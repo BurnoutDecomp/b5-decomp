@@ -51,6 +51,10 @@ namespace BrnGame { BrnSound::Module::RootSoundModule* GetMainSoundModule() { re
 // The game-module global itself (X360 off_830102D0 / TUB gpBurnoutGame); the scripted module
 // loads read the update IO stacks through it.
 namespace BrnGame { BrnGameModule* GetMainGameModule() { return &gGameModule; } }
+// ⚠️ FLAG PC quality-of-life: the simulation-pacing switch (config.ini `[Display]
+// DecoupleSimulation`). Defaults to the decoupled 60 Hz simulation; LoadConfig overwrites it
+// before BrnGameModule::Construct reads it. See the declaration in BrnGameModule.hpp.
+namespace BrnGame { bool gbDecoupleSimulationFromRenderRate = true; }
 
 #ifdef WIN32
 namespace
@@ -121,6 +125,21 @@ void LoadConfig()
     // Present sync (device.h gVSync): 1 = vertical sync (default), 0 = immediate presents.
     renderengine::gVSync = (GetPrivateProfileIntA("Display", "VSync", renderengine::gVSync, lacPath) == 0) ? 0 : 1;
 
+    // ⚠️ FLAG PC quality-of-life: the simulation-pacing A/B switch. No console counterpart.
+    //   1 (default) -- DECOUPLED. The simulation runs at a fixed 60 Hz off the real-time
+    //                  clock and the renderer draws as fast as it likes, interpolating
+    //                  between the last two ticks. Set VSync=0 to see it do anything.
+    //   0           -- CONSOLE-LOCKED. Exactly one simulation step per rendered frame, the
+    //                  X360's own arrangement (mi8FrameRateMinSteps = 1). Pair it with
+    //                  VSync=1 on a 60 Hz panel for the console's behaviour; on a faster
+    //                  panel, or with VSync off, the game runs FAST, because that is what
+    //                  "one tick per frame" means when frames are cheap.
+    // Read here rather than seeded in the game module's constructor because the module is a
+    // static and its constructor runs before this function; BrnGameModule::Construct applies
+    // it. See the banner on mi8FrameRateMinSteps.
+    BrnGame::gbDecoupleSimulationFromRenderRate =
+        (GetPrivateProfileIntA("Display", "DecoupleSimulation", 1, lacPath) != 0);
+
     // TUB clamps AntiAliasing to [0,16].
     s32 liAntiAliasing = GetPrivateProfileIntA("Settings", "AntiAliasing", renderengine::gAntiAliasing, lacPath);
     if (liAntiAliasing < 0)  liAntiAliasing = 0;
@@ -166,6 +185,11 @@ void SaveConfig()
     WritePrivateProfileStringA("Display", "AdapterIndex", lacValue, lacPath);
     std::snprintf(lacValue, sizeof(lacValue), "%d", renderengine::gVSync);
     WritePrivateProfileStringA("Display", "VSync", lacValue, lacPath);
+    // ⚠️ FLAG PC quality-of-life -- written back so the key exists in config.ini to be
+    // edited. See the read side in LoadConfig.
+    std::snprintf(lacValue, sizeof(lacValue), "%d",
+                  BrnGame::gbDecoupleSimulationFromRenderRate ? 1 : 0);
+    WritePrivateProfileStringA("Display", "DecoupleSimulation", lacValue, lacPath);
     std::snprintf(lacValue, sizeof(lacValue), "%d", renderengine::gAntiAliasing);
     WritePrivateProfileStringA("Settings", "AntiAliasing", lacValue, lacPath);
     std::snprintf(lacValue, sizeof(lacValue), "%d", renderengine::gAlphaToCoverage);

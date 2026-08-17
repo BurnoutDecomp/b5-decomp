@@ -22,6 +22,7 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourceIOEvents.h" // CgsResource::Events::AcquireResourceResponse (GamePrepare's acquire drain)
 #include "rw/rwcore_structs.h"                       // rw::ResourceAllocatorRegistry::GetDefaultAllocator (the debug-font texture state)
 #include "pc/gcm/renderengine/device.h"               // renderengine::GetDisplayRefreshRate (the step-9 timer rate)
+#include "GameShared/GameClasses/System/Timer/CgsFrameInterpolation.h" // ⚠️ FLAG PC QoL: the 60Hz-sim / uncapped-render blend
 #include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h" // RegisterFunction (the Debug/Sim actions)
 #include "GameSource/Graphics/BrnRendererModuleIO.h"    // RendererIO::InputBuffer/OutputBuffer (GamePrepare's renderer pair)
 #include "GameSource/Director/DirectorModule/BrnDirectorModuleIO.h"          // DirectorIO::InputBuffer (DoUpdate_Director)
@@ -80,7 +81,31 @@ namespace BrnGame
         // GetCurrentTimeStep -- physics, the director's behaviour advance, the streamer's
         // per-frame budget -- inherits that.
         , meFrameRateManagerType(CgsSystem::E_FRAMERATEMANAGER_MULTIPLE_CAPPED)
-        , mi8FrameRateMinSteps(1)
+        // ⚠️ FLAG PC QUALITY-OF-LIFE, 2026-08-17: THE CONSOLE SEED IS 1, AND THIS IS 0.
+        //
+        // This single byte is the whole "60 Hz simulation, uncapped renderer" switch, and it
+        // is the ONE deliberate departure from the frame-rate block restored above.
+        //
+        // The console is vsync-locked at the rate its simulation runs at, so demanding at
+        // least one simulation step per rendered frame is not a policy there -- it is a
+        // restatement of the hardware. On a PC it is not: with VSync=0 in config.ini (or any
+        // panel above 60 Hz) the renderer runs as fast as it can, and a mandatory step per
+        // frame made the ENTIRE simulation run at the render rate. Measured on a 144 Hz
+        // panel: 144 ticks a second, i.e. the game, its physics, its timers, its cameras and
+        // its streaming budget all at 2.4x speed.
+        //
+        // A minimum of ZERO lets CgsSystem::FrameRateManager::UpdatePostRenderWait pace the
+        // simulation off the real-time clock instead -- exactly 60 steps per second however
+        // many frames get drawn -- and publish the leftover fraction of a step as the
+        // interpolation alpha the render legs blend with (CgsFrameInterpolation.h). The
+        // maximum of 3 is unchanged and still the console's: that is the catch-up budget for
+        // a frame that overran, and it is what stops a hitch turning into a death spiral.
+        //
+        // Everything else about the machine -- MULTIPLE_CAPPED, the max, the cumulative
+        // accounting, the backlog repair -- is the console's, untouched. Restore 1 here and
+        // the whole build reverts to console-locked pacing with no other change (the alpha
+        // pins at 1.0 and every blend degenerates to "use the current state").
+        , mi8FrameRateMinSteps(0)
         , mi8FrameRateMaxSteps(3)
         , mi8ActualFrameRateMinStepsThisFrame(1)
         , mi8ActualFrameRateMaxStepsThisFrame(1)
@@ -93,6 +118,8 @@ namespace BrnGame
         , mpGuiOutputBuffer(0)
         , mpDirectorOutputBuffer(0)
         , mpWorldUpdateOutputBuffer(0)
+        , mbCurrentTickCameraValid(false)
+        , mbPreviousTickCameraValid(false)
         , miInputModuleState(0)
         , miPlayer0ControllerPort(0)
         , miSecondaryControllerPort(0)
@@ -425,18 +452,75 @@ namespace BrnGame
         mMainFlowStateMachine.Construct();
 
         {
+            // ⚠️ FLAG PC QUALITY-OF-LIFE, 2026-08-17: THE SIMULATION RATE IS NOW FIXED AT
+            // 60 Hz AND NO LONGER FOLLOWS THE DISPLAY.
+            //
+            // The console derives this rate from the display it validated one step earlier
+            // (asserting 50 or 60) because the two are the same clock there -- the frame it
+            // draws and the step it simulates are one event. This build has broken that
+            // identity on purpose (see mi8FrameRateMinSteps in the ctor): the renderer is
+            // free to run at whatever the panel and VSync setting allow, and the simulation
+            // is paced against the real-time clock instead. That only works if the step size
+            // is a CONSTANT -- it is the divisor CgsSystem::FrameRateManager counts real
+            // elapsed cycles against, and it is the timestep every consumer downstream
+            // (physics, the director's behaviour advance, the streamer budget, every GUI
+            // dwell) reads out of GetCurrentTimeStep.
+            //
+            // 60 is the console's own NTSC rate and the rate the game's handling, timers and
+            // animation were authored at. A PAL console ran the simulation at 50 and was
+            // correspondingly slower in real time; matching the panel here would reintroduce
+            // exactly the coupling this change removes.
+            //
+            // The refresh rate is still queried and still logged -- it is worth seeing, and
+            // it is what the console read -- it just no longer sets the simulation rate.
             const u32 luRefreshHz = renderengine::GetDisplayRefreshRate();
-            const u32 luRateHz    = (luRefreshHz >= 50u && luRefreshHz <= 60u) ? luRefreshHz : 60u;
+            const u32 luRateHz    = KU_SIMULATION_RATE_HZ;
             const f32 lfTimerRate = 1.0f / static_cast<f32>(luRateHz);
             if (CgsDev::Message::gxMessageFilterFlags & 1)
                 *CgsDev::Log::gpDebugPrint
                     << "[timers] display refresh " << (s32)luRefreshHz
-                    << "Hz -> timer rate 1/" << (s32)luRateHz << "\n";
+                    << "Hz -> simulation rate 1/" << (s32)luRateHz
+                    << " (fixed; render rate is decoupled)\n";
             mTimerStatusInterface.Clear();
             mGameTimer.Prepare(lfTimerRate);
             mSimTimer.Prepare(lfTimerRate);
             mGameTimer.SetRunning(true);
             mSimTimer.SetRunning(true);
+
+            // ⭐ THE FRAME-RATE MANAGER IS CONSTRUCTED, 2026-08-17. It never was on this
+            // build -- the call was listed among the "[gated] rest of steps 7-9" items -- so
+            // every one of its fields sat at the static game module's zero-init and its
+            // UpdatePostRenderWait was a stub that answered "the minimum, at least one"
+            // without ever reading a clock. That stub is what tied the simulation to the
+            // render rate.
+            //
+            // Position and arguments are the console's, verbatim: Construct @0x823C9EA8 runs
+            // it at 0x823CAE68, immediately after the two Timer::Prepare calls above, with
+            // `this = gm + 0x9A0B50` and the two floats formed at 0x823CAE3C-64 as
+            //     a2 = simTimer.mfRate * simTimer.mfScaleCurrent * flt_82009E10 (1000.0)
+            //     a3 = simTimer.mfRate * simTimer.mfScaleCurrent * flt_820049E0 ( 100.0)
+            // i.e. one simulation step in MILLISECONDS, and a framerate tolerance of one
+            // tenth of it. (Both constants read out of the decrypted ARTIST image at
+            // 0x82009E10 / 0x820049E0.) mfScaleCurrent is 1.0 straight out of Timer::Prepare,
+            // so this is the console's own expression, not a simplification of it.
+            {
+                const f32 lfSimulationStepMs = mSimTimer.GetRate() * mSimTimer.GetScaleCurrent() * 1000.0f;
+                const f32 lfToleranceMs      = mSimTimer.GetRate() * mSimTimer.GetScaleCurrent() * 100.0f;
+                mFrameRateManager.Construct(lfSimulationStepMs, lfToleranceMs);
+            }
+
+            // ⚠️ FLAG PC quality-of-life: apply the config.ini pacing switch. The ctor seeded
+            // the decoupled value (0); config.ini can put the console's 1 back. Applied HERE
+            // because this module is a static -- its constructor ran before LoadConfig did.
+            mi8FrameRateMinSteps = gbDecoupleSimulationFromRenderRate ? 0 : 1;
+            if (CgsDev::Message::gxMessageFilterFlags & 1)
+                *CgsDev::Log::gpDebugPrint
+                    << "[timers] pacing: "
+                    << (gbDecoupleSimulationFromRenderRate
+                            ? "DECOUPLED (fixed 60Hz simulation, free-running renderer)"
+                            : "CONSOLE-LOCKED (one simulation step per rendered frame)")
+                    << ", min/max steps " << (s32)mi8FrameRateMinSteps << "/"
+                    << (s32)mi8FrameRateMaxSteps << "\n";
         }
 
         // ⭐ CORRECTED 2026-08-16 (boot audit F-P1-2). Construct already leaves the
@@ -1740,8 +1824,82 @@ namespace BrnGame
     // BrnRendererModule::Update @0x82405E28 publishes, and the same one
     // BrnRendererModule::Render walks after OnEndOfUpdateFrame's swap.
     // Restore the real body when DoDispatch's IO set + the frustum query are live.
+    // ============================================================================
+    // ⚠️ FLAG PC QUALITY-OF-LIFE -- NOT X360 FUNCTIONS.
+    //
+    // LatchDispatchCamera / GetInterpolatedDispatchCamera
+    //
+    // WHY THEY EXIST. DoDispatch below reads the director's finished camera out of
+    // mpDirectorOutputBuffer and hands it to four consumers (the renderer's effects camera,
+    // the particle reprojection, the world producer's camera override, the junkyard lighting
+    // latch). That buffer is created and destroyed INSIDE GameMain's simulation sub-step
+    // loop, so it exists at Render time only because at least one sub-step ran that frame --
+    // which stopped being true when the simulation was decoupled from the render rate.
+    //
+    // Without a latch, a frame that runs no sub-step finds a null buffer, stages no camera,
+    // and the world module falls back to its bring-up tour camera for that one frame: a
+    // visible jump, several times a second.
+    //
+    // And the same latch is what buys the interpolation. Holding the last TWO ticks lets the
+    // frame render the blend of them rather than the newest one, so a 60 Hz camera reads as
+    // continuous motion however many frames are drawn between ticks. The cost is one Camera
+    // copy per sub-step (a 350-byte memberwise copy -- the X360-attested
+    // Camera::Camera(const Camera&) @0x821F3B88) and it is paid once per TICK, not per frame.
+    //
+    // In console-locked pacing the alpha pins at 1.0, BlendTransform short-circuits to the
+    // current tick, and this returns exactly the camera the buffer read used to return.
+    // ============================================================================
+    void BrnGameModule::LatchDispatchCamera()
+    {
+        if (mpDirectorOutputBuffer == 0)
+            return;
+
+        mpDirectorOutputBuffer->LockForRead();
+        const BrnDirector::Camera::Camera* lpCamera = mpDirectorOutputBuffer->GetCameraOutput();
+        if (lpCamera != 0)
+        {
+            mbPreviousTickCameraValid = mbCurrentTickCameraValid;
+            if (mbCurrentTickCameraValid)
+                mPreviousTickCamera = mCurrentTickCamera;
+
+            mCurrentTickCamera       = *lpCamera;
+            mbCurrentTickCameraValid = true;
+        }
+        mpDirectorOutputBuffer->UnlockForRead();
+    }
+
+    const BrnDirector::Camera::Camera* BrnGameModule::GetInterpolatedDispatchCamera()
+    {
+        if (!mbCurrentTickCameraValid)
+            return 0;
+
+        const f32 lfAlpha = CgsSystem::FrameInterpolation::GetAlpha();
+        if (!mbPreviousTickCameraValid || lfAlpha >= 1.0f)
+            return &mCurrentTickCamera;
+
+        // Everything that is not the pose is the CURRENT tick's: the state flag word (which
+        // carries the junkyard bit DoDispatch reads and the validity account), the shot
+        // reference, the depth-of-field band, the effects block. Those are discrete decisions,
+        // not quantities -- blending them would produce a camera that was never in any state.
+        // Only the two continuous quantities are blended.
+        mInterpolatedCamera = mCurrentTickCamera;
+        mInterpolatedCamera.SetTransform(
+            CgsSystem::FrameInterpolation::BlendTransform(mPreviousTickCamera.GetTransform(),
+                                                          mCurrentTickCamera.GetTransform(),
+                                                          lfAlpha));
+        mInterpolatedCamera.SetFOV(
+            CgsSystem::FrameInterpolation::BlendScalar(mPreviousTickCamera.GetFOV(),
+                                                       mCurrentTickCamera.GetFOV(),
+                                                       lfAlpha));
+        return &mInterpolatedCamera;
+    }
+
     int BrnGameModule::DoDispatch()
     {
+        // ⚠️ FLAG PC quality-of-life: THIS FRAME'S CAMERA, blended between the last two
+        // simulation ticks. Null only before the first tick has published one, which is the
+        // same window in which the buffer read below used to return null.
+        const BrnDirector::Camera::Camera* const lpDispatchCamera = GetInterpolatedDispatchCamera();
         // ---- stage the DIRECTOR's published camera for the world ------------------------
         // The console does this through the renderer/world dispatch IO buffer set:
         // DoDispatch fills RendererIO::InputBuffer's camera from the director output,
@@ -1779,10 +1937,14 @@ namespace BrnGame
         // the world hand-over below are world-STREAMER safety, and applying them here would
         // freeze the effects record instead of letting the director turn effects off.
         // DELETE-WHEN DoDispatch's IO buffer set is real (with the two hand-overs below).
-        if (mpDirectorOutputBuffer != 0)
+        // ⚠️ FLAG PC quality-of-life: the gate is the LATCHED camera, not the per-sub-step
+        // buffer, so this whole block still runs on a frame that ran no sub-step -- see the
+        // banner on LatchDispatchCamera. The buffer is still locked and read where a
+        // consumer needs something other than the camera out of it (the race-car state
+        // below), and that read keeps its own null guard.
+        if (lpDispatchCamera != 0)
         {
-            mpDirectorOutputBuffer->LockForRead();
-            mRenderModule.PCBringUpSetCameraInput(mpDirectorOutputBuffer->GetCameraOutput());
+            mRenderModule.PCBringUpSetCameraInput(lpDispatchCamera);
 
             // ---- stage the PLAYER's RACE-CAR STATE as the EFFECTS TempRaceCarStateCache -------
             // The console: BrnEffects::EffectsModule::Update @0x8229EC28, the SECOND
@@ -1881,20 +2043,16 @@ namespace BrnGame
                                     + mSimTimer.GetAccumulator();
                 BrnParticle::PCBringUpProduceParticleRenderData(
                     mDispatchThreadInputBufferManager.GetWriteBuffer(),
-                    mpDirectorOutputBuffer->GetCameraOutput(),
+                    lpDispatchCamera,
                     lfSimTimeStep,
                     lfSimTime,
                     mSimTimer.GetScaleCurrent());
             }
-
-            mpDirectorOutputBuffer->UnlockForRead();
         }
 
-        if (mpDirectorOutputBuffer != 0 && mbDirectorCameraLive)
+        if (lpDispatchCamera != 0 && mbDirectorCameraLive)
         {
-            mpDirectorOutputBuffer->LockForRead();
-            const BrnDirector::Camera::Camera* lpCamera = mpDirectorOutputBuffer->GetCameraOutput();
-            if (lpCamera != 0)
+            const BrnDirector::Camera::Camera* const lpCamera = lpDispatchCamera;
             {
                 const rw::math::vpu::Matrix44Affine& lrXform = lpCamera->GetTransform();
                 const f32 lfDistSq = lrXform.wAxis.x * lrXform.wAxis.x
@@ -1925,7 +2083,6 @@ namespace BrnGame
                     }
                 }
             }
-            mpDirectorOutputBuffer->UnlockForRead();
         }
 
         // ---- stage the RENDERER's four WORLD-layer effects frames for the world -----------
@@ -3287,6 +3444,13 @@ namespace BrnGame
                 // on PC the queue is a module member, so it is cleared explicitly.)
                 // (the retiring Clear moved to the HEAD of this leg -- see F-P3-8 above.)
                 }   // end of the frame-step guard opened above (boot audit F-P3-9)
+
+                // ⚠️ FLAG PC quality-of-life: LATCH THIS TICK'S CAMERA.
+                // Last thing in the sub-step, after the director's final pass has published
+                // into mpDirectorOutputBuffer and before that buffer is torn down. Renders
+                // that fall between ticks blend the last two latches; see the banner on
+                // LatchDispatchCamera.
+                LatchDispatchCamera();
                 PerfMonCpu::StopMonitor(mCpuMonitors.miUT_EachUpdate);
 
                 if (liStep != miNumSimFramesRequired - 1)
@@ -3299,6 +3463,26 @@ namespace BrnGame
                 ++liStep;
             }
             while (liStep < miNumSimFramesRequired);
+        }
+        else
+        {
+            // ⚠️ FLAG PC quality-of-life: KEEP THE RESOURCE PUMP AT FRAME RATE.
+            //
+            // ResourceUpdateThread is the ONLY thing that drains the GameData request queue,
+            // and on the console it is exactly that -- a THREAD (@0x823BC9B8), running
+            // continuously and independently of the simulation rate. It only sits inside the
+            // sub-step loop here because this host is single-threaded and that was the
+            // nearest honest place to serialise it.
+            //
+            // Leaving it there once zero-step frames existed quietly cut the pump from the
+            // render rate to 60 Hz -- on a 140 fps machine that is less than half as many
+            // service passes per second, and it shows up as slower loading and a streamer
+            // that takes longer to deliver the city. Nothing about the console's design says
+            // the pump should be paced by the simulation; this restores a per-frame floor
+            // without changing the per-sub-step behaviour on frames that do step.
+            PerfMonCpu::StartMonitor(mCpuMonitors.miUT_GameState);
+            ResourceUpdateThread(0);
+            PerfMonCpu::StopMonitor(mCpuMonitors.miUT_GameState);
         }
         PerfMonCpu::StopMonitor(mCpuMonitors.miUT_TotalUpdate);
         sbSimUpdateComplete = 1;
@@ -3315,12 +3499,27 @@ namespace BrnGame
             }
         }
 
-        mpUpdateOutputBufferStack->DestroyIOBuffer<BrnWorldIO::UpdateOutputBuffer>(&mpWorldUpdateOutputBuffer);
-        mpUpdateOutputBufferStack->DestroyIOBuffer<BrnDirector::DirectorIO::OutputBuffer>(&mpDirectorOutputBuffer);
-        mpUpdateOutputBufferStack->DestroyIOBuffer<CgsGui::ModelIO::OutputBuffer>(&mpGuiModelOutputBuffer);
-        mpUpdateOutputBufferStack->DestroyIOBuffer<CgsGui::CgsGuiModuleIO::OutputBuffer>(&mpGuiOutputBuffer);
-        mpUpdateInputBufferStack->DestroyIOBuffer<CgsGui::ViewIO::InputBuffer>(&mpGuiViewInputBuffer);
-        mpUpdateInputBufferStack->DestroyIOBuffer<CgsGui::CgsGuiModuleIO::InputBuffer>(&mpGuiInputBuffer);
+        // ⚠️ FLAG PC quality-of-life: ONLY IF THIS FRAME ACTUALLY RAN A SUB-STEP.
+        //
+        // These six are the LAST sub-step's set -- the loop above creates them per step and
+        // destroys them between steps, deliberately leaving the final set alive so the flow
+        // state's Render (just above) can read them. That reasoning assumes at least one
+        // sub-step ran, which was guaranteed while mi8FrameRateMinSteps was the console's 1.
+        //
+        // It no longer is. On a frame that runs no sub-step nothing was created, and these
+        // pointers are the nulls the PREVIOUS frame's teardown left. IOBufferStack::
+        // DestroyIOBuffer asserts on a null and then dereferences it anyway (it mirrors the
+        // console, which does exactly that) -- six asserts and a fault. Guarded, not
+        // null-checked one by one, so the pairing with the create side stays obvious.
+        if (miNumSimFramesRequired > 0)
+        {
+            mpUpdateOutputBufferStack->DestroyIOBuffer<BrnWorldIO::UpdateOutputBuffer>(&mpWorldUpdateOutputBuffer);
+            mpUpdateOutputBufferStack->DestroyIOBuffer<BrnDirector::DirectorIO::OutputBuffer>(&mpDirectorOutputBuffer);
+            mpUpdateOutputBufferStack->DestroyIOBuffer<CgsGui::ModelIO::OutputBuffer>(&mpGuiModelOutputBuffer);
+            mpUpdateOutputBufferStack->DestroyIOBuffer<CgsGui::CgsGuiModuleIO::OutputBuffer>(&mpGuiOutputBuffer);
+            mpUpdateInputBufferStack->DestroyIOBuffer<CgsGui::ViewIO::InputBuffer>(&mpGuiViewInputBuffer);
+            mpUpdateInputBufferStack->DestroyIOBuffer<CgsGui::CgsGuiModuleIO::InputBuffer>(&mpGuiInputBuffer);
+        }
 
         PerfMonCpu::StopMonitor(mCpuMonitors.miUT_RenderAll);
         return false;
@@ -3449,6 +3648,15 @@ namespace BrnGame
     {
         miNumSimFramesRequired = mFrameRateManager.UpdatePostRenderWait(
             mi8ActualFrameRateMinStepsThisFrame, mi8ActualFrameRateMaxStepsThisFrame);
+
+        // ⚠️ FLAG PC quality-of-life: publish this frame's blend factor + real frame length
+        // to the render legs. This is the ONE producer -- everything that interpolates reads
+        // CgsSystem::FrameInterpolation, never the manager, so a render leg deep in the world
+        // module does not have to reach the game module to find out how far between two
+        // simulation ticks the frame it is drawing sits.
+        CgsSystem::FrameInterpolation::SetEnabled(mFrameRateManager.IsDecoupledFromRenderRate());
+        CgsSystem::FrameInterpolation::SetAlpha(mFrameRateManager.GetInterpolationAlpha());
+        CgsSystem::FrameInterpolation::SetFrameSeconds(mFrameRateManager.GetLastFrameSeconds());
     }
 
     // @ BrnGameModule.cpp:1565 - render the on-screen assert overlay via the renderer module.

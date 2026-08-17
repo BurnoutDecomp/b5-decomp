@@ -75,6 +75,7 @@
 #include "GameShared/GameClasses/Graphics/Dispatch/CgsDispatcher.h"     // DispatchFrame / DispatchList
 #include "rw/math/vpu/vector3_operation.h"   // rw::math::vpu::operator- / Magnitude (CalculateVehicleLODs)
 #include "GameSource/Director/Camera/Utils/CameraUtils.h" // Utils::GetZoomFromFOVDegs (the bring-up LOD zoom)
+#include "GameShared/GameClasses/System/Timer/CgsFrameInterpolation.h" // ⚠️ FLAG PC QoL: GetFrameSeconds (the tour camera's advance)
 #include <cmath>    // sqrtf / tanf ([FLAG PC bring-up] the dispatch producer's camera) + std::sqrt (vehicle LODs)
 #include <cstddef>  // offsetof (the VehicleRenderInfo layout pins)
 
@@ -5260,6 +5261,47 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
         mbIsInJunkyard = false;
     }
 
+    // [DIAG frame-pacing, host only -- BRN_PACE_DIAG=1] one line per rendered frame:
+    // the interpolation alpha this frame is drawing at, the director-camera eye it is
+    // drawing from, and the spawned car's render pose. Together they say which of the two
+    // is stepping at 60 Hz and which is continuous. Costs nothing unless the variable is
+    // set. Remove when the pacing work is signed off.
+    static s32 siPaceDiag = -1;
+    if ( siPaceDiag < 0 )
+    {
+        const char* lpcPaceEnv = std::getenv( "BRN_PACE_DIAG" );
+        siPaceDiag = ( lpcPaceEnv != 0 && lpcPaceEnv[0] != '0' ) ? 1 : 0;
+    }
+    // ⚠️ FLAG PC quality-of-life: THIS FRAME'S CAR DISPLAY POSE.
+    //
+    // Before anything reads a race car's RenderParams -- the tour camera's framing below,
+    // the vehicle LOD banding, and the dispatch legs themselves -- publish the blend of the
+    // last two simulation ticks into it. The camera is already continuous (the game module
+    // interpolates the director camera); without this the CAR is the only thing in the frame
+    // still stepping at 60 Hz, which reads as the car shuddering against a smooth world.
+    // Idempotent, and a no-op in console-locked pacing (alpha pins at 1.0).
+    mRaceCarEntityModule.ApplyRenderPoseInterpolationBringUp(
+        CgsSystem::FrameInterpolation::GetAlpha() );
+
+    // ⚠️ MUST BE READ AFTER THE APPLY ABOVE. Sampled before it, this reports whatever the
+    // sub-step's latch left behind on a stepping frame and the previous frame's blend on a
+    // zero-step frame -- an alternating pair that looks exactly like broken interpolation.
+    // That cost one diagnosis round on 2026-08-17.
+    if ( siPaceDiag != 0 && CgsDev::Log::gpDebugPrint != 0 )
+    {
+        Vector3 lDiagCar;
+        lDiagCar.SetZero();
+        const bool lbHaveCar = mRaceCarEntityModule.GetSpawnedCarPositionBringUp( lDiagCar );
+        *CgsDev::Log::gpDebugPrint
+            << "[pace] alpha " << CgsSystem::FrameInterpolation::GetAlpha()
+            << " frameMs " << ( CgsSystem::FrameInterpolation::GetFrameSeconds() * 1000.0f )
+            << " camValid " << ( lbUseDirectorCamera ? 1 : 0 )
+            << " eye " << lDirectorTransform.wAxis.x << " " << lDirectorTransform.wAxis.y
+            << " " << lDirectorTransform.wAxis.z
+            << " car " << ( lbHaveCar ? 1 : 0 ) << " "
+            << lDiagCar.x << " " << lDiagCar.y << " " << lDiagCar.z << "\n";
+    }
+
     // ---- frame an establishing camera on the loaded world -------------------
     Vector3 lCentre;
     f32     lfRadius = 0.0f;
@@ -5425,9 +5467,23 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
     }
     else if ( sfCamSpeed > 0.0f )
     {
-        // One lap per ~40 s of dispatch frames at speed 1 (the dispatch spine runs once
-        // per rendered frame; a fixed per-frame step keeps a capture reproducible).
-        sfPathAngle += 0.0052f * sfCamSpeed;
+        // One lap per ~40 s at speed 1.
+        //
+        // ⚠️ FLAG PC quality-of-life, 2026-08-17: ADVANCED ON REAL TIME, NOT PER FRAME.
+        // This used to be a flat `+= 0.0052f * sfCamSpeed` per call, and this producer runs
+        // once per RENDERED frame -- so the tour ran at whatever rate the renderer happened
+        // to hit. That was invisible while the renderer was pinned to the simulation at
+        // 60 Hz; with the two decoupled it means the boot/loading camera sweeps the city at
+        // 2.4x on a 144 Hz panel. Scaling by the real frame length, normalised to the 60 Hz
+        // step the constant was tuned against, keeps the sweep at its authored speed at any
+        // render rate -- and, unlike everything the simulation owns, this stand-in needs no
+        // interpolation because it is now genuinely continuous.
+        //
+        // A capture stays reproducible: BRN_WORLD_CAMSPEED still scales it, and the frame
+        // length is clamped (CgsFrameInterpolation::SetFrameSeconds) so a stall cannot jump
+        // the tour.
+        sfPathAngle += 0.0052f * sfCamSpeed
+                     * ( CgsSystem::FrameInterpolation::GetFrameSeconds() * 60.0f );
 
         // The orbit radius itself breathes between 1.1x and 2.6x the latched framing over
         // four laps, so the tour sweeps a whole annulus of the city instead of retracing

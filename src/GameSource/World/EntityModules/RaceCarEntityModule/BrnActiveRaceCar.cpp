@@ -42,6 +42,7 @@
 #include "GameSource/World/BrnEntityTypes.h"              // BrnWorld::E_ENTITYTYPE_RACECAR (the Attach seed)
 #include "SharedClasses/World/BrnCollisionTag.h"          // BrnWorld::KU_COLLISION_FLAG_FATAL (IsWrecked)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h" // gpDebugPrint / gxMessageFilterFlags ([engine-diag])
+#include "GameShared/GameClasses/System/Timer/CgsFrameInterpolation.h" // ⚠️ FLAG PC QoL: BlendTransform (the render-pose interpolator)
 
 #include <cstring>   // memset (the console's own inlined clears)
 
@@ -107,6 +108,14 @@ void ActiveRaceCar::Construct(EActiveRaceCarIndex leActiveRaceCarIndex)
                "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
     CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
                "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+
+    // ⚠️ FLAG PC quality-of-life: the render-pose interpolator starts with no history, so
+    // the first frame after this slot is built draws the tick pose straight rather than
+    // blending it against uninitialised storage. (This module's array is not zero-filled --
+    // DebugMemoryInit stamps module memory with 0x7FFFFFFF.)
+    mBodyPoseTrack.Reset();
+    for (u32 luWheel = 0; luWheel < KU_INTERP_WHEELS; ++luWheel)
+        maWheelPoseTracks[luWheel].Reset();
 
     meRaceStartState             = E_RACE_START_STATE_RACING;     // 0x77C = 2
     mfTimeSinceCreation          = 0.0f;                          // 0x728
@@ -370,6 +379,36 @@ void ActiveRaceCar::CalcBodyTransform(Matrix44Affine& lrBodyTransform) const
                "Invalid racecar physics transform");
 
     lrBodyTransform = rw::math::vpu::Mult(mCentreOfMassTransform, mPhysicsState.mTransform);
+}
+
+// ============================================================================
+// ⚠️ FLAG PC QUALITY-OF-LIFE -- NOT X360 FUNCTIONS. See the banner on the declarations
+// in BrnActiveRaceCar.h for why these exist and what they deliberately do not touch.
+// ============================================================================
+// Each of the three is the same three-line shape over one PoseTrack per interpolated
+// transform -- the body, and each of the six WORLD wheel transforms. The ordering rules
+// (restore before the producers, latch after them, apply per rendered frame) and the
+// reason the restore is mandatory live on PoseTrack itself; the module drives the pairing
+// (RaceCarEntityModule::PostPhysicsUpdate brackets its producers with the first two).
+void ActiveRaceCar::RestoreTickRenderPose()
+{
+    mBodyPoseTrack.Restore(mRenderParams.GetBodyTransformForWrite());
+    for (u32 luWheel = 0; luWheel < KU_INTERP_WHEELS; ++luWheel)
+        maWheelPoseTracks[luWheel].Restore(mRenderParams.GetWheelTransform(luWheel));
+}
+
+void ActiveRaceCar::LatchTickRenderPose()
+{
+    mBodyPoseTrack.Latch(mRenderParams.GetBodyTransform());
+    for (u32 luWheel = 0; luWheel < KU_INTERP_WHEELS; ++luWheel)
+        maWheelPoseTracks[luWheel].Latch(mRenderParams.GetWheelTransform(luWheel));
+}
+
+void ActiveRaceCar::ApplyRenderPoseInterpolation(f32 lfAlpha)
+{
+    mBodyPoseTrack.Apply(mRenderParams.GetBodyTransformForWrite(), lfAlpha);
+    for (u32 luWheel = 0; luWheel < KU_INTERP_WHEELS; ++luWheel)
+        maWheelPoseTracks[luWheel].Apply(mRenderParams.GetWheelTransform(luWheel), lfAlpha);
 }
 
 // ----------------------------------------------------------------------------

@@ -334,6 +334,12 @@ public:
         // DELETE with that camera.
         bool GetSpawnedCarPositionBringUp( Vector3& lrPosition ) const;
 
+        // ⚠️ FLAG PC quality-of-life -- NOT an X360 function. Once per rendered frame,
+        // publish each active car's display pose as the blend of the last two simulation
+        // ticks (the simulation runs at a fixed 60 Hz; the renderer does not). Idempotent.
+        // See ActiveRaceCar::ApplyRenderPoseInterpolation.
+        void ApplyRenderPoseInterpolationBringUp( f32 lfAlpha );
+
         // [FLAG PC bring-up] NOT an X360 function. Stands in for the player-car leg of
         // ProcessCreateVehicleEvents @0x822FF620, whose input queue
         // (VehicleManagerOutputInterface::mCreateVehicleResultQueue) has no producer on this
