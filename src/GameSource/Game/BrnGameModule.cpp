@@ -22,6 +22,7 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourceIOEvents.h" // CgsResource::Events::AcquireResourceResponse (GamePrepare's acquire drain)
 #include "rw/rwcore_structs.h"                       // rw::ResourceAllocatorRegistry::GetDefaultAllocator (the debug-font texture state)
 #include "pc/gcm/renderengine/device.h"               // renderengine::GetDisplayRefreshRate (the step-9 timer rate)
+#include "GameSource/Graphics/BrnRendererModuleIO.h"    // RendererIO::InputBuffer/OutputBuffer (GamePrepare's renderer pair)
 #include "GameSource/Director/DirectorModule/BrnDirectorModuleIO.h"          // DirectorIO::InputBuffer (DoUpdate_Director)
 #include "GameSource/GameState/BrnGameStateModuleIO.h" // GameStateModuleIO::OutputBuffer (BridgeGameStateToDirector)
 #include "GameSource/Director/DirectorModule/BrnDirectorModuleIOSceneQuery.h" // DirectorIO::SceneQuery{Input,Output}Buffer
@@ -53,6 +54,7 @@ namespace BrnGame
         , mbSimPaused(false)
         , mbDiskError(false)
         , mbSkipVideos(false)
+        , mpReusableLoadingScreenAllocator(0)
         , mbStalled(false)
         , mbRequestDoStepFrame(false)
         , mbRequestDoPlayFrame(false)
@@ -2263,6 +2265,32 @@ namespace BrnGame
             // [FLAG] CheckDiskError @0x823BC798 reads the GameData output's filesystem-status
             // interface, a documented deferral in BrnGameDataModuleIO.h. The byte it would
             // act on is the one published just below, so nothing is lost but the thread spawn.
+            // ⭐ THE RENDERER PAIR + THE ALLOCATOR LATCH, landed 2026-08-17 (boot audit
+            // F-P2-4). @0x823F023C-2F4: create the RendererIO pair off the two update stacks,
+            // run BrnRendererModule::Update through them, then read the reusable
+            // loading-screen allocator back out of the output buffer and latch it at
+            // gm+0x9A0630. That latch is what the world drive is supposed to use; its absence
+            // is why BrnGameMainFlowStates.cpp still carries an invented 512 KiB static
+            // (F-P6-12), which this unblocks.
+            {
+                RendererIO::InputBuffer*  lpRendererIn  = 0;
+                RendererIO::OutputBuffer* lpRendererOut = 0;
+                mpUpdateInputBufferStack->CreateIOBuffer(&lpRendererIn, "Render");
+                mpUpdateOutputBufferStack->CreateIOBuffer(&lpRendererOut, "Render");
+                if (lpRendererIn != 0 && lpRendererOut != 0)
+                {
+                    mRenderModule.Update(mpUpdateInputBufferStack, mpUpdateOutputBufferStack,
+                                         lpRendererIn, lpRendererOut);
+
+                    lpRendererOut->LockForRead();
+                    mpReusableLoadingScreenAllocator =
+                        lpRendererOut->GetReusableLoadingScreenAllocator();
+                    lpRendererOut->UnlockForRead();
+                }
+                if (lpRendererOut != 0) mpUpdateOutputBufferStack->DestroyIOBuffer(&lpRendererOut);
+                if (lpRendererIn  != 0) mpUpdateInputBufferStack->DestroyIOBuffer(&lpRendererIn);
+            }
+
             {
                 BrnGame::DispatchThreadInputBuffer* lpDispatchInput =
                     mDispatchThreadInputBufferManager.GetWriteBuffer();

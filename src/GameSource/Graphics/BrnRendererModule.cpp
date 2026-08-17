@@ -3604,3 +3604,103 @@ void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispa
 void BrnRendererModule::RenderAssert(const AssertData* /*lpAssertData*/)
 {
 }
+
+// ============================================================================================
+// @ 0x82405E28 -- BrnRendererModule::Update.  RECONSTRUCTED 2026-08-17 (boot audit F-P2-4).
+//
+// The renderer's per-pass publication into the RendererIO buffer pair.  BrnGameModule::
+// GamePrepare's not-done tail creates the pair, calls this, and reads the loading-screen
+// allocator back out; the console runs it on EVERY not-done GamePrepare pass and again from
+// the loading-screen spine (F-P5-3) and RenderGUI (F-P6-18).
+//
+// EVERY SOURCE IN THE CONSOLE BODY IS A RAW OFFSET INTO THE RENDERER, and this build's layout
+// is an x64 reconstruction, so each one is resolved to its committed member BY TYPE AND ROLE
+// (the full offset->name derivation is in progress/boot_audit/phases/P2b_renderermodule_update.md):
+//
+//   this+0xAE8/0x1090/0x1270/0x1550/0x1598/0x172C/0x1774 -> the seven Im2d/Im3d buffers, which
+//     are the only members of those types in the class and appear in the console's order;
+//   the three effects families at E+0/+4/+8 with the shared slot byte at E+0xD -> the
+//     arbitrator's own GetExternalEffectsFrame(layer, slot).  The console forms
+//     `496 * (2*slot + internal)`, and EffectsArbitrator.h:141 documents that same expression
+//     as `mapaEffectsFrames[layer][slot][external]` -- so the console's loop index IS the slot
+//     and its `s` byte IS the external index.  Layer slot counts 1/4/2 match the loop bounds;
+//   this[0xAD1] + slot*0x320 + 0x490 -> maShaderConstantsFrames[mu8ShaderConstantsFrameExternal];
+//   the blobby/corona slot walks -> the managers' own GetExternalBuffer() / GetSubmissionInterface();
+//   this+0xC40C -> mRenderSwitches;  this+0xC8FC -> mReusableLoadingScreenAllocator.
+// ============================================================================================
+void BrnRendererModule::Update(CgsModule::IOBufferStack* /*lpUpdateInputStack*/,
+                               CgsModule::IOBufferStack* /*lpUpdateOutputStack*/,
+                               RendererIO::InputBuffer*  lpInput,
+                               RendererIO::OutputBuffer* lpOutput)
+{
+    CGS_ASSERT(lpOutput != 0, "lpOutput");   // X360 :0x11A7
+    CGS_ASSERT(lpInput  != 0, "lpInput");    // X360 :0x11A8
+    if (lpInput == 0 || lpOutput == 0)
+        return;
+
+    lpInput->LockForRead();
+    lpOutput->LockForWrite();
+
+    // @0x82405EA4-B0 -- the camera crosses first.
+    if (const BrnDirector::Camera::Camera* lpCamera = lpInput->GetBrnCamera())
+        lpOutput->SetBrnCamera(*lpCamera);
+
+    // @0x82405EBC-C0 -- THE LATCH SOURCE.  The console lends the ADDRESS of its embedded
+    // allocator; the game module stores that pointer at gm+0x9A0630 and FreeAll's it once per
+    // world drive.  This one call is why the PC had to invent a static 512 KiB world frame
+    // allocator (F-P6-12).
+    lpOutput->SetReusableLoadingScreenAllocator(&mReusableLoadingScreenAllocator);
+
+    lpInput->UnlockForRead();
+
+    // ---- the publication block (@0x82405FD0-0x82406130) -------------------------------
+    lpOutput->SetDispatchFrame(GetDispatchFrameForWrite());
+    lpOutput->SetIm2dRenderBuffer(&mIm2dRenderBuffer);
+    lpOutput->SetIm3dRenderBuffer(&mIm3dRenderBuffer);
+    lpOutput->SetIm3dRenderBufferUntex(&mIm3dRenderBufferUntex);
+    lpOutput->SetIm3dDebugRenderBuffer(&mIm3dDebugRenderBuffer);
+    lpOutput->SetIm2dDebugRenderBuffer(&mIm2dDebugRenderBuffer);
+
+    // The three effects families, in the console's order and with its loop bounds
+    // (kau8SlotsPerEffectsLayer == {1, 4, 2}).
+    lpOutput->SetBaseEffectsFrame(
+        mEffectsArbitrator.GetExternalEffectsFrame(
+            BrnGraphics::EffectsArbitrator::KU_EFFECTS_LAYER_BASE, 0));
+    for (u8 lu8Slot = 0; lu8Slot < 4; ++lu8Slot)
+    {
+        lpOutput->SetWorldEffectsFrame(lu8Slot,
+            mEffectsArbitrator.GetExternalEffectsFrame(
+                BrnGraphics::EffectsArbitrator::KU_EFFECTS_LAYER_WORLD, lu8Slot));
+    }
+    for (u8 lu8Slot = 0; lu8Slot < 2; ++lu8Slot)
+    {
+        lpOutput->SetFXEventsEffectsFrame(lu8Slot,
+            mEffectsArbitrator.GetExternalEffectsFrame(
+                BrnGraphics::EffectsArbitrator::KU_EFFECTS_LAYER_FX_EVENTS, lu8Slot));
+    }
+
+    lpOutput->SetShaderConstantsFrame(&maShaderConstantsFrames[mu8ShaderConstantsFrameExternal]);
+    lpOutput->SetBlobbyShadowBuffer(mBlobbyShadowManager.GetExternalBuffer());
+    // [FLAG] @0x824060F0-108 publishes the corona submission interface
+    // (`corona + mu8Slot*0x70 + 0x50`). BrnCoronaManager::GetSubmissionInterface is
+    // DECLARED-ONLY and its header says so in as many words -- "Not X360-attested for this
+    // TU". The blobby accessor beside it WAS derivable (maBuffers[mu8External], stride
+    // 0x1010 == sizeof(buffer)); this one is not, because the +0x50 sub-object inside the
+    // 0x70 stride has no committed member to name. Left unpublished rather than guessed;
+    // the output buffer keeps its Construct-time null, which its consumers already tolerate.
+    // Tracked as the remainder of F-P2-4 alongside the 0x2C record below.
+    lpOutput->SetIm3dRenderBufferRacePosition(&mIm3dBufferRacePosition);
+    lpOutput->SetIm3dRenderBufferMenusAndHud(&mIm3dBufferMenusAndHud);
+    lpOutput->SetRenderSwitches(mRenderSwitches);
+
+    // [FLAG] @0x82406134-F0 -- the console then gathers ELEVEN scattered words
+    // (renderer +0xC938/+0xC940/+0xC948/+0xC9C0/+0xC954/+0xC958/+0xC9C8/+0xC9D0/+0xCA10/
+    // +0xC9D4/+0xC9D8) into a 0x2C-byte stack record and memcpy's it to lpOutput+0x1B8.
+    // Those eleven are NOT resolved to committed members yet -- they sit past mRenderSwitches
+    // in a region this layout has not itemised, and guessing eleven member identities is
+    // exactly the misattribution class this audit exists to remove (cf. F-P7-12). The record
+    // is left unwritten rather than filled with plausible-looking values; the output buffer's
+    // corresponding field keeps its Construct-time zeros. Tracked as the remainder of F-P2-4.
+
+    lpOutput->UnlockForWrite();
+}
