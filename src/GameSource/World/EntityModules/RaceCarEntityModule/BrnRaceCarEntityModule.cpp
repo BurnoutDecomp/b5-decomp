@@ -1323,6 +1323,29 @@ void RaceCarEntityModule::PublishNewVehicleToDirectorWithoutPhysicsBringUp(
 }
 
 
+// ============================================================================
+// ⚠️ FLAG PC QUALITY-OF-LIFE -- NOT an X360 function.
+//
+// ApplyRenderPoseInterpolationBringUp: once per RENDERED frame, before the dispatch pass,
+// write each active car's display pose as the blend of the last two simulation ticks.
+//
+// The simulation is paced at a fixed 60 Hz while the renderer runs free, so without this
+// the car steps 60 times a second inside a 140-frame-a-second stream and shudders against
+// a world that moves smoothly with the camera. Idempotent -- the frame's several dispatch
+// passes (main view, three shadow cascades, the env-map faces) may each call it.
+// ============================================================================
+void RaceCarEntityModule::ApplyRenderPoseInterpolationBringUp( f32 lfAlpha )
+{
+    for( s32 liCar = 0; liCar < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liCar )
+    {
+        ActiveRaceCar& lrActiveRaceCar = maActiveRaceCars[liCar];
+        if( lrActiveRaceCar.IsActive() )
+        {
+            lrActiveRaceCar.ApplyRenderPoseInterpolation( lfAlpha );
+        }
+    }
+}
+
 // [FLAG PC bring-up] NOT an X360 function -- see the header. Reports the first active
 // slot's render pose so the world module's bring-up tour camera can frame it.
 bool RaceCarEntityModule::GetSpawnedCarPositionBringUp( Vector3& lrPosition ) const
@@ -2735,6 +2758,23 @@ void RaceCarEntityModule::PostPhysicsUpdate(
 
     lpOutput->LockForWrite();
 
+    // ⚠️ FLAG PC quality-of-life: UN-BLEND BEFORE THIS TICK'S PRODUCERS RUN.
+    // RenderParams currently holds the last rendered frame's interpolated pose; put the real
+    // tick pose back, so the latch at the bottom of this function can only ever capture a
+    // genuine tick pose and never its own blended output. Pairs with the latch loop below --
+    // the two must stay in the same function, bracketing every pose producer.
+    // (Currently changes no value here -- every active slot is written every tick by either
+    // the readback or a stand-in -- but see the scope note on ActiveRaceCar.)
+    for( s32 liCar = 0; liCar < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liCar )
+    {
+        ActiveRaceCar* lpActiveRaceCar =
+            GetActiveRaceCar( static_cast<EActiveRaceCarIndex>( liCar ) );
+        if( lpActiveRaceCar->IsActive() )
+        {
+            lpActiveRaceCar->RestoreTickRenderPose();
+        }
+    }
+
     // ⭐ THE NEW-VEHICLE PUBLISH, at the console's own position for
     // ProcessCreateVehicleEvents (@0x823075F8 -- early, BEFORE the physics readback at
     // @0x8230761C). See PublishNewVehicleToDirectorWithoutPhysicsBringUp's banner.
@@ -2842,6 +2882,24 @@ void RaceCarEntityModule::PostPhysicsUpdate(
     // `bne cr6, loc_823076C0` at 0x82307610 skips the whole physics-readback run and lands
     // on the instruction pair that sets this call up, so the paint refresh runs every frame
     // whether the sim is paused or not.
+    // ⚠️ FLAG PC quality-of-life: LATCH THIS TICK'S RENDER POSE, for every active slot.
+    //
+    // Here and nowhere else, because THIS is the one point in the tick at which every
+    // producer has finished: the physics readback above owns the slots in mUsedRaceCars and
+    // the two stand-ins own the rest, and both have run by now. Latching inside either
+    // producer would double-latch the slots the other one also touches, and a double latch
+    // silently collapses the blend to a no-op -- the judder would come back looking like it
+    // had never been fixed. See ActiveRaceCar::LatchTickRenderPose.
+    for( s32 liCar = 0; liCar < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liCar )
+    {
+        ActiveRaceCar* lpActiveRaceCar =
+            GetActiveRaceCar( static_cast<EActiveRaceCarIndex>( liCar ) );
+        if( lpActiveRaceCar->IsActive() )
+        {
+            lpActiveRaceCar->LatchTickRenderPose();
+        }
+    }
+
     UpdateActiveRaceCarColours();
 
     // The console reads the four interfaces off the output buffer in this order

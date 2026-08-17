@@ -67,6 +67,7 @@
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnDetachedPartRenderEvent.h"
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarType.h" // ERaceCarType (IsPlayer)
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h" // EActiveRaceCarEngineState
+#include "GameShared/GameClasses/System/Timer/CgsFrameInterpolation.h" // ⚠️ FLAG PC QoL: PoseTrack (the render-pose interpolator, by value)
 
 namespace BrnPhysics { namespace Vehicle { struct VehicleInputInterface; } }
 namespace CgsWorld { struct WorldMap2D; }   // UpdatePhysicsState forwards it to RaceCar::UpdatePositioningData
@@ -323,6 +324,10 @@ public:
         // --- body pose ------------------------------------------------------
         const Matrix44Affine& GetBodyTransform() const { return mBodyTransform; }
         void SetBodyTransform(const Matrix44Affine& lrTransform) { mBodyTransform = lrTransform; }
+        // ⚠️ FLAG PC quality-of-life: writable access for the render-pose interpolator,
+        // which rewrites this transform in place once per rendered frame. Additive; the
+        // console's own producers keep using SetBodyTransform.
+        Matrix44Affine& GetBodyTransformForWrite() { return mBodyTransform; }
 
         // --- deformation scratch (128 verlet points) ------------------------
         const Vector3Plus* GetVerletOffsets() const { return maVerletOffsets; }
@@ -523,6 +528,67 @@ public:
     // (`addi r5, r29, 0x7E0`) rather than going through GetRenderParams().
     RenderParams* GetRenderParams()             { return &mRenderParams; }
     const RenderParams* GetRenderParams() const { return &mRenderParams; }
+
+    // ========================================================================
+    // ⚠️ FLAG PC QUALITY-OF-LIFE -- NOT X360 FUNCTIONS. THE RENDER-POSE INTERPOLATOR.
+    //
+    // The simulation now ticks at a fixed 60 Hz while the renderer draws as fast as it
+    // can (see CgsFrameInterpolation.h). RenderParams IS the pose the renderer draws, and
+    // it is rewritten once per TICK by whichever producer owns the slot --
+    // ActiveRaceCar::UpdatePhysicsState for the cars physics owns, the
+    // PublishRenderPoseWithoutPhysics/WheelPose stand-ins for the rest. Drawn straight,
+    // that steps at 60 Hz inside a 140 Hz frame stream and the car visibly shudders
+    // against a world that is moving smoothly with the camera. (MEASURED: the body
+    // position holds for two to three consecutive frames and then jumps.)
+    //
+    // So the tick pose is kept HERE, one tick deep, and RenderParams carries the blend of
+    // the last two:
+    //   RestoreTickRenderPose()        -- once per simulation tick, BEFORE the producers
+    //                                     run. Puts the stored tick pose back into
+    //                                     RenderParams.
+    //   LatchTickRenderPose()          -- once per simulation tick, AFTER the producer has
+    //                                     written RenderParams. Rolls current -> previous
+    //                                     and takes the new current.
+    //   ApplyRenderPoseInterpolation() -- once per rendered frame, BEFORE the dispatch
+    //                                     pass. Writes blend(previous, current, alpha)
+    //                                     into RenderParams.
+    //
+    // WHY THE RESTORE EXISTS. Apply REWRITES RenderParams, so between two ticks the pose in
+    // it is a blend, not a tick pose. The latch's source is therefore only trustworthy if
+    // the tick pose is put back first -- otherwise, on any tick where no producer rewrote
+    // that slot, the latch would take its own blended output as the next tick and the
+    // history would drift.
+    //
+    // HONEST SCOPE, as of 2026-08-17: on this build every ACTIVE slot is written every tick
+    // by exactly one producer (the physics readback owns the slots in mUsedRaceCars, the two
+    // stand-ins own the rest), so the restore currently changes no value. It is a structural
+    // guarantee, not an observed fix, and it stops being belt-and-braces the moment any slot
+    // can go a tick unwritten -- a paused simulation, a producer gated on the update set, or
+    // the prop module, where only the simulated props will have a producer at all.
+    //
+    // ⛔ AND A WARNING FOR WHOEVER MEASURES THIS NEXT. Any probe of the display pose must be
+    // read AFTER Apply. Sampled before it, a probe alternates between the sub-step's raw
+    // latch (on stepping frames) and the previous frame's blend (on zero-step frames), which
+    // plots as a sawtooth and reads exactly like broken interpolation. That artifact cost one
+    // diagnosis round on 2026-08-17; the interpolation was working at the time.
+    //
+    // ApplyRenderPoseInterpolation is IDEMPOTENT -- it always blends from the two stored
+    // ticks, never from what is currently in RenderParams -- so the multi-pass frame (main
+    // view plus three shadow cascades plus the env-map faces) can call it per pass without
+    // compounding.
+    //
+    // WHY NOT IN RenderParams: its layout is X360-pinned down to sizeof == 5280
+    // (BrnActiveRaceCarRenderParams.cpp's static_assert block). ActiveRaceCar is not.
+    //
+    // WHAT IS BLENDED: the body transform and the six WORLD wheel transforms -- every
+    // matrix the render leg turns into geometry. NOT the wheel SCALE matrices (a scale,
+    // republished only when the wheel scale changes), not the LOD, not the visibility bits,
+    // not the light locators: those are discrete per-tick decisions, and blending a
+    // decision produces a state the game was never in.
+    // ========================================================================
+    void RestoreTickRenderPose();
+    void LatchTickRenderPose();
+    void ApplyRenderPoseInterpolation(f32 lfAlpha);
 
     // X360: RaceCarState* GetPhysicsState() -- &mPhysicsState.
     BrnPhysics::Vehicle::RaceCarState*       GetPhysicsState()       { return &mPhysicsState; }
@@ -806,5 +872,18 @@ private:
     u8 maPad1CAC[24];                                    // +0x1CAC (7340) .. +0x1CC4 (7364)
     CgsResource::ResourceHandle mGraphicsModelHandle;    // +0x1CC4 (7364)
     u8 maPad1CCC[12];                                    // +0x1CCC (7372) .. +0x1CD0 (7376)
+
+    // ---- ⚠️ FLAG PC quality-of-life: the render-pose interpolator's storage ------------
+    // PAST the console's 0x1CD0 object stride, deliberately: nothing here exists on the
+    // X360 and no offset at or before 0x1CD0 moves. (The only pinned offset in the owning
+    // module is maRaceCars @0x250, which precedes maActiveRaceCars -- BrnRaceCarEntityModule.h
+    // already records that the array's own 0x1A60 no longer holds.)
+    //
+    // One CgsSystem::FrameInterpolation::PoseTrack per interpolated transform. The wheels
+    // get their own because GetWheelTransform is already a WORLD transform -- spin, steer
+    // and suspension travel are in it, not derived from the body.
+    static const u32 KU_INTERP_WHEELS = 6u;              // == RenderParams::mWheelTransforms[6]
+    CgsSystem::FrameInterpolation::PoseTrack mBodyPoseTrack;
+    CgsSystem::FrameInterpolation::PoseTrack maWheelPoseTracks[KU_INTERP_WHEELS];
 };
 }

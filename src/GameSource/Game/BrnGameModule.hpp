@@ -332,6 +332,21 @@ namespace BrnGame
         void         CreateStaticIOBuffers();      // @ BrnGameModule.cpp:2497
         void         DestroyStaticIOBuffers();     // @ BrnGameModule.cpp:2515
 
+        // ---- ⚠️ FLAG PC quality-of-life: the dispatch camera latch --------------------
+        // NOT X360 functions. The renderer can now draw frames on which NO simulation
+        // sub-step ran (see mi8FrameRateMinSteps), and on such a frame the per-sub-step IO
+        // buffers DoDispatch used to read the camera out of do not exist -- they are created
+        // and destroyed inside the sub-step loop. So the director's published camera is
+        // latched into the game module at the end of every sub-step, one tick deep, and
+        // DoDispatch renders the blend of the last two.
+        //
+        // That is both halves of the same problem solved by one mechanism: it is what keeps
+        // a zero-step frame from falling back to the world module's tour camera (a visible
+        // jump), and it is what makes a 60 Hz camera read as continuous motion at 144 Hz.
+        // DELETE-WHEN: never, while the simulation is decoupled from the render rate.
+        void LatchDispatchCamera();
+        const BrnDirector::Camera::Camera* GetInterpolatedDispatchCamera();
+
         // Debug step/play-frame callbacks (registered with the debug menu; the void* is the
         // game-module instance).
         static void StepFrameCB(void* lpContext);  // @ BrnGameModule.cpp:3981
@@ -683,6 +698,12 @@ namespace BrnGame
         // [h:469-471: the two TimerRequests + the request interface - omitted]
         CgsSystem::FrameRateManager      mFrameRateManager;          // h:472
         CgsSystem::EFrameRateManagerType meFrameRateManagerType;     // h:473
+        // ⚠️ FLAG PC quality-of-life (no console counterpart -- the console reads this rate
+        // out of the validated display mode). The FIXED simulation rate, in Hz: the size of
+        // one simulation step, the divisor the frame-rate manager counts real elapsed time
+        // against, and the base of every timestep downstream. See the banner at its use site
+        // in BrnGameModule::Construct.
+        static const u32 KU_SIMULATION_RATE_HZ = 60u;
         // [h:474: frame-rate type request interface - omitted]
         s8   mi8FrameRateMinSteps;                                   // h:475
         s8   mi8FrameRateMaxSteps;                                   // h:476
@@ -703,6 +724,16 @@ namespace BrnGame
         // other per-sub-step static IO buffers instead. Same lifetime either way.
         // See GetWorldUpdateOutputBuffer() above.
         BrnWorldIO::UpdateOutputBuffer*        mpWorldUpdateOutputBuffer;
+        // ---- ⚠️ FLAG PC quality-of-life: the dispatch camera latch (no console members) ---
+        // The last two simulation ticks' worth of the director's published camera, plus the
+        // frame-local blend of them. See LatchDispatchCamera / GetInterpolatedDispatchCamera.
+        // Latched by value because the buffer they are read out of only lives for the
+        // sub-step that produced it.
+        BrnDirector::Camera::Camera mPreviousTickCamera;
+        BrnDirector::Camera::Camera mCurrentTickCamera;
+        BrnDirector::Camera::Camera mInterpolatedCamera;
+        bool                        mbCurrentTickCameraValid;
+        bool                        mbPreviousTickCameraValid;
         // The double-buffered dispatch-thread input pair (X360 module +10097064): the update
         // side writes it (BridgeGuiToGame's loading-screen commands, IsStalled/IsDiskError,
         // brightness/contrast), OnEndOfUpdateFrame swaps it, and the dispatch/render side
@@ -852,4 +883,13 @@ namespace BrnGame
     // BrnMain.cpp next to GetMainGameDataModule/GetMainSoundModule; the loading flow reads the
     // update IO stacks through it, as the X360 loads do off the global.
     BrnGameModule* GetMainGameModule();
+
+    // ⚠️ FLAG PC quality-of-life -- no console counterpart. The simulation-pacing switch,
+    // read from config.ini `[Display] DecoupleSimulation` by BrnMain's LoadConfig and applied
+    // by BrnGameModule::Construct (the module is a static, so its constructor runs first and
+    // cannot see the setting).
+    //   true  -- fixed 60 Hz simulation, free-running renderer, interpolated display poses.
+    //   false -- the console's arrangement: exactly one simulation step per rendered frame.
+    // It exists so the two can be A/B'd in a single edit rather than a rebuild.
+    extern bool gbDecoupleSimulationFromRenderRate;
 }
