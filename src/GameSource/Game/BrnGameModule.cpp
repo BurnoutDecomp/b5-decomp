@@ -278,12 +278,18 @@ namespace BrnGame
         // (F4) that phantom OnEnter would also have raised mbSaveLoadState, making the
         // initial-load update set 0xC1 instead of the console's 0x80.
 
-        // GUI module Prepare (movie-hosting slice): load VIDEOS\VIDEOLIST.BUNDLE (metadata only, no
-        // device needed) + publish gpActiveMovieManager so the renderer draws the active movie. The
-        // X360 prepares the GuiModule via the loading flow's LoadGUIModule stage + the module
-        // dispatch; this is the minimal PC hookup (Update runs in GameMain). It stays idle until a
-        // 508 GuiEventPlayVideo is queued (BrnBootVideos in Phase 3).
-        mGuiModule.Prepare();
+        // ⭐ THE GUI PREPARE IS GONE FROM HERE, 2026-08-16 (boot audit F-P1-1, the S1
+        // exemplar). It used to run `mGuiModule.Prepare()` on this line -- which meant the
+        // whole ~24MB GUI/Apt bring-up (VIDEOLIST, the Apt runtime, PERSISTENTAPT,
+        // GUITEXTURES, the fonts, FLAPTHUD, the profiles, the flow pools, the FSM
+        // controller) completed BEFORE the loading screen existed. The log said so plainly:
+        // every GUI/Apt line came out before "loading screen shown".
+        //
+        // Construct @0x823C9EA8 contains no GuiModule::Prepare at all. The console drives it
+        // from the loading-screen stage machine: InitialLoadingScreen::Update @0x823EF688
+        // stage 2 -> LoadingScriptedState::LoadGUIModule @0x823EF310, which pumps the GUI
+        // module's Prepare (vtable+0x58) once per frame and only posts the two id-144 RunFsm
+        // records when it finally reports done. That is now where ours runs.
 
         // ---- input bring-up (PC stand-in for the unreconstructed input setup pass) --------
         // The console input module's Prepare constructs its output buffer, scans the pads and
@@ -1306,7 +1312,10 @@ namespace BrnGame
         // the POST-GUI pass, bracketed by the same write lock, immediately before
         // DirectorModule::PostGuiUpdate consumes what it published. This is the only path by
         // which BrnGui::Intro's fly-by START/END commands (477 / 478) reach the director.
-        if (lbPostGui)
+        // (the IsPrepared test is the GUI out-queue's existence: it is Constructed by
+        // GuiModule::Prepare, which since 2026-08-16 runs at loading stage 2 rather than at
+        // BrnGameModule::Construct -- boot audit F-P1-1.)
+        if (lbPostGui && mGuiModule.IsPrepared())
         {
             lpDirectorInput->LockForWrite();
             BridgeGuiToDirector(lpDirectorInput, mGuiModule.GetGuiOutQueue());
@@ -2926,10 +2935,21 @@ namespace BrnGame
                 }
                 // GUI module per-frame tick (drives the FSM controller + the HUD flow + the
                 // MovieManager). The X360 ticks this through the module dispatch.
-                mGuiModule.Update();
-                // The GUI->game out-event consumer (X360 0x823CB758): latch the flow
-                // commands (70/71, the loading screen 19/20, ...) the states posted.
-                BridgeGuiToGame(mGuiModule.GetGuiOutQueue());
+                //
+                // ⭐ GATED 2026-08-16 (boot audit F-P1-1). The GUI module is no longer
+                // prepared by the time the frame loop starts -- loading stage 2 builds it,
+                // several frames in, with the loading screen up. Ticking an unprepared
+                // module would drive a null FSM controller, flow and MovieManager. The
+                // console never faces the question: its module scheduler does not dispatch
+                // to a module until the module reports prepared, which is the same test.
+                const bool lbGuiPrepared = mGuiModule.IsPrepared();
+                if (lbGuiPrepared)
+                {
+                    mGuiModule.Update();
+                    // The GUI->game out-event consumer (X360 0x823CB758): latch the flow
+                    // commands (70/71, the loading screen 19/20, ...) the states posted.
+                    BridgeGuiToGame(mGuiModule.GetGuiOutQueue());
+                }
                 // ---- the DIRECTOR's post-GUI pass (X360 module-scheduler order) -----------
                 // It runs BridgeGuiToDirector over the SAME out-queue, so the queue must still
                 // be intact here -- that is why BridgeGuiToGame no longer clears it.
@@ -2937,7 +2957,11 @@ namespace BrnGame
                 // Both GUI out-event consumers have now run; retire this frame's records.
                 // (The console's queue lifecycle is the module scheduler's IO-buffer teardown;
                 // on PC the queue is a module member, so it is cleared explicitly.)
-                mGuiModule.GetGuiOutQueue()->Clear();
+                // The out-queue is Constructed by GuiModule::Prepare -- on the console too
+                // (CgsGui::GuiModule::Prepare @0x82857070 constructs the base queue at
+                // @0x828570F0) -- so before stage 2 there is no queue to clear.
+                if (lbGuiPrepared)
+                    mGuiModule.GetGuiOutQueue()->Clear();
                 PerfMonCpu::StopMonitor(mCpuMonitors.miUT_EachUpdate);
 
                 if (liStep != miNumSimFramesRequired - 1)

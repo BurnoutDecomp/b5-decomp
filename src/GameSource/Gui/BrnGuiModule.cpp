@@ -1040,6 +1040,7 @@ namespace BrnGui
             }
         }
         mbResourcesReadyFed = false;
+        mbPrepared          = false;
     }
 
     bool GuiModule::Prepare()
@@ -1389,6 +1390,7 @@ namespace BrnGui
 
         CgsDev::Log::WriteToLog(
             "[GuiModule] flow controller live (HUD flow registered; awaiting GuiEventRunFsm).\n");
+        mbPrepared = true;
         return true;
     }
 

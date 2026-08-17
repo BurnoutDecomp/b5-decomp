@@ -54,6 +54,15 @@ namespace BrnGui
         void Destruct() override;
         void Update() override;
 
+        // ⭐ 2026-08-16 (boot audit F-P1-1). Prepare no longer runs from BrnGameModule::Construct;
+        // it runs from loading stage 2, with the loading screen already up, exactly as the
+        // console's LoadingScriptedState::LoadGUIModule @0x823EF310 pumps it (vtable+0x58 per
+        // frame). This latch is what everything that used to be able to assume "the GUI module
+        // was prepared before the frame loop started" now tests -- above all the game module's
+        // per-frame Update() drive, which on the console does not exist until the module
+        // scheduler has the module prepared.
+        bool IsPrepared() const { return mbPrepared; }
+
         // The per-frame GUI render drive (X360 BrnGui::GuiModule::Render @0x825146B8 ->
         // CgsGui::GuiModule::Render @0x8285AF38's core): publish the active renderer set
         // into the view input buffer (SetImRenderers), run the view module's render entry
@@ -305,6 +314,13 @@ namespace BrnGui
         // resource while live, so the pools must not alias across flows).
         CgsResource::Pool mFsmBundlePool[E_GUIFLOW_COUNT];
         bool              mbResourcesReadyFed;   // fed BF_LEGAL its resources-ready (567) yet
+        // The Prepare latch behind IsPrepared() (see the accessor's note). The console has no
+        // such member because its stage word IS the latch -- CgsGui::GuiModule::Prepare
+        // @0x82518D68 is a 16-stage resumable ladder whose gated stages return 0 until the
+        // stage word reaches DONE (boot audit F-P8a-1). This build's Prepare is still the
+        // one-shot synchronous collapse of that ladder, so a bool is the whole of the state;
+        // it becomes the stage word when the ladder itself is adopted.
+        bool              mbPrepared;
     };
 
     // Renderer bridge, matching gpActiveMovieManager: GuiModule publishes itself while
