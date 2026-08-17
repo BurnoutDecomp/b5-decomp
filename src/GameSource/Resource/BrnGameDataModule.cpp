@@ -763,6 +763,11 @@ namespace BrnResource
     // are not committed. Until then the PC stage 0 logs one-shot and jumps straight to
     // stage 2 WITHOUT registering a schema -- AttribSysModule::sbSchemaLoaded stays false
     // and its vault-array interior stays gated (see CgsAttribSysModule.cpp).
+    // Forward declaration: the shared list-prepare resource input carve, defined in the
+    // anonymous namespace below. The schema prepare's X360 tail pumps the resource module
+    // through it too (boot audit F-P7-17), and that tail comes first in this file.
+    namespace { CgsResource::ResourceIO::InputBuffer* GetListPrepareResourceInput(); }
+
     bool GameDataModule::PrepareAttribSysSchemaResource(
             CgsAttribSys::AttribSysIO::InputBuffer* lpAttribModuleInputBuffer)
     {
@@ -833,9 +838,18 @@ namespace BrnResource
             mReceiverQueue.Clear();
             miResourcePrepareStage = 1;
 
-            // The shared X360 per-pass tail: a DIRECT AttribSysModule::ProcessInputs
-            // on the attrib input (the schema request is consumed synchronously; the
-            // SchemaRegisteredResponse lands on mReceiverQueue for stage 1).
+            // The shared X360 per-pass tail @0x826733B0-E4, in the console's order:
+            // unlock, UpdateResourceModule @0x826663B0, destroy the carve, then a DIRECT
+            // AttribSysModule::ProcessInputs on the attrib input (the schema request is
+            // consumed synchronously; the SchemaRegisteredResponse lands on mReceiverQueue
+            // for stage 1).
+            //
+            // ⭐ THE RESOURCE PUMP IS RESTORED, 2026-08-17 (boot audit F-P7-17). Only the
+            // ProcessInputs half was here. Latent while the schema blobs come from files --
+            // nothing is queued for the resource module to service -- and wrong the moment
+            // the schema arrives as a resource, which is the shape the console is written
+            // for. Same pump the list-prepare tail below already calls.
+            mResourceModule.Update(GetListPrepareResourceInput(), 0);
             mAttribSysModule.ProcessInputs(lpAttribModuleInputBuffer);
             return false;
         }
