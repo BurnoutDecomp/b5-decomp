@@ -53,6 +53,10 @@ namespace CgsFsm
 
         bool IsLuaResourceValid() { return mLuaState.IsLuaResourceValid(); }
         u32  GetSequenceNumber() const { return muSequenceNumber; }
+        // BrnBaseFlow::Construct @0x824F1C04 seeds this to 1 (so the owner's first Update
+        // sees a sequence change and kicks its streaming pass once). Construct itself
+        // leaves it 0, so the seed is a store by the owner, not by this class.
+        void SetSequenceNumber(u32 luSequenceNumber) { muSequenceNumber = luSequenceNumber; }
 
     protected:
         CgsFsm::LuaState mLuaState;        // +0x08
