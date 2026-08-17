@@ -14,7 +14,8 @@
 // BrnGui::ScreenLoading -- reconstructed from BURNOUT_X360_ARTIST.XEX:
 //   OnEnter @0x824D0CA8   OnLeave @0x824B8FD0   Update @0x824DA770
 //   ApplyOptionsDataProfileSettings @0x824D0DC0
-//   GetResourcesToLoad = the ICF fold @0x824B5A20 (vtable @0x82074130)
+//   GetResourcesToLoad = vtable @0x82074130 slot +0x20 -> 0x825011B0 (ICF fold with
+//                        BrnGui::Video::GetResourcesToLoad)
 // Class shape from the DecFIGS DWARF (BrnScreenLoading.h:42). The SCREEN flow's
 // loading state: posted after the intro hand-off, it drops any lingering apt movies,
 // waits for the world-load-complete feedback (event 137), replays the loaded options
@@ -196,15 +197,17 @@ namespace BrnGui
         mpStateInterface->UnRegisterForEvents(maiEventToObserve, miNumEventsObserved);
     }
 
-    // @ the ICF fold 0x824B5A20 (== BrnGui::CarSelectUnlock::GetResourcesToLoad): assert
-    // the out-pointers, then hand back the empty list. (The X360 streams "Invalid
-    // pointer" through the assert buffer; plain form per policy.)
-    void ScreenLoading::GetResourcesToLoad(const CgsGui::sResourceTuple** lppResourceTuples,
+    // ⭐ RE-ANCHORED 2026-08-16 (boot audit F-P8b-14). This cited the ICF fold @0x824B5A20
+    // and reproduced THAT body -- two "Invalid pointer" asserts and a null tuple store.
+    // Wrong slot by one: 0x824B5A20 is the end of the PREVIOUS vtable. ScreenLoading's
+    // vtable @0x82074130 slot +0x20 is 0x825011B0 (== BrnGui::Video::GetResourcesToLoad,
+    // itself an ICF fold), and it is three instructions with no asserts and no tuple store:
+    //     li r11, 0 ; stw r11, 0(r5) ; blr
+    // i.e. it writes the COUNT only and leaves the caller's tuple pointer untouched. The
+    // two asserts were invented; so was the *lppResourceTuples = 0.
+    void ScreenLoading::GetResourcesToLoad(const CgsGui::sResourceTuple** /*lppResourceTuples*/,
                                            u32* lpuNumberOfResources) const
     {
-        CGS_ASSERT(lppResourceTuples != 0, "Invalid pointer");
-        CGS_ASSERT(lpuNumberOfResources != 0, "Invalid pointer");
-        *lppResourceTuples    = 0;
         *lpuNumberOfResources = 0;
     }
 

@@ -2483,7 +2483,17 @@ namespace BrnGame
             }
         }
 
-        mGameDataModule.Update(lpGameDataInput, lpGameDataOutput);
+        // ⭐ THE STALL PUBLISH, restored 2026-08-16 (boot audit F-P3-3). @0x823BCA18-38:
+        //     ret = (gameDataModule->vtable+0x44)(...);          // the Update above
+        //     cmpwi cr6, r3, 1; li r10,1; beq; li r10,0
+        //     stbx r10, r31, 0x99FFE8                            // (gm+1600)+0x99FFE8
+        //                                                        //  == gm+0x9A0628
+        // gm+0x9A0628 is the byte ConstructUpdateSetFromFsm turns into update-set bit 0x400,
+        // the STALL bit. The PC threw the return value away and never wrote the member, so
+        // the whole stall gate was dead: nothing downstream could ever tell that the
+        // streamer had not caught up. The value is "the resource pump is still busy" --
+        // Update returning 1 -- and it is republished every pass, not latched.
+        mbStalled = mGameDataModule.Update(lpGameDataInput, lpGameDataOutput);
     }
 
     // @ BrnGameModule.cpp:1221 - the render/dispatch thread body. The threaded D3D

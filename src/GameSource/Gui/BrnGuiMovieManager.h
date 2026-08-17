@@ -33,12 +33,23 @@ namespace BrnGui
         // One queued/playing video request (DecFIGS BrnGui::MovieManager::VideoDefinition).
         struct VideoDefinition
         {
+            // ⭐ LAYOUT CORRECTED 2026-08-16 (boot audit F-P8b-6), read store-for-store off
+            // VideoDefinition::Prepare @0x82472990:
+            //     std  ID::HashString("")   , 0x10(this)   <- ONE 8-byte id, not two u32s
+            //     stw  [dword_830082A8]     , 0x18(this)   <- the SOUND-NAME default
+            //     stw  0, 0x1C(this) ; stw 0, 0x20(this)   <- the TWO crossfades
+            //     stb  0, 0x24/0x25/0x26(this)
+            //     stvx {CC0,CC0,C98,C98}    , 0x00(this)   <- the rectangle
+            // The previous decode split the 64-bit id into {id, soundName} at +0x10/+0x14
+            // and then slid every later field back one slot: what it called
+            // miCrossfadeInFrames was the sound name, miCrossfadeOutFrames was the first
+            // crossfade, and "muField20" was the second. Harmless while nothing wrote a
+            // sound name; not harmless since the producers started (F-P8b-5).
             f32  mafRectangle[4];                 // +0x00 mv4Rectangle (left/top/right/bottom)
-            u32  mVideoResourceId;                // +0x10 VideoDataResource id (0 = none)
-            u32  mSoundStreamName;                // +0x14 mSoundStreamName [stub: CgsSound::Playback::Name -> id]
-            s32  miCrossfadeInFrames;             // +0x18 (Prepare seeds from dword_830082A8 default)
-            s32  miCrossfadeOutFrames;            // +0x1C
-            u32  muField20;                       // +0x20 (Prepare zeroes / Copy copies; @0x82472990/@0x824EAFD8)
+            u64  mVideoResourceId;                // +0x10 VideoDataResource id, 64-bit (0 = none)
+            u32  mSoundStreamName;                // +0x18 CgsSound::Playback::Name::MakeHash of the video name
+            s32  miCrossfadeInFrames;             // +0x1C
+            s32  miCrossfadeOutFrames;            // +0x20
             bool mbPreload;                       // +0x24
             bool mbKeepMemoryWhenFinished;        // +0x25
             bool mbDisableCustomSoundtracks;      // +0x26
@@ -103,8 +114,8 @@ namespace BrnGui
         void Render(CgsGraphics::Im2dRenderBuffer* lpIm2dRenderBuffer);
         void RecvEvent(const CgsModule::Event* lpEvent, s32 liEventId);
 
-        u32  GetPlayingMovie() const { return mPlayingMovie.mVideoResourceId; }
-        u32  GetQueuedMovie() const  { return mQueuedMovie.mVideoResourceId; }
+        u64  GetPlayingMovie() const { return mPlayingMovie.mVideoResourceId; }
+        u64  GetQueuedMovie() const  { return mQueuedMovie.mVideoResourceId; }
         bool IsMovieQueued() const   { return mQueuedMovie.mVideoResourceId != 0; }
         // ARTIST @0x824F7808: the GuiModule polls this (PreWorldUpdate) while the manager is in
         // REQUESTING_MOVIEDATARESOURCE -- it advances the state to WAITING_FOR_MOVIEDATARESOURCE and
@@ -169,7 +180,7 @@ namespace BrnGui
     private:
         bool QueueNextMovie();                          // VideoDataResource -> GetVideoFile(lang) -> player name
         bool LoadVideoListBundle();                     // [PC IO] sync BundleLoader of VIDEOS\VIDEOLIST.BUNDLE
-        bool AcquireVideoDataResource(u32 luResId);     // [PC IO] sync Pool::FindResource -> mpVideoDataResource
+        bool AcquireVideoDataResource(u64 luResId);     // [PC IO] sync Pool::FindResource -> mpVideoDataResource
         void HandlePlayVideoEvent(const GuiEventPlayVideo* lpPlayVideoEvent);
         void HandleStopVideoEvent(const GuiEventStopVideo* lpStopVideoEvent);
 
