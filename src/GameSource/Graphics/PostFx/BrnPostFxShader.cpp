@@ -1808,7 +1808,26 @@ void BrnPostFxShader::Render(f32 lfWhiteLevel,
     // Units 3 and 4: the colour-cube volume and the scene depth, each bound as a whole TextureState
     // (texture + its own sampler) rather than as a texture/sampler pair.
     shadow::Device::SetState(lp3dTintTexture, KU_SAMPLER_TINT_3D);
-    shadow::Device::SetState(lpDepthTexture,  KU_SAMPLER_DEPTH);
+
+    // [FLAG PC deviation -- MEASURED, 2026-08-17] The console binds SamplerDepth on EVERY
+    // permutation (the unconditional SetState above's twin at 0x82409B0C); on Xenos a bound,
+    // unsampled texture costs nothing. On PC the depth texture is the down-sample INTZ that the
+    // NVIDIA StretchRectEx depth resolve just WROTE this frame, and binding it as a texture on the
+    // same frame costs ~4.5 ms (steady 58 -> 79 fps in the fps A/B, vsync off: post-fx on + 2x MSAA
+    // 58.1; post-fx off 79.1; post-fx on + AA off -- where the NVAPI resolve is refused and the INTZ
+    // stays unwritten -- 78.7; the GPU idles at P5 throughout, i.e. a driver-side hazard/decompress
+    // on the depth-as-texture read, not GPU load). Only the DoF (+2) and motion-blur (+4/+8)
+    // permutations sample s4, so the bind is issued exactly when one of them is selected and unit 4
+    // is otherwise left EMPTY (a stale INTZ on the unit trips the same hazard at the draw). What each
+    // permutation samples is unchanged; only an unread bind is dropped.
+    if (lbEnableDof || lbEnableMotionBlur)
+    {
+        shadow::Device::SetState(lpDepthTexture, KU_SAMPLER_DEPTH);
+    }
+    else
+    {
+        shadow::Device::SetResource(0, KU_SAMPLER_DEPTH);
+    }
 
     shadow::Device::SetVertexDescriptor(mpVertexDescriptor);
     shadow::Device::FlushVertexProgramState();
