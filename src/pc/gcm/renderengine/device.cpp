@@ -159,6 +159,24 @@ void renderengine::Device::Start()
     ShowWindow(hWnd, SW_SHOWNORMAL);
 }
 
+// ⭐ 2026-08-16 (boot audit F-P1-9) -- the PC realisation of the console's display-mode
+// refresh-rate read. GetAdapterDisplayMode reports 0 for some windowed modes, which is
+// D3D's way of saying "whatever the desktop is doing"; the caller keeps its own default in
+// that case rather than inventing one here.
+namespace renderengine
+{
+    u32 GetDisplayRefreshRate()
+    {
+        if (gD3D9 == nullptr)
+            return 0u;
+        D3DDISPLAYMODE lMode;
+        std::memset(&lMode, 0, sizeof(lMode));
+        if (FAILED(gD3D9->GetAdapterDisplayMode(static_cast<UINT>(gAdapterIndex), &lMode)))
+            return 0u;
+        return static_cast<u32>(lMode.RefreshRate);
+    }
+}
+
 // Begin a frame: clear to black (the loading screen fades up from black) and open the
 // scene so immediate-mode draws are accepted. Returns false if the device is not ready.
 bool renderengine::Device::FrameBegin()
