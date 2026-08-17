@@ -936,13 +936,22 @@ void DrawRenderable::Interpret(DispatchCommand* lpCommand, DispatchFrame* lpFram
     //
     // DELETE when a real instanced draw path exists on the D3D9 back end.
     // -------------------------------------------------------------------------
+    // The per-instance channels, by their ShaderConstantTable slot (the constructor's own
+    // numbering: AddShaderConstant(0, "world"), AddShaderConstantArray(6,
+    // "InstancingMatrixArray"), AddShaderConstantArray(7, "InstancingIndexArray")).
+    const u32 KU_CONSTANT_WORLD                   = 0u;
+    const u32 KU_CONSTANT_INSTANCING_MATRIX_ARRAY = 6u;
+    const u32 KU_CONSTANT_INSTANCING_INDEX_ARRAY  = 7u;
+
     const u8 lu8InstanceCount = lpTrailer[2];
     const rw::math::vpu::Matrix44* lpaInstanceWorlds = 0;
+    const rw::math::vpu::Vector4*  lpaInstanceIndices = 0;
     u32 luNumInstanceDraws = 1;
     if (lu8InstanceCount > 1u)
     {
         lpaInstanceWorlds = reinterpret_cast<const rw::math::vpu::Matrix44*>(
-            lpContext->mapConstantData[6]);
+            lpContext->mapConstantData[KU_CONSTANT_INSTANCING_MATRIX_ARRAY]);
+        lpaInstanceIndices = lpContext->mapConstantData[KU_CONSTANT_INSTANCING_INDEX_ARRAY];
         if (lpaInstanceWorlds != 0)
         {
             luNumInstanceDraws = lu8InstanceCount;
@@ -1000,10 +1009,61 @@ void DrawRenderable::Interpret(DispatchCommand* lpCommand, DispatchFrame* lpFram
         }
     }
 
+    // -------------------------------------------------------------------------
+    // [PC bring-up shim] THE PER-INSTANCE CONSTANT CHANNELS.
+    //
+    // The expansion above already gives draw i its own WVP. That is enough for the flagged
+    // fallback shader, and NOT enough for the technique's real vertex program, which reads
+    // the object matrix out of a shader CONSTANT (see the substitute table in
+    // CgsShaderConstants.cpp: the recompiled PC program spells InstancingMatrixArray `world`
+    // and InstancingIndexArray `g_wheelConstants`). Those constants are gathered per emitted
+    // mesh command, inside EmitObjectMeshCommands -> AddShaderTechniqueConstantsToDispatchBin
+    // -> ShaderConstantsExternal_GatherFromContext, which reads them from THIS context.
+    //
+    // So for the duration of draw i the two instancing slots point at ENTRY i of their own
+    // arrays. Both targets live in the dispatch bin (they are the command's own restored
+    // constant copies), so the pointers outlive the mesh commands that reference them,
+    // exactly as the unmodified array base did. The saved values are put back after the loop
+    // because the context is shared with every later object in the walk.
+    //
+    // ⚠ A single entry is 4 quad-words (matrix) / 1 quad-word (index vector), where the
+    // console constants declare 5 entries. Nothing can read past entry i, because reading the
+    // WHOLE array needs a program that declares InstancingMatrixArray -- and none of the 220
+    // program buffers in the shipped PC bundle does (measured; that is the very gap the
+    // substitute table exists for). Revisit this the day one does.
+    //
+    // `world` (slot 0) rides along for the same reason and with the same meaning: for draw i
+    // the object's world matrix IS instance i's. No technique in the shipped bundle names both
+    // (the 19 instancing blocks name neither `world` nor anything else), so this only matters
+    // if an instanced renderable is ever drawn through a non-instanced technique -- and then
+    // it is the difference between N copies at N places and N copies stacked on one.
+    //
+    // DELETE with the expansion itself, when a real instanced draw path exists on D3D9.
+    // -------------------------------------------------------------------------
+    const rw::math::vpu::Vector4* const lpSavedWorldConstant =
+        lpContext->mapConstantData[KU_CONSTANT_WORLD];
+    const rw::math::vpu::Vector4* const lpSavedInstancingMatrixConstant =
+        lpContext->mapConstantData[KU_CONSTANT_INSTANCING_MATRIX_ARRAY];
+    const rw::math::vpu::Vector4* const lpSavedInstancingIndexConstant =
+        lpContext->mapConstantData[KU_CONSTANT_INSTANCING_INDEX_ARRAY];
+
     for (u32 luInstance = 0; luInstance < luNumInstanceDraws; ++luInstance)
     {
         const rw::math::vpu::Matrix44* lpWorldForDraw =
             (lpaInstanceWorlds != 0) ? &lpaInstanceWorlds[luInstance] : lpWorld;
+
+        if (lpaInstanceWorlds != 0)
+        {
+            const rw::math::vpu::Vector4* const lpInstanceWorldRows =
+                reinterpret_cast<const rw::math::vpu::Vector4*>(&lpaInstanceWorlds[luInstance]);
+            lpContext->mapConstantData[KU_CONSTANT_WORLD]                   = lpInstanceWorldRows;
+            lpContext->mapConstantData[KU_CONSTANT_INSTANCING_MATRIX_ARRAY] = lpInstanceWorldRows;
+            if (lpaInstanceIndices != 0)
+            {
+                lpContext->mapConstantData[KU_CONSTANT_INSTANCING_INDEX_ARRAY] =
+                    lpaInstanceIndices + luInstance;
+            }
+        }
 
         rw::math::vpu::Matrix44 lWorldViewProjection;
         {
@@ -1036,6 +1096,12 @@ void DrawRenderable::Interpret(DispatchCommand* lpCommand, DispatchFrame* lpFram
                                (lpaInstanceWorlds != 0) ? 1u : lu8InstanceCount,
                                lWorldViewProjection);
     }
+
+    lpContext->mapConstantData[KU_CONSTANT_WORLD]                   = lpSavedWorldConstant;
+    lpContext->mapConstantData[KU_CONSTANT_INSTANCING_MATRIX_ARRAY] =
+        lpSavedInstancingMatrixConstant;
+    lpContext->mapConstantData[KU_CONSTANT_INSTANCING_INDEX_ARRAY] =
+        lpSavedInstancingIndexConstant;
 }
 
 // =============================================================================

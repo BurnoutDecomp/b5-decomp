@@ -1,11 +1,11 @@
 #include "GameSource/Graphics/BrnCoronaManager.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Graphics/CgsResourceAllocatorCreate.h"  // CgsGraphics::ResourceAllocatorCreate
 #include "pc/gcm/renderengine/renderstates.h"        // renderengine::TextureState
 #include "pc/gcm/renderengine/texture.h"             // renderengine::Texture
 #include "rw/math/vpu/vector3_operation.h"           // rw::math::vpu::operator-, Dot, MagnitudeSquared
 
-#include <cstring>   // memcpy
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX. Three ledger-tracked functions:
 //   BrnCoronaManager::BrnSubmissionInterface::AddCorona(..., const BrnCoronaTypeParams&) @ 0x823FD270
@@ -15,6 +15,37 @@
 // Everything else declared in BrnCoronaManager.h is NOT X360-attested for this TU (no ledger
 // address under GameSource/Unity/../Graphics/BrnCoronaManager.cpp) and is deliberately left
 // declaration-only -- see the header comment and AGENTS.md's DWARF/X360-ledger gating rule.
+//
+// ---------------------------------------------------------------------------------------------
+// [FLAG BLOCKED -- CONSOLE DATA NOT RECOVERED] (carlights step 1, group `coronas`, 2026-08-17)
+//
+// This TU is STILL NOT MOUNTABLE-FOR-EFFECT, and the reason is DATA, not code. Four console blobs
+// decide everything a corona looks like, and none of them is in any export we hold. Their exact
+// addresses/sizes are pinned below so a single idat dump closes them:
+//
+//   1. BrnCoronaTypeParams::smParams  = X360 unk_82F24310, 25 records x 48 bytes = 1200 bytes.
+//      PROOF: sub_823FD428 (the `const BrnCoronaType&` AddCorona overload, xrefs from
+//      SubmitCoronasForRaceCar / SubmitCoronasForVehicle / RenderCoronasForInstance) is exactly
+//      `AddCorona(pos, dir, scale, opacity, *(&unk_82F24310 + 48 * type))`; its asm is
+//      `lwz r11,0(r6); slwi r9,r11,1; add r11,r11,r9; slwi r11,r11,4` == type*3*16 == type*48.
+//      *** THE CONSOLE RECORD IS 48 BYTES; THIS HOST DECLARATION IS 64 (Vector2/Vector3 are
+//      alignas(16) here, so mScaleCurve lands at +0x20, not the console's +0x18). The dump must be
+//      transcribed FIELD BY FIELD into C++ initialisers -- never memcpy'd. ***
+//   2. BrnCoronaManager::s_atlasUVs   = X360 unk_82FAFC10, 12 rows x 4 Vector2 x 16 B = 768 bytes.
+//      PROOF: SetTextureAtlas @0x823FD11C-2C stores &unk_82FAFC10 into dword_82FAB6B8, and
+//      CoronaRenderer::Dispatch<shadow::Device> @0x82404F30 reads the four quad UVs as
+//      `*(textureID<<6 + dword_82FAB6B8 + {0,4 | 16,20 | 32,36 | 48,52})` -- a 64-byte row per
+//      texture id, four 16-byte-strided (u,v) pairs per row. So dword_82FAB6B8 is the ATLAS UV
+//      TABLE POINTER (it was previously modelled here as a "vtable" byte -- corrected below).
+//   3. kfCoronaFadeDistance          = X360 flt_82F242CC (4 bytes) -- see the placeholder below.
+//   4. kPropCoronaScaleCurveParams   = X360 flt_82F242FC / flt_82F24300 / flt_82F24304 (12 bytes),
+//      and gPropCoronaColour's initial RGB = X360 dword_82F242D0 (4 bytes).
+//
+//   A single dump of 0x82F242C0..0x82F247E0 (1312 bytes) covers 1, 3 and 4; 0x82FAFC10..0x82FAFF10
+//   (768 bytes) covers 2. Both live in the 0x82F2xxxx / 0x82FAxxxx WRITABLE segments, so the dump
+//   must also state whether a runtime initialiser writes them (the way 0x82C4BC30 splats
+//   unk_82FAD990) -- if it does, the image bytes are zeros and the initialiser is the ground truth.
+// ---------------------------------------------------------------------------------------------
 
 namespace
 {
@@ -156,44 +187,35 @@ void BrnCoronaManager::BrnSubmissionInterface::AddPropCorona(const Vector3& lvPo
 
 namespace
 {
-// The X360 asm dispatches through lAllocator's own vtable at +16 (Allocate: out, this, descriptor,
-// flags) and +20 (Free: this, block) -- the same resource-carving allocator interface the sibling
-// corona vendor TU declares (SDKs/RenderEngineClub/MAIN/components/src/coronas/rwgcoronarenderer.cpp
-// ResourceAllocator). This is a DIFFERENT vtable shape than the x64-PDB-generated rw::IResourceAllocator
-// (whose Alloc/Free slots are a generic bump-allocator API, not this descriptor-carving one), so it is
-// redeclared here at the minimal matching slice per that same established per-TU vendor convention
-// rather than force-fit onto the generated header.
-class ResourceCarvingAllocator
-{
-public:
-    virtual void  Reserved00() = 0;   // vtable +0x00 (dtor slot)
-    virtual void  Reserved04() = 0;   // vtable +0x04
-    virtual void  Reserved08() = 0;   // vtable +0x08
-    virtual void  Reserved0C() = 0;   // vtable +0x0C
-    // vtable +0x10: allocate a resource for `lpDescriptor`, writing the created handle(s) into
-    // `lpHandleOut`. `luFlags` is 0 at this call site.
-    virtual void* Allocate(void* lpHandleOut, ResourceCarvingAllocator* lpThis,
-                            const u32* lpDescriptor, int luFlags) = 0;
-    // vtable +0x14: free a previously-allocated resource block.
-    virtual void  Free(void* lpBlock) = 0;
-};
-}
-
-namespace
-{
 // File-scope globals the asm writes after building the atlas texture state (X360
 // dword_82FAB6A8/B8/BC). The SAME three addresses are also written by BrnCoronaManager::Construct
 // (ledger TU SDKs/RenderEngineClub/MAIN/components/include/coronas/rwgcoronabuffer.h @ 0x823FCD90),
-// whose already-committed reconstruction models the corona-render-state globals under different
-// names (gpCoronaBuffer0/1/2, guCoronaFlag0/1, gpCoronaVTable) that this TU cannot trace back to
-// these exact raw addresses without re-deriving that (separate, already-reviewed) function. Declared
-// here as this TU's own copy so SetTextureAtlas's store side effects are faithfully reproduced; a
-// true single shared definition is a follow-up reconciliation once BrnCoronaManager::Construct is
-// re-verified against these same addresses (compile-only gate: no link-time collision at this stage).
-u32 gsuCoronaCurrentTextureStateResult; // X360 dword_82FAB6BC -- last SetTextureAtlas/Construct result
-u32 gsuCoronaTextureStateFlags;         // X360 dword_82FAB6A8 -- SetTextureAtlas writes 4 here
-u8  gsuCoronaVTableTarget;               // X360 unk_82FAFC10 (this TU's own copy of the vtable-image byte)
-void* gspCoronaVTable;                  // X360 dword_82FAB6B8 -- &unk_82FAFC10
+// whose already-committed reconstruction models them under different names; a single shared
+// definition is a follow-up reconciliation once that function is re-derived against the real class
+// (compile-only gate: no link-time collision at this stage).
+//
+// TYPES CORRECTED 2026-08-17 (carlights step 1, group `coronas`) -- what each one actually holds is
+// named by its CONSUMER, renderengine::CoronaRenderer::Begin<shadow::Device> @0x823FF2C0 and
+// ::Dispatch<shadow::Device> @0x82404F30:
+//
+//   dword_82FAB6BC : Begin's first act is `sub_8227D158(dword_82FAB6BC, 0)` -- the built atlas
+//                    TextureState bound on sampler 0. It is a POINTER, so on this x64 host it must
+//                    be a pointer: the previous `u32` spelling truncated a 64-bit host pointer to
+//                    32 bits (AGENTS.md rule 1, GUEST vs HOST), which would have handed the sampler
+//                    a corrupt state the moment this TU was mounted.
+//   dword_82FAB6A8 : Begin gates `shadow::Device::Xbox2SetStateLowLevelShadowed(dword_82FAB6C0,...)`
+//                    on a separate word; this one is a plain state word -- Construct writes 1,
+//                    SetTextureAtlas writes 4. Kept as an opaque u32 (its consumer is not in the
+//                    corona call graph we have; no meaning is asserted).
+//   dword_82FAB6B8 : NOT a vtable. Dispatch reads it as
+//                    `*(textureID<<6 + dword_82FAB6B8 + {0,4|16,20|32,36|48,52})` -- the four quad
+//                    UV pairs of one atlas page -- so it is `&BrnCoronaManager::s_atlasUVs[0]`,
+//                    i.e. a `const Vector2 (*)[4]` over the 12x4 table at X360 unk_82FAFC10.
+//                    The previous model (a one-byte `gsuCoronaVTableTarget` global taken as "the
+//                    vtable image") would have let Dispatch read 768 bytes past a 1-byte object.
+renderengine::TextureState* gspCoronaAtlasTextureState;  // X360 dword_82FAB6BC
+u32                          gsuCoronaRenderStateWord;    // X360 dword_82FAB6A8 (Construct: 1, here: 4)
+const Vector2              (*gspaCoronaAtlasUVs)[4];      // X360 dword_82FAB6B8 == &s_atlasUVs[0]
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -206,15 +228,22 @@ void* gspCoronaVTable;                  // X360 dword_82FAB6B8 -- &unk_82FAFC10
 // ---------------------------------------------------------------------------------------------
 void BrnCoronaManager::SetTextureAtlas(const rw::IResourceAllocator& lAllocator, renderengine::Texture* lpTextureAtlas)
 {
-    // See ResourceCarvingAllocator above: the X360 call site dispatches through a descriptor-carving
-    // vtable shape that the generated rw::IResourceAllocator does not model, so the reference is
-    // reinterpreted at the matching local slice (documented cast, not a raw offset poke -- the target
-    // is a real vtable-dispatched object, just declared through this TU's minimal interface slice).
-    ResourceCarvingAllocator* lpAllocator =
-        const_cast<ResourceCarvingAllocator*>(reinterpret_cast<const ResourceCarvingAllocator*>(&lAllocator));
+    // THE ALLOCATOR IS CALLED BY NAME, NOT BY GUESSED SLOT (fixed 2026-08-17, carlights step 1).
+    // The X360 reaches the allocator through two indirect calls, `(*(*a2 + 16))(out, a2, desc, 0)`
+    // and `(*(*a2 + 20))(a2, &m_textureStateAtlasResource)`. This TU used to model that with a local
+    // `class ResourceCarvingAllocator { virtual Reserved00..0C; virtual Allocate; virtual Free; }`
+    // reinterpret_cast over the real rw::IResourceAllocator -- the EXACT shim that
+    // GameShared/GameClasses/Graphics/CgsResourceAllocatorCreate.h documents as destructive: the
+    // guessed slot numbers are console 4-byte slots, the host vtable has 8-byte slots, and
+    // rw::IResourceAllocator's slot 0 is its VIRTUAL DESTRUCTOR. Calling through it ran the
+    // allocator's deleting destructor, returned an unwritten out-parameter, and left the allocator
+    // permanently downgraded to the inert base vtable (this is what broke the sky dome; see that
+    // header's banner). The named calls below are the same two operations on the committed
+    // interface: DoAllocate (via the shared helper) and DoFree(const Resource&).
+    rw::IResourceAllocator* lpAllocator = const_cast<rw::IResourceAllocator*>(&lAllocator);
 
     if (m_textureStateAtlas)
-        lpAllocator->Free(&m_textureStateAtlasResource);
+        lpAllocator->DoFree(m_textureStateAtlasResource);
 
     renderengine::TextureState::Parameters lTextureStateParams = {};
     lTextureStateParams.muAddressU      = 2;
@@ -240,20 +269,31 @@ void BrnCoronaManager::SetTextureAtlas(const rw::IResourceAllocator& lAllocator,
     lTextureStateParams.mu8Field44      = 1;
     lTextureStateParams.mpTexture       = lpTextureAtlas;
 
-    u32 laDescriptor[13] = {};
+    // renderengine::TextureState::GetResourceDescriptor writes ten words (texturestate.cpp:17-25);
+    // the console's stack block is larger but only those ten are consumed. Sized to match the
+    // sibling call sites (CgsFont.cpp:323, CgsImRenderer.cpp:259).
+    u32 laDescriptor[10] = {};
     renderengine::TextureState::GetResourceDescriptor(laDescriptor);
 
-    u32 lauResourceHandle[5] = {};
-    lpAllocator->Allocate(lauResourceHandle, lpAllocator, laDescriptor, 0);
-    std::memcpy(&m_textureStateAtlasResource, lauResourceHandle, sizeof(lauResourceHandle));
+    // The console's `(*(*a2 + 16))(handlesOut, a2, descriptor, 0)`, carved straight into the member
+    // rw::Resource. The old form allocated into a `u32 lauResourceHandle[5]` and memcpy'd 20 bytes
+    // over an rw::Resource -- five GUEST words written across four HOST pointers (AGENTS.md rule 1).
+    CgsGraphics::ResourceAllocatorCreate(lpAllocator, &m_textureStateAtlasResource, laDescriptor);
 
     // NOTE: the asm never stores lpTextureAtlas into m_textureAtlas (this+4) -- only
     // m_textureStateAtlas (this+8) is written, via TextureState::Initialize's return. Left as-is
     // to match the binary exactly rather than adding an unattested store.
     m_textureStateAtlas = renderengine::TextureState::Initialize(&m_textureStateAtlasResource, &lTextureStateParams);
 
-    gsuCoronaCurrentTextureStateResult = static_cast<u32>(reinterpret_cast<uintptr_t>(m_textureStateAtlas));
-    gsuCoronaTextureStateFlags = 4;
-    gspCoronaVTable = &gsuCoronaVTableTarget;
+    // @0x823FD108-2C, in the asm's order.
+    gspCoronaAtlasTextureState = m_textureStateAtlas;
+    gsuCoronaRenderStateWord   = 4;
+    // [FLAG BLOCKED] The console stores `&unk_82FAFC10` == &s_atlasUVs[0] here. s_atlasUVs is
+    // DECLARED (BrnCoronaManager.h:230) but has no definition in this tree, because its 768 bytes
+    // of atlas UVs are not in any export we hold (see the BLOCKED DATA block at the top of this
+    // file). Left null rather than pointed at invented UVs: Dispatch is not live, and a zeroed
+    // table would draw degenerate quads that LOOK like a working corona pass. Restore this to
+    // `&s_atlasUVs[0]` in the same commit that lands the dumped table.
+    gspaCoronaAtlasUVs = 0;
 }
 
