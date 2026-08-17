@@ -13,9 +13,19 @@ namespace CgsResource
     {
         enum { KU_MAX_REGISTERED_RESOURCE_TYPES = 256 };
 
-        void        Register(const Type* lpType);          // by lpType->GetTypeID()
+        // lpcName is the console's parallel name column (RegisterResourceTypes keeps a
+        // handler table and a name table side by side); it is debug-only.
+        void        Register(const Type* lpType, const char* lpcName = 0);   // by lpType->GetTypeID()
         const Type* GetType(u32 luResourceTypeId);         // null if unregistered
         void        Clear();
+
+        // Enumeration, in registration order. The X360 keeps its handler table INSIDE the
+        // GameDataModule and hands the whole run to the pool's game-specific type list
+        // (RegisterResourceTypes @0x82667EA8 registers 76 of them); the PC keeps the table
+        // here, so GameDataModule::Construct needs to walk it to forward the same set.
+        u32         GetCount();
+        const Type* GetByIndex(u32 luIndex);               // null when out of range
+        const char* GetNameByIndex(u32 luIndex);           // "" when unnamed/out of range
     }
 
     // Default FTypeResolver for BundleLoader::LoadBundle.

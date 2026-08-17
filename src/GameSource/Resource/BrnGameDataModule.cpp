@@ -1299,32 +1299,37 @@ namespace BrnResource
         }
 
         // [BRIDGE -- marked deviation from X360 RegisterResourceTypes 0x82667EA8] Populate the pool type
-        // list from our existing singleton resource-type handlers. The X360 operator-new's ~50 Type objects
+        // list from our existing singleton resource-type handlers. The X360 operator-new's 76 Type objects
         // into a GSResourceType array, but that path's prerequisites (Type::operator new / InitCachedValues
-        // + the ~50 subclasses) are deferred, and our tree already registers handler SINGLETONS into a
+        // + the 76 subclasses) are deferred, and our tree already registers handler SINGLETONS into a
         // CgsResource::TypeRegistry (RegisterAllResourceTypes). So reuse those: register them (idempotent),
-        // then build the GSResourceType list from ResolveResourceType(id) for the wired type ids. The
-        // PoolModule type-registry loop then copies them into maTypes (keyed by GetTypeID()). Grows as more
-        // handlers are wired; backfill the faithful operator-new path if byte-fidelity is needed.
+        // then forward the WHOLE registered set into the GSResourceType list. The PoolModule type-registry
+        // loop then copies them into maTypes (keyed by GetTypeID()).
+        //
+        // ⭐ CORRECTED 2026-08-14 (boot audit F-P7-18). This forwarded a HARDCODED FIVE ids
+        // (raster/texture-state/material-state/font/videodata) while the engine had ~45 handlers
+        // registered, so every other type reaching a pool took CgsResourcePool.cpp's "no registered
+        // type handler -- allocating raw, FixUp will be skipped" path. A resource whose FixUp never
+        // runs keeps its file-relative pointers, so the first consumer to walk one dereferences an
+        // unrelocated offset -- which is exactly how EnvironmentSettings::Dictionary (0x10014) crashed
+        // EnvironmentManager::StreamIn the moment the scripted world load was restored to its console
+        // position (F3). The console registers every handler it owns; so do we now.
         CgsResource::RegisterAllResourceTypes();
-        static CgsResource::PoolModule::InitOptions::GSResourceType s_aGameTypes[5];
-        static const struct { u32 muId; const char* mpcName; } skWiredTypes[5] =
-        {
-            { 0x00u, "RwRasterResourceType" },
-            { 0x0Eu, "RwTextureStateResourceType" },
-            { 0x0Fu, "MaterialStateResourceType" },
-            { 0x21u, "FontResourceType" },
-            { 0x42u, "VideoDataResourceType" },
-        };
+        enum { KI_MAX_GAME_TYPES = CgsResource::TypeRegistry::KU_MAX_REGISTERED_RESOURCE_TYPES };
+        static CgsResource::PoolModule::InitOptions::GSResourceType s_aGameTypes[KI_MAX_GAME_TYPES];
         s32 lNumGameTypes = 0;
-        for (s32 li = 0; li < 5; ++li)
         {
-            const CgsResource::Type* lpType = CgsResource::ResolveResourceType(skWiredTypes[li].muId);
-            if (lpType == 0)
-                continue;
-            s_aGameTypes[lNumGameTypes].mpType  = lpType;
-            s_aGameTypes[lNumGameTypes].mpcName = skWiredTypes[li].mpcName;
-            ++lNumGameTypes;
+            const u32 luRegistered = CgsResource::TypeRegistry::GetCount();
+            for (u32 lu = 0; lu < luRegistered && lNumGameTypes < KI_MAX_GAME_TYPES; ++lu)
+            {
+                const CgsResource::Type* lpType = CgsResource::TypeRegistry::GetByIndex(lu);
+                if (lpType == 0)
+                    continue;
+                s_aGameTypes[lNumGameTypes].mpType = lpType;
+                // The name column is the console's parallel string table; it is debug-only.
+                s_aGameTypes[lNumGameTypes].mpcName = CgsResource::TypeRegistry::GetNameByIndex(lu);
+                ++lNumGameTypes;
+            }
         }
         s_InitOptions.mPoolInitOptions.mpGameSpecificTypes    = s_aGameTypes;
         s_InitOptions.mPoolInitOptions.miNumGameSpecificTypes = lNumGameTypes;
