@@ -1116,21 +1116,49 @@ void MainGameFlowStateInitialLoadingScreen::Update()
         break;
     case E_LOADINGSTAGE_DONE:
     default:
-        // Load complete (once): raise the completion signal + advance the flow (FinishLoading ->
-        // SendEvent(STATEEND) -> MARKETING_SCREENS). The GUI BF_LOADING state watches
-        // gBrnInitialLoadingComplete and dismisses the loading screen itself (StopLoadingScreen) as it
-        // proceeds to BF_VIDEOS; only when the GUI isn't driving do we drop the screen here. Guarded so
-        // the held DONE stage doesn't re-fire every frame.
-        if (!gBrnInitialLoadingComplete)
+        // ⭐ CORRECTED 2026-08-16 (boot audit F-P5-4). The console's stage 9 vcalls
+        // FinishLoading on EVERY frame, unconditionally; FinishLoading @0x823C6AC8 opens
+        // with `lbz r11,0xC(r3); beqlr` and returns straight away until mbGuiPreloadDone is
+        // set. So reaching stage 9 is NOT what ends the loading screen -- the GUI's own
+        // done signal is. We used to fire it once, the instant the stage machine arrived,
+        // which is why LOADING -> MARKETING never waited for anything.
+        FinishLoading();
+
+        // The GUI BF_LOADING state watches gBrnInitialLoadingComplete and dismisses the
+        // loading screen itself (StopLoadingScreen) as it proceeds to BF_VIDEOS; only when
+        // the GUI isn't driving do we drop the screen here.
+        if (mbGuiPreloadDone && !gBrnInitialLoadingComplete)
         {
             if (CgsDev::Message::gxMessageFilterFlags & 1)
                 *CgsDev::Log::gpDebugPrint << "InitialLoadingScreen: loading complete\n";
-            FinishLoading();
             gBrnInitialLoadingComplete = true;
             if (!gBrnGuiDrivesLoadingScreen)
                 GetDispatchWriteBuffer()->HideLoadingScreen();
         }
         break;
+    }
+
+    // @0x823EFA48-6C -- the GUI-PRELOAD-DONE LATCH, run every frame right after
+    // BridgeGuiToGame:
+    //     if (!this->mbGuiPreloadDone && gm[0x9A0648]) this->mbGuiPreloadDone = 1;
+    // gm+0x9A0648 is the byte BridgeGuiToGame @0x823CB758 sets from GUI command 70 (the
+    // HUD flow's "phase complete"); on PC that is BrnGameModule::mbGuiPhaseComplete
+    // (+10094152), set by the same command in the same bridge. The member was WRITE-ONLY
+    // before this -- reset in Construct and never read -- so FinishLoading had nothing to
+    // gate on. It is a sticky latch: once set it stays set for the life of the state.
+    // The PC's BridgeGuiToGame runs later in the same sub-step (from GameMain rather than
+    // from this body), so the value read here is the previous sub-step's -- one sub-step of
+    // latency on a signal that is latched anyway.
+    if (!mbGuiPreloadDone)
+    {
+        BrnGame::BrnGameModule* lpGameModuleForLatch = BrnGame::GetMainGameModule();
+        if (lpGameModuleForLatch != 0 && lpGameModuleForLatch->IsGuiPhaseComplete())
+        {
+            mbGuiPreloadDone = true;
+            if (CgsDev::Message::gxMessageFilterFlags & 1)
+                *CgsDev::Log::gpDebugPrint
+                    << "InitialLoadingScreen: GUI preload done (command 70) -- loading may finish\n";
+        }
     }
 
     // Close the frame's GameData IO bracket (X360 @0x823EF688's tail: UnlockForWrite(input),
@@ -1156,12 +1184,24 @@ void MainGameFlowStateInitialLoadingScreen::AdvanceLoadingStage(ELoadingScreenSt
     }
 }
 
-// @ 0x823C6AC8 - the load is complete: advance the flow. The X360 gates on a completion flag
-// (this+0xC) and stamps a game-module load-state field to 5 before firing; here the Update stage
-// machine gates the call (it fires FinishLoading once, at DONE) and that game-module field isn't
-// mapped in this incremental layout. SendEvent(STATEEND) takes LOADING -> MARKETING_SCREENS.
+// @ 0x823C6AC8 - the load is complete: advance the flow. Store for store:
+//     lbz  r11, 0xC(r3); cmplwi r11, 0; beqlr        <- the mbGuiPreloadDone gate
+//     gm[0x9A119C] = 5
+//     SendEvent(gm + 0x9A0664, 2 /* E_MGE_STATEEND */)   (a tail call)
+//
+// ⭐ THE GATE IS RESTORED, 2026-08-16 (boot audit F-P5-4). The caller vcalls this every
+// frame from stage 9; this early return is what makes LOADING -> MARKETING wait for the
+// GUI's own done signal instead of firing the instant the stage machine arrives.
+//
+// [FLAG] the gm+0x9A119C := 5 stamp is not reproduced: that word is not mapped in this
+// incrementally-populated game-module layout, and nothing on the PC reads it yet. It is a
+// loading-state publication for the dispatch side; restore it with the rest of gm's
+// 0x9A11xx block.
 void MainGameFlowStateInitialLoadingScreen::FinishLoading()
 {
+    if (!mbGuiPreloadDone)
+        return;
+
     if (BrnGameMainFlowController::gpMainGameFlowController != 0)
         BrnGameMainFlowController::gpMainGameFlowController->SendEvent(BrnGameMainFlowController::E_MGE_STATEEND);
 }
