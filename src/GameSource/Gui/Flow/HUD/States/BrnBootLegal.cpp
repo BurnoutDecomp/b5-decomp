@@ -269,12 +269,16 @@ namespace BootLegalCacheBoundary  // FLAG boundary helpers
 
 namespace BrnGui
 {
-    // FLAG: the legal-screen static resource list (.rdata @ off_82F25CEC, X360 count @ 0x82F25CF4 = 1).
-    // The tuple's .rdata values are not extracted; defined empty (count 0) so GetResourcesToLoad /
-    // UnloadResources iterate nothing -- the legal-screen resource preload is deferred, the flow still
-    // reaches BootLegal + the title_screen02 request.
-    const CgsGui::sResourceTuple BootLegal::maResourcesToLoad[1] = {};
-    const u32                    BootLegal::muNumResourcesToLoad  = 0u;
+    // ⭐ RECOVERED 2026-08-16 (boot audit F-P8b-13). The legal-screen static resource list
+    // (.rdata @0x82F25CEC, count @0x82F25CF4 = 1) read out of the decrypted XEX: the single
+    // entry is the title screen's own apt, id 128 "Title_Screen02" (name via off_82F278E0),
+    // type 4 = E_GUI_RESOURCETYPE_APT. With the table empty, GetResourcesToLoad handed the
+    // loader nothing and OnLeave's UnloadResources dropped nothing.
+    const CgsGui::sResourceTuple BootLegal::maResourcesToLoad[1] =
+    {
+        { 128u, CgsGui::E_GUI_RESOURCETYPE_APT },   // Title_Screen02
+    };
+    const u32                    BootLegal::muNumResourcesToLoad  = 1u;
 
     BootLegal::BootLegal()
         : mpGuiCache(0)

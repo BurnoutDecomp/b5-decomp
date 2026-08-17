@@ -2,6 +2,7 @@
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                       // CGS_ASSERT
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiState.h"         // CgsGui::State (PreWorldUpdate)
+#include "GameSource/Gui/BrnGuiCache.h"                                 // GuiCache (UpdateStreaming's unload/ensure pair)
 #include "GameShared/GameClasses/Fsm/Resources/CgsLuaCodeResource.h"    // CgsResource::LuaCodeResource (PrepareLua)
 #include "GameShared/GameClasses/Memory/CgsHeapMalloc.h"               // CgsMemory::HeapMalloc (PrepareLua)
 
@@ -34,10 +35,12 @@ namespace BrnGui
     {
         EventObserver::Construct();
         mStateMachine.Construct();      // ScriptedFsm::Construct: mpCurrentState=0, mLuaState.Construct(), seq=0
-        // FLAG (faithful note): the X360 sets the state machine's sequence number to 1 here (so the
-        // first Update sees seq(1) != muFsmSequenceNumber(0) and kicks streaming once). ScriptedFsm::
-        // Construct leaves it 0. Immaterial while UpdateStreaming is the stubbed preload no-op; the
-        // first real SetState bumps the sequence anyway. Revisit when streaming lands.
+        // @0x824F1C04 -- the X360 seeds the state machine's sequence number to 1 here, so the
+        // FIRST Update sees seq(1) != muFsmSequenceNumber(0) and kicks streaming once.
+        // ScriptedFsm::Construct leaves it 0; restore the seed (boot audit F-P8b-10). Harmless
+        // while the mode word is OFF -- UpdateStreaming returns immediately -- but it is the
+        // console's initial condition and it matters the moment the SCREEN flow is armed.
+        mStateMachine.SetSequenceNumber(1);
         mpGuiCache          = lpGuiCache;
         mReleaseStage       = E_RELEASESTAGE_DONE;
         muFsmSequenceNumber = 0;
@@ -132,15 +135,62 @@ namespace BrnGui
     }
 
     // @ 0x824FFD48 -- next-state resource streaming.
+    // @ 0x824FFD48 -- the per-state APT streaming pass, store-for-store.
+    //
+    // ⭐ RECONSTRUCTED 2026-08-16 (boot audit F-P8b-9); was a `(void)` no-op.
+    //
+    // A NOTE ON WHEN THIS RUNS, because it is easy to get wrong: the mode word is
+    // E_STREAMING_OFF for the HUD flow on the console too -- BrnBaseFlow::Construct is its
+    // only writer there -- so every boot state's resources are loaded by DIRECT
+    // GuiCache::EnsureResources calls inside the states' own Updates, NOT through here.
+    // The SCREEN flow is the one that arms it: GuiModule::Prepare's stage 4 stores 1 into
+    // ScreenFlow's mode word and GuiModule::Update refreshes it per frame, which is what
+    // makes each screen transition unload the previous screen's type-4 APTs and ensure the
+    // new one's. That arming is a separate finding (F-P8b-17) and is NOT invented here --
+    // this function stays dormant until its writer lands, exactly as on the console.
     void BrnBaseFlow::UpdateStreaming(s32 liStateIndex, EStreamingMode meStreamingMode)
     {
-        // FLAG (stub): the X360 walks the current state's GetResourcesToLoad plus the next reachable
-        // states (ScriptedFsm::GetNextStates) and issues preload/keep/drop requests against the
-        // streaming system for meStreamingMode. The streaming-request API + GetNextStates query
-        // helper are a follow-on; until then this is a no-op. The boot FSM scripts are tiny
-        // single-state bundles whose resources are already resident, so next-state streaming is not
-        // needed to boot.
-        (void)liStateIndex;
-        (void)meStreamingMode;
+        // 1. @0x824FFD60 -- mode 0 returns before ANY work.
+        if (meStreamingMode == E_STREAMING_OFF)
+            return;
+        if (mpGuiCache == 0)
+            return;
+
+        // 2. @0x824FFD78 -- drop every per-state APT (type 4) the previous state held.
+        mpGuiCache->UnloadAllResources(CgsGui::E_GUI_RESOURCETYPE_APT);
+
+        // 3. @0x824FFD98 -- the indexed state must BE the current state.
+        const CgsGui::State* lpState = mStateMachine.GetStateByIndex(liStateIndex);
+        CGS_ASSERT(lpState == mStateMachine.GetCurrentState(),
+                   "GetStateMachine().GetCurrentState()==lpState");   // BrnBaseFlow.cpp:334
+        if (lpState == 0)
+            return;
+
+        // 4. @0x824FFDF8 -- vtable+0x20 GetResourcesToLoad, then ensure that set.
+        const CgsGui::sResourceTuple* lpResources = 0;
+        u32 luCount = 0;
+        const_cast<CgsGui::State*>(lpState)->GetResourcesToLoad(&lpResources, &luCount);
+        mpGuiCache->EnsureResourcesAreLoaded(lpResources, luCount);
+
+        // 5. @0x824FFE14 -- E_STREAMING_PRELOAD additionally prefetches every state
+        //    reachable from this one: ScriptedFsm::GetNextStates(idx, &outIdx[], &outCount)
+        //    then, per next state, GetStateByIndex (null => the console debug-prints
+        //    "Warning: next state index=%d is present in FSM but state object doesn't
+        //    exist" and continues) + the same GetResourcesToLoad/Ensure pair.
+        // [FLAG] ScriptedFsm::GetNextStates @0x82836998 is not reconstructed yet, so the
+        // prefetch arm is the one part of this body still missing. It only runs in
+        // E_STREAMING_PRELOAD, which nothing sets today.
+        if (meStreamingMode == E_STREAMING_PRELOAD)
+        {
+            static bool s_bLoggedNoPrefetch = false;
+            if (!s_bLoggedNoPrefetch)
+            {
+                s_bLoggedNoPrefetch = true;
+                if (CgsDev::Message::gxMessageFilterFlags & 1)
+                    *CgsDev::Log::gpDebugPrint
+                        << "[flow] streaming PRELOAD requested but ScriptedFsm::GetNextStates "
+                           "is not reconstructed -- next-state prefetch skipped [FLAG]\n";
+            }
+        }
     }
 }
