@@ -395,19 +395,29 @@ namespace CgsGui
 
         OutputBuffer::GuiResourceRequestQueue* lpRequests = lpOutput->GetResourceRequestQueue();
 
-        // ⭐ THE PER-PASS BUNDLE CAP, 2026-08-17 (boot audit F-P8a-5). The console's model
-        // scheduler services at most FIVE bundles per pass and comes back for the rest next
-        // frame; this drained the WHOLE queue in one call, so a stage that queued twenty
-        // bundles paid for all twenty in a single frame.
+        // ⚠️ THE PER-PASS BUNDLE CAP WAS TRIED HERE AND REVERTED, 2026-08-17 (boot audit
+        // F-P8a-5). Recording it so it is not tried again the same way.
         //
-        // The other half of that finding has EXPIRED and is worth saying so: it reads
-        // "drains whole queue SYNC w/ CRT BundleLoader". The loader is not CRT-backed any
-        // more -- CgsResource::BundleLoader reads through the live async FS engine
-        // (DeviceManager worker + OperationPool + the Win32 device leaf; every boot log line
-        // says "via async-FS"). So the IO layer is already right and the batching was the
-        // real remaining deviation.
-        const s32 KI_MAX_BUNDLES_PER_PASS = 5;
-        s32 liServicedThisPass = 0;
+        // The console's model scheduler services at most FIVE bundles per pass, and this
+        // drains the whole queue in one call, so the cap looks like a drop-in fix. It is not,
+        // because of WHERE the two builds drain. On the console the request queue is a
+        // transient IO buffer whose records are moved out by downstream modules, so the WAIT
+        // stage's `HasPendingResourceRequests` can safely Clear() it. On PC the drain happens
+        // in-module, AFTER the stage machine in the same Update -- so a capped pass leaves
+        // records in the queue, and the NEXT pass's WAIT stage clears them before they are
+        // ever serviced. Bundles queued past the fifth are silently lost.
+        //
+        // It boot-tested clean and passed both golden gates, which is the point worth
+        // remembering: this build's boot happens to post <= 5 per stage, so the hazard is
+        // invisible until a stage queues more. Capping needs the queue lifetime fixed first
+        // -- either service before the stage machine, or make HasPendingResourceRequests
+        // clear only what was actually consumed.
+        //
+        // The OTHER half of the finding has genuinely expired: it reads "drains whole queue
+        // SYNC w/ CRT BundleLoader". The loader is not CRT-backed any more --
+        // CgsResource::BundleLoader reads through the live async FS engine (DeviceManager
+        // worker + OperationPool + the Win32 device leaf), which is why every bundle line in
+        // the boot log says "via async-FS". The IO layer is already right.
 
         const CgsModule::Event* lpEvent = 0;
         s32 liSize = 0;
@@ -415,9 +425,6 @@ namespace CgsGui
         bool lbAnyServiced = false;
         while (liType >= 0 && lpEvent != 0)
         {
-            if (liServicedThisPass >= KI_MAX_BUNDLES_PER_PASS)
-                break;
-            ++liServicedThisPass;
             lbAnyServiced = true;
             switch (liType)
             {
@@ -710,10 +717,10 @@ namespace CgsGui
             lpEvent = lpNextEvent;
         }
 
-        // ⚠️ Only clear when the queue was drained TO THE END. With the per-pass cap above,
-        // hitting the cap leaves records behind that must survive to the next pass -- the
-        // old unconditional Clear() would have thrown exactly the ones the cap deferred.
-        if (lbAnyServiced && (liType < 0 || lpEvent == 0))
+        // This frame's records are fully serviced -- drop them (the console equivalent is
+        // the transient IO buffer being consumed downstream; the WAIT stage's
+        // HasPendingResourceRequests clears the queue anyway before counting).
+        if (lbAnyServiced)
             lpRequests->Clear();
     }
 }
