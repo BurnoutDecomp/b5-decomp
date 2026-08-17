@@ -34,6 +34,16 @@ namespace CgsSystem
     class StreamHeadersPC
     {
     public:
+        // ⭐ 2026-08-16 (boot audit F-P5-11/F7). Load both bundles NOW, from the boot point
+        // the console loads them: RootSoundModule::Prepare's REGISTRY_LOAD stage, i.e.
+        // loading-screen stage 4, with the loading screen up. Before this the tables were
+        // built lazily on the first lookup, which on the PC meant "when the first boot video
+        // asks for its audio" -- several seconds and a whole flow transition after the
+        // console has them, and inside the frame that wanted to start playing.
+        // Idempotent; the two resolvers still call it, so a missed preload degrades to the
+        // old lazy behaviour rather than to no audio.
+        static void Preload();
+
         // Resolve by ContentSpec NAME (e.g. "Guns_And_Roses"): fills the raw SNR
         // (GenericRwacWaveContent) bytes + the zone-1 .SNS file name. The SNR
         // memory is owned by the resident table (valid for the process lifetime).

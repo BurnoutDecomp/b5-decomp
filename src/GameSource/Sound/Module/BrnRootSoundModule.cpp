@@ -2,6 +2,7 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"                       // CGS_ASSERT
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h" // AddMonitor (START stage)
 #include "GameShared/GameClasses/Sound/CgsTestBedAllocator.h"            // CgsSound::TestBed::Allocator (the four carve globals)
+#include "GameShared/GameClasses/System/PC/CgsStreamHeadersPC.h"         // StreamHeadersPC::Preload (the REGISTRY_LOAD stage's data half)
 
 // BrnSound::Module::RootSoundModule -- see the header. Reconstructed from BURNOUT_X360_ARTIST.XEX
 // (ctor 0x827E4808, Construct 0x826AF350, Prepare 0x826FABF8), cross-checked against the DecFIGS
@@ -188,7 +189,19 @@ namespace Module
             //   (lpLogicOutputBuffer, lpSoundModuleOutputBuffer); unlock both; -> still
             //   preparing }. RegistryLoad (0x826EBA08) streams the CSIS/AEMS registries through
             //   the playback module; blocked on the playback stage above + the RootOutputBuffer
-            //   request interfaces. Until then this stage completes without loading registries.
+            //   request interfaces.
+            //
+            // ⭐ WHAT IS NOT BLOCKED IS THE TIMING, restored 2026-08-16 (boot audit
+            // F-P5-11/F7). The console reads SOUND\STREAMS\StreamHeaders.bundle and the
+            // StreamsRegistry HERE -- RegistryLoad merges the registry's ContentSpecs into
+            // the playback Registry, and StreamingStateManager::Prepare @0x826EE680 loads
+            // the headers bundle beside it -- i.e. during loading-screen stage 4, with the
+            // loading screen up. The PC read the same two files LAZILY, on the first
+            // lookup, which in practice was "when the first boot video asks for its audio":
+            // several seconds and a whole flow transition later, and inside the very frame
+            // that wanted to start playing. StreamHeadersPC::Preload does that read now.
+            // The full stage stays [gated] on the rw::audio engine; this is its data half.
+            CgsSystem::StreamHeadersPC::Preload();
             meReleaseStage = E_RELEASESTAGE_REGISTRY_LOAD;
             // fall through
         case E_PREPARESTAGE_LOGIC_MODULE:
