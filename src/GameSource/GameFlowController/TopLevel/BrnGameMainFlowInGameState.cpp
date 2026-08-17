@@ -20,7 +20,8 @@ namespace BrnGameMainFlowController
     // Option B stand-ins for the game-module aggregate fields the X360 body accesses by
     // absolute offset (off_830102D0 == BrnGame::GetMainGameModule()); those fields are not
     // mapped in the incremental game-module layout, so -- following the
-    // gBrnLoadingScreenShouldShow / gBrnDiskSpaceCheckComplete bridge-global precedent --
+    // gBrnLoadingScreenShouldShow bridge-global precedent (the gBrnDiskSpaceCheckComplete
+    // one was retired 2026-08-16 -- boot audit F-P4-8 -- as an invented producer) --
     // they are modelled here:
     //   gBrnInGameStateActive       stands in for *(base + 0x9A06BA) (byte) -- "in-game state active"
     //   gBrnReturnToFrontEndRequested stands in for *(base + 0x9A0626) (byte) -- "return to front-end" poll
