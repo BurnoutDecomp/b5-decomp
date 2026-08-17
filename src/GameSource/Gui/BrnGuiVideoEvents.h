@@ -31,10 +31,15 @@ namespace BrnGui
         bool mbPreload;
         bool mbKeepMemoryWhenFinished;
         bool mbDisableCustomSoundtracks;
-        // [follow-on: mSoundStreamName -> CgsSound::Playback::Name when the sound system lands]
+        // The video's SOUND stream name, CgsSound::Playback::Name::MakeHash(name). The X360
+        // producers write it into the VideoDefinition slot at +0x18 alongside the resource id
+        // (boot audit F-P8b-5); it was a "[follow-on]" comment and the field did not exist, so
+        // every boot video was played with no sound name attached.
+        u32  muSoundStreamName;
 
         GuiEventPlayVideo()
             : muVideoResourceId(0)
+            , muSoundStreamName(0)
             , miCrossfadeInFrames(0)
             , miCrossfadeOutFrames(0)
             , mbPreload(false)

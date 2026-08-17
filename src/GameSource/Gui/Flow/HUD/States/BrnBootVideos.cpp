@@ -4,6 +4,11 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourceID.h"         // CgsResource::ID::HashString (resId = name hash)
 #include "GameSource/Gui/BrnGuiVideoEvents.h"                             // BrnGui::GuiEventPlayVideo (508)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                 // CgsDev::Log::WriteToLog (diagnostics)
+#include "GameSource/Gui/BrnGuiCache.h"                                    // GuiCache::GetTime (the EA-logo dwell)
+#include "GameSource/Game/BrnGameModule.hpp"                          // BrnGame::GetMainGameModule (soft-reboot query)
+#include "GameShared/GameClasses/Core/CgsAssert.h"                     // CGS_ASSERT
+#include "GameShared/GameClasses/Sound/Playback/CgsCommon.h"               // CgsSound::Playback::Name::MakeHash (the video sound name)
+#include <cstring>                                                         // strcmp (the Criterion sub-name match)
 
 #include <cstdio>                                                         // snprintf (diagnostics)
 
@@ -33,24 +38,78 @@ namespace BrnGui
 
         typedef CgsModule::VariableEventQueue<18432, 16> BootInQueue;
 
-        // Emit a GuiEventPlayVideo at the MovieManager (via the StateInterface output queue). The video's
-        // resource id is CgsResource::ID::HashString(name) -- matching VIDEOLIST.BUNDLE's VideoDataResource
-        // ids. The X360 also fills the VideoDefinition rect/crossfade + the sound name (MakeHash); the rect
-        // defaults to full-screen here and the sound is a follow-on.
-        void PlayVideoByName(CgsGui::StateInterface* lpStateInterface, const char* lpcName)
+        // The event-64 record: the GUI module posts the cache pointer each frame.
+        struct GuiEventCacheReady : public CgsModule::Event
+        {
+            GuiCache* mpGuiCache;
+        };
+
+        // The boot GUI sub-ids/channels the X360 uses (BootVideos::Update @0x82478778).
+        const s32 KI_EVENT_APT_NAME       = 21;    // apt-name notification (the Criterion sub-name match)
+        const s32 KI_EVENT_VIDEO_TICK     = 6;     // per-tick video notification (sub-id 49 = skip request)
+        const s32 KI_VIDEO_TICK_SKIP_SUB  = 49;    // payload+4 == 49 -> the player asked to stop
+        const s32 KI_CHANNEL_GUI_OUT      = 40;
+        const s32 KI_CHANNEL_VIEW_STATE   = 41;
+        const f32 KF_EA_LOGO_MIN_DWELL    = 4.5f;  // flt_8205ABF4 -- the EA logo cannot be skipped sooner
+
+        // 16-byte GuiEvent<N> command record { 1, N, 12 } + one trailing flag byte -- the
+        // shape every boot state posts on the GUI-out / view-state channels.
+        template <s32 N>
+        struct GuiCommandEvent16 : public CgsGui::GuiEvent<N>
+        {
+            u8 mu8Flag;
+            u8 maPad[3];
+            GuiCommandEvent16(u8 lu8Flag = 0) : CgsGui::GuiEvent<N>(1, 12), mu8Flag(lu8Flag)
+            { maPad[0] = maPad[1] = maPad[2] = 0; }
+        };
+
+        template <s32 N>
+        void PostCommand16(CgsGui::StateInterface* lpInterface, s32 liChannel, u8 lu8Flag = 0)
+        {
+            if (lpInterface == 0)
+                return;
+            GuiCommandEvent16<N> lEvent(lu8Flag);
+            lpInterface->GetOutputEventQueue()->AddEvent(
+                reinterpret_cast<const CgsModule::Event*>(&lEvent), liChannel, 16);
+        }
+
+        // Emit a GuiEventPlayVideo at the MovieManager (via the StateInterface output queue).
+        //
+        // ⭐ CORRECTED 2026-08-16 (boot audit F-P8b-5). The X360 payload carries THREE things
+        // this only half-filled: the 64-bit ID::HashString at +0x10 (the PC truncated it to
+        // u32), the Playback::Name::MakeHash SOUND name at +0x18, and the keep-memory byte at
+        // +0x25 -- which is 1 for EAFranchise and 0 for Criterion, and is why the console does
+        // NOT tear the movie allocator down between the two logos.
+        void PlayVideoByName(CgsGui::StateInterface* lpStateInterface, const char* lpcName,
+                             bool lbKeepMemoryWhenFinished)
         {
             if (lpStateInterface == 0)
                 return;
             BrnGui::GuiEventPlayVideo lPlayEvent;
             lPlayEvent.muVideoResourceId =
                 static_cast<u32>(CgsResource::ID::HashString(reinterpret_cast<const u8*>(lpcName)));
+            lPlayEvent.muSoundStreamName  = static_cast<u32>(CgsSound::Playback::Name::MakeHash(lpcName));
+            lPlayEvent.mbKeepMemoryWhenFinished = lbKeepMemoryWhenFinished;
             {
-                char lac[96];
-                std::snprintf(lac, sizeof(lac), "[BootVideos] play '%s' (id=0x%08X)\n",
-                              lpcName, lPlayEvent.muVideoResourceId);
+                char lac[128];
+                std::snprintf(lac, sizeof(lac),
+                              "[BootVideos] play '%s' (id=0x%08X sound=0x%08X keep=%d)\n",
+                              lpcName, lPlayEvent.muVideoResourceId,
+                              lPlayEvent.muSoundStreamName, (int)lbKeepMemoryWhenFinished);
                 CgsDev::Log::WriteToLog(lac);
             }
             lpStateInterface->OutputGuiEvent<BrnGui::GuiEventPlayVideo>(lPlayEvent);
+        }
+
+        // @0x824787C8 -- the per-tick stop: a video-tick event carrying sub-id 49 is the
+        // player asking to skip, and the console answers it with a StopVideo every Update,
+        // BEFORE the stage switch.
+        void StopCurrentVideo(CgsGui::StateInterface* lpStateInterface)
+        {
+            if (lpStateInterface == 0)
+                return;
+            BrnGui::GuiEventStopVideo lStopEvent;
+            lpStateInterface->OutputGuiEvent<BrnGui::GuiEventStopVideo>(lStopEvent);
         }
     }
 
@@ -64,17 +123,33 @@ namespace BrnGui
         mpGuiCache = 0;
     }
 
+    // @ 0x824786B8 -- register and drop the loading screen. NB the console does NOT reset
+    // the stage here (Construct does); resetting it made a re-entry replay the logos
+    // (boot audit F-P8b-7).
     void BootVideos::OnEnter()
     {
-        meUpdateStage = E_UPDATE_STAGE_LOADING;
         if (mpStateInterface != 0)
+        {
             mpStateInterface->RegisterForEvents(KAI_OBSERVED_EVENTS, KI_NUM_OBSERVED_EVENTS);
+            PostCommand16<20>(mpStateInterface, KI_CHANNEL_GUI_OUT);      // stop the loading screen
+            // [FLAG] The console also posts a view-state record here, {8,25,12,0,1.0f} on
+            // channel 41. Its layout is NOT the 16-byte command shape -- the view module
+            // reads a string out of these records (ProcessIncomingViewEvents strlen's a
+            // field), and posting the command shape faults it. The record's field semantics
+            // are unresolved (boot audit P8b BLOCKER note), so it stays unposted rather than
+            // guessed at.
+        }
     }
 
+    // @ 0x82478D38 -- unregister and post the leave record on the view-state channel.
     void BootVideos::OnLeave()
     {
         if (mpStateInterface != 0)
+        {
             mpStateInterface->UnRegisterForEvents(KAI_OBSERVED_EVENTS, KI_NUM_OBSERVED_EVENTS);
+            // [FLAG] as OnEnter: the console's {8,18,12,&"",1} channel-41 record carries a
+            // string pointer, not the 16-byte command shape. Unresolved -> unposted.
+        }
     }
 
     void BootVideos::Update()
@@ -84,49 +159,95 @@ namespace BrnGui
         if (lpInQueue == 0)
             return;
 
+        // @0x824787A4-C8 -- THE PRE-PASS, before the stage switch and on EVERY call: any
+        // video-tick event carrying sub-id 49 is a skip request, and it is answered with a
+        // StopVideo regardless of which stage we are in.
+        {
+            const CgsModule::Event* lpScan = 0;
+            s32 liScanSize = 0;
+            for (s32 liScanId = lpInQueue->GetFirstEvent(&lpScan, &liScanSize);
+                 lpScan != 0;
+                 liScanId = lpInQueue->GetNextEvent(lpScan, &lpScan, &liScanSize))
+            {
+                if (liScanId != KI_EVENT_VIDEO_TICK)
+                    continue;
+                const s32* lpiPayload = reinterpret_cast<const s32*>(lpScan);
+                if (lpiPayload[1] == KI_VIDEO_TICK_SKIP_SUB)
+                    StopCurrentVideo(mpStateInterface);
+            }
+        }
+
         const CgsModule::Event* lpEvent = 0;
         s32 liSize = 0;
         s32 liEventId = lpInQueue->GetFirstEvent(&lpEvent, &liSize);
         while (liEventId >= 0 && lpEvent != 0)
         {
-            // In pre-release builds, I'm pretty sure E_UPDATE_STAGE_MAIN_HD_MOVIE plays EAHD, but in the final release, the HD video is skipped
             switch (meUpdateStage)
             {
             case E_UPDATE_STAGE_LOADING:
             case E_UPDATE_STAGE_MAIN_HD_MOVIE:
-                // Boot resource/cache ready -> play the EA logo. [follow-on: soft-reboot skip; HD vs SD.]
+                // @0x8247882C -- a soft reboot skips the branding entirely: post the
+                // phase-complete command and jump straight to DONE.
+                if (BrnGame::GetMainGameModule() != 0 &&
+                    BrnGame::GetMainGameModule()->HasGameBeenSoftRebooted() != 0)
+                {
+                    PostCommand16<70>(mpStateInterface, KI_CHANNEL_GUI_OUT);
+                    meUpdateStage = E_UPDATE_STAGE_DONE;
+                    break;
+                }
+                // Boot resource/cache ready -> latch the cache (the dwell clock lives on it)
+                // and play the EA logo with the keep-memory byte set.
                 if (liEventId == KI_EVENT_CACHE_READY)
                 {
-                    PlayVideoByName(mpStateInterface, "EAFranchise");
+                    GuiCache* lpCache = reinterpret_cast<const GuiEventCacheReady*>(lpEvent)->mpGuiCache;
+                    CGS_ASSERT(lpCache != 0, "Invalid cache in BootVideos::Update");
+                    mpGuiCache = lpCache;
+                    PlayVideoByName(mpStateInterface, "EAFranchise", /*keepMemory*/ true);
                     meUpdateStage = E_UPDATE_STAGE_MAIN_EA_LOGO_MOVIE;
+                    // @0x82478A18 -- stamp the EA start time; the skip below is gated on it.
+                    mfLogoVideoStartTime = (mpGuiCache != 0) ? mpGuiCache->GetTime() : 0.0f;
                 }
                 break;
 
             case E_UPDATE_STAGE_MAIN_EA_LOGO_MOVIE:
-                // EA-logo video finished -> play the Criterion logo. [follow-on: min 4.5s dwell + tick-stop.]
+                // @0x82478B10-44 -- the EA logo may only be skipped once it has been up for
+                // KF_EA_LOGO_MIN_DWELL seconds; before that the skip request is ignored.
+                if (liEventId == KI_EVENT_VIDEO_TICK && mpGuiCache != 0)
+                {
+                    const s32* lpiPayload = reinterpret_cast<const s32*>(lpEvent);
+                    if (lpiPayload[1] == KI_VIDEO_TICK_SKIP_SUB &&
+                        mpGuiCache->GetTime() > mfLogoVideoStartTime + KF_EA_LOGO_MIN_DWELL)
+                    {
+                        StopCurrentVideo(mpStateInterface);
+                    }
+                }
+                // EA-logo video finished -> the Criterion logo (keep-memory CLEAR: this is
+                // the last branding movie, so its memory is handed back).
                 if (liEventId == KI_EVENT_VIDEO_FINISHED)
                 {
-                    PlayVideoByName(mpStateInterface, "Criterion");
+                    PlayVideoByName(mpStateInterface, "Criterion", /*keepMemory*/ false);
                     meUpdateStage = E_UPDATE_STAGE_MAIN_CRITERION_LOGO_MOVIE;
                 }
                 break;
 
             case E_UPDATE_STAGE_MAIN_CRITERION_LOGO_MOVIE:
-                // Criterion-logo video finished -> the boot videos are done. The X360
-                // posts the phase-complete command 70 on the GUI-out channel (Update
-                // @0x82478778: {1,70,12} AddEvent(out, 40, 16)); the game main flow's
-                // MarketingScreens::Update advances on it.
+                // @0x82478C34-70 -- the apt-name notification for "EA_Criterion_Logo" ends the
+                // phase as well as the video-finished event does; both post command 70 on the
+                // GUI-out channel, which is what MarketingScreens::Update advances on.
+                if (liEventId == KI_EVENT_APT_NAME)
+                {
+                    const s32*  lpiPayload = reinterpret_cast<const s32*>(lpEvent);
+                    const char* lpcName    = reinterpret_cast<const char*>(lpEvent) + 8;
+                    if (lpiPayload[0] == 4 && std::strcmp(lpcName, "EA_Criterion_Logo") == 0)
+                    {
+                        PostCommand16<70>(mpStateInterface, KI_CHANNEL_GUI_OUT);
+                        meUpdateStage = E_UPDATE_STAGE_DONE;
+                    }
+                }
                 if (liEventId == KI_EVENT_VIDEO_FINISHED)
                 {
+                    PostCommand16<70>(mpStateInterface, KI_CHANNEL_GUI_OUT);
                     meUpdateStage = E_UPDATE_STAGE_DONE;
-                    struct GuiCommandEvent16 : public CgsGui::GuiEvent<70>
-                    {
-                        u8 mu8Flag; u8 maPad[3];
-                        GuiCommandEvent16() : CgsGui::GuiEvent<70>(1, 12), mu8Flag(0)
-                        { maPad[0] = maPad[1] = maPad[2] = 0; }
-                    } lDone;
-                    mpStateInterface->GetOutputEventQueue()->AddEvent(
-                        reinterpret_cast<const CgsModule::Event*>(&lDone), 40, 16);
                 }
                 break;
 
