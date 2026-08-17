@@ -59,6 +59,15 @@ namespace BrnGame
         , mbStalled(false)
         , mbRequestDoStepFrame(false)
         , mbRequestDoPlayFrame(false)
+        // ⭐ SEEDED 2026-08-17 (boot audit F-P1-6). Construct's step 3 stores 7 at
+        // gm+0x9A0650, and E_RELEASESTAGE_DONE is 7 -- the console parks the release ladder
+        // at DONE so a Release() reached before Prepare has armed it answers true and walks
+        // away. Ours was never initialised at all: it only worked because the game module is
+        // a file-scope static and zero-inits to E_RELEASESTAGE_START, which is the OPPOSITE
+        // meaning -- a Release() from there walks straight into releasing unprepared modules.
+        // Same seed BrnBaseFlow::Construct already applies to its own release stage, and the
+        // precondition the teardown loop (F-P0-8) needs before it can ever be wired.
+        , meReleaseStage(E_RELEASESTAGE_DONE)
         , meGamePrepareStage(E_GAMEPREPARESTAGE_START)
         , meGameUpdateStage(E_GAMEUPDATESTAGE_PREPARE)
         , miNumSimFramesRequired(0)
