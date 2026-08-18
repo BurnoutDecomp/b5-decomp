@@ -14,6 +14,15 @@
 
 namespace CgsPhysics
 {
+    // 2026-08-18 (wave Q5, VolumeManager mount): the DWARF-declared accessor (CgsCollisionMeshData.h:38)
+    // was declared with no body anywhere; VolumeManager::GetRwVolume's STATIC-volume arm (the arm props
+    // take, @0x828C5E68) reaches it through ResourcePtr<CollisionMeshData>::operator->. Header-inline
+    // on the console (no out-of-line symbol): a plain member read.
+    const VolRef::Volume* CollisionMeshData::GetVolume() const
+    {
+        return mpCollisionVolume;
+    }
+
     void CollisionMeshData::FixDown(void* lpBaseAddr)
     {
         if (mpCollisionVolume)

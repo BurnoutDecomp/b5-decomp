@@ -66,6 +66,9 @@
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleDriverControls.h"             // BrnPhysics::Vehicle::BrnPlayerDriverControls (the 72-byte player record)
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleDriverInputInterface.h"       // VehicleDriverInputInterface::AddTargetAssist / GetUpdateDriverQueue
 #include "GameSource/World/EntityModules/RaceCarEntityModule/Boost/BrnBoostStrategy.h"       // BrnWorld::BoostStrategy::IsBoosting (vtable slot 19)
+#include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleOutputInterface.h"            // BrnPhysics::Vehicle::VehicleManagerOutputInterface (the create-vehicle result queue)
+#include "GameSource/World/BrnEntityTypes.h"                                                 // BrnWorld::E_ENTITYTYPE_RACECAR (the VolumeInstanceId owner byte)
+#include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_SceneUpdate.h"                // InSceneUpdateInterface::SetVolumeInstanceTransform / SetEntityPosition / ClearEntityVolumesPadding
 
 #include <cstring>   // memset
 #include <cstdlib>   // getenv  ([motion] bring-up probe only)
@@ -3075,6 +3078,373 @@ void RaceCarEntityModule::ReadUpdatedActiveRaceCarDataFromPhysics(
     }
 }
 
+// ============================================================================
+// ⭐⭐ THE THREE SCENE LEGS OF PostPhysicsUpdate  (wave Q5, cluster G1, 2026-08-18)
+//
+// These are the CAR's half of the scene volume-collision middle: the leg that puts a race
+// car's collision box INTO the scene (ProcessCreateVehicleEvents -> OnHandlingModelAdded ->
+// AddToScene), the leg that MOVES it every frame (GenerateSceneUpdateEvents ->
+// InSceneUpdateInterface::SetVolumeInstanceTransform), and the per-frame culling/collision
+// refresh (SendRaceCarSceneUpdates -> ActiveRaceCar::SendSceneUpdatesPostPhysics).
+//
+// All three are called ONLY from PostPhysicsUpdate @0x82307538, and the call order + the
+// paused-branch membership below were re-derived from that function's asm this wave, not
+// taken from any earlier note:
+//     0x823075BC  lpInput->LockForRead()          <- the whole body runs inside this lock
+//     0x823075C4  lpOutput->LockForWrite()
+//     0x823075D8  CopyActiveRaceCarToPlayerScoringMappingToOutput
+//     0x823075E8  ProcessRaceCarCrashEvents_PostPhysics
+//     0x823075F8 ⭐ ProcessCreateVehicleEvents(lpInput, lpOutput)
+//     0x82307604  ReadOutOfRangeRaceCarDataFromAI
+//     0x82307610  bne -> 0x823076C0                <- `if ((lUpdateSet & 1) == 0)`, the SIM-PAUSED skip
+//       0x8230761C  ReadUpdatedActiveRaceCarDataFromPhysics
+//       0x8230763C  the 5-byte AggressiveDrivingFlags copy (input +0x6C00 -> module +0x1836C)
+//       0x82307658 ⭐ GenerateSceneUpdateEvents(lpOutput)
+//       0x82307664  UpdateRaceCarContacts / ProcessPropContactQueue / UpdateCrashingPlayerContacts
+//       0x82307688  UpdateActiveRaceCarTransforms / UpdateCurrentWorldRegion / UpdateHidingEvents
+//       0x823076BC  StorePlayerRoutePortalPositions
+//     0x823076C4  UpdateActiveRaceCarColours
+//     0x823076D8  UpdateOutputBoostInfo
+//     0x8230771C  UpdateOutputInterfaces
+//     0x82307730  TransmitCarsInRaceToQueryManager
+//     0x8230773C ⭐ SendRaceCarSceneUpdates(lpOutput)          <- OUTSIDE the paused skip
+//     0x82307744  bne -> 0x82307930                <- the SECOND paused skip (near-miss/air-time)
+//     0x82307938  SendGameEvents / SendStreamerEvents / ReplayIO::RegisterSerialiser
+//     0x82307980  UnlockForRead / UnlockForWrite
+// ============================================================================
+
+// ============================================================================
+// ProcessCreateVehicleEvents  @0x822FF620 (182)
+//
+// ⭐ THE STALE-BANNER RE-VERIFICATION THE WAVE ASKED FOR, AND ITS ANSWER.
+// PublishNewVehicleToDirectorWithoutPhysicsBringUp's banner (above, :1338) claims this
+// function's input queue "is permanently empty on this build, and it is not a mount away
+// from being filled". That was true when it was written and is NOT true now. Re-checked
+// 2026-08-18 against the tree and the current boot log:
+//   * BrnVehicleManager_ProcessCreateEvents.cpp exists, is REAL, and IS on
+//     tools/build/build_game_exe.bat;
+//   * its per-car body ends in `lpManagerOutputInterface->AddCreateVehicleResult(lResult)`
+//     with mbSuccess = true;
+//   * build/game/BrnGame.log:883 carries that body's own one-shot line
+//     ("[FLAG PC bring-up] ProcessCreateEvents: race-car debug component vptr is NULL"),
+//     which is emitted INSIDE the per-race-car loop three statements before that Add --
+//     i.e. the queue is written on this build, at least once, on the junkyard drive;
+//   * BrnGame.log:819 records BridgePhysicsModuleToRaceCarModule_PostPhysics legs 1-2
+//     (vehicle output + VEHICLE-MANAGER output) as LIVE, so the written interface really
+//     does reach this module's post-physics input buffer.
+// The ordering worry the stand-in's banner raises (publishing before the car's attribute
+// collection is resident) also resolves by itself: the create event is posted by
+// ActiveRaceCar::AddHandlingModel from ResetActiveRaceCar, which only runs after
+// OnRaceCarResourcesLoaded, so the result lands AFTER the vault load. The log shows exactly
+// that ordering -- vault 109b0d7b00000000 at :853, E_STATE_ACTIVE at :881, ProcessCreateEvents
+// at :883.
+//
+// THE BODY, leg for leg from the asm:
+//   assert lpInput/lpOutput (X360 :5174 / :5175)
+//   lpInput->GetVehicleOutputInterface()            <- result DISCARDED (see the note below)
+//   queue = lpInput->GetVehicleManagerOutputInterface()->GetCreateVehicleResults()
+//   for each event:
+//       if (id.GetEntityIDOwner() != E_ENTITYTYPE_RACECAR) continue;   // `srwi r11,r29,24; cmplwi 1`
+//       assert(mbSuccess)                                              // "Add vehicle failed\n", :5202
+//       slot = id.GetEntityIDEntityIndex()                             // `extrwi r31,r29,14,8`
+//       assert slot >= 0 / slot < COUNT                                // :5206 / :5207
+//       car = GetActiveRaceCar(slot)
+//       modelIndex = mpVehicleList->GetVehicleIndex(car->GetGlobalRaceCar()->GetModelId())
+//       assert modelIndex >= 0                                         // :5211
+//       car->OnHandlingModelAdded(lpOutput->GetSceneInputInterface(),
+//                                 lpOutput->GetVehicleInputInterface(), mfTimeStep)
+//       if (car->IsPlayer())
+//           lpOutput->GetDirectorVehicleInputInterface()->NewVehicle(
+//               mpVehicleList->GetVehicleData(modelIndex)->GetAttribCollectionKeyHash(),
+//               modelIndex)
+//
+// ⚠️ THE DISCARDED FIRST ACCESSOR IS THE CONSOLE'S, NOT A SLIP. The asm calls
+// InputBuffer_PostPhysics::GetVehicleOutputInterface (@0x822FF694, the +16 accessor) and
+// throws r3 away one instruction later, then calls GetVehicleManagerOutputInterface
+// (@0x822FF69C, +27680) for the queue. That is a second source-level local the optimiser
+// dropped; the call itself could not be elided because the accessor is out of line and
+// carries its own "Not locked for reading" tripwire. Reproduced as-is.
+//
+// ⚠️ THE THREE INTERFACE HOPS ARE NAMED, NOT OFFSET-DERIVED, AND TWO OF THE NAMES IN
+// BrnRaceCarEntityModuleIO.h's DECLARATION COMMENTS ARE WRONG (reported to the conductor,
+// not fixed here -- that file is not this cluster's). Measured from the accessor bodies:
+//     sub_822B63E0  -> this + 8224    (h:576)  == mSceneInputInterface        -> GetSceneInputInterface()
+//     0x822B6488    -> this + 826992  (h:579)  == mDirectorVehicleInputInterface
+//     0x822B6920    -> this + 855200  (h:600)  == mVehicleInputInterface      -> GetVehicleInputInterface()
+// which agrees with OutputBuffer_PostPhysics::Construct's own offset comments in that header
+// (+8224 scene, +826992 director, +855200 vehicle) and disagrees with the per-declaration
+// "(0x822B6488)" / "(0x822B6920)" attributions three lines below them. The names used here
+// are the ones Construct attests.
+// ============================================================================
+void RaceCarEntityModule::ProcessCreateVehicleEvents(
+        const RaceCarEntityModuleIO::InputBuffer_PostPhysics* lpInput,
+        RaceCarEntityModuleIO::OutputBuffer_PostPhysics* lpOutput )
+{
+    CGS_ASSERT( lpInput != 0, "lpInput != NULL" );      // X360 :5174
+    CGS_ASSERT( lpOutput != 0, "lpOutput != NULL" );    // X360 :5175
+
+    if( lpInput == 0 || lpOutput == 0 )
+    {
+        return;
+    }
+
+    // The console's two accessor hops, in its own order -- the first result is discarded.
+    lpInput->GetVehicleOutputInterface();
+    const BrnPhysics::Vehicle::VehicleManagerOutputInterface* lpVehicleManagerOutput =
+        lpInput->GetVehicleManagerOutputInterface();
+
+    if( lpVehicleManagerOutput == 0 )
+    {
+        return;
+    }
+
+    // ⛔⛔ PARKED ON ONE MISSING DECLARATION -- NOT on a missing body, and not on this file.
+    // The loop below needs the create-vehicle result queue, and the ONLY console-attested way
+    // to read it is the DWARF-declared accessor
+    //     references/DecFIGS/dwarfdump/GameSource/Physics/VehicleManager/SharedIO/
+    //     BrnVehicleOutputInterface.h:232
+    //         const VehicleManagerOutputInterface::CreateVehicleResultQueue*
+    //             GetCreateVehicleResults() const;
+    // (the X360 inlines it -- ProcessCreateVehicleEvents' asm reaches the queue with a bare
+    // `addi r30, r3, 0x6C0`, which is exactly mCreateVehicleResultQueue's seat). That accessor
+    // does not exist in b5-decomp/src yet, and mCreateVehicleResultQueue is `private:` in
+    // BrnVehicleOutputInterface.h -- a file this cluster does not own, so the one-line
+    // addition is REPORTED to the conductor rather than made here. Nothing about the queue
+    // is guessed: its element type, capacity (8) and seat (+0x6C0) are all already committed
+    // in that header, and its producer is real and mounted.
+    //
+    // ⚠️ CONSEQUENCE, stated plainly: until that line lands this function publishes NOTHING,
+    // so PublishNewVehicleToDirectorWithoutPhysicsBringUp above is deliberately NOT retired
+    // (retiring it while this is parked would silently lose the NewVehicle publish the log
+    // shows working at BrnGame.log:860 -> MainDirector at :864). The two retire together.
+    // DELETE-WHEN VehicleManagerOutputInterface::GetCreateVehicleResults() exists; the flip is
+    // this block -> the loop the banner above transcribes.
+    static bool sbReportedCreateVehicleResultsParked = false;
+    if( !sbReportedCreateVehicleResultsParked )
+    {
+        sbReportedCreateVehicleResultsParked = true;
+        if( CgsDev::Log::gpDebugPrint != 0 )
+        {
+            *CgsDev::Log::gpDebugPrint
+                << "[Q5 carmod] RaceCarEntityModule::ProcessCreateVehicleEvents (X360 "
+                   "0x822FF620) PARKED on ONE missing declaration: "
+                   "BrnPhysics::Vehicle::VehicleManagerOutputInterface::GetCreateVehicleResults() "
+                   "const (DWARF BrnVehicleOutputInterface.h:232) -- mCreateVehicleResultQueue "
+                   "is private and that header is not this cluster's. The queue IS written on "
+                   "this build (VehicleManager::ProcessCreateEvents is real + mounted). Until "
+                   "it lands, ActiveRaceCar::OnHandlingModelAdded -> AddToScene is never "
+                   "reached and no race car has a scene volume.\n";
+        }
+    }
+}
+
+// ============================================================================
+// SendRaceCarSceneUpdates  @0x822F6B08 (56)
+//
+// For every ACTIVE slot, run the per-car post-physics scene leg. The console body is one
+// eight-iteration loop with the range-guarded EActiveRaceCarIndex `operator++` inlined --
+// which is what bakes the "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT" assert
+// (BurnoutConstants.h:39) the asm carries at 0x822F6BB4..0x822F6BD0, exactly as the
+// same-shaped loops elsewhere in this tree already do.
+//
+// ⚠️ ARGUMENT ORDER AND THE FLOAT. The asm loads the vehicle-input interface first
+// (0x822F6B8C, the +855200 accessor -> r24 -> r5) and the scene-input interface second
+// (0x822F6B98, sub_822B63E0 -> r4), then passes (this, scene, vehicle, f1) -- i.e. the
+// DWARF's (SceneInputInterface*, VehicleInputInterface*, float32_t). The float is
+// module +0x18398 == mfTimeStep (`lis r11,1 ; ori r30,r11,0x8398 ; lfsx f31,r28,r30`), the
+// value PreSceneUpdate latches. ActiveRaceCar::SendSceneUpdatesPostPhysics does not read it
+// (no f-register touch anywhere in its 46 instructions) -- it is passed because the
+// declaration takes it; see that function's own banner.
+// ============================================================================
+void RaceCarEntityModule::SendRaceCarSceneUpdates(
+        RaceCarEntityModuleIO::OutputBuffer_PostPhysics* lpOutput )
+{
+    CGS_ASSERT( lpOutput != 0, "lpOutput != NULL" );    // X360 :5086
+
+    if( lpOutput == 0 )
+    {
+        return;
+    }
+
+    for( EActiveRaceCarIndex leActiveRaceCarIndex = E_ACTIVE_RACE_CAR_INDEX_0;
+         leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT;
+         leActiveRaceCarIndex++ )
+    {
+        ActiveRaceCar* lpActiveRaceCar = GetActiveRaceCar( leActiveRaceCarIndex );
+
+        if( lpActiveRaceCar->IsActive() )
+        {
+            lpActiveRaceCar->SendSceneUpdatesPostPhysics( lpOutput->GetSceneInputInterface(),
+                                                          lpOutput->GetVehicleInputInterface(),
+                                                          mfTimeStep );
+        }
+    }
+}
+
+// ============================================================================
+// GenerateSceneUpdateEvents  @0x822D2500 (100)
+//
+// ⭐ THE CAR'S PER-FRAME SCENE-TRANSFORM PRODUCER. For each of the eight slots the console
+// body does (asm 0x822D2540..0x822D2668, loop counter r23 = 8, stride r28 += 0x1CD0):
+//     if (!IsActive()) continue;
+//     assert IsAttached()                       // BrnActiveRaceCar.h:1096 and :1111, TWICE each
+//     id        = *(u64*)(car + 0xD0)           // `ld r30, 0xD0(r28)`   == mHandlingBodyVolumeId
+//     transform =  (car + 0x2D0)                // `addi r29, r31, 0x200` (r31 == car+0xD0)
+//     sceneInterface->SetVolumeInstanceTransform(id, transform)
+//     assert IsAttached() x2 again              // the two accessors' own tripwires, re-emitted
+//     entityWord = (u32)(id >> 32)              // `ld; srdi r11,r11,32; clrlwi r30,r11,0`
+//     position   = *(Vector4*)(car + 0x300)     // `lvx128 v0, r31, r24` with r24 == 0x230
+//     sceneInterface->SetEntityPosition(entityWord, position)
+// then, once, sceneInterface->SetPaddingForResetRaceCars-equivalent tail call.
+//
+// THE TWO OFFSETS ARE NAMED MEMBERS HERE, and both are already attested in this tree:
+//   +0x0D0 == ActiveRaceCar::mHandlingBodyVolumeId (BrnActiveRaceCar.h's own layout block);
+//   +0x2D0 == ActiveRaceCar::mPhysicsState.mTransform -- mPhysicsState sits at +0xE0 and
+//            RaceCarState::mTransform at +496, and 224 + 496 == 720 == 0x2D0 exactly. The
+//            position lane at +0x300 is that same matrix's translation row (0x2D0 + 0x30),
+//            i.e. `mTransform.Pos()`, NOT a separate member.
+// ============================================================================
+void RaceCarEntityModule::GenerateSceneUpdateEvents(
+        RaceCarEntityModuleIO::OutputBuffer_PostPhysics* lpOutput )
+{
+    // The console has no null test here (its caller has already asserted the buffer); this
+    // guard is the PC one every leg in this file carries.
+    if( lpOutput == 0 )
+    {
+        return;
+    }
+
+    CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* lpSceneInterface =
+        lpOutput->GetSceneInputInterface();
+
+    for( EActiveRaceCarIndex leActiveRaceCarIndex = E_ACTIVE_RACE_CAR_INDEX_0;
+         leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT;
+         leActiveRaceCarIndex++ )
+    {
+        ActiveRaceCar* lpActiveRaceCar = GetActiveRaceCar( leActiveRaceCarIndex );
+
+        if( !lpActiveRaceCar->IsActive() )
+        {
+            continue;
+        }
+
+        // The console emits this tripwire four times per car (the two inlined accessors,
+        // each of which asserts twice); it is one predicate, so it is raised once here.
+        CGS_ASSERT( lpActiveRaceCar->IsAttached(), "IsAttached()" );  // BrnActiveRaceCar.h:1096/:1111
+
+        const Matrix44Affine& lrTransform = lpActiveRaceCar->GetPhysicsState()->mTransform;
+
+        // ⛔ PARKED ON ONE MISSING DECLARATION -- see the block banner below the loop.
+        // The two publishes need the slot's own VolumeInstanceId, which lives on
+        // ActiveRaceCar as the private member mHandlingBodyVolumeId (+0x0D0) and has no
+        // public reader yet. BrnActiveRaceCar.h is the SIBLING cluster's file this wave, so
+        // the accessor is REPORTED, not added here.
+        (void)lrTransform;
+        (void)lpSceneInterface;
+    }
+
+    // ⛔⛔ THE PARK, stated once and precisely.
+    // REQUIRED (one line, on BrnActiveRaceCar.h, in the same additive-named-reader block that
+    // already carries GetEngineState/IsInShowtime/IsTakenDown):
+    //     const CgsSceneManager::VolumeInstanceId& GetHandlingBodyVolumeId() const
+    //     { return mHandlingBodyVolumeId; }                                     // +0x0D0
+    // With it, the loop above becomes exactly the console's two publishes:
+    //     const CgsSceneManager::VolumeInstanceId& lrVolumeInstanceId =
+    //         lpActiveRaceCar->GetHandlingBodyVolumeId();
+    //     lpSceneInterface->SetVolumeInstanceTransform( lrVolumeInstanceId, lrTransform );
+    //     lpSceneInterface->SetEntityPosition(
+    //         CgsSceneManager::EntityId( static_cast<u32>(
+    //             lrVolumeInstanceId.muId
+    //             >> CgsSceneManager::VolumeInstanceId::KU_ENTITY_ID_START_INDEX ) ),
+    //         lrTransform.Pos() );
+    // Both callees are REAL and MOUNTED here already (CgsSceneManagerIO_SceneUpdate.cpp:298
+    // and :55, on build_game_exe.bat line 636), so this park is one declaration wide and
+    // nothing else.
+    //
+    // ⚠️ WHY IT IS NOT WORKED AROUND -- and the honest version of that answer, MEASURED
+    // rather than assumed. The handle could in fact be rebuilt from (owner, slot) today:
+    // ActiveRaceCar::Attach @0x822BEEE0 seeds it with `std r30(=0), 0xD0(r31)`, splices the
+    // owner byte with `clrlwi/oris 0x100/sldi 32/or/std` (== E_ENTITYTYPE_RACECAR) and then
+    // calls VolumeInstanceId::SetEntityIDEntityIndex(meActiveRaceCarIndex) -- so on this
+    // build the value is exactly ((1u << 24) | (slot << 10)) << 32, with the reserved bits
+    // and the 8-bit volume index both zero, and nothing ever splices a volume index into a
+    // CAR's handle (AddToScene reuses the same 64-bit word as both the VolumeId and the
+    // VolumeInstanceId -- see BrnActiveRaceCar_wQ5_01.cpp's AddVolumeInstance call).
+    // It is still not done, deliberately: the console READS THE MEMBER, the member is another
+    // class's private state, and a rebuilt copy of a handle diverges silently the first time
+    // the Attach/AddToScene pair changes how it is composed. A one-line reader cannot drift;
+    // a duplicated composition rule can, and this project has shipped that bug before.
+    // DELETE-WHEN ActiveRaceCar::GetHandlingBodyVolumeId() exists.
+    static bool sbReportedHandlingBodyVolumeIdParked = false;
+    if( !sbReportedHandlingBodyVolumeIdParked )
+    {
+        sbReportedHandlingBodyVolumeIdParked = true;
+        if( CgsDev::Log::gpDebugPrint != 0 )
+        {
+            *CgsDev::Log::gpDebugPrint
+                << "[Q5 carmod] RaceCarEntityModule::GenerateSceneUpdateEvents (X360 "
+                   "0x822D2500) PARKED on ONE missing declaration: "
+                   "BrnWorld::ActiveRaceCar::GetHandlingBodyVolumeId() const (reader for the "
+                   "already-named private member mHandlingBodyVolumeId @+0x0D0). Until it "
+                   "lands no race car volume instance is ever moved, so a registered car box "
+                   "would sit at its spawn point for ever.\n";
+        }
+    }
+
+    // The console's tail call. Runs whether or not the loop published anything.
+    SetPaddingForResetRaceCars( lpSceneInterface );
+}
+
+// ============================================================================
+// SetPaddingForResetRaceCars  @0x822CEEA8
+//
+// The tail call of GenerateSceneUpdateEvents, and the only reader of mabResetThisFrame.
+// The console body is the BitArray<8> set-bit iterator inlined whole (the
+// `x & -x` / `cntlzd` lowest-set-bit idiom at 0x822CEEF0..0x822CEF10 and again at
+// 0x822CF168..0x822CF188, with the 64-bit-block re-scan in between), so it is written here
+// with the container's own GetFirstNonZeroBit / GetNextNonZeroBit -- same walk, by name.
+//
+//   for each set bit i:
+//       if (maActiveRaceCars[i].IsActive())
+//           sceneInterface->ClearEntityVolumesPadding( EntityId(E_ENTITYTYPE_RACECAR, i, 0) )
+//   mabResetThisFrame.UnSetAll()
+//
+// The entity id is built by the console as `slwi r11,r31,10 ; oris r4,r11,0x100`
+// (0x822CEFB4/0x822CEFBC) -- index at bit 10, owner byte 1 -- which is EntityId::Set(1, i, 0).
+// Only ONE of Set()'s three asserts survives in the asm (CgsEntityId.h:116, the entity-index
+// bound); the other two are compile-time provable for a literal owner of 1 and part of 0.
+// Using Set() reproduces the emitted one exactly and does not add the other two at run time
+// beyond what the shared header already does for every caller.
+//
+// The trailing clear is unconditional and is reached from EVERY exit path in the console
+// (`std r22, 0(r19)` at loc_822CF194 with r22 == 0, which all four early branches jump to).
+// ============================================================================
+void RaceCarEntityModule::SetPaddingForResetRaceCars(
+        CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* lpSceneInterface )
+{
+    if( lpSceneInterface != 0 )
+    {
+        for( s32 liActiveRaceCar = mabResetThisFrame.GetFirstNonZeroBit();
+             liActiveRaceCar != CgsContainers::BitArray<8u>::KI_INVALID_BITINDEX;
+             liActiveRaceCar = mabResetThisFrame.GetNextNonZeroBit( liActiveRaceCar ) )
+        {
+            ActiveRaceCar* lpActiveRaceCar =
+                GetActiveRaceCar( static_cast<EActiveRaceCarIndex>( liActiveRaceCar ) );
+
+            if( lpActiveRaceCar->IsActive() )
+            {
+                CgsSceneManager::EntityId lEntityId;
+                lEntityId.Set( static_cast<u32>( E_ENTITYTYPE_RACECAR ),
+                               static_cast<u32>( liActiveRaceCar ),
+                               0 );
+                lpSceneInterface->ClearEntityVolumesPadding( lEntityId );
+            }
+        }
+    }
+
+    mabResetThisFrame.UnSetAll();
+}
+
 // X360 0x82307538 -- PARTIAL SLICE. The console body runs the post-physics half of the
 // module (ProcessCreateVehicleEvents, the crash/takedown queues, the director vehicle
 // input, the replay request interface, ...). Three of its 20-odd legs are reproduced, in the
@@ -3091,19 +3461,39 @@ void RaceCarEntityModule::ReadUpdatedActiveRaceCarDataFromPhysics(
 //   * SendStreamerEvents -- the load-bearing streamer drain: InternalBaseStreamer::Update
 //     clears its own request ring at the top of every frame, so a load request that is not
 //     drained in the frame it was posted is silently lost.
+//   ⭐ THREE MORE LEGS LANDED 2026-08-18 (wave Q5, cluster G1 -- the scene-collision middle):
+//     ProcessCreateVehicleEvents (0x823075F8), GenerateSceneUpdateEvents (0x82307658, inside
+//     the paused skip) and SendRaceCarSceneUpdates (0x8230773C). Their bodies and the full
+//     re-derived console call order are in the block banner above them.
 // [FLAG PC bring-up] the rest is dropped, NOT paraphrased. DELETE-WHEN the interior lands.
+//
+// ⭐ THE INPUT READ-LOCK MOVED TO THE CONSOLE'S OWN POSITION (2026-08-18). It used to be
+// taken half-way down, inside the `if (lpInput != 0)` arm around the physics readback. The
+// console takes it at 0x823075BC -- BEFORE the first leg -- and holds it to 0x82307980, and
+// ProcessCreateVehicleEvents' own input accessors carry "Not locked for reading" tripwires,
+// so calling that leg at its console slot required the console's lock scope.
 void RaceCarEntityModule::PostPhysicsUpdate(
         RaceCarEntityModuleIO::InputBuffer_PostPhysics* lpInput,
         RaceCarEntityModuleIO::OutputBuffer_PostPhysics* lpOutput,
         BrnUpdateSet lUpdateSet )
 {
-    (void)lUpdateSet;
+    CGS_ASSERT( lpInput != 0, "lpInput != NULL" );      // X360 :2640
+    CGS_ASSERT( lpOutput != 0, "lpOutput != NULL" );    // X360 :2641
 
     if( lpOutput == 0 )
     {
         return;
     }
 
+    // Bit 0 of the update set is the "sim paused" bit (the same bit PreSceneUpdate's time-step
+    // latch tests). The console's `bne cr6, loc_823076C0` at 0x82307610 skips the whole
+    // physics-readback / scene-update / contact block on it.
+    const bool lbSimPaused = ( ( lUpdateSet & 1 ) != 0 );
+
+    if( lpInput != 0 )
+    {
+        lpInput->LockForRead();
+    }
     lpOutput->LockForWrite();
 
     // ⚠️ FLAG PC quality-of-life: UN-BLEND BEFORE THIS TICK'S PRODUCERS RUN.
@@ -3123,9 +3513,17 @@ void RaceCarEntityModule::PostPhysicsUpdate(
         }
     }
 
-    // ⭐ THE NEW-VEHICLE PUBLISH, at the console's own position for
-    // ProcessCreateVehicleEvents (@0x823075F8 -- early, BEFORE the physics readback at
-    // @0x8230761C). See PublishNewVehicleToDirectorWithoutPhysicsBringUp's banner.
+    // ⭐⭐ THE REAL LEG, at its own console position (@0x823075F8 -- early, BEFORE the
+    // physics readback at @0x8230761C). Landed 2026-08-18 (wave Q5); its own banner carries
+    // the re-verification that killed the "the queue is permanently empty" claim below.
+    ProcessCreateVehicleEvents( lpInput, lpOutput );
+
+    // ⭐ THE NEW-VEHICLE PUBLISH STAND-IN, immediately after the real leg it stands in for.
+    // ⚠️ DELIBERATELY NOT RETIRED YET: ProcessCreateVehicleEvents is parked one declaration
+    // wide (VehicleManagerOutputInterface::GetCreateVehicleResults()), so it publishes
+    // nothing, and retiring this would silently lose the NewVehicle publish that
+    // BrnGame.log:860 -> MainDirector:864 shows working. The two retire in one edit the
+    // moment that accessor lands -- see ProcessCreateVehicleEvents' banner.
     PublishNewVehicleToDirectorWithoutPhysicsBringUp( lpOutput );
 
     // ⭐⭐ THE PHYSICS READBACK, at the console's own position (`bl` at 0x8230761C, before
@@ -3135,10 +3533,8 @@ void RaceCarEntityModule::PostPhysicsUpdate(
     // holds back (see ReadUpdatedActiveRaceCarDataFromPhysics' mUsedRaceCars banner).
     if( lpInput != 0 )
     {
-        // The console locks the post-physics input buffer around this whole half; the
-        // getters' own "Not locked for reading" asserts are what require it.
-        lpInput->LockForRead();
-
+        // (The console's read lock is taken at the top of this function, at its own slot --
+        // see the banner. It used to be taken here.)
         ReadUpdatedActiveRaceCarDataFromPhysics( lpInput );
 
         // [FLAG PC bring-up] the pose STAND-IN. Until the vehicle manager populates
@@ -3201,8 +3597,6 @@ void RaceCarEntityModule::PostPhysicsUpdate(
                 }
             }
         }
-
-        lpInput->UnlockForRead();
     }
     else
     {
@@ -3217,6 +3611,21 @@ void RaceCarEntityModule::PostPhysicsUpdate(
                 PublishRenderPoseWithoutPhysicsBringUp( lpActiveRaceCar, liCar );
             }
         }
+    }
+
+    // ⭐⭐ THE CAR'S PER-FRAME SCENE PUBLISH, at the console's own position: the `bl` at
+    // 0x82307658, i.e. immediately after the physics readback (0x8230761C) and the five-byte
+    // AggressiveDrivingFlags copy, and INSIDE the sim-paused skip that starts at 0x82307610.
+    // Landed 2026-08-18 (wave Q5, cluster G1).
+    //
+    // [FLAG PC bring-up] the console leg BETWEEN the readback and this call is NOT reproduced:
+    // the 5-byte copy of VehicleOutputInterface::mAggressiveDrivingFlags (input +0x6C00) into
+    // module +0x1836C (asm 0x82307628..0x8230764C, a `mtctr 5` byte loop). Its destination is
+    // still inside this module's maTailPadB0 span -- no DWARF-named member is pinned there --
+    // so it is named here rather than faked. Nothing in the scene chain reads it.
+    if( !lbSimPaused )
+    {
+        GenerateSceneUpdateEvents( lpOutput );
     }
 
     // ⭐ THE PAINT PUBLISH, at the console's own position. VERIFIED from the asm of
@@ -3257,7 +3666,20 @@ void RaceCarEntityModule::PostPhysicsUpdate(
                             lpOutput->GetGlobalRaceCarOutputInterface(),
                             lpOutput->GetReplayActiveRaceCarOutputInterface(),
                             lpOutput->GetReplayGlobalRaceCarOutputInterface() );
+
+    // ⭐⭐ THE PER-CAR CULLING / LATE-COLLISION REFRESH, at the console's own position: the
+    // `bl` at 0x8230773C, i.e. after UpdateOutputInterfaces (0x8230771C) and
+    // TransmitCarsInRaceToQueryManager (0x82307730), and OUTSIDE the sim-paused skip (the
+    // second skip only starts at 0x82307744, one instruction later). Landed 2026-08-18.
+    SendRaceCarSceneUpdates( lpOutput );
+
     SendStreamerEvents( lpOutput );
+
+    // The console's own unlock order: read first (0x82307980), then write (0x82307988).
+    if( lpInput != 0 )
+    {
+        lpInput->UnlockForRead();
+    }
     lpOutput->UnlockForWrite();
 }
 
@@ -3853,7 +4275,11 @@ void RaceCarEntityModule::ProcessPlayerVehicleInput(
 //    plain Vector3 load in the stompee loop. Landing it needed the CrashPlayManager scalar
 //    tail, the BoostManager's BoostStrategy pointer and mPlayerVehicleControls modelled --
 //    all three are now named members in the header.)
-//   ProcessCreateVehicleEvents, ProcessRaceCarCrashCompleteEvents, ProcessResetOnTrackResultQueue,
+//   (ProcessCreateVehicleEvents RETIRED from this list 2026-08-18, wave Q5 -- it is bodied
+//    above, PARKED one declaration wide. It was never a [VMX] function: its 182 instructions
+//    contain no vector opcode at all. What actually blocked it was the "the create-vehicle
+//    result queue has no producer" claim, which this wave re-verified and found STALE.)
+//   ProcessRaceCarCrashCompleteEvents, ProcessResetOnTrackResultQueue,
 //   UpdateBoost, UpdateNearMisses, UpdateInAndOutOfRangeCars, UpdateSerialiser,
 //   UpdateReplayStreaming, CheckForResetOnTrackConditions, DebugRenderPosition (38 total).
 //
@@ -3865,7 +4291,11 @@ void RaceCarEntityModule::ProcessPlayerVehicleInput(
 //   UpdateCrashingPlayerContacts, UpdateCurrentWorldRegion, UpdateHidingEvents,
 //   UpdateRaceCars_PreScene, UpdatePropBoundingBoxes_PreScene, UpdateRaceCarContacts,
 //   UpdateActiveCars, UpdateDisconnectedPlayers, UpdateTrafficAndRaceCarNearMisses,
-//   SendGameEvents, SendStreamerEvents, SendRaceCarSceneUpdates, SendAddedForCollisionStateToPhysics,
+//   SendGameEvents, SendStreamerEvents, SendAddedForCollisionStateToPhysics,
+//   (SendRaceCarSceneUpdates RETIRED from this list 2026-08-18, wave Q5 -- COMPLETE above,
+//    with no park at all. Its one "un-homed interior" callee, ActiveRaceCar::
+//    SendSceneUpdatesPostPhysics, landed in the same wave. GenerateSceneUpdateEvents and
+//    SetPaddingForResetRaceCars are bodied above too and were never on this list.)
 //   SetAllActiveCarsInGameMode, SetAllCarsOnStartLine, SetupCarColour, SetHiddenDelay,
 //   RemoveRivals, RemoveAllRivalsFromWorld, RemoveAllNetworkCarsFromWorld, RemoveAllRaceCars,
 //   ChangePlayerCarColour, GetDamagedCarCount, GetPersistentDamageCarCount,

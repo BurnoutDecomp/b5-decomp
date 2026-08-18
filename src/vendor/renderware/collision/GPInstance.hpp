@@ -182,15 +182,27 @@ static_assert(offsetof(GPInstance, mEdgeData)          == 0x98, "GPInstance::mEd
 // reached through pointers-to-member; the X360 build caches PLAIN function
 // pointers, so they are reconstructed as static members matching the
 // committed GetMaximumFeatureFn / GetIntervalFn / GetIntervalsFn typedefs
-// exactly (the un-recovered FixupSepDirMethods-style registration TU owns the
-// table fill). GetBBox siblings exist in the binary at other addresses
-// outside these TUs and are NOT declared here.
+// exactly (the registration TU owns the table fill -- it is HOMED now, in
+// GPRegistration.cpp).
+//
+// GetBBox slot (waveQ5 C1, dumped from unk_82F918F0 on a private .i64 copy):
+// every one of the five per-type records carries 0x82AD5078 in the +0xB0 slot
+// -- the XEX's ICF-folded shared empty `blr` (AGENTS gotcha 6). So there is no
+// per-type GetBBox body to declare: the GP GetBBox callback is a NO-OP on this
+// build for ALL types, and GPRegistration.cpp stores one shared no-op there.
+// (The earlier wording here -- "GetBBox siblings exist in the binary at other
+// addresses outside these TUs" -- was a hypothesis; the table dump refutes it.)
 // ---------------------------------------------------------------------------
 
 // The GP sphere image (canonical rwccore.h:1182: the core primitive is a
 // point -- the radius rides in mFatness and is applied by the callers).
 struct GPSphere : public GPInstance
 {
+    // @ 0x82BA8088 -- VolumeMethods +0xA4 (GetMaximumFeatureFn). Homed in
+    // GPSphere.cpp (waveQ5 C1): it sits 0x20 bytes BEFORE GetInterval, i.e.
+    // inside this same TU run, not "at another address outside this TU".
+    static void GetMaximumFeature(const GPInstance* lpThis, RwBool abCcw,
+                                  const Vec4& arDir, Feature& arFeature);
     // @ 0x82BA80A8 -- VolumeMethods +0xA8 (GetIntervalFn).
     static void GetInterval(const GPInstance* lpThis,
                             const Vec4& arDir, Interval& arInterval);
@@ -383,14 +395,20 @@ struct VolRef1xN
 
 // X360 off_82F91800 -- the 6x6 [type1][type2] dispatch table of the family
 // (row stride 6 attested by `mulli r11, rN, 6` in both batch kernels and
-// ComputeContactPoints). The table itself lives in the un-recovered GP
-// registration TU (canonical FixupSepDirMethods, rwccore.h:2955) -- extern
-// declaration only, contents NOT reconstructed here.
+// ComputeContactPoints). RECOVERED + DEFINED 2026-08-18 (waveQ5 C1): the
+// registration TU is GPRegistration.cpp (canonical FixupSepDirMethods,
+// rwccore.h:2955); all 36 slots are dumped there entry by entry.
 typedef f32 (*FindBestSeparatingDirectionFn)(Vec4& arBestSepDir,
                                              const GPInstance& arGP1,
                                              const GPInstance& arGP2);
 extern const FindBestSeparatingDirectionFn
     gapFindBestSeparatingDirection[GPInstance::NUMINTERNALTYPES][GPInstance::NUMINTERNALTYPES];
+
+// X360 unk_82F918F0 -- the sibling per-VolumeType VolumeMethods table each
+// volume's CreateGPInstance copies into GPInstance::mMethods (stride 0x10 == 4
+// pointers; row 0 == VOLUMETYPEUNUSED is all-zero). Same home, GPRegistration.cpp.
+extern const GPInstance::VolumeMethods
+    g_aGPVolumeMethods[GPInstance::NUMINTERNALTYPES];
 
 // @ 0x82BB4038 -- fill lapCandidates with the SAT candidate directions for the
 // pair (face normals, normalised edge crosses, capsule fallbacks, centre
@@ -436,6 +454,13 @@ f32 FindBestSepDirWithCylinder(Vec4& arBestSepDir,
 // order is the worker's native order).
 f32 FindBestSeparatingDirCylVol(Vec4& arBestSepDir,
                                 const GPInstance& arGPCylinder, const GPInstance& arGPOther);
+
+// @ 0x82BAA258 -- the mirrored thunk (the CYLINDER-as-gp2 column of the
+// dispatch table): call the worker with the operands swapped so the cylinder
+// is first, then flip the sign of the stored direction. Same shape as
+// FindBestSeparatingDirectionBoxTri @ 0x82BAA1A0.
+f32 FindBestSeparatingDirVolCyl(Vec4& arBestSepDir,
+                                const GPInstance& arGPOther, const GPInstance& arGPCylinder);
 
 // ---------------------------------------------------------------------------
 // Cylinder-rim SAT candidate helpers (X360-era additions; no Feb-2007

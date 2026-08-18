@@ -34,6 +34,7 @@
 #include "SharedClasses/Progression/BrnTrainingTypes.h" // BrnProgression::ETrainingType
 
 #include "GameShared/GameClasses/Module/CgsBaseEventReceiverQueue.h" // CgsModule::EventReceiverQueue<N,A>
+#include "GameShared/GameClasses/Containers/CgsBitArray.h"           // CgsContainers::BitArray<8u> (mabResetThisFrame)
 #include "GameShared/GameClasses/System/Resource/CgsResourcePtr.h"   // CgsResource::BaseResourcePtr
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnRaceCarStreamer.h" // BrnWorld::RaceCarStreamer (by value)
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnRaceCar.h"         // BrnWorld::RaceCar (by value)
@@ -166,6 +167,49 @@ public:
         // banner for the leg-by-leg landed/parked inventory.
         void ReadUpdatedActiveRaceCarDataFromPhysics(
                 RaceCarEntityModuleIO::InputBuffer_PostPhysics* lpInput );
+
+        // ====================================================================
+        // THE THREE SCENE LEGS OF PostPhysicsUpdate (wave Q5, cluster G1 -- the car's
+        // half of the scene volume-collision middle). All three are console functions
+        // called only from PostPhysicsUpdate @0x82307538, at these exact `bl` sites:
+        //     0x823075F8  ProcessCreateVehicleEvents(lpInput, lpOutput)
+        //     0x82307658  GenerateSceneUpdateEvents(lpOutput)      [inside the paused skip]
+        //     0x8230773C  SendRaceCarSceneUpdates(lpOutput)
+        // Signatures are the DecFIGS DWARF's own (BrnRaceCarEntityModule.h entries for
+        // .cpp:5070 / :5859 / :4980) and match the ARTIST asm register use one for one.
+        // ====================================================================
+
+        // X360 0x822FF620 (182). Drain the physics vehicle manager's create-vehicle result
+        // queue: for every result whose VolumeInstanceId owner is E_ENTITYTYPE_RACECAR,
+        // hand the freshly created handling body to the matching active slot
+        // (ActiveRaceCar::OnHandlingModelAdded -> AddToScene, which is what registers the
+        // car's BOX VOLUME with the scene), and -- for the player's car only -- publish the
+        // new vehicle's attribute key + vehicle-list index to the director.
+        // ⚠️ `const` on the input buffer is the DWARF's.
+        void ProcessCreateVehicleEvents(
+                const RaceCarEntityModuleIO::InputBuffer_PostPhysics* lpInput,
+                RaceCarEntityModuleIO::OutputBuffer_PostPhysics* lpOutput );
+
+        // X360 0x822F6B08 (56). For every ACTIVE slot, run the per-car post-physics scene
+        // publish (ActiveRaceCar::SendSceneUpdatesPostPhysics -> UpdateCullingGroup plus the
+        // late AddToCollision arm). Runs OUTSIDE the console's paused skip.
+        void SendRaceCarSceneUpdates( RaceCarEntityModuleIO::OutputBuffer_PostPhysics* lpOutput );
+
+        // X360 0x822D2500 (100). ⭐ THE CAR'S PER-FRAME SCENE-TRANSFORM PRODUCER: for every
+        // ACTIVE slot push InSceneUpdateInterface::SetVolumeInstanceTransform( the slot's
+        // handling-body VolumeInstanceId, mPhysicsState.mTransform ) and
+        // SetEntityPosition( that id's entity word, the transform's translation ), then
+        // SetPaddingForResetRaceCars. Without it a registered car volume never moves off its
+        // spawn point, which is the exact signature the wave-Q5 scout names in §6.
+        void GenerateSceneUpdateEvents( RaceCarEntityModuleIO::OutputBuffer_PostPhysics* lpOutput );
+
+        // X360 0x822CEEA8 (the tail call of GenerateSceneUpdateEvents). Walk
+        // mabResetThisFrame; for every set bit whose slot IsActive(), clear that entity's
+        // volume padding, then clear the whole bit array. DWARF declares the parameter as
+        // `OutputBuffer_PreScene::SceneInputInterface*` -- the same InSceneUpdateInterface
+        // type the PostPhysics output buffer hands out.
+        void SetPaddingForResetRaceCars(
+                CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* lpSceneInterface );
 
         // ---- X360 0x822E79F8 (called by WorldModule::GenerateDispatchLists @0x827D27C8) ----
         // ⚠ NOTE the argument list. The earlier PC declaration carried only the input
@@ -606,6 +650,19 @@ private:
     // LoadGlobalResources step is waiting for (always 1 in the shipped path); the
     // stage compares mReceiverQueue's event count against it and yields while short.
     s32 miExpectedResponseCount;
+
+    // X360 +0x100E0 (65760). DWARF BrnRaceCarEntityModule.h:339 `BitArray<8u>
+    // mabResetThisFrame` -- ADDED 2026-08-18 (wave Q5, cluster G1). Three-point pin: the
+    // ActiveRaceCar[8] array ends at +0x100E0 (see maTailPadA0's own comment above),
+    // mReceiverQueue starts at +0x100E8, and SetPaddingForResetRaceCars @0x822CEEA8
+    // addresses exactly that 8-byte gap (`addis r19,r3,1 ; addi r19,r19,0xE0`), iterating
+    // it as ONE 64-bit BitArray word (`ld r9,0(r10)` with the word count fixed at 1) and
+    // clearing it whole at the tail (`std r22,0(r19)` with r22 == 0).
+    // ⚠️ NO PRODUCER IN THIS TREE YET. The console's writer of the bits is the reset path
+    // (a car reset THIS FRAME wants its scene padding dropped); nothing in this tree sets
+    // one, so the walk is a correct no-op rather than a wrong answer. Recorded here rather
+    // than left inside a pad so the walk reads a NAMED member.
+    CgsContainers::BitArray<8u> mabResetThisFrame;
 
     // X360 +0x100E8 (65768). The module's own reply queue: every request
     // LoadGlobalResources publishes names it as mpUser, so the GameData module posts

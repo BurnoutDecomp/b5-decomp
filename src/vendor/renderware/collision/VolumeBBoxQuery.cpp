@@ -15,8 +15,12 @@
 //   VolumeBBoxQuery::Initialize             @ 0x82BBBD90
 //   VolumeBBoxQuery::GetOverlaps            @ 0x82BBBDE8
 //
-// (VolumeBBoxQuery::AddPrimitiveRef @ 0x82BB0478 belongs to another TU and
-// remains declaration-only -- see VolumeBBoxQuery.hpp.)
+//   VolumeBBoxQuery::AddPrimitiveRef        @ 0x82BB0478   (waveQ5 C1)
+//
+// (AddPrimitiveRef was declaration-only until waveQ5 C1 on the theory that it
+// "belongs to another TU". It has no per-address JSON in .ida-exports -- an
+// EXPORT HOLE, not a missing function (AGENTS gotcha 6) -- and a targeted
+// headless-IDA pass on a private .i64 copy recovered all 66 instructions.)
 // ===========================================================================
 
 namespace rw
@@ -276,6 +280,86 @@ RwBool VolumeBBoxQuery::AddVolumeRef(const Volume*                    lpVol,
                                                     // is a Hex-Rays artefact)
 
     ++m_stackNext;                                  // lwz/addi/stw +0xC0
+    return 1;                                       // li r3, 1
+}
+
+// ===========================================================================
+// rw::collision::VolumeBBoxQuery::AddPrimitiveRef @ 0x82BB0478   (waveQ5 C1)
+//
+// Stage ONE primitive volume reference in the result buffer. This is the
+// buffer VolumeVolumeQuery::GetPrimitiveBBoxOverlaps drains and
+// PrimitiveBatchIntersect turns into GPInstances, so it is on the direct path
+// from "the culler asked for a pair query" to "a contact exists".
+//
+// 66 instructions, no VMX arithmetic -- the only vector work is the same 4x
+// lvx128/stvx128 transform-row block move AddVolumeRef does. Structurally the
+// aggregate arm above with three substitutions: the m_primVRefBuffer /
+// m_primNext / m_primBufferSize triple (+0xC8/+0xCC/+0xD0) instead of the
+// stack triple (+0x30/+0xC0/+0xC4), no VOLUMETYPEAGGREGATE test, and the
+// capacity guard placed BEFORE the volume-pointer store.
+//
+//   lwz r10,0xCC(r11) / lwz r9,0xD0(r11) / cmplw / blt   ; full -> li r3,0; blr
+//   lwz r9,0xC8(r11) / slwi r10,r10,7 / stwx r4,r10,r9   ; rec+0x00 = volume
+//   cmplwi cr6, r5, 0                                    ; transform present?
+//     yes: 4x lvx128/stvx128 tm+0x00/0x10/0x20/0x30 -> rec+0x10..+0x4F
+//          stw (rec+0x10), 4(rec)                        ; rec+0x04 = &rec+0x10
+//     no : stw 0, 4(rec)                                 ; rec+0x04 = NULL
+//   4x ld/std from r6                -> rec+0x50..+0x6F  ; the 32-byte AABBox
+//   stw r7, 0x70(rec)                                    ; tag
+//   stb r8, 0x74(rec)                                    ; tag bit count
+//   lwz/addi/stw 0xCC(r11)                               ; ++m_primNext
+//   li r3, 1
+//
+// NOTE (Hex-Rays bug, asm authoritative -- the identical artefact AddVolumeRef
+// already documents): the pseudocode renders the last store as
+// "...+116 = BYTE3(v16)", sourcing the byte from the final bbox qword. The asm
+// is `stb r8, 0x74(r10)`, i.e. the numTagBits ARGUMENT.
+//
+// Canonical inline body: rwccore.h:2796-2818.
+// ===========================================================================
+RwBool VolumeBBoxQuery::AddPrimitiveRef(const Volume*                    lpVol,
+                                        const math::vpu::Matrix44Affine* lpTm,
+                                        const AABBox&                    arBBox,
+                                        u32                              auTag,
+                                        u8                               auNumTagBits)
+{
+    // lwz 0xCC/0xD0; cmplw cr6; blt: result buffer full -> reject. The guard
+    // runs before ANY store, so a rejected call leaves the buffer untouched.
+    if (m_primNext >= m_primBufferSize)
+    {
+        return 0;
+    }
+
+    // slwi r10, r10, 7: the result records are 0x80-stride VolRefs.
+    VolRef& lrRef = m_primVRefBuffer[m_primNext];
+
+    // stwx r4 -> record +0x00 (console pointer word, committed VolRef
+    // convention).
+    lrRef.muVolumePtr = static_cast<u32>(reinterpret_cast<uintptr_t>(lpVol));
+
+    if (lpTm)                                       // cmplwi cr6, r5, 0
+    {
+        // Cache the transform rows inline, then aim the record's transform
+        // pointer at that inline copy (stw r9 -> +0x04).
+        CopyRow(lrRef.mRow0, lpTm->xAxis.mV);
+        CopyRow(lrRef.mRow1, lpTm->yAxis.mV);
+        CopyRow(lrRef.mRow2, lpTm->zAxis.mV);
+        CopyRow(lrRef.mRow3, lpTm->wAxis.mV);
+        lrRef.muTransformPtr =
+            static_cast<u32>(reinterpret_cast<uintptr_t>(&lrRef.mRow0));
+    }
+    else
+    {
+        lrRef.muTransformPtr = 0;                   // stw 0 -> +0x04
+    }
+
+    // 4x ld/std: the 32-byte AABBox block-copied into record +0x50..+0x6F.
+    std::memcpy(&lrRef.mu50, &arBBox, 4 * sizeof(u64));
+
+    lrRef.muTag        = auTag;                     // stw r7 -> +0x70
+    lrRef.muNumTagBits = auNumTagBits;              // stb r8 -> +0x74
+
+    ++m_primNext;                                   // lwz/addi/stw +0xCC
     return 1;                                       // li r3, 1
 }
 

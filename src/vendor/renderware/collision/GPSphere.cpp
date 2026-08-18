@@ -4,6 +4,7 @@
 // rw::collision::GPSphere -- the sphere primitive's VolumeMethods callbacks,
 // reconstructed from BURNOUT_X360_ARTIST.XEX (dedicated VMX pass wave 2).
 //
+//   GPSphere::GetMaximumFeature @ 0x82BA8088   (VolumeMethods +0xA4)
 //   GPSphere::GetInterval   @ 0x82BA80A8   (VolumeMethods +0xA8)
 //   GPSphere::GetIntervals  @ 0x82BA80C0   (VolumeMethods +0xAC)
 //
@@ -15,8 +16,14 @@
 // contact resolve in the committed PrimitiveIntersect.cpp), so the projection
 // interval collapses to min == max == dot3(dir, centre).
 //
-// GPSphere::GetMaximumFeature / GetBBox exist in the binary at other
-// addresses outside this TU and are not homed here.
+// CORRECTED 2026-08-18 (waveQ5 C1): the old banner said "GPSphere::
+// GetMaximumFeature / GetBBox exist in the binary at other addresses outside
+// this TU and are not homed here". GetMaximumFeature @ 0x82BA8088 is 0x20
+// bytes BEFORE GetInterval -- inside this same TU run -- and is homed below.
+// GetBBox has no per-type body at all: the +0xB0 slot of every one of the five
+// records in unk_82F918F0 is 0x82AD5078, the XEX's ICF-folded shared empty
+// `blr` (dumped in waveQ5 C1; AGENTS gotcha 6), so the shared no-op lives in
+// GPRegistration.cpp with the table.
 // ===========================================================================
 
 namespace rw
@@ -43,6 +50,33 @@ namespace
         r.w = s;
         return r;
     }
+}
+
+// ===========================================================================
+// rw::collision::GPSphere::GetMaximumFeature @ 0x82BA8088   (waveQ5 C1)
+//
+// A GP sphere's core primitive is a POINT (the radius rides in mFatness), so
+// the maximum feature along any direction is that point -- the body never
+// reads the direction (v1) or abCcw (r4) at all.
+//
+//   li       r11, 0
+//   lvx128   v0, r0, r3        ; v0 = GPInstance::mPos (this+0x00)
+//   li       r10, 0x220
+//   stw      r11, 0x230(r5)    ; feature.numedges = 0   (POINT feature)
+//   stvx128  v0, r5, r10       ; feature.pt       = mPos (+0x220)
+//   stw      r11, 0(r5)        ; feature.region   = 0
+//   blr
+//
+// Store order preserved (numedges, then pt, then region). X360 register image
+// matches the sibling GPCapsule/GPTriangle callbacks: r3 = this, r4 = abCcw,
+// r5 = &arFeature, the query direction in v1.
+// ===========================================================================
+void GPSphere::GetMaximumFeature(const GPInstance* lpThis, RwBool /*abCcw*/,
+                                 const Vec4& /*arDir*/, Feature& arFeature)
+{
+    arFeature.numedges = 0;              // stw r11(0), 0x230(r5)
+    arFeature.pt       = lpThis->mPos;   // stvx128 v0, r5, r10(0x220)
+    arFeature.region   = 0;              // stw r11(0), 0(r5)
 }
 
 // ===========================================================================

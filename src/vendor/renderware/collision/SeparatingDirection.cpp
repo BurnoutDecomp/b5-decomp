@@ -634,6 +634,37 @@ f32 FindBestSeparatingDirCylVol(Vec4& arBestSepDir,
 }
 
 // ===========================================================================
+// rw::collision::FindBestSeparatingDirVolCyl @ 0x82BAA258   (waveQ5 C1)
+//
+// The mirrored thunk -- the CYLINDER-as-gp2 column of the 6x6 dispatch table
+// off_82F91800 (every [type][CYLINDER] slot points here). Swap the operands so
+// the worker sees its native cylinder-first order, then flip the sign of the
+// direction it stored. Structurally identical to
+// FindBestSeparatingDirectionBoxTri @ 0x82BAA1A0 above.
+//
+//   mr r11,r4 / mr r4,r5 / mr r5,r11      swap gp1/gp2 (r3 = out, saved in r31)
+//   bl rw__collision__FindBestSepDirWithCylinder
+//   vspltisw v0,-1 / vslw v0,v0,v0        v0 = 0x80000000 in all four lanes
+//   lvx128 v13, r0, r31 / vxor / stvx128  out = -out (sign-bit flip, 4 lanes)
+//
+// The VecFloat separation rides out in v1 untouched by the sign flip (the
+// Hex-Rays `result` in r3 is the usual artefact of this family).
+// ===========================================================================
+f32 FindBestSeparatingDirVolCyl(Vec4& arBestSepDir,
+                                const GPInstance& arGPOther, const GPInstance& arGPCylinder)
+{
+    const f32 lfSeparation =
+        FindBestSepDirWithCylinder(arBestSepDir,
+                                   static_cast<const GPCylinder&>(arGPCylinder),
+                                   arGPOther);
+
+    // bestSepDir = -bestSepDir (sign-bit flip of all four lanes).
+    arBestSepDir = Negate(arBestSepDir);
+
+    return lfSeparation;
+}
+
+// ===========================================================================
 // Cylinder-rim SAT candidate workers (wave 2): RimToEdge @ 0x82BB53F8 and
 // RimToRim @ 0x82BB56C8. X360-era additions with no Feb-2007 canonical
 // source; the shapes are asm-derived. Shared vocabulary below.
