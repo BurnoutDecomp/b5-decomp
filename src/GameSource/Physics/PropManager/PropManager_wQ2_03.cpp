@@ -134,10 +134,15 @@
 //   The parked bodies carry two file-local AUTHORED-NAME constants over MEASURED values whose real
 //   home is the KVF_* block in BrnPropManager.h/.cpp, which this implementer does not own:
 //     KVF_MAX_CONTACT_GEN_PADDING == Splat(0.3f)   and   KB_USE_CONTACT_GEN_STREAM == true.
-//   ⭐ THE FIRST ONE IS NOW HOMED: `extern const VecFloat KVF_MAX_CONTACT_GEN_PADDING` in
-//   BrnPropManager.h, defined `= { 0.3f, 0.3f, 0.3f, 0.3f }` in BrnPropManager.cpp with this file's
-//   own thunk/rodata provenance carried across. When the parked bodies land they should reach for
-//   the header's constant and drop their file-local copy.
+//   ⭐ THE FIRST ONE IS NOW HOMED **AND ITS NAME IS RECOVERED**: it is `extern const VecFloat
+//   KVF_MAX_PROP_PADDING` in BrnPropManager.h (defined `= { 0.3f, 0.3f, 0.3f, 0.3f }` in
+//   BrnPropManager.cpp with this file's own thunk/rodata provenance carried across).
+//   ⚠️ THE AUTHORED SPELLING `KVF_MAX_CONTACT_GEN_PADDING` ABOVE IS THE OLD ONE AND NO LONGER
+//   EXISTS -- wave Q4 (2026-08-18) matched 0x82FB94F0's initialiser-table slot 0x82CD19AC to the
+//   DWARF's own source-order file scope, where BrnPropManager.cpp:54 reads
+//   `const VecFloat KVF_MAX_PROP_PADDING;`. The evidence is on the declaration. When the parked
+//   bodies land they should reach for the header's constant UNDER THAT NAME and drop their
+//   file-local copy.
 //   ⚠️ THE SECOND ONE IS NOT LANDED and is still an open request: KB_USE_CONTACT_GEN_STREAM has no
 //   address and no thunk cited anywhere in this banner or in the parks, so there is nothing for the
 //   header owner to re-measure and nothing was invented for it.

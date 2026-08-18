@@ -15,16 +15,16 @@
 //     M*offset + M.Pos()). BrnPhysicsPropTypeData.h models that span as the opaque
 //     `maReserved0[0x20]` with no accessor, and that header is owned by another slice, so
 //     the offset cannot be reached by name yet.
-//   * AddPropToContactGeneration @0x822DF6C8 / AddPropPartsToContactGeneration @0x822DF9D8 /
-//     RemovePropFromContactGeneration @0x822C6318 / RemovePropPartsFromContactGeneration
-//     @0x822C6430 -- all four splice a VOLUME INDEX into the low byte of the 64-bit
-//     PropVolumeInstanceID (`clrrdi r,id,8; or index`) and then hand the whole 64-bit word
-//     to InSceneUpdateInterface::AddForCollision / RemoveForCollision /
-//     AddVolumeInstance / RemoveVolumeInstance. Two prerequisites are missing:
-//     PropVolumeInstanceID has no volume-index setter/getter (BrnPropEntityID.h models
-//     only Set(entityId, volumeNumber)), and the committed InSceneUpdateInterface
-//     Remove*/Add* collision entry points take a 32-bit CgsSceneManager::EntityId while
-//     the X360 passes the 64-bit VolumeInstanceId. Both live in other owners' headers.
+//   * ⭐ NO LONGER DEFERRED (wave Q4, 2026-08-18): AddPropToContactGeneration @0x822DF6C8 /
+//     AddPropPartsToContactGeneration @0x822DF9D8 / RemovePropFromContactGeneration
+//     @0x822C6318 / RemovePropPartsFromContactGeneration @0x822C6430 are BODIED, in the
+//     sibling partfile BrnPropCellManager_wQ4.cpp (a partfile only because this TU was
+//     concurrently owned when they landed). Both prerequisites this entry used to name are
+//     gone: PropVolumeInstanceID::SetVolumeNumber/GetVolumeNumber now exist
+//     (BrnPropEntityID.h, DWARF :181/:199, forwarding to CgsSceneManager::VolumeInstanceId::
+//     SetVolumeIndex/GetVolumeIndex), and InSceneUpdateInterface carries the DWARF's own
+//     64-bit AddVolumeInstance/AddForCollision alongside the already-present 64-bit
+//     RemoveForCollision/RemoveVolumeInstance. See that file's banner for the asm spine.
 //   * GetPhysicalPropSlot @0x822E11C0 / GetPhysicalPartSlot @0x822E0DB0 -- the eviction
 //     search over maPhysicalPropParams/maPhysicalPartParams; not needed by any path in
 //     this pass and left to its own reconstruction.

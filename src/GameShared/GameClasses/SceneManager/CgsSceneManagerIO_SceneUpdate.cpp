@@ -50,6 +50,19 @@ namespace SceneManagerIO
         mUpdatePositionQueue.AddEvent(lEvent);
     }
 
+    // The DWARF-spelled overload (see the header note): the position arrives pre-extracted,
+    // exactly as the X360's v1 argument @0x822B1398 -- same event, same queue, same assert.
+    void InSceneUpdateInterface::SetEntityPosition(CgsSceneManager::EntityId lEntityId, Vector3 lPosition)
+    {
+        InEventSetEntityPosition lEvent;
+        lEvent.mPosition = lPosition;          // stvx128 v1
+        lEvent.mEntityId = lEntityId;          // stw a2
+
+        CGS_ASSERT(mUpdatePositionQueue.GetLength() < mUpdatePositionQueue.GetMaxLength(),
+                   "SceneManager.mUpdatePositionQueue too small, increase value in SceneManagerConstants.h");
+        mUpdatePositionQueue.AddEvent(lEvent);
+    }
+
     // ----- Add an entity to the scene (X360 0x822B11F8) -----
     // Stages { mTransformLane = v1 (caller-supplied, not exposed by this committed 3-arg signature),
     // mEntityId = a2, miField14 = a3, mfField18 = a4 } and appends to mAddEntityQueue.
@@ -141,6 +154,105 @@ namespace SceneManagerIO
         CGS_ASSERT(mRemoveVolumeInstanceQueue.GetLength() < mRemoveVolumeInstanceQueue.GetMaxLength(),
                    "SceneManager.mRemoveVolumeInstanceQueue too small, increase value in SceneManagerConstants.h");
         mRemoveVolumeInstanceQueue.AddEvent(lEvent);
+    }
+
+    // ----- Register a collision volume instance with the scene (X360 0x822CB650) -----
+    // ADDED 2026-08-18 (wave Q4, collision seam). The DWARF's ONE spelling of this producer
+    // (CgsSceneManagerIO_SceneUpdate.h:388) -- 64-bit VolumeInstanceId + 64-bit VolumeId +
+    // the world transform. Decoded instruction by instruction from the raw `assembly` array
+    // of .ida-exports/BURNOUT_X360_ARTIST.XEX/0x822CB650.json (Hex-Rays pseudocode not used):
+    //
+    //   0x822CB664  srdi  r11, r4, 32       ; the embedded entity word (bits [32..63])
+    //   0x822CB66C  srwi  r11, r11, 24      ; its owner byte
+    //   0x822CB674  cmplwi cr6, r11, 0xC    ; K_MAX_ENTITY_TYPE
+    //   0x822CB69C  ble   -> skip           ; assert owner <= 0xC, message built by streaming
+    //                                       ; the raw 64-bit id after the literal
+    //                                       ; "Burnout Specific: Bad Volume Instance "
+    //                                       ; (baked line 0x3E2 == 994)
+    //   0x822CB730  std   r4,  event+0x00   ; mVolumeInstanceId
+    //   0x822CB738  std   r5,  event+0x08   ; mVolumeId
+    //   0x822CB714/28/48/5C/60/6C  four lvx128/stvx128 lanes r6[0x00..0x3F] -> event+0x10
+    //   0x822CB744  lwzx  r11, this, 0x7D058 ; miLength  \  the standard "queue too small"
+    //   0x822CB750  lwzx  r10, this, 0x7D054 ; miMaxLength >  tripwire, baked line 0x3E8 == 1000
+    //   0x822CB770  blt   -> skip                        /
+    //   0x822CB7CC  addis r3, this, 8 ; addi r3, r3, -0x2FB0   ; == this + 0x7D050
+    //   0x822CB7D8  bl    BaseEventQueue<InEventAddVolumeInstance>::AddEvent
+    //
+    // this+0x7D050 is mAddVolumeInstanceQueue (the header's own X360 offset comment), and
+    // +4/+8 off a queue base are miMaxLength/miLength -- consistent with every sibling
+    // producer in this TU. The three console offsets are provenance only: this body reaches
+    // the queue BY NAME (gotcha 1 -- 0x7D050 is a console byte offset, not a host one).
+    //
+    // MEASURED, NOT ASSUMED: the owner tripwire compares against 0xC (VolumeInstanceId::
+    // KU_MAX_ENTITY_TYPE), NOT against E_ENTITYTYPE_PROP -- this producer is entity-type
+    // agnostic; it is the PROP handles' own operator VolumeInstanceId() that pins owner == 3,
+    // and that conversion fires at the CALL SITE, not here.
+    void InSceneUpdateInterface::AddVolumeInstance(VolumeInstanceId lVolumeInstanceId,
+                                                   VolumeId lVolumeId,
+                                                   const Matrix44Affine& lrTransform)
+    {
+        CGS_ASSERT(lVolumeInstanceId.GetEntityIDOwner() <= VolumeInstanceId::KU_MAX_ENTITY_TYPE,
+                   "Burnout Specific: Bad Volume Instance ");
+
+        InEventAddVolumeInstance lEvent;
+        lEvent.mVolumeInstanceId = lVolumeInstanceId;   // std a2 @+0x00
+        lEvent.mVolumeId         = lVolumeId;           // std a3 @+0x08
+        lEvent.mTransform        = lrTransform;         // four stvx128 lanes @+0x10
+
+        CGS_ASSERT(mAddVolumeInstanceQueue.GetLength() < mAddVolumeInstanceQueue.GetMaxLength(),
+                   "SceneManager.mAddVolumeInstanceQueue too small, increase value in SceneManagerConstants.h");
+        mAddVolumeInstanceQueue.AddEvent(lEvent);
+    }
+
+    // ----- Put a registered volume instance into the broad phase (X360 0x822B1860) -----
+    // ADDED 2026-08-18 (wave Q4, collision seam). DWARF CgsSceneManagerIO_SceneUpdate.h:418.
+    // Decoded from the raw `assembly` array of 0x822B1860.json:
+    //
+    //   arg regs: r3 this, r4 VolumeInstanceId (64-bit), r5 CullingGroup, r6 BodyState,
+    //             v1 the Vector3 padding (a vmx argument), r7 CacheOptions.
+    //             -- the Vector3 is DWARF parameter 4 yet lands in v1 while r7 carries
+    //             parameter 5, i.e. the vector argument does NOT consume a GPR slot here.
+    //             Proved by the rodata the asm pairs with each register: r7 is the operand of
+    //             the "leCacheOptions < E_NUM_CACHE_OPTIONS" compare (0x822B1890) and r6 of
+    //             "(int)leBodyState <= 0xff" (0x822B18C0).
+    //
+    //   0x822B1890  cmpwi cr6, r7, 3 ; blt skip   ; assert leCacheOptions < E_NUM_CACHE_OPTIONS
+    //                                             ; (baked line 0x426 == 1062)
+    //   0x822B18BC  std   r4, event+0x10          ; mVolumeInstanceId
+    //   0x822B18C4  stvx128 v1, event+0x00        ; mPadding (the Vector3 lane)
+    //   0x822B18C8  stw   r5, event+0x18          ; mCullGroup
+    //   0x822B18C0..EC  SetBodyState(r6)          ; tripwire line 0xBC == 188, then stb +0x1C
+    //   0x822B18F0..1918 SetCacheOptions(r7)      ; tripwire line 0xC9 == 201, then stb +0x1D
+    //   0x822B1928  lwzx  r11, this, 0x71048      ; miLength     \  "queue too small"
+    //   0x822B192C  lwzx  r10, this, 0x71044      ; miMaxLength   > tripwire, line 0x42E == 1070
+    //   0x822B1934  blt   -> skip                                /
+    //   0x822B19AC  addis r3, this, 7 ; addi r3, r3, 0x1040      ; == this + 0x71040
+    //   0x822B19B8  bl    BaseEventQueue<InEventAddForCollision>::AddEvent
+    //
+    // this+0x71040 is mAddForCollisionQueue. Console offsets are provenance only; the body
+    // reaches the queue by name.
+    //
+    // FIELD-ORDER NOTE: the asm writes mVolumeInstanceId (+0x10) BEFORE mPadding (+0x00)
+    // because the vmx store had to wait for v127's copy of v1; the two stores are independent
+    // slots of the same stack record, so declaration order is used here.
+    void InSceneUpdateInterface::AddForCollision(VolumeInstanceId lVolumeInstanceId,
+                                                 InEventAddForCollision::CullingGroup lCullingGroup,
+                                                 rw::physics::BodyState leBodyState,
+                                                 Vector3 lPadding,
+                                                 EAddForCollisionCacheOptions leCacheOptions)
+    {
+        CGS_ASSERT(leCacheOptions < E_NUM_CACHE_OPTIONS, "leCacheOptions < E_NUM_CACHE_OPTIONS");
+
+        InEventAddForCollision lEvent;
+        lEvent.mPadding          = lPadding;             // stvx128 v1 @+0x00
+        lEvent.mVolumeInstanceId = lVolumeInstanceId;    // std a2 @+0x10
+        lEvent.mCullGroup        = lCullingGroup;        // stw a3 @+0x18
+        lEvent.SetBodyState(leBodyState);                // stb @+0x1C, own tripwire
+        lEvent.SetCacheOptions(leCacheOptions);          // stb @+0x1D, own tripwire
+
+        CGS_ASSERT(mAddForCollisionQueue.GetLength() < mAddForCollisionQueue.GetMaxLength(),
+                   "SceneManager.mAddForCollisionQueue too small, increase value in SceneManagerConstants.h");
+        mAddForCollisionQueue.AddEvent(lEvent);
     }
 
     // ----- Set an entity's bounding radius (X360 0x822B1450) -----

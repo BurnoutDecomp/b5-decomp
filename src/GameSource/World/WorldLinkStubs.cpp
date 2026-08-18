@@ -510,20 +510,7 @@ void MassiveAdClient3::CMassiveAdObjectSubscriber::operator delete(void *)
 // is the only assignment to mpSimulation in the tree. The three stubs below are what is LEFT of
 // it: one named symbol per sibling subsystem whose own prepare pass is still unreconstructed,
 // instead of one silent `return true` for the whole module.
-
-// LINK STUB (task #135, 2026-08-04): X360 @0x82C08ED0. Called from
-// PhysicsModule::Prepare stage 5 (E_PREPARESTAGE_PROPMANAGER).
-bool BrnPhysics::Props::PropManager::Prepare(struct rw::IResourceAllocator *)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "PropManager::Prepare: inert [FLAG PC boot gate]\n";
-    }
-    return true;
-}
+// GATE RETIRED 2026-08-18 (wave Q4 PropManager mount): BrnPhysics::Props::PropManager::Prepare @0x8260EE18 is REAL in PropManager_wQ2_06.cpp.
 
 // ⭐⭐ RETIRED 2026-08-10 (producer wave): BrnPhysics::Vehicle::VehicleManager::Prepare
 // @0x8263C688 IS BODIED, in GameSource/Physics/VehicleManager/BrnVehicleManager_Prepare.cpp.
@@ -621,24 +608,7 @@ void BrnPhysics::Vehicle::VehicleManager::ReadSurfaceProperties()
     }
 }
 
-// -------------------------------------------------------------------------
-// BrnReplays::ReplayIO::RequestInterface
-// -------------------------------------------------------------------------
-// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
-// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
-// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
-// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
-// not this gate.
-void BrnReplays::ReplayIO::RequestInterface::Append(struct BrnReplays::ReplayIO::RequestInterface const *)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "BrnReplays::ReplayIO::RequestInterface::Append: inert (body not reconstructed) [FLAG PC boot gate]\n";
-    }
-}
+// GATE RETIRED 2026-08-18 (breakable-props wave Q mount): BrnReplays::ReplayIO::RequestInterface::Append @0x823A6868 is REAL in GameSource/Replays/BrnReplayRequestInterface.cpp (mounted with RegisterSerialiser, which PropEntityModule::PostPhysicsUpdate now calls).
 
 // -------------------------------------------------------------------------
 // BrnSound::Module::Io::SoundWorldLoadEvent
@@ -1154,38 +1124,8 @@ void BrnWorld::PropEntityModule::Destruct()
 // 'PROP SPAWN WAVE' block in tools/build/build_game_exe.bat). Leaving this inert
 
 // definition here would be a duplicate symbol at link.
-
-// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
-// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
-// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
-// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
-// not this gate.
-void BrnWorld::PropEntityModule::PostSceneUpdate(struct CgsModule::IOBufferStack *,struct CgsModule::IOBufferStack *,struct BrnWorld::PropEntityIO::InputBuffer_PostScene *,struct BrnWorld::PropEntityIO::OutputBuffer_PostScene *,unsigned short)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "BrnWorld::PropEntityModule::PostSceneUpdate: inert (body not reconstructed) [FLAG PC boot gate]\n";
-    }
-}
-
-// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
-// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
-// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
-// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
-// not this gate.
-void BrnWorld::PropEntityModule::PrePhysicsUpdate(struct CgsModule::IOBufferStack *,struct CgsModule::IOBufferStack *,class BrnWorld::PropEntityIO::InputBuffer_PrePhysics *,class BrnWorld::PropEntityIO::OutputBuffer_PrePhysics *,unsigned short)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "BrnWorld::PropEntityModule::PrePhysicsUpdate: inert (body not reconstructed) [FLAG PC boot gate]\n";
-    }
-}
+// GATE RETIRED 2026-08-18 (breakable-props wave Q mount): BrnWorld::PropEntityModule::PostSceneUpdate @0x822C4718 (PropEntityModule_wQ2_03.cpp) is now REAL.
+// GATE RETIRED 2026-08-18 (breakable-props wave Q mount): BrnWorld::PropEntityModule::PrePhysicsUpdate @0x82303048 (PropEntityModule_wQ_07.cpp) is now REAL.
 
 // GATE RETIRED 2026-08-12 (prop-spawn wave): BrnWorld::PropEntityModule::Prepare @0x82306DB8 is now REAL.
 
@@ -3162,22 +3102,7 @@ void BrnTraffic::TrafficEntityModule::PostPhysicsUpdate(struct CgsModule::IOBuff
 // 'PROP SPAWN WAVE' block in tools/build/build_game_exe.bat). Leaving this inert
 
 // definition here would be a duplicate symbol at link.
-
-// BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
-// WorldModule::Update @0x827D63E8 once the drive is wired. the prop post-physics tick (X360 vtbl+80).
-// Reconstruct from X360 and DELETE this gate.
-// One-shot log + inert: the module/interface it would feed is itself gated
-// inert, so dropping the transfer is the consistent observable.
-void BrnWorld::PropEntityModule::PostPhysicsUpdate(struct CgsModule::IOBufferStack *,struct CgsModule::IOBufferStack *,class BrnWorld::PropEntityIO::InputBuffer_PostPhysics *,class BrnWorld::PropEntityIO::OutputBuffer_PostPhysics *,unsigned short)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "PropEntityModule::PostPhysicsUpdate: inert [FLAG PC boot gate]\n";
-    }
-}
+// GATE RETIRED 2026-08-18 (breakable-props wave Q mount): BrnWorld::PropEntityModule::PostPhysicsUpdate @0x823031D8 (PropEntityModule_wQ2_02.cpp) is now REAL.
 
 // BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
 // WorldModule::Update @0x827D63E8 once the drive is wired. the trigger pre-scene tick (X360 vtbl+64).
@@ -3395,22 +3320,8 @@ void BrnTraffic::BrnTrafficIO::OutputBuffer_PostScene::Construct()
     memset(this, 0, sizeof(*this));   // FLAG PC: stands in for the unrecovered body
     CgsModule::IOBuffer::Construct();
 }
-
-// BOOT GATE: base bring-up only (see the block note above).
-// X360 CreateIOBuffer<InputBuffer_PostPhysics> @0x827B9DA0 (Alloc 22432).
-void BrnWorld::PropEntityIO::InputBuffer_PostPhysics::Construct()
-{
-    memset(this, 0, sizeof(*this));   // FLAG PC: stands in for the unrecovered body
-    CgsModule::IOBuffer::Construct();
-}
-
-// BOOT GATE: base bring-up only (see the block note above).
-// X360 CreateIOBuffer<InputBuffer_PrePhysics> @0x827B6768 (Alloc 170032).
-void BrnWorld::PropEntityIO::InputBuffer_PrePhysics::Construct()
-{
-    memset(this, 0, sizeof(*this));   // FLAG PC: stands in for the unrecovered body
-    CgsModule::IOBuffer::Construct();
-}
+// GATE RETIRED 2026-08-18 (breakable-props wave Q mount): BrnWorld::PropEntityIO::InputBuffer_PostPhysics::Construct @0x822EFDC8 (BrnPropEntityModuleIO_InputBuffer_PostPhysics.cpp; the memset gate left its queues un-Constructed) is now REAL.
+// GATE RETIRED 2026-08-18 (breakable-props wave Q mount): BrnWorld::PropEntityIO::InputBuffer_PrePhysics::Construct @0x822EFD68 (BrnPropEntityModuleIO_InputBuffer_PrePhysics.cpp) is now REAL.
 
 // (BrnWorld::RaceCarEntityModuleIO::InputBuffer_PostPhysics::Construct gate RETIRED
 //  2026-08-11, physics->output publish wave: the real partial slice now lives in
@@ -3738,89 +3649,11 @@ void BrnWorld::PropEntityDebugComponent::RenderHUD(CgsDev::Debug2DImmediateRende
 // the real body would do, carries its X360 address, and names exactly what unparks it.
 // ============================================================================
 
-// ---- (a) PROP CONTACT GENERATION x4 -----------------------------------------
-// Parked by agent A2 on a REAL, still-unresolved TYPE MISMATCH -- not on missing effort.
-// All four splice a volume index into the LOW BYTE of the 64-bit PropVolumeInstanceID
-// (`clrrdi r,id,8; or index`) and then hand the WHOLE 64-BIT WORD to the scene:
-//     AddPropToContactGeneration            @0x822DF6C8 -> AddForCollision / AddVolumeInstance
-//     AddPropPartsToContactGeneration       @0x822DF9D8 -> same, once per part volume
-//     RemovePropFromContactGeneration       @0x822C6318 -> RemoveForCollision / RemoveVolumeInstance
-//     RemovePropPartsFromContactGeneration  @0x822C6430 -> same, once per part volume
-// The committed InSceneUpdateInterface collision entry points take a 32-bit
-// CgsSceneManager::EntityId. Writing these against the 32-bit signature would DISCARD the
-// volume index -- i.e. every volume of a prop would key to the same scene id -- so it is
-// papering over the divergence, which is precisely what a decomp must not do.
-//
-// UNPARKED BY: (1) PropVolumeInstanceID gaining the asm-attested volume-index
-// setter/getter (BrnPropEntityID.h models only Set(entityId, volumeNumber) today), and
-// (2) InSceneUpdateInterface's Add/RemoveForCollision + Add/RemoveVolumeInstance taking
-// VolumeInstanceId (64-bit) as the X360 does. Both live in other owners' headers.
-// The four bodies are then a short pass; they are NOT hard.
-void BrnWorld::PropCellManager::AddPropToContactGeneration(
-        BrnWorld::PropEntityInstance*, const BrnPhysics::Props::PropTypeData*,
-        BrnWorld::PropVolumeInstanceID, CgsSceneManager::SceneManagerIO::InSceneUpdateInterface*)
-{
-    // @0x822DF6C8. WOULD: set KU_ADDED_TO_CONTACT_GEN_BIT on the prop, then for each of the
-    // type's collision volumes splice the volume index into the id's low byte and call
-    // lpScene->AddForCollision + AddVolumeInstance, bumping mu16NumberOfPropVolumesInScene.
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "PropCellManager::AddPropToContactGeneration: inert -- "
-                                          "64-bit PropVolumeInstanceID vs 32-bit EntityId collision API "
-                                          "[FLAG PC boot gate]\n";
-    }
-}
-
-void BrnWorld::PropCellManager::AddPropPartsToContactGeneration(
-        BrnWorld::PropEntityInstance*, BrnWorld::PropPartEntityInstance*,
-        const BrnPhysics::Props::PropTypeData*, BrnWorld::PropVolumeInstanceID,
-        CgsSceneManager::SceneManagerIO::InSceneUpdateInterface*)
-{
-    // @0x822DF9D8. WOULD: the smashed-prop twin of the above -- one contact-gen volume per
-    // part volume group, keyed by (part index, volume index) inside the 64-bit id.
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "PropCellManager::AddPropPartsToContactGeneration: inert -- "
-                                          "same 64-bit volume-id blocker [FLAG PC boot gate]\n";
-    }
-}
-
-void BrnWorld::PropCellManager::RemovePropFromContactGeneration(
-        BrnWorld::PropEntityInstance*, const BrnPhysics::Props::PropTypeData*,
-        BrnWorld::PropVolumeInstanceID, CgsSceneManager::SceneManagerIO::InSceneUpdateInterface*)
-{
-    // @0x822C6318. WOULD: clear KU_ADDED_TO_CONTACT_GEN_BIT and undo the above volume by
-    // volume (RemoveForCollision + RemoveVolumeInstance), decrementing the volume count.
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "PropCellManager::RemovePropFromContactGeneration: inert -- "
-                                          "same 64-bit volume-id blocker [FLAG PC boot gate]\n";
-    }
-}
-
-void BrnWorld::PropCellManager::RemovePropPartsFromContactGeneration(
-        BrnWorld::PropEntityInstance*, const BrnPhysics::Props::PropTypeData*,
-        BrnWorld::PropVolumeInstanceID, CgsSceneManager::SceneManagerIO::InSceneUpdateInterface*)
-{
-    // @0x822C6430. WOULD: the smashed-prop twin of the remove above.
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "PropCellManager::RemovePropPartsFromContactGeneration: inert -- "
-                                          "same 64-bit volume-id blocker [FLAG PC boot gate]\n";
-    }
-}
+// ---- (a) PROP CONTACT GENERATION x4 -- GATES RETIRED 2026-08-18 (wave Q4): PropCellManager::
+//      AddPropToContactGeneration @0x822DF6C8 / AddPropPartsToContactGeneration @0x822DF9D8 /
+//      RemovePropFromContactGeneration @0x822C6318 / RemovePropPartsFromContactGeneration @0x822C6430
+//      are REAL in BrnPropCellManager_wQ4.cpp; the 64-bit VolumeInstanceId overloads of
+//      InSceneUpdateInterface::AddForCollision/AddVolumeInstance they need are landed.
 
 // ---- (b) PROP REPLAY DELTA SERIALISATION x4 ---------------------------------
 // The record/playback half of BrnReplays::PropSerialiserFrame. Referenced by

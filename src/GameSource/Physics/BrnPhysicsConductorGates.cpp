@@ -197,21 +197,7 @@ namespace Deformation
     // link will say so (LNK2005).
 }
 
-namespace Props
-{
-    // @0x8263AF30 (209 insns). Drains the prop input interface's add/remove prop-and-part instance
-    // queues and re-runs the jointed-prop update. All six of its callees
-    // (ProcessRemove/AddPropInstanceEvents, ProcessRemove/AddPartInstanceEvents,
-    // RemoveAllPropsAndParts, UpdateJointedProps) are unreconstructed.
-    void PropManager::ProcessInputsPreScene(
-        const BrnPhysics::Props::PropInputInterface*,
-        CgsSceneManager::SceneManagerIO::InSceneUpdateInterface*,
-        bool,
-        CgsPhysics::PhysicsSimulationIO::InputBuffer*)
-    {
-        BRN_CONDUCTOR_GATE("PropManager::ProcessInputsPreScene @0x8263AF30 (209)");
-    }
-}
+// GATE RETIRED 2026-08-18 (wave Q4 PropManager mount): PropManager::ProcessInputsPreScene @0x8263AF30 is REAL in PropManager_wQ2_08.cpp.
 
 namespace Vehicle
 {
@@ -496,17 +482,39 @@ namespace Props
         BRN_CONDUCTOR_GATE("PropManager::EndPropWorldContactGeneration @0x82628E18 (37)");
     }
 
-    void PropManager::ReadUpdatedBodies(
-        const CgsModule::EventQueue<CgsPhysics::PhysicsSimulationIO::OutUpdateRigidBody, 200>*,
-        CgsSceneManager::SceneManagerIO::InSceneUpdateInterface*,
-        CgsPhysics::PhysicsSimulationIO::InputBuffer*, VecFloat)
-    {
-        BRN_CONDUCTOR_GATE("PropManager::ReadUpdatedBodies @0x82632918 (752)");
-    }
+    // GATE RETIRED 2026-08-18 (wave Q4 PropManager mount): PropManager::ReadUpdatedBodies @0x82632918 is REAL in PropManager_wQ2_01.cpp.
 
     void PropManager::OutputUpdatedProps(BrnPhysics::PhysicsModuleIO::OutputBuffer*)
     {
         BRN_CONDUCTOR_GATE("PropManager::OutputUpdatedProps @0x82627EC8 (14)");
+    }
+
+    // 2026-08-18 (wave Q4 PropManager mount): three honest gates for bodies that are COMPLETE
+    // but still parked out of tree on foreign-header declarations, so the mounted
+    // SetupAndValidatePropContact / ProcessInputsPreScene link. Retire each with its landing.
+    //  * HandleContactWithLean/TiltProp -- parked at scratchpad/waveQ2/parked/PropManager_07_*.cpp
+    //    on vendor vpu helpers (CompLessThan/CompGreaterThan/GetVector3_YAxis/ZAxis/Mask3/a
+    //    Select overload) + RaceCarPhysics::GetLinearMomentum + Wheel::GetRoadLongSpeed.
+    //    Effect while gated: a car hitting a jointed lamppost/pole gets no lean/tilt response
+    //    (SetupAndValidatePropContact still validates and routes the contact).
+    //  * RemoveAllPropsAndParts @0x8260F010 (331) -- never reconstructed (no per-address export;
+    //    absent from identity.json; headless idat confirms it exists). Unload path, not smash.
+    void PropManager::HandleContactWithLeanProp(
+        PropInstance*, s32, const PropTypeData*, BrnPhysics::Vehicle::RaceCarPhysics*,
+        Vector3, Vector3, Vector3, CgsPhysics::PhysicsSimulationIO::InAddPotentialContact*, bool, f32)
+    {
+        BRN_CONDUCTOR_GATE("PropManager::HandleContactWithLeanProp @0x8260FB60 (854; body PARKED on vendor vpu helpers + RaceCarPhysics::GetLinearMomentum)");
+    }
+    void PropManager::HandleContactWithTiltProp(
+        PropInstance*, s32, const PropTypeData*, BrnPhysics::Vehicle::RaceCarPhysics*,
+        Vector3, Vector3, Vector3, CgsPhysics::PhysicsSimulationIO::InAddPotentialContact*, bool, f32)
+    {
+        BRN_CONDUCTOR_GATE("PropManager::HandleContactWithTiltProp @0x826108B8 (720; body PARKED, same helper set as the Lean twin)");
+    }
+    void PropManager::RemoveAllPropsAndParts(
+        CgsPhysics::PhysicsSimulationIO::InputBuffer*, CgsSceneManager::SceneManagerIO::InSceneUpdateInterface*)
+    {
+        BRN_CONDUCTOR_GATE("PropManager::RemoveAllPropsAndParts @0x8260F010 (331; NOT reconstructed -- no per-address JSON, absent from identity.json)");
     }
 
     // 2026-08-11 (lifetime wave) -- arm 2 of PhysicsModule::UpdateCachedPositions. See the note
@@ -525,4 +533,17 @@ namespace Deformation
     // real body mounts with BrnDeformationManager_Contacts.cpp (its detached-manager callees
     // land with the part/wheel manager TUs this wave). LNK2005 if it ever comes back.
 }
+}
+
+// 2026-08-18 (wave Q4 PropManager mount): PRE-EXISTING declaration-only hole surfaced by mounting
+// PropManager::ReadUpdatedBodies' mbRenderCOM debug arm (BehaviourRig.cpp:189 was the older
+// caller). CgsDev::DebugRender::DrawAxis @0x8282BE40 (35 insns) is declared in CgsDebugRender.h:104
+// with no body anywhere. Debug-only render; an inert gate is safe. Retire when the body lands.
+#include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebugRender.h"
+namespace CgsDev
+{
+    void DebugRender::DrawAxis(const f32*)
+    {
+        BRN_CONDUCTOR_GATE("CgsDev::DebugRender::DrawAxis @0x8282BE40 (35; declaration-only, pre-existing hole)");
+    }
 }

@@ -46,6 +46,43 @@ namespace CgsSceneManager
         static const u32 KU_OWNER_MASK        = 0xFF000000u; // bits [24..31] of entity word
         static const u32 KU_ENTITY_INDEX_MASK = 0x00FFFC00u; // bits [10..23] of entity word
 
+        // ---- packed-field geometry of the WHOLE 64-bit word (DWARF CgsVolumeInstanceId.h) ----
+        // ADDED 2026-08-18 (wave Q4, collision seam). These are the DecFIGS DWARF's own
+        // private constants for this type, transcribed verbatim from the dumpfile
+        // (references/DecFIGS/dwarfdump/GameShared/GameClasses/SceneManager/CgsVolumeInstanceId.h):
+        //   :130 KU_NUM_BITS_FOR_ENTITY_ID       = 32
+        //   :131 KU_NUM_RESERVED_BITS            = 24
+        //   :132 KU_NUM_BITS_FOR_VOLUME_INDEX    = 8
+        //   :135 KU_VOLUME_INDEX_START_INDEX     = 0   (the dump prints no initialiser for a
+        //                                               zero-valued const; the value is pinned
+        //                                               by KU_VOLUME_INDEX_MASK == 255 below
+        //                                               and by the X360 splice `clrrdi r,id,8`)
+        //   :136 KU_RESERVED_START_INDEX         = 8
+        //   :137 KU_ENTITY_ID_START_INDEX        = 32
+        //   :141 KU_RESERVED_UNSHIFTED_MASK      = 16777215   (0x00FFFFFF)
+        //   :142 KU_VOLUME_INDEX_UNSHIFTED_MASK  = 255        (0xFF)
+        //   :144 KU_RESERVED_MASK                = 4294967040 (0xFFFFFF00)
+        //   :145 KU_VOLUME_INDEX_MASK            = 255        (0xFF)
+        // (KU_ENTITY_ID_UNSHIFTED_MASK == 0xFFFFFFFF and KU_ENTITY_ID_MASK == 0xFFFFFFFF00000000
+        //  are the same geometry expressed at bit 32; the dumpfile renders the latter as an
+        //  unparsed byte array, so it is spelled out from the shift/width pair rather than
+        //  copied from the dump.)
+        static const u64 KU_NUM_BITS_FOR_ENTITY_ID      = 32;
+        static const u64 KU_NUM_RESERVED_BITS           = 24;
+        static const u64 KU_NUM_BITS_FOR_VOLUME_INDEX   = 8;
+
+        static const u64 KU_VOLUME_INDEX_START_INDEX    = 0;
+        static const u64 KU_RESERVED_START_INDEX        = 8;
+        static const u64 KU_ENTITY_ID_START_INDEX       = 32;
+
+        static const u64 KU_ENTITY_ID_UNSHIFTED_MASK    = 0xFFFFFFFFull;
+        static const u64 KU_RESERVED_UNSHIFTED_MASK     = 0x00FFFFFFull;
+        static const u64 KU_VOLUME_INDEX_UNSHIFTED_MASK = 0xFFull;
+
+        static const u64 KU_ENTITY_ID_MASK              = 0xFFFFFFFF00000000ull;
+        static const u64 KU_RESERVED_MASK               = 0xFFFFFF00ull;
+        static const u64 KU_VOLUME_INDEX_MASK           = 0xFFull;
+
         // 0x822B0E00 — set the entity-type / owner byte of the embedded entity word.
         VolumeInstanceId* SetEntityIDOwner(u8 lu8Owner);
 
@@ -61,6 +98,52 @@ namespace CgsSceneManager
         u32 GetEntityIDEntityIndex() const
         {
             return static_cast<u32>(muId >> (32 + KU_ENTITY_INDEX_BASE)) & 0x3FFFu;
+        }
+
+        // ---- the OWNER byte of the embedded entity word (bits [56..63] of muId) ------------
+        // ADDED 2026-08-18 (wave Q4, collision seam). DWARF CgsVolumeInstanceId.h:106
+        //     uint8_t GetEntityIDOwner() const;
+        // Header inline (no out-of-line symbol in the X360 export set). The console folds it
+        // as the two-instruction pair the prop contact-generation bodies show verbatim:
+        //     0x822DF8D8  srdi r11, r23, 32     ; the embedded entity word
+        //     0x822DF8DC  srwi r31, r11, 24     ; its high byte == the owner
+        // and the value is what the "mVolumeInstanceId.GetEntityIDOwner() == E_ENTITYTYPE_PROP"
+        // tripwire (BrnPropEntityID.h:455) compares. The same fold appears in
+        // InSceneUpdateInterface::AddVolumeInstance @0x822CB664/0x822CB66C, there compared
+        // against KU_MAX_ENTITY_TYPE instead.
+        u8 GetEntityIDOwner() const
+        {
+            return static_cast<u8>(muId >> (KU_ENTITY_ID_START_INDEX + KU_OWNER_BASE));
+        }
+
+        // ---- the VOLUME-INDEX field (bits [0..7]) ------------------------------------------
+        // ADDED 2026-08-18 (wave Q4, collision seam). DWARF CgsVolumeInstanceId.h:92 declares
+        //     void SetVolumeIndex(uint8_t);
+        // and :115 declares
+        //     uint16_t GetVolumeIndex() const;
+        // Both are HEADER INLINES: neither has an out-of-line symbol anywhere in the X360
+        // export set (progress/identity.json has no "SetVolumeIndex"/"GetVolumeIndex" row at
+        // all), and every user shows the splice folded in place.
+        //
+        // X360 ATTESTATION of the splice, read off the four prop contact-generation bodies
+        // that carry it (all four fold the same two instructions):
+        //     0x822DF8A0  clrrdi r9,  r23, 8     ; muId & ~0xFF          -- drop the old index
+        //     0x822DF8AC  or     r23, r9,  r31   ; | (volumeIndex & 0xFF)
+        // (identical pairs at 0x822DFB40/0x822DFB44, 0x822C63A0/0x822C63A4 and
+        //  0x822C64B4/0x822C64B8). `clrrdi rA,rS,8` clears the LOW 8 bits of the 64-bit word,
+        // which is exactly ~KU_VOLUME_INDEX_MASK -- the reserved bits [8..31] and the whole
+        // embedded entity word [32..63] are preserved.
+        void SetVolumeIndex(u8 lu8VolumeIndex)
+        {
+            muId = (muId & ~KU_VOLUME_INDEX_MASK)
+                   | (static_cast<u64>(lu8VolumeIndex) & KU_VOLUME_INDEX_UNSHIFTED_MASK);
+        }
+
+        // DWARF spells the return uint16_t even though the stored field is 8 bits wide
+        // (KU_NUM_BITS_FOR_VOLUME_INDEX == 8); the declaration is kept DWARF-shaped.
+        u16 GetVolumeIndex() const
+        {
+            return static_cast<u16>(muId & KU_VOLUME_INDEX_MASK);
         }
 
         u64 muId;

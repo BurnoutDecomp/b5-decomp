@@ -161,6 +161,40 @@ namespace BrnWorld
         // 0x822B7CE0 — Set(propEntityId, volumeNumber).
         void Set(PropEntityID lPropEntityId, u8 luVolumeNumber);
 
+        // ---- the VOLUME-NUMBER splice (the wave-Q4 unpark) ---------------------------------
+        // ADDED 2026-08-18 (wave Q4, collision seam). This is the accessor the four parked
+        // PropCellManager contact-generation bodies were blocked on. DWARF names it
+        // SetVolumeNumber, not SetVolumeIndex (BrnPropEntityID.h:181 / :199):
+        //     :181  void     SetVolumeNumber(uint8_t);
+        //     :199  uint32_t GetVolumeNumber();          <- non-const in the DWARF, kept so
+        // (the WRAPPED CgsSceneManager::VolumeInstanceId spells the same field SetVolumeIndex
+        //  / GetVolumeIndex, DWARF CgsVolumeInstanceId.h:92 / :115 -- these two forward to it,
+        //  exactly as every other member of this wrapper forwards.)
+        //
+        // HEADER INLINES: neither has an out-of-line symbol anywhere in the X360 export set
+        // (progress/identity.json lists seven PropVolumeInstanceID rows -- Set, SetEntityIndex,
+        // SetPartIndex, GetEntityIndex, SetPropEntityId, GetPropEntityID and the
+        // operator VolumeInstanceId -- and no *VolumeNumber row), so no new link symbol.
+        //
+        // X360 ATTESTATION -- the splice is folded at all four call sites, as the pair
+        //     clrrdi rA, id, 8        ; muId & ~0xFF   (clear the low 8 bits, keep [8..63])
+        //     or     id, rA, index    ; | (volumeNumber & 0xFF)
+        // at 0x822DF8A0/0x822DF8AC (AddPropToContactGeneration),
+        //    0x822DFB40/0x822DFB44 (AddPropPartsToContactGeneration),
+        //    0x822C63A0/0x822C63A4 (RemovePropFromContactGeneration),
+        //    0x822C64B4/0x822C64B8 (RemovePropPartsFromContactGeneration).
+        // In every case the index register was just narrowed with `clrlwi rN,rN,24`, i.e. the
+        // argument really is a byte -- matching the DWARF's uint8_t.
+        void SetVolumeNumber(u8 lu8VolumeNumber)
+        {
+            mVolumeInstanceId.SetVolumeIndex(lu8VolumeNumber);
+        }
+
+        u32 GetVolumeNumber()
+        {
+            return mVolumeInstanceId.GetVolumeIndex();
+        }
+
         // 0x822B7FE0 — install a PropEntityID into the high dword (keep volume index).
         void SetPropEntityId(PropEntityID lPropEntityId);
 
@@ -248,6 +282,23 @@ namespace BrnWorld
 
         // Owner tripwire (baked line 387).
         void AssertIsProp() const;
+
+        // ADDED 2026-08-18 (wave Q4, collision seam). DWARF BrnPropEntityID.h:143 --
+        //     VolumeId operator CgsSceneManager::VolumeId() const;
+        // the exact sibling of PropVolumeInstanceID::operator VolumeInstanceId() @0x822B7958,
+        // and the reason the "mVolumeId.GetOwner() == E_ENTITYTYPE_PROP" tripwire (line 387)
+        // fires at the AddVolumeInstance CALL SITE rather than inside the producer: see
+        // AddPropToContactGeneration 0x822DF8A8-0x822DF8D4 (`srdi r10,volId,16; clrlwi 24;
+        // cmplwi 3; beq` then the assert block with `li r5, 0x183` == 387), immediately before
+        // the `bl InSceneUpdateInterface::AddVolumeInstance` at 0x822DF910. The same block
+        // appears at 0x822DFB50-0x822DFB74 in AddPropPartsToContactGeneration.
+        // HEADER INLINE: no out-of-line symbol for it in the export set (identity.json's only
+        // PropVolumeID row is Set @0x822B7C20), so no new link symbol.
+        operator CgsSceneManager::VolumeId() const
+        {
+            AssertIsProp();
+            return mVolumeId;
+        }
 
         CgsSceneManager::VolumeId mVolumeId;
     };
