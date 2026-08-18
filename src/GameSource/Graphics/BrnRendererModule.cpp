@@ -281,6 +281,7 @@ EA::Jobs::Job::Job(s32 /*liPriority*/) {}
 #include <Windows.h>   // [diag] GetEnvironmentVariableA
 #include <cstdio>      // [diag] snprintf
 #include <cstring>     // memcpy (per-pass DispatchObjectContext copies)
+#include <cmath>       // std::sqrt (PCBringUpPublishCoronaCamera's two projection scalars)
 #include <new>         // world dispatch bring-up heap
 
 // [diag] present counter (device.cpp) - stamps the trace lines with their frame.
@@ -751,11 +752,14 @@ namespace
         const u32 luHeapBytes = KU_PC_DISPATCH_BIN_BYTES
                               + 2u * KU_PC_GDL_DISPATCH_BIN_BYTES
                               + (3u * 4096u)   // per-bin align128(size)+128 slop + headroom
-                              + (64u * 1024u); // + the small renderengine objects that share
+                              + (192u * 1024u); // + the small renderengine objects that share
                                                //   this allocator (the sky dome's four buffer
                                                //   headers); without it their DoAllocate came
                                                //   back empty and tripped CreateGeometry's
-                                               //   GetMemoryResource asserts
+                                               //   GetMemoryResource asserts. Raised 64->192 KB
+                                               //   for the corona manager's TWO 32,784-byte
+                                               //   corona buffers (512 slots x 64 B + header)
+                                               //   so its Construct does not starve the sky dome.
         void* lpHeap = ::operator new(luHeapBytes, std::nothrow);
         if (lpHeap == 0)
             return false;
@@ -836,6 +840,153 @@ namespace
         lrRendererMemory.PCBringUpCreateShadowMapBufferOnly(&sWorldDispatchAllocator);
         gpShadowMapTarget = lrRendererMemory.GetShadowMapBuffer(0);
         return gpShadowMapTarget != nullptr;
+    }
+
+    // ============================================================================================
+    // [FLAG PC bring-up] CONSTRUCT THE CORONA MANAGER (coronas step 1, 2026-08-17).
+    //
+    // CONSOLE POSITION: BrnRendererModule::Prepare's eRendererPrepareCoronas stage
+    // (BrnRendererModule.h:214) runs `mCoronaManager.Construct(<the global graphics allocator>)`,
+    // and PrepareAgain @0x823FF8F8's corona-atlas argument then reaches
+    // `mCoronaManager.SetTextureAtlas(allocator, atlas)`. NEITHER is reachable on this build:
+    // BrnRendererModule::Prepare is not reconstructed at all, and
+    // BrnResource::Allocators::GetGlobalGraphicsAllocator() is declaration-only (the same blocker
+    // EnsureEffectsArbitratorBringUp and the render-target pair already carry).
+    //
+    // So the manager comes up here, on the first frame that HAS a device and an atlas, over the
+    // same sWorldDispatchAllocator every other deferred subsystem uses. VALUE-LATCHED on
+    // IsConstructed(), not on a `tried` bool, for the reason EnsureShadowMapTarget's banner gives:
+    // a one-shot flag set during the loading screen would burn the single attempt before the
+    // device (and the atlas) existed.
+    //
+    // DELETE-WHEN BrnRendererModule::Prepare is reconstructed: then Construct runs at the console's
+    // own point in the prepare state machine and PrepareAgain calls SetTextureAtlas directly.
+    // ============================================================================================
+    // The corona atlas texture PrepareAgain is handed (`corona_atlas.TextureConfig2d?ID=297312`,
+    // pool slot 10, acquired by BrnGameModule::GamePrepare and asserted non-null there).
+    renderengine::Texture* gpCoronaAtlasTexture = nullptr;
+
+    bool EnsureCoronaManagerBringUp(BrnCoronaManager& lrCoronaManager)
+    {
+        if (lrCoronaManager.IsConstructed())
+            return true;
+        if (renderengine::gDevice == 0)
+            return false;                      // no device -> no D3D9 vertex declaration yet
+        if (gpCoronaAtlasTexture == nullptr)
+            return false;                      // GamePrepare has not delivered the atlas yet
+        if (!EnsureWorldDispatchAllocator())
+            return false;
+
+        lrCoronaManager.Construct(sWorldDispatchAllocator);
+        if (!lrCoronaManager.IsConstructed())
+            return false;                      // Construct reported why; retry next frame
+
+        // PrepareAgain's own call, at the console's position in the order (Construct first, then
+        // the atlas -- Construct clears m_textureStateAtlas and SetTextureAtlas fills it).
+        lrCoronaManager.SetTextureAtlas(sWorldDispatchAllocator, gpCoronaAtlasTexture);
+        return lrCoronaManager.IsConstructed();
+    }
+
+    // ============================================================================================
+    // [FLAG PC bring-up] PUBLISH THE CORONA CAMERA.
+    //
+    // Stands in for the block BrnRendererModule::Update @0x82405EC4-0x82405FA0 runs on the console,
+    // which is BrnSubmissionInterface::SetCameraInfo plus the three values it is handed. The console
+    // block, decoded instruction by instruction:
+    //     0x82405ED0  lfs  f13, 0x58(camera)              camera->mfFOV
+    //     0x82405ED8  fcmpu / ble                          if (mfFOV <= flt_82004014) skip everything
+    //                                                      (flt_82004014 == 0.1f -- DATA_DUMP.md)
+    //     0x82405EF0  bl   CopyToCgsCamera(&lCgs)
+    //     0x82405EF8  lfs  f0,  lCgs+0x144                 maProjectionScalars[1] ==
+    //                                                        m_oneOverTanHalfFovHorizontal
+    //     0x82405F00  lfs  f12, lCgs+0x150                 maProjectionScalars[4] ==
+    //                                                        m_oneOverTanHalfFovVertical
+    //     0x82405F04  fdivs f10, f12, f0                   ootV / ootH
+    //     0x82405F10  fsubs f11, f0, 1.0                 \ fsel f0, f11, f0, 1.0
+    //     0x82405F20  fsel  f0,  f11, f0, f13            / == max(ootH, 1.0f)
+    //     0x82405F24  stfs  f0            -> viewXyScale.x
+    //     0x82405F28  fmuls f0, f10, f0                    (ootV / ootH) * max(ootH, 1.0f)
+    //     0x82405F2C  stfs  f0            -> viewXyScale.y
+    //     0x82405F18/1C stfs flt_82001CC0 -> viewXyScale.z / .w   (== 0.0f)
+    //     0x82405F48..F98  the four mViewProjection rows from lCgs+0x80..+0xBF
+    //     0x82405F54/F9C   `lvx128 v0, camera, 0x30` -> the camera position (Camera.h GetPosition's
+    //                                                    own "X360 +48" lane)
+    // The two scalars ARE the projection's screen-space x/y scale (1/tan(fov/2) each), which is what
+    // the corona vertex program multiplies the quad corner offsets by -- so viewXyScale is
+    // "world units -> clip units" for the billboard expansion, and the max(.,1) is a lower clamp
+    // that only bites on a fov wider than 90 degrees horizontally.
+    //
+    // ⚠ WHAT DEVIATES, AND WHY (both halves flagged, neither invented):
+    //   * THE CAMERA OBJECT. Not a LINK problem -- BrnDirector::Camera::Camera::{GetFOV,
+    //     GetPosition, CopyToCgsCamera} are all bodied in GameSource/Director/Camera/Camera.cpp
+    //     (:179 / :562 / :508) and that file IS on tools/build/build_game_exe.bat (line 394). The
+    //     problem is that there is no camera to read: Update takes its camera from the RendererIO
+    //     INPUT buffer, which is created empty at its ONE call site (BrnGameModule.cpp:2647,
+    //     GamePrepare's not-done tail) because the dispatch IO buffer set is not real on this build.
+    //     The live substitute is gBrnSkyCameraBringUp, filled every dispatch by
+    //     WorldModule::GenerateDispatchListsBringUp from the SAME camera the world and sky draw
+    //     with (BrnWorldModule.cpp:5554-5556), so the view-projection and the eye are exact.
+    //   * THE TWO FOV SCALARS have no substitute member, so they are RECOVERED FROM THE MATRIX
+    //     rather than guessed: for a row-vector VP = view * perspective with an ORTHONORMAL view
+    //     basis (CgsCamera.h:244 states the cameras this engine builds are orthonormal), the length
+    //     of VP's first column is exactly 1/tan(fovH/2) and of its second column 1/tan(fovV/2) --
+    //     the perspective scale survives the orthonormal rotation. This is an identity, not a
+    //     heuristic, and the log line below prints both numbers once so a boot can check them
+    //     against the expected pair (a 1280x720 60-degrees-horizontal camera reads ~1.73 / ~3.08).
+    // DELETE BOTH when Camera.cpp mounts: then this whole function is the console's ten instructions.
+    // ============================================================================================
+    const f32 KF_CORONA_CAMERA_FOV_GATE = 0.1f;   // X360 flt_82004014 (DATA_DUMP.md)
+
+    void PCBringUpPublishCoronaCamera(BrnCoronaManager& lrCoronaManager)
+    {
+        if (!gBrnSkyCameraBringUp.mbValid)
+            return;
+
+        const Matrix44& lrViewProjection = gBrnSkyCameraBringUp.mViewProjection;
+
+        // |column 0| and |column 1| of the row-vector view-projection (see the banner).
+        const f32 lfOotHalfFovH = std::sqrt(lrViewProjection.xAxis.x * lrViewProjection.xAxis.x
+                                          + lrViewProjection.yAxis.x * lrViewProjection.yAxis.x
+                                          + lrViewProjection.zAxis.x * lrViewProjection.zAxis.x);
+        const f32 lfOotHalfFovV = std::sqrt(lrViewProjection.xAxis.y * lrViewProjection.xAxis.y
+                                          + lrViewProjection.yAxis.y * lrViewProjection.yAxis.y
+                                          + lrViewProjection.zAxis.y * lrViewProjection.zAxis.y);
+
+        // The console's own gate, expressed on the value this build actually has: mfFOV > 0.1f is
+        // "this camera has a real projection". A degenerate view-projection reads ootH == 0 here,
+        // which is the same refusal -- and it is the refusal that matters, because a zero scale
+        // would collapse every corona quad to a point and the frame would still "look fine"
+        // (AGENTS.md rule 9).
+        if (!(lfOotHalfFovH > KF_CORONA_CAMERA_FOV_GATE))
+            return;
+
+        const f32 lfClamped = (lfOotHalfFovH > 1.0f) ? lfOotHalfFovH : 1.0f;   // fsel max(ootH, 1)
+        Vector4 lvViewXyScale;
+        lvViewXyScale.x = lfClamped;
+        lvViewXyScale.y = (lfOotHalfFovV / lfOotHalfFovH) * lfClamped;
+        lvViewXyScale.z = 0.0f;
+        lvViewXyScale.w = 0.0f;
+
+        lrCoronaManager.PCBringUpSetRenderCamera(lrViewProjection,
+                                                  gBrnSkyCameraBringUp.mViewPosition,
+                                                  lvViewXyScale);
+
+        {
+            static bool sbLogged = false;
+            if (!sbLogged)
+            {
+                sbLogged = true;
+                char lacMessage[192];
+                std::snprintf(lacMessage, sizeof(lacMessage),
+                              "[corona] camera published: eye=(%.2f %.2f %.2f)"
+                              " viewXyScale=(%.4f %.4f) (1/tanHalfFovH, 1/tanHalfFovV)\n",
+                              gBrnSkyCameraBringUp.mViewPosition.x,
+                              gBrnSkyCameraBringUp.mViewPosition.y,
+                              gBrnSkyCameraBringUp.mViewPosition.z,
+                              lvViewXyScale.x, lvViewXyScale.y);
+                CgsDev::Log::WriteToLog(lacMessage);
+            }
+        }
     }
 
     // [PC bring-up] The POST-FX SCENE TARGETS, created the same lazy way and for the same reason.
@@ -1309,6 +1460,21 @@ void BrnRendererModule::StartOfFrame()
         PCBringUpProduceBaseEffectsFrame();
     }
 
+    // ---- THE CORONA REWIND (coronas step 1) ---------------------------------------------------
+    // The X360 body's LAST statement, @0x823FC160's tail:
+    //     v11 = (112 * *(this + 14640) + this + 14336 + 80);   // &mSubmissionInterface[swapIndex]
+    //     v11[2] = 0;  v11[1] = mpBuffer->mpData;  v11[3] = mpBuffer->muNumCoronas;
+    // -- i.e. BrnCoronaManager::Clear() on the CURRENT (write) interface, which is
+    // CoronaBuffer::Lock(Iterator&). 14336 == 0x3800 == mCoronaManager, 14640 == +0x130 ==
+    // mu8SubmissionSwapIndex, 112 == sizeof(BrnSubmissionInterface), 80 == +0x50 == the array base.
+    // The manager's own bring-up gate is elsewhere (Render); this is a no-op until it Constructs.
+    //
+    // ⚠ IT IS DELIBERATELY BEFORE THE mpInterpreter EARLY-OUT, for the reason the effects block
+    // above gives: the corona buffers are not the GDL ring, and a build where the ring never came up
+    // must still rewind the write cursor every frame or the very first producer to run would keep
+    // appending into a buffer that is never reset (it would hit the 512-corona assert in seconds).
+    mCoronaManager.Clear();
+
     if (mpInterpreter == 0)
         return;   // Construct's allocator gate did not open -- no GDL ring.
 
@@ -1742,6 +1908,16 @@ void BrnRendererModule::SwapBuffers()
     {
         mEffectsArbitrator.EndOfFrame();
     }
+
+    // ---- THE CORONA INDEX FLIP (coronas step 1) -----------------------------------------------
+    // The X360 body's LAST statement, @0x823FC678: `*(a1 + 14640) ^= 1u;` -- the whole of
+    // BrnCoronaManager::Swap(). It publishes the interface the producers just filled to Render (which
+    // reads mu8SubmissionSwapIndex ^ 1) and hands the other one to the next frame's Clear.
+    //
+    // ⚠ ALSO BEFORE THE mpInterpreter EARLY-OUT, and for a sharper reason than Clear's: if the flip
+    // were skipped on a ring-less build, Render would read the SAME slot the producers are writing
+    // and the batch count would be whatever the write cursor happened to hold mid-frame.
+    mCoronaManager.Swap();
 
     if (mpInterpreter == 0)
         return;
@@ -3241,10 +3417,13 @@ void BrnRendererModule::PrepareAgain(renderengine::Texture* lpBlobbyShadow,
     mpCloudDensity0Texture  = lpCloudDensity;
     mpCloudLighting0Texture = lpCloudLighting;
     mpGlassFractureTexture  = lpGlassFracture;
-    // The corona atlas' slot is the CoronaManager's, not one of this module's members --
-    // the X360 hands it on rather than storing it. The corona pass is not live, so it is
-    // accepted and dropped here; wire it when BrnCoronaManager comes online.
-    (void)lpCoronaAtlas;
+    // The corona atlas' slot is the CoronaManager's, not one of this module's members -- the X360
+    // hands it straight on (`mCoronaManager.SetTextureAtlas(allocator, lpCoronaAtlas)`). On this
+    // build the manager is not Constructed yet when PrepareAgain runs (there is no
+    // BrnRendererModule::Prepare and no device this early), so the texture is LATCHED and
+    // EnsureCoronaManagerBringUp hands it on at the first frame that can accept it. See that
+    // function's banner. (Until coronas step 1 this argument was accepted and dropped.)
+    gpCoronaAtlasTexture = lpCoronaAtlas;
 }
 
 // =============================================================================
@@ -3708,6 +3887,27 @@ void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispa
         }
     }
 #endif  // BRN_ENVMAP_PASS_AVAILABLE
+
+    // ---- THE CORONA SWITCH, seeded from config.ini exactly like the env-map one above ---------
+    // ConstructRenderSwitches (BrnRendererModule.h:832) sets mbRenderCoronas true, which IS the
+    // console's value, and it runs at static-init time -- before Device::Initialize and before
+    // LoadConfig. So the knob seeds it here, on the first Render, once, and never again: a debug
+    // toggle at run time still wins, exactly as on the console. NO SECOND SWITCH IS MINTED
+    // (AGENTS.md rule 3) -- renderengine::gCoronas only seeds the module's own bool.
+    // DELETE-WHEN the debug component owns the switch and the knob can go.
+    {
+        static bool sbCoronaSwitchSeeded = false;
+        if (!sbCoronaSwitchSeeded)
+        {
+            sbCoronaSwitchSeeded = true;
+            mbRenderCoronas = (renderengine::gCoronas != 0);
+            if (!mbRenderCoronas && CgsDev::Log::gpDebugPrint != 0)
+            {
+                *CgsDev::Log::gpDebugPrint
+                    << "[corona] config.ini [Settings] Coronas=0 -- the corona pass is OFF\n";
+            }
+        }
+    }
 
     // ---- X360 Render:536-542 -- the three GLOBAL texture binds. --------------------------
     //
@@ -4188,6 +4388,36 @@ void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispa
     if (lbDispatchReady)
     {
         RenderWorldPasses(lpDispatchThreadInputBuffer, &lDispatchContext);
+
+        // ==========================================================================================
+        // THE CORONA PASS (coronas step 1, 2026-08-17).
+        //
+        // CONSOLE POSITION: BrnRendererModule::Render @0x8240BFA8 calls
+        // BrnCoronaManager::Render(&mCoronaManager, whiteLevel) gated on the module's own
+        // mbRenderCoronas switch, bracketed by the CgsDev::PerfMonCpu/PerfMonGpu pair whose monitor
+        // is registered as "DT: Render coronas" (mCpuMonitors.miRenderCoronas /
+        // mGpuMonitors.miCoronas) -- AFTER the transparent car pass and BEFORE the particles /
+        // post-fx composite. On this build that position is HERE: RenderWorldPasses ends with the
+        // transparent passes, and ResolveMSAA + the composite follow immediately below. The coronas
+        // are therefore drawn INTO the scene target, additively, and the post-fx grade sees them --
+        // which is what makes a flare bloom.
+        //
+        // (The PerfMon bracket is not reproduced: every id in mGpuMonitors is 0 on this build
+        // because nothing calls PerfMonGpu::AddMonitor -- this file's own banner at :250 says so --
+        // so a bracket here would time one monitor id shared with every other pass.)
+        //
+        // THE SWITCH IS THE CONSOLE'S OWN. mbRenderCoronas already exists (BrnRendererModule.h:733,
+        // set true by ConstructRenderSwitches at :832) -- no new global is minted (AGENTS.md rule
+        // 3). The user-facing knob is config.ini [Settings] Coronas, which BrnMain seeds into it.
+        // ==========================================================================================
+        // (lbSceneBracketOpen: the console's only gate is mbRenderCoronas because its scene target
+        // always exists; here the additive pass must not land in whatever target is bound when the
+        // anti-alias bracket did not open.)
+        if (lbSceneBracketOpen && mbRenderCoronas && EnsureCoronaManagerBringUp(mCoronaManager))
+        {
+            PCBringUpPublishCoronaCamera(mCoronaManager);
+            mCoronaManager.Render(lfFrameWhiteLevel);
+        }
     }
 
 #if BRN_ANTIALIAS_BRACKET_AVAILABLE
@@ -4634,14 +4864,13 @@ void BrnRendererModule::RenderAssert(const AssertData* /*lpAssertData*/)
 // the expression IS attested -- by its caller, which is where an un-bodied accessor's shape
 // usually lives.
 //
-// Defined from THIS TU rather than BrnCoronaManager.cpp because that file is not on the build
-// list and adding it drags in AddCorona/AddPropCorona, which want BrnEffects::Curves::
-// SmoothStep::Evaluate and rw::RGBA's ctor -- a dependency cascade for one accessor. Move it
-// home when the corona TU is mounted for its own sake.
-BrnCoronaManager::BrnSubmissionInterface* BrnCoronaManager::GetSubmissionInterface()
-{
-    return &mSubmissionInterface[mu8SubmissionSwapIndex];
-}
+// MOVED HOME 2026-08-17 (coronas step 1). The paragraph that stood here said "defined from THIS TU
+// rather than BrnCoronaManager.cpp because that file is not on the build list ... move it home when
+// the corona TU is mounted for its own sake". That is exactly what this wave does:
+// GameSource/Graphics/BrnCoronaManager.cpp is now on tools/build/build_game_exe.bat and defines
+// GetSubmissionInterface (together with Construct / Clear / Swap / Render / SetCameraInfo, all of
+// which the same caller needs). Keeping this copy would be LNK2005, not a duplicate comment.
+// The reading above is unchanged and still correct -- see the body in BrnCoronaManager.cpp.
 
 // ============================================================================================
 // @ 0x82405E28 -- BrnRendererModule::Update.  RECONSTRUCTED 2026-08-17 (boot audit F-P2-4).

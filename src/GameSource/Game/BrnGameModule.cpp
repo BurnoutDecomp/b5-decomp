@@ -2121,6 +2121,18 @@ namespace BrnGame
         mWorldModule.SetBringUpDispatchThreadInputBuffer(
             mDispatchThreadInputBufferManager.GetWriteBuffer());
 
+        // ---- stage the CORONA SUBMISSION INTERFACE for the race-car lamp-flare producer -----
+        // [FLAG PC bring-up] STANDS IN FOR BrnRendererModule::Update @0x824060F0-108 ->
+        // RendererIO output -> GameBridgeRendererToX -> BrnWorldIO::DispatchInputBuffer ->
+        // InputBuffer_GenerateDispatchLists::SetCoronaSubmissionInterface @0x8279EBC8. Fetched
+        // FRESH every frame: it is &mSubmissionInterface[mu8SubmissionSwapIndex], the WRITE slot
+        // (StartOfFrame Cleared it above; OnEndOfUpdateFrame's Swap publishes it to Render).
+        // Never null; IsReady() is false until BrnCoronaManager::Construct runs (lazily, at the
+        // first renderable frame) and the producer checks that before it posts.
+        // DELETE-WHEN: DoDispatch's IO buffer set is real.
+        mWorldModule.SetBringUpCoronaSubmissionInterface(
+            mRenderModule.GetCoronaSubmissionInterfaceBringUp());
+
         // ---- [FLAG PC bring-up] PARKED: the EFFECTS module's copy of the env-map -------
         // NOT WIRED, DELIBERATELY, AND NOTHING IS MISSING BECAUSE OF IT. The console hands
         // the environment-map texture to the particle/effects side one call further down

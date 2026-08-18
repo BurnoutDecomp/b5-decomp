@@ -801,8 +801,28 @@ namespace RaceCarEntityModuleIO
 
     // ============================================================================
     // InputBuffer_GenerateDispatchLists  (DWARF :619)
-    //   The two byte-reads at +8289/+8290 are trailing bool members past the captured
-    //   DWARF member list (:652); names NOT in DWARF -> placeholder mb*/GetDispatchFlag*.
+    //
+    // CORRECTED 2026-08-17 (coronas step 1). This block used to carry two INVENTED
+    // members -- `bool mbDispatchFlagA/B` "at +8289/+8290" -- behind two getters that
+    // claimed X360 0x822B6B20 / 0x822B6BD0. Both addresses are real and NEITHER is a byte
+    // read; each is a 32-bit load of a trailing POINTER slot:
+    //     0x822B6BBC  ori   r11, r11, 0x8184      0x822B6BC0  lwzx  r3, r28, r11
+    //     0x822B6C6C  ori   r11, r11, 0x8188      0x822B6C70  lwzx  r3, r28, r11
+    // i.e. this+0x8184 == mpBlobbyShadowBuffer and this+0x8188 == mpCoronaSubmissionInterface
+    // -- exactly the two members whose DWARF-declared getters (:636 / :639) had NO definition
+    // anywhere in this tree. The buffer's five getters are one 0xB0-apiece run over the camera
+    // plus the four trailing pointer slots, and their assert line numbers step by 3 with the
+    // DWARF declarations:
+    //     0x822B69C8  GetCameraInput                this+0x0010   cpp line 639 (0x27F)
+    //     0x822B6A70  GetDispatchFrame              this+0x8180   cpp line 642 (0x282)
+    //     0x822B6B20  GetBlobbyShadowBuffer         this+0x8184   cpp line 645 (0x285)
+    //     0x822B6BD0  GetCoronaSubmissionInterface  this+0x8188   cpp line 648 (0x288)
+    //     0x822B6C80  GetShadowMap                  this+0x818C   cpp line 651 (0x28B)
+    // The two placeholder members and their getters are DELETED (no reader existed anywhere:
+    // `grep -rn "GetDispatchFlagA\|GetDispatchFlagB\|mbDispatchFlagA\|mbDispatchFlagB" src/`
+    // matched only their own declaration + definition), and the two REAL getters are bodied in
+    // the .cpp at those two addresses. RaceCarEntityModule::SubmitCoronasForRaceCar's call site
+    // is the first consumer of GetCoronaSubmissionInterface.
     // ============================================================================
     struct InputBuffer_GenerateDispatchLists : public CgsModule::IOBuffer
     {
@@ -832,9 +852,6 @@ namespace RaceCarEntityModuleIO
         void SetCoronaSubmissionInterface(BrnCoronaManager::BrnSubmissionInterface*);     // :640
         BrnWorld::ShadowMap* GetShadowMap() const;                                        // :642
         void                 SetShadowMap(BrnWorld::ShadowMap*);                          // :643
-        // Trailing bool flags (names NOT in DWARF; placeholders): read by 0x822B6B20/0x822B6BD0.
-        bool GetDispatchFlagA() const; // 0x822B6B20 -> *(this+8289)
-        bool GetDispatchFlagB() const; // 0x822B6BD0 -> *(this+8290)
     private:
         BrnDirector::Camera::Camera  mCameraInput;                                        // :647
         SceneResultQueue             mSceneResultQueue;                                   // :648
@@ -842,8 +859,6 @@ namespace RaceCarEntityModuleIO
         BrnBlobbyShadowManager::BrnBlobbyShadowBuffer* mpBlobbyShadowBuffer;              // :650
         BrnCoronaManager::BrnSubmissionInterface*      mpCoronaSubmissionInterface;       // :651
         BrnWorld::ShadowMap*         mpShadowMap;                                         // :652
-        bool                         mbDispatchFlagA;                                     // +8289 (placeholder name)
-        bool                         mbDispatchFlagB;                                     // +8290 (placeholder name)
     };
 
     // ============================================================================

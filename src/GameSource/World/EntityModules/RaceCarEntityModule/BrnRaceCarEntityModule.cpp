@@ -61,6 +61,7 @@
 #include "rw/math/vpu/vector3_operation.h"                                               // rw::math::vpu::IsValid(Vector3)
 #include "rw/math/vpu/matrix44affine_operation.h"                                        // rw::math::vpu::IsValid(Matrix44Affine) / Mult
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnStreamedDeformationSpec.h" // StreamedDeformationSpec::WheelSpec (the authored wheel placements)
+#include "GameSource/Physics/DeformationManager/SharedIO/BrnVehicleLocatorData.h"                // VehicleLocatorData (the rest-pose light-locator stand-in)
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/VehiclePhysics.h"                 // VehiclePhysics::SeatTransformFromCreateLegBringUp (the analytic rest seat, seat wave 2026-08-05)
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleDriverControls.h"             // BrnPhysics::Vehicle::BrnPlayerDriverControls (the 72-byte player record)
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleDriverInputInterface.h"       // VehicleDriverInputInterface::AddTargetAssist / GetUpdateDriverQueue
@@ -1186,6 +1187,134 @@ void RaceCarEntityModule::PublishWheelPoseWithoutPhysicsBringUp( ActiveRaceCar* 
                 }
                 *CgsDev::Log::gpDebugPrint << "\n";
             }
+        }
+    }
+}
+
+
+// ============================================================================
+// [FLAG PC bring-up] PublishRestPoseLightLocatorsBringUp -- NOT an X360 function.
+// The REST-POSE LIGHT LOCATORS: the input RaceCarEntityModule::SubmitCoronasForRaceCar
+// @0x822D1600 has nothing to do without.
+//
+// ⛔ WHY IT EXISTS -- the console's producer is a THREE-HOP CHAIN AND ALL THREE HOPS ARE
+// DEAD ON THIS BUILD. Each is named, each is already logged at boot, none is guessed at:
+//   (1) DeformableObject::PrepareLocators @0x825BA010 copies the streamed spec's three tag
+//       lists into the car's live VehicleLocatorData. Committed
+//       (BrnDeformableObject_Lifecycle.cpp) with `const u32 luNumLight = 0;   // FLAG:
+//       = mpDeformationSpec->mLightTags.GetNumLocatorPoints()` -- the loop body is exact,
+//       the SOURCE is pinned to an empty list, so miNumLightLocators comes out 0. (That FLAG
+//       is now STALE, by the way: StreamedDeformationSpec's three LocatorPointSpecList
+//       members are PUBLIC, and LocatorPointSpecList::GetNumLocatorPoints/GetLocatorSpec are
+//       public inlines -- the same staleness the 2026-08-14 walls wave already found and
+//       fixed for the tag/driven-point accessors. See the report's CROSS-GROUP list.)
+//   (2) DeformationManager::OutputData @0x826225D8 publishes those tables into the
+//       entity-module output interface. Its committed body's first pass writes NO locator
+//       records ("GROW DEFERRAL ... the three count-bound asserts AND the table writes are
+//       deliberately NOT emitted here"), and its TU is not even mounted:
+//       BrnGame.log:793 "conductor gate: DeformationManager::OutputData @0x826225D8 (339;
+//       real body in the unmounted BrnDeformationManager_Output.cpp) inert".
+//   (3) leg L5 of ReadUpdatedActiveRaceCarDataFromPhysics copies them into RenderParams:
+//       BrnGame.log:808 "[physics-readback] PARKED deformation legs ... locator-output copy
+//       ...".
+// With no stand-in, RenderParams::miNumLightLocators is 0 for every car forever, the corona
+// producer's loop runs zero times, and the whole subsystem looks healthy while drawing
+// nothing -- the exact "the frame looks identical" trap this campaign keeps paying for.
+//
+// WHAT IS HONEST ABOUT IT:
+//   * NOTHING IS INVENTED. Every position and every tag type is read out of the car's own
+//     shipped StreamedDeformationSpec::mLightTags -- the same resource the wheel stand-in
+//     above already reads its WheelSpecs from, resident on this build ("STRM: Physics loaded:
+//     0" and the four real authored wheel scales in BrnGame.log prove the spec parses).
+//   * It publishes what the console's own DeformableObject::UpdateLocator @0x825E0EC8 yields
+//     for an UNDAMAGED car. That function copies the spec's four locator rows verbatim and
+//     then ADDS the car's verlet skin-point displacement to the translation row
+//     (`_R8 = 16 * (*(_R28 + 70) + 270); lvx128 v0, r8, r29; vaddfp; stvx128`) -- which is
+//     zero at rest -- before the detached-part re-basing arm, which needs a detached part.
+//   * It goes through the REAL consumer: RenderParams::SetLightLocators, itself recovered
+//     from L5's own inlined asm. Only the INPUT is stood in for.
+//
+// WHAT IS A LIE, stated plainly: the locators never MOVE. A crushed front wing does not drag
+// its head-lamp flare with it, and a torn-off part keeps its lamp floating where the part
+// used to be, because both of those come from hops (1)-(3).
+// DELETE-WHEN leg (3) unparks -- and it MUST be deleted then, or it will overwrite the
+// deformed positions with the rest pose every single frame.
+// ============================================================================
+void RaceCarEntityModule::PublishRestPoseLightLocatorsBringUp( ActiveRaceCar* lpActiveRaceCar,
+                                                               s32 liActiveRaceCar )
+{
+    // [FLAG PC bring-up] the BringUp resource getter, for the same reason the wheel stand-in
+    // above uses it: the console's GetPhysicsResource asserts IsRaceCarLoaded() (ALL five
+    // resource bits) and would fire a dev assert every frame on this build.
+    const RaceCarStreamer::PhysicsResourcePtr& lrPhysicsResource =
+        mRaceCarStreamer.GetPhysicsResourceBringUp( liActiveRaceCar );
+
+    // The table is published on EVERY path (verify_coronaproducer F5): RenderParams::Reset()
+    // does not clear miNumLightLocators, so a slot recycled to a car whose spec is not (yet)
+    // resident would otherwise keep the previous car's lamp inventory. A spec-less car
+    // publishes ZERO locators -- which is what the console's zeroed mLocatorData means.
+    BrnPhysics::Deformation::VehicleLocatorData lLocators;
+    lLocators.miNumCameraLocators  = 0;
+    lLocators.miNumGenericLocators = 0;
+    lLocators.miNumLightLocators   = 0;
+
+    const BrnPhysics::Deformation::StreamedDeformationSpec* lpSpec =
+        lrPhysicsResource.HasMemoryResource() ? lrPhysicsResource.operator->() : 0;
+
+    // The streamed light-tag list. muSlot is the resource's own 32-bit pointer slot, rebased
+    // in place by StreamedDeformationSpec::FixUp @0x82630E18 -- a zero slot means the car
+    // authored no light tags at all, and GetLocatorSpec would then index off null.
+    const u32 luNumSpecLocators =
+        ( lpSpec != 0 && lpSpec->mLightTags.mpaLocatorPoints.muSlot != 0 )
+            ? lpSpec->mLightTags.GetNumLocatorPoints() : 0u;
+
+    for ( u32 luLocator = 0; luLocator < luNumSpecLocators; ++luLocator )
+    {
+        // PrepareLocators' own bound (its assert is "mLocatorData.miNumLightLocators <
+        // KI_MAX_LIGHT_LOCATORS"); a spec with more than 24 light tags is malformed, so stop
+        // rather than run off the fixed array.
+        if ( lLocators.miNumLightLocators >= BrnPhysics::Deformation::KI_NUM_LIGHT_LOCATORS )
+        {
+            break;
+        }
+
+        const BrnPhysics::Deformation::LocatorPointSpec* lpLocatorSpec =
+            lpSpec->mLightTags.GetLocatorSpec( luLocator );
+        if ( lpLocatorSpec == 0 )
+        {
+            continue;
+        }
+
+        lLocators.maLightLocators[ lLocators.miNumLightLocators ]     = lpLocatorSpec->mLocatorMatrix;
+        lLocators.maLightLocatorTypes[ lLocators.miNumLightLocators ] = lpLocatorSpec->meTagPointType;
+        ++lLocators.miNumLightLocators;
+    }
+
+    lpActiveRaceCar->GetRenderParams()->SetLightLocators( &lLocators );
+
+    // [DIAG coronas step 1] the car's authored lamp inventory, printed once per distinct car
+    // (latched on the first locator's X, the same trick the wheel stand-in above uses, so a
+    // run where every position is zero is distinguishable from a run where this never ran).
+    {
+        static f32 sfLastLoggedLocator0X = 1e30f;
+        if ( lLocators.miNumLightLocators > 0
+             && lLocators.maLightLocators[0].wAxis.x != sfLastLoggedLocator0X
+             && CgsDev::Log::gpDebugPrint != 0 )
+        {
+            sfLastLoggedLocator0X = lLocators.maLightLocators[0].wAxis.x;
+            *CgsDev::Log::gpDebugPrint
+                << "[corona-locators] car " << liActiveRaceCar << ": "
+                << lLocators.miNumLightLocators << " rest-pose light locators of "
+                << luNumSpecLocators << " authored (type:pos)";
+            for ( s32 liLog = 0; liLog < lLocators.miNumLightLocators; ++liLog )
+            {
+                *CgsDev::Log::gpDebugPrint
+                    << " " << static_cast<s32>( lLocators.maLightLocatorTypes[liLog] )
+                    << ":(" << lLocators.maLightLocators[liLog].wAxis.x
+                    << ", " << lLocators.maLightLocators[liLog].wAxis.y
+                    << ", " << lLocators.maLightLocators[liLog].wAxis.z << ")";
+            }
+            *CgsDev::Log::gpDebugPrint << " [FLAG PC bring-up]\n";
         }
     }
 }
@@ -2906,6 +3035,23 @@ void RaceCarEntityModule::ReadUpdatedActiveRaceCarDataFromPhysics(
                        "DELETE WHEN VehicleManager::ProcessCreateEvents populates "
                        "maRaceCarStates.\n";
             }
+        }
+    }
+
+    // ---- L5 (the LOCATOR-OUTPUT copy), stood in for -------------------------
+    // [FLAG PC bring-up] at leg L5's own position in the console's body. The rest-pose
+    // locators do NOT depend on physics ownership -- they are authored data in the car's
+    // handling-body frame -- so this runs for every ACTIVE slot, not only the ones the
+    // mUsedRaceCars gate above lets through. See PublishRestPoseLightLocatorsBringUp's
+    // banner for the three dead producer hops it stands in for.
+    // DELETE-WHEN L5 below unparks.
+    for( s32 liCar = 0; liCar < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liCar )
+    {
+        ActiveRaceCar* lpActiveRaceCar =
+            GetActiveRaceCar( static_cast<EActiveRaceCarIndex>( liCar ) );
+        if( lpActiveRaceCar->IsActive() )
+        {
+            PublishRestPoseLightLocatorsBringUp( lpActiveRaceCar, liCar );
         }
     }
 

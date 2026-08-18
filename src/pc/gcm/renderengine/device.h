@@ -61,6 +61,18 @@ namespace renderengine
     // once, in the bring-up producer, and is not a second per-frame switch; the BRN_ENVMAP_30HZ /
     // BRN_ENVMAP_ALLFACES env vars keep their override for measuring.
     extern s32 gEnvironmentMap30Hz;
+    // Whether the CORONA (light-flare) pass runs. 1 = draw the head/tail-light and prop flares
+    // (default, and what the console does -- BrnRendererModule::ConstructRenderSwitches seeds
+    // mbRenderCoronas true); 0 = the pass never runs. Sourced from config.ini `[Settings] Coronas`
+    // (BrnMain.cpp LoadConfig/SaveConfig) and seeded by Device::Initialize, exactly like
+    // gEnvironmentMap above it.
+    //
+    // NOTE -- IT IS NOT A SECOND SWITCH, for the same reason gEnvironmentMap is not: the console already
+    // owns this state as BrnRendererModule::mbRenderCoronas, and this global only SEEDS that member
+    // once, on the first frame of BrnRendererModule::Render -- the module's constructor runs at
+    // static-init time, before Device::Initialize and before LoadConfig have read the file. Nothing
+    // else reads it.
+    extern s32 gCoronas;
     // Present synchronisation. 1 = D3DPRESENT_INTERVAL_DEFAULT (vertical sync, the behaviour
     // this build has always had); 0 = D3DPRESENT_INTERVAL_IMMEDIATE (uncapped presents). Sourced
     // from config.ini `[Display] VSync` (BrnMain.cpp LoadConfig/SaveConfig) and seeded by

@@ -165,6 +165,13 @@ void LoadConfig()
     const s32 liEnvironmentMap30Hz =
         GetPrivateProfileIntA("Settings", "EnvironmentMap30Hz", renderengine::gEnvironmentMap30Hz, lacPath);
     renderengine::gEnvironmentMap30Hz = (liEnvironmentMap30Hz == 0) ? 0 : 1;
+
+    // The corona (light-flare) pass off switch (coronas step 1); 0/1, clamped the same way and for
+    // the same reason as its neighbours. It SEEDS BrnRendererModule::mbRenderCoronas on the first
+    // Render frame; see the declaration in device.h.
+    const s32 liCoronas =
+        GetPrivateProfileIntA("Settings", "Coronas", renderengine::gCoronas, lacPath);
+    renderengine::gCoronas = (liCoronas == 0) ? 0 : 1;
 #endif
 }
 
@@ -198,6 +205,8 @@ void SaveConfig()
     WritePrivateProfileStringA("Settings", "EnvironmentMap", lacValue, lacPath);
     std::snprintf(lacValue, sizeof(lacValue), "%d", renderengine::gEnvironmentMap30Hz);
     WritePrivateProfileStringA("Settings", "EnvironmentMap30Hz", lacValue, lacPath);
+    std::snprintf(lacValue, sizeof(lacValue), "%d", renderengine::gCoronas);
+    WritePrivateProfileStringA("Settings", "Coronas", lacValue, lacPath);
 #endif
 }
 

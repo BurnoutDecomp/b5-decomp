@@ -33,8 +33,15 @@
 //    instead and additionally drives the replay serialiser
 //    (BrnReplays::RaceCarEntitySerialiser::GetStaticLayout), the blobby-shadow buffer
 //    (BrnBlobbyShadowManager::BrnBlobbyShadowBuffer::AddShadow), ShadowMap::CalcOptimisedLod
-//    and RaceCarEntityModule::SubmitCoronasForRaceCar -- none of which exist in the tree.
+//    and RaceCarEntityModule::SubmitCoronasForRaceCar.
 //    It is a later wave, not a stub: no empty branch is written for it here.
+//    UPDATED 2026-08-17 (coronas step 1): SubmitCoronasForRaceCar @0x822D1600 IS now in the
+//    tree -- bodied at the foot of this file -- and its CALL is wired into the `else` arm's
+//    per-car loop at the console's own position within the per-car body (last, after
+//    RenderRaceCar; asm order in the `if` arm: RenderRaceCar @0x822E7E4C ... AddShadow
+//    @0x822E8040 ... the five gates @0x822E8044..0x822E808C ... SubmitCoronasForRaceCar
+//    @0x822E80BC ... `b` to the loop tail @0x822E83A0). The replay serialiser, the blobby
+//    shadow buffer and CalcOptimisedLod are still `if`-arm-only and still absent.
 // 2. RenderRaceCar's CRACKED-GLASS loop. It walks the spec's shattered-glass part table
 //    and calls BrnWorld::SetGlassFractureConstants per pane before its own AddToBin /
 //    Submit, and it needs two .rodata constant vectors the function-only IDA export does
@@ -79,7 +86,9 @@
 #include "GameSource/World/ShadowMap/BrnShadowMap.h"                     // BrnWorld::ShadowMap
 #include "SharedClasses/World/BrnVehicleGraphicsSpec.h"                  // BrnVehicle::GraphicsSpec
 #include "SharedClasses/World/BrnWheelGraphicsSpec.h"                    // BrnWheel::GraphicsSpec
-#include "rw/math/vpu/matrix44affine_operation.h"                        // rw::math::vpu::Mult
+#include "rw/math/vpu/matrix44affine_operation.h"                        // rw::math::vpu::Mult / InverseOfMatrixWithOrthonormal3x3 / TransformPoint
+#include "rw/math/vpu/vector3_operation.h"                               // rw::math::vpu::Negate
+#include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnStreamedDeformationSpec.h" // StreamedDeformationSpec (spec+1552) + ETagPointType
 
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // CgsDev::Log::gpDebugPrint
 
@@ -1048,6 +1057,329 @@ RaceCarEntityModule::RenderRaceCar( CgsGraphics::DispatchFrame* lpDispatchFrame,
 
 
 // ============================================================================
+// SubmitCoronasForRaceCar  @ X360 0x822D1600  -- ONE race car's LAMP FLARES.
+//
+// For every LIGHT LOCATOR the car carries, this posts one corona (an additive camera-facing
+// flare sprite) through the corona manager's submission interface: the lamp's WORLD position,
+// the direction the lamp FACES (AddCorona back-face-culls on `Dot(pos - camera, dir) < 0`), a
+// scale, an opacity, and the BrnCoronaType archetype that carries the sprite's atlas page,
+// size, bias distance and distance-fade curve.
+//
+// ---- THE ARGUMENTS ---------------------------------------------------------
+// DWARF BrnRaceCarEntityModule.h:788 (definition BrnRaceCarEntityModule.cpp:3828) and the asm
+// prologue agree exactly: (interface, physics-resource-ptr, render params, bool) const.
+// The bool is the console's `(u16)mePlayerActiveRaceCarIndex == liActiveRaceCar`
+// (@0x822E80A8..0x822E80B8) -- "this is the LOCAL PLAYER's car" -- and its ONLY effect is to
+// select the eCoronaTypePlayerCar* archetype bank instead of the eCoronaTypeRaceCar* one.
+// The console fills eight BrnCoronaType stack locals up front, in one of two straight-line
+// arms (@0x822D16A0..0x822D16DC and @0x822D16E0..0x822D1714), with 8..15 or 16..23; the tree's
+// BrnCoronaType enum (BrnCoronaManager.h, DWARF-named) has exactly those two banks in exactly
+// that order, so each store below is one enumerator, not arithmetic on an ordinal.
+//
+// ---- THE FRAME (the one thing worth reading twice) -------------------------
+// A light locator's position lives in the car's HANDLING-BODY space, and mBodyTransform is
+// `mCentreOfMassTransform * physicsTransform` == `spec.mCarModelSpaceToHandlingBodySpaceTransform
+// * physicsTransform` (ActiveRaceCar::CalcBodyTransform @0x822B8828). So the console composes
+//     Inverse(spec+1552) * mBodyTransform  ==  the handling body's WORLD transform
+// and transforms each locator by it. That is what the fused block @0x822D1754..0x822D1814 is:
+// a 3x3 transpose built with vmrglw/vmrghw lane merges, an inverse translation
+// (`vsubfp v11, 0, C3` then the transposed FMA cascade), and the four-row affine product --
+// i.e. exactly rw::math::vpu::InverseOfMatrixWithOrthonormal3x3 followed by Mult, both of
+// which this tree already homes with those same asm shapes described on them.
+// MEASURED against the shipped data (all 130 VEH_*_AT.BIN files whose deformation spec parses):
+// spec+1552's upper 3x3 is the IDENTITY in every single one -- it is a pure translation -- which
+// is why the console can hand AddCorona the raw mBodyTransform.zAxis as the lamp direction
+// without rotating it back through the same inverse.
+//
+// ---- THE PER-LOCATOR SWITCH ------------------------------------------------
+// `switch (type - 1)` over 32 cases (asm @0x822D1874..0x822D1898), i.e. tag types 1..32, with
+// types 20..30 falling to the default (they are the tyrewell / axle / articulation / attach
+// tags -- not lamps). Each live case picks (a) the archetype, (b) whether the lamp faces
+// FORWARD (+mBodyTransform.zAxis) or REARWARD (the console negates the row with
+// `vspltisw v13,-1 ; vslw v13,v13,v13 ; vxor128 v2, v127, v13`, i.e. a sign-bit flip), and
+// (c) an optional state gate. The scale argument is 1.0f on every path in this function; only
+// the opacity varies (0.8 for the spot lamps, a triangle wave for the police strobes).
+//
+// TAG TYPES 31 AND 32 are handled -- 31 alongside the brake lamps, 32 as the standalone
+// eCoronaTypePlayerCarPS3BluRayLights (the only user of archetype 24, staged into its own
+// stack slot at @0x822D1B54..0x822D1B58). The DWARF tag taxonomy
+// (BrnTagPointTypes.h:35, and the tree's own copy in BrnStreamedDeformationSpec.h) names those
+// two E_TAGPOINT_FXGLASSSMASHPOINT1/2, which reads oddly next to brake lamps -- so it was
+// CHECKED against the shipped data rather than argued about: across the same 130 parsed
+// vehicle specs the light-locator tag histogram is types 1..19 ONLY, never 31 or 32, and the
+// generic/camera lists use 26/27/41/42/46/47 exactly as the same enum names them. The enum is
+// therefore right and these two arms are simply dead in the retail fleet; they are reproduced
+// because the console has them, and flagged because a car that did author them would take
+// them.
+//
+// ---- WHAT THIS FUNCTION READS FROM THE MODULE ------------------------------
+// `mfTimeStep` (+0x18398) and `mPlayerVehicleControls.mbHorn` (+0x183DC) -- the two arguments
+// of RenderParams::RequestBluesAndTwosStateSwitch @0x822A1C90, whose PPC signature is the
+// classic float-skips-its-GPR-slot shape: `this` in r3, the timestep in f1 (r4 is never set),
+// the force flag in r5. So the police strobe is switched by the LOCAL PLAYER'S HORN, on every
+// car, which is the console's own wiring and not an inference.
+// ============================================================================
+
+// flt_82014930 -- the spot-lamp opacity, the one non-unit opacity in the function
+// (@0x822D1AA0 `lfs f2, flt_82014930` on the tag-5/6/16/17 path). Hex-Rays renders the literal
+// as 0.80000001, i.e. the f32 0.8f.
+static const f32 KF_CORONA_SPOTLIGHT_OPACITY = 0.8f;
+
+// The blues-and-twos strobe shaping constants, all read straight out of the asm:
+//   flt_82CDB628 = 0.5   (DATA_DUMP.md, .data image word 0x3F000000) -- the HALF-CYCLE split:
+//                        tag 18 (BLUESTWOS1) owns phase <= 0.5, tag 19 (BLUESTWOS2) phase >= 0.5.
+//   flt_820147FC = 0.5   (@0x822D1998 `fmuls f0, f0, f26`) -- tag 18's quarter point is spelled
+//                        `flt_82CDB628 * 0.5`, while tag 19's is the literal 0.25 below. Two
+//                        spellings of the same number in the console; both are kept.
+//   flt_82003F40 = 0.25  -- already homed in this TU as KF_LIGHTS_OUT_DEFORMATION_SQUARED.
+//   flt_82004EF4 = 4.0 and flt_82014984 = 2.0 -- the triangle wave `t*4` / `-(t*4 - 2)`.
+static const f32 KF_BLUES_AND_TWOS_HALF_CYCLE   = 0.5f;
+static const f32 KF_BLUES_AND_TWOS_HALF_OF_HALF = 0.5f;
+static const f32 KF_BLUES_AND_TWOS_RAMP         = 4.0f;
+static const f32 KF_BLUES_AND_TWOS_PEAK         = 2.0f;
+
+// flt_82CDB62C -- the scale applied to mfLightOpacityFlipFlop before it is used as the strobe
+// PHASE (`fmuls f29, f13, f0` @0x822D1838).
+// RECOVERED from the .data image at 0x82CDB62C (word 3F800000 == 1.0f; its neighbour
+// flt_82CDB628 reads 3F000000 == the 0.5 DATA_DUMP.md attests, so the page is not
+// runtime-initialised -- verify_coronaproducer F4). Cross-checks: RequestBluesAndTwosStateSwitch
+// wraps mfLightOpacityFlipFlop at 1.0 (`lfs f13, flt_82001C98 ; fcmpu ; fsubs` @0x822A1CD4),
+// tag 18 covers phase <= 0.5 with a triangle that peaks at phase 0.25, and tag 19 covers phase
+// >= 0.5 with the same triangle on (phase - 0.5) -- the two arms tile [0,1] exactly once at this
+// scale. (A wrong value would not crash: it desynchronises the two strobe halves.)
+static const f32 KF_BLUES_AND_TWOS_PHASE_SCALE = 1.0f;   // X360 flt_82CDB62C @0x82CDB62C, image word 3F800000
+
+void
+RaceCarEntityModule::SubmitCoronasForRaceCar(
+    BrnCoronaManager::BrnSubmissionInterface* lpCoronaSubmissionInterface,
+    const CgsResource::ResourcePtr<BrnPhysics::Deformation::StreamedDeformationSpec>& lrPhysicsResource,
+    ActiveRaceCar::RenderParams* lpRenderParams,
+    bool lbIsPlayerCar ) const
+{
+    CGS_ASSERT( lpCoronaSubmissionInterface != 0, "lpCoronaSubmissionInterface != NULL" );  // :3905
+    CGS_ASSERT( lpRenderParams != 0, "lpRenderParams != NULL" );                            // :3906
+
+    // [FLAG] NOT in the console -- its asserts are non-gating tripwires and it walks on. On PC
+    // a null interface or null params would be a null-deref two lines down, and the call site
+    // already refuses to call with a null interface, so this is the belt to that brace.
+    if ( lpCoronaSubmissionInterface == 0 || lpRenderParams == 0 )
+    {
+        return;
+    }
+
+    // The four light-state bytes, in the console's own load order
+    // (@0x822D1684/0x822D1688/0x822D1690/0x822D1698).
+    const bool lbIsBraking         = lpRenderParams->IsBraking();          // +5127
+    const bool lbIsReversing       = lpRenderParams->IsReversing();        // +5128
+    const bool lbIsIndicatingRight = lpRenderParams->IsIndicatingRight();  // +5130
+    const bool lbIsIndicatingLeft  = lpRenderParams->IsIndicatingLeft();   // +5129
+
+    // THE ARCHETYPE BANK. Eight locals, filled before the loop, exactly as the console's two
+    // straight-line arms do -- the player's own car gets its own eight archetypes.
+    const BrnCoronaType leHeadLight  = lbIsPlayerCar ? eCoronaTypePlayerCarHeadLight
+                                                     : eCoronaTypeRaceCarHeadLight;        // var_130
+    const BrnCoronaType leRearLight  = lbIsPlayerCar ? eCoronaTypePlayerCarRearLight
+                                                     : eCoronaTypeRaceCarRearLight;        // var_12C
+    const BrnCoronaType leBrakeLight = lbIsPlayerCar ? eCoronaTypePlayerCarBrakeLight
+                                                     : eCoronaTypeRaceCarBrakeLight;       // var_134
+    const BrnCoronaType leIndicator  = lbIsPlayerCar ? eCoronaTypePlayerCarIndicator
+                                                     : eCoronaTypeRaceCarIndicator;        // var_140
+    const BrnCoronaType leReversing  = lbIsPlayerCar ? eCoronaTypePlayerCarReversingLight
+                                                     : eCoronaTypeRaceCarReversingLight;   // var_128
+    const BrnCoronaType leBluesRed   = lbIsPlayerCar ? eCoronaTypePlayerCarBluesTwosRed
+                                                     : eCoronaTypeRaceCarBluesTwosRed;     // var_13C
+    const BrnCoronaType leBluesBlue  = lbIsPlayerCar ? eCoronaTypePlayerCarBluesTwosBlue
+                                                     : eCoronaTypeRaceCarBluesTwosBlue;    // var_138
+    const BrnCoronaType leSpotlight  = lbIsPlayerCar ? eCoronaTypePlayerCarSpotlights
+                                                     : eCoronaTypeRaceCarSpotlights;       // var_124
+    // var_120 -- staged inside the tag-32 arm itself (@0x822D1B58 `stw r23` with r23 == 0x18),
+    // and it is the SAME archetype whether or not this is the player's car.
+    const BrnCoronaType leBluRayLight = eCoronaTypePlayerCarPS3BluRayLights;
+
+    // The locator -> world matrix (see the banner). The console's resource-pointer deref
+    // (@0x822D1720) carries its own "Can not instance resource pointer" assert; the tree's
+    // ResourcePtr::operator-> is that accessor.
+    const BrnPhysics::Deformation::StreamedDeformationSpec* lpSpec = lrPhysicsResource.operator->();
+    if ( lpSpec == 0 )
+    {
+        return;   // [FLAG] the console asserts instead; a PC car can legitimately be mid-stream
+    }
+
+    const Matrix44Affine& lrBodyTransform = lpRenderParams->GetBodyTransform();
+    const Matrix44Affine  lLocatorToWorld =
+        rw::math::vpu::Mult(
+            rw::math::vpu::InverseOfMatrixWithOrthonormal3x3( lpSpec->mCarModelSpaceToHandlingBodySpaceTransform ),
+            lrBodyTransform );
+
+    // The two lamp directions. v127 is mBodyTransform.zAxis loaded once @0x822D175C and reused
+    // for every locator; the rearward one is the same row with its sign bits flipped.
+    const Vector3 lForward  = lrBodyTransform.zAxis;
+    const Vector3 lRearward = rw::math::vpu::Negate( lrBodyTransform.zAxis );
+
+    // The police strobe. RequestBluesAndTwosStateSwitch advances the timers and reports whether
+    // the strobe is lit; the phase is read back AFTER it (@0x822D1824), i.e. post-advance.
+    const bool lbBluesAndTwosOn =
+        lpRenderParams->RequestBluesAndTwosStateSwitch( mfTimeStep, mPlayerVehicleControls.mbHorn );
+    const f32 lfStrobePhase =
+        lpRenderParams->GetLightOpacityFlipFlop() * KF_BLUES_AND_TWOS_PHASE_SCALE;
+
+    u32 luSubmitted = 0;   // [DIAG] one-shot boot proof only -- see the tail
+
+    const u32 luNumLocators = lpRenderParams->GetNumLightLocators();
+    for ( u32 luLocator = 0; luLocator < luNumLocators; ++luLocator )
+    {
+        const BrnPhysics::Deformation::ETagPointType leTagType =
+            lpRenderParams->GetLightLocatorType( luLocator );
+
+        BrnCoronaType leCoronaType = leHeadLight;
+        bool          lbSubmit     = false;
+        bool          lbForward    = true;
+        f32           lfOpacity    = 1.0f;
+
+        switch ( leTagType )
+        {
+        // ---- always-on running lamps ---------------------------------------
+        case BrnPhysics::Deformation::E_TAGPOINT_LIGHTS_FRONTRUNNINGLEFT:    // 1
+        case BrnPhysics::Deformation::E_TAGPOINT_LIGHTS_FRONTRUNNINGRIGHT:   // 2
+            leCoronaType = leHeadLight;  lbForward = true;  lbSubmit = true;
+            break;
+
+        case BrnPhysics::Deformation::E_TAGPOINT_LIGHTS_REARRUNNINGLEFT:     // 3
+        case BrnPhysics::Deformation::E_TAGPOINT_LIGHTS_REARRUNNINGRIGHT:    // 4
+            leCoronaType = leRearLight;  lbForward = false; lbSubmit = true;
+            break;
+
+        // ---- spot lamps: the only non-unit opacity in the function --------
+        case BrnPhysics::Deformation::E_TAGPOINT_LIGHTS_FRONTSPOTLEFT:       // 5
+        case BrnPhysics::Deformation::E_TAGPOINT_LIGHTS_FRONTSPOTRIGHT:      // 6
+        case BrnPhysics::Deformation::E_TAGPOINT_LIGHTS_SPOTLIGHT1:          // 16
+        case BrnPhysics::Deformation::E_TAGPOINT_LIGHTS_SPOTLIGHT2:          // 17
+            leCoronaType = leSpotlight;  lbForward = true;  lbSubmit = true;
+            lfOpacity    = KF_CORONA_SPOTLIGHT_OPACITY;
+            break;
+
+        // ---- indicators: front pair faces forward, rear pair rearward -----
+        case BrnPhysics::Deformation::E_TAGPOINT_LIGHTS_INDICATORFRONTLEFT:  // 7
+            if ( lbIsIndicatingLeft )  { leCoronaType = leIndicator; lbForward = true;  lbSubmit = true; }
+            break;
+        case BrnPhysics::Deformation::E_TAGPOINT_LIGHTS_INDICATORFRONTRIGHT: // 8
+            if ( lbIsIndicatingRight ) { leCoronaType = leIndicator; lbForward = true;  lbSubmit = true; }
+            break;
+        case BrnPhysics::Deformation::E_TAGPOINT_LIGHTS_INDICATORREARLEFT:   // 9
+            if ( lbIsIndicatingLeft )  { leCoronaType = leIndicator; lbForward = false; lbSubmit = true; }
+            break;
+        case BrnPhysics::Deformation::E_TAGPOINT_LIGHTS_INDICATORREARRIGHT:  // 10
+            if ( lbIsIndicatingRight ) { leCoronaType = leIndicator; lbForward = false; lbSubmit = true; }
+            break;
+
+        // ---- brake lamps ---------------------------------------------------
+        case BrnPhysics::Deformation::E_TAGPOINT_LIGHTS_BRAKELEFT:           // 11
+        case BrnPhysics::Deformation::E_TAGPOINT_LIGHTS_BRAKERIGHT:          // 12
+        case BrnPhysics::Deformation::E_TAGPOINT_LIGHTS_BRAKECENTRE:         // 13
+        case BrnPhysics::Deformation::E_TAGPOINT_FXGLASSSMASHPOINT1:         // 31 -- see the banner
+            if ( lbIsBraking ) { leCoronaType = leBrakeLight; lbForward = false; lbSubmit = true; }
+            break;
+
+        // ---- reversing lamps -----------------------------------------------
+        case BrnPhysics::Deformation::E_TAGPOINT_LIGHTS_REVERSELEFT:         // 14
+        case BrnPhysics::Deformation::E_TAGPOINT_LIGHTS_REVERSERIGHT:        // 15
+            if ( lbIsReversing ) { leCoronaType = leReversing; lbForward = false; lbSubmit = true; }
+            break;
+
+        // ---- the police strobe: TWO coronas per locator, one each way ------
+        // The console emits the rearward one inline (@0x822D19E8 / @0x822D1A78) and then falls
+        // into the shared tail with the direction swapped back to +z, so a light bar is visible
+        // from in front of the car as well as behind it. Both calls take the same position and
+        // the same triangle-wave opacity.
+        case BrnPhysics::Deformation::E_TAGPOINT_LIGHTS_BLUESTWOS1:          // 18
+            if ( lbBluesAndTwosOn && lfStrobePhase <= KF_BLUES_AND_TWOS_HALF_CYCLE )
+            {
+                const f32 lfQuarter = KF_BLUES_AND_TWOS_HALF_CYCLE * KF_BLUES_AND_TWOS_HALF_OF_HALF;
+                lfOpacity = ( lfStrobePhase > lfQuarter )
+                          ? -( lfStrobePhase * KF_BLUES_AND_TWOS_RAMP - KF_BLUES_AND_TWOS_PEAK )
+                          :  ( lfStrobePhase * KF_BLUES_AND_TWOS_RAMP );
+
+                lpCoronaSubmissionInterface->AddCorona( rw::math::vpu::TransformPoint(
+                                                            lLocatorToWorld,
+                                                            lpRenderParams->GetLightLocatorPos( luLocator ) ),
+                                                        lRearward, 1.0f, lfOpacity, leBluesRed );
+                ++luSubmitted;
+
+                leCoronaType = leBluesRed;  lbForward = true;  lbSubmit = true;
+            }
+            break;
+
+        case BrnPhysics::Deformation::E_TAGPOINT_LIGHTS_BLUESTWOS2:          // 19
+            if ( lbBluesAndTwosOn && lfStrobePhase >= KF_BLUES_AND_TWOS_HALF_CYCLE )
+            {
+                // The console spells this quarter point as the LITERAL 0.25 (flt_82003F40, the
+                // same rodata float as the lights-out threshold) while tag 18 spells its own as
+                // `flt_82CDB628 * 0.5`. Both spellings are kept as written.
+                const f32 lfPhaseInHalf = lfStrobePhase - KF_BLUES_AND_TWOS_HALF_CYCLE;
+                lfOpacity = ( lfPhaseInHalf > KF_LIGHTS_OUT_DEFORMATION_SQUARED )
+                          ? -( lfPhaseInHalf * KF_BLUES_AND_TWOS_RAMP - KF_BLUES_AND_TWOS_PEAK )
+                          :  ( lfPhaseInHalf * KF_BLUES_AND_TWOS_RAMP );
+
+                lpCoronaSubmissionInterface->AddCorona( rw::math::vpu::TransformPoint(
+                                                            lLocatorToWorld,
+                                                            lpRenderParams->GetLightLocatorPos( luLocator ) ),
+                                                        lRearward, 1.0f, lfOpacity, leBluesBlue );
+                ++luSubmitted;
+
+                leCoronaType = leBluesBlue; lbForward = true;  lbSubmit = true;
+            }
+            break;
+
+        // ---- the standalone archetype-24 lamp ------------------------------
+        case BrnPhysics::Deformation::E_TAGPOINT_FXGLASSSMASHPOINT2:         // 32 -- see the banner
+            leCoronaType = leBluRayLight; lbForward = false; lbSubmit = true;
+            break;
+
+        default:
+            // Tag types 20..30 (tyrewells / axle / articulation / attach) and everything past
+            // 32: the console's jump-table default, which just advances to the next locator.
+            break;
+        }
+
+        if ( lbSubmit )
+        {
+            lpCoronaSubmissionInterface->AddCorona(
+                rw::math::vpu::TransformPoint( lLocatorToWorld,
+                                               lpRenderParams->GetLightLocatorPos( luLocator ) ),
+                lbForward ? lForward : lRearward,
+                1.0f,               // the scale argument is 1.0f on every path of this function
+                lfOpacity,
+                leCoronaType );
+            ++luSubmitted;
+        }
+    }
+
+    // [DIAG coronas step 1] one shot per boot -- the wave's own acceptance line. A car with a
+    // dark, working subsystem and a car with no light locators at all look identical on screen,
+    // so the count and the locator inventory are printed once rather than inferred.
+    static bool sbLoggedFirstCoronaSubmit = false;
+    if ( !sbLoggedFirstCoronaSubmit && CgsDev::Log::gpDebugPrint != 0 )
+    {
+        sbLoggedFirstCoronaSubmit = true;
+        *CgsDev::Log::gpDebugPrint
+            << "[corona] first submit: " << luSubmitted << " coronas from "
+            << luNumLocators << " light locators (types";
+        for ( u32 luLocator = 0; luLocator < luNumLocators; ++luLocator )
+        {
+            *CgsDev::Log::gpDebugPrint
+                << " " << static_cast<s32>( lpRenderParams->GetLightLocatorType( luLocator ) );
+        }
+        *CgsDev::Log::gpDebugPrint
+            << ") playerCar " << ( lbIsPlayerCar ? 1 : 0 )
+            << " braking " << ( lbIsBraking ? 1 : 0 )
+            << " reversing " << ( lbIsReversing ? 1 : 0 )
+            << " bluesAndTwos " << ( lbBluesAndTwosOn ? 1 : 0 )
+            << " phase " << lfStrobePhase << "\n";
+    }
+}
+
+
+// ============================================================================
 // GenerateDispatchLists  @ 0x822E79F8  (the `else` arm -- see the banner)
 //
 //   for (i = 0; i < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++i)
@@ -1170,6 +1502,77 @@ RaceCarEntityModule::GenerateDispatchLists(
                     << lpDispatchFrame->GetList( liObjectList )->GetCount()
                     << " (mesh bins " << liOpaqueMeshList << "/"
                     << liTransparentMeshList << ")\n";
+            }
+
+            // ---- THE LAMP FLARES (coronas step 1) -------------------------
+            // Console position: the LAST thing the per-car body does. In the scene-manager
+            // arm that is RenderRaceCar @0x822E7E4C ... AddShadow @0x822E8040 ... five gates
+            // ... SubmitCoronasForRaceCar @0x822E80BC ... `b` to the loop tail @0x822E83A0;
+            // here it is the same relative position inside the arm that is live on PC.
+            //
+            // THE FIVE CONSOLE GATES, in the console's own order and spelling:
+            //   @0x822E804C  lbzx r11, r22, 0x1834F   mbRenderRaceCarCoronas
+            //   @0x822E805C  lfs  f13, 0xD9C(r29)     mRenderParams.mfDeformationSquared < 0.25
+            //   @0x822E806C  lbz  r11, 0x44A(r28)     !GetPhysicsState()->mbCrashing
+            //   @0x822E8078  lbz  r11, 0x3646(r23)    !mRenderParams.mbIsEngineOff  (car +0x1BE6)
+            //   @0x822E8084  lbz  r11, 0x364B(r23)    !mRenderParams.mbIsRaceCarHidden (+0x1BEB)
+            // (the two ActiveRaceCar-relative offsets resolve through mRenderParams @+0x7E0:
+            //  0x3646 - 0x1A60 - 0x7E0 == 0x1406 and 0x364B - 0x1A60 - 0x7E0 == 0x140B).
+            if ( mbRenderRaceCarCoronas
+                 && lrActiveRaceCar.GetRenderParams()->GetDeformationSquared()
+                        < KF_LIGHTS_OUT_DEFORMATION_SQUARED
+                 && !lrActiveRaceCar.GetPhysicsState()->mbCrashing
+                 && !lrActiveRaceCar.GetRenderParams()->IsEngineOff()
+                 && !lrActiveRaceCar.GetRenderParams()->IsRaceCarHidden() )
+            {
+                // [FLAG PC bring-up gate] NOT in the console. The console asserts the
+                // interface non-null inside the callee and walks on. On this build the slot
+                // is seeded EVERY FRAME by BrnWorldModule::GenerateDispatchListsBringUp
+                // (SetCoronaSubmissionInterface beside SetShadowMap, from the pointer
+                // BrnGameModule::DoDispatch stages out of BrnRendererModule::
+                // GetCoronaSubmissionInterfaceBringUp -- the console's RendererIO ->
+                // GameBridgeRendererToX -> BrnWorldIO copy chain does not exist here, and
+                // GameBridgeRendererToX.cpp is not on tools/build/build_game_exe.bat). That
+                // pointer is never null, but BrnCoronaManager::Construct runs LAZILY inside
+                // BrnRendererModule::Render, so a non-null interface does NOT imply a real
+                // corona buffer -- and AddCorona's tail writes straight through
+                // CoronaBuffer::Iterator::mpData. IsReady() is the manager's own answer to
+                // "is my buffer real"; see CROSS-GROUP S3-A. DELETE the IsReady() term (not
+                // the null check -- that one is this build's) when the corona manager is
+                // constructed unconditionally.
+                BrnCoronaManager::BrnSubmissionInterface* lpCoronaSubmissionInterface =
+                    lpInput->GetCoronaSubmissionInterface();
+
+                if ( lpCoronaSubmissionInterface != 0 && lpCoronaSubmissionInterface->IsReady() )
+                {
+                    // [FLAG PC bring-up] the BringUp resource getter, for the same reason the
+                    // graphics pair above uses it: the console's GetPhysicsResource asserts
+                    // IsRaceCarLoaded() (all five resource bits) and would fire a dev assert
+                    // every frame on this build. RESTORE the console accessor with the pair
+                    // above.
+                    SubmitCoronasForRaceCar(
+                        lpCoronaSubmissionInterface,
+                        mRaceCarStreamer.GetPhysicsResourceBringUp( liCar ),
+                        lrActiveRaceCar.GetRenderParams(),
+                        mePlayerActiveRaceCarIndex == static_cast<EActiveRaceCarIndex>( liCar ) );
+                }
+                else
+                {
+                    static bool sbLoggedNoCoronaInterface = false;
+                    if ( !sbLoggedNoCoronaInterface && CgsDev::Log::gpDebugPrint != 0 )
+                    {
+                        sbLoggedNoCoronaInterface = true;
+                        *CgsDev::Log::gpDebugPrint
+                            << "[corona] race-car coronas SKIPPED: submission interface "
+                            << ( lpCoronaSubmissionInterface != 0 ? "present but NOT READY "
+                                                                    "(BrnCoronaManager::Construct "
+                                                                    "has not run / the corona "
+                                                                    "buffer is null)"
+                                                                  : "is NULL (nothing called "
+                                                                    "SetCoronaSubmissionInterface)" )
+                            << " -- no lamp flares this run [FLAG PC boot gate]\n";
+                    }
+                }
             }
         }
     }

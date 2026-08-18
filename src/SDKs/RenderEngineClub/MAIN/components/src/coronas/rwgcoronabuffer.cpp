@@ -4,18 +4,21 @@
 //   renderengine::CoronaBuffer::GetResourceDescriptor @ 0x8228D6C0
 //   renderengine::CoronaBuffer::Initialize            @ 0x822850D8
 //
-// REWRITTEN 2026-08-17 (carlights step 1, group `coronas`). Three corrections, all from the ASM
-// (which overrides the Hex-Rays pseudocode -- AGENTS.md "Verify calling conventions against the
-// ASSEMBLY"):
+// (2026-08-17, coronas step 1: the two bodies are unchanged; only the descriptor type moved with the
+// class into GameSource/Graphics/BrnCoronaManager.h -- see this file's header shim. It is now spelled
+// CoronaBuffer::ResourceDescriptor5, a NESTED type, because the flat `renderengine::
+// ResourceDescriptor5` it used to be was a third spelling of rw::BaseResourceDescriptors<5>.)
+//
+// The three corrections carried in from carlights step 1, all from the ASM (which overrides the
+// Hex-Rays pseudocode -- AGENTS.md "Verify calling conventions against the ASSEMBLY"):
 //
 // 1. THE DECLARATIONS DID NOT MATCH THE HEADER. This file used to declare its own local
 //    `class CoronaBuffer` with NON-STATIC `void* GetResourceDescriptor(void*, const u32*)` and
-//    `void* Initialize(void**, const u32*)`, while the committed header
-//    (coronas/rwgcoronabuffer.h:83-84) declares them STATIC with typed parameters. Different
-//    mangled names -> mounting this file would have left BrnCoronaManager::Construct's two calls
-//    unresolved (LNK2019 x2). Measured at HEAD with dumpbin /SYMBOLS:
-//      ?GetResourceDescriptor@CoronaBuffer@renderengine@@QEAAPEAXPEAXPEBI@Z   (defined here, Q = non-static)
-//      ?Initialize@CoronaBuffer@renderengine@@QEAAPEAXPEAPEAXPEBI@Z           (defined here)
+//    `void* Initialize(void**, const u32*)`, while the committed header declared them STATIC with
+//    typed parameters -- different mangled names, i.e. LNK2019 x2 the moment
+//    BrnCoronaManager::Construct linked. Measured at the time with dumpbin /SYMBOLS:
+//      ?GetResourceDescriptor@CoronaBuffer@renderengine@@QEAAPEAXPEAXPEBI@Z   (Q = non-static)
+//      ?Initialize@CoronaBuffer@renderengine@@QEAAPEAXPEAPEAXPEBI@Z
 //    It now includes the header and defines exactly what the header declares.
 //
 // 2. GetResourceDescriptor SIZES ONLY SLOT 0. The pseudocode reads
@@ -31,16 +34,15 @@
 //    and the old form asked the allocator for FIVE blocks of 32784 bytes instead of one.
 //
 // 3. THE SECOND Initialize ARGUMENT IS THE PARAMETERS, NOT A DESCRIPTOR. Its caller
-//    BrnCoronaManager::Construct @0x823FCE38/0x823FCE44 passes the same `v33` block it handed
-//    GetResourceDescriptor, whose first word is the corona count (512) -- so `*result = *a2` is
-//    `muNumCoronas = params.miNumCoronas`, not a descriptor copy. The parameter was named
-//    `pDescriptor`.
+//    BrnCoronaManager::Construct @0x823FCEB8/0x823FCEC8 passes the same params block it handed
+//    GetResourceDescriptor, whose first word is the corona count (512, `li r11, 0x200` @0x823FCE1C)
+//    -- so `*result = *a2` is `muNumCoronas = params.miNumCoronas`, not a descriptor copy.
 
 namespace renderengine
 {
     // X360 0x8228D6C0. The buffer is one block: a header followed by `count` 64-byte records.
-    ResourceDescriptor5* CoronaBuffer::GetResourceDescriptor(ResourceDescriptor5* pDescriptor,
-                                                             Parameters* pParameters)
+    CoronaBuffer::ResourceDescriptor5* CoronaBuffer::GetResourceDescriptor(
+        ResourceDescriptor5* pDescriptor, Parameters* pParameters)
     {
         // `slwi r9,r9,6 ; addi r9,r9,0x10` -- 64 bytes per Corona plus the 16-byte header lane.
         const u32 luBlockSize = (static_cast<u32>(pParameters->miNumCoronas) << 6) + 16u;
@@ -61,6 +63,9 @@ namespace renderengine
     CoronaBuffer* CoronaBuffer::Initialize(CoronaBuffer** ppBuffer, Parameters* pParameters)
     {
         CoronaBuffer* lpBuffer = *ppBuffer;
+        if (lpBuffer == 0)
+            return 0;   // [PC guard] a starved allocator lane -- console-impossible (its heap is
+                        // carved up front), a live failure mode of the PC LinearResourceAllocator
 
         lpBuffer->muNumCoronas = static_cast<u32>(pParameters->miNumCoronas);
 

@@ -70,6 +70,14 @@
 #include "GameShared/GameClasses/System/Timer/CgsFrameInterpolation.h" // ⚠️ FLAG PC QoL: PoseTrack (the render-pose interpolator, by value)
 
 namespace BrnPhysics { namespace Vehicle { struct VehicleInputInterface; } }
+// RenderParams' LIGHT-LOCATOR block (the corona producer's input) speaks two deformation
+// types. The tag-point taxonomy is spelled as an opaque enum WITH ITS FIXED UNDERLYING TYPE
+// -- which makes it a complete type here -- and VehicleLocatorData is used by pointer only,
+// so this header names both without pulling in BrnStreamedDeformationSpec.h and its cascade
+// (AGENTS.md forward-declaration exception (b)). The real definitions live in
+// GameSource/Physics/DeformationManager/DeformationPhysics/BrnStreamedDeformationSpec.h and
+// .../SharedIO/BrnVehicleLocatorData.h, which the .cpp that bodies SetLightLocators includes.
+namespace BrnPhysics { namespace Deformation { enum ETagPointType : s32; struct VehicleLocatorData; } }
 namespace CgsWorld { struct WorldMap2D; }   // UpdatePhysicsState forwards it to RaceCar::UpdatePositioningData
 // Detach / RemoveFromScene / RemoveFromCollision take it by pointer only (the .cpp includes
 // the owning header). DWARF spells it OutputBuffer_PreScene::SceneInputInterface, which is a
@@ -364,6 +372,35 @@ public:
         f32  GetWheelAngularVelocity(u32 luWheel) const { return mafWheelAngularVelocities[luWheel]; }
         void SetWheelAngularVelocity(u32 luWheel, f32 lfValue) { mafWheelAngularVelocities[luWheel] = lfValue; }
 
+        // --- light locators (up to 24 lamp anchors) --------------------------
+        // The car's LAMP ANCHORS: per-lamp position in the car's HANDLING-BODY frame plus the
+        // BrnPhysics::Deformation tag-point type that says which lamp it is. Published once
+        // per frame by the deformation readback (SetLightLocators below) and consumed by
+        // RaceCarEntityModule::SubmitCoronasForRaceCar @0x822D1600, the lamp-FLARE producer.
+        //
+        // All four names + shapes are the DWARF's (BrnActiveRaceCar.h:263/:266/:269/:272);
+        // the three getters are additionally marked `const`, which the DWARF does not
+        // (contrast :410 GetWheelExists(uint32_t) const, where the dump DOES emit it) -- a
+        // deliberate, flagged deviation (SubmitCoronasForRaceCar takes a non-const
+        // RenderParams*, so either spelling links).
+        // None carries a standalone X360 address because the console INLINED every one of
+        // them -- the three getters into SubmitCoronasForRaceCar (`lvx128 v0, r0, r31` off
+        // this+0xBA0+16*i, `lwz r11, 0(r25)` off this+0xD20+4*i, `lwz r10, 0xD88(r27)`), and
+        // the setter into ReadUpdatedActiveRaceCarDataFromPhysics's locator-output leg
+        // @0x822E9044..0x822E90A8. Same "the console emits bare offsets, so these exist only
+        // so a body can spell the member BY NAME" case as GetWheelAngularVelocity above.
+        // NOTE the console's own signedness: the corona loop compares the count UNSIGNED
+        // (`cmplwi`/`cmplw` @0x822D1830/0x822D1BAC), which is what the u32 return spells.
+        u32     GetNumLightLocators() const { return static_cast<u32>(miNumLightLocators); }
+        Vector3 GetLightLocatorPos(u32 luIndex) const { return maLightLocatorPos[luIndex]; }
+        BrnPhysics::Deformation::ETagPointType GetLightLocatorType(u32 luIndex) const
+        {
+            return maLightLocatorType[luIndex];
+        }
+        // The locator-output copy (leg L5 of ReadUpdatedActiveRaceCarDataFromPhysics
+        // @0x822E87B8); bodied in BrnActiveRaceCarRenderParams.cpp with the asm cites.
+        void SetLightLocators(const BrnPhysics::Deformation::VehicleLocatorData* lpLocatorData);
+
         // --- part visibility (96 body parts) --------------------------------
         // X360 0x822B8B60: the inlined BitArray<96>::IsBitSet (field = part/64).
         bool IsPartVisible(u8 lu8Part) const;
@@ -387,6 +424,19 @@ public:
         void SetEngineOff(bool lbOn) { mbIsEngineOff = lbOn; }
         bool IsReversing() const     { return mbIsReversing; }
         void SetReversing(bool lbOn) { mbIsReversing = lbOn; }
+        // ADDITIVE (coronas step 1): the two INDICATOR bits. SubmitCoronasForRaceCar
+        // @0x822D1600 reads them as bare bytes (`lbz r20, 0x1409(r27)` == +5129 == LEFT,
+        // `lbz r21, 0x140A(r27)` == +5130 == RIGHT) to gate the four indicator tag types --
+        // 7/9 on LEFT, 8/10 on RIGHT, which is what pins which byte is which side. Getters
+        // only: no writer of either byte exists anywhere in the reconstructed tree yet (the
+        // console's producer is the AI/driver indicator logic, not reconstructed).
+        bool IsIndicatingLeft() const  { return mbIsIndicatingLeft; }
+        bool IsIndicatingRight() const { return mbIsIndicatingRight; }
+        // ADDITIVE (coronas step 1): the blues-and-twos STROBE PHASE.
+        // RequestBluesAndTwosStateSwitch below advances and wraps it in [0,1);
+        // SubmitCoronasForRaceCar reads it back (`lfs f13, 0x140C(r27)`) immediately after
+        // that call to shape the two police-strobe triangle waves.
+        f32  GetLightOpacityFlipFlop() const { return mfLightOpacityFlipFlop; }
         bool IsRaceCarHidden() const { return mbIsHidden; }
         void SetRaceCarHidden(bool lbOn) { mbIsHidden = lbOn; }
         u8   GetRenderDamageFlag() const { return mu8RenderDamageFlags; }
@@ -444,7 +494,11 @@ public:
         Vector4        mPaintColour;                     // +0xB80 (2944)  Reset() = (1,1,1,1)
         Vector4        mPearlescentColour;               // +0xB90 (2960)  Reset() = (1,1,1,1)
         Vector3        maLightLocatorPos[24];            // +0xBA0 (2976)
-        s32            maLightLocatorType[24];           // +0xD20 (3360)  BrnPhysics::Deformation::ETagPointType
+        BrnPhysics::Deformation::ETagPointType
+                       maLightLocatorType[24];           // +0xD20 (3360)  DWARF :33 spells the
+                                                        //   member ETagPointType[24]; it is
+                                                        //   s32-backed, so the pinned offsets
+                                                        //   below are unchanged.
         bool           mabWheelExists[6];                // +0xD80 (3456)  Reset() zeroes
         s32            miNumLightLocators;               // +0xD88 (3464)
         f32            mafWheelAngularVelocities[4];     // +0xD8C (3468)

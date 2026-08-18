@@ -38,6 +38,7 @@
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnRaceCarStreamer.h" // BrnWorld::RaceCarStreamer (by value)
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnRaceCar.h"         // BrnWorld::RaceCar (by value)
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnActiveRaceCar.h"   // BrnWorld::ActiveRaceCar (by value)
+#include "GameSource/Graphics/BrnCoronaManager.h"   // BrnCoronaManager::BrnSubmissionInterface (SubmitCoronasForRaceCar's 1st arg)
 #include "GameSource/World/BrnPlaceOnTrackManager.h"                              // BrnWorld::PlaceOnTrackManager (by value, +0x17850)
 #include "GameShared/GameClasses/World/CgsWorldMap2D.h"                           // CgsWorld::WorldMap2D (by value, +0x18300)
 #include "GameSource/World/EntityModules/RaceCarEntityModule/Boost/BrnBoostManager.h"                 // BrnWorld::BoostManager (by value, +0x17890)
@@ -208,6 +209,25 @@ public:
                             f32  lfCameraDistance,
                             Vector4 lvFogScattering,
                             Vector4 lvFogColourPlusWhiteLevel );
+
+        // ---- X360 0x822D1600 -- ONE race car's LAMP FLARES (coronas) ----
+        // Signature + `const` are the DWARF's (BrnRaceCarEntityModule.h:788, definition
+        // BrnRaceCarEntityModule.cpp:3828) and they match the asm prologue one for one:
+        //   r3 = this, r4 = the corona submission interface (asserted non-null, :3905),
+        //   r5 = the car's STREAMED DEFORMATION SPEC resource pointer (dereferenced through
+        //        the resource-pointer accessor at 0x822D1720 for its
+        //        mCarModelSpaceToHandlingBodySpaceTransform at spec+1552),
+        //   r6 = the car's RenderParams (asserted non-null, :3906),
+        //   r7 = a BYTE (`clrlwi r11, r28, 24`): "this is the LOCAL PLAYER's car", which
+        //        selects the eCoronaTypePlayerCar* archetype bank over the eCoronaTypeRaceCar*
+        //        one. Its call site computes it as
+        //        `(u16)mePlayerActiveRaceCarIndex == liActiveRaceCar` (@0x822E80A8..0x822E80B8).
+        // Bodied in BrnRaceCarEntityModule_Render.cpp beside its only caller.
+        void SubmitCoronasForRaceCar(
+                BrnCoronaManager::BrnSubmissionInterface* lpCoronaSubmissionInterface,
+                const CgsResource::ResourcePtr<BrnPhysics::Deformation::StreamedDeformationSpec>& lrPhysicsResource,
+                ActiveRaceCar::RenderParams* lpRenderParams,
+                bool lbIsPlayerCar ) const;
 
         // ---- X360 0x82303E78 (attested by WorldModule::Prepare @0x827D53B0 stage 6) ----
         // NOTE the argument list: the console signature is
@@ -640,6 +660,31 @@ private:
     // DELETE-WHEN the body-pose stand-in is deleted (they retire together).
     void PublishWheelPoseWithoutPhysicsBringUp( ActiveRaceCar* lpActiveRaceCar,
                                                 s32 liActiveRaceCar );
+
+    // [FLAG PC bring-up] NOT an X360 function. The REST-POSE LIGHT LOCATORS.
+    // SubmitCoronasForRaceCar's whole input is mRenderParams' light-locator block, whose
+    // console producer is a three-hop chain that is DEAD end-to-end on this build:
+    //   (1) DeformableObject::PrepareLocators @0x825BA010 copies the streamed spec's light
+    //       tag list into the live VehicleLocatorData -- committed with its source list
+    //       pinned to an EMPTY list (BrnDeformableObject_Lifecycle.cpp, "spec accessors not
+    //       exposed"), so miNumLightLocators is 0;
+    //   (2) DeformationManager::OutputData @0x826225D8 publishes those tables into the
+    //       entity-module output interface -- its committed body emits no locator write at
+    //       all and the TU is not even mounted (BrnGame.log: "conductor gate:
+    //       DeformationManager::OutputData ... inert");
+    //   (3) leg L5 of ReadUpdatedActiveRaceCarDataFromPhysics copies them into RenderParams
+    //       -- PARKED (BrnGame.log: "[physics-readback] PARKED deformation legs ...
+    //       locator-output copy ...").
+    // So with no stand-in the count is 0, the producer's loop runs zero times, and the whole
+    // subsystem draws nothing while looking perfectly healthy. This publishes what
+    // DeformableObject::UpdateLocator @0x825E0EC8 yields for an UNDAMAGED car -- the streamed
+    // spec's own authored locator frames, whose skin-point displacement term is zero at rest
+    // -- through the REAL consumer (RenderParams::SetLightLocators). It invents no position:
+    // every value comes from the car's shipped StreamedDeformationSpec::mLightTags.
+    // DELETE-WHEN leg (3) unparks -- at which point this must go, or it will overwrite the
+    // deformed positions with the rest pose every frame.
+    void PublishRestPoseLightLocatorsBringUp( ActiveRaceCar* lpActiveRaceCar,
+                                              s32 liActiveRaceCar );
 
     // ========================================================================
     // MODELLED members (pose wave 2026-07-31): the three module flags
