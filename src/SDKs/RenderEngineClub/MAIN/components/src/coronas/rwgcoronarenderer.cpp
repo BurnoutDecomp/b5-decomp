@@ -195,6 +195,19 @@ namespace
     // ---------------------------------------------------------------------------------------------
     const u32 KU_MAX_CORONAS_PER_BATCH = 512u;
 
+    // ---------------------------------------------------------------------------------------------
+    // [DIAG corona-calib -- coronas step 2] THE CALIBRATION CAPTURE.
+    //
+    // Begin() is handed the two values the calibration turns on (the frame white level, in
+    // RenderParameters::mvCameraPositionPlusWhiteLevel.w, and viewXyScale) and Dispatch() is where
+    // the batch count is known, so Begin parks them here for Dispatch's one-shot line. Not console
+    // state: the console has no such capture.
+    // DELETE-WHEN the corona calibration is signed off.
+    // ---------------------------------------------------------------------------------------------
+    f32 gfCalibWhiteLevel   = 0.0f;
+    f32 gfCalibViewXyScaleX = 0.0f;
+    f32 gfCalibViewXyScaleY = 0.0f;
+
     void CoronaLog(const char* lpcMessage)
     {
         CgsDev::Log::WriteToLog(lpcMessage);
@@ -456,6 +469,11 @@ namespace renderengine
             if (lpRow != 0)
                 std::memcpy(lpRow, &lrParameters.mvViewXyScale, 16);                   // +0x60, 16 B
         }
+
+        // [DIAG corona-calib] park the two published values for Dispatch's one-shot line.
+        gfCalibWhiteLevel   = lrParameters.mvCameraPositionPlusWhiteLevel.w;
+        gfCalibViewXyScaleX = lrParameters.mvViewXyScale.x;
+        gfCalibViewXyScaleY = lrParameters.mvViewXyScale.y;
     }
 
     // =============================================================================================
@@ -515,6 +533,71 @@ namespace renderengine
 
         shadow::Device::SetVertexDescriptor(s_vertexDescriptor);
         shadow::Device::FlushVertexProgramState();
+
+        // =========================================================================================
+        // [DIAG corona-calib -- coronas step 2] THE CALIBRATION LINE (WAVE_NOTE's own format,
+        // extended with the fields that are actually measurable here).
+        //
+        // Every number below is READ from the live objects, not restated from a comment:
+        //   * whiteLevel / viewXyScale come from the RenderParameters Begin published this frame
+        //     (BrnCoronaManager::Render fills them from maShaderConstantsFrames[internal]
+        //     .GetWhiteLevel() and from the interface's mViewXyScale);
+        //   * blendRT0 is s_blendState->maState[E_WORD_BLEND_RT0], the packed Xenos RB_BLENDCONTROL
+        //     word shadow::Device::Xbox2SetStateLowLevelShadowed pushes through
+        //     D3DDevice_SetBlendState -- decoded here with the SAME field split that function uses
+        //     (XenonD3D9Shims.cpp:4120-4122: COLOR_SRCBLEND [4:0], COLOR_COMB_FCN [7:5],
+        //     COLOR_DESTBLEND [12:8], ALPHA_SRCBLEND [20:16], ALPHA_COMB_FCN [23:21],
+        //     ALPHA_DESTBLEND [28:24]). CgsBlendStateFactory::Construct builds slot 2
+        //     (TRANSPARENT_ADDITIVE_NO_ALPHA_TEST_DEST_RGBA) with maBlendFactor[0] == 0x07060106
+        //     (CgsBlendStateFactory.cpp:203, X360 `li r9,0x83` @0x827EB524 + `rlwimi` @0x827EB548),
+        //     so this must print src=6 (SRC_ALPHA) op=0 (ADD) dst=1 (ONE);
+        //   * alphaTest / colourWrite are maState[16] / maState[4] of the same object;
+        //   * subImages is s_numSubImages (SetTextureAtlas's second argument);
+        //   * drawsThisFrame is the batch count BrnCoronaManager::Render read out of the
+        //     submission iterator -- the number that must equal the producer's submitted count.
+        // The two `leaf-const` lanes are NOT measured: this backend never sets
+        // D3DSAMP_SRGBTEXTURE or D3DRS_SRGBWRITEENABLE to anything but FALSE
+        // (XenonD3D9Shims.cpp:3423/3462/3478/5042 and :6913), and the corona TU has no honest
+        // route to the IDirect3DDevice9 to read them back, so they are printed with that label
+        // rather than as a measurement. The console-side answer is INFERRED, not measured: the
+        // corona atlas (corona_atlas.TextureConfig2d ID 297312) is not in GLOBALTEXTUREDICTIONARY
+        // .BIN (searched, 0 hits) and no shipped bundle in build/game carries that resource id, so
+        // its Xenos fetch-constant GPUSIGN field has not been read. What IS measured: all 8
+        // textures of GLOBALTEXTUREDICTIONARY are GPUSIGN_UNSIGNED (no gamma channel), and this
+        // backend never sets D3DSAMP_SRGBTEXTURE / D3DRS_SRGBWRITEENABLE to anything but FALSE.
+        // [FLAG] the atlas's own GPUSIGN stays a named park until its bundle is located.
+        // DELETE-WHEN the corona calibration is signed off.
+        // =========================================================================================
+        {
+            static bool sbLoggedCalib = false;
+            if (!sbLoggedCalib && s_blendState != 0)
+            {
+                sbLoggedCalib = true;
+                const u32 luBlend = s_blendState->maState[BlendMaterialState::E_WORD_BLEND_RT0];
+                char lacMessage[352];
+                std::snprintf(lacMessage, sizeof(lacMessage),
+                              "[corona-calib] whiteLevel=%.3f blendRT0=0x%08X"
+                              " (colour src=%u op=%u dst=%u | alpha src=%u op=%u dst=%u)"
+                              " alphaTest=%u colourWrite=0x%X depth=%s"
+                              " srgbTex=0(leaf-const) srgbWrite=0(leaf-const)"
+                              " viewXyScale=(%.4f %.4f) subImages=%u drawsThisFrame=%u\n",
+                              gfCalibWhiteLevel, (unsigned)luBlend,
+                              (unsigned)( luBlend        & 0x1Fu),
+                              (unsigned)((luBlend >>  5) & 0x07u),
+                              (unsigned)((luBlend >>  8) & 0x1Fu),
+                              (unsigned)((luBlend >> 16) & 0x1Fu),
+                              (unsigned)((luBlend >> 21) & 0x07u),
+                              (unsigned)((luBlend >> 24) & 0x1Fu),
+                              (unsigned)s_blendState->maState[BlendMaterialState::E_WORD_ALPHA_TEST_ENABLE],
+                              (unsigned)s_blendState->maState[BlendMaterialState::E_WORD_COLOUR_WRITE_ENABLE],
+                              ((lrParameters.muFlags & BatchParameters::FLAG_OCCLUSION_ZTEST) != 0u)
+                                  ? "ZON_ZLEQ_ZWRITEOFF" : "ZOFF_ZALL_ZWRITEOFF",
+                              gfCalibViewXyScaleX, gfCalibViewXyScaleY,
+                              (unsigned)s_numSubImages,
+                              (unsigned)lrParameters.muNumCoronas);
+                CoronaLog(lacMessage);
+            }
+        }
 
         u32           luCoronasLeft = lrParameters.muNumCoronas;
         const Corona* lpCorona      = lpBuffer->GetCoronas();

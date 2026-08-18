@@ -635,6 +635,14 @@ private:
     // ShadowMapRenderManager::Begin/EndRenderShadowMap; the lists are {0,2} / {1,3} / {4}.
     void RenderShadowMapPasses(CgsGraphics::DispatchObjectContext* lpContext);
 
+    // @ 0x82405D80 -- measure how much of the sun is occluded, once per frame. Reads the INTERNAL
+    // shader-constants frame for the view projection, the eye and the unbiased key-light
+    // direction, projects the sun through BrnSunCorona::ComputeSunPositionOnScreen and then renders
+    // the 1x1 occlusion buffer through BrnSunCorona::GenerateOcclusionBuffer. Called from Render
+    // @0x8240D5D0, immediately after ResolveMSAA (which is what fills the depth texture the
+    // measurement samples). DWARF BrnRendererModule.h:787 declares it `void ComputeSunCoronaVisibility()`.
+    void ComputeSunCoronaVisibility();
+
     void RenderWorldPasses(const BrnGame::DispatchThreadInputBuffer* lpDispatchThreadInputBuffer,
                            CgsGraphics::DispatchObjectContext* lpContext);
 

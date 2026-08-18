@@ -636,6 +636,30 @@ void BrnRendererMemory::PCBringUpCreateEnvMapBuffer(rw::IResourceAllocator* lpAl
     CreateEnvmapBuffer(lpAllocator);
 }
 
+// [PC bring-up] Create the SUN-CORONA render target (coronas step 2). NOT a console function --
+// the console builds it inside Construct @0x823FCA38 (`bl BrnRendererMemory__CreateSunCoronaBuffer`
+// @0x823FCB0C), which is still gated out for the two reasons the
+// BRN_RENDERER_MEMORY_FULL_POOL_AVAILABLE banner names. This is the same one-slot bring-up entry
+// point PCBringUpCreateEnvMapBuffer is, and it does nothing CreateSunCoronaBuffer does not do.
+//
+// It is NOT sized from the screen and does not care about the device's extent: the target is 1x1
+// (CreateSunCoronaBuffer's single `li r10, 1` feeds width, height AND the mip count), so unlike
+// PCBringUpCreatePostFxSceneTargets it has no mu32ScreenWidth precondition.
+//
+// DELETE WITH THE BRING-UP, together with its three siblings.
+void BrnRendererMemory::PCBringUpCreateSunCoronaBuffer(rw::IResourceAllocator* lpAllocator)
+{
+    CGS_ASSERT(mapRenderTarget[E_RENDER_TARGET_SHADOW_MAP_0] != nullptr,
+               "GetShadowMapBuffer(0) != NULL -- slot-nulling bring-up must run first");
+
+    if (mapRenderTarget[E_RENDER_TARGET_SUN_CORONA] != nullptr)
+    {
+        return;
+    }
+
+    CreateSunCoronaBuffer(lpAllocator);
+}
+
 // =================================================================================================
 // THE REST OF THE RENDER-TARGET POOL (post-fx spine wave, 2026-08-13).
 //

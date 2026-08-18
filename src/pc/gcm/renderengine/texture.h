@@ -264,6 +264,15 @@ namespace renderengine
         // the post-fx Tint lookup-texture create calls this). Body lives in its own renderengine TU.
         static Texture* Initialize(rw::Resource* lpResourceMemory, const Parameters* lpParams);
 
+        // [PC diagnostic -- NOT an X360 function] Read back texel (0,0) of mip 0 of a 2D
+        // render-target texture through a system-memory staging surface (GetRenderTargetData +
+        // LockRect). It STALLS the GPU; for ONE-SHOT diagnostics only (the sun corona's 1x1
+        // occlusion buffer is the first user: verify_suncorona F1 -- the one number that says
+        // whether that pass works lives only on the GPU). Returns false when the texture is not a
+        // readable 2D render target (multisampled, cube, volume, no device). *lpuTexel receives
+        // the raw first 4 bytes of the texel; *lpiFormat the D3DFORMAT, so the caller can decode.
+        static bool PCReadBackTexel0(const Texture* lpTexture, u32* lpuTexel, s32* lpiFormat);
+
         // --- Burnout PC raster header (wiki page "Texture/Burnout Paradise/PC"; field order is
         // the wiki's, offsets are the x64 target's). mpD3DTexture is the wiki +0 "texture data"
         // pointer (the D3D texture on the PC backend); SetTexture / Lock bind it directly. ----

@@ -73,6 +73,17 @@ namespace renderengine
     // static-init time, before Device::Initialize and before LoadConfig have read the file. Nothing
     // else reads it.
     extern s32 gCoronas;
+    // Whether the SUN-CORONA pass runs. 1 = measure the sun's occlusion into the 1x1 buffer and
+    // draw the sun flare (default, and what the console does -- BrnSunCorona::Construct
+    // @0x824009B0 stores 1 into mbRenderSunCorona); 0 = neither pass runs. Sourced from config.ini
+    // `[Settings] SunCorona` (BrnMain.cpp LoadConfig/SaveConfig) and seeded by Device::Initialize,
+    // exactly like gCoronas above it.
+    //
+    // NOTE -- IT IS NOT A SECOND SWITCH, for the same reason gCoronas is not: the console already
+    // owns this state as BrnSunCorona::mbRenderSunCorona, and this global only SEEDS that member
+    // once, in EnsureSunCoronaBringUp, immediately after the Construct that wrote it. Nothing else
+    // reads it.
+    extern s32 gSunCorona;
     // Present synchronisation. 1 = D3DPRESENT_INTERVAL_DEFAULT (vertical sync, the behaviour
     // this build has always had); 0 = D3DPRESENT_INTERVAL_IMMEDIATE (uncapped presents). Sourced
     // from config.ini `[Display] VSync` (BrnMain.cpp LoadConfig/SaveConfig) and seeded by

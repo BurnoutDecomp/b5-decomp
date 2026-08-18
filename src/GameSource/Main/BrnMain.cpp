@@ -172,6 +172,13 @@ void LoadConfig()
     const s32 liCoronas =
         GetPrivateProfileIntA("Settings", "Coronas", renderengine::gCoronas, lacPath);
     renderengine::gCoronas = (liCoronas == 0) ? 0 : 1;
+
+    // The SUN-CORONA (sun flare + its occlusion measurement) off switch (coronas step 2); 0/1,
+    // clamped the same way and for the same reason as its neighbours. It SEEDS
+    // BrnSunCorona::mbRenderSunCorona in EnsureSunCoronaBringUp; see the declaration in device.h.
+    const s32 liSunCorona =
+        GetPrivateProfileIntA("Settings", "SunCorona", renderengine::gSunCorona, lacPath);
+    renderengine::gSunCorona = (liSunCorona == 0) ? 0 : 1;
 #endif
 }
 
@@ -207,6 +214,8 @@ void SaveConfig()
     WritePrivateProfileStringA("Settings", "EnvironmentMap30Hz", lacValue, lacPath);
     std::snprintf(lacValue, sizeof(lacValue), "%d", renderengine::gCoronas);
     WritePrivateProfileStringA("Settings", "Coronas", lacValue, lacPath);
+    std::snprintf(lacValue, sizeof(lacValue), "%d", renderengine::gSunCorona);
+    WritePrivateProfileStringA("Settings", "SunCorona", lacValue, lacPath);
 #endif
 }
 

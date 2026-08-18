@@ -9,6 +9,49 @@
 #include <cstddef>   // offsetof
 #include <new>       // placement new (build the texture object into rw resource memory)
 
+namespace renderengine
+{
+    // [PC diagnostic] see texture.h. The staging-surface shape is XenonD3D9Shims.cpp's composite
+    // ReadCentre probe (GetRenderTargetData refuses MULTISAMPLED sources -- reported, not retried).
+    bool Texture::PCReadBackTexel0(const Texture* lpTexture, u32* lpuTexel, s32* lpiFormat)
+    {
+        if (lpuTexel != nullptr) *lpuTexel = 0u;
+        if (lpiFormat != nullptr) *lpiFormat = 0;
+        if (gDevice == nullptr || lpTexture == nullptr || lpTexture->mpD3DTexture == nullptr)
+            return false;
+        if (lpTexture->mpD3DTexture->GetType() != D3DRTYPE_TEXTURE)
+            return false;
+        IDirect3DTexture9* lpD3DTexture = static_cast<IDirect3DTexture9*>(lpTexture->mpD3DTexture);
+        IDirect3DSurface9* lpSrc = nullptr;
+        if (FAILED(lpD3DTexture->GetSurfaceLevel(0, &lpSrc)) || lpSrc == nullptr)
+            return false;
+        bool lbRead = false;
+        D3DSURFACE_DESC lDesc;
+        if (SUCCEEDED(lpSrc->GetDesc(&lDesc)) && lDesc.MultiSampleType == D3DMULTISAMPLE_NONE)
+        {
+            IDirect3DSurface9* lpSys = nullptr;
+            if (SUCCEEDED(gDevice->CreateOffscreenPlainSurface(lDesc.Width, lDesc.Height, lDesc.Format,
+                                                               D3DPOOL_SYSTEMMEM, &lpSys, nullptr)))
+            {
+                D3DLOCKED_RECT lLock;
+                if (SUCCEEDED(gDevice->GetRenderTargetData(lpSrc, lpSys))
+                    && SUCCEEDED(lpSys->LockRect(&lLock, nullptr, D3DLOCK_READONLY)))
+                {
+                    u32 luTexel = 0u;
+                    std::memcpy(&luTexel, lLock.pBits, 4);
+                    if (lpuTexel != nullptr) *lpuTexel = luTexel;
+                    if (lpiFormat != nullptr) *lpiFormat = static_cast<s32>(lDesc.Format);
+                    lbRead = true;
+                    lpSys->UnlockRect();
+                }
+                lpSys->Release();
+            }
+        }
+        lpSrc->Release();
+        return lbRead;
+    }
+}
+
 // PC / D3D9 implementation of the renderengine 2D-texture create + upload path. The
 // X360/PS3 renderengine marshals a platform resource descriptor and a GPU surface
 // format (the loading screen passes format 340); on PC these map onto a managed D3D9
