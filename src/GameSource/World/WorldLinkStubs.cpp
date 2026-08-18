@@ -2237,21 +2237,7 @@ bool CgsSceneManager::VolumeManager::Prepare()
 // -------------------------------------------------------------------------
 // WorldModule
 // -------------------------------------------------------------------------
-// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
-// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
-// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
-// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
-// not this gate.
-void WorldModule::BridgeCrashModuleToPropModule_PostScene(void *,struct BrnWorld::PropEntityIO::InputBuffer_PostScene *,class BrnWorld::CrashModuleIO::OutputBuffer_PostScene const *)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "WorldModule::BridgeCrashModuleToPropModule_PostScene: inert (body not reconstructed) [FLAG PC boot gate]\n";
-    }
-}
+// GATE RETIRED 2026-08-18 (wave Q4 bridges): WorldModule::BridgeCrashModuleToPropModule_PostScene @0x827AAD78 is REAL in GameSource/World/Bridges/WorldBridgePropModule.cpp.
 
 // BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
 // one-shot log. This symbol is REACHED every frame now that WorldModule::Update
@@ -2285,21 +2271,7 @@ void WorldModule::BridgeCrashModuleToTrafficModule_PostScene(void *,class BrnTra
     }
 }
 
-// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
-// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
-// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
-// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
-// not this gate.
-void WorldModule::BridgePropModuleToTrafficModule_PrePhysics(void *,class BrnTraffic::BrnTrafficIO::InputBuffer_PrePhysics *,class BrnWorld::PropEntityIO::OutputBuffer_PrePhysics const *)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "WorldModule::BridgePropModuleToTrafficModule_PrePhysics: inert (body not reconstructed) [FLAG PC boot gate]\n";
-    }
-}
+// GATE RETIRED 2026-08-18 (wave Q4 bridges): WorldModule::BridgePropModuleToTrafficModule_PrePhysics @0x827AEA70 is REAL in GameSource/World/Bridges/WorldBridgePropModule.cpp.
 
 // BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
 // one-shot log. This symbol is REACHED every frame now that WorldModule::Update
@@ -2365,21 +2337,7 @@ void WorldModule::BridgeRaceCarModuleToTrafficModule_PrePhysics(void *,class Brn
     }
 }
 
-// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
-// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
-// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
-// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
-// not this gate.
-void WorldModule::BridgeSceneContactsToPropModule_PrePhysics(void *,class BrnWorld::PropEntityIO::InputBuffer_PrePhysics *,struct CgsSceneManager::SceneManagerIO::OutputBuffer const *)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "WorldModule::BridgeSceneContactsToPropModule_PrePhysics: inert (body not reconstructed) [FLAG PC boot gate]\n";
-    }
-}
+// GATE RETIRED 2026-08-18 (wave Q4 bridges): WorldModule::BridgeSceneContactsToPropModule_PrePhysics @0x827ABCB0 is REAL in GameSource/World/Bridges/WorldBridgePropModule.cpp.
 
 // BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
 // one-shot log. This symbol is REACHED every frame now that WorldModule::Update
@@ -2719,19 +2677,7 @@ void WorldModule::BridgePhysicsModuleToTrafficModule_PostPhysics(void *,class Br
 
 // BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
 // WorldModule::Update @0x827D63E8 once the drive is wired. Per-frame world bridge.
-// X360 0x827AB998 -- reconstruct and DELETE this gate.
-// One-shot log + inert: the module/interface it would feed is itself gated
-// inert, so dropping the transfer is the consistent observable.
-void WorldModule::BridgePhysicsModuleToPropModule_PostPhysics(void *,class BrnWorld::PropEntityIO::InputBuffer_PostPhysics *,class BrnPhysics::PhysicsModuleIO::OutputBuffer const *)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "WorldModule::BridgePhysicsModuleToPropModule_PostPhysics: inert [FLAG PC boot gate]\n";
-    }
-}
+// GATE RETIRED 2026-08-18 (wave Q4 bridges): WorldModule::BridgePhysicsModuleToPropModule_PostPhysics @0x827AB998 is REAL in GameSource/World/Bridges/WorldBridgePropModule.cpp.
 
 // BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
 // WorldModule::Update @0x827D63E8 once the drive is wired. Per-frame world bridge.
@@ -2967,19 +2913,7 @@ void WorldModule::BridgeRaceCarModuleToAIModule_PostScene(void *,struct BrnAI::A
 
 // BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
 // WorldModule::Update @0x827D63E8 once the drive is wired. Per-frame world bridge.
-// X360 0x827AD540 -- reconstruct and DELETE this gate.
-// One-shot log + inert: the module/interface it would feed is itself gated
-// inert, so dropping the transfer is the consistent observable.
-void WorldModule::BridgeAIToEntityModules_PrePhysics(void *,struct BrnWorld::RaceCarEntityModuleIO::InputBuffer_PrePhysics *,class BrnWorld::PropEntityIO::InputBuffer_PrePhysics *,struct BrnAI::AIModuleIO::OutputBuffer const *)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "WorldModule::BridgeAIToEntityModules_PrePhysics: inert [FLAG PC boot gate]\n";
-    }
-}
+// GATE RETIRED 2026-08-18 (wave Q4 bridges): WorldModule::BridgeAIToEntityModules_PrePhysics @0x827AD540 is REAL in GameSource/World/Bridges/WorldBridgePropModule.cpp.
 
 // BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
 // WorldModule::Update @0x827D63E8 once the drive is wired. Per-frame world bridge.

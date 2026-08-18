@@ -139,6 +139,7 @@
 
 #include "rw/math/vpu/vector3_operation.h"                                       // rw::math::vpu::Dot
 #include <math.h>                                                                // fabsf (the vandc sign-mask)
+#include <stdlib.h>                                                              // getenv (BRN_PROP_DIAG, host only)
 
 namespace BrnWorld
 {
@@ -261,6 +262,33 @@ namespace BrnWorld
             // the second assert the console emits here, and it is NOT written out again.
             CGS_ASSERT( lpInstance->GetState() > E_NON_PHYSICAL,
                         "lpInstance->GetState() > E_NON_PHYSICAL" );            // :1964 (0x7AC)
+
+            // [DIAG] NOT IN THE X360 BINARY. Opt-in break-pipeline probe for the wave-Q4
+            // bring-up: set BRN_PROP_DIAG to answer "did a car-vs-prop contact even reach
+            // the world module?" -- the first question every parked bridge in
+            // WorldBridgePropModule.cpp changes the answer to. Placed here, after the
+            // race-car/whole-prop filters and before LEG 1, so it reports EVERY qualifying
+            // contact, not just the ones that go on to smash. The impact speed is recomputed
+            // inside the gate (same dot/abs/MPH the smash test uses further down) so the
+            // shipped path pays nothing when the probe is off.
+            // The latch is evaluated ONCE: getenv per contact would be a per-frame syscall.
+            {
+                static const bool sbPropDiag = ( getenv( "BRN_PROP_DIAG" ) != 0 );
+                if ( sbPropDiag && CgsDev::Log::gpDebugPrint != 0 )
+                {
+                    const s32 liStrikingCar =
+                        static_cast<s32>( lOtherEntityId.GetEntityIndex() );
+                    const f32 lfDiagSpeedMph =
+                        fabsf( rw::math::vpu::Dot( GetRaceCarVelocity( liStrikingCar ),
+                                                   lrContact.mNormal ) ) * KF_MPS_TO_MPH;
+                    *CgsDev::Log::gpDebugPrint
+                        << "[prop-diag] contact prop=" << lPropEntityId.GetValue()
+                        << " type=" << lpInstance->muTypeId
+                        << " car=" << liStrikingCar
+                        << " speed=" << lfDiagSpeedMph
+                        << "\n";
+                }
+            }
 
             // -------------------------------------------------------------------------------
             // LEG 1 -- PROGRESSION. Player car only, prop not already moved, progression

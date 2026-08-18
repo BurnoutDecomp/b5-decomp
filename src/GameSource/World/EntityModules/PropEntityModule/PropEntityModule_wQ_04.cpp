@@ -113,6 +113,9 @@
 // include, for the same reason, as BrnPropCellManager.cpp:46 (which runs the identical maths).
 #include "rw/math/vpu/vector3_operation.h"
 
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // gpDebugPrint ([DIAG] BRN_PROP_DIAG)
+#include <stdlib.h>                                          // getenv    ([DIAG] BRN_PROP_DIAG)
+
 namespace BrnWorld
 {
     // ------------------------------------------------------------------
@@ -362,6 +365,23 @@ namespace BrnWorld
         // ChangePropState above.
         const BrnPhysics::Props::PropTypeData* lpType =
             mpPropPhysicsDataHeader.GetMemoryResource()->GetType(lpProp->muTypeId);
+
+        // [DIAG] NOT IN THE X360 BINARY. The middle rung of the wave-Q4 break probe (set
+        // BRN_PROP_DIAG): reaching here means the smash test passed and the prop is being
+        // taken apart. Placed after lpType is fetched because the part count comes from it,
+        // and after SetState(E_SMASHED) so a line here means the state change is committed.
+        // The latch is evaluated ONCE (a static bool), not per call.
+        {
+            static const bool sbPropDiag = ( getenv( "BRN_PROP_DIAG" ) != 0 );
+            if ( sbPropDiag && CgsDev::Log::gpDebugPrint != 0 )
+            {
+                *CgsDev::Log::gpDebugPrint
+                    << "[prop-diag] BREAK prop=" << lPropEntityId.GetValue()
+                    << " type=" << lpProp->muTypeId
+                    << " parts=" << lpType->GetNumberOfParts()
+                    << "\n";
+            }
+        }
 
         // 0x822FB12C..0x822FB144. `li r11,3; sldi r11,r11,56; std r11, var_E0` is the
         // compiler's fold of PropVolumeInstanceID's default constructor, which seeds the

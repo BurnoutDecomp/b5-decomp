@@ -146,6 +146,9 @@
 // include, for the same reason, as PropEntityModule_wQ_04.cpp and BrnPropCellManager.cpp.
 #include "rw/math/vpu/vector3_operation.h"
 
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // gpDebugPrint ([DIAG] BRN_PROP_DIAG)
+#include <stdlib.h>                                          // getenv    ([DIAG] BRN_PROP_DIAG)
+
 namespace BrnWorld
 {
     namespace
@@ -444,6 +447,22 @@ namespace BrnWorld
         for ( u32 luBroken = 0; luBroken < maRecentlyBrokenProps.GetLength(); ++luBroken )
         {
             const PropEntityID lPropEntityId = maRecentlyBrokenProps[luBroken];
+
+            // [DIAG] NOT IN THE X360 BINARY. The last rung of the wave-Q4 break probe (set
+            // BRN_PROP_DIAG): the prop reached maRecentlyBrokenProps and is being retired
+            // from the simulation. Emitted at the TOP of the iteration, before the E_MOVED
+            // early-out, so an entry that is skipped still shows up -- "the event exists" and
+            // "the event was acted on" are different failures and the log must separate them.
+            // The latch is evaluated ONCE (a static bool), not per iteration.
+            {
+                static const bool sbPropDiag = ( getenv( "BRN_PROP_DIAG" ) != 0 );
+                if ( sbPropDiag && CgsDev::Log::gpDebugPrint != 0 )
+                {
+                    *CgsDev::Log::gpDebugPrint
+                        << "[prop-diag] broken-event prop=" << lPropEntityId.GetValue()
+                        << "\n";
+                }
+            }
 
             // 0x822EF150 `sub_822CDA28` == PropZoneManager::GetProp(PropEntityID) -- the
             // GLOBAL-index overload. Hex-Rays drops its second argument; the asm passes
