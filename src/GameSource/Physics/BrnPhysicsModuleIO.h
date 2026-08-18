@@ -90,6 +90,19 @@ namespace PhysicsModuleIO
         PropOutputInterfaceStorage*                 GetPropManagerOutputInterface();          // +71792,  write
         DeformationOutputInterfaceStorage*          GetDeformationOutputInterface();          // +148656, write
         ContactSpy::ContactSpyInterface*            GetContactSpyInterface();                 // +998192, write (retyped with the promotion)
+        // ⭐ ADDITIVE 2026-08-18 (wave Q4, prop bridges). The READ-LOCK const twin, X360
+        // @0x8279F8E0 (bit-4 test, "Not locked for reading\n", baked cite BrnPhysicsModuleIO.h:369
+        // -- one line above the write twin's :370 already carried here). This was a written-down
+        // TODO in the tree, not a discovery: WorldBridgePhysicsToEntityModules.cpp's own banner
+        // parks its leg 6 with "the console's read-locked const twin is @0x8279F8E0; adding and
+        // bodying it is a two-line follow-up". Both bridges that carry the contact-spy handle
+        // hold a `const OutputBuffer*` (their callers read-lock the source), so the non-const
+        // overload above is unusable to them -- and one of them,
+        // WorldModule::BridgePhysicsModuleToPropModule_PostPhysics @0x827AB998, is the sole
+        // producer of PropEntityIO::InputBuffer_PostPhysics::mContactSpyInterface::mpData, whose
+        // absence asserts + AVs in PropEntityModule::ProcessContacts on the first prop frame.
+        // Declaration + body only: no layout, no member, no existing signature is touched.
+        const ContactSpy::ContactSpyInterface*      GetContactSpyInterface() const;           // +998192, read  (0x8279F8E0, DWARF :369)
         // ADDITIVE GROW (BridgePhysicsSceneUpdateToScene @0x827ABAA8): the scene-update
         // sub-interface (DWARF :385), read-locked. @0x8279F838 -> +179424 -- this pins
         // the previously-unpinned mSceneInputInterface offset.

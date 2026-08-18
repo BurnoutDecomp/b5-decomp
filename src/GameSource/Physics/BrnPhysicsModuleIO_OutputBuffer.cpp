@@ -187,6 +187,18 @@ namespace PhysicsModuleIO
         return &mContactSpyInterface;
     }
 
+    // X360 0x8279F640's sibling @0x8279F8E0 (DWARF :369): read-lock; return this + 998192.
+    // ⭐ ADDITIVE 2026-08-18 (wave Q4, prop bridges) -- the const twin of the accessor above.
+    // The consumers are the two post-physics bridges that carry the contact-spy handle out of
+    // the physics module; both hold a `const OutputBuffer*` because their callers read-lock the
+    // source buffer. See the declaration's banner in BrnPhysicsModuleIO.h for why this was a
+    // standing two-line follow-up rather than a new finding.
+    const ContactSpy::ContactSpyInterface* OutputBuffer::GetContactSpyInterface() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        return &mContactSpyInterface;
+    }
+
     // ---- wave5 ADDITIVE accessors (const twins + non-const scene-input) --------------
     // Assert strings match this file's existing convention (no trailing \n); the X360 rodata
     // carries \n but the committed bodies above omit it -- kept consistent within this file.
