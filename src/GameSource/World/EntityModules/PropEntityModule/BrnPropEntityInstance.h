@@ -112,19 +112,57 @@ namespace BrnWorld
 
         EPropState GetState() const;
         void       SetState(EPropState leState);
+        // ⭐ BODIED 2026-08-18 (wave Q round 2) in BrnPropEntityInstance.cpp. Both were
+        // declared-only while PropEntityModule_wQ_05.cpp already called them four times.
+        // Fold-only on the console (no out-of-line symbol); folds at 0x822FA714 / 0x822DB2B8
+        // (get, assert line 677) and 0x822FA84C / 0x822DB340 (set, assert line 690).
         EPropState GetNextState() const;
         void       SetNextState(EPropState leState);
 
         bool IsPhysical() const;     // mu8State == E_PHYSICAL
         bool IsSmashed() const;      // 0x822B82C8
+        // ⚠️ IsAddedToScene / IsAnimated / IsLamppost are DECLARED-ONLY: no body anywhere in
+        // the tree and no X360 out-of-line symbol either, because the console folds each of
+        // them at every use site (the committed callers read mu8Flags /
+        // mi8RotationParamsIndex directly). Body them from a measured fold, not from the name.
         bool IsAddedToScene() const;
+        // ⭐ BODIED 2026-08-18 (wave Q round 3) in BrnPropEntityInstance.cpp. DWARF
+        // BrnPropEntityInstance.h:151. Also fold-only (no X360 symbol); its fold is MEASURED at
+        // ProcessContacts 0x822FAAF8 as `lbz 0x4A(prop) ; rlwinm 0,29,29`, i.e.
+        // mu8Flags & KU_ADDED_TO_CONTACT_GEN_BIT, with no tripwire.
         bool IsAddedToContactGen() const;
         bool IsAnimated() const;
         bool IsLamppost() const;
 
+        // ⚠️ DECLARED-ONLY, no body anywhere in the tree (reported by the wave-Q2 owner sweep;
+        // the console folds it and the tree reads mi8RotationParamsIndex directly).
         s32 GetRotationParamsIndex() const;   // mi8RotationParamsIndex
+        // ⭐ BODIED 2026-08-18 (wave Q round 2) in BrnPropEntityInstance.cpp. DWARF :324.
+        // Fold-only; MEASURED at ChangePropState 0x822EF818/0x822EF828 as a bare
+        // `lbz rN, 0x4C(prop)` with no tripwire.
         s32 GetPhysicsIndex() const;
         void SetPhysicsIndex(s32 liIndex);
+
+        // ⭐ WAVE Q KEYSTONE (2026-08-18). @0x822C5608 -- the per-frame swing step for ONE
+        // animated prop (a gate, a barrier arm, a swinging sign). A real ledger function that
+        // had no declaration anywhere; the ledger files it under the altivec.h catch-all
+        // (an inlining artefact), but it is a member of THIS class and its only caller is
+        // BrnWorld::PropZoneManager::UpdateAnimation @0x822DF4E8.
+        //
+        // SIGNATURE is DWARF BrnPropEntityInstance.h:219 --
+        //     void Update(float_t, const PropEntityRotationParams *);
+        // -- and the call site agrees exactly: `mr r5, r31 ; fmr f1, f31 ; mr r3, r30`, i.e.
+        // r3 this, f1 the timestep, r5 the rotation params. r4 is never written because the
+        // FLOAT CONSUMES ITS GPR SLOT and leaves it unused (the same rule that reconciles this
+        // class's UpdateConstraints, whose r4 is likewise dead -- Hex-Rays renders both as a
+        // phantom leading `int` parameter).
+        //
+        // The body's first act is `if ( mi8RotationParamsIndex == -1 ) assert("IsAnimated()")`
+        // (BrnPropEntityInstance.cpp:254); it then derives the frame's angular speed from
+        // mnRotSpeed, calls UpdateConstraints + CalculateEaseInSpeedModulation when the swing
+        // is bounded, rebuilds mWorldTransform around the axis selected by mnRotSpeed's top
+        // two bits, and re-orthonormalises it (rw::math::vpu::OrthoNormalize3x3 @0x82203B28).
+        void Update(f32 lfTimeStep, const PropEntityRotationParams* lpRotationParams);
 
     private:
         // @ 0x822A9D38 -- ease curve slowing an animated prop near its swing limits.

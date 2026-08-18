@@ -32,9 +32,9 @@ namespace PropEntityIO
         static_assert(offsetof(InputBuffer_Dispatch, mSceneResultQueue)
                           == offsetof(InputBuffer_Dispatch, mpShadowMap) + sizeof(void*),
                       "mSceneResultQueue immediately follows mpShadowMap");
-        static_assert(offsetof(InputBuffer_Dispatch, muCoronaSubmissionInterface)
+        static_assert(offsetof(InputBuffer_Dispatch, mpCoronaSubmissionInterface)
                           > offsetof(InputBuffer_Dispatch, mSceneResultQueue),
-                      "muCoronaSubmissionInterface follows the scene-result queue");
+                      "mpCoronaSubmissionInterface follows the scene-result queue");
     }
 
     // ========================================================================
@@ -104,18 +104,19 @@ namespace PropEntityIO
 
     // X360 0x822B8FF8 (R, :304) -- read-lock; return the corona-submission interface handle
     // (this+0x801C).
-    u32 InputBuffer_Dispatch::GetCoronaSubmissionInterface() const
+    BrnCoronaManager::BrnSubmissionInterface* InputBuffer_Dispatch::GetCoronaSubmissionInterface() const
     {
         CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
-        return muCoronaSubmissionInterface;
+        return mpCoronaSubmissionInterface;
     }
 
     // X360 0x827A12D0 (W, :305) -- write-lock; set the corona-submission interface handle
     // (this+0x801C).
-    void InputBuffer_Dispatch::SetCoronaSubmissionInterface(u32 luCoronaSubmissionInterface)
+    void InputBuffer_Dispatch::SetCoronaSubmissionInterface(
+            BrnCoronaManager::BrnSubmissionInterface* lpCoronaSubmissionInterface)
     {
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
-        muCoronaSubmissionInterface = luCoronaSubmissionInterface;
+        mpCoronaSubmissionInterface = lpCoronaSubmissionInterface;
     }
 }
 }

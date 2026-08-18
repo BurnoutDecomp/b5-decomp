@@ -31,6 +31,7 @@
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "SharedClasses/Physics/Props/BrnPropPhysicsDataHeader.h" // PropPhysicsDataHeader::GetType, PropTypeData
+#include "SharedClasses/Physics/Props/BrnPropConstants.h"        // BrnPhysics::Props::KVF_PROP_FLOOR (NEW 2026-08-18)
 #include "SharedClasses/Physics/Props/BrnPhysicsPropZoneData.h"   // PropZoneData, PropCellData, PropCellId
 #include "SharedClasses/Physics/Props/BrnPhysicsPropInstanceData.h" // PropInstanceData (the 80B serialised record LoadProp reads)
 #include "SharedClasses/Physics/Props/BrnPropGraphicsList.h"        // PropGraphics / PropPartGraphics (PropGraphicsManager table)
@@ -89,23 +90,40 @@ namespace BrnWorld
                       == KU_MAX_PROP_TYPES * sizeof(PropGraphicsReference), "500 slots");
     }
 
-    // ---- UpdateInstance displacement / world-floor thresholds (X360 rodata) -------------
-    // unk_82FAD840 (@0x822F0B80): a Y-position floor. UpdateInstance computes
-    // `lbBelowWorldFloor = (unk_82FAD840 > pos.y)` to gate pulling a frozen prop out of the
-    // scene. The same constant is read by ProcessPotentialContactWithPart @ 0x822EEDA8.
-    // FLAGGED: the exact float is NOT in .ida-exports (rodata at 0x82FAD840 is not dumped --
-    // same situation as BrnStuntManager's unk_82FADED0). Modelled as a large negative Y so a
-    // prop that has fallen far below the world reads "below floor"; the predicate STRUCTURE
-    // (const > pos.y) is the asm-attested part. Replace the magnitude when rodata lands.
-    static const f32 KF_UNDER_WORLD_THRESHOLD_Y = -15000.0f; // FLAG: rodata unk_82FAD840 magnitude
-
-    // unk_82FAD4D0 (@0x822F1504): a per-axis displacement threshold vector compared against
-    // |lTransform| (vandc strips the sign bits -> absolute value) to detect the prop's first
-    // real move this frame. UpdateInstance sets KU_MOVED_BIT only when this compare SUCCEEDS
-    // (at least one axis exceeds the threshold) AND the bit was previously unset. The four lanes of
-    // the rodata vector are NOT in .ida-exports; FLAGGED: modelled as a small per-axis epsilon
-    // so any non-trivial displacement trips the "moved" path. Predicate STRUCTURE is asm-pinned.
-    static const f32 KF_FIRST_MOVE_THRESHOLD = 0.01f;        // FLAG: rodata unk_82FAD4D0 magnitude
+    // ---- UpdateInstance displacement / world-floor thresholds ---------------------------
+    // ⭐⭐ BOTH VALUES CORRECTED 2026-08-18 (wave Q round 2). Both constants used to carry a
+    // FLAG saying the float "is NOT in .ida-exports (rodata at 0x82FAD840 is not dumped)" and
+    // a placeholder magnitude. The claim was wrong about RECOVERABILITY, and both placeholders
+    // were wrong about the value -- one by 15x, one by 50x. A per-address FUNCTION export
+    // cannot show them because neither address is rodata at all: BOTH are .bss (sixteen zero
+    // bytes in the image) filled at run time by unnamed dynamic initialisers. Read out of the
+    // IDB with headless idat in this pass:
+    //
+    //   unk_82FAD840 <- initialiser @0x82C4B478:
+    //       lis r11, flt_8200D4F8@ha ; lfs f0, flt_8200D4F8@l(r11)
+    //       stfs f0,-0x10(r1) ; lvlx v0 ; vspltw v0,v0,0 ; stvx128 v0 -> unk_82FAD840
+    //     flt_8200D4F8 == 0xC47A0000 == -1000.0f     (was modelled as -15000.0f)
+    //
+    //   unk_82FAD4D0 <- initialiser @0x82C4C2B8 (identical splat shape):
+    //     flt_820147FC == 0x3F000000 ==     0.5f     (was modelled as 0.01f)
+    //
+    // Both are 4-lane splats of a single scalar, which is why a scalar models them exactly.
+    //
+    // unk_82FAD840 (read @0x822F0B90 here, and by PropEntityModule::ProcessPotentialContact-
+    // WithPart @0x822EEE48 and ::ChangePropState @0x822EF5E8): the Y-position floor.
+    // UpdateInstance computes `lbBelowWorldFloor = (KVF_PROP_FLOOR > pos.y)` to gate pulling a
+    // frozen prop out of the scene. NOW HOMED at its DWARF address
+    // (SharedClasses/Physics/Props/BrnPropConstants.h:176, `const VecFloat KVF_PROP_FLOOR`) and
+    // used from there so the three consumers cannot drift apart again.
+    //
+    // unk_82FAD4D0 (read @0x822F150C, this function only): the per-axis displacement threshold
+    // compared against |lTransform| (vandc strips the sign bits -> absolute value) to detect
+    // the prop's first real move this frame. UpdateInstance sets KU_MOVED_BIT only when this
+    // compare SUCCEEDS (at least one axis exceeds the threshold) AND the bit was previously
+    // unset. 0.5 m, not the 0.01 m the placeholder assumed -- with the old value essentially
+    // any physics jitter tripped "moved". No DWARF name is attested for it, so it keeps this
+    // file's descriptive one.
+    static const f32 KF_FIRST_MOVE_THRESHOLD = 0.5f;   // MEASURED: flt_820147FC via 0x82C4C2B8
 
     // RwMath::IsValid(matrix) -- the X360 inlines this as a per-lane vcmpeqfp self-compare
     // (a finite float equals itself; a NaN does not). Restored here as a finite check over
@@ -757,6 +775,124 @@ namespace BrnWorld
     }
 
     // ========================================================================
+    // ⭐ WAVE Q KEYSTONE (2026-08-18) -- the BREAKABLE-PROP forwarder block.
+    // ------------------------------------------------------------------------
+    // Every body below is a DecFIGS-declared PropZoneManager method the X360 compiler FOLDED
+    // into its caller (which is why IDA shows those callers calling PropCellManager directly
+    // with `r3 = module + 0x280` -- &mZoneManager and &mCellManager are the same address,
+    // PropCellManager being embedded at offset 0). De-inlined here so the break pipeline never
+    // has to reach through the private mCellManager / mauStartIndexOfZone. The header carries
+    // the per-method DWARF line and the X360 fold witness.
+    //
+    // LAYOUT DISCIPLINE: not one console byte offset appears below. The only index arithmetic
+    // is `maParts[ lpProp->mu16PartsIndex ]`, which the compiler scales by
+    // sizeof(PropPartEntityInstance) -- NOT by the console's literal 80.
+    // ========================================================================
+
+    // DWARF :185 -- X360 0x822CDD48 (unnamed `sub_822CDD48`).
+    // `return propIndexInZone < KU_MAX_NON_PERSISTENT_PROPS_PER_ZONE && HasPropBeenHit(zone, propIndexInZone);`
+    // The `cmplwi r5, 0x258` gate is UNSIGNED, so a negative (below-base) index also fails it.
+    bool PropZoneManager::HasPropBeenHit(PropEntityID lEntityId) const
+    {
+        const s16 li16ZoneId = GetZone(lEntityId);
+        // GetEntityIndex() carries the owner tripwire the asm fires here
+        // ("mEntityId.GetOwner() == E_ENTITYTYPE_PROP", BrnPropEntityID.h:278) -- it is the
+        // SAME check, inlined; do not add a second AssertIsProp().
+        const u32 luPropIndexInZone =
+            lEntityId.GetEntityIndex() - static_cast<u32>(mauStartIndexOfZone[static_cast<u16>(li16ZoneId)]);
+        if (luPropIndexInZone >= KU_MAX_NON_PERSISTENT_PROPS_PER_ZONE)
+        {
+            return false;
+        }
+        return HasPropBeenHit(static_cast<u32>(li16ZoneId), luPropIndexInZone);
+    }
+
+    // DWARF :189 -- X360 0x822CDCD0 (unnamed `sub_822CDCD0`). Note the asm loads
+    // mauStartIndexOfZone[zone] BEFORE the owner tripwire and applies NO 0x258 gate.
+    void PropZoneManager::RecordHitProp(PropEntityID lEntityId)
+    {
+        const s16 li16ZoneId       = GetZone(lEntityId);
+        // The asm loads mauStartIndexOfZone[zone] BEFORE the owner tripwire (0x822CDCF4..
+        // 0x822CDD04 precede the `beq` at 0x822CDD08), so the read is hoisted here too. The
+        // tripwire itself is GetEntityIndex()'s, inlined -- not a second, separate assert.
+        const u16 lu16ZoneStart    = mauStartIndexOfZone[static_cast<u16>(li16ZoneId)];
+
+        RecordHitProp(static_cast<s32>(li16ZoneId),
+                      static_cast<s32>(lEntityId.GetEntityIndex()) - static_cast<s32>(lu16ZoneStart));
+    }
+
+    // DWARF :208 (park P5) -- folded into PreSceneUpdate @0x8230ADF4.
+    void PropZoneManager::UpdateCollisionStreaming(Vector3 lv3Position, const PropPhysicsDataHeader* lpTypes,
+                                                   PropCellManager::RecentlyBrokenPropsArray* lpRecentlyBroken,
+                                                   PropEntityIO::OutputBuffer_PreScene* lpOutput,
+                                                   bool lbInReplay,
+                                                   BrnReplays::PropEntitySerialiser* lpSerialiser)
+    {
+        mCellManager.Update(lv3Position, lpTypes, lpRecentlyBroken, lpOutput,
+                            lbInReplay, lpSerialiser, mauStartIndexOfZone);
+    }
+
+    // DWARF :346 (park P4) -- folded into PreSceneUpdate @0x8230AD00.
+    void PropZoneManager::ClearPropsNearPosition(Vector3 lv3Position, VecFloat lvClearRadius,
+                                                 const PropPhysicsDataHeader* lpTypes,
+                                                 PropCellManager::PropInputInterface* lpPropInput,
+                                                 InSceneUpdateInterface* lpScene,
+                                                 BrnReplays::PropEntitySerialiser* lpSerialiser)
+    {
+        mCellManager.ClearPropsNearPosition(lv3Position, lvClearRadius, lpTypes, lpPropInput,
+                                            lpScene, lpSerialiser, mauStartIndexOfZone);
+    }
+
+    // DWARF :255 / :269 / :276 -- pure pass-throughs.
+    void PropZoneManager::AddPropToContactGeneration(PropEntityInstance* lpProp, const PropTypeData* lpType,
+                                                     PropVolumeInstanceID lVolumeInstanceID,
+                                                     InSceneUpdateInterface* lpScene)
+    {
+        mCellManager.AddPropToContactGeneration(lpProp, lpType, lVolumeInstanceID, lpScene);
+    }
+
+    void PropZoneManager::RemovePropFromContactGeneration(PropEntityInstance* lpProp, const PropTypeData* lpType,
+                                                          PropVolumeInstanceID lVolumeInstanceID,
+                                                          InSceneUpdateInterface* lpScene)
+    {
+        mCellManager.RemovePropFromContactGeneration(lpProp, lpType, lVolumeInstanceID, lpScene);
+    }
+
+    void PropZoneManager::RemovePropPartsFromContactGeneration(PropEntityInstance* lpProp, const PropTypeData* lpType,
+                                                               PropVolumeInstanceID lVolumeInstanceID,
+                                                               InSceneUpdateInterface* lpScene)
+    {
+        mCellManager.RemovePropPartsFromContactGeneration(lpProp, lpType, lVolumeInstanceID, lpScene);
+    }
+
+    // DWARF :262 -- the one forwarder that is NOT a pass-through: it resolves the prop's FIRST
+    // part instance. BreakPropIntoParts @0x822FB25C..0x822FB288 is the asm witness (see the
+    // header note); the console's literal 80-byte stride is replaced by the array subscript.
+    void PropZoneManager::AddPropPartsToContactGeneration(PropEntityInstance* lpProp, const PropTypeData* lpType,
+                                                          PropVolumeInstanceID lVolumeInstanceID,
+                                                          InSceneUpdateInterface* lpScene)
+    {
+        mCellManager.AddPropPartsToContactGeneration(lpProp, &maParts[lpProp->mu16PartsIndex],
+                                                     lpType, lVolumeInstanceID, lpScene);
+    }
+
+    // DWARF :283 (park P3) -- pure pass-through.
+    void PropZoneManager::RemovePropPartsFromSimIfPhysical(PropEntityInstance* lpProp, const PropTypeData* lpType,
+                                                           PropVolumeInstanceID lVolumeInstanceID,
+                                                           PropEntityIO::OutputBuffer_PreScene* lpOutput)
+    {
+        mCellManager.RemovePropPartsFromSimIfPhysical(lpProp, lpType, lVolumeInstanceID, lpOutput);
+    }
+
+    // The replay record-side snapshot. X360 PostPhysicsUpdate @0x823032F8 calls
+    // PropCellManager::RecordPropPositions with `r3 = module + 0x280`.
+    void PropZoneManager::RecordPropPositions(BrnReplays::PropEntitySerialiser* lpSerialiser,
+                                              const PropPhysicsDataHeader* lpTypes)
+    {
+        mCellManager.RecordPropPositions(lpSerialiser, lpTypes);
+    }
+
+    // ========================================================================
     // PropZoneManager::LoadZone @ 0x822FC168
     // ------------------------------------------------------------------------
     // Allocate one prop-pool slot + one part-pool slot for the zone, record its start
@@ -1259,14 +1395,14 @@ namespace BrnWorld
 
         // "Below world floor" predicate (X360 v108 @ 0x822F0B80-0x822F0BA4):
         //   vcmpgtfp v0, [unk_82FAD840], splat(lTransform.Pos().y)
-        // i.e. KF_UNDER_WORLD_THRESHOLD_Y > pos.y  -- true when the prop's translation Y has
+        // i.e. BrnPhysics::Props::KVF_PROP_FLOOR > pos.y  -- true when the prop's translation Y has
         // dropped below the rodata floor constant. (The sibling
         // PropEntityModule::ProcessPotentialContactWithPart @ 0x822EEDA8 compares the SAME
         // unk_82FAD840 against a transform's Y lane, confirming it is a world-floor / Y
         // threshold, not a NaN check.) The frozen-prop branch below uses this to decide
         // whether the prop must be pulled out of the scene / contact generation this frame.
         const f32 lfPositionY = lTransform.Pos().y;
-        const bool lbBelowWorldFloor = (KF_UNDER_WORLD_THRESHOLD_Y > lfPositionY);
+        const bool lbBelowWorldFloor = (BrnPhysics::Props::KVF_PROP_FLOOR > lfPositionY);
 
         // The destination scene-update interface (X360 OutputBuffer_PostPhysics::GetScene...).
         InSceneUpdateInterface* lpScene =

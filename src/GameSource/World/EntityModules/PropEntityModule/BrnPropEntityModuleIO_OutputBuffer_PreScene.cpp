@@ -44,10 +44,17 @@ namespace PropEntityIO
                       "scene-input interface smaller than the console span -- retype regressed");
         static_assert(sizeof(PropInputInterfaceStorage) >= 11264,
                       "prop-input interface smaller than the console span -- retype regressed");
-        // The count word Construct zeroes sits at +1024 inside the array (console buffer+832128
-        // == &mVisibleOverheadSignArray + 1024).
-        static_assert(offsetof(VisibleOverheadSignArrayStorage, miCount) == 1024,
-                      "overhead-sign count word @ +1024 (console buffer+832128)");
+        // ⭐ 2026-08-18 (wave Q keystone): VisibleOverheadSignArrayStorage is now the real
+        // ::Array<BrnGui::OverheadSignScore,32>, whose miCount is private, so the old
+        // `offsetof(..., miCount) == 1024` pin cannot be spelled. The fact it was pinning --
+        // that the word Construct/Clear zero sits immediately after a 32 * 0x20 element run --
+        // is preserved by pinning the element stride and the whole-array extent instead
+        // (1024 elements bytes + a 4-byte count, rounded up to the array's 16-byte alignment,
+        // which the alignas(16) Vector3 inside OverheadSignScore forces).
+        static_assert(sizeof(BrnGui::OverheadSignScore) == 0x20,
+                      "overhead-sign element stride 0x20 (console `slwi ...,5`)");
+        static_assert(sizeof(VisibleOverheadSignArrayStorage) == 32 * 0x20 + 16,
+                      "overhead-sign array is 32 x 0x20 elements + the count word (console buffer+832128)");
     }
 
     // ========================================================================

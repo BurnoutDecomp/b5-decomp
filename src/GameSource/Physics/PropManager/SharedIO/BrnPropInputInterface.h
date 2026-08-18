@@ -51,6 +51,15 @@ namespace Props
     // MOVE to BrnPropConstants.h when that file lands to avoid a duplicate definition.
     static const u32 KU_MAX_PHYSICAL_PROPS = 15;
 
+    // ⭐ ADDED 2026-08-18 (breakable-props keystone). The part-slot ceiling, same DWARF home
+    // (BrnPropConstants.h, still uncommitted) and the same MOVE-WHEN-IT-LANDS caveat as the
+    // prop one above. Value is X360-attested twice over: PropManager::ReadUpdatedBodies
+    // @0x82632E1C bounds-checks the part index with `cmplwi r11, 0x1E` under the assert
+    // "liPartIndex >= 0 && liPartIndex < static_cast<int32_t>( KU_MAX_PHYSICAL_PROP_PARTS )"
+    // (BrnPropManager.cpp:1043 -- the message literally names this constant), and
+    // PropManager::mUsedParts is a BitArray<30>.
+    static const u32 KU_MAX_PHYSICAL_PROP_PARTS = 30;
+
     struct PropInputInterface
     {
         // ---- embedded-queue typedefs (DWARF BrnPropInputInterface.h:43/44/47/48,
@@ -133,6 +142,43 @@ namespace Props
         // AGENTS.md bans (the ResourceHandle widens on the host, so +0x2BF8 is wrong here
         // anyway). Pure addition -- no member added, no layout change.
         void SetPhysicsData(const CgsResource::ResourceHandle& lrHandle) { mpPhysicsData = lrHandle; }
+
+        // ==================================================================================
+        // ⭐ ADDED 2026-08-18 (breakable-props keystone wave). THE SEVEN DWARF-DECLARED
+        // QUEUE / DATA ACCESSORS (BrnPropInputInterface.h:102..:120). Without them the four
+        // PropManager::Process{Add,Remove}{Prop,Part}InstanceEvents drains have no legal way
+        // to reach the queues at all -- the members are private, and poking `interface +
+        // 0xFB0` from the caller is exactly the console-offset-on-x64 pattern AGENTS.md bans
+        // (each EventQueue's element carries a Matrix44Affine, so the console offsets do not
+        // survive the host build even though these particular payloads are pointer-free).
+        //
+        // X360 ATTESTATION (they are folded at every call site, so there is no out-of-line
+        // emission to cite -- what is cited instead is the offset each fold lands on, which
+        // is the member map below, stated twice):
+        //   ProcessAddPartInstanceEvents    @0x826280F8  `addi r30, r4, 0xFB0`  == mAddPartQueue
+        //   ProcessRemovePartInstanceEvents @0x82627818  `addi r24, r4, 0x28CC` == mRemovePartQueue
+        // and each then reads `lwz r,8(queue)` == BaseEventQueue::miLength (GetLength()) and
+        // calls BaseEventQueue<T>::GetEvent(i) on it.
+        //
+        // Const/non-const split is the DWARF's own (:108 vs :111, :114 vs :117): the drains
+        // hold `const PropInputInterface*` and bind the const overloads.
+        // ==================================================================================
+        const AddPhysicalPropEventQueue& GetAddPhysicalPropQueue() const { return mAddPropQueue; }      // :102
+        const AddPhysicalPartEventQueue& GetAddPhysicalPartQueue() const { return mAddPartQueue; }      // :105
+        const RemovePropEventQueue&      GetRemovePhysicalPropQueue() const { return mRemovePropQueue; } // :108
+        RemovePropEventQueue&            GetRemovePhysicalPropQueue()       { return mRemovePropQueue; } // :111
+        const RemovePartEventQueue&      GetRemovePhysicalPartQueue() const { return mRemovePartQueue; } // :114
+        RemovePartEventQueue&            GetRemovePhysicalPartQueue()       { return mRemovePartQueue; } // :117
+
+        // :120. The physics-data handle the world side seated via SetPropPhysicsData.
+        // PropManager::ProcessInputs_Prepare's DWARF body hint is a single
+        // `ResourcePtr<PropPhysicsDataHeader>::operator=` -- i.e. mpPhysicsData = this.
+        const CgsResource::ResourceHandle& GetPropPhysicsData() const { return mpPhysicsData; }
+
+        // :65 -- the DWARF's own spelling of the setter. The committed SetPhysicsData(const&)
+        // above predates this wave and keeps its callers compiling; this is the DWARF name,
+        // by value as the DWARF has it. Both write the same member; neither is a new member.
+        void SetPropPhysicsData(CgsResource::ResourceHandle lHandle) { mpPhysicsData = lHandle; }
 
     private:
         AddPhysicalPropEventQueue mAddPropQueue;             // +0x0000   (:125)

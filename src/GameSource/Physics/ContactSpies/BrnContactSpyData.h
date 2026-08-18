@@ -102,7 +102,18 @@ namespace BrnPhysics
             const TrafficContactQueue*         GetTrafficContacts() const;
             const PhysicalCarPartContactQueue* GetPhysicalCarPartContacts() const;
             const HingedCarPartContactQueue*   GetHingedPartContacts() const;
-            const PropContactQueue*            GetPropContacts() const;
+            // ⭐ BODIED 2026-08-18 (wave Q round 2). DWARF BrnContactSpyData.h:146. It was
+            // declared here with no definition anywhere in the tree, and it is the ONE route
+            // to the prop contacts (mPropContactQueue is private) that
+            // BrnWorld::PropEntityModule::ProcessContacts needs.
+            // INLINE (attested, same footing as GetRaceCarContactRunList below): the X360
+            // emits NO out-of-line symbol for it. ProcessContacts folds the whole two-level
+            // accessor chain at 0x822FA99C..0x822FA9A8 as `lwz r11,0(interface)` (mpData) then
+            // `addis r3,r11,1 ; addi r3,r3,0x67E0` == mpData + 0x167E0, which is exactly the
+            // mPropContactQueue seat this header's member table already carries -- no member
+            // read, no tripwire, on this half of the chain (the "mpData != NULL" assert at
+            // 0x822FA970 belongs to ContactSpyInterface::GetPropContacts, one level up).
+            const PropContactQueue*            GetPropContacts() const { return &mPropContactQueue; }
             const DiscardedContactQueue*       GetDiscardedContacts() const;
             // INLINE (attested): ContactSpyInterface::GetRaceCarContactRunList @0x82355BF0
             // inlines this accessor as bare offset math (mpData + 0x198D0) -- the console body

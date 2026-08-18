@@ -208,6 +208,80 @@ namespace SceneManagerIO
         void SetVolumeInstanceCullingGroup(VolumeInstanceId lVolumeInstanceId, s32 liCullingGroupId); // @0x822B1A98
         void AddVolumeInstanceForCaching(VolumeInstanceId lVolumeInstanceId, s32 leCacheOptions);     // @0x8270DA10
 
+        // ---- the TRIANGLE-CACHE reposition producer ------------------------------------------
+        // ADDED 2026-08-18 (wave Q round 2, shared-header owner). DWARF
+        // CgsSceneManagerIO_SceneUpdate.h:478 -- `void UpdateCachedObjectPosition(int32_t,
+        // Vector3, float32_t);` (source line, not the dumpfile line; the dumpfile prints it at
+        // its line 506). It sits between AddCachedObject (:472) and RemoveCachedObject (:488),
+        // neither of which is declared in this tree yet.
+        //
+        // A HEADER INLINE, deliberately: there is NO out-of-line body in the X360 export set (I
+        // scanned the `name` field of every 0x*.json under .ida-exports/BURNOUT_X360_ARTIST.XEX
+        // for "UpdateCachedObjectPosition"/"UpdateCachedPosition" -- the only hits are
+        // TriangleCacheManagerIO::InEventUpdateCachedPosition::AddEvent, PhysicsModule::
+        // UpdateCachedPositions and TriangleCacheManager::ProcessUpdateCachedPositionEvents,
+        // none of them this), and every call site has it fully inlined.
+        //
+        // BODY, transcribed from the one recovered inlined copy -- BrnPhysics::Props::
+        // PropManager::UpdateTriangleCache @0x826119A0, instructions 0x82611B00..0x82611B48:
+        //     stw  <slot>, event+0x00                       (0x82611B28)
+        //     <16B scratch>.xyz = the caller's Vector3      (0x82611B30 stvx128 v127)
+        //     <16B scratch>.w   = the caller's f32 radius   (0x82611B38 stfs f0)
+        //     copy that 16B scratch to event+0x10           (0x82611B40/0x82611B44)
+        //     bl BaseEventQueue<InEventUpdateCachedPosition>::AddEvent(queue, &event)
+        //                                                   (0x82611B48; queue == interface +
+        //                                                    0xC5290 == mUpdateCachedPositionQueue)
+        // Two stores in that window are DEAD (the w-lane zero at 0x82611B1C and the whole-vector
+        // zero at 0x82611B20, both overwritten before any address is published) -- they are the
+        // register-level way the compiler assembled a Vector3Plus, not behaviour, so they are not
+        // transcribed. Called out rather than smoothed.
+        //
+        // MEASURED, NOT ASSUMED: this producer emits NO "queue too small" tripwire, unlike every
+        // sibling producer in this struct. There is no `bl` and no length compare anywhere
+        // between the interface fetch at 0x82611AFC and the AddEvent at 0x82611B48.
+        //
+        // INFERENCE, FLAGGED: both recovered call sites add the 0.1f cache padding
+        // (flt_82004014, which I read out of the image: 3D CC CC CD == 0.1f big-endian) to the
+        // radius BEFORE the call, so the asm alone cannot prove whether the source put the
+        // padding in the caller or in here. The padding is left in the CALLERS because that is
+        // what the two call sites of the (still-gated) EmitUpdateTriangleCacheEvent hook do --
+        // BrnDetachedWheelManager.cpp:260 and BrnDetachedPartManager.cpp:298-299 both compute
+        // `radius + KF_TRIANGLE_CACHE_PADDING + lfSweptDistance` before the call, and the
+        // hook's own signature takes an already-padded radius.
+        // ⚠️ CORRECTED 2026-08-18 (round 3): this used to call those two "this tree's two
+        // already-committed PRODUCERS of the same event". NEITHER IS A PRODUCER. Both call
+        // BrnPhysics::Deformation::EmitUpdateTriangleCacheEvent, which is a LOG-ONCE CONDUCTOR
+        // GATE with an empty body (BrnDetachedWheelManager.cpp:315-329, declared
+        // BrnDetachedWheelManager.h:105, second definition/caller pair in
+        // BrnDetachedPartManager.cpp:77/:301); its own banner says "the real bodies are the
+        // InEventUpdateCachedPosition / RemoveRigidBody queue AddEvents". There are ZERO
+        // committed producers of InEventUpdateCachedPosition in the tree apart from this
+        // inline and PropManager_wQ_03.cpp's open-coded block.
+        // ⚠️ GATE NOW UNBLOCKED, NOT RETIRED (gotcha 7, reported not fixed -- foreign file):
+        // that gate's whole body collapses to one forward to this producer. Conductor to body
+        // + retire it; it is not this header's owner's file. If a later wave finds the padding
+        // belongs in here instead, the fix is one line here and three at the call sites.
+        //
+        // NOT LANDED: the DWARF also declares a `VecFloat`-tailed overload at :484
+        // (`void UpdateCachedObjectPosition(int32_t, Vector3, VecFloat)`). No X360 call site
+        // attests it -- rung 1 decides what exists, and adding an unattested overload against
+        // `VecFloat` (== rw::math::vpu::Vector4 in BrnCommonTypes.h) risks making the existing
+        // f32 call sites ambiguous for nothing.
+        //
+        // NAMING NOTE: the DWARF calls the target queue mUpdateCachedObjectPositionQueue
+        // (:606); this tree committed it as mUpdateCachedPositionQueue (below, X360 +0xC5290).
+        // Not renamed here -- the committed spelling is load-bearing for existing consumers and
+        // a rename is not this owner's call.
+        void UpdateCachedObjectPosition(s32 liCacheSlot, Vector3 lPosition, f32 lfSphereRadius)
+        {
+            CgsSceneManager::TriangleCacheManagerIO::InEventUpdateCachedPosition lEvent;
+            lEvent.miCacheSlot = liCacheSlot;                          // stw, event +0x00
+            lEvent.mNewPositionAndRadius.SetVector3(lPosition);        // xyz lanes
+            lEvent.mNewPositionAndRadius.SetPlus(lfSphereRadius);      // w lane
+
+            mUpdateCachedPositionQueue.AddEvent(lEvent);               // X360 +0xC5290
+        }
+
         // @ 0x827A9340 -- the whole-interface merge every entity-module -> scene bridge
         // drives (BridgeEntityModulesToSceneModule_PreScene @0x827AB490,
         // BridgePhysicsSceneUpdateToScene @0x827ABA40, ...): append all 25 embedded

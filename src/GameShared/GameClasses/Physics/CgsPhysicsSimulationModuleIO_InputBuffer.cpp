@@ -217,8 +217,36 @@ namespace PhysicsSimulationIO
     const InputBuffer::InUpdateRigidBodyQueue* InputBuffer::GetUpdateRigidBodyQueue() const
     { CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n"); return &mUpdateRigidBodyQueue; }
 
+    // ⭐ ADDED 2026-08-18 (wave Q round 2, shared-header owner). The WRITE-side twin
+    // @0x825BCCB8 -- the accessor PropManager::ClampAcceleration @0x82627F00 and
+    // PropManager::ReadUpdatedBodies @0x82632918 call before posting an InUpdateRigidBody.
+    // MEASURED from .ida-exports/BURNOUT_X360_ARTIST.XEX/0x825BCCB8.json (42 instructions,
+    // 0x825BCCB8..0x825BCD5C, counted): the guard is `lbz r11,0(r28)` + `extrwi r11,r11,1,28`
+    // -- MSB0 bit 28 == LSB bit 3 == eStatusLockedForWrite, the opposite bit from the const
+    // read-lock block above (`,1,27`) -- and the string it fires is "Not locked for writing\n"
+    // with the console source line baked in as `li r5,0x414` (== 1044). The return is
+    // `addis r3,r28,1 ; addi r3,r3,-0x69E0` == this + 0x9620 == +38432, which is exactly the
+    // mUpdateRigidBodyQueue offset pinned in _AssertLayout above. No bounds check, no other
+    // work. (Console offset quoted for provenance only -- the host returns the member's own
+    // address, whose byte offset differs wherever an element type widened on LLP64.)
+    InputBuffer::InUpdateRigidBodyQueue* InputBuffer::GetUpdateRigidBodyQueue()
+    { CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n"); return &mUpdateRigidBodyQueue; }
+
     const InputBuffer::InApplyForceQueue* InputBuffer::GetApplyForceQueue() const
     { CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n"); return &mApplyForceQueue; }
+
+    // ⭐ ADDED 2026-08-18 (same wave/owner). The WRITE-side twin @0x825BCD60 -- an UNNAMED
+    // `sub_825BCD60` in the export set (no identity.json entry, no ledger row: an export-set
+    // NAMING hole, the function itself is fully exported). MEASURED from
+    // .ida-exports/BURNOUT_X360_ARTIST.XEX/0x825BCD60.json (42 instructions,
+    // 0x825BCD60..0x825BCE04, counted): the same write-lock guard and the same
+    // "Not locked for writing\n" string, source line baked as `li r5,0x41B` (== 1051), then
+    // `addis r3,r28,1 ; addi r3,r3,0x2C30` == this + 0x12C30 == +76848 == &mApplyForceQueue
+    // (BOTH instructions matter: 0x2C30 by itself is 11312). Callers per the image's own
+    // xrefs_to: PropManager::ApplyAntiHerdingForce @0x826113F8 (AddEventSafe post) and
+    // PropManager::ReadUpdatedBodies @0x82632918 (AddEvent post).
+    InputBuffer::InApplyForceQueue* InputBuffer::GetApplyForceQueue()
+    { CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n"); return &mApplyForceQueue; }
 
     const InputBuffer::InSetRigidBodySpyQueue* InputBuffer::GetSetRigidBodySpyQueue() const
     { CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n"); return &mSetRigidBodySpyQueue; }

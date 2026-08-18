@@ -239,6 +239,88 @@ namespace BrnWorld
         mu8State = static_cast<u8>(leState);   // +77
     }
 
+    // ------------------------------------------------------------------------------------
+    // ⭐ BODIED 2026-08-18 (wave Q round 2). GetNextState / SetNextState were DECLARED at
+    // BrnPropEntityInstance.h:115/116 and defined NOWHERE in the tree, while
+    // PropEntityModule_wQ_05.cpp calls them four times (lines 250/259/396/400) -- a link break
+    // `cl /c` cannot see and coverage_check cannot see either (neither accessor has a ledger
+    // entry, so no other TU owner would ever have bodied them).
+    //
+    // Neither has an out-of-line X360 symbol (the whole PropEntityInstance symbol set in the
+    // image is Construct / GetState / SetState / SetPhysicsIndex / UpdateConstraints /
+    // CalculateEaseInSpeedModulation / InitialiseFromData / IsSmashed / IsPhysical / Update),
+    // so both are fold-only -- exactly like GetZone/GetTypeId/GetInstanceID above, which is why
+    // they are homed here rather than as header inlines.
+    //
+    // Both folds MEASURED twice each, in ProcessPotentialContacts @0x822FA538 and in
+    // ProcessPotentialContactWithProp @0x822DB038, identical in shape:
+    //   GetNextState  0x822FA714 / 0x822DB2B8:
+    //       lbz r11, 0x4E(prop)  ; mu8NextState
+    //       cmplwi r11, 7 ; blt  ; UNSIGNED compare against E_STATE_COUNT
+    //       FireAssert("mu8NextState < E_STATE_COUNT", …, 0x2A5 == 677)
+    //       lbz r11, 0x4E(prop)  ; re-read, the return value
+    //   SetNextState  0x822FA84C / 0x822DB340:
+    //       cmpwi r31, 7 ; blt   ; SIGNED compare -- the parameter is an EPropState (int),
+    //                            ; not the u8 member, which is why the polarity differs
+    //       FireAssert("leState < E_STATE_COUNT", …, 0x2B2 == 690)
+    //       stb r31, 0x4E(prop)
+    // The two assert message pointers are pinned at 0x822FA6E4 (r24 == "leState < …") and
+    // 0x822FA6F8 (r25 == "mu8NextState < …"), so the pairing is measured, not assumed.
+    // Same shape as the GetState/SetState pair above; only the member and the message differ.
+    // ------------------------------------------------------------------------------------
+    EPropState PropEntityInstance::GetNextState() const
+    {
+        CGS_ASSERT(mu8NextState < E_STATE_COUNT, "mu8NextState < E_STATE_COUNT");
+        return static_cast<EPropState>(mu8NextState);
+    }
+
+    void PropEntityInstance::SetNextState(EPropState leState)
+    {
+        CGS_ASSERT(leState < E_STATE_COUNT, "leState < E_STATE_COUNT");
+        mu8NextState = static_cast<u8>(leState);   // +78
+    }
+
+    // ------------------------------------------------------------------------------------
+    // ⭐ BODIED 2026-08-18 (wave Q round 2). Declared at BrnPropEntityInstance.h:126 and
+    // defined nowhere; DWARF BrnPropEntityInstance.h:324 `int32_t GetPhysicsIndex() const`.
+    // Fold-only (no X360 symbol). MEASURED at ChangePropState 0x822EF818 and 0x822EF828, both
+    // a bare `lbz r5/r6, 0x4C(prop)` feeding PropInputInterface::RemovePropInstance /
+    // ::AddPropInstance -- a plain zero-extending byte read with NO tripwire, unlike its
+    // SetPhysicsIndex twin below (which carries two). Nothing is inferred beyond the fold.
+    // ------------------------------------------------------------------------------------
+    s32 PropEntityInstance::GetPhysicsIndex() const
+    {
+        return static_cast<s32>(mu8PhysicsIndex);   // +76
+    }
+
+    // ------------------------------------------------------------------------------------
+    // ⭐ BODIED 2026-08-18 (wave Q round 3, fix pass). Declared at BrnPropEntityInstance.h:125
+    // and defined NOWHERE in the tree -- reported by the round-2 contacts lander, which had to
+    // open-code the mask at its one call site rather than add an unresolved external.
+    // DWARF BrnPropEntityInstance.h:151 `bool IsAddedToContactGen() const;`.
+    //
+    // Fold-only: the whole PropEntityInstance out-of-line symbol set in the ledger is
+    // Construct / InitialiseFromData / GetState / SetState / SetPhysicsIndex / IsPhysical /
+    // IsSmashed / Update / UpdateConstraints / CalculateEaseInSpeedModulation -- there is no
+    // IsAddedToContactGen symbol, so it is homed here beside the other fold-only accessors
+    // (GetNextState / SetNextState / GetPhysicsIndex above) rather than as a header inline.
+    //
+    // MEASURED at ProcessContacts 0x822FAAF8:
+    //       lbz    r11, 0x4A(r30)          ; 0x4A == 74 == mu8Flags
+    //       rlwinm r11, r11, 0,29,29       ; keep bit 29 (MSB-numbered) == 0x04
+    //       cmplwi cr6, r11, 0 ; bne       ; the assert's "!= 0" test
+    // i.e. the bare mask, with no tripwire of its own. Four committed sibling sites spell the
+    // same fold open-coded (BrnPropCellManager.cpp:534/580/607/685).
+    //
+    // ⚠️ Deliberately NOT propagated to those five call sites: each of them reproduces a
+    // console fold that is already committed and gate-green, and rewriting them is the owning
+    // lane's call, not this header's.
+    // ------------------------------------------------------------------------------------
+    bool PropEntityInstance::IsAddedToContactGen() const
+    {
+        return (mu8Flags & KU_ADDED_TO_CONTACT_GEN_BIT) != 0;   // +74
+    }
+
     // @ 0x822A1C20. Assign the prop's slot in the physics pool (0 .. KU_MAX_PHYSICAL_PROPS-1).
     void PropEntityInstance::SetPhysicsIndex(s32 liPhysicsIndex)
     {

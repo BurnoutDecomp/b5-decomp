@@ -70,6 +70,49 @@ namespace PropEntityIO
         mPotentialContactQueue.Append(*lpQueue);
     }
 
+    // ========================================================================
+    // InputBuffer_PrePhysics::GetPotentialContactQueue() const   @ 0x822B92A0   (DWARF :540)
+    // ------------------------------------------------------------------------
+    // ⭐ NEW 2026-08-18 (wave Q round 2). Declared in the header since this buffer landed and
+    // DEFINED NOWHERE, while two wave-Q partfiles already call it (PropEntityModule_wQ_05.cpp
+    // :176 in ProcessPotentialContacts and PropEntityModule_wQ_07.cpp:628 in PrePhysicsUpdate's
+    // paused-leg tripwire) -- a live unresolved external that `cl /c` cannot see.
+    // The asm is the family's standard read handle: `lbz r11,0(this) ; extrwi r11,r11,1,27`
+    // (READ-lock, bit 4), the "Not locked for reading\n" FireAssert baking
+    // BrnPropEntityModuleIO.h line 0x223 == 547, then `addi r3, r28, 0x10` --
+    // &mPotentialContactQueue, the same +0x10 seat AppendPotentialContactQueue writes.
+    // ========================================================================
+    const InputBuffer_PrePhysics::OutPotentialContactQueue* InputBuffer_PrePhysics::GetPotentialContactQueue() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        return &mPotentialContactQueue;
+    }
+
+    // ========================================================================
+    // InputBuffer_PrePhysics::AppendResetOnTrackResultQueue   @ 0x827AA220   (DWARF :544)
+    // ------------------------------------------------------------------------
+    // ⭐ NEW 2026-08-18 (wave Q round 2). Declared-only until now.
+    // ⚠️ There is NO per-address JSON export for 0x827AA220, so this body is grounded on a
+    // headless-idat dump of the IDB rather than on .ida-exports. Two independent facts pin the
+    // identity before a line of it was written: (a) the callee's own export,
+    // .ida-exports/BURNOUT_X360_ARTIST.XEX/0x827A71B8.json (BaseEventQueue<ResetOnTrackResult>
+    // ::Append), lists 0x827AA220 in its `xrefs_to` under exactly this name; (b) the function
+    // sits immediately after AppendPotentialContactQueue @0x827AA170 and is the same 44
+    // instructions long. Dumped body:
+    //     lbz r11,0(r28) ; extrwi r11,r11,1,28        -- write-lock (bit 3)
+    //     ... "Not locked for writing\n", baked line 0x227 == 551
+    //     addis r3,r28,3 ; addi r3,r3,-0x7FE0         -- this + 0x28020
+    //     mr r4,r27 ; bl BaseEventQueue<ResetOnTrackResult>::Append
+    // this+0x28020 is mResetOnTrackResultQueue: the sibling read handle @0x822B9348 returns
+    // the same +163872 == 0x28020 seat. Like AppendPotentialContactQueue, the DWARF declares
+    // it void and the console's tail-call merely forwards the callee frame.
+    // ========================================================================
+    void InputBuffer_PrePhysics::AppendResetOnTrackResultQueue(const ResetOnTrackResultQueue* lpQueue)
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        mResetOnTrackResultQueue.Append(*lpQueue);
+    }
+
     // X360 0x822B9348 (R, :550) -- read-lock; return the reset-on-track result queue (this+163872).
     // mResetOnTrackResultQueue sits after mPotentialContactQueue (EventQueue<PotentialContact,2048>:
     // +0x10 base + 16 header + 2048*80 = +163872). Called by BrnWorld::PropEntityModule::PrePhysicsUpdate.

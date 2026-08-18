@@ -165,11 +165,46 @@ namespace BrnWorld
         // X360 @0x822FC8F0 -- the per-frame cell sweep PropEntityModule::PreSceneUpdate
         // drives: rebuild the target list around the player, then activate/deactivate
         // every loaded cell to match it.
+        //
+        // ⭐ SIGNATURE GROWN 2026-08-18 (wave Q keystone). The committed form had SIX
+        // parameters; the shipped X360 function takes SEVEN. The missing one is `r7`, and
+        // the sole call site pins what it is:
+        //   PreSceneUpdate @0x8230ADF0  `lbzx r7, r30, 0xD3334`  == PropEntityModule::mbInReplay
+        //   PreSceneUpdate @0x8230ADF4  `bl BrnWorld__PropCellManager__Update`
+        // with r8 = &mPropEntitySerialiser (var_2EC, the same local ClearPropsNearPosition
+        // takes in its own r7) and r9 = &mZoneManager.mauStartIndexOfZone. Inserting the flag
+        // at position 5 is what makes r8/r9 land on lpSerialiser/lpuZoneStartIndices instead of
+        // being shifted one slot left -- i.e. the six-parameter form silently mis-bound the
+        // last two arguments at every call site that ever gets written.
+        //
+        // ⚠️ MEASURED: the shipped BODY NEVER READS r7. Its prologue moves r4->r28, r5->r25,
+        // r6->r27, r8->r26, r9->r24 and leaves r7 untouched (0x822FC8F0..0x822FC970), and no
+        // later instruction reads r7 before the first call clobbers it. The parameter is
+        // therefore dead in the shipped build; it is declared because the CALL SITE passes it
+        // and the argument positions after it depend on it -- NOT because the body needs it.
         void Update(Vector3 lv3Position, const PropPhysicsDataHeader* lpTypes,
                     RecentlyBrokenPropsArray* lpRecentlyBroken,
                     PropEntityIO::OutputBuffer_PreScene* lpOutput,
+                    bool lbInReplay,
                     BrnReplays::PropEntitySerialiser* lpSerialiser,
                     const u16* lpuZoneStartIndices);
+
+        // X360 @0x822E1988 (ledger `reviewed`, but it had NO declaration and NO body anywhere
+        // in the tree until wave Q -- see the spec's "ledger-reviewed != implemented" list).
+        // The replay RECORD-side snapshot PropEntityModule::PostPhysicsUpdate drives once per
+        // frame while the serialiser is recording: clear the frame's eight prop/part arrays,
+        // then, for each of the miNumActiveCells entries of maActiveCells, append the cell id
+        // to the frame's 4-slot cell array ("muLength < MaxLength", BrnReplayArray.h:98) and
+        // walk that cell's [GetStartIndex(),GetEndIndex()) run of mpaProps recording every
+        // prop that carries KU_ADDED_TO_SCENE_BIT.
+        //
+        // SIGNATURE from the 0x822E1988 prologue: r3 = this, r4 = the PropEntitySerialiser
+        // (immediately fed to GetStaticLayout), r5 = the prop type table. The caller
+        // (PostPhysicsUpdate @0x823032F8) passes r3 = module+0x280 == &mZoneManager == this
+        // (PropCellManager is at offset 0 of PropZoneManager), r4 = module+0xD3180 ==
+        // &mPropEntitySerialiser, r5 = mpPropPhysicsDataHeader.GetMemoryResource().
+        void RecordPropPositions(BrnReplays::PropEntitySerialiser* lpSerialiser,
+                                 const PropPhysicsDataHeader* lpTypes);
 
         // X360 @0x822C6068 -- the 2x2 block of cells around lv3Position.
         void GenerateTargetList(Vector3 lv3Position);

@@ -87,6 +87,32 @@ namespace CgsCollision
         // definition in the .cpp includes its owning header.)
         CollisionResultList GetResultList(u16 luIndex) const;   // X360 0x825B2AE0
 
+        // ==========================================================================================
+        // ADDED 2026-08-18 (wave Q round 2, shared-header owner): the used-result-list count
+        // reader. DWARF CgsCollisionGenerator.h:298 -- `uint16_t GetNumUsedResultLists() const;`
+        // (verbatim, in the class's public section, immediately above GetResultList at :302).
+        //
+        // MUST be a header INLINE, not a declaration: there is NO out-of-line body anywhere in
+        // the X360 export set (I scanned the `name` field of every 0x*.json under
+        // .ida-exports/BURNOUT_X360_ARTIST.XEX for "NumUsedResult"/"GetNumUsed" -- 0 hits), and
+        // its one recovered consumer has it fully inlined --
+        // BrnPhysics::Props::PropManager::EndPropWorldContactGeneration @0x82628E18 reads the
+        // member directly with `lis r11,1 ; ori r11,r11,0x23BC ; lhzx r11, r30, r11`
+        // (0x82628E50/0x82628E5C), r30 being the generator. That +0x123BC is exactly the console
+        // offset this header's own member table already records for mu16NumUsedResultLists, and
+        // the same consumer's assert string names the accessor verbatim:
+        //   "miNumJobsAdded == lpContactGenerator->GetNumUsedResultLists()"
+        // So the member was already correct and PRIVACY was the only blocker. (The console read
+        // is a HALFWORD -- lhzx -- which is why the return type stays u16; the consumer widens it
+        // itself for the signed `cmpw` against its s32 job counter.)
+        //
+        // WARNING for anyone tempted to shortcut this: +0x123BC is a CONSOLE offset. The host
+        // BaseCollisionGenerator is wider (8-byte CollisionResultList* in mapCollisionResultLists
+        // [200], plus the host IOBuffer base), so reaching the member by that byte offset lands
+        // somewhere else entirely. Reach it by NAME, which is what this accessor is for.
+        // ==========================================================================================
+        u16 GetNumUsedResultLists() const { return mu16NumUsedResultLists; }   // DWARF h:298
+
         // Allocate + construct a SimpleDataStreamProducer for a streamed collision pass out of
         // the result allocator (128-byte aligned, alignment saved/restored around the burst).
         // X360 0x828109F8 (ledger identity "Crea" -- the IDA symbol is truncated; this is the
@@ -148,6 +174,94 @@ namespace CgsCollision
                                                        u16 lu16MaxResults, f32 lfPadding,
                                                        u32 lu32UserTagA, u16 lu16UserTagB,
                                                        CgsMemory::SimpleDataStreamProducer* lpProducer); // @0x82811698
+
+        // ==========================================================================================
+        // ADDED 2026-08-18 (wave Q round 2, shared-header owner): the PRIMITIVE-PAIR-LIST vs
+        // TRIANGLE-LIST stream family -- the fourth collide-stream family, and the one BREAKABLE
+        // PROPS run on. It is the stream BrnPhysics::Props::PropManager::BeginPropWorldContact-
+        // Generation @0x82628CB0 creates into mpPrimitiveWithTriangleStream and dispatches from,
+        // and the same pair BrnPhysics::Vehicle::VehicleManager::StartPartContactGeneration
+        // @0x8262C220 uses for the deformable-part pass (that one is still a documented PARTIAL in
+        // BrnVehicleManagerContactGeneration.cpp:868).
+        //
+        // ---- IDENTITY OF THE Create HALF (it carries no IDA symbol) -----------------------------
+        // sub_82811DD0 is CreateCollidePrimitiveListWithTriangleListStream. MEASURED with headless
+        // IDA 9.3 on IDA Files/BURNOUT_X360_ARTIST.XEX.i64 this wave, not inferred from a name:
+        //   * boundaries 0x82811D40..0x82811DCC AddPrimitiveListWithTriangleListT<runcated> (35),
+        //     0x82811DD0..0x82811F58 sub_82811DD0 (98), 0x82811F58..0x82812098 RunCollidePrimitive
+        //     ListWit<runcated> (80) -- the Add / Create / Run triple sits contiguous, exactly the
+        //     layout the three committed families use one block earlier;
+        //   * its 98 instructions are the SAME BODY as the three committed Create* (the shared
+        //     CreateCollideStreamProducer helper in CgsCollisionGenerator_CollideStreams.cpp):
+        //     GetAlignment / SetAlignment(0x80) / Malloc(0x180) / "Failed to allocate stream
+        //     producer\n" (:2037) / GetRequiredBufferSizes(n, 0x20, 0, 0, &cmd, &res) / Malloc /
+        //     "Failed to allocate stream buffers\n" (:2049) / Construct(n, 0x20, buf, 0,0,0) /
+        //     SetAlignment(saved) / return producer;
+        //   * both halves are called by exactly the two consumers above (xrefs measured), and the
+        //     Create call site passes `li r4, 0x64` == 100 max commands (0x82628CF0).
+        // The DWARF settles the source shape: CgsCollisionGenerator.h:271 / :275 declare exactly
+        // these two, and CgsCollisionGenerator.cpp:2028 / :2076 name the parameters (liMaxTests /
+        // lpStream) and the locals -- Run's are liNumJobs / lpNULLJob / liJobIndex / lu16BatchIndex,
+        // which is the AllocateJob + per-batch-wiring dispatcher shape its 80 instructions have.
+        //
+        // ---- BODIES ARE **NOT** LANDED HERE -- and why (wave Q round 2) --------------------------
+        // Both bodies are fully decoded and were written out this wave, but neither can be landed
+        // FAITHFULLY today because the family's job descriptor has no home in this tree:
+        //   CgsSceneManager::CgsCollision::PrimitiveListWithTriangleListStreamJobDesc
+        //   (DWARF home JobDescription/CgsPrimitiveListWithTriangleListJobDesc.h:107, with
+        //    StreamCommand at :111 and Data at :139) -- `grep -rn PrimitiveListWithTriangleList
+        //    StreamJobDesc b5-decomp/src` returns nothing.
+        // Create needs it for its command SIZE and Run needs it for its descriptor STORES:
+        //   * the console command size is 32 (`li r4/r5, 0x20`), but 32 is a CONSOLE size --
+        //     AddPrimitiveListWithTriangleListToStream @0x82811D40 builds the record as
+        //     {PrimitivePairList 12B @0x00, TriangleList 8B @0x0C, CollisionResultList* 4B @0x14,
+        //      bool @0x18} == 25 bytes rounded to 32, and three of those are 4-byte console
+        //     pointers that widen here. Hard-coding 32 on this host is gotcha 1 and would make the
+        //     poster and the stream buffer disagree the day a command flows;
+        //   * Run's descriptor writes are (batch+0x3D0 == the job-description slot):
+        //       +0x00 = the producer          (0x82811FF8 stw r22, 0x3D0(batch base))
+        //       +0xF0 = NULL   mpResultsList  (0x82811FF0 stw r27, 0x4C0)
+        //       +0xF4 = 0.0f   mfRadius       (0x82811FE8 stfs f31, 0x4C4; flt_82001CC0, which I
+        //                                      read out of the image myself: 00000000 == 0.0f)
+        //       +0xF8 = NULL   mpDebugStream  (0x82811FF4 stw r27, 0x4C8 -- this family passes NO
+        //                                      DebugRenderStreamReader; the Run signature has no
+        //                                      reader parameter, matching DWARF :275)
+        //       +0xFF = 12     muJobType      (0x82811FEC stb r23, 0x4CF, r23 == 0xC)
+        //     and 12 is not in this tree's E_CollisionJobType enum yet either.
+        // Both files are outside this owner's write scope, so the bodies are PARKED rather than
+        // half-landed or written against invented types:
+        //   scratchpad/waveQ2/parked/CgsCollisionGenerator_wQ2_PrimitiveStream.cpp
+        //   scratchpad/waveQ2/collgen.owner.md   (the paste-ready descriptor + enum recipe)
+        // The type-12 WORKER already exists as a loud named gate (ContactGeneratorJob::Execute
+        // case 12 -> ExecutePrimitiveListWithTriangleListStream @0x82926650), so landing the
+        // dispatcher over it is a named gate, not a silent drop -- the same precedent the three
+        // committed Run* rest on.
+        // ==========================================================================================
+        CgsMemory::SimpleDataStreamProducer* CreateCollidePrimitiveListWithTriangleListStream(s32 liMaxTests); // h:271 / X360 0x82811DD0 (sub_ -- see banner)
+        EA::Jobs::Job* RunCollidePrimitiveListWithTriangleListStream(
+            CgsMemory::SimpleDataStreamProducer* lpStream);                                                   // h:275 / X360 0x82811F58
+
+        // The family's command POSTER. DECLARATION ONLY -- same descriptor blocker as the two
+        // above; its five call sites (PropManager::DoPart/DoPropInstanceWorldContactGeneration,
+        // DeformableObject::DoBodyPart<x2>/DoDetachedWheelWorldContactGeneration) are themselves
+        // un-landed, so nothing in the tree calls it yet.
+        // X360 0x82811D40 (35 insns) -- an EXPORT-SET HOLE: the .i64 names it (truncated to
+        // "AddPrimitiveListWithTriangleListT") but .ida-exports has no 0x82811D40.json. Boundaries,
+        // callers and the full 35-instruction decode were read out of the image this wave.
+        // Parameter ORDER + names are the DWARF's (h:267 / cpp:1996) and are corroborated
+        // register-for-register by that decode: r4 pair list, r5 triangle list, r6 max results,
+        // r7 the bool (`stb r26`), r8 tag A, r9 tag B, r10 producer -- seven GPR arguments, no
+        // float (this family carries a bool where the sphere families carry lfPadding).
+        // RETURN TYPE: the DWARF says uint16_t, but the console returns the result-list index
+        // untruncated (`mr r3, r28`, no clrlwi) exactly like the two committed Add* siblings above,
+        // which this tree deliberately types s32 for the same register-truth reason. Kept s32 for
+        // family consistency; the DWARF's spelling is recorded here so a later join finds either.
+        s32 AddPrimitiveListWithTriangleListToStream(const PrimitivePairList* lpSPrimList,
+                                                     const TriangleList* lpTriangleList,
+                                                     u16 lu16MaxNumCollisions,
+                                                     bool lbUseOptimisedBoxTests,
+                                                     u32 luUserTagA, u16 lu16UserTagB,
+                                                     CgsMemory::SimpleDataStreamProducer* lpPrimitiveTriangleStream); // h:267 / X360 0x82811D40 (export hole)
 
         // ==========================================================================================
         // ⭐ ADDED 2026-08-10 (ground wave): the LINE-vs-triangle-list stream pair -- the floor of

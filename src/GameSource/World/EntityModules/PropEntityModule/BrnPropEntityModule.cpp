@@ -111,6 +111,43 @@ namespace BrnWorld
     }
 
     // ========================================================================
+    // PropEntityModule::PropEntityModule   @ 0x827E0488
+    // ------------------------------------------------------------------------
+    // ⭐ NEW 2026-08-18 (wave Q keystone). A real ledger function that had no declaration and
+    // no definition; the tree relied on the compiler's implicit constructor instead.
+    //
+    // The shipped body IS that implicit constructor, and nothing more. In order:
+    //   * `*a1 = &off_820CE500`, EA::Thread::RWMutex(this+16, 0, 1),
+    //     EA::Thread::RWMutex(this+280, 0, 1), `*a1 = off_820CFF40`
+    //       -- the CgsModule::ModuleSingleBuffered base sub-object: its two IOBuffer
+    //          read/write locks and the base-then-derived vtable stores.
+    //   * `a1[210786..210791]` / `a1[210794..210800]` self-linking node writes
+    //       -- CgsResource::BaseResourcePtr's default ctor, twice: mpPropPhysicsDataHeader
+    //          and mVFXPropCollection (each intrusive list node points at itself).
+    //   * the `v3 += 8` loop, 500 iterations from a1[210889] (== module + 0xCDF24)
+    //       -- the same BaseResourcePtr default ctor across mapGraphicsLists[500]
+    //          (8 dwords == the console's 32-byte ResourcePtr stride).
+    //   * four `-1` stores: module+841872 (mZoneManager.mauTrafficLightsToRestore),
+    //     +843428 (maRecentlyRecycledProps), +843552 (maRecentlyRecycledParts) and
+    //     +860592 == 0xD21B0 (mVisibleOverheadSigns)
+    //       -- ::Array<T,N>'s default ctor writing KI_UNCONSTRUCTED into each count word.
+    //     (That last one is also the independent confirmation that mVisibleOverheadSigns is
+    //      an ::Array: only ::Array's default ctor writes -1, and only at its count word.)
+    //   * `a1[210468] = -1`, `a1[210857] = -1`, `a1[210888] = -1`, `a1[215148] = -1` are those
+    //     four; there is no other initialisation. Every scalar flag/enum/counter the class
+    //     owns is left UNINITIALISED here -- Construct() is what sets them.
+    //
+    // So the faithful port is an empty user-provided default constructor: it
+    // default-initialises exactly the same set (base + the members with non-trivial default
+    // ctors) and leaves the same scalars untouched. It is written out of line only because
+    // the X360 emitted it out of line and the ledger tracks it. The class was already
+    // non-trivially constructible via its base, so nothing about it changes.
+    // ========================================================================
+    PropEntityModule::PropEntityModule()
+    {
+    }
+
+    // ========================================================================
     // PropEntityModule::Construct   @ 0x822FA068   (308 insns)
     // ------------------------------------------------------------------------
     // Store-for-store from the asm. Reading order follows the asm's, which is also the
@@ -148,12 +185,13 @@ namespace BrnWorld
         // capacity 1024 (@+0x10), alignment 16 (@+0x14), then Clear().
         mReceiverQueue.Construct();
 
-        // PARK -- the X360 clears mVisibleOverheadSigns' live count here
-        // (`stwx r29, r31, 0xD21B0`). Its DWARF type,
-        // GuiOverheadSignInfoEvent::VisibleOverheadSignArray, has no committed home, so
-        // the member is opaque storage in the header and there is no named count to
-        // reset. Deliberately NOT expressed as a raw offset poke. Restore this line to
-        // `mVisibleOverheadSigns.Clear();` when the GUI overhead-sign event group lands.
+        // ⭐ UNPARKED 2026-08-18 (wave Q keystone). The X360 clears mVisibleOverheadSigns'
+        // live count here (`stwx r29, r31, 0xD21B0`). The park said its DWARF type
+        // GuiOverheadSignInfoEvent::VisibleOverheadSignArray "has no committed home" -- it
+        // does (DWARF BrnGuiEventTypeDefs.h:1001 == Array<BrnGui::OverheadSignScore,32>, and
+        // the element is committed at GameSource/Gui/BrnGuiEventTypeDefs.h:155), so the member
+        // is now that array and 0xD21B0 IS its count word. This line is that store, by name.
+        mVisibleOverheadSigns.Clear();
 
         mLoadedZones.Clear();                      // stwx 0 @0xD339C (the Set's count word)
         miFramesUntilUpdateVisibleSigns = 1;       // stwx 1 @0xD21C0

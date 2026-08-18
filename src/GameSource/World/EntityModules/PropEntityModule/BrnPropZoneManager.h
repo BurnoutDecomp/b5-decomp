@@ -67,6 +67,9 @@
 
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerModuleIO.h" // InSceneUpdateInterface
 #include "SharedClasses/Physics/Props/PropRespawnTypesEnum.h"            // BrnPhysics::Props::eRespawnType (GetRespawnType return)
+// ⭐ ADDED 2026-08-18 (wave Q round 2): BrnPhysics::Props::KU_MAX_PHYSICAL_PROP_PARTS, the
+// bound IsInPhysicalBudgetForParts compares against (its assert message names the constant).
+#include "GameSource/Physics/PropManager/SharedIO/BrnPropInputInterface.h"
 
 namespace BrnPhysics { namespace Props {
     class  PropPhysicsDataHeader;
@@ -240,6 +243,22 @@ namespace BrnWorld
         // 0x822F0920 -- per-frame physics-result apply for one prop or part instance.
         // The trailing serialiser is asm-attested: `stw r10, 0x220+arg_74` at the prologue,
         // reloaded as `lwz r8, arg_74` for the RemovePropFromScene forward at 0x822F14CC.
+        //
+        // ⚠️ KNOWN DECLARATION DIVERGENCE, documented rather than fixed (wave Q round 2 owner
+        // pass). The 6th parameter is spelled `const PropPhysicsDataHeader*` here; the DWARF
+        // (references/DecFIGS/dwarfdump/.../BrnPropZoneManager.h:135) spells it
+        //     void UpdateInstance(PropEntityID, Matrix44Affine, Vector3, Vector3, bool,
+        //                         PropPhysicsResourcePtr, float32_t, OutputBuffer_PostPhysics*);
+        // -- a PropPhysicsResourcePtr BY VALUE, and the X360 agrees: UpdateProps @0x822FB490
+        // builds a local ResourcePtr with BaseResourcePtr::CreateFromHandle and passes &local
+        // in r7. The two are semantically equivalent here because the body only ever needs
+        // ResourcePtr::GetMemoryResource(), which is the header pointer this signature already
+        // receives. NOT CHANGED because the fix ripples out of this owner's write set: it would
+        // touch the definition at BrnPropZoneManager.cpp:1367 AND the call site at
+        // PropEntityModule_wQ_06.cpp:131 (a round-1 partfile owned by the wave-Q2 fixer), which
+        // passes GetPropPhysicsDataHeader(). Whoever holds both files should make the change
+        // together. Reconstructors of UpdateProps: the extra CreateFromHandle you see in the
+        // asm is THIS, not a missing step.
         void UpdateInstance(PropEntityID lEntityId, Matrix44Affine lTransform,
                             Vector3 lLinearVelocity, Vector3 lAngularVelocity, bool lbFrozen,
                             const PropPhysicsDataHeader* lpTypeData, f32 lfTimeStep,
@@ -294,6 +313,194 @@ namespace BrnWorld
         // 0x822BCC00 (DWARF :194 overload RecordHitProp(int32_t,int32_t)) -- flag one prop
         // (zone + index-within-zone) as hit in the persistent 300000-bit progression array.
         void RecordHitProp(s32 liZoneIndex, s32 liPropIndex);
+
+        // ====================================================================
+        // ⭐ WAVE Q KEYSTONE (2026-08-18) -- BREAKABLE / PHYSICAL PROPS.
+        // Everything below was named as a BLOCKER by the park lists in
+        // BrnPropEntityModule_PreScene.cpp (P2/P3/P4/P5) and
+        // BrnPropEntityModule_Streaming.cpp, because the break pipeline reaches
+        // PropCellManager through the PRIVATE mCellManager and reaches the per-zone
+        // tables through the PRIVATE mauStartIndexOfZone.
+        //
+        // Every one of them is a DecFIGS DWARF declaration of THIS class
+        // (references/DecFIGS/dwarfdump/.../BrnPropZoneManager.h, source line in the
+        // comment), so this is rung-2 shape, not invention. None is emitted out of line
+        // in the ARTIST image -- the X360 compiler folded each forwarder into its caller,
+        // which is why the callers appear to call PropCellManager directly with
+        // `r3 = module + 0x280` (== &mZoneManager == &mCellManager, PropCellManager being
+        // embedded at offset 0). De-inlined here per the project convention, exactly as
+        // PropGraphicsManager::Reset and PropCellRecord::Constuct already are, so that no
+        // caller has to index a foreign private table. The X360 witness for each fold is
+        // named per method. Pure addition: no member, layout or sizeof change.
+        // ====================================================================
+
+        // DWARF :161. The zone's base slot in maProps. Folded at every use site as the
+        // `lhzx` from mauStartIndexOfZone (e.g. inside HasPropBeenHit(PropEntityID) and
+        // RecordHitProp(PropEntityID), both `2*(zone + 418145) + this`).
+        // ⚠️ ADDRESSES CORRECTED 2026-08-18 (wave Q round 2): this comment used to cite those
+        // two as @0x822CDD9C and @0x822CDD04. Both are INTERIOR addresses -- single
+        // instructions inside the two bodies -- and neither has a per-address export
+        // (.ida-exports/BURNOUT_X360_ARTIST.XEX/0x822CDD9C.json and 0x822CDD04.json do not
+        // exist, while 0x822CDD48.json and 0x822CDCD0.json do). The real entry points are
+        // @0x822CDD48 and @0x822CDCD0, as the two declarations further down already say.
+        s32 GetStartIndexOfZone(u16 lu16ZoneId) const
+        {
+            return static_cast<s32>(mauStartIndexOfZone[lu16ZoneId]);
+        }
+
+        // DWARF :185. The PropEntityID-keyed overload of HasPropBeenHit. EMITTED OUT OF LINE
+        // at X360 0x822CDD48 but left UNNAMED by IDA (`sub_822CDD48`); identified by its body:
+        // GetZone(id) -> propIndexInZone = id.GetEntityIndex() - mauStartIndexOfZone[zone] ->
+        // `cmplwi r5, 0x258` (== KU_MAX_NON_PERSISTENT_PROPS_PER_ZONE) -> HasPropBeenHit(zone,
+        // index). Its only caller is PropEntityModule::ProcessContacts @0x822FA890.
+        bool HasPropBeenHit(PropEntityID lEntityId) const;
+
+        // DWARF :189. The PropEntityID-keyed overload of RecordHitProp. EMITTED OUT OF LINE at
+        // X360 0x822CDCD0, also unnamed (`sub_822CDCD0`): GetZone(id), then
+        // RecordHitProp(zone, id.GetEntityIndex() - mauStartIndexOfZone[zone]). Note it does
+        // NOT apply the 0x258 gate its HasPropBeenHit twin does. Caller: ProcessContacts.
+        void RecordHitProp(PropEntityID lEntityId);
+
+        // DWARF :198 (park P2). The profile round-trip's whole-array install of the persistent
+        // "prop already smashed" progression bits. The X360 folds it into
+        // PropEntityModule::PreSceneUpdate @0x82309CA0 as
+        // `memcpy( module + 0xC3200, lpInput->GetHitPropsBitArray(), 37504 )`, where
+        // module+0xC3200 == this(+0x280) + 798784 == maPreviouslyHitProps and
+        // 37504 == sizeof(BitArray<300000>).
+        void SetHitPropBitArray(const HitPropsBitArray& lrHitProps) { maPreviouslyHitProps = lrHitProps; }
+
+        // DWARF :172. Advance every animated (swinging) prop by one timestep.
+        // X360 0x822DF3A0 (202 insns) -- a REAL out-of-line body.
+        // PropEntityModule::UpdateProps @0x822FB4E4 is its only caller
+        // (`lfsx f1, module, 0xD3378` == mrTimestep; note the float rides f1 and SKIPS r4).
+        // ⚠️ BANNER CORRECTED 2026-08-18 (wave Q round 2). This used to say "currently
+        // unbodied in the tree", which went stale within round 1: the body landed in
+        // PropEntityModule_wQ_06.cpp (at :181 as of the round-3 fix pass; that file is another
+        // lane's and its line numbers move -- grep the symbol), NOT at this class's mirrored home
+        // BrnPropZoneManager.cpp. It is the only definition in the tree today (no ODR break),
+        // but DO NOT mint a second one here when filling out BrnPropZoneManager.cpp -- `cl /c`
+        // cannot see a cross-TU duplicate. Moving it to the mirrored home is the wave-Q2
+        // fixer's call, since it owns the partfile.
+        void UpdateAnimation(f32 lfTimeStep);
+
+        // DWARF :208 (park P5). The per-frame cell sweep. Folded into
+        // PropEntityModule::PreSceneUpdate @0x8230ADF4, which calls PropCellManager::Update
+        // with r3 = &mZoneManager and r9 = &mauStartIndexOfZone[0]. The DWARF's four logical
+        // parameters plus the two the shipped build threads through (the replay flag in r7 and
+        // the serialiser in r8) -- see PropCellManager::Update's own note for the r7 evidence.
+        void UpdateCollisionStreaming(Vector3 lv3Position, const PropPhysicsDataHeader* lpTypes,
+                                      PropCellManager::RecentlyBrokenPropsArray* lpRecentlyBroken,
+                                      PropEntityIO::OutputBuffer_PreScene* lpOutput,
+                                      bool lbInReplay,
+                                      BrnReplays::PropEntitySerialiser* lpSerialiser);
+
+        // DWARF :346 (park P4). The "do not pop a prop in on top of the player" sweep. Folded
+        // into PropEntityModule::PreSceneUpdate @0x8230AD00: r3 = &mZoneManager,
+        // r8 = &mauStartIndexOfZone[0], v2 = unk_82FAD760 == KF_MIN_DIST_FROM_PLAYER.
+        // DWARF's five logical parameters plus the shipped build's replay serialiser (r7).
+        void ClearPropsNearPosition(Vector3 lv3Position, VecFloat lvClearRadius,
+                                    const PropPhysicsDataHeader* lpTypes,
+                                    PropCellManager::PropInputInterface* lpPropInput,
+                                    InSceneUpdateInterface* lpScene,
+                                    BrnReplays::PropEntitySerialiser* lpSerialiser);
+
+        // DWARF :255 / :262 / :269 / :276 -- the four contact-generation forwarders (park P3
+        // and BreakPropIntoParts). Pure pass-throughs to mCellManager: the X360 folds each and
+        // calls the cell manager with `r3 = module + 0x280`, e.g. BreakPropIntoParts
+        // @0x822FB168 (RemovePropFromContactGeneration) and @0x822FB28C
+        // (AddPropPartsToContactGeneration).
+        //
+        // ⚠️ AddPropPartsToContactGeneration takes FOUR parameters here but FIVE on
+        // PropCellManager: the first part instance is computed by THIS forwarder. Asm witness
+        // BreakPropIntoParts @0x822FB25C..0x822FB288 --
+        //   `lhz r11,0x48(prop)` (mu16PartsIndex); `rotlwi r10,r11,2; add r11,r11,r10;
+        //    slwi r11,r11,4` (== 80 * index, the CONSOLE PropPartEntityInstance stride);
+        //   `add r11,r11,r27` (+ &mZoneManager); `addis r5,r11,7; addi r5,r5,-0x5900`
+        //    (+ 435968 == the maParts base)  ==>  &maParts[ lpProp->mu16PartsIndex ].
+        // The 80 is a CONSOLE stride and does NOT appear below: the array subscript uses
+        // sizeof(PropPartEntityInstance) via the host compiler.
+        void AddPropToContactGeneration(PropEntityInstance* lpProp, const PropTypeData* lpType,
+                                        PropVolumeInstanceID lVolumeInstanceID,
+                                        InSceneUpdateInterface* lpScene);
+        void AddPropPartsToContactGeneration(PropEntityInstance* lpProp, const PropTypeData* lpType,
+                                             PropVolumeInstanceID lVolumeInstanceID,
+                                             InSceneUpdateInterface* lpScene);
+        void RemovePropFromContactGeneration(PropEntityInstance* lpProp, const PropTypeData* lpType,
+                                             PropVolumeInstanceID lVolumeInstanceID,
+                                             InSceneUpdateInterface* lpScene);
+        void RemovePropPartsFromContactGeneration(PropEntityInstance* lpProp, const PropTypeData* lpType,
+                                                  PropVolumeInstanceID lVolumeInstanceID,
+                                                  InSceneUpdateInterface* lpScene);
+
+        // DWARF :283 (park P3). The recycled-PART sim removal leg. Pure pass-through.
+        void RemovePropPartsFromSimIfPhysical(PropEntityInstance* lpProp, const PropTypeData* lpType,
+                                              PropVolumeInstanceID lVolumeInstanceID,
+                                              PropEntityIO::OutputBuffer_PreScene* lpOutput);
+
+        // DWARF :293 / :297 / :301 / :305. The in-sim population counters PropCellManager keeps
+        // and PropEntityModule::ChangePropState bumps. The X360 folds the whole-prop increment
+        // into ChangePropState @0x822EF6F0 as a bare `++*(module + 2948)`, i.e.
+        // `++mZoneManager.mCellManager.miNumPropsInSim` (2948 == 0x280 + 2308). The DWARF gives
+        // all four an int32_t delta, so the folded form is the delta == 1 case.
+        // DWARF :323 / :330 / :334 / :338 -- the physical-slot broker. Same fold as the
+        // contact-generation block: PropEntityModule::ChangePropState @0x822EF6C0,
+        // ProcessPotentialContactWithPart @0x822EEE68 and ProcessBrokenProps @0x822EF040 all
+        // call the PropCellManager entry point with `r3 = module + 0x280` (== &mZoneManager),
+        // i.e. through a forwarder the compiler erased. Pure pass-throughs.
+        bool GetPhysicalPropSlot(PropEntityID lEntityId, s32& lriSlot,
+                                 PropEntityID& lrEvictedId, bool& lrbEvicted)
+        {
+            return mCellManager.GetPhysicalPropSlot(lEntityId, lriSlot, lrEvictedId, lrbEvicted);
+        }
+        bool GetPhysicalPartSlot(PropEntityID lEntityId, s32& lriSlot,
+                                 PropEntityID& lrEvictedId, bool& lrbEvicted)
+        {
+            return mCellManager.GetPhysicalPartSlot(lEntityId, lriSlot, lrEvictedId, lrbEvicted);
+        }
+        void FreePhysicalPropSlot(s32 liPhysicsIndex) { mCellManager.FreePhysicalPropSlot(liPhysicsIndex); }
+        void FreePhysicalPartSlot(s32 liPhysicsIndex) { mCellManager.FreePhysicalPartSlot(liPhysicsIndex); }
+
+        void IncrementNumberOfPropsInSim(s32 liCount) { mCellManager.miNumPropsInSim += liCount; }
+        void IncrementNumberOfPartsInSim(s32 liCount) { mCellManager.miNumPartsInSim += liCount; }
+        void DecrementNumberOfPropsInSim(s32 liCount) { mCellManager.miNumPropsInSim -= liCount; }
+        void DecrementNumberOfPartsInSim(s32 liCount) { mCellManager.miNumPartsInSim -= liCount; }
+
+        // ⭐ NEW 2026-08-18 (wave Q round 2). DWARF BrnPropZoneManager.h:312 --
+        //     `bool IsInPhysicalBudgetForParts(int32_t) const;`
+        // The class exposed Increment/Decrement/Free/GetPhysicalPartSlot but NO READER of the
+        // part-in-sim counter, which is the single declaration that kept
+        // PropEntityModule::ProcessPotentialContactWithPart parked in round 1.
+        //
+        // No out-of-line X360 body; FOLDED into that function @0x822EEE70..0x822EEE80, MEASURED:
+        //     lwz    r11, 0xB88(module)    ; the counter
+        //     addi   r11, r11, 1           ; + liCount, and liCount == 1 at that (only) site
+        //     cmpwi  r11, 0x1E             ; 30
+        //     li     r11, 1 ; ble -> keep  ; <= 30  =>  true
+        // module+0xB88 == (module+0x280)+0x908 == mZoneManager.mCellManager.miNumPartsInSim --
+        // proved inside the SAME function by the read-modify-write of that member at
+        // 0x822EEF6C, which is spelled `lwz/stw 0x908(r28)` with r28 == module+0x280 (AGENTS.md
+        // gotcha 2: one pointer, three classes). The bound 30 is named by the sibling assert
+        // three instructions later ("liPhysicalPartIndex < static_cast< int32_t > (
+        // BrnPhysics::Props::KU_MAX_PHYSICAL_PROP_PARTS )"), and that constant is the committed
+        // BrnPropInputInterface.h:61. De-inlined exactly like the Increment/Decrement/
+        // FreePhysical* forwarders above.
+        // ⚠️ Deliberately NOT also minting the DWARF sibling `IsInPhysicalBudgetForProps()`
+        // @:308 -- it takes no argument and no fold has been grounded for it.
+        bool IsInPhysicalBudgetForParts(s32 liCount) const
+        {
+            return ( mCellManager.miNumPartsInSim + liCount )
+                   <= static_cast<s32>( BrnPhysics::Props::KU_MAX_PHYSICAL_PROP_PARTS );
+        }
+
+        // NOT DWARF-declared on PropZoneManager -- the X360 calls PropCellManager::
+        // RecordPropPositions @0x822E1988 DIRECTLY from PropEntityModule::PostPhysicsUpdate
+        // @0x823032F8 with `r3 = module + 0x280` (== &mZoneManager == &mCellManager). Modelled
+        // as a forwarder rather than by making mCellManager public or minting a friendship the
+        // DWARF does not show; the call it makes is exactly the one in the asm.
+        // ⚠️ INFERENCE, clearly marked: the *name* is PropCellManager's (rung-1 attested);
+        // the *forwarder* is this port's own de-inlining, matching the sibling block above.
+        void RecordPropPositions(BrnReplays::PropEntitySerialiser* lpSerialiser,
+                                 const PropPhysicsDataHeader* lpTypes);
 
         // Never called -- host layout tripwires (offsetof inside a member function is legal
         // for private members). Pins the facts the bodies in this TU actually rely on.

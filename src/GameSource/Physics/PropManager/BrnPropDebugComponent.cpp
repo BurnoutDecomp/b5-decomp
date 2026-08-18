@@ -65,6 +65,18 @@ namespace Props
     // subsystem call that same address where three DIFFERENT empty `void f(T*)` bodies belong
     // (here, OnRegister @0x822A9750, and PropManager::Destruct's tail @0x825E33E4), which is what
     // identifies it as a fold rather than a real base-class call.
+    //
+    // ⚠️ ROUND 2, 2026-08-18 -- WHAT "EMPTY" MEANS HERE, AND WHERE IT STOPS BEING TRUE.
+    // The fold target 0x8284CB38 is a single `blr` (measured), so the CONSOLE's
+    // CgsDev::DebugComponent::Construct() / ::Destruct() emit nothing, and this emission stores
+    // ONLY +0xC / +0x10 / +0x11 -- nothing lands in the base sub-object at +0x00..+0x0B.
+    // But the TREE's base bodies are NOT empty: CgsDebugComponent.cpp:49-53 gives Construct()
+    // two stores (mbActive, mpDebugLinkedListNext) and :57-60 gives Destruct() one (mbActive).
+    // So on the host these two calls perform base-object writes the X360 does not. The CALLS are
+    // faithful and stay; the divergence is in that foreign TU's bodies, whose own comment admits
+    // they are inference ("the X360 inlines them; bodies reconstructed from the attested member
+    // set"). Reported as a conductor item from PropManager_wQ_01.cpp's Destruct banner, where
+    // the same fold is analysed in full with all five refuting emissions.
     void PropDebugComponent::Construct(PropManager* lpPropManager)
     {
         CgsDev::DebugComponent::Construct();

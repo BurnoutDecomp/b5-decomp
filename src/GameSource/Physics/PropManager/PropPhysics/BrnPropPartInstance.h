@@ -32,25 +32,46 @@ namespace Props
     class PropPartInstance
     {
     public:
+        // ⚠️ Construct()/Prepare() are DECLARATION-ONLY: nothing in the prop-physics closure
+        // calls them and no folded call site says what they do. Not invented.
         void            Construct();                       // :47
         bool            Prepare();                          // :51
-        bool            Release();                          // :55
-        void            Destruct();                         // :59
-        BrnWorld::PropEntityID GetEntityId();               // :62
-        void            SetEntityId(BrnWorld::PropEntityID); // :65
+
+        // ⭐ INLINED 2026-08-18 (breakable-props keystone), by the same measurement that
+        // settles PropInstance::Release/Destruct: PropManager::Release @0x825BAC88 keeps
+        // only `lbSuccess & 1` where the per-element Release() call was, and
+        // PropManager::Destruct @0x825E3398 keeps no loop at all. Constant-true / empty.
+        bool            Release()  { return true; }         // :55
+        void            Destruct() {}                       // :59
+
+        // ⭐ INLINED 2026-08-18: the DWARF's trivial field accessors, given bodies over the
+        // offsets the banner above already pins (the X360 folds every one of them at its
+        // call sites -- ReadUpdatedBodies @0x82632918 reads mEntityId at +0x30, compares
+        // muTypeId, and stores mAngularVelocity with a bare `stvx128 v0, r31, 32`). Same
+        // precedent as GetType below. Nothing here changes the layout.
+        BrnWorld::PropEntityID GetEntityId()                { return mEntityId; }         // :62
+        void            SetEntityId(BrnWorld::PropEntityID lId) { mEntityId = lId; }      // :65
         // :68. INLINE 2026-08-06 (bridge de-facade wave): no out-of-line emission exists;
         // PropManager::CreateContactEvent @0x825A53A0 inlines the +0x34 read directly.
         u32             GetType() { return muTypeId; }      // :68
-        u8              GetPartId();                        // :71
-        void            SetType(u32);                       // :74
-        void            SetPartId(u8);                      // :77
+        u8              GetPartId()                         { return mu8PartId; }         // :71
+        void            SetType(u32 luTypeId)               { muTypeId = luTypeId; }      // :74
+        void            SetPartId(u8 lu8PartId)             { mu8PartId = lu8PartId; }    // :77
         void            SetPosition(Vector3 lPosition);     // :81  X360 0x825DE798
-        Vector3         GetPosition();                      // :84
+        Vector3         GetPosition()                       { return mPos; }              // :84
         void            SetLinearVelocity(Vector3 lLinearVelocity); // :88  X360 0x825DE860
-        Vector3         GetAngularVelocity();               // :91
-        void            SetAngularVelocity(Vector3);        // :95
-        Vector3         GetLinearVelocity();                // :98
-        bool            HasBeenUpdated();                   // :101
+        Vector3         GetAngularVelocity()                { return mAngularVelocity; }  // :91
+        // :95. ⚠️ NO out-of-line X360 emission was found for this one (its two siblings
+        // SetPosition/SetLinearVelocity have real bodies at 0x825DE798/0x825DE860 with
+        // IsValid asserts). ReadUpdatedBodies stores the angular velocity with a bare
+        // `stvx128 v0, r31, 32`, i.e. an inlined plain store with NO assert -- reproduced
+        // exactly, rather than copying the siblings' tripwire in.
+        void            SetAngularVelocity(Vector3 lAngularVelocity)
+        {
+            mAngularVelocity = lAngularVelocity;
+        }
+        Vector3         GetLinearVelocity()                 { return mLinearVelocity; }   // :98
+        bool            HasBeenUpdated()                    { return mbUpdated; }         // :101
 
     private:
         Vector3                mPos;             // +0x00 :104
