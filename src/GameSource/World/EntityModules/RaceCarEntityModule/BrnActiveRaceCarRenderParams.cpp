@@ -1,6 +1,7 @@
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnActiveRaceCar.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameSource/Physics/DeformationManager/SharedIO/BrnVehicleLocatorData.h" // VehicleLocatorData (SetLightLocators' source)
 
 #include <cstddef>   // offsetof
 
@@ -243,15 +244,83 @@ bool ActiveRaceCar::RenderParams::RequestBluesAndTwosStateSwitch(f32 lfDeltaTime
         return mbBluesAndTwosActive != 0;
     }
 
-    // Forced switch with the strobe armed: toggle and reset the timers. Note the
-    // console writes the strobe state (+5140) and returns the toggled value but does
-    // NOT write +5141 here -- faithful to the asm, mbBluesAndTwosActive is left
-    // unchanged and the toggle is computed from its current value.
+    // Forced switch with the strobe armed: DISARM the switch, LATCH the toggled state, zero
+    // both timers, return the new state.
+    //
+    // CORRECTED 2026-08-17 (coronas step 1) -- the previous body had these two stores wrong
+    // in both directions, on the strength of a comment claiming the console "does NOT write
+    // +5141 here". It does; both stores are in the tail, and the value that reaches +5140 is
+    // the LITERAL ZERO in r9, not the toggle:
+    //     0x822A1D00  lbz     r10, 0x1415(r11)   r10 = mbBluesAndTwosActive (the OLD state)
+    //     0x822A1D04  li      r9, 0
+    //     0x822A1D08  stfs    f12, 0x1410(r11)   mfLightSwitchTimeOut   = 0.0f (flt_82001CC0)
+    //     0x822A1D0C  cntlzw  r10, r10
+    //     0x822A1D10  stfs    f12, 0x140C(r11)   mfLightOpacityFlipFlop = 0.0f
+    //     0x822A1D14  extrwi  r3, r10, 1,26      r3 = (old == 0) -- the logical NOT
+    //     0x822A1D18  stb     r9,  0x1414(r11)   mbBluesAndTwosCanSwitchState = 0   (DISARM)
+    //     0x822A1D1C  stb     r3,  0x1415(r11)   mbBluesAndTwosActive         = !old (LATCH)
+    // CONSEQUENCE OF THE OLD FORM, precisely: mbBluesAndTwosCanSwitchState was set to the
+    // toggle, which is `true` whenever mbBluesAndTwosActive is false -- and since +5141 was
+    // never written it stayed false forever. So the strobe stayed permanently ARMED, every
+    // frame with lbForce set re-entered this arm and re-zeroed mfLightOpacityFlipFlop, the
+    // phase never advanced past 0, and SubmitCoronasForRaceCar's two triangle waves (which
+    // are `phase * 4`) evaluated to opacity 0.0 on every frame -- an invisible police strobe
+    // that additionally switched off the instant the force input dropped. Found while
+    // reconstructing that producer, which is this function's only reader.
     const bool lbToggled = (mbBluesAndTwosActive == 0);
     mfLightSwitchTimeOut = 0.0f;
     mfLightOpacityFlipFlop = 0.0f;
-    mbBluesAndTwosCanSwitchState = lbToggled ? 1 : 0;
+    mbBluesAndTwosCanSwitchState = false;
+    mbBluesAndTwosActive         = lbToggled;
     return lbToggled;
+}
+
+// ----------------------------------------------------------------------------
+// Light locators (the lamp anchors the corona producer reads)
+// ----------------------------------------------------------------------------
+
+// SetLightLocators -- the LOCATOR-OUTPUT COPY, i.e. leg L5 of
+// RaceCarEntityModule::ReadUpdatedActiveRaceCarDataFromPhysics @0x822E87B8. The console
+// INLINED it, so it has no standalone address of its own; its body is the block at
+// 0x822E9044..0x822E90A8, reached once per published VehicleLocatorOutput whose EntityId
+// type byte is 1 (a race car) and whose 14-bit index is < 8:
+//
+//   0x822E9044  lwz  r10, 4(r28)        lpLocatorData  (VehicleLocatorOutput +4)
+//   0x822E9054  lwz  r9,  0x6B0(r10)    lpLocatorData->miNumLightLocators
+//   0x822E9064  stw  r9,  0xD88(r11)    mRenderParams.miNumLightLocators = it (UNCONDITIONAL)
+//   0x822E9068  ble  ...                then, only when > 0 (a SIGNED test here):
+//   0x822E906C  addi r8,  r10, 0x650    &lpLocatorData->maLightLocatorTypes[0]
+//   0x822E9070  addi r7,  r11, 0xD20    &mRenderParams.maLightLocatorType[0]
+//   0x822E9074  addi r9,  r11, 0xBA0    &mRenderParams.maLightLocatorPos[0]
+//   0x822E9078  addi r10, r10, 0x80     &lpLocatorData->maLightLocators[0].wAxis
+//   loop:       lvx128 v0,(r10) ; stvx128 v0,(r9) ; lwz r5,(r8) ; stw r5,(r7)
+//               r10 += 0x40 (one Matrix44Affine)   r9 += 0x10   r8 += 4   r7 += 4
+//               and the bound is RE-READ from 0xD88(r11) every iteration (0x822E90A0).
+//
+// Two things worth keeping: the source lane is the locator frame's TRANSLATION ROW (+0x30
+// inside the 64-byte affine, hence the +0x80 == +0x50 + 0x30 base) -- RenderParams keeps the
+// lamp POSITION only, never its orientation -- and the three source offsets (+0x50 frames,
+// +0x650 types, +0x6B0 count) independently PIN VehicleLocatorData's layout: they are exactly
+// where maCameraLocators[1] + its type + its count + 8 bytes of 16-byte alignment put the
+// light block, which is the layout BrnVehicleLocatorData.h already carries from the DWARF.
+void ActiveRaceCar::RenderParams::SetLightLocators(
+        const BrnPhysics::Deformation::VehicleLocatorData* lpLocatorData)
+{
+    // [FLAG] NOT a console assert: the console reaches this code only from inside its own
+    // "liIndex < miNumLocatorOutputs" walk, where the pointer cannot be null.
+    CGS_ASSERT(lpLocatorData != 0, "lpLocatorData != NULL");
+    if (lpLocatorData == 0)
+    {
+        return;
+    }
+
+    miNumLightLocators = lpLocatorData->miNumLightLocators;
+
+    for (s32 liLocator = 0; liLocator < miNumLightLocators; ++liLocator)
+    {
+        maLightLocatorPos[liLocator]  = lpLocatorData->maLightLocators[liLocator].wAxis;
+        maLightLocatorType[liLocator] = lpLocatorData->maLightLocatorTypes[liLocator];
+    }
 }
 
 // ----------------------------------------------------------------------------

@@ -548,20 +548,32 @@ InputBuffer_GenerateDispatchLists::GetCameraInput() const
     return &mCameraInput;
 }
 
-// X360 0x822B6B20 (R) -- const trailing dispatch flag A (placeholder name; byte at +8289).
-bool
-InputBuffer_GenerateDispatchLists::GetDispatchFlagA() const
+// X360 0x822B6B20 (R, DWARF :636) -- const blobby-shadow-buffer accessor. Returns the POINTER
+// VALUE stored at this+0x8184 == mpBlobbyShadowBuffer, the member SetBlobbyShadowBuffer
+// @0x8279EB18 writes:
+//     0x822B6BBC  ori   r11, r11, 0x8184
+//     0x822B6BC0  lwzx  r3, r28, r11
+// (This body replaces the invented `GetDispatchFlagA` -- see the header banner.)
+BrnBlobbyShadowManager::BrnBlobbyShadowBuffer*
+InputBuffer_GenerateDispatchLists::GetBlobbyShadowBuffer() const
 {
     CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
-    return mbDispatchFlagA;
+    return mpBlobbyShadowBuffer;
 }
 
-// X360 0x822B6BD0 (R) -- const trailing dispatch flag B (placeholder name; byte at +8290).
-bool
-InputBuffer_GenerateDispatchLists::GetDispatchFlagB() const
+// X360 0x822B6BD0 (R, DWARF :639) -- const corona-submission-interface accessor. Returns the
+// POINTER VALUE stored at this+0x8188 == mpCoronaSubmissionInterface, the member
+// SetCoronaSubmissionInterface @0x8279EBC8 writes (on the console seeded from the renderer's
+// output buffer through GameBridgeRendererToX -> BrnWorldIO::DispatchInputBuffer; on this build
+// BrnWorldModule::GenerateDispatchListsBringUp seeds it every frame beside SetShadowMap):
+//     0x822B6C6C  ori   r11, r11, 0x8188
+//     0x822B6C70  lwzx  r3, r28, r11
+// (This body replaces the invented `GetDispatchFlagB` -- see the header banner.)
+BrnCoronaManager::BrnSubmissionInterface*
+InputBuffer_GenerateDispatchLists::GetCoronaSubmissionInterface() const
 {
     CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
-    return mbDispatchFlagB;
+    return mpCoronaSubmissionInterface;
 }
 
 // ============================================================================

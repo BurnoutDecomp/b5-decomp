@@ -196,6 +196,39 @@ namespace
         case 0x2A2187: *lpu8Type = D3DDECLTYPE_DEC3N;     *lpuWidth =  4; return true;
         case 0x2C235F: *lpu8Type = D3DDECLTYPE_FLOAT16_2; *lpuWidth =  4; return true;
         case 0x1A235F: *lpu8Type = D3DDECLTYPE_FLOAT16_4; *lpuWidth =  8; return true;
+        // ADDED 2026-08-17 (coronas step 1). THE IMMEDIATE-MODE COLOUR ELEMENT WORD. It was missing
+        // from BOTH copies of this table (here and XenonD3D9Shims.cpp:319 MapXenonDeclType), so any
+        // Parameters record carrying it lost its element to the "unknown vertex format code -
+        // element dropped" branch -- a SILENT drop: the declaration still builds, the draw still
+        // issues, and the shader's COLOR0 input is simply never fed.
+        //
+        // WHOSE WORD IT IS: five committed TUs already name it, each quoting the X360 immediate
+        // `lis r11,1 / ori r11,0x4C86` that produces it, and all five call it the UBYTE4N colour
+        // element -- CgsIm2dUntex.cpp:69, CgsIm2dColTex.cpp:77/80, CgsIm3d.cpp:77/80,
+        // CgsIm3dUntex.cpp:72/74, BrnLionBlendIm3d.cpp:71. renderengine::CoronaRenderer::Initialize
+        // (X360 @0x822850F8) stores it as its fourth element, with element type 4 == COLOR0.
+        // The identification is therefore the tree's own, not this edit's.
+        //
+        // WHY UBYTE4N AND NOT D3DCOLOR (the byte order, derived rather than assumed): the attested
+        // writer CoronaBuffer::Iterator::Write @0x823F3350 byte-SWAPS rw::RGBA::m_rgba
+        // ((a<<24)|(b<<16)|(g<<8)|r) before storing it, which on the big-endian console lays the
+        // channels down in MEMORY as R,G,B,A -- the order a memory-ordered UBYTE4N delivers as
+        // (x,y,z,w) = (r,g,b,a). A D3DCOLOR would instead read the dword as ARGB. The corona writer
+        // on this little-endian host stores the same R,G,B,A memory order (see that file's banner),
+        // so UBYTE4N is the type that reproduces the console's channel assignment.
+        //
+        // ⚠ IF THIS IS WRONG the tell is specific and cheap: red and blue swap on every immediate
+        // colour (corona flares would go blue-ish, the Im2d/Im3d families likewise once they mount).
+        // The `[corona] first draw` log line prints the first corona's colour word for exactly this
+        // check. No other behaviour changes -- before this line the element did not exist at all,
+        // so nothing that works today can regress.
+        //
+        // NOT ALSO ADDED to XenonD3D9Shims.cpp's MapXenonDeclType: that table decodes SERIALISED
+        // world vertex descriptors out of the converted bundle, and no bundle record has ever
+        // carried this word (its producers are all immediate-mode). Adding it there would be a
+        // change with no attested caller; the two tables are deliberately independent and this file
+        // documents them as "duplicated rather than shared".
+        case 0x014C86: *lpu8Type = D3DDECLTYPE_UBYTE4N;   *lpuWidth =  4; return true;
         default: return false;
         }
     }

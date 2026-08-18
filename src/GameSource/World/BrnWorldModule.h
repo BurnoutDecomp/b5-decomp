@@ -319,6 +319,18 @@ namespace BrnWorld
         // DELETE-WHEN the RendererIO/BrnWorldIO dispatch buffer set is real on PC.
         void SetBringUpDispatchThreadInputBuffer( BrnGame::DispatchThreadInputBuffer* lpBuffer );
 
+        // [FLAG PC bring-up] Hand the race-car producer THE CORONA SUBMISSION INTERFACE
+        // (SubmitCoronasForRaceCar @0x822D1600 posts its lamp flares through it).
+        // STANDS IN FOR: the console's copy chain BrnRendererModule::Update -> RendererIO
+        // output -> GameBridgeRendererToX -> BrnWorldIO::DispatchInputBuffer ->
+        // RaceCarEntityModuleIO::InputBuffer_GenerateDispatchLists::SetCoronaSubmissionInterface
+        // @0x8279EBC8. That IO buffer set does not exist on PC, so the pointer comes straight
+        // across from BrnRendererModule (GetCoronaSubmissionInterfaceBringUp) via
+        // BrnGameModule::DoDispatch, and GenerateDispatchListsBringUp applies it to the
+        // race-car dispatch input EVERY FRAME beside SetShadowMap (the manager's Swap moves
+        // which slot is the write slot). DELETE-WHEN the dispatch buffer set is real on PC.
+        void SetBringUpCoronaSubmissionInterface( BrnCoronaManager::BrnSubmissionInterface* lpInterface );
+
         // (PublishWorldShadingConstantsBringUp RETIRED 2026-08-16 -- the real producer
         // SetupShaderConstantsBeforeRendering @0x827D1410 below publishes a superset of its
         // slots. See the retirement note in BrnWorldModule.cpp.)
@@ -750,6 +762,9 @@ namespace BrnWorld
         // [FLAG PC bring-up] the dispatch-thread input buffer staged by
         // SetBringUpDispatchThreadInputBuffer (see the header entry). DELETE with it.
         BrnGame::DispatchThreadInputBuffer* mpBringUpDispatchThreadInputBuffer;
+        // [FLAG PC bring-up] the corona submission interface staged by
+        // SetBringUpCoronaSubmissionInterface (see the header entry). DELETE with it.
+        BrnCoronaManager::BrnSubmissionInterface* mpBringUpCoronaSubmissionInterface;
         // [FLAG PC bring-up] THE ENV-MAP ARM'S HONEST GATE. Raised by WorldModule::Update
         // @0x827D63E8 at the exact line that drives the console's own env-map camera
         // refresh (`mEnvironmentMap.Update( lpPlayerState->mTransform.Pos() )`, cpp :3046),

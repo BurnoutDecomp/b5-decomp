@@ -70,6 +70,11 @@ s32  renderengine::gAlphaToCoverage = 1;
 s32  renderengine::gEnvironmentMap = 1;
 // Three faces per frame by default on PC -- the perf deviation is documented on the declaration.
 s32  renderengine::gEnvironmentMap30Hz = 1;
+// The corona (light-flare) pass knob. 1 = draw it; 0 = never. Semantics, and why this is a SEED for
+// BrnRendererModule::mbRenderCoronas rather than a second switch, are on the declaration in
+// device.h. Default 1 because the console's answer is 1 (ConstructRenderSwitches) -- the same
+// principle that makes gAntiAliasing default to "whatever the console did".
+s32  renderengine::gCoronas = 1;
 // Vertical sync on by default -- see the declaration in device.h.
 s32  renderengine::gVSync = 1;
 HWND renderengine::hWnd = nullptr;
@@ -110,6 +115,10 @@ bool renderengine::Device::Initialize()
     gEnvironmentMap = 1;
     // Half-schedule the env-map refresh unless config.ini `[Settings] EnvironmentMap30Hz=0`.
     gEnvironmentMap30Hz = 1;
+    // Draw the corona pass unless config.ini `[Settings] Coronas=0`. Seeded here for the same
+    // reason its neighbours are: LoadConfig runs after this (BrnMain.cpp:260/:261) and is what a
+    // config.ini value overrides it with.
+    gCoronas = 1;
     // Vertical sync unless config.ini `[Display] VSync=0` (see device.h).
     gVSync = 1;
     // TUB seeds fullscreen=true; forced windowed during the PC bring-up.

@@ -43,5 +43,18 @@ f32 SmoothStep::Evaluate(const Vector3 &lvParams, const Vector2 &lvScale, f32 lf
     return (lfT * 0.5f) * lfSpan + lvScale.x;
 }
 
+// DWARF Curves.h:126. INLINED on the console -- no standalone address (the ledger's only
+// SmoothStep::Evaluate is 0x8227D2F0, the overload above). Recovered from its inlined copy in
+// BrnCoronaManager::BrnSubmissionInterface::AddCorona @0x823FD270:
+//   0x823FD314  addi r3, r30, 0x18   ; &mCurveParams   (BrnCoronaTypeParams record +0x18)
+//   0x823FD318  addi r4, r3,  0x0C   ; &mScaleFactors  (record +0x24)
+//   0x823FD32C  fmr  f1, f30         ; lfInput
+//   0x823FD330  bl   BrnEffects__Curves__SmoothStep__Evaluate
+// -- the stored members forwarded to the three-argument overload, and nothing else.
+f32 SmoothStep::Evaluate(f32 lfInput) const
+{
+    return Evaluate(mCurveParams, mScaleFactors, lfInput);
+}
+
 } // namespace Curves
 } // namespace BrnEffects

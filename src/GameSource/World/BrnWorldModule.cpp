@@ -537,6 +537,7 @@ WorldModule::Construct( const BrnGame::BrnCpuMonitors& lrCpuMonitors )
     mbFirstRenderFrame = true;                      // X360 +6167329
     // [FLAG PC bring-up] the env-map producer seams (see BrnWorldModule.h).
     mpBringUpDispatchThreadInputBuffer = 0;
+    mpBringUpCoronaSubmissionInterface = 0;
     mbEnvMapCamerasPositionedBringUp   = false;
     mbBringUpCameraInJunkyardBringUp   = false;
     mbForceOnlyBackdrops = false;                   // X360 +6167330
@@ -4937,6 +4938,17 @@ WorldModule::SetBringUpDispatchThreadInputBuffer( BrnGame::DispatchThreadInputBu
     mpBringUpDispatchThreadInputBuffer = lpBuffer;
 }
 
+// [FLAG PC bring-up] see the header. STANDS IN FOR the console's RendererIO -> BrnWorldIO ->
+// RaceCarEntityModuleIO copy chain of the corona submission interface (the last hop is
+// InputBuffer_GenerateDispatchLists::SetCoronaSubmissionInterface @0x8279EBC8, applied by
+// GenerateDispatchListsBringUp beside SetShadowMap every frame). Overwritten every frame.
+// DELETE-WHEN DoDispatch's IO buffer set is real.
+void
+WorldModule::SetBringUpCoronaSubmissionInterface( BrnCoronaManager::BrnSubmissionInterface* lpInterface )
+{
+    mpBringUpCoronaSubmissionInterface = lpInterface;
+}
+
 // =============================================================================
 // ⭐ [DIAG shadow-perf wave 2026-08-12] THE PRODUCER PHASE TIMERS.
 //
@@ -6599,6 +6611,12 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
             sRaceCarDispatchInput.LockForWrite();
             sRaceCarDispatchInput.SetDispatchFrame( lpDispatchFrame );
             sRaceCarDispatchInput.SetShadowMap( &mShadowMap );
+            // [FLAG PC bring-up] the corona submission interface (SubmitCoronasForRaceCar's
+            // sink), staged by BrnGameModule::DoDispatch this frame. On the console
+            // BrnWorldIO::DispatchInputBuffer carries it in from the renderer's Update; here it
+            // is applied per frame because BrnCoronaManager::Swap moves the write slot.
+            // DELETE-WHEN BridgeRendererToWorld + the world->entity-module IO copy are real.
+            sRaceCarDispatchInput.SetCoronaSubmissionInterface( mpBringUpCoronaSubmissionInterface );
             sRaceCarDispatchInput.UnlockForWrite();
 
             mRaceCarEntityModule.GenerateDispatchLists(

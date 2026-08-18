@@ -405,6 +405,23 @@ public:
     // DELETE-WHEN the RendererIO buffers are created on PC and Update publishes for real.
     BrnEffectsFrame* GetWorldEffectsFrameBringUp(u8 luSlot);
 
+    // [FLAG PC bring-up] The corona SUBMISSION INTERFACE for the world's race-car producer
+    // (SubmitCoronasForRaceCar). On the console this crosses in the RendererIO output buffer:
+    // BrnRendererModule::Update @0x824060F0-108 -> SetCoronaSubmissionInterface, then
+    // GameBridgeRendererToX copies it into the WORLD dispatch input buffer, and the world's
+    // GenerateDispatchLists hands it to the race-car module's InputBuffer_GenerateDispatchLists.
+    // None of that IO buffer set exists on PC, so it comes straight across from here -- the same
+    // stand-in shape as GetWorldEffectsFrameBringUp above, staged from the same place
+    // (BrnGameModule::DoDispatch, immediately before GenerateDispatchListsBringUp).
+    // Returns &mSubmissionInterface[mu8SubmissionSwapIndex] -- the slot the producers WRITE this
+    // update frame (StartOfFrame Clears it, EndOfFrame's Swap publishes it to Render). It is
+    // never null, but IsReady() is false until the manager Constructs; the producer checks.
+    // DELETE-WHEN the RendererIO/BrnWorldIO dispatch buffer set is real on PC.
+    BrnCoronaManager::BrnSubmissionInterface* GetCoronaSubmissionInterfaceBringUp()
+    {
+        return mCoronaManager.GetSubmissionInterface();
+    }
+
     // [FLAG PC bring-up] Stage the DIRECTOR'S PUBLISHED CAMERA for the base-frame producer.
     //
     // STANDS IN FOR BrnEffects::EffectsIO::DispatchInputBuffer::SetCameraInput @0x823C9988
