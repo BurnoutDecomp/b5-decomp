@@ -3,13 +3,7 @@
 
 #include "types.hpp"
 #include "GameSource/AttribSys/Generated/classes/propscrashbinlist.h" // Attrib::Gen::propscrashbinlist (the Build List type)
-
-// AttribSys-generated crash-bin container (Build's Bin template argument). The Build leaf
-// only needs the class-key COMPILE-TIME CONSTANT baked from this type (hardcoded, attested
-// in the asm) and never forms a propscrashbin object, so a forward declaration suffices --
-// and no propscrashbin ctor is fabricated (none is attested in the X360 ledger; only
-// CrashBinUtils<propscrashbin>::GetSampleIds @0x8268FE90 is).
-namespace Attrib { namespace Gen { class propscrashbin; } }
+#include "GameSource/AttribSys/Generated/classes/propscrashbin.h"     // Attrib::Gen::propscrashbin (the Build Bin type: ClassKey / KU_LAYOUT_SIZE / material offsets)
 
 // =============================================================================
 // BrnSound::Logic::Collision::BinLookupCache
@@ -51,18 +45,16 @@ public:
     // Capacity gate the Build assert enforces (`... < KU_CACHE_SIZE`, blt cr6, 0x40).
     static const u32 KU_CACHE_SIZE = 0x40u;
 
-    // One cached crash bin: the two qwords Build copies out of the resolved bin's
-    // attribute data area.
-    // FLAG (un-homed propscrashbin schema): the field MEANINGS of the bin's data area at
-    // +0x38 / +0x40 are not recoverable -- the propscrashbin generated schema is not homed
-    // (no propscrashbin.h; its accessors are inlined away), and there is no DWARF for
-    // BinLookupCache. Named by their attested source byte offset rather than fabricating a
-    // meaning. mBinField40 gets bin[+0x40] (stored first, at entry+0x00); mBinField38 gets
-    // bin[+0x38] (stored second, at entry+0x08), matching the X360 store order.
+    // One cached crash bin: the material pair Build copies out of the resolved bin's
+    // layout block. RESOLVED 2026-08-18 (was "FLAG (un-homed propscrashbin schema)"): the
+    // propscrashbin schema is now homed (propscrashbin.h, DWARF _LayoutStruct walk pinned
+    // by this very leaf's `ld 0x40` / `ld 0x38`): bin[+0x40] is mMaterialA, bin[+0x38] is
+    // mMaterialB (UInt64 pair, DWARF propscrashbin.h:163/:170). mMaterialA is stored first
+    // (entry+0x00), mMaterialB second (entry+0x08) -- the X360 store order.
     struct Entry
     {
-        u64 mBinField40; // +0x00  <- (bin data area)[+0x40]
-        u64 mBinField38; // +0x08  <- (bin data area)[+0x38]
+        u64 mMaterialA; // +0x00  <- propscrashbin layout +0x40
+        u64 mMaterialB; // +0x08  <- propscrashbin layout +0x38
     };
 
     // Build the cache from a crash-bin list attribute. STATIC (the X360 leaf takes no

@@ -40,8 +40,9 @@
 // =============================================================================
 
 // AttribSys-generated crash-bin containers (forward declarations only). CrashBinUtils
-// takes them as pointer parameters and never dereferences them, so a forward decl
-// suffices; crashbin.h is committed, propscrashbin.h is not yet generated.
+// takes them as pointer parameters; the accessor member-pointers are invoked through
+// them only inside the template body in the .cpp, so a forward decl suffices here.
+// Both crashbin.h and propscrashbin.h are committed under AttribSys/Generated/classes/.
 namespace Attrib { namespace Gen { class crashbin; class propscrashbin; } }
 
 namespace BrnSound
@@ -56,11 +57,16 @@ namespace Collision
 // (DWARF BrnCollisionStateManager.h:528/538) that copies the collision-sample-id
 // array out of an AttribSys crash-bin container into a caller u16 buffer.
 // GetSampleIds takes the container as an explicit first parameter (the struct holds
-// no data, so the method never touches its own `this` -- which is why the X360 leaf
-// forwards r3=lpCrashBin to the accessor calls). The two accessors are the bin's
-// generated array-size / array-item getters; DWARF types them `const Int32& (*)()`
-// and `const Int32& (*)(unsigned int)` (the _LayoutStruct::Int32 field is a plain
-// 32-bit int in the attribute data area, modelled as `const int&`).
+// no data, so the method never touches its own `this`). The two accessors are the
+// bin's generated array-size / array-item getters and they are POINTERS TO MEMBER
+// FUNCTIONS of the bin, invoked THROUGH lpCrashBin: the X360 leaf @0x8268FF24 does
+// `mr r3,r28(lpCrashBin) ; mtctr r29 ; bctrl` and @0x8268FF68 the same for the item
+// getter, i.e. the bin is `this` for both calls. DWARF :529/:530 renders the two
+// parameters as `struct { const Int32& (*)() __pfn; int __delta; }` -- MSVC's
+// pointer-to-member representation, not a plain function pointer (a 2026-08-18
+// verify caught the earlier `const int& (*)()` spelling: it does not accept
+// `&propscrashbin::mNumCollisionsSmall`, C2664). The _LayoutStruct::Int32 field is a
+// plain 32-bit int in the attribute data area, modelled as `const int&`.
 //
 // Explicit instantiations (defined in BrnCollisionStateManager.cpp):
 //   CrashBinUtils<Attrib::Gen::crashbin>::GetSampleIds      @ 0x8268DC18
@@ -74,8 +80,8 @@ struct CrashBinUtils
     // bounded by luMaxSize; return the count.
     unsigned int GetSampleIds(
         const CrashBin*             lpCrashBin,
-        const int&               (*lpfnGetArraySize)(),
-        const int&               (*lpfnGetArrayItem)( unsigned int ),
+        const int&    (CrashBin::*lpfnGetArraySize)() const,
+        const int&    (CrashBin::*lpfnGetArrayItem)( unsigned int ) const,
         u16*                        lpauArray,
         u16                         luMaxSize );
 };

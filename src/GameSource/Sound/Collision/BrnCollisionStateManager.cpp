@@ -391,10 +391,11 @@ int SelectBin( int /*a1*/, const char* lkpacName, int /*a3*/, int /*a4*/, int /*
 //
 // Stateless utility MEMBER (not a free function): the container is the explicit
 // first arg lpCrashBin; because CrashBinUtils holds no data the method never
-// touches its own `this` -- which is exactly why the X360 leaf forwards
-// r3=lpCrashBin to the two accessor calls and never dereferences an object
-// pointer. lpfnGetArraySize / lpfnGetArrayItem are the bin's generated AttribSys
-// array accessors (DWARF `const Int32& (*)()` / `const Int32& (*)(u32)`); the
+// touches its own `this`. lpfnGetArraySize / lpfnGetArrayItem are the bin's
+// generated AttribSys array accessors as POINTERS TO MEMBER (DWARF :529/:530
+// `{ __pfn, __delta }`), and the X360 leaf invokes them THROUGH lpCrashBin
+// (`mr r3,r28 ; mtctr r29 ; bctrl` @0x8268FF24, `mr r3,r28 ; mtctr r27 ; bctrl`
+// @0x8268FF68) -- the bin IS dereferenced, as `this` of each accessor; the
 // Int32 layout field is a plain 32-bit int living in the crash-bin attribute data
 // area, so the accessors return a reference to it. Copies luNumCollisions =
 // *lpfnGetArraySize() indices into lpauArray (truncating each to u16), bounded by
@@ -407,9 +408,9 @@ int SelectBin( int /*a1*/, const char* lkpacName, int /*a3*/, int /*a4*/, int /*
 // ---------------------------------------------------------------------------
 template< typename CrashBin >
 unsigned int CrashBinUtils< CrashBin >::GetSampleIds(
-    const CrashBin*                /*lpCrashBin*/,   // forwarded to accessors as r3; never dereferenced here
-    const int&                   (*lpfnGetArraySize)(),
-    const int&                   (*lpfnGetArrayItem)( unsigned int ),
+    const CrashBin*                lpCrashBin,   // r3 (r28) -- `this` of both accessor calls
+    const int&        (CrashBin::*lpfnGetArraySize)() const,
+    const int&        (CrashBin::*lpfnGetArrayItem)( unsigned int ) const,
     u16*                           lpauArray,
     u16                            luMaxSize )
 {
@@ -417,13 +418,13 @@ unsigned int CrashBinUtils< CrashBin >::GetSampleIds(
     CGS_ASSERT( lpfnGetArraySize != 0, "lpGetArraySize" );
     CGS_ASSERT( lpauArray        != 0, "lpauArray" );
 
-    unsigned int luNumCollisions = lpfnGetArraySize();
+    unsigned int luNumCollisions = ( lpCrashBin->*lpfnGetArraySize )();
 
     CGS_ASSERT( luNumCollisions < luMaxSize, "luNumCollisions < luMaxSize" );
 
     for ( unsigned int i = 0; i < luNumCollisions; ++lpauArray )
     {
-        *lpauArray = static_cast<u16>( lpfnGetArrayItem( i++ ) );
+        *lpauArray = static_cast<u16>( ( lpCrashBin->*lpfnGetArrayItem )( i++ ) );
     }
 
     return luNumCollisions;

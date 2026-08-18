@@ -30,13 +30,14 @@
 // propscrashbinlist.h). The bin-side is the raw AttribSys resolve+read the X360 baked from
 // Bin=propscrashbin at compile time.
 //
-// FLAG (Bin=propscrashbin compile-time constants baked, not derived): the X360 template
-// body derived the resolved-collection class key and the bin data-area size from the Bin
-// type at compile time. Bin (propscrashbin) has no attested ctor / homed schema, so those
-// two constants are reproduced here as the values the asm literally stages -- the class
-// key 0x4154BD6DE9FF326C (low word 0xE9FF326C surfaced to FindCollection(int), matching the
-// b4blurasset / languagestreamconfiguration key-staging convention) and the 0x190-byte data
-// area (== crashbin's DefaultDataArea size) -- rather than fabricating a propscrashbin ctor.
+// RESOLVED 2026-08-18 (was "FLAG (Bin=propscrashbin compile-time constants baked, not
+// derived)"): the X360 template body derived the resolved-collection class key and the bin
+// layout-block size from the Bin type at compile time. Bin (propscrashbin) is now homed in
+// propscrashbin.h, so the two constants come from Bin::ClassKey() (0x4154BD6DE9FF326C, the
+// doubleword this leaf stages @0x826A8794-A8) and Bin::KU_LAYOUT_SIZE (0x190, `li r3,0x190`
+// @0x826A87CC), and the two qword reads use Bin's named material offsets. What is STILL not
+// reproduced: the X360 forms a Bin over the collection (its (const Collection*, uint32_t)
+// ctor); that ctor has no IDA export, so an Attrib::Instance stands in for the handle.
 //
 // RESOLVED 2026-07-31 (was: "FLAG (FindCollection owner arg)"). The X360 forwards
 // *(RefSpec + 8) -- the RefSpec's 64-bit COLLECTION key -- in r4, and r4 is exactly what
@@ -57,13 +58,10 @@ namespace Collision
 template< typename List, typename Bin >
 BinLookupCache BinLookupCache::Build( const List& lrList )
 {
-    // Bin is a compile-time type tag only (its class key / data-area size are the baked
-    // constants below); reference it so the parameter is not flagged unused.
-    (void)sizeof( Bin* );
-
-    // Bin=propscrashbin compile-time constants the X360 baked into this instantiation.
-    static const u64 KU_PROPSCRASHBIN_CLASS_KEY = 0x4154BD6DE9FF326CULL;
-    static const u32 KU_PROPSCRASHBIN_DATA      = 0x190u;
+    // Bin=propscrashbin compile-time constants the X360 baked into this instantiation,
+    // now derived from the homed Bin type (propscrashbin.h).
+    const u64 KU_PROPSCRASHBIN_CLASS_KEY = Bin::ClassKey();
+    const u32 KU_PROPSCRASHBIN_DATA      = Bin::KU_LAYOUT_SIZE;
 
     BinLookupCache lCache; // entries left indeterminate past mNumBins, as in the asm
 
@@ -91,12 +89,13 @@ BinLookupCache BinLookupCache::Build( const List& lrList )
         if ( !lpBinData )
             lpBinData = Attrib::DefaultDataArea( KU_PROPSCRASHBIN_DATA );
 
-        // Copy the two attested descriptor qwords into the cache entry (store order:
-        // +0x40 into entry+0x00, then +0x38 into entry+0x08).
-        lCache.maEntries[i].mBinField40 =
-            *reinterpret_cast<const u64*>( reinterpret_cast<const u8*>( lpBinData ) + 0x40 );
-        lCache.maEntries[i].mBinField38 =
-            *reinterpret_cast<const u64*>( reinterpret_cast<const u8*>( lpBinData ) + 0x38 );
+        // Copy the bin's material pair into the cache entry (store order: +0x40 mMaterialA
+        // into entry+0x00, then +0x38 mMaterialB into entry+0x08). DATA-format offsets
+        // (they do not widen on the host).
+        lCache.maEntries[i].mMaterialA =
+            *reinterpret_cast<const u64*>( reinterpret_cast<const u8*>( lpBinData ) + Bin::KU_OFFSET_MATERIAL_A );
+        lCache.maEntries[i].mMaterialB =
+            *reinterpret_cast<const u64*>( reinterpret_cast<const u8*>( lpBinData ) + Bin::KU_OFFSET_MATERIAL_B );
     }
 
     lCache.mNumBins = lrList.mNumCrashBins();
