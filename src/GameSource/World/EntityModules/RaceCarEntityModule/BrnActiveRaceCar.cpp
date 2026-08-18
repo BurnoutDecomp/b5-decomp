@@ -530,14 +530,26 @@ void ActiveRaceCar::RemoveHandlingModel( BrnPhysics::Vehicle::VehicleInputInterf
 // one and post a DIFFERENT handle. The DWARF-declared 64-bit overloads were therefore added
 // alongside the committed 32-bit ones (additive, header-only inlines) and are what this calls.
 //
-// RUNTIME SCOPE ON THIS BUILD: race cars are never REGISTERED with the scene manager in the
-// first place (ActiveRaceCar::AddToScene @0x822EB768 is not reconstructed -- which is exactly
-// why CalculateVehicleLODs gets an empty race-car id list and needs the world module's
-// stand-in), and of the four queues this posts to only mRemoveEntityQueue is drained
-// (SceneManagerModule::BridgeInputSceneUpdateInterfaceToSubModules, which skips ids the
-// EntityManager does not know: `if (liIndex < 0) continue;`). So all four posts are inert
-// today. They are reproduced rather than parked because the producer side must be correct the
-// day AddToScene lands, and because posting nothing is indistinguishable from a leak once it does.
+// RUNTIME SCOPE ON THIS BUILD -- ⚠️ CORRECTED 2026-08-18 (wave Q5, scene-add cluster). This
+// paragraph used to say "race cars are never REGISTERED with the scene manager in the first
+// place (ActiveRaceCar::AddToScene @0x822EB768 is not reconstructed)". THAT IS NO LONGER TRUE:
+// AddToScene / AddToCollision / OnHandlingModelAdded / UpdateCullingGroup /
+// SendSceneUpdatesPostPhysics / DetermineCullingGroup are all bodied in
+// BrnActiveRaceCar_wQ5_01.cpp. What IS still true, and is what makes these four posts inert:
+//   * AddToScene's own caller chain does not run yet -- RaceCarEntityModule::
+//     ProcessCreateVehicleEvents @0x822FF620 is still the PublishNewVehicleToDirector
+//     WithoutPhysicsBringUp stand-in, so OnHandlingModelAdded is never reached;
+//   * of the four queues this posts to only mRemoveEntityQueue is drained
+//     (SceneManagerModule::BridgeInputSceneUpdateInterfaceToSubModules, which skips ids the
+//     EntityManager does not know: `if (liIndex < 0) continue;`); the volume /
+//     volume-instance / for-collision legs of that bridge are still absent (its own banner at
+//     CgsSceneManagerModule.cpp:685 says so);
+//   * AddToScene's AddDynamicVolume post is itself parked on the missing 64-bit
+//     `AddDynamicVolume(VolumeId, const void*, u8)` overload -- see the wQ5 partfile.
+// They are reproduced rather than parked because the producer side must be correct the day the
+// drain lands, and because posting nothing is indistinguishable from a leak once it does.
+// (CalculateVehicleLODs still needs the world module's stand-in for the same caller-chain
+// reason.)
 // ----------------------------------------------------------------------------
 void ActiveRaceCar::RemoveFromScene( CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* lpSceneInterface,
                                      BrnPhysics::Vehicle::VehicleInputInterface* lpVehicleInterface )

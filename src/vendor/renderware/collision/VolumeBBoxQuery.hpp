@@ -71,11 +71,11 @@ namespace collision
                             const math::vpu::Matrix44Affine* lpTm,
                             const AABBox& arBBox, u32 auTag, u8 auNumTagBits);
 
-        // PENDING DECLARATION (cross-TU, un-homed) @ 0x82BB0478 -- stage a
-        // primitive reference in m_primVRefBuffer; returns 0 when the result
-        // buffer is full. Canonical inline body rwccore.h:2796-2818; the
-        // X360 out-of-line compile is NOT in this wave's group, so it is
-        // declared and called, not reconstructed here.
+        // @ 0x82BB0478 -- stage a primitive reference in m_primVRefBuffer;
+        // returns 0 when the result buffer is full. Canonical inline body
+        // rwccore.h:2796-2818. HOMED 2026-08-18 (waveQ5 C1) in
+        // VolumeBBoxQuery.cpp: the address has no per-address IDA export
+        // (an export hole), which is why it read as "cross-TU, un-homed".
         RwBool AddPrimitiveRef(const Volume* lpVol,
                                const math::vpu::Matrix44Affine* lpTm,
                                const AABBox& arBBox, u32 auTag, u8 auNumTagBits);

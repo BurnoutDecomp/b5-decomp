@@ -619,6 +619,78 @@ public:
     void RemoveFromCollision( CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* lpSceneInterface,
                               BrnPhysics::Vehicle::VehicleInputInterface* lpVehicleInterface );
 
+    // ========================================================================
+    // THE ADD CHAIN (wave Q5 2026-08-18) -- the exact inverse of the Detach chain above,
+    // and the reason a race car can be hit by anything in the scene at all.
+    //
+    // Reached as: RaceCarEntityModule::ProcessCreateVehicleEvents @0x822FF620
+    //               -> OnHandlingModelAdded -> AddToScene -> AddToCollision
+    // and, every frame after that, as: RaceCarEntityModule::PostPhysicsUpdate @0x82307538
+    //               -> SendRaceCarSceneUpdates @0x822F6B08 -> SendSceneUpdatesPostPhysics
+    //               -> UpdateCullingGroup (+ the late AddToCollision arm).
+    //
+    // Every signature is the DecFIGS DWARF's own (references/DecFIGS/dwarfdump/GameSource/
+    // World/EntityModules/RaceCarEntityModule/BrnActiveRaceCar.h), and matches the ARTIST
+    // asm's register use:
+    //     :667  void OnHandlingModelAdded(SceneInputInterface*, VehicleInputInterface*, float32_t)
+    //     :718  void SendSceneUpdatesPostPhysics(SceneInputInterface*, VehicleInputInterface*, float32_t)
+    //     :1022 void UpdateCullingGroup(SceneInputInterface*)
+    //     :1028 void AddToScene(SceneInputInterface*, VehicleInputInterface*, float32_t)
+    //     :1035 void AddToCollision(SceneInputInterface*, VehicleInputInterface*)
+    //     :1052 InEventAddForCollision::CullingGroup DetermineCullingGroup()
+    // (`SceneInputInterface` is the OutputBuffer_PreScene typedef for
+    //  CgsSceneManager::SceneManagerIO::InSceneUpdateInterface -- BrnRaceCarEntityModuleIO.h:379,
+    //  the same spelling the Detach chain above already uses.)
+    //
+    // ⚠️ THE `float32_t` ON THREE OF THEM IS NOT READ BY ANY OF THE THREE BODIES. It arrives
+    // in f1 (PPC floats take their own register file, so it costs no GPR slot) and is passed
+    // straight down the chain; AddToScene's own f31 spill is the callee-save of a scratch
+    // register, not this argument. Kept because the DWARF declares it and because
+    // SendRaceCarSceneUpdates @0x822F6B08 loads it from module+0x18398 (`lfsx f31,r28,r30`)
+    // and hands it over. Do NOT drop it to "clean up" the signature.
+    // ========================================================================
+
+    // X360 0x822F7EF8 (41 insns). Two tripwires and a tail-call into AddToScene. This is the
+    // console's ONLY caller of AddToScene.
+    void OnHandlingModelAdded( CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* lpSceneInterface,
+                               BrnPhysics::Vehicle::VehicleInputInterface* lpVehicleInterface,
+                               f32 lfTimeStep );
+
+    // X360 0x822EB768 (332 insns). Give the car a scene ENTITY (bounding sphere), a dynamic
+    // collision VOLUME (a box built from the deformation spec's mHandlingBodyDimensions), a
+    // VOLUME INSTANCE at the car's world transform, and then a collision registration; sets
+    // mbAddedToScene. PARTIAL -- see the .cpp banner for the two flagged legs.
+    void AddToScene( CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* lpSceneInterface,
+                     BrnPhysics::Vehicle::VehicleInputInterface* lpVehicleInterface,
+                     f32 lfTimeStep );
+
+    // X360 0x822D41F0 (138 insns). Put the car's volume instance into the scene collision set
+    // under its current culling group and arm the "collision state changed" flag. PARTIAL --
+    // the E_RACE_CAR_TYPE_NETWORK re-add post is [FLAG BLOCKED] on the same
+    // mAddRemoveNetworkCarForCollisionQueue that blocks RemoveFromCollision's.
+    void AddToCollision( CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* lpSceneInterface,
+                         BrnPhysics::Vehicle::VehicleInputInterface* lpVehicleInterface );
+
+    // X360 0x822EB6B0 (46 insns). The per-frame post-physics scene leg: refresh the culling
+    // group, then re-add for collision if this car was un-crashed this frame.
+    void SendSceneUpdatesPostPhysics( CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* lpSceneInterface,
+                                      BrnPhysics::Vehicle::VehicleInputInterface* lpVehicleInterface,
+                                      f32 lfTimeStep );
+
+    // X360 0x822BF5B8 (44 insns). Recompute the culling group; on a change, latch it, arm
+    // mbChangeCullingGroup, and (only if already added for collision) publish it to the scene.
+    void UpdateCullingGroup( CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* lpSceneInterface );
+
+    // X360 0x822BF4D8 (56 insns). The culling group this car belongs in: 6 for the player,
+    // 5 for an AI-driven car, 1 otherwise.
+    //
+    // RETURN TYPE: the DWARF prints this declaration twice with two spellings of the SAME
+    // u32 typedef -- `InEventAddForCollision::CullingGroup` (:1052, :4178) and
+    // `SetRaceCarCullingGroupEvent::CullingGroup` (:2093). The second is used here because
+    // BrnVehicleEvents.h is already in this header's include closure (it is where
+    // InEventAddForCollision's own typedef points), so naming it costs no new include.
+    BrnPhysics::Vehicle::SetRaceCarCullingGroupEvent::CullingGroup DetermineCullingGroup();
+
     // X360 0x822B8828: the render body transform,
     // `Mult(mCentreOfMassTransform, mPhysicsState.mTransform)`. The console's only caller
     // is UpdatePhysicsState @0x822D4418, which stores the result into

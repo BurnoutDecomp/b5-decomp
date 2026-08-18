@@ -26,23 +26,56 @@ namespace rw
 namespace collision
 {
 
-// --- un-recovered .rdata Initialize stamps (declared extern; reproduced
-// faithfully WITHOUT fabricating values, exactly as TriangleVolume.cpp does for
-// its init word). The real definitions live in the un-recovered GP/volume
-// registration + math-constant TUs. FLAGGED as un-recovered. ---------------
-
-// dword_8327EEF4 -- module-scope initialisation word stamped at +0x40. Loaded
-// via `lis/addi dword_8327EEE0 ; lwz +0x14`; the export carries no value and no
-// function in this TU reads the field back.
+// --- Initialize's +0x40 stamp: NOT a .rdata constant -----------------------
+// dword_8327EEF4 -- module-scope word stamped at +0x40, loaded via
+// `lis/addi dword_8327EEE0 ; lwz +0x14`.
+//
+// CORRECTED 2026-08-18 (waveQ5 C1, headless IDA on a private .i64 copy). The
+// old comment here called this an "un-recovered .rdata Initialize stamp", i.e.
+// a compile-time constant whose value the export happened not to carry. It is
+// neither: dword_8327EEE0 is the SEVEN-ENTRY RUNTIME Volume descriptor table
+// (rw::collision::gVolumeVTable, defined in SDKs/EATech/rwcollision/volume.cpp
+// and filled by rw::collision::Volume::InitializeVTable @ 0x82BB03A8), and
+// +0x14 is slot 5 == VOLUMETYPECYLINDER. So the stamp is a RUNTIME READ of
+// gVolumeVTable[5] -- the cylinder Volume descriptor POINTER -- exactly the
+// value PrimitiveIntersect.cpp's GetVolumeVTable reads back from Volume+0x40.
+// The image bytes at 0x8327EEE0..0x8327EEFC are all ZERO (they are .data, not
+// .rdata) -- AGENTS gotcha 13: a zero there is "not written yet", not a value.
+//
+// LEFT AS A DECLARED EXTERN (link hole, reported to the conductor) rather than
+// wired to gVolumeVTable[5]: mInitWord is a u32 (the console 32-bit pointer
+// IMAGE) and this class's members are offset-pinned by static_asserts, so a
+// host pointer cannot be stored without relaying out CylinderVolume. That
+// host-width promotion belongs to the Volume / InitializeVTable TU, which is
+// also where the six descriptor records have to become real -- see the LINK
+// FACTS block in SDKs/EATech/rwcollision/volume.cpp.
 extern const u32 g_uCylinderVolumeInitWord;
 
-// The default local-frame seed rows. gIVector is w::math::vpu::detail::gIVector
-// (an identity basis vector); unk_82181510 / unk_82181520 are the same
-// un-recovered axis-seed constants referenced (and flagged) across VehiclePhysics
-// / ParticleModule / PropCollisions. They are 16-byte VMX rows.
-extern const Vec4 g_vIVector;             // -> maFrame[0]
-extern const Vec4 g_vAxisSeed82181510;    // unk_82181510 -> maFrame[1]
-extern const Vec4 g_vAxisSeed82181520;    // unk_82181520 -> maFrame[2]
+// --- Initialize's default local-frame seed rows ----------------------------
+// RECOVERED 2026-08-18 (waveQ5 C1, headless IDA on a private .i64 copy). These
+// were three `extern const Vec4` declarations FLAGGED as "un-recovered axis
+// seeds", i.e. three permanent link holes standing in for values that were in
+// the image all along. They are the three IDENTITY BASIS ROWS of the SDK's
+// I/J/K run, and the .rdata carries them verbatim:
+//   0x82181500  w::math::vpu::detail::gIVector  3F800000 00000000 00000000 00000000
+//   0x82181510  unk_82181510                    00000000 3F800000 00000000 00000000
+//   0x82181520  unk_82181520                    00000000 00000000 3F800000 00000000
+// (The IDA symbol is TRUNCATED to `w::math::vpu::detail::gIVector` -- AGENTS
+// gotcha 6; the real name is rw::math::vpu::detail::gIVector.)
+//
+// Spelled as file-scope constants here, not as a new global, for the same
+// reason GameSource/Director/Camera/Utils/CameraUtils.cpp:136 spells gIVector
+// as a local KV_AXIS_X: the SDK's rw::math::vpu::detail basis run has no home
+// TU anywhere in this tree, and inventing `rw::collision::g_vIVector` to
+// satisfy three reads would be a second definition of a name that belongs to
+// rw::math::vpu::detail (AGENTS gotcha 7). When that home lands, these three
+// become references to it.
+namespace
+{
+    const Vec4 KV_BASIS_X = { 1.0f, 0.0f, 0.0f, 0.0f };   // gIVector     @0x82181500
+    const Vec4 KV_BASIS_Y = { 0.0f, 1.0f, 0.0f, 0.0f };   // unk_82181510 @0x82181510
+    const Vec4 KV_BASIS_Z = { 0.0f, 0.0f, 1.0f, 0.0f };   // unk_82181520 @0x82181520
+}
 
 namespace
 {
@@ -84,13 +117,13 @@ CylinderVolume* CylinderVolume::Initialize(CylinderVolume** appVolume,
     lpVolume->mu5C      = 1;
     lpVolume->mInitWord = g_uCylinderVolumeInitWord;
 
-    lpVolume->maFrame[0] = g_vIVector;
+    lpVolume->maFrame[0] = KV_BASIS_X;
     lpVolume->maFrame[3].x = 0.0f;
     lpVolume->maFrame[3].y = 0.0f;
     lpVolume->maFrame[3].z = 0.0f;
     lpVolume->maFrame[3].w = 0.0f;
-    lpVolume->maFrame[1] = g_vAxisSeed82181510;
-    lpVolume->maFrame[2] = g_vAxisSeed82181520;
+    lpVolume->maFrame[1] = KV_BASIS_Y;
+    lpVolume->maFrame[2] = KV_BASIS_Z;
 
     lpVolume->mfFatness    = afFatness;      // f3 -> +0x50
     lpVolume->mfRadius     = afRadius;       // f1 -> +0x48

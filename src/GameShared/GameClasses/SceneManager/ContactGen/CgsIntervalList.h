@@ -24,9 +24,15 @@
 
 namespace CgsSceneManager
 {
-    // Forward decls for the sweep surface (bodies not in this batch).
+    // The sweep surface's scratch stack. Pointer/reference-only here, so a forward
+    // declaration is enough and CgsIntervalStack.h stays out of this header's closure
+    // (CgsIntervalStack.h already includes CgsInterval.h, so including it here would be an
+    // ordering hazard for no gain). OverlapPairQueue is NOT forward-declared: it is a
+    // typedef of a class template instantiation (DWARF CgsInterval.h:61) and CgsInterval.h
+    // -- already included above -- is its attested home. The `struct OverlapPairQueue;`
+    // forward declaration that stood here until 2026-08-18 declared a DIFFERENT, never-
+    // defined type; any TU that actually dereferenced the queue would have failed.
     class IntervalStack;
-    struct OverlapPairQueue;
 
     // Sentinel object index stored on the terminating sentinel interval
     // (CgsIntervalList.cpp:28, KU_SENTINEL_OBJECT_INDEX = 65535).
@@ -73,10 +79,36 @@ namespace CgsSceneManager
         void RemoveObject(u16 luObjectIndex);
         void UpdateObject(u16 luObjectIndex, Vector3 lMin, Vector3 lMax);
 
+        // CgsIntervalList.h:121 (DWARF). Re-sort the endpoint array on mfXInterval, append the
+        // terminating sentinel and rebuild the object->slot map. Body in CgsIntervalList.cpp.
+        //
+        // The X360 build has no out-of-line Sort symbol -- SceneSweeper::SortLists @0x828D5980
+        // carries it inlined, three times: `std::_Sort<Interval*,int>(mpaIntervals,
+        // mpaIntervals + muNumIntervals, muNumIntervals)` then `bl IntervalList::
+        // AddSentinelInterval` then `bl IntervalList::RepairMappings`, all on the same list
+        // pointer. Those last two are NOT SceneSweeper's to call -- AddSentinelInterval is
+        // PRIVATE to IntervalList (DWARF CgsIntervalList.h:191) and SceneSweeper is not a
+        // friend -- so the trio can only have been the body of this method, inlined. That
+        // access rule is what pins the split; the asm alone would allow either reading.
         void Sort();
+
+        // CgsIntervalList.h:126 (DWARF). @0x828C1328. Single-list sweep: walk the sorted
+        // endpoints once, closing max-role endpoints off lpDynamicStack and testing each
+        // min-role endpoint against the currently-open set before pushing it.
         void SweepIntervals(OverlapPairQueue* lpOverlappingPairQueue, IntervalStack* lpDynamicStack) const;
+
+        // CgsIntervalList.h:133 (DWARF). ⚠️ NO X360 BODY AND NO CALLER -- `SweepWithStaticList`
+        // does not appear in progress/identity.json, in the ledger, or as a callee of any
+        // sweeper body (SceneSweeper::SweepLists @0x828C20F0 calls SweepIntervals and
+        // SweepAgainstList only). Declaration kept because the DWARF attests it; NOT a
+        // reconstruction target -- do not invent one.
         void SweepWithStaticList(IntervalList* lpSortedListToSweep, OverlapPairQueue* lpOverlappingPairQueue,
                                  IntervalStack lDynamicStack, IntervalStack lStaticStack);
+
+        // CgsIntervalList.h:140 (DWARF). @0x828C1520. Cross-list sweep: merge-walk the two
+        // sorted endpoint arrays on mfXInterval; lpStaticStackA holds THIS list's open
+        // intervals and lpStaticStackB the other list's, and each opening endpoint is tested
+        // against the OTHER list's open set.
         void SweepAgainstList(const IntervalList& lrSortedListToSweep, OverlapPairQueue* lpOverlappingPairQueue,
                               IntervalStack* lpStaticStackA, IntervalStack* lpStaticStackB) const;
 

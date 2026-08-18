@@ -1781,39 +1781,8 @@ void CgsGraphics::DispatchBin::HandleMemoryOverflow(unsigned int)
 // -------------------------------------------------------------------------
 // CgsSceneManager::EntityManager
 // -------------------------------------------------------------------------
-// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
-// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
-// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
-// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
-// not this gate.
-int CgsSceneManager::EntityManager::GetVolumeInstanceIndexByID(struct CgsSceneManager::VolumeInstanceId) const
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "CgsSceneManager::EntityManager::GetVolumeInstanceIndexByID: inert (body not reconstructed) [FLAG PC boot gate]\n";
-    }
-    return 0;
-}
-
-// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
-// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
-// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
-// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
-// not this gate.
-struct CgsSceneManager::VolumeInstance * CgsSceneManager::EntityManager::GetVolumeInstance(int)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "CgsSceneManager::EntityManager::GetVolumeInstance: inert (body not reconstructed) [FLAG PC boot gate]\n";
-    }
-    return 0;
-}
+// GATE RETIRED 2026-08-18 (wave Q5): CgsSceneManager::EntityManager::GetVolumeInstanceIndexByID @0x828CD4B8 is REAL in CgsEntityManager.cpp (this stub RETURNED 0 for every id, every frame).
+// GATE RETIRED 2026-08-18 (wave Q5): CgsSceneManager::EntityManager::GetVolumeInstance @0x828B9F28 is REAL in CgsEntityManager.cpp.
 
 // -------------------------------------------------------------------------
 // CgsSceneManager::FineIntersectionTestModule
@@ -2187,23 +2156,7 @@ void CgsSceneManager::SceneManagerModule::ExternalSceneQueriesUpdate()
 // -------------------------------------------------------------------------
 // CgsSceneManager::VolumeManager
 // -------------------------------------------------------------------------
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
-bool CgsSceneManager::VolumeManager::Prepare()
-{
-    // BOOT-GATE (attribsys wave 2026-07-26): REACHED by the world Prepare chain
-    // (SceneManagerModule::Prepare / the world stage machine). One-shot log +
-    // report success so the scripted load advances; the sub-manager stays
-    // inert (zero-initialised storage) and its consumers keep their traps.
-    // Reconstruct from X360 0x828CFD38.
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "VolumeManager::Prepare: inert [FLAG PC boot gate]\n";
-    }
-    return true;
-}
+// GATE RETIRED 2026-08-18 (wave Q5): CgsSceneManager::VolumeManager::Prepare @0x828CFD38 is REAL in CgsVolumeManager.cpp (mounted).
 
 // -------------------------------------------------------------------------
 // ShaderConstantTable
