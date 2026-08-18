@@ -130,6 +130,18 @@ struct BrnRendererMemory
     // reads is fixed by the same function's `lwz r11, 0x25C(r28)` against mAllocatedRenderTargets at
     // this+0x238: (0x25C-0x238)/4 == 9.
     CgsRenderTarget* GetParticleBuffer()   { return mapRenderTarget[E_RENDER_TARGET_PARTICLE]; }
+    // DWARF source BrnRendererMemory.h:156 (dwarfdump file line 156,
+    // `CgsRenderTarget* GetSunCoronaBuffer();`). INLINED on the X360 like its neighbours, and the
+    // slot it reads is fixed the same way theirs are: BrnRendererModule::ComputeSunCoronaVisibility
+    // @0x82405D80 reads it as `lwz r4, 0x260(r31)` and hands it to
+    // BrnSunCorona::GenerateOcclusionBuffer as lpOcclusionRt, while the sibling load two
+    // instructions earlier (`lwz r5, 0x248(r31)`) is the DOWN-SAMPLE buffer it passes as
+    // lpSourceDepthRt. Against mAllocatedRenderTargets at this+0x238 that is
+    // (0x260-0x238)/4 == 10 == E_RENDER_TARGET_SUN_CORONA and (0x248-0x238)/4 == 4 ==
+    // E_RENDER_TARGET_DOWN_SAMPLE -- the two slots CreateSunCoronaBuffer @0x823F73C8 and
+    // CreateDownSampleBuffer @0x823F6E60 write. The offset arithmetic is documentation only: the
+    // slot is reached BY NAME below.
+    CgsRenderTarget* GetSunCoronaBuffer()  { return mapRenderTarget[E_RENDER_TARGET_SUN_CORONA]; }
 
     // 0x82406A68 (DWARF source BrnRendererMemory.h:221, dwarfdump file line 123) -- composite two
     // sampled render targets into the bound one with one full-screen quad through the immediate-mode
@@ -169,6 +181,18 @@ struct BrnRendererMemory
     // does) and it refuses to run twice, so calling it after the shadow + post-fx slices is safe in
     // either order. DELETE with the other two, when Construct() can be called.
     void PCBringUpCreateEnvMapBuffer(rw::IResourceAllocator* lpAllocator);
+
+    // The SUN-CORONA target (a 1x1 colour-only surface, pool slot 10), created the same lazy way
+    // and for the same two reasons as its three siblings above: Construct @0x823FCA38 is gated out,
+    // and it would run before the D3D9 device exists anyway. It is NOT a re-implementation -- the
+    // body calls the real CreateSunCoronaBuffer @0x823F73C8, which is already bodied in this file.
+    //
+    // Same two ordering facts as PCBringUpCreateEnvMapBuffer: it must run AFTER
+    // PCBringUpCreateShadowMapBufferOnly (which nulls every pool slot -- asserted), and it must not
+    // run twice (CreateSunCoronaBuffer `new`s a target and publishes it into the slot, so a second
+    // call would leak the first AND hand the flare pass a different object than the one sampler 0
+    // was bound to). DELETE WITH THE BRING-UP, together with its three siblings.
+    void PCBringUpCreateSunCoronaBuffer(rw::IResourceAllocator* lpAllocator);
 
 private:
     // The Create* render-target helpers Construct delegates to. Bodies live in their own (already

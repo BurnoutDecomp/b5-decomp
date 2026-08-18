@@ -1486,6 +1486,77 @@ RaceCarEntityModule::GenerateDispatchLists(
                            lvFogScattering,
                            lvFogColourPlusWhiteLevel );
 
+            // ==============================================================
+            // THE SHADOW-PASS GATE -- console @0x822E7E50-0x822E7E58, RECOVERED
+            // (coronas step 2, group `coronacalib`). THIS IS THE DOUBLE-POST FIX.
+            //
+            //   0x822E7E4C  bl     RenderRaceCar
+            //   0x822E7E50  lbz    r11, 0(r19)        ; r19 = lpInput->GetShadowMap()
+            //   0x822E7E54  cmplwi cr6, r11, 0        ;   ShadowMap +0x00 == mbRenderingShadowMap
+            //   0x822E7E58  bne    cr6, loc_822E83A0  ; -> the LOOP TAIL: for this car, skip
+            //                                         ;    EVERYTHING after RenderRaceCar
+            //   0x822E8040  bl     BrnBlobbyShadowBuffer::AddShadow      (below the branch)
+            //   0x822E804C..0x822E808C  the five corona gates             (below the branch)
+            //   0x822E80BC  bl     SubmitCoronasForRaceCar               (below the branch)
+            //
+            // ShadowMap +0x00 IS mbRenderingShadowMap: ShadowMap::Construct writes it with
+            // `stb r28, 0(this)` (BrnShadowMap.cpp:192), it is the first of the two leading
+            // ShadowMap bytes this very file already reads at :336 for the shadow technique,
+            // and the console reads the same slot two instructions earlier (@0x822E7D9C
+            // `lbz r11, 0(r19)`) to choose ShadowMap::CalcOptimisedLod.
+            //
+            // WHY IT MATTERS ON PC. WorldModule::GenerateDispatchListsBringUp drives THIS
+            // function from TWO call sites -- the main-view leg (BrnWorldModule.cpp:6622) and
+            // the per-cascade leg (:7129, inside the arm that raises the latch at :7071
+            // `mShadowMap.SetRenderingShadowMap(true)`) -- all with the SAME
+            // `sRaceCarDispatchInput`, whose corona submission interface is set ONCE in the
+            // main leg (:6619) and never cleared. Without this branch a cascade leg posts the
+            // car's lamp flares again into the same corona buffer, and the pass is ADDITIVE:
+            // step 1's boot log proves at least one extra post reached the buffer --
+            // `[corona] first submit: 4 coronas` against `[corona] first draw: 8 quads` for
+            // ONE race car (BrnGame.log:4508/4509, `[racecar-lod] banded 1 cars`). Which
+            // cascade legs post on a given frame is what the `[corona-calib] dispatch leg`
+            // probe below measures; this branch removes EVERY cascade post regardless.
+            //
+            // (The console's SECOND gate at 0x822E7E5C -- `clrlwi r11, r21, 24 / beq
+            // loc_822E83A0`, where r21 is 1 unless the input buffer's camera flag word bit 2
+            // is set AND this car is the player's -- is NOT reproduced: its source is an
+            // unidentified 64-bit field at camera+0x140 (`ld r11, 0x140(r3)` @0x822E7CEC after
+            // an InputBuffer getter) and inventing it would be fabrication. It can only ever
+            // REMOVE the local player's own flares in a camera mode that hides the player car,
+            // which the boot frames are not in -- the player car renders in full. Recorded in
+            // the report as a named follow-up.)
+            //
+            // The blobby-shadow AddShadow leg is not reconstructed on PC yet; when it lands it
+            // belongs BELOW this branch, exactly where the console has it.
+            // ==============================================================
+            const bool lbRenderingShadowMap = lpShadowMap->IsRenderingShadowMap();
+
+            // [DIAG corona-calib -- coronas step 2] THE MEASUREMENT the calibration needs:
+            // which dispatch legs reach the per-car body in one frame, and which of them the
+            // gate above now rejects. A burst of the first 16 legs of the boot, then silent
+            // for ever. Read it together with `[corona] first draw: N quads`: N must equal the
+            // sum of the `main` legs' submitted counts and nothing else.
+            // DELETE-WHEN the corona calibration is signed off.
+            {
+                static u32 suCoronaCalibLegs = 0u;
+                if ( suCoronaCalibLegs < 16u && CgsDev::Log::gpDebugPrint != 0 )
+                {
+                    ++suCoronaCalibLegs;
+                    *CgsDev::Log::gpDebugPrint
+                        << "[corona-calib] dispatch leg #" << static_cast< s32 >( suCoronaCalibLegs )
+                        << " car " << liCar
+                        << " site=" << ( lbRenderingShadowMap ? "shadow-cascade" : "main" )
+                        << " objectList " << liObjectList
+                        << " coronaPost=" << ( lbRenderingShadowMap ? 0 : 1 ) << "\n";
+                }
+            }
+
+            if ( lbRenderingShadowMap )
+            {
+                continue;
+            }
+
             // [DIAG pose wave] one-shot proof that the console leg reached the submission
             // leaf, and with what pose. Cheap enough to leave in: it fires once per boot.
             static bool sbLoggedFirstSubmission = false;

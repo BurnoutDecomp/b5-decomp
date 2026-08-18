@@ -843,6 +843,91 @@ namespace
     }
 
     // ============================================================================================
+    // [FLAG PC bring-up] BRING THE SUN CORONA UP (coronas step 2, 2026-08-18).
+    //
+    // CONSOLE POSITION: BrnRendererModule::Construct @0x8240A778 calls
+    // `mSunCorona.Construct(<the global graphics allocator>)`, and BrnRendererMemory::Construct
+    // @0x823FCA38 builds pool slot 10 through CreateSunCoronaBuffer @0x823F73C8. NEITHER is
+    // reachable on this build -- BrnRendererModule::Construct is not reconstructed and
+    // BrnResource::Allocators::GetGlobalGraphicsAllocator() is declaration-only -- which is the
+    // same pair of blockers EnsureCoronaManagerBringUp / EnsurePostFxSceneTargets / EnsureEnvMapTarget
+    // already carry.
+    //
+    // So both halves come up here, on the first frame that HAS a device and a down-sample buffer,
+    // over the same sWorldDispatchAllocator every other deferred subsystem uses. VALUE-LATCHED on
+    // IsConstructed() and on the pool slot, never on a `static bool tried`: a one-shot flag set
+    // during the loading screen -- before renderengine::gDevice exists -- would burn the single
+    // attempt (EnsureShadowMapTarget's banner, above, records that bug).
+    //
+    // THE DOWN-SAMPLE BUFFER IS A PRECONDITION, not an ordering assumption: it is the target whose
+    // depth texture the occlusion taps sample, and PCBringUpCreateSunCoronaBuffer asserts the
+    // slot-nulling bring-up has already run. Render calls EnsurePostFxSceneTargets before this
+    // point on every path; testing the SLOT rather than calling that function again is what keeps
+    // this gate independent of it.
+    //
+    // DELETE-WHEN BrnRendererModule::Construct and BrnRendererMemory::Construct are reconstructed.
+    // ============================================================================================
+    bool EnsureSunCoronaBringUp(BrnRendererMemory& lrRendererMemory, BrnSunCorona& lrSunCorona)
+    {
+        if (lrSunCorona.IsConstructed() && lrRendererMemory.GetSunCoronaBuffer() != nullptr)
+            return true;
+        if (renderengine::gDevice == 0)
+            return false;                                  // no device -> no D3D9 objects yet
+        if (lrRendererMemory.GetShadowMapBuffer(0) == nullptr)
+            return false;                                  // the slot-nulling bring-up has not run
+        if (lrRendererMemory.GetDownSampleBuffer() == nullptr)
+            return false;                                  // no depth source to measure against
+        if (!EnsureWorldDispatchAllocator())
+            return false;
+
+        if (lrRendererMemory.GetSunCoronaBuffer() == nullptr)
+        {
+            lrRendererMemory.PCBringUpCreateSunCoronaBuffer(&sWorldDispatchAllocator);
+        }
+
+        if (!lrSunCorona.IsConstructed())
+        {
+            lrSunCorona.Construct(&sWorldDispatchAllocator);
+
+            // ---- THE SUN-CORONA SWITCH, seeded from config.ini ---------------------------------
+            // BrnSunCorona::Construct sets mbRenderSunCorona true, which IS the console's value
+            // (`stb r27(=1), 0x51(r31)` @0x824009EC). The knob only SEEDS that member, once, right
+            // where Construct wrote it -- NO SECOND SWITCH IS MINTED (AGENTS.md rule 3); the
+            // console's other writer is BrnGraphics::DebugComponent, which is an empty placeholder
+            // in this tree. DELETE-WHEN the debug component owns the switch.
+            lrSunCorona.PCBringUpSetRenderSunCorona(renderengine::gSunCorona != 0);
+            if (renderengine::gSunCorona == 0)
+            {
+                CgsDev::Log::WriteToLog("[suncorona] config.ini [Settings] SunCorona=0 --"
+                                        " the sun-corona pass is OFF\n");
+            }
+        }
+
+        const CgsRenderTarget* const lpBuffer = lrRendererMemory.GetSunCoronaBuffer();
+        if (lpBuffer == nullptr || !lrSunCorona.IsConstructed())
+            return false;                                  // both halves reported why; retry next frame
+
+        {
+            // AGENTS.md rule 9: print the EXTENT and refuse a degenerate target rather than
+            // rendering into nothing and erroring nowhere. One line, latched.
+            static bool sbLoggedBuffer = false;
+            if (!sbLoggedBuffer)
+            {
+                sbLoggedBuffer = true;
+                char lacMessage[192];
+                std::snprintf(lacMessage, sizeof(lacMessage),
+                              "[suncorona] buffer created %ux%u fmt=0x%08X target=%p\n",
+                              (unsigned)lpBuffer->GetWidth(), (unsigned)lpBuffer->GetHeight(),
+                              (unsigned)0x18280186u,
+                              (const void*)lpBuffer->GetRenderTarget());
+                CgsDev::Log::WriteToLog(lacMessage);
+            }
+        }
+        return lpBuffer->GetWidth() != 0u && lpBuffer->GetHeight() != 0u
+            && lpBuffer->GetRenderTarget() != 0;
+    }
+
+    // ============================================================================================
     // [FLAG PC bring-up] CONSTRUCT THE CORONA MANAGER (coronas step 1, 2026-08-17).
     //
     // CONSOLE POSITION: BrnRendererModule::Prepare's eRendererPrepareCoronas stage
@@ -976,14 +1061,37 @@ namespace
             if (!sbLogged)
             {
                 sbLogged = true;
-                char lacMessage[192];
+                // [DIAG corona-calib -- coronas step 2] the UNCLAMPED scalars and the field of
+                // view they imply, printed beside the published pair. This is the whole answer to
+                // "is viewXyScale.x == 1.0000 the console's fsel or a wrong matrix element read":
+                // BrnDirector::Camera::Camera::Construct seeds mfFOV = 90 (flt_82004F64) and
+                // mfAspectRatio = 16/9 (flt_82009A78 -- 1.77778, in this wave's DATA_DUMP), and
+                // CgsGraphics::Camera::SetFOV treats mfFOV as the HORIZONTAL fov
+                // (CgsCamera.cpp:420-433: maProjectionScalars[1] = 1/tan(fovH/2) and the VERTICAL
+                // fov is DERIVED from it through the aspect ratio). At 90 degrees horizontal
+                // 1/tan(45) is exactly 1.0, so the console's `fsel f0, f11, f0, 1.0` at
+                // BrnRendererModule::Update @0x82405F10-0x82405F20 is a no-op and viewXyScale
+                // reads (1.0, aspect) == (1.0000, 1.7778) on the console too.
+                // EXPECT: rawOotFovH ~= 1.000, fovH ~= 90.0, fovV ~= 58.7. A rawOotFovH that is
+                // NOT close to 1.0 while the clamped lane still prints 1.0000 is the failure this
+                // line exists to catch. DELETE-WHEN the corona calibration is signed off.
+                const f32 lfRadToDeg = 57.2957795f;
+                const f32 lfFovHDeg  = (lfOotHalfFovH > 0.0f)
+                                     ? 2.0f * std::atan(1.0f / lfOotHalfFovH) * lfRadToDeg : 0.0f;
+                const f32 lfFovVDeg  = (lfOotHalfFovV > 0.0f)
+                                     ? 2.0f * std::atan(1.0f / lfOotHalfFovV) * lfRadToDeg : 0.0f;
+                char lacMessage[288];
                 std::snprintf(lacMessage, sizeof(lacMessage),
                               "[corona] camera published: eye=(%.2f %.2f %.2f)"
-                              " viewXyScale=(%.4f %.4f) (1/tanHalfFovH, 1/tanHalfFovV)\n",
+                              " viewXyScale=(%.4f %.4f) = (max(ootH,1), (ootV/ootH)*max(ootH,1))"
+                              " | rawOotFovH=%.4f rawOotFovV=%.4f fovH=%.1f fovV=%.1f"
+                              " aspect=%.4f\n",
                               gBrnSkyCameraBringUp.mViewPosition.x,
                               gBrnSkyCameraBringUp.mViewPosition.y,
                               gBrnSkyCameraBringUp.mViewPosition.z,
-                              lvViewXyScale.x, lvViewXyScale.y);
+                              lvViewXyScale.x, lvViewXyScale.y,
+                              lfOotHalfFovH, lfOotHalfFovV, lfFovHDeg, lfFovVDeg,
+                              (lfOotHalfFovH > 0.0f) ? (lfOotHalfFovV / lfOotHalfFovH) : 0.0f);
                 CgsDev::Log::WriteToLog(lacMessage);
             }
         }
@@ -3158,6 +3266,79 @@ void BrnRendererModule::ResolveMSAA(f32 lfWhiteLevel, u8 luStencilValue)
 
 #endif  // BRN_ANTIALIAS_BRACKET_AVAILABLE
 
+// =================================================================================================
+// BrnRendererModule::ComputeSunCoronaVisibility -- X360 @0x82405D80.
+// (Ledger `reviewed`, and ABSENT from this file until coronas step 2 -- the second recurring trap
+// this campaign records: a ledger `reviewed` does not mean the body exists.)
+//
+// THE WHOLE CONSOLE BODY, instruction for instruction:
+//     0x82405D98  lwz r3, 0(this+0xC9EC) ; bl PerfMonGpu::StartMonitor    mGpuMonitors.miSunCoronaVisibilityTest
+//     0x82405DA0  lbz r11, 0xAD0(this)                                    mu8ShaderConstantsFrameInternal
+//     0x82405DA8  mulli r11, r11, 0x320                                   sizeof(BrnShaderConstantsFrame)
+//     0x82405DB0  addi r30, r11, 0x490                                    &maShaderConstantsFrames[internal]
+//     0x82405DB8  bl BrnShaderConstantsFrame::GetViewProjectionMatrix     -> the stack Matrix44
+//     0x82405DBC  lbz 0x31C(r30) / assert "false == mbLockedForWriting"   the INLINED getters' assert
+//     0x82405DFC  lvx128 v2, r30, 0x300                                   mUnbiasedKeyLightDirection
+//     0x82405E00  lvx128 v1, r30, 0x040                                   mViewPosition
+//     0x82405E04  bl BrnSunCorona::ComputeSunPositionOnScreen             (r3 = this+0xC520 = mSunCorona)
+//     0x82405E08  lwz r5, 0x248(this)                                     mapRenderTarget[4]  DOWN_SAMPLE
+//     0x82405E0C  lwz r4, 0x260(this)                                     mapRenderTarget[10] SUN_CORONA
+//     0x82405E10  bl BrnSunCorona::GenerateOcclusionBuffer
+//     0x82405E18  bl PerfMonGpu::StopMonitor
+//
+// The two `lvx128` loads are the INLINED accessors GetUnbiasedKeyLightDirection() (+0x300) and
+// GetViewPosition() (+0x40) -- BrnShaderConstantsFrame.h:96/78 -- which is why only ONE of the
+// three reads has a `bl` and why the lock assert appears once, at the first inlined getter. They
+// are DE-INLINED onto the named accessors here (AGENTS.md "inlining reversal").
+//
+// ⚠ THE PERFMON BRACKET IS NOT REPRODUCED, for the reason this file's banner at :250 gives: every
+// id in mGpuMonitors is 0 on this build because nothing calls PerfMonGpu::AddMonitor, so a bracket
+// here would time one monitor id shared with every other pass.
+//
+// ⚠ THE FRAME. The console reads the INTERNAL slot, and so does this. On PC that slot is filled by
+// the sky publisher: BrnRendererModule::PublishSkyConstantsBringUp writes
+// maShaderConstantsFrames[mu8ShaderConstantsFrameEXTERNAL] (RenderWorldPasses' sky block and the
+// env-map loop both call it), and SwapBuffers promotes external -> internal at the end of the
+// frame. So the internal frame carries the PREVIOUS frame's published constants -- which is the
+// console's own contract (its producer is Update, and SwapBuffers flips), not a PC deviation.
+// THE OWNER OF THAT WIRE IS PublishSkyConstantsBringUp; if it does not run, the internal frame is
+// the all-zero one BrnShaderConstantsFrame::Construct left and the block below REFUSES rather than
+// projecting the sun through a zero matrix (AGENTS.md rule 9). The refusal names the wire.
+// =================================================================================================
+void BrnRendererModule::ComputeSunCoronaVisibility()
+{
+    BrnShaderConstantsFrame& lrFrame = maShaderConstantsFrames[mu8ShaderConstantsFrameInternal];
+
+    const Matrix44 lViewProjection = lrFrame.GetViewProjectionMatrix();
+    const Vector3  lViewPosition   = lrFrame.GetViewPosition();
+    const Vector3  lSunDir         = lrFrame.GetUnbiasedKeyLightDirection();
+
+    // [FLAG PC bring-up gate] see the banner: an unpublished internal frame is all zeros, and a
+    // zero view projection puts the flare at a NaN screen position with nothing erroring.
+    const bool lbFrameLive =
+        (lViewProjection.xAxis.x != 0.0f || lViewProjection.yAxis.x != 0.0f
+         || lViewProjection.zAxis.x != 0.0f)
+        && (lSunDir.x != 0.0f || lSunDir.y != 0.0f || lSunDir.z != 0.0f);
+    if (!lbFrameLive)
+    {
+        static bool sbLoggedDeadFrame = false;
+        if (!sbLoggedDeadFrame)
+        {
+            sbLoggedDeadFrame = true;
+            CgsDev::Log::WriteToLog(
+                "[suncorona] SKIPPED: the INTERNAL shader-constants frame carries no view"
+                " projection / key-light direction yet -- its producer is"
+                " PublishSkyConstantsBringUp (external slot) + SwapBuffers (external -> internal)\n");
+        }
+        return;
+    }
+
+    mSunCorona.ComputeSunPositionOnScreen(lViewProjection, lViewPosition, lSunDir);
+
+    mSunCorona.GenerateOcclusionBuffer(mAllocatedRenderTargets.GetSunCoronaBuffer(),
+                                       mAllocatedRenderTargets.GetDownSampleBuffer());
+}
+
 // The world/car/sky pass block of Render (@0x8240BFA8 :725+). Pass order and list ids are the
 // X360's (see the renderer wave log for the full map):
 //   shadow cascades (lists 0,2,1,3,4)  -> LIVE, and no longer here: they run in
@@ -4071,9 +4252,22 @@ void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispa
     // frame's member at +0x318 -- mfWhiteLevel (BrnShaderConstantsFrame.h:99, "@0x318"). The
     // arithmetic closes on itself: maShaderConstantsFrames is at this+0x490, 0x490 + 0x318 == 0x7A8,
     // and 0x490 + 2*0x320 == 0xAD0, i.e. the array ends exactly where the two index bytes begin.
-    // On this build the value is 1.0f, because BrnShaderConstantsFrame::Construct seeds it
-    // (BrnShaderConstantsFrame.cpp:40, ARTIST 0x823F7478 storing flt_82001C98 == 1.0) and nothing
-    // writes the INTERNAL frame's white level. It is read from the member anyway, not hard-coded.
+    //
+    // ⭐ CORRECTED 2026-08-18 (coronas step 2, group `coronacalib`). This paragraph used to end
+    // "On this build the value is 1.0f ... nothing writes the INTERNAL frame's white level". That
+    // has not been true since post-fx step 10: PublishSkyConstantsBringUp writes the live
+    // EnvironmentManager white level into maShaderConstantsFrames[EXTERNAL]
+    // (SetWhiteLevel, this file's PublishSkyConstantsBringUp), and SwapBuffers makes that slot the
+    // INTERNAL one (`mu8ShaderConstantsFrameInternal = mu8ShaderConstantsFrameExternal`). The
+    // shipped boot log reads `[sky] ... whiteLevel 0.500000` on every sky publish, and
+    // `[postfx-composite] call 1000: ... white=1` only because those calls precede the first
+    // publish. It IS read from the member, never hard-coded, which is what matters -- and the
+    // SAME local feeds BeginRenderAntiAliased, the corona pass and the composite below, so the
+    // corona vertex program's `colour.rgb * cameraPositionPlusBrightness.w` and the composite's
+    // `GlobalParams.x = 1 / whiteLevel` (BrnPostFxShader.cpp:1458) are guaranteed to be the same
+    // number's multiply and divide -- the console's own round trip, cancelling exactly. A corona
+    // pass fed a DIFFERENT white level from the composite would be brighter or darker by that
+    // ratio, which is why the value is printed in the `[corona-calib]` line.
     const f32 lfFrameWhiteLevel =
         maShaderConstantsFrames[mu8ShaderConstantsFrameInternal].GetWhiteLevel();
 
@@ -4454,6 +4648,70 @@ void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispa
         // nothing -- the previous frame's resolve is what left the surface clean. Drop it and the
         // scene's DEPTH is never cleared again.
         ResolveMSAA(lfFrameWhiteLevel, luSceneStencilClearValue);
+
+        // ==========================================================================================
+        // THE SUN CORONA (coronas step 2, 2026-08-18).
+        //
+        // CONSOLE POSITION, exactly: Render @0x8240BFA8 calls ResolveMSAA @0x8240D5BC, then
+        // ComputeSunCoronaVisibility @0x8240D5D0, then (after BeginQuarterResBuffer and the
+        // quarter-res particles) BrnSunCorona::RenderOccludedFlare @0x8240D688 -- both arms gated on
+        // the SAME byte, `lbz r25, var_CC8` @0x8240D5C0, which was loaded at 0x8240C41C from
+        // DispatchThreadInputBuffer::GetCalibrationUnfriendlyEnablePostFx(). That is the console's
+        // own gate and it is the reason the flare disappears on the calibration screen; the same
+        // read already drives lbTintEffectsAllowed / lbEffectsAllowed elsewhere in this function.
+        //
+        // AFTER ResolveMSAA IS LOAD-BEARING: GenerateOcclusionBuffer samples the DOWN-SAMPLE
+        // buffer's depth TEXTURE, and ResolveMSAA is what puts this frame's depth there.
+        //
+        // ⚠ THE FLARE'S TARGET IS A DECLARED PC DEVIATION. The console draws it into the QUARTER-RES
+        // particle buffer that BrnRendererModule::BeginQuarterResBuffer @0x82408C38 opens, and the
+        // post-fx composite adds that buffer to the frame. On PC neither exists: BeginQuarterResBuffer
+        // is declaration-only and pool slot 9 is never created (only ANTI_ALIAS + DOWN_SAMPLE are).
+        // So the flare is drawn into the DOWN-SAMPLE buffer -- the surface ResolveMSAA has just
+        // filled and the surface the composite reads -- i.e. the same colour bus one stage earlier.
+        // The blend is the console's own additive RGB either way. DELETE-WHEN the quarter-res
+        // buffer and BeginQuarterResBuffer land.
+        //
+        // ⚠ AND THE SCENE TARGET IS RE-BOUND UNCONDITIONALLY inside this gate, not only when the
+        // flare draws. CgsRenderTarget::Begin on the 1x1 occlusion buffer leaves that 1x1 surface
+        // (and a 1x1 viewport) bound -- End is a documented no-op on this backend -- so the
+        // condition that authorised the occlusion pass has to be the condition that hands the scene
+        // target back, or the composite below would run with a one-pixel target bound.
+        // ==========================================================================================
+        const bool lbSunCoronaAllowed = (lpDispatchThreadInputBuffer != 0)
+            ? lpDispatchThreadInputBuffer->GetCalibrationUnfriendlyEnablePostFx()
+            : false;
+        if (lbSunCoronaAllowed && EnsureSunCoronaBringUp(mAllocatedRenderTargets, mSunCorona))
+        {
+            ComputeSunCoronaVisibility();
+
+            CgsRenderTarget* const lpSceneTarget = mAllocatedRenderTargets.GetDownSampleBuffer();
+            if (lpSceneTarget != 0 && lpSceneTarget->GetRenderTarget() != 0)
+            {
+                lpSceneTarget->Begin();
+
+                // The colour and the white level are the console's own arguments, read off the
+                // SAME internal frame ComputeSunCoronaVisibility used (asm 0x8240D634-0x8240D664:
+                // `lbz r11, 0xAD0` -> the internal index, `lfs f30, 0x7A8(r11)` == frame+0x318 ==
+                // mfWhiteLevel, and BrnShaderConstantsFrame::GetKeyLightColour on the same frame).
+                //
+                // The last two arguments are the console's NO-OVERRIDE values: it reads them from
+                // BrnGraphics::DebugComponent (this+0xCA50 mfSunFlareOverrideBrightness and
+                // this+0xCA54 mbSunFlareOverrideBrightness -- DWARF
+                // BrnRendererModuleDebugComponent.h:86/87, exposed as GetOverriddenSunBrightness() /
+                // GetOverrideSunBrightness()), which is a DEBUG-MENU toggle and is an EMPTY
+                // PLACEHOLDER struct in this tree (BrnRendererModule.h:200). Passing (0.0f, false)
+                // is the console's own default, not an invention: with the flag false the float is
+                // never read and BrnSunCorona::RenderOccludedFlare uses mfSunBrightness.
+                // DELETE-WHEN BrnGraphics::DebugComponent is reconstructed.
+                const BrnShaderConstantsFrame& lrSunFrame =
+                    maShaderConstantsFrames[mu8ShaderConstantsFrameInternal];
+                mSunCorona.RenderOccludedFlare(mAllocatedRenderTargets.GetSunCoronaBuffer(),
+                                               lrSunFrame.GetKeyLightColour(),
+                                               lrSunFrame.GetWhiteLevel(),
+                                               0.0f, false);
+            }
+        }
 
         // [FLAG PC bring-up] PRESENT THE SCENE TARGET. The world passes above drew into the
         // off-screen anti-alias buffer and ResolveMSAA has just copied the result into the

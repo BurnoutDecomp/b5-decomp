@@ -75,6 +75,10 @@ s32  renderengine::gEnvironmentMap30Hz = 1;
 // device.h. Default 1 because the console's answer is 1 (ConstructRenderSwitches) -- the same
 // principle that makes gAntiAliasing default to "whatever the console did".
 s32  renderengine::gCoronas = 1;
+// The sun-corona pass knob. 1 = run it; 0 = never. Semantics, and why this is a SEED for
+// BrnSunCorona::mbRenderSunCorona rather than a second switch, are on the declaration in device.h.
+// Default 1 because the console's answer is 1 (BrnSunCorona::Construct @0x824009EC).
+s32  renderengine::gSunCorona = 1;
 // Vertical sync on by default -- see the declaration in device.h.
 s32  renderengine::gVSync = 1;
 HWND renderengine::hWnd = nullptr;
@@ -119,6 +123,10 @@ bool renderengine::Device::Initialize()
     // reason its neighbours are: LoadConfig runs after this (BrnMain.cpp:260/:261) and is what a
     // config.ini value overrides it with.
     gCoronas = 1;
+    // Run the sun-corona pass unless config.ini `[Settings] SunCorona=0`. Seeded here for the same
+    // reason its neighbours are: LoadConfig runs after this and is what a config.ini value
+    // overrides it with.
+    gSunCorona = 1;
     // Vertical sync unless config.ini `[Display] VSync=0` (see device.h).
     gVSync = 1;
     // TUB seeds fullscreen=true; forced windowed during the PC bring-up.
