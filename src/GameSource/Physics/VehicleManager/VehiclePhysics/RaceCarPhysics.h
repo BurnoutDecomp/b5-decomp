@@ -398,6 +398,22 @@ namespace Vehicle
         // catapult the car, then zeroing the accumulator.
         void ApplyPropCollisionImpulseSum();
 
+        // DWARF RaceCarPhysics.h:340 `void AddPropCollisionImpulse(Vector3);` -- accumulate one prop
+        // collision impulse into mPropCollisionImpulseSum (@+0x13F0), flushed by
+        // ApplyPropCollisionImpulseSum. ARTIST emits NO out-of-line symbol: the X360 compiler inlined
+        // it into its one caller PropManager::ApplyPropRaceCarCollisionImpulse @0x825E3560, whose
+        // last four instructions ARE this body (`addi r10,r4,0x13F0 ; lvx128 v8,r0,r10 ;
+        // vmaddfp v0,v1,v8,v0 ; stvx128 v0,r0,r10` @0x825E35E8..0x825E3620 == sum += impulse).
+        // The PS3 unit references/DecFIGS/dwarfdump/_compile/BrnPhysicsUnity2.cpp:19688 carries it
+        // out-of-line. Landed 2026-08-18 (wave Q4) as the inline it is on X360.
+        void AddPropCollisionImpulse( Vector3 lImpulse )
+        {
+            mPropCollisionImpulseSum.x += lImpulse.x;
+            mPropCollisionImpulseSum.y += lImpulse.y;
+            mPropCollisionImpulseSum.z += lImpulse.z;
+            mPropCollisionImpulseSum.w += lImpulse.w;   // the vmaddfp is a full 4-lane add
+        }
+
         // @0x825FFAE8: record a wheel/surface traction point. Chains register-transparently to
         // the base SimpleVehiclePhysics::AddTractionPoint, then -- once mfBeachedTime has
         // passed the 0.5s window -- promotes a close-to-ground wheel to on-ground.

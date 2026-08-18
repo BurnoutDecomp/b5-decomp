@@ -32,8 +32,14 @@ namespace Props
     class PropPartInstance
     {
     public:
-        // ⚠️ Construct()/Prepare() are DECLARATION-ONLY: nothing in the prop-physics closure
-        // calls them and no folded call site says what they do. Not invented.
+        // ⭐ Construct() IS BODIED as of 2026-08-18 (wave Q4 mount closure), in
+        // BrnPropPartInstance.cpp. The note that stood here -- "DECLARATION-ONLY: nothing in the
+        // prop-physics closure calls them and no folded call site says what they do" -- was
+        // right when it was written and is now false for Construct on BOTH halves:
+        // PropManager::CreatePart calls it (PropManager_wQ2_04.cpp:293) and its inlined emission
+        // at 0x82627BD4..0x82627BE8 says exactly what it does. Full evidence, including what is
+        // measured and what is deliberately NOT written, is on the body.
+        // ⚠️ Prepare() IS still declaration-only: no caller, no folded site, not invented.
         void            Construct();                       // :47
         bool            Prepare();                          // :51
 

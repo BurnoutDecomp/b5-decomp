@@ -287,9 +287,28 @@ namespace Props
     extern const VecFloat KVF_PROP_OUT_OF_WORLD_HEIGHT;    // X360 0x82FB94C0  (AUTHORED NAME,
                                                            //   RECOVERED VALUE = Splat(-1000.0f))
 
-    // ⚠️ X360 0x82FB94F0 -- NAME AUTHORED, not recovered (same status as the one above: no DWARF
-    // candidate, no debug-variable registration). ROLE is measured: the two world contact-generation
-    // legs -- DoPartWorldContactGeneration @0x82611D8C and DoPropInstanceWorldContactGeneration
+    // ⭐⭐ NAME RECOVERED 2026-08-18 (wave Q4, physics-contact seam). This declaration read
+    // `KVF_MAX_CONTACT_GEN_PADDING`, flagged "NAME AUTHORED, not recovered ... no DWARF
+    // candidate". BOTH halves of that were wrong, and the DWARF candidate was in the file the
+    // note said had none: `const VecFloat KVF_MAX_PROP_PADDING;` at
+    // references/DecFIGS/dwarfdump/GameSource/Physics/PropManager/BrnPropManager.cpp:54.
+    // WHAT SETTLES IT is not the name's plausibility but the INITIALISER-TABLE ORDER, measured
+    // this wave with headless IDA 9.3 over a private copy of the .i64: the MSVC dynamic-
+    // initialiser pointer table runs in SOURCE-DECLARATION order for this file, and the slots
+    // line up one-for-one with the DWARF's source lines --
+    //     0x82CD19A0 :50 KVF_INERTIA_SCALE        0x82CD19A4 :51 KVF_GRAVITY_SCALE
+    //     0x82CD19A8 :53 K_DEFAULT_GRAVITY        0x82CD19AC :54 <-- THIS ONE
+    //     0x82CD19B0 :338 LEAN_PROP_LERP_SPEED    0x82CD19B4 :339 LEAN_PROP_MIN_LERP  ...
+    // -- i.e. 0x82FB94F0's initialiser sits in the slot the DWARF's :54 must occupy, between
+    // K_DEFAULT_GRAVITY (:53, independently pinned) and the three :338-:340 lean constants
+    // (independently pinned). The name is therefore MEASURED, not authored, and is corrected
+    // here. (No code referenced the old spelling -- only this declaration, its definition, and
+    // two comments -- so this is a rename with no call-site cost. ⚠️ The two PARKED
+    // contact-generation bodies at scratchpad/waveQ2/parked/PropManager_03_Do*.cpp each carry a
+    // file-local `static const VecFloat KVF_MAX_CONTACT_GEN_PADDING`; their lander should delete
+    // that local and reach this one under its recovered name.)
+    // ROLE is measured, unchanged: the two world contact-generation legs --
+    // DoPartWorldContactGeneration @0x82611D8C and DoPropInstanceWorldContactGeneration
     // @0x82612280 -- clamp their per-frame swept expansion with `Min(padding, <this>)`.
     // ⭐ VALUE = Splat(0.3f); thunk 0x82C5E750 (tbl slot 0x82CD19AC), rodata flt_82004740 =
     //    0x3E99999A. This is the constant PropManager_wQ2_03.cpp's banner walked end to end first --
@@ -301,8 +320,32 @@ namespace Props
     // ⚠️ HEADER REQUEST D's OTHER HALF IS NOT LANDED: `KB_USE_CONTACT_GEN_STREAM == true` has no
     //    address and no thunk cited anywhere, so there is nothing for this round to re-measure and
     //    nothing is invented for it. It stays an open request against this header.
-    extern const VecFloat KVF_MAX_CONTACT_GEN_PADDING;     // X360 0x82FB94F0  (AUTHORED NAME,
+    extern const VecFloat KVF_MAX_PROP_PADDING;            // X360 0x82FB94F0  (DWARF NAME :54,
                                                            //   RECOVERED VALUE = Splat(0.3f))
+
+    // ⭐ ADDED 2026-08-18 (wave Q4, physics-contact seam). X360 0x82FB93B0.
+    // DWARF `const VecFloat KVF_MAX_LEAN_PROP_WORLD_PENETRATION;` at BrnPropManager.cpp:1288.
+    // SOLE READER, and the whole reason it exists: SetupAndValidatePropContact @0x826285C8
+    // (`vcmpgtfp. v0, v13, v0` against the dot of the Y-flattened contact normal with
+    // mPointOnB - mPointOnA). When a JOINTED prop is pushed into the WORLD by more than this,
+    // its joint index is set in mBreakPropJoints -- i.e. this is the threshold at which a smash
+    // gate's joint gives way.
+    // ADDRESS<->NAME: measured three ways, no inference. (a) A whole-image xref scan returns
+    // exactly TWO references to 0x82FB93B0 -- the read above and the write in its own
+    // initialiser thunk -- so this function is its only consumer. (b) The DWARF puts
+    // KVF_MAX_LEAN_PROP_WORLD_PENETRATION at source :1288, immediately before this function's
+    // own first local at :1300, with no other file-scope VecFloat between them. (c) Its
+    // initialiser-table slot is 0x82CD19D0, which is exactly the slot between :1177
+    // (KVF_MAX_ANGULAR_ACCELERATION_SQ, 0x82CD19CC) and :1678 (KVF_MAX_PROP_SPEED_MPS,
+    // 0x82CD19D4) -- the same source-order property that settles KVF_MAX_PROP_PADDING above.
+    // ⭐ VALUE = Splat(0.01f). Thunk 0x82C5E8C0 (tbl slot 0x82CD19D0), rodata flt_82002138 =
+    //    0x3C23D70A. A ONE-CENTIMETRE penetration budget -- and the same rodata word
+    //    KVF_LEAN_PROP_MIN_LERP uses (ordinary literal pooling; separate thunks, separate
+    //    addresses).
+    // ⚠️ THE PLACEHOLDER ZERO WOULD NOT HAVE BEEN NEUTRAL, which is why the value is seated
+    //    rather than left at the on-disk zeroes: with the threshold at 0 every jointed prop
+    //    would break its joint on the first world contact with any positive penetration at all.
+    extern const VecFloat KVF_MAX_LEAN_PROP_WORLD_PENETRATION;   // X360 0x82FB93B0
 
     // =====================================================================================
     // ⭐ ADDED 2026-08-18 (round 3, fix round) -- THE SIX REMAINING ZERO-PAGE TUNABLES THIS
@@ -794,16 +837,29 @@ namespace Props
         // 0x79008C -- the mangle is the signature authority). Validate + set up one prop-vs-X
         // potential contact for the simulation (called by PhysicsModule::
         // BridgeContactsToSimulation when either owner is a PROP); returns false to drop the
-        // contact. ⚠ FLAG: DECLARED for the bridge driver's closure; body still a TRAP STUB
-        // (572 X360 asm lines / 24 callees -- named, not landed, this wave).
+        // contact.
+        // ⭐⭐ BODY LANDED 2026-08-18 (wave Q4) in the sibling partfile PropManager_wQ4_01.cpp,
+        // all 573 instructions; the trap stub in BrnPropManager.cpp is DELETED. The old FLAG on
+        // this declaration ("body still a TRAP STUB ... 572 asm lines / 24 callees") is retired.
+        // ⭐ PARAMETER NAMES CORRECTED in the same wave to the DecFIGS DWARF's own spellings
+        // (dwarfdump BrnPropManager.cpp, source line :1298): lpAddContactEvent -> lpOutContact,
+        // lpPotentialContact -> lpInPotentialContact, lpSimModuleInputBuffer -> lpSimInputBuffer,
+        // lbFrozen -> lbOtherEntityIsFrozen. NAME-ONLY -- no type, order or count changed, so no
+        // call site moved.
+        // ⚠️ lpPropRaceCarContactBuffer AND lWorldRigidBodyId ARE DEAD IN THE ARTIST EMISSION:
+        // neither r8 nor r9 is copied in the prologue and neither is read in the 573 instructions
+        // (both are later reused as scratch, which is the compiler proving to itself they were
+        // dead). They are KEPT because the DWARF declares them and the asm cannot disprove an
+        // unused parameter -- flagged so nobody "discovers" the drop later and deletes them.
+        // What it means for the seam: this function does NOT write the PropRaceCarContactBuffer.
         bool SetupAndValidatePropContact(
-            CgsPhysics::PhysicsSimulationIO::InAddPotentialContact*        lpAddContactEvent,
-            const CgsSceneManager::SceneManagerIO::PotentialContact*       lpPotentialContact,
+            CgsPhysics::PhysicsSimulationIO::InAddPotentialContact*        lpOutContact,
+            const CgsSceneManager::SceneManagerIO::PotentialContact*       lpInPotentialContact,
             BrnPhysics::Vehicle::VehicleManager*                           lpVehicleManager,
-            CgsPhysics::PhysicsSimulationIO::InputBuffer*                  lpSimModuleInputBuffer,
+            CgsPhysics::PhysicsSimulationIO::InputBuffer*                  lpSimInputBuffer,
             PropRaceCarContactBuffer*                                      lpPropRaceCarContactBuffer,
             CgsPhysics::RigidBodyId                                        lWorldRigidBodyId,
-            bool                                                           lbFrozen,
+            bool                                                           lbOtherEntityIsFrozen,
             f32                                                            lfTimeStep );
 
         // X360 0x82606148 (DWARF BrnPropManager.h:230 -- corrected round 3; :250 is the

@@ -131,6 +131,39 @@ namespace SceneManagerIO
                        Vector3 lCentre, f32 lfBoundingRadius);
         void AddVolumeInstance(CgsSceneManager::EntityId lEntityId, const Matrix44Affine& lrTransform);
 
+        // ---- the DWARF's own 64-bit ADD half of the collision pair -------------------------
+        // ADDED 2026-08-18 (wave Q4, collision seam). Both are the DecFIGS DWARF's ONLY
+        // spelling of these two producers -- there is no EntityId form in the DWARF at all:
+        //     CgsSceneManagerIO_SceneUpdate.h:388
+        //         void AddVolumeInstance(VolumeInstanceId, VolumeId, const Matrix44Affine &);
+        //     CgsSceneManagerIO_SceneUpdate.h:418
+        //         void AddForCollision(VolumeInstanceId, SetRaceCarCullingGroupEvent::CullingGroup,
+        //                              rw::physics::BodyState, Vector3,
+        //                              EAddForCollisionCacheOptions);
+        // (the same two lines appear five more times in the dumpfile, once per compilation
+        //  unit that saw the header; :949/:1312/:1675/:2051 spell CullingGroup through the
+        //  InEventAddForCollision typedef instead -- the same u32.)
+        //
+        // Both have a REAL out-of-line X360 body, emitted in this struct's own TU, so both are
+        // bodied in CgsSceneManagerIO_SceneUpdate.cpp rather than inlined here:
+        //     AddVolumeInstance @0x822CB650   (58 insns)
+        //     AddForCollision   @0x822B1860   (91 insns)
+        //
+        // ADDITIVE: the committed 2-arg AddVolumeInstance(EntityId, const Matrix44Affine&)
+        // above is a DIFFERENT overload (2 args vs 3) with its own mangled name, so its one
+        // caller -- BrnTriggerEntityModule.cpp:335 -- keeps binding to it unchanged and no
+        // LNK2005 is possible. That 2-arg form is a fitted signature the DWARF does not have,
+        // and its body is still the inert log-once gate at WorldLinkStubs.cpp:1983-1993; it
+        // cannot fill InEventAddVolumeInstance::mVolumeId (it has no VolumeId argument), which
+        // is why triggers post no usable volume instance today. Reported, not touched.
+        void AddVolumeInstance(VolumeInstanceId lVolumeInstanceId, VolumeId lVolumeId,
+                               const Matrix44Affine& lrTransform);
+        void AddForCollision(VolumeInstanceId lVolumeInstanceId,
+                             InEventAddForCollision::CullingGroup lCullingGroup,
+                             rw::physics::BodyState leBodyState,
+                             Vector3 lPadding,
+                             EAddForCollisionCacheOptions leCacheOptions);
+
         void RemoveEntity(CgsSceneManager::EntityId lEntityId, u32 luFlags);
         void RemoveForCollision(CgsSceneManager::EntityId lEntityId);
         void RemoveVolumeInstance(CgsSceneManager::EntityId lEntityId);
@@ -192,6 +225,14 @@ namespace SceneManagerIO
         // is the @0x822CB7E8 producer (bodied by this TU -- it targets mSetVolumeInstanceTransformQueue);
         // pointer-/value-used by committed consumers, signatures unchanged.
         void SetEntityPosition(u32 luEntityId, const Matrix44Affine& lTransform);
+        // The DWARF's ONE declared spelling (DecFIGS CgsSceneManagerIO_SceneUpdate.h:446, source :346):
+        // the X360 producer @0x822B1398 takes the position pre-extracted in v1 and stages
+        // InEventSetEntityPosition{ mPosition = v1, mEntityId = r4 } -- no matrix is read. The
+        // (u32, const Matrix44Affine&) form above is the tree's MODEL for matrix-holding callers;
+        // the replay-prop updaters (PropEntityModule::ReplayUpdateProps/PartsInScene @0x822DB370/
+        // @0x822DB900) hand it a bare recorded position, which is this overload. Additive
+        // (EntityId has operator u32, existing (u32, matrix) calls keep binding above).
+        void SetEntityPosition(CgsSceneManager::EntityId lEntityId, Vector3 lPosition);
         void SetVolumeInstanceTransform(VolumeInstanceId lVolumeInstanceId, const Matrix44Affine& lTransform);
 
         // ⚠️ SIGNATURE CORRECTED 2026-08-12 (prop-spawn link-closure pass): this was

@@ -6,7 +6,11 @@
 //   ConstructPreScenePerfMonitors()           @ 0x825BAC70   (6 asm lines)   -- DONE below
 //   CreateContactEvent()                      @ 0x825A53A0                   -- DONE below
 //                                                             (a `class:` TU's function, bodied here)
-//   SetupAndValidatePropContact()             @ 0x82628190                   -- TRAP STUB below
+//   SetupAndValidatePropContact()             @ 0x82628190                   -- REAL BODY, in the
+//                                                             sibling partfile PropManager_wQ4_01.cpp
+//                                                             (wave Q4; the trap stub that used to
+//                                                             stand at the bottom of this file is
+//                                                             deleted -- see the block there)
 // The other ELEVEN ledger functions of this TU, plus ClampAcceleration @0x82627F00 (ledger-
 // attributed to the rw/math/fpu/vector3.h catch-all -- an inlining artefact; it is this
 // class's helper), are open. Their per-function triage, callee sets, include set and group
@@ -288,11 +292,26 @@ const ::VecFloat KVF_MAX_ANGULAR_ACCELERATION_SQ  = { 6400.0f, 6400.0f, 6400.0f,
 // the initialiser -- which is the standing lead on the missing name; see the header.)
 const ::VecFloat KVF_PROP_OUT_OF_WORLD_HEIGHT     = { -1000.0f, -1000.0f, -1000.0f, -1000.0f }; // X360 0x82FB94C0
 
-// ⚠️ AUTHORED NAME -- see the declaration's block in BrnPropManager.h. This is PropManager_wQ2_03.cpp's
+// ⭐⭐ NAME RECOVERED 2026-08-18 (wave Q4). This line read `KVF_MAX_CONTACT_GEN_PADDING` and was
+// flagged AUTHORED; the DWARF names it (dwarfdump BrnPropManager.cpp:54 `const VecFloat
+// KVF_MAX_PROP_PADDING;`) and the initialiser-table slot order pins it to that source line.
+// Full evidence is on the declaration in BrnPropManager.h. This is PropManager_wQ2_03.cpp's
 // HEADER REQUEST D, landed. Splat(0.3f), thunk 0x82C5E750, tbl slot 0x82CD19AC, rodata
 // flt_82004740 = 0x3E99999A. (Request D's other half, KB_USE_CONTACT_GEN_STREAM, is NOT landed --
 // no address, no thunk, nothing to measure. It stays open.)
-const ::VecFloat KVF_MAX_CONTACT_GEN_PADDING      = { 0.3f, 0.3f, 0.3f, 0.3f };          // X360 0x82FB94F0
+const ::VecFloat KVF_MAX_PROP_PADDING             = { 0.3f, 0.3f, 0.3f, 0.3f };          // X360 0x82FB94F0
+
+// ⭐ ADDED 2026-08-18 (wave Q4) -- the declaration landed in BrnPropManager.h this wave with NO
+// definition anywhere, i.e. a latent LNK2001 the moment SetupAndValidatePropContact's real body
+// mounts. This is that definition. Splat(0.01f); MEASURED, not inferred: initialiser-table slot
+// 0x82CD19D0 -> thunk 0x82C5E8C0, dumped instruction by instruction with headless IDA over a
+// private copy of the .i64 --
+//     lis r11, flt_82002138@ha ; lfs f0 ; stfs -0x10(r1) ; lvlx v0 ; vspltw v0,v0,0 ;
+//     stvx128 v0, r0, <unk_82FB93B0>
+// and flt_82002138 == 0x3C23D70A == 0.01f. 0x82FB93B0 is the exact address
+// SetupAndValidatePropContact loads at 0x826285AC before its `vcmpgtfp.`, so the reader and the
+// writer are pinned to one another, not matched by plausibility.
+const ::VecFloat KVF_MAX_LEAN_PROP_WORLD_PENETRATION = { 0.01f, 0.01f, 0.01f, 0.01f };   // X360 0x82FB93B0
 
 // =========================================================================================
 // ⭐ ADDED 2026-08-18 (round 3, fix round). THE SIX REMAINING ZERO-PAGE TUNABLES -- the five
@@ -473,8 +492,10 @@ void PropManager::ConstructPreScenePerfMonitors()
 //       muType = mpaPartInstances[low 16 bits of mIDA's LOW dword].muTypeId
 //       (asm `(low << 6) & 0x3FFFC0` == (low & 0xFFFF) * sizeof(PropPartInstance)==64; the
 //       type word is the part instance's +0x34), tripwired < 1000 (:550); muState = 1;
-//   * WHOLE-PROP id: the instance is mpaPropInstances[mIDA's LOW dword] (112-byte stride);
-//       muType = instance.muTypeId (+0x64), tripwired < 1000 (:563); if the instance's
+//   * WHOLE-PROP id: the instance is mpaPropInstances[LOW 16 BITS of mIDA's low dword]
+//       (112-byte stride; asm `clrlwi r11,r11,16 ; mulli r11,r11,0x70` @0x825A5530 -- the index
+//       is the handle's USER-ID-B, NOT the whole low dword: corrected 2026-08-18, see the body);
+//       muType = instance.muTypeId (+0x64) masked to 16 bits, tripwired < 1000 (:563); if the
 //       muMovementState < E_PROP_MOVESTATE_MOVING it is promoted to MOVING and
 //       muBeganMoving = 1; muState = 0;
 //   * if muType != KU_UNKNOWN_PROP_TYPE (0xFFFF): look the type up through the physics-data
@@ -514,19 +535,38 @@ void PropManager::CreateContactEvent( ContactSpy::PropContact* lpOutPropContact,
 
     if ((luSpyIdAHigh & 0x3FFu) != 0u)
     {
-        // PART id: the part-instance table, 64-byte stride, index = the id's low 16 bits.
-        const u32 luTypeId = mpaPartInstances[luSpyIdALow & 0xFFFFu].GetType();
-        CGS_ASSERT(luTypeId < 1000u, "luTypeId < 1000");   // :550
-        lpOutPropContact->muType  = static_cast<u16>(luTypeId);
+        // PART id: the part-instance table, 64-byte stride, index = the id's USER-ID-B, i.e.
+        // the handle's low 16 bits (asm `clrlslwi r11,r11,16,6` == (low & 0xFFFF) << 6).
+        const u16 luTypeId =
+            static_cast<u16>(mpaPartInstances[luSpyIdALow & 0xFFFFu].GetType());  // asm masks the
+        CGS_ASSERT(luTypeId < 1000u, "luTypeId < 1000");   // :550          //  type word to 16 bits
+        lpOutPropContact->muType  = luTypeId;                               //  BEFORE the compare
         lpOutPropContact->muState = 1;
     }
     else
     {
-        // Whole-prop id: the prop-instance table, 112-byte stride, index = the id's low dword.
-        PropInstance& lrInstance = mpaPropInstances[luSpyIdALow];
-        const u32 luTypeId = lrInstance.muTypeId;
+        // Whole-prop id: the prop-instance table, 112-byte stride.
+        // ⚠️⚠️ FIXED 2026-08-18 (wave Q4 re-verification). This line read
+        //     `mpaPropInstances[luSpyIdALow]`
+        // and its comment said "index = the id's low dword". BOTH WERE WRONG. The console masks
+        // first -- 0x825A5530 `clrlwi r11, r11, 16` then `mulli r11, r11, 0x70` -- because the
+        // index lives in the handle's USER-ID-B, the low 16 bits, exactly like the part branch
+        // directly above and exactly where SetupAndValidatePropContact's four
+        // RigidBodyId::SetUserIDB stamps put it. The handle's other 16-bit user field sits in
+        // bits 16..31 of the same dword, so an id carrying a user-id-A indexed this table at
+        // >= 65536 * 112 bytes -- an out-of-bounds READ of muTypeId and, three lines below, an
+        // out-of-bounds WRITE of muMovementState.
+        // ⚠️ HOW BAD IS IT, STATED HONESTLY RATHER THAN DRAMATICALLY: on today's pipeline the
+        // difference is not observable, because the one producer of a prop-side id --
+        // BrnPhysicsModuleBridgeFunctions.cpp:704 -- builds it as `(id >> 32) << 32`, i.e. with
+        // the whole low dword cleared, so user-id-A is 0 and the mask is a no-op. This is
+        // therefore a FAITHFULNESS fix with a latent-safety dividend, not a live corruption:
+        // the console masks, so the reconstruction masks, and the day some other producer stamps
+        // a user-id-A the two builds still agree instead of one of them indexing off the end.
+        PropInstance& lrInstance = mpaPropInstances[luSpyIdALow & 0xFFFFu];
+        const u16 luTypeId = static_cast<u16>(lrInstance.muTypeId);   // asm `clrlwi r30,r11,16`
         CGS_ASSERT(luTypeId < 1000u, "luTypeId < 1000");   // :563
-        lpOutPropContact->muType = static_cast<u16>(luTypeId);
+        lpOutPropContact->muType = luTypeId;
         if (lrInstance.muMovementState < static_cast<u8>(E_PROP_MOVESTATE_MOVING))
         {
             lrInstance.muMovementState      = static_cast<u8>(E_PROP_MOVESTATE_MOVING);
@@ -552,27 +592,19 @@ void PropManager::CreateContactEvent( ContactSpy::PropContact* lpOutPropContact,
 // =================================================================================================
 // PropManager::SetupAndValidatePropContact  @0x82628190  (PS3 DecFIGS 0x79008C)
 //
-// ⚠⚠ TRAP STUB (closure enforcement, 2026-08-06 big-five #2 wave) -- the REAL body (572 X360 asm
-// lines / 24 callees: validate + set up one prop-vs-X potential contact for the simulation) is
-// NOT reconstructed yet. Dead code today: the only caller chain is PhysicsModule::
-// BridgeContactsToSimulation <- Update @0x825B0640, still a link stub, so /OPT:REF strips this.
-// RECONSTRUCT-NEXT.
+// ⭐⭐ THE TRAP STUB THAT STOOD HERE IS GONE, 2026-08-18 (wave Q4, physics-contact seam). The REAL
+// 573-instruction body is reconstructed in this TU's sibling partfile
+//     GameSource/Physics/PropManager/PropManager_wQ4_01.cpp
+// and a definition in both files is an LNK2005, so the stub was DELETED in the same edit that
+// landed the body -- not left behind.
+//
+// ⚠️⚠️ CONSEQUENCE FOR THE LINK: PropManager_wQ4_01.cpp MUST be mounted in
+// tools/build/build_game_exe.bat. Its only caller, PhysicsModule::BridgeContactsToSimulation, is
+// in the MOUNTED BrnPhysicsModuleBridgeFunctions.cpp, so an exe built with this file but without
+// the partfile is an immediate LNK2019 on
+// `BrnPhysics::Props::PropManager::SetupAndValidatePropContact`. The exact echo line to add, and
+// the rest of the PropManager mount closure, are in scratchpad/waveQ4/physcontact.owner.md.
 // =================================================================================================
-bool PropManager::SetupAndValidatePropContact(
-    CgsPhysics::PhysicsSimulationIO::InAddPotentialContact* /*lpAddContactEvent*/,
-    const CgsSceneManager::SceneManagerIO::PotentialContact* /*lpPotentialContact*/,
-    BrnPhysics::Vehicle::VehicleManager* /*lpVehicleManager*/,
-    CgsPhysics::PhysicsSimulationIO::InputBuffer* /*lpSimModuleInputBuffer*/,
-    PropRaceCarContactBuffer* /*lpPropRaceCarContactBuffer*/,
-    CgsPhysics::RigidBodyId /*lWorldRigidBodyId*/,
-    bool /*lbFrozen*/,
-    f32 /*lfTimeStep*/)
-{
-    CGS_ASSERT(false,
-               "TRAP: PropManager::SetupAndValidatePropContact @0x82628190 "
-               "not reconstructed (big-five #2 closure stub)\n");
-    return false;
-}
 
 }
 }
