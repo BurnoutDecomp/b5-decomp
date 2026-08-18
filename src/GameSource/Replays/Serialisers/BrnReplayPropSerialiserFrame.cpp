@@ -3,7 +3,7 @@
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   BrnReplays::PropSerialiserFrame::GetZone                 @ 0x822BBBB8  (27 insns)
 //   BrnReplays::PropSerialiserFrame::WasPropPreviouslyHit    @ 0x822CD920  (66 insns)
-//   BrnReplays::PropSerialiserFrame::AllocateLoadedZoneRecord@ 0x822AA150  (41 insns)
+//   BrnReplays::PropSerialiserFrame::AllocateLoadedZoneRecord@ 0x822AA150  (63 insns)
 //   BrnReplays::PropSerialiserFrame::RemoveLoadedZone        @ 0x822BBB10  (42 insns)
 //   BrnReplays::PropSerialiserFrame::SetPropAddedToScene     @ 0x822BBC28  (94 insns)
 //
@@ -11,12 +11,18 @@
 // LoadProp @0x822F2EF0 needs, plus the three bookkeeping bodies PropEntitySerialiser calls
 // that share the same table and the same PropLoadedZoneRecord decode.
 //
-// STILL DECLARED-ONLY in BrnReplayPropSerialiserFrame.h (the delta-serialisation half of the
-// TU, out of this slice's scope): Read @0x82653120, Write @0x82657FE0, KeyFrameRead
-// @0x826586B0, KeyFrameWrite, plus IsPropAddedToScene @0x822CD818, IsCellActive @0x822BBDA0,
-// WriteProp @0x822BB528, WritePart @0x822BB718, GetPropTransform @0x822BB920, GetPartTransform
-// @0x822BBA18. (IsPropAddedToScene is WasPropPreviouslyHit with `+1` instead of `+11` -- i.e.
-// maPropsAddedToScene instead of maPropsPreviouslyHit -- and is trivial once someone calls it.)
+// [2026-08-18 UPDATE, wave Q round 2] Six of the ten functions this banner listed as
+// DECLARED-ONLY are now bodied in the sibling partfile
+// BrnReplayPropSerialiserFrame_wQ2_owner.cpp (IsPropAddedToScene @0x822CD818, IsCellActive
+// @0x822BBDA0, WriteProp @0x822BB528, WritePart @0x822BB718, GetPropTransform @0x822BB920,
+// GetPartTransform @0x822BBA18), and KeyFrameRead @0x826586B0 in
+// BrnReplayPropSerialiserFrame_wQ2_keyframe.cpp.
+//
+// STILL DECLARED-ONLY: Read @0x82653120, Write @0x82657FE0 and KeyFrameWrite (unnamed in the
+// IDA export). All three -- and KeyFrameRead -- still carry INERT BOOT GATES in
+// GameSource/World/WorldLinkStubs.cpp:3842-3900; see the report in
+// scratchpad/waveQ2/replays.owner.md for the KeyFrameRead collision the conductor must resolve
+// when it mounts the keyframe partfile.
 //
 // The class declaration's real console home is BrnReplayPropEntitySerialiser.h (the X360
 // assert in SetPropAddedToScene @0x822BBC28 bakes
@@ -86,12 +92,11 @@ namespace BrnReplays
         return 0;
     }
 
-    PropLoadedZoneRecord* PropSerialiserFrame::GetZone(s32 liZoneId)
-    {
-        // One console function serves both cv-forms; the search is not duplicated.
-        const PropSerialiserFrame* lpConstThis = this;
-        return const_cast<PropLoadedZoneRecord*>(lpConstThis->GetZone(liZoneId));
-    }
+    // [2026-08-18] The non-const GetZone cv-forwarder MOVED to the header as an inline. There
+    // is exactly ONE console GetZone (@0x822BBBB8), so the class must carry exactly one
+    // out-of-line definition of that name -- a second one made coverage_check report a
+    // (spurious) ODR duplicate, because it keys on (class, leaf) with no arity or cv.
+    // Behaviour is unchanged: the forwarder is the same two lines, now inline.
 
     bool PropSerialiserFrame::WasPropPreviouslyHit(s32 liZoneId, u32 luPropIndex) const
     {
@@ -106,7 +111,9 @@ namespace BrnReplays
         return lpZone->maPropsPreviouslyHit.IsBitSet(luPropIndex);
     }
 
-    // ---- AllocateLoadedZoneRecord @0x822AA150 (sub_822AA150, 41 insns) --------------------
+    // ---- AllocateLoadedZoneRecord @0x822AA150 (sub_822AA150, 63 insns) --------------------
+    // [round-3: the count was 41 in both places above; RECOUNTED from the per-address JSON
+    //  `assembly` -- 63 address lines, extent 0x822AA150..0x822AA248 inclusive.]
     // The loaded-zone array's "append uninitialised" accessor (BrnReplayArray.h:103), reached
     // through the frame because the array base IS the frame base:
     //     lbz    r11, 0x5E8(this) ; cmplwi r11, 9 ; blt ok

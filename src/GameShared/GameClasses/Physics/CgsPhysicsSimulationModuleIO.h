@@ -173,7 +173,32 @@ namespace PhysicsSimulationIO
         // ⚠️ Their addresses are the offset evidence for the member map above -- so these
         // bodies and those offsetof pins are the same fact stated twice, deliberately.
         const InUpdateRigidBodyQueue*        GetUpdateRigidBodyQueue()        const;  // @0x8289E4B0
+        // ⭐ ADDED 2026-08-18 (wave Q round 2, shared-header owner): the WRITE-side twin
+        // @0x825BCCB8 (IDA name TRUNCATED to "CgsPhysics:"; ledger row exists under
+        // class:<global>, status todo). MEASURED off .ida-exports/0x825BCCB8.json, 42
+        // instructions: `lbz r11,0(r28)` + `extrwi r11,r11,1,28` (MSB0 bit 28 == LSB bit 3 ==
+        // eStatusLockedForWrite -- NOT the const twins' `,1,27`/bit 4 read bit), firing the
+        // rodata string "Not locked for writing\n" with `li r5,0x414` == source line 1044
+        // baked in, then `addis r3,r28,1 ; addi r3,r3,-0x69E0` == this + 0x9620 == +38432 ==
+        // &mUpdateRigidBodyQueue, exactly the member offset pinned below. Same shape as the
+        // committed write twins GetRemoveRigidBodyQueue() @0x825BCF58 / GetAddContactQueue()
+        // @0x8259EF28. DWARF declares it at CgsPhysicsSimulationModuleIO.h:564 (the source
+        // groups all nine non-const queue getters in one block at :546..:570; this file keeps
+        // each write twin beside its const twin instead -- the pre-existing convention here).
+        // Callers (the image's own xrefs_to): PropManager::ClampAcceleration @0x82627F00 and
+        // PropManager::ReadUpdatedBodies @0x82632918.
+        InUpdateRigidBodyQueue*              GetUpdateRigidBodyQueue();               // @0x825BCCB8
         const InApplyForceQueue*             GetApplyForceQueue()             const;  // @0x8289E558
+        // ⭐ ADDED 2026-08-18 (same wave/owner): the WRITE-side twin @0x825BCD60 (an UNNAMED
+        // `sub_` in the exports; no identity.json row and no ledger row -- an export-set naming
+        // hole, not a missing function). MEASURED off .ida-exports/0x825BCD60.json, 42
+        // instructions: identical write-lock guard, "Not locked for writing\n" with
+        // `li r5,0x41B` == source line 1051, then `addis r3,r28,1 ; addi r3,r3,0x2C30` ==
+        // this + 0x12C30 == +76848 == &mApplyForceQueue (both instructions quoted deliberately:
+        // 0x2C30 alone is 11312, the addis carries the other 0x10000). DWARF declares it at
+        // CgsPhysicsSimulationModuleIO.h:546. Callers (image xrefs_to):
+        // PropManager::ApplyAntiHerdingForce @0x826113F8 and ReadUpdatedBodies @0x82632918.
+        InApplyForceQueue*                   GetApplyForceQueue();                    // @0x825BCD60
         const InSetRigidBodySpyQueue*        GetSetRigidBodySpyQueue()        const;  // @0x8289E600
         const InRemoveRigidBodyQueue*        GetRemoveRigidBodyQueue()        const;  // @0x8289E6A8  ⚠️ export HOLE
         // ⭐ ADDED 2026-08-14 (deformation-mount wave): the WRITE-side twin @0x825BCF58 (an

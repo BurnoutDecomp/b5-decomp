@@ -442,7 +442,7 @@ PropEntityModule::RenderPropAndCoronas(
     bool                    lbRenderCoronas,
     const void*             lpVFXPropTable,
     bool                    lbUseZOnlyRendering,
-    u32                     luCoronaSubmissionInterface )
+    BrnCoronaManager::BrnSubmissionInterface* lpCoronaSubmissionInterface )
 {
     // @0x822DC03C: the model comes out of the graphics record; every other register is a
     // straight forward of this function's own parameter.
@@ -468,7 +468,7 @@ PropEntityModule::RenderPropAndCoronas(
 
     (void)luPropTypeId;
     (void)lpVFXPropTable;
-    (void)luCoronaSubmissionInterface;
+    (void)lpCoronaSubmissionInterface;
 
     // -------------------------------------------------------------------------
     // PARKED (see banner item 2): the corona loop @0x822DC090..0x822DC2DC. FULLY

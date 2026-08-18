@@ -62,6 +62,27 @@ namespace ContactSpy
         // ContactSpyData). RETYPED with the promotion (was `const void*` over the u32 slot).
         const ContactSpyData::RaceCarContactRunList* GetRaceCarContactRunList() const;
 
+        // ⭐ NEW 2026-08-18 (wave Q round 2). DWARF BrnContactSpyInterface.h:42
+        //     `const ContactSpyData::PropContactQueue * GetPropContacts() const;`
+        // INLINE (attested): the X360 emits no out-of-line symbol; it folds the accessor into
+        // BrnWorld::PropEntityModule::ProcessContacts @0x822FA970..0x822FA9A8 --
+        //     lwz     r11, 0(r31)          ; mpData
+        //     cmplwi  r11, 0 ; bne         ; the guard
+        //     FireAssert("mpData != NULL", "..\..\..\GameSource\Physics/ContactSpies/…", 0xD3)
+        //     lwz     r11, 0(r31)          ; re-read mpData
+        //     addis   r3, r11, 1 ; addi r3, r3, 0x67E0     ; mpData + 0x167E0
+        // -- i.e. the assert this header's own line 211 bakes (0xD3 == 211), then the
+        // pass-through to ContactSpyData::GetPropContacts(), whose +0x167E0 IS
+        // ContactSpyData::mPropContactQueue in that class's member table. Unblocks
+        // ProcessContacts, the only consumer: mpData is private and the interface previously
+        // exposed only GetRaceCarContactRunList(), so there was no route to the prop contacts
+        // at all.
+        const ContactSpyData::PropContactQueue* GetPropContacts() const
+        {
+            CGS_ASSERT(mpData != nullptr, "mpData != NULL");
+            return mpData->GetPropContacts();
+        }
+
     private:
         // DWARF BrnContactSpyInterface.h:130. The single published-aggregate pointer
         // (the console's 32-bit slot; widens to 8 on this host -- see the banner).

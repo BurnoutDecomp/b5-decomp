@@ -47,6 +47,19 @@ namespace CgsModule
         // are non-gating tripwires. Used by VehicleOutputInterface::AddTrafficState (816-byte
         // PhysicalTrafficState element). ADDITIVE GROW (flagged): new no-arg overload, no change to
         // existing members/behaviour.
+        //
+        // ⚠️ NAME DEFECT, FILED NOT FIXED 2026-08-18 (wave Q round 2, shared-header owner; the
+        // fix touches a consumer file this owner does not own). The DecFIGS DWARF member list
+        // for BaseEventQueue<T> has NO no-arg AddEvent at all. Its members in source order are
+        // AddEvent(const T&) :310, AddEventSafe(const T&) :329, `T* AllocateEvent()` :356,
+        // `T* AllocateEventSafe()` :379, Append :411, AppendSafe :438. So THIS member is the
+        // DWARF's AllocateEvent() @:356 (its two asserts at :360/:361 sit inside that body,
+        // which is what the banner's ":358" was reaching for), spelled with a `T&` return
+        // instead of the DWARF's `T*`. Renaming it to AllocateEvent() and retyping the return
+        // would touch its live consumer CgsSceneManagerIO_SceneUpdate.cpp:218
+        // (`mRemoveAllEntitiesQueue.AddEvent().mu8Owner = ...`), so it is left alone here and
+        // reported. Do not "discover" this again -- and do NOT reach for this member when you
+        // want the bounds-gated reserve; that is AllocateEventSafe below.
         T& AddEvent()
         {
             CGS_ASSERT(mpEvents != nullptr, "mpEvents != NULL");
@@ -67,6 +80,61 @@ namespace CgsModule
             mpEvents[miLength] = lEvent;
             ++miLength;
             return true;
+        }
+
+        // ⭐ ADDED 2026-08-18 (wave Q round 2, shared-header owner). ADDITIVE GROW: a new
+        // member on the template, no change to any existing member, layout or behaviour, and
+        // (being a member of a class template) only instantiated where it is called.
+        //
+        // BOUNDS-GATED slot reserve -- the pointer-returning sibling of AddEventSafe.
+        // DWARF (authoritative for the shape): `T* AllocateEventSafe();` declared at
+        // CgsBaseEventQueue.h:379, in the member list of every BaseEventQueue<T> the DecFIGS
+        // dump covers (e.g. references/DecFIGS/dwarfdump/GameShared/GameClasses/Module/
+        // CgsBaseEventQueue.h, the InEventSetEntityPosition block).
+        //
+        // X360 BODY, MEASURED instruction-for-instruction off
+        // .ida-exports/BURNOUT_X360_ARTIST.XEX/0x825E3C30.json (the
+        // BaseEventQueue<CgsPhysics::PhysicsSimulationIO::InUpdateRigidBody> instantiation;
+        // an unnamed `sub_825E3C30`, no identity.json/ledger row -- a naming hole):
+        //     lwz r11,0(r31) / cmplwi / bne              -> the "mpEvents != NULL" tripwire,
+        //         fired with `li r5,0x17D` == source line 381 (which is why the DWARF's :379
+        //         declaration is the right one);
+        //     lwz r11,8(r31) / lwz r10,4(r31) / cmpw /
+        //         bge -> li r3,0 ; blr                   -> SIGNED miLength >= miMaxLength
+        //         returns NULL *without* appending;
+        //     slwi r9,r11,1 / add r11,r11,r9 / slwi r11,r11,6 / add r3,r11,r10
+        //                                               -> mpEvents + miLength*192;
+        //     stw r8,8(r31) (r8 = miLength+1)            -> the slot is consumed.
+        // ⚠️ THAT 192 IS THE CONSOLE sizeof(InUpdateRigidBody), NOT a host value -- on LLP64
+        // the element carries a RigidBody whose pointer lanes widen. The host spelling indexes
+        // mpEvents[liIndex], so the stride is sizeof(T) by construction. The console stride is
+        // quoted here as provenance only; it is also the evidence that T is InUpdateRigidBody
+        // (192) rather than the address-adjacent InApplyForce family (32).
+        //
+        // ⚠️ NOT interchangeable with the no-arg AddEvent() above: that one appends
+        // UNCONDITIONALLY (its bounds check is a non-gating assert), this one returns NULL on a
+        // full queue.
+        // ⚠️ CORRECTED 2026-08-18 (round 3): this line used to add "and the caller must test
+        // it". True as an API contract, FALSE as a statement about the only console consumer,
+        // and a lander reading it would insert a guard the X360 build has no counterpart for.
+        // NOTE the sole console consumer, PropManager::ReadUpdatedBodies @0x82632918, does NOT
+        // test the result -- MEASURED: 0x82633068 `bl sub_825E3C30` -> 0x8263306C `mr r30,r3`
+        // -> 0x82633080 `std r11,0(r30)`, with no `cmplwi`/`cmpwi` on r3 or r30 and no branch
+        // anywhere between the call and that first dereference. REPRODUCE THAT; do not add a
+        // guard. Consumer call site: PropManager::ReadUpdatedBodies @0x82632918
+        // (`bl sub_825BCCB8` then `bl sub_825E3C30` at 0x82633064/0x82633068);
+        // the DWARF for that function lists AllocateEventSafe in its BrnPropManager.cpp:1096
+        // scope, right after InputBuffer::GetUpdateRigidBodyQueue.
+        T* AllocateEventSafe()
+        {
+            CGS_ASSERT(mpEvents != nullptr, "mpEvents != NULL");   // CgsBaseEventQueue.h:381
+            if (miLength >= miMaxLength)
+            {
+                return nullptr;
+            }
+            s32 liIndex = miLength;
+            ++miLength;
+            return &mpEvents[liIndex];
         }
 
         // Checked element accessor, const overload (X360 BaseEventQueue<T>::GetEvent(int) const,

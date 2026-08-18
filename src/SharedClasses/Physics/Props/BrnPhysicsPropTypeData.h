@@ -139,6 +139,50 @@ namespace Props
         // the debug overlay draws as traffic lights (RenderTrafficLights @0x822DD868).
         bool IsTrafficLight() const     { return mu8ExtraTypeInfo == 1; }
 
+        // ⭐ NEW 2026-08-18 (wave Q round 2). DWARF BrnPhysicsPropTypeData.h:95 --
+        //     `bool ShouldActivateOnNonRaceCarContact() const;`
+        // No out-of-line X360 symbol; the DWARF records it as an INLINED SUBROUTINE inside
+        // PropEntityModule::ProcessPotentialContactWithProp (_compile/BrnEntityModuleUnity.cpp
+        // :32037). MEASURED there at 0x822DB148..0x822DB194 -- and it reads ONLY this class's
+        // own fields, which is what makes it a const method of this class rather than an
+        // anonymous expression in the caller:
+        //     lfs    f13, 0x50(type)   ; mfMoveThreshold
+        //     fcmpu  f13, flt_82001C98 ; 1.0f  (re-dumped from the image as 3f800000)
+        //     blt -> continue          ; else result = 0
+        //     lbz    r11, 0x5D(type)   ; muNumberOfParts
+        //     subfic/subfe/clrlwi 31   ; the standard (x != 0) idiom == IsSmashable()
+        //     beq -> result = 1        ; NOT smashable  => activate
+        //     lfs    f13, 0x54(type)   ; mfSmashThreshold
+        //     fcmpu  f13, 1.0f ; blt -> result = 0 ; else result = 1
+        // ⚠️ NaN POLARITY (AGENTS.md gotcha 4): the second compare is deliberately written as
+        // the NEGATED ORDERED form `!( GetSmashThreshold() < 1.0f )`, not `>= 1.0f`. The
+        // console falls THROUGH the `blt` on an unordered compare, so a NaN smash threshold
+        // yields "activate"; `>=` would yield the opposite. Do not "simplify" it.
+        bool ShouldActivateOnNonRaceCarContact() const
+        {
+            return ( GetMoveThreshold() < 1.0f )
+                && ( !IsSmashable() || !( GetSmashThreshold() < 1.0f ) );
+        }
+
+        // ⭐ NEW 2026-08-18 (wave Q round 2). DWARF BrnPhysicsPropTypeData.h:114 --
+        //     `bool IsOverheadSign() const;`
+        // No out-of-line X360 symbol; the DWARF records it as an inlined subroutine THREE
+        // times inside ProcessPotentialContactWithProp (_compile/BrnEntityModuleUnity.cpp
+        // :32038-32039 and :32057) and again in BrnPropZoneManager.cpp:584. MEASURED at
+        // 0x822DB198..0x822DB1E0: `lwz r11, 0x58(type)` (muSceneUriId) compared against
+        // 0x7A4D6 / 0x7A4C2 / 0x7B8C2, result 1 on any match.
+        // Homed here because the same magic triple is currently hand-spelled in three other
+        // places (BrnPropCellManager.cpp:894-896, BrnPropZoneManager.cpp:1204 and :1548) plus
+        // a file-local helper in PropEntityModule_wQ_05.cpp -- four copies of one predicate
+        // inside one subsystem, which is the divergence gotcha 7 exists to stop. Folding those
+        // four onto this method belongs to their own files' owners.
+        bool IsOverheadSign() const
+        {
+            return ( muSceneUriId == 500950u )      // 0x7A4D6
+                || ( muSceneUriId == 500930u )      // 0x7A4C2
+                || ( muSceneUriId == 506050u );     // 0x7B8C2
+        }
+
         // DWARF BrnPhysicsPropTypeData.h:101. A prop is smashable iff it has parts to shed.
         // Attested by the X360 at the inlined call site in
         // PropEntityInstance::InitialiseFromData @0x822B80E8:
@@ -147,6 +191,39 @@ namespace Props
 
         // DWARF BrnPhysicsPropTypeData.h:107, bodied @0x822A1A00 in the sibling .cpp.
         bool IsLamppost() const;
+
+        // ⭐ NEW 2026-08-18 (wave Q round 2). DWARF BrnPhysicsPropTypeData.h:110 --
+        //     `bool HACKShouldMoveComOffset() const;`   (no parameters)
+        // The X360 emits NO out-of-line symbol; it inlines the helper, and the DWARF records
+        // the call INSIDE its caller (references/DecFIGS/dwarfdump/_compile/
+        // BrnEntityModuleUnity.cpp:1311 lists it in PropEntityModule::GetDesiredState's body,
+        // and dwarfdump/GameSource/Physics/PropManager/BrnPropManager.cpp:277/2069/2073 list
+        // three more inlined call sites). Reversed out here rather than left as bare hex
+        // literals in each caller -- AGENTS.md "UNDO COMPILER OPTIMIZATIONS / Inlining
+        // reversal", and four copies of the same magic pair is exactly the divergence risk
+        // gotcha 7 exists to stop.
+        //
+        // MEASURED at GetDesiredState 0x822A9428..0x822A9460:
+        //     lwz    r11, 0x58(type)     ; muSceneUriId
+        //     ori    r9, r10, 0x894C     ; 0x6894C == 428364
+        //     cmplw  r11, r9 ; beq -> 1
+        //     ori    r9, r9,  0x8964     ; 0x68964 == 428388
+        //     cmplw  r11, r9 ; bne -> 0
+        //     clrlwi r11, r11, 24        ; truncate to a bool RETURN VALUE -- the signature of
+        //                                ; an inlined bool-returning accessor, not an inline ||
+        //     cmplwi r11, 0 ; beqlr
+        // The declaration taking no parameter is what says the speed test is the CALLER's, not
+        // part of this helper -- exactly the shape of the asm above.
+        //
+        // Cross-check (not the grounding): both ids are also two of IsLamppost's eight
+        // (BrnPhysicsPropTypeData.cpp:31-32), i.e. these are two lamppost types that get a
+        // shifted centre of mass. Header-inline because the console emits no body, matching
+        // IsSmashable/IsTrafficLight above rather than the out-of-line IsLamppost.
+        bool HACKShouldMoveComOffset() const
+        {
+            return ( muSceneUriId == 428364u )      // 0x6894C
+                || ( muSceneUriId == 428388u );     // 0x68964
+        }
 
         // The luIndex-th whole-prop collision volume / part descriptor. Both tables are
         // contiguous runs from the stored base (proven over every record in the shipped

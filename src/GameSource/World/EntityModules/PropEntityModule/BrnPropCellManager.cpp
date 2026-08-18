@@ -125,6 +125,27 @@ namespace BrnWorld
         static_assert(offsetof(PropCellManager, maActiveCells)    == 1804, "maActiveCells @ +1804 (asm 0x70C)");
         static_assert(offsetof(PropCellManager, miNumActiveCells) == 1900, "miNumActiveCells @ +1900 (asm 0x76C)");
         static_assert(offsetof(PropCellManager, mpaProps)         == 1904, "mpaProps @ +1904 (asm 0x770)");
+
+        // ⭐ ADDED 2026-08-18 (wave Q round 2), from a round-1 verifier NIT on
+        // PropEntityModule_wQ_07.cpp. The physical-slot ceiling is spelled THREE ways in this
+        // subsystem -- this class's own KU_MAX_PHYSICAL_PROPS/KU_MAX_PHYSICAL_PARTS, the bare
+        // literals that size the members below, and BrnPhysics::Props::KU_MAX_PHYSICAL_PROPS /
+        // KU_MAX_PHYSICAL_PROP_PARTS (which the broker loops and both BitArray qualifications
+        // in that partfile use). All three agree at 15/30 today, so nothing is wrong now --
+        // but BrnPropInputInterface.h:48-51 explicitly marks its pair as temporary squatters
+        // scheduled to MOVE to BrnPropConstants.h, by someone with no reason to open this
+        // file. A pool resized through only one spelling is a silent out-of-bounds walk over
+        // maPhysicalPartParams. These four asserts make the three spellings unable to drift.
+        static_assert(KU_MAX_PHYSICAL_PROPS == BrnPhysics::Props::KU_MAX_PHYSICAL_PROPS,
+                      "PropCellManager::KU_MAX_PHYSICAL_PROPS == BrnPhysics::Props::KU_MAX_PHYSICAL_PROPS");
+        static_assert(KU_MAX_PHYSICAL_PARTS == BrnPhysics::Props::KU_MAX_PHYSICAL_PROP_PARTS,
+                      "PropCellManager::KU_MAX_PHYSICAL_PARTS == BrnPhysics::Props::KU_MAX_PHYSICAL_PROP_PARTS");
+        static_assert(sizeof(((PropCellManager*)0)->maPhysicalPropParams) / sizeof(PhysicalParams)
+                          == KU_MAX_PHYSICAL_PROPS,
+                      "maPhysicalPropParams extent == KU_MAX_PHYSICAL_PROPS");
+        static_assert(sizeof(((PropCellManager*)0)->maPhysicalPartParams) / sizeof(PhysicalParams)
+                          == KU_MAX_PHYSICAL_PARTS,
+                      "maPhysicalPartParams extent == KU_MAX_PHYSICAL_PARTS");
     }
 
     // ========================================================================
@@ -283,9 +304,15 @@ namespace BrnWorld
     // drives: audit the in-sim counters against the physical bit arrays, rebuild the
     // target list around the player, then bring every loaded cell's activation state in
     // line with it.
+    //
+    // ⭐ 2026-08-18 (wave Q keystone): `lbInReplay` added at position 5 to match the shipped
+    // seven-parameter form (see the declaration's note). It is DELIBERATELY UNUSED here --
+    // the X360 body never reads r7 -- so it is left unnamed in the definition rather than
+    // given a name the body would not touch.
     void PropCellManager::Update(Vector3 lv3Position, const PropPhysicsDataHeader* lpTypes,
                                  RecentlyBrokenPropsArray* lpRecentlyBroken,
                                  PropEntityIO::OutputBuffer_PreScene* lpOutput,
+                                 bool /*lbInReplay -- r7, never read by the shipped body*/,
                                  BrnReplays::PropEntitySerialiser* lpSerialiser,
                                  const u16* lpuZoneStartIndices)
     {

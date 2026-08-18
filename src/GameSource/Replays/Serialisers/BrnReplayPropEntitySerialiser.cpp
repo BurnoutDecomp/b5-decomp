@@ -164,14 +164,19 @@ namespace BrnReplays
             // static 0x4008 == frame 0x5E8 == the loaded-zone array's live count (see
             // BrnReplayPropSerialiserFrame.h): "no zones loaded" is count 0.
             lrLive.maLoadedZones.muLength = 0;
-            lrLive.mbAddedFlag15F0 = false; // static 0x5010
-            lrLive.mbAddedFlag25E0 = false; // static 0x6000
-            lrLive.mbAddedFlag27EC = false; // static 0x620C
-            lrLive.mbAddedFlag2FF0 = false; // static 0x6A10
-            lrLive.mbAddedFlag3800 = false; // static 0x7220
-            lrLive.mbAddedFlag3910 = false; // static 0x7330
-            lrLive.mbAddedFlag3A12 = false; // static 0x7432
-            lrLive.mbAddedFlag0600 = false; // static 0x4020
+            // [2026-08-18, wave Q round 2] The eight `mbAddedFlagNNNN` placeholders were never
+            // flags: each IS one sub-array's muLength byte. The frame is now nine real
+            // BrnReplayArray members (BrnReplayPropSerialiserFrame.h), so these nine stores
+            // read as what the console actually does -- "reset every record array to empty".
+            // Same nine zero bytes, same order, same offsets (pinned by _AssertLayout).
+            lrLive.maPropPositions.muLength    = 0; // static 0x5010 -> frame 0x15F0
+            lrLive.maPropOrientations.muLength = 0; // static 0x6000 -> frame 0x25E0
+            lrLive.maTypes.muLength            = 0; // static 0x620C -> frame 0x27EC
+            lrLive.maPartPositions.muLength    = 0; // static 0x6A10 -> frame 0x2FF0
+            lrLive.maPartOrientations.muLength = 0; // static 0x7220 -> frame 0x3800
+            lrLive.maPartTypes.muLength        = 0; // static 0x7330 -> frame 0x3910
+            lrLive.maPartIds.muLength          = 0; // static 0x7432 -> frame 0x3A12
+            lrLive.maRecordedCells.muLength    = 0; // static 0x4020 -> frame 0x0600
 
             lpStaticLayout->mPreviousFrame = lrLive;
             mbPreviousFrameInitialized = true;

@@ -61,12 +61,127 @@ namespace Props
         // 0x825DE5F8 -- validate + store the angular velocity.
         void SetAngularVelocity(Vector3 lAngularVelocity);
 
+        // ⭐ ADDED 2026-08-18 (breakable-props keystone). DWARF BrnPropInstance.h:91.
+        // X360 0x825DE6C8 -- the LINEAR twin of SetAngularVelocity: the same three-lane
+        // vcmpeqfp self-equality NaN test then `stvx128 v127, r31, 64` == mLinearVelocity
+        // (+0x40). Its assert text/line are the binary's own: "RwMath::IsValid(
+        // lLinearVelocity )", PropPhysics/BrnPropInstance.h:266.
+        // ⚠️ THE ADDRESS HAS NO PER-ADDRESS JSON IN .ida-exports (an export hole, like
+        // AddContactResultsToQueue below it) -- the 51-instruction body was pulled with
+        // headless IDA 9.3 out of IDA Files/BURNOUT_X360_ARTIST.XEX.i64, where the symbol
+        // IS present. It is CALLED by PropManager::ReadUpdatedBodies @0x82632918, which is
+        // why the hole mattered. Body in BrnPropInstance.cpp.
+        void SetLinearVelocity(Vector3 lLinearVelocity);
+
         // 0x825B96B0 -- assert IsJointed() then return the joint index.
         int32_t GetJointIndex() const;
 
         // Inline tripwire predicate used by GetJointIndex (DWARF :131). The X360 folds
         // this into the caller as (mu8JointIndex != KU_NOT_JOINTED).
         bool IsJointed() const { return mu8JointIndex != KU_NOT_JOINTED; }
+
+        // ==================================================================================
+        // ⭐ ADDED 2026-08-18 (breakable-props keystone wave -- BrnPropManager.cpp's eleven
+        // un-bodied functions). The DWARF declares the full trivial-accessor set for this
+        // class (BrnPropInstance.h:53..:147) and the X360 folds EVERY one of them into its
+        // callers -- PropManager::ReadUpdatedBodies / CreateContactEvent / AddPropToSim read
+        // and write these exact fields with inline lwz/stb/stvx at the offsets the banner
+        // above already pins. They are given inline bodies here (same precedent, and same
+        // "no out-of-line emission exists" reason, as PropPartInstance::GetType) so
+        // implementers reach the members BY NAME instead of poking the struct.
+        //
+        // ⚠️ Construct() and Prepare() are DECLARATION-ONLY: no body exists anywhere in the
+        // tree (re-grepped 2026-08-18, round 3 -- `PropInstance::Construct` matches only
+        // comments), and unlike Release/Destruct below there is no folded call site that
+        // would tell us what they do. Not invented.
+        //
+        // ⚠️ UPDATED round 3 -- "nothing in this wave's closure calls them" was true of the
+        // TREE and is still true of the tree, but it is NOT true of the source. The DecFIGS
+        // callee list for PropManager::ProcessAddPropInstanceEvents names
+        // `PropInstance::Construct(...)` explicitly, immediately before its two
+        // rw::math::vpu::Vector3::SetZero entries -- so the source really did write
+        // `lpProp->Construct();` where this wave's landed body hand-spells the ten-store
+        // instance seed. It is STILL not bodyable from that one site: the same callee list
+        // contains SetTypeId but NOT SetEntityId even though the mEntityId store is plainly
+        // emitted, so the Construct-vs-caller split is not recoverable from one call site.
+        // A second site (PropManager::CreatePart or ::AddPropToSim) has to pin it first.
+        // ==================================================================================
+        void Construct();                                    // DWARF :53  (no body here)
+        bool Prepare();                                      // DWARF :57  (no body here)
+
+        // DWARF :61 / :65. MEASURED, not assumed: PropManager::Release @0x825BAC88 is the
+        // whole loop `for(i<muNumberOfPropInstances) lbSuccess &= mpaPropInstances[i].Release()`
+        // with the call folded away and `clrlwi r3,r3,31` (== `& 1`) as the only survivor, so
+        // Release() is a side-effect-free constant `true`; PropManager::Destruct @0x825E3398
+        // likewise keeps NO loop at all, so Destruct() is empty. (The DWARF locals luIndex /
+        // lbSuccess at BrnPropManager.cpp:245/246 and luIndex at :275 prove the loops were in
+        // the source, which is what makes "the callee is empty" the reading rather than "the
+        // loop never existed".)
+        bool Release()  { return true; }                     // DWARF :61
+        void Destruct() {}                                   // DWARF :65
+
+        uint32_t     GetTypeId()                     { return muTypeId; }        // :68
+        PropEntityID GetEntityId()                   { return mEntityId; }       // :71
+        void         SetEntityId(PropEntityID lId)   { mEntityId = lId; }        // :74
+        void         SetTypeId(uint32_t luTypeId)    { muTypeId = luTypeId; }    // :77
+
+        // :83. The whole affine.
+        // ⚠️ DWARF :80 also declares `Vector3 & GetPos()`. NOT landed: in the committed
+        // tree Matrix44Affine's rows are rw::math::vpu::Vector4, not Vector3, so the DWARF
+        // return type cannot bind to mWorldTransform.wAxis without a reinterpret -- and
+        // nothing in this wave's closure calls it. Reach the position row through
+        // GetTransform().wAxis instead.
+        const Matrix44Affine& GetTransform() const    { return mWorldTransform; }
+
+        Vector3 GetLinearVelocity()                   { return mLinearVelocity; }   // :98
+        Vector3 GetAngularVelocity() const            { return mAngularVelocity; }  // :101
+
+        void     SetInstanceID(uint32_t luId)         { muInstanceId = luId; }      // :104
+        uint32_t GetInstanceID() const                { return muInstanceId; }      // :107
+
+        // :111 / :114. mu8JointIndex is the u8 slot; KU_NOT_JOINTED (255) is the sentinel.
+        void SetJointIndex(int32_t liJointIndex)
+        {
+            mu8JointIndex = static_cast<uint8_t>(liJointIndex);
+        }
+        void SetNotJointed()                          { mu8JointIndex = KU_NOT_JOINTED; }
+
+        void SetIsStatic(bool lbIsStatic)             { mbIsStatic = lbIsStatic; }  // :118
+        bool IsStatic() const                         { return mbIsStatic; }        // :134
+
+        // :122 / :125. mu8Flags bit 1. AddPropToSim @0x826274D8 gates the
+        // K_PROP_EXTRA_COM_OFFSET add on the same bit, and ReadUpdatedBodies @0x82632918
+        // re-reads it (`lbz +0x6F ; andi 2`) to undo the offset on the way back.
+        void SetExtraComOffsetFlag(bool lbSet)
+        {
+            mu8Flags = static_cast<uint8_t>(lbSet ? (mu8Flags | KU_HAS_EXTRA_COM_OFFSET_FLAG)
+                                                  : (mu8Flags & ~KU_HAS_EXTRA_COM_OFFSET_FLAG));
+        }
+        bool HasExtraComOffset()
+        {
+            return (mu8Flags & KU_HAS_EXTRA_COM_OFFSET_FLAG) != 0;
+        }
+
+        // :138 / :141. muMovementState holds an EPropMovementState; CreateContactEvent
+        // @0x825A53A0 already compares/writes it as a raw u8 at +0x6E.
+        void SetMovementState(EPropMovementState leState)
+        {
+            muMovementState = static_cast<uint8_t>(leState);
+        }
+        EPropMovementState GetMovementState() const
+        {
+            return static_cast<EPropMovementState>(muMovementState);
+        }
+
+        // :144 / :147. mu8Flags bit 0.
+        bool WasAddedThisFrame() const
+        {
+            return (mu8Flags & KU_ADDED_THIS_FRAME_FLAG) != 0;
+        }
+        void ClearAddedThisFrameFlag()
+        {
+            mu8Flags = static_cast<uint8_t>(mu8Flags & ~KU_ADDED_THIS_FRAME_FLAG);
+        }
 
         // ------------------------------------------------------------------
         // Members (DWARF order; offsets asm-pinned -- see banner).

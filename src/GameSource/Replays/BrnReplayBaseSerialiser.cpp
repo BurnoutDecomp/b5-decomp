@@ -156,27 +156,44 @@ namespace BrnReplays
     // name: meId = liId (+0x28) / meContext = liContext (+0x2C) -- the second
     // parameter feeds the CONTEXT word, not the mode; meMode / mbLocked / mpBuffer /
     // miBufferUsed / miBufferRead / mpStaticBuffer / mbIsKeyFrame all zeroed;
-    // miBufferSize / miStaticBufferSize from the args (the X360 zeroes the stale
-    // DWARF +0x1C static-size slot and writes the live +0x24 extension slot -- one
-    // named member here); the flag byte lands at X360 +0x5B, the streaming gate
-    // (modelled mbAllowStreaming; the header's documented +0x5A is the known
-    // X360-extension tail drift). The X360's r3 at exit is a dead this-derived
-    // tail value; 0 here.
+    // miBufferSize / miStaticBufferSize from the args.
+    //
+    // ⭐ [2026-08-18 CORRECTED, wave Q round 2 -- a real misrouted store.] This body used to end
+    // the flag with `mbAllowStreaming = (liFlag != 0)`, its own banner conceding "the flag byte
+    // lands at X360 +0x5B ... modelled mbAllowStreaming; the header's documented +0x5A is the
+    // known X360-extension tail drift". +0x5A/+0x5B are now BOTH named members, so the modelling
+    // is over: I disassembled Construct headless (it has no per-address JSON export; extent
+    // 0x8264C280..0x8264C470) and its store is `stb r9, 0x5B(r31)` at 0x8264C2C8. The 6th
+    // argument therefore feeds mbSkipModuleSerialise, NOT mbAllowStreaming -- and that is the
+    // byte PropEntityModule::ReplayPreSceneUpdate @0x822EF924 and ::PostPhysicsUpdate
+    // @0x823034B0 read to skip their serialiser Read/Write. Leaving it on +0x5A would have left
+    // the real gate uninitialised.
+    //
+    // ⭐ FAITHFUL OMISSION, measured: Construct's fourteen stores are +0x28, +0x2C, +0x08, +0x0C,
+    // +0x10, +0x20, +0x24, +0x00, +0x04, +0x14, +0x50, +0x5B, +0x18, +0x1C (plus the name copy
+    // into +0x30). It does NOT touch mfTime (+0x54), mbDataReady (+0x58), mbDataRestored (+0x59)
+    // or mbAllowStreaming (+0x5A) -- so this body does not either. Do not "tidy" them to false:
+    // adding an initialiser the console does not have is exactly the kind of invented behaviour
+    // this project fails a TU for. (mbDataReady / mbDataRestored are written by the owning module
+    // before anything reads them; see BaseSerialiser::SetDataReady / SetDataRestored.)
+    //
+    // The X360's r3 at exit is a dead this-derived tail value; 0 here.
     s32 BaseSerialiser::Construct(s32 liId, s32 liContext, s32 liBufferSize,
-                                  s32 liStaticBufferSize, const char* lpcName, s32 liFlag)
+                                  s32 liStaticBufferSize, const char* lpcName,
+                                  s32 liSkipModuleSerialise)
     {
-        meId               = static_cast<ESerialiserId>(liId);
-        meContext          = static_cast<ESerialiserContext>(liContext);
-        mpBuffer           = 0;
-        miBufferSize       = liBufferSize;
-        miBufferUsed       = 0;
-        miStaticBufferSize = liStaticBufferSize;
-        meMode             = E_MODE_IDLE;
-        mbLocked           = false;
-        miBufferRead       = 0;
-        mbIsKeyFrame       = false;
-        mbAllowStreaming   = (liFlag != 0);
-        mpStaticBuffer     = 0;
+        meId                  = static_cast<ESerialiserId>(liId);
+        meContext             = static_cast<ESerialiserContext>(liContext);
+        mpBuffer              = 0;
+        miBufferSize          = liBufferSize;
+        miBufferUsed          = 0;
+        miStaticBufferSize    = liStaticBufferSize;
+        meMode                = E_MODE_IDLE;
+        mbLocked              = false;
+        miBufferRead          = 0;
+        mbIsKeyFrame          = false;
+        mbSkipModuleSerialise = (liSkipModuleSerialise != 0);
+        mpStaticBuffer        = 0;
 
         if (lpcName)
         {

@@ -16,20 +16,46 @@
 //   +0x10 miBufferUsed       int32_t             (Write: lwz 0x10; Read: lwz 0x10)
 //   +0x14 miBufferRead       int32_t             (Read:  lwz 0x14 read cursor)
 //   +0x18 mpStaticBuffer     void*
-//   +0x1C miStaticBufferSize int32_t
-//   +0x20 meId               ESerialiserId       (RegisterSerialiser reads this)
-//   +0x24 meContext          ESerialiserContext
-//   +0x28 macName[32]        char   (.. +0x48; +0x48..+0x50 reserved/padding)
+//   +0x1C .. +0x24 : see the X360-extension note below
+//   +0x24 miStaticBufferSize int32_t
+//   +0x28 meId               ESerialiserId       (RegisterSerialiser reads this)
+//   +0x2C meContext          ESerialiserContext
+//   +0x30 macName[32]        char   (.. +0x50)
 //   +0x50 mbIsKeyFrame       bool   (asm Read/Write select the key-frame path off lbz 0x50)
 //   +0x54 mfTime             f32
 //   +0x58 mbDataReady        bool
 //   +0x59 mbDataRestored     bool
 //   +0x5A mbAllowStreaming   bool
+//   +0x5B mbSkipModuleSerialise  bool   -- X360-only, NOT in the DWARF; see its declaration
 //
-// NOTE on meId offset: wave 1's comment placed meId at +0x28 from the asm. With the
-// real named layout (8 leading fields == 0x20 bytes, meId at +0x20) the slot index
-// math in RegisterSerialiser (slwi id,2 ; stwx) is unaffected -- the +0x28 figure
-// referred to a different read. The DWARF member order is authoritative here.
+// [2026-08-18 CORRECTED, wave Q round 2 -- the tail offsets above are now MEASURED, not
+// inferred.] BaseSerialiser::Construct @0x8264C280 has NO per-address JSON export, so earlier
+// passes could only guess this half. I disassembled it headless (idat.exe over a scratch copy of
+// the .i64; the function extent is 0x8264C280..0x8264C470, 124 insns) and its prologue writes
+// EVERY field, which pins the whole tail:
+//     8264C29C  stw r4,  0x28(this)   meId              <- Construct arg 1
+//     8264C2A0  stw r5,  0x2C(this)   meContext         <- arg 2
+//     8264C2A4  stw r30, 8(this)      mpBuffer     = 0
+//     8264C2A8  stw r6,  0xC(this)    miBufferSize      <- arg 3
+//     8264C2AC  stw r30, 0x10(this)   miBufferUsed = 0
+//     8264C2B0  stw r30, 0x20(this)   <X360 extension word> = 0
+//     8264C2B4  stw r7,  0x24(this)   miStaticBufferSize <- arg 4
+//     8264C2B8  stw r30, 0(this)      meMode       = 0
+//     8264C2BC  stb r30, 4(this)      mbLocked     = false
+//     8264C2C0  stw r30, 0x14(this)   miBufferRead = 0
+//     8264C2C4  stb r30, 0x50(this)   mbIsKeyFrame = false
+//     8264C2C8  stb r9,  0x5B(this)   mbSkipModuleSerialise <- arg 6   (see below)
+//     8264C2CC  stw r30, 0x18(this)   mpStaticBuffer = 0
+//     8264C2D0  stw r30, 0x1C(this)   <X360 extension word> = 0
+//     8264C41C  <macName copy loop into this+0x30>
+// So the X360 SKU's two extra words sit at +0x1C/+0x20, i.e. BETWEEN mpStaticBuffer and
+// miStaticBufferSize -- not after miStaticBufferSize where wave 1's placeholder put them. The
+// old comment already flagged the contradiction ("PreUpdateRecord reads the static-buffer-size
+// at live+0x24, 8 bytes past the DWARF +0x1C placement") and left it unresolved; Construct
+// resolves it. Nothing behavioural changes -- every access is by name -- but a wrong layout
+// comment is a real defect, so the placeholder moved to where the asm puts it.
+// meId at +0x28 (not the DWARF's +0x20) is the same X360-extension shift, and is corroborated
+// twice: RegisterSerialiser @0x821F34A0 reads `lwz 0x28(r31)`, and Construct stores arg 1 there.
 
 #include "types.hpp"
 #include "GameSource/Replays/BrnReplayShared.h"
@@ -58,14 +84,16 @@ namespace BrnReplays
         // DWARF: BrnReplayBaseSerialiser.h:67
         static const s32 KI_MAX_NAME_LENGTH = 32;
 
-        // Construct @ (BaseSerialiser TU, external). Shared initialiser every concrete
-        // serialiser forwards to: (id, mode, bufferSize, staticBufferSize, name, flag).
+        // Construct @0x8264C280 (124 insns). Shared initialiser every concrete serialiser
+        // forwards to: (id, context, bufferSize, staticBufferSize, name, skipModuleSerialise).
         // X360 attestation: each leaf serialiser calls it with 6 args after `this`
         // (e.g. PropEntitySerialiser @0x8264C6C0 -> 6,0,0x4000,0x7480,"PropEntity",1;
         // RaceCarEntitySerialiser -> 0,0,0x1B000,0x1B000,"RaceCarEntity",1). Declared
         // here (home of BaseSerialiser); the body lives in the BaseSerialiser TU.
-        s32 Construct(s32 liId, s32 liMode, s32 liBufferSize, s32 liStaticBufferSize,
-                      const char* lpcName, s32 liFlag);
+        // The 6th argument (r9) is the one that lands in mbSkipModuleSerialise -- named for it
+        // now that `stb r9, 0x5B(r31)` is measured (see the layout note at the top of this file).
+        s32 Construct(s32 liId, s32 liContext, s32 liBufferSize, s32 liStaticBufferSize,
+                      const char* lpcName, s32 liSkipModuleSerialise);
 
         // --- read/write/seek primitives owned by THIS TU ---
 
@@ -162,6 +190,35 @@ namespace BrnReplays
         // forking BaseSerialiser's storage locally.
         void* GetStaticBuffer() const { return mpStaticBuffer; }
 
+        // ================================================================================
+        // ADDITIVE GROW (wave Q round 2) -- the three tail flags the prop/race-car/traffic
+        // entity modules drive from their own update, plus the byte the DWARF stops short of.
+        // ================================================================================
+
+        // DWARF BrnReplayBaseSerialiser.h:229 / :232 (source lines; in the dumpfile
+        // references/DecFIGS/dwarfdump/GameSource/Replays/BrnReplayBaseSerialiser.h they are
+        // lines 207/210 -- an earlier request cited the dumpfile numbers as if they were the
+        // source ones). Parameter names lbDataReady / lbDataRestored are the DWARF's, from
+        // _compile/BrnEntityModuleUnity.cpp:12935 and :23876.
+        //
+        // Header-inline on the console: no out-of-line body exists for either, and every writer
+        // is a bare byte store folded into its caller. PropEntityModule::PostPhysicsUpdate
+        // @0x823031D8 does exactly four of them -- `stbx r17, r28, 0xD31D8` (mbDataReady) and
+        // `stbx r17, r28, 0xD31D9` (mbDataRestored) at 0x82303548 / 0x823034B4 / 0x82303578 /
+        // 0x823035C4, where mPropEntitySerialiser sits at module +0xD3180, so +0x58 / +0x59.
+        // No lock test is inlined at any of the four sites, so neither setter carries one here.
+        void SetDataReady(bool lbDataReady)         { mbDataReady = lbDataReady; }
+        void SetDataRestored(bool lbDataRestored)   { mbDataRestored = lbDataRestored; }
+
+        // AllowStreaming() -- DWARF :212, the mbAllowStreaming reader.
+        bool AllowStreaming() const { return mbAllowStreaming; }
+
+        // The X360-only byte at +0x5B. See mbSkipModuleSerialise's declaration below for the
+        // full measurement; short version: it is Construct's 6th argument, it is 1 for this
+        // build's PropEntity / RaceCarEntity / TrafficEntity / Sound serialisers, and when it
+        // is set the owning module SKIPS its own inline serialiser Read/Write.
+        bool SkipModuleSerialise() const { return mbSkipModuleSerialise; }
+
     protected:
         // SetMode @ 0x8264B0F8. Private in the leak; protected here so the embed
         // check and (future) construction path can drive the mode while it stays
@@ -177,15 +234,16 @@ namespace BrnReplays
         s32                miBufferUsed;       // @0x10
         s32                miBufferRead;       // @0x14
         void*              mpStaticBuffer;     // @0x18
-        s32                miStaticBufferSize; // @0x1C
-        // FLAG (X360 overrides DWARF): RegisterSerialiser @0x821F34A0 reads GetId()/meId at
-        // *(this+0x28) (lwz 0x28(r31) at six GetId/range-guard sites + the slwi;stwx slot-index
-        // store), so meId sits at +0x28 on X360 -- 8 bytes higher than the Feb-2007 PS3 DWARF's
-        // +0x20. The X360 SKU extended the serialiser (ESerialiserId E_ID_COUNT 5->11); those two
-        // leading words are unrecovered, modelled as a sized placeholder so meId + the whole tail
-        // land at their X360-attested offsets. (The 7 bodied funcs touch only +0x00..+0x14, so
-        // they are unaffected; this keeps any future Construct/by-offset path faithful.)
-        u8                 maX360Extension20[8]; // @0x20 (unmodeled X360-extension fields)
+        // FLAG (X360 overrides DWARF): the X360 SKU extended the serialiser (ESerialiserId
+        // E_ID_COUNT 5->11) with TWO words the DWARF does not name, and they sit HERE -- between
+        // mpStaticBuffer and miStaticBufferSize. Measured from Construct @0x8264C280, which zeroes
+        // +0x1C and +0x20 and then stores its static-buffer-size argument at +0x24 (full listing
+        // in the layout note at the top of this file); corroborated by RegisterSerialiser
+        // @0x821F34A0 reading meId at `lwz 0x28(r31)` and by PreUpdateRecord @0x8264BD08 reading
+        // the static-buffer size at live+0x24. Modelled as a sized placeholder so miStaticBufferSize,
+        // meId and the whole tail land at their X360-attested offsets.
+        u8                 maX360Extension1C[8]; // @0x1C (unmodeled X360-extension fields)
+        s32                miStaticBufferSize; // @0x24 -- Construct `stw r7, 0x24(r31)`
         ESerialiserId      meId;               // @0x28 -- read by RegisterSerialiser (lwz 0x28)
         ESerialiserContext meContext;          // @0x2C
         char               macName[32];        // @0x30
@@ -194,10 +252,68 @@ namespace BrnReplays
         bool               mbDataReady;        // @0x58
         bool               mbDataRestored;     // @0x59
         bool               mbAllowStreaming;   // @0x5A
+
+        // ================================================================================
+        // @0x5B -- X360-ONLY, NOT IN THE DWARF (whose member list ends at mbAllowStreaming
+        // @0x5A, and PropEntitySerialiser::mbPreviousFrameInitialized is already at +0x5C, so
+        // this is a fourth bool squeezed into the base's tail: a merge-window delta).
+        //
+        // ⚠️ THE NAME IS DESCRIPTIVE ONLY. No symbol, assert string, DWARF entry or Feb-2007
+        // source attests it. It is named for the ONE effect both of its readers have.
+        //
+        // WHAT IS MEASURED (all of it by me, wave Q round 2, from the ARTIST image):
+        //   * ONE WRITER, and it is not "none". BaseSerialiser::Construct @0x8264C280 does
+        //     `stb r9, 0x5B(r31)` at 0x8264C2C8 -- r9 being its 6th post-`this` argument, moved
+        //     by no instruction between the call site and the store. Construct has NO
+        //     per-address JSON export (that is why an earlier export-set scan concluded "zero
+        //     writers image-wide" and a spec built on that conclusion was wrong); it must be
+        //     disassembled from the .i64.
+        //   * PER-SERIALISER VALUE, read off `li r9, <n>` at all nine Construct call sites:
+        //         PropEntity 1   RaceCarEntity 1   TrafficEntity 1   Sound 1
+        //         DirectorBridge 0   GameModule 0   Effects 0   GuiModule 0   DirectorModule 0
+        //     So on the shipped image the prop serialiser's byte is 1 and is never cleared.
+        //   * SCAN FOR OTHER WRITERS: a full-image opcode scan of both executable segments for
+        //     `stb rX, 0x5B(rY)` returns 38 sites; the only one whose base is a replay serialiser
+        //     is Construct's. The rest are stack slots or unrelated classes (BrnSound::Logic::
+        //     MusicEffect/HUDEffect/MusicStream, BrnGame::BrnGameModule, SHA1/md5, CEMBMVQ).
+        //     A scan for the indexed form -- the module-relative constant 0xD31DB that
+        //     PropEntityModule uses -- finds exactly TWO materialisations image-wide, and both
+        //     are `lbzx` READS. HONEST LIMIT: those two scans do not prove a universal negative
+        //     for every possible indexed store through every serialiser; what they prove is that
+        //     no displacement-form store and no PropEntityModule-relative store other than
+        //     Construct's touches this byte. Do not upgrade that to "nothing ever writes it".
+        //   * THE TWO READERS, and what the flag DOES:
+        //         PropEntityModule::ReplayPreSceneUpdate @0x822EF878 --
+        //             0x822EF91C lis r11,0xD ; ori r11,r11,0x31DB ; lbzx r11, r31, r11
+        //             0x822EF928 cmplwi r11,0 ; bne -> 0x822EF944
+        //           i.e. NON-ZERO SKIPS the `GetStaticLayout(); Read()` pair and jumps straight
+        //           to ReplayUpdatePropsInScene / ReplayUpdatePartsInScene (which are ungated).
+        //         PropEntityModule::PostPhysicsUpdate @0x823031D8 --
+        //             0x823034A8 the same constant, `lbzx r11, r28, r11`
+        //             0x823034B8 cmplwi r11,0 ; bne -> 0x823035C8
+        //           same polarity, skipping `GetStaticLayout(); Write()`.
+        //     mPropEntitySerialiser is at module +0xD3180, so 0xD31DB is exactly +0x5B.
+        //
+        // CONSEQUENCE FOR ANYONE LANDING THOSE TWO BODIES: with the flag at 1, the shipped image
+        // NEVER runs PropEntitySerialiser::Read there and NEVER runs ::Write there. Landing
+        // either call unconditionally is not "behaviour-identical" -- BaseSerialiser::Read
+        // @0x8264C188 pops bytes off the playback stream, so an extra Read desyncs every
+        // subsequent replay read. Gate both on !SkipModuleSerialise(), or omit them.
+        //
+        // WHAT IS *NOT* MEASURED: why the flag exists. The four serialisers that set it are the
+        // ones whose frames their owning module drives itself; the four that clear it are driven
+        // through the generic path. That is a pattern, not an attestation -- treat the name as a
+        // label for the observed effect, not as a recovered concept.
+        // ================================================================================
+        bool               mbSkipModuleSerialise; // @0x5B
         // NOTE: the @0xNN offsets above are X360 byte offsets (4-byte pointers). On the 64-bit
         // host mpBuffer/mpStaticBuffer are 8 bytes, so absolute host offsets differ -- all access
-        // is BY NAME, so this is immaterial; the maX360Extension20[8] placeholder keeps the X360
-        // field SEQUENCE (meId after 8 extra X360 words) faithful, which is what matters.
+        // is BY NAME, so this is immaterial; the maX360Extension1C[8] placeholder keeps the X360
+        // field SEQUENCE faithful, which is what matters. [round-3 correction: this note still
+        // named the placeholder maX360Extension20 and put it AFTER miStaticBufferSize. It was
+        // renamed and MOVED -- it sits at +0x1C, BETWEEN mpStaticBuffer and miStaticBufferSize,
+        // per Construct's `stw r30,0x1C` / `stw r30,0x20` / `stw r7,0x24` -- so it is two
+        // unnamed X360 words BEFORE miStaticBufferSize, not eight words before meId.]
     };
 
     // -------- ReadVariableQueue<BUFSIZE,ALIGN> @ X360 0x82653A60 (<13312,16>) / 0x82656CF0 (<512,16>) --------

@@ -140,8 +140,25 @@
 #include "GameSource/Replays/Serialisers/BrnReplayPropEntitySerialiser.h" // PropEntitySerialiser
 #include "BrnPropZoneManager.h"              // PropZoneManager, PropGraphicsManager (by value)
 #include "BrnPropEntityDebugComponent.h"     // PropEntityDebugComponent (by value)
+// ⭐ WAVE Q KEYSTONE (2026-08-18): UpdatePropEvent, the element of the post-physics
+// update queue UpdateProps drains (its parameter used to be a `const void*` placeholder).
+// No cycle: BrnPropEvents.h pulls only BrnCommonTypes.h, BrnPropEntityID.h and
+// BrnPropEntityInstance.h, none of which reaches back here.
+#include "GameSource/Physics/PropManager/SharedIO/BrnPropEvents.h"     // BrnPhysics::Props::UpdatePropEvent
+// ⭐ WAVE Q KEYSTONE: BrnGui::OverheadSignScore -- the element type of mVisibleOverheadSigns,
+// which used to be modelled as opaque byte storage (see that member's note).
+#include "GameSource/Gui/BrnGuiEventTypeDefs.h"                        // BrnGui::OverheadSignScore
+// ⭐ WAVE Q KEYSTONE: BrnCoronaManager::BrnSubmissionInterface -- the retyped corona
+// submission handle RenderPropAndCoronas / RenderReplayProp carry.
+#include "GameSource/Graphics/BrnCoronaManager.h"                     // BrnCoronaManager::BrnSubmissionInterface
 
 namespace BrnPhysics { namespace Props { class PropPhysicsDataHeader; class PropGraphicsList; } }
+// ⭐ WAVE Q KEYSTONE: pointer-only parameter uses in the break pipeline (GetDesiredState takes a
+// const PropTypeData*, the three contact handlers take a PropInputInterface*). Both have real
+// homes (SharedClasses/Physics/Props/BrnPhysicsPropTypeData.h and
+// GameSource/Physics/PropManager/SharedIO/BrnPropInputInterface.h) which the BODIES include;
+// forward-declared here to keep this header's dependency tail where it already is.
+namespace BrnPhysics { namespace Props { class PropTypeData; struct PropInputInterface; } }
 namespace BrnParticle { class VFXPropCollection; }
 namespace CgsGraphics { class Model; }
 namespace rw { class IResourceAllocator; }
@@ -320,6 +337,74 @@ namespace BrnWorld
         bool RestoreFromReplay();    // @0x822A95A8
         void LeaveReplay( PropEntityIO::OutputBuffer_PreScene* lpOutput );  // @0x822C4810
 
+        // ⭐ WAVE Q KEYSTONE (2026-08-18) -- the rest of the X360-only replay set. All five
+        // are real ledger functions with per-address exports; none is in the DecFIGS DWARF
+        // (the PS3 build predates the prop replay path -- the same merge-window delta that
+        // gives the class miReplayState / muReplayPropsInScene / muReplayPartsInScene /
+        // mbStreamingSettled / miSerialisePM / mPropEntitySerialiser). Signatures below come
+        // from the ARTIST PROLOGUES, not from Hex-Rays (which renders all three of the
+        // 2-parameter ones as 14-`int` blobs).
+        //
+        // @0x822EF878 (park P1). Prologue: r3 this, r4 lpInput, r5 lpOutput, r6 lUpdateSet
+        // (`extrwi r11,r6,8,16 ; clrlwi r30,r11,31` == (lUpdateSet >> 8) & 1). ⚠️ MEASURED:
+        // the body NEVER READS r4 -- lpInput is moved nowhere and no instruction touches it.
+        // It is declared because the CALL SITE (PreSceneUpdate @0x82309AB8) passes it.
+        void ReplayPreSceneUpdate( PropEntityIO::InputBuffer_PreScene* lpInput,
+                                   PropEntityIO::OutputBuffer_PreScene* lpOutput,
+                                   BrnUpdateSet lUpdateSet );
+        // @0x822DB370 / @0x822DB900. Prologue: r3 this, r4 lpOutput -- two parameters, no more
+        // (0x822DB390/94 and 0x822DB920/24 move exactly r3 and r4). Both reconcile the scene's
+        // replay prop/part entity population against the playback frame's counts
+        // (GetStaticLayout()[0x5010] vs muReplayPropsInScene, [0x6A10] vs muReplayPartsInScene)
+        // via InSceneUpdateInterface Add/RemoveEntity + SetEntityPosition/SetEntityRadius.
+        void ReplayUpdatePropsInScene( PropEntityIO::OutputBuffer_PreScene* lpOutput );
+        void ReplayUpdatePartsInScene( PropEntityIO::OutputBuffer_PreScene* lpOutput );
+        // @0x822EF968. The playback-time draw of one recorded prop: resolve its recorded type
+        // and transform out of the replay frame, look the graphics record up in
+        // mPropGraphicsManager, and hand the whole render tail to RenderPropAndCoronas.
+        // PARAMETER MAP recovered by the same save-area rule that pins RenderPropAndCoronas
+        // (8-byte slots from incoming SP+0x14; a __vector4 consumes NO GPR; a float DOES
+        // consume its GPR slot). Every entry is proven by the forwarding store at 0x822EFA2C..
+        // 0x822EFA84, which copies each incoming slot to RenderPropAndCoronas' matching one:
+        //     r4   -> GetEntityIndex()                r5   -> outgoing r7  (dispatch frame)
+        //     r6   -> outgoing r8  (view-projection)  v1   -> v1           (camera position)
+        //     f1   -> f1           (lod zoom)         r8   -> outgoing r10 (model-only list)
+        //     r9   -> outgoing @0x64                  r10  -> outgoing @0x6C
+        //     @0x64-> outgoing @0x74                  @0x6C-> outgoing @0x7C
+        //     @0x74-> outgoing @0x84                  @0x7C-> outgoing @0x8C
+        //     @0x84-> outgoing @0x94                  @0x8C-> outgoing @0x9C
+        // Return type is void: the epilogue sets no result and the `beq loc_822EFA88` early-out
+        // leaves r3 holding a leftover.
+        void RenderReplayProp( PropEntityID lPropEntityId,                       // r4
+                               DispatchFrame* lpDispatchFrame,                   // r5
+                               Matrix44::InParam lCameraViewProjection,          // r6
+                               Vector3::InParam lCameraPosition,                 // v1
+                               f32 lfLodDistanceZoomScale,                       // f1 (skips r7)
+                               s32 liModelOnlyDisplayList,                       // r8
+                               s32 liOpaqueList, s32 liTransparentList,          // r9, r10
+                               bool lbRenderingEnvironmentMap,                   // @0x64
+                               const ShaderLodInfo* lpShaderLodInfo,             // @0x6C
+                               bool lbRenderCoronas,                             // @0x74
+                               const void* lpVFXPropTable,                       // @0x7C
+                               bool lbUseZOnlyRendering,                         // @0x84
+                               BrnCoronaManager::BrnSubmissionInterface*
+                                   lpCoronaSubmissionInterface );                // @0x8C
+
+        // @0x827E0488. The class's own constructor -- a real ledger function and, in the
+        // shipped image, EXACTLY the compiler's implicit one: the ModuleSingleBuffered base
+        // (two EA::Thread::RWMutex ctors at this+16 / this+280 and the two vtable stores),
+        // then the members that have non-trivial default ctors -- the two ResourcePtr<>s and
+        // the 500-entry mapGraphicsLists (the `v3 += 8` loop over 500 console-32-byte
+        // ResourcePtrs, self-linking each intrusive node), and the `-1` KI_UNCONSTRUCTED
+        // sentinel into the count word of each embedded ::Array / ::Set
+        // (module+841872 == mZoneManager.mauTrafficLightsToRestore, +843428 ==
+        // maRecentlyRecycledProps, +843552 == maRecentlyRecycledParts, +860592 ==
+        // mVisibleOverheadSigns -- see that member's note). Declaring it user-provided-but-
+        // empty is the faithful port: an empty body default-initialises exactly the same set,
+        // and the host compiler emits the same chain. It changes nothing about the class --
+        // the base already made it non-trivial.
+        PropEntityModule();
+
         const PropPhysicsDataHeader* GetPropPhysicsDataHeader() const
         {
             return mpPropPhysicsDataHeader.GetMemoryResource();
@@ -357,10 +442,174 @@ namespace BrnWorld
         void BreakPropIntoParts( PropEntityID lPropEntityId,
                                  PropEntityIO::OutputBuffer_PreScene* lpOutput );
         // @0x822FB2A0 (148 insns).  DWARF BrnPropEntityModule.cpp:2045.
+        // ⭐ PARAMETER RETYPED 2026-08-18 (wave Q keystone). The second parameter was a
+        // `const void*` PLACEHOLDER. The DWARF spells it
+        // `const PropOutputInterface::UpdatePropEventQueue *`, and that typedef and
+        // PropEntityIO::InputBuffer_PostPhysics::UpdatePropEventQueue are the SAME
+        // instantiation -- CgsModule::EventQueue<BrnPhysics::Props::UpdatePropEvent, 200>
+        // (BrnPropOutputInterface.h:53 and BrnPropEntityModuleIO.h's InputBuffer_PostPhysics).
+        // The instantiation is spelled directly here for the same reason
+        // PropInstancesNeededForZoneQueue is (see the RESOLVED note above the class): the
+        // owning buffers are only forward-declared in this header, so their nested typedefs
+        // cannot be named. The X360 body confirms the element type end to end -- it reads
+        // `lwz r11, 8(queue)` (BaseEventQueue::miLength), calls GetEvent(i), then reads the
+        // event's +0x60 packed PropEntityID, +0x68 mbFrozen and the two __vector4s at +0x40 /
+        // +0x50, which is UpdatePropEvent's exact layout.
+        typedef CgsModule::EventQueue<BrnPhysics::Props::UpdatePropEvent, 200> UpdatePropEventQueue;
         void UpdateProps( PropEntityIO::OutputBuffer_PostPhysics* lpOutput,
-                          const void* lpUpdatePropEventQueue );
+                          const UpdatePropEventQueue* lpUpdatePropEventQueue );
         // BrnPropEntityModule.h:386 -- the debug overlay's "Reset props" action target.
         void ResetProps();
+
+        // ====================================================================
+        // ⭐ WAVE Q KEYSTONE (2026-08-18) -- THE BREAKABLE-PROP PIPELINE.
+        // contact -> state change -> break -> parts physical -> broken-prop event.
+        // Every declaration below is a DecFIGS DWARF declaration of this class (source line
+        // quoted) AND a real X360 ledger function with a per-address export; nothing here is
+        // shaped from Hex-Rays, which renders most of them as `int` blobs.
+        // ====================================================================
+
+        // @0x822A93A8. DWARF BrnPropEntityModule.cpp:1648
+        //   `BrnWorld::EPropState GetDesiredState(const PropTypeData *, float32_t);`
+        // Classify what state a car arriving at `lfIncomingCarSpeed` should put a prop of this
+        // type into. The float rides f1 and SKIPS its GPR slot -- the body uses r3 and r4 only,
+        // never r5.
+        // ⭐ PARAMETERS RENAMED 2026-08-18 (round 3) to the DWARF's own names
+        // (_compile/BrnEntityModuleUnity.cpp:1299
+        // `GetDesiredState(const PropTypeData* lpPropType, float32_t lfIncomingCarSpeed)`),
+        // matching the definition already committed at PropEntityModule_wQ_02.cpp:127. The old
+        // second name `lfImpulseMagnitude` was a misnomer: the sole caller
+        // (ProcessPotentialContactWithProp, bl @0x822DB11C) passes GetRaceCarSpeed(), the .w
+        // lane of the cached race-car velocity, not an impulse.
+        EPropState GetDesiredState( const BrnPhysics::Props::PropTypeData* lpPropType,
+                                    f32 lfIncomingCarSpeed );
+
+        // @0x822EF550. DWARF BrnPropEntityModule.cpp:1538
+        //   `void ChangePropState(PropEntityInstance *, PropEntityID, EPropState, EPropState,
+        //                         OutputBuffer_PrePhysics *);`
+        void ChangePropState( PropEntityInstance* lpProp, PropEntityID lPropEntityId,
+                              EPropState leOldState, EPropState leNewState,
+                              PropEntityIO::OutputBuffer_PrePhysics* lpOutput );
+
+        // BrnPropEntityModule.h:394 (DWARF) -- the state-transition legality predicate.
+        //
+        // ⭐⭐ CORRECTED 2026-08-18 (wave Q round 2). This inline used to read
+        //     return ( leOldState < leNewState ) || ( leOldState == E_MOVED );
+        // and was justified as "de-inlined from ChangePropState's assert message VERBATIM".
+        // That message really is `"leOldState < leNewState || (leOldState == E_MOVED)"` (I
+        // dumped the full rodata string at 0x8201DFAC out of the IDB -- IDA truncates it in
+        // the listing) and ChangePropState's fold at 0x822EF5AC really is just
+        // `cmpw r29,r25 ; blt ; cmpwi r29,5 ; beq` -- but that ASSERT IS NOT THIS PREDICATE.
+        // It is a laxer guard that happens to sit next to it. CanChangeState itself is folded
+        // at the two places the DWARF records it as an INLINED SUBROUTINE
+        // (_compile/BrnEntityModuleUnity.cpp:32042 inside ProcessPotentialContactWithProp,
+        // :32159 inside ProcessPotentialContacts), and both folds -- 0x822FA760..0x822FA7BC
+        // and 0x822DB2E0..0x822DB33C, instruction-for-instruction identical -- carry a
+        // conjunct the assert does not:
+        //     r11 = (new > old)          -> r9                       lbHigherState
+        //     if (old == 5) r11 = (new == 4) else r11 = 0            lbMovedToPhysical
+        //     take the branch when (r9 | r11)
+        // The old two-term form was therefore WEAKER than the shipped predicate: it also
+        // admitted E_MOVED -> E_NON_PHYSICAL / E_STATIC / E_LEANING /
+        // E_PHYSICAL_WITH_EXTRA_COM_OFFSET, which the console rejects.
+        //
+        // The three-term spelling below is the DWARF's own: its body block declares exactly
+        // three locals, each with its own header source line --
+        //   BrnPropEntityModule.h:397 `bool lbHigherState`
+        //   BrnPropEntityModule.h:400 `bool lbMovedToPhysical`
+        //   BrnPropEntityModule.h:403 `bool lbMovedToSmashed`
+        // (references/DecFIGS/dwarfdump/_compile/BrnEntityModuleUnity.cpp:31983-31996).
+        // lbMovedToSmashed is INVISIBLE in both ARTIST folds because it is arithmetically
+        // subsumed: E_MOVED == 5 and E_SMASHED == 6, so (old == E_MOVED && new == E_SMASHED)
+        // implies (old < new) and the compiler dropped it. Written out anyway so the next
+        // sweep does not "discover" a missing conjunct and re-derive all of this.
+        //
+        // Also from the DWARF (references/DecFIGS/dwarfdump/.../BrnPropEntityModule.h:336,
+        // `bool CanChangeState(BrnWorld::EPropState, BrnWorld::EPropState);`): the method is
+        // NOT const and the second parameter is leNextState, not leNewState. Both corrected.
+        //
+        // ⚠️ CALLERS: this predicate is NOT the ChangePropState assert. PropEntityModule_wQ_04
+        // .cpp:186 currently spells that assert as `CGS_ASSERT(CanChangeState(leOldState,
+        // leNewState), "leOldState < leNewState || (leOldState == E_MOVED)")`, which was
+        // correct against the old weak inline and is now STRICTER than the shipped guard --
+        // it would fire on an E_MOVED -> lower transition the console permits. That call site
+        // must be respelled as the assert's own two-term expression. Reported to the round-2
+        // fixer who owns the wQ partfiles (see scratchpad/waveQ2/worldio.owner.md).
+        bool CanChangeState( EPropState leOldState, EPropState leNextState )
+        {
+            const bool lbHigherState     = ( leOldState < leNextState );
+            const bool lbMovedToPhysical = ( leOldState == E_MOVED ) && ( leNextState == E_PHYSICAL );
+            const bool lbMovedToSmashed  = ( leOldState == E_MOVED ) && ( leNextState == E_SMASHED );
+
+            return lbHigherState || lbMovedToPhysical || lbMovedToSmashed;
+        }
+
+        // @0x822FA538. DWARF BrnPropEntityModule.cpp:1171. Drain the scene's per-frame
+        // potential-contact queue and route each entry to the prop or the part handler.
+        void ProcessPotentialContacts( const PropEntityIO::InputBuffer_PrePhysics* lpInput,
+                                       PropEntityIO::OutputBuffer_PrePhysics* lpOutput );
+        // @0x822DB038. DWARF BrnPropEntityModule.cpp:1265. NOTE: this one is ledger-attributed
+        // to the BrnPropZoneManager.h catch-all TU, not to BrnPropEntityModule.cpp -- an
+        // inlining artefact; it is a member of THIS class and belongs with its two siblings.
+        // ⚠️ The DWARF spells the second parameter bare `EntityId`; it is
+        // CgsSceneManager::EntityId, not the raw BrnCommonTypes word. MEASURED at 0x822DB0C4 /
+        // 0x822DB0EC / 0x822DB224, where the body decomposes it with `srwi 24`,
+        // `extrwi 14,8` and `clrlwi 22` -- literally CgsSceneManager::EntityId::GetOwner /
+        // GetEntityIndex / GetPartIndex (CgsEntityId.h's KU_OWNER_BASE 24 / 14-bit entity /
+        // 10-bit part) -- and then at 0x822DB230 feeds the whole word to
+        // PropEntityID::PropEntityID(u32) through that class's `operator u32()`.
+        void ProcessPotentialContactWithProp( PropEntityID lPropEntityId,
+                                              CgsSceneManager::EntityId lContactEntityId,
+                                              Vector3 lContactImpulse,
+                                              BrnPhysics::Props::PropInputInterface* lpPropInput );
+        // @0x822EEDA8. DWARF BrnPropEntityModule.cpp:1351.
+        void ProcessPotentialContactWithPart( PropEntityID lPropEntityId,
+                                              BrnPhysics::Props::PropInputInterface* lpPropInput );
+
+        // @0x822EEFA0. DWARF BrnPropEntityModule.cpp:1430. Retire the props/parts the physics
+        // side reported broken last frame: free their physical slots and re-issue the parts.
+        void ProcessBrokenProps( const PropEntityIO::InputBuffer_PrePhysics* lpInput,
+                                 PropEntityIO::OutputBuffer_PrePhysics* lpOutput );
+
+        // @0x822FA890 (476 insns -- the biggest of the set). DWARF BrnPropEntityModule.cpp:1743.
+        // THE SMASH RECORDER: drain the contact-spy prop-contact queue, mark each hit prop in
+        // the progression bit array (PropZoneManager::RecordHitProp), and emit the outbound
+        // PropEntityIO::BrokenPropEvent + PropVFXLocatorEvent that GameState's StuntManager
+        // latches into a smash/billboard score.
+        void ProcessContacts( const PropEntityIO::InputBuffer_PostPhysics* lpInput,
+                              PropEntityIO::OutputBuffer_PostPhysics* lpOutput );
+
+        // BrnPropEntityModule.h:412 / :420 / :427 (DWARF). The per-race-car velocity cache
+        // PreSceneUpdate fills and the contact classifier reads. All three are header inlines
+        // the X360 folds at every use site; the committed PreSceneUpdate body already
+        // open-codes the setter's two halves (xyz verbatim, w == speed in MPH), which is what
+        // attests the split between GetRaceCarVelocity (the vector) and GetRaceCarSpeed (the
+        // scalar carried in the w lane -- the DWARF's `Vector3Plus`).
+        // ⚠️ INFERENCE, marked: the BODIES below are the member reads/writes the declaration
+        // shapes force; no out-of-line X360 symbol exists to compare against.
+        void    SetRaceCarVelocity( s32 liCarIndex, Vector3 lVelocity ) { maRaceCarVelocity[liCarIndex] = lVelocity; }
+        Vector3 GetRaceCarVelocity( s32 liCarIndex ) const              { return maRaceCarVelocity[liCarIndex]; }
+        // ⭐ NEW 2026-08-18 (wave Q round 2). The scalar half the prose above promised and the
+        // declaration list did not deliver -- DWARF BrnPropEntityModule.h:345
+        //     `VecFloat GetRaceCarSpeed(int32_t) const;`
+        // The fold that grounds it is MEASURED in ProcessPotentialContactWithProp
+        // @0x822DB0EC..0x822DB118:
+        //     extrwi r11, r25, 14,8      ; EntityId::GetEntityIndex()
+        //     ... slwi 4 ; add ; lvx128 v0     ; &maRaceCarVelocity[liRaceCarIndex] (16B stride)
+        //     vspltw v0, v0, 3                 ; SPLAT LANE 3 == the .w lane (big-endian VMX)
+        //     stvx128 ; lfs f1                 ; -> the float argument of GetDesiredState
+        // and the DWARF for that same function records the pair `GetRaceCarSpeed(...)` then
+        // `rw::math::vpu::VecFloat::operator float(...)` with a local `int32_t liRaceCarIndex`
+        // (_compile/BrnEntityModuleUnity.cpp:32060-32066).
+        // ⚠️ TYPE DEVIATION, deliberate and marked (same shape as BrnPropConstants.h's
+        // KVF_PROP_FLOOR): the DWARF return type is VecFloat, and `vspltw ...,3` really does
+        // broadcast the lane to all four -- but the committed rw POD Vector4 has no
+        // `operator float`, and every consumer immediately wants the scalar. Returning f32
+        // here is that splat's single distinct value; nothing else about the read changes.
+        // Consumers should prefer this over spelling `GetRaceCarVelocity( i ).w`: the SDK
+        // reconstruction at SDKs/EATech/include/rw/math/vpu/vector3.h documents Vector3's w as
+        // unused, so the raw `.w` read is structurally fragile as well as unfaithful.
+        f32     GetRaceCarSpeed( s32 liCarIndex ) const                 { return maRaceCarVelocity[liCarIndex].w; }
 
         // ====================================================================
         // AGENT B3 (render) -- bodies land in BrnPropEntityModule.cpp.
@@ -410,7 +659,12 @@ namespace BrnWorld
                                    bool lbRenderCoronas,                                  // @0x84
                                    const void* lpVFXPropTable,                            // @0x8C
                                    bool lbUseZOnlyRendering,                              // @0x94
-                                   u32 luCoronaSubmissionInterface );                     // @0x9C
+                                   // ⭐ RETYPED 2026-08-18 (wave Q keystone): was `u32
+                                   // luCoronaSubmissionInterface`, a console-width word standing
+                                   // in for a pointer. See the note on
+                                   // PropEntityIO::InputBuffer_Dispatch::mpCoronaSubmissionInterface.
+                                   BrnCoronaManager::BrnSubmissionInterface*
+                                       lpCoronaSubmissionInterface );                     // @0x9C
 
     public:
         // ====================================================================
@@ -448,13 +702,28 @@ namespace BrnWorld
         // handle, CachePropGraphicsLists walks them.
         CgsResource::ResourcePtr<PropGraphicsList> mapGraphicsLists[KU_MAX_ZONES]; // +0xCDF24
 
-        // :216. DWARF type GuiOverheadSignInfoEvent::VisibleOverheadSignArray -- NO
-        // COMMITTED HOME (the GUI overhead-sign event group has not landed). Modelled as
-        // correctly-sized opaque storage so the member exists and is reachable by name;
-        // Construct's reset of its live count is PARKED (see the .cpp). Console span
-        // 0xD1DA4..0xD21BF == 1052 bytes.
-        struct VisibleOverheadSignArrayStorage { u8 maBytes[1052]; };
-        VisibleOverheadSignArrayStorage mVisibleOverheadSigns;   // :216 console +0xD1DA4
+        // :216. ⭐ RETYPED 2026-08-18 (wave Q keystone; park P8 in
+        // BrnPropEntityModule_PreScene.cpp). This was `struct { u8 maBytes[1052]; }` opaque
+        // storage, on the belief that the DWARF type GuiOverheadSignInfoEvent::
+        // VisibleOverheadSignArray had no committed home. IT DOES, in both halves:
+        //   * DWARF BrnGuiEventTypeDefs.h:1001 --
+        //         typedef Array<BrnGui::OverheadSignScore,32u> VisibleOverheadSignArray;
+        //   * the element BrnGui::OverheadSignScore is committed at
+        //     GameSource/Gui/BrnGuiEventTypeDefs.h:155 with its 0x20 stride static_assert'd.
+        // ⚠️ THE OLD BANNER'S CONSOLE ARITHMETIC WAS WRONG and is corrected here, because it
+        // is what made the type look unmodellable. The array does NOT start at 0xD1DA4 (the
+        // byte after mapGraphicsLists) and is NOT 1052 bytes:
+        //   OverheadSignScore leads with an alignas(16) Vector3, so ::Array<it,32> is
+        //   16-ALIGNED. mapGraphicsLists ends at 0xD1DA4, which is 4 mod 16, so the compiler
+        //   pads 12 bytes and the array really begins at 0xD1DB0.
+        //   32 elements * 0x20 = 0x400 -> maElements spans 0xD1DB0..0xD21AF, and the count
+        //   word lands at 0xD21B0 -- EXACTLY where the constructor @0x827E0488 writes the
+        //   ::Array KI_UNCONSTRUCTED sentinel (`a1[215148] = -1`, 215148*4 == 0xD21B0).
+        //   sizeof rounds 1028 up to the 16-alignment -> 1040, ending at 0xD21C0, which is
+        //   exactly where miFramesUntilUpdateVisibleSigns sits. Every byte is accounted for;
+        //   the old "1052" was the span from the pre-padding address and had 12 bytes spare.
+        // Console offsets stay PROVENANCE ONLY -- the host lays this out itself.
+        ::Array<BrnGui::OverheadSignScore, 32> mVisibleOverheadSigns;  // :216 console +0xD1DB0
 
         s32                 miFramesUntilUpdateVisibleSigns;     // :217 console +0xD21C0
         PropGraphicsManager mPropGraphicsManager;                // :218 console +0xD21C4
@@ -496,8 +765,23 @@ namespace BrnWorld
         // X360-ONLY. LeaveReplay @0x822C4810 removes scene entities
         // `(i << 10) | 0x22000000` for i < muReplayPropsInScene, then
         // `(i << 10) | 0x22000001` for i < muReplayPartsInScene, then zeroes both.
-        u32  muReplayPropsInScene;                           //       console +0xD3338
-        u32  muReplayPartsInScene;                           //       console +0xD333C
+        //
+        // ⭐ RETYPED u32 -> s32 on 2026-08-18 (wave Q round 3). Every compare LeaveReplay makes
+        // against these two counters is SIGNED, which an unsigned counter cannot produce:
+        //     0x822C4834  lwz  r11, 0(r25)        ; muReplayPropsInScene
+        //     0x822C4838  cmpwi cr6, r11, 0       ; SIGNED entry guard (unsigned -> cmplwi)
+        //     0x822C4894  cmpw  cr6, r31, r11     ; SIGNED back-edge  (unsigned -> cmplw)
+        //     0x822C48AC  cmpwi cr6, r11, 0       ; the same pair for muReplayPartsInScene
+        //     0x822C4900  cmpw  cr6, r31, r11
+        // No `cmplwi`/`cmplw` against either counter appears anywhere in the function. This is
+        // what lets PropEntityModule_wQ_01.cpp drop the `static_cast<s32>` it carries today --
+        // ⚠️ do NOT let a simplification sweep strip those casts before that file is rewritten;
+        // they are correct either way.
+        // ⚠️ The `mu` prefix is now a misnomer under CXX_NAMING_CONVENTIONS. Renaming to
+        // mi* touches PropEntityModule_wQ_01.cpp and PropEntityModule_wQ2_01.cpp, which are
+        // other lanes' files, so the rename is deliberately left as a coordinated follow-up.
+        s32  muReplayPropsInScene;                           //       console +0xD3338
+        s32  muReplayPartsInScene;                           //       console +0xD333C
 
         bool mbCurrentlyOnline;                              // :235  console +0xD3340
         bool mbEasySmashProps;                               // :237  console +0xD3341

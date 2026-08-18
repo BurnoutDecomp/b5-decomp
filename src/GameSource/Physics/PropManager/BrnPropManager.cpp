@@ -1,9 +1,16 @@
 // GameSource/Physics/PropManager/BrnPropManager.cpp
 //
 // BrnPhysics::Props::PropManager -- reconstructed from BURNOUT_X360_ARTIST.XEX.
+//   Construct()                               @ 0x82627390   (82 asm lines)  -- DONE below
 //   ConstructContactGenerationPerfMonitors()  @ 0x825BAC60   (4 asm lines)   -- DONE below
 //   ConstructPreScenePerfMonitors()           @ 0x825BAC70   (6 asm lines)   -- DONE below
-// The other 13 functions of this TU are still open; the block list is at the bottom.
+//   CreateContactEvent()                      @ 0x825A53A0                   -- DONE below
+//                                                             (a `class:` TU's function, bodied here)
+//   SetupAndValidatePropContact()             @ 0x82628190                   -- TRAP STUB below
+// The other ELEVEN ledger functions of this TU, plus ClampAcceleration @0x82627F00 (ledger-
+// attributed to the rw/math/fpu/vector3.h catch-all -- an inlining artefact; it is this
+// class's helper), are open. Their per-function triage, callee sets, include set and group
+// split are in scratchpad/waveQ/PropManager.spec.md (breakable-props keystone, 2026-08-18).
 //
 // =========================================================================================
 // ⚠️ CORRECTION (physics wave 4) -- THE PREVIOUS BLOCK NOTE IN THIS FILE WAS WRONG ON ITS
@@ -92,20 +99,61 @@
 //    is a known hazard in this image. NOT ASSERTED -- flagged for whoever bodies Destruct.
 // =========================================================================================
 //
-// STILL BLOCKED, and why (the parts of the old note that hold up):
+// =========================================================================================
+// ⭐ THE OLD BLOCK LIST IS RETIRED (breakable-props KEYSTONE wave, 2026-08-18). Every item on
+// it was re-derived against the tree as it stands today; here is what each one turned into,
+// with the evidence, so nobody re-parks on a stale claim.
 //
-//   1. PropDebugComponent -- embedded BY VALUE at +0x00, so any TU that instantiates
-//      PropManager needs its vtable, and PropDebugComponent's four virtual overrides
-//      (RenderHUD / GetName / OnActivate / OnRegister) have no bodies in-tree. That is what
-//      keeps Construct itself out for now, not the layout. (The two functions bodied below
-//      touch only scalars, so they do not need it.)
-//   2. PropInstance / PropPartInstance -- pointers here, but dereferenced pervasively by the
-//      other bodies (112-byte / 64-byte element strides at +0x7C / +0x8C).
-//   3. The rest of the physics/IO/collision dependency family used by the non-trivial bodies:
-//      BrnPhysics::Vehicle::RaceCarPhysics, CgsPhysics::PhysicsSimulationIO::InApplyForce,
-//      CgsSceneManager::{SceneManagerIO, TriangleCacheManagerIO}, CgsMemory::
-//      DataStreamCommandPoster, the Prop/PropTypeData/PropPartTypeData/PropPhysicsDataHeader
-//      accessors, and the rw::physics::RigidBody helpers.
+//   1. "PropDebugComponent has no bodies for its four virtual overrides, which is what keeps
+//      Construct out."  ->  STALE. Construct IS bodied above, and BrnPropDebugComponent.cpp
+//      is committed beside this file. Nothing in this TU is blocked on it.
+//
+//   2. "PropInstance / PropPartInstance are pointers here but dereferenced pervasively."
+//      ->  CLOSED. Both have real homes (PropPhysics/BrnPropInstance.h and
+//      PropPhysics/BrnPropPartInstance.h) and both are ledger-done. What they were still
+//      MISSING was the accessor surface, and that landed in this wave: the DWARF's full
+//      trivial-accessor set on each (inline, over the already-pinned members) plus the one
+//      real out-of-line body the pipeline needs -- PropInstance::SetLinearVelocity
+//      @0x825DE6C8, which has NO per-address JSON export and was pulled with headless IDA.
+//
+//   3. The dependency family, item by item, CHECKED TODAY rather than repeated:
+//        BrnPhysics::Vehicle::RaceCarPhysics       -> HOMED. All five reads
+//          ApplyAntiHerdingForce makes already have accessors (GetTransform,
+//          GetLinearVelocity, GetSimpleAttribs()->mCOMOffset @+0x670, GetHalfExtent @+0x6A0,
+//          GetSpeedMPH @+0x6C0). No request needed.
+//        CgsPhysics::PhysicsSimulationIO::InApplyForce / InUpdateRigidBody / OutUpdateRigidBody
+//          -> HOMED (CgsPhysicsSimulationIO_Events.h) and their queues exist. ⛔ but the two
+//          WRITE-side InputBuffer accessors this TU needs do NOT -- see the request list.
+//        CgsSceneManager::SceneManagerIO           -> HOMED; InputBuffer_Update::
+//          GetInSceneUpdateInterface() exists. ⛔ InSceneUpdateInterface::
+//          UpdateCachedObjectPosition (DWARF :506) does not -- request.
+//        CgsSceneManager::TriangleCacheManagerIO   -> HOMED (InEventUpdateCachedPosition,
+//          sizeof 32, slot @+0 / Vector3Plus @+0x10).
+//        CgsMemory::DataStreamCommandPoster        -> HOMED (Begin/End), and
+//          SimpleDataStreamProducer with it.
+//        Prop/PropTypeData/PropPartTypeData/PropPhysicsDataHeader accessors -> HOMED, every
+//          field the two inertia builders read (GetNumberOfVolumes / GetCollisionVolume /
+//          GetMass / GetGraphicsId) is already named.
+//        rw::physics::RigidBody helpers            -> operator= is homed. ⛔ BUT
+//          rw::collision::Volume::GetBBox (the vtable slot the two inertia builders call) is
+//          NOT, and the box type itself cannot even be NAMED next to BrnCommonTypes.h --
+//          see the request list and the HAZARD note below.
+//
+//   4. "the header's mbRenderCentreOfMass offset is wrong"  ->  DISPROVEN, and now
+//      double-witnessed: PropDebugComponent::OnActivate @0x825E39EC registers the debug
+//      variable "Render prop centre of mass" at `mpPropManager + 72` == +0x48, which is
+//      exactly where the rebuilt header puts mbRenderCOM (and +25784 == +0x64B8 for
+//      "Disable prop freezing" == mbDisableFreezing, the same run). The committed layout
+//      stands.
+//
+// ⚠️ HAZARD FOR WHOEVER BODIES GetPropInertia / GetPartInertia -- a PRE-EXISTING tree defect,
+//    not something this TU can fix and not something to work around locally: the tree holds
+//    TWO different definitions of rw::math::vpu::Vector3, one under the VENDOR include root
+//    (vendor/renderware/include/rw/math/vpu/types.h, what BrnCommonTypes.h pulls) and one
+//    under the SRC root (src/SDKs/EATech/include/rw/math/vpu/vector3.h, what
+//    vendor/renderware/collision/AABBox.hpp pulls). Including both in one TU is a hard C2011
+//    redefinition -- proved in scratchpad/waveQ/probe_PropManager/probe_aabbox_clash.cpp. So
+//    the two inertia builders cannot name rw::collision::AABBox at all today.
 //
 // No types or bodies are fabricated here.
 
@@ -137,31 +185,149 @@ namespace Props
 //     0x82F2A394  41f00000  30.0f    KF_PROP_MAX_LINEAR_VEL
 //     0x82F2A398  3ca3d70a  0.02f    KF_PROP_RESTITUTION
 //
-// ⚠️ THE SEVEN VecFloats: THEIR INITIAL VALUES ARE NOT RECOVERED, AND NOTHING IS INVENTED FOR
-//    THEM. Every one of the seven reads as all-zero on disk, and so does the whole 0x82FB9xxx
-//    page around them -- i.e. they live in the zero-filled region, so their values must come
-//    from a dynamic initialiser. The ARTIST export set contains no such initialiser: a scan of
-//    all 30 084 exported functions for any reference to 0x82FB94E0 / 0x82FB9400 / 0x82FB93E0 /
-//    0x82FB9450 / 0x82FB9D70 / 0x82FB93A0 / 0x82FB94A0 returns only READERS
-//    (PropManager::ReadUpdatedBodies, ApplyAntiHerdingForce, AddPropToSim, CreatePart) and the
-//    OnChange*/OnActivate sites in the debug component. They are therefore defined
-//    zero-initialised, which is what the image itself holds, and flagged here so that whoever
-//    bodies ApplyAntiHerdingForce knows the anti-herding gains are still missing rather than
-//    "measured as zero".
+// ⭐⭐ THE SEVEN VecFloats: THEIR VALUES ARE RECOVERED AND SEATED, 2026-08-18 round 3b.
+//    The note that stood here through three rounds said their values "must come from a dynamic
+//    initialiser" and that "the ARTIST export set contains no such initialiser: a scan ...
+//    returns only READERS". The first half was exactly right. The second half was FALSE, and it
+//    was false for a mechanical reason worth writing down: the initialiser is a THUNK that sits
+//    outside every IDA function, so it is invisible to any scan built on the per-address
+//    function exports -- which is what every round-1/2/3 scan was built on. The globals really
+//    do read 16 zero bytes on disk; that was never the disagreement.
+//    Full recipe, and every constant's thunk / dynamic-initialiser-table slot / rodata address /
+//    hex word, are on the declarations in BrnPropManager.h. Each definition below repeats its
+//    own provenance so a reader never has to trust a value without its evidence.
+//    ⚠️ THE ZEROES WERE NOT NEUTRAL, which is why this is a behavioural fix and not a comment
+//    tidy-up: ApplyAntiHerdingForce with KVF_SPEED_CLAMP == 0 produced zero force for every
+//    prop, and ReadUpdatedBodies with KVF_GRAVITY_SCALE == 0 posted a NEGATIVE extra-gravity
+//    force (scale - 1 == -1), i.e. smashed props were being pushed UP.
 // =========================================================================================
-::VecFloat KVF_GRAVITY_SCALE;
-::VecFloat KVF_INERTIA_SCALE;
-::VecFloat KVF_ANTI_HERD_UPWARD_SCALE;
-::VecFloat KVF_ANTI_HERD_SIDE_SCALE;
-::VecFloat KVF_ANTI_HERD_HIGH_SPEED_SIDE_SCALE;
-::VecFloat KVF_MAX_SPEED_FOR_SIDE_FORCE;
-::VecFloat KVF_SPEED_CLAMP;
+// Splat(3.0f). Thunk 0x82C5E6E8, tbl slot 0x82CD19A4, rodata flt_82004270 = 0x40400000.
+::VecFloat KVF_GRAVITY_SCALE                   = { 3.0f, 3.0f, 3.0f, 3.0f };
+// Splat(3.0f). Thunk 0x82C5E6C0, tbl slot 0x82CD19A0, rodata flt_82004270 = 0x40400000.
+::VecFloat KVF_INERTIA_SCALE                   = { 3.0f, 3.0f, 3.0f, 3.0f };
+// Splat(2.0f). Thunk 0x82C5EA00, tbl slot 0x82CD19F0, rodata flt_82001D9C = 0x40000000.
+::VecFloat KVF_ANTI_HERD_UPWARD_SCALE          = { 2.0f, 2.0f, 2.0f, 2.0f };
+// Splat(0.05f). Thunk 0x82C5EA28, tbl slot 0x82CD19F4, rodata flt_820047C8 = 0x3D4CCCCD.
+::VecFloat KVF_ANTI_HERD_SIDE_SCALE            = { 0.05f, 0.05f, 0.05f, 0.05f };
+// Splat(1.5f). Thunk 0x82C5EA50, tbl slot 0x82CD19F8, rodata flt_820945DC = 0x3FC00000.
+::VecFloat KVF_ANTI_HERD_HIGH_SPEED_SIDE_SCALE = { 1.5f, 1.5f, 1.5f, 1.5f };
+// Splat(60.0f). Thunk 0x82C5EA78, tbl slot 0x82CD19FC, rodata flt_82092BC4 = 0x42700000.
+::VecFloat KVF_MAX_SPEED_FOR_SIDE_FORCE        = { 60.0f, 60.0f, 60.0f, 60.0f };
+// Splat(120.0f). Thunk 0x82C5EAA0, tbl slot 0x82CD1A00, rodata flt_82092BC8 = 0x42F00000.
+::VecFloat KVF_SPEED_CLAMP                     = { 120.0f, 120.0f, 120.0f, 120.0f };
 
 f32 KF_PROP_ANGULAR_DRAG   = 0.005f;
 f32 KF_PROP_LINEAR_DRAG    = 0.004f;
 f32 KF_PROP_MAX_ANGULAR_VEL = 27.0f;
 f32 KF_PROP_MAX_LINEAR_VEL  = 30.0f;
 f32 KF_PROP_RESTITUTION     = 0.02f;
+
+// =========================================================================================
+// ⭐ ADDED 2026-08-18 (breakable-props keystone wave). THE OTHER SEVEN ZERO-PAGE CONSTANTS.
+// Full evidence for each address->name mapping is on its declaration in BrnPropManager.h.
+//
+// ⭐⭐ VALUES RECOVERED AND SEATED, 2026-08-18 round 3b -- same correction as the seven above.
+// The round-1/round-2 note here said "a ripgrep of every per-address export ... returns exactly
+// FOUR files ... and every one of them is a READER. There is no initialiser in the image". The
+// scan result was accurate; the CONCLUSION drawn from it was not. A per-address export scan
+// cannot see these initialisers by construction -- they are MSVC dynamic-initialiser thunks
+// that live outside every IDA function and therefore have no per-address export. Round 2 spent
+// its effort auditing the export COUNT in that sentence (30,084 vs 30,095 vs 30,093) while the
+// sentence's actual claim was the thing that was wrong; noted here because the lesson is
+// re-usable -- when a scan says "nothing exists", check what the scan is structurally blind to
+// before concluding it. The per-constant thunk / table slot / rodata evidence is on each
+// declaration in BrnPropManager.h and repeated on each definition below.
+//
+// ⚠️⚠️ THE ZEROES WERE NOT HARMLESS -- and this is exactly the failure mode this block used to
+// PREDICT while getting the cause wrong. With the placeholder zeroes ClampAcceleration compared
+// against a threshold of 0 and clamped every moving body to zero acceleration every frame,
+// GetPropInertia gave lampposts a zero inertia box, and the out-of-world floor sat at Y == 0.
+// All three are now seated at the console's own values.
+//
+// NOTE ON THE FOURTH BRACE ELEMENT: this tree's `rw::math::vpu::Vector3` (vendor/renderware/
+// include/rw/math/vpu/types.h:24) is a 4-lane aggregate `{ float x, y, z, w; }` -- the console
+// type is one 16-byte register too, and the W lane is real storage in both. The thunks all
+// write it explicitly (`stw r9` with r9 == 0), so the definitions do too rather than leaving
+// it to depend on aggregate-initialisation defaults.
+// =========================================================================================
+// (0.0f, -9.8f, 0.0f), w == 0. Vector3 thunk 0x82C5E710, tbl slot 0x82CD19A8; lanes
+// x/z <- flt_82001CC0 = 0x00000000, y <- flt_82013FC8 = 0xC11CCCCD, w <- `stw r9` (r9 == 0).
+const Vector3  K_DEFAULT_GRAVITY        = { 0.0f, -9.8f, 0.0f, 0.0f };   // X360 0x82FB93F0
+// (0.0f, 0.0f, -0.2f), w == 0. Vector3 thunk 0x82C5E7F0, tbl slot 0x82CD19BC; lanes
+// x/y <- flt_82001CC0 = 0x00000000, z <- flt_82020A84 = 0xBE4CCCCD, w <- `stw r9` (r9 == 0).
+const Vector3  K_PROP_EXTRA_COM_OFFSET  = { 0.0f, 0.0f, -0.2f, 0.0f };   // X360 0x82FB93C0
+// (2.0f, 1.0f, 2.0f), w == 0. Vector3 thunk 0x82C5EAC8, tbl slot 0x82CD1A04; lanes
+// x/z <- flt_82001D9C = 0x40000000, y <- flt_82001C98 = 0x3F800000, w <- `stw r9` (r9 == 0).
+// Decoded per lane -- x and z share one rodata word and y another, so it is NOT a splat.
+const Vector3  K_LAMPOST_INERTIA_BOX    = { 2.0f, 1.0f, 2.0f, 0.0f };    // X360 0x82FB9420
+
+// Splat(30.0f). Thunk 0x82C5E830, tbl slot 0x82CD19C0, rodata flt_82004F5C = 0x41F00000.
+const ::VecFloat KVF_MAX_LINEAR_ACCELERATION      = { 30.0f, 30.0f, 30.0f, 30.0f };      // X360 0x82FB94B0
+// Splat(80.0f). Thunk 0x82C5E858, tbl slot 0x82CD19C4, rodata flt_82004A18 = 0x42A00000.
+const ::VecFloat KVF_MAX_ANGULAR_ACCELERATION     = { 80.0f, 80.0f, 80.0f, 80.0f };      // X360 0x82FB9490
+
+// ⚠️ THE TWO _SQ CONSTANTS ARE SEATED AS LITERALS, DELIBERATELY. Their thunks carry NO rodata
+// word of their own -- they are the self-product shape:
+//     0x82C5E880 (tbl slot 0x82CD19C8):  lvx128 v0, unk_82FB94B0 ; vmulfp128 v0,v0,v0 ; stvx128 -> 0x82FB9F40
+//     0x82C5E8A0 (tbl slot 0x82CD19CC):  lvx128 v0, unk_82FB9490 ; vmulfp128 v0,v0,v0 ; stvx128 -> 0x82FB94D0
+// i.e. on the console each is literally `sibling * sibling`, and the result is only well-defined
+// because the _SQ slots sit AFTER their bases' slots in the initialiser table. Writing that
+// dependency out here as `KVF_MAX_LINEAR_ACCELERATION * KVF_MAX_LINEAR_ACCELERATION` would make
+// this tree's values depend on host dynamic-initialisation ORDER, which the standard does not
+// guarantee across (or reliably within, once anyone splits this file) translation units -- the
+// exact class of latent placeholder-zero bug this campaign has been burned by. So the products
+// are evaluated here instead: 30^2 == 900 and 80^2 == 6400, both exact in f32, both equal to
+// what the console computes at startup. NOT invented values -- derived ones, with the derivation
+// and its inputs above.
+const ::VecFloat KVF_MAX_LINEAR_ACCELERATION_SQ   = { 900.0f, 900.0f, 900.0f, 900.0f };  // X360 0x82FB9F40
+const ::VecFloat KVF_MAX_ANGULAR_ACCELERATION_SQ  = { 6400.0f, 6400.0f, 6400.0f, 6400.0f }; // X360 0x82FB94D0
+
+// ⚠️ AUTHORED NAME -- see the declaration's block in BrnPropManager.h. The VALUE is recovered:
+// Splat(-1000.0f), thunk 0x82C5B570, tbl slot 0x82CD15E8, rodata flt_8200D4F8 = 0xC47A0000.
+// (That slot is ~950 entries before this file's own contiguous run, i.e. a different TU emits
+// the initialiser -- which is the standing lead on the missing name; see the header.)
+const ::VecFloat KVF_PROP_OUT_OF_WORLD_HEIGHT     = { -1000.0f, -1000.0f, -1000.0f, -1000.0f }; // X360 0x82FB94C0
+
+// ⚠️ AUTHORED NAME -- see the declaration's block in BrnPropManager.h. This is PropManager_wQ2_03.cpp's
+// HEADER REQUEST D, landed. Splat(0.3f), thunk 0x82C5E750, tbl slot 0x82CD19AC, rodata
+// flt_82004740 = 0x3E99999A. (Request D's other half, KB_USE_CONTACT_GEN_STREAM, is NOT landed --
+// no address, no thunk, nothing to measure. It stays open.)
+const ::VecFloat KVF_MAX_CONTACT_GEN_PADDING      = { 0.3f, 0.3f, 0.3f, 0.3f };          // X360 0x82FB94F0
+
+// =========================================================================================
+// ⭐ ADDED 2026-08-18 (round 3, fix round). THE SIX REMAINING ZERO-PAGE TUNABLES -- the five
+// the jointed-prop/break legs read and the one ApplyPropRaceCarCollisionImpulse reads. Until
+// now they were `extern`-declared file-locally in PropManager_wQ2_05.cpp with NO definition
+// anywhere in the tree, i.e. a latent LNK2001; these are those definitions. Full evidence for
+// each address->name mapping (and the INFERENCE flag on the last one) is on its declaration
+// in BrnPropManager.h. The const-ness of each line is the DWARF's.
+//
+// ⭐⭐ VALUES RECOVERED AND SEATED, 2026-08-18 round 3b. Round 3's note here got closest and
+// still landed wrong: it found "one unnamed six-instruction .text store stub in the 0x82C5Exxx
+// run" for each of the six and classified it as "the debug-UI OnChange shape ... a runtime
+// writer is not a static initialiser". That stub IS the static initialiser -- an entry of the
+// MSVC dynamic-initialiser pointer table. The tell round 3 missed: the REAL OnChange handlers
+// (PropDebugComponent::OnChangeInertiaScale @0x825BAF28 and friends) are named IDA functions
+// inside the debug component, and every one of the six already had its own separate xref to
+// one of those; the 0x82C5Exxx stub was a THIRD thing, sitting inside no function at all.
+// Distinguishing them takes one membership test against the initialiser table -- see the recipe
+// on the declarations in BrnPropManager.h.
+// =========================================================================================
+// Splat(0.1f). Thunk 0x82C5E778, tbl slot 0x82CD19B0, rodata flt_82004014 = 0x3DCCCCCD.
+const ::VecFloat KVF_LEAN_PROP_LERP_SPEED           = { 0.1f, 0.1f, 0.1f, 0.1f };    // X360 0x82FB9500
+// Splat(0.01f). Thunk 0x82C5E7A0, tbl slot 0x82CD19B4, rodata flt_82002138 = 0x3C23D70A.
+const ::VecFloat KVF_LEAN_PROP_MIN_LERP             = { 0.01f, 0.01f, 0.01f, 0.01f }; // X360 0x82FB9F30
+// Splat(0.1f). Thunk 0x82C5E7C8, tbl slot 0x82CD19B8, rodata flt_82004014 = 0x3DCCCCCD.
+const ::VecFloat KVF_LEAN_PROP_ORTHOGONAL_TOLERANCE = { 0.1f, 0.1f, 0.1f, 0.1f };   // X360 0x82FB9390
+
+// Splat(1.0f). Thunk 0x82C5E9B0, tbl slot 0x82CD19E8, rodata flt_82001C98 = 0x3F800000.
+::VecFloat       KVF_BREAK_JOINT_LINEAR_VEL         = { 1.0f, 1.0f, 1.0f, 1.0f };    // X360 0x82FB9440
+// Splat(1.0f). Thunk 0x82C5E9D8, tbl slot 0x82CD19EC, rodata flt_82001C98 = 0x3F800000.
+::VecFloat       KVF_BREAK_JOINT_ANGULAR_VEL        = { 1.0f, 1.0f, 1.0f, 1.0f };    // X360 0x82FB9460
+
+// ⚠️ INFERRED ADDRESS<->NAME MAPPING -- see the declaration's block in BrnPropManager.h.
+// Splat(10.0f). Thunk 0x82C5E8E8, tbl slot 0x82CD19D4, rodata flt_82004A20 = 0x41200000.
+::VecFloat       KVF_MAX_PROP_SPEED_MPS             = { 10.0f, 10.0f, 10.0f, 10.0f }; // X360 0x82FB9470
 
 // =========================================================================================
 // BrnPhysics::Props::PropManager::Construct @ 0x82627390 (82 asm).
