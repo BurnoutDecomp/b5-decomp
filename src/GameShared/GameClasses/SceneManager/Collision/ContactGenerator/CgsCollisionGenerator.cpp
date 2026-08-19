@@ -1,14 +1,17 @@
 #include "GameShared/GameClasses/SceneManager/Collision/ContactGenerator/CgsCollisionGenerator.h"
 
-#include <new> // placement new (per-batch job construction in Prepare)
+#include <new>     // placement new (per-batch job construction in Prepare)
+#include <cstdlib> // std::getenv (the BRN_PROP_DIAG latch -- diagnostics only, see the [DIAG] block)
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                        // CGS_ASSERT
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"                // gpDebugPrint (the [DIAG] block only)
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h" // CgsDev::PerfMonCpu::AddMonitor
 #include "GameShared/GameClasses/SceneManager/Collision/Primitives/CgsCollisionResult.h" // CollisionResultList (complete: by-value return)
 #include "GameShared/GameClasses/SceneManager/Collision/Primitives/CgsPrimitivePairList.h" // PrimitivePairList::GetNumTests
 #include "GameShared/GameClasses/SceneManager/Collision/Primitives/CgsTriangleList.h"      // TriangleList (descriptor copy)
 #include "GameShared/GameClasses/SceneManager/Collision/ContactGenerator/JobDescription/CgsPrimitiveListWithTriangleListJobDesc.h" // the type-11 descriptor
 #include "GameShared/GameClasses/SceneManager/Collision/ContactGenerator/JobDescription/CgsPrimitiveListWithTriangleListStreamJobDesc.h" // the type-12 descriptor + its StreamCommand
+#include "GameShared/GameClasses/SceneManager/Collision/ContactGenerator/JobDescription/CgsPrimitivePairListJobDesc.h" // the type-10 descriptor (CollidePrimitivePairList)
 #include "GameShared/GameClasses/Memory/DataStream/CgsSimpleDataStreamProducer.h"        // SimpleDataStreamProducer (CreateStreamProducer)
 #include "SDKs/EATech/eajobs/job.h"                                                       // EA::Jobs::Job (AllocateJob)
 #include "SDKs/EATech/eajobs/job_types.h"                                                 // EA::Jobs::Param (the inline dispatch)
@@ -41,8 +44,12 @@ void ContactGeneratorEntry(EA::Jobs::Param, EA::Jobs::Param, EA::Jobs::Param, EA
 // (b) ContactGeneratorEntry is homed in GameShared/Jobs/ContactGenerator/, (c) the descriptor
 // "variant" is the per-family StreamCommand/Data the DWARF names verbatim, and (d) the DWARF
 // names every CollisionResultList field (CgsCollisionResultList.h:163-169). The family is REAL
-// in CgsCollisionGenerator_CollideStreams.cpp; only CollidePrimitivePairList keeps a gate
-// (CgsCollisionGenerator_StreamStubs.cpp).
+// in CgsCollisionGenerator_CollideStreams.cpp.
+//
+// ⭐⭐ AND THE LAST GATE OF THAT FAMILY IS GONE TOO (2026-08-19, wave Q7 cluster `pairlist`). The
+// sentence that used to close the paragraph above -- "only CollidePrimitivePairList keeps a gate
+// (CgsCollisionGenerator_StreamStubs.cpp)" -- is retired: that body is BELOW, and the gate file it
+// named now holds no definition at all (banner-only; reported for UNMOUNT, bat:1001).
 
 namespace CgsSceneManager
 {
@@ -345,6 +352,176 @@ u16 BaseCollisionGenerator::CollidePrimitiveListAgainstTriangleList(
 }
 
 // =================================================================================================
+// BaseCollisionGenerator::CollidePrimitivePairList @0x82814138  (40 asm insns)
+//
+// ⭐⭐ BODIED 2026-08-19 (wave Q7, cluster `pairlist`) -- THE LAST GATE IN
+// CgsCollisionGenerator_StreamStubs.cpp. That TU is banner-only now and is reported for UNMOUNT
+// (build_game_exe.bat:1001); this body and that deletion are ONE change, because both TUs are
+// mounted and an LNK2005 is invisible to `cl /c` (gotcha 7 / the pstream precedent).
+//
+// The SYNCHRONOUS primitive-pair leg: one already-built PrimitivePairList (a pair of primitive
+// indices per test, no second list) posted as a single type-10 collision batch. It is the plainest
+// member of the Collide* family -- the sibling CollidePrimitiveListAgainstTriangleList @0x828141D8
+// above is the SAME 12 steps plus three non-gating asserts, a second (triangle) list and the
+// optimised-box global. Diffed instruction-for-instruction against it; every delta is called out
+// below rather than silently smoothed over.
+//
+// GROUNDING: the RAW `assembly` array of .ida-exports/BURNOUT_X360_ARTIST.XEX/0x82814138.json --
+// 40 instructions, 0x82814138..0x828141D4, which is exactly (0x828141D8-0x82814138)/4, so the
+// function is complete and abuts its sibling. (Hex-Rays pseudocode was read only AFTER the decode,
+// as a cross-check; it agrees, including `Prepare(v10 + 976, a2, v9)` == batch +0x3D0.)
+// ⚠️ The retired gate's own banner claimed "(92)" instructions. That number was wrong -- it is 40.
+// A wrong comment is a real defect (gotcha 9); corrected here and in the StreamStubs banner.
+//
+// ---- SIGNATURE, from the prologue (asm arbitrates, DWARF names) ---------------------------------
+// FOUR arguments, none of them a float, so no GPR slot is skipped (gotcha 3 does not bite):
+//   0x82814144  mr r29, r4     ; r4 = lpPrimitiveList  (kept for the descriptor Prepare)
+//   0x82814148  mr r4,  r5     ; r5 = lu16MaxNumCollisions  -> becomes arg 1 of the next call
+//   0x8281414C  mr r5,  r6     ; r6 = luUserTagA            -> arg 2
+//   0x82814150  mr r6,  r7     ; r7 = lu16UserTagB          -> arg 3
+//   0x82814154  mr r31, r3     ; this
+// which is PrepareNewPrimitiveTestResultsList(u16 maxResults, u32 tagA, u16 tagB) verbatim -- the
+// same three-argument shuffle the two committed Add* posters make. DecFIGS confirms the shape and
+// supplies the names: CgsCollisionGenerator.h:292 declares
+//     uint16_t CollidePrimitivePairList(const PrimitivePairList *, uint16_t, uint32_t, uint16_t);
+// and CgsCollisionGenerator.cpp:1662 names the parameters lpPrimitiveList / lu16MaxNumCollisions /
+// luUserTagA / lu16UserTagB and the two locals lu16ResultListIndex / lu16BatchIndex (:1664/:1665).
+// ⚠️ THE HEADER'S OLD PARAMETER NAMES WERE WRONG: it spelled the last two `u32 luFlags, u16
+// lu16Tag`. They are the USER TAGS this family threads into the CollisionResultList, not a flag
+// word -- PrepareNewPrimitiveTestResultsList stores them straight into the list header. Renamed to
+// the DWARF's names with this body. The one recovered call site had the same misname in its
+// literals and was corrected in the same wave: BrnVehicleManagerContactGeneration.cpp now spells
+// them KU_COLLIDE_USER_TAG_A (11) / KU16_COLLIDE_USER_TAG_B (0).
+//
+// ---- DECODE, address by address ----------------------------------------------------------------
+//   0x82814158  bl PrepareNewPrimitiveTestResultsList(maxResults, tagA, tagB) -> r30 = the index.
+//               This is the value the function returns.
+//   0x82814164  bl CreateNewBatch()                       -> r3 = the batch slot
+//   0x82814168..0x82814178  `clrlwi r11,r30,16 ; addi r11,r11,0x4820 ; slwi r11,r11,2 ;
+//               lwzx r5, r11, r31` -- 0x4820*4 == 0x12080 == offsetof(mapCollisionResultLists), so
+//               r5 is mapCollisionResultLists[resultIndex], argument 2 of the descriptor Prepare.
+//               ⚠️ 0x12080 IS A CONSOLE OFFSET (gotcha 1): the host array holds 8-byte pointers
+//               behind a wider IOBuffer base. Reached BY NAME below. The `clrlwi` is why the index
+//               is narrowed to u16 at the subscript here and nowhere else.
+//   0x8281416C  mr r4, r29                                -- the pair list, argument 1
+//   0x8281417C..0x8281418C  `clrlwi r11,r3,16 ; slwi r10,r11,3 ; add r11,r11,r10 ; slwi r11,r11,7`
+//               == batchIndex * 9 * 128 == batchIndex * 1152 == the CONSOLE sizeof(CollisionBatch);
+//               `add r31,r11,r31`.
+//   0x82814190  `addi r3, r31, 0x3D0` == 0x80 (maCollisionBatches) + 0x350
+//               (CollisionBatch::mJobDescription). Both CONSOLE numbers; the host indexes the typed
+//               array and asks the batch for its descriptor buffer.
+//   0x82814194  bl PrimitivePairListJobDesc::Prepare(pairList, resultList) -- TWO arguments (this
+//               family has no optimised-box flag), and it seats muJobType = 10 ==
+//               E_COLLISIONJOB_PRIMITIVE_PAIR_LIST (CgsPrimitivePairListJobDesc.cpp:25).
+//   0x82814198..0x828141A0  PerfMonCpu::StartMonitor(dword_82F310B4 == _miStartJobsPerfMon)
+//   0x828141A4..0x828141AC  `addi r31,r31,0x80` -> &maCollisionBatches[i]; bl CollisionBatch::SetupJob
+//   0x828141B0..0x828141C0  `lis r11, unk_830EA650 ; li r5,1 ; mr r4,r31 ;
+//               bl EA::Jobs::JobScheduler::AddJobs`  (r4 == the batch base == &batch.mJob, mJob
+//               being CollisionBatch's first member, so this submits the one job).
+//   0x828141C4/C8  PerfMonCpu::StopMonitor(_miStartJobsPerfMon)
+//   0x828141CC  `mr r3, r30` -- the result-list index, NOT truncated on the return path.
+//
+// ⚠️ NO ASSERTS AT ALL. Unlike its sibling, this leg's `xrefs_from` set contains no
+// BeginAssert/FireAssert/EndAssert (measured -- the JSON lists exactly seven callees:
+// __savegprlr_29, PrepareNewPrimitiveTestResultsList, CreateNewBatch, PrimitivePairListJobDesc::
+// Prepare, PerfMonCpu::Start/StopMonitor, CollisionBatch::SetupJob, JobScheduler::AddJobs). The
+// null/GetNumTests() guards its sibling carries are NOT in this function; adding them would be
+// invented behaviour. Both live call sites guard `GetNumTests() != 0` themselves.
+//
+// ⚠️⚠️ FLAG PC-platform leaf: THE DISPATCH, AND ONLY THE DISPATCH. `unk_830EA650` is the global
+// EA::Jobs::JobScheduler singleton and it does not exist on this build (CgsHardwareInitPC.cpp:40
+// has it commented out), so the AddJobs call -- and only that call -- is replaced by running the
+// batch's entry point inline. Standing precedent of this subsystem (CgsLooseOctree.cpp:997, the
+// five committed dispatchers in CgsCollisionGenerator_CollideStreams.cpp / _LineStream.cpp, and
+// CollidePrimitiveListAgainstTriangleList directly above).
+//
+// ⚠️ AND BECAUSE THE DISPATCH IS INLINE, the _miStartJobsPerfMon bracket around it no longer
+// measures the same thing on both platforms: on PC it times SUBMIT + EXECUTE (the whole narrow-
+// phase walk runs inside StartMonitor/StopMonitor), on the console it times SUBMIT ONLY (AddJobs is
+// ~a queue push). The counter is therefore NOT comparable to the console's. That became material
+// only in wave Q7, when the type-10 worker stopped being a gate and started doing real work.
+//
+// ⭐ THE TYPE-10 WORKER IS A REAL BODY (wave Q7, 2026-08-19): ContactGeneratorJob::Execute case 10
+// -> ExecutePrimitivePairList @0x82925798, reconstructed in ContactGeneratorJob.cpp (the Itterator
+// walk: BuildGPInstance A/B -> CollideGPInstances -> the 16-byte header write-back). This leg is
+// bodied end to end -- a posted primitive-pair batch now produces real contacts.
+//
+// ---- CALL SITES (xrefs_to, measured; both in another owner's file) ------------------------------
+//   VehicleManager::StartVehicleContactGeneration @0x8262AEE8 -- the two simple-traffic pair lists,
+//     ALREADY CALLING THIS (BrnVehicleManagerContactGeneration.cpp:344/:351) with
+//     (200 results, tagA 11, tagB 0). Both are guarded by `GetNumTests() != 0`, and on the junkyard
+//     path both builders are empty, so nothing posts YET -- it goes live with traffic.
+//   VehicleManager::StartPartContactGeneration    @0x8262C220 -- three calls at 0x8262C28C /
+//     0x8262C2D4 / 0x8262C31C (part / wheel / hinged builders; `li r5,0x64` == 100 results,
+//     tagA 3 / 4 / 2, tagB 0), each followed by its marker AddEntry. That tail is a documented
+//     PARTIAL (BrnVehicleManagerContactGeneration.cpp:868, owner `carcar`); nothing more is needed
+//     FROM THIS FUNCTION for it -- the whole rest of its closure is already real too (the Create/Run
+//     pair @0x82811DD0/@0x82811F58 landed wave Q6, DataStreamCommandPoster::Begin, and the two
+//     DeformationManager Do*WorldContactGeneration drivers).
+// =================================================================================================
+u16 BaseCollisionGenerator::CollidePrimitivePairList(const PrimitivePairList* lpPrimitiveList,
+                                                     u16                      lu16MaxNumCollisions,
+                                                     u32                      luUserTagA,
+                                                     u16                      lu16UserTagB)
+{
+    const s32 liResultListIndex =
+        PrepareNewPrimitiveTestResultsList(lu16MaxNumCollisions, luUserTagA, lu16UserTagB); // 0x82814158
+
+    // ⭐ [DIAG] NOT IN THE X360 BINARY -- wave Q7, behind BRN_PROP_DIAG, ONE-SHOT (the getenv is
+    // latched once; this sits on the per-frame contact path). This leg is DEAD on the junkyard
+    // route today -- both simple-traffic builders report GetNumTests() == 0 and their call sites
+    // guard on it -- so the first line this ever prints is the proof that it went live, and the
+    // user tag says WHICH caller woke it: 11 == StartVehicleContactGeneration's simple-traffic
+    // pass, 3/4/2 == StartPartContactGeneration's part / wheel / hinged legs (that tail is still
+    // a documented PARTIAL, owner `carcar`). Read it against [prop-diag] contact and against the
+    // type-10 worker's own [Q7-pairs] line: the worker (ContactGeneratorJob::ExecutePrimitivePairList
+    // @0x82925798) is a REAL body since wave Q7, so this line with no contacts behind it means the
+    // pairs did not overlap, not that a gate ate the batch.
+    {
+        static const bool sbPropDiag  = (std::getenv("BRN_PROP_DIAG") != 0);
+        static bool       sbFirstPass = true;
+        if (sbPropDiag && sbFirstPass && CgsDev::Log::gpDebugPrint != 0)
+        {
+            sbFirstPass = false;
+            *CgsDev::Log::gpDebugPrint
+                << "[Q7-pairlist] first CollidePrimitivePairList: tests="
+                << static_cast<s32>(lpPrimitiveList->GetNumTests())
+                << " maxResults=" << static_cast<s32>(lu16MaxNumCollisions)
+                << " tagA=" << static_cast<s32>(luUserTagA)
+                << " resultList=" << liResultListIndex
+                << "\n";
+        }
+    }
+
+    CollisionBatch& lrBatch = maCollisionBatches[CreateNewBatch()];                         // 0x82814164
+
+    PrimitivePairListJobDesc* lpDesc =
+        reinterpret_cast<PrimitivePairListJobDesc*>(
+            lrBatch.GetJobDescription().GetBuffer());                                       // batch +0x3D0
+
+    // `clrlwi r11, r30, 16` @0x82814168 -- the index is narrowed to 16 bits for the subscript
+    // only. Reached BY NAME; 0x12080 is a console offset (see the decode block).
+    lpDesc->Prepare(lpPrimitiveList,
+                    mapCollisionResultLists[static_cast<u16>(liResultListIndex)]);          // 0x82814194
+
+    CgsDev::PerfMonCpu::StartMonitor(_miStartJobsPerfMon);                                  // 0x828141A0
+
+    lrBatch.SetupJob();                                                                     // 0x828141AC
+    // ---- FLAG PC-platform leaf: run the job body here (see the banner) ----
+    // X360: EA::Jobs::JobScheduler::AddJobs(&unk_830EA650, &lrBatch.mJob, 1) at 0x828141C0.
+    ContactGeneratorEntry(EA::Jobs::Param(static_cast<void*>(lpDesc)),
+                          EA::Jobs::Param(static_cast<void*>(lpDesc)),
+                          EA::Jobs::Param(),
+                          EA::Jobs::Param());
+
+    CgsDev::PerfMonCpu::StopMonitor(_miStartJobsPerfMon);                                   // 0x828141C8
+
+    // 0x828141CC `mr r3, r30` -- no truncation on the return path; the u16 return type is the
+    // DWARF's (CgsCollisionGenerator.h:292). All five measured call sites drop the value.
+    return static_cast<u16>(liResultListIndex);
+}
+
+// =================================================================================================
 // ⭐⭐⭐ THE PRIMITIVE-PAIR-LIST vs TRIANGLE-LIST STREAM FAMILY -- LANDED 2026-08-19 (wave Q6,
 // cluster pstream). Three functions, and this is the arm the console's runtime selector actually
 // takes for prop/part-vs-world collision, so it is the LIVE half of "a smashed prop's parts land
@@ -376,9 +553,12 @@ u16 BaseCollisionGenerator::CollidePrimitiveListAgainstTriangleList(
 //
 // ⚠️ THE TYPE-12 WORKER IS REAL AS OF THIS WAVE (ContactGeneratorJob::
 // ExecutePrimitiveListWithTriangleListStream @0x82926650, ContactGeneratorJob.cpp), so a command
-// posted here is drained. What it drains INTO -- the 849-instruction non-stream kernel
-// ExecutePrimitiveListWithTriangleList @0x82925908 -- is still a LOUD NAMED GATE, and that is
-// the honest residual: see ContactGeneratorJob.cpp's banner for its measured closure.
+// posted here is drained. ⭐ AND WHAT IT DRAINS INTO IS REAL TOO -- the 849-instruction non-stream
+// kernel ExecutePrimitiveListWithTriangleList @0x82925908 has been a full body since wave Q6
+// round 3 (2026-08-19), in ContactGeneratorJob.cpp, with ::BuildGPInstance @0x829222A0 and
+// ::CollideGPInstances @0x829253C8 landing beside it in ContactGeneratorJob_wQ6_01.cpp. Nothing
+// on this leg is gated any more (this paragraph called it a LOUD NAMED GATE for a wave after it
+// landed).
 // =================================================================================================
 
 // -------------------------------------------------------------------------------------------------

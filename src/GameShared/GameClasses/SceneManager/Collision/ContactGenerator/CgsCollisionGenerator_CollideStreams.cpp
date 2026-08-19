@@ -220,6 +220,48 @@ namespace CgsCollision
     }
 
     // =============================================================================================
+    // ⭐ AddSphereListWithSphereListToStream @0x828119F0 (33) — LANDED 2026-08-19 (wave Q7,
+    // cluster `carcar`). The third poster of the family, and the one the car-vs-car leg needs:
+    // VehicleManager::DoCarCarContactGeneration posts ONE of these per overlapping car pair per
+    // frame, into the producer StartVehicleContactGeneration seats in mpSphereSphereStreamProducer.
+    //
+    // ⚠️ OUT-OF-OWNERSHIP EDIT (reported): this file belongs to the `pairlist` cluster this wave;
+    // `carcar` added this body + its declaration in CgsCollisionGenerator.h because its own body
+    // cannot exist without them and no other Q7 cluster is scoped to the poster.
+    //
+    // Instruction-for-instruction the SAME BODY as the two siblings above — diffed against the
+    // raw asm, which is why it is written in exactly their shape:
+    //     0x82811A20  PrepareNewPrimitiveTestResultsList(maxResults, userTagA, userTagB) -> r29
+    //     0x82811A24  ld r11,0(r28) / std -> command sphere list A   (the console's one 8-byte
+    //     0x82811A3C  ld r11,0(r27) / std -> command sphere list B    {ptr,count} copy each)
+    //     0x82811A30  stfs f31             -> command padding
+    //     0x82811A44  mapCollisionResultLists[(u16)r29] -> command result list
+    //     0x82811A58  DataStreamCommandPoster::AddCommand(producer+0x80, &command)
+    //     0x82811A64  stw r3, 0x104(producer)  (the poster's own command-count store — inside
+    //                 SimpleDataStreamProducer::AddCommand on the host, same as the siblings)
+    //     return the result-list index (`mr r3, r29`)
+    // =============================================================================================
+    s32 BaseCollisionGenerator::AddSphereListWithSphereListToStream(
+        const SphereList* lpSphereListA, const SphereList* lpSphereListB,
+        u16 lu16MaxResults, f32 lfPadding, u32 lu32UserTagA, u16 lu16UserTagB,
+        CgsMemory::SimpleDataStreamProducer* lpProducer)
+    {
+        const s32 liResultListIndex =
+            PrepareNewPrimitiveTestResultsList(lu16MaxResults, lu32UserTagA, lu16UserTagB);
+
+        SphereListWithSphereListStreamJobDesc::StreamCommand lCommand;
+        lCommand.mSphereListA = *lpSphereListA;
+        lCommand.mSphereListB = *lpSphereListB;
+        lCommand.mfPadding    = lfPadding;
+        lCommand.mpResultList =
+            mapCollisionResultLists[static_cast<u16>(liResultListIndex)];
+
+        lpProducer->AddCommand(&lCommand);
+
+        return liResultListIndex;
+    }
+
+    // =============================================================================================
     // The three Create* factories — the shared body above with each family's HOST command size
     // and its own console assert lines (:1384/:1396, :1567/:1579, :1799/:1811 — messages
     // identical, recorded here so the addresses stay greppable).
@@ -370,10 +412,15 @@ namespace CgsCollision
 
     // =============================================================================================
     // RunCollideSphereListWithSphereListStream @0x82811C00 (80) — desc type 8
-    // (-> ExecuteSphereListWithSphereListStream, loud named gate). No debug reader on this one;
-    // per-batch perfmon bracket like the swept twin. Dead at runtime this wave: its poster
-    // (AddSphereListWithSphereListToStream @0x828119F0, the car-car leg) is not reconstructed,
-    // so the stream always carries zero commands and this returns null at the top.
+    // (-> ExecuteSphereListWithSphereListStream). No debug reader on this one; per-batch perfmon
+    // bracket like the swept twin.
+    // ⚠️ BANNER CORRECTED 2026-08-19 (wave Q7, cluster `carcar`) — it used to read "Dead at
+    // runtime this wave: its poster (AddSphereListWithSphereListToStream @0x828119F0, the car-car
+    // leg) is not reconstructed, so the stream always carries zero commands and this returns null
+    // at the top." That is NO LONGER TRUE and a stale banner of exactly that shape is this
+    // campaign's most repeated defect: the poster is REAL above, and VehicleManager::
+    // DoCarCarContactGeneration @0x8261BB38 posts through it once per overlapping car pair per
+    // frame, so this dispatcher now runs whenever two cars overlap.
     // =============================================================================================
     EA::Jobs::Job*
     BaseCollisionGenerator::RunCollideSphereListWithSphereListStream(

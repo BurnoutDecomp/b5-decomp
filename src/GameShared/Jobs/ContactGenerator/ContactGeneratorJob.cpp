@@ -14,6 +14,11 @@
 //   ExecutePrimitiveListWithTriangleListStream @0x82926650 (100) :1104 :1105  ⭐ PROP stream
 //   ExecutePrimitiveListWithTriangleList @0x82925908 (849) :1052 :1059 :1066 :1073 ⭐⭐ PROP
 //                                                          NARROW PHASE (wave Q6, cluster pvt)
+//   ExecuteBoxListWithTriangleList      @0x829218B8   (44)  :841   ⚠️ the CONSOLE'S OWN
+//                                                          "Not implemented" arm (wave Q7, arms)
+//   ExecutePrimitivePairList            @0x82925798   (92)  CgsPrimitivePairList.h:107
+//                                                          ⭐⭐ the CAR-vs-CAR / body-part PAIR
+//                                                          WALK (wave Q7, cluster arms)
 //   LoadPrimitives                      @0x829210F0   (61)  :1405 :1406
 //   LoadResultList                      @0x829211E8   (46)  :1552
 //   AllocateMemory                      @0x829212A0   (54)  :1720
@@ -21,21 +26,41 @@
 //
 // Declared in the header, bodied in the sibling partfile ContactGeneratorJob_wQ6_01.cpp
 // (wave Q6, cluster gpi):  BuildGPInstance @0x829222A0 (258) · CollideGPInstances @0x829253C8
-// (244). They are ExecutePrimitiveListWithTriangleList's only two un-homed callees.
+// (244). Both are called by ExecutePrimitiveListWithTriangleList AND by ExecutePrimitivePairList
+// below -- the pair walk is the second (and, in the console, the FIRST-written) caller of each.
 //
 // Until this TU existed, the triangle cache filled with real Paradise City geometry every frame
 // and NOTHING READ IT. This is the reader.
 //
-// ─── WHY THE REMAINING ARMS ARE GATES AND NOT DELETIONS ──────────────────────────────────────
-// `Execute` is a 12-way jump table over the descriptor's type byte. As of 2026-08-19 (wave Q6
-// round 3) EIGHT of the arms are real bodies (types 5, 6, 11, 12, 13, 14, 16 and Execute itself);
-// FOUR remain NAMED one-shot boot gates -- ExecuteSphereListWithSphereList @0x829215B0, its
-// Stream twin @0x82923758, ExecuteBoxListWithTriangleList @0x829218B8, ExecutePrimitivePairList
-// @0x82925798 -- rather than folded into the `default:` assert, for one measured reason: `xrefs_to` on
-// ContactGeneratorJob::Execute @0x829267E0 shows a SINGLE caller (ContactGeneratorEntry
-// @0x82920F10), and every one of the seven `BaseCollisionGenerator::Run*` dispatchers points its
-// batches at that same entry. So the day any other Run* is bodied, its descriptor arrives here
-// and the gate NAMES the missing arm instead of tripping a generic "Unsupported collision job".
+// ─── EVERY WORKER ARM IS REAL (2026-08-19, wave Q7) ──────────────────────────────────────────
+// `Execute` is a 12-ENTRY jump table over the descriptor's type byte (0x8292681C `addi r11,r11,-5`
+// then `cmplwi r11,0xB`, so entry i == type i+5, types 5..16). ELEVEN of those entries are worker
+// arms; the remaining one, entry 10 == TYPE 15 (the ELEVENTH entry; entry 11 == type 16 is a real
+// arm, ExecuteLineWithTriangleListStream), is the table's own default target -- the console has no
+// type-15 job and routes it to the same "Unsupported collision job" assert as an out-of-range
+// byte. As of this wave all ELEVEN arms have bodies. NINE are in this file (types 5, 6, 9, 10, 11,
+// 12, 13, 14, 16); the other TWO -- ExecuteSphereListWithSphereList @0x829215B0 and its Stream
+// twin @0x82923758 (types 7 and 8: the car-vs-car sphere narrow phase) -- are DECLARED in this
+// TU's header and DEFINED in the sibling partfile ContactGeneratorJob_wQ7_01.cpp (wave Q7,
+// cluster ss), split only because this file was owned by a concurrent session in the same wave.
+// ⚠️ THAT PARTFILE MUST BE MOUNTED BESIDE THIS TU, exactly as ContactGeneratorJob_wQ6_01.cpp is:
+// `cl /c` cannot see an unresolved external, so the compile gate stays green either way and the
+// exe takes two LNK2019s instead. If cluster ss parked, the two declarations in the header have
+// no definition anywhere and the conductor must restore a gate for that PAIR ONLY.
+//
+// ⚠️ "REAL" DOES NOT MEAN "DOES WORK" FOR ExecuteBoxListWithTriangleList. Those 44 instructions
+// ARE an assert: the console ships `CGS_ASSERT(false, "Not implemented")` at :841 and there is
+// no box-vs-triangle-list test anywhere in the X360 image. Landing it is landing the console's
+// own refusal -- see its banner below. Nothing posts a type-9 descriptor either: `xrefs_to` on
+// 0x829218B8 is ContactGeneratorJob::Execute and nothing else, and no `BaseCollisionGenerator::
+// Run*` dispatcher writes 9 into the batch's +0x4CF job-type byte.
+//
+// ⚠️ THE `default:` ASSERT STAYS, AND IT IS NOW THE ONLY THING THIS SWITCH CAN REFUSE.
+// `xrefs_to` on ContactGeneratorJob::Execute @0x829267E0 shows a SINGLE caller
+// (ContactGeneratorEntry @0x82920F10) and every `BaseCollisionGenerator::Run*` dispatcher points
+// its batches at that same entry, so a descriptor carrying types 0-4, 15, or anything above 16
+// lands on "Unsupported collision job" (:135) -- the console's own tripwire for a corrupt or
+// mis-typed batch.
 //
 // ─── THE ALGORITHM, AND WHERE IT CAME FROM ───────────────────────────────────────────────────
 // ExecuteLineWithTriangleListStream inlines its whole intersection kernel -- `xrefs_from` on
@@ -74,10 +99,13 @@
 #include "GameShared/GameClasses/Geometric/Primitives/CgsTriangle4.h"       // Triangle4 (the SoA block)
 #include "GameShared/GameClasses/Geometric/Intersection/CgsTriangleSphere.h" // the sphere contact kernel
 #include "GameShared/GameClasses/Memory/DataStream/CgsSimpleDataStreamConsumer.h"
+#include "GameShared/GameClasses/SceneManager/Collision/ContactGenerator/JobDescription/CgsBoxListWithTriangleListJobDesc.h"
 #include "GameShared/GameClasses/SceneManager/Collision/ContactGenerator/JobDescription/CgsCollisionJobDescription.h"
 #include "GameShared/GameClasses/SceneManager/Collision/ContactGenerator/JobDescription/CgsLineWithTriangleListStreamJobDesc.h"
 #include "GameShared/GameClasses/SceneManager/Collision/ContactGenerator/JobDescription/CgsPrimitiveListWithTriangleListJobDesc.h"
 #include "GameShared/GameClasses/SceneManager/Collision/ContactGenerator/JobDescription/CgsPrimitiveListWithTriangleListStreamJobDesc.h"
+#include "GameShared/GameClasses/SceneManager/Collision/ContactGenerator/JobDescription/CgsPrimitivePairListJobDesc.h"
+#include "GameShared/GameClasses/SceneManager/Collision/ContactGenerator/JobDescription/CgsSphereListWithSphereListJobDesc.h"
 #include "GameShared/GameClasses/SceneManager/Collision/ContactGenerator/JobDescription/CgsSphereListWithTriangleListJobDesc.h"
 #include "GameShared/GameClasses/SceneManager/Collision/ContactGenerator/JobDescription/CgsSweptSphereListWithTriangleListJobDesc.h"
 #include "GameShared/GameClasses/SceneManager/Collision/Primitives/CgsCollisionResult.h"
@@ -92,13 +120,16 @@
 // all three read out of ContactGeneratorEntry @0x82920F10 (see ContactGenerator.cpp).
 ContactGeneratorJob gaContactGeneratorJobs[KI_NUM_CONTACT_GENERATOR_JOBS];
 
+using CgsSceneManager::CgsCollision::BoxListWithTriangleListJobDesc;
 using CgsSceneManager::CgsCollision::CollisionJobDescription;
 using CgsSceneManager::CgsCollision::CollisionResultList;
 using CgsSceneManager::CgsCollision::LineWithTriangleListStreamJobDesc;
 using CgsSceneManager::CgsCollision::PrimitiveListWithTriangleListJobDesc;
 using CgsSceneManager::CgsCollision::PrimitiveListWithTriangleListStreamJobDesc;
 using CgsSceneManager::CgsCollision::PrimitivePairList;
+using CgsSceneManager::CgsCollision::PrimitivePairListJobDesc;
 using CgsSceneManager::CgsCollision::PrimitiveTestResult;
+using CgsSceneManager::CgsCollision::SphereListWithSphereListJobDesc;
 using CgsSceneManager::CgsCollision::SphereListWithTriangleListJobDesc;
 using CgsSceneManager::CgsCollision::SphereListWithTriangleListStreamJobDesc;
 using CgsSceneManager::CgsCollision::SweptSphereListWithTriangleListJobDesc;
@@ -348,6 +379,20 @@ namespace
 
         arInst.mMethods = rw::collision::g_aGPVolumeMethods[GPInstance::TRIANGLE];
     }
+
+    // ---------------------------------------------------------------------------------------
+    // The pair-list header KIND that ExecutePrimitivePairList @0x82925798 requires of every
+    // record it walks. The console compares the cached header's mu8HeaderType against the
+    // literal 1 (0x82925820 `cmplwi cr6, r11, 1`) and its assert text spells the enumerator:
+    //     "mCurrentHeader.mu8HeaderType == E_LIST_TYPE_PRIMATIVE_PAIR"
+    //     ..\..\GameClasses\SceneManager\Collision\Primitives\CgsPrimitivePairList.h:107
+    // ⚠️ NAMED HERE, NOT WHERE IT BELONGS. E_LIST_TYPE_* is a CgsPrimitivePairList.h enum in the
+    // console (the same header the assert's file string names) and that file is NOT this
+    // cluster's to edit; the value is a one-line file-local constant here and "add the
+    // E_LIST_TYPE_* enum beside PrimitivePairList::EVolumeType, then use it here" is a reported
+    // follow-up. The VALUE is measured, not assumed -- it is the `cmplwi` immediate.
+    // ---------------------------------------------------------------------------------------
+    const u8 KU8_LIST_TYPE_PRIMATIVE_PAIR = 1;
 }
 
 // -------------------------------------------------------------------------------------------
@@ -415,8 +460,19 @@ void ContactGeneratorJob::Execute(void* lpvJobData)
                 static_cast<const SphereListWithTriangleListJobDesc*>(mpJobDescription));
             break;
         case 6:  ExecuteSphereListWithTriangleListStream();     break;
-        case 7:  ExecuteSphereListWithSphereList();             break;
+        // Case 2 of the jump table (0x82926890). Like cases 5/11/13 the `bl` leaves r4 ==
+        // lpvJobData untouched, and unlike the no-arg arms this worker READS it -- 0x829215C4
+        // `mr r18, r4` is its fourth instruction and every descriptor field it touches comes
+        // through r18. (Corrected with the body, wave Q7 cluster ss; this case used to call a
+        // no-arg gate.)
+        case 7:
+            ExecuteSphereListWithSphereList(
+                static_cast<const SphereListWithSphereListJobDesc*>(mpJobDescription));
+            break;
         case 8:  ExecuteSphereListWithSphereListStream();       break;
+        // Cases 4 and 5 of the jump table (0x829268A0 / 0x829268B8). Both leave r4 == lpvJobData
+        // live too, and both bodies IGNORE it: each opens with `mr r31, r3` and re-reads
+        // `lwz 0x10(r31)` == mpJobDescription. No-arg is the measured spelling.
         case 9:  ExecuteBoxListWithTriangleList();              break;
         case 10: ExecutePrimitivePairList();                    break;
         // Case 6 of the jump table (0x829268A8): the `bl` leaves r4 == lpvJobData untouched,
@@ -1429,44 +1485,252 @@ void ContactGeneratorJob::ExecutePrimitiveListWithTriangleList(
 }
 
 // =============================================================================================
-// The other four Execute arms -- NAMED BOOT GATES, not silent returns and not a shared default.
-// Each names its own X360 home and insn count so that the day something posts that descriptor
-// type, the log says which worker is missing rather than "unsupported".
+// ContactGeneratorJob::ExecuteBoxListWithTriangleList @0x829218B8 (44)   ⚠️ THE CONSOLE'S OWN
+// "NOT IMPLEMENTED" ARM. Wave Q7, cluster arms (2026-08-19).
+//
+// GROUNDING: the RAW `assembly` array of .ida-exports/BURNOUT_X360_ARTIST.XEX/0x829218B8.json
+// (44 lines == (0x82921964-0x829218B8)/4 + 1). All three of its `xrefs_from` are accounted for
+// below: LoadPrimitives @0x829210F0, LoadResultList @0x829211E8, Assert::PrintStringed.
+//
+// THIS ARM DOES NO COLLISION WORK ON THE CONSOLE EITHER, and that is the finding, not a park:
+//   0x829218D4  lwz  r30, 0x10(r31)          -> mpJobDescription
+//   0x829218D8  addi r4,  r30, 8             -> &desc->mTriangleList   (the derived payload's
+//                                               second member; see the type note below)
+//   0x829218DC  bl   LoadPrimitives          (r5 = a stack local, never read again)
+//   0x829218E8  lwz  r4,  0xF0(r30)          -> desc->mpResultsList    (the SHARED base seat)
+//   0x829218EC  bl   LoadResultList          (r5 = the SAME stack local -- the compiler
+//                                             coalesced two dead locals onto one slot)
+//   0x829218F0..0x8292194C  CGS_ASSERT(false, "Not implemented")       ContactGeneratorJob.cpp:841
+//   0x82921964  blr
+// and nothing else -- no triangle loop, no kernel, no result written. There is no box-vs-
+// triangle-list narrow phase anywhere in the X360 image to reconstruct.
+//
+// ⚠️ ONE SOURCE-LEVEL CGS_ASSERT, TWO PrintStringed CALLS. The X360 build emits the assert body
+// twice at the same line number (0x82921910 and 0x82921938, both `li r5, 0x349` == 841). That is
+// this compiler's fixed expansion of one assert and NOT two asserts: the same doubling appears
+// in LoadPrimitives @0x829210F0, whose two DISTINCT asserts (:1405 and :1406) each emit the pair.
+// So this is one `CGS_ASSERT(false, "Not implemented")`, matching the tree's existing precedent
+// for console "not implemented" defaults (CgsDevice.cpp:58 and its siblings).
+//
+// ⭐ THE ARM IS NOW STORE FOR STORE (wave Q7, fixer round 1). It shipped one wave with the
+// `LoadPrimitives(&desc->mTriangleList, &local)` call at 0x829218DC dropped, because that call
+// needs the DERIVED descriptor type and that type had no home in this tree. The home now exists:
+// JobDescription/CgsBoxListWithTriangleListJobDesc.h, transcribed from the DecFIGS DWARF
+// (h:58 `struct BoxListWithTriangleListJobDesc : public CollisionJobDescription`, h:95-98
+// `Data { BoxList mBoxList; TriangleList mTriangleList; }`, h:37-40 `struct BoxList {
+// CgsGeometric::Box* mpaBoxes; int32_t miNumBoxes; }`), which puts mTriangleList at the payload's
+// +0x08 and INDEPENDENTLY confirms the `addi r4, r30, 8` above. It is a pure-declaration header:
+// no new TU, no mount line, and its two accessors are inline, so this TU gains no new external.
+// WHAT THE RESTORED CALL DOES: nothing observable, which is why dropping it was inert rather than
+// wrong. LoadPrimitives' whole body is two asserts plus `*dst = *src`; here the source is an
+// interior address of a live object (never NULL) and the destination is a stack local (never
+// NULL), so neither assert can fire and the copy's destination is dead -- the compiler in fact
+// coalesced it onto the SAME stack slot the result-list copy uses. It is landed anyway because
+// the arm is a 44-instruction refusal and a refusal is worth having exactly, not approximately.
 // =============================================================================================
-#define BRN_CONTACT_JOB_GATE(TEXT)                                                       \
-    do { static bool s_bLogged = false;                                                  \
-    if (!s_bLogged) { s_bLogged = true;                                                  \
-        if (CgsDev::Message::gxMessageFilterFlags & 1)                                   \
-            *CgsDev::Log::gpDebugPrint << TEXT; } } while (0)
-
-void ContactGeneratorJob::ExecuteSphereListWithSphereList()
-{
-    BRN_CONTACT_JOB_GATE("conductor gate: ContactGeneratorJob::ExecuteSphereListWithSphereList "
-                         "@0x829215B0 not reconstructed [FLAG PC boot gate]\n");
-}
-
-void ContactGeneratorJob::ExecuteSphereListWithSphereListStream()
-{
-    BRN_CONTACT_JOB_GATE("conductor gate: ContactGeneratorJob::ExecuteSphereListWithSphereList"
-                         "Stream @0x82923758 not reconstructed [FLAG PC boot gate]\n");
-}
-
 void ContactGeneratorJob::ExecuteBoxListWithTriangleList()
 {
-    BRN_CONTACT_JOB_GATE("conductor gate: ContactGeneratorJob::ExecuteBoxListWithTriangleList "
-                         "@0x829218B8 (44) not reconstructed [FLAG PC boot gate]\n");
+    // 0x829218D4 `lwz r30, 0x10(r31)` -- the descriptor, then its DERIVED type for the payload.
+    const BoxListWithTriangleListJobDesc* lpDesc =
+        static_cast<const BoxListWithTriangleListJobDesc*>(mpJobDescription);
+
+    // 0x829218D8/0x829218DC `addi r4, r30, 8 ; bl LoadPrimitives` -- the triangle list copied
+    // into a stack local the console never reads again (the compiler coalesced it with the
+    // result-list local below onto one slot).
+    TriangleList lTriangleList;
+    LoadPrimitives(&lpDesc->GetTriangleList(), &lTriangleList);
+
+    // 0x829218E8 `lwz r4, 0xF0(r30)` -- the results list, reached through the SHARED base seat
+    // (CollisionJobDescription::mpResultsList). The copy's destination is dead too;
+    // LoadResultList's :1552 assert is its whole effect.
+    CollisionResultList lResultsList;
+    LoadResultList(mpJobDescription->GetResultsList(), &lResultsList);
+
+    CGS_ASSERT(false, "Not implemented");                                            // :841
 }
 
+// =============================================================================================
+// ⭐⭐ ContactGeneratorJob::ExecutePrimitivePairList @0x82925798 (92)
+// THE PRIMITIVE-PAIR WALK -- job type 10. Wave Q7, cluster arms (2026-08-19).
+//
+// GROUNDING: the RAW `assembly` array of .ida-exports/BURNOUT_X360_ARTIST.XEX/0x82925798.json
+// (92 lines == (0x82925904-0x82925798)/4 + 1). Every one of its `xrefs_from` is accounted for
+// below: LoadResultList, PrimitivePairList::Itterator::{Prepare @0x82812128, GetPrimativeA
+// @0x828121D8, GetPrimativeB @0x828121E8, MoveToNextHeader @0x82812210}, BuildGPInstance
+// @0x829222A0, CollideGPInstances @0x829253C8, Assert::PrintStringed.
+//
+// ─── WHAT THE PAIR-LIST FAMILY ACTUALLY IS -- MEASURED, BECAUSE AN EARLIER NOTE GOT IT WRONG ──
+// A stale note in this campaign called this arm "prop-vs-prop". IT IS NOT. Measured from
+// `xrefs_to`, this wave, on the two builder entry points that CREATE primitive pairs:
+//   PrimitivePairListBuilder::AddPrimitivePair @0x82814708 <- exactly three callers:
+//       DeformationManager::AddRaceCarBodyPartPair  @0x82605928
+//       DeformationManager::AddHingedBodyPartPairs  @0x82605A98
+//       VehicleManager::DoCarCarContactGeneration   @0x8261BB38
+//   sub_828149F8 (the second AddPrimitivePair* overload, same AllocateMemory/sub_82814480
+//       closure) <- exactly one caller: DeformationManager::AddRaceCarWheelPair @0x82605BE8
+// and all four of THOSE are called from one place: VehicleManager::StartVehicleContactGeneration
+// @0x8262AEE8. On the consumer side, `xrefs_to` on the synchronous dispatcher
+// BaseCollisionGenerator::CollidePrimitivePairList @0x82814138 (the only thing that prepares a
+// type-10 descriptor, via PrimitivePairListJobDesc::Prepare @0x82810478) is likewise exactly
+// two: VehicleManager::StartVehicleContactGeneration @0x8262AEE8 and StartPartContactGeneration
+// @0x8262C220.
+// ⇒ THE PAIR-LIST FAMILY IS THE CAR SIDE: car-vs-car, plus the deformable body-part and
+//   detached-wheel pairs of the SAME cars. NO PROP FUNCTION APPEARS ANYWHERE IN IT -- not a
+//   producer, not a consumer, not a caller of a caller. A prop or a broken-off prop part
+//   collides with the WORLD through the type-11/12 primitive-list-vs-TRIANGLE-list arms above
+//   (PropManager::Do{Part,PropInstance}WorldContactGeneration -> PrimitivePairListBuilder::
+//   AddPrimitive -- the SINGLE-primitive entry, not AddPrimitivePair -- ->
+//   AddPrimitiveListWithTriangleListToStream), and with cars through the car side's own
+//   contact generation. No prop-vs-prop producer exists in the image; if one is ever found,
+//   this paragraph is the thing to correct.
+//
+// SHAPE (every citation is an address in that listing):
+//   0x829257B0..0x829257C4  the descriptor's PrimitivePairList copied word for word (3 console
+//                           dwords) into a local -- BEFORE the result list is loaded
+//   0x829257C8/CC           LoadResultList(desc->mpResultsList, &lResultsList)   (r4 = desc+0xF0)
+//   0x829257D8              PrimitivePairList::Itterator::Prepare(&lIterator, &lPairList)
+//   per pair record (a DO-WHILE: the body runs before MoveToNextHeader decides):
+//     0x829257F0  the cached header's A type byte (+0x00) -> Itterator::GetTypeA()
+//     0x829257F4  the cached header's A tag halfword (+0x0C) -> Itterator::GetPrimitiveTagA()
+//     0x829257FC  Itterator::GetPrimativeA()
+//     0x82925814  BuildGPInstance(typeA, primA, &lGPInstanceA, tagA)      (dest r1+var_100)
+//     0x8292581C  the cached header's B tag halfword (+0x0E) -> GetPrimitiveTagB()
+//     0x82925818/20  assert mCurrentHeader.mu8HeaderType == 1        (CgsPrimitivePairList.h:107)
+//     0x8292587C  the cached header's B type byte (+0x01) -> Itterator::GetTypeB()
+//     0x82925884  Itterator::GetPrimativeB()
+//     0x8292589C  BuildGPInstance(typeB, primB, &lGPInstanceB, tagB)      (dest r1+var_1C0)
+//     0x829258A8  lfs f1, iterator+0x08                 -> Itterator::GetPadding()
+//     0x829258A0  lhz r9,  iterator+0x14                -> Itterator::GetCurrentTestIndex()
+//     0x829258C0  CollideGPInstances(&A, &B, padding, idx, idx+1, idx, &lResultsList)
+//   0x829258C8  } while (Itterator::MoveToNextHeader())
+//   0x829258D8..0x829258FC  the 16-byte CollisionResultList header written back through
+//                           desc->mpResultsList -- this is what publishes mu16NumResults.
+//
+// ⚠️ ONE HALFWORD FEEDS ALL THREE INDEX ARGUMENTS. `lhz r9` is copied to r7, `addi r8, r7, 1`
+// makes the second, and r9 itself is still live as the third at the call: the result record gets
+// muPrimitive0Index = testIndex, muPrimitive1Index = testIndex + 1, mu16TestIndex = testIndex.
+// That is NOT the type-11 worker's convention (there, primitive1 is the triangle lane) and it is
+// not a transcription slip -- the pair walk has no lanes to number, so the console numbers the
+// two sides of the pair off the record's own index. Reproduced exactly.
+//
+// ⚠️ r6 IS SKIPPED AT THE CollideGPInstances CALL. f1 carries the third argument (the pair
+// record's mfPadding): a PPC float parameter consumes its GPR slot without using it (AGENTS
+// gotcha 3). Same trap, same call, same answer as the type-11 worker's four call sites.
+//
+// ⚠️ A DO-WHILE, NOT A WHILE, AND THAT IS THE CONSOLE'S SHAPE. The loop top loc_829257EC is
+// reached by FALLTHROUGH from Prepare (0x829257D8), and Itterator::Prepare @0x82812128 has NO
+// empty-list guard -- it caches the blob's first 16 bytes and asserts their checksum whatever
+// mu16NumTests says. An EMPTY pair list therefore still runs this body once with a zeroed
+// header, and BuildGPInstance then takes its default "false" assert arm (:1699). Do not invent a
+// `GetNumTests() != 0` guard to quiet it: the tripwire is the console's own, and silencing it
+// would hide an empty pair list, which is the exact failure mode this leg has.
+//
+// ⚠️ THE RESULT RECORDS ARE NOT WRITTEN HERE. CollideGPInstances appends each 80-byte
+// PrimitiveTestResult into the list itself, which is why this arm keeps no local result count --
+// same as the type-11 worker, and deliberately unlike the sphere/swept workers.
+//
+// ⚠️ THE ASSERT AT CgsPrimitivePairList.h:107 IS LANDED AT THE CALL SITE, NOT IN ITS HOME. The
+// console fires it from an INLINED accessor of that header (its file string is that header, and
+// it sits between the A-side BuildGPInstance and the B-side type read) -- so it is either
+// GetTypeB() or GetPrimitiveTagB(); the asm does not discriminate between them, because the
+// compiler hoisted the tag load above the branch. It is written out here, in the console's
+// firing position, rather than guessed into one of the two accessors in a header this cluster
+// does not own. FOLLOW-UP: move it into whichever accessor a future DWARF/source witness names.
+// =============================================================================================
 void ContactGeneratorJob::ExecutePrimitivePairList()
 {
-    BRN_CONTACT_JOB_GATE("conductor gate: ContactGeneratorJob::ExecutePrimitivePairList "
-                         "@0x82925798 (92) not reconstructed [FLAG PC boot gate]\n");
+    using rw::collision::GPInstance;
+
+    const PrimitivePairListJobDesc* lpDesc =
+        static_cast<const PrimitivePairListJobDesc*>(mpJobDescription);
+
+    // 0x829257B0..0x829257C4 -- the three console dwords of the descriptor's pair list, copied
+    // to a local. The Itterator is prepared against THIS copy, exactly as the type-11 worker
+    // does with its own.
+    const PrimitivePairList lPairList = lpDesc->mPrimitivePairList;
+
+    CollisionResultList lResultsList;
+    LoadResultList(lpDesc->mpResultsList, &lResultsList);
+
+    PrimitivePairList::Itterator lIterator;
+    lIterator.Prepare(&lPairList);
+
+    do
+    {
+        // The A side, in the console's read order: both cached-header fields first, then the
+        // packed-data pointer (0x829257F0 / 0x829257F4 / 0x829257FC).
+        const PrimitivePairList::EVolumeType leTypeA  = lIterator.GetTypeA();
+        const u16                            lu16TagA = lIterator.GetPrimitiveTagA();
+
+        GPInstance lGPInstanceA;
+        BuildGPInstance(leTypeA, lIterator.GetPrimativeA(), &lGPInstanceA, lu16TagA);
+
+        // 0x8292581C -- B's tag is read BEFORE the header-kind check (the compiler hoisted it
+        // out of the branch); kept in the console's order.
+        const u16 lu16TagB = lIterator.GetPrimitiveTagB();
+
+        CGS_ASSERT(lIterator.mCurrentHeader.mu8HeaderType == KU8_LIST_TYPE_PRIMATIVE_PAIR,
+                   "mCurrentHeader.mu8HeaderType == E_LIST_TYPE_PRIMATIVE_PAIR");
+                                                              // CgsPrimitivePairList.h:107
+
+        const PrimitivePairList::EVolumeType leTypeB = lIterator.GetTypeB();
+
+        GPInstance lGPInstanceB;
+        BuildGPInstance(leTypeB, lIterator.GetPrimativeB(), &lGPInstanceB, lu16TagB);
+
+        // 0x829258A0 / 0x829258AC / 0x829258BC -- one halfword, three index arguments.
+        const u16 lu16TestIndex = lIterator.GetCurrentTestIndex();
+
+        CollideGPInstances(&lGPInstanceA,
+                           &lGPInstanceB,
+                           lIterator.GetPadding(),
+                           lu16TestIndex,
+                           static_cast<u16>(lu16TestIndex + 1),
+                           lu16TestIndex,
+                           &lResultsList);
+    }
+    while (lIterator.MoveToNextHeader());
+
+    // ⭐ [DIAG] NOT IN THE X360 BINARY -- wave Q7, behind BRN_PROP_DIAG, one-shot. The latch is
+    // evaluated ONCE (a getenv per job would be a syscall on the job thread) and it fires on the
+    // FIRST call of all, empty list included: a type-10 job that arrives with pairs=0 is itself
+    // the finding, so this is deliberately not gated on having done work.
+    // Reading it: `headers` is how many records the Itterator actually walked
+    // (GetCurrentTestIndex() + 1 -- MoveToNextHeader leaves the cursor on the last record), and
+    // it reads 1 even for an EMPTY list because of the do-while above; `pairs` is what the
+    // poster declared in the list header. pairs=0 headers=1 therefore means "an empty pair list
+    // was posted", which is a VehicleManager::StartVehicleContactGeneration / DoCarCar
+    // ContactGeneration problem, not this arm's. results=0 with pairs>0 means the two GP
+    // instances never overlapped, which is normal for most frames.
+    {
+        static const bool sbPropDiag  = (std::getenv("BRN_PROP_DIAG") != 0);
+        static bool       sbFirstPass = true;
+        if (sbPropDiag && sbFirstPass && CgsDev::Log::gpDebugPrint != 0)
+        {
+            sbFirstPass = false;
+            *CgsDev::Log::gpDebugPrint
+                << "[Q7-pairs] first primitive-pair batch: headers="
+                << static_cast<s32>(lIterator.GetCurrentTestIndex() + 1)
+                << " pairs=" << static_cast<s32>(lPairList.mu16NumTests)
+                << " results=" << static_cast<s32>(lResultsList.mu16NumResults)
+                << "\n";
+        }
+    }
+
+    // 0x829258D8..0x829258FC -- the unconditional 16-byte header write-back.
+    *lpDesc->mpResultsList = lResultsList;
 }
 
-// ⭐ THE PROP NARROW-PHASE GATE THAT USED TO STAND HERE IS GONE (2026-08-19, wave Q6 cluster
-// pvt): ExecutePrimitiveListWithTriangleList @0x82925908 is a real body above. Its two callees
-// BuildGPInstance / CollideGPInstances are declared in this TU's header and defined in the
-// sibling partfile ContactGeneratorJob_wQ6_01.cpp -- there is no gate for either, so the
-// partfile MUST be mounted with this TU (two LNK2019s otherwise; `cl /c` cannot see them).
-
-#undef BRN_CONTACT_JOB_GATE
+// =============================================================================================
+// ⭐⭐⭐ THIS FILE NO LONGER HAS A SINGLE GATE, AND THE MACHINERY IS GONE WITH THEM.
+// Retired 2026-08-19 (wave Q7, cluster arms): the four remaining BRN_CONTACT_JOB_GATE bodies
+// (ExecuteSphereListWithSphereList, ...Stream, ExecuteBoxListWithTriangleList,
+// ExecutePrimitivePairList) and the BRN_CONTACT_JOB_GATE macro + its #undef. Two of those four
+// are real bodies above; the OTHER TWO -- the sphere-sphere pair, job types 7 and 8 -- are
+// declared in this TU's header and defined in ContactGeneratorJob_wQ7_01.cpp (wave Q7, cluster
+// ss), exactly as BuildGPInstance / CollideGPInstances are defined in ContactGeneratorJob_wQ6_01
+// .cpp. BOTH PARTFILES MUST BE MOUNTED WITH THIS TU -- four LNK2019s otherwise, and `cl /c`
+// cannot see any of them, so a green compile gate proves nothing about the link.
+// The earlier prop narrow-phase gate went the same way one wave before this
+// (2026-08-19, wave Q6 cluster pvt: ExecutePrimitiveListWithTriangleList @0x82925908).
+// =============================================================================================

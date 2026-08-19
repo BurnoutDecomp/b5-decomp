@@ -220,12 +220,14 @@ namespace CgsCollision
         //   * A SILENT log therefore means the callers never ran (no prop/part event
         //     reached BeginPropWorldContactGeneration), NOT that this switch is broken --
         //     a different failure, and the two are easy to confuse.
-        //   * ⚠️ The line firing does NOT mean prop contacts are being RESOLVED. The
-        //     surviving runtime gate is downstream of here:
-        //     ContactGeneratorJob::ExecutePrimitiveListWithTriangleList @0x82925908 (849,
-        //     ContactGeneratorJob.cpp:1092, MOUNTED bat:1124) is still a loud named
-        //     BRN_CONTACT_JOB_GATE, so a correctly built pair list still yields no
-        //     contacts and "prop fell out of the world" can keep printing.
+        //   * ⭐ THE DOWNSTREAM GATE IS GONE (this block used to say it survived).
+        //     ContactGeneratorJob::ExecutePrimitiveListWithTriangleList @0x82925908 (849) has
+        //     been REAL since wave Q6 round 3 (2026-08-19) -- the body lives in
+        //     ContactGeneratorJob.cpp, and the two workers it delegates to (::BuildGPInstance
+        //     @0x829222A0 and ::CollideGPInstances @0x829253C8, in the sibling partfile
+        //     ContactGeneratorJob_wQ6_01.cpp) landed with it. A correctly
+        //     built pair list now yields real contacts, so "prop fell out of the world" after
+        //     this line means something else.
         // The getenv latch is evaluated once; a per-call getenv would be a syscall on the
         // contact-generation path.
         {

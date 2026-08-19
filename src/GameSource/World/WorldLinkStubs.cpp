@@ -829,38 +829,14 @@ void BrnTraffic::TrafficEntityModule::PreDispatchUpdate(class BrnTraffic::BrnTra
     }
 }
 
-// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
-// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
-// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
-// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
-// not this gate.
-void BrnTraffic::TrafficEntityModule::PrePhysicsUpdate(struct CgsModule::IOBufferStack *,struct CgsModule::IOBufferStack *,class BrnTraffic::BrnTrafficIO::InputBuffer_PrePhysics *,class BrnTraffic::BrnTrafficIO::OutputBuffer_PrePhysics *,unsigned short)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "BrnTraffic::TrafficEntityModule::PrePhysicsUpdate: inert (body not reconstructed) [FLAG PC boot gate]\n";
-    }
-}
+// GATE RETIRED 2026-08-19 (wave Q7, cluster traffic): BrnTraffic::TrafficEntityModule::PrePhysicsUpdate @0x8274C690
+// is REAL (documented PARTIAL: all real legs + 8 named one-shot gates inside the body) in
+// EntityModules/TrafficEntityModule/BrnTrafficEntityModule_wQ7_01.cpp (mounted). HandlePropModuleRequests
+// @0x82720A90 -- the traffic-light knockdown/restore consumer -- is REAL in the same partfile.
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
-bool BrnTraffic::TrafficEntityModule::Prepare(class BrnTraffic::BrnTrafficIO::OutputBuffer_Prepare *)
-{
-    // BOOT-GATE (attribsys wave 2026-07-26): REACHED by the world Prepare stage
-    // chain. One-shot log + report success so the scripted load advances toward
-    // WORLDENTITY; the module stays inert (zero-initialised storage) and its
-    // deeper consumers keep their traps. Reconstruct from X360.
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "TrafficEntityModule::Prepare: inert [FLAG PC boot gate]\n";
-    }
-    return true;
-}
+// GATE RETIRED 2026-08-19 (wave Q7, cluster traffic): BrnTraffic::TrafficEntityModule::Prepare @0x8274A578 is
+// REAL (documented PARTIAL: stages 0/2/5 real incl. LoadData @0x82746A88 resource stages 0/1 that SEAT mpData;
+// stages 1/3/4 named gates) in EntityModules/TrafficEntityModule/BrnTrafficEntityModule_wQ7_02.cpp (mounted).
 
 // BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
 // one-shot log. This symbol is REACHED every frame now that WorldModule::Update

@@ -134,10 +134,12 @@ namespace CgsCollision
         // ListStream shape with command size 32-console/sizeof-host and NO result buffer) and the
         // three Run* dispatchers (the landed RunLineWithTriangleListStream shape wiring
         // ContactGeneratorEntry over desc types 6/14/8 -- whose workers are the three loud named
-        // gates in ContactGeneratorJob.cpp until the intersection kernels land). Only
-        // CollidePrimitivePairList remains a gate (CgsCollisionGenerator_StreamStubs.cpp) -- its
-        // synchronous collide path (type-10 descriptor + ExecutePrimitivePairList worker) is a
-        // separate leg nothing live reaches (the junkyard runs no simple-traffic pairs).
+        // gates in ContactGeneratorJob.cpp until the intersection kernels land).
+        // ⭐⭐⭐ UPDATED 2026-08-19 (wave Q7, cluster `pairlist`): SEVEN OF SEVEN NOW. The sentence
+        // that stood here -- "Only CollidePrimitivePairList remains a gate
+        // (CgsCollisionGenerator_StreamStubs.cpp)" -- is retired; that body is in
+        // CgsCollisionGenerator.cpp beside its sibling synchronous leg, and StreamStubs.cpp is a
+        // banner-only tombstone reported for UNMOUNT (bat:1001). See the declaration's own block.
         // The DebugRenderStreamReader parameter is spelled bare in the DWARF; bound to
         // CgsDev::DebugRenderStreamReader (the one committed type of that name).
         // ==========================================================================================
@@ -149,8 +151,47 @@ namespace CgsCollision
                                                                        CgsDev::DebugRenderStreamReader* lpDebugReader); // @0x828118A8 (:111)
         CgsMemory::SimpleDataStreamProducer* CreateCollideSphereListWithSphereListStream(s32 liMaxCommands);     // @0x82811A78 (:120)
         EA::Jobs::Job* RunCollideSphereListWithSphereListStream(CgsMemory::SimpleDataStreamProducer* lpProducer); // @0x82811C00 (:123)
-        u16 CollidePrimitivePairList(const PrimitivePairList* lpPairList, u16 lu16MaxResults,
-                                     u32 luFlags, u16 lu16Tag);                                                  // @0x82814138 (:144)
+
+        // ==========================================================================================
+        // ⭐⭐ BODIED 2026-08-19 (wave Q7, cluster `pairlist`) -- the SYNCHRONOUS primitive-pair leg,
+        // and the LAST gate of the collide family. Body + full 40-instruction decode:
+        // CgsCollisionGenerator.cpp, beside its sibling CollidePrimitiveListAgainstTriangleList.
+        //
+        // ⚠️ PARAMETER NAMES CORRECTED WITH THE BODY. This declaration used to read
+        //     (const PrimitivePairList*, u16 lu16MaxResults, u32 luFlags, u16 lu16Tag)
+        // and `luFlags` was a MISNAME: the asm passes r6/r7 straight through to
+        // PrepareNewPrimitiveTestResultsList(u16 maxResults, u32 tagA, u16 tagB) (the r4<-r5,
+        // r5<-r6, r6<-r7 shuffle at 0x82814148..0x82814150), which stores them into the
+        // CollisionResultList header as the caller's USER TAGS -- nothing reads them as a flag
+        // word. DecFIGS agrees and supplies the spelling: CgsCollisionGenerator.h:292 declares
+        //     uint16_t CollidePrimitivePairList(const PrimitivePairList *, uint16_t, uint32_t,
+        //                                       uint16_t);
+        // and CgsCollisionGenerator.cpp:1662 names them lpPrimitiveList / lu16MaxNumCollisions /
+        // luUserTagA / lu16UserTagB. (Four arguments, no float -> no GPR slot skipped.)
+        // The caller's literals carried the same misname and were corrected in the same wave:
+        // BrnVehicleManagerContactGeneration.cpp now spells them KU_COLLIDE_USER_TAG_A (tagA == 11)
+        // and KU16_COLLIDE_USER_TAG_B (tagB == 0).
+        //
+        // ⚠️ RETURN TYPE: the DWARF's u16 is kept (this declaration is DWARF-shaped), but the
+        // console returns the result-list index UNTRUNCATED -- 0x8281415C `mr r30, r3`, a
+        // `clrlwi` at 0x82814168 for the mapCollisionResultLists SUBSCRIPT only, and 0x828141CC
+        // `mr r3, r30` with no narrowing on the return path. Same register truth for which the
+        // three Add*...ToStream siblings are deliberately typed s32. All FIVE measured call sites
+        // (two functions, five `bl`s -- see the body's banner) drop the value, so the spelling
+        // changes no behaviour.
+        //
+        // ⭐ THE WHOLE CLOSURE IS REAL AS OF WAVE Q7 (2026-08-19). The type-10 worker --
+        // ContactGeneratorJob::ExecutePrimitivePairList @0x82925798, dispatched from Execute
+        // case 10 -- landed as a full body in ContactGeneratorJob.cpp in the SAME wave as this
+        // dispatcher; it is no longer a gate. Everything
+        // else in the closure was already a real body (PrepareNewPrimitiveTestResultsList @0x82810798,
+        // CreateNewBatch @0x82810960, PrimitivePairListJobDesc::Prepare @0x82810478,
+        // CollisionBatch::SetupJob @0x82810508, PerfMonCpu::Start/StopMonitor).
+        // ==========================================================================================
+        u16 CollidePrimitivePairList(const PrimitivePairList* lpPrimitiveList,
+                                     u16                     lu16MaxNumCollisions,
+                                     u32                     luUserTagA,
+                                     u16                     lu16UserTagB);                                      // @0x82814138 (DWARF :292)
 
         // ==========================================================================================
         // ⭐ ADDED 2026-08-19 (wave Q6, cluster B -- prop-vs-world contact generation). The
@@ -222,6 +263,34 @@ namespace CgsCollision
                                                        CgsMemory::SimpleDataStreamProducer* lpProducer); // @0x82811698
 
         // ==========================================================================================
+        // ⭐ ADDED 2026-08-19 (wave Q7, cluster `carcar`) — the THIRD collide-stream poster, and
+        // the last of the sphere family: the SPHERE-LIST vs SPHERE-LIST command
+        // VehicleManager::DoCarCarContactGeneration @0x8261BB38 posts once per overlapping
+        // (non-simple-traffic) car pair per frame. Landing it is what makes the type-7/8
+        // sphere-sphere arm reachable at run time at all.
+        //
+        // ⚠️⚠️ OUT-OF-OWNERSHIP EDIT, DECLARED HERE ON PURPOSE AND REPORTED. This header is the
+        // `pairlist` cluster's this wave; the `carcar` cluster added ONLY this declaration (and
+        // the matching body beside its two siblings in CgsCollisionGenerator_CollideStreams.cpp)
+        // because DoCarCarContactGeneration cannot be landed without it and no other Q7 cluster
+        // is scoped to the poster. If this block and the body do not arrive together, the link
+        // reports it (LNK2019 from BrnVehicleManagerContactGeneration.obj).
+        //
+        // The body @0x828119F0 (33 insns) is the SAME BODY as its two siblings above, diffed:
+        // PrepareNewPrimitiveTestResultsList -> build the family StreamCommand {list A, list B,
+        // padding, result list} -> AddCommand -> return the result-list index. Register truth
+        // from that asm: r4/r5 the two lists, r6 maxResults, r7 SKIPPED (f1's GPR slot, gotcha 3),
+        // r8 userTagA, r9 userTagB, r10 the producer, f1 the padding — i.e. the identical
+        // argument order the two siblings already carry. Its ONE caller passes userTagB == 0
+        // (`li r9, 0` @0x8261BCF8) where the world path passes 1.
+        // ==========================================================================================
+        s32 AddSphereListWithSphereListToStream(const SphereList* lpSphereListA,
+                                                const SphereList* lpSphereListB,
+                                                u16 lu16MaxResults, f32 lfPadding,
+                                                u32 lu32UserTagA, u16 lu16UserTagB,
+                                                CgsMemory::SimpleDataStreamProducer* lpProducer);      // @0x828119F0
+
+        // ==========================================================================================
         // ADDED 2026-08-18 (wave Q round 2, shared-header owner): the PRIMITIVE-PAIR-LIST vs
         // TRIANGLE-LIST stream family -- the fourth collide-stream family, and the one BREAKABLE
         // PROPS run on. It is the stream BrnPhysics::Props::PropManager::BeginPropWorldContact-
@@ -284,9 +353,9 @@ namespace CgsCollision
         //       +0xFF = 12     muJobType      (0x82811FEC stb r23, 0x4CF, r23 == 0xC)
         // The type-12 WORKER is a real body too as of the same wave (ContactGeneratorJob::Execute
         // case 12 -> ExecutePrimitiveListWithTriangleListStream @0x82926650, 100 insns), so a
-        // posted command is drained rather than dropped. What that worker delegates to --
-        // ExecutePrimitiveListWithTriangleList @0x82925908 (849) -- is still a loud named gate,
-        // and that is the family's honest runtime residual.
+        // posted command is drained rather than dropped. ⭐ What that worker delegates to --
+        // ExecutePrimitiveListWithTriangleList @0x82925908 (849) -- is a REAL BODY too, since wave
+        // Q6 round 3 (2026-08-19), in ContactGeneratorJob.cpp. This family has no gated leg left.
         // ==========================================================================================
         CgsMemory::SimpleDataStreamProducer* CreateCollidePrimitiveListWithTriangleListStream(s32 liMaxTests); // h:271 / X360 0x82811DD0 (sub_ -- see banner)
         EA::Jobs::Job* RunCollidePrimitiveListWithTriangleListStream(

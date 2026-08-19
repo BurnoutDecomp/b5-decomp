@@ -2,60 +2,49 @@
 // GameShared/GameClasses/SceneManager/Collision/ContactGenerator/
 // CgsCollisionGenerator_StreamStubs.cpp
 //
-// ⭐⭐ SIX OF THE SEVEN STUBS RETIRED 2026-08-14 (walls leg 1). This TU was born
-// (2026-08-06, big-five #2 wave) holding trap stubs for the whole collide-stream family;
-// the three Create* factories, the three Run* dispatchers and the two Add* posters are REAL
-// now, in CgsCollisionGenerator_CollideStreams.cpp (bodies read from the image; the three
-// Create* proved byte-identical bar assert lines; the Run* wire ContactGeneratorEntry over
-// desc types 6/14/8 whose workers are loud named gates in ContactGeneratorJob.cpp).
-// If a definition for any of them reappears here the link will say so (LNK2005).
+// ⭐⭐⭐ THIS TU IS EMPTY AS OF 2026-08-19 (wave Q7, cluster `pairlist`). ALL SEVEN OF ITS
+// STUBS ARE RETIRED. It defines NO symbol; it is kept as a tombstone so the history of
+// where each stub went is readable, and it is REPORTED FOR UNMOUNT
+// (tools/build/build_game_exe.bat:1001 -- the conductor owns that file and that deletion).
+// Compiling it is harmless but pointless (MSVC emits LNK4221 "no public symbols found").
 //
-// WHAT REMAINS — ONE gate:
-//   CollidePrimitivePairList @0x82814138 (92) — the SYNCHRONOUS primitive-pair collide leg
-//   StartVehicleContactGeneration calls for the two simple-traffic pair lists. Nothing on the
-//   junkyard path posts a traffic pair (both GetNumTests() guards are 0), so this is dead at
-//   runtime today; when traffic lands, the gate names it. Its closure is its own: the type-10
-//   descriptor prepare + ExecutePrimitivePairList @0x82925798 (92) + the pair-list walk.
+// WHERE EVERYTHING WENT
+//   2026-08-14 (walls leg 1) -- SIX OF THE SEVEN BIRTH STUBS ->
+//     CgsCollisionGenerator_CollideStreams.cpp: the three Create* factories and the three Run*
+//     dispatchers. (The two Add* posters landed in the same change but were never stubs here --
+//     the TU was born, at fbd9392e, holding exactly 3 Create* + 3 Run* + CollidePrimitivePairList.)
+//     The three Create* proved byte-identical bar assert line numbers; the Run* wire
+//     ContactGeneratorEntry over descriptor types 6/14/8, whose workers are all real bodies now
+//     (ContactGeneratorJob.cpp and its wQ6/wQ7 partfiles, wave Q7).
+//   2026-08-19 (wave Q6, cluster pstream) -- A GATE ADDED TO THIS FILE AFTER BIRTH, NOT ONE OF THE
+//     SEVEN: AddPrimitiveListWithTriangleListToStream
+//     @0x82811D40 (35) -> CgsCollisionGenerator.cpp, its DWARF home TU (dumpfile source
+//     line 1996). Its whole blocker was ONE type + ONE enum member, both landed with it:
+//     JobDescription/CgsPrimitiveListWithTriangleListStreamJobDesc.h and
+//     E_COLLISIONJOB_PRIMITIVE_LIST_WITH_TRIANGLE_LIST_STREAM = 12.
+//   2026-08-19 (wave Q7, cluster pairlist) -- THE LAST ONE:
+//     BaseCollisionGenerator::CollidePrimitivePairList @0x82814138 -> CgsCollisionGenerator.cpp,
+//     beside its sibling synchronous leg CollidePrimitiveListAgainstTriangleList @0x828141D8.
+//     Its closure was ALREADY COMPLETE and had been for waves -- PrepareNewPrimitiveTestResults-
+//     List @0x82810798, CreateNewBatch @0x82810960, PrimitivePairListJobDesc::Prepare
+//     @0x82810478 (which seats job type 10), CollisionBatch::SetupJob @0x82810508 and the two
+//     PerfMonCpu monitors are all real bodies in the tree; the gate was outliving its reason.
+//     ⚠️ TWO CORRECTIONS to the banner that stood here, both real defects (gotcha 9):
+//       * "(92)" instructions -- WRONG, it is 40 (0x82814138..0x828141D4, and
+//         (0x828141D8-0x82814138)/4 == 40).
+//       * "Its closure is its own: the type-10 descriptor prepare + ExecutePrimitivePairList
+//         @0x82925798 (92) + the pair-list walk" -- the descriptor prepare was already landed,
+//         and only ExecutePrimitivePairList was ever outstanding. ⭐ It is no longer: the type-10
+//         worker landed as a full body in ContactGeneratorJob.cpp (ExecutePrimitivePairList,
+//         dispatched from Execute case 10) in the SAME wave Q7, so this leg is bodied end to end.
+//     The "dead at runtime today" observation still holds and is still worth keeping: on the
+//     junkyard path both simple-traffic builders report GetNumTests() == 0, so nothing posts
+//     yet. It goes live with traffic, and with VehicleManager::StartPartContactGeneration's
+//     gated tail (owner `carcar`).
 //
-// ⭐⭐ GATE RETIRED 2026-08-19 (wave Q6, cluster pstream):
-//   AddPrimitiveListWithTriangleListToStream @0x82811D40 (35) is REAL now, in the sibling
-//   CgsCollisionGenerator.cpp (its DWARF home TU — dumpfile source line 1996). The whole
-//   blocker was ONE type plus ONE enum member, and both landed with it:
-//     * JobDescription/CgsPrimitiveListWithTriangleListStreamJobDesc.h — the type-12 descriptor
-//       and its nested StreamCommand (DWARF-homed in the non-Stream sibling header at :107-:149;
-//       landed in its own file, matching the tree's placement for every other *Stream descriptor
-//       whose DWARF home is a non-Stream header);
-//     * E_COLLISIONJOB_PRIMITIVE_LIST_WITH_TRIANGLE_LIST_STREAM = 12 in
-//       JobDescription/CgsCollisionJobDescription.h.
-//   The family's Create/Run halves (@0x82811DD0 / @0x82811F58) landed in the same TU, and the
-//   type-12 WORKER (ContactGeneratorJob::ExecutePrimitiveListWithTriangleListStream @0x82926650,
-//   100 insns) is a real body now too — so a posted command is actually drained.
-//   ⚠️ Both TUs are MOUNTED (this one bat:1001, CgsCollisionGenerator.cpp bat:1018), so the gate
-//   HAD to be deleted in the same change that landed the body or the mounted build takes an
-//   LNK2005 that `cl /c` cannot see.
+// If a definition for ANY of the seven ever reappears in this file, the link will say so
+// (LNK2005) -- which is exactly why each retirement had to happen in the same change as its
+// body: both TUs are mounted and `cl /c` cannot see a duplicate definition.
 // ============================================================================
 
-#include "GameShared/GameClasses/SceneManager/Collision/ContactGenerator/CgsCollisionGenerator.h"
-
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"  // gpDebugPrint (the boot gate, 2026-08-09)
-
-namespace CgsSceneManager
-{
-namespace CgsCollision
-{
-    // (AddPrimitiveListWithTriangleListToStream's gate lived here until 2026-08-19; the real body
-    //  is in CgsCollisionGenerator.cpp. LNK2005 if a definition ever comes back to this file.)
-
-    u16 BaseCollisionGenerator::CollidePrimitivePairList(const PrimitivePairList* /*lpPairList*/,
-                                                         u16 /*lu16MaxResults*/, u32 /*luFlags*/, u16 /*lu16Tag*/)
-    {
-        do { static bool s_bLogged = false;
-        if (!s_bLogged) { s_bLogged = true;
-            if (CgsDev::Message::gxMessageFilterFlags & 1)
-                *CgsDev::Log::gpDebugPrint << "conductor gate (was TRAP): BaseCollisionGenerator::CollidePrimitivePairList "
-                          "@0x82814138 not reconstructed (big-five #2 closure stub)\n"; } } while (0);
-        return 0;
-    }
-}
-}
+// Deliberately no includes and no definitions: this TU contributes nothing to the link.

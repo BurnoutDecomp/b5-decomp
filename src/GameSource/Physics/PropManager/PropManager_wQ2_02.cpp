@@ -389,12 +389,13 @@ bool PropManager::GetTriangleCacheSlotAndRadius( PropEntityID lPropEntityId,
 //         E_COLLISIONJOB_PRIMITIVE_LIST_WITH_TRIANGLE_LIST_STREAM = 12. The type-12 worker
 //         (ContactGeneratorJob::ExecutePrimitiveListWithTriangleListStream @0x82926650, 100)
 //         landed with them, so a command posted from this file is actually drained.
-//         ⛔ WHAT IS STILL GATED, AND IT IS THE RUNTIME RESIDUAL OF THIS WHOLE LEG:
+//         ⭐ NOTHING IN THIS LEG IS GATED ANY MORE. This block used to name
 //         ContactGeneratorJob::ExecutePrimitiveListWithTriangleList @0x82925908 (849) -- the
-//         primitive-vs-triangle narrow phase the stream arm delegates to. Its closure is two
-//         un-reconstructed workers, ::BuildGPInstance @0x829222A0 and ::CollideGPInstances
-//         @0x829253C8. Until they land, prop commands reach a NAMED gate rather than producing
-//         contacts.
+//         primitive-vs-triangle narrow phase the stream arm delegates to -- as the runtime
+//         residual of the whole leg. It has been REAL since wave Q6 round 3 (2026-08-19), in
+//         ContactGeneratorJob.cpp, and the two workers it delegates to landed with it:
+//         ::BuildGPInstance @0x829222A0 and ::CollideGPInstances @0x829253C8, in the sibling
+//         partfile ContactGeneratorJob_wQ6_01.cpp. Prop commands now produce real contacts.
 //     VERIFIED-BODIED and therefore NOT holes (checked, so the list above is exhaustive):
 //     BaseCollisionGenerator::Prepare(void*,s32) and ::Finish (CgsCollisionGenerator.cpp:68/:86),
 //     SimpleDataStreamProducer::Begin (CgsSimpleDataStreamProducer_Begin.cpp) and ::End
@@ -514,14 +515,13 @@ void PropManager::BeginPropWorldContactGeneration(
     // created, integrated, and then FREE-FALL, since this whole function was an inert
     // BRN_CONDUCTOR_GATE and no prop-vs-world contact was ever generated.
     // ⚠️ READ IT AS A PAIR WITH THAT WARNING. `props`/`parts` non-zero here and the fall-out
-    // warning still firing means the contacts are being POSTED but not RESOLVED -- which is
-    // exactly what the ONE remaining RUNTIME GATE on this path would produce:
-    // ContactGeneratorJob::ExecutePrimitiveListWithTriangleList @0x82925908 (849,
-    // GameShared/Jobs/ContactGenerator/ContactGeneratorJob.cpp:1092, mounted bat:1124), the
-    // primitive-vs-triangle NARROW PHASE that the type-12 stream arm delegates to. It is a loud
-    // named BRN_CONTACT_JOB_GATE with a definition, so the exe links -- it just produces no
-    // contacts. Its own closure is ::BuildGPInstance @0x829222A0 and ::CollideGPInstances
-    // @0x829253C8.
+    // warning still firing used to be explained by the narrow phase being gated. IT IS NOT ANY
+    // MORE: ContactGeneratorJob::ExecutePrimitiveListWithTriangleList @0x82925908 (849), the
+    // primitive-vs-triangle NARROW PHASE the type-12 stream arm delegates to, has been REAL since
+    // wave Q6 round 3 (2026-08-19) in GameShared/Jobs/ContactGenerator/ContactGeneratorJob.cpp,
+    // and its own closure landed with it -- ::BuildGPInstance @0x829222A0 and
+    // ::CollideGPInstances @0x829253C8, in the sibling partfile ContactGeneratorJob_wQ6_01.cpp.
+    // So counts here plus a surviving fall-out warning now means something further down.
     // ✅ NOT the explanation any more (both landed 2026-08-19, wave Q6 round 2):
     // BaseCollisionGenerator::AddPrimitiveListWithTriangleListToStream is a REAL BODY in the
     // mounted CgsCollisionGenerator.cpp, and PrimitivePairListBuilder::AddPrimitive(const
