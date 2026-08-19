@@ -120,6 +120,7 @@
 #include "rw/math/vpu/vector3_operation.h"                                // MagnitudeSquared
 
 #include <cstddef>   // offsetof (the layout tripwire below)
+#include <stdlib.h>  // getenv   ([DIAG] BRN_PROP_DIAG, wave Q6)
 
 // The global runtime shader-constant register (X360 symbol mShaderConstantTable; bodied by
 // the CgsShaderConstants TU). Mirrors the committed extern in the sibling render TUs.
@@ -774,6 +775,72 @@ PropEntityModule::GenerateDispatchLists(
             const Matrix44Affine& lrTransform = lpPart->mWorldTransform;
             const u32 luPropTypeId = lpPart->muTypeId;
             const u32 luPartId     = lpPart->muPartId;
+
+            // ---- [DIAG] NOT IN THE X360 BINARY -- wave Q6 last-link witness --------------
+            // ⛔ DELETE-WHEN smashed parts are confirmed moving on screen. Set BRN_PROP_DIAG.
+            // This read of lpPart->mWorldTransform is the ONLY consumer of what
+            // PropZoneManager::UpdateInstance's part arm writes, so "the parts visibly move"
+            // is, precisely, "this hash CHANGES between lines". A constant hash while
+            // [Q6-move] prints a non-zero dy means the writer and the reader are looking at
+            // different part slots; NO line at all means no part entity ever survived
+            // FilterFrustumTestResults, i.e. the break never reached the scene.
+            //
+            // Deliberately placed AT THE READ, i.e. BEFORE the GetPropGraphics()==0 drop
+            // below: a part whose type has no graphics record still prints here, which is
+            // what separates "the pose is stale" (a frozen hash) from "the model is missing"
+            // (a moving hash with liDropPartNoGfx counting up). The two failures look
+            // identical on screen and this is the only place that tells them apart.
+            //
+            // ONE tracked part (the first one this function ever sees, latched) and one line
+            // per 60 sightings. A visible part is seen exactly once per Render call, so 60
+            // sightings is ~1 s at 60 Hz -- a call counter is used rather than a clock
+            // because this TU has no timestep of its own.
+            //
+            // The hash is built arithmetically from the twelve basis+translation components
+            // (fixed-point at 1/1024, then FNV-1a) rather than from the float bit patterns:
+            // a bit-level fold would need a raw reinterpret_cast, which is the exact shape
+            // the faithfulness lint rejects.
+            {
+                static const bool sbPropDiag = ( getenv( "BRN_PROP_DIAG" ) != 0 );
+                if ( sbPropDiag && CgsDev::Log::gpDebugPrint != 0 )
+                {
+                    static u32  suTrackedPartId  = 0;
+                    static bool sbTrackedLatched = false;
+                    static u32  suSightings      = 0;
+
+                    const u32 luPartEntityId = static_cast< u32 >( lEntityId );
+                    if ( !sbTrackedLatched )
+                    {
+                        sbTrackedLatched = true;
+                        suTrackedPartId  = luPartEntityId;
+                    }
+
+                    if ( suTrackedPartId == luPartEntityId )
+                    {
+                        if ( ( suSightings % 60u ) == 0u )
+                        {
+                            const f32 lafComponents[ 12 ] =
+                            {
+                                lrTransform.Right().x, lrTransform.Right().y, lrTransform.Right().z,
+                                lrTransform.Up().x,    lrTransform.Up().y,    lrTransform.Up().z,
+                                lrTransform.At().x,    lrTransform.At().y,    lrTransform.At().z,
+                                lrTransform.Pos().x,   lrTransform.Pos().y,   lrTransform.Pos().z
+                            };
+                            u32 luHash = 2166136261u;   // FNV-1a offset basis
+                            for ( s32 liComponent = 0; liComponent < 12; ++liComponent )
+                            {
+                                const s32 liFixed =
+                                    static_cast< s32 >( lafComponents[ liComponent ] * 1024.0f );
+                                luHash = ( luHash ^ static_cast< u32 >( liFixed ) ) * 16777619u;
+                            }
+                            *CgsDev::Log::gpDebugPrint
+                                << "[Q6-render] part " << luPartEntityId
+                                << " xform hash " << luHash << "\n";
+                        }
+                        ++suSightings;
+                    }
+                }
+            }
 
             // ---- shared part tail (@0x822FBCD4..0x822FBDF0) ------------------
             CGS_ASSERT( luPropTypeId < BrnPhysics::Props::KU_MAX_PROP_TYPES,

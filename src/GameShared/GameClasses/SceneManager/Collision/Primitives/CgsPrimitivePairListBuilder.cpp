@@ -2,6 +2,7 @@
 
 #include "GameShared/GameClasses/Memory/CgsLinearMalloc.h"   // CgsMemory::LinearMalloc::Malloc / GetAlignment
 #include "GameShared/GameClasses/Core/CgsAssert.h"           // CGS_ASSERT
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // gpDebugPrint (the named gate below)
 
 #include <cmath>   // std::sqrt
 
@@ -134,6 +135,69 @@ namespace CgsCollision
         lpHeader->mu16PrimitiveATag         = lu16PrimitiveTagA;
         lpHeader->mu16PrimitiveBTag         = lu16PrimitiveTagB;
         lpHeader->mu8DataPaddingAndCheckSum = static_cast<u8>(lu8TypeA + lu8TypeB + 1);
+    }
+
+    // =========================================================================
+    // AddPrimitive(const rw::collision::Volume*, Matrix44Affine, f32, u16)
+    // @0x82814AB8 (140 insns) -- ⛔ LOUD NAMED GATE, NOT A RECONSTRUCTION.
+    //
+    // Added 2026-08-19 (wave Q6, cluster B) so that the two prop-vs-world contact
+    // generation legs that landed the same wave
+    // (PropManager::DoPart/DoPropInstanceWorldContactGeneration,
+    //  GameSource/Physics/PropManager/PropManager_wQ2_03.cpp) LINK. The bat's own
+    // doctrine is that "LNK2019 resolves before /OPT:REF discards" (:544), so a
+    // referenced-but-bodyless callee breaks the exe even when nothing calls it.
+    //
+    // ⚠️ THIS IS THE WAVE'S RESIDUAL DEFECT AND IT IS DELIBERATELY LOUD. While this
+    // gate stands, a prop's collision volumes never become collision primitives, so
+    // the pair list a smashed prop hands the contact generator is EMPTY and its parts
+    // keep free-falling ("Warning!! prop fell out of the world"). Nothing about that
+    // is silent: the one-shot line below names the address the moment the first prop
+    // volume is submitted.
+    //
+    // WHY IT IS A GATE AND NOT A BODY -- the closure, measured this wave on a private
+    // .i64 copy (scratchpad/waveQ6/ida_worldc/out.json), NOT inferred:
+    //   * the console body is a 5-case switch on the volume's rwcollision type id
+    //     (`lwz 0x40(volume)` -> the per-TYPE descriptor -> `lwz 0(desc)` == typeID,
+    //     `addi -1`, jump table jpt_82814B08 = {0x82814C04, 0x82814B88, 0x82814CAC,
+    //     0x82814B20, 0x82814C48} -- read out of the image, not guessed);
+    //   * case typeID 1 SPHERE  -> AddPrimitive(Sphere*) @0x82814508  -- IN TREE (below);
+    //   * case typeID 2 CAPSULE -> sub_82814600 (29 insns) == AddPrimitive(Capsule*):
+    //     AddCollisionHeader(E_VOLUME_TYPE_CAPSULE=2), AllocateMemory(0x20), a 32-byte
+    //     copy, ++mu16NumTests. NO CgsGeometric::Capsule TYPE EXISTS IN THE TREE.
+    //   * case typeID 3 TRIANGLE -> the DEFAULT arm 0x82814CAC: the console REFUSES it,
+    //     firing "Tried to add a RW volume that wasn't a "... at
+    //     CgsPrimitivePairListBuilder.cpp:319 (`li r5, 0x13F`);
+    //   * case typeID 4 BOX     -> CgsGeometric::Box::Set @0x825E6918 (269 insns, ALSO
+    //     bodyless in this tree -- only modelled inline at
+    //     BrnDeformableObject_BBox.cpp:243) then sub_82814570 (35 insns) ==
+    //     AddPrimitive(Box*): header type 4, AllocateMemory(0x50), five 16-byte rows;
+    //   * case typeID 5 CYLINDER -> sub_82814678 (36 insns) == AddPrimitive(Cylinder*):
+    //     header type 5, AllocateMemory(0x50), four 16-byte rows + two f32 at +0x40/+0x44.
+    //     NO CgsGeometric::Cylinder TYPE EXISTS IN THE TREE.
+    // So closing this needs: two new CgsGeometric primitive types, three sibling
+    // overloads, and Box::Set -- its own cluster. A partial switch landed here would
+    // omit whole volume kinds with nothing in the log to say so, which is precisely
+    // what this project's faithfulness rules forbid. Reported, not guessed.
+    //
+    // ⚠️ GOTCHA 3 IS ALREADY BAKED INTO THE SIGNATURE: the f32 padding rides f1 AND
+    // consumes r6's GPR slot, so the u16 tag arrives in r7. Four parameters, not five.
+    // =========================================================================
+    void PrimitivePairListBuilder::AddPrimitive(const ::rw::collision::Volume* /*lpVolume*/,
+                                                Matrix44Affine /*lTransform*/,
+                                                f32 /*lfPadding*/,
+                                                u16 /*lu16PrimitiveTag*/)
+    {
+        do { static bool s_bLogged = false;
+        if (!s_bLogged) { s_bLogged = true;
+            if (CgsDev::Message::gxMessageFilterFlags & 1)
+                *CgsDev::Log::gpDebugPrint
+                    << "conductor gate: PrimitivePairListBuilder::AddPrimitive(rw::collision::Volume*)"
+                       " @0x82814AB8 (140) not reconstructed -- prop/part collision volumes are NOT"
+                       " being turned into collision primitives, so prop-vs-world contact generation"
+                       " posts EMPTY pair lists (wave Q6 cluster B residual; closure = 3 sibling"
+                       " overloads + CgsGeometric::Capsule/Cylinder + CgsGeometric::Box::Set"
+                       " @0x825E6918)\n"; } } while (0);
     }
 
     // -------------------------------------------------------------------------

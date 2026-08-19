@@ -36,6 +36,27 @@
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleDriverInputInterface.h"   // OutputBuffer_PrePhysics::VehicleDriverInputInterface
 #include "GameSource/Physics/DeformationManager/SharedIO/BrnDeformationOutputInterface.h" // DeformationOutputInterfaceForEntityModules
 #include "GameSource/Physics/ContactSpies/BrnContactSpyInterface.h"                       // ContactSpyInterface
+#include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"                          // CgsModule::VariableEventQueue<N,16>
+#include "GameSource/World/EntityModules/PropEntityModule/SharedIO/BrnPropToTrafficInterface.h" // BrnWorld::PropEntityIO::PropToTrafficInterface (InputBuffer_PrePhysics member, retyped 2026-08-19)
+#include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_SceneUpdate.h"            // CgsSceneManager::SceneManagerIO::InSceneUpdateInterface (canonical home; the two OutputBuffer scene seats, relaid 2026-08-19)
+#include "GameSource/World/EntityModules/TrafficEntityModule/SharedIO/BrnTrafficDirectorInterfaces.h" // TrafficDirectorOutputInterface (OutputBuffer_PostPhysics @+6208)
+#include "GameSource/World/EntityModules/TrafficEntityModule/SharedIO/BrnTrafficTypeInterface.h"      // TrafficTypeResponse (OutputBuffer_PostPhysics @+830144)
+#include "GameSource/World/EntityModules/TrafficEntityModule/SharedIO/BrnTrafficToRaceCarInterface.h"  // TrafficToRaceCarInterface_PreScene (OutputBuffer_PreScene @+818784; typedef'd, was a padding fork)
+#include "GameSource/World/EntityModules/TriggerEntityModule/SharedIO/BrnTriggerEntityModuleInputInterface.h" // BrnWorld::TriggerEntityModuleIO::TriggerManagementInputInterface (OutputBuffer_PreScene @+819328)
+
+// ---- InputBuffer_Dispatch member type homes (pointer slots) ----
+// BrnBlobbyShadowBuffer and BrnSubmissionInterface are NESTED classes, so they cannot be
+// forward-declared -- the real headers come in, exactly as the sibling race-car IO header
+// (BrnRaceCarEntityModuleIO.h:80/:85) and prop IO header already do.
+#include "GameSource/Graphics/BrnBlobbyShadowManager.h"   // BrnBlobbyShadowManager::BrnBlobbyShadowBuffer
+#include "GameSource/Graphics/BrnCoronaManager.h"         // BrnCoronaManager::BrnSubmissionInterface
+// Pointer-only uses in InputBuffer_Dispatch (AGENTS.md forward-declaration exception (b) --
+// the same treatment the sibling BrnWorld::PropEntityIO::InputBuffer_Dispatch already uses):
+// including CgsDispatcher.h / BrnShadowMap.h here would pull the whole renderer + shadow-
+// cascade tail into every includer of this IO header (and this header is reached from
+// BrnWorldModule.h, i.e. from almost everywhere).
+namespace CgsGraphics { class DispatchFrame; }
+namespace BrnWorld { struct ShadowMap; }
 
 namespace BrnTraffic
 {
@@ -49,41 +70,60 @@ namespace BrnTrafficIO
     // BrnTraffic::TrafficEntityModule::GenerateDispatchLists drains it via the four getters).
     // Mirrors the near-identical sibling BrnWorld::WorldEntityIO::InputBuffer_GenerateDispatchLists.
     //
-    // LAYOUT (X360 accessor offsets, authoritative -- four contiguous 32-bit words at the tail):
+    // LAYOUT (X360 accessor offsets -- PROVENANCE, see the POINTER WIDTH note below):
     //   base    CgsModule::IOBuffer                     (1-byte status FlagSet8; +1.. pad)
-    //   +0x8014 u32 muDispatchFrame                     dispatch-frame index
-    //   +0x8018 u32 muBlobbyShadowBuffer                blobby-shadow buffer handle
-    //   +0x801C u32 muCoronaSubmissionInterface         corona-submission interface handle
-    //   +0x8020 u32 muShadowMap                         shadow-map handle
+    //   +0x8014 u32 muDispatchFrame                     dispatch frame
+    //   +0x8018 u32 muBlobbyShadowBuffer                blobby-shadow buffer
+    //   +0x801C u32 muCoronaSubmissionInterface         corona-submission interface
+    //   +0x8020 u32 muShadowMap                         shadow map
     //
-    // FLAG (opaque interior): the corona/shadow/blobby fields are 32-bit handles of foreign
-    // interfaces whose homes land elsewhere; the asm treats each as a single 32-bit word. The
-    // dispatch-list payload from base up to +0x8014 is the buffer's other (unrecovered) contents
-    // and is modelled as correctly-sized opaque storage so the four X360-pinned offsets are exact.
+    // ⭐ POINTER WIDTH CORRECTED 2026-08-19 (wave Q6, cluster C2 -- the render-dispatch bridge).
+    // All four slots were modelled as `u32` handles because the X360 accessors are a bare
+    // `lwzx`/`stwx` of a 32-bit word. They are NOT handles: on the X360 a pointer IS 32 bits, and
+    // the one and only producer -- WorldModule::BridgeWorldModuleToEntityModules_Render
+    // @0x827ABE28, now bodied in Bridges/WorldBridgeToEntityModules.cpp -- stores real pointers
+    // into every one of them:
+    //   SetDispatchFrame(r4 = DispatchInputBuffer::GetDispatchFrame()            @0x827A4EB0)
+    //   SetBlobbyShadowBuffer(r4 = DispatchInputBuffer::GetBlobbyShadowBuffer()  @0x827A42F0)
+    //   SetCoronaSubmissionInterface(r4 = ...GetCoronaSubmissionInterface()      @0x827A4398)
+    //   SetShadowMap(r4 = `addis r27,r25,0x5E; addi r27,r27,0x26E0` == &WorldModule::mShadowMap)
+    // Those four producer accessors already carry the real pointer types
+    // (BrnWorldModuleIO_DispatchInputBuffer.h:80/:111/:115), and BOTH sibling dispatch input
+    // buffers were widened already (PropEntityIO::InputBuffer_Dispatch 2026-08-12/2026-08-18,
+    // RaceCarEntityModuleIO::InputBuffer_GenerateDispatchLists). Keeping them u32 on x64
+    // truncates a host pointer -- AGENTS.md gotcha 1, the recurring project bug.
+    // The console byte offsets above are PROVENANCE ONLY now; every access goes by name.
+    //
+    // FLAG (opaque interior): the dispatch-list payload from base up to +0x8014 is the buffer's
+    // other (unrecovered) contents and stays modelled as correctly-sized opaque storage, so the
+    // four fields still sit at the tail in the console's order. The host pointers are 8-byte
+    // aligned, so the tail block starts at 0x8018 rather than 0x8014 -- deliberate, and pinned
+    // by _AssertLayout as a HOST fact (nothing serialises this buffer; it is a pure runtime IO
+    // object, exactly like its already-widened prop sibling).
     class InputBuffer_Dispatch : public CgsModule::IOBuffer
     {
     public:
-        // X360 0x827120D8: read-lock; return the dispatch-frame index (this+0x8014).
-        u32  GetDispatchFrame() const;
+        // X360 0x827120D8: read-lock; return the dispatch frame (console word @this+0x8014).
+        CgsGraphics::DispatchFrame* GetDispatchFrame() const;
 
         // ADDITIVE (WorldModule::GenerateDispatchLists @0x827D1CE8 seeds the
         // frustum result through this pipe -- X360 accessor sub_827BB138;
         // VariableEventQueue<32768,16>, the same shape as the sibling buffers).
         CgsModule::VariableEventQueue<32768, 16>* GetSceneResultQueue();
-        // X360 0x827A0EC0: write-lock; set the dispatch-frame index (this+0x8014).
-        void SetDispatchFrame(u32 luDispatchFrame);
-        // X360 0x82712188 (Hex-Rays "G"): read-lock; return the blobby-shadow buffer handle (this+0x8018).
-        u32  GetBlobbyShadowBuffer() const;
-        // X360 0x827A0F70: write-lock; set the blobby-shadow buffer handle (this+0x8018).
-        void SetBlobbyShadowBuffer(u32 luBlobbyShadowBuffer);
-        // X360 0x82712238 (Hex-Rays "GetCor"): read-lock; return the corona-submission interface handle (this+0x801C).
-        u32  GetCoronaSubmissionInterface() const;
-        // X360 0x827A1020: write-lock; set the corona-submission interface handle (this+0x801C).
-        void SetCoronaSubmissionInterface(u32 luCoronaSubmissionInterface);
-        // X360 0x827122E8: read-lock; return the shadow-map handle (this+0x8020).
-        u32  GetShadowMap() const;
-        // X360 0x827A10D0: write-lock; set the shadow-map handle (this+0x8020).
-        void SetShadowMap(u32 luShadowMap);
+        // X360 0x827A0EC0: write-lock; set the dispatch frame (console word @this+0x8014).
+        void SetDispatchFrame(CgsGraphics::DispatchFrame* lpDispatchFrame);
+        // X360 0x82712188 (Hex-Rays "G"): read-lock; return the blobby-shadow buffer (this+0x8018).
+        BrnBlobbyShadowManager::BrnBlobbyShadowBuffer* GetBlobbyShadowBuffer() const;
+        // X360 0x827A0F70: write-lock; set the blobby-shadow buffer (this+0x8018).
+        void SetBlobbyShadowBuffer(BrnBlobbyShadowManager::BrnBlobbyShadowBuffer* lpBlobbyShadowBuffer);
+        // X360 0x82712238 (Hex-Rays "GetCor"): read-lock; return the corona-submission interface (this+0x801C).
+        BrnCoronaManager::BrnSubmissionInterface* GetCoronaSubmissionInterface() const;
+        // X360 0x827A1020: write-lock; set the corona-submission interface (this+0x801C).
+        void SetCoronaSubmissionInterface(BrnCoronaManager::BrnSubmissionInterface* lpCoronaSubmissionInterface);
+        // X360 0x827122E8: read-lock; return the shadow map (console word @this+0x8020).
+        BrnWorld::ShadowMap* GetShadowMap() const;
+        // X360 0x827A10D0: write-lock; set the shadow map (console word @this+0x8020).
+        void SetShadowMap(BrnWorld::ShadowMap* lpShadowMap);
 
         // ⭐ ADDED 2026-08-15 (IO-buffer zero-fill removal audit). X360 0x8275CF40 -- this
         // Construct was never written, so `CreateIOBuffer<InputBuffer_Dispatch>` ran only the
@@ -96,14 +136,16 @@ namespace BrnTrafficIO
         static void _AssertLayout();
 
     private:
-        // The IOBuffer base is a single status byte; the four handle words sit contiguously at the
-        // tail (+0x8014..+0x8020). The preceding dispatch-list payload is folded into correctly-sized
-        // opaque storage: 0x8014 - 1 accounts for the base's 1-byte status (see FLAG).
-        u8            maPayloadAndPad[0x8014 - 1];        // +0x0001..+0x8013 (status pad + payload)
-        u32           muDispatchFrame;                    // +0x8014
-        u32           muBlobbyShadowBuffer;               // +0x8018
-        u32           muCoronaSubmissionInterface;        // +0x801C
-        u32           muShadowMap;                        // +0x8020
+        // The IOBuffer base is a single status byte; the four pointer slots sit contiguously at the
+        // tail (console +0x8014..+0x8020). The preceding dispatch-list payload is folded into
+        // correctly-sized opaque storage: 0x8014 - 1 accounts for the base's 1-byte status (see FLAG).
+        // On the host the four widened pointers push the block to 0x8018..0x8030 -- deliberate;
+        // see the POINTER WIDTH note above.
+        u8                                             maPayloadAndPad[0x8014 - 1];       // +0x0001..+0x8013 (status pad + payload)
+        CgsGraphics::DispatchFrame*                    mpDispatchFrame;                   // console +0x8014
+        BrnBlobbyShadowManager::BrnBlobbyShadowBuffer* mpBlobbyShadowBuffer;              // console +0x8018
+        BrnCoronaManager::BrnSubmissionInterface*      mpCoronaSubmissionInterface;       // console +0x801C
+        BrnWorld::ShadowMap*                           mpShadowMap;                       // console +0x8020
     };
 
     // ============================================================================
@@ -204,10 +246,27 @@ namespace BrnTrafficIO
         typedef CgsModule::EventQueue<CgsSceneManager::SceneManagerIO::OutOverlapPair, 128>    OverlapPairsQueue;     // :92
         typedef BrnWorld::RaceCarEntityModuleIO::RCEntityPlayerResetInterface                  RCEntityPlayerResetInterface; // :104
 
-        // DWARF :289/:290 name a PropToTrafficInterface member + const/non-const getter overloads.
-        // Its concrete home is not yet in-tree, so it stays a 1-byte opaque placeholder (only its
-        // address at +199776 is load-bearing this batch); adopt the named type when its home lands.
-        struct PropToTrafficInterface { u8 muDUMMY; };
+        // ⭐⭐ RETYPED 2026-08-19 (wave Q6 cluster C3) -- the one-line unpark of
+        // WorldModule::BridgePropModuleToTrafficModule_PrePhysics @0x827AEA70, i.e. of "a
+        // smashed traffic light tells the traffic system to change".
+        //
+        // This used to be `struct PropToTrafficInterface { u8 muDUMMY; };` with the note "its
+        // concrete home is not yet in-tree". That note was STALE: the home is
+        // BrnWorld::PropEntityIO::PropToTrafficInterface (BrnPropToTrafficInterface.h), the PROP
+        // side of this very bridge has held it BY VALUE since 2026-08-12
+        // (BrnPropEntityModuleIO.h, OutputBuffer_PrePhysics::PropToTrafficInterfaceStorage), and
+        // the console's own InputBuffer_PrePhysics::Construct @0x827615F8 builds THIS member's
+        // two queues at +0x30C60 / +0x30CEC (== +199776 / +199916) -- the 140-byte gap between
+        // them is exactly sizeof(EventQueue<TrafficLightKnockDownEvent,32>) == 12 + 32*4, which
+        // is what identifies the two calls as this interface's two members. So the seat IS this
+        // type, X360-attested, not inferred.
+        //
+        // ⚠ WHY A 1-BYTE SEAT WAS A BUG AND NOT MERELY A GAP: the bridge Clear()s and Append()s
+        // both of those queues. Over a 1-byte placeholder that is a ~140-byte write past the end
+        // of the member (into mSceneResultQueue's tail on the console layout), with the ring's
+        // own miLength read out of foreign memory -- the same class of live corruption the AI
+        // and traffic scene seats were parked for. Retyping is the fix; casting was never an option.
+        typedef BrnWorld::PropEntityIO::PropToTrafficInterface PropToTrafficInterface;   // :299
 
         // @ 0x827615F8 (DWARF :274) -- the buffer bring-up CreateIOBuffer<T> runs. LANDED 2026-08-19
         // (wave Q5 round-3 integration): without it the base IOBuffer::Construct ran instead and
@@ -229,13 +288,20 @@ namespace BrnTrafficIO
         static void _AssertLayout();
 
     private:
-        // The mSceneResultQueue member this batch does not touch is modelled as a correctly-sized
-        // opaque stand-in so the pinned member offsets are exact.
         PotentialContactQueue        mPotentialContactQueue;                                     // :294 (offset 16)
         OverlapPairsQueue            mOverlapPairsQueue;                                          // :295 (offset 163872)
-        unsigned char                maSceneResultQueue[199744 - 166960];                        // :296 (offset 166960, 32784B; OutSceneQueryResultsQueue<32768>, opaque)
+        // ⭐ RETYPED 2026-08-19 (wave Q6 cluster C3), SIZE-NEUTRAL. This was
+        // `unsigned char maSceneResultQueue[199744 - 166960]` -- a 32,784-byte opaque span that
+        // nothing could Construct, so the console's third Construct leg
+        // (VariableEventQueue<32768,16>::Construct(this+0x28C30)) had no expression and the
+        // queue's mbIsConstructed/miFirstEventOffset stayed at whatever the IO stack's previous
+        // tenant left (CreateIOBuffer stopped zero-filling in the 2026-08-15 perf pass).
+        // VariableEventQueue<BUFSIZE,ALIGN> is POINTER-FREE (bool + char[BUFSIZE] + three s32),
+        // so its host sizeof is BUFSIZE+16 == 32,784 == exactly the span it replaces: the
+        // following members do not move. Naming the type is what lets Construct build it.
+        CgsModule::VariableEventQueue<32768, 16> mSceneResultQueue;                              // :296 (offset 166960)
         RCEntityPlayerResetInterface mPlayerResetInterface;                                       // :298 (offset 199744, 32B)
-        PropToTrafficInterface       mPropToTrafficInterface;                                     // :299 (offset 199776; opaque placeholder)
+        PropToTrafficInterface       mPropToTrafficInterface;                                     // :299 (offset 199776, real type)
     };
 
     // ============================================================================
@@ -366,133 +432,230 @@ namespace BrnTrafficIO
     // OutputBuffer_PostPhysics  (DWARF BrnTrafficEntityModuleIO.h :459+, post-physics output buffer)
     // ============================================================================
     // The post-physics output buffer the traffic module produces and WorldModule::
-    // BridgeEntityModulesToOutput_PostPhysics drains. This grow migrates the earlier offset-role
-    // placeholder members (mInterfaceAt8/834784/834828) to their DWARF names and adds the read/
-    // write accessor overloads recovered this wave. Each accessor tests the IOBuffer lock bit
-    // (read = bit 4 IsBufferLockedForReading; write = bit 3 IsBufferLockedForWriting) then returns
-    // the pinned member address. X360 accessor map:
-    //   +8      mCrashTrafficInputInterface   read 0x827A0830 (:387) / write 0x82711A48 (:392)
-    //   +3632   mTrafficSoundOutputInterface  read 0x827A0980 (:391) / write 0x82711B98 (:394)
-    //   +9824   mGameEventQueue               read 0x827A0A28 (:399) / write 0x82711CE8 (:400)
-    //   +834784 mSceneInputInterface          read 0x827A0B78 (:402) / write 0x82711D90 (:407)
-    //   +834828 mTrafficTypeResponseFactory   read 0x827A0E18 (:418) / write 0x82712030 (:419)
+    // BridgeEntityModulesToOutput_PostPhysics drains.
     //
-    // FLAG (foreign types / opaque interior): the returned interfaces have their own owning homes
-    // (not reconstructed here) EXCEPT mTrafficSoundOutputInterface which uses the real committed
-    // SharedIO type. The foreign members are modelled as correctly-sized opaque storage so the
-    // pinned return offsets are exact; offsets are pinned via opaque pad spans, not static_asserts
-    // (the SIMD/queue aggregates widen on the 64-bit host, so host offsets do not reproduce the
-    // 32-bit console offsets -- same rule as the sibling InputBuffer_PostPhysics). Adopt the named
-    // interface types additively when their homes land.
+    // ⭐⭐ RELAID OUT 2026-08-19 (wave Q6 cluster C3) FROM ITS OWN Construct. Every member below
+    // is named and placed by BrnTrafficIO::OutputBuffer_PostPhysics::Construct @0x82761908,
+    // recovered this cluster by a targeted headless IDA run on a private .i64 copy
+    // (scratchpad/waveQ6/ida_bridges/) -- 0x82761908 has NO per-address JSON under
+    // .ida-exports/, an export-run gap, not a missing function; its name comes from
+    // CreateIOBuffer<OutputBuffer_PostPhysics> @0x827B79D0's own xrefs_from.
+    // Construct, store for store:
+    //   stb 1,0(this)                                          IOBuffer status
+    //   CrashIO::TrafficInputInterface::Construct     this+8        mCrashTrafficInputInterface
+    //   TrafficNetworkOutputInterface::Construct      this+0xDA0    mNetworkInterface        (3488)
+    //   sth 0,0xE30(this)                             this+0xE30    mTrafficSoundOutputInterface (3632)
+    //   stw 0,0x2650(this)                            (inside mTrafficDirectorOutputInterface)
+    //   VariableEventQueue<1536,16>::Construct        this+0x2660   mGameEventQueue          (9824)
+    //   InSceneUpdateInterface::Construct             this+0x2C70   mSceneInputInterface     (11376) ⭐
+    //   VariableEventQueue<4096,16>::Construct+Clear  this+0xCAB90  mResourceRequestInterface(830672)
+    //   11x stw 0 stride 4                            this+0xCFCE0  mInterfaceAt834784 (44 B, X360-only)
+    //   EventQueue<TrafficTypeResponse,32>::Construct this+0xCAAC0  mTrafficTypeResponseQueue(830144)
+    //   VariableEventQueue<32768,16>::Construct       this+0xCFD0C  mGuiEventQueue           (834828)
+    // and CreateIOBuffer allocates 0xD3D20 == 867,616 bytes, which closes the last span exactly
+    // (867616 - 834828 == 32,788 == sizeof(VariableEventQueue<32768,16>) rounded to 4).
     //
-    // NOTE (wave35 reconciliation): the read accessor @0x827A0980 was graded fail on a fabricated
-    // class/member name (OutputBuffer_ToOutput::mTrafficOutputInterface); its DWARF-cited member
-    // (:419 mTrafficDirectorOutputInterface) collides at +3632 with the authoritative [pass] write
-    // accessor @0x82711B98 (:418 mTrafficSoundOutputInterface). Homed as the const READ overload of
-    // that same +3632 member (mTrafficSoundOutputInterface) so both accessors share one member.
+    // X360 ACCESSOR MAP (read = bit 4 IsBufferLockedForReading; write = bit 3):
+    //   +8      mCrashTrafficInputInterface      read 0x827A0830 (baked 391) / write 0x82711A48 (392)
+    //   +3488   mNetworkInterface                read 0x827A08D8 (baked 394)
+    //   +3632   mTrafficSoundOutputInterface     read 0x827A0980 (baked 397) / write 0x82711B98 (398)
+    //   +6208   mTrafficDirectorOutputInterface  read 0x827A0A28 (baked 400)
+    //   +9824   mGameEventQueue                  read 0x827A0AD0 (baked 403) / write 0x82711CE8 (404)
+    //   +834784 mInterfaceAt834784               read 0x827A0B78 (baked 406) / write 0x82711D90 (407)
+    //   +11376  mSceneInputInterface             read 0x827A0C20 (baked 409)                   ⭐
+    //   +830144 mTrafficTypeResponseQueue        read 0x827A0CC8 (baked 412)
+    //   +830672 mResourceRequestInterface        read 0x827A0D70 (baked 415)
+    //   +834828 mGuiEventQueue                   read 0x827A0E18 (baked 418) / write 0x82712030 (419)
+    //
+    // ⛔ THE DEFECT THIS FIXES, AND WHY THE OLD MAP LOOKED RIGHT. The tree modelled
+    // `mSceneInputInterface` at +834784 as a 44-byte `SceneInputInterfaceStorage`, on the strength
+    // of the DecFIGS declaration-line ladder: the read accessors bake source lines
+    // 391/394/397/400/403/406/409/412/415/418 (step 3, i.e. const+non-const pairs) and DecFIGS
+    // declares GetSceneInputInterface at :402, which is baked 406 under this header's uniform +4
+    // skew. But the X360 header carries ONE accessor pair DecFIGS does not (for the +834784
+    // member), which displaces every later slot by one: the real GetSceneInputInterface is baked
+    // 409 -> +11376. Two independent witnesses settle it against the line ladder:
+    //   (a) Construct calls InSceneUpdateInterface::Construct on this+11376, and that aggregate is
+    //       the only InSceneUpdateInterface-typed member the DWARF gives this class;
+    //   (b) 11376 + 818768 (the console sizeof(InSceneUpdateInterface)) == 830144 EXACTLY, the
+    //       next member -- while +834784 has only 44 bytes before +834828.
+    // Appending a 44-byte span reinterpreted as the 25-queue aggregate made
+    // InSceneUpdateInterface::Append read 25 mpEvents/miLength pairs out of foreign memory, which
+    // is why WorldBridgeEntityModulesToScene.cpp's post-physics traffic leg was parked rather than
+    // cast. That leg is LIVE as of this wave.
+    //
+    // FLAG (foreign types / opaque interior): mTrafficDirectorOutputInterface is the real committed
+    // SharedIO type; mInterfaceAt834784 is the X360-only 44-byte member DecFIGS has no counterpart
+    // for and is named by offset role, not invented. NOTHING here pins a host byte offset: several
+    // members are queue aggregates whose host header is 16 bytes where the console's is 12, so host
+    // offsets legitimately exceed the console ones. Parity is by NAMED MEMBER + SEQUENCE, and the
+    // members are in the console's ascending-offset order, which is also the DWARF's member order
+    // (:416..:424) with the one X360-only insertion.
     class OutputBuffer_PostPhysics : public CgsModule::IOBuffer
     {
     public:
-        // DWARF :416 (TrafficInputInterface :94) -- foreign type, opaque placeholder (address-only).
-        struct CrashTrafficInputInterface { unsigned char maBytes[1]; };
-        // DWARF :420 -- foreign type, opaque placeholder (address-only).
-        struct GameEventQueue { unsigned char maBytes[1]; };
-        // DWARF :421 spells this OutputBuffer_Prepare::SceneInputInterface; the real 818768B type
-        // cannot precede the +834828 member (44B later), so the stored member is a 44B opaque span
-        // and the const getter returns it via reinterpret_cast to the DWARF pointer type (which is
-        // itself a local opaque placeholder here, its concrete home not in-tree).
-        struct SceneInputInterface { unsigned char maBytes[1]; };
-        struct SceneInputInterfaceStorage { unsigned char maReserved[44]; };
-        // DWARF :422 -- foreign type at +834828, opaque placeholder (read/write overload pair).
-        struct TrafficTypeResponseFactory { unsigned char maBytes[1]; };
+        // DWARF :416 / :94 -- the crash module's traffic input interface (real committed type).
+        typedef BrnWorld::CrashIO::TrafficInputInterface CrashTrafficInputInterface;
+        // DWARF :420 -- Construct proves the shape (VariableEventQueue<1536,16> @ +9824).
+        typedef CgsModule::VariableEventQueue<1536, 16> GameEventQueue;
+        // DWARF :421 spells the member `OutputBuffer_Prepare::SceneInputInterface`, which is the
+        // scene manager's InSceneUpdateInterface -- Construct-attested at +11376.
+        typedef CgsSceneManager::SceneManagerIO::InSceneUpdateInterface SceneInputInterface;
+        // DWARF :422 / BrnTrafficTypeInterface.h:51.
+        typedef CgsModule::EventQueue<TrafficTypeResponse, 32> TrafficTypeResponseQueue;
+        // DWARF :423 -- the same 4096-slot request pipe OutputBuffer_Prepare owns.
+        typedef BrnResource::GameDataIO::RequestInterface<4096> ResourceRequestInterface;
+        // DWARF :424 -- Construct proves the shape (VariableEventQueue<32768,16> @ +834828),
+        // the same instantiation every other GuiEventInputQueue in the tree is.
+        typedef CgsModule::VariableEventQueue<32768, 16> GuiEventInputQueue;
+        // X360-ONLY member at +834828-44: 44 bytes, zeroed by Construct as 11 words, no DecFIGS
+        // counterpart and no recovered type. Named by offset role (the in-file precedent), NOT
+        // invented -- it used to carry the fabricated name "TrafficTypeResponseFactory".
+        struct InterfaceAt834784 { unsigned char maReserved[44]; };
+
+        // @0x82761908 -- run by CreateIOBuffer<OutputBuffer_PostPhysics> @0x827B79D0.
+        void Construct();
 
         // +8   read/write mCrashTrafficInputInterface.
-        const CrashTrafficInputInterface* GetCrashTrafficInputInterface() const;  // 0x827A0830 (:387)
-        CrashTrafficInputInterface*       GetCrashTrafficInputInterface();        // 0x82711A48 (:392)
+        const CrashTrafficInputInterface* GetCrashTrafficInputInterface() const;  // 0x827A0830 (baked 391)
+        CrashTrafficInputInterface*       GetCrashTrafficInputInterface();        // 0x82711A48 (baked 392)
+        // +3488 read mNetworkInterface.
+        const TrafficNetworkOutputInterface* GetNetworkInterface() const;         // 0x827A08D8 (baked 394)
         // +3632 read/write mTrafficSoundOutputInterface (real SharedIO type).
-        const TrafficSoundOutputInterface* GetTrafficSoundOutputInterface() const; // 0x827A0980 (:391, reconciled)
-        TrafficSoundOutputInterface*       GetTrafficSoundOutputInterface();       // 0x82711B98 (:394)
+        const TrafficSoundOutputInterface* GetTrafficSoundOutputInterface() const; // 0x827A0980 (baked 397)
+        TrafficSoundOutputInterface*       GetTrafficSoundOutputInterface();       // 0x82711B98 (baked 398)
+        // +6208 read mTrafficDirectorOutputInterface.
+        const TrafficDirectorOutputInterface* GetTrafficDirectorOutputInterface() const; // 0x827A0A28 (baked 400)
         // +9824 read/write mGameEventQueue.
-        const GameEventQueue* GetGameEventQueue() const;                          // 0x827A0A28 (:399)
-        GameEventQueue*       GetGameEventQueue();                                // 0x82711CE8 (:400)
-        // +834784 read/write mSceneInputInterface.
-        const SceneInputInterface* GetSceneInputInterface() const;               // 0x827A0B78 (:402)
-        SceneInputInterfaceStorage* GetWriteSceneInputInterface();               // 0x82711D90 (:407)
-        // +834828 read/write mTrafficTypeResponseFactory.
-        const TrafficTypeResponseFactory* GetReadTrafficTypeResponseFactory() const; // 0x827A0E18 (:418)
-        TrafficTypeResponseFactory*       GetWriteTrafficTypeResponseFactory();      // 0x82712030 (:419)
+        const GameEventQueue* GetGameEventQueue() const;                          // 0x827A0AD0 (baked 403)
+        GameEventQueue*       GetGameEventQueue();                                // 0x82711CE8 (baked 404)
+        // +834784 read/write the X360-only member.
+        const InterfaceAt834784* GetReadInterfaceAt834784() const;                // 0x827A0B78 (baked 406)
+        InterfaceAt834784*       GetWriteInterfaceAt834784();                     // 0x82711D90 (baked 407)
+        // ⭐ +11376 read mSceneInputInterface -- the leg WorldModule::
+        // BridgeEntityModulesToScene_PostPhysics @0x827AB608 calls.
+        const SceneInputInterface* GetSceneInputInterface() const;                // 0x827A0C20 (baked 409)
+        // +830144 read mTrafficTypeResponseQueue.
+        const TrafficTypeResponseQueue* GetTrafficTypeResponseQueue() const;      // 0x827A0CC8 (baked 412)
+        // +830672 read mResourceRequestInterface.
+        const ResourceRequestInterface* GetResourceRequestInterface() const;      // 0x827A0D70 (baked 415)
+        // +834828 read/write mGuiEventQueue.
+        const GuiEventInputQueue* GetGuiEventQueue() const;                       // 0x827A0E18 (baked 418)
+        GuiEventInputQueue*       GetGuiEventQueue();                             // 0x82712030 (baked 419)
 
         static void _AssertLayout();
 
     private:
-        // Offset-pinned layout: the IOBuffer base's 1-byte status sits at +0; each named member is
-        // placed at its X360 offset via opaque pad spans (see FLAG -- offsets pinned by pads, not
-        // static_asserts, because the SharedIO TrafficSoundOutputInterface widens on the 64-bit host).
-        u8                          maStatusPad[7];                              // +1..+7 (force +8)
-        CrashTrafficInputInterface  mCrashTrafficInputInterface;                 // +8
-        unsigned char               maPad8To3632[3632 - 8 - 1];                  // span up to +3632
-        TrafficSoundOutputInterface mTrafficSoundOutputInterface;               // +3632 (real type; widens on host)
-        unsigned char               maPad3632To9824[9824 - 3632 - 1];            // span up to +9824
-        GameEventQueue              mGameEventQueue;                             // +9824
-        unsigned char               maPad9824To834784[834784 - 9824 - 1];        // span up to +834784
-        SceneInputInterfaceStorage  mSceneInputInterface;                        // +834784 (44B span; ends at +834828)
-        TrafficTypeResponseFactory  mTrafficTypeResponseFactory;                 // +834828 (immediately follows the 44B span)
+        // Members in the console's ascending-offset order; the console offsets are PROVENANCE and
+        // every access below goes by name (see the FLAG above -- no host offset is pinned).
+        u8                             maStatusPad[7];                     // +1..+7 (force +8)
+        CrashTrafficInputInterface     mCrashTrafficInputInterface;        // console +8      :416
+        TrafficNetworkOutputInterface  mNetworkInterface;                  // console +3488   :417
+        TrafficSoundOutputInterface    mTrafficSoundOutputInterface;       // console +3632   :418
+        TrafficDirectorOutputInterface mTrafficDirectorOutputInterface;    // console +6208   :419
+        GameEventQueue                 mGameEventQueue;                    // console +9824   :420
+        SceneInputInterface            mSceneInputInterface;               // console +11376  :421 ⭐
+        TrafficTypeResponseQueue       mTrafficTypeResponseQueue;          // console +830144 :422
+        ResourceRequestInterface       mResourceRequestInterface;          // console +830672 :423
+        InterfaceAt834784              mInterfaceAt834784;                 // console +834784 (X360-only)
+        GuiEventInputQueue             mGuiEventQueue;                     // console +834828 :424
     };
 
     // ============================================================================
     // OutputBuffer_PreScene  (DWARF :185+, pre-scene output buffer)  -- NEW HOME
     // ============================================================================
-    // Owns the pre-scene traffic->race-car interface (@63424, read 0x827A00B0 :185) and the
-    // trigger-management input interface (@818784, read 0x827BB090 / write 0x82710DD0 :208).
-    // Foreign member types are opaque placeholders pinned by offset via pad spans.
+    // ⭐⭐ RELAID OUT 2026-08-19 (wave Q6 cluster C3) FROM ITS OWN Construct @0x82761790, and the
+    // old layout had BOTH its members in the wrong place AND its two accessors on the wrong
+    // members. Construct, store for store:
+    //   stb 1,0(this)                                     IOBuffer status
+    //   InSceneUpdateInterface::Construct   this+0x10      mSceneInputInterface     (+16)     ⭐
+    //   7x std 0 stride 8 from this+0xC7E60, then stw 0 at +0x1C0/+0x204/+0x208/+0x20C and four
+    //     stfs flt_82001CC0 at +0x210..+0x21C                mTrafficToRaceCarInterface_PreScene
+    //                                                        (+818784, and 819328-818784 == 544)
+    //   VariableEventQueue<131072,16>::Construct  this+0xC8080   mTriggerManagementInputInterface
+    //                                                            add queue        (+819328)
+    //   InRemoveTriggerEvent<256>::Construct      this+0xE8090   its remove queue (+950416
+    //                                                            == 819328 + 131088)
+    //   stwx 0, this, 0xE8720                     this+951072    mPotentialScorees's count (:209;
+    //                                                            not modelled -- see below)
+    //
+    // X360 ACCESSOR MAP (baked source line in brackets; uniform +4 skew off the DecFIGS lines):
+    //   +16     mSceneInputInterface                read 0x8279FD58 [186] (DWARF :182)   ⭐
+    //   +818784 mTrafficToRaceCarInterface_PreScene  read 0x827BB090 [189] (:185)
+    //                                                write 0x82710DD0 [190] (:186)
+    //   +819328 mTriggerManagementInputInterface     read 0x8279FE00 [192] (:188)
+    //                                                write 0x82710E78 [193] (:189)
+    //
+    // ⛔ WHAT WAS WRONG, MEASURED. (1) The tree put mTrafficToRaceCarInterface_PreScene at +63424
+    // on the strength of accessor 0x827A00B0 -- but that accessor bakes line 262, which is
+    // OutputBuffer_PostScene's ladder (256 -> +4, 259 -> +16416, 262 -> +63424), not this
+    // buffer's; and +63424 falls INSIDE the scene interface's [16, 818784) span, so it could
+    // never have been a sibling member. (2) The +818784 accessor pair 0x827BB090/0x82710DD0 was
+    // homed on mTriggerManagementInputInterface -- one member too early. That is not cosmetic:
+    // WorldBridgeEntityModulesToEntityModules.cpp's BridgeTrafficToTrigger_PreScene Appends
+    // GetTriggerManagementInputInterface() into the trigger module's real
+    // TriggerManagementInputInterface, i.e. it would have read a
+    // VariableEventQueue<131072,16> header out of the 544-byte traffic->race-car block. That TU
+    // is not on the build list, so the bug was latent; it is fixed here, not worked around.
+    // (3) The separate `class OutputBuffer` that used to sit below, homing
+    // GetReadInterfaceAt818784 (0x827BB090) and GetWriteInterfaceAt819328 (0x82710E78) as
+    // offset-role members, was a DUPLICATE MODEL of these same two seats made when nobody knew
+    // whose they were. Both accessors are this buffer's; the phantom class is retired and had
+    // no user anywhere in the tree (grepped).
+    //
+    // NOT MODELLED, and named so nobody re-derives it: mPotentialScorees (DWARF :209,
+    // GuiTrafficCarInfoEvent::ScoringVehicleArray, console +951072, its count word zeroed by
+    // Construct) has no accessor in the tree and no producer; it is this buffer's last member and
+    // leaving it out shortens the host object without moving anything. Its `AddPotentialScoree`
+    // (:198) / `GetPotentialScorees` (:202) are likewise absent.
+    //
+    // ⭐ Q6 ROUND-1 FIX (bridges #1) -- THE PADDING FORK IS RETIRED. This block used to carry a
+    // FLAG reading "TrafficToRaceCarInterface_PreScene has no home in the tree, so it stays
+    // opaque". THAT WAS FALSE: BrnTraffic::BrnTrafficIO::TrafficToRaceCarInterface_PreScene has a
+    // fully reconstructed, named, canonical home in this same subsystem --
+    // TrafficEntityModule/SharedIO/BrnTrafficToRaceCarInterface.h -- and
+    // BrnRaceCarEntityModuleIO.h had already deleted its own inline slice to adopt it, precisely
+    // to avoid an ODR-confusing duplicate of that fully-qualified name. The nested opaque struct
+    // is now a typedef of the committed type (the same idiom BrnRaceCarEntityModuleIO.h:475
+    // uses, so it is proven to compile), which is size-neutral: the canonical type is
+    // pointer-free and its host sizeof is the console span's 544 bytes, as _AssertLayout()
+    // still pins. Consequence to collect: BrnWorldModule.cpp:2656's
+    // `reinterpret_cast<const BrnTraffic::BrnTrafficIO::TrafficToRaceCarInterface_PreScene*>`
+    // adapter existed ONLY because of this fork and can now be retired (left for the conductor,
+    // who owns that file).
     class OutputBuffer_PreScene : public CgsModule::IOBuffer
     {
     public:
-        struct TrafficToRaceCarInterface_PreScene { unsigned char maBytes[1]; };  // :207 foreign, opaque
-        struct TriggerManagementInputInterface     { unsigned char maBytes[1]; };  // :208 foreign, opaque
+        // DWARF :206 spells the member `OutputBuffer_Prepare::SceneInputInterface` == the scene
+        // manager's InSceneUpdateInterface (Construct-attested at +16).
+        typedef CgsSceneManager::SceneManagerIO::InSceneUpdateInterface SceneInputInterface;
+        // DWARF :207 -- the committed SharedIO type, adopted by typedef (see the ⭐ Q6 note in
+        // the class banner above; console span [818784, 819328) == its 544-byte sizeof).
+        typedef BrnTraffic::BrnTrafficIO::TrafficToRaceCarInterface_PreScene TrafficToRaceCarInterface_PreScene;
+        // DWARF :208 / :89 -- the real committed trigger-management aggregate (its two queues are
+        // exactly the pair Construct builds at +819328 and +819328+131088).
+        typedef BrnWorld::TriggerEntityModuleIO::TriggerManagementInputInterface TriggerManagementInputInterface;
 
-        // +63424 read.
-        const TrafficToRaceCarInterface_PreScene* GetTrafficToRaceCarInterface_PreScene() const; // 0x827A00B0 (:185)
-        // +818784 read/write (X360 overload pair 0x827BB090 / 0x82710DD0).
-        const TriggerManagementInputInterface* GetTriggerManagementInputInterface() const;       // 0x827BB090
-        TriggerManagementInputInterface*       GetTriggerManagementInputInterface();             // 0x82710DD0
+        // @0x82761790 -- run by CreateIOBuffer<OutputBuffer_PreScene> @0x827B6330.
+        void Construct();
 
-        static void _AssertLayout();
-
-    private:
-        u8                                 maStatusPadTo63424[63424 - 1];                 // +1..+63423
-        TrafficToRaceCarInterface_PreScene mTrafficToRaceCarInterface_PreScene;           // +63424
-        unsigned char                      maPad63424To818784[818784 - 63424 - 1];        // span up to +818784
-        TriggerManagementInputInterface    mTriggerManagementInputInterface;              // +818784
-    };
-
-    // ============================================================================
-    // OutputBuffer  (DWARF-scope-attested base name)  -- NEW HOME
-    // ============================================================================
-    // Homes the two X360 accessors whose returned member names/types are unrecoverable in scope
-    // (named by offset role): +818784 (read 0x827BB090 was graded pass here as OutputBuffer, the
-    // read overload) and +819328 (write 0x82710E78). Kept as a distinct DWARF-scope-attested
-    // buffer with opaque address-only members. (See the reconciliation note on OutputBuffer_PreScene
-    // above: the +818784 read accessor 0x827BB090 was modelled by two verifiers -- as
-    // OutputBuffer::GetReadInterfaceAt818784 [pass] and as OutputBuffer_PreScene::
-    // GetTriggerManagementInputInterface const [DWARF]. Both class homes are retained; the pass
-    // body binds to OutputBuffer here.)
-    class OutputBuffer : public CgsModule::IOBuffer
-    {
-    public:
-        struct InterfaceAt818784Storage { unsigned char maBytes[1]; };
-        struct InterfaceAt819328Storage { unsigned char maBytes[1]; };
-
-        const InterfaceAt818784Storage* GetReadInterfaceAt818784() const;   // 0x827BB090
-        InterfaceAt819328Storage*       GetWriteInterfaceAt819328();         // 0x82710E78
+        // ⭐ +16 read -- the leg WorldModule::BridgeEntityModulesToSceneModule_PreScene
+        // @0x827AB490 calls (its first merge, 0x827AB570).
+        const SceneInputInterface* GetSceneInputInterface() const;                              // 0x8279FD58 [186]
+        // +818784 read/write.
+        const TrafficToRaceCarInterface_PreScene* GetTrafficToRaceCarInterface_PreScene() const; // 0x827BB090 [189]
+        TrafficToRaceCarInterface_PreScene*       GetTrafficToRaceCarInterface_PreScene();       // 0x82710DD0 [190]
+        // +819328 read/write.
+        const TriggerManagementInputInterface* GetTriggerManagementInputInterface() const;       // 0x8279FE00 [192]
+        TriggerManagementInputInterface*       GetTriggerManagementInputInterface();             // 0x82710E78 [193]
 
         static void _AssertLayout();
 
     private:
-        u8                        maStatusPadTo818784[818784 - 1];             // +1..+818783
-        InterfaceAt818784Storage  mInterfaceAt818784;                          // +818784
-        unsigned char             maPad818784To819328[819328 - 818784 - 1];    // span up to +819328
-        InterfaceAt819328Storage  mInterfaceAt819328;                          // +819328
+        u8                                 maStatusPadTo16[16 - 1];                       // +1..+15 (force +16)
+        SceneInputInterface                mSceneInputInterface;                          // console +16     :206
+        TrafficToRaceCarInterface_PreScene mTrafficToRaceCarInterface_PreScene;           // console +818784 :207
+        TriggerManagementInputInterface    mTriggerManagementInputInterface;              // console +819328 :208
     };
 
     // ============================================================================
@@ -521,32 +684,49 @@ namespace BrnTrafficIO
 
     // OutputBuffer_Prepare  (DWARF :2/:115, prepare/boot output buffer)  -- NEW HOME
     // ============================================================================
-    // Owns the scene-input interface (@16, read 0x8279F988 / write 0x827109E0 :130) and the
-    // 4096-slot resource-request interface (@818784, read 0x8279FA30 / write 0x82710A88 :31).
-    // SceneInputInterface is a legitimately-large opaque interface here (ResourceRequestInterface
-    // is the only following member, no size contradiction).
+    // Owns the scene-input interface (@16, read 0x8279F988 [baked 126] / write 0x827109E0) and the
+    // 4096-slot resource-request interface (@818784, read 0x8279FA30 [baked 129] / write 0x82710A88).
+    //
+    // ⭐⭐ SceneInputInterface PROMOTED 2026-08-19 (wave Q6 cluster C3) -- AND IT DISARMS A LIVE
+    // LANDMINE, not merely a gap. It was `struct { unsigned char maBytes[1]; }` in front of a raw
+    // `maPad16To818784` span: an UNTYPED, NEVER-CONSTRUCTED byte block that
+    // WorldModule::BridgeTrafficModuleToSceneModule_Prepare @0x827AB300 used to
+    // reinterpret_cast to the 25-queue aggregate and Append -- reading 25 mpEvents/miLength pairs
+    // out of whatever the IO stack's previous tenant left (CreateIOBuffer stopped zero-filling in
+    // the 2026-08-15 perf pass). Wave Q5/F3 disarmed that leg and filed the recipe; this is the
+    // fix it asked for. The type is NOT inferred: OutputBuffer_Prepare::Construct @0x82761740
+    // calls CgsSceneManager::SceneManagerIO::InSceneUpdateInterface::Construct(this+0x10), and
+    // 16 + 818768 == 818784 == the next member exactly.
     class OutputBuffer_Prepare : public CgsModule::IOBuffer
     {
     public:
-        struct SceneInputInterface     { unsigned char maBytes[1]; };   // :12 (InSceneUpdateInterface), foreign opaque
+        typedef CgsSceneManager::SceneManagerIO::InSceneUpdateInterface SceneInputInterface;  // :12
         // RETYPED 2026-07-24 (WorldModule::Prepare/BridgeTrafficResourceRequestsToOutput
         // consumers need the real pipe; the :12 comment already named it).
         typedef BrnResource::GameDataIO::RequestInterface<4096> ResourceRequestInterface;
 
+        // @0x82761740 -- run by CreateIOBuffer<OutputBuffer_Prepare> @0x827B5C70. ADDED with the
+        // promotion: without it the base IOBuffer::Construct ran alone and the aggregate's 25
+        // queues kept a foreign mpEvents (AGENTS.md gotcha 14).
+        void Construct();
+
         // +16 read/write.
-        const SceneInputInterface* GetSceneInputInterface() const;      // 0x8279F988
+        const SceneInputInterface* GetSceneInputInterface() const;      // 0x8279F988 [baked 126]
         SceneInputInterface*       GetSceneInputInterface();            // 0x827109E0
         // +818784 read/write.
-        const ResourceRequestInterface* GetResourceRequestInterface() const; // 0x8279FA30 (:125)
+        const ResourceRequestInterface* GetResourceRequestInterface() const; // 0x8279FA30 [baked 129]
         ResourceRequestInterface*       GetResourceRequestInterface();       // 0x82710A88 (:130)
 
         static void _AssertLayout();
 
     private:
         u8                       maStatusPadTo16[16 - 1];                     // +1..+15
-        SceneInputInterface      mSceneInputInterface;                        // +16 (opaque span up to +818784)
-        unsigned char            maPad16To818784[818784 - 16 - 1];            // span up to +818784
-        ResourceRequestInterface mResourceRequestInterface;                   // +818784
+        SceneInputInterface      mSceneInputInterface;                        // console +16
+        // ⚠ NO PAD HERE ANY MORE: the seat holds the REAL aggregate, whose host sizeof already
+        // EXCEEDS the 818,768-byte console span (its queues carry an 8-byte mpEvents where the
+        // console has 4). Same disposition PhysicsModuleIO::OutputBuffer's scene seat took on
+        // 2026-08-19; keeping the pad as well would add 818 KB of dead space.
+        ResourceRequestInterface mResourceRequestInterface;                   // console +818784
     };
 
     // ============================================================================

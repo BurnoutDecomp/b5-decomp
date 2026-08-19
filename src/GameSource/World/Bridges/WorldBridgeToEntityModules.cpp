@@ -3,10 +3,26 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"
 
+// ---- BridgeWorldModuleToEntityModules_Render (@0x827ABE28) only ---------------------
+// That bridge is a BrnWorld::WorldModule METHOD (it reads the module's own mShadowMap), so
+// unlike the four game-action bridges below it needs the module's complete type. The header
+// also transitively supplies BrnWorldIO::DispatchInputBuffer and the prop-entity IO buffer.
+#include "GameSource/World/BrnWorldModule.h"
+#include "GameSource/World/EntityModules/PropEntityModule/BrnPropEntityModuleIO.h"  // PropEntityIO::InputBuffer_Dispatch
+#include "GameSource/Graphics/BrnCoronaManager.h"        // BrnCoronaManager::BrnSubmissionInterface (pointer pass-through)
+#include "GameSource/Graphics/BrnBlobbyShadowManager.h"  // BrnBlobbyShadowManager::BrnBlobbyShadowBuffer (pointer pass-through)
+#include "GameShared/GameClasses/Graphics/Dispatch/CgsDispatcher.h"  // CgsGraphics::DispatchFrame (pointer pass-through)
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [DIAG] CgsDev::Log::gpDebugPrint
+
+#include <stdlib.h>   // getenv -- BRN_PROP_DIAG only, host-side diagnostic (see the [DIAG] block)
+
 // WorldModule game-action -> physics / traffic module bridges. Reconstructed from
 // BURNOUT_X360_ARTIST.XEX. Each bridge walks the world Update input buffer's game-action
 // queue and forwards the events its destination module cares about (a fixed type-id
 // allowlist, the X360 switch jump table) verbatim into that module's own queue.
+//
+// This TU also homes the render-phase fan-out bridge (DWARF WorldBridgeToEntityModules.cpp:47,
+// i.e. the FIRST function of the console TU) -- see the banner at the bottom of the file.
 
 // @ 0x827AC568 -- WorldBridgeToEntityModules.cpp:222. Forward the physics-relevant
 // game actions from the world Update input buffer's GameActionQueue into the physics
@@ -214,4 +230,99 @@ void WorldModule::BridgeActionsToWorldModule(
         }
         liType = lpInQueue->GetNextEvent(lpEvent, &lpEvent, &liSize);
     }
+}
+
+// ============================================================================
+// @ 0x827ABE28 -- WorldBridgeToEntityModules.cpp:47. THE RENDER-PHASE FAN-OUT.
+// ============================================================================
+// Reconstructed 2026-08-19 (wave Q6, cluster C2) from the X360 assembly recovered by a
+// targeted headless `idat` run on a private copy of BURNOUT_X360_ARTIST.XEX.i64 --
+// 0x827ABE28..0x827ABF3C, 70 instructions, `__savegprlr_25` frame. The per-address JSON for
+// this address is a HOLE in `.ida-exports/BURNOUT_X360_ARTIST.XEX/` and the symbol is absent
+// from `progress/identity.json`; the address itself comes from the xref table of the two
+// callers (WorldModule::GenerateDispatchLists @0x827D1CE8 and
+// WorldModule::GenerateShadowMapDispatchLists @0x827C96D8 -- the ONLY two xrefs).
+// Dump + Hex-Rays output: scratchpad/waveQ6/ida_rdisp/out.json.
+//
+// UNLIKE the four game-action bridges above this one is a real BrnWorld::WorldModule METHOD
+// (X360 r3 == `this`, and it is read: `addis r27,r25,0x5E ; addi r27,r27,0x26E0` == r25 +
+// 0x5E26E0 == 6170336 == &WorldModule::mShadowMap, BrnWorldModule.h:739). It takes no locks
+// and reads no queues: it is 21 straight-line calls -- 7 source getters and 14 destination
+// setters -- publishing the frame's five render-side globals (dispatch frame, shadow map,
+// blobby-shadow buffer, corona-submission interface, camera input) into the four entity
+// modules' dispatch input buffers. Both callers bracket it with LockForWrite/UnlockForWrite
+// on all four destination buffers (BrnWorldModule.cpp:3965-3975 and :4309-4319), which is what
+// satisfies every setter's "Not locked for writing" assert.
+//
+// STORE-FOR-STORE ORDER (the asm's, which the DecFIGS DWARF call list at
+// _compile/BrnWorldBridgesUnity.cpp:2587 reproduces exactly). Note that the four destinations
+// do NOT get the same set -- this asymmetry is the console's, not an omission:
+//   world entity : dispatch frame, shadow map
+//   traffic      : dispatch frame, blobby-shadow buffer, corona interface, shadow map
+//   prop         : dispatch frame, shadow map, corona interface        (no blobby, no camera)
+//   race car     : dispatch frame, camera input, blobby-shadow buffer, corona interface,
+//                  shadow map
+// The dispatch frame is fetched ONCE into r28 and reused; the blobby buffer and the corona
+// interface are RE-FETCHED per destination (the console does not cache them -- three separate
+// `GetCoronaSubmissionIn` calls at 0x827ABE9C / 0x827ABED4 / 0x827ABF1C, two separate
+// `GetBlobbyShadowB` calls at 0x827ABE88 / 0x827ABF08). Reproduced as written: each getter
+// asserts the source buffer's read lock, so collapsing them would drop three assert sites.
+//
+// The X360 tail leaves the last setter's r3 as a register artifact; the logical return is void
+// (DWARF BrnWorldModule.h:608 declares it `void`).
+void BrnWorld::WorldModule::BridgeWorldModuleToEntityModules_Render(
+    BrnTraffic::BrnTrafficIO::InputBuffer_Dispatch*             lpTrafficInputBuffer_Dispatch,
+    RaceCarEntityModuleIO::InputBuffer_GenerateDispatchLists*   lpRaceCarInputBuffer,
+    WorldEntityIO::InputBuffer_GenerateDispatchLists*           lpWorldEntityInputBuffer,
+    PropEntityIO::InputBuffer_Dispatch*                         lpPropEntityInputBuffer,
+    const BrnWorldIO::DispatchInputBuffer*                      lpWorldInputBuffer)
+{
+    // @0x827ABE50 -- fetched once into r28 and handed to all four destinations.
+    CgsGraphics::DispatchFrame* const lpDispatchFrame = lpWorldInputBuffer->GetDispatchFrame();
+
+    // ---- the world-entity module (@0x827ABE60, @0x827ABE74) ----------------
+    lpWorldEntityInputBuffer->SetDispatchFrame(lpDispatchFrame);
+    lpWorldEntityInputBuffer->SetShadowMap(&mShadowMap);
+
+    // ---- the traffic module (@0x827ABE80..@0x827ABEB4) ---------------------
+    lpTrafficInputBuffer_Dispatch->SetDispatchFrame(lpDispatchFrame);
+    lpTrafficInputBuffer_Dispatch->SetBlobbyShadowBuffer(lpWorldInputBuffer->GetBlobbyShadowBuffer());
+    lpTrafficInputBuffer_Dispatch->SetCoronaSubmissionInterface(
+        lpWorldInputBuffer->GetCoronaSubmissionInterface());
+    lpTrafficInputBuffer_Dispatch->SetShadowMap(&mShadowMap);
+
+    // ---- the prop module (@0x827ABEC0..@0x827ABEE0) ------------------------
+    // ⭐ This is the leg that seeds BrnWorld::PropEntityModule::GenerateDispatchLists'
+    // input: the dispatch frame it draws every prop model into, the shadow map it reads the
+    // z-only path from, and the corona interface RenderPropAndCoronas submits prop coronas
+    // through. Nothing else in the image writes this buffer.
+    lpPropEntityInputBuffer->SetDispatchFrame(lpDispatchFrame);
+    lpPropEntityInputBuffer->SetShadowMap(&mShadowMap);
+    lpPropEntityInputBuffer->SetCoronaSubmissionInterface(
+        lpWorldInputBuffer->GetCoronaSubmissionInterface());
+
+    // [DIAG] NOT IN THE X360 BINARY. Opt-in one-shot (set BRN_PROP_DIAG): the first frame the
+    // prop dispatch input is actually seeded by the console producer. Its absence from a
+    // BRN_PROP_DIAG run means this bridge never ran -- which is the state of the tree at the
+    // time of writing, because the live frame producer is the PC-local
+    // WorldModule::GenerateDispatchListsBringUp (BrnWorldModule.cpp:5167), not the console's
+    // WorldModule::GenerateDispatchLists @0x827D1CE8 (BrnWorldModule.cpp:3748, no callers).
+    // The getenv latch is evaluated once; a per-frame getenv would be a syscall.
+    {
+        static const bool sbPropDiag = (getenv("BRN_PROP_DIAG") != 0);
+        static bool       sbLoggedSeeded = false;
+        if (sbPropDiag && !sbLoggedSeeded && CgsDev::Log::gpDebugPrint != 0)
+        {
+            sbLoggedSeeded = true;
+            *CgsDev::Log::gpDebugPrint << "[Q6-dispatch] prop dispatch input seeded\n";
+        }
+    }
+
+    // ---- the race-car module (@0x827ABEEC..@0x827ABF34) --------------------
+    lpRaceCarInputBuffer->SetDispatchFrame(lpDispatchFrame);
+    lpRaceCarInputBuffer->SetCameraInput(lpWorldInputBuffer->GetCameraInput());
+    lpRaceCarInputBuffer->SetBlobbyShadowBuffer(lpWorldInputBuffer->GetBlobbyShadowBuffer());
+    lpRaceCarInputBuffer->SetCoronaSubmissionInterface(
+        lpWorldInputBuffer->GetCoronaSubmissionInterface());
+    lpRaceCarInputBuffer->SetShadowMap(&mShadowMap);
 }

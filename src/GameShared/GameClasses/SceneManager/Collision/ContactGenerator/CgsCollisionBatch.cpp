@@ -13,14 +13,30 @@
 // and SetCodeRecycle(CODE_RECYCLE_ON) enables code recycling. mJob is at +0 so
 // &mJob == this and the asm returns r31 (this) as the Job*.
 
+// ⭐⭐ DEFECT FIXED 2026-08-19 (wave Q6, cluster B). This declaration used to sit INSIDE
+// `namespace CgsSceneManager { namespace CgsCollision {` below, which made it a DIFFERENT SYMBOL
+// from the function that actually exists:
+//     declared   ?ContactGeneratorEntry@CgsCollision@CgsSceneManager@@YAXUParam@Jobs@EA@@000@Z
+//     defined    ?ContactGeneratorEntry@@YAXUParam@Jobs@EA@@000@Z
+//                (GameShared/Jobs/ContactGenerator/ContactGenerator.cpp:64, GLOBAL scope, MOUNTED
+//                 at tools/build/build_game_exe.bat:1122)
+// MEASURED, not reasoned: `dumpbin /SYMBOLS` on this TU's object emitted the namespace-qualified
+// UNDEF verbatim (scratchpad/waveQ6/probe_worldc/obj/). Taking `&ContactGeneratorEntry` therefore
+// asked the linker for a function nobody defines -- which is exactly why the bat's `rem` at :1014
+// says this TU "stays UNMOUNTED: its only body, CollisionBatch::SetupJob, references the absent
+// ContactGeneratorEntry". That `rem` IS STALE: the entry point is not absent, it was being named
+// in the wrong scope. The sibling CgsCollisionGenerator_CollideStreams.cpp:84 already declares it
+// correctly at global scope, which is why THAT TU links.
+// ⚠️ CONSEQUENCE FOR THE CONDUCTOR: with this fixed, CgsCollisionBatch.cpp is mountable, and
+// wave Q6's BaseCollisionGenerator::CollidePrimitiveListAgainstTriangleList body (which the
+// console builds by calling SetupJob out of line) NEEDS it mounted. Exact echo line + the stale
+// `rem` are in the wave report.
+void ContactGeneratorEntry(EA::Jobs::Param, EA::Jobs::Param, EA::Jobs::Param, EA::Jobs::Param);
+
 namespace CgsSceneManager
 {
 namespace CgsCollision
 {
-
-// The contact-generator local job entry (size-0 local function; its address is passed
-// to EntryPoint::SetCode as const void*).
-extern void ContactGeneratorEntry(EA::Jobs::Param, EA::Jobs::Param, EA::Jobs::Param, EA::Jobs::Param);
 
 // CgsCollisionBatch.cpp:448 / X360 0x82810508
 EA::Jobs::Job* CollisionBatch::SetupJob()

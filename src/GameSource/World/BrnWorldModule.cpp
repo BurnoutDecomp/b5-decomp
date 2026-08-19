@@ -2520,11 +2520,14 @@ WorldModule::Update( BrnUpdateSet lUpdateSet,
         lTrafficToRaceCar_PreScene;
     lpTrafficOutput_PreScene->LockForRead();
     {
-        // [FLAG PC boot gate] same seam as the controls copy above: the traffic
-        // pre-scene accessor is still the WorldLinkStubs null return, and the
-        // snapshot is a 544-byte structure copy. Skip it while the producer is gated.
+        // The CONST read-lock accessor (X360 0x8279FD58-family, baked :185) -- the buffer is
+        // read-locked here, and the non-const twin asserts 'Not locked for writing' (70 asserts
+        // per boot the moment the accessor became real, 2026-08-19 wave Q6). The null test is
+        // kept: the accessor is real now but the snapshot copy is unchanged.
+        const BrnTraffic::BrnTrafficIO::OutputBuffer_PreScene* lpTrafficOutput_PreSceneRead =
+            lpTrafficOutput_PreScene;
         const BrnTraffic::BrnTrafficIO::OutputBuffer_PreScene::TrafficToRaceCarInterface_PreScene*
-            lpTrafficToRaceCar = lpTrafficOutput_PreScene->GetTrafficToRaceCarInterface_PreScene();
+            lpTrafficToRaceCar = lpTrafficOutput_PreSceneRead->GetTrafficToRaceCarInterface_PreScene();
         if ( lpTrafficToRaceCar != 0 )
             lTrafficToRaceCar_PreScene = *lpTrafficToRaceCar;
     }

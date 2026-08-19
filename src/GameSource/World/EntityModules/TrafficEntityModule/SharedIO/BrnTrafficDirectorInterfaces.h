@@ -54,6 +54,16 @@ namespace BrnTrafficIO
         void AddTrafficEntity(const TrafficDirectorEntity&);                    // :95
         const Array<TrafficDirectorEntity, 32u>& GetTrafficDirectorEntityArray() const; // :98
 
+        // ⭐ ADDITIVE GROW (wave Q6 round-1 fix, bridges #2) -- non-const overload of the DWARF
+        // :98 accessor, header-inline. No new member, no layout change.
+        // WHY IT EXISTS: OutputBuffer_PostPhysics::Construct @0x82761908 INLINES
+        // `maActiveEntityArray.Construct()` as the single raw `stw r29,0x2650(r31)` at
+        // 0x8276193C -- console +9808 == this interface's +6208 seat, +16 (the array) + 32*112
+        // (the entity records) == the Array<>::miCount word at +3600. The array is private, so
+        // the de-inlined leg in that Construct needs a named way in; this is it.
+        // ⚠️ The console does NOT touch mu16EntityCount (+0) there. Do not add that store.
+        Array<TrafficDirectorEntity, 32u>& GetTrafficDirectorEntityArray() { return maActiveEntityArray; }
+
     private:
         // ---- FROZEN LAYOUT (DWARF :102-:103; X360 count @+0, array @+16) ----
         u16                                mu16EntityCount;      // :102

@@ -67,6 +67,27 @@ namespace BrnTrafficIO
         // X360 0x82706028: record a traffic vehicle the player could stomp.
         void AddPotentialStompee(u32 luEntityIndex, Vector3 lPosition, f32 lfDistanceSquared); // :118 (0x82706028)
 
+        // ⭐ ADDITIVE GROW (wave Q6 round-1 fix, bridges #1). The console has no out-of-line
+        // body for this: OutputBuffer_PreScene::Construct @0x82761790 INLINES the whole
+        // initialisation of this member as a run of raw stores over the console span
+        // [818784, 819328). De-inlining it here (AGENTS "inlining reversal") is what lets that
+        // Construct spell its leg by NAME instead of value-initialising an opaque 544-byte
+        // blob, and keeps the zero roll-call next to the members it names.
+        //
+        // MEASURED store roll-call, in console order (offsets relative to the member's base):
+        //   7 x `std 0` @ +0..55   -> mSympatheticCrashers (BitArray<400> == 7 u64)
+        //   `stw 0`     @ +448     -> mNearMissTrafficCollection.miCount (320 + 16*8)
+        //   `stw 0`     @ +516     -> mNearMissRaceCarCollection.miCount (452 + 8*8)
+        //   `stw 0`     @ +520     -> miPotentialStompeeCount
+        //   `stw 0`     @ +524     -> muNearbyStaticVehicleCount
+        //   4 x `stfs flt_82001CC0` @ +528/+532/+536/+540
+        //                          -> mfClosestDistanceSq / mfSecondClosestDistanceSq /
+        //                             mfClosestAngleDiff / mfClosestPerpendicularDist
+        //                             (flt_82001CC0 is the rodata 0.0f the build reuses)
+        // NOTE what the console does NOT zero: mPotentialStompees[8] keeps whatever the IO
+        // stack's previous tenant left -- only its count is reset. Do not "helpfully" clear it.
+        void Construct();
+
     private:
         BitArray<400>              mSympatheticCrashers;        // :150 @0
         VehicleStompingData        mPotentialStompees[8];       // :151 @64 (alignas(16) via VehicleStompingData)

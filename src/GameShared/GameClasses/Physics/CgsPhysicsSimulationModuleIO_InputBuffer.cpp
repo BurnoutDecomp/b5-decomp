@@ -266,6 +266,15 @@ namespace PhysicsSimulationIO
     const InputBuffer::InRemoveAllRigidBodiesQueue* InputBuffer::GetRemoveAllRigidBodiesQueue() const
     { CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n"); return &mRemoveAllRigidBodiesQueue; }
 
+    // ⭐ ADDED 2026-08-19 (wave Q6). The WRITE-side twin @0x825BD000, dumped with headless idat
+    // this wave (an unnamed `sub_` -- no per-address JSON): write-lock guard firing
+    // "Not locked for writing\n" (`li r5, 0x43F` == CgsPhysicsSimulationModuleIO.h:1087, the
+    // line baked into its own assert), then `addis r3,r28,2 ; addi r3,r3,-0x5CD0` ==
+    // &mRemoveAllRigidBodiesQueue (+0x1A330 == 107312). Same shape as the two write-side twins
+    // above it. Sole caller: PropManager::RemoveAllPropsAndParts @0x8260F010.
+    InputBuffer::InRemoveAllRigidBodiesQueue* InputBuffer::GetRemoveAllRigidBodiesQueue()
+    { CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n"); return &mRemoveAllRigidBodiesQueue; }
+
     const InputBuffer::InAddContactQueue* InputBuffer::GetAddContactQueue() const
     { CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n"); return &mAddContactQueue; }
 

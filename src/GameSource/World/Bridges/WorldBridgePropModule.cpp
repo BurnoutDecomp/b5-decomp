@@ -38,9 +38,13 @@
 // declarations the conductor must land are collected in scratchpad/waveQ4/bridges.owner.md
 // and scratchpad/waveQ5/f2.owner.md.
 //
-//   LIVE   BridgePhysicsModuleToPropModule_PostPhysics -- the CONTACT-SPY leg. Its
-//          updated-prop-queue leg is parked (PhysicsModuleIO::OutputBuffer models
-//          mPropManagerOutputInterface as 1-byte opaque storage).
+//   LIVE   BridgePhysicsModuleToPropModule_PostPhysics -- ⭐⭐ BOTH LEGS, since 2026-08-19
+//          (wave Q6/A3). The updated-prop-queue leg was parked while
+//          PhysicsModuleIO::OutputBuffer modelled mPropManagerOutputInterface as 1-byte
+//          opaque storage; wave Q6 cluster A1 promoted that seat to the real
+//          BrnPhysics::Props::PropOutputInterface and made GetUpdatedProps() a header
+//          inline, so the leg is the console's two calls with no cast. See that
+//          function's banner.
 //   LIVE   BridgeSceneContactsToPropModule_PrePhysics -- ⭐ UNPARKED 2026-08-19 (wave Q5/F2).
 //          SceneManagerIO::OutputBuffer grew the real mPotentialContactQueue (+32800), the
 //          read-lock accessor @0x8279C098 and the console's own Construct in wave Q5 round 2,
@@ -48,9 +52,12 @@
 //          destination Append takes. See that function's banner.
 //   PARKED BridgeCrashModuleToPropModule_PostScene -- BrnWorld::CrashModuleIO::
 //          OutputBuffer_PostScene is `u8 maDeferredPayload[16]` (BrnCrashModule.h:75).
-//   PARKED BridgePropModuleToTrafficModule_PrePhysics -- the TRAFFIC side's
-//          PropToTrafficInterface is a 1-byte `{ u8 muDUMMY; }` placeholder
-//          (BrnTrafficEntityModuleIO.h:210) while the PROP side already holds the real type.
+//   LIVE   BridgePropModuleToTrafficModule_PrePhysics -- ⭐ UNPARKED 2026-08-19 (wave Q6/C3).
+//          The TRAFFIC side's PropToTrafficInterface was a 1-byte `{ u8 muDUMMY; }`
+//          placeholder; it is the committed BrnWorld::PropEntityIO::PropToTrafficInterface
+//          now (BrnTrafficEntityModuleIO.h), and BrnTrafficIO::InputBuffer_PrePhysics::
+//          Construct grew the two queue legs the console's Construct @0x827615F8 runs at
+//          +0x30C60 / +0x30CEC. Smashed traffic lights reach the traffic system again.
 //   PARKED BridgeAIToEntityModules_PrePhysics -- sizeof(BrnAI::AIModuleIO::OutputBuffer) == 1
 //          on the host while its accessors return this+98128. See that function's banner:
 //          this park caught a live corruption that had already been written and compiled.
@@ -60,14 +67,19 @@
 // buffer, against the console offset the bridge reads:
 //
 //     PhysicsModuleIO::OutputBuffer          998224   contact spy @998192   IN BOUNDS  -> LIVE
-//     PhysicsModuleIO::OutputBuffer          998224   updated props @71792  in bounds, but the
-//                                                     seat is a 1-byte placeholder -> PARKED
+//     PhysicsModuleIO::OutputBuffer          998224   updated props @71792  in bounds, and the
+//                                                     seat is the REAL PropOutputInterface since
+//                                                     wave Q6/A1 -> ⭐ LIVE (row kept as the
+//                                                     record of what unparked it)
 //     SceneManagerIO::OutputBuffer            32800   contacts   @32800     OUT OF BOUNDS
 //                                                     -> ⭐ FIXED: the buffer is 201,824 B with
 //                                                     a NAMED mPotentialContactQueue since wave
 //                                                     Q5 round 2, so this row is LIVE now
 //     CrashModuleIO::OutputBuffer_PostScene      16   racecar iface @143824 OUT OF BOUNDS
 //     BrnAI::AIModuleIO::OutputBuffer             1   AI result  @98128     OUT OF BOUNDS
+//     BrnTrafficIO::InputBuffer_PrePhysics   199777+  prop->traffic @199776 in bounds, and the
+//                                                     seat is the REAL PropToTrafficInterface
+//                                                     since wave Q6/C3 -> ⭐ LIVE
 //
 // (probe: scratchpad/waveQ4/probe_bridges/probe_sizes.cpp + probe_ai_size.cpp. The remaining
 // out-of-bounds rows are not "missing accessors" -- they are buffers whose LIVE ALLOCATION is
@@ -96,6 +108,9 @@
 #include "GameSource/World/Bridges/WorldBridgeCrashToEntityModules.h"          // BridgeCrashModuleToPropModule_PostScene
 #include "GameSource/World/Bridges/WorldBridgeEntityModulesToEntityModules.h"  // BridgePropModuleToTrafficModule_PrePhysics
 #include "GameSource/World/Bridges/WorldBridgeAIToEntityModules.h"             // BridgeAIToEntityModules_PrePhysics
+
+#include "GameSource/Physics/PropManager/SharedIO/BrnPropOutputInterface.h"       // Props::PropOutputInterface (leg 1's source seat)
+#include "GameSource/World/EntityModules/PropEntityModule/SharedIO/BrnPropToTrafficInterface.h" // PropEntityIO::PropToTrafficInterface (the traffic bridge's payload)
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"           // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // CgsDev::Log::gpDebugPrint
@@ -132,6 +147,25 @@ static void _AssertLayout()
     static_assert(sizeof(BrnPhysics::PhysicsModuleIO::OutputBuffer) > 998192,
                   "the physics output buffer must be large enough to hold mContactSpyInterface "
                   "(console +998192) -- CreateIOBuffer allocates sizeof(T)");
+
+    // ⭐ THE UPDATED-PROP LEG'S "no cast anywhere" PROOF (wave Q6 cluster A3). The console
+    // hands GetUpdatedProps()'s result straight to AppendUpdatedPropQueue with no conversion;
+    // the two spellings must therefore be the SAME C++ type. A plain pointer assignment is a
+    // compile-time type-identity test that no reinterpret_cast could ever silence -- if the
+    // physics side's queue and the prop-entity side's queue ever diverge (different element
+    // type, different capacity), this line stops compiling instead of the bridge quietly
+    // shipping a cast over two different layouts.
+    const BrnPhysics::Props::PropOutputInterface::UpdatePropEventQueue*      lpPhysicsSideQueue = 0;
+    const BrnWorld::PropEntityIO::InputBuffer_PostPhysics::UpdatePropEventQueue* lpPropSideQueue =
+        lpPhysicsSideQueue;
+    (void)lpPropSideQueue;
+
+    // The seat this leg reads must be a REAL member of the buffer CreateIOBuffer<T> allocates,
+    // not a placeholder: the console's mPropManagerOutputInterface sits at +71792 and the whole
+    // interface is 76,864 console bytes wide, so the host object has to cover it by name.
+    static_assert(sizeof(BrnPhysics::Props::PropOutputInterface) > 41632,
+                  "PropOutputInterface must be the real interface (its mUpdatedProps is at "
+                  "console +41632), not a 1-byte placeholder");
 }
 
 // =================================================================================================
@@ -171,25 +205,34 @@ static void _AssertLayout()
 // `b __restgprlr_29` forwards the last call's register as an artifact; the logical return
 // type is void.
 //
-// ⛔ LEG 1 (updated-prop queue) IS PARKED -- honestly, not silently. Two independent blockers,
-//    neither of which this TU may fix:
-//      (a) PhysicsModuleIO::OutputBuffer models mPropManagerOutputInterface as
-//          `struct PropOutputInterfaceStorage { unsigned char maBytes[1]; }`
-//          (BrnPhysicsModuleIO.h's own "FLAG (foreign types)" block), so the const getter
-//          returns a pointer to a ONE-BYTE struct. Reaching mUpdatedProps through it would
-//          mean reinterpret_cast'ing that placeholder onto a 76,864-byte interface and reading
-//          a queue out of it -- the exact live-corruption class the sibling
-//          WorldBridgePhysicsToEntityModules.cpp refused for its own legs 3-5.
-//      (b) Props::PropOutputInterface::GetUpdatedProps() const is DECLARED
-//          (BrnPropOutputInterface.h:65) and DEFINED NOWHERE in the tree, so even with (a)
-//          fixed this leg would be an unresolved external that `cl /c` cannot see.
-//    COST OF THE PARK: the prop module's post-physics input never sees the physics side's
-//    per-prop UpdatePropEvent stream, so a prop that has been broken and is being simulated
-//    does not get its new pose back into the world module. It does NOT block the break
-//    itself -- that runs off the contact-spy leg below.
-//    DELETE-WHEN: mPropManagerOutputInterface is promoted to Props::PropOutputInterface (the
-//    same storage-typedef promotion the vehicle trio already had, BrnPhysicsModuleIO.h
-//    2026-08-09) and GetUpdatedProps() is bodied. Exact text in bridges.owner.md.
+// ⭐⭐ LEG 1 (updated-prop queue) IS LIVE -- UNPARKED 2026-08-19 (wave Q6 cluster A3), and it is
+//    THE line the whole "smashed props do not visibly move" complaint hangs on. The park that
+//    stood here named two blockers; BOTH were closed by wave Q6 cluster A1 in the seat's own
+//    owning header, not worked around here:
+//      (a) PhysicsModuleIO::OutputBuffer modelled mPropManagerOutputInterface as
+//          `struct PropOutputInterfaceStorage { unsigned char maBytes[1]; }`. It is now
+//          `typedef Props::PropOutputInterface PropOutputInterfaceStorage`
+//          (BrnPhysicsModuleIO.h:112 / member :208), X360-attested by
+//          PhysicsModuleIO::OutputBuffer::Construct @0x825ABB10, which runs
+//          PropOutputInterface::Construct(this+71792) -- so the const getter returns a REAL,
+//          CONSTRUCTED interface and there is no reinterpret_cast anywhere in this leg.
+//      (b) Props::PropOutputInterface::GetUpdatedProps() const is a header inline now
+//          (BrnPropOutputInterface.h:83, `{ return mUpdatedProps; }`) -- which is exactly what
+//          the console emits: it has NO out-of-line symbol for it, it folds the accessor into
+//          this bridge as `addis r4,r11,1 ; addi r4,r4,-0x5D60` (== +0xA2A0 == 41632 ==
+//          offsetof(PropOutputInterface, mUpdatedProps)).
+//    NO CAST: BrnPhysics::Props::PropOutputInterface::UpdatePropEventQueue and
+//    BrnWorld::PropEntityIO::InputBuffer_PostPhysics::UpdatePropEventQueue are the SAME
+//    instantiation, CgsModule::EventQueue<BrnPhysics::Props::UpdatePropEvent, 200>.
+//    _AssertLayout below proves that at compile time by a plain pointer assignment.
+//    ORDER: the console runs this leg FIRST and the contact-spy leg SECOND (0x827ABA00 before
+//    0x827ABA1C); the two are independent, but the order is reproduced.
+//    WHAT IT BUYS: PropManager::ReadUpdatedBodies fills mUpdatedProps every physics frame with
+//    the post-solve transform/velocity/frozen state of every prop and part;
+//    PropManager::OutputUpdatedProps publishes it into this buffer; this leg is the ONLY hop
+//    that carries it into PropEntityModule::PostPhysicsUpdate -> UpdateProps ->
+//    PropZoneManager::UpdateInstance, whose part arm is the single writer of
+//    PropPartInstance::mWorldTransform -- the matrix BrnPropEntityModule_Render.cpp:774 draws.
 //
 // ⭐ LEG 2 (contact spy) IS LIVE. It needed one ADDITIVE declaration that this tree was
 //    already carrying a written TODO for: WorldBridgePhysicsToEntityModules.cpp's own banner
@@ -208,26 +251,39 @@ void BridgePhysicsModuleToPropModule_PostPhysics(
     CGS_ASSERT(lpPropInputBuffer_PostPhysics != 0, "lpPropInputBuffer_PostPhysics != NULL");  // :102
     CGS_ASSERT(lpPhysicsModuleOutputBuffer != 0, "lpPhysicsModuleOutputBuffer != NULL");      // :103
 
+    // ---- LEG 1 -- the updated-prop queue (0x827ABA00 GetPropManagerOutputInterface const,
+    // then the folded +0xA2A0 GetUpdatedProps, then 0x827ABA14 AppendUpdatedPropQueue).
+    const BrnPhysics::Props::PropOutputInterface::UpdatePropEventQueue& lrUpdatedProps =
+        lpPhysicsModuleOutputBuffer->GetPropManagerOutputInterface()->GetUpdatedProps();
+
+    // [DIAG] NOT IN THE X360 BINARY. Opt-in one-shot behind BRN_PROP_DIAG: the single line that
+    // says the physics side's per-prop pose stream reached the world module for the first time.
+    // Fires on the FIRST frame the source queue is non-empty and never again, so a silent log
+    // means the producer (PropManager::OutputUpdatedProps @0x82627EC8, wave Q6 cluster A2) is
+    // still an inert conductor gate -- a different failure from "the bridge dropped the data".
+    // The getenv latch is a function-local static const evaluated ONCE (a per-frame getenv
+    // would be a per-frame syscall).
+    {
+        static const bool sbPropDiag = ( getenv( "BRN_PROP_DIAG" ) != 0 );
+        static bool       sbLoggedFirstUpdatedProps = false;
+        if ( sbPropDiag && !sbLoggedFirstUpdatedProps
+             && lrUpdatedProps.GetLength() > 0
+             && CgsDev::Log::gpDebugPrint != 0 )
+        {
+            sbLoggedFirstUpdatedProps = true;
+            *CgsDev::Log::gpDebugPrint
+                << "[Q6-bridge] first " << lrUpdatedProps.GetLength()
+                << " UpdatePropEvents -> prop post-physics input\n";
+        }
+    }
+
+    lpPropInputBuffer_PostPhysics->AppendUpdatedPropQueue(&lrUpdatedProps);   // @0x827AA2D8
+
     // ---- LEG 2 -- the contact-spy handle. The console copies the interface's single
     // ContactSpyData* word; on the host that word is the whole struct, so this is the
     // struct assignment (_AssertLayout above pins that equivalence).
     *lpPropInputBuffer_PostPhysics->GetContactSpyInterface() =
         *lpPhysicsModuleOutputBuffer->GetContactSpyInterface();
-
-    // ---- LEG 1 -- parked. See the banner for the two blockers.
-    {
-        static bool sbLoggedUpdatedPropsPark = false;
-        if (!sbLoggedUpdatedPropsPark && CgsDev::Log::gpDebugPrint != 0)
-        {
-            sbLoggedUpdatedPropsPark = true;
-            *CgsDev::Log::gpDebugPrint
-                << "[FLAG PC bring-up] BridgePhysicsModuleToPropModule_PostPhysics: the "
-                   "contact-spy leg is LIVE; the updated-prop-queue leg (X360 @0x8279F640 -> "
-                   "AppendUpdatedPropQueue) is PARKED because PhysicsModuleIO::OutputBuffer "
-                   "still models mPropManagerOutputInterface as 1-byte opaque storage and "
-                   "Props::PropOutputInterface::GetUpdatedProps() has no body in the tree.\n";
-        }
-    }
 }
 
 // =================================================================================================
@@ -405,19 +461,35 @@ void BridgeCrashModuleToPropModule_PostScene(
 // clearing and re-appending a pair of rings, i.e. the Clear()+Append() idiom the committed
 // RaceCar/Traffic setters use (BrnRaceCarEntityModuleIO.cpp:772, BrnTrafficEntityModuleIO.cpp:269).
 //
-// ⛔ PARKED. The DESTINATION seat is a placeholder: BrnTrafficIO::InputBuffer_PrePhysics
-//    declares its own nested `struct PropToTrafficInterface { u8 muDUMMY; };`
-//    (BrnTrafficEntityModuleIO.h:210, with the note "Its concrete home is not yet in-tree ...
-//    adopt the named type when its home lands"). That home HAS landed -- it is
-//    BrnWorld::PropEntityIO::PropToTrafficInterface, which the PROP side of this very bridge
-//    already holds by value -- but adopting it on the traffic side is a member RETYPE that
-//    grows that buffer, not an additive declaration, so it belongs to that buffer's owner and
-//    not to this TU.
-//    ⭐ This one is a ONE-LINE unpark and it is the only parked leg here whose data actually
-//    exists today (the prop module fills its side via PropZoneManager's
-//    SendTrafficLightRestoreEvents). Exact text in bridges.owner.md.
-//    COST OF THE PARK: smashed traffic lights do not tell the traffic system to change. It
-//    does not block the break.
+// ⭐⭐ UNPARKED 2026-08-19 (wave Q6 cluster C3). The park said the DESTINATION seat was a
+//    placeholder -- `struct PropToTrafficInterface { u8 muDUMMY; };` on the traffic side -- and
+//    that retyping it belonged to that buffer's owner. It does, and it is done: the traffic
+//    InputBuffer_PrePhysics member is `typedef BrnWorld::PropEntityIO::PropToTrafficInterface`
+//    now, and BrnTrafficIO::InputBuffer_PrePhysics::Construct grew the two queue legs the
+//    console's Construct @0x827615F8 runs at +0x30C60 / +0x30CEC. Both ends of this bridge are
+//    the SAME type, so there is no cast in the leg below.
+//
+//    THE PRODUCER IS ALREADY LIVE: PropZoneManager::SendTrafficLightRestoreEvents and the
+//    knock-down post inside the break path fill the prop side's copy
+//    (BrnPropZoneManager.cpp), which is why this was the cheapest closeable leg in the file.
+//
+//    ⛔ THE ONE THING THIS TU CANNOT SUPPLY, AND IT IS A LINK HOLE, NOT A PARK:
+//    PropToTrafficInterface::GetTrafficLightKnockDownQueue() const and
+//    ::GetTrafficLightRestoreQueue() const are DECLARED (BrnPropToTrafficInterface.h:77/:78,
+//    DWARF :125/:126) and DEFINED NOWHERE. The console emits no out-of-line symbol for either
+//    -- it folds both into this bridge -- so each is a one-line body
+//    (`return &mTrafficLightKnockDownQueue;`) in the already-mounted
+//    SharedIO/BrnPropToTrafficInterface.cpp, which this cluster does not own. Reported to the
+//    conductor with the exact text rather than forked here (AGENTS.md gotcha 7): a second
+//    definition in this TU would be an LNK2005 the per-TU `cl /c` gate cannot see.
+//
+//    THE const_cast IS THE COMMITTED IN-TREE IDIOM, not a workaround: PropToTrafficInterface
+//    keeps its two rings private behind const-only getters, and the console reaches them from
+//    outside the class exactly the way BrnTrafficEntityModuleIO.cpp:194
+//    (InputBuffer_PreScene::SetTrafficNetworkInputInterface) already does for
+//    TrafficNetworkInputInterface's private ActivateHull ring -- const accessor + const_cast +
+//    Clear() + Append(). The DESTINATION is write-locked by the caller
+//    (WorldModule::EntityModulePrePhysicsUpdate), so writing through it is correct.
 // =================================================================================================
 void BridgePropModuleToTrafficModule_PrePhysics(
     void* lpWorldModule,
@@ -431,17 +503,43 @@ void BridgePropModuleToTrafficModule_PrePhysics(
     // not corrected.
     CGS_ASSERT(lpPropOutputBuffer_PrePhysics != 0, "lpPropOutbutBuffer_PrePhysics != NULL");     // :124
 
+    typedef BrnWorld::PropEntityIO::PropToTrafficInterface PropToTrafficInterface;
+
+    // asm order: the SOURCE getter first (0x827A1C10, read-lock, +11296), then the DESTINATION
+    // getter (0x827A02D0, write-lock, +199776).
+    const PropToTrafficInterface* const lpSource =
+        lpPropOutputBuffer_PrePhysics->GetPropToTrafficInterface();
+    PropToTrafficInterface* const lpDestination =
+        lpTrafficInputBuffer_PrePhysics->GetPropToTrafficInterface();
+
+    // ---- ring 0: the knock-down requests (`stw 0,8(dst)` == Clear, then Append at 0x827A8650)
+    CgsModule::EventQueue<BrnWorld::PropEntityIO::TrafficLightKnockDownEvent, 32>& lrKnockDown =
+        const_cast<CgsModule::EventQueue<BrnWorld::PropEntityIO::TrafficLightKnockDownEvent, 32>&>(
+            *lpDestination->GetTrafficLightKnockDownQueue());
+    lrKnockDown.Clear();
+    lrKnockDown.Append(*lpSource->GetTrafficLightKnockDownQueue());
+
+    // ---- ring 1: the restore requests (`stw 0,8(dst+0x8C)` == Clear, then Append at 0x827A8730)
+    CgsModule::EventQueue<BrnWorld::PropEntityIO::TrafficLightRestoreEvent, 80>& lrRestore =
+        const_cast<CgsModule::EventQueue<BrnWorld::PropEntityIO::TrafficLightRestoreEvent, 80>&>(
+            *lpDestination->GetTrafficLightRestoreQueue());
+    lrRestore.Clear();
+    lrRestore.Append(*lpSource->GetTrafficLightRestoreQueue());
+
+    // [DIAG] NOT IN THE X360 BINARY. Opt-in one-shot behind BRN_PROP_DIAG: fires the first
+    // frame a smashed traffic light actually raises a request, so a silent log separates "the
+    // bridge dropped it" from "PropZoneManager never posted one". Rate: once, ever.
     {
-        static bool sbLoggedTrafficPark = false;
-        if (!sbLoggedTrafficPark && CgsDev::Log::gpDebugPrint != 0)
+        static const bool sbPropDiag = ( getenv( "BRN_PROP_DIAG" ) != 0 );
+        static bool       sbLoggedFirstLights = false;
+        if ( sbPropDiag && !sbLoggedFirstLights
+             && ( lrKnockDown.GetLength() > 0 || lrRestore.GetLength() > 0 )
+             && CgsDev::Log::gpDebugPrint != 0 )
         {
-            sbLoggedTrafficPark = true;
+            sbLoggedFirstLights = true;
             *CgsDev::Log::gpDebugPrint
-                << "[FLAG PC bring-up] BridgePropModuleToTrafficModule_PrePhysics: PARKED. "
-                   "BrnTrafficIO::InputBuffer_PrePhysics still declares its own 1-byte "
-                   "PropToTrafficInterface placeholder; the real type "
-                   "(BrnWorld::PropEntityIO::PropToTrafficInterface) is committed and the "
-                   "prop side already holds it. One-line retype unparks the traffic lights.\n";
+                << "[Q6-lights] first traffic-light requests -> traffic module: knockdown "
+                << lrKnockDown.GetLength() << " restore " << lrRestore.GetLength() << "\n";
         }
     }
 }

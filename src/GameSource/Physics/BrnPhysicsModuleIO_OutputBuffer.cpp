@@ -36,9 +36,19 @@ namespace PhysicsModuleIO
         // is sizeof(VMOI)'s console span (adjacent members, gated trivially by adjacency);
         // 148656-71792 == 76864; 159648-148656 == 11000... NO -- the deltas below are the
         // PAD-under-written spans, which this file's own pad arrays hold by construction:
+        // ⭐ 2026-08-19 (wave Q6/A1): this relation is no longer held by a pad -- it is held by
+        // sizeof(Props::PropOutputInterface) itself, now that mPropManagerOutputInterface IS
+        // that type. Console delta 76,864; MEASURED host sizeof 76,864 -- exactly equal, because
+        // all four of the interface's EventQueue<T,200> element types are 16-byte aligned, so
+        // the host's 16-byte BaseEventQueue header lands inside the space the console's 12-byte
+        // header already padded out to. The gate is written `>=` (not `==`) for the same reason
+        // the scene seat's is: benign host GROWTH in a later wave only pushes the opaque
+        // deformation seat further out, which nothing reads by absolute offset, whereas a
+        // SHRINK below the console span would silently re-seat it inside data the prop
+        // interface owns -- and that is what this must catch.
         static_assert(offsetof(OutputBuffer, mDeformationOutputInterface)
-                    - offsetof(OutputBuffer, mPropManagerOutputInterface)    == 148656 - 71792,
-                      "prop -> deformation console delta");
+                    - offsetof(OutputBuffer, mPropManagerOutputInterface)    >= 148656 - 71792,
+                      "prop -> deformation console delta (>=: measured host == console, 76864)");
         static_assert(offsetof(OutputBuffer, mDeformationOutputInterfaceForEntityModules)
                     - offsetof(OutputBuffer, mDeformationOutputInterface)    == 159648 - 148656,
                       "deformation -> entity-modules console delta");
@@ -113,13 +123,23 @@ namespace PhysicsModuleIO
     //     because nothing constructed this interface's queue storage. It can be un-guarded now.
     //     Reported, not edited -- that file belongs to another owner.
     //
-    // ⚠️ THREE legs still CANNOT be emitted and are NOT faked: mPropManagerOutputInterface
-    // (+71792), mDeformationOutputInterface (+148656) and
-    // mDeformationOutputInterfaceForEntityModules (+159648) are 1-byte opaque *Storage spans
-    // (each size-pinned by the pad that follows it) with no members to construct. Their seats
-    // and exact console call lists are transcribed above. Any consumer reaching one of those
-    // will fire the same loud "Not Constructed" this buffer did before it had a Construct at
-    // all, by design.
+    // ⭐⭐ 2026-08-19 (wave Q6 cluster A1): THE PROP LEG IS LIVE. mPropManagerOutputInterface was
+    // the fifth of the blocked legs, parked only because the member was a 1-byte opaque span. It
+    // is the real BrnPhysics::Props::PropOutputInterface now -- the CONSOLE names that type in
+    // this very function (0x825ABBF8: `addis r3,r30,1 ; addi r3,r3,0x1870` == this+71792,
+    // `bl Props::PropOutputInterface::Construct`) -- so the console's own call is reproduced
+    // literally below, in the console's own position: after the scene leg, before the
+    // contact-spy zero store. This is the leg without which the interface's four embedded
+    // EventQueue<T,200>s stay un-Constructed and PropManager::OutputUpdatedProps @0x82627EC8
+    // would fire "mpEvents != NULL" on its first AppendUpdatedProps -- the never-Constructed
+    // EventQueue family that has broken every previous producer bring-up.
+    //
+    // ⚠️ TWO legs still CANNOT be emitted and are NOT faked: mDeformationOutputInterface
+    // (+148656) and mDeformationOutputInterfaceForEntityModules (+159648) are 1-byte opaque
+    // *Storage spans (each size-pinned by the pad that follows it) with no members to construct.
+    // Their seats and exact console call lists are transcribed above. Any consumer reaching one
+    // of those will fire the same loud "Not Constructed" this buffer did before it had a
+    // Construct at all, by design.
     void OutputBuffer::Construct()
     {
         CgsModule::IOBuffer::Construct();               // status = 1
@@ -128,6 +148,7 @@ namespace PhysicsModuleIO
         mVehicleOutputInterface.Construct();            // +44128   (X360-inline @0x825ABB58)
         mVehicleManagerOutputInterface.Construct();     // +41952   (X360 0x822E6790)
         mSceneInputInterface.Construct();               // +179424  (X360 0x825ABBEC)
+        mPropManagerOutputInterface.Construct();        // +71792   (X360 0x825ABBF8)
         mContactSpyInterface.Construct();               // +998192  (the console's trailing stwx 0)
     }
 
@@ -178,6 +199,9 @@ namespace PhysicsModuleIO
     }
 
     // X360 0x8279F640: read-lock; return this + 71792.
+    // (Return RETYPED 2026-08-19 with the member promotion: PropOutputInterfaceStorage is a
+    // typedef of the real Props::PropOutputInterface now, so both overloads hand out a typed
+    // interface and the callers' reinterpret_cast seams retire. Signature text unchanged.)
     const OutputBuffer::PropOutputInterfaceStorage* OutputBuffer::GetPropManagerOutputInterface() const
     {
         CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");

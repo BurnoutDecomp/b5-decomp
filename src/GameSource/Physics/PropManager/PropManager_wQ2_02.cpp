@@ -17,17 +17,27 @@
 //         parked on BaseCollisionGenerator::GetNumUsedResultLists(). THAT LANDED TOO
 //         (CgsCollisionGenerator.h:114, a public inline). Body brought in-tree here.
 //
-// ⚠️ ODR NOTE FOR THE CONDUCTOR -- Begin and End STILL HAVE their one-shot conductor-gate
-//    bodies in b5-decomp/src/GameSource/Physics/BrnPhysicsConductorGates.cpp:
-//        :485  BeginPropWorldContactGeneration          :492  EndPropWorldContactGeneration
-//    Re-confirmed by grep this round; both gate bodies are still present and are DELIBERATELY
-//    LEFT IN PLACE. AGENTS.md's convention is that a gate is retired only in the same commit
-//    that MOUNTS the real body in tools/build/build_game_exe.bat, and that script lists
-//    BrnPhysicsConductorGates.cpp but lists NEITHER PropManager_wQ_03.cpp NOR this file. So
-//    there is no LNK2005 today; it fires the instant either partfile joins the source list.
-//    `cl /c` cannot see this -- reported, not "fixed". (The same commit must also delete the
-//    UpdateTriangleCache gate at :514, which PropManager_wQ_03.cpp already reported.)
-//    GetTriangleCacheSlotAndRadius has NO gate and no stub anywhere (grepped
+// ⚠️ ODR NOTE FOR THE CONDUCTOR -- RE-MEASURED 2026-08-19 (wave Q6). Begin and End STILL HAVE
+//    their one-shot conductor-gate bodies in
+//    b5-decomp/src/GameSource/Physics/BrnPhysicsConductorGates.cpp, and the line numbers this
+//    banner used to carry (":485 / :492 / :514") HAD DRIFTED. The measured ranges today, banner
+//    line through closing brace:
+//        :471-476  PropManager::BeginPropWorldContactGeneration  @0x82628CB0 (89)
+//        :478-483  PropManager::EndPropWorldContactGeneration    @0x82628E18 (37)
+//        :522-527  PropManager::UpdateTriangleCache              @0x826119A0 (116)
+//    All three are DELIBERATELY LEFT IN PLACE. AGENTS.md's convention is that a gate is retired
+//    only in the same commit that MOUNTS the real body in tools/build/build_game_exe.bat, and that
+//    script lists BrnPhysicsConductorGates.cpp (:1230) but lists NEITHER PropManager_wQ_03.cpp NOR
+//    this file -- its `rem` at :1777-1780 says so in as many words. So there is no LNK2005 today;
+//    it fires the instant either partfile joins the source list. `cl /c` cannot see this --
+//    reported, not "fixed".
+//    ⭐ THE `rem`'s REASON IS NOW STALE: it says these two TUs stay unmounted "because their
+//    contact-gen legs are parked". As of wave Q6 the legs are NOT parked -- both
+//    DoPart/DoPropInstanceWorldContactGeneration are landed in the already-mounted
+//    PropManager_wQ2_03.cpp. What blocks the mount now is two LINK HOLES, listed in that file's
+//    LINK-LEVEL FACTS block (PrimitivePairListBuilder::AddPrimitive(Volume*) @0x82814AB8 and
+//    BaseCollisionGenerator::AddPrimitiveListWithTriangleListToStream @0x82811D40).
+//    GetTriangleCacheSlotAndRadius has NO gate and no stub anywhere (re-grepped
 //    BrnPhysicsConductorGates.cpp and WorldLinkStubs.cpp) -- this is its only definition.
 //
 // GROUNDING. Every body below was re-derived this round from the RAW `assembly` array of
@@ -63,6 +73,9 @@
 #include "GameShared/GameClasses/SceneManager/Collision/ContactGenerator/CgsCollisionGenerator.h"
 #include "GameShared/GameClasses/Memory/DataStream/CgsSimpleDataStreamProducer.h" // SimpleDataStreamProducer::Begin/End
 #include "GameShared/GameClasses/Memory/CgsLinearMalloc.h"                    // CgsMemory::LinearMalloc (parameter)
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"                    // gpDebugPrint ([DIAG] only)
+
+#include <stdlib.h>                                                           // getenv (BRN_PROP_DIAG, host only)
 
 namespace BrnPhysics
 {
@@ -340,19 +353,24 @@ bool PropManager::GetTriangleCacheSlotAndRadius( PropEntityID lPropEntityId,
 // owner landed both at those signatures. Their BODIES are still parked (that owner's §4), so
 // this file calls two declared-but-unbodied symbols -- reported, `cl /c` cannot see it.
 //
-// ⛔⛔ THE COMPLETE LINK-HOLE LIST THIS BODY INTRODUCES (AGENTS gotcha 12; re-grepped 2026-08-18.
-//     The earlier banner listed only the two BaseCollisionGenerator symbols, which understated it
-//     by half -- the two biggest callees below were missing entirely):
-//       * PropManager::DoPartWorldContactGeneration          @0x82611B70 -- DECLARED
-//         in BrnPropManager.h, NO definition anywhere in b5-decomp/src or vendor; body parked at
-//         scratchpad/waveQ2/parked/PropManager_03_DoPartWorldContactGeneration.cpp
-//         (PropManager_wQ2_03.cpp's own banner marks it NOT LANDED).
-//       * PropManager::DoPropInstanceWorldContactGeneration   @0x826120E8 -- DECLARED
-//         in BrnPropManager.h, same status; parked as
-//         scratchpad/waveQ2/parked/PropManager_03_DoPropInstanceWorldContactGeneration.cpp.
-//       * BaseCollisionGenerator::CreateCollidePrimitiveListWithTriangleListStream
-//         (CgsCollisionGenerator.h:240) and ::RunCollidePrimitiveListWithTriangleListStream
-//         (:241-242) -- declaration-only, bodies parked with the collgen owner.
+// ⛔⛔ THE COMPLETE LINK-HOLE LIST THIS BODY INTRODUCES (AGENTS gotcha 12; RE-GREPPED 2026-08-19,
+//     wave Q6 -- and it SHRANK by half):
+//       ✅ PropManager::DoPartWorldContactGeneration          @0x82611B70 -- NO LONGER A HOLE.
+//         Landed 2026-08-19 in the already-mounted PropManager_wQ2_03.cpp.
+//       ✅ PropManager::DoPropInstanceWorldContactGeneration   @0x826120E8 -- NO LONGER A HOLE.
+//         Landed 2026-08-19 in the same file.
+//       ⛔ BaseCollisionGenerator::CreateCollidePrimitiveListWithTriangleListStream
+//         (CgsCollisionGenerator.h, X360 0x82811DD0, 98 insns) and
+//         ::RunCollidePrimitiveListWithTriangleListStream (X360 0x82811F58, 80 insns) --
+//         STILL declaration-only. Both bodies are complete and compile-proven, parked at
+//         scratchpad/waveQ2/parked/CgsCollisionGenerator_wQ2_PrimitiveStream.cpp, blocked on ONE
+//         type (PrimitiveListWithTriangleListStreamJobDesc, beside the already-mounted
+//         CgsPrimitiveListWithTriangleListJobDesc.h) plus ONE enum member
+//         (E_COLLISIONJOB_PRIMITIVE_LIST_WITH_TRIANGLE_LIST_STREAM = 12 in
+//         CgsCollisionJobDescription.h; its type-12 worker is already a named gate at
+//         ContactGeneratorJob.cpp:230). ⚠️ That park's banner claims the descriptor "has no home
+//         in this tree" -- STALE: the non-Stream sibling header/.cpp exist and are mounted
+//         (bat:2864). Only the *Stream* variant is missing.
 //     VERIFIED-BODIED and therefore NOT holes (checked, so the list above is exhaustive):
 //     BaseCollisionGenerator::Prepare(void*,s32) and ::Finish (CgsCollisionGenerator.cpp:68/:86),
 //     SimpleDataStreamProducer::Begin (CgsSimpleDataStreamProducer_Begin.cpp) and ::End
@@ -430,6 +448,13 @@ void PropManager::BeginPropWorldContactGeneration(
 
     miNumPropsAddedToContactGen = 0;                                        // stw 0x6570
 
+    // [DIAG] NOT IN THE X360 BINARY -- the two counters below and the one-shot print after the
+    // loop. They are plain s32 locals bumped in the two dispatch arms (one add each, no branch,
+    // no store outside this frame), so the shipped path is unchanged whether the probe is on or
+    // off; only the PRINT is gated. See the block after the loop for what the line answers.
+    s32 liDiagProps = 0;
+    s32 liDiagParts = 0;
+
     // The bound is re-read every iteration (lwz 0x688 at both 0x82628D30 and 0x82628DA0).
     for ( s32 liEvent = 0; liEvent < mUpdatedProps.GetLength(); ++liEvent )
     {
@@ -443,14 +468,46 @@ void PropManager::BeginPropWorldContactGeneration(
         // 0x82628D6C -- bare `clrlwi r11,r11,22`; see the divergence note above.
         if ( lrEvent.mEntityId.GetPartIndex() != 0u )
         {
+            ++liDiagParts;                                                  // [DIAG]
             DoPartWorldContactGeneration( lpCollisionGenerator, lpTriangleCacheInterface,
                                           lrEvent, miNumJobsAdded, lpLinearMalloc, lvfTimeStep );
         }
         else
         {
+            ++liDiagProps;                                                  // [DIAG]
             DoPropInstanceWorldContactGeneration( lpCollisionGenerator, lpTriangleCacheInterface,
                                                   lrEvent, miNumJobsAdded, lpLinearMalloc,
                                                   lvfTimeStep );
+        }
+    }
+
+    // =============================================================================================
+    // [DIAG] NOT IN THE X360 BINARY -- ONE-SHOT, behind BRN_PROP_DIAG.
+    //
+    // This is the line that says cluster B is ALIVE: the wave's user-visible complaint is that
+    // smashed parts do not visibly move, and today's boot log shows the second half of that story
+    // -- six "Warning!! prop fell out of the world" prints, because prop and part rigid bodies are
+    // created, integrated, and then FREE-FALL, since this whole function was an inert
+    // BRN_CONDUCTOR_GATE and no prop-vs-world contact was ever generated.
+    // ⚠️ READ IT AS A PAIR WITH THAT WARNING. `props`/`parts` non-zero here and the fall-out
+    // warning still firing means the contacts are being POSTED but not RESOLVED -- which is
+    // exactly what the two remaining link holes (PrimitivePairListBuilder::AddPrimitive(Volume*)
+    // and AddPrimitiveListWithTriangleListToStream, both reported in PropManager_wQ2_03.cpp's
+    // LINK-LEVEL FACTS) would produce. `parts` staying 0 while `props` climbs is scout.md's
+    // honest unknown 1 firing: no PART rigid body has ever reached the simulation.
+    //
+    // The latch is evaluated ONCE -- a getenv per frame would be a syscall on the hot path -- and
+    // the print is one-shot, so it costs one predicted branch per frame forever after.
+    // =============================================================================================
+    {
+        static const bool sbPropDiag  = ( getenv( "BRN_PROP_DIAG" ) != 0 );
+        static bool       sbFirstPass = true;
+        if ( sbPropDiag && sbFirstPass && CgsDev::Log::gpDebugPrint != 0 )
+        {
+            sbFirstPass = false;
+            *CgsDev::Log::gpDebugPrint
+                << "[Q6-worldc] first prop-vs-world contact pass: " << liDiagProps
+                << " props, " << liDiagParts << " parts\n";
         }
     }
 

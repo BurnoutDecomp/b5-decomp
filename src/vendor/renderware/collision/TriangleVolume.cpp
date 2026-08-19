@@ -14,14 +14,25 @@
 // operations they approximate (sqrt / divide); see FeatureEdge.cpp for the same
 // treatment.
 //
-// CreateGPInstance @ 0x82BBAA00 is not yet homed here, but its former blocker
-// is CRACKED (2026-08-04 unblock dump): unk_82CDA350 is DUMPED --
-//   bytes 00 01 02 03 | 14 15 16 17 | 00 01 02 03 | 00 01 02 03,
-// i.e. vperm(vA, vB, ctl) = (vA.x, vB.y, vA.x, vA.x) -- and off_82F91920 is
-// row [3] (TRIANGLE) of the recovered unk_82F918F0 VolumeMethods table
-// (0x82F918F0 + 3*0x10), i.e. g_aGPVolumeMethods[GPInstance::TRIANGLE].
-// Full recovered tables + per-instruction walk-through:
-// scratchpad/waveN/TriangleVolume.spec.md. Implementation pending.
+// CreateGPInstance @ 0x82BBAA00 is HOMED, in the sibling partfile
+// TriangleVolume_wN_01.cpp (mounted at build_game_exe.bat:2088). CORRECTED
+// 2026-08-19 (wave Q6 cluster C4): this banner still said "not yet homed here
+// ... Implementation pending", which is a stale claim in the helpful direction
+// (AGENTS gotcha 10) -- the body landed and the descriptor's createGPInstance
+// slot for TRIANGLE has been bound to it since wave Q5. The evidence that
+// unblocked it is kept because it is still the reading key for that body:
+// unk_82CDA350 is DUMPED -- bytes 00 01 02 03 | 14 15 16 17 | 00 01 02 03 |
+// 00 01 02 03, i.e. vperm(vA, vB, ctl) = (vA.x, vB.y, vA.x, vA.x) -- and
+// off_82F91920 is row [3] (TRIANGLE) of the recovered unk_82F918F0
+// VolumeMethods table (0x82F918F0 + 3*0x10), i.e.
+// g_aGPVolumeMethods[GPInstance::TRIANGLE]. Full recovered tables +
+// per-instruction walk-through: scratchpad/waveN/TriangleVolume.spec.md.
+//
+// GetBBoxDiag @ 0x82BBA110 IS homed here as of 2026-08-19 (wave Q6 cluster C4).
+// It was an EXPORT HOLE -- no per-address JSON, no identity.json row -- and was
+// closed by a targeted headless idat run on a PRIVATE .i64 copy;
+// scratchpad/waveQ6/ida_vt2/asm/0x82BBA110.txt is the raw dump the body below
+// is read from.
 // ===========================================================================
 
 namespace rw
@@ -289,6 +300,64 @@ RwBool TriangleVolume::GetBBox(const Vec4* lpTransform, RwBool /*abTight*/, AABB
     arResult.mMax = math::vpu::Vector3(lMax.x, lMax.y, lMax.z);
 
     return 1;
+}
+
+// ---------------------------------------------------------------------------
+// TriangleVolume::GetBBoxDiag @ 0x82BBA110  (18 instructions, no callees)
+//
+// RECOVERED 2026-08-19 (wave Q6 cluster C4). This address had NO per-address
+// export JSON and no progress/identity.json row -- it was an EXPORT HOLE, which
+// is exactly why the wave-Q5 descriptor binding had to leave the TRIANGLE
+// getBBoxDiag slot NULL. Closed by a targeted headless idat run on a PRIVATE
+// copy of the .i64 (scratchpad/waveQ6/ida_vt2/dump_vt2.py -> out.json), so the
+// body below comes from the same raw asm every other body in this TU does, not
+// from an .i64 label (AGENTS gotcha 6).
+//
+//   li      r11, 0x20
+//   lvx128  v0,  r0, r4        ; maVerts[0]
+//   li      r10, 0x10
+//   li      r9,  0x50
+//   lvx128  v13, r4, r11       ; maVerts[2]
+//   lvx128  v12, r4, r10       ; maVerts[1]
+//   vminfp  v10, v12, v13      ; min(v1, v2)
+//   lvlx    v11, r4, r9        ; the +0x50 quadword, left-justified...
+//   vmaxfp  v13, v12, v13      ; max(v1, v2)
+//   vspltw  v11, v11, 0        ; ...lane 0 == mfFatness, broadcast
+//   vminfp  v12, v0,  v10      ; lo = min(v0, min(v1, v2))
+//   vmaxfp  v0,  v0,  v13      ; hi = max(v0, max(v1, v2))
+//   vsubfp  v13, v12, v11      ; fattened min = lo - fatness
+//   vaddfp  v0,  v0,  v11      ; fattened max = hi + fatness
+//   vsubfp  v0,  v0,  v13      ; diagonal     = fattened max - fattened min
+//   stvx128 v0,  r0, r3        ; -> the hidden 16-byte return slot
+//   blr
+//
+// So the diagonal is exactly the extent of the SAME fattened box GetBBox
+// @0x82BBA038 builds -- with the local vertices only. Unlike GetBBox there is
+// no transform arm at all: the console reads r4 (this) and nothing else, which
+// matches DWARF triangle.h:119 taking no parameters.
+//
+// The three siblings that already had this slot bound compute the same quantity
+// the same way (CylinderVolume::GetBBoxDiag @0x82BAC7B8 doubles the local
+// half-extent, CapsuleVolume::GetBBoxDiag @0x82BAF6A8 doubles |axis|*h + r).
+// Note the algebra does NOT simplify to `hi - lo + 2*fatness` on the console:
+// the two vsubfp/vaddfp round trips are performed in float, and reproducing the
+// operation ORDER is what keeps the result bit-identical.
+// ---------------------------------------------------------------------------
+math::vpu::Vector3 TriangleVolume::GetBBoxDiag() const
+{
+    // vminfp v10,v12,v13 ; vminfp v12,v0,v10  (and the vmaxfp mirror) -- the
+    // same fold order GetBBox uses.
+    const Vec4 lLo = MinXYZW(maVerts[0], MinXYZW(maVerts[1], maVerts[2]));
+    const Vec4 lHi = MaxXYZW(maVerts[0], MaxXYZW(maVerts[1], maVerts[2]));
+
+    // lvlx this+0x50 ; vspltw lane0 : the fatness broadcast.
+    const f32 lfFatness = mfFatness;
+
+    const f32 lfDiagX = (lHi.x + lfFatness) - (lLo.x - lfFatness);
+    const f32 lfDiagY = (lHi.y + lfFatness) - (lLo.y - lfFatness);
+    const f32 lfDiagZ = (lHi.z + lfFatness) - (lLo.z - lfFatness);
+
+    return math::vpu::Vector3(lfDiagX, lfDiagY, lfDiagZ);
 }
 
 // ---------------------------------------------------------------------------

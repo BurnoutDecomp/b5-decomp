@@ -208,6 +208,17 @@ namespace PhysicsSimulationIO
         // console) by PhysicalBodyPartPool::RemovePart before its InRemoveRigidBody AddEvent.
         InRemoveRigidBodyQueue*              GetRemoveRigidBodyQueue();               // @0x825BCF58
         const InRemoveAllRigidBodiesQueue*   GetRemoveAllRigidBodiesQueue()   const;  // @0x8289E750
+        // ⭐ ADDED 2026-08-19 (wave Q6, RemoveAllPropsAndParts owner): the WRITE-side twin
+        // @0x825BD000 -- the THIRD member of this write-side family, and its body was dumped
+        // this wave with headless idat (it is an unnamed `sub_` in the exports, so there is no
+        // per-address JSON for it either). 42 instructions, the identical shape to the two
+        // twins above: `lbz r11,0(this) ; extrwi r11,r11,1,28` == status bit 3 == the WRITE
+        // lock, firing "Not locked for writing\n" with `li r5, 0x43F` == this header's line
+        // 1087, then `addis r3,r28,2 ; addi r3,r3,-0x5CD0` == this + 0x1A330 == +107312 ==
+        // &mRemoveAllRigidBodiesQueue -- byte-for-byte the offset the const accessor
+        // @0x8289E750 returns, so no new offset is asserted here. Its ONLY caller in the image
+        // is PropManager::RemoveAllPropsAndParts @0x8260F010 (`bl sub_825BD000` at 0x8260F02C).
+        InRemoveAllRigidBodiesQueue*         GetRemoveAllRigidBodiesQueue();          // @0x825BD000
         const InAddContactQueue*             GetAddContactQueue()             const;  // @0x8289E7F8
         // ⭐ ADDED 2026-08-06 (BridgeContactsToSimulation wave): the WRITE-side twin
         // @0x8259EF28 -- write-lock guard ("Not locked for writing\n", DWARF decl :1073 per the

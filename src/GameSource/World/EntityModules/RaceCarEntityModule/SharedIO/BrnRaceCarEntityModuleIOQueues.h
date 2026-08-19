@@ -1,10 +1,17 @@
 #pragma once
 
-// MINIMAL SLICE for the RaceCarEntityModuleIO IO-buffer unlock; full layout reconstructed
-// by each queue/request type's own TU (DWARF home BrnRaceCarEntityModuleIO.h, with the real
-// element/generic types living in their respective subsystem headers -- see per-type notes
-// below). Each type below is a COMPLETE but minimal placeholder: a reserved-byte blob is
-// intentional, the real member layout belongs to the owning TU's ledger.
+// The six RaceCarEntityModuleIO payload types (DWARF home BrnRaceCarEntityModuleIO.h; the real
+// element/generic types live in their respective subsystem headers -- see per-type notes
+// below).
+//
+// ⚠ THE HEADER'S ORIGINAL PREMISE IS RETIRED. It opened life as a "minimal slice" of
+// reserved-byte blobs, on the theory that byte-exact layout was not required because every
+// member is only ever handed out by name. That was WRONG FIVE TIMES: each of the five queues
+// has since been GROWN to its real instantiation after a console producer was found writing
+// THROUGH the member (Clear()+Append() / memcpy), which a 256-byte blob would have overrun into
+// the next member. There are NO reserved-byte blobs left in this file, and a new payload must
+// be the real type from the start -- see each type's own ⛔ note for the measurement that
+// forced it.
 //
 // These six payloads are embedded BY VALUE in the BrnRaceCarEntityModuleIO IO buffers and are
 // only ever returned by named pointer (Get*Queue()/Get*Interface() -> &member), so a sized
@@ -33,17 +40,22 @@
 //                             (BrnGameDataEvents.h:240).  RaceCar TU :70/:131.
 //
 // Size sources:
-//   The five queue blobs use the documented nominal 256 (NOT byte-verified; grown by own TU).
-//   The SIZE-HINTS gave no clean same-buffer delta isolating any of these queues, and byte-exact
-//   layout is not required, so nominal is intentional per STUB RULE 2.
+//   ⚠ CORRECTED 2026-08-19 (wave Q6 C5). This block used to read "the five queue blobs use the
+//   documented nominal 256 (NOT byte-verified) ... byte-exact layout is not required, so nominal
+//   is intentional per STUB RULE 2". Every word of that is now false: all five carry their real
+//   instantiation, each pinned by a named console symbol or a console Construct/memcpy offset
+//   span (per-type notes below). MEASURED on the host, 2026-08-19:
+//     PotentialContactQueue   163856 / align 16   (== 16 + 2048*80, console-attested span)
+//     InputBuffer_PrePhysics  212160 / align 16
+//   (scratchpad/waveQ6/probe_rcfork/measure_sizes.cpp -- the sizes MSVC itself prints.)
 //   ResourceRequestInterface = 8208 = 8192 + 16: derived from the committed in-tree evidence in
 //   BrnGameStateModuleIO.h, where RequestInterface<3072> occupies 0x4024-0x3414 = 3088 = 3072+16
 //   (a RequestQueue<N> carries a 16-byte BaseEventQueue-style header: T* + s32 maxLen + s32 len,
 //   see CgsBaseEventQueue.h:138-140). Same +16 header => RequestInterface<8192> = 8208.
 
 #include "types.hpp"
-#include "GameShared/GameClasses/Module/CgsEventQueue.h"           // CgsModule::EventQueue<T,N> (PotentialContactQueue base)
-#include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"   // VariableEventQueue<32768,16> (SceneResultQueue base)   // u8 (reserved-byte blob)
+#include "GameShared/GameClasses/Module/CgsEventQueue.h"           // CgsModule::EventQueue<T,N> (PotentialContactQueue IS this; TakedownEventQueue base)
+#include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"   // VariableEventQueue<32768,16> (SceneResultQueue base)
 #include "GameShared/GameClasses/SceneManager/SharedIO/CgsPotentialContact.h" // CgsSceneManager::SceneManagerIO::PotentialContact (PotentialContactQueue element)
 #include "GameSource/Resource/SharedIO/BrnGameDataRequestQueue.h"  // BrnResource::GameDataIO::RequestInterface<8192>
 #include "GameSource/GameState/TakedownManager/BrnTakedownManagerTypes.h" // BrnGameState::TakedownEvent (TakedownEventQueue element)
@@ -66,7 +78,13 @@ namespace RaceCarEntityModuleIO
     // ever put a game action into the race-car input buffer.
     // The type is pinned by the mangled Append symbol at 0x827ABFC4 (13312,16), not inferred.
     // Derives (rather than typedefs) so existing `struct GameActionQueue` forward references
-    // stay valid -- the SceneResultQueue / PotentialContactQueue precedent above.
+    // stay valid -- the SceneResultQueue precedent below.
+    // ⚠ SAME FORK CLASS AS PotentialContactQueue (collapsed 2026-08-19, see below): the DWARF
+    // spells this one a typedef too (BrnRaceCarEntityModuleIO.h:63 ->
+    // `typedef InputBuffer::GameActionQueue GameActionQueue`, chaining to
+    // BaseGameActionQueue<13312>). It was NOT collapsed here because no consumer in this tree
+    // has yet been measured to need the base type by pointer; the day one does, the symptom is
+    // a hard C2664, not a silent divergence.
     struct alignas(16) GameActionQueue : public CgsModule::VariableEventQueue<13312, 16>
     {
     };
@@ -89,7 +107,10 @@ namespace RaceCarEntityModuleIO
     //   the producing side (BrnWorldIO::UpdateInputBuffer::TakedownEventQueue), which is the
     //   second independent attestation of the width.
     // Derives (rather than typedefs) so existing `struct TakedownEventQueue` forward
-    // references stay valid -- the SceneResultQueue / PotentialContactQueue precedent above.
+    // references stay valid -- the SceneResultQueue precedent below. Same fork class as
+    // GameActionQueue above (DWARF :97 -> `typedef InputBuffer::TakedownEventQueue
+    // TakedownEventQueue`, chaining to EventQueue<BrnGameState::TakedownEvent,8>); left forked
+    // because no measured consumer needs the base type by pointer.
     struct alignas(16) TakedownEventQueue
         : public CgsModule::EventQueue<BrnGameState::TakedownEvent, 8>
     {
@@ -109,7 +130,8 @@ namespace RaceCarEntityModuleIO
     // module's own game-event queue (GameBridgeGUIToX.cpp:146), i.e. two independent
     // attestations of the width.
     // Derives (rather than typedefs) so existing `struct GameEventQueue` forward references
-    // stay valid -- same move as SceneResultQueue / PotentialContactQueue above.
+    // stay valid -- same move as SceneResultQueue below. (PotentialContactQueue no longer
+    // belongs on that list: its fork was collapsed to the DWARF typedef on 2026-08-19.)
     struct alignas(16) GameEventQueue : public CgsModule::VariableEventQueue<1536, 16>
     {
     };
@@ -123,14 +145,35 @@ namespace RaceCarEntityModuleIO
     // (== OutputBuffer::OutPotentialContactQueue; element home CgsPotentialContact.h, the
     // committed EventQueue<PotentialContact,2048> instantiation lives in
     // GameShared/GameClasses/SceneManager/SharedIO/EventQueue_PotentialContact_2048.cpp).
-    // Derives (rather than typedefs) so existing `struct PotentialContactQueue` forward
-    // references stay valid, mirroring the SceneResultQueue pattern below. Real sizeof is
-    // 16 + 2048*80 = 163856; the member is returned only by-name (&member), so growing it is
-    // offset-safe for all consumers.
-    struct alignas(16) PotentialContactQueue
-        : public CgsModule::EventQueue<CgsSceneManager::SceneManagerIO::PotentialContact, 2048>
-    {
-    };
+    //
+    // ⭐ FORK COLLAPSED 2026-08-19 (wave Q6 cluster C5). This was
+    //     struct alignas(16) PotentialContactQueue : public EventQueue<PotentialContact,2048> {};
+    // -- a DERIVED struct, i.e. a type distinct from the scene manager's
+    // OutputBuffer::OutPotentialContactQueue. The DecFIGS DWARF spells it as a TYPEDEF of
+    // exactly that type (BrnRaceCarEntityModuleIO.h:89 ->
+    // `typedef OutputBuffer::OutPotentialContactQueue PotentialContactQueue`, where
+    // OutputBuffer is CgsSceneManager::SceneManagerIO::OutputBuffer, DWARF
+    // CgsSceneManagerModuleIO.h:474). Traffic's twin (:91) is already a direct typedef in this
+    // tree (BrnTrafficEntityModuleIO.h:203), which is why its scene bridge landed in wave Q5
+    // and the race-car one could not: base -> derived does not convert, so
+    //   WorldModule::BridgeSceneContactsToRaceCarModule_PrePhysics @0x827ABBD0
+    //     lpRaceCarInput->SetPotentialContactQueue( lpSceneOut->GetPotentialContactQueue() )
+    // was a hard error C2664 (measured; scratchpad/waveQ5/f2.owner.md:206-219). The console
+    // has ONE type here and hands the pointer straight across with no conversion at all.
+    //
+    // The reason the old note gave for deriving -- "so existing `struct PotentialContactQueue`
+    // forward references stay valid" -- did not hold: grepped the whole tree (src + vendor),
+    // there is NO forward declaration of that name anywhere; the only spellings are the
+    // typedef at BrnRaceCarEntityModuleIO.h:515 and the member at :571.
+    //
+    // OFFSET-NEUTRAL, MEASURED (scratchpad/waveQ6/probe_rcfork/measure_sizes.cpp, MSVC
+    // diagnostic, before and after): the derived struct and the typedef target are BOTH
+    // sizeof 163856 (== 16 + 2048*80) / alignof 16, and InputBuffer_PrePhysics stays
+    // sizeof 212160 / alignof 16. The `alignas(16)` the struct carried was redundant -- the
+    // element PotentialContact is itself `alignas(16)` (CgsPotentialContact.h:38), so the
+    // inline maEvents array already forces 16 on the queue.
+    typedef CgsModule::EventQueue<CgsSceneManager::SceneManagerIO::PotentialContact, 2048>
+            PotentialContactQueue;                                                   // DWARF :89
 
     // ---- Scene-query-results queue (InputBuffer_PrePhysics :442 / GenerateDispatch :648) --
     // GROWN (was a 256-byte NOMINAL opaque): the scene->race-car bridge

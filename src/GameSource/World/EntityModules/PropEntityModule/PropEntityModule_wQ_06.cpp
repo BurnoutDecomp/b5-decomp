@@ -62,6 +62,9 @@
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerModuleIO.h"
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"  // gpDebugPrint ([DIAG] BRN_PROP_DIAG, wave Q6)
+
+#include <stdlib.h>                                         // getenv    ([DIAG] BRN_PROP_DIAG, wave Q6)
 
 // ---- this group's extra leaves ---------------------------------------------------
 #include "rw/math/vpu/matrix44affine_operation.h"  // rw::math::vpu::OrthoNormalize3x3 @0x82203B28
@@ -117,6 +120,50 @@ namespace BrnWorld
     void PropEntityModule::UpdateProps( PropEntityIO::OutputBuffer_PostPhysics* lpOutput,
                                         const UpdatePropEventQueue* lpUpdatePropEventQueue )
     {
+        // ---- [DIAG] NOT IN THE X360 BINARY -- wave Q6 world-side arrival witness ---------
+        // ⛔ DELETE-WHEN smashed parts are confirmed moving on screen. Set BRN_PROP_DIAG.
+        // This is the first place in the world module that can see a physics pose, so it is
+        // the proof that PropManager::OutputUpdatedProps -> the post-physics bridge leg ->
+        // AppendUpdatedPropQueue actually delivered. Two independent one-shots rather than
+        // one line: the first non-empty batch can legitimately be all whole-prop events, and
+        // the part line is the one the wave is actually about.
+        {
+            static const bool sbPropDiag = ( getenv( "BRN_PROP_DIAG" ) != 0 );
+            if ( sbPropDiag && CgsDev::Log::gpDebugPrint != 0 )
+            {
+                const s32 liQueueLength = lpUpdatePropEventQueue->GetLength();
+
+                static bool sbLoggedFirstBatch = false;
+                if ( !sbLoggedFirstBatch && liQueueLength > 0 )
+                {
+                    sbLoggedFirstBatch = true;
+                    *CgsDev::Log::gpDebugPrint
+                        << "[Q6-world] first " << liQueueLength << " updated props\n";
+                }
+
+                static bool sbLoggedFirstPart = false;
+                if ( !sbLoggedFirstPart )
+                {
+                    for ( s32 liScan = 0; liScan < liQueueLength; ++liScan )
+                    {
+                        const BrnPhysics::Props::UpdatePropEvent& lrScanEvent =
+                            lpUpdatePropEventQueue->GetEvent( liScan );
+                        if ( lrScanEvent.mEntityId.GetPartIndex() != 0 )
+                        {
+                            const Vector3& lScanPosition = lrScanEvent.mTransform.Pos();
+                            sbLoggedFirstPart = true;
+                            *CgsDev::Log::gpDebugPrint
+                                << "[Q6-world] first part " << lrScanEvent.mEntityId.GetValue()
+                                << " pos (" << lScanPosition.x
+                                << ", "     << lScanPosition.y
+                                << ", "     << lScanPosition.z << ")\n";
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
         for ( s32 liEvent = 0; liEvent < lpUpdatePropEventQueue->GetLength(); ++liEvent )
         {
             const BrnPhysics::Props::UpdatePropEvent& lrEvent =

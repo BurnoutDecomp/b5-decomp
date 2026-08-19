@@ -6,6 +6,13 @@
 // fixed-capacity (200) event queues that the prop physics fills each frame and that
 // downstream consumers drain.
 //
+// ⭐ 2026-08-19 (wave Q6 cluster A1): this class IS the OutputBuffer's +71792 seat now.
+// PhysicsModuleIO::OutputBuffer::PropOutputInterfaceStorage was a 1-byte opaque placeholder
+// until today; it is a typedef of this class (BrnPhysicsModuleIO.h), OutputBuffer::Construct
+// runs Construct() on it (the console's own 0x825ABBF8), and this TU is MOUNTED. That is the
+// whole unblock for Props::PropManager::OutputUpdatedProps @0x82627EC8 -- the sole producer of
+// the UpdatePropEvent stream that carries a smashed prop part's pose to the world module.
+//
 // Layout, member names/types and method shapes are DWARF-AUTHORITATIVE
 // (references/DecFIGS/dwarfdump/.../BrnPropOutputInterface.h):
 //   +0        InputBuffer::InAddRigidBodyQueue    mAddRigidBodyQueue           :73
@@ -60,13 +67,30 @@ namespace Props
         // UpdatePropEventQueue* (== const InputBuffer's UpdatePropEventQueue*).
         void AppendUpdatedProps(const UpdatePropEventQueue* lpUpdatedProps); // :59
 
+        // ⭐ BODIED 2026-08-19 (wave Q6 cluster A1) -- as the HEADER INLINE it is on the console.
+        // There is no out-of-line emission of this accessor anywhere in the X360 image (it has
+        // no row in progress/identity.json), because every caller folds it. Measured at the one
+        // live call site, WorldModule::BridgePhysicsModuleToPropModule_PostPhysics @0x827AB998:
+        //     0x827ABA00  bl  OutputBuffer::GetPropManagerOutputInterface   -> r3 == r11
+        //     0x827ABA0C  addis r4, r11, 1
+        //     0x827ABA10  addi  r4, r4, -0x5D60      ; r11 + 65536 - 23904 == r11 + 41632
+        //     0x827ABA14  bl  PropEntityIO::InputBuffer_PostPhysics::AppendUpdatedPropQueue
+        // and +41632 == 0xA2A0 is exactly mUpdatedProps' seat (pinned independently by
+        // PropOutputInterface::Construct @0x825A9658). So the whole body is the member's
+        // address; there is no lock test and no assert in the folded sequence.
+        // The DWARF (:65) returns it by const reference, which is the same ABI as the pointer
+        // the fold materialises -- kept in the DWARF shape.
+        const UpdatePropEventQueue&        GetUpdatedProps() const { return mUpdatedProps; }  // :65
+
         // Remaining DWARF-attested methods, bodied in their own TUs; not owned by this slice.
+        // ⚠ NONE of these five appears in the X360 ledger either -- they are folded/unused in
+        // the ARTIST image -- so they are declaration-only here and are LINK HOLES the moment
+        // anything calls them. Nothing in the tree does today (grepped 2026-08-19).
         bool Prepare();                                                    // :43
         bool Release();                                                    // :47
         void Destruct();                                                   // :51
         void Append(const PropOutputInterface* lpSource);                  // :55
         void Clear();                                                      // :62
-        const UpdatePropEventQueue&        GetUpdatedProps() const;        // :65
         const PropUpdateNotificationQueue& GetUpdatePropNotifications() const; // :68
 
     private:

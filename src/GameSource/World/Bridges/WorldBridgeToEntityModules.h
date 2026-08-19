@@ -25,6 +25,13 @@
 // (WorldBridgeInputToEntityModules.cpp) they are modelled as namespace functions whose
 // leading lpWorldModule arg is the X360 r3 (the WorldModule `this`), which neither bridge
 // reads through.
+// ---- ADDITIVE 2026-08-19 (wave Q6, cluster C2) ------------------------------
+// The owning .cpp ALSO homes BrnWorld::WorldModule::BridgeWorldModuleToEntityModules_Render
+// @0x827ABE28 (DWARF WorldBridgeToEntityModules.cpp:47 -- the FIRST function of the console
+// TU). That one is a real WorldModule METHOD, so it is declared where its class lives,
+// GameSource/World/BrnWorldModule.h:642, NOT in this header; the .cpp includes
+// BrnWorldModule.h for it. Listed here only so the next reader of this pair knows the .cpp
+// carries a fifth bridge that this header does not declare.
 namespace WorldModule
 {
     // @ 0x827AC568 -- forward the physics-relevant game actions (type ids 7,11,23,34,37,

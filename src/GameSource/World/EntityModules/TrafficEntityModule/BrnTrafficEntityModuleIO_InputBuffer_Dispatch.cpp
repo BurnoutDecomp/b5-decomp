@@ -4,9 +4,9 @@
 #include <cstddef>   // offsetof
 
 // BrnTraffic::BrnTrafficIO::InputBuffer_Dispatch members, reconstructed from
-// BURNOUT_X360_ARTIST.XEX. Eight scalar accessors over four contiguous 32-bit fields at the
-// buffer tail (+0x8014..+0x8020). Mirrors the sibling
-// BrnWorld::WorldEntityIO::InputBuffer_GenerateDispatchLists.
+// BURNOUT_X360_ARTIST.XEX. Eight accessors over four contiguous pointer slots at the buffer tail
+// (console words +0x8014..+0x8020; host pointers, see the header's POINTER WIDTH note).
+// Mirrors the sibling BrnWorld::WorldEntityIO::InputBuffer_GenerateDispatchLists.
 //
 // Getters test the read-lock bit (`lbz r11,0(this); extrwi r11,r11,1,27` == bit 4 ==
 // IsBufferLockedForReading()) and fire "Not locked for reading\n"; setters test the write-lock
@@ -25,10 +25,22 @@ namespace BrnTrafficIO
 {
     void InputBuffer_Dispatch::_AssertLayout()
     {
-        static_assert(offsetof(InputBuffer_Dispatch, muDispatchFrame)             == 0x8014, "muDispatchFrame @0x8014");
-        static_assert(offsetof(InputBuffer_Dispatch, muBlobbyShadowBuffer)        == 0x8018, "muBlobbyShadowBuffer @0x8018");
-        static_assert(offsetof(InputBuffer_Dispatch, muCoronaSubmissionInterface) == 0x801C, "muCoronaSubmissionInterface @0x801C");
-        static_assert(offsetof(InputBuffer_Dispatch, muShadowMap)                 == 0x8020, "muShadowMap @0x8020");
+        // HOST layout, not the console's: all four tail slots are real 8-byte host pointers now
+        // (see the header's POINTER WIDTH note, 2026-08-19 wave Q6), so the block starts at the
+        // next 8-byte boundary after the 0x8014-byte opaque payload and steps by sizeof(void*).
+        // Transcribing the console's 0x8014/0x8018/0x801C/0x8020 here would re-assert exactly the
+        // 32-bit-word shape the widening removes.
+        static_assert(offsetof(InputBuffer_Dispatch, mpDispatchFrame) == 0x8018,
+                      "mpDispatchFrame @0x8018 (host: 0x8014 payload rounded up to pointer alignment)");
+        static_assert(offsetof(InputBuffer_Dispatch, mpBlobbyShadowBuffer)
+                          == offsetof(InputBuffer_Dispatch, mpDispatchFrame) + sizeof(void*),
+                      "mpBlobbyShadowBuffer immediately follows mpDispatchFrame");
+        static_assert(offsetof(InputBuffer_Dispatch, mpCoronaSubmissionInterface)
+                          == offsetof(InputBuffer_Dispatch, mpBlobbyShadowBuffer) + sizeof(void*),
+                      "mpCoronaSubmissionInterface immediately follows mpBlobbyShadowBuffer");
+        static_assert(offsetof(InputBuffer_Dispatch, mpShadowMap)
+                          == offsetof(InputBuffer_Dispatch, mpCoronaSubmissionInterface) + sizeof(void*),
+                      "mpShadowMap immediately follows mpCoronaSubmissionInterface");
     }
 
     // ------------------------------------------------------------------------
@@ -54,68 +66,72 @@ namespace BrnTrafficIO
     {
         CgsModule::IOBuffer::Construct();      // stb 1, 0(this) @0x8275CF40
 
-        muDispatchFrame             = 0;       // *(this+0x8014) = 0 @0x8275CF40
-        muBlobbyShadowBuffer        = 0;       // *(this+0x8018) = 0 @0x8275CF40
-        muCoronaSubmissionInterface = 0;       // *(this+0x801C) = 0 @0x8275CF40
-        muShadowMap                 = 0;       // *(this+0x8020) = 0 @0x8275CF40
+        // (the four console words at +0x8014..+0x8020 are the host pointers -- see the header's
+        //  POINTER WIDTH note -- so they are nulled by name, not by offset)
+        mpDispatchFrame             = 0;       // *(this+0x8014) = 0 @0x8275CF40
+        mpBlobbyShadowBuffer        = 0;       // *(this+0x8018) = 0 @0x8275CF40
+        mpCoronaSubmissionInterface = 0;       // *(this+0x801C) = 0 @0x8275CF40
+        mpShadowMap                 = 0;       // *(this+0x8020) = 0 @0x8275CF40
     }
 
-    // X360 0x827120D8 (asm-line :482) -- read-lock; return the dispatch-frame index (this+0x8014).
-    u32 InputBuffer_Dispatch::GetDispatchFrame() const
+    // X360 0x827120D8 (asm-line :482) -- read-lock; return the dispatch frame (console word @this+0x8014).
+    CgsGraphics::DispatchFrame* InputBuffer_Dispatch::GetDispatchFrame() const
     {
         CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
-        return muDispatchFrame;
+        return mpDispatchFrame;
     }
 
-    // X360 0x827A0EC0 (asm-line :483) -- write-lock; set the dispatch-frame index (this+0x8014).
-    void InputBuffer_Dispatch::SetDispatchFrame(u32 luDispatchFrame)
+    // X360 0x827A0EC0 (asm-line :483) -- write-lock; set the dispatch frame (console word @this+0x8014).
+    void InputBuffer_Dispatch::SetDispatchFrame(CgsGraphics::DispatchFrame* lpDispatchFrame)
     {
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
-        muDispatchFrame = luDispatchFrame;
+        mpDispatchFrame = lpDispatchFrame;
     }
 
     // X360 0x82712188 (Hex-Rays "G", asm-line :488) -- read-lock; return the blobby-shadow
-    // buffer handle (this+0x8018).
-    u32 InputBuffer_Dispatch::GetBlobbyShadowBuffer() const
+    // buffer (console word @this+0x8018).
+    BrnBlobbyShadowManager::BrnBlobbyShadowBuffer* InputBuffer_Dispatch::GetBlobbyShadowBuffer() const
     {
         CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
-        return muBlobbyShadowBuffer;
+        return mpBlobbyShadowBuffer;
     }
 
-    // X360 0x827A0F70 (asm-line :489) -- write-lock; set the blobby-shadow buffer handle (this+0x8018).
-    void InputBuffer_Dispatch::SetBlobbyShadowBuffer(u32 luBlobbyShadowBuffer)
+    // X360 0x827A0F70 (asm-line :489) -- write-lock; set the blobby-shadow buffer (console word @this+0x8018).
+    void InputBuffer_Dispatch::SetBlobbyShadowBuffer(
+        BrnBlobbyShadowManager::BrnBlobbyShadowBuffer* lpBlobbyShadowBuffer)
     {
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
-        muBlobbyShadowBuffer = luBlobbyShadowBuffer;
+        mpBlobbyShadowBuffer = lpBlobbyShadowBuffer;
     }
 
     // X360 0x82712238 (Hex-Rays "GetCor", asm-line :491) -- read-lock; return the corona-
-    // submission interface handle (this+0x801C).
-    u32 InputBuffer_Dispatch::GetCoronaSubmissionInterface() const
+    // submission interface (console word @this+0x801C).
+    BrnCoronaManager::BrnSubmissionInterface* InputBuffer_Dispatch::GetCoronaSubmissionInterface() const
     {
         CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
-        return muCoronaSubmissionInterface;
+        return mpCoronaSubmissionInterface;
     }
 
-    // X360 0x827A1020 (asm-line :492) -- write-lock; set the corona-submission interface handle (this+0x801C).
-    void InputBuffer_Dispatch::SetCoronaSubmissionInterface(u32 luCoronaSubmissionInterface)
+    // X360 0x827A1020 (asm-line :492) -- write-lock; set the corona-submission interface (console word @this+0x801C).
+    void InputBuffer_Dispatch::SetCoronaSubmissionInterface(
+        BrnCoronaManager::BrnSubmissionInterface* lpCoronaSubmissionInterface)
     {
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
-        muCoronaSubmissionInterface = luCoronaSubmissionInterface;
+        mpCoronaSubmissionInterface = lpCoronaSubmissionInterface;
     }
 
-    // X360 0x827122E8 (asm-line :494) -- read-lock; return the shadow-map handle (this+0x8020).
-    u32 InputBuffer_Dispatch::GetShadowMap() const
+    // X360 0x827122E8 (asm-line :494) -- read-lock; return the shadow map (console word @this+0x8020).
+    BrnWorld::ShadowMap* InputBuffer_Dispatch::GetShadowMap() const
     {
         CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
-        return muShadowMap;
+        return mpShadowMap;
     }
 
-    // X360 0x827A10D0 (asm-line :495) -- write-lock; set the shadow-map handle (this+0x8020).
-    void InputBuffer_Dispatch::SetShadowMap(u32 luShadowMap)
+    // X360 0x827A10D0 (asm-line :495) -- write-lock; set the shadow map (console word @this+0x8020).
+    void InputBuffer_Dispatch::SetShadowMap(BrnWorld::ShadowMap* lpShadowMap)
     {
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
-        muShadowMap = luShadowMap;
+        mpShadowMap = lpShadowMap;
     }
 }
 }

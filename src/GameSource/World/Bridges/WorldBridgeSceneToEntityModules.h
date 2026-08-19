@@ -27,14 +27,18 @@ namespace WorldModule
     // PHANTOMS (callers in EntityModulePostSceneUpdate @0x827C3C58):
     //   @0x827ABB50 traffic (3-buffer form), @0x827ABD30 trigger.
     //
-    // ---- STATUS 2026-08-19 (wave Q5 cluster F2) -----------------------------------------
+    // ---- STATUS 2026-08-19 (wave Q5 cluster F2, then wave Q6 cluster C5) ------------------
     //   @0x827ABCB0 prop     BODIED -- WorldBridgePropModule.cpp (the split-out TU that owns
     //                        all five prop bridges); its WorldLinkStubs gate is already retired.
     //   @0x827ABC50 traffic  BODIED -- WorldBridgeSceneToEntityModules.cpp (this header's TU).
-    //   @0x827ABBD0 race car PARKED -- the destination setter's parameter type is forked in
-    //                        BrnRaceCarEntityModuleIOQueues.h (a derived struct where the DWARF
-    //                        has a typedef), so the scene's queue pointer does not convert.
-    //                        Measured, with the exact one-line unblock, in that TU's banner.
+    //   @0x827ABBD0 race car BODIED (Q6 C5) -- WorldBridgeSceneToEntityModules.cpp. It was
+    //                        parked because the destination setter's parameter type was forked
+    //                        in BrnRaceCarEntityModuleIOQueues.h (a derived struct where the
+    //                        DWARF has a typedef); that fork is collapsed and the collapse is
+    //                        measured offset-neutral. ⛔ ITS LANDING REQUIRES the one-line
+    //                        `mPotentialContactQueue.Construct();` companion edit in
+    //                        RaceCarEntityModuleIO::InputBuffer_PrePhysics::Construct --
+    //                        see the body's banner in the .cpp.
     void BridgeSceneQueryResultsToTrafficModule_PrePhysics(
         void* lpWorldModule,
         BrnTraffic::BrnTrafficIO::InputBuffer_PostPhysics* lpTrafficInputBuffer_PostPhysics,
@@ -46,10 +50,13 @@ namespace WorldModule
         BrnWorld::TriggerEntityModuleIO::InputBuffer_PrePhysics* lpTriggerInputBuffer_PrePhysics,
         const CgsSceneManager::SceneManagerIO::OutputBuffer* lpSceneQueryOutput);
 
+    // Source parameter named from the console's own assert string at 0x827ABC24
+    // ("lpSceneModuleOutputBuffer != NULL"), not from the traffic twin below (which has no
+    // asserts and therefore no attested name).
     void BridgeSceneContactsToRaceCarModule_PrePhysics(
         void* lpWorldModule,
         BrnWorld::RaceCarEntityModuleIO::InputBuffer_PrePhysics* lpRaceCarInputBuffer_PrePhysics,
-        const CgsSceneManager::SceneManagerIO::OutputBuffer* lpSceneContactsFromWorld);
+        const CgsSceneManager::SceneManagerIO::OutputBuffer* lpSceneModuleOutputBuffer);
 
     void BridgeSceneContactsToPropModule_PrePhysics(
         void* lpWorldModule,

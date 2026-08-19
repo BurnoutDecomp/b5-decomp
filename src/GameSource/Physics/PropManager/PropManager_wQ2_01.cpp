@@ -116,6 +116,7 @@
 #include "rw/math/vpu/matrix44affine_operation.h"                          // TransformPoint /
                                                                            // InverseOfMatrixWithOrthonormal3x3
 #include <cmath>                                                           // std::fabs (the `vandc`)
+#include <stdlib.h>                                                        // getenv -- [DIAG] BRN_PROP_DIAG only, host-side
 
 namespace BrnPhysics
 {
@@ -877,6 +878,21 @@ void PropManager::ReadUpdatedBodies(
     // `stw r27,0x688(r29)` before the loop -- mUpdatedProps.miLength = 0. FIRST, not last.
     mUpdatedProps.Clear();
 
+    // [DIAG] NOT IN THE X360 BINARY. Wave-Q6 read-back census (opt in with BRN_PROP_DIAG),
+    // rate-limited to ONE line per simulated second. scout.md §5: until wave Q6 this loop ran with
+    // a non-empty queue every physics frame and threw the whole result away, because its only
+    // consumer -- OutputUpdatedProps -- was an inert gate. These three counts are the first proof
+    // the read-back is alive at all, and their SHAPE is the diagnosis:
+    //   parts=0 with props>0  -> no part body ever reached the sim (scout.md §4.1);
+    //   frozen climbing        -> bodies are being retired, i.e. cluster B's missing prop-vs-world
+    //                             contacts are letting them free-fall past the out-of-world floor.
+    // The clock is the SIMULATED one (lvfTimeStep), not a host clock: it stays meaningful under a
+    // paused or stepped sim, and it costs no syscall.
+    static const bool sbPropDiag = ( getenv( "BRN_PROP_DIAG" ) != 0 );
+    s32               liDiagProps  = 0;
+    s32               liDiagParts  = 0;
+    s32               liDiagFrozen = 0;
+
     // :974  `vrefp128 v0,dt` + two Newton refinement steps, x 1.0f (v127 == vcsxwfp128 of
     // vspltisw 1). DWARF `VecFloat lvfOneOverTimeStep`, produced by rw::math::vpu::operator/ over
     // GetVecFloat_One(). De-optimised to an exact reciprocal, broadcast over the four lanes --
@@ -931,6 +947,28 @@ void PropManager::ReadUpdatedBodies(
                                            << CgsDev::E_PRINTMODE_HEXONCE
                                            << static_cast<u64>( lRigidBodyId )
                                            << "\n";
+
+                // [DIAG] NOT IN THE X360 BINARY -- a wave-Q6 SUFFIX on the console's own warning
+                // (opt in with BRN_PROP_DIAG), first 16 only. scout.md §4.7: the floor constant
+                // KVF_PROP_OUT_OF_WORLD_HEIGHT is not printed anywhere, yet it decides how long a
+                // part falls before the freeze deletes it -- i.e. how much of the motion a drive
+                // test can even observe. Printing the threshold NEXT TO the y that tripped it also
+                // makes the memory-file's recurring failure ("a console constant read as a host
+                // value", here Splat(-1000.0f) recovered from a dyn-init thunk) checkable in one
+                // glance instead of by re-deriving the initialiser.
+                {
+                    static const bool sbPropDiag  = ( getenv( "BRN_PROP_DIAG" ) != 0 );
+                    static u32        suDiagCount = 0;
+                    if ( sbPropDiag && suDiagCount < 16u )
+                    {
+                        ++suDiagCount;
+                        *CgsDev::Log::gpDebugPrint
+                            << "[Q6-read] out-of-world floor="
+                            << KVF_PROP_OUT_OF_WORLD_HEIGHT.x
+                            << " pos.y=" << lUpdatedPosition.y
+                            << "\n";
+                    }
+                }
             }
             lbFrozen = true;
         }
@@ -940,6 +978,13 @@ void PropManager::ReadUpdatedBodies(
         lbFrozen = lbFrozen && !mbDisableFreezing;
 
         lUpdatePropEvent.mbFrozen = lbFrozen;
+
+        // [DIAG] see the census note at the top of this function. Counted here, after the
+        // mbDisableFreezing fold, so the number matches what the event actually carries.
+        if ( sbPropDiag && lbFrozen )
+        {
+            ++liDiagFrozen;
+        }
 
         // :1035  The explicit PropEntityID(u32) ctor stores the word then fires AssertIsProp --
         // owner tripwire #1 of four, BrnPropEntityID.h:278. See decode (H).
@@ -1000,6 +1045,12 @@ void PropManager::ReadUpdatedBodies(
         if ( lEntityId.GetPartIndex() != 0 )
         {
             // ---- one shed PART of a smashed prop -------------------------------------------
+            // [DIAG] see the census note at the top of this function.
+            if ( sbPropDiag )
+            {
+                ++liDiagParts;
+            }
+
             // :1041
             const s32 liPartIndex = static_cast<s32>( lRigidBodyId.GetIndex() );
 
@@ -1045,6 +1096,12 @@ void PropManager::ReadUpdatedBodies(
         else
         {
             // ---- a whole prop ----------------------------------------------------------------
+            // [DIAG] see the census note at the top of this function.
+            if ( sbPropDiag )
+            {
+                ++liDiagProps;
+            }
+
             // :1078
             const s32 liPropIndex = static_cast<s32>( lRigidBodyId.GetIndex() );
 
@@ -1168,6 +1225,26 @@ void PropManager::ReadUpdatedBodies(
     // Tail: fold the jointed (leaning / tilting) props' own queue in and empty it. Decode (I).
     mUpdatedProps.Append( mUpdatedJointedProps );
     mUpdatedJointedProps.Clear();
+
+    // [DIAG] NOT IN THE X360 BINARY. The once-per-simulated-second census line -- see the note at
+    // the top of this function for what its shape means. Emitted AFTER the jointed fold so
+    // `queued` is the exact length OutputUpdatedProps is about to publish, which is what the
+    // matching one-shot `[Q6-out] first publish` should agree with on the frame it fires.
+    if ( sbPropDiag && CgsDev::Log::gpDebugPrint != 0 )
+    {
+        static f32 sfDiagAccumulatedTime = 0.0f;
+        sfDiagAccumulatedTime += lvfTimeStep.x;
+        if ( sfDiagAccumulatedTime >= 1.0f )
+        {
+            sfDiagAccumulatedTime = 0.0f;
+            *CgsDev::Log::gpDebugPrint
+                << "[Q6-read] props=" << liDiagProps
+                << " parts=" << liDiagParts
+                << " frozen=" << liDiagFrozen
+                << " queued=" << mUpdatedProps.GetLength()
+                << "\n";
+        }
+    }
 }
 
 }

@@ -20,6 +20,12 @@
 //     rw::collision::TriangleVolume::GetNormal         @ 0x82BB0580
 //     rw::collision::TriangleVolume::GetPoints         @ 0x82BB11F8
 //     rw::collision::TriangleVolume::GetBBox           @ 0x82BBA038
+//     rw::collision::TriangleVolume::GetBBoxDiag       @ 0x82BBA110  (landed
+//        2026-08-19, wave Q6 cluster C4 -- this address was an EXPORT HOLE: no
+//        progress/identity.json row and no per-address JSON, so wave Q5 had to
+//        leave the descriptor's getBBoxDiag slot NULL. Closed by a targeted
+//        headless idat run on a PRIVATE .i64 copy; raw asm + bounds in
+//        scratchpad/waveQ6/ida_vt2/out.json.)
 //     rw::collision::TriangleVolume::GetMaximumFeature @ 0x82BBACD0
 //     rw::collision::TriangleVolume::LineSegIntersect  @ 0x82BBB970
 //     rw::collision::TriangleVolume::CreateGPInstance  @ 0x82BBAA00  (declared
@@ -75,6 +81,14 @@ public:
     // triangle to arResult and return 1. abTight is accepted but unused by the
     // triangle (r5 is dead in the asm). lpTransform NULL uses local space.
     RwBool GetBBox(const Vec4* lpTransform, RwBool abTight, AABBox& arResult) const;
+
+    // @ 0x82BBA110 -- return the LOCAL axis-aligned bounding-box diagonal: the
+    // per-lane extent of the three vertices, fattened by mfFatness on both
+    // sides, i.e. (max(v0,v1,v2) + fatness) - (min(v0,v1,v2) - fatness). There
+    // is no transform parameter -- the console body reads nothing but this
+    // (DWARF triangle.h:119 `Vector3 GetBBoxDiag() const`). X360 struct-return
+    // convention: r3 = the hidden 16-byte return slot, r4 = this (const).
+    math::vpu::Vector3 GetBBoxDiag() const;
 
     // @ 0x82BBACD0 -- build the triangle's maximum contact feature (its three
     // boundary edges) into arResult. arDir is accepted but unused (a triangle's

@@ -484,10 +484,10 @@ namespace Props
 
     // GATE RETIRED 2026-08-18 (wave Q4 PropManager mount): PropManager::ReadUpdatedBodies @0x82632918 is REAL in PropManager_wQ2_01.cpp.
 
-    void PropManager::OutputUpdatedProps(BrnPhysics::PhysicsModuleIO::OutputBuffer*)
-    {
-        BRN_CONDUCTOR_GATE("PropManager::OutputUpdatedProps @0x82627EC8 (14)");
-    }
+    // GATE RETIRED 2026-08-19 (wave Q6 / outprop): PropManager::OutputUpdatedProps @0x82627EC8 is REAL
+    // in PropManager_wQ2_06.cpp -- the only producer of the UpdatePropEvent stream that carries a
+    // smashed prop part's pose back to the world module (the PhysicsModuleIO::OutputBuffer prop seat
+    // is the real Props::PropOutputInterface now; SharedIO/BrnPropOutputInterface.cpp mounted).
 
     // 2026-08-18 (wave Q4 PropManager mount): three honest gates for bodies that are COMPLETE
     // but still parked out of tree on foreign-header declarations, so the mounted
@@ -497,8 +497,6 @@ namespace Props
     //    Select overload) + RaceCarPhysics::GetLinearMomentum + Wheel::GetRoadLongSpeed.
     //    Effect while gated: a car hitting a jointed lamppost/pole gets no lean/tilt response
     //    (SetupAndValidatePropContact still validates and routes the contact).
-    //  * RemoveAllPropsAndParts @0x8260F010 (331) -- never reconstructed (no per-address export;
-    //    absent from identity.json; headless idat confirms it exists). Unload path, not smash.
     void PropManager::HandleContactWithLeanProp(
         PropInstance*, s32, const PropTypeData*, BrnPhysics::Vehicle::RaceCarPhysics*,
         Vector3, Vector3, Vector3, CgsPhysics::PhysicsSimulationIO::InAddPotentialContact*, bool, f32)
@@ -511,11 +509,8 @@ namespace Props
     {
         BRN_CONDUCTOR_GATE("PropManager::HandleContactWithTiltProp @0x826108B8 (720; body PARKED, same helper set as the Lean twin)");
     }
-    void PropManager::RemoveAllPropsAndParts(
-        CgsPhysics::PhysicsSimulationIO::InputBuffer*, CgsSceneManager::SceneManagerIO::InSceneUpdateInterface*)
-    {
-        BRN_CONDUCTOR_GATE("PropManager::RemoveAllPropsAndParts @0x8260F010 (331; NOT reconstructed -- no per-address JSON, absent from identity.json)");
-    }
+    // GATE RETIRED 2026-08-19 (wave Q6 / rmall): PropManager::RemoveAllPropsAndParts @0x8260F010 (331) is
+    // REAL in PropManager_wQ6_01.cpp (export hole closed with headless idat on a private .i64 copy).
 
     // 2026-08-11 (lifetime wave) -- arm 2 of PhysicsModule::UpdateCachedPositions. See the note
     // at the foot of the Vehicle namespace above for why this one is gated while arm 1 is real.

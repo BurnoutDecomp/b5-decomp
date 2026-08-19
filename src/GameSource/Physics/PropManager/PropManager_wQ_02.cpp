@@ -88,6 +88,8 @@
 #include "GameSource/Physics/PropManager/SharedIO/BrnPropInputInterface.h"  // PropInputInterface + the queue accessors
 #include "GameShared/GameClasses/Core/CgsAssert.h"                          // CGS_ASSERT
 #include "SharedClasses/Physics/Props/BrnPropEntityID.h"                    // BrnWorld::PropEntityID
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"                  // gpDebugPrint -- [DIAG] only
+#include <stdlib.h>                                                         // getenv -- [DIAG] BRN_PROP_DIAG only, host-side
 
 namespace BrnPhysics
 {
@@ -157,6 +159,29 @@ void PropManager::ProcessAddPartInstanceEvents(
     for ( u32 luEventIndex = 0; luEventIndex < luQueueSize; ++luEventIndex )
     {
         const AddPhysicalPartEvent* lpEvent = &lpQueue->GetEvent( static_cast<s32>( luEventIndex ) );
+
+        // [DIAG] NOT IN THE X360 BINARY. Wave-Q6 pre-flight probe (opt in with BRN_PROP_DIAG),
+        // FIRST EIGHT events only. It answers the wave's cheapest open question, scout.md §4.1:
+        // "has a PART rigid body ever reached the simulation on this build?" -- every
+        // `prop fell out of the world` id in the 2026-08-19 drive log has part index 0, i.e. all
+        // six were WHOLE props, so no part had been PROVEN to reach the sim. If this line never
+        // prints, the AddPartInstance events are not surviving the buffer hop and the whole
+        // read-back cluster is looking at the wrong seam. Printed BEFORE CreatePart so it fires
+        // even if CreatePart asserts. The env latch is a function-local static: a getenv per
+        // event would be a syscall inside the drain loop.
+        {
+            static const bool sbPropDiag  = ( getenv( "BRN_PROP_DIAG" ) != 0 );
+            static u32        suDiagCount = 0;
+            if ( sbPropDiag && suDiagCount < 8u && CgsDev::Log::gpDebugPrint != 0 )
+            {
+                ++suDiagCount;
+                *CgsDev::Log::gpDebugPrint
+                    << "[Q6-part] add part entity=" << lpEvent->mEntityId.GetValue()
+                    << " slot=" << static_cast<s32>( lpEvent->miSlot )
+                    << " type=" << static_cast<s32>( lpEvent->miPropTypeId )
+                    << "\n";
+            }
+        }
 
         // 0x8262816C -- r7 is the event pointer itself, which IS &lpEvent->mTransform (the event
         // starts with the affine); the by-value Matrix44Affine parameter is passed by hidden
