@@ -160,6 +160,93 @@ namespace vpu
         return lResult;
     }
 
+    // -- general axis-angle rotation builder ---------------------------------------------
+
+    // Matrix44AffineFromAxisRotationAngle(axis, angle): the Rodrigues rotation of `angle`
+    // radians about an arbitrary (unit) `axis`, row-major, with a ZERO translation row --
+    // the general form of the three MakeRotation{X,Y,Z} above.
+    //
+    // ADDITIVE GROW 2026-08-19 (wave Q6 / the jointed lean+tilt prop response).
+    //
+    // ⭐ SIGNATURE IS SDK-EXACT, and the row contents are ASM-VERIFIED -- neither is inferred.
+    //   * The declaration is copied from the shipped rwmath public header,
+    //     references/Feb-2007/BrnEntityModuleUnity/EARenderWare/stable/external/rwmath/
+    //     1.02.00/include/rw/math/vpu/matrix44affine_operation.h:116
+    //         Matrix44Affine Matrix44AffineFromAxisRotationAngle(Vector3::InParam inputAxis,
+    //                                                            VecFloat::InParam angle);
+    //     (VecFloat is Vector4 in this tree -- BrnCommonTypes.h:23 -- hence the type below.)
+    //   * The BODY is the SDK's own, detail/ps3/ppu/matrix44affine_operation_platform_inline.h
+    //     :177-208: SinCos(angle) -> s,c ; t = 1 - c ; then the twelve products below.
+    //   * And the X360 build AGREES INSTRUCTION FOR INSTRUCTION. PropManager::
+    //     HandleContactWithLeanProp inlines this builder at 0x82610140..0x82610370 and every
+    //     term is readable, with v127/v0/v13 the broadcast axis lanes ax/ay/az
+    //     (`vspltw128 v127, v125, 0` @0x82610060, `vspltw128 v0, v125, 1` and
+    //     `vspltw128 v13, v125, 2` @0x826102C4/C8):
+    //         vsubfp128 v11, v122, v12   @0x826102D8   t   = 1 - c        (v122 == 1.0f)
+    //         vmulfp128 v9,  v11, v127                 tx  = t * ax
+    //         vmulfp128 v10, v11, v0                   ty  = t * ay
+    //         vmulfp128 v11, v11, v13                  tz  = t * az
+    //         vmulfp128 v8,  v11, v127   @0x826102BC   sx  = s * ax   (v11 == s at that pt)
+    //         vmulfp128 v6,  v11, v0                   sy  = s * ay
+    //         vmulfp128 v7,  v11, v13                  sz  = s * az
+    //         vmaddfp128 v1, v9,  v127, v1  @0x826102F8   xAxis.x = tx*ax + c
+    //         vmaddfp    v2, v9,  v7,   v0  @0x826102F4   xAxis.y = tx*ay + sz
+    //         vsubfp     v5, v3,  v6        @0x8261030C   xAxis.z = tx*az - sy
+    //         vsubfp     v7, v5,  v7        @0x82610308   yAxis.x = ty*ax - sz
+    //         vmaddfp    v9, v10, v12,  v0  @0x826102FC   yAxis.y = ty*ay + c
+    //         vmaddfp    v10,v10, v8,   v13 @0x82610300   yAxis.z = ty*az + sx
+    //         vmaddfp128 v6, v11, v127, v6  @0x82610310   zAxis.x = tz*ax + sy
+    //         vmulfp128  v7, v11, v0        @0x8261031C   zAxis.y = tz*ay - sx
+    //         vmaddfp    v13,v11, v12,  v13 @0x82610304   zAxis.z = tz*az + c
+    //     (Operand order per the split documented in scratchpad/waveQ2/parked/
+    //      PropManager_07_HandleContactWithLeanProp.cpp §B: plain `vmaddfp vD,vA,vB,vC` is
+    //      vA*vC+vB while VMX128 `vmaddfp128` is vA*vB+vC. Both readings are used above and
+    //      both land on the same twelve SDK terms.)
+    //
+    // FLAG (PC-platform, numeric) -- the same de-optimisation MakeRotationX/Y/Z above already
+    // carry: the console evaluates s and c with ONE inlined SinCos minimax over a 2*pi-reduced
+    // argument (the range-reduction register unk_82000C60 == {pi, 2pi, 1/pi, 1/2pi} loaded at
+    // 0x82610140 and the coefficient blocks unk_82000BD0/BE0/BF0 and C00/C10/C20). std::sin /
+    // std::cos are the exact forms -- numerically tighter than the console's approximation,
+    // never a placeholder. The BRANCH-FREE structure and every sign below are transcribed.
+    //
+    // The angle arrives as a broadcast VecFloat (all four lanes equal, `vspltw`-seeded); lane
+    // .x is read, exactly as the console's own scalar extraction does.
+    //
+    // ⚠️ SPELLED `float`, NOT `f32`, ON PURPOSE. `f32` is `typedef float f32` from
+    // b5-decomp/src/types.hpp -- a GAME header this VENDOR header does not (and should not)
+    // include. Every pre-existing function in this file that takes an `f32` therefore only
+    // parses because the including TU happened to pull types.hpp first; including this header
+    // standalone is a wall of C2146/C2065 on `f32` (measured 2026-08-19 while probing this
+    // addition). The two types are identical, so the pre-existing signatures are left alone --
+    // but nothing new is added to that debt. REPORTED to the conductor as a separate finding.
+    inline Matrix44Affine Matrix44AffineFromAxisRotationAngle(Vector3 lvAxis, Vector4 lvfAngle)
+    {
+        const float lfSin = std::sin(lvfAngle.x);
+        const float lfCos = std::cos(lvfAngle.x);
+        const float lfT   = 1.0f - lfCos;
+
+        const float lfTx = lfT * lvAxis.x;
+        const float lfTy = lfT * lvAxis.y;
+        const float lfTz = lfT * lvAxis.z;
+        const float lfSx = lfSin * lvAxis.x;
+        const float lfSy = lfSin * lvAxis.y;
+        const float lfSz = lfSin * lvAxis.z;
+
+        Matrix44Affine lResult;
+        lResult.xAxis = Vector3{ lfTx * lvAxis.x + lfCos,
+                                 lfTx * lvAxis.y + lfSz,
+                                 lfTx * lvAxis.z - lfSy, 0.0f };
+        lResult.yAxis = Vector3{ lfTy * lvAxis.x - lfSz,
+                                 lfTy * lvAxis.y + lfCos,
+                                 lfTy * lvAxis.z + lfSx, 0.0f };
+        lResult.zAxis = Vector3{ lfTz * lvAxis.x + lfSy,
+                                 lfTz * lvAxis.y - lfSx,
+                                 lfTz * lvAxis.z + lfCos, 0.0f };
+        lResult.wAxis = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };
+        return lResult;
+    }
+
     // -- orthonormalisation -------------------------------------------------------------
 
     // OrthoNormalize3x3(m): re-normalise the three rotation rows (xAxis/yAxis/zAxis) of an

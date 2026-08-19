@@ -12,8 +12,12 @@
 // register (operator-/+ = vsubfp/vaddfp; Mult/Dot/Cross = vmaddfp/vnmsubfp + permutes;
 // Magnitude/Normalize = vrsqrtefp + one or two Newton refinement steps; IsValid = per-lane
 // vcmpeqfp self-equality NaN test). The PC reconstruction operates on the named float lanes
-// of the flat Vector3 aggregate in types.h -- the SIMD machinery (VecFloat / VectorIntrinsic
-// / VecFloatRef / Mask3) is NOT modelled here, so:
+// of the flat Vector3 aggregate in types.h -- the SIMD machinery (VectorIntrinsic /
+// VecFloatRef) is NOT modelled here, so:
+// ⚠️ 2026-08-19 CORRECTION (wave Q6): this line used to include VecFloat and Mask3 in that
+//    "not modelled" list, and both halves are now false -- VecFloat has been the global
+//    `typedef rw::math::vpu::Vector4` since BrnCommonTypes.h:23, and Mask3 is modelled at
+//    the foot of this file. Only VectorIntrinsic / VecFloatRef remain un-modelled.
 //   * functions the SDK returns as a broadcast VecFloat are de-modelled to scalar `float`
 //     (Dot/Magnitude/MagnitudeSquared); call sites read a single lane.
 //   * the rsqrt-estimate-plus-refinement reciprocal-magnitude is de-optimised to an exact
@@ -294,6 +298,122 @@ namespace vpu
             && lrVector.y == lrVector.y
             && lrVector.z == lrVector.z;
     }
+
+    // ===================================================================================
+    // ADDITIVE GROW 2026-08-19 (wave Q6 / the jointed lean+tilt prop response). The five
+    // entries below are the vocabulary BrnPhysics::Props::PropManager::HandleContactWith
+    // Lean/TiltProp (X360 0x8260FB60 / 0x826108B8) consumes and the tree had no home for.
+    //
+    // ⭐ EVERY SIGNATURE HERE IS SDK-EXACT, not inferred. Two independent sources agree:
+    //   * the Feb-2007 leak's own public header, references/Feb-2007/BrnEntityModuleUnity/
+    //     EARenderWare/stable/external/rwmath/1.02.00/include/rw/math/vpu/vector3_operation.h
+    //     :121/:122/:127 and mask3.h -- the declarations are copied from there;
+    //   * the DecFIGS DWARF, which names the same calls in this exact function
+    //     (references/DecFIGS/dwarfdump/GameSource/Physics/PropManager/BrnPropManager.cpp
+    //     :1500 GetVector3_YAxis, :1502 CompLessThan, :1545 Select, :1547 CompGreaterThan,
+    //     :1796 GetVector3_ZAxis) and dumps the SDK bodies at
+    //     dwarfdump/SDKs/EATech/include/rw/math/vpu/detail/vector3_operation_inline.h:1166/
+    //     :1169/:1883 and .../mask3_type_inline.h:71/:78/:85.
+    //
+    // ⚠️ THE SDK'S `Select` TAKES THE MASK **FIRST**, then the TRUE value, then the FALSE
+    //    value -- `Select(mask, trueValue, falseValue)`, lowering to
+    //    `vec_sel(falseValue, trueValue, mask)` (Feb-2007 vector3_operation_inline.h:738-743).
+    //    The Vector4 `Select` already committed in the sibling vector4_operation.h has the
+    //    OPPOSITE order (`Select(false, true, mask)`); that is a pre-existing divergence,
+    //    flagged at its own site, and NOT copied here. Getting either one wrong is a COMPILE
+    //    error, never a silent behaviour change, because MaskScalar and Vector3/Vector4 are
+    //    distinct structs with no conversion between them.
+    // ===================================================================================
+
+    // The SDK's THREE-LANE comparison-result wrapper -- what a VMX vcmpgefp/vcmpgtfp leaves
+    // in a vector register when the operands are Vector3s: four lanes of 0x00000000 (false)
+    // or 0xFFFFFFFF (true), of which only x/y/z carry meaning. Same 16-byte, 16-aligned
+    // register layout as MaskScalar (vpu/types.h), and stored the same way -- four named
+    // float lanes where "true" is any non-zero lane -- so the compare semantics reduce
+    // exactly and Mask3 stays an aggregate.
+    //
+    // ⚠️ CANONICAL SDK HOME is rw/math/vpu/mask3.h, which does not exist in this tree; it
+    //    lives here, beside its only producers, on exactly the footing vector4_operation.h
+    //    already records for IsValid(Quaternion) ("until that header exists"). Move it to a
+    //    real mask3.h the day one lands. The SDK class also carries SetX/SetY/SetZ, the
+    //    (bool,bool,bool) / (uint32_t x3) / (MaskScalar x3) constructors and the free
+    //    reduction `MaskScalar CompAllTrue(Mask3)` (mask3_operation_inline.h:73); none of
+    //    those is consumed by reconstructed game code yet, so none is reproduced -- this is
+    //    the operation vocabulary the tree actually uses, not a full SDK port.
+    struct alignas(16) Mask3
+    {
+        float x, y, z, w;
+
+        // Feb-2007 mask3_type_inline.h:71/:78/:85 -- each is one `vspltw mV, <lane>`, i.e.
+        // the lane broadcast into all four lanes of a MaskScalar. HandleContactWithLeanProp
+        // inlines exactly these six broadcasts at 0x82610018/0x8261001C/0x82610020 (the
+        // less-than mask) and 0x82610028/0x8261002C/0x82610034 (the greater-than mask).
+        MaskScalar GetX() const { return MaskScalar{ x, x, x, x }; }
+        MaskScalar GetY() const { return MaskScalar{ y, y, y, y }; }
+        MaskScalar GetZ() const { return MaskScalar{ z, z, z, z }; }
+    };
+
+    // CompLessThan(a, b) -- Feb-2007 vector3_operation_inline.h:693-699. ⚠️ THE SDK DOES NOT
+    // EMIT A "LESS THAN" COMPARE. It emits `vcmpgefp(a, b)` and then `vnor` -- the NEGATED
+    // greater-or-equal. That is AGENTS.md gotcha 4 in its purest form: on a NaN lane
+    // `a >= b` is false, so the negation makes the lane TRUE, whereas a host `a < b` would
+    // make it FALSE. Written below as the literal `!(a >= b)` so the NaN polarity is
+    // reproduced rather than paraphrased away. MEASURED in the consumer too:
+    // `vcmpgefp128 v12, v127, v13` @0x8260FFF0 followed by `vnot v12, v12` @0x8261000C.
+    inline Mask3 CompLessThan(Vector3 lA, Vector3 lB)
+    {
+        return Mask3{
+            !(lA.x >= lB.x) ? 1.0f : 0.0f,
+            !(lA.y >= lB.y) ? 1.0f : 0.0f,
+            !(lA.z >= lB.z) ? 1.0f : 0.0f,
+            !(lA.w >= lB.w) ? 1.0f : 0.0f };
+    }
+
+    // CompGreaterThan(a, b) -- Feb-2007 vector3_operation_inline.h:701-706: a bare
+    // `vcmpgtfp(a, b)` with no negation, so a NaN lane comes out FALSE (the plain C++ `>`
+    // polarity). The two functions are deliberately NOT symmetric; see CompLessThan.
+    // MEASURED in the consumer: `vcmpgtfp128 v13, v127, v0` @0x82610008.
+    inline Mask3 CompGreaterThan(Vector3 lA, Vector3 lB)
+    {
+        return Mask3{
+            lA.x > lB.x ? 1.0f : 0.0f,
+            lA.y > lB.y ? 1.0f : 0.0f,
+            lA.z > lB.z ? 1.0f : 0.0f,
+            lA.w > lB.w ? 1.0f : 0.0f };
+    }
+
+    // Select(mask, trueValue, falseValue) -- Feb-2007 vector3_operation_inline.h:738-743,
+    // `vec_sel(falseValue, trueValue, mask)`: per lane, a non-zero mask lane picks
+    // trueValue. MEASURED at the consumer: `vsel128 v125, v0, v119, v125` @0x8261005C with
+    // vA = the normalised rotation axis (the FALSE value), vB = the car's xAxis (the TRUE
+    // value) and vC = the degenerate-axis mask -- PPC `vsel vD,vA,vB,vC` is `vC ? vB : vA`.
+    // The SDK also declares a Mask3-masked overload (:745-750); it has no consumer in this
+    // tree yet and is not reproduced.
+    inline Vector3 Select(MaskScalar lMask, Vector3 lTrueValue, Vector3 lFalseValue)
+    {
+        return Vector3{
+            lMask.x != 0.0f ? lTrueValue.x : lFalseValue.x,
+            lMask.y != 0.0f ? lTrueValue.y : lFalseValue.y,
+            lMask.z != 0.0f ? lTrueValue.z : lFalseValue.z,
+            lMask.w != 0.0f ? lTrueValue.w : lFalseValue.w };
+    }
+
+    // The three world basis vectors -- Feb-2007 constants_operation.h:42-44, whose bodies
+    // (detail/constants_operation_inline.h:111-124) just return the SDK's three rodata
+    // registers `detail::gIVector` / `gJVector` / `gKVector`. Those three sit contiguously
+    // in the shipped X360 image at 0x82181500 / 0x82181510 / 0x82181520 -- the existing
+    // banner at the head of this file already names gIVector @0x82181500 -- and
+    // HandleContactWithLeanProp loads 0x82181510 (`addi r28, r11, unk_82181510` @0x8260FC48,
+    // consumed by the `vmsum3fp128 v0, v118, v0` up-axis dot at 0x8260FC74 and by the
+    // Cross at 0x8260FEC0) while HandleContactWithTiltProp loads 0x82181520
+    // (`addi r10, r10, unk_82181520` @0x82610A94 -> `vmsum3fp128 v12, v126, v12`).
+    // PropCollisions.cpp:95-96 independently attests 0x82181510 == GetVector3_YAxis().
+    //
+    // ⚠️ CANONICAL SDK HOME is rw/math/vpu/constants_operation.h, absent from this tree;
+    //    same "until that header exists" footing as Mask3 above.
+    inline Vector3 GetVector3_XAxis() { return Vector3{ 1.0f, 0.0f, 0.0f, 0.0f }; }
+    inline Vector3 GetVector3_YAxis() { return Vector3{ 0.0f, 1.0f, 0.0f, 0.0f }; }
+    inline Vector3 GetVector3_ZAxis() { return Vector3{ 0.0f, 0.0f, 1.0f, 0.0f }; }
 }
 }
 }
