@@ -1,4 +1,5 @@
 #include "GameSource/Physics/BrnPhysicsModule.h"
+#include "GameSource/Physics/BrnPhysicsModuleIO.h"                             // PhysicsModuleIO::InputBuffer (PropPrepareTypes)
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                        // CGS_ASSERT
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h" // CgsDev::PerfMonCpu::AddMonitor
@@ -244,6 +245,25 @@ namespace BrnPhysics
     }
 
     // ================================================================================================
+    // PhysicsModule::PropPrepareTypes -- X360 @0x825A14A8 (23 insns), store for store. The prop
+    // stage tail of WorldModule::Prepare @0x827D53B0 calls it with the physics input buffer the
+    // world just filled (BridgePropModuleToPhysics_Prepare appended the prop module's
+    // PropInputInterface, carrying the prop-physics data ResourceHandle PropEntityModule::Prepare
+    // posted). LANDED 2026-08-19 (wave Q5 round-3 integration; was a WorldLinkStubs boot gate --
+    // the first car-vs-prop contact died in PropManager::ProcessAddPropInstanceEvents because
+    // mpPhysicsData had never been bound):
+    //   0x825A14C8  bl IOBuffer::LockForRead(lpInputBuffer)
+    //   0x825A14D0  bl PhysicsModuleIO::InputBuffer::GetPropManagerInputInterface (const, 0x8259FDE0)
+    //   0x825A14E0  bl PropManager::ProcessInputs_Prepare(this+407088 == &mPropManager, iface)
+    //   0x825A14E8  bl IOBuffer::UnlockForRead(lpInputBuffer)
+    void PhysicsModule::PropPrepareTypes( PhysicsModuleIO::InputBuffer* lpInputBuffer )
+    {
+        lpInputBuffer->LockForRead();
+        const PhysicsModuleIO::InputBuffer* lpConstInput = lpInputBuffer;   // the CONST accessor @0x8259FDE0
+        mPropManager.ProcessInputs_Prepare( lpConstInput->GetPropManagerInputInterface() );
+        lpInputBuffer->UnlockForRead();
+    }
+
     // PhysicsModule::Prepare -- X360 @0x825ADB68 (BrnPhysicsModule.cpp:192).
     //
     // ⭐⭐ THE POINT OF THIS FUNCTION, for this campaign, IS STAGE 3. Until 2026-08-04 the whole

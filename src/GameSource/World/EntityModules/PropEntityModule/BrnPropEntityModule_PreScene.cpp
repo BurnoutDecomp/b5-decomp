@@ -13,26 +13,26 @@
 //
 // ---- WHAT THE FRAME DOES, IN EXECUTION ORDER --------------------------------------
 //   1  latch mbResourceSystemStalled from the update set; check the replay serialiser's
-//      previous frame; take the buffer locks; run the replay hook.        [hook PARKED]
+//      previous frame; take the buffer locks; run the replay hook.
 //   2  copy the player index + position out of the input buffer, and normalise the eight
 //      race-car velocities into maRaceCarVelocity (xyz verbatim, w = speed in MPH).
 //   3  fold the three tri-state game-action latches into the module's flags, then the
-//      profile round-trip / reset legs of the streaming state machine.    [copy PARKED]
+//      profile round-trip (install the persistent hit-props bit array) / reset legs of
+//      the streaming state machine.
 //   4  drain the "prop graphics UNLOADED" queue -> drop each zone's graphics list.
 //   5  drain the "prop graphics LOADED" queue   -> request each zone's "PRP_GL__<n>".
-//   6  scene/sim/contact-gen removal for the props+parts recycled last frame.  [PARKED]
-//   7  clear the recycled lists; on a player reset, clear the props around the reset
-//      point.                                                    [the clears land; the
-//                                                                 ClearPropsNearPosition
-//                                                                 call is PARKED]
+//   6  scene/sim/contact-gen removal for the props+parts recycled last frame, each loop
+//      terminated by its own list Clear().
+//   7  on a player reset, clear the props around the reset point.
 //   8  UpdateInstanceStreaming -- decide which zone to ask for and ask for it.
-//   9  PropCellManager::Update inside the miCollisionStreamingPM monitor.      [PARKED]
-//  10  BreakPropIntoParts for everything broken last frame.                    [PARKED]
+//   9  PropCellManager::Update inside the miCollisionStreamingPM monitor -- the cell
+//      activation sweep that puts prop volumes into CONTACT GENERATION.
+//  10  BreakPropIntoParts for everything broken last frame (skipped on network catch-up).
 //  11  drain the GameData receiver queue: type 62 == a zone's prop instances arrived
 //      -> **LoadZone**, the step that actually spawns props; type 63 == a zone's prop
 //      graphics list arrived -> bind it into mapGraphicsLists.
-//  12  publish the frame timestep, the overhead-sign scores, release the locks.
-//      [the overhead-sign append and the corona-phase advance are PARKED]
+//  12  publish the frame timestep, advance the corona phases [PARKED], append the
+//      overhead-sign scores, release the locks.
 //
 // ---- LAYOUT DISCIPLINE --------------------------------------------------------------
 // Not one console byte offset appears in the code below; every access is by named member
@@ -72,124 +72,68 @@
 // mfCurrentTimeStep, +0x788 miPlayerZoneNumber, +0x78C mu8PlayerCarIndex,
 // +0x78D/E/F the three tri-state latches, +0x790/91/92/93/94 the five bools.
 //
-// ---- PARK LIST (no body here; the precise blocker for each) -------------------------
-// Every park below is a MISSING DECLARATION in a header this lane must not edit
-// (BrnPropZoneManager.h / BrnPropCellManager.h / BrnPropEntityModule.h are all on the
-// do-not-touch list), not a missing decode. The decode for each is written out beside
-// it so the follow-up is mechanical.
+// ---- PARK LIST -- REWRITTEN 2026-08-19 (wave Q5 lander) -----------------------------
+// ⚠ READ THIS FIRST IF YOU ARE ABOUT TO TRUST A PARK LIST. The list that stood here was
+// written on 2026-08-12 against headers that later waves grew, and by 2026-08-19 SEVEN of
+// its nine entries were stale IN THE HELPFUL DIRECTION: every declaration each one named
+// as "missing" had since been added by the wave-Q keystone, and the parks were the ONLY
+// thing still keeping PropCellManager::Update out of the frame -- which is why no prop
+// volume ever reached the broad phase even after the scene/volume middle went live.
+// A park list is a claim about the tree TODAY; re-grep it before believing it.
 //
-//  P1. step 1 -- `ReplayPreSceneUpdate( lpInput, lpOutput, lUpdateSet )` @0x822EF878.
-//      ASM: `mr r6,r31(updateSet); mr r5,r30(lpOutput); mr r4,r29(lpInput); mr r3,r16;
-//      bl ReplayPreSceneUpdate`. BLOCKER: the method is X360-only and is NOT declared in
-//      the committed BrnPropEntityModule.h (which declares only PrepareForReplay /
-//      RestoreFromReplay / LeaveReplay), and this lane may make only the two agreed
-//      narrow edits to that header. BOOT-SAFE: 0x822EF878's first act is
-//      `if ( (lUpdateSet>>8 & 1) != mbInReplay )`, and everything past it is gated on
-//      `mPropEntitySerialiser.IsPlaying()`, so a non-replay boot frame does nothing.
-//      MOUNT: add `void ReplayPreSceneUpdate( PropEntityIO::InputBuffer_PreScene*,
-//      PropEntityIO::OutputBuffer_PreScene*, BrnUpdateSet );` and call it here.
+// LANDED 2026-08-19 (wave Q5): P1, P2, P3, P4, P5, P6, P8 -- see the ⭐ block at each
+// site for the per-call asm witness. STILL PARKED: P7, P9, both re-measured below.
 //
-//  P2. step 3 -- the profile round-trip's hit-props install. ASM:
-//      `memcpy( module+0xC3200, *(lpInput+0x780), 37504 )` where module+0xC3200 is
-//      mZoneManager.maPreviouslyHitProps and 37504 == sizeof(BitArray<300000>). The
-//      original is PropZoneManager::SetHitPropBitArray (DWARF BrnPropZoneManager.h:171)
-//      inlined. BLOCKER: `maPreviouslyHitProps` is PRIVATE in the committed
-//      BrnPropZoneManager.h and there is no `SetHitPropBitArray` declaration and no
-//      `friend class PropEntityModule`. MOUNT: add
-//      `void SetHitPropBitArray( const HitPropsBitArray& );` to PropZoneManager and call
-//      `mZoneManager.SetHitPropBitArray( lpInput->GetHitPropsBitArray() );` here.
-//      The two asserts and the `meStreamingMode = E_STREAM` that bracket it DO land.
+//  P7. step 11, type 63 -- the `luZone == <callee at 0x8295F4A0>( lGraphicsList )`
+//      cross-check assert (fired at 0x8230B25C and again at 0x8230B368 for the message
+//      body). STILL PARKED, but the OLD REASON WAS WRONG and is corrected here:
+//      `Nicotine::DMixIO` DOES have a committed home (SDKs/EATech/include/Nicotine/
+//      DMixIO.hpp). The real blocker is that the callee is UNIDENTIFIED:
+//        * DMixIO.hpp declares no GetDMixID, and progress/identity.json has no
+//          `Nicotine::DMixIO::GetDMixID` row at all -- the whole Nicotine::DMixIO family
+//          sits at 0x82B448B0..0x82B44A08, nowhere near 0x8295F4A0, so IDA's name on this
+//          call target is an ICF-fold misattribution, not a signature;
+//        * there is no per-address export for it
+//          (.ida-exports/BURNOUT_X360_ARTIST.XEX/0x8295F4A0.json does not exist), so its
+//          body, its owning class and its real name are all unrecovered;
+//        * its r3 is the PropGraphicsList resource pointer, i.e. it is far more likely a
+//          one-line id getter on the graphics list that ICF folded with the Nicotine one.
+//      Writing it from the name would be fabrication. It is an ASSERT ONLY; the binding it
+//      guards (step 11's `mapGraphicsLists[luZone] = lGraphicsList`) lands in full.
+//      UNPARKED BY: a targeted IDA export of 0x8295F4A0.
 //
-//  P3. step 6 -- the recycled-prop / recycled-part scene, sim and contact-generation
-//      removal legs. The decode is complete: for each id in maRecentlyRecycledProps,
-//      `lpProp = mZoneManager.GetProp( lPropEntityId )`,
-//      `lpType = mpPropPhysicsDataHeader->GetType( lpProp->GetTypeId() )`, assert the
-//      prop is not smashed, and -- unless its state is 4 -- call
-//      RemovePropFromContactGeneration when `mu8Flags & KU_ADDED_TO_CONTACT_GEN_BIT` and
-//      RemovePropFromScene when `mu8Flags & KU_ADDED_TO_SCENE_BIT`; then the same shape
-//      for maRecentlyRecycledParts with RemovePropPartsFromSimIfPhysical +
-//      RemovePropParts{FromContactGeneration,FromScene} and the mirrored asserts.
-//      BLOCKER: `PropZoneManager::GetProp( PropEntityID )` @0x822CDA28 -- the
-//      global-pool-index overload whose tripwires are BrnPropZoneManager.h:534..541 --
-//      is NOT declared in the committed header (only the `GetProp(u16,u32)` zone+index
-//      overload is), and PropCellManager is reached through the PRIVATE
-//      PropZoneManager::mCellManager. MOUNT: add that GetProp overload plus
-//      PropZoneManager forwarders for the four Remove* calls (the header already has the
-//      sibling forwarder block at BrnPropZoneManager.h:232).
-//      SCOPE NOTE: both lists are empty until a prop is smashed or a zone unloads, so
-//      nothing on the spawn-and-render path runs through here. The two `Clear()`s that
-//      terminate the loops DO land below, so the lists cannot grow unbounded.
+//  P9. step 12 -- the corona-phase advance between the timestep publish and the
+//      overhead-sign append. RE-MEASURED 2026-08-19, still blocked, decode unchanged:
+//      gate `if ( (lUpdateSet & 1) == 0 || mPropEntitySerialiser.IsPlaying() )` (asm
+//      0x8230BBF4 reloads the SAME `lUpdateSet & 1` stack slot step 10 wrote, then
+//      0x8230BC08-0x8230BC28 tests the serialiser state against 4/5/6), then over
+//      `mVFXPropCollection->muCoronaDataTableSize` (`lwz 0x2C`) entries of the table at
+//      `lwz 0x28`, stride 0x20: `phase(+0x18) = fmod( phase + mrTimestep, e(+0xC) + e(+0x8) )`
+//      -- computed as `x - trunc(x/period)*period` at 0x8230BD74..0x8230BDC8. Assert text
+//      "luOffset < muCoronaDataTableSize", VFXPropsResourceType.h:636.
+//      BLOCKER (unchanged): `BrnParticle::VFXPropCollection` is only FORWARD-DECLARED
+//      in-tree (BrnPropEntityModule.h:162); the committed
+//      SharedClasses/Graphics/VFXPropsResourceType.h is 25 lines and homes only the
+//      resource-type HANDLER (VFXPropCollectionResourceType), not the payload with the
+//      corona data table. Reproducing it would mean poking `*(f32*)(entry + 0x18)` into an
+//      unrecovered blob -- exactly the offset hack the project forbids. The same type
+//      blocks the corona tail of RenderPropAndCoronas (BrnPropEntityModule_Render.cpp:65).
+//      MOUNT: reconstruct BrnParticle::VFXPropCollection (the corona table pointer at
+//      +0x28, muCoronaDataTableSize at +0x2C, and the 0x20-byte corona entry record).
+//      It is a visual-only phase wrap; props spawn, render and smash without it.
 //
-//  P4. step 7 -- `mZoneManager.mCellManager.ClearPropsNearPosition( mLastPlayerResetPosition,
-//      KVF_MIN_DIST_FROM_PLAYER, mpPropPhysicsDataHeader.GetMemoryResource(),
-//      lpOutput->GetPropInputInterface(), lpOutput->GetSceneInputInterface(),
-//      &mPropEntitySerialiser, mZoneManager.mauStartIndexOfZone )` (X360 @0x822E1600, and
-//      the committed PropCellManager declaration matches that argument list exactly).
-//      BLOCKER: `mCellManager` and `mauStartIndexOfZone` are both PRIVATE in
-//      BrnPropZoneManager.h with no PropEntityModule friendship. MOUNT: a
-//      `PropZoneManager::ClearPropsNearPosition(...)` forwarder. The `mbPlayerWasJustReset`
-//      test and its clear DO land below (so the latch cannot stick).
-//
-//  P5. step 9 -- `PropCellManager::Update( mPlayerPosition, types, &maRecentlyBrokenProps,
-//      lpOutput, mbInReplay, &mPropEntitySerialiser, mZoneManager.mauStartIndexOfZone )`
-//      (X360 @0x822FC8F0, r3 == module+0x280 == the zone manager, whose mCellManager is
-//      at offset 0), bracketed by PerfMonCpu Start/StopMonitor(miCollisionStreamingPM).
-//      Same BLOCKER as P4 (private mCellManager + mauStartIndexOfZone); note also that
-//      the committed PropCellManager::Update signature has no slot for the console's
-//      `mbInReplay` r7 argument. MOUNT: a `PropZoneManager::Update(...)` forwarder.
-//      SCOPE NOTE: cells only govern CONTACT GENERATION -- PropZoneManager::LoadZone ->
-//      LoadProp already adds each prop to the SCENE as it spawns -- so props still spawn
-//      and still render without this; they are simply not collidable. Breakable/physical
-//      props are out of scope for this wave, which is why this is an acceptable park.
-//
-//  P6. step 10 -- the `BreakPropIntoParts` sweep over maRecentlyBrokenProps. Explicitly
-//      out of scope (breakable props), and BreakPropIntoParts is itself PARKED by B2 in
-//      BrnPropEntityModule_Streaming.cpp, so calling it would only bind a trap stub.
-//
-//  P7. step 11, type 63 -- the `luZone == Nicotine::DMixIO::GetDMixID( lGraphicsList )`
-//      cross-check assert. BLOCKER: `Nicotine::DMixIO` has no committed home anywhere in
-//      b5-decomp/src. It is an ASSERT ONLY; the binding it guards (step 11's
-//      `mapGraphicsLists[luZone] = lGraphicsList`) lands in full.
-//
-//  P8. step 12 -- `Array<BrnGui::OverheadSignScore,32>::AppendArray<32>(
-//      lpOutput->GetVisibleOverheadSignArray(), &mVisibleOverheadSigns )` (X360
-//      @0x822E5348). BLOCKER: BOTH ends are opaque byte storage --
-//      PropEntityModule::mVisibleOverheadSigns is a
-//      `VisibleOverheadSignArrayStorage { u8 maBytes[1052]; }` in BrnPropEntityModule.h
-//      and OutputBuffer_PreScene::mVisibleOverheadSignArray is a 1-byte placeholder --
-//      so there is no typed array to append. The element type DOES exist
-//      (BrnGui::OverheadSignScore, GameSource/Gui/BrnGuiEventTypeDefs.h, sizeof 0x20).
-//      MOUNT: retype the module member to `CgsContainers::Array<BrnGui::OverheadSignScore,32>`
-//      (that is an edit to BrnPropEntityModule.h beyond this lane's two agreed ones); the
-//      output-buffer side is in this lane's file and can follow in the same change.
-//
-//  P9. step 12 -- the corona-phase advance that follows the timestep publish:
-//      `if ( (lUpdateSet & 1) == 0 || mPropEntitySerialiser.IsPlaying() )` then, for each
-//      of mVFXPropCollection->muCoronaDataTableSize entries (stride 0x20),
-//      `phase = phase + mrTimestep; period = e[3] + e[2]; e[6] = phase - trunc(phase/period)*period`
-//      -- a fmod wrap of each corona's animation phase (assert text
-//      "luOffset < muCoronaDataTableSize", SharedClasses/Graphics/VFXPropsResourceType.h:636).
-//      BLOCKER: `BrnParticle::VFXPropCollection` is only FORWARD-DECLARED in-tree; the
-//      committed SharedClasses/Graphics/VFXPropsResourceType.h homes only the resource-type
-//      HANDLER (VFXPropCollectionResourceType), not the resource payload with the corona
-//      data table. Reproducing it would mean poking `*(f32*)(entry + 24)` into an unrecovered
-//      blob -- exactly the offset hack the project forbids. MOUNT: reconstruct
-//      BrnParticle::VFXPropCollection (muCoronaDataTableSize + the corona entry record).
-//      It is a visual-only phase wrap; props spawn and render without it.
-//
-// ---- WHAT IS STILL MISSING FOR PROPS TO ACTUALLY APPEAR (report to the conductor) ----
-// This function is now real, but its INPUT is not: both producers of
-// PropEntityIO::InputBuffer_PreScene are still inert gates in WorldLinkStubs.cpp --
-//   WorldModule::BridgeWorldModuleToPropModule_PreScene  @0x827AACF8  (fills the
-//       instances-needed queue and the two graphics loaded/unloaded queues), and
-//   WorldModule::BridgeRaceCarModuleToPropModule_PreScene @0x827A5510 (fills the player
-//       position/zone/index and the eight race-car velocities)
-// -- both called from BrnWorldModule.cpp:2016/2021. With them inert every queue stays at
-// length 0 and miPlayerZoneNumber stays 0, so the streaming machine has nothing to ask
-// for. Also note IOBufferStack::CreateIOBuffer<T> (CgsIOBufferStack.h:25) placement-news
-// `T()` and never calls `T::Construct()` the way the X360 template does; the buffer is
-// value-initialised so the queues read as empty (safe), but miPlayerZoneNumber will read
-// 0 rather than the -1 "no zone" sentinel until Construct is wired in.
+// ---- STATE OF THE INPUT SIDE (this note also corrected 2026-08-19) ------------------
+// The 2026-08-12 note here said both producers of PropEntityIO::InputBuffer_PreScene were
+// "still inert gates in WorldLinkStubs.cpp". THAT IS NO LONGER TRUE -- both are real,
+// bodied and mounted:
+//   WorldModule::BridgeWorldModuleToPropModule_PreScene  @0x827AACF8
+//       -> GameSource/World/Bridges/WorldBridgeWorldModuleToPropModule.cpp:112
+//   WorldModule::BridgeRaceCarModuleToPropModule_PreScene @0x827A5510
+//       -> GameSource/World/Bridges/WorldBridgeRaceCarToPropModule.cpp:124
+// (both mounted at tools/build/build_game_exe.bat:1936/1937, both called from
+// BrnWorldModule.cpp:2033/2038). CreateIOBuffer<T> was likewise made console-faithful by
+// the 2026-08-15 perf wave, so T::Construct() now runs and miPlayerZoneNumber carries its
+// real sentinel rather than 0.
 // ============================================================================
 
 #include "BrnPropEntityModule.h"
@@ -288,6 +232,15 @@ namespace BrnWorld
         // fold it into that header when its bit list lands.
         const BrnUpdateSet KU_UPDATESET_RESOURCE_SYSTEM_STALLED = 0x400;
 
+        // BrnUpdateSet bit 0 -- the NETWORK-CATCHUP bit. ASM 0x82309A74
+        // `clrlwi r9, r31, 31` stores it in the prologue; step 10 (0x8230AE00) and step 12's
+        // corona gate (0x8230BBEC) are its two consumers, and BOTH treat a set bit as "skip".
+        // The name is not invented here: BrnPhysicsModuleUpdateFunctions.cpp:231 already reads
+        // the same bit of the same word as `lbNetworkCatchup` (the console's catch-up fast
+        // path, which locks the sim and skips contact generation). Fold it into
+        // SharedClasses/BrnSharedConstants.h when that header's bit list lands.
+        const BrnUpdateSet KU_UPDATESET_NETWORK_CATCHUP = 0x1;
+
         // The eight per-car velocity slots the X360 loop walks (`li r9, 8`, stride 16).
         const s32 KI_NUM_RACE_CAR_VELOCITIES = 8;
 
@@ -341,7 +294,13 @@ namespace BrnWorld
         // BrnWorldModule.cpp's `lpWorldEntityRead` in the prepare bridge.
         const PropEntityIO::InputBuffer_PreScene* lpInputRead = lpInput;
 
-        // P1: ReplayPreSceneUpdate( lpInput, lpOutput, lUpdateSet ) -- see the PARK LIST.
+        // ⭐ P1 LANDED 2026-08-19 (wave Q5). ASM 0x82309AA8-0x82309AB8:
+        //   `mr r6,r31 (lUpdateSet) ; mr r5,r30 (lpOutput) ; mr r4,r29 (lpInput) ;
+        //    mr r3,r16 (this) ; bl BrnWorld::PropEntityModule::ReplayPreSceneUpdate`
+        // -- immediately after LockForRead and before anything reads the input buffer.
+        // The declaration the old park cited as missing is now at BrnPropEntityModule.h:352
+        // and the body at PropEntityModule_wQ_03.cpp:151.
+        ReplayPreSceneUpdate( lpInput, lpOutput, lUpdateSet );
 
         // DIAGNOSTIC (prop-spawn wave 2026-08-12) -- NOT in the X360 binary. Deliberately
         // NOT gated on gxMessageFilterFlags (bit 0 is off in a default PC boot), so a boot
@@ -426,11 +385,19 @@ namespace BrnWorld
                         "meStreamingMode == E_WAITING_FOR_PROFILE_DATA" );        // cpp:512
             // The X360's second tripwire here, "mpabHitPropBitArray != NULL"
             // (BrnPropEntityModuleIO.h:848), is the input buffer's OWN assert inside
-            // GetHitPropsBitArray(); it fires from there once P2 calls the getter.
+            // GetHitPropsBitArray(); it fires from there, in the console's own order,
+            // because the install below is what calls the getter.
 
-            // P2: mZoneManager.SetHitPropBitArray( lpInput->GetHitPropsBitArray() );
-            //     -- see the PARK LIST. The state transition below still lands, so the
-            //     machine does not stall in E_WAITING_FOR_PROFILE_DATA.
+            // ⭐ P2 LANDED 2026-08-19 (wave Q5). ASM 0x82309CA0
+            //   `memcpy( module + 0xC3200, *(lpInput + 0x780), 37504 )`
+            // == PropZoneManager::SetHitPropBitArray inlined: module+0xC3200 is
+            // mZoneManager(+0x280).maPreviouslyHitProps and 37504 == sizeof(BitArray<300000>).
+            // Both ends are the SAME instantiation (CgsContainers::BitArray<300000u>) --
+            // InputBuffer_PreScene::HitPropsBitArray (BrnPropEntityModuleIO.h:661) and
+            // PropZoneManager::HitPropsBitArray (BrnPropZoneManager.h:125) -- so the whole-array
+            // assignment inside the setter (BrnPropZoneManager.h:370) IS the memcpy. Read
+            // through the READ-LOCKED handle, like every other input read in this function.
+            mZoneManager.SetHitPropBitArray( lpInputRead->GetHitPropsBitArray() );
 
             meStreamingMode = E_STREAM;
         }
@@ -523,22 +490,175 @@ namespace BrnWorld
 
         // ================================================================
         // [6] scene / sim / contact-generation removal for the props and parts recycled
-        // last frame -- PARKED (P3). Only the two list clears that TERMINATE those loops
-        // land, so the fixed-capacity lists cannot overflow while P3 is outstanding.
-        // ASM: `stw r30, 0xCDEA4(module)` and `stw r30, 0xCDF20(module)` -- the two
-        // Array<PropEntityID,N> count words.
+        // last frame.  ⭐ P3 LANDED 2026-08-19 (wave Q5) -- store for store off
+        // 0x8230A5F0..0x8230AC18.
+        //
+        // TWO loops in the console's order, each terminated by its own Clear():
+        //   props: 0x8230A6C0..0x8230A928, then `stwx 0 -> module+0xCDEA4` (the
+        //          Array<PropEntityID,15> count word) at 0x8230A940;
+        //   parts: 0x8230A988..0x8230AC00, then `stwx 0 -> module+0xCDF20` (the
+        //          Array<PropEntityID,30> count word) at 0x8230AC18.
+        // ⚠ The props Clear() sits BETWEEN the two loops in the shipped build, not after
+        // both. The previous (loop-less) shape put the two clears adjacent; that was
+        // indistinguishable only because neither loop existed. It is spelled the console's
+        // way now so the ordering stays right if either loop ever grows a side effect.
+        //
+        // Every call below goes through the de-inlined PropZoneManager forwarders (the
+        // console calls PropCellManager directly with `r3 = module + 0x280`, because
+        // &mZoneManager == &mZoneManager.mCellManager -- the cell manager is embedded at
+        // offset 0; and the forwarders own the private mauStartIndexOfZone read the
+        // console inlines at 0x8230A8C0 / 0x8230AB98 as `2*(zone + 0x66161) + r25`).
+        //
+        // ⚠ The two resource-pointer tripwires differ and are NOT interchangeable:
+        // this step bakes CgsResourcePtr.h line 544 == `operator->()` (0x8230A748 /
+        // 0x8230AA34 both `li r5, 0x220`), while steps 7 and 9 bake line 581 ==
+        // `GetMemoryResource()` (`li r5, 0x245`). Spelled accordingly.
         // ================================================================
+        {
+            const s32 liNumRecycledProps = static_cast<s32>( maRecentlyRecycledProps.GetLength() );
+
+            for ( s32 liRecycled = 0; liRecycled < liNumRecycledProps; ++liRecycled )
+            {
+                const PropEntityID lPropEntityId = maRecentlyRecycledProps.GetItem(
+                    static_cast<u32>( liRecycled ) );
+
+                // 0x8230A6DC `sub_822CDA28` == PropZoneManager::GetProp(PropEntityID),
+                // the GLOBAL-index overload (Hex-Rays drops its second argument).
+                PropEntityInstance* lpProp = mZoneManager.GetProp( lPropEntityId );
+
+                // 0x8230A6EC `lhz r28,0x44(prop)` == muTypeId, then the pair of type-id
+                // tripwires GetType() carries (BrnPropPhysicsDataHeader.h:173/:174).
+                const BrnPhysics::Props::PropTypeData* lpType =
+                    mpPropPhysicsDataHeader->GetType( lpProp->muTypeId );
+
+                // 0x8230A7DC `sldi r27,r27,32` -- the by-value X360 form of a
+                // PropVolumeInstanceID carrying this prop's entity word and volume index 0.
+                // SetPropEntityId is where the console's owner tripwire at 0x8230A7B4
+                // ("mEntityId.GetOwner() == E_ENTITYTYPE_PROP", BrnPropEntityID.h:278)
+                // comes from.
+                PropVolumeInstanceID lVolumeInstanceID;
+                lVolumeInstanceID.SetPropEntityId( lPropEntityId );
+
+                // 0x8230A7D8..0x8230A834. TWO `lbz 0x4D(prop)` loads, which are IsSmashed()'s
+                // own two acts: the "mu8State < E_STATE_COUNT" tripwire
+                // (BrnPropEntityInstance.h:653, fired at 0x8230A7E0) and then the
+                // `state >= E_SMASHED` test, which the console spells branchlessly with the
+                // subfc/subfe carry trick at 0x8230A808..0x8230A814.
+                CGS_ASSERT( !lpProp->IsSmashed(), "!lpProp->IsSmashed()" );            // cpp:597
+
+                // 0x8230A838..0x8230A864. A prop still in E_PHYSICAL is left alone entirely
+                // (`cmplwi r11,4 ; beq` straight to the loop increment): the physics side
+                // owns it until it leaves that state.
+                if ( lpProp->GetState() != E_PHYSICAL )
+                {
+                    if ( ( lpProp->mu8Flags & KU_ADDED_TO_CONTACT_GEN_BIT ) != 0 )
+                    {
+                        mZoneManager.RemovePropFromContactGeneration(
+                            lpProp, lpType, lVolumeInstanceID,
+                            lpOutput->GetSceneInputInterface() );
+                    }
+
+                    if ( ( lpProp->mu8Flags & KU_ADDED_TO_SCENE_BIT ) != 0 )
+                    {
+                        // The scene leg takes a FRESHLY fetched interface (0x8230A8AC is a
+                        // second `sub_822B9738`, not a reuse of the first result) plus the
+                        // replay serialiser in r8.
+                        mZoneManager.RemovePropFromScene(
+                            lpProp, lpType, lVolumeInstanceID,
+                            lpOutput->GetSceneInputInterface(),
+                            &mPropEntitySerialiser );
+                    }
+                }
+            }
+        }
+
         maRecentlyRecycledProps.Clear();
+
+        {
+            const s32 liNumRecycledParts = static_cast<s32>( maRecentlyRecycledParts.GetLength() );
+
+            for ( s32 liRecycled = 0; liRecycled < liNumRecycledParts; ++liRecycled )
+            {
+                const PropEntityID lPartEntityId = maRecentlyRecycledParts.GetItem(
+                    static_cast<u32>( liRecycled ) );
+
+                // 0x8230A9BC `clrrwi r27,r31,10` -- clear the 10-bit part field, i.e. the
+                // OWNING PROP's id. SetPartIndex(0) is exactly that mask (its X360 body
+                // @0x822B7A70 is `clrrwi r11,r11,10` & index) and it carries the owner
+                // tripwire the console fires first, at 0x8230A99C.
+                PropEntityID lPropEntityId = lPartEntityId;
+                lPropEntityId.SetPartIndex( 0 );
+
+                PropEntityInstance* lpProp = mZoneManager.GetProp( lPropEntityId );
+
+                const BrnPhysics::Props::PropTypeData* lpType =
+                    mpPropPhysicsDataHeader->GetType( lpProp->muTypeId );
+
+                PropVolumeInstanceID lVolumeInstanceID;
+                lVolumeInstanceID.SetPropEntityId( lPropEntityId );
+
+                // 0x8230AAEC..0x8230AB20. The MIRROR of the prop loop's tripwire: a prop
+                // whose PARTS are being recycled must already be smashed.
+                CGS_ASSERT( lpProp->IsSmashed(), "lpProp->IsSmashed()" );              // cpp:628
+
+                // 0x8230AB3C -- UNCONDITIONAL, and it takes the OUTPUT BUFFER (r7 == a5),
+                // not a scene interface; there is no E_PHYSICAL gate on this loop.
+                mZoneManager.RemovePropPartsFromSimIfPhysical( lpProp, lpType,
+                                                               lVolumeInstanceID, lpOutput );
+
+                if ( ( lpProp->mu8Flags & KU_ADDED_TO_CONTACT_GEN_BIT ) != 0 )
+                {
+                    mZoneManager.RemovePropPartsFromContactGeneration(
+                        lpProp, lpType, lVolumeInstanceID,
+                        lpOutput->GetSceneInputInterface() );
+                }
+
+                if ( ( lpProp->mu8Flags & KU_ADDED_TO_SCENE_BIT ) != 0 )
+                {
+                    mZoneManager.RemovePropPartsFromScene(
+                        lpProp, lpType, lVolumeInstanceID,
+                        lpOutput->GetSceneInputInterface(),
+                        &mPropEntitySerialiser );
+                }
+            }
+        }
+
         maRecentlyRecycledParts.Clear();
 
         // ================================================================
         // [7] the player was teleported/reset: sweep the props out from under them.
-        // The ClearPropsNearPosition call is PARKED (P4); the latch handling is faithful,
-        // so the flag cannot stick set.
+        // ⭐ P4 LANDED 2026-08-19 (wave Q5). ASM 0x8230AC20..0x8230AD0C:
+        //   r3 = module + 0x280 (&mZoneManager)   r4 = *mpPropPhysicsDataHeader
+        //   r5 = lpOutput->GetPropInputInterface()  (0x8230ACC4)
+        //   r6 = lpOutput->GetSceneInputInterface() (0x8230ACB8 -- fetched FIRST)
+        //   r7 = &mPropEntitySerialiser            r8 = &mauStartIndexOfZone[0]
+        //   v1 = module + 0xCDDD0 (mLastPlayerResetPosition)
+        //   v2 = unk_82FAD760 == the broadcast KF_MIN_DIST_FROM_PLAYER
+        // then `stb 0 -> module+0xCDDE0` clears the latch.
+        // The r8 argument is the zone manager's PRIVATE start-index table, which is why
+        // this goes through the PropZoneManager forwarder (BrnPropZoneManager.h:401).
         // ================================================================
         if ( mbPlayerWasJustReset )
         {
-            // P4: mZoneManager.ClearPropsNearPosition( mLastPlayerResetPosition, ... );
+            // The exclusion radius is a BROADCAST VecFloat on the console (the dynamic
+            // initialiser at 0x82C4B9B8 splats flt_82004270 == 3.0f across all four lanes
+            // into unk_82FAD760); built the same way here rather than as a scalar.
+            const VecFloat lvClearRadius = { KF_MIN_DIST_FROM_PLAYER, KF_MIN_DIST_FROM_PLAYER,
+                                             KF_MIN_DIST_FROM_PLAYER, KF_MIN_DIST_FROM_PLAYER };
+
+            // GetMemoryResource() first (its 0x8230AC38 null test bakes CgsResourcePtr.h:581),
+            // then the scene interface, then the prop-input interface -- the console's order.
+            const PropPhysicsDataHeader* lpTypes = mpPropPhysicsDataHeader.GetMemoryResource();
+            PropEntityIO::OutputBuffer_PreScene::SceneInputInterfaceStorage* lpScene =
+                lpOutput->GetSceneInputInterface();
+            PropCellManager::PropInputInterface* lpPropInput =
+                reinterpret_cast<PropCellManager::PropInputInterface*>(
+                    lpOutput->GetPropInputInterface() );
+
+            mZoneManager.ClearPropsNearPosition( mLastPlayerResetPosition, lvClearRadius,
+                                                 lpTypes, lpPropInput, lpScene,
+                                                 &mPropEntitySerialiser );
+
             mbPlayerWasJustReset = false;
         }
 
@@ -553,9 +673,86 @@ namespace BrnWorld
                                  lpOutput );
 
         // ================================================================
-        // [9] PropCellManager::Update inside miCollisionStreamingPM -- PARKED (P5).
-        // [10] the BreakPropIntoParts sweep                          -- PARKED (P6).
+        // [9] THE CELL SWEEP -- what actually turns loaded props into COLLIDABLE ones.
+        // ⭐ P5 LANDED 2026-08-19 (wave Q5). ASM 0x8230AD30..0x8230ADFC:
+        //   0x8230AD3C  StartMonitor( *(module + 0xD3360) )   == miCollisionStreamingPM
+        //   0x8230ADF4  PropCellManager::Update with
+        //       r3 = module + 0x280  (&mZoneManager; the cell manager is embedded at 0)
+        //       r4 = *(module + 0xCDD88)  == mpPropPhysicsDataHeader.GetMemoryResource()
+        //                                    (its null test bakes CgsResourcePtr.h:581)
+        //       r5 = module + 0xCDDE4      == &maRecentlyBrokenProps
+        //       r6 = lpOutput
+        //       r7 = `lbzx r7, r30, 0xD3334` == mbInReplay   <-- the seventh slot the old
+        //            park said the committed signature had no room for; it has one now
+        //            (BrnPropCellManager.h:185 / BrnPropZoneManager.h:391)
+        //       r8 = &mPropEntitySerialiser
+        //       r9 = module + 0x280 + 0xCC342 == &mauStartIndexOfZone[0]  (PRIVATE -- which
+        //            is why this goes through the PropZoneManager forwarder)
+        //       v1 = the stack copy of mPlayerPosition
+        //   0x8230ADFC  StopMonitor( the SAME reloaded *(module + 0xD3360) )
         // ================================================================
+        CgsDev::PerfMonCpu::StartMonitor( miCollisionStreamingPM );
+
+        mZoneManager.UpdateCollisionStreaming( mPlayerPosition,
+                                               mpPropPhysicsDataHeader.GetMemoryResource(),
+                                               &maRecentlyBrokenProps,
+                                               lpOutput,
+                                               mbInReplay,
+                                               &mPropEntitySerialiser );
+
+        CgsDev::PerfMonCpu::StopMonitor( miCollisionStreamingPM );
+
+        // [DIAG] NOT IN THE X360 BINARY. Wave-Q5 probe: proves the cell-activation sweep
+        // is now entered at all -- until this wave PropCellManager::Update was never
+        // called, so AddPropToContactGeneration never ran and no prop volume ever reached
+        // the broad phase. One-shot; the env latch is evaluated ONCE (a static bool).
+        // ⚠ HONEST LIMIT: the requested "N active cells" cannot be printed. The count lives
+        // in PropCellManager::miNumActiveCells (BrnPropCellManager.h:318), PropCellManager is
+        // reached only through PropZoneManager::mCellManager which is PRIVATE, and neither
+        // class exposes an accessor for it -- and both headers are outside this lane. What is
+        // printed instead is reachable and true: that the step ran, and the module's own
+        // loaded-zone count (no cell can be active before a zone is loaded). Boot-log grep:
+        // "[Q5-props] first cell activation sweep".
+        {
+            static const bool sbPropDiag = ( getenv( "BRN_PROP_DIAG" ) != 0 );
+            static bool sbLoggedFirstCellSweep = false;
+            if ( sbPropDiag && !sbLoggedFirstCellSweep && CgsDev::Log::gpDebugPrint != 0 )
+            {
+                sbLoggedFirstCellSweep = true;
+                *CgsDev::Log::gpDebugPrint
+                    << "[Q5-props] first cell activation sweep ran; loadedZones "
+                    << muNumberOfLoadedZones
+                    << " (active-cell count not exposed: PropZoneManager::mCellManager is private)\n";
+            }
+        }
+
+        // ================================================================
+        // [10] break everything the cell sweep (and last frame's physics) reported broken.
+        // ⭐ P6 LANDED 2026-08-19 (wave Q5). ASM 0x8230AE00..0x8230AEC8.
+        //
+        // GATE: `lbz var_300(r1)` is the `lUpdateSet & 1` computed in the prologue
+        // (0x82309A74 `clrlwi r9,r31,31`, stored at 0x82309A8C); a NON-ZERO value skips the
+        // whole sweep. Bit 0 is the network-catchup bit -- the same bit
+        // BrnPhysicsModuleUpdateFunctions.cpp:231 already reads as `lbNetworkCatchup`.
+        // ⚠ The `stw r11, var_238(r1)` at 0x8230AE0C is NOT a dead spill: step 12's corona
+        // gate reloads that exact slot at 0x8230BBEC. Same latch, two consumers.
+        //
+        // The Set<PropEntityID,32> walk RE-READS its live count every iteration
+        // (0x8230AE38 and 0x8230AE5C both `lwz 0x80(r31)`) and fires CgsSet.h:227 / :274 /
+        // :275 per iteration -- GetLength() and operator[] carry those tripwires verbatim,
+        // which is the idiom ProcessBrokenProps (PropEntityModule_wQ_07.cpp:447) already uses.
+        // ⚠ MEASURED: PreSceneUpdate does NOT Clear() the set here -- no store to the count
+        // word at module+0xCDE64 exists anywhere in this function. The owner of the clear is
+        // ProcessBrokenProps @0x822EEFA0; UpdateCollisionStreaming above ERASES individual
+        // entries as it deactivates cells (BrnPropCellManager.cpp:458).
+        // ================================================================
+        if ( ( lUpdateSet & KU_UPDATESET_NETWORK_CATCHUP ) == 0 )
+        {
+            for ( u32 luBroken = 0; luBroken < maRecentlyBrokenProps.GetLength(); ++luBroken )
+            {
+                BreakPropIntoParts( maRecentlyBrokenProps[luBroken], lpOutput );
+            }
+        }
 
         // ================================================================
         // [11] drain the GameData receiver queue.
@@ -653,8 +850,11 @@ namespace BrnWorld
                     {
                         CgsResource::ResourcePtr<PropGraphicsList> lGraphicsList( lpAssetEvent->mHandle );
 
-                        // P7: the `luZone == Nicotine::DMixIO::GetDMixID( lGraphicsList )`
-                        //     cross-check assert (cpp:702) -- see the PARK LIST.
+                        // P7 (STILL PARKED): the `luZone == <0x8295F4A0>( lGraphicsList )`
+                        //     cross-check assert (cpp:702). The callee is unidentified --
+                        //     IDA's "Nicotine::DMixIO::GetDMixID" label on it is an ICF-fold
+                        //     misattribution and there is no per-address export. See the
+                        //     PARK LIST.
 
                         mapGraphicsLists[luZone] = lGraphicsList;
                         mabWaitingForGraphics.UnSetBit( luZone );
@@ -687,10 +887,18 @@ namespace BrnWorld
         // ================================================================
         mrTimestep = lpInput->GetCurrentTimestep();
 
-        // P9: the corona-phase advance -- see the PARK LIST.
-        // P8: Array<BrnGui::OverheadSignScore,32>::AppendArray<32>(
-        //         lpOutput->GetVisibleOverheadSignArray(), &mVisibleOverheadSigns )
-        //     -- see the PARK LIST.
+        // P9: the corona-phase advance -- STILL PARKED, see the PARK LIST.
+
+        // ⭐ P8 LANDED 2026-08-19 (wave Q5). ASM 0x8230BDD0..0x8230BDE8:
+        //   `mr r3, lpOutput ; bl 0x822B9930` == GetVisibleOverheadSignArray() (the
+        //   WRITE-lock overload; the read-lock twin is 0x827A1AC0), then
+        //   `mr r4, module + 0xD1DB0` == &mVisibleOverheadSigns, then
+        //   Array<BrnGui::OverheadSignScore,32>::AppendArray<32> @0x822E5348.
+        // The park's blocker -- "BOTH ends are opaque byte storage" -- is gone: the module
+        // member is ::Array<BrnGui::OverheadSignScore,32> (BrnPropEntityModule.h:726) and
+        // OutputBuffer_PreScene::VisibleOverheadSignArrayStorage is the SAME instantiation
+        // (BrnPropEntityModuleIO.h:226), so AppendArray's `const Array<T,N>&` binds directly.
+        lpOutput->GetVisibleOverheadSignArray()->AppendArray( mVisibleOverheadSigns );
 
         lpInput->UnlockForRead();
         lpOutput->UnlockForWrite();

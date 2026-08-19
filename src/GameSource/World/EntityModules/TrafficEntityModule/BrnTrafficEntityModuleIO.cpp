@@ -266,6 +266,26 @@ namespace BrnTrafficIO
     // X360 0x827A9DE0: write-lock; reset the queue then merge the source potential-contact queue
     // onto it. The X360 stores 0 to miLength (&mPotentialContactQueue+8) then forwards to
     // BaseEventQueue<PotentialContact>::Append.
+    // X360 0x827615F8 (DWARF :274), store for store:
+    //   stb 1,0(this)                                   IOBuffer::Construct (status = constructed)
+    //   EventQueue<PotentialContact,2048>::Construct     this+0x10     mPotentialContactQueue
+    //   EventQueue<OutOverlapPair,128>::Construct        this+0x28020  mOverlapPairsQueue
+    //   VariableEventQueue<32768,16>::Construct          this+0x28C30  mSceneResultQueue   [opaque stand-in here]
+    //   stvx128 v0(zero) ; stb 0,0x10                    this+0x30C40  mPlayerResetInterface = {0, false}
+    //   TrafficLightKnockDownEvent<32>::Construct        this+0x30C60  mPropToTrafficInterface queue 0 [opaque here]
+    //   TrafficLightRestoreEvent<80>::Construct          this+0x30CEC  mPropToTrafficInterface queue 1 [opaque here]
+    // The two members still modelled as opaque byte spans (maSceneResultQueue, PropToTrafficInterface)
+    // keep their console bytes un-Constructed here -- nothing mounted reads them yet; when their real
+    // types land, add the three Constructs above in this order. LANDED 2026-08-19 (wave Q5 round-3
+    // integration; first traffic bridge into this buffer asserted 'mpEvents != NULL').
+    void InputBuffer_PrePhysics::Construct()
+    {
+        CgsModule::IOBuffer::Construct();              // stb 1, 0(this)
+        mPotentialContactQueue.Construct();            // +0x10
+        mOverlapPairsQueue.Construct();                // +0x28020
+        mPlayerResetInterface.Clear();                 // the 16-byte zero splat + the bool byte
+    }
+
     void InputBuffer_PrePhysics::SetPotentialContactQueue(const PotentialContactQueue* lpPotentialContactQueue)
     {
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
