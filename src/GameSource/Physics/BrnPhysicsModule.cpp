@@ -8,6 +8,11 @@
 // the derived->base conversion to rw::IResourceAllocator* that every stage-3..6 call needs is
 // ill-formed (both types incomplete). The error names two types that look perfectly compatible.
 #include "rw/rwcore_structs.h"                                            // rw::LinearResourceAllocator : IResourceAllocator
+#include "GameShared/GameClasses/Module/CgsIOBufferStack.h"                // Create/DestroyIOBuffer<T> (Prepare stage 8)
+#include "GameShared/GameClasses/Module/CgsModuleUtils.h"                  // Lock/UnlockBuffersForIO (CgsModuleUtils.h:238/:248)
+#include "GameShared/GameClasses/Physics/CgsRigidBody.h"                   // CgsPhysics::RigidBodyId::SetEntityId
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"                 // gpDebugPrint -- the [Q6-worldbody] one-shot only
+#include <cstdlib>                                                        // std::getenv -- the BRN_PROP_DIAG latch only
 
 // ================================================================================================
 // BrnPhysics::PhysicsModule -- constructor (X360 @0x827E5400) + Construct (X360 @0x825AE308).
@@ -302,11 +307,17 @@ namespace BrnPhysics
     //       the whole module. DeformationManager::Prepare actually EXISTS (bodied in the unmounted
     //       BrnDeformationManager.cpp); mounting that TU is its own closure job.
     //
-    //   (c) stage 8's body: `CreateIOBuffer<PhysicsSimulationIO::InputBuffer>("Simulation")`,
-    //       PrepareWorldRigidBody @0x825A9834, `mWorldRigidBodyId = <that id>`, DestroyIOBuffer.
-    //       PrepareWorldRigidBody is not reconstructed, so creating a multi-kilobyte IO buffer on
-    //       the stack purely to hand it to nothing would be pure risk for zero observable. The
-    //       stage stamps its cursor and falls through, as the console's does.
+    //   (c) ⭐⭐ RETIRED 2026-08-19 (wave Q6 round 4) -- STAGE 8 IS LANDED IN FULL. This entry used
+    //       to read "PrepareWorldRigidBody is not reconstructed, so creating a multi-kilobyte IO
+    //       buffer on the stack purely to hand it to nothing would be pure risk for zero
+    //       observable". The objection was correct AND it expired the moment the function was
+    //       recovered: PrepareWorldRigidBody @0x825A9750 is bodied below, so the buffer now has a
+    //       consumer, and it is drained inside that same call (see its banner). What made this
+    //       urgent is that the hole was not inert -- mWorldEntityId stayed at K_INVALID_ENTITY_ID
+    //       (owner byte 0xFF), which is what made every prop-vs-world contact fail
+    //       ValidateSimulationContactTypes' `case 3` the first frame narrow-phase produced any.
+    //       ⛔ ONE STORE OF STAGE 8 IS STILL NOT REPRODUCED, and it is called out at its own site
+    //       below: `mDeformationManager.SetWorldBodyId( mWorldRigidBodyId )`.
     // ================================================================================================
     bool PhysicsModule::Prepare( CgsModule::IOBufferStack* lpInputBufferStack,
                                  CgsModule::IOBufferStack* lpOutputBufferStack,
@@ -318,7 +329,6 @@ namespace BrnPhysics
         CGS_ASSERT( lpSceneInputBuffer  != 0, "lpSceneInputBuffer_Update != NULL" ); // :196
         CGS_ASSERT( lpAllocatorList     != 0, "lpAllocatorList != NULL" );           // :197
 
-        (void)lpInputBufferStack;      // consumed by stage 8's CreateIOBuffer -- see (c) above
         (void)lpOutputBufferStack;     // asserted only; the console never uses it either
         (void)lpSceneInputBuffer;      // consumed by stage 6's VehicleManager::Prepare
 
@@ -402,9 +412,35 @@ namespace BrnPhysics
             // fall through
 
         case E_PREPARESTAGE_CREATE_WORLD_RIGIDBODY:
+        {
             mePrepareStage = E_PREPARESTAGE_CREATE_WORLD_RIGIDBODY;    // *v11 = 8
-            // ⛔ PrepareWorldRigidBody and its IO buffer go here -- see (c) in the banner.
+
+            // X360 0x825ADE14..0x825ADE58, four calls in this exact order. The console does NOT
+            // test CreateIOBuffer's bool and does NOT test PrepareWorldRigidBody's bool -- r3 is
+            // dead after both -- so neither result is branched on here either.
+            //
+            // ⚠️ THIS BUFFER IS ~227 kB ON THE CONSOLE (the DestroyIOBuffer instantiation
+            // @0x8259DAC0 frees `0x373E0` bytes), which is why it comes off the IO STACK and not
+            // off the C stack. It is created, filled, drained and freed inside this one stage.
+            CgsPhysics::PhysicsSimulationIO::InputBuffer* lpSimulationModuleInputBuffer = 0;
+            lpInputBufferStack->CreateIOBuffer( &lpSimulationModuleInputBuffer, "Simulation" );
+
+            PrepareWorldRigidBody( lpSimulationModuleInputBuffer );
+
+            // The console's fourth store, an INLINED SETTER not a call:
+            //     0x825ADE50  ldx  r11, r30, 0x69BB8   // mWorldRigidBodyId          (+433080)
+            //     0x825ADE54  stdx r11, r30, 0x5F498   // +390296
+            // +390296 lands 76,024 bytes into mDeformationManager (+314272), which
+            // BrnDeformationManager.h:674 names `mWorldRigidBodyId` -- so this is
+            // `mDeformationManager.SetWorldBodyId( mWorldRigidBodyId )` (DWARF
+            // BrnDeformationManager.h:156). ⚠️ That setter was DECLARED-ONLY in this tree until
+            // this wave -- the one-line body it needs to stop being an LNK2019 was added to
+            // BrnDeformationManager.cpp with this store as its whole attestation.
+            mDeformationManager.SetWorldBodyId( mWorldRigidBodyId );
+
+            lpInputBufferStack->DestroyIOBuffer( &lpSimulationModuleInputBuffer );
             // fall through
+        }
 
         case E_PREPARESTAGE_DONE:
             mePrepareStage = E_PREPARESTAGE_DONE;                      // *v11 = 9
@@ -414,6 +450,195 @@ namespace BrnPhysics
             meReleaseStage = E_RELEASESTAGE_START;                     // +433076 = 0
             return true;
         }
+    }
+
+    // ================================================================================================
+    // PhysicsModule::PrepareWorldRigidBody  @0x825A9750  (165 insns)
+    // DWARF BrnPhysicsModule.h:207, body BrnPhysicsModule.cpp:472 (its own assert is .cpp:474).
+    //
+    // ⭐⭐ BODIED 2026-08-19 (wave Q6 round 4). ⚠️ NOT IN .ida-exports -- there is no
+    // .ida-exports/BURNOUT_X360_ARTIST.XEX/0x825A9750.json; the disassembly below was pulled from
+    // BURNOUT_X360_ARTIST.XEX.i64 with headless IDA 9.3 (the same export-set hole
+    // PhysicsSimulationModule::Destruct and RigidBodyData::RigidBodyData were). Note the address
+    // that has been quoted for this function all over the tree -- 0x825A9834 -- is NOT its entry
+    // point; it is the single `stdx` instruction inside it that proved mWorldRigidBodyId is eight
+    // bytes. The function starts at 0x825A9750.
+    //
+    // WHAT IT IS FOR, and it is not the 165 instructions. This creates THE WORLD BODY: the one
+    // static rw::physics rigid body that the static environment is, and the entity every
+    // prop-vs-world, part-vs-world and car-vs-world contact names as its OTHER HALF. Until it
+    // runs, `mWorldEntityId` sits at the value Construct stamps -- K_INVALID_ENTITY_ID, owner byte
+    // 0xFF -- and every contact bridged against it is malformed. That was not theoretical: the
+    // frame after wave Q6 made prop-vs-world narrow phase produce real results, the module fired
+    // 80x "Bridging invalid PROP contact to simulation with entity B of type" out of
+    // ValidateSimulationContactTypes (BrnPhysicsModuleBridgeFunctions.cpp `case 3`), because
+    // owner 0xFF is in none of that case's ten legal owners. With this bodied, entity B is owner
+    // 0 == BrnWorld::E_ENTITYTYPE_WORLD, which `case 3` accepts.
+    //
+    // ⭐ THE TWO IDS ARE LITERAL ZERO, and that is a derivation rather than a shrug:
+    //   * `li r31, 0` @0x825A9790 is the only source of the entity id -- it is not read from any
+    //     global, allocator or counter. `stw r31, 0(r11)` with r11 == this+0x69BC0 (433088) is
+    //     the mWorldEntityId store. EntityId 0 unpacks (CgsEntityId.h's 8/14/10 split) as
+    //     owner 0 / entityIndex 0 / partIndex 0 -- owner 0 IS E_ENTITYTYPE_WORLD.
+    //   * `clrlwi r11, r31, 0` then `extldi r30, r11, 64, 32` builds the 64-bit handle as
+    //     ((u64)(u32)entityId) << 32 -- which is EXACTLY CgsPhysics::RigidBodyId::SetEntityId
+    //     (CgsRigidBody.h: "mId &= 0xFFFFFFFF; mId |= ((u64)EntityId << 32)") applied to a
+    //     zero handle. `stdx r30, r29, r4` with r4 == 0x69BB8 (433080) is the mWorldRigidBodyId
+    //     store. So the world body's low word (the per-entity index) is 0 as well.
+    // Spelled through the two committed accessors rather than as `= 0` so the packing lives in
+    // one place, and so a future non-zero world entity id changes one line.
+    //
+    // X360 STORE MAP of the event (the stack block at r1+0x50..0xDF is copied into the event at
+    // r1+0xE0 by six lvx128/stvx128 pairs plus a 6x ld/std loop -- a pure register-scheduling
+    // artefact of the compiler holding one NewRigidBody local in scattered slots; the reordering
+    // 0x90->+0x10, 0x80->+0x20, 0xA0->+0x30, 0x70->+0x40, 0x50->+0x50, 0x60->+0x60 is what
+    // reassembles it in declaration order). Event offsets are
+    // CgsPhysicsSimulationIO_Events.h's, which were derived from the CONSUMER
+    // (ProcessAddRigidBodyQueue @0x828A2708) and agree here to the byte:
+    //     +0x00  mID                                  = 0            std  r30
+    //     +0x10  mRigidBody.mTransform.xAxis  {1,0,0,0}              stfs 1.0 / 0.0 / 0.0, stw 0
+    //     +0x20                       .yAxis  {0,1,0,0}
+    //     +0x30                       .zAxis  {0,0,1,0}
+    //     +0x40                       .wAxis  {0,0,0,0}   <- the world body sits at the ORIGIN
+    //     +0x50  mRigidBody.mVelocity        {0,0,0,0}
+    //     +0x60  mRigidBody.mAngularVelocity {0,0,0,0}
+    //     +0x70  mRigidBody.mInertia.mInvTens     {0,0,0,0}          stvx128 of the zero vector
+    //     +0x80                      .mInvMass    = 0.1f             flt_82004014 == 0x3DCCCCCD
+    //     +0x84                      .mSpherical  = 1.0f / min(x,y,z of mInvTens)  <- SEE BELOW
+    //     +0x88                      .mMaxVelocity= 0.0f
+    //     +0x8C                      .mMaxOmega   = 0.0f
+    //     +0x90                      .mLinearDrag = 0.0f
+    //     +0x94                      .mAngularDrag= 0.0f
+    //     +0xA0  mRigidBody.mbSpy                 = false            stb 0
+    //     +0xB0  meState                          = 1               li r11,1; stw
+    // meState == 1 is rw::physics::STATIC_BODY (rigidbody.h's DWARF-attested bitmask -- 1 is
+    // STATIC, not "frozen" and not an ordinal). +0x98/+0x9C are Inertia's tail PADDING and the
+    // console copies them UNINITIALISED; nothing reads them and nothing here writes them.
+    //
+    // ⚠️⚠️ mSpherical IS +INFINITY HERE AND THAT IS THE CONSOLE'S OWN VALUE, NOT A DEFECT AND NOT
+    // A PLACEHOLDER ZERO. The asm computes it as `fdivs f0, f13(1.0f), f12` where f12 is
+    // min(mInvTens.x, mInvTens.y, mInvTens.z) read back from the stack slot the zero vector was
+    // just stored into -- so the divisor is 0.0f and the quotient is +inf. That is precisely what
+    // rw::physics::Inertia::SetInverseInertia does with a zero inverse-inertia diagonal (an
+    // infinitely resistant-to-rotation body), and this tree's SetInverseInertia already carries
+    // the same fcmpu/blt/fmr/fdivs shape recovered independently from
+    // ProcessChangeRigidBodyInertiaQueue. ⛔ Do NOT "fix" this to 0 or 1: the value is only ever
+    // read by RigidBody::DynamicUpdate's sleep-energy scale, which never runs for a STATIC_BODY.
+    // (Note the console emits only the FINAL store to +0x84, not SetInverseInertia's intermediate
+    // one -- the intermediate is dead in a stack temp. Same final value either way.)
+    //
+    // ⚠️ mInvMass IS 0.1f, NOT 0.0f. A static body with a non-zero inverse mass reads oddly, and
+    // it was double-checked against the image byte-for-byte rather than reasoned about:
+    // flt_82004014 == 0x3DCCCCCD == 0.1f. Reconstructed as shipped -- flag, don't fix.
+    //
+    // ⭐ THE POSTED EVENT IS DRAINED BY THIS FUNCTION ITSELF, which is the answer to "the console
+    // destroys the buffer immediately, so how does the InAddRigidBody survive?". It does not have
+    // to survive: the tail of this body is
+    //     0x825A99C0  lwz   r11, 0x230(r29)   // the vptr of the sub-object at this+0x230
+    //     0x825A99C4  addi  r3,  r29, 0x230   // == mSimulationModule (BrnPhysicsModule.h's anchor)
+    //     0x825A99CC  lwz   r11, 0x48(r11)    // console vtable slot 18
+    //     0x825A99D4  bctrl                   // ...(r4 == the input buffer)
+    // Slot 16 is PhysicsSimulationModule::Prepare (CgsPhysicsSimulationModule.h reads that vtable
+    // slot-by-slot and PhysicsModule::Prepare stage 3 dispatches through `lwz 0x40`), 17 is
+    // Update, 18 is ProcessInput -- and ProcessInput is the ONLY one of the three whose signature
+    // is `(const InputBuffer*)`. So the queue is appended, then drained through
+    // ProcessInputBuffers' nineteen drains, all of which are bodied in this tree, before Prepare
+    // ever calls DestroyIOBuffer. Nothing is dropped and no IOBufferStack lifetime is stretched.
+    // ⚠️ This is the FIRST caller ProcessInput/ProcessInputBuffers has ever had at runtime in this
+    // tree -- CgsPhysicsSimulationModule.cpp's banner still says "NOTHING REACHES ANY OF THIS AT
+    // RUNTIME YET". It does now, and rw::physics::Simulation::AddRigidBody runs for real.
+    //
+    // The three assert sites are the console's own, with its own file/line: :474 here, and
+    // CgsModuleUtils.h:238/:248 inside the inlined single-buffer Lock/UnlockBuffersForIO pair
+    // (Feb-2007 CgsModuleUtils.h names both outright). ⚠️ FLAG: this tree's
+    // CgsModule::Lock/UnlockBuffersForIO<TBuffer> single-buffer templates do NOT carry those two
+    // `CGS_ASSERT(lpInputBuffer, "lpInputBuffer")` tripwires. Not added here because that header
+    // has ~dozens of includers and the change belongs to it, not to this call site.
+    // ================================================================================================
+    bool PhysicsModule::PrepareWorldRigidBody(
+            CgsPhysics::PhysicsSimulationIO::InputBuffer* lpSimulationModuleInputBuffer )
+    {
+        CGS_ASSERT( lpSimulationModuleInputBuffer != 0, "lpSimulationModuleInputBuffer != NULL" );  // :474
+
+        // ---- the two module-level ids (see the banner's derivation) ----------------------------
+        CgsSceneManager::EntityId lWorldEntityId( 0u );   // owner 0 == BrnWorld::E_ENTITYTYPE_WORLD
+        mWorldEntityId = lWorldEntityId;                  // stw  -> +433088
+
+        CgsPhysics::RigidBodyId lWorldRigidBodyId( 0u );
+        lWorldRigidBodyId.SetEntityId( lWorldEntityId );  // extldi: ((u64)entityId) << 32
+        mWorldRigidBodyId = lWorldRigidBodyId;            // stdx -> +433080
+
+        // ---- the body description ---------------------------------------------------------------
+        // ⚠️ rw::physics::Inertia HAS a default constructor on the PC (1.0f / 1.0f / FLT_MAX /
+        // FLT_MAX / 0 / 0 and a unit mInvTens) and the console runs no such thing -- the block is
+        // raw stack there. All SEVEN of its fields are overwritten below, so the two agree at the
+        // point the event is copied; the ctor's stores are the only extra work the PC does.
+        CgsPhysics::NewRigidBody lNewRigidBody;
+        lNewRigidBody.mTransform.SetIdentity();           // {1,0,0,0}/{0,1,0,0}/{0,0,1,0}/{0,0,0,0}
+        lNewRigidBody.mVelocity.SetZero();
+        lNewRigidBody.mAngularVelocity.SetZero();
+
+        rw::math::vpu::Vector3 lInverseInertia;
+        lInverseInertia.SetZero();
+        lNewRigidBody.mInertia.SetInverseInertia( lInverseInertia );   // ...and mSpherical = 1/0 = +inf
+        lNewRigidBody.mInertia.SetInverseMass( 0.1f );                 // flt_82004014
+        lNewRigidBody.mInertia.SetMaxLinearVelocity( 0.0f );
+        lNewRigidBody.mInertia.SetMaxAngularVelocity( 0.0f );
+        lNewRigidBody.mInertia.SetLinearDrag( 0.0f );
+        lNewRigidBody.mInertia.SetAngularDrag( 0.0f );
+        // The console never writes the LOCAL's mbSpy -- it stamps the EVENT's copy after the block
+        // move (`stb r31, +0xA0`). Written here as well so the struct copy below has no
+        // indeterminate byte in it; the event's own store is kept where the console puts it.
+        lNewRigidBody.mbSpy = false;
+
+        // ---- the capacity-1 stack queue (EventQueue<InAddRigidBody,1>::Construct @0x825A8228) ----
+        CgsModule::EventQueue<CgsPhysics::PhysicsSimulationIO::InAddRigidBody, 1> lAddRigidBodyQueue;
+        lAddRigidBodyQueue.Construct();
+
+        CgsPhysics::PhysicsSimulationIO::InAddRigidBody lAddRigidBodyEvent;
+        lAddRigidBodyEvent.mID              = lWorldRigidBodyId;   // std r30 -> event+0x00
+        lAddRigidBodyEvent.mRigidBody       = lNewRigidBody;       // the 6x lvx128 + 6x ld/std copy
+        lAddRigidBodyEvent.mRigidBody.mbSpy = false;               // stb 0   -> event+0xA0
+        lAddRigidBodyEvent.meState          = rw::physics::STATIC_BODY;  // stw 1 -> event+0xB0
+        lAddRigidBodyQueue.AddEvent( lAddRigidBodyEvent );         // BaseEventQueue::AddEvent @0x825A3000
+
+        // ---- publish into the simulation module's input buffer ----------------------------------
+        // ⚠️ The console IGNORES AppendAddRigidBodyQueue's result (the mangled name @0x825A8298
+        // even spells the return type `X` == void, against this tree's `bool`); r3 is dead at the
+        // next instruction. Not branched on here either.
+        CgsModule::LockBuffersForIO( lpSimulationModuleInputBuffer );                    // :238
+        lpSimulationModuleInputBuffer->AppendAddRigidBodyQueue<1>( &lAddRigidBodyQueue );
+        CgsModule::UnlockBuffersForIO( lpSimulationModuleInputBuffer );                  // :248
+
+        // ---- and drain it, in this call, before Prepare frees the buffer (see the banner) -------
+        mSimulationModule.ProcessInput( lpSimulationModuleInputBuffer );   // console vtable slot 18
+
+        // [DIAG] NOT IN THE X360 BINARY. Opt-in one-shot (set BRN_PROP_DIAG): the wave-Q6 witness
+        // that the world body actually got created and that mWorldEntityId is no longer the
+        // 0xFFFFFFFF the prop-contact validator was choking on. Same latch pattern as its
+        // siblings -- getenv read ONCE into a function-local static.
+        {
+            static const bool sbPropDiag = ( std::getenv( "BRN_PROP_DIAG" ) != 0 );
+            static bool       sbFirst    = true;
+            if ( sbPropDiag && sbFirst && CgsDev::Log::gpDebugPrint != 0 )
+            {
+                sbFirst = false;
+                // ⚠️ The handle is printed as its two 32-bit halves ON PURPOSE. RigidBodyId
+                // carries the EntityId in its HIGH word, so a single `(s32)` cast of the u64
+                // would print 0 whatever the world entity id turned out to be -- a diagnostic
+                // that cannot fail is not a diagnostic.
+                const u64 lu64WorldRigidBodyId = mWorldRigidBodyId;
+                *CgsDev::Log::gpDebugPrint
+                    << "[Q6-worldbody] world rigid body created: rbid="
+                    << static_cast<s32>( static_cast<u32>( lu64WorldRigidBodyId >> 32 ) )
+                    << ":" << static_cast<s32>( static_cast<u32>( lu64WorldRigidBodyId ) )
+                    << " entity=" << static_cast<s32>( static_cast<u32>( mWorldEntityId ) )
+                    << " owner=" << static_cast<s32>( mWorldEntityId.GetOwner() )
+                    << "\n";
+            }
+        }
+
+        return true;   // li r3, 1
     }
 
     // ================================================================================================

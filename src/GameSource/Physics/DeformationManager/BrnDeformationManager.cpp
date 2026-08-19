@@ -162,6 +162,30 @@ namespace Deformation
     }
 
     // -----------------------------------------------------------------------------------
+    // SetWorldBodyId  (DWARF BrnDeformationManager.h:156)
+    //
+    // ⭐ BODIED 2026-08-19 (wave Q6 round 4). It was DECLARED-ONLY -- an LNK2019 waiting for its
+    // first caller, which is exactly what BrnPhysics::PhysicsModule::Prepare stage 8 now is.
+    //
+    // NO STANDALONE X360 SYMBOL: the console inlines it, and the one place it is inlined is also
+    // its whole attestation -- PhysicsModule::Prepare @0x825ADE38..0x825ADE54, immediately after
+    // PrepareWorldRigidBody returns:
+    //     lis  r11, 6 ; ori r11, r11, 0x9BB8   // 0x69BB8 == 433080 == PhysicsModule::mWorldRigidBodyId
+    //     lis  r10, 5 ; ori r10, r10, 0xF498   // 0x5F498 == 390296
+    //     ldx  r11, r30, r11                   // an EIGHT-byte load...
+    //     stdx r11, r30, r10                   // ...and an EIGHT-byte store
+    // 390296 - 314272 (PhysicsModule's mDeformationManager anchor) == 76024, which is this class's
+    // own `mWorldRigidBodyId` seat (see this header's +76024 note and its adjacency assert). One
+    // 8-byte store of the argument, nothing else -- so the body is that store and no more. The
+    // 8-byte width is corroboration, not assumption: it is the SAME `stdx` pairing that settled
+    // both handles' widths on the PhysicsModule side.
+    // -----------------------------------------------------------------------------------
+    void DeformationManager::SetWorldBodyId(CgsPhysics::RigidBodyId lWorldRigidBodyId)
+    {
+        mWorldRigidBodyId = lWorldRigidBodyId;
+    }
+
+    // -----------------------------------------------------------------------------------
     // Prepare  @0x82630230
     //
     // Per-level prepare: register the debug component, allocate the pool of 28 DeformableObjects
