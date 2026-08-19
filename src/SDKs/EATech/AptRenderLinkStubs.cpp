@@ -608,9 +608,13 @@ namespace rw { namespace collision {
     // Volume::GetType() read four bytes of whatever followed it.
     //
     // They are now REAL `rw::collision::Volume::VTable` records -- typeID, name and flags
-    // dumped out of the shipped image, the seven method slots null with their X360
-    // addresses documented -- defined in their proper rwcollision home,
-    // SDKs/EATech/rwcollision/volume.cpp, beside the vTableArray they fill. Their type
+    // dumped out of the shipped image, and their METHOD SLOTS BOUND as of the wave-Q5
+    // vtbind change (34 of the 40 slots the image binds are live; 2 are genuine image
+    // zeros and 6 are parked with per-slot reasons at the record). They are defined in
+    // vendor/renderware/collision/VolumeVTables.cpp -- NOT in
+    // SDKs/EATech/rwcollision/volume.cpp, which keeps only the SDK-side declarations, the
+    // shared gVolumeVTable array and InitializeVTable's fill (the records had to move
+    // across the Vector3 header fork so every primitive's methods are visible). Their type
     // therefore changed from `const u8` to `const Volume::VTable`, which changes the
     // mangled symbol (MEASURED: ...@@3EB vs ...@@3U...@B), so both sides moved together
     // in one change and the tree never carries the two spellings at once.

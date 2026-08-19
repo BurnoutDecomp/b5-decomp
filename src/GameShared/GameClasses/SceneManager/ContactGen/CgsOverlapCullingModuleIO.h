@@ -79,13 +79,15 @@ namespace OverlapCullingIO
     //     +0        IOBuffer status byte
     //     +16       mContactQueue             EventQueue<Contact,16384>         1048592 = 16 + 16384*64
     //
-    // ⚠️ CONSOLE ALIGNMENT NOTE (recorded, not acted on here): the overlapping-pair queue
-    // sits at buffer+4 and its Construct @0x828C4D40 puts maEvents at queue+0xC, so on the
-    // X360 CgsSceneManager::OverlappingPair is 4-ALIGNED (16 bytes, four words). The comment
-    // in CgsOverlappingPair.h claiming 8-byte alignment is wrong for the console; on the host
-    // its two u64 VolumeInstanceId members make it 8-aligned, which is harmless (name access
-    // only) but the claim about the console is a defect -- reported, that header is not this
-    // TU's file.
+    // ✅ CONSOLE ALIGNMENT NOTE -- RESOLVED 2026-08-19 (wave Q5, cluster E3a). This block
+    // used to record a defect: the overlapping-pair queue sits at buffer+4 and its
+    // Construct @0x828C4D40 puts maEvents at queue+0xC, so on the X360
+    // CgsSceneManager::OverlappingPair is 4-ALIGNED -- while CgsOverlappingPair.h modelled
+    // it as two 8-aligned u64 VolumeInstanceIds, which pushed the host's maEvents to +0x10.
+    // That header has now been corrected to the DWARF's real field set
+    // {u32, u32, f32, bool} (CgsSceneManagerTypes.h:87-90), which is 4-aligned with the
+    // same 16-byte stride, so the host and the console now agree exactly. Nothing in this
+    // file changed as a result -- access was always by name.
     // =====================================================================
 
     // DWARF :75. The culler's per-frame input: the broad phase's overlapping pairs plus the
@@ -113,11 +115,16 @@ namespace OverlapCullingIO
             return &mOverlappingPairQueue;
         }
 
-        // :88 / :89. The console emits these as their own read-locked getters (the culler's
-        // ProcessAdd/RemoveInternalVolumeQueue reach the request queues through them);
-        // their symbols are unnamed in the export, so the lock bit follows the proven
-        // family pattern (const -> read) rather than an asm tripwire. FLAG: lock bit
-        // inferred; existence, offset and constness are DWARF-attested.
+        // ⭐ @ 0x828B0740 (the export's unnamed `sub_828B0740`) -- ASM-ATTESTED
+        // 2026-08-19 (wave Q5, cluster E3a; the earlier "lock bit inferred" FLAG here is
+        // RETIRED). Read-lock tripwire (bit 4: `lbz 0(this) ; extrwi r11,r11,1,27`,
+        // "Not locked for reading\n"), baked file CgsOverlapCullingModuleIO.h line 0x58
+        // == 88, and it returns `this + 0x40010` == this+262160 -- exactly the
+        // mAddInternalVolumeQueue seat documented above. Its one caller is
+        // OverlapCullingModule::ProcessAddInternalVolumeQueue @0x828B5420 (0x828B546C),
+        // which then walks the queue with
+        // BaseEventQueue<AddInternalCollisionVolume>::GetEvent @0x828AE220 (stride 0x0C
+        // == the 3-u32 element, `slwi r11,r30,1 ; add r11,r30,r11 ; slwi r11,r11,2`).
         const InAddInternalVolumeQueue* GetAddInternalVolumeQueue() const    // :88
         {
             CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
@@ -149,9 +156,9 @@ namespace OverlapCullingIO
 
     private:
         // No status pad here (unlike SceneManagerIO's buffers): the console seats this queue
-        // at +4 because its OverlappingPair is 4-aligned there, but the HOST OverlappingPair
-        // carries two 8-byte VolumeInstanceId members, so the queue is 8-aligned and lands at
-        // +8 whatever we pad. Access is by name; a pad here would only be a wrong comment.
+        // at +4 and, since the OverlappingPair correction of 2026-08-19, the host element is
+        // 4-aligned too, so the compiler lands it at +4 without one. Access is by name
+        // regardless; a pad here would only be a wrong comment.
         InOverlappingPairQueue      mOverlappingPairQueue;       // :98  console +4
         InAddInternalVolumeQueue    mAddInternalVolumeQueue;     // :99  console +262160
         InRemoveInternalVolumeQueue mRemoveInternalVolumeQueue;  // :100 console +265244

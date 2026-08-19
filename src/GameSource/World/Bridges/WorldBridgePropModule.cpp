@@ -31,20 +31,21 @@
 // here re-declares anything.
 //
 // ---- LIVE vs PARKED (read this before believing the pipeline is closed) ----
-// ONE leg carries its full console payload today -- and it is the one the boot AV is about.
-// EVERY OTHER LEG IS PARKED, all four on the SAME root cause: the SOURCE buffer models the
-// seat this bridge reads as opaque placeholder storage, or has no member there at all. A
-// parked leg logs once and does nothing -- it never fabricates a transfer. Per-leg blockers
-// are in each function's banner; the exact declarations the conductor must land are collected
-// in scratchpad/waveQ4/bridges.owner.md.
+// TWO legs carry their full console payload today. The remaining three are PARKED on the SAME
+// root cause: the SOURCE buffer models the seat this bridge reads as opaque placeholder
+// storage, or has no member there at all. A parked leg logs once and does nothing -- it never
+// fabricates a transfer. Per-leg blockers are in each function's banner; the exact
+// declarations the conductor must land are collected in scratchpad/waveQ4/bridges.owner.md
+// and scratchpad/waveQ5/f2.owner.md.
 //
 //   LIVE   BridgePhysicsModuleToPropModule_PostPhysics -- the CONTACT-SPY leg. Its
 //          updated-prop-queue leg is parked (PhysicsModuleIO::OutputBuffer models
 //          mPropManagerOutputInterface as 1-byte opaque storage).
-//   PARKED BridgeSceneContactsToPropModule_PrePhysics -- CgsSceneManager::SceneManagerIO::
-//          OutputBuffer has NO potential-contact queue member at all (its own header's
-//          "MINIMAL SLICE" FLAG says so: the console Constructs EventQueue<PotentialContact,
-//          2048> at +32800 and that queue "cannot be reached by name yet").
+//   LIVE   BridgeSceneContactsToPropModule_PrePhysics -- ⭐ UNPARKED 2026-08-19 (wave Q5/F2).
+//          SceneManagerIO::OutputBuffer grew the real mPotentialContactQueue (+32800), the
+//          read-lock accessor @0x8279C098 and the console's own Construct in wave Q5 round 2,
+//          so the source seat this leg reads is a named member of the same type the
+//          destination Append takes. See that function's banner.
 //   PARKED BridgeCrashModuleToPropModule_PostScene -- BrnWorld::CrashModuleIO::
 //          OutputBuffer_PostScene is `u8 maDeferredPayload[16]` (BrnCrashModule.h:75).
 //   PARKED BridgePropModuleToTrafficModule_PrePhysics -- the TRAFFIC side's
@@ -54,18 +55,21 @@
 //          on the host while its accessors return this+98128. See that function's banner:
 //          this park caught a live corruption that had already been written and compiled.
 //
-// ⚠️ THE MEASUREMENT THAT DECIDED ALL FOUR PARKS -- run it before unparking anything, and
-// before adding any accessor to a buffer that has no named members. The host sizeof of each
-// source buffer, against the console offset the bridge reads:
+// ⚠️ THE MEASUREMENT THAT DECIDED THE PARKS -- run it before unparking anything, and before
+// adding any accessor to a buffer that has no named members. The host sizeof of each source
+// buffer, against the console offset the bridge reads:
 //
 //     PhysicsModuleIO::OutputBuffer          998224   contact spy @998192   IN BOUNDS  -> LIVE
 //     PhysicsModuleIO::OutputBuffer          998224   updated props @71792  in bounds, but the
 //                                                     seat is a 1-byte placeholder -> PARKED
 //     SceneManagerIO::OutputBuffer            32800   contacts   @32800     OUT OF BOUNDS
+//                                                     -> ⭐ FIXED: the buffer is 201,824 B with
+//                                                     a NAMED mPotentialContactQueue since wave
+//                                                     Q5 round 2, so this row is LIVE now
 //     CrashModuleIO::OutputBuffer_PostScene      16   racecar iface @143824 OUT OF BOUNDS
 //     BrnAI::AIModuleIO::OutputBuffer             1   AI result  @98128     OUT OF BOUNDS
 //
-// (probe: scratchpad/waveQ4/probe_bridges/probe_sizes.cpp + probe_ai_size.cpp. The three
+// (probe: scratchpad/waveQ4/probe_bridges/probe_sizes.cpp + probe_ai_size.cpp. The remaining
 // out-of-bounds rows are not "missing accessors" -- they are buffers whose LIVE ALLOCATION is
 // smaller than the offset, because CgsIOBufferStack::CreateIOBuffer<T> allocates sizeof(T).
 // An accessor added over any of them returns a pointer into the next IO-stack tenant.)
@@ -95,6 +99,7 @@
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"           // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // CgsDev::Log::gpDebugPrint
+#include <stdlib.h>                                          // getenv ([DIAG] BRN_PROP_DIAG, host only)
 
 namespace WorldModule
 {
@@ -245,22 +250,25 @@ void BridgePhysicsModuleToPropModule_PostPhysics(
 //
 // That is the whole function: two asserts and one queue Append.
 //
-// ⛔ PARKED. The SOURCE seat does not exist in this tree. CgsSceneManager::SceneManagerIO::
-//    OutputBuffer is a documented MINIMAL SLICE with exactly two members
-//    (mSceneQueryResultsQueue, mTriangleCacheInterface), and its own Construct carries the
-//    FLAG that names this exact gap: "the console Construct also runs PotentialContact<2048>/
-//    ErrorEvent<128>/OutOverlapPair<128> Constructs at +32800/+199744/+196656 -- those three
-//    queues are not members of this documented MINIMAL slice, so they cannot be reached by
-//    name yet" (CgsSceneManagerIO.h:182). +32800 IS the queue this bridge reads.
+// ⭐⭐ UNPARKED 2026-08-19 (wave Q5 cluster F2). The park that used to stand here said
+//    "CgsSceneManager::SceneManagerIO::OutputBuffer has no potential-contact queue member at
+//    all" -- true when it was written, STALE since wave Q5 round 2. That buffer now carries
+//    all five DWARF members, its Construct is the console's own body (X360 0x828C7CA0, which
+//    runs EventQueue<PotentialContact,2048>::Construct at +32800), and the read-lock accessor
+//    the console calls here IS declared:
+//        SceneManagerIO::OutputBuffer::GetPotentialContactQueue() const   (CgsSceneManagerIO.h)
+//        == X360 0x8279C098, bit-4 read tripwire, baked CgsSceneManagerModuleIO.h:625,
+//           `return this + 32800`
+//    and it returns EXACTLY the type the destination takes:
+//        PropEntityIO::InputBuffer_PrePhysics::AppendPotentialContactQueue(
+//            const OutPotentialContactQueue*)                (BrnPropEntityModuleIO.h:960)
+//    -- both spell CgsModule::EventQueue<SceneManagerIO::PotentialContact, 2048>, so there is
+//    no cast anywhere in this leg. The destination Append is REAL and MOUNTED
+//    (BrnPropEntityModuleIO_InputBuffer_PrePhysics.cpp, X360 0x827AA170).
 //
-//    ⚠️ THE PARK COSTS NOTHING TODAY, and that is a measured statement, not a hope: because
-//    the member does not exist, it is also never Constructed and no scene-manager code path
-//    can fill it. The queue this bridge would carry is unconditionally empty on this build.
-//    Landing the bridge against a reinterpret_cast onto +32800 would read whatever the IO
-//    stack's previous tenant left there and Append it as PotentialContacts -- a live
-//    corruption feeding straight into prop contact processing.
-//    DELETE-WHEN: SceneManagerIO::OutputBuffer grows the member + the read-lock accessor and
-//    its Construct builds it. Exact text in bridges.owner.md.
+//    LOCKING: the console's read-lock tripwire fires on the SOURCE and the write-lock one on
+//    the DESTINATION -- which is exactly how WorldModule::EntityModulePrePhysicsUpdate
+//    @0x827BD5B8 brackets this call, so no lock handling belongs in the bridge itself.
 //
 //    NOTE the parameter-name divergence, recorded rather than resolved: the console's own
 //    assert string names the source `lpSceneModuleOutputBuffer`, while the committed
@@ -278,18 +286,30 @@ void BridgeSceneContactsToPropModule_PrePhysics(
     CGS_ASSERT(lpPropInputBuffer_PrePhysics != 0, "lpPropInputBuffer_PrePhysics != NULL");  // :209
     CGS_ASSERT(lpSceneModuleOutputBuffer != 0, "lpSceneModuleOutputBuffer != NULL");        // :210
 
+    const CgsSceneManager::SceneManagerIO::OutputBuffer::OutPotentialContactQueue* const
+        lpPotentialContacts = lpSceneModuleOutputBuffer->GetPotentialContactQueue();  // @0x8279C098
+
+    // [DIAG] NOT IN THE X360 BINARY. Opt-in one-shot: set BRN_PROP_DIAG to see whether the
+    // scene middle ever produced a car-vs-prop broad-phase pair at all. It fires on the FIRST
+    // frame the source queue is non-empty and never again, so a silent log means the producer
+    // (SceneManagerModule::BridgeOverlapCullerToOutputBuffer @0x828BA8C8, round 4 cluster F1)
+    // is still inert -- which is a different failure from "the bridge dropped the data".
+    // The latch is evaluated ONCE: getenv per frame would be a per-frame syscall.
     {
-        static bool sbLoggedScenePark = false;
-        if (!sbLoggedScenePark && CgsDev::Log::gpDebugPrint != 0)
+        static const bool sbPropDiag = ( getenv( "BRN_PROP_DIAG" ) != 0 );
+        static bool       sbLoggedFirstContacts = false;
+        if ( sbPropDiag && !sbLoggedFirstContacts
+             && lpPotentialContacts->GetLength() > 0
+             && CgsDev::Log::gpDebugPrint != 0 )
         {
-            sbLoggedScenePark = true;
+            sbLoggedFirstContacts = true;
             *CgsDev::Log::gpDebugPrint
-                << "[FLAG PC bring-up] BridgeSceneContactsToPropModule_PrePhysics: PARKED. "
-                   "CgsSceneManager::SceneManagerIO::OutputBuffer has no potential-contact "
-                   "queue member (console +32800); the queue this bridge would append is not "
-                   "produced on this build, so the park loses no data.\n";
+                << "[Q5-world] first " << lpPotentialContacts->GetLength()
+                << " potential contacts -> prop module\n";
         }
     }
+
+    lpPropInputBuffer_PrePhysics->AppendPotentialContactQueue(lpPotentialContacts); // @0x827AA170
 }
 
 // =================================================================================================

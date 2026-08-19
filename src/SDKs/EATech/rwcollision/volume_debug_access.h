@@ -171,40 +171,61 @@ namespace rw
             //
             // ⚠️ CONSOLE-ONLY OFFSETS. The +0x04/+0x08/... word offsets above are X360
             // facts and appear here as documentation only: on the host every slot is an
-            // 8-byte pointer-to-member, so the struct is laid out by NAME and its host
-            // sizeof deliberately differs from the console's 40. Nothing in this tree
-            // constructs a VTable yet (see the link note in volume.cpp), so no host layout
-            // is pinned by anything.
+            // 8-byte pointer, so the struct is laid out by NAME and its host sizeof
+            // deliberately differs from the console's 0x28.
+            //
+            // ⭐ THE SLOTS ARE BOUND SINCE 2026-08-19 (wave Q5 vtbind). The six records
+            // are DEFINED in vendor/renderware/collision/VolumeVTables.cpp -- the only TU
+            // that can see all six primitive classes at once -- and declared here in this
+            // half's vocabulary. The two spellings are LAYOUT-IDENTICAL and MANGLE
+            // IDENTICALLY; both facts are measured, see the gVolumeVTable note at the foot
+            // of this file and the banner of that TU.
             // -----------------------------------------------------------------------
             struct VTable;
 
-            // rwccore.h:1490-1505 -- the descriptor slots are POINTERS TO MEMBER FUNCTION
-            // of Volume (the concrete bodies are the primitive subclasses' members, stored
-            // downcast). On the X360 (MSVC, single inheritance, no vptr) that is a plain
-            // 4-byte code pointer, which is exactly the 4-byte stride the dump above shows.
-            typedef RwBool  (Volume::*GetBBoxFn)(const Matrix44Affine* lpTransform,
-                                                 RwBool lbTight, AABBox& lrBBox) const;
-            typedef Vector3 (Volume::*GetBBoxDiagFn)() const;
+            // rwccore.h:1490-1505 spells the slots as POINTERS TO MEMBER FUNCTION of
+            // Volume. That spelling is not usable across this fork: the four primitive
+            // classes with a home in the tree (Capsule/Cylinder/Triangle/Aggregate) are
+            // standalone, not `: public Volume`, so `&X::GetBBox` can never convert to a
+            // Volume pointer-to-member. The slots are therefore FREE function pointers
+            // with an explicit leading `const Volume*` -- the same spelling the three
+            // TU-local descriptor views in vendor/renderware/collision already use, and
+            // the one vendor/renderware/collision/VolumeVTables.cpp writes.
+            //
+            // MEASURED, not argued (scratchpad/waveQ5/probe_vtbind/measure_layout.cpp,
+            // STATUS=pass with the canonical ship flags): MSVC x64 gives a
+            // pointer-to-member of a single-inheritance, non-polymorphic class size 8, so
+            // the previous member-pointer spelling of this struct and the free-function
+            // spelling below are byte-for-byte the same record. Changing it moves nothing.
+            typedef RwBool  (*GetBBoxFn)(const Volume* lpVolume,
+                                         const Matrix44Affine* lpTransform,
+                                         RwBool lbTight, AABBox& lrBBox);
+            typedef Vector3 (*GetBBoxDiagFn)(const Volume* lpVolume);
 
             // The four slots whose parameter types (Interval, Feature, GPInstance,
-            // VolumeLineSegIntersectResult) are NOT reconstructed in this tree yet. They
-            // are carried as a generic member-function pointer so the slot ORDER stays
-            // honest and nothing can call them by accident. rwccore.h:1493-1505 has the
-            // real signatures for whoever lands those types.
-            typedef void (Volume::*UnrecoveredMethodFn)();
+            // VolumeLineSegIntersectResult) cannot be NAMED in this half: their headers
+            // reach the EATech `rw::math::vpu::Vector3` while this one reaches
+            // BrnCommonTypes.h's, and the two are a hard C2011 in one TU. They are BOUND
+            // in VolumeVTables.cpp to real bodies; here they are carried as a generic
+            // function pointer so the slot ORDER stays honest and nothing on this side can
+            // call them with the wrong prototype by accident. rwccore.h:1493-1505 has the
+            // canonical signatures, and that TU's banner documents the one place they are
+            // NOT uniform (getInterval / getMaximumFeature take the direction by value for
+            // BOX and TRIANGLE and by reference for the other four -- a console fact).
+            typedef void (*OpaqueSlotFn)();
 
             struct VTable
             {
-                u32                 muTypeID;               // +0x00  DWARF `typeID`
-                GetBBoxFn           mpfnGetBBox;            // +0x04  DWARF `getBBox`
-                GetBBoxDiagFn       mpfnGetBBoxDiag;        // +0x08  DWARF `getBBoxDiag`
-                UnrecoveredMethodFn mpfnGetInterval;        // +0x0C  DWARF `getInterval`
-                UnrecoveredMethodFn mpfnGetMaximumFeature;  // +0x10  DWARF `getMaximumFeature`
-                UnrecoveredMethodFn mpfnCreateGPInstance;   // +0x14  DWARF `createGPInstance`
-                UnrecoveredMethodFn mpfnLineSegIntersect;   // +0x18  DWARF `lineSegIntersect`
-                UnrecoveredMethodFn mpfnRelease;            // +0x1C  DWARF `release`
-                const char*         mpcName;                // +0x20  DWARF `name` (const RwChar*)
-                u32                 muFlags;                // +0x24  DWARF `flags`
+                u32           muTypeID;               // +0x00  DWARF `typeID`
+                GetBBoxFn     mpfnGetBBox;            // +0x04  DWARF `getBBox`
+                GetBBoxDiagFn mpfnGetBBoxDiag;        // +0x08  DWARF `getBBoxDiag`
+                OpaqueSlotFn  mpfnGetInterval;        // +0x0C  DWARF `getInterval`
+                OpaqueSlotFn  mpfnGetMaximumFeature;  // +0x10  DWARF `getMaximumFeature`
+                OpaqueSlotFn  mpfnCreateGPInstance;   // +0x14  DWARF `createGPInstance`
+                OpaqueSlotFn  mpfnLineSegIntersect;   // +0x18  DWARF `lineSegIntersect`
+                OpaqueSlotFn  mpfnRelease;            // +0x1C  DWARF `release`
+                const char*   mpcName;                // +0x20  DWARF `name` (const RwChar*)
+                u32           muFlags;                // +0x24  DWARF `flags`
             };
 
             // `Volume::vTable` @ +0x40 (rwccore.h:1600). Read by byte offset for the same
@@ -287,15 +308,26 @@ namespace rw
             // -----------------------------------------------------------------------
             RwBool GetBBox(const Matrix44Affine* lpTransform, RwBool lbTight, AABBox& lrBBox) const
             {
-                return (this->*(GetVTable()->mpfnGetBBox))(lpTransform, lbTight, lrBBox);
+                return GetVTable()->mpfnGetBBox(this, lpTransform, lbTight, lrBBox);
             }
 
             // rwccore.h:1719-1723 / DWARF volume.h:1457. Same dispatch, descriptor slot
             // +0x08. No caller in the reconstructed tree yet; landed with GetBBox because
             // the descriptor slot it uses is already typed above.
+            //
+            // ⚠️ THE ONE SLOT WHOSE TWO SPELLINGS DIFFER IN RETURN TYPE, NOT JUST IN
+            // PARAMETER SPELLING. This half returns `Vector3` (== rw::math::vpu::Vector3);
+            // the bodies in vendor/renderware/collision return that directory's `Vec4`.
+            // Both are ONE 16-byte, four-lane row -- MEASURED,
+            // scratchpad/waveQ5/probe_vtbind/measure_vocab.cpp and measure_vocab2.cpp --
+            // and neither is a compiler vector type, so MSVC x64 returns both through the
+            // caller's hidden buffer pointer: the same ABI, lane for lane. The run-time
+            // proof that a diagonal written by the vendor body reads back identically
+            // through this accessor is scratchpad/waveQ5/probe_vtbind/ (built and RUN, not
+            // reasoned about).
             Vector3 GetBBoxDiag() const
             {
-                return (this->*(GetVTable()->mpfnGetBBoxDiag))();
+                return GetVTable()->mpfnGetBBoxDiag(this);
             }
 
             // -----------------------------------------------------------------------

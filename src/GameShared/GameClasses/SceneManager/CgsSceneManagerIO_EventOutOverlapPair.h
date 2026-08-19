@@ -42,13 +42,44 @@ namespace SceneManagerIO
     // with the bases defined by the other per-element queue homes.
     struct EventBaseOutOverlapPair {};
 
+    // ⭐ THE TAIL QWORD WAS NAMED 2026-08-19 (wave Q5 round 4, cluster F1 -- the scene
+    // bridges). It is NOT opaque and it is NOT a qword: it is a single 32-bit float
+    // followed by 4 bytes of tail padding, and cluster F1 landed the element's ONLY
+    // producer, so the field is now attested from both ends:
+    //   * DWARF, verbatim -- references/DecFIGS/dwarfdump/GameShared/GameClasses/
+    //     SceneManager/CgsSceneManagerModuleIO.h:293
+    //         struct CgsSceneManager::SceneManagerIO::OutOverlapPair : public Event {
+    //             VolumeInstanceId mVolInstA;   // :295
+    //             VolumeInstanceId mVolInstB;   // :296
+    //             float32_t        mfPadding;   // :297
+    //         }
+    //   * X360, the producer -- SceneManagerModule::BridgeOverlapGenerationToOutputBuffer
+    //     @0x828BA6A0 stages the record at sp+var_80 and writes exactly three fields:
+    //         0x828BA808  std  r11, var_80      <- GetVolumeInstanceIdByIndex(pair.A)  +0x00
+    //         0x828BA850  std  r11, var_78      <- GetVolumeInstanceIdByIndex(pair.B)  +0x08
+    //         0x828BA844  lfs  f0,  <pair+0x08> ; 0x828BA848  stfs f0, var_70          +0x10
+    //     `lfs`/`stfs` is a SINGLE-precision load/store: 4 bytes at +0x10, carrying
+    //     OverlappingPair::mfPadding (the broad phase's squared centre separation) straight
+    //     through. Bytes +0x14..+0x17 are never written -- they are the struct's tail
+    //     padding to the 8-byte alignment the two ids force, which is why the console's
+    //     stride stays 24.
+    //
+    // sizeof is UNCHANGED at 24 (the u64 tail and an f32 + 4 pad bytes occupy the same
+    // span), so EventQueue_OverlappingPair_128_Construct.cpp:50's
+    // `static_assert(sizeof(OutOverlapPair) == 24)` still holds, and no reader moves:
+    // VehicleManager::StartVehicleContactGeneration @0x8262AEE8 only touches +0x00/+0x08.
+    //
+    // ⚠️ NAME DELTA REPORTED, NOT APPLIED: the DWARF spells the two id members `mVolInstA`
+    // / `mVolInstB`, retiring this header's own "⚠ name inferred" flag on them. They are
+    // NOT renamed here because VehicleManager reads them under the current spellings and
+    // this file is not cluster F1's grant; see scratchpad/waveQ5/f1.owner.md.
+    //
     // BaseEventQueue<OutOverlapPair> element. 8-byte aligned, X360-attested stride 24 (0x18).
-    // First two qwords promoted 2026-08-06 (see the banner); the tail qword stays opaque.
     struct OutOverlapPair : public EventBaseOutOverlapPair
     {
-        VolumeInstanceId muVolumeInstanceIdA;  // +0x00  packed id of overlap volume A (⚠ name inferred)
-        VolumeInstanceId muVolumeInstanceIdB;  // +0x08  packed id of overlap volume B (⚠ name inferred)
-        u64              maOpaquePayload[1];   // +0x10  opaque tail qword (nothing in scope reads it)
+        VolumeInstanceId muVolumeInstanceIdA;  // +0x00  packed id of overlap volume A (DWARF :295 mVolInstA)
+        VolumeInstanceId muVolumeInstanceIdB;  // +0x08  packed id of overlap volume B (DWARF :296 mVolInstB)
+        f32              mfPadding;            // +0x10  DWARF :297 (X360 `stfs f0` @0x828BA848)
     };
 }
 }

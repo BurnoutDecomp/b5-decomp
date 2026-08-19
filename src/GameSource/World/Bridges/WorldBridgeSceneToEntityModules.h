@@ -26,6 +26,15 @@ namespace WorldModule
     //      scene output's contact queues into the module's pre-physics input). ----
     // PHANTOMS (callers in EntityModulePostSceneUpdate @0x827C3C58):
     //   @0x827ABB50 traffic (3-buffer form), @0x827ABD30 trigger.
+    //
+    // ---- STATUS 2026-08-19 (wave Q5 cluster F2) -----------------------------------------
+    //   @0x827ABCB0 prop     BODIED -- WorldBridgePropModule.cpp (the split-out TU that owns
+    //                        all five prop bridges); its WorldLinkStubs gate is already retired.
+    //   @0x827ABC50 traffic  BODIED -- WorldBridgeSceneToEntityModules.cpp (this header's TU).
+    //   @0x827ABBD0 race car PARKED -- the destination setter's parameter type is forked in
+    //                        BrnRaceCarEntityModuleIOQueues.h (a derived struct where the DWARF
+    //                        has a typedef), so the scene's queue pointer does not convert.
+    //                        Measured, with the exact one-line unblock, in that TU's banner.
     void BridgeSceneQueryResultsToTrafficModule_PrePhysics(
         void* lpWorldModule,
         BrnTraffic::BrnTrafficIO::InputBuffer_PostPhysics* lpTrafficInputBuffer_PostPhysics,

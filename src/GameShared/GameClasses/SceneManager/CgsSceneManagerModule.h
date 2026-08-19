@@ -96,13 +96,35 @@ namespace CgsSceneManager
         struct InputBuffer;
         struct InputBuffer_Update;
         struct InputBuffer_Query;
+        // The volume-collision scene events the wave-Q5 round-3 drain legs consume (their
+        // full homes are the CgsSceneManagerIO_Event*.h headers; reference parameters only).
+        struct InEventAddForCollision;
+        struct InEventRemoveForCollision;
+        struct InEventSetPadding;
+        struct InEventClearEntityPadding;
+        struct InEventForceNoPadding;
+        // ADDED 2026-08-19 (wave Q5 / E1a): the culling-group leg's own element type. Its
+        // home is CgsSceneManagerIO_SceneUpdate.h; a reference parameter needs only this.
+        struct InEventSetVolumeInstanceCullingGroup;
     }
+    struct VolumeInstanceId;   // CgsVolumeInstanceId.h (by-value parameter of UpdateCollisionBody -- see note there)
 
     // The overlap-generation input buffer the AddBody producer pushes onto. Its full
     // definition lives in ContactGen/CgsOverlapGenerationModule.h (pulled by the .cpp);
     // this TU's header includes only the STUB SceneManager/CgsOverlapGenerationModule.h,
     // so a forward declaration suffices for the pointer parameter.
     namespace OverlapGenerationIO { struct InputBuffer; }
+
+    // wave Q5 round 4 / cluster F1 (2026-08-19). The three BridgeOverlap* declarations below
+    // are typed on the console's real buffer types. OverlapGenerationIO::OutputBuffer is
+    // already COMPLETE here (ContactGen/CgsOverlapGenerationModule.h, included above, pulls
+    // ContactGen/CgsOverlapGenerationModuleIO.h); the two OverlapCullingIO buffers are NOT --
+    // SceneManager/CgsOverlapCullingModule.h does not pull ContactGen/CgsOverlapCullingModuleIO.h
+    // and pulling it here would cascade the whole culler IO tree into every includer. Pointer
+    // parameters only, so a forward declaration suffices (the AGENTS.md cascade-avoidance
+    // exception); the bridge TU includes both real homes.
+    namespace OverlapGenerationIO { struct OutputBuffer; }
+    namespace OverlapCullingIO    { struct InputBuffer; struct OutputBuffer; }
 
     class SceneManagerModule : public CgsModule::ModuleSingleBuffered
     {
@@ -224,8 +246,19 @@ namespace CgsSceneManager
 
     protected:
         // @ 0x828CF8E8 -- apply a "set volume-instance culling group" scene event.
-        void ProcessSetVolumeInstanceCullingGroupEvent(const SceneManagerIO::InputBuffer&  lrEvent,
-                                                        SceneManagerIO::OutputBuffer*       lpInputBuffer);
+        //
+        // RETYPED 2026-08-19 (wave Q5 / E1a). Both parameters were fitted placeholders
+        // (`const SceneManagerIO::InputBuffer&` / `SceneManagerIO::OutputBuffer*`) chosen
+        // before the element type and the generator input buffer had homes; the body then
+        // had to walk the event through a `const u32*` view. DWARF CgsSceneManagerModule.h:334
+        // spells it `(const InEventSetVolumeInstanceCullingGroup &, InputBuffer *)`, and the
+        // X360 drain @0x828D32C0 passes `mSetVolumeInstanceCullingGroupQueue`'s 16-byte
+        // element (stride 0x10) plus the SAME lpOverlapGenerationInputBuffer every other
+        // Process*Event leg gets. Both types now exist, so the placeholders are retired.
+        // This TU is the only caller and the only definition (no gate anywhere).
+        void ProcessSetVolumeInstanceCullingGroupEvent(
+            const SceneManagerIO::InEventSetVolumeInstanceCullingGroup& lrEvent,
+            OverlapGenerationIO::InputBuffer* lpOverlapGenerationInput);
 
         // @ 0x828BAC90 -- build the culling-group adjacency table from the scene
         // resource allocator (forwards to mCullingGroupManager).
@@ -233,25 +266,111 @@ namespace CgsSceneManager
 
         // @ 0x828BA498 -- push an add-body request onto the overlap-generation input
         // buffer's add-body queue and record the object's culling group. lpAabb is the
-        // 32-byte world box (opaque; block-copied whole into the queued 64-byte event).
+        // 32-byte world box, block-copied whole into the queued 64-byte InAddBody event.
+        //
+        // RETYPED 2026-08-19 (wave Q5 / E1a), taking up the request cluster D1 left in the
+        // body's banner (CgsSceneManagerModule.cpp). The last three parameters were
+        // pre-recovery placeholders that the body had to undo by cast. DWARF
+        // CgsSceneManagerModule.h:322 spells
+        //     AddBody(InputBuffer *, uint32_t, AABBox *, InEventAddForCollision::CullingGroup,
+        //             rw::physics::BodyState, VolumeInstanceId)
+        // and the X360 register usage agrees store-for-store (0x828BA4A4 `ld` x4 off r6 = the
+        // box; 0x828BA4E0 `stw r7` -> InAddBody::mCullGroup +0x20; 0x828BA4DC `stw r5` ->
+        // muIndex +0x24; 0x828BA4E4 `stw r8` -> meBodyState +0x28; 0x828BA4E8 `std r9` ->
+        // mVolumeInstanceID +0x30). `luVolumeHandle` was NEVER a volume handle: it is the
+        // STATIC/FROZEN/ACTIVE tag SceneSweeper::AddObject three-way dispatches on.
+        // The only caller is ProcessAddForCollisionEvent, in this same TU; no gate exists.
         void AddBody(OverlapGenerationIO::InputBuffer* lpOverlapGenerationInputBuffer,
-                     u32 luObjectIndex, const void* lpAabb, u32 luCullingGroup,
-                     u32 luVolumeHandle, u64 lu64Body);
+                     u32 luObjectIndex,
+                     const rw::collision::AABBox* lpAabb,
+                     OverlapGenerationIO::InAddBody::CullingGroup lCullingGroup,
+                     rw::physics::BodyState leBodyState,
+                     VolumeInstanceId lVolumeInstanceId);
 
-        // Bridges driven by UpdateContactGeneration (bodies in this TU's bridge
-        // sibling TU; declared here for the call sites).
-        void BridgeOverlapGenerationToOverlapCulling(SceneManagerIO::OutputBuffer* lpInput,
-                                                     SceneManagerIO::OutputBuffer* lpGenerationOutput);
-        void BridgeOverlapCullerToOutputBuffer(SceneManagerIO::OutputBuffer* lpSceneOutput,
-                                               SceneManagerIO::OutputBuffer* lpCullerOutput);
-        void BridgeOverlapGenerationToOutputBuffer(SceneManagerIO::OutputBuffer* lpSceneOutput,
-                                                   SceneManagerIO::OutputBuffer* lpGenerationOutput);
+        // ---- wave Q5 round 3 (2026-08-19): the volume-collision drain legs, DWARF
+        // CgsSceneManagerModule.h:864-905 (declaration-seeded by the conductor so the two
+        // file-disjoint owners of CgsSceneManagerModule.cpp and CgsSceneManagerModule_wQ5_01.cpp
+        // compile against one header; bodies land in those TUs). Signatures are the DWARF's.
+        // @ 0x828CE898 (.cpp:937)  -- AddForCollision: EntityManager::SetVolumeForCollision +
+        //   AddBody with the volume's world AABBox.
+        void ProcessAddForCollisionEvent(const SceneManagerIO::InEventAddForCollision& lrEvent,
+                                         OverlapGenerationIO::InputBuffer* lpOverlapGenerationInput);
+        // @ 0x828CF828 (.cpp:1045) -- RemoveForCollision: InRemoveBody::AddEvent + clear the flag.
+        void ProcessRemoveForCollisionEvent(const SceneManagerIO::InEventRemoveForCollision& lrEvent,
+                                            OverlapGenerationIO::InputBuffer* lpOverlapGenerationInput);
+        // @ 0x828CF9A8 (.cpp:1113) / 0x828CFA60 (.cpp:1142) / 0x828CFC80 (.cpp:1187) -- the three
+        //   padding events; each ends in UpdateCollisionBody.
+        void ProcessSetPaddingEvent(const SceneManagerIO::InEventSetPadding& lrEvent,
+                                    OverlapGenerationIO::InputBuffer* lpOverlapGenerationInput);
+        void ProcessClearEntityPaddingEvent(const SceneManagerIO::InEventClearEntityPadding& lrEvent,
+                                            OverlapGenerationIO::InputBuffer* lpOverlapGenerationInput);
+        void ProcessForceNoPaddingEvent(const SceneManagerIO::InEventForceNoPadding& lrEvent,
+                                        OverlapGenerationIO::InputBuffer* lpOverlapGenerationInput);
+        // @ 0x828C7528 (.cpp:1223; export hole, headless-IDA dump in scratchpad/waveQ5/q5_out*.json)
+        //   -- re-post a body's world AABBox + padding to the overlap generator's UpdateBody
+        //   queue. DWARF: (int32_t liVolumeInstanceIndex, VolumeInstanceId, InputBuffer*).
+        //   VolumeInstanceId is passed BY VALUE (8-byte id); the owner of the body completes the
+        //   type via CgsVolumeInstanceId.h in the .cpp -- a by-value parameter of an incomplete
+        //   type is legal in a declaration.
+        void UpdateCollisionBody(s32 liVolumeInstanceIndex, VolumeInstanceId lVolumeInstanceId,
+                                 OverlapGenerationIO::InputBuffer* lpOverlapGenerationInput);
+
+        // ---- wave Q5 / cluster RMLEG (2026-08-19): the two ENTITY-WIDE / OWNER-WIDE volume
+        // removals. DWARF CgsSceneManagerModule.h:439 / :442 (console bodies
+        // CgsSceneManagerBridgeFunctions.cpp:430 / :460); X360 @0x828CD9A0 / @0x828CDA70.
+        // Both were in progress/identity.json with NO body anywhere in the tree until now --
+        // they are the volume half of drain leg 4 and the whole of drain leg 5, parked by
+        // round 3 (see the drain's banner). The DWARF's second parameter is the SAME
+        // OverlapGenerationIO::InputBuffer the rest of the drain threads through: both bodies
+        // post an InRemoveBody through it (0x828CDA20 InRemoveBody::AddEvent, reached via
+        // 0x828B02D8 == the non-const InputBuffer::GetRemoveBodyQueue).
+        //   :439  RemoveAllEntityVolumeInstances(uint16_t lu16EntityIndex, InputBuffer*)
+        //   :442  RemoveAllOwnerVolumeInstances(uint8_t lu8Owner,          InputBuffer*)
+        void RemoveAllEntityVolumeInstances(u16 lu16EntityIndex,
+                                            OverlapGenerationIO::InputBuffer* lpOverlapGenerationInput);
+        void RemoveAllOwnerVolumeInstances(u8 lu8Owner,
+                                           OverlapGenerationIO::InputBuffer* lpOverlapGenerationInput);
+
+        // ---- wave Q5 round 4 / cluster F1 (2026-08-19). Bodies in the console's own home,
+        // CgsSceneManagerBridgeFunctions.cpp (every assert in all three bakes that path).
+        //
+        // RETYPED. All three previously declared BOTH parameters `SceneManagerIO::OutputBuffer*`,
+        // which is wrong for four of the six and is why UpdateContactGeneration's call sites
+        // (CgsSceneManagerModule.cpp:564-565, :585, :587) each carry a reinterpret_cast. The
+        // types below are the DWARF's (CgsSceneManagerModule.h:407-428 -- `(OutputBuffer*, const
+        // OutputBuffer*)` / `(InputBuffer*, const OutputBuffer*)`) disambiguated by the accessor
+        // each body actually calls:
+        //   BridgeOverlapGenerationToOverlapCulling @0x828BA538 -> 0x828B07E8 (OverlapCullingIO::
+        //     InputBuffer::GetOverlappingPairQueue, WRITE, baked CgsOverlapCullingModuleIO.h:91)
+        //     + 0x828B0428 (OverlapGenerationIO::OutputBuffer::GetOverlappingPairQueue const,
+        //     READ, baked CgsOverlapGenerationModuleIO.h:266)
+        //   BridgeOverlapCullerToOutputBuffer @0x828BA8C8 -> 0x828AF9A8 (SceneManagerIO::
+        //     OutputBuffer::GetPotentialContactQueue, WRITE, :632) + 0x828B0890
+        //     (OverlapCullingIO::OutputBuffer::GetContactQueue const, READ, :128)
+        //   BridgeOverlapGenerationToOutputBuffer @0x828BA6A0 -> 0x828AFA50 (SceneManagerIO::
+        //     OutputBuffer::GetOverlapPairsQueue, WRITE, :633) + 0x828B0428
+        //
+        // ⚠️ CONDUCTOR, ATOMIC: retyping these INVALIDATES the three WorldLinkStubs.cpp gate
+        // definitions (:2020/:2036/:2052 spell the old parameter pair -> C2511 once this header
+        // lands) and the three call sites' reinterpret_casts. Land the gate deletion + the
+        // call-site fix in the SAME commit as this header. Exact text: scratchpad/waveQ5/f1.owner.md.
+        void BridgeOverlapGenerationToOverlapCulling(
+            OverlapCullingIO::InputBuffer* lpOverlapCullingInputBuffer,
+            const OverlapGenerationIO::OutputBuffer* lpOverlapGenerationOutputBuffer);
+        void BridgeOverlapCullerToOutputBuffer(
+            SceneManagerIO::OutputBuffer* lpSceneOutputBuffer,
+            const OverlapCullingIO::OutputBuffer* lpOverlapCullingOutputBuffer);
+        void BridgeOverlapGenerationToOutputBuffer(
+            SceneManagerIO::OutputBuffer* lpSceneOutputBuffer,
+            const OverlapGenerationIO::OutputBuffer* lpOverlapGenerationOutputBuffer);
 
         // @ 0x828D1F88 -- fan the scene input's InSceneUpdateInterface out into the
-        // sub-modules: allocate / retire entity-manager slots for the add + remove
-        // queues, re-emit the position / radius updates, and drive the collision-volume
-        // legs. Only the ENTITY legs (the ones the broad-phase needs) are reconstructed;
-        // see the body's SCOPE note.
+        // sub-modules: the entity legs (entity-manager slots + the spatial partition), the
+        // triangle-cache / poly-soup legs, and -- as of wave Q5 / E1a (2026-08-19) -- the
+        // VOLUME legs that turn queued AddDynamicVolume / AddVolumeInstance /
+        // AddForCollision events into live scene volume instances and overlap-generation
+        // bodies. The body carries the per-leg SCOPE note, including the three legs that
+        // are still parked and exactly what each one is waiting on.
         void BridgeInputSceneUpdateInterfaceToSubModules(
             OverlapGenerationIO::InputBuffer* lpOverlapGenerationInput,
             SpatialPartitionIO::InputBuffer_Update* lpSpatialPartitionInput,
