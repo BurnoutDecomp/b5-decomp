@@ -560,19 +560,9 @@ bool BrnPhysics::Vehicle::VehicleManager::PrepareData(struct rw::IResourceAlloca
 // and its fourteen deferred deformation-IO clears go live with it. If a stub for it reappears
 // here the link will say so (LNK2005).
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
-void BrnPhysics::PhysicsModule::PropPrepareTypes(class BrnPhysics::PhysicsModuleIO::InputBuffer *)
-{
-    // BOOT-GATE (attribsys wave 2026-07-26): REACHED by the prop stage tail of
-    // WorldModule::Prepare. The physics module is boot-gated inert; quiet no-op.
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "PhysicsModule::PropPrepareTypes: inert [FLAG PC boot gate]\n";
-    }
-}
+// GATE RETIRED 2026-08-19 (wave Q5 round-3 integration): PhysicsModule::PropPrepareTypes @0x825A14A8
+// is REAL in BrnPhysicsModule.cpp -- it hands the prop-physics data handle to the physics PropManager
+// (ProcessInputs_Prepare @0x825E3400, PropManager_wQ5_01.cpp).
 
 // (PhysicsModule::UpdateNetworkCatchup(int,int) stub RETIRED 2026-07-27: the
 // signature was a decompiler misread -- the world drive passes the physics INPUT

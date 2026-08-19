@@ -209,6 +209,11 @@ namespace BrnTrafficIO
         // address at +199776 is load-bearing this batch); adopt the named type when its home lands.
         struct PropToTrafficInterface { u8 muDUMMY; };
 
+        // @ 0x827615F8 (DWARF :274) -- the buffer bring-up CreateIOBuffer<T> runs. LANDED 2026-08-19
+        // (wave Q5 round-3 integration): without it the base IOBuffer::Construct ran instead and
+        // the first BridgeSceneContactsToTrafficModule_PrePhysics (real since round 3) died on
+        // 'mpEvents != NULL' inside SetOverlapPairsQueue -- the never-Constructed-queue IO trap.
+        void  Construct();
         const PotentialContactQueue* GetPotentialContactQueue() const;                           // :277
         void  SetPotentialContactQueue(const PotentialContactQueue* lpPotentialContactQueue);    // :278 W (0x827A9DE0)
 

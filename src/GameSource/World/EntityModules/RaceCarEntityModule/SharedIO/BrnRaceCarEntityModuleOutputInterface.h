@@ -362,10 +362,23 @@ namespace RaceCarEntityModuleIO
     // DWARF :612 -- the player-reset interface (rest position + this-frame reset flag).
     struct RCEntityPlayerResetInterface
     {
-        void Clear();                                       // :615 (own TU)
-        void SetPlayerResetPos(Vector3);                    // :619 (own TU)
-        bool PlayerHasRestThisFrame() const;                // :622 (own TU)
-        Vector3 GetPlayerResetPos() const;                  // :625 (own TU)
+        // The four accessors are header-inline on the console (no X360 symbol, no ledger row);
+        // every reconstructed caller so far had them inlined. Clear() is the form
+        // BrnTrafficIO::InputBuffer_PrePhysics::Construct @0x827615F8 inlines at 0x8276163C..
+        // 0x82761658 (`vspltisw v0,0 ; stvx128 v0 -> mRestPos ; stb 0 -> mbPlayerResetThisFrame`),
+        // landed 2026-08-19 (wave Q5 round-3 integration). The other three stay declaration-only
+        // until a caller needs them.
+        void Clear()                                        // :615
+        {
+            mRestPos.x = 0.0f;
+            mRestPos.y = 0.0f;
+            mRestPos.z = 0.0f;
+            mRestPos.w = 0.0f;
+            mbPlayerResetThisFrame = false;
+        }
+        void SetPlayerResetPos(Vector3);                    // :619
+        bool PlayerHasRestThisFrame() const;                // :622
+        Vector3 GetPlayerResetPos() const;                  // :625
 
     private:
         Vector3 mRestPos;                                   // :629

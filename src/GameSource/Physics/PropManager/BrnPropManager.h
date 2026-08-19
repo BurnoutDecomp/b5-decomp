@@ -635,10 +635,23 @@ namespace Props
         //
         // ⚠️ DELIBERATELY OMITTED (DWARF declares them, the X360 ledger does NOT attest them,
         // so by the AGENTS.md gating rule they are PS3-only or fully inlined and are left
-        // out rather than guessed): ProcessInputs_Prepare (:140), GetInputInterface (:158 --
-        // and note PropManager owns no PropInputInterface member for it to return),
-        // GetStaticFriction (:176), GetDynamicFriction (:179).
+        // out rather than guessed): GetInputInterface (:158 -- and note PropManager owns no
+        // PropInputInterface member for it to return), GetStaticFriction (:176),
+        // GetDynamicFriction (:179).
         // ==================================================================================
+
+        // DWARF :140 / X360 0x825E3400 -- a 3-instruction tail call the ledger never rowed
+        // (an EXPORT HOLE, recovered 2026-08-19 by headless IDA on a private .i64 copy --
+        // scratchpad/waveQ5/ida_pip/out.json): `addi r4,r4,0x2BF8 ; addi r3,r3,0x54 ;
+        // b BaseResourcePtr::CreateFromHandle` == mpPhysicsData.CreateFromHandle(
+        // &lpInput->mpPhysicsData). Its ONLY caller is PhysicsModule::PropPrepareTypes
+        // @0x825A14A8 (WorldModule::Prepare's prop stage tail), i.e. this is how the physics
+        // PropManager receives the prop-physics data handle the world's
+        // PropEntityModule::Prepare posts. Without it mpPhysicsData stays the empty
+        // BaseResourcePtr() and the first physical prop dies in ProcessAddPropInstanceEvents
+        // on 'Can not instance resource pointer' (first car-vs-prop contact, 2026-08-19).
+        // Body: PropManager_wQ5_01.cpp.
+        void ProcessInputs_Prepare( const PropInputInterface* lpInput );
 
         // DWARF :132 / X360 0x825BAC88. Ten instructions: `lwz r11,0x88(r3)` then a
         // count-down loop whose only surviving body is `clrlwi r3,r3,31` -- i.e. the source
