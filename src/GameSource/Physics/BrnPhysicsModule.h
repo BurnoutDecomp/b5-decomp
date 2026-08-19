@@ -216,6 +216,23 @@ namespace Vehicle         { struct VehicleManagerOutputBuffer; } // home BrnVehi
                       CgsSceneManager::SceneManagerIO::InputBuffer_Update* lpSceneInputBuffer,
                       BrnResource::GameDataIO::AllocatorList* lpAllocatorList );
 
+        // ---- DWARF BrnPhysicsModule.h:207 (body BrnPhysicsModule.cpp:472) ----
+        // X360 @0x825A9750 (165 insns). Creates the WORLD's static rigid body -- the body every
+        // prop/part/car world contact names as its other half -- and seats the two module ids
+        // (mWorldRigidBodyId / mWorldEntityId) it is addressed by. Called only from Prepare's
+        // stage 8, with the transient "Simulation" IO buffer that stage allocates.
+        //
+        // ⚠️ THE PARAMETER IS THE **SIMULATION MODULE'S** INPUT BUFFER, NOT PhysicsModuleIO's.
+        // The dwarfdump prints the type unqualified as `InputBuffer *`, exactly as it does for
+        // PropPrepareTypes/UpdateNetworkCatchup below, so the name alone does not choose between
+        // the two. The asm does, twice over: the body calls
+        // `InputBuffer::AppendAddRigidBodyQueue<1>` @0x825A8298 on it (a
+        // CgsPhysics::PhysicsSimulationIO::InputBuffer member) and then hands the same pointer to
+        // mSimulationModule's ProcessInput slot; and Prepare @0x825ADE28 fills it from
+        // `CreateIOBuffer<CgsPhysics::PhysicsSimulationIO::InputBuffer>`. The console's own assert
+        // string names it too: "lpSimulationModuleInputBuffer != NULL".
+        bool PrepareWorldRigidBody( CgsPhysics::PhysicsSimulationIO::InputBuffer* lpSimulationModuleInputBuffer );
+
         // ---- ADDITIVE (attested by WorldModule::Prepare @0x827D53B0 stage 9) ----
         void PropPrepareTypes( PhysicsModuleIO::InputBuffer* lpInputBuffer );
 
