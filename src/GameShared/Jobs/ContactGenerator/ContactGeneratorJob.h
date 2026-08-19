@@ -79,6 +79,11 @@
 
 #include "types.hpp"
 
+// PrimitivePairList::EVolumeType is BuildGPInstance's dispatch parameter, and a nested enum
+// cannot be forward-declared through an incomplete class -- so the real header comes in. It
+// is a leaf (types.hpp only), so this costs the 23-TU includer closure nothing.
+#include "GameShared/GameClasses/SceneManager/Collision/Primitives/CgsPrimitivePairList.h"
+
 #include <cstddef>   // offsetof (the layout gates at the foot of this header)
 
 namespace CgsSceneManager { namespace CgsCollision {
@@ -89,6 +94,12 @@ namespace CgsSceneManager { namespace CgsCollision {
     struct TriangleList;
     struct CollisionResultList;
 } }
+
+// rw::collision::GPInstance -- the narrow-phase "generalised primitive" image
+// (vendor/renderware/collision/GPInstance.hpp, 0xC0 bytes on the console). Pointer-only use
+// in this header, so the forward declaration is the documented exception rather than pulling
+// the whole rw::collision vocabulary into every includer; the .cpp includes the real header.
+namespace rw { namespace collision { struct GPInstance; } }
 
 struct alignas(16) ContactGeneratorJob
 {
@@ -167,19 +178,66 @@ struct alignas(16) ContactGeneratorJob
     // poster (BaseCollisionGenerator::AddPrimitiveListWithTriangleListToStream @0x82811D40)
     // allocated with PrepareNewPrimitiveTestResultsList.
     //
-    // ExecutePrimitiveListWithTriangleList @0x82925908 (849): still a LOUD NAMED GATE — the
-    // primitive-vs-triangle narrow phase itself. ⚠️ ITS SIGNATURE IS NOT THE NO-ARG FORM THIS
-    // HEADER USED TO DECLARE. Measured two ways: Execute's jump table calls it at 0x829268A8
-    // with r4 == lpvJobData untouched (exactly as cases 5 and 13 do for the two workers that
-    // already take a descriptor), and the stream arm at 0x829267AC passes r4 == its stack-local
-    // descriptor. So it takes the descriptor, and the stream arm could not call it faithfully
-    // until this declaration was corrected.
+    // ExecutePrimitiveListWithTriangleList @0x82925908 (849): ⭐⭐ REAL as of wave Q6 cluster
+    // pvt (2026-08-19) — the primitive-vs-triangle narrow phase itself, i.e. the last thing
+    // between a posted prop-vs-world command and a real contact. Per Triangle4 batch it builds
+    // the four lanes' GP triangle images, then walks the descriptor's PrimitivePairList with a
+    // PrimitivePairList::Itterator, builds the pair's A-side GP primitive once, and collides it
+    // against every VALID lane. Results go straight into the descriptor's CollisionResultList
+    // (CollideGPInstances appends; this worker only writes the 16-byte header back).
+    // ⚠️ ITS SIGNATURE IS NOT THE NO-ARG FORM THIS HEADER USED TO DECLARE. Measured two ways:
+    // Execute's jump table calls it at 0x829268A8 with r4 == lpvJobData untouched (exactly as
+    // cases 5 and 13 do for the two workers that already take a descriptor), and the stream arm
+    // at 0x829267AC passes r4 == its stack-local descriptor.
     // ---------------------------------------------------------------------------------------
     void ExecutePrimitiveListWithTriangleList(
         const CgsSceneManager::CgsCollision::PrimitiveListWithTriangleListJobDesc* lpDesc); // @0x82925908
     void ExecutePrimitiveListWithTriangleListStream(); // @0x82926650
 
-    // The other five arms of the switch. Bodies NOT reconstructed -- each is a named
+    // ---------------------------------------------------------------------------------------
+    // ⭐⭐ THE TWO NARROW-PHASE WORKERS ExecutePrimitiveListWithTriangleList delegates to.
+    // DECLARED HERE, DEFINED IN THE SIBLING PARTFILE ContactGeneratorJob_wQ6_01.cpp (wave Q6,
+    // cluster gpi). Neither has a DecFIGS DWARF declaration and neither carries a Feb-2007
+    // canonical form (they are ContactGeneratorJob's own X360-era members), so BOTH SIGNATURES
+    // ARE READ OFF THE ASM — the prologue register map plus the one and only call site:
+    //
+    //  BuildGPInstance @0x829222A0 (258)
+    //     r3 this · r4 the EVolumeType (`addi r11,r4,-1 ; cmplwi r11,4` -> a 5-case switch over
+    //     types 1..5, the exact EVolumeType range) · r5 the pair record's packed primitive data
+    //     (the caller passes Itterator::GetPrimativeA(), a `const void*`) · r6 the GPInstance to
+    //     fill · r7 the caller tag, `clrlwi r7,r7,16` and stored to BOTH mVolumeTag (+0x84) and
+    //     mUserTag (+0x88). Returns void (r3 is clobbered on every arm).
+    //     Type 3 (E_VOLUME_TYPE_4TRIANGLES) is an assert, not an arm: "Are you mad?
+    //     Triangle-Triangle collision" (.cpp:1660); the default arm asserts "false" (:1699).
+    //
+    //  CollideGPInstances @0x829253C8 (244)
+    //     r3 this · r4/r5 the two GP instances (forwarded straight to
+    //     rw::collision::ComputeContactPoints as `const GPInstance&`) · ⚠️ r6 IS SKIPPED —
+    //     f1 carries the third argument (AGENTS gotcha 3: a PPC float parameter consumes its
+    //     GPR slot without using it), the pair record's mfPadding · r7/r8/r9 three halfwords
+    //     `sth`-stored into the 80-byte PrimitiveTestResult at +0x48/+0x4A/+0x4C, i.e.
+    //     muPrimitive0Index / muPrimitive1Index / mu16TestIndex · r10 the CollisionResultList
+    //     it appends into (`lhz 0xC(r10)` = mu16NumResults, `lwz 0(r10)` = mpResults, 80-byte
+    //     stride, then the clamp-to-max-1 the sphere workers also do). Returns void.
+    //     FLAGGED: the three index parameter NAMES are descriptive — they are named for the
+    //     result field each one lands in, which is what the asm proves; no symbol attests them.
+    // ---------------------------------------------------------------------------------------
+    void BuildGPInstance(
+        CgsSceneManager::CgsCollision::PrimitivePairList::EVolumeType leVolumeType,
+        const void*                lpcPrimitiveData,
+        rw::collision::GPInstance* lpInstance,
+        u16                        lu16Tag);            // @0x829222A0
+
+    void CollideGPInstances(
+        const rw::collision::GPInstance* lpGPInstance0,
+        const rw::collision::GPInstance* lpGPInstance1,
+        f32                              lfPadding,
+        u16                              lu16Primitive0Index,
+        u16                              lu16Primitive1Index,
+        u16                              lu16TestIndex,
+        CgsSceneManager::CgsCollision::CollisionResultList* lpResultsList); // @0x829253C8
+
+    // The other four arms of the switch. Bodies NOT reconstructed -- each is a named
     // one-shot boot gate in the .cpp. Declared so the switch can name them and so the closure
     // is enforced at link time rather than discovered at runtime.
     void ExecuteSphereListWithSphereList();            // @0x829215B0
