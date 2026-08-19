@@ -111,10 +111,14 @@ namespace CgsCollision
         // it; CgsGeometric::Box moved from a fork in THIS header to its measured home CgsBox.h,
         // where its Set body (@0x825E6918) now lives.
         //
-        // ⚠️ THE ONE THING THE CONSOLE DOES THAT THIS DOES NOT: CgsGeometric::Box::Set calls
-        // CgsGeometric::Box::IsValid @0x825BEB80 (264 insns) and, on failure, fires a debug-only
-        // diagnostic assert. IsValid has no body anywhere in the tree; the call is OMITTED and
-        // the omission is documented at length in CgsBox.h. It changes no program state.
+        // ⭐ THE CONSOLE'S Box::Set VALIDITY CALL IS LIVE AGAIN (wave Q7, 2026-08-19). This block
+        // used to say it was the one thing the console does that this does not -- that
+        // CgsGeometric::Box::Set's call to CgsGeometric::Box::IsValid @0x825BEB80 (264 insns) was
+        // OMITTED because IsValid had no body anywhere in the tree. IsValid is now a real body in
+        // CgsBox.cpp, Box::Set calls it, and its debug-only diagnostic assert is restored verbatim.
+        // ⚠️ CONSEQUENCE FOR THIS FILE: PrimitivePairListBuilder::AddPrimitive calls Box::Set per
+        // primitive per frame, so this TU now carries an undefined reference to
+        // CgsGeometric::Box::IsValid -- CgsBox.cpp must be mounted or the link fails here.
         //
         // Its ONLY two callers in the whole image are PropManager::DoPartWorldContactGeneration
         // (0x82611F44) and ::DoPropInstanceWorldContactGeneration (0x826124A0) -- measured

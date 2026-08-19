@@ -548,7 +548,9 @@ namespace Vehicle
         // producers, walk the scene's overlap pairs (car-car pairs -> DoCarCarContactGeneration +
         // hinged-part pairs; part-vs-car / wheel-vs-car pairs -> the deformation pair builders),
         // run the per-car and per-traffic world contact generation, then kick the three collide
-        // stream jobs. Caller: PhysicsModule::Update @0x825B0640 (still a link stub).
+        // stream jobs. Caller: PhysicsModule::Update @0x825B0640 is a REAL BODY
+        // (BrnPhysicsModuleUpdateFunctions.cpp, mounted) and drives this every non-catchup frame --
+        // it has NOT been a link stub since the 2026-08-09 conductor wave.
         void StartVehicleContactGeneration(
             const CgsSceneManager::SceneManagerIO::TriangleCacheInterface* lpTriangleCacheInterface,
             const CgsModule::EventQueue<CgsSceneManager::SceneManagerIO::OutOverlapPair, 128>* lpOverlapPairs,
@@ -575,23 +577,41 @@ namespace Vehicle
         // ⭐ ADDED 2026-08-06 (big-five #2): StartVehicleContactGeneration's own contact-generation
         // callees. Signatures per the PS3 DecFIGS mangles (@0x75C0C8 / @0x788190 / @0x789760);
         // ⚠ 0x8261BF28 and 0x825C2EA0 are .ida-exports HOLES -- the PS3 twins are the signature
-        // authority for both. ⚠ FLAG: all four bodies are TRAP STUBS this wave
-        // (BrnVehicleManagerContactGeneration.cpp) -- named, not landed.
+        // authority for both.
+        // ⚠️ STALE FLAG RETIRED 2026-08-19 (wave Q7, cluster `carcar`): this block used to end
+        // "FLAG: all four bodies are TRAP STUBS this wave -- named, not landed". Three of the four
+        // have been real for waves (DoRaceCarWorldContactGeneration since 2026-08-14, IsRaceCarHidden
+        // since 2026-08-11) and DoCarCarContactGeneration is real as of this wave; only
+        // DoTrafficCarWorldContactGeneration is still a trap.
         // ==========================================================================================
 
-        // @0x8261BB38 (PS3 0x75C0C8). Generate the car-vs-car contacts for one overlap pair.
-        // lu16QueueIndex is the custom potential-contact queue the pair's contacts route to --
-        // the driver passes 7 (racecar-racecar), 8 (racecar-traffic) or 13 (traffic-traffic),
-        // exactly the bridge's queue-index/ContactId binding.
-        void DoCarCarContactGeneration( CgsSceneManager::EntityId lGlobalIdA,
-                                        CgsSceneManager::EntityId lGlobalIdB,
-                                        CgsSceneManager::EntityId lPhysicsIdA,
-                                        CgsSceneManager::EntityId lPhysicsIdB,
-                                        BrnPhysics::Deformation::DeformationManager* lpDeformationManager,
+        // ⭐⭐ @0x8261BB38 (251; PS3 0x75C0C8) -- REAL as of 2026-08-19 (wave Q7), body in
+        // BrnVehicleManagerContactGeneration.cpp. Generate the car-vs-car contacts for one overlap
+        // pair: sphere-list-vs-sphere-list into the collide stream when neither car is a SIMPLE
+        // traffic vehicle, box-vs-box into a simple-traffic pair builder when one is (that arm is a
+        // documented PARTIAL -- see the body's banner).
+        //
+        // ⚠️ PARAMETER ORDER, DO NOT "FIX" IT: the u16 comes BEFORE the f32. That is the DWARF's
+        // own declaration order (dwarfdump BrnVehicleManagerContactGeneration.cpp:184) AND what the
+        // X360 asm says once the Xbox 360 parameter save area is read correctly -- 8-byte
+        // doubleword slots, values right-justified, so `lwz arg_54` (producer, slot 0x50+4) and
+        // `lhz arg_5E` (queue id, slot 0x58+6) are CONSECUTIVE parameters, not a skipped slot.
+        // lfTimeStep rides f1 and its slot 0x60 is never written. Swapping them compiles fine and
+        // silently transposes the queue id with the timestep.
+        //
+        // lu16QueueID is the custom potential-contact queue the pair's contacts route to -- the
+        // driver passes 7 (racecar-racecar), 8 (racecar-traffic) or 13 (traffic-traffic), exactly
+        // the bridge's queue-index/ContactId binding. It rides through to the posted command's
+        // UserTagA, which is what AddContactResultsToQueue posts the harvested contacts into.
+        void DoCarCarContactGeneration( CgsSceneManager::EntityId lCarIdA,
+                                        CgsSceneManager::EntityId lCarIdB,
+                                        CgsSceneManager::EntityId lCarPhysicsIdA,
+                                        CgsSceneManager::EntityId lCarPhysicsIdB,
+                                        BrnPhysics::Deformation::DeformationManager* lpDefMan,
                                         BrnPhysics::ContactGenList* lpContactGenList,
                                         CgsSceneManager::CgsCollision::CollisionGenerator* lpContactGenerator,
                                         CgsMemory::SimpleDataStreamProducer* lpSphereSphereStream,
-                                        u16 lu16QueueIndex,
+                                        u16 lu16QueueID,
                                         f32 lfTimeStep );
 
         // @0x825EB140 (PS3 0x788190). Generate one race car's car-vs-world contacts.
@@ -1267,10 +1287,25 @@ namespace Vehicle
         CgsSceneManager::EntityId GetPhysicsEntityIDFromGlobalEntityID(CgsSceneManager::EntityId lGlobalEntityID);
 
         // @0x825B4F50: resolve a packed physics-vehicle id to its physics body. Owner==RACECAR (1)
-        // returns &maRaceCarVehicles[index] (as the VehiclePhysics base); owner==TRAFFIC_VEHICLE (2)
-        // delegates to the contained PhysicalTrafficManager. Returns an untyped body pointer (the two
-        // branch types -- RaceCarPhysics : VehiclePhysics and SimpleVehiclePhysics : ExternalPhysicsBody
-        // -- share no base, matching the X360's raw-pointer return).
+        // returns &maRaceCarVehicles[index]; owner==TRAFFIC_VEHICLE (2) delegates to the contained
+        // PhysicalTrafficManager.
+        //
+        // ⚠️ WRONG COMMENT CORRECTED 2026-08-19 (wave Q7, cluster `carcar`) -- it read: "Returns an
+        // untyped body pointer (the two branch types -- RaceCarPhysics : VehiclePhysics and
+        // SimpleVehiclePhysics : ExternalPhysicsBody -- share no base, matching the X360's
+        // raw-pointer return)". THEY DO SHARE A BASE, and it is the whole point of the accessor:
+        // `struct VehiclePhysics : public SimpleVehiclePhysics` (VehiclePhysics.h:164), so
+        // RaceCarPhysics IS-A SimpleVehiclePhysics and both branches return one. The DWARF types the
+        // console accessor accordingly -- `SimpleVehiclePhysics* GetVehiclePhysics(EntityId)`
+        // (dwarfdump BrnVehicleManager.h:1299) -- and its callers rely on the shared prefix
+        // (DoCarCarContactGeneration reads mbFrozen and mLinearVelocity off either branch with no
+        // per-branch test at all).
+        //
+        // The `void*` return is therefore a TREE ARTEFACT, not console truth, and it is kept ONLY
+        // because narrowing it would change the signature of a definition this cluster does not own
+        // (the body is in BrnVehicleManagerPlayerStats.cpp:167). Callers static_cast to
+        // SimpleVehiclePhysics*. FIX-WHEN that TU is next opened: return SimpleVehiclePhysics* and
+        // drop the casts. (The truncated NAME is the IDA symbol's; that one is deliberate.)
         void* GetVehiclePhysi(EntityId lPhysicsVehicleId);
 
         // @0x825C3040: mark a NETWORK race car hidden for at least luFrames frames (sets its bit in

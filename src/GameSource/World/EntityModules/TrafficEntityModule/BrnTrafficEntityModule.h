@@ -177,10 +177,25 @@ namespace BrnTrafficIO { class InputBuffer_PreScene; class OutputBuffer_PreScene
     // ticks the traffic-vehicle fleet through the scene-update interface. This slice GROWS the
     // committed element-type header (above) ADDITIVELY with the module class itself.
     //
-    // LAYOUT IS DWARF-OPAQUE (FOUNDATION / dossier-DWARF-gap):
-    //   The X360 DWARF DIE for this class emits ONLY its nested enums (reproduced below); it emits
-    //   NO member-field layout for the ~470KB module object. Every X360 method reaches the object
-    //   through raw, asm-attested BYTE offsets (e.g. meState @ +0x300, meRunningState @ +0x308,
+    // LAYOUT IS MODELLED OPAQUELY -- BUT NOT BECAUSE THE DWARF IS SILENT:
+    //   ⚠️ CORRECTED 2026-08-19 (wave Q7, cluster `traffic`). This banner used to claim "the X360
+    //   DWARF DIE for this class emits ONLY its nested enums ... NO member-field layout". THAT WAS
+    //   FALSE, and a wrong comment is a real defect: references/DecFIGS/dwarfdump/GameSource/World/
+    //   EntityModules/TrafficEntityModule/BrnTrafficEntityModule.h carries the FULL ordered member
+    //   list, and it is where the NAME for every attested offset below comes from -- e.g.
+    //   `meState` (:607 -> +0x300), `meStartingUpState` (:608 -> +0x304), `meRunningState`
+    //   (:609 -> +0x308), `meRunningStateToUseAfterStartup` (:610 -> +0x30C),
+    //   `meTearingDownState` (:611 -> +0x310), `EventReceiverQueue<4096,16> mReceiverQueue`
+    //   (:613 -> +0x314), `TrafficLightManager mTrafficLightManager` (:661 -> +0x53790),
+    //   `bool mbPlayingShowtimeMode` (:619 -> +0x717DD),
+    //   `ResourcePtr<BrnTraffic::TrafficData> mpData` (:752 -> +0x71840),
+    //   `int32_t miPerfMon_PrePhysicsUpdate` (:976 -> +0x729FC).
+    //   The banner's CONCLUSION still stands, for a different reason: reconstructing the real
+    //   member layout needs ~60 un-homed sub-aggregates ahead of these (Vehicle[601], Param[400],
+    //   VehicleSoaData, FuzzyBehaviourLogic, ...), so no faithful ORDERED layout is buildable yet.
+    //   Hence the object stays an opaque blob and every method reaches it through raw, asm-attested
+    //   BYTE offsets carrying the DWARF's names in comments (e.g. meState @ +0x300,
+    //   meRunningState @ +0x308,
     //   the maStandard/maStatic vehicle pools at (index+85)<<7 / (index+485)<<7, the static-param
     //   pool at 6*(index+...) , etc.). Because no faithful member layout is recoverable, the object
     //   is modelled here as an OPAQUE fixed storage blob and the recoverable methods are bodied as
@@ -264,8 +279,29 @@ namespace BrnTrafficIO { class InputBuffer_PreScene; class OutputBuffer_PreScene
                                     const BrnDirector::Camera::Camera* lpCamera );
 
         // ---- ADDITIVE (attested by WorldModule::Prepare @0x827D53B0 stage 7) ----
-        // Declaration-only; the body lands with this module's own TU.
+        // @0x8274A578 (252 insns). PARTIAL body in BrnTrafficEntityModule_wQ7_02.cpp
+        // (wave Q7): the six-stage ladder is real; stages 1/3/4 are NAMED one-shot gates.
+        // DWARF :1079 declares it `virtual`; it is non-virtual here because this class is
+        // modelled as an opaque blob with no base sub-object -- retyping it would change the
+        // mangled name and orphan BrnWorldModule.cpp + the WorldLinkStubs gate.
         bool Prepare( BrnTrafficIO::OutputBuffer_Prepare* lpOutputBuffer );
+
+        // ---- ADDITIVE (wave Q7, cluster `traffic`) --------------------------------------
+        // @0x82746A88 (465 insns), DWARF :1266 `bool LoadData(OutputBuffer_Prepare*)`.
+        // The module's resource-acquire ladder, driven by Prepare stage 2. PARTIAL body in
+        // BrnTrafficEntityModule_wQ7_02.cpp: resource stages 0/1 (post LoadTrafficLanes, bind
+        // the reply into mpData @+0x71840) are REAL; stages 2..11 are ONE named gate.
+        bool LoadData( BrnTrafficIO::OutputBuffer_Prepare* lpOutputBuffer );
+
+        // ---- ADDITIVE (wave Q7, cluster `traffic`) --------------------------------------
+        // @0x82720A90 (118 insns), DWARF :1443
+        //   `void HandlePropModuleRequests(const InputBuffer_PrePhysics*, OutputBuffer_PrePhysics*)`
+        // Drains the two prop->traffic rings (traffic-light knock-downs / restores) that
+        // WorldModule::BridgePropModuleToTrafficModule_PrePhysics @0x827AEA70 copied into the
+        // pre-physics input buffer, and applies each to mTrafficLightManager. REAL body in
+        // BrnTrafficEntityModule_wQ7_01.cpp.
+        void HandlePropModuleRequests( const BrnTrafficIO::InputBuffer_PrePhysics* lpInput,
+                                       BrnTrafficIO::OutputBuffer_PrePhysics* lpOutput );
 
         // --- DWARF-attested nested enums (BrnTrafficEntityModule.h:486-559) -------------------
 

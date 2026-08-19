@@ -27,15 +27,25 @@
 //   ExecutePrimitiveListWithTriangleListStream                 @0x82926650  (100) ⭐ PROP leg
 //   ExecutePrimitiveListWithTriangleList                       @0x82925908  (849) ⭐⭐ PROP
 //                                                       NARROW PHASE (wave Q6, cluster pvt)
-// Declared-only (the other four Execute arms; each a named boot gate in the .cpp -- see there
-// for why the switch keeps all twelve cases instead of only the ones landed so far):
+//   ExecuteBoxListWithTriangleList                             @0x829218B8   (44) ⚠️ the
+//                          console's own "Not implemented" arm (wave Q7, cluster arms)
+//   ExecutePrimitivePairList                                   @0x82925798   (92) ⭐⭐ the
+//                          CAR-vs-CAR / body-part pair walk (wave Q7, cluster arms)
+//
+// ⭐ AS OF WAVE Q7 (2026-08-19) NO ARM OF Execute's SWITCH IS A GATE. Its 12-entry jump table
+// covers types 5..16; ELEVEN entries are worker arms and the remaining one (entry 10 == type 15,
+// the ELEVENTH entry -- entry 11 == type 16 is a real arm, ExecuteLineWithTriangleListStream) is
+// the table's own default target. NINE arms live in the .cpp; the other two are declared here and
+// DEFINED IN THE SIBLING PARTFILE ContactGeneratorJob_wQ7_01.cpp (wave Q7, cluster ss) -- job
+// types 7 and 8, the car-vs-car sphere narrow phase, produced by
+// VehicleManager::DoCarCarContactGeneration:
 //   ExecuteSphereListWithSphereList          @0x829215B0 · ...Stream          @0x82923758
-//   ExecuteBoxListWithTriangleList           @0x829218B8
-//   ExecutePrimitivePairList                 @0x82925798
 // Declared here, BODIES IN THE SIBLING PARTFILE ContactGeneratorJob_wQ6_01.cpp (wave Q6,
-// cluster gpi -- both are called by ExecutePrimitiveListWithTriangleList and by nothing else):
+// cluster gpi -- called by ExecutePrimitiveListWithTriangleList AND by ExecutePrimitivePairList):
 //   BuildGPInstance                          @0x829222A0  (258)
 //   CollideGPInstances                       @0x829253C8  (244)
+// ⚠️ ALL THREE .cpp FILES MUST BE MOUNTED TOGETHER. `cl /c` cannot see an unresolved external,
+// so the compile gate is green whether or not the partfiles are in the build; the link is not.
 //
 // ─── LAYOUT ──────────────────────────────────────────────────────────────────────────────────
 // Every offset below is read out of a body, never guessed. Execute's own pseudocode gives the
@@ -88,6 +98,7 @@
 
 namespace CgsSceneManager { namespace CgsCollision {
     struct CollisionJobDescription;
+    struct SphereListWithSphereListJobDesc;
     struct SphereListWithTriangleListJobDesc;
     struct SweptSphereListWithTriangleListJobDesc;
     struct PrimitiveListWithTriangleListJobDesc;
@@ -237,13 +248,49 @@ struct alignas(16) ContactGeneratorJob
         u16                              lu16TestIndex,
         CgsSceneManager::CgsCollision::CollisionResultList* lpResultsList); // @0x829253C8
 
-    // The other four arms of the switch. Bodies NOT reconstructed -- each is a named
-    // one-shot boot gate in the .cpp. Declared so the switch can name them and so the closure
-    // is enforced at link time rather than discovered at runtime.
-    void ExecuteSphereListWithSphereList();            // @0x829215B0
+    // ---------------------------------------------------------------------------------------
+    // ⭐⭐ THE SPHERE-vs-SPHERE ARMS (job types 7 and 8) -- the CAR-vs-CAR narrow phase.
+    // DECLARED HERE, DEFINED IN THE SIBLING PARTFILE ContactGeneratorJob_wQ7_01.cpp (wave Q7,
+    // cluster ss), split only because this header and its .cpp were owned by a concurrent
+    // session in the same wave.
+    //
+    // ⚠️ THE NON-STREAM ARM TAKES THE DESCRIPTOR, and this header used to declare it no-arg --
+    // corrected 2026-08-19 (wave Q7, cluster arms) when the body landed. Measured, not assumed:
+    // 0x829215C4 `mr r18, r4` is the FOURTH instruction of @0x829215B0 and every later read of
+    // the descriptor goes through r18 (`ld 0(r18)` / `lwz 0xF0(r18)` / `lfs 0xF4(r18)`) -- the
+    // body never does the `lwz r30, 0x10(r3)` that the no-arg arms do. Execute leaves r4 ==
+    // lpvJobData live at all twelve `bl`s (nothing writes r4 between 0x829267F8 and the `bctr`),
+    // so the callee's own register map is the only discriminator, exactly as it is for cases
+    // 5/11/13 (descriptor) versus 6/9/12/14/16 (no-arg). The Stream twin @0x82923758 is no-arg
+    // and passes its OWN stack-local descriptor down, like the sphere/swept stream arms.
+    //
+    // ⚠️ If that partfile is absent from the build these two declarations have NO definition
+    // anywhere in the tree -- two LNK2019s that `cl /c` cannot see. There is deliberately no
+    // gate left for them here.
+    // ---------------------------------------------------------------------------------------
+    void ExecuteSphereListWithSphereList(
+        const CgsSceneManager::CgsCollision::SphereListWithSphereListJobDesc* lpDesc); // @0x829215B0 (193)
     void ExecuteSphereListWithSphereListStream();      // @0x82923758
-    void ExecuteBoxListWithTriangleList();             // @0x829218B8
-    void ExecutePrimitivePairList();                   // @0x82925798
+
+    // ---------------------------------------------------------------------------------------
+    // The last two arms, REAL in the .cpp as of wave Q7 (2026-08-19, cluster arms).
+    //
+    // ExecuteBoxListWithTriangleList @0x829218B8 (44) ⚠️ IS THE CONSOLE'S OWN "Not implemented"
+    // ARM -- 44 instructions that load the descriptor's two lists into dead locals and then
+    // fire `CGS_ASSERT(false, "Not implemented")` at ContactGeneratorJob.cpp:841. There is no
+    // box-vs-triangle-list narrow phase anywhere in the X360 image, and nothing posts a type-9
+    // descriptor. Landing it landed the console's refusal, not a worker; see the .cpp banner
+    // (including the one instruction pair it does NOT reproduce, and why).
+    //
+    // ExecutePrimitivePairList @0x82925798 (92) is the type-10 pair walk: per record in the
+    // descriptor's PrimitivePairList, build BOTH sides' GPInstance and collide them. Its
+    // producers are measured and are ALL on the car side (DeformationManager's body-part /
+    // hinged / wheel pair helpers and VehicleManager::DoCarCarContactGeneration); no prop
+    // function appears anywhere in the family. Both take no argument -- Execute's jump table
+    // leaves r4 = lpvJobData live but neither body reads it; each re-reads mpJobDescription.
+    // ---------------------------------------------------------------------------------------
+    void ExecuteBoxListWithTriangleList();             // @0x829218B8 (44)
+    void ExecutePrimitivePairList();                   // @0x82925798 (92)
 
     // LoadPrimitives @0x829210F0 (61) / LoadResultList @0x829211E8 (46) -- the worker's
     // "DMA down" pair (a plain copy on X360; the names are the SPU build's). LoadPrimitives

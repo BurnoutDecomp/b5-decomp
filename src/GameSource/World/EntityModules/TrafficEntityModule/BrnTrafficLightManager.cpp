@@ -19,6 +19,21 @@
 namespace BrnTraffic
 {
 
+namespace
+{
+    // [DIAG] NOT IN THE X360 BINARY. Backing state for Q7Diag_GetLastResolvedLightIndex /
+    // ...InstanceID (declared in BrnTrafficLightManager.h -- see the banner there for why this
+    // is a file-static + free function rather than a member). Written only by the two
+    // GotSmashed/GotRestored bodies below, read only by the [Q7-tlight] one-shot in
+    // BrnTrafficEntityModule_wQ7_01.cpp. No console counterpart.
+    s32 gQ7DiagLastResolvedLightIndex      = -1;
+    u32 gQ7DiagLastResolvedLightInstanceID = 0;
+}
+
+// [DIAG] NOT IN THE X360 BINARY -- see BrnTrafficLightManager.h.
+s32 Q7Diag_GetLastResolvedLightIndex()      { return gQ7DiagLastResolvedLightIndex; }
+u32 Q7Diag_GetLastResolvedLightInstanceID() { return gQ7DiagLastResolvedLightInstanceID; }
+
 TrafficLightState* TrafficLightManager::GetLightState(u32 luInstance)
 {
     CGS_ASSERT(luInstance < KU_MAX_TRAFFIC_LIGHT_INSTANCES,
@@ -50,6 +65,54 @@ void TrafficLightManager::TrafficLightGotSmashed(const TrafficLightCollection* l
         // TrafficLightRuntimeState::muFlags offset). Byte access keeps this slice additive
         // over the placeholder TrafficLightState element type (see BrnTrafficLightManager.h).
         reinterpret_cast<u8*>(lpState)[5] |= 0x80u;
+
+        // [DIAG] NOT IN THE X360 BINARY -- record the resolution for the [Q7-tlight] one-shot.
+        gQ7DiagLastResolvedLightIndex      = liInstanceIndex;
+        gQ7DiagLastResolvedLightInstanceID = luInstanceID;
+    }
+}
+
+// -- TrafficLightGotRestored @ 0x82751A40 (40 insns) --------------------------
+//
+// The paired "this traffic light is back" event: the same id-hash resolution as
+// TrafficLightGotSmashed, then CLEAR the smashed bit instead of setting it. Measured
+// instruction for instruction (the address has no .ida-exports JSON -- exporter-run gap,
+// gotcha 6 -- so it was dumped with headless idat on a private .i64 copy,
+// scratchpad/waveQ7/ida_tl/out.json, fn_0x82751A40):
+//
+//   cmplwi r31,0 / bne              -> assert("lpTrafficLightData")            :0x1BB (443)
+//   bl GetInstanceIndexForInstanceID
+//   cmpwi  r4,-1 / beq  loc_82751AD8-> a missing id is silently ignored
+//   bl GetLightState
+//   cmplwi r31,0 / bne              -> assert("lpState")                        :0x1C3 (451)
+//   lbz    r11,5(r31)
+//   clrlwi r11,r11,25               -> KEEP bits 25..31 == muFlags &= 0x7F      (the ONE
+//                                      instruction that differs from the smashed twin,
+//                                      which sets 0x80 instead)
+//   stb    r11,5(r31)
+//
+// The baked d:\p4 path + the two line numbers are dropped per project policy; the assert
+// STRINGS are the X360 rodata literals verbatim.
+void TrafficLightManager::TrafficLightGotRestored(const TrafficLightCollection* lpTrafficLightData,
+                                                  u32 luInstanceID)
+{
+    CGS_ASSERT(lpTrafficLightData, "lpTrafficLightData");
+
+    const s32 liInstanceIndex = lpTrafficLightData->GetInstanceIndexForInstanceID(luInstanceID);
+    if (liInstanceIndex != -1)
+    {
+        TrafficLightState* lpState = GetLightState(static_cast<u32>(liInstanceIndex));
+        CGS_ASSERT(lpState, "lpState");
+
+        // Clear the smashed bit (0x80) of the record's flags byte at +5, leaving the low
+        // 7 bits (the active-state mask the corona render legs consume) untouched. Byte
+        // access mirrors the smashed twin above and keeps this slice additive over the
+        // placeholder TrafficLightState element type.
+        reinterpret_cast<u8*>(lpState)[5] &= 0x7Fu;
+
+        // [DIAG] NOT IN THE X360 BINARY -- record the resolution for the [Q7-tlight] one-shot.
+        gQ7DiagLastResolvedLightIndex      = liInstanceIndex;
+        gQ7DiagLastResolvedLightInstanceID = luInstanceID;
     }
 }
 

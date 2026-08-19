@@ -40,10 +40,16 @@ namespace CgsCollision
     // BaseCollisionGenerator::RunCollideSphereListWithSphereListStream @0x82811C00 (+0x00
     // producer / +0xF4 0.0f / +0xF8 NULL — this Run takes NO debug reader, matching the DWARF
     // Prepare(SimpleDataStreamProducer*) single-argument signature at h:125 — / +0xFF type 8);
-    // consumed by ContactGeneratorJob::ExecuteSphereListWithSphereListStream @0x82923758 (loud
-    // named gate). Its poster (AddSphereListWithSphereListToStream @0x828119F0, the car-car leg)
-    // is NOT reconstructed this wave — DoCarCarContactGeneration is still a gate, so this stream
-    // carries zero commands at runtime and its Run returns null before dispatching.
+    // consumed by ContactGeneratorJob::ExecuteSphereListWithSphereListStream @0x82923758.
+    //
+    // ⭐ THE WHOLE LEG IS LIVE AS OF WAVE Q7 (2026-08-19) — every clause of the old banner here
+    // ("its poster is NOT reconstructed … DoCarCarContactGeneration is still a gate … this stream
+    // carries zero commands … its Run returns null before dispatching") is now FALSE. The poster
+    // AddSphereListWithSphereListToStream @0x828119F0 landed in
+    // CgsCollisionGenerator_CollideStreams.cpp; its producer VehicleManager::
+    // DoCarCarContactGeneration @0x8261BB38 is a real body; and the consumer @0x82923758 is a real
+    // body in ContactGeneratorJob_wQ7_01.cpp. The stream carries one command per overlapping
+    // non-simple-traffic car pair per frame.
     // StreamCommand shape is DWARF h:108-113 ({A, B, padding, result list}); declared with the
     // family for the Create* factory's sizeof, same widening contract as the siblings.
     // =============================================================================================

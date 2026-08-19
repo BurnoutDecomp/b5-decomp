@@ -63,10 +63,22 @@ namespace BrnTraffic
         u8 muNumCoronas;    // +1
     };
 
-    // The transform expander lives in the BrnTraffic namespace (RECOVERED sibling in
-    // class:BrnTraffic; body in that TU). Referenced by CalcInstanceTransform: it expands
-    // a packed Vector3Plus (xyz = position, w = Y rotation angle) into a full affine.
-    Matrix44Affine ExpandPosPlusYRotToTransform(const Vector3Plus& lPosAndYRot);
+    // ExpandPosPlusYRotToTransform @ 0x823610B8 (183 insns) -- expands a packed Vector3Plus
+    // (xyz = position, w = Y rotation angle) into a full affine. Referenced by
+    // CalcInstanceTransform.
+    //
+    // ⚠️ DWARF homes it in SharedClasses/Traffic/BrnTrafficSharedMaths.h:81, and the
+    //    console's own baked assert file literal agrees ("..\..\..\SharedClasses\Traffic/
+    //    BrnTrafficSharedMaths.h", lines 83/84). That header has no mirror in this tree, so
+    //    the BODY currently lives in BrnTrafficLightCollection.cpp beside its only in-tree
+    //    caller (landed 2026-08-19, wave Q7). Move both this declaration and that body to a
+    //    real BrnTrafficSharedMaths.h the day one lands.
+    //
+    // ⚠️ The parameter is `const Vector3Plus&` here and in the retail mangled name (AEB);
+    //    the DWARF DIE spells it by value. The reference form is the committed one -- do not
+    //    "correct" it, it would change the mangled name. The parameter NAME is the console's
+    //    own (`lPosPlusYRot`, from the two assert literals).
+    Matrix44Affine ExpandPosPlusYRotToTransform(const Vector3Plus& lPosPlusYRot);
 
     // DWARF BrnTrafficLightCollection.h:78.
     struct TrafficLightCollection
@@ -108,7 +120,9 @@ namespace BrnTraffic
         u32 GetInstanceType(u32 luInstance) const;
         // GetTrafficLightType @ 0x8274F4A0 -- &mpaTrafficLightTypes[luType].
         const TrafficLightType* GetTrafficLightType(u32 luType) const;
-        // GetCoronaState -- mpaCoronaTypes[luCorona] as ETrafficLightState (body: another TU).
+        // GetCoronaState @ 0x8274F510 -- mpaCoronaTypes[luCorona] as ETrafficLightState.
+        // NOT an inline: a real out-of-line symbol (32 insns), asserts baked at :222/:223.
+        // Body in BrnTrafficLightCollection.cpp (landed 2026-08-19, wave Q7).
         ETrafficLightState GetCoronaState(u32 luCorona) const;
         // GetCoronaPosition @ 0x82753820 -- mpaCoronaPositions[luCorona] (validated).
         Vector3 GetCoronaPosition(u32 luCorona) const;

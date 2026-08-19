@@ -157,25 +157,62 @@ namespace Props
 
         // -----------------------------------------------------------------------------------
         // [DIAG] NOT IN THE X360 BINARY. Wave-Q6 bring-up probe, opt-in via BRN_PROP_DIAG.
-        // ONE-SHOT across BOTH bodies -- the question it answers is "does a car-vs-jointed-prop
-        // contact reach this response at all?", which is a yes/no, and these two run per contact
-        // per frame once a pole is being leaned on. The getenv latch is a function-local static
-        // so it costs one predicted branch, never a per-contact syscall.
+        // ONE-SHOT PER ARM -- the question it answers is "does a car-vs-jointed-prop contact reach
+        // this response at all?", which is a yes/no, and these two run per contact per frame once
+        // a pole is being leaned on. The getenv latch is a function-local static so it costs one
+        // predicted branch, never a per-contact syscall.
+        //
+        // ⚠️ TWO LATCHES, ONE PER JOINT KIND -- and that is a fix, not a preference. It was a
+        // SINGLE TU-scope bool until 2026-08-19 (wave Q7), which meant a run that leaned could
+        // never report whether TILT also ran: the first LEAN contact consumed the only latch and
+        // the TILT arm went silent for the rest of the run. That is exactly how the wave-Q6
+        // campaign closed with the TILT arm UNEXERCISED and nobody able to tell. Now the first
+        // LEAN contact and the first TILT contact each print once, independently.
+        //
+        // ⚠️⚠️ WHY THIS LINE STAYED SILENT FOR A WHOLE CAMPAIGN: LEAN/TILT IS A SPEED GATE, and it
+        // is a slow-speed one. PropEntityModule::GetDesiredState hands a prop E_LEANING only when
+        //     mfLeanThreshold < carSpeedMPH <= mfMoveThreshold
+        // and the shipped PROPS/PROPPHYSICS.BUNDLE says all 35 jointed types (of 219) carry
+        // leanThreshold 0.0 with moveThreshold 20 / 35 / 40 / 70 mph. So a full-throttle 80-130 mph
+        // drive classifies EVERY prop E_PHYSICAL, mu8JointIndex stays KU_NOT_JOINTED, IsJointed()
+        // is false, and the contact always takes the ApplyPropRaceCarCollisionImpulse arm instead
+        // of either of these two bodies. It was never a code defect.
+        // ⚠️ TWO TRAPS THAT LOOK LIKE DEFECTS AND ARE NOT:
+        //   * prop type 6 (a TILT type, and the FIRST prop on the straight junkyard route) ships
+        //     moveThreshold 0.0, so GetDesiredState early-returns E_PHYSICAL and it can NEVER
+        //     lean. "We hit a jointed prop and nothing happened" is correct behaviour there.
+        //   * the [prop-diag] "speed=" field is the NORMAL COMPONENT
+        //     (|Dot(carVel, contactNormal)| * MPS_TO_MPH), NOT the car speed GetDesiredState is
+        //     fed (GetRaceCarSpeed == mfSpeedMPH). A glancing 130 mph pass logs speed=0.10 and
+        //     still classifies E_PHYSICAL. Do not read one for the other.
+        // PROVEN AT RUN TIME 2026-08-19: this line fired twice, on two different lamppost
+        // instances (both type 53, joint=LEAN), at 7.6 mph and at 22.1 mph, with no new assert --
+        // evidence and the throttle/steer schedules that reached it are in scratchpad/waveQ7/
+        // leantest/. TILT types (3,4,6,10,29,30,38,51,52,58) all have a <= 20 mph window, tighter
+        // than the type 53 that was reached, so a TILT run needs a slower schedule still.
         // -----------------------------------------------------------------------------------
-        bool gbQ6LeanDiagFired = false;
+        bool gbQ6LeanDiagFiredLean = false;
+        bool gbQ6LeanDiagFiredTilt = false;
+
+        enum EQ6JointKind { E_Q6_JOINT_LEAN, E_Q6_JOINT_TILT };
 
         void
         Q6LeanDiag( const CgsPhysics::PhysicsSimulationIO::InAddPotentialContact* lpOutContact,
                     bool                                                          lbPropIsEntityA,
                     u32                                                           luPropTypeId,
-                    const char*                                                   lpcJointType )
+                    EQ6JointKind                                                  leJointKind )
         {
             static const bool sbPropDiag = ( getenv( "BRN_PROP_DIAG" ) != 0 );
-            if ( !sbPropDiag || gbQ6LeanDiagFired || CgsDev::Log::gpDebugPrint == 0 )
+
+            bool& lrbFired = ( leJointKind == E_Q6_JOINT_LEAN ) ? gbQ6LeanDiagFiredLean
+                                                                : gbQ6LeanDiagFiredTilt;
+            const char* const lpcJointType = ( leJointKind == E_Q6_JOINT_LEAN ) ? "LEAN" : "TILT";
+
+            if ( !sbPropDiag || lrbFired || CgsDev::Log::gpDebugPrint == 0 )
             {
                 return;
             }
-            gbQ6LeanDiagFired = true;
+            lrbFired = true;
 
             // Same id split the Tilt body's UpdatePropEvent tail uses (see step 7 there).
             const CgsPhysics::RigidBodyId lPropRigidBodyId(
@@ -223,7 +260,7 @@ namespace Props
 
         // [DIAG] NOT IN THE X360 BINARY -- the wave-Q6 one-shot. This is the ONLY reader of
         // lbPropIsEntityA in this function; see §A.
-        Q6LeanDiag( lpOutContact, lbPropIsEntityA, lpPropInstance->GetTypeId(), "LEAN" );
+        Q6LeanDiag( lpOutContact, lbPropIsEntityA, lpPropInstance->GetTypeId(), E_Q6_JOINT_LEAN );
 
         // `lfs f0, flt_82001CC0(==0.0f)` ; `stfs f0, 0x48(r8)` @0x8260FBA0/0x8260FBA8.
         // +0x48 in InAddPotentialContact is mRestitution (CgsPhysicsSimulationIO_Events.h:143,
@@ -516,7 +553,7 @@ namespace Props
         f32                                                      lfTimeStep )
     {
         // [DIAG] NOT IN THE X360 BINARY -- the wave-Q6 one-shot, shared with the Lean arm.
-        Q6LeanDiag( lpOutContact, lbPropIsEntityA, lpPropInstance->GetTypeId(), "TILT" );
+        Q6LeanDiag( lpOutContact, lbPropIsEntityA, lpPropInstance->GetTypeId(), E_Q6_JOINT_TILT );
 
         // `stfs f0(flt_82001CC0 == 0.0f), 0x48(r16)` @0x826108F8/0x82610900 -- mRestitution.
         lpOutContact->mRestitution = 0.0f;

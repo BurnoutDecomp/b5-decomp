@@ -107,10 +107,47 @@ namespace BrnTraffic
         void TrafficLightGotSmashed(const TrafficLightCollection* lpTrafficLightData,
                                     u32 luInstanceID);
 
+        // TrafficLightGotRestored @ 0x82751A40 (40 insns) -- ADDED 2026-08-19 (wave Q7, cluster
+        // `traffic`). The exact twin of TrafficLightGotSmashed with ONE instruction different:
+        // `clrlwi r11,r11,25` (clear the top bit) where the smashed twin's tail is a single
+        // `ori r11,r11,0x80` (0x82751A30, between `lbz r11,5(r31)` and `stb r11,5(r31)`) --
+        // i.e. muFlags &= 0x7F instead of muFlags |= 0x80. There is NO `clrrwi` in the smashed
+        // twin; the .cpp banner has always had this right. Assert strings + their
+        // baked source lines: "lpTrafficLightData" :443 (0x1BB), "lpState" :451 (0x1C3).
+        //
+        // PROVENANCE NOTE (gotcha 6): this address has NO .ida-exports JSON and NO ledger row --
+        // an exporter-run gap, not a missing function. The body was recovered by the wave-Q7
+        // scout with headless idat on a PRIVATE copy of the .i64 (scratchpad/waveQ7/ida_tl/),
+        // and is corroborated structurally by its already-verified smashed twin. Ask the
+        // conductor to add the ledger row.
+        void TrafficLightGotRestored(const TrafficLightCollection* lpTrafficLightData,
+                                     u32 luInstanceID);
+
     private:
         // The state array begins at offset 0 of the manager (record base == this).
         TrafficLightState maLightStates[KU_MAX_TRAFFIC_LIGHT_INSTANCES];
     };
+
+    // ------------------------------------------------------------------------
+    // [DIAG] NOT IN THE X360 BINARY. Wave-Q7 tripwire, opt-in behind BRN_PROP_DIAG at the
+    // reader's side. TrafficLightGot{Smashed,Restored} are the only code in the tree that
+    // can turn a persistent traffic-light INSTANCE ID into the dense instance INDEX
+    // (TrafficLightCollection::GetInstanceIndexForInstanceID lives on the Junctions/ copy of
+    // the collection type, which the traffic module's own TUs cannot include -- see the
+    // duplicate-type report BL-1 in scratchpad/waveQ7/traffic.owner.md). The consumer that
+    // prints the "[Q7-tlight] ... -> light instance I smashed" line therefore reads the
+    // index back through this accessor instead of resolving it a second time.
+    //
+    // Deliberately a FREE FUNCTION over a file-static, NOT a new member: TrafficLightManager
+    // is embedded inside TrafficEntityModule's opaque storage blob at a fixed console offset,
+    // so growing it is a non-additive change to a committed type (see BL-4). No layout,
+    // no behaviour, no console symbol.
+    // DELETE-WHEN: the [Q7-tlight] diagnostic is retired, or the two collection headers are
+    // merged so the module TUs can resolve the index themselves.
+    // Returns -1 when no light has been resolved yet (also the "id not found" value).
+    s32  Q7Diag_GetLastResolvedLightIndex();
+    // The instance ID that produced it (0 when nothing has been resolved yet).
+    u32  Q7Diag_GetLastResolvedLightInstanceID();
 }
 
 #endif  // BRN_TRAFFIC_LIGHT_MANAGER_H

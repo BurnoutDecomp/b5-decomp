@@ -152,7 +152,18 @@ namespace Vehicle
     // Resolve a packed physics-vehicle id to its physics body. The owner byte selects the source:
     //   RACECAR (1)        -> &maRaceCarVehicles[index]  (the RaceCarPhysics : VehiclePhysics record)
     //   TRAFFIC_VEHICLE(2) -> PhysicalTrafficManager::GetVehiclePhysics on the contained subobject.
-    // The X360 returns a raw pointer; the two branch types share no common base, so this returns void*.
+    // The X360 returns a raw pointer.
+    //
+    // ⚠️ CORRECTED 2026-08-19 (wave Q7): THE TWO BRANCH TYPES DO SHARE A BASE. `struct
+    // VehiclePhysics : public SimpleVehiclePhysics` (VehiclePhysics.h), so RaceCarPhysics IS-A
+    // SimpleVehiclePhysics and both branches return one. The DWARF types the console accessor
+    // `SimpleVehiclePhysics* GetVehiclePhysics(EntityId)` (BrnVehicleManager.h:1299), and
+    // DoCarCarContactGeneration relies on exactly that shared prefix -- it reads mbFrozen (+0x70)
+    // and mLinearVelocity (+0x50) off either branch with no per-branch test.
+    // The void* return is KEPT for now only because narrowing it changes this definition and its
+    // declaration together. FIX-WHEN someone owns both files in one pass: narrow the return to
+    // SimpleVehiclePhysics* and drop the two static_casts at the call site in
+    // DoCarCarContactGeneration (BrnVehicleManagerContactGeneration.cpp).
     //
     // ⭐ THE TRAFFIC BRANCH IS REAL AS OF 2026-08-03. The old note here read: "the contained
     // PhysicalTrafficManager subobject @ +44768 is modelled as opaque padding in this layout (it

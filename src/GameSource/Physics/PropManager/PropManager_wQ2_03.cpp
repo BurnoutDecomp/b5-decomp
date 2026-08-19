@@ -235,13 +235,13 @@
 //          E_COLLISIONJOB_PRIMITIVE_LIST_WITH_TRIANGLE_LIST_STREAM = 12, whose worker
 //          ContactGeneratorJob::ExecutePrimitiveListWithTriangleListStream @0x82926650 is now a
 //          real body too -- so a command posted from this leg is actually drained.
-//   * ⛔ THE ONE SURVIVING RUNTIME GATE ON THIS PATH (a definition, so the exe LINKS -- it just
-//     produces no contacts): ContactGeneratorJob::ExecutePrimitiveListWithTriangleList
-//     @0x82925908 (849), the primitive-vs-triangle NARROW PHASE the type-12 stream arm delegates
-//     to -- ContactGeneratorJob.cpp:1092 (MOUNTED, bat:1124), still a loud
-//     BRN_CONTACT_JOB_GATE. Its closure is two un-reconstructed workers, ::BuildGPInstance
-//     @0x829222A0 and ::CollideGPInstances @0x829253C8. Expect "Warning!! prop fell out of the
-//     world" to survive this integration for exactly that reason.
+//   * ⭐ NO GATE SURVIVES ON THIS PATH. This entry used to call
+//     ContactGeneratorJob::ExecutePrimitiveListWithTriangleList @0x82925908 (849) -- the
+//     primitive-vs-triangle NARROW PHASE the type-12 stream arm delegates to -- the one surviving
+//     runtime gate, and to expect "Warning!! prop fell out of the world" to survive because of it.
+//     It has been REAL since wave Q6 round 3 (2026-08-19), in ContactGeneratorJob.cpp, and the two
+//     workers it delegates to landed with it: ::BuildGPInstance @0x829222A0 and
+//     ::CollideGPInstances @0x829253C8, in the sibling partfile ContactGeneratorJob_wQ6_01.cpp.
 //   * ✅ RESOLVED, was "INHERITED, still open": PropManager_wQ_03.cpp's UpdateTriangleCache and
 //     PropManager_wQ2_02.cpp's Begin/End no longer have gate bodies -- all three retired in
 //     BrnPhysicsConductorGates.cpp (:471 / :489 now read GATE RETIRED), and both partfiles are
