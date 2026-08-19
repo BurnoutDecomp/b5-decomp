@@ -20,25 +20,44 @@
 // ⚠️ ODR NOTE FOR THE CONDUCTOR -- RE-MEASURED 2026-08-19 (wave Q6). Begin and End STILL HAVE
 //    their one-shot conductor-gate bodies in
 //    b5-decomp/src/GameSource/Physics/BrnPhysicsConductorGates.cpp, and the line numbers this
-//    banner used to carry (":485 / :492 / :514") HAD DRIFTED. The measured ranges today, banner
-//    line through closing brace:
+//    banner used to carry (":485 / :492 / :514") HAD DRIFTED. Re-measured AGAIN 2026-08-19 (wave
+//    Q6, cluster pstream) -- the UpdateTriangleCache range had drifted a second time. Today,
+//    banner/comment line through closing brace:
 //        :471-476  PropManager::BeginPropWorldContactGeneration  @0x82628CB0 (89)
 //        :478-483  PropManager::EndPropWorldContactGeneration    @0x82628E18 (37)
-//        :522-527  PropManager::UpdateTriangleCache              @0x826119A0 (116)
+//        :515-522  PropManager::UpdateTriangleCache              @0x826119A0 (116)
+//                  (the `void` at :517; :515-516 is its two-line comment)
 //    All three are DELIBERATELY LEFT IN PLACE. AGENTS.md's convention is that a gate is retired
 //    only in the same commit that MOUNTS the real body in tools/build/build_game_exe.bat, and that
 //    script lists BrnPhysicsConductorGates.cpp (:1230) but lists NEITHER PropManager_wQ_03.cpp NOR
-//    this file -- its `rem` at :1777-1780 says so in as many words. So there is no LNK2005 today;
+//    this file -- its `rem` at :1783-1787 says so in as many words. So there is no LNK2005 today;
 //    it fires the instant either partfile joins the source list. `cl /c` cannot see this --
 //    reported, not "fixed".
-//    ⭐ THE `rem`'s REASON IS NOW STALE: it says these two TUs stay unmounted "because their
-//    contact-gen legs are parked". As of wave Q6 the legs are NOT parked -- both
-//    DoPart/DoPropInstanceWorldContactGeneration are landed in the already-mounted
-//    PropManager_wQ2_03.cpp. What blocks the mount now is two LINK HOLES, listed in that file's
-//    LINK-LEVEL FACTS block (PrimitivePairListBuilder::AddPrimitive(Volume*) @0x82814AB8 and
-//    BaseCollisionGenerator::AddPrimitiveListWithTriangleListToStream @0x82811D40).
+//    ⭐⭐ THE `rem`'s REASON IS STALE TWICE OVER, AND BOTH BLOCKERS ARE NOW CLOSED.
+//    (a) It says these two TUs stay unmounted "because their contact-gen legs are parked". As of
+//        wave Q6 round 1 the legs are NOT parked -- both DoPart/DoPropInstanceWorldContact-
+//        Generation are landed in the already-mounted PropManager_wQ2_03.cpp.
+//    (b) Its current wording says what still blocks the mount is "the primitive-stream family,
+//        Create/RunCollidePrimitiveListWithTriangleListStream". THAT LANDED 2026-08-19 (wave Q6,
+//        cluster pstream) in the mounted CgsCollisionGenerator.cpp, together with the family's
+//        poster AddPrimitiveListWithTriangleListToStream, the descriptor type
+//        (JobDescription/CgsPrimitiveListWithTriangleListStreamJobDesc.h), the job-type-12 enum
+//        member, and the type-12 worker (ContactGeneratorJob::ExecutePrimitiveListWith-
+//        TriangleListStream @0x82926650).
+//    ⇒ BOTH THIS FILE AND PropManager_wQ_03.cpp ARE LINK-READY NOW. Verified by compiling each
+//      into a private obj dir and cross-checking every external UNDEF against a definition AND
+//      against the bat's mount list (scratchpad/waveQ6/probe_pstream/obj/*.sym.txt): zero
+//      unresolved callees remain. Mount both, and retire the three gates above in the SAME commit.
+//    ⚠️ ONE RESIDUAL, AND IT IS A RUNTIME ONE, NOT A LINK ONE: PrimitivePairListBuilder::
+//      AddPrimitive(const rw::collision::Volume*, ...) @0x82814AB8 is still a LOUD NAMED GATE
+//      (CgsPrimitivePairListBuilder.cpp, mounted bat:867). It has a definition, so the exe links;
+//      but while it is gated a prop's collision volumes never become collision primitives, so the
+//      pair list this file's Begin leg posts is EMPTY. Expect [Q6-worldc] to print non-zero counts
+//      with "prop fell out of the world" still firing until that switch lands.
 //    GetTriangleCacheSlotAndRadius has NO gate and no stub anywhere (re-grepped
-//    BrnPhysicsConductorGates.cpp and WorldLinkStubs.cpp) -- this is its only definition.
+//    BrnPhysicsConductorGates.cpp and WorldLinkStubs.cpp) -- this is its only definition, and it
+//    is what PropManager_wQ_03.cpp's UpdateTriangleCache calls, so the two partfiles mount as a
+//    PAIR (wQ_03 alone would take an LNK2019 on it).
 //
 // GROUNDING. Every body below was re-derived this round from the RAW `assembly` array of
 // .ida-exports/BURNOUT_X360_ARTIST.XEX/<addr>.json (Hex-Rays pseudocode NOT consulted; its
@@ -359,18 +378,23 @@ bool PropManager::GetTriangleCacheSlotAndRadius( PropEntityID lPropEntityId,
 //         Landed 2026-08-19 in the already-mounted PropManager_wQ2_03.cpp.
 //       ✅ PropManager::DoPropInstanceWorldContactGeneration   @0x826120E8 -- NO LONGER A HOLE.
 //         Landed 2026-08-19 in the same file.
-//       ⛔ BaseCollisionGenerator::CreateCollidePrimitiveListWithTriangleListStream
-//         (CgsCollisionGenerator.h, X360 0x82811DD0, 98 insns) and
-//         ::RunCollidePrimitiveListWithTriangleListStream (X360 0x82811F58, 80 insns) --
-//         STILL declaration-only. Both bodies are complete and compile-proven, parked at
-//         scratchpad/waveQ2/parked/CgsCollisionGenerator_wQ2_PrimitiveStream.cpp, blocked on ONE
-//         type (PrimitiveListWithTriangleListStreamJobDesc, beside the already-mounted
-//         CgsPrimitiveListWithTriangleListJobDesc.h) plus ONE enum member
-//         (E_COLLISIONJOB_PRIMITIVE_LIST_WITH_TRIANGLE_LIST_STREAM = 12 in
-//         CgsCollisionJobDescription.h; its type-12 worker is already a named gate at
-//         ContactGeneratorJob.cpp:230). ⚠️ That park's banner claims the descriptor "has no home
-//         in this tree" -- STALE: the non-Stream sibling header/.cpp exist and are mounted
-//         (bat:2864). Only the *Stream* variant is missing.
+//       ✅ BaseCollisionGenerator::CreateCollidePrimitiveListWithTriangleListStream
+//         (X360 0x82811DD0, 98 insns) and ::RunCollidePrimitiveListWithTriangleListStream
+//         (X360 0x82811F58, 80 insns) -- NO LONGER HOLES. Landed 2026-08-19 (wave Q6, cluster
+//         pstream) in the already-mounted CgsCollisionGenerator.cpp, together with the family's
+//         poster ::AddPrimitiveListWithTriangleListToStream @0x82811D40 (35, whose loud gate in
+//         CgsCollisionGenerator_StreamStubs.cpp was deleted in the same change) and the two things
+//         that had blocked them for three waves: the descriptor type
+//         (JobDescription/CgsPrimitiveListWithTriangleListStreamJobDesc.h) and the enum member
+//         E_COLLISIONJOB_PRIMITIVE_LIST_WITH_TRIANGLE_LIST_STREAM = 12. The type-12 worker
+//         (ContactGeneratorJob::ExecutePrimitiveListWithTriangleListStream @0x82926650, 100)
+//         landed with them, so a command posted from this file is actually drained.
+//         ⛔ WHAT IS STILL GATED, AND IT IS THE RUNTIME RESIDUAL OF THIS WHOLE LEG:
+//         ContactGeneratorJob::ExecutePrimitiveListWithTriangleList @0x82925908 (849) -- the
+//         primitive-vs-triangle narrow phase the stream arm delegates to. Its closure is two
+//         un-reconstructed workers, ::BuildGPInstance @0x829222A0 and ::CollideGPInstances
+//         @0x829253C8. Until they land, prop commands reach a NAMED gate rather than producing
+//         contacts.
 //     VERIFIED-BODIED and therefore NOT holes (checked, so the list above is exhaustive):
 //     BaseCollisionGenerator::Prepare(void*,s32) and ::Finish (CgsCollisionGenerator.cpp:68/:86),
 //     SimpleDataStreamProducer::Begin (CgsSimpleDataStreamProducer_Begin.cpp) and ::End
@@ -491,9 +515,19 @@ void PropManager::BeginPropWorldContactGeneration(
     // BRN_CONDUCTOR_GATE and no prop-vs-world contact was ever generated.
     // ⚠️ READ IT AS A PAIR WITH THAT WARNING. `props`/`parts` non-zero here and the fall-out
     // warning still firing means the contacts are being POSTED but not RESOLVED -- which is
-    // exactly what the two remaining link holes (PrimitivePairListBuilder::AddPrimitive(Volume*)
-    // and AddPrimitiveListWithTriangleListToStream, both reported in PropManager_wQ2_03.cpp's
-    // LINK-LEVEL FACTS) would produce. `parts` staying 0 while `props` climbs is scout.md's
+    // exactly what the ONE remaining RUNTIME GATE on this path would produce:
+    // ContactGeneratorJob::ExecutePrimitiveListWithTriangleList @0x82925908 (849,
+    // GameShared/Jobs/ContactGenerator/ContactGeneratorJob.cpp:1092, mounted bat:1124), the
+    // primitive-vs-triangle NARROW PHASE that the type-12 stream arm delegates to. It is a loud
+    // named BRN_CONTACT_JOB_GATE with a definition, so the exe links -- it just produces no
+    // contacts. Its own closure is ::BuildGPInstance @0x829222A0 and ::CollideGPInstances
+    // @0x829253C8.
+    // ✅ NOT the explanation any more (both landed 2026-08-19, wave Q6 round 2):
+    // BaseCollisionGenerator::AddPrimitiveListWithTriangleListToStream is a REAL BODY in the
+    // mounted CgsCollisionGenerator.cpp, and PrimitivePairListBuilder::AddPrimitive(const
+    // rw::collision::Volume*) @0x82814AB8 is a real body in the mounted
+    // CgsPrimitivePairListBuilder.cpp (bat:867) -- the pair list it posts is no longer empty.
+    // `parts` staying 0 while `props` climbs is scout.md's
     // honest unknown 1 firing: no PART rigid body has ever reached the simulation.
     //
     // The latch is evaluated ONCE -- a getenv per frame would be a syscall on the hot path -- and

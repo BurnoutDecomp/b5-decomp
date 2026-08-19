@@ -240,6 +240,35 @@ namespace Vehicle
         // here to avoid breaking the committed callers).
         const RoadContact& GetRoadContact() const { return mRoadContact; }
 
+        // ⭐ ADDED 2026-08-19 (wave Q6 / the jointed lean+tilt prop response). The wheel's
+        // road-relative LONGITUDINAL contact speed -- lane .x of mSpeedAndMassOnWheelVariables,
+        // broadcast into all four lanes.
+        //
+        // SIGNATURE IS DWARF-AUTHORITATIVE: references/DecFIGS/dwarfdump/GameSource/Physics/
+        // VehicleManager/VehiclePhysics/Wheel.h:457 reads `VecFloat GetRoadLongSpeed() const;`
+        // (source line Wheel.h:557), directly above its GetRoadLatSpeed sibling at :460/:561.
+        //
+        // WHICH LANE IS NOT INFERRED -- three independent attestations agree:
+        //   1. the X360 consumer PropManager::HandleContactWithLeanProp @0x8260FEA8 does
+        //      `addi r11, r26, 0x360` / `lvx128 v0, r0, r11` / `vspltw v12, v0, 0`, and
+        //      0x360 == maWheels(+0x130) + 2*0xE0 + 0x70 == maWheels[eRearLeftWheel]
+        //      .mSpeedAndMassOnWheelVariables; the `vspltw ...,0` is lane .x broadcast.
+        //      HandleContactWithTiltProp repeats it verbatim at 0x82610A48/0x82610A8C.
+        //   2. this tree's own WRITER, VehiclePhysics.cpp:735-737, seats
+        //      `mSpeedAndMassOnWheelVariables.x = lrIn.mfLongSpeed`.
+        //   3. this tree's own READER, BrnVehicleOutputInterface_UpdateRaceCarState.cpp:356,
+        //      publishes `mfRoadLongSpeed = lrWheel.mSpeedAndMassOnWheelVariables.x`.
+        //
+        // Header-inline like the console (Wheel.h:557 is an SDK-style accessor the X360
+        // compiler folds -- it has no address of its own). Spelled as an explicit four-lane
+        // brace init rather than vpu::Splat so this widely-included header pulls in no new
+        // dependency; VecFloat/Vector4 already arrive through BrnCommonTypes.h above.
+        VecFloat GetRoadLongSpeed() const
+        {
+            const f32 lfRoadLongSpeed = mSpeedAndMassOnWheelVariables.x;
+            return VecFloat{ lfRoadLongSpeed, lfRoadLongSpeed, lfRoadLongSpeed, lfRoadLongSpeed };
+        }
+
         // C05 road-noise API (PRESERVED). Reconciled onto a real register lane: UpdateRoadNoise's
         // stvx128 lands in the wheel's leading SIMD region; the force-variable register's w lane is
         // the flagged home so the standalone mfRoadNoise no longer shifts the layout. No external

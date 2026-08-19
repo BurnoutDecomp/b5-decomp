@@ -4,56 +4,40 @@
 // Partfile of the TU GameSource/Unity/../Physics/PropManager/BrnPropManager.cpp
 // (breakable-props wave Q, ROUND 2, group 07, 2026-08-18). Folds back into BrnPropManager.cpp.
 //
-// GROUP 07 WAS THREE FUNCTIONS. ONE LANDS HERE; TWO ARE PARKED, each on declarations that do not
-// exist in the tree today (verified by grep and by a negative compile probe, not by repeating a
-// spec):
+// GROUP 07 WAS THREE FUNCTIONS. ONE LANDS HERE; the other two used to be PARKED.
+// ✅ NOTHING IS PARKED ANY MORE -- re-grepped 2026-08-19 (wave Q6 round 2). This block previously
+// read "TWO ARE PARKED ... eight declarations, each PROVEN absent"; every one of those eight
+// blockers was supplied and both bodies landed:
 //
 //   * PropManager::FindPartIndex               @0x82605E10  -- BODIED BELOW (205 insns).
-//   * PropManager::HandleContactWithLeanProp   @0x8260FB60  -- PARKED,
-//         scratchpad/waveQ2/parked/PropManager_07_HandleContactWithLeanProp.cpp
-//   * PropManager::HandleContactWithTiltProp   @0x826108B8  -- PARKED,
-//         scratchpad/waveQ2/parked/PropManager_07_HandleContactWithTiltProp.cpp
-//     Both parked files carry COMPLETE bodies plus a banner naming every missing declaration and
-//     the evidence for it. THE FULL BLOCKER LIST -- eight declarations, each PROVEN absent by the
-//     two negative compile probes scratchpad/waveQ2/probe_wq2_07/probe_api.cpp and probe_api2.cpp
-//     (not by repeating a spec, and not by grep alone):
-//       game headers (2)   ExternalPhysicsBody::GetLinearMomentum(VecFloat) const   [DWARF
-//                            ExternalPhysicsBody.h:262 -- unavoidable: the console inlines
-//                            `v*m + F*dt + J` and all three members are `protected`]
-//                          Vehicle::Wheel::GetRoadLongSpeed() const
-//                            [== mSpeedAndMassOnWheelVariables.x; the asm reads lpRaceCar+0x360
-//                             == maWheels[eRearLeftWheel] + 0x70]
-//       vendor rw-math (6) rw::math::vpu::Matrix44AffineFromAxisRotationAngle(Vector3, VecFloat)
-//                            [the tree has only MakeRotationX/Y/Z; the ARTIST bodies inline this
-//                             as a ~130-instruction 2pi-reduction + sin/cos minimax + Rodrigues
-//                             block at 0x82610140..0x82610370]
-//                          GetVector3_YAxis() / GetVector3_ZAxis()
-//                          CompLessThan / CompGreaterThan  (VecFloat and Vector3 forms)
-//                          struct Mask3  + its three lane broadcasts
-//                          Select(Vector3, Vector3, MaskScalar)
-//     The vendor six sit in b5-decomp/vendor/renderware/include/rw/math/vpu/, which this wave may
-//     not edit -- so these are a conductor request, not something a lander can route around.
+//   * PropManager::HandleContactWithLeanProp   @0x8260FB60  -- BODIED in
+//         GameSource/Physics/PropManager/PropManager_wQ6_02.cpp (MOUNTED, bat:1802).
+//   * PropManager::HandleContactWithTiltProp   @0x826108B8  -- BODIED in the same file.
+//     The parked copies under scratchpad/waveQ2/parked/ are SUPERSEDED (their banners say so).
+//     What unblocked them, for the record -- the two game-header declarations
+//     (ExternalPhysicsBody::GetLinearMomentum(VecFloat) const, DWARF ExternalPhysicsBody.h:262;
+//     Vehicle::Wheel::GetRoadLongSpeed() const == mSpeedAndMassOnWheelVariables.x) and the six
+//     rw-math vendor helpers (Matrix44AffineFromAxisRotationAngle, GetVector3_YAxis/ZAxis,
+//     CompLessThan/CompGreaterThan in both the VecFloat and Vector3 forms, struct Mask3 with its
+//     lane broadcasts, and Select(Vector3, Vector3, MaskScalar)) all exist now.
 //
-//     ⚠️ THE ROUND-1/EARLIER FRAMING OF THIS PARK WAS INCOMPLETE and is corrected here: it named
-//     three blockers; there are eight. It also implied the axis-angle builder was the whole story.
-//     Separately, and contrary to what a "rodata-blocked" reading would suggest, the FOUR file-scope
-//     VecFloat constants both bodies need are NOT blocked -- they are zero in the image and written
-//     by CRT-init thunks at 0x82C5E910..0x82C5E9AC, and a headless IDA read recovers them:
-//     KVF_ROTATION_FACTOR 0.07f / KVF_MAX_ROTATION 0.05f / KVF_PENETRATION_RESOLUTION_FACTOR 0.5f /
-//     KVF_MOMENTUM_RESOLUTION_FACTOR 0.5f (names from the DecFIGS file-scope list,
-//     BrnPropManager.cpp:1755-1758). Details in the Lean parked file's banner, section C.
+//     Still true and worth keeping: the FOUR file-scope VecFloat constants both bodies need are
+//     zero in the image and written by CRT-init thunks at 0x82C5E910..0x82C5E9AC; a headless IDA
+//     read recovered them -- KVF_ROTATION_FACTOR 0.07f / KVF_MAX_ROTATION 0.05f /
+//     KVF_PENETRATION_RESOLUTION_FACTOR 0.5f / KVF_MOMENTUM_RESOLUTION_FACTOR 0.5f (names from the
+//     DecFIGS file-scope list, BrnPropManager.cpp:1755-1758).
 //
-// ⚠️ LINK, for the conductor (gotcha 12) -- ONE hole, not two (round-2 MUST_FIX; re-grepped
-//    2026-08-18 across b5-decomp/src AND b5-decomp/vendor):
-//      * BrnPhysics::ExternallySimulatedBody::Translate(Vector3) -- DECLARED at
-//        GameSource/Physics/PhysicsUtilities/ExternallySimulatedBody.h:105, NO definition anywhere.
-//        THAT is the parked bodies' link hole.
+// ⚠️ LINK, for the conductor (gotcha 12) -- re-grepped 2026-08-19 across b5-decomp/src AND
+//    b5-decomp/vendor; the one hole this park used to carry is CLOSED:
+//      * ✅ BrnPhysics::ExternallySimulatedBody::Translate(Vector3) -- BODIED at the wave-Q6
+//        round-2 integration in GameSource/Physics/PhysicsUtilities/ExternallySimulatedBody.cpp
+//        (declared at ExternallySimulatedBody.h:105). It was the landed bodies' last link hole.
 //      * ✅ BrnPhysics::ExternalPhysicsBody::GetLocalVelocity IS BODIED -- a real, complete body at
 //        GameSource/Physics/PhysicsUtilities/ExternalPhysicsBody.cpp:839 (the WORLD_SPACE /
 //        BODY_SPACE branch over mLinearVelocity + mAngularVelocity x r), not a stub. It is NOT a
-//        link hole; do NOT write a second definition for it (an LNK2005 `cl /c` cannot see). The
-//        earlier banner named both, and the parked files' own banners carry the same wrong claim.
-//    `cl /c` is green on the parks; a link is not. FindPartIndex below has no such callee.
+//        link hole; do NOT write a second definition for it (an LNK2005 `cl /c` cannot see). An
+//        earlier banner named it as one, and the superseded parked files carry that wrong claim.
+//    FindPartIndex below has no such callee.
 //
 // ⚠️ ODR / LINK NOTE FOR THE CONDUCTOR. Grepped before writing: FindPartIndex has NO other
 //    definition anywhere in b5-decomp/src or b5-decomp/vendor -- not a real body, not a trap stub,

@@ -2,9 +2,11 @@
 
 #include "GameShared/GameClasses/Memory/CgsLinearMalloc.h"   // CgsMemory::LinearMalloc::Malloc / GetAlignment
 #include "GameShared/GameClasses/Core/CgsAssert.h"           // CGS_ASSERT
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // gpDebugPrint (the named gate below)
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // gpDebugPrint ([DIAG] block only)
+#include "SDKs/EATech/rwcollision/volume_debug_access.h"     // rw::collision::Volume + EVolumeType
 
-#include <cmath>   // std::sqrt
+#include <cmath>     // std::sqrt
+#include <stdlib.h>  // [DIAG] getenv -- BRN_PROP_DIAG latch only
 
 // CgsSceneManager::CgsCollision::PrimitivePairListBuilder — the writer bodies. Construct/Prepare
 // bring up the packed-pair blob; AddCollisionHeader stamps the 16-byte record header; AddPrimitive /
@@ -138,66 +140,247 @@ namespace CgsCollision
     }
 
     // =========================================================================
-    // AddPrimitive(const rw::collision::Volume*, Matrix44Affine, f32, u16)
-    // @0x82814AB8 (140 insns) -- ⛔ LOUD NAMED GATE, NOT A RECONSTRUCTION.
+    // AddPrimitive(const rw::collision::Volume*, Matrix44Affine, f32, u16) @0x82814AB8
+    // (140 insns, 0x82814AB8..0x82814CE4)
     //
-    // Added 2026-08-19 (wave Q6, cluster B) so that the two prop-vs-world contact
-    // generation legs that landed the same wave
-    // (PropManager::DoPart/DoPropInstanceWorldContactGeneration,
-    //  GameSource/Physics/PropManager/PropManager_wQ2_03.cpp) LINK. The bat's own
-    // doctrine is that "LNK2019 resolves before /OPT:REF discards" (:544), so a
-    // referenced-but-bodyless callee breaks the exe even when nothing calls it.
+    // ⭐⭐ BODIED 2026-08-19 (wave Q6 round 2, cluster `addprim`). This REPLACES the loud
+    // conductor gate that stood here from 2026-08-19 round 1 -- the gate was the sole
+    // definition, so there is no second definition to retire and no LNK2005 risk.
     //
-    // ⚠️ THIS IS THE WAVE'S RESIDUAL DEFECT AND IT IS DELIBERATELY LOUD. While this
-    // gate stands, a prop's collision volumes never become collision primitives, so
-    // the pair list a smashed prop hands the contact generator is EMPTY and its parts
-    // keep free-falling ("Warning!! prop fell out of the world"). Nothing about that
-    // is silent: the one-shot line below names the address the moment the first prop
-    // volume is submitted.
+    // WHY IT MATTERS AT RUNTIME: this is the function that turns a prop's (or a part's)
+    // rwcollision volumes into packed CgsGeometric collision primitives. While it was a
+    // gate the pair list every prop handed the contact generator was EMPTY, so a smashed
+    // prop's parts had nothing to collide the world with and fell forever
+    // ("Warning!! prop fell out of the world", PropManager_wQ2_01.cpp:930).
     //
-    // WHY IT IS A GATE AND NOT A BODY -- the closure, measured this wave on a private
-    // .i64 copy (scratchpad/waveQ6/ida_worldc/out.json), NOT inferred:
-    //   * the console body is a 5-case switch on the volume's rwcollision type id
-    //     (`lwz 0x40(volume)` -> the per-TYPE descriptor -> `lwz 0(desc)` == typeID,
-    //     `addi -1`, jump table jpt_82814B08 = {0x82814C04, 0x82814B88, 0x82814CAC,
-    //     0x82814B20, 0x82814C48} -- read out of the image, not guessed);
-    //   * case typeID 1 SPHERE  -> AddPrimitive(Sphere*) @0x82814508  -- IN TREE (below);
-    //   * case typeID 2 CAPSULE -> sub_82814600 (29 insns) == AddPrimitive(Capsule*):
-    //     AddCollisionHeader(E_VOLUME_TYPE_CAPSULE=2), AllocateMemory(0x20), a 32-byte
-    //     copy, ++mu16NumTests. NO CgsGeometric::Capsule TYPE EXISTS IN THE TREE.
-    //   * case typeID 3 TRIANGLE -> the DEFAULT arm 0x82814CAC: the console REFUSES it,
-    //     firing "Tried to add a RW volume that wasn't a "... at
-    //     CgsPrimitivePairListBuilder.cpp:319 (`li r5, 0x13F`);
-    //   * case typeID 4 BOX     -> CgsGeometric::Box::Set @0x825E6918 (269 insns, ALSO
-    //     bodyless in this tree -- only modelled inline at
-    //     BrnDeformableObject_BBox.cpp:243) then sub_82814570 (35 insns) ==
-    //     AddPrimitive(Box*): header type 4, AllocateMemory(0x50), five 16-byte rows;
-    //   * case typeID 5 CYLINDER -> sub_82814678 (36 insns) == AddPrimitive(Cylinder*):
-    //     header type 5, AllocateMemory(0x50), four 16-byte rows + two f32 at +0x40/+0x44.
-    //     NO CgsGeometric::Cylinder TYPE EXISTS IN THE TREE.
-    // So closing this needs: two new CgsGeometric primitive types, three sibling
-    // overloads, and Box::Set -- its own cluster. A partial switch landed here would
-    // omit whole volume kinds with nothing in the log to say so, which is precisely
-    // what this project's faithfulness rules forbid. Reported, not guessed.
+    // ITS ONLY TWO CALLERS in the whole image are PropManager::DoPartWorldContactGeneration
+    // (bl @0x82611F44) and ::DoPropInstanceWorldContactGeneration (bl @0x826124A0) --
+    // measured xrefs; both were landed in round 1 in PropManager_wQ2_03.cpp.
     //
-    // ⚠️ GOTCHA 3 IS ALREADY BAKED INTO THE SIGNATURE: the f32 padding rides f1 AND
-    // consumes r6's GPR slot, so the u16 tag arrives in r7. Four parameters, not five.
+    // SIGNATURE, off the prologue (raw `assembly`, 0x82814AB8.json):
+    //     r3 = this        (`mr r31, r3` @0x82814AD8)
+    //     r4 = the volume  (`mr r11, r4` @0x82814AD0)
+    //     r5 = the transform -- a by-value Matrix44Affine riding a hidden pointer; every
+    //          arm reads it as four 16-byte rows at +0x00/+0x10/+0x20/+0x30
+    //     f1 = the padding (`fmr f31, f1` @0x82814AD4, saved because the arms clobber f1)
+    //     r7 = the tag     (`mr r30, r7` @0x82814ADC, forwarded as r6 to every leaf)
+    // ⚠️ GOTCHA 3: the f32 rides f1 AND consumes r6's GPR slot, so the u16 tag lands in
+    // r7. FOUR parameters, not five -- a signature read off the GPRs alone would invent a
+    // dead fifth.
+    //
+    // THE DISPATCH (`lwz r10,0x40(volume)` -> the per-TYPE descriptor, `lwz r10,0(r10)`
+    // -> its typeID, `addi r10,r10,-1`, `cmplwi r10,4`, `bgt default`, then the 5-entry
+    // jump table jpt_82814B08). The table was READ OUT OF THE IMAGE on a private .i64 copy
+    // twice (round 1 and again this wave, scratchpad/waveQ6/ida_addprim/out.json):
+    //     jpt_82814B08 = { 0x82814C04, 0x82814B88, 0x82814CAC, 0x82814B20, 0x82814C48 }
+    // indexed by typeID-1, i.e.
+    //     1 SPHERE   -> 0x82814C04 -> AddPrimitive(Sphere*)   @0x82814508
+    //     2 CAPSULE  -> 0x82814B88 -> AddPrimitive(Capsule*)  sub_82814600
+    //     3 TRIANGLE -> 0x82814CAC == THE DEFAULT LABEL: the console REFUSES it
+    //     4 BOX      -> 0x82814B20 -> Box::Set @0x825E6918 then AddPrimitive(Box*)
+    //                                 sub_82814570
+    //     5 CYLINDER -> 0x82814C48 -> AddPrimitive(Cylinder*) sub_82814678
+    // typeID 0 (NULL) and 6 (AGGREGATE) take the `bgt` out to the same default label --
+    // 0-1 wraps to 0xFFFFFFFF and 6-1 == 5, both > 4 unsigned. So EVERY volume kind the
+    // console has is covered here: four build a primitive, everything else asserts. No arm
+    // is silently omitted.
+    //
+    // THE VOLUME FIELDS EACH ARM READS (console offsets; the names are
+    // SDKs/EATech/rwcollision/volume_debug_access.h's, whose layout is the DWARF's):
+    //     +0x00..+0x3F  the volume's own relative transform -- NOT used here; every arm
+    //                   uses the CALLER's lTransform (the volume's frame times the prop's
+    //                   pose, already composed by the two callers)
+    //     +0x44         the 12-byte type-specific union: BoxSpecificData{hx,hy,hz} for
+    //                   BOX; its x lane doubles as the capsule/cylinder half-height
+    //     +0x50         float32_t radius (sphere / capsule / cylinder)
     // =========================================================================
-    void PrimitivePairListBuilder::AddPrimitive(const ::rw::collision::Volume* /*lpVolume*/,
-                                                Matrix44Affine /*lTransform*/,
-                                                f32 /*lfPadding*/,
-                                                u16 /*lu16PrimitiveTag*/)
+    void PrimitivePairListBuilder::AddPrimitive(const ::rw::collision::Volume* lpVolume,
+                                                Matrix44Affine lTransform,
+                                                f32 lfPadding,
+                                                u16 lu16PrimitiveTag)
     {
-        do { static bool s_bLogged = false;
-        if (!s_bLogged) { s_bLogged = true;
-            if (CgsDev::Message::gxMessageFilterFlags & 1)
+        // `lwz r10,0x40(volume) ; lwz r10,0(r10)` -- the per-TYPE descriptor's leading
+        // word IS its typeID. On this host the +0x40 slot holds the 4-byte type enum and
+        // Volume::GetVTable() recovers the console's descriptor as gVolumeVTable[enum]
+        // (volume_debug_access.h's documented host representation), so GetType() is the
+        // exact same two loads.
+        const u32 luTypeID = lpVolume->GetType();
+
+        // [DIAG] NOT IN THE X360 BINARY. Opt-in one-shot (set BRN_PROP_DIAG): the first
+        // volume this builder is ever asked to convert, and which arm it took.
+        // HOW TO READ IT (re-measured 2026-08-19, wave Q6 round 2 -- the earlier text here
+        // named the wrong TUs and the wrong bat lines):
+        //   * The two prop-vs-world legs that call this -- DoPartWorldContactGeneration
+        //     (bl @0x82611F44) and DoPropInstanceWorldContactGeneration (bl @0x826124A0) --
+        //     are BODIED in PropManager_wQ2_03.cpp (MOUNTED, bat:1810), and their
+        //     dispatcher PropManager_wQ2_02.cpp is MOUNTED too as of this integration
+        //     (bat:1816, paired with PropManager_wQ_03.cpp at bat:1817). So the whole chain
+        //     into this function is live and the line IS EXPECTED TO FIRE on the first boot
+        //     that reaches a prop.
+        //   * A SILENT log therefore means the callers never ran (no prop/part event
+        //     reached BeginPropWorldContactGeneration), NOT that this switch is broken --
+        //     a different failure, and the two are easy to confuse.
+        //   * ⚠️ The line firing does NOT mean prop contacts are being RESOLVED. The
+        //     surviving runtime gate is downstream of here:
+        //     ContactGeneratorJob::ExecutePrimitiveListWithTriangleList @0x82925908 (849,
+        //     ContactGeneratorJob.cpp:1092, MOUNTED bat:1124) is still a loud named
+        //     BRN_CONTACT_JOB_GATE, so a correctly built pair list still yields no
+        //     contacts and "prop fell out of the world" can keep printing.
+        // The getenv latch is evaluated once; a per-call getenv would be a syscall on the
+        // contact-generation path.
+        {
+            static const bool sbPropDiag = (getenv("BRN_PROP_DIAG") != 0);
+            static bool       sbLoggedFirstVolume = false;
+            if (sbPropDiag && !sbLoggedFirstVolume && CgsDev::Log::gpDebugPrint != 0)
+            {
+                sbLoggedFirstVolume = true;
                 *CgsDev::Log::gpDebugPrint
-                    << "conductor gate: PrimitivePairListBuilder::AddPrimitive(rw::collision::Volume*)"
-                       " @0x82814AB8 (140) not reconstructed -- prop/part collision volumes are NOT"
-                       " being turned into collision primitives, so prop-vs-world contact generation"
-                       " posts EMPTY pair lists (wave Q6 cluster B residual; closure = 3 sibling"
-                       " overloads + CgsGeometric::Capsule/Cylinder + CgsGeometric::Box::Set"
-                       " @0x825E6918)\n"; } } while (0);
+                    << "[Q6-addprim] first rw::collision::Volume converted: typeID "
+                    << luTypeID << " (1=sphere 2=capsule 3=triangle/UNSUPPORTED 4=box "
+                       "5=cylinder), tag " << static_cast<u32>(lu16PrimitiveTag) << "\n";
+            }
+        }
+
+        switch (luTypeID)
+        {
+        // -----------------------------------------------------------------------------
+        // case 1 SPHERE -- loc_82814C04. Build a packed 16-byte sphere from the caller's
+        // transform position and the volume's radius, then append it.
+        //     0x82814C1C  lvx128 v13,[sphere]            read the (uninitialised) local
+        //     0x82814C24  lvlx   v0,[volume+0x50]        the radius
+        //     0x82814C2C  vspltw v0,v0,0                 broadcast it  (a VecFloat)
+        //     0x82814C30  lvx128 v12,[transform+0x30]    the centre row
+        //     0x82814C34  vrlimi128 v12,v13,1,0          keep the old w  -> SetPosition
+        //     0x82814C38  vrlimi128 v12,v0,1,0           w := radius     -> SetRadius
+        //     0x82814C3C  stvx128 v12,[sphere]
+        //     0x82814C40  bl     AddPrimitive(Sphere*)
+        // ⚠️ The two vrlimi pairs are CgsGeometric::Sphere::SetPosition(Vector3) and
+        // ::SetRadius(VecFloat) inlined -- both are DWARF-declared (CgsSphere.h:47/:51)
+        // header inlines with no standalone X360 body. Neither is DECLARED in this tree's
+        // CgsSphere.h yet (it carries only GetPosition/GetRadius, which do have X360
+        // bodies), and that header is outside this cluster's ownership, so the two lane
+        // writes are spelled directly on the named member here. REPORTED as a follow-up
+        // for CgsSphere.h's owner: adding the two DWARF setters would let this arm read
+        // like the console does.
+        // -----------------------------------------------------------------------------
+        case ::rw::collision::E_VOLUMETYPE_SPHERE:
+        {
+            CgsGeometric::Sphere lSphere;
+            lSphere.mPositionRadius.x = lTransform.Pos().x;   // SetPosition(transform.wAxis)
+            lSphere.mPositionRadius.y = lTransform.Pos().y;
+            lSphere.mPositionRadius.z = lTransform.Pos().z;
+            lSphere.mPositionRadius.w = lpVolume->GetRadius();// SetRadius(volume->radius)
+
+            AddPrimitive(&lSphere, lfPadding, lu16PrimitiveTag);
+            break;
+        }
+
+        // -----------------------------------------------------------------------------
+        // case 2 CAPSULE -- loc_82814B88. Build a packed 32-byte capsule: start position
+        // from the transform's centre row, axis from its "at" row, radius from the
+        // volume's +0x50 and length from the volume's +0x44 half-height lane. The exact
+        // store sequence is transcribed in CgsCapsule.h's Set banner.
+        // -----------------------------------------------------------------------------
+        case ::rw::collision::E_VOLUMETYPE_CAPSULE:
+        {
+            // `vspltw v12,<volume+0x50>,0` and `vspltw v13,<volume+0x44>,0` -- both
+            // scalars are broadcast to all four lanes before the w-lane insert, which is
+            // what makes Capsule::Set's two scalars VecFloat and not f32.
+            VecFloat lvfRadius;
+            lvfRadius.x = lvfRadius.y = lvfRadius.z = lvfRadius.w = lpVolume->GetRadius();
+
+            // The +0x44 union lane: CapsuleSpecificData::mfHalfHeight (volume_debug_access.h
+            // names the 12-byte arm GetExtent(); its x lane IS the capsule half-height).
+            const f32 lfHalfHeight = lpVolume->GetExtent().x;
+            VecFloat lvfLength;
+            lvfLength.x = lvfLength.y = lvfLength.z = lvfLength.w = lfHalfHeight;
+
+            CgsGeometric::Capsule lCapsule;
+            lCapsule.Set(lTransform.Pos(),   // 0x82814BBC lvx128 v9,[transform+0x30]
+                         lTransform.At(),    // 0x82814BB0 lvx128 v10,[transform+0x20]
+                         lvfRadius,
+                         lvfLength);
+
+            AddPrimitive(&lCapsule, lfPadding, lu16PrimitiveTag);
+            break;
+        }
+
+        // -----------------------------------------------------------------------------
+        // case 4 BOX -- loc_82814B20. Compose the packed 80-byte box through
+        // CgsGeometric::Box::Set @0x825E6918 (an out-of-line `bl`, unlike the capsule and
+        // cylinder arms which inline their Set), then append it.
+        //     0x82814B34  lfs f0,flt_82001CC0        the fatness literal
+        //     0x82814B3C  stfs f0,[var_A0]           -> broadcast into v2 at 0x82814B64
+        //     0x82814B40..0x82814B54  volume +0x44/+0x48/+0x4C -> three contiguous f32
+        //     0x82814B58  stw r8(=0),[var_84]        the Vector3's 4th slot, zeroed
+        //     0x82814B68  lvx128 v1,[var_90]         -> the Vector3 dimensions
+        //     0x82814B6C  bl CgsGeometric::Box::Set  (r3=&box, r4=&transform, v1, v2)
+        //     0x82814B80  bl AddPrimitive(Box*)
+        // flt_82001CC0 is 0.0f -- image bytes 00000000, re-dumped from a private .i64 copy
+        // this wave (scratchpad/waveQ6/ida_addprim/out.json) and already recorded as 0.0f
+        // by a dozen committed TUs. So a collision box built from an rwcollision volume
+        // carries NO fatness / collision skin; the skin comes from the pair record's own
+        // `lfPadding` field instead.
+        // -----------------------------------------------------------------------------
+        case ::rw::collision::E_VOLUMETYPE_BBOX:
+        {
+            // BoxSpecificData{mfHx, mfHy, mfHz} at volume +0x44/+0x48/+0x4C. The asm
+            // stages the three floats individually and zeroes the 4th slot, so the
+            // dimensions are built lane by lane rather than copied as a vector.
+            const Vector3& lrExtent = lpVolume->GetExtent();
+            Vector3 lvDimensions;
+            lvDimensions.x = lrExtent.x;
+            lvDimensions.y = lrExtent.y;
+            lvDimensions.z = lrExtent.z;
+            lvDimensions.w = 0.0f;              // `stw r8,[var_84]`, r8 == 0
+
+            VecFloat lvfFatness;
+            lvfFatness.SetZero();               // flt_82001CC0 == 0.0f, broadcast
+
+            CgsGeometric::Box lBox;
+            lBox.Set(lTransform, lvDimensions, lvfFatness);
+
+            AddPrimitive(&lBox, lfPadding, lu16PrimitiveTag);
+            break;
+        }
+
+        // -----------------------------------------------------------------------------
+        // case 5 CYLINDER -- loc_82814C48. Copy the caller's whole transform into the
+        // packed 80-byte cylinder and take the two scalars from the volume; the store
+        // sequence is transcribed in CgsCylinder.h's Set banner.
+        // ⚠️ The volume's +0x44 lane is CylinderSpecificData::mfHalfHeight and it is
+        // stored VERBATIM into Cylinder::mfLength -- the console does not double it. The
+        // name difference is the console's, not a conversion.
+        // -----------------------------------------------------------------------------
+        case ::rw::collision::E_VOLUMETYPE_CYLINDER:
+        {
+            CgsGeometric::Cylinder lCylinder;
+            lCylinder.Set(lTransform,
+                          lpVolume->GetRadius(),        // 0x82814C48 lfs [volume+0x50]
+                          lpVolume->GetExtent().x);     // 0x82814C58 lfs [volume+0x44]
+
+            AddPrimitive(&lCylinder, lfPadding, lu16PrimitiveTag);
+            break;
+        }
+
+        // -----------------------------------------------------------------------------
+        // case 3 TRIANGLE, plus NULL / AGGREGATE / anything out of range -- loc_82814CAC,
+        // which the jump table's third entry points at DIRECTLY: the console does not
+        // support a triangle volume here and says so. The message string was dumped from
+        // the image this wave (aTriedToAddARwV @0x820DB268) rather than left truncated,
+        // and the file/line the console passes are
+        // "..\\..\\..\\GameShared\\GameClasses\\SceneManager/Collision/Primitives/
+        // CgsPrimitivePairListBuilder.cpp" : 0x13F == 319 (aGamesharedGame_287
+        // @0x820DAFF0). CGS_ASSERT substitutes the host __FILE__/__LINE__, which is the
+        // established house behaviour for every assert in this tree.
+        // -----------------------------------------------------------------------------
+        case ::rw::collision::E_VOLUMETYPE_TRIANGLE:
+        default:
+            CGS_ASSERT(false,
+                       "Tried to add a RW volume that wasn't a box, capsule, sphere or "
+                       "cylinder (only these are supported)");
+            break;
+        }
     }
 
     // -------------------------------------------------------------------------
@@ -222,6 +405,95 @@ namespace CgsCollision
     }
 
     // -------------------------------------------------------------------------
+    // AddPrimitive(Box*) @ 0x82814570 (35 insns, 0x82814570..0x828145F8)
+    //
+    // ⭐ BODIED 2026-08-19 (wave Q6, cluster `addprim`). IDA leaves it `sub_82814570` and
+    // it has NO per-address export JSON at all -- an export-run gap, not a missing
+    // function (AGENTS gotcha 6). Boundaries and disassembly came from a targeted headless
+    // idat run on a PRIVATE .i64 copy (scratchpad/waveQ6/ida_worldc/out.json
+    // `asm_82814570`, re-confirmed this wave in ida_addprim/out.json `leaves`).
+    //
+    // Append a single-box record, asm line for line:
+    //     0x82814588  li r4,4                       E_VOLUME_TYPE_BOX
+    //     0x82814590  bl AddCollisionHeader         (f1 padding + r6 tag pass straight
+    //                                                through -- neither is touched)
+    //     0x82814594  li r4,0x50                    == sizeof(CgsGeometric::Box)
+    //     0x8281459C  bl AllocateMemory
+    //     0x828145A8..0x828145D4  five lvx128/stvx128 pairs at 0/0x10/0x20/0x30/0x40
+    //     0x828145D8  lhz r11,6(this) ; addi r11,r11,1 ; sth r11,6(this)   ++mu16NumTests
+    // -------------------------------------------------------------------------
+    void PrimitivePairListBuilder::AddPrimitive(CgsGeometric::Box* lpBox,
+                                                f32 lfPadding,
+                                                u16 lu16PrimitiveTag)
+    {
+        AddCollisionHeader(E_VOLUME_TYPE_BOX, lfPadding, lu16PrimitiveTag);
+
+        CgsGeometric::Box* lpPrimitive =
+            static_cast<CgsGeometric::Box*>(AllocateMemory(sizeof(CgsGeometric::Box)));
+        *lpPrimitive = *lpBox;   // the five 16-byte rows
+
+        ++mu16NumTests;
+    }
+
+    // -------------------------------------------------------------------------
+    // AddPrimitive(Capsule*) @ 0x82814600 (29 insns, 0x82814600..0x82814670)
+    //
+    // ⭐ BODIED 2026-08-19 (wave Q6, cluster `addprim`); IDA leaves it `sub_82814600`.
+    // Identical shape to the Box overload with the capsule's type and size:
+    //     0x82814618  li r4,2                       E_VOLUME_TYPE_CAPSULE
+    //     0x82814620  bl AddCollisionHeader
+    //     0x82814624  li r4,0x20                    == sizeof(CgsGeometric::Capsule)
+    //     0x8281462C  bl AllocateMemory
+    //     0x82814630..0x8281464C  four ld/std doubleword pairs at 0/8/0x10/0x18 -- the
+    //                             whole 32-byte record, moved as GPR doublewords rather
+    //                             than VMX rows because 32 bytes is only two vectors and
+    //                             the payload is not required to be 16-aligned here
+    //     0x82814650  ++mu16NumTests
+    // -------------------------------------------------------------------------
+    void PrimitivePairListBuilder::AddPrimitive(CgsGeometric::Capsule* lpCapsule,
+                                                f32 lfPadding,
+                                                u16 lu16PrimitiveTag)
+    {
+        AddCollisionHeader(E_VOLUME_TYPE_CAPSULE, lfPadding, lu16PrimitiveTag);
+
+        CgsGeometric::Capsule* lpPrimitive =
+            static_cast<CgsGeometric::Capsule*>(AllocateMemory(sizeof(CgsGeometric::Capsule)));
+        *lpPrimitive = *lpCapsule;   // the two packed 16-byte lanes
+
+        ++mu16NumTests;
+    }
+
+    // -------------------------------------------------------------------------
+    // AddPrimitive(Cylinder*) @ 0x82814678 (36 insns, 0x82814678..0x82814704)
+    //
+    // ⭐ BODIED 2026-08-19 (wave Q6, cluster `addprim`); IDA leaves it `sub_82814678`.
+    //     0x82814690  li r4,5                       E_VOLUME_TYPE_CYLINDER
+    //     0x82814698  bl AddCollisionHeader
+    //     0x8281469C  li r4,0x50                    == sizeof(CgsGeometric::Cylinder)
+    //     0x828146A4  bl AllocateMemory
+    //     0x828146B0..0x828146D0  FOUR lvx128/stvx128 pairs at 0/0x10/0x20/0x30
+    //     0x828146D4..0x828146E0  two lfs/stfs pairs at 0x40 and 0x44
+    //     0x828146E4  ++mu16NumTests
+    // ⚠️ The console copies 72 of the 80 allocated bytes and leaves +0x48..+0x4F (the
+    // record's tail padding) as whatever the bump allocator last held. The C++ assignment
+    // below copies the three named members, which is the same live data; the padding is
+    // not part of the value either way, and KAU16_VOLUME_SIZES[CYLINDER] == 80 is what
+    // the iterator strides by. Documented so nobody "fixes" the eight bytes.
+    // -------------------------------------------------------------------------
+    void PrimitivePairListBuilder::AddPrimitive(CgsGeometric::Cylinder* lpCylinder,
+                                                f32 lfPadding,
+                                                u16 lu16PrimitiveTag)
+    {
+        AddCollisionHeader(E_VOLUME_TYPE_CYLINDER, lfPadding, lu16PrimitiveTag);
+
+        CgsGeometric::Cylinder* lpPrimitive =
+            static_cast<CgsGeometric::Cylinder*>(AllocateMemory(sizeof(CgsGeometric::Cylinder)));
+        *lpPrimitive = *lpCylinder;   // four rows + the two scalars
+
+        ++mu16NumTests;
+    }
+
+    // -------------------------------------------------------------------------
     // AddPrimitivePair(Box*, Box*) @ 0x82814708
     //
     // Append a box-vs-box pair record. First (debug) the two boxes are tested for
@@ -233,9 +505,27 @@ namespace CgsCollision
     // two-type (BOX/BOX) CollisionHeader, bump-allocates two 80-byte box payloads,
     // copies box A and box B verbatim, and bumps the record count.
     //
-    // NOTE: flt_82005450 (the axis-alignment threshold) is not recoverable from the
-    // dossier rodata; it is a near-1 dot-product threshold used only by the debug
-    // assert and is named below.
+    // ⭐ CORRECTED 2026-08-19 (wave Q6, cluster `addprim`) -- TWO REAL DEFECTS, both from
+    // the same cause: the two thresholds were GUESSED when this body landed, and both
+    // guesses were wrong. They are now IMAGE BYTES, dumped from a private .i64 copy
+    // (scratchpad/waveQ6/ida_addprim/out.json):
+    //     flt_82005450 = 3F666666 = 0.9f   (was written as 0.999f, with a note saying it
+    //                                       was "not recoverable from the dossier rodata")
+    //     flt_82004014 = 3DCCCCCD = 0.1f   (guessed 0.1f -- this one happened to be right,
+    //                                       and is now measured rather than assumed; the
+    //                                       same constant is the tolerance CgsGeometric::
+    //                                       Box::IsValid @0x825BEB80 uses)
+    // 0.999f vs 0.9f is a ~26x difference in the admitted angle (cos-1 0.999 = 2.6 deg,
+    // cos-1 0.9 = 25.8 deg), so the old value made this debug assert far too strict about
+    // what counts as "the same box" -- it would have stayed silent on genuinely duplicated
+    // near-aligned box pairs. Debug-only, but a wrong constant is a wrong constant.
+    //
+    // ⭐ The Box member names below moved with the type to its real home
+    // (GameShared/GameClasses/Geometric/Primitives/CgsBox.h): the five 16-byte rows the
+    // old local fork spelled `maRows[0..4]` are `mTransform.xAxis/.yAxis/.zAxis/.wAxis`
+    // and `mDimensionsAndFatness`. Members are private there (as the DWARF has them), so
+    // the rows are read through the DWARF's own GetTransform()/GetDimensions() accessors.
+    // Same five rows, same order, same test -- a rename, not a behaviour change.
     // -------------------------------------------------------------------------
     void PrimitivePairListBuilder::AddPrimitivePair(CgsGeometric::Box* lpBoxA,
                                                     CgsGeometric::Box* lpBoxB,
@@ -244,33 +534,41 @@ namespace CgsCollision
                                                     u16 lu16PrimitiveTagB)
     {
         // Axis-alignment threshold for the three basis rows (dot > threshold).
-        static const f32 KF_BOX_AXIS_ALIGNED_THRESHOLD = 0.999f; // flt_82005450 (near 1)
-        static const f32 KF_BOX_NEAR_IDENTICAL_DISTANCE = 0.1f;   // flt_82004014
+        // MEASURED image bytes, not a guess: flt_82005450 == 3F666666 == 0.9f, loaded at
+        // X360 0x82814740 and broadcast (vspltw) before `vcmpgtfp. v0, dot, threshold`.
+        static const f32 KF_BOX_AXIS_ALIGNED_THRESHOLD = 0.9f;   // flt_82005450
+        // MEASURED: flt_82004014 == 3DCCCCCD == 0.1f, loaded at 0x82814824, compared the
+        // other way round (`vcmpgtfp. v0, threshold, length`) -- hence the reversed reads
+        // below, which are the asm's own operand order, not a stylistic choice.
+        static const f32 KF_BOX_NEAR_IDENTICAL_DISTANCE = 0.1f;  // flt_82004014
 
-        const auto Dot3 = [](const Vector4& lvA, const Vector4& lvB) -> f32
+        const auto Dot3 = [](const Vector3& lvA, const Vector3& lvB) -> f32
         {
-            const f32* la = reinterpret_cast<const f32*>(&lvA);
-            const f32* lb = reinterpret_cast<const f32*>(&lvB);
-            return la[0] * lb[0] + la[1] * lb[1] + la[2] * lb[2];
+            return lvA.x * lvB.x + lvA.y * lvB.y + lvA.z * lvB.z;   // vmsum3fp128
         };
-        const auto Length3 = [](const Vector4& lvA, const Vector4& lvB) -> f32
+        const auto Length3 = [](const Vector3& lvA, const Vector3& lvB) -> f32
         {
-            const f32* la = reinterpret_cast<const f32*>(&lvA);
-            const f32* lb = reinterpret_cast<const f32*>(&lvB);
-            const f32 lfDx = la[0] - lb[0];
-            const f32 lfDy = la[1] - lb[1];
-            const f32 lfDz = la[2] - lb[2];
+            const f32 lfDx = lvA.x - lvB.x;
+            const f32 lfDy = lvA.y - lvB.y;
+            const f32 lfDz = lvA.z - lvB.z;
             const f32 lfLenSq = lfDx * lfDx + lfDy * lfDy + lfDz * lfDz;
             return std::sqrt(lfLenSq); // vrsqrtefp + Newton refine -> length; 0 -> 0
         };
 
-        // Rows 0/16/32: orientation basis aligned when dot(rowA,rowB) > threshold.
-        const bool lbAxis0 = Dot3(lpBoxA->maRows[0], lpBoxB->maRows[0]) > KF_BOX_AXIS_ALIGNED_THRESHOLD;
-        const bool lbAxis1 = Dot3(lpBoxA->maRows[1], lpBoxB->maRows[1]) > KF_BOX_AXIS_ALIGNED_THRESHOLD;
-        const bool lbAxis2 = Dot3(lpBoxA->maRows[2], lpBoxB->maRows[2]) > KF_BOX_AXIS_ALIGNED_THRESHOLD;
-        // Row 64 (half-dimensions) and row 48 (position): near when |A - B| < 0.1.
-        const bool lbDims  = KF_BOX_NEAR_IDENTICAL_DISTANCE > Length3(lpBoxA->maRows[4], lpBoxB->maRows[4]);
-        const bool lbPos   = KF_BOX_NEAR_IDENTICAL_DISTANCE > Length3(lpBoxA->maRows[3], lpBoxB->maRows[3]);
+        // The five rows, read through the DWARF accessors now that Box lives in CgsBox.h.
+        const Matrix44Affine lFrameA = lpBoxA->GetTransform();
+        const Matrix44Affine lFrameB = lpBoxB->GetTransform();
+        const Vector3        lvDimsA = lpBoxA->GetDimensions();
+        const Vector3        lvDimsB = lpBoxB->GetDimensions();
+
+        // Rows 0/16/32 (the right/up/at basis): aligned when dot(rowA,rowB) > threshold.
+        const bool lbAxis0 = Dot3(lFrameA.Right(), lFrameB.Right()) > KF_BOX_AXIS_ALIGNED_THRESHOLD;
+        const bool lbAxis1 = Dot3(lFrameA.Up(),    lFrameB.Up())    > KF_BOX_AXIS_ALIGNED_THRESHOLD;
+        const bool lbAxis2 = Dot3(lFrameA.At(),    lFrameB.At())    > KF_BOX_AXIS_ALIGNED_THRESHOLD;
+        // Row 64 (half-dimensions, X360 boxA/boxB +0x40) and row 48 (the centre row,
+        // +0x30): near when |A - B| < 0.1.
+        const bool lbDims  = KF_BOX_NEAR_IDENTICAL_DISTANCE > Length3(lvDimsA, lvDimsB);
+        const bool lbPos   = KF_BOX_NEAR_IDENTICAL_DISTANCE > Length3(lFrameA.Pos(), lFrameB.Pos());
 
         CGS_ASSERT(!(lbAxis0 && lbAxis1 && lbAxis2 && lbDims && lbPos),
                    "Attempting to collide two near-identical boxes\n");

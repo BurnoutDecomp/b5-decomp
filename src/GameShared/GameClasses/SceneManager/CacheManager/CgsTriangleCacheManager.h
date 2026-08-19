@@ -234,8 +234,11 @@ namespace CgsSceneManager
                                         KU_MAX_CACHED_OBJECTS>& lrQueue);
 
         // @ X360 0x828B2710 (346). Release each event's slot: clear the dirty/overflow
-        // state, drop the cached radius to zero, and clear the slot's used bit. Takes the
-        // whole interface because its dev cross-checks scan the ADD queue as well.
+        // state, zero the WHOLE cached sphere (one stvx128 over CacheSlot+0x00..+0x0F --
+        // centre AND radius; X360 0x828B2BDC..0x828B2C08, where the vrlimi128's merge base
+        // is the ZERO register, unlike the add leg which merges into w only), and clear the
+        // slot's used bit. Takes the whole interface because its dev cross-checks scan the
+        // ADD queue as well.
         void ProcessRemoveFromCacheEvents(const SceneManagerIO::InSceneUpdateInterface& lrSceneUpdate);
 
         // @ X360 0x828BE898 (279). Reposition each event's cached object (delegating the

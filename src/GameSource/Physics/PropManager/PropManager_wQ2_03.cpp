@@ -205,7 +205,7 @@
 //     GameSource/Physics/BrnPhysicsConductorGates.cpp, GameSource/World/WorldLinkStubs.cpp and the
 //     whole of b5-decomp/src: the only hits are the header declarations and comments. This file is
 //     the SOLE definition of all three.
-//   * ⭐ THIS FILE IS MOUNTED (tools/build/build_game_exe.bat:1796), so the two Do* bodies landing
+//   * ⭐ THIS FILE IS MOUNTED (tools/build/build_game_exe.bat:1810), so the two Do* bodies landing
 //     here go straight into the link. Their callees, checked ONE BY ONE this wave:
 //       BODIED IN THE TREE -- PropManager::HasProp/HasPartJustBeenRemoved (PropManager_wQ2_04.cpp),
 //       ResourcePtr<PropPhysicsDataHeader>::operator-> (BrnPropQueueFacades.cpp:87),
@@ -219,29 +219,34 @@
 //       GetComponent, operator*}, and -- NEW THIS WAVE --
 //       BaseCollisionGenerator::CollidePrimitiveListAgainstTriangleList
 //       (CgsCollisionGenerator.cpp, landed with its declaration).
-//     ⛔ **TWO LINK HOLES REMAIN, AND THEY ARE REPORTED, NOT PAPERED OVER** (gotcha 12):
+//     ✅ **BOTH LINK HOLES ARE CLOSED** -- re-verified 2026-08-19, wave Q6 round 2 (this block
+//        previously read "TWO LINK HOLES REMAIN"; that is history now):
 //       1. PrimitivePairListBuilder::AddPrimitive(const rw::collision::Volume*, Matrix44Affine,
-//          f32, u16) @0x82814AB8 -- declared this wave, NO BODY. Full decode + the three unnamed
-//          sibling overloads + the two missing CgsGeometric types are written up on the
-//          declaration in CgsPrimitivePairListBuilder.h. THIS IS THE ONE THAT MATTERS AT RUNTIME:
-//          until it exists, a prop's collision volumes never become collision primitives.
-//       2. BaseCollisionGenerator::AddPrimitiveListWithTriangleListToStream @0x82811D40 --
-//          declared since 2026-08-18 (CgsCollisionGenerator.h), still NO BODY; it is the LIVE arm
-//          (byte_82F2A39C == 1, re-measured this wave), together with the Create/Run halves
-//          @0x82811DD0 / @0x82811F58 whose bodies sit parked at
-//          scratchpad/waveQ2/parked/CgsCollisionGenerator_wQ2_PrimitiveStream.cpp on ONE type --
-//          PrimitiveListWithTriangleListStreamJobDesc -- plus ONE enum member
-//          (E_COLLISIONJOB_PRIMITIVE_LIST_WITH_TRIANGLE_LIST_STREAM = 12, its type-12 worker is
-//          already a named gate at ContactGeneratorJob.cpp:230).
-//          ⚠️ THAT PARK'S BANNER IS STALE IN THE HELPFUL DIRECTION: it says the descriptor
-//          "has no home in this tree", but CgsPrimitiveListWithTriangleListJobDesc.h/.cpp EXIST and
-//          are MOUNTED (bat:2864) -- what is missing is only the *Stream* variant beside them.
-//   * ⚠️ INHERITED, still open, not this file's to fix: PropManager_wQ_03.cpp's UpdateTriangleCache
-//     and PropManager_wQ2_02.cpp's Begin/End still have one-shot gate bodies in
-//     BrnPhysicsConductorGates.cpp (re-measured 2026-08-19: Begin :471-476, End :478-483,
-//     UpdateTriangleCache :522-527 -- the old ":485/:492/:514" citation had drifted). They collide
-//     at LINK time the moment those partfiles are added to tools/build/build_game_exe.bat (the
-//     `rem` at :1777-1780 says so). Mount + retire in one commit.
+//          f32, u16) @0x82814AB8 -- REAL BODY, CgsPrimitivePairListBuilder.cpp:197 (MOUNTED,
+//          bat:867). The five-arm jump table (sphere/capsule/box/cylinder + the console's own
+//          TRIANGLE refusal) was read out of the image; a prop's collision volumes DO become
+//          collision primitives now, so the pair list this file posts is no longer empty.
+//       2. BaseCollisionGenerator::AddPrimitiveListWithTriangleListToStream @0x82811D40 -- REAL
+//          BODY, CgsCollisionGenerator.cpp:422 (MOUNTED, bat:1018), with the Create/Run halves
+//          @0x82811DD0 / @0x82811F58 beside it (:482 / :540) and its loud gate deleted from
+//          CgsCollisionGenerator_StreamStubs.cpp. The two things that had blocked it for three
+//          waves also landed: the descriptor type (JobDescription/
+//          CgsPrimitiveListWithTriangleListStreamJobDesc.h) and the enum member
+//          E_COLLISIONJOB_PRIMITIVE_LIST_WITH_TRIANGLE_LIST_STREAM = 12, whose worker
+//          ContactGeneratorJob::ExecutePrimitiveListWithTriangleListStream @0x82926650 is now a
+//          real body too -- so a command posted from this leg is actually drained.
+//   * ⛔ THE ONE SURVIVING RUNTIME GATE ON THIS PATH (a definition, so the exe LINKS -- it just
+//     produces no contacts): ContactGeneratorJob::ExecutePrimitiveListWithTriangleList
+//     @0x82925908 (849), the primitive-vs-triangle NARROW PHASE the type-12 stream arm delegates
+//     to -- ContactGeneratorJob.cpp:1092 (MOUNTED, bat:1124), still a loud
+//     BRN_CONTACT_JOB_GATE. Its closure is two un-reconstructed workers, ::BuildGPInstance
+//     @0x829222A0 and ::CollideGPInstances @0x829253C8. Expect "Warning!! prop fell out of the
+//     world" to survive this integration for exactly that reason.
+//   * ✅ RESOLVED, was "INHERITED, still open": PropManager_wQ_03.cpp's UpdateTriangleCache and
+//     PropManager_wQ2_02.cpp's Begin/End no longer have gate bodies -- all three retired in
+//     BrnPhysicsConductorGates.cpp (:471 / :489 now read GATE RETIRED), and both partfiles are
+//     MOUNTED as a pair right after this one (bat:1816 wQ2_02, bat:1817 wQ_03; wQ_03 alone is an
+//     LNK2019). Mount + retire happened in one change, as that note asked.
 // =================================================================================================
 
 #include "GameSource/Physics/PropManager/BrnPropManager.h"

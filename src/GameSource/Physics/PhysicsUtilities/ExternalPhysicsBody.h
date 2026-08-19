@@ -208,6 +208,38 @@ namespace BrnPhysics
         // named on the host. Trivial inline, no console address of its own.
         VecFloat GetMass() const { return mfMass; }
 
+        // ⭐ ADDED 2026-08-19 (wave Q6 / the jointed lean+tilt prop response). The body's
+        // linear momentum AT THE END of a step of `lvfTimeStep`, i.e. the momentum the
+        // accumulators are about to become:
+        //     mLinearVelocity * mfMass  +  mTotalLinearForce * dt  +  mTotalLinearImpulse
+        //
+        // SIGNATURE IS DWARF-AUTHORITATIVE, and it is public there too: the DecFIGS dump
+        // references/DecFIGS/dwarfdump/GameSource/Physics/PhysicsUtilities/
+        // ExternalPhysicsBody.h:262 reads `Vector3 GetLinearMomentum(VecFloat) const;` and
+        // sits ABOVE that class's `protected:` at :264 (source line ExternalPhysicsBody.h:233);
+        // dwarfdump/_compile/BrnPhysicsUnity2.cpp:36698 names the parameter `lfTimeStep`.
+        //
+        // NO CONSOLE ADDRESS OF ITS OWN -- the X360 compiler inlines it at every call site,
+        // which is why this is a real reconstruction rather than a port. Recovered store-for-
+        // store from HandleContactWithLeanProp @0x8260FCA4..0x8260FCBC, where all four member
+        // loads are visible with this class's own attested offsets:
+        //     lvx128 v11, r31, 0xE0   ; mTotalLinearForce
+        //     vmulfp128 v12, v11, v12 ; * splat(dt)                     (v12 == the dt splat)
+        //     lvx128 v10, r31, 0x40   ; mLinearVelocity  (the base's +0x40)
+        //     lvx128 v11, r31, 0xD0   ; mfMass
+        //     vmaddfp  v12, v10, v12, v11   ; == v10*v11 + v12 = v*m + F*dt   (plain vmaddfp
+        //                                   ;    is vA*vC+vB -- see the operand-order split in
+        //                                   ;    scratchpad/waveQ2/parked/PropManager_07_*.cpp §B)
+        //     lvx128 v9,  r31, 0x100  ; mTotalLinearImpulse
+        //     vaddfp   v12, v12, v9
+        // HandleContactWithTiltProp @0x82610A08..0x82610A18 repeats the identical sequence, so
+        // the two call sites corroborate rather than repeat.
+        //
+        // ⚠️ WHY THIS HAS TO BE A MEMBER and cannot be open-coded by a caller: all three
+        // members it reads (mLinearVelocity on the base, mfMass and mTotalLinearForce /
+        // mTotalLinearImpulse here) are `protected`, and PropManager is not a friend.
+        Vector3 GetLinearMomentum(VecFloat lvfTimeStep) const;
+
     protected:
         Matrix33 mLocalInverseInertia;   // :241
         Matrix33 mWorldInverseInertia;   // :242

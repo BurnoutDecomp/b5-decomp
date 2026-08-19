@@ -786,10 +786,15 @@ namespace Deformation
     // orientation (v26/v27/v28) and centre (v29), then hands them to CgsGeometric::Box::Set with the
     // half-dimensions (this+416 -- mBoundingBoxHalfDimensions).
     //
-    // CgsGeometric::Box is forward-declared only (its layout/Set are owned by its own TU). The world
-    // box rows the asm builds are computed here; the Set call is modelled by writing the rows + centre
-    // + half-dims into the out-box through a raw-offset layout matching the asm's Box::Set stores. FLAG:
-    // Box layout provisional (matrix44affine basis @ +0, half-dims @ +64) -- refined by Box's own TU.
+    // CgsGeometric::Box is forward-declared only here. The world box rows the asm builds are computed
+    // here; the Set call is modelled by writing the rows + centre + half-dims into the out-box through
+    // a raw-offset layout matching the asm's Box::Set stores.
+    // ✅ FLAG CLEARED 2026-08-19 (wave Q6, cluster `addprim`): the layout is no longer provisional and
+    // the guess was RIGHT. Box is homed at GameShared/GameClasses/Geometric/Primitives/CgsBox.h --
+    // the console's own home, proven by the file string Box::Set @0x825E6918 passes -- with
+    // DWARF-authoritative members +0x00 Matrix44Affine mTransform and +0x40 Vector3Plus
+    // mDimensionsAndFatness. FOLLOW-UP, deliberately NOT done here: the raw-offset writes below can
+    // now become a by-name Box::Set call. That is a separate de-duplication, not a comment fix.
     // =========================================================================================
     void PhysicalBodyPart::GetBoundingBox(CgsGeometric::Box* lpBoxOut) const
     {
@@ -820,7 +825,8 @@ namespace Deformation
         };
 
         // CgsGeometric::Box::Set(box, {right,up,at,centre}, halfDims). Modelled as a raw-offset write
-        // into the out-box (Matrix44Affine basis @ +0, half-dims @ +64). FLAG: Box layout provisional.
+        // into the out-box (Matrix44Affine basis @ +0, half-dims @ +64). ✅ CONFIRMED layout, not
+        // provisional -- CgsGeometric::Box is homed at CgsBox.h; see the banner above.
         char* lpBox = reinterpret_cast<char*>(lpBoxOut);
         *reinterpret_cast<Vector3*>(lpBox +  0) = lWorldRight;
         *reinterpret_cast<Vector3*>(lpBox + 16) = lWorldUp;

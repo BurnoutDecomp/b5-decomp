@@ -16,9 +16,12 @@
 // used by Prepare (X360 computes 96*count as ((count*3)<<5)).
 
 #include "types.hpp"
-#include "BrnCommonTypes.h"   // Vector4 (rw::math::vpu)
+#include "BrnCommonTypes.h"   // Vector4 / Matrix44Affine (rw::math::vpu)
 #include "GameShared/GameClasses/SceneManager/Collision/Primitives/CgsPrimitivePairList.h"
-#include "GameShared/GameClasses/Geometric/Primitives/CgsSphere.h"   // CgsGeometric::Sphere (16-byte)
+#include "GameShared/GameClasses/Geometric/Primitives/CgsSphere.h"     // CgsGeometric::Sphere   (16 bytes)
+#include "GameShared/GameClasses/Geometric/Primitives/CgsCapsule.h"    // CgsGeometric::Capsule  (32 bytes)
+#include "GameShared/GameClasses/Geometric/Primitives/CgsBox.h"        // CgsGeometric::Box      (80 bytes)
+#include "GameShared/GameClasses/Geometric/Primitives/CgsCylinder.h"   // CgsGeometric::Cylinder (80 bytes)
 
 namespace CgsMemory { class LinearMalloc; }
 
@@ -33,20 +36,15 @@ namespace CgsMemory { class LinearMalloc; }
 // declaration does not make that worse -- it matches the 96-byte record's key.
 namespace rw { namespace collision { class Volume; } }
 
-namespace CgsGeometric
-{
-    // Box — 80-byte packed oriented box primitive: a 3-row orientation basis
-    // (rows 0/16/32 = right/up/at), a position/centre row (48) and a half-dimensions
-    // row (64). Copied verbatim (five 16-byte vectors) by AddPrimitive(Box*) /
-    // AddPrimitivePair. Matches KAU16_VOLUME_SIZES[E_VOLUME_TYPE_BOX] = 80. Only ever
-    // forward-declared elsewhere in the tree (BrnDeformableObject.h uses
-    // `struct CgsGeometric::Box;`); this is its provisional layout home. The
-    // near-identical-box assert in AddPrimitivePair reads these five rows.
-    struct alignas(16) Box
-    {
-        Vector4 maRows[5];   // +0x00 basisX, +0x10 basisY, +0x20 basisZ, +0x30 pos, +0x40 halfDims
-    };
-}
+// ⭐ THE LOCAL `CgsGeometric::Box` FORK THAT STOOD HERE IS GONE (2026-08-19, wave Q6
+// cluster `addprim`). It was `struct alignas(16) Box { Vector4 maRows[5]; }` with its own
+// banner calling itself "its provisional layout home". Box now lives at its real,
+// MEASURED home -- GameShared/GameClasses/Geometric/Primitives/CgsBox.h, included above --
+// which is where the console's own Box::Set body is (its assert's __FILE__ string, dumped
+// from the image this wave, is ".../Geometric/Primitives/CgsBox.h", line 95). The five
+// 16-byte rows the fork modelled are exactly `Matrix44Affine mTransform` (rows 0..3) plus
+// `Vector3Plus mDimensionsAndFatness` (row 4), so the layout is unchanged and sizeof is
+// still 80; only the member NAMES changed, and AddPrimitivePair below was updated with it.
 
 namespace CgsSceneManager
 {
@@ -86,39 +84,95 @@ namespace CgsCollision
         // packed CgsGeometric primitive, built from the volume payload times the caller's world
         // transform. Case index == typeID - 1, so the five arms are the six-entry gVolumeVTable
         // minus AGGREGATE:
-        //     typeID 1 SPHERE   -> 0x82814C04 -> AddPrimitive(Sphere*) @0x82814508  (in tree)
-        //     typeID 2 CAPSULE  -> 0x82814B88 -> sub_82814600                       (NOT in tree)
-        //     typeID 3 TRIANGLE -> the DEFAULT arm 0x82814CAC, i.e. UNSUPPORTED: it fires
-        //                          "Tried to add a RW volume that wasn't a "... at
-        //                          CgsPrimitivePairListBuilder.cpp:319 (`li r5, 0x13F`)
+        //     typeID 1 SPHERE   -> 0x82814C04 -> AddPrimitive(Sphere*)   @0x82814508
+        //     typeID 2 CAPSULE  -> 0x82814B88 -> AddPrimitive(Capsule*)  sub_82814600
+        //     typeID 3 TRIANGLE -> the DEFAULT arm 0x82814CAC, i.e. UNSUPPORTED: it fires the
+        //                          refusal assert at CgsPrimitivePairListBuilder.cpp:319
+        //                          (`li r5, 0x13F`). The message string, dumped whole from the
+        //                          image this wave (aTriedToAddARwV @0x820DB268) rather than left
+        //                          truncated, is "Tried to add a RW volume that wasn't a box,
+        //                          capsule, sphere or cylinder (only these are supported)".
         //     typeID 4 BOX      -> 0x82814B20 -> CgsGeometric::Box::Set @0x825E6918 then
-        //                          sub_82814570                                     (NOT in tree)
-        //     typeID 5 CYLINDER -> 0x82814C48 -> sub_82814678                       (NOT in tree)
+        //                          AddPrimitive(Box*)      sub_82814570
+        //     typeID 5 CYLINDER -> 0x82814C48 -> AddPrimitive(Cylinder*) sub_82814678
+        // typeID 0 (NULL) and 6 (AGGREGATE) reach the same default label through the `bgt` --
+        // both are out of the 5-entry table's range once 1 is subtracted.
+        // ⚠️ The "(NOT in tree)" markers this list used to carry on three of the arms are GONE
+        // because they are no longer true: all four leaves and both missing primitive types
+        // landed in wave Q6 round 2. Do not re-derive them from an older copy of this banner.
         //
-        // ⛔ NOT RECONSTRUCTED -- and this is a REPORTED HOLE, not an oversight.
-        // ⚠️ CORRECTED wave Q6 round 1 (worldc #1): this used to read "DECLARATION ONLY -- NO
-        // BODY ANYWHERE IN THE TREE", which is FALSE and is a DUPLICATE-DEFINITION TRAP. THE
-        // ONLY DEFINITION IS THE LOUD NAMED GATE AT CgsPrimitivePairListBuilder.cpp:186 (that TU
-        // IS MOUNTED -- tools/build/build_game_exe.bat:867) -- RETIRE THAT GATE IN THE SAME
-        // COMMIT THAT LANDS THE REAL SWITCH, or you will add a second definition and get LNK2005
-        // in a mounted TU. Bodying it needs three unexported leaves (sub_82814570 @0x82814570
-        // has no per-address JSON at all; sub_82814600 and sub_82814678 do) plus two
-        // CgsGeometric primitive types that do not exist in b5-decomp/src -- there is no
-        // Capsule and no Cylinder under GameShared/GameClasses/Geometric/Primitives/, only
-        // Sphere / SweptSphere / Box / AxisAlignedBox / Line / Triangle4. That is its own
-        // cluster. A partial switch landed here would omit whole volume kinds with nothing in
-        // the log to say so -- the exact failure mode this project's faithfulness rules exist to
-        // stop -- so the declaration stands alone and the hole is reported to the conductor.
+        // ⭐⭐ BODIED 2026-08-19 (wave Q6 round 2, cluster `addprim`) -- THE LOUD CONDUCTOR GATE
+        // THAT STOOD AT CgsPrimitivePairListBuilder.cpp:186 IS DELETED IN THE SAME COMMIT, and
+        // that gate was the SOLE definition, so nothing else has to be retired with it. All five
+        // arms are real, none is omitted: the four supported volume kinds build their packed
+        // CgsGeometric primitive and append it, and the fifth (TRIANGLE, and every out-of-range
+        // id) fires the console's own refusal assert. The three sibling overloads declared just
+        // below and the two brand-new primitive types (CgsCapsule.h / CgsCylinder.h) landed with
+        // it; CgsGeometric::Box moved from a fork in THIS header to its measured home CgsBox.h,
+        // where its Set body (@0x825E6918) now lives.
+        //
+        // ⚠️ THE ONE THING THE CONSOLE DOES THAT THIS DOES NOT: CgsGeometric::Box::Set calls
+        // CgsGeometric::Box::IsValid @0x825BEB80 (264 insns) and, on failure, fires a debug-only
+        // diagnostic assert. IsValid has no body anywhere in the tree; the call is OMITTED and
+        // the omission is documented at length in CgsBox.h. It changes no program state.
+        //
         // Its ONLY two callers in the whole image are PropManager::DoPartWorldContactGeneration
         // (0x82611F44) and ::DoPropInstanceWorldContactGeneration (0x826124A0) -- measured
-        // xrefs -- both landed this wave in PropManager_wQ2_03.cpp.
+        // xrefs -- both landed in wave Q6 round 1 in PropManager_wQ2_03.cpp.
         // ==========================================================================================
         void AddPrimitive(const ::rw::collision::Volume* lpVolume, Matrix44Affine lTransform,
                           f32 lfPadding, u16 lu16PrimitiveTag);                 // @0x82814AB8
 
-        // AddPrimitive(Sphere*) @ 0x82814508 — append a single-sphere record: stamp a
+        // AddPrimitive(Sphere*) @ 0x82814508 (25 insns) — append a single-sphere record: stamp a
         // sphere CollisionHeader, bump-allocate 16 bytes, copy the sphere, bump the count.
         void AddPrimitive(CgsGeometric::Sphere* lpSphere, f32 lfPadding, u16 lu16PrimitiveTag);
+
+        // ==========================================================================================
+        // ⭐ THE THREE SIBLING SINGLE-PRIMITIVE APPENDERS, landed 2026-08-19 (wave Q6, cluster
+        // `addprim`). IDA leaves all three as `sub_` (the symbols are absent, the functions are
+        // not); each is the byte-for-byte twin of the Sphere overload above with a different
+        // EVolumeType and payload size, and each is reached from the switch in
+        // AddPrimitive(const rw::collision::Volume*, ...).
+        //
+        //   AddPrimitive(Box*)      sub_82814570  35 insns  type 4, AllocateMemory(0x50)
+        //   AddPrimitive(Capsule*)  sub_82814600  29 insns  type 2, AllocateMemory(0x20)
+        //   AddPrimitive(Cylinder*) sub_82814678  36 insns  type 5, AllocateMemory(0x50)
+        // Declared in the DWARF's own order (CgsPrimitivePairListBuilder.h:89 / :101 / :107),
+        // with the DWARF's exact parameter types (CgsGeometric::X *, float32_t, uint16_t).
+        //
+        // ⚠️ THE DWARF HAS A SIXTH OVERLOAD THIS CLUSTER DELIBERATELY DID NOT LAND:
+        //     void AddPrimitive(Triangle4 *, float32_t, uint16_t);   // DWARF :95
+        // It is NOT reachable from the volume switch -- typeID 3 (rwcollision TRIANGLE) takes
+        // the refusal arm -- and no X360 address for it has been located, so there is nothing
+        // to reconstruct it from and nothing calling it. Left undeclared rather than declared
+        // bodyless. Same for the DWARF's Destruct()/Release() and its four other
+        // AddPrimitivePair overloads (Sphere/Sphere, Sphere/Box, Box/Sphere, Cylinder/Box).
+        //
+        // Instruction counts and function boundaries were MEASURED this wave on a private .i64
+        // copy (scratchpad/waveQ6/ida_addprim/out.json `leaves`), because sub_82814570 has NO
+        // per-address export JSON at all -- an export-run gap, not a missing function (AGENTS
+        // gotcha 6). Its disassembly came from the same targeted headless-idat run
+        // (scratchpad/waveQ6/ida_worldc/out.json `asm_82814570`).
+        //
+        // ⚠️ GOTCHA 3 AGAIN, and it is why the tag is the THIRD parameter and not the second:
+        // the f32 padding rides f1 AND consumes the r5 GPR slot, so the u16 tag arrives in r6.
+        // Every one of the three forwards r6 to AddCollisionHeader untouched (they only load r4
+        // with the type and r3 with `this`), which is the direct proof of the shape.
+        //
+        // ⚠️ EACH HAS OTHER MEASURED CALLERS ALREADY WAITING IN THE TREE (xrefs measured this
+        // wave). Landing these three UNBLOCKS, but does not by itself complete, the deferred
+        // contact-emission blocks in:
+        //     AddPrimitive(Box*)      <- DeformableObject::DoBodyPartWorldContactGeneration x2
+        //                                (0x8260950C / 0x826096D8) and
+        //                                VehicleManager::DoTrafficCarWorldContactGeneration x2
+        //                                (0x8261C094 / 0x8261C11C)
+        //     AddPrimitive(Cylinder*) <- DeformableObject::DoDetachedWheelWorldContactGeneration
+        //                                (0x82609A60)
+        //     AddPrimitive(Capsule*)  <- no caller other than the switch
+        // ==========================================================================================
+        void AddPrimitive(CgsGeometric::Box* lpBox, f32 lfPadding, u16 lu16PrimitiveTag);       // DWARF :89
+        void AddPrimitive(CgsGeometric::Capsule* lpCapsule, f32 lfPadding, u16 lu16PrimitiveTag);// DWARF :101
+        void AddPrimitive(CgsGeometric::Cylinder* lpCylinder, f32 lfPadding, u16 lu16PrimitiveTag);// DWARF :107
 
         // AddPrimitivePair(Box*, Box*) @ 0x82814708 — append a box-vs-box pair record:
         // (debug) assert the two boxes are not near-identical, stamp a box/box header,
@@ -132,8 +186,12 @@ namespace CgsCollision
         void AddCollisionHeader(EVolumeType lePrimType, f32 lfPadding, u16 lu16PrimitiveTag);
 
         // AddCollisionHeader(EVolumeType, EVolumeType, f32, u16, u16) @ 0x82814480 — the
-        // two-type header stamp used by the pair helpers (owned by sub_82814480; declared
-        // for coherence, defined in its own reconstruction).
+        // two-type header stamp used by the pair helpers.
+        // ⚠️ STALE COMMENT CORRECTED 2026-08-19 (wave Q6, cluster `addprim`): this line used
+        // to say "declared for coherence, defined in its own reconstruction". It is DEFINED
+        // in the sibling .cpp -- it has been since 2026-08-06, when the LNK2019 from this very
+        // claim is what caused it to be bodied. Believing the old wording would produce a
+        // second definition and an LNK2005 in a mounted TU (bat:867).
         void AddCollisionHeader(EVolumeType lePrimTypeA, EVolumeType lePrimTypeB,
                                 f32 lfPadding, u16 lu16PrimitiveTagA, u16 lu16PrimitiveTagB);
 
