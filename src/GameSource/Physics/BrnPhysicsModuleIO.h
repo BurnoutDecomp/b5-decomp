@@ -14,6 +14,10 @@
 //   GetDeformationOutputInterface()    @ 0x825A0128 write (bit 3) -> +148656 (DWARF :361)
 //   GetContactSpyInterface()           @ 0x825A0320 write (bit 3) -> +998192 (DWARF :370)
 //   GetSceneInputInterface() const     @ 0x8279F838 read  (bit 4) -> +179424 (DWARF :366)
+//     ⭐ 2026-08-19 (wave Q5/F2): its member is the REAL SceneManagerIO::InSceneUpdateInterface
+//     now (X360 Construct @0x825ABB10 calls InSceneUpdateInterface::Construct(this+179424)),
+//     so both overloads return a typed interface and the reinterpret_cast seam their callers
+//     used is retired at the call sites that this wave owns.
 //   [wave5 ADDITIVE] const GetVehicleOutputRequestInterface() @ 0x8279F448 read -> +16     (:298)
 //   [wave5 ADDITIVE] const GetDeformationOutputInterface()    @ 0x8279F6E8 read -> +148656 (:322)
 //   [wave5 ADDITIVE] non-const GetSceneInputInterface()       @ 0x825A0278 write -> +179424 (:337)
@@ -39,6 +43,7 @@
 #include "types.hpp"
 
 #include "GameShared/GameClasses/Module/CgsIOBuffer.h"  // CgsModule::IOBuffer
+#include "GameShared/GameClasses/Core/CgsAssert.h"      // CGS_ASSERT (the two inline write-lock queue getters, 2026-08-19)
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"  // CgsModule::VariableEventQueue<13312,16> (mGameActionQueue)
 #include "GameShared/GameClasses/System/Timer/CgsTimerStatusInterface.h" // CgsSystem::TimerStatusInterface (mTimerInterface, retyped 2026-08-09)
 #include "GameShared/GameClasses/Module/CgsEventQueue.h"                 // CgsModule::EventQueue<T,N> (the two unfolded input queues, 2026-08-09)
@@ -50,6 +55,7 @@
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleDriverInputInterface.h" // Vehicle::VehicleDriverInputInterface (mVehicleDriverInterface, retyped 2026-08-09)
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleEffectsInputInterface.h" // Vehicle::VehicleEffectsInputInterface (mVehicleEffectsInputInterface, retyped 2026-08-10)
 #include "GameSource/Physics/PropManager/SharedIO/BrnPropInputInterface.h" // Props::PropInputInterface (mPropManagerInputInterface, retyped 2026-08-10)
+#include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_SceneUpdate.h" // SceneManagerIO::InSceneUpdateInterface (mSceneInputInterface, retyped 2026-08-19)
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h" // BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface (mRCEntityOutputInterface, retyped 2026-08-10)
 
 namespace BrnPhysics
@@ -76,7 +82,30 @@ namespace PhysicsModuleIO
         struct PropOutputInterfaceStorage           { unsigned char maBytes[1]; };
         struct DeformationOutputInterfaceStorage    { unsigned char maBytes[1]; };
         struct DeformationOutputInterfaceForEntityModulesStorage { unsigned char maBytes[1]; }; // :384 (unfolded 2026-08-09)
-        struct SceneInputInterfaceStorage           { unsigned char maBytes[1]; };
+        // ⭐⭐ PROMOTED 2026-08-19 (wave Q5 cluster F2 -- the physics->scene seam). This was a
+        // 1-byte opaque placeholder with an 818,767-byte pad behind it, which is why
+        // WorldModule::BridgePhysicsSceneUpdateToScene @0x827ABA40 could not be mounted and why
+        // BrnDeformableObject_Update.cpp:1436 has to gate SetEntityRadius behind "is the queue
+        // storage even there" ("conductor gate: module-output scene interface unprepared").
+        //
+        // The type is NOT inferred -- the console names it in its own Construct. X360
+        // OutputBuffer::Construct @0x825ABB10, instruction 0x825ABBEC:
+        //     addis r3, r30, 3 ; addi r3, r3, -0x4320      == this + 179424
+        //     bl CgsSceneManager::SceneManagerIO::InSceneUpdateInterface::Construct
+        // and the DWARF spells the member's type `SceneInputInterface` (:385) -- the same
+        // typedef-of-InSceneUpdateInterface every sibling IO buffer in the tree already carries
+        // (BrnPropEntityModuleIO.h:211 OutputBuffer_PreScene::SceneInputInterfaceStorage,
+        // BrnTrafficEntityModuleIO's OutputBuffer_Prepare twin).
+        //
+        // The console SPAN closes the identification arithmetically: the next member,
+        // mContactSpyInterface, sits at +998192, so the seat is exactly 998192 - 179424 ==
+        // 818,768 bytes wide -- and InSceneUpdateInterface's 25 embedded queues end at
+        // mRemoveAllEntitiesQueue (X360 +0xC7E3C == 818,748) plus its 12-byte header + tail
+        // alignment. MEASURED host sizeof == 818,944 (>= the console span, because the host's
+        // BaseEventQueue header is 16 bytes where the console's is 12); probe
+        // scratchpad/waveQ5/probe_f2/probe_sizes.cpp. So the pad that used to follow this
+        // member is GONE, not shrunk -- see the private section.
+        typedef CgsSceneManager::SceneManagerIO::InSceneUpdateInterface SceneInputInterfaceStorage;   // :385
         // mContactSpyInterface PROMOTED 2026-08-06 (bridge de-facade wave): the real
         // ContactSpy::ContactSpyInterface (one ContactSpyData* + SetData/IsEmpty), consumed by
         // PhysicsModule::BridgeSimulationToOutput @0x825B0448. Its +998192 seat is 8-aligned,
@@ -160,8 +189,13 @@ namespace PhysicsModuleIO
         // gap to mSceneInputInterface: +159649 .. +179423.
         unsigned char                        maEntityModulesPad[179424 - 159649];     // ...
         SceneInputInterfaceStorage           mSceneInputInterface;             // +179424 :385 (0x8279F838)
-        // gap to mContactSpyInterface: +179425 .. +998191.
-        unsigned char                        maScenePad[998192 - 179425];      // ...
+        // ⚠ NO PAD HERE ANY MORE (2026-08-19, wave Q5/F2): the seat holds the REAL
+        // InSceneUpdateInterface now, whose host sizeof (818,944 -- measured) already EXCEEDS
+        // the 818,768-byte console span [+179424 .. +998192], exactly like
+        // mVehicleInputInterface / mPropManagerInputInterface do in the InputBuffer below. The
+        // old `maScenePad[998192 - 179425]` was holding the console offset of a member that
+        // could never be written; keeping it as well would have added 818 KB of dead space.
+        // _AssertLayout gates the surviving relation (`>=` the console delta).
 
         ContactSpy::ContactSpyInterface      mContactSpyInterface;             // +998192 :386 (real type; seat 8-aligned)
     };
@@ -330,6 +364,32 @@ namespace PhysicsModuleIO
         VehicleEffectsInputInterfaceStorage*        GetVehicleEffectsInputInterface();      // 0x8279EE78 :282
         PropInputInterfaceStorage*                  GetPropManagerInputInterface();         // 0x8279F2F8 :302
         GameActionQueueStorage*                     GetGameActionQueue();                   // 0x8279F3A0 :305
+
+        // ---- ADDITIVE 2026-08-19 (wave Q5 cluster F2): the WRITE-locked twins of the two
+        // unfolded queue getters above. Both are real out-of-line X360 symbols and both are
+        // read off the asm, not inferred:
+        //   0x8279EFD8  `extrwi r11,r11,1,28` (bit 3) -> "Not locked for writing\n",
+        //               baked cite BrnPhysicsModuleIO.h:290 (li r5,0x122), `return this+160208`
+        //   0x8279F080  same bit-3 test, baked cite :293 (li r5,0x125), `return this+324064`
+        // Both offsets are the SAME seats the const twins at :289/:292 return, so no member and
+        // no layout moves. Their ONLY caller in ARTIST is
+        // WorldModule::BridgeScenePotentialContactsToPhysics @0x827ABD80, which write-locks this
+        // buffer and read-locks the scene output -- i.e. the const overloads are unusable to it.
+        // Bodied INLINE here (rather than in BrnPhysicsModuleIO_InputBuffer_Accessors.cpp beside
+        // the const twins) because that TU is another owner's this wave; inline emits no new
+        // out-of-line symbol, so mounting order and LNK2005 are both unaffected.
+        CgsModule::EventQueue<CgsSceneManager::SceneManagerIO::PotentialContact, 2048>*
+        GetPotentialContactQueue()                                                          // 0x8279EFD8 :290
+        {
+            CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+            return &mPotentialContactQueue;
+        }
+        CgsModule::EventQueue<CgsSceneManager::SceneManagerIO::OutOverlapPair, 128>*
+        GetOverlapPairsQueue()                                                              // 0x8279F080 :293
+        {
+            CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+            return &mOverlapPairsQueue;
+        }
 
         // ---- setters (write-lock: status bit 3) ----
         void SetCameraInput(const CameraStorage* lpCamera);                                 // 0x827A9D30 :273

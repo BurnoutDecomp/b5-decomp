@@ -134,9 +134,15 @@ void OutputBuffer::Destruct()
 // is 4-ALIGNED there: the 12-byte {T*,s32,s32} header takes NO tail padding. It is corroborated
 // by the queue's seat inside InputBuffer (buffer+4, itself not 8-aligned) and by
 // BaseEventQueue<OverlappingPair>::GetEvent @0x828AE0D0 (`16 * liIndex + mpEvents`, stride
-// 0x10 == sizeof). On this LLP64 host the element's two u64 VolumeInstanceId members make it
-// 8-aligned, so maEvents lands at +0x10 -- a width difference absorbed by name access, not a
-// divergence to "fix" with packing.
+// 0x10 == sizeof).
+// ✅ UPDATED 2026-08-19 (wave Q5, cluster E3a): this note used to end "on this LLP64 host the
+// element's two u64 VolumeInstanceId members make it 8-aligned, so maEvents lands at +0x10 --
+// a width difference absorbed by name access". Both halves of that sentence are now obsolete:
+// the two-u64 spelling was WRONG (the element is {u32 muVolumeInstanceA, u32 muVolumeInstanceB,
+// f32 mfPadding, bool mbCull} -- DWARF CgsSceneManagerTypes.h:87-90, and the producer/consumer
+// asm in CgsOverlappingPair.h's banner), and with the real field set the host element is
+// 4-aligned exactly like the console, so maEvents lands at +0xC here too. No packing, no
+// divergence, and the console's 0x10 stride is the host's `sizeof` by construction.
 //
 // Callers (X360): OverlapCullingIO::InputBuffer::Construct @0x828CB640 (0x828CB660) and
 // 0x828CC848.

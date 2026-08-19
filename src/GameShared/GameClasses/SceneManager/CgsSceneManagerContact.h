@@ -22,16 +22,58 @@ namespace CgsSceneManager
     //   +0x00  mPosition   (stvx128 v0, r0,  r30)   — point copied from source[idx]
     //   +0x10  mImpulse    (stvx128 v0, r30, r8=0x10)— second per-point vec4
     //   +0x20  mNormal     (stvx128 v0, r30, r9=0x20)— source normal lane, sign-flipped
-    //   +0x30  (reserved 8 bytes)
+    //   +0x30  muVolumeInstanceA  (NOT written by Construct -- see below)
+    //   +0x34  muVolumeInstanceB  (NOT written by Construct -- see below)
     //   +0x38  muFieldA    (stw r11, 0x38(r30) <- source[+4])
     //   +0x3C  muFieldB    (stw r11, 0x3C(r30) <- source[+0xC])
+    //
+    // ⭐ THE +0x30 / +0x34 PAIR WAS NAMED 2026-08-19 (wave Q5, cluster E3a). It used to
+    // be `u8 maReserved30[8]` because Contact::Construct never touches it. Its
+    // producer is the culler's DoPairQuery @0x828C1A18, which stamps the two
+    // volume-instance indices into the freshly Constructed contact immediately BEFORE
+    // pushing it -- twice, once per arm:
+    //     prim x prim  0x828C1B20 `stw r17, var_7F0` / 0x828C1B28 `stw r16, var_7EC`
+    //     prim x agg   0x828C1C7C `stw r17, var_7F0` / 0x828C1C84 `stw r16, var_7EC`
+    // with var_7F0 == var_820+0x30 and var_7EC == var_820+0x34 (var_820 being the
+    // stack Contact), and r17/r16 the DoPairQuery arguments the caller took straight
+    // out of OverlappingPair::muVolumeInstanceA / ::muVolumeInstanceB.
+    // DWARF confirms both names and their position in the member list:
+    //     references/DecFIGS/dwarfdump/.../CgsSceneManagerTypes.h:231
+    //         uint32_t muVolumeInstanceA;  // CgsSceneManagerTypes.h:107
+    //         uint32_t muVolumeInstanceB;  // CgsSceneManagerTypes.h:108
+    // No layout change, no symbol change: eight reserved bytes become two named u32s
+    // at the same offsets. (Edited out of cluster E3a's file grant -- DoPairQuery
+    // cannot stamp these fields without them; reported in
+    // scratchpad/waveQ5/e3a.owner.md.)
+    //
+    // ⚠️ THREE MORE DWARF DELTAS IN THIS FILE, REPORTED NOT APPLIED (they change
+    // names/signatures other TUs bind to, so they belong to this file's owner):
+    //   * `mPosition` / `mImpulse` are really `mPointOnA` / `mPointOnB` (DWARF
+    //     CgsSceneManagerTypes.h:104/:105) -- Construct copies them from the source
+    //     result's pointsOn1[i] / pointsOn2[i], which are two CONTACT POINTS, one per
+    //     side. Neither is an impulse; nothing in the scene manager computes an
+    //     impulse. A wrong name here is a live trap for the world/physics bridges that
+    //     will read these next (they need pointOnA/pointOnB, not a "position").
+    //   * `muFieldA` / `muFieldB` are `muPolyTagA` / `muPolyTagB` (DWARF :109/:110) --
+    //     the source's tag1/tag2 user tags (PrimitivePairIntersectResult +0x04/+0x0C).
+    //   * `Contact::SourceResult` below is a FORK of rw::collision::
+    //     PrimitivePairIntersectResult, which now has a real home at
+    //     vendor/renderware/collision/GPInstance.hpp:320 (same 0x750 stride, same
+    //     normal/pointsOn1/pointsOn2/numPoints offsets). DWARF declares
+    //     `void Construct(PrimitivePairIntersectResult*, uint32_t)`
+    //     (CgsSceneManagerTypes.h:102). Retyping the parameter would change
+    //     Contact::Construct's mangled name and pull the vendor narrow-phase header
+    //     into every includer of this file, so it is left for a coordinated step;
+    //     DoPairQuery casts between the two spellings at its two call sites with the
+    //     equivalence static_asserted in that TU.
     // -------------------------------------------------------------------------
     struct alignas(16) Contact
     {
         Vector4 mPosition;             // +0x00
         Vector4 mImpulse;              // +0x10
         Vector4 mNormal;               // +0x20  (negated source normal)
-        u8      maReserved30[8];       // +0x30
+        u32     muVolumeInstanceA;     // +0x30  DWARF :107 (stamped by DoPairQuery)
+        u32     muVolumeInstanceB;     // +0x34  DWARF :108 (stamped by DoPairQuery)
         u32     muFieldA;              // +0x38  (<- source +0x04)
         u32     muFieldB;              // +0x3C  (<- source +0x0C)
 

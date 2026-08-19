@@ -5,9 +5,12 @@
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   rw::collision::Volume::InitializeVTable @ 0x82BB03A8
 //   rw::collision::Volume::operator=        @ 0x82BB12D0
-// plus the six per-type Volume descriptor RECORDS the first of those installs
-// (X360 .rdata unk_82F91740 / unk_82F918C0 / unk_82F919A4 / unk_82F9176C /
-// unk_82F91894 / unk_82F919D0), dumped slot by slot 2026-08-18 (waveQ5 rwc3).
+// plus the SDK-side declarations of the six per-type Volume descriptor RECORDS the first
+// of those installs (X360 .rdata unk_82F91740 / unk_82F918C0 / unk_82F919A4 / unk_82F9176C /
+// unk_82F91894 / unk_82F919D0, dumped slot by slot 2026-08-18 by waveQ5 rwc3). The records
+// themselves are DEFINED in vendor/renderware/collision/VolumeVTables.cpp since 2026-08-19
+// (wave Q5 vtbind) -- see the block below for why, and for the measured proof that both
+// halves bind to one symbol.
 //
 // InitializeVTable fills the shared Volume descriptor table (7 words at
 // dword_8327EEE0 -- the SDK's `Volume::VTable *vTableArray[VOLUMETYPENUMINTERNALTYPES]`,
@@ -47,50 +50,77 @@
 //     ?gVolumeVTable@collision@rw@@3PAPEAXA and
 //     ?gVolumeVTable@collision@rw@@3PAPEAUVTable@Volume@12@A -- different symbols, so
 //     leaving :20 alone is an LNK2019 in FixableVolume.obj.
-//  3. The six `gVolumeHandler_82F91*` symbols are REAL `Volume::VTable` records now,
-//     defined below, instead of single zero bytes in SDKs/EATech/AptRenderLinkStubs.cpp
-//     (whose six stub lines were deleted in the same change -- both sides are the same
-//     owner's, so there is no window in which the tree carries both).
+//  3. The six `gVolumeHandler_82F91*` symbols became REAL `Volume::VTable` records instead
+//     of single zero bytes in SDKs/EATech/AptRenderLinkStubs.cpp (whose six stub lines were
+//     deleted in the same change -- both sides were the same owner's, so there was no window
+//     in which the tree carried both). They were defined HERE with null method slots on
+//     2026-08-18; the next block records where they went and why.
 //
+// ---------------------------------------------------------------------------------------
+// ⭐ WHAT CHANGED 2026-08-19 (wave Q5 vtbind): THE SIX DESCRIPTORS ARE BOUND, AND THEY MOVED.
+// ---------------------------------------------------------------------------------------
+// Until this date the six records were DEFINED here with all seven method slots NULL, and
+// the note below listed four obstacles (a)-(d) to binding them. (d) -- "a TU cannot NAME both
+// rw::collision::Volume and any primitive header" -- was the head of that queue and is still
+// TRUE **for this half**. What was never measured is the other half: the VENDOR side has no
+// such conflict at all. scratchpad/waveQ5/probe_vtbind/measure_coinclude.cpp compiles
+// CollisionVolume.hpp + AABBox.hpp + Capsule/Cylinder/Triangle/Aggregate + GPInstance +
+// LineSegIntersect in ONE TU with the canonical ship flags: STATUS=pass. The fork is
+// one-sided.
+//
+// So the six records now live in vendor/renderware/collision/VolumeVTables.cpp, where every
+// primitive's methods are visible, and this TU keeps what only it can hold: the SDK-side
+// declarations, the shared gVolumeVTable array, and InitializeVTable's fill. 34 of the 40
+// method slots the shipped image binds are bound; 2 are genuinely 0 in the image; 6 are
+// PARKED with per-slot reasons at the record (see that file). Obstacles (a) and (b) are
+// SOLVED there by thin per-type adapters with the slot's exact signature -- there is no
+// function-pointer cast anywhere -- and (c) is closed: BoxVolume.cpp now carries all four
+// Box and all four Sphere bodies except the two LineSegIntersects.
+//
+// ⚠️ MOUNT: vendor/renderware/collision/VolumeVTables.cpp is a NEW TU and MUST be added to
+// tools/build/build_game_exe.bat in the same commit, in the wave-Q5 C1 collision block. If it
+// is missed, THIS TU's six references fail to resolve -- six LNK2019s, loud, not silent.
+//
+// ---------------------------------------------------------------------------------------
 // LINK FACTS still open, REPORTED not fixed:
-//  * ⚠️ THE SIX DESCRIPTORS ARE PARTIAL, AND DELIBERATELY SO. Every value that could be
-//    grounded is grounded (typeID, name, flags -- all read out of the shipped image); the
-//    seven METHOD slots are null with their X360 addresses named beside them, because
-//    NONE of them can be bound on the host today. The obstacle set, re-measured this
-//    round (it is the waveQ2 owner's list, still true line for line):
-//      (a) The slot type is a POINTER TO MEMBER of the 96-byte `rw::collision::Volume`
-//          (volume_debug_access.h). All four homed primitive classes are STANDALONE with
-//          no base clause -- vendor/renderware/collision/AggregateVolume.hpp:48,
-//          TriangleVolume.hpp:48, CapsuleVolume.hpp:56, CylinderVolume.hpp:49 -- so
-//          `&X::GetBBox` can never convert to
-//          `RwBool (Volume::*)(const Matrix44Affine*, RwBool, AABBox&) const`.
+//  * The four obstacles as they stood before this change, kept for the record. (a) and (b)
+//    were the reason the slots could not be spelled; they are handled by the adapters in
+//    VolumeVTables.cpp, not made to disappear:
+//      (a) The canonical slot type is a POINTER TO MEMBER of the 96-byte
+//          `rw::collision::Volume` (rwccore.h:1490-1505). All four standalone primitive
+//          classes -- vendor/renderware/collision/AggregateVolume.hpp, TriangleVolume.hpp:48,
+//          CapsuleVolume.hpp:56, CylinderVolume.hpp:49 -- have no base clause, so
+//          `&X::GetBBox` can never convert to one. The tree's slot type is therefore a FREE
+//          function pointer with an explicit leading `const Volume*`, which is what the
+//          three TU-local descriptor views in that directory already used. MEASURED
+//          (scratchpad/waveQ5/probe_vtbind/measure_layout.cpp): on MSVC x64 the two
+//          spellings are byte-for-byte the same record, so this is a spelling change, not a
+//          layout change.
 //      (b) THREE of those four declare the transform parameter as `const Vec4*`
 //          (TriangleVolume.hpp:77, CapsuleVolume.hpp:91, CylinderVolume.hpp:72); only
-//          AggregateVolume.hpp:54 spells `const math::vpu::Matrix44Affine*`.
-//      (c) SphereVolume and BoxVolume have NO bodies anywhere in the tree, and it is more
-//          than the two GetBBoxes: SphereVolume::GetBBox @0x82BA8020 (both bodies exist in
-//          the image and were disassembled this round), SphereVolume::GetBBoxDiag
-//          @0x82BA8580, BoxVolume::GetBBox @0x82BA9FC8, BoxVolume::GetBBoxDiag @0x82BA8890,
-//          plus every Sphere/Box GetMaximumFeature / CreateGPInstance / LineSegIntersect
-//          the dump names. ⚠️ TriangleVolume::GetBBoxDiag @0x82BBA110 appears in the dump
-//          but has NO identity.json row -- an export hole; declare it, never body it from
-//          the .i64 label alone.
-//      (d) STRUCTURAL: a TU cannot even NAME both `rw::collision::Volume` (which reaches
-//          BrnCommonTypes.h's vendor-POD `rw::math::vpu::Vector3`) and any of the four
-//          primitive headers (which reach AABBox.hpp -> the EATech `Vector3` class) --
-//          that is the C2011 duplicate the waveQ2 owner measured (rwvol.owner.md s4).
-//          So the descriptor TU that binds the real slots cannot exist until that
-//          vocabulary is collapsed. This is the true head of the queue, not (c).
-//  * HOST-WIDTH HAZARD, PRE-EXISTING, NOT INTRODUCED HERE. `FixableVolume::FixUp`
-//    (FixableVolume.cpp:44) stores `gVolumeVTable[type]` through a `void**` into the
-//    volume record's +0x40 -- 8 bytes on x64 into a slot the console sized at 4 -- so it
-//    clobbers +0x44..+0x47, the box half-extent X lane. That was already happening (it
-//    wrote an 8-byte NULL); with a real table it writes 8 real bytes. The clean host fix
-//    is the one named in volume_debug_access.h's banner: keep a 4-byte TYPE INDEX at +0x40
-//    and index gVolumeVTable in the accessors -- which needs FixUp, FixDown, the four
-//    Initialize bodies and both TU-local descriptor views changed together, so it is NOT a
-//    one-file job and was not attempted here. No mounted TU reads GetExtent() today
-//    (BrnPropEntityDebugComponent.cpp is not in build_game_exe.bat), so nothing regresses.
+//          AggregateVolume spells `const math::vpu::Matrix44Affine*`. Same pointer:
+//          sizeof(Matrix44Affine)==64 == four 16-byte rows, sizeof(Vec4)==16 -- MEASURED,
+//          measure_vocab.cpp / measure_vocab2.cpp. One documented adapter converts it.
+//      (c) CLOSED. SphereVolume and BoxVolume had no bodies at all; BoxVolume.cpp now has
+//          GetBBox / GetBBoxDiag / GetMaximumFeature / CreateGPInstance for both, from the
+//          raw asm. ⚠️ TriangleVolume::GetBBoxDiag @0x82BBA110 is STILL an export hole (no
+//          identity.json row, no per-address JSON) and its slot is parked, not stubbed.
+//      (d) STILL TRUE FOR THIS TU, and that is now a documented property rather than a
+//          blocker: this file cannot NAME both `rw::collision::Volume` (which reaches
+//          BrnCommonTypes.h's `rw::math::vpu::Vector3`) and any primitive header (which
+//          reaches AABBox.hpp -> the EATech `Vector3` class) -- a hard C2011, still
+//          reproduced by scratchpad/waveQ5/probe_rwc3/probe_descriptor_blocked.cpp. It is
+//          why the records are defined on the other side of the fork.
+//  * HOST-WIDTH HAZARD -- CLOSED 2026-08-18, kept for the record because the fix is what
+//    makes the enum-in-+0x40 representation below legal. `FixableVolume::FixUp` USED TO
+//    store `gVolumeVTable[type]` through a `void**` into the volume record's +0x40 -- 8
+//    bytes on x64 into a slot the console sized at 4 -- clobbering +0x44..+0x47, the box
+//    half-extent X lane. IT NO LONGER DOES: GameShared/GameClasses/RenderWare/
+//    FixableVolume.cpp now reads and writes a `u32*` at +0x40 and FixUp/FixDown are the
+//    console's VALIDATION half only (the enum<->pointer swap is the identity on the host),
+//    which is exactly the clean fix volume_debug_access.h's banner named -- keep a 4-byte
+//    TYPE INDEX at +0x40 and index gVolumeVTable in the accessors. Every reader now
+//    recovers the console's pointer as gVolumeVTable[type]. Nothing writes 8 bytes there.
 //  * TWO TU-LOCAL DUPLICATE MODELS of the descriptor, reported per gotcha 7 (both are
 //    TU-local, so no link-time ODR break): vendor/renderware/collision/VolumeBBoxQuery.cpp:68
 //    `struct VolumeVTableView` and PrimitiveIntersect.cpp:795 `struct VolumeVTable` both
@@ -108,114 +138,35 @@ namespace rw
         // -------------------------------------------------------------------------------
         // The six per-type Volume descriptors -- X360 .rdata records, one per VolumeType.
         //
-        // The console's home for each of these is that primitive's OWN TU (the record sits
-        // in the same .rdata run as that class's strings); the tree has no SphereVolume.cpp
-        // or BoxVolume.cpp, and the four TUs that do exist cannot include this header (see
-        // obstacle (d) above), so they are homed here -- beside the table they fill -- and
-        // keep the address-suffixed names the rest of the tree already refers to.
+        // DECLARED here, DEFINED in vendor/renderware/collision/VolumeVTables.cpp (2026-08-19,
+        // wave Q5 vtbind). That TU is the only one that can see all six primitive classes at
+        // once, which is what makes the method slots bindable at all; this one is the only one
+        // that can hold `gVolumeVTable` in the SDK's own vocabulary. The two halves spell
+        // `Volume::VTable` differently and bind to the SAME decorated symbol -- MEASURED with
+        // dumpbin /symbols (scratchpad/waveQ5/vtbind/mangle_sdk.cpp + mangle_vendor.cpp):
+        //     this half   UNDEF  ?gVolumeHandler_82F91740@collision@rw@@3UVTable@Volume@12@B
+        //     vendor half SECT3  ?gVolumeHandler_82F91740@collision@rw@@3UVTable@Volume@12@B
+        // MSVC encodes the leaf class key (`U` = struct VTable) and the enclosing SCOPE NAMES,
+        // never the enclosing class key and never a member type -- which is exactly why the
+        // fork is invisible at link time. The layout identity that makes that safe rather than
+        // merely quiet is measured separately (measure_layout.cpp; see the header's VTable
+        // banner).
         //
-        // `extern const` because a namespace-scope `const` has INTERNAL linkage in C++ and
-        // these are referenced by name from comments/notes elsewhere and were external
-        // before; the keyword forces external linkage, exactly as the retired
+        // `extern const` because a namespace-scope `const` has INTERNAL linkage in C++; the
+        // keyword forces external linkage on both halves, exactly as the retired
         // AptRenderLinkStubs.cpp stubs documented.
         //
-        // GROUNDED: typeID, name and flags are the words read out of the image (the table
-        // in volume_debug_access.h's VTable comment). NOT GROUNDED, hence null: the seven
-        // method slots -- their X360 addresses are named on each line so a future owner can
-        // bind them without re-dumping, but binding is impossible today for the reasons in
-        // the LINK FACTS block. A null slot is an honest hole: the previous spelling was a
-        // single zero BYTE, so `GetType()` read four bytes of whatever followed it.
+        // The per-slot X360 addresses, the typeID/name/flags dump and the five parked slots
+        // are all recorded at the records themselves in VolumeVTables.cpp -- deliberately not
+        // duplicated here, so there is one place to keep true.
         // -------------------------------------------------------------------------------
 
-        extern const Volume::VTable gVolumeHandler_82F91740;
-        const Volume::VTable gVolumeHandler_82F91740 =        // type 1 SPHERE
-        {
-            E_VOLUMETYPE_SPHERE,
-            0,   // getBBox           X360 0x82BA8020  SphereVolume::GetBBox        (un-homed)
-            0,   // getBBoxDiag       X360 0x82BA8580  SphereVolume::GetBBoxDiag    (un-homed)
-            0,   // getInterval       X360 0x82BAC980  ICF-folded `li r3,1 ; blr`
-            0,   // getMaximumFeature X360 0x82BA81B0                               (un-homed)
-            0,   // createGPInstance  X360 0x82BA8100                               (un-homed)
-            0,   // lineSegIntersect  X360 0x82BA82C8                               (un-homed)
-            0,   // release           X360 0x82AD5078  ICF-folded empty `blr`
-            "SphereVolume",
-            0
-        };
-
-        extern const Volume::VTable gVolumeHandler_82F918C0;
-        const Volume::VTable gVolumeHandler_82F918C0 =        // type 2 CAPSULE
-        {
-            E_VOLUMETYPE_CAPSULE,
-            0,   // getBBox           X360 0x82BAF9C8  CapsuleVolume::GetBBox     (homed, unbindable (a)+(b))
-            0,   // getBBoxDiag       X360 0x82BAF6A8  CapsuleVolume::GetBBoxDiag (homed, unbindable (a))
-            0,   // getInterval       X360 0x82BAC980  ICF-folded `li r3,1 ; blr`
-            0,   // getMaximumFeature X360 0x82BAF808                             (un-homed)
-            0,   // createGPInstance  X360 0x82BAF6F0                             (un-homed)
-            0,   // lineSegIntersect  X360 0x82BAFCF8                             (un-homed)
-            0,   // release           X360 0x82AD5078  ICF-folded empty `blr`
-            "CapsuleVolume",
-            0
-        };
-
-        extern const Volume::VTable gVolumeHandler_82F919A4;
-        const Volume::VTable gVolumeHandler_82F919A4 =        // type 3 TRIANGLE
-        {
-            E_VOLUMETYPE_TRIANGLE,
-            0,   // getBBox           X360 0x82BBA038  TriangleVolume::GetBBox    (homed, unbindable (a)+(b))
-            0,   // getBBoxDiag       X360 0x82BBA110  TriangleVolume::GetBBoxDiag (EXPORT HOLE: no identity.json row)
-            0,   // getInterval       X360 0x82BAC980  ICF-folded `li r3,1 ; blr`
-            0,   // getMaximumFeature X360 0x82BBACD0                             (un-homed)
-            0,   // createGPInstance  X360 0x82BBAA00                             (un-homed)
-            0,   // lineSegIntersect  X360 0x82BBB970                             (un-homed)
-            0,   // release           X360 0x82AD5078  ICF-folded empty `blr`
-            "TriangleVolume",
-            0
-        };
-
-        extern const Volume::VTable gVolumeHandler_82F9176C;
-        const Volume::VTable gVolumeHandler_82F9176C =        // type 4 BOX
-        {
-            E_VOLUMETYPE_BBOX,
-            0,   // getBBox           X360 0x82BA9FC8  BoxVolume::GetBBox         (un-homed)
-            0,   // getBBoxDiag       X360 0x82BA8890  BoxVolume::GetBBoxDiag     (un-homed)
-            0,   // getInterval       X360 0x82BAC980  ICF-folded `li r3,1 ; blr`
-            0,   // getMaximumFeature X360 0x82BA87F0                             (un-homed)
-            0,   // createGPInstance  X360 0x82BA92E8                             (un-homed)
-            0,   // lineSegIntersect  X360 0x82BA9478                             (un-homed)
-            0,   // release           X360 0x82AD5078  ICF-folded empty `blr`
-            "BoxVolume",
-            0
-        };
-
-        extern const Volume::VTable gVolumeHandler_82F91894;
-        const Volume::VTable gVolumeHandler_82F91894 =        // type 5 CYLINDER
-        {
-            E_VOLUMETYPE_CYLINDER,
-            0,   // getBBox           X360 0x82BAD490  CylinderVolume::GetBBox    (homed, unbindable (a)+(b))
-            0,   // getBBoxDiag       X360 0x82BAC7B8  CylinderVolume::GetBBoxDiag (homed, unbindable (a))
-            0,   // getInterval       X360 0x82BAC980  ICF-folded `li r3,1 ; blr`
-            0,   // getMaximumFeature X360 0x82BAC988                             (un-homed)
-            0,   // createGPInstance  X360 0x82BAC7F8                             (un-homed)
-            0,   // lineSegIntersect  X360 0x82BAF688                             (un-homed)
-            0,   // release           X360 0x82AD5078  ICF-folded empty `blr`
-            "CylinderVolume",
-            0
-        };
-
-        extern const Volume::VTable gVolumeHandler_82F919D0;
-        const Volume::VTable gVolumeHandler_82F919D0 =        // type 6 AGGREGATE
-        {
-            E_VOLUMETYPE_AGGREGATE,
-            0,   // getBBox           X360 0x82BBBA10  AggregateVolume::GetBBox     (homed, unbindable (a))
-            0,   // getBBoxDiag       X360 0x82BBBB58  AggregateVolume::GetBBoxDiag (homed, unbindable (a))
-            0,   // getInterval       X360 0x00000000  GENUINELY NULL in the image
-            0,   // getMaximumFeature X360 0x82B0F1B8  ICF-folded `li r3,0 ; blr`
-            0,   // createGPInstance  X360 0x82B0F1B8  ICF-folded `li r3,0 ; blr` (same body)
-            0,   // lineSegIntersect  X360 0x00000000  GENUINELY NULL in the image
-            0,   // release           X360 0x82AD5078  ICF-folded empty `blr`
-            "AggregateVolume",
-            0
-        };
+        extern const Volume::VTable gVolumeHandler_82F91740;   // type 1 SPHERE    (unk_82F91740)
+        extern const Volume::VTable gVolumeHandler_82F918C0;   // type 2 CAPSULE   (unk_82F918C0)
+        extern const Volume::VTable gVolumeHandler_82F919A4;   // type 3 TRIANGLE  (unk_82F919A4)
+        extern const Volume::VTable gVolumeHandler_82F9176C;   // type 4 BOX       (unk_82F9176C)
+        extern const Volume::VTable gVolumeHandler_82F91894;   // type 5 CYLINDER  (unk_82F91894)
+        extern const Volume::VTable gVolumeHandler_82F919D0;   // type 6 AGGREGATE (unk_82F919D0)
 
         // Shared Volume descriptor table (dword_8327EEE0 .. dword_8327EEF8) -- the SDK's
         // Volume::vTableArray. Element type per DWARF volume.h:1521 (see the header note on
@@ -275,6 +226,8 @@ namespace rw
 // serialised stride pinned at BrnPhysicsPropTypeData.h:201 and measured as i*96 in
 // PropManager::GetPropInertia -- it cannot grow), so the host keeps the 4-byte TYPE ENUM
 // in the slot and every reader recovers the console pointer as gVolumeVTable[enum].
-// The six descriptors' METHOD slots are still null (binding them is the (c) queue in
-// scratchpad/waveQ5/rwc3.owner.md); GetType()/name/flags are real.
+// The six descriptors' METHOD slots are BOUND as of the wave-Q5 vtbind change -- see the
+// ⭐ block above and vendor/renderware/collision/VolumeVTables.cpp, which defines the
+// records: 34 of the 40 image-bound method slots are live, 2 are genuine image zeros, and
+// 6 are parked with per-slot reasons at the record. GetType()/name/flags are real.
 // ===========================================================================================

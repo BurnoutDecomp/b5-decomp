@@ -45,6 +45,11 @@ namespace PhysicsModuleIO
         static_assert(offsetof(OutputBuffer, mSceneInputInterface)
                     - offsetof(OutputBuffer, mDeformationOutputInterfaceForEntityModules) == 179424 - 159648,
                       "entity-modules -> scene console delta");
+        // ⭐ 2026-08-19 (wave Q5/F2): this relation is no longer held by a pad -- it is held by
+        // sizeof(InSceneUpdateInterface) itself, now that mSceneInputInterface IS that type.
+        // Console delta 818,768; measured host 818,944 (the 16-vs-12-byte queue headers). The
+        // `>=` is what makes the promotion safe: if a later wave ever SHRINKS the interface
+        // below the console span this gate fails instead of silently re-seating the spy.
         static_assert(offsetof(OutputBuffer, mContactSpyInterface)
                     - offsetof(OutputBuffer, mSceneInputInterface)           >= 998192 - 179424,
                       "scene -> contact-spy console delta (>=: the spy seat 8-aligns)");
@@ -95,13 +100,26 @@ namespace PhysicsModuleIO
     // The game-event-queue leg inside VehicleOutputInterface runs through that class's
     // sanctioned span cast, gated by a static_assert on the span size -- see its .cpp.
     //
-    // ⚠️ FOUR legs still CANNOT be emitted and are NOT faked: mPropManagerOutputInterface
-    // (+71792), mDeformationOutputInterface (+148656),
-    // mDeformationOutputInterfaceForEntityModules (+159648) and mSceneInputInterface (+179424)
-    // are 1-byte opaque *Storage spans (each size-pinned by the pad that follows it) with no
-    // members to construct. Their seats and exact console call lists are transcribed above.
-    // Any consumer reaching one of those will fire the same loud "Not Constructed" this
-    // buffer did before it had a Construct at all, by design.
+    // ⭐⭐ 2026-08-19 (wave Q5 cluster F2): THE SCENE LEG IS LIVE. mSceneInputInterface was the
+    // fourth of the blocked legs, parked only because the member was a 1-byte opaque span. It is
+    // the real CgsSceneManager::SceneManagerIO::InSceneUpdateInterface now -- the CONSOLE names
+    // that type in this very function (0x825ABBEC: `addis r3,r30,3 ; addi r3,r3,-0x4320` ==
+    // this+179424, `bl InSceneUpdateInterface::Construct`) -- so the console's own call is
+    // reproduced literally below. Two live consequences, both previously worked around:
+    //   * WorldModule::BridgePhysicsSceneUpdateToScene @0x827ABA40 (WorldBridgePhysicsToScene.cpp)
+    //     can be mounted: its source is this member and it is now typed + Constructed.
+    //   * BrnDeformableObject_Update.cpp:1436's marked-deviation host guard ("conductor gate:
+    //     module-output scene interface unprepared -- SetEntityRadius skipped") exists ONLY
+    //     because nothing constructed this interface's queue storage. It can be un-guarded now.
+    //     Reported, not edited -- that file belongs to another owner.
+    //
+    // ⚠️ THREE legs still CANNOT be emitted and are NOT faked: mPropManagerOutputInterface
+    // (+71792), mDeformationOutputInterface (+148656) and
+    // mDeformationOutputInterfaceForEntityModules (+159648) are 1-byte opaque *Storage spans
+    // (each size-pinned by the pad that follows it) with no members to construct. Their seats
+    // and exact console call lists are transcribed above. Any consumer reaching one of those
+    // will fire the same loud "Not Constructed" this buffer did before it had a Construct at
+    // all, by design.
     void OutputBuffer::Construct()
     {
         CgsModule::IOBuffer::Construct();               // status = 1
@@ -109,6 +127,7 @@ namespace PhysicsModuleIO
         mVehicleOutputRequestInterface.Construct();     // +16      (the six sim-request queues)
         mVehicleOutputInterface.Construct();            // +44128   (X360-inline @0x825ABB58)
         mVehicleManagerOutputInterface.Construct();     // +41952   (X360 0x822E6790)
+        mSceneInputInterface.Construct();               // +179424  (X360 0x825ABBEC)
         mContactSpyInterface.Construct();               // +998192  (the console's trailing stwx 0)
     }
 

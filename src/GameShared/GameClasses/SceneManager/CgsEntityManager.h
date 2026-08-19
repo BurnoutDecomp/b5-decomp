@@ -105,6 +105,26 @@ namespace CgsSceneManager
                               VolumeId lVolumeId,
                               const Matrix44Affine& lrTransform);
 
+        // ---- wave Q5 / cluster RMLEG (2026-08-19): the removal mirror of AddVolumeInstance.
+        // DWARF h:120 / h:126. NEITHER HAS AN OUT-OF-LINE X360 BODY -- both are absent from
+        // progress/identity.json because the console INLINED them at every use, so the shape
+        // below is recovered from the three verbatim inline expansions, which agree
+        // instruction for instruction:
+        //   * BridgeInputSceneUpdateInterfaceToSubModules leg 3 @0x828D21C4..0x828D21EC
+        //       bl GetVolumeInstanceIndexByID ; bl RemoveVolumeInstanceFromEntity ;
+        //       bl IndexedHashTable<VolumeInstanceId,u32,509>::Remove ;
+        //       bl ObjectPool<VolumeInstance,5048,int>::FreeObject
+        //     -- i.e. RemoveVolumeInstance(id) == RemoveVolumeInstanceByIndex(id, GetVolumeInstanceIndexByID(id)).
+        //   * SceneManagerModule::RemoveAllEntityVolumeInstances tail @0x828CDA24..0x828CDA48
+        //   * (reached through it) RemoveAllOwnerVolumeInstances @0x828CDA70
+        //     -- both of the latter already HOLD the pool index and re-load the id off the
+        //     record (`ld r28, 0x50(r31)`), which is exactly the ByIndex form's two arguments.
+        // The trio's last two calls touch mVolumeInstanceIdToIndex / mVolumeInstancePool, which
+        // are private -- that privacy is the ONLY reason drain leg 3 and the two RemoveAll*
+        // walkers were parked in round 3 (scratchpad/waveQ5/e1a.owner.md section 3, P1/P2).
+        void RemoveVolumeInstance(VolumeInstanceId lVolumeInstanceId);
+        void RemoveVolumeInstanceByIndex(VolumeInstanceId lVolumeInstanceId, s32 liIndex);
+
         // The index -> public-id lookup SceneManagerModule::ProcessFrustumTestJobResults
         // @0x828C7838 uses to turn a coarse-query result index back into an EntityId
         // (the X360 truncated accessor `CgsSceneManager::Scen(&mEntityManager, index)`
@@ -164,6 +184,17 @@ namespace CgsSceneManager
         // @ 0x828BA088 (DWARF h:132) -- set the collision-padding vector on the instance
         // at a pool index.
         void SetVolumePadding(s32 liIndex, Vector3 lPadding);
+
+        // DWARF h:216 / h:220 -- iterate the ALLOCATED entity slots in ascending index
+        // order; -1 ends the walk. Added 2026-08-19 (wave Q5 / cluster RMLEG) because
+        // SceneManagerModule::RemoveAllOwnerVolumeInstances @0x828CDA70 is a sweep over
+        // every live entity and the X360 reaches mEntityPool's own
+        // GetFirstObjectIndex/GetNextObjectIndex directly (0x828CDA94 / 0x828CDB64) --
+        // the pool is private here, and these two DWARF-declared members are the console's
+        // own names for exactly that pair. Header-declared only; no new X360 symbol (the
+        // console inlined the pool scan at every use).
+        s32 GetFirstEntityIndex() const;
+        s32 GetNextEntityIndex(s32 liCurrentIndex) const;
 
     protected:
         // DWARF h:227 (body CgsEntityManager.cpp:274) -- push a volume-instance slot onto

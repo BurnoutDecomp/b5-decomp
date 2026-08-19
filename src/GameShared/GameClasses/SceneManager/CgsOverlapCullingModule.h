@@ -51,9 +51,14 @@ namespace CgsSceneManager
     // avoid forking that name the handle is modelled as an opaque void* here. It is only
     // stored (SetContactGenerator) and read by the unreconstructed DoPairQuery body.
 
-    // Per-volume reference produced by the broad phase. The DWARF DoPairQuery signature
-    // names a VolRef::Volume*; that argument is only used by the (unreconstructed)
-    // DoPairQuery body, so it is an opaque forward-declared pointer type here.
+    // The scene manager's own spelling of a serialised RenderWare collision volume --
+    // an INCOMPLETE type by design, forward-declared identically in
+    // CgsVolumeStore.h:82 (this is the same entity, not a second one). It is what
+    // VolumeManager::GetRwVolume hands back and what DoPairQuery forwards to the
+    // rw::collision narrow phase; the ONE place that needs its interior
+    // (CgsVolumeManager.cpp:212) reinterpret_casts it to rw::collision::Volume with the
+    // DWARF's own note that volume.h:39 typedefs exactly that. DoPairQuery does the
+    // same, for the same reason, at three sites in its .cpp.
     namespace VolRef { struct Volume; }
 
     namespace OverlapCullingIO
@@ -115,25 +120,48 @@ namespace CgsSceneManager
 
     private:
         // --- the per-frame queue processors (DWARF private helpers) ---
+        // Bodies: ContactGen/CgsOverlapCullingModule.cpp (this class's main TU).
         void ProcessOverlapsQueue(OverlapCullingIO::OutputBuffer* lpOutputBuffer,
                                   const OverlapCullingIO::InputBuffer* lpInputBuffer);    // @ 0x828D0330 :237
         void ProcessAddInternalVolumeQueue(const OverlapCullingIO::InputBuffer* lpInputBuffer);     // @ 0x828B5420 :307
         void ProcessRemoveInternalVolumeQueue(const OverlapCullingIO::InputBuffer* lpInputBuffer);  // @ :346
         void ProcessOverlap(OverlappingPair& lrOverlappingPair,
-                            OverlapCullingIO::OutputBuffer* lpOutputBuffer);             // @ :380
+                            OverlapCullingIO::OutputBuffer* lpOutputBuffer);             // @ 0x828CAF38 :380
 
-        // The narrow-phase pair query (DWARF CgsOverlapCullingModule.cpp:469). Large
-        // RenderWare-driven body; declaration faithful, body not reconstructed this pass.
-        u32 DoPairQuery(OverlapCullingIO::OutputBuffer* lpOutputBuffer,
-                        const VolumeInstance* lpVolumeInstanceA, u32 luVolumeIndexA,
-                        const VolRef::Volume* lpVolumeA,
-                        const VolumeInstance* lpVolumeInstanceB, u32 luVolumeIndexB,
-                        const VolRef::Volume* lpVolumeB, f32 lfPadding);                  // @ 0x828C1A18 :469
+        // The narrow-phase pair query -- the culler's single contact PRODUCER, shared by
+        // both the overlap path (ProcessOverlap) and the internal-collision path
+        // (DoInternalCollision). DWARF CgsOverlapCullingModule.cpp:469 gives the exact
+        // declaration, RETURN TYPE INCLUDED:
+        //     void DoPairQuery(OutputBuffer*, const VolumeInstance*, uint32_t,
+        //                      const VolRef::Volume*, const VolumeInstance*, uint32_t,
+        //                      const VolRef::Volume*, float_t);
+        // (It was declared `u32` here while the body was a `return 0` shell. The X360
+        // body falls through to __restgprlr_16 without setting r3, which is why
+        // Hex-Rays types both this and its caller `int`; nothing reads the value --
+        // DoInternalCollision @0x828CB1D8 tail-calls it and discards r3.)
+        //
+        // ⚠️ luVolumeInstanceIndexA/B RENAMED 2026-08-19 (E3b's finding, confirmed
+        // here from DoPairQuery's own asm). They were `luVolumeIndexA`/`luVolumeIndexB`,
+        // which named the WRONG INDEX SPACE: a VolumeManager volume index is
+        // `lpVolumeInstance->miVolumeIndex`, and that is what GetRwVolume is fed one
+        // line earlier in every caller. These two are ENTITY-MANAGER VOLUME-INSTANCE
+        // indices -- DoPairQuery stashes them in r17/r16 and stores them verbatim into
+        // CgsSceneManager::Contact::muVolumeInstanceA/B (0x828C1B20/0x828C1B28 and
+        // 0x828C1C7C/0x828C1C84), which is the pair of ids the world bridge resolves.
+        void DoPairQuery(OverlapCullingIO::OutputBuffer* lpOutputBuffer,
+                         const VolumeInstance* lpVolumeInstanceA, u32 luVolumeInstanceIndexA,
+                         const VolRef::Volume* lpVolumeA,
+                         const VolumeInstance* lpVolumeInstanceB, u32 luVolumeInstanceIndexB,
+                         const VolRef::Volume* lpVolumeB, f32 lfPadding);                 // @ 0x828C1A18 :469
 
-        bool IsInsideEscapeVolume(s32 liVolumeInstanceIndex);                             // @ :600
+        // --- the internal-collision half -------------------------------------------
+        // BODIES LIVE IN THE PARTFILE ContactGen/CgsOverlapCullingModule_wQ5_01.cpp
+        // (wave Q5, cluster E3b). Declarations stay here; do NOT re-add bodies for
+        // these three to CgsOverlapCullingModule.cpp -- that is an instant LNK2005.
+        bool IsInsideEscapeVolume(s32 liVolumeInstanceIndex);                             // @ 0x828CB0A8 :600
         void DoInternalCollision(s32 liVolumeInstanceIndex,
-                                 OverlapCullingIO::OutputBuffer* lpOutputBuffer);         // @ :644
-        void ProcessInternalCollisions(OverlapCullingIO::OutputBuffer* lpOutputBuffer);   // @ :682
+                                 OverlapCullingIO::OutputBuffer* lpOutputBuffer);         // @ 0x828CB1D8 :644
+        void ProcessInternalCollisions(OverlapCullingIO::OutputBuffer* lpOutputBuffer);   // @ 0x828CB308 :682
 
         // --- members (DWARF CgsOverlapCullingModule.h:148-175; offsets documented) ---
         EPrepareStage mePrepareStage;   // X360 word 138 (+0x228 from ModuleSingleBuffered base region)
@@ -142,9 +170,19 @@ namespace CgsSceneManager
         VolumeManager*   mpVolumeManager;    // X360 word 140
         EntityManager*   mpEntityManager;    // X360 word 141
 
-        void* mpContactGenerator;  // X360 word 143 (ContactGenerator*; used by DoPairQuery)
+        // ⚠️ WORD INDEX CORRECTED 2026-08-19: this member is X360 word 142 (+0x238), not
+        // 143. Word 143 (+0x23C) is mpVolVolQuery -- proven twice: Construct @0x828C18E8
+        // stores the Initialize result to `this+572` (== 0x23C), and DoPairQuery's
+        // aggregate arm loads the query handle with `lwz r11, 0x23C(r27)`
+        // (0x828C1B8C / 0x828C1BC8). Nothing in the X360 export reads +0x238 at all,
+        // which is consistent with mpContactGenerator being write-only in this build
+        // (SetContactGenerator is its sole writer).
+        void* mpContactGenerator;  // X360 word 142 (+0x238) (ContactGenerator*)
 
-        rw::collision::VolumeVolumeQuery* mpVolVolQuery;  // X360 word ... (the constructed query handle)
+        // X360 word 143 (+0x23C). Set by Construct, read by DoPairQuery's prim x
+        // aggregate arm (which fills its 1xN input block in place and calls
+        // GetPrimitiveIntersections on it).
+        rw::collision::VolumeVolumeQuery* mpVolVolQuery;
 
         // The in-class VolumeVolumeQuery scratch buffer (Construct partitions this; the X360
         // asserts the descriptor size <= KU_VOL_QUERY_MEM_SIZE and 16-byte alignment).

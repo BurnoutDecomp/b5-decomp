@@ -10,7 +10,7 @@
 // X360-emitted accessors homed here (addresses per body):
 //   OutputBuffer_Prepare::GetResourceRequestInterface       @ 0x822BA180 (w) / 0x827A2728 (r)
 //   OutputBuffer_PostPhysics::GetResourceRequestInterface   @ 0x822BA810 (w)
-//   OutputBuffer_PostPhysics::GetSceneInputInterface        @ 0x822BA960 (w)
+//   OutputBuffer_PostPhysics::GetSceneInputInterface        @ 0x822BA960 (w) / 0x827A2F20 (r)
 //   OutputBuffer_PostPhysics::GetStatusInterface            @ 0x827A2E78 (r) / 0x822BA8B8 (w)
 //   InputBuffer_GenerateDispatchLists::Get/SetDispatchFrame @ 0x822BAA08 / 0x827A2FC8
 //   InputBuffer_GenerateDispatchLists::Get/SetShadowMap     @ 0x822BAAB0 / 0x827A3070
@@ -116,8 +116,14 @@ namespace WorldEntityIO
         // Read-lock const twin (the world streamer's request flush is drained through
         // it by WorldModule::BridgeEntityModulesToOutput_PostPhysics @0x827AEEB0).
         const ResourceRequestInterface* GetResourceRequestInterface() const;
-        // X360 0x822BA960: write-lock; the scene input interface (X360 this+4116).
+        // X360 0x822BA960: write-lock; the scene input interface (X360 this+0x1020 == 4128).
         SceneInputInterface* GetSceneInputInterface();
+        // ⭐ X360 0x827A2F20: READ-lock const twin of the writer above, same member
+        // (X360 this+0x1020 == 4128). ADDED 2026-08-19 (wave Q5 cluster F3) -- see the body's banner:
+        // the console really does emit both overloads and only the writer had been modelled,
+        // which is why WorldBridgeEntityModulesToScene.cpp's post-physics world-entity leg
+        // carried a FLAG blaming an X360 "lock ordering" that does not exist.
+        const SceneInputInterface* GetSceneInputInterface() const;
         // X360 0x827A2E78: read-lock; X360 this+822896.
         const StatusInterface* GetStatusInterface() const;
         // X360 0x822BA8B8: write-lock; X360 this+822896.
@@ -128,7 +134,7 @@ namespace WorldEntityIO
     private:
         u8                       maStatusPad[3];
         ResourceRequestInterface mResourceRequestInterface;   // :257 (X360 +4)
-        SceneInputInterface      mSceneInputInterface;        // :258 (X360 +4116)
+        SceneInputInterface      mSceneInputInterface;        // :258 (X360 +0x1020 == 4128)
         StatusInterface          mStatusInterface;            // :259 (X360 +822896)
     };
 

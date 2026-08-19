@@ -95,6 +95,18 @@ namespace collision
     // SDKs/EATech/rwcollision/volume_debug_access.h:61-65.
     class AABBox;
 
+    // The other four descriptor-slot parameter types, NAMED for exactly the same reason
+    // (a reference / pointer parameter needs no definition, and each of their headers
+    // drags a vocabulary this header must stay free of). Their homes:
+    //   Feature                      vendor/renderware/collision/Feature.hpp:39
+    //   GPInstance / Interval        vendor/renderware/collision/GPInstance.hpp:69/:55
+    //   VolumeLineSegIntersectResult vendor/renderware/collision/LineSegIntersect.hpp:59
+    // Class keys match those definitions (all four are `struct`).
+    struct Feature;
+    struct GPInstance;
+    struct Interval;
+    struct VolumeLineSegIntersectResult;
+
     // The rwcollision volume primitive kinds -- DWARF volume.h:1238
     // (VOLUMETYPENULL..VOLUMETYPENUMINTERNALTYPES), MEASURED a second time out of the
     // shipped image: each per-type descriptor's leading word is its own id
@@ -200,6 +212,96 @@ namespace collision
         u32  muFlags;               // +0x5C  DWARF `uint32_t m_flags`
     };
 
+    // ===========================================================================
+    // THE PER-TYPE DESCRIPTOR -- rw::collision::Volume::VTable (DWARF volume.h:1507,
+    // canonical rwccore.h:1584-1595). Defined here 2026-08-19 (wave Q5 vtbind); it was
+    // an opaque `struct VTable;` until now, which is why the six descriptor records had
+    // to carry seven NULL method slots.
+    //
+    // SLOT ORDER is the DWARF's, verbatim (dwarfdump .../rw/collision/volume.h:1507-1518):
+    //   typeID, getBBox, getBBoxDiag, getInterval, getMaximumFeature,
+    //   createGPInstance, lineSegIntersect, release, name, flags.
+    //
+    // WHY THE SLOTS ARE FREE FUNCTION POINTERS AND NOT POINTERS-TO-MEMBER.
+    // The canonical SDK spells them `RwBool (Volume::*)(...)`. That spelling is
+    // unusable in this tree: the four primitive classes with a home here
+    // (Capsule/Cylinder/Triangle/Aggregate) are STANDALONE, not `: public Volume`,
+    // so `&CapsuleVolume::GetBBox` can never convert to a `Volume` pointer-to-member.
+    // The free-function spelling with an explicit leading `const Volume*` is the one
+    // the three TU-local descriptor views in this directory already use
+    // (VolumeBBoxQuery.cpp:68, VolumeQuery.cpp:167, PrimitiveIntersect.cpp:1226), and
+    // it is LAYOUT-IDENTICAL to the pointer-to-member spelling on this host --
+    // MEASURED, not argued, by scratchpad/waveQ5/probe_vtbind/measure_layout.cpp:
+    // MSVC x64 gives every one of those pointers-to-member size 8 (single inheritance,
+    // no vptr), so the two structs agree slot for slot and byte for byte.
+    // The other half of the fork (SDKs/EATech/rwcollision/volume_debug_access.h) spells
+    // the same record with its own vocabulary; both halves emit and consume the ONE
+    // decorated symbol per descriptor -- MEASURED with dumpbin, see the gVolumeHandler_*
+    // declarations below.
+    //
+    // ⚠️ CONSOLE FACT, NOT A HOST CHOICE: the getInterval and getMaximumFeature slots
+    // DO NOT have one uniform ABI on this build. DWARF box.h:39/:42 and triangle.h:45/:48
+    // declare BOX's and TRIANGLE's as taking `Vector3` BY VALUE, while sphere.h:24/:27,
+    // capsule.h:33/:36, cylinder.h:39/:42 and aggregatevolume.h:30 take
+    // `const Vector3&`. A by-value VMX vector rides a vector register on the console and
+    // consumes NO GPR, so the two shapes put the `Feature&` out-parameter in DIFFERENT
+    // argument registers -- visible in the raw asm: SphereVolume::GetMaximumFeature
+    // @0x82BA81B0 writes through r6 while the otherwise byte-identical
+    // BoxVolume::GetMaximumFeature @0x82BA87F0 writes through r5 (same for
+    // TriangleVolume::GetMaximumFeature @0x82BBACD0, `mr r31, r5`, against
+    // CylinderVolume::GetMaximumFeature @0x82BAC988, `mr r31, r6`). Nothing in the
+    // canonical SDK's `class Volume` dispatches through those two slots (rwccore.h:1507+
+    // exposes GetBBox / GetBBoxDiag / CreateGPInstance / LineSegIntersect / Release and
+    // NOTHING else), which is why the inconsistency was survivable on the console and why
+    // AGGREGATE's getInterval slot is genuinely 0. On this host both parameters are
+    // memory-passed either way, so ONE slot type is faithful for both -- but the per-type
+    // adapters in VolumeVTables.cpp keep each primitive's own DWARF spelling and the
+    // divergence is recorded here rather than smoothed away.
+    // ===========================================================================
+    typedef RwBool (*VolumeGetBBoxFn)(const Volume* lpVolume,
+                                      const Vec4*   lpTransform,
+                                      RwBool        abTight,
+                                      AABBox&       arBBox);
+    typedef Vec4   (*VolumeGetBBoxDiagFn)(const Volume* lpVolume);
+    typedef RwBool (*VolumeGetIntervalFn)(const Volume* lpVolume,
+                                          const Vec4&   arDir,
+                                          Interval&     arInterval);
+    typedef RwBool (*VolumeGetMaximumFeatureFn)(const Volume* lpVolume,
+                                                RwBool        abCcw,
+                                                const Vec4&   arDir,
+                                                Feature&      arFeature);
+    typedef RwBool (*VolumeCreateGPInstanceFn)(const Volume* lpVolume,
+                                               GPInstance&   arInstance,
+                                               const Vec4*   lpTransform);
+    typedef RwBool (*VolumeLineSegIntersectFn)(const Volume* lpVolume,
+                                               const Vec4&   arPt1,
+                                               const Vec4&   arPt2,
+                                               const Vec4*   lpTransform,
+                                               VolumeLineSegIntersectResult& arResult,
+                                               f32           afFatness);
+    typedef void   (*VolumeReleaseFn)(Volume* lpVolume);
+
+    struct Volume::VTable
+    {
+        u32                       muTypeID;               // +0x00  DWARF `typeID`
+        VolumeGetBBoxFn           mpfnGetBBox;            // +0x04  DWARF `getBBox`
+        VolumeGetBBoxDiagFn       mpfnGetBBoxDiag;        // +0x08  DWARF `getBBoxDiag`
+        VolumeGetIntervalFn       mpfnGetInterval;        // +0x0C  DWARF `getInterval`
+        VolumeGetMaximumFeatureFn mpfnGetMaximumFeature;  // +0x10  DWARF `getMaximumFeature`
+        VolumeCreateGPInstanceFn  mpfnCreateGPInstance;   // +0x14  DWARF `createGPInstance`
+        VolumeLineSegIntersectFn  mpfnLineSegIntersect;   // +0x18  DWARF `lineSegIntersect`
+        VolumeReleaseFn           mpfnRelease;            // +0x1C  DWARF `release`
+        const char*               mpcName;                // +0x20  DWARF `name`
+        u32                       muFlags;                // +0x24  DWARF `flags`
+    };
+
+    // ⚠️ CONSOLE-ONLY OFFSETS above. The +0x04/+0x08/... comments are X360 word offsets
+    // and are documentation only: every slot is an 8-byte pointer on the host, so the
+    // record's host sizeof deliberately differs from the console's 0x28. What IS pinned
+    // is the slot ORDER and the fact that the three TU-local views in this directory
+    // (which spell slot 0 as one host word and reach getBBox at host +8 / createGPInstance
+    // at host +40) reinterpret this exact record -- see the static_asserts at the foot.
+
     // ---------------------------------------------------------------------------
     // rw::collision::BoxVolume -- DWARF box.h:50 (`: public Volume`).
     //
@@ -254,6 +356,20 @@ namespace collision
         // @ 0x82BA8890 -- DWARF box.h:160. The LOCAL bbox diagonal (full extents), i.e.
         // 2 * (|row0|*hx + |row1|*hy + |row2|*hz + radius). No transform argument.
         Vec4 GetBBoxDiag() const;
+
+        // @ 0x82BA87F0 (9 insns) -- DWARF box.h:42
+        //     `RwBool GetMaximumFeature(RwBool, Vector3, Feature &) const`.
+        // ⚠️ `arDir` is BY VALUE here (DWARF), unlike the sphere/capsule/cylinder
+        // spelling -- that is what puts the Feature out-parameter in r5 rather than r6
+        // on the console (see the VTable banner). Both parameters are DEAD in the body:
+        // the box's maximum feature is always its centre point.
+        RwBool GetMaximumFeature(RwBool abCcw, Vec4 aDir, Feature& arFeature) const;
+
+        // @ 0x82BA92E8 (~85 insns) -- DWARF box.h:36. Instance the box into the GP
+        // narrow-phase image: three face normals + three edge directions (the same three
+        // optionally-rotated transform rows), mPos = the transformed centre row,
+        // mDimensions = (hx, hy, hz, hx) and the BOX row of g_aGPVolumeMethods.
+        RwBool CreateGPInstance(GPInstance& arInstance, const Vec4* lpTransform) const;
     };
 
     // ---------------------------------------------------------------------------
@@ -277,6 +393,18 @@ namespace collision
 
         // @ 0x82BA8580 -- 2 * radius on every axis.
         Vec4 GetBBoxDiag() const;
+
+        // @ 0x82BA81B0 (9 insns) -- DWARF sphere.h:27
+        //     `RwBool GetMaximumFeature(RwBool, const Vector3 &, Feature &) const`.
+        // BY REFERENCE here (DWARF), which is why the console writes the Feature through
+        // r6 while the byte-identical box body writes through r5. Both parameters are
+        // dead: a sphere's maximum feature is its centre point.
+        RwBool GetMaximumFeature(RwBool abCcw, const Vec4& arDir, Feature& arFeature) const;
+
+        // @ 0x82BA8100 (~40 insns) -- DWARF sphere.h:21. Instance the sphere into the GP
+        // narrow-phase image: mPos = the transformed centre, no face normals, no edge
+        // directions, mFatness = radius, and the SPHERE row of g_aGPVolumeMethods.
+        RwBool CreateGPInstance(GPInstance& arInstance, const Vec4* lpTransform) const;
     };
 
     // The shared per-type descriptor table -- X360 dword_8327EEE0..dword_8327EEF8, seven
@@ -285,6 +413,36 @@ namespace collision
     // SDKs/EATech/rwcollision/volume.cpp. Slot 0 is null; slots 1..6 are the six real
     // descriptors. Index it with Volume::muVTableSlot (see that member).
     extern Volume::VTable* gVolumeVTable[E_VOLUMETYPE_NUMINTERNALTYPES];
+
+    // ---------------------------------------------------------------------------
+    // The six per-type descriptor RECORDS themselves -- X360 .rdata
+    // unk_82F91740 / _82F918C0 / _82F919A4 / _82F9176C / _82F91894 / _82F919D0, kept
+    // under the address-suffixed names the rest of the tree already refers to.
+    //
+    // DEFINED ONCE, in vendor/renderware/collision/VolumeVTables.cpp -- the only TU that
+    // can see every primitive class at once (MEASURED:
+    // scratchpad/waveQ5/probe_vtbind/measure_coinclude.cpp compiles all six vendor
+    // headers together; it is the SDK half that cannot, per rwc3.owner.md section 3.3).
+    // SDKs/EATech/rwcollision/volume.cpp declares the SAME six symbols in its own
+    // vocabulary and stores their addresses into gVolumeVTable[1..6].
+    //
+    // ⚠️ THE TWO HALVES BIND TO ONE SYMBOL EACH -- MEASURED with dumpbin /symbols on two
+    // objects compiled with the canonical ship flags
+    // (scratchpad/waveQ5/vtbind/mangle_sdk.cpp / mangle_vendor.cpp):
+    //     SDK half    UNDEF  ?gVolumeHandler_82F91740@collision@rw@@3UVTable@Volume@12@B
+    //     vendor half SECT3  ?gVolumeHandler_82F91740@collision@rw@@3UVTable@Volume@12@B
+    // MSVC encodes only the leaf class key (`U` = struct VTable) and the enclosing SCOPE
+    // NAMES, never the enclosing class key or any member type -- which is exactly why the
+    // two spellings of `Volume::VTable` mangle identically and why the fork is invisible
+    // at link time. The layout identity that makes that safe is measured separately
+    // (measure_layout.cpp; see the VTable banner).
+    // ---------------------------------------------------------------------------
+    extern const Volume::VTable gVolumeHandler_82F91740;   // type 1 SPHERE
+    extern const Volume::VTable gVolumeHandler_82F918C0;   // type 2 CAPSULE
+    extern const Volume::VTable gVolumeHandler_82F919A4;   // type 3 TRIANGLE
+    extern const Volume::VTable gVolumeHandler_82F9176C;   // type 4 BOX
+    extern const Volume::VTable gVolumeHandler_82F91894;   // type 5 CYLINDER
+    extern const Volume::VTable gVolumeHandler_82F919D0;   // type 6 AGGREGATE
 
     // The console's `lwz r11, 0x40(volume)` on the host: the descriptor the type enum in
     // the +0x40 slot names. Out-of-range enums map to the null slot 0 (the console would
@@ -308,6 +466,23 @@ namespace collision
     static_assert(sizeof(BoxVolume)    == 96, "BoxVolume adds no storage over Volume");
     static_assert(sizeof(SphereVolume) == 96, "SphereVolume adds no storage over Volume");
     static_assert(offsetof(BoxVolume, mBoxData) == 0x44, "BoxVolume half-extents @ +0x44");
+
+    // --- descriptor-record pins (HOST offsets; what the TU-local views reinterpret) ---
+    // The three TU-local descriptor views in this directory spell slot 0 as ONE host word
+    // and then index the slots positionally; these asserts are what keeps them honest if
+    // anyone ever reorders or retypes a slot above.
+    //   VolumeBBoxQuery.cpp:68 / VolumeQuery.cpp:167  -> getBBox          at host +8
+    //   PrimitiveIntersect.cpp:1226                   -> createGPInstance at host +40
+    static_assert(offsetof(Volume::VTable, muTypeID)              ==  0, "VTable typeID");
+    static_assert(offsetof(Volume::VTable, mpfnGetBBox)           ==  8, "VTable getBBox");
+    static_assert(offsetof(Volume::VTable, mpfnGetBBoxDiag)       == 16, "VTable getBBoxDiag");
+    static_assert(offsetof(Volume::VTable, mpfnGetInterval)       == 24, "VTable getInterval");
+    static_assert(offsetof(Volume::VTable, mpfnGetMaximumFeature) == 32, "VTable getMaximumFeature");
+    static_assert(offsetof(Volume::VTable, mpfnCreateGPInstance)  == 40, "VTable createGPInstance");
+    static_assert(offsetof(Volume::VTable, mpfnLineSegIntersect)  == 48, "VTable lineSegIntersect");
+    static_assert(offsetof(Volume::VTable, mpfnRelease)           == 56, "VTable release");
+    static_assert(offsetof(Volume::VTable, mpcName)               == 64, "VTable name");
+    static_assert(offsetof(Volume::VTable, muFlags)               == 72, "VTable flags");
 
 } // namespace collision
 } // namespace rw

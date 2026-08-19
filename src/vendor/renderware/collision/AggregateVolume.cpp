@@ -25,7 +25,7 @@ namespace collision
 // The RwBool second arg is part of the ABI shape but is NOT consumed by this
 // body -- the asm tests r4 (the matrix pointer), not r5 (the RwBool).
 //
-//   r11 = *(this+0x44)              -> mpAggregate (Volume-base union slot)
+//   r11 = *(this+0x44)              -> GetAggregate() (Volume-base union slot)
 //   var_90 = aggregate->m_AABB      (4x ld/std: 32-byte cached AABBox copy)
 //   if (lpTransform != NULL):
 //       var_50 = Mult(this->mTransform, *lpTransform)   (committed affine Mult;
@@ -42,7 +42,9 @@ RwBool AggregateVolume::GetBBox(const math::vpu::Matrix44Affine* lpTransform,
                                 AABBox& arBBox) const
 {
     // r11 = *(this+0x44); the cached AABBox lives at Aggregate+0x00 (m_AABB).
-    const AABBox lAggBox = *reinterpret_cast<const AABBox*>(mpAggregate);
+    // GetAggregate() is the +0x44 accessor -- a bare `Aggregate*` member gets pushed to
+    // +0x48 by x64 alignment, which is the defect fixed 2026-08-19 (see the header).
+    const AABBox lAggBox = *reinterpret_cast<const AABBox*>(GetAggregate());
 
     AABBox lResult;
     if (lpTransform != 0)
@@ -79,8 +81,9 @@ RwBool AggregateVolume::GetBBox(const math::vpu::Matrix44Affine* lpTransform,
 // ---------------------------------------------------------------------------
 math::vpu::Vector3 AggregateVolume::GetBBoxDiag() const
 {
-    // r11 = *(this+0x44); cached AABBox at Aggregate+0x00.
-    const AABBox lAggBox = *reinterpret_cast<const AABBox*>(mpAggregate);
+    // r11 = *(this+0x44); cached AABBox at Aggregate+0x00 (see GetBBox above on the
+    // accessor -- this offset was measurably wrong until 2026-08-19).
+    const AABBox lAggBox = *reinterpret_cast<const AABBox*>(GetAggregate());
 
     // AAB(var_30, var_50, r5=this): transform the cached box by the volume's
     // own transform (no caller matrix on this path).

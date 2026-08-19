@@ -109,6 +109,31 @@ OutputBuffer_PreScene::GetSceneInputInterface()
     return &mSceneInputInterface;
 }
 
+// ⭐ X360 0x8279D458 (R, :285) -- the CONST scene-input accessor, the read-locked twin of
+// the :286 writer above. BODIED 2026-08-19 (wave Q5 cluster F3). Its per-address JSON was an
+// export-run gap, closed with a targeted headless-IDA run on a private .i64 copy
+// (scratchpad/waveQ5/ida_f3/); everything below is off that dump, not inferred:
+//   * `lbz r11,0(r28); extrwi r11,r11,1,27` -- bit 4 of the status byte
+//     (eStatusLockedForRead) => IsBufferLockedForReading(), i.e. the CONST overload;
+//   * the baked assert cites BrnRaceCarEntityModuleIO.h line 0x11D == 285, which is exactly
+//     this declaration's DWARF line. The whole OutputBuffer_PreScene read ladder lands on its
+//     DWARF lines with NO skew -- 282 (+16 mVehicleInputInterface) / 285 (+142192, here) /
+//     288 (+960960) / 291 (+971440) / 294 (+973856) / 300 (+986752) -- so the slot is pinned
+//     by two independent facts, not by position alone. (The +9 X360-vs-DWARF line skew this
+//     header records applies to InputBuffer_PostPhysics and later, not here.)
+//   * epilogue `addis r3,r28,2 ; addi r3,r3,0x2B70` == this + 0x22B70 == 142192, the same
+//     displacement OutputBuffer_PreScene::Construct names for the
+//     InSceneUpdateInterface::Construct(+142192) leg. Reproduced BY NAME as
+//     &mSceneInputInterface, never as an offset.
+// SOLE caller: WorldModule::BridgeEntityModulesToSceneModule_PreScene @0x827AB490 (the
+// race-car leg, `bl sub_8279D458` at 0x827AB590) -- which is why nothing needed it before.
+const OutputBuffer_PreScene::SceneInputInterface*
+OutputBuffer_PreScene::GetSceneInputInterface() const
+{
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+    return &mSceneInputInterface;
+}
+
 // X360 0x8279D6F8 (R, :300) -- const race-car AI interface accessor.
 const OutputBuffer_PreScene::RaceCarAIInterface*
 OutputBuffer_PreScene::GetRaceCarAIInterface() const
@@ -437,6 +462,34 @@ OutputBuffer_PreScene::SceneInputInterface*
 OutputBuffer_PostPhysics::GetSceneInputInterface()
 {
     CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+    return &mSceneInputInterface;
+}
+
+// ⭐ X360 0x8279E5D0 (R, :566) -- the CONST scene-input accessor of OutputBuffer_PostPhysics.
+// BODIED 2026-08-19 (wave Q5 cluster F3). ⭐ THIS IS THE ACCESSOR THE CAR'S WHOLE SCENE
+// REGISTRATION HANGS OFF: ActiveRaceCar::AddToScene / AddToCollision /
+// RaceCarEntityModule::GenerateSceneUpdateEvents stage AddEntity / AddDynamicVolume /
+// AddVolumeInstance / AddForCollision / SetVolumeInstanceTransform into THIS buffer's
+// mSceneInputInterface, and WorldModule::BridgeEntityModulesToScene_PostPhysics @0x827AB608
+// (`bl sub_8279E5D0` at 0x827AB6E0) is the only thing that carries them into the scene
+// manager's InputBuffer_Update. Off the raw asm:
+//   * `lbz r11,0(r28); extrwi r11,r11,1,27` -- bit 4 (eStatusLockedForRead) =>
+//     IsBufferLockedForReading(): the CONST overload, and the read lock is exactly what
+//     WorldModule::Update holds on this buffer (LockBuffersForIO read-locks every source);
+//   * baked assert line 0x23F == 575 == this declaration's DWARF line 566 + the +9 X360-vs-
+//     DWARF skew this header's CORRECTION (3) measured for the post-physics buffers;
+//   * epilogue `addi r3, r28, 0x2020` == this + 8224 -- the SAME displacement
+//     OutputBuffer_PostPhysics::Construct names for its InSceneUpdateInterface::Construct
+//     (+8224) leg. Two independent votes for the member. Returned BY NAME.
+// ⚠️ REPORTED, NOT FIXED (this cluster does not own the header): the declaration comments on
+// :777/:797 attribute the WRITE twin 0x822B5D50 to "+147488" for this same member. Both the
+// console Construct and this read getter say +8224, so that citation is stale/mis-slotted --
+// same class of one-slot drift as CORRECTION (3). The BODIES are unaffected (both return
+// &mSceneInputInterface by name); only the citation is wrong.
+const OutputBuffer_PreScene::SceneInputInterface*
+OutputBuffer_PostPhysics::GetSceneInputInterface() const
+{
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
     return &mSceneInputInterface;
 }
 

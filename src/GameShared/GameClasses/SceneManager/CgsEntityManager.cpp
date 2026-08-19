@@ -27,6 +27,14 @@
 //   EntityManager::GetVolumeInstance const       @0x828B9F28  (h:488/493)
 //   EntityManager::GetVolumeInstance non-const   @0x828B9FD8  (h:518/523)
 //
+// ADDED 2026-08-19, wave Q5 cluster RMLEG -- the REMOVAL half (the console inlined every
+// one of these, so none has an X360 address of its own; each cites the inline expansions
+// it was recovered from in its own banner):
+//   EntityManager::RemoveVolumeInstance          (DWARF h:120; inlined @0x828D21C4..0x828D21EC)
+//   EntityManager::RemoveVolumeInstanceByIndex   (DWARF h:126; inlined @0x828CDA30..0x828CDA48)
+//   EntityManager::GetFirstEntityIndex           (DWARF h:216; pool scan @0x828CDA94)
+//   EntityManager::GetNextEntityIndex            (DWARF h:220; pool scan @0x828CDB64)
+//
 // ⚠️ TWO OF THESE RETIRE LIVE SILENT-WRONG STUBS, they are not "absences":
 //   GameSource/World/WorldLinkStubs.cpp:1789 GetVolumeInstanceIndexByID **returned 0**
 //     -- every caller resolved volume-instance index 0, a valid-looking answer, every
@@ -556,6 +564,97 @@ void EntityManager::RemoveVolumeInstanceFromEntity(s32 liVolumeInstanceIndex)
     }
 
     CGS_ASSERT(false, "Entity does not contain the specified volume instance");      // cpp:329
+}
+
+// ===========================================================================
+// EntityManager::RemoveVolumeInstance        (DWARF h:120)
+// EntityManager::RemoveVolumeInstanceByIndex (DWARF h:126)
+//
+// ⭐ WAVE Q5 / CLUSTER RMLEG (2026-08-19). The removal mirror of AddVolumeInstance, and
+// the missing half of the scene's volume registry: until this landed, NOTHING in the
+// tree ever took a VolumeInstanceId back out of mVolumeInstanceIdToIndex, so a re-created
+// owner (the player car on a colour change / HIDE_ONLINE remove+create, prop-cell churn)
+// re-inserted the SAME key and IndexedHashTable<VolumeInstanceId,u32,509>::Insert fired
+// "2 elements with the same key inserted" on the next AddVolumeInstance.
+//
+// NO OUT-OF-LINE X360 SYMBOL: neither method has a row in progress/identity.json, because
+// the console inlined both at every use. The shape below is the common factor of the three
+// verbatim expansions, which agree instruction for instruction:
+//
+//   drain leg 3, BridgeInputSceneUpdateInterfaceToSubModules:
+//     0x828D21C4  bl EntityManager::GetVolumeInstanceIndexByID   (r4 = the queued id)
+//     0x828D21D4  bl EntityManager::RemoveVolumeInstanceFromEntity(r4 = that index)
+//     0x828D21E0  bl IndexedHashTable<VolumeInstanceId,u32,509>::Remove
+//                    (r3 = this + 0x123B20 == &mVolumeInstanceIdToIndex, r4 = the id)
+//     0x828D21EC  bl ObjectPool<VolumeInstance,5048,int>::FreeObject
+//                    (r3 = this + 0x27600 == &mVolumeInstancePool,     r4 = that index)
+//   SceneManagerModule::RemoveAllEntityVolumeInstances tail:
+//     0x828CDA30 / 0x828CDA3C / 0x828CDA48 -- the same last three, with the index already
+//     in hand and the id re-loaded off the record (`ld r28, 0x50(r31)` @0x828CDA28).
+//   SceneManagerModule::RemoveAllOwnerVolumeInstances reaches the same tail through it.
+//
+// So the id form is exactly `ByIndex(id, GetVolumeInstanceIndexByID(id))`, and the ByIndex
+// form is the three-call trio. The two X360 offsets above are DOCUMENTATION: this build
+// reaches both members by name.
+//
+// ⚠️ ORDER IS LOAD-BEARING. RemoveVolumeInstanceFromEntity reads mu16EntityIndex off the
+// record it is unlinking, so it must run BEFORE the slot is freed; and the hash Remove
+// takes the ID, which the pool slot still holds. Reordering silently corrupts the owner's
+// chain.
+// ===========================================================================
+void EntityManager::RemoveVolumeInstance(VolumeInstanceId lVolumeInstanceId)
+{
+    const s32 liIndex = GetVolumeInstanceIndexByID(lVolumeInstanceId);
+
+    // FLAG PC (not console): the X360 does NOT test the lookup result -- 0x828D21C8 moves
+    // r3 straight into r4 and calls on. On the console an absent id therefore reaches
+    // mVolumeInstancePool[-1]; here that is an out-of-bounds write into a 5048-element
+    // by-value pool inside SceneManagerModule, i.e. live memory corruption of whatever
+    // member precedes it. The tripwire below is the console's own class of dev assert and
+    // is LOUD (it is not a silent swallow), and the early return only skips work that had
+    // no target. Producers that can post an id twice do exist -- PropCellManager's
+    // deactivate path and ActiveRaceCar::RemoveFromScene both post RemoveVolumeInstance
+    // without first proving the id is still registered.
+    if (liIndex == KI_INVALID_VOLUME_INSTANCE_INDEX)
+    {
+        // NOT a console rodata string -- this guard has no console counterpart, so it must
+        // not borrow one (the image's "Volume instance not found for volume instance id "
+        // @0x820F61A8 belongs to SceneManagerModule, not here).
+        CGS_ASSERT(false, "PC guard: RemoveVolumeInstance called with an unregistered VolumeInstanceId");
+        return;
+    }
+
+    RemoveVolumeInstanceByIndex(lVolumeInstanceId, liIndex);
+}
+
+void EntityManager::RemoveVolumeInstanceByIndex(VolumeInstanceId lVolumeInstanceId, s32 liIndex)
+{
+    RemoveVolumeInstanceFromEntity(liIndex);          // 0x828D21D4 / 0x828CDA30
+    mVolumeInstanceIdToIndex.Remove(lVolumeInstanceId); // 0x828D21E0 / 0x828CDA3C
+    mVolumeInstancePool.FreeObject(liIndex);          // 0x828D21EC / 0x828CDA48
+}
+
+// ===========================================================================
+// EntityManager::GetFirstEntityIndex / GetNextEntityIndex   (DWARF h:216 / h:220)
+//
+// The allocated-slot walk over mEntityPool. The X360 calls the pool's own
+// ObjectPool<SceneManagerEntity,10000,int>::GetFirstObjectIndex / GetNextObjectIndex
+// directly on &mEntityManager (the pool is the manager's first member, so `r3 = &em`
+// IS `&mEntityPool`) -- see SceneManagerModule::RemoveAllOwnerVolumeInstances
+// @0x828CDA94 and @0x828CDB64. Both return -1 when no allocated slot remains.
+//
+// Clearing the CURRENT slot's bit mid-walk is safe and is what the console does:
+// GetNextObjectIndex scans strictly ABOVE liCurrentIndex, so RemoveEntity(index)
+// followed by GetNextEntityIndex(index) still enumerates every remaining slot exactly once.
+// ===========================================================================
+s32 EntityManager::GetFirstEntityIndex() const
+{
+    return mEntityPool.GetFirstObjectIndex();
+}
+
+s32 EntityManager::GetNextEntityIndex(s32 liCurrentIndex) const
+{
+    return mEntityPool.GetNextObjectIndex(liCurrentIndex);
 }
 
 }
