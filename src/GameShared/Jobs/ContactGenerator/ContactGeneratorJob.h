@@ -24,12 +24,18 @@
 //   ContactGeneratorJob::RestoreMemory                        @0x82921050   (39)
 //   ExecuteSweptSphereListWithTriangleList                    @0x829238E8  ⭐ swept leg
 //   ExecuteSweptSphereListWithTriangleListStream               @0x82925238  (100)
-// Declared-only (the other six Execute arms; each a named boot gate in the .cpp -- see there
+//   ExecutePrimitiveListWithTriangleListStream                 @0x82926650  (100) ⭐ PROP leg
+//   ExecutePrimitiveListWithTriangleList                       @0x82925908  (849) ⭐⭐ PROP
+//                                                       NARROW PHASE (wave Q6, cluster pvt)
+// Declared-only (the other four Execute arms; each a named boot gate in the .cpp -- see there
 // for why the switch keeps all twelve cases instead of only the ones landed so far):
 //   ExecuteSphereListWithSphereList          @0x829215B0 · ...Stream          @0x82923758
 //   ExecuteBoxListWithTriangleList           @0x829218B8
-//   ExecutePrimitiveListWithTriangleList     @0x82925908 · ...Stream          @0x82926650
 //   ExecutePrimitivePairList                 @0x82925798
+// Declared here, BODIES IN THE SIBLING PARTFILE ContactGeneratorJob_wQ6_01.cpp (wave Q6,
+// cluster gpi -- both are called by ExecutePrimitiveListWithTriangleList and by nothing else):
+//   BuildGPInstance                          @0x829222A0  (258)
+//   CollideGPInstances                       @0x829253C8  (244)
 //
 // ─── LAYOUT ──────────────────────────────────────────────────────────────────────────────────
 // Every offset below is read out of a body, never guessed. Execute's own pseudocode gives the
@@ -79,6 +85,7 @@ namespace CgsSceneManager { namespace CgsCollision {
     struct CollisionJobDescription;
     struct SphereListWithTriangleListJobDesc;
     struct SweptSphereListWithTriangleListJobDesc;
+    struct PrimitiveListWithTriangleListJobDesc;
     struct TriangleList;
     struct CollisionResultList;
 } }
@@ -149,15 +156,36 @@ struct alignas(16) ContactGeneratorJob
         const CgsSceneManager::CgsCollision::SweptSphereListWithTriangleListJobDesc* lpDesc); // @0x829238E8
     void ExecuteSweptSphereListWithTriangleListStream();// @0x82925238
 
-    // The other eight arms of the switch. Bodies NOT reconstructed -- each is a named
+    // ---------------------------------------------------------------------------------------
+    // ⭐⭐⭐ THE PRIMITIVE-LIST ARMS — the ones BREAKABLE PROPS run on (job types 11 and 12).
+    //
+    // ExecutePrimitiveListWithTriangleListStream @0x82926650 (100): REAL as of 2026-08-19
+    // (wave Q6, cluster pstream). The exact structural twin of the sphere/swept stream arms —
+    // drain the descriptor's command stream, build a stack-local NON-stream descriptor per
+    // command (PrimitiveListWithTriangleListJobDesc::Prepare), run the non-stream worker on it.
+    // No AddResult: results travel through the command's own CollisionResultList, which the
+    // poster (BaseCollisionGenerator::AddPrimitiveListWithTriangleListToStream @0x82811D40)
+    // allocated with PrepareNewPrimitiveTestResultsList.
+    //
+    // ExecutePrimitiveListWithTriangleList @0x82925908 (849): still a LOUD NAMED GATE — the
+    // primitive-vs-triangle narrow phase itself. ⚠️ ITS SIGNATURE IS NOT THE NO-ARG FORM THIS
+    // HEADER USED TO DECLARE. Measured two ways: Execute's jump table calls it at 0x829268A8
+    // with r4 == lpvJobData untouched (exactly as cases 5 and 13 do for the two workers that
+    // already take a descriptor), and the stream arm at 0x829267AC passes r4 == its stack-local
+    // descriptor. So it takes the descriptor, and the stream arm could not call it faithfully
+    // until this declaration was corrected.
+    // ---------------------------------------------------------------------------------------
+    void ExecutePrimitiveListWithTriangleList(
+        const CgsSceneManager::CgsCollision::PrimitiveListWithTriangleListJobDesc* lpDesc); // @0x82925908
+    void ExecutePrimitiveListWithTriangleListStream(); // @0x82926650
+
+    // The other five arms of the switch. Bodies NOT reconstructed -- each is a named
     // one-shot boot gate in the .cpp. Declared so the switch can name them and so the closure
     // is enforced at link time rather than discovered at runtime.
     void ExecuteSphereListWithSphereList();            // @0x829215B0
     void ExecuteSphereListWithSphereListStream();      // @0x82923758
     void ExecuteBoxListWithTriangleList();             // @0x829218B8
     void ExecutePrimitivePairList();                   // @0x82925798
-    void ExecutePrimitiveListWithTriangleList();       // @0x82925908
-    void ExecutePrimitiveListWithTriangleListStream(); // @0x82926650
 
     // LoadPrimitives @0x829210F0 (61) / LoadResultList @0x829211E8 (46) -- the worker's
     // "DMA down" pair (a plain copy on X360; the names are the SPU build's). LoadPrimitives

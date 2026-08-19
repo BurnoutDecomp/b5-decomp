@@ -250,53 +250,55 @@ namespace CgsCollision
         // lpStream) and the locals -- Run's are liNumJobs / lpNULLJob / liJobIndex / lu16BatchIndex,
         // which is the AllocateJob + per-batch-wiring dispatcher shape its 80 instructions have.
         //
-        // ---- BODIES ARE **NOT** LANDED HERE -- and why (wave Q round 2) --------------------------
-        // Both bodies are fully decoded and were written out this wave, but neither can be landed
-        // FAITHFULLY today because the family's job descriptor has no home in this tree:
-        //   CgsSceneManager::CgsCollision::PrimitiveListWithTriangleListStreamJobDesc
-        //   (DWARF home JobDescription/CgsPrimitiveListWithTriangleListJobDesc.h:107, with
-        //    StreamCommand at :111 and Data at :139) -- `grep -rn PrimitiveListWithTriangleList
-        //    StreamJobDesc b5-decomp/src` returns nothing.
-        // Create needs it for its command SIZE and Run needs it for its descriptor STORES:
+        // ---- ⭐⭐ BOTH BODIES ARE REAL AS OF 2026-08-19 (wave Q6, cluster pstream) ----------------
+        // The paragraph that stood here said they could not be landed "because the family's job
+        // descriptor has no home in this tree". That blocker is CLOSED, and it was exactly one
+        // type plus one enum member:
+        //   * CgsSceneManager::CgsCollision::PrimitiveListWithTriangleListStreamJobDesc (with its
+        //     nested StreamCommand) now lives in
+        //     JobDescription/CgsPrimitiveListWithTriangleListStreamJobDesc.h. Its DWARF home is
+        //     the non-Stream sibling header (CgsPrimitiveListWithTriangleListJobDesc.h:107, with
+        //     StreamCommand at :111 and Data at :139); it is landed in its own file because that
+        //     is the tree's placement for every other *Stream* descriptor whose DWARF home is a
+        //     non-Stream header (CgsLineWithTriangleListStreamJobDesc.h,
+        //     CgsFillTriangleCacheStreamJobDesc.h). One definition, no fork.
+        //   * E_COLLISIONJOB_PRIMITIVE_LIST_WITH_TRIANGLE_LIST_STREAM = 12 is in
+        //     JobDescription/CgsCollisionJobDescription.h (MEASURED on both sides: the Run half's
+        //     `li r23, 0xC` -> `stb r23, 0x4CF(batch)`, and Execute's jump-table case 7).
+        // BODIES: CgsCollisionGenerator.cpp (this class's DWARF home TU, mounted at
+        // build_game_exe.bat:1018).
         //   * the console command size is 32 (`li r4/r5, 0x20`), but 32 is a CONSOLE size --
         //     AddPrimitiveListWithTriangleListToStream @0x82811D40 builds the record as
         //     {PrimitivePairList 12B @0x00, TriangleList 8B @0x0C, CollisionResultList* 4B @0x14,
         //      bool @0x18} == 25 bytes rounded to 32, and three of those are 4-byte console
-        //     pointers that widen here. Hard-coding 32 on this host is gotcha 1 and would make the
-        //     poster and the stream buffer disagree the day a command flows;
+        //     pointers that widen here. The factory passes sizeof(StreamCommand) == 48, gated by
+        //     the descriptor header's static_asserts.
         //   * Run's descriptor writes are (batch+0x3D0 == the job-description slot):
         //       +0x00 = the producer          (0x82811FF8 stw r22, 0x3D0(batch base))
         //       +0xF0 = NULL   mpResultsList  (0x82811FF0 stw r27, 0x4C0)
-        //       +0xF4 = 0.0f   mfRadius       (0x82811FE8 stfs f31, 0x4C4; flt_82001CC0, which I
-        //                                      read out of the image myself: 00000000 == 0.0f)
+        //       +0xF4 = 0.0f   mfRadius       (0x82811FE8 stfs f31, 0x4C4; flt_82001CC0, read out
+        //                                      of the image again this wave: 00000000 == 0.0f)
         //       +0xF8 = NULL   mpDebugStream  (0x82811FF4 stw r27, 0x4C8 -- this family passes NO
         //                                      DebugRenderStreamReader; the Run signature has no
         //                                      reader parameter, matching DWARF :275)
         //       +0xFF = 12     muJobType      (0x82811FEC stb r23, 0x4CF, r23 == 0xC)
-        //     and 12 is not in this tree's E_CollisionJobType enum yet either.
-        // Both files are outside this owner's write scope, so the bodies are PARKED rather than
-        // half-landed or written against invented types:
-        //   scratchpad/waveQ2/parked/CgsCollisionGenerator_wQ2_PrimitiveStream.cpp
-        //   scratchpad/waveQ2/collgen.owner.md   (the paste-ready descriptor + enum recipe)
-        // The type-12 WORKER already exists as a loud named gate (ContactGeneratorJob::Execute
-        // case 12 -> ExecutePrimitiveListWithTriangleListStream @0x82926650), so landing the
-        // dispatcher over it is a named gate, not a silent drop -- the same precedent the three
-        // committed Run* rest on.
+        // The type-12 WORKER is a real body too as of the same wave (ContactGeneratorJob::Execute
+        // case 12 -> ExecutePrimitiveListWithTriangleListStream @0x82926650, 100 insns), so a
+        // posted command is drained rather than dropped. What that worker delegates to --
+        // ExecutePrimitiveListWithTriangleList @0x82925908 (849) -- is still a loud named gate,
+        // and that is the family's honest runtime residual.
         // ==========================================================================================
         CgsMemory::SimpleDataStreamProducer* CreateCollidePrimitiveListWithTriangleListStream(s32 liMaxTests); // h:271 / X360 0x82811DD0 (sub_ -- see banner)
         EA::Jobs::Job* RunCollidePrimitiveListWithTriangleListStream(
             CgsMemory::SimpleDataStreamProducer* lpStream);                                                   // h:275 / X360 0x82811F58
 
-        // The family's command POSTER. NOT RECONSTRUCTED -- same descriptor blocker as the two
-        // above; its five call sites (PropManager::DoPart/DoPropInstanceWorldContactGeneration,
-        // DeformableObject::DoBodyPart<x2>/DoDetachedWheelWorldContactGeneration) are themselves
-        // un-landed, so nothing in the tree calls it yet.
-        // ⚠️ CORRECTED wave Q6 round 1 (worldc #1): this is NOT "declaration only". THE ONLY
-        // DEFINITION IS THE LOUD NAMED GATE AT CgsCollisionGenerator_StreamStubs.cpp:60 (that TU
-        // IS MOUNTED -- tools/build/build_game_exe.bat:1001) -- RETIRE THAT GATE IN THE SAME
-        // COMMIT THAT LANDS THE REAL BODY, or the second definition is an LNK2005 in a mounted
-        // TU. (Same shape as PrimitivePairListBuilder::AddPrimitive, gate at
-        // CgsPrimitivePairListBuilder.cpp:186, bat:867.)
+        // The family's command POSTER. ⭐ REAL as of 2026-08-19 (wave Q6, cluster pstream), body in
+        // CgsCollisionGenerator.cpp; the loud named gate that used to be its only definition
+        // (CgsCollisionGenerator_StreamStubs.cpp) was deleted in the same change, because both
+        // TUs are mounted and `cl /c` cannot see an LNK2005. Two of its five call sites --
+        // PropManager::DoPart/DoPropInstanceWorldContactGeneration -- are landed AND mounted
+        // (PropManager_wQ2_03.cpp), which is what forced the body this wave; the other three are
+        // DeformableObject::DoBodyPart<x2>/DoDetachedWheelWorldContactGeneration.
         // X360 0x82811D40 (35 insns) -- an EXPORT-SET HOLE: the .i64 names it (truncated to
         // "AddPrimitiveListWithTriangleListT") but .ida-exports has no 0x82811D40.json. Boundaries,
         // callers and the full 35-instruction decode were read out of the image this wave.

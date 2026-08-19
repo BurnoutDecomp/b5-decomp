@@ -17,11 +17,12 @@
 //
 // ⚠️ ODR NOTE FOR THE CONDUCTOR -- all three of these functions ALSO HAVE A ONE-SHOT
 //    CONDUCTOR-GATE BODY in b5-decomp/src/GameSource/Physics/BrnPhysicsConductorGates.cpp.
-//    ⭐ THE LINE NUMBERS IN THIS BANNER HAD DRIFTED and are RE-MEASURED 2026-08-19 (banner line
-//    through closing brace):
+//    ⭐ THE LINE NUMBERS IN THIS BANNER HAD DRIFTED and are RE-MEASURED 2026-08-19 (wave Q6,
+//    cluster pstream -- the UpdateTriangleCache range had drifted a SECOND time; comment/banner
+//    line through closing brace):
 //        :471-476  BeginPropWorldContactGeneration     :478-483  EndPropWorldContactGeneration
-//        :522-527  UpdateTriangleCache
-//    `cl /c` cannot see the duplicate. The :522-527 gate MUST be deleted when this partfile mounts.
+//        :515-522  UpdateTriangleCache   (the `void` is at :517; :515-516 is its comment)
+//    `cl /c` cannot see the duplicate. The :515-522 gate MUST be deleted when this partfile mounts.
 //    The gate is DELIBERATELY LEFT IN PLACE: BrnPhysicsConductorGates.cpp is not this TU's to edit,
 //    and AGENTS.md's convention is that a gate is retired only in the same commit that MOUNTS the
 //    real body in tools/build/build_game_exe.bat. That script lists BrnPhysicsConductorGates.cpp
@@ -31,6 +32,13 @@
 //    with no definition in the mounted build at all.
 //    Re-run coverage_check against the whole GameSource/Physics directory, not just
 //    GameSource/Physics/PropManager, or this cross-directory duplicate stays invisible.
+//
+// ⭐⭐ THIS PARTFILE IS LINK-READY AS OF 2026-08-19 (wave Q6, cluster pstream). Its only two
+//    non-vendor external callees are InputBuffer_Update::GetInSceneUpdateInterface (real, mounted
+//    at build_game_exe.bat:658) and PropManager::GetTriangleCacheSlotAndRadius -- whose only
+//    definition lives in the sibling PropManager_wQ2_02.cpp, which is ALSO still unmounted. So the
+//    two partfiles MOUNT AS A PAIR: adding this one alone takes an LNK2019. Measured, not
+//    reasoned: scratchpad/waveQ6/probe_pstream/obj/PropManager_wQ_03.sym.txt.
 //
 // ⛔⛔ THE :522-527 GATE'S OWN TEXT IS WRONG, AND IT IS WRONG IN THE HELPFUL DIRECTION.
 //    It reads: "props own ZERO triangle-cache slots today (usedSlots==28==8+20)", i.e. "gating

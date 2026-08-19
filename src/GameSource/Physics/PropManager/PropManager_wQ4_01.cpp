@@ -204,11 +204,15 @@
 //
 // ==========================================================================================
 // LINK-LEVEL, INVISIBLE TO `cl /c` (gotcha 12). Every callee of this body is DECLARED, so the
-// compile gate is green; these are the ones with NO BODY anywhere in the tree, i.e. the
-// unresolved externals mounting this file adds:
-//     PropManager::HandleContactWithLeanProp        @0x8260FB60  (parked, waveQ2/parked/)
-//     PropManager::HandleContactWithTiltProp        @0x826108B8  (parked, waveQ2/parked/)
-//     PropManager::ApplyPropRaceCarCollisionImpulse @0x825E3560  (parked, waveQ2/parked/)
+// compile gate is green. ✅ ALL THREE FORMER HOLES ARE CLOSED -- re-grepped 2026-08-19 (wave Q6
+// round 2); this list used to read "(parked, waveQ2/parked/)" for each and that is history now:
+//     PropManager::HandleContactWithLeanProp        @0x8260FB60  -- BODIED, PropManager_wQ6_02.cpp
+//                                                                  (MOUNTED, bat:1802)
+//     PropManager::HandleContactWithTiltProp        @0x826108B8  -- BODIED, PropManager_wQ6_02.cpp
+//                                                                  (MOUNTED, bat:1802)
+//     PropManager::ApplyPropRaceCarCollisionImpulse @0x825E3560  -- BODIED, PropManager_wQ4_04.cpp
+//                                                                  (MOUNTED, bat:1791), landed at
+//                                                                  the wave-Q4 integration
 // Everything else it calls is bodied: FindPropIndex / FindPartIndex / HasPropJustBeenRemoved /
 // HasPartJustBeenRemoved / RoutePropVsRaceCarContactToDummyCar / ApplyAntiHerdingForce, plus
 // PropPhysicsDataHeader::GetType, PropTypeData::IsLamppost, PropInstance::GetJointIndex and

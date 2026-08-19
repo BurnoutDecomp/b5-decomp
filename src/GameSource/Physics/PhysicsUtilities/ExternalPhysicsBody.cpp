@@ -854,4 +854,32 @@ namespace BrnPhysics
         return vpu::Add(mLinearVelocity, vpu::Cross(mAngularVelocity, lvR));
     }
 
+    // ---------------------------------------------------------------------------------------
+    // GetLinearMomentum -- ⭐ 2026-08-19 (wave Q6 / the jointed lean+tilt prop response).
+    // Console-inline (no address of its own on either console); the header's block comment
+    // above the declaration carries the store-for-store recovery out of
+    // HandleContactWithLeanProp @0x8260FCA4..0x8260FCBC and its corroborating twin in
+    // HandleContactWithTiltProp @0x82610A08..0x82610A18, and is not repeated here.
+    //
+    //     v*m + F*dt + J
+    //
+    // ⚠️ ALL FOUR LANES, not xyz. Every one of the console's five instructions is a full
+    // 4-lane VMX op (vmulfp128 / vmaddfp / vaddfp), and the caller immediately feeds the
+    // result to a `vmsum3fp128` dot that ignores .w anyway -- so the w lane is carried, not
+    // cleared, exactly as the register does. `vpu::Mult(Vector3, float)` and `vpu::Add` are
+    // both 4-lane in this tree, so the spelling below reproduces that without comment.
+    //
+    // ⚠️ mfMass is a broadcast VecFloat (`stvx128` of a splat -- see the +0xD0 note at the
+    // head of this file); its .x lane IS the mass. Same for the incoming timestep, which the
+    // console builds with a `vspltw` before the multiply.
+    // ---------------------------------------------------------------------------------------
+    Vector3 ExternalPhysicsBody::GetLinearMomentum(VecFloat lvfTimeStep) const
+    {
+        const Vector3 lvMomentumFromVelocity = vpu::Mult(mLinearVelocity, mfMass.x);
+        const Vector3 lvMomentumFromForce    = vpu::Mult(mTotalLinearForce, lvfTimeStep.x);
+
+        return vpu::Add(vpu::Add(lvMomentumFromVelocity, lvMomentumFromForce),
+                        mTotalLinearImpulse);
+    }
+
 }

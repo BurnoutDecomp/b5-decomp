@@ -38,11 +38,18 @@
 // BrnPhysicalBodyPart.cpp::GetBoundingBox).
 //
 // OPAQUE TYPES accessed by console byte offset (proven by the asm; NOT renamed):
-//   * CgsGeometric::Box is forward-declared only in the frozen header (its layout/Set live in their
-//     own TU). The asm's CgsGeometric::Box::Set(box, Matrix44Affine, Vector3Plus) is modelled by
-//     writing the oriented-box transform rows (+0/+16/+32/+48) and dims+fatness (+64) into the
-//     out-box through a raw-offset layout -- identical to BrnPhysicalBodyPart::GetBoundingBox. FLAG:
-//     Box layout provisional (Matrix44Affine basis @ +0, Vector3Plus dims @ +64); refined by Box's TU.
+//   * CgsGeometric::Box is forward-declared only in the frozen header. The asm's
+//     CgsGeometric::Box::Set(box, Matrix44Affine, Vector3Plus) is modelled by writing the
+//     oriented-box transform rows (+0/+16/+32/+48) and dims+fatness (+64) into the out-box through
+//     a raw-offset layout -- identical to BrnPhysicalBodyPart::GetBoundingBox.
+//     ✅ FLAG CLEARED 2026-08-19 (wave Q6, cluster `addprim`): the layout is no longer provisional
+//     and the guess was RIGHT. Box now has a real home -- GameShared/GameClasses/Geometric/
+//     Primitives/CgsBox.h, which is the console's OWN home (Box::Set @0x825E6918 passes the file
+//     string "..\GameShared\GameClasses\Geometric/Primitives/CgsBox.h", dumped from the image) --
+//     and its DWARF-authoritative members are exactly +0x00 Matrix44Affine mTransform and +0x40
+//     Vector3Plus mDimensionsAndFatness. FOLLOW-UP, deliberately NOT done here: these raw-offset
+//     writes can now be replaced by a by-name Box::Set call. That is a separate de-duplication, not
+//     a comment fix.
 //   * StreamedDeformationSpec::mu8NumDeformationSensors is private to a sibling (already-committed)
 //     header that must not be edited here; the asm reads it as `*(mpDeformationSpec + 1618)`. It is
 //     read through that same console offset (+1618), exactly as the asm does (the committed
@@ -242,8 +249,11 @@ namespace Deformation
 	//   * dims+fatness = *(mpDeformationSpec + 64) (mHandlingBodyDimensions), fatness lane = 0,
 	// then CgsGeometric::Box::Set(box, {right,up,at,centre}, dimsAndFatness). Box is forward-declared
 	// only, so the Set is modelled as a raw-offset write (transform @ +0/+16/+32/+48, dims @ +64),
-	// matching BrnPhysicalBodyPart::GetBoundingBox. FLAG: Box layout provisional; mpDeformationSpec
-	// vectors at console +64 / +1632 read by offset (sibling spec's private members not editable here).
+	// matching BrnPhysicalBodyPart::GetBoundingBox. ✅ That layout is CONFIRMED, not provisional --
+	// see the file banner: CgsGeometric::Box now lives at GameShared/GameClasses/Geometric/
+	// Primitives/CgsBox.h with mTransform @ +0x00 and mDimensionsAndFatness @ +0x40. Still open here:
+	// mpDeformationSpec vectors at console +64 / +1632 read by offset (sibling spec's private
+	// members not editable here).
 	// =============================================================================================
 	void DeformableObject::GetBoundingBox(CgsGeometric::Box* lpBoxOut)
 	{
@@ -289,8 +299,10 @@ namespace Deformation
 	// FLAG: KVF_CAR_BBOX_SHRINK (&unk_82FB95E0) is unrecovered rodata -> FLAGGED-0 (the shrink term
 	// vanishes; honest). The deformed AABB corner pair is read off the asm-proven vehiclePhysics console
 	// offsets (+0x6D0 / +0x6E0; not a named VehiclePhysics member here). Box::Set modelled as the
-	// raw-offset write (transform @ +0..+48, dims @ +64); Box layout provisional, per the committed
-	// BrnPhysicalBodyPart::GetBoundingBox precedent.
+	// raw-offset write (transform @ +0..+48, dims @ +64), per the committed
+	// BrnPhysicalBodyPart::GetBoundingBox precedent. ✅ That layout is CONFIRMED, not provisional --
+	// CgsGeometric::Box is homed at GameShared/GameClasses/Geometric/Primitives/CgsBox.h (see the
+	// file banner).
 	// =============================================================================================
 	void DeformableObject::GetAlignedDeformedBoundingBox(CgsGeometric::Box* lpBoxOut)
 	{

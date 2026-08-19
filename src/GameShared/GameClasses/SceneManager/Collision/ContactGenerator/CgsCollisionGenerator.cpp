@@ -8,6 +8,7 @@
 #include "GameShared/GameClasses/SceneManager/Collision/Primitives/CgsPrimitivePairList.h" // PrimitivePairList::GetNumTests
 #include "GameShared/GameClasses/SceneManager/Collision/Primitives/CgsTriangleList.h"      // TriangleList (descriptor copy)
 #include "GameShared/GameClasses/SceneManager/Collision/ContactGenerator/JobDescription/CgsPrimitiveListWithTriangleListJobDesc.h" // the type-11 descriptor
+#include "GameShared/GameClasses/SceneManager/Collision/ContactGenerator/JobDescription/CgsPrimitiveListWithTriangleListStreamJobDesc.h" // the type-12 descriptor + its StreamCommand
 #include "GameShared/GameClasses/Memory/DataStream/CgsSimpleDataStreamProducer.h"        // SimpleDataStreamProducer (CreateStreamProducer)
 #include "SDKs/EATech/eajobs/job.h"                                                       // EA::Jobs::Job (AllocateJob)
 #include "SDKs/EATech/eajobs/job_types.h"                                                 // EA::Jobs::Param (the inline dispatch)
@@ -341,6 +342,251 @@ u16 BaseCollisionGenerator::CollidePrimitiveListAgainstTriangleList(
     // 0x82814324 `mr r3, r29` -- the console does NOT truncate on the return path; the u16 return
     // type is the DWARF's (CgsCollisionGenerator.h:257). Every call site drops the value.
     return static_cast<u16>(liResultListIndex);
+}
+
+// =================================================================================================
+// ⭐⭐⭐ THE PRIMITIVE-PAIR-LIST vs TRIANGLE-LIST STREAM FAMILY -- LANDED 2026-08-19 (wave Q6,
+// cluster pstream). Three functions, and this is the arm the console's runtime selector actually
+// takes for prop/part-vs-world collision, so it is the LIVE half of "a smashed prop's parts land
+// on the road instead of falling through it".
+//
+//   AddPrimitiveListWithTriangleListToStream         @0x82811D40  (35)   the command POSTER
+//   CreateCollidePrimitiveListWithTriangleListStream @0x82811DD0  (98)   the producer FACTORY
+//   RunCollidePrimitiveListWithTriangleListStream    @0x82811F58  (80)   the batch DISPATCHER
+//
+// WHY THEY LIVE IN THIS TU. The DWARF puts all three in CgsCollisionGenerator.cpp (source lines
+// 1996 / 2028 / 2076 -- the same dumpfile that names their parameters and locals), which is this
+// file. The tree's sibling partfile CgsCollisionGenerator_CollideStreams.cpp holds the three
+// OTHER collide-stream families; it is not this owner's file, and its Create* helper has
+// internal linkage, which is why the factory below is open-coded rather than calling it. See the
+// factory's own banner.
+//
+// CONSUMERS (xrefs measured this wave with headless IDA 9.3 on a private .i64 copy):
+//   Add  @0x82811D40 -- DeformableObject::DoBodyPartWorldContactGeneration x2 (0x82609720 /
+//                       0x82609840), ::DoDetachedWheelWorldContactGeneration (0x82609AA4),
+//                       PropManager::DoPartWorldContactGeneration (0x826120C0) and
+//                       ::DoPropInstanceWorldContactGeneration (0x8261261C). The last two are
+//                       LANDED AND MOUNTED (PropManager_wQ2_03.cpp), which is why this body had
+//                       to exist this wave and not later: "LNK2019 resolves before /OPT:REF
+//                       discards" (build_game_exe.bat:544).
+//   Create/Run       -- PropManager::BeginPropWorldContactGeneration @0x82628CB0 (the Create at
+//                       0x82628D00 with `li r4, 0x64` == 100 max commands, the Run at
+//                       0x82628E00) and VehicleManager::StartPartContactGeneration @0x8262C344 /
+//                       @0x8262C3DC.
+//
+// ⚠️ THE TYPE-12 WORKER IS REAL AS OF THIS WAVE (ContactGeneratorJob::
+// ExecutePrimitiveListWithTriangleListStream @0x82926650, ContactGeneratorJob.cpp), so a command
+// posted here is drained. What it drains INTO -- the 849-instruction non-stream kernel
+// ExecutePrimitiveListWithTriangleList @0x82925908 -- is still a LOUD NAMED GATE, and that is
+// the honest residual: see ContactGeneratorJob.cpp's banner for its measured closure.
+// =================================================================================================
+
+// -------------------------------------------------------------------------------------------------
+// BaseCollisionGenerator::AddPrimitiveListWithTriangleListToStream @0x82811D40 (35 asm insns)
+//
+// ⚠️ EXPORT-SET HOLE: there is no .ida-exports/BURNOUT_X360_ARTIST.XEX/0x82811D40.json. All 35
+// instructions (raw words included) were read out of a PRIVATE copy of the .i64 with headless
+// IDA 9.3 this wave -- scratchpad/waveQ6/ida_pstream/{dump_ps.py,out.json}. Hex-Rays pseudocode
+// was not available and was not used.
+//
+// ---- REGISTER MAP, read off the prologue --------------------------------------------------------
+//   r3 this  r4 lpSPrimList  r5 lpTriangleList  r6 lu16MaxNumCollisions  r7 lbUseOptimisedBoxTests
+//   r8 luUserTagA  r9 lu16UserTagB  r10 lpPrimitiveTriangleStream
+// SEVEN GPR arguments and NO float -- this family carries a bool where the sphere families carry
+// lfPadding, so AGENTS.md gotcha 3 (a float arg skipping a GPR slot) does NOT bite here. The
+// spills at 0x82811D4C..0x82811D68 are r31=r4, r27=r5, r26=r7, r29=r10, r30=r3, and the
+// re-shuffle r4=r6 / r5=r8 / r6=r9 is the argument set for the call on the next line.
+//
+// ---- DECODE, address by address -----------------------------------------------------------------
+//   0x82811D6C  bl PrepareNewPrimitiveTestResultsList(maxCollisions, tagA, tagB) -> r28 = index.
+//   0x82811D7C  stb r26, sp+0x68   -> command +0x18   the bool (stored FIRST on the console)
+//   0x82811D70/84, 88/8C, 90/94    lwz/stw pairList words 0,4,8 -> command +0x00/+0x04/+0x08
+//   0x82811D98/9C  ld/std triangle list (one 8-byte console pair) -> command +0x0C
+//   0x82811DA0..0x82811DB0  `clrlwi r11,r28,16 ; addi r11,r11,0x4820 ; slwi r11,r11,2 ;
+//               lwzx r11,r11,r30` == this + 0x12080 + index*4 == mapCollisionResultLists[index],
+//               stored to command +0x14.
+//               ⚠️ 0x12080 IS A CONSOLE OFFSET (gotcha 1) -- the host array holds 8-byte pointers
+//               behind a wider IOBuffer base. Reached BY NAME below.
+//   0x82811D80/0x82811DB4  `addi r3, r29, 0x80 ; bl DataStreamCommandPoster::AddCommand` --
+//               producer+0x80 is SimpleDataStreamProducer::mCommandPoster.
+//   0x82811DC0  stw r3, 0x104(r29) -> the producer's miNumAddedCommands.
+//               Those two together are exactly the committed
+//               SimpleDataStreamProducer::AddCommand (CgsSimpleDataStreamProducer.cpp:121,
+//               `miNumAddedCommands = mCommandPoster.AddCommand(lpCommand);`), so the pair is
+//               written as that one call -- the same reduction the two committed Add* siblings
+//               in CgsCollisionGenerator_CollideStreams.cpp already make.
+//   0x82811DBC  `mr r3, r28` -- the result-list index, NOT truncated on the return path, which is
+//               why this tree types the two Add* siblings (and this one) s32 while the DWARF
+//               spells them uint16_t. Every measured call site drops the value.
+// -------------------------------------------------------------------------------------------------
+s32 BaseCollisionGenerator::AddPrimitiveListWithTriangleListToStream(
+    const PrimitivePairList*             lpSPrimList,
+    const TriangleList*                  lpTriangleList,
+    u16                                  lu16MaxNumCollisions,
+    bool                                 lbUseOptimisedBoxTests,
+    u32                                  luUserTagA,
+    u16                                  lu16UserTagB,
+    CgsMemory::SimpleDataStreamProducer* lpPrimitiveTriangleStream)
+{
+    const s32 liResultListIndex =
+        PrepareNewPrimitiveTestResultsList(lu16MaxNumCollisions, luUserTagA, lu16UserTagB); // 0x82811D6C
+
+    PrimitiveListWithTriangleListStreamJobDesc::StreamCommand lCommand;
+    lCommand.mbUseOptimisedBoxTests = lbUseOptimisedBoxTests;                  // 0x82811D7C (+0x18)
+    lCommand.mPairList              = *lpSPrimList;                            // +0x00..+0x08
+    lCommand.mTriangleList          = *lpTriangleList;                         // +0x0C
+    lCommand.mpResultsList =
+        mapCollisionResultLists[static_cast<u16>(liResultListIndex)];          // +0x14, by NAME
+
+    lpPrimitiveTriangleStream->AddCommand(&lCommand);                          // 0x82811DB4 + 0x82811DC0
+
+    return liResultListIndex;                                                  // 0x82811DBC
+}
+
+// -------------------------------------------------------------------------------------------------
+// BaseCollisionGenerator::CreateCollidePrimitiveListWithTriangleListStream @0x82811DD0 (98 insns)
+//
+// DWARF h:271; CgsCollisionGenerator.cpp:2028 names the parameter liMaxTests and the locals
+// (liOrigAlignment / lpStreamProducer / liCommandBufferSize / liResultBufferSize /
+// lpCommandBuffer). Grounding: the RAW `assembly` array of
+// .ida-exports/BURNOUT_X360_ARTIST.XEX/0x82811DD0.json (dumped to
+// scratchpad/waveQ6/asm_82811DD0.txt; 98 lines, matching (0x82811F58-0x82811DD0)/4).
+//
+// The 98 instructions are the SAME BODY as the three committed Create* in
+// CgsCollisionGenerator_CollideStreams.cpp -- the only deltas are the two assert line numbers,
+// :2037 (`li r5, 0x7F5`) and :2049 (`li r5, 0x801`). Decode:
+//   0x82811DE0/E8  `addis r25,r3,1 ; addi r25,r25,0x23A0` -> &mCollisionResultsAllocator
+//   0x82811DF4     `lwzx r20, r3, 0x123B0`  -> the allocator's live alignment (GetAlignment)
+//   0x82811DFC     SetAlignment(0x80)
+//   0x82811E08     Malloc(0x180)            -> the producer (0x180 is the CONSOLE sizeof)
+//   0x82811EA4/AC  GetRequiredBufferSizes(liMaxTests, 0x20, 0, 0, &cmdSize, &resSize)
+//   0x82811EB8     Malloc(cmdSize)          -> the command buffer
+//   0x82811F30/3C  Construct(liMaxTests, 0x20, cmdBuffer, 0, 0, 0)
+//   0x82811F48     SetAlignment(saved) ; 0x82811F4C `mr r3, r22` -> the producer
+// NO RESULT LANE (`li r5,0 / li r6,0` into GetRequiredBufferSizes and three zeros into
+// Construct): stream results travel through the CollisionResultList each posted command carries.
+//
+// ⚠️ COMMAND SIZE: the console passes 32; this host passes sizeof(StreamCommand) == 48. That is
+// the standing widen-the-runtime-carved-record rule, gated by the static_asserts in
+// CgsPrimitiveListWithTriangleListStreamJobDesc.h -- see its banner.
+//
+// ⚠️ WHY THIS IS OPEN-CODED RATHER THAN CALLING A SHARED HELPER. The three committed Create*
+// share an ANONYMOUS-NAMESPACE helper `CreateCollideStreamProducer` in
+// CgsCollisionGenerator_CollideStreams.cpp:105. That helper has internal linkage and lives in a
+// TU outside this owner's scope, so it cannot be called from here and duplicating a second
+// static of the same name in this TU would be a worse fork than open-coding the console's own
+// body. FOLLOW-UP: whoever owns _CollideStreams.cpp can promote that helper (file-scope in a
+// shared header, or a private member) and collapse all four factories onto it.
+// -------------------------------------------------------------------------------------------------
+CgsMemory::SimpleDataStreamProducer*
+BaseCollisionGenerator::CreateCollidePrimitiveListWithTriangleListStream(s32 liMaxTests)
+{
+    const size_t lnSavedAlignment = mCollisionResultsAllocator.GetAlignment();  // 0x82811DF4
+    mCollisionResultsAllocator.SetAlignment(128);                               // 0x82811DF0 li r4, 0x80
+
+    CgsMemory::SimpleDataStreamProducer* lpProducer =
+        static_cast<CgsMemory::SimpleDataStreamProducer*>(
+            mCollisionResultsAllocator.Malloc(sizeof(CgsMemory::SimpleDataStreamProducer))); // li r4, 0x180 (console sizeof)
+    CGS_ASSERT(lpProducer != nullptr, "Failed to allocate stream producer\n");  // :2037
+
+    // The producer's stride, and the poster's. NEVER the console's literal 32 -- see the banner.
+    const s32 liCommandSize = static_cast<s32>(
+        sizeof(PrimitiveListWithTriangleListStreamJobDesc::StreamCommand));
+
+    u32 luCommandBufferSize = 0;
+    u32 luResultBufferSize  = 0;
+    CgsMemory::SimpleDataStreamProducer::GetRequiredBufferSizes(
+        liMaxTests, liCommandSize, 0, 0,                                        // 0x82811E9C/EA0 li r5,0 / li r6,0
+        &luCommandBufferSize, &luResultBufferSize);
+
+    void* lpCommandBuffer = mCollisionResultsAllocator.Malloc(luCommandBufferSize);
+    CGS_ASSERT(lpCommandBuffer != nullptr, "Failed to allocate stream buffers\n"); // :2049
+
+    lpProducer->Construct(liMaxTests, liCommandSize, lpCommandBuffer, 0, 0, 0);  // 0x82811F20..F3C
+
+    mCollisionResultsAllocator.SetAlignment(lnSavedAlignment);                  // 0x82811F48
+    return lpProducer;                                                          // 0x82811F4C mr r3, r22
+}
+
+// -------------------------------------------------------------------------------------------------
+// BaseCollisionGenerator::RunCollidePrimitiveListWithTriangleListStream @0x82811F58 (80 insns)
+//
+// DWARF h:275; CgsCollisionGenerator.cpp:2076 names the locals liNumJobs / lpNULLJob / liJobIndex
+// / lu16BatchIndex and the calls GetNumCommands / rw::core::stdc::Min / AllocateJob /
+// PerfMonCpu::Start+StopMonitor -- i.e. exactly this dispatcher shape. Grounding: the RAW
+// `assembly` of 0x82811F58.json (scratchpad/waveQ6/asm_82811F58.txt, 80 lines).
+//
+// Divergences from its three committed twins, read off the asm and reproduced:
+//   * NO DebugRenderStreamReader parameter (DWARF :275 has one argument, and the asm loads only
+//     r3=this, r4=producer); the descriptor's mpDebugStream is stored NULL (0x82811FF4).
+//   * descriptor type 12 (`li r23, 0xC` @0x82811FC0 -> `stb r23, 0x4CF` @0x82811FEC).
+//   * the perfmon brackets EACH batch's wiring (Start @0x82812000 after the descriptor stores,
+//     Stop @0x82812068 after DependsOn) -- the swept / sphere-sphere placement, not the
+//     sphere-triangle one.
+//   * mabUsedBatches is NOT written here (no store to +0x123C0 anywhere in the 80 instructions);
+//     the landed CreateNewBatch marks the slot itself.
+//   * batch clamp is 3 (`li r29, 3` @0x82811F90), like all three twins. The console runs the
+//     loop as a countdown (`addi r29,r29,-1` @0x8281206C); re-rolled forward here.
+//   * the empty-stream early-out returns NULL (0x82811F7C `li r3, 0`) BEFORE AllocateJob.
+//
+// ⚠️⚠️ FLAG PC-platform leaf: THE DISPATCH, AND ONLY THE DISPATCH. `unk_830EA650` (the global
+// EA::Jobs::JobScheduler) does not exist on this build (CgsHardwareInitPC.cpp:40), so the
+// JobScheduler::AddTree call at 0x82812084 -- and only that call -- is replaced by running each
+// batch's entry point inline, exactly as the five already-committed dispatchers in
+// CgsCollisionGenerator_CollideStreams.cpp / _LineStream.cpp and CollidePrimitiveListAgainst-
+// TriangleList above already do.
+// -------------------------------------------------------------------------------------------------
+EA::Jobs::Job*
+BaseCollisionGenerator::RunCollidePrimitiveListWithTriangleListStream(
+    CgsMemory::SimpleDataStreamProducer* lpStream)
+{
+    const s32 liNumCommands = lpStream->GetNumCommands();   // 0x82811F70 lwz r11, 0x104(producer)
+    if (liNumCommands == 0)
+    {
+        return 0;                                           // 0x82811F7C li r3, 0
+    }
+
+    const s32 KI_MAX_BATCHES = 3;                           // 0x82811F90 li r29, 3
+    s32 liNumBatches = liNumCommands;
+    if (liNumBatches > KI_MAX_BATCHES)                      // 0x82811F8C cmpwi 3 / bgt
+    {
+        liNumBatches = KI_MAX_BATCHES;
+    }
+
+    EA::Jobs::Job* lpParentJob = AllocateJob();              // 0x82811FA0
+
+    for (s32 liBatch = 0; liBatch < liNumBatches; ++liBatch)
+    {
+        CollisionBatch& lrBatch = maCollisionBatches[CreateNewBatch()];        // 0x82811FD0
+
+        PrimitiveListWithTriangleListStreamJobDesc* lpDesc =
+            reinterpret_cast<PrimitiveListWithTriangleListStreamJobDesc*>(
+                lrBatch.GetJobDescription().GetBuffer());                      // batch +0x350
+        lpDesc->Prepare(lpStream);                 // the five inlined stores, 0x82811FE8..0x82811FF8
+
+        CgsDev::PerfMonCpu::StartMonitor(_miStartJobsPerfMon);                 // 0x82812000
+
+        EA::Jobs::Job* lpJob = lrBatch.GetJob();                               // batch +0x00
+        lpJob->Clear();                                                        // 0x8281200C
+        lpJob->SetName("CollisionBatch");                                      // 0x8281201C
+        lpJob->SetCode(EA::Jobs::JOB_ENVIRONMENT_LOCAL,
+                       reinterpret_cast<const void*>(&ContactGeneratorEntry), 0);  // 0x82812034
+        lpJob->SetData(lpDesc,
+                       static_cast<int>(CollisionJobDescriptionStorage::KU_CONSOLE_BYTES)); // li r5, 0x100
+        lpJob->SetCodeRecycle(EA::Jobs::EntryPoint::CODE_RECYCLE_ON);          // 0x82812050 (ICF-folded blr)
+        lpParentJob->DependsOn(*lpJob, EA::Jobs::Event::EVENT_WHEN_JOB_END);   // 0x82812060, li r5, 1
+
+        CgsDev::PerfMonCpu::StopMonitor(_miStartJobsPerfMon);                  // 0x82812068
+
+        // ---- FLAG PC-platform leaf: run the job body here (see the banner) ----
+        // X360: JobScheduler::AddTree(&unk_830EA650, lpParentJob) at 0x82812084, after the loop.
+        ContactGeneratorEntry(EA::Jobs::Param(static_cast<void*>(lpDesc)),
+                              EA::Jobs::Param(static_cast<void*>(lpDesc)),
+                              EA::Jobs::Param(),
+                              EA::Jobs::Param());
+    }
+
+    return lpParentJob;                                     // 0x82812088 mr r3, r24
 }
 
 }

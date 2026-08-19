@@ -68,6 +68,8 @@
 #include "GameShared/GameClasses/Memory/DataStream/CgsSimpleDataStreamConsumer.h"
 #include "GameShared/GameClasses/SceneManager/Collision/ContactGenerator/JobDescription/CgsCollisionJobDescription.h"
 #include "GameShared/GameClasses/SceneManager/Collision/ContactGenerator/JobDescription/CgsLineWithTriangleListStreamJobDesc.h"
+#include "GameShared/GameClasses/SceneManager/Collision/ContactGenerator/JobDescription/CgsPrimitiveListWithTriangleListJobDesc.h"
+#include "GameShared/GameClasses/SceneManager/Collision/ContactGenerator/JobDescription/CgsPrimitiveListWithTriangleListStreamJobDesc.h"
 #include "GameShared/GameClasses/SceneManager/Collision/ContactGenerator/JobDescription/CgsSphereListWithTriangleListJobDesc.h"
 #include "GameShared/GameClasses/SceneManager/Collision/ContactGenerator/JobDescription/CgsSweptSphereListWithTriangleListJobDesc.h"
 #include "GameShared/GameClasses/SceneManager/Collision/Primitives/CgsCollisionResult.h"
@@ -82,6 +84,8 @@ ContactGeneratorJob gaContactGeneratorJobs[KI_NUM_CONTACT_GENERATOR_JOBS];
 using CgsSceneManager::CgsCollision::CollisionJobDescription;
 using CgsSceneManager::CgsCollision::CollisionResultList;
 using CgsSceneManager::CgsCollision::LineWithTriangleListStreamJobDesc;
+using CgsSceneManager::CgsCollision::PrimitiveListWithTriangleListJobDesc;
+using CgsSceneManager::CgsCollision::PrimitiveListWithTriangleListStreamJobDesc;
 using CgsSceneManager::CgsCollision::PrimitiveTestResult;
 using CgsSceneManager::CgsCollision::SphereListWithTriangleListJobDesc;
 using CgsSceneManager::CgsCollision::SphereListWithTriangleListStreamJobDesc;
@@ -226,7 +230,12 @@ void ContactGeneratorJob::Execute(void* lpvJobData)
         case 8:  ExecuteSphereListWithSphereListStream();       break;
         case 9:  ExecuteBoxListWithTriangleList();              break;
         case 10: ExecutePrimitivePairList();                    break;
-        case 11: ExecutePrimitiveListWithTriangleList();        break;
+        // Case 6 of the jump table (0x829268A8): the `bl` leaves r4 == lpvJobData untouched,
+        // exactly as cases 5 and 13 do -- this worker takes the descriptor as its parameter.
+        case 11:
+            ExecutePrimitiveListWithTriangleList(
+                static_cast<const PrimitiveListWithTriangleListJobDesc*>(mpJobDescription));
+            break;
         case 12: ExecutePrimitiveListWithTriangleListStream();  break;
         // Case 13's `bl` at 0x82926880 leaves r4 = lpvJobData untouched, exactly as case 5's
         // does: the swept worker takes the descriptor as its parameter too.
@@ -955,7 +964,92 @@ void ContactGeneratorJob::ExecuteSweptSphereListWithTriangleListStream()
 }
 
 // =============================================================================================
-// The other six Execute arms -- NAMED BOOT GATES, not silent returns and not a shared default.
+// ⭐⭐⭐ THE PROP ARM — ContactGeneratorJob::ExecutePrimitiveListWithTriangleListStream
+// @0x82926650 (100), landed 2026-08-19 (wave Q6, cluster pstream). This is the type-12 worker:
+// the drain end of the stream BrnPhysics::Props::PropManager::BeginPropWorldContactGeneration
+// creates and DoPart/DoPropInstanceWorldContactGeneration post into, i.e. the reason a smashed
+// prop's parts can collide with the world at all instead of free-falling.
+//
+// Grounding: the RAW `assembly` array of
+// .ida-exports/BURNOUT_X360_ARTIST.XEX/0x82926650.json (100 lines, matching
+// (0x829267E0-0x82926650)/4). Hex-Rays pseudocode not consulted.
+//
+// SHAPE — instruction-for-instruction the sphere/swept stream arms with four symbols changed
+// (the two assert line numbers, the Prepare, the worker):
+//   0x82926668  lwz r28, 0x10(this)      -> mpJobDescription   assert :1104 "No job description\n"
+//   0x829266CC  lwz r11, 0(r28)          -> mpStreamProducer   assert :1105 "No stream producer\n"
+//               (0x450 == 1104, 0x451 == 1105 -- the `li r5` immediates)
+//   0x82926740  SimpleDataStreamConsumer::Construct(&consumer, producer, 0, 0)
+//   0x82926750  AllocateMemory(0x80, 0x80)                  -> the command scratch
+//   0x82926778  stwx  -> miMemoryRestorePoint = miAllocCursor  (AFTER the alloc, as the twins do)
+//   loop:       DataStreamCommandReader::ReadCom(&consumer.mReader, command, &index)
+//   0x82926788  addi r29, r31, 0xC       -> &cmd->mTriangleList      (command +0x0C)
+//   0x82926790  lbz  r7,  0x18(r31)      -> cmd->mbUseOptimisedBoxTests
+//   0x82926794  mr   r4,  r31            -> &cmd->mPairList          (command +0x00)
+//   0x82926798  lwz  r6,  0x14(r31)      -> cmd->mpResultsList       (command +0x14)
+//   0x829267A0  PrimitiveListWithTriangleListJobDesc::Prepare(local, pairList, triList,
+//                                                             resultList, flag)
+//   0x829267AC  ExecutePrimitiveListWithTriangleList(&local)   (r4 == the local descriptor)
+//   0x829267B4  RestoreMemory()
+//   0x829267D4  SimpleDataStreamConsumer::Destruct()
+//
+// ⚠️ THOSE FOUR COMMAND OFFSETS ARE THE CONSUMER-SIDE PROOF of the StreamCommand layout that
+// CgsPrimitiveListWithTriangleListStreamJobDesc.h models from the poster side. Both directions
+// agree, which is why that header's member order is a measurement and not a reading of the DWARF
+// alone.
+//
+// ⚠️ 128 IS THE PRODUCER'S ALIGNED STRIDE, NOT sizeof(StreamCommand). The console asks for a
+// whole 128-byte arena slice (`li r4, 0x80 / li r5, 0x80`) because the poster's stride round is
+// (32 + 127) & ~127 == 128 on the console AND (48 + 127) & ~127 == 128 here, and ReadCom copies a
+// WHOLE STRIDE into this buffer. A sizeof-sized scratch would be read past its end every command
+// -- the same doctrine the sphere arm's banner states for its own 128 and the line arm's for 256.
+//
+// ⚠️⚠️ THE HONEST RESIDUAL, STATED HERE AND NOT BURIED: what this arm delegates to --
+// ExecutePrimitiveListWithTriangleList @0x82925908 (849 insns) -- is still a LOUD NAMED GATE
+// below. So a posted prop command now reaches a named missing kernel instead of nothing at all;
+// it does NOT yet produce contacts. Landing this dispatcher over a named gate is the same
+// precedent every committed Run*/Execute*Stream in this subsystem rests on. Its measured closure
+// (xrefs_from on 0x82925908): ContactGeneratorJob::{LoadPrimitives, LoadResultList,
+// BuildGPInstance @0x829222A0, CollideGPInstances @0x829253C8}, PrimitivePairList::Itterator::
+// {Prepare @0x82812128, GetPrimativeA @0x828121D8, MoveToNextHeader @0x82812210} and
+// CgsGeometric::Triangle4::GetAOSTriangle -- i.e. two un-reconstructed workers
+// (BuildGPInstance / CollideGPInstances) plus the already-real iterator. That pair is the
+// next cluster on this leg.
+// =============================================================================================
+void ContactGeneratorJob::ExecutePrimitiveListWithTriangleListStream()
+{
+    typedef PrimitiveListWithTriangleListStreamJobDesc Desc;
+
+    const Desc* lpDesc = static_cast<const Desc*>(mpJobDescription);
+
+    CGS_ASSERT(lpDesc != NULL, "No job description\n");                           // :1104
+    CGS_ASSERT(lpDesc->GetDataStreamProducer() != NULL, "No stream producer\n");  // :1105
+
+    CgsMemory::SimpleDataStreamConsumer lConsumer;
+    lConsumer.Construct(lpDesc->GetDataStreamProducer(), NULL, 0);
+
+    Desc::StreamCommand* lpCommand =
+        static_cast<Desc::StreamCommand*>(AllocateMemory(128, 128));
+
+    miMemoryRestorePoint = miAllocCursor;
+
+    u32 luCommandIndex = 0;
+    while (lConsumer.ReadCo(lpCommand, &luCommandIndex) == 0)
+    {
+        PrimitiveListWithTriangleListJobDesc lLocalDesc;
+        lLocalDesc.Prepare(&lpCommand->mPairList, &lpCommand->mTriangleList,
+                           lpCommand->mpResultsList, lpCommand->mbUseOptimisedBoxTests);
+
+        ExecutePrimitiveListWithTriangleList(&lLocalDesc);
+
+        RestoreMemory();
+    }
+
+    lConsumer.Destruct();
+}
+
+// =============================================================================================
+// The other five Execute arms -- NAMED BOOT GATES, not silent returns and not a shared default.
 // Each names its own X360 home and insn count so that the day something posts that descriptor
 // type, the log says which worker is missing rather than "unsupported".
 // =============================================================================================
@@ -989,16 +1083,20 @@ void ContactGeneratorJob::ExecutePrimitivePairList()
                          "@0x82925798 (92) not reconstructed [FLAG PC boot gate]\n");
 }
 
-void ContactGeneratorJob::ExecutePrimitiveListWithTriangleList()
+// ⛔ THE PROP NARROW PHASE. This is the one gate on the breakable-props motion path that still
+// matters at runtime: the type-12 stream arm above now drains prop commands straight into it, so
+// while it is gated a smashed prop's parts generate NO world contacts and keep free-falling. Its
+// closure is measured and small (see the stream arm's banner): ContactGeneratorJob::
+// BuildGPInstance @0x829222A0 and ::CollideGPInstances @0x829253C8 are the two un-reconstructed
+// callees; everything else it touches is already real in this tree.
+void ContactGeneratorJob::ExecutePrimitiveListWithTriangleList(
+    const PrimitiveListWithTriangleListJobDesc* /*lpDesc*/)
 {
     BRN_CONTACT_JOB_GATE("conductor gate: ContactGeneratorJob::ExecutePrimitiveListWithTriangleList "
-                         "@0x82925908 not reconstructed [FLAG PC boot gate]\n");
-}
-
-void ContactGeneratorJob::ExecutePrimitiveListWithTriangleListStream()
-{
-    BRN_CONTACT_JOB_GATE("conductor gate: ContactGeneratorJob::ExecutePrimitiveListWithTriangle"
-                         "ListStream @0x82926650 (100) not reconstructed [FLAG PC boot gate]\n");
+                         "@0x82925908 (849) not reconstructed -- prop/part-vs-world commands now "
+                         "REACH this worker (type-12 stream arm is live) but produce no contacts; "
+                         "closure = BuildGPInstance @0x829222A0 + CollideGPInstances @0x829253C8 "
+                         "[FLAG PC boot gate]\n");
 }
 
 #undef BRN_CONTACT_JOB_GATE

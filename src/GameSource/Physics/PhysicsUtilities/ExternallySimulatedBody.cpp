@@ -1,4 +1,5 @@
 #include "GameSource/Physics/PhysicsUtilities/ExternallySimulatedBody.h"
+#include "rw/math/vpu/vector3_operation.h"   // rw::math::vpu::Add (Translate)
 
 // BrnPhysics::ExternallySimulatedBody -- the single ledger func owned by the Physics-IO-util
 // group: ReadFromRenderware @0x825A2E88.
@@ -79,6 +80,18 @@ namespace BrnPhysics
         mLinearVelocity.SetZero();
         mAngularVelocity.SetZero();
         mbFrozen = false;
+    }
+
+    // DWARF ExternallySimulatedBody.h:105 -- console-INLINED (no X360 symbol). Its two callers,
+    // PropManager::HandleContactWithLeanProp @0x8260FB60 / TiltProp @0x826108B8, expand it as
+    // `lvx128 v13, lpBody+0x40 ; vmaddfp128 v13 = pos + n*d ; stvx128 v13, lpBody+0x40`
+    // (0x8260FCFC..0x8260FD10 / 0x82610A70..0x82610A7C): body +0x10 mTransform + 0x30 wAxis, i.e.
+    // advance the pose's translation row by a world-space offset; the rotation rows and both
+    // velocities are untouched. LANDED 2026-08-19 (wave Q6 / lean integration; measured body
+    // in scratchpad/waveQ6/lean.owner.md section 5).
+    void ExternallySimulatedBody::Translate(Vector3 lvTranslation)
+    {
+        mTransform.wAxis = rw::math::vpu::Add(mTransform.wAxis, lvTranslation);
     }
 
     void ExternallySimulatedBody::ReadFromRenderware(const rw::physics::RigidBody* lpRigidBody)

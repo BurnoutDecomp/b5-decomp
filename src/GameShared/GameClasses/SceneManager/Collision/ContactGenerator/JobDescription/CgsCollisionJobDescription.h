@@ -73,6 +73,20 @@ namespace CgsCollision
         E_COLLISIONJOB_PRIMITIVE_PAIR_LIST                = 10,  // @0x82810478
         E_COLLISIONJOB_PRIMITIVE_LIST_WITH_TRIANGLE_LIST  = 11,  // @0x82810278
 
+        // ⭐ 2026-08-19 (wave Q6, cluster pstream): the fourth collide-STREAM id -- the one
+        // BREAKABLE PROPS run on. MEASURED on both sides, writer and reader:
+        //   writer -- BaseCollisionGenerator::RunCollidePrimitiveListWithTriangleListStream
+        //             @0x82811F58 does `li r23, 0xC` (0x82811FC0) -> `stb r23, 0x4CF(batch)`
+        //             (0x82811FEC), and 0x4CF - 0x3D0 == +0xFF, this base's muJobType seat;
+        //   reader -- ContactGeneratorJob::Execute @0x829267E0 subtracts 5 from the type byte and
+        //             jumps a 12-entry table whose case 7 (== type 12) is
+        //             `bl ExecutePrimitiveListWithTriangleListStream` at 0x829268B0.
+        // The DWARF enum (CgsCollisionJobDescription.h:53) spells it
+        // E_COLLISION_TYPE_PRIMITIVE_TRIANGLE_LIST_STREAM; this tree's established
+        // E_COLLISIONJOB_ prefix + full class-name spelling is kept, exactly as the six ids
+        // above it already are.
+        E_COLLISIONJOB_PRIMITIVE_LIST_WITH_TRIANGLE_LIST_STREAM = 12, // Run @0x82811F58
+
         // ⭐ 2026-08-16 (swept leg): the NON-stream swept id, 13. Its own Prepare is missing
         // from the X360 export set, so the id is read straight out of the image bytes:
         // 0x828103EC `li r11, 13` -> 0x82810400 `stb r11, 0xFF(r3)`. That body is otherwise

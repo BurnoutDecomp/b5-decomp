@@ -42,6 +42,26 @@ static_assert(offsetof(CgsSceneManager::CacheSlot, mbIsDirty) == 0x2E, "CacheSlo
 static_assert(sizeof(CgsSceneManager::CacheSlot::miOverflow) == 2,
               "miOverflow is 16-bit -- ProcessRemoveFromCacheEvents clears it with `sth`, not `stw`");
 
+// ---------------------------------------------------------------------------
+// Wave Q6 round 2 (2026-08-19): the contract the RELEASE-side sphere zero rests on.
+// ProcessRemoveFromCacheEvents now writes all four lanes of mLastCachedSphere, because the
+// console's 0x828B2C08 `stvx128` stores a vector whose x/y/z come from the zero register
+// (`vmr128 v0, v127`) and whose w comes from a mask-1 vrlimi128 of that same zero register --
+// i.e. ONE 16-byte store covering CacheSlot+0x00..+0x0F, not a single-field write. Four lanes of
+// C++ assignment reproduce that store only if the field really is the four contiguous floats at
+// offset 0. If a future edit re-orders CacheSlot or re-types CacheSphere, THIS is the line that
+// must fail rather than the release path silently reverting to a partial clear.
+static_assert(offsetof(CgsSceneManager::CacheSlot, mLastCachedSphere) == 0,
+              "CacheSlot.mLastCachedSphere @ +0x00 -- the console's release store is one stvx128 "
+              "over the slot's first 16 bytes");
+static_assert(sizeof(CgsSceneManager::CacheSphere) == 16, "CacheSphere is one 16-byte vector slot");
+static_assert(offsetof(CgsSceneManager::CacheSphere, x) == 0
+                  && offsetof(CgsSceneManager::CacheSphere, y) == 4
+                  && offsetof(CgsSceneManager::CacheSphere, z) == 8
+                  && offsetof(CgsSceneManager::CacheSphere, w) == 12,
+              "CacheSphere lanes are x,y,z,w in that order -- the vrlimi128 mask 1 that both legs "
+              "use names the LAST lane, so w must be the one at +12");
+
 // ⛔⛔ TriangleCacheManager's OWN offsets are deliberately NOT pinned to the console
 // numbers, and this is a correction made after the gate below caught the mistake.
 // The first draft of this file asserted the X360 values the asm shows --

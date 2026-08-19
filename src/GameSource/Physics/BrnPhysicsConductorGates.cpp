@@ -423,10 +423,9 @@ namespace Vehicle
     // UpdateTriangleCache producers write INDEPENDENT per-slot InEventUpdateCachedPosition
     // events into ONE queue whose consumer (CacheSlot::UpdateCachedObject, landed and draining
     // every frame) is per-slot. There is no lifetime pair and no count invariant between
-    // managers. And props/deformation own ZERO triangle-cache slots today -- the runtime witness
-    // is `usedSlots=28`, which is exactly KI_MAX_ACTIVE_RACE_CARS(8) +
-    // KU8_TOTAL_MAX_NUM_PHYSICAL_TRAFFIC(20) -- so no consumer can read a stale prop sphere. A
-    // manager that does not push leaves its own unclaimed slots where they already are.
+    // managers. (2026-08-19 correction: props DO own slots now -- five mounted producers claim
+    // 28..72 -- and the prop arm is REAL in PropManager_wQ_03.cpp; only the DEFORMATION arm is
+    // still gated, and a manager that does not push leaves its own unclaimed slots where they are.)
     // Their closures are 573 (props: GetTriangleCacheSlotAndRadius 247 + UpdateTriangleCache 116
     // + UpdatePro 41 + Has{Part,Prop}JustBeenRemoved 2x99 ...) and 585 (deformation:
     // DetachedWheel 264 + DetachedPart 113 + PhysicalBodyPartPool::GetPart 110 + the conductor 35
@@ -468,19 +467,10 @@ namespace Deformation
 
 namespace Props
 {
-    void PropManager::BeginPropWorldContactGeneration(
-        const CgsSceneManager::SceneManagerIO::TriangleCacheInterface*,
-        CgsSceneManager::CgsCollision::CollisionGenerator*, CgsMemory::LinearMalloc*, VecFloat)
-    {
-        BRN_CONDUCTOR_GATE("PropManager::BeginPropWorldContactGeneration @0x82628CB0 (89)");
-    }
-
-    void PropManager::EndPropWorldContactGeneration(
-        BrnPhysics::PhysicsModuleIO::PotentialContactInterface*,
-        CgsSceneManager::CgsCollision::CollisionGenerator*, CgsSceneManager::EntityId)
-    {
-        BRN_CONDUCTOR_GATE("PropManager::EndPropWorldContactGeneration @0x82628E18 (37)");
-    }
+    // GATES RETIRED 2026-08-19 (wave Q6 round 2 / pstream+worldc): PropManager::BeginPropWorldContact
+    // Generation @0x82628CB0 and EndPropWorldContactGeneration @0x82628E18 are REAL in PropManager_wQ2_02.cpp
+    // (mounted as a pair with PropManager_wQ_03.cpp) -- the primitive-list-vs-triangle-list STREAM job
+    // family (CgsCollisionGenerator.cpp) and DoProp/DoPartWorldContactGeneration (wQ2_03) landed.
 
     // GATE RETIRED 2026-08-18 (wave Q4 PropManager mount): PropManager::ReadUpdatedBodies @0x82632918 is REAL in PropManager_wQ2_01.cpp.
 
@@ -489,37 +479,17 @@ namespace Props
     // smashed prop part's pose back to the world module (the PhysicsModuleIO::OutputBuffer prop seat
     // is the real Props::PropOutputInterface now; SharedIO/BrnPropOutputInterface.cpp mounted).
 
-    // 2026-08-18 (wave Q4 PropManager mount): three honest gates for bodies that are COMPLETE
-    // but still parked out of tree on foreign-header declarations, so the mounted
-    // SetupAndValidatePropContact / ProcessInputsPreScene link. Retire each with its landing.
-    //  * HandleContactWithLean/TiltProp -- parked at scratchpad/waveQ2/parked/PropManager_07_*.cpp
-    //    on vendor vpu helpers (CompLessThan/CompGreaterThan/GetVector3_YAxis/ZAxis/Mask3/a
-    //    Select overload) + RaceCarPhysics::GetLinearMomentum + Wheel::GetRoadLongSpeed.
-    //    Effect while gated: a car hitting a jointed lamppost/pole gets no lean/tilt response
-    //    (SetupAndValidatePropContact still validates and routes the contact).
-    void PropManager::HandleContactWithLeanProp(
-        PropInstance*, s32, const PropTypeData*, BrnPhysics::Vehicle::RaceCarPhysics*,
-        Vector3, Vector3, Vector3, CgsPhysics::PhysicsSimulationIO::InAddPotentialContact*, bool, f32)
-    {
-        BRN_CONDUCTOR_GATE("PropManager::HandleContactWithLeanProp @0x8260FB60 (854; body PARKED on vendor vpu helpers + RaceCarPhysics::GetLinearMomentum)");
-    }
-    void PropManager::HandleContactWithTiltProp(
-        PropInstance*, s32, const PropTypeData*, BrnPhysics::Vehicle::RaceCarPhysics*,
-        Vector3, Vector3, Vector3, CgsPhysics::PhysicsSimulationIO::InAddPotentialContact*, bool, f32)
-    {
-        BRN_CONDUCTOR_GATE("PropManager::HandleContactWithTiltProp @0x826108B8 (720; body PARKED, same helper set as the Lean twin)");
-    }
+    // GATES RETIRED 2026-08-19 (wave Q6 round 2 / lean): PropManager::HandleContactWithLeanProp @0x8260FB60
+    // (854) and HandleContactWithTiltProp @0x826108B8 (720) are REAL in PropManager_wQ6_02.cpp -- the eight
+    // declarations they were parked on (ExternalPhysicsBody::GetLinearMomentum, Wheel::GetRoadLongSpeed,
+    // six rw::math::vpu helpers) landed in their homes.
     // GATE RETIRED 2026-08-19 (wave Q6 / rmall): PropManager::RemoveAllPropsAndParts @0x8260F010 (331) is
     // REAL in PropManager_wQ6_01.cpp (export hole closed with headless idat on a private .i64 copy).
 
-    // 2026-08-11 (lifetime wave) -- arm 2 of PhysicsModule::UpdateCachedPositions. See the note
-    // at the foot of the Vehicle namespace above for why this one is gated while arm 1 is real.
-    void PropManager::UpdateTriangleCache(
-        CgsSceneManager::SceneManagerIO::InputBuffer_Update*)
-    {
-        BRN_CONDUCTOR_GATE("PropManager::UpdateTriangleCache @0x826119A0 (116; 573-insn closure) "
-                           "-- props own ZERO triangle-cache slots today (usedSlots==28==8+20)");
-    }
+    // GATE RETIRED 2026-08-19 (wave Q6 round 2): PropManager::UpdateTriangleCache @0x826119A0 is REAL in
+    // PropManager_wQ_03.cpp (mounted with wQ2_02). Props DO own triangle-cache slots (five mounted
+    // producers: ProcessAddPropInstanceEvents window 28..42, CreatePart 43..72, their removes), so the
+    // old 'usedSlots==28' justification is gone, not reworded.
 }
 
 namespace Deformation
