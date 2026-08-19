@@ -1,4 +1,5 @@
 #include "vendor/renderware/collision/LineSegIntersect.hpp"
+#include "vendor/renderware/collision/GPInstance.hpp"   // TriangleNearestPointRegion (7-param, GPTriangle.cpp)
 
 #include <cmath>     // sqrt, fabs, powf
 #include <cstring>   // memcpy (bit-exact float constant)
@@ -282,9 +283,10 @@ s32 FatTriangleLineSegIntersect(VolumeLineSegIntersectResult* lpResult,
     Vec4 lvFocus;                          // var_160: nearest point, later the sphere centre
     f32 lfNearU = 0.0f;                    // var_188
     f32 lfNearV = 0.0f;                    // var_178
-    f32 lfPlaneDist = 0.0f;                // X360 f3 side-channel return
-    s32 liFeature = TriangleNearestPointRegion(&lvFocus, &lfNearU, &lfNearV, &lfPlaneDist,
-                                               lvPoint, aV0, aV1, aV2);   // bl loc_82BBA748
+    s32 liFeature = TriangleNearestPointRegion(&lvFocus, &lfNearU, &lfNearV,
+                                               lvPoint, aV0, aV1, aV2);   // bl loc_82BBA748 (7 params:
+                                               // the callee writes f0/f4-f13, never f3 -- there is NO
+                                               // plane-distance side channel; see the face arm below)
 
     const Vec4 lvToPoint = Sub(lvPoint, lvFocus);              // vsubfp v0 = v1 - v0
     const f32 lfDistSq  = Dot3(lvToPoint, lvToPoint);          // vmsum3fp128 -> var_170
@@ -304,7 +306,11 @@ s32 FatTriangleLineSegIntersect(VolumeLineSegIntersectResult* lpResult,
         // Face region: keep the caller's plane normal, flipped to the point's
         // side of the plane (the classifier's f3 signed distance).
         lpResult->position = lvPoint;                          // stvx128 v1, r30, 0x10
-        if (lfPlaneDist < 0.0f)                                // fcmpu f3, f31 / bge
+        // The console's `fcmpu f3, f31 / bge` at 0x82BBB1D4 compares f3 -- which is THIS
+        // function's own |det| (lfAbsDet, staged at 0x82BBAE30/0x82BBAE44; the callee never
+        // writes f3) -- against 0.0. |det| >= 0 always, so the flip arm below never fires;
+        // it is kept in the console's shape rather than deleted (2026-08-18 wave Q5 fix).
+        if (lfAbsDet < 0.0f)                                   // fcmpu f3, f31 / bge
         {
             lpResult->normal = Scale(lpResult->normal, -1.0f); // flt_820037C8 broadcast
         }

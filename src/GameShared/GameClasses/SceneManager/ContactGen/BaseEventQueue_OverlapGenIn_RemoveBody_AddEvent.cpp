@@ -1,8 +1,8 @@
 #include "GameShared/GameClasses/Module/CgsBaseEventQueue.h"                              // CgsModule::BaseEventQueue<T>::AddEvent (inline generic)
-#include "GameShared/GameClasses/SceneManager/ContactGen/CgsOverlapGenerationModule.h"    // OverlapGenerationIO::InRemoveBodyEvent (16-byte element)
+#include "GameShared/GameClasses/SceneManager/ContactGen/CgsOverlapGenerationModuleIO.h"    // OverlapGenerationIO::InRemoveBody (16-byte element)
 
 // =============================================================================
-// CgsModule::BaseEventQueue<CgsSceneManager::OverlapGenerationIO::InRemoveBodyEvent>::AddEvent
+// CgsModule::BaseEventQueue<CgsSceneManager::OverlapGenerationIO::InRemoveBody>::AddEvent
 //   @ X360 0x828B8888   (ledger id: class:CgsSceneManager::OverlapGenerationIO::InRemoveBody>)
 //
 // Thin explicit instantiation -- the generic BaseEventQueue<T>::AddEvent body is
@@ -15,11 +15,13 @@
 //     (slwi r11,r11,4), then two 64-bit moves copy the whole 16-byte event image
 //     (*v12 = *src @+0; v12[1] = src[1] @+8) -- the generic `mpEvents[miLength] = lEvent` copy;
 //   * ++miLength; return true.
-// The 16-byte stride == sizeof(OverlapGenerationIO::InRemoveBodyEvent) (u64 packed
-// body word @+0, u32 object index @+8, tail-padded to 16). Called from
-// CgsSceneManager::SceneManagerModule::RemoveAllEntityVolumeInstances and
-// ::ProcessRemoveForCollisionEvent.
+// The 16-byte stride == sizeof(OverlapGenerationIO::InRemoveBody) (DWARF
+// CgsOverlapGenerationModuleIO.h:163: mVolumeInstanceID -- the packed 64-bit handle --
+// @+0x00, muIndex @+0x08, tail-padded to 16). Called from
+// OverlapGenerationIO::InputBuffer::RemoveBody, which the X360 inlines into
+// CgsSceneManager::SceneManagerModule::ProcessRemoveForCollisionEvent @0x828CF828 and
+// ::RemoveAllEntityVolumeInstances.
 // =============================================================================
 template bool
-CgsModule::BaseEventQueue<CgsSceneManager::OverlapGenerationIO::InRemoveBodyEvent>::AddEvent(
-    const CgsSceneManager::OverlapGenerationIO::InRemoveBodyEvent& lEvent);
+CgsModule::BaseEventQueue<CgsSceneManager::OverlapGenerationIO::InRemoveBody>::AddEvent(
+    const CgsSceneManager::OverlapGenerationIO::InRemoveBody& lEvent);

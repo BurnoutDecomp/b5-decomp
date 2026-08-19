@@ -38,17 +38,16 @@
 // slwi r11,r11,5` == i*96) and static_asserted in
 // SharedClasses/Physics/Props/BrnPhysicsPropTypeData.h:201.
 //
-// ⚠️ HOST-vs-CONSOLE HAZARD, PRE-EXISTING, NOT INTRODUCED HERE. The record must stay 96
-// bytes on the host (the serialised stride above), but the vTable slot at +0x40 holds a
-// POINTER, which is 8 bytes on x64 and 4 on the console. So on the host the pointer
-// written into +0x40 overlaps +0x44..+0x47 -- the box half-extent X lane. Every accessor
-// below reads the same slots the pre-existing GetType() already did, so this file does not
-// widen the hazard, but it is REAL and it is live: BrnPhysics::Props::FixableVolume::FixUp
-// (GameShared/GameClasses/RenderWare/FixableVolume.cpp:44) stores
-// `gVolumeVTable[type]` through a `void**` at +0x40 and therefore clobbers the extent's
-// x lane on the PC build. Fixing it belongs to whoever owns the prop-physics resource
-// converter + FixableVolume (neither is this file); reported by the waveQ2 rwcollision
-// owner, 2026-08-18.
+// ⚠️ HOST-vs-CONSOLE HAZARD -- RESOLVED 2026-08-18 (wave Q5 integration). The record must
+// stay 96 bytes on the host (the serialised stride above), but the vTable slot at +0x40
+// holds a POINTER on the console, which is 8 bytes on x64 and 4 on the console; a host
+// pointer written into +0x40 would overlap +0x44..+0x47 -- the box half-extent X lane
+// (and FixableVolume::FixUp used to do exactly that through a `void**`). THE HOST
+// REPRESENTATION IS THEREFORE THE TYPE ENUM: +0x40 keeps the 4-byte on-disk VolumeType
+// (1..6) for the whole lifetime of the record, FixUp/FixDown only validate it, and every
+// reader (Volume::GetVTable() below, FixableVolume.cpp, the vendor narrow-phase TUs'
+// TU-local descriptor views, the four *Volume::Initialize bodies) recovers the console's
+// pointer as gVolumeVTable[type]. Derivation: scratchpad/waveQ5/rwc3.owner.md section 7.
 // ============================================================================
 
 #include "types.hpp"
@@ -140,9 +139,35 @@ namespace rw
             //   5 0x82F91894     5   CylinderVolume::GetBBox  CylinderVolume::..  "CylinderVolume"
             //   6 0x82F919D0     6   AggregateVolume::GetBBox AggregateVolume::.. "AggregateVolume"
             //
-            // (slot +0x1C `release` is 0x82AD5078 in all six -- the ICF-folded empty `blr`
-            // the exporter labels STUB; slot +0x0C `getInterval` is one ICF-folded address
-            // shared by types 1..5 that IDA mislabels with an unrelated symbol.)
+            // FULL per-slot dump, re-measured 2026-08-18 (waveQ5 rwc3) on a private .i64
+            // copy -- console word offsets, X360 addresses:
+            //
+            //  slot        [1] SPHERE  [2] CAPSULE [3] TRIANGLE [4] BOX    [5] CYLINDER [6] AGGREGATE
+            //  +00 typeID   1           2           3            4          5            6
+            //  +04 getBBox  82BA8020    82BAF9C8    82BBA038     82BA9FC8   82BAD490     82BBBA10
+            //  +08 diag     82BA8580    82BAF6A8    82BBA110     82BA8890   82BAC7B8     82BBBB58
+            //  +0C intvl    82BAC980    82BAC980    82BAC980     82BAC980   82BAC980     00000000
+            //  +10 maxfeat  82BA81B0    82BAF808    82BBACD0     82BA87F0   82BAC988     82B0F1B8
+            //  +14 creategp 82BA8100    82BAF6F0    82BBAA00     82BA92E8   82BAC7F8     82B0F1B8
+            //  +18 lineseg  82BA82C8    82BAFCF8    82BBB970     82BA9478   82BAF688     00000000
+            //  +1C release  82AD5078    82AD5078    82AD5078     82AD5078   82AD5078     82AD5078
+            //  +20 name    "SphereVolume" "CapsuleVolume" "TriangleVolume" "BoxVolume"
+            //                                           "CylinderVolume" "AggregateVolume"
+            //  +24 flags    0           0           0            0          0            0
+            //
+            // The three shared/ICF-folded targets were disassembled, not assumed:
+            //   0x82AD5078 = a lone `blr`            -- the empty function (411 xrefs; the
+            //                                           exporter labels it STUB, gotcha 6)
+            //   0x82BAC980 = `li r3,1 ; blr`         -- a folded "return 1" (54 xrefs). This
+            //                                           is the getInterval slot for types
+            //                                           1..5; IDA mislabels it
+            //                                           `MassiveAdClient3::...MediaDownload`.
+            //                                           DO NOT believe that name.
+            //   0x82B0F1B8 = `li r3,0 ; blr`         -- a folded "return 0" (33 xrefs), shared
+            //                                           by AGGREGATE's getMaximumFeature AND
+            //                                           createGPInstance slots; IDA mislabels
+            //                                           it `MassiveAdClient3::...`.
+            // AGGREGATE's getInterval and lineSegIntersect slots are genuinely 0 in the image.
             //
             // ⚠️ CONSOLE-ONLY OFFSETS. The +0x04/+0x08/... word offsets above are X360
             // facts and appear here as documentation only: on the host every slot is an
@@ -183,13 +208,19 @@ namespace rw
             };
 
             // `Volume::vTable` @ +0x40 (rwccore.h:1600). Read by byte offset for the same
-            // serialised-record reason as the getters below; this is the slot
-            // FixableVolume::FixUp rewrites from the on-disk type enum to the runtime
-            // descriptor pointer.
-            const VTable* GetVTable() const
-            {
-                return *reinterpret_cast<const VTable* const*>(maPayload + 0x40);  // serialised record slot
-            }
+            // serialised-record reason as the getters below.
+            //
+            // HOST REPRESENTATION (2026-08-18, wave Q5 integration -- the "honest host
+            // design" of scratchpad/waveQ5/rwc3.owner.md section 7): the console keeps a
+            // 4-byte descriptor POINTER in this slot (FixableVolume::FixUp @0x828A87A0
+            // swaps the on-disk type enum for gVolumeVTable[enum]; FixDown puts the enum
+            // back). An x64 pointer is 8 bytes and would overlap +0x44..+0x47 (the box
+            // half-extent X lane), and the record cannot grow (96-byte serialised stride).
+            // So on the host the slot ALWAYS holds the 4-byte type enum (1..6) and every
+            // reader indexes gVolumeVTable[] with it -- the same descriptor the console
+            // pointer would have named. FixUp/FixDown are therefore validation-only on
+            // the host. Defined below the class, after gVolumeVTable's declaration.
+            const VTable* GetVTable() const;
 
             // rwccore.h:1616-1621 `return vTable->typeID;`. The SDK returns
             // rw::collision::VolumeType; the u32 spelling is kept because
@@ -275,34 +306,31 @@ namespace rw
             // type that has this real home, which `cl /c` cannot see.
             // -----------------------------------------------------------------------
 
-            // @ 0x82BB03A8 -- fills the 7-entry shared descriptor table (slot 0 stays null).
+            // @ 0x82BB03A8 -- fills the 7-entry shared descriptor table (slot 0 stays null)
+            // and returns 1 (`li r3,1` at 0x82BB03B8, MEASURED -- the old `return 0` gate
+            // did not even match the console's return value).
             //
-            // ⚠️⚠️ THIS DECLARATION IS KNOWINGLY WRONG AND MUST NOT BE "FIXED" ON ITS OWN.
-            // It SHOULD be `static`: rwccore.h:1580-1581 says `static RwBool
-            // InitializeVTable(void)`, DWARF volume.h:1491 agrees, the X360 body never
-            // touches `this`, and BOTH of the tree's other minimal forward declarations of
-            // this class already spell it static --
-            // GameShared/GameClasses/SceneManager/CgsSceneManagerModule.cpp:48 (the caller,
-            // at :191) and GameSource/World/WorldLinkStubs.cpp:150.
+            // NOW `static`, as rwccore.h:1580-1581 / DWARF volume.h:1491 / the X360 body
+            // (which never touches `this`) all say, and as the tree's two other minimal
+            // forward declarations already spelled it:
+            // GameShared/GameClasses/SceneManager/CgsSceneManagerModule.cpp:48 (the ONLY
+            // caller, at :191) and GameSource/World/WorldLinkStubs.cpp:150.
             //
-            // It is left NON-static here, matching the shape volume.cpp already had, ONLY
-            // because static/non-static are DIFFERENT MANGLED SYMBOLS, and flipping it
-            // would make volume.cpp's real body collide with the inert boot gate
-            // `int rw::collision::Volume::InitializeVTable() { return 0; }` at
-            // WorldLinkStubs.cpp:2573 -- both TUs are mounted, so that is LNK2005 (the
-            // build script's own idiom, e.g. build_game_exe.bat:196/:214).
+            // ⚠️⚠️ THIS CHANGE IS HALF OF ONE COMMIT. Static and non-static are DIFFERENT
+            // MANGLED SYMBOLS, so until the inert boot gate
+            // `int rw::collision::Volume::InitializeVTable() { return 0; }` in
+            // GameSource/World/WorldLinkStubs.cpp is DELETED (block
+            // :2414-2427 as of 2026-08-18 -- banner through closing brace), this
+            // declaration + volume.cpp's real body collide with it: LNK2005. The gate file
+            // is conductor-owned, so the delete is REPORTED, not done here (waveQ5 rwc3).
             //
-            // ⚠️ CONSEQUENCE, LIVE TODAY: because the caller and the gate agree on the
-            // STATIC symbol and volume.cpp emits the NON-static one, volume.cpp's real body
-            // is DEAD CODE and SceneManagerModule::Construct gets the gate's `return 0`. So
-            // gVolumeVTable stays ALL ZERO on the PC build, FixableVolume::FixUp then writes
-            // NULL into every volume's +0x40 slot, and GetType()/GetBBox()/GetBBoxDiag()
-            // below would null-dereference. THE FIX IS ONE COMMIT: add `static` here, add it
-            // to volume.cpp's definition, and DELETE the WorldLinkStubs.cpp gate (its block
-            // is :2563-2576) in the same commit. Reported by the waveQ2 rwcollision owner
-            // 2026-08-18; not done here because retiring a gate is the conductor's call and
-            // half of it breaks a build two other sessions are using.
-            RwBool InitializeVTable();
+            // WHAT IT BUYS: while the gate was live, the caller bound to `return 0`,
+            // volume.cpp's real body was dead, gVolumeVTable stayed ALL ZERO,
+            // FixableVolume::FixUp wrote NULL into every volume's +0x40 slot, and
+            // GetType()/GetBBox()/GetBBoxDiag() null-dereferenced. With the gate gone the
+            // table is filled with the six real descriptors defined in volume.cpp, so
+            // GetType() returns the true VolumeType and FixUp/FixDown round-trip.
+            static RwBool InitializeVTable();
 
             // @ 0x82BB12D0 -- the copy assignment MSVC emitted out of line (rwccore.h
             // does not declare one, so this is the implicit member). The console body
@@ -313,5 +341,36 @@ namespace rw
         private:
             u8 maPayload[96];   // serialised rwcollision volume record (see volume.cpp)
         };
+
+        // ---------------------------------------------------------------------------
+        // The shared per-type descriptor table -- X360 dword_8327EEE0..dword_8327EEF8,
+        // seven consecutive words, filled by Volume::InitializeVTable @0x82BB03A8 and
+        // read by FixableVolume::FixUp, SphereVolume::Initialize @0x82BA84E8,
+        // BoxVolume::BoxVolume @0x82BAA0F0, CylinderVolume::Initialize @0x82BAD3F0,
+        // TriangleVolume::Initialize @0x82BB0680 and the two resource FixUps.
+        //
+        // The element type is the DWARF's: `rw::collision::Volume::VTable *[7]
+        // vTableArray` (volume.h:1521; SDK rwccore.h:1597 `static VTable *vTableArray[]`).
+        // It used to be `void*[7]`, which threw the type away and forced a
+        // `const_cast<u8*>` at every fill site. Declared here (2026-08-18, waveQ5 rwc3)
+        // so consumers can stop re-declaring it privately.
+        //
+        // ⚠️ CHANGING THE ELEMENT TYPE CHANGES THE MANGLED SYMBOL -- MEASURED with
+        // dumpbin: `void*[7]`  -> ?gVolumeVTable@collision@rw@@3PAPEAXA
+        //          `VTable*[7]`-> ?gVolumeVTable@collision@rw@@3PAPEAUVTable@Volume@12@A.
+        // The vendor narrow-phase TUs (vendor/renderware/collision/CollisionVolume.hpp)
+        // declare the SAME symbol with their own `struct Volume { struct VTable; }` --
+        // the leaf `struct VTable` under a scope named `Volume` mangles identically, so
+        // both halves of the tree bind to the one table volume.cpp fills.
+        // ---------------------------------------------------------------------------
+        extern Volume::VTable* gVolumeVTable[E_VOLUMETYPE_NUMINTERNALTYPES];
+
+        // The +0x40 slot holds the 4-byte VolumeType on the host (see the declaration
+        // in the class); the console's pointer is recovered by indexing the table.
+        inline const Volume::VTable* Volume::GetVTable() const
+        {
+            const u32 luType = *reinterpret_cast<const u32*>(maPayload + 0x40);  // serialised record slot
+            return gVolumeVTable[luType < static_cast<u32>(E_VOLUMETYPE_NUMINTERNALTYPES) ? luType : 0u];
+        }
     }
 }

@@ -165,15 +165,16 @@ template <s32 tiCapacity>
 CgsResource::ResourceDescriptor
 VolumeStore<tiCapacity>::GetVolumeResourceDescriptor(const VolRef::Volume* lpVolume)
 {
-    // Attested double indirection: mpRwVolume @ VolRef::Volume+0x40; the RW collision
-    // volume-type enum is its first dword. (VolRef::Volume is opaque here, so read through
-    // raw bytes rather than fabricate a layout -- the documented serialised-data
-    // exception; the typed form is rw::collision::Volume::GetType(), whose real home is
-    // SDKs/EATech/rwcollision/volume_debug_access.h.)
-    const s32* const* lppRwVolume =
-        reinterpret_cast<const s32* const*>(
-            reinterpret_cast<const u8*>(lpVolume) + 0x40);
-    const s32 liRwVolumeType = **lppRwVolume;
+    // Attested double indirection on the console: `Volume::vTable` @ VolRef::Volume+0x40
+    // is the per-TYPE descriptor pointer and the RW collision volume-type enum is its
+    // first dword (lwz r11,0x40 ; lwz r11,0(r11)). HOST REPRESENTATION (2026-08-18, wave
+    // Q5 integration): the +0x40 slot holds the 4-byte type enum itself (an x64 pointer
+    // would overlap +0x44; see SDKs/EATech/rwcollision/volume_debug_access.h), so the
+    // console's second load is the identity here. (VolRef::Volume is opaque in this TU,
+    // so read through raw bytes -- the documented serialised-data exception; the typed
+    // form is rw::collision::Volume::GetType().)
+    const s32 liRwVolumeType =
+        *reinterpret_cast<const s32*>(reinterpret_cast<const u8*>(lpVolume) + 0x40);
 
     // Entry0 size/align, selected by the RW collision-volume type.
     u32 luEntry0Size;
@@ -211,7 +212,7 @@ VolumeStore<tiCapacity>::GetVolumeResourceDescriptor(const VolRef::Volume* lpVol
 
 // h:386. The primitive-volume predicate, read out of the copy ReplaceVolume inlined:
 // the RW collision-volume type comes from the double indirection at VolRef::Volume+0x40
-// (lwz r11,0x40; lwz r11,0(r11)) and the block is primitive when (type-1) <= 4, i.e.
+// (lwz r11,0x40; lwz r11,0(r11); on the host the slot is the enum itself) and the block is primitive when (type-1) <= 4, i.e.
 // types 1..5 (SPHERE, CAPSULE, TRIANGLE, BOX, CYLINDER) -- NOT the aggregate type 6.
 // ⚠️ De-inlined into its DWARF-declared home (h:386) as the pure predicate its name
 // states; the console folded it into ReplaceVolume, so which side of that boundary the
@@ -222,10 +223,9 @@ VolumeStore<tiCapacity>::GetVolumeResourceDescriptor(const VolRef::Volume* lpVol
 template <s32 tiCapacity>
 bool VolumeStore<tiCapacity>::IsPrimitiveVolume(const VolRef::Volume* lpVolume) const
 {
-    const s32* const* lppRwVolume =
-        reinterpret_cast<const s32* const*>(
-            reinterpret_cast<const u8*>(lpVolume) + 0x40);
-    const s32 liRwVolumeType = **lppRwVolume;
+    // Host: the +0x40 slot IS the type enum (see GetVolumeResourceDescriptor above).
+    const s32 liRwVolumeType =
+        *reinterpret_cast<const s32*>(reinterpret_cast<const u8*>(lpVolume) + 0x40);
 
     return static_cast<u32>(liRwVolumeType - 1) <= 4u;
 }

@@ -435,14 +435,11 @@ public:
         // See ActiveRaceCar::ApplyRenderPoseInterpolation.
         void ApplyRenderPoseInterpolationBringUp( f32 lfAlpha );
 
-        // [FLAG PC bring-up] NOT an X360 function. Stands in for the player-car leg of
-        // ProcessCreateVehicleEvents @0x822FF620, whose input queue
-        // (VehicleManagerOutputInterface::mCreateVehicleResultQueue) has no producer on this
-        // build -- its only console producer is the physics VehicleManager. Runs from
-        // PostPhysicsUpdate at the console's own position for the function it replaces.
-        // Full provenance in the .cpp banner.
-        void PublishNewVehicleToDirectorWithoutPhysicsBringUp(
-                RaceCarEntityModuleIO::OutputBuffer_PostPhysics* lpOutput );
+        // [RETIRED 2026-08-18, wave Q5 finisher] PublishNewVehicleToDirectorWithoutPhysicsBringUp
+        // was declared here. The real leg it stood in for -- ProcessCreateVehicleEvents
+        // @0x822FF620 -- is complete as of that wave and publishes the director NewVehicle event
+        // itself, on the console's own trigger, so the stand-in was deleted rather than left
+        // beside it. See the .cpp banner at the function's old seat.
 
         // ====================================================================
         // THE ATTACHED -> WAITING -> ACTIVE CHAIN (drivable wave 2026-08-01).

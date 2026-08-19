@@ -163,28 +163,11 @@ s32 TriangleLineSegIntersect(VolumeLineSegIntersectResult* lpResult,
                              Vec4 aV2,
                              f32  afFatness);
 
-// ---------------------------------------------------------------------------
-// PENDING family member (declaration-only; body not delivered).
-// ---------------------------------------------------------------------------
-
-// PENDING X360 loc_82BBA748 -- the triangle nearest-point / feature-region
-// classifier FatTriangleLineSegIntersect calls. The ledger attributes the
-// address to rw::collision::GPTriangle::GetIntervals; the observed semantics
-// here are a point-vs-triangle nearest-feature query, so it is declared under
-// a semantic name pending that TU's own decompile (FLAGGED). X360 internal
-// convention: r3 = out nearest point, r4/r5 = out u/v parameters, v1 = query
-// point, v2/v3/v4 = V0/V1/V2. Returns the feature region in r3 (0..2 =
-// vertex, 3..5 = edge V0V1/V0V2/V1V2, 6 = face interior) AND the signed
-// point-to-plane distance in f3 (a same-TU register side channel, consumed by
-// the face-region normal flip) -- modelled as lpfPlaneDistance.
-s32 TriangleNearestPointRegion(Vec4* lpNearest,
-                               f32* lpfParamU,
-                               f32* lpfParamV,
-                               f32* lpfPlaneDistance,
-                               Vec4 aPoint,
-                               Vec4 aV0,
-                               Vec4 aV1,
-                               Vec4 aV2);
+// (The 8-parameter TriangleNearestPointRegion declaration that stood here -- with an
+//  invented f3 'lpfPlaneDistance' side channel -- was RETIRED 2026-08-18 (wave Q5): the
+//  real 7-parameter body @0x82BBA748 lives in GPTriangle.cpp, declared in GPInstance.hpp:297.
+//  The callee writes f0/f4-f13 and never f3; the caller's f3 test at 0x82BBB1D4 is its OWN
+//  |det| staged at 0x82BBAE30/0x82BBAE44 -- see FatTriangleLineSegIntersect.)
 
 } // namespace collision
 } // namespace rw

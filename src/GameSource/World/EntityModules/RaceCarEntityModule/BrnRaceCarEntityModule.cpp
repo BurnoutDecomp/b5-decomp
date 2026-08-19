@@ -57,7 +57,6 @@
 #include "GameSource/GameState/BrnGameActions.h"                                         // GameStateModuleIO::ResetPlayerCarAction (game action 0)
 #include "GameSource/World/AI/SharedIO/BrnRaceCarAIInterfaces.h"                         // BrnAI::AIModuleIO::RaceCarAIInterface / AttachAIControlEvent
 #include "GameSource/Math/BrnMathUtils.h"                                                // BrnMath::BuildTransform / IsNormal
-#include "GameSource/AttribSys/Generated/classes/burnoutcarasset.h"                      // Attrib::Gen::burnoutcarasset (the new-vehicle residency gate)
 #include "rw/math/vpu/vector3_operation.h"                                               // rw::math::vpu::IsValid(Vector3)
 #include "rw/math/vpu/matrix44affine_operation.h"                                        // rw::math::vpu::IsValid(Matrix44Affine) / Mult
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnStreamedDeformationSpec.h" // StreamedDeformationSpec::WheelSpec (the authored wheel placements)
@@ -1324,135 +1323,33 @@ void RaceCarEntityModule::PublishRestPoseLightLocatorsBringUp( ActiveRaceCar* lp
 
 
 // ============================================================================
-// [FLAG PC bring-up] PublishNewVehicleToDirectorWithoutPhysicsBringUp -- NOT an X360
-// function. It stands in for exactly ONE console leg, in the console's own frame slot.
+// [RETIRED 2026-08-18, wave Q5 finisher] PublishNewVehicleToDirectorWithoutPhysicsBringUp
+// stood here: a NOT-an-X360 function that published the director NewVehicle event on an
+// invented trigger (a function-local edge latch on the player slot plus an attribute-residency
+// retry) because RaceCarEntityModule::ProcessCreateVehicleEvents @0x822FF620 was parked one
+// declaration wide and published nothing.
 //
-// ⭐⭐ WHAT IT STANDS IN FOR, and why the real function cannot simply be transcribed.
-// The console's ProcessCreateVehicleEvents @0x822FF620 (called from PostPhysicsUpdate
-// @0x823075F8, i.e. right here) walks
-//     lpInput->GetVehicleManagerOutputInterface()->mCreateVehicleResultQueue
-// and, for each result whose active-race-car slot IsPlayer(), does
-//     lpOutput->GetDirectorVehicleInputInterface()->NewVehicle(
-//         VehicleList::GetVehicleData(liModelIndex)->AttribSysCollectionKey.GetHashKey(),
-//         liModelIndex );
-// (asm @0x822FF898..@0x822FF8C4: GetVehicleData -> `addi r3,r3,0xA0` -> GetHashKey ->
-// NewVehicle(interface, key, liModelIndex)).
+// It is DELETED, not merely unhooked: ProcessCreateVehicleEvents is now complete (see its
+// banner below), and its player arm posts the SAME two values -- VehicleList::GetVehicleData(
+// GetVehicleIndex(RaceCar::GetModelId()))->GetAttribCollectionKeyHash() and that same model
+// index -- through the SAME callee (BrnDirectorVehicleInputInterface::NewVehicle, the real
+// @0x822CBA90 body), in the SAME PostPhysicsUpdate slot, on the CONSOLE's own trigger. Keeping
+// both would post the director a duplicate NewVehicleEvent the console never emits.
 //
-// ⛔ THAT QUEUE IS PERMANENTLY EMPTY ON THIS BUILD, and it is not a mount away from being
-// filled. The ONLY producer of a CreateVehicleResult anywhere in the XEX is
-// BrnPhysics::Vehicle::VehicleManager::ProcessCreateEvents @0x82616770 -- verified as the
-// single entry in the xrefs_to set of BaseEventQueue<CreateVehicleResult>::AddEvent
-// @0x825E4EC8. BrnVehicleManager.cpp is not on the build list and that function has no body
-// here, so transcribing @0x822FF620 verbatim would add a loop over an always-zero-length
-// queue: a body with no input, which is as dead as no body. It stays in this file's FLAG
-// INVENTORY, correctly, under [VMX]/[INTERIOR].
+// The stand-in's residency gate is not lost, it is superseded: it existed because the invented
+// trigger fired ~150 log lines BEFORE the car's attribute vault was streamed. The console
+// trigger cannot: the create event is posted by ActiveRaceCar::AddHandlingModel from
+// ResetActiveRaceCar, i.e. downstream of OnRaceCarResourcesLoaded (measured on this build --
+// build/game/BrnGame.log has the vault 109b0d7b00000000 registered well before
+// VehicleManager::ProcessCreateEvents runs).
 //
-// WHAT IS HONEST ABOUT THIS STAND-IN:
-//   * it publishes ONLY for the player's car, which is the only case the console's own
-//     `if (ActiveRaceCar::IsPlayer())` arm reaches NewVehicle in;
-//   * the two published values are read from the SAME two sources the console reads them
-//     from -- VehicleList::GetVehicleIndex(RaceCar::GetModelId()) for the index and the
-//     entry's own AttribSysCollectionKey hash for the key;
-//   * it runs in PostPhysicsUpdate at the console's own position for the function it
-//     replaces (before the physics readback, not after);
-//   * NewVehicle itself is NOT stood in for -- the real @0x822CBA90 body runs, asserts and
-//     all (GameSource/Director/SharedIO/BrnDirectorVehicleInputInterface.cpp).
-//
-// WHAT IS A LIE, stated plainly:
-//   * the TRIGGER. The console publishes when PHYSICS finishes creating the vehicle; this
-//     publishes when the player's ActiveRaceCar slot reports a model the vehicle list knows
-//     AND that car's attribute collection has actually arrived. The edge is detected with a
-//     function-local static rather than a member because this module's layout is offset-pinned
-//     and this state is not the console's.
-//   * the console also runs OnHandlingModelAdded per created vehicle; that leg reaches
-//     un-homed physics/AI interiors and is NOT reproduced here.
-//
-// ⚠️⚠️ THE RESIDENCY GATE IS NOT OPTIONAL, and it is the console's ordering, not ours.
-// MEASURED (CAM_RUN1, before the gate existed): the publish fired the moment the player's
-// ActiveRaceCar attached, which on this build is ~150 log lines BEFORE
-// `Vehicles\VEH_PUSMC01_AT.bin` is streamed and its vault registered
-// ("[ATTRIBSYS LOAD] Just loaded vault resource with ID 109b0d7b00000000"). So
-// Attrib::FindCollection missed, every generated ctor substituted
-// Attrib::DefaultDataArea (zeros), and the chain delivered FOUR-TEEN new asserts and a
-// VALID-but-all-zero parameter block (mrFOV 0, mfBoostFOV 0) -- the exact "wrong-but-plausible
-// data" failure this project keeps hitting. On the console the create-vehicle completion is
-// downstream of the car's resource load by construction, so the collection is always there;
-// gating on the resolve is how that ordering is reproduced without a physics module.
-// The key itself was never wrong: it is byte-present, little-endian, at +0x398 of our own
-// ported VEH_PUSMC01_AT.BIN.
-//
-// DELETE-WHEN VehicleManager::ProcessCreateEvents lands and ProcessCreateVehicleEvents can
-// be transcribed against a queue that is actually written.
+// ⚠️ FOR THE CONDUCTOR: five READ-ONLY files still name this function in prose comments and are
+// now stale by one sentence each -- BrnBehaviourGameplayExternal.h:509,
+// BrnDirectorVehicleInputInterface.cpp:23, GameBridgeWorldToX.cpp:207 and
+// BrnPhysicsModuleUpdateFunctions.cpp:70 / :1007 (five sites, four files) -- plus
+// BrnRaceCarEntityModuleIO.cpp:446. Reported, not edited: none of them is this owner's file.
+// (BrnActiveRaceCar_wQ5_01.cpp's reference WAS updated -- that partfile is this owner's.)
 // ============================================================================
-void RaceCarEntityModule::PublishNewVehicleToDirectorWithoutPhysicsBringUp(
-        RaceCarEntityModuleIO::OutputBuffer_PostPhysics* lpOutput )
-{
-    // [FLAG PC bring-up] the edge state -- see the banner.
-    static s32 sliPublishedModelIndex = -1;
-
-    if( lpOutput == 0 || mpVehicleList == 0 )
-    {
-        return;
-    }
-    if( mePlayerActiveRaceCarIndex == E_ACTIVE_RACE_CAR_INDEX_INVALID )
-    {
-        return;
-    }
-
-    const ActiveRaceCar* lpActiveRaceCar = GetActiveRaceCar( mePlayerActiveRaceCarIndex );
-    if( lpActiveRaceCar == 0 || !lpActiveRaceCar->IsAttached() )
-    {
-        return;
-    }
-
-    const RaceCar* lpRaceCar = lpActiveRaceCar->GetGlobalRaceCar();
-    if( lpRaceCar == 0 )
-    {
-        return;
-    }
-
-    // The console's own two lines: model id -> vehicle-list index -> entry -> attrib key.
-    const s32 liModelIndex = mpVehicleList->GetVehicleIndex( lpRaceCar->GetModelId() );
-    CGS_ASSERT( liModelIndex >= 0, "liModelIndex >= 0" );          // X360 :5211
-    if( liModelIndex < 0 || liModelIndex == sliPublishedModelIndex )
-    {
-        return;
-    }
-
-    const BrnResource::VehicleListEntry* lpEntry = mpVehicleList->GetVehicleData( liModelIndex );
-    if( lpEntry == 0 )
-    {
-        return;
-    }
-
-    const u64 lxAttribsKey = lpEntry->GetAttribCollectionKeyHash();
-
-    // ⚠️ THE RESIDENCY GATE -- see the banner. Retry every frame until the car's own
-    // burnoutcarasset collection is in the attribute database; publishing before it is what
-    // the console's physics-driven ordering makes impossible.
-    if( lxAttribsKey == 0 ||
-        Attrib::FindCollection(
-            Attrib::Gen::burnoutcarasset::KU_BURNOUTCARASSET_CLASS_KEY, lxAttribsKey ) == 0 )
-    {
-        return;
-    }
-
-    sliPublishedModelIndex = liModelIndex;
-
-    lpOutput->GetDirectorVehicleInputInterface()->NewVehicle( lxAttribsKey, liModelIndex );
-
-    // [diag, one-shot -- NOT console code] this is the head of the chain that ends in the two
-    // shared gameplay cameras' Parameters::mbIsValid; the line proves the key really leaves
-    // the race-car module. Remove with the FLAG above.
-    if( ( CgsDev::Message::gxMessageFilterFlags & 1 ) && CgsDev::Log::gpDebugPrint != 0 )
-    {
-        *CgsDev::Log::gpDebugPrint
-            << "[newveh] RaceCarEntityModule: published NewVehicle( key hi "
-            << static_cast<s32>( lxAttribsKey >> 32 ) << " lo "
-            << static_cast<s32>( lxAttribsKey & 0xFFFFFFFFu ) << ", modelIndex "
-            << liModelIndex << " )\n";
-    }
-}
 
 
 // ============================================================================
@@ -3117,10 +3014,10 @@ void RaceCarEntityModule::ReadUpdatedActiveRaceCarDataFromPhysics(
 // ProcessCreateVehicleEvents  @0x822FF620 (182)
 //
 // ⭐ THE STALE-BANNER RE-VERIFICATION THE WAVE ASKED FOR, AND ITS ANSWER.
-// PublishNewVehicleToDirectorWithoutPhysicsBringUp's banner (above, :1338) claims this
-// function's input queue "is permanently empty on this build, and it is not a mount away
-// from being filled". That was true when it was written and is NOT true now. Re-checked
-// 2026-08-18 against the tree and the current boot log:
+// The now-retired PublishNewVehicleToDirectorWithoutPhysicsBringUp stand-in (its seat, and the
+// record of its deletion, is above) claimed this function's input queue "is permanently empty
+// on this build, and it is not a mount away from being filled". That was true when it was
+// written and is NOT true now. Re-checked 2026-08-18 against the tree and the current boot log:
 //   * BrnVehicleManager_ProcessCreateEvents.cpp exists, is REAL, and IS on
 //     tools/build/build_game_exe.bat;
 //   * its per-car body ends in `lpManagerOutputInterface->AddCreateVehicleResult(lResult)`
@@ -3132,14 +3029,15 @@ void RaceCarEntityModule::ReadUpdatedActiveRaceCarDataFromPhysics(
 //   * BrnGame.log:819 records BridgePhysicsModuleToRaceCarModule_PostPhysics legs 1-2
 //     (vehicle output + VEHICLE-MANAGER output) as LIVE, so the written interface really
 //     does reach this module's post-physics input buffer.
-// The ordering worry the stand-in's banner raises (publishing before the car's attribute
+// The ordering worry the stand-in's banner raised (publishing before the car's attribute
 // collection is resident) also resolves by itself: the create event is posted by
 // ActiveRaceCar::AddHandlingModel from ResetActiveRaceCar, which only runs after
 // OnRaceCarResourcesLoaded, so the result lands AFTER the vault load. The log shows exactly
 // that ordering -- vault 109b0d7b00000000 at :853, E_STATE_ACTIVE at :881, ProcessCreateEvents
 // at :883.
 //
-// THE BODY, leg for leg from the asm:
+// THE BODY, leg for leg from the asm -- LANDED IN FULL 2026-08-18 (wave Q5 finisher); this
+// list is now a map of the code below, not a transcription waiting to be pasted:
 //   assert lpInput/lpOutput (X360 :5174 / :5175)
 //   lpInput->GetVehicleOutputInterface()            <- result DISCARDED (see the note below)
 //   queue = lpInput->GetVehicleManagerOutputInterface()->GetCreateVehicleResults()
@@ -3149,6 +3047,8 @@ void RaceCarEntityModule::ReadUpdatedActiveRaceCarDataFromPhysics(
 //       slot = id.GetEntityIDEntityIndex()                             // `extrwi r31,r29,14,8`
 //       assert slot >= 0 / slot < COUNT                                // :5206 / :5207
 //       car = GetActiveRaceCar(slot)
+//       assert(car->IsAttached())                                      // BrnActiveRaceCar.h:1089
+//                                                                      // asm 0x822FF7F0..0x822FF814
 //       modelIndex = mpVehicleList->GetVehicleIndex(car->GetGlobalRaceCar()->GetModelId())
 //       assert modelIndex >= 0                                         // :5211
 //       car->OnHandlingModelAdded(lpOutput->GetSceneInputInterface(),
@@ -3198,42 +3098,117 @@ void RaceCarEntityModule::ProcessCreateVehicleEvents(
         return;
     }
 
-    // ⛔⛔ PARKED ON ONE MISSING DECLARATION -- NOT on a missing body, and not on this file.
-    // The loop below needs the create-vehicle result queue, and the ONLY console-attested way
-    // to read it is the DWARF-declared accessor
-    //     references/DecFIGS/dwarfdump/GameSource/Physics/VehicleManager/SharedIO/
-    //     BrnVehicleOutputInterface.h:232
-    //         const VehicleManagerOutputInterface::CreateVehicleResultQueue*
-    //             GetCreateVehicleResults() const;
-    // (the X360 inlines it -- ProcessCreateVehicleEvents' asm reaches the queue with a bare
-    // `addi r30, r3, 0x6C0`, which is exactly mCreateVehicleResultQueue's seat). That accessor
-    // does not exist in b5-decomp/src yet, and mCreateVehicleResultQueue is `private:` in
-    // BrnVehicleOutputInterface.h -- a file this cluster does not own, so the one-line
-    // addition is REPORTED to the conductor rather than made here. Nothing about the queue
-    // is guessed: its element type, capacity (8) and seat (+0x6C0) are all already committed
-    // in that header, and its producer is real and mounted.
-    //
-    // ⚠️ CONSEQUENCE, stated plainly: until that line lands this function publishes NOTHING,
-    // so PublishNewVehicleToDirectorWithoutPhysicsBringUp above is deliberately NOT retired
-    // (retiring it while this is parked would silently lose the NewVehicle publish the log
-    // shows working at BrnGame.log:860 -> MainDirector at :864). The two retire together.
-    // DELETE-WHEN VehicleManagerOutputInterface::GetCreateVehicleResults() exists; the flip is
-    // this block -> the loop the banner above transcribes.
-    static bool sbReportedCreateVehicleResultsParked = false;
-    if( !sbReportedCreateVehicleResultsParked )
+    // ⭐ UNPARKED 2026-08-18 (wave Q5 finisher). The queue is reached through the DWARF's own
+    // accessor, which now exists (BrnVehicleOutputInterface.h:148 -- dumpfile :232 --
+    // `const VehicleManagerOutputInterface::CreateVehicleResultQueue* GetCreateVehicleResults()
+    // const`). The X360 inlines it: `addi r30, r3, 0x6C0` @0x822FF6A0 is exactly
+    // mCreateVehicleResultQueue's seat, and the walk below is that queue's own
+    // miLength/GetEvent pair (`lwz r11, 8(r30)` @0x822FF6A8 and @0x822FF8DC -- the console
+    // RE-READS the length every iteration, so the loop condition is re-evaluated here too).
+    const BrnPhysics::Vehicle::VehicleManagerOutputInterface::CreateVehicleResultQueue*
+        lpCreateVehicleResults = lpVehicleManagerOutput->GetCreateVehicleResults();
+
+    for( s32 liResult = 0; liResult < lpCreateVehicleResults->GetLength(); ++liResult )
     {
-        sbReportedCreateVehicleResultsParked = true;
-        if( CgsDev::Log::gpDebugPrint != 0 )
+        const BrnPhysics::Vehicle::CreateVehicleResult& lrResult =
+            lpCreateVehicleResults->GetEvent( liResult );
+
+        // `ld r11,0(r3) ; srdi r11,r11,32 ; clrlwi r29,r11,0` then `srwi r11,r29,24 ;
+        // cmplwi 1 ; bne next` -- the embedded entity word's OWNER byte. Anything that is not
+        // a race car is skipped without touching the rest of the body.
+        if( lrResult.mVolumeInstanceID.GetEntityIDOwner() !=
+            static_cast<u8>( E_ENTITYTYPE_RACECAR ) )
         {
-            *CgsDev::Log::gpDebugPrint
-                << "[Q5 carmod] RaceCarEntityModule::ProcessCreateVehicleEvents (X360 "
-                   "0x822FF620) PARKED on ONE missing declaration: "
-                   "BrnPhysics::Vehicle::VehicleManagerOutputInterface::GetCreateVehicleResults() "
-                   "const (DWARF BrnVehicleOutputInterface.h:232) -- mCreateVehicleResultQueue "
-                   "is private and that header is not this cluster's. The queue IS written on "
-                   "this build (VehicleManager::ProcessCreateEvents is real + mounted). Until "
-                   "it lands, ActiveRaceCar::OnHandlingModelAdded -> AddToScene is never "
-                   "reached and no race car has a scene volume.\n";
+            continue;
+        }
+
+        CGS_ASSERT( lrResult.mbSuccess, "Add vehicle failed\n" );          // X360 :5202
+
+        // `extrwi r31, r29, 14, 8` -- bits [10..23] of the entity word == the slot index.
+        const s32 liActiveRaceCarIndex =
+            static_cast<s32>( lrResult.mVolumeInstanceID.GetEntityIDEntityIndex() );
+
+        CGS_ASSERT( liActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
+                    "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0" );  // X360 :5206
+        CGS_ASSERT( liActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                    "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT" ); // X360 :5207
+
+        ActiveRaceCar* lpActiveRaceCar =
+            GetActiveRaceCar( static_cast<EActiveRaceCarIndex>( liActiveRaceCarIndex ) );
+
+        // The console's own tripwire between the slot fetch and the model read
+        // (0x822FF7F0 `bl IsAttached` -> 0x822FF804 `li r5, 0x441` == BrnActiveRaceCar.h:1089).
+        CGS_ASSERT( lpActiveRaceCar->IsAttached(), "IsAttached()" );        // BrnActiveRaceCar.h:1089
+
+        // `lwz r3, 0x6F0(r30)` == mpRaceCar (GetGlobalRaceCar), then GetModelId, then the
+        // vehicle list read through module+0x18434 == mpVehicleList.
+        //
+        // PC-SAFETY GUARD (not console behaviour, stated so): the console dereferences
+        // mpVehicleList unconditionally (`lwz r3, 0(r29)` @0x822FF828). It is non-NULL by
+        // construction here on this build too -- RaceCarStreamer::Prepare takes the list before
+        // any car can be created -- but the guard is preferred to a null deref, and it covers
+        // ONLY the model-index legs: OnHandlingModelAdded below runs either way, so a missing
+        // list can never cost the car its SCENE REGISTRATION, which is the whole point of this
+        // leg. A missing list still reports itself through the console's own :5211 assert.
+        const s32 liModelIndex =
+            ( mpVehicleList != 0 )
+                ? mpVehicleList->GetVehicleIndex( lpActiveRaceCar->GetGlobalRaceCar()->GetModelId() )
+                : -1;
+
+        CGS_ASSERT( liModelIndex >= 0, "liModelIndex >= 0" );               // X360 :5211
+
+        // ⭐ THE LEG THE WHOLE WAVE HANGS OFF: this is the console's ONLY caller of
+        // ActiveRaceCar::OnHandlingModelAdded -> AddToScene -> AddToCollision.
+        // Argument order re-derived from the asm: the VEHICLE interface is fetched first
+        // (0x822FF85C, stashed in var_B8 -> r5) and the SCENE interface second
+        // (0x822FF86C sub_822B63E0 -> r4); f1 is module+0x18398 == mfTimeStep
+        // (`lfsx f31, r21, r15` @0x822FF858).
+        lpActiveRaceCar->OnHandlingModelAdded( lpOutput->GetSceneInputInterface(),
+                                               lpOutput->GetVehicleInputInterface(),
+                                               mfTimeStep );
+
+        if( lpActiveRaceCar->IsPlayer() )
+        {
+            // 0x822FF898..0x822FF8C4: GetVehicleData(liModelIndex) -> `addi r3,r3,0xA0` ->
+            // AttribSysCollectionKey::GetHashKey -> GetDirectorVehicleInputInterface() ->
+            // NewVehicle(key, liModelIndex).
+            //
+            // The NULL test on the entry is NOT an added guard: VehicleList::GetVehicleData
+            // (VehicleList.cpp:260) already carries its own marked deviation returning 0 for an
+            // out-of-range index or an unregistered slot, where the console log-and-continues
+            // and indexes anyway. Honouring that contract is required, not optional.
+            const BrnResource::VehicleListEntry* lpVehicleData =
+                ( mpVehicleList != 0 ) ? mpVehicleList->GetVehicleData( liModelIndex ) : 0;
+
+            if( lpVehicleData == 0 )
+            {
+                continue;
+            }
+
+            const u64 lxAttribsKey = lpVehicleData->GetAttribCollectionKeyHash();
+
+            lpOutput->GetDirectorVehicleInputInterface()->NewVehicle( lxAttribsKey, liModelIndex );
+
+            // [diag, one-shot -- NOT console code] the retired stand-in
+            // (PublishNewVehicleToDirectorWithoutPhysicsBringUp) printed this exact line, and
+            // it is the head of the chain that ends in the two shared gameplay cameras'
+            // Parameters::mbIsValid. Kept, in the leg that now owns the publish, so a boot
+            // check for "[newveh] RaceCarEntityModule" still proves the key leaves this module
+            // -- i.e. so retiring the stand-in is falsifiable rather than assumed.
+            static bool sbLoggedFirstNewVehiclePublish = false;
+            if( !sbLoggedFirstNewVehiclePublish
+                && ( CgsDev::Message::gxMessageFilterFlags & 1 )
+                && CgsDev::Log::gpDebugPrint != 0 )
+            {
+                sbLoggedFirstNewVehiclePublish = true;
+                *CgsDev::Log::gpDebugPrint
+                    << "[newveh] RaceCarEntityModule::ProcessCreateVehicleEvents: published "
+                       "NewVehicle( key hi "
+                    << static_cast<s32>( lxAttribsKey >> 32 ) << " lo "
+                    << static_cast<s32>( lxAttribsKey & 0xFFFFFFFFu ) << ", modelIndex "
+                    << liModelIndex << " ) for active race car slot "
+                    << liActiveRaceCarIndex << "\n";
+            }
         }
     }
 }
@@ -3334,62 +3309,40 @@ void RaceCarEntityModule::GenerateSceneUpdateEvents(
 
         const Matrix44Affine& lrTransform = lpActiveRaceCar->GetPhysicsState()->mTransform;
 
-        // ⛔ PARKED ON ONE MISSING DECLARATION -- see the block banner below the loop.
-        // The two publishes need the slot's own VolumeInstanceId, which lives on
-        // ActiveRaceCar as the private member mHandlingBodyVolumeId (+0x0D0) and has no
-        // public reader yet. BrnActiveRaceCar.h is the SIBLING cluster's file this wave, so
-        // the accessor is REPORTED, not added here.
-        (void)lrTransform;
-        (void)lpSceneInterface;
+        // ⭐ UNPARKED 2026-08-18 (wave Q5 finisher). The handle is read through the DWARF's
+        // own accessor, which now exists (BrnActiveRaceCar.h:716 `VolumeInstanceId
+        // GetHandlingBodyVolumeId() const` -- BY VALUE, as the DWARF spells it). The console
+        // reads the member directly (`ld r30, 0xD0(r28)` @0x822D2578) because it inlines the
+        // accessor; nothing here re-derives the handle from (owner, slot).
+        const CgsSceneManager::VolumeInstanceId lVolumeInstanceId =
+            lpActiveRaceCar->GetHandlingBodyVolumeId();
+
+        lpSceneInterface->SetVolumeInstanceTransform( lVolumeInstanceId, lrTransform );
+
+        // `srdi r11,r11,32 ; clrlwi r30,r11,0` -- the embedded 32-bit entity word, and
+        // `lvx128 v0, r31, r24` with r24 == 0x230 (car+0x300 == mTransform + 0x30 == Pos()).
+        lpSceneInterface->SetEntityPosition(
+            CgsSceneManager::EntityId( static_cast<u32>(
+                lVolumeInstanceId.muId
+                >> CgsSceneManager::VolumeInstanceId::KU_ENTITY_ID_START_INDEX ) ),
+            lrTransform.Pos() );
     }
 
-    // ⛔⛔ THE PARK, stated once and precisely.
-    // REQUIRED (one line, on BrnActiveRaceCar.h, in the same additive-named-reader block that
-    // already carries GetEngineState/IsInShowtime/IsTakenDown):
-    //     const CgsSceneManager::VolumeInstanceId& GetHandlingBodyVolumeId() const
-    //     { return mHandlingBodyVolumeId; }                                     // +0x0D0
-    // With it, the loop above becomes exactly the console's two publishes:
-    //     const CgsSceneManager::VolumeInstanceId& lrVolumeInstanceId =
-    //         lpActiveRaceCar->GetHandlingBodyVolumeId();
-    //     lpSceneInterface->SetVolumeInstanceTransform( lrVolumeInstanceId, lrTransform );
-    //     lpSceneInterface->SetEntityPosition(
-    //         CgsSceneManager::EntityId( static_cast<u32>(
-    //             lrVolumeInstanceId.muId
-    //             >> CgsSceneManager::VolumeInstanceId::KU_ENTITY_ID_START_INDEX ) ),
-    //         lrTransform.Pos() );
-    // Both callees are REAL and MOUNTED here already (CgsSceneManagerIO_SceneUpdate.cpp:298
-    // and :55, on build_game_exe.bat line 636), so this park is one declaration wide and
-    // nothing else.
+    // ⚠️ WHY THE HANDLE IS READ AND NOT REBUILT -- kept because it is the measured answer, and
+    // the next reader will otherwise "simplify" the accessor away. The handle could in fact be
+    // rebuilt from (owner, slot) today: ActiveRaceCar::Attach @0x822BEEE0 seeds it with
+    // `std r30(=0), 0xD0(r31)`, splices the owner byte with `clrlwi/oris 0x100/sldi 32/or/std`
+    // (== E_ENTITYTYPE_RACECAR) and then calls
+    // VolumeInstanceId::SetEntityIDEntityIndex(meActiveRaceCarIndex) -- so on this build the
+    // value is exactly ((1u << 24) | (slot << 10)) << 32, with the reserved bits and the 8-bit
+    // volume index both zero, and nothing ever splices a volume index into a CAR's handle
+    // (AddToScene reuses the same 64-bit word as both the VolumeId and the VolumeInstanceId --
+    // see BrnActiveRaceCar_wQ5_01.cpp's AddVolumeInstance call). It is deliberately NOT done:
+    // the console READS THE MEMBER, and a duplicated composition rule diverges silently the
+    // first time the Attach/AddToScene pair changes how it is composed.
     //
-    // ⚠️ WHY IT IS NOT WORKED AROUND -- and the honest version of that answer, MEASURED
-    // rather than assumed. The handle could in fact be rebuilt from (owner, slot) today:
-    // ActiveRaceCar::Attach @0x822BEEE0 seeds it with `std r30(=0), 0xD0(r31)`, splices the
-    // owner byte with `clrlwi/oris 0x100/sldi 32/or/std` (== E_ENTITYTYPE_RACECAR) and then
-    // calls VolumeInstanceId::SetEntityIDEntityIndex(meActiveRaceCarIndex) -- so on this
-    // build the value is exactly ((1u << 24) | (slot << 10)) << 32, with the reserved bits
-    // and the 8-bit volume index both zero, and nothing ever splices a volume index into a
-    // CAR's handle (AddToScene reuses the same 64-bit word as both the VolumeId and the
-    // VolumeInstanceId -- see BrnActiveRaceCar_wQ5_01.cpp's AddVolumeInstance call).
-    // It is still not done, deliberately: the console READS THE MEMBER, the member is another
-    // class's private state, and a rebuilt copy of a handle diverges silently the first time
-    // the Attach/AddToScene pair changes how it is composed. A one-line reader cannot drift;
-    // a duplicated composition rule can, and this project has shipped that bug before.
-    // DELETE-WHEN ActiveRaceCar::GetHandlingBodyVolumeId() exists.
-    static bool sbReportedHandlingBodyVolumeIdParked = false;
-    if( !sbReportedHandlingBodyVolumeIdParked )
-    {
-        sbReportedHandlingBodyVolumeIdParked = true;
-        if( CgsDev::Log::gpDebugPrint != 0 )
-        {
-            *CgsDev::Log::gpDebugPrint
-                << "[Q5 carmod] RaceCarEntityModule::GenerateSceneUpdateEvents (X360 "
-                   "0x822D2500) PARKED on ONE missing declaration: "
-                   "BrnWorld::ActiveRaceCar::GetHandlingBodyVolumeId() const (reader for the "
-                   "already-named private member mHandlingBodyVolumeId @+0x0D0). Until it "
-                   "lands no race car volume instance is ever moved, so a registered car box "
-                   "would sit at its spawn point for ever.\n";
-        }
-    }
+    // Both publish callees are REAL and MOUNTED (CgsSceneManagerIO_SceneUpdate.cpp:298 and :55,
+    // on build_game_exe.bat line 636).
 
     // The console's tail call. Runs whether or not the loop published anything.
     SetPaddingForResetRaceCars( lpSceneInterface );
@@ -3515,16 +3468,17 @@ void RaceCarEntityModule::PostPhysicsUpdate(
 
     // ⭐⭐ THE REAL LEG, at its own console position (@0x823075F8 -- early, BEFORE the
     // physics readback at @0x8230761C). Landed 2026-08-18 (wave Q5); its own banner carries
-    // the re-verification that killed the "the queue is permanently empty" claim below.
+    // the re-verification that killed the "the queue is permanently empty" claim.
+    //
+    // ⭐ THE STAND-IN THAT USED TO SIT HERE IS GONE. PublishNewVehicleToDirectorWithoutPhysics-
+    // BringUp published the director NewVehicle event on an invented trigger because this leg
+    // was parked one declaration wide; that declaration landed (wave Q5 finisher,
+    // VehicleManagerOutputInterface::GetCreateVehicleResults) and the loop below now publishes
+    // it on the CONSOLE's trigger -- the create-vehicle result itself, in the player arm, with
+    // the same two values from the same two sources. Keeping both would post the director a
+    // duplicate NewVehicleEvent the console never emits, so the stand-in and its edge latch are
+    // deleted rather than left beside the real leg.
     ProcessCreateVehicleEvents( lpInput, lpOutput );
-
-    // ⭐ THE NEW-VEHICLE PUBLISH STAND-IN, immediately after the real leg it stands in for.
-    // ⚠️ DELIBERATELY NOT RETIRED YET: ProcessCreateVehicleEvents is parked one declaration
-    // wide (VehicleManagerOutputInterface::GetCreateVehicleResults()), so it publishes
-    // nothing, and retiring this would silently lose the NewVehicle publish that
-    // BrnGame.log:860 -> MainDirector:864 shows working. The two retire in one edit the
-    // moment that accessor lands -- see ProcessCreateVehicleEvents' banner.
-    PublishNewVehicleToDirectorWithoutPhysicsBringUp( lpOutput );
 
     // ⭐⭐ THE PHYSICS READBACK, at the console's own position (`bl` at 0x8230761C, before
     // UpdateActiveRaceCarColours @0x823076C4 and UpdateOutputInterfaces @0x8230771C).
@@ -4276,9 +4230,10 @@ void RaceCarEntityModule::ProcessPlayerVehicleInput(
 //    tail, the BoostManager's BoostStrategy pointer and mPlayerVehicleControls modelled --
 //    all three are now named members in the header.)
 //   (ProcessCreateVehicleEvents RETIRED from this list 2026-08-18, wave Q5 -- it is bodied
-//    above, PARKED one declaration wide. It was never a [VMX] function: its 182 instructions
-//    contain no vector opcode at all. What actually blocked it was the "the create-vehicle
-//    result queue has no producer" claim, which this wave re-verified and found STALE.)
+//    above, COMPLETE, with no park at all (the queue-reader declaration it waited on landed in
+//    the same wave). It was never a [VMX] function: its 182 instructions contain no vector
+//    opcode at all. What actually blocked it was the "the create-vehicle result queue has no
+//    producer" claim, which this wave re-verified and found STALE.)
 //   ProcessRaceCarCrashCompleteEvents, ProcessResetOnTrackResultQueue,
 //   UpdateBoost, UpdateNearMisses, UpdateInAndOutOfRangeCars, UpdateSerialiser,
 //   UpdateReplayStreaming, CheckForResetOnTrackConditions, DebugRenderPosition (38 total).

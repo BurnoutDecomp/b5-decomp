@@ -31,13 +31,42 @@
 namespace CgsSceneManager
 {
     // ---- perf-monitor ids (DWARF CgsSceneSweeper.h:174-176) --------------------------
-    // Update @0x828D5A88 reads these as dword_82F33F54 / _58 / _5C and brackets each phase
-    // with CgsDev::PerfMonCpu::Start/StopMonitor when the id is > -1. The console's .data
-    // image for all three is 0; the "not registered" sentinel the guard `> -1` implies is
-    // negative, and the SceneSweeperDebugComponent that would register them is the parked
-    // member (see the header's FLAG). FLAG: initialised to the disabled sentinel -1 so the
-    // round-2 Update body's `if (id > -1)` guard is inert until a registrar exists -- do NOT
-    // read the console's zero as "monitor 0 is enabled".
+    //
+    // These are the console's dword_82F33F54 / _58 / _5C. Each has EXACTLY FOUR xrefs in the
+    // whole image, and they name both ends of the contract:
+    //
+    //   READER   SceneSweeper::Update @0x828D5A88 -- 0x828D5AC8 + 0x828D5AE0 (_54),
+    //            0x828D5AF4 + 0x828D5B0C (_58), 0x828D5B20 + 0x828D5B3C (_5C). Each phase is
+    //            bracketed `lwz; cmpwi cr6,r3,-1; ble skip; bl PerfMonCpu::Start/StopMonitor`
+    //            -- i.e. run the monitor iff the id is > -1.
+    //   REGISTRAR ⭐ SceneManagerModule::Construct @0x828D09A0 -- NOT the SceneSweeperDebug-
+    //            Component. 0x828D0C24 reads _54, `cmpwi cr6,r11,-1; bne` SKIPS registration
+    //            unless the id is still -1, then AddMonitor("      SortLists", 0x10, ...) and
+    //            0x828D0C4C stores the handle back; 0x828D0C58-0C70 asserts
+    //            "SceneSweeper::siUpdate_SortListsPerfMon >= 0" (CgsSceneManagerModule.cpp
+    //            line 0x88 == 136). The same shape at 0x828D0C78/0CA0/0CB8 for _58
+    //            ("      SweepLists", line 137) and 0x828D0CCC/0CF4/0D0C for _5C
+    //            ("      BuildColPairs", line 138). Nothing else in .text writes them.
+    //
+    // ⚠️ THE INITIALISER -1 IS FAITHFUL, NOT A DIVERGENCE. Re-measured 2026-08-18 by headless
+    // idat on a private copy of the .i64: all three live in .data (0x82CD0000..0x832BE424) and
+    // the image dwords at 0x82F33F54/58/5C are 0xFFFFFFFF 0xFFFFFFFF 0xFFFFFFFF == -1, -1, -1.
+    // (An earlier note in this file and in scratchpad/waveQ5/sweeper.owner.md claimed the .data
+    // image was 0 and that -1 was therefore a deliberate PC divergence; both were wrong.) The
+    // registrar's own guard proves it independently: it registers ONLY when the id equals -1,
+    // so a zero image would (a) mean the monitors never register at all and (b) make Update's
+    // `> -1` guard pass with id 0 and time whatever monitor 0 happens to be. -1 is the source
+    // initialiser the console compiled.
+    //
+    // ⚠️ HAND-OFF (a file this owner does not own -- reported, not edited): these three statics
+    // are FORKED by a MOUNTED TU. CgsSceneManagerModule.cpp:62-64 declares file-local
+    // `static s32 siSceneSweeper_{SortLists,SweepLists,BuildCollidingPairs}PerfMon = -1;` and
+    // :222-227 registers into THOSE -- while carrying the console's own
+    // "SceneSweeper::siUpdate_*PerfMon >= 0" assert strings, which is the tell that they are
+    // this class's statics. Until :62-64 are deleted and :222-227 point at
+    // SceneSweeper::siUpdate_SortListsPerfMon / _SweepListsPerfMon / _BuildCollidingPairsPerfMon,
+    // the three below stay -1 forever and round 2's Update brackets are permanently dead while
+    // the console's are live. Not a link duplicate (different symbols), so no gate to retire.
     s32 SceneSweeper::siUpdate_SortListsPerfMon           = -1;
     s32 SceneSweeper::siUpdate_SweepListsPerfMon          = -1;
     s32 SceneSweeper::siUpdate_BuildCollidingPairsPerfMon = -1;
@@ -181,9 +210,12 @@ namespace CgsSceneManager
     //
     // 2026-08-18: rewritten off the raw offset hack. The body used to reach the bit set as
     // `*(BitArray<5051>*)((u8*)this + 0xDC230)`; that console byte offset is now the named
-    // member mabForceNoPadding (its offset re-derived and re-attested in the header's layout
-    // table -- `this + 225420` dwords at 0x828B0598 == 901680 == 0xDC230, which is exactly
-    // where the member set puts it).
+    // member mabForceNoPadding. Offset re-derived and re-attested in the header's layout
+    // table: the console forms the bit-array base at 0x828B05B4 `addis r27,r31,0xE` +
+    // 0x828B05BC `addi r27,r27,-0x3DD0` == this + 0xE0000 - 0x3DD0 == this + 0xDC230
+    // (== `this + 225420` dwords == 901680 bytes), which is exactly where the member set puts
+    // it. (0x828B0598, cited here on first landing, is `lis r11, aDP4B5MainBurno_430@ha` --
+    // the assert's file-name string, not the base.)
     //
     // Two guard asserts, faithful to the X360:
     //   1. the KI_MAX_NUM_VOLUME_INSTANCES (0x13B8 == 5048) range check, string + home baked
@@ -207,10 +239,11 @@ namespace CgsSceneManager
     //
     // Only POINTER-INVARIANT facts are asserted: element sizes, and the byte deltas between
     // members with no pointer (and no pointer-bearing member) in between. The whole-object
-    // size and every absolute console offset are DELIBERATELY not asserted -- three members
-    // widen on LLP64 (mpaVolumeInstanceCullingGroup, mpCullingTable, and each IntervalList's
-    // two pointers) and so does the EventQueue base, so the console's 902336 is not a host
-    // number. Asserting it would be the exact bug this rewrite removed.
+    // size and every absolute console offset are DELIBERATELY not asserted -- five members
+    // widen on LLP64 (mpaVolumeInstanceCullingGroup, mpCullingTable, and each of the three
+    // IntervalLists, two pointers apiece) and so does the EventQueue base, so the console's
+    // 902336 (== 0xDC4C0, sweeper-relative) is not a host number. Asserting it would be the
+    // exact bug this rewrite removed.
     namespace
     {
         // Element strides the console's memsets / index arithmetic depend on.
@@ -238,9 +271,10 @@ namespace CgsSceneManager
     //
     // ⚠️ SweepLists' two IntervalStack::Init calls are the reason the two "index" -> "interval"
     // stack deltas below carry padding: mauDynamicStackIndexMem ends at an 8-mod-16 address on
-    // the console (0xC02E8 + 4000 == 0xC1288) and the 16-byte-aligned IntervalStackEntry array
-    // starts 8 bytes later at 0xC1290; the secondary pair pads by 12 (0xCA6A4 -> 0xCA6B0). The
-    // host alignment rules reproduce both, which is exactly what these asserts check.
+    // the console (0xC0268 + 4000 == 0xC1208) and the 16-byte-aligned IntervalStackEntry array
+    // starts 8 bytes later at 0xC1210; the secondary pair pads by 12 (0xC8F10 + 6100 ==
+    // 0xCA6E4 -> 0xCA6F0). The host alignment rules reproduce both, which is exactly what
+    // these asserts check.
     void SceneSweeper::AssertLayout()
     {
         static_assert(offsetof(SceneSweeper, maDynamicIntervalMem)
@@ -254,12 +288,12 @@ namespace CgsSceneManager
                       "maStaticIntervalMem span (0x9C628 -> 0x9C670, 3*24)");
         static_assert(offsetof(SceneSweeper, mauDynamicStackIndexMem)
                       - offsetof(SceneSweeper, maInactiveIntervalMem) == 146424,
-                      "maInactiveIntervalMem span (0x9C670 -> 0xC02E8, 6101*24)");
+                      "maInactiveIntervalMem span (0x9C670 -> 0xC0268, 6101*24)");
         // ⚠️ The two u16-index -> IntervalStackEntry spans are the ONLY two that are NOT
         // reproducible as a console number: the entry array is 16-aligned, and the amount of
         // alignment padding depends on where the index array happens to START -- which the
-        // widened members ahead of it move. (Console: 0xC02E8 + 4000 == 0xC1288 -> 8 bytes of
-        // pad -> 0xC1290; and 0xC8F90 + 6100 == 0xCA6A4 -> 12 bytes -> 0xCA6B0.) Asserting the
+        // widened members ahead of it move. (Console: 0xC0268 + 4000 == 0xC1208 -> 8 bytes of
+        // pad -> 0xC1210; and 0xC8F10 + 6100 == 0xCA6E4 -> 12 bytes -> 0xCA6F0.) Asserting the
         // console's 4008 / 6112 here is exactly the console-value-on-the-host bug; what IS
         // invariant is that the entry array follows the index array immediately, separated by
         // nothing but alignment padding.
@@ -270,7 +304,7 @@ namespace CgsSceneManager
                       "maDynamicStackIntervalMem must directly follow mauDynamicStackIndexMem (pad only)");
         static_assert(offsetof(SceneSweeper, mauSecondaryStackIndexMem)
                       - offsetof(SceneSweeper, maDynamicStackIntervalMem) == 32000,
-                      "maDynamicStackIntervalMem span (0xC1290 -> 0xC8F90, 2000*16)");
+                      "maDynamicStackIntervalMem span (0xC1210 -> 0xC8F10, 2000*16)");
         static_assert(offsetof(SceneSweeper, maSecondaryStackIntervalMem)
                       - offsetof(SceneSweeper, mauSecondaryStackIndexMem) >= KI_SECONDARY_STACK_SIZE * 2
                       && offsetof(SceneSweeper, maSecondaryStackIntervalMem)
@@ -278,7 +312,7 @@ namespace CgsSceneManager
                       "maSecondaryStackIntervalMem must directly follow mauSecondaryStackIndexMem (pad only)");
         static_assert(offsetof(SceneSweeper, mDynamicIntervalList)
                       - offsetof(SceneSweeper, maSecondaryStackIntervalMem) == 48800,
-                      "maSecondaryStackIntervalMem span (0xCA6B0 -> 0xD6590, 3050*16)");
+                      "maSecondaryStackIntervalMem span (0xCA6F0 -> 0xD6590, 3050*16)");
 
         // The three lists are consecutive: console stride 16, host stride sizeof(IntervalList)
         // (24 on LLP64 -- two widened pointers). Pin the STRIDE RELATION, never the 16.
@@ -294,16 +328,16 @@ namespace CgsSceneManager
                       "maCollidingPairs span (0xD65C0 -> 0xD95C0, 1024*12)");
         static_assert(offsetof(SceneSweeper, mUseInternalCollision)
                       - offsetof(SceneSweeper, maObjectData) == 5056,
-                      "maObjectData span (0xD95C0 -> 0xD9A40, 5051 + 5 pad)");
+                      "maObjectData span (0xD95C0 -> 0xDA980, 5051 + 5 pad)");
         static_assert(offsetof(SceneSweeper, mCollidingBodies)
                       - offsetof(SceneSweeper, mUseInternalCollision) == 632,
-                      "mUseInternalCollision span (0xD9A40 -> 0xD9CB8)");
+                      "mUseInternalCollision span (0xDA980 -> 0xDABF8)");
         static_assert(offsetof(SceneSweeper, mabMovedThisFrame)
                       - offsetof(SceneSweeper, mCollidingBodies) == 632,
-                      "mCollidingBodies span (0xD9CB8 -> 0xD9F30)");
+                      "mCollidingBodies span (0xDABF8 -> 0xDAE70)");
         static_assert(offsetof(SceneSweeper, mabForceNoPadding)
                       - offsetof(SceneSweeper, mabMovedThisFrame) == 5056,
-                      "mabMovedThisFrame span (0xD9F30 -> 0xDC230, 5051 + 5 pad)");
+                      "mabMovedThisFrame span (0xDAE70 -> 0xDC230, 5051 + 5 pad)");
         static_assert(offsetof(SceneSweeper, mpaVolumeInstanceCullingGroup)
                       - offsetof(SceneSweeper, mabForceNoPadding) == 632,
                       "mabForceNoPadding span (0xDC230 -> 0xDC4A8)");

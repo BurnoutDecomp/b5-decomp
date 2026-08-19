@@ -30,6 +30,8 @@
 #include "types.hpp"
 #include "GameShared/GameClasses/Module/CgsIOBuffer.h"  // CgsModule::IOBuffer (base)
 #include "GameShared/GameClasses/SceneManager/SpatialPartitionModule/CgsSpatialPartitionManagerIO.h"  // SpatialPartitionIO::OutputBuffer (real home)
+#include "GameShared/GameClasses/SceneManager/ContactGen/CgsOverlapGenerationModuleIO.h"  // OverlapGenerationIO::{InputBuffer,OutputBuffer} (real home)
+#include "GameShared/GameClasses/SceneManager/ContactGen/CgsOverlapCullingModuleIO.h"     // OverlapCullingIO::{InputBuffer,OutputBuffer} (real home, wave Q5)
 
 namespace CgsSceneManager
 {
@@ -40,16 +42,16 @@ namespace CgsSceneManager
 //  SpatialPartitionModule/CgsSpatialPartitionManagerIO.h, included at the top of
 //  this header so every consumer keeps seeing the type by name.)
 
-namespace OverlapCullingIO
-{
-    struct alignas(16) InputBuffer  : public CgsModule::IOBuffer { u8 maReserved[4096]; };
-    struct alignas(16) OutputBuffer : public CgsModule::IOBuffer { u8 maReserved[4096]; };
-}
+// (OverlapCullingIO's two 4096-byte stand-ins RETIRED 2026-08-18, wave Q5: the real
+//  InputBuffer / OutputBuffer live in ContactGen/CgsOverlapCullingModuleIO.h, included at the top.)
 
-namespace OverlapGenerationIO
-{
-    struct alignas(16) OutputBuffer : public CgsModule::IOBuffer { u8 maReserved[4096]; };
-}
+// (OverlapGenerationIO's 4096-byte OutputBuffer stand-in RETIRED 2026-08-18, wave Q5
+//  cluster D1: the REAL OutputBuffer -- CgsModule::IOBuffer plus the single
+//  EventQueue<OverlappingPair,16384> the console allocates 262,160 bytes for -- now lives
+//  in its own console-named home, ContactGen/CgsOverlapGenerationModuleIO.h, included at
+//  the top of this header so every consumer keeps seeing the type by name. That header is
+//  also the real home of OverlapGenerationIO::InputBuffer and its four event types, which
+//  used to be a partial stand-in inside CgsOverlapGenerationModule.h.)
 
 namespace ContactGenerator
 {

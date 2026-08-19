@@ -76,10 +76,12 @@ namespace
 // 5 CYLINDER); row/column 0 is never indexed by a live GPInstance but is
 // present in the image and reproduced.
 //
-// [3][4] is the ONE slot whose target has no body in the tree:
-// FindBestSeparatingDirectionTriBox @ 0x82BB4CA8 (272 insns) -- the same hole
-// SeparatingDirection.cpp:538 already carries through
-// FindBestSeparatingDirectionBoxTri. Reported, not stubbed.
+// [3][4] WAS the one slot whose target had no body in the tree. CLOSED
+// 2026-08-18 (waveQ5 rwc3): FindBestSeparatingDirectionTriBox @ 0x82BB4CA8
+// (272 insns) is bodied at the END of SeparatingDirection.cpp, under the
+// "wave Q5 rwc3" banner, so this slot and the BoxTri thunk at
+// SeparatingDirection.cpp:538 both resolve now. (Comment-only correction; the
+// slot expression itself was already correct.)
 // ---------------------------------------------------------------------------
 const FindBestSeparatingDirectionFn
 gapFindBestSeparatingDirection[GPInstance::NUMINTERNALTYPES][GPInstance::NUMINTERNALTYPES] =

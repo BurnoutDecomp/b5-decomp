@@ -46,11 +46,14 @@ const f32 TriangleVolume::KF_DEGENERATE_EPSILON = 1.1920928955078125e-07f;   // 
 // So the word Initialize stamps at +0x40 is the console 32-bit POINTER IMAGE
 // of the triangle Volume vtable record (the block PrimitiveIntersect.cpp's
 // GetVolumeVTable reads back from Volume+0x40; its +0x14 slot is this class's
-// own CreateGPInstance @ 0x82BBAA00). Kept as an extern u32 console image --
-// the definition and the host pointer-width promotion belong to the Volume /
-// InitializeVTable TU, not here. FLAG (host width): a u32 standing in for a
-// console pointer; see the spec (scratchpad/waveN/TriangleVolume.spec.md).
-extern const u32 g_uTriangleVolumeInitWord;
+// own CreateGPInstance @ 0x82BBAA00).
+// HOST REPRESENTATION (2026-08-18, wave Q5 integration): the +0x40 slot holds
+// the 4-byte VolumeType enum for the record's whole lifetime (an x64 pointer
+// would overlap +0x44, and the 96-byte serialised record cannot grow); every
+// reader recovers the pointer as gVolumeVTable[enum]. So Initialize stamps
+// E_VOLUMETYPE_TRIANGLE (3, the index the console pointer sits at) here.
+// Derivation: scratchpad/waveQ5/rwc3.owner.md section 7 / volume.cpp foot.
+static const u32 KU_TRIANGLE_VOLUME_TYPE = 3u;   // gVolumeVTable[3] = &unk_82F919A4
 
 namespace
 {
@@ -161,7 +164,7 @@ TriangleVolume* TriangleVolume::Initialize(TriangleVolume** appVolume,
     lpVolume->mNormal.z = 0.0f;
     lpVolume->mNormal.w = 0.0f;
 
-    lpVolume->mInitWord = g_uTriangleVolumeInitWord;
+    lpVolume->mInitWord = KU_TRIANGLE_VOLUME_TYPE;   // console: dword_8327EEEC = gVolumeVTable[3]
 
     lpVolume->mafEdgeCos[0] = -1.0f;
     lpVolume->mafEdgeCos[1] = -1.0f;

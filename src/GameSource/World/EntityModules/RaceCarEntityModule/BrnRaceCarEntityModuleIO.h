@@ -743,9 +743,15 @@ namespace RaceCarEntityModuleIO
             CgsModule::IOBuffer::Construct();                    // X360 *a1 = 1
             mResourceRequestInterface.mRequestQueue.Construct();  // X360 +4
             mResourceRequestInterface.mRequestQueue.Clear();
-            // [FLAG] the console's InSceneUpdateInterface::Construct(+8224) on
-            // mSceneInputInterface is still not emitted (that interface's Construct lives in the
-            // CgsSceneManager IO TU and has no body here yet).
+            // The console's InSceneUpdateInterface::Construct(+8224) on mSceneInputInterface.
+            // Emitted 2026-08-19 (wave Q5 round-2 integration): the body has existed since cars
+            // step 1c (CgsSceneManagerIO_SceneUpdate.cpp:276, X360 0x822E6550, 25 queue
+            // Constructs) and the wave-Q5 ActiveRaceCar::AddToScene now posts AddEntity /
+            // AddDynamicVolume / AddVolumeInstance into THIS copy of the interface from
+            // ProcessCreateVehicleEvents -- the first boot without this line died on
+            // "mAddEntityQueue too small" + "mpEvents != NULL" (the never-Constructed-queue
+            // IO-buffer trap, third sighting in this family).
+            mSceneInputInterface.Construct();                    // X360 +8224
             // ⭐ ADDED 2026-08-02 (camera parameter-chain wave) -- the "NewVehicleEvent<50>::
             // Construct" leg named in the X360 note above. The producer that writes it lands
             // in this wave (RaceCarEntityModule's new-vehicle publish), and an unconstructed

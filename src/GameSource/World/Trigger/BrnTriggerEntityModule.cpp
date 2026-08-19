@@ -21,10 +21,10 @@
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_LineTestFineResult.hpp" // OutEventLineTestFineResult
 #include "GameSource/World/EntityModules/TriggerEntityModule/SharedIO/BrnTriggerEntityModuleInputInterface.h" // InAddTriggerEvent / InTriggerQueryEvent / KU_TRIGGER_QUERY_EXCLUDE_ENTITY_ID
 #include "vendor/renderware/collision/CollisionVolume.hpp"                      // rw::collision::SphereVolume / BoxVolume
+#include "rw/rwcore_structs.h"                                                  // rw::Resource (the Initialize block descriptor)
 
 #include <cstddef>   // offsetof
 #include <cmath>     // sqrtf
-#include <new>       // placement new (build the volume image in the 128-byte stage buffer)
 
 namespace BrnWorld
 {
@@ -257,9 +257,18 @@ void TriggerEntityModule::ProcessAddTriggerEvents(
                 // A plane segment is a very thin box. The X360 feeds BoxVolume::Initialize the
                 // FULL X/Y dims and a literal Z half-extent of 0.0099999998 (== KF_PLANE_SEGMENT_
                 // TRIGGER_DEPTH, used directly -- NO x0.5 anywhere in the plane branch).
-                rw::collision::BoxVolume* lpVolume =
-                    new (laVolumeStorage) rw::collision::BoxVolume();
-                lbVolumeOk = lpVolume->Initialize(lfDimX, lfDimY, KF_PLANE_SEGMENT_TRIGGER_DEPTH);
+                //
+                // The console stages a zeroed rw::Resource whose first word is the volume block
+                // and hands THAT to the (static) Initialize -- 0x822D98DC..0x822D9900:
+                //   stw r30(=0), 0..0x10(var_2A0) ; stw &var_1D0, 0(var_2A0)
+                //   addi r3, r1, var_2A0 ; bl rw::collision::BoxVolume::Initialize
+                // The result IS the volume pointer, and it is the console's own
+                // `lpVolume` assert operand below.
+                rw::Resource lResource = {};
+                lResource.m_baseResources[0] = laVolumeStorage;
+                rw::collision::BoxVolume* lpVolume = rw::collision::BoxVolume::Initialize(
+                        lResource, lfDimX, lfDimY, KF_PLANE_SEGMENT_TRIGGER_DEPTH);
+                lbVolumeOk = (lpVolume != 0);
                 // Bounding sphere radius = 0.5 * sqrt(dimX^2 + dimY^2) over the FULL dims (the asm
                 // vmsum is over X^2 + Y^2 only -- Z is dropped -- then x0.5).
                 lfEntityBoundingSphereRadius = 0.5f * sqrtf(lfDimX * lfDimX + lfDimY * lfDimY);
@@ -276,9 +285,12 @@ void TriggerEntityModule::ProcessAddTriggerEvents(
                     CgsDev::Assert::FireAssert("Invalid sphere trigger radius", KAC_FILE, 327);
                     CgsDev::Assert::EndAssert();
                 }
+                // Same staged rw::Resource as the two box branches (0x822D96C4..0x822D96EC).
+                rw::Resource lResource = {};
+                lResource.m_baseResources[0] = laVolumeStorage;
                 rw::collision::SphereVolume* lpVolume =
-                    new (laVolumeStorage) rw::collision::SphereVolume();
-                lbVolumeOk = lpVolume->Initialize(lfRadius);
+                    rw::collision::SphereVolume::Initialize(lResource, lfRadius);
+                lbVolumeOk = (lpVolume != 0);
                 lfEntityBoundingSphereRadius = lfRadius;
                 lu8TriggerTypeFlag = 2;   // (1 << E_TRIGGERTYPE_SPHERE) == 2
                 break;
@@ -290,9 +302,13 @@ void TriggerEntityModule::ProcessAddTriggerEvents(
                 const f32 lfHX = lpEvent->GetDimensionX() * 0.5f;
                 const f32 lfHY = lpEvent->GetDimensionY() * 0.5f;
                 const f32 lfHZ = lpEvent->GetDimensionZ() * 0.5f;
+                // Staged rw::Resource, 0x822D9520..0x822D9554 (this is the branch whose
+                // `vmulfp128 v1, v0, 0.5` builds the halved-extent Vector3 in v1).
+                rw::Resource lResource = {};
+                lResource.m_baseResources[0] = laVolumeStorage;
                 rw::collision::BoxVolume* lpVolume =
-                    new (laVolumeStorage) rw::collision::BoxVolume();
-                lbVolumeOk = lpVolume->Initialize(lfHX, lfHY, lfHZ);
+                    rw::collision::BoxVolume::Initialize(lResource, lfHX, lfHY, lfHZ);
+                lbVolumeOk = (lpVolume != 0);
                 // Bounding sphere radius = 0.5 * sqrt(fullX^2 + fullY^2 + fullZ^2) (the asm vmsum3
                 // is over the full dims, then x0.5). == magnitude of the halved-extent vector.
                 lfEntityBoundingSphereRadius = VectorMagnitude(lfHX, lfHY, lfHZ);

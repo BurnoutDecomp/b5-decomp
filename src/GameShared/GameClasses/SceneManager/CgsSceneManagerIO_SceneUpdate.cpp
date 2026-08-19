@@ -95,6 +95,41 @@ namespace SceneManagerIO
         mAddDynamicVolumeQueue.AddEvent(lEvent);
     }
 
+    // ----- Add a dynamic collision volume, DWARF form (the SAME X360 body, 0x822B1518) -----
+    // ADDED 2026-08-18 (wave Q5, car-registration finisher). DWARF
+    // CgsSceneManagerIO_SceneUpdate.h:367. Decoded from the raw `assembly` array of
+    // 0x822B1518.json -- the console has exactly one body and it is 64-bit throughout:
+    //
+    //   0x822B1524  mr    r11, r4                  ; the WHOLE 64-bit id register
+    //   0x822B1528  stb   r6, var_B8(r1)           ; event +0x08  mu8Flags
+    //   0x822B153C  std   r11, var_C0(r1)          ; event +0x00  muId  -- ALL 64 BITS
+    //   0x822B1530..40  memcpy(var_B0, r5, 0x80)   ; event +0x10  128-byte volume image
+    //   0x822B1554  lwzx  r11, this, 0x44038       ; miLength     \  "queue too small"
+    //   0x822B1558  lwzx  r10, this, 0x44034       ; miMaxLength   > tripwire, baked line
+    //   0x822B1560  blt   -> skip                                /  0x3A5 == 933
+    //   0x822B15DC  addis r3, this, 4 ; addi r3, r3, 0x4030      ; == this + 0x44030
+    //   0x822B15E8  bl    BaseEventQueue<InEventAddDynamicVolume>::AddEvent
+    //
+    // this+0x44030 is mAddDynamicVolumeQueue; the console offsets are provenance only (gotcha
+    // 1) -- this body reaches the queue BY NAME, exactly like every sibling producer here.
+    // The stack record is staged in the console's own order (flags byte, then id, then the
+    // block copy); the three are independent slots of one record, so declaration order is used.
+    //
+    // The EntityId overload above is the fitted 32-bit slice of this same body and is kept
+    // because committed callers bind to it; see the header note for why a race car needs this
+    // one.
+    void InSceneUpdateInterface::AddDynamicVolume(VolumeId lVolumeId, const void* lpVolumeImage, u8 lu8VolumeTypeFlag)
+    {
+        InEventAddDynamicVolume lEvent;
+        lEvent.muId     = lVolumeId.mId;                        // std a2 @+0x00 -- all 64 bits
+        lEvent.mu8Flags = lu8VolumeTypeFlag;                    // stb a4 @+0x08
+        std::memcpy(lEvent.maVolumeData, lpVolumeImage, 128);   // memcpy(@+0x10, a3, 0x80)
+
+        CGS_ASSERT(mAddDynamicVolumeQueue.GetLength() < mAddDynamicVolumeQueue.GetMaxLength(),
+                   "SceneManager.mAddDynamicVolumeQueue too small, increase value in SceneManagerConstants.h");
+        mAddDynamicVolumeQueue.AddEvent(lEvent);
+    }
+
     // ----- Replace an existing dynamic volume's collision image (X360 0x822B15F8) -----
     // Stages { muId = a2, maVolumeData = memcpy(a3, 128) } and appends to mReplaceDynamicVolumeQueue
     // (no flags byte, unlike AddDynamicVolume).

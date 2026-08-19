@@ -38,24 +38,35 @@
 //                                                     max 3; Clear 9 x std == 72 bytes
 //   0x9C670  maInactiveIntervalMem[6101]              Prepare arg2 #2 (`addis 0xA; addi -0x3990`),
 //                                                     max 0x17D5==6101; Clear memset 0x23BF8
-//   0xC02E8  mauDynamicStackIndexMem[2000]            SweepLists 0x828C2104 (`addis 0xC; addi 0x268`)
-//   0xC1290  maDynamicStackIntervalMem[2000]          SweepLists 0x828C2130 (`addis 0xC; addi 0x1210`),
-//                                                     with muMaxLen 0x7D0==2000
-//   0xC8F90  mauSecondaryStackIndexMem[3050]          SweepLists 0x828C2148 (`addis 0xD; addi -0x70F0`)
-//   0xCA6B0  maSecondaryStackIntervalMem[3050]        SweepLists 0x828C2154 (`addis 0xD; addi -0x5910`),
-//                                                     with muMaxLen 0xBEA==3050
+//   0xC0268  mauDynamicStackIndexMem[2000]            SweepLists 0x828C2104/0x828C210C
+//                                                     (`addis r10,r31,0xC; addi r10,r10,0x268`)
+//   0xC1210  maDynamicStackIntervalMem[2000]          SweepLists 0x828C2130/0x828C2138
+//                                                     (`addis 0xC; addi 0x1210`), muMaxLen 0x7D0==2000
+//   0xC8F10  mauSecondaryStackIndexMem[3050]          SweepLists 0x828C2148/0x828C214C
+//                                                     (`addis 0xD; addi -0x70F0` == 0xD0000-0x70F0)
+//   0xCA6F0  maSecondaryStackIntervalMem[3050]        SweepLists 0x828C2154/0x828C2158
+//                                                     (`addis 0xD; addi -0x5910`), muMaxLen 0xBEA==3050
 //   0xD6590  mDynamicIntervalList                     Prepare/Clear/SortLists/SweepLists/Update
 //   0xD65A0  mInactiveIntervalList                    ditto  (stride 16 => console
 //   0xD65B0  mStaticIntervalList                      ditto   sizeof(IntervalList)==16)
 //   0xD65C0  maCollidingPairs[1024]                   BuildCollidingPairs `&this[3*i + 219504]`
 //                                                     == 878016 + 12*i (console stride 12)
-//   0xD95C0  maObjectData[5051]                       Clear (5051 x `stb 3`), Update, AddObject
-//   0xD9A40  mUseInternalCollision                    Clear/Update memset(+0xD9A40, 0, 0x278==632)
-//   0xD9CB8  mCollidingBodies                         Clear memset; AddObject's duplicate-add
-//                                                     tripwire + SetBit (`this + 223998` dwords)
-//   0xD9F30  mabMovedThisFrame[5051]                  Clear/Update memset(..., 0x13BB==5051)
-//   0xDC230  mabForceNoPadding                        ForceNoPadding @0x828B0578 (`this + 225420`
-//                                                     dwords), Clear memset 632
+//   0xD95C0  maObjectData[5051]                       Clear 0x828B58AC (`addis 0xE; addi -0x6A40`),
+//                                                     5051 x `stb 3`; Update 0x828D5B50/0x828D5B68;
+//                                                     AddObject 0x828B5B08/0x828B5B0C
+//   0xDA980  mUseInternalCollision                    Clear 0x828B57E8 / Update 0x828D5BF4
+//                                                     (`addis 0xE; addi -0x5680`) memset 0x278==632
+//   0xDABF8  mCollidingBodies                         Clear 0x828B5820 (`addis 0xE; addi -0x5408`)
+//                                                     memset; AddObject 0x828B5D48/0x828B5D50, and
+//                                                     its duplicate-add tripwire + SetBit reach it
+//                                                     as `this + 223998` dwords (223998*4==0xDABF8)
+//   0xDAE70  mabMovedThisFrame[5051]                  Clear 0x828B5854 (`addis 0xE; addi -0x5190`)
+//                                                     memset 0x13BB==5051; Update 0x828D5B54 and
+//                                                     BuildCollidingPairs 0x828C2238 (`ori 0xAE70`)
+//   0xDC230  mabForceNoPadding                        ForceNoPadding @0x828B0578 (base built at
+//                                                     0x828B05B4/0x828B05BC, `addis r27,r31,0xE;
+//                                                     addi r27,r27,-0x3DD0`; == `this + 225420`
+//                                                     dwords), Clear 0x828B5838 memset 632
 //   0xDC4A8  mpaVolumeInstanceCullingGroup            Prepare `stwx r29,r31,0xDC4A8`
 //   0xDC4AC  mpCullingTable                           Prepare `stwx r28,r31,0xDC4AC`; Clear reads it
 //   0xDC4B0  muNumObjects                             Clear `stwx r30,r31,0xDC4B0`; AddObject ++
@@ -63,20 +74,36 @@
 //   0xDC4B8  mbSortStaticObjects                      Clear `stbx`; SortLists gate for the STATIC list
 //   0xDC4B9  mbSortFrozenObjects                      Clear `stbx`; SortLists gate for the INACTIVE list
 //   0xDC4BC  miTracerID                               (DWARF :248; no attested access -- see FLAG)
-//   0xDC6F0  <end>                                    == 902336, the OverlapGenerationModule
-//                                                     member delta +0x230..+0xDC6F0
+//   0xDC4C0  <end>                                    == 902336 == sizeof(SceneSweeper) on the
+//                                                     console.  ⚠️ EVERY OFFSET IN THIS TABLE IS
+//                                                     SWEEPER-RELATIVE.  The number you will meet
+//                                                     in OverlapGenerationModule::Construct is
+//                                                     MODULE-relative: mSweeper spans module+0x230
+//                                                     .. module+0xDC6F0 (0x828D047C `addi r31,r30,
+//                                                     0x230`; 0x828D04B8/0x828D04C0 `addis r11,r30,
+//                                                     0xE; addi r11,r11,-0x3910` then 16 x `sth`
+//                                                     == the 32 bytes immediately AFTER the
+//                                                     sweeper).  0xDC6F0 - 0x230 == 0xDC4C0.
+//                                                     Do not read 0xDC6F0 (== 902896) as a sweeper
+//                                                     offset -- that is 560 bytes past the end.
 //
 // The arithmetic closes EXACTLY: every neighbouring pair above differs by that member's
-// console size (20204 / 96024 / 72 / 146424 / 4000+8pad / 32000 / 6100+12pad / 48800 /
-// 3*16 / 12288 / 5051+5pad / 632 / 632 / 5051+1pad / 632 / 4 / 4 / 4 / 4 / 1 / 1 / 2pad+4),
-// and the last one lands on 902336. That closure is the proof the member ORDER is right.
+// console size (24 / 12+524288 / 20204 / 96024 / 72 / 146424 / 4000+8pad / 32000 /
+// 6100+12pad / 48800 / 16 / 16 / 16 / 12288 / 5051+5pad / 632 / 632 / 5051+5pad / 632 /
+// 4 / 4 / 4 / 4 / 1 / 1+2pad / 4), and the last one lands on 0xDC4C0 == 902336. That
+// closure is the proof the member ORDER is right. (2026-08-18 round-2 fix: seven offsets
+// in this table and the end row were wrong on first landing -- the SPANS the static_asserts
+// pin were right throughout, but the absolute column drifted. Re-measured instruction by
+// instruction from Prepare/Clear/SweepLists/ForceNoPadding/AddObject/Update/
+// BuildCollidingPairs; every row now cites the exact instruction pair that forms it.)
 //
-// ⚠️ THESE CONSOLE OFFSETS DO NOT SURVIVE THE x64 COMPILE and are comments only. Three
-// members widen on the host -- mpaVolumeInstanceCullingGroup, mpCullingTable, and the three
-// IntervalLists (two pointers each, so host sizeof(IntervalList)==24, not 16) -- and the
-// EventQueue base widens too. Everything is addressed BY NAME; the static_asserts at the
-// bottom of CgsSceneSweeper.cpp pin only the POINTER-INVARIANT facts (element sizes and the
-// intra-array deltas that contain no pointer), never a whole-object size.
+// ⚠️ THESE CONSOLE OFFSETS DO NOT SURVIVE THE x64 COMPILE and are comments only. FIVE
+// members widen on the host -- mpaVolumeInstanceCullingGroup and mpCullingTable (4 -> 8),
+// and each of the three IntervalLists (two pointers each, so host sizeof(IntervalList)==24,
+// not 16) -- and the EventQueue base widens too. Everything is addressed BY NAME; the
+// static_asserts at the bottom of CgsSceneSweeper.cpp pin only the POINTER-INVARIANT facts
+// (element sizes and the intra-array deltas that contain no pointer), never a whole-object
+// size.
 //
 // FLAG (park, precise reason) -- mDebugComponent is a sized opaque slice, not the real
 // CgsSceneManager::SceneSweeperDebugComponent, for TWO independent reasons, both measured:
@@ -232,12 +259,24 @@ namespace CgsSceneManager
         // :144 @0x828B6160. ProcessUpdateBodyQueue @0x828C1DE8 loads
         //   r4 = lwz    0x30(event) -> luObjectIndex
         //   r5 =        event       -> the world AABBox
-        //   v1 = lvx128 0x20(event) -> lvPosition   (a VECTOR arg: it takes a VR, and the next
+        //   v1 = lvx128 0x20(event) -> lvPadding    (a VECTOR arg: it takes a VR, and the next
         //                              GPR slot is NOT consumed by it -- the PPC vector-arg
         //                              analogue of the float-skips-a-GPR rule)
         //   r6 = ld     0x38(event) -> lVolumeInstanceId
+        //
+        // ⭐ THE VECTOR IS A PADDING VECTOR, NOT A POSITION -- do not write this body against
+        // the word "position". The console's own body proves it: @0x828B6160 the box is grown
+        // by it (vminfp128/vmaxfp128 against {-0.1,-0.1,-0.1} / {+0.1,+0.1,+0.1}) and the
+        // sanity assert streams " Padding: [" (0x828B647C `addi r24, r11, aPadding_1@l`,
+        // message head "\n Bad AABBox \n" at 0x828B6428); the producer
+        // OverlapGenerationIO::InputBuffer::UpdateBody @0x828BA430 already names it lvPadding.
+        // (Dump: scratchpad/waveQ5/q5_sweeper_holes.json -- 0x828B6160 is absent from
+        // identity.json and from the per-address export, recovered by targeted headless idat.)
+        // The queue field this arrives in is still called mvPosition in
+        // CgsOverlapGenerationModule.h -- that name is a defect, reported in
+        // scratchpad/waveQ5/sweeper.owner.md §7 (a file this owner does not own).
         void UpdateObject(u32 luObjectIndex, const rw::collision::AABBox* lpAABBox,
-                          Vector3 lvPosition, VolumeInstanceId lVolumeInstanceId);
+                          Vector3 lvPadding, VolumeInstanceId lVolumeInstanceId);
 
         u32 GetNumCollidingPairs() const { return muNumCollidingPairs; }         // :147
         const CollidingPair* GetCollidingPair(u32 luIndex) const                 // :152
@@ -286,10 +325,10 @@ namespace CgsSceneManager
         Interval maStaticIntervalMem[KI_MAX_NUM_STATIC_INTERVALS];            // 0x9C628 :212
         Interval maInactiveIntervalMem[KI_MAX_NUM_INACTIVE_INTERVALS];        // 0x9C670 :213
 
-        u16 mauDynamicStackIndexMem[KI_DYNAMIC_STACK_SIZE];                   // 0xC02E8 :217
-        IntervalStackEntry maDynamicStackIntervalMem[KI_DYNAMIC_STACK_SIZE];  // 0xC1290 :218
-        u16 mauSecondaryStackIndexMem[KI_SECONDARY_STACK_SIZE];               // 0xC8F90 :219
-        IntervalStackEntry maSecondaryStackIntervalMem[KI_SECONDARY_STACK_SIZE]; // 0xCA6B0 :220
+        u16 mauDynamicStackIndexMem[KI_DYNAMIC_STACK_SIZE];                   // 0xC0268 :217
+        IntervalStackEntry maDynamicStackIntervalMem[KI_DYNAMIC_STACK_SIZE];  // 0xC1210 :218
+        u16 mauSecondaryStackIndexMem[KI_SECONDARY_STACK_SIZE];               // 0xC8F10 :219
+        IntervalStackEntry maSecondaryStackIntervalMem[KI_SECONDARY_STACK_SIZE]; // 0xCA6F0 :220
 
         IntervalList mDynamicIntervalList;                                    // 0xD6590 :222
         IntervalList mInactiveIntervalList;                                   // 0xD65A0 :223
@@ -298,9 +337,9 @@ namespace CgsSceneManager
         CollidingPair maCollidingPairs[KU_MAX_NUM_COLLIDING_PAIRS];           // 0xD65C0 :226
         IntervalObjectData maObjectData[KU_MAX_NUM_OBJECTS];                  // 0xD95C0 :228
 
-        ObjectBitArray mUseInternalCollision;                                 // 0xD9A40 :230
-        ObjectBitArray mCollidingBodies;                                      // 0xD9CB8 :232
-        bool mabMovedThisFrame[KU_MAX_NUM_OBJECTS];                           // 0xD9F30 :235
+        ObjectBitArray mUseInternalCollision;                                 // 0xDA980 :230
+        ObjectBitArray mCollidingBodies;                                      // 0xDABF8 :232
+        bool mabMovedThisFrame[KU_MAX_NUM_OBJECTS];                           // 0xDAE70 :235
         ObjectBitArray mabForceNoPadding;                                     // 0xDC230 :237
 
         u8*                    mpaVolumeInstanceCullingGroup;                 // 0xDC4A8 :239
