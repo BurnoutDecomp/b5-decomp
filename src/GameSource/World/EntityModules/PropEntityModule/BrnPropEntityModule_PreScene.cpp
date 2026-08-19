@@ -82,45 +82,62 @@
 // A park list is a claim about the tree TODAY; re-grep it before believing it.
 //
 // LANDED 2026-08-19 (wave Q5): P1, P2, P3, P4, P5, P6, P8 -- see the ⭐ block at each
-// site for the per-call asm witness. STILL PARKED: P7, P9, both re-measured below.
+// site for the per-call asm witness.
+// LANDED 2026-08-19 (wave Q6 cluster C5): P7. STILL PARKED: P9 only, re-measured below.
 //
 //  P7. step 11, type 63 -- the `luZone == <callee at 0x8295F4A0>( lGraphicsList )`
-//      cross-check assert (fired at 0x8230B25C and again at 0x8230B368 for the message
-//      body). STILL PARKED, but the OLD REASON WAS WRONG and is corrected here:
-//      `Nicotine::DMixIO` DOES have a committed home (SDKs/EATech/include/Nicotine/
-//      DMixIO.hpp). The real blocker is that the callee is UNIDENTIFIED:
-//        * DMixIO.hpp declares no GetDMixID, and progress/identity.json has no
-//          `Nicotine::DMixIO::GetDMixID` row at all -- the whole Nicotine::DMixIO family
-//          sits at 0x82B448B0..0x82B44A08, nowhere near 0x8295F4A0, so IDA's name on this
-//          call target is an ICF-fold misattribution, not a signature;
-//        * there is no per-address export for it
-//          (.ida-exports/BURNOUT_X360_ARTIST.XEX/0x8295F4A0.json does not exist), so its
-//          body, its owning class and its real name are all unrecovered;
-//        * its r3 is the PropGraphicsList resource pointer, i.e. it is far more likely a
-//          one-line id getter on the graphics list that ICF folded with the Nicotine one.
-//      Writing it from the name would be fabrication. It is an ASSERT ONLY; the binding it
-//      guards (step 11's `mapGraphicsLists[luZone] = lGraphicsList`) lands in full.
-//      UNPARKED BY: a targeted IDA export of 0x8295F4A0.
+//      cross-check assert (fired at 0x8230B25C, and again at 0x8230B368 to format the
+//      message body). ⭐ LANDED -- see the ⭐ block at the site.
+//      The Q5 park reason ("the callee is UNIDENTIFIED; no per-address export") was
+//      correct at the time and is now CLOSED by a targeted headless `idat` export of
+//      0x8295F4A0 on a private .i64 copy (scratchpad/waveQ6/ida_p7/, dump + out_p7.json).
+//      The export settles it in two instructions -- `lwz r3,4(r3) ; blr` -- and its
+//      xrefs_to name three unrelated callers (this function twice, NFSMixMap::SETSFXID,
+//      NFSMixMap::GetObjectPtr), i.e. the classic ICF fold that produced IDA's bogus
+//      "Nicotine::DMixIO::GetDMixID" label. r3 is the PropGraphicsList memory resource and
+//      its +4 word is muZoneNumber, so the call is
+//      `PropGraphicsList::GetZoneNumber() const` (DWARF BrnPropGraphicsList.h:157).
+//      ⚠ RESIDUAL, for the owner of SharedClasses/Physics/Props/BrnPropGraphicsList.h:
+//      that header does not declare GetZoneNumber() yet, so the site reads muZoneNumber
+//      directly. One line -- `u32 GetZoneNumber() const { return muZoneNumber; }` -- turns
+//      it back into the console's getter call.
 //
 //  P9. step 12 -- the corona-phase advance between the timestep publish and the
-//      overhead-sign append. RE-MEASURED 2026-08-19, still blocked, decode unchanged:
-//      gate `if ( (lUpdateSet & 1) == 0 || mPropEntitySerialiser.IsPlaying() )` (asm
+//      overhead-sign append. RE-MEASURED 2026-08-19 (wave Q6 C5). The DECODE IS NOW
+//      COMPLETE AND NEEDS NO FURTHER MEASUREMENT -- it is blocked purely on a type having
+//      no home in this tree, and that home is not this cluster's file.
+//      Gate: `if ( (lUpdateSet & 1) == 0 || mPropEntitySerialiser.IsPlaying() )` (asm
 //      0x8230BBF4 reloads the SAME `lUpdateSet & 1` stack slot step 10 wrote, then
 //      0x8230BC08-0x8230BC28 tests the serialiser state against 4/5/6), then over
 //      `mVFXPropCollection->muCoronaDataTableSize` (`lwz 0x2C`) entries of the table at
-//      `lwz 0x28`, stride 0x20: `phase(+0x18) = fmod( phase + mrTimestep, e(+0xC) + e(+0x8) )`
+//      `lwz 0x28`, stride 0x20: `+0x18 = fmod( +0x18 + mrTimestep, e(+0xC) + e(+0x8) )`
 //      -- computed as `x - trunc(x/period)*period` at 0x8230BD74..0x8230BDC8. Assert text
 //      "luOffset < muCoronaDataTableSize", VFXPropsResourceType.h:636.
-//      BLOCKER (unchanged): `BrnParticle::VFXPropCollection` is only FORWARD-DECLARED
-//      in-tree (BrnPropEntityModule.h:162); the committed
+//      ⭐ EVERY ONE OF THOSE RAW OFFSETS IS NOW A NAME. The DecFIGS DWARF
+//      (references/DecFIGS/dwarfdump/SharedClasses/Graphics/VFXPropsResourceType.h:282)
+//      gives BrnParticle::VFXPropCollection's full member sequence -- six {pointer,count}
+//      table pairs then muVersion -- which puts, on the 32-bit console,
+//        +0x28 mpCoronaTypeDataTable (:660)   +0x2C muCoronaDataTableSize (:661)
+//      and the same file (:97) gives VFXCoronaTypeData: mnID/mType/mrTimeOn/mrTimeOff/
+//      mrSizeMin/mrSizeMax/mrMasterTime/mbSynchronised == console stride 0x20, with
+//        +0x18 == mrMasterTime      +0x08 + +0x0C == mrTimeOn + mrTimeOff == GetTotalTime()
+//      (VFXCoronaTypeData::GetTotalTime is a real DWARF method, :202). So the console
+//      statement is, in names:
+//        e->mrMasterTime = fmod( e->mrMasterTime + mrTimestep, e->GetTotalTime() );
+//      over `GetCoronaTypeDataByOffset(i)` (:634, whose own bounds assert is the :636 text).
+//      BLOCKER (unchanged, re-grepped): `BrnParticle::VFXPropCollection` is still only
+//      FORWARD-DECLARED in-tree (BrnPropEntityModule.h:162); the committed
 //      SharedClasses/Graphics/VFXPropsResourceType.h is 25 lines and homes only the
-//      resource-type HANDLER (VFXPropCollectionResourceType), not the payload with the
-//      corona data table. Reproducing it would mean poking `*(f32*)(entry + 0x18)` into an
-//      unrecovered blob -- exactly the offset hack the project forbids. The same type
-//      blocks the corona tail of RenderPropAndCoronas (BrnPropEntityModule_Render.cpp:65).
-//      MOUNT: reconstruct BrnParticle::VFXPropCollection (the corona table pointer at
-//      +0x28, muCoronaDataTableSize at +0x2C, and the 0x20-byte corona entry record).
-//      It is a visual-only phase wrap; props spawn, render and smash without it.
+//      resource-type HANDLER (VFXPropCollectionResourceType), not the payload. `operator->`
+//      on an incomplete type is a hard error, so this cannot be landed from here at all --
+//      and that header is NOT this cluster's file.
+//      MOUNT (one owner, one sitting): home VFXPropCollection + VFXCoronaTypeData in
+//      SharedClasses/Graphics/VFXPropsResourceType.h from the DWARF rows above. ⚠ It is a
+//      SERIALISED resource whose six embedded pointers WIDEN on the x64 host, so it needs
+//      the same porter/static_assert contract BrnPropGraphicsList.h documents -- that, not
+//      the arithmetic, is the work.
+//      It is a visual-only phase wrap; props spawn, render and smash without it. The same
+//      type blocks the corona tail of RenderPropAndCoronas (BrnPropEntityModule_Render.cpp:65).
 //
 // ---- STATE OF THE INPUT SIDE (this note also corrected 2026-08-19) ------------------
 // The 2026-08-12 note here said both producers of PropEntityIO::InputBuffer_PreScene were
@@ -151,6 +168,7 @@
 #include "GameSource/Resource/SharedIO/BrnGameDataRequestQueue.h"         // RequestInterface<1024>
 #include "GameSource/Replays/Serialisers/BrnReplayPropEntitySerialiser.h" // PropEntitySerialiser
 #include "SharedClasses/Physics/Props/BrnPhysicsPropZoneData.h"           // PropZoneData::GetZoneId
+#include "SharedClasses/Physics/Props/BrnPropGraphicsList.h"              // PropGraphicsList::muZoneNumber (step 11 / P7)
 #include "SharedClasses/Physics/Props/BrnPropPhysicsDataHeader.h"         // PropPhysicsDataHeader
 
 #include <cstdlib>   // atoi  (the X360 calls the CRT's, @0x82C0B868)
@@ -850,11 +868,58 @@ namespace BrnWorld
                     {
                         CgsResource::ResourcePtr<PropGraphicsList> lGraphicsList( lpAssetEvent->mHandle );
 
-                        // P7 (STILL PARKED): the `luZone == <0x8295F4A0>( lGraphicsList )`
-                        //     cross-check assert (cpp:702). The callee is unidentified --
-                        //     IDA's "Nicotine::DMixIO::GetDMixID" label on it is an ICF-fold
-                        //     misattribution and there is no per-address export. See the
-                        //     PARK LIST.
+                        // ⭐ P7 LANDED 2026-08-19 (wave Q6 cluster C5) -- the callee is
+                        // IDENTIFIED. A targeted headless IDA export of 0x8295F4A0 on a private
+                        // .i64 copy (scratchpad/waveQ6/ida_p7/) shows the whole function is TWO
+                        // instructions:
+                        //     0x8295F4A0  lwz  r3, 4(r3)
+                        //     0x8295F4A4  blr
+                        // i.e. "return the u32 at +4 of my argument". Its xrefs_to prove the
+                        // ICF fold that made IDA mislabel it: PropEntityModule::PreSceneUpdate
+                        // (here, twice) AND NFSMixMap::SETSFXID AND NFSMixMap::GetObjectPtr all
+                        // branch to the same body, so "Nicotine::DMixIO::GetDMixID" is just
+                        // whichever representative IDA kept -- not this call's signature.
+                        // r3 here is the PropGraphicsList memory resource, whose +4 word is
+                        // muZoneNumber (BrnPropGraphicsList.h), and the DWARF names the getter:
+                        // `uint32_t PropGraphicsList::GetZoneNumber() const` (DWARF
+                        // SharedClasses/Physics/Props/BrnPropGraphicsList.h:157).
+                        //
+                        // ASM 0x8230B1EC..0x8230B264:
+                        //   lwz r11,var_1C0 ; cmplwi 0 ; bne -> skip    == ResourcePtr::operator->()'s
+                        //       own `mpResource != NULL` tripwire, FireAssert li r5,0x220 ==
+                        //       CgsResourcePtr.h:544 (the same :544 spelling steps 6/7/9 use)
+                        //   lwz r3,var_1C0 ; bl 0x8295F4A0 ; cmplw r29,r3 ; beq -> past the assert
+                        //   the miss arm composes the message through StrStream ("%u" / "0x%X"
+                        //   for BOTH values) and fires it with li r5,0x2BE == cpp:702.
+                        //   (0x8230B3E4/0x8230B3E8 `lwz r26,var_304` / `li r25,1` are the assert
+                        //   block RESTORING the two constant registers it scratched -- r25==1,
+                        //   r24==0 are live across the whole event loop. They are NOT a flag.)
+                        //
+                        // ⚠ TWO DEVIATIONS, both deliberate and both cheap to retire:
+                        // 1. The member is read directly instead of through GetZoneNumber(),
+                        //    because SharedClasses/Physics/Props/BrnPropGraphicsList.h does not
+                        //    declare that getter yet and it is not this cluster's file. It is a
+                        //    ONE-LINE header addition -- `u32 GetZoneNumber() const { return
+                        //    muZoneNumber; }` (DWARF :157) -- after which this line should become
+                        //    `lGraphicsList->GetZoneNumber()`. Same value either way: the console
+                        //    getter IS `return muZoneNumber;`.
+                        // 2. The console composes the assert TEXT at run time from two
+                        //    StrStream AppendFormats; those literals were not recovered, so the
+                        //    condition text stands in -- exactly the disposition the sibling
+                        //    zone-data assert at cpp:727 (above) already took.
+                        //
+                        // The `!mbResourceSystemStalled` gate is the console's, not a guess:
+                        // 0x8230B1DC-0x8230B1E8 `lwz r11,var_1D0 ; lbz r11,0(r11) ; cmplwi 0 ;
+                        // bne -> 0x8230B3EC` -- the SAME byte, through the SAME cached address
+                        // (seeded at 0x82309A80/0x82309A90 in the prologue), that the zone-data
+                        // branch tests at 0x8230B808. Note where it branches TO: past the assert
+                        // but NOT past the store, so a stalled resource system still binds the
+                        // list -- it only stops the cross-check from firing on a torn load.
+                        if ( !mbResourceSystemStalled )
+                        {
+                            CGS_ASSERT( luZone == lGraphicsList->muZoneNumber,
+                                        "luZoneIndex == lpPropGraphicsList->GetZoneNumber()" ); // cpp:702
+                        }
 
                         mapGraphicsLists[luZone] = lGraphicsList;
                         mabWaitingForGraphics.UnSetBit( luZone );
@@ -887,7 +952,14 @@ namespace BrnWorld
         // ================================================================
         mrTimestep = lpInput->GetCurrentTimestep();
 
-        // P9: the corona-phase advance -- STILL PARKED, see the PARK LIST.
+        // P9: the corona-phase advance -- STILL PARKED. Re-measured 2026-08-19 (wave Q6 C5):
+        // the decode is COMPLETE and every raw offset now has a DWARF name
+        //   e->mrMasterTime = fmod( e->mrMasterTime + mrTimestep, e->GetTotalTime() );
+        // over mVFXPropCollection's muCoronaDataTableSize corona-type-data entries.
+        // The ONLY thing missing is a home for BrnParticle::VFXPropCollection /
+        // VFXCoronaTypeData (still forward-declaration-only in this tree), and that home --
+        // SharedClasses/Graphics/VFXPropsResourceType.h -- is another owner's file.
+        // Full recipe in the PARK LIST at the top of this file.
 
         // ⭐ P8 LANDED 2026-08-19 (wave Q5). ASM 0x8230BDD0..0x8230BDE8:
         //   `mr r3, lpOutput ; bl 0x822B9930` == GetVisibleOverheadSignArray() (the

@@ -57,8 +57,11 @@
 // cast (there is NO cast between function pointer types anywhere in this file -- every
 // adapter has the slot's exact signature, so the compiler type-checks all 42 slots):
 //
-//   1. FOUR OF THE SIX CLASSES ARE STANDALONE. CapsuleVolume.hpp:56, CylinderVolume.hpp:49,
-//      TriangleVolume.hpp:48 and AggregateVolume.hpp have no `: public Volume` base clause,
+//   1. FOUR OF THE SIX CLASSES ARE STANDALONE. CapsuleVolume, CylinderVolume,
+//      TriangleVolume and AggregateVolume have no `: public Volume` base clause on their
+//      `class X` line (line numbers deliberately NOT cited: the 2026-08-19 wave-Q6 edits to
+//      CylinderVolume.hpp and TriangleVolume.hpp moved two of the four, and three read-only
+//      files elsewhere still cite the old ones -- reported, not edited),
 //      so `&CapsuleVolume::GetBBox` cannot convert to anything Volume-shaped. Their adapters
 //      reinterpret_cast the `const Volume*`. That is sound because all five classes model the
 //      SAME 96-byte serialised record at the SAME offsets, which is pinned by static_asserts
@@ -96,19 +99,37 @@
 // -------------------------------------------------------------------------------------------
 //  slot                [1] SPHERE  [2] CAPSULE  [3] TRIANGLE  [4] BOX     [5] CYLINDER  [6] AGG
 //  getBBox             82BA8020 ✅ 82BAF9C8 ✅  82BBA038 ✅   82BA9FC8 ✅ 82BAD490 ✅   82BBBA10 ✅
-//  getBBoxDiag         82BA8580 ✅ 82BAF6A8 ✅  82BBA110 ⛔P   82BA8890 ✅ 82BAC7B8 ✅   82BBBB58 ✅
+//  getBBoxDiag         82BA8580 ✅ 82BAF6A8 ✅  82BBA110 ⭐   82BA8890 ✅ 82BAC7B8 ✅   82BBBB58 ✅
 //  getInterval         82BAC980 ✅ 82BAC980 ✅  82BAC980 ✅   82BAC980 ✅ 82BAC980 ✅   0 (image)
 //  getMaximumFeature   82BA81B0 ✅ 82BAF808 ✅  82BBACD0 ✅   82BA87F0 ✅ 82BAC988 ✅   82B0F1B8 ✅
-//  createGPInstance    82BA8100 ✅ 82BAF6F0 ✅  82BBAA00 ✅   82BA92E8 ✅ 82BAC7F8 ⛔P   82B0F1B8 ✅
+//  createGPInstance    82BA8100 ✅ 82BAF6F0 ✅  82BBAA00 ✅   82BA92E8 ✅ 82BAC7F8 ⭐   82B0F1B8 ✅
 //  lineSegIntersect    82BA82C8 ⛔P 82BAFCF8 ⛔P 82BBB970 ✅   82BA9478 ⛔P 82BAF688 ⛔P  0 (image)
 //  release             82AD5078 ✅ 82AD5078 ✅  82AD5078 ✅   82AD5078 ✅ 82AD5078 ✅   82AD5078 ✅
 //
-//  ✅ = bound to a real body (34 of the 40 slots the image binds).
+//  ✅ = bound to a real body (36 of the 40 slots the image binds).
+//  ⭐ = bound 2026-08-19 by wave Q6 cluster C4, from bodies landed the same day in
+//       TriangleVolume.cpp / CylinderVolume.cpp. Both were wave-Q5 parks; the counts moved
+//       34 -> 36 bound and 6 -> 4 parked. The per-type slot masks the run-time descriptor
+//       probe checks move with them: TRIANGLE 0x7D -> 0x7F and CYLINDER 0x4F -> 0x5F
+//       (SPHERE / CAPSULE / BOX stay 0x5F, AGGREGATE stays 0x5B; bit i = slot i in the row
+//       order above, bit 0 = getBBox ... bit 6 = release).
 //  0 (image) = the shipped .rdata word really is zero -- reproduced, not a hole.
-//  ⛔P = PARKED, six slots, each with its reason at the record below and none of them
+//  ⛔P = PARKED, four slots, each with its reason at the record below and none of them
 //        stubbed: a NULL slot is an honest hole, a stub that returns a plausible value is a
-//        wrong answer. None of the six is on the wave-Q5 car-vs-prop contact path (that path
-//        is getBBox -> the sweeper, then createGPInstance -> PrimitiveIntersect).
+//        wrong answer. All four are lineSegIntersect, and none is on the wave-Q5 car-vs-prop
+//        contact path (that path is getBBox -> the sweeper, then createGPInstance ->
+//        PrimitiveIntersect); their consumer is rw::collision::VolumeLineQuery.
+//
+//  The four remaining parks, with the sizes MEASURED (the last two by a targeted headless
+//  idat run on a private .i64 copy this cluster, because they have no export JSON):
+//        SPHERE   lineSegIntersect 0x82BA82C8   136 insns
+//        CAPSULE  lineSegIntersect 0x82BAFCF8   428 insns
+//        BOX      lineSegIntersect 0x82BA9478   723 insns (+ rwcPlaneLineSegIntersect
+//                                               @0x82BA8818, itself bodyless)
+//        CYLINDER lineSegIntersect 0x82BAF688     8 insns -- RECOVERED IN FULL, but it only
+//                                               tail-calls Thin/FatLineSegIntersect
+//                                               (441 / 733 insns), neither of which has a
+//                                               body; see the CYLINDER record.
 //
 // The three shared/ICF-folded targets are reproduced as three shared adapters, exactly the
 // arrangement the console has (one body, many slots), NOT invented:
@@ -262,6 +283,11 @@ namespace
         return AsTriangle(lpV)->GetBBox(lpTransform, abTight, arBBox);
     }
 
+    Vec4 TriangleGetBBoxDiag(const Volume* lpV)
+    {
+        return AsVec4(AsTriangle(lpV)->GetBBoxDiag());
+    }
+
     // TriangleVolume::GetMaximumFeature omits the leading `abCcw` that DWARF triangle.h:48
     // declares -- the reconstruction read the asm's r4 as the direction, which is what the
     // BY-VALUE `Vector3` shape makes it look like (see reason 3 in the banner). Both
@@ -339,6 +365,12 @@ namespace
         return 1;
     }
 
+    RwBool CylinderCreateGPInstance(const Volume* lpV, GPInstance& arInstance,
+                                    const Vec4* lpTransform)
+    {
+        return AsCylinder(lpV)->CreateGPInstance(arInstance, lpTransform);
+    }
+
     // -----------------------------------------------------------------------------------
     // [6] AGGREGATE -- unk_82F919D0. Bodies in AggregateVolume.cpp.
     // -----------------------------------------------------------------------------------
@@ -402,13 +434,14 @@ const Volume::VTable gVolumeHandler_82F919A4 =                  // type 3 TRIANG
 {
     E_VOLUMETYPE_TRIANGLE,
     TriangleGetBBox,                        // 82BBA038  TriangleVolume::GetBBox
-    // ⛔ PARKED -- TriangleVolume::GetBBoxDiag @0x82BBA110. The address is in the descriptor
-    // dump but there is NO progress/identity.json row for it and NO per-address JSON: it is an
-    // EXPORT HOLE, and AGENTS gotcha 6 forbids bodying a function from an .i64 label alone.
-    // Closing it needs a targeted headless idat run on a private copy; the shape is almost
-    // certainly the sibling one (twice the local half-extent fold), but "almost certainly" is
-    // not a reconstruction.
-    0,
+    // ✅ UNPARKED 2026-08-19 (wave Q6 cluster C4). The wave-Q5 park read: "The address is in
+    // the descriptor dump but there is NO progress/identity.json row for it and NO per-address
+    // JSON: it is an EXPORT HOLE ... Closing it needs a targeted headless idat run on a private
+    // copy; the shape is almost certainly the sibling one, but 'almost certainly' is not a
+    // reconstruction." That idat run happened (scratchpad/waveQ6/ida_vt2/): 18 instructions,
+    // no callees, dumped in full. The park was right to refuse the guess AND right about the
+    // shape -- it is the fattened local extent, (max + fatness) - (min - fatness).
+    TriangleGetBBoxDiag,                    // 82BBA110  TriangleVolume::GetBBoxDiag
     FoldedGetIntervalReturnsTrue,           // 82BAC980
     TriangleGetMaximumFeature,              // 82BBACD0  TriangleVolume::GetMaximumFeature
     TriangleCreateGPInstance,               // 82BBAA00  TriangleVolume::CreateGPInstance
@@ -445,17 +478,29 @@ const Volume::VTable gVolumeHandler_82F91894 =                  // type 5 CYLIND
     CylinderGetBBoxDiag,                    // 82BAC7B8  CylinderVolume::GetBBoxDiag
     FoldedGetIntervalReturnsTrue,           // 82BAC980
     CylinderGetMaximumFeature,              // 82BAC988  CylinderVolume::GetMaximumFeature
-    // ⛔ PARKED -- CylinderVolume::CreateGPInstance @0x82BAC7F8, 98 insns. NO body and NO
-    // declaration exist: CylinderVolume.hpp declares Initialize / GetBBoxDiag / GetBBox /
-    // GetMaximumFeature and stops (its member comment at :95 already anticipates a
-    // CreateGPInstance reading all four frame rows). The body's home is CylinderVolume.cpp,
-    // which is READ-ONLY for this cluster, and homing it anywhere else would fork a class that
-    // has a home (AGENTS gotcha 7). Raw asm dumped for the next owner:
-    // scratchpad/waveQ5/vtbind/asm/0x82BAC7F8.txt.
-    0,
-    // ⛔ PARKED -- CylinderVolume::LineSegIntersect @0x82BAF688. No body, no declaration, and
-    // NO per-address export JSON either (checked: .ida-exports has no 0x82BAF688.json), so it
-    // needs a targeted headless idat run before anyone can even size it.
+    // ✅ UNPARKED 2026-08-19 (wave Q6 cluster C4). The wave-Q5 park was purely an OWNERSHIP
+    // park -- "the body's home is CylinderVolume.cpp, which is READ-ONLY for this cluster" --
+    // and this cluster owns that file, so the 98 instructions were reconstructed there from
+    // the asm wave Q5 had already dumped. (The OLDER park reason, still standing in
+    // CylinderVolume.hpp until today, claimed the GP VolumeMethods table was un-recovered
+    // rodata. That was stale in the helpful direction: the table has been homed as
+    // g_aGPVolumeMethods since 2026-08-18, and its CYLINDER row was re-dumped this cluster.)
+    CylinderCreateGPInstance,               // 82BAC7F8  CylinderVolume::CreateGPInstance
+    // ⛔ STILL PARKED -- CylinderVolume::LineSegIntersect @0x82BAF688, but the park is now
+    // MEASURED rather than unknown. Wave Q5 could only say "no per-address export JSON, so it
+    // needs a targeted headless idat run before anyone can even size it". That run happened
+    // (scratchpad/waveQ6/ida_vt2/): the function is EIGHT instructions and is recovered in
+    // full -- a pure two-way TAIL-CALL dispatcher, `mfFatness + afFatness == 0.0f` (the
+    // compared scalar flt_82001CC0 re-dumped as word 0x00000000) picking
+    // CylinderVolume::ThinLineSegIntersect @0x82BADCE0, anything else
+    // CylinderVolume::FatLineSegIntersect @0x82BAEB10.
+    // THE BLOCKER IS NOW EXACT, AND IT IS NOT THE DISPATCHER: neither kernel has a body
+    // anywhere in the tree (441 and 733 instructions respectively, both measured, both
+    // register-allocated VMX over rwcCylinderLineSegIntersect / rwcTorusLineSegIntersect /
+    // AALineClipper). Landing the eight instructions into the already-mounted
+    // CylinderVolume.cpp would plant two guaranteed LNK2019s that `cl /c` cannot see
+    // (AGENTS gotcha 12), so the slot stays an honest NULL until the kernels land. The whole
+    // recovered dispatcher is written out in CylinderVolume.hpp's BLOCKED banner.
     0,
     FoldedReleaseEmptyBody,                  // 82AD5078
     "CylinderVolume",

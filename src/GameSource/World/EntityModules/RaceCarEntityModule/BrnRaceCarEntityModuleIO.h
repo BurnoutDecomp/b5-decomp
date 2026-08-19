@@ -531,6 +531,11 @@ namespace RaceCarEntityModuleIO
         void Construct()
         {
             CgsModule::IOBuffer::Construct();
+            // ⭐ 2026-08-19 (wave Q6 / rcfork) -- the console's PotentialContact<2048>::Construct
+            // (+16) leg, emitted now that BridgeSceneContactsToRaceCarModule_PrePhysics is REAL and
+            // is the first producer of mPotentialContactQueue (SetPotentialContactQueue Clear()s +
+            // Append()s it: the never-Constructed-queue trap, 4th sighting in this family).
+            mPotentialContactQueue.Construct();
             mSceneResultQueue.Construct();
             // ⭐⭐ 2026-08-11 (WorldBridgeInputToEntityModules mount) -- ADDED, AND IT HAD
             // BECOME MANDATORY. The X360 Construct's own list above names

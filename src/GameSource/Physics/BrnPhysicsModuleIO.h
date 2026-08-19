@@ -11,6 +11,11 @@
 //   GetVehicleOutputInterface()        @ 0x825A0080 write (bit 3) -> +44128  (DWARF :355)
 //   GetPropManagerOutputInterface() const @ 0x8279F640 read (bit 4) -> +71792 (DWARF :357)
 //   GetPropManagerOutputInterface()    @ 0x825C0DC8 write (bit 3) -> +71792  (DWARF :358)
+//     ⭐ 2026-08-19 (wave Q6/A1): its member is the REAL Props::PropOutputInterface now
+//     (X360 Construct @0x825ABB10 calls PropOutputInterface::Construct(this+71792) at
+//     0x825ABBF8), so both overloads return a typed interface and
+//     PropManager::OutputUpdatedProps @0x82627EC8 -- the only producer of the UpdatePropEvent
+//     stream that makes a smashed prop's parts move -- can finally be bodied.
 //   GetDeformationOutputInterface()    @ 0x825A0128 write (bit 3) -> +148656 (DWARF :361)
 //   GetContactSpyInterface()           @ 0x825A0320 write (bit 3) -> +998192 (DWARF :370)
 //   GetSceneInputInterface() const     @ 0x8279F838 read  (bit 4) -> +179424 (DWARF :366)
@@ -55,6 +60,7 @@
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleDriverInputInterface.h" // Vehicle::VehicleDriverInputInterface (mVehicleDriverInterface, retyped 2026-08-09)
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleEffectsInputInterface.h" // Vehicle::VehicleEffectsInputInterface (mVehicleEffectsInputInterface, retyped 2026-08-10)
 #include "GameSource/Physics/PropManager/SharedIO/BrnPropInputInterface.h" // Props::PropInputInterface (mPropManagerInputInterface, retyped 2026-08-10)
+#include "GameSource/Physics/PropManager/SharedIO/BrnPropOutputInterface.h" // Props::PropOutputInterface (mPropManagerOutputInterface, retyped 2026-08-19)
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_SceneUpdate.h" // SceneManagerIO::InSceneUpdateInterface (mSceneInputInterface, retyped 2026-08-19)
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h" // BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface (mRCEntityOutputInterface, retyped 2026-08-10)
 
@@ -79,7 +85,31 @@ namespace PhysicsModuleIO
         // The typedefs keep the pre-promotion accessor signatures compiling.
         typedef Vehicle::VehicleOutputRequestInterface VehicleOutputRequestInterfaceStorage;
         typedef Vehicle::VehicleOutputInterface        VehicleOutputInterfaceStorage;
-        struct PropOutputInterfaceStorage           { unsigned char maBytes[1]; };
+        // ⭐⭐ PROMOTED 2026-08-19 (wave Q6 cluster A1 -- the prop READ-BACK seam). This was a
+        // 1-byte opaque placeholder pinned by a 76,863-byte pad, and it was the single reason
+        // Props::PropManager::OutputUpdatedProps @0x82627EC8 (FOURTEEN instructions) could not
+        // be bodied -- i.e. the reason a smashed prop's parts never reach the world module and
+        // never visibly move.
+        //
+        // The type is NOT inferred -- the console names it in its own Construct. X360
+        // OutputBuffer::Construct @0x825ABB10, instruction 0x825ABBF8:
+        //     addis r3, r30, 1 ; addi r3, r3, 0x1870      == this + 71792
+        //     bl BrnPhysics::Props::PropOutputInterface::Construct
+        // and the DWARF spells the member's type `PropOutputInterface` (:381).
+        //
+        // The console SPAN closes the identification arithmetically: the next member,
+        // mDeformationOutputInterface, sits at +148656, so the seat is exactly
+        // 148656 - 71792 == 76,864 bytes wide -- and BrnPropOutputInterface.h's four embedded
+        // EventQueue<T,200> members sum to exactly 38416 + 3216 + 22416 + 12816 == 76,864.
+        // MEASURED host sizeof == 76,864 as well -- EXACTLY the console span, not merely >= it,
+        // because all four element types are 16-byte aligned, so the host's 16-byte
+        // BaseEventQueue header occupies the same slot the console's 12-byte header padded out
+        // to (probe scratchpad/waveQ6/probe_seat/probe_seat_sizes.cpp). The pad that used to
+        // follow this member is therefore GONE, not shrunk -- see the private section -- and
+        // every later member keeps its current host offset (measured before/after with
+        // /d1reportSingleClassLayout: mDeformationOutputInterface stays at host +148672 and
+        // sizeof(OutputBuffer) stays 998,400).
+        typedef Props::PropOutputInterface PropOutputInterfaceStorage;                        // :381
         struct DeformationOutputInterfaceStorage    { unsigned char maBytes[1]; };
         struct DeformationOutputInterfaceForEntityModulesStorage { unsigned char maBytes[1]; }; // :384 (unfolded 2026-08-09)
         // ⭐⭐ PROMOTED 2026-08-19 (wave Q5 cluster F2 -- the physics->scene seam). This was a
@@ -176,8 +206,13 @@ namespace PhysicsModuleIO
         Vehicle::VehicleManagerOutputInterface mVehicleManagerOutputInterface; // console +41952 :378 (console span 2176)
         VehicleOutputInterfaceStorage        mVehicleOutputInterface;          // console +44128 :379 (console span 27664)
         PropOutputInterfaceStorage           mPropManagerOutputInterface;      // console +71792 :381
-        // gap to mDeformationOutputInterface: +71793 .. +148656.
-        unsigned char                        maDeformationPad[148656 - 71793]; // ...
+        // ⚠ NO PAD HERE ANY MORE (2026-08-19, wave Q6/A1): the seat holds the REAL
+        // Props::PropOutputInterface now, whose host sizeof (76,864 -- measured) is EXACTLY the
+        // console span [+71792 .. +148656]. The old `maDeformationPad[148656 - 71793]` was
+        // pinning the console offset of a member that could never be written; the correct
+        // replacement width is ZERO, and a zero-length array is not legal here, so the pad is
+        // deleted outright (the same disposition mSceneInputInterface's pad took on 2026-08-19).
+        // _AssertLayout gates the surviving relation (`>=` the console delta).
         DeformationOutputInterfaceStorage    mDeformationOutputInterface;      // +148656 :383
         // gap to mDeformationOutputInterfaceForEntityModules: +148657 .. +159647.
         unsigned char                        maDeformOutPad[159648 - 148657];  //

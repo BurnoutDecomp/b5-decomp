@@ -1474,21 +1474,7 @@ void BrnWorld::WorldEntityModule::UpdateMassive(unsigned short)
 // -------------------------------------------------------------------------
 // BrnWorld::WorldModule
 // -------------------------------------------------------------------------
-// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
-// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
-// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
-// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
-// not this gate.
-void BrnWorld::WorldModule::BridgeWorldModuleToEntityModules_Render(class BrnTraffic::BrnTrafficIO::InputBuffer_Dispatch *,struct BrnWorld::RaceCarEntityModuleIO::InputBuffer_GenerateDispatchLists *,struct BrnWorld::WorldEntityIO::InputBuffer_GenerateDispatchLists *,class BrnWorld::PropEntityIO::InputBuffer_Dispatch *,struct BrnWorldIO::DispatchInputBuffer const *)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "BrnWorld::WorldModule::BridgeWorldModuleToEntityModules_Render: inert (body not reconstructed) [FLAG PC boot gate]\n";
-    }
-}
+// GATE RETIRED 2026-08-19 (wave Q6 / rdisp): WorldModule::BridgeWorldModuleToEntityModules_Render is REAL in Bridges/WorldBridgeToEntityModules.cpp -- the entity modules (traffic / race car / world entity / prop) now receive their Dispatch input every frame; prop coronas and the prop dispatch input are seeded.
 
 // (WorldModule::CalculateVehicleLODs stub RETIRED 2026-08-12, vehicle-LOD wave:
 //  the real body @0x827C3778 now lives in BrnWorldModule.cpp. It was the ONLY
@@ -2164,21 +2150,7 @@ void WorldModule::BridgeRaceCarModuleToTrafficModule_PrePhysics(void *,class Brn
 
 // GATE RETIRED 2026-08-18 (wave Q4 bridges): WorldModule::BridgeSceneContactsToPropModule_PrePhysics @0x827ABCB0 is REAL in GameSource/World/Bridges/WorldBridgePropModule.cpp.
 
-// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
-// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
-// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
-// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
-// not this gate.
-void WorldModule::BridgeSceneContactsToRaceCarModule_PrePhysics(void *,struct BrnWorld::RaceCarEntityModuleIO::InputBuffer_PrePhysics *,struct CgsSceneManager::SceneManagerIO::OutputBuffer const *)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "WorldModule::BridgeSceneContactsToRaceCarModule_PrePhysics: inert (body not reconstructed) [FLAG PC boot gate]\n";
-    }
-}
+// GATE RETIRED 2026-08-19 (wave Q6 / rcfork): BridgeSceneContactsToRaceCarModule_PrePhysics @0x827ABBD0 is REAL in WorldBridgeSceneToEntityModules.cpp (the RaceCarEntityModuleIO::PotentialContactQueue derived-struct fork collapsed to the DWARF typedef).
 
 // GATE RETIRED 2026-08-19 (wave Q5 round 3 / F2): BridgeSceneContactsToTrafficModule_PrePhysics @0x827ABC50 is REAL in WorldBridgeSceneToEntityModules.cpp.
 

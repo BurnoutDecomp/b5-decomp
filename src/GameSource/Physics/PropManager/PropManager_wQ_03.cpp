@@ -4,31 +4,83 @@
 // Partfile of the TU GameSource/Unity/../Physics/PropManager/BrnPropManager.cpp
 // (breakable-props keystone wave Q, group 3, 2026-08-18). Folds back into BrnPropManager.cpp.
 //
-// GROUP 3 WAS THREE FUNCTIONS. ONE LANDS HERE; TWO ARE PARKED, each on a declaration that does
-// not exist in the tree today (verified by grep, not by repeating the spec):
+// GROUP 3 WAS THREE FUNCTIONS. ONE LANDS HERE; THE OTHER TWO ARE NO LONGER PARKED --
+// ⭐ STALE-BANNER CORRECTION 2026-08-19 (wave Q6): the two "PARKED" entries below were already
+// wrong when this file was last read. Both bodies were brought in-tree on 2026-08-18 and live in
+// the sibling part-file PropManager_wQ2_02.cpp; the declarations they were parked on
+// (BaseCollisionGenerator::{Create,Run}CollidePrimitiveListWithTriangleListStream and
+// ::GetNumUsedResultLists) all exist in CgsCollisionGenerator.h.
 //
 //   * PropManager::UpdateTriangleCache            @0x826119A0  -- BODIED BELOW.
-//   * PropManager::BeginPropWorldContactGeneration @0x82628CB0 -- PARKED,
-//         scratchpad/waveQ/parked/PropManager_03_BeginPropWorldContactGeneration.cpp
-//         (needs BaseCollisionGenerator::{Create,Run}CollidePrimitiveListWithTriangleListStream)
-//   * PropManager::EndPropWorldContactGeneration   @0x82628E18 -- PARKED,
-//         scratchpad/waveQ/parked/PropManager_03_EndPropWorldContactGeneration.cpp
-//         (needs BaseCollisionGenerator::GetNumUsedResultLists)
+//   * PropManager::BeginPropWorldContactGeneration @0x82628CB0 -- REAL, PropManager_wQ2_02.cpp
+//   * PropManager::EndPropWorldContactGeneration   @0x82628E18 -- REAL, PropManager_wQ2_02.cpp
 //
-// ⚠️ ODR NOTE FOR THE CONDUCTOR -- all three of these functions ALREADY HAVE A ONE-SHOT
-//    CONDUCTOR-GATE BODY, in b5-decomp/src/GameSource/Physics/BrnPhysicsConductorGates.cpp:
-//        :485  BeginPropWorldContactGeneration      :492  EndPropWorldContactGeneration
-//        :514  UpdateTriangleCache
-//    `cl /c` cannot see the duplicate. The :514 gate MUST be deleted when this partfile mounts.
-//    ⚠️ RE-CONFIRMED 2026-08-18 (round 2), AND THE GATE IS DELIBERATELY LEFT IN PLACE.
-//    BrnPhysicsConductorGates.cpp is not this TU's to edit, and AGENTS.md's gate convention is
-//    that a gate is retired only in the same commit that MOUNTS the real body in
-//    tools/build/build_game_exe.bat. That script lists BrnPhysicsConductorGates.cpp (line 1161)
-//    and does NOT list PropManager_wQ_03.cpp, so today there is no LNK2005 -- it fires the
-//    instant this partfile is added to the source list. Reported, not "fixed": deleting the gate
-//    unilaterally would leave UpdateTriangleCache with no definition in the mounted build at all.
+// ⚠️ ODR NOTE FOR THE CONDUCTOR -- all three of these functions ALSO HAVE A ONE-SHOT
+//    CONDUCTOR-GATE BODY in b5-decomp/src/GameSource/Physics/BrnPhysicsConductorGates.cpp.
+//    ⭐ THE LINE NUMBERS IN THIS BANNER HAD DRIFTED and are RE-MEASURED 2026-08-19 (banner line
+//    through closing brace):
+//        :471-476  BeginPropWorldContactGeneration     :478-483  EndPropWorldContactGeneration
+//        :522-527  UpdateTriangleCache
+//    `cl /c` cannot see the duplicate. The :522-527 gate MUST be deleted when this partfile mounts.
+//    The gate is DELIBERATELY LEFT IN PLACE: BrnPhysicsConductorGates.cpp is not this TU's to edit,
+//    and AGENTS.md's convention is that a gate is retired only in the same commit that MOUNTS the
+//    real body in tools/build/build_game_exe.bat. That script lists BrnPhysicsConductorGates.cpp
+//    (:1230 -- the old ":1161" citation had drifted too) and does NOT list PropManager_wQ_03.cpp,
+//    so today there is no LNK2005 -- it fires the instant this partfile is added to the source
+//    list. Reported, not "fixed": deleting the gate unilaterally would leave UpdateTriangleCache
+//    with no definition in the mounted build at all.
 //    Re-run coverage_check against the whole GameSource/Physics directory, not just
 //    GameSource/Physics/PropManager, or this cross-directory duplicate stays invisible.
+//
+// ⛔⛔ THE :522-527 GATE'S OWN TEXT IS WRONG, AND IT IS WRONG IN THE HELPFUL DIRECTION.
+//    It reads: "props own ZERO triangle-cache slots today (usedSlots==28==8+20)", i.e. "gating
+//    this costs nothing". RE-MEASURED 2026-08-19 three independent ways. TWO of the three refute
+//    it (1 and 2 below); the THIRD does not -- it was written backwards and is corrected in place
+//    rather than deleted, because what it really measures is a live defect (see 3):
+//      1. PROPS POST CACHE ADDS. PropManager::ProcessAddPropInstanceEvents builds an
+//         InEventAddToCache and appends it to InSceneUpdateInterface::mAddToCacheQueue
+//         (PropManager_wQ2_06.cpp:557), and PropManager::CreatePart does the same per part
+//         (PropManager_wQ2_04.cpp:357-361). Both TUs are MOUNTED.
+//      2. PROPS POST CACHE REMOVES. RemoveProp / RemovePart append InEventRemoveFromCache
+//         (PropManager_wQ2_04.cpp:554 and :635). Also mounted.
+//      3. THE BOOT LOG PROVES THE REMOVE LEG REACHES THE CACHE MANAGER AT RUNTIME:
+//         build/game/BrnGame.log:11541 / :11558 / :11575 / :11592 are four
+//         "Trying to remove unused triangle cache slot" asserts from
+//         CgsTriangleCacheManager_Events.cpp:201 -- an assert that can only fire for a slot the
+//         remove queue names, and callstack line 11545 names
+//         TriangleCacheManager::ProcessRemoveFromCacheEvents.
+//         ⚠️⚠️ CORRECTED wave Q6 round 1 (worldc #2). This item USED TO END with "A subsystem
+//         that owned zero slots could not produce it." THAT WAS LOGICALLY BACKWARDS and is
+//         deleted. Read the asserting code: CgsTriangleCacheManager_Events.cpp:169 guards the
+//         whole block with `if (!mUsedCacheSlots.IsBitSet(liCacheSlot))`, and :199-201 fire only
+//         when the slot is ALSO not added-this-frame and not already-removed. So the assert
+//         fires PRECISELY BECAUSE the used-bitmap does NOT hold that slot -- it is evidence FOR
+//         the gate text's "zero slots", not against it. What it actually proves is the two
+//         things below, and they are worth more than the refutation it was mis-sold as:
+//           (a) props REACH the cache manager's remove leg at runtime (the queue plumbing is
+//               live end to end), which is all this item is entitled to claim; and
+//           (b) 🔴 THE PROP *ADD* LEG IS NOT SEATING SLOTS. The remove arrives for a slot the
+//               used-bitmap never took. That is a live lead on this cluster's own goal:
+//               DoPart/DoPropInstanceWorldContactGeneration read the same slots back through
+//               `lpTriCache->GetCache(slot)`, so they will be handed an EMPTY triangle set --
+//               i.e. parts keep falling out of the world -- even after every gate in this
+//               cluster is retired. FOLLOW-UP FOR THE CONDUCTOR: prop InEventAddToCache IS
+//               queued (PropManager_wQ2_06.cpp:557, PropManager_wQ2_04.cpp:357-361) but the
+//               slot is not marked used by the time the remove arrives -- TRACE
+//               ProcessAddToCacheEvents before declaring cluster B runtime-complete.
+//         Refutations 1 and 2 stand on their own and are enough to justify deleting the stale
+//         `usedSlots==28` sentence; this item is NOT part of that justification.
+//    So the slot range props own is KI_PROP_CACHE_START_INDEX..+KU_MAX_PHYSICAL_PROPS +
+//    KU_MAX_PHYSICAL_PROP_PARTS == 28..72 (the two constants are DWARF-attested WITH their values;
+//    GetTriangleCacheSlotAndRadius's own :2258 assert names exactly that window), and gating this
+//    function means those 45 slots never follow their prop. That is not free -- it is precisely the
+//    input DoProp/DoPartWorldContactGeneration read back through
+//    TriangleCacheInterface::GetCache(slot), so a gated UpdateTriangleCache makes prop-vs-world
+//    contact generation collide against a STALE OR EMPTY triangle set even once its own gate is
+//    retired. ⚠️ The literal number `usedSlots==28` is NOT re-measurable statically (it is a
+//    runtime count inside the cache manager); it is not inherited here and must not be re-quoted.
+//    RECOMMENDATION TO THE CONDUCTOR: when this gate is retired, DELETE the sentence -- do not
+//    reword it and do not carry the number forward.
 //
 // Grounding: .ida-exports/BURNOUT_X360_ARTIST.XEX/0x826119A0.json (RAW `assembly`, 116 insns);
 // the Hex-Rays pseudocode in the same export was used only to confirm the stack-slot map.

@@ -525,17 +525,33 @@ namespace Props
         //    this TU's to edit, so the pair is left for the conductor to land together.
         //    (The parameter NAME is separable from the type and was corrected on its own in
         //    round 3: DWARF BrnPropManager.cpp source :174 spells it `lpPhysicsAllocator`.
-        //    Name-only, and WorldLinkStubs.cpp:516 spells the definition with no parameter
-        //    name at all, so nothing moves.)
+        //    Name-only, so nothing moves. ⚠ The clause that used to sit here -- "and
+        //    WorldLinkStubs.cpp:516 spells the definition with no parameter name at all" --
+        //    is STALE: that link stub was RETIRED on 2026-08-18 with the wave-Q4 PropManager
+        //    mount and WorldLinkStubs.cpp:513 now carries only its tombstone. The narrowing
+        //    is therefore a SINGLE-file edit today, not the pair edit this block describes.)
         bool Prepare( rw::IResourceAllocator* lpPhysicsAllocator );
 
         // ==========================================================================
         // ⭐ ADDED 2026-08-09 (conductor wave -- PhysicsModule::Update @0x825B0640's
         // prop legs). Signatures per the PS3 DecFIGS mangles (0x77F694 names
         // OutputUpdatedProps; the generation pair and ReadUpdatedBodies carry their
-        // param lists in the same export set). ⚠ FLAG: DECLARED for the conductor's
-        // closure; all four bodies are LOUD one-shot gates in
-        // BrnPhysicsConductorGates.cpp until reconstructed.
+        // param lists in the same export set).
+        // ⚠ THE OLD FLAG HERE -- "all four bodies are LOUD one-shot gates in
+        // BrnPhysicsConductorGates.cpp until reconstructed" -- IS STALE. Re-measured
+        // 2026-08-19 (wave Q6): TWO of the four are real, and only the world-contact
+        // PAIR is still gated.
+        //   * ReadUpdatedBodies    @0x82632918 -- REAL, PropManager_wQ2_01.cpp:871
+        //                                         (gate retired 2026-08-18, wave Q4).
+        //   * OutputUpdatedProps   @0x82627EC8 -- REAL, PropManager_wQ2_06.cpp
+        //                                         (landed 2026-08-19, wave Q6 A2; see its
+        //                                         own block below for the gate to retire).
+        //   * Begin/EndPropWorldContactGeneration -- bodies exist at
+        //     PropManager_wQ2_02.cpp:414/:522 but that TU is deliberately UNMOUNTED
+        //     (build_game_exe.bat:1778-1780), so the gates at
+        //     BrnPhysicsConductorGates.cpp:471-476 / :478-483 are what runs. Effect,
+        //     stated plainly: prop and part rigid bodies get NO world collision, so they
+        //     free-fall until KVF_PROP_OUT_OF_WORLD_HEIGHT deletes them.
         // ==========================================================================
         void BeginPropWorldContactGeneration(
             const CgsSceneManager::SceneManagerIO::TriangleCacheInterface* lpTriangleCacheInterface,
@@ -570,24 +586,34 @@ namespace Props
         // i.e. `lpOutput->GetPropManagerOutputInterface()->AppendUpdatedProps(mUpdatedProps);`
         // (+0x680 == mUpdatedProps). Parameter name is the DWARF's (source :943).
         //
-        // ⛔ BLOCKED -- CORRECTED 2026-08-18 (round 3). This block used to end "Both callees are
-        // HOMED ... so this one has no blocker at all". The ACCESSOR is homed; its RETURN TYPE
-        // is not. `PhysicsModuleIO::OutputBuffer::GetPropManagerOutputInterface()` returns the
-        // opaque placeholder `struct PropOutputInterfaceStorage { unsigned char maBytes[1]; }`
-        // (BrnPhysicsModuleIO.h:76, returned at :89/:90), NOT PropOutputInterface -- so the
-        // one-statement body does not compile. REPRODUCED: selfcheck of
-        // scratchpad/waveQ2/probe_physfix/probe_outputupdatedprops.cpp -> STATUS=fail with
-        // EXACTLY one diagnostic, C2039 "AppendUpdatedProps is not a member of
-        // BrnPhysics::PhysicsModuleIO::OutputBuffer::PropOutputInterfaceStorage".
-        // Do NOT reinterpret_cast over the placeholder -- that is a type fork, and the 1-byte
-        // stand-in also makes the enclosing OutputBuffer's own layout wrong.
-        // The unblock is a foreign-header promotion (the same one the three VEHICLE seats at
-        // BrnPhysicsModuleIO.h:74-75 got on 2026-08-09) PLUS re-deriving the
-        // `maDeformationPad[148656 - 71793]` expression at :138, whose 71793 bakes in
-        // sizeof(the 1-byte placeholder). See PropManager.spec.md REQUEST 8 / physfix.owner.md
-        // §5 N1. The body is parked verbatim at
-        // scratchpad/waveQ2/parked/PropManager_06_OutputUpdatedProps.cpp; the one-shot gate at
-        // BrnPhysicsConductorGates.cpp:507 stays until that lands.
+        // ⭐ LANDED 2026-08-19 (wave Q6 cluster A2) -- BODY AT
+        //   GameSource/Physics/PropManager/PropManager_wQ2_06.cpp (mounted, build_game_exe.bat:1799).
+        // This function is the ONLY producer of the UpdatePropEvent stream, so while it was gated a
+        // smashed prop's parts simulated correctly and rendered at their original pose.
+        //
+        // HISTORY OF THIS COMMENT, kept because both earlier versions were wrong in ways that cost
+        // a wave each (AGENTS.md gotcha 10 -- banners go stale in the HELPFUL direction):
+        //   * The ORIGINAL text ended "Both callees are HOMED -- BrnPhysicsModuleIO.h and
+        //     SharedIO/BrnPropOutputInterface.h -- so this one has no blocker at all." FALSE: the
+        //     accessor was homed, its RETURN TYPE was not.
+        //   * The 2026-08-18 correction was right about the blocker but named the wrong gate line
+        //     (BrnPhysicsConductorGates.cpp:507; the gate was at :487-490) and pointed at a probe
+        //     path that no longer existed.
+        // The blocker itself -- `GetPropManagerOutputInterface()` returning the opaque placeholder
+        // `struct PropOutputInterfaceStorage { unsigned char maBytes[1]; }` -- was cleared the same
+        // day by wave Q6 cluster A1, which promoted BrnPhysicsModuleIO.h:112 to
+        // `typedef Props::PropOutputInterface PropOutputInterfaceStorage;`, deleted the
+        // maDeformationPad that baked sizeof(the placeholder), and added the missing
+        // `mPropManagerOutputInterface.Construct()` leg (X360 0x825ABBF8) to OutputBuffer::Construct
+        // -- without which this producer would have driven an EventQueue whose mpEvents was NULL.
+        // Re-measured, not assumed: scratchpad/waveQ6/probe_outprop/probe_outprop.cpp went
+        // STATUS=fail (exactly one C2440 at the accessor's return) -> STATUS=pass across that edit.
+        //
+        // ⛔ REMAINING INTEGRATION ITEMS for the conductor, neither of them this file's to do:
+        //   (a) the inert one-shot gate at BrnPhysicsConductorGates.cpp:487-490 is now a REAL
+        //       LNK2005 duplicate of the landed body and must be deleted in the same commit;
+        //   (b) SharedIO/BrnPropOutputInterface.cpp -- which bodies AppendUpdatedProps @0x826153A0,
+        //       this function's second callee -- is still absent from tools/build/build_game_exe.bat.
         void OutputUpdatedProps(
             BrnPhysics::PhysicsModuleIO::OutputBuffer* lpOutput ); // @0x82627EC8
 

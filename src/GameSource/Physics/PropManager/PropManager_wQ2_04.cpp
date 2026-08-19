@@ -68,13 +68,18 @@
 //   ternary, not as any fpu::Min/Max helper -- see the SetInverseInertia note.
 // ==================================================================================================
 //
-// ⛔ CALLEES DECLARED BUT NOT BODIED ANYWHERE IN THE TREE (`cl /c` cannot see an unresolved
-//    external, so this file gating green does NOT mean the TU links). Reported, not stubbed:
-//      BrnPhysics::Props::PropManager::GetPartInertia   @0x82612AC8  (declared in BrnPropManager.h;
-//          its round-1 body is parked at scratchpad/waveQ/parked/
-//          PropManager_04_GetPropInertia_GetPartInertia.cpp, blocked on the rw::collision::AABBox
-//          include clash -- physfix.owner.md §5.1 REQUEST 1b)
-//      BrnPhysics::Props::PropPartInstance::Construct   (BrnPropPartInstance.h:37, declaration-only)
+// ✅ NO LINK HOLES LEFT IN THIS FILE -- re-grepped 2026-08-19 (wave Q6 A2). This block used to
+//    read "⛔ CALLEES DECLARED BUT NOT BODIED ANYWHERE IN THE TREE" and name two. BOTH have since
+//    landed, and both are mounted; the banner had gone stale in the HELPFUL direction, which is
+//    exactly the AGENTS.md gotcha-10 failure mode:
+//      * BrnPhysics::Props::PropManager::GetPartInertia @0x82612AC8 -- REAL at
+//        PropManager_wQ4_03.cpp:520 (with GetPropInertia at :482), mounted at
+//        tools/build/build_game_exe.bat:1783. The "parked on the rw::collision::AABBox include
+//        clash" claim is history, not state. The stale ⛔ that stood at its call site below has
+//        been corrected too.
+//      * BrnPhysics::Props::PropPartInstance::Construct -- REAL at
+//        PropPhysics/BrnPropPartInstance.cpp:52 (bodied 2026-08-18, wave Q4), mounted at
+//        build_game_exe.bat:1792.
 //    Everything else this file calls has a real body -- each one is named at its call site.
 
 #include "GameSource/Physics/PropManager/BrnPropManager.h"
@@ -94,6 +99,8 @@
 #include "GameShared/GameClasses/Development/CgsStrStream.h"                  // CgsDev::StrStream (the :778 / :859 messages)
 #include "rw/physics/rigidbody.h"                                             // rw::physics::ACTIVE_BODY
 #include "rw/physics/inertia.h"                                               // rw::physics::Inertia setters
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"                    // gpDebugPrint -- [DIAG] only
+#include <stdlib.h>                                                           // getenv -- [DIAG] BRN_PROP_DIAG only, host-side
 
 namespace BrnPhysics
 {
@@ -437,8 +444,9 @@ void PropManager::CreatePart( PropEntityID                                      
 
     // :914 / :845. `bl PropManager::GetPartInertia @0x82612AC8` returns Vector3 through the hidden
     // pointer in r3 (r4 = this, r5 = lpPartType) -- a normal by-value return here.
-    // ⛔ GetPartInertia HAS NO BODY IN THE TREE (BrnPropManager.h declares it; its round-1 body
-    //    is parked on the rw::collision::AABBox include clash). Link-red, gate-green.
+    // ✅ CORRECTED 2026-08-19 (wave Q6 A2): the "⛔ GetPartInertia HAS NO BODY IN THE TREE ...
+    //    Link-red, gate-green" note that stood here is STALE. It is REAL at
+    //    PropManager_wQ4_03.cpp:520 and mounted (build_game_exe.bat:1783).
     const Vector3 lInertia = GetPartInertia( lpPartType );
 
     // 0x82627DA4..0x82627E30. Each axis is splatted, multiplied by the WHOLE KVF_INERTIA_SCALE
@@ -470,6 +478,32 @@ void PropManager::CreatePart( PropEntityID                                      
     //    0x82627E70 lands. Same final value, one fewer dead store. Not a reason to hand-spell the
     //    two lines instead of calling the named setter.
     lSimulationAddBodyEvent.mRigidBody.mInertia.SetInverseInertia( lInverseInertia );
+
+    // [DIAG] NOT IN THE X360 BINARY. Wave-Q6 pre-flight probe (opt in with BRN_PROP_DIAG), FIRST
+    // EIGHT parts only. Its twin at PropManager_wQ_02.cpp proves the ADD EVENT reached the drain;
+    // this one proves the drain turned it into an InAddRigidBody on the SIM queue. Together they
+    // bracket scout.md §4.1 ("has a part rigid body ever reached the simulation?"): if the wQ_02
+    // line prints and this one does not, the loss is inside CreatePart's assert chain above; if
+    // both print and no part ever moves, the loss is downstream of the solver.
+    // meState is printed as the literal ACTIVE_BODY only when it really is -- a state that is not
+    // ACTIVE means the part is asleep and will never be integrated, which is the exact failure
+    // this line has to be able to show.
+    {
+        static const bool sbPropDiag  = ( getenv( "BRN_PROP_DIAG" ) != 0 );
+        static u32        suDiagCount = 0;
+        if ( sbPropDiag && suDiagCount < 8u && CgsDev::Log::gpDebugPrint != 0 )
+        {
+            ++suDiagCount;
+            *CgsDev::Log::gpDebugPrint
+                << "[Q6-part] rigid body posted id=" << CgsDev::E_PRINTMODE_HEXONCE
+                << static_cast<u64>( lRigidBodyId )
+                << " state="
+                << ( lSimulationAddBodyEvent.meState == rw::physics::ACTIVE_BODY
+                         ? "ACTIVE"
+                         : "NOT-ACTIVE" )
+                << "\n";
+        }
+    }
 
     // 0x82627EA0 `bl CgsPhysics::PhysicsSimulationIO::InputBuffer::GetAddRigidBodyQueue @0x825BCE08`
     // (the write-lock-guarded producer overload -- its "Not locked for writing\n" assert bakes

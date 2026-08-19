@@ -39,6 +39,8 @@
 #include "GameSource/Replays/Serialisers/BrnReplayPropEntitySerialiser.h"  // PropEntitySerialiser::GetStaticLayout / PropSerialiserFrame
 #include "GameSource/World/EntityModules/PropEntityModule/BrnPropEntityModuleIO.h" // OutputBuffer_PreScene / _PostPhysics / _PrePhysics
 #include "GameSource/World/EntityModules/PropEntityModule/SharedIO/BrnPropToTrafficInterface.h" // PropToTrafficInterface (SendTrafficLightRestoreEvents)
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // gpDebugPrint ([DIAG] BRN_PROP_DIAG, wave Q6)
+#include <stdlib.h>                                          // getenv    ([DIAG] BRN_PROP_DIAG, wave Q6)
 
 namespace BrnWorld
 {
@@ -116,13 +118,29 @@ namespace BrnWorld
     // (SharedClasses/Physics/Props/BrnPropConstants.h:176, `const VecFloat KVF_PROP_FLOOR`) and
     // used from there so the three consumers cannot drift apart again.
     //
-    // unk_82FAD4D0 (read @0x822F150C, this function only): the per-axis displacement threshold
-    // compared against |lTransform| (vandc strips the sign bits -> absolute value) to detect
-    // the prop's first real move this frame. UpdateInstance sets KU_MOVED_BIT only when this
-    // compare SUCCEEDS (at least one axis exceeds the threshold) AND the bit was previously
-    // unset. 0.5 m, not the 0.01 m the placeholder assumed -- with the old value essentially
-    // any physics jitter tripped "moved". No DWARF name is attested for it, so it keeps this
-    // file's descriptive one.
+    // unk_82FAD4D0 (read @0x822F150C, this function only): the per-axis threshold compared
+    // against the ABSOLUTE VALUE OF THE INCOMING LINEAR VELOCITY -- NOT of the transform.
+    //
+    // ⭐ OPERAND CORRECTED 2026-08-19 (wave Q6 write-back audit). The previous revision of
+    // this comment (and of the gate in UpdateInstance) said the compare was against
+    // |lTransform| / the transform's first basis row. The asm says otherwise, unambiguously:
+    //   0x822F0948  vmr128   v127, v1        ; v127 latches the FIRST VMX ARGUMENT
+    //   0x822F1518  vandc128 v0,  v127, v0   ; |v127|   (v0 = the 0x80000000 sign mask)
+    //   0x822F1524  vcmpgtfp. v0, v12, v13   ; |v127| > unk_82FAD4D0
+    // lTransform arrives as a hidden POINTER in r5 (every one of its rows is reached with
+    // `lvx128 v0, r0, r28` / `r28+0x10` / `+0x20` / `+0x30`), so v1 is not the transform: it
+    // is the third source parameter, `Vector3 lLinearVelocity`. Its producer confirms it --
+    // PropEntityModule::UpdateProps @0x822FB2A0 loads `lvx128 v1, r30, 0x40`, and
+    // UpdatePropEvent::mLinearVelocity is at +0x40 (mAngularVelocity, which rides v2, is at
+    // +0x50 and is never read by this function).
+    // The old spelling was not merely a mislabel: a basis row of an orthonormal transform has
+    // max|component| >= 1/sqrt(3) == 0.577 > 0.5, so the gate was TRUE for every prop on its
+    // very first update and KU_MOVED_BIT was set unconditionally.
+    // The lane bookkeeping around the compare is `vrlimi128 v12, v0, 1, 1`, which overwrites
+    // the w lane with a copy of another lane -- i.e. it removes Vector3's undefined 4th
+    // component from the test, leaving exactly "any of |x|,|y|,|z| exceeds the threshold".
+    // 0.5 m/s, not the 0.01 the pre-round-2 placeholder assumed. No DWARF name is attested
+    // for the constant, so it keeps this file's descriptive one.
     static const f32 KF_FIRST_MOVE_THRESHOLD = 0.5f;   // MEASURED: flt_820147FC via 0x82C4C2B8
 
     // RwMath::IsValid(matrix) -- the X360 inlines this as a per-lane vcmpeqfp self-compare
@@ -1216,12 +1234,10 @@ namespace BrnWorld
             {
                 // Traffic lights and the three overhead-sign prop types must always load,
                 // however close the player is (the same three graphics ids UpdateInstance
-                // special-cases: 500950 / 500930 / 506050).
-                const u32 luGraphicsId = lpTypeData->GetGraphicsId();
-                const bool lbOverheadSign =
-                    (luGraphicsId == 500950u || luGraphicsId == 500930u || luGraphicsId == 506050u);
-
-                if (!lpTypeData->IsTrafficLight() && !lbOverheadSign)
+                // special-cases: 500950 / 500930 / 506050). FOLDED 2026-08-19 (wave Q6) onto
+                // PropTypeData::IsOverheadSign() -- the shared header homes that predicate and
+                // names this site as one of the four hand-spelled copies to retire.
+                if (!lpTypeData->IsTrafficLight() && !lpTypeData->IsOverheadSign())
                 {
                     // X360 log: "Not loading prop because its too close to player <id>".
                     lbLoadProp = false;
@@ -1374,21 +1390,40 @@ namespace BrnWorld
     // bounds asserts (vcmpgtfp), and the StrStream assert messages (collapsed to CGS_ASSERT).
     // Three predicates are NOT validity checks and are restored from the asm exactly:
     //   * lbBelowWorldFloor = (unk_82FAD840 > pos.y)            [frozen-prop scene removal]
-    //   * the first-move gate sets KU_MOVED_BIT only when the displacement compare
-    //     vcmpgtfp(|lTransform|, unk_82FAD4D0) SUCCEEDS (>=1 axis exceeds) and the bit is unset.
+    //   * the first-move gate sets KU_MOVED_BIT only when the compare
+    //     vcmpgtfp(|lLinearVelocity|, unk_82FAD4D0) SUCCEEDS (>=1 axis exceeds) and the bit
+    //     is unset.  (⭐ the OPERAND is the velocity, not the transform -- see the
+    //     KF_FIRST_MOVE_THRESHOLD block at the top of this file for the asm that pins it.)
     //   * both per-volume scene-push loops iterate to PropTypeData's volume counts
     //     (whole-prop +0x5E; per-part group +0x2C), NOT a hard-coded 0.
-    // Two move events (PropVFXLocatorEvent::AddEventSafe @0x822F15C8, HitOverheadSignEvent::
-    // AddEvent @0x822F162C) and the ResourcePtr-list tail splice remain FLAGGED (see inline).
+    // The first-move edge publishes THREE events, not two (⭐ Q6 round-1 fix): the first,
+    // PropBecamePhysicalEvent (@0x822F1560/0x822F1564), is now BODIED -- its payload type,
+    // queue and onward Append to the sound module all exist in the tree. The other two
+    // (PropVFXLocatorEvent::AddEventSafe @0x822F15C8, HitOverheadSignEvent::AddEvent
+    // @0x822F162C) and the ResourcePtr-list tail splice remain FLAGGED (see inline).
     // The prop-index math (entity index -> prop pool slot) and the part-copy loop are
     // reproduced as the X360 performs them.
+    //
+    // ⚠️⚠️ RE-AUDITED STORE-FOR-STORE against the 1032-instruction body on 2026-08-19 (wave
+    // Q6), because this function had never actually executed: its only producer,
+    // PropManager::OutputUpdatedProps @0x82627EC8, was an inert conductor gate until this
+    // wave. Three real divergences were found and are fixed here, each marked ⭐ Q6 inline:
+    //   1. the first-move gate read the transform instead of lLinearVelocity (0x822F1518);
+    //   2. the whole-prop arm was missing the `if (!IsSmashed())` guard the console branches
+    //      on at 0x822F1414-0x822F1420 -- without it a whole-prop event that arrives for an
+    //      already-smashed prop runs the retirement bookkeeping (miNumPropsInSim--,
+    //      FreePhysicalPropSlot on a stale slot) and republishes a stale pose;
+    //   3. the Y LOWER bound assert (console line 762, " fell out of the world ") was absent,
+    //      so the one tripwire that names a runaway prop never fired.
     void PropZoneManager::UpdateInstance(PropEntityID lEntityId, Matrix44Affine lTransform,
                                          Vector3 lLinearVelocity, Vector3 lAngularVelocity, bool lbFrozen,
                                          const PropPhysicsDataHeader* lpTypeData, f32 lfTimeStep,
                                          PropEntityIO::OutputBuffer_PostPhysics* lpOutput,
                                          BrnReplays::PropEntitySerialiser* lpSerialiser)
     {
-        (void)lLinearVelocity;
+        // lAngularVelocity really is dead in this body: it arrives in v2 and the X360 never
+        // touches v2 again (the only vector-register argument the body latches is v1, at
+        // 0x822F0948). lLinearVelocity IS read -- by the first-move gate below.
         (void)lAngularVelocity;
 
         CGS_ASSERT(IsValid(lTransform), "RwMath::IsValid( lTransform )");
@@ -1427,11 +1462,38 @@ namespace BrnWorld
             // --- updating one physical PART of a smashed prop ---
             CGS_ASSERT(lpProp->IsSmashed(), "lpProp->IsSmashed()");
 
-            // Part pool slot = the prop's first-part index + (partId - 1) ... the X360
-            // computes (a15 & 0x3FF) + mu16PartsIndex; partId already carries the +1, so
-            // the addressed part is maParts[firstPart + partId].
-            const u32 luPartPoolIndex = static_cast<u32>(lpProp->mu16PartsIndex) + luPartId;
+            // Part pool slot = the prop's first-part index + (partId - 1).
+            //
+            // ⚠️ CORRECTED wave Q6 (was `+ luPartId`, i.e. one slot too high -- the writer
+            // and the renderer were on different part slots). The console hides the -1 in
+            // the ADDRESS BASE, not in the index, which is what made it easy to misread:
+            //   UpdateInstance  @0x822F0920: idx = (partId & 0x3FF) + mu16PartsIndex
+            //                                (0x822F1764/0x822F1770), *80 (0x822F1778-8C),
+            //                                then base `addis 7 / addi -0x5950`
+            //                                (0x822F178C/0x822F1794) == 0x6A6B0 == 435888.
+            //   GetPart(PropEntityID) @0x822CDB90 and GetPart(zone,idx) @0x822A4298 both use
+            //                                base `addis 7 / addi -0x5900`
+            //                                (0x822CDCC0 / 0x822A437C) == 0x6A700 == 435968,
+            //                                which is the maParts pool base recorded in
+            //                                BrnPropZoneManager.h.
+            //   435968 - 435888 == 80 == exactly one sizeof(PropPartEntityInstance) stride,
+            //   so UpdateInstance's base is &maParts[-1] and its index is one high: the
+            //   addressed element is maParts[firstPart + partId - 1].
+            // The PropEntityID overload spells the same -1 out in its index arithmetic
+            // instead (0x822CDCA0 add / 0x822CDCA4 addis +0x10000 / 0x822CDCA8 addi -1 /
+            // 0x822CDCAC clrlwi 16 -- the +0x10000 only keeps the borrow out of the high
+            // half before the u16 truncation), and the tree already spells it that way at
+            // BrnPropZoneManager.cpp:487 and BrnPropCellManager.cpp:836.
+            // luPartId is >= 1 inside this arm (the `luPartId != 0` gate above), so the
+            // subtraction cannot underflow and the console's u16 wrap is unreachable.
+            // The matching READER is PropZoneManager::GetPart(PropEntityID) -- keep the two
+            // in step if either is ever touched again.
+            const u32 luPartPoolIndex = static_cast<u32>(lpProp->mu16PartsIndex) + luPartId - 1u;
             PropPartEntityInstance* lpPart = &maParts[luPartPoolIndex];
+
+            // [DIAG] NOT IN THE X360 BINARY -- captured before the store so the [Q6-move]
+            // line below can report the frame's vertical displacement.
+            const f32 lfQ6PreviousPartY = lpPart->mWorldTransform.Pos().y;
 
             // Install the new world transform into the part.
             lpPart->mWorldTransform = lTransform;
@@ -1447,6 +1509,34 @@ namespace BrnWorld
             // The volume-instance handle for this part's prop.
             PropVolumeInstanceID lVolumeInstanceID;
             lVolumeInstanceID.SetPropEntityId(lEntityId);
+
+            // ---- [DIAG] NOT IN THE X360 BINARY -- wave Q6 "the money line" ---------------
+            // ⛔ DELETE-WHEN smashed parts are confirmed moving on screen. Set BRN_PROP_DIAG.
+            // Rate-limited to the first 16 part updates of the run (one line each), because
+            // the whole question the wave exists to answer is answered by the first few:
+            //   dy != 0 over consecutive lines  -> physics IS reaching the world transform;
+            //   volumes == 0 or contactGenBit=0 -> the per-volume scene push below is being
+            //                                      skipped, so the part will RENDER moving
+            //                                      while its collision volumes stay behind
+            //                                      (scout.md §4 item 5: BreakPropIntoParts
+            //                                      clears that bit and
+            //                                      AddPropPartsToContactGeneration only
+            //                                      re-sets it when CanAddPartVolumes passes).
+            {
+                static const bool sbPropDiag = (getenv("BRN_PROP_DIAG") != 0);
+                static s32        siQ6MoveLines = 0;
+                if (sbPropDiag && CgsDev::Log::gpDebugPrint != 0 && siQ6MoveLines < 16)
+                {
+                    ++siQ6MoveLines;
+                    *CgsDev::Log::gpDebugPrint
+                        << "[Q6-move] part " << lEntityId.GetValue()
+                        << " dy=" << (lpPart->mWorldTransform.Pos().y - lfQ6PreviousPartY)
+                        << " volumes=" << static_cast<u32>(lVolumeGroup.GetNumberOfVolumes())
+                        << " contactGenBit="
+                        << (((lpProp->mu8Flags & KU_ADDED_TO_CONTACT_GEN_BIT) != 0) ? 1 : 0)
+                        << "\n";
+                }
+            }
 
             if (lbFrozen)
             {
@@ -1486,9 +1576,30 @@ namespace BrnWorld
             CGS_ASSERT(IsValid(lTransform), "IsValid(lTransform)");
 
             // "Fell out of the world" / sanity bounds: each position axis must be within
-            // +/-KF_MAX_VALID_POSITION_ALONG_AXIS (Y under-bound logs which zone the prop
-            // fell out of -- debug only, no early-out). Restored from the per-axis vcmpgtfp
+            // +/-KF_MAX_VALID_POSITION_ALONG_AXIS. Restored from the per-axis vcmpgtfp
             // asserts as component comparisons against the transform's translation.
+            //
+            // The two bound constants are MEASURED, not assumed: flt_8201D2BC == 15000.0f
+            // and flt_8201D204 == -15000.0f, read back out of the sibling consumer
+            // PropCellManager::AddPropToScene @0x822E0128, which folds the identical assert
+            // block and whose export renders both literals.
+            //
+            // The SIX asserts and their console source lines, in emission order:
+            //   0x822F0F5C  15000 >  pos.x   :747      0x822F1020  15000 >  pos.y   :748
+            //   0x822F10DC  15000 >  pos.z   :749      0x822F119C  pos.x > -15000   :750
+            //   0x822F1254  pos.z > -15000   :751      0x822F130C  pos.y > -15000   :762
+            // ⭐ Q6 FIX: the sixth (the Y LOWER bound) was MISSING. It is the only one of the
+            // six with its own message -- the console streams
+            //   "Prop " << entityIndex << " with resource id: " << type->mResourceId
+            //           << " instance id: " << prop->muInstanceID << " position: " << pos
+            //           << " in zone " << prop->mu16ZoneIndex << " fell out of the world \n "
+            // (0x822F1364..0x822F1408) -- and it is the one tripwire that names a runaway
+            // prop, i.e. exactly what wave Q6 needs to see if parts free-fall. Its branch
+            // polarity is inverted relative to its five siblings because the console swaps the
+            // vcmpgtfp operands (`-15000 > pos.y` fires) instead of negating the result; the
+            // condition asserted is the same `pos.y > -15000`. CGS_ASSERT takes a plain
+            // string, so only the trailing literal survives -- the same collapse every other
+            // StrStream assert in this file takes.
             static const f32 KF_MAX_VALID_POSITION_ALONG_AXIS = 15000.0f;
             const Vector3& lPosition = lTransform.Pos();
             CGS_ASSERT(lPosition.x < KF_MAX_VALID_POSITION_ALONG_AXIS, "Exploding prop, resource id");
@@ -1496,6 +1607,27 @@ namespace BrnWorld
             CGS_ASSERT(lPosition.z < KF_MAX_VALID_POSITION_ALONG_AXIS, "Exploding prop, resource id");
             CGS_ASSERT(lPosition.x > -KF_MAX_VALID_POSITION_ALONG_AXIS, "Exploding prop, resource id");
             CGS_ASSERT(lPosition.z > -KF_MAX_VALID_POSITION_ALONG_AXIS, "Exploding prop, resource id");
+            CGS_ASSERT(lPosition.y > -KF_MAX_VALID_POSITION_ALONG_AXIS, "fell out of the world");
+
+            // ⭐ Q6 FIX -- THE MISSING GUARD (X360 0x822F1410-0x822F1420):
+            //     mr r3, r31 ; bl PropEntityInstance::IsSmashed
+            //     clrlwi r11, r3, 24 ; cmplwi cr6, r11, 0 ; bne cr6, loc_822F18F0
+            // i.e. after the assert block the console RE-TESTS IsSmashed() and branches
+            // straight to the epilogue when it is true. The recon had only the assert at the
+            // head of this arm, so on a release-shaped run (asserts non-fatal) a whole-prop
+            // event arriving for an already-smashed prop would fall through into the
+            // retirement bookkeeping below -- decrementing miNumPropsInSim a second time and
+            // calling FreePhysicalPropSlot with a slot index the break already recycled.
+            // That ordering is reachable: BreakPropIntoParts runs in PreScene while the
+            // physics read-back that produced this event ran in the PREVIOUS frame's
+            // post-physics, so a frozen whole-prop event can outlive the break by one frame.
+            // Spelled as an early return because loc_822F18F0 is the epilogue: everything the
+            // console still does there is the ResourcePtr user-list splice this recon
+            // deliberately does not model (see the note at the foot of this function).
+            if (lpProp->IsSmashed())
+            {
+                return;
+            }
 
             // The volume-instance handle this prop's entity owns.
             PropVolumeInstanceID lVolumeInstanceID;
@@ -1533,37 +1665,104 @@ namespace BrnWorld
             if (!lbFrozen)
             {
                 // First-move detection (X360 0x822F1500-0x822F1638). The build takes the
-                // absolute value of the incoming transform's first basis row
-                // (`vandc(lTransform, signMask)`), rearranges two lanes, and compares it
-                // against the rodata threshold vector unk_82FAD4D0 with vcmpgtfp. The asm extracts
-                // the CR6.2 "all-false / no-lane-greater" bit and `bne` SKIPS the move-set when it is
-                // set; so it sets KU_MOVED_BIT (and fires the move events) only when the compare
-                // SUCCEEDS -- i.e. AT LEAST ONE axis EXCEEDS the threshold -- AND the prop was not
-                // already flagged moved (`if (allFalseBit || (flags & 0x20)) skip; else { ori 0x20; stb }`).
-                const Vector3& lRow0 = lTransform.Right();
-                const bool lbDisplacementExceedsThreshold =
-                       (lRow0.x < -KF_FIRST_MOVE_THRESHOLD || lRow0.x > KF_FIRST_MOVE_THRESHOLD)
-                    || (lRow0.y < -KF_FIRST_MOVE_THRESHOLD || lRow0.y > KF_FIRST_MOVE_THRESHOLD)
-                    || (lRow0.z < -KF_FIRST_MOVE_THRESHOLD || lRow0.z > KF_FIRST_MOVE_THRESHOLD);
+                // absolute value of the INCOMING LINEAR VELOCITY (`vandc128 v0, v127, signMask`
+                // with v127 == v1 == the third parameter, latched at 0x822F0948), replaces the
+                // undefined 4th lane with a copy of another (`vrlimi128 v12, v0, 1, 1`), and
+                // compares it against the threshold vector unk_82FAD4D0 with vcmpgtfp. The asm
+                // extracts the CR6.2 "all-false / no-lane-greater" bit and `bne` SKIPS the
+                // move-set when it is set; so it sets KU_MOVED_BIT (and fires the move events)
+                // only when the compare SUCCEEDS -- i.e. AT LEAST ONE axis EXCEEDS the
+                // threshold -- AND the prop was not already flagged moved
+                // (`if (allFalseBit || (flags & 0x20)) skip; else { ori 0x20; stb }`).
+                //
+                // ⭐ Q6 FIX: this read `lTransform.Right()` -- the transform's first basis row
+                // -- which is a unit vector, so max|component| >= 0.577 always cleared the
+                // 0.5 threshold and every prop was flagged "moved" on its first update. See
+                // the KF_FIRST_MOVE_THRESHOLD block at the top of this file for the full asm
+                // derivation, and BrnPropEvents.h for the +0x40 mLinearVelocity offset the
+                // producer loads v1 from.
+                //
+                // NaN polarity (gotcha 4): vcmpgtfp yields false for an unordered lane, and so
+                // does `x > T || x < -T` -- the pair of compares is the NaN-correct spelling of
+                // the console's fabs-then-compare, where std::fabs would clear a NaN's sign.
+                const Vector3& lVelocity = lLinearVelocity;
+                const bool lbVelocityExceedsThreshold =
+                       (lVelocity.x < -KF_FIRST_MOVE_THRESHOLD || lVelocity.x > KF_FIRST_MOVE_THRESHOLD)
+                    || (lVelocity.y < -KF_FIRST_MOVE_THRESHOLD || lVelocity.y > KF_FIRST_MOVE_THRESHOLD)
+                    || (lVelocity.z < -KF_FIRST_MOVE_THRESHOLD || lVelocity.z > KF_FIRST_MOVE_THRESHOLD);
 
-                if (lbDisplacementExceedsThreshold && (lpProp->mu8Flags & KU_MOVED_BIT) == 0)
+                if (lbVelocityExceedsThreshold && (lpProp->mu8Flags & KU_MOVED_BIT) == 0)
                 {
                     lpProp->mu8Flags = static_cast<u8>(lpProp->mu8Flags | KU_MOVED_BIT);
 
-                    // FLAGGED EVENT PUBLISHES (gate above is now asm-faithful; the event
-                    // payload types are large unreconstructed IO records this TU does not own):
+                    // ⭐ Q6 FIX (round 1 verifier, wdiag #2): THE FIRST of the THREE console
+                    // publishes at this edge was absent, with no FLAG and no park note -- the
+                    // comment below used to say there were only two. It is a dropped side effect,
+                    // not an accepted park: nothing about it was blocked.
+                    // Measured at 0x822F1554-0x822F1578, immediately after the
+                    // `stb` that sets KU_MOVED_BIT and BEFORE the VFX-locator staging:
+                    //   0x822F1560  bl 0x822B9F18  -- OutputBuffer_PostPhysics::
+                    //                                 GetPropBecamePhysicalEventQueue()
+                    //                                 (write-lock assert, then `addi r3,r28,0x10`
+                    //                                  == &mPropBecamePhysicalEventQueue, the
+                    //                                  console +0x10 member pinned in
+                    //                                  BrnPropEntityModuleIO.h:399/:508)
+                    //   0x822F1564  bl 0x822C95C8  -- BaseEventQueue<T>::AllocateEventSafe()
+                    //                                 (asserts mpEvents != NULL at
+                    //                                  CgsBaseEventQueue.h:381, returns
+                    //                                  &mpEvents[miLength] at a 16-byte stride and
+                    //                                  bumps miLength, or NULL when the 20-entry
+                    //                                  queue is full)
+                    //   0x822F156C  cmplwi r3,0 / beq -- the console DOES test the slot and, when
+                    //                                 the queue is full, branches past the store
+                    //                                 without asserting. That null test is part
+                    //                                 of the binary and is reproduced here; do
+                    //                                 not "improve" it into an assert.
+                    //   0x822F1574  lvx128 v0,r31,0x30 / stvx128 v0,r0,r3
+                    //                              -- stores the prop's PRE-UPDATE world
+                    //                                 translation (mWorldTransform's +0x30 row;
+                    //                                 the new lTransform is not installed until
+                    //                                 below) into the single Vector3 mPosition of
+                    //                                 PropEntityIO::PropBecamePhysicalEvent.
+                    // This one is NOT flagged/parked: the payload type, the queue typedef, the
+                    // getter body and the World-module Append onward to the sound module
+                    // (BrnWorldModuleIO_UpdateOutputBuffer.cpp:553 -> BrnRootSoundModuleIO.cpp:52)
+                    // all exist, so this is the sole producer of a fully-wired end-to-end path.
+                    {
+                        PropEntityIO::OutputBuffer_PostPhysics::PropBecamePhysicalEventQueue*
+                            lpBecamePhysicalQueue = lpOutput->GetPropBecamePhysicalEventQueue();
+                        PropEntityIO::PropBecamePhysicalEvent* lpEvent =
+                            lpBecamePhysicalQueue->AllocateEventSafe();
+                        if (lpEvent != 0)
+                        {
+                            lpEvent->mPosition = lpProp->mWorldTransform.Pos();
+                        }
+                    }
+
+                    // FLAGGED EVENT PUBLISHES -- the REMAINING TWO of the console's three (the
+                    // first, PropBecamePhysicalEvent, is bodied above). The gate above is now
+                    // asm-faithful; these two payload types are large unreconstructed IO records
+                    // this TU does not own:
                     //   * PropEntityIO::PropVFXLocatorEvent::AddEventSafe @ 0x822F15C8 -- pushes
-                    //     a VFX-locator record (the prop's transform rows + zone id) onto the
-                    //     post-physics output buffer's queue.
-                    //   * for overhead-sign prop graphics ids 500950 / 500930 / 506050
-                    //     (lpType->GetGraphicsId(), console +0x58), additionally
+                    //     a VFX-locator record onto the post-physics output buffer's queue. Its
+                    //     payload, read straight off the staging stores at 0x822F1590-0x822F15BC,
+                    //     is { Matrix44Affine = the prop's CURRENT mWorldTransform (i.e. the pose
+                    //     BEFORE this frame's transform is installed below), u32 = the prop's
+                    //     muTypeId (`lhz r10, 0x44(prop)`), u32 = 0 }.
+                    //     ⚠️ CORRECTED 2026-08-19: this note used to call that second word the
+                    //     "zone id". +0x44 is muTypeId; mu16ZoneIndex is +0x46 and is not read
+                    //     here (a wrong comment is a real defect).
+                    //   * for the three overhead-sign prop graphics ids (lpType->GetGraphicsId(),
+                    //     console +0x58, compared against 0x7A4D6 / 0x7A4C2 / 0x7B8C2 at
+                    //     0x822F15D0-0x822F1604), additionally
                     //     BrnGameState::GameStateModuleIO::HitOverheadSignEvent::AddEvent
-                    //     @ 0x822F162C with the prop index.
+                    //     @ 0x822F162C, whose payload is the prop's ENTITY INDEX as a single
+                    //     byte (`stb r15, var_1C0` -- r15 is the 14-bit index, truncated).
                     // FLAGGED: not reproduced -- both targets fork event-queue / GameState IO
-                    // types outside this TU. The overhead-sign id set is asm-attested here:
-                    const u32 luGraphicsId = lpType->GetGraphicsId();
-                    const bool lbOverheadSign =
-                        (luGraphicsId == 500950u || luGraphicsId == 500930u || luGraphicsId == 506050u);
+                    // types outside this TU. The id test itself is kept live, now folded onto
+                    // PropTypeData::IsOverheadSign() (the shared header homes that predicate and
+                    // names this site as one of the copies to retire).
+                    const bool lbOverheadSign = lpType->IsOverheadSign();
                     (void)lbOverheadSign;
                 }
 

@@ -153,6 +153,52 @@ namespace CgsCollision
                                      u32 luFlags, u16 lu16Tag);                                                  // @0x82814138 (:144)
 
         // ==========================================================================================
+        // ⭐ ADDED 2026-08-19 (wave Q6, cluster B -- prop-vs-world contact generation). The
+        // SYNCHRONOUS twin of AddPrimitiveListWithTriangleListToStream: carve a result list,
+        // create a batch, prepare a PrimitiveListWithTriangleListJobDesc over it and dispatch.
+        // Returns the result-list index.
+        //
+        // SIGNATURE IS DWARF-SETTLED AND REGISTER-CONFIRMED. DWARF CgsCollisionGenerator.h, SOURCE
+        // LINE 257:
+        //     uint16_t CollidePrimitiveListAgainstTriangleList(const PrimitivePairList *,
+        //         const TriangleList *, uint16_t, uint32_t, uint16_t, bool);
+        // Six parameters, none of them a float, so NO GPR slot is skipped (gotcha 3 does not bite
+        // here) and r4..r9 confirm the order one-for-one in the raw `assembly` of
+        // .ida-exports/BURNOUT_X360_ARTIST.XEX/0x828141D8.json (86 insns, 0x828141D8..0x8281432C):
+        //     r4 -> `cmplwi 0` + assert "lpPrimitiveList != NULL"     (CgsCollisionGenerator.cpp:1940)
+        //     r5 -> `cmplwi 0` + assert "lpTriangleList != NULL"                             (:1941)
+        //     `lhz r11, 6(r4)` + assert "lpPrimitiveList->GetNumTests() > 0"                  (:1942)
+        //     r6/r7/r8 -> PrepareNewPrimitiveTestResultsList(maxResults, tagA, tagB)
+        //     r9  -> `clrlwi r11, r24, 24`, ANDed with the global byte_82F310B0 to pick the
+        //            descriptor's optimised-box flag -- so r9 IS the trailing bool
+        //     return: `mr r3, r29` == the index PrepareNewPrimitiveTestResultsList returned.
+        // ⚠️ RETURN TYPE: the DWARF's u16 is kept (this declaration is DWARF-shaped), but the
+        // console returns the index UNTRUNCATED -- 0x8281428C `mr r29,r3`, 0x82814298
+        // `clrlwi r10,r29,16` for the LOCAL use only, and 0x82814324 `mr r3,r29` with no clrlwi on
+        // the return path. That is the same register truth for which the two Add*...ToStream
+        // siblings above are deliberately typed s32. Every call site drops the result, so neither
+        // spelling changes behaviour; the delta is recorded here rather than left undocumented.
+        // ⚠️ IT IS THE DEAD ARM AT RUNTIME, AND IT STILL CANNOT BE DROPPED. Its two prop call
+        // sites sit under a RUNTIME byte read (`lbz byte_82F310B0`'s sibling `lbz byte_82F2A39C`
+        // in PropManager_wQ2_03.cpp), not a compile-time constant, so the console emits both arms.
+        // IDA truncates the export symbol to "...CollidePrimitiveListAgainstTriang"; the full name
+        // is in the .i64 and in .pdata at 0x821D8770.
+        // SEVEN measured call sites (headless IDA 9.3 on a private .i64 copy, this wave):
+        // DeformableObject::DoBodyPartWorldContactGeneration x2 (0x82609708 / 0x82609828),
+        // ::DoDetachedWheelWorldContactGeneration (0x82609A8C),
+        // VehicleManager::DoTrafficCarWorldContactGeneration x2 (0x8261C0CC / 0x8261C154),
+        // PropManager::DoPartWorldContactGeneration (0x826120A8) and
+        // ::DoPropInstanceWorldContactGeneration (0x82612604).
+        // BODY: CgsCollisionGenerator.cpp (landed with this declaration, wave Q6).
+        // ==========================================================================================
+        u16 CollidePrimitiveListAgainstTriangleList(const PrimitivePairList* lpPrimitiveList,
+                                                    const TriangleList*     lpTriangleList,
+                                                    u16                     lu16MaxResults,
+                                                    u32                     luUserTagA,
+                                                    u16                     lu16UserTagB,
+                                                    bool                    lbUseOptimisedBoxTests); // @0x828141D8 (DWARF :257)
+
+        // ==========================================================================================
         // ⭐ ADDED 2026-08-14 (walls leg 1): the two collide-stream COMMAND POSTERS
         // DoRaceCarWorldContactGeneration @0x825EB140 calls per live race car per frame. Console
         // bodies are byte-identical to each other (33 insns, diffed): allocate a fresh
@@ -241,10 +287,16 @@ namespace CgsCollision
         EA::Jobs::Job* RunCollidePrimitiveListWithTriangleListStream(
             CgsMemory::SimpleDataStreamProducer* lpStream);                                                   // h:275 / X360 0x82811F58
 
-        // The family's command POSTER. DECLARATION ONLY -- same descriptor blocker as the two
+        // The family's command POSTER. NOT RECONSTRUCTED -- same descriptor blocker as the two
         // above; its five call sites (PropManager::DoPart/DoPropInstanceWorldContactGeneration,
         // DeformableObject::DoBodyPart<x2>/DoDetachedWheelWorldContactGeneration) are themselves
         // un-landed, so nothing in the tree calls it yet.
+        // ⚠️ CORRECTED wave Q6 round 1 (worldc #1): this is NOT "declaration only". THE ONLY
+        // DEFINITION IS THE LOUD NAMED GATE AT CgsCollisionGenerator_StreamStubs.cpp:60 (that TU
+        // IS MOUNTED -- tools/build/build_game_exe.bat:1001) -- RETIRE THAT GATE IN THE SAME
+        // COMMIT THAT LANDS THE REAL BODY, or the second definition is an LNK2005 in a mounted
+        // TU. (Same shape as PrimitivePairListBuilder::AddPrimitive, gate at
+        // CgsPrimitivePairListBuilder.cpp:186, bat:867.)
         // X360 0x82811D40 (35 insns) -- an EXPORT-SET HOLE: the .i64 names it (truncated to
         // "AddPrimitiveListWithTriangleListT") but .ida-exports has no 0x82811D40.json. Boundaries,
         // callers and the full 35-instruction decode were read out of the image this wave.

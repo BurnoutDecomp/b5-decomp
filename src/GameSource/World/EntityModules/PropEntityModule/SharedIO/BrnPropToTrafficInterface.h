@@ -74,8 +74,11 @@ namespace PropEntityIO
         // X360 0x822CD378 (this TU): assert luInstanceID != 0, then AddEvent a knock-down.
         void RequestTrafficLightKnockDown(u32 luInstanceID); // :117
         void RequestTrafficLightRestore(u32 luInstanceID);   // :122
-        const CgsModule::EventQueue<TrafficLightKnockDownEvent, 32>* GetTrafficLightKnockDownQueue() const; // :125
-        const CgsModule::EventQueue<TrafficLightRestoreEvent, 80>*   GetTrafficLightRestoreQueue()   const; // :126
+        // DWARF :125/:126 -- header inlines on the console (no X360 symbol, no ledger row; the one
+        // reader, WorldModule::BridgePropModuleToTrafficModule_PrePhysics, folds them as the two
+        // member addresses). Bodied inline 2026-08-19 (wave Q6 / bridges) when that bridge went live.
+        const CgsModule::EventQueue<TrafficLightKnockDownEvent, 32>* GetTrafficLightKnockDownQueue() const { return &mTrafficLightKnockDownQueue; } // :125
+        const CgsModule::EventQueue<TrafficLightRestoreEvent, 80>*   GetTrafficLightRestoreQueue()   const { return &mTrafficLightRestoreQueue; }   // :126
 
     private:
         CgsModule::EventQueue<TrafficLightKnockDownEvent, 32> mTrafficLightKnockDownQueue;  // :130 (+0x00)

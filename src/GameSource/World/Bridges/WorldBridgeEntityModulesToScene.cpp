@@ -27,11 +27,18 @@
 // BrnPropEntityModuleIO.h:211/:334/:453, BrnWorldEntityModuleIO.h:60,
 // BrnTriggerEntityModuleIO.h:41), so their getters already return the destination's own type
 // and the casts on those legs were no-ops hiding behind a stale justification. They are gone.
-// ⛔ The ONE place where the storage really is opaque -- BrnTrafficIO's buffers -- is exactly
-// where the cast must NOT be used: see the park banners on the three traffic legs. A 1-byte /
-// 44-byte span reinterpreted as the 25-queue aggregate makes Append walk foreign memory as
-// queue headers, which is the retired PhysicsModuleIO::mPropManagerInputInterface bug (below)
-// in the opposite direction.
+// ⭐⭐ NARROWED AGAIN 2026-08-19 (wave Q6 cluster C3). The line that used to stand here said the
+// ONE place the storage is really opaque is BrnTrafficIO's buffers, and that all three traffic
+// legs must stay parked. That is no longer true either: BrnTrafficEntityModuleIO.h now models
+// mSceneInputInterface as the real InSceneUpdateInterface in all three of its buffers -- at +16
+// in OutputBuffer_Prepare and OutputBuffer_PreScene, at +11376 in OutputBuffer_PostPhysics --
+// each X360-attested by that buffer's own Construct (0x82761740 / 0x82761790 / 0x82761908), each
+// Constructed, so all three legs are same-type Appends with no cast. The three park banners are
+// replaced by the derivations that unparked them.
+// The GENERAL RULE the old text was protecting still stands and is the reason those legs waited:
+// a 1-byte / 44-byte span reinterpreted as the 25-queue aggregate makes Append walk foreign
+// memory as queue headers, which is the retired PhysicsModuleIO::mPropManagerInputInterface bug
+// (below) in the opposite direction. Fix the layout in the owning header; never cast here.
 
 namespace WorldModule
 {
@@ -100,29 +107,21 @@ void BridgeTrafficModuleToSceneModule_Prepare(
     // asm order: fetch the traffic output's scene-input interface first, then the scene manager's
     // in-scene-update aggregate, then merge source into destination.
     //
-    // ⛔ PARKED 2026-08-19 (wave Q5 cluster F3) -- THIS LEG WAS A LANDMINE, and it is the same
-    // defect class as the two per-frame traffic legs parked below, found while auditing them.
-    // It used to be:
-    //     Append(reinterpret_cast<const InSceneUpdateInterface&>(
-    //                *lpTrafficOutputBuffer_Prepare->GetSceneInputInterface()));
-    // BrnTrafficIO::OutputBuffer_Prepare::SceneInputInterface is `struct { unsigned char
-    // maBytes[1]; }` sitting at +16 in front of a raw `maPad16To818784` span
-    // (BrnTrafficEntityModuleIO.h:526/:542) -- an UNTYPED, NEVER-CONSTRUCTED byte span, not the
-    // aggregate. There is no traffic OutputBuffer_Prepare::Construct anywhere in the tree, so
-    // the 25 embedded EventQueue headers in that span are whatever the IO stack's previous
-    // tenant left (CreateIOBuffer stopped zero-filling in the 2026-08-15 perf pass), and
-    // InSceneUpdateInterface::Append reads every one of their mpEvents/miLength pairs.
-    // It has never fired only because WorldModule::Prepare reaches it solely on the
-    // `!mTrafficEntityModule.Prepare(...)` retry arm and that gate returns true
-    // (WorldLinkStubs.cpp:859-873). The moment the real traffic Prepare lands, this Appends a
-    // garbage length from a garbage pointer. Parked rather than left armed.
-    // RESTORE IN ONE LINE once BrnTrafficEntityModuleIO.h models mSceneInputInterface at +16 as
-    // the real InSceneUpdateInterface and OutputBuffer_Prepare::Construct constructs it:
-    //     lpSceneInputBuffer->GetInSceneUpdateInterface()->Append(
-    //         *lpTrafficOutputBuffer_Prepare->GetSceneInputInterface());
-    // [park owner: BrnTrafficEntityModuleIO.h / the traffic IO TU]
-    (void)lpSceneInputBuffer;
-    (void)lpTrafficOutputBuffer_Prepare;
+    // ⭐⭐ RESTORED 2026-08-19 (wave Q6 cluster C3), on exactly the terms wave Q5/F3 wrote when it
+    // DISARMED this leg. The park read: "RESTORE IN ONE LINE once BrnTrafficEntityModuleIO.h
+    // models mSceneInputInterface at +16 as the real InSceneUpdateInterface and
+    // OutputBuffer_Prepare::Construct constructs it." Both are done in that header's own TU:
+    //   * `typedef CgsSceneManager::SceneManagerIO::InSceneUpdateInterface SceneInputInterface;`
+    //     -- X360-attested, not inferred: OutputBuffer_Prepare::Construct @0x82761740 runs
+    //     `InSceneUpdateInterface::Construct(this+0x10)` and 16 + 818768 == 818784 == the next
+    //     member (mResourceRequestInterface) exactly;
+    //   * OutputBuffer_Prepare::Construct is bodied from that same asm and runs the aggregate's
+    //     Construct plus the console's paired VariableEventQueue<4096,16> Construct+Clear.
+    // So the reinterpret_cast that made this a landmine is GONE -- source and destination are the
+    // same type -- and the 25 embedded queue headers are Constructed rather than inherited from
+    // the IO stack's previous tenant.
+    lpSceneInputBuffer->GetInSceneUpdateInterface()->Append(
+        *lpTrafficOutputBuffer_Prepare->GetSceneInputInterface());
 }
 
 // @ 0x827AB490 -- the PER-FRAME pre-scene merge: every entity module's staged scene
@@ -161,28 +160,21 @@ void BridgeEntityModulesToSceneModule_PreScene(
     InSceneUpdateInterface* lpScene = lpSceneInputBuffer->GetInSceneUpdateInterface();
 
     // ---- LEG 1/5: TRAFFIC (0x827AB570, `mr r3,r25 ; bl sub_8279FD58`) -------------------
-    // ⛔ PARKED -- NOT a fabrication-safe leg. The console accessor is recovered (headless
-    // IDA this cluster, scratchpad/waveQ5/ida_f3/): sub_8279FD58 is
-    // BrnTrafficIO::OutputBuffer_PreScene::GetSceneInputInterface() const -- read-lock
-    // (`extrwi r11,r11,1,27`), baked BrnTrafficEntityModuleIO.h line 0xBA == 186, epilogue
-    // `addi r3, r28, 0x10` == this + 16. The in-tree OutputBuffer_PreScene
-    // (BrnTrafficEntityModuleIO.h:443) has NO member at +16: its first modelled member is
-    // mTrafficToRaceCarInterface_PreScene at +63424 behind a pad span.
-    // The console layout that the recovered ladder actually implies is
-    // mSceneInputInterface@+16 (a real 818768-byte InSceneUpdateInterface) followed by
-    // mTriggerManagementInputInterface@+818784 == 16 + 818768 EXACTLY -- so +63424 falls
-    // INSIDE the scene interface's span and cannot be a sibling member (that accessor,
-    // 0x827A00B0, bakes line 262, not the :185 the header cites, i.e. it belongs to
-    // OutputBuffer_PostScene).
-    // Landing this leg therefore needs the traffic buffer RE-LAID-OUT in its own header --
-    // a member insert plus a pad re-split on a shared, _AssertLayout-pinned class -- which is
-    // outside this cluster's "GetSceneInputInterface accessor bodies only" mandate on the
-    // traffic IO TU. Casting the existing +63424/+818784 storage to InSceneUpdateInterface
-    // would make Append read 25 queue headers out of foreign memory: the same slice-cast
-    // corruption class as the retired PhysicsModuleIO mPropManagerInputInterface bug above.
-    // COSTS NOTHING TODAY: TrafficEntityModule::PreSceneUpdate is a WorldLinkStubs gate, so
-    // nothing stages into that interface.  [park owner: BrnTrafficEntityModuleIO.h]
-    (void)lpTrafficOutputBuffer_PreScene;
+    // ⭐⭐ RESTORED 2026-08-19 (wave Q6 cluster C3). Wave Q5/F3 parked this leg after recovering
+    // sub_8279FD58 == BrnTrafficIO::OutputBuffer_PreScene::GetSceneInputInterface() const
+    // (read-lock `extrwi r11,r11,1,27`, baked BrnTrafficEntityModuleIO.h line 0xBA == 186,
+    // epilogue `addi r3,r28,0x10` == this+16) and finding that the in-tree buffer had NO member
+    // at +16 -- its first modelled member sat at +63424, which is INSIDE the scene interface's
+    // [16, 818784) span. That park named the fix and this wave did it in the buffer's own header:
+    // mSceneInputInterface is the real InSceneUpdateInterface at +16 (X360-attested by
+    // OutputBuffer_PreScene::Construct @0x82761790's `InSceneUpdateInterface::Construct(this+0x10)`
+    // leg), the 544-byte traffic->race-car block follows at +818784 == 16 + 818768, and the
+    // +63424 accessor 0x827A00B0 was re-homed to OutputBuffer_PostScene where its baked line
+    // (262) says it belongs. Source and destination are the same type: no cast in this leg.
+    // STILL A NO-OP TODAY: TrafficEntityModule::PreSceneUpdate is a WorldLinkStubs gate, so
+    // nothing traffic-side stages into that interface yet -- but it is now a LIVE leg over a
+    // Constructed aggregate rather than a park, and it goes live with that module.
+    lpScene->Append(*lpTrafficOutputBuffer_PreScene->GetSceneInputInterface());
 
     // ---- LEG 2/5: RACE CAR (0x827AB58C, `mr r3,r28 ; bl sub_8279D458`) ------------------
     // ⭐ RESTORED 2026-08-19 (wave Q5 cluster F3). The FLAG that stood here claimed the
@@ -271,24 +263,20 @@ void BridgeEntityModulesToScene_PostPhysics(
     InSceneUpdateInterface* lpScene = lpSceneInputBuffer->GetInSceneUpdateInterface();
 
     // ---- LEG 1/4: TRAFFIC (0x827AB6C0, `mr r3,r29 ; bl sub_827A0C20`) ------------------
-    // ⛔ PARKED for the same reason as the pre-scene traffic leg, and this one is a MEASURED
-    // header defect rather than an absence. sub_827A0C20 is
-    // BrnTrafficIO::OutputBuffer_PostPhysics::GetSceneInputInterface() const -- read-lock,
-    // baked BrnTrafficEntityModuleIO.h line 0x199 == 409, epilogue `addi r3, r28, 0x2C70`
-    // == this + 11376. The tree instead models mSceneInputInterface at +834784 as a 44-byte
-    // SceneInputInterfaceStorage, on the strength of 0x827A0B78 (line 406).
-    // The full read ladder recovered this cluster settles it:
-    //   391 -> +8      394 -> +3488   397 -> +3632   400 -> +6208   403 -> +9824
-    //   406 -> +834784 409 -> +11376  412 -> +830144 415 -> +830672 418 -> +834828
-    // and 11376 + 818768 (the console sizeof InSceneUpdateInterface) == 830144 EXACTLY --
-    // i.e. the scene interface occupies [+11376, +830144) and the header's +834784/44-byte
-    // member is something else. Appending a 44-byte span reinterpreted as the 25-queue
-    // aggregate would walk foreign memory as queue headers.
-    // COSTS NOTHING TODAY (nothing traffic-side stages scene updates on this build); it needs
-    // the traffic buffer relaid out in its own header, which this cluster does not own.
-    // [park owner: BrnTrafficEntityModuleIO.h -- move mSceneInputInterface to +11376 as the
-    //  real aggregate, then this leg is one line.]
-    (void)lpTrafficOutputBuffer_PostPhysics;
+    // ⭐⭐ RESTORED 2026-08-19 (wave Q6 cluster C3), on the exact terms wave Q5/F3's park set out.
+    // sub_827A0C20 is BrnTrafficIO::OutputBuffer_PostPhysics::GetSceneInputInterface() const --
+    // read-lock, baked BrnTrafficEntityModuleIO.h line 0x199 == 409, epilogue
+    // `addi r3,r28,0x2C70` == this + 11376. The tree modelled mSceneInputInterface at +834784 as
+    // a 44-byte span (from 0x827A0B78, baked 406) because DecFIGS declares GetSceneInputInterface
+    // at :402 and this header runs a uniform +4 line skew. The X360 header carries one accessor
+    // pair DecFIGS lacks, which displaces every later slot by one; the buffer's own
+    // Construct @0x82761908 (recovered this cluster by targeted headless IDA -- 0x82761908 has no
+    // per-address JSON) settles it by calling InSceneUpdateInterface::Construct(this+0x2C70), and
+    // 11376 + 818768 == 830144 == the next member EXACTLY.
+    // The buffer is relaid out from that Construct in its own header, so this is now a same-type
+    // Append over a Constructed aggregate -- no cast, no 44-byte reinterpretation.
+    // STILL A NO-OP TODAY (nothing traffic-side stages scene updates on this build), but LIVE.
+    lpScene->Append(*lpTrafficOutputBuffer_PostPhysics->GetSceneInputInterface());
 
     // ---- LEG 2/4: RACE CAR (0x827AB6DC, `mr r3,r28 ; bl sub_8279E5D0`) -----------------
     // ⭐ THE LEG THIS WHOLE CLUSTER EXISTS FOR. The const read-lock accessor is bodied this

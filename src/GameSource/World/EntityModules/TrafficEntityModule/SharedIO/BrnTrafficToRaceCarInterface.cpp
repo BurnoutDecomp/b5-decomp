@@ -17,6 +17,37 @@ namespace BrnTrafficIO
     // Avoids pulling the heavy BrnTrafficEntityModule.h just for the bound.
     static const u32 KU_MAX_STANDARD_TRAFFIC = 0x190; // 400
 
+    // BrnTraffic::BrnTrafficIO::TrafficToRaceCarInterface_PreScene::Construct
+    //   -- NO out-of-line console body: OutputBuffer_PreScene::Construct @0x82761790 INLINES the
+    // whole initialisation of its mTrafficToRaceCarInterface_PreScene member as a run of raw
+    // stores over the console span [818784, 819328). De-inlined here (AGENTS "inlining reversal")
+    // so that Construct can spell its leg by name instead of value-initialising an opaque blob.
+    //
+    // ⭐ ADDED wave Q6 round-1 fix (bridges #1). Store roll-call, offsets relative to the member:
+    //   7 x `std 0` @ +0..55  -> mSympatheticCrashers        (BitArray<400> == 7 u64 fields)
+    //   `stw 0`     @ +448    -> mNearMissTrafficCollection  (320 + 16*8 == the Array miCount)
+    //   `stw 0`     @ +516    -> mNearMissRaceCarCollection  (452 +  8*8 == the Array miCount)
+    //   `stw 0`     @ +520    -> miPotentialStompeeCount
+    //   `stw 0`     @ +524    -> muNearbyStaticVehicleCount
+    //   4 x `stfs flt_82001CC0` @ +528/+532/+536/+540
+    //                         -> mfClosestDistanceSq / mfSecondClosestDistanceSq /
+    //                            mfClosestAngleDiff / mfClosestPerpendicularDist.
+    //                            flt_82001CC0 is the image's 0x00000000 == 0.0f.
+    // ⚠️ mPotentialStompees[8] (+64..+319) is DELIBERATELY untouched -- the console zeroes only
+    // the count that bounds it. Do not "helpfully" clear the records.
+    void TrafficToRaceCarInterface_PreScene::Construct()
+    {
+        mSympatheticCrashers.UnSetAll();
+        mNearMissTrafficCollection.Construct();
+        mNearMissRaceCarCollection.Construct();
+        miPotentialStompeeCount        = 0;
+        muNearbyStaticVehicleCount     = 0;
+        mfClosestDistanceSq            = 0.0f;
+        mfSecondClosestDistanceSq      = 0.0f;
+        mfClosestAngleDiff             = 0.0f;
+        mfClosestPerpendicularDist     = 0.0f;
+    }
+
     // BrnTraffic::BrnTrafficIO::TrafficToRaceCarInterface_PreScene::AddPotentialStompee
     //   @ 0x82706028. Records a traffic vehicle the player could stomp (drive over). Two regimes on
     // the live count (KI_MAX_POTENTIAL_STOMPEES == 8):

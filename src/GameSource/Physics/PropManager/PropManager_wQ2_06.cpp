@@ -4,36 +4,39 @@
 // Partfile of the TU GameSource/Unity/../Physics/PropManager/BrnPropManager.cpp
 // (breakable-props wave Q ROUND 2, lander 06, 2026-08-18). Folds back into BrnPropManager.cpp.
 //
-// THREE FUNCTIONS WERE ASSIGNED. TWO LAND HERE; ONE IS PARKED ON A MISSING DECLARATION:
+// THREE FUNCTIONS WERE ASSIGNED. ALL THREE ARE NOW BODIED HERE:
 //
 //   * PropManager::Prepare                       @0x8260EE18 (126 insns)  -- BODIED BELOW.
 //   * PropManager::ProcessAddPropInstanceEvents  @0x82632108 (515 insns)  -- BODIED BELOW.
-//   * PropManager::OutputUpdatedProps            @0x82627EC8 (14 insns)   -- PARKED, complete body at
-//         scratchpad/waveQ2/parked/PropManager_06_OutputUpdatedProps.cpp
-//         Blocker: PhysicsModuleIO::OutputBuffer::GetPropManagerOutputInterface() still returns the
-//         opaque placeholder `struct PropOutputInterfaceStorage { unsigned char maBytes[1]; }`
-//         (BrnPhysicsModuleIO.h:76). RE-CHECKED THIS ROUND rather than trusted from the round-2
-//         owner report -- the placeholder is still there, verbatim, at that line, and my own
-//         negative probe (scratchpad/waveQ2/probe_wQ2_06/probe_outputupdatedprops.cpp) fails with
-//         exactly one diagnostic: C2440 "PropOutputInterfaceStorage* cannot be converted to
-//         BrnPhysics::Props::PropOutputInterface*" at the accessor's return. (The round-2 owner's
-//         probe reported a C2039 instead because it called AppendUpdatedProps directly on the
-//         storage type; same blocker, different spelling of the same missing promotion.)
-//         ⚠️ The GetPropManagerOutputInterface note in BrnPropManager.h claims "Both callees are
-//         HOMED ... so this one has no blocker
-//         at all". That claim is STALE/WRONG: GetPropManagerOutputInterface is homed, but its
-//         RETURN TYPE is not the real PropOutputInterface. Not corrected from here -- this lander
-//         may not edit headers; filed as a header request.
-//         ⚠⚠ ARITHMETIC THE PROMOTION COMMIT MUST GET RIGHT (round-2 NIT, restated here because the
-//         parked banner's wording implies a surviving pad): the seat at BrnPhysicsModuleIO.h:138 is
-//         followed by `unsigned char maDeformationPad[148656 - 71793]`, the 71793 being
-//         `71792 + sizeof(the 1-byte placeholder)`. 148656 - 71792 == 76864 EXACTLY, and 76864 is
-//         the host sizeof the parked banner computes for the promoted PropOutputInterface
-//         (38416 + 3216 + 22416 + 12816). So the re-derived pad
-//         `148656 - (71792 + sizeof(PropOutputInterface))` evaluates to ZERO -- a zero-length array,
-//         which ISO C++ forbids and MSVC accepts only as an extension. The correct edit is to
-//         DELETE maDeformationPad and let _AssertLayout re-pin mDeformationOutputInterface at
-//         +148656 directly, not to recompute a pad that no longer exists.
+//   * PropManager::OutputUpdatedProps            @0x82627EC8 (14 insns)   -- ⭐ LANDED 2026-08-19
+//         (wave Q6 cluster A2), at the END of this file. It was parked here from 2026-08-18 with a
+//         complete body at scratchpad/waveQ2/parked/PropManager_06_OutputUpdatedProps.cpp; that
+//         body was re-verified store-for-store against the raw `assembly` array of
+//         .ida-exports/BURNOUT_X360_ARTIST.XEX/0x82627EC8.json this wave and landed unchanged
+//         except for the added [DIAG] block. See its own banner further down for the decode.
+//
+//   ⛔ THE BLOCKER THAT KEPT IT PARKED, and its disposition -- BOTH MEASURED on 2026-08-19, an
+//      hour apart, so this note records a transition and not a belief. The body's first statement
+//      needs PhysicsModuleIO::OutputBuffer::GetPropManagerOutputInterface() to return the real
+//      BrnPhysics::Props::PropOutputInterface:
+//        * BEFORE: BrnPhysicsModuleIO.h read `struct PropOutputInterfaceStorage
+//          { unsigned char maBytes[1]; };` and the probe
+//          scratchpad/waveQ6/probe_outprop/probe_outprop.cpp reported STATUS=fail with EXACTLY one
+//          diagnostic -- C2440, "PropOutputInterfaceStorage* cannot be converted to
+//          BrnPhysics::Props::PropOutputInterface*", at the accessor's return.
+//        * AFTER: wave Q6 cluster A1 (owner `seat`) promoted BrnPhysicsModuleIO.h:112 to
+//          `typedef Props::PropOutputInterface PropOutputInterfaceStorage;`, DELETED the
+//          maDeformationPad that baked sizeof(the 1-byte placeholder), and added the missing
+//          `mPropManagerOutputInterface.Construct()` leg to OutputBuffer::Construct
+//          (BrnPhysicsModuleIO_OutputBuffer.cpp:151, X360 0x825ABBF8). The same probe now reports
+//          STATUS=pass, and so does this file.
+//      That Construct leg is not a nicety: this function is what first DRIVES the interface's
+//      event queues, and an EventQueue whose Construct never ran has mpEvents == NULL and fires
+//      "Not Constructed" on its first AddEvent -- the recurring boot killer (AGENTS.md gotcha 14).
+//      If this file ever stops compiling, the line to look at is BrnPhysicsModuleIO.h:112 and
+//      nothing else. Do NOT reinterpret_cast over a placeholder to "fix" it -- that is the type
+//      fork AGENTS.md bans, and a 1-byte stand-in also makes the enclosing OutputBuffer's own
+//      layout wrong.
 //
 // ⚠️ A PRIOR, INTERRUPTED RUN of this same lander wrote the banner that used to sit here. It
 //    claimed ProcessAddPropInstanceEvents was blocked on
@@ -49,17 +52,20 @@
 //    member and EventQueue::AddEvent are public and homed, so nothing is blocked. The undeclared
 //    `AddCachedObject` helper is filed as a header request, not a blocker.
 //
-// ⚠️ LINK-LEVEL DUPLICATES -- `cl /c` cannot see either of these; REPORTED, NOT REMOVED (AGENTS.md
-//    gotcha 7: a gate is retired only in the same commit that MOUNTS the real body in
-//    tools/build/build_game_exe.bat, and that script lists neither this file nor its siblings):
-//      * PropManager::Prepare has an inert named LINK STUB at
-//        b5-decomp/src/GameSource/World/WorldLinkStubs.cpp:516 (`bool Prepare(struct
-//        rw::IResourceAllocator*)`, logs "PropManager::Prepare: inert [FLAG PC boot gate]" and
-//        returns true). The real body below is an LNK2005 against it the instant this file is
-//        mounted. Retire the stub in the mounting commit.
-//      * PropManager::OutputUpdatedProps has an inert one-shot gate at
-//        b5-decomp/src/GameSource/Physics/BrnPhysicsConductorGates.cpp:507. Nothing to retire yet
-//        (its body is parked, not landed) -- listed so the two land together.
+// ⚠️ LINK-LEVEL DUPLICATES -- `cl /c` cannot see these; re-measured 2026-08-19 (wave Q6 A2)
+//    rather than inherited, because both entries here had gone stale:
+//      * PropManager::Prepare's link stub at WorldLinkStubs.cpp is GONE -- RETIRED 2026-08-18 with
+//        the wave-Q4 PropManager mount; that file now carries the tombstone
+//        "GATE RETIRED 2026-08-18 ... PropManager::Prepare @0x8260EE18 is REAL in
+//        PropManager_wQ2_06.cpp" at WorldLinkStubs.cpp:513. This file IS mounted
+//        (tools/build/build_game_exe.bat:1799), and it links, which is the proof.
+//      * PropManager::OutputUpdatedProps's inert one-shot gate is at
+//        b5-decomp/src/GameSource/Physics/BrnPhysicsConductorGates.cpp:487-490 -- NOT :507, which
+//        is what this banner used to say and what the parked body's banner still says. ⛔ IT IS
+//        STILL LIVE, and now that the body below is landed it is a REAL LNK2005 duplicate. THE
+//        CONDUCTOR MUST DELETE BrnPhysicsConductorGates.cpp:487-490 IN THE SAME COMMIT. Reported,
+//        not removed (AGENTS.md gotcha 7 + this wave's ownership split: that file is the
+//        conductor's).
 //
 // ✅ EVERY CALLEE REACHED FROM THIS FILE HAS A BODY IN THE TREE (round-2 MUST_FIX, applied;
 //    re-grepped 2026-08-18). The earlier banner said `PropManager::AddPropToSim` @0x826274D8 was
@@ -68,8 +74,20 @@
 //    b5-decomp/src/GameSource/Physics/PropManager/PropManager_wQ2_05.cpp, with a signature matching
 //    this file's call site parameter for parameter. Do NOT add a trap stub for it beside that body
 //    (an LNK2005 `cl /c` cannot see), and do not hold this file's mount for it.
-//    The only LINK-level items here are the two listed above: the WorldLinkStubs.cpp:516 Prepare
-//    stub (a real duplicate to retire at mount time) and the OutputUpdatedProps gate.
+//    The only LINK-level item left is the one listed above: the OutputUpdatedProps gate at
+//    BrnPhysicsConductorGates.cpp:487-490. Re-grepped 2026-08-19 for the newly landed body's own
+//    two callees, both REAL and both mounted:
+//      * PhysicsModuleIO::OutputBuffer::GetPropManagerOutputInterface -- bodied at
+//        BrnPhysicsModuleIO_OutputBuffer.cpp:188 (write overload, X360 0x825C0DC8), MOUNTED.
+//      * Props::PropOutputInterface::AppendUpdatedProps @0x826153A0 -- bodied at
+//        SharedIO/BrnPropOutputInterface.cpp:36. ⛔ THAT TU IS **NOT** IN build_game_exe.bat
+//        (`grep -c` == 0 on 2026-08-19), so it is THE ONE LINK HOLE this file has. MEASURED with
+//        dumpbin, not asserted: this file's .obj carries the UNDEF
+//        `?AppendUpdatedProps@PropOutputInterface@Props@BrnPhysics@@QEAAXPEBV?$EventQueue@
+//        UUpdatePropEvent@Props@BrnPhysics@@$0MI@@CgsModule@@@Z`, and BrnPropOutputInterface.obj
+//        defines that BYTE-IDENTICAL name -- so mounting that one file closes it exactly (it
+//        pulls in nothing else: its own obj has only 4 UNDEFs, the three assert entry points and
+//        memcpy). Reported, not mounted from here: the build script is the conductor's.
 //    Every OTHER callee was checked and is real: PropInstance::SetTransform / ::SetLinearVelocity
 //    (BrnPropInstance.cpp:24/:56), CgsDev::DebugComponent::Register (CgsDebugComponent.cpp:66),
 //    rw::BaseResourceDescriptor::BaseResourceDescriptor (vendor .../BaseResourceDescriptor.cpp:35),
@@ -124,6 +142,8 @@
 #include "GameSource/Physics/PropManager/PropPhysics/BrnPropPartInstance.h"  // PropPartInstance (sizeof)
 #include "GameSource/Physics/PropManager/SharedIO/BrnPropEvents.h"           // AddPhysicalPropEvent
 #include "GameSource/Physics/PropManager/SharedIO/BrnPropInputInterface.h"   // KU_MAX_PHYSICAL_PROPS / _PROP_PARTS
+#include "GameSource/Physics/PropManager/SharedIO/BrnPropOutputInterface.h"  // PropOutputInterface (OutputUpdatedProps)
+#include "GameSource/Physics/BrnPhysicsModuleIO.h"                           // PhysicsModuleIO::OutputBuffer (OutputUpdatedProps)
 #include "SharedClasses/Physics/Props/BrnPropPhysicsDataHeader.h"            // PropPhysicsDataHeader::GetType
 #include "SharedClasses/Physics/Props/BrnPhysicsPropTypeData.h"              // PropTypeData accessors
 #include "GameShared/GameClasses/Physics/CgsPhysicsSimulationModuleIO.h"     // PhysicsSimulationIO::InputBuffer
@@ -133,6 +153,7 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                   // gpDebugPrint / gxMessageFilterFlags
 #include "rw/rwcore_structs.h"                                               // rw::IResourceAllocator / Resource / BaseResourceDescriptors
 #include "rw/math/vpu/matrix44affine_operation.h"                            // rw::math::vpu::TransformPoint
+#include <stdlib.h>                                                          // getenv -- [DIAG] BRN_PROP_DIAG only, host-side
 
 namespace BrnPhysics
 {
@@ -609,6 +630,113 @@ void PropManager::ProcessAddPropInstanceEvents(
                       lZeroVelocity,
                       lZeroVelocity );
     }
+}
+
+
+// =================================================================================================
+// BrnPhysics::Props::PropManager::OutputUpdatedProps @ 0x82627EC8   (14 instructions)
+// DWARF: class decl BrnPropManager.h:155; body scope BrnPropManager.cpp:943.
+//   ⚠️ CORRECTED wave Q6 round 1 (outprop #1): this line read "class decl BrnPropManager.h:294-295",
+//   which the DWARF contradicts. The DecFIGS dwarfdump puts `void OutputUpdatedProps(OutputBuffer*)`
+//   at source :155 (recorded twice, at dwarfdump .../BrnPropManager.h:211 and :477); source :294
+//   and :295 are two unrelated DATA MEMBERS -- `DebugWorldContactInfo* mpDebugWorldContacts` and
+//   `int32_t miNumDebugWorldContacts` (dwarfdump :164-171). The rest of this sentence (body scope
+//   .cpp:943, local lpOutputQueue at :945) was and remains correct, which is what made the wrong
+//   half read as measured.
+//   NOTE for a later DWARF-reading sweep: the DWARF body carries a SECOND lexical block
+//   (CgsDev::StrStream::StrStream + StrStreamBase::operator<<) with NO counterpart in the ARTIST
+//   emission. Do NOT "restore" a log statement the image disproves.
+//
+// ⭐ LANDED 2026-08-19 (wave Q6 cluster A2). Parked since 2026-08-18 at
+//    scratchpad/waveQ2/parked/PropManager_06_OutputUpdatedProps.cpp; re-verified store-for-store
+//    against the raw `assembly` array this wave and landed with one added [DIAG] block.
+//
+// WHY IT MATTERS -- this is the ONLY producer of the UpdatePropEvent stream. PropManager::
+// ReadUpdatedBodies fills mUpdatedProps every physics frame from the solver's OutUpdateRigidBody
+// queue; until this function ran, nothing ever copied that queue into the module OUTPUT buffer, so
+// WorldModule::BridgePhysicsModuleToPropModule_PostPhysics had nothing to forward,
+// PropEntityModule::UpdateProps was never fed and PropZoneManager::UpdateInstance never wrote
+// PropPartInstance::mWorldTransform -- i.e. a smashed prop's parts simulate correctly and are
+// rendered at their ORIGINAL pose. Fourteen instructions were the whole severed edge.
+//
+// ---- THE FOURTEEN INSTRUCTIONS ------------------------------------------------------------------
+// Counted from the 0xXXXXXXXX-prefixed lines of
+// .ida-exports/BURNOUT_X360_ARTIST.XEX/0x82627EC8.json: (0x82627EFC - 0x82627EC8)/4 + 1 == 14.
+// Nine are prologue/epilogue (mflr/stw/std/stwu ... addi/lwz/mtlr/ld/blr). The body is five:
+//
+//   0x82627ED8  mr   r31, r3                    save `this`
+//   0x82627EDC  mr   r3,  r4                    lpOutput becomes the callee's `this`
+//   0x82627EE0  bl   PhysicsModuleIO::OutputBuffer::GetPropManagerOutputInterface   (@0x825C0DC8)
+//   0x82627EE4  addi r4,  r31, 0x680            &mUpdatedProps
+//   0x82627EE8  bl   Props::PropOutputInterface::AppendUpdatedProps                 (@0x826153A0)
+//
+// The Hex-Rays pseudocode in the same export agrees and is quoted here only as the cross-check it
+// is: `AppendUpdatedProps(GetPropManage(a2), a1 + 1664)` -- 1664 == 0x680.
+//
+// xrefs_to is exactly {BrnPhysics::PhysicsModule::Update @0x825B0640}; that call site is already
+// live at BrnPhysicsModuleUpdateFunctions.cpp:730. xrefs_from is exactly the two callees above --
+// there is no third `bl`, no assert, no branch, no early-out.
+//
+// ---- WHICH ACCESSOR OVERLOAD, and why it is not a guess -----------------------------------------
+// The export's xrefs_from names 0x825C0DC8, which BrnPhysicsModuleIO_OutputBuffer.cpp:14 pins as
+// the NON-const (write-locked, bit 3) overload -- not the const twin @0x8279F640. `lpOutput` is a
+// non-const OutputBuffer*, so ordinary overload resolution picks that same one; nothing is cast
+// and nothing is const_cast-ed to make it happen.
+//
+// ---- AGENTS.md GOTCHA AUDIT, all four measured rather than assumed ------------------------------
+//   * gotcha 1 (console literals are not host values): ONE site, `0x680`. It is the console byte
+//     offset of mUpdatedProps and it appears ONLY in this comment -- the member is reached BY NAME
+//     below, so the x64 pointer widening of the members before it cannot desync the argument.
+//   * gotcha 2 (a store through obj+0xNNNN may hit an EMBEDDED sub-object): no site -- the body
+//     performs no store at all, and `+0x680` is a member of PropManager itself
+//     (BrnPropManager.h:837), not of an embedded sub-object.
+//   * gotcha 3 (PPC float args skip a GPR): no site -- the fourteen instructions touch no f* and
+//     no v* register, and neither parameter is a float or vector.
+//   * gotcha 4 (NaN polarity, `bge` == !(a<b)): no site -- there is no compare and no branch.
+//
+// ---- THE DWARF LOCAL ----------------------------------------------------------------------------
+// The DecFIGS scope for BrnPropManager.cpp:943 names exactly one local,
+// `PropOutputInterface* lpOutputQueue` at :945. That is why the interface pointer is bound to a
+// named local instead of the two calls being chained into one expression: the X360 tail-shape is
+// the emission's, the local is the source's. The parameter name lpOutput is the committed
+// declaration's and the DWARF's alike.
+//
+// ---- ARGUMENT TYPE: NO FORK ---------------------------------------------------------------------
+// AppendUpdatedProps takes `const PropOutputInterface::UpdatePropEventQueue*`
+// (BrnPropOutputInterface.h:68) and mUpdatedProps is a PropManager::UpdatePropEventQueue
+// (BrnPropManager.h:837/:778 -- ⚠️ these two citations read :811/:752 until wave Q6 round 1
+// (outprop #2); this same owner's comment-only header edits in this wave moved the member and its
+// typedef by 26 lines, and the pre-edit numbers land a reader in the middle of an unrelated member.
+// Re-grep both after ANY further edit to BrnPropManager.h). Both typedefs name the SAME instantiation,
+// CgsModule::EventQueue<UpdatePropEvent,200>, so `&mUpdatedProps` needs no cast -- pinned at
+// compile time by scratchpad/waveQ6/probe_outprop/probe_outprop.cpp's negative-array-bound check.
+// =================================================================================================
+void PropManager::OutputUpdatedProps( BrnPhysics::PhysicsModuleIO::OutputBuffer* lpOutput )
+{
+    // 0x82627EDC / 0x82627EE0 -- lpOutput is handed over as the callee's `this`.
+    PropOutputInterface* lpOutputQueue = lpOutput->GetPropManagerOutputInterface();   // DWARF :945
+
+    // [DIAG] NOT IN THE X360 BINARY. Wave-Q6 one-shot: the single line that means the
+    // UpdatePropEvent stream is alive. Opt in with BRN_PROP_DIAG. It is read BEFORE the append
+    // because AppendUpdatedProps is the console's own merge-and-translate pass and this is the
+    // producer-side count -- exactly the number of poses this frame hands to the world module.
+    // The env latch is a function-local static: getenv per physics frame would be a syscall.
+    {
+        static const bool sbPropDiag = ( getenv( "BRN_PROP_DIAG" ) != 0 );
+        static bool       sbLogged   = false;
+        if ( sbPropDiag && !sbLogged && CgsDev::Log::gpDebugPrint != 0
+             && mUpdatedProps.GetLength() > 0 )
+        {
+            sbLogged = true;
+            *CgsDev::Log::gpDebugPrint
+                << "[Q6-out] first publish: " << mUpdatedProps.GetLength()
+                << " UpdatePropEvents\n";
+        }
+    }
+
+    // 0x82627EE4 / 0x82627EE8 -- `addi r4, r31, 0x680` == &mUpdatedProps, passed by pointer
+    // (AppendUpdatedProps takes `const UpdatePropEventQueue*`, BrnPropOutputInterface.h:68).
+    lpOutputQueue->AppendUpdatedProps( &mUpdatedProps );
 }
 
 }

@@ -9,9 +9,23 @@
 // BeginPropWorldContactGeneration dispatches on, and the queue drain EndPropWorldContactGeneration
 // tail-calls:
 //
-//   * PropManager::DoPartWorldContactGeneration         @0x82611B70 (349 insns) -- ⛔ NOT LANDED
-//   * PropManager::DoPropInstanceWorldContactGeneration @0x826120E8 (342 insns) -- ⛔ NOT LANDED
-//   * PropManager::AddContactResultsToQueue             @0x82612F08 (184 insns) -- ⭐ LANDED BELOW
+//   * PropManager::DoPartWorldContactGeneration         @0x82611B70 (349 insns) -- ⭐ LANDED 2026-08-19
+//   * PropManager::DoPropInstanceWorldContactGeneration @0x826120E8 (342 insns) -- ⭐ LANDED 2026-08-19
+//   * PropManager::AddContactResultsToQueue             @0x82612F08 (184 insns) -- ⭐ LANDED 2026-08-18
+//
+// ⭐⭐ 2026-08-19 (wave Q6, cluster B "prop-vs-world contact generation"): THE TWO Do* LEGS ARE
+// NO LONGER PARKED. Both blocking declarations landed this wave --
+//   A. CgsSceneManager::CgsCollision::PrimitivePairListBuilder::AddPrimitive(const
+//      rw::collision::Volume*, Matrix44Affine, f32, u16)   @0x82814AB8
+//      -> CgsPrimitivePairListBuilder.h, above the Sphere overload (the DWARF's own order)
+//   B. CgsSceneManager::CgsCollision::BaseCollisionGenerator::
+//      CollidePrimitiveListAgainstTriangleList(...)         @0x828141D8
+//      -> CgsCollisionGenerator.h, beside CollidePrimitivePairList
+// Both bodies below were RE-DERIVED against the raw `assembly` arrays this wave (see the
+// per-function decode blocks) rather than pasted from the park, and the park's two file-local
+// constants were reconciled: KVF_MAX_CONTACT_GEN_PADDING is GONE -- its recovered name
+// KVF_MAX_PROP_PADDING now lives in BrnPropManager.h (HEADER REQUEST D, landed wave Q4) and both
+// bodies reach for it there.
 //
 // Instruction counts are (end-start)/4 over the measured function boundaries, stated
 // END-EXCLUSIVE so the arithmetic and the addresses agree (round-2 NIT: the earlier line mixed the
@@ -25,19 +39,11 @@
 // from ida_funcs.get_func on the .i64.
 //
 // -------------------------------------------------------------------------------------------------
-// ⛔ WHY THE TWO Do* LEGS ARE NOT HERE -- TWO MISSING DECLARATIONS, COMPILE-PROVED
+// ⭐ HEADER REQUESTS A AND B -- BOTH LANDED 2026-08-19 (wave Q6). THE Do* LEGS ARE IN THIS FILE.
 // -------------------------------------------------------------------------------------------------
-// Both bodies are COMPLETE, re-derived this round from the raw `assembly` arrays of
-// .ida-exports/BURNOUT_X360_ARTIST.XEX/0x82611B70.json and /0x826120E8.json (the Hex-Rays
-// pseudocode in those exports was NOT consulted -- its `a5, a6` prototype drops the vector
-// parameter entirely), and they are parked at
-//
-//     scratchpad/waveQ2/parked/PropManager_03_DoPartWorldContactGeneration.cpp
-//     scratchpad/waveQ2/parked/PropManager_03_DoPropInstanceWorldContactGeneration.cpp
-//
-// `selfcheck.py scratchpad/waveQ2/probe_wQ2_03b/probe_bodies.cpp` (BOTH bodies verbatim, in one
-// TU) returns STATUS=fail with EXACTLY TWO DISTINCT diagnostics, one per missing declaration and
-// each reported once per body -- nothing else is missing:
+// The round-2 diagnosis stands re-verified: `selfcheck.py
+// scratchpad/waveQ2/probe_wQ2_03b/probe_bodies.cpp` used to return STATUS=fail with EXACTLY TWO
+// DISTINCT diagnostics, one per missing declaration and each reported once per body --
 //
 //   error C2660: "CgsSceneManager::CgsCollision::PrimitivePairListBuilder::AddPrimitive":
 //                function does not take 4 arguments
@@ -45,58 +51,42 @@
 //   error C2039: "CollidePrimitiveListAgainstTriangleList" is not a member of
 //                "CgsSceneManager::CgsCollision::CollisionGenerator"
 //
-// ---- HEADER REQUEST A ---------------------------------------------------------------------------
-//   FILE: b5-decomp/src/GameShared/GameClasses/SceneManager/Collision/Primitives/
-//         CgsPrimitivePairListBuilder.h -- inside `struct PrimitivePairListBuilder`, public
-//         section, ABOVE the committed AddPrimitive(Sphere*, f32, u16) at :52:
+// -- and both are gone, because both declarations landed this wave.
 //
-//     // AddPrimitive(Volume*, Matrix44Affine, f32, u16) @0x82814AB8 (140 insns): switch on the
-//     // rwcollision volume's type id, build the matching CgsGeometric primitive from the volume
-//     // payload + the caller's world transform, and append it.
+// ---- HEADER REQUEST A -- LANDED ------------------------------------------------------------------
+//   CgsPrimitivePairListBuilder.h, inside `struct PrimitivePairListBuilder`, public, ABOVE the
+//   committed AddPrimitive(Sphere*, f32, u16) -- the DWARF's own declaration order (source :77):
 //     void AddPrimitive(const ::rw::collision::Volume* lpVolume, Matrix44Affine lTransform,
-//                       f32 lfPadding, u16 lu16PrimitiveTag);
+//                       f32 lfPadding, u16 lu16PrimitiveTag);                    // @0x82814AB8
+//   Register map re-measured this wave (headless IDA 9.3 on a PRIVATE .i64 copy; IDA leaves the
+//   symbol `sub_82814AB8`, the function is 0x82814AB8..0x82814CE8, 140 insns):
+//     r3 = the builder; r4 = the volume; r5 = the transform (four 16-byte rows);
+//     f1 = the padding; r7 = the tag.
+//   ⚠️ GOTCHA 3 IS WHY r6 IS SKIPPED: the f32 rides f1 and consumes its GPR slot, so the u16 tag
+//   lands in r7. r6 is never read -- a signature derived from GPRs alone would invent a dead
+//   fifth argument.
+//   ⛔ ITS BODY IS A LINK HOLE AND IS **NOT** THIS WAVE'S (reported to the conductor, with the
+//   whole decode on the declaration): it needs three sibling overloads that are unnamed in the
+//   export (measured boundaries this wave -- sub_82814570 = AddPrimitive(Box*) 35 insns,
+//   sub_82814600 = AddPrimitive(Capsule*) 29, sub_82814678 = AddPrimitive(Cylinder*) 36),
+//   CgsGeometric::Box::Set @0x825E6918 (269, also bodyless), and two CgsGeometric primitive types
+//   that do not exist in the tree at all (Capsule 32 bytes, Cylinder 80 bytes).
 //
-//   MEASURED (headless IDA 9.3 on IDA Files/BURNOUT_X360_ARTIST.XEX.i64, this round -- IDA leaves
-//   the symbol as `sub_82814AB8`, the function is 0x82814AB8..0x82814CE8):
-//     r3 = the builder (`mr r31,r3`); r4 = the volume (`lwz r10,0x40(r11)` == the rwcollision
-//     per-type descriptor, `lwz r10,0(r10)` == its typeID, `addi -1`, 5-case jump table at
-//     jpt_82814B08); r5 = the transform, read as four 16-byte rows at +0x00/+0x10/+0x20/+0x30;
-//     f1 = the padding (`fmr f31,f1`); r7 = the tag (`mr r30,r7`, forwarded as r6 to every leaf).
-//     ⚠️ GOTCHA 3 IS WHY r6 IS SKIPPED: the f32 rides f1 and consumes its GPR slot, so the u16
-//     tag lands in r7. r6 is never read. A signature derived from GPRs alone would invent a dead
-//     fifth argument.
-//   Its only two callers in the whole image are this pair (0x82611F44 / 0x826124A0) -- measured
-//   xrefs, plus the .pdata entry at 0x821D87C0.
-//
-// ---- HEADER REQUEST B ---------------------------------------------------------------------------
-//   FILE: b5-decomp/src/GameShared/GameClasses/SceneManager/Collision/ContactGenerator/
-//         CgsCollisionGenerator.h -- inside `struct BaseCollisionGenerator`, public section:
-//
-//     // @0x828141D8 (86 insns). The SYNCHRONOUS twin of
-//     // AddPrimitiveListWithTriangleListToStream. Returns the result-list index.
-//     // ⚠️ RETURN TYPE, for whoever lands this (round-2 NIT): the DWARF says uint16_t, but the
-//     // console returns the index UNTRUNCATED -- 0x8281428C `mr r29,r3`, 0x82814298 `clrlwi r10,r29,16`
-//     // for the LOCAL use only, 0x82814324 `mr r3,r29` with no clrlwi on the return path. That is
-//     // exactly the register truth for which this tree deliberately types the two committed
-//     // Add*...ToStream siblings `s32` (see CgsCollisionGenerator.h's own banner on
-//     // AddPrimitiveListWithTriangleListToStream). Land it `s32` for family consistency, or land the
-//     // DWARF's u16 and carry that same one-line note -- but do not leave two undocumented
-//     // spellings of one value in one class. Every call site drops the result, so neither breaks.
-//     u16 CollidePrimitiveListAgainstTriangleList(const PrimitivePairList* lpPrimitiveList,
-//                                                 const TriangleList* lpTriangleList,
-//                                                 u16 lu16MaxResults,
-//                                                 u32 luUserTagA, u16 lu16UserTagB,
-//                                                 bool lbUseOptimisedBoxTests);
-//
-//   The export for 0x828141D8 EXISTS (IDA truncates its symbol to "...CollidePrimitiveListAgainst
-//   Triang"); its six parameters are ordinary GPRs, so no slot is skipped and r4..r9 confirm the
-//   order register-for-register. Seven measured call sites, six of them already reconstructed
-//   functions: DeformableObject::DoBodyPartWorldContactGeneration (x2),
+// ---- HEADER REQUEST B -- LANDED, **AND BODIED** --------------------------------------------------
+//   CgsCollisionGenerator.h, inside `struct BaseCollisionGenerator`, beside CollidePrimitivePairList:
+//     u16 CollidePrimitiveListAgainstTriangleList(const PrimitivePairList*, const TriangleList*,
+//                                                 u16, u32, u16, bool);          // @0x828141D8
+//   ⭐ The round-2 NIT asked whoever landed it to pick u16-with-a-note or s32-for-family-
+//   consistency, but not to leave two undocumented spellings. RESOLVED: the DWARF's u16 is kept
+//   (source :257) and the register truth carries the note on the declaration -- 0x8281428C
+//   `mr r29,r3`, 0x82814298 `clrlwi r10,r29,16` for the LOCAL use only, 0x82814324 `mr r3,r29`
+//   with no clrlwi on the return path. Every call site drops the result.
+//   Its BODY landed with it, in CgsCollisionGenerator.cpp (86 insns, all callees present).
+//   Seven measured call sites: DeformableObject::DoBodyPartWorldContactGeneration x2,
 //   ::DoDetachedWheelWorldContactGeneration, VehicleManager::DoTrafficCarWorldContactGeneration
-//   (x2), and this pair.
+//   x2, and this pair (0x826120A8 / 0x82612604).
 //   ⚠️ IT CANNOT BE DROPPED as "the dead arm": the selector is a RUNTIME byte read
-//   (`lbz byte_82F2A39C`), not a compile-time constant -- the console emits BOTH arms. See the
-//   ⭐⭐ constants block in the parked files.
+//   (`lbz byte_82F2A39C`), not a compile-time constant -- the console emits BOTH arms.
 //
 // ---- HEADER REQUEST C (source-shape only, not a compile blocker) --------------------------------
 //   `CgsSceneManager::CgsCollision::TriangleList::SetTriangleBuffer(const Triangle4*, s32)`
@@ -130,22 +120,30 @@
 //        (physfix.owner.md §3 says this signature was "left exactly as declared" because there is
 //        no export to check registers against -- the DWARF scope line settles the names.)
 //
-// ---- HEADER REQUEST D (home for two recovered constants) -- HALF LANDED 2026-08-18 round 3b -----
-//   The parked bodies carry two file-local AUTHORED-NAME constants over MEASURED values whose real
-//   home is the KVF_* block in BrnPropManager.h/.cpp, which this implementer does not own:
+// ---- HEADER REQUEST D (home for two recovered constants) -- CLOSED 2026-08-19 (wave Q6) ---------
+//   The parked bodies carried two file-local AUTHORED-NAME constants over MEASURED values whose
+//   real home is the KVF_* block in BrnPropManager.h/.cpp:
 //     KVF_MAX_CONTACT_GEN_PADDING == Splat(0.3f)   and   KB_USE_CONTACT_GEN_STREAM == true.
-//   ⭐ THE FIRST ONE IS NOW HOMED **AND ITS NAME IS RECOVERED**: it is `extern const VecFloat
+//   ⭐ THE FIRST ONE IS HOMED **AND ITS NAME IS RECOVERED**: it is `extern const VecFloat
 //   KVF_MAX_PROP_PADDING` in BrnPropManager.h (defined `= { 0.3f, 0.3f, 0.3f, 0.3f }` in
 //   BrnPropManager.cpp with this file's own thunk/rodata provenance carried across).
-//   ⚠️ THE AUTHORED SPELLING `KVF_MAX_CONTACT_GEN_PADDING` ABOVE IS THE OLD ONE AND NO LONGER
-//   EXISTS -- wave Q4 (2026-08-18) matched 0x82FB94F0's initialiser-table slot 0x82CD19AC to the
-//   DWARF's own source-order file scope, where BrnPropManager.cpp:54 reads
-//   `const VecFloat KVF_MAX_PROP_PADDING;`. The evidence is on the declaration. When the parked
-//   bodies land they should reach for the header's constant UNDER THAT NAME and drop their
-//   file-local copy.
-//   ⚠️ THE SECOND ONE IS NOT LANDED and is still an open request: KB_USE_CONTACT_GEN_STREAM has no
-//   address and no thunk cited anywhere in this banner or in the parks, so there is nothing for the
-//   header owner to re-measure and nothing was invented for it.
+//   ⭐ AND THE LANDING HONOURED IT: the two bodies below reach for the HEADER's constant under
+//   that recovered name, and the file-local `KVF_MAX_CONTACT_GEN_PADDING` copy the parks carried
+//   is GONE. That authored spelling no longer exists anywhere in the tree.
+//   (Wave Q4 matched 0x82FB94F0's initialiser-table slot 0x82CD19AC to the DWARF's own source-order
+//   file scope, where BrnPropManager.cpp:54 reads `const VecFloat KVF_MAX_PROP_PADDING;`.)
+//   ⭐ THE SECOND ONE IS NOW MEASURED TOO, and its request is DISCHARGED rather than dropped. The
+//   park said "KB_USE_CONTACT_GEN_STREAM has no address and no thunk cited anywhere, so there is
+//   nothing for the header owner to re-measure". Both halves of that are now false: the address IS
+//   cited (byte_82F2A39C, the `lbz` at 0x826125D4 / 0x82612078), and it was RE-MEASURED
+//   INDEPENDENTLY this wave on a private .i64 copy (scratchpad/waveQ6/ida_worldc/out.json) --
+//   the 32 bytes at 0x82F2A390 read
+//       41D80000 41F00000 3CA3D70A 01000000 7F7FFFFF FFFFFFFF FFFFFFFF FFFFFFFF
+//   so 0x82F2A39C == 0x01, inside an ordinary initialised .data run, not a zero page.
+//   It STAYS FILE-LOCAL below (with that evidence attached) because it is a CgsCollision-side
+//   switch with no DWARF name and no PropManager home -- seating an authored name in
+//   BrnPropManager.h would be a worse fork than a documented file-local. The open request is
+//   therefore narrowed, not closed: find its real home, do not re-measure its value.
 //   ⭐ SCOPE OF THE CLAIM (round-2 NIT), now closed: this banner correctly warned that only the
 //   0x82FB94F0 thunk had been walked end to end and that every other KVF_*/K_* pair must be
 //   re-MEASURED through its own thunk before being seated. Round 3b did exactly that -- all 22
@@ -201,38 +199,128 @@
 //      does. That entry did not block this function.
 //
 // -------------------------------------------------------------------------------------------------
-// LINK-LEVEL FACTS (gate-green != link-green)
+// LINK-LEVEL FACTS (gate-green != link-green) -- RE-GREPPED 2026-08-19 (wave Q6)
 // -------------------------------------------------------------------------------------------------
-//   * NO gate and NO stub exists for any of these three names. Grepped
+//   * NO gate and NO stub exists for ANY of this file's three functions. Re-grepped this wave over
 //     GameSource/Physics/BrnPhysicsConductorGates.cpp, GameSource/World/WorldLinkStubs.cpp and the
-//     whole of b5-decomp/src: the only pre-existing hits are the header declarations and comments
-//     in PropManager_wQ2_02.cpp. This file is the sole definition of AddContactResultsToQueue.
-//   * Callees of the body below that are DECLARED WITH A BODY IN THE TREE (checked one by one):
-//     BaseCollisionGenerator::GetNumUsedResultLists (header inline, CgsCollisionGenerator.h:114),
-//     ::GetResultList (CgsCollisionGenerator.cpp:130), PropEntityID::GetValue
-//     (BrnPropEntityID.cpp:50), PotentialContactInterface::AddEvent(const PotentialContact&)
-//     (BrnPhysicsModuleIO_PotentialContactInterface.cpp:46). NONE of this file's callees is
-//     body-less -- see the report for the parked files' own lists.
+//     whole of b5-decomp/src: the only hits are the header declarations and comments. This file is
+//     the SOLE definition of all three.
+//   * ⭐ THIS FILE IS MOUNTED (tools/build/build_game_exe.bat:1796), so the two Do* bodies landing
+//     here go straight into the link. Their callees, checked ONE BY ONE this wave:
+//       BODIED IN THE TREE -- PropManager::HasProp/HasPartJustBeenRemoved (PropManager_wQ2_04.cpp),
+//       ResourcePtr<PropPhysicsDataHeader>::operator-> (BrnPropQueueFacades.cpp:87),
+//       PropPhysicsDataHeader::GetType, PropTypeData/PropPartTypeData accessors (header inlines),
+//       PropInstance/PropPartInstance velocity accessors (header inlines),
+//       PrimitivePairListBuilder::Prepare (CgsPrimitivePairListBuilder.cpp:40),
+//       TriangleCacheInterface::GetCache / GetNumCachedTriangleBatches
+//       (CgsSceneManagerModuleIO.cpp), TriangleList::CheckAlignment / ValidateTriangles
+//       (CgsTriangleList.cpp), Triangle4::AssertIsValid, PropEntityID::GetValue,
+//       CgsDev::StrStream + the Begin/Fire/EndAssert trio, rw::math::vpu::{Magnitude, Splat, Min,
+//       GetComponent, operator*}, and -- NEW THIS WAVE --
+//       BaseCollisionGenerator::CollidePrimitiveListAgainstTriangleList
+//       (CgsCollisionGenerator.cpp, landed with its declaration).
+//     ⛔ **TWO LINK HOLES REMAIN, AND THEY ARE REPORTED, NOT PAPERED OVER** (gotcha 12):
+//       1. PrimitivePairListBuilder::AddPrimitive(const rw::collision::Volume*, Matrix44Affine,
+//          f32, u16) @0x82814AB8 -- declared this wave, NO BODY. Full decode + the three unnamed
+//          sibling overloads + the two missing CgsGeometric types are written up on the
+//          declaration in CgsPrimitivePairListBuilder.h. THIS IS THE ONE THAT MATTERS AT RUNTIME:
+//          until it exists, a prop's collision volumes never become collision primitives.
+//       2. BaseCollisionGenerator::AddPrimitiveListWithTriangleListToStream @0x82811D40 --
+//          declared since 2026-08-18 (CgsCollisionGenerator.h), still NO BODY; it is the LIVE arm
+//          (byte_82F2A39C == 1, re-measured this wave), together with the Create/Run halves
+//          @0x82811DD0 / @0x82811F58 whose bodies sit parked at
+//          scratchpad/waveQ2/parked/CgsCollisionGenerator_wQ2_PrimitiveStream.cpp on ONE type --
+//          PrimitiveListWithTriangleListStreamJobDesc -- plus ONE enum member
+//          (E_COLLISIONJOB_PRIMITIVE_LIST_WITH_TRIANGLE_LIST_STREAM = 12, its type-12 worker is
+//          already a named gate at ContactGeneratorJob.cpp:230).
+//          ⚠️ THAT PARK'S BANNER IS STALE IN THE HELPFUL DIRECTION: it says the descriptor
+//          "has no home in this tree", but CgsPrimitiveListWithTriangleListJobDesc.h/.cpp EXIST and
+//          are MOUNTED (bat:2864) -- what is missing is only the *Stream* variant beside them.
 //   * ⚠️ INHERITED, still open, not this file's to fix: PropManager_wQ_03.cpp's UpdateTriangleCache
-//     and PropManager_wQ2_02.cpp's Begin/End still have one-shot gate bodies at
-//     BrnPhysicsConductorGates.cpp:485/:492/:514. They collide at LINK time the moment those
-//     partfiles are added to tools/build/build_game_exe.bat. Mount + retire in one commit.
+//     and PropManager_wQ2_02.cpp's Begin/End still have one-shot gate bodies in
+//     BrnPhysicsConductorGates.cpp (re-measured 2026-08-19: Begin :471-476, End :478-483,
+//     UpdateTriangleCache :522-527 -- the old ":485/:492/:514" citation had drifted). They collide
+//     at LINK time the moment those partfiles are added to tools/build/build_game_exe.bat (the
+//     `rem` at :1777-1780 says so). Mount + retire in one commit.
 // =================================================================================================
 
 #include "GameSource/Physics/PropManager/BrnPropManager.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"                                            // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssert.h"                                            // CGS_ASSERT / Begin/Fire/EndAssert
+#include "GameShared/GameClasses/Development/CgsStrStream.h"                                  // CgsDev::StrStream (the :2478 / :2600 messages)
+#include "GameShared/GameClasses/Memory/CgsLinearMalloc.h"                                    // CgsMemory::LinearMalloc (parameter)
 #include "GameShared/GameClasses/SceneManager/CgsEntityId.h"                                  // CgsSceneManager::EntityId
+#include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_TriangleCache.h"              // TriangleCacheInterface
 #include "GameShared/GameClasses/SceneManager/Collision/ContactGenerator/CgsCollisionGenerator.h" // CollisionGenerator
 #include "GameShared/GameClasses/SceneManager/Collision/Primitives/CgsCollisionResult.h"      // CollisionResultList / PrimitiveTestResult
+#include "GameShared/GameClasses/SceneManager/Collision/Primitives/CgsPrimitivePairListBuilder.h" // PrimitivePairListBuilder
+#include "GameShared/GameClasses/SceneManager/Collision/Primitives/CgsTriangleList.h"         // TriangleList
 #include "GameShared/GameClasses/SceneManager/SharedIO/CgsPotentialContact.h"                 // PotentialContact
 #include "GameSource/Physics/BrnPhysicsModuleIO_PotentialContactInterface.h"                  // PotentialContactInterface::AddEvent
+#include "GameSource/Physics/PropManager/PropPhysics/BrnPropInstance.h"                       // PropInstance
+#include "GameSource/Physics/PropManager/PropPhysics/BrnPropPartInstance.h"                   // PropPartInstance
+#include "GameSource/Physics/PropManager/SharedIO/BrnPropEvents.h"                            // UpdatePropEvent
+#include "GameSource/Physics/PropManager/SharedIO/BrnPropInputInterface.h"                    // KU_MAX_PHYSICAL_PROPS / _PROP_PARTS
 #include "SharedClasses/Physics/Props/BrnPropEntityID.h"                                      // PropEntityID::GetValue (owner tripwire)
+#include "SharedClasses/Physics/Props/BrnPhysicsPropTypeData.h"                               // PropTypeData / PropPartTypeData
+#include "SharedClasses/Physics/Props/BrnPropPhysicsDataHeader.h"                             // PropPhysicsDataHeader::GetType
+#include "SDKs/EATech/rwcollision/volume_debug_access.h"                                      // rw::collision::Volume
+
+#include "rw/math/vpu/vector3_operation.h"        // Magnitude
+#include "rw/math/vpu/vector4_operation.h"        // Splat / Min / GetComponent / operator*
+#include "rw/math/vpu/matrix44affine_operation.h" // Matrix44Affine operator*
+
+// ⚠️ Do NOT add vendor/renderware/collision/AABBox.hpp here -- it drags in the second
+//    rw::math::vpu::Vector3 and hard-C2011s against BrnCommonTypes.h (physfix.owner.md REQUEST 1b).
+//    volume_debug_access.h only forward-declares AABBox, which is all these bodies need.
 
 namespace BrnPhysics
 {
 namespace Props
 {
+
+namespace vpu = ::rw::math::vpu;
+
+// =================================================================================================
+// FILE-LOCAL CONSTANTS FOR THE TWO CONTACT-GENERATION LEGS
+// =================================================================================================
+// byte_82F2A39C -- the STREAM-vs-SYNCHRONOUS selector both legs read (`lbz` at 0x826125D4 in the
+// prop leg and 0x82612078 in the part leg). AUTHORED NAME (no symbol survives), MEASURED VALUE,
+// RE-MEASURED INDEPENDENTLY 2026-08-19 on a private copy of the .i64
+// (scratchpad/waveQ6/ida_worldc/out.json): the 32 bytes at 0x82F2A390 read
+//     41D80000 41F00000 3CA3D70A 01000000 7F7FFFFF FFFFFFFF FFFFFFFF FFFFFFFF
+// so the byte at 0x82F2A39C is 0x01 -- one byte inside a plain initialised-data run (its
+// neighbours are 27.0f, 30.0f, 0.02f and FLT_MAX), NOT a zero page. So on the shipped console
+// build the STREAM arm is the live one.
+// ⚠️ THE 0x82FB9xxx "PLACEHOLDER ZERO" TRAP (gotcha 13) DOES NOT APPLY: that trap is
+// zero-in-the-static-image plus a dynamic-initialiser thunk that writes the real value at startup.
+// This byte is already non-zero in the image, so there is nothing for a thunk to supply. (The
+// wave-Q round-2 measurement additionally reported a whole-export-set xref scan returning exactly
+// two references, both the `lbz` reads in this pair of functions -- attributed, not re-run here.
+// What THIS wave re-measured is the value.)
+// ⚠️ THE SYNCHRONOUS ARM STILL CANNOT BE DROPPED: the read is a RUNTIME load, not a folded
+// constant, which is why the console emits BOTH arms and why both are reproduced below.
+// ⚠️ HOME NOT RECOVERED -- see HEADER REQUEST D in the banner. It is a CgsCollision-side switch
+// with no DWARF name, so it stays file-local here rather than being seated under an authored name
+// in BrnPropManager.h.
+static const bool KB_USE_CONTACT_GEN_STREAM = true;   // byte_82F2A39C == 0x01, measured
+
+// The triangle-cache slot map. Both are DWARF-attested WITH THEIR VALUES in
+// references/DecFIGS/dwarfdump/GameSource/Physics/BrnTriangleCacheConstants.h:36 / :37, and both
+// are X360-attested in these two bodies: `addi r21, liPropIndex, 0x1C` (0x826122B8, == 28) and
+// `addi r20, liPartIndex, 0x2B` (0x82611D40, == 43).
+// ⚠️ SAME MOVE-WHEN-IT-LANDS CAVEAT, AND THE SAME FOLD HAZARD, as the sibling part-files:
+// b5-decomp/src/GameSource/Physics/BrnTriangleCacheConstants.h -- their DWARF home -- still does
+// not exist (re-checked 2026-08-19), and PropManager_wQ2_02.cpp:97-98 and PropManager_wQ2_04.cpp
+// declare the SAME two file-local names. Internal linkage keeps that harmless across translation
+// units, but every one of these part-files folds back into BrnPropManager.cpp: whichever folds
+// second must drop its copy, or all of them switch to BrnTriangleCacheConstants.h in one commit.
+// The names deliberately MATCH wQ2_02's spelling so that fold is a delete, not a rename.
+static const s32 KI_PROP_CACHE_START_INDEX      = 28;   // DWARF BrnTriangleCacheConstants.h:36
+static const s32 KI_PROP_PART_CACHE_START_INDEX = 43;   // DWARF BrnTriangleCacheConstants.h:37
+
+// Console `li r6, 0x40` at all four collide call sites of this pair.
+static const u16 KU16_COLLIDE_MAX_RESULTS = 64;
 
 // =================================================================================================
 // BrnPhysics::Props::PropManager::AddContactResultsToQueue @0x82612F08  (184 asm insns)
@@ -495,6 +583,421 @@ void PropManager::AddContactResultsToQueue(
             }
         }
     }
+}
+
+// =================================================================================================
+// BrnPhysics::Props::PropManager::DoPartWorldContactGeneration @0x82611B70  (349 asm insns)
+//
+// ⭐ LANDED 2026-08-19 (wave Q6). One leg of BeginPropWorldContactGeneration's per-UpdatePropEvent
+// dispatch -- the arm taken when the event's PropEntityID carries a NON-ZERO part index, i.e. a
+// SHED PANEL of a smashed prop. It builds a primitive-pair list out of that part's collision
+// volumes, pairs it with the world triangles cached for the part's triangle-cache slot, and posts
+// one collision job.
+//
+// GROUNDING: the RAW `assembly` array of .ida-exports/BURNOUT_X360_ARTIST.XEX/0x82611B70.json,
+// re-read line by line this wave (scratchpad/waveQ6/asm_82611B70.txt). The Hex-Rays pseudocode in
+// that same export was NOT consulted -- its `a5, a6` prototype drops the vector parameter entirely.
+// 349 == (0x826120E0 - 0x82611B70)/4 + 1, and the export listing has exactly 349 lines.
+//
+// ---- CONSOLE ARGUMENT MAP, read off the prologue 0x82611B88..0x82611BA4 ------------------------
+//     r3 = this (r19) · r4 = lpContactGenerator (r17) · r5 = lpTriCache (r18)
+//     r6 = &lUpdatePartEvent (r22) · r7 = &liNumJobsAdded (r16) · r8 = lpMalloc (r26)
+//     v1 = lvfTimeStep (saved to v127 at 0x82611B8C)
+//   ⚠️ A VECTOR ARG CONSUMES NO GPR SLOT, so lvfTimeStep's POSITION in the parameter list is
+//   DWARF-attested only (BrnPropManager.h carries the same note on the declaration); the asm alone
+//   cannot order it.
+//
+// ---- DECODE, address by address ----------------------------------------------------------------
+//   0x82611BA8  cmplwi r17,0 / bne        assert "lpContactGenerator != NULL", li r5,0x991 ==
+//                                         BrnPropManager.cpp:2449. NON-GATING (falls through).
+//   0x82611BD0  lhz 0x64(r22) / extsh     liPartIndex = event.miPhysicsSlot -- the member is s16
+//                                         and is SIGN-extended into an s32 local.
+//   0x82611BD8  cmpwi 0 / bge             assert "liPartIndex >= 0"          li r5,0x9A2 == :2466
+//   0x82611BFC  cmpwi 0x1E / blt          assert "liPartIndex < ...", li r5,0x9A3 == :2467.
+//                                         0x1E == 30 == KU_MAX_PHYSICAL_PROP_PARTS.
+//   0x82611C30  bl HasPartJustBeenRemoved(event.mEntityId @0x60, liPartIndex)
+//   0x82611C3C  clrlwi/bne -> 0x826120D0  TRUE => return (branch straight to the epilogue).
+//   0x82611C44..0x82611D2C                the SECOND, message-CARRYING range check, which fires
+//                                         only when liPartIndex is outside [0,30):
+//                                           "Updated part was removed: Part ID = " << u32 id
+//                                           << ", Returned part index = " << s32 index
+//                                         li r5,0x9AE == :2478, exactly the DWARF's
+//                                         `CgsDev::StrStream lStrStream @ BrnPropManager.cpp:2478`.
+//                                         ⚠️ It also re-runs the mEntityId.GetOwner() ==
+//                                         E_ENTITYTYPE_PROP tripwire (BrnPropEntityID.h:278,
+//                                         li r5,0x116) -- that is PropEntityID::GetValue()'s OWN
+//                                         inlined assert, not a separate source line, so it is
+//                                         reproduced by CALLING GetValue() rather than spelled out.
+//   0x82611D30  lwz 0x8C(r19) + slwi r29,6   lpPart = &mpaPartInstances[liPartIndex]
+//                                         (console stride 64 == the CONSOLE sizeof(PropPartInstance);
+//                                          the host indexes the typed array -- gotcha 1).
+//   0x82611D40  addi r20, r29, 0x2B       liCacheSlotIndex = 43 + liPartIndex.
+//   0x82611D44/48  lwz 0x34 / lbz 0x38    luTypeId = lpPart->GetType(), luPartId = GetPartId();
+//                                         both loaded BEFORE the operator-> call clobbers r3.
+//   0x82611D4C  bl ResourcePtr<PropPhysicsDataHeader>::operator-> on this+0x54 (0x822868E0,
+//               identified in the tree at BrnPropQueueFacades.cpp:87), then GetType(luTypeId).
+//   0x82611D60..0x82611D78  `slwi r9,r11,1 ; add r11,r11,r9 ; slwi r11,r11,4` == luPartId * 48,
+//               added to `lwz 0x40(propType)` == PropTypeData::maParts.
+//               ⚠️ 48 IS THE CONSOLE STRIDE; the HOST PropPartTypeData is 64 bytes, which is why
+//               this indexes GetParts()[luPartId] instead of doing the console's byte arithmetic.
+//   0x82611D7C  lbz 0x2C(partType)        lpPartType->GetNumberOfVolumes()
+//   0x82611D80  bl PrimitivePairListBuilder::Prepare(lpMalloc, that count)
+//
+//   ---- THE PADDING (0x82611D84..0x82611E5C) ----------------------------------------------------
+//   0x82611D98  lfs 0x28(partType)        the bounding radius, splatted (`vspltw ,0`).
+//   0x82611DA8  lvx r31+0x10 / r31+0x20   lpPart->GetLinearVelocity() / GetAngularVelocity()
+//   0x82611DB4  vmsum3fp128 x2            the two 3-lane MagnitudeSquared
+//   0x82611DD4..0x82611E4C                vrsqrtefp + TWO Newton-Raphson refinements, then
+//                                         lenSq * rsqrt == the magnitude, with a
+//                                         `vcmpeqfp(0,lenSq)` + `vsel` zero-length guard.
+//     ⚠️⚠️ THE VMX OPERAND-ORDER RULE THAT MAKES THIS READABLE (gotcha 9; a previous wave got it
+//     backwards): IDA prints the VA-form as (vD, vA, vB, vC) while the arithmetic is vA*vC (+/-)
+//     vB. So `vnmsubfp v7,v0,v11,v5` == v11 - v0*v5 == 1 - a*x^2 and `vmaddfp v9,v3,v9,v7` ==
+//     v3*v7 + v9 == the NR step x + 0.5x(1 - a x^2). Read the other way the block is nonsense.
+//     The 1.0f / 0.5f are `vcfsx v0,0` / `vcfsx v0,1` over `vspltisw v0,1` -- MATERIALISED, not
+//     loaded from rodata.
+//     HOST SPELLING: rw::math::vpu::Magnitude (an exact std::sqrt of MagnitudeSquared), which the
+//     DWARF names TWICE in this scope -- so this is a de-optimisation, not a rewrite. The console's
+//     vsel guard exists because rsqrte(0) is +inf and 0*inf is NaN; std::sqrt(0) is 0, so the host
+//     needs no guard and none is added.
+//   0x82611E50  vmaddfp v0, v13, v0, v5   == v13*v5 + v0 == |angular| * radius + |linear|
+//   0x82611E54  vmulfp128 v0, v0, v127    *= lvfTimeStep
+//   0x82611E58  vminfp v0, v0, v12        Min(that, unk_82FB94F0) == KVF_MAX_PROP_PADDING
+//   0x82611E64  lfs f31, <that slot>      the f32 lane-0 read the AddPrimitive calls pass in f1.
+//
+//   ---- THE VOLUME LOOP (0x82611E80..0x82611F58) ------------------------------------------------
+//   0x82611E84  lwz 0x24(partType) + vol*96   lpPartType->GetCollisionVolume(lu8Vol). 96 ==
+//               sizeof(rw::collision::Volume), already static_asserted in BrnPhysicsPropTypeData.h,
+//               so the typed index is exact and 96 does NOT widen.
+//   0x82611E88..0x82611F40  a full Matrix44Affine product, broadcast+FMA:
+//               out.row_i = vol.row_i.x*ev.row0 + vol.row_i.y*ev.row1 + vol.row_i.z*ev.row2
+//                           (+ ev.row3 for the position row)
+//               == `lpPartVolume->GetRelativeTransform() * lUpdatePartEvent.mTransform`. The
+//               volume's four rows come from volume+0x00..+0x30, which IS its embedded transform
+//               (volume_debug_access.h already returns it). The DWARF confirms
+//               `rw::math::vpu::operator*` here.
+//   0x82611E74  clrlwi r29,r29,16         the primitive tag is (u16)liPartIndex.
+//   0x82611F44  bl sub_82814AB8           AddPrimitive(volume, transform, padding, tag)
+//   0x82611F4C  lbz 0x2C(partType)        THE LOOP BOUND IS RE-READ EVERY ITERATION, and the
+//                                         counter is an 8-bit `clrlwi ,24` compared UNSIGNED
+//                                         (`cmplw`) -- the DWARF's `uint8_t lu8Vol @2502`.
+//
+//   ---- THE TRIANGLE LIST (0x82611F5C..0x82612058) ----------------------------------------------
+//   0x82611F5C  assert "mpTriangleCacheManager != NULL" (CgsSceneManagerModuleIO.h:1286, 0x506) --
+//               the INLINED body of TriangleCacheInterface::GetCache. The DWARF spells that method
+//               GetCachedTriangles; the tree committed the same @0x82277810 method as GetCache --
+//               same method, no fork. That is why three baked tripwires appear here with no `bl`.
+//   0x82611F90..0x82611FE4  slot*48 into the manager's per-slot table (+0x04), `lwz 0x24` == the
+//               batch base index, `mulli 0xE0` == * sizeof(Triangle4) off mpaTriangleCache (+0x00),
+//               with the manager's own "mpaTriangleCache != NULL" (:153) tripwire between --
+//               i.e. exactly the committed TriangleCacheManager::GetTrianglesForCachedObject.
+//   0x82611FE8  assert :1295 (0x50F)      the second inlined accessor ==
+//               GetNumCachedTriangleBatches, whose count is the per-slot `lwz 0x28`.
+//   0x8261201C  two stw + bl CheckAlignment == TriangleList::SetTriangleBuffer INLINED. That method
+//               (DWARF CgsTriangleList.h:21) does not exist in the tree, which is why the two
+//               member stores are open-coded -- exactly as the committed sibling
+//               BrnVehicleManagerContactGeneration.cpp:591-593 already does. HEADER REQUEST C.
+//   0x82612028..0x82612058  the Triangle4::AssertIsValid walk at a 0xE0 stride with the count
+//               re-read each iteration == TriangleList::ValidateTriangles (committed).
+//
+//   ---- THE POST (0x8261205C..0x826120CC) -------------------------------------------------------
+//   0x82612084  slwi r11,(miNumPropsAddedToContactGen + 0x192F),2 ; stwx r9,r11,r19
+//               0x192F*4 == 0x64BC == offsetof(maPropsAddedToContactGen), so this is the array
+//               write followed by the ++. NO BOUNDS CHECK in the console (the array is 45 long);
+//               none is added.
+//   0x82612078  lbz byte_82F2A39C / bne   the stream-vs-synchronous selector.
+//   0x826120A8  synchronous arm  CollidePrimitiveListAgainstTriangleList(prims, tris,
+//                                  r6=0x40 max, r7=0 tagA, r8=0 tagB, r9=1 useOptimisedBoxTests)
+//   0x826120C0  stream arm       AddPrimitiveListWithTriangleListToStream(prims, tris, 0x40,
+//                                  r7=1 useOptimisedBoxTests, r8=0 tagA, r9=0 tagB,
+//                                  r10 = mpPrimitiveWithTriangleStream (lwz 0xA0))
+//     ⚠️ THE TWO CALLEES TAKE THE BOOL AND THE TAGS IN A DIFFERENT ORDER. Both orders are the
+//     DWARF's own and both are register-confirmed. Do NOT "tidy" them to match.
+//   0x826120C4  ++liNumJobsAdded through the reference.
+//
+// Every console offset above appears in a COMMENT only; every member is reached by name.
+// =================================================================================================
+void PropManager::DoPartWorldContactGeneration(
+    CgsSceneManager::CgsCollision::CollisionGenerator*             lpContactGenerator,
+    const CgsSceneManager::SceneManagerIO::TriangleCacheInterface* lpTriCache,
+    const UpdatePropEvent&                                         lUpdatePartEvent,
+    s32&                                                           liNumJobsAdded,
+    CgsMemory::LinearMalloc*                                       lpMalloc,
+    VecFloat                                                       lvfTimeStep )
+{
+    typedef CgsSceneManager::CgsCollision::PrimitivePairListBuilder PrimitivePairListBuilder;
+    typedef CgsSceneManager::CgsCollision::TriangleList             TriangleList;
+
+    // BrnPropManager.cpp:2449 -- non-gating tripwire (the asm falls through).
+    CGS_ASSERT( lpContactGenerator != NULL, "lpContactGenerator != NULL" );
+
+    // lhz +0x64 / extsh: the event's slot member is s16, SIGN-extended into an s32 local.
+    const s32 liPartIndex = lUpdatePartEvent.miPhysicsSlot;
+
+    CGS_ASSERT( liPartIndex >= 0, "liPartIndex >= 0" );                                   // :2466
+    CGS_ASSERT( liPartIndex < static_cast<s32>( KU_MAX_PHYSICAL_PROP_PARTS ),
+                "liPartIndex < static_cast< int32_t > ( KU_MAX_PHYSICAL_PROP_PARTS )" );  // :2467
+
+    if ( HasPartJustBeenRemoved( lUpdatePartEvent.mEntityId, liPartIndex ) )
+    {
+        return;                                             // 0x82611C3C bne -> the epilogue
+    }
+
+    // :2478. The console streams this into the SHARED global sink CgsDev::Assert::gpcMessageBuffer;
+    // that global is not declared anywhere in this tree, so the message is built on a stack buffer
+    // of the same KI_MESSAGEBUFFERSIZE -- the committed idiom (CgsID.cpp:73-84,
+    // PropManager_wQ2_02.cpp:317). Message content, stream order and the fired line are unchanged.
+    if ( liPartIndex < 0 || liPartIndex >= static_cast<s32>( KU_MAX_PHYSICAL_PROP_PARTS ) )
+    {
+        char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
+        CgsDev::StrStream lStrStream( lacMessage, CgsDev::Assert::KI_MESSAGEBUFFERSIZE );
+        lStrStream << "Updated part was removed: Part ID = ";
+        lStrStream << lUpdatePartEvent.mEntityId.GetValue();   // carries the owner tripwire :278
+        lStrStream << ", Returned part index = ";
+        lStrStream << liPartIndex;
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert( lacMessage, __FILE__, __LINE__ );
+        CgsDev::Assert::EndAssert();
+    }
+
+    PropPartInstance* lpPart = &mpaPartInstances[liPartIndex];          // console stride 64
+    const s32 liCacheSlotIndex = KI_PROP_PART_CACHE_START_INDEX + liPartIndex;
+
+    const u32 luTypeId = lpPart->GetType();                             // +0x34
+    const u32 luPartId = lpPart->GetPartId();                           // +0x38
+
+    const PropTypeData*     lpPropType = mpPhysicsData->GetType( luTypeId );
+    const PropPartTypeData* lpPartType = &lpPropType->GetParts()[luPartId];   // console stride 48
+
+    PrimitivePairListBuilder lPrimPairList;
+    lPrimPairList.Prepare( lpMalloc, lpPartType->GetNumberOfVolumes() );      // lbz 0x2C
+
+    // |linear| + |angular| * boundingRadius, scaled by the timestep and capped. See the banner for
+    // the vmaddfp/vnmsubfp operand-order rule that makes this the right reading of the console's
+    // rsqrt+2NR+vsel block.
+    VecFloat lvfPadding = vpu::Splat( vpu::Magnitude( lpPart->GetLinearVelocity() ) );
+    lvfPadding = lvfPadding
+               + vpu::Splat( vpu::Magnitude( lpPart->GetAngularVelocity() ) )
+                     * vpu::Splat( lpPartType->GetBoundingRadius() );         // lfs 0x28
+    lvfPadding = lvfPadding * lvfTimeStep;
+    lvfPadding = vpu::Min( lvfPadding, KVF_MAX_PROP_PADDING );                // vminfp
+
+    // The bound is RE-READ every iteration (lbz 0x2C at both 0x82611DA0 and 0x82611F4C) and the
+    // counter is an 8-bit value compared UNSIGNED -- the DWARF's `uint8_t lu8Vol`.
+    for ( u8 lu8Vol = 0; lu8Vol < lpPartType->GetNumberOfVolumes(); ++lu8Vol )
+    {
+        ::rw::collision::Volume* lpPartVolume = lpPartType->GetCollisionVolume( lu8Vol );
+
+        const Matrix44Affine lPartTransform =
+            lpPartVolume->GetRelativeTransform() * lUpdatePartEvent.mTransform;
+
+        lPrimPairList.AddPrimitive( lpPartVolume, lPartTransform,
+                                    vpu::GetComponent( lvfPadding, 0 ),   // VecFloat -> f32, in f1
+                                    static_cast<u16>( liPartIndex ) );    // clrlwi r29,r29,16
+    }
+
+    // The DWARF spells the first accessor GetCachedTriangles; the tree committed the same
+    // @0x82277810 method as GetCache. Same method, no fork.
+    const CgsGeometric::Triangle4* lp4Tris = lpTriCache->GetCache( liCacheSlotIndex );
+    const s32 liNum4Tris = lpTriCache->GetNumCachedTriangleBatches( liCacheSlotIndex );
+
+    // HEADER REQUEST C: the console called TriangleList::SetTriangleBuffer(lp4Tris, liNum4Tris) and
+    // the compiler inlined it to these two member stores plus its out-of-line CheckAlignment().
+    TriangleList lListOfCachedTris;
+    lListOfCachedTris.mpTriangles    = const_cast<CgsGeometric::Triangle4*>( lp4Tris );
+    lListOfCachedTris.miNumTriangles = liNum4Tris;
+    lListOfCachedTris.CheckAlignment();
+    lListOfCachedTris.ValidateTriangles();
+
+    // 0x82612084: maPropsAddedToContactGen[miNumPropsAddedToContactGen] = the event's id.
+    // The console does NOT bounds-check the 45-entry array; none is added.
+    maPropsAddedToContactGen[miNumPropsAddedToContactGen] = lUpdatePartEvent.mEntityId;
+    ++miNumPropsAddedToContactGen;
+
+    if ( !KB_USE_CONTACT_GEN_STREAM )
+    {
+        // 0x826120A8 -- r7 = 0 tag A, r8 = 0 tag B, r9 = 1 the bool. Return value dropped.
+        lpContactGenerator->CollidePrimitiveListAgainstTriangleList(
+            &lPrimPairList, &lListOfCachedTris, KU16_COLLIDE_MAX_RESULTS, 0u, 0u, true );
+    }
+    else
+    {
+        // 0x826120C0 -- NOTE the different order: r7 = 1 the bool, r8 = 0 tag A, r9 = 0 tag B,
+        // r10 = mpPrimitiveWithTriangleStream (lwz 0xA0). Return value dropped.
+        lpContactGenerator->AddPrimitiveListWithTriangleListToStream(
+            &lPrimPairList, &lListOfCachedTris, KU16_COLLIDE_MAX_RESULTS, true, 0u, 0u,
+            mpPrimitiveWithTriangleStream );
+    }
+
+    ++liNumJobsAdded;                                       // 0x826120C4 through the reference
+}
+
+// =================================================================================================
+// BrnPhysics::Props::PropManager::DoPropInstanceWorldContactGeneration @0x826120E8  (342 insns)
+//
+// ⭐ LANDED 2026-08-19 (wave Q6). The other leg -- the arm taken when the event's PropEntityID
+// carries a ZERO part index, i.e. a WHOLE prop.
+//
+// GROUNDING: the RAW `assembly` array of .ida-exports/BURNOUT_X360_ARTIST.XEX/0x826120E8.json,
+// re-read this wave (scratchpad/waveQ6/asm_826120E8.txt); the Hex-Rays pseudocode was NOT
+// consulted. 342 == (0x8261263C - 0x826120E8)/4 + 1, and the listing has exactly 342 lines.
+//
+// ---- IT IS THE SAME FUNCTION AS ITS DoPart TWIN, WITH THE PROP ARM SUBSTITUTED -----------------
+// MEASURED, not assumed: strip the addresses from both export listings and diff them -- the two
+// bodies are instruction-for-instruction the same shape, and every difference is one of the eleven
+// below (plus register allocation and branch targets). That is why the two bodies read as
+// near-copies here: the console's two bodies are too.
+//
+//   #  DoPart @0x82611B70                        DoPropInstance @0x826120E8
+//   1  lhz 0x64(event) / extsh -> liPartIndex    same, -> liPropIndex
+//   2  asserts :2449 :2466 :2467 :2478           asserts :2574 :2588 :2589 :2600
+//                                                (li r5 0x991/0x9A2/0x9A3/0x9AE vs
+//                                                       0xA0E/0xA1C/0xA1D/0xA28)
+//   3  bound `cmpwi 0x1E` == 30                  bound `cmpwi 0xF` == 15
+//      (KU_MAX_PHYSICAL_PROP_PARTS)              (KU_MAX_PHYSICAL_PROPS)
+//   4  bl HasPartJustBeenRemoved                 bl HasPropJustBeenRemoved
+//   5  "Updated part was removed: Part ID = "    "Updated prop was removed: Prop ID = "
+//      ", Returned part index = "                ", Returned prop index = "
+//   6  lwz 0x8C(this) + `slwi 6` (stride 64)     lwz 0x7C(this) + `mulli 0x70` (stride 112)
+//      == mpaPartInstances                       == mpaPropInstances
+//   7  `addi r20, idx, 0x2B` == slot 43 + i      `addi r21, idx, 0x1C` == slot 28 + i
+//   8  lwz 0x34 / lbz 0x38 == GetType/GetPartId, lwz 0x64 == GetTypeId ONLY -- no part id, and NO
+//      then `lwz 0x40(type)` + partId*48         maParts indexing at all
+//   9  volume count `lbz 0x2C(partType)`         volume count `lbz 0x5E(propType)`
+//      radius       `lfs 0x28(partType)`         radius       `lfs 0x44(propType)`
+//      volumes      `lwz 0x24(partType)`         volumes      `lwz 0x3C(propType)`
+//  10  velocities   lvx part+0x10 / part+0x20    velocities   lvx prop+0x40 / prop+0x50
+//  11  DWARF locals lPartTransform @2505         DWARF locals lpRelativeTransform @2625 (a POINTER)
+//                                                + lVolumeMatrix @2626
+//
+// EVERYTHING ELSE IS IDENTICAL, and was re-checked line by line this wave: the null-generator
+// assert, the double range check, the ResourcePtr operator-> + PropPhysicsDataHeader::GetType pair,
+// PrimitivePairListBuilder::Prepare, the whole rsqrt+2NR+vsel Magnitude pair, the `vminfp` against
+// unk_82FB94F0, the per-volume Matrix44Affine product and AddPrimitive, the triangle-cache fetch
+// with its three inlined asserts, the Triangle4::AssertIsValid walk, the
+// maPropsAddedToContactGen post, the `lbz byte_82F2A39C` selector with its two arms IN THE SAME
+// ARGUMENT ORDERS, and the `++liNumJobsAdded` through the reference. See the DoPart banner above
+// for the shared decode; only the deltas are annotated inline below.
+//
+// ---- CONSOLE ARGUMENT MAP, read off the prologue 0x82612100..0x8261211C -----------------------
+//     r3 = this (r19) · r4 = lpContactGenerator (r17) · r5 = lpTriCache (r18)
+//     r6 = &lUpdatePropEvent (r22) · r7 = &liNumJobsAdded (r16) · r8 = lpMalloc (r27)
+//     v1 = lvfTimeStep (saved to v127) -- again, a vector arg consumes NO GPR slot, so its
+//     POSITION is DWARF-attested, not register-attested.
+//
+// ---- ONE SOURCE-SHAPE NOTE, STATED NOT HIDDEN ------------------------------------------------
+// The DecFIGS scope names `Matrix44Affine* lpRelativeTransform @2625` -- a POINTER, because the
+// SDK's own Volume::GetRelativeTransform returns `Matrix44Affine*`. This tree's accessor
+// (volume_debug_access.h) deliberately returns a REFERENCE, so the local is a reference here.
+// Same object, same product; recorded so nobody reads the difference as a recovered semantic.
+// =================================================================================================
+void PropManager::DoPropInstanceWorldContactGeneration(
+    CgsSceneManager::CgsCollision::CollisionGenerator*             lpContactGenerator,
+    const CgsSceneManager::SceneManagerIO::TriangleCacheInterface* lpTriCache,
+    const UpdatePropEvent&                                         lUpdatePropEvent,
+    s32&                                                           liNumJobsAdded,
+    CgsMemory::LinearMalloc*                                       lpMalloc,
+    VecFloat                                                       lvfTimeStep )
+{
+    typedef CgsSceneManager::CgsCollision::PrimitivePairListBuilder PrimitivePairListBuilder;
+    typedef CgsSceneManager::CgsCollision::TriangleList             TriangleList;
+
+    // BrnPropManager.cpp:2574 -- non-gating tripwire (the asm falls through).
+    CGS_ASSERT( lpContactGenerator != NULL, "lpContactGenerator != NULL" );
+
+    // lhz +0x64 / extsh: the event's slot member is s16, SIGN-extended into an s32 local.
+    const s32 liPropIndex = lUpdatePropEvent.miPhysicsSlot;                       // DWARF :2576
+
+    CGS_ASSERT( liPropIndex >= 0, "liPropIndex >= 0" );                           // :2588
+    CGS_ASSERT( liPropIndex < static_cast<s32>( KU_MAX_PHYSICAL_PROPS ),
+                "liPropIndex < static_cast< int32_t > ( KU_MAX_PHYSICAL_PROPS )" ); // :2589
+
+    if ( HasPropJustBeenRemoved( lUpdatePropEvent.mEntityId, liPropIndex ) )
+    {
+        return;                                            // 0x826121B4 bne -> the epilogue
+    }
+
+    // :2600 -- same shared-message-buffer treatment as the DoPart twin.
+    if ( liPropIndex < 0 || liPropIndex >= static_cast<s32>( KU_MAX_PHYSICAL_PROPS ) )
+    {
+        char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
+        CgsDev::StrStream lStrStream( lacMessage, CgsDev::Assert::KI_MESSAGEBUFFERSIZE );
+        lStrStream << "Updated prop was removed: Prop ID = ";
+        lStrStream << lUpdatePropEvent.mEntityId.GetValue();  // carries the owner tripwire :278
+        lStrStream << ", Returned prop index = ";
+        lStrStream << liPropIndex;
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert( lacMessage, __FILE__, __LINE__ );
+        CgsDev::Assert::EndAssert();
+    }
+
+    // console `mulli r11, liPropIndex, 0x70` -- stride 112 is a CONSOLE size; the host indexes the
+    // typed array and lets sizeof do the striding (gotcha 1).
+    PropInstance* lpProp = &mpaPropInstances[liPropIndex];                        // DWARF :2577
+    const s32 liCacheSlotIndex = KI_PROP_CACHE_START_INDEX + liPropIndex;
+
+    // `lwz 0x64(lpProp)` is muTypeId, loaded before the ResourcePtr operator-> call clobbers r3;
+    // that is emission order, not a second statement.
+    const PropTypeData* lpPropType = mpPhysicsData->GetType( lpProp->GetTypeId() );
+
+    PrimitivePairListBuilder lPrimPairList;                                       // DWARF :2613
+    lPrimPairList.Prepare( lpMalloc, lpPropType->GetNumberOfVolumes() );          // lbz 0x5E
+
+    VecFloat lvfPadding = vpu::Splat( vpu::Magnitude( lpProp->GetLinearVelocity() ) );
+    lvfPadding = lvfPadding
+               + vpu::Splat( vpu::Magnitude( lpProp->GetAngularVelocity() ) )
+                     * vpu::Splat( lpPropType->GetBoundingRadius() );             // lfs 0x44
+    lvfPadding = lvfPadding * lvfTimeStep;
+    lvfPadding = vpu::Min( lvfPadding, KVF_MAX_PROP_PADDING );                    // vminfp
+
+    // The bound is RE-READ every iteration (lbz 0x5E at both 0x82612328 and 0x826124A8).
+    for ( u8 lu8Vol = 0; lu8Vol < lpPropType->GetNumberOfVolumes(); ++lu8Vol )
+    {
+        // console `lwz 0x3C(propType)` + `vol*96`; 96 == sizeof(rw::collision::Volume), already
+        // static_assert'd in BrnPhysicsPropTypeData.h, so the typed index is exact.
+        ::rw::collision::Volume* lpVolume = lpPropType->GetCollisionVolume( lu8Vol ); // DWARF :2624
+
+        const Matrix44Affine& lrRelativeTransform = lpVolume->GetRelativeTransform();
+
+        const Matrix44Affine lVolumeMatrix =
+            lrRelativeTransform * lUpdatePropEvent.mTransform;                    // DWARF :2626
+
+        lPrimPairList.AddPrimitive( lpVolume, lVolumeMatrix,
+                                    vpu::GetComponent( lvfPadding, 0 ),  // VecFloat -> f32, in f1
+                                    static_cast<u16>( liPropIndex ) );   // clrlwi r26,r26,16
+    }
+
+    const CgsGeometric::Triangle4* lp4Tris = lpTriCache->GetCache( liCacheSlotIndex );  // DWARF :2579
+    const s32 liNum4Tris = lpTriCache->GetNumCachedTriangleBatches( liCacheSlotIndex ); // DWARF :2578
+
+    // HEADER REQUEST C -- the inlined TriangleList::SetTriangleBuffer, open-coded.
+    TriangleList lListOfCachedTris;                                               // DWARF :2580
+    lListOfCachedTris.mpTriangles    = const_cast<CgsGeometric::Triangle4*>( lp4Tris );
+    lListOfCachedTris.miNumTriangles = liNum4Tris;
+    lListOfCachedTris.CheckAlignment();
+    lListOfCachedTris.ValidateTriangles();
+
+    // 0x826125E0: maPropsAddedToContactGen[miNumPropsAddedToContactGen] = the event's id.
+    // The console does NOT bounds-check the 45-entry array; none is added.
+    maPropsAddedToContactGen[miNumPropsAddedToContactGen] = lUpdatePropEvent.mEntityId;
+    ++miNumPropsAddedToContactGen;
+
+    if ( !KB_USE_CONTACT_GEN_STREAM )
+    {
+        // 0x82612604 -- r7 = 0 tag A, r8 = 0 tag B, r9 = 1 the bool. Return value dropped.
+        lpContactGenerator->CollidePrimitiveListAgainstTriangleList(
+            &lPrimPairList, &lListOfCachedTris, KU16_COLLIDE_MAX_RESULTS, 0u, 0u, true );
+    }
+    else
+    {
+        // 0x8261261C -- NOTE the different order: r7 = 1 the bool, r8 = 0 tag A, r9 = 0 tag B,
+        // r10 = mpPrimitiveWithTriangleStream (lwz 0xA0). Return value dropped.
+        lpContactGenerator->AddPrimitiveListWithTriangleListToStream(
+            &lPrimPairList, &lListOfCachedTris, KU16_COLLIDE_MAX_RESULTS, true, 0u, 0u,
+            mpPrimitiveWithTriangleStream );
+    }
+
+    ++liNumJobsAdded;                                       // 0x82612620 through the reference
 }
 
 }
