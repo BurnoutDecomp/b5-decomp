@@ -1178,21 +1178,27 @@ void SceneManagerModule::ProcessFrustumTestJobResults(CgsModule::IOBufferStack* 
 // ===========================================================================
 // SceneManagerModule::AddBody @ 0x828BA498
 //
-// Producer side of the overlap-generation add-body path: assemble a 64-byte
-// InAddBodyEvent image (the whole 32-byte world AABB block-copied into +0x00..+0x1F,
-// then the culling-group lane @+0x20, sweeper object index @+0x24, volume-instance
-// handle @+0x28, and the packed 64-bit body word @+0x30) and push it onto the
-// overlap-generation input buffer's add-body queue, then record the object's culling
+// Producer side of the overlap-generation add-body path: queue a 64-byte InAddBody
+// request on the overlap-generation input buffer, then record the object's culling
 // group in the culling-group manager's per-object array.
 //
-// The X360 lays the event out store-for-store (four ld/std qword pairs off the
-// caller's box, then stw r30/r31/r8 + std r9). The truncated `CgsSceneMana(a2)` callee
-// is the non-const OverlapGenerationIO::InputBuffer::GetAddBodyQueue accessor
-// (== &a2->mAddBodyQueue, the queue is the first member) whose queued 64-byte events
-// the sibling BaseEventQueue<InAddBodyEvent>::AddEvent (@0x828B85D8) copies wholesale.
-// The +0x20 culling-group lane sits inside the event's leading AABB span (the box is
-// 32 bytes on the wire) so it is written by raw offset rather than a named field. The
-// trailing index assert is a non-gating tripwire; the culling-group byte store runs
+// The X360 emits this function with OverlapGenerationIO::InputBuffer::AddBody inlined
+// into it, which is why the whole event assembly is visible here store-for-store:
+//     ld/std x4 off r6 -> mAabb  +0x00..+0x1F   (the caller's rw::collision::AABBox)
+//     stw r7           -> mCullGroup            +0x20
+//     stw r5           -> muIndex               +0x24
+//     stw r8           -> meBodyState           +0x28
+//     std r9           -> mVolumeInstanceID     +0x30
+// then the truncated `CgsSceneMana(a2)` callee -- the non-const
+// OverlapGenerationIO::InputBuffer::GetAddBodyQueue accessor @0x828B0188 (== a2+16,
+// the queue is the first member after the IOBuffer status byte) -- and
+// BaseEventQueue<InAddBody>::AddEvent @0x828B85D8, which copies the 64 bytes wholesale.
+// ⚠️ CORRECTED 2026-08-18 (D1): the previous banner claimed the +0x20 culling-group lane
+// "sits inside the event's leading AABB span" and therefore had no named field. It does
+// not -- the box ends at +0x1F and +0x20 is InAddBody::mCullGroup (DWARF
+// CgsOverlapGenerationModuleIO.h:57). That misreading is what produced the 36-byte
+// maAABBox stand-in the wave retired.
+// The trailing index assert is a non-gating tripwire; the culling-group byte store runs
 // unconditionally after it (X360 stbx past the blt).
 // ===========================================================================
 void SceneManagerModule::AddBody(OverlapGenerationIO::InputBuffer* lpOverlapGenerationInputBuffer,
@@ -1202,27 +1208,39 @@ void SceneManagerModule::AddBody(OverlapGenerationIO::InputBuffer* lpOverlapGene
                                  u32         luVolumeHandle,
                                  u64         lu64Body)
 {
-    // Build the 64-byte add-body event image (the X360 assembles it on the stack).
-    OverlapGenerationIO::InAddBodyEvent lEvent;
-    u8* lpEventBytes = reinterpret_cast<u8*>(&lEvent);
+    VolumeInstanceId lVolumeInstanceId;
+    lVolumeInstanceId.muId = lu64Body;
 
-    // 32-byte world AABB block copy (four ld/std qword pairs off the caller's box).
-    const u64* lpAabbWords  = static_cast<const u64*>(lpAabb);
-    u64*       lpEventWords = reinterpret_cast<u64*>(lpEventBytes);
-    lpEventWords[0] = lpAabbWords[0];
-    lpEventWords[1] = lpAabbWords[1];
-    lpEventWords[2] = lpAabbWords[2];
-    lpEventWords[3] = lpAabbWords[3];
-
-    // Culling group @+0x20 (inside the event's leading AABB span -- the box is 32B on
-    // the wire, so this lane has no named field); the remaining tail fields do.
-    *reinterpret_cast<u32*>(lpEventBytes + 0x20) = luCullingGroup;  // +0x20 (r30)
-    lEvent.muObjectIndex  = luObjectIndex;   // +0x24 (r31)
-    lEvent.muVolumeHandle = luVolumeHandle;  // +0x28 (r8)
-    lEvent.mu64Body       = lu64Body;        // +0x30 (r9)
-
-    // Push it onto the overlap-generation module's add-body queue.
-    lpOverlapGenerationInputBuffer->GetAddBodyQueue().AddEvent(lEvent);
+    // ⭐ REWRITTEN 2026-08-18 (wave Q5 cluster D1, OverlapGenerationModuleIO owner).
+    // What used to be here was a hand-assembled 64-byte image poked through a u8* view
+    // (four qword copies, then `*(u32*)(bytes + 0x20) = luCullingGroup`), because the
+    // event type was a stand-in whose `u8 maAABBox[0x24]` swallowed the culling-group
+    // word. That stand-in is retired: OverlapGenerationIO::InAddBody now has the DWARF
+    // field set (mAabb / mCullGroup / muIndex / meBodyState / mVolumeInstanceID) and the
+    // assembly itself lives where the console put it -- InputBuffer::AddBody
+    // (CgsOverlapGenerationModuleIO.h:200), which the X360 inlines into THIS function.
+    // So this body is now the console's own two halves, in order: the producer call, then
+    // the culling-group bookkeeping.
+    //
+    // ⚠️ E1/SceneManagerModule OWNER, PLEASE READ: three of this function's parameter
+    // TYPES are still the pre-recovery placeholders and are corrected here only by cast.
+    // The X360 register usage (0x828BA498: r6 = the box, r8 -> +0x28, r9 -> +0x30) plus
+    // DWARF CgsOverlapGenerationModuleIO.h:200 give the real ones --
+    //     lpAabb          const void*  ->  const rw::collision::AABBox*
+    //     luVolumeHandle  u32          ->  rw::physics::BodyState   (NOT a volume handle:
+    //                                      it is the STATIC/FROZEN/ACTIVE tag that
+    //                                      SceneSweeper::AddObject three-way dispatches on)
+    //     lu64Body        u64          ->  VolumeInstanceId
+    // -- and the declaration lives in CgsSceneManagerModule.h, which D1 does not own, so
+    // the signature is left untouched. There is no caller yet
+    // (ProcessAddForCollisionEvent @0x828CE898 is not reconstructed), so retyping it is a
+    // free, isolated change whenever E1 gets here.
+    lpOverlapGenerationInputBuffer->AddBody(
+        luObjectIndex,
+        static_cast<const rw::collision::AABBox*>(lpAabb),
+        static_cast<OverlapGenerationIO::InAddBody::CullingGroup>(luCullingGroup),
+        static_cast<rw::physics::BodyState>(luVolumeHandle),
+        lVolumeInstanceId);
 
     // Record the object's culling group (non-gating index tripwire, then the store
     // runs unconditionally -- X360 stbx sits past the assert's branch).

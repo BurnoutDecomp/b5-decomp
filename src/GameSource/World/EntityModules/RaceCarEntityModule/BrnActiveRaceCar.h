@@ -843,6 +843,20 @@ public:
     void SetTakenDown(bool lbTakenDown)              { mbTakenDown = lbTakenDown; }            // +0x789
     f32  GetInvulnerabilityTime() const              { return mfInvulnerablityTime; }          // +0x724
 
+    // ADDITIVE 2026-08-18 (wave Q5, car-registration finisher). DWARF-attested, and the DWARF
+    // spells it BY VALUE, not by const-reference:
+    //     references/DecFIGS/dwarfdump/.../BrnActiveRaceCar.h  (source line :716)
+    //         VolumeInstanceId GetHandlingBodyVolumeId() const;
+    // X360 inlines it at every consumer -- RaceCarEntityModule::GenerateSceneUpdateEvents
+    // @0x822D2500 reads the member with a bare `ld r30, 0xD0(r28)` (0x822D2578) and
+    // ActiveRaceCar::AddToScene @0x822EB768 with `ld r11, 0xD0(r30)` -- so there is no
+    // out-of-line symbol to name it after; the member's seat (+0x0D0) is the attestation.
+    // Exposed so the module's per-frame publishes read the handle BY NAME instead of
+    // re-deriving it from (owner, slot): the composition rule lives in Attach/AddToScene and
+    // a duplicated copy of it would drift silently the first time those change.
+    CgsSceneManager::VolumeInstanceId GetHandlingBodyVolumeId() const
+    { return mHandlingBodyVolumeId; }                                                         // +0x0D0
+
 private:
     // ========================================================================
     // Layout (completed by the pose wave 2026-07-31).

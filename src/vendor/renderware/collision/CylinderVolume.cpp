@@ -42,14 +42,13 @@ namespace collision
 // The image bytes at 0x8327EEE0..0x8327EEFC are all ZERO (they are .data, not
 // .rdata) -- AGENTS gotcha 13: a zero there is "not written yet", not a value.
 //
-// LEFT AS A DECLARED EXTERN (link hole, reported to the conductor) rather than
-// wired to gVolumeVTable[5]: mInitWord is a u32 (the console 32-bit pointer
-// IMAGE) and this class's members are offset-pinned by static_asserts, so a
-// host pointer cannot be stored without relaying out CylinderVolume. That
-// host-width promotion belongs to the Volume / InitializeVTable TU, which is
-// also where the six descriptor records have to become real -- see the LINK
-// FACTS block in SDKs/EATech/rwcollision/volume.cpp.
-extern const u32 g_uCylinderVolumeInitWord;
+// HOST REPRESENTATION (2026-08-18, wave Q5 integration): the +0x40 slot holds
+// the 4-byte VolumeType enum for the record's whole lifetime (an x64 pointer
+// would overlap +0x44, and the 96-byte serialised record cannot grow); every
+// reader recovers the console pointer as gVolumeVTable[enum]. So Initialize
+// stamps E_VOLUMETYPE_CYLINDER (5, the index the console pointer sits at).
+// Derivation: scratchpad/waveQ5/rwc3.owner.md section 7 / volume.cpp foot.
+static const u32 KU_CYLINDER_VOLUME_TYPE = 5u;   // gVolumeVTable[5] = &unk_82F91894
 
 // --- Initialize's default local-frame seed rows ----------------------------
 // RECOVERED 2026-08-18 (waveQ5 C1, headless IDA on a private .i64 copy). These
@@ -115,7 +114,7 @@ CylinderVolume* CylinderVolume::Initialize(CylinderVolume** appVolume,
     lpVolume->mu54      = 0;
     lpVolume->mu58      = 0;
     lpVolume->mu5C      = 1;
-    lpVolume->mInitWord = g_uCylinderVolumeInitWord;
+    lpVolume->mInitWord = KU_CYLINDER_VOLUME_TYPE;   // console: dword_8327EEF4 = gVolumeVTable[5]
 
     lpVolume->maFrame[0] = KV_BASIS_X;
     lpVolume->maFrame[3].x = 0.0f;

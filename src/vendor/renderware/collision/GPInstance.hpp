@@ -279,6 +279,24 @@ struct GPTriangle : public GPInstance
                              u32 auNumDirs, Interval* lapIntervals);
 };
 
+// @ 0x82BBA748 -- point-vs-triangle nearest-feature query, HOMED in
+// GPTriangle.cpp (waveQ5 C1). A standalone leaf that IDA merges into the
+// GPTriangle::GetIntervals chunk because it starts one instruction after that
+// function's `blr`; the console TU is one run holding the GP triangle
+// callbacks AND the triangle line tests, and its only call site is
+// FatTriangleLineSegIntersect @ 0x82BBB10C. X360: r3/r4/r5 = out nearest
+// point / out s / out t, v1..v4 = the query point and V0/V1/V2 by value;
+// returns the region code (0..2 vertex V0/V1/V2, 3..5 edge V0V1/V0V2/V1V2,
+// 6 face interior). The nearest point is V0 + (V1-V0)*s + (V2-V0)*t.
+//
+// NOTE for the LineSegIntersect owner: the parallel declaration at
+// LineSegIntersect.hpp:180 carries an extra `f32* lpfPlaneDistance` fourth
+// parameter that the console function does not have (it never writes f3 --
+// see the body's banner). That declaration has no definition anywhere; this
+// one does.
+s32 TriangleNearestPointRegion(Vec4* lpNearest, f32* lpfParamS, f32* lpfParamT,
+                               Vec4 aPoint, Vec4 aV0, Vec4 aV1, Vec4 aV2);
+
 // ---------------------------------------------------------------------------
 // rw::collision::PrimitivePairIntersectResult -- one narrow-phase result slot
 // (DWARF primitivepairquery.h:47; canonical rwccore.h:2957). Console stride
@@ -511,7 +529,8 @@ void AddRimToRimCandidates(const GPInstance* lpGP1, const GPInstance* lpGP2,
 RwBool FindEdgePointPrism(rwc_FeatureIntersectionPrism& arRes, Vec4* lapPtsOn1, Vec4* lapPtsOn2,
                           Feature& arEdgeFeature, Feature& arPointFeature, const Vec4& arSepDir);
 
-// PENDING (not delivered this wave; called by the dispatcher) -- edge vs edge.
+// @ 0x82BB78A8 -- edge vs edge (skew closest approach, or the parallel
+// interval clip through FindIntervalOverlap).
 RwBool FindEdgeEdgePrism(rwc_FeatureIntersectionPrism& arRes, Vec4* lapPtsOn1, Vec4* lapPtsOn2,
                          Feature& arEdgeFeature1, Feature& arEdgeFeature2, const Vec4& arSepDir);
 
@@ -552,11 +571,20 @@ u32 FindIntervalOverlap(Interval* lpResult,
 // Narrow-phase entry points.
 // ---------------------------------------------------------------------------
 
-// PENDING X360 sub_82BAA600 (not delivered this wave; body sits between
-// FindBestSeparatingDirCylVol and GPInstanceBatchIntersectNx1). Validates a
-// proposed contact normal against a one-sided GPTriangle instance (this=r3,
-// normal=v1); zero return discards the contact. FLAGGED: the name is
-// descriptive, not SDK-attested (the binary symbol is unnamed).
+// @ 0x82BAA600 -- HOMED in PrimitiveIntersect.cpp (waveQ5 C1), where the
+// binary puts it: between FindBestSeparatingDirCylVol and
+// GPInstanceBatchIntersectNx1, with its three same-TU static helpers
+// (0x82BAA2A8 / 0x82BAA378 / 0x82BAA4A8) that nothing else calls.
+// Validates a proposed contact normal against a GPTriangle instance
+// (this = r3, normal = v1): the per-edge convexity flags, the per-vertex
+// disable flags and the FLAG_TRIANGLEUSEEDGECOS edge cosines decide whether a
+// contact whose normal falls outside the triangle's own face cone is real
+// geometry or a neighbour's. A zero return discards the contact; a nonzero
+// return accepts it -- and the console literally returns the tested flag BIT
+// (0x20/0x40/0x80) on the no-edge-cos paths, so treat the result as a
+// truthiness, never as 0/1.
+// FLAGGED: the name is descriptive, not SDK-attested (the binary symbol is
+// unnamed and no DWARF/Feb-2007 declaration exists for it).
 u32 GPTriangleAcceptContactNormal(const GPInstance* lpTriangle, const Vec4& arNormal);
 
 // @ 0x82BABDA8 -- narrow-phase contact generation for one GP-instance pair

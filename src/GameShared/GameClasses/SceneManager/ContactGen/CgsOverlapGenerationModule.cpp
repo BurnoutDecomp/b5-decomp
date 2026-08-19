@@ -147,19 +147,29 @@ void OverlapGenerationModule::ProcessAddBodyQueue(const OverlapGenerationIO::Inp
 {
     CGS_ASSERT(lpInputBuffer != NULL, "lpInputBuffer != NULL");
 
-    // The X360 reads the add-body queue out of the input structure (sub_828AFEE8) and
-    // iterates its decoded events by GetLength()/GetEvent(index).
-    const OverlapGenerationIO::InAddBodyQueue& lrQueue = lpInputBuffer->GetAddBodyQueue();
+    // The X360 reads the add-body queue out of the input structure (sub_828AFEE8, the
+    // const GetAddBodyQueue) and iterates its decoded events by GetLength()/GetEvent(index).
+    const OverlapGenerationIO::InAddBodyQueue& lrQueue = *lpInputBuffer->GetAddBodyQueue();
 
     const s32 liNumEvents = lrQueue.GetLength();
     for (s32 liEvent = 0; liEvent < liNumEvents; ++liEvent)
     {
-        const OverlapGenerationIO::InAddBodyEvent& lrEvent = lrQueue.GetEvent(liEvent);
+        const OverlapGenerationIO::InAddBody& lrEvent = lrQueue.GetEvent(liEvent);
 
-        mSweeper.AddObject(lrEvent.muObjectIndex, &lrEvent, lrEvent.muVolumeHandle, lrEvent.mu64Body);
+        // X360 0x828C1D8C-0x828C1DA0: r4 = lwz 0x24 (muIndex), r5 = the EVENT POINTER
+        // (mAabb is the event's first member, so &event == &event.mAabb -- `mr r5,r31`),
+        // r6 = lwz 0x28 (meBodyState), r7 = ld 0x30 (mVolumeInstanceID).
+        // rw::collision::AABBox is forward-declared only (the rw::math::vpu::Vector3 fork),
+        // so the box pointer is spelled as the cast the console's register move performs.
+        mSweeper.AddObject(lrEvent.muIndex,
+                           reinterpret_cast<const rw::collision::AABBox*>(&lrEvent),
+                           lrEvent.meBodyState,
+                           lrEvent.mVolumeInstanceID);
 
-        // The culling group is the high byte of the high word of the packed body id.
-        const u32 luCullingGroup = static_cast<u32>(lrEvent.mu64Body >> 56);
+        // The counter index is the OWNER byte of the packed volume-instance id
+        // (X360 `ld r11,0x30 ; srdi 32 ; srwi 24` == VolumeInstanceId::GetEntityIDOwner).
+        // ⚠️ NOT InAddBody::mCullGroup -- the console reads the id, not the +0x20 lane.
+        const u32 luCullingGroup = lrEvent.mVolumeInstanceID.GetEntityIDOwner();
         ++mau16NumEntitiesPerType[luCullingGroup];
     }
 }
@@ -172,14 +182,21 @@ void OverlapGenerationModule::ProcessUpdateBodyQueue(const OverlapGenerationIO::
 {
     CGS_ASSERT(lpInputBuffer != NULL, "lpInputBuffer != NULL");
 
-    const OverlapGenerationIO::InUpdateBodyQueue& lrQueue = lpInputBuffer->GetUpdateBodyQueue();
+    const OverlapGenerationIO::InUpdateBodyQueue& lrQueue = *lpInputBuffer->GetUpdateBodyQueue();
 
     const s32 liNumEvents = lrQueue.GetLength();
     for (s32 liEvent = 0; liEvent < liNumEvents; ++liEvent)
     {
-        const OverlapGenerationIO::InUpdateBodyEvent& lrEvent = lrQueue.GetEvent(liEvent);
+        const OverlapGenerationIO::InUpdateBody& lrEvent = lrQueue.GetEvent(liEvent);
 
-        mSweeper.UpdateObject(lrEvent.muObjectIndex, &lrEvent, lrEvent.mu64Body, lrEvent.mvPosition);
+        // X360 0x828C1E54-0x828C1E68: r4 = lwz 0x30 (muIndex), r5 = the EVENT POINTER
+        // (== &event.mAabb), v1 = lvx128 event+0x20 (mPadding), r6 = ld 0x38
+        // (mVolumeInstanceID). ⚠️ The vector lane is the sweeper PADDING, not a position,
+        // and it is the THIRD argument -- the old spelling passed the id there.
+        mSweeper.UpdateObject(lrEvent.muIndex,
+                              reinterpret_cast<const rw::collision::AABBox*>(&lrEvent),
+                              lrEvent.mPadding,
+                              lrEvent.mVolumeInstanceID);
     }
 }
 
@@ -191,16 +208,19 @@ void OverlapGenerationModule::ProcessRemoveBodyQueue(const OverlapGenerationIO::
 {
     CGS_ASSERT(lpInputBuffer != NULL, "lpInputBuffer != NULL");
 
-    const OverlapGenerationIO::InRemoveBodyQueue& lrQueue = lpInputBuffer->GetRemoveBodyQueue();
+    const OverlapGenerationIO::InRemoveBodyQueue& lrQueue = *lpInputBuffer->GetRemoveBodyQueue();
 
     const s32 liNumEvents = lrQueue.GetLength();
     for (s32 liEvent = 0; liEvent < liNumEvents; ++liEvent)
     {
-        const OverlapGenerationIO::InRemoveBodyEvent& lrEvent = lrQueue.GetEvent(liEvent);
+        const OverlapGenerationIO::InRemoveBody& lrEvent = lrQueue.GetEvent(liEvent);
 
-        mSweeper.RemoveObject(lrEvent.muObjectIndex);
+        // X360 `RemoveObject(a1 + 560, v7[2])` -- word 2 of the 16-byte element == +0x08
+        // == muIndex; then `--*(2 * (HIBYTE(*v7) + 451448) + a1)`, whose HIBYTE(*v7) is the
+        // owner byte of mVolumeInstanceID (word 0 is the id's big-endian high dword).
+        mSweeper.RemoveObject(lrEvent.muIndex);
 
-        const u32 luCullingGroup = static_cast<u32>(lrEvent.mu64Body >> 56);
+        const u32 luCullingGroup = lrEvent.mVolumeInstanceID.GetEntityIDOwner();
         --mau16NumEntitiesPerType[luCullingGroup];
     }
 }

@@ -2412,52 +2412,13 @@ void WorldModule::BridgeTriggerModuleToSceneModule_PostScene(void *,struct CgsSc
 // lives in its owning TU, src/vendor/renderware/collision/BitTable.cpp.)
 
 // -------------------------------------------------------------------------
-// rw::collision::Volume
+// rw::collision::Volume / rw::collision::VolumeVolumeQuery
 // -------------------------------------------------------------------------
-// BOOT-GATE (world-module mount 2026-07-26): REACHED at boot -- the real
-// SceneManagerModule::Construct @0x828D09A0 lazily fills the shared Volume
-// processing vtable here. Quiet no-op returning 0: no rw::collision volume is
-// ever processed until the world Prepare/query path is wired. The real body
-// is owned by the rwcollision SDK TU (volume.cpp) -- link it with the
-// rw::collision closure.
-// FLAG PC-platform leaf: boot-gate no-op (world-module mount 2026-07-26) -- reached by the wired WorldModule::Construct cascade; real body pending X360 reconstruction (see note above).
-int rw::collision::Volume::InitializeVTable()
-{
-    return 0;
-}
-
-// -------------------------------------------------------------------------
-// rw::collision::VolumeVolumeQuery
-// -------------------------------------------------------------------------
-// BOOT-GATE (world-module mount 2026-07-26): REACHED at boot -- the real
-// OverlapCullingModule::Construct @0x828C18E8 stores the result in
-// mpVolVolQuery. Quiet null return: the handle is only consumed by the
-// un-wired Prepare/CullOverlaps path. Real body = rwcollision SDK TU.
-// FLAG PC-platform leaf: boot-gate no-op (world-module mount 2026-07-26) -- reached by the wired WorldModule::Construct cascade; real body pending X360 reconstruction (see note above).
-void * rw::collision::VolumeVolumeQuery::Initialize(void * *,int,int)
-{
-    return 0;
-}
-
-// BOOT-GATE (world-module mount 2026-07-26): REACHED at boot -- the real
-// OverlapCullingModule::Construct @0x828C18E8 calls this and then COPIES 10
-// words out of the returned pointer (returning null here crashed the first
-// mount boot). Fill the caller's scratch with the two words the asm actually
-// consults -- size <= 0x62000 (the X360's exact scratch budget for the 100/100
-// query) and alignment == 16 (GTALIGN) -- and hand it back. These are the
-// asm-attested immediates of the consuming asserts, not invented behaviour;
-// the real SDK body computes the same-or-smaller size for 100/100. The
-// resulting mpVolVolQuery stays null (Initialize below) and is only consumed
-// by the un-wired Prepare/CullOverlaps path.
-void * rw::collision::VolumeVolumeQuery::GetResourceDescriptor(void * lpScratch, int, int)
-{
-    unsigned int* lpuWords = static_cast<unsigned int*>(lpScratch);
-    for (int liWord = 0; liWord < 10; ++liWord)
-        lpuWords[liWord] = 0;
-    lpuWords[0] = 0x62000u;   // size word (caller asserts <= 0x62000)
-    lpuWords[1] = 16u;        // alignment word (caller asserts == 16)
-    return lpScratch;
-}
+// GATES RETIRED 2026-08-18 (wave Q5, rw::collision narrow-phase mount): Volume::InitializeVTable
+// (static, REAL in SDKs/EATech/rwcollision/volume.cpp), VolumeVolumeQuery::Initialize (was a NULL
+// return that left OverlapCullingModule::mpVolVolQuery null) and VolumeVolumeQuery::
+// GetResourceDescriptor (was a FABRICATED 0x62000/16 descriptor) -- REAL in
+// vendor/renderware/collision/VolumeQuery.cpp, mounted with the collision block.
 
 // -------------------------------------------------------------------------
 // rw::math::vpu

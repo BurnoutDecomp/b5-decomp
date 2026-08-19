@@ -16,7 +16,11 @@
 // buffer pointer at this+0xC, exactly as the asm does (addi r30,this,0xC; stw r30,0(this)).
 
 #include "types.hpp"
-#include "GameShared/GameClasses/Module/CgsEventQueue.h"  // CgsModule::EventQueue, CgsModule::Event
+#include "GameShared/GameClasses/Core/CgsAssert.h"                             // CGS_ASSERT (lock tripwires)
+#include "GameShared/GameClasses/Module/CgsEventQueue.h"                       // CgsModule::EventQueue, CgsModule::Event
+#include "GameShared/GameClasses/Module/CgsIOBuffer.h"                         // CgsModule::IOBuffer (both buffers' base)
+#include "GameShared/GameClasses/SceneManager/CgsOverlappingPair.h"            // CgsSceneManager::OverlappingPair (in-queue element)
+#include "GameShared/GameClasses/SceneManager/CgsSceneManagerContact.h"        // CgsSceneManager::Contact (out-queue element)
 
 namespace CgsSceneManager
 {
@@ -51,5 +55,146 @@ namespace OverlapCullingIO
     // The two bounded request queues (DWARF CgsOverlapCullingModuleIO.h:63/64).
     typedef CgsModule::EventQueue<AddInternalCollisionVolume, 256>    InAddInternalVolumeQueue;
     typedef CgsModule::EventQueue<RemoveInternalCollisionVolume, 256> InRemoveInternalVolumeQueue;
+
+    // =====================================================================
+    // ⭐ THE REAL BUFFERS (wave Q5, 2026-08-18). These replace the two 4096-byte
+    // `u8 maReserved[4096]` stand-ins that live in ContactGen/CgsContactGenerationIO.h
+    // (that file is another owner's this wave -- the stand-ins must be DELETED there and
+    // this header included in their place; see the sceneio owner report for the exact
+    // lines). Nothing else about the placeholder was salvageable: the console InputBuffer
+    // is 266,280 bytes and the OutputBuffer 1,048,608.
+    //
+    // DECLARATION SHAPE is the DecFIGS DWARF verbatim
+    // (references/DecFIGS/dwarfdump/.../ContactGen/CgsOverlapCullingModuleIO.h:72-143):
+    // member set, member order, typedef names, and both getter pairs.
+    //
+    // CONSOLE LAYOUT (offsets are comments -- on this LLP64 host the queues are wider and
+    // every access is BY NAME):
+    //   InputBuffer   sizeof 0x41028 = 266280   (IOBufferStack::Free literal @0x828C4F70)
+    //     +0        IOBuffer status byte
+    //     +4        mOverlappingPairQueue     EventQueue<OverlappingPair,16384>  262156 = 12 + 16384*16
+    //     +262160   mAddInternalVolumeQueue   EventQueue<AddInternal...,256>       3084 = 12 + 256*12
+    //     +265244   mRemoveInternalVolumeQueue EventQueue<RemoveInternal...,256>   1036 = 12 + 256*4
+    //   OutputBuffer  sizeof 0x100020 = 1048608 (IOBufferStack::Alloc literal @0x828CC698)
+    //     +0        IOBuffer status byte
+    //     +16       mContactQueue             EventQueue<Contact,16384>         1048592 = 16 + 16384*64
+    //
+    // ⚠️ CONSOLE ALIGNMENT NOTE (recorded, not acted on here): the overlapping-pair queue
+    // sits at buffer+4 and its Construct @0x828C4D40 puts maEvents at queue+0xC, so on the
+    // X360 CgsSceneManager::OverlappingPair is 4-ALIGNED (16 bytes, four words). The comment
+    // in CgsOverlappingPair.h claiming 8-byte alignment is wrong for the console; on the host
+    // its two u64 VolumeInstanceId members make it 8-aligned, which is harmless (name access
+    // only) but the claim about the console is a defect -- reported, that header is not this
+    // TU's file.
+    // =====================================================================
+
+    // DWARF :75. The culler's per-frame input: the broad phase's overlapping pairs plus the
+    // two internal-collision-volume request queues.
+    struct InputBuffer : public CgsModule::IOBuffer
+    {
+        // DWARF :61 -- the in-queue typedef (the :63/:64 pair above are the same typedefs
+        // the DWARF nests in this struct; they are hoisted to namespace scope in this tree
+        // because the two explicit-instantiation TUs name them there).
+        typedef CgsModule::EventQueue<CgsSceneManager::OverlappingPair, 16384> InOverlappingPairQueue;
+
+        // X360 0x828CB640 / (Destruct inlined into DestroyIOBuffer @0x828C4F70). Bodies in
+        // the sibling CgsOverlapCullingModuleIO.cpp -- the console's own file (DWARF
+        // CgsOverlapCullingModuleIO.cpp:46 / :72).
+        void Construct();   // DWARF :80
+        void Destruct();    // DWARF :84
+
+        // @ 0x828B0698 -- read-lock tripwire (bit 4, "Not locked for reading\n"), `this+4`,
+        // baked CgsOverlapCullingModuleIO.h:87. Its ONE caller is
+        // OverlapCullingModule::ProcessOverlapsQueue @0x828D0330, which walks the queue with
+        // BaseEventQueue<OverlappingPair>::GetEvent @0x828AE0D0 (stride 0x10).
+        const InOverlappingPairQueue* GetOverlappingPairQueue() const        // :87
+        {
+            CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+            return &mOverlappingPairQueue;
+        }
+
+        // :88 / :89. The console emits these as their own read-locked getters (the culler's
+        // ProcessAdd/RemoveInternalVolumeQueue reach the request queues through them);
+        // their symbols are unnamed in the export, so the lock bit follows the proven
+        // family pattern (const -> read) rather than an asm tripwire. FLAG: lock bit
+        // inferred; existence, offset and constness are DWARF-attested.
+        const InAddInternalVolumeQueue* GetAddInternalVolumeQueue() const    // :88
+        {
+            CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+            return &mAddInternalVolumeQueue;
+        }
+        const InRemoveInternalVolumeQueue* GetRemoveInternalVolumeQueue() const  // :89
+        {
+            CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+            return &mRemoveInternalVolumeQueue;
+        }
+
+        // :91 / :92 / :93 -- the write-locked producer handles. The producer is
+        // SceneManagerModule::BridgeOverlapGenerationToOverlapCulling @0x828BA538 (round 4).
+        InOverlappingPairQueue* GetOverlappingPairQueue()                    // :91
+        {
+            CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+            return &mOverlappingPairQueue;
+        }
+        InAddInternalVolumeQueue* GetAddInternalVolumeQueue()                // :92
+        {
+            CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+            return &mAddInternalVolumeQueue;
+        }
+        InRemoveInternalVolumeQueue* GetRemoveInternalVolumeQueue()          // :93
+        {
+            CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+            return &mRemoveInternalVolumeQueue;
+        }
+
+    private:
+        // No status pad here (unlike SceneManagerIO's buffers): the console seats this queue
+        // at +4 because its OverlappingPair is 4-aligned there, but the HOST OverlappingPair
+        // carries two 8-byte VolumeInstanceId members, so the queue is 8-aligned and lands at
+        // +8 whatever we pad. Access is by name; a pad here would only be a wrong comment.
+        InOverlappingPairQueue      mOverlappingPairQueue;       // :98  console +4
+        InAddInternalVolumeQueue    mAddInternalVolumeQueue;     // :99  console +262160
+        InRemoveInternalVolumeQueue mRemoveInternalVolumeQueue;  // :100 console +265244
+    };
+
+    // DWARF :116. The culler's per-frame output: the narrow phase's resolved contacts.
+    struct OutputBuffer : public CgsModule::IOBuffer
+    {
+        // DWARF :104.
+        typedef CgsModule::EventQueue<CgsSceneManager::Contact, 16384> OutContactQueue;
+
+        // The console INLINES both into the IOBufferStack templates
+        // (CreateIOBuffer @0x828CC698 / DestroyIOBuffer @0x828C5148); the DWARF still
+        // declares them as members (CgsOverlapCullingModuleIO.cpp:98 / :119), which is where
+        // the bodies live in this tree.
+        void Construct();   // DWARF :121
+        void Destruct();    // DWARF :125
+
+        // :128. No emitted body in the ARTIST image (nothing reads the culler's contacts
+        // through a const handle -- SceneManagerModule::BridgeOverlapCullerToOutputBuffer
+        // is the only consumer and it is a stub today). FLAG: lock bit inferred from the
+        // family pattern; existence/offset/constness are DWARF-attested.
+        const OutContactQueue* GetContactQueue() const                       // :128
+        {
+            CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+            return &mContactQueue;
+        }
+
+        // ⭐ @ 0x828B0938 -- write-lock tripwire (bit 3, "Not locked for writing\n"),
+        // `this+16`, baked CgsOverlapCullingModuleIO.h:129. Recovered by headless IDA in
+        // wave Q5 (it is an export hole). Its two call sites are both inside
+        // OverlapCullingModule::DoPairQuery @0x828C1A18 (0x828C1B2C and 0x828C1C88) -- the
+        // prim x prim arm and the prim x aggregate arm -- each of which then pushes with
+        // BaseEventQueue<Contact>::AddEventSafe @0x828B8D08.
+        OutContactQueue* GetContactQueue()                                   // :129
+        {
+            CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+            return &mContactQueue;
+        }
+
+    private:
+        u8              maStatusPad[15];   // +1..+15 (force +16, the console's Contact-queue seat)
+        OutContactQueue mContactQueue;     // :133 console +16
+    };
 }
 }

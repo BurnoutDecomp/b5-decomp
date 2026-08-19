@@ -26,111 +26,38 @@
 #include "GameShared/GameClasses/SceneManager/ContactGen/CgsSceneSweeper.h"  // CgsSceneManager::SceneSweeper (by-value member)
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_EventAddForCollision.h"  // InEventAddForCollision::CullingGroup
 #include "GameShared/GameClasses/SceneManager/CgsVolumeInstanceId.h"  // CgsSceneManager::VolumeInstanceId (UpdateBody arg)
+#include "GameShared/GameClasses/SceneManager/ContactGen/CgsOverlapGenerationModuleIO.h"  // ⭐ the REAL home of namespace OverlapGenerationIO (was a stand-in in this file)
 
 namespace CgsSceneManager
 {
-    // ---- input-buffer event payloads -------------------------------------------------
-    // The OverlapGeneration input buffer carries a small family of fixed-capacity event
-    // queues -- the per-frame body mutations the SceneManagerModule pushes for this module
-    // to apply to its SceneSweeper. The Process*BodyQueue passes pull the matching queue
-    // out of the input structure and replay each event into the sweeper.
+    // ---- input-buffer event payloads + the InputBuffer ITSELF: NOT HERE ----------------
+    // ⭐ 2026-08-18 (wave Q5 cluster D1, OverlapGenerationModuleIO owner). The 102-line
+    // OverlapGenerationIO stand-in that used to sit here -- InAddBodyEvent /
+    // InUpdateBodyEvent / InRemoveBodyEvent / a `typedef u32 InForceNoPadding`, the four
+    // queue typedefs and a THREE-QUEUE InputBuffer built out of storage-less
+    // BaseEventQueue<T> bases -- is RETIRED. Its own banner already said the real home was
+    // "this module's IO TU (CgsOverlapGenerationModuleIO, not yet reconstructed)"; that TU
+    // now exists, and the include below is it.
     //
-    // Field offsets are read off the X360 Process*BodyQueue asm (the byte offsets each pass
-    // loads out of the decoded event before calling SceneSweeper::Add/Remove/UpdateObject).
-    // The element types' real home is this module's IO TU (CgsOverlapGenerationModuleIO,
-    // not yet reconstructed); they are modelled here, by the offsets the asm attests, so
-    // the Process passes compile against named members rather than raw offset pokes.
-    namespace OverlapGenerationIO
-    {
-        // Culling-group tag -- the same u32 typedef the add-for-collision event family uses.
-        typedef SceneManagerIO::InEventAddForCollision::CullingGroup CullingGroup;
-
-        // ProcessAddBodyQueue element (X360 0x828C1D18): the sweeper add-body request.
-        // The whole element doubles as the world AABB passed to SceneSweeper::AddObject.
-        struct alignas(16) InAddBodyEvent
-        {
-            u8  maAABBox[0x24];     // +0x00 world AABB (passed whole to AddObject)
-            u32 muObjectIndex;      // +0x24 sweeper object index
-            u32 muVolumeHandle;     // +0x28 volume-instance index
-            u8  maPad2C[0x04];      // +0x2C
-            u64 mu64Body;           // +0x30 packed body word; high byte of hi word = CullingGroup
-        };
-
-        // ProcessRemoveBodyQueue element (X360 0x828C1E90).
-        struct InRemoveBodyEvent
-        {
-            u64 mu64Body;           // +0x00 packed body word; high byte of hi word = CullingGroup
-            u32 muObjectIndex;      // +0x08 sweeper object index
-        };
-
-        // ProcessUpdateBodyQueue element (X360 0x828C1DE8) / InputBuffer::UpdateBody producer
-        // (X360 0x828BA430). 64-byte record, alignas(16). The whole 32-byte world AABB is
-        // value-copied into mAabb (four ld/std qword pairs off the caller's box == the two
-        // 16-byte rw::collision::AABBox corner rows), then the position lane, sweeper object
-        // index and packed body word. mAabb is kept as a documented opaque 32-byte span: the
-        // consumer (ProcessUpdateBodyQueue) passes &InUpdateBodyEvent whole to SceneSweeper::
-        // UpdateObject as a const void* and never dereferences the box, and pulling the
-        // SDKs/EATech rw::collision::AABBox definition in here would redefine rw::math::vpu::
-        // Vector3 against the vendor one BrnCommonTypes.h already supplies. The producer's DWARF
-        // names the tail field a VolumeInstanceId; it is the same packed 64-bit body word the
-        // consumer reads whole as mu64Body and forwards to UpdateObject -- kept as u64 mu64Body
-        // so the committed ProcessUpdateBodyQueue keeps compiling.
-        struct alignas(16) InUpdateBodyEvent
-        {
-            u8      maAABBox[0x20]; // +0x00 world AABB (32B; whole box passed to UpdateObject)
-            Vector3 mvPosition;     // +0x20 new world position lane (lvx128 +0x20)
-            u32     muObjectIndex;  // +0x30 sweeper object index
-            u8      maPad34[0x04];  // +0x34
-            u64     mu64Body;       // +0x38 packed body word / volume-instance id
-        };
-
-        // ProcessForceNoPaddingEvent element (X360 AddEvent 0x828B89D0): a single 4-byte
-        // object/volume-instance index the force-no-padding pass replays into the sweeper. No
-        // interior fields are attested (stride 4, one 32-bit move), so it is a plain u32.
-        // Distinct from the 8-byte SceneManagerIO::InEventForceNoPadding (a VolumeInstanceId).
-        typedef u32 InForceNoPadding;
-
-        // The per-frame body-mutation queues the input structure carries. The X360 Process*BodyQueue
-        // passes pull these out of the input buffer and iterate them by GetLength()/GetEvent(index).
-        // The update-body queue is the fixed-capacity (16384) derived EventQueue -- the queue whose
-        // Construct the X360 emits out-of-line at 0x828C4BF0; it IS-A BaseEventQueue<InUpdateBodyEvent>
-        // so GetUpdateBodyQueue()/ProcessUpdateBodyQueue/AddEvent keep working through the base.
-        typedef CgsModule::BaseEventQueue<InAddBodyEvent>             InAddBodyQueue;
-        typedef CgsModule::EventQueue<InUpdateBodyEvent, 16384>       InUpdateBodyQueue;
-        typedef CgsModule::BaseEventQueue<InRemoveBodyEvent>          InRemoveBodyQueue;
-        typedef CgsModule::BaseEventQueue<InForceNoPadding>          InForceNoPaddingQueue;
-
-        // The overlap-generation module's input structure: the body-mutation request
-        // queues the SceneManagerModule fills each frame. Its full layout (capacities +
-        // any sibling queues) has its real home in this module's IO TU
-        // (CgsOverlapGenerationModuleIO, not yet reconstructed); only the three queues
-        // the body passes here read are modelled, by the accessors the X360 attests.
-        struct InputBuffer
-        {
-            InAddBodyQueue    mAddBodyQueue;
-            InUpdateBodyQueue mUpdateBodyQueue;
-            InRemoveBodyQueue mRemoveBodyQueue;
-
-            const InAddBodyQueue&    GetAddBodyQueue()    const { return mAddBodyQueue; }
-            const InUpdateBodyQueue& GetUpdateBodyQueue() const { return mUpdateBodyQueue; }
-            const InRemoveBodyQueue& GetRemoveBodyQueue() const { return mRemoveBodyQueue; }
-
-            // Non-const accessor for the producing path -- the X360 UpdateBody body resolves the
-            // update-body queue (sub_828B0230, == &mUpdateBodyQueue) and appends through it.
-            InUpdateBodyQueue* GetUpdateBodyQueue() { return &mUpdateBodyQueue; }
-
-            // Non-const add-body-queue accessor for the producing path -- the X360
-            // SceneManagerModule::AddBody (0x828BA498) resolves the add-body queue (the
-            // truncated CgsSceneMana(a2) callee, == &mAddBodyQueue since the queue is the
-            // struct's first member) and appends the assembled event through it.
-            InAddBodyQueue& GetAddBodyQueue() { return mAddBodyQueue; }
-
-            // Push a per-frame body-position update request onto the update-body queue. @ 0x828BA430.
-            // lpAabb is the world box (the X360 rw::collision::AABBox*); modelled as an opaque
-            // 32-byte source span (see maAABBox above) block-copied whole into the queued event.
-            void UpdateBody(u32 luIndex, const void* lpAabb, Vector3 lvPadding, VolumeInstanceId lVolumeInstanceID);
-        };
-    }
+    // This was not a cosmetic move. The stand-in was WRONG in ways that mattered:
+    //   * it modelled the world box as `u8 maAABBox[0x24]` (36 bytes), which swallowed the
+    //     culling-group word the producer stores at +0x20 and pushed every later field;
+    //   * `muVolumeHandle` @+0x28 is really `rw::physics::BodyState meBodyState` (the
+    //     STATIC/FROZEN/ACTIVE tag SceneSweeper::AddObject dispatches on) and `mu64Body`
+    //     @+0x30 is really a `VolumeInstanceId` -- which is exactly why this TU's own
+    //     ProcessAddBodyQueue/ProcessUpdateBodyQueue stopped compiling against the landed
+    //     SceneSweeper signatures;
+    //   * the InputBuffer was missing mForceNoPaddingQueue entirely and gave the other
+    //     three no inline storage, so a Construct through it would have left mpEvents NULL
+    //     on a 2,359,888-byte console buffer -- a silent corruption, not a compile error.
+    // The real layout is pinned to InputBuffer::Construct @0x828CB918 and
+    // DestroyIOBuffer<InputBuffer> @0x828C53F0; see CgsOverlapGenerationModuleIO.h.
+    //
+    // ⚠️ OWNERSHIP: this file belongs to the OverlapGenerationModule cluster, not to D1.
+    // D1 changed exactly this block (delete + the include on the next line) because a
+    // second definition of OverlapGenerationIO::InputBuffer cannot coexist with the real
+    // one -- CgsSceneManagerModule.cpp includes BOTH this header and
+    // ContactGen/CgsContactGenerationIO.h. Nothing else in this header was touched.
 
     class OverlapGenerationModule : public CgsModule::ModuleSingleBuffered
     {

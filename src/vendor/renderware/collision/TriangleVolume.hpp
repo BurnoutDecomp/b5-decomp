@@ -109,11 +109,10 @@ public:
     // --- members (X360-asm-attested offsets; inferred names) ----------------
     Vec4         maVerts[3];    // +0x00 / +0x10 / +0x20  triangle vertices
     mutable Vec4 mNormal;       // +0x30  cached unit face normal (GetNormal)
-    u32          mInitWord;     // +0x40  console 32-bit POINTER IMAGE of the
-                                //        triangle Volume vtable (&unk_82F919A4,
-                                //        registry dword_8327EEE0[3]; see .cpp --
-                                //        FLAG host width: what GetVolumeVTable
-                                //        reads back from Volume+0x40)
+    u32          mInitWord;     // +0x40  console: 32-bit POINTER to the triangle
+                                //        Volume vtable (&unk_82F919A4 = registry
+                                //        dword_8327EEE0[3]); HOST: the type enum 3
+                                //        (readers index gVolumeVTable[3]; see .cpp)
     f32          mafEdgeCos[3]; // +0x44 / +0x48 / +0x4C  per-edge cosine (-1 = unset)
     f32          mfFatness;     // +0x50  surface fatness (0 by default)
     u32          mu54;          // +0x54  (Initialize: 0)

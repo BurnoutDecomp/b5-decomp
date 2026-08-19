@@ -298,6 +298,21 @@ namespace Vehicle
             return mCreateVehicleResultQueue.GetLength() - 1;
         }
 
+        // ⭐ ADDED 2026-08-18 (wave Q5, car-registration finisher). The READ half of the pair
+        // above. DWARF-attested (BrnVehicleOutputInterface.h:148, dumpfile :232
+        // `const VehicleManagerOutputInterface::CreateVehicleResultQueue* GetCreateVehicleResults()
+        // const`), and X360-attested at its one consumer: RaceCarEntityModule::
+        // ProcessCreateVehicleEvents @0x822FF620 reaches the queue with a bare
+        // `addi r30, r3, 0x6C0` (0x822FF6A0) off the VehicleManagerOutputInterface it just
+        // fetched, then walks it with `lwz r11, 8(r30)` (miLength) + BaseEventQueue<
+        // CreateVehicleResult>::GetEvent -- i.e. the accessor is inlined there, over exactly
+        // mCreateVehicleResultQueue's own seat (0x6C0 == 1728, the member below).
+        // Same shape as the sibling GetXxxQueue readers the DWARF lists at :142/:145/:151/:154.
+        const CreateVehicleResultQueue* GetCreateVehicleResults() const
+        {
+            return &mCreateVehicleResultQueue;
+        }
+
     private:
         TrafficCrashedEventQueue     mCrashedTrafficEventQueue;     // @0x0000  (DWARF :176)
         TrafficSlammedEventQueue     mSlammedTrafficEventQueue;     // @0x0150  (DWARF :177)

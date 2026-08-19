@@ -1414,5 +1414,805 @@ void AddRimToRimCandidates(const GPInstance* lpGP1, const GPInstance* lpGP2,
     }
 }
 
+// ###########################################################################
+// ---- wave Q5 rwc3 ---------------------------------------------------------
+// (Cluster boundary: everything below this banner belongs to the waveQ5 rwc3
+// owner. rwc4 appends its own block after this one; nothing above was
+// reformatted.)
+// ###########################################################################
+
+// ===========================================================================
+// rw::collision::FindBestSeparatingDirectionTriBox @ 0x82BB4CA8  (272 insns)
+//
+// The TRIANGLE x BOX closed form -- slot [3][4] of off_82F91800, and the sole
+// worker behind FindBestSeparatingDirectionBoxTri @ 0x82BAA1A0 (which swaps the
+// operands and negates the result). Reconstructed from the raw asm on
+// 2026-08-18 (headless IDA 9.3, PRIVATE copy of BURNOUT_X360_ARTIST.XEX.i64 --
+// there is no .ida-exports/0x82BB4CA8.json, AGENTS gotcha 6; Hex-Rays declines
+// this body entirely and emits pure __asm, so every statement below comes from
+// the instruction listing, not from pseudocode).
+//
+// ARGUMENT ROLES, from the asm + the caller: r3 = &arBestSepDir,
+// r4 = arGP1 = the TRIANGLE (loads its vert0/vert1/vert2 and its single face
+// normal), r5 = arGP2 = the BOX (loads mPos, the three face normals and
+// mDimensions). That is exactly the table's [gp1=TRIANGLE][gp2=BOX] slot, and
+// it is why BoxTri @0x82BAA1A0 does `mr r11,r4 / mr r4,r5 / mr r5,r11` first.
+//
+// THE 13 CANDIDATE AXES, in the console's exact stack order (a contiguous
+// sp+0x00..sp+0xC0 table; note this body allocates NO frame -- it is a leaf and
+// writes the table through r1 directly):
+//   [0]      sp+0x00  the triangle's face normal        (tri +0x10)
+//   [1..3]   sp+0x10  the box's face normals, in REVERSE row order (2,1,0)
+//   [4..12]  sp+0x40  normalize(tri.e[i] x box.e[j]), row-major (i,j)
+// The triangle's three VERTICES are the GPTriangle aliases documented in
+// GPInstance.hpp: vert0 = mPos (+0x00), vert1 = mFaceNormals[1] (+0x20),
+// vert2 = mFaceNormals[2] (+0x30).
+//
+// THE SCAN: candidate [0] is the pre-loop seed (0x82BB4E70..0x82BB4F1C computes
+// its separation/sign and parks the axis in v28); the counted loop (r10 = 3,
+// r11 = sp+0x30 stepping +0x40) then tests candidates [1..12] four at a time in
+// ASCENDING memory order -- lane 0 = [r11-0x20], lane 1 = [r11-0x10],
+// lane 2 = [r11], lane 3 = [r11+0x10] -- with a strict `vcmpgtfp` replacement
+// test, so the seed survives a tie. Unlike the BoxBox kernel there is NO
+// re-test of the seed inside the loop and no duplicated pad slot: 1 + 12 = 13
+// axes, each visited exactly once.
+//
+// NORMALISATION IS A RAW `vrsqrtefp` ESTIMATE -- no Newton-Raphson refine and
+// no degeneracy guard, identical to FindBestSeparatingDirectionBoxBox above. A
+// zero-length cross (parallel edges) therefore yields inf/NaN lanes on the
+// console and here; the NaN separation loses every `>` comparison, so the
+// degenerate axis can never be selected.
+//
+// rodata: flt_82001CC0 = 0.0f is NOT used by this body; the +/-1.0f signs are
+// built in-register (`vspltisw v11,1 / vcfsx` = +1.0f, `vcfsx` of
+// `vspltisw v0,-1` = -1.0f, and `vxor` with the 0x80000000 splat for the
+// loop's copy). unk_82CDA400 / unk_82CDA3C0 are the two vperm lane-merge
+// controls that pack four broadcast `vmsum3fp128` results into one register
+// (dumped: 08 09 0A 0B 1C 1D 1E 1F 00 01 02 03 00 01 02 03 and
+// 00 01 02 03 00 01 02 03 00 01 02 03 14 15 16 17). In this scalar rendering
+// the pack/reduce collapses to an in-order scan, so neither table value is
+// needed or fabricated -- same treatment the BoxBox kernel already documents.
+//
+// The best separation rides out in v1 (the VecFloat return register): it is
+// accumulated there from 0x82BB4F18 onward and never re-materialised, which is
+// why the tail has no `vmr v1, ...` -- Hex-Rays's `int result` in r3 is the
+// usual artefact of this family.
+// ===========================================================================
+
+namespace
+{
+    // The per-axis TRIANGLE-vs-BOX separation, identical in shape to
+    // ComputeBoxAxisSeparation above except that the triangle's interval is the
+    // min/max of its three VERTEX projections instead of centre +/- radius:
+    //   triLo = min(p0, min(p1, p2))   triHi = max(p0, max(p1, p2))   (vminfp/
+    //                                                                  vmaxfp,
+    //                                                                  this fold order)
+    //   dBox  = dot3(L, box.pos)                                      (vmsum3fp128)
+    //   rBox  = (|dot3(boxProj0,L)| + |dot3(boxProj1,L)|) + |dot3(boxProj2,L)|
+    //                                                  (vandc sign mask + vaddfp)
+    //   sep1  = triLo - (dBox + rBox)     triangle entirely on the +L side of the box
+    //   sep2  = (dBox - rBox) - triHi     box entirely on the +L side of the triangle
+    //   sep   = sep1 > sep2 ? sep1 : sep2                    (vcmpgtfp + vsel)
+    //   sign  = sep1 > sep2 ? -1.0f : +1.0f                  (vsel of the two vcfsx splats)
+    inline f32 ComputeTriBoxAxisSeparation(const Vec4& arAxis,
+                                           const Vec4& arVert0, const Vec4& arVert1,
+                                           const Vec4& arVert2,
+                                           const Vec4& arBoxPos, const Vec4* lapBoxProj,
+                                           f32& rfSign)
+    {
+        const f32 lfProj0 = Dot3(arVert0, arAxis);
+        const f32 lfProj1 = Dot3(arVert1, arAxis);
+        const f32 lfProj2 = Dot3(arVert2, arAxis);
+
+        // vminfp/vmaxfp of (vert1, vert2) first, then folded against vert0 --
+        // that exact pairing order, in both the seed and the loop.
+        const f32 lfLo12  = (lfProj1 < lfProj2) ? lfProj1 : lfProj2;
+        const f32 lfHi12  = (lfProj1 > lfProj2) ? lfProj1 : lfProj2;
+        const f32 lfTriLo = (lfProj0 < lfLo12) ? lfProj0 : lfLo12;
+        const f32 lfTriHi = (lfProj0 > lfHi12) ? lfProj0 : lfHi12;
+
+        const f32 lfBoxDist   = Dot3(arAxis, arBoxPos);
+        const f32 lfBoxRadius = (std::fabs(Dot3(lapBoxProj[0], arAxis))
+                               + std::fabs(Dot3(lapBoxProj[1], arAxis)))
+                               + std::fabs(Dot3(lapBoxProj[2], arAxis));
+
+        const f32 lfSep1 = lfTriLo - (lfBoxDist + lfBoxRadius);
+        const f32 lfSep2 = (lfBoxDist - lfBoxRadius) - lfTriHi;
+
+        if (lfSep1 > lfSep2)
+        {
+            rfSign = -1.0f;
+            return lfSep1;
+        }
+        rfSign = 1.0f;
+        return lfSep2;
+    }
+}
+
+f32 FindBestSeparatingDirectionTriBox(Vec4& arBestSepDir,
+                                      const GPInstance& arGP1, const GPInstance& arGP2)
+{
+    // arGP1 = TRIANGLE (r4), arGP2 = BOX (r5) -- see the banner.
+
+    // The triangle's three vertices (GPTriangle's documented aliases) and its
+    // single unit face normal.
+    const Vec4& lrVert0     = arGP1.mPos;                // lvx128 v8,  r0, r4
+    const Vec4& lrVert1     = arGP1.mFaceNormals[1];     // lvx128 v5,  r4, 0x20
+    const Vec4& lrVert2     = arGP1.mFaceNormals[2];     // lvx128 v4,  r4, 0x30
+    const Vec4& lrTriNormal = arGP1.mFaceNormals[0];     // lvx128 v13, r4, 0x10
+
+    // The box's centre and its three projection rows: face normal i scaled by
+    // half-extent lane i (vspltw of [r5+0x70] + vmulfp128), exactly as the
+    // BoxBox kernel builds them.
+    const Vec4& lrBoxPos = arGP2.mPos;                   // lvx128 v9, r0, r5
+    Vec4 laBoxProj[3];
+    laBoxProj[0] = Scale(arGP2.mFaceNormals[0], arGP2.mDimensions.x);   // v31
+    laBoxProj[1] = Scale(arGP2.mFaceNormals[1], arGP2.mDimensions.y);   // v3
+    laBoxProj[2] = Scale(arGP2.mFaceNormals[2], arGP2.mDimensions.z);   // v2
+
+    // The 13-slot candidate table, in the console's exact stack order.
+    Vec4 laCandidates[13];
+    laCandidates[0] = lrTriNormal;                 // sp+0x00
+    laCandidates[1] = arGP2.mFaceNormals[2];       // sp+0x10
+    laCandidates[2] = arGP2.mFaceNormals[1];       // sp+0x20
+    laCandidates[3] = arGP2.mFaceNormals[0];       // sp+0x30
+    for (s32 li = 0; li < 3; ++li)                 // sp+0x40 .. sp+0xC0
+    {
+        for (s32 lj = 0; lj < 3; ++lj)
+        {
+            // vpermwi128 0x63 / vmulfp128 / vnmsubfp / vpermwi128 cross recipe.
+            const Vec4 lvCross = Cross(arGP1.mEdgeDirections[li],
+                                       arGP2.mEdgeDirections[lj]);
+            // RAW vrsqrtefp estimate normalisation (see the banner).
+            laCandidates[4 + 3 * li + lj] =
+                Scale(lvCross, 1.0f / std::sqrt(Dot3(lvCross, lvCross)));
+        }
+    }
+
+    // Pre-loop seed: candidate [0], the triangle's face normal.
+    f32  lfBestSign = 0.0f;
+    f32  lfBestSep  = ComputeTriBoxAxisSeparation(laCandidates[0], lrVert0, lrVert1, lrVert2,
+                                                  lrBoxPos, laBoxProj, lfBestSign);
+    Vec4 lvBestAxis = laCandidates[0];             // vmr v28, v13
+
+    // 3 iterations x 4 lanes over candidates [1..12], ascending, strict `>`.
+    for (s32 lu = 1; lu < 13; ++lu)
+    {
+        f32 lfSign = 0.0f;
+        const f32 lfSep = ComputeTriBoxAxisSeparation(laCandidates[lu], lrVert0, lrVert1, lrVert2,
+                                                      lrBoxPos, laBoxProj, lfSign);
+        if (lfSep > lfBestSep)
+        {
+            lfBestSep  = lfSep;
+            lfBestSign = lfSign;
+            lvBestAxis = laCandidates[lu];
+        }
+    }
+
+    // vmulfp128 v0, v28, v27 + stvx128 v0, r0, r3: orient the winning axis by
+    // the +/-1 sign and store all four lanes.
+    arBestSepDir = Scale(lvBestAxis, lfBestSign);
+    return lfBestSep;
+}
+
+// ---- end wave Q5 rwc3 -----------------------------------------------------
+
 } // namespace collision
 } // namespace rw
+
+// ###########################################################################
+// ---- wave Q5 rwc4 ---------------------------------------------------------
+// (Cluster boundary: everything below this banner belongs to the waveQ5 rwc4
+// owner -- the CYLINDER SAT candidate builder + evaluator. Nothing above this
+// line was touched; the namespaces are re-opened here because the rwc3 block
+// closes them at its end.)
+//
+//   rw::collision::FindBestSepDirWithCylinder_Evaluate       @ 0x82BB75B0 (77)
+//   rw::collision::AddAxisToEdgeCandidate                    @ 0x82BB50E8 (131)
+//   rw::collision::FindBestSepDirWithCylinder_FindCandidates @ 0x82BB64C0 (1082)
+//
+// SOURCES. Both per-address JSONs exist (.ida-exports/BURNOUT_X360_ARTIST.XEX/
+// 0x82BB64C0.json, 0x82BB75B0.json, 0x82BB50E8.json) and every statement below
+// is grounded in their `assembly` listings; the Hex-Rays pseudocode is inline
+// __asm for all three and was used only for the .rdata literal values it
+// folded (flt_82001CC0 == 0.0f, flt_82001DA0 == 0.5f, flt_82180894 == FLT_MIN
+// -- the first two independently corroborated by the committed CgsFont.cpp /
+// CgsCamera.cpp comments). `references/Feb-2007` was grepped first: rwccore.h
+// declares FindBestSepDirWithCylinder (:3832) and the two thunks around it but
+// carries NO body for the builder/evaluator and no cylinder SAT source at all,
+// so there is no rung-3 cross-check for this pair -- the asm is the only
+// authority here.
+//
+// ---------------------------------------------------------------------------
+// DISASSEMBLY TRAP THIS WAVE FOUND (it silently swaps a multiplicand for an
+// addend, so it is written down here rather than left implicit):
+// IDA prints the two multiply-add families in DIFFERENT operand orders.
+//   * plain AltiVec `vmaddfp  vD, vA, vB, vC`  ==>  vD = vA*vC + vB
+//     `vnmsubfp vD, vA, vB, vC`  ==>  vD = vB - vA*vC
+//     (i.e. the printed 3rd operand is the ADDEND). Proof, from the already
+//     committed + reviewed AddRimToEdgeCandidate @0x82BB6118: `vmaddfp v4, v0,
+//     v13, v12` with v0 = the edge direction, v13 = the edge point and v12 =
+//     splat(offset+halfLength) is the landed `dir*splat + point`; and the
+//     canonical Newton-Raphson refine `vnmsubfp v9, v9, v10, v6` with v10 =
+//     1.0 is `1.0 - lenSq*e^2`.
+//   * VMX128 `vmaddfp128 vD, vA, vB, vD`  ==>  vD = vA*vB + vD (the printed
+//     4th operand is always vD -- the accumulate form). Proof: 0x82BB6818
+//     `vmaddfp128 v19, v126, v0, v19` = cylAxis*splat(halfLength) + cyl.mPos.
+// Reading them the same way turns `axis0*sh0 + axis1*sh1` into
+// `axis0*(axis1*sh1) + sh0`, which still compiles and still runs.
+//
+// The other console idiom used throughout: `lvsl vX, 0, rN` (rN = 0/4/8) +
+// `vspltw v7, vX, 0` + `vperm vD, vS, vS, v7` is a LANE BROADCAST of lane
+// rN/4 -- the rotate-by-N-bytes permute control degenerates to a splat once
+// its word 0 is broadcast. Rendered as SplatLane below.
+// ###########################################################################
+
+namespace rw
+{
+namespace collision
+{
+
+namespace
+{
+    // Broadcast one scalar to all four lanes (the console's
+    // `stfs x, scratch / stw 0, scratch+4.. / lvx / vspltw 0` construction).
+    inline Vec4 SplatScalar(f32 afValue)
+    {
+        Vec4 r;
+        r.x = afValue;
+        r.y = afValue;
+        r.z = afValue;
+        r.w = afValue;
+        return r;
+    }
+
+    // Broadcast lane auLane (0/1/2) to all four lanes -- `vspltw vD, vS, N`,
+    // and equivalently the lvsl/vperm form described in the banner.
+    inline Vec4 SplatLane(const Vec4& arV, u32 auLane)
+    {
+        const f32 lfLane = (auLane == 0u) ? arV.x
+                         : (auLane == 1u) ? arV.y
+                                          : arV.z;
+        return SplatScalar(lfLane);
+    }
+
+    // vrsqrtefp + two Newton-Raphson refines, then vmulfp128 -- rendered as the
+    // exact reciprocal square root the refine converges to (this directory's
+    // committed precedent). There is NO zero guard on any of the sites below,
+    // unlike Magnitude() above: the console divides straight through.
+    inline Vec4 NormalizeExact(const Vec4& arV, f32 afLenSq)
+    {
+        return Scale(arV, 1.0f / std::sqrt(afLenSq));
+    }
+
+    // The signed support half-extent of a box-like primitive along one of its
+    // own axes: `vcmpgtfp. 0 > dot` selects the negated broadcast half-extent.
+    // NaN polarity preserved -- a NaN dot fails the compare exactly as the
+    // console's all-lanes vcmpgtfp. does, so it takes the POSITIVE arm.
+    inline Vec4 SignedHalfExtent(const Vec4& arDimensions, u32 auLane, f32 afDot)
+    {
+        const Vec4 lvHalf = SplatLane(arDimensions, auLane);
+        return (0.0f > afDot) ? Negate(lvHalf) : lvHalf;
+    }
+}
+
+// ===========================================================================
+// rw::collision::FindBestSepDirWithCylinder_Evaluate @ 0x82BB75B0  (77 insns)
+//
+// The second half of FindBestSepDirWithCylinder: project BOTH primitives onto
+// every candidate direction the builder produced and keep the axis with the
+// greatest interval separation, writing the winner (oriented so it points from
+// the cylinder toward the other primitive) through arBestSepDir and returning
+// the separation.
+//
+//   bl rw__collision__GPCylinder__GetIntervals   ; DIRECT, not through mMethods
+//   lwz r11, 0xAC(r29) / bctrl                   ; other->mMethods.mGetIntervals
+//   loop i: r11 += 0x30 (sizeof Interval), r30 += 0x10 (the candidate cursor)
+//     sep1 = other[i].min - cyl[i].max           ; other above the cylinder
+//     sep2 = cyl[i].min   - other[i].max         ; cylinder above the other
+//     flip = (sep2 > sep1); sep = flip ? sep2 : sep1
+//     if (best == NULL || sep > bestSep) { best = &cand[i]; bestSep = sep;
+//                                          bestFlip = flip; }
+//   out = bestFlip ? -(*best) : *best            ; vspltisw -1 / vslw / vxor
+//   return bestSep                               ; VecFloat in v1
+//
+// The `vcmpgtfp.` + `mfocrf r10,2` + `extrwi. r10,r10,1,24` idiom reads CR6
+// bit 0 = "ALL FOUR lanes greater". Both interval bounds are lane-broadcast
+// VecFloats, so that is a scalar `>` and is written as one (not a 4-lane
+// compare), with the same NaN polarity: a NaN comparand fails, so a NaN
+// separation never displaces the incumbent.
+//
+// ---------------------------------------------------------------------------
+// DECISION 1 -- HOW MANY Interval SLOTS? The frame is 0x6B0. `__savegprlr_25`
+// stores r25..r31 + LR at old_sp-0x20..-0x04 and the prologue stores v127 at
+// old_sp-0x50, i.e. at sp+0x690..0x6AC and sp+0x660..0x66F of the NEW frame.
+// So the two Interval arrays run
+//     other  : sp+0x060 .. sp+0x360   = 0x300 = 16 * sizeof(Interval)
+//     cylinder: sp+0x360 .. sp+0x660  = 0x300 = 16 * sizeof(Interval)
+// -- EXACTLY 16 slots each, not the "~17 and 16" a measurement to the top of
+// the frame (0x6B0) suggests: the register save area is not part of the local
+// area. Chosen: 16, and it is provably the right number rather than a pick,
+// because the builder's WORST CASE OUTPUT IS EXACTLY 16 (BOX: 1 cylinder axis
+// + 3 box face normals + 6 rim-vs-edge + 6 axis-vs-edge; CYLINDER <= 13,
+// TRIANGLE 11, capsule-like 4, SPHERE 2 -- every appender in the builder is
+// unconditional except AddRimToRimCandidates' four probes). The caller's own
+// table is sp+0x50..sp+0x160 = 0x110 = 17 slots (frame 0x170, `__savegprlr_29`
+// saving at old_sp-0x10..-0x04), i.e. one spare -- see the REPORTED note at
+// the end of this block about the `laCandidates[18]` above.
+//
+// DECISION 2 -- THE count == 0 PATH LOADS THROUGH A NULL best POINTER. It
+// does, on the console too (`beq loc_82BB76C8` straight to `lvx128 v0, r0,
+// r28` with r28 still 0), and there is no guard. It is NOT reachable on this
+// build and that is a fact of the producer, not an assumption: the builder's
+// first three instructions after its prologue are `li r3,1 / lvx128 v0,
+// [cyl+0x40] / stvx128 v0, [table]` -- candidate 0 is the cylinder axis and
+// the count is initialised to 1 UNCONDITIONALLY, before any type test, and
+// nothing in the builder ever decrements it. FindBestSepDirWithCylinder is the
+// only caller and forwards that count verbatim. So the load is reproduced
+// verbatim (no invented guard, per the no-improving rule): with the sole
+// producer in the tree, `lpBest` is non-NULL whenever the loop ran, and the
+// loop always runs.
+// ===========================================================================
+
+// X360 flt_82001CC0 -- the running-best seed. Only observable when the loop
+// body never executes (see DECISION 2), because the first iteration always
+// takes the `best == NULL` arm.
+static const f32 KF_CYLINDER_SAT_INITIAL_SEPARATION = 0.0f;
+
+// The console frame's Interval scratch capacity (DECISION 1).
+static const u32 KU_CYLINDER_SAT_MAX_CANDIDATES = 16u;
+
+f32 FindBestSepDirWithCylinder_Evaluate(
+    Vec4& arBestSepDir, Vec4* lapCandidates, intptr_t aiCandidateResult,
+    const GPCylinder& arGPCylinder, const GPInstance& arGPOther)
+{
+    // The builder's result is a COUNT (this resolves the `intptr_t` the
+    // declaration above calls "candidate count or end pointer -- opaque until
+    // the body is reconstructed"): r5 is the loop trip count (`addic. r31,
+    // r31, -1`) AND the `auNumDirs` argument of both GetIntervals calls.
+    const u32 luNumCandidates = static_cast<u32>(aiCandidateResult);
+
+    // sp+0x360 and sp+0x060 (DECISION 1).
+    Interval laCylinderIntervals[KU_CYLINDER_SAT_MAX_CANDIDATES];
+    Interval laOtherIntervals[KU_CYLINDER_SAT_MAX_CANDIDATES];
+
+    f32   lfBestSeparation = KF_CYLINDER_SAT_INITIAL_SEPARATION;
+    Vec4* lpBest           = 0;      // r28
+    RwBool lbBestFlip      = 0;      // r27
+
+    // The cylinder side is called directly (the console knows the type); the
+    // other side goes through its cached VolumeMethods slot at +0xAC.
+    GPCylinder::GetIntervals(&arGPCylinder, lapCandidates, luNumCandidates,
+                             laCylinderIntervals);
+    arGPOther.mMethods.mGetIntervals(&arGPOther, lapCandidates, luNumCandidates,
+                                     laOtherIntervals);
+
+    for (u32 luI = 0; luI < luNumCandidates; ++luI)
+    {
+        // vsubfp of the lane-broadcast interval bounds.
+        const f32 lfSepOtherAbove = laOtherIntervals[luI].min.x - laCylinderIntervals[luI].max.x;
+        const f32 lfSepCylAbove   = laCylinderIntervals[luI].min.x - laOtherIntervals[luI].max.x;
+
+        RwBool lbFlip   = 0;
+        f32    lfSepDir = lfSepOtherAbove;
+        if (lfSepCylAbove > lfSepOtherAbove)
+        {
+            lfSepDir = lfSepCylAbove;
+            lbFlip   = 1;
+        }
+
+        if (lpBest == 0 || lfSepDir > lfBestSeparation)
+        {
+            lpBest           = &lapCandidates[luI];
+            lfBestSeparation = lfSepDir;
+            lbBestFlip       = lbFlip;
+        }
+    }
+
+    // stvx128 v0, r0, r25: the direction store is unconditional; the flip is
+    // the 4-lane sign-bit xor (vspltisw -1 / vslw / vxor).
+    arBestSepDir = lbBestFlip ? Negate(*lpBest) : *lpBest;
+
+    // vmr128 v1, v127 -- the VecFloat separation rides out in v1 (Hex-Rays's
+    // `result` in r3 is the usual artefact of this family).
+    return lfBestSeparation;
+}
+
+// ===========================================================================
+// rw::collision::AddAxisToEdgeCandidate @ 0x82BB50E8  (131 insns)
+//
+// FLAGGED NAME: the binary symbol is unnamed (`sub_82BB50E8`) and there is no
+// Feb-2007 / DWARF declaration for it; the name is descriptive and follows its
+// already-committed sibling AddRimToEdgeCandidate @0x82BB6118, whose register
+// contract it copies exactly (r3..r6, f1, f2 in the r7/r8 argument slots --
+// AGENTS gotcha 3, a float consumes its GPR slot -- then r9 = the candidate
+// array and r10 = the running count; unlike the rim helper, which has one more
+// pointer argument and so spills its count pointer to the caller stack slot at
+// +0x54). Its ONLY caller is the candidate builder below (6 sites for a BOX,
+// 3 for a TRIANGLE, 1 for a capsule-like primitive).
+//
+// It appends the separating-direction candidate between an INFINITE axis line
+// (arAxisPoint, unit arAxisDirection -- always the cylinder's centre + axis)
+// and the finite edge segment
+//     arEdgePoint + arEdgeDirection * t,  t in [offset-half, offset+half].
+//
+//   cross0 = cross(axis, edgeDir); if |cross0|^2 <= FLT_MIN the two lines are
+//   parallel  -> candidate = normalize(cross(cross(axis, P1-P2), axis)), or
+//   the axis itself when that is degenerate too.
+//   Otherwise solve for the closest point on the edge LINE,
+//     t = dot3(cross(axis, cross0), P1-P2) / dot3(cross(axis, cross0), edgeDir)
+//   and:
+//     * t-offset inside [-half, +half]      -> candidate = normalize(cross0)
+//     * outside                             -> clamp to the matching endpoint
+//       E = arEdgePoint + arEdgeDirection*(offset +/- half) and
+//       candidate = normalize(cross(axis, cross(E, axis)))
+//
+// RETAIL-BINARY QUIRK, PRESERVED VERBATIM (same treatment as
+// RimRadialDirection above): the clamped-endpoint arm rejects the ABSOLUTE
+// endpoint E from the axis direction -- it does NOT subtract the axis point
+// arAxisPoint first, although the parallel arm right above it does use
+// (arAxisPoint - arEdgePoint). `vmaddfp v12, v11, v10, v12` builds E from
+// arEdgePoint(v10) alone and `vmulfp128 v10, v12, v7` crosses that E with
+// perm(axis) directly. Not "fixed" here.
+//
+// THE COUNT IS BUMPED FIRST, UNCONDITIONALLY (`lwz r7,0(r10) / addi r30,r7,1 /
+// stw r30,0(r10)`, all before the first compare) -- every one of the three
+// arms then overwrites the same slot, so this helper always contributes
+// exactly one candidate. That is what makes the builder's worst case exactly
+// 16 (DECISION 1 above). The two intermediate `stvx128 ..., r0, r9` stores
+// (the raw cross0 and the parallel-arm intermediate) are dead: the tail store
+// at 0x82BB53E4 targets the same slot and always runs.
+// ===========================================================================
+
+// flt_82180894 -- the parallel/degenerate guard of this helper (the same
+// FLT_MIN row KF_RIM_PARALLEL_EPSILON / KF_RIM_FLT_MIN above already name).
+static const f32 KF_AXIS_EDGE_PARALLEL_EPSILON = 1.1754944e-38f;
+
+static void AddAxisToEdgeCandidate(const Vec4& arAxisPoint, const Vec4& arAxisDirection,
+                                   const Vec4& arEdgePoint, const Vec4& arEdgeDirection,
+                                   f32 afEdgeOffset, f32 afEdgeHalfLength,
+                                   Vec4* lapCandidateDirs, u32* lpuNumCandidateDirs)
+{
+    // lwz/addi/stw on r10 before anything else: the slot is claimed up front.
+    Vec4& lrSlot = lapCandidateDirs[*lpuNumCandidateDirs];
+    ++(*lpuNumCandidateDirs);
+
+    // cross0 = cross(axis, edgeDir) -- the two-permute VMX idiom.
+    const Vec4 lvCross      = Cross(arAxisDirection, arEdgeDirection);
+    const f32  lfCrossLenSq = Dot3(lvCross, lvCross);
+
+    if (KF_AXIS_EDGE_PARALLEL_EPSILON > lfCrossLenSq)
+    {
+        // Parallel: reject the axis-point -> edge-point gap from the axis.
+        const Vec4 lvGap       = Sub(arAxisPoint, arEdgePoint);
+        const Vec4 lvPerp      = Cross(Cross(arAxisDirection, lvGap), arAxisDirection);
+        const f32  lfPerpLenSq = Dot3(lvPerp, lvPerp);
+
+        // `lvx128 v0, r0, r4` -- the fallback is the axis direction itself,
+        // stored UNNORMALISED (it already is a unit row).
+        lrSlot = (KF_AXIS_EDGE_PARALLEL_EPSILON > lfPerpLenSq)
+                     ? arAxisDirection
+                     : NormalizeExact(lvPerp, lfPerpLenSq);
+        return;
+    }
+
+    // The plane normal that contains the axis and is perpendicular to cross0;
+    // intersecting the edge line with it gives the closest-point parameter.
+    const Vec4 lvPlaneNormal = Cross(arAxisDirection, lvCross);
+    const f32  lfParameter   = Dot3(lvPlaneNormal, Sub(arAxisPoint, arEdgePoint))
+                             / Dot3(lvPlaneNormal, arEdgeDirection);   // vrefp + 2 NR
+    const f32  lfOffsetFromMid = lfParameter - afEdgeOffset;
+
+    // Two vcmpgtfp. tests, in this order, with the console's NaN polarity: a
+    // NaN parameter fails both and lands on the "inside the segment" arm.
+    f32 lfClamped;
+    if (lfOffsetFromMid > afEdgeHalfLength)
+    {
+        lfClamped = afEdgeOffset + afEdgeHalfLength;
+    }
+    else if (-afEdgeHalfLength > lfOffsetFromMid)
+    {
+        lfClamped = afEdgeOffset - afEdgeHalfLength;
+    }
+    else
+    {
+        // Inside the segment: the plain mutual perpendicular.
+        lrSlot = NormalizeExact(lvCross, lfCrossLenSq);
+        return;
+    }
+
+    // The clamped endpoint (see the QUIRK note: E is used absolutely).
+    const Vec4 lvEndPoint = MaddScalar(arEdgeDirection, lfClamped, arEdgePoint);
+    const Vec4 lvRadial   = Cross(arAxisDirection, Cross(lvEndPoint, arAxisDirection));
+    lrSlot = NormalizeExact(lvRadial, Dot3(lvRadial, lvRadial));
+}
+
+// ===========================================================================
+// rw::collision::FindBestSepDirWithCylinder_FindCandidates @ 0x82BB64C0
+// (1082 insns -- the biggest body in this cluster)
+//
+// The rim-aware candidate builder. r3 = the caller's candidate table, r4 = the
+// GPCylinder, r5 = the other GPInstance; returns the number of candidates
+// written (see DECISION 2 in the evaluator's banner -- it is a count, never an
+// end cursor, and it is never 0).
+//
+// Structure, exactly as the asm branches:
+//   [0]                 the cylinder axis                        (unconditional)
+//   [1..n]              every face normal of the other primitive (n = +0x8C)
+//   other is SPHERE     one radial direction from the axis toward the centre
+//   other is CYLINDER   both of the OTHER cylinder's rims vs this cylinder's
+//                       axis segment, then AddRimToRimCandidates (0..4)
+//   then, on the other primitive's shape:
+//     mNumEdgeDirections == 1 (capsule-like): this cylinder's two rims vs the
+//                       other's axis segment, + one axis-vs-axis candidate
+//     BOX             : both rims vs the three box edges that meet the
+//                       supporting vertex (6), then six axis-vs-edge
+//                       candidates around the box's cylinder-facing edge loop
+//     TRIANGLE        : both rims vs the three triangle edges (6), then one
+//                       axis-vs-edge candidate per triangle edge (3)
+//     anything else   : nothing more
+//
+// A NOTE ON THE COUNT SPILL. The console keeps the count in r3 and spills it
+// to sp+0x60 only because the appenders take `u32*`; between spills it reuses
+// that word as scratch (`stw r31, 0x1C0+var_160(r1)` twice inside the SPHERE
+// arm, with no call in between and `stw r3, ...` restoring it before the next
+// consumer). Those two stores are DEAD and are not modelled -- the same
+// treatment AddRimToRimCandidates above already gives its `stw r10, var_70`.
+// Likewise the SPHERE arm materialises all three identity basis rows on the
+// stack but its selector is 0 or 0x10, so the third row is never indexed.
+// ===========================================================================
+
+// The three identity basis rows the SPHERE arm seeds its fallback axis from.
+// Same provenance (and the same reason for being file-scope constants rather
+// than new globals) as the copies in CylinderVolume.cpp: the .rdata run at
+// 0x82181500 belongs to rw::math::vpu::detail, which has no home TU anywhere
+// in the tree, and inventing rw::collision::g_vIVector to satisfy two reads
+// would fork a name that belongs elsewhere (AGENTS gotcha 7).
+//   0x82181500  w::math::vpu::detail::gIVector  {1,0,0,0}  (IDA-truncated name)
+//   0x82181510  unk_82181510                    {0,1,0,0}
+//   0x82181520  unk_82181520                    {0,0,1,0}  (built, never indexed)
+static const Vec4 KV_AXIS_SEED_I = { 1.0f, 0.0f, 0.0f, 0.0f };
+static const Vec4 KV_AXIS_SEED_J = { 0.0f, 1.0f, 0.0f, 0.0f };
+
+// flt_82001DA0 -- the SPHERE arm's "is the axis mostly +X?" seed selector and
+// the TRIANGLE arm's edge-midpoint factor.
+static const f32 KF_CYLINDER_SAT_HALF = 0.5f;
+
+intptr_t FindBestSepDirWithCylinder_FindCandidates(
+    Vec4* lapCandidates, const GPCylinder& arGPCylinder, const GPInstance& arGPOther)
+{
+    const GPInstance& lrCylinder = arGPCylinder;
+    const GPInstance& lrOther    = arGPOther;
+
+    // li r3,1 / lvx128 v0,[cyl+0x40] / stvx128 v0,[table]: the cylinder axis is
+    // candidate 0 and the count starts at 1 with no test in front of it.
+    lapCandidates[0] = lrCylinder.mEdgeDirections[0];
+    u32 luNumDirs    = 1u;
+
+    // `lbz r11, 0x8C(r30)` then a 16-byte-stride copy of other+0x10.. into
+    // table+0x10..: every face normal of the other primitive, in order.
+    for (u32 luI = 0u; luI < static_cast<u32>(lrOther.mNumFaceNormals); ++luI)
+    {
+        lapCandidates[1u + luI] = lrOther.mFaceNormals[luI];
+        ++luNumDirs;
+    }
+
+    // --- SPHERE: the radial direction from the cylinder axis to the centre --
+    if (lrOther.mVolumeType == GPInstance::SPHERE)
+    {
+        const Vec4 lvAxis  = lrCylinder.mEdgeDirections[0];
+        const Vec4 lvDelta = Sub(lrOther.mPos, lrCylinder.mPos);
+
+        Vec4 lvCross      = Cross(lvAxis, lvDelta);
+        f32  lfCrossLenSq = Dot3(lvCross, lvCross);
+
+        // The same flt_82180894 (FLT_MIN) guard row the helper above uses.
+        if (KF_AXIS_EDGE_PARALLEL_EPSILON > lfCrossLenSq)
+        {
+            // The centre sits on the axis: cross against a basis row that is
+            // not (nearly) parallel to it. `vcmpgtfp.` on splat(axis.x) vs
+            // splat(0.5) -- the RAW lane, not its magnitude.
+            const Vec4 lvSeed = (lvAxis.x > KF_CYLINDER_SAT_HALF) ? KV_AXIS_SEED_J
+                                                                  : KV_AXIS_SEED_I;
+            lvCross      = Cross(lvAxis, lvSeed);
+            lfCrossLenSq = Dot3(lvCross, lvCross);
+        }
+
+        lapCandidates[luNumDirs] =
+            Cross(lvAxis, NormalizeExact(lvCross, lfCrossLenSq));
+        ++luNumDirs;
+    }
+
+    // --- CYLINDER: the OTHER cylinder's two rims vs this cylinder's axis ----
+    if (lrOther.mVolumeType == GPInstance::CYLINDER)
+    {
+        const Vec4 lvOtherAxis   = lrOther.mEdgeDirections[0];
+        const Vec4 lvOtherRadius = SplatLane(lrOther.mDimensions, 1u);
+        const Vec4 lvOtherOffset = Scale(lvOtherAxis, lrOther.mDimensions.x);
+
+        AddRimToEdgeCandidate(Add(lrOther.mPos, lvOtherOffset), lvOtherAxis, lvOtherRadius,
+                              lrCylinder.mPos, lrCylinder.mEdgeDirections[0],
+                              0.0f, lrCylinder.mDimensions.x,
+                              lapCandidates, &luNumDirs);
+
+        AddRimToEdgeCandidate(Sub(lrOther.mPos, lvOtherOffset), lvOtherAxis, lvOtherRadius,
+                              lrCylinder.mPos, lrCylinder.mEdgeDirections[0],
+                              0.0f, lrCylinder.mDimensions.x,
+                              lapCandidates, &luNumDirs);
+
+        AddRimToRimCandidates(&lrCylinder, &lrOther, lapCandidates, &luNumDirs);
+    }
+
+    // --- shared rim frame (loc_82BB67E8) -----------------------------------
+    const Vec4 lvCylAxis    = lrCylinder.mEdgeDirections[0];
+    const Vec4 lvRimRadius  = SplatLane(lrCylinder.mDimensions, 1u);
+    const Vec4 lvAxisOffset = Scale(lvCylAxis, lrCylinder.mDimensions.x);
+    const Vec4 lvRimPlus    = Add(lrCylinder.mPos, lvAxisOffset);
+    const Vec4 lvRimMinus   = Sub(lrCylinder.mPos, lvAxisOffset);
+
+    // --- capsule-like (one edge direction): the two rims vs its axis segment
+    if (lrOther.mNumEdgeDirections == 1)
+    {
+        const Vec4 lvOtherAxis = lrOther.mEdgeDirections[0];
+        const f32  lfOtherHalf = lrOther.mDimensions.x;
+
+        AddRimToEdgeCandidate(lvRimPlus, lvCylAxis, lvRimRadius,
+                              lrOther.mPos, lvOtherAxis, 0.0f, lfOtherHalf,
+                              lapCandidates, &luNumDirs);
+
+        // The "-" rim also flips the rim axis here (vxor128 v0, v126, signmask).
+        AddRimToEdgeCandidate(lvRimMinus, Negate(lvCylAxis), lvRimRadius,
+                              lrOther.mPos, lvOtherAxis, 0.0f, lfOtherHalf,
+                              lapCandidates, &luNumDirs);
+
+        // The shared tail (loc_82BB7574 -> loc_82BB757C).
+        AddAxisToEdgeCandidate(lrCylinder.mPos, lvCylAxis,
+                               lrOther.mPos, lvOtherAxis, 0.0f, lfOtherHalf,
+                               lapCandidates, &luNumDirs);
+        return static_cast<intptr_t>(luNumDirs);
+    }
+
+    if (lrOther.mVolumeType == GPInstance::BOX)
+    {
+        const Vec4& lrAxis0 = lrOther.mEdgeDirections[0];
+        const Vec4& lrAxis1 = lrOther.mEdgeDirections[1];
+        const Vec4& lrAxis2 = lrOther.mEdgeDirections[2];
+        const Vec4& lrDims  = lrOther.mDimensions;
+
+        // Both rim ends against the three box edges that meet the box vertex
+        // supporting the rim centre. AddRimToEdgeCandidate turns
+        // (vertex, axis_k, -sh_k, halfExtent_k) into the full edge, because
+        // the vertex already carries the +sh_k term.
+        for (u32 luEnd = 0u; luEnd < 2u; ++luEnd)
+        {
+            const Vec4 lvRimCentre = (luEnd == 0u) ? lvRimPlus : lvRimMinus;
+            const Vec4 lvDelta     = Sub(lvRimCentre, lrOther.mPos);
+
+            const Vec4 lvSH0 = SignedHalfExtent(lrDims, 0u, Dot3(lvDelta, lrAxis0));
+            const Vec4 lvSH1 = SignedHalfExtent(lrDims, 1u, Dot3(lvDelta, lrAxis1));
+            const Vec4 lvSH2 = SignedHalfExtent(lrDims, 2u, Dot3(lvDelta, lrAxis2));
+
+            // vmaddfp / vmaddfp128 / vaddfp: mPos + a0*sh0 + a1*sh1 + a2*sh2.
+            Vec4 lvVertex = Scale(lrAxis0, lvSH0.x);
+            lvVertex = Add(lvVertex, Scale(lrAxis1, lvSH1.x));
+            lvVertex = Add(lvVertex, Scale(lrAxis2, lvSH2.x));
+            lvVertex = Add(lvVertex, lrOther.mPos);
+
+            // The rim axis stays +cylAxis for BOTH ends here (unlike the
+            // capsule-like arm above, which negates it for the "-" rim).
+            AddRimToEdgeCandidate(lvRimCentre, lvCylAxis, lvRimRadius,
+                                  lvVertex, lrAxis0, -lvSH0.x, lrDims.x,
+                                  lapCandidates, &luNumDirs);
+            AddRimToEdgeCandidate(lvRimCentre, lvCylAxis, lvRimRadius,
+                                  lvVertex, lrAxis1, -lvSH1.x, lrDims.y,
+                                  lapCandidates, &luNumDirs);
+            AddRimToEdgeCandidate(lvRimCentre, lvCylAxis, lvRimRadius,
+                                  lvVertex, lrAxis2, -lvSH2.x, lrDims.z,
+                                  lapCandidates, &luNumDirs);
+        }
+
+        // The axis-vs-edge half: the support signs now come from the cylinder
+        // AXIS itself, and the six calls walk the three edges that meet each
+        // of two opposite corners of the box's cylinder-facing face loop.
+        const Vec4 lvSA0 = SignedHalfExtent(lrDims, 0u, Dot3(lvCylAxis, lrAxis0));
+        const Vec4 lvSA1 = SignedHalfExtent(lrDims, 1u, Dot3(lvCylAxis, lrAxis1));
+        const Vec4 lvSA2 = SignedHalfExtent(lrDims, 2u, Dot3(lvCylAxis, lrAxis2));
+
+        Vec4 lvCorner = Scale(lrAxis0, -lvSA0.x);
+        lvCorner = Add(lvCorner, Scale(lrAxis1, lvSA1.x));
+        lvCorner = Add(lvCorner, Scale(lrAxis2, lvSA2.x));
+        lvCorner = Add(lvCorner, lrOther.mPos);
+
+        AddAxisToEdgeCandidate(lrCylinder.mPos, lvCylAxis, lvCorner, lrAxis1,
+                               -lvSA1.x, lrDims.y, lapCandidates, &luNumDirs);
+        AddAxisToEdgeCandidate(lrCylinder.mPos, lvCylAxis, lvCorner, lrAxis2,
+                               -lvSA2.x, lrDims.z, lapCandidates, &luNumDirs);
+
+        lvCorner = Sub(Scale(lrAxis0, lvSA0.x), Scale(lrAxis1, lvSA1.x));
+        lvCorner = Add(lvCorner, Scale(lrAxis2, lvSA2.x));
+        lvCorner = Add(lvCorner, lrOther.mPos);
+
+        AddAxisToEdgeCandidate(lrCylinder.mPos, lvCylAxis, lvCorner, lrAxis2,
+                               -lvSA2.x, lrDims.z, lapCandidates, &luNumDirs);
+        AddAxisToEdgeCandidate(lrCylinder.mPos, lvCylAxis, lvCorner, lrAxis0,
+                               -lvSA0.x, lrDims.x, lapCandidates, &luNumDirs);
+
+        lvCorner = Add(Scale(lrAxis0, lvSA0.x), Scale(lrAxis1, lvSA1.x));
+        lvCorner = Sub(lvCorner, Scale(lrAxis2, lvSA2.x));
+        lvCorner = Add(lvCorner, lrOther.mPos);
+
+        AddAxisToEdgeCandidate(lrCylinder.mPos, lvCylAxis, lvCorner, lrAxis0,
+                               -lvSA0.x, lrDims.x, lapCandidates, &luNumDirs);
+        // The shared tail (loc_82BB757C).
+        AddAxisToEdgeCandidate(lrCylinder.mPos, lvCylAxis, lvCorner, lrAxis1,
+                               -lvSA1.x, lrDims.y, lapCandidates, &luNumDirs);
+        return static_cast<intptr_t>(luNumDirs);
+    }
+
+    if (lrOther.mVolumeType == GPInstance::TRIANGLE)
+    {
+        // The GP triangle's three vertices alias mPos / mFaceNormals[1] /
+        // mFaceNormals[2] (+0x00 / +0x20 / +0x30), its three edge directions
+        // are mEdgeDirections[0..2] and mDimensions carries the edge lengths.
+        const Vec4& lrVert0 = lrOther.mPos;
+        const Vec4& lrVert1 = lrOther.mFaceNormals[1];
+        const Vec4& lrVert2 = lrOther.mFaceNormals[2];
+
+        // Six RimToEdge results, stored straight into the table (this arm does
+        // NOT go through AddRimToEdgeCandidate: the edge end points are the
+        // vertices themselves, so there is nothing to build). The rim axis is
+        // +cylAxis for all six.
+        lapCandidates[luNumDirs++] = RimToEdge(lvRimPlus, lvCylAxis, lvRimRadius, lrVert0, lrVert1);
+        lapCandidates[luNumDirs++] = RimToEdge(lvRimPlus, lvCylAxis, lvRimRadius, lrVert1, lrVert2);
+        lapCandidates[luNumDirs++] = RimToEdge(lvRimPlus, lvCylAxis, lvRimRadius, lrVert2, lrVert0);
+
+        lapCandidates[luNumDirs++] = RimToEdge(lvRimMinus, lvCylAxis, lvRimRadius, lrVert0, lrVert1);
+        lapCandidates[luNumDirs++] = RimToEdge(lvRimMinus, lvCylAxis, lvRimRadius, lrVert1, lrVert2);
+        lapCandidates[luNumDirs++] = RimToEdge(lvRimMinus, lvCylAxis, lvRimRadius, lrVert2, lrVert0);
+
+        // One axis-vs-edge candidate per triangle edge; offset == half-length
+        // == half the edge length, so the segment runs from the vertex to the
+        // next one (flt_82001DA0 == 0.5).
+        const f32 lfHalfEdge0 = lrOther.mDimensions.x * KF_CYLINDER_SAT_HALF;
+        const f32 lfHalfEdge1 = lrOther.mDimensions.y * KF_CYLINDER_SAT_HALF;
+        const f32 lfHalfEdge2 = lrOther.mDimensions.z * KF_CYLINDER_SAT_HALF;
+
+        AddAxisToEdgeCandidate(lrCylinder.mPos, lvCylAxis, lrVert0,
+                               lrOther.mEdgeDirections[0], lfHalfEdge0, lfHalfEdge0,
+                               lapCandidates, &luNumDirs);
+        AddAxisToEdgeCandidate(lrCylinder.mPos, lvCylAxis, lrVert1,
+                               lrOther.mEdgeDirections[1], lfHalfEdge1, lfHalfEdge1,
+                               lapCandidates, &luNumDirs);
+        // The shared tail (loc_82BB7574 -> loc_82BB757C).
+        AddAxisToEdgeCandidate(lrCylinder.mPos, lvCylAxis, lrVert2,
+                               lrOther.mEdgeDirections[2], lfHalfEdge2, lfHalfEdge2,
+                               lapCandidates, &luNumDirs);
+        return static_cast<intptr_t>(luNumDirs);
+    }
+
+    // loc_82BB7594: every other primitive shape contributes nothing more.
+    return static_cast<intptr_t>(luNumDirs);
+}
+
+// ---------------------------------------------------------------------------
+// REPORTED, NOT EDITED (this cluster owns only the block below the rwc4
+// banner; the two items sit above it):
+//  1. FindBestSepDirWithCylinder @0x82BB76E8 declares `Vec4 laCandidates[18]`
+//     and comments "288 bytes = 18 candidate-direction slots". The console
+//     frame is 0x170 with `__savegprlr_29` occupying old_sp-0x10..-0x04, so
+//     the table is sp+0x50..sp+0x160 = 0x110 = 17 slots. 18 is harmless on the
+//     host (it over-allocates one slot and the builder writes at most 16), but
+//     the comment's arithmetic is wrong -- correct it to 17 with the mount.
+//  2. The two `extern` declarations above FindBestSepDirWithCylinder still say
+//     the builder's result is "candidate count or end pointer -- opaque until
+//     the body is reconstructed, hence intptr_t". It is a COUNT (proved by the
+//     evaluator's `addic. r31,r31,-1` trip count and by both GetIntervals
+//     calls passing it as auNumDirs). The bodies here match the declared
+//     `intptr_t` signature exactly so nothing breaks; retyping both to u32 and
+//     dropping that sentence is a follow-up for whoever owns the block above.
+// ---------------------------------------------------------------------------
+
+} // namespace collision
+} // namespace rw
+
+// ---- end wave Q5 rwc4 -----------------------------------------------------

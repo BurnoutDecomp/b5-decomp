@@ -6,6 +6,8 @@
 #include <cstddef>                                                   // offsetof (OutEventLineTestNearestResult layout pin)
 #include "types.hpp"
 #include "BrnCommonTypes.h"                                          // Vector3, EntityId, Matrix44Affine
+#include "GameShared/GameClasses/Module/CgsEventQueue.h"             // CgsModule::EventQueue<T,N> (OutErrorQueue base)
+#include "GameShared/GameClasses/SceneManager/CgsSceneManagerErrorEvent.h" // CgsSceneManager::ErrorEvent (OutErrorQueue element)
 #include "GameShared/GameClasses/SceneManager/CgsVolumeInstanceId.h" // CgsSceneManager::VolumeInstanceId
 #include "GameShared/GameClasses/SceneManager/CgsSceneQueryId.h"     // CgsSceneManager::SceneQueryId
 // InSceneUpdateInterface has a single canonical home (kills the prior ODR double-definition
@@ -78,6 +80,27 @@ namespace SceneManagerIO
         static_assert(offsetof(OutEventLineTestFastDoubleSidedResult, mbIntersection) == 0x04, "mbIntersection @ +0x04");
         static_assert(sizeof(OutEventLineTestFastDoubleSidedResult)                   == 8,    "sizeof == 8");
     }
+
+    // ------------------------------------------------------------------------
+    // OutErrorQueue<N> -- DWARF CgsSceneManagerModuleIO.h:141. The DWARF prints it as
+    //   struct OutErrorQueue<128> : public EventQueue<CgsSceneManager::ErrorEvent,128> {}
+    // i.e. a named EventQueue specialisation with NO members and NO methods of its own.
+    // SceneManagerIO::OutputBuffer embeds it at N == 128 through the :304 typedef
+    // OutSmErrorQueue, and the X360 OutputBuffer::Construct @0x828C7CA0 brings it up with
+    //   CgsSceneManager::ErrorEvent,128>::Construct(this + 199744)   (@0x828C4B10)
+    // whose `addi r30, r31, 0xC` proves the plain 12-byte BaseEventQueue header with no
+    // padding before maEvents (ErrorEvent alignment <= 4).
+    // ⚠️ FLAG (reported, not fixed here -- CgsSceneManagerErrorEvent.h is not this TU's file):
+    // the console ErrorEvent element is 136 bytes, not the 16 the placeholder models. It is
+    // pinned by this queue's console EXTENT inside OutputBuffer: the queue runs from +199744
+    // to the next member (mTriangleCacheInterface @ +217164), i.e. 17420 bytes, and
+    // 17420 == 12 (header) + 128 * 136. Nothing addresses the element by offset on the host,
+    // so the size is cosmetic here -- but the placeholder's "16 bytes" is a wrong fact.
+    // ------------------------------------------------------------------------
+    template <s32 N>
+    class OutErrorQueue : public CgsModule::EventQueue<CgsSceneManager::ErrorEvent, N>
+    {
+    };
 
     // MINIMAL SLICE for the RaceCarEntityModuleIO IO-buffer unlock; full layout
     // reconstructed by SceneFineLineTestQueue's own TU (DWARF home

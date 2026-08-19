@@ -133,6 +133,437 @@ namespace
 }
 
 // ===========================================================================
+// rw::collision::GPTriangleAcceptContactNormal @ 0x82BAA600  (waveQ5 C1)
+//
+// THE shared narrow-phase gate: every one of the six contact-emitting paths in
+// this file (both batch kernels, ComputeContactPoints and PrimitivePairIntersect)
+// ends by running it over any TRIANGLE operand -- with +normal for the first
+// side and -normal for the second -- and discards the contact on a zero
+// return. Until it existed no pair type could produce a contact at all.
+//
+// The binary symbol is UNNAMED (`sub_82BAA600`); the name is descriptive. No
+// DWARF and no Feb-2007 declaration cover it (the Feb-2007 rwccore.h carries
+// GPTriangle and ComputeContactPoints but not this static), so the signature
+// is taken from the asm: r3 = the triangle GPInstance, v1 = the candidate
+// contact normal. It is homed here, not in GPTriangle.cpp, because the binary
+// puts it in THIS run (0x82BAA1A0 SAT thunks -> 0x82BAA600 -> 0x82BAACD8
+// GPInstanceBatchIntersectNx1), and its three helpers below are statics that
+// nothing outside the run calls.
+//
+// WHAT IT IS FOR. A GPTriangle is one face of a mesh. A contact normal that
+// points out of the plane of the face is this triangle's business; one that
+// points sideways, past an edge or a vertex, belongs to the NEIGHBOUR the
+// mesh shares that edge/vertex with -- accepting it is what makes a car catch
+// on an internal mesh seam. So:
+//   1. Project the candidate normal on the face normal. If it is within
+//      0.99985 of (anti)parallel the normal is "on the face" -- region 0.
+//   2. Otherwise strip the face component, renormalise, and classify the
+//      remaining in-plane direction into one of six Voronoi sectors around
+//      the triangle (three edges, three vertices) -- ClassifyInPlaneRegion.
+//   3. Accept or reject that sector using the instance's flags: the
+//      per-edge FLAG_TRIANGLEEDGE*CONVEX bits (is the shared edge convex, i.e.
+//      does this triangle own the space beyond it?), the per-vertex
+//      FLAG_TRIANGLEVERT*DISABLE bits, and -- when FLAG_TRIANGLEUSEEDGECOS is
+//      set -- the three stored edge cosines in mEdgeData, which give the exact
+//      dihedral half-angle instead of a yes/no convexity bit.
+//
+// SECTOR NUMBERING (from ClassifyInPlaneRegion, and confirmed by the flag each
+// sector tests on the no-edge-cos path):
+//   0 = the face itself (never returned by the classifier; it is the
+//       "no classification was run" value)
+//   1 = edge 0     2 = edge 1     4 = edge 2
+//   5 = vertex 0   3 = vertex 1   6 = vertex 2
+// A vertex sector is bounded by TWO edges, and the pairing the asm uses is
+// consistent across all three vertex cases: logical edge k is
+// mEdgeDirections[2-k] (edge 0 <-> mEdgeDirections[2], edge 1 <->
+// mEdgeDirections[1], edge 2 <-> mEdgeDirections[0]), and vertex k is bounded
+// by edges k-1 and k. That pairing is taken from the asm, not assumed.
+//
+// RETURN VALUE: nonzero = accept. The console returns the tested flag BIT
+// itself on the no-edge-cos paths (0x20 / 0x40 / 0x80), 0/1 elsewhere -- so it
+// is a truthiness, never a canonical 1. Reproduced exactly.
+//
+// VMX lowering (asm authoritative, same conventions as the rest of this file):
+//   * vmsum3fp128 = xyz dot fold broadcast to all four lanes -> scalar Dot3.
+//   * vspltisw(-1)+vslw builds the 0x80000000 lane mask; vandc against it is
+//     fabs, vxor against it is per-lane negate.
+//   * lvsl(0, 4*k) + vspltw + vperm is a LANE BROADCAST of mEdgeData[k] out of
+//     the (ec0,ec1,ec2,0) row staged on the stack -- not a rodata permute
+//     table (AGENTS gotcha 5).
+//   * vcmpgtfp./vcmpgefp. + mfocrf r11,2 + extrwi. r11,r11,1,24 reads CR6[0]
+//     = "all four lanes". Every operand here is lane-broadcast, so it lowers
+//     to a scalar compare; NaN polarity matches C++ (`>` false on unordered).
+//   * vrsqrtefp + two vnmsubfp/vmaddfp Newton-Raphson steps -> exact
+//     1/sqrt, i.e. a plain normalise.
+//
+// .rdata: flt_82F917F4 == unk_82F917F8 == 0x3F7FF62B == 0.99984998f (two
+// separate literal slots holding the same value; both dumped on a private .i64
+// copy), unk_821802C4 == 0x3D4CCCCD == 0.05f, flt_82001CC0 == 0.0f.
+// ===========================================================================
+
+// flt_82F917F4 / unk_82F917F8 -- |dot(normal, faceNormal)| at or above this
+// counts as "the normal lies on the face", so no in-plane classification runs
+// (and, on the no-edge-cos paths, accepts outright).
+static const f32 KF_FACE_PARALLEL_COSINE = 0.99984998f;
+
+// unk_821802C4 -- the in-plane sector epsilon of the Voronoi classifier.
+static const f32 KF_INPLANE_SECTOR_EPSILON = 0.050000001f;
+
+namespace
+{
+    // vpermwi128 0x63 selects words (1,2,0,3) == the (y,z,x,w) shuffle; the
+    // vmulfp128 / vnmsubfp / vpermwi triple in both edge-fan helpers below is
+    // a plain xyz cross product (its w lane cancels to zero and is only ever
+    // consumed by a dot3).
+    inline Vec4 Cross3(const Vec4& a, const Vec4& b)
+    {
+        Vec4 r;
+        r.x = a.y * b.z - a.z * b.y;
+        r.y = a.z * b.x - a.x * b.z;
+        r.z = a.x * b.y - a.y * b.x;
+        r.w = 0.0f;
+        return r;
+    }
+
+    // vrsqrtefp + two Newton-Raphson refinements, then vmulfp128 over all four
+    // lanes -- rendered exact.
+    inline Vec4 Normalize3(const Vec4& a)
+    {
+        return Scale(a, 1.0f / std::sqrt(Dot3(a, a)));
+    }
+
+    // The component of arVec perpendicular to the unit axis arAxis
+    // (vmsum3fp128 / vmulfp128 / vsubfp), renormalised.
+    inline Vec4 NormalizedReject(const Vec4& arVec, const Vec4& arAxis)
+    {
+        return Normalize3(Sub(arVec, Scale(arAxis, Dot3(arVec, arAxis))));
+    }
+
+    // -----------------------------------------------------------------------
+    // @ 0x82BAA2A8 -- ONE-SIDED edge-fan acceptance (static; only 0x82BAA600
+    // calls it). arEdgeAxis is the NEGATED edge direction the caller stages,
+    // arFaceNormal the triangle's face normal, arNormal the candidate contact
+    // normal, afEdgeCos the edge's stored cosine and abEdgeConvex the edge's
+    // FLAG_TRIANGLEEDGE*CONVEX bit.
+    //
+    // The candidate is accepted outright when it falls on the inner side of
+    // the edge's half-plane (the cross product test). Otherwise it is only
+    // accepted if the edge is marked convex AND the candidate, projected off
+    // the edge axis and renormalised, still leans at least afEdgeCos toward
+    // the face -- i.e. it is inside the dihedral wedge this triangle owns.
+    // -----------------------------------------------------------------------
+    RwBool AcceptEdgeFanOneSided(const Vec4& arEdgeAxis, const Vec4& arFaceNormal,
+                                 const Vec4& arNormal, f32 afEdgeCos,
+                                 u32 auEdgeConvex)
+    {
+        // vmsum3fp128 against the cross, vs flt_82001CC0 (0.0f).
+        if (0.0f > Dot3(arNormal, Cross3(arEdgeAxis, arFaceNormal)))
+        {
+            return 1;                                   // li r3, 1
+        }
+        if (auEdgeConvex == 0)                          // cmplwi cr6, r7, 0
+        {
+            return 0;
+        }
+        return (Dot3(NormalizedReject(arNormal, arEdgeAxis), arFaceNormal) >= afEdgeCos)
+                   ? 1 : 0;                             // vcmpgefp. CR6[0]
+    }
+
+    // -----------------------------------------------------------------------
+    // @ 0x82BAA378 -- TWO-SIDED edge-fan acceptance (static; same caller).
+    // Identical to the one-sided form except that a non-convex edge is not an
+    // outright reject: the wedge is measured against the BACK face instead
+    // (vxor sign flip of the face normal), because a two-sided triangle owns
+    // the space on both sides of its plane.
+    // -----------------------------------------------------------------------
+    RwBool AcceptEdgeFanTwoSided(const Vec4& arEdgeAxis, const Vec4& arFaceNormal,
+                                 const Vec4& arNormal, f32 afEdgeCos,
+                                 u32 auEdgeConvex)
+    {
+        if (0.0f > Dot3(arNormal, Cross3(arEdgeAxis, arFaceNormal)))
+        {
+            return 1;                                   // li r3, 1
+        }
+
+        const Vec4 lvRejected = NormalizedReject(arNormal, arEdgeAxis);
+        const Vec4 lvAgainst  = (auEdgeConvex != 0) ? arFaceNormal
+                                                    : Negate(arFaceNormal);
+        return (Dot3(lvRejected, lvAgainst) >= afEdgeCos) ? 1 : 0;
+    }
+
+    // -----------------------------------------------------------------------
+    // @ 0x82BAA4A8 -- classify an IN-PLANE direction against the triangle's
+    // three edge directions (static; same caller). r3 = the instance,
+    // v1 = the direction; returns the sector 1..6 (never 0).
+    //
+    // The three dots are compared against +/-0.05 and against each other in a
+    // fixed cascade; the six outcomes are the three edge sectors and the three
+    // vertex sectors of the triangle's in-plane Voronoi diagram.
+    // -----------------------------------------------------------------------
+    u32 ClassifyInPlaneRegion(const GPInstance* lpTriangle, const Vec4& arDir)
+    {
+        const f32 lfD0 = Dot3(arDir, lpTriangle->mEdgeDirections[0]);   // lvx +0x40
+        const f32 lfD1 = Dot3(arDir, lpTriangle->mEdgeDirections[1]);   // lvx +0x50
+        const f32 lfD2 = Dot3(arDir, lpTriangle->mEdgeDirections[2]);   // lvx +0x60
+
+        const f32 lfPosEps = KF_INPLANE_SECTOR_EPSILON;
+        const f32 lfNegEps = -KF_INPLANE_SECTOR_EPSILON;   // vxor sign flip
+
+        if (lfD0 > lfPosEps && lfNegEps > lfD1)
+        {
+            return 6;   // vertex 2
+        }
+        if (lfD1 > lfPosEps && lfNegEps > lfD2)
+        {
+            return 3;   // vertex 1
+        }
+        if (lfD2 > lfPosEps && lfNegEps > lfD0)
+        {
+            return 5;   // vertex 0
+        }
+        // vcmpgtfp then vcmpgefp against the negated siblings (`bge` is
+        // `!(a < b)`, so these are written as `>=` / `>` exactly as emitted).
+        if (lfD0 > -lfD2 && -lfD1 >= lfD0)
+        {
+            return 4;   // edge 2
+        }
+        if (lfD1 > -lfD0 && -lfD2 >= lfD1)
+        {
+            return 2;   // edge 1
+        }
+        return 1;       // edge 0
+    }
+}
+
+u32 GPTriangleAcceptContactNormal(const GPInstance* lpTriangle, const Vec4& arNormal)
+{
+    const u32  luFlags   = lpTriangle->mFlags;              // lwz 0x94(r30)
+    const Vec4 lvFaceN   = lpTriangle->mFaceNormals[0];     // lvx128 r30+0x10
+    const f32  lfFaceDot = Dot3(arNormal, lvFaceN);         // vmsum3fp128 v7
+
+    // Sector 0 == "the normal lies on the face": no classification is run.
+    u32 luRegion = 0;                                       // li r31, 0 / mr r3, r31
+    if (KF_FACE_PARALLEL_COSINE > std::fabs(lfFaceDot))     // vandc + vcmpgtfp.
+    {
+        luRegion = ClassifyInPlaneRegion(lpTriangle,
+                                         NormalizedReject(arNormal, lvFaceN));
+    }
+
+    if ((luFlags & GPInstance::FLAG_TRIANGLEUSEEDGECOS) != 0)   // flags & 0x100
+    {
+        // The three stored edge cosines, staged as one (ec0,ec1,ec2,0) row and
+        // lane-broadcast per use.
+        const f32 lfEdgeCos0 = lpTriangle->mEdgeData[0];    // lfs 0x98(r30)
+        const f32 lfEdgeCos1 = lpTriangle->mEdgeData[1];    // lfs 0x9C(r30)
+        const f32 lfEdgeCos2 = lpTriangle->mEdgeData[2];    // lfs 0xA0(r30)
+
+        const Vec4& lrEdgeDir0 = lpTriangle->mEdgeDirections[0];   // +0x40
+        const Vec4& lrEdgeDir1 = lpTriangle->mEdgeDirections[1];   // +0x50
+        const Vec4& lrEdgeDir2 = lpTriangle->mEdgeDirections[2];   // +0x60
+
+        // The edge-fan helpers take the NEGATED edge direction (vxor sign
+        // flip staged into the stack slot the call reads).
+        const u32 luEdge0Convex = luFlags & GPInstance::FLAG_TRIANGLEEDGE0CONVEX;
+        const u32 luEdge1Convex = luFlags & GPInstance::FLAG_TRIANGLEEDGE1CONVEX;
+        const u32 luEdge2Convex = luFlags & GPInstance::FLAG_TRIANGLEEDGE2CONVEX;
+
+        if ((luFlags & GPInstance::FLAG_TRIANGLEONESIDED) != 0)   // flags & 0x10
+        {
+            switch (luRegion)
+            {
+            case 0:
+                // Face sector: only a front-facing normal survives.
+                return (lfFaceDot > 0.0f) ? 1u : 0u;
+
+            case 1:   // edge 0
+                if (luEdge0Convex == 0)
+                {
+                    return 0;
+                }
+                return (lfFaceDot >= lfEdgeCos0) ? 1u : 0u;
+
+            case 2:   // edge 1
+                if (luEdge1Convex == 0)
+                {
+                    return 0;
+                }
+                return (lfFaceDot >= lfEdgeCos1) ? 1u : 0u;
+
+            case 4:   // edge 2
+                if (luEdge2Convex == 0)
+                {
+                    return 0;
+                }
+                return (lfFaceDot >= lfEdgeCos2) ? 1u : 0u;
+
+            case 3:   // vertex 1 -- bounded by edge 0 and edge 1
+                if ((luFlags & GPInstance::FLAG_TRIANGLEVERT1DISABLE) != 0)
+                {
+                    return 0;
+                }
+                if (!AcceptEdgeFanOneSided(Negate(lrEdgeDir2), lvFaceN, arNormal,
+                                           lfEdgeCos0, luEdge0Convex))
+                {
+                    return 0;
+                }
+                return AcceptEdgeFanOneSided(Negate(lrEdgeDir1), lvFaceN, arNormal,
+                                             lfEdgeCos1, luEdge1Convex);
+
+            case 5:   // vertex 0 -- bounded by edge 2 and edge 0
+                if ((luFlags & GPInstance::FLAG_TRIANGLEVERT0DISABLE) != 0)
+                {
+                    return 0;
+                }
+                if (!AcceptEdgeFanOneSided(Negate(lrEdgeDir0), lvFaceN, arNormal,
+                                           lfEdgeCos2, luEdge2Convex))
+                {
+                    return 0;
+                }
+                return AcceptEdgeFanOneSided(Negate(lrEdgeDir2), lvFaceN, arNormal,
+                                             lfEdgeCos0, luEdge0Convex);
+
+            case 6:   // vertex 2 -- bounded by edge 1 and edge 2
+                if ((luFlags & GPInstance::FLAG_TRIANGLEVERT2DISABLE) != 0)
+                {
+                    return 0;
+                }
+                if (!AcceptEdgeFanOneSided(Negate(lrEdgeDir1), lvFaceN, arNormal,
+                                           lfEdgeCos1, luEdge1Convex))
+                {
+                    return 0;
+                }
+                return AcceptEdgeFanOneSided(Negate(lrEdgeDir0), lvFaceN, arNormal,
+                                             lfEdgeCos2, luEdge2Convex);
+
+            default:
+                // Sector >= 7 is unreachable from the classifier; the console
+                // still carries the accept-everything arm (cmplwi 7 / bge).
+                return 1;
+            }
+        }
+
+        // Two-sided + edge cosines.
+        switch (luRegion)
+        {
+        case 0:
+            return 1;
+
+        case 1:   // edge 0
+            return ((luEdge0Convex != 0) ? (lfFaceDot >= lfEdgeCos0)
+                                         : (-lfFaceDot >= lfEdgeCos0)) ? 1u : 0u;
+
+        case 2:   // edge 1
+            return ((luEdge1Convex != 0) ? (lfFaceDot >= lfEdgeCos1)
+                                         : (-lfFaceDot >= lfEdgeCos1)) ? 1u : 0u;
+
+        case 4:   // edge 2
+            return ((luEdge2Convex != 0) ? (lfFaceDot >= lfEdgeCos2)
+                                         : (-lfFaceDot >= lfEdgeCos2)) ? 1u : 0u;
+
+        case 3:   // vertex 1
+            if ((luFlags & GPInstance::FLAG_TRIANGLEVERT1DISABLE) != 0)
+            {
+                return 0;
+            }
+            if (!AcceptEdgeFanTwoSided(Negate(lrEdgeDir2), lvFaceN, arNormal,
+                                       lfEdgeCos0, luEdge0Convex))
+            {
+                return 0;
+            }
+            return AcceptEdgeFanTwoSided(Negate(lrEdgeDir1), lvFaceN, arNormal,
+                                         lfEdgeCos1, luEdge1Convex);
+
+        case 5:   // vertex 0
+            if ((luFlags & GPInstance::FLAG_TRIANGLEVERT0DISABLE) != 0)
+            {
+                return 0;
+            }
+            if (!AcceptEdgeFanTwoSided(Negate(lrEdgeDir0), lvFaceN, arNormal,
+                                       lfEdgeCos2, luEdge2Convex))
+            {
+                return 0;
+            }
+            return AcceptEdgeFanTwoSided(Negate(lrEdgeDir2), lvFaceN, arNormal,
+                                         lfEdgeCos0, luEdge0Convex);
+
+        case 6:   // vertex 2
+            if ((luFlags & GPInstance::FLAG_TRIANGLEVERT2DISABLE) != 0)
+            {
+                return 0;
+            }
+            if (!AcceptEdgeFanTwoSided(Negate(lrEdgeDir1), lvFaceN, arNormal,
+                                       lfEdgeCos1, luEdge1Convex))
+            {
+                return 0;
+            }
+            return AcceptEdgeFanTwoSided(Negate(lrEdgeDir0), lvFaceN, arNormal,
+                                         lfEdgeCos2, luEdge2Convex);
+
+        default:
+            return 1;
+        }
+    }
+
+    // ---- no edge cosines: the FLAG_TRIANGLEOLDMASK path --------------------
+    // Only the convexity/disable bits arbitrate, after a cheap "the normal is
+    // essentially the face normal" accept.
+    //
+    // NOTE (kept because the console keeps it): on the non-zero-sector arms
+    // both KF_FACE_PARALLEL_COSINE tests below are PROVABLY DEAD -- a non-zero
+    // sector only exists because KF_FACE_PARALLEL_COSINE > |lfFaceDot| already
+    // held at the top, so neither `lfFaceDot >` nor `|lfFaceDot| >` can fire.
+    // They are reproduced rather than folded away: they are real instructions
+    // in the binary (0x82BAABB0 / 0x82BAAC24 re-load unk_82F917F8), and the
+    // original source clearly wrote the two tests independently.
+    if ((luFlags & GPInstance::FLAG_TRIANGLEONESIDED) != 0)
+    {
+        if (luRegion == 0)
+        {
+            return (lfFaceDot > 0.0f) ? 1u : 0u;        // splat(flt_82001CC0)
+        }
+        if (lfFaceDot > KF_FACE_PARALLEL_COSINE)        // unk_82F917F8
+        {
+            return 1;
+        }
+        if (0.0f > lfFaceDot)
+        {
+            return 0;   // one-sided: a normal pointing behind the face is never ours
+        }
+    }
+    else
+    {
+        if (luRegion == 0)
+        {
+            return 1;
+        }
+        if (std::fabs(lfFaceDot) > KF_FACE_PARALLEL_COSINE)   // vandc + vcmpgtfp.
+        {
+            return 1;
+        }
+    }
+
+    // The console returns the tested flag BIT here (rlwinm / not+extrwi), not a
+    // canonical 1 -- preserved.
+    switch (luRegion)
+    {
+    case 1:   // edge 0
+        return luFlags & GPInstance::FLAG_TRIANGLEEDGE0CONVEX;
+    case 2:   // edge 1
+        return luFlags & GPInstance::FLAG_TRIANGLEEDGE1CONVEX;
+    case 4:   // edge 2
+        return luFlags & GPInstance::FLAG_TRIANGLEEDGE2CONVEX;
+    case 3:   // vertex 1
+        return ((luFlags & GPInstance::FLAG_TRIANGLEVERT1DISABLE) == 0) ? 1u : 0u;
+    case 5:   // vertex 0
+        return ((luFlags & GPInstance::FLAG_TRIANGLEVERT0DISABLE) == 0) ? 1u : 0u;
+    case 6:   // vertex 2
+        return ((luFlags & GPInstance::FLAG_TRIANGLEVERT2DISABLE) == 0) ? 1u : 0u;
+    default:
+        return 1;
+    }
+}
+
+// ===========================================================================
 // rw::collision::GPInstanceBatchIntersectNx1 @ 0x82BAACD8
 //
 // Three passes over min(aiNum, aiResBufMaxSize) pairs:
@@ -802,30 +1233,30 @@ namespace
         CreateGPInstanceFn mpCreateGPInstance; // slot 5
     };
 
-    // FLAG (word-width): the committed VolRef keeps its X360 words as u32
-    // (muVolumePtr / muTransformPtr). The 0x82BABC78 asm attests their meaning
-    // at this consumer: +0x00 -> the Volume* the vtable dispatch runs on
+    // The 0x82BABC78 asm attests the two leading VolRef words at this
+    // consumer: +0x00 -> the Volume* the vtable dispatch runs on
     // (lwz r3, 0(rRef)); +0x04 -> the cached transform pointer passed in r5
-    // (lwz r5, 4(rRef)). The u32 fields are widened through uintptr_t here; if
-    // VolRef is later promoted to pointer-typed fields these collapse to
-    // member reads.
+    // (lwz r5, 4(rRef)). Both are HOST-width in VolRef since waveQ5 C1 (they
+    // are pointers, not console values -- see the VolRef.hpp banner), so these
+    // views are plain reinterpretations: what AddPrimitiveRef/AddVolumeRef
+    // stored is exactly what CreateGPInstance dereferences here.
     const Volume* VolRefVolume(const VolRef& lrRef)
     {
-        return reinterpret_cast<const Volume*>(static_cast<uintptr_t>(lrRef.muVolumePtr));
+        return reinterpret_cast<const Volume*>(lrRef.muVolumePtr);
     }
 
     const void* VolRefTransform(const VolRef& lrRef)
     {
-        return reinterpret_cast<const void*>(static_cast<uintptr_t>(lrRef.muTransformPtr));
+        return reinterpret_cast<const void*>(lrRef.muTransformPtr);
     }
 
-    // The dispatch-table pointer lives at X360 byte +0x40 of the volume image;
-    // read it by image offset until the full Volume layout lands (raw offset
-    // documented per the serialised rw::collision data exception).
+    // The dispatch-table pointer lives at X360 byte +0x40 of the volume image
+    // (`lwz r11, 0x40(r3)`). On the host that slot holds the type ENUM and the
+    // descriptor is gVolumeVTable[enum] (CollisionVolume.hpp GetVolumeDescriptor;
+    // wave Q5 integration 2026-08-18) -- reinterpreted into this TU's slot view.
     const VolumeVTable* GetVolumeVTable(const Volume* lpVolume)
     {
-        return *reinterpret_cast<const VolumeVTable* const*>(
-            reinterpret_cast<const u8*>(lpVolume) + 0x40);
+        return reinterpret_cast<const VolumeVTable*>(GetVolumeDescriptor(lpVolume));
     }
 }
 
@@ -1155,8 +1586,21 @@ namespace
     }
 
     // Console pointer image of a Volume* for the result header words
-    // (stw r28/r27 into +0x00/+0x08; the committed PPIR keeps v1/v2 as the
-    // X360 32-bit words -- same width FLAG as VolRef::muVolumePtr).
+    // (stw r28/r27 into +0x00/+0x08).
+    //
+    // FLAG (64->32 TRUNCATION, deliberate, UNRESOLVED): unlike VolRef -- whose
+    // two leading pointer words were promoted to host width in waveQ5 C1
+    // because the console left +0x08..+0x0F unwritten -- PrimitivePairIntersect-
+    // Result has NO hole to grow into: v1/tag1/v2/tag2/vNindex are five packed
+    // words at +0x00..+0x13 inside a record whose 0x750 stride is pinned by the
+    // batch kernels' `mulli rN, 0x750`, and the SAME two slots are written by
+    // the batch kernels with a genuine 32-bit GPInstance::mVolumeTag (see
+    // :447/:449 and :743/:745). So the field is a tag-or-pointer union that
+    // cannot be widened without relaying the record out from under both
+    // producers. The truncation is currently INERT -- no consumer anywhere in
+    // the tree reads v1/v2 back as a pointer (grepped) -- but a future consumer
+    // that does will get a wild pointer on x64. Fix belongs with a PPIR
+    // relayout, not here.
     inline u32 VolumePointerImage(const Volume* lpVolume)
     {
         return static_cast<u32>(reinterpret_cast<uintptr_t>(lpVolume));

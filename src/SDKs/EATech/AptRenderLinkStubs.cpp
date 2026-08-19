@@ -601,16 +601,22 @@ namespace rw { namespace collision {
     class VolumeLineQuery { public: int GetIntersections(); };   // FLAG link-stub (minimal decl for mangling)
     int VolumeLineQuery::GetIntersections() { return 0; }        // FLAG link-stub
 
-    // The six per-type volume-handler bytes the volume vtable points at (volume.cpp
-    // declares these extern const u8). Zero-init storage -- off the Apt render path.
-    // extern: a namespace-scope `const` defaults to INTERNAL linkage in C++; the volume
-    // vtable in another TU references these as external -> force external linkage.
-    extern const u8 gVolumeHandler_82F91740 = 0;   // FLAG link-stub
-    extern const u8 gVolumeHandler_82F9176C = 0;   // FLAG link-stub
-    extern const u8 gVolumeHandler_82F91894 = 0;   // FLAG link-stub
-    extern const u8 gVolumeHandler_82F918C0 = 0;   // FLAG link-stub
-    extern const u8 gVolumeHandler_82F919A4 = 0;   // FLAG link-stub
-    extern const u8 gVolumeHandler_82F919D0 = 0;   // FLAG link-stub
+    // RETIRED 2026-08-18 (waveQ5 rwc3): the six per-type volume-handler symbols
+    // (gVolumeHandler_82F91740 / _82F9176C / _82F91894 / _82F918C0 / _82F919A4 /
+    // _82F919D0) used to be defined here as single zero BYTES ("FLAG link-stub"), so a
+    // fixed-up Volume's +0x40 descriptor pointer aimed at one zero byte and
+    // Volume::GetType() read four bytes of whatever followed it.
+    //
+    // They are now REAL `rw::collision::Volume::VTable` records -- typeID, name and flags
+    // dumped out of the shipped image, the seven method slots null with their X360
+    // addresses documented -- defined in their proper rwcollision home,
+    // SDKs/EATech/rwcollision/volume.cpp, beside the vTableArray they fill. Their type
+    // therefore changed from `const u8` to `const Volume::VTable`, which changes the
+    // mangled symbol (MEASURED: ...@@3EB vs ...@@3U...@B), so both sides moved together
+    // in one change and the tree never carries the two spellings at once.
+    // Nothing outside volume.cpp ever referenced these symbols (grepped: the only other
+    // mentions are comments in CgsVolumeManager.cpp:195 and PropManager_wQ2_09.cpp:109,
+    // both of which now describe a state that no longer exists).
 
 }}
 

@@ -75,10 +75,12 @@ namespace
         VolumeGetBBoxFn mpGetBBox;   // slot 1  getBBox
     };
 
+    // Console `lwz 0x40(vol)` = the descriptor pointer; on the host the slot holds the
+    // type enum and the descriptor is gVolumeVTable[enum] (CollisionVolume.hpp
+    // GetVolumeDescriptor; wave Q5 integration 2026-08-18).
     const VolumeVTableView* GetVolumeVTable(const Volume* lpVolume)
     {
-        return *reinterpret_cast<const VolumeVTableView* const*>(
-            reinterpret_cast<const u8*>(lpVolume) + 0x40);  // lwz 0x40(vol)
+        return reinterpret_cast<const VolumeVTableView*>(GetVolumeDescriptor(lpVolume));
     }
 
     // Volume::m_flags -- console byte +0x5C; bit 0 is VOLUMEFLAG_ISENABLED
@@ -105,17 +107,17 @@ namespace
             reinterpret_cast<const u8*>(lpVolume) + 0x44);
     }
 
-    // VolRef console-pointer-word widening (the committed
-    // PrimitiveIntersect.cpp helpers).
+    // VolRef pointer-word views (the committed PrimitiveIntersect.cpp
+    // helpers). Since waveQ5 C1 the stored words are HOST width, so these are
+    // plain reinterpretations, not a re-widening of a truncated console word.
     const Volume* VolRefVolume(const VolRef& lrRef)
     {
-        return reinterpret_cast<const Volume*>(static_cast<uintptr_t>(lrRef.muVolumePtr));
+        return reinterpret_cast<const Volume*>(lrRef.muVolumePtr);
     }
 
     const math::vpu::Matrix44Affine* VolRefTransform(const VolRef& lrRef)
     {
-        return reinterpret_cast<const math::vpu::Matrix44Affine*>(
-            static_cast<uintptr_t>(lrRef.muTransformPtr));
+        return reinterpret_cast<const math::vpu::Matrix44Affine*>(lrRef.muTransformPtr);
     }
 
     // -----------------------------------------------------------------------
@@ -249,9 +251,10 @@ RwBool VolumeBBoxQuery::AddVolumeRef(const Volume*                    lpVol,
     // (sizeof(VolRef) static_asserts to 0x80).
     VolRef& lrRef = m_stackVRefBuffer[m_stackNext];
 
-    // stwx r4 -> record +0x00 (console pointer word, committed VolRef
-    // convention).
-    lrRef.muVolumePtr = static_cast<u32>(reinterpret_cast<uintptr_t>(lpVol));
+    // stwx r4 -> record +0x00 (the console's 32-bit pointer word; VolRef
+    // carries it at HOST width since waveQ5 C1, so no truncation here -- the
+    // readers below dereference exactly what was stored).
+    lrRef.muVolumePtr = reinterpret_cast<uintptr_t>(lpVol);
 
     if (lpTm)                                       // cmplwi cr6, r5, 0
     {
@@ -262,8 +265,7 @@ RwBool VolumeBBoxQuery::AddVolumeRef(const Volume*                    lpVol,
         CopyRow(lrRef.mRow1, lpTm->yAxis.mV);
         CopyRow(lrRef.mRow2, lpTm->zAxis.mV);
         CopyRow(lrRef.mRow3, lpTm->wAxis.mV);
-        lrRef.muTransformPtr =
-            static_cast<u32>(reinterpret_cast<uintptr_t>(&lrRef.mRow0));
+        lrRef.muTransformPtr = reinterpret_cast<uintptr_t>(&lrRef.mRow0);
     }
     else
     {
@@ -333,9 +335,10 @@ RwBool VolumeBBoxQuery::AddPrimitiveRef(const Volume*                    lpVol,
     // slwi r10, r10, 7: the result records are 0x80-stride VolRefs.
     VolRef& lrRef = m_primVRefBuffer[m_primNext];
 
-    // stwx r4 -> record +0x00 (console pointer word, committed VolRef
-    // convention).
-    lrRef.muVolumePtr = static_cast<u32>(reinterpret_cast<uintptr_t>(lpVol));
+    // stwx r4 -> record +0x00 (the console's 32-bit pointer word; VolRef
+    // carries it at HOST width since waveQ5 C1, so no truncation here -- the
+    // readers below dereference exactly what was stored).
+    lrRef.muVolumePtr = reinterpret_cast<uintptr_t>(lpVol);
 
     if (lpTm)                                       // cmplwi cr6, r5, 0
     {
@@ -345,8 +348,7 @@ RwBool VolumeBBoxQuery::AddPrimitiveRef(const Volume*                    lpVol,
         CopyRow(lrRef.mRow1, lpTm->yAxis.mV);
         CopyRow(lrRef.mRow2, lpTm->zAxis.mV);
         CopyRow(lrRef.mRow3, lpTm->wAxis.mV);
-        lrRef.muTransformPtr =
-            static_cast<u32>(reinterpret_cast<uintptr_t>(&lrRef.mRow0));
+        lrRef.muTransformPtr = reinterpret_cast<uintptr_t>(&lrRef.mRow0);
     }
     else
     {

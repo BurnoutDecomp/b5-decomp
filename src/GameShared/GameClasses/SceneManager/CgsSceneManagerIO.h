@@ -7,19 +7,28 @@
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"          // VariableEventQueue<32768,16>
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_SceneUpdate.h"  // InSceneUpdateInterface (canonical home)
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_TriangleCache.h" // TriangleCacheInterface (OutputBuffer::mTriangleCacheInterface)
+// ---- OutputBuffer's four output queues (all DWARF CgsSceneManagerModuleIO.h members) ----
+#include "GameShared/GameClasses/Module/CgsEventQueue.h"                        // CgsModule::EventQueue<T,N>
+#include "GameShared/GameClasses/SceneManager/CgsSceneManagerModuleIO.h"        // SceneManagerIO::OutErrorQueue<N> (:141)
+#include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_SceneQueryResultsQueue.h" // OutSceneQueryResultsQueue<32768> (:303)
+#include "GameShared/GameClasses/SceneManager/SharedIO/CgsPotentialContact.h"   // SceneManagerIO::PotentialContact (:290 element)
+#include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_EventOutOverlapPair.h" // SceneManagerIO::OutOverlapPair (:300 element)
 
-// CgsSceneManager::SceneManagerIO - the scene-manager module's IO buffer slices
-// the world bridges drive. FLAG: MINIMAL slices -- only the accessors the bridges
-// call are modelled (per the BrnPhysicsModuleIO.h / BrnCrashModuleIO.h precedent);
-// the full buffer payloads are owned by the scene-manager IO TUs. X360 anchors:
+// CgsSceneManager::SceneManagerIO - the scene-manager module's IO buffers the world
+// bridges drive. X360 anchors:
 //   InputBuffer_Update::GetInSceneUpdateInterface() @ 0x825BD8C0
 //     write-lock (bit 3, "Not locked for writing\n", assert line 463) -> this + 16
-//   OutputBuffer::GetSceneQueryResultsQueue() const @ 0x823B1ED0
-//     read-lock (bit 4, "Not locked for reading\n") -> this + 4
-//     (FLAG: the getter's IDA symbol is truncated to "CgsSceneManager::SceneM";
-//      named here after the queue the scene->race-car bridge Appends from)
+//   OutputBuffer::GetResultsQueue() const @ 0x823B1ED0
+//     read-lock (bit 4, "Not locked for reading\n", line 624) -> this + 4
+//     (the getter's IDA symbol is truncated to "CgsSceneManager::SceneM"; the DWARF
+//      names it GetResultsQueue -- CgsSceneManagerModuleIO.h:624)
 // InputBuffer_Update's Construct/Destruct are real committed symbols
 // (@0x828C7B80 / @0x828BAD00, their own TUs).
+//
+// FLAG (still MINIMAL, and which one): InputBuffer_Query is a documented sized slice
+// (see its own banner). OutputBuffer is NO LONGER a slice as of wave Q5 -- its five
+// DWARF members are all present and its Construct/Destruct are the console bodies.
+// InputBuffer_Update carries only the scene-update aggregate the X360 Construct brings up.
 namespace CgsSceneManager
 {
 namespace SceneManagerIO
@@ -159,56 +168,132 @@ namespace SceneManagerIO
         { return reinterpret_cast<const CgsSceneManager::EntityId*>(this + 1); }
     };
 
+    // ========================================================================
+    // SceneManagerIO::OutputBuffer -- the scene manager's whole output payload.
+    //
+    // ⭐ THE THREE MISSING SEATS LANDED 2026-08-18 (wave Q5, scene-collision middle).
+    // The struct used to be a documented MINIMAL slice (results ring + triangle-cache
+    // interface only) and the FLAG in its Construct admitted the gap. The full member
+    // set is now DWARF-shaped and console-sized:
+    //
+    //   DWARF CgsSceneManagerModuleIO.h:612 (struct), members :640/:643/:646/:649/:652
+    //   in that order, with typedefs :303 / :290 / :300 / :304.
+    //
+    //   console offset   member                    type                                  extent
+    //   +0               IOBuffer status byte      (base)                                1 (+3 pad)
+    //   +4        (:640) mResultsQueue             OutSceneQueryResultsQueue<32768>       32796
+    //   +32800    (:643) mPotentialContactQueue    EventQueue<PotentialContact,2048>     163856 = 16 + 2048*80
+    //   +196656   (:646) mOverlapPairsQueue        EventQueue<OutOverlapPair,128>          3088 = 16 + 128*24
+    //   +199744   (:649) mErrorQueue               OutErrorQueue<128>                     17420 = 12 + 128*136
+    //   +217164   (:652) mTriangleCacheInterface   TriangleCacheInterface                     4
+    //                                                                          sizeof = 217168
+    // The three queue offsets come straight out of OutputBuffer::Construct @0x828C7CA0
+    // (`addis r31,1 / addi -0x7FE0` = +0x8020, `addis 3 / addi 0x30` = +0x30030,
+    // `addis 3 / addi 0xC40` = +0x30C40) and sizeof from the CreateIOBuffer<OutputBuffer>
+    // instantiation @0x823AF668 (`IOBufferStack::Alloc(this, 0x35050, name)`).
+    //
+    // ⚠️ CONSOLE OFFSETS ARE COMMENTS, NOT LAYOUT. On this LLP64 host the queues are wider
+    // (VolumeInstanceId/pointers), so the members land wherever the compiler puts them --
+    // every access here and downstream is BY NAME. Do NOT re-pad to hit +32800.
+    // ========================================================================
     struct OutputBuffer : public CgsModule::IOBuffer
     {
+        // ---- DWARF typedefs (all four are the member types, in DWARF order) ----
+        typedef OutSceneQueryResultsQueue<32768>                             OutSmSceneQueryResultsQueue;  // :303
+        typedef CgsModule::EventQueue<PotentialContact, 2048>                OutPotentialContactQueue;     // :290
+        typedef CgsModule::EventQueue<OutOverlapPair, 128>                   OutOverlapPairsQueue;         // :300
+        typedef OutErrorQueue<128>                                           OutSmErrorQueue;              // :304
+
+        // Pre-DWARF spelling of the results-queue type, kept because the existing call
+        // sites (WorldBridgeSceneToEntityModules/ToPhysics, BrnWorldModule, the frustum
+        // producer) name the accessors below by it. It is the BASE of the DWARF type --
+        // OutSceneQueryResultsQueue<32768> : VariableEventQueue<32768,16> -- so the two
+        // spellings describe one member, not two.
         typedef CgsModule::VariableEventQueue<32768, 16> SceneQueryResultsQueue;
 
-        // The Construct CreateIOBuffer<T> runs after the alloc (X360 instantiation
-        // @0x823AF668): raise the IOBuffer status base + bring up the query-results ring.
-        void Construct()
-        {
-            CgsModule::IOBuffer::Construct();
-            mSceneQueryResultsQueue.Construct();
-            // ⭐ 2026-08-15 (IO-buffer zero-fill removal audit) -- MISSING STORE.
-            // *(this+217164) = 0 @0x828C7CA0 is this pointer. It was omitted, and it only
-            // ever survived because the old PC CreateIOBuffer<T> value-initialised the whole
-            // buffer; with default-init the slot holds the previous IO-stack tenant's bytes,
-            // which SURVIVES GetCache()'s "mpTriangleCacheManager != NULL" tripwire and is
-            // then dereferenced. Same defect class as SimpleDataStreamProducer's cursor.
-            mTriangleCacheInterface.mpTriangleCacheManager = 0;
-            // The console's tail `VariableEventQueue<32768,16>::Clear(this+4)` @0x828C7CA0.
-            mSceneQueryResultsQueue.Clear();
-            // [FLAG] the console Construct also runs PotentialContact<2048>/ErrorEvent<128>/
-            // OutOverlapPair<128> Constructs at +32800/+199744/+196656 -- those three queues
-            // are not members of this documented MINIMAL slice, so they cannot be reached by
-            // name yet.
-            // ⚠️ CORRECTED 2026-08-15: the assert on `mResultsQueue.Prepare()` that used to be
-            // listed alongside them as "not a member" IS a member -- mResultsQueue is this
-            // buffer's own mSceneQueryResultsQueue. It is not omitted, it is already covered:
-            // VariableEventQueue<...>::Prepare is nothing but the "Not Constructed" assert plus
-            // Clear() and `return true` (CgsVariableEventQueue.h), and both the Construct and
-            // the Clear above are made. Nothing to restore for that leg.
-        }
+        // X360 0x828C7CA0 / 0x828BAD38. Both are OUT-OF-LINE in the console's own
+        // CgsSceneManagerModuleIO.cpp (their asserts bake that path at lines 224 and 256),
+        // and that file is this tree's CgsSceneManagerModuleIO.cpp -- where the bodies live.
+        void Construct();   // DWARF :617
+        void Destruct();    // DWARF :621
 
-        // @ 0x823B1ED0 -- read-lock tripwire, then the query-results ring. (Was a
-        // declaration-only accessor whose WorldLinkStubs body asserted; every scene-query
-        // round trip in WorldModule::EntityModulePostSceneUpdate reads the results
-        // through it, so the trap stopped the world drive. The member IS committed, so
-        // this is the real body.)
-        const SceneQueryResultsQueue* GetSceneQueryResultsQueue() const
+        // ---- the four const (READ-locked) getters, DWARF :624-:628 ----
+
+        // @ 0x823B1ED0 -- read-lock tripwire (bit 4, "Not locked for reading"), `this+4`,
+        // baked line 624. Every scene-query round trip in
+        // WorldModule::EntityModulePostSceneUpdate reads the results through it.
+        const OutSmSceneQueryResultsQueue* GetResultsQueue() const           // :624
         {
             CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
-            return &mSceneQueryResultsQueue;
+            return &mResultsQueue;
         }
 
-        // The producer-side handle (X360 0x828AF900, guarded on the WRITE lock):
-        // SceneManagerModule::ProcessFrustumTestJobResults @0x828C7838 allocates one
-        // variable event per coarse-result batch through it.
-        SceneQueryResultsQueue* GetSceneQueryResultsQueueForWrite()
+        // ⭐ @ 0x8279C098 -- read-lock (bit 4), `this+32800`, baked line 625. THE SEAT THE
+        // WHOLE PROP-CONTACT PATH DRAINS: WorldModule::BridgeSceneContactsToPropModule_
+        // PrePhysics @0x827ABCB0, BridgeSceneContactsToRaceCarModule_PrePhysics @0x827ABBD0,
+        // BridgeSceneContactsToTrafficModule_PrePhysics @0x827ABC50 and
+        // BridgeScenePotentialContactsToPhysics @0x827ABD80 all call exactly this function.
+        const OutPotentialContactQueue* GetPotentialContactQueue() const     // :625
+        {
+            CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+            return &mPotentialContactQueue;
+        }
+
+        // :626. The console emits NO out-of-line body for this overload (no caller in the
+        // ARTIST image -- the error queue is filled but never drained on the shipped path),
+        // so the lock bit is taken from the DWARF constness + the family's proven
+        // const-reads / non-const-writes pattern rather than from an asm tripwire. FLAG:
+        // lock bit inferred, offset and existence are DWARF-attested. There is deliberately
+        // NO non-const overload -- the DWARF declares none.
+        const OutSmErrorQueue* GetErrorQueue() const                        // :626
+        {
+            CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+            return &mErrorQueue;
+        }
+
+        // @ 0x8279C140 -- read-lock (bit 4), `this+196656`, baked line 627. Drained by
+        // WorldModule::BridgeSceneContactsToTrafficModule_PrePhysics @0x827ABC50 and
+        // BridgeScenePotentialContactsToPhysics @0x827ABD80 (the traffic overlap feed).
+        const OutOverlapPairsQueue* GetOverlapPairsQueue() const             // :627
+        {
+            CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+            return &mOverlapPairsQueue;
+        }
+
+        // ---- the non-const (WRITE-locked) getters, DWARF :631-:634 ----
+
+        // X360 0x828AF900, guarded on the WRITE lock: SceneManagerModule::
+        // ProcessFrustumTestJobResults @0x828C7838 allocates one variable event per
+        // coarse-result batch through it.
+        OutSmSceneQueryResultsQueue* GetResultsQueue()                       // :631
         {
             CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
-            return &mSceneQueryResultsQueue;
+            return &mResultsQueue;
         }
+
+        // ⭐ @ 0x828AF9A8 -- write-lock (bit 3, "Not locked for writing"), `this+32800`,
+        // baked line 632. Its ONE caller is SceneManagerModule::
+        // BridgeOverlapCullerToOutputBuffer @0x828BA8C8 -- the producer that turns each
+        // culler Contact into a PotentialContact. Round 3/4 writes through this.
+        OutPotentialContactQueue* GetPotentialContactQueue()                 // :632
+        {
+            CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+            return &mPotentialContactQueue;
+        }
+
+        // @ 0x828AFA50 -- write-lock (bit 3), `this+196656`, baked line 633. Its ONE caller
+        // is SceneManagerModule::BridgeOverlapGenerationToOutputBuffer @0x828BA6A0.
+        OutOverlapPairsQueue* GetOverlapPairsQueue()                         // :633
+        {
+            CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+            return &mOverlapPairsQueue;
+        }
+
+        // ---- pre-DWARF accessor spellings kept for the existing call sites ----
+        // Same member, same tripwire, same console symbol as GetResultsQueue()/() const
+        // above; they return the BASE type because that is what the call sites bind to.
+        const SceneQueryResultsQueue* GetSceneQueryResultsQueue() const { return GetResultsQueue(); }
+        SceneQueryResultsQueue*       GetSceneQueryResultsQueueForWrite() { return GetResultsQueue(); }
 
         // ⭐ ADDED 2026-08-11 (triangle-cache wiring wave). THE HANDOFF SEAT OF THE WHOLE
         // TRIANGLE-CACHE CHAIN: the scene manager publishes &mTriangleCacheManager here, and
@@ -237,13 +322,12 @@ namespace SceneManagerIO
         }
 
     private:
-        u8                     maStatusPad[3];            // +1..+3 (force +4)
-        SceneQueryResultsQueue mSceneQueryResultsQueue;   // +4
-        // DWARF CgsSceneManagerModuleIO.h:652. Console seat +217164; placed by NAME after the
-        // results ring because this whole buffer is the documented MINIMAL slice above (the
-        // overlap-pair / error queues that fill the gap belong to their own TUs). Nothing
-        // addresses it by offset -- both accessors take its address.
-        TriangleCacheInterface mTriangleCacheInterface;   // X360 +217164 (0x3504C)
+        u8                          maStatusPad[3];           // +1..+3 (force +4)
+        OutSmSceneQueryResultsQueue mResultsQueue;            // :640  console +4
+        OutPotentialContactQueue    mPotentialContactQueue;   // :643  console +32800  (0x8020)
+        OutOverlapPairsQueue        mOverlapPairsQueue;       // :646  console +196656 (0x30030)
+        OutSmErrorQueue             mErrorQueue;              // :649  console +199744 (0x30C40)
+        TriangleCacheInterface      mTriangleCacheInterface;  // :652  console +217164 (0x3504C)
     };
 }
 }

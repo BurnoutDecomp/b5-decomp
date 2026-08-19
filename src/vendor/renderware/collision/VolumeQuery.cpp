@@ -170,10 +170,12 @@ namespace
         VolumeGetBBoxFn mpGetBBox;   // slot 1  getBBox
     };
 
+    // Console `lwz 0x40(vol)` = the descriptor pointer; on the host the slot holds the
+    // type enum and the descriptor is gVolumeVTable[enum] (CollisionVolume.hpp
+    // GetVolumeDescriptor; wave Q5 integration 2026-08-18).
     const VolumeVTableView* GetVolumeVTable(const Volume* lpVolume)
     {
-        return *reinterpret_cast<const VolumeVTableView* const*>(
-            reinterpret_cast<const u8*>(lpVolume) + 0x40);
+        return reinterpret_cast<const VolumeVTableView*>(GetVolumeDescriptor(lpVolume));
     }
 
     // Volume::groupID -- canonical rwccore.h:1612, console byte +0x54

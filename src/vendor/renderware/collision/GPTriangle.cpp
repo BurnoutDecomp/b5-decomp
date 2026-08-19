@@ -1,6 +1,7 @@
 #include "vendor/renderware/collision/GPInstance.hpp"
 
-#include <cmath>   // fabs
+#include <cmath>    // fabs
+#include <cstring>  // memcpy (bit-exact subnormal constant)
 
 // ===========================================================================
 // rw::collision::GPTriangle -- the triangle primitive's VolumeMethods
@@ -9,6 +10,7 @@
 //   GPTriangle::GetMaximumFeature  @ 0x82BBA158   (VolumeMethods +0xA4)
 //   GPTriangle::GetInterval        @ 0x82BBA6A0   (VolumeMethods +0xA8)
 //   GPTriangle::GetIntervals       @ 0x82BBA6E0   (VolumeMethods +0xAC)
+//   TriangleNearestPointRegion     @ 0x82BBA748   (waveQ5 C1; see its banner)
 //
 // Canonical declarations rwccore.h:1229 (non-static const members on PS3);
 // reconstructed as static plain-function callbacks matching the committed
@@ -72,6 +74,38 @@ namespace
         r.z = s;
         r.w = s;
         return r;
+    }
+
+    // vsubfp: per-lane a - b (all four lanes, w included).
+    inline Vec4 Sub(const Vec4& a, const Vec4& b)
+    {
+        Vec4 r;
+        r.x = a.x - b.x;
+        r.y = a.y - b.y;
+        r.z = a.z - b.z;
+        r.w = a.w - b.w;
+        return r;
+    }
+
+    // vmaddfp against a lvlx/vspltw splat multiplier: per-lane a*s + b.
+    inline Vec4 MaddScalar(const Vec4& a, f32 s, const Vec4& b)
+    {
+        Vec4 r;
+        r.x = a.x * s + b.x;
+        r.y = a.y * s + b.y;
+        r.z = a.z * s + b.z;
+        r.w = a.w * s + b.w;
+        return r;
+    }
+
+    // Bit-exact float constant (the degeneracy epsilon below is a subnormal;
+    // the committed LineSegIntersect.cpp uses the same idiom for the same
+    // .rdata word).
+    inline f32 F32FromBits(u32 luBits)
+    {
+        f32 lfValue;
+        std::memcpy(&lfValue, &luBits, sizeof(lfValue));
+        return lfValue;
     }
 
     // vspltisw(-1)/vslw sign mask + vxor: flip every lane's sign.
@@ -321,6 +355,239 @@ void GPTriangle::GetIntervals(const GPInstance* lpThis, const Vec4* lapDirs,
         ++lpOut;    // addi r11, r11, 0x30
     }
     while (--luRemaining != 0);
+}
+
+// ===========================================================================
+// rw::collision::TriangleNearestPointRegion @ 0x82BBA748   (waveQ5 C1)
+//
+// SEPARATE-ENTRY vs PART-OF-GetIntervals -- decided from the asm, not the
+// ledger. IDA reports 0x82BBA748 INSIDE the function chunk
+// 0x82BBA6E0..0x82BBAA00 (`rw::collision::GPTriangle::GetIntervals`), which is
+// why the earlier notes called it "a mid-function bl target / shared tail".
+// It is neither: GetIntervals' own loop ENDS with `blr` at 0x82BBA744, so
+// there is no fall-through, and 0x82BBA748 opens a fresh body with its own
+// argument contract. IDA simply merged two adjacent functions into one chunk
+// (AGENTS gotcha 6: a truncated/merged IDA symbol is not evidence about the
+// code). The single call site is `bl loc_82BBA748` @ 0x82BBB10C inside
+// rw::collision::FatTriangleLineSegIntersect -- i.e. the console's TU is one
+// run holding both the GP triangle callbacks and the triangle line tests, and
+// this file owns the first half of that run. So: a standalone function, homed
+// here beside GetIntervals exactly where the binary places it.
+//
+// It is a LEAF: no prologue, no stwu -- it scratches the linkage area at
+// r1+0x00..0x0F and the red zone below r1 for its dot-product spills.
+//
+// X360 register map (__fastcall + VMX128 vector args, all confirmed at the
+// 0x82BBB0F4..0x82BBB108 call site):
+//   r3 = out nearest point   r4 = out s   r5 = out t
+//   v1 = query point   v2 = V0   v3 = V1   v4 = V2
+//   return (r3) = the feature region code.
+//
+// ** THERE IS NO FOURTH OUT-PARAMETER. ** The committed
+// LineSegIntersect.hpp:180 declares an extra `f32* lpfPlaneDistance` on the
+// claim that the callee returns a signed point-to-plane distance in f3 as a
+// "same-TU register side channel". This body writes f0/f4..f13 and never
+// touches f3 -- so it cannot. What the caller reads at 0x82BBB1D4
+// (`fcmpu cr6, f3, f31`) is its OWN f3, set way back at 0x82BBAE30/0x82BBAE44
+// to |det| and kept live across the call (an LTCG same-TU register-allocation
+// artefact). Since |det| >= 0, that caller-side branch never fires -- which is
+// exactly what the reconstruction does today, because it leaves its
+// `lfPlaneDist` at its 0.0f seed. Behaviour therefore matches; the DECLARATION
+// is what is wrong. Reported to the conductor with the exact edit (that file
+// is outside this cluster's ownership).
+//
+// Algorithm: the standard barycentric point-vs-triangle nearest-feature query
+// (Ericson's ClosestPtPointTriangle in its s/t determinant form), with
+//   ab = V1-V0, ac = V2-V0, ap = V0-P   (note the sign: A minus P)
+//   a = ab.ab   b = ab.ac   c = ac.ac   d = ab.ap   e = ac.ap
+//   det = c*a - b*b     sNum = e*b - d*c     tNum = d*b - e*a
+// Stage 1 picks one of four groups (three edge fans + the interior), stage 2
+// resolves that group to a vertex / edge parameter / interior barycentric.
+// The nearest point is rebuilt as V0 + ab*s + ac*t and s/t are published.
+//
+// VMX/FPU lowering notes (asm authoritative):
+//   * vmsum3fp128 = xyz dot fold broadcast to all lanes -> scalar Dot3; every
+//     dot is spilled to the stack and re-read with `lfs`, i.e. consumed as a
+//     scalar -- so the whole classifier is scalar FP, not lane-wise.
+//   * vrefp + two vnmsubfp/vmaddfp Newton-Raphson steps -> exact 1/det.
+//   * BRANCH POLARITY (AGENTS gotcha 4): `bge X` after `fcmpu a,b` is
+//     `if (!(a < b)) goto X` (NaN takes it), `ble X` is `if (!(a > b))`,
+//     `blt`/`bgt` are the plain `<` / `>`. Every test below is written in the
+//     form that reproduces the console's NaN behaviour exactly.
+//   * `fneg` then `> 0` is kept as written rather than folded to `< 0`.
+//
+// Region codes (the values FatTriangleLineSegIntersect switches on):
+//   0 = vertex V0   1 = vertex V1   2 = vertex V2
+//   3 = edge V0V1   4 = edge V0V2   5 = edge V1V2
+//   6 = face interior
+// ===========================================================================
+
+// flt_82180A24: raw 0x00200000 == 2^-128 (subnormal) -- the degenerate-area
+// threshold on the barycentric determinant. The same .rdata word the committed
+// LineSegIntersect.cpp names KF_PARALLEL_EPSILON_BITS.
+static const f32 KF_DEGENERATE_AREA_EPSILON = F32FromBits(0x00200000u);
+
+s32 TriangleNearestPointRegion(Vec4* lpNearest, f32* lpfParamS, f32* lpfParamT,
+                               Vec4 aPoint, Vec4 aV0, Vec4 aV1, Vec4 aV2)
+{
+    const Vec4 lvAB = Sub(aV1, aV0);      // vsubfp v0,  v3, v2
+    const Vec4 lvAC = Sub(aV2, aV0);      // vsubfp v13, v4, v2
+    const Vec4 lvAP = Sub(aV0, aPoint);   // vsubfp v12, v2, v1   (V0 - P)
+
+    const f32 lfA = Dot3(lvAB, lvAB);     // f8   -> r1+0x00
+    const f32 lfB = Dot3(lvAB, lvAC);     // f0   -> var_40
+    const f32 lfC = Dot3(lvAC, lvAC);     // f13  -> var_30
+    const f32 lfD = Dot3(lvAB, lvAP);     // f10  -> var_20
+    const f32 lfE = Dot3(lvAC, lvAP);     // f11  -> var_10
+
+    const f32 lfDet  = lfC * lfA - lfB * lfB;   // fmuls + fmsubs -> var_5C
+    const f32 lfSNum = lfE * lfB - lfD * lfC;   // f7  (fmuls + fmsubs)
+    const f32 lfTNum = lfD * lfB - lfE * lfA;   // f6  (fmuls + fmsubs)
+
+    // |V1V2|^2 == a - 2b + c (fnmsubs against flt_82001D9C == 2.0f, then
+    // fadds). The asm recomputes this in both places that need it; the value
+    // is identical, so it is hoisted once.
+    const f32 lfEdge12LenSq = lfA - 2.0f * lfB + lfC;
+
+    // ---- stage 1: pick the group -------------------------------------------
+    // 0 = the V0V1 edge fan, 1 = the V0V2 edge fan, 2 = the V1V2 edge fan,
+    // 3 = the triangle interior.
+    s32 liGroup;
+    if (lfDet < KF_DEGENERATE_AREA_EPSILON)   // fcmpu det, eps / bge -> non-degenerate
+    {
+        // Degenerate (near-zero area): resolve against the LONGEST edge.
+        if (lfA > lfC)                                     // ble -> the c branch
+        {
+            liGroup = (lfA > lfEdge12LenSq) ? 0 : 2;       // ble -> 2
+        }
+        else
+        {
+            liGroup = (lfC > lfEdge12LenSq) ? 1 : 2;       // ble -> 2
+        }
+    }
+    else if (lfSNum + lfTNum > lfDet)         // fadds + fcmpu / ble -> the other arm
+    {
+        // Beyond the V1V2 edge: V1 / V2 / the V1V2 fan.
+        if (lfSNum < 0.0f)                                 // bge -> the t test
+        {
+            liGroup = !((lfE + lfC) < (lfD + lfB)) ? 2 : 1;   // bge -> 2
+        }
+        else if (!(lfTNum < 0.0f))                         // bge -> 2
+        {
+            liGroup = 2;
+        }
+        else
+        {
+            liGroup = ((lfD + lfA) < (lfE + lfB)) ? 0 : 2;    // blt -> 0
+        }
+    }
+    else
+    {
+        // Inside the V1V2 half-plane: the interior, or one of the two fans
+        // hanging off V0.
+        if (lfSNum < 0.0f)                                 // bge -> the t test
+        {
+            liGroup = (-lfE > 0.0f) ? 1 : 0;               // fneg + bgt -> 1
+        }
+        else if (!(lfTNum < 0.0f))                         // bge -> 3
+        {
+            liGroup = 3;
+        }
+        else
+        {
+            liGroup = (-lfD > 0.0f) ? 0 : 1;               // fneg + bgt -> 0
+        }
+    }
+
+    // ---- stage 2: resolve the group to a feature ---------------------------
+    f32 lfS;
+    f32 lfT;
+    s32 liRegion;
+
+    if (liGroup == 0)
+    {
+        // The V0V1 edge fan (loc_82BBA98C).
+        if (!(lfD < 0.0f))          // fcmpu d, 0 / blt -> continue
+        {
+            lfS      = 0.0f;
+            lfT      = 0.0f;
+            liRegion = 0;           // vertex V0
+        }
+        else if (!(-lfD < lfA))     // fneg + fcmpu / blt -> continue
+        {
+            lfS      = 1.0f;        // flt_82001C98
+            lfT      = 0.0f;
+            liRegion = 1;           // vertex V1
+        }
+        else
+        {
+            lfS      = -(lfD / lfA);   // fdivs + fneg
+            lfT      = 0.0f;
+            liRegion = 3;           // edge V0V1
+        }
+    }
+    else if (liGroup == 1)
+    {
+        // The V0V2 edge fan (loc_82BBA958): s is 0 on every path here.
+        lfS = 0.0f;
+        if (!(lfE < 0.0f))          // fcmpu e, 0 / blt -> continue
+        {
+            lfT      = 0.0f;
+            liRegion = 0;           // vertex V0
+        }
+        else if (!(-lfE < lfC))     // fneg + fcmpu / bge -> vertex V2
+        {
+            lfT      = 1.0f;
+            liRegion = 2;           // vertex V2
+        }
+        else
+        {
+            lfT      = -(lfE / lfC);   // fdivs + fneg
+            liRegion = 4;           // edge V0V2
+        }
+    }
+    else if (liGroup == 2)
+    {
+        // The V1V2 edge fan (loc_82BBA8F4). The parameter runs from V2 (0)
+        // toward V1 (1): num == dot(V2-V1, V2-P), denominator == |V1V2|^2.
+        const f32 lfNum = lfE + lfC - lfB - lfD;   // fadds + fsubs + fsubs
+        if (!(lfNum > 0.0f))        // fcmpu num, 0 / bgt -> continue
+        {
+            lfS      = 0.0f;
+            lfT      = 1.0f;
+            liRegion = 2;           // vertex V2
+        }
+        else if (lfNum < lfEdge12LenSq)   // fcmpu / blt -> the edge case
+        {
+            lfS      = lfNum / lfEdge12LenSq;   // fdivs
+            lfT      = 1.0f - lfS;              // fsubs against flt_82001C98
+            liRegion = 5;           // edge V1V2
+        }
+        else
+        {
+            lfS      = 1.0f;
+            lfT      = 0.0f;
+            liRegion = 1;           // vertex V1
+        }
+    }
+    else
+    {
+        // Interior (loc_82BBA8A4): vrefp + two Newton-Raphson steps == 1/det.
+        const f32 lfInvDet = 1.0f / lfDet;
+        lfS      = lfInvDet * lfSNum;   // fmuls
+        lfT      = lfInvDet * lfTNum;   // fmuls
+        liRegion = 6;                   // face interior
+    }
+
+    // ---- publish (store order as on X360) ----------------------------------
+    *lpfParamS = lfS;   // stfs f12, 0(r4)
+    *lpfParamT = lfT;   // stfs f0,  0(r5)
+
+    // vmaddfp v0, ab, splat(s), V0  then  vmaddfp v0, ac, splat(t), v0
+    // (all four lanes; stvx128 v0, r0, r9 with r9 = the saved r3).
+    *lpNearest = MaddScalar(lvAC, lfT, MaddScalar(lvAB, lfS, aV0));
+
+    return liRegion;
 }
 
 } // namespace collision

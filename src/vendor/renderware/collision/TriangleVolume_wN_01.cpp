@@ -22,7 +22,7 @@
 //     NOT been hoisted into GPInstance.hpp yet, verified by grep);
 //   * rewrite TriangleVolume.cpp's top-of-file note (lines 17-24, "Implementation
 //     pending") into the normal homed-function wording -- CreateGPInstance is
-//     no longer pending. The KF_DEGENERATE_EPSILON / g_uTriangleVolumeInitWord
+//     no longer pending. The KF_DEGENERATE_EPSILON / KU_TRIANGLE_VOLUME_TYPE
 //     definitions stay where they are; nothing here duplicates them.
 //
 // Sources: the RAW asm of 0x82BBAA00 (.ida-exports) plus the recovered tables

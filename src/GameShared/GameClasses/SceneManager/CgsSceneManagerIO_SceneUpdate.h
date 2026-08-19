@@ -123,6 +123,32 @@ namespace SceneManagerIO
         // appends the event to the matching embedded queue. Signatures for the pre-existing
         // declarations are LOAD-BEARING (committed consumers call them) and left unchanged.
         void AddDynamicVolume(CgsSceneManager::EntityId lEntityId, const void* lpVolumeImage, u8 lu8VolumeTypeFlag);
+
+        // ---- the DWARF's own 64-bit form of the producer one line above --------------------
+        // ADDED 2026-08-18 (wave Q5, car-registration finisher). The DecFIGS DWARF's ONLY
+        // spelling of this producer -- there is no EntityId form in the DWARF at all:
+        //     CgsSceneManagerIO_SceneUpdate.h:367 (dumpfile :455, and again at :928/:1291/:1654)
+        //         void AddDynamicVolume(VolumeId, const VolRef::Volume*,
+        //                               InEventAddDynamicVolume::VolumeTypeFlags);
+        // `VolumeTypeFlags` is `typedef uint8_t` (DWARF CgsSceneManagerIO_FineQuery.h:39), so
+        // the u8 below IS the DWARF type. The volume argument stays `const void*` -- the same
+        // spelling the committed EntityId form and ReplaceDynamicVolume already use for this
+        // one 128-byte image -- because `VolRef::Volume` is only a forward declaration in this
+        // tree (CgsVolumeStore.h:82) and the X360 body does nothing with the pointer but
+        // `memcpy(event+0x10, a3, 0x80)`.
+        //
+        // WHY BOTH FORMS EXIST. There is ONE console body (0x822B1518) and it stores the WHOLE
+        // 64-bit r4 (`mr r11,r4 ; std r11, var_C0(r1)` @0x822B1524/0x822B153C -- Hex-Rays'
+        // `LODWORD(v4) = a2` is a 32-bit misread of a plain 64-bit register move). The committed
+        // EntityId form above is a fitted 32-bit signature; a RACE CAR cannot go through it,
+        // because ActiveRaceCar::Attach seeds mHandlingBodyVolumeId's low dword to zero and only
+        // ever writes the high one, so narrowing posts volume key 0 for all eight cars. Same
+        // width trap wave Q4 recorded for AddVolumeInstance / AddForCollision, whose 64-bit
+        // forms sit below. ADDITIVE: different first-parameter type => different mangled name,
+        // so BrnTriggerEntityModule.cpp:255-262 and every other committed caller of the EntityId
+        // form keeps binding to it unchanged and no LNK2005 is possible.
+        void AddDynamicVolume(VolumeId lVolumeId, const void* lpVolumeImage, u8 lu8VolumeTypeFlag);
+
         void AddEntity(CgsSceneManager::EntityId lEntityId, u32 luEntityTypeFlag, f32 lfBoundingRadius);
         // Full producer signature (X360 @ 0x822B11F8 stages the bounding-sphere CENTRE
         // vmx lane at event +0x00 before the id/flags/radius scalars; the world-entity

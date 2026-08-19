@@ -1,5 +1,5 @@
 #include "GameShared/GameClasses/Module/CgsBaseEventQueue.h"                              // CgsModule::BaseEventQueue<T>::AddEvent (inline generic)
-#include "GameShared/GameClasses/SceneManager/ContactGen/CgsOverlapGenerationModule.h"    // OverlapGenerationIO::InForceNoPadding (4-byte u32 element)
+#include "GameShared/GameClasses/SceneManager/ContactGen/CgsOverlapGenerationModuleIO.h"    // OverlapGenerationIO::InForceNoPadding (4-byte u32 element)
 
 // =============================================================================
 // CgsModule::BaseEventQueue<CgsSceneManager::OverlapGenerationIO::InForceNoPadding>::AddEvent
@@ -14,11 +14,14 @@
 //   * append at STRIDE 4: *(4*miLength + mpEvents) == mpEvents[miLength] = lEvent,
 //     a single 32-bit move (slwi r11,r11,2; lwz r10,0(src); stwx r10,r11,mpEvents);
 //   * ++miLength; return true.
-// The 4-byte stride == sizeof(OverlapGenerationIO::InForceNoPadding) -- a single u32
-// (the object/volume-instance index the force-no-padding pass replays into the sweeper).
-// No interior fields are attested, so the element is a plain u32 typedef (never invent
-// field names). Distinct from the 8-byte SceneManagerIO::InEventForceNoPadding. Called
-// from CgsSceneManager::SceneManagerModule::ProcessForceNoPaddingEvent.
+// The 4-byte stride == sizeof(OverlapGenerationIO::InForceNoPadding). ⚠️ CORRECTED
+// 2026-08-18 (wave Q5 cluster D1): this element is a one-field STRUCT deriving the empty
+// event base, not a bare u32 typedef -- DWARF CgsOverlapGenerationModuleIO.h:111 declares
+// `struct InForceNoPadding : Event { uint32_t muVolInstIndex; }` at :113. The single
+// 32-bit move is that one member. Distinct from the 8-byte
+// SceneManagerIO::InEventForceNoPadding. Called from
+// OverlapGenerationIO::InputBuffer::ForceNoPadding, which the X360 inlines into
+// CgsSceneManager::SceneManagerModule::ProcessForceNoPaddingEvent @0x828CFC80.
 // =============================================================================
 template bool
 CgsModule::BaseEventQueue<CgsSceneManager::OverlapGenerationIO::InForceNoPadding>::AddEvent(
