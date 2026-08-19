@@ -6,8 +6,13 @@
 // ContactGeneratorJob::ExecutePrimitiveListWithTriangleList @0x82925908 calls and that had NO
 // body anywhere in the tree:
 //
-//   ContactGeneratorJob::BuildGPInstance    @0x829222A0  (254)  :1660 :1699
+//   ContactGeneratorJob::BuildGPInstance    @0x829222A0  (258)  :1660 :1699
 //   ContactGeneratorJob::CollideGPInstances @0x829253C8  (244)  :1279 :1286 :1287 :1288
+//
+// ⚠️ 258 vs 254: `(0x829226A4 - 0x829222A0)/4 + 1` counts 258 WORDS in the .text run, but the
+// export's `assembly` array has 254 ROWS, because the five-entry jump table at
+// 0x829222D0..0x829222E0 is one `.long` row. Both numbers are right about different things; the
+// sibling header quotes 258. No instruction is missing from the decode.
 //
 // The console's own path for both is the SAME TU as the rest of the family -- every assert here
 // passes the string
@@ -315,20 +320,21 @@ namespace
 }
 
 // =================================================================================================
-// ContactGeneratorJob::BuildGPInstance @0x829222A0 (254)
+// ContactGeneratorJob::BuildGPInstance @0x829222A0 (258 words / 254 listed rows -- see the file
+// banner for why both numbers are right)
 //
 // Turn one packed primitive from a PrimitivePairList blob into an rw::collision::GPInstance.
 // `this` is never read (see the banner); the member spelling is the console's.
 // =================================================================================================
-void ContactGeneratorJob::BuildGPInstance(u32         luVolumeType,
-                                          const void* lpcPrimitiveData,
-                                          GPInstance* lpInstance,
-                                          u16         lu16Tag)
+void ContactGeneratorJob::BuildGPInstance(PrimitivePairList::EVolumeType leVolumeType,
+                                          const void*                    lpcPrimitiveData,
+                                          GPInstance*                    lpInstance,
+                                          u16                            lu16Tag)
 {
     // The console's r4 is a 32-bit register holding the pair header's zero-extended
-    // mu8PrimTypeA byte, so the parameter keeps that width; the VALUES are
-    // PrimitivePairList::EVolumeType and the switch names them.
-    switch (luVolumeType)
+    // mu8PrimTypeA byte; the VALUES are PrimitivePairList::EVolumeType, which is how the
+    // declaration spells it, and the five arms below are the jump table's five cases.
+    switch (leVolumeType)
     {
         // -------------------------------------------------------------------------------------
         case PrimitivePairList::E_VOLUME_TYPE_SPHERE:            // jumptable case 0 -> 0x829223B0
@@ -470,13 +476,13 @@ void ContactGeneratorJob::BuildGPInstance(u32         luVolumeType,
 // Run the narrow-phase contact kernel over one GPInstance pair and queue one 80-byte
 // PrimitiveTestResult per contact point pair into the caller's CollisionResultList.
 // =================================================================================================
-void ContactGeneratorJob::CollideGPInstances(const GPInstance*    lpInstance1,
-                                             const GPInstance*    lpInstance2,
+void ContactGeneratorJob::CollideGPInstances(const GPInstance*    lpGPInstance0,
+                                             const GPInstance*    lpGPInstance1,
                                              f32                  lfPadding,
                                              u16                  lu16Primitive0Index,
                                              u16                  lu16Primitive1Index,
                                              u16                  lu16TestIndex,
-                                             CollisionResultList* lpResultList)
+                                             CollisionResultList* lpResultsList)
 {
     // The record is carved ONCE: the console writes its three index halfwords BEFORE the kernel
     // call (0x829253E0/E8/F0) and only refreshes the vectors and the two tag words per pair.
@@ -492,7 +498,7 @@ void ContactGeneratorJob::CollideGPInstances(const GPInstance*    lpInstance1,
     // returned a non-zero count, which is the guard that makes that safe.
     GPInstance::ContactPoints lStackResult;
 
-    const u32 luNumContacts = rw::collision::ComputeContactPoints(*lpInstance1, *lpInstance2,
+    const u32 luNumContacts = rw::collision::ComputeContactPoints(*lpGPInstance0, *lpGPInstance1,
                                                                   lfPadding, lStackResult);
 
     // The console compares against 16 and asserts on GREATER; the `>= 0` half of the source
@@ -533,19 +539,19 @@ void ContactGeneratorJob::CollideGPInstances(const GPInstance*    lpInstance1,
 
         // The 80-byte carve, not CollisionResult's 112 -- see the banner.
         PrimitiveTestResult* lpaResults =
-            reinterpret_cast<PrimitiveTestResult*>(lpResultList->mpResults);
+            reinterpret_cast<PrimitiveTestResult*>(lpResultsList->mpResults);
 
-        lpaResults[lpResultList->mu16NumResults] = lRecord;   // 10 x ld/std at base + 80*index
+        lpaResults[lpResultsList->mu16NumResults] = lRecord;   // 10 x ld/std at base + 80*index
 
         // idx+1 published first, then clamped to max-1: an overflowing list keeps overwriting
         // its last slot. Two halfword stores, exactly as the console emits them.
-        u16 lu16Next = static_cast<u16>(lpResultList->mu16NumResults + 1);
-        lpResultList->mu16NumResults = lu16Next;
-        if (lu16Next >= lpResultList->mu16MaxNumResults)
+        u16 lu16Next = static_cast<u16>(lpResultsList->mu16NumResults + 1);
+        lpResultsList->mu16NumResults = lu16Next;
+        if (lu16Next >= lpResultsList->mu16MaxNumResults)
         {
-            lu16Next = static_cast<u16>(lpResultList->mu16MaxNumResults - 1);
+            lu16Next = static_cast<u16>(lpResultsList->mu16MaxNumResults - 1);
         }
-        lpResultList->mu16NumResults = lu16Next;
+        lpResultsList->mu16NumResults = lu16Next;
 
         // ---------------------------------------------------------------------------------
         // [DIAG] NOT IN THE X360 BINARY -- ONE-SHOT, behind BRN_PROP_DIAG, getenv latched once
@@ -565,11 +571,11 @@ void ContactGeneratorJob::CollideGPInstances(const GPInstance*    lpInstance1,
                 sbFirstContact = false;
                 *CgsDev::Log::gpDebugPrint
                     << "[Q6-gpi] first GP narrow-phase contact: gp1 type "
-                    << static_cast<s32>(lpInstance1->mVolumeType)
-                    << " vs gp2 type " << static_cast<s32>(lpInstance2->mVolumeType)
+                    << static_cast<s32>(lpGPInstance0->mVolumeType)
+                    << " vs gp2 type " << static_cast<s32>(lpGPInstance1->mVolumeType)
                     << ", " << static_cast<s32>(lStackResult.numPoints)
                     << " point pair(s), result slot "
-                    << static_cast<s32>(lpResultList->mu16NumResults) << "\n";
+                    << static_cast<s32>(lpResultsList->mu16NumResults) << "\n";
             }
         }
     }

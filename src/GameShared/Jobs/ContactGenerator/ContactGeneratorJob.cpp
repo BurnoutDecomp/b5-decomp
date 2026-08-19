@@ -11,19 +11,27 @@
 //   ExecuteSphereListWithTriangleListStream @0x829235C8 (100)  :381 :382
 //   ExecuteSweptSphereListWithTriangleList  @0x829238E8 (1620) :497 :513 :539 :565 :591  ⭐ swept leg
 //   ExecuteSweptSphereListWithTriangleListStream @0x82925238 (100)  :642 :643
+//   ExecutePrimitiveListWithTriangleListStream @0x82926650 (100) :1104 :1105  ⭐ PROP stream
+//   ExecutePrimitiveListWithTriangleList @0x82925908 (849) :1052 :1059 :1066 :1073 ⭐⭐ PROP
+//                                                          NARROW PHASE (wave Q6, cluster pvt)
 //   LoadPrimitives                      @0x829210F0   (61)  :1405 :1406
 //   LoadResultList                      @0x829211E8   (46)  :1552
 //   AllocateMemory                      @0x829212A0   (54)  :1720
 //   RestoreMemory                       @0x82921050   (39)  ContactGeneratorJob.h:167
 //
+// Declared in the header, bodied in the sibling partfile ContactGeneratorJob_wQ6_01.cpp
+// (wave Q6, cluster gpi):  BuildGPInstance @0x829222A0 (258) · CollideGPInstances @0x829253C8
+// (244). They are ExecutePrimitiveListWithTriangleList's only two un-homed callees.
+//
 // Until this TU existed, the triangle cache filled with real Paradise City geometry every frame
 // and NOTHING READ IT. This is the reader.
 //
-// ─── WHY THE OTHER TEN ARMS ARE GATES AND NOT DELETIONS ──────────────────────────────────────
-// `Execute` is a 12-way jump table over the descriptor's type byte. Only type 16
-// (E_COLLISIONJOB_LINE_WITH_TRIANGLE_LIST_STREAM) is reconstructed here, because only type 16 is
-// posted by anything in this tree. The other eleven cases are kept as NAMED one-shot boot gates
-// rather than folded into the `default:` assert, for one measured reason: `xrefs_to` on
+// ─── WHY THE REMAINING ARMS ARE GATES AND NOT DELETIONS ──────────────────────────────────────
+// `Execute` is a 12-way jump table over the descriptor's type byte. As of 2026-08-19 (wave Q6
+// round 3) EIGHT of the arms are real bodies (types 5, 6, 11, 12, 13, 14, 16 and Execute itself);
+// FOUR remain NAMED one-shot boot gates -- ExecuteSphereListWithSphereList @0x829215B0, its
+// Stream twin @0x82923758, ExecuteBoxListWithTriangleList @0x829218B8, ExecutePrimitivePairList
+// @0x82925798 -- rather than folded into the `default:` assert, for one measured reason: `xrefs_to` on
 // ContactGeneratorJob::Execute @0x829267E0 shows a SINGLE caller (ContactGeneratorEntry
 // @0x82920F10), and every one of the seven `BaseCollisionGenerator::Run*` dispatchers points its
 // batches at that same entry. So the day any other Run* is bodied, its descriptor arrives here
@@ -73,8 +81,11 @@
 #include "GameShared/GameClasses/SceneManager/Collision/ContactGenerator/JobDescription/CgsSphereListWithTriangleListJobDesc.h"
 #include "GameShared/GameClasses/SceneManager/Collision/ContactGenerator/JobDescription/CgsSweptSphereListWithTriangleListJobDesc.h"
 #include "GameShared/GameClasses/SceneManager/Collision/Primitives/CgsCollisionResult.h"
+#include "GameShared/GameClasses/SceneManager/Collision/Primitives/CgsPrimitivePairList.h"
+#include "vendor/renderware/collision/GPInstance.hpp"   // GPInstance + g_aGPVolumeMethods
 
-#include <cmath>     // std::sqrt (the vrsqrtefp lowering)
+#include <cmath>     // std::sqrt (the vrsqrtefp lowering) / std::fabs (the vandc sign clear)
+#include <cstdlib>   // std::getenv (the BRN_PROP_DIAG latch)
 #include <cstring>   // std::memcpy (reading a lane's raw bit pattern)
 
 // The six per-job-thread contexts. X360 base unk_831BBF80, stride 0x10300, bound 6 --
@@ -86,6 +97,7 @@ using CgsSceneManager::CgsCollision::CollisionResultList;
 using CgsSceneManager::CgsCollision::LineWithTriangleListStreamJobDesc;
 using CgsSceneManager::CgsCollision::PrimitiveListWithTriangleListJobDesc;
 using CgsSceneManager::CgsCollision::PrimitiveListWithTriangleListStreamJobDesc;
+using CgsSceneManager::CgsCollision::PrimitivePairList;
 using CgsSceneManager::CgsCollision::PrimitiveTestResult;
 using CgsSceneManager::CgsCollision::SphereListWithTriangleListJobDesc;
 using CgsSceneManager::CgsCollision::SphereListWithTriangleListStreamJobDesc;
@@ -158,6 +170,183 @@ namespace
         u32 luBits = 0;
         std::memcpy(&luBits, &(&lrV.x)[liLane], sizeof(u32));
         return luBits;
+    }
+
+    // =======================================================================================
+    // ⭐⭐ THE PROP NARROW PHASE'S TRIANGLE SIDE (wave Q6, cluster pvt).
+    //
+    // rw::collision::Vec4 (vendor/renderware/collision/FeatureEdge.hpp) and this tree's
+    // Vector3 (rw::math::vpu::Vector3) are the SAME 16 bytes -- one VMX register, xyzw -- under
+    // two C++ names, because the collision vocabulary was recovered in its own vendor home.
+    // The console moves them with a single lvx128/stvx128 and never converts. These three
+    // helpers are that move, written out; they are lowering scaffolding, not behaviour.
+    // ---------------------------------------------------------------------------------------
+    inline rw::collision::Vec4 ToVec4(const Vector3& lrV)
+    {
+        rw::collision::Vec4 lOut;
+        lOut.x = lrV.x;
+        lOut.y = lrV.y;
+        lOut.z = lrV.z;
+        lOut.w = lrV.w;   // the AOS rows carry w == 0 (GetAOSTriangle writes it); vsubfp/vmulfp
+                          // below run on all four lanes, so w rides along exactly as on VMX.
+        return lOut;
+    }
+
+    inline rw::collision::Vec4 SubVec4(const rw::collision::Vec4& lrA,
+                                       const rw::collision::Vec4& lrB)
+    {
+        rw::collision::Vec4 lOut;
+        lOut.x = lrA.x - lrB.x;
+        lOut.y = lrA.y - lrB.y;
+        lOut.z = lrA.z - lrB.z;
+        lOut.w = lrA.w - lrB.w;
+        return lOut;
+    }
+
+    inline rw::collision::Vec4 ScaleVec4(const rw::collision::Vec4& lrV, f32 lfScale)
+    {
+        rw::collision::Vec4 lOut;
+        lOut.x = lrV.x * lfScale;
+        lOut.y = lrV.y * lfScale;
+        lOut.z = lrV.z * lfScale;
+        lOut.w = lrV.w * lfScale;
+        return lOut;
+    }
+
+    // vmsum3fp128 -- the three-lane dot product, broadcast on the console.
+    inline f32 Dot3(const rw::collision::Vec4& lrA, const rw::collision::Vec4& lrB)
+    {
+        return (lrA.x * lrB.x) + (lrA.y * lrB.y) + (lrA.z * lrB.z);
+    }
+
+    // flt_82001CC0 == 00 00 00 00 == 0.0f. The GP triangle image the narrow phase builds
+    // carries NO surface fatness -- the padding it collides with rides in the pair record's
+    // mfPadding instead (the f1 argument of CollideGPInstances). Re-measured this wave off a
+    // private .i64 copy with headless IDA 9.3 (scratchpad/waveQ6/ida_pvt/out.json), not
+    // inherited from a banner.
+    const f32 KF_GP_TRIANGLE_FATNESS = 0.0f;
+
+    // flt_82004014 == 3D CC CC CD == 0.1f -- the tolerance the four per-lane unit-length
+    // asserts compare |MagnitudeSquared(normal) - 1| against. DOUBLE-WITNESSED: the rodata
+    // word, and the assert message text below, which literally ends "< 0.1f".
+    const f32 KF_GP_TRIANGLE_NORMAL_TOLERANCE = 0.1f;
+
+    // The four assert message strings, recovered whole (IDA truncates them to 39 characters in
+    // the operand comment; these are the full bytes from the same private-.i64 run):
+    //   0x82101C78 / 0x82101CE8 / 0x82101D58 / 0x82101DC8, fired at
+    //   ContactGeneratorJob.cpp:1052 / :1059 / :1066 / :1073.
+    // ⚠️ THEY ARE WHY THE FOUR LANES ARE NOT A COMPILER UNROLL: each names a DIFFERENT source
+    // local (lGPTriangle0..lGPTriangle3), so the console SOURCE was hand-unrolled with four
+    // named GP triangles. The reconstruction re-rolls the lane loop -- every other operand is
+    // a pure lane index -- and keeps the four texts in this table so no message is lost. (The
+    // sibling swept worker collapsed its four to one; this does not.)
+    const char* const KAPC_GP_TRIANGLE_NORMAL_ASSERTS[4] =
+    {
+        "RwMathVPU::Abs(RwMathVPU::MagnitudeSquared(lGPTriangle0.Normal()) - RwMathVPU::GetVecFloat_One()) < 0.1f",
+        "RwMathVPU::Abs(RwMathVPU::MagnitudeSquared(lGPTriangle1.Normal()) - RwMathVPU::GetVecFloat_One()) < 0.1f",
+        "RwMathVPU::Abs(RwMathVPU::MagnitudeSquared(lGPTriangle2.Normal()) - RwMathVPU::GetVecFloat_One()) < 0.1f",
+        "RwMathVPU::Abs(RwMathVPU::MagnitudeSquared(lGPTriangle3.Normal()) - RwMathVPU::GetVecFloat_One()) < 0.1f",
+    };
+
+    // ---------------------------------------------------------------------------------------
+    // BuildGPTriangleInstance -- the OUTLINED rw::collision::GPTriangle::Initialize
+    // (canonical rwccore.h:1360, `always_inline`) that the X360 compiler folded FOUR TIMES into
+    // ExecutePrimitiveListWithTriangleList @0x82925908 (0x82925A48..0x829261B8, i.e. more than
+    // half the function's 849 instructions). It is reconstructed store for store against that
+    // asm, and it agrees field for field with the committed second witness in this tree,
+    // rw::collision::TriangleVolume::CreateGPInstance @0x82BBAA00
+    // (vendor/renderware/collision/TriangleVolume_wN_01.cpp:192) -- same edge triple, same
+    // (L0,L1,L2,L0) mDimensions gather, same store set.
+    //
+    // The X360 store set, verbatim -- lane 0's copy is the one cited, and every address below is
+    // the STORE instruction itself, not the `addi` that computed its address (offsets from
+    // GP + 0x00, which is r1+0xE0 for lane 0):
+    //   0x82925A94  stvx128 -> +0x00  mPos               = V0
+    //   0x82925AC8  stvx128 -> +0x10  mFaceNormals[0]    = the AOS face normal
+    //   0x82925AA4  stvx128 -> +0x20  mFaceNormals[1]    = V1   } the GPTriangle vertex
+    //   0x82925AB8  stvx128 -> +0x30  mFaceNormals[2]    = V2   } aliasing
+    //   0x82925C58  stvx128 -> +0x40  mEdgeDirections[0] = (V2-V0)/L0
+    //   0x82925C68  stvx128 -> +0x50  mEdgeDirections[1] = (V1-V2)/L1
+    //   0x82925C70  stvx128 -> +0x60  mEdgeDirections[2] = (V0-V1)/L2
+    //   0x82925C9C  stvx128 -> +0x70  mDimensions        = (L0, L1, L2, L0)
+    //   0x82925A9C  stfs    -> +0x80  mFatness           = flt_82001CC0 == 0.0f
+    //   0x82925A64  stw     -> +0x84  mVolumeTag         = 0
+    //   0x82925A74  stw     -> +0x88  mUserTag           = 0
+    //   0x82925A54  stb     -> +0x8C  mNumFaceNormals    = 1
+    //   0x82925A5C  stb     -> +0x8D  mNumEdgeDirections = 3
+    //   0x82925A4C  stw     -> +0x90  mVolumeType        = 3 (GPInstance::TRIANGLE)
+    //   0x82925ACC  stw     -> +0x94  mFlags             = 0x1F0
+    //   0x82925AC0/AD4/AE4 stfs -> +0x98/+0x9C/+0xA0  mEdgeData[0..2] = the AOS edge cosines
+    //   0x82925CA4..CB4  four stw -> +0xA4  mMethods = off_82F91920, i.e. the TRIANGLE row of
+    //                    unk_82F918F0 == rw::collision::g_aGPVolumeMethods[TRIANGLE]
+    //
+    // ⚠️ THE EDGE TRIPLE'S ORDER AND DIRECTIONS ARE ASM-ATTESTED, NOT CONVENTIONAL:
+    // e0 = V2-V0, e1 = V1-V2, e2 = V0-V1, and mDimensions lane w repeats L0 (the console
+    // gathers the three lengths through the perm control unk_82CDA350, dumped this wave as
+    // 00 01 02 03 | 14 15 16 17 | 00 01 02 03 | 00 01 02 03 == (vA.x, vB.y, vA.x, vA.x), then
+    // a `vrlimi128 ...,2,0` overwrites lane z). Swapping any two of them would still compile
+    // and would still produce contacts -- with the wrong edge convexity flags applied.
+    //
+    // ⚠️ NO DEGENERATE GUARD. The console divides by a zero edge length here exactly as
+    // TriangleVolume::CreateGPInstance does (vrsqrtefp(0) == +inf); none is invented.
+    // The console's `vrsqrtefp` + 1 Newton-Raphson round and `vrefp` + 2 rounds lower to
+    // std::sqrt and a divide, which is this family's standing precedent (CgsTriangle4.cpp,
+    // FeatureEdge.cpp, TriangleVolume_wN_01.cpp) and is strictly more accurate.
+    //
+    // FOLLOW-UP (not this owner's file): its real home is
+    // vendor/renderware/collision/GPInstance.hpp as `GPTriangle::Initialize`, beside the three
+    // GPTriangle callbacks -- the canonical header declares exactly this signature's 11-argument
+    // form. It sits here only because this cluster owns no vendor file.
+    // ---------------------------------------------------------------------------------------
+    void BuildGPTriangleInstance(rw::collision::GPInstance&                  arInst,
+                                 const CgsGeometric::Triangle4::AOSTriangle& arTriangle)
+    {
+        using rw::collision::GPInstance;
+        using rw::collision::Vec4;
+
+        const Vec4 lvP0 = ToVec4(arTriangle.mVertex0);
+        const Vec4 lvP1 = ToVec4(arTriangle.mVertex1);
+        const Vec4 lvP2 = ToVec4(arTriangle.mVertex2);
+
+        const Vec4 lvE0 = SubVec4(lvP2, lvP0);
+        const Vec4 lvE1 = SubVec4(lvP1, lvP2);
+        const Vec4 lvE2 = SubVec4(lvP0, lvP1);
+
+        arInst.mPos               = lvP0;
+        arInst.mFaceNormals[0]    = ToVec4(arTriangle.mNormal);
+        arInst.mFaceNormals[1]    = lvP1;
+        arInst.mFaceNormals[2]    = lvP2;
+
+        arInst.mFatness           = KF_GP_TRIANGLE_FATNESS;
+        arInst.mVolumeTag         = 0;
+        arInst.mUserTag           = 0;
+        arInst.mNumFaceNormals    = 1;
+        arInst.mNumEdgeDirections = 3;
+        arInst.mVolumeType        = GPInstance::TRIANGLE;
+
+        // 0x1F0 == FLAG_TRIANGLEDEFAULT (use-edge-cos + the three edge-convex bits) plus
+        // FLAG_TRIANGLEONESIDED -- the console's `li r24, 0x1F0`, hoisted out of all four lanes.
+        arInst.mFlags = static_cast<u32>(GPInstance::FLAG_TRIANGLEDEFAULT
+                                       | GPInstance::FLAG_TRIANGLEONESIDED);
+
+        arInst.mEdgeData[0]       = arTriangle.mfEdgeCosine0;
+        arInst.mEdgeData[1]       = arTriangle.mfEdgeCosine1;
+        arInst.mEdgeData[2]       = arTriangle.mfEdgeCosine2;
+
+        const f32 lfLength0 = std::sqrt(Dot3(lvE0, lvE0));
+        const f32 lfLength1 = std::sqrt(Dot3(lvE1, lvE1));
+        const f32 lfLength2 = std::sqrt(Dot3(lvE2, lvE2));
+
+        arInst.mDimensions.x = lfLength0;
+        arInst.mDimensions.y = lfLength1;
+        arInst.mDimensions.z = lfLength2;
+        arInst.mDimensions.w = lfLength0;   // the perm control's fourth lane, measured
+
+        arInst.mEdgeDirections[0] = ScaleVec4(lvE0, 1.0f / lfLength0);
+        arInst.mEdgeDirections[1] = ScaleVec4(lvE1, 1.0f / lfLength1);
+        arInst.mEdgeDirections[2] = ScaleVec4(lvE2, 1.0f / lfLength2);
+
+        arInst.mMethods = rw::collision::g_aGPVolumeMethods[GPInstance::TRIANGLE];
     }
 }
 
@@ -1004,17 +1193,16 @@ void ContactGeneratorJob::ExecuteSweptSphereListWithTriangleListStream()
 // WHOLE STRIDE into this buffer. A sizeof-sized scratch would be read past its end every command
 // -- the same doctrine the sphere arm's banner states for its own 128 and the line arm's for 256.
 //
-// ⚠️⚠️ THE HONEST RESIDUAL, STATED HERE AND NOT BURIED: what this arm delegates to --
-// ExecutePrimitiveListWithTriangleList @0x82925908 (849 insns) -- is still a LOUD NAMED GATE
-// below. So a posted prop command now reaches a named missing kernel instead of nothing at all;
-// it does NOT yet produce contacts. Landing this dispatcher over a named gate is the same
-// precedent every committed Run*/Execute*Stream in this subsystem rests on. Its measured closure
-// (xrefs_from on 0x82925908): ContactGeneratorJob::{LoadPrimitives, LoadResultList,
-// BuildGPInstance @0x829222A0, CollideGPInstances @0x829253C8}, PrimitivePairList::Itterator::
-// {Prepare @0x82812128, GetPrimativeA @0x828121D8, MoveToNextHeader @0x82812210} and
-// CgsGeometric::Triangle4::GetAOSTriangle -- i.e. two un-reconstructed workers
-// (BuildGPInstance / CollideGPInstances) plus the already-real iterator. That pair is the
-// next cluster on this leg.
+// ⭐ THE RESIDUAL THIS BANNER USED TO CARRY IS CLOSED (2026-08-19, wave Q6 cluster pvt): what
+// this arm delegates to -- ExecutePrimitiveListWithTriangleList @0x82925908 (849) -- is a REAL
+// BODY immediately below, no longer a named gate. Its measured closure (xrefs_from on
+// 0x82925908): ContactGeneratorJob::{LoadPrimitives, LoadResultList, BuildGPInstance
+// @0x829222A0, CollideGPInstances @0x829253C8}, PrimitivePairList::Itterator::{Prepare
+// @0x82812128, GetPrimativeA @0x828121D8, MoveToNextHeader @0x82812210} and
+// CgsGeometric::Triangle4::GetAOSTriangle. Everything there is real except the two workers
+// BuildGPInstance / CollideGPInstances, which are DECLARED in this TU's header and DEFINED in
+// the sibling partfile ContactGeneratorJob_wQ6_01.cpp (wave Q6, cluster gpi) -- that partfile
+// must be mounted beside this one or the exe takes two LNK2019s.
 // =============================================================================================
 void ContactGeneratorJob::ExecutePrimitiveListWithTriangleListStream()
 {
@@ -1049,7 +1237,199 @@ void ContactGeneratorJob::ExecutePrimitiveListWithTriangleListStream()
 }
 
 // =============================================================================================
-// The other five Execute arms -- NAMED BOOT GATES, not silent returns and not a shared default.
+// ⭐⭐⭐ ContactGeneratorJob::ExecutePrimitiveListWithTriangleList @0x82925908 (849)
+// THE PROP NARROW PHASE. Wave Q6, cluster pvt (2026-08-19).
+//
+// This is the kernel at the bottom of the whole breakable-prop world-collision leg:
+//   PropManager::BeginPropWorldContactGeneration
+//     -> CreateCollidePrimitiveListWithTriangleListStream
+//     -> Do{Part,PropInstance}WorldContactGeneration
+//          -> PrimitivePairListBuilder::AddPrimitive (the prop's volumes -> pair records)
+//          -> BaseCollisionGenerator::AddPrimitiveListWithTriangleListToStream
+//     -> RunCollidePrimitiveListWithTriangleListStream  (descriptor type 12)
+//          -> ContactGeneratorJob::Execute case 12 -> ExecutePrimitiveListWithTriangleListStream
+//               -> THIS FUNCTION, once per stream command
+// While it was a gate, a smashed prop's parts generated NO world contacts and free-fell until
+// PropManager::ReadUpdatedBodies printed "prop fell out of the world" and deleted them.
+//
+// GROUNDING: the RAW `assembly` array of .ida-exports/BURNOUT_X360_ARTIST.XEX/0x82925908.json
+// (849 lines == (0x8292664C-0x82925908)/4), dumped to scratchpad/waveQ6/asm_82925908.txt.
+// Hex-Rays pseudocode NOT consulted. Rodata and the four assert strings were read out of a
+// PRIVATE copy of the .i64 with headless IDA 9.3 this wave (scratchpad/waveQ6/ida_pvt/).
+//
+// SHAPE (every citation is an address in that listing):
+//   0x82925944  the descriptor's PrimitivePairList copied word for word (3 console dwords)
+//   0x82925960  LoadPrimitives(&desc->mTriangleList, &lTriangles)      (r4 = desc + 0x0C)
+//   0x82925970  LoadResultList(desc->mpResultsList, &lResultsList)     (r4 = desc + 0xF0)
+//   0x8292597C  ⚠️ the batch count is TRUNCATED TO 16 BITS (`clrlwi r11,r11,16`) and compared
+//               unsigned against a 16-bit index that is re-masked on every increment
+//               (0x829265E8) -- both loop variables are u16 in the console source, and that is
+//               reproduced rather than widened.
+//   0x8292598C  a zero batch count skips STRAIGHT to the header write-back (loc_829265FC), so
+//               the write-back is unconditional -- reproduced.
+//   per Triangle4 batch (stride 0xE0, `mulli r11, r27, 0xE0` @0x82925A00):
+//     0x82925A08..44  GetAOSTriangle(lane, &laAOSTriangles[lane]) x4
+//     0x82925A48..0x829261B8  the four GP triangle images, built inline (see
+//                             BuildGPTriangleInstance above -- over half the function)
+//     0x829261BC  PrimitivePairList::Itterator::Prepare(&lIterator, &lPairList)
+//     0x829261C0  r25 = &block.mValidMasks  (Triangle4 + 0x90), hoisted out of the pair loop
+//     per pair record (a DO-WHILE: the body runs before MoveToNextHeader decides):
+//       0x829261C8  the cached header's type byte      -> Itterator::GetTypeA()
+//       0x829261CC  the cached header's A tag halfword -> Itterator::GetPrimitiveTagA()
+//       0x829261D4  Itterator::GetPrimativeA()
+//       0x829261EC  BuildGPInstance(typeA, primA, &lGPPrimitive, tagA)
+//       per lane 0..3 (0x829261F0 / 0x829262E8 / 0x829263E0 / 0x829264D8):
+//         `vspltw v0, validMasks, lane ; vcmpeqfp. v0, v0, 0` and SKIP when all-equal --
+//         i.e. run the lane only when its valid-mask word is non-zero.
+//         assert |MagnitudeSquared(gpTriangle.mFaceNormals[0]) - 1| < 0.1f   (:1052/:1059/
+//           :1066/:1073; `vandc` against 0x80000000 is the fabs, `vcmpgtfp.` the compare)
+//         CollideGPInstances(&lGPPrimitive, &laGPTriangles[lane], iterator.GetPadding(),
+//                            iterator.GetCurrentTestIndex(), 4*batch + lane, collisionIndex,
+//                            &lResultsList)
+//         collisionIndex = (u16)(collisionIndex + 1)                    (0x829262DC..E4)
+//     0x829265D4  } while (Itterator::MoveToNextHeader())
+//   0x829265FC..0x82926620  the 16-byte CollisionResultList header written back through
+//                           desc->mpResultsList -- this is what publishes mu16NumResults.
+//
+// ⚠️ THE RESULT RECORDS ARE NOT WRITTEN HERE. CollideGPInstances appends each 80-byte
+// PrimitiveTestResult into the list itself (`lhz 0xC(r10)` / `lwz 0(r10)` / 80-byte stride /
+// clamp-to-max-1 @0x829256F0..0x82925784), which is why this worker keeps no local count the
+// way the sphere and swept workers do. Do not "harmonise" it with them.
+//
+// ⚠️ Primitive0 IS THE PAIR-LIST PRIMITIVE AND Primitive1 IS THE TRIANGLE here -- the OPPOSITE
+// of the sphere worker's convention. Proven by CollideGPInstances' three `sth`s: r7
+// (Itterator::GetCurrentTestIndex) lands at result +0x48 muPrimitive0Index and r8 (4*batch +
+// lane) at +0x4A muPrimitive1Index.
+//
+// ⚠️ f1 IS THE THIRD ARGUMENT AND r6 IS UNUSED at all four call sites (AGENTS gotcha 3). The
+// value is the pair record's mfPadding, re-read from the iterator per lane exactly as the
+// console does.
+// =============================================================================================
+void ContactGeneratorJob::ExecutePrimitiveListWithTriangleList(
+    const PrimitiveListWithTriangleListJobDesc* lpDesc)
+{
+    using CgsGeometric::Triangle4;
+    using rw::collision::GPInstance;
+
+    // 0x82925944..0x8292595C -- the three dwords of the descriptor's pair list, copied to a
+    // local. The Itterator is prepared against THIS copy, once per triangle batch.
+    const PrimitivePairList lPairList = lpDesc->mPrimitivePairList;
+
+    TriangleList lTriangles;
+    LoadPrimitives(&lpDesc->mTriangleList, &lTriangles);
+
+    CollisionResultList lResultsList;
+    LoadResultList(lpDesc->mpResultsList, &lResultsList);
+
+    // 0x8292597C `clrlwi r11, r11, 16` -- see the banner: both the bound and the index are u16.
+    const u16 lu16NumTriangleBatches = static_cast<u16>(lTriangles.miNumTriangles);
+
+    // r28: a running count of GP-instance collisions attempted across the WHOLE call (it is
+    // never reset per batch or per pair record), handed to CollideGPInstances as the result
+    // record's mu16TestIndex.
+    u16 lu16CollisionIndex = 0;
+
+    for (u16 lu16Batch = 0; lu16Batch < lu16NumTriangleBatches; ++lu16Batch)
+    {
+        const Triangle4& lrBlock = lTriangles.mpTriangles[lu16Batch];
+
+        // The four lanes, unpacked to AOS and then to GP triangle images. On the console these
+        // are eight separate stack objects, not two arrays: the GP images sit at r1+0xE0 /
+        // 0x1A0 / 0x320 / 0x260 for lanes 0/1/2/3 (0xC0 apart, but NOT in lane order -- lane 3's
+        // is BELOW lane 2's) and the AOS triangles at r1+0x480 / 0x3E0 / 0x4D0 / 0x430 (0x50
+        // apart, likewise scrambled). That is stack-allocation order and nothing reads them by
+        // stride, so they become arrays here -- every use is a lane index.
+        Triangle4::AOSTriangle laAOSTriangles[4];
+        GPInstance             laGPTriangles[4];
+
+        for (s32 liLane = 0; liLane < 4; ++liLane)
+        {
+            lrBlock.GetAOSTriangle(liLane, laAOSTriangles[liLane]);
+            BuildGPTriangleInstance(laGPTriangles[liLane], laAOSTriangles[liLane]);
+        }
+
+        PrimitivePairList::Itterator lIterator;
+        lIterator.Prepare(&lPairList);
+
+        // ⚠️ A DO-WHILE, NOT A WHILE, AND THAT IS THE CONSOLE'S SHAPE, NOT A TRANSCRIPTION SLIP.
+        // The loop top loc_829261C4 is reached by FALLTHROUGH from Prepare (0x829261BC), and
+        // Itterator::Prepare @0x82812128 has NO empty-list guard -- it caches the blob's first
+        // 16 bytes and asserts their checksum whatever mu16NumTests says. So an EMPTY pair list
+        // still runs this body once, with a zeroed header, and BuildGPInstance then takes its
+        // default "false" assert arm (:1699). Reproduced as read; do not invent a
+        // `GetNumTests() != 0` guard to quiet it -- the tripwire is the console's own, and
+        // silencing it would hide an empty pair list, which is exactly the failure this leg has.
+        do
+        {
+            // Read the cached header BEFORE the primitive pointer, as the console does.
+            const PrimitivePairList::EVolumeType leTypeA = lIterator.GetTypeA();
+            const u16                            lu16TagA = lIterator.GetPrimitiveTagA();
+
+            GPInstance lGPPrimitive;
+            BuildGPInstance(leTypeA, lIterator.GetPrimativeA(), &lGPPrimitive, lu16TagA);
+
+            for (s32 liLane = 0; liLane < 4; ++liLane)
+            {
+                // vspltw the lane out of Triangle4::mValidMasks and compare against 0.0f: a
+                // zero word means "this lane holds no real triangle".
+                if (LaneBits(lrBlock.mValidMasks, liLane) == 0u)
+                {
+                    continue;
+                }
+
+                const GPInstance& lrGPTriangle = laGPTriangles[liLane];
+
+                // |MagnitudeSquared(n) - 1| < 0.1f, all four lanes (the operand is a broadcast,
+                // so the console's all-lanes `vcmpgtfp.` is one scalar test here).
+                const f32 lfNormalMagnitudeSquared = Dot3(lrGPTriangle.mFaceNormals[0],
+                                                          lrGPTriangle.mFaceNormals[0]);
+                CGS_ASSERT(std::fabs(lfNormalMagnitudeSquared - 1.0f)
+                               < KF_GP_TRIANGLE_NORMAL_TOLERANCE,
+                           KAPC_GP_TRIANGLE_NORMAL_ASSERTS[liLane]);   // :1052/:1059/:1066/:1073
+
+                CollideGPInstances(&lGPPrimitive,
+                                   &lrGPTriangle,
+                                   lIterator.GetPadding(),
+                                   lIterator.GetCurrentTestIndex(),
+                                   static_cast<u16>((4 * lu16Batch) + liLane),
+                                   lu16CollisionIndex,
+                                   &lResultsList);
+
+                lu16CollisionIndex = static_cast<u16>(lu16CollisionIndex + 1);
+            }
+        }
+        while (lIterator.MoveToNextHeader());
+    }
+
+    // ⭐ [DIAG] NOT IN THE X360 BINARY -- wave Q6, behind BRN_PROP_DIAG, one-shot. The latch is
+    // evaluated ONCE (a getenv per command would be a syscall on the job thread's hot path) and
+    // it fires on the first call that actually had a triangle batch to run, so the counts
+    // describe real work rather than an empty command. Read it together with
+    // [Q6-worldc] (the producer side) and "prop fell out of the world": prims/tris non-zero
+    // with results == 0 means the pair list is arriving EMPTY, which is the
+    // PrimitivePairListBuilder::AddPrimitive leg, not this one.
+    if (lu16NumTriangleBatches != 0)
+    {
+        static const bool sbPropDiag  = (std::getenv("BRN_PROP_DIAG") != 0);
+        static bool       sbFirstPass = true;
+        if (sbPropDiag && sbFirstPass && CgsDev::Log::gpDebugPrint != 0)
+        {
+            sbFirstPass = false;
+            *CgsDev::Log::gpDebugPrint
+                << "[Q6-narrow] first prim-vs-tri batch: prims="
+                << static_cast<s32>(lPairList.mu16NumTests)
+                << " tris=" << static_cast<s32>(lu16NumTriangleBatches)
+                << " results=" << static_cast<s32>(lResultsList.mu16NumResults)
+                << "\n";
+        }
+    }
+
+    // 0x829265FC..0x82926620 -- the unconditional 16-byte header write-back.
+    *lpDesc->mpResultsList = lResultsList;
+}
+
+// =============================================================================================
+// The other four Execute arms -- NAMED BOOT GATES, not silent returns and not a shared default.
 // Each names its own X360 home and insn count so that the day something posts that descriptor
 // type, the log says which worker is missing rather than "unsupported".
 // =============================================================================================
@@ -1083,20 +1463,10 @@ void ContactGeneratorJob::ExecutePrimitivePairList()
                          "@0x82925798 (92) not reconstructed [FLAG PC boot gate]\n");
 }
 
-// ⛔ THE PROP NARROW PHASE. This is the one gate on the breakable-props motion path that still
-// matters at runtime: the type-12 stream arm above now drains prop commands straight into it, so
-// while it is gated a smashed prop's parts generate NO world contacts and keep free-falling. Its
-// closure is measured and small (see the stream arm's banner): ContactGeneratorJob::
-// BuildGPInstance @0x829222A0 and ::CollideGPInstances @0x829253C8 are the two un-reconstructed
-// callees; everything else it touches is already real in this tree.
-void ContactGeneratorJob::ExecutePrimitiveListWithTriangleList(
-    const PrimitiveListWithTriangleListJobDesc* /*lpDesc*/)
-{
-    BRN_CONTACT_JOB_GATE("conductor gate: ContactGeneratorJob::ExecutePrimitiveListWithTriangleList "
-                         "@0x82925908 (849) not reconstructed -- prop/part-vs-world commands now "
-                         "REACH this worker (type-12 stream arm is live) but produce no contacts; "
-                         "closure = BuildGPInstance @0x829222A0 + CollideGPInstances @0x829253C8 "
-                         "[FLAG PC boot gate]\n");
-}
+// ⭐ THE PROP NARROW-PHASE GATE THAT USED TO STAND HERE IS GONE (2026-08-19, wave Q6 cluster
+// pvt): ExecutePrimitiveListWithTriangleList @0x82925908 is a real body above. Its two callees
+// BuildGPInstance / CollideGPInstances are declared in this TU's header and defined in the
+// sibling partfile ContactGeneratorJob_wQ6_01.cpp -- there is no gate for either, so the
+// partfile MUST be mounted with this TU (two LNK2019s otherwise; `cl /c` cannot see them).
 
 #undef BRN_CONTACT_JOB_GATE
