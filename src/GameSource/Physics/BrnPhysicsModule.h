@@ -120,7 +120,7 @@
 namespace CgsModule { struct IOBufferStack; }
 namespace CgsSceneManager { namespace SceneManagerIO { struct InputBuffer_Update; struct PotentialContact; } }
 namespace BrnResource { namespace GameDataIO { struct AllocatorList; } }
-namespace BrnWorld { enum EEntityTypeID : int; }   // fixed-underlying-type opaque decl (home BrnEntityTypes.h)
+namespace BrnWorld { class WorldModule; enum EEntityTypeID : int; }   // fixed-underlying-type opaque decl (home BrnEntityTypes.h)
 
 namespace BrnPhysics
 {
@@ -278,6 +278,12 @@ namespace Vehicle         { struct VehicleManagerOutputBuffer; } // home BrnVehi
         static void _AssertLayout();
 
     private:
+        // WorldModule::Prepare owns the X360 call at 0x827D5B60..0x827D5B70:
+        // it addresses this module's embedded VehicleManager and loads the surface-list
+        // collection key before calling VehicleManager::ReadSurfaceProperties. Keep that
+        // direct aggregate relationship without adding an invented public accessor.
+        friend class BrnWorld::WorldModule;
+
         // ===================================================================
         // The contact-spy bridge slice (DWARF-private driver methods, home TU
         // BrnPhysicsModuleBridgeFunctions.cpp -- each decl carries its DWARF

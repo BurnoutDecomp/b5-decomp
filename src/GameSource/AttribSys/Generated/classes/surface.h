@@ -17,13 +17,32 @@ namespace Gen
     class surface : private Instance
     {
     public:
+        struct _LayoutStruct
+        {
+            u8      maLeadingAttributes[0x40];
+            RefSpec mPhysicsSurface;
+            RefSpec mGameplaySurface;
+        };
+
         explicit surface(Collection* lpCollection = nullptr, void* lpOwner = nullptr);
+        explicit surface(const RefSpec& lrRefSpec, void* lpOwner = nullptr);
 
         // The resolved attribute-data pointer (Attrib::Instance::GetLayoutPointer, public
         // on the base but reachable only from within the private-derived class). The wheel
         // FX reads the surface's visual-FX sub-collection off this (WheelStateMachine::
         // Update 0x82293EB8: LODWORD(surfaceInstance[1]) + 16). Additive re-export.
         const void* GetAttributeData() const { return GetLayoutPointer(); }
+
+        // DecFIGS surface.h:89/:96; Breaker ReadSurfaceProperties addresses the
+        // PhysicsSurface and GameplaySurface RefSpecs at layout +0x40/+0x58.
+        const RefSpec& PhysicsSurface() const
+        {
+            return static_cast<const _LayoutStruct*>(GetLayoutPointer())->mPhysicsSurface;
+        }
+        const RefSpec& GameplaySurface() const
+        {
+            return static_cast<const _LayoutStruct*>(GetLayoutPointer())->mGameplaySurface;
+        }
     };
 
     // Chain the Instance ctor, assert the collection's class is ClassName::surface,
@@ -32,6 +51,18 @@ namespace Gen
         : Instance(lpCollection, lpOwner)
     {
         static const int KI_SURFACE_CLASS = 2016857936; // Attrib::ClassName::surface (0x7836CF50)
+        if (GetClass() != KI_SURFACE_CLASS && GetClass() != 0)
+            AssertOnClassCheck(GetClass(), KI_SURFACE_CLASS, GetCollection());
+        if (!mpAttributeData)
+            mpAttributeData = DefaultDataArea(0x90u);
+    }
+
+    // Breaker sub_8227FB58: the generated RefSpec overload used by
+    // VehicleManager::ReadSurfaceProperties' per-surface loop.
+    inline surface::surface(const RefSpec& lrRefSpec, void* lpOwner)
+        : Instance(lrRefSpec, lpOwner)
+    {
+        static const int KI_SURFACE_CLASS = 2016857936; // low word 0x7836CF50
         if (GetClass() != KI_SURFACE_CLASS && GetClass() != 0)
             AssertOnClassCheck(GetClass(), KI_SURFACE_CLASS, GetCollection());
         if (!mpAttributeData)

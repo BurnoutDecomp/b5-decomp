@@ -63,5 +63,5 @@ namespace Attrib
     // has no per-function JSON). Declaring it 64-bit costs nothing if the high half is
     // ignored and is the difference between resolving and silently mis-resolving if it is
     // not -- which is the exact failure the FindCollection correction above describes.
-    Collection* FindCollectionWithDefault(u64 luClassKey);
+    Collection* FindCollectionWithDefault(u64 luClassKey, u64 luCollectionKey);
 }

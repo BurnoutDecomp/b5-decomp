@@ -113,6 +113,26 @@ namespace CgsNumeric
         return liMin + static_cast<s32>(RandomUInt() % luMod);
     }
 
+    // Header-inline in the console. UpdateRoadNoise @0x825F69B4..0x825F6A20 and its second
+    // expansion @0x825F6A30..0x825F6A84 pin the complete operation: read the current ring slot,
+    // refill that same slot from the OLD seed's high word, step the 64-bit LCG, advance the cursor,
+    // and return the consumed [1,2) value minus 1.0. DecFIGS CgsRandom.h:90 names this overload
+    // RandomFloat() and its locals `lfRandomFractionPlusOne` / `lfRandomFraction`.
+    f32 Random::RandomFloat()
+    {
+        const u32 luIndex = muOldestBufferIndex;
+        const f32 lfRandomFractionPlusOne = mafFloatBuffer[luIndex];
+        const u64 luOldSeed = muSeed;
+
+        muSeed = luOldSeed * KU_RANDOM_LCG_MULTIPLIER + 1u;
+        mauIntegerBuffer[luIndex] =
+            ConvertUnsignedFixed32ToFloatRepresentation(static_cast<u32>(luOldSeed >> 32));
+        muOldestBufferIndex = (luIndex + 1u) & (KU_FLOAT_BUFFER_SIZE - 1u);
+
+        const f32 lfRandomFraction = lfRandomFractionPlusOne - 1.0f;
+        return lfRandomFraction;
+    }
+
     // ========================================================================
     // THE TWO BOUNDED FLOAT DRAWS -- BODIED 2026-08-02 (rotate-helper wave).
     //

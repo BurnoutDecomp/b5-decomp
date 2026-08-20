@@ -892,5 +892,40 @@ void PhysicalTrafficManager::UpdateTriangleCache(
     }
 }
 
+// =================================================================================================
+// PhysicalTrafficManager::UpdateTrafficPhysicsPostSimulation  @0x826371D0
+//
+// Breaker passes the scalar timestep in f1, splats it only at the full-physics body call, clears
+// every used traffic driver's snapped-this-frame byte, then performs the articulated-joint passes.
+// The SimpleVehiclePhysics arm has no post-simulation work. DecFIGS supplies the declaration shape.
+// =================================================================================================
+void PhysicalTrafficManager::UpdateTrafficPhysicsPostSimulation(
+    const CgsPhysics::PhysicsSimulationIO::OutputBuffer* lpSimModuleOutputBuffer,
+    f32 lfTimeStep)
+{
+    const VecFloat lvfTimeStep{lfTimeStep, lfTimeStep, lfTimeStep, lfTimeStep};
+
+    for (s32 liVehicle = mUsedTrafficVehicles.GetFirstNonZeroBit();
+         liVehicle != TotalPhysicalTrafficBitArray::KI_INVALID_BITINDEX;
+         liVehicle = mUsedTrafficVehicles.GetNextNonZeroBit(liVehicle))
+    {
+        CGS_ASSERT(liVehicle < static_cast<s32>(KU8_TOTAL_MAX_NUM_PHYSICAL_TRAFFIC),
+                   "liVehicle < ku8TotalMaxNumPhysicalTraffic");
+
+        PhysicalTrafficVehicle& lrVehicle = mpaTrafficVehicles[liVehicle];
+        CGS_ASSERT(lrVehicle.mu8PhysicalType < PhysicalTrafficVehicle::E_PHYSICAL_TRAFFIC_TYPE_COUNT,
+                   "leType < E_PHYSICAL_TRAFFIC_TYPE_COUNT");
+        if (lrVehicle.mu8PhysicalType == PhysicalTrafficVehicle::E_PHYSICAL_TRAFFIC_TYPE_FULL)
+            lrVehicle.GetFullTrafficPhysics()->UpdatePostSimulation(lvfTimeStep);
+
+        CGS_ASSERT(liVehicle < static_cast<s32>(KU8_TOTAL_MAX_NUM_PHYSICAL_TRAFFIC),
+                   "liVehicle < ku8TotalMaxNumPhysicalTraffic");
+        mpaTrafficDrivers[liVehicle].ClearSnappedThisFrame();
+    }
+
+    ResolveArticulatedJoints();
+    ProcessJointSpys(lpSimModuleOutputBuffer);
+}
+
 }   // namespace Vehicle
 }   // namespace BrnPhysics

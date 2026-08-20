@@ -18,7 +18,19 @@ namespace Gen
     class gameplaysurface : private Instance
     {
     public:
+        struct _LayoutStruct
+        {
+            bool mbIsWater;
+        };
+
         explicit gameplaysurface(Collection* lpCollection = nullptr, void* lpOwner = nullptr);
+        explicit gameplaysurface(const RefSpec& lrRefSpec, void* lpOwner = nullptr);
+
+        const void* GetAttributeData() const { return GetLayoutPointer(); }
+        const bool& IsWater() const
+        {
+            return static_cast<const _LayoutStruct*>(GetLayoutPointer())->mbIsWater;
+        }
     };
 
     // Chain the Instance ctor, assert the collection's class is ClassName::gameplaysurface,
@@ -27,6 +39,16 @@ namespace Gen
         : Instance(lpCollection, lpOwner)
     {
         static const int KI_GAMEPLAYSURFACE_CLASS = 713126835; // Attrib::ClassName::gameplaysurface (0x2A8173B3)
+        if (GetClass() != KI_GAMEPLAYSURFACE_CLASS && GetClass() != 0)
+            AssertOnClassCheck(GetClass(), KI_GAMEPLAYSURFACE_CLASS, GetCollection());
+        if (!mpAttributeData)
+            mpAttributeData = DefaultDataArea(0x1u);
+    }
+
+    inline gameplaysurface::gameplaysurface(const RefSpec& lrRefSpec, void* lpOwner)
+        : Instance(lrRefSpec, lpOwner)
+    {
+        static const int KI_GAMEPLAYSURFACE_CLASS = 713126835; // low word 0x2A8173B3
         if (GetClass() != KI_GAMEPLAYSURFACE_CLASS && GetClass() != 0)
             AssertOnClassCheck(GetClass(), KI_GAMEPLAYSURFACE_CLASS, GetCollection());
         if (!mpAttributeData)

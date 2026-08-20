@@ -74,7 +74,22 @@ enum EGameActionType
     E_ACTION_RANK_INFO_RESPONSE         = 173,   // DWARF BrnGameActions.h:183
     E_ACTION_TROPHY_UNLOCK              = 196,   // DWARF BrnGameActions.h:206
     E_ACTION_FINISHED_MODE              = 31,    // DWARF BrnGameActions.h:41
-    E_ACTION_PREPARE_FOR_MODE           = 19,    // DWARF BrnGameActions.h:29
+    // ⛔ VALUE CORRECTION 2026-08-20 -- this carried the PS3-DWARF value (19). The X360 ARTIST
+    // build posts 23, asm-pinned at BOTH ends:
+    //   producer  ModeManager::PrepareForMode @0x82342930 -- `li r5,0x17` (23) + `li r6,0x8E0`
+    //             (2272 == this record's size) into VariableEventQueue<13312,16>::AddEvent,
+    //             asm 0x82342E80..0x82342E90.
+    //   consumers RaceCarEntityModule::HandleGameActions @0x8230BE08 `case 23` ->
+    //             HandlePrepareForModeAction @0x823092F0 (the ONLY setter of the module's
+    //             mbIsInGameMode, +99140); TrafficEntityModule::HandlePrepareForModeAction
+    //             @0x827480D8; MainDirector::HandlePrepareForModeAction @0x8221B0B0;
+    //             NetworkRoadRulesManager::ProcessGameActions @0x8255CA48 (`liActionID == 23`);
+    //             and WorldBridgeInputToEntityModules' prop arm, which already hardcodes 23.
+    // Same species of PS3->X360 shift this enum already records for the stunt block (+5),
+    // CAR_SELECT_CHANGE_COLOUR (74 -> 79) and the freeburn-challenge block (+8). Inert today
+    // (nothing posts through the tag yet) but it is the id the whole gameplay-arming chain
+    // turns on: at a wrong value no consumer's case would ever match.
+    E_ACTION_PREPARE_FOR_MODE           = 23,    // DWARF :29 gives 19 -- PS3 value (X360-attested 23)
     E_ACTION_SET_UP_ALL_DRIVE_THRUS     = 40,    // DWARF BrnGameActions.h:40
     // ⛔⛔ [gateui] VALUE CORRECTION 2026-08-20 -- THE WHOLE STUNT BLOCK WAS CARRYING DWARF (PS3)
     // VALUES, and the X360 ARTIST build shifts this range by EXACTLY +5. Both ends measured:

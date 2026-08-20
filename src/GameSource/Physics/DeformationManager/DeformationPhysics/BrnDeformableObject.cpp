@@ -297,7 +297,7 @@ namespace Deformation
     //   relMotion= linVel (+0x50) + angVel (+0x60) x r      (the gCrossProductPermuteConstant pair);
     //   closing  = dot(relMotion, lContact.mNormal); if (closing >= 0) return false  (separating);
     //   restitution = GetVehicleWorldRestitution(lContact);
-    //   mag = body.CalculateCollisionImpulseWithInanimateObject(r, relMotion, normal, restitution,
+    //   mag = body.CalculateCollisionImpulseWithInanimateObject(worldPoint, relMotion, normal, restitution,
     //                                                           &impulse, &invInertia);
     //   if (vehicle->IsPlayerVehicleInShowtime()) {           (the vtable +0x10 virtual)
     //       if (n.y*|n.y| >= n.x^2 + n.z^2 && n.y > 0) {      (upward-dominant landing normal)
@@ -340,7 +340,7 @@ namespace Deformation
         Vector3  lImpulse{ 0.0f, 0.0f, 0.0f, 0.0f };
         VecFloat lvfInvInertia{ 0.0f, 0.0f, 0.0f, 0.0f };
         VecFloat lvfImpulseMagnitude = GetVehicleBody().CalculateCollisionImpulseWithInanimateObject(
-            lvR, lRelativeMotion, lContact.mNormal, lvfRestitution, &lImpulse, &lvfInvInertia);
+            lContact.mPointOnA, lRelativeMotion, lContact.mNormal, lvfRestitution, &lImpulse, &lvfInvInertia);
 
         if ( lpVehicle->IsPlayerVehicleInShowtime() )   // the vtable +0x10 virtual
         {

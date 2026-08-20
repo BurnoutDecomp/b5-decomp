@@ -1,6 +1,7 @@
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/RaceCarPhysics.h"
 #include "rw/math/vpu/vector3_operation.h"   // rw::math::vpu::{Dot, Add, Subtract, Mult, Normalize, MagnitudeSquared}
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include <algorithm> // std::clamp
 #include <cmath>     // std::sqrt, std::fabs
 #include <cstddef>   // offsetof
 
@@ -84,6 +85,28 @@ namespace Vehicle
         if (!msPlayerParams.mbLaunchActive)   // byte_82FB84B2 (was the forked extern -- see above)
             return true;
         return false;
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // SetCrashing  @0x825FFBB0 (vtable slot +0x08) / bool overload @0x825B8A70
+    // ---------------------------------------------------------------------------------------
+    void RaceCarPhysics::SetCrashing()
+    {
+        VehiclePhysics::SetCrashing();
+        mbAISlowMo = false; // stb 0,0x1434(this) -- confirmed from the Breaker slot target
+    }
+
+    void RaceCarPhysics::SetCrashing(bool lbActivateAISlowMo)
+    {
+        // Breaker dispatches slot +0x08 unconditionally, even when the bool is false.
+        SetCrashing();
+
+        if (lbActivateAISlowMo)
+        {
+            mfCrashTimer         = 0.0f;
+            mInitialCrashAngVel  = GetAngularVelocity();
+            mInitialCrashVel     = GetLinearVelocity();
+        }
     }
 
     // ---------------------------------------------------------------------------------------
@@ -347,11 +370,11 @@ namespace Vehicle
     //   stores v127 (== v1) -- not v126 (== v2) -- into the scratch it adds at 0x826418CC
     //   (mfUncappedSpeedTimer), 0x826418E4 (mfTimeSinceTookDownPlayer) and 0x826419CC (+0x1408).
     // ---------------------------------------------------------------------------------------
-    void RaceCarPhysics::Update(const rw::math::vpu::Matrix44Affine* lpCameraMatrix,
+    void RaceCarPhysics::Update(VecFloat lvfSimTimeStep, VecFloat lvfRealTimeStep,
+                                const rw::math::vpu::Matrix44Affine* lpCameraMatrix,
                                 const BrnPlayerDriverControls* lpControls, bool lbImpactTime,
                                 bool lbPlayerAftertouchForceAdditive, bool lbShowtimeAllowed,
-                                CgsNumeric::Random& lrRandom,
-                                Vector3 lrPassThroughV1, Vector3 lrTimeStep)
+                                CgsNumeric::Random& lrRandom)
     {
         // ⭐⭐ THE ZERO TIMESTEP IS GONE (2026-08-01, physics wave 1). This used to read
         //     static const f32 KF_DT = 0.0f;   // FLAG: frame dt ... un-homed here
@@ -360,13 +383,11 @@ namespace Vehicle
         // the second incoming vector register; the asm is quoted in RaceCarPhysics.h above the
         // declaration (`stvx128 v126 ; lfs f13 ; fadds` on mfCrashTimer, at the top of the
         // CRASHING branch). NOT un-homed -- just never read off the asm.
-        // ⭐ TWO dt's, as the console has. lrTimeStep is v2 (REAL frame time) and lrPassThroughV1
+        // ⭐ TWO dt's, as the console has. lvfRealTimeStep is v2 and lvfSimTimeStep
         // is v1 (the SIM timestep, which the AI crash slow-mo branch below scales by 1/100). Only
         // mfCrashTimer integrates v2; every other timer in this function integrates v1, so v1 is
         // read at its use sites (AFTER the possible scaling) rather than snapshotted here.
-        const f32 lfRealDT = lrTimeStep.x;   // v126/v2 lane 0 -- the unscaled frame time
-
-        const f32 lfSteer = lpControls->GetSteer();
+        const f32 lfRealDT = lvfRealTimeStep.x;   // v126/v2 lane 0 -- unscaled frame time
 
         if (mbCrashing)   // asm @0x82641624: `lbz r11, 0x710(r31)` -- see the ⛔ note above
         {
@@ -387,12 +408,19 @@ namespace Vehicle
             // by KVF_AI_CRASH_SLOWMO_FACTOR (vrefp + 2 Newton steps, then `vmulfp128 v127, v0, v1`).
             // v127 is v1, and every later use of v1 in this function reads the SCALED value.
             if (mbAISlowMo)
-                lrPassThroughV1 = vpu::Mult(lrPassThroughV1, 1.0f / KVF_AI_CRASH_SLOWMO_FACTOR);
+            {
+                const f32 lfScale = 1.0f / KVF_AI_CRASH_SLOWMO_FACTOR;
+                lvfSimTimeStep = VecFloat{
+                    lvfSimTimeStep.x * lfScale, lvfSimTimeStep.y * lfScale,
+                    lvfSimTimeStep.z * lfScale, lvfSimTimeStep.w * lfScale };
+            }
 
             mfSlamSteering = 0.0f;          // this->float1404 = 0.0 (flt_82001CC0)
         }
         else
         {
+            const f32 lfSteer = lpControls->GetSteer();
+
             // asm 0x826416F0..0x826416FC: clear mbAISlowMo, then re-seed mfCrashTimer from
             // flt_820037C8. That symbol is READ: 0x820037C8 .rdata = 0xBF800000 = -1.0f, the same
             // "invalid timer" sentinel it carries at eight other committed sites in this tree.
@@ -406,18 +434,16 @@ namespace Vehicle
             if (lpControls->GetType() == E_DRIVER_TYPE_AI)
             {
                 if (static_cast<const BrnAIDriverControls*>(lpControls)->mbSlamPlayer)
-                    mfSlamSteering += lfSteer * 4.0f;   // (a3+16)*4.0 added (AI slam-steer add)
+                    mfSlamSteering += lfSteer * 4.0f * lvfSimTimeStep.x;
             }
             else if (lfSteer * mfSlamSteering < -0.30000001f)
             {
-                // opposite-sign decay toward 0 by +/-0.2 (fsel min/max envelope)
-                const f32 lfDown = -0.2f - (mfSlamSteering * -0.2f);
-                mfSlamSteering = (lfDown >= 0.0f) ? (mfSlamSteering * -0.2f /*f13*/) : mfSlamSteering;
-                // (faithful structure of the two fsel steps; the second clamps to 0.2 - x)
+                // 0x82641784..A4: multiply by -0.2, then clamp with the two fsel instructions.
+                mfSlamSteering = std::clamp(mfSlamSteering * -0.2f, -0.2f, 0.2f);
             }
 
             if (std::fabs(lfSteer) >= 0.1f)
-                mfSlamSteering += lfSteer;                 // deadzone 0.1: outside -> accumulate stick
+                mfSlamSteering += lfSteer * lvfSimTimeStep.x;
             else
                 mfSlamSteering = mfSlamSteering * 0.94999999f;   // inside -> decay 0.95/frame
 
@@ -436,9 +462,9 @@ namespace Vehicle
 
         // The asm restores BOTH vectors verbatim before this call (`vmr128 v2,v126 ;
         // vmr128 v1,v127` @0x8264185C), i.e. they are pass-through arguments.
-        VehiclePhysics::Update(lpCameraMatrix, lpControls, lbImpactTime,
-                               lbPlayerAftertouchForceAdditive, lbShowtimeAllowed, lrRandom,
-                               lrPassThroughV1, lrTimeStep);
+        VehiclePhysics::Update(lvfSimTimeStep, lvfRealTimeStep, lpCameraMatrix, lpControls,
+                               lbImpactTime, lbPlayerAftertouchForceAdditive,
+                               lbShowtimeAllowed, lrRandom);
 
         // ⭐⭐ RE-POINTED 2026-08-03 (VehiclePhysics own-block wave). The console gates this
         // follow-up steering pass on a byte at +0x70 (asm @0x82641884: `lbz r11, 0x70(r31) ;
@@ -463,16 +489,15 @@ namespace Vehicle
         // (the sim timestep, slow-mo scaled), r6 = mbIsSteeringWheel.
         if (IsFrozen())   // asm @0x82641884: lbz r11, 0x70(r31) == ExternallySimulatedBody::mbFrozen
             VehiclePhysics::UpdateSteering(
-                lfSteer, 0.0f,
-                VecFloat{ lrPassThroughV1.x, lrPassThroughV1.y,
-                          lrPassThroughV1.z, lrPassThroughV1.w },
+                lpControls->GetSteer(), 0.0f,
+                lvfSimTimeStep,
                 lpControls->mbIsSteeringWheel);
 
         // Decay the uncapped-speed window timer while it is positive.
         // ⭐ v1, NOT v2: asm 0x826418CC stores v127 (the sim timestep, slow-mo scaled) into the
         // scratch it then subtracts at 0x826418D4. Was lfDT (v2) while the scaling was elided.
         if (mbPlayerCarInShowtime && MS.mfUncappedSpeedTimer > 0.0f)
-            MS.mfUncappedSpeedTimer -= lrPassThroughV1.x;
+            MS.mfUncappedSpeedTimer -= lvfSimTimeStep.x;
 
         // ⭐ RE-POINTED 2026-08-03. This store is at +0x1400 (asm 0x826418E0: `lfs f0,0x1400(r31)`
         // / 0x826418F8: `stfs f0,0x1400(r31)`), i.e. mfTimeSinceTookDownPlayer -- the post-takedown
@@ -480,7 +505,7 @@ namespace Vehicle
         // member, which is a different timer entirely.
         // ⭐ v1, NOT v2: asm 0x826418E4 stores v127 (the sim timestep) into the scratch it adds at
         // 0x826418F0. Was lfDT (v2) while the slow-mo scaling that makes the two differ was elided.
-        mfTimeSinceTookDownPlayer += lrPassThroughV1.x;
+        mfTimeSinceTookDownPlayer += lvfSimTimeStep.x;
 
         // Latch aftertouch-active for this frame: needs the request flag (a5), an aftertouch-enable
         // input ( > 0 ) and the virtual "can use aftertouch" query (vtbl+20).
@@ -494,9 +519,36 @@ namespace Vehicle
             lbUsing = false;
         mbUsingAftertouch = lbUsing;
 
-        // (the trailing unk_83017FE0 speed-gate block decays a SEPARATE per-frame timer at +0x1408;
-        //  it integrates the same dt under a multi-condition gate -- faithful-but-inert here as it
-        //  only touches the un-modelled mfBeachedTime scratch.)
+        // 0x82641938..E0: the exact beached-time gate. The four byte loads at
+        // +0x206/+0x2E6/+0x3C6/+0x4A6 are Wheel::mbHasTraction (+0xD6 within each wheel),
+        // not RoadContact::mbIsOnGround.
+        static const f32 KF_MPH_TO_MPS = 0.447039992f; // unk_83017FE0 <- flt_82F31928
+        const bool lbEveryWheelHasTraction =
+            maWheels[eFrontLeftWheel].mbHasTraction
+            && maWheels[eFrontRightWheel].mbHasTraction
+            && maWheels[eRearLeftWheel].mbHasTraction
+            && maWheels[eRearRightWheel].mbHasTraction;
+
+        if (GetSpeedMPH().x * KF_MPH_TO_MPS >= 1.0f
+            && !mbHasAir
+            && !lbEveryWheelHasTraction
+            && mbContactingWall
+            && !mbCrashing)
+        {
+            mfBeachedTime += lvfSimTimeStep.x;
+        }
+        else
+        {
+            mfBeachedTime = 0.0f;
+        }
+    }
+
+    // DecFIGS @0x6EE02C is a one-branch thunk. There is no separate Race-only post-simulation
+    // behavior to reconstruct: the Showtime boundary remains the virtual predicate inside the
+    // VehiclePhysics base implementation.
+    void RaceCarPhysics::UpdatePostSimulation(VecFloat lvfTimeStep)
+    {
+        VehiclePhysics::UpdatePostSimulation(lvfTimeStep);
     }
 
     // ---------------------------------------------------------------------------------------
@@ -655,33 +707,52 @@ namespace Vehicle
     // RaceCarPhysics::ApplyPropCollisionImpulseSum  @0x82600780
     //   Soft-clamp the accumulated prop-collision impulse against the car's mass/speed so props can't
     //   catapult the car, apply it, then zero the accumulator.
-    //   Structure (de-SIMD'd): impulse *= unk_82FB91C0 (a scale); project out a component along the
-    //   body forward (this+32) gated >0; clamp its magnitude into [0, cap] via a reciprocal-magnitude
-    //   renormalise against a speed-derived limit (this+1728 speed); if the traction byte (gap1359[2])
-    //   is clear, zero it; AddWorldSpaceImpulse; then zero the accumulator.
-    //   FLAG: the scale/cap rodata (unk_82FB91C0, unk_82FB8430, unk_82FB8B80, unk_82FB9C00,
-    //   unk_82CDA350) are un-homed -> the clamp shape is faithful, the numeric limits inert.
+    //   Structure (de-SIMD'd): scale the impulse, project out its positive component along world-up
+    //   (this+0x20), component-clamp it to 20% of the car momentum when speed^2 > 0.5, fade it to
+    //   zero from 30 to 85 MPH, gate it on mbAllWheelsHaveTraction (+0x135B), apply it, and clear
+    //   the accumulator. All numeric values are read from Breaker's static-init/data chain.
     // ---------------------------------------------------------------------------------------
     void RaceCarPhysics::ApplyPropCollisionImpulseSum()
     {
-        // unk_82FB91C0 <- flt_820047C8 (0.05), static-init splat @0x82C5D13C. ⚠️ At 0.0f this was an
-        // unguarded `mPropCollisionImpulseSum *= 0` -- every accumulated prop impulse was ERASED.
-        static const f32 KF_PROP_IMPULSE_SCALE = 0.05f;   // unk_82FB91C0
+        static const f32 KF_PROP_IMPULSE_MODIFIER = 0.05f; // unk_82FB91C0
+        static const f32 KF_MAX_SLOWDOWN          = 0.2f;  // unk_82FB8430
+        static const f32 KF_MIN_SPEED_SQUARED     = 0.5f;  // flt_82001DA0
+        static const f32 KF_SPEED_LOWER_LIMIT_MPH = 30.0f; // unk_82FB9C00
+        static const f32 KF_SPEED_RANGE_MPH       = 55.0f; // unk_82FB8B80 = 85 - 30
 
-        // impulse *= scale  (faithful-but-inert: scale is a placeholder)
-        mPropCollisionImpulseSum = vpu::Mult(mPropCollisionImpulseSum, KF_PROP_IMPULSE_SCALE);
+        Vector3 lImpulse = vpu::Mult(mPropCollisionImpulseSum, KF_PROP_IMPULSE_MODIFIER);
 
-        // The remaining steps are the soft-clamp against the body forward axis + speed-derived cap and
-        // the traction gate. They read several un-homed .rdata caps; the projection/clamp ARITHMETIC
-        // is structural but every magnitude is a placeholder, so the net effect with inert seeds is a
-        // zeroed impulse. We preserve the two observable side effects: the traction-gate zeroing and
-        // the AddWorldSpaceImpulse + final accumulator clear.
-        if (!mbUsingAftertouch /* gap1359[2]: a traction/contact byte */)
-            mPropCollisionImpulseSum = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };
+        // Remove only the upward component. A downward component is retained exactly as the
+        // `vmax(dot(up, impulse), 0)` / subtract pair at 0x826007D4..F4 does.
+        const Vector3 lWorldUp = GetWorldUpRow();
+        const f32 lfUpComponent = std::max(vpu::Dot(lWorldUp, lImpulse), 0.0f);
+        lImpulse = vpu::Subtract(lImpulse, vpu::Mult(lWorldUp, lfUpComponent));
 
-        AddWorldSpaceImpulse(mPropCollisionImpulseSum);
+        const Vector3 lLinearVelocity = GetLinearVelocity();
+        if (vpu::MagnitudeSquared(lLinearVelocity) > KF_MIN_SPEED_SQUARED)
+        {
+            const Vector3 lMomentum = vpu::Mult(lLinearVelocity, GetMass().x);
+            const f32 lfComponentLimit = vpu::Magnitude(lMomentum) * KF_MAX_SLOWDOWN;
+            lImpulse.x = std::clamp(lImpulse.x, -lfComponentLimit, lfComponentLimit);
+            lImpulse.y = std::clamp(lImpulse.y, -lfComponentLimit, lfComponentLimit);
+            lImpulse.z = std::clamp(lImpulse.z, -lfComponentLimit, lfComponentLimit);
+            lImpulse.w = std::clamp(lImpulse.w, -lfComponentLimit, lfComponentLimit);
+        }
+        else
+        {
+            lImpulse.SetZero();
+        }
 
-        mPropCollisionImpulseSum = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };   // zero the accumulator
+        const f32 lfSpeedFactor = std::clamp(
+            (GetSpeedMPH().x - KF_SPEED_LOWER_LIMIT_MPH) / KF_SPEED_RANGE_MPH,
+            0.0f, 1.0f);
+        lImpulse = vpu::Mult(lImpulse, 1.0f - lfSpeedFactor);
+
+        if (!mbAllWheelsHaveTraction)
+            lImpulse.SetZero();
+
+        AddWorldSpaceImpulse(lImpulse);
+        mPropCollisionImpulseSum.SetZero();
     }
 
     // ---------------------------------------------------------------------------------------

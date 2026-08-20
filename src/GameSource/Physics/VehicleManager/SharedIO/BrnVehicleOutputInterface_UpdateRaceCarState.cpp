@@ -291,7 +291,7 @@ void VehicleOutputInterface::UpdateRaceCarState(s32 liRaceCarIndex,
     lrState.meDriverType = lrDriver.meDriverType;
 
     // ---- steering: the vtable slot-0 dispatch (0x825ECA6C..0x825ECA84) ---------------------------
-    lrState.mfSteering = lrPhysics.GetSteeringAngle();
+    lrState.mfSteering = lrPhysics.GetSteeringAngle().x;
 
     // ---- boost + crash latches (0x825ECA88..0x825ECAE8) -------------------------------------------
     lrState.mfTimeBoosting =

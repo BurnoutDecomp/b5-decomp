@@ -2,11 +2,25 @@
 
 // Vehicle-physics constants/enums. Recovered from the DecFIGS DWARF.
 #include "types.hpp"
+#include "BrnCommonTypes.h"  // VecFloat
 
 namespace BrnPhysics
 {
 namespace Vehicle
 {
+    // Surface-property bank (DecFIGS BrnVehicleConstants.h/.cpp; Breaker globals
+    // byte_82FB7DF0, dword_82F2A10C, unk_82FB8DE0/8890/8BD0 and byte_82FB7DF4).
+    // ReadSurfaceProperties replaces the three vector tables and water flags from the
+    // live AttribSys surface list. Breaker statically seeds all vector lanes to zero and
+    // the used-surface count to 20.
+    const s32 KI_MAX_NUM_SURFACES = 32;
+    extern bool     gbReadSurfaceProperties;
+    extern s32      KI_NUM_USED_SURFACES;
+    extern VecFloat KAVF_SURFACE_ROUGHNESS[KI_MAX_NUM_SURFACES];
+    extern VecFloat KAVF_SURFACE_GRIP[KI_MAX_NUM_SURFACES];
+    extern VecFloat KAVF_SURFACE_LINEAR_DRAG[KI_MAX_NUM_SURFACES];
+    extern bool     KAB_SURFACE_IS_WATER[KI_MAX_NUM_SURFACES];
+
     // ⭐⭐ GRAVITY -- what actually accelerates a Burnout race car downward. [V] 2026-08-03.
     //
     // A race car is a BrnPhysics::ExternalPhysicsBody: the game integrates it ITSELF and only

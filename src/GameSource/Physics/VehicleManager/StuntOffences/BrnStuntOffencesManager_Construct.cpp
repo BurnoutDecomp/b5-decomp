@@ -9,18 +9,16 @@
 // == WHY THE SPLIT ==
 // VehicleManager::Construct @0x8263B7C8 calls StuntOffencesManager::Construct @0x825E8C08, and
 // VehicleManager::Construct is now mounted (BrnVehicleManager_Construct.cpp) so that
-// PhysicsModule::Construct could stop being a live empty stub. BrnStuntOffencesManager.cpp AS A
-// WHOLE still cannot be mounted: its Update spine calls SEVEN RaceCarPhysics stunt accessors
-// (GetDriftActiveTime / GetDriftLateralSpeed / IsHandbrakeHeld / IsConsideredAirborne /
-// GetStuntReferenceVelocity / GetStuntWorldPosition / GetStuntForwardAxis -- RaceCarPhysics.h
-// :268-274) that are declare-only with no body anywhere in the tree. /OPT:REF does not suppress
-// LNK2019, so mounting the whole TU would drag all seven.
+// PhysicsModule::Construct could stop being a live empty stub. The original link blocker is now
+// retired: the seven apparent RaceCarPhysics stunt accessors were project-only inventions, and the
+// Update spine now uses the exact inherited/member APIs proven by Breaker + DecFIGS. The main TU is
+// mounted alongside this split constructor; keeping the split avoids duplicating Construct.
 //
 // These two bodies call NOTHING outside the class: only member stores and std::memset. Zero new
 // closure.
 //
-// TO RE-MERGE: body the seven stunt accessors, mount BrnStuntOffencesManager.cpp, then move this
-// text back and delete the TU.
+// This remains a build-mechanics split only; it may be merged back into the main TU later if the
+// manifest is changed atomically.
 // ==================================================================================================
 
 namespace BrnPhysics

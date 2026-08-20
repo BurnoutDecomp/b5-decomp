@@ -511,8 +511,8 @@ namespace BrnPhysics
     // ---------------------------------------------------------------------------------------
     // CalculateCollisionImpulseWithInanimateObject  @0x8259C978
     //
-    // The textbook impulse magnitude for a body striking an immovable object at contact point
-    // r (relative to the centre of mass) with surface normal n, relative velocity vRel and
+    // The textbook impulse magnitude for a body striking an immovable object at world contact
+    // point p (with r = p - centre-of-mass), surface normal n, point velocity vRel and
     // restitution e:
     //
     //     j = -(1 + e) (vRel . n) / ( 1/m + n . ( (I^-1 (r x n)) x r ) )
@@ -520,20 +520,20 @@ namespace BrnPhysics
     // The recovered asm computes exactly this shape: a vmsum3fp dot of the normal with a
     // velocity vector, the cross/inverse-inertia/cross chain assembled through the vpermwi +
     // vnmsubfp sequence, a vrefp reciprocal of the effective mass, and three stores:
-    //   * the inverse effective-mass scalar  -> *lpvfInvInertiaOut   (first store, asm r6)
-    //   * the impulse magnitude / scaled-n    -> the VecFloat return  (asm r3)
-    //   * the impulse vector  j*n             -> *lpvImpulseOut        (asm r5)
+    //   * the effective inverse-mass denominator -> *lpvfInvInertiaOut (first store, asm r6)
+    //   * the signed impulse magnitude           -> the VecFloat return (hidden result r3)
+    //   * normal * abs(magnitude)                 -> *lpvImpulseOut      (asm r5)
     // and asserts `lpvfInvInertiaOut != NULL` before writing it.
     //
     // FLAG (modelled, not bit-verified): the X360 Hex-Rays dropped the argument list (rendered
     // `int(...)`), so the arg->register threading was recovered from the PS3 DecFIGS DWARF
     // prototype (PS3 0x68B130): (Vector3 lPoint, Vector3 lPointVel, Vector3 lCollisionNormal,
     // VecFloat lvfRestitution, Vector3* lpImpulseOut, VecFloat* lpvfInvInertiaOut). The PS3 asm
-    // shows lPointVel is the relative velocity (it subtracts the body velocity at this+0x30:
-    // `vsubfp v2,v2,v0; lvx v0,this,0x30`), lPoint is the cross-product `r`, lCollisionNormal is
-    // the surface normal `n`. The inverse inertia used is this body's mWorldInverseInertia. The
-    // data flow, output set and assert match the asm; the precise VMX tensor multiply / reciprocal
-    // refinement is the modelled I^-1 row-combination, not proven lane-for-lane.
+    // prototype supplies the declaration shape. Breaker supplies the argument semantics:
+    // @0x8259C9B0 loads mTransform.wAxis and @0x8259C9B8 subtracts it from v1, proving lPoint is
+    // the absolute world point rather than an already-relative arm. The inverse inertia used is
+    // this body's mWorldInverseInertia. The precise VMX reciprocal refinement is lowered to C
+    // division; the data flow and all three stores follow the assembly.
     // ---------------------------------------------------------------------------------------
     VecFloat ExternalPhysicsBody::CalculateCollisionImpulseWithInanimateObject(
         Vector3 lPoint, Vector3 lPointVel, Vector3 lCollisionNormal,
@@ -543,29 +543,33 @@ namespace BrnPhysics
 
         const f32 lfRestitution = lvfRestitution.x;   // broadcast VecFloat -> scalar (de-modelled lane)
 
+        // @0x8259C9B0..C9B8: the source argument is a WORLD point; derive r here.
+        const Vector3 lvPointArm = vpu::Subtract(lPoint, mTransform.wAxis);
+
         // Angular term: I^-1 ( r x n ), then ( I^-1(rxn) ) x r, projected onto n.
-        const Vector3 lvRxN = vpu::Cross(lPoint, lCollisionNormal);
+        const Vector3 lvRxN = vpu::Cross(lvPointArm, lCollisionNormal);
         const Vector3 lvAngular = vpu::Add(
             vpu::Add(vpu::Mult(mWorldInverseInertia.xAxis, lvRxN.x),
                      vpu::Mult(mWorldInverseInertia.yAxis, lvRxN.y)),
             vpu::Mult(mWorldInverseInertia.zAxis, lvRxN.z));
-        const Vector3 lvAngularAtContact = vpu::Cross(lvAngular, lPoint);
+        const Vector3 lvAngularAtContact = vpu::Cross(lvAngular, lvPointArm);
 
         // Effective inverse mass: 1/m + n . (angular term). m is stored as VecFloat (broadcast).
-        const f32 lfInvMass = (mfMass.x != 0.0f) ? (1.0f / mfMass.x) : 0.0f;
+        const f32 lfInvMass = 1.0f / mfMass.x;
         const f32 lfDenominator = lfInvMass + vpu::Dot(lCollisionNormal, lvAngularAtContact);
-        const f32 lfInvDenominator = (lfDenominator != 0.0f) ? (1.0f / lfDenominator) : 0.0f;
+        const f32 lfInvDenominator = 1.0f / lfDenominator;
 
         // Impulse magnitude and the impulse vector j*n.
         const f32 lfRelativeNormalSpeed = vpu::Dot(lPointVel, lCollisionNormal);
         const f32 lfImpulse = -(1.0f + lfRestitution) * lfRelativeNormalSpeed * lfInvDenominator;
-        const Vector3 lvImpulse = vpu::Mult(lCollisionNormal, lfImpulse);
+        const Vector3 lvImpulse = vpu::Mult(lCollisionNormal, std::fabs(lfImpulse));
 
-        // Stores (asm order): inverse-effective-mass scalar, then the impulse vector out.
-        VecFloat lvfInvInertia; lvfInvInertia.x = lvfInvInertia.y = lvfInvInertia.z = lvfInvInertia.w = lfInvDenominator;
+        // @0x8259CA94 stores v124 BEFORE the reciprocal refinement: the out-value is the
+        // denominator, not its reciprocal. @0x8259CAC4/CAD0 strips the return's sign for the
+        // impulse-vector store, while @0x8259CAC8 preserves the signed hidden return.
+        VecFloat lvfInvInertia; lvfInvInertia.x = lvfInvInertia.y = lvfInvInertia.z = lvfInvInertia.w = lfDenominator;
         *lpvfInvInertiaOut = lvfInvInertia;
-        if (lpImpulseOut != nullptr)
-            *lpImpulseOut = lvImpulse;
+        *lpImpulseOut = lvImpulse;
 
         VecFloat lvfResult; lvfResult.x = lvfResult.y = lvfResult.z = lvfResult.w = lfImpulse;
         return lvfResult;
@@ -649,37 +653,65 @@ namespace BrnPhysics
     // ---------------------------------------------------------------------------------------
     // DampenAngularVelocity  @0x825B2CD8   /   DampPitchYawRoll  @0x825BE210
     //
-    // Both scale mAngularVelocity in place (asm `addi r11,this,0x50` -> mAngularVelocity load,
-    // poly chain, store back). The poly chain is the EARenderWare VMX pow(base, exp) lane
+    // Both damp mAngularVelocity in place. The poly chain is the EARenderWare VMX pow(base, exp)
+    // lane
     // approximation: vlogefp (log2) + a Chebyshev-style polynomial (coefficient tables at
     // 0x82014AC0..0x82014AF0) + vexptefp (exp2), combined per axis. The net effect is a
-    // frame-rate-correct exponential decay of the angular velocity:
+    // frame-rate-correct exponential decay of the angular velocity. The exponent is measured
+    // in 60-Hz reference frames, not seconds:
     //
-    //     omega *= pow(dampingPerSecond, dt)
+    // DampenAngularVelocity scales omega isotropically. DampPitchYawRoll instead loads the body
+    // axes at this+0/+0x10/+0x20, and sequentially removes each projected component:
     //
-    // DampenAngularVelocity uses one isotropic damping coefficient for all three axes;
-    // DampPitchYawRoll uses a separate coefficient per body axis (pitch=x, yaw=y, roll=z).
+    //     omega -= axis * dot(omega, axis) * pow(dampingPerFrameAt60Hz, dt * 60)
+    //
+    // DampPitchYawRoll uses a separate coefficient per body axis (pitch=x, yaw=y, roll=z),
+    // and each later projection observes the result of the previous removal.
     //
     // FLAG (modelled, not bit-verified): the exact per-lane select machinery and the polynomial
-    // coefficients (unk_82014A* / unk_82FB9AF0) are NOT reproduced -- they are the SDK's
+    // coefficients (unk_82014A*) are NOT reproduced -- they are the SDK's
     // internal pow() approximation, with no project home. The recovered DATA FLOW (load
-    // mAngularVelocity, raise a damping base to the dt power per axis, multiply, store back) is
-    // reproduced with std::pow. Faithful in behaviour and store target; the bit pattern of the
-    // approximation is intentionally NOT fabricated.
+    // mAngularVelocity, raise a damping base to the `dt * kvfSixty` power, then scale/project as
+    // described above) is reproduced with std::pow. DecFIGS' static initializer @0x12DF24 writes the
+    // literal 60.0 splat to BrnPhysics::kvfSixty; Breaker names that slot unk_82FB9AF0 and
+    // multiplies it by the incoming dt. The polynomial's final bit pattern is not reproduced.
     // ---------------------------------------------------------------------------------------
     void ExternalPhysicsBody::DampenAngularVelocity(VecFloat lvfDampingPerSecond, VecFloat lvfDeltaTime)
     {
-        const f32 lfFactor = std::pow(lvfDampingPerSecond.x, lvfDeltaTime.x);
+        const f32 lfFactor = std::pow(lvfDampingPerSecond.x, lvfDeltaTime.x * 60.0f);
         mAngularVelocity = vpu::Mult(mAngularVelocity, lfFactor);
     }
 
     void ExternalPhysicsBody::DampPitchYawRoll(VecFloat lvfPitchDamping, VecFloat lvfYawDamping,
                                                VecFloat lvfRollDamping, VecFloat lvfDeltaTime)
     {
-        const f32 lfDt = lvfDeltaTime.x;
-        mAngularVelocity.x *= std::pow(lvfPitchDamping.x, lfDt);   // pitch about body x
-        mAngularVelocity.y *= std::pow(lvfYawDamping.x,   lfDt);   // yaw   about body y
-        mAngularVelocity.z *= std::pow(lvfRollDamping.x,  lfDt);   // roll  about body z
+        // @0x825BE210..E264: no projection is touched for a zero-sized simulation step.
+        static const f32 KF_TIME_STEP_EPSILON = 1.1920928955078125e-07f; // stru_8208F620.x
+        if (std::fabs(lvfDeltaTime.x) <= KF_TIME_STEP_EPSILON)
+            return;
+
+        const f32 lfDt = lvfDeltaTime.x * 60.0f;
+
+        // @0x825BE398..E424: pitch about the body's x axis.
+        const f32 lfPitchFactor = std::pow(lvfPitchDamping.x, lfDt);
+        const f32 lfPitchVelocity = vpu::Dot(mAngularVelocity, mTransform.xAxis);
+        mAngularVelocity = vpu::Subtract(
+            mAngularVelocity,
+            vpu::Mult(mTransform.xAxis, lfPitchVelocity * lfPitchFactor));
+
+        // @0x825BE4A0..E5A8: yaw uses the velocity left by the pitch pass.
+        const f32 lfYawFactor = std::pow(lvfYawDamping.x, lfDt);
+        const f32 lfYawVelocity = vpu::Dot(mAngularVelocity, mTransform.yAxis);
+        mAngularVelocity = vpu::Subtract(
+            mAngularVelocity,
+            vpu::Mult(mTransform.yAxis, lfYawVelocity * lfYawFactor));
+
+        // @0x825BE66C..E704: roll uses the velocity left by both earlier passes.
+        const f32 lfRollFactor = std::pow(lvfRollDamping.x, lfDt);
+        const f32 lfRollVelocity = vpu::Dot(mAngularVelocity, mTransform.zAxis);
+        mAngularVelocity = vpu::Subtract(
+            mAngularVelocity,
+            vpu::Mult(mTransform.zAxis, lfRollVelocity * lfRollFactor));
     }
 
     // ---------------------------------------------------------------------------------------

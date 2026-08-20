@@ -20,19 +20,19 @@ static_assert(std::is_base_of<BrnPhysics::ExternalPhysicsBody, VehiclePhysics>::
 static_assert(std::is_base_of<BrnPhysics::ExternallySimulatedBody, VehiclePhysics>::value,
               "VehiclePhysics must inherit ExternallySimulatedBody's mTransform/velocities");
 
-bool VehiclePhysics_embed_check(const VehiclePhysics& lrPhysics, f32 lfSteering, f32 lfSpeed)
+bool VehiclePhysics_embed_check(VehiclePhysics& lrPhysics, f32 lfSteering, f32 lfSpeed)
 {
     const f64 lfScale = lrPhysics.GetShowtimeDeformationScale();
     // (signature conformed 2026-08-07 to the DWARF 3-arg form: VecFloat fwdSpeed, steering, GAS)
     const bool lbCounter = lrPhysics.IsCounterSteeringAtLowSpeed(
         VecFloat{ lfSpeed, lfSpeed, lfSpeed, lfSpeed }, lfSteering, 1.0f);
-    const Vector3 lDownForce = lrPhysics.GetDownForce();   // aero quadratic (flagged-inert)
-    // surface-response group (per-wheel grip/roughness + vehicle linear drag; flagged-inert)
+    const VecFloat lDownForce = lrPhysics.GetDownForce();   // aero quadratic
+    // surface-response group (per-wheel grip/roughness + vehicle linear drag; runtime-loaded)
     // EVehicleDrivenWheel is homed at NAMESPACE scope (BrnSimpleVehiclePhysics.h:52) per the DWARF;
     // the nested VehiclePhysics::EVehicleDrivenWheel fork retired with the re-parenting.
-    const Vector3 lGrip  = lrPhysics.GetSurfaceGrip(BrnPhysics::Vehicle::eFrontLeftWheel);
-    const Vector3 lRough = lrPhysics.GetSurfaceRoughness(BrnPhysics::Vehicle::eRearRightWheel);
-    const Vector3 lDrag  = lrPhysics.GetSurfaceLinearDrag();
+    const VecFloat lGrip  = lrPhysics.GetSurfaceGrip(BrnPhysics::Vehicle::eFrontLeftWheel);
+    const VecFloat lRough = lrPhysics.GetSurfaceRoughness(BrnPhysics::Vehicle::eRearRightWheel);
+    const VecFloat lDrag  = lrPhysics.GetSurfaceLinearDrag();
     return lbCounter && (lfScale > 0.0) && (lDownForce.x >= 0.0f)
         && (lGrip.x >= 0.0f) && (lRough.x >= 0.0f) && (lDrag.x >= 0.0f);
 }

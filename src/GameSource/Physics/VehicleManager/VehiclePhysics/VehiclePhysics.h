@@ -229,6 +229,10 @@ namespace Vehicle
 
         static const u8 KU_MAX_AIR_RAMS = 4;   // VehiclePhysics.h:46  (mUsedAirRams capacity)
         static const u8 KU_MAX_SPINS    = 8;   // VehiclePhysics.h:47  (mUsedSpins capacity)
+        static bool msbInShowtime;             // VehiclePhysics.h:921 / Breaker byte_82FB7DF2
+
+        void SetIsInShowtime(bool lbInShowtime) { msbInShowtime = lbInShowtime; }
+        bool IsInShowtime() const { return msbInShowtime; }
 
         // A timed body- or world-space "air ram" impulse with decay. UpdateAirRam counts mfTimerTillFire
         // down by dt; when it reaches 0 it fires mImpulse (at mPosition, in meImpulseSpace) and then
@@ -271,6 +275,31 @@ namespace Vehicle
             bool DoApplyTorque()   const { return (mu8DriftFlags & KU_DRIFT_FLAG_APPLY_TORQUE) != 0; }
         };
 
+        // Virtual surface, in the exact DecFIGS/X360 declaration order.  The order of the first
+        // declaration of each new virtual is ABI-significant: Breaker dispatches these as slots
+        // +0x0C through +0x2C after SimpleVehiclePhysics's three inherited slots.
+        virtual void Update(VecFloat lvfSimTimeStep, VecFloat lvfRealTimeStep,
+                            const rw::math::vpu::Matrix44Affine* lpCameraMatrix,
+                            const BrnPlayerDriverControls* lpControls,
+                            bool lbImpactTime, bool lbPlayerAftertouchForceAdditive,
+                            bool lbShowtimeAllowed, CgsNumeric::Random& lrRandom);
+        // Non-virtual in DecFIGS (VehiclePhysics.h:1087). Breaker inlines this exact body in the
+        // race-car and full-traffic post-simulation loops: vtable +0x10 is the showtime query;
+        // UpdateSuspensionPostSimulation runs only when that query returns false.
+        void UpdatePostSimulation(VecFloat lvfTimeStep);
+        virtual bool IsPlayerVehicleInShowtime() const { return false; }
+        virtual bool IsPlayerVehicleActuallyInShowtime() const { return false; }
+        virtual bool IsCrashingNormally() const { return true; }
+        virtual f32 GetShowtimeDeformationScale() const { return 1.0f; }
+        virtual f32 GetShowtimePlayerCarStrength() const { return 0.0f; }
+        virtual bool IsUsingAftertouch() const { return false; }
+        virtual void UpdateAftertouch(const BrnPlayerDriverControls* /*lpControls*/,
+                                      const rw::math::vpu::Matrix44Affine* /*lpCameraMatrix*/,
+                                      VecFloat /*lvfSimTimeStep*/,
+                                      bool /*lbDoForceAdditiveAftertouch*/,
+                                      bool /*lbUseSixaxis*/) {}
+        virtual void UpdateSuspension(VecFloat lvfTimeStep);
+
         // ----- Vehicle-physics group (class TU): three scalar predicates (bodies in VehiclePhysics.cpp) -----
 
         // @0x825B2FE0: the number of driven wheels currently on the ground (counts the per-wheel
@@ -297,28 +326,10 @@ namespace Vehicle
         //       members. -----
 
         // @0x826412C0: the base per-frame tick (RaceCarPhysics::Update chains here).
-        // Carries the same two pass-through vector arguments its caller restores into v1/v2
-        // before chaining (`vmr128 v2,v126 ; vmr128 v1,v127` @0x8264185C in RaceCarPhysics::Update);
-        // lrTimeStep.x is the frame dt -- see RaceCarPhysics.h for the recovery.
-        //
-        // ⭐⭐ SIGNATURE CONFORMED 2026-08-06 (UpdateVehiclePhysics wave). The DWARF declares
-        // this VIRTUAL (VehiclePhysics.h:1084, vtable slot +0xC -- exactly the slot
-        // VehicleManager::UpdateVehiclePhysics dispatches through at 0x82645A34/0x82645A5C)
-        // with `(VecFloat, VecFloat, const Matrix44Affine*, const BrnPlayerDriverControls*,
-        // bool, bool, bool, Random&)`. The four `s32 a2/a5/a6/a7` placeholders are now
-        // RECOVERED from that call site: a2 = the manager's camera matrix, a5 = the
-        // player-aftertouch-additive flag, a6 = (meShowtimeBehaviour == 2), a7 = the
-        // manager's CgsNumeric::Random. The two vector args KEEP this tree's trailing
-        // position (an established documented deviation: the console passes them in v1/v2
-        // regardless of declaration order) and lbApplyAftertouch is re-named to what the
-        // caller actually passes (the manager's mbImpactTime byte, r6). Kept NON-virtual as
-        // modelled -- every call site's static type is the exact dynamic type, and the
-        // vtable head carries its own open flags (do not grow it silently).
-        void Update(const rw::math::vpu::Matrix44Affine* lpCameraMatrix,
-                    const BrnPlayerDriverControls* lpControls, bool lbImpactTime,
-                    bool lbPlayerAftertouchForceAdditive, bool lbShowtimeAllowed,
-                    CgsNumeric::Random& lrRandom,
-                    Vector3 lrPassThroughV1, Vector3 lrTimeStep);
+        // DecFIGS declares the canonical virtual signature at VehiclePhysics.h:1084.
+        // Breaker independently confirms its ABI: sim/game time arrive in v1/v2, followed by
+        // camera/controls/three bools/Random in r4..r9; the vtable dispatch uses slot +0x0C.
+        // The declaration lives on the canonical virtual surface above.
 
         // ----- ADDITIVE GROW (C11 group): the crash master-gate accessors the TrafficPhysics layer
         //       consults. (DWARF BrnSimpleVehiclePhysics.h :285 IsCrashing / .cpp:805 SetCrashing.)
@@ -332,7 +343,7 @@ namespace Vehicle
         // corresponds to. MEASURED: it was one of six such declarations that made VehiclePhysics.cpp
         // unlinkable (LNK2019). The name is now simply INHERITED. SetCrashing stays: it is a real
         // virtual override with a body in this TU. -----
-        virtual void SetCrashing();
+        void SetCrashing() override;
 
         // @0x825D3720 -- the per-frame steering model (577 X360 insns, standalone; also called by
         // UpdateDriving @0x82638354 and UpdateCrashing @0x82638F6C, and by RaceCarPhysics::Update
@@ -420,7 +431,9 @@ namespace Vehicle
         //       +0x40) and the +0x60 angular-velocity register through these (the host vptr is 8
         //       bytes wide -- the stunt code must NOT touch raw console byte offsets). -----
         const Matrix44Affine& GetTransform() const { return mTransform; }
-        const Vector3& GetPosition() const { return mTransform.wAxis; }
+        // DecFIGS VehiclePhysics.h:1228 declares this BY VALUE. Breaker inlines the
+        // same +0x40 transform-row load throughout StuntOffencesManager.
+        Vector3 GetPosition() const { return mTransform.wAxis; }
         // The +0x60 angular-velocity register. This slice used to call it mLocalVelocity and declare
         // its own copy; +0x60 is base+0x50 == ExternallySimulatedBody::mAngularVelocity, so the
         // duplicate is retired and this reads the base member. UpdateInAirRotations integrates it
@@ -457,8 +470,8 @@ namespace Vehicle
         //    prologue + one epilogue, and VehiclePhysics::Destruct starts at 0x8262DD58.
         //
         // ---- Reset(Vector3 lvVelocity) @0x825FDD78, 0x825FDD78..0x825FE118 (232 instrs) --------
-        //   SimpleVehiclePhysics::Reset();                       // 0-arg overload -- @0x825D9A58
-        //                                                        // builds its OWN zero (vspltisw128)
+        //   SimpleVehiclePhysics::Reset(lvVelocity);             // Vector3 overload @0x825D9A58;
+        //                                                        // v1 is ABI-real, body-unused
         //   if (mpAttribs == NULL) {                             // lwz r11,0x720(this) ; beq
         //       maWheels[0..3].Reset(0);                         // this+0x130/0x210/0x2F0/0x3D0
         //       mEngine.Reset(0);                                // this+0xF00
@@ -531,8 +544,8 @@ namespace Vehicle
         //   mvSideForceMag_..._TimeSinceLastBoostKick_....z          = 0 // +0x1040 LANE Z ONLY
         //   mvTimeSinceHardLanding_..._CarCarResponse_....z          = 0 // +0x1070 LANE Z ONLY
         //   mvSpeedOnLastCrashMPH_TimeCrashing_...                   = 0 // +0xEF0 (whole register)
-        //   SimpleVehiclePhysics::Reset();                               // 0-arg base @0x825D9A58
-        //   mbFrozen = false;                                            // +0x70   <- SEE CORRECTION
+        //   SimpleVehiclePhysics::Reset(Vector3(0));                     // @0x825D9A58
+        //   mbFrozen = false;                                            // inlined 0-arg-wrapper tail
         //   Reset(Vector3(0,0,0));                                       // the Vector3 overload
         //
         //   ⚠️⚠️ TWO CORRECTIONS TO THE DECODE THAT USED TO SIT HERE. It ended in an elided line,
@@ -579,9 +592,8 @@ namespace Vehicle
         // It is BODIED in VehiclePhysics.cpp as of this wave, so Reset/Construct are unblocked.
         //
         // Reset(Vector3) is BODIED in VehiclePhysics.cpp as of this wave, from the decode above.
-        // ⚠️ It HIDES SimpleVehiclePhysics::Reset() (the 0-arg base overload) -- which is exactly
-        // what the console does, and the body calls the base one explicitly-qualified, as the X360
-        // does out of line at 0x825D9A58.
+        // It hides both base overloads by C++ name lookup; its body explicitly calls the base
+        // Vector3 overload, exactly matching the X360 branch target @0x825D9A58.
         //
         // ⭐ Construct() is BODIED TOO as of 2026-08-03. The three members it needed --
         // mAIVehicleAttribs / mPlayerVehicleAttribs (+0x730/+0xAA0) and mvSpringMassScalers
@@ -600,6 +612,10 @@ namespace Vehicle
         // Its callers are VehicleManager::Construct, VehicleManager::PrepareData and
         // TrafficPhysics::Construct.
         void Construct();
+
+        // @0x8262DD58: paired teardown/reset path.  This is an explicit engine lifecycle method,
+        // not the C++ destructor.
+        void Destruct();
 
         // ==========================================================================================
         // ⛔⛔ SIGNATURE CORRECTED 2026-08-11 (the create-drain wave). THIS DECLARATION WAS A FORK.
@@ -767,9 +783,9 @@ namespace Vehicle
         // @0x825B81A8: the water "hard kill". When the representative contact's surface id maps to a
         // water surface AND the depth scalar (mfWaterDepth, +0x590) is below a threshold, zeroes the
         // linear & angular velocity and the force/impulse accumulators -- the car stops dead and sinks
-        // (no buoyancy). The DWARF signature takes the frame controls + dt though the X360 body reads
-        // neither (they exist so it slots into the UpdateDriving phase chain uniformly).
-        void UpdateInWaterBehaviour(const BrnPlayerDriverControls* lpControls, VecFloat lvfDeltaTime);
+        // (no buoyancy). DecFIGS declares only a VecFloat dt; Breaker receives it in v1 but does not
+        // read it (the uniform phase-chain argument is behaviorally dead in this body).
+        void UpdateInWaterBehaviour(VecFloat lvfDeltaTime);
 
         // @0x825FC8D8: tick the queued air-ram impulses. Walks the SET bits of mUsedAirRams (active
         // slots); for each, decays mfTimerTillFire by dt and, when it crosses 0, fires the slot's
@@ -791,7 +807,7 @@ namespace Vehicle
         // `mfCarGroundCheckExtent * KF_CAR_GROUND_DISTANCE_INVERTED_SCALE + 0.5`, accounting for the
         // car's own vertical extent when it is upside down. Spelled f64 to match the X360 ABI (the
         // value comes back in f1 as a double; the source return type is float32_t).
-        f64 GetCarGroundDistanceCheck() const;
+        f32 GetCarGroundDistanceCheck();
 
         // ==========================================================================================
         // ⭐⭐ THE DRIVING SPINE (orchestrator wave, 2026-08-07). The per-car frame chain that
@@ -821,8 +837,9 @@ namespace Vehicle
         // torque core -- STILL A LOUD TRAP, its own wave) and, when not frozen,
         // ApplyEngineForcesOntoWheels. Register map recovered at the UpdateEngine call site: f1..f5 =
         // gas/brake/steering/fwdSpeed/mfBoostMaxSpeedScale, r6 = mbHandBrake, v1 = dt.
-        void ApplyEngineForces(f32 lfGas, f32 lfBrake, f32 lfSteering, f32 lfForwardSpeed,
-                               f32 lfBoostMaxSpeedScale, bool lbHandBrake, VecFloat lvfTimeStep);
+        void ApplyEngineForces(f32 lfGas, f32 lfBrake, bool lbHandBrake, f32 lfSteering,
+                               f32 lfVehicleZSpeed, f32 lfBoostMaxSpeedScale,
+                               VecFloat lvfTimeStep);
 
         // @0x825FB000 (128): distribute the engine drive force onto the wheels' angular-velocity
         // integration accumulators (BODIED). Scales mEngine.GetEngineDrive() by the counter-steer
@@ -831,8 +848,8 @@ namespace Vehicle
         // handbrake above 5 mph -- locks the drive into the rear pair only. Register map from the
         // ApplyEngineForces call site: f1 = drive scale, f2 = forward speed, f3 = boost max-speed
         // scale, r5 = handbrake.
-        void ApplyEngineForcesOntoWheels(f32 lfDriveScale, f32 lfForwardSpeed,
-                                         f32 lfBoostMaxSpeedScale, bool lbHandBrake);
+        void ApplyEngineForcesOntoWheels(f32 lfTorqueFactor, bool lbHandBrake,
+                                         f32 lfVehicleZSpeed, f32 lfBoostMaxSpeedScale);
 
         // @0x825D0A50 (102): shift mbHasAir into mbHadAirLastFrame, then re-derive mbHasAir: no
         // wheel has traction, the (in-water && above-ground-valid) depth test passes
@@ -851,9 +868,10 @@ namespace Vehicle
         // @0x82638148 (433): ⭐⭐ THE ORDERER. The exact phase chain is transcribed in the body;
         // every stage is bracketed by ExternalPhysicsBody::CheckState with the console's own
         // stage strings ("Before driving update" ... "End of driving update").
-        void UpdateDriving(const rw::math::vpu::Matrix44Affine* lpCameraMatrix,
+        void UpdateDriving(VecFloat lvfTimeStep,
+                           const rw::math::vpu::Matrix44Affine* lpCameraMatrix,
                            const BrnPlayerDriverControls* lpControls,
-                           CgsNumeric::Random& lrRandom, VecFloat lvfTimeStep);
+                           CgsNumeric::Random& lrRandom);
 
         // @0x8261E4F0 (1130): ⭐⭐ THE WHEEL ORCHESTRATOR -- BODIED 2026-08-07 (wheel-cluster
         // wave) in VehiclePhysics.cpp, with its four exclusive helper callees below. The full
@@ -957,7 +975,7 @@ namespace Vehicle
         // the same slot. UpdateFreezing dispatches through +0x14, so the distinction is live:
         // traffic never reads showtime state, race cars do. RaceCarPhysics.h's existing
         // declaration is the override.
-        virtual bool IsPlayerVehicleActuallyInShowtime() const { return false; }
+        // Declared in ABI order on the canonical virtual surface near the class head.
 
         // ----- ADDITIVE GROW (aero/downforce group) -----
         // @0x825D0840: the aerodynamic down/drag force magnitude, the textbook quadratic
@@ -971,7 +989,7 @@ namespace Vehicle
         // exports; carried as honest flagged-0 placeholders (faithful-but-inert) per project rule
         // -- the formula + offsets are exact, the numeric output stays 0 until the seeds are
         // recovered from the XEX .rdata. NEVER fabricated.
-        Vector3 GetDownForce() const;
+        VecFloat GetDownForce();
 
         // ----- ADDITIVE GROW (surface-response group): the per-surface grip/drag/roughness
         //       lookups. Each reads a 6-bit surface id from a RoadContact CollisionTag
@@ -980,40 +998,36 @@ namespace Vehicle
         //       UpdateInWaterBehaviour's identical extraction for the same CollisionTag type),
         //       indexes a global per-surface property table, and blends with a lane
         //       of mpAttribs->mBaseAttribs.mvFrontSurfaceGripFactor_RearSurfaceGripFactor_SurfaceRoughnessFactor_SurfaceLinearDragFactor.
-        //       FLAG (runtime data): the per-surface tables (grip unk_82FB8890, drag unk_82FB8BD0,
-        //       roughness unk_82FB8DE0, the global roughness scale unk_82FB9220 and the optional
-        //       wet/condition multiplier unk_82FB9EC0) are RUNTIME-LOADED scratch globals, not
-        //       .rdata in the function exports -- carried as honest flagged-0 placeholders
-        //       (faithful-but-inert): the surface-id extraction, the lerp/scale math and the
-        //       attrib lanes are EXACT; the looked-up property stays 0 until the tables are
-        //       recovered. NEVER fabricated. The debug "properties loaded" / surface-id-bound
-        //       asserts are elided (debug-build guards, no effect on output).
+        //       The per-surface tables are zero-initialised, then populated from generated surface
+        //       attributes by VehicleManager::ReadSurfaceProperties @0x825C7BB8 (roughness, grip,
+        //       linear drag and water flag for every used surface). The global roughness scale is
+        //       the image-pinned 0.2f static-init value at unk_82FB9220. These lookups are therefore
+        //       live runtime data, not flagged-zero placeholders; the "properties loaded" and
+        //       surface-id-bound debug asserts are retained in the bodies.
 
         // @0x825D51B8: per-wheel surface grip multiplier. result = 1 - (1 - gripTable[id]) * blend,
         //   blend = mBaseAttribs.mvFrontSurfaceGripFactor_RearSurfaceGripFactor_SurfaceRoughnessFactor_SurfaceLinearDragFactor lane .x (FRONT, leWheel<2) or .y (REAR); optional global wet
         //   multiplier when enabled. A lerp toward 1.0 by (1 - blend).
-        Vector3 GetSurfaceGrip(EVehicleDrivenWheel leWheel) const;
+        VecFloat GetSurfaceGrip(EVehicleDrivenWheel leWheel) const;
 
         // @0x825D5328: per-wheel surface roughness = roughTable[id] * globalRoughScale *
         //   mBaseAttribs.mvFrontSurfaceGripFactor_RearSurfaceGripFactor_SurfaceRoughnessFactor_SurfaceLinearDragFactor lane .z. Feeds UpdateRoadNoise.
-        Vector3 GetSurfaceRoughness(EVehicleDrivenWheel leWheel) const;
+        VecFloat GetSurfaceRoughness(EVehicleDrivenWheel leWheel) const;
 
         // @0x825D50A8: vehicle linear-drag from a single representative contact (NOT per-wheel) =
         //   dragTable[id] * mBaseAttribs.mvFrontSurfaceGripFactor_RearSurfaceGripFactor_SurfaceRoughnessFactor_SurfaceLinearDragFactor lane .w. Reads the representative-contact tag below.
-        Vector3 GetSurfaceLinearDrag() const;
+        VecFloat GetSurfaceLinearDrag() const;
 
         // ----- ADDITIVE GROW (surface-grip/drag/friction group, C05): the road-noise rumble and the
         //       two per-wheel tyre-friction solvers. Bodies in VehiclePhysics.cpp. -----
 
-        // @0x825F6980: surface roughness -> stochastic rumble accumulated into each grounded wheel.
-        // Per frame it draws floats from the shared Random ring (the inlined Random::AddRandomFloatToBuffer
-        // LCG, full 64-bit multiplier 0x5851F42D4C957F2D, +1, 8-entry ring) -- one pre-loop draw shared
-        // across wheels plus one draw per grounded wheel -- combines them into a small [0,1) noise term,
-        // scales by GetSurfaceRoughness(wheel), the per-vehicle road-noise factor (mpAttribs->mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce
-        // .z) and the body-frame speed (mfSpeedMPH @+0x6C0), clamps to 1.0 and accumulates into the
-        // wheel's road-noise register. Takes the shared Random by reference (DWARF: UpdateRoadNoise(
-        // VecFloat, Random&); the leading VecFloat dt is unused by the rumble math and elided here).
-        void UpdateRoadNoise(CgsNumeric::Random& lrRandom);
+        // @0x825F6980: displace each grounded wheel's road-contact position along its contact normal
+        // by stochastic surface roughness. One RandomFloat draw is shared across all wheels and one
+        // is consumed per grounded wheel; the result is scaled by GetSurfaceRoughness and
+        // min(mfSpeedMPH / GetMaxSpeed, 1). Breaker 0x825F6AE0..0x825F6B84 proves the destination
+        // is mRoadContact.mPosition (wheel+0x00), not a force/integration lane. DecFIGS declares
+        // UpdateRoadNoise(VecFloat, Random&); the timestep arrives in v1 but is not consumed.
+        void UpdateRoadNoise(VecFloat lvfTimeStep, CgsNumeric::Random& lrRandom);
 
         // @0x825FB458: the per-axle tyre-friction workhorse -- resolves BOTH wheels of an axle at once
         // in 2-wide SIMD (left lane0 / right lane1). Builds longitudinal & lateral unit directions
@@ -1082,12 +1096,8 @@ namespace Vehicle
 
         // @0x827E24E8: returns the showtime deformation scale. On X360 this is a leaf returning a
         // single constant (lfs from flt_82001C98 == 1.0). The richer mass-scaled variant lives in
-        // RaceCarPhysics; the base VehiclePhysics simply returns 1.0. Spelled f64 to match the
-        // X360 ABI (the value comes back in f1 as a double).
-        f64 GetShowtimeDeformationScale() const
-        {
-            return 1.0;
-        }
+        // RaceCarPhysics; the base VehiclePhysics simply returns 1.0f. Declared on the canonical
+        // virtual surface above with DecFIGS' float32_t return type.
 
         // @0x825BFEF0: true when the car is being counter-steered while moving slowly -- used by
         // UpdateWheels / ApplyEngineForces to soften the handling at low speed. Logic recovered
@@ -1159,21 +1169,21 @@ namespace Vehicle
         //   steering direction: angle = acos(dot(normalize(mLinearVelocity), forwardAxis @+0x30)),
         //   SIGNED by dot(unitVel, rightAxis @+0x10), then speed-blended (authority shrinks with
         //   speed via mvLatDriftForceFactor_..._.w = CurrentDriftAngle lane) and clamped.
-        f32 GetSteeringAngle() const;
+        virtual VecFloat GetSteeringAngle() const;
 
         // @0x825D34D8: caps the wheel angle during a slide. Builds a steering direction from the
         //   stiffened steer input, takes acos against the velocity, scales to a max via
         //   mpAttribs->mvDriftParams (+0xF0) lane .x with deg->rad (0.017453292), returns the angle.
-        f32 GetMaxSteeringAngleDuringDrift(f32 lfSteeringInput) const;
+        f32 GetMaxSteeringAngleDuringDrift(f32 lfSteeringInput);
 
         // @0x825CFB70: quartic stick-stiffening: s' = -1 - sign(s)*(s^4 * 1.25). Softens centre,
         //   sharpens the extremes. Writes back lrControls.mfSteering; when on a wheel device it
         //   blends the steering direction toward the body forward (unk_82FB9370 weight).
-        void ModifyControlsForSteeringWheelInput(BrnPlayerDriverControls& lrControls) const;
+        void ModifyControlsForSteeringWheelInput(BrnPlayerDriverControls* lpControls);
 
         // @0x825CFC68: re-maps steer to drift control while sliding (gated on mu8DriftState!=0 and
         //   the original-controls drift-override byte). Direction signed by the drift state.
-        void ModifyControlsForDrift(BrnPlayerDriverControls& lrControls) const;
+        void ModifyControlsForDrift(BrnPlayerDriverControls* lpControls);
 
         // ⭐⭐ SIGNATURES CORRECTED 2026-08-03 (the "cheap prize" wave). The DecFIGS DWARF declares
         //    the WHOLE drift family with a TRAILING `VecFloat` time-step that this header had
@@ -1230,25 +1240,30 @@ namespace Vehicle
 
         // @0x825D2B20: the sideways world-space force that steps the rear out. Tangent-projects the
         //   lateral force against the ground normal (+0x580) so drift never pushes into/off the road.
-        void ApplyDriftLatForce(f32 lfSlipAngle, f32 lfSpeed, f32 lfSteeringDir, f32 lfTimeStep);
+        void ApplyDriftLatForce(VecFloat lvfAbsDriftScale, VecFloat lvfSpeedMPS,
+                                VecFloat lvfSteering, VecFloat lvfBrake,
+                                VecFloat lvfGas, VecFloat lvfTimeStep);
 
         // @0x825D25A0: a world-space yaw torque rotating the car toward the drift direction (gated on
         //   the computed local drift angle AND mDriftFlags & KU_DRIFT_FLAG_APPLY_TORQUE).
-        void ApplyDriftYaw(const BrnPlayerDriverControls* lpControls, f32 lfSlipAngle, f32 lfSpeed);
+        void ApplyDriftYaw(const BrnPlayerDriverControls* lpControls,
+                           VecFloat lvfAbsSteering, VecFloat lvfAbsDriftScale);
 
         // @0x825D2F78: a gentle straightening yaw when NOT actively drifting (self-aligning torque
         //   signed by mu8DriftState), gated on the per-car drift push-time attrib.
-        void ApplyNaturalDriftForces();
+        void ApplyNaturalDriftForces(VecFloat lvfTimeStep, VecFloat lvfDriftAngle,
+                                     VecFloat lvfFactor, VecFloat lvfGas, VecFloat lvfBrake);
 
         // @0x825D2270: keeps a sliding car from scrubbing off speed -- when MaintainedSpeed (the
         //   +0x1000 .y lane) exceeds current speed AND throttle >= 0.3 AND grounded, adds a ground-
         //   tangent world impulse along a Z/velocity blend (mvPropSpeedMaintainAlong* @+0x1050).
-        void MaintainDriftSpeed(const BrnPlayerDriverControls* lpControls, f32 lfTimeStep);
+        void MaintainDriftSpeed(const BrnPlayerDriverControls* lpControls,
+                                Vector3 lvDirection, VecFloat lvfSpeed);
 
         // @0x825CFA10: the handbrake latch+timer with hysteresis around input 0.1. Engages above
         //   0.1; releases below 0.1 only once a drift is active OR the on-time threshold passes. The
         //   two timers (TimeHandbrakeHasBeenOn / TimeSinceLastHandBrake) live in the +0x1080 lane.
-        void UpdateHandBrake(f32 lfHandBrakeInput, f32 lfTimeStep);
+        void UpdateHandBrake(VecFloat lvfTimeStep, f32 lfHandBrakeInput);
 
         // ----- ADDITIVE GROW (C07 boost/speed-match group): the boost regime classifier + its two
         //       force appliers + the AI speed-match assist (bodies in VehiclePhysics.cpp). All boost
@@ -1266,19 +1281,19 @@ namespace Vehicle
         //   mbInBoostKick = (CurrentBoostKickTime > TimeBoosting) and dispatches Apply{Boost,Normal}*Force.
         //   The boost-state timers (+0x1040) are advanced every path (TimeBoosting += dt while boosting,
         //   else reset; TimeSinceLastBoostKick accumulates the cooldown).
-        void UpdateBoost(const BrnPlayerDriverControls* lpControls, f32 lfTimeStep);
+        void UpdateBoost(BrnPlayerDriverControls* lpControls, VecFloat lvfTimeStep);
 
         // @0x825D30C8: sustained boost. F = Mass * NormalBoostAcceleration along the body forward axis,
         //   applied at the NormalBoostHeightOffset local position. Gated on mbAllWheelsHaveTraction
         //   (+0x135B). Advances TimeSinceLastBoostKick by dt and zeroes CurrentBoostKickTime.
-        void ApplyNormalBoostForce(f32 lfTimeStep);
+        void ApplyNormalBoostForce(VecFloat lvfTimeStep);
 
         // @0x825D3228: the boost KICK -- a larger forward impulse applied at the off-centre
         //   BoostKickHeightOffset to generate a wheelie (pitch-up torque). It then SELF-LIMITS: once the
         //   pitch exceeds sin(kfMaxWheelieAngle deg->rad), it damps the roll/pitch components of the
         //   velocity/impulse rows (+0x60/+0x100/+0x120) by kfWheelieLimitDamping. Resets the kick
         //   cooldown lane (TimeSinceLastBoostKick).
-        void ApplyBoostKickForce(f32 lfTimeStep);
+        void ApplyBoostKickForce(VecFloat lvfTimeStep);
 
         // @0x825D4AD8: the AI rubber-band speed-match assist. Gated on mbAllWheelsHaveTraction (+0x135B)
         //   + the controls' speed-match mode/target. Computes (targetSpeed - currentForwardSpeed), clamps
@@ -1286,7 +1301,7 @@ namespace Vehicle
         //   wheel integration accumulators (front pair scaled by 1/maWheels[0].mSlipVariables.w, rear pair
         //   by 1/maWheels[2].mSlipVariables.w) and folds the same clamped delta back into mLinearVelocity
         //   along the forward axis. A soft, capped nudge -- never a hard velocity set.
-        void UpdateSpeedMatch(const BrnPlayerDriverControls* lpControls, f32 lfTimeStep);
+        void UpdateSpeedMatch(const BrnPlayerDriverControls* lpControls, VecFloat lvfTimeStep);
 
         // AddLocalForce is the BASE's 4-argument form (ExternalPhysicsBody @0x825A1670). The
         // 2-argument declaration that used to sit here dropped both rw::physics::InputSpace tags,
@@ -1472,17 +1487,18 @@ namespace Vehicle
         // steering bank, both recovered from the stationary-wheel-pose tail of
         // VehicleManager::UpdateVehiclePhysics @0x82645F58..0x82645FA0:
         //   GetMaxSteeringAngle (DWARF :1745; `lvx +0x1030 ; vspltw lane 2` -- the .z lane,
-        //   de-SIMD'd to f32 per the project convention for VecFloat returns), and
+        //   returned as the declared VecFloat), and
         //   OverrideWheelAngle (DWARF :1144, VecFloat arg; its console inline is
         //   SetPackedSteeringAngle+SetX -- write lane .x of the +0xFE0 steering register,
         //   `vrlimi128 v13, v0, 8, 0 ; stvx128`).
-        f32  GetMaxSteeringAngle() const
+        VecFloat GetMaxSteeringAngle() const
         {
-            return mvLatDriftForceFactor_DriftPushTime_MaxSteeringAngle_CurrentDriftAngle.z;
+            const f32 lfAngle = mvLatDriftForceFactor_DriftPushTime_MaxSteeringAngle_CurrentDriftAngle.z;
+            return VecFloat{ lfAngle, lfAngle, lfAngle, lfAngle };
         }
-        void OverrideWheelAngle(f32 lfAngleRadians)
+        void OverrideWheelAngle(VecFloat lvfAngleRadians)
         {
-            mvSteeringAngle_Steering_PrevSteering_DriftGasLetOffAmount.x = lfAngleRadians;
+            mvSteeringAngle_Steering_PrevSteering_DriftGasLetOffAmount.x = lvfAngleRadians.x;
         }
 
         // @+0x1050 (4176): lane .x = PropSpeedMaintainAlongZ, .y = PropSpeedMaintainAlongVel
@@ -1579,6 +1595,32 @@ namespace Vehicle
         // written by UpdateLinearVelocityMagnitude (`addi r10,r3,0x1340 ; stvx128`) and read by
         // GetLinearVelocityDirection / GetLinearVelocityMagnitude. Pinned BY NAME.
         Vector3Plus mNormLinearVelocityMag;
+
+        // DecFIGS VehiclePhysics.h:431 / :2194. Both accessors are inlined in
+        // Breaker. GetTimeDrifting is the lane-2 splat of the +0x1010 drift
+        // register (CheckForDrift @0x82613834..0x82613864). The direction
+        // accessor returns the xyz portion of +0x1340; the tailgating paths then
+        // explicitly normalize that Vector3.
+        VecFloat GetTimeDrifting() const
+        {
+            const f32 lfTimeDrifting =
+                mvTimeToReachTargetDriftSlipRecip_StartSlip_TimeDrifting_BrakeScale.z;
+            return VecFloat{ lfTimeDrifting, lfTimeDrifting,
+                             lfTimeDrifting, lfTimeDrifting };
+        }
+
+        Vector3 GetLinearVelocityDirection() const
+        {
+            return mNormLinearVelocityMag.GetVector3();
+        }
+
+        // DecFIGS VehiclePhysics.h:1180/:1267/:1318. Breaker inlines all three
+        // against their named members: HasAir at +0x1350 in SetCurrentCarInAirStatus,
+        // PreviousControls at +0x1090 (mfHandBrake at +0x0C) in CheckForHandBreakTurns,
+        // and AllWheelsHaveTraction at +0x135B in that function's stabilise branch.
+        bool HasAir() const { return mbHasAir; }
+        const BrnPlayerDriverControls* GetPreviousControls() const { return &mPreviousControls; }
+        bool GetAllWheelsHaveTraction() const { return mbAllWheelsHaveTraction; }
 
         // @+0x1370: the previous-frame physics transform, the "from" matrix of GetTransformDelta
         // (asm: `addi r11,r4,0x1370 ; lvx128` of the four rows, whose orthonormal 3x3 is inverted
@@ -1903,23 +1945,24 @@ namespace Vehicle
         // ⭐ BODIED 2026-08-11 (suspension-springs wave). Its "PARTIAL / un-pinned lane" verdict is
         // RETRACTED in the .cpp: it writes maWheels[i].mPosition.y -- the exact input the grounded
         // arm of UpdateSuspensionSprings reads -- and every offset it touches is a committed member.
-        void ApplyWheelWeight();                            // @0x825F7898
+        void ApplyWheelWeight(VecFloat lvfTimeStep);        // @0x825F7898
         // @0x825F9DD0 -- ⭐⭐ THE MassOnWheel WRITER (the per-frame load pass). dt IS AN ARGUMENT:
         // UpdateSuspension parks the incoming vector (`vmr128 v127,v1`) and re-issues `vmr128 v1,v127`
         // before this call at 0x8261F6EC, and the callee's first instruction is `vrefp v13,v1` -- the
         // 1/dt that turns the velocity delta into an acceleration. The old no-arg spelling was a slice
         // artifact of the [partial] body that never used dt.
         void CalculateWeightTransfer(VecFloat lvfTimeStep);
-        void ApplySuspensionForces();                       // @0x825D1EE8 (lever arm + direction + gate corrected 2026-08-11)
-        void UpdateSuspension(f64 lfTimeStep);              // @0x8261F698 CLEAN (the virtual spine)
+        void ApplySuspensionForces(VecFloat lvfTimeStep);   // @0x825D1EE8 (lever arm + direction + gate corrected 2026-08-11)
+        // UpdateSuspension(VecFloat) is declared on the canonical virtual surface above.
         // ⭐ BODIED 2026-08-11 (suspension-springs wave); the BLOCKED verdict is RETRACTED in the
         // .cpp. ⚠️ ARITY CONFORMED at the same time: UpdateSuspension @0x8261F698 parks the
-        // incoming dt (`vmr128 v127,v1`) and re-issues `vmr128 v1,v127` before EACH of its four
-        // phase calls, and the callee integrates with it (0x825F9058/0x825F9074). The committed
+        // incoming dt (`vmr128 v127,v1`); ApplyWheelWeight is called while incoming v1 remains
+        // untouched, and v1 is explicitly restored for later phase calls. The integrating callees
+        // consume it (for example 0x825F9058/0x825F9074). The committed
         // no-parameter form was a slice artifact -- the same shape as SetupSuspension's, inverted.
         void UpdateSuspensionSprings(VecFloat lvfTimeStep); // @0x825F7AF0
-        void UpdateSuspensionPostSimulation();              // @0x825F6BB0 BLOCKED (degenerate VMX giant)
-        void StabiliseAfterHardLanding();                   // @0x825D1890 PARTIAL (powf settle blocked)
+        void UpdateSuspensionPostSimulation(VecFloat lvfTimeStep); // @0x825F6BB0
+        void StabiliseAfterHardLanding(VecFloat lvfTimeStep);      // @0x825D1890
 
         // ===== ADDITIVE GROW (C09 crash/contact-impulse group) =====
         // The contact-impulse handlers + the slam enqueue/tick. (SetCrashing override + UpdateShunt +
@@ -1949,30 +1992,33 @@ namespace Vehicle
         // arrives in v3, so at least one further vector-register parameter (very likely a VecFloat)
         // sits between them and is not yet recovered. The INTEGER argument order below is
         // asm-proven; the vector argument list may still grow. No literal tag is invented anywhere.
-        void ApplyCarContactImpulse(const Vector3& lvLocalImpulse,
+        void ApplyCarContactImpulse(Vector3 lvLocalImpulse,
                                     rw::physics::InputSpace leImpulseSpace,
-                                    const Vector3& lvContactPosition,
+                                    Vector3 lvWorldImpulseDirection,
+                                    Vector3 lvContactPosition,
                                     rw::physics::InputSpace lePositionSpace);                                // @0x825D4C10
-        void ApplyCrashedContactImpulse(const Vector3& lvLocalImpulse,
+        void ApplyCrashedContactImpulse(Vector3 lvLocalImpulse,
                                         rw::physics::InputSpace leImpulseSpace,
-                                        const Vector3& lvContactPosition,
+                                        Vector3 lvContactPosition,
                                         rw::physics::InputSpace lePositionSpace,
                                         bool lbZeroResponse);                                                // @0x825D4D50
-        void ApplyWallContactImpulse(const Vector3& lvLocalImpulse,
+        void ApplyWallContactImpulse(Vector3 lvLocalImpulse,
                                      rw::physics::InputSpace leImpulseSpace,
-                                     const Vector3& lvContactNormal,
+                                     Vector3 lvWorldImpulseDirection,
+                                     Vector3 lvContactPosition,
                                      rw::physics::InputSpace lePositionSpace);                               // @0x825FEA18
-        void ApplyShowtimeContactImpulse(const Vector3& lvLocalImpulse,
+        void ApplyShowtimeContactImpulse(Vector3 lvLocalImpulse,
                                          rw::physics::InputSpace leImpulseSpace,
-                                         const Vector3& lvContactPosition,
+                                         Vector3 lvContactPosition,
                                          rw::physics::InputSpace lePositionSpace,
                                          bool lbZeroResponse);                                               // @0x825D4E00
-        void AddSlam(bool lbTaper, f32 lfDuration, f32 lfSteer, f32 lfRecoveryTime, s8 li8RaceCarId);        // @0x825D4870
-        // __fastcall with three VMX128 float args the Hex-Rays signature drops: speed-increase delta,
-        // shunt direction (stored verbatim, not normalized), and a Life-register seed splat.
-        void AddShunt(f32 lfSpeedIncrease, const Vector3& lvShuntDirection, f32 lfLifeSeed,
-                     s8 li8RaceCarId);                                                                       // @0x825FC630
-        void UpdateSlam(f32* lpControlsCopy, f32 lfFrameTime);                                               // @0x825D4950
+        s8 AddSlam(bool lbTaper, f32 lfDuration, f32 lfSteer, f32 lfRecoveryTime, s8 li8RaceCarId);          // @0x825D4870
+        // __fastcall with three VMX128 args the Hex-Rays signature drops: magnitude,
+        // shunt direction (stored verbatim, not normalized), and speed-increase-to-quit.
+        s8 AddShunt(VecFloat lvfMagnitude, Vector3 lvWorldDirection,
+                    VecFloat lvfSpeedIncreaseToQuit,
+                    s8 li8RaceCarId);                                                                        // @0x825FC630
+        void UpdateSlam(BrnPlayerDriverControls* lpControlsCopy, VecFloat lvfFrameTime);                     // @0x825D4950
         // ⚠️ RETIRED 2026-08-02: a 4-argument `GetImpulsesFromLocalImpulse(const Vector3&, const
         // Vector3&, Vector3&, Vector3&) const` used to sit here, marked "declare-only (base)". It was
         // not the base's function -- the base's is SIX arguments with the two InputSpace tags above,
@@ -1992,7 +2038,7 @@ namespace Vehicle
         // trap in VehiclePhysics.cpp is retired with it. UpdateCrashing @0x82638FC0 dispatches
         // the same slot when it AND-folds the wheels-on-ground run into mbAllWheelsHaveTraction.
         // RaceCarPhysics.h's existing declaration is the override.
-        virtual bool IsPlayerVehicleInShowtime() const { return false; }   // vtable +0x10
+        // Declared in ABI order on the canonical virtual surface near the class head.
 
         // ⭐⭐ VIRTUAL, IMAGE-ATTESTED (crash/shunt wave, 2026-08-09). Vtable slot +0x18 (DWARF
         // VehiclePhysics.h:1204). The base/traffic default @0x82C296C8 is `li r3,1 ; blr` (an
@@ -2001,7 +2047,7 @@ namespace Vehicle
         // carries @0x827E42B8 in this slot (its showtime-aware override, RaceCarPhysics.h:89).
         // UpdateCrashing dispatches it twice: to select the crash damping pair and to gate the
         // down-force + the synthetic-mass regime.
-        virtual bool IsCrashingNormally() const { return true; }   // vtable +0x18
+        // Declared in ABI order on the canonical virtual surface near the class head.
 
         // ⭐⭐ VIRTUAL, IMAGE-ATTESTED (crash/shunt wave, 2026-08-09). Vtable slot +0x28 (DWARF
         // VehiclePhysics.h:1514: `void UpdateAftertouch(const BrnPlayerDriverControls *,
@@ -2012,11 +2058,7 @@ namespace Vehicle
         // commit -- its asm SAVES v1 at entry, `vmr128 v121, v1` @0x8262EC08, the dropped
         // dt-argument trap again). UpdateCrashing dispatches it under
         // lbPlayerAftertouchForceAdditive.
-        virtual void UpdateAftertouch(const BrnPlayerDriverControls* /*lpControls*/,
-                                      const rw::math::vpu::Matrix44Affine* /*lpCameraMatrix*/,
-                                      VecFloat /*lvfTimeStep*/,
-                                      bool /*lbDoForceAdditiveAftertouch*/,
-                                      bool /*lbShowtimeAllowed*/) {}   // vtable +0x28
+        // Declared in ABI order on the canonical virtual surface near the class head.
 
         // ⚠️ NOT A CONSOLE FUNCTION. The layout gate for the two own-member blocks recovered above.
         // It is a STATIC MEMBER so that offsetof() reaches the protected members this class

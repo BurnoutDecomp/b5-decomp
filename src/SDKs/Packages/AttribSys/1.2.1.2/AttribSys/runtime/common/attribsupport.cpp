@@ -97,6 +97,20 @@ Collection* FindCollection(u64 luClassKey, u64 luCollectionKey)
     return lpClass->GetCollection(luCollectionKey);
 }
 
+// @0x82808400 -- identical two-stage resolve to FindCollection, except the
+// class collection lookup falls back to that class's default collection.
+Collection* FindCollectionWithDefault(u64 luClassKey, u64 luCollectionKey)
+{
+    if (!Database::IsInitialized())
+        return nullptr;
+
+    const Class* lpClass = GetDatabasePrivate()->mClasses.Find(luClassKey);
+    if (!lpClass)
+        return nullptr;
+
+    return lpClass->GetCollectionWithDefault(luCollectionKey);
+}
+
 // ===========================================================================
 // Attrib::RefSpec::operator= @ 0x8280DFB0
 // ===========================================================================

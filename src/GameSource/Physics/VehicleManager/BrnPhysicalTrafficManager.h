@@ -243,6 +243,10 @@ namespace CgsSceneManager { namespace SceneManagerIO { struct InputBuffer_Update
 namespace CgsSceneManager { namespace CgsCollision { struct CollisionGenerator; } }
 namespace CgsMemory { struct SimpleDataStreamProducer; struct SimpleDataStreamResultIterator; }
 
+// UpdateTrafficPhysicsPostSimulation only forwards this buffer to the joint-spy pass.
+// Class key matches CgsPhysicsSimulationModuleIO.h.
+namespace CgsPhysics { namespace PhysicsSimulationIO { struct OutputBuffer; } }
+
 namespace BrnPhysics
 {
 // Forward decl of the streamed deformation model spec (real home
@@ -696,6 +700,10 @@ public:
     void UpdateTrafficPhysics(f32 lfSimTimeStep, f32 lfGameTimeStep,
                               const Matrix44Affine* lpCameraMatrix,
                               bool lbImpactTime, bool lbUnknownFalse);
+    // X360 @0x826371D0; DecFIGS BrnPhysicalTrafficManager.h:191.
+    void UpdateTrafficPhysicsPostSimulation(
+        const CgsPhysics::PhysicsSimulationIO::OutputBuffer* lpSimModuleOutputBuffer,
+        f32 lfTimeStep);
     void PassNearbyCrashingTrafficIdsToRaceCarModule(
         VehicleManagerOutputInterface* lpVehicleManagerOutputInterface, Vector3 lPlayerPosition);
 
@@ -713,6 +721,11 @@ public:
                                 f32 lfTimeStep);
 
 private:
+    // The X360 post-simulation tail calls ResolveArticulatedJoints and then executes the
+    // DecFIGS-named ProcessJointSpys pass over lpSimModuleOutputBuffer.
+    void ProcessJointSpys(const CgsPhysics::PhysicsSimulationIO::OutputBuffer* lpSimModuleOutputBuffer);
+    void ResolveArticulatedJoints();
+
     // ⭐ 2026-08-03 (the un-pin wave). VehicleManager owns this object by value and reaches TWO of
     // its tables directly, with bare loads that fire none of the asserts the matching accessors do.
     // Both are asm-proven, and both used to be modelled as SIBLING members of VehicleManager at

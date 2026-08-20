@@ -76,11 +76,18 @@
 // =================================================================================================
 
 #include "GameSource/Physics/VehicleManager/BrnVehicleManager.h"
+#include "GameSource/Physics/VehicleManager/BrnVehicleConstants.h"
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleInputInterface.h"
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleOutputInterface.h"
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/B5PhysicsHandlingDebugComponent.h"
+#include "GameSource/AttribSys/Generated/classes/surfacelist.h"
+#include "GameSource/AttribSys/Generated/classes/surface.h"
+#include "GameSource/AttribSys/Generated/classes/physicssurface.h"
+#include "GameSource/AttribSys/Generated/classes/gameplaysurface.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"  // gpDebugPrint / gxMessageFilterFlags (the boot gates)
+
+#include <cmath>
 
 namespace BrnPhysics
 {
@@ -184,11 +191,54 @@ namespace Vehicle
         }
     }
 
-    // LINK STUB (UpdateVehiclePhysics wave): body not reconstructed yet.
-    void VehicleManager::ReadSurfaceProperties(u64)
+    // Breaker @0x825C7BB8; DecFIGS BrnVehicleManager.cpp:9410.
+    void VehicleManager::ReadSurfaceProperties(u64 luSurfaceListKey)
     {
-        CGS_ASSERT(false, "VehicleManager::ReadSurfaceProperties(Attribute::Key): link stub -- "
-                          "reconstruct from X360 @0x825C7BB8 (187 insns; AttribSys walk)");
+        Attrib::Gen::surfacelist lSurfaceList;
+        lSurfaceList.ChangeWithDefault(luSurfaceListKey);
+
+        // The console sanity-checks surface element 1's leading colour/vector. Its
+        // sign bits are cleared, every lane is compared with FLT_EPSILON, and CR6.EQ
+        // fires the assert only when NONE of the four lanes is greater than epsilon.
+        void* lpSampleRefData = lSurfaceList.Surfaces(1);
+        if (!lpSampleRefData)
+            lpSampleRefData = Attrib::DefaultDataArea(sizeof(Attrib::RefSpec));
+
+        Attrib::RefSpec* lpSampleRef = static_cast<Attrib::RefSpec*>(lpSampleRefData);
+        Attrib::Gen::surface lSampleSurface(
+            const_cast<Attrib::Collection*>(lpSampleRef->GetCollection()), nullptr);
+        const f32* lpSampleData = static_cast<const f32*>(lSampleSurface.GetAttributeData());
+        const f32 KF_EPSILON = 1.1920928955078125e-07f; // stru_8208F620.x
+        CGS_ASSERT(std::fabs(lpSampleData[0]) > KF_EPSILON ||
+                       std::fabs(lpSampleData[1]) > KF_EPSILON ||
+                       std::fabs(lpSampleData[2]) > KF_EPSILON ||
+                       std::fabs(lpSampleData[3]) > KF_EPSILON,
+                   "Surface list appears to be corrupt");
+
+        KI_NUM_USED_SURFACES = lSurfaceList.Num_Surfaces();
+        for (s32 liSurface = 0; liSurface < KI_NUM_USED_SURFACES; ++liSurface)
+        {
+            void* lpSurfaceRefData = lSurfaceList.Surfaces(static_cast<u32>(liSurface));
+            if (!lpSurfaceRefData)
+                lpSurfaceRefData = Attrib::DefaultDataArea(sizeof(Attrib::RefSpec));
+
+            Attrib::Gen::surface lSurface(
+                *static_cast<Attrib::RefSpec*>(lpSurfaceRefData), nullptr);
+            Attrib::Gen::gameplaysurface lGameplaySurface(lSurface.GameplaySurface(), nullptr);
+            Attrib::Gen::physicssurface lPhysicsSurface(lSurface.PhysicsSurface(), nullptr);
+
+            const f32 lfRoughness = lPhysicsSurface.Roughness();
+            const f32 lfLinearDrag = lPhysicsSurface.LinearDrag();
+            const f32 lfGrip = lPhysicsSurface.Grip();
+            KAVF_SURFACE_ROUGHNESS[liSurface] =
+                VecFloat{lfRoughness, lfRoughness, lfRoughness, lfRoughness};
+            KAVF_SURFACE_GRIP[liSurface] = VecFloat{lfGrip, lfGrip, lfGrip, lfGrip};
+            KAVF_SURFACE_LINEAR_DRAG[liSurface] =
+                VecFloat{lfLinearDrag, lfLinearDrag, lfLinearDrag, lfLinearDrag};
+            KAB_SURFACE_IS_WATER[liSurface] = lGameplaySurface.IsWater();
+        }
+
+        gbReadSurfaceProperties = true;
     }
 
     // ⭐⭐ 2026-08-11 (driving-path wave): the VehicleDriver::UpdateVehicle @0x825D7290 LINK STUB

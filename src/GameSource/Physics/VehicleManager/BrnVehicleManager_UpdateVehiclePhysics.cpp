@@ -51,6 +51,7 @@
 #include "SharedClasses/BrnSharedConstants.h"                                     // BrnUpdateSet
 #include "rw/math/vpu/vector3_operation.h"                                        // vpu::{Magnitude, Normalize, Dot, Abs, Add, Mult}
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/B5PhysicsHandlingDebugComponent.h" // BrnPhysics::Vehicle::DebugComponent (per-car tick)
+#include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/AttributeKey.h" // Attrib::StringToKey
 
 namespace BrnPhysics
 {
@@ -70,13 +71,12 @@ namespace Vehicle
     static bool gs_bOverrideForceFrozen = false;
 
     // qword_82FB7F10 -- the 64-bit AttribSys surface-list key UpdateVehiclePhysics passes
-    // to ReadSurfaceProperties (`ld r4, qword_82FB7F10` @0x82645144). FLAG (un-homed
-    // WRITER + storage home provisional): the global's seeding site is not yet identified
-    // in the tree (the attribsys prepare path owns it); until then it stays zero here.
+    // to ReadSurfaceProperties (`ld r4, qword_82FB7F10` @0x82645144). Breaker static
+    // initializer @0x82C5B5F8 calls Attrib::StringToKey("340654") and stores the u64 result.
     // DWARF spells the parameter type Attribute::Key; the committed Attribute::Key typedef
     // is u32 while the console load is 8 bytes -- width conflict FLAGGED at the
     // declaration (BrnVehicleManager.h), not compounded here.
-    static u64 gs_uSurfaceListKey = 0;
+    static const u64 gs_uSurfaceListKey = Attrib::StringToKey("340654");
 
     // The stationary-pose wheel-angle scale (rodata flt_8208FA8C == 1.3f, read off the
     // image). DWARF BrnVehicleManager.cpp:223 names the constant
@@ -500,14 +500,16 @@ namespace Vehicle
             //      v1/v2           = splat(lfSimTimerTimeStep) / splat(lfGameTimerTimeStep)
             CgsDev::PerfMonCpu::StartMonitor(gs_iUpdateVehiclesPM);
             maRaceCarVehicles[liCar].Update(
+                VecFloat{ lfSimTimerTimeStep, lfSimTimerTimeStep,
+                          lfSimTimerTimeStep, lfSimTimerTimeStep },
+                VecFloat{ lfGameTimerTimeStep, lfGameTimerTimeStep,
+                          lfGameTimerTimeStep, lfGameTimerTimeStep },
                 &mCameraMatrix,
                 maRaceCarDrivers[liCar].GetControls(),
                 mbImpactTime,
                 lbIsPlayerAftertouchAdditive,
                 meShowtimeBehaviour == 2u,
-                mRandom,
-                Vector3{ lfSimTimerTimeStep, lfSimTimerTimeStep, lfSimTimerTimeStep, lfSimTimerTimeStep },
-                Vector3{ lfGameTimerTimeStep, lfGameTimerTimeStep, lfGameTimerTimeStep, lfGameTimerTimeStep });
+                mRandom);
             CgsDev::PerfMonCpu::StopMonitor(gs_iUpdateVehiclesPM);
 
             // Per-car debug component tick (asm 0x82645A68..78; f1 = lfSimTimerTimeStep).
@@ -603,16 +605,18 @@ namespace Vehicle
         if (meStationaryPlayerWheelAngle == 0)
         {
             RaceCarPhysics& lrPlayer = maRaceCarVehicles[mePlayerActiveRaceCarIndex];
-            lrPlayer.OverrideWheelAngle(
-                -lrPlayer.GetMaxSteeringAngle() * (-KF_WHEEL_ANGLE_IN_CAR_SELECT_SCALE)  // flt_8209D0D4 == -1.3
-                * KF_DEG_TO_RAD);
+            const f32 lfAngle =
+                -lrPlayer.GetMaxSteeringAngle().x * (-KF_WHEEL_ANGLE_IN_CAR_SELECT_SCALE) // flt_8209D0D4 == -1.3
+                * KF_DEG_TO_RAD;
+            lrPlayer.OverrideWheelAngle(VecFloat{ lfAngle, lfAngle, lfAngle, lfAngle });
         }
         else if (meStationaryPlayerWheelAngle == 1)
         {
             RaceCarPhysics& lrPlayer = maRaceCarVehicles[mePlayerActiveRaceCarIndex];
-            lrPlayer.OverrideWheelAngle(
-                -lrPlayer.GetMaxSteeringAngle() * KF_WHEEL_ANGLE_IN_CAR_SELECT_SCALE     // flt_8208FA8C == 1.3
-                * KF_DEG_TO_RAD);
+            const f32 lfAngle =
+                -lrPlayer.GetMaxSteeringAngle().x * KF_WHEEL_ANGLE_IN_CAR_SELECT_SCALE   // flt_8208FA8C == 1.3
+                * KF_DEG_TO_RAD;
+            lrPlayer.OverrideWheelAngle(VecFloat{ lfAngle, lfAngle, lfAngle, lfAngle });
         }
 
         // ---- publish the player's wheel force-feedback spring (asm 0x82645FA4..C4) -----
@@ -621,6 +625,47 @@ namespace Vehicle
         // player != -1 guard here either.
         lpVehicleManagerOutputInterface->SetPlayerWheelFFSpring(
             maRaceCarVehicles[mePlayerActiveRaceCarIndex].mWheelFFSpring);
+    }
+
+    // ============================================================================================
+    // VehicleManager::UpdateVehiclePhysicsPostSimulation  @0x826426E0
+    //
+    // Breaker is authoritative for this late-merge body and its StuntOffencesManager call ABI:
+    // r4/r5/r6/r7/r8 are race bodies, drivers, active index, used-bitset, and game-event queue.
+    // The VecFloat conversion is local to each vehicle call; the public manager ABI remains f32.
+    // ============================================================================================
+    void VehicleManager::UpdateVehiclePhysicsPostSimulation(
+        const VehicleInputInterface* lpInputInterface,
+        const CgsPhysics::PhysicsSimulationIO::OutputBuffer* lpSimOutputBuffer,
+        f32 lfTimeStep,
+        BrnGameState::GameStateModuleIO::GameEventQueue* lpGameEventQueue)
+    {
+        const u32 luPlayerIndex = static_cast<u32>(mePlayerActiveRaceCarIndex);
+        CGS_ASSERT(luPlayerIndex < KI_MAX_ACTIVE_RACE_CARS, "invalid index : ");
+        const bool lbPlayerCarUsed = mUsedRaceCars.IsBitSet(luPlayerIndex);
+
+        if (lbPlayerCarUsed)
+            DoPlayerTractionLineTestsPostSimulation(lpInputInterface, lfTimeStep);
+
+        const VecFloat lvfTimeStep{lfTimeStep, lfTimeStep, lfTimeStep, lfTimeStep};
+        for (s32 liRaceCar = mUsedRaceCars.GetFirstNonZeroBit();
+             liRaceCar != CgsContainers::BitArray<8>::KI_INVALID_BITINDEX;
+             liRaceCar = mUsedRaceCars.GetNextNonZeroBit(liRaceCar))
+        {
+            maRaceCarVehicles[liRaceCar].UpdatePostSimulation(lvfTimeStep);
+            maRaceCarDrivers[liRaceCar].ClearSnappedThisFrame();
+        }
+
+        if (lbPlayerCarUsed)
+            DoPlayerStuckLineTests(lpInputInterface);
+
+        CgsDev::PerfMonCpu::StartMonitor(gs_iUpdateStuntOffencesPM);
+        mStuntOffencesManager.Update(maRaceCarVehicles, maRaceCarDrivers,
+                                     mePlayerActiveRaceCarIndex, &mUsedRaceCars,
+                                     lpGameEventQueue, lfTimeStep);
+        CgsDev::PerfMonCpu::StopMonitor(gs_iUpdateStuntOffencesPM);
+
+        mPhysicalTrafficManager.UpdateTrafficPhysicsPostSimulation(lpSimOutputBuffer, lfTimeStep);
     }
 }
 }

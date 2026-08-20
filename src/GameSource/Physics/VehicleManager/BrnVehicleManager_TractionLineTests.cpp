@@ -108,14 +108,6 @@ namespace
     // the console header, replace this and say so.
     const s32 KI_MAX_TRACTION_LINE_STREAM_COMMANDS = 136;
 
-    // dword_82F2A10C -- the assert bound in ReadRaceCarTractionLineTestResults' baked message
-    // "static_cast<int32_t>( lu8SurfaceId ) < KI_NUM_USED_SURFACES". Read straight out of the X360
-    // image with x360rd (0x82F2A10C == 20); it sits statically initialised among live .data, i.e.
-    // it is a constant the compiler had to give an address to, not a runtime counter (a runtime
-    // counter would live zeroed in .bss). Consistent with BrnWorld::KU_MAX_SURFACE_ID == 63: 20 of
-    // the 64 encodable surface ids are in use.
-    const s32 KI_NUM_USED_SURFACES = 20;
-
     // ---------------------------------------------------------------------------------------
     // The 192-byte line-test RESULT record, laid out from the seats
     // ReadRaceCarTractionLineTestResults reads at 0x8261817C..0x826181B0. The console's own type
