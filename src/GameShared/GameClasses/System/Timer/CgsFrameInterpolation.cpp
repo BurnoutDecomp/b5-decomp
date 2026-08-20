@@ -1,9 +1,12 @@
 #include "GameShared/GameClasses/System/Timer/CgsFrameInterpolation.h"
 
-#include <math.h>   // sqrtf
+// rw::math::vpu::SLerp -- the ENGINE'S OWN transform blend (X360 0x82216858). See the
+// banner on BlendTransform below for why this file uses it rather than any local maths.
+#include "rw/math/vpu/matrix44affine_operation.h"
 
 // ⚠️ FLAG PC QUALITY-OF-LIFE LAYER -- see the banner in CgsFrameInterpolation.h.
-// No X360 counterpart exists for anything in this file.
+// No X360 counterpart exists for the alpha bookkeeping in this file. The one piece of
+// MATHS in it is not ours at all -- it is the console's SLerp, called directly.
 namespace CgsSystem
 {
     namespace FrameInterpolation
@@ -14,83 +17,9 @@ namespace CgsSystem
             f32  sfFrameSeconds = 1.0f / 60.0f;
             bool sbEnabled      = false;
 
-            // A one-tick delta larger than either of these is a CUT, not motion.
-            //
-            // Both are set an order of magnitude clear of anything the game can
-            // legitimately produce in one 60 Hz tick, so they never fire on real
-            // movement and always fire on a shot change:
-            //   * 25 m/tick is 1500 m/s. The fastest car in the game does ~0.9 m/tick.
-            //   * cos(30 deg) is 1800 deg/s of camera yaw. A fast chase-camera whip
-            //     is nearer 360 deg/s, i.e. 6 deg/tick.
-            const f32 KF_CUT_DISTANCE_SQ = 25.0f * 25.0f;
-            const f32 KF_CUT_FORWARD_DOT = 0.866f;   // cos(30 degrees)
-
-            // Below this the blend is a no-op either way and the caller gets the
-            // endpoint back untouched (bit-identical to not blending at all).
+            // Below this the blend is a no-op either way and the caller gets the endpoint
+            // back untouched (bit-identical to not blending at all).
             const f32 KF_ALPHA_EPSILON = 1.0f / 512.0f;
-
-            struct V3
-            {
-                f32 x, y, z;
-            };
-
-            V3 Make(f32 lfX, f32 lfY, f32 lfZ)
-            {
-                V3 lResult;
-                lResult.x = lfX;
-                lResult.y = lfY;
-                lResult.z = lfZ;
-                return lResult;
-            }
-
-            V3 Lerp(const V3& lrA, const V3& lrB, f32 lfT)
-            {
-                return Make(lrA.x + (lrB.x - lrA.x) * lfT,
-                            lrA.y + (lrB.y - lrA.y) * lfT,
-                            lrA.z + (lrB.z - lrA.z) * lfT);
-            }
-
-            f32 Dot(const V3& lrA, const V3& lrB)
-            {
-                return lrA.x * lrB.x + lrA.y * lrB.y + lrA.z * lrB.z;
-            }
-
-            V3 Cross(const V3& lrA, const V3& lrB)
-            {
-                return Make(lrA.y * lrB.z - lrA.z * lrB.y,
-                            lrA.z * lrB.x - lrA.x * lrB.z,
-                            lrA.x * lrB.y - lrA.y * lrB.x);
-            }
-
-            // Returns false (leaving lrVector untouched) when the vector is too short to
-            // carry a direction -- the caller then abandons the blend rather than
-            // publishing a degenerate basis.
-            bool Normalise(V3& lrVector)
-            {
-                const f32 lfLengthSq = Dot(lrVector, lrVector);
-                if (lfLengthSq < 1.0e-12f)
-                    return false;
-                const f32 lfScale = 1.0f / sqrtf(lfLengthSq);
-                lrVector.x *= lfScale;
-                lrVector.y *= lfScale;
-                lrVector.z *= lfScale;
-                return true;
-            }
-
-            // Matrix44Affine's four rows are Vector3 -- four 16-byte lane registers whose
-            // fourth lane is unused padding (rw/math/vpu/types.h).
-            V3 Row(const rw::math::vpu::Vector3& lrRow)
-            {
-                return Make(lrRow.x, lrRow.y, lrRow.z);
-            }
-
-            void StoreRow(rw::math::vpu::Vector3& lrRow, const V3& lrValue, f32 lfW)
-            {
-                lrRow.x = lrValue.x;
-                lrRow.y = lrValue.y;
-                lrRow.z = lrValue.z;
-                lrRow.w = lfW;
-            }
         }
 
         void SetAlpha(f32 lfAlpha)
@@ -142,6 +71,51 @@ namespace CgsSystem
             return lfPrevious + (lfCurrent - lfPrevious) * lfAlpha;
         }
 
+        // ====================================================================
+        // ⭐ THE BLEND IS THE CONSOLE'S OWN, AND DELIBERATELY SO.
+        //
+        // rw::math::vpu::SLerp @0x82216858 is what this engine blends transforms with --
+        // BrnDirector::Camera::BehaviourGameplayExternal, BehaviourIceAnim, BehaviourRoadRunner
+        // and BehaviourInterpolate all go through it. It blends the three axis rows along the
+        // arc between them (falling back to a plain lerp inside the console's own 2-degree
+        // threshold), re-normalises each, and lerps the translation row.
+        //
+        // ⛔ IT REPLACED A HAND-ROLLED BLEND, AND THAT BLEND WAS A BUG. The first version of
+        // this function nlerp'd the rows and re-orthonormalised them by Gram-Schmidt --
+        // rebuilding the x and y rows from z, with a measured handedness sign -- and rejected
+        // the blend outright when the two poses were more than 30 degrees or 25 metres apart,
+        // on the theory that such a jump had to be a cut rather than motion.
+        //
+        // A ROAD WHEEL BREAKS THAT ASSUMPTION IMMEDIATELY. A 0.331 m wheel at 20 m/s turns
+        // about 57 degrees per 60 Hz tick -- past the invented threshold -- so every wheel on
+        // a moving car took the "this is a cut" arm and was handed back UNBLENDED. MEASURED
+        // on the boot run: the body changed on 13359 of 18162 frames with essentially every
+        // hold-run one frame long, while wheel rows held for two and three frames (1520 and
+        // 644 runs) -- the wheels stepping at 60 Hz inside a 130 fps stream, which is exactly
+        // what they looked like.
+        //
+        // SLerp has no such threshold, because it does not need one: a 57-degree arc is what
+        // spherical interpolation is FOR. It also makes no handedness assumption and rebuilds
+        // no row from the others.
+        //
+        // WHAT IS GIVEN UP, STATED PLAINLY:
+        //   * A TELEPORT will smear over one frame instead of snapping -- SLerp cannot tell a
+        //     respawn from a fast movement, and neither could the thresholds it replaced (they
+        //     just guessed, and guessed wrong for wheels). Discontinuities are handled where
+        //     they are actually KNOWN: the producer calls PoseTrack::Reset. That is the honest
+        //     seam, and it needs no magic number.
+        //   * A rotation of more than half a turn per tick aliases the short way round -- the
+        //     wagon-wheel effect, inherent to interpolating a sampled rotation and not
+        //     something a different blend would fix. For this engine that is a wheel above
+        //     ~224 km/h, by which point the console's own spinning-blur wheel technique
+        //     (RenderRaceCar's technique 0) is what is on screen anyway.
+        //
+        // Scale: SLerp normalises the three axis rows, so it is only lossless on an
+        // orthonormal 3x3. MEASURED before adopting it -- the race car's published body and
+        // wheel transforms are exactly orthonormal (row magnitudes 1.000000, row dots
+        // 0.000000); the wheels' scale lives in the separate GetWheelScaleMatrix, which is
+        // composed after this and never blended.
+        // ====================================================================
         rw::math::vpu::Matrix44Affine BlendTransform(
             const rw::math::vpu::Matrix44Affine& lrPrevious,
             const rw::math::vpu::Matrix44Affine& lrCurrent,
@@ -149,61 +123,14 @@ namespace CgsSystem
         {
             if (lfAlpha >= 1.0f - KF_ALPHA_EPSILON)
                 return lrCurrent;
+            if (lfAlpha <= KF_ALPHA_EPSILON)
+                return lrPrevious;
 
-            const V3 lPrevPos = Row(lrPrevious.wAxis);
-            const V3 lCurPos  = Row(lrCurrent.wAxis);
-
-            // ---- cut rejection: translation --------------------------------------
-            const V3 lDelta = Make(lCurPos.x - lPrevPos.x,
-                                   lCurPos.y - lPrevPos.y,
-                                   lCurPos.z - lPrevPos.z);
-            if (Dot(lDelta, lDelta) > KF_CUT_DISTANCE_SQ)
-                return lrCurrent;
-
-            const V3 lPrevX = Row(lrPrevious.xAxis);
-            const V3 lPrevY = Row(lrPrevious.yAxis);
-            const V3 lPrevZ = Row(lrPrevious.zAxis);
-            const V3 lCurX  = Row(lrCurrent.xAxis);
-            const V3 lCurY  = Row(lrCurrent.yAxis);
-            const V3 lCurZ  = Row(lrCurrent.zAxis);
-
-            // ---- cut rejection: orientation --------------------------------------
-            if (Dot(lPrevZ, lCurZ) < KF_CUT_FORWARD_DOT)
-                return lrCurrent;
-
-            // ---- the basis, measured handedness ----------------------------------
-            // cross(y, z) is either +x or -x depending on which convention the source
-            // matrix was built with; read it off lrCurrent instead of assuming.
-            const f32 lfHandedness = (Dot(Cross(lCurY, lCurZ), lCurX) >= 0.0f) ? 1.0f : -1.0f;
-
-            V3 lForward = Lerp(lPrevZ, lCurZ, lfAlpha);
-            if (!Normalise(lForward))
-                return lrCurrent;
-
-            const V3 lUpGuess = Lerp(lPrevY, lCurY, lfAlpha);
-
-            V3 lRight = Cross(lUpGuess, lForward);
-            if (!Normalise(lRight))
-                return lrCurrent;
-            lRight.x *= lfHandedness;
-            lRight.y *= lfHandedness;
-            lRight.z *= lfHandedness;
-
-            V3 lUp = Cross(lForward, lRight);
-            lUp.x *= lfHandedness;
-            lUp.y *= lfHandedness;
-            lUp.z *= lfHandedness;
-
-            const V3 lPos = Lerp(lPrevPos, lCurPos, lfAlpha);
-
-            // The w lanes are carried from lrCurrent: on this engine's affine rows they
-            // are padding/flags, not part of the pose, so they must not be blended.
-            rw::math::vpu::Matrix44Affine lResult = lrCurrent;
-            StoreRow(lResult.xAxis, lRight,   lrCurrent.xAxis.w);
-            StoreRow(lResult.yAxis, lUp,      lrCurrent.yAxis.w);
-            StoreRow(lResult.zAxis, lForward, lrCurrent.zAxis.w);
-            StoreRow(lResult.wAxis, lPos,     lrCurrent.wAxis.w);
-            return lResult;
+            // The fourth argument is SLerp's OUT parameter (the rotation remaining after the
+            // blend). The console's own callers pass a stack slot they never read -- DecFIGS
+            // names one of them `lUnusedAngle` -- and SLerp null-checks it, so nothing is
+            // dropped by passing none.
+            return rw::math::vpu::SLerp(lrPrevious, lrCurrent, lfAlpha, 0);
         }
     }
 }

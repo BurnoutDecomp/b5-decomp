@@ -66,23 +66,15 @@ namespace CgsSystem
         void SetFrameSeconds(f32 lfSeconds);
         f32  GetFrameSeconds();
 
-        // Blend two rigid poses.
+        // Blend two rigid poses. This is a thin wrapper over rw::math::vpu::SLerp
+        // @0x82216858 -- THE ENGINE'S OWN transform blend, the one every director camera
+        // behaviour uses. See the banner on the definition for why it is the console's
+        // function and not local maths, and what a hand-rolled version got wrong.
         //
-        // Translation is a straight lerp. The 3x3 basis is nlerp'd row-by-row and then
-        // re-orthonormalised by Gram-Schmidt, which is exact enough for the sub-degree
-        // per-tick deltas a 60 Hz camera or car produces and cannot introduce shear the
-        // way a raw component lerp does.
-        //
-        // The cross-product ORDER is measured off lrCurrent rather than assumed, so the
-        // helper is correct for either basis handedness (this engine's camera basis is
-        // x = right, y = up, z = forward, w = position -- CgsGraphics::Camera::LookAt
-        // @0x827F9510 builds screen-x as the NEGATIVE of a D3DXMatrixLookAtLH right
-        // vector, which is exactly the case a hard-coded order would get wrong).
-        //
-        // A CUT is not a movement: when the two poses are further apart than any
-        // legitimate one-tick delta (the director switching shots, a car teleporting to
-        // a spawn point) the blend is skipped and lrCurrent is returned unchanged.
-        // Blending across a cut would smear the camera through the world for a frame.
+        // Discontinuities (a respawn, a place-on-track, a camera cut) are NOT detected
+        // here by thresholding the values -- that was tried and it mis-classified a
+        // spinning road wheel as a cut. They are handled at the producer, which knows:
+        // call PoseTrack::Reset when the pose jumps for a reason.
         rw::math::vpu::Matrix44Affine BlendTransform(
             const rw::math::vpu::Matrix44Affine& lrPrevious,
             const rw::math::vpu::Matrix44Affine& lrCurrent,

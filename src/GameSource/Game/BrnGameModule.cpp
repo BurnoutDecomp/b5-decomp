@@ -3645,26 +3645,28 @@ namespace BrnGame
             }
             while (liStep < miNumSimFramesRequired);
         }
-        else
-        {
-            // ⚠️ FLAG PC quality-of-life: KEEP THE RESOURCE PUMP AT FRAME RATE.
-            //
-            // ResourceUpdateThread is the ONLY thing that drains the GameData request queue,
-            // and on the console it is exactly that -- a THREAD (@0x823BC9B8), running
-            // continuously and independently of the simulation rate. It only sits inside the
-            // sub-step loop here because this host is single-threaded and that was the
-            // nearest honest place to serialise it.
-            //
-            // Leaving it there once zero-step frames existed quietly cut the pump from the
-            // render rate to 60 Hz -- on a 140 fps machine that is less than half as many
-            // service passes per second, and it shows up as slower loading and a streamer
-            // that takes longer to deliver the city. Nothing about the console's design says
-            // the pump should be paced by the simulation; this restores a per-frame floor
-            // without changing the per-sub-step behaviour on frames that do step.
-            PerfMonCpu::StartMonitor(mCpuMonitors.miUT_GameState);
-            ResourceUpdateThread(0);
-            PerfMonCpu::StopMonitor(mCpuMonitors.miUT_GameState);
-        }
+        // ⛔ NO PER-FRAME RESOURCE PUMP HERE -- TRIED 2026-08-17, REVERTED THE SAME DAY.
+        //
+        // The idea was sound on its face: ResourceUpdateThread is the only thing that drains
+        // the GameData request queue, on the console it is a free-running THREAD
+        // (@0x823BC9B8) rather than anything the simulation rate paces, and once zero-step
+        // frames existed it dropped from the render rate to 60 Hz -- which does cost loading
+        // throughput. So an `else` arm here pumped it once on frames that ran no sub-step.
+        //
+        // IT BROKE A CONSUMER. BrnWorld::InternalBaseStreamer::UpdateLoading (BrnBaseStreamer
+        // .cpp:436, X360 0x827D41E8) is a per-TICK state machine that takes exactly ONE reply
+        // per visit: it returns early on an empty receiver queue and asserts
+        // `mGDReceiverQueue.GetLength() == 1` otherwise. Pumping ~2.2x per tick lets a second
+        // reply land before the streamer next looks, and the assert fires -- MEASURED, one
+        // assert per boot with the arm in, none without it, everything else identical.
+        //
+        // Pumping the producer faster than the console does is not more faithful, it is just
+        // different, and the difference lands on a consumer written for the console's rate.
+        // The real fix for loading throughput is the console's own architecture -- give the
+        // resource pump its own thread, where the streamer's per-tick consumption and the
+        // pump's rate are decoupled by the IO buffer locks rather than by luck. Until then
+        // the pump stays where the single-threaded host can reason about it: once per
+        // simulation sub-step, above.
         PerfMonCpu::StopMonitor(mCpuMonitors.miUT_TotalUpdate);
         sbSimUpdateComplete = 1;
 

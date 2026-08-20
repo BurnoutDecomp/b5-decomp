@@ -355,6 +355,9 @@ public:
         // --- wheel render transforms (6 wheels) -----------------------------
         // X360 0x822A3220: ((luWheel+33)<<6)+this == &mWheelTransforms[luWheel].
         Matrix44Affine&       GetWheelTransform(u32 luWheel);
+        // [DIAG] const read-only view of the same slot, for probes that must not imply a write.
+        const Matrix44Affine& GetWheelTransformConst(u32 luWheel) const
+        { return mWheelTransforms[luWheel]; }
         // X360 0x822A31B8: ((luWheel+39)<<6)+this == &mWheelScaleTransforms[luWheel].
         Matrix44Affine&       GetWheelScaleMatrix(u32 luWheel);
         // X360 0x822CD170: mWheelScaleTransforms[luWheel] = diag(lrScale.xyz, 1). The
@@ -763,6 +766,9 @@ public:
     void RestoreTickRenderPose();
     void LatchTickRenderPose();
     void ApplyRenderPoseInterpolation(f32 lfAlpha);
+    // Drop the history. Call wherever the pose is KNOWN to jump (a placement, a respawn) --
+    // the blend itself deliberately does not try to detect that from the values.
+    void ResetRenderPoseInterpolation();
 
     // X360: RaceCarState* GetPhysicsState() -- &mPhysicsState.
     BrnPhysics::Vehicle::RaceCarState*       GetPhysicsState()       { return &mPhysicsState; }

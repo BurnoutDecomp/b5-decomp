@@ -429,6 +429,10 @@ public:
         // DELETE with that camera.
         bool GetSpawnedCarPositionBringUp( Vector3& lrPosition ) const;
 
+        // [DIAG] const slot access for the frame-pacing probe in BrnWorldModule.
+        const ActiveRaceCar* GetActiveRaceCarConstBringUp( s32 liCar ) const
+        { return ( liCar >= 0 && liCar < E_ACTIVE_RACE_CAR_INDEX_COUNT ) ? &maActiveRaceCars[liCar] : 0; }
+
         // ⚠️ FLAG PC quality-of-life -- NOT an X360 function. Once per rendered frame,
         // publish each active car's display pose as the blend of the last two simulation
         // ticks (the simulation runs at a fixed 60 Hz; the renderer does not). Idempotent.
