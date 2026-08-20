@@ -966,7 +966,16 @@ namespace BrnGui
         }
         if (mbInGameMessagesEnabled)
         {
-            // FLAG deferred (Slice B): InGameMessagesComponent::Update.
+            // [gateui r6] X360 UpdateRunning @0x8247B660, verbatim:
+            //     if (*(a1 + 333)) BrnGui::InGameMessagesComponent::Update(a1 + 1000);
+            // This is the tick that RETIRES a shown message: Update ends a VISIBLE slot
+            // once the base timer passes the end time EndTransition latched from the
+            // message's mfDuration, which runs the "transout" animation and frees the
+            // slot. Without it the popup was correct-but-immortal -- it slid in and stayed
+            // on screen for the rest of the drive. The whole component (Update /
+            // EndTransition / EndMessage / SendGameMessage) landed in round 3, so the
+            // round-2 "Slice B" deferral had nothing left to defer.
+            mInGameMessages.Update();
         }
         if (mbFriendsListEnabled)
         {

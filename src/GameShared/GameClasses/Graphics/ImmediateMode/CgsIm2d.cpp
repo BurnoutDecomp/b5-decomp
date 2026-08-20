@@ -73,6 +73,9 @@ namespace
 
 namespace CgsGraphics
 {
+    // [DIAG] NOT IN THE X360 BINARY -- see CgsIm2d.h.
+    s32 gLastIm2dMaskRect[4] = { 0, 0, 0, 0 };
+
     // ---- ImRendererBase (non-template) -------------------------------------------
     void ImRendererBase::SetTexture(renderengine::Texture* lpTexture)
     {
@@ -337,11 +340,144 @@ namespace CgsGraphics
         return static_cast<u8>(lfOut * 255.0f + 0.5f);
     }
 
+    // ==================================================================================
+    // [gateui r6] The published-transform fold.
+    //
+    // On the console the Im2dTransform is BUFFER STATE, not a per-batch argument:
+    // Im2dRenderBuffer::Dispatch @0x827F9BA0 case 0x16 forwards it to
+    // ImRenderer<Basic2dColouredTexturedVertex>::SetTransform @0x823AC048, which uploads
+    // the four rows as GPU shader constants; every vertex run dispatched after that --
+    // the mesh batches, the PushMask corner pair, and the TextRenderer's glyph strips --
+    // is transformed by them until the next SetTransform command. The PC backend has no
+    // shader constant to upload, so the same state has to be folded on the CPU at each
+    // submission point. Before this round only BatchTransformTextureBlendRenderStatic
+    // folded (and only from its own argument), so the two other submission paths dropped
+    // the transform entirely: FLAPT masks became a ~31x31 px scissor pinned to the screen
+    // corner (which clipped the whole HUD-message ribbon away) and every FLAPT text field
+    // drew at its authored box origin read as raw screen pixels.
+    //
+    // FLAG PC-platform leaf: CPU fold standing in for the console's GPU constant upload
+    // (the same divergence FoldIm2dColourChannel above already documents).
+    // ==================================================================================
+
+    // The canonical screen-space transform: 1280x720 logical -> NDC. Byte-for-byte the
+    // transform BrnFlapt::FlaptRenderer::Construct @0x82472270 seeds its stack with and
+    // the one BrnGame::LoadingScreenRenderer builds. Used as the "nothing published"
+    // state so a pass that submits ready-made logical coordinates folds through an exact
+    // round trip.
+    static const Im2dTransform& ScreenSpaceIm2dTransform()
+    {
+        static Im2dTransform sScreenTransform = {};
+        static bool sbBuilt = false;
+        if (!sbBuilt)
+        {
+            sScreenTransform.mOriginXYZ.x = -1.0f;
+            sScreenTransform.mOriginXYZ.y =  1.0f;
+            sScreenTransform.mOriginXYZ.z =  0.0f;
+            sScreenTransform.mOriginXYZ.w =  0.0f;
+            sScreenTransform.mRightUp.x   =  1.0f / (KF_LOGICAL_WIDTH  * 0.5f);   // right.x
+            sScreenTransform.mRightUp.y   =  0.0f;                                // right.y
+            sScreenTransform.mRightUp.z   =  0.0f;                                // up.x
+            sScreenTransform.mRightUp.w   = -1.0f / (KF_LOGICAL_HEIGHT * 0.5f);   // up.y (Y flipped)
+            sScreenTransform.mColourShift.x = 0.0f;
+            sScreenTransform.mColourShift.y = 0.0f;
+            sScreenTransform.mColourShift.z = 0.0f;
+            sScreenTransform.mColourShift.w = 0.0f;
+            sScreenTransform.mColourScale.x = 1.0f;
+            sScreenTransform.mColourScale.y = 1.0f;
+            sScreenTransform.mColourScale.z = 1.0f;
+            sScreenTransform.mColourScale.w = 1.0f;
+            sbBuilt = true;
+        }
+        return sScreenTransform;
+    }
+
+    // A transform whose whole right/up basis is zero can only be zero-initialised storage
+    // that nobody has published to (the buffer is a long-lived module member); treat it as
+    // "no transform published" and leave the run alone rather than collapsing it to a point.
+    static inline bool IsIm2dTransformPublished(const Im2dTransform& lrTransform)
+    {
+        return lrTransform.mRightUp.x != 0.0f || lrTransform.mRightUp.y != 0.0f
+            || lrTransform.mRightUp.z != 0.0f || lrTransform.mRightUp.w != 0.0f;
+    }
+
+    // Fold one local-space position through the transform into the engine's 1280x720
+    // logical space. mRightUp lanes are {m00, m10, m01, m11} (right = (.x,.y), up =
+    // (.z,.w)) -- the serialised flapt/apt raw {a,b,c,d} order; the transform produces NDC,
+    // which the PC ImRenderer::Render consumes as logical coordinates (same two lines
+    // BatchTransformTextureBlendRenderStatic has always used).
+    static inline void FoldIm2dPosition(const Im2dTransform& lrTransform,
+                                        f32 lfLocalX, f32 lfLocalY,
+                                        f32* lpfOutX, f32* lpfOutY)
+    {
+        const f32 lfNdcX = lrTransform.mOriginXYZ.x
+                         + lrTransform.mRightUp.x * lfLocalX
+                         + lrTransform.mRightUp.z * lfLocalY;
+        const f32 lfNdcY = lrTransform.mOriginXYZ.y
+                         + lrTransform.mRightUp.y * lfLocalX
+                         + lrTransform.mRightUp.w * lfLocalY;
+        *lpfOutX = (lfNdcX + 1.0f) * (KF_LOGICAL_WIDTH  * 0.5f);
+        *lpfOutY = (1.0f - lfNdcY) * (KF_LOGICAL_HEIGHT * 0.5f);
+    }
+
     // ---- Im2dBase<V> (template) --------------------------------------------------
     template <typename V>
     void Im2dBase<V>::SetTransform(const Im2dTransform& lTransform)
     {
         mCurrentTransform = lTransform;
+    }
+
+    // [gateui r6] see the header note: reset the published transform per pass, then chain.
+    template <typename V>
+    void Im2dBase<V>::BeginRendering()
+    {
+        mCurrentTransform = ScreenSpaceIm2dTransform();
+        ImRenderer<V>::BeginRendering();
+    }
+
+    // [gateui r6] The reserve/submit (text) path, folded through the published transform.
+    template <typename V>
+    void Im2dBase<V>::RenderEnd(renderengine::PrimitiveType lePrimitiveType,
+                                const V* lpVertices, u32 luVertexCount)
+    {
+        if (lpVertices == nullptr || luVertexCount == 0
+            || !IsIm2dTransformPublished(mCurrentTransform))
+        {
+            ImRenderer<V>::RenderEnd(lePrimitiveType, lpVertices, luVertexCount);
+            return;
+        }
+
+        // A separate scratch from ImRenderer<V>::RenderStart's: lpVertices IS that buffer.
+        static V saFolded[KU_RENDER_BUFFER_MAX];
+        CGS_ASSERT(luVertexCount <= KU_RENDER_BUFFER_MAX,
+                   "Im2d RenderEnd run exceeds the transform buffer");
+        if (luVertexCount > KU_RENDER_BUFFER_MAX)
+        {
+            luVertexCount = KU_RENDER_BUFFER_MAX;
+        }
+
+        for (u32 luVertex = 0; luVertex < luVertexCount; ++luVertex)
+        {
+            saFolded[luVertex] = lpVertices[luVertex];
+            FoldIm2dPosition(mCurrentTransform,
+                             lpVertices[luVertex].mv2Pos.x, lpVertices[luVertex].mv2Pos.y,
+                             &saFolded[luVertex].mv2Pos.x, &saFolded[luVertex].mv2Pos.y);
+
+            // The colour transform rides the same shader constants on the console, so a
+            // faded/tinted clip fades its text with it (this is what makes the HUD-message
+            // strings fade in with their banner instead of popping at full opacity).
+            const RGBA8 lSrcColour = lpVertices[luVertex].mv4Colour;
+            saFolded[luVertex].mv4Colour.r = FoldIm2dColourChannel(
+                lSrcColour.r, mCurrentTransform.mColourScale.x, mCurrentTransform.mColourShift.x);
+            saFolded[luVertex].mv4Colour.g = FoldIm2dColourChannel(
+                lSrcColour.g, mCurrentTransform.mColourScale.y, mCurrentTransform.mColourShift.y);
+            saFolded[luVertex].mv4Colour.b = FoldIm2dColourChannel(
+                lSrcColour.b, mCurrentTransform.mColourScale.z, mCurrentTransform.mColourShift.z);
+            saFolded[luVertex].mv4Colour.a = FoldIm2dColourChannel(
+                lSrcColour.a, mCurrentTransform.mColourScale.w, mCurrentTransform.mColourShift.w);
+        }
+
+        ImRenderer<V>::RenderEnd(lePrimitiveType, saFolded, luVertexCount);
     }
 
     template <typename V>
@@ -428,23 +564,71 @@ namespace CgsGraphics
         // FLAG PC-platform leaf: materialise the console's two-corner stencil mask as a
         // D3D9 scissor rectangle (an axis-aligned approximation -- the console masks by
         // stencil texture; Flapt masks are axis-aligned quads, so the rect is exact for
-        // them). The corners arrive in the 1280x720 logical space, so scale to the back
-        // buffer like every draw on this path. PopMask (below) disables the scissor;
-        // BeginRendering also clears it at frame start.
+        // them). PopMask (below) disables the scissor; BeginRendering also clears it at
+        // frame start.
         IDirect3DDevice9* lpDevice = renderengine::gDevice;
         if (lpDevice == nullptr)
         {
             return;
         }
 
+        // [gateui r6] The corners are the mask mesh's own LOCAL-space quad corners --
+        // BrnFlapt::FlaptRenderer::RenderMask reads them straight out of the file's vertex
+        // table and adds only the console's small origin bias -- so they must be folded
+        // through the published transform, exactly like a mesh batch. Reading them as
+        // 1280x720 logical coordinates (what this did before) turned every FLAPT mask into
+        // a ~31x31 px scissor glued to the screen's top-left corner, which clipped away the
+        // whole masked layer: the HUD-message banner's ribbon body drew nothing at all
+        // while its unmasked grunge/icon layers drew normally.
+        f32 lfCorner0X = lpaMaskVertices[0].mv2Pos.x;
+        f32 lfCorner0Y = lpaMaskVertices[0].mv2Pos.y;
+        f32 lfCorner1X = lpaMaskVertices[1].mv2Pos.x;
+        f32 lfCorner1Y = lpaMaskVertices[1].mv2Pos.y;
+        if (IsIm2dTransformPublished(mCurrentTransform))
+        {
+            FoldIm2dPosition(mCurrentTransform, lpaMaskVertices[0].mv2Pos.x,
+                             lpaMaskVertices[0].mv2Pos.y, &lfCorner0X, &lfCorner0Y);
+            FoldIm2dPosition(mCurrentTransform, lpaMaskVertices[1].mv2Pos.x,
+                             lpaMaskVertices[1].mv2Pos.y, &lfCorner1X, &lfCorner1Y);
+        }
+
+        // The fold flips min/max whenever the composed basis carries a negative scale (the
+        // Y basis always does -- the screen transform's up.y is negative), so normalise:
+        // D3D9 rejects a scissor rect whose left/top is not <= right/bottom.
+        const f32 lfMinX = (lfCorner0X < lfCorner1X) ? lfCorner0X : lfCorner1X;
+        const f32 lfMaxX = (lfCorner0X < lfCorner1X) ? lfCorner1X : lfCorner0X;
+        const f32 lfMinY = (lfCorner0Y < lfCorner1Y) ? lfCorner0Y : lfCorner1Y;
+        const f32 lfMaxY = (lfCorner0Y < lfCorner1Y) ? lfCorner1Y : lfCorner0Y;
+
         const f32 lfScaleX = static_cast<f32>(renderengine::gDisplayWidth) / KF_LOGICAL_WIDTH;
         const f32 lfScaleY = static_cast<f32>(renderengine::gDisplayHeight) / KF_LOGICAL_HEIGHT;
 
+        // Clamp to the back buffer: an off-screen mask (the first frames of a wipe) must
+        // stay a legal rect rather than a negative one.
+        LONG liLeft   = static_cast<LONG>(lfMinX * lfScaleX);
+        LONG liTop    = static_cast<LONG>(lfMinY * lfScaleY);
+        LONG liRight  = static_cast<LONG>(lfMaxX * lfScaleX);
+        LONG liBottom = static_cast<LONG>(lfMaxY * lfScaleY);
+        const LONG liWidth  = static_cast<LONG>(renderengine::gDisplayWidth);
+        const LONG liHeight = static_cast<LONG>(renderengine::gDisplayHeight);
+        if (liLeft   < 0)        liLeft   = 0;
+        if (liTop    < 0)        liTop    = 0;
+        if (liRight  > liWidth)  liRight  = liWidth;
+        if (liBottom > liHeight) liBottom = liHeight;
+        if (liRight  < liLeft)   liRight  = liLeft;
+        if (liBottom < liTop)    liBottom = liTop;
+
         RECT lRect;
-        lRect.left = static_cast<LONG>(lpaMaskVertices[0].mv2Pos.x * lfScaleX);
-        lRect.top = static_cast<LONG>(lpaMaskVertices[0].mv2Pos.y * lfScaleY);
-        lRect.right = static_cast<LONG>(lpaMaskVertices[1].mv2Pos.x * lfScaleX);
-        lRect.bottom = static_cast<LONG>(lpaMaskVertices[1].mv2Pos.y * lfScaleY);
+        lRect.left   = liLeft;
+        lRect.top    = liTop;
+        lRect.right  = liRight;
+        lRect.bottom = liBottom;
+        // [DIAG] NOT IN THE X360 BINARY -- publish the rect the FLAPT mask path just
+        // installed so BrnFlapt::FlaptRenderer::RenderMask can log it under BRN_PROP_DIAG.
+        gLastIm2dMaskRect[0] = static_cast<s32>(liLeft);
+        gLastIm2dMaskRect[1] = static_cast<s32>(liTop);
+        gLastIm2dMaskRect[2] = static_cast<s32>(liRight);
+        gLastIm2dMaskRect[3] = static_cast<s32>(liBottom);
         lpDevice->SetScissorRect(&lRect);
         lpDevice->SetRenderState(D3DRS_SCISSORTESTENABLE, TRUE);
         this->SetTexture(lpTexture);

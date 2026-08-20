@@ -5,6 +5,8 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"                    // CGS_ASSERT
 #include "SharedClasses/Gui/Flapt/BrnFlaptFile.h"                     // BrnFlapt::Mesh / FlaptFile / FlaptFile::GuiTexture / GuiVertex
 #include "pc/gcm/renderengine/texture.h"                              // renderengine::Texture2D create path (interim white "no texture")
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"            // [gateui r6] gpDebugPrint (the mask/text placement probes)
+#include <stdlib.h>                                                   // [gateui r6] getenv (BRN_PROP_DIAG)
 
 // BrnFlapt::FlaptRenderer member functions, reconstructed from BURNOUT_X360_ARTIST.XEX.
 // This TU bodies the constructor, the shader-state accessor, the per-object render entry
@@ -263,6 +265,29 @@ void FlaptRenderer::RenderTextField(const CgsGraphics::TextObject* lpTextObject)
     const CgsGraphics::Im2dTransform& lrTransform = maTransformStack.Peek();
     mpImRenderSet->mpIm2dRenderBuffer->SetTransform(lrTransform);
 
+    // [DIAG] NOT IN THE X360 BINARY. [gateui r6] The text-placement probe. The glyph run
+    // the TextRenderer builds is in the field's LOCAL box space; this transform is what
+    // carries it onto the banner. Until this round the submit path (RenderStart/RenderEnd)
+    // dropped it, so every FLAPT text field landed at its authored box origin read as raw
+    // screen pixels -- which is why the HUD-message banner's two strings both drew on top
+    // of each other in the screen's top-left corner (both boxes author top-left (-2,-2)).
+    // Printed in NDC, so a non-degenerate basis and an origin away from (-1,+1) is proof.
+    {
+        static const bool sbUiGateDiag  = ( getenv( "BRN_PROP_DIAG" ) != 0 );
+        static s32        siDiagPrinted = 0;
+        if ( sbUiGateDiag && siDiagPrinted < 12 && CgsDev::Log::gpDebugPrint != 0 )
+        {
+            ++siDiagPrinted;
+            *CgsDev::Log::gpDebugPrint
+                << "[UI-gate] flapt text ndcOrigin=(" << lrTransform.mOriginXYZ.x
+                << "," << lrTransform.mOriginXYZ.y
+                << ") basis=(" << lrTransform.mRightUp.x << "," << lrTransform.mRightUp.y
+                << "," << lrTransform.mRightUp.z << "," << lrTransform.mRightUp.w
+                << ") alpha=" << (lrTransform.mColourScale.w + lrTransform.mColourShift.w)
+                << "\n";
+        }
+    }
+
     if (miShaderProgram != 0)
     {
         mpImRenderSet->mpIm2dRenderBuffer->SetProgram(static_cast<s8>(0));
@@ -413,8 +438,40 @@ void FlaptRenderer::RenderMask(const Mesh* lpMesh, const FlaptFile* lpFile,
     laMaskVerts[1].mv4Colour  = lMaxVert.mv4Colour;
     laMaskVerts[1].mv2Tex0UV  = lMaxVert.mv2Tex0UV;
 
+    // [gateui r6] FLAG PC-platform leaf: publish this mask mesh's own composed transform
+    // before the push. On the console the PushMask command is dispatched into a stream in
+    // which the transform is persistent GPU state, so the mask quad is transformed by the
+    // shader constants already resident; the PC fold has no resident GPU transform, so the
+    // state the mask corners must be folded through -- the transform the enclosing
+    // MovieClipInstance::Render walk pushed for this very mesh, i.e. the stack top read
+    // above -- is (re)published explicitly here. Without it Im2dBase::PushMask has no
+    // transform to fold and the mask degenerates to the mesh's raw local quad.
+    mpImRenderSet->mpIm2dRenderBuffer->SetTransform(lrTransform);
+
     mpImRenderSet->mpIm2dRenderBuffer->PushMask(
         const_cast<renderengine::Texture*>(lpTexture), laMaskVerts);
+
+    // [DIAG] NOT IN THE X360 BINARY. [gateui r6] The mask-rect probe: prints the
+    // back-buffer scissor the push installed. Before this round every FLAPT mask folded to
+    // a ~31x31 px rect in the screen's top-left corner (the corners were read as 1280x720
+    // logical coordinates), which clipped the whole masked layer -- the HUD-message
+    // banner's ribbon body -- away. A rect that now tracks the wipe is the proof.
+    {
+        static const bool sbUiGateDiag  = ( getenv( "BRN_PROP_DIAG" ) != 0 );
+        static s32        siDiagPrinted = 0;
+        if ( sbUiGateDiag && siDiagPrinted < 12 && CgsDev::Log::gpDebugPrint != 0 )
+        {
+            ++siDiagPrinted;
+            *CgsDev::Log::gpDebugPrint
+                << "[UI-gate] flapt mask rect=(" << CgsGraphics::gLastIm2dMaskRect[0]
+                << "," << CgsGraphics::gLastIm2dMaskRect[1]
+                << ")-(" << CgsGraphics::gLastIm2dMaskRect[2]
+                << "," << CgsGraphics::gLastIm2dMaskRect[3]
+                << ") localMin=(" << lMinVert.mv2Pos.x << "," << lMinVert.mv2Pos.y
+                << ") localMax=(" << lMaxVert.mv2Pos.x << "," << lMaxVert.mv2Pos.y
+                << ")\n";
+        }
+    }
 
     // Count this mesh against the currently-open mask.
     ++mMaskMeshCounts[mMaskMeshCounts.GetLength() - 1];
