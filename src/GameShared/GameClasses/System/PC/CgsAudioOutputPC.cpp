@@ -4,7 +4,11 @@
 #define _WIN32_WINNT 0x0A00 // Windows 10 -> in-box XAudio 2.9
 #endif
 #include <Windows.h>
-#include <xaudio2.h>
+// The XAudio2 Redistributable header (vendor/xaudio2redist, fetched by
+// tools\build\fetch_xaudio2_redist.bat) rather than the Windows SDK <xaudio2.h>:
+// same 2.9 engine and same interfaces, but it names xaudio2_9redist.dll -- the
+// down-level-capable build we ship beside the exe. See Open() below.
+#include <xaudio2Redist.h>
 #include <cmath>
 #include <cstring>
 #include <cstdio>
@@ -12,7 +16,8 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 
 // ===========================================================================
-//  CgsSystem::AudioOutputPC -- XAudio2 2.9 PC output backend. See the header for the
+//  CgsSystem::AudioOutputPC -- XAudio2 2.9 PC output backend (Microsoft's XAudio2
+//  Redistributable, xaudio2_9redist.dll). See the header for the
 //  X360 (Dac -> XAudio render-driver) correspondence. A single stereo 16-bit source
 //  voice is fed by a triple-buffered, callback-driven pull (OnBufferEnd refills the
 //  drained buffer and re-submits it), matching the X360 render-driver frame callback.
@@ -148,12 +153,20 @@ bool AudioOutputPC::Open(int liSampleRate, int liChannels, FillFn lpFill, void* 
     if (liChannels < 1) liChannels = 1;
     if (liChannels > kMaxChannels) liChannels = kMaxChannels;
 
-    g_hXAudioDll = ::LoadLibraryW(L"xaudio2_9.dll");
+    // XAUDIO2_DLL_W is L"xaudio2_9redist.dll" (xaudio2Redist.h; the _W spelling because
+    // plain XAUDIO2_DLL follows UNICODE, which this build does not define). That is the
+    // redistributable 2.9 engine, shipped beside Burnout_PC.exe by build_game_exe.bat and
+    // found first by the exe-directory-first search order: the same engine as the in-box
+    // 2.9 but supported down to Windows 7 SP1, so it is the preferred provider on every
+    // OS. The in-box DLLs stay as fallbacks for a game folder whose redist DLL is missing.
+    g_hXAudioDll = ::LoadLibraryW(XAUDIO2_DLL_W);
     if (!g_hXAudioDll)
-        g_hXAudioDll = ::LoadLibraryW(L"xaudio2_8.dll"); // older Win10 fallback
+        g_hXAudioDll = ::LoadLibraryW(L"xaudio2_9.dll"); // in-box 2.9 (Win10 1803+)
+    if (!g_hXAudioDll)
+        g_hXAudioDll = ::LoadLibraryW(L"xaudio2_8.dll"); // in-box 2.8 (Win8/older Win10)
     if (!g_hXAudioDll)
     {
-        AUDIO_LOG << "[Audio] XAudio2 unavailable (no xaudio2_9/_8.dll) -- running muted\n";
+        AUDIO_LOG << "[Audio] XAudio2 unavailable (no xaudio2_9redist/_9/_8.dll) -- running muted\n";
         return false;
     }
     PFN_XAudio2Create lpCreate = reinterpret_cast<PFN_XAudio2Create>(
