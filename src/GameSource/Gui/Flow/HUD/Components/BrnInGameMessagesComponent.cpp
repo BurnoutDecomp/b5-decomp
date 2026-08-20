@@ -683,6 +683,27 @@ namespace
         BrnResource::HudMessageEvent* lpMessage =
             &mpInGameMessagesQueue->maMessages[mpInGameMessagesQueue->muCurrentMessageIndex];
 
+        // [DIAG] NOT IN THE X360 BINARY. [gateui r6] The banner-identity probe: which
+        // hudMessages_mc timeline label the popup drives, which animation label runs on the
+        // SpecificMessage_mc it selects, and which icon label. Pins the popup to a known
+        // frame of the FLAPTHUD data (HUDMESSAGES.HM gives StuntPartSma style="JSSMessage"
+        // icon="JSSIcon" -- NOT the "ShowSmashMessage" label the name suggests), so a
+        // frame-dump comparison can be checked against the authored layout rather than
+        // guessed. Same knob as the rest of the ladder; first 6 sends only.
+        {
+            static const bool sbUiGateDiag  = ( getenv( "BRN_PROP_DIAG" ) != 0 );
+            static s32        siDiagPrinted = 0;
+            if ( sbUiGateDiag && siDiagPrinted < 6 && CgsDev::Log::gpDebugPrint != 0 )
+            {
+                ++siDiagPrinted;
+                *CgsDev::Log::gpDebugPrint
+                    << "[UI-gate] hud banner style=\"" << lpMessage->macMessageStyle
+                    << "\" anim=\"" << lpcAnimName
+                    << "\" icon=\"" << lpMessage->macIcon
+                    << "\" duration=" << lpMessage->mfDuration << "\n";
+            }
+        }
+
         mAptRef.GotoAndPlayLabel(lpMessage->macMessageStyle);
 
         mAptRef.FindChildMovieClipOnFrame(&mAnimationRef, "SpecificMessage_mc");
