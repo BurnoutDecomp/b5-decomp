@@ -15,12 +15,28 @@
 //                                    GameBridgeGameStateToX_TrainingStringIds.cpp; see the
 //                                    MOVED-OUT block below for the four compile errors that
 //                                    keep THIS file out of the build]
-//   TranslateTakedownsToGuiEvents   0x823E1C38  [reconstructed, DOES NOT COMPILE -- see below]
+//   TranslateTakedownsToGuiEvents   0x823E1C38  [reconstructed; COMPILES as of 2026-08-20 --
+//                                    see the ✅ block below; its SOFT arm is parked on a
+//                                    GuiSoftTakedownEvent type grow]
+//   MapStuntEnumsFromGameplayToGui  0x823AA4A8  [MOVED 2026-08-20 ->
+//                                    GameBridgeGameStateToX_StuntGuiEvents.cpp]
+//   TranslateGameActionsToGuiEvents 0x823E9CE0  [PARTIAL (cases 58/59/60), same sibling TU]
 //
-// FLAG (by-name, un-homed): the game-state input bind/unbind REQUEST-queue accessors
-// (BrnGameState::GetGameStateInput*RequestQueue; X360 sub_823B9CD8, +0x4C for the second
-// queue) and the PostWorldInputBuffer write-side PostBindRequest/PostUnbindRequest are
-// reached by name (declared in GameBridgeGameStateToX.h / CgsInputModuleIO.h).
+// ⛔ THIS TU COMPILES BUT IS STILL NOT MOUNTABLE, and the reason has CHANGED: it is no
+// longer the four compile errors (fixed), it is SIX UNRESOLVED EXTERNALS with no definition
+// anywhere in b5-decomp/src -- all of them reached BY NAME from the two bodies that remain
+// here, both of which are callerless today:
+//     BrnGameState::GetTakedownEventOutputCount        (TranslateTakedownsToGuiEvents)
+//     BrnGameState::GetTakedownEventOutputRecord       (        "                    )
+//     BrnGameState::GetGameStateInputBindRequestQueue  (BridgeGameStateToController)
+//     BrnGameState::GetGameStateInputUnbindRequestQueue(        "                  )
+//     CgsInput::InputIO::PostWorldInputBuffer::PostBindRequest    (        "       )
+//     CgsInput::InputIO::PostWorldInputBuffer::PostUnbindRequest  (        "       )
+// (X360 sub_823B9CD8 is the bind-request-queue accessor; the unbind queue sits at +0x4C from
+// it. Their canonical home is the game-state IO TU.) That is why the two NEW bodies this wave
+// added were split into GameBridgeGameStateToX_StuntGuiEvents.cpp -- they ARE called every
+// sub-step by BrnGameModule::Update, so they have to be linkable now. Home those six and this
+// whole TU (plus the ~700-case translate switch) can be mounted and the split folded back.
 // ============================================================================
 
 #include "GameSource/Game/BrnGameModule.hpp"
@@ -30,6 +46,27 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"                 // CGS_ASSERT
 #include "GameShared/GameClasses/System/Input/CgsInputModuleIO.h"  // CgsInput::InputIO::PostWorldInputBuffer / BaseInputEvent
 #include "SharedClasses/Progression/BrnTrainingTypes.h"            // BrnProgression::ETrainingType
+// [gateui] the real GUI-event payload homes (the two placeholders this TU used to fork live
+// here) + the game-action payload homes the stunt arms read.
+#include "GameSource/Gui/BrnGuiEventTypeDefs.h"                    // BrnGui::GuiTakedownEvent / StuntType / GuiEventStunt*
+// ⛔ [gateui] GameSource/Gui/BrnGuiDemangledEventTypes.h is DELIBERATELY NOT INCLUDED HERE, and
+// that is a MEASURED blocker, not a preference. It re-defines two payload types that are ALSO
+// forked in headers this TU already reaches through BrnGameModule.hpp:
+//     BrnGuiDemangledEventTypes.h:122 GuiEventNetworkPlayerImage
+//         vs GameSource/Gui/CustomRenderer/Renderers/BrnNetworkPlayerImageRenderer.h:75
+//     BrnGuiDemangledEventTypes.h:196 GuiEventToggleChangeCarMessage
+//         vs GameSource/Game/GameBridgeControllerToX.h:113
+// -- two more C2011s of exactly the class this wave just removed from
+// GameBridgeGameStateToX.h. Both are pre-existing and neither is repaired here: deleting the
+// GameBridgeControllerToX.h fork (this lane's half) would force ITS TU to include the
+// demangled header, where the renderer fork -- a Gui-lane file -- would break it in turn. Filed
+// as a shared_header_request; the consequence for this TU is the parked autosave-request post
+// in the action-58 arm.
+#include "GameSource/GameState/BrnGameActions.h"                   // BrnGameState::GameStateModuleIO action payloads
+#include "GameSource/GameState/BrnGameStateModuleIO.h"             // GameStateModuleIO::OutputBuffer / GameActionQueue
+#include "GameShared/GameClasses/Gui/CgsGuiModuleIO.h"             // CgsGuiModuleIO::InputBuffer::GetGuiEvents()
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"         // CgsDev::Log::gpDebugPrint ([UI-gate] diag)
+#include <stdlib.h>                                                // getenv (the [UI-gate] diag guard)
 
 namespace BrnGame
 {
@@ -79,6 +116,7 @@ namespace BrnGame
             miInputModuleState = 6;
     }
 
+
     // ------------------------------------------------------------------------
     // MOVED OUT (2026-08-16, tutorial-ticker leg):
     //   ConvertTrainingTypeToStringId @0x823AA3B8 + its two rodata string-ID tables now
@@ -87,7 +125,22 @@ namespace BrnGame
     //   MOVED, not copied -- folding it back in later is a delete, not a duplicate-symbol hunt
     //   (the same _Prepare.cpp / _SetupParRivals.cpp precedent the build script documents).
     //
-    // ⛔ WHY THE SPLIT: **THIS TU DOES NOT COMPILE**, and did not before this leg either --
+    // ✅ [gateui] 2026-08-20: THE FOUR ERRORS BELOW ARE FIXED AND THIS TU COMPILES AGAIN.
+    // They were ONE defect with three symptoms -- the header forked two GUI event payload
+    // types that have real homes -- plus one stale member name:
+    //   1/2/4. The `BrnGui::GuiTakedownEvent` / `BrnGui::GuiSoftTakedownEvent` placeholders are
+    //          deleted from GameBridgeGameStateToX.h; the real homes are included instead
+    //          (BrnGuiEventTypeDefs.h / BrnGuiDemangledEventTypes.h). The two consequent
+    //          C2027s fall out with them.
+    //   3.     `mpCgsGuiModule` is gone from the body: the GUI events are pushed onto the
+    //          input buffer's own queue by PushGuiEvent (GameBridgeGameStateToX.h) -- which is
+    //          what the console's AddGuiEvent<T> instantiation does anyway, and needs no
+    //          module object.
+    // The MOVED-OUT split of ConvertTrainingTypeToStringId is LEFT AS IT IS (moving it back is
+    // a delete, not a duplicate-symbol hunt -- do it in a commit of its own if wanted).
+    // The historical diagnosis is preserved verbatim below.
+    //
+    // ⛔ WHY THE SPLIT: **THIS TU DID NOT COMPILE**, and did not before this leg either --
     // MEASURED with a control (HEAD's own copy of this file, compiled with the canonical
     // build flags, produces the SAME four errors, so none of them is new work):
     //   1. C2011 'BrnGui::GuiTakedownEvent': struct type redefinition. The placeholder in
@@ -130,8 +183,6 @@ namespace BrnGame
         // X360 `li r,1; extldi r,r,64,33` -> 64-bit mask 0x0000000200000000 (bit 33).
         static const u64 KU_TAKEDOWN_SOFT_DISPLAY_MASK = 0x0000000200000000ull;
 
-        CgsGui::GuiModule* lpGui = mpCgsGuiModule;
-
         const s32 liCount = BrnGameState::GetTakedownEventOutputCount(lpTakedownQueue);  // *(queue+8)
         for (s32 i = 0; i < liCount; ++i)
         {
@@ -151,30 +202,56 @@ namespace BrnGame
 
             if (lbHard)
             {
+                // The HARD arm, store for store (@0x823E1D24..0x823E1D74). Field names are the
+                // real ones from BrnGuiEventTypeDefs.h; the offsets they land on are exactly
+                // the console's -- see that header's own producer/consumer store map.
                 BrnGui::GuiTakedownEvent lEvent;
-                lEvent.mu64Field00   = lpRecord->mu64Field08;   // +0x00 <- src +0x08
-                lEvent.mu64Field08   = lpRecord->mu64Field10;   // +0x08 <- src +0x10
-                lEvent.miField10     = lpRecord->miField00;     // +0x10 <- src +0x00
-                lEvent.miRaceCarIndex= lpRecord->miRaceCarIndex;// +0x14 <- src +0x04
-                lEvent.miField18     = lpRecord->miField18;     // +0x18 <- src +0x18
-                lEvent.miField1C     = lpRecord->miField20;     // +0x1C <- src +0x20
-                lEvent.miField20     = lpRecord->miField1C;     // +0x20 <- src +0x1C
-                lEvent.mbStatus24    = lpRecord->mbField24;     // +0x24 <- src +0x24
-                lEvent.mbStatus25    = lpRecord->mbField26;     // +0x25 <- src +0x26
-                if (lpGui) lpGui->AddGuiEvent(&lEvent, lpGuiInput);
+                lEvent.mAggressorCarID        = lpRecord->mu64Field08;   // +0x00 <- src +0x08
+                lEvent.mVictimCarID           = lpRecord->mu64Field10;   // +0x08 <- src +0x10
+                lEvent.meAggressorIndex       =
+                    static_cast< ::EActiveRaceCarIndex>(lpRecord->miField00);       // +0x10 <- src +0x00
+                lEvent.meVictimIndex          =
+                    static_cast< ::EActiveRaceCarIndex>(lpRecord->miRaceCarIndex);  // +0x14 <- src +0x04
+                lEvent.meTakedownType         =
+                    static_cast<BrnGameState::ETakedownType>(lpRecord->miField18);         // +0x18 <- src +0x18
+                lEvent.miTakedownChainCount   = lpRecord->miField20;     // +0x1C <- src +0x20
+                lEvent.miMultipleTakedownCount= lpRecord->miField1C;     // +0x20 <- src +0x1C
+                lEvent.mbMarkedManTakeDown    = (lpRecord->mbField24 != 0);  // +0x24 <- src +0x24
+                lEvent.mbSettledScore         = (lpRecord->mbField26 != 0);  // +0x25 <- src +0x26
+                PushGuiEvent(lEvent, lpGuiInput);                       // AddEvent(&ev, 363, 40)
             }
             else
             {
-                BrnGui::GuiSoftTakedownEvent lEvent;
-                lEvent.mu64Field00   = lpRecord->mu64Field08;   // +0x00 <- src +0x08
-                lEvent.mu64Field08   = lpRecord->mu64Field10;   // +0x08 <- src +0x10
-                lEvent.miField10     = lpRecord->miField00;     // +0x10 <- src +0x00
-                lEvent.miRaceCarIndex= lpRecord->miRaceCarIndex;// +0x14 <- src +0x04
-                lEvent.miField18     = lpRecord->miField18;     // +0x18 <- src +0x18
-                lEvent.mbStatus1C    = lpRecord->mbField24;     // +0x1C byte0 <- src +0x24
-                lEvent.mbStatus1D    = lpRecord->mbField26;     // +0x1D byte1 <- src +0x26
-                if (lpGui) lpGui->AddGuiEvent(&lEvent, lpGuiInput);
+                // ⛔ [gateui] PARKED, NOT DROPPED -- THE SOFT ARM NEEDS A TYPE GROW I MAY NOT MAKE.
+                // The console's soft record (@0x823E1CDC..0x823E1D1C) is 32 bytes of PLAIN data,
+                // decoded store for store off the same 40-byte source image the hard arm uses:
+                //     +0x00 CgsID               <- src +0x08   (std)
+                //     +0x08 CgsID               <- src +0x10   (std)
+                //     +0x10 EActiveRaceCarIndex <- src +0x00   (stw)
+                //     +0x14 EActiveRaceCarIndex <- src +0x04   (stw)
+                //     +0x18 ETakedownType       <- src +0x18   (stw)
+                //     +0x1C bool                <- src +0x24   (stb)
+                //     +0x1D bool                <- src +0x26   (stb)
+                // i.e. GuiTakedownEvent's leading five fields plus the two status bytes pulled
+                // forward to +0x1C/+0x1D (the soft variant carries no chain/multiple counts).
+                // The committed home, BrnGuiDemangledEventTypes.h:271, is the auto-derived
+                // honest placeholder `GuiSoftTakedownEvent : public CgsGui::GuiEvent<364>
+                // { u8 maPayload[20]; }` -- the right SIZE (32, matching AddGuiEvent<...>
+                // @0x823D9AD0's `AddEvent(q, ev, 364, 32)`) but the WRONG SHAPE: the asm above
+                // proves the record has no 12-byte GuiEvent header, its first store is at +0x00.
+                // Filling that opaque payload by byte offset from here is exactly the
+                // offset-poke this project forbids, and re-forking the type is what broke this
+                // TU in the first place.
+                // SHARED_HEADER_REQUEST (owner: the Gui lane) -- grow GuiSoftTakedownEvent in
+                // GameSource/Gui/BrnGuiEventTypeDefs.h to the seven fields above, next to its
+                // GuiTakedownEvent sibling (static_assert sizeof == 32), and retire the
+                // demangled placeholder. This arm is then five lines, spelled out above.
+                // ⓘ SCOPE: no regression. This TU has never compiled or been mounted, so the
+                // soft-takedown HUD event has never been posted on PC. Landing the hard arm is
+                // a strict improvement; this park is the honest remainder.
+                (void)lpRecord;
             }
         }
     }
+
 } // namespace BrnGame

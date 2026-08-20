@@ -425,6 +425,27 @@ namespace BrnGame
             const void* lpTakedownQueue,
             s32 liRunnerActiveRaceCarIndex);
 
+        // ⭐⭐ [gateui] X360 0x823E9CE0 -- the GAME-ACTION -> GUI-EVENT translator: drain the
+        // game-state output buffer's GameActionQueue (VariableEventQueue<13312,16>) and post
+        // the matching BrnGui event for each recognised action. Signature from the asm
+        // prologue (r3 = this, r4 = lpGuiInput, r5 = lpGameStateOutput); the two null asserts
+        // are GameBridgeGameStateToX.cpp:754/755. Called by BridgeGameStateToGui @0x823EE880
+        // (call site @0x823EF22C).
+        // ⚠️ PARTIAL RECONSTRUCTION -- only the three STUNT-COLLECTIBLE arms (58/59/60) are
+        // reproduced. The full body is a ~700-case switch; see the FLAG on the body.
+        // Home GameSource/Game/GameBridgeGameStateToX.cpp.
+        void TranslateGameActionsToGuiEvents(
+            CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInput,
+            const BrnGameState::GameStateModuleIO::OutputBuffer* lpGameStateOutput);
+
+        // ⭐ [gateui] X360 0x823AA4A8 -- map a gameplay-side StuntElementType onto the GUI's
+        // BrnGui::StuntType. IDENTITY for 0/1/2; anything >= 3 fires the streamed assert
+        // "Invalid Stunt Enum : <v>" (GameBridgeGameStateToX.cpp:404) and returns 3
+        // (E_STUNTTYPE_COUNT, which the analyzer's own bound assert then catches). A real X360
+        // symbol and a non-static member (r3 = this, never read). Home
+        // GameSource/Game/GameBridgeGameStateToX.cpp.
+        BrnGui::StuntType MapStuntEnumsFromGameplayToGui(u32 luGameplayStuntType) const;
+
         // X360 0x823DCA10 -- the game->GUI flow-FSM bridge: when the main flow requested a
         // GUI FSM stage (miGuiFsmStage 1..5), post the matching GuiEventRunFsm record(s)
         // (event 144, 24 bytes) into the GUI module INPUT buffer's inbound queue, then park
@@ -469,6 +490,20 @@ namespace BrnGame
         // and the world UPDATE OUTPUT buffer.
         void BridgeWorldToDirector(BrnDirector::DirectorIO::InputBuffer* lpDirectorInput,
                                    const BrnWorldIO::UpdateOutputBuffer* lpWorldOutput);
+
+        // ⭐⭐ [gateui] X360 0x823E5368 -- the WORLD->GAME-STATE seam, the hop that carries the
+        // world's per-frame game events (including event 111 E_EVENT_RECORD_PROP_HIT, the
+        // smash-gate / billboard feed) into the game state. Signature from the asm prologue
+        // (r3 = this, unused; r4 = the post-world INPUT buffer, write-locked; r5 = the world
+        // UPDATE OUTPUT buffer, read-locked). Console home + body:
+        // GameSource/Game/GameBridgeWorldToX.cpp, where the ten console legs, the two landed
+        // here, and the eight parks (each with its blocker) are enumerated.
+        // Called by DoUpdate_GameStatePostWorld @0x823E92A8 inside its LockBuffersForIO
+        // bracket -- an entry point this build does not have yet, so this function has no PC
+        // call site; see the banner on the body.
+        void BridgeWorldToGameState(
+            BrnGameState::GameStateModuleIO::PostWorldInputBuffer* lpGameStateInput,
+            const BrnWorldIO::UpdateOutputBuffer* lpWorldOutput);
 
         // ⭐⭐ X360 0x823CD170 -- the GAME-STATE->DIRECTOR seam. Its Append of the game-state
         // output buffer's game-action queue into the director input buffer's own queue is the

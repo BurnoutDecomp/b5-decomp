@@ -52,38 +52,22 @@ namespace BrnGameState
         const void* lpTakedownQueue, s32 liIndex);
 }
 
-namespace BrnGui
-{
-    // ---- takedown GUI-event payloads -- UN-HOMED placeholder (FLAGGED) --------------------------
-    // TranslateTakedownsToGuiEvents (X360 0x823E1C38) synthesises one of these per queued takedown
-    // and pushes it through the CgsGui GUI module (this + 7252512). Both variants fill the same
-    // stack image (X360 &v14); layouts are derived store-for-store from the branch stores. Replace
-    // with the real BrnGui event types when the GUI-event family is reconstructed.
-    struct GuiTakedownEvent
-    {
-        u64 mu64Field00;      // +0x00 (src +0x08)
-        u64 mu64Field08;      // +0x08 (src +0x10)
-        s32 miField10;        // +0x10 (src +0x00)
-        s32 miRaceCarIndex;   // +0x14 (src +0x04)
-        s32 miField18;        // +0x18 (src +0x18)
-        s32 miField1C;        // +0x1C (src +0x20)
-        s32 miField20;        // +0x20 (src +0x1C)
-        u8  mbStatus24;       // +0x24 (src +0x24)
-        u8  mbStatus25;       // +0x25 (src +0x26)
-        u8  maPad[2];         // +0x26
-    };
-    struct GuiSoftTakedownEvent
-    {
-        u64 mu64Field00;      // +0x00 (src +0x08)
-        u64 mu64Field08;      // +0x08 (src +0x10)
-        s32 miField10;        // +0x10 (src +0x00)
-        s32 miRaceCarIndex;   // +0x14 (src +0x04)
-        s32 miField18;        // +0x18 (src +0x18)
-        u8  mbStatus1C;       // +0x1C byte0 (src +0x24)
-        u8  mbStatus1D;       // +0x1D byte1 (src +0x26)
-        u8  maPad[2];         // +0x1E
-    };
-}
+// ⛔ [gateui] THE TWO GUI-EVENT PLACEHOLDERS THAT LIVED HERE ARE GONE (2026-08-20).
+// This header used to define file-local `BrnGui::GuiTakedownEvent` and
+// `BrnGui::GuiSoftTakedownEvent`, justified by the claim that "the include graphs do not
+// meet". THEY DO: GameBridgeGameStateToX.cpp includes BrnGameModule.hpp, which reaches
+// GameSource/Gui/BrnGuiEventTypeDefs.h, so the placeholders were a straight C2011 type
+// redefinition against the real homes -- and that redefinition, plus a stale `mpCgsGuiModule`
+// reference, is why this whole TU (and therefore the ~700-case
+// TranslateGameActionsToGuiEvents) could not be compiled or mounted.
+//   * GuiTakedownEvent      -> GameSource/Gui/BrnGuiEventTypeDefs.h (id 363, 40 bytes, real
+//                              DWARF member names; the store map that used to live in this
+//                              comment block is reproduced in that header's banner).
+//   * GuiSoftTakedownEvent  -> GameSource/Gui/BrnGuiDemangledEventTypes.h (id 364, 32 bytes,
+//                              still an OPAQUE `GuiEvent<364> { u8 maPayload[20]; }` shell --
+//                              see the shared_header_request on the soft-takedown arm in the
+//                              .cpp; the asm proves the record has NO 12-byte GuiEvent header).
+// One type, one home. Do not re-fork either.
 
 namespace BrnGame
 {
@@ -91,4 +75,57 @@ namespace BrnGame
     // Returns "ERROR - UNKNOWN TRAINING TYPE" for the unused/gap indices.
     const char* ConvertTrainingTypeToStringId(BrnProgression::ETrainingType leTrainingType);
 
+} // namespace BrnGame
+
+#include "GameShared/GameClasses/Gui/CgsGuiModuleIO.h"   // CgsGui::CgsGuiModuleIO::InputBuffer::GetGuiEvents()
+#include "GameShared/GameClasses/Core/CgsAssert.h"       // CGS_ASSERT
+
+namespace BrnGame
+{
+    // =========================================================================
+    // [gateui] ONE SHARED GUI-EVENT PUSH, used by every producer in the
+    // GameState->Gui bridge family (this header's two TUs).
+    //
+    // The console pushes each of these through `CgsGui::GuiModule::AddGuiEvent<T>` -- a
+    // NON-STATIC member of the CgsGui::GuiModule embedded in BrnGameModule at +7252512 (the
+    // `add r3, r29, r30` before every one of the calls in TranslateGameActionsToGuiEvents
+    // @0x823E9CE0). Every one of the 270 instantiations has the SAME three-step body, e.g.
+    // AddGuiEvent<GuiEventStuntInfo> @0x823D3B38:
+    //     assert(lpBuffer);                                   // "Input hasn't been locked for write"
+    //     queue = InputBuffer::GetGuiEvents(lpBuffer);        // sub_8284F238
+    //     queue->AddEvent(&event, <T's id>, <sizeof(T)>);
+    // -- i.e. the WHOLE object, at offset 0, with no header stripped. It never reads `this`.
+    //
+    // ⚠️ THE OBJECT IS THE PROBLEM, NOT THE BODY. Nothing on this build constructs that
+    // embedded CgsGui::GuiModule (BrnGameModule.hpp says so at the +7252512 note), and the
+    // header's OTHER, STATIC `AddGuiEvent(T&, InputBuffer*)` overload is NOT interchangeable:
+    // it pushes `&event + 12` with size `sizeof(T) - 12`, which is correct only for payloads
+    // that derive from CgsGui::GuiEvent<N>. Every type this TU posts is a PLAIN record whose
+    // own GetEventType() carries the id (GuiTakedownEvent 363/40, GuiEventStuntInfo 217/12,
+    // GuiEventBoostBarStuntInfo 218/12, GuiEventStuntAreaComplete 219/8,
+    // GuiEventStuntAllComplete 220/4, GuiAutosaveRequestEvent 356/1 -- every (id,size) pair
+    // read straight off its instantiation's asm), so that arithmetic would push a 1-byte
+    // marker instead of a 12-byte record.
+    //
+    // So the queue is written DIRECTLY, exactly as the instantiation's own body does. This is
+    // the established in-tree idiom for this situation -- BrnGameModule.cpp's GuiEventTimeInfo
+    // publish carries the identical ⚠️ banner and the identical three lines. It adds no
+    // dependency on CgsGuiModule_AddGuiEvent_Inst.cpp, so it needs no new mount line.
+    // DELETE-WHEN the embedded CgsGui::GuiModule is constructed on PC: then these become
+    // `mCgsGuiModule.AddGuiEvent(&lEvent, lpGuiInput)` verbatim.
+    // =========================================================================
+    template <class GuiEventT>
+    static void PushGuiEvent(const GuiEventT& lrEvent,
+                             CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInput)
+    {
+        CGS_ASSERT(lpGuiInput != 0, "Input hasn't been locked for write");
+        if (lpGuiInput == 0)
+        {
+            return;
+        }
+        lpGuiInput->GetGuiEvents()->AddEvent(
+            reinterpret_cast<const CgsModule::Event*>(&lrEvent),
+            lrEvent.GetEventType(),
+            static_cast<s32>(sizeof(GuiEventT)));
+    }
 } // namespace BrnGame
