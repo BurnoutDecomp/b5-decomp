@@ -977,35 +977,43 @@ void RaceCarEntityModule::PublishRenderPoseWithoutPhysicsBringUp( ActiveRaceCar*
     Matrix44Affine lBodyTransform;
     lpActiveRaceCar->CalcBodyTransform( lBodyTransform );
 
-    // ---- THE GRAPHICS-FRAME STEP (seat wave 2026-08-05) ---------------------
-    // CalcBodyTransform yields the MODEL-frame pose (COM * physics -- the console's own
-    // composition, now fed by the real seat + the shipped spec+1552 matrix). But the shipped
-    // GraphicsSpec PART LOCATORS are NOT authored in that frame: every locator translation in
-    // VEH_PUSMC01_GR.BIN is POSITIVE-Y (bumpers +0.73, arch parts +0.325 -- real part heights
-    // above the GROUND), i.e. the locator frame sits ONE MORE model->handling step below the
-    // model frame. MEASURED, not tuned: with body = M1552 * modelFrame the front-arch locators
-    // (+0.325) land at ground+0.290 against wheel centres at ground+0.296 -- a 1 mm fit --
-    // and the pre-seat builds' look confirms it (body drawn AT the raw ground transform looked
-    // grounded; wheels composed with the same matrix hung 0.4 m under the floor).
-    // The factor is the SHIPPED spec+1552 matrix applied once more -- no invented offset.
-    // ⚠️ FLAG: the console mechanism carrying this step (RenderRaceCar's own consumption of
-    // mBodyTransform, or the GraphicsSpec's mppRigidBodyToSkinMatrixTransforms table this leg
-    // ignores) is NOT yet recovered; this is the measured stand-in inside an already-flagged
-    // bring-up leg. The WHEELS keep composing against the MODEL frame (WheelSpec positions are
-    // model-space -- verified by the same measurement).
-    const RaceCarStreamer::PhysicsResourcePtr& lrPhysicsResource =
-        mRaceCarStreamer.GetPhysicsResourceBringUp( liActiveRaceCar );
-
-    if ( lrPhysicsResource.HasMemoryResource() )
-    {
-        lpRenderParams->SetBodyTransform( rw::math::vpu::Mult(
-            lrPhysicsResource.operator->()->mCarModelSpaceToHandlingBodySpaceTransform,
-            lBodyTransform ) );
-    }
-    else
-    {
-        lpRenderParams->SetBodyTransform( lBodyTransform );
-    }
+    // ⛔ THE "GRAPHICS-FRAME STEP" IS GONE, 2026-08-17 -- IT WAS THE CAR-WARPING BUG.
+    //
+    // This used to publish `Mult( spec.mCarModelSpaceToHandlingBodySpaceTransform,
+    // lBodyTransform )` -- the shipped +1552 matrix applied ONCE MORE on top of
+    // CalcBodyTransform -- under a FLAG admitting the console mechanism for it "is NOT yet
+    // recovered" and that it was a fit measured against a stationary car ("a 1 mm fit").
+    //
+    // IT IS NOT A CONSOLE MECHANISM. Read off the ARTIST asm, both ends:
+    //
+    //   * ActiveRaceCar::UpdatePhysicsState @0x822D4418 -- the console's ONLY producer of
+    //     mBodyTransform -- calls CalcBodyTransform into a stack matrix (@0x822D47A4) and
+    //     copies its four rows STRAIGHT into `this + 0x7E0` (== &mRenderParams, and
+    //     mBodyTransform is RenderParams+0) at 0x822D47A8-DC. No second factor, no table.
+    //   * RenderRaceCar @0x822CF6A0 composes each part as world = Mult( partLocator,
+    //     mBodyTransform ) -- the vmulfp/vmaddfp cascade at 0x822D0190-0x822D0230, with the
+    //     body's four rows held in v124/v126/v125/v117 and the locator rows loaded from
+    //     spec+20. The GraphicsSpec's mppRigidBodyToSkinMatrixTransforms table (spec+32),
+    //     which the old FLAG offered as the possible carrier, is NOT REFERENCED ANYWHERE in
+    //     that function -- searched: zero loads of spec+32 or spec+28 in all 2008 lines.
+    //
+    // So the console applies the +1552 matrix EXACTLY ONCE, and it applies it as the CENTRE
+    // OF MASS TRANSFORM inside CalcBodyTransform @0x822B8828 (`Mult( mCentreOfMassTransform,
+    // mPhysicsState.mTransform )`). Our promote seam already seeds mCentreOfMassTransform
+    // with that very matrix (SetCentreOfMassTransformBringUp, this file), so the multiply
+    // below was applying it a SECOND time.
+    //
+    // WHY IT LOOKED RIGHT AND WAS STILL WRONG: an extra RIGID factor cannot deform anything,
+    // so on a stationary, axis-aligned car it reads as a small offset -- which is exactly
+    // what the original measurement tuned away. But the WHEELS deliberately did NOT get it
+    // (the old FLAG says so in its own last sentence: "The WHEELS keep composing against the
+    // MODEL frame"). Body and wheels were therefore in two different frames, and the moment
+    // the car ROTATES the extra factor swings the shell against its own wheels -- the car
+    // visibly coming apart. The car-select carousel rotates it continuously.
+    //
+    // Publishing CalcBodyTransform verbatim is what UpdatePhysicsState does, and it puts the
+    // body back in the same frame the wheels have always been composed in.
+    lpRenderParams->SetBodyTransform( lBodyTransform );
 
     // ---- THE WHEEL POSE -----------------------------------------------------
     // ⭐ SPLIT OUT 2026-08-12 (carrender wave). It used to be inline here, which meant the
@@ -3593,6 +3601,43 @@ void RaceCarEntityModule::PostPhysicsUpdate(
     // `bne cr6, loc_823076C0` at 0x82307610 skips the whole physics-readback run and lands
     // on the instruction pair that sets this call up, so the paint refresh runs every frame
     // whether the sim is paused or not.
+    // [DIAG pose-scale, one-shot] Is the published render pose ORTHONORMAL? The interpolator
+    // blends it, and every blend this engine owns (rw::math::vpu::SLerp @0x82216858,
+    // OrthoNormalize3x3 @0x82203B28) re-normalises the three axis rows -- which is only
+    // lossless on a matrix whose rows are already unit length. Print the row magnitudes and
+    // the row dot products once, so the question is answered by measurement.
+    {
+        static bool sbLoggedPoseScale = false;
+        if( !sbLoggedPoseScale && CgsDev::Log::gpDebugPrint != 0 )
+        {
+            for( s32 liCar = 0; liCar < E_ACTIVE_RACE_CAR_INDEX_COUNT && !sbLoggedPoseScale; ++liCar )
+            {
+                ActiveRaceCar* lpCar = GetActiveRaceCar( static_cast<EActiveRaceCarIndex>( liCar ) );
+                if( !lpCar->IsActive() )
+                    continue;
+                sbLoggedPoseScale = true;
+                const Matrix44Affine& lrB = lpCar->GetRenderParams()->GetBodyTransform();
+                const Matrix44Affine& lrW = lpCar->GetRenderParams()->GetWheelTransform( 0u );
+                #define KI_ROWMAG( r ) sqrtf( ( r ).x * ( r ).x + ( r ).y * ( r ).y + ( r ).z * ( r ).z )
+                #define KI_ROWDOT( a, b ) ( ( a ).x * ( b ).x + ( a ).y * ( b ).y + ( a ).z * ( b ).z )
+                *CgsDev::Log::gpDebugPrint
+                    << "[pose-scale] car " << liCar
+                    << " body |x| " << KI_ROWMAG( lrB.xAxis )
+                    << " |y| " << KI_ROWMAG( lrB.yAxis )
+                    << " |z| " << KI_ROWMAG( lrB.zAxis )
+                    << " x.y " << KI_ROWDOT( lrB.xAxis, lrB.yAxis )
+                    << " x.z " << KI_ROWDOT( lrB.xAxis, lrB.zAxis )
+                    << " y.z " << KI_ROWDOT( lrB.yAxis, lrB.zAxis )
+                    << " | wheel0 |x| " << KI_ROWMAG( lrW.xAxis )
+                    << " |y| " << KI_ROWMAG( lrW.yAxis )
+                    << " |z| " << KI_ROWMAG( lrW.zAxis )
+                    << " x.y " << KI_ROWDOT( lrW.xAxis, lrW.yAxis ) << "\n";
+                #undef KI_ROWMAG
+                #undef KI_ROWDOT
+            }
+        }
+    }
+
     // ⚠️ FLAG PC quality-of-life: LATCH THIS TICK'S RENDER POSE, for every active slot.
     //
     // Here and nowhere else, because THIS is the one point in the tick at which every

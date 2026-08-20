@@ -5405,7 +5405,21 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
             << " eye " << lDirectorTransform.wAxis.x << " " << lDirectorTransform.wAxis.y
             << " " << lDirectorTransform.wAxis.z
             << " car " << ( lbHaveCar ? 1 : 0 ) << " "
-            << lDiagCar.x << " " << lDiagCar.y << " " << lDiagCar.z << "\n";
+            << lDiagCar.x << " " << lDiagCar.y << " " << lDiagCar.z;
+        // Wheel 0: its world TRANSLATION (does the hub track the body?) and one BASIS
+        // component (does the SPIN advance smoothly?). The two answer different questions --
+        // a hub that steps and a spin that steps are different producers.
+        {
+            const BrnWorld::ActiveRaceCar* lpDiagCar0 = mRaceCarEntityModule.GetActiveRaceCarConstBringUp( 0 );
+            if ( lpDiagCar0 != 0 )
+            {
+                const Matrix44Affine& lrW0 = lpDiagCar0->GetRenderParams()->GetWheelTransformConst( 0u );
+                *CgsDev::Log::gpDebugPrint
+                    << " w0pos " << lrW0.wAxis.x << " " << lrW0.wAxis.y << " " << lrW0.wAxis.z
+                    << " w0basis " << lrW0.xAxis.x << " " << lrW0.xAxis.y;
+            }
+        }
+        *CgsDev::Log::gpDebugPrint << "\n";
     }
 
     // ---- frame an establishing camera on the loaded world -------------------

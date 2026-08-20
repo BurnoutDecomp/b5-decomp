@@ -1089,6 +1089,22 @@ void ActiveRaceCar::SeedPhysicsStateFromCreateEventBringUp(const Matrix44Affine&
 {
     CGS_ASSERT(IsAttached(), "IsAttached()");
     mPhysicsState.mTransform = lrTransform;
+
+    // ⚠️ FLAG PC quality-of-life: THIS IS A TELEPORT, so drop the interpolation history.
+    // The car is being placed, not moved -- blending from wherever it was before would smear
+    // it across the world for one frame. This is the honest place to say so: the producer
+    // KNOWS the pose is discontinuous, whereas the blend can only guess from the values (and
+    // guessing is what mis-classified a spinning road wheel as a cut -- see BlendTransform).
+    ResetRenderPoseInterpolation();
+}
+
+// ⚠️ FLAG PC quality-of-life -- NOT an X360 function. Forget the last two ticks, so the next
+// frame draws the tick pose straight instead of blending across a discontinuity.
+void ActiveRaceCar::ResetRenderPoseInterpolation()
+{
+    mBodyPoseTrack.Reset();
+    for (u32 luWheel = 0; luWheel < KU_INTERP_WHEELS; ++luWheel)
+        maWheelPoseTracks[luWheel].Reset();
 }
 
 // ----------------------------------------------------------------------------
