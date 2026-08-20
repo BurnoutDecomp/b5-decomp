@@ -418,7 +418,20 @@ namespace PropEntityIO
     //        0x822B9E70  W  line 746  -> +0x160    GetRecordHitPropQueue()
     //        0x822B9F18  W  line 747  -> +0x10     GetPropBecamePhysicalEventQueue()
     //        0x822B9FC0  W  line 748  -> +0xCB5F0  GetReplayRequestInterface()  (IDA "…::GetRep")
-    //        0x827A2000  R            -> +0xCB5F0  GetReplayRequestInterface() const
+    //      and the READ-lock twins, all IDA-UNNAMED and therefore invisible to a name-keyed grep
+    //      of the JSON export set -- MEASURED 2026-08-20 (gateui wave) by enumerating and
+    //      decompiling every function start in 0x827A1600..0x827A2100 on a private .i64 copy:
+    //        0x827A1CB8  R  line 732  -> +0x860    GetSceneInputInterface() const
+    //        0x827A1D60  R  line 734  -> +0x7B0    GetHitOverheadSignQueue() const
+    //        0x827A1E08  R  line 736  -> +0xCB2C0  GetPropVFXLocatorQueue() const
+    //        0x827A1EB0  R  line 737  -> +0x160    GetRecordHitPropQueue() const
+    //        0x827A1F58  R  line 738  -> +0x10     GetPropBecamePhysicalEventQueue() const
+    //        0x827A2000  R  line 739  -> +0xCB5F0  GetReplayRequestInterface() const
+    //      (733 and 735 are NOT emitted -- the const twins of GetPropInputInterface and
+    //      GetBrokenPropQueue have no call site anywhere in the image. Every emitted const twin's
+    //      baked line is exactly its non-const twin's minus 9, so the class body is a contiguous
+    //      const block 732..739 then a contiguous non-const block 741..748 -- an INDEPENDENT
+    //      corroboration of the 741..748 re-binding recorded below.)
     //      The old header bound 0x822B9B28 to GetHitOverheadSignQueue, 0x822B9BD0 to
     //      GetSceneInputInterface and 0x822B9FC0 to GetPropInputInterface -- each one member out
     //      of step. No committed .cpp called any of the three, so nothing shipped broken.
@@ -480,7 +493,57 @@ namespace PropEntityIO
         PropBecamePhysicalEventQueue* GetPropBecamePhysicalEventQueue();
         // X360 0x822B9FC0 (line 748): write-lock; return &mReplayRequestInterface (console +0xCB5F0).
         ReplayRequestInterface* GetReplayRequestInterface();
-        // X360 0x827A2000: READ-lock (`extrwi r11,r11,1,27`) twin of the above; same member.
+
+        // ====================================================================================
+        // ⭐ THE READ-LOCK (const) TWINS -- ADDED 2026-08-20 (gateui wave, owner `wire`).
+        //
+        // ⚠️ THIS CORRECTS A RECORDED "THERE IS NO SUCH SYMBOL" CONCLUSION. The gateui scout
+        // report (scratch/gateui_wave/scout.md §E) states that the ONLY read-lock twin on this
+        // buffer is 0x827A2000 (+0xCB5F0) and that a host-invented FLAGged accessor would be
+        // needed for +0x160. That is WRONG: SIX const twins are emitted, they were simply
+        // UNNAMED in the JSON export set (`sub_827A1CB8` … `sub_827A1F58`), so a name-keyed grep
+        // finds nothing. MEASURED on a private BURNOUT_X360_ARTIST.XEX.i64 copy by enumerating
+        // every function start in 0x827A1600..0x827A2100 and decompiling each: every one opens
+        // `lbz r11,0(this) ; extrwi r11,r11,1,27` (the READ bit -- IOBuffer::
+        // IsBufferLockedForReading), fires "Not locked for reading\n" against
+        // ..\..\..\GameSource\World/EntityModules/PropEntityModule/BrnPropEntityModuleIO.h,
+        // and tail-returns `this + <offset>`:
+        //
+        //     0x827A1CB8  R  baked line 732  -> +0x860    mSceneInputInterface
+        //   [ 733 not emitted: the const GetPropInputInterface twin has no caller ]
+        //     0x827A1D60  R  baked line 734  -> +0x7B0    mHitOverheadSignQueue
+        //   [ 735 not emitted: the const GetBrokenPropQueue twin has no caller ]
+        //     0x827A1E08  R  baked line 736  -> +0xCB2C0  mPropVFXLocatorQueue
+        //     0x827A1EB0  R  baked line 737  -> +0x160    mRecordHitPropQueue
+        //     0x827A1F58  R  baked line 738  -> +0x10     mPropBecamePhysicalEventQueue
+        //     0x827A2000  R  baked line 739  -> +0xCB5F0  mReplayRequestInterface
+        //
+        // ⭐ THE BAKED LINES INDEPENDENTLY CORROBORATE THE NON-CONST TABLE ABOVE. Every emitted
+        // const twin sits at exactly (its non-const line - 9): 732/741 scene, 734/743 sign,
+        // 736/745 vfx, 737/746 record-hit, 738/747 became-physical, 739/748 replay. The two
+        // gaps (733, 735) fall precisely on the two members whose const twin has no call site,
+        // so the class body is a contiguous const block (732..739) then a contiguous non-const
+        // block (741..748). That is a second, independent proof of the 2026-08-18 re-binding.
+        //
+        // WHY THEY MATTER: WorldModule::BridgeEntityModulesToOutput_PostPhysics @0x827AEEB0
+        // runs with this buffer READ-locked (BrnWorldModule.cpp :: WorldModule::Update brackets
+        // it with LockBuffersForIO(dest, …sources) -- dest write, sources read), so the four
+        // prop legs there call these, not the write getters. Calling a non-const getter under a
+        // read lock is the "Not locked for writing" tripwire.
+        // ====================================================================================
+        // X360 0x827A1CB8 (line 732): read-lock; return &mSceneInputInterface (console +0x860).
+        const SceneInputInterface* GetSceneInputInterface() const;
+        // X360 0x827A1D60 (line 734): read-lock; return &mHitOverheadSignQueue (console +0x7B0).
+        const HitOverheadSignQueue* GetHitOverheadSignQueue() const;
+        // X360 0x827A1E08 (line 736): read-lock; return &mPropVFXLocatorQueue (console +0xCB2C0).
+        const PropVFXLocatorQueue* GetPropVFXLocatorQueue() const;
+        // X360 0x827A1EB0 (line 737): read-lock; return &mRecordHitPropQueue (console +0x160).
+        // ⭐ THE gateui SEAM: the source the world->output bridge appends into the world
+        // update-output GameEventQueue as game event 111 (E_EVENT_RECORD_PROP_HIT).
+        const RecordHitPropQueue* GetRecordHitPropQueue() const;
+        // X360 0x827A1F58 (line 738): read-lock; return &mPropBecamePhysicalEventQueue (+0x10).
+        const PropBecamePhysicalEventQueue* GetPropBecamePhysicalEventQueue() const;
+        // X360 0x827A2000 (line 739): read-lock twin of GetReplayRequestInterface(); same member.
         const ReplayRequestInterface* GetReplayRequestInterface() const;
 
         // DWARF :719. X360 @0x822EFE08 -- bodied in this buffer's own TU.

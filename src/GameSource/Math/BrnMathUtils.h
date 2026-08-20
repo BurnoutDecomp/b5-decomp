@@ -43,12 +43,15 @@ namespace BrnMath
     // Round lfValue to lfNumFigures significant figures, returned as an integer. @ 0x82361600
     s32 RoundWithNumSignificantFigures(f32 lfValue, f32 lfNumFigures);
 
-    // ADDITIVE GROW (declare-only; body in its own TU @ X360 0x82540AB8).
-    // Exact point-in-oriented-box test: transform lPoint into the box's local frame via
-    // lBoxTransform and test each component against +/- the box half-extents. StuntManager::
-    // OnPropHit's narrowphase calls this. FLAG: the X360 passes the box transform plus two SIMD
-    // args (the prop position and the region dimensions); the exact param order / by-value-vs-ref
-    // is inferred from the OnPropHit call site and the asm register setup.
+    // Exact point-in-oriented-box test: project (lPoint - box centre) onto each of the box's
+    // own axes and test |projection| against that axis's half-extent. StuntManager::OnPropHit's
+    // narrowphase and ChallengeManager::IsPointInTriggerRegion both call it. @ 0x82540AB8
+    //
+    // [gateui] 2026-08-20: BODIED in this TU (it was declare-only, and a measured UNDEF
+    // external). The old "param order / by-value-vs-ref is inferred" FLAG is RETIRED -- the
+    // asm settles it: r3 carries the matrix pointer (rows read at +0/+16/+32/+48), v1 carries
+    // lPoint (`vmr128 v126, v1`) and v2 carries the extents (spilled to the param save area).
+    // The declaration below is exactly that shape.
     bool IsPointInsideBox(const Matrix44Affine& lBoxTransform, Vector3 lPoint, Vector3 lHalfExtents);
 
     // ADDITIVE GROW (reset-player-car wave 2026-08-01). @ 0x825405A0, DWARF primary file

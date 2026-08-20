@@ -6,6 +6,9 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"                    // CGS_ASSERT
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"      // CgsModule::VariableEventQueue<N,16>
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"            // gpDebugPrint (PROPS-BOOT one-shot)
+#include "GameSource/GameState/BrnGameEvents.h"                       // E_EVENT_RECORD_PROP_HIT (111)
+
+#include <stdlib.h>                                                   // getenv ([DIAG] BRN_PROP_DIAG)
 
 // WorldModule entity-modules -> update-output bridges, reconstructed store-for-store from
 // BURNOUT_X360_ARTIST.XEX.
@@ -169,25 +172,82 @@ void BridgePropToOutput_PreScene(
 }
 
 // ----------------------------------------------------------------------------
-// BridgeEntityModulesToOutput_PostPhysics  @ 0x827AEEB0
+// BridgeEntityModulesToOutput_PostPhysics  @ 0x827AEEB0   (200 instructions)
 //
-// The post-physics output fan-in. THE STREAMER LEG IS THE FIRST TRANSFER: the
-// world-entity post-physics output's staged GameData resource requests are
-// appended into the world update-output's request interface --
-//     v12 = WorldEntityIO::OutputBuffer_PostPhysics::GetResourceRequestInterface(a6);
-//     VariableEventQueue<4096,16>::Append<4096,16>(
-//         UpdateOutputBuffer::GetResourceRequestResourceInterface(a2), v12);
-// -- which LoadingScriptedState::UpdateWorldModule then forwards into the
-// GameData input (BridgeWorldToResource @0x823E5300), i.e. this is how a TRK_UNIT
-// load request raised by the streamer in PreSceneUpdate leaves the world module.
+// ⭐⭐ THE EXPORT HOLE IS CLOSED (2026-08-20, gateui wave, owner `wire`). Every earlier
+// revision of this banner said "@0x827AEEB0 is one of the holes in the JSON export set", and
+// the leg placement below was therefore GUESSED. It has now been dumped in full (pseudocode
+// + all 200 instructions) from a private BURNOUT_X360_ARTIST.XEX.i64 copy. The console body,
+// in ITS OWN ORDER, is:
 //
-// PARTIAL SLICE (FLAG): the console body continues with the traffic/race-car/prop
-// legs (traffic resource requests under the miUT_* monitor, the traffic scene-result
-// and game-event appends, BridgeRaceCarEntityInfoToOutput_PostPhysics, the prop VFX/
-// physical/update-notification queues and the crash-network output). Every one of
-// those SOURCE modules is itself a documented inert boot gate on this build, so
-// dropping their transfers is the consistent observable; they land with their
-// modules. The four X360 null tripwires (:74-:77) are reproduced.
+//    :74/:75/:76/:77   the four null tripwires (world out / traffic / race car / prop)
+//     1  BridgeRaceCarResourceRequestsToOutput(a1, out, raceCarOut)          @0x827AEF78
+//     2  Append<4096,16>( out->GetResourceRequestResourceInterface(),
+//                         worldEntityOut->GetResourceRequestInterface() )     @0x827AEF94
+//     3  [PerfMon a1+6167724]  Append<4096,16>( out->…RequestResourceInterface(),
+//                         trafficOut->GetResourceRequestInterface() )         @0x827AEFC0
+//     4  Append<32768,16>( out->sub_827A4E08(), trafficOut->…G() )            @0x827AEFE4
+//     5  BridgeRaceCarEntityInfoToOutput_PostPhysics(a1, out, raceCarOut)     @0x827AEFF4
+//     6  [PerfMon] Append<1536,16>( out->GetGameEventQueue(),
+//                         trafficOut->GetGameEventQueue() )                   @0x827AF018
+//     7  out->AppendTrafficTypeResponseQueue( trafficOut->… )                 @0x827AF02C
+//   ⭐8  out->AppendPropBecamePhysicalEventQueue( propOut->GetPropBecamePhysicalEventQueue()
+//                         const /*0x827A1F58, +0x10*/ )                       @0x827AF048
+//   ⭐9  out->SetPropVFXLocatorQueue( propOut->GetPropVFXLocatorQueue()
+//                         const /*0x827A1E08, +0xCB2C0*/ )                    @0x827AF05C
+//  ⭐10  Append<RecordPropHitEvent,50>( out->GetGameEventQueue(),
+//                         propOut->GetRecordHitPropQueue() const
+//                         /*0x827A1EB0, +0x160*/, 111 )                       @0x827AF07C
+//                         (`li r5, 0x6F` == 111 == E_EVENT_RECORD_PROP_HIT @0x827AF078)
+//  ⭐11  Append<HitOverheadSignEvent,100>( out->GetGameEventQueue(),
+//                         propOut->GetHitOverheadSignQueue() const
+//                         /*0x827A1D60, +0x7B0*/, 118 )                       @0x827AF09C
+//                         (`li r5, 0x76` == 118 == E_EVENT_OVERHEAD_SIGN_HIT @0x827AF098)
+//  ⭐12  if ( propOut->mbShouldRequestProgression /*lbzx at +0xCB61C @0x827AF0A8*/ )
+//            out->GetGameEventQueue()->AddEvent(&lEvent, 112, 1)              @0x827AF0C8
+//                         (112 == E_EVENT_REQUEST_PROP_PROGRESSION, DWARF
+//                          GameSource/GameState/BrnGameEvents.h:122; the payload is the EMPTY
+//                          struct RequestPropProgression, DWARF :442 -- `li r6,1` is its
+//                          sizeof, and r4 points at an UNINITIALISED 1-byte stack slot)
+//    13  [PerfMon] SetTrafficNetworkOutputInterface / SetTrafficSoundOutputInterface /
+//                  SetTrafficDirectorOutputInterface                          @0x827AF0E4..
+//    14  [PerfMon a1+6167720] SetDirectorVehicleInputInterface( raceCarOut->… ) @0x827AF158
+//    15  SetWorldEntityStatusInterface( worldEntityOut->… )                   @0x827AF174
+//    16  AppendReplayRequestInterface × 3 (race car, PROP, traffic)           @0x827AF190..
+//
+// The sole caller is WorldModule::Update @0x827D8218 -- which is the committed
+// BrnWorldModule.cpp call site that already brackets it with
+// LockBuffersForIO(lpUpdateOutputBuffer, …four source buffers), i.e. **destination
+// write-locked, every source READ-locked** (CgsModuleUtils.h). That is why legs 8-12 go
+// through the buffer's const accessors; the non-const twins would fire "Not locked for
+// writing". (See the read-lock twin table in BrnPropEntityModuleIO.h -- those six symbols are
+// real but IDA-unnamed, which is why an export-set grep previously concluded they don't exist.)
+//
+// ⭐ LANDED THIS WAVE: leg 10, the RecordPropHitEvent transfer. It is the ONLY world-side hop
+// on the smash-gate / billboard UI chain, and it was explicitly dropped
+// (`(void)lpPropOutput_PostPhysics;`). PropEntityModule::ProcessContacts already fills the
+// source queue at run time (PropEntityModule_wQ2_03.cpp :: ProcessContacts, the `lbRecord`
+// block) and the source queue IS Constructed (BrnPropEntityModuleIO_OutputBuffer_PostPhysics.cpp
+// :: Construct -- the never-Constructed-queue trap does not apply here), as is the destination
+// (BrnWorldModuleIO_UpdateOutputBuffer.cpp :: Construct, `mGameEventQueue.Construct()`).
+//
+// STILL DROPPED, DELIBERATELY (each now exactly specified above, so landing one is mechanical):
+//   * legs 3/4/6/7/13 -- every traffic transfer. Source getters un-homed on this build.
+//   * legs 8/9  -- the prop became-physical + VFX-locator queues. Both destinations exist and
+//     are typed (BrnWorldModuleIO.h :: AppendPropBecamePhysicalEventQueue /
+//     SetPropVFXLocatorQueue) and both const source getters now exist, so these are two
+//     one-liners; they are OFF the OnPropHit chain, so the gateui brief says note-don't-land.
+//   * leg 11 -- the overhead-sign transfer (game event 118). ⚠️ NOT the billboard/smash-gate
+//     feature: it feeds CrashModeScoring::DealWithHitOverheadSign, the Showtime overhead-sign
+//     scorer (gateui scout §0.1). Out of this wave's scope.
+//   (leg 12 IS NO LONGER DROPPED -- landed 2026-08-20 round 2, see the block at the end of the
+//    body. The `E_EVENT_REQUEST_PROP_PROGRESSION = 112` + `struct RequestPropProgression` it
+//    waited on now exist in GameSource/GameState/BrnGameEvents.h :43 / :138. ⚠️ The round-1
+//    banner here claimed the need was "Filed as a shared_header_request" when no report had
+//    been written at all -- corrected: it was filed in round 2 and answered in the same round.)
+//   * leg 16's prop arm -- AppendReplayRequestInterface(propOut->GetReplayRequestInterface()).
+//   * The console's two CPU monitors (a1+6167720 / +6167724) are not modelled on any leg here;
+//     every sibling bridge in this file takes the same disposition.
 // ----------------------------------------------------------------------------
 void BridgeEntityModulesToOutput_PostPhysics(
     void* lpWorldModule,
@@ -198,7 +258,6 @@ void BridgeEntityModulesToOutput_PostPhysics(
     const BrnWorld::WorldEntityIO::OutputBuffer_PostPhysics* lpWorldEntityOutput_PostPhysics)
 {
     (void)lpWorldModule;
-    (void)lpPropOutput_PostPhysics;
 
     CGS_ASSERT(lpOutputBuffer != 0, "lpWorldOutput != NULL");                                   // :74
     CGS_ASSERT(lpTrafficOutput_PostPhysics != 0, "lpTrafficOutputBuffer_PostPhysics != NULL");  // :75
@@ -230,9 +289,12 @@ void BridgeEntityModulesToOutput_PostPhysics(
         // image, and it is THIS function (@0x827AEEB0). The setter is the inlined
         // BrnDirectorVehicleInputInterface::Append -- it Clears the destination queue and
         // merges the source's events, which is why it is safe to run unconditionally every
-        // frame. (@0x827AEEB0 is one of the holes in the JSON export set, so the leg's
-        // POSITION inside this function is not asm-ordered; it is placed with the other
-        // race-car transfers, which is the only group it can belong to.)
+        // frame. (POSITION CORRECTED-BY-MEASUREMENT 2026-08-20: the console runs this leg late,
+        // at @0x827AF158 inside the a1+6167720 monitor bracket, AFTER the prop and traffic
+        // transfers -- not here with the other race-car ones, which is where it was placed while
+        // @0x827AEEB0 was still an export hole. It is left in place: SetDirectorVehicleInputInterface
+        // Clears-then-Appends into a destination no other leg in this function touches, so its
+        // position is behaviourally free, and moving it would be churn on a working camera chain.)
         //
         // ⭐⭐ WHY IT MATTERS: this is the only way a car's attribute key reaches the
         // director. Without it BridgeWorldToDirector step 6 has an empty source, so
@@ -246,6 +308,104 @@ void BridgeEntityModulesToOutput_PostPhysics(
         // named leg; see the function below.
         BridgeRaceCarEntityInfoToOutput_PostPhysics(lpWorldModule, lpOutputBuffer,
                                                     lpRaceCarOutput_PostPhysics);
+    }
+
+    // ================================================================================
+    // ⭐⭐ THE RECORD-PROP-HIT TRANSFER -- console leg 10, @0x827AF064..0x827AF07C.
+    //   0x827AF064  mr r3, r28                 ; r28 == lpPropOutput_PostPhysics
+    //   0x827AF068  bl sub_827A1EB0            ; GetRecordHitPropQueue() const  -> +0x160
+    //   0x827AF070  bl …GetGameEventQue        ; UpdateOutputBuffer::GetGameEventQueue()
+    //   0x827AF078  li r5, 0x6F                ; == 111 == E_EVENT_RECORD_PROP_HIT
+    //   0x827AF07C  bl Append<RecordPropHitEvent,50>
+    // and inside that helper (@0x827AEC10, exported): it walks 0..GetLength() and forwards each
+    // element to the three-arg AddEvent with liSize == 32 (`li r6,0x20` @0x827AECCC).
+    //
+    // ⭐⭐ WHY IT MATTERS: this is THE world-side hop of the smash-gate / billboard chain, and
+    // it was the one explicitly dropped (`(void)lpPropOutput_PostPhysics;`). Downstream:
+    // BrnGameModule::BridgeWorldToGameState @0x823E5368 appends this GameEventQueue into the
+    // GameState PostWorldInputBuffer, GameStateModule::PostWorldUpdate @0x8238F358 carries it,
+    // PreWorldUpdate @0x823A5328 merges it, and ProcessGameEvents @0x823A0A18 case 111 calls
+    // StuntManager::OnPropHit @0x8236EE18. With this leg dropped every one of those runs on an
+    // empty queue -- OnPropHit is unreachable no matter what the GameState side lands.
+    //
+    // The prop output buffer is READ-locked here (WorldModule::Update's LockBuffersForIO
+    // bracket), hence the const accessor; the queue's producer is
+    // PropEntityModule_wQ2_03.cpp :: ProcessContacts.
+    //
+    // ⚠️ NOT BrokenPropEvent. PropEntityIO::BrokenPropEvent (+0x820) has an AddEvent producer but
+    // NO Append instantiation anywhere in the image, so it never leaves the world module; the
+    // GameState feed is RecordPropHitEvent. (BrnPropEntityModule.h's "the outbound BrokenPropEvent
+    // … that GameState's StuntManager latches" comment is stale -- filed, not fixed here.)
+    //
+    // [FLAG] The `!= 0` guard is NOT in the console (its :77 assert is a non-gating tripwire and
+    // it dereferences regardless). It is carried for consistency with the two sibling legs above,
+    // which this TU already guards the same way; it can only differ from the console on a path
+    // that would fault there.
+    // ================================================================================
+    if (lpPropOutput_PostPhysics != 0)
+    {
+        const BrnWorld::PropEntityIO::OutputBuffer_PostPhysics::RecordHitPropQueue* lpRecordHitPropQueue =
+            lpPropOutput_PostPhysics->GetRecordHitPropQueue();
+
+        lpOutputBuffer->GetGameEventQueue()->Append(
+            *lpRecordHitPropQueue,
+            BrnGameState::GameStateModuleIO::E_EVENT_RECORD_PROP_HIT);
+
+        // [DIAG] NOT IN THE X360 BINARY -- the gateui `[UI-gate]` ladder's world rung. Same
+        // idiom and same env guard as PropEntityModule_wQ_04.cpp's "[prop-diag] BREAK" line
+        // (a once-evaluated static latch + the gpDebugPrint null test), first-N capped so a
+        // pile-up of smashes does not flood the boot log. A line here proves the transport
+        // fired; its absence with a "[prop-diag] BREAK" above it localises the break to
+        // ProcessContacts' lbRecord gate rather than to this bridge.
+        {
+            static const bool sbPropDiag = ( getenv( "BRN_PROP_DIAG" ) != 0 );
+            static s32 siDiagLinesLeft = 8;
+
+            const s32 liQueued = lpRecordHitPropQueue->GetLength();
+            if ( sbPropDiag && liQueued > 0 && siDiagLinesLeft > 0 && CgsDev::Log::gpDebugPrint != 0 )
+            {
+                --siDiagLinesLeft;
+                *CgsDev::Log::gpDebugPrint
+                    << "[UI-gate] bridged prop-hit n=" << liQueued << "\n";
+            }
+        }
+
+        // ================================================================================
+        // ⭐ [gateui] THE PROP-PROGRESSION REQUEST -- console leg 12, @0x827AF0A8..0x827AF0C8.
+        //   0x827AF0A8  lbzx r11, r28, 0xCB61C     ; propOut->mbShouldRequestProgression
+        //   (branch on zero)
+        //   0x827AF0C8  bl AddEvent(v28 /*out->GetGameEventQueue()*/,
+        //                           &v38 /*a stack slot the console never initialises*/,
+        //                           112 /*E_EVENT_REQUEST_PROP_PROGRESSION*/,
+        //                           1 /*sizeof(RequestPropProgression)*/)
+        //
+        // LANDED 2026-08-20 (round 2): it was BLOCKED, not dropped, on
+        // `E_EVENT_REQUEST_PROP_PROGRESSION = 112` + `struct RequestPropProgression` having no
+        // home. Both now exist (GameSource/GameState/BrnGameEvents.h:43 and :138, landed by the
+        // GameState owner this wave), so the world side is the console's own `if`.
+        //
+        // [FLAG] The console's payload is an UNINITIALISED 1-byte stack slot -- the event is a
+        // pure marker and its consumer never reads the byte. An uninitialised read is not
+        // reproducible across ABIs, so the (empty) record is default-constructed here; every
+        // byte the queue copies is therefore defined. Same disposition this file already takes
+        // on the console's other indeterminate reads.
+        // ⓘ The flag is a LEVEL, not an edge: nothing in the tree clears
+        // mbShouldRequestProgression, and the console does not clear it here either (the only
+        // `stbx 0` at +0xCB61C is in OutputBuffer_PostPhysics::Construct @0x822EFEAC) -- and
+        // that Construct runs every frame, because the buffer is a per-frame
+        // IOBufferStack::CreateIOBuffer<T> allocation. So it is a strict one-frame request, and
+        // this leg posts at most one event per frame. Not a double-post seam.
+        // ================================================================================
+        if (lpPropOutput_PostPhysics->ShouldRequestPropProgression())
+        {
+            const BrnGameState::GameStateModuleIO::RequestPropProgression lRequest =
+                BrnGameState::GameStateModuleIO::RequestPropProgression();
+
+            lpOutputBuffer->GetGameEventQueue()->AddEvent(
+                reinterpret_cast<const CgsModule::Event*>(&lRequest),
+                BrnGameState::GameStateModuleIO::E_EVENT_REQUEST_PROP_PROGRESSION,
+                static_cast<s32>(sizeof(lRequest)));
+        }
     }
 }
 

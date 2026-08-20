@@ -67,7 +67,15 @@ public:
     inline f32 GetDimensionY() const;
     inline f32 GetDimensionZ() const;
 
-    // These two have their own translation units (see ledger) — declaration only.
+    // These two have their own out-of-line X360 bodies (ComputeDirection @0x821F2CA8,
+    // ComputeTransform @0x821F2FD0). [gateui] 2026-08-20: both are now RECONSTRUCTED, in the
+    // sibling BrnRegion.cpp -- read its banner before touching either. The short version:
+    // the stored mRotationX/Y/Z are RADIANS (the console's inlined range-reduction lane is
+    // 1/2pi, not 1/360), ComputeTransform is RotZ * (RotY * RotX) applied to the world basis
+    // with the centre as the translation row, and ComputeDirection is the "at" row of
+    // RotY * RotX.
+    // ⛔ CONDUCTOR: GameSource/Director/DirectorLinkStubs.cpp still defines ComputeTransform
+    // as an identity stub; that block must be deleted when BrnRegion.cpp mounts (LNK2005).
     Vector3        ComputeDirection() const;
     Matrix44Affine ComputeTransform() const;
 

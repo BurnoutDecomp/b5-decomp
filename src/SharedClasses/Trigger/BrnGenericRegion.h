@@ -108,19 +108,60 @@ public:
     // BrnGenericRegion.h:117 / body @ :231 -- THIS TU (X360 0x82354760).
     const char*     GetTypeName() const;
 
-    // BrnGenericRegion.h:120-138 -- inlined accessors; declaration only.
-    bool            IsDriveThru() const;
-    CgsID           GetGroupId() const;
-    int32_t         GetCameraCut1() const;
-    int32_t         GetCameraCut2() const;
-    StuntCameraType GetCameraType1() const;
-    StuntCameraType GetCameraType2() const;
-    bool            IsOneWay() const;
+    // BrnGenericRegion.h:120-138 -- inlined accessors.
+    //
+    // [gateui] 2026-08-20: the six below were declaration-only and were LINK-DEAD
+    // (`GetGroupId` / `GetCameraCut1` / `GetCameraCut2` / `GetCameraType1` /
+    // `GetCameraType2` were measured as UNDEF externals in BrnStuntManager.obj,
+    // StuntManager_gUI_00.obj and BrnTriggerQueryManager.obj). They are given their
+    // inline bodies here, which is what the console has: NONE of them owns a
+    // standalone X360 symbol (`progress/identity.json` lists only
+    // `GenericRegion::GetTypeName` @0x82354760 for this class), i.e. every one is a
+    // header-inlined member-read in the original, exactly like the `GetType()`
+    // above. Each reads its named member -- no offset poke.
+    //
+    // OFFSET ATTESTATION (why these members and not neighbours): the TriggerRegion
+    // base subobject is 44 bytes (BoxRegion 36 + mId 4 + miRegionIndex 2 + meType 1
+    // + 1 pad), so miGroupID lands at +0x2C and meType at +0x36 -- and the X360
+    // reads confirm both: `lbz r11, 0x36(region)` is the sub-type test in
+    // StuntManager::OnPropHit @0x8236EE18 (8 -> SMASH, 12 -> BILLBOARD) and
+    // ProcessStuntElement @0x8239CDB0 keys the stunt element on the +0x2C word,
+    // falling back to TriggerRegion::GetId() (+0x24) when it is zero.
+    bool            IsDriveThru() const;   // still declaration-only -- see the FLAG below
+
+    // The stunt-element KEY. X360 ProcessStuntElement @0x8239CDB0 does
+    // `lwz r11, 0x2C(region); extsw r11, r11` -- a SIGN-EXTENDING word read into the
+    // 64-bit CgsID. `static_cast<CgsID>(int32_t)` reproduces that exactly (the
+    // int32 -> uint64 conversion is 2's-complement, i.e. sign extension), and it is
+    // the same idiom TriggerRegion::GetId() already uses for its own int32 storage.
+    CgsID           GetGroupId() const     { return static_cast<CgsID>( miGroupID ); }
+
+    // Stunt-camera cut indices. DWARF returns int32_t over int16_t storage, so the
+    // console read is the sign-extending `lha`; the implicit int16 -> int32
+    // promotion below is that sign extension. StuntManager::UpdateJumps
+    // (BrnStuntManager.cpp :: UpdateJumps) compares `GetCameraCut1() > 0`, which is
+    // only meaningful signed.
+    int32_t         GetCameraCut1() const  { return miCameraCut1; }
+    int32_t         GetCameraCut2() const  { return miCameraCut2; }
+
+    StuntCameraType GetCameraType1() const { return static_cast<StuntCameraType>( miCameraType1 ); }
+    StuntCameraType GetCameraType2() const { return static_cast<StuntCameraType>( miCameraType2 ); }
+
+    bool            IsOneWay() const       { return miIsOneWay != 0; }
 
     // BrnGenericRegion.h:141-144 -- own TUs (FixDown @ BrnGenericRegion.cpp:89);
     // declaration only.
     void            FixDown();
     void            FixUp();
+
+    // FLAG [gateui]: `IsDriveThru()` is deliberately LEFT declaration-only. Unlike the
+    // six above it is not a member read -- the console tests meType against the
+    // drive-thru type SET, and that set is not attested by anything in this wave's
+    // evidence (the only consumer, DriveThruManager::ProcessDriveThru @0x8239B6E8,
+    // is an unmounted TU and inlines the test inside a 1300-line body). Guessing
+    // "meType <= E_TYPE_CAR_PARK" would be a fabrication with a live behavioural
+    // consequence (every junkyard/gas-station/body-shop/paint-shop/car-park trigger
+    // gates on it), so it is parked for the owner of the DriveThruManager TU.
 
 private:
     // Layout (DWARF, after the 44-byte TriggerRegion base subobject @ 0x00..0x2B):

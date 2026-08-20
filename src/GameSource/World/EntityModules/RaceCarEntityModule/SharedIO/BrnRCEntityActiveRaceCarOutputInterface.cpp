@@ -580,5 +580,111 @@ bool RCEntityActiveRaceCarOutputInterface::IsPlayerWrecked() const
     return mbPlayerWrecked;
 }
 
+// ============================================================================
+// ---- ADDITIVE 2026-08-20 ([gateui] round 3, owner fix3bridge) --------------
+// The THREE remaining player-scoped getters that MOUNTED callers reference with no
+// definition anywhere in the tree. They gate the gsm lane's mount set: every one of
+//   Offences/BrnStuntManager.cpp :: UpdateJumps
+//   ModeManager/Scoring/BrnStuntModeScoring_StuntTypes.cpp   (three sites)
+//   ModeManager/Scoring/BrnStuntModeScoringOnline.cpp        (three sites)
+//   ModeManager/GameModes/BrnBurnoutSkillzManager.cpp        (two sites)
+//   ModeManager/ChallengeManager/BrnChallengeManager_wB_05 / _wB_15 / _wC_04
+// calls one of them and would otherwise LNK2019.
+//
+// ⭐ THEY ARE NOT "CONSOLE-INLINED ACCESSORS THIS TREE DE-INLINED" (the round-2 fixgsm
+// request's premise, corrected here). All three ARE real out-of-line X360 functions --
+// IDA simply leaves them unnamed, so they are absent from the ledger and from any
+// name-keyed grep:
+//     sub_82310240 (43 insns) -> GetPlayerRaceCarState
+//     sub_82310398 (41 insns) -> GetPlayerDirection
+//     sub_82310440 (41 insns) -> GetPlayerLinearVelocity
+// They were identified the same way the committed GetPlayerPosition (sub_823102F0)
+// above was: by their two baked assert strings, which name THIS header and carry an
+// exact line. The four sit in one contiguous address run and their `IsPlayerCarActive()`
+// assert lines are 7 apart -- 1266 / 1273 / 1280 / 1287 -- while the DWARF declares the
+// four in exactly that order and spacing (references/DecFIGS/dwarfdump/.../
+// BrnRaceCarEntityModuleOutputInterface.h:435 GetPlayerRaceCarState, :438
+// GetPlayerPosition, :441 GetPlayerDirection, :444 GetPlayerLinearVelocity). The ALREADY
+// COMMITTED middle member of that run -- GetPlayerPosition at assert line 1273 -- is the
+// fixed point that pins which sub_ is which, so these are transcriptions, not inferences.
+// (Independently corroborated: ModeManager/Scoring/BrnStuntModeScoring_StuntTypes.cpp's
+// own banner already attributes sub_82310440 -> GetPlayerLinearVelocity and sub_82310398
+// -> GetPlayerDirection from its call sites. The ":393/:399/:402" numbers in this
+// interface's declaration column come from an earlier dwarfdump revision; the order is
+// identical, so nothing depends on which numbering is quoted.)
+//
+// ⚠️ EVERY OFFSET BELOW IS TAKEN BY NAME, NEVER AT THE CONSOLE'S LITERAL BYTE COUNT.
+// The console's element loads are `mulli r11, idx, 0x460 ; add r11, r11, this` then a
+// displacement off maRaceCarStates' base (this + 816); the displacements resolve as:
+//     0x330 = 816  -> &maRaceCarStates[idx]                    (a pointer return, r3)
+//     0x540 = 1344 -> element + 528 == mTransform(496) + 32 == Matrix44Affine::At()
+//                     (zAxis -- the forward row; the sibling GetPlayerPosition takes
+//                      +48 == wAxis == Pos(), which is the committed body above)
+//     0x660 = 1632 -> element + 816 == mLinearVelocity
+// (BrnVehicleEvents.h's RaceCarState is byte-identical to the console's for these three
+// members -- the historic "+4 drift" was settled at mCarAssetAttribKey @960 and lands
+// entirely AFTER them, so no drift correction applies here.)
+//
+// ⚠️ BOTH ASSERTS ARE NON-GATING TRIPWIRES, as in GetPlayerPosition: the console fires
+// them and then reads the element anyway. Reproduced with that behaviour, not turned
+// into early-outs -- an early-out would invent a return value the binary never has.
+// The second guard is the INLINED IsPlayerCarActive() (the -1 sentinel short-circuiting
+// mbIsPlayerCarActive @+0x2860), written as the call to the out-of-line twin.
+// ============================================================================
+
+// ----------------------------------------------------------------------------
+// X360 sub_82310240 -- GetPlayerRaceCarState (DWARF :435). Statement for statement:
+//     lwz   r11, 0x2858(this) ; cmpwi 8 ; blt -> skip
+//       FireAssert("mePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", <hdr>, 0x3C7 == 967)
+//     lwz   r11, 0x2858(this) ; cmpwi -1 ; r11 = (idx == -1) ? 0 : lbz 0x2860(this)
+//     cmplwi r11, 0 ; bne -> skip
+//       FireAssert("IsPlayerCarActive()", <hdr>, 0x4F2 == 1266)
+//     lwz   r11, 0x2858(this) ; mulli r11, r11, 0x460 ; add r11, r11, this
+//     addi  r3, r11, 0x330                       ; return &maRaceCarStates[idx]
+// Returned in r3 as a plain pointer (no sret), which is why this one is the odd
+// single-argument member of the four.
+// ----------------------------------------------------------------------------
+const RCEntityActiveRaceCarOutputInterface::RaceCarState*
+RCEntityActiveRaceCarOutputInterface::GetPlayerRaceCarState() const
+{
+    CGS_ASSERT(mePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+               "mePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");   // this header :967
+    CGS_ASSERT(IsPlayerCarActive(), "IsPlayerCarActive()");                     // this header :1266
+    return &maRaceCarStates[mePlayerActiveRaceCarIndex];
+}
+
+// ----------------------------------------------------------------------------
+// X360 sub_82310398 -- GetPlayerDirection (DWARF :441). Same two tripwires (the second
+// at 0x500 == 1280), then a single 16-byte vector move returned through the sret
+// pointer in r3:
+//     lwz    r11, 0x2858(this) ; li r10, 0x540 ; mulli r11, r11, 0x460 ; add r11, r11, this
+//     lvx128 v0, r11, r10 ; stvx128 v0, r0, r29
+// 0x540 == 1344 == maRaceCarStates(816) + 528, and 528 == mTransform(496) + 32 ==
+// Matrix44Affine::At() -- the zAxis / forward row of the car's world transform.
+// ----------------------------------------------------------------------------
+Vector3 RCEntityActiveRaceCarOutputInterface::GetPlayerDirection() const
+{
+    CGS_ASSERT(mePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+               "mePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");   // this header :967
+    CGS_ASSERT(IsPlayerCarActive(), "IsPlayerCarActive()");                     // this header :1280
+    return maRaceCarStates[mePlayerActiveRaceCarIndex].mTransform.At();
+}
+
+// ----------------------------------------------------------------------------
+// X360 sub_82310440 -- GetPlayerLinearVelocity (DWARF :444). Identical shape (second
+// tripwire at 0x507 == 1287); the displacement is 0x660 == 1632 == maRaceCarStates(816)
+// + 816, and element +816 is RaceCarState::mLinearVelocity (BrnVehicleEvents.h).
+// ⓘ RAW m/s, NOT normalised: StuntModeScoring_StuntTypes' own console arm normalises the
+// result itself before dotting it with GetPlayerDirection(), so normalising here would
+// double-apply.
+// ----------------------------------------------------------------------------
+Vector3 RCEntityActiveRaceCarOutputInterface::GetPlayerLinearVelocity() const
+{
+    CGS_ASSERT(mePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+               "mePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");   // this header :967
+    CGS_ASSERT(IsPlayerCarActive(), "IsPlayerCarActive()");                     // this header :1287
+    return maRaceCarStates[mePlayerActiveRaceCarIndex].mLinearVelocity;
+}
+
 }
 }
