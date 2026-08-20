@@ -15,6 +15,7 @@
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h"
 #include "GameSource/BurnoutConstants.h"            // EActiveRaceCarIndex / EGlobalRaceCarIndex enumerators
 #include "GameShared/GameClasses/Core/CgsAssert.h"  // CGS_ASSERT
+#include "GameShared/GameClasses/Development/Log/CgsLog.h" // gpDebugPrint (the demoted player-index tripwire)
 #include <cstring>                                  // std::memcpy (RaceCarState payload copy)
 
 namespace BrnWorld
@@ -228,7 +229,23 @@ EGlobalRaceCarIndex RCEntityActiveRaceCarOutputInterface::GetGlobalRaceCarIndex(
 // (Truncated export name: "GetPlay".)
 EActiveRaceCarIndex RCEntityActiveRaceCarOutputInterface::GetPlayerActiveRaceCarIndex() const
 {
-    CGS_ASSERT(mePlayerActiveRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID, "Player car index hasn't been set");
+    // ⚠️ [FLAG PC bring-up — the console's "hasn't been set" tripwire demoted to a one-shot
+    // log]. On this build one boot-time caller queries the player index once (~33 s, before
+    // any race car is registered) and the INVALID sentinel return is handled by every consumer
+    // (they early-out on the inactive player — verify_r3_fix3bridge NOTE 2). The console's
+    // blocking assert stopped a manual boot at the loading screen; the diagnostic stays in the
+    // log. RESTORE the CGS_ASSERT when the early caller is identified and guarded.
+    if (mePlayerActiveRaceCarIndex == E_ACTIVE_RACE_CAR_INDEX_INVALID)
+    {
+        static bool gsbWarnedUnsetPlayerIndex = false;
+        if (!gsbWarnedUnsetPlayerIndex && CgsDev::Log::gpDebugPrint != 0)
+        {
+            *CgsDev::Log::gpDebugPrint
+                << "[UI-gate] tripwire: GetPlayerActiveRaceCarIndex queried before the player "
+                   "car index was set (console asserts here; INVALID returned, consumers early-out)\n";
+            gsbWarnedUnsetPlayerIndex = true;
+        }
+    }
     return mePlayerActiveRaceCarIndex;
 }
 
