@@ -1,9 +1,9 @@
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/BrnSimpleVehiclePhysics.h"
-#include "GameSource/Physics/VehicleManager/VehiclePhysics/VehiclePhysics.h"  // GetWheelsWorldTransfrom's devirtualized GetSteeringAngle (named slot-0 divergence, see header)
 #include "GameSource/Physics/VehicleManager/BrnVehicleConstants.h"            // KVF_MAX_BUCKLE_ANGLE_CRASHING / KAVF_WHEEL_TWIST_DIRECTIONS (crash arm)
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/VehicleAttribs.h"  // the full VehicleAttribs (SwitchAttribs reads its base/suspension lanes)
 #include "GameSource/AttribSys/Generated/classes/burnoutcarasset.h"           // the car-asset wrapper (SetAttributes' key chase)
 #include "GameSource/AttribSys/Generated/classes/physicsvehiclehandling.h"    // the handling wrapper + its checked copy ctor
+#include "GameShared/GameClasses/Geometric/Primitives/CgsBox.h"              // CgsGeometric::Box::Set
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"     // CGS_ASSERT
 #include <cmath>                                        // std::sqrt (AddTractionPoint's line distance)
@@ -138,8 +138,8 @@ namespace Vehicle
     //
     //   base Construct, Wheel::Clear each of the 4 wheels (the do/while walks +304 stride 224
     //   until Wheel::Clear returns the sentinel), SimpleVehicleAttribs::Construct, zero
-    //   mHandlingBodyOffset(+1680)/mHalfExtent(+1696)/the two AABBs, then Reset, then the
-    //   base frozen gate cleared.
+    //   mHandlingBodyOffset(+1680)/mHalfExtent(+1696), reset mAboveGroundTestResult, then run
+    //   the source-level zero-argument Reset wrapper (Vector3 zero reset + frozen clear).
     // -------------------------------------------------------------------------------------------
     void SimpleVehiclePhysics::Construct()
     {
@@ -150,19 +150,13 @@ namespace Vehicle
             maWheels[liWheel].Clear();
         mSimpleAttribs.Construct();
 
-        mHandlingBodyOffset = KV_ZERO;                           // +1680
-        mHalfExtent         = KV_ZERO;                           // +1696
-        mDeformableAABB.mMin = KV_ZERO;                          // the stvx128 v1 zero pair
-        mDeformableAABB.mMax = KV_ZERO;
-        mOriginalAABB.mMin   = KV_ZERO;
-        mOriginalAABB.mMax   = KV_ZERO;
+        mHandlingBodyOffset = KV_ZERO;                           // +0x690
+        mHalfExtent         = KV_ZERO;                           // +0x6A0
 
-        // FLAG: the X360 seeds raw scratch words *(+1430)=0x8000 / *(+1428)=-1 / *(+1424)=0.0 /
-        // *(+1432)=0 that sit in the deform/crash-flag/wheel-plane region. In the BY-NAME home the
-        // faithful intent is the post-construct reset state, applied by Reset() below.
+        // 0x82620454..0x8262047C initialises the above-ground result at +0x570.  These are not
+        // AABB stores: +0x590/+0x594/+0x596/+0x598 are the distance, tag halves and valid byte.
+        mAboveGroundTestResult.Reset();
         Reset();
-        // *(this+112)=0 -- the base sleep/engine-only-update gate (mbFrozen region), cleared.
-        SetFrozen(false);
     }
 
     // -------------------------------------------------------------------------------------------
@@ -171,17 +165,16 @@ namespace Vehicle
     // -------------------------------------------------------------------------------------------
     void SimpleVehiclePhysics::Destruct()
     {
-        ExternallySimulatedBody::Destruct();
+        ExternalPhysicsBody::Destruct();
         for (int liWheel = 0; liWheel < eNumDrivenWheels; ++liWheel)
             maWheels[liWheel].Clear();
         Reset();
-        SetFrozen(false);
     }
 
     // -------------------------------------------------------------------------------------------
-    // Reset  @0x825D9A58
-    //   if !mbStartedDeforming (the `if ( !*(result+1668) )` gate -- 1668 is the deform latch in
-    //   the console layout) Wheel::Reset each wheel; then zero maLocalTractionPoints[0..3]
+    // Reset(Vector3)  @0x825D9A58
+    //   if !mSimpleAttribs.IsValid() (`lbz this+0x684`, exactly +0x5A0+0xE4) Wheel::Reset each
+    //   wheel; then zero maLocalTractionPoints[0..3]
     //   (+1328/+1344/+1360/+1376), splat mfSpeedMPH(+1728) to 0, and clear the crash bools
     //   (+1808 mbCrashing, +1809 mbStartedFatallyCrashing, +1812 mbMinWheelDistValid,
     //   +1813 mbAnyWheelsDetatched).
@@ -209,9 +202,13 @@ namespace Vehicle
     // mAngularVelocity there destroys the velocity the caller is resetting the car WITH
     // (VehiclePhysics::Reset takes the velocity as its argument and re-publishes it).
     // -------------------------------------------------------------------------------------------
-    void SimpleVehiclePhysics::Reset()
+    void SimpleVehiclePhysics::Reset(Vector3 lInitialVelocity)
     {
-        if (!mbStartedDeforming)                        // gate: console reads the deform latch
+        // The parameter is part of the DecFIGS-mangled source signature and Breaker ABI, but is
+        // dead in this build: @0x825D9A80 constructs its own zero before every Wheel::Reset.
+        (void)lInitialVelocity;
+
+        if (!mSimpleAttribs.IsValid())                  // lbz this+0x684
         {
             for (int liWheel = 0; liWheel < eNumDrivenWheels; ++liWheel)
                 maWheels[liWheel].Reset(KV_ZERO);
@@ -226,6 +223,21 @@ namespace Vehicle
         mbStartedFatallyCrashing = false;               // +1809
         mbMinWheelDistValid      = false;               // +1812
         mbAnyWheelsDetatched     = false;               // +1813
+    }
+
+    // DecFIGS @0x6D8824.  Breaker inlines this wrapper in Construct @0x82620430..47C and
+    // Destruct @0x8262070C..718: splat zero into v1, call @0x825D9A58, clear +0x70.
+    void SimpleVehiclePhysics::Reset()
+    {
+        Reset(KV_ZERO);
+        SetFrozen(false);
+    }
+
+    // DecFIGS @0x6B4400 is an emitted empty body. UpdatePostSimulation is deliberately
+    // non-virtual; full-physics callers select the VehiclePhysics implementation statically.
+    void SimpleVehiclePhysics::UpdatePostSimulation(VecFloat lvfTimeStep)
+    {
+        (void)lvfTimeStep;
     }
 
     // -------------------------------------------------------------------------------------------
@@ -261,6 +273,13 @@ namespace Vehicle
         mAboveGroundTestResult.mbValid = true;                       // +1432
     }
 
+    // The base vtable's first slot is the ICF-folded zero-return implementation.  DecFIGS names
+    // it at BrnSimpleVehiclePhysics.cpp:768; VehiclePhysics overrides it with @0x825D4028.
+    VecFloat SimpleVehiclePhysics::GetSteeringAngle() const
+    {
+        return VecFloat{ 0.0f, 0.0f, 0.0f, 0.0f };
+    }
+
     // -------------------------------------------------------------------------------------------
     // ClearCrashing  @0x825B8EA8  -- clear the crash master flag + the fatal-crash latch.
     // -------------------------------------------------------------------------------------------
@@ -271,38 +290,23 @@ namespace Vehicle
     }
 
     // -------------------------------------------------------------------------------------------
-    // ⛔⛔ SetCrashing -- NOT THE CONSOLE BODY. VTABLE-CLOSURE GATE ONLY, added 2026-08-03.
-    //
-    // WHY IT EXISTS AT ALL. `SimpleVehiclePhysics::SetCrashing()` is one of this group's
-    // fidelity:BLOCKED entries (BrnSimpleVehiclePhysics.h: "deep VMX128 routines ... whose
-    // pseudocode is the degenerate 'local variable allocation has failed' form ... no fabricated
-    // math is committed"). It was DECLARE-ONLY and that cost nothing, because nothing mounted ever
-    // instantiated this class's vtable.
-    //
-    // ⭐⭐ THAT CHANGED THE MOMENT BrnVehicleManager.h STOPPED USING A BYTE-PINNED STAND-IN. With
-    // `RaceCarPhysics maRaceCarVehicles[8]` embedded BY VALUE, the already-mounted
-    // BrnPhysicsModule.cpp -- which embeds a VehicleManager by value -- odr-uses the implicit
-    // constructor, which writes eight vptrs, which requires the WHOLE vtable to be defined.
-    // Exactly the standing lesson that a mount's closure is its STATIC reference graph and not its
-    // live-call graph: this function has no caller anywhere in the mounted tree and is still
-    // link-required. It and the +0x10 slot (then role-named IsIgnoringPassedOnImpulses;
-    // image-settled 2026-08-09 as IsPlayerVehicleInShowtime) were the only two symbols of the
-    // entire RaceCarPhysics vtable still missing.
-    //
-    // ⛔ WHAT IT MUST NOT BECOME. A quiet `{}` here is the silent-drop-stub failure class this
-    // project keeps paying for: crash arming would be dropped and every downstream reader would see
-    // a plausible "not crashing". So it asserts. It is UNREACHABLE today -- the only callers are
-    // TrafficPhysics::Update and VehiclePhysics::SetCrashing's base entry, both unmounted -- and the
-    // assert is the thing that says so out loud if that ever stops being true.
-    //
-    // ⚠️ IT DELIBERATELY WRITES NOTHING. Setting mbCrashing here would be inventing the one part of
-    // the body that happens to be guessable and would make the assert look survivable.
+    // SetCrashing @0x825D98F0.  Arm the two car-level latches, clear each wheel's accumulated
+    // torque/broken-adhesive state and match its angular speed to the body's forward speed.
     // -------------------------------------------------------------------------------------------
     void SimpleVehiclePhysics::SetCrashing()
     {
-        CGS_ASSERT(false,
-                   "SimpleVehiclePhysics::SetCrashing is a vtable-closure gate, not a body -- "
-                   "reconstruct it before anything calls it");
+        mbCrashing         = true;    // +0x710
+        mbCrashedThisFrame = true;    // +0x713
+
+        const f32 lfForwardSpeed = vpu::Dot(mLinearVelocity, mTransform.zAxis);
+        for (s32 liWheel = 0; liWheel < eNumDrivenWheels; ++liWheel)
+        {
+            Wheel& lrWheel = maWheels[liWheel];
+            lrWheel.mIntegrationVariables.y = 0.0f; // wheel+0x30.y
+            lrWheel.mIntegrationVariables.x =
+                lfForwardSpeed / lrWheel.mSlipVariables.w; // wheel angular velocity = v/r
+            lrWheel.mbBrokenAdhesiveLimit = false;  // wheel+0xD5
+        }
     }
     // -------------------------------------------------------------------------------------------
     // AboveGroundTestResult::Reset  (declared "owned by this TU" at the struct; the byte source is
@@ -730,13 +734,8 @@ namespace Vehicle
             // 0x825D9490 splats the spin rows onto the steer rows).
             if (leWheel == eFrontLeftWheel || leWheel == eFrontRightWheel)
             {
-                // The console call is vtable slot 0 with a 16-byte sret (0x825D92E0) --
-                // `virtual VecFloat GetSteeringAngle() const`, which this tree declares
-                // non-virtual f32 on VehiclePhysics. DEVIRTUALIZED per the named divergence
-                // (header banner + the UpdateRaceCarState precedent); every live receiver is
-                // at least a VehiclePhysics.
-                const f32 lfSteerAngle =
-                    static_cast<const VehiclePhysics*>(this)->GetSteeringAngle();
+                // The console dispatches vtable slot 0 and consumes the broadcast VecFloat.
+                const f32 lfSteerAngle = GetSteeringAngle().x;
                 lLocal = SvpMulRotation(lLocal, SvpRotationAboutY(lfSteerAngle));
             }
         }
@@ -782,6 +781,56 @@ namespace Vehicle
 
         // PS3 DWARF names the sret local `lWheelTransform` -- kept.
         return lWheelTransform;
+    }
+
+    // ===========================================================================================
+    // SimpleVehiclePhysics::GetSimpleVehicleBox @0x82602A20
+    //
+    // Build the local bounds from the streamed body half-extent and the bottom of every wheel,
+    // move the graphics transform to the local bounds' centre, then publish an oriented box with
+    // zero fatness.  This is the exact named-member form of the vminfp/vmaxfp loop in Breaker.
+    // ===========================================================================================
+    void SimpleVehiclePhysics::GetSimpleVehicleBox(CgsGeometric::Box& lrOutBox) const
+    {
+        Vector3 lvMin{ -mHalfExtent.x, -mHalfExtent.y, -mHalfExtent.z, 0.0f };
+        Vector3 lvMax{  mHalfExtent.x,  mHalfExtent.y,  mHalfExtent.z, 0.0f };
+
+        for (s32 liWheel = 0; liWheel < eNumDrivenWheels; ++liWheel)
+        {
+            const Wheel& lrWheel = maWheels[liWheel];
+            CGS_ASSERT(vpu::IsValid(lrWheel.mPosition),
+                       "Invalid wheel position: , please tell Graham D.");
+
+            // The wheel's lowest point in graphics/model space:
+            //     COM offset + wheel centre - (0, radius, 0).
+            const Vector3 lvWheelBottom{
+                mSimpleAttribs.mCOMOffset.x + lrWheel.mPosition.x,
+                mSimpleAttribs.mCOMOffset.y + lrWheel.mPosition.y - lrWheel.mSlipVariables.w,
+                mSimpleAttribs.mCOMOffset.z + lrWheel.mPosition.z,
+                0.0f
+            };
+            lvMin = vpu::Min(lvMin, lvWheelBottom);
+            lvMax = vpu::Max(lvMax, lvWheelBottom);
+        }
+
+        const Vector3 lvCentre{
+            (lvMin.x + lvMax.x) * 0.5f,
+            (lvMin.y + lvMax.y) * 0.5f,
+            (lvMin.z + lvMax.z) * 0.5f,
+            0.0f
+        };
+        const Vector3 lvDimensions{
+            lvMax.x - lvCentre.x,
+            lvMax.y - lvCentre.y,
+            lvMax.z - lvCentre.z,
+            0.0f
+        };
+
+        Matrix44Affine lBoxTransform = GetGraphicsVehicleTransform();
+        lBoxTransform.wAxis = vpu::Add(lBoxTransform.wAxis,
+                                       RotateCOMOffsetToWorld(lBoxTransform, lvCentre));
+        lBoxTransform.wAxis.w = 1.0f;
+        lrOutBox.Set(lBoxTransform, lvDimensions, VecFloat{ 0.0f, 0.0f, 0.0f, 0.0f });
     }
 
     // ===========================================================================================
@@ -1199,9 +1248,9 @@ namespace Vehicle
     //
     // Store map, every offset read off the asm and reached BY NAME below:
     //   0x8262FB94  bl ExternalPhysicsBody::Prepare      r3 = this + 0x10 (the base sub-object)
-    //   0x8262FBA0  bl SimpleVehiclePhysics::Reset       the caller's `vmr128 v1,v127` is a DEAD
-    //               move -- Reset @0x825D9A58 overwrites v127 with `vspltisw128 v127,0` before its
-    //               first use, so the committed 0-arg Reset() is right (checked, not assumed).
+    //   0x8262FBA0  bl SimpleVehiclePhysics::Reset(Vector3) @0x825D9A58. The caller forwards
+    //               lLinearVelocity in v1; that source/ABI argument is real even though this
+    //               Breaker body never consumes it.
     //   0x8262FBB0  bl SimpleVehicleAttribs::SetupAttribs  r3 = this + 0x5A0 == &mSimpleAttribs
     //   0x8262FBC8  stvx128 v127, this+0x50    mLinearVelocity     = lLinearVelocity
     //   0x8262FBD0  stvx128 v125, this+0x690   mHandlingBodyOffset = lHandlingBodyOffset
@@ -1251,7 +1300,7 @@ namespace Vehicle
         }
 
         ExternalPhysicsBody::Prepare();          // bl @0x8262FB94, r3 = this + 0x10
-        Reset();                                 // bl @0x8262FBA0 (incoming v1 is dead -- see banner)
+        Reset(lLinearVelocity);                  // v1 @0x8262FB98; source arg is real but callee-dead
         mSimpleAttribs.SetupAttribs(lpAttribs);  // bl @0x8262FBB0
 
         mLinearVelocity     = lLinearVelocity;     // +0x50

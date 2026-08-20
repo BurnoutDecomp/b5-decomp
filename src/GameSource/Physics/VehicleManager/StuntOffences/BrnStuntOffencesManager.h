@@ -15,17 +15,17 @@
 // layout is expressed with explicit offsets (named members + alignment pads). Every recovered offset
 // is pinned by offsetof asserts in the never-called _AssertLayout(); sizeof is pinned to 452.
 //
-// The class accesses the FOREIGN per-car RaceCarPhysics record and per-driver record by raw offset
-// (drift Z-speed @+0x1010, velocity reg @+0x6C0, position/transform row @+0x1340, drift-active float
-// @+0x109C, handbrake-held byte @+0x135B, "should be airborne" gate @+0x1350, driver-state word
-// @+0xD0). Those are spelled through narrow accessors GROWN onto VehiclePhysics by name (see the .cpp
-// + shared_header_grows); each is FLAGged.
+// The class reads the foreign RaceCarPhysics and VehicleDriver records exclusively through the
+// exact DecFIGS-declared accessors/members whose inlined Breaker loads attest them. In particular,
+// +0x1010 lane 2 is GetTimeDrifting (a genuine VecFloat), +0x6C0 is the splatted scalar speed,
+// +0x1340 is GetLinearVelocityDirection, and the driver word at +0xD0 is GetDriverType.
 
 #include "types.hpp"
 #include <cstddef>                                                  // offsetof (layout asserts)
 #include "BrnCommonTypes.h"                                         // Vector2, Vector3, Matrix44Affine
 #include "GameSource/BurnoutConstants.h"                            // EActiveRaceCarIndex
 #include "GameSource/Physics/VehicleManager/StuntOffences/BrnStuntOffencesManagerShared.h" // the 3 enums
+#include "GameSource/Physics/VehicleManager/VehiclePhysics/BrnVehicleDriver.h" // Vehicle::VehicleDriver
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"    // CgsModule::VariableEventQueue<1536,16>
 #include "GameShared/GameClasses/Containers/CgsBitArray.h"          // CgsContainers::BitArray<8> (live-car bitset)
 
@@ -44,10 +44,10 @@ namespace BrnPhysics
         void Construct();                                                                          // @0x825E8C08
 
         void Update(Vehicle::RaceCarPhysics* lpaRaceCarPhysics,
-                    void* lpaRaceCarDrivers,
-                    BrnGameState::GameStateModuleIO::GameEventQueue* lpGameEventQueue,
+                    Vehicle::VehicleDriver* lpaRaceCarDrivers,
                     EActiveRaceCarIndex lePlayerActiveRaceCarIndex,
                     const CgsContainers::BitArray<8>* lpUsedRaceCars,
+                    BrnGameState::GameStateModuleIO::GameEventQueue* lpGameEventQueue,
                     f32 lfTimeStep);                                                               // @0x82642408
 
         void OutputStuntsInProgress(RaceCarState* lpRaceCarState,
@@ -90,14 +90,17 @@ namespace BrnPhysics
                            BrnGameState::GameStateModuleIO::GameEventQueue* lpGameEventQueue,
                            f32 lfTimeStep);                                                         // @0x82613820
 
-        void CheckForConvoy(Vehicle::RaceCarPhysics* lpaRaceCarPhysics, void* lpaRaceCarDrivers,
+        void CheckForConvoy(Vehicle::RaceCarPhysics* lpaRaceCarPhysics,
+                            Vehicle::VehicleDriver* lpaRaceCarDrivers,
                             EActiveRaceCarIndex lePlayerActiveRaceCarIndex,
                             const CgsContainers::BitArray<8>* lpUsedRaceCars, f32 lfTimeStep);      // @0x82628EC8
         s32  GetTailgaterIndex(EActiveRaceCarIndex leActiveRaceCarIndex,
-                               Vehicle::RaceCarPhysics* lpaRaceCarPhysics, void* lpaRaceCarDrivers,
+                               Vehicle::RaceCarPhysics* lpaRaceCarPhysics,
+                               Vehicle::VehicleDriver* lpaRaceCarDrivers,
                                const CgsContainers::BitArray<8>* lpRaceCarsToCheck);                // @0x82613F68
         s32  GetTailgateeIndex(EActiveRaceCarIndex leActiveRaceCarIndex,
-                               Vehicle::RaceCarPhysics* lpaRaceCarPhysics, void* lpaRaceCarDrivers,
+                               Vehicle::RaceCarPhysics* lpaRaceCarPhysics,
+                               Vehicle::VehicleDriver* lpaRaceCarDrivers,
                                const CgsContainers::BitArray<8>* lpRaceCarsToCheck);                // @0x82613960
         static bool IsWithinTailgatingCone(const Vector3& lvForward, const Vector3& lvFrom,
                                            const Vector3& lvTo);                                    // @0x825BB290

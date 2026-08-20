@@ -255,9 +255,11 @@ namespace Vehicle
         //       @0x825B8A70). When crashing it snapshots the live velocity/orientation vectors into
         //       the crash-replay slots and zeroes the crash-blend scalar (it dispatches down the
         //       VehiclePhysics/SimpleVehiclePhysics::SetCrashing chain via vtbl+8 first). The bool is
-        //       gated on PROXIMITY TO THE PLAYER CAMERA by the caller. DECLARE-ONLY -- bodied by a
-        //       separate RaceCarPhysics crash-state TU. Signature DWARF-authoritative (int/char). -----
-        void SetCrashing(bool lbCrash);
+        //       gated on PROXIMITY TO THE PLAYER CAMERA by the caller. The zero-argument override is
+        //       X360 vtable slot +0x08 (off_820D1034 -> sub_825FFBB0); the bool overload is
+        //       @0x825B8A70. DecFIGS supplies the source-level overload shape.
+        void SetCrashing() override;
+        void SetCrashing(bool lbActivateAISlowMo);
 
         // =====================================================================================
         // ADDITIVE GROW (C10 showtime / aftertouch / target-assist / bounce-boost group).
@@ -291,20 +293,20 @@ namespace Vehicle
         // Both vectors are restored verbatim
         // (`vmr128 v2,v126 ; vmr128 v1,v127` @0x8264185C) immediately before the chained
         // VehiclePhysics::Update, so they are pass-through arguments, not scratch.
-        // ⚠️ FLAG: only the REGISTER assignment is recovered, not the console's declaration
-        // POSITION for the two vector parameters -- vector args do not consume GPR slots on the
-        // X360 ABI, so their place in the C++ parameter list cannot be read off the asm. They are
-        // appended here. (Hex-Rays renders this function as 7 all-integer arguments and drops
-        // both vectors outright -- the twelfth instance of that failure in this project.)
-        // ⭐⭐ SIGNATURE CONFORMED 2026-08-06 (UpdateVehiclePhysics wave) -- the DWARF's own
-        // declaration order and the manager call site @0x82645A10..5C recover the four
-        // placeholder args: a2 = the camera matrix, a5 = player-aftertouch-additive,
-        // a6 = (meShowtimeBehaviour == 2), a7 = the manager's Random. See VehiclePhysics.h.
-        void Update(const rw::math::vpu::Matrix44Affine* lpCameraMatrix,
+        // The exact source-level ordering and types come from the DecFIGS declaration. Breaker's
+        // manager call @0x82645A10..5C independently places the simulation/game timer values in
+        // v1/v2 and the remaining arguments in r4..r9; this callee saves v1/v2 before reading them
+        // and forwards the same register/GPR map to VehiclePhysics::Update @0x8264185C..80.
+        void Update(VecFloat lvfSimTimeStep, VecFloat lvfRealTimeStep,
+                    const rw::math::vpu::Matrix44Affine* lpCameraMatrix,
                     const BrnPlayerDriverControls* lpControls, bool lbImpactTime,
                     bool lbPlayerAftertouchForceAdditive, bool lbShowtimeAllowed,
-                    CgsNumeric::Random& lrRandom,
-                    Vector3 lrPassThroughV1, Vector3 lrTimeStep);
+                    CgsNumeric::Random& lrRandom) override;
+
+        // Non-virtual DecFIGS declaration (RaceCarPhysics.h:262). The emitted PS3 body
+        // @0x6EE02C is a direct thunk to VehiclePhysics::UpdatePostSimulation; Breaker's
+        // manager inlines that same base body at 0x826428A8..0x826428D8.
+        void UpdatePostSimulation(VecFloat lvfTimeStep);
 
         // @0x825FFBD8: the showtime bounce-boost state machine, run each frame from UpdateAftertouch
         // while in showtime. Decides if the car is airborne/slow enough to bounce, runs the latch
@@ -423,51 +425,6 @@ namespace Vehicle
         // The old 2-arg spelling (s32, u32) existed nowhere in the image.
         void AddTractionPoint(EVehicleDrivenWheel leWheel, Vector3 lvPosition, Vector3 lvNormal,
                               u32 lu32CollisionTag);
-
-        // ----- ADDITIVE GROW (stunt-offences group): seven declare-only race-car stunt-state
-        //       accessors BrnPhysics::StuntOffencesManager reads by name (drift / convoy /
-        //       tailgating). Bodied by the owning RaceCarPhysics/SimpleVehiclePhysics TU later.
-        //       Only the console offsets are asm-proven; FLAG: IsConsideredAirborne and the
-        //       Stunt* names are proposed-by-role. The stunt code MUST go through these (host
-        //       vptr is 8 bytes -- raw console offsets would be wrong). -----
-        //
-        // ⛔⛔ DO NOT BODY THESE OFF THE ROLE NAMES. Measured 2026-08-03 (task #110): these seven
-        // are the ONLY thing keeping BrnStuntOffencesManager.cpp out of the build (7 of the 10
-        // LNK2019 a first mount produced), so the next wave will be tempted to knock them out as
-        // one-line member returns. FOUR of the seven have an offset whose committed meaning in the
-        // base classes CONTRADICTS the role in the comment -- the "address right, meaning wrong"
-        // class this tree keeps paying for. Each conflict is between two already-committed,
-        // separately asm-cited comments, so ONE of the two is wrong and neither wins by default:
-        //
-        //   +0x109C  GetDriftActiveTime   vs  VehiclePhysics.h:1447 -- mPreviousControls sits at
-        //            +0x1090 and is the WHOLE 0x48-byte BrnPlayerDriverControls, so +0x109C is
-        //            +0x0C INSIDE last frame's controls, not a free timer slot.
-        //   +0x1010  GetDriftLateralSpeed ("lane 2")  vs  VehiclePhysics.h:1095 + VehiclePhysics.cpp
-        //            :2099/:2462, which pin that register's lanes as .x=1/TimeToReachTargetDriftSlip,
-        //            .y=StartSlip, .z=TimeDrifting, .w=BrakeScale. Lane 2 is a TIME, not a speed.
-        //   +0x135B  IsHandbrakeHeld      vs  VehiclePhysics.h:1183 -- mbAllWheelsHaveTraction,
-        //            pinned by `lbz r11,0x135B(r3)` and gated by VehiclePhysics_layout_check.cpp.
-        //   +0x1340  GetStuntWorldPosition vs VehiclePhysics.h:1197 -- mNormLinearVelocityMag, the
-        //            cached NORMALIZED LINEAR VELOCITY (xyz) + magnitude (.w), written by
-        //            UpdateLinearVelocityMagnitude and likewise gated by the layout check. A unit
-        //            vector is not a world position. (Note the sibling GetStuntForwardAxis reads
-        //            the SAME +0x1340 and calls it a normalized velocity -- they cannot both hold.)
-        //
-        // The remaining three are consistent with the committed map: IsConsideredAirborne/+0x1350
-        // == mbHasAir; GetStuntForwardAxis/+0x1340 == the normalized velocity; and
-        // GetStuntReferenceVelocity/+0x6C0 == SimpleVehiclePhysics::mfSpeedMPH -- a SPLATTED SPEED,
-        // which is why every call site reads only `.x >= 30.0f`; the "Velocity" in its name is
-        // misleading but its use is not.
-        // ⇒ Re-derive all four from the StuntOffencesManager asm that produced the offsets before
-        // writing a single body. A wrong body here compiles, links, and silently feeds the whole
-        // stunt/takedown scoring system the wrong field.
-        f32     GetDriftActiveTime() const;        // +0x109C  ⛔ conflicts with mPreviousControls
-        f32     GetDriftLateralSpeed() const;      // +0x1010 lane 2  ⛔ conflicts with TimeDrifting
-        bool    IsHandbrakeHeld() const;           // +0x135B  ⛔ conflicts with mbAllWheelsHaveTraction
-        bool    IsConsideredAirborne() const;      // +0x1350: mbHasAir (consistent)
-        Vector3 GetStuntReferenceVelocity() const; // +0x6C0: mfSpeedMPH, splatted speed (consistent)
-        Vector3 GetStuntWorldPosition() const;     // +0x1340  ⛔ conflicts with mNormLinearVelocityMag
-        Vector3 GetStuntForwardAxis() const;       // normalized +0x1340 velocity = cone forward axis
 
     public:
         // Never called. Bodied in RaceCarPhysics_layout_check.cpp (a MOUNTED TU) and nothing but

@@ -43,6 +43,7 @@
 #include "GameSource/Physics/VehicleManager/BrnVehicleManager.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // the SCENE-stage allocator-hold one-shot log
 #include "GameShared/GameClasses/System/AttribSys/CgsAttribSysSharedIO.h"
+#include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/AttributeKey.h" // Attrib::StringToKey
 #include "GameShared/GameClasses/System/Resource/CgsResourceIOEvents.h"
 #include "GameShared/GameClasses/SceneManager/SpatialPartitionModule/CgsSpatialPartitionManager.h"
 #include "GameSource/World/Bridges/WorldBridgeEntityModulesToOutput.h"
@@ -97,6 +98,10 @@ namespace renderengine { extern s32 gEnvironmentMap; extern s32 gEnvironmentMap3
 
 namespace BrnWorld
 {
+
+// qword_8300E9B8: X360 static initializer @0x82C6A9D8 hashes this exact text;
+// WorldModule::Prepare loads the resulting 64-bit key at @0x827D5B6C.
+static const u64 gs_uSurfaceListKey = Attrib::StringToKey("340654");
 
 static CgsSceneManager::SceneQueryId KA_FRUSTUM_QUERY_IDS[11];
 static CgsGraphics::Camera gFrustumQueryCamera;
@@ -1044,7 +1049,10 @@ WorldModule::Prepare( CgsModule::IOBufferStack* lpInputBufferStack,
                 return false;
             }
 
-            BrnPhysics::Vehicle::VehicleManager::ReadSurfaceProperties();
+            // Breaker @0x827D5B60..0x827D5B70: r3 = this->mPhysicsModule.mVehicleManager,
+            // r4 = qword_8300E9B8 (StringToKey("340654")). The old PC call targeted an
+            // invented no-argument stub, leaving gbReadSurfaceProperties false.
+            mPhysicsModule.mVehicleManager.ReadSurfaceProperties(gs_uSurfaceListKey);
 
             lpOutputBufferStack->DestroyIOBuffer( &lpSceneOutput );
             lpInputBufferStack->DestroyIOBuffer( &lpSceneInput );

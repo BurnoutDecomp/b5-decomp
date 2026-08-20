@@ -67,7 +67,7 @@ namespace Vehicle
     // then `fmr f1, f22` at all thirty call sites).
     static const f32 KF_VMAN_PERFMON_BUDGET = 10.0f;
 
-    static s32 gs_iUpdateStuntOffencesPM     = KI_PERFMON_UNREGISTERED;   // dword_82F2A1A0
+    s32 gs_iUpdateStuntOffencesPM            = KI_PERFMON_UNREGISTERED;   // dword_82F2A1A0
     s32 gs_iUpdateVehicleImpactsPM    = KI_PERFMON_UNREGISTERED;   // dword_82F2A14C
     s32 gs_iProcessAboveGroundLTsPM   = KI_PERFMON_UNREGISTERED;   // dword_82F2A150
     s32 gs_iTractionLTsPM             = KI_PERFMON_UNREGISTERED;   // dword_82F2A154

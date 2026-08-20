@@ -337,11 +337,17 @@ namespace Vehicle
         BRN_CONDUCTOR_GATE("VehicleManager::GetUpdatedVehicleBodies @0x82619340 (export hole)");
     }
 
-    void VehicleManager::UpdateVehiclePhysicsPostSimulation(
-        const VehicleInputInterface*, const CgsPhysics::PhysicsSimulationIO::OutputBuffer*, f32,
-        CgsModule::VariableEventQueue<1536, 16>*)
+    // UpdateVehiclePhysicsPostSimulation @0x826426E0 is real now. These two independent
+    // line-test consumers remain named deferrals in its closure.
+    void VehicleManager::DoPlayerTractionLineTestsPostSimulation(const VehicleInputInterface*, f32)
     {
-        BRN_CONDUCTOR_GATE("VehicleManager::UpdateVehiclePhysicsPostSimulation @0x826426E0 (354)");
+        BRN_CONDUCTOR_GATE("VehicleManager::DoPlayerTractionLineTestsPostSimulation "
+                           "@0x826185A0 (548)");
+    }
+
+    void VehicleManager::DoPlayerStuckLineTests(const VehicleInputInterface*)
+    {
+        BRN_CONDUCTOR_GATE("VehicleManager::DoPlayerStuckLineTests @0x825C3A70");
     }
 
     void VehicleManager::ProcessCrashingNetworkCars(
@@ -410,6 +416,20 @@ namespace Vehicle
         BRN_CONDUCTOR_GATE("PhysicalTrafficManager::ReadTrafficTractionLineTestResults @0x8262D2B8 "
                            "(291) -- PAIRED with AddTrafficTractionLineTests @0x8261D580; leaving "
                            "it inert is CORRECT while the Add posts nothing");
+    }
+
+    // UpdateTrafficPhysicsPostSimulation @0x826371D0 is real now. Its articulated-joint tail is
+    // orthogonal to the vehicle post-simulation dispatch and remains loudly deferred here.
+    void PhysicalTrafficManager::ResolveArticulatedJoints()
+    {
+        BRN_CONDUCTOR_GATE("PhysicalTrafficManager::ResolveArticulatedJoints @0x825F0A90");
+    }
+
+    void PhysicalTrafficManager::ProcessJointSpys(
+        const CgsPhysics::PhysicsSimulationIO::OutputBuffer*)
+    {
+        BRN_CONDUCTOR_GATE("PhysicalTrafficManager::ProcessJointSpys "
+                           "(inlined at UpdateTrafficPhysicsPostSimulation @0x826375C4)");
     }
 
     // ---- 2026-08-11 (driver-arms wave): the TRAFFIC arm gate that stood here for one wave is

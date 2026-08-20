@@ -50,6 +50,11 @@
 namespace BrnWorld
 {
 
+// The out-of-class home for the header's SetOnStartLine sentinel. flt_820037C8 in the
+// ARTIST image is 0xBF800000 == -1.0f (dumped, not inferred); RaceCarEntityModule::
+// SetAllCarsOnStartLine @0x822A4850 loads it once into f31 and stores it per car.
+const f32 ActiveRaceCar::KF_NO_START_LINE_BOOST_CHANGE = -1.0f;
+
 // ============================================================================
 // Lifecycle (pose wave 2026-07-31): Construct / Prepare / Attach / CalcBodyTransform.
 //

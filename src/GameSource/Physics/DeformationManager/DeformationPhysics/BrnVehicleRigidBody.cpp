@@ -142,15 +142,17 @@ namespace Deformation
         }
         else if ( lpImpulseParams->mbWorldContact )          // *(params+184)
         {
-            const Vector3& lrContactNormal = lpImpulseParams->mWorldImpulseDirection;   // params+48 (v2)
             lpVehicle->ApplyWallContactImpulse(liImpulse, rw::physics::BODY_SPACE,
-                                               lrContactNormal, lpImpulseParams->mePositionSpace);
+                                               lpImpulseParams->mWorldImpulseDirection,
+                                               lpImpulseParams->mImpulsePosition,
+                                               lpImpulseParams->mePositionSpace);
         }
         else
         {
-            const Vector3& lrContactPosition = lpImpulseParams->mImpulsePosition;   // params+32 (v3)
             lpVehicle->ApplyCarContactImpulse(liImpulse, rw::physics::BODY_SPACE,
-                                              lrContactPosition, lpImpulseParams->mePositionSpace);
+                                              lpImpulseParams->mWorldImpulseDirection,
+                                              lpImpulseParams->mImpulsePosition,
+                                              lpImpulseParams->mePositionSpace);
         }
     }
 

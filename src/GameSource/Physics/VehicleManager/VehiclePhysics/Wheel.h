@@ -14,14 +14,12 @@
 // everything else is ADDITIVE. mRoadContact remains the leading member so the RoadContact-only
 // consumers that already exist keep their offsets.
 //
-// RECONCILIATION (C05 road-noise): a prior surface-grip/friction group (C05) had added a standalone
-// `f32 mfRoadNoise` immediately after mRoadContact as an admitted flagged placeholder (its note says
-// the real destination lanes "overlap the suspension/integration blobs the full Wheel TU owns").
-// That standalone member would shift every real member off its console offset. With the full DWARF
-// layout now known, the road-noise accumulator is reconciled onto a real register lane (the
-// force-variable register, where the UpdateRoadNoise stvx128 lands) and the C05 Add/GetRoadNoise
-// accessor API is preserved verbatim -- no caller existed outside this header, so no break. The
-// 0xE0 layout is now correct.
+// ROAD-NOISE DESTINATION (Breaker UpdateRoadNoise @0x825F6AE0..0x825F6B84): the update loads
+// mRoadContact.mNormal at wheel+0x10 and mRoadContact.mPosition at wheel+0x00, computes
+// position + normal * noise, and stores the complete vector back to wheel+0x00. DecFIGS names the
+// corresponding header inline `SetRoadContactPosition(Vector3)` (Wheel.h:351). Road noise is thus
+// a stochastic displacement of the contact point, not a separate accumulator or a force-register
+// lane. The full Wheel layout remains the DWARF/asm-confirmed 0xE0 bytes.
 #include "BrnCommonTypes.h"   // Vector3, Vector3Plus, Vector4, VecFloat, CollisionTag
 #include "types.hpp"          // f32, s8, u8, u16
 
@@ -269,12 +267,9 @@ namespace Vehicle
             return VecFloat{ lfRoadLongSpeed, lfRoadLongSpeed, lfRoadLongSpeed, lfRoadLongSpeed };
         }
 
-        // C05 road-noise API (PRESERVED). Reconciled onto a real register lane: UpdateRoadNoise's
-        // stvx128 lands in the wheel's leading SIMD region; the force-variable register's w lane is
-        // the flagged home so the standalone mfRoadNoise no longer shifts the layout. No external
-        // caller existed. FLAG: exact lane within the SIMD region is partial.
-        void AddRoadNoise(f32 lfNoise) { mForceVariables.w += lfNoise; }
-        f32  GetRoadNoise() const { return mForceVariables.w; }
+        // DecFIGS Wheel.h:351. Breaker UpdateRoadNoise inlines this setter: its final stvx128 at
+        // 0x825F6B84 targets wheel+0x00 after forming mPosition + mNormal * noise.
+        void SetRoadContactPosition(Vector3 lPosition) { mRoadContact.mPosition = lPosition; }
 
         // ----- Members: RoadContact is PRE-EXISTING (leading member). The rest is ADDITIVE GROW,
         //       pinned BY NAME + SEQUENCE per the DWARF (stride 0xE0). -----
@@ -286,7 +281,7 @@ namespace Vehicle
         // matching the console layout/offset exactly.
         Vector4 mIntegrationVariables;                  // +0x30
         Vector4 mSlipVariables;                         // +0x40
-        Vector4 mForceVariables;                        // +0x50  (w lane: C05 road-noise accumulator, flagged)
+        Vector4 mForceVariables;                        // +0x50
         Vector4 mSuspensionAndInertiaVariables;         // +0x60
         Vector4 mSpeedAndMassOnWheelVariables;          // +0x70
 

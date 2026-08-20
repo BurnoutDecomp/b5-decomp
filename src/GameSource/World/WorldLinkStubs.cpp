@@ -579,25 +579,6 @@ bool BrnPhysics::Vehicle::VehicleManager::PrepareData(struct rw::IResourceAlloca
 //  ⚠️ The stub's parameter was a REFERENCE; the DWARF and the PS3 mangle both say
 //  pointer -- corrected with the body.)
 
-// -------------------------------------------------------------------------
-// BrnPhysics::Vehicle::VehicleManager
-// -------------------------------------------------------------------------
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
-void BrnPhysics::Vehicle::VehicleManager::ReadSurfaceProperties()
-{
-    // BOOT-GATE (attribsys wave 2026-07-26): REACHED right after the WORLDENTITY
-    // prepare stage (WorldModule::Prepare @0x827D53B0 tail). Reads the surface
-    // attributes out of the LIVE Attrib database -- gated with the schema/DB
-    // cluster (see PrepareSurfaceList's gate). One-shot log + no-op.
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "VehicleManager::ReadSurfaceProperties: inert [FLAG PC boot gate]\n";
-    }
-}
-
 // GATE RETIRED 2026-08-18 (breakable-props wave Q mount): BrnReplays::ReplayIO::RequestInterface::Append @0x823A6868 is REAL in GameSource/Replays/BrnReplayRequestInterface.cpp (mounted with RegisterSerialiser, which PropEntityModule::PostPhysicsUpdate now calls).
 
 // -------------------------------------------------------------------------
@@ -2278,13 +2259,6 @@ struct BrnPhysics::Deformation::WheelPhysicalStates & BrnPhysics::Deformation::W
 // keyed overload was a separate un-landed function. There is only ONE such symbol
 // @0x82805880 and this IS its signature -- the body tail-calls Collection::GetData with
 // r4/r5 untouched. Real in attribinstance.cpp now; the no-arg spelling is retired.)
-
-// LINK STUB (attrib mount closure): gap G5 sibling (Gen:: ChangeWithDefault edit path).
-Attrib::Collection * Attrib::FindCollectionWithDefault(u64)
-{
-    CGS_ASSERT(false, "Attrib::FindCollectionWithDefault: attrib gap G5 -- reconstruct");
-    return 0;
-}
 
 // LINK STUB (attrib mount closure): GameTalk live-edit decode (gap G6).
 void Attrib::DecodeLiveLinkMessage(char const *)

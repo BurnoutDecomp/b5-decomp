@@ -27,12 +27,6 @@ namespace BrnPhysics
 {
 namespace Vehicle
 {
-    // The global "player car is currently in showtime" latch (X360 byte_82FB7DF2). A standalone module
-    // byte the gui/camera layer reads; SetPlayerCarToShowtimeMode stores the requested flag verbatim.
-    // FLAG: name proposed by role; the X360 home is a bare .data byte (byte_82FB7DF2). Modelled as a
-    // file-static here -- fold into its real owning TU if one is recovered.
-    static bool gbPlayerCarInShowtime = false;
-
     // The integer-stat -> showtime-strength scale (X360 flt_82004014). The asm sign-extends
     // lpSendCarStatsAction[1] as an integer, converts to float, and multiplies by this. The
     // pseudocode renders the multiplier as the literal 0.1, which is the recovered rodata value.
@@ -304,7 +298,7 @@ namespace Vehicle
                                                 mfPlayerStatStrength,
                                                 mfPlayerStatDamageLimit);
 
-        gbPlayerCarInShowtime = lbInShowtime;   // asm: stb r29, byte_82FB7DF2
+        VehiclePhysics::msbInShowtime = lbInShowtime;   // asm: stb r29, byte_82FB7DF2
     }
 
     // -------------------------------------------------------------------------------------------

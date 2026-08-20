@@ -657,7 +657,8 @@ namespace BrnPhysics
                 lpPhysicsModuleInputBuffer->GetVehicleInputInterface(),
                 lpSimOutputBuffer,
                 lfSimTimerTimeStep,
-                lpPhysicsModuleOutputBuffer->GetVehicleOutputInterface()->GetGameEventQueue());
+                reinterpret_cast<BrnGameState::GameStateModuleIO::GameEventQueue*>(
+                    lpPhysicsModuleOutputBuffer->GetVehicleOutputInterface()->GetGameEventQueue()));
             mVehicleManager.CheckState();
 
             CgsDev::PerfMonCpu::StartMonitor(miDeformationManagerPM);                    // +433132 (v518)

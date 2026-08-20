@@ -507,6 +507,20 @@ public:
     // X360 0x822A3760 -- set every player slot to the "no mapping" sentinel (8).
     void ClearAllActiveRaceCarToPlayerScoringMappings();
 
+    // X360 0x822BE0A0 -- walk all eight active-race-car slots and put every ATTACHED one
+    // into the current game mode. The console INLINES RaceCar::SetInCurrentGameMode
+    // @0x822B3F08 at the store pair (`stb r22,0xA6(r31)` / `stb r20,0xA7(r31)`, r22 == the
+    // literal 1), so the in-game flag is a CONSTANT true here and only the car-select-allowed
+    // flag comes from the argument -- HandlePrepareForModeAction passes its own
+    // mbCarSelectAllowedInGameMode (+99143), NOT the online flag.
+    void SetAllActiveCarsInGameMode(bool lbCarSelectAllowedInGameMode);
+
+    // X360 0x822A4850 -- put every ATTACHED active-race-car slot into a race-start state.
+    // lbIncludePlayer selects whether the PLAYER's own slot (mePlayerActiveRaceCarIndex,
+    // +0x182F8) is included; SetupOpponents @0x82307DF0 always passes true.
+    void SetAllCarsOnStartLine(ActiveRaceCar::ERaceStartState leRaceStartState,
+                               bool lbIncludePlayer);
+
     // X360 0x822A37C8 -- find the player slot currently mapped to leActiveRaceCarIndex
     // and reset it to the sentinel (8). If no slot maps to it, do nothing.
     void ClearActiveRaceCarToPlayerScoringMapping(EActiveRaceCarIndex leActiveRaceCarIndex);

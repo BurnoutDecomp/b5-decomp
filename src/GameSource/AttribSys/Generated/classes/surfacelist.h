@@ -44,7 +44,7 @@ namespace Gen
         // Resolve the surfacelist collection (with default) for this class key and swap
         // this instance onto it, returning the previous collection. REAL X360 function
         // @0x8227EFC8.
-        Collection* ChangeWithDefault();
+        Collection* ChangeWithDefault(u64 luCollectionKey = 0);
 
         // The generated "Surfaces" indexed-array accessor (DWARF Attrib::Gen::surfacelist
         // ::Surfaces): return the attribute pointer for element luIndex of the Surfaces
@@ -102,9 +102,10 @@ namespace Gen
     // mis-resolving every lookup.
     static const u64 KU_SURFACELIST_CLASS_KEY = 0x42C25F4985B5C4F4ull;   // @0x8227EFD8-EC
 
-    inline Collection* surfacelist::ChangeWithDefault()
+    inline Collection* surfacelist::ChangeWithDefault(u64 luCollectionKey)
     {
-        Collection* lpCollectionWithDefault = FindCollectionWithDefault(KU_SURFACELIST_CLASS_KEY);
+        Collection* lpCollectionWithDefault =
+            FindCollectionWithDefault(KU_SURFACELIST_CLASS_KEY, luCollectionKey);
         return Change(lpCollectionWithDefault);
     }
 }

@@ -221,7 +221,7 @@ void VehicleManager::WriteOutVehicleStats(VehicleOutputInterface* lpOutputInterf
         // return -- i.e. the self-equality NaN check, which is what RwMath::IsValid is. Spelled as
         // that same self-comparison here because this tree's GetSteeringAngle returns a scalar f32
         // (see the divergence note in BrnVehicleOutputInterface_UpdateRaceCarState.cpp).
-        const f32 lfSteeringAngle = lpRaceCar->GetSteeringAngle();
+        const f32 lfSteeringAngle = lpRaceCar->GetSteeringAngle().x;
         CGS_ASSERT(lfSteeringAngle == lfSteeringAngle,
                    "RwMath::IsValid( maRaceCarVehicles[liRaceCar].GetSteeringAngle() )");
 

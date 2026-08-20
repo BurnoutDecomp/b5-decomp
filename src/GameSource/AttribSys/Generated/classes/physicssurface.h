@@ -19,7 +19,29 @@ namespace Gen
     class physicssurface : private Instance
     {
     public:
+        struct _LayoutStruct
+        {
+            f32 mfRoughness;
+            f32 mfLinearDrag;
+            f32 mfGrip;
+        };
+
         explicit physicssurface(Collection* lpCollection = nullptr, void* lpOwner = nullptr);
+        explicit physicssurface(const RefSpec& lrRefSpec, void* lpOwner = nullptr);
+
+        const void* GetAttributeData() const { return GetLayoutPointer(); }
+        const f32& Roughness() const
+        {
+            return static_cast<const _LayoutStruct*>(GetLayoutPointer())->mfRoughness;
+        }
+        const f32& LinearDrag() const
+        {
+            return static_cast<const _LayoutStruct*>(GetLayoutPointer())->mfLinearDrag;
+        }
+        const f32& Grip() const
+        {
+            return static_cast<const _LayoutStruct*>(GetLayoutPointer())->mfGrip;
+        }
     };
 
     // Chain the Instance ctor, assert the collection's class is ClassName::physicssurface,
@@ -32,6 +54,16 @@ namespace Gen
         // dead/incidental upper half. Mirrors the surfacelist sibling, whose base
         // word 0x85B5C4F4 is the committed class constant.
         static const int KI_PHYSICSSURFACE_CLASS = 742937399; // Attrib::ClassName::physicssurface (0x2C485337)
+        if (GetClass() != KI_PHYSICSSURFACE_CLASS && GetClass() != 0)
+            AssertOnClassCheck(GetClass(), KI_PHYSICSSURFACE_CLASS, GetCollection());
+        if (!mpAttributeData)
+            mpAttributeData = DefaultDataArea(0xCu);
+    }
+
+    inline physicssurface::physicssurface(const RefSpec& lrRefSpec, void* lpOwner)
+        : Instance(lrRefSpec, lpOwner)
+    {
+        static const int KI_PHYSICSSURFACE_CLASS = 742937399; // low word 0x2C485337
         if (GetClass() != KI_PHYSICSSURFACE_CLASS && GetClass() != 0)
             AssertOnClassCheck(GetClass(), KI_PHYSICSSURFACE_CLASS, GetCollection());
         if (!mpAttributeData)

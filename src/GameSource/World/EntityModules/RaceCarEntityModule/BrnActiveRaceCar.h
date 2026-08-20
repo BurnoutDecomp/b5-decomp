@@ -566,6 +566,26 @@ public:
     // DWARF BrnActiveRaceCar.h:63.
     static const s32 KI_MAX_BRAKE_COUNTER = 10;
 
+    // The "no start-line boost change pending" sentinel SetOnStartLine writes into
+    // mfTimeToStartLineBoostChange. flt_820037C8 == 0xBF800000, read out of the decrypted
+    // ARTIST image (file_off = 0x3000 + vaddr - 0x82000000, big-endian).
+    static const f32 KF_NO_START_LINE_BOOST_CHANGE;
+
+    // X360 inlined -- RaceCarEntityModule::SetAllCarsOnStartLine @0x822A4850 pokes the three
+    // members directly (asm 0x822A4910..0x822A4918):
+    //     stfs f31, 0x734(r31)   mfTimeToStartLineBoostChange = -1.0f (flt_820037C8)
+    //     stw  r23, 0x77C(r31)   meRaceStartState             = the argument
+    //     stb  r22, 0x780(r31)   mbIsDoingStartLineBoost      = false
+    // There is no standalone X360 symbol for this trio; it is grouped here (same precedent
+    // as SetInGameMode above) so the module reaches the private members BY NAME rather than
+    // by offset.
+    void SetOnStartLine(ERaceStartState leRaceStartState)
+    {
+        mfTimeToStartLineBoostChange = KF_NO_START_LINE_BOOST_CHANGE;
+        meRaceStartState             = leRaceStartState;
+        mbIsDoingStartLineBoost      = false;
+    }
+
     // ========================================================================
     // Lifecycle (pose wave 2026-07-31). All three are console functions.
     // ========================================================================

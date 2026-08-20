@@ -50,14 +50,16 @@ namespace BrnPhysics
 
         // Solve the collision impulse for a hit against an immovable object:
         //   j = -(1+e)(vRel . n) / ( 1/m + n . ((I^-1 (r x n)) x r) )
-        // writes the impulse vector, the inverse effective mass scalar, and j*n out-params.
+        // writes normal*abs(j), the effective inverse-mass denominator, and signed j.
         // @0x8259C978. The X360 Hex-Rays dropped the arg list (rendered `int(...)`); the
         // parameter names/order below are recovered from the PS3 DecFIGS DWARF prototype
         // (._ZN10BrnPhysics19ExternalPhysicsBody44CalculateCollisionImpulseWithInanimateObject...
         //  @ PS3 0x68B130): (Vector3 lPoint, Vector3 lPointVel, Vector3 lCollisionNormal,
-        //  VecFloat lvfRestitution, Vector3* lpImpulseOut, VecFloat* lpvfInvInertiaOut). lPoint
-        // is the contact point relative to the centre of mass (the cross-product `r`),
-        // lPointVel the point's relative velocity, lCollisionNormal the surface normal `n`.
+        //  VecFloat lvfRestitution, Vector3* lpImpulseOut, VecFloat* lpvfInvInertiaOut).
+        // Breaker settles the otherwise ambiguous first argument: @0x8259C9B0 loads the body's
+        // world position from this+0x30 and @0x8259C9B8 forms `lPoint - position`.  lPoint is
+        // therefore an absolute world contact point; the callee derives the COM-relative arm.
+        // lPointVel is the point velocity and lCollisionNormal the surface normal `n`.
         VecFloat CalculateCollisionImpulseWithInanimateObject(
             Vector3 lPoint, Vector3 lPointVel, Vector3 lCollisionNormal,
             VecFloat lvfRestitution, Vector3* lpImpulseOut, VecFloat* lpvfInvInertiaOut);
@@ -84,10 +86,10 @@ namespace BrnPhysics
         // (ExternalPhysicsBody::GetLocalVelocity(Vector3, rw::physics::InputSpace) const -> Vector3).
         Vector3 GetLocalVelocity(Vector3 lPoint, rw::physics::InputSpace leSpace) const;
 
-        // Damp the angular velocity. DampenAngularVelocity applies one isotropic damping
-        // curve; DampPitchYawRoll applies a separate per-axis (pitch/yaw/roll) curve. Both
-        // scale mAngularVelocity in place by pow(dampPerSecond, dt)-style factors built from a
-        // VMX exp2/log2 polynomial. @0x825B2CD8 / @0x825BE210.
+        // Damp the angular velocity. DampenAngularVelocity applies one isotropic scale.
+        // DampPitchYawRoll projects the angular velocity onto the body's x/y/z axes in order
+        // and removes `axis * dot(omega,axis) * pow(damping,dt*60)` for pitch/yaw/roll.
+        // The powers are built by a VMX exp2/log2 polynomial. @0x825B2CD8 / @0x825BE210.
         void DampenAngularVelocity(VecFloat lvfDampingPerSecond, VecFloat lvfDeltaTime); // h:192 @0x825B2CD8
         void DampPitchYawRoll(VecFloat lvfPitchDamping, VecFloat lvfYawDamping,
                               VecFloat lvfRollDamping, VecFloat lvfDeltaTime);            // h:200 @0x825BE210

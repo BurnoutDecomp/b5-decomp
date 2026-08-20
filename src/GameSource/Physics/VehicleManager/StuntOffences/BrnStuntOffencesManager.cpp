@@ -35,17 +35,16 @@ namespace
     // NOTE: on X360 sizeof(RaceCarPhysics)==5216 and the Update spine indexes the array as
     // 5216*idx + base. Host pointer width differs, so the bodies index by typed pointer (&array[idx]).
 
-    // FLAG: the per-driver record is passed as void* (its real type is GameState/AI-side, not homed by
-    // this physics TU). The X360 reads its "state" word at +0xD0 (224-byte stride) and keeps a car when
-    // that word is 2 (active) or 0. Modelled as a raw POD read -- the driver record is a non-polymorphic
-    // array so the byte offset is host-stable; still flagged as a layout assumption.
-    constexpr s32 KI_DRIVER_STRIDE       = 224;   // 0xE0
-    constexpr s32 KI_DRIVER_STATE_OFFSET = 208;   // +0xD0
-    inline bool DriverIsTailgatable(const void* lpaDrivers, s32 liIndex)
+    // GetTailgatee/GetTailgater @0x82613960/@0x82613F68 index VehicleDriver records at
+    // stride 0xE0 and compare the +0xD0 E_DRIVER_TYPE against NETWORK(2) or PLAYER(0).
+    // VehicleDriver's DecFIGS surface names the exact accessor; keep host pointer-width
+    // layout out of this algorithm by indexing the typed array.
+    inline bool DriverIsTailgatable(const BrnPhysics::Vehicle::VehicleDriver* lpaDrivers,
+                                    s32 liIndex)
     {
-        const s32 liState = *reinterpret_cast<const s32*>(
-            reinterpret_cast<const u8*>(lpaDrivers) + KI_DRIVER_STRIDE * liIndex + KI_DRIVER_STATE_OFFSET);
-        return liState == 2 || liState == 0;
+        const BrnPhysics::Vehicle::E_DRIVER_TYPE leType = lpaDrivers[liIndex].GetDriverType();
+        return leType == BrnPhysics::Vehicle::E_DRIVER_TYPE_NETWORK
+            || leType == BrnPhysics::Vehicle::E_DRIVER_TYPE_PLAYER;
     }
 
     // X360 source file string used by every CgsDev::Assert::FireAssert in this TU.
@@ -69,10 +68,10 @@ namespace BrnPhysics
     // @0x82642408  Update -- per-frame spine for the player's active car.
     // ============================================================================================
     void StuntOffencesManager::Update(Vehicle::RaceCarPhysics* lpaRaceCarPhysics,
-                                      void* lpaRaceCarDrivers,
-                                      BrnGameState::GameStateModuleIO::GameEventQueue* lpGameEventQueue,
+                                      Vehicle::VehicleDriver* lpaRaceCarDrivers,
                                       EActiveRaceCarIndex lePlayerActiveRaceCarIndex,
                                       const CgsContainers::BitArray<8>* lpUsedRaceCars,
+                                      BrnGameState::GameStateModuleIO::GameEventQueue* lpGameEventQueue,
                                       f32 lfTimeStep)
     {
         if (!lpaRaceCarPhysics) FireAssert("lpaRaceCarPhysics != NULL", 76);
@@ -151,7 +150,7 @@ namespace BrnPhysics
         else
         {
             // 0 wheels + the physics "should be airborne" gate (+0x1350) + not crashing -> IN_AIR_NOW.
-            if (lpRaceCarPhysics->IsConsideredAirborne() && !lbIsCrashing)
+            if (lpRaceCarPhysics->HasAir() && !lbIsCrashing)
             {
                 muCurrentRaceCarState |= E_CURRENT_CAR_STATE_IN_THE_AIR_NOW;
                 lbInAirNow = true;
@@ -354,8 +353,9 @@ namespace BrnPhysics
         if (!lpRaceCarPhysics) FireAssert("lpRaceCarPhysics != NULL", 1088);
         if (!lpGameEventQueue) FireAssert("lpGameEventQueue != NULL", 1089);
 
-        // begin tracking when the physics drift-active timer (+0x109C) goes positive and we're not already.
-        if (!mbHandbreakTurnAttempting && lpRaceCarPhysics->GetDriftActiveTime() > 0.0f)
+        // Breaker @0x825E3ACC reads mPreviousControls.mfHandBrake (+0x1090+0x0C).
+        if (!mbHandbreakTurnAttempting
+            && lpRaceCarPhysics->GetPreviousControls()->mfHandBrake > 0.0f)
         {
             mfBearingLastFrame      = 0.0f;
             mfHandBreakAngleSoFar   = 0.0f;
@@ -404,9 +404,9 @@ namespace BrnPhysics
                 muStuntActionInProgress |= E_STUNT_ACTION_IN_PROGRESS_HANDBREAK_TURN;
             }
 
-            // when the handbrake is RELEASED (+0x135B byte clears), wait KF_HANDBRAKE_STABLE_END_TIME
-            // of stable driving, then commit the turn if one was registered.
-            if (lpRaceCarPhysics->IsHandbrakeHeld())
+            // Breaker @0x825E3BBC reads mbAllWheelsHaveTraction (+0x135B): once
+            // traction is restored, wait the stable window before committing the turn.
+            if (lpRaceCarPhysics->GetAllWheelsHaveTraction())
             {
                 const f32 lfStable = mfHandBrakeStabiliseTime + lfTimeStep;
                 mfHandBrakeStabiliseTime = lfStable;
@@ -569,24 +569,24 @@ namespace BrnPhysics
             return;
         }
 
-        // physics drift lateral Z-speed @+0x1010 (lane 2), clamped to >= 0 (asm vmaxfp vs 0).
-        const f32 lfDriftZSpeedRaw = lpRaceCarPhysics->GetDriftLateralSpeed();
+        // DecFIGS names +0x1010 lane 2 GetTimeDrifting; Breaker splats that lane and
+        // clamps it to >= 0 (vmaxfp). This is a genuine VecFloat accessor, not an xyz vector.
+        const f32 lfDriftZSpeedRaw = lpRaceCarPhysics->GetTimeDrifting().x;
         const f32 lfDriftZSpeed = (lfDriftZSpeedRaw > 0.0f) ? lfDriftZSpeedRaw : 0.0f;
         mfTimeDriftingLastFrame = 0.0f;
 
         if (lfDriftZSpeed > 0.0f)
         {
-            // DRIFTING. The "time" members (+0xB4/+0x194/+0x1BC) all receive the clamped drift LATERAL
-            // SPEED v24[0] (a Burnout quirk -- not elapsed time, not dt). The distance increment
-            // (velocity reg @+0x6C0 * unit_83017FE0 * drift-speed).x accumulates into mfCompletedDriftDistance
+            // DRIFTING. The time members (+0xB4/+0x194/+0x1BC) all receive GetTimeDrifting.
+            // The distance increment is GetSpeed() (MPH converted to m/s) times this frame's
+            // timestep; Breaker @0x826138EC..0x82613904 performs both multiplies as scalar splats.
             // (+0x198) and mirrors into mfInProgressDriftDistance (+0x1C0).
             mbWasDriftingLastFrame = true;
             muStuntActionInProgress |= (E_STUNT_ACTION_IN_PROGRESS_DRIFT | E_STUNT_ACTION_IN_PROGRESS_DRIFT_DISTANCE);   // 0x18
             mfTimeDriftingLastFrame = lfDriftZSpeed;   // +0xB4  (asm stfs v24[0] @0xB4)
             mfInProgressDriftTime   = lfDriftZSpeed;   // +0x1BC (asm stfs v24[0] @0x1BC)
             mfCompletedDriftTime    = lfDriftZSpeed;   // +0x194 (asm stfs v24[0] @0x194)
-            Vector3 lvVel = lpRaceCarPhysics->GetStuntReferenceVelocity();   // +0x6C0
-            const f32 lfDistInc = lvVel.x;   // FLAG: asm splats the .x lane of (vel * unit_83017FE0 * drift-speed); unit not in exports -> modelled as the x-lane increment
+            const f32 lfDistInc = lpRaceCarPhysics->GetSpeed().x * lfTimeStep;
             mfCompletedDriftDistance += lfDistInc;                 // +0x198 accumulator
             mfInProgressDriftDistance = mfCompletedDriftDistance;  // +0x1C0 mirrors +0x198
         }
@@ -624,7 +624,7 @@ namespace BrnPhysics
     // ============================================================================================
     s32 StuntOffencesManager::GetTailgateeIndex(EActiveRaceCarIndex leActiveRaceCarIndex,
                                                 Vehicle::RaceCarPhysics* lpaRaceCarPhysics,
-                                                void* lpaRaceCarDrivers,
+                                                Vehicle::VehicleDriver* lpaRaceCarDrivers,
                                                 const CgsContainers::BitArray<8>* lpRaceCarsToCheck)
     {
         if (!lpRaceCarsToCheck) FireAssert("lpRaceCarsToCheck", 639);
@@ -639,12 +639,11 @@ namespace BrnPhysics
         if (!lpCar) FireAssert("lpRaceCarPhysics", 646);
 
         // require the car to be moving forward fast enough (forward speed @+0x6C0 >= 30).
-        if (!(lpCar->GetStuntReferenceVelocity().x >= 30.0f)) return -1;
+        if (!(lpCar->GetSpeedMPH().x >= 30.0f)) return -1;
 
         s32 liBest = -1;
         f32 lfBestDistSq = 3.4028235e38f;
-        const Vector3 lvForward   = lpCar->GetStuntForwardAxis();   // FLAG: cone forward axis (normalized stunt velocity reg @+0x1340)
-        const Vector3 lvSelfPos   = lpCar->GetStuntWorldPosition();
+        const Vector3 lvSelfPos = lpCar->GetPosition();
 
         for (s32 li = 0; li < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++li)
         {
@@ -654,10 +653,13 @@ namespace BrnPhysics
 
             Vehicle::RaceCarPhysics* lpOther = &lpaRaceCarPhysics[li];
             if (!lpOther) FireAssert("lpRaceCarToCheckPhysics", 687);
-            if (!(lpOther->GetStuntReferenceVelocity().x >= 30.0f)) continue;   // candidate also moving (>30)
+            if (!(lpOther->GetSpeedMPH().x >= 30.0f)) continue;
 
-            const Vector3 lvOtherPos = lpOther->GetStuntWorldPosition();
-            if (IsWithinTailgatingCone(lvForward, lvSelfPos, lvOtherPos))
+            // Breaker @0x82613C88..0x82613CA0 loads and normalizes the candidate's
+            // cached linear-velocity direction inside this loop.
+            const Vector3 lvOtherForward = vpu::Normalize(lpOther->GetLinearVelocityDirection());
+            const Vector3 lvOtherPos = lpOther->GetPosition();
+            if (IsWithinTailgatingCone(lvOtherForward, lvSelfPos, lvOtherPos))
             {
                 const f32 lfDistSq = vpu::MagnitudeSquared(vpu::Subtract(lvSelfPos, lvOtherPos));
                 if (liBest == -1 || lfDistSq < lfBestDistSq)
@@ -672,7 +674,7 @@ namespace BrnPhysics
 
     s32 StuntOffencesManager::GetTailgaterIndex(EActiveRaceCarIndex leActiveRaceCarIndex,
                                                 Vehicle::RaceCarPhysics* lpaRaceCarPhysics,
-                                                void* lpaRaceCarDrivers,
+                                                Vehicle::VehicleDriver* lpaRaceCarDrivers,
                                                 const CgsContainers::BitArray<8>* lpRaceCarsToCheck)
     {
         if (!lpRaceCarsToCheck) FireAssert("lpRaceCarsToCheck", 757);
@@ -686,11 +688,14 @@ namespace BrnPhysics
         Vehicle::RaceCarPhysics* lpCar = &lpaRaceCarPhysics[leActiveRaceCarIndex];
         if (!lpCar) FireAssert("lpRaceCarPhysics", 764);
 
-        if (!(lpCar->GetStuntReferenceVelocity().x >= 30.0f)) return -1;
+        if (!(lpCar->GetSpeedMPH().x >= 30.0f)) return -1;
 
         s32 liBest = -1;
         f32 lfBestDistSq = 3.4028235e38f;
-        const Vector3 lvSelfPos = lpCar->GetStuntWorldPosition();
+        // Breaker @0x826140F4..0x82614110 loads and normalizes the subject car's
+        // cached direction once before scanning candidates.
+        const Vector3 lvSelfForward = vpu::Normalize(lpCar->GetLinearVelocityDirection());
+        const Vector3 lvSelfPos = lpCar->GetPosition();
 
         for (s32 li = 0; li < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++li)
         {
@@ -700,12 +705,10 @@ namespace BrnPhysics
 
             Vehicle::RaceCarPhysics* lpOther = &lpaRaceCarPhysics[li];
             if (!lpOther) FireAssert("lpRaceCarToCheckPhysics", 831);
-            if (!(lpOther->GetStuntReferenceVelocity().x >= 30.0f)) continue;
+            if (!(lpOther->GetSpeedMPH().x >= 30.0f)) continue;
 
-            // tailgater: the OTHER car's forward axis points at us (it is behind, aiming forward at us).
-            const Vector3 lvOtherFwd = lpOther->GetStuntForwardAxis();   // FLAG: normalized stunt velocity reg
-            const Vector3 lvOtherPos = lpOther->GetStuntWorldPosition();
-            if (IsWithinTailgatingCone(lvOtherFwd, lvOtherPos, lvSelfPos))
+            const Vector3 lvOtherPos = lpOther->GetPosition();
+            if (IsWithinTailgatingCone(lvSelfForward, lvOtherPos, lvSelfPos))
             {
                 const f32 lfDistSq = vpu::MagnitudeSquared(vpu::Subtract(lvOtherPos, lvSelfPos));
                 if (liBest == -1 || lfDistSq < lfBestDistSq)
@@ -726,7 +729,7 @@ namespace BrnPhysics
     //   completed-convoy slots.
     // ============================================================================================
     void StuntOffencesManager::CheckForConvoy(Vehicle::RaceCarPhysics* lpaRaceCarPhysics,
-                                              void* lpaRaceCarDrivers,
+                                              Vehicle::VehicleDriver* lpaRaceCarDrivers,
                                               EActiveRaceCarIndex lePlayerActiveRaceCarIndex,
                                               const CgsContainers::BitArray<8>* lpUsedRaceCars,
                                               f32 lfTimeStep)
@@ -802,8 +805,7 @@ namespace BrnPhysics
         if (liChainLen > 1)
         {
             Vehicle::RaceCarPhysics* lpLinkCar = &lpaRaceCarPhysics[lePlayerActiveRaceCarIndex];
-            Vector3 lvVel = lpLinkCar->GetStuntReferenceVelocity();   // +0x6C0
-            const f32 lfDistInc = lvVel.x * lfTimeStep;   // FLAG: asm splats x-lane of (vel*unit_83017FE0)*dt; unit not in exports
+            const f32 lfDistInc = lpLinkCar->GetSpeed().x * lfTimeStep;
             for (s32 li = 1; li < liChainLen; ++li)
             {
                 maConvoyTimer[li]     += lfDistInc;     // +0xD8[i] += distance increment (asm *(v39-8) += v50)

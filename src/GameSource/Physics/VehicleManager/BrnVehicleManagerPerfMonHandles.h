@@ -14,7 +14,7 @@
 // The gs_ spelling is kept verbatim from the Construct TU (the identifiers pre-date the
 // hoist; renaming them would churn thirty call sites for zero information).
 //
-// The sixteen handles NOT listed here (stunt offences, the traction sub-stages, the
+// The remaining handles NOT listed here (the still-single-reader traction sub-stages and the
 // seven guarded VPhys sub-monitors) stay file-static in the Construct TU -- nothing
 // else reads them yet. Hoist ADDITIVELY when a slice needs one; do not re-declare
 // locally (see the shadowing-redeclaration postmortems).
@@ -26,6 +26,7 @@ namespace BrnPhysics
 {
 namespace Vehicle
 {
+    extern s32 gs_iUpdateStuntOffencesPM;     // dword_82F2A1A0
     extern s32 gs_iUpdateVehicleImpactsPM;    // dword_82F2A14C
     extern s32 gs_iProcessAboveGroundLTsPM;   // dword_82F2A150
     extern s32 gs_iTractionLTsPM;             // dword_82F2A154

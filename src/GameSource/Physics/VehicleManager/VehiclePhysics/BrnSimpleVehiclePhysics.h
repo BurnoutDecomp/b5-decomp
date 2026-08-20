@@ -29,6 +29,7 @@ namespace Vehicle
 // Forward decl: the generated AttribSys handling wrapper (full type in
 // GameSource/AttribSys/Generated/classes/physicsvehiclehandling.h).
 namespace Attrib { namespace Gen { class physicsvehiclehandling; } }
+namespace CgsGeometric { struct Box; }
 
 namespace BrnPhysics
 {
@@ -180,18 +181,27 @@ namespace Vehicle
         //       BY NAME below so these bodies resolve their members without raw-offset casts. -----
 
         // @0x826203E8: construct -- base Construct, Wheel::Clear each of the 4 wheels,
-        // SimpleVehicleAttribs::Construct, zero mHandlingBodyOffset/mHalfExtent/the two AABBs, seed
-        // the crash/deform bools, then Reset. Bodied in BrnSimpleVehiclePhysics.cpp.
+        // SimpleVehicleAttribs::Construct, zero mHandlingBodyOffset/mHalfExtent, reset the
+        // above-ground result, then run the zero-argument Reset wrapper. Bodied in the .cpp.
         void Construct();
 
         // @0x826206D0: destruct -- base Destruct, Wheel::Clear loop, Reset. Bodied below.
         void Destruct();
 
-        // @0x825D9A58: reset -- (gated by mbStartedDeforming==0) Wheel::Reset each wheel, zero
-        // maLocalTractionPoints[0..3] (+0x530 stride 16) + mfSpeedMPH, clear the crash bools.
-        // Bodied below. ⚠️ The "velocity/transform-delta SIMD registers" reading of the four
-        // vector stores was WRONG and is corrected in the .cpp banner (2026-08-03).
+        // The no-argument source wrapper (DecFIGS @0x6D8824) calls Reset(Vector3::Zero) and
+        // clears the base frozen flag.  Breaker inlines that wrapper in Construct/Destruct.
         void Reset();
+
+        // @0x825D9A58: the Vector3 overload (DecFIGS @0x6D8718).  The source parameter is real
+        // and is passed in v1 by Breaker callers, although this build's body does not consume it.
+        // Wheel::Reset is gated by !mSimpleAttribs.IsValid(), then the local traction points,
+        // speed and crash-state flags are cleared.
+        void Reset(Vector3 lInitialVelocity);
+
+        // DecFIGS BrnSimpleVehiclePhysics.cpp:834; its emitted PS3 body @0x6B4400 is empty.
+        // Breaker's callers inline the more-derived VehiclePhysics implementation, which attests
+        // this non-virtual VecFloat declaration without requiring an X360 out-of-line emission.
+        void UpdatePostSimulation(VecFloat lvfTimeStep);
 
         // @0x82602880: stamp the above-ground (down-ray) test result from a position+normal+two
         // collision-tag halfwords. Asserts the position/normal are finite (debug). Bodied below.
@@ -226,6 +236,10 @@ namespace Vehicle
         // mbIsCloseToGround / mbLineTestIsValid / mi8NumContacts / mbHasTraction}, then
         // mAboveGroundTestResult.Reset(). Bodied in BrnSimpleVehiclePhysics.cpp.
         void ResetAboveGroundTestResult();
+
+        // The first three virtuals are kept in the DecFIGS order.  The base steering implementation
+        // is the ICF-folded zero-return leaf; VehiclePhysics overrides it at 0x825D4028.
+        virtual VecFloat GetSteeringAngle() const;
 
         // @0x825B8EA8: clear the crash master flag (mbCrashing) + mbStartedFatallyCrashing. Bodied.
         // Virtual in the DWARF (BrnSimpleVehiclePhysics.cpp:786).
@@ -288,20 +302,9 @@ namespace Vehicle
         // says the mirrored wheels 0/2 are the LEFT ones; the body and enum are the authority,
         // the ABI name is kept.) Every committed caller passes false == mirror ACTIVE.
         //
-        // ⛔ NAMED DIVERGENCE (vtable slot 0). The console class's FIRST virtual is
-        // `virtual VecFloat GetSteeringAngle() const` (DWARF BrnSimpleVehiclePhysics.h:250,
-        // base impl cpp:768) -- ahead of ClearCrashing -- and @0x825D8878 dispatches the steer
-        // read through vtable slot 0. This tree's virtual list starts at ClearCrashing (slot 0
-        // here), i.e. the committed vtable order is WRONG at slot 0, and it declares
-        // GetSteeringAngle non-virtual (f32) on VehiclePhysics instead. Retrofitting the base
-        // virtual would touch every vtable the closure work pinned, so the body follows the
-        // tree's existing precedent (BrnVehicleOutputInterface_UpdateRaceCarState.cpp:129) and
-        // DEVIRTUALIZES: every live receiver is at least a VehiclePhysics (RaceCarPhysics /
-        // TrafficPhysics both derive from it; neither overrides). Left for the verifier as the
-        // class-surface cure.
         Matrix44Affine GetWheelsWorldTransfrom(EVehicleDrivenWheel leWheel,
                                                bool lbHackDontReverseRightWheels) const;
-        void GetSimpleVehicleBox(/* Box& */ void* lpOutBox) const;
+        void GetSimpleVehicleBox(CgsGeometric::Box& lrOutBox) const;
 
         // ⭐ OUT of the BLOCKED list 2026-08-07 (wheel-cluster wave): BODIED in
         // BrnSimpleVehiclePhysics.cpp from @0x82602CB8 -- the min-height plane fit over the four
@@ -414,6 +417,22 @@ namespace Vehicle
         //   DWARF BrnSimpleVehiclePhysics.h -- GetSpeedMPH / IsFatallyCrashing /
         //   HasStartedDeforming / GetAboveGroundTestResult / GetLocalTractionPoint.
         VecFloat GetSpeedMPH() const { return mfSpeedMPH; }                          // @0x6C0 (`lvx128 v0,r30,0x6C0`)
+
+        // DecFIGS BrnSimpleVehiclePhysics.h:297 declares `VecFloat GetSpeed() const`.
+        // Breaker inlines it in StuntOffencesManager::CheckForDrift @0x826138EC:
+        // load the splatted MPH register at +0x6C0 and multiply it by the splatted
+        // 0.44704 MPH-to-m/s constant at unk_83017FE0. This is a genuine VecFloat
+        // accessor; the VMX splat represents one scalar speed, not an xyz velocity.
+        VecFloat GetSpeed() const
+        {
+            static const f32 KF_MPH_TO_MPS = 0.447039992f; // flt_82F31928 / unk_83017FE0
+            return VecFloat{
+                mfSpeedMPH.x * KF_MPH_TO_MPS,
+                mfSpeedMPH.y * KF_MPH_TO_MPS,
+                mfSpeedMPH.z * KF_MPH_TO_MPS,
+                mfSpeedMPH.w * KF_MPH_TO_MPS
+            };
+        }
         bool     IsFatallyCrashing() const { return mbStartedFatallyCrashing; }      // @0x711 (`lbz r11,0x711(r30)`)
         bool     HasStartedDeforming() const { return mbStartedDeforming; }          // @0x712 (`lbz r11,0x712(r30)`)
         const AboveGroundTestResult* GetAboveGroundTestResult() const                // @0x570 (`addi r11,r31,0x570`)

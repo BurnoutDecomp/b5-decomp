@@ -121,6 +121,7 @@ namespace CgsSceneManager { namespace CgsCollision { struct CollisionGenerator; 
 namespace BrnPhysics { namespace Deformation { class DeformationOutputInterface; } } // BrnDeformationOutputInterface.h
 // ReadUpdatedBodyProperties' queue element (CgsPhysicsSimulationIO_Events.h, class key `struct`).
 namespace CgsPhysics { namespace PhysicsSimulationIO { struct InChangeRigidBodyInertia; } }
+namespace BrnGameState { namespace GameStateModuleIO { class GameEventQueue; } }
 
 namespace BrnPhysics
 {
@@ -331,18 +332,6 @@ namespace Vehicle
         // tuning bank seeds; the body is written straight off it.
         void Construct();
 
-        // ADDITIVE (WorldModule::Prepare @0x827D53B0 stage-8 success path reads the
-        // surface-property table once the world entity module prepared). Static on the
-        // X360 (a global manager pair). Declaration-only; body with this manager's TU.
-        // ⚠️⚠️ SIGNATURE FORK, FLAGGED 2026-08-06 (UpdateVehiclePhysics wave): the DWARF
-        // (BrnVehicleManager.h:1085) declares ONE ReadSurfaceProperties -- the NON-static
-        // one-argument member below -- and the X360 caller in UpdateVehiclePhysics
-        // @0x8264513C passes this + the 64-bit key. This static no-arg form exists only in
-        // this tree (WorldLinkStubs.cpp's simplified stub + BrnWorldModule.cpp's call).
-        // The WorldModule wave owns re-pointing that call to the real member; do not add
-        // more callers to this overload.
-        static void ReadSurfaceProperties();
-
         // ==================================================================================
         // ⭐⭐ ADDED 2026-08-06 (big-five #3, UpdateVehiclePhysics wave). The per-frame FORCE
         // PRODUCER and its sibling surface. DWARF lines cited per member; bodies either in
@@ -458,7 +447,10 @@ namespace Vehicle
             CgsSceneManager::EntityId lWorldEntityId);
 
         // DWARF h:1085 `void ReadSurfaceProperties(Attribute::Key)`; X360 @0x825C7BB8
-        // (187 insns, AttribSys walk). ⚠️ WIDTH: the caller loads the key with a 64-bit `ld`
+        // (187 insns, AttribSys walk). WorldModule::Prepare @0x827D5B60..0x827D5B70
+        // passes its embedded manager plus StringToKey("340654"); UpdateVehiclePhysics
+        // passes the same TU-local initialized key on player reset. ⚠️ WIDTH: both
+        // callers load the key with a 64-bit `ld`
         // (qword_82FB7F10) while the committed Attribute::Key typedef is u32 -- the
         // parameter is spelled u64 off the asm; the typedef conflict is FLAGGED here, not
         // resolved (attribhash64 keys are 64-bit; the u32 typedef has its own note).
@@ -1074,7 +1066,7 @@ namespace Vehicle
             const VehicleInputInterface* lpInputInterface,
             const CgsPhysics::PhysicsSimulationIO::OutputBuffer* lpSimOutputBuffer,
             f32 lfTimeStep,
-            CgsModule::VariableEventQueue<1536, 16>* lpGameEventQueue);  // DWARF spells GameStateModuleIO::GameEventQueue (same type)
+            BrnGameState::GameStateModuleIO::GameEventQueue* lpGameEventQueue);
 
         // @0x8263C7C0 (DWARF :235 -- ⚠ .ida-exports HOLE, image-only).
         void ProcessCrashingNetworkCars(const VehicleDriverInputInterface* lpDriverInputInterface,
@@ -1405,6 +1397,12 @@ namespace Vehicle
         VecFloat PredictCarWorldContactTime(const CgsSceneManager::SceneManagerIO::PotentialContact& lContact);
 
     private:
+        // DecFIGS BrnVehicleManager.h:1454/:1459; both are X360-attested calls in
+        // UpdateVehiclePhysicsPostSimulation @0x82642828/@0x82642C04.
+        void DoPlayerTractionLineTestsPostSimulation(
+            const VehicleInputInterface* lpInputInterface, f32 lfTimeStep);
+        void DoPlayerStuckLineTests(const VehicleInputInterface* lpInputInterface);
+
         // ------------------------------------------------------------------------------------------
         // Deep VehicleManager data members, recovered by LAYOUT RECOVERY WITH PADDING from the X360
         // asm offsets. The full VehicleManager is ~172 KB across many parallel per-car arrays;
