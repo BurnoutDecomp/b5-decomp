@@ -13,8 +13,11 @@
 //  SubmitSourceBuffer. Modelled as a self-contained PC-platform sink (the same
 //  "PC platform layer at the leaf" pattern as the D3D9 / FFmpeg shims).
 //
-//  XAudio2Create is resolved at runtime from the in-box xaudio2_9.dll (Win10/11) via
-//  LoadLibrary/GetProcAddress -- no new linked .lib and no redistributable.
+//  XAudio2Create is resolved at runtime via LoadLibrary/GetProcAddress -- no linked .lib,
+//  so a missing engine degrades to "run muted" instead of failing to start. The provider
+//  is Microsoft's XAudio2 Redistributable (xaudio2_9redist.dll, shipped beside the exe):
+//  the same 2.9 engine as the in-box one, but supported down to Windows 7 SP1 instead of
+//  Windows 10 1803+. The in-box xaudio2_9/_8.dll remain fallbacks.
 //
 //  Output format is 16-bit signed PCM, interleaved. The backend pulls audio through a
 //  fill callback (called on XAudio2's audio thread when a buffer drains); the rw::audio
