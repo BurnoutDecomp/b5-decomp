@@ -13,16 +13,17 @@ namespace BrnGui
     // @ 0x8240F018 -- resolve the freeburn challenge list through the owned world-data
     // controller. Asserts the controller is present, forwards to its accessor, then asserts
     // the returned list is non-null. The X360 passes the controller pointer straight to
-    // WorldDataController::GetFreeburnChallengeList and tail-returns its r3 unchanged; the
-    // GuiCache header forward-declares the return element as BrnResource::ChallengeList while
-    // the controller header forward-declares the same opaque resource as BrnGui::ChallengeList,
-    // so bridge the two boundary forward-decls with a pointer passthrough cast.
+    // WorldDataController::GetFreeburnChallengeList and tail-returns its r3 unchanged.
+    // [gateui r3] The reinterpret_cast that used to sit here is GONE: it only existed to
+    // bridge BrnGuiWorldDataController.h's phantom `BrnGui::ChallengeList` forward
+    // declaration (a type defined nowhere in the tree) to the real BrnResource::ChallengeList
+    // this header already spells. That header now names the real type, so both sides agree
+    // and the passthrough is a plain forward.
     const BrnResource::ChallengeList* GuiCache::GetFreeburnChallengeList() const
     {
         CGS_ASSERT(mpWorldDataController != nullptr, "mpWorldDataController");
         const BrnResource::ChallengeList* lpChallengeList =
-            reinterpret_cast<const BrnResource::ChallengeList*>(
-                mpWorldDataController->GetFreeburnChallengeList());
+            mpWorldDataController->GetFreeburnChallengeList();
         CGS_ASSERT(lpChallengeList != nullptr, "lpChallengeList");
         return lpChallengeList;
     }

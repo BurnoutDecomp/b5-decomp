@@ -674,21 +674,77 @@ namespace CgsLanguage
         return !lbAnyParamFailed;
     }
 
+    // @ 0x82865710 (DWARF CgsLanguageManager.h:260, cpp:1185/1186) -- FormatText's
+    // one-int-parameter sibling and the last unresolved external the HUD-message analyzer
+    // mount needs (HandleStuntPerformed's four "STUNT_RUN_MULTIPLIER_*_MULTIPLE" renders in
+    // BrnGuiHudMessageAnalyzer_wC_03.cpp).
+    //
+    // Register map from the asm (r5 == luBufferSize is NEVER READ -- see below):
+    //   r3 this · r4 lpacBuffer · r5 luBufferSize · r6 lpcSourceText · r7 leType
+    //   r8 liValue · r9 leValueType
+    // Body, store-for-store:
+    //   0x8286581C-34  var_4D0 := &var_4C0            (the one-entry parameter array)
+    //   0x82865834     sub_82864C48(this, var_480, 1024, lpcSourceText, leType)
+    //                  == FormatText(char*, u32, const char*, ParameterFormatType)
+    //   0x8286584C     FormatText(this, var_4C0, 64, liValue, leValueType)
+    //                  == FormatText(char*, u32, s32, ParameterFormatType) @0x82862650
+    //   0x82865864     CgsUnicode::_Print(lpacBuffer, var_480, 1024, &var_4D0, 1)
+    //   0x82865868     li r3, 1        -- unconditionally true
+    //
+    // ⚠ CONSOLE DEFECT, reproduced verbatim: `li r5, 0x400` at 0x82865858 passes the
+    // SOURCE scratch buffer's size (1024) as _Print's lnTargetStringSize, i.e. as the
+    // TARGET cap -- luBufferSize is dropped on the floor. Both console call sites pass 63
+    // against a 64-byte stack buffer (HandleStuntPerformed @0x8251B7F0/B93C/BA88/BCDC), so
+    // the cap is wrong by 16x on the platform this shipped on too. It does not smash in
+    // practice because _Print copies the SOURCE up to its terminator and the cap is only a
+    // maximum -- the resolved "%1 spins"-class strings are far shorter than 64. Left as the
+    // binary has it (the sibling FormatTextV/Obsolete_FormatTextByArray above DO forward
+    // luBufferSize, which is what makes this one visibly an oversight rather than a
+    // convention). Do NOT "fix" it to luBufferSize without re-reading 0x82865858.
+    bool LanguageManager::FormatTextFromInt(char* lpacBuffer, u32 luBufferSize,
+                                            const char* lpcSourceText, ParameterFormatType leType,
+                                            s32 liValue, ParameterFormatType leValueType)
+    {
+        CGS_ASSERT(lpacBuffer != 0, "Target field is invalid in LanguageManager::FormatText");  // cpp:1185
+        CGS_ASSERT(lpcSourceText != 0, "Text field is invalid in TextField::SetLocalisedText"); // cpp:1186
+
+        (void)luBufferSize;   // see the CONSOLE DEFECT note above
+
+        char lacSourceBuffer[1024];
+        FormatText(lacSourceBuffer, 1024, lpcSourceText, leType);
+
+        char lacValueBuffer[64];
+        FormatText(lacValueBuffer, 64, liValue, leValueType);
+
+        const CgsUnicode::CgsUtf8* lapUtf8Params[1];
+        lapUtf8Params[0] = reinterpret_cast<const CgsUnicode::CgsUtf8*>(lacValueBuffer);
+
+        CgsUnicode::_Print(reinterpret_cast<CgsUnicode::CgsUtf8*>(lpacBuffer),
+                           reinterpret_cast<const CgsUnicode::CgsUtf8*>(lacSourceBuffer),
+                           1024, lapUtf8Params, 1);
+        return true;
+    }
+
     // ------------------------------------------------------------------------
-    // FLAG trap-stub bodies (link scaffold, 2026-07-01): the ten Format*String
-    // members below are declared (DWARF) and referenced by the debug component's
+    // FLAG trap-stub bodies (link scaffold, 2026-07-01): the Format*String members
+    // below are declared (DWARF) and referenced by the debug component's
     // RenderHUD (CgsLanguageManagerDebugComponent.cpp, pulled in by the by-value
     // mDebugComponent member landed in wave f0de9b78), but their reconstructions
-    // have not landed yet. Trap bodies per the stub scaffold -- reachable only
-    // through the debug language HUD, never on the boot path. Replace each with
-    // its faithful decompile.
+    // have not landed yet. Replace each with its faithful decompile.
+    //
+    // ⚠️ [gateui r5] THE ORIGINAL BANNER'S "reachable only through the debug language HUD,
+    // never on the boot path" CLAIM IS REFUTED and has been deleted. The four INTEGER leaves
+    // it covered are on the live HUD-message path (RefreshString -> SetLocalisedText ->
+    // Obsolete_FormatTextByArray -> FormatText -> here) and their traps killed the process on
+    // the first smashed gate; they now have faithful bodies above the float dispatcher.
+    // The FLOAT leaves still below are one HUD parameter type away from the same fate:
+    // RefreshString maps E_HUDMESSAGEPARAMTYPES_TIME -> format 6 -> FormatSecondsString
+    // (@0x82863328) through the float dispatcher, so a HUD message carrying a TIME parameter
+    // WILL trap here. Treat the remaining trap bodies as live hazards, not debug-only.
     // ------------------------------------------------------------------------
-    void LanguageManager::FormatIntegerString(char*, s32, s32) const                      { __debugbreak(); }   // FLAG trap-stub
-    void LanguageManager::FormatIntegerNoSeperatorString(char*, s32, s32) const           { __debugbreak(); }   // FLAG trap-stub
     void LanguageManager::FormatXoverYString(char*, s32, s32, s32) const                  { __debugbreak(); }   // FLAG trap-stub
-    void LanguageManager::FormatPercentageString(char*, s32, s32) const                   { __debugbreak(); }   // FLAG trap-stub
-    void LanguageManager::FormatCurrencyString(char*, s32, s32) const                     { __debugbreak(); }   // FLAG trap-stub
-    // (FormatDateString is no longer a trap-stub -- its faithful body is below this block.)
+    // (FormatDateString + the four INTEGER leaves are no longer trap-stubs -- their faithful
+    //  bodies are above this block.)
     void LanguageManager::FormatHoursMinutesAndSecondsString(char*, f32, s32) const       { __debugbreak(); }   // FLAG trap-stub
     void LanguageManager::FormatMinutesAndSecondsString(char*, f32, s32) const            { __debugbreak(); }   // FLAG trap-stub
     void LanguageManager::FormatMinutesAndSecondsAndHundredsString(char*, f32, s32) const { __debugbreak(); }   // FLAG trap-stub
@@ -755,6 +811,166 @@ namespace CgsLanguage
 
         CgsUnicode::_Print(reinterpret_cast<CgsUnicode::CgsUtf8*>(lpcTarget),
                            mpTimeFormatDate, liTargetSize, lapArgs, 3);
+    }
+
+    // ------------------------------------------------------------------------
+    // [gateui r5] THE FOUR INTEGER LEAVES, lifted out of the trap-stub block below.
+    //
+    // The trap block's banner claimed these were "reachable only through the debug language
+    // HUD, never on the boot path". THAT PREMISE IS REFUTED -- they are on the HUD-message
+    // path, and the __debugbreak() bodies killed the game on the first smashed gate:
+    //   host rva 0x1B951A = FormatText(char*,u32,s32,ParameterFormatType) @0x82862650
+    //      + 0x7A, EXCEPTION 0x80000003 (int3, NOT an access violation) -- the four leaf
+    //      calls inlined to nothing but their __debugbreak, and MSVC then folded ALL FOUR
+    //      case arms (E_FORMAT_INTEGER / _NOSEPERATOR / _PERCENTAGE / _MONEY) onto that ONE
+    //      int3 at +0x7A, jumped to by all four `jz` arms while the default/assert path
+    //      hops over it (`eb 01 cc`). So any of the four killed the process.
+    //   <- FormatText(char*,u32,const char*,ParameterFormatType) @0x82864C48 case 11..14
+    //   <- Obsolete_FormatTextByArray @0x82865480
+    //   <- BrnFlapt::TextFieldRef::SetLocalisedText <- InGameMessagesComponent::RefreshString.
+    // RefreshString maps CgsGui::E_HUDMESSAGEPARAMTYPES_INT -> format 11 and _MONEY -> 14
+    // (its dword_8204B83C table), so EVERY parameterised HUD message lands here.
+    //
+    // Shared shape (all four): the console's stack block IS a CgsUnicode::UnicodeBuffer with
+    // Reset() + the separator setters + Convert(s32) inlined -- maBuffer[256], then
+    // maUtf8ThousandsSeparator[4], maUtf8DecimalPointCharacter[4], muDecimalPlaces,
+    // muMinimumDigits (the ten tail bytes each body zeroes one stb at a time). Modelled with
+    // explicit locals rather than a UnicodeBuffer object because Reset / the Set*
+    // separator setters / Convert(s32) have no reconstructed bodies in the tree yet (only
+    // Convert(const CgsUtf8*) does) -- same call sequence, no unresolved external.
+    // muMinimumDigits is read straight back out of that zeroed block, i.e. always 0.
+    // ------------------------------------------------------------------------
+
+    // @ 0x828610B0 (asserts cpp:1418/:1419/:1420/:1421). Render liValue with the locale's
+    // thousands separator. The decimal-point character is copied into the buffer too (the
+    // inlined SetDecimalPointCharacter) even though an integer render never consumes it --
+    // reproduced, because its <=1-character tripwire is a real side effect.
+    void LanguageManager::FormatIntegerString(char* lpcTarget, s32 liValue, s32 liTargetSize) const
+    {
+        CGS_ASSERT(lpcTarget != 0, "lpTargetString != NULL");                          // cpp:1418
+        CGS_ASSERT(liTargetSize > 0, "lnTargetStringSize > 0");                        // cpp:1419
+        CGS_ASSERT(mpGeneralThousandsSeparator != 0, "mpGeneralThousandsSeparator");   // cpp:1420
+        CGS_ASSERT(mpGeneralDecimalSeparator != 0, "mpGeneralDecimalSeparator");       // cpp:1421
+
+        CgsUnicode::CgsUtf8 lacValue[256];
+        CgsUnicode::CgsUtf8 lacThousandsSeparator[4];
+        CgsUnicode::CgsUtf8 lacDecimalPointCharacter[4];
+        const u8 lu8MinimumDigits = 0;   // the buffer's muMinimumDigits, zeroed with the block
+
+        lacValue[0] = 0;
+        for (s32 liByte = 0; liByte < 4; ++liByte)
+        {
+            lacThousandsSeparator[liByte]    = 0;
+            lacDecimalPointCharacter[liByte] = 0;
+        }
+
+        // UnicodeBuffer::SetDecimalPointCharacter, inlined (CgsUnicode.h:617).
+        CGS_ASSERT(CgsUnicode::StringLength(mpGeneralDecimalSeparator) <= 1,
+                   "StringLength(lUtf8DecimalPointCharacter) <= 1");
+        CgsUnicode::Copy(lacDecimalPointCharacter, mpGeneralDecimalSeparator);
+
+        // UnicodeBuffer::SetThousandsSeparator, inlined (CgsUnicode.h:598).
+        CGS_ASSERT(CgsUnicode::StringLength(mpGeneralThousandsSeparator) <= 1,
+                   "StringLength(lUtf8ThousandsSeparator) <= 1");
+        CgsUnicode::Copy(lacThousandsSeparator, mpGeneralThousandsSeparator);
+
+        CgsUnicode::IntToString(lacValue, liValue, lu8MinimumDigits, lacThousandsSeparator);
+        CgsUnicode::CopyN(reinterpret_cast<CgsUnicode::CgsUtf8*>(lpcTarget), lacValue,
+                          liTargetSize);
+    }
+
+    // @ 0x82861248 (asserts cpp:1453..:1456). Same as above with NO separator set: the
+    // console passes the Reset()-zeroed (empty) thousands buffer and a literal 0 minimum-digit
+    // count straight to IntToString, so no grouping is spliced in.
+    void LanguageManager::FormatIntegerNoSeperatorString(char* lpcTarget, s32 liValue,
+                                                         s32 liTargetSize) const
+    {
+        CGS_ASSERT(lpcTarget != 0, "lpTargetString != NULL");                          // cpp:1453
+        CGS_ASSERT(liTargetSize > 0, "lnTargetStringSize > 0");                        // cpp:1454
+        CGS_ASSERT(mpGeneralThousandsSeparator != 0, "mpGeneralThousandsSeparator");   // cpp:1455
+        CGS_ASSERT(mpGeneralDecimalSeparator != 0, "mpGeneralDecimalSeparator");       // cpp:1456
+
+        CgsUnicode::CgsUtf8 lacValue[256];
+        CgsUnicode::CgsUtf8 lacThousandsSeparator[4];
+
+        lacValue[0] = 0;
+        for (s32 liByte = 0; liByte < 4; ++liByte)
+            lacThousandsSeparator[liByte] = 0;
+
+        CgsUnicode::IntToString(lacValue, liValue, 0, lacThousandsSeparator);
+        CgsUnicode::CopyN(reinterpret_cast<CgsUnicode::CgsUtf8*>(lpcTarget), lacValue,
+                          liTargetSize);
+    }
+
+    // @ 0x828614D8 (asserts cpp:1529/:1530/:1532). Render liValue with no grouping, copy it
+    // into the caller's buffer, then OVERWRITE that buffer by printing the rendered digits
+    // through the locale's percentage template ("%1%"). The intermediate CopyN is the
+    // console's own -- @0x828615BC, before the _Print at @0x828615EC -- and is kept.
+    void LanguageManager::FormatPercentageString(char* lpcTarget, s32 liValue,
+                                                 s32 liTargetSize) const
+    {
+        CGS_ASSERT(lpcTarget != 0, "lpTargetString != NULL");        // cpp:1529
+        CGS_ASSERT(liTargetSize > 0, "lnTargetStringSize > 0");      // cpp:1530
+        CGS_ASSERT(mpGeneralPercentage != 0, "mpGeneralPercentage"); // cpp:1532
+
+        CgsUnicode::CgsUtf8 lacValue[256];
+        CgsUnicode::CgsUtf8 lacThousandsSeparator[4];
+
+        lacValue[0] = 0;
+        for (s32 liByte = 0; liByte < 4; ++liByte)
+            lacThousandsSeparator[liByte] = 0;
+
+        CgsUnicode::IntToString(lacValue, liValue, 0, lacThousandsSeparator);
+        CgsUnicode::CopyN(reinterpret_cast<CgsUnicode::CgsUtf8*>(lpcTarget), lacValue,
+                          liTargetSize);
+
+        CgsUnicode::UnicodeBuffer lValueBuffer;
+        lValueBuffer.Convert(lacValue);
+
+        const CgsUnicode::CgsUtf8* lapArgs[1] = { lValueBuffer.GetBuffer() };
+        CgsUnicode::_Print(reinterpret_cast<CgsUnicode::CgsUtf8*>(lpcTarget),
+                           mpGeneralPercentage, liTargetSize, lapArgs, 1);
+    }
+
+    // @ 0x82860F38 (asserts cpp:1384/:1385/:1387/:1388). Render liValue grouped by the
+    // locale's CURRENCY separator (mpGeneralCurrencySeparator takes the thousands-separator
+    // slot -- the inlined setter's tripwire still reads "lUtf8ThousandsSeparator"), then print
+    // it through the currency template ("$%1"). No intermediate CopyN here, unlike the
+    // percentage leaf.
+    void LanguageManager::FormatCurrencyString(char* lpcTarget, s32 liCurrencyValue,
+                                               s32 liTargetSize) const
+    {
+        CGS_ASSERT(lpcTarget != 0, "lpTargetString != NULL");                        // cpp:1384
+        CGS_ASSERT(liTargetSize > 0, "lnTargetStringSize > 0");                      // cpp:1385
+        CGS_ASSERT(mpGeneralCurrencySeparator != 0, "mpGeneralCurrencySeparator");   // cpp:1387
+        CGS_ASSERT(mpGeneralCurrency != 0, "mpGeneralCurrency");                     // cpp:1388
+
+        CgsUnicode::CgsUtf8 lacValue[256];
+        CgsUnicode::CgsUtf8 lacThousandsSeparator[4];
+        CgsUnicode::CgsUtf8 lacDecimalPointCharacter[4];
+        const u8 lu8MinimumDigits = 0;
+
+        lacValue[0] = 0;
+        for (s32 liByte = 0; liByte < 4; ++liByte)
+        {
+            lacThousandsSeparator[liByte]    = 0;
+            lacDecimalPointCharacter[liByte] = 0;
+        }
+
+        // UnicodeBuffer::SetThousandsSeparator, inlined (CgsUnicode.h:598).
+        CGS_ASSERT(CgsUnicode::StringLength(mpGeneralCurrencySeparator) <= 1,
+                   "StringLength(lUtf8ThousandsSeparator) <= 1");
+        CgsUnicode::Copy(lacThousandsSeparator, mpGeneralCurrencySeparator);
+
+        CgsUnicode::IntToString(lacValue, liCurrencyValue, lu8MinimumDigits,
+                                lacThousandsSeparator);
+
+        CgsUnicode::UnicodeBuffer lValueBuffer;
+        lValueBuffer.Convert(lacValue);
+
+        const CgsUnicode::CgsUtf8* lapArgs[1] = { lValueBuffer.GetBuffer() };
+        CgsUnicode::_Print(reinterpret_cast<CgsUnicode::CgsUtf8*>(lpcTarget),
+                           mpGeneralCurrency, liTargetSize, lapArgs, 1);
     }
 
     // @ 0x828641F0 -- the FLOAT value dispatcher (DWARF CgsLanguageManager.h: the

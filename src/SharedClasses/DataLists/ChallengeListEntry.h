@@ -235,7 +235,7 @@ struct ChallengeListEntry
     void                          Construct();                       // :362  declared-only
     void                          FixUp(void* lpBase);               // :365  declared-only
     void                          FixDown(void* lpBase);             // :368  declared-only
-    CgsID                         GetChallengeID() const;            // :372  declared-only
+    CgsID                         GetChallengeID() const;            // :372  RECONSTRUCTED (inline below)
     // NOTE (do NOT re-add `GetChall`): the ledger/IDB identity
     // `BrnResource::ChallengeListEntry::GetChall` is the IDA-TRUNCATED form of
     // GetChallengeStyle -- the IDB clips qualified names at 41 characters
@@ -253,7 +253,7 @@ struct ChallengeListEntry
     const ChallengeListEntryAction* GetAction(int32_t liActionIndex) const; // :384  RECONSTRUCTED (inline below, const twin)
     EChallengeDifficulty          GetDifficulty() const;             // :387  declared-only
     const char*                   GetDescriptionStringID() const;    // :390  declared-only
-    const char*                   GetTitleStringID() const;          // :393  declared-only
+    const char*                   GetTitleStringID() const;          // :393  RECONSTRUCTED (inline below)
     // X360 0x823542A0. The IDB/ledger identity for this same address is the 41-char-truncated
     // name `BrnResource::ChallengeListEntry::GetChall` -- see the note above; there is no
     // separate `GetChall` method.
@@ -401,6 +401,34 @@ ChallengeListEntry::GetChallengeStyle() const
 inline int32_t ChallengeListEntry::GetNumActions() const
 {
     return muNumActions;
+}
+
+// [gateui] ChallengeListEntry::GetChallengeID -- X360-inlined, no ledger row. Recovered
+// from ChallengeList::GetChallengeIndex @0x82326168, whose scan body is
+//     0x82326194  bl   BrnResource__ChallengeList__GetChallengeData
+//     0x82326198  ld   r11, 0xC0(r3)        <-- the whole body: the 8-byte CgsID at +0xC0
+//     0x8232619C  cmpld cr6, r11, r29
+// +0xC0 is mChallengeID (DWARF ChallengeListEntry.h:458). An 8-byte `ld`, so this is the
+// CgsID member itself, not a truncated word.
+inline CgsID ChallengeListEntry::GetChallengeID() const
+{
+    return mChallengeID;
+}
+
+// [gateui] ChallengeListEntry::GetTitleStringID -- another accessor the X360 ALWAYS
+// inlines (it has no ledger row of its own). Recovered from the ONE call site the HUD
+// path uses, BrnGui::HudMessageAnalyzer::TriggerChallengeTriggeredMessage @0x8251F970:
+//     0x8251FA5C  bl   BrnGui__FreeburnChallengeManager__GetCurrentChallenge
+//     0x8251FA60  mr   r11, r3
+//     0x8251FA70  addi r6, r11, 0xB0            <-- the whole body: `entry + 0xB0`
+//     0x8251FA74  bl   BrnGui__GuiHudMessage__AddParam   (type 6 == STRINGID, string 1)
+// +0xB0 is macTitleStringID (DWARF ChallengeListEntry.h:456), the 16-byte char array
+// right after macDescriptionStringID -- so the accessor returns the embedded array, not a
+// stored pointer, and there is nothing to null-check. (Its twin GetDescriptionStringID
+// @+0xA0 is the identical shape; left declared-only until a caller needs it.)
+inline const char* ChallengeListEntry::GetTitleStringID() const
+{
+    return macTitleStringID;
 }
 
 inline const ChallengeListEntryAction* ChallengeListEntry::GetAction( int32_t liActionIndex ) const

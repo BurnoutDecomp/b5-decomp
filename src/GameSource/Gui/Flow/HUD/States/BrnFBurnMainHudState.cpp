@@ -309,10 +309,40 @@ namespace BrnGui
         // the SatNav body TU is not reconstructed.
         LogDeferredComponent("SatNavComponent");
 
-        // FLAG deferred (Slice B): InGameMessagesComponent::Construct("hudMessages_mc")
-        // + SetInGameMessagesQueue(cache+16512) + Prepare -- the ctor/prepare half of
-        // that TU is not reconstructed (the setters are; driven in UpdateSetupState).
-        LogDeferredComponent("InGameMessagesComponent");
+        // [gateui r3] THE LAST RUNG OF THE gateui LADDER, landed. X360 OnEnter @0x8247B0E8:
+        //     InGameMessagesComponent::Construct(&this->field_3E8, "hudMessages_mc",
+        //                                        this->field_1C, 0);
+        //     ... assert mpGuiCache (CgsGuiShared.h:201) ...
+        //     InGameMessagesComponent::SetInGameMessagesQueue(&this->field_3E8,
+        //                                                     guiCache + 16512);
+        //     InGameMessagesComponent::Prepare(&this->field_3E8, "hudMessages_mc", lFile);
+        // Round 2's park ("that component's Construct/Prepare TU is unreconstructed") was
+        // wrong twice over: Prepare/AddMessage/Update/TerminateMessages were already bodied,
+        // and the ONLY missing piece was this Construct call plus the component's five
+        // private bodies -- all of which now exist (BrnInGameMessagesComponent.cpp).
+        mInGameMessages.Construct("hudMessages_mc", mpStateInterface, 0);
+
+        // ⭐ [gateui r4] CE-4: THE QUEUE HAND-OFF, LANDED. X360 OnEnter @0x8247B0E8 lines
+        // 91-108, verbatim:
+        //     v11 = this->field_1C;                                    // mpStateInterface
+        //     if ( !*(v11 + 4) ) assert "mpAccessPointers != NULL"
+        //                        (CgsGuiStateInterface.h:344)
+        //     v12 = *(v11 + 4);                                        // the access pointers
+        //     if ( !*(v12 + 16) ) assert "mpGuiCache" (CgsGuiShared.h:201)
+        //     SetInGameMessagesQueue(&field_3E8, *(v12 + 16) + 16512);
+        // 16512 == 0x4080 == the GuiCache's by-value InGameMessagesQueue, which round 4
+        // homed as a named member (BrnGuiCache.h :: mInGameMessagesQueue) -- so the raw
+        // console offset is replaced by the accessor, which is the only correct move on a
+        // host where every pointer ahead of it in the cache has widened.
+        {
+            CgsGui::GuiAccessPointers* lpAccessPointers = mpStateInterface->GetAccessPointers();
+            CGS_ASSERT(lpAccessPointers != 0, "mpAccessPointers != NULL");
+            GuiCache* lpGuiCache = static_cast<GuiCache*>(lpAccessPointers->GetGuiCache());
+            CGS_ASSERT(lpGuiCache != 0, "mpGuiCache");
+            mInGameMessages.SetInGameMessagesQueue(lpGuiCache->GetInGameMessagesQueue());
+        }
+
+        mInGameMessages.Prepare("hudMessages_mc", lFile);
 
         // FLAG deferred (Slice B): DistrictMarkerComponent::Construct/Prepare
         // ("marker_mc") -- only the SetHideCountyIcon slice is reconstructed.
@@ -544,9 +574,24 @@ namespace BrnGui
 
         if (mbInGameMessagesEnabled)
         {
-            // FLAG deferred (Slice B): InGameMessages SetController/SetDirector wiring
-            // needs GuiCache::GetHudMessageController/GetHudMessageDirector, not yet
-            // surfaced by the cache recon; SetGameMode likewise reads cache+40536.
+            // [gateui r3] X360 UpdateSetupState @0x82480EA0, verbatim:
+            //     SetController (GuiCache::GetHudMessageController(cache));
+            //     SetDirector   (GuiCache::GetHudMessageDirector  (cache));
+            //     SetGameMode   (*(cache + 40536));
+            // Both cache getters exist now. The controller one is GATED on the pointer
+            // being present because GuiCache::GetHudMessageController asserts non-null and
+            // this runs every frame until the state leaves SETUP -- the same bring-up gate
+            // BrnGuiModule.cpp already uses at its own SetController site. The producer
+            // (GameDataModule::PrepareHudMessages) landed this round; the one hand-off that
+            // fills GuiCache::mpHudMessageController is a conductor edit in the gateui r3
+            // report.
+            if (mpGuiCache->HasHudMessageController())
+                mInGameMessages.SetController(mpGuiCache->GetHudMessageController());
+
+            mInGameMessages.SetDirector(mpGuiCache->GetHudMessageDirector());
+            mInGameMessages.SetGameMode(
+                static_cast<BrnGameState::GameStateModuleIO::EGameModeType>(
+                    GuiCache_GetGameModeType(mpGuiCache)));
         }
 
         if (mbRoadRulesEnabled)
@@ -734,15 +779,25 @@ namespace BrnGui
                     mFriendsListChangeIcon.AnimateIn();
                 break;
             case 154:
+                // [gateui r3] X360 @0x8247B660 case 154, verbatim:
+                //     if (*(a1 + 333)) InGameMessagesComponent::AddMessage(a1 + 1000, v7);
+                // v7 is the queued record's payload -- the whole GuiHudMessage the
+                // HudMessageDirector published as event 154 and the model/view layer fanned
+                // out to this state. THIS is the rung the `[UI-gate] hud message sent` line
+                // in BrnGuiHudMessageDirector_gUI_01.cpp hands off to.
+                // [gateui r4] The round-3 `HasMessageQueue()` bring-up gate is GONE: OnEnter
+                // above now always runs SetInGameMessagesQueue, exactly as the console does,
+                // so the pointer is never null here.
                 if (mbInGameMessagesEnabled)
                 {
-                    // FLAG deferred (Slice B): InGameMessagesComponent::AddMessage.
+                    mInGameMessages.AddMessage(lpEvent);
                 }
                 break;
             case 156:
+                // [gateui r3] X360 case 156: TerminateMessages(a1 + 1000) under the same gate.
                 if (mbInGameMessagesEnabled)
                 {
-                    // FLAG deferred (Slice B): InGameMessagesComponent::TerminateMessages.
+                    mInGameMessages.TerminateMessages();
                 }
                 break;
             case 199:

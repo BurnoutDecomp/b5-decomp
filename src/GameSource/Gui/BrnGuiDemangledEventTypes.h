@@ -45,7 +45,9 @@ namespace BrnGui
     struct GuiAftertouchEvent : public CgsGui::GuiEvent<403> { u8 maPayload[20]; };  // id 403 size 32 (12B GuiEvent header + opaque payload)
     struct GuiAttackScoreUpdate : public CgsGui::GuiEvent<428> { u8 maPayload[28]; };  // id 428 size 40 (12B GuiEvent header + opaque payload)
     struct GuiAutosaveRequestEvent { u8 maData[1]; s32 GetEventType() const { return 356; } };  // id 356 size 1 (raw; size not GuiEvent-shaped)
-    struct GuiBHRCheckpointReachedEvent { u8 maData[8]; s32 GetEventType() const { return 454; } };  // id 454 size 8 (raw; size not GuiEvent-shaped)
+    // [gateui r3] GuiBHRCheckpointReachedEvent (id 454) has been RECOVERED and now lives in
+    // BrnGuiEventTypeDefs.h with its real DWARF field set (DWARF :6153, sizeof 8).
+    // The opaque placeholder that stood here was DELETED rather than left to shadow it.
     struct GuiBlueTeamIsBehindYouEvent { u8 maData[1]; s32 GetEventType() const { return 447; } };  // id 447 size 1 (raw; size not GuiEvent-shaped)
     struct GuiBlueTeamIsEscapingEvent { u8 maData[1]; s32 GetEventType() const { return 446; } };  // id 446 size 1 (raw; size not GuiEvent-shaped)
     struct GuiCarSelectAbortEvent { u8 maData[1]; s32 GetEventType() const { return 84; } };  // id 84 size 1 (raw; size not GuiEvent-shaped)
@@ -69,13 +71,21 @@ namespace BrnGui
     // placeholder that stood here was deleted rather than left to shadow it -- this
     // header includes BrnGuiEventTypeDefs.h, so every includer still sees the type.
     struct GuiDriftingEvent { u8 maData[4]; s32 GetEventType() const { return 385; } };  // id 385 size 4 (raw; size not GuiEvent-shaped)
-    struct GuiDriveThroughEvent { u8 maData[8]; s32 GetEventType() const { return 366; } };  // id 366 size 8 (raw; size not GuiEvent-shaped)
+    // [gateui r3] GuiDriveThroughEvent (id 366) has been RECOVERED and now lives in
+    // BrnGuiEventTypeDefs.h with its real DWARF field set (DWARF :5097 + the nested DriveThroughType enum, sizeof 8).
+    // The opaque placeholder that stood here was DELETED rather than left to shadow it.
     struct GuiEnteredJunkyard { u8 maData[1]; s32 GetEventType() const { return 79; } };  // id 79 size 1 (raw; size not GuiEvent-shaped)
     struct GuiEventAllJunctionsDiscoveredOfType { u8 maData[4]; s32 GetEventType() const { return 313; } };  // id 313 size 4 (raw; size not GuiEvent-shaped)
     struct GuiEventAllOfRivalsShutdown { u8 maData[1]; s32 GetEventType() const { return 306; } };  // id 306 size 1 (raw; size not GuiEvent-shaped)
     struct GuiEventAllOfTypeComplete { u8 maData[4]; s32 GetEventType() const { return 305; } };  // id 305 size 4 (raw; size not GuiEvent-shaped)
-    struct GuiEventBoostBarStuntInfo : public CgsGui::GuiEvent<218> {};  // id 218 size 12
-    struct GuiEventBoostInfo : public CgsGui::GuiEvent<206> { u8 maPayload[16]; };  // id 206 size 28 (12B GuiEvent header + opaque payload)
+    // [gateui] GuiEventBoostBarStuntInfo (id 218) has been RECOVERED and now lives in
+    // BrnGuiEventTypeDefs.h with its real DWARF fields ({current, total, StuntType},
+    // DWARF BrnGuiEventTypeDefs.h:4502). The opaque GuiEvent<218> shell that stood here
+    // read the 12-byte record as "header only, no payload" -- the 12 bytes ARE the
+    // payload. Deleted rather than left to shadow it.
+    // [gateui r3] GuiEventBoostInfo (id 206) has been RECOVERED and now lives in
+    // BrnGuiEventTypeDefs.h with its real DWARF field set (DWARF :4566 in the X360 field order, sizeof 28).
+    // The opaque placeholder that stood here was DELETED rather than left to shadow it.
     struct GuiEventBuddyNotification : public CgsGui::GuiEvent<105> { u8 maPayload[12]; };  // id 105 size 24 (12B GuiEvent header + opaque payload)
     struct GuiEventCamPicCompressed : public CgsGui::GuiEvent<569> {};  // id 569 size 12
     struct GuiEventCanSkipCrash { u8 maData[1]; s32 GetEventType() const { return 547; } };  // id 547 size 1 (raw; size not GuiEvent-shaped)
@@ -181,8 +191,10 @@ namespace BrnGui
     struct GuiEventSpecificPresetRaces : public CgsGui::GuiEvent<194> { u8 maPayload[7692]; };  // id 194 size 7704 (12B GuiEvent header + opaque payload)
     struct GuiEventStatsResponse : public CgsGui::GuiEvent<436> { u8 maPayload[420]; };  // id 436 size 432 (12B GuiEvent header + opaque payload)
     struct GuiEventStopMode : public CgsGui::GuiEvent<322> {};  // id 322 size 12
-    struct GuiEventStuntAllComplete { u8 maData[4]; s32 GetEventType() const { return 220; } };  // id 220 size 4 (raw; size not GuiEvent-shaped)
-    struct GuiEventStuntInfo : public CgsGui::GuiEvent<217> {};  // id 217 size 12
+    // [gateui] GuiEventStuntAllComplete (id 220) and GuiEventStuntInfo (id 217) have been
+    // RECOVERED and now live in BrnGuiEventTypeDefs.h with their real DWARF fields
+    // (:4538 / :4515). Their consumers -- HandleStuntsComplete @0x8251F7E8 and
+    // HandleStuntInfo @0x8251F650 -- read named words straight off the queued record.
     struct GuiEventSuperJumpFailed { u8 maData[1]; s32 GetEventType() const { return 549; } };  // id 549 size 1 (raw; size not GuiEvent-shaped)
     struct GuiEventTickerClearMessages { u8 maData[2]; s32 GetEventType() const { return 536; } };  // id 536 size 2 (raw; size not GuiEvent-shaped)
     struct GuiEventTickerCustomMessage : public CgsGui::GuiEvent<537> { u8 maPayload[2060]; };  // id 537 size 2072 (12B GuiEvent header + opaque payload)
@@ -196,25 +208,32 @@ namespace BrnGui
     struct GuiFinishRaceEvent { u8 maData[8]; s32 GetEventType() const { return 372; } };  // id 372 size 8 (raw; size not GuiEvent-shaped)
     struct GuiGameModeStarted : public CgsGui::GuiEvent<237> { u8 maPayload[4]; };  // id 237 size 16 (12B GuiEvent header + opaque payload)
     struct GuiGamePausedEvent { u8 maData[8]; s32 GetEventType() const { return 505; } };  // id 505 size 8 (raw; size not GuiEvent-shaped)
-    struct GuiHUDMessageBHRRunnerCrashed { u8 maData[8]; s32 GetEventType() const { return 455; } };  // id 455 size 8 (raw; size not GuiEvent-shaped)
-    struct GuiHUDMessageComboPerformed { u8 maData[8]; s32 GetEventType() const { return 430; } };  // id 430 size 8 (raw; size not GuiEvent-shaped)
-    struct GuiHUDMessageCrushCombo { u8 maData[4]; s32 GetEventType() const { return 401; } };  // id 401 size 4 (raw; size not GuiEvent-shaped)
-    struct GuiHUDMessageShowtimeMultiplier { u8 maData[8]; s32 GetEventType() const { return 399; } };  // id 399 size 8 (raw; size not GuiEvent-shaped)
-    struct GuiHUDMessageSignSmashed { u8 maData[4]; s32 GetEventType() const { return 400; } };  // id 400 size 4 (raw; size not GuiEvent-shaped)
+    // [gateui r3] GuiHUDMessageBHRRunnerCrashed (id 455) has been RECOVERED and now lives in
+    // BrnGuiEventTypeDefs.h with its real DWARF field set (DWARF :6218, sizeof 8).
+    // The opaque placeholder that stood here was DELETED rather than left to shadow it.
+    // [gateui] GuiHUDMessageComboPerformed (430), GuiHUDMessageCrushCombo (401),
+    // GuiHUDMessageShowtimeMultiplier (399) and GuiHUDMessageSignSmashed (400) have been
+    // RECOVERED and now live in BrnGuiEventTypeDefs.h with their real DWARF fields
+    // (:6170 / :6199 / :5343 / :6194). Their four handlers read named words off the record.
     struct GuiHUDMessageStuntTimeUp { u8 maData[1]; s32 GetEventType() const { return 431; } };  // id 431 size 1 (raw; size not GuiEvent-shaped)
     struct GuiHitVehicleEvent : public CgsGui::GuiEvent<394> { u8 maPayload[12]; };  // id 394 size 24 (12B GuiEvent header + opaque payload)
     struct GuiImageGalleryCollectedCountEvent { u8 maData[8]; s32 GetEventType() const { return 520; } };  // id 520 size 8 (raw; size not GuiEvent-shaped)
     struct GuiImageGalleryCollectedDataEvent : public CgsGui::GuiEvent<522> { u8 maPayload[4]; };  // id 522 size 16 (12B GuiEvent header + opaque payload)
     struct GuiImageGalleryImageInfoEvent : public CgsGui::GuiEvent<518> { u8 maPayload[36]; };  // id 518 size 48 (12B GuiEvent header + opaque payload)
     struct GuiInAirEvent { u8 maData[8]; s32 GetEventType() const { return 387; } };  // id 387 size 8 (raw; size not GuiEvent-shaped)
-    struct GuiInEventFinisher { u8 maData[8]; s32 GetEventType() const { return 423; } };  // id 423 size 8 (raw; size not GuiEvent-shaped)
-    struct GuiInEventLeaderSplit : public CgsGui::GuiEvent<420> { u8 maPayload[12]; };  // id 420 size 24 (12B GuiEvent header + opaque payload)
+    // [gateui r3] GuiInEventFinisher (id 423) has been RECOVERED and now lives in
+    // BrnGuiEventTypeDefs.h with its real DWARF field set (DWARF :5651, sizeof 8).
+    // The opaque placeholder that stood here was DELETED rather than left to shadow it.
+    // [gateui r3] GuiInEventLeaderSplit (id 420) has been RECOVERED and now lives in
+    // BrnGuiEventTypeDefs.h with its real DWARF field set (DWARF :5618, sizeof 24).
+    // The opaque placeholder that stood here was DELETED rather than left to shadow it.
     struct GuiInEventNeckAndNeck { u8 maData[1]; s32 GetEventType() const { return 421; } };  // id 421 size 1 (raw; size not GuiEvent-shaped)
     struct GuiInEventRivalProgress : public CgsGui::GuiEvent<422> { u8 maPayload[12]; };  // id 422 size 24 (12B GuiEvent header + opaque payload)
     struct GuiInProgressStuntEvent : public CgsGui::GuiEvent<391> { u8 maPayload[12]; };  // id 391 size 24 (12B GuiEvent header + opaque payload)
     struct GuiLastBlueTeamMemberEvent { u8 maData[1]; s32 GetEventType() const { return 452; } };  // id 452 size 1 (raw; size not GuiEvent-shaped)
-    struct GuiLeaderPassedKMBoundaryEvent { u8 maData[8]; s32 GetEventType() const { return 449; } };  // id 449 size 8 (raw; size not GuiEvent-shaped)
-    struct GuiLeaderPassedMileBoundaryEvent { u8 maData[8]; s32 GetEventType() const { return 448; } };  // id 448 size 8 (raw; size not GuiEvent-shaped)
+    // [gateui] GuiLeaderPassedKMBoundaryEvent (449) and GuiLeaderPassedMileBoundaryEvent
+    // (448) have been RECOVERED and now live in BrnGuiEventTypeDefs.h as
+    // { EActiveRaceCarIndex, f32 metres } (DWARF :6136 / :6126).
     struct GuiLeaptVehicleEvent { u8 maData[1]; s32 GetEventType() const { return 393; } };  // id 393 size 1 (raw; size not GuiEvent-shaped)
     struct GuiLocalPlayerEliminatedEvent { u8 maData[1]; s32 GetEventType() const { return 451; } };  // id 451 size 1 (raw; size not GuiEvent-shaped)
     struct GuiMugshotControlEvent : public CgsGui::GuiEvent<325> { u8 maPayload[12]; };  // id 325 size 24 (12B GuiEvent header + opaque payload)
@@ -250,9 +269,13 @@ namespace BrnGui
         u8    maPayload1[24];   // +0x28..+0x3F (opaque)
     };
     struct GuiPlayerRaceCarIdEvent { u8 maData[8]; s32 GetEventType() const { return 376; } };  // id 376 size 8 (raw; size not GuiEvent-shaped)
-    struct GuiPowerParkResult { u8 maData[8]; s32 GetEventType() const { return 404; } };  // id 404 size 8 (raw; size not GuiEvent-shaped)
+    // [gateui r3] GuiPowerParkResult (id 404) has been RECOVERED and now lives in
+    // BrnGuiEventTypeDefs.h with its real DWARF field set (DWARF :5467, sizeof 8).
+    // The opaque placeholder that stood here was DELETED rather than left to shadow it.
     struct GuiPursuitScoreUpdate { u8 maData[4]; s32 GetEventType() const { return 432; } };  // id 432 size 4 (raw; size not GuiEvent-shaped)
-    struct GuiRaceCheckpointReached : public CgsGui::GuiEvent<425> {};  // id 425 size 12
+    // [gateui r3] GuiRaceCheckpointReached (id 425) has been RECOVERED and now lives in
+    // BrnGuiEventTypeDefs.h with its real DWARF field set (DWARF :5690, sizeof 12).
+    // The opaque placeholder that stood here was DELETED rather than left to shadow it.
     struct GuiReplayStatusEvent : public CgsGui::GuiEvent<524> { u8 maPayload[1548]; };  // id 524 size 1560 (12B GuiEvent header + opaque payload)
     struct GuiRoadRageScoreUpdate { u8 maData[8]; s32 GetEventType() const { return 426; } };  // id 426 size 8 (raw; size not GuiEvent-shaped)
     struct GuiSetEasyDriveNotAllowedEvent { u8 maData[1]; s32 GetEventType() const { return 96; } };  // id 96 size 1 (raw; size not GuiEvent-shaped)

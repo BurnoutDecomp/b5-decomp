@@ -22,8 +22,10 @@
 //
 // Header-exposure notes (wave-C keystone; the wave-B gaps are CLOSED):
 //  * GuiCache friends HudMessageAnalyzer -- the consumer-carved snapshot members
-//    (mbGameplayHudActive / miGameFlowState / the +0x4930 pending cluster) are read by
-//    name below, exactly the inlined X360 loads.
+//    (mbGameplayHudActive / miGameFlowState) are read by name below, exactly the inlined
+//    X360 loads. [gateui r4] The former "+0x4930 pending cluster" carve is GONE: it was an
+//    alias of the cache's InGameMessagesQueue @+0x4080, and the id-291/320 arm now goes
+//    through GuiCache::GetInGameMessagesQueue(). See that case for the asm proof.
 //  * Profile::Get/SetOneHundredHudMessageViewed are the DWARF-attested accessors
 //    (BrnProfile.h:556/:560); the X360 inlines both here.
 //  * HandleDeveloperChallengeMessageDEBUG(const GuiDeveloperChallengesCompleted*) is
@@ -133,6 +135,15 @@ void HudMessageAnalyzer::Update(const CgsGui::GuiEventQueueBase<32768, 16>* lpGu
                     }
                     break;
                 case 217:
+                case 218:
+                    // [gateui r4 boot fix] 218 (GuiEventBoostBarStuntInfo) shares this arm: the
+                    // console dispatches BOTH stunt-info flavours to HandleStuntInfo (scout.md
+                    // section C and the _gUI_01 banner agree; the two payloads are the same
+                    // 12-byte {type, current, total} record, ids 217/218 chosen by game mode in
+                    // TranslateGameActionsToGuiEvents case 58). The reconstructed switch carried
+                    // only 217, so the freeburn flavour (218, the one a free drive posts) fell
+                    // through the default and the HUD popup never fired -- boot-drive
+                    // 2026-08-20 17:21: gui-event id=218 posted, no hud rung.
                     HandleStuntInfo(reinterpret_cast<const GuiEventStuntInfo*>(lpEvent));
                     break;
                 case 219:
@@ -152,14 +163,40 @@ void HudMessageAnalyzer::Update(const CgsGui::GuiEventQueueBase<32768, 16>* lpGu
                     HandlePlayerLeftLobby(reinterpret_cast<const GuiEventNetworkPlayerLeftLobby*>(lpEvent));
                     break;
 
-                case 291:   // shares the pending-event-cluster reset with id 320
+                case 291:   // shares the in-game-message-queue reset with id 320
                 case 320:
                 {
-                    mpGuiCache->mu64PendingEventPayload = 0;
-                    if (mpGuiCache->miPendingEventStatusA == 1 || mpGuiCache->miPendingEventStatusA == 2)
-                        mpGuiCache->miPendingEventStatusA = 0;
-                    if (mpGuiCache->miPendingEventStatusB == 1 || mpGuiCache->miPendingEventStatusB == 2)
-                        mpGuiCache->miPendingEventStatusB = 0;
+                    // ⭐ [gateui r4] CE-4: REWRITTEN AGAINST THE REAL MEMBERS. The round-2
+                    // body wrote three consumer-named carve fields
+                    // (mu64PendingEventPayload / miPendingEventStatusA / ...B) that were an
+                    // ALIAS of the cache's InGameMessagesQueue: the console forms the queue
+                    // base itself here --
+                    //     0x82526B0C  addi r11, r11, 0x4080   ; &mInGameMessagesQueue
+                    //     0x82526B10  lwz  r10, 0x8B0(r11)    ; maeMessageState[0]
+                    //     0x82526B14  std  r25, 0x8B8(r11)    ; muCurrentEventEndTime = 0
+                    //     0x82526B28  stw  r25, 0x8B0(r11)    ; maeMessageState[0] = 0
+                    //     0x82526B2C  lwz  r10, 0x8B4(r11)    ; maeMessageState[1]
+                    //     0x82526B40  stw  r25, 0x8B4(r11)    ; maeMessageState[1] = 0
+                    // (r25 == 0, `li r25, 0` @0x82525FE0). 16512+0x8B0/0x8B4/0x8B8 are the
+                    // 18736/18740/18744 the carve was named after.
+                    //
+                    // So the arm's real meaning: DROP THE LIVE EXPIRY AND CANCEL ANY SLOT
+                    // THAT HAS NOT BECOME VISIBLE YET -- states 1 and 2 are
+                    // E_MESSAGESTATE_WAITING and E_MESSAGESTATE_TRANSIN
+                    // (BrnInGameMessagesComponent.h); VISIBLE(3)/TRANSOUT(4) slots are left
+                    // alone to finish their transition, which is why the compare is against
+                    // exactly {1,2} and not "non-zero".
+                    InGameMessagesQueue* lpQueue = mpGuiCache->GetInGameMessagesQueue();
+
+                    lpQueue->muCurrentEventEndTime = 0;
+                    for (s32 liSlot = 0; liSlot < 2; ++liSlot)
+                    {
+                        if (lpQueue->maeMessageState[liSlot] == E_MESSAGESTATE_WAITING ||
+                            lpQueue->maeMessageState[liSlot] == E_MESSAGESTATE_TRANSIN)
+                        {
+                            lpQueue->maeMessageState[liSlot] = E_MESSAGESTATE_NOMESSAGE;
+                        }
+                    }
                     break;
                 }
 

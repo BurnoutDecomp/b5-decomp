@@ -86,5 +86,17 @@ namespace CgsGui
         GuiHudMessageData** mppHudMessageData;         // +0x0 (DWARF h:164)
         s32                 miSizeOfHudMessageResource; // +0x4 (DWARF h:165)
         s32                 miHudMessageCount;          // +0x8 (DWARF h:166)
+
+        // X360 CgsGui::GuiHudMessageResource::FixUp @0x82846528 -- the load-time
+        // relocation the type handler forwards to (CgsResource::HudMessageResourceType::
+        // FixUp @0x828465D8 is a single tail call to it). Body in CgsGuiHudMessage.cpp.
+        //
+        // [gateui r4] CE-3: the delta is `uintptr_t`, not the console's `int`. The console
+        // spells it 32-bit only because its pointers are; the shipped .HM bundle is
+        // transcoded to native-8 slots, so the offsets this relocates are host-width and a
+        // truncated (GetLoadBase) delta would rebase them into the low 4 GB. Same treatment
+        // and same reason as BrnStreetData::StreetData::FixUp and
+        // CgsLanguage::LanguageResourceType::FixUp/FixDown.
+        GuiHudMessageResource* FixUp(uintptr_t luDelta);
     };
 }

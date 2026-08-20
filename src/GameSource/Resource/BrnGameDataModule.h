@@ -13,6 +13,7 @@
 #include "SharedClasses/DataLists/VehicleList.h"                             // mVehicleList (X360 a1+444336)
 #include "SharedClasses/DataLists/ICEList.h"                                 // mICEList     (X360 a1+457664)
 #include "SharedClasses/DataLists/WheelList.h"                               // mWheelList   (X360 a1+458696)
+#include "SharedClasses/DataLists/BrnHudMessageController.h"                 // [gateui r3] mHudMessageController (X360 a1+416080 == 0x65950)
 #include "rw/rwcore_structs.h"                                               // rw::Resource / ResourceDescriptor (maGeneratedRaw*)
 
 namespace rw { struct LinearResourceAllocator; namespace core { struct GeneralResourceAllocator; } }
@@ -69,7 +70,11 @@ namespace BrnResource
             // fall-through order below, not from the numeric value.)
             E_PREPARE_VEHICLE_LIST = 9,
             E_PREPARE_ICE_LIST     = 11,
-            E_PREPARE_WHEEL_LIST   = 12
+            E_PREPARE_WHEEL_LIST   = 12,
+            // [gateui r3] X360 stage 13, PrepareHudMessages @0x8266C8E0 -- the HUD-message
+            // table ("HudMessages.hm"). Live as of the gateui wave; stage 14 (PreparePopups
+            // @0x8266CBA0, "Popups.pup") is still skipped.
+            E_PREPARE_HUD_MESSAGES = 13
         };
 
         // X360 @0x82671B90 Construct: event-slot pool capacity (96 slots wired inline:
@@ -185,13 +190,25 @@ namespace BrnResource
         // BrnResource::ICEList::AddListResource -- UN-GATED 2026-08-01, once the take
         // runtime and the type-65 handler joined the link.
         bool PrepareICEList();       // 0x8266CEB0  "Cameras.bundle"              / "StandardICETakes"
+        // [gateui r3] @0x8266C8E0 -- Prepare stage 13. The SAME six-state machine, but over
+        // POOL 11 (not 5) and with mbAllowFailiure = 0, and its terminal step hands the
+        // acquire RESPONSE straight to HudMessageController::AddMessages @0x8267D580.
+        // BOTH string literals are the SAME pointer target, "HudMessages.hm" (off_82F2A730
+        // is the bundle file, off_82F2A734 the resource name; IDA renders both loads with
+        // that comment). MEASURED against the shipped bundle:
+        // HashString("HudMessages.hm") == 0x1953150C, which is exactly the single resource
+        // id in build/game/HUDMESSAGES.HM -- so the two pointers really are one string.
+        // (Its sibling PreparePopups @0x8266CBA0 has the identical shape over "Popups.pup",
+        // hash 0x2718168B == POPUPS.PUP's only resource id. Same proof, still deferred.)
+        bool PrepareHudMessages();   // 0x8266C8E0  "HudMessages.hm"              / "HudMessages.hm"
 
         // The shared body of the two above (the X360 emits them as two near-identical
         // functions; the only differences are the bundle path, the resource name, the
-        // mbAllowFailiure flag, the stage word and the list object). PC helper, not an X360
-        // function -- see the .cpp.
+        // pool id, the mbAllowFailiure flag, the stage word and the list object). PC
+        // helper, not an X360 function -- see the .cpp.
         bool PrepareDataListResource(s32& lriStage, const char* lpcBundleFileName,
                                      const char* lpcResourceName, bool lbAllowFailure,
+                                     s32 liPoolId,
                                      CgsResource::ResourceHandle* lpOutHandle);
 
         // Shared completion-post helper (the X360 inlines this 40-byte response build in
@@ -314,6 +331,24 @@ namespace BrnResource
         BrnResource::ICEList&     GetICEList()     { return mICEList; }
         BrnResource::WheelList&   GetWheelList()   { return mWheelList; }
 
+        // [gateui r3] ADDITIVE accessor. The console never spells one: the module's OWNER
+        // hands `&gameDataModule.mHudMessageController` (== `this + 0x65950`) to
+        // BrnGui::GuiModule::Construct @0x82518028 as its `a2`, which stores it into the
+        // GuiCache (line 369, `*(gm + 1021872) = a2`, assert BrnGuiCache.h:2405 == the
+        // inlined GuiCache::SetHudMessageController). This tree reaches nothing by offset,
+        // so the pointer needs a name to travel through. [gateui r4] IT NOW TRAVELS:
+        // BrnGameModule::Construct passes this accessor's result into
+        // BrnGui::GuiModule::Construct(const BrnResource::HudMessageController*), which is
+        // the console's `a2`. (The round-3 banner pointed at a "gateui r3 report" that was
+        // never written; the decode is in scratch/gateui_wave/verify_r3_fix3hud/VERDICT.md.)
+        // Const because every consumer
+        // (HudMessageDirector::FilterAndSendOffMessage, InGameMessagesComponent) holds it
+        // const -- only PrepareHudMessages writes it.
+        const BrnResource::HudMessageController* GetHudMessageController() const
+        {
+            return &mHudMessageController;
+        }
+
         // ADDITIVE accessor (the console reaches the sub-module by member offset). Lets the
         // game module resolve an already-resident resource through the same
         // PoolModule::GetPool -> Pool::FindResource pair the pool module's own
@@ -402,6 +437,15 @@ namespace BrnResource
         s32                            miVehicleListPrepareStage;
         s32                            miICEListPrepareStage;
         s32                            miWheelListPrepareStage;
+        // [gateui r3] X360 a1+416080 (0x65950) -- the resident HUD-message table. Attested
+        // twice and identically: GameDataModule::Construct @0x82671D1C constructs
+        // `this + 0x65950` (through the ICF-folded one-store Construct) and
+        // PrepareHudMessages @0x8266CB10 hands the SAME `this + 0x65950` to
+        // HudMessageController::AddMessages. Its ResourcePtr half is the ctor's
+        // `stw 0, 0(this+0x65954)` / `stw 0, 4(...)` pair @0x827E3304.
+        BrnResource::HudMessageController mHudMessageController;
+        // X360 a1[145] (offset 0x244) -- PrepareHudMessages' own six-state stage word.
+        s32                            miHudMessagesPrepareStage;
         // (the 9 GeneralAllocators, DLCManager, per-type IndexedLinkLists, HUD
         //  message / popup controllers and the game-data tables are added with their own passes.)
     };

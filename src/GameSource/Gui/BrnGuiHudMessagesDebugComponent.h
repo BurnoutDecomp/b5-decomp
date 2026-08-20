@@ -20,10 +20,17 @@
 #include "types.hpp"
 #include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugComponent.h" // CgsDev::DebugComponent
 
+// [gateui] the controller is BrnResource::HudMessageController (the former
+// BrnGui::HudMessageController fork is gone -- see BrnGuiHudMessageDirector.h).
+namespace BrnResource { struct HudMessageController; }
+
 namespace BrnGui
 {
-    class HudMessageDirector;
-    class HudMessageController;
+    // [gateui r2] `struct`, matching its real definition (BrnGuiHudMessageDirector.h:53) and
+    // BrnGuiCache.h's forward declaration -- a `class` here is a C4099 tag mismatch in any TU
+    // that sees both (invisible at this build's /W1, an error under /permissive- + /W2).
+    struct HudMessageDirector;
+
 
     // BrnGuiHudMessagesDebugComponent.h:47
     struct GuiHudMessagesDebugComponent : public CgsDev::DebugComponent
@@ -33,7 +40,7 @@ namespace BrnGui
         void Destruct();
 
         // BrnGuiHudMessagesDebugComponent.h:164/:151
-        void SetController(const HudMessageController* lpMessageController);
+        void SetController(const BrnResource::HudMessageController* lpMessageController);
         bool ControllerIsValid() const;
 
     protected:
@@ -55,7 +62,7 @@ namespace BrnGui
 
         // BrnGuiHudMessagesDebugComponent.h:76..:79
         HudMessageDirector*         mpMessageDirector;
-        const HudMessageController* mpMessageController;
+        const BrnResource::HudMessageController* mpMessageController;
         s32                         miMessageId;
         s32                         miMessageGroup;
     };

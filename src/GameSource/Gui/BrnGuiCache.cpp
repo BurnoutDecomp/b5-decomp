@@ -1092,7 +1092,7 @@ namespace BrnGui
     }
 
     // @ 0x82472D00
-    const HudMessageController* GuiCache::GetHudMessageController() const
+    const BrnResource::HudMessageController* GuiCache::GetHudMessageController() const
     {
         CGS_ASSERT(mpHudMessageController != nullptr, "mpHudMessageController");
         return mpHudMessageController;
@@ -1145,6 +1145,18 @@ namespace BrnGui
     s32 GuiCache::GetCamStatus() const
     {
         return miCamStatus;
+    }
+
+    // [gateui] @ (far member +0x405C / 16476) -- the player profile the cache latches.
+    // Same situation as GetCamStatus: there is NO out-of-line X360 accessor (every reader
+    // inlines the `lwz mpGuiCache+0x405C`, e.g. OdometerComponent::Construct @0x82415088
+    // and HudMessageAnalyzer::Update's 100%-viewed gate @0x825275xx), so this exists purely
+    // to keep those TUs off a raw offset. Plain read, no assert -- none of the X360 read
+    // sites guards it. The header has declared it since the odometer wave; the body was
+    // never landed, which left HudMessageAnalyzer::Update unlinkable.
+    const BrnProgression::Profile* GuiCache::GetProfile() const
+    {
+        return mpProfile;
     }
 
     // ---- the player-name string ids -------------------------------------------------
