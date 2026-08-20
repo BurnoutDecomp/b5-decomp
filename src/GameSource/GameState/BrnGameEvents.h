@@ -35,6 +35,12 @@ enum EGameEventType
     E_EVENT_START_NETWORK_ROUND     = 18,    // DWARF BrnGameEvents.h
     E_EVENT_REMOTE_PLAYER_DISCONNECTED = 131, // value unconfirmed (template tag only)
     E_EVENT_RECORD_PROP_HIT         = 111,   // DWARF BrnGameEvents.h:121
+    // [gateui] DWARF BrnGameEvents.h:122 -- the immediate neighbour of RECORD_PROP_HIT, and the
+    // one the world->GameState bridge's prop leg needs as its second event type. Game EVENT ids
+    // are NOT subject to the +5 shift the ACTION ids carry in this range (see the long note in
+    // BrnGameActions.h): 111 matches the X360 ProcessGameEvents @0x823A0A18 jump table's case 111
+    // exactly, so its DWARF-contiguous neighbour 112 is trustworthy as-is.
+    E_EVENT_REQUEST_PROP_PROGRESSION = 112,  // DWARF BrnGameEvents.h:122
     E_EVENT_OVERHEAD_SIGN_HIT       = 118,   // DWARF BrnGameEvents.h:76
     // Freeburn-challenge events (PS3-DWARF values; used as template tags -- the X360
     // discriminants ChallengeManager::ProcessEvent actually switches on are the raw
@@ -108,6 +114,29 @@ struct RecordPropHitEvent : public GameEvent<E_EVENT_RECORD_PROP_HIT>
     u16     muZoneId;    // 0x10
     u16     muPropId;    // 0x12
     bool    mbHitBefore; // 0x14
+};
+
+// [gateui] PINNED 2026-08-20. This event's neighbours in this header were pinned and it was not,
+// even though it is a WIRE IMAGE: PropEntityModule::ProcessContacts writes it into an
+// EventQueue<RecordPropHitEvent,50>, VariableEventQueue<1536,16>::Append<RecordPropHitEvent,50>
+// @0x827AEC10 copies it with a hard `li r6, 0x20` (== 32) size immediate, and
+// GameStateModule::ProcessGameEvents' case-111 arm reads it back at the console's three literal
+// offsets (`lvx128 v1,r0,r25` @+0x00, `lhz r4,0x10(r25)`, `lhz r5,0x12(r25)`). Every one of those
+// four numbers has to survive the widen to the host -- and it does, because the struct is
+// POINTER-FREE and the empty GameEvent<T> base folds away (EBO), so the leading 16-byte-aligned
+// Vector3 fixes the whole layout. If any of these four ever fires, the prop-hit wire is silently
+// corrupt at the seam and the case-111 arm is reading the wrong halfword.
+static_assert(offsetof(RecordPropHitEvent, mPosition)   == 0x00, "RecordPropHitEvent position at +0x00");
+static_assert(offsetof(RecordPropHitEvent, muZoneId)    == 0x10, "RecordPropHitEvent zone id at +0x10");
+static_assert(offsetof(RecordPropHitEvent, muPropId)    == 0x12, "RecordPropHitEvent prop id at +0x12");
+static_assert(offsetof(RecordPropHitEvent, mbHitBefore) == 0x14, "RecordPropHitEvent hit-before flag at +0x14");
+static_assert(sizeof(RecordPropHitEvent) == 32, "RecordPropHitEvent is the Append<...,50> `li r6,0x20` wire size");
+
+// [gateui] DWARF BrnGameEvents.h:442 -- EMPTY, exactly as the DWARF declares it (the event id IS
+// the whole payload: "somebody wants the prop-progression census re-sent"). Homed here so owner
+// `bridge` can name it on the world->GameState prop leg without forking a second declaration.
+struct RequestPropProgression : public GameEvent<E_EVENT_REQUEST_PROP_PROGRESSION>
+{
 };
 
 // FLAG (minimal home): FinishedSyncingPlayersEvent -- a BrnGameState::GameStateModuleIO network-sync

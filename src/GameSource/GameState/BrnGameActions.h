@@ -10,6 +10,7 @@
 #include "GameSource/GameState/Offences/BrnDriveThruManager.h"  // BrnTrigger::GenericRegion::Type (DriveThruInfo::meType)
 #include "GameShared/GameClasses/System/Timer/CgsTime.h"     // CgsSystem::Time (OnlineGameResults::mSecondsInEvent / maRoundTimes)
 #include "GameSource/GameState/BrnGameStateTypes.h"           // BrnGameState::StuntElementType (WorldStuntAction / OnStuntElementCompleteAction)
+#include "SharedClasses/World/BrnWorldRegion.h"               // [gateui] BrnWorld::ECounty (OnStuntElementCompleteForCountyAction)
 
 // Owning header for the BrnGameState::GameStateModuleIO GameAction<> family slices reconstructed
 // by the GameMode/ModeManager leaf batch. Each struct is a minimal slice: only the members the
@@ -75,8 +76,31 @@ enum EGameActionType
     E_ACTION_FINISHED_MODE              = 31,    // DWARF BrnGameActions.h:41
     E_ACTION_PREPARE_FOR_MODE           = 19,    // DWARF BrnGameActions.h:29
     E_ACTION_SET_UP_ALL_DRIVE_THRUS     = 40,    // DWARF BrnGameActions.h:40
-    E_ACTION_ON_STUNT_ELEMENT_COMPLETE  = 53,    // DWARF BrnGameActions.h:63
-    E_ACTION_WORLD_STUNT_PERFORMED      = 122,   // DWARF BrnGameActions.h:132
+    // ⛔⛔ [gateui] VALUE CORRECTION 2026-08-20 -- THE WHOLE STUNT BLOCK WAS CARRYING DWARF (PS3)
+    // VALUES, and the X360 ARTIST build shifts this range by EXACTLY +5. Both ends measured:
+    //   producer StuntManager::ProcessStuntElement @0x8239CDB0 posts, in body order,
+    //     `li r5,0x7F` (127) size 16 @0x8239CE30/0x8239CE2C  -- WORLD_STUNT_PERFORMED
+    //     `li r5,0x3D` (61)  size 4  @0x8239D1A0             -- STUNT_ELEMENT_BOOST
+    //     `li r5,0x3A` (58)  size 24 @0x8239D384             -- ON_STUNT_ELEMENT_COMPLETE
+    //     `li r5,0x3B` (59)  size 8  @0x8239D3D0             -- ..._COMPLETE_FOR_COUNTY
+    //     `li r5,0x3C` (60)  size 4  @0x8239D430             -- ..._COMPLETE_BY_TYPE
+    //   consumer BrnGameModule::TranslateGameActionsToGuiEvents @0x823E9CE0 switches on
+    //     case 58 -> GuiEventStuntInfo/BoostBarStuntInfo, 59 -> StuntAreaComplete,
+    //     60 -> StuntAllComplete, 127 -> (Showtime only) CrashModeScoring::DealWithShowtimeStunt.
+    // The DWARF (DecFIGS, PS3) values are ON_STUNT_ELEMENT_COMPLETE 53 (:63) and
+    // WORLD_STUNT_PERFORMED 122 (:132) -- exactly 5 lower. Same +5 shift this enum already records
+    // for CAR_SELECT_CHANGE_COLOUR / NEW_CAR_UNLOCKED / CAR_UNLOCK_END below.
+    // ⓘ Game EVENT ids are NOT shifted (E_EVENT_RECORD_PROP_HIT == 111 matches the X360
+    //   ProcessGameEvents jump table exactly); this shift is the ACTION enum only.
+    // The two were inert until this wave (GameAction<T> is an empty tag and nothing posted through
+    // the enum); ProcessStuntElement posts through them now, so a wrong value is a live defect.
+    E_ACTION_ON_JUMP_START              = 56,    // X360 UpdateJumps @0x8239D460 (`li r5,0x38`, size 24)
+    E_ACTION_SHOW_JUMP_NAME             = 57,    // X360 UpdateJumps @0x8239D460 (`li r5,0x39`, size 8)
+    E_ACTION_ON_STUNT_ELEMENT_COMPLETE  = 58,    // X360 0x8239D384 (DWARF :63 gives 53 -- PS3 value)
+    E_ACTION_ON_STUNT_ELEMENT_COMPLETE_FOR_COUNTY = 59,  // X360 0x8239D3D0, size 8
+    E_ACTION_ON_STUNT_ELEMENT_COMPLETE_BY_TYPE    = 60,  // X360 0x8239D430, size 4
+    E_ACTION_STUNT_ELEMENT_BOOST        = 61,    // X360 0x8239D1A0, size 4
+    E_ACTION_WORLD_STUNT_PERFORMED      = 127,   // X360 0x8239CE30 (DWARF :132 gives 122 -- PS3 value)
     E_ACTION_POWER_PARK_RESULT          = 139,   // DWARF BrnGameActions.h:149
 
     // X360-ATTESTED value (NOT a DWARF-only import -- both ends agree on 15):
@@ -461,16 +485,64 @@ struct OnlineGameResults : public GameAction<E_ACTION_ONLINE_GAME_RESULT>
 };
 
 // X360 0x8232CEB0 (StuntModeScoring::DealWithStunt reads it). The "a world stunt element was
-// performed" action: a stunt-element discriminant plus the 64-bit element key. DWARF home
+// performed" action: the 64-bit element key plus a stunt-element discriminant. DWARF home
 // BrnGameActions.h:3469 (true owning home). Minimal slice -- exactly the two members the consumer
-// reads. The GameAction<T> base is the empty tag, so meStuntElementType is at +0x00 and mId at
-// +0x08. DealWithStunt branches on meStuntElementType (JUMP/SMASH/BILLBOARD, asserts >= COUNT is
+// reads. DealWithStunt branches on meStuntElementType (JUMP/SMASH/BILLBOARD, asserts >= COUNT is
 // "Unknown world stunt type.") and Find/Inserts mId (the 64-bit CgsID stunt-element key) into the
 // scorer's mRecentStuntElementSet to de-dupe repeated elements.
+//
+// ⛔⛔ [gateui] MEMBER ORDER CORRECTED 2026-08-20 -- THE COMMITTED ORDER WAS REVERSED, and the
+// justification it cited was a misattribution. The GameAction<T> base is the empty tag, so member
+// 1 sits at +0x00. Measured at BOTH ends of the wire:
+//   PRODUCER  StuntManager::ProcessStuntElement @0x8239CDB0 builds the 16-byte record on the stack
+//             and posts it as action 127 size 16 (@0x8239CE2C..0x8239CE40):
+//               0x8239CE18  stw r24, var_78(r1)   ; var_78 == record +0x08  <- the TYPE
+//               0x8239CE3C  std r11, var_80(r1)   ; var_80 == record +0x00  <- the 64-bit ID
+//             (r24 is loaded from `lwz r24, 0x600(r31)` == meLastStuntElementType; r11 from
+//              `lwz r11, 0x2C(r22)`/`0x24(r22)` == the region's group id / own id.)
+//   CONSUMER  CrashModeScoring::DealWithShowtimeStunt @0x82320F38 does `ld r8, 0(r29)` at
+//             0x82320FA8 -- a 64-bit load of the ID at +0x00.
+// The committed header's cited justification ("StuntModeScoring::DealWithStunt @0x8232CEB0 reads
+// it") does NOT arbitrate the layout at all: that function is called with SEPARATE (type in r4,
+// id in r5) arguments by ScoringSystem::DealWithStunt @0x823384F0, never with an action pointer.
+// Every tree consumer reads this struct BY NAME, so the swap is behaviour-preserving for them and
+// FIXES the wire for the new producer.
 struct WorldStuntAction : public GameAction<E_ACTION_WORLD_STUNT_PERFORMED>
 {
-    StuntElementType meStuntElementType;  // +0x00  (DWARF BrnGameActions.h:3471)
-    CgsID            mId;                  // +0x08  (DWARF BrnGameActions.h:3472)
+    CgsID            mId;                  // +0x00  (X360 `std r11, +0x00` @0x8239CE3C)
+    StuntElementType meStuntElementType;   // +0x08  (X360 `stw r24, +0x08` @0x8239CE18)
+    // The X360 posts this record with size 16, i.e. the 4-byte type at +0x08 is followed by 4
+    // bytes of tail padding -- which the host's natural 8-byte alignment for the leading CgsID
+    // reproduces exactly (sizeof == 16 on both).
+};
+
+// [gateui] The three sibling stunt-element actions StuntManager::ProcessStuntElement @0x8239CDB0
+// posts alongside 127/58. Each layout is asm-exact off the stack record the producer builds:
+//
+//   action 61 (size 4)  @0x8239D1A0: `HIDWORD(v51) = type` -- the type alone at +0x00.
+//   action 59 (size 8)  @0x8239D3D0: `v51 = v8` where v8's HIGH dword is the type and its LOW
+//                                    dword is the county -- on big-endian PPC that lands
+//                                    type@+0x00, county@+0x04.
+//   action 60 (size 4)  @0x8239D430: `HIDWORD(v51) = type` -- the type alone at +0x00.
+//
+// Homed here so the GameState producer and the BrnGame TranslateGameActionsToGuiEvents consumer
+// (cases 59/60 -> GuiEventStuntAreaComplete(219) / GuiEventStuntAllComplete(220)) agree by name.
+struct StuntElementBoostAction : public GameAction<E_ACTION_STUNT_ELEMENT_BOOST>
+{
+    StuntElementType meStuntElementType;   // +0x00
+};
+
+struct OnStuntElementCompleteForCountyAction
+    : public GameAction<E_ACTION_ON_STUNT_ELEMENT_COMPLETE_FOR_COUNTY>
+{
+    StuntElementType  meStuntElementType;  // +0x00
+    BrnWorld::ECounty meCounty;            // +0x04
+};
+
+struct OnStuntElementCompleteByTypeAction
+    : public GameAction<E_ACTION_ON_STUNT_ELEMENT_COMPLETE_BY_TYPE>
+{
+    StuntElementType meStuntElementType;   // +0x00
 };
 
 // X360 0x82321530 (StuntModeScoring::DealWithPowerPark reads it). The power-park-scored result

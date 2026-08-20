@@ -131,7 +131,24 @@ namespace BrnGameState
         void              AddStunt(const BrnTrigger::SignatureStunt*, int32_t, f32); // :179 (own TU)
         // THIS TU (X360 0x82358BE0): predicate - has a stunt/smash element latched this frame?
         bool              StuntElementTriggered();                              // :182
-        void              ProcessStuntElement(GameStateModuleIO::GameActionQueue*, bool, bool); // :188 (own TU)
+        // BODIED this wave (X360 0x8239CDB0, partfile StuntManager_gUI_00.cpp). FOUR parameters,
+        // as the committed declaration always had and as DWARF spells it
+        // (`void ProcessStuntElement(OutputBuffer::GameActionQueue*, bool, bool)`,
+        // dwarfdump GameSource/GameState/Offences/BrnStuntManager.h:355).
+        // ⚠️ A round-1 banner here claimed "THREE parameters, not four" off the CALLEE's prologue
+        // (which reads only r3/r4/r5). That conclusion was WRONG: the prologue tells you what the
+        // callee USES, not what the signature is. BOTH console call sites materialise r6 in the
+        // argument block immediately before the branch --
+        //     0x8239D7C0  mr r6, r24   (UpdateJumps;  r5 = 1, r24 = its own lbIsAGameModeActive,
+        //                               `mr r24, r7` @0x8239D48C -- r7 because the f32 timestep
+        //                               rides f1 and SKIPS its GPR slot)
+        //     0x8239FA3C  mr r6, r27   (Update;        r5 = 0)
+        // -- so the source signature carries the trailing bool and the callee simply optimised its
+        // only use away. Kept 4-arg; the body ignores lbIsAGameModeActive, exactly as the console's
+        // does.
+        void              ProcessStuntElement(GameStateModuleIO::GameActionQueue* lpActionQueue,
+                                              bool lbIsJump,
+                                              bool lbIsAGameModeActive);        // :188 (X360 0x8239CDB0)
         // THIS TU (X360 0x8239D460): advance the active-jump state machine (takeoff/land/abandon).
         void              UpdateJumps(const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpActiveRaceCarInterface,
                                       GameStateModuleIO::GameActionQueue* lpActionQueue,

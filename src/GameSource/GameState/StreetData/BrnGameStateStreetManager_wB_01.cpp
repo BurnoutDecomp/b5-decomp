@@ -416,4 +416,29 @@ bool StreetManager::LoadDistrictMap( GameStateModuleIO::OutputBuffer* lpOutput,
     }
 }
 
+// ----------------------------------------------------------------------------
+// StreetManager::GetStreetData   (DWARF BrnGameStateStreetManager.h:326)
+//
+// [gateui r4] ADDITIVE 2026-08-20. Declaration-only until now, which made
+// BrnRoadRulesManager.cpp unmountable (LNK2019 -- verify_r3_fix3gsm F1).
+//
+// There is NO X360 symbol for this accessor: it is absent from the ledger and
+// every caller inlines it. RoadRulesManager::IsRoadLimitRegionValid @0x82335268
+// shows the whole body at its call site --
+//     0x82335280  lwz   r11, 0x14(r28)          ; this->mpStreetManager
+//     0x82335284  addi  r3, r11, 0x1CC8         ; == 7368 == &mpStreetData
+//     0x82335288  bl    BrnStreetData__StreetData___oper   ; ResourcePtr<>::operator->
+// -- i.e. exactly `mpStreetData.operator->()`, whose own baked assert
+// ("Can not instance resource pointer - it has no main memory resource")
+// therefore stays the one this path fires. mpStreetData is the +0x1CC8 member
+// (BrnGameStateStreetManager.h) and LoadStreetData above is its only writer.
+//
+// Written as an explicit `.operator->()` rather than `mpStreetData.GetMemoryResource()`
+// so the console's assert line (CgsResourcePtr.h:544) is the one reproduced.
+// ----------------------------------------------------------------------------
+const BrnStreetData::StreetData* StreetManager::GetStreetData()
+{
+    return mpStreetData.operator->();
+}
+
 } // namespace BrnGameState

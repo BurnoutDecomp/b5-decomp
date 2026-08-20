@@ -96,6 +96,23 @@ public:
     // element) and returns the set's element-count field (set base +0x1000). The leading
     // set-sentinel check (set base +0x1000 == -1 -> "Set used before Construct/Clear")
     // is reproduced inside this accessor in the full TU.
+    //
+    // ⭐ [gateui] BODIED 2026-08-20 (owner `deps`). It was a measured UNDEF external in
+    // StuntManager_gUI_00.obj -- the `miCurrentCount` of the action-58 HUD popup ("Billboards
+    // 12/45") is literally this read. The console's `*(pm + 4104*type + 30568 + 4096)` IS
+    // `mProfile.maStuntElements[type].GetLength()`: the embedded Profile sits at pm+368
+    // (Profile::RecordPropHit is called as `(mpProgressionManager + 368, ...)` from
+    // ProcessStuntElement) and Profile's own set array is at Profile+30200 -- 368 + 30200 ==
+    // 30568, and Profile::GetStuntElementCount @0x82361950 reads `4104*type + this + 30200`
+    // then `+4096`. Identical address, so this is a straight delegation, and the
+    // set-sentinel assert the banner above promises lives in Set<>::GetLength (CgsSet.h:227,
+    // "Set used before Construct/Clear was called") which that path already goes through.
+    // FLAG (NAME, not shape): the DWARF spells this method `GetStuntElementCount`
+    // (BrnProgressionManager.h:438, same `int32_t (StuntElementType) const` shape). The
+    // committed repo name is kept because two live consumers spell it -- rename it and its two
+    // call sites (AchievementManagerBase::OnCollectStunt, StuntManager::ProcessStuntElement)
+    // in one pass when the full ProgressionManager TU lands.
+    // (Body in BrnProgressionManager.cpp, next to its bodied accessor siblings.)
     s32 GetCollectedStuntElementCount(BrnGameState::StuntElementType leStuntType) const;
 
     // ADDITIVE GROW (declare-only) for the BrnTrainingManager TU.
@@ -103,7 +120,12 @@ public:
     // (the X360 reaches it as the by-value sub-object at this+0x170). TrainingManager::
     // DEBUG_ClearTrainingFlags (0x82366050) / RequestTraining / SendTrainingTickerMessage call it,
     // assert the result is non-null, then poke training flags through it. Body + the real embedded
-    // Profile member land with the ProgressionManager TU. FLAG: declare-only additive grow.
+    // Profile member land with the ProgressionManager TU.
+    //
+    // ⓘ [gateui] 2026-08-20: this one is NOT a hole -- it is already bodied in this TU's .cpp
+    // (BrnProgressionManager.cpp :: GetProfile). It shows up as an UNDEF external in
+    // StuntManager_gUI_00.obj only because that is a different, and legitimately separate,
+    // translation unit. Recorded here so the next reader does not re-chase it.
     Profile* GetProfile();
 
     // (The StreetManager keystone's GetProgressionData() grow collided with the identical
@@ -117,6 +139,19 @@ public:
     // SendGameCompletionResults(pm, lpOutput->GetGameActionQueue()) after the trophy
     // fan-out -- posts the game-completion results onto the output game-action queue
     // (VariableEventQueue<13312,16>). Body lands with the ProgressionManager TU.
+    //
+    // ⛔ [gateui] PARKED 2026-08-20, NOT bodied. 0x82395C28 is short in shape --
+    //     record = { s32 meGameMode = mpModeManager->meCurrentGameModeType (+3476);
+    //                bool mbGameComplete; bool <profile flag @Profile+118032> }
+    //     ... ComputeCompletionPercentage() >= 100.0 -> set both, and stamp the completion
+    //         date via CgsSystem::DateAndTime::Update(&Profile+118008) once
+    //     AddEvent(queue, &record, /*action*/208, /*size*/8)
+    // -- but it is gated on the SAME missing 320-instruction
+    // ProgressionManager::ComputeCompletionPercentage @0x8238A198, and it additionally needs
+    // an mpModeManager back-pointer member (X360 +133436) that this header does not model and
+    // nothing in the tree installs, plus three unmodelled Profile fields in the +118000
+    // region. Posting the action with a fabricated percentage would put a wrong
+    // "game complete" onto the game-action queue. See report_r2_deps.md.
     void SendGameCompletionResults( CgsModule::VariableEventQueue<13312, 16>* lpGameActionQueue );
 
     // ------------------------------------------------------------------------
@@ -126,17 +161,63 @@ public:
     // semantics are X360-asm-attested; bodies land with the ProgressionManager TU. Declare-only.
     // ------------------------------------------------------------------------
 
-    // X360 UpdateJumps reads the completed-stunt-element Set<__int64,512> at this+30568 (0x7768)
-    // via Find -> a present key == that stunt element was already completed before.
-    bool IsStuntElementDone(CgsID lStuntElementKey) const;
+    // ⛔ [gateui] TYPE DISCRIMINANT RESTORED 2026-08-20 (was `IsStuntElementDone(CgsID)`).
+    // The completed-stunt-element sets are PER StuntElementType: the X360 Finds in
+    // `mpProgressionManager + 4104*type + 30568` (StuntManager::ProcessStuntElement @0x8239CDB0,
+    // `v29 = 4104 * HIDWORD(v8)`), and the 4104 stride is one Set<s64,512> per type. The old
+    // type-less form had no way to choose a set (and no body anywhere in the tree): keying every
+    // query off set 0 would make every billboard/smash read "not done" for ever, re-posting game
+    // action 58 and re-popping the HUD on every re-smash.
+    // Shape is the DWARF declaration verbatim:
+    //   references/DecFIGS/dwarfdump/GameSource/GameState/Progression/BrnProgressionManager.h:447
+    //   `bool IsStuntElementDone(BrnGameState::StuntElementType, CgsID) const;`
+    // (its byte-exact sibling Profile::IsStuntElementDone(type, id) is already bodied at
+    //  BrnProfile.cpp :: IsStuntElementDone). Body lands with owner `deps` this round.
+    // ⓘ UpdateJumps' console call carries no type only because its type is JUMP == index 0, so
+    // the `4104 * type` term folds away -- not because the query is type-less.
+    // ⭐ [gateui] BODIED 2026-08-20 (owner `deps`), as the delegation the console inlines.
+    // `Set<s64,512>::Find(mpProgressionManager + 4104*type + 30568, &key) != -1` and
+    // `mProfile.maStuntElements[type].Find(id) != KU_INVALID` are the SAME address and the
+    // SAME comparison: Profile::IsStuntElementDone @0x823619B0 is literally
+    // `_int64_512_::Find(4104 * type + this + 30200, &id) != -1`, and the Profile sits at
+    // ProgressionManager+368 (30200 + 368 == 30568). Neither side asserts, so nothing is
+    // dropped by delegating. No standalone X360 symbol exists for the manager form -- it is
+    // header-inlined on the console. (Body in BrnProgressionManager.cpp, next to its bodied
+    // accessor siblings -- the same placement GetProfile / GetProgressionData already use.)
+    bool IsStuntElementDone(BrnGameState::StuntElementType leStuntElementType,
+                            CgsID                          lStuntElementKey) const;
 
     // X360 0x82389740. CheckForTrophyUnlocks fires this when an element-complete count tops out.
     // FLAG: the exact arg type/count is not recovered; modelled as a single trophy-id s32 (the
-    // X360 li-immediate the call site passes).
+    // X360 li-immediate the call site passes). DWARF :345 types the parameter
+    // `BrnProgression::TrophyUnlockData::UnlockType` (an enum with no owning header in this
+    // tree yet), which is consistent with the s32 model.
+    //
+    // ⛔ [gateui] PARKED 2026-08-20, NOT bodied -- the round-2 brief's "every one is small"
+    // does not hold for this one. 0x82389740 is a 12-case trophy-condition machine over the
+    // loaded PROGRESSION.DAT trophy table (`ProgressionData` +64 table base / +68 count,
+    // 16-byte records of {threshold, unlockType, carId}), and it needs THREE bodies that do
+    // not exist anywhere in b5-decomp/src:
+    //     BrnProgression::ProgressionManager::UnlockCarFromTrophy      @0x8237B0E8 (56 insns)
+    //     BrnProgression::Profile::GetTotalWinCount                    -- EXISTS (BrnProfile.cpp)
+    //     an owning header for BrnProgression::ProgressionData's trophy table -- MISSING
+    // plus four unmodelled manager/Profile fields (+776, +780, +482, the +133456/60/64 road
+    // rules tallies which DO exist). Landing it would ADD net UNDEFs, which is exactly the
+    // failure mode verify_gsm/VERDICT.md F2 fails the wave for. See report_r2_deps.md.
     void OnTrophyUnlock(s32 liTrophyType);
 
     // X360 0x82396058. Re-evaluates whether any special car should unlock after a stunt-element
     // milestone; CheckForTrophyUnlocks calls it unconditionally after the trophy path.
+    //
+    // ⛔ [gateui] PARKED 2026-08-20, NOT bodied. Same reason: 0x82396058 gates the silver-car
+    // unlock on `mProfile.GetCurrentProgressionRank() >= ProgressionData[+20]` and the
+    // gold-car unlock on `ComputeCompletionPercentage() >= 100.0`, and needs two missing
+    // bodies --
+    //     BrnProgression::ProgressionManager::ComputeCompletionPercentage @0x8238A198 (320 insns)
+    //     BrnProgression::ProgressionManager::UnlockSpecialCars           @0x8237AF38 (106 insns)
+    // -- plus the two Profile unlock flags at Profile+42516/+42517 and a ProgressionData
+    // layout that is not modelled. (AchievementManagerBase::OnGameCompletion, the third
+    // callee, DOES exist.) See report_r2_deps.md.
     void CheckForSpecialCarUnlocks();
 
     // ------------------------------------------------------------------------
@@ -165,6 +246,21 @@ public:
 
     // The embedded achievement manager (X360 *(progmgr+133432)); DriveThruManager routes
     // OnFindAllCarParks / OnBodyShop through it.
+    //
+    // ⭐ [gateui] BODIED 2026-08-20 (owner `deps`). Measured UNDEF external in
+    // StuntManager_gUI_00.obj. It is a plain read of the pointer Prepare2 installs: the
+    // member below is documented as X360 +0x20938 == 133432, which is the very word
+    // CheckForSpecialCarUnlocks @0x82396058 dereferences (`OnGameCompletion(*(a1 + 133432))`)
+    // and that StreetManager / ChallengeManager / ImageManager all reach the same way. Not a
+    // by-value sub-object despite the older "embedded" wording -- the X360 loads a pointer.
+    // DWARF :588 types the return `StuntModeScoring::AchievementManager *`; the committed
+    // `BrnGameState::AchievementManagerBase *` is what every in-tree consumer is written
+    // against and what the X360 ledger attests, so it is kept.
+    // ⚠️ FLAG (PC bring-up, NOT introduced here): nothing in the mounted set calls Prepare2,
+    // so this returns NULL today. Every console caller asserts it non-null first and
+    // StuntManager_gUI_00.cpp reproduces that assert -- so a null shows up as the console's
+    // own diagnostic, not a silent deref.
+    // (Body in BrnProgressionManager.cpp, next to its bodied accessor siblings.)
     BrnGameState::AchievementManagerBase* GetAchievementManager();
 
     // ------------------------------------------------------------------------

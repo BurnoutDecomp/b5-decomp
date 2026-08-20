@@ -14,6 +14,11 @@
 #include "GameSource/GameState/TriggerQueryManager/BrnTriggerQueryManager.h" // BrnGameState::TriggerQueryManager (mTriggerQueryManager, by value)
 #include "GameShared/GameClasses/Module/CgsBaseEventReceiverQueue.h"         // CgsModule::EventReceiverQueue<3072,16> (mReceiverQueue)
 #include "GameSource/GameState/CarSelect/BrnCarSelectManager.h"      // BrnGameState::CarSelectManager (mCarSelectManager, by value)
+// [gateui] The two sub-objects the smash/billboard chain needs BY VALUE, both at their console
+// positions (StuntManager this+183952, DeveloperChallengeManager this+185712). Neither header
+// includes this one back, so there is no cycle (contrast mpTrainingManager below).
+#include "GameSource/GameState/Offences/BrnStuntManager.h"           // BrnGameState::StuntManager (mStuntManager, by value)
+#include "GameSource/GameState/DeveloperChallengeManager/BrnDeveloperChallengeManager.h" // DeveloperChallengeManager (by value)
 // ---- Prepare2's two sub-objects, both held BY VALUE exactly as the console holds them ----
 // X360 GameStateModule::Construct @0x82380388 constructs both in place:
 //   AchievementManagerBase::Construct(a1 + 181680, a1 + 47920, a1 + 284520, a1 + 7632, a1)
@@ -41,7 +46,11 @@ namespace BrnGameState  { namespace GameStateModuleIO { struct OutputBuffer; } }
 namespace BrnResource    { struct VehicleList; }
 // For the StreetManager wave-C GetDeveloperChallengeManager grow below (pointer-only;
 // the real class is BrnGameState::DeveloperChallengeManager, BrnDeveloperChallengeManager.h).
-namespace BrnGameState   { class DeveloperChallengeManager; }
+// (The DeveloperChallengeManager is no longer a forward-declared pointer: the module embeds the
+// real subobject -- see the include above and mDeveloperChallengeManager below.)
+// [gateui] TrainingManager stays a forward declaration ON PURPOSE -- BrnTrainingManager.h includes
+// THIS header, so including it back is a cycle. See mpTrainingManager's FLAG at the member.
+namespace BrnGameState   { class TrainingManager; }
 // For the ResetPlayerDebugComponent additive grows below (pointer-only).
 namespace BrnResource    { class  WheelList; }
 namespace BrnTrigger     { struct TriggerData; }
@@ -151,6 +160,100 @@ public:
     // console's, held BY VALUE exactly as the console holds it.
     CarSelectManager*       GetCarSelectManager()       { return &mCarSelectManager; }
     const CarSelectManager* GetCarSelectManager() const { return &mCarSelectManager; }
+
+    // ⭐ [gateui] The COLLECTIBLE bookkeeper (X360 this+183952 == 0x2CE50, 1568 bytes). Held BY
+    // VALUE exactly as the console holds it -- attested five ways: Construct @0x82380388
+    // (`StuntManager::Construct(a1+183952, a1+47920, a1+42320, a1+4128, a1+46640, a1)`),
+    // Prepare @0x8239E578 stage 4, PreWorldUpdate @0x823A5328 (both `StuntManager::Update
+    // (a1+183952, ...)` and the TriggerQueryManager::PreWorldUpdate argument),
+    // ProcessGameEvents @0x823A0A18 case 111, and ProgressionManager::Construct's 5th argument.
+    // The 1568-byte size is pinned by the next sub-object (GameStateImageManagerBase at
+    // this+185520; 185520 - 183952 == 1568).
+    //
+    // Like mCarSelectManager, the console NEVER names an accessor for it -- every call site
+    // reaches the sub-object through the inlined `this + 0x2CE50` pointer adjust. De-inlined to
+    // this named accessor so no reconstructed body has to poke a byte offset.
+    StuntManager*       GetStuntManager()       { return &mStuntManager; }
+    const StuntManager* GetStuntManager() const { return &mStuntManager; }
+
+    // ------------------------------------------------------------------------
+    // ⭐⭐ [gateui] X360 PostWorldUpdate @0x8238F358 -- ITS TWO STUNT-CHAIN LEGS.
+    //
+    // The console body opens `LockForRead(lpPostWorldInput)` and then, among other copies:
+    //     XMemCpy(this + 235488, lpInput->GetActiveRaceCarOutputInterface(), 10480);   // sub_8231D2C0
+    //     VariableEventQueue<1536,16>::Append<1536,16>(this + 248384,
+    //                                                  lpInput->GetGameEventQueue());  // 0x8231D0C8
+    // i.e. it refreshes mLastActiveRaceCarInterface from the world's published snapshot and folds
+    // the world's per-frame game-event queue into the module's CARRY queue, which PreWorldUpdate
+    // then merges and hands to ProcessGameEvents on the NEXT frame.
+    //
+    // ⛔ WHY BOTH LEGS ARE LOAD-BEARING FOR THIS WAVE, and why the first one is the bigger of the
+    // two: mLastActiveRaceCarInterface had NO WRITER ANYWHERE IN THE TREE (its FLAG at the member
+    // said so), so it read as the Clear()ed "no valid player car" state on every frame. That is
+    // not a cosmetic gap -- TriggerQueryManager::UpdateTriggers gates its ENTIRE active-set
+    // rebuild on `lpActiveRaceCarInterface->IsPlayerCarActive()`, so with a dead interface
+    // maActiveTriggers stays EMPTY for ever and StuntManager::OnPropHit iterates nothing and
+    // latches nothing. StuntManager::Update has the same dependency (an inactive player car makes
+    // it drop the latch instead of processing it).
+    //
+    // [FLAG PC bring-up] THE ARGUMENTS ARE THE DEVIATION, NOT THE BODY. The console reads both
+    // out of a GameStateModuleIO::PostWorldInputBuffer that BridgeWorldToGameState @0x823E5368
+    // fills; nothing on PC creates that buffer (its accessors exist, its producer does not), so
+    // this entry point takes the two values DIRECTLY -- and the world module's OutputBuffer hands
+    // out exactly these two types (BrnWorldModuleIO.h: `GetActiveRaceCarOutputInterface() const`
+    // and `GetGameEventQueue() const`, the latter typedef'd to VariableEventQueue<1536,16>), so
+    // the caller passes them through unchanged. The interface copy is done BY ASSIGNMENT, never
+    // as the console's 10480-byte XMemCpy: the host object is a different size.
+    // DELETE-WHEN PostWorldUpdate lands with a real PostWorldInputBuffer.
+    void PostWorldUpdateStuntBringUp(
+        const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface*
+                                                      lpActiveRaceCarOutputInterface,
+        const CgsModule::VariableEventQueue<1536, 16>* lpWorldGameEventQueue);
+
+    // ⭐⭐ [gateui] X360 PreWorldUpdate @0x823A5328 -- ITS THREE STUNT-CHAIN LEGS, IN THE
+    // CONSOLE'S OWN ORDER (which matters, see below):
+    //     239-245  build a LOCAL VariableEventQueue<1536,16> and Append THREE sources into it
+    //              (the carry queue this+248384, the PreWorldInputBuffer's queue, and the
+    //              InviteManager's this+2032), then Clear the carry queue
+    //     252      ProcessGameEvents(this, thatQueue, actionQueue, preWorldInput, output)
+    //                                            <- case 111 -> StuntManager::OnPropHit LATCHES
+    //     310      TriggerQueryManager::PreWorldUpdate(this+42320, in, out, this+183952,
+    //                                                  this+44240, this+235488, mpVehicleList)
+    //                                            <- UpdateTriggers ARMS the trigger set
+    //     332      StuntManager::Update(this+183952, out->GetGameActionQueue(), this+235488,
+    //                                   f1 == the game timestep, isGameModeActive)
+    //                                            <- CONSUMES the latch
+    //
+    // ⚠️⚠️ OnPropHit RUNS BEFORE THE TRIGGER SET IS REFRESHED -- it deliberately walks the
+    // PREVIOUS frame's armed set. That is the console's own order; DO NOT "fix" it.
+    //
+    // [FLAG PC bring-up] two documented reductions, both stated rather than hidden:
+    //   * the three-source merge collapses to the carry queue alone, because the other two
+    //     sources do not exist on this build (nothing creates a PreWorldInputBuffer, and the
+    //     InviteManager's queue has no producer). The Clear of the carry queue is the console's.
+    //   * TriggerQueryManager::PreWorldUpdate @0x8239F5C8 is reduced to its UpdateTriggers leg --
+    //     the one that writes maActiveTriggers, which is the only thing OnPropHit reads. Its
+    //     other legs (SubmitTriggerQueries, the per-player-trigger fan-out that posts action 109
+    //     and calls ProcessPlayerTriggers, the killzone drain) walk arrays this tree's
+    //     TriggerQueryManager slice does not model. Named as a park; nothing is fabricated.
+    void PreWorldUpdateStuntBringUp(f32 lfGameTimestep, bool lbIsAGameModeActive);
+
+    // ⭐⭐ [gateui] X360 ProcessGameEvents @0x823A0A18, THE CASE-111 ARM (0x823A1684..0x823A1698).
+    // The console's dispatcher is a ~180-case jump table this tree extracts one arm at a time
+    // (the precedent: ProcessGameEventsReallyEnterJunkyardBringUp / ...ActivateCarSelectBringUp
+    // above). This arm, verbatim from the asm:
+    //     0x823A1684  addis r3, r31, 3          ; \
+    //     0x823A1690  addi  r3, r3, -0x3170     ; / r3 = this + 183952  == &mStuntManager
+    //     0x823A1688  lvx128 v1, r0, r25        ; v1 = event->mPosition   (event +0x00, Vector3)
+    //     0x823A1694  lhz   r4, 0x10(r25)       ; r4 = event->muZoneId    (event +0x10, u16)
+    //     0x823A168C  lhz   r5, 0x12(r25)       ; r5 = event->muPropId    (event +0x12, u16)
+    //     0x823A1698  bl    StuntManager::OnPropHit
+    // (the Vector3 rides v1 and consumes NO GPR slot -- the PPC float-arg rule in reverse, which
+    //  is why the committed OnPropHit(u16, u16, Vector3) signature is the right one).
+    // The event is GameStateModuleIO::RecordPropHitEvent, game EVENT id 111 -- and game event ids
+    // are NOT subject to the +5 action-id shift (see BrnGameActions.h): 111 matches the X360 jump
+    // table exactly.
+    void ProcessGameEventsPropHitBringUp(const CgsModule::VariableEventQueue<1536, 16>* lpGameEventQueue);
 
     // ⭐ X360 0x8236BAC8. The nearest junkyard's CgsID to lPosition -- the single input that turns
     // the loaded TriggerData into "which junkyard do I enter". Both start-of-game entries need it:
@@ -727,29 +830,29 @@ private:
     // The base's copy is private, so there is no ambiguity; nothing reads it through this class.
     EPrepareStage mePrepareStage = E_PREPARESTAGE_START;
 
-    // ⚠️ [FLAG PC bring-up] STANDS IN FOR StuntManager::meDistrictMapLoadStage.
-    // Prepare stage 4 is `StuntManager::Prepare(this+183952, out)` @0x82380F30, whose FIRST
-    // statement is StuntManager::LoadDistrictMap @0x82399458 -- the console's own
-    // LoadBundle("Districts.dat", pool 5) -> acquire("Districts") pair. That sub-object is not
-    // reconstructed on this module (there is no mStuntManager member) and the committed
-    // BrnStuntManager.cpp loader is still an inert deferral, so nothing has ever made the
-    // DISTRICTS.DAT bundle resident during Prepare -- which is exactly what stage 23's
-    // StreetManager::LoadDistrictMap needs, because THAT machine only ACQUIRES (it never loads
-    // the bundle; on the console stage 4 loaded it 19 stages earlier).
-    // This latch carries the request/response half of that console machine at the stage that
-    // calls it. It is a SITE deviation, not an invented call: the request is the console's own,
-    // with the console's own arguments. Three states, mirroring the console machine's first
-    // three (LOAD_REQUEST / LOAD_RESPONSE / past-it) -- the DONE state has to be STICKY because
-    // Prepare's terminal stage re-arms mePrepareStage at MANAGER for a later re-prepare, and a
-    // two-state latch would stall stage 4 for ever on that second pass.
-    // DELETE-WHEN GameStateModule embeds a real StuntManager and stage 4 calls its Prepare.
-    enum EDistrictsBundleStage
-    {
-        E_DISTRICTS_BUNDLE_NOT_REQUESTED = 0,
-        E_DISTRICTS_BUNDLE_REQUESTED     = 1,
-        E_DISTRICTS_BUNDLE_LOADED        = 2,
-    };
-    EDistrictsBundleStage meDistrictsBundleStage = E_DISTRICTS_BUNDLE_NOT_REQUESTED;
+    // ✅ [gateui] THE meDistrictsBundleStage STAND-IN LATCH IS RETIRED (2026-08-20).
+    // It carried the LoadBundle("Districts.dat", pool 5) request/response half of
+    // StuntManager::LoadDistrictMap @0x82399458 at the stage that calls it, because this module
+    // had no StuntManager sub-object and BrnStuntManager.cpp's loader was an inert deferral. Both
+    // of those are now false: mStuntManager below is the real embedded sub-object and its
+    // LoadDistrictMap drives the console's full LoadBundle -> acquire("Districts") -> handle-bind
+    // machine, so stage 4 is `mStuntManager.Prepare(lpOutputBuffer)` verbatim.
+    // ⓘ The reason the latch's DONE state had to be STICKY still applies to the real machine and
+    // is satisfied by it: Prepare's terminal stage re-arms mePrepareStage at MANAGER for a later
+    // re-prepare pass, and StuntManager::meDistrictMapLoadStage's E_DISTRICT_MAP_DONE case
+    // returns true without re-requesting -- so a second Prepare pass walks straight through
+    // stage 4 instead of stalling on a spent request.
+    // ⛔ [gateui] ROUND-3 CORRECTION (verify_r2_fixgsm F5). The round-2 wording of the line above
+    // continued "...and only re-runs the census", which is FALSE on one path: if the FIRST pass
+    // spent the PC bring-up acquire-retry budget and declared the district map unavailable, that
+    // give-up is PROCESS-FINAL. StuntManager's give-up latches are file statics and
+    // meDistrictMapLoadStage is already E_DISTRICT_MAP_DONE, whose arm never re-issues -- so every
+    // later Prepare pass takes the give-up arm immediately and the census is NEVER re-run, even if
+    // Districts.dat became resident in between. Accurately: a second pass walks through stage 4
+    // and re-runs the census ONLY IF the first pass bound the map successfully; after a give-up it
+    // walks through with the tally left at zero. The latches are reset in exactly one place
+    // (LoadDistrictMap's E_DISTRICT_MAP_LOAD_REQUEST arm), so this self-corrects the moment
+    // anything re-arms meDistrictMapLoadStage. See BrnStuntManager.cpp :: Prepare's give-up arm.
 
     // X360 this+556 (0x22C) -- Prepare2's OWN stage word, four bytes past mePrepareStage. Proven
     // straight off 0x8239ED10 (`lwz r11, 0x22C(r31)` / three `stw ..., 0x22C(r31)`). It is NOT
@@ -780,5 +883,50 @@ private:
     // terminal stage. GameStateModule::Construct is the console's ONLY caller of
     // CarSelectManager::Construct.
     CarSelectManager                        mCarSelectManager;
+
+    // ⭐ [gateui] X360 this+183952 (0x2CE50). The Super-Jump / Super-Smash / Billboard collectible
+    // bookkeeper, embedded BY VALUE as the console embeds it. See GetStuntManager() above for the
+    // five console attestations of the offset and for why the console never names an accessor.
+    StuntManager                            mStuntManager;
+
+    // ⭐ [gateui] X360 this+185712 (0x2D570). The developer-challenge tracker, embedded BY VALUE:
+    // Construct @0x82380388 runs `DeveloperChallengeManager::Construct(a1 + 185712, a1 + 47920,
+    // a1 + 284520, a1 + 7632, a1)` in place, and StuntManager::ProcessStuntElement @0x8239CDB0
+    // reaches it as the inlined `mpGameStateModule + 185712` adjust (asserted there as
+    // "mpGameStateModule->GetDeveloperChallengeManager()", BrnStuntManager.cpp:695). It was
+    // already declared as an accessor (GetDeveloperChallengeManager, added for the StreetManager
+    // wave) with no member behind it; the member lands here and the body with it.
+    // ⚠️ NOT Construct()ed yet -- see the named deferral in GameStateModule::Construct.
+    DeveloperChallengeManager               mDeveloperChallengeManager;
+
+    // ⭐ [gateui] X360 this+248384 (0x3CA40). THE GAME-EVENT CARRY QUEUE -- the one-frame buffer
+    // between the world and ProcessGameEvents. PostWorldUpdate @0x8238F358 Appends the world's
+    // per-frame game-event queue into it; PreWorldUpdate @0x823A5328 merges it (with two other
+    // sources) into a local queue, hands that to ProcessGameEvents, and Clears it.
+    // ⓘ THE never-Constructed-queue TRAP IS PAID: the console's own Construct @0x82380388 carries
+    // `CgsModule::VariableEventQueue<1536,16>::Construct(a1 + 248384)`, and this module's
+    // Construct() reproduces that call. (A VariableEventQueue that is only Clear()ed still has no
+    // buffer bound -- the exact trap that has bitten this tree four times.)
+    // ⚠️ CORRECTION while adding it: the dangling comment further up this class (under the
+    // ResetPlayerDebugComponent block) claimed this offset is "the same per-frame output queue
+    // GetOutputGuiEventQueue() returns". It is not -- that one is a VariableEventQueue<18432,16>
+    // at a different offset (its accessor is X360 0x823566F8); +248384 is this <1536,16> queue,
+    // as both Append<1536,16> call sites prove. That comment had no member behind it either.
+    CgsModule::VariableEventQueue<1536, 16>  mGameEventCarryQueue;
+
+    // ⚠️ [FLAG PC bring-up] X360 this+46640. The console embeds TrainingManager BY VALUE here
+    // (PreWorldUpdate @0x823A5328 calls `TrainingManager::Update(a1 + 46640, ...)`, and four
+    // Constructs -- ProgressionManager's, RoadRulesManager's, DriveThruManager's and
+    // StuntManager's -- are each handed `a1 + 46640` as an owner pointer).
+    // Embedding it here is blocked by a GENUINE INCLUDE CYCLE, not by a missing reconstruction:
+    // BrnTrainingManager.h `#include`s THIS header (its bodies call GameStateModule::RequestPause
+    // / GetLastActiveRaceCarInterface / the timed-mode accessors), so this header cannot include
+    // it back, and a by-value member needs the complete type. Held by pointer and allocated in
+    // Construct() instead -- the same shape, and the same class of reason, as mpOutputBuffer
+    // above: the ALLOCATION SITE moves, nothing else does. The pointer's VALUE is what every
+    // consumer sees, and it is stable for the module's whole life.
+    // DELETE-WHEN the cycle is broken (BrnTrainingManager.h forward-declaring GameStateModule and
+    // moving its inline bodies out would do it) -- then this becomes `TrainingManager mTrainingManager;`.
+    TrainingManager*                        mpTrainingManager = 0;
 };
 }

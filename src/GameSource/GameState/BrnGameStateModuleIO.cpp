@@ -112,14 +112,15 @@ void PreWorldInputBuffer::SetNetworkPlayerResultsInterface(const NetworkPlayerRe
 const GameEventQueue* PreWorldInputBuffer::GetGameEventQueue() const
 {
     CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
-    return reinterpret_cast<const GameEventQueue*>(&mGameEventQueueStorage);
+    // [gateui] `&member`, not a reinterpret_cast over a u8 seat -- the seat is the real type now.
+    return &mGameEventQueue;
 }
 
 // X360 0x823B8C60 - write-lock (mutable) accessor for the game-event queue (this+0x4C).
 GameEventQueue* PreWorldInputBuffer::GetGameEventQueue()
 {
     CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
-    return reinterpret_cast<GameEventQueue*>(&mGameEventQueueStorage);
+    return &mGameEventQueue;
 }
 
 // X360 0x823B8E18 - write-lock accessor for the takedown-event input queue (this+0x660).
@@ -163,14 +164,18 @@ VehicleOutputInterface* PostWorldInputBuffer::GetVehicleOutputInterface()
 const GameEventQueue* PostWorldInputBuffer::GetGameEventQueue() const
 {
     CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
-    return reinterpret_cast<const GameEventQueue*>(&mGameEventQueueStorage);
+    // [gateui] `&member`, not a reinterpret_cast over a u8 seat -- the seat is the real type now.
+    // This is the queue owner `bridge`'s BridgeWorldToGameState @0x823E5368 Appends the world's
+    // per-frame game events into, and the one GameStateModule::PostWorldUpdate @0x8238F358 drains
+    // into the module's carry queue.
+    return &mGameEventQueue;
 }
 
 // X360 0x823B91B0 - write-lock accessor for the game-event queue (this+0xA4B0).
 GameEventQueue* PostWorldInputBuffer::GetGameEventQueue()
 {
     CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
-    return reinterpret_cast<GameEventQueue*>(&mGameEventQueueStorage);
+    return &mGameEventQueue;
 }
 
 // X360 0x8231D410 - read-lock accessor for the AI-car output interface (this+0xAAC0).

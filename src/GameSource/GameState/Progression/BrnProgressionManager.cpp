@@ -432,6 +432,69 @@ Profile* ProgressionManager::GetProfile()
 }
 
 // ============================================================================================
+// [gateui] 2026-08-20 (owner `deps`) -- THE THREE STUNT-ELEMENT / ACHIEVEMENT ACCESSORS the
+// smash-gate + billboard UI chain links against. All three were declaration-only and are
+// measured UNDEF externals in StuntManager_gUI_00.obj and BrnStuntManager.obj (dumpbin
+// /SYMBOLS), which is what keeps GameSource/GameState/Offences/BrnStuntManager.cpp from
+// mounting. None of them owns a standalone X360 symbol -- the console header-inlines each one,
+// so the only evidence is the inlined form at the call sites, quoted per body below. They are
+// placed here rather than as header inlines to match the placement GetProfile /
+// GetProgressionData / GetCurrentCarData already use in this TU.
+//
+// THE ADDRESS IDENTITY THAT MAKES ALL OF THIS A DELEGATION, ONCE:
+//   * the player Profile is embedded at ProgressionManager+368 (0x170) -- see GetProfile above,
+//     and the console's own `Profile::RecordPropHit(mpProgressionManager + 368, ...)` in
+//     StuntManager::ProcessStuntElement @0x8239CDB0;
+//   * Profile's per-type completed-element sets start at Profile+30200 with a 4104-byte stride
+//     (Profile::IsStuntElementDone @0x823619B0 = `Find(4104*type + this + 30200, &id) != -1`;
+//     Profile::GetStuntElementCount @0x82361950 = `*(4104*type + this + 30200 + 4096)`);
+//   * 368 + 30200 == 30568, which is EXACTLY the base ProcessStuntElement uses when it inlines
+//     the manager-side query: `Set<s64,512>::Find(mpProgressionManager + 4104*type + 30568)`.
+// Same address, same stride, same comparison -- so the manager methods are the profile methods,
+// and nothing is dropped by routing through the bodied Profile pair.
+// ============================================================================================
+
+// Is this stunt element already in the player's completed set for its type?
+//
+// X360 (inlined, ProcessStuntElement @0x8239CDB0): `v29 = 4104 * HIDWORD(v8)` then
+// `Set<__int64,512>::Find(mpProgressionManager + v29 + 30568, &key)`, with the
+// `_cntlzw(-1 - Find(...)) & 0x20) == 0` dance being nothing but the compiler's "!= -1" test.
+// Neither this method nor Profile::IsStuntElementDone asserts on the console, so none is added.
+bool ProgressionManager::IsStuntElementDone(BrnGameState::StuntElementType leStuntElementType,
+                                            CgsID                          lStuntElementKey) const
+{
+    return mProfile.IsStuntElementDone(leStuntElementType, lStuntElementKey);
+}
+
+// How many elements of this type the player has collected -- the `miCurrentCount` of game
+// action 58, i.e. the "12" in the HUD's "Billboards Smashed 12/45".
+//
+// X360 (inlined, ProcessStuntElement): `*(mpProgressionManager + 4104*type + 30568 + 4096)`.
+// The +4096 lands on the set's length word, so the console's own
+// "Set used before Construct/Clear was called" sentinel (CgsSet.h:227, the assert
+// Profile::GetStuntElementCount @0x82361950 carries) is on this path via Set<>::GetLength.
+//
+// FLAG (NAME): the DWARF spells the method `GetStuntElementCount` (BrnProgressionManager.h:438)
+// with this exact shape. The repo name is kept -- see the header comment for the rename plan.
+s32 ProgressionManager::GetCollectedStuntElementCount(BrnGameState::StuntElementType leStuntType) const
+{
+    return mProfile.GetStuntElementCount(leStuntType);
+}
+
+// The achievement manager Prepare2 installed (X360 *(progmgr + 133432) == +0x20938 == the
+// `mpAchievementManager` member). Read as a POINTER by every console consumer, e.g.
+// CheckForSpecialCarUnlocks @0x82396058 `OnGameCompletion(*(a1 + 133432))` and
+// StuntManager::ProcessStuntElement's `OnCollectStunt` / `OnCollectAllStunts` calls.
+//
+// ⚠️ FLAG (PC bring-up, pre-existing): nothing in the mounted set calls Prepare2 yet, so this
+// answers NULL today. That is the console's own contract -- every caller asserts non-null
+// first -- so it surfaces as the game's own assert rather than a silent dereference.
+BrnGameState::AchievementManagerBase* ProgressionManager::GetAchievementManager()
+{
+    return mpAchievementManager;
+}
+
+// ============================================================================================
 // THE JUNKYARD / CAR-SELECT PRODUCER SURFACE (2026-08-01).
 // Everything below is what CarSelectManager and GameStateModule reach for through the
 // progression layer. Bodies recovered from the X360 ASM (the Hex-Rays prototypes for AddCar /
