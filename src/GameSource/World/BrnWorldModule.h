@@ -283,9 +283,24 @@ namespace BrnWorld
         // and it does NOT expire with the one-frame override: a frame on which the director
         // publishes nothing must not be read as "left the junkyard".
         // DELETE with GenerateDispatchListsBringUp itself.
+        //
+        // ⭐ WIDENED 2026-08-20 (DMV look-dev wave, group timeofday) with the SAME camera's
+        // TIME-OF-DAY REQUEST -- mEffects.IsTimeOfDaySet() / mEffects.GetTimeOfDay(), the two
+        // DWARF-named fields (BrnCameraEffects.h:329 / :311) that
+        // BrnDirector::ArbStateCarSelect::Update @0x8226F5D0 raises on the junkyard/DMV
+        // camera (16.5 h, flt_8200CA28) and clears elsewhere. The console needs no argument
+        // for them because its GenerateDispatchLists latches the WHOLE record
+        // (`mLastCameraInput = *lpCameraInput`) and WorldModule::Update @0x827D63E8 then
+        // reads them straight off mLastCameraInput at 0x827D7CEC. On this build
+        // mLastCameraInput is a STAND-IN that only ever receives a synthesised transform
+        // (GenerateDispatchListsBringUp), so the request has to be carried across explicitly
+        // or the restored override in Update can never fire. LEVEL, like lbIsInJunkyard and
+        // for the same reason. DELETE with GenerateDispatchListsBringUp.
         void SetBringUpCameraOverride( const rw::math::vpu::Matrix44Affine& lrTransform,
                                        f32 lfFOVDegrees,
-                                       bool lbIsInJunkyard );
+                                       bool lbIsInJunkyard,
+                                       bool lbSetTimeOfDay,
+                                       f32 lfTimeOfDayHours );
 
         // [FLAG PC bring-up] Hand the bring-up producer the renderer's four WORLD-layer
         // effects frames for this frame, so EnvironmentManager::GenerateEffects @0x827BE698
@@ -756,6 +771,16 @@ namespace BrnWorld
         // director publishes nothing, because the console's camera input is never absent.
         // DELETE with GenerateDispatchListsBringUp.
         bool                          mbBringUpCameraInJunkyardBringUp;
+        // [FLAG PC bring-up] the director camera's TIME-OF-DAY REQUEST, staged by the same
+        // setter and latched into mLastCameraInput.mEffects by GenerateDispatchListsBringUp.
+        // STANDS IN FOR the console's whole-record `mLastCameraInput = *lpCameraInput` in
+        // GenerateDispatchLists @0x827D1CE8, which is what carries mEffects.mbSetTimeOfDay
+        // (+0x121) and mEffects.mfTimeOfDay (+0x100, HOURS) to the consumer in
+        // WorldModule::Update @0x827D63E8 (0x827D7CEC-0x827D7D24). LEVEL, not one-shot, for
+        // the same reason as mbBringUpCameraInJunkyardBringUp above.
+        // DELETE with GenerateDispatchListsBringUp.
+        bool                          mbBringUpCameraSetTimeOfDayBringUp;
+        f32                           mfBringUpCameraTimeOfDayHoursBringUp;
         // [FLAG PC bring-up] the four world-layer effects frames staged by
         // SetBringUpEffectsFrames (see the header entry). DELETE with it.
         BrnEffectsFrame*              mapBringUpEffectsFrames[ 4 ];

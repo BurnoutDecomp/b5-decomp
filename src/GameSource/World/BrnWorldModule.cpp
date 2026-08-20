@@ -540,6 +540,11 @@ WorldModule::Construct( const BrnGame::BrnCpuMonitors& lrCpuMonitors )
     mpBringUpCoronaSubmissionInterface = 0;
     mbEnvMapCamerasPositionedBringUp   = false;
     mbBringUpCameraInJunkyardBringUp   = false;
+    // [FLAG PC bring-up] the time-of-day request staging (see BrnWorldModule.h). Cleared,
+    // which is what Camera::Clear()/CameraEffects::Construct() leaves on the console's own
+    // mLastCameraInput before the director ever publishes -- so "no request" is the state.
+    mbBringUpCameraSetTimeOfDayBringUp   = false;
+    mfBringUpCameraTimeOfDayHoursBringUp = 0.0f;
     mbForceOnlyBackdrops = false;                   // X360 +6167330
     mbRenderBackdrops = true;                       // X360 +6167331
     mfCarKeyLightMultiplier = 1.175f;               // X360 +6167332
@@ -2858,7 +2863,8 @@ WorldModule::Update( BrnUpdateSet lUpdateSet,
     // virtual Update (the environment-settings tuning page).
     mSkyDebugComponent.Update();
 
-    // [FLAG PC boot gate -- FRAME-DELTA HALF RESTORED, post-fx step 9, group envblend]
+    // [FLAG PC boot gate -- FRAME DELTA + TIME-OF-DAY OVERRIDE RESTORED; post-fx step 9
+    //  (group envblend) then DMV look-dev wave 2026-08-20 (group timeofday)]
     // X360 WorldModule::Update @0x827D63E8, 0x827D7CEC-0x827D7D78.
     //
     // RESTORED -- the environment frame delta. `stfsx f0, r31, 0x1E8124` is
@@ -2877,11 +2883,79 @@ WorldModule::Update( BrnUpdateSet lUpdateSet,
     // inert -- the sky would sit at Construct's 13:00 for ever, which reads on screen as
     // "the time of day never moves" rather than as a crash.
     //
-    // STILL GATED -- the director-camera time-of-day override (X360: when the camera's
-    // override byte [camera+289] is set, mfTimeOfDay <- camera float [camera+256] * 3600).
-    // The committed Director camera slice still has no named home for those two fields.
-    // Restore with that TU.
+    // ⭐ RESTORED 2026-08-20 (DMV look-dev wave, group timeofday) -- THE DIRECTOR-CAMERA
+    // TIME-OF-DAY OVERRIDE. The old park here said "the committed Director camera slice
+    // still has no named home for those two fields". That was STALE: BrnCameraEffects.h
+    // carved mfTimeOfDay (+0x98) on 2026-07-31 and mbSetTimeOfDay (+0xB9) beside it, both
+    // DWARF-named (BrnCameraEffects.h:311 / :329). The arm is the console's, verbatim:
     //
+    //   0x827D7CEC  lbzx  r11, r31, 0x5E1DE1        ; mLastCameraInput.mEffects.mbSetTimeOfDay
+    //   0x827D7CFC  beq   -> skip
+    //   0x827D7D10  lfsx  f13, r31, 0x5E1DC0        ; ...mEffects.mfTimeOfDay  (HOURS)
+    //   0x827D7D18  lfs   f0, flt_82004C6C          ; 60.0  (image bytes 42 70 00 00, dumped
+    //                                               ;        headless from ARTIST, .rdata)
+    //   0x827D7D1C  fmuls f13, f13, f0              ; hours * 60          -> minutes
+    //   0x827D7D20  fmuls f0,  f13, f0              ; minutes * 60        -> SECONDS
+    //   0x827D7D24  stfsx f0,  r31, 0x1E7464        ; mEnvironmentManager.mfTimeOfDay
+    //
+    // NOTE THE SHAPE: two separate `fmuls` by the SAME 60.0 constant, i.e. the source wrote
+    // `* 60.0f * 60.0f`, not `* 3600.0f` -- reproduced literally below so the rounding is
+    // identical. mLastCameraInput sits at WorldModule +0x5E1CC0 (pinned by the
+    // `lvx128 v1, r31, 0x5E1CF0` at 0x827D7D94 = camera +0x30 = GetPosition(), the third
+    // argument of the EnvironmentManager::Update call just below), so +0x5E1DC0/+0x5E1DE1
+    // are camera +0x100/+0x121 == mEffects +0x98/+0xB9. Reached BY NAME here, because those
+    // console offsets do not survive the x64 pointer widening in Camera (three 4->8 byte
+    // pointer members precede mEffects).
+    //
+    // THERE IS NO CLAMP. The store is a bare `stfsx` -- no fsel, no compare against
+    // mfTimeOfDayLowerBound/UpperBound (28800/61200, flt_820CC768/flt_820CAB98). The bounds
+    // are applied one step later, by SetupTimeOfDayBlend inside EnvironmentManager::Update.
+    //
+    // ORDER IS LOAD-BEARING and is the console's: AFTER mSkyDebugComponent.Update() (the
+    // `bctrl` at 0x827D7CE8), BEFORE the SetCurrentTimeStep block below (0x827D7D28) and
+    // before EnvironmentManager::Update (0x827D7DA0) -- so the override lands in the same
+    // frame it is requested, and SetupTimeOfDayBlend advances from the overridden value.
+    //
+    // WHY IT MATTERS FOR THE DMV BUG. Construct seeds KF_DEF_TIME_OF_DAY = 46800 s
+    // (flt_820CA580, image bytes 47 36 D0 00 == 46800.0 -- the default is NOT misdecoded)
+    // and only two console mechanisms ever move mfTimeOfDay off it: THIS override, and the
+    // junkyard-lighting latch (EnableJunkyardLightingSetup pins 18:00 = flt_82F307F0 and
+    // EnvironmentManager::Update re-pins it every frame while latched, asm 0x827D6358 --
+    // and that re-pin runs AFTER this override, so the latch wins when both are live).
+    // The one console producer of THIS request, BrnDirector::ArbStateCarSelect::Update
+    // @0x8226F5D0, raises it only in E_STATE_GAME_INTRO_PART_ONE: `stb r28(=1), 0x131(r31)`
+    // + `stfs flt_8200CA28, 0x110(r31)` at 0x8226FC94/0x8226FC9C -- camera(r31+0x10)
+    // +0x121/+0x100 -- with flt_8200CA28 = 0x41840000 = 16.5 h, and 12.5 h (flt_8200CA00 =
+    // 0x41480000) for the outro arms at 0x82270C10 and 0x82270C38. 16.5 * 60 * 60 = 59400 s
+    // = 16:30, late-afternoon golden hour. The ordinary DMV BROWSE state raises nothing --
+    // its console look is the 18:00 junkyard latch, which never fires on this build yet
+    // (no `[env] junkyard` line in the boot log; see the wave findings). The producer's
+    // three writes are ALREADY committed (BrnArbStateCarSelect.cpp:827/905/1255,
+    // KF_JUNKYARD_TIME_OF_DAY / KF_OUTRO_TIME_OF_DAY); with no consumer they went nowhere
+    // and the backdrop sat at 13:00 (`[env] tod=46800.9s (13:00)` in build/game/BrnGame.log).
+    if ( mLastCameraInput.GetEffects().IsTimeOfDaySet() )
+    {
+        // flt_82004C6C == 60.0f, loaded ONCE and used for both multiplies (see above).
+        const f32 KF_MINUTES_PER_HOUR   = 60.0f;
+        const f32 KF_SECONDS_PER_MINUTE = 60.0f;
+        mEnvironmentManager.SetTimeOfDay_Seconds(
+            mLastCameraInput.GetEffects().GetTimeOfDay()
+                * KF_MINUTES_PER_HOUR * KF_SECONDS_PER_MINUTE );
+
+        // [FLAG PC bring-up diagnostic] one-shot proof line, NOT console code. Delete when
+        // the override is signed off. Pairs with the existing `[env] tod=...` line.
+        static bool sbLoggedTimeOfDayOverride = false;
+        if ( !sbLoggedTimeOfDayOverride && CgsDev::Log::gpDebugPrint != 0 )
+        {
+            sbLoggedTimeOfDayOverride = true;
+            *CgsDev::Log::gpDebugPrint
+                << "[env-tod] director camera override ACTIVE: "
+                << mLastCameraInput.GetEffects().GetTimeOfDay() << " h -> "
+                << ( mLastCameraInput.GetEffects().GetTimeOfDay() * 60.0f * 60.0f )
+                << " s\n";
+        }
+    }
+
     // FLAG cross-home cast: BrnWorldIO models the world buffer's timer block as its own
     // 48-byte pointer-free POD while the canonical type is CgsSystem::TimerStatusInterface.
     // Both model the SAME X360 member, the sizes are pinned equal here, and this is the
@@ -4863,9 +4937,13 @@ WorldModule::SetupShaderConstantsBeforeRendering( const rw::math::vpu::Matrix44&
 //  moves. The bring-up chose (0.406, -0.812, 0.419); the real value is
 //  EnvironmentSettings::ComputeKeyLightDirection @0x82678AB0 at the manager's time of day
 //  with the keyframe rig angles (rig 45 deg, tilt 20 deg at horizon / 50 deg at midday) --
-//  (-0.60916963, -0.66981047, +0.42457779) at 12:00 and (-0.42457771, -0.66981045,
-//  +0.60916971) at the Construct default 13:00; 61.7 deg from the bring-up direction at
-//  12:00. The world's shading AND the shadow direction change accordingly, and the sun in
+//  (-0.60917, -0.66981, -0.42458) at 12:00 and (-0.424578, -0.669810, -0.609170) at the
+//  Construct default 13:00 exactly (46800.0 s; the shipped log's tod=46800.9 reads
+//  (-0.42452, -0.66982, -0.60920)). (CORRECTED 2026-08-20, DMV look-dev wave: the Z lane was
+//  POSITIVE here until ComputeKeyLightDirection's two row-vector products were un-transposed
+//  -- see the XMMatrixRotationX/Y vpermwi128 decode in BrnEnvironmentUtil.cpp. The sun
+//  therefore now travels the mirrored-in-Z arc, which is the console's.)
+//  The world's shading AND the shadow direction change accordingly, and the sun in
 //  the sky dome only agrees once BrnRendererModule::PublishSkyConstantsBringUp is retired
 //  in favour of gBrnWorldShaderConstantsFrameBringUp.
 //  The other documented delta is IrradianceQuadricB row 3: the bring-up carried (0,0,0,0),
@@ -4900,7 +4978,9 @@ WorldModule::SetupShaderConstantsBeforeRendering( const rw::math::vpu::Matrix44&
 void
 WorldModule::SetBringUpCameraOverride( const rw::math::vpu::Matrix44Affine& lrTransform,
                                        f32 lfFOVDegrees,
-                                       bool lbIsInJunkyard )
+                                       bool lbIsInJunkyard,
+                                       bool lbSetTimeOfDay,
+                                       f32 lfTimeOfDayHours )
 {
     mBringUpCameraOverride       = lrTransform;
     mfBringUpCameraOverrideFOV   = lfFOVDegrees;
@@ -4908,6 +4988,11 @@ WorldModule::SetBringUpCameraOverride( const rw::math::vpu::Matrix44Affine& lrTr
     // LEVEL, not one-shot (see the header): the junkyard state is a property of the game,
     // not of this frame's camera publish, and the console's camera input is never absent.
     mbBringUpCameraInJunkyardBringUp = lbIsInJunkyard;
+    // LEVEL for the same reason: on the console these two ride the camera record itself, so
+    // they persist exactly as long as the director keeps publishing a camera that carries
+    // them. See the header entry.
+    mbBringUpCameraSetTimeOfDayBringUp   = lbSetTimeOfDay;
+    mfBringUpCameraTimeOfDayHoursBringUp = lfTimeOfDayHours;
 }
 
 // [FLAG PC bring-up] see the header. STANDS IN FOR the four
@@ -5555,6 +5640,19 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
     // latch for the stand-in camera so the streamer's working set follows the view.
     mLastCameraInput.mTransform.Pos() = lPvsPosition;
 
+    // ⭐ ...and the SAME latch for the two fields of that record the ENVIRONMENT consumer
+    // reads. The console's latch is a whole-camera copy, so WorldModule::Update @0x827D63E8
+    // finds the director's time-of-day request already sitting in
+    // mLastCameraInput.mEffects (`lbzx r11, r31, 0x5E1DE1` at 0x827D7CEC == camera +0x121).
+    // Here mLastCameraInput is synthesised, never copied, so without this the restored
+    // override in Update reads Camera::Clear()'s zeroed mbSetTimeOfDay for ever and the DMV
+    // backdrop stays at Construct's 13:00. The values come across from the very camera the
+    // console would have copied -- BrnGameModule::DoDispatch stages them beside the
+    // transform, the FOV and the junkyard bit (SetBringUpCameraOverride).
+    // DELETE with the rest of this producer.
+    mLastCameraInput.GetEffects().mbSetTimeOfDay = mbBringUpCameraSetTimeOfDayBringUp;
+    mLastCameraInput.GetEffects().mfTimeOfDay    = mfBringUpCameraTimeOfDayHoursBringUp;
+
     Vector3 lForward;
     lForward.x = lLookAt.x - lEye.x;
     lForward.y = lLookAt.y - lEye.y;
@@ -5851,7 +5949,9 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
     // reads (mfTimeOfDay, the three sun-rig tuning angles, the 09:00..16:00 elevation
     // clamp) is seeded by EnvironmentManager::Construct, which WorldModule::Construct
     // calls at :451. At the Construct default time of day (46800 s == 13:00) it evaluates
-    // to (-0.4246, -0.6698, +0.6092) -- a real, normalised, downward direction.
+    // to (-0.4246, -0.6698, -0.6092) -- a real, normalised, downward direction. (The Z lane
+    // read +0.6092 until 2026-08-20; ComputeKeyLightDirection was applying XMMatrixRotationX
+    // and XMMatrixRotationY transposed, which negates exactly that lane.)
     //
     // ⚠ IT IS NOT THE DIRECTION THE WORLD IS CURRENTLY LIT BY. Both bring-up publishes
     // (PublishWorldShadingConstantsBringUp below, shader slot 10, and

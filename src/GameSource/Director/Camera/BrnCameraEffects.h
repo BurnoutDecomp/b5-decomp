@@ -189,6 +189,26 @@ struct CameraEffects
     f32 GetShakeAmplitude() const { return mfShakeAmplitude; }
     f32 GetShakeFrequency() const { return mfShakeFrequency; }
 
+    // ---- the time-of-day REQUEST read pair (DWARF BrnCameraEffects.h:148 / :151) --------
+    // The DWARF declares four members for this request: SetTimeOfDay(float32_t) (:142),
+    // ClearTimeOfDay() (:145), IsTimeOfDaySet() const (:148) and GetTimeOfDay() const (:151).
+    // NONE of them has a standalone X360 export (they are absent from the ledger): ARTIST
+    // inlines every one of them at its call sites, which is why only the two FIELDS above
+    // are asm-attested. The two READERS are de-inlined here, named exactly as the DWARF
+    // names them, so the single consumer -- WorldModule::Update @0x827D63E8 -- never forms
+    // `camera + 289` / `camera + 256` itself:
+    //     0x827D7CEC  lbzx  r11, r31, 0x5E1DE1   <- mbSetTimeOfDay  (IsTimeOfDaySet)
+    //     0x827D7D10  lfsx  f13, r31, 0x5E1DC0   <- mfTimeOfDay     (GetTimeOfDay)
+    // (0x5E1DC0/0x5E1DE1 are WorldModule::mLastCameraInput +0x100/+0x121, i.e. this block's
+    // +0x98/+0xB9 -- mLastCameraInput itself sits at WorldModule +0x5E1CC0, independently
+    // pinned by the `lvx128 v1, r31, 0x5E1CF0` at 0x827D7D94 that feeds
+    // EnvironmentManager::Update the camera POSITION, camera +0x30.)
+    // The two WRITERS are deliberately NOT added: the one console producer,
+    // ArbStateCarSelect::Update @0x8226F5D0, is already committed against the fields.
+    // UNITS: HOURS of the day (0..24). The consumer converts with `* 60.0f * 60.0f`.
+    bool IsTimeOfDaySet() const { return mbSetTimeOfDay; }
+    f32  GetTimeOfDay() const   { return mfTimeOfDay; }
+
     // ---- the hook-name accessor set (class:CameraEffects TU; all header-inline in
     // the original -- the h:175/:178/:194 class-body copies and the h:497/:524
     // out-of-class copies compile as SEPARATE X360 functions distinguished only by
