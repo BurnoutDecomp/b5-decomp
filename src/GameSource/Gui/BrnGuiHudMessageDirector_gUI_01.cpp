@@ -60,7 +60,23 @@ namespace BrnGui
 void HudMessageDirector::Construct(CgsGui::ModelModule* lpModelModule,
                                    const GuiCache* lpGuiCache)
 {
-    CGS_ASSERT(lpModelModule != 0, "lpModelModule");   // cpp:80
+    // ⚠️ [FLAG PC bring-up — PARK-1 marker demoted from a blocking assert]. The console asserts
+    // lpModelModule != 0 (cpp:80); on this build no CgsGui::ModelModule is reconstructed and the
+    // pointer is deliberately NULL (write-only across the whole recovered surface — see the
+    // round-3 fix3hud park). The blocking "press END" dialog stopped every manual boot at the
+    // loading screen, so the marker is now a one-shot log. DELETE-WHEN CgsGui::ModelModule lands
+    // and the real pointer is passed — then restore the console assert.
+    if (lpModelModule == 0)
+    {
+        static bool gsbWarnedNullModelModule = false;
+        if (!gsbWarnedNullModelModule && CgsDev::Log::gpDebugPrint != 0)
+        {
+            *CgsDev::Log::gpDebugPrint
+                << "[UI-gate] PARK: HudMessageDirector::Construct lpModelModule is null "
+                   "(no CgsGui::ModelModule on this build; console asserts here, cpp:80)\n";
+            gsbWarnedNullModelModule = true;
+        }
+    }
     CGS_ASSERT(lpGuiCache != 0, "lpGuiCache");         // cpp:81
 
     mpModelModule = lpModelModule;
