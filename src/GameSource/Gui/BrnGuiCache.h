@@ -12,6 +12,12 @@
 #include "GameSource/BurnoutConstants.h"          // EActiveRaceCarIndex, E_ACTIVE_RACE_CAR_INDEX_COUNT
 #include "BrnCommonTypes.h"                        // Vector3 / Vector4 (event-position / camera accessors)
 #include "GameSource/GameState/BrnCgsPlayerName.h" // CgsNetwork::PlayerName (COMPLETE: value member of ReplayPlayerActive below)
+// [gateui r4] CE-4: BrnGui::InGameMessagesQueue is a BY-VALUE member of the cache at
+// +0x4080 (see mInGameMessagesQueue), so the COMPLETE type is required here. No cycle:
+// that header pulls only types.hpp / BrnCommonTypes.h / BrnGameStateSharedIO.h /
+// BrnGuiFlaptComponent.h / BrnFlaptTextFieldRef.h / BrnHudMessageController.h, and none of
+// them (transitively) includes BrnGuiCache.h.
+#include "GameSource/Gui/Flow/HUD/Components/BrnInGameMessagesComponent.h" // BrnGui::InGameMessagesQueue (by value)
 
 // BrnGui::GuiCache subsystem (DecFIGS DWARF: BrnGuiCache.h). StateLoadingHelper is the
 // resource/component watcher embedded in the cache; GuiCache is the cache itself. Only
@@ -38,6 +44,15 @@ namespace BrnTraffic { struct ScoringTrafficData; } // GetScoringTrafficData ret
 // of ReplayPlayerActive (the replay-player-active table entry) and the element returned by
 // GetSortedReplayPlayerActive. Home: GameSource/GameState/BrnCgsPlayerName.h.
 
+// [gateui] The HUD-message controller is BrnResource::HudMessageController
+// (SharedClasses/DataLists/BrnHudMessageController.h). It used to be forward-declared a
+// SECOND time as `BrnGui::HudMessageController`, an unrelated empty type that the two
+// consumers then reinterpret_cast across; the X360 asm settles it (the director's
+// mpController is passed straight to BrnResource::HudMessageController::
+// GetIndexFromMessageHash @0x8267D4C8 in FilterAndSendOffMessage @0x82511640), so the fork
+// is gone and the real type is named here.
+namespace BrnResource { struct HudMessageController; }
+
 namespace BrnGui
 {
     // Pointer-only members of the GuiCache layout (forward-declared; the cache never
@@ -46,7 +61,6 @@ namespace BrnGui
     struct BurnoutSkillsManager;   // GetBurnoutSkillsManager return (pointer only)
     struct OptionsDataProfile;     // GetOptionsDataProfile return (pointer only; home BrnCrashNavOptions.h family)
     struct HudMessageAnalyzer;     // friend of GuiCache (reads the analyzer-carved snapshot members by name)
-    struct HudMessageController;
     struct HudMessageDirector;
     struct MapIconManager;
     class  GuiTracker;             // GetGuiTracker return (pointer only; home GameSource/Gui/SatNav/BrnGuiTracker.h)
@@ -505,6 +519,36 @@ namespace BrnGui
         void SetOnlineStartPending(bool lbPending)   { mbOnlineStartPending = lbPending; }   // +0x4B53
         bool IsOnlineStartPending() const     { return mbOnlineStartPending; }      // +0x4B53 (19283) CrashNavEnterOnlineBase Handle{Disconnected,OverlayComplete}Event lbz
         s32 GetPlayerActiveRaceCarIndex() const                  { return mePlayerActiveRaceCarIndex; }  // DWARF h:924
+
+        // [gateui r3] ADDITIVE GROW -- the twin of the accessor above over the GLOBAL index
+        // carved at +0x4B04 (see the member for the Construct/RecEvent pairing that pins it).
+        // Consumer: HudMessageAnalyzer::HandleRaceCheckpointReached @0x8251B350. No standalone
+        // X360 symbol (the console inlines the load), so this is a header inline like its twin.
+        s32 GetPlayerGlobalRaceCarIndex() const                  { return mePlayerGlobalRaceCarIndex; }
+
+        // [gateui r3] ADDITIVE GROW -- the active-landmark count carved at +0x5286. Returns u8:
+        // the console STORES it with `stb` behind a `<= 512` assert, so the truncation is the
+        // shipped width (see the member). No standalone X360 symbol (inlined at every read).
+        u8 GetNumActiveLandmarks() const                         { return muNumActiveLandmarks; }
+
+        // [gateui r3] @0x82443C50 -- maRaceCarDisconnected[index] @0xA0F4, front-guarded by the
+        // same two range asserts its siblings carry (X360 builds "Invalid EActiveRaceCarIndex : "
+        // + the index; BrnGuiCache.h:3904 / :3905).
+        // FLAG (deliberate host boundary): the console emits this as an OUT-OF-LINE body and the
+        // tree's siblings (IsActiveRaceCarConnecting @0x82443B28, IsRaceCarCrashing @0x824438A8)
+        // are bodied in BrnGuiCache_wB_05/_wB_06.cpp. It is inlined HERE instead so its one
+        // consumer -- HudMessageAnalyzer::HandleEventFinisher, landing this round in
+        // BrnGuiHudMessageAnalyzer_gUI_03.cpp -- does not acquire an unresolved external that
+        // only an as-yet-unmounted GuiCache partfile could satisfy. Behaviour is identical; move
+        // it to _wB_06.cpp next to its twin whenever that partfile is mounted.
+        bool IsActiveRaceCarDisconnected(EActiveRaceCarIndex leActiveRaceCarIndex) const
+        {
+            CGS_ASSERT(0 <= leActiveRaceCarIndex, "Invalid EActiveRaceCarIndex");
+            CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                       "Invalid EActiveRaceCarIndex");
+            return maRaceCarDisconnected[leActiveRaceCarIndex];
+        }
+
         s32 GetActiveRoadRule() const                            { return meActiveRoadRule; }
 
         // ADDITIVE GROW (BrnCarSelectMain wave G). The car-select flow surface. All three were
@@ -614,8 +658,42 @@ namespace BrnGui
         // ADDITIVE GROW: real X360 symbol (called by RenderValue @0x82422030);
         // declaration-only (bodied with the GuiCache accessor TUs).
         u8 GetCheckpointsInEvent() const;
-        const HudMessageController*     GetHudMessageController() const;      // X360 @0x82472D00
+        const BrnResource::HudMessageController* GetHudMessageController() const;  // X360 @0x82472D00
         const HudMessageDirector*       GetHudMessageDirector() const;        // X360 @0x82472D58
+
+        // [gateui r2] DWARF h:2221/:2224 -- the two setters that pair with the getters
+        // above. The X360 INLINES both into BrnGui::GuiModule::Construct @0x82518028
+        // (line 369 `*(gm + 1021872) = a2` with the assert "lpController"
+        // BrnGuiCache.h:2405, and line 376 `*(gm + 1021876) = gm + 639264` with the
+        // assert "lpDirector" BrnGuiCache.h:2433), which is why no standalone body
+        // exists in the export set -- the ASSERT TEXT + the baked header line numbers
+        // are the attestation. Bodied inline here, as the console has them.
+        void SetHudMessageController(const BrnResource::HudMessageController* lpController)
+        {
+            CGS_ASSERT(lpController != 0, "lpController");   // BrnGuiCache.h:2405
+            mpHudMessageController = lpController;
+        }
+        void SetHudMessageDirector(const HudMessageDirector* lpDirector)
+        {
+            CGS_ASSERT(lpDirector != 0, "lpDirector");       // BrnGuiCache.h:2433
+            mpHudMessageDirector = lpDirector;
+        }
+
+        // [gateui r2] FLAG: ADDITIVE HOST ACCESSOR -- no X360 symbol. The console never
+        // needs to ask: its HUD-message controller is always loaded by the time
+        // GuiModule::Update reaches the SetController leg (@0x82527A58 line 912 asserts it
+        // outright). This build has no producer for one yet, so the module's leg must be
+        // able to TEST the pointer without tripping GetHudMessageController's non-null
+        // assert every frame. Same treatment, and same justification, as GetProfile().
+        // DELETE-WHEN a HudMessageController producer lands.
+        bool HasHudMessageController() const { return mpHudMessageController != 0; }
+
+        // [gateui r4] CE-4. The console has NO accessor for this -- BrnFBurnMainHudState::
+        // OnEnter @0x8247B0E8 forms `cache + 16512` by hand and hands it to
+        // InGameMessagesComponent::SetInGameMessagesQueue. This tree does not use console
+        // byte offsets, so the member needs a name to travel through. ADDITIVE, and the only
+        // way the by-value member is reachable from outside.
+        InGameMessagesQueue* GetInGameMessagesQueue() { return &mInGameMessagesQueue; }
 
         // ---- the road-rule-shot block + the online player records (past the
         // modelled tail; RoadRuleShotComponent::Snap @0x82415620 inlines all
@@ -807,6 +885,15 @@ namespace BrnGui
         // accessors above.)
         friend struct OnlineCustomMatch;
 
+        // [gateui] Same exposure rule for the HUD-message DIRECTOR: its
+        // CheckMessageIsAvailable @0x824F2B28 inlines exactly two raw loads off the cache --
+        // the game-mode word (`lwz r30, 0x9E58(r9)`, which picks the offline vs online
+        // availability bit) and the game-flow state (`lwz r12, 0x4B30(r9)`, the "is the player
+        // crashed" test). meGameModeType does have a public GetGameMode() accessor, but
+        // miGameFlowState is one of the X360-only consumer-carved words with no DWARF
+        // accessor row -- the same situation, and the same answer, as the analyzer above.
+        friend struct HudMessageDirector;
+
         // ===================================================================
         //  DATA LAYOUT -- named anchors at asm-proven `this+offset`, gaps
         //  reserved with explicit padding (AGENTS.md "LAYOUT RECOVERY WITH
@@ -838,24 +925,48 @@ namespace BrnGui
         WorldDataController*      mpWorldDataController;  // +0x4064 (16484)
         const BurnoutSkillsManager* mpSkillsManager;      // +0x4068 (16488) DWARF h:1632 (PlayerPositionSingle::RenderValue @0x824223FC)
         FreeburnChallengeManager* mpChallengeManager;    // +0x406C (16492)
-        HudMessageController*     mpHudMessageController; // +0x4070 (16496)
-        HudMessageDirector*       mpHudMessageDirector;   // +0x4074 (16500)
+        // [gateui r2] both pointers are `const` in the DWARF (h:1674/:1677) and both
+        // getters already returned const; the setters above are the only writers.
+        const BrnResource::HudMessageController* mpHudMessageController; // +0x4070 (16496)
+        const HudMessageDirector* mpHudMessageDirector;   // +0x4074 (16500)
         u8  mPad_4078[4];                                // +0x4078..+0x407B
         // ADDITIVE CARVE (HudMessageAnalyzer keystone): the gameplay-HUD gate byte the
         // analyzer's Update checks before firing crash/challenge/trophy/player-left
         // messages (lbz mpGuiCache+0x407C, X360 @0x82527668/0x825276B0/...). FLAG:
         // consumer-named.
         bool mbGameplayHudActive;                        // +0x407C (16508)
-        u8  mPad_407D[0x4930 - 0x407D];                  // +0x407D..+0x492F
-        // ADDITIVE CARVE (HudMessageAnalyzer keystone): the three-slot pending-status
-        // cluster the analyzer's Update resets on wire ids 291/320 (lwz/std @+0x4930/
-        // +0x4934/+0x4938: each status word is cleared when it holds 1 or 2, and the
-        // qword payload is zeroed unconditionally). FLAG: consumer-named -- the
-        // producer-side semantics are unrecovered.
-        s32 miPendingEventStatusA;                       // +0x4930 (18736)
-        s32 miPendingEventStatusB;                       // +0x4934 (18740)
-        u64 mu64PendingEventPayload;                     // +0x4938 (18744)
-        u8  mPad_4940[0x4AE0 - 0x4940];                  // +0x4940..+0x4ADF
+        u8  mPad_407D[0x4080 - 0x407D];                  // +0x407D..+0x407F (alignment tail)
+
+        // ⭐ [gateui r4] CE-4: THE IN-GAME MESSAGE QUEUE'S REAL HOME, replacing the round-2
+        // "pending-status cluster" carve (miPendingEventStatusA/B @+0x4930/+0x4934 and
+        // mu64PendingEventPayload @+0x4938) that ALIASED three of its members.
+        //
+        // PROOF, from the X360 asm of HudMessageAnalyzer::Update @0x82525FC0, the wire-id
+        // 291/320 arm (0x82526B08..0x82526B44) -- the console forms the queue base ITSELF:
+        //     0x82526B08  lwz   r11, 4(r31)          ; mpGuiCache
+        //     0x82526B0C  addi  r11, r11, 0x4080     ; == 16512 == &mInGameMessagesQueue
+        //     0x82526B10  lwz   r10, 0x8B0(r11)      ; maeMessageState[0]   (16512+2224 = 18736)
+        //     0x82526B14  std   r25, 0x8B8(r11)      ; muCurrentEventEndTime = 0  (r25 is
+        //                                            ;   `li r25, 0` @0x82525FE0)
+        //     0x82526B28  stw   r25, 0x8B0(r11)      ; maeMessageState[0] = 0, if it was 1 or 2
+        //     0x82526B2C  lwz   r10, 0x8B4(r11)      ; maeMessageState[1]   (16512+2228 = 18740)
+        //     0x82526B40  stw   r25, 0x8B4(r11)      ; maeMessageState[1] = 0, if it was 1 or 2
+        // 0x8B0 / 0x8B4 / 0x8B8 are exactly maeMessageState[0], maeMessageState[1] and
+        // muCurrentEventEndTime (BrnInGameMessagesComponent.h). So the "unrecovered
+        // producer-side semantics" the carve's FLAG admitted to are simply the message
+        // component's own slot machine, and the arm means "cancel any WAITING/TRANSIN slot
+        // and drop the live expiry".
+        //
+        // The console binds it into the component from BrnFBurnMainHudState::OnEnter
+        // @0x8247B0E8 with the same base -- `SetInGameMessagesQueue(cache + 16512)` -- which
+        // is what makes the two views one object.
+        //
+        // Host width: BrnResource::HudMessageEvent is POINTER-FREE (CgsID + s32/f32 + char
+        // arrays + HudMessageParameter), so sizeof is the console's 0x458 on x64 too and the
+        // whole queue is exactly 0x8C8 bytes here as well -- the one place in this header
+        // where a console span survives the widening intact. Access stays BY NAME regardless.
+        InGameMessagesQueue mInGameMessagesQueue;        // +0x4080 (16512), spans ..+0x4947
+        u8  mPad_4948[0x4AE0 - 0x4948];                  // +0x4948..+0x4ADF
         Vector4 mv4WorldCameraPosition;                  // +0x4AE0 (19168) GetWorldCameraPosition (SatNavRenderer @0x8245FA48 lvx128 mpGuiCache,0x4AE0)
         // ADDITIVE CARVE (BrnCrashNavMap wave J): the leading 8 bytes of the former
         // mPad_4AF0[16] -- the local player's car id. X360-attested as an `ld` (8-byte load)
@@ -865,7 +976,16 @@ namespace BrnGui
         CgsID mLocalPlayerCarId;                         // +0x4AF0 (19184)
         u8  mPad_4AF8[8];                                // +0x4AF8..+0x4AFF
         s32 mePlayerActiveRaceCarIndex;                  // +0x4B00 (19200) EActiveRaceCarIndex (DWARF h; HudMessageAnalyzer::HandleLiveRevengeUpdate @0x8251E2xx)
-        u8   mPad_4B04[0x2C];                             // +0x4B04..+0x4B2F
+        // [gateui r3] ADDITIVE CARVE from the head of the former mPad_4B04[0x2C] -- the local
+        // player's GLOBAL race-car index, the twin of the ACTIVE index at +0x4B00. Pinned as a
+        // PAIR at both ends: GuiCache::Construct @0x82505860 seeds `*(a1+19200) = -1;
+        // *(a1+19204) = -1;` back to back, and GuiCache::RecEvent @0x8250DDF0 writes them from
+        // one event record (`*(+19200) = *rec; *(+19204) = *(rec+4)`). Consumer:
+        // HudMessageAnalyzer::HandleRaceCheckpointReached @0x8251B350 (`lwz 4(event)` compared
+        // against `lwz 0x4B04(cache)`) -- which is why the event carries BOTH indices.
+        // No member is shifted (4 + 0x28 == 0x2C). FLAG: consumer-named.
+        s32  mePlayerGlobalRaceCarIndex;                  // +0x4B04 (19204) EGlobalRaceCarIndex
+        u8   mPad_4B08[0x28];                             // +0x4B08..+0x4B2F
         // ADDITIVE CARVE (HudMessageAnalyzer keystone): the game-flow state word the
         // analyzer's Update gates its trigger passes on (lwz mpGuiCache+0x4B30; fire
         // only when it holds 1 or 3, treat -1 as invalid). FLAG: consumer-named -- the
@@ -944,7 +1064,19 @@ namespace BrnGui
         u8   mPad_4B77[1081];                            // +0x4B77..+0x4FAF
         u8   maPresetRacesStorage[6 * 120];              // +0x4FB0 (20400) PresetRace maPresetRaces[6] (stride 120; GetPresetRace @0x824B2FE8 -> 120*(idx+170)+this; element un-homed)
         s32 miNumPresetRaces;                            // +0x5280 (21120) count of maPresetRaces (GetPresetRace bound)
-        u8  mPad_5284[9436];                             // +0x5284..+0x775F  (holds mSetUpAllEventStartsInterface @0x5690/22160 -- embedded; GetNumEventStarts forwards to it)
+        u8  mPad_5284[2];                                // +0x5284..+0x5285
+        // [gateui r3] ADDITIVE CARVE from the head of the former mPad_5284[9436] -- the count of
+        // ACTIVE landmarks. Producer GuiCache::HandleSetActiveLandmarksEvent @0x824EE7D0 copies
+        // the incoming list into the u16 array at +0x5288 (`addi r10, r30, 0x5288`, `sth`) and
+        // stores the count with a BYTE store (`stb r11, 0x5286(r30)`) after asserting the source
+        // list is <= 0x200 (512); GuiCache::Construct zeroes it. KEEP THIS `u8` -- the console
+        // truncates a >255 list and that is the shipped behaviour, not a bug to widen away.
+        // Consumer: HudMessageAnalyzer::HandleRaceCheckpointReached @0x8251B350.
+        // NOT the same counter as muCheckpointsInEvent (+0x9FB8, GetCheckpointsInEvent
+        // @0x8240F1C0) -- two different "checkpoint" counts on this class.
+        // No member is shifted (2 + 1 + 9433 == 9436); the u16 array at +0x5288 stays padded.
+        u8  muNumActiveLandmarks;                        // +0x5286 (21126)
+        u8  mPad_5287[9433];                             // +0x5287..+0x775F  (holds mSetUpAllEventStartsInterface @0x5690/22160 -- embedded; GetNumEventStarts forwards to it)
         s32 miEventStartsCount;                          // +0x7760 (30560) mSetUpAllEventStartsInterface CgsArray count (ctor -1; GetNumEventStarts sentinel/count @+0x20D0 of the interface)
         u8  mPad_7764[12];                               // +0x7764..+0x776F
         // 256-bit online finish-point bitmask (4 doublewords). GetNumOnlineFinishPoints
@@ -1034,7 +1166,15 @@ namespace BrnGui
         u8  mPad_A0A0[68];                               // +0xA0A0..+0xA0E3
         bool maRaceCarUsed[8];                           // +0xA0E4 (41188) IsActiveRaceCarIndexUsed @0x82443A00 / GetRaceCarPosition used-gate
         bool maRaceCarConnecting[8];                     // +0xA0EC (41196) IsActiveRaceCarConnecting @0x82443B28
-        u8  mPad_A0F4[16];                               // +0xA0F4..+0xA103
+        // [gateui r3] ADDITIVE CARVE from the head of the former mPad_A0F4[16] -- the
+        // per-active-race-car "disconnected from the network" flags, the third table in the
+        // maRaceCarUsed / maRaceCarConnecting run above. X360-attested by
+        // GuiCache::IsActiveRaceCarDisconnected @0x82443C50, whose whole body is the two range
+        // asserts plus `lbzx r3, index, 0xA0F4`. HudMessageAnalyzer::HandleEventFinisher
+        // @0x824F2FB0 also walks all eight bytes (+0xA0F4..+0xA0FB) for its debug dump.
+        // No member is shifted (8 + 8 == 16).
+        bool maRaceCarDisconnected[8];                   // +0xA0F4 (41204) IsActiveRaceCarDisconnected @0x82443C50
+        u8  mPad_A0FC[8];                                // +0xA0FC..+0xA103
         bool maRaceCarCrashing[8];                       // +0xA104 (41220) IsRaceCarCrashing @0x824438A8
         u8  mPad_A10C[36];                               // +0xA10C..+0xA12F
         s8  maEventPositionOfRaceCar[8];                 // +0xA130 (41264) GetEventPositionOfRaceCar @0x82443D78 (place; gated on @0xA140)

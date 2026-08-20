@@ -362,4 +362,19 @@ void HudMessageAnalyzer::HandleOnlineStuntRunMessage(
     TriggerMessage(&lMessage);
 }
 
+// [gateui r2] DWARF BrnGuiHudMessageAnalyzer.h:75. The X360 has NO standalone body for
+// this (it is absent from the ledger's HudMessageAnalyzer function set) because
+// BrnGui::GuiModule::Prepare @0x82518D68 INLINES it as a single store at stage 3:
+//     line 104:  *(v3 + 660992) = v3 + 1005332;
+// i.e. analyzer + 0x00 (mpAccessPointers, DWARF h:97) := the module's shared
+// GuiAccessPointers block. Reconstructed as the de-inlined method the DWARF names
+// (AGENTS "inlining reversal"), since the pointer is private to the analyzer and the
+// handlers dereference it (`mpAccessPointers->mpLanguageManager` in
+// TriggerChallengeEndedMessage @0x82520078 and HandleStuntPerformed @0x8251B7F0).
+// Construct @0x82509060 does not touch it -- the module's Prepare is its only writer.
+void HudMessageAnalyzer::SetAccessPointers(CgsGui::GuiAccessPointers* lpAccessPointers)
+{
+    mpAccessPointers = lpAccessPointers;
+}
+
 }

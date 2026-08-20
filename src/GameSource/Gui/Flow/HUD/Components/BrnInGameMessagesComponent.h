@@ -31,7 +31,7 @@ namespace CgsModule { struct Event; }    // CgsVariableEventQueue.h (AddMessage 
 
 namespace BrnGui
 {
-    class HudMessageController;   // BrnGuiHudMessageDirector.h (pointer-only)
+
     struct HudMessageDirector;    // BrnGuiHudMessageDirector.h (pointer-only)
 
     // The per-slot message lifecycle state (DWARF BrnInGameMessagesComponent.h:54). The
@@ -70,6 +70,23 @@ namespace BrnGui
     class InGameMessagesComponent : public BrnFlaptComponent
     {
     public:
+        // [gateui r3] @ 0x82437050 -- DWARF h:252. Adopt the state channel, invalidate every
+        // apt handle, null the queue/controller/director, clear the three cached string ids
+        // and their param counts, and set meCurrentGameMode to E_MODE_NONE (-1). It ALSO
+        // posts one GuiEvent<157> command (16-byte record, channel 40) on the state's output
+        // queue -- the console's own first act. lacName / lacParentName are the
+        // BrnFlaptComponent-family signature; this override reads NEITHER (the name is used
+        // by Prepare, not Construct) -- verified against the X360 body, which never touches
+        // its a2/a4.
+        //
+        // THE ROUND-2 VERIFIER'S WRONG-4 WAS RIGHT: this -- not AddMessage -- is the ONE
+        // missing piece of the last gateui rung. AddMessage/Prepare/Update/TerminateMessages
+        // were already bodied in this TU; nothing constructed the component, and
+        // BrnFBurnMainHudState::OnEnter logged a "component TU deferred" line instead of
+        // calling it.
+        void Construct(const char* lacName, CgsGui::StateInterface* lpStateInterface,
+                       const char* lacParentName);
+
         // @ 0x8241F190 -- h:197. Resolve the named component out of lFile, bind it into the
         // base mAptRef, reset its timeline and install the transition-complete callback.
         void Prepare(const char* lacName, const BrnFlapt::FileRef& lFile);
@@ -88,13 +105,21 @@ namespace BrnGui
         void EndTransition();
 
         // @ 0x82472BE8 -- h:216. Latch the HUD message controller pointer.
-        void SetController(const HudMessageController* lpController);
+        void SetController(const BrnResource::HudMessageController* lpController);
         // @ 0x82472C48 -- h:221. Latch the HUD message director pointer.
         void SetDirector(const HudMessageDirector* lpDirector);
         // @ 0x82472B80 -- h:244. Latch the current game-mode (range-guarded).
         void SetGameMode(BrnGameState::GameStateModuleIO::EGameModeType leCurrentGameMode);
         // @ 0x82475B80 -- h:239. Adopt the shared message queue and reconcile its live slot.
         void SetInGameMessagesQueue(InGameMessagesQueue* lInGameInMessagesQueue);
+
+        // [gateui r4] The round-3 `bool HasMessageQueue() const` ADDITIVE BRING-UP GATE that
+        // stood here is DELETED. Its DELETE-WHEN ("GuiCache carries the queue and OnEnter's
+        // SetInGameMessagesQueue runs") is met: BrnGuiCache.h now homes the queue by value as
+        // mInGameMessagesQueue @+0x4080 with a GetInGameMessagesQueue() accessor, and
+        // FBurnMainHudState::OnEnter runs the console's SetInGameMessagesQueue
+        // unconditionally, so mpInGameMessagesQueue is never null at any entry point --
+        // exactly the console's own invariant.
 
         // @ 0x824376F0 -- h:248. Retire any message the director no longer allows (clearing
         // its state, dismissing a visible one), then promote a pending next-slot message.
@@ -107,10 +132,17 @@ namespace BrnGui
         // @ 0x824374B8 -- h:306. End the currently-visible message (declared; later slice).
         void EndMessage();
 
-        // @ 0x8241F248 -- h:292. Rebuild the message banner clip/text/icon and publish the
-        // named transition animation (declared here; bodied in a later slice -- it depends on
-        // the un-homed MovieClipRef bind helper vein).
+        // @ 0x8241F248 -- h:289. Rebuild the message banner clip/text/icon and publish the
+        // named transition animation. [gateui r3] BODIED.
         void SendGameMessage(const char* lpcAnimName, bool lbNewIcon);
+
+        // [gateui r3] @ 0x82410E30 -- h:292. Drive the bound Icon_mc clip to a named label;
+        // the literal "EventSpecific" selects the icon for the live game mode instead.
+        void SetIcon(const char* lacIconTypeName);
+
+        // [gateui r3] @ 0x82411210 -- h:273. Push the liIndex'th cached string (and its
+        // cached parameters) into its bound text field through the language manager.
+        void RefreshString(s32 liIndex);
 
         // @ 0x82410F18 -- h:302. Fill the NEXT double-buffer slot with lpEvent, keeping the
         // higher-priority message when the slot is already occupied.
@@ -147,7 +179,7 @@ namespace BrnGui
         char maacCurrentStringStringId[3][64];                  // +0x050 (h:274)
         s32  maaeCurrentStringParamTypes[3][4];                 // +0x110 (h:275)
         char maaacCurrentStringParams[3][4][64];                // +0x140 (h:276)
-        const HudMessageController* mpMessageController;         // +0x440 (h:278)
+        const BrnResource::HudMessageController* mpMessageController;   // +0x440 (h:278)
         const HudMessageDirector*   mpDirector;                 // +0x444 (h:279)
         BrnGameState::GameStateModuleIO::EGameModeType meCurrentGameMode; // +0x448 (h:281)
     };

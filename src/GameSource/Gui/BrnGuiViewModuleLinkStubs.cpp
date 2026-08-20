@@ -48,6 +48,33 @@ template <> void CgsGui::GuiEventQueueBase<32768, 16>::Construct()
 {
     this->CgsModule::VariableEventQueue<32768, 16>::Construct();
 }
+// [gateui] The READ half of the same <32768,16> instantiation. The GUI module input
+// buffer's event queue is what BrnGui::HudMessageAnalyzer::Update @0x82525FC0 drains
+// (`GetFirstEvent`/`GetNextEvent` on the queue sub_8284F238 hands back), and no TU had
+// ever instantiated the pair -- Construct above was the only member that existed. Same
+// thin forwarder to the VariableEventQueue base as every sibling here.
+template <> s32 CgsGui::GuiEventQueueBase<32768, 16>::GetFirstEvent(
+    const CgsModule::Event** lppEvent, s32* lpiSize) const
+{
+    return this->CgsModule::VariableEventQueue<32768, 16>::GetFirstEvent(lppEvent, lpiSize);
+}
+template <> s32 CgsGui::GuiEventQueueBase<32768, 16>::GetNextEvent(
+    const CgsModule::Event* lpEvent, const CgsModule::Event** lppNextEvent, s32* lpiSize) const
+{
+    return this->CgsModule::VariableEventQueue<32768, 16>::GetNextEvent(lpEvent, lppNextEvent, lpiSize);
+}
+// [gateui r2] Clear, the last member of the <32768,16> instantiation with no home.
+// MEASURED (dumpbin /SYMBOLS over the whole Gui mount set): Construct + the read pair
+// above existed; Clear did not, so the first consumer to drain-and-reset a
+// GuiEventQueueBase<32768,16> was an LNK2019 that `cl /c` cannot see. That consumer is
+// now BrnGuiModule::Update's model-input drain (the HudMessageDirector::Update leg --
+// nothing else empties that queue and it overflows after ~39 840-byte HUD messages).
+// Same thin forwarder to the VariableEventQueue base as every sibling here.
+template <> void CgsGui::GuiEventQueueBase<32768, 16>::Clear()
+{
+    this->CgsModule::VariableEventQueue<32768, 16>::Clear();
+}
+
 template <> void CgsGui::GuiEventQueueBase<4096, 16>::Construct()
 {
     this->CgsModule::VariableEventQueue<4096, 16>::Construct();

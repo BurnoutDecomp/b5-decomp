@@ -48,7 +48,7 @@ namespace BrnGui
 
     // @ 0x824EBEF8 -- store the active controller (stw arg, 0x4814) after asserting it is
     // non-null (BrnGuiHudMessageDirector.h:174).
-    void HudMessageDirector::SetController(const HudMessageController* lpController)
+    void HudMessageDirector::SetController(const BrnResource::HudMessageController* lpController)
     {
         CGS_ASSERT(lpController != 0,
                    "Invalid controller passed in to HudMessageDirector::SetController");

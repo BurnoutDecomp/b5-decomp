@@ -244,7 +244,7 @@ bool WorldDataController::Prepare(BrnResource::GameDataIO::InputBuffer* lpGameDa
             reinterpret_cast<const BrnResource::GameDataIO::GameDataAssetEvent*>(lpEvent);
         CGS_ASSERT(lpReply != 0 && lpReply->miEventId == 1, "Invalid event id received\n");  // cpp:226
         if (lpReply != 0)
-            mpChallengeList = static_cast<const ChallengeList*>(lpReply->mHandle.mpResourceMemory);
+            mpChallengeList = static_cast<const BrnResource::ChallengeList*>(lpReply->mHandle.mpResourceMemory);
         mReceiverQueue.Clear();
     }
         // fall through
@@ -442,7 +442,10 @@ const BrnResource::VehicleList* WorldDataController::GetVehicleList() const
 }
 
 // X360 0x824F3AF8. Accessor for the loaded freeburn-challenge-list resource (pointer member @X360 +0x4A8).
-const ChallengeList* WorldDataController::GetFreeburnChallengeList() const
+// [gateui r3] Return type re-spelled from the phantom `BrnGui::ChallengeList` (defined nowhere in
+// the tree) to the real BrnResource::ChallengeList -- see the note in BrnGuiWorldDataController.h.
+// Same for the mpChallengeList store in the resource-reply arm above.
+const BrnResource::ChallengeList* WorldDataController::GetFreeburnChallengeList() const
 {
     return mpChallengeList;
 }

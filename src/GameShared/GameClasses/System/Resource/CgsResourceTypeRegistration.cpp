@@ -19,6 +19,7 @@
 #include "GameShared/GameClasses/SceneManager/Zones/Resources/ZoneListResourceType.h" // CgsResource::ZoneListResourceType (0xB000)
 #include "GameShared/GameClasses/System/Resource/CgsResourceIdListResourceType.h"     // CgsResource::IdListResourceType (0x25)
 #include "GameShared/GameClasses/Gui/Model/Resources/CgsAptDataHeaderType.h"
+#include "GameShared/GameClasses/Gui/Model/Resources/CgsGuiHudMessageType.h"  // CgsResource::HudMessageResourceType (0x2C == 44)
 #include "GameShared/GameClasses/Fsm/Resources/CgsLuaCodeResource.h"   // CgsResource::LuaCodeResourceType (0x22)
 #include "GameShared/GameClasses/Language/Resources/CgsLanguageResourceType.h" // CgsResource::LanguageResourceType (0x27)
 #include "GameShared/GameClasses/RenderWare/cross/CgsRwRenderableResourceType.h"          // 0xC
@@ -348,6 +349,17 @@ namespace CgsResource
         TypeRegistry::Register(&sEntryList, "EntryList");
         static AptDataHeaderType           sAptDataHeader;     // 0x1E  AptData (GUI/Flash movie header)
         TypeRegistry::Register(&sAptDataHeader, "AptDataHeader");
+        // ⭐ [gateui r4] CE-2. HUD messages, type 44 (0x2C) -- the handler existed
+        // (CgsGuiHudMessageType.cpp, all four virtuals reconstructed off
+        // 0x82846578/0x8267B110/0x828465D8/0x828465E8) but was NEVER REGISTERED, so
+        // TypeRegistry::GetType(44) answered null, CgsResourceBundleLoader.cpp's
+        // `mpResourceType != 0` guards (:195/:251/:258/:266) skipped every FixUp / import /
+        // PostFixUp pass, and the acquire completed with an UN-RELOCATED pointer table --
+        // which is why GameDataModule::PrepareHudMessages had to refuse to bind. Verified
+        // against the shipped bundle: `build/game/HUDMESSAGES.HM` carries `2c 00 00 00` as
+        // its resource type at 0x68 (verify_r3_fix3hud §1.4, re-measured byte for byte).
+        static HudMessageResourceType      sHudMessage;        // 0x2C  HudMessage (HUDMESSAGES.HM)
+        TypeRegistry::Register(&sHudMessage, "HudMessage");
         static LuaCodeResourceType         sLuaCode;           // 0x22  LuaCode (FSM scripts; loaded by the GUI flow)
         TypeRegistry::Register(&sLuaCode, "LuaCode");
         static LanguageResourceType        sLanguage;          // 0x27  Language (localised string table)

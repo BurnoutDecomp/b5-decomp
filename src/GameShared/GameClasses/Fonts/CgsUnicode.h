@@ -76,6 +76,17 @@ namespace CgsUnicode
     // descriptor (string-table size).
     u32 ByteLength(const u8* lpUtf8String);
 
+    // [gateui r5] ADDITIVE GROW. CHARACTER (not byte) length of a NUL-terminated UTF-8 string:
+    // every byte that is not a 10xxxxxx continuation byte counts as one character, so it is
+    // ByteLength's multi-byte-aware sibling. X360 ARTIST 0x828357A0; it opens with its own
+    // "IsValidUtf8String(lpUtf8String)" assert (CgsUnicode.cpp:77). Reached from the
+    // LanguageManager separator setters, whose tripwires read
+    // "StringLength(lUtf8ThousandsSeparator) <= 1" (CgsUnicode.h:598 / :617 on the console --
+    // those two lines are the header-inline UnicodeBuffer::SetThousandsSeparator /
+    // SetDecimalPointCharacter, folded into every Format*String leaf that sets a separator).
+    // Body in CgsUnicode.cpp.
+    s32 StringLength(const CgsUtf8* lpUtf8String);
+
     // Validate the UTF-8 character at lpUtf8Char: its lead byte must be a valid lead and be
     // followed by the right number of continuation (10xxxxxx) bytes. X360 ARTIST 0x82834D10.
     // Returns 1 (valid / NUL) or 0 (invalid). Used by IsValidUtf8String.

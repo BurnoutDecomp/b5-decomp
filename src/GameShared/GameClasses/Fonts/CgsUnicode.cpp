@@ -211,6 +211,23 @@ namespace CgsUnicode
         return false;
     }
 
+    // [gateui r5] Faithful port of X360 ARTIST 0x828357A0: the CHARACTER length of a UTF-8
+    // string. The console validates the string first (its one assert, CgsUnicode.cpp:77), then
+    // walks the bytes counting every byte that is NOT a 10xxxxxx continuation byte -- i.e. one
+    // count per UTF-8 character however many bytes it occupies.
+    s32 StringLength(const CgsUtf8* lpUtf8String)
+    {
+        CGS_ASSERT(IsValidUtf8String(lpUtf8String), "IsValidUtf8String(lpUtf8String)");   // cpp:77
+
+        s32 liLength = 0;
+        for (const CgsUtf8* lpByte = lpUtf8String; *lpByte != 0; ++lpByte)
+        {
+            if ((*lpByte & 0xC0) != 0x80)
+                ++liLength;
+        }
+        return liLength;
+    }
+
     // Faithful port of X360 ARTIST 0x82834478: copy at most lnMaxTargetStringLength bytes of
     // the source string into the target, always NUL-terminating, and NEVER cutting a multi-byte
     // UTF-8 character: when the byte cap is reached, back up over any trailing continuation

@@ -138,7 +138,16 @@ namespace BrnResource
             if (!PrepareWheelList())
                 return false;
             // fall through
-            // (X360 stages 13 PrepareHudMessages and 14 PreparePopups follow -- deferred.)
+        case E_PREPARE_HUD_MESSAGES:
+            // [gateui r3] X360 stage 13: PrepareHudMessages @0x8266C8E0 -- "HudMessages.hm"
+            // into pool 11, then acquire + HudMessageController::AddMessages. This is what
+            // gives GuiCache::mpHudMessageController something to point at.
+            // (X360 stage 14 PreparePopups @0x8266CBA0 -- "Popups.pup", same shape, same
+            //  pool -- still deferred: nothing in this tree consumes a PopupController.)
+            mePrepareStage = E_PREPARE_HUD_MESSAGES;
+            if (!PrepareHudMessages())
+                return false;
+            // fall through
         case E_PREPARE_DONE:
             meReleaseStage = E_PREPARE_START;
             mePrepareStage = E_PREPARE_DONE;
@@ -923,10 +932,18 @@ namespace BrnResource
         }
 
         const s32 KI_DATA_LIST_POOL_ID = 5;   // X360 immediate (the "GameData" pool)
+
+        // [gateui r3] PrepareHudMessages @0x8266C8E0 uses a DIFFERENT pool: `li r26, 0xB`
+        // at 0x8266C948, stored as the LoadBundleRequest's miPoolId (var_84 @+140) and
+        // again as the AcquireResourceRequest's miPoolId (var_128 @+8). Its sibling
+        // PreparePopups @0x8266CBA0 uses the same 11. Reading 5 here would push the HUD
+        // message bundle into the GameData pool and the acquire would miss.
+        const s32 KI_GUI_DATA_POOL_ID  = 11;  // X360 immediate (`li r26, 0xB`)
     }
 
     bool GameDataModule::PrepareDataListResource(s32& lriStage, const char* lpcBundleFileName,
                                                  const char* lpcResourceName, bool lbAllowFailure,
+                                                 s32 liPoolId,
                                                  CgsResource::ResourceHandle* lpOutHandle)
     {
         CgsResource::ResourceIO::InputBuffer* lpResourceInput = GetListPrepareResourceInput();
@@ -947,7 +964,7 @@ namespace BrnResource
             lRequest.miEventId = 0;
             lRequest.SetFileName(lpcBundleFileName);
             lRequest.mbLiveUpdateReplace = false;
-            lRequest.miPoolId            = KI_DATA_LIST_POOL_ID;
+            lRequest.miPoolId            = liPoolId;
             lRequest.mbAllowFailiure     = lbAllowFailure;
             lRequest.mbUseHDCache        = false;
             lpResourceInput->GetResourceQueue()->AddEvent(
@@ -977,7 +994,7 @@ namespace BrnResource
             memset(&lRequest, 0, sizeof(lRequest));
             lRequest.mpUser    = &mReceiverQueue;
             lRequest.miEventId = 0;
-            lRequest.miPoolId  = KI_DATA_LIST_POOL_ID;
+            lRequest.miPoolId  = liPoolId;
             lRequest.mResourceId.SetHash(static_cast<u64>(static_cast<u32>(
                 CgsResource::ID::HashString(reinterpret_cast<const u8*>(lpcResourceName)))));
             lRequest.mbCheckRefCount = false;
@@ -1056,6 +1073,7 @@ namespace BrnResource
         if (!PrepareDataListResource(miVehicleListPrepareStage,
                                      "Vehicles/VehicleList.bundle", "B5VehicleList",
                                      true /*mbAllowFailiure -- the X360 sets 1 here*/,
+                                     KI_DATA_LIST_POOL_ID,
                                      &lHandle))
             return false;
 
@@ -1134,6 +1152,7 @@ namespace BrnResource
         if (!PrepareDataListResource(miICEListPrepareStage,
                                      "Cameras.bundle", "StandardICETakes",
                                      false /*mbAllowFailiure -- the X360 leaves it 0*/,
+                                     KI_DATA_LIST_POOL_ID,
                                      &lHandle))
             return false;
 
@@ -1185,6 +1204,7 @@ namespace BrnResource
         if (!PrepareDataListResource(miWheelListPrepareStage,
                                      "Wheels/WheelList.bundle", "B5WheelList",
                                      false /*mbAllowFailiure -- the X360 sets 0 here*/,
+                                     KI_DATA_LIST_POOL_ID,
                                      &lHandle))
             return false;
 
@@ -1209,6 +1229,127 @@ namespace BrnResource
             *CgsDev::Log::gpDebugPrint
                 << "[GameData]   wheel '5Spoke_19_16_650' index=" << liWheel << "\n";
         }
+        return true;
+    }
+
+    // ========================================================================================
+    // [gateui r3] @ 0x8266C8E0 -- Prepare stage 13, PrepareHudMessages. THE PRODUCER OF
+    // BrnResource::HudMessageController. Until this landed, GuiCache::mpHudMessageController
+    // had ZERO writers anywhere in the tree, so HudMessageDirector::FilterAndSendOffMessage
+    // stopped every HUD message at its `mpController` assert (cpp:222) and the gateui ladder
+    // could never reach `[UI-gate] hud message sent`.
+    //
+    // Structurally identical to the vehicle/wheel/ICE machine (same six states, same
+    // LoadBundleRequest -> wait -> AcquireResourceRequest -> wait -> bind shape, same
+    // "Invalid event id received\n" asserts at cpp:1015 / cpp:1045, same "Invalid Stage\n"
+    // default), with exactly two differences, both X360-measured:
+    //   * POOL 11, not 5 (`li r26, 0xB` @0x8266C948 -- see KI_GUI_DATA_POOL_ID);
+    //   * the terminal step hands the ACQUIRE RESPONSE to HudMessageController::AddMessages
+    //     (`addis r3, r30, 6 / addi r3, r3, 0x5950 / bl AddMessages` @0x8266CB10), instead of
+    //     binding a typed ResourcePtr and calling a list's AddListResource.
+    //
+    // [marked deviation] the shared helper hands back a ResourceHandle rather than the queued
+    // event record, so the response AddMessages reads is rebuilt from that handle here. The
+    // console's AddMessages @0x8267D580 reads exactly ONE thing out of the response --
+    // `CreateFromHandle(this + 4, response + 24)`, i.e. the {mpResourceMemory, mpSourceEntry}
+    // handle pair -- so the two forms are observationally identical.
+    bool GameDataModule::PrepareHudMessages()
+    {
+        CgsResource::ResourceHandle lHandle;
+        lHandle.Clear();
+        if (!PrepareDataListResource(miHudMessagesPrepareStage,
+                                     "HudMessages.hm", "HudMessages.hm",
+                                     false /*mbAllowFailiure -- the X360 stores 0 @0x8266C9C8*/,
+                                     KI_GUI_DATA_POOL_ID,
+                                     &lHandle))
+        {
+            // [DIAG] NOT IN THE X360 BINARY, and NOT a new failure mode -- the stage still
+            // waits exactly as the vehicle/ICE/wheel siblings do, for ever if need be. This
+            // is a one-shot LOUD tripwire so that verify_r3_fix3hud's SUSPECT-1 (a boot hang
+            // on the mounted path, invisible because Prepare simply never completes) is
+            // diagnosable from BrnGame.log instead of looking like a freeze. Three firsts
+            // stack up in this one stage and none had ever run in this tree before round 3:
+            // the first `.hm` bundle requested, the first pool-11 acquire, and the first
+            // acquire of a type whose handler round 4 only just registered.
+            // Unconditional (not BRN_PROP_DIAG-gated) to match this file's house style --
+            // every other gpDebugPrint in BrnGameDataModule.cpp is unconditional -- and it
+            // prints at most once per process.
+            static const s32 KI_HUD_MESSAGE_STALL_WARN_PUMPS = 600;   // ~10 s at 60 Hz
+            static s32       siHudMessageWaitPumps           = 0;
+            static bool      sbHudMessageStallReported       = false;
+
+            ++siHudMessageWaitPumps;
+            if (!sbHudMessageStallReported &&
+                siHudMessageWaitPumps >= KI_HUD_MESSAGE_STALL_WARN_PUMPS &&
+                CgsDev::Log::gpDebugPrint != 0)
+            {
+                sbHudMessageStallReported = true;
+                *CgsDev::Log::gpDebugPrint
+                    << "[GameData] PrepareHudMessages: STILL WAITING after "
+                    << siHudMessageWaitPumps
+                    << " pumps at sub-stage " << miHudMessagesPrepareStage
+                    << " -- the HudMessages.hm LoadBundle/acquire has not answered on pool "
+                    << KI_GUI_DATA_POOL_ID
+                    << ". GameData Prepare stage 13 cannot complete and the boot will not"
+                       " advance past it.\n";
+            }
+            return false;
+        }
+
+        // ⭐ [gateui r4] THE ROUND-3 REFUSAL GATE IS DELETED. It read the registry for type
+        // 44 and, finding no handler, declined the bind -- because
+        // CgsResource::HudMessageResourceType existed (CgsGuiHudMessageType.cpp, GetTypeID
+        // 44) but was never registered, so CgsResourceBundleLoader.cpp's
+        // `mpResourceType != 0` guards (:195/:251/:258/:266) skipped every FixUp pass and the
+        // acquire handed back a pointer table that was still a FILE OFFSET. Both halves are
+        // now closed in the same commit: the type is registered
+        // (CgsResourceTypeRegistration.cpp, "HudMessage") and its FixUp/FixDown relocate at
+        // HOST pointer width (CgsGuiHudMessage.cpp / CgsGuiHudMessageType.cpp, GetLoadBase64)
+        // -- which is what the shipped bundle needs, since build/game/HUDMESSAGES.HM is
+        // already transcoded to platform 4 with 8-byte slots (mppHudMessageData reads 0x80,
+        // the 250 table entries at an 8-byte stride, record stride 0x170 == the host
+        // sizeof(CgsGui::GuiHudMessageData)). With FixUp running, the bind must proceed.
+        if (lHandle.mpResourceMemory != 0)
+        {
+            CgsResource::Events::AcquireResourceResponse lResponse;
+            lResponse.mpUser           = &mReceiverQueue;
+            lResponse.miEventId        = 0;
+            lResponse.miPoolId         = KI_GUI_DATA_POOL_ID;
+            lResponse.mpResourceMemory = lHandle.mpResourceMemory;
+            lResponse.mpSourceEntry    = lHandle.mpSourceEntry;
+            mHudMessageController.AddMessages(&lResponse);
+
+            // [DIAG] NOT IN THE X360 BINARY -- the gateui ladder's producer rung, guarded by
+            // the wave's single knob (BRN_PROP_DIAG) exactly like PropEntityModule_wQ_04.cpp.
+            // Fires ONCE, at the bind, and reports the loaded message count so a silently
+            // empty table (unregistered type 44 / skipped FixUp) is visible here rather than
+            // as an "Unable to find message" line 400 frames later.
+            {
+                static const bool sbUiGateDiag = (getenv("BRN_PROP_DIAG") != 0);
+                if (sbUiGateDiag && CgsDev::Log::gpDebugPrint != 0)
+                {
+                    *CgsDev::Log::gpDebugPrint
+                        << "[UI-gate] hud controller bound msgs="
+                        << mHudMessageController.GetMessageLoadedCount() << "\n";
+                }
+            }
+        }
+        else
+        {
+            // [marked deviation] the console has no null path here (mbAllowFailiure is 0, so
+            // a missing bundle asserts inside the loader). Report instead of binding a null
+            // resource -- AddMessages would dereference it through mMessagesPtr->
+            // miHudMessageCount for its own 300-message cap assert.
+            *CgsDev::Log::gpDebugPrint
+                << "[GameData] PrepareHudMessages: HudMessages.hm did not resolve"
+                   " -- the HUD message table is EMPTY (the director will reject every"
+                   " message at GetIndexFromMessageHash)\n";
+        }
+
+        *CgsDev::Log::gpDebugPrint
+            << "[GameData] PrepareHudMessages: "
+            << ((lHandle.mpResourceMemory != 0) ? mHudMessageController.GetMessageLoadedCount() : 0)
+            << " hud messages\n";
         return true;
     }
 
@@ -1246,6 +1387,7 @@ namespace BrnResource
         miVehicleListPrepareStage       = 0;
         miICEListPrepareStage           = 0;
         miWheelListPrepareStage         = 0;
+        miHudMessagesPrepareStage       = 0;   // [gateui r3] X360 a1[145]
 
         // X360 0x82671B90 also constructs the two resident data tables here (VehicleList::
         // Construct @0x82677850 and WheelList::Construct @0x82677DB8 both list
@@ -1253,6 +1395,12 @@ namespace BrnResource
         // stages 9/12: AddListResource appends into slot tables that Construct seeds with -1.
         mVehicleList.Construct();
         mWheelList.Construct();
+
+        // [gateui r3] X360 0x82671D1C: HudMessageController::Construct(this + 0x65950) --
+        // through the ICF-folded one-store symbol at 0x82676600 (see the banner on
+        // HudMessageController::Construct). It MUST run before Prepare stage 13:
+        // AddMessages' first act is the "already loaded" tripwire on mbMessagesUsed.
+        mHudMessageController.Construct();
 
         // X360 0x82671B90 (tail): reset the bank->allocator registry -- the inline
         // `maiAllocatorMap[0..66] = -1` loop == AllocatorList::Construct. CreateAllocators

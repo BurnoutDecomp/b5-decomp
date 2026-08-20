@@ -960,8 +960,12 @@ namespace BrnGui
     // X360 GuiModule::Construct (0x82518028) builds the whole GUI subsystem. This slice
     // constructs the view module, the movie manager, and the real flow-controller chain
     // (cache + HUD flow + FSM controller).
-    void GuiModule::Construct()
+    void GuiModule::Construct(const BrnResource::HudMessageController* lpHudMessageController)
     {
+        // X360 GuiModule::Construct @0x82518028, pseudocode lines 327-332 -- the console's
+        // own argument assert, fired before anything is built.
+        CGS_ASSERT(lpHudMessageController != 0, "lpHudMessageController");   // BrnGuiModule.cpp:229
+
         // Route through the real BrnGui::ViewModule::Construct @0x824F13B8 with the X360
         // caller's recovered args: the view flapt count (7), a 16:9 aspect, and the real
         // alternate-text-colours table + count 8 (see the static above). The
@@ -1022,6 +1026,49 @@ namespace BrnGui
         mHudFlow.Construct(&mGuiCache);
         mOverlayFlow.Construct(&mGuiCache);
         mFsmController.Construct();
+
+        // ---- the HUD-message pair (gateui wave, round 2) --------------------------------
+        // X360 GuiModule::Construct @0x82518028, lines 277-278 + 376, verbatim order:
+        //     HudMessageDirector::Construct(gm + 639264, gm + 552, gm + 1005376);
+        //     HudMessageAnalyzer ::Construct(gm + 660992, gm + 639264);
+        //     ... *(gm + 1021876) = gm + 639264;   // GuiCache::SetHudMessageDirector
+        //
+        // ⚠ FLAG PC bring-up (argument sourcing only -- both bodies are real
+        // reconstructions): the console's first Construct argument is its embedded
+        // CgsGui::ModelModule (gm+552 == the CgsGui::GuiModule base's +0x228). This tree's
+        // BrnGui::GuiModule derives straight from CgsModule::ModuleSingleBuffered and there
+        // is no reconstructed CgsGui::ModelModule anywhere, so there is nothing to pass and
+        // NOTHING IS FABRICATED HERE -- the argument is NULL and the console's own
+        // "lpModelModule" assert (BrnGuiHudMessageDirector.cpp:80) fires ONCE per boot as
+        // the honest marker for that gap. It costs no behaviour: mpModelModule is
+        // write-only in the whole recovered surface (the console reaches the model IO
+        // buffer through ModelModule::AddGuiEvents @0x8285DF50, which never touches its own
+        // `this`), and HudMessageDirector::Update takes the buffer as its own argument.
+        // DELETE-WHEN CgsGui::ModelModule is reconstructed (or BrnGui::GuiModule is given
+        // its CgsGui::GuiModule base).
+        mHudMessageDirector.Construct(0, &mGuiCache);
+        mHudMessageAnalyzer.Construct(&mHudMessageDirector);
+
+        // ⭐ [gateui r4] THE CONTROLLER HAND-OFF -- the missing writer of
+        // GuiCache::mpHudMessageController. X360 GuiModule::Construct @0x82518028
+        // pseudocode lines 362-368, IMMEDIATELY before the director store:
+        //     if ( !a2 ) { BeginAssert; FireAssert("lpController",
+        //                  "..\\..\\..\\GameSource\\Gui/BrnGuiCache.h", 2405); EndAssert; }
+        //     *(a1 + 1021872) = a2;                     // == GuiCache +0x4070, mpHudMessageController
+        //     if ( a1 == -639264 ) { ... "lpDirector", BrnGuiCache.h, 2433 ... }
+        //     *(a1 + 1021876) = a1 + 639264;            // == GuiCache +0x4074, mpHudMessageDirector
+        // (1021872 - 1005376 == 16496 == 0x4070 and 1021876 - 1005376 == 16500 == 0x4074,
+        // the two members BrnGuiCache.h:917/918 pin -- so the console's order really is
+        // controller THEN director.) The setter carries the console's assert already, so the
+        // CGS_ASSERT below is the ARGUMENT one (BrnGuiModule.cpp:229) re-stated at the point
+        // of use rather than a second copy of BrnGuiCache.h:2405.
+        CGS_ASSERT(lpHudMessageController != 0,
+                   "lpHudMessageController (GuiCache::mpHudMessageController would stay null "
+                   "and every HUD message would die at FilterAndSendOffMessage's mpController "
+                   "assert)");
+        mGuiCache.SetHudMessageController(lpHudMessageController);
+
+        mGuiCache.SetHudMessageDirector(&mHudMessageDirector);
 
         // The REAL GUI resource-loading module + its persistent IO pair (replaces the
         // host FSM-bundle stand-in). Construct the IO buffers (their embedded queues come
@@ -1199,6 +1246,15 @@ namespace BrnGui
             reinterpret_cast<const BrnProgression::ProgressionData*>(s_pcProgressionManifestBacking));
         mProfileManager.SetLiveRevengeProfile(
             reinterpret_cast<BrnNetwork::LiveRevengeProfile*>(s_pcLiveRevengeProfileBacking));
+
+        // X360 GuiModule::Prepare @0x82518D68 STAGE 3, line 104: `*(gm + 660992) = gm +
+        // 1005332`, i.e. the analyzer adopts the shared GuiAccessPointers block (the same
+        // block the three flows are prepared against, one line below). The console inlines
+        // the store; the DWARF names the method (BrnGuiHudMessageAnalyzer.h:75) and it is
+        // bodied as the de-inlined form in BrnGuiHudMessageAnalyzer.cpp. Without it
+        // mpAccessPointers is never written and TriggerChallengeEndedMessage /
+        // HandleStuntPerformed dereference it (mpAccessPointers->mpLanguageManager).
+        mHudMessageAnalyzer.SetAccessPointers(&s_GuiAccessPointers);
 
         mHudFlow.Prepare(&s_GuiAccessPointers, /*lpAllocator*/ 0, &mHudStatePool,
                          &mProfileManager);
@@ -2346,6 +2402,124 @@ namespace BrnGui
                                                 &mGuiOutQueue, mpTextureAllocator);
                 lpGameDataInput->UnlockForWrite();
             }
+        }
+
+        // ---- 3d. THE HUD-MESSAGE PUMP (gateui wave, round 2) --------------------------
+        // X360 GuiModule::Update @0x82527A58, reproduced in the console's own order:
+        //
+        //   910  v153 = gm + 1005376;
+        //   911  VariableEventQueue<32768,16>::AddEvent(v156, &v153, 64, 4);
+        //          -- v156 == sub_8284F238(a5) == CgsGuiModuleIO::InputBuffer::GetGuiEvents(),
+        //             i.e. the console PUSHES the GuiCache pointer (event 64) back into the
+        //             very queue the analyzer is about to drain. That record is how
+        //             HudMessageAnalyzer::mpGuiCache gets set: Construct @0x82509060 leaves
+        //             it NULL and Update's case 64 latches it (_wB_12). Without this push
+        //             the analyzer's first `mpGuiCache->...` is a null deref.
+        //   912-929 the mpHudMessageController assert (BrnGuiCache.h:2418) + SetController.
+        //   1015 LockForWrite(a8)                        -- the VIEW input buffer
+        //   1022 v114 = ViewIO::InputBuffer::GetViewStateQueue(a8)
+        //   1024 HudMessageAnalyzer::Update(gm + 660992, v115, v114)
+        //   1031 UnlockForWrite(a8)
+        //   1035 HudMessageDirector::Update(gm + 639264, v150)   -- v150 == the ModelIO
+        //          input buffer, the same one GuiCache::Update is handed at line 1048.
+        //
+        // The console runs the analyzer between ColourCalibrationScreen::Update (1007) and
+        // GuiOverlaysDirector::Update (1032); this build has no overlays director, so the
+        // block sits immediately after the calibration screen and before the flow ticks --
+        // the same slot.
+        if (mpGuiEventInputBuffer != 0)
+        {
+            mpGuiEventInputBuffer->LockForWrite();
+            {
+                CgsGui::CgsGuiModuleIO::InputBuffer::GuiEventInputQueue* lpGuiEvents =
+                    mpGuiEventInputBuffer->GetGuiEvents();
+
+                // console line 910-911 (the X360 size literal is 4 -- its pointer width;
+                // the host record is 8, so the push rides sizeof, as every other event
+                // producer in this TU does).
+                GuiEventCache lCacheEvent;
+                lCacheEvent.mpGuiCache = &mGuiCache;
+                lpGuiEvents->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lCacheEvent),
+                                      64, static_cast<s32>(sizeof(lCacheEvent)));
+
+                // console lines 911-928, and the SHAPE below is the CONSOLE'S OWN, not a
+                // PC gate: it fires a NON-GATING `mpHudMessageController` assert
+                // (BrnGuiCache.h:2418) and then wraps the SetController call in
+                // `if ( *(a1 + 1021872) )` -- i.e. it too declines to publish a null
+                // controller.
+                //
+                // ⭐ [gateui r4] THE ROUND-3 PARK IS RETIRED. Its DELETE-WHEN ("a
+                // HudMessageController producer lands") is met twice over:
+                // GameDataModule::PrepareHudMessages fills mHudMessageController, and
+                // GuiModule::Construct now receives it as the console's `a2` and stores it
+                // through GuiCache::SetHudMessageController. So this gate is expected to be
+                // TRUE from the first frame and the assert below is a tripwire, not a
+                // standing gap report.
+                //
+                // The assert fires ONCE rather than per frame: a per-pump assert storm is
+                // what the 440-assert perf incident was, and the console reaches this line
+                // once per frame too.
+                if (!mGuiCache.HasHudMessageController())
+                {
+                    static bool sbNoControllerAssertFired = false;
+                    if (!sbNoControllerAssertFired)
+                    {
+                        sbNoControllerAssertFired = true;
+                        CgsDev::Assert::BeginAssert();
+                        CgsDev::Assert::FireAssert(
+                            "mpHudMessageController",
+                            "..\\..\\..\\GameSource\\Gui/BrnGuiCache.h", 2418);
+                        CgsDev::Assert::EndAssert();
+                    }
+                }
+                else
+                {
+                    mHudMessageDirector.SetController(mGuiCache.GetHudMessageController());
+                }
+
+                // console lines 1015-1031: the analyzer runs with the VIEW input buffer
+                // write-locked across it (it appends view-state records through
+                // mpViewOutputQueue).
+                mViewInputBuffer.LockForWrite();
+                mHudMessageAnalyzer.Update(lpGuiEvents, &mViewInputBuffer.GetViewStateQueue());
+                mViewInputBuffer.UnlockForWrite();
+            }
+            mpGuiEventInputBuffer->UnlockForWrite();
+        }
+
+        // console line 1035. The director drains its own published messages (event 154)
+        // into the model module's input GUI-event queue.
+        mHudMessageDirector.Update(&mModelInputBuffer);
+
+        // FLAG PC bring-up (dispatch seam, NOT a behaviour change): on the console the
+        // records the director just appended are consumed by the embedded
+        // CgsGui::ModelModule's own update -- the EventInterpreterModule fans them out to
+        // every registered observer, which is how event 154 reaches
+        // BrnFBurnMainHudState::RecvEvent. This build models that fan-out with
+        // RouteEventToFlow (see DispatchInboundGuiEvents), so the same walk is run here
+        // over the model input buffer's queue. It is ALSO what keeps that queue bounded:
+        // nothing else drains or clears it, and a GuiHudMessage is ~840 bytes against a
+        // 32768-byte queue -- roughly 39 messages to an overflow assert.
+        // DELETE-WHEN CgsGui::ModelModule is reconstructed and owns this dispatch.
+        {
+            mModelInputBuffer.LockForRead();
+            const CgsGui::ModelIO::InputBuffer::GuiEventInputQueue* lpModelEvents =
+                static_cast<const CgsGui::ModelIO::InputBuffer&>(mModelInputBuffer).GetEventQueue();
+            const CgsModule::Event* lpEvent = 0;
+            s32 liSize = 0;
+            s32 liId = lpModelEvents->GetFirstEvent(&lpEvent, &liSize);
+            while (liId >= 0 && lpEvent != 0)
+            {
+                RouteEventToFlow(lpEvent, liId, liSize);
+                const CgsModule::Event* lpNext = 0;
+                liId = lpModelEvents->GetNextEvent(lpEvent, &lpNext, &liSize);
+                lpEvent = lpNext;
+            }
+            mModelInputBuffer.UnlockForRead();
+
+            mModelInputBuffer.LockForWrite();
+            mModelInputBuffer.GetEventQueueNonConst()->Clear();
+            mModelInputBuffer.UnlockForWrite();
         }
 
         // ---- 4. the flow ticks (each current state's PreUpdate/Update/PostUpdate) -----

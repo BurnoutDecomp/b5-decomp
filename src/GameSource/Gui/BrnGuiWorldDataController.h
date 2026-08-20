@@ -31,10 +31,16 @@
 
 namespace BrnProgression { struct RaceEventData; struct ProgressionData; }
 namespace BrnTrigger     { struct TriggerData; struct Landmark; struct BoxRegion; }
-namespace BrnResource    { struct VehicleList; namespace GameDataIO { struct InputBuffer; } }
+namespace BrnResource    { struct VehicleList; class ChallengeList; namespace GameDataIO { struct InputBuffer; } }
 namespace BrnStreetData  { struct StreetData; }
 namespace BrnGameState   { class  LandmarkIndex; }
-namespace BrnGui { struct ChallengeList; }
+// [gateui r3] CORRECTED: this file used to forward-declare `BrnGui::ChallengeList` and type
+// both GetFreeburnChallengeList() and mpChallengeList with it. NO SUCH TYPE EXISTS -- nothing
+// in the tree ever defines BrnGui::ChallengeList, so the accessor returned a pointer to a
+// permanently-incomplete phantom and every caller had to bridge it with a reinterpret_cast.
+// The real type is BrnResource::ChallengeList (SharedClasses/DataLists/ChallengeList.h:44),
+// which is exactly what BrnGuiCache.h already spells for the same resource. Forward-declared
+// above with the rest of the BrnResource boundary types; pointer-only use, no include added.
 
 namespace BrnWorld
 {
@@ -136,7 +142,7 @@ namespace BrnGui
         const BrnResource::VehicleList* GetVehicleList() const;
 
         // DWARF h:137 / X360 0x824F3AF8 -- the loaded freeburn-challenge-list resource.
-        const ChallengeList* GetFreeburnChallengeList() const;
+        const BrnResource::ChallengeList* GetFreeburnChallengeList() const;
 
         // DWARF h:147 / X360 0x824BDA40 -- the lType'th player-car colour palette entry.
         const BrnWorld::PlayerCarColourPalette* GetColourPaletteFromType(BrnWorld::EPalettesTypes lType) const;
@@ -164,7 +170,7 @@ namespace BrnGui
         const BrnResource::VehicleList*                           mpVehicleList;      // X360 +0x464  (DWARF :189)
         CgsResource::ResourcePtr<BrnWorld::GlobalColourPalette>    mpPlayerCarColours; // X360 +0x468  (DWARF :190)
         CgsResource::ResourcePtr<BrnStreetData::StreetData>       mpStreetData;       // X360 +0x488  (DWARF :191)
-        const ChallengeList*                                     mpChallengeList;    // DWARF :193
+        const BrnResource::ChallengeList*                         mpChallengeList;    // DWARF :193
     };
 }
 

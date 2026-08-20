@@ -47,6 +47,9 @@
 #include "SharedClasses/StreetData/BrnChallengeData.h"  // BrnStreetData::ScoreType / E_SCORE_TYPE_COUNT (road-rules events)
 #include "GameSource/GameState/BrnGameStateSharedIO.h"  // BrnGameState::GameStateModuleIO::EGameModeType (GuiEventJunctionInfo)
 #include "GameSource/GameState/BrnTakedownType.h"       // BrnGameState::ETakedownType (GuiTakedownEvent)
+#include "GameSource/GameState/BrnGameActions.h"        // [gateui r3] BrnWorld::EPowerParkOutcome (GuiPowerParkResult) -- it has no
+                                                        // fixed underlying type, so the opaque-enum idiom below cannot carry it
+#include "GameSource/World/EntityModules/RaceCarEntityModule/Boost/BrnBoostType.h" // [gateui r3] BrnWorld::EBoostType (GuiEventBoostInfo)
 #include "GameSource/GameState/BrnCgsPlayerName.h"      // CgsNetwork::PlayerName (road-rule high score / left-lobby payloads)
 #include "GameSource/GameState/ModeManager/Scoring/BrnStuntModeScoring.h" // BrnGameState::StuntInfo (GuiHUDMessageStuntPerformed)
 #include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h" // BrnNetwork::EPaybackType (dirty-trick payloads)
@@ -1134,8 +1137,12 @@ static_assert(sizeof(GuiPlayerCrashingStateChangeEvent) == 4, "X360 record size 
 //   consumer: HudMessageAnalyzer::HandleTakedown @0x8251C3C0 (reads +0x10/+0x14/+0x18/
 //             +0x24/+0x25) and ConstructTakedownMessage @0x824F9C28 (reads type @+0x18,
 //             chain @+0x1C with the <2 / -2<9 ladder, multi @+0x20 with the <=1 gate).
-// Member NAMES from the DWARF. (GameBridgeGameStateToX.h keeps a file-local FLAGGED
-// placeholder of this record for its own TU; the include graphs do not meet.)
+// Member NAMES from the DWARF.
+// [gateui r3] STALE NOTE CORRECTED: this used to say "GameBridgeGameStateToX.h keeps a
+// file-local FLAGGED placeholder of this record for its own TU; the include graphs do not
+// meet." Both halves are now false -- the graphs DO meet (that header reaches this one), the
+// placeholder was a straight C2011 redefinition, and it has been deleted. That header now
+// includes this one and uses THIS definition; see its own banner for the fork's history.
 struct GuiTakedownEvent
 {
     CgsID                       mAggressorCarID;          // +0x00
@@ -1302,6 +1309,143 @@ struct GuiEventStuntAreaComplete
     s32 GetEventType() const { return 219; }
 };
 static_assert(sizeof(GuiEventStuntAreaComplete) == 8, "X360 AddGuiEvent size 8 (id 219)");
+
+// ===================================================================================
+// [gateui] The rest of the stunt-collectible HUD family. These four payloads used to be
+// opaque shells in BrnGuiDemangledEventTypes.h (the auto-derived table read a 12-byte
+// record as "GuiEvent header only, no payload", and a 4-byte one as an anonymous byte
+// blob). They are NOT header-only: their consumers read named words straight off the
+// queued record, so the record IS the payload -- the same correction the committed
+// GuiEventStuntAreaComplete / GuiEventProgressionProfileData entries carry.
+//
+// PS3-DWARF -> X360 id drift in this family is +2 (StuntInfo 215->217, BoostBar 216->218,
+// AreaComplete 217->219, AllComplete 218->220); the sign-smash event drifts +5
+// (395->400). Every (id,size) pair below is the X360 AddGuiEvent instantiation's two
+// literals, read from the asm:
+//   AddGuiEvent<GuiEventStuntInfo>          @0x823D3B38 -> AddEvent(q, ev, 217, 12)
+//   AddGuiEvent<GuiEventBoostBarStuntInfo>  @0x823D3A80 -> AddEvent(q, ev, 218, 12)
+//   AddGuiEvent<GuiEventStuntAllComplete>   @0x823D3CA8 -> AddEvent(q, ev, 220,  4)
+//   AddGuiEvent<GuiHUDMessageSignSmashed>   @0x823D9960 -> AddEvent(q, ev, 400,  4)
+// ===================================================================================
+
+// DWARF :4515 (PS3 GuiEvent<215>; X360 id 217, record 12 bytes). "Billboards Smashed
+// 12/45" -- the running collectible tally for ONE stunt family. HandleStuntInfo
+// @0x8251F650 reads the three words at +0x00/+0x04/+0x08 in this order (`lwz r6,0(r31)`
+// current, `lwz r6,4(r31)` total, `lwz r8,8(r31)` the type it scales by 8 to index the
+// 3-entry CgsID message-name table KA_STUNT_INFO_MESSAGES).
+struct GuiEventStuntInfo
+{
+    s32       miCurrentCount;   // +0x00 (DWARF :2081)
+    s32       miTotalCount;     // +0x04 (DWARF :2082)
+    StuntType meStuntType;      // +0x08 (DWARF :2083)
+
+    s32 GetEventType() const { return 217; }
+};
+static_assert(sizeof(GuiEventStuntInfo) == 12, "X360 AddGuiEvent size 12 (id 217)");
+
+// DWARF :4502 (PS3 GuiEvent<216>; X360 id 218, record 12 bytes). The IDENTICAL payload,
+// posted instead of 217 by the game-action-58 translation when the current game mode
+// wants the boost-bar-anchored presentation. It has no HudMessageAnalyzer::Update arm on
+// the X360 (only 217 dispatches to HandleStuntInfo) -- its consumer is the HUD boost-bar
+// component -- so it is a distinct type with its own id, not an alias.
+struct GuiEventBoostBarStuntInfo
+{
+    s32       miCurrentCount;   // +0x00 (DWARF :2071)
+    s32       miTotalCount;     // +0x04 (DWARF :2072)
+    StuntType meStuntType;      // +0x08 (DWARF :2073)
+
+    s32 GetEventType() const { return 218; }
+};
+static_assert(sizeof(GuiEventBoostBarStuntInfo) == 12, "X360 AddGuiEvent size 12 (id 218)");
+
+// DWARF :4538 (PS3 GuiEvent<218>; X360 id 220, record 4 bytes). "Every collectible of
+// this family is done, city-wide" -- HandleStuntsComplete @0x8251F7E8 bound-asserts the
+// single word (`lwz r11,0(r31)`; `cmpwi r11,3`) and fires "StntAllDone" with the family
+// completion string id and the literal "PARADISE_CITY".
+struct GuiEventStuntAllComplete
+{
+    StuntType meStuntElementType;   // +0x00 (DWARF :2097)
+
+    s32 GetEventType() const { return 220; }
+};
+static_assert(sizeof(GuiEventStuntAllComplete) == 4, "X360 AddGuiEvent size 4 (id 220)");
+
+// DWARF :6194 (PS3 GuiEvent<395>; X360 id 400, record 4 bytes). The CRASH-MODE OVERHEAD
+// SIGN score popup -- NOT a billboard/smash-gate event. Its only producer is
+// BrnGame::BrnGameModule::TranslateShowtimeActionToGuiEvent @0x823E1988 case 128
+// (E_ACTION_OVERHEAD_SIGN_HIT), whose whole translate call is gated on game mode 2/16;
+// the feeder is PropEntityIO's mHitOverheadSignQueue -> CrashModeScoring::
+// DealWithHitOverheadSign @0x82312928. HandleSignSmashMessage @0x8251BF40 fires
+// "ShowSignHit" with the single word as an INT param on display string 2.
+struct GuiHUDMessageSignSmashed
+{
+    s32 miPointsAwarded;   // +0x00 (DWARF :5358)
+
+    s32 GetEventType() const { return 400; }
+};
+static_assert(sizeof(GuiHUDMessageSignSmashed) == 4, "X360 AddGuiEvent size 4 (id 400)");
+
+// [gateui] The three crash-mode HUD-popup payloads that sat next to GuiHUDMessageSignSmashed
+// as opaque byte blobs. Same recovery, same evidence shape (DWARF fields + the X360
+// AddGuiEvent (id,size) literals + the handler's own loads).
+
+// DWARF :6170 (PS3 GuiEvent<425>; X360 id 430, record 8 bytes -- AddGuiEvent @0x823D5B90).
+// HandleComboPerformed @0x8251BE40 branches on the BYTE at +0x04 to pick "StuntCmbBst" vs
+// "StuntCmb" and appends the word at +0x00 as an INT param of display string 1.
+struct GuiHUDMessageComboPerformed
+{
+    s32  miScore;       // +0x00 (DWARF :5315)
+    bool mbBestScore;   // +0x04 (DWARF :5316)
+
+    s32 GetEventType() const { return 430; }
+};
+static_assert(sizeof(GuiHUDMessageComboPerformed) == 8, "X360 AddGuiEvent size 8 (id 430)");
+
+// DWARF :6199 (PS3 GuiEvent<396>; X360 id 401, record 4 bytes -- AddGuiEvent @0x823D9738).
+// HandleCrushComboMessage @0x8251BFA8 fires "ShowCombo" with the count as an INT param.
+struct GuiHUDMessageCrushCombo
+{
+    s32 miCrushComboCount;   // +0x00 (DWARF :5372)
+
+    s32 GetEventType() const { return 401; }
+};
+static_assert(sizeof(GuiHUDMessageCrushCombo) == 4, "X360 AddGuiEvent size 4 (id 401)");
+
+// DWARF :5343/:5344 (PS3 GuiEvent<394>; X360 id 399, record 8 bytes -- AddGuiEvent
+// @0x823D97F0). HandleShowtimeMultiplierMessage @0x8251BEC0 compares the NEW multiplier
+// (+0x00) against the analyzer's miLastSignMultiplier latch and, when it changed, fires
+// "ShowSmash" with the EARNED value (+0x04) as an INT param before re-latching.
+struct GuiHUDMessageShowtimeMultiplier
+{
+    s32 miNewMultiplier;      // +0x00 (DWARF :5343)
+    s32 miMultiplierEarned;   // +0x04 (DWARF :5344)
+
+    s32 GetEventType() const { return 399; }
+};
+static_assert(sizeof(GuiHUDMessageShowtimeMultiplier) == 8, "X360 AddGuiEvent size 8 (id 399)");
+
+// [gateui] DWARF :6126/:6136 (PS3 GuiEvent<443/444>; X360 ids 448/449, records 8 bytes --
+// AddGuiEvent @0x823D4D30 / @0x823D4DE8). The online road-rage "leader is N miles/km from
+// the finish" chatter. Both handlers (@0x8251C270 / @0x8251C318) resolve the car index to
+// an online name, then append the metre distance converted in the handler itself
+// (x0.0006213712 for miles, x0.001 for km) -- the record always carries METRES.
+struct GuiLeaderPassedMileBoundaryEvent
+{
+    EActiveRaceCarIndex meActiveRaceCarIndex;        // +0x00 (DWARF :5251)
+    f32                 mfDistanceToFinishInMetres;  // +0x04 (DWARF :5252)
+
+    s32 GetEventType() const { return 448; }
+};
+static_assert(sizeof(GuiLeaderPassedMileBoundaryEvent) == 8, "X360 AddGuiEvent size 8 (id 448)");
+
+struct GuiLeaderPassedKMBoundaryEvent
+{
+    EActiveRaceCarIndex meActiveRaceCarIndex;        // +0x00 (DWARF :5263)
+    f32                 mfDistanceToFinishInMetres;  // +0x04 (DWARF :5264)
+
+    s32 GetEventType() const { return 449; }
+};
+static_assert(sizeof(GuiLeaderPassedKMBoundaryEvent) == 8, "X360 AddGuiEvent size 8 (id 449)");
 
 // DWARF :4795 (PS3 GuiEvent<314>; X360 id 316, record 8 bytes). The special-event car
 // the burning route could not start with.
@@ -1483,27 +1627,52 @@ struct GuiEventRoadRuleFail
 };
 static_assert(sizeof(GuiEventRoadRuleFail) == 48, "X360 OutputGuiEvent size 48 (id 337)");
 
-// DWARF :4252 (PS3 GuiEvent<338>; X360 id 342, record 48 bytes). The analyzer's
-// HandleNewRoadRulesHighScore @0x824F32A0 block-copies the whole 48-byte record into
-// mRoadRuleHighScoreData (no field is read there), so only the DWARF member ORDER is
-// carried here. FLAG: the interior X360 offsets are unverified (nothing in this TU reads
-// them); the 16-byte PlayerName head + the 48-byte total are the X360-load-bearing facts.
+// DWARF :4252 (PS3 GuiEvent<338>; X360 id 342, record 48 bytes).
+//
+// [gateui r3] X360 FIELD ORDER, REORDERED 2026-08-20 -- the DWARF member order (16-byte
+// PlayerName FIRST) is PS3-only drift; the X360 record leads with the road id. Two
+// independent store-for-store witnesses, both re-derived from the asm:
+//   READER   HudMessageAnalyzer::TriggerNewRoadRulesHighScoreMessage @0x8251ED08, with
+//            mRoadRuleHighScoreData at analyzer+0x480: `ld r6, 0x480` feeds
+//            SPrintf("%llu") from record+0x00; `lwz 0x488` meScoreType; `lwz 0x48C`
+//            miNumScoresLost; `lwz 0x490` miNumRoadsNowRuled; `addi r30, r31, 0x494`
+//            passes record+0x14 as the STRING (char*) param; `lbz 0x4A4/5/6/7/8` the
+//            five bools.
+//   PRODUCER TranslateGameActionsToGuiEvents case 281 @0x823EC7C4: `ld r11, 0(r31)` +
+//            `std` for the leading qword id, `memcpy(dst+0x14, src+0x14, 0x10)` for the
+//            name, the three words at +0x08/+0x0C/+0x10, then `lbz 0x24(r31)` onward.
+// sizeof is 48 in BOTH orders, which is exactly why the static_assert below could never
+// have caught it. Same mRoadId-first drift the siblings GuiEventRoadRuleFail (:337) and
+// GuiEventRoadRuleEnter already carry. This closes this struct's old "the interior X360
+// offsets are unverified" FLAG.
+// NOTE (not a live corruption before the fix): the only producer/consumer pair in the tree
+// is BrnGuiHudMessageAnalyzer_wB_07.cpp's typed struct copy `mRoadRuleHighScoreData =
+// *lpEvent;`, so host code was self-consistent whatever the order. Re-verified this round:
+// nothing reads this record at raw X360 offsets.
 struct GuiEventRoadRuleNewHighScore
 {
-    CgsNetwork::PlayerName   mPlayerName;                // DWARF :1275 (16-byte name)
-    CgsID                    mRoadId;                    // DWARF :1276
-    BrnStreetData::ScoreType meScoreType;                // DWARF :1277
-    s32                      miNumScoresLost;            // DWARF :1278
-    s32                      miNumRoadsNowRuled;         // DWARF :1279
-    bool                     mbIsLocalPlayer;            // DWARF :1280
-    bool                     mbIsWholeRoadOwned;         // DWARF :1281
-    bool                     mbWasRulePlayersBefore;     // DWARF :1282
-    bool                     mbMultipleScores;           // DWARF :1283
-    bool                     mbOnlineLossButOfflineWin;  // DWARF :1284
+    CgsID                    mRoadId;                    // +0x00  DWARF :1276
+    BrnStreetData::ScoreType meScoreType;                // +0x08  DWARF :1277
+    s32                      miNumScoresLost;            // +0x0C  DWARF :1278
+    s32                      miNumRoadsNowRuled;         // +0x10  DWARF :1279
+    CgsNetwork::PlayerName   mPlayerName;                // +0x14  DWARF :1275 (16-byte name)
+    bool                     mbIsLocalPlayer;            // +0x24  DWARF :1280
+    bool                     mbIsWholeRoadOwned;         // +0x25  DWARF :1281
+    bool                     mbWasRulePlayersBefore;     // +0x26  DWARF :1282
+    bool                     mbMultipleScores;           // +0x27  DWARF :1283
+    bool                     mbOnlineLossButOfflineWin;  // +0x28  DWARF :1284
 
     s32 GetEventType() const { return 342; }
 };
 static_assert(sizeof(GuiEventRoadRuleNewHighScore) == 48, "X360 AddGuiEvent size 48 (id 342)");
+static_assert(__builtin_offsetof(GuiEventRoadRuleNewHighScore, mRoadId)            == 0x00, "X360 mRoadId @0x00");
+static_assert(__builtin_offsetof(GuiEventRoadRuleNewHighScore, meScoreType)        == 0x08, "X360 meScoreType @0x08");
+static_assert(__builtin_offsetof(GuiEventRoadRuleNewHighScore, miNumScoresLost)    == 0x0C, "X360 miNumScoresLost @0x0C");
+static_assert(__builtin_offsetof(GuiEventRoadRuleNewHighScore, miNumRoadsNowRuled) == 0x10, "X360 miNumRoadsNowRuled @0x10");
+static_assert(__builtin_offsetof(GuiEventRoadRuleNewHighScore, mPlayerName)        == 0x14, "X360 mPlayerName @0x14");
+static_assert(__builtin_offsetof(GuiEventRoadRuleNewHighScore, mbIsLocalPlayer)    == 0x24, "X360 mbIsLocalPlayer @0x24");
+static_assert(__builtin_offsetof(GuiEventRoadRuleNewHighScore, mbOnlineLossButOfflineWin) == 0x28,
+              "X360 mbOnlineLossButOfflineWin @0x28");
 
 // ---------------------------------------------------------------------------------------
 // GuiEventProgressionProfileData (id 350, X360 record 12 bytes)
@@ -1551,5 +1720,218 @@ struct GuiEventProgressionProfileData
 
     s32 GetEventType() const { return 350; }
 };
+
+// =========================================================================================
+// [gateui r3] TEN MORE HudMessageAnalyzer-consumed payloads, upgraded here from their
+// opaque BrnGuiDemangledEventTypes.h placeholders (`u8 maData[8]` / `u8 maPayload[N]` /
+// an empty GuiEvent<N> shell). Those placeholders are DELETED in the same change -- there
+// is exactly one definition of each name in the program.
+//
+// MODELLING: plain payload structs, NO CgsGui::GuiEvent<N> base -- the same treatment the
+// round-1 upgrades got, and for the same reason: the X360 GuiEvent<N> base is provably
+// EMPTY while the host's is 12 bytes, so only a plain struct makes sizeof(T) equal the
+// console's baked AddEvent literal. Every consumer reads its fields at record+0, which a
+// 12-byte base would displace. Each therefore carries its own
+// `s32 GetEventType() const { return <X360 id>; }` -- the member CgsGui::GuiModule::
+// AddGuiEvent<T> bakes (CgsGuiModule.h:69) -- plus the house sizeof pin.
+//
+// LAYOUTS: DecFIGS DWARF (references/DecFIGS/dwarfdump/GameSource/Gui/BrnGuiEventTypeDefs.h
+// at the cited lines), each confirmed member-for-member against the X360 consumer's loads.
+// SIZES: the `AddEvent(queue, payload, <id>, <size>)` literal pair inside that type's
+// AddGuiEvent<T> instantiation. Where NO instantiation exists in the image the size is not
+// pinned by a literal and the record is pinned by offsetof instead, never by a guess.
+// IDS: X360 wire ids. In this range the X360 id is the PS3-DWARF GuiEvent<N> + 5.
+// =========================================================================================
+
+// DWARF :5467 (GuiEvent<399>; X360 id 404). sizeof 8 == the AddEvent literal @0x823D8488.
+// HandlePowerParkingResult @0x8251F330 tests meOutcome == E_PPO_SUCCESS(1) / != E_PPO_FAILURE(2)
+// and bands miOverallRating by a literal 20.
+struct GuiPowerParkResult
+{
+    BrnWorld::EPowerParkOutcome meOutcome;        // +0x00  (lwz 0(a2))
+    s32                         miOverallRating;  // +0x04  (lwz 4(a2))
+
+    s32 GetEventType() const { return 404; }
+};
+static_assert(sizeof(GuiPowerParkResult) == 8, "X360 AddGuiEvent size 8 (id 404)");
+
+// DWARF :5608 (GuiEvent<414>; X360 id 419). NO AddGuiEvent<T> instantiation exists anywhere
+// in the image, so the record SIZE is not pinned by a console literal -- the two consumer
+// loads in HandleEventDistanceToFinish @0x8251E550 (`lfs 0(a2)` / `lwz 4(a2)`) are the whole
+// attestation and the record is pinned by offsetof below.
+struct GuiInEventDistanceToFinish
+{
+    f32 mfDistanceToFinish;   // +0x00  metres
+    s32 miPlayerPosition;     // +0x04  1-based
+
+    s32 GetEventType() const { return 419; }
+};
+static_assert(__builtin_offsetof(GuiInEventDistanceToFinish, mfDistanceToFinish) == 0x00,
+              "X360 mfDistanceToFinish @0x00 (lfs 0(a2) @0x8251E5B0)");
+static_assert(__builtin_offsetof(GuiInEventDistanceToFinish, miPlayerPosition) == 0x04,
+              "X360 miPlayerPosition @0x04 (lwz 4(a2) @0x8251E5C8)");
+
+// DWARF :5618 (GuiEvent<415>; X360 id 420). sizeof 24 == the AddEvent literal @0x823D55D0
+// (8 + 4 + 4 + 1 rounded to CgsID's 8-byte alignment).
+struct GuiInEventLeaderSplit
+{
+    CgsID               mLeadersCarID;               // +0x00
+    f32                 mfLeadTime;                  // +0x08  (lfs 8(a2) @0x8251E6E0)
+    EActiveRaceCarIndex meLeaderActiveRaceCarIndex;  // +0x0C  (lwz 0xC(a2))
+    bool                mbLocalPlayerIsLeading;      // +0x10  (lbz 0x10(a2))
+
+    s32 GetEventType() const { return 420; }
+};
+static_assert(sizeof(GuiInEventLeaderSplit) == 24, "X360 AddGuiEvent size 24 (id 420)");
+static_assert(__builtin_offsetof(GuiInEventLeaderSplit, mfLeadTime) == 0x08, "X360 mfLeadTime @0x08");
+static_assert(__builtin_offsetof(GuiInEventLeaderSplit, meLeaderActiveRaceCarIndex) == 0x0C,
+              "X360 meLeaderActiveRaceCarIndex @0x0C");
+static_assert(__builtin_offsetof(GuiInEventLeaderSplit, mbLocalPlayerIsLeading) == 0x10,
+              "X360 mbLocalPlayerIsLeading @0x10");
+
+// DWARF :5690 (GuiEvent<420>; X360 id 425). sizeof 12 == the AddEvent literal @0x823D4B08.
+// HandleRaceCheckpointReached @0x8251B350 compares the GLOBAL index (not the active one).
+struct GuiRaceCheckpointReached
+{
+    EActiveRaceCarIndex meActiveRaceCarIndex;   // +0x00
+    EGlobalRaceCarIndex meGlobalRaceCarIndex;   // +0x04
+    s32                 miCheckpointIndex;      // +0x08  0-based
+
+    s32 GetEventType() const { return 425; }
+};
+static_assert(sizeof(GuiRaceCheckpointReached) == 12, "X360 AddGuiEvent size 12 (id 425)");
+
+// DWARF :6153 (GuiEvent<449>; X360 id 454). sizeof 8 == the AddEvent literal @0x823D5968.
+struct GuiBHRCheckpointReachedEvent
+{
+    EActiveRaceCarIndex meActiveRaceCarIndex;   // +0x00
+    s32                 miNumCheckpointsToGo;   // +0x04
+
+    s32 GetEventType() const { return 454; }
+};
+static_assert(sizeof(GuiBHRCheckpointReachedEvent) == 8, "X360 AddGuiEvent size 8 (id 454)");
+
+// DWARF :6218 (GuiEvent<450>; X360 id 455). sizeof 8 == the AddEvent literal @0x823D5A20.
+struct GuiHUDMessageBHRRunnerCrashed
+{
+    EActiveRaceCarIndex meActiveRaceCarIndex;   // +0x00
+    s32                 miNumCrashesToGo;       // +0x04
+
+    s32 GetEventType() const { return 455; }
+};
+static_assert(sizeof(GuiHUDMessageBHRRunnerCrashed) == 8, "X360 AddGuiEvent size 8 (id 455)");
+
+// DWARF :5097 (GuiEvent<361>; X360 id 366). sizeof 8 == the AddEvent literal @0x823D3070.
+// HandleDriveThrough @0x8251D570 asserts meDriveThroughType < E_DRIVE_THROUGH_TYPE_COUNT and
+// selects one of three message tables on mbEffective (lbz 4(a2)).
+struct GuiDriveThroughEvent
+{
+    // DWARF :3665 -- the nested enumerator set, verbatim.
+    enum DriveThroughType
+    {
+        E_DRIVE_THROUGH_TYPE_CAR_WASH    = 0,
+        E_DRIVE_THROUGH_TYPE_BODY_SHOP   = 1,
+        E_DRIVE_THROUGH_TYPE_PAINT_SHOP  = 2,
+        E_DRIVE_THROUGH_TYPE_GAS_STATION = 3,
+        E_DRIVE_THROUGH_TYPE_AUTO_PARTS  = 4,
+        E_DRIVE_THROUGH_TYPE_FAILED      = 5,
+        E_DRIVE_THROUGH_TYPE_COUNT       = 6,
+    };
+
+    DriveThroughType meDriveThroughType;   // +0x00  DWARF :3680
+    bool             mbEffective;          // +0x04  DWARF :3681
+
+    s32 GetEventType() const { return 366; }
+};
+static_assert(sizeof(GuiDriveThroughEvent) == 8, "X360 AddGuiEvent size 8 (id 366)");
+
+// DWARF :5651 (GuiEvent<418>; X360 id 423). sizeof 8 == the AddEvent literal @0x823D5740.
+// HandleEventFinisher @0x824F2FB0 fires only for miFinishPosition == 1.
+struct GuiInEventFinisher
+{
+    EActiveRaceCarIndex meActiveRaceCarIndex;   // +0x00  DWARF :4803
+    s32                 miFinishPosition;       // +0x04  DWARF :4804  (1-based)
+
+    s32 GetEventType() const { return 423; }
+};
+static_assert(sizeof(GuiInEventFinisher) == 8, "X360 AddGuiEvent size 8 (id 423)");
+
+// DWARF :5315 (GuiEvent<478>; X360 id 483 -- the case the committed fan-out dispatches,
+// BrnGuiHudMessageAnalyzer_wB_12.cpp :: Update). This type had NO definition anywhere in the
+// tree, only the forward declaration at BrnGuiHudMessageAnalyzer.h:74. Like
+// GuiInEventDistanceToFinish it has NO AddGuiEvent<T> instantiation in the image, so the
+// size is not pinned by a literal; the two consumer loads in HandleNetworkBattling
+// @0x8251CDC0 (`lwz 0(a2)` / `lwz 4(a2)`, each range-asserted against [0, 8)) are the
+// attestation and the record is pinned by offsetof.
+struct GuiNetworkPlayerBattlingEvent
+{
+    EActiveRaceCarIndex meAggressorActiveRaceCarIndex;   // +0x00  DWARF :4340
+    EActiveRaceCarIndex meVictimActiveRaceCarIndex;      // +0x04  DWARF :4341
+
+    s32 GetEventType() const { return 483; }
+};
+static_assert(__builtin_offsetof(GuiNetworkPlayerBattlingEvent, meAggressorActiveRaceCarIndex) == 0x00,
+              "X360 aggressor index @0x00 (lwz 0(a2) @0x8251D004)");
+static_assert(__builtin_offsetof(GuiNetworkPlayerBattlingEvent, meVictimActiveRaceCarIndex) == 0x04,
+              "X360 victim index @0x04 (lwz 4(a2) @0x8251D034)");
+
+// -----------------------------------------------------------------------------------------
+// DWARF :4566 (GuiEvent<204>; X360 id 206). sizeof 28 == the AddEvent literal @0x823DA510.
+//
+// X360 FIELD ORDER (binary authoritative; the PS3 DWARF lists the nine leading bools first,
+// the X360 record leads with the scalars). Pinned STORE FOR STORE by the sole producer,
+// BrnGame::BrnGameModule::BridgeWorldVehicleDataToGui @0x823E5768 (@0x823E5AFC..0x823E5B70),
+// which copies the world's 36-byte BrnWorld::RaceCarEntityModuleIO::BoostOutputInfo
+// (BrnRaceCarEntityModuleOutputInterface.h:72, itself X360-attested) field by field:
+//
+//   dst+0x00 <- src+0x0C muNumChained        dst+0x10 <- src+0x1C mbBoostIsFull
+//   dst+0x04 <- src+0x10 mfBoostAmount       dst+0x11 <- src+0x00 mbIsBoosting
+//   dst+0x08 <- src+0x14 mfMaxBoost          dst+0x12 <- src+0x01 mbIsInAir
+//   dst+0x0C <- src+0x20 meBoostType         dst+0x13 <- src+0x02 mbIsOncoming
+//                                            dst+0x14 <- src+0x03 mbIsDrifting
+//                                            dst+0x15 <- src+0x04 mbNearMiss
+//                                            dst+0x16 <- src+0x05 mbIsBlueMode
+//                                            dst+0x17 <- src+0x06 mbWasChainJustCompleted
+//                                            dst+0x18 <- src+0x0A mbAllowedToBoost
+//                                            dst+0x19 <- src+0x08 mbIsTailgating
+//
+// Fourteen stores, fourteen DWARF members -- the mapping is exact, not inferred, and it is
+// the SECOND witness the round-2 park asked for (the first being HandleChainedBoost's own
+// reads of +0x00 / +0x0C / +0x10 / +0x11 / +0x17). `mbIsBlueMode` is the world-side name for
+// the slot the GUI DWARF calls `mbIsChainedMode`; the GUI name is used here.
+// The producer post-processes two slots in Showtime/Crash mode (game mode 2 or 16,
+// @0x823E5B74): mbBoostIsFull is FORCED true and mbAllowedToBoost becomes
+// `!CrashModeScoring::HasCrashModeEnded() && mbAllowedToBoost`.
+//
+// The old model (`GuiEvent<206>` + `u8 maPayload[16]`) was provably wrong: HandleChainedBoost
+// reads a live field at record+0x00, which a 12-byte host header would displace.
+// -----------------------------------------------------------------------------------------
+struct GuiEventBoostInfo
+{
+    u32                  muNumChained;             // +0x00  DWARF :2152
+    f32                  mfBoostAmount;            // +0x04  DWARF :2153
+    f32                  mfMaxBoost;               // +0x08  DWARF :2154
+    BrnWorld::EBoostType meBoostType;              // +0x0C  DWARF :2155
+    bool                 mbBoostIsFull;            // +0x10  DWARF :2156
+    bool                 mbIsBoosting;             // +0x11  DWARF :2143
+    bool                 mbIsInAir;                // +0x12  DWARF :2144
+    bool                 mbIsOncoming;             // +0x13  DWARF :2145
+    bool                 mbIsDrifting;             // +0x14  DWARF :2146
+    bool                 mbNearMiss;               // +0x15  DWARF :2147
+    bool                 mbIsChainedMode;          // +0x16  DWARF :2148 (world-side mbIsBlueMode)
+    bool                 mbWasChainJustCompleted;  // +0x17  DWARF :2149
+    bool                 mbAllowedToBoost;         // +0x18  DWARF :2150
+    bool                 mbIsTailgating;           // +0x19  DWARF :2151
+    // 2 tail-pad bytes -> the X360 28-byte record
+
+    s32 GetEventType() const { return 206; }
+};
+static_assert(sizeof(GuiEventBoostInfo) == 28, "X360 AddGuiEvent size 28 (id 206)");
+static_assert(__builtin_offsetof(GuiEventBoostInfo, muNumChained)            == 0x00, "X360 muNumChained @0x00");
+static_assert(__builtin_offsetof(GuiEventBoostInfo, meBoostType)             == 0x0C, "X360 meBoostType @0x0C");
+static_assert(__builtin_offsetof(GuiEventBoostInfo, mbBoostIsFull)           == 0x10, "X360 mbBoostIsFull @0x10");
+static_assert(__builtin_offsetof(GuiEventBoostInfo, mbIsBoosting)            == 0x11, "X360 mbIsBoosting @0x11");
+static_assert(__builtin_offsetof(GuiEventBoostInfo, mbWasChainJustCompleted) == 0x17, "X360 mbWasChainJustCompleted @0x17");
+static_assert(__builtin_offsetof(GuiEventBoostInfo, mbIsTailgating)          == 0x19, "X360 mbIsTailgating @0x19");
 
 } // namespace BrnGui

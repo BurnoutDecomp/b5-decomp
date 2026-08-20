@@ -20,6 +20,8 @@
 #include "GameSource/Gui/BrnGuiProfile.h"                               // BrnGui::ProfileManager (module-owned; REAL)
 #include "GameShared/GameClasses/Gui/CgsGuideIntegration.h"             // CgsGui::SystemUserProfile (module-owned; X360 +949152)
 #include "GameSource/Gui/BrnGuiCache.h"                                 // BrnGui::GuiCache (the flow states' cache)
+#include "GameSource/Gui/BrnGuiHudMessageDirector.h"                    // BrnGui::HudMessageDirector (module-owned; X360 +639264)
+#include "GameSource/Gui/BrnGuiHudMessageAnalyzer.h"                    // BrnGui::HudMessageAnalyzer (module-owned; X360 +660992)
 #include "GameSource/Gui/BrnGuiWorldDataController.h"                   // BrnGui::WorldDataController (module-owned; X360 +307836)
 #include "GameSource/Gui/BrnGuiAlwaysAvailableComponentsManager.h"     // module-owned permanent FLApt components
 #include "GameSource/Gui/BrnCustomRendererManager.h"                    // BrnGui::CustomRendererManager (module-owned; X360 +311952)
@@ -49,7 +51,25 @@ namespace BrnGui
     class GuiModule : public CgsModule::ModuleSingleBuffered
     {
     public:
-        void Construct() override;
+        // [gateui r4] X360 `BrnGui::GuiModule::Construct` @0x82518028 is NOT the module
+        // virtual -- it is a direct, argument-taking call the OWNER makes
+        // (BrnGameModule::Construct), and the pure-virtual `Construct()` slot stays
+        // `CgsModule::ModuleSingleBuffered::Construct`, exactly as `CgsGui::GuiModule::
+        // Construct` @0x82856FA8 (which likewise takes `lpViewModule`) chains into it.
+        // Round 4 restores the console's first argument: `a2` == the owner's
+        // `&mGameDataModule.mHudMessageController` (X360 gm+0x65A1D0), asserted
+        // "lpHudMessageController" BrnGuiModule.cpp:229 and then stored into the cache at
+        // line 368 (`*(gm + 1021872) = a2`, the inlined GuiCache::SetHudMessageController
+        // with assert "lpController" BrnGuiCache.h:2405). Without it
+        // GuiCache::mpHudMessageController had ZERO writers and every HUD message died at
+        // HudMessageDirector::FilterAndSendOffMessage's `mpController` assert.
+        //
+        // The console's remaining arguments are NOT reconstructed here: `lpPopupController`
+        // (gm+0x65A1F4, assert BrnGuiModule.cpp:230 -> `*(gm + 1021880)`) has no
+        // reconstructed type in this tree, and the trailing aspect/bool pair is already
+        // sourced inside the body. Named, not fabricated.
+        void Construct(const BrnResource::HudMessageController* lpHudMessageController);
+
         bool Prepare() override;
         bool Release() override;
         void Destruct() override;
@@ -260,6 +280,25 @@ namespace BrnGui
         BrnHudFlow        mHudFlow;         // X360 +638904-adjacent flow set (HUD = E_GUIFLOW_HUD)
         BrnOverlayFlow    mOverlayFlow;     // X360 mOverlayFlow (OVERLAY = E_GUIFLOW_OVERLAY)
         GuiFsmController  mFsmController;   // X360 +638904 (the flow FSM controller)
+
+        // ---- the HUD-message pair (gateui wave, round 2) --------------------------------
+        // X360 GuiModule::Construct @0x82518028 lines 277-278 constructs them back to back
+        // and in this order:
+        //     HudMessageDirector::Construct(gm + 639264, gm + 552 /*ModelModule*/, gm + 1005376 /*GuiCache*/);
+        //     HudMessageAnalyzer ::Construct(gm + 660992, gm + 639264 /*the director*/);
+        // then line 376 publishes the director into the cache
+        // (`*(gm + 1021876) = gm + 639264` == GuiCache::SetHudMessageDirector), and
+        // Prepare @0x82518D68 stage 3 line 104 gives the analyzer the shared access-pointer
+        // block (`*(gm + 660992) = gm + 1005332`).
+        //
+        // ⭐ THIS PAIR IS THE GUI END OF THE gateui CHAIN. Until it landed, the whole
+        // HudMessageAnalyzer fan-out (25 partfiles) and the director's send path were
+        // unreachable code: HudMessageAnalyzer::Update had no caller anywhere in the
+        // program, so `[UI-gate] hud stunt-info ...` could never print no matter what the
+        // GameState/bridge lanes did (round-1 verify WRONG-2).
+        HudMessageDirector mHudMessageDirector;  // X360 +639264
+        HudMessageAnalyzer mHudMessageAnalyzer;  // X360 +660992
+
         ProfileManager    mProfileManager;  // X360 +681696 (the REAL save/load manager)
         CgsGui::SystemUserProfile mSystemUserProfile; // X360 +949152 (sign-in watcher the manager listens to)
         CgsMemory::HeapMalloc  mFsmLuaHeap;    // the FSM Lua VM heap (the controller's allocator)

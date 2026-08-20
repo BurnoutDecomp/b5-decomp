@@ -600,6 +600,13 @@ namespace BrnGui
     extern const char* const KAPC_PAYBACK_TAKEDOWN_GD_MESSAGES[3];    // cpp:137 (0x8206F624; X360 is 3-entry)
     extern const char* const KAPC_FINISH_POSITION_MESSAGES[12];       // cpp:149 (0x82F277E0; 8 uppercase + 4 lowercase slots)
     extern const char* const KAPC_COLLECTABLE_COMPLETION_STRINGID[3]; // cpp:238 (0x8206F684)
+    // [gateui r3] The three drive-through tables HandleDriveThrough @0x8251D570 picks between,
+    // indexed by GuiDriveThroughEvent::DriveThroughType. DWARF names (cpp:95 / :105 / :115),
+    // including the original's KPAC_ transposition in the third. Some slots are genuinely NULL
+    // in the X360 image -- see the definitions.
+    extern const char* const KAPC_DRIVE_THROUGH_MESSAGES[6];             // cpp:95  (0x8206F5D0)
+    extern const char* const KAPC_DRIVE_THROUGH_MAGIC_MESSAGES[6];       // cpp:105 (0x8206F5E8)
+    extern const char* const KPAC_DRIVE_THROUGH_INEFFECTIVE_MESSAGES[6]; // cpp:115 (0x8206F600)
     // FLAG: consumer-named -- the county string-id table HandleStuntsComplete indexes
     // (< 5 == BrnWorld county count); no DWARF row names it in this TU.
     extern const char* const KAPC_COUNTY_STRINGID[5];                 // (0x82F27704)

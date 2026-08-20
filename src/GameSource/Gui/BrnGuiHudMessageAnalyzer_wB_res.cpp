@@ -79,6 +79,57 @@ const char* const KAPC_COLLECTABLE_COMPLETION_STRINGID[3] =
     "HUDMESSAGE_STUNTS_COMPLETE",
 };
 
+// -----------------------------------------------------------------------------------------
+// [gateui r3] The THREE drive-through message tables HandleDriveThrough @0x8251D570 selects
+// between, all indexed by GuiDriveThroughEvent::DriveThroughType (0..5). Names verbatim from
+// the DWARF (BrnGuiHudMessageAnalyzer.cpp:95 / :105 / :115) -- including the original's
+// KPAC_ transposition in the third one, which is reproduced, not "corrected".
+// Values dumped from the X360 image (scratchpad/waveB/hudmsg_rodata_dump.txt, the 18-entry
+// run at 0x8206F5D0 that IDA labels as one block: 0x8206F5D0 / 0x8206F5E8 / 0x8206F600).
+//
+// The NULL slots are REAL and load-bearing, not gaps in the dump: the console reaches a table
+// slot only on the paths its own branch structure allows, so the empty ones are unreachable
+// -- MAGIC is only ever indexed for types 0/2 (the only two with a "2" variant), and
+// INEFFECTIVE is only ever indexed when mbEffective is false. Reproduced as NULL, and
+// HandleDriveThrough deliberately does NOT guard the Construct against a null id (that guard
+// would be a behaviour the binary does not have).
+// -----------------------------------------------------------------------------------------
+
+// @0x8206F5D0 -- the normal ("basic") line for each drive-through type.
+const char* const KAPC_DRIVE_THROUGH_MESSAGES[6] =
+{
+    "DriThrCarWsh",   // [0] E_DRIVE_THROUGH_TYPE_CAR_WASH
+    "DriThrBdyShp",   // [1] E_DRIVE_THROUGH_TYPE_BODY_SHOP
+    "DriThrPntShp",   // [2] E_DRIVE_THROUGH_TYPE_PAINT_SHOP
+    "DriThrGasStn",   // [3] E_DRIVE_THROUGH_TYPE_GAS_STATION
+    "DriThrAPts",     // [4] E_DRIVE_THROUGH_TYPE_AUTO_PARTS
+    "DriThrClosed",   // [5] E_DRIVE_THROUGH_TYPE_FAILED
+};
+
+// @0x8206F5E8 -- the rare "magic" variant, drawn 1-in-
+// KU_FREQUENCY_OF_DRIVETHROUGH_MAGIC_MESSAGES for the two effective types that have one.
+const char* const KAPC_DRIVE_THROUGH_MAGIC_MESSAGES[6] =
+{
+    "DriThrCarWs2",   // [0] E_DRIVE_THROUGH_TYPE_CAR_WASH
+    NULL,             // [1] (never indexed: only types 0 and 2 take the random branch)
+    "DriThrPntSh2",   // [2] E_DRIVE_THROUGH_TYPE_PAINT_SHOP
+    NULL,             // [3]
+    NULL,             // [4]
+    NULL,             // [5]
+};
+
+// @0x8206F600 -- the "you drove through but it did nothing" line (mbEffective == false).
+// DWARF spelling KPAC_ (sic) preserved.
+const char* const KPAC_DRIVE_THROUGH_INEFFECTIVE_MESSAGES[6] =
+{
+    NULL,             // [0] (car wash has no ineffective line)
+    "DriThrBdyShX",   // [1] E_DRIVE_THROUGH_TYPE_BODY_SHOP
+    "DriThrPntShX",   // [2] E_DRIVE_THROUGH_TYPE_PAINT_SHOP
+    NULL,             // [3]
+    NULL,             // [4]
+    "DriThrClosed",   // [5] E_DRIVE_THROUGH_TYPE_FAILED (aliases the basic table's slot 5)
+};
+
 // @0x82F27704 -- county string ids (BrnWorld::ECounty order), the second "StntAllDone"
 // parameter. FLAG: consumer-named (see the header declaration).
 const char* const KAPC_COUNTY_STRINGID[5] =
@@ -93,6 +144,29 @@ const char* const KAPC_COUNTY_STRINGID[5] =
 // flt_8206F8E0 -- how long the wreck state must persist before the wrecked message
 // fires (HandleWreckedEvent accumulates the frame delta against it).
 const f32 HudMessageAnalyzer::KF_REQUIRED_WRECK_DURATION = 0.6f;
+
+// [gateui] .data qword_82FB5898 (the three qwords immediately after the 4x14
+// KA_SKILLZ_MESSAGE_IDS block, which ends at 0x82FB5890) -- the collectible-tally message
+// names HandleStuntInfo @0x8251F650 indexes by BrnGui::StuntType (`slwi r8,r8,3; ldx`).
+// Zero in the image and filled by the TU's OWN second dynamic initialiser @0x82C56040
+// (a distinct thunk from the skillz one @0x82C56198), which the pseudocode gives
+// verbatim:
+//     CgsIDCompress("StuntPartJmp") -> qword_82FB5898[0]
+//     CgsIDCompress("StuntPartSma") -> qword_82FB58A0
+//     CgsIDCompress("StuntFull")    -> qword_82FB58A8
+// Reproduced here as a dynamically initialised static, exactly as KA_SKILLZ_MESSAGE_IDS
+// is (the compiler emits the same compress-and-store init).
+//
+// (This closes the scout map's "PARK: qword_82FB5898 needs headless IDA" item -- the
+// values were never in rodata to dump; they are constructed by a dyn-init thunk that IS
+// in the JSON export set. Same class of recovery as the k*Def* CRT-init dumps: walk the
+// initialiser, do not read the zeroed .data.)
+const CgsID HudMessageAnalyzer::KA_STUNT_INFO_MESSAGES[3] =
+{
+    CgsIDCompress("StuntPartJmp"),   // [0] E_STUNTTYPE_JUMP
+    CgsIDCompress("StuntPartSma"),   // [1] E_STUNTTYPE_SMASH
+    CgsIDCompress("StuntFull"),      // [2] E_STUNTTYPE_STUNT
+};
 
 // .data qword_82FB56D8, filled by the TU's dynamic initialiser @0x82C56198: one
 // compressed "Sklz_<messageType>_<skill>" id per (EBurnoutSkillzMessageTypes row,

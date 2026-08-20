@@ -340,6 +340,157 @@ s32 GuiOverlayRequest::GetButton2Param(ParamOut* lpOut) const
     return 0;
 }
 
+// ============================================================================
+// [gateui] GuiHudMessage -- the message-BUILDING half. These four bodies were
+// declaration-only, which made every HudMessageAnalyzer::Handle* body in the tree
+// unlinkable: Construct @0x824F78B0 has 59 X360 callers and AddParam 46 + 17. They are
+// the keystone of the whole HUD-message path, so they land here in the type's own TU
+// alongside the already-committed reading half (GetParam / GetParamCount).
+//
+// X360 RECORD LAYOUT (from AddParam's own address arithmetic @0x824EB2C8, which is the
+// only place all three members are indexed together):
+//     +0x00  CgsID mMessageIdHash                 (Construct stores it here)
+//     +0x08  s32   maiNoOfParams[3]               ("4 * (a3 + 2)" == +8 + 4*stringIndex)
+//     +0x14  HudMessageParameter maaParams[3][4]  (base a1+20, stride 68, row stride 4;
+//                                                  meParamType @param+0, macParameter
+//                                                  @param+4 -- "a1 + 24" in the asm)
+// The host record widens (the GuiEvent<152> base sits in front of mMessageIdHash), so
+// every access below is BY NAME; the offsets above are recorded only to show how the
+// member roles were read out of the asm.
+// ============================================================================
+
+// @0x824F78B0 -- hash the message id and clear the three parameter counts.
+// The X360 body's assert is the streamed form ("Invalid Message Id",
+// BrnGuiEventTypeDefs.h:7225) and is NON-GATING: it falls through into CgsIDCompress with
+// the null pointer exactly as written.
+void GuiHudMessage::Construct(const char* lpcMessageId)
+{
+    CGS_ASSERT( lpcMessageId != NULL, "Invalid Message Id" );
+
+    mMessageIdHash = CgsIDCompress( lpcMessageId );
+    maiNoOfParams[0] = 0;
+    maiNoOfParams[1] = 0;
+    maiNoOfParams[2] = 0;
+}
+
+// DWARF h:5626 -- the pre-hashed sibling. It has no standalone X360 symbol because every
+// caller inlines it; the inline is verbatim in HandleStuntInfo @0x8251F650
+// (`std r9, var_360` = the id straight into +0x00, then three `stw r10` zeroing
+// +0x08/+0x0C/+0x10 @0x8251F69C..0x8251F6A4) -- i.e. the same body as the const char*
+// overload minus the compress step and minus the null assert.
+void GuiHudMessage::Construct(CgsID lMessageIdHash)
+{
+    mMessageIdHash = lMessageIdHash;
+    maiNoOfParams[0] = 0;
+    maiNoOfParams[1] = 0;
+    maiNoOfParams[2] = 0;
+}
+
+namespace
+{
+    // The overflow report all three AddParam overloads share (X360 @0x824EB2C8 lines
+    // "Invalid num of params ( N of max 4 ) in the Hud Message with ID <id>", gated on
+    // CgsDev::Message::gxMessageFilterFlags & 1, followed by an unconditional
+    // FireAssert("\n")). De-inlined here because the overloads emit it identically.
+    //
+    // ⚠ CONSOLE OFF-BY-ONE, REPRODUCED VERBATIM: the guard the three overloads apply is
+    // `count > KI_MAX_PARAMS_PER_STRING`, not `>=` (X360 `cmplwi cr6, r11, 4; ble` at
+    // 0x824EB2FC / 0x824EB53C / 0x824EB754). A string that already holds 4 parameters
+    // therefore passes the guard and writes slot [4] -- one past the row. It is
+    // unreachable on the shipped content (no HUD message in the image adds more than two
+    // parameters to one display string) and CGS_ASSERT is non-gating in this build, so
+    // "fixing" it to `>=` would be a silent behaviour change on a path the console never
+    // takes. Left as the binary has it; flagged so nobody re-derives it as a typo.
+    void ReportHudMessageParamOverflow(CgsID lMessageIdHash, s32 liCount, s32 liMax)
+    {
+        char lacMessageId[16];
+        CgsIDUnCompress( lMessageIdHash, lacMessageId );
+
+        if ( ( CgsDev::Message::gxMessageFilterFlags & 1 ) != 0 && CgsDev::Log::gpDebugPrint != 0 )
+        {
+            *CgsDev::Log::gpDebugPrint
+                << "Invalid num of params ( " << liCount
+                << " of max " << liMax
+                << " ) in the Hud Message with ID " << lacMessageId
+                << " \n";
+        }
+
+        CGS_ASSERT( false, "\n" );
+    }
+}
+
+// @0x824EB2C8 -- append a STRING-valued parameter to display string liStringIndex.
+// Register order (r4 type, r5 string index, r6 value) is the asm's, and it matches the
+// DWARF declaration order; the pseudocode's a2/a3/a4 map to leType / liStringIndex /
+// lpcValue respectively (a2 is what lands in the slot's meParamType, a3 is what the
+// "Invalid string index." guard bounds, a4 is what SnPrintf formats).
+void GuiHudMessage::AddParam(CgsGui::HudMessageParamTypes leType, s32 liStringIndex,
+                             const char* lpcValue)
+{
+    CGS_ASSERT( static_cast<u32>(liStringIndex) <= 2u, "Invalid string index." );
+
+    if ( maiNoOfParams[liStringIndex] > KI_MAX_PARAMS_PER_STRING )
+        ReportHudMessageParamOverflow( mMessageIdHash, maiNoOfParams[liStringIndex],
+                                       KI_MAX_PARAMS_PER_STRING );
+
+    CGS_ASSERT( lpcValue != NULL, "lpcParam != NULL" );
+
+    CgsGui::HudMessageParameter& lrParam = maaParams[liStringIndex][maiNoOfParams[liStringIndex]];
+    CgsCore::SnPrintf( lrParam.macParameter,
+                       CgsGui::HudMessageParameter::KI_MAX_PARAM_STRING_LENGTH,
+                       "%s", lpcValue );
+    CgsUnicode::SafelyTerminate( reinterpret_cast<CgsUnicode::CgsUtf8*>( lrParam.macParameter ),
+                                 CgsGui::HudMessageParameter::KI_MAX_PARAM_STRING_LENGTH );
+    lrParam.meParamType = leType;
+    ++maiNoOfParams[liStringIndex];
+}
+
+// @0x824EB508 (unnamed in the export set; identified by its "%d" format and by being the
+// callee of every `AddParam(msg, 2 /*INT*/, index, value)` site) -- the INT-valued
+// overload. Identical to the string one except for the format and the missing null guard.
+void GuiHudMessage::AddParam(CgsGui::HudMessageParamTypes leType, s32 liStringIndex,
+                             s32 liValue)
+{
+    CGS_ASSERT( static_cast<u32>(liStringIndex) <= 2u, "Invalid string index." );
+
+    if ( maiNoOfParams[liStringIndex] > KI_MAX_PARAMS_PER_STRING )
+        ReportHudMessageParamOverflow( mMessageIdHash, maiNoOfParams[liStringIndex],
+                                       KI_MAX_PARAMS_PER_STRING );
+
+    CgsGui::HudMessageParameter& lrParam = maaParams[liStringIndex][maiNoOfParams[liStringIndex]];
+    CgsCore::SnPrintf( lrParam.macParameter,
+                       CgsGui::HudMessageParameter::KI_MAX_PARAM_STRING_LENGTH,
+                       "%d", liValue );
+    CgsUnicode::SafelyTerminate( reinterpret_cast<CgsUnicode::CgsUtf8*>( lrParam.macParameter ),
+                                 CgsGui::HudMessageParameter::KI_MAX_PARAM_STRING_LENGTH );
+    lrParam.meParamType = leType;
+    ++maiNoOfParams[liStringIndex];
+}
+
+// @ 0x824EB720 (also unnamed in the export set; identified by its "%f" format
+// @0x824EB8E4 and by being the callee of HandleLeaderPassedMileBoundary @0x8251C2F0 /
+// HandleLeaderPassedKMBoundary @0x8251C398, both of which pass a float distance) -- the
+// FLOAT-valued overload. PPC note: the value rides f1 and consumes no GPR slot, which is
+// why Hex-Rays renders this one's parameter list a word short of the other two.
+void GuiHudMessage::AddParam(CgsGui::HudMessageParamTypes leType, s32 liStringIndex,
+                             f32 lfValue)
+{
+    CGS_ASSERT( static_cast<u32>(liStringIndex) <= 2u, "Invalid string index." );
+
+    if ( maiNoOfParams[liStringIndex] > KI_MAX_PARAMS_PER_STRING )
+        ReportHudMessageParamOverflow( mMessageIdHash, maiNoOfParams[liStringIndex],
+                                       KI_MAX_PARAMS_PER_STRING );
+
+    CgsGui::HudMessageParameter& lrParam = maaParams[liStringIndex][maiNoOfParams[liStringIndex]];
+    CgsCore::SnPrintf( lrParam.macParameter,
+                       CgsGui::HudMessageParameter::KI_MAX_PARAM_STRING_LENGTH,
+                       "%f", lfValue );
+    CgsUnicode::SafelyTerminate( reinterpret_cast<CgsUnicode::CgsUtf8*>( lrParam.macParameter ),
+                                 CgsGui::HudMessageParameter::KI_MAX_PARAM_STRING_LENGTH );
+    lrParam.meParamType = leType;
+    ++maiNoOfParams[liStringIndex];
+}
+
 // @0x82674D60 -- copy display-string liStringIndex's parameter liParamIndex into *lpOut:
 // format the value string (bounded), UTF-8-safely terminate it, and copy the param type.
 // Returns the SafelyTerminate result (X360 r3).
