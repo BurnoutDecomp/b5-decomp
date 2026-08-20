@@ -121,6 +121,33 @@ namespace renderengine
     // named entry for a caller that binds a depth texture some other way.
     void PostFxDepthSampler_ApplyState(u32 luUnit);
 
+    // FLAG PC-platform leaf: the POST-FX COMPOSITE'S **SOURCE** sampler seam -- unit 0 of the
+    // composite (BrnPostFxShader.cpp's KU_SAMPLER_SOURCE), the third sibling of the two seams
+    // above and the one whose absence is visible on every frame with motion blur.
+    //
+    // BrnPostFxShader::Construct builds FOUR samplers for that unit and Render binds one of three
+    // per frame: the ANISOTROPIC motion-blur pair (4x for E_QUALITY_CHEAP, 16x for
+    // E_QUALITY_EXPENSIVE -- the X360 `addi r27, r27, 0xC`), the LINEAR one when the caller
+    // overrode the source texture, and the POINT one for a 1:1 blit. On Xenos the anisotropy IS
+    // the tap count: the blur is ONE tfetch with the two gradient latches set by hand, so the
+    // anisotropic filter integrates the streak in hardware, and BLURHQ differs from BLUR only by
+    // the sub-tap jitter constant 1/MaxAnisotropy (0.25 vs 0.0625). None of those words reach
+    // D3D9 here -- SetSamplerStateLowLevel is the documented no-op -- so without this the
+    // tex2Dgrad in the eight blur permutations degrades to a level-0 bilinear tap.
+    //
+    // CALL IT ON EVERY COMPOSITE DRAW, right after the source-sampler bind, with the words of the
+    // sampler that was just bound. Passing all three arms is what keeps the unit from being left
+    // ANISOTROPIC + CLAMP for later consumers once a blur frame has run.
+    //   luMinMagFilterWord  the console's own SamplerStateParameters min/mag word:
+    //                       0 = POINT, 1 = LINEAR, 4 = ANISOTROPIC (BrnPostFxShader.cpp:380-382).
+    //   luMaxAnisotropy     that block's MAX ANISOTROPY (muConvolution): 1 for the point and
+    //                       linear samplers, 4 or 16 for the two motion-blur ones.
+    // Defined in XenonD3D9Shims.cpp; it reads the device caps once, clamps to
+    // D3DCAPS9::MaxAnisotropy, and on a device without anisotropic min+mag filtering falls back to
+    // the LINEAR words Construct writes before its own anisotropic override.
+    // DELETE WHEN SetSamplerStateLowLevel really applies a TextureState's sampler block.
+    void PostFxSourceSampler_ApplyState(u32 luUnit, u32 luMinMagFilterWord, u32 luMaxAnisotropy);
+
     // The units currently holding a raw-depth texture, one bit per sampler. Device::SetState
     // unbinds them before it binds that same texture's surface as the depth-stencil: D3D9 (unlike
     // D3D10+) does NOT auto-unbind, and a texture that is simultaneously a sampler source and the

@@ -805,6 +805,17 @@ namespace
     // rather than argued about per vendor, exactly as the shadow pass is.
     bool        sbMaskStampActive = false;
 
+    // [DIAG, mask-alpha] SET by PCStampMotionBlurMask on every stamp; CONSUMED (read and
+    // cleared) on every post-fx COMPOSITE draw in the immediate-mode leaf below. It answers the
+    // one question the "[mask-alpha] source alpha" line cannot, and whose absence cost a wave:
+    // a mask of 0.000 on a frame where THE STAMP NEVER RAN is not a broken carrier, it is a
+    // frame with motion blur switched off -- the stamp and the composite's blur permutation are
+    // gated on the SAME byte (BrnRendererModule.cpp:4637 and :4943, both reading
+    // lPostFxFrameBytes.mbMotionBlurActive inside the same `if (lbSceneBracketOpen)` at :4618) --
+    // and the alpha the probe shows is then simply whatever the world pass left in the lane.
+    // DELETE with the mask bring-up.
+    bool        sbMaskStampedSinceComposite = false;
+
     // =========================================================================
     // [FLAG PC bring-up diagnostic] THE DEST-ALPHA CENSUS -- the fidelity question the
     // motion-blur mask's carrier turns on, answered with a counter instead of an opinion.
@@ -3477,6 +3488,146 @@ namespace
         lpDevice->SetSamplerState(luUnit, D3DSAMP_MAXANISOTROPY, 1u);
         lpDevice->SetSamplerState(luUnit, D3DSAMP_SRGBTEXTURE,   FALSE);
     }
+
+    // =========================================================================================
+    // [FLAG PC-platform leaf] THE POST-FX COMPOSITE'S **SOURCE** SAMPLER SEAM -- the fourth case
+    // of the shape the three seams above establish, and the one with the largest visible payload.
+    //
+    // WHAT THE CONSOLE ASKS FOR. BrnPostFxShader::Construct @0x823FDD18 builds FOUR samplers for
+    // this one unit and Render picks between three of them per frame
+    // (BrnPostFxShader.cpp:1786-1799):
+    //     motion blur on   -> mapSamplerState_MotionBlur[meQuality]: ANISOTROPIC min+mag
+    //                         (muBias = muMaxLevel = KU_SAMPLER_FILTER_ANISO, BrnPostFxShader.cpp
+    //                         :1341-1342) with muConvolution -- the block's MAX ANISOTROPY field,
+    //                         see that file's field-naming banner at :404-412 -- set to the loop's
+    //                         `luMaxAnisotropy = 4` then `+= 12` (the X360 `addi r27, r27, 0xC`),
+    //                         i.e. 4x for E_QUALITY_CHEAP and 16x for E_QUALITY_EXPENSIVE;
+    //     bilinear source  -> mpSamplerState_Linear: LINEAR min+mag (:1313-1314);
+    //     otherwise        -> mpSamplerState_Point:  POINT  min+mag (:1293-1294), because a 1:1
+    //                         blit must not be filtered ("a linear fetch there would soften every
+    //                         pixel", :1283-1284).
+    // All four are CLAMP on U/V/W (:1290-1292; Linear and MotionBlur are copies of the Point
+    // block) and all four carry the same mip word, so the ARMS DIFFER ONLY IN MIN/MAG AND IN THE
+    // ANISOTROPY COUNT -- which is exactly this function's two parameters.
+    //
+    // WHY THE COUNT IS THE EFFECT. The console's camera motion blur is not a tap loop: it sets the
+    // fetch unit's two gradient latches by hand (setGradientH = the screen velocity, setGradientV
+    // = its perpendicular * 1/256) and issues ONE tfetch, so the sampler's ANISOTROPIC filter
+    // integrates the streak in hardware. The PC programs spell that as one tex2Dgrad
+    // (tools/assets/shaders/brn_postfx_composite.fx). BLUR and BLURHQ differ by a single constant
+    // -- the sub-tap jitter 0.25 vs 0.0625 -- and both are 1/MaxAnisotropy for the sampler this
+    // function installs. Left at MAXANISOTROPY = 1 with a LINEAR filter, texldd's gradients only
+    // select a mip level, MIPFILTER is NONE, and the whole effect degrades to a bilinear tap at
+    // the jittered uv: visibly SHARP.
+    //
+    // WHY IT IS APPLIED HERE AND NOT THROUGH THE SAMPLER OBJECT. Same reason as the three seams
+    // above: SetSamplerStateLowLevel is the documented no-op at the bottom of this file, so a
+    // SamplerState's words never reach D3D9 -- including the POINT and LINEAR arms. Unlike those
+    // three this one CANNOT be keyed on the bound resource (the source is an ordinary 2D colour
+    // target on every arm), so it is keyed on the CALLER's own bind instead.
+    //
+    // IT HAS AN OFF ARM, AND THAT IS THE POINT. BrnPostFxShader::Render calls this on EVERY
+    // composite draw with the words of the sampler it just bound, so the unit always carries that
+    // sampler and a non-blur frame puts POINT/LINEAR and MAXANISOTROPY = 1 back. Applying a
+    // single arm would leave unit 0 ANISOTROPIC for every later consumer (the Im2d GUI draws at
+    // CgsIm2d.cpp:118/149 re-assert MIN/MAG but never ADDRESS), which is a state leak, not a fix.
+    // The apply discipline is the file's own: re-issue the words at every bind, keep no cache --
+    // shadow::Device::SetState already owns the only cache there is (shadowingdevice.cpp:374-386).
+    //
+    // CAPS, not assumption: D3D9 ignores MAXANISOTROPY unless a filter is D3DTEXF_ANISOTROPIC and
+    // clamps the count to D3DCAPS9::MaxAnisotropy. Both are read from the device and reported
+    // once. On a device without anisotropic min+mag the aniso arm falls back to LINEAR with
+    // anisotropy 1 -- which is not an invention: it is exactly what Construct writes into the
+    // motion-blur block BEFORE the anisotropic override (BrnPostFxShader.cpp:1335-1337).
+    // DELETE WHEN SetSamplerStateLowLevel really applies a TextureState's sampler block.
+    // =========================================================================================
+
+    // The console's own min/mag filter word, as stored in SamplerStateParameters::muBias /
+    // muMaxLevel by BrnPostFxShader.cpp:380-382 (`li r26, 1` / `li r22, 4`). Passed in rather
+    // than re-derived so the caller can hand over the word of the sampler object it just bound.
+    const u32 KU_POSTFX_SOURCE_FILTER_POINT  = 0u;
+    const u32 KU_POSTFX_SOURCE_FILTER_LINEAR = 1u;
+    const u32 KU_POSTFX_SOURCE_FILTER_ANISO  = 4u;
+
+    // [DIAG, mask-alpha] Raised by ApplyPostFxSourceSamplerState and by nothing else, so it is
+    // true on exactly the composite's own full-screen quad and false on the bloom down-sample and
+    // the two Blur9 passes -- the discriminator the [mask-alpha] source read-back needs (see the
+    // probe in the immediate-mode draw path). Consumed there, on every immediate draw.
+    bool gbPostFxSourceSamplerApplied = false;
+
+    void ApplyPostFxSourceSamplerState(IDirect3DDevice9* lpDevice, u32 luUnit,
+                                       u32 luMinMagFilterWord, u32 luMaxAnisotropy)
+    {
+        gbPostFxSourceSamplerApplied = true;
+
+        if (lpDevice == nullptr || luUnit >= KU_RAW_DEPTH_MAX_SAMPLER_UNITS)
+            return;
+
+        static bool sbCapsRead       = false;
+        static bool sbAnisoSupported = false;
+        static u32  suDeviceMaxAniso = 1u;
+        if (!sbCapsRead)
+        {
+            sbCapsRead = true;
+            D3DCAPS9 lCaps;
+            std::memset(&lCaps, 0, sizeof(lCaps));
+            if (SUCCEEDED(lpDevice->GetDeviceCaps(&lCaps)))
+            {
+                sbAnisoSupported =
+                    ((lCaps.TextureFilterCaps & D3DPTFILTERCAPS_MINFANISOTROPIC) != 0u) &&
+                    ((lCaps.TextureFilterCaps & D3DPTFILTERCAPS_MAGFANISOTROPIC) != 0u);
+                suDeviceMaxAniso = (lCaps.MaxAnisotropy > 1u)
+                                       ? static_cast<u32>(lCaps.MaxAnisotropy) : 1u;
+            }
+            char lacMsg[280];
+            std::snprintf(lacMsg, sizeof(lacMsg),
+                          "[postfx-mb] composite SOURCE sampler seam live: device anisotropic"
+                          " min+mag = %d, MaxAnisotropy = %u. The console's motion-blur samplers"
+                          " ask for 4x (E_QUALITY_CHEAP) and 16x (E_QUALITY_EXPENSIVE); with"
+                          " anisotropy 1 the blur's single tex2Dgrad is a bilinear tap.\n",
+                          sbAnisoSupported ? 1 : 0, static_cast<unsigned>(suDeviceMaxAniso));
+            CgsDev::Log::WriteToLog(lacMsg);
+        }
+
+        DWORD leFilter       = D3DTEXF_POINT;
+        DWORD luAppliedAniso = 1u;
+        if (luMinMagFilterWord == KU_POSTFX_SOURCE_FILTER_ANISO)
+        {
+            if (sbAnisoSupported)
+            {
+                u32 luAniso = (luMaxAnisotropy < 1u) ? 1u : luMaxAnisotropy;
+                if (luAniso > suDeviceMaxAniso)
+                    luAniso = suDeviceMaxAniso;
+                leFilter       = D3DTEXF_ANISOTROPIC;
+                luAppliedAniso = static_cast<DWORD>(luAniso);
+            }
+            else
+            {
+                // Construct's own pre-override words for this block (BrnPostFxShader.cpp
+                // :1335-1337): LINEAR min+mag, muConvolution = 1.
+                leFilter = D3DTEXF_LINEAR;
+            }
+        }
+        else if (luMinMagFilterWord == KU_POSTFX_SOURCE_FILTER_LINEAR)
+        {
+            leFilter = D3DTEXF_LINEAR;
+        }
+
+        lpDevice->SetSamplerState(luUnit, D3DSAMP_MINFILTER,     leFilter);
+        lpDevice->SetSamplerState(luUnit, D3DSAMP_MAGFILTER,     leFilter);
+        // NONE, and it is not a choice: the composite's source is a single-level render target,
+        // so there is no mip chain to filter. The console's mip word (KU_SAMPLER_MIP_FILTER = 2)
+        // is identical across all four of Construct's samplers (BrnPostFxShader.cpp:383), i.e. it
+        // is not what tells the arms apart, and the three seams above install NONE for the same
+        // single-level reason.
+        lpDevice->SetSamplerState(luUnit, D3DSAMP_MIPFILTER,     D3DTEXF_NONE);
+        lpDevice->SetSamplerState(luUnit, D3DSAMP_ADDRESSU,      D3DTADDRESS_CLAMP);  // X360 addressU = 2
+        lpDevice->SetSamplerState(luUnit, D3DSAMP_ADDRESSV,      D3DTADDRESS_CLAMP);  // X360 addressV = 2
+        lpDevice->SetSamplerState(luUnit, D3DSAMP_ADDRESSW,      D3DTADDRESS_CLAMP);  // X360 addressW = 2
+        lpDevice->SetSamplerState(luUnit, D3DSAMP_MAXMIPLEVEL,   0u);
+        lpDevice->SetSamplerState(luUnit, D3DSAMP_MAXANISOTROPY, luAppliedAniso);
+        lpDevice->SetSamplerState(luUnit, D3DSAMP_SRGBTEXTURE,   FALSE);
+    }
 }
 }  // extern "C++"
 
@@ -3803,10 +3954,46 @@ void D3DDevice_EndVertices(void* /*lpDeviceArg*/)
     // state dump above cannot answer.
     static u32 suRunTotal = 0u;
     ++suRunTotal;
+
+    // [DIAG, mask-alpha] WHICH stride-20 quad is this? gbPostFxSourceSamplerApplied is raised by
+    // ApplyPostFxSourceSamplerState -- the seam BrnPostFxShader::Render calls at its SamplerSource
+    // bind -- and by nothing else, so it is true on exactly the composite's own draw and false on
+    // the bloom down-sample and the two Blur9 passes. Consumed on EVERY immediate draw, so a
+    // composite bind that never reached a draw cannot mislabel the next quad.
+    // WHY IT IS NEEDED: the run-count cadence below fires on whichever stride-20 quad happens to
+    // be run 2000/4000/..., and BrnGame.log runs 8000 and 10000 read rt=320x180 tex0=320x180 --
+    // a down-sample, not the composite -- so the motion-blur MASK the composite actually samples
+    // (the ALPHA lane of its SOURCE) has never been measured on a blur frame. A zero mask makes
+    // the screen velocity exactly zero, which would make the anisotropic-sampler fix invisible;
+    // this settles it in one boot.
+    const bool lbCompositeDraw = gbPostFxSourceSamplerApplied;
+    gbPostFxSourceSamplerApplied = false;
+    static u32 suCompositeDraws = 0u;
+    if (lbCompositeDraw)
+        ++suCompositeDraws;
+
+    // [DIAG, mask-alpha] DID THE MASK STAMP RUN ON THIS FRAME? Read-and-cleared on every
+    // composite draw (not only the sampled ones -- a flag left standing would label every later
+    // blur-OFF frame as stamped), and latched so the sampled print below can report it. Without
+    // it the "source alpha" line is misreadable: an alpha of 0.000 on a frame with motion blur
+    // switched off is the world's leftovers, not a broken carrier.
+    static bool sbStampedForThisComposite = false;
+    if (lbCompositeDraw)
+    {
+        sbStampedForThisComposite   = sbMaskStampedSinceComposite;
+        sbMaskStampedSinceComposite = false;
+    }
+
     // Rung 5 (bloom lit): FOUR stride-20 quads run per frame now (bloom down-sample, two blur passes,
     // the composite), so the cadence is 2000 runs (= 500 frames) up to run 12000 -- the old 500/3000
     // landed every sample inside the title/menu period and read a black centre.
-    if ((suRunTotal % 2000u) == 0u && suRunTotal <= 12000u && suImVertsStride == 20u)
+    // Second cadence: every 500th COMPOSITE draw (= every 500 frames, the same rate), which is what
+    // guarantees the mask read below lands on the composite's own source rather than on a
+    // down-sample buffer.
+    const bool lbSampleThisRun =
+        ((suRunTotal % 2000u) == 0u && suRunTotal <= 12000u) ||
+        (lbCompositeDraw && (suCompositeDraws % 500u) == 0u && suCompositeDraws <= 6000u);
+    if (lbSampleThisRun && suImVertsStride == 20u)
     {
         IDirect3DSurface9* lpRt = nullptr;
         IDirect3DBaseTexture9* lpTex0 = nullptr;
@@ -3905,11 +4092,20 @@ void D3DDevice_EndVertices(void* /*lpDeviceArg*/)
         // must differ.
         if (lbTex0Read)
         {
-            char lacMask[220];
+            char lacMask[640];
             std::snprintf(lacMask, sizeof(lacMask),
-                          "[mask-alpha] source alpha run %u: centre=%u (%.3f) quarter=%u (%.3f)"
-                          " -- the motion-blur mask the composite reads at those two pixels\n",
+                          "[mask-alpha] source alpha run %u: composite=%d (composite draws %u)"
+                          " stamped=%d centre=%u (%.3f) quarter=%u (%.3f)"
+                          " -- the motion-blur mask the composite reads at those two pixels."
+                          " composite=0 is a bloom/DoF down-sample quad and says nothing about"
+                          " the mask. stamped=0 means PCStampMotionBlurMask did NOT run on this"
+                          " frame -- motion blur was inactive, the composite picked a NON-blur"
+                          " permutation and never sampled the lane, so the alpha shown is the"
+                          " world pass's leftovers and says nothing about the mask either.\n",
                           static_cast<unsigned>(suRunTotal),
+                          lbCompositeDraw ? 1 : 0,
+                          static_cast<unsigned>(suCompositeDraws),
+                          sbStampedForThisComposite ? 1 : 0,
                           static_cast<unsigned>((luTex0Centre  >> 24) & 0xFFu),
                           static_cast<double>((luTex0Centre  >> 24) & 0xFFu) / 255.0,
                           static_cast<unsigned>((luTex0Quarter >> 24) & 0xFFu),
@@ -5058,6 +5254,16 @@ void ShadowSampler_ApplyState(u32 luUnit)
 void PostFxDepthSampler_ApplyState(u32 luUnit)
 {
     ApplyRawDepthSamplerState(Dev(), luUnit);
+}
+
+// PostFxSourceSampler_ApplyState -- the post-fx composite's SOURCE unit (KU_SAMPLER_SOURCE == 0).
+// See ApplyPostFxSourceSamplerState's banner above. The only caller is BrnPostFxShader::Render,
+// immediately after `shadow::Device::SetState(lpSourceSampler, KU_SAMPLER_SOURCE)`, and it passes
+// the min/mag filter word and the MAX ANISOTROPY of the sampler object it just bound -- so all
+// three of Render's arms (motion blur / bilinear / point) land on the unit, not just the blur one.
+void PostFxSourceSampler_ApplyState(u32 luUnit, u32 luMinMagFilterWord, u32 luMaxAnisotropy)
+{
+    ApplyPostFxSourceSamplerState(Dev(), luUnit, luMinMagFilterWord, luMaxAnisotropy);
 }
 
 u32 PostFxDepthSampler_BoundUnitMask()
@@ -7032,6 +7238,11 @@ void PCStampMotionBlurMask(u32 luCarsBlurStencil, u32 luWorldBlurStencil)
     sbMaskStampActive = false;
     AlphaCoverage_Reconcile();   // the inputs are back; follow them
 
+    // [DIAG, mask-alpha] a stamp COMPLETED on this frame -- consumed by the next composite draw
+    // (see the declaration's note). Raised after the draws and the restore, so it cannot claim a
+    // stamp the device refused; hr is reported separately below.
+    sbMaskStampedSinceComposite = true;
+
     if (lpSavedDecl != nullptr) lpSavedDecl->Release();
     if (lpSavedPs   != nullptr) lpSavedPs->Release();
     if (lpSavedVs   != nullptr) lpSavedVs->Release();
@@ -7041,21 +7252,39 @@ void PCStampMotionBlurMask(u32 luCarsBlurStencil, u32 luWorldBlurStencil)
     // ONE line, on the first stamp of the run: it answers the three questions a wrong mask
     // raises -- which two bytes went in, whether the stencil could discriminate them at all,
     // and whether alpha-to-coverage was live at the moment they were written.
+    // ⚠ NOT LogOnce ANY MORE, and the reason is a wave that was lost to the old line. `quads` and
+    // the two bytes are per-FRAME facts: the first stamp of a run is the junkyard entry, where
+    // mfCarsBlurAmount == mfWorldBlurAmount == 1.0, so lbTwoQuads is false and the frozen line
+    // says `quads=1` forever -- which reads like a refused draw and is nothing of the kind. Later
+    // frames genuinely stamp TWO quads (run 20260820_101433: `[postfx-cam] produce 4500 ... mb=1
+    // cars=0.000000 world=1.000000`, and the composite's own read-back on that frame,
+    // `[mask-alpha] source alpha ... composite draws 4500 centre=0 (0.000) quarter=255 (1.000)`,
+    // is the cars-vs-world split arriving in the lane). So the line is re-printed whenever the
+    // tuple it describes changes, capped so a ramping amount cannot flood the log.
     {
-        char lacMessage[384];
-        std::snprintf(lacMessage, sizeof(lacMessage),
-                      "[mask-alpha] stamp: cars=%u world=%u carrier=scene-alpha stencil=%s"
-                      " depthFmt=0x%08X a2c=%s quads=%u target=%ux%u hr=0x%08X\n",
-                      static_cast<unsigned>(luCarsByte),
-                      static_cast<unsigned>(luWorldByte),
-                      lbHaveStencil ? "yes" : "NO (world amount everywhere)",
-                      static_cast<unsigned>(luDepthFormat),
-                      lbA2cWasApplied ? "on (suppressed for the stamp)" : "off",
-                      static_cast<unsigned>(luQuads),
-                      static_cast<unsigned>(luSurfaceWidth),
-                      static_cast<unsigned>(luSurfaceHeight),
-                      static_cast<unsigned>(lHrDraw));
-        LogOnce("mask-alpha-stamp", lacMessage);
+        static u32 suLastStampKey = 0xFFFFFFFFu;
+        static u32 suStampPrints  = 0u;
+        const u32  luStampKey = (luCarsByte << 16) | (luWorldByte << 8)
+                              | (luQuads << 1) | (lbHaveStencil ? 1u : 0u);
+        if (luStampKey != suLastStampKey && suStampPrints < 12u)
+        {
+            suLastStampKey = luStampKey;
+            ++suStampPrints;
+            char lacMessage[384];
+            std::snprintf(lacMessage, sizeof(lacMessage),
+                          "[mask-alpha] stamp: cars=%u world=%u carrier=scene-alpha stencil=%s"
+                          " depthFmt=0x%08X a2c=%s quads=%u target=%ux%u hr=0x%08X\n",
+                          static_cast<unsigned>(luCarsByte),
+                          static_cast<unsigned>(luWorldByte),
+                          lbHaveStencil ? "yes" : "NO (world amount everywhere)",
+                          static_cast<unsigned>(luDepthFormat),
+                          lbA2cWasApplied ? "on (suppressed for the stamp)" : "off",
+                          static_cast<unsigned>(luQuads),
+                          static_cast<unsigned>(luSurfaceWidth),
+                          static_cast<unsigned>(luSurfaceHeight),
+                          static_cast<unsigned>(lHrDraw));
+            CgsDev::Log::WriteToLog(lacMessage);
+        }
     }
 
     if (FAILED(lHrDraw))

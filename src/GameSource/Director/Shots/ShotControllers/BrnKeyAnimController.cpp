@@ -487,6 +487,55 @@ void KeyAnimController::UpdateFocus(const ICE::ICETake& lrTake, Camera::Camera* 
         }
     }
 
+    // [DIAG BRN_DOF_TRACE] BRING-UP SCAFFOLDING, NOT CONSOLE CODE. THE MEASUREMENT THAT SETTLES
+    // "our depth of field is weaker than the original": it prints what the AUTHORED take asks for
+    // (the four RAWFOCUS channels plus the override gate) NEXT TO the band this function derives
+    // from them, so the two halves can never be confused again. Nothing else in the tree reports
+    // either half -- BrnRendererModule's `[postfx-cam] produce` line carries the blurriness ONLY,
+    // which is why an authored 0.386 and a diluted 0.386 look identical in BrnGame.log today.
+    //
+    // CHANGE-LATCHED on the gate + the blurriness (these are event-driven authored curves, so a
+    // periodic sample would miss the transitions that matter) and capped at 32 lines so a take
+    // whose intensity animates every frame cannot flood the log. Off unless BRN_DOF_TRACE is set.
+    // Remove with the ICE-camera bring-up.
+    {
+        // The whole probe (channel reads AND the change latches) sits behind a one-time getenv
+        // so a trace-off run does no per-frame work, and the take is null-tested (GetData())
+        // before GetLength()'s mpTakeData deref -- a deref the surrounding console code never
+        // makes.
+        static const bool sbDofTraceOn = getenv("BRN_DOF_TRACE") != 0;
+        static s32 s_iDofReports   = 0;
+        static s32 s_iLastOverride = -1;
+        static f32 s_fLastBlur     = -1.0f;
+
+        if (sbDofTraceOn && s_iDofReports < 32 && lrTake.GetData() != 0
+            && CgsDev::Log::gpDebugPrint != 0)
+        {
+            const s32 liOverride = lrTake.GetValueInt(E_ICE_RAWFOCUS_OVERRIDE);
+            const bool lbChanged =
+                (liOverride != s_iLastOverride) || (lfBlurriness != s_fLastBlur);
+            s_iLastOverride = liOverride;
+            s_fLastBlur     = lfBlurriness;
+
+            if (lbChanged)
+            {
+            ++s_iDofReports;
+            *CgsDev::Log::gpDebugPrint
+                << "[dof-take] len " << lrTake.GetLength()
+                << " override "  << liOverride
+                << " intensity " << lrTake.GetValueFloat(E_ICE_BLUR_INTENSITY)
+                << " falloff "   << lrTake.GetValueFloat(E_ICE_BLUR_FALLOFF)
+                << " near "      << lrTake.GetValueFloat(E_ICE_NEAR_FOCUS)
+                << " far "       << lrTake.GetValueFloat(E_ICE_FAR_FOCUS)
+                << " -> band "   << lfFocusStartDistanceMeters
+                << " / "         << lfPerfectFocusStartDistanceMeters
+                << " / "         << lfPerfectFocusEndDistanceMeters
+                << " / "         << lfFocusEndDistanceMeters
+                << " blur "      << lfBlurriness << "\n";
+            }
+        }
+    }
+
     lpCamera->GetDepthOfField().SetParams(lfFocusStartDistanceMeters,
                                           lfPerfectFocusStartDistanceMeters,
                                           lfPerfectFocusEndDistanceMeters,

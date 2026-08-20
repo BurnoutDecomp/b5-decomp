@@ -10,6 +10,7 @@
 #include "pc/gcm/renderengine/VertexDescriptor.h"                               // VertexDescriptor / VertexDescriptorData
 #include "pc/gcm/renderengine/texture.h"                                        // renderengine::Texture
 #include "pc/gcm/renderengine/Xbox2SurfaceShims.h"                              // renderengine::gpD3DDevice
+#include "pc/gcm/renderengine/ShadowPassPCLeaf.h"                              // renderengine::PostFxSourceSampler_ApplyState
 #include "GameShared/GameClasses/Graphics/CgsResourceAllocatorCreate.h"         // ResourceAllocatorCreate
 #include "rw/math/vpu/matrix44affine_operation.h"                               // vpu::Inverse(Matrix44Affine) / Mult(affine,affine)
 #include "rw/math/vpu/matrix44_operation.h"                                     // vpu::Mult(Matrix44Affine, Matrix44)
@@ -381,6 +382,19 @@ namespace
     const u32 KU_SAMPLER_FILTER_LINEAR = 1;   // `li r26, 1`
     const u32 KU_SAMPLER_FILTER_ANISO  = 4;   // `li r22, 4` -> `stw r22, var_4D4 / var_4D0`
     const u32 KU_SAMPLER_MIP_FILTER    = 2;   // constant across all four samplers
+
+    // The MAX ANISOTROPY Construct writes into mapSamplerState_MotionBlur[quality]'s muConvolution:
+    // `luMaxAnisotropy = 4` before the loop and `luMaxAnisotropy += 12` at the end of every
+    // iteration (the X360 `addi r27, r27, 0xC`), i.e. 4 for E_QUALITY_CHEAP and 16 for
+    // E_QUALITY_EXPENSIVE. Written as that recurrence's closed form over the SAME quality index the
+    // bind site uses to pick the sampler, so the value pushed to the device cannot drift from the
+    // value inside the sampler object. It is also 1 / the pixel programs' sub-tap jitter constant
+    // (0.25 for BLUR, 0.0625 for BLURHQ -- tools/assets/shaders/brn_postfx_composite.fx), which is
+    // what keeps the CPU side and the shader side consistent by construction.
+    u32 MotionBlurSamplerMaxAnisotropy(u32 luQuality)
+    {
+        return 4u + 12u * luQuality;
+    }
 #endif  // BRN_POSTFX_SHADER_PROGRAMS_AVAILABLE
 }
 
@@ -1784,19 +1798,53 @@ void BrnPostFxShader::Render(f32 lfWhiteLevel,
     // the target), and otherwise POINT -- a 1:1 blit must not be filtered.
     shadow::Device::SetResource(lpSourceTexture, KU_SAMPLER_SOURCE);
     renderengine::SamplerStateData* lpSourceSampler = 0;
+    // The min/mag filter word and the MAX ANISOTROPY of whichever sampler this arm picks, carried
+    // alongside the object because the object's words never reach D3D9 (see the seam call below).
+    // Every value is the one Construct wrote into that very sampler: POINT/LINEAR at
+    // BrnPostFxShader.cpp:1293-1294 / :1313-1314, ANISO + 4|16 at :1341-1343 / :1356. The point and
+    // linear blocks carry muConvolution = 1 (:1296, inherited by the linear copy at :1312).
+    u32 luSourceFilter        = KU_SAMPLER_FILTER_POINT;
+    u32 luSourceMaxAnisotropy = 1;
     if (lbEnableMotionBlur)
     {
-        lpSourceSampler = mapSamplerState_MotionBlur[lMotionBlurState.meQuality];
+        lpSourceSampler       = mapSamplerState_MotionBlur[lMotionBlurState.meQuality];
+        luSourceFilter        = KU_SAMPLER_FILTER_ANISO;
+        luSourceMaxAnisotropy =
+            MotionBlurSamplerMaxAnisotropy(static_cast<u32>(lMotionBlurState.meQuality));
     }
     else if (lbBilinearSource)
     {
         lpSourceSampler = mpSamplerState_Linear;
+        luSourceFilter  = KU_SAMPLER_FILTER_LINEAR;
     }
     else
     {
         lpSourceSampler = mpSamplerState_Point;
+        luSourceFilter  = KU_SAMPLER_FILTER_POINT;
     }
     shadow::Device::SetState(static_cast<void*>(lpSourceSampler), KU_SAMPLER_SOURCE);
+
+    // [FLAG PC-platform leaf] PUSH THE SAMPLER WORDS THE BIND ABOVE CANNOT.
+    // shadow::Device::SetState hands the block to SetSamplerStateLowLevel, whose PC body is a
+    // documented no-op (XenonD3D9Shims.cpp), so NONE of this unit's words reach D3D9 -- not the
+    // ANISOTROPIC filter and 4x/16x anisotropy of the motion-blur samplers, and not the POINT or
+    // LINEAR of the other two arms either. On this effect the anisotropy IS the tap count: the
+    // blur is one tex2Dgrad whose two gradients span a 256:1 sliver along the screen velocity (the
+    // source tap in tools/assets/shaders/brn_postfx_composite.fx). Left at MAXANISOTROPY = 1 with
+    // a LINEAR filter, texldd's gradients only pick a mip level, MIPFILTER is NONE, and the streak
+    // collapses to a bilinear tap at the jittered uv.
+    // CALLED ON ALL THREE ARMS, unconditionally, so a non-blur composite takes the anisotropy
+    // back off unit 0 after a blur frame. It is NOT the only writer of unit 0's sampler state
+    // (PCSceneBlit_Begin/_End save+restore that unit, and CgsIm2d / the Im render buffers write
+    // it per draw), but it IS the only apply path for the COMPOSITE's own bind, since SetState
+    // routes the block to the no-op. KNOWN RESIDUAL: the ADDRESSU/V/W CLAMP this seam applies is
+    // never restored -- the next unit-0 consumer that does not write its own address mode
+    // inherits CLAMP (probe: a WRAP-tiled texture drawn on unit 0 right after the composite).
+    // The bookkeeping above is untouched -- SetState still ran first and still wrote the shadow
+    // cache; this only re-states the same words to the device.
+    // DELETE-WHEN SetSamplerStateLowLevel really applies a sampler block.
+    renderengine::PostFxSourceSampler_ApplyState(KU_SAMPLER_SOURCE, luSourceFilter,
+                                                 luSourceMaxAnisotropy);
 
     // Units 1 and 2: the bloom buffer and the depth-of-field buffer, both bilinear (they are
     // down-sampled, so filtering them is the point).
