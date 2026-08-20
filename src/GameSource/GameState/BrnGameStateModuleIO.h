@@ -56,7 +56,28 @@ namespace GameStateModuleIO
     // ---- forward declarations of the interface member types (own TUs) --------
     // Full layouts live with their own reconstructions; only pointers are returned by the
     // accessors, so incomplete declarations suffice.
-    class GameEventQueue;                  // == VariableEventQueue<1536,16>
+    // ⭐ [gateui] SEAT PROMOTED 2026-08-20 -- this was `class GameEventQueue;`, forward-only, over
+    // two 1552/1556-byte `u8` placeholders. It is now the DWARF definition verbatim:
+    //     dwarfdump GameSource/GameState/BrnGameEvents.h:314
+    //     `struct GameEventQueue : public VariableEventQueue<1536,16> {}`
+    // WHY NOW: owner `bridge` lands BridgeWorldToGameState this round, which Appends the world's
+    // per-frame queue into PostWorldInputBuffer's copy -- an `Append<1536,16>` call that CANNOT be
+    // written against an incomplete type. Every existing caller reached it through a
+    // `reinterpret_cast<GameEventQueue*>(&storage)` in the accessor; those casts still compile
+    // unchanged, they now just hand back a usable type.
+    //
+    // ⚠️ THE PADS ARE A LOADED GUN -- the two seats were sized from CONSOLE offset arithmetic
+    // (0x660-0x4C == 1556 and 0xAAC0-0xA4B0 == 1552), so promoting the seat means re-deriving the
+    // remainder AT HOST SIZE, not assuming the console's fit. Measured, not assumed:
+    // VariableEventQueue<1536,16> is POINTER-FREE (bool mbIsConstructed; char macData[1536];
+    // three s32), so its host sizeof is 1552 -- the SAME as the console's -- and the
+    // KI_..._SEAT_SIZE static_asserts below fail loudly the day that stops being true. The
+    // PostWorld seat is therefore an exact fit; the PreWorld seat keeps 4 bytes of trailing
+    // console padding, spelled as an explicit pad rather than folded into the member.
+    class GameEventQueue : public CgsModule::VariableEventQueue<1536, 16>
+    {
+    };
+
     class TakedownEventInputQueueType;     // PreWorldInputBuffer +0x660
     // PreWorldInputBuffer +0x36B8: the network player-results interface is BrnNetwork's committed
     // PlayerResultsInterface (operator= @0x823B8F68); alias it so SetNetworkPlayerResultsInterface
@@ -351,7 +372,11 @@ namespace GameStateModuleIO
         u8                   maPad0x01[0x04 - sizeof(CgsModule::IOBuffer)]; // status byte end -> 0x04
         TimerStatusInterface mTimerStatusInterface;                         // @ +0x0004 (0x30 bytes)
         ControllerInput      mControllerInput;                              // @ +0x0034 (0x18 bytes)
-        u8  mGameEventQueueStorage[0x660 - 0x4C];                       // GameEventQueue   @ +0x004C
+        // [gateui] real typed seat (was `u8 mGameEventQueueStorage[0x660 - 0x4C]`).
+        GameEventQueue       mGameEventQueue;                               // @ +0x004C
+        // The console seat is 4 bytes wider than the queue; keep the remainder explicit so
+        // mTakedownEventInputQueueStorage stays pinned at +0x660 (asserted below).
+        u8  maPadAfterGameEventQueue[(0x660 - 0x4C) - sizeof(GameEventQueue)];
         u8  mTakedownEventInputQueueStorage[0x7B0 - 0x660];            // TakedownEventQueue@ +0x0660
         NetworkToGameStateInterface mNetworkToGameStateInterface;      // @ +0x07B0 (named opaque)
         u8  maPadToPlayerStatus[0x2CC8 - (0x7B0 + sizeof(NetworkToGameStateInterface))]; // -> +0x2CC8
@@ -369,7 +394,11 @@ namespace GameStateModuleIO
             static_assert(sizeof(TimerStatusInterface) == 0x30, "TimerStatusInterface must be 0x30 bytes");
             static_assert(offsetof(PreWorldInputBuffer, mTimerStatusInterface)          == 0x04,   "mTimerStatusInterface @ +0x04");
             static_assert(offsetof(PreWorldInputBuffer, mControllerInput)               == 0x34,   "mControllerInput @ +0x34");
-            static_assert(offsetof(PreWorldInputBuffer, mGameEventQueueStorage)         == 0x4C,   "mGameEventQueueStorage @ +0x4C");
+            // [gateui] the promoted seat: pin BOTH its offset and its HOST size, because the pad
+            // that follows it is computed from `sizeof(GameEventQueue)` -- if the queue ever grows
+            // a pointer, this is the assert that fires instead of silently shifting +0x660.
+            static_assert(sizeof(GameEventQueue) == 1552, "GameEventQueue host sizeof (pointer-free: bool + char[1536] + 3 * s32)");
+            static_assert(offsetof(PreWorldInputBuffer, mGameEventQueue)                == 0x4C,   "GameEventQueue @ +0x4C");
             static_assert(offsetof(PreWorldInputBuffer, mTakedownEventInputQueueStorage) == 0x660,  "TakedownEventInputQueue @ +0x660");
             static_assert(offsetof(PreWorldInputBuffer, mPlayerStatusInterface)         == 0x2CC8, "mPlayerStatusInterface @ +0x2CC8");
             static_assert(offsetof(PreWorldInputBuffer, mNetworkPlayerResultsInterface) == 0x36B8, "mNetworkPlayerResultsInterface @ +0x36B8");
@@ -425,7 +454,10 @@ namespace GameStateModuleIO
         // returns &this member. Its GetPlayerActiveRaceCarIndex reads at interface+0x2858.
         u8  mActiveRaceCarOutputInterfaceStorage[0x2890]; // RCEntityActiveRaceCarOutputInterface @ +0x7250 (covers +0x2858 read)
         u8  mPostActiveCarOutputStorage[0xA4B0 - (0x7250 + 0x2890)]; // -> +0xA4B0
-        u8  mGameEventQueueStorage[0xAAC0 - 0xA4B0];                  // GameEventQueue         @ +0xA4B0
+        // [gateui] real typed seat (was `u8 mGameEventQueueStorage[0xAAC0 - 0xA4B0]`). This seat
+        // is an EXACT fit at host size (0xAAC0 - 0xA4B0 == 1552 == sizeof(GameEventQueue)), so no
+        // trailing pad -- and the two asserts below are what keep that claim honest.
+        GameEventQueue       mGameEventQueue;                         // GameEventQueue         @ +0xA4B0
         // Real, complete AICarOutputInterface (BrnAI::AIModuleIO::AICarOutputInterface). sizeof == 0x14E8
         // (== 0xBFA8 - 0xAAC0), 4-aligned, so it occupies exactly the former placeholder span and leaves
         // mTrafficTypeResponseQueue pinned at +0xBFA8.
@@ -439,8 +471,13 @@ namespace GameStateModuleIO
         {
             static_assert(offsetof(PostWorldInputBuffer, mActiveRaceCarOutputInterfaceStorage) == 0x7250,
                           "RCEntityActiveRaceCarOutputInterface @ +0x7250");
-            static_assert(offsetof(PostWorldInputBuffer, mGameEventQueueStorage) == 0xA4B0,
+            static_assert(offsetof(PostWorldInputBuffer, mGameEventQueue) == 0xA4B0,
                           "GameEventQueue @ +0xA4B0");
+            // [gateui] the exact-fit claim, spelled out: the seat the console's offsets carve is
+            // 0xAAC0 - 0xA4B0 == 1552, and the host queue is 1552. If either moves, this fires
+            // before mAICarOutputInterface silently slides off +0xAAC0.
+            static_assert((0xAAC0 - 0xA4B0) == sizeof(GameEventQueue),
+                          "PostWorldInputBuffer GameEventQueue seat is an exact host fit");
             static_assert(offsetof(PostWorldInputBuffer, mAICarOutputInterface) == 0xAAC0,
                           "AICarOutputInterface @ +0xAAC0");
         }

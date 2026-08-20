@@ -8,6 +8,7 @@
 #include "GameSource/GameState/Progression/BrnProgressionManager.h"     // BrnProgression::ProgressionManager::GetProfile
 #include "GameSource/GameState/Progression/BrnProfile.h"                // BrnProgression::Profile::SetCarUnlockAlreadyShown
 #include "GameSource/GameState/BrnGameStateModuleIO.h"                  // GameStateModuleIO::OutputBuffer (owned by pointer)
+#include "GameSource/GameState/TrainingManager/BrnTrainingManager.h"    // [gateui] the complete type mpTrainingManager is newed as (see its FLAG in the header)
 #include "SharedClasses/DataLists/VehicleList.h"                        // BrnResource::VehicleList (GetVehicleIndex / GetVehicleData)
 #include "SharedClasses/DataLists/WheelList.h"                          // BrnResource::WheelList (GetWheelCount -- Prepare's list diagnostic)
 #include "SharedClasses/DataLists/VehicleListEntry.h"                   // BrnResource::VehicleListEntry (parent id / livery + car type / stats)
@@ -90,6 +91,77 @@ void GameStateModule::Construct()
     // DELETE-WHEN those two Constructs land: they must then run BEFORE this line.
     mCarSelectManager.Construct(&mTriggerQueryManager, this, &mProgressionManager);
 
+    // ⭐⭐ [gateui] THE STUNT SUB-OBJECT, wired with the console's own six arguments. X360
+    // 0x82380388, the line immediately after OnlineCarSelectManager::Construct:
+    //     BrnGameState::StuntManager::Construct(a1 + 183952,   // &mStuntManager
+    //                                           a1 + 47920,    // &mProgressionManager
+    //                                           a1 + 42320,    // &mTriggerQueryManager
+    //                                           a1 + 4128,     // &mModeManager
+    //                                           a1 + 46640,    // the TrainingManager
+    //                                           a1);           // this
+    // Verbatim, same order. Construct is the manager's ONLY initialiser -- it seeds the "last
+    // latched element" set to its empty state (muLastZoneId/muLastPropId = -1,
+    // mpLastStuntOrSmashElement = NULL, meLastStuntElementType = COUNT), Constructs the district
+    // map's receiver queue and registers the debug component -- so without it OnPropHit would
+    // latch into, and Prepare would stream through, uninitialised state.
+    //
+    // ⚠️ THE TRAINING-MANAGER ARGUMENT IS A HEAP OBJECT HERE, NOT A SUB-OBJECT -- see
+    // mpTrainingManager's FLAG in the header for the include cycle that forces it. It is
+    // allocated FIRST so the pointer StuntManager stores is final and non-null: passing 0 would
+    // fire the console's own `mpTrainingManager` assert (BrnStuntManager.cpp:71) EVERY BOOT.
+    // ⓘ TrainingManager::Construct is deliberately NOT called: the console's GameStateModule::
+    // Construct does not call it either (it is absent from the 0x82380388 Construct list -- the
+    // manager is wired by the four Constructs that take `a1 + 46640` as an owner pointer, and
+    // initialised elsewhere).
+    // ⛔ [gateui] AND NOTHING IN THIS TREE DEREFERENCES IT. `new T()` VALUE-initialises (the class
+    // has no user-provided default ctor and no vptr), so every member -- including the
+    // mpProgressionManager back-pointer that only TrainingManager::Construct ever writes -- is
+    // ZERO, not indeterminate. The one body that used to reach through it,
+    // StuntManager::ProcessStuntElement's training-tip arm, is PARKED this round precisely
+    // because TrainingManager::GetProfile() would have null-dereffed that unwritten back-pointer
+    // (and because its six symbols have no body anywhere). So this object exists ONLY to satisfy
+    // the console's non-null assert; it is stored, never used.
+    // DELETE-WHEN TrainingManager::Construct gets a caller, at which point it must run HERE,
+    // before mStuntManager.Construct, and the tip arm can be un-parked.
+    if (mpTrainingManager == 0)
+    {
+        mpTrainingManager = new TrainingManager();
+    }
+    mStuntManager.Construct(&mProgressionManager, &mTriggerQueryManager, &mModeManager,
+                            mpTrainingManager, this);
+
+    // ⭐ [gateui] THE GAME-EVENT CARRY QUEUE (X360 this+248384). The console Constructs it right
+    // here: `CgsModule::VariableEventQueue<1536,16>::Construct(a1 + 248384)` @0x82380388, in the
+    // block of queue Constructs near the end of the body. This is the never-Constructed-queue
+    // trap paid up front -- PostWorldUpdate Appends into it and PreWorldUpdate Clears it, and
+    // Clear() does NOT bind a buffer.
+    mGameEventCarryQueue.Construct();
+
+    // ⭐ [gateui r4] CONSTRUCT INSURANCE (verify_r3_fix3bridge NOTE-2). The round-3 carry-queue
+    // gate narrowed the producer to E_MGS_IN_GAME, so the FIRST in-game pre-world leg now reads
+    // an mLastActiveRaceCarInterface that has never been written (round 2 refreshed it on every
+    // loading sub-step). Nothing else clears it either: the interface's default ctor is an
+    // empty user-provided `{}`, so mePlayerActiveRaceCarIndex / mbIsPlayerCarActive have no
+    // initialiser. It is safe TODAY only by accident -- BrnMain.cpp:45 is
+    // `static BrnGame::BrnGameModule gGameModule;`, i.e. static storage, i.e. zero-init, i.e.
+    // IsPlayerCarActive() false for exactly one sub-step. The day that allocation moves to the
+    // boot allocator (which BrnMain.cpp:23 names as the console shape) a garbage-true
+    // IsPlayerCarActive() sends GetPlayerRaceCarState() into maRaceCarStates[garbage].
+    // Clear() is the interface's OWN X360 body (0x8227D550) and lands exactly the state the
+    // readers expect: index -1, engine state COUNT, mbIsPlayerCarActive false.
+    mLastActiveRaceCarInterface.Clear();
+
+    // [FLAG PC bring-up] `DeveloperChallengeManager::Construct(a1 + 185712, a1 + 47920,
+    // a1 + 284520, a1 + 7632, a1)` -- i.e. (&mDeveloperChallengeManager, &mProgressionManager,
+    // &mStreetManager, mModeManager.GetScoringSystem(), this) -- is NOT called yet, for the same
+    // MEASURED link reason as the AchievementManagerBase / StreetManager pair documented above:
+    // its third argument goes through ModeManager::GetScoringSystem(), whose body lives in the
+    // unmounted BrnModeManager.cpp. The subobject is embedded (so it is zero-initialised rather
+    // than indeterminate -- BrnGameModule holds this module by value) and
+    // GetDeveloperChallengeManager() hands it back, which is what
+    // StuntManager::ProcessStuntElement's assert and OnCollectStunt call need.
+    // DELETE-WHEN BrnModeManager.cpp mounts; the call then goes on the line the console has it.
+
     // ⚠️⚠️ THE TWO PREPARE2 SUB-OBJECTS ARE NOT Construct()ed HERE (2026-08-11), and the reason in
     // BOTH cases is a MEASURED LINK COST -- not a missing body. The X360 Construct @0x82380388 runs
     //
@@ -165,6 +237,13 @@ void GameStateModule::Destruct()
     {
         delete mpOutputBuffer;
         mpOutputBuffer = 0;
+    }
+
+    // [gateui] the partner of Construct()'s allocation -- see mpTrainingManager's FLAG.
+    if (mpTrainingManager != 0)
+    {
+        delete mpTrainingManager;
+        mpTrainingManager = 0;
     }
 
     CgsModule::ModuleSingleBuffered::Destruct();
@@ -253,12 +332,10 @@ void GameStateModule::Destruct()
 static const s32 KI_REPLY_VEHICLE_LIST = 52;
 static const s32 KI_REPLY_WHEEL_LIST   = 59;
 
-// Stage 4's district-map bundle. The console's own literals, off StuntManager::LoadDistrictMap
-// @0x82399458 (`aDistrictsDat`, event id 1, pool 5 == the GameData pool) -- the same spelling
-// BrnWorldModule::LoadDistrictMap @0x827D11D8 uses for the same file.
-static const char* const KPC_DISTRICTS_FILE_NAME = "Districts.dat";
-static const s32         KI_DISTRICTS_EVENT_ID   = 1;
-static const s32         KI_GAMEDATA_POOL_ID     = 5;
+// ✅ [gateui] Stage 4's district-map bundle literals moved OUT of this file (2026-08-20): the
+// LoadBundle they served now happens where the console has it, inside StuntManager::LoadDistrictMap
+// @0x82399458, so KPC_DISTRICT_MAP_BUNDLE_NAME / _RESOURCE_NAME / KI_DISTRICT_MAP_EVENT_ID /
+// KI_DISTRICT_MAP_POOL_ID live in BrnStuntManager.cpp alongside it.
 
 namespace
 {
@@ -393,42 +470,37 @@ bool GameStateModule::Prepare(GameStateModuleIO::OutputBuffer* lpOutputBuffer,
         // fall through
 
     case E_PREPARESTAGE_STUNT_MANAGER:
-        // X360: `if (!StuntManager::Prepare(this + 183952, out)) break;` -- and
-        // StuntManager::Prepare @0x82380F30 opens with `if (!LoadDistrictMap(out)) return false;`
-        // (@0x82399458), i.e. LoadBundle("Districts.dat", pool 5) -> wait -> acquire("Districts")
-        // -> bind. THE TALLY HALF (the county/stunt-element census the rest of that Prepare does)
-        // IS STILL DEFERRED -- this module has no StuntManager sub-object and BrnStuntManager.cpp's
-        // loader is an inert stub.
+        // ⭐⭐ REAL, WHOLE (2026-08-20, [gateui]). X360:
+        //     `if (!StuntManager::Prepare(this + 183952, out)) break;  *(this + 552) = 6;`
+        // (@0x8239E578, LABEL_7/LABEL_8: the store is 6, not the 5 an earlier banner here quoted.
+        //  Behaviourally identical in this tree -- E_PREPARESTAGE_REQUEST_CHALLENGE_LIST (5) is an
+        //  immediate fall-through to 6 -- but the quoted asm has to be right.)
+        // StuntManager::Prepare @0x8239C9C0 is TWO halves and BOTH are live now:
+        //   * LoadDistrictMap @0x82399458 -- LoadBundle("Districts.dat", pool 5) -> wait ->
+        //     acquire("Districts") -> bind mDistrictMapResourceHandle from the response. It needs
+        //     several pumps, which is why this stage breaks and is re-entered.
+        //   * the census -- bind mWorldMap2D over the streamed grid, then walk every generic
+        //     region, county-classify it and tally the JUMP / SMASH / BILLBOARD totals (and the
+        //     signature-takedown count). Those totals ARE the "12/45" denominator the HUD popup
+        //     prints, so nothing downstream of a smashed billboard is meaningful without them.
         //
-        // ⭐ WHAT IS REAL HERE, and why it has to be: stage 23's
-        // StreetManager::LoadDistrictMap @0x8234FB98 only ACQUIRES "Districts" -- it never loads
-        // the bundle, because on the console THIS stage loaded it 19 stages earlier. Without the
-        // bundle resident, PoolModule::DoAcquireResourceRequest still replies (it always does)
-        // but with a NULL handle, and SetupParRivals would then null-deref. So the console's own
-        // LoadBundle is issued here, with the console's own arguments, latched by
-        // meDistrictsBundleStage (which stands in for StuntManager::meDistrictMapLoadStage --
-        // see its declaration). Same request idiom as stage 3's Triggers.dat leg.
+        // ⭐ WHY THE BUNDLE LOAD HAS TO HAPPEN AT THIS STAGE (unchanged, and still the reason):
+        // stage 23's StreetManager::LoadDistrictMap @0x8234FB98 only ACQUIRES "Districts" -- it
+        // never loads the bundle, because on the console THIS stage loaded it 19 stages earlier.
+        // Without the bundle resident, PoolModule::DoAcquireResourceRequest still replies (it
+        // always does) but with a NULL handle, and SetupParRivals then null-derefs. The request
+        // that keeps that working is now the console's own, issued from the console's own
+        // function, instead of from the meDistrictsBundleStage stand-in latch this replaces (the
+        // latch, its enum and its member are deleted from the header this wave).
+        //
+        // ⓘ RE-PREPARE SAFETY (the reason the old latch had to be sticky): the terminal stage
+        // re-arms mePrepareStage at MANAGER, so this stage is re-entered on a second pass.
+        // StuntManager::meDistrictMapLoadStage's E_DISTRICT_MAP_DONE case returns true without
+        // re-requesting, so the second pass walks through and only re-runs the census.
         mePrepareStage = E_PREPARESTAGE_STUNT_MANAGER;
-        if (meDistrictsBundleStage == E_DISTRICTS_BUNDLE_NOT_REQUESTED)
-        {
-            // Console order, off 0x82399458 case 0: Clear FIRST, then LoadBundle (the mirror
-            // image of LoadStreetData's request-then-clear). `Clear` only drops stale replies.
-            mReceiverQueue.Clear();
-            lpOutputBuffer->GetResourceRequestInterface()->LoadBundle(
-                &mReceiverQueue, KI_DISTRICTS_EVENT_ID, KI_GAMEDATA_POOL_ID,
-                KPC_DISTRICTS_FILE_NAME, /*lbUseHDCache*/ false);
-            meDistrictsBundleStage = E_DISTRICTS_BUNDLE_REQUESTED;
-            break;   // the console returns here too (its case 0 ends `result = 0`)
-        }
-        if (meDistrictsBundleStage == E_DISTRICTS_BUNDLE_REQUESTED)
-        {
-            // The console's case 1 (E_DISTRICT_MAP_LOAD_RESPONSE): wait for the load reply.
-            if (mReceiverQueue.GetCount() <= 0)
-                break;
-            mReceiverQueue.Clear();
-            meDistrictsBundleStage = E_DISTRICTS_BUNDLE_LOADED;
-            LogPrepareStageOnce(4, "Districts.dat bundle loaded; StuntManager tally half [deferred]");
-        }
+        if (!mStuntManager.Prepare(lpOutputBuffer))
+            break;
+        mePrepareStage = E_PREPARESTAGE_REQUEST_CHALLENGE_LIST;
         // fall through
     case E_PREPARESTAGE_REQUEST_CHALLENGE_LIST:
     case E_PREPARESTAGE_RECEIVE_CHALLENGE_LIST:
