@@ -73,16 +73,21 @@ Vector3 ComputeKeyLightDirection( f32 lfSunAngleRad,
     const f32 lfSinRig  = std::sin(lfRigRotationRad);
     const f32 lfCosRig  = std::cos(lfRigRotationRad);
 
-    // v * RotationX(tilt)
+    // v * RotationX(tilt).  XMMatrixRotationX @0x822034B0 stores its rows as
+    //   row0 (1, 0, 0, 0) / row1 (0, cos, sin, 0) / row2 (0, -sin, cos, 0)
+    // (decoded from the vpermwi128 immediates 0xEA / 0xE3 / 0xDB at 0x8220352C..0x82203540),
+    // and the caller's ladder forms x*row0 + y*row1 + z*row2 -- a ROW-vector * matrix product.
     const f32 lfTiltedX = lDirection.x;
-    const f32 lfTiltedY = (lDirection.y * lfCosTilt) + (lDirection.z * lfSinTilt);
-    const f32 lfTiltedZ = (lDirection.z * lfCosTilt) - (lDirection.y * lfSinTilt);
+    const f32 lfTiltedY = (lDirection.y * lfCosTilt) - (lDirection.z * lfSinTilt);
+    const f32 lfTiltedZ = (lDirection.y * lfSinTilt) + (lDirection.z * lfCosTilt);
 
-    // (v * RotationX) * RotationY(rig)
+    // (v * RotationX) * RotationY(rig).  XMMatrixRotationY @0x82203560 stores
+    //   row0 (cos, 0, -sin, 0) / row1 (0, 1, 0, 0) / row2 (sin, 0, cos, 0)
+    // (vpermwi128 0xB7 / 0xBA / 0x3B at 0x822035DC..0x822035F0), again applied as a row vector.
     Vector3 lResult;
-    lResult.x = (lfTiltedX * lfCosRig) - (lfTiltedZ * lfSinRig);
+    lResult.x = (lfTiltedX * lfCosRig) + (lfTiltedZ * lfSinRig);
     lResult.y = lfTiltedY;
-    lResult.z = (lfTiltedX * lfSinRig) + (lfTiltedZ * lfCosRig);
+    lResult.z = (lfTiltedZ * lfCosRig) - (lfTiltedX * lfSinRig);
     lResult.w = KF_ZERO;
     return lResult;
 }
