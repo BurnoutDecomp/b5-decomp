@@ -221,7 +221,75 @@ namespace PropEntityIO
         return &mReplayRequestInterface;
     }
 
-    // X360 0x827A2000 (R) -- read-lock; the const twin of the getter above, same member.
+    // ========================================================================================
+    // ⭐ THE READ-LOCK (const) TWINS -- ADDED 2026-08-20 (gateui wave, owner `wire`).
+    //
+    // These are NOT host inventions. All six are real X360 out-of-line symbols; they were
+    // simply left UNNAMED by IDA (`sub_827A1CB8` … `sub_827A1F58`), so the JSON export set --
+    // which is keyed on names -- appears not to contain them and a grep concludes "no const
+    // twin exists". MEASURED on a private BURNOUT_X360_ARTIST.XEX.i64 copy by enumerating every
+    // function start in 0x827A1600..0x827A2100 and decompiling each. Each body is the same
+    // three-step shape as its non-const twin, with the READ bit:
+    //     lbz r11,0(this) ; extrwi r11,r11,1,27      (IOBuffer::IsBufferLockedForReading)
+    //     -> "Not locked for reading\n" against
+    //        ..\..\..\GameSource\World/EntityModules/PropEntityModule/BrnPropEntityModuleIO.h
+    //     -> return this + <offset>
+    //   0x827A1CB8 line 732 -> +0x860    mSceneInputInterface
+    //   0x827A1D60 line 734 -> +0x7B0    mHitOverheadSignQueue
+    //   0x827A1E08 line 736 -> +0xCB2C0  mPropVFXLocatorQueue
+    //   0x827A1EB0 line 737 -> +0x160    mRecordHitPropQueue
+    //   0x827A1F58 line 738 -> +0x10     mPropBecamePhysicalEventQueue
+    //   0x827A2000 line 739 -> +0xCB5F0  mReplayRequestInterface   (already committed, below)
+    // Lines 733/735 are absent because the const twins of GetPropInputInterface and
+    // GetBrokenPropQueue have no call site; every emitted twin's baked line is its non-const
+    // twin's minus 9, which independently re-confirms the 741..748 binding this TU documents.
+    //
+    // Their only console consumer is WorldModule::BridgeEntityModulesToOutput_PostPhysics
+    // @0x827AEEB0, which runs with this buffer READ-locked -- see that bridge's banner in
+    // GameSource/World/Bridges/WorldBridgeEntityModulesToOutput.cpp.
+    // ========================================================================================
+
+    // X360 0x827A1CB8 (R, line 732) -- read-lock; the scene input interface (console +0x860).
+    const OutputBuffer_PostPhysics::SceneInputInterface* OutputBuffer_PostPhysics::GetSceneInputInterface() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        return &mSceneInputInterface;
+    }
+
+    // X360 0x827A1D60 (R, line 734) -- read-lock; the hit-overhead-sign queue (console +0x7B0).
+    const OutputBuffer_PostPhysics::HitOverheadSignQueue* OutputBuffer_PostPhysics::GetHitOverheadSignQueue() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        return &mHitOverheadSignQueue;
+    }
+
+    // X360 0x827A1E08 (R, line 736) -- read-lock; the prop-VFX-locator queue (console +0xCB2C0).
+    const OutputBuffer_PostPhysics::PropVFXLocatorQueue* OutputBuffer_PostPhysics::GetPropVFXLocatorQueue() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        return &mPropVFXLocatorQueue;
+    }
+
+    // X360 0x827A1EB0 (R, line 737) -- read-lock; the record-hit-prop queue (console +0x160).
+    // ⭐ THE gateui SEAM. PropEntityModule::ProcessContacts fills this queue through the WRITE
+    // getter above (PropEntityModule_wQ2_03.cpp :: ProcessContacts); the world->output bridge
+    // drains it through THIS one and re-posts every element into the world update-output's
+    // GameEventQueue as game event 111 (E_EVENT_RECORD_PROP_HIT), which is the only path by
+    // which a smashed prop reaches GameStateModule::ProcessGameEvents -> StuntManager::OnPropHit.
+    const OutputBuffer_PostPhysics::RecordHitPropQueue* OutputBuffer_PostPhysics::GetRecordHitPropQueue() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        return &mRecordHitPropQueue;
+    }
+
+    // X360 0x827A1F58 (R, line 738) -- read-lock; the prop-became-physical queue (console +0x10).
+    const OutputBuffer_PostPhysics::PropBecamePhysicalEventQueue* OutputBuffer_PostPhysics::GetPropBecamePhysicalEventQueue() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        return &mPropBecamePhysicalEventQueue;
+    }
+
+    // X360 0x827A2000 (R, line 739) -- read-lock; the const twin of the getter above, same member.
     const OutputBuffer_PostPhysics::ReplayRequestInterface* OutputBuffer_PostPhysics::GetReplayRequestInterface() const
     {
         CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");

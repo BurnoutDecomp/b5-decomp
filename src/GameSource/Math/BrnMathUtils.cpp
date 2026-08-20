@@ -148,6 +148,105 @@ namespace BrnMath
     }
 
     // ---------------------------------------------------------------------------------------
+    // IsPointInsideBox (X360 @ 0x82540AB8)  -- DWARF Math/BrnMathUtils.cpp
+    //
+    // [gateui] 2026-08-20. THE ORIENTED-BOX NARROWPHASE. StuntManager::OnPropHit
+    // @0x8236EE18 runs it after its bounding-sphere pre-cull to decide whether a broken
+    // prop really sits inside a SMASH / BILLBOARD generic region, and
+    // ChallengeManager::IsPointInTriggerRegion @0x82333368 runs the identical pair.
+    // It was declared here and defined NOWHERE (measured UNDEF in BrnStuntManager.obj
+    // and BrnChallengeManager_wC_04.obj).
+    //
+    // ARG SHAPE FROM THE ASM (the header's old "inferred" FLAG is now retired):
+    //   r3 = &lBoxTransform -- rows are read at r3+0 / +16 / +32 (`lvx128 v13,r0,r30`,
+    //        `... r0,r28` with r28 = r3+16, `... r0,r27` with r27 = r3+32) and the
+    //        translation row at r3+48 (`lvx128 v13, r30, r11` with r11 = 48);
+    //   v1  = lPoint (saved to v126 in the prologue, `vmr128 v126, v1`);
+    //   v2  = lBoxDimensions (spilled to the param save area at sp+256 and re-read from
+    //        there as the pseudocode's `a19`).
+    // Two SIMD args in v1/v2 and one GPR -- the committed
+    // (const Matrix44Affine&, Vector3, Vector3) declaration is exactly right.
+    //
+    // BODY (asm, 0x82540C60..end):
+    //   lOffset = lPoint - lBoxTransform.Pos()                    (vsubfp128 v13, v126, row3)
+    //   per axis A in {row0, row1, row2}:
+    //     d = vmsum3fp128(lOffset, A)                             -- dot, splatted to 4 lanes
+    //     if (!(d >= 0)) d ^= 0x80000000                          -- vcmpgefp. + vxor == fabs
+    //     if (!(extent > d)) return false                         -- vcmpgtfp. extent, |d|
+    //   return true
+    // ⚠️ POLARITY: the surviving compare is `vcmpgtfp. v0, extent, |dot|` and the CR6
+    // "all lanes true" bit is what continues, so a point exactly ON a face is OUTSIDE
+    // (strict >). Reproduced as `>= extent -> false` below, not `> extent`.
+    //
+    // The seven asserts are the console's own, in its own order, with its own message
+    // strings and BrnMathUtils.cpp line numbers (85..91). The X360 evaluates the
+    // orthogonality test with an inlined vmsum3fp/vperm block against
+    // `rw::math::vpu::detail::gIVector` and a rodata epsilon (unk_8207BFC4); that is
+    // reproduced by the file-local helper below.
+    //
+    // FLAG (epsilon): `unk_8207BFC4` is an un-valued .rdata float, so the tolerance
+    //   below is INFERRED. The test STRUCTURE (M * transpose(M) compared against the
+    //   identity, squared error against a tolerance) is transcribed. Every caller feeds
+    //   a matrix built by BoxRegion::ComputeTransform from sin/cos, which is orthonormal
+    //   to ~1e-7, so the value is comfortably clear of a false assert either way.
+    // FLAG (VMX->portable): the lane algebra is lowered to scalar f32 exactly as every
+    //   other function in this TU does; std::fabs replaces the vcmpgefp/vxor sign flip.
+    namespace
+    {
+        // The inlined `RwMath::IsOrthogonal3x3(m)` of 0x82540AE0..0x82540C40: form the
+        // three rows of M * transpose(M), subtract the identity rows, and reject when the
+        // total squared error exceeds the tolerance.
+        bool IsOrthogonal3x3(const Matrix44Affine& lrMatrix)
+        {
+            // FLAG: inferred tolerance -- see the FLAG block above.
+            const f32 KF_ORTHOGONAL_EPSILON = 1.0e-3f;
+
+            const f32 lfXX = rw::math::vpu::Dot(lrMatrix.xAxis, lrMatrix.xAxis) - 1.0f;
+            const f32 lfYY = rw::math::vpu::Dot(lrMatrix.yAxis, lrMatrix.yAxis) - 1.0f;
+            const f32 lfZZ = rw::math::vpu::Dot(lrMatrix.zAxis, lrMatrix.zAxis) - 1.0f;
+            const f32 lfXY = rw::math::vpu::Dot(lrMatrix.xAxis, lrMatrix.yAxis);
+            const f32 lfXZ = rw::math::vpu::Dot(lrMatrix.xAxis, lrMatrix.zAxis);
+            const f32 lfYZ = rw::math::vpu::Dot(lrMatrix.yAxis, lrMatrix.zAxis);
+
+            const f32 lfError = lfXX * lfXX + lfYY * lfYY + lfZZ * lfZZ
+                              + 2.0f * (lfXY * lfXY + lfXZ * lfXZ + lfYZ * lfYZ);
+
+            return lfError <= KF_ORTHOGONAL_EPSILON;
+        }
+    }
+
+    bool IsPointInsideBox(const Matrix44Affine& lBoxTransform, Vector3 lPoint, Vector3 lHalfExtents)
+    {
+        CGS_ASSERT(IsOrthogonal3x3(lBoxTransform), "RwMath::IsOrthogonal3x3( lBoxTransform )"); // :85
+        CGS_ASSERT(IsNormal(lBoxTransform.Right()), "IsNormal( lBoxTransform.XAxis() )");       // :86
+        CGS_ASSERT(IsNormal(lBoxTransform.Up()),    "IsNormal( lBoxTransform.YAxis() )");       // :87
+        CGS_ASSERT(IsNormal(lBoxTransform.At()),    "IsNormal( lBoxTransform.ZAxis() )");       // :88
+        CGS_ASSERT(lHalfExtents.x >= 0.0f, "lBoxDimensions.X() >= 0.0f");                       // :89
+        CGS_ASSERT(lHalfExtents.y >= 0.0f, "lBoxDimensions.Y() >= 0.0f");                       // :90
+        CGS_ASSERT(lHalfExtents.z >= 0.0f, "lBoxDimensions.Z() >= 0.0f");                       // :91
+
+        // vsubfp128 v13, v126, row3 -- the point in the box's (un-rotated) frame origin.
+        const Vector3 lOffset = lPoint - lBoxTransform.Pos();
+
+        // Three independent slab tests along the box's own axes. Each early-outs, exactly
+        // as the console's two `goto LABEL_23` do.
+        if (std::fabs(rw::math::vpu::Dot(lOffset, lBoxTransform.Right())) >= lHalfExtents.x)
+        {
+            return false;
+        }
+        if (std::fabs(rw::math::vpu::Dot(lOffset, lBoxTransform.Up())) >= lHalfExtents.y)
+        {
+            return false;
+        }
+        if (std::fabs(rw::math::vpu::Dot(lOffset, lBoxTransform.At())) >= lHalfExtents.z)
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    // ---------------------------------------------------------------------------------------
     // BuildTransform (X360 @ 0x825405A0)  -- DWARF Math/BrnMathUtils.cpp
     //
     // ⭐ THE SPAWN-POSE BUILDER. RaceCarEntityModule::HandleResetPlayerCarAction feeds it the

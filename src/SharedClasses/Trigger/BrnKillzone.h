@@ -32,7 +32,11 @@ public:
     inline int32_t GetTriggerCount() const  { return miTriggerCount; }
     inline int32_t GetRegionIdCount() const { return miRegionIdCount; }
 
-    const GenericRegion* GetTrigger( int32_t liIndex ) const;   // body needs complete GenericRegion -> declaration only
+    // [gateui] 2026-08-20: BODIED in the sibling BrnKillzone.cpp (it needs the complete
+    // GenericRegion type, which this header deliberately keeps forward-declared). It was a
+    // measured UNDEF external in BrnTriggerQueryManager.obj and is one of the thirteen
+    // unresolved externals build_game_exe.bat:2369-2375 blames for that TU being unmounted.
+    const GenericRegion* GetTrigger( int32_t liIndex ) const;
     inline CgsID GetRegionId( int32_t liIndex ) const { return mpRegionIds[liIndex]; }
 
     void SetTrigger( int32_t liIndex, const GenericRegion* lpTrigger ) const;

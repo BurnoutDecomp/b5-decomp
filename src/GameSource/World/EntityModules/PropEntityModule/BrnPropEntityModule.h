@@ -574,8 +574,23 @@ namespace BrnWorld
         // @0x822FA890 (476 insns -- the biggest of the set). DWARF BrnPropEntityModule.cpp:1743.
         // THE SMASH RECORDER: drain the contact-spy prop-contact queue, mark each hit prop in
         // the progression bit array (PropZoneManager::RecordHitProp), and emit the outbound
-        // PropEntityIO::BrokenPropEvent + PropVFXLocatorEvent that GameState's StuntManager
-        // latches into a smash/billboard score.
+        // events.
+        //
+        // ⚠️ CORRECTED 2026-08-20 (gateui wave). This comment used to say the event GameState's
+        // StuntManager latches is `PropEntityIO::BrokenPropEvent`. IT IS NOT, and the mistake
+        // sent a whole wave brief after the wrong queue. BrokenPropEvent (+0x820) has an
+        // AddEvent producer @0x822C9838 but **no `Append` instantiation anywhere in the image**
+        // -- unlike its seven siblings (TrafficLightKnockDown/Restore, PropInstancesNeededForZone,
+        // PropGraphicsLoaded/Unloaded, PropVFXLocator, PropBecamePhysical), which all have one --
+        // so it never leaves the world module and is consumed only inside PropEntityModule.
+        //
+        // The GameState feed is `BrnGameState::GameStateModuleIO::RecordPropHitEvent`, written to
+        // OutputBuffer_PostPhysics::mRecordHitPropQueue (+0x160) by this function's `lbRecord`
+        // block, and carried out by WorldModule::BridgeEntityModulesToOutput_PostPhysics
+        // @0x827AEEB0 as game event 111 (E_EVENT_RECORD_PROP_HIT) -- see that bridge's banner in
+        // GameSource/World/Bridges/WorldBridgeEntityModulesToOutput.cpp. From there it reaches
+        // GameStateModule::ProcessGameEvents @0x823A0A18 case 111 -> StuntManager::OnPropHit
+        // @0x8236EE18, which is what turns a hit into a smash/billboard score.
         void ProcessContacts( const PropEntityIO::InputBuffer_PostPhysics* lpInput,
                               PropEntityIO::OutputBuffer_PostPhysics* lpOutput );
 
