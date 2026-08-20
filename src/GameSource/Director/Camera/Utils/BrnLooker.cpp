@@ -58,15 +58,17 @@ namespace
     const f32 KF_ASSESSMENT_WINDOW_SECONDS = 0.2f;
 
     // The static depth-of-field forward scales (Zoom static-DOF path): focal length is scaled
-    // by flt_820049E0 (ungroundable, FLAGGED below) and the DOF by flt_82004A20 == 10.0
+    // by flt_820049E0 == 100.0 and the DOF by flt_82004A20 == 10.0
     // (pinned: the same rodata const Construct stores into mfDesiredPerceivedDistance / mfMinFOV).
     const f32 KF_STATIC_DOF_SCALE = 10.0f;
 
-    // FLAG (ungroundable): the static-DOF focal-length scale (flt_820049E0). Its numeric value
-    // could not be recovered from the asm packet; modelled as a 0.0f placeholder (the static
-    // focal length forwards as 0) rather than fabricated. Recover and replace when the rodata
-    // is available.
-    const f32 KF_STATIC_FOCAL_LENGTH_SCALE = 0.0f;   // flt_820049E0
+    // GROUNDED 2026-08-20 (DMV look-dev wave, retiring the old "ungroundable" 0.0f placeholder):
+    // flt_820049E0 == 100.0f, witnessed three ways -- this tree's own BrnPostFx.cpp:225
+    // (KF_DOF_FOCAL_PLANE_2 = 100.0f // flt_820049E0), the fnmsubs in ExponentialLerp
+    // @0x821F8C78 (-((a11 * 100.0) - 50.0)), and MainDirector::Update's use of the same const.
+    // A 0.0f here would centre the static-DOF band on the camera with a negative near plane the
+    // day this TU mounts, with no assert (SetStaticParams writes members directly).
+    const f32 KF_STATIC_FOCAL_LENGTH_SCALE = 100.0f;  // flt_820049E0
 
     // FLAG (ungroundable): the three depth-of-field blurriness ramp-rate constants. Real
     // values live in rodata (flt_82CDAD18 / flt_82CDAD1C / flt_82CDAD20) and could not be
