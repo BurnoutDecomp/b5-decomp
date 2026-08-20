@@ -2069,8 +2069,21 @@ namespace BrnGame
                     // exist on PC, and this IS that camera
                     // (mpDirectorOutputBuffer->GetCameraOutput()), so the flag comes across
                     // beside the transform. DELETE with the rest of this staging block.
-                    mWorldModule.SetBringUpCameraOverride(lrXform, lpCamera->GetFOV(),
-                                                          lpCamera->IsInJunkyard());
+                    // ⭐ The fourth/fifth arguments are the SAME camera's time-of-day
+                    // REQUEST (mEffects.mbSetTimeOfDay / mEffects.mfTimeOfDay in HOURS).
+                    // The console carries them for free, inside the whole-record camera copy
+                    // the world dispatch input buffer makes; WorldModule::Update
+                    // @0x827D63E8 reads them off mLastCameraInput at 0x827D7CEC and stamps
+                    // EnvironmentManager::mfTimeOfDay with hours*60*60. On this build
+                    // mLastCameraInput is synthesised, so they come across explicitly beside
+                    // the transform, FOV and junkyard bit. The producer is
+                    // BrnDirector::ArbStateCarSelect::Update @0x8226F5D0 (the junkyard/DMV
+                    // camera: 16.5 h; the outro arms: 12.5 h).
+                    // DELETE with the rest of this staging block.
+                    mWorldModule.SetBringUpCameraOverride(
+                        lrXform, lpCamera->GetFOV(), lpCamera->IsInJunkyard(),
+                        lpCamera->GetEffects().IsTimeOfDaySet(),
+                        lpCamera->GetEffects().GetTimeOfDay());
 
                     static bool sbLoggedHandover = false;
                     if (!sbLoggedHandover && CgsDev::Log::gpDebugPrint != 0)
