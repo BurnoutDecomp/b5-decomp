@@ -6,18 +6,14 @@
 // CgsContainers::FastBitArray<tuNumBits>
 //
 // DWARF home: GameShared/GameClasses/Containers/CgsFastBitArray.h. A fixed-capacity
-// bit set whose storage is an array of 64-bit fields (one field per 64 bits, rounded
-// up), distinct from the simpler CgsContainers::BitArray (CgsBitArray.h) by adding the
-// "next set bit" iteration helpers (GetFirstBitSet / GetNextBitSet) and a SetAll the
-// X360 inlines as a per-bit shift-or loop.
+// bit set stored as an array of 64-bit fields, one per 64 bits rounded up. It differs
+// from CgsContainers::BitArray (CgsBitArray.h) by adding the next-set-bit helpers
+// GetFirstBitSet / GetNextBitSet and a SetAll the X360 inlines as a shift-or loop.
 //
-// The X360 build inlines every instantiation at its call site (BurnoutSkillzManager's
-// mabDirtyFlags<8> SetBit/SetAll/GetFirstBitSet/GetNextBitSet are all folded into the
-// manager's bodies, complete with their out-of-range CgsDev::StrStream assert
-// machinery). That assert/StrStream scaffolding is owned by the callers (which own the
-// CgsDev::Assert API), so this container header stays free of the assert-system
-// dependency -- the inlined bit math here is value-identical to those folded sites.
-// (Assert-machinery parity is intentionally not reproduced bit-for-bit; it is benign.)
+// The X360 inlines every instantiation at its call site, out-of-range CgsDev::StrStream
+// assert machinery included. That scaffolding belongs to the callers, which own the
+// CgsDev::Assert API, so this header stays free of the assert-system dependency; the
+// bit math here is value-identical to the folded sites.
 //
 // The storage member fixes the type's size so the container can be embedded by value
 // (BurnoutSkillzManager::mabDirtyFlags is a FastBitArray<8> @ +0x90, one u64 field).
@@ -129,27 +125,17 @@ public:
         return true;
     }
 
-    // ⭐ ADDED 2026-08-21 (wave T1 round 4). The two field-wise combiners that sit either side
-    // of SetOr in the DWARF's own method list (:534 / :545 / :556) and complete the trio. They
-    // are not inferred from SetOr's shape: TrafficEntityModule::CreateNewVehicleEntities
-    // @0x8272FA30 opens with exactly these two operations over a 10-field local, and the
-    // DecFIGS scope tree for that function NAMES them --
-    //     FastBitArray<601>::SetInverse(...); FastBitArray<601>::SetAnd(...);
-    // -- against its two locals lVehicles_NoEntity / lVehicles_Alive_And_NoEntity
-    // (BrnTrafficEntityModule.cpp:4529/:4530). The X360 spells them as two 10-iteration
-    // ld/nor-or-and/std loops at 0x8272FA84..0x8272FAE4.
+    // SetInverse / SetAnd sit either side of SetOr in the DWARF method list
+    // (:534 / :545 / :556). TrafficEntityModule::CreateNewVehicleEntities @0x8272FA30
+    // opens with both over a 10-field local (X360: two 10-iteration ld/nor-or-and/std
+    // loops at 0x8272FA84..0x8272FAE4), and the DecFIGS scope tree for that function
+    // names them against its locals lVehicles_NoEntity / lVehicles_Alive_And_NoEntity.
     //
-    // ⚠️ CROSS-FILE ADDITION, DISCLOSED: this header is not a traffic-module file. The edit is
-    // PURELY ADDITIVE (two new inline template members; no member, no layout, no existing
-    // signature touched) and neither name previously existed anywhere in b5-decomp/src, so no
-    // TU that includes this header can change behaviour or fail to compile because of it.
-    //
-    // NOTE ON SetInverse'S TAIL BITS. Both operate on whole 64-bit fields, so when tuNumBits
-    // is not a multiple of 64 SetInverse sets the padding bits above tuNumBits as well. That
-    // is the console's behaviour, not an oversight -- and it is harmless for the same reason
-    // it is harmless there: every consumer either ANDs the result with a real set (as
-    // CreateNewVehicleEntities does) or iterates with Iterator, which stops at tuNumBits.
-    // Masking the tail would be a host-side "fix" the binary does not have.
+    // SetInverse TAIL BITS: both operate on whole 64-bit fields, so when tuNumBits is
+    // not a multiple of 64 SetInverse also sets the padding bits above tuNumBits. That
+    // is the console's behaviour. It is harmless there for the same reason it is here:
+    // every consumer either ANDs the result with a real set or iterates with Iterator,
+    // which stops at tuNumBits. Masking the tail would be a fix the binary does not have.
 
     // DWARF CgsFastBitArray.h:534 -- this = ~a, field-wise.
     void SetInverse(const FastBitArray<tuNumBits>& lrA)
@@ -179,17 +165,16 @@ public:
         }
     }
 
-    // DWARF CgsFastBitArray.h:60 -- the "next set bit" iterator (members h:91-93). The
-    // X360 folds every instantiation inline; the <15> fold in
+    // DWARF CgsFastBitArray.h:60 -- the next-set-bit iterator (members h:91-93). The X360
+    // folds every instantiation inline; the <15> fold in
     // HudMessageAnalyzer::TriggerDeveloperChallengeMessageDEBUG (@0x825204EC..0x82520660)
-    // pins the observable contract: construction positions at the LOWEST set bit; an
-    // EMPTY array positions at tuNumBits (== End()); GetIndex() returns the raw index
-    // either way (the X360 additionally fires "Attempt to get index when out of range",
-    // h:235, and "Internal mask has wrapped - expected to find valid bit", h:282 -- the
-    // assert scaffolding is caller-owned per this header's policy and is intentionally
-    // not reproduced). MEASURED: the 1-field scan shape + the empty->tuNumBits result.
-    // INFERENCE: the multi-field advance (field = miIndex/64 walk) -- no multi-field
-    // instantiation of Begin() is inlined anywhere in the X360 spine we have decoded.
+    // pins the contract: construction positions at the lowest set bit, an empty array
+    // positions at tuNumBits (== End()), and GetIndex() returns the raw index either way.
+    // Its two asserts (h:235, h:282) are caller-owned per this header's policy.
+    //
+    // FLAG: the single-field scan and the empty-array result are MEASURED; the
+    // multi-field advance (the miIndex/64 field walk) is INFERRED, since no multi-field
+    // instantiation of Begin() is inlined anywhere in the X360 spine decoded so far.
     class Iterator
     {
     public:

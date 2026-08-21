@@ -260,9 +260,7 @@ namespace BrnResource
         // only. LOAD overwrites the id's "TVEH" prefix with "VEH_" and streams
         // "Vehicles\VEH_<code>_GR.bin"; ProcessInternalLoadBundleResponse's case 28 then
         // chains into GET, which acquires "<code>_TrafficStub" (the GraphicsStub, type
-        // 65557/0x10015). Landed wave T1 round-4 consolidation 2026-08-21 -- these two
-        // deferrals were the last hop between the traffic car streamer and the 42
-        // converted VEH_T*_GR.BIN bundles.
+        // 65557/0x10015).
         void ProcessLoadTrafficVehicleRequest(CgsResource::ResourceIO::InputBuffer* lpResourceInput,
                                               const GameDataIO::GameDataAssetEvent* lpEvent,
                                               s32 liEventId, s32 liSlotIndex);         // 0x8266EF00

@@ -1,11 +1,12 @@
 // =============================================================================
-// BrnTrafficPvs.cpp  (owning .cpp for BrnTraffic::Pvs)
+// BrnTrafficPvs.cpp -- owning .cpp for BrnTraffic::Pvs. Layout in BrnTrafficPvs.h.
 //
-// Reconstructed from BURNOUT_X360_ARTIST.XEX. Bodies the two attested standalone
-// accessors of the traffic PVS grid:
-//   BrnTraffic::Pvs::GetHullIndexForPoint  @ 0x82208090
-//   BrnTraffic::Pvs::GetHullPvs            @ 0x82705FB0
-// Layout in BrnTrafficPvs.h.
+// Reconstructed from BURNOUT_X360_ARTIST.XEX
+//   BrnTraffic::Pvs::GetHullIndexForPoint(Vector3)            @ 0x82208090
+//   BrnTraffic::Pvs::GetHullIndexForPoint(Vector3, s32&, s32&) @ 0x827106B8
+//   BrnTraffic::Pvs::GetHullPvs                               @ 0x82705FB0
+//   BrnTraffic::Pvs::FixUp / FixDown            @ 0x827623E8 / @ 0x827624A0
+// GetHullIndexForIndices has no standalone symbol; see its body below.
 // =============================================================================
 
 #include "SharedClasses/Traffic/BrnTrafficPvs.h"
@@ -15,10 +16,9 @@ namespace BrnTraffic
 {
 
 // X360 @ 0x82208090. The point arrives in a VMX register; the grid offset is a
-// vector subtract + componentwise multiply by the reciprocal cell size, then the
-// X and Z lanes are truncated to int (fctiwz) and clamped into the grid. Done as
-// scalar float math for host parity -- only the .x and .z lanes are consumed (the
-// stack spill reads the +0 and +8 components, i.e. x and z).
+// vector subtract and a componentwise multiply by the reciprocal cell size, then
+// the X and Z lanes are truncated to int (fctiwz) and clamped into the grid.
+// Written as scalar float math for host parity: only .x and .z are consumed.
 u32 Pvs::GetHullIndexForPoint(Vector3 lPoint) const
 {
     const f32 lfScaledX = (lPoint.x - mGridMin.x) * mRecipCellSize.x;
@@ -52,35 +52,15 @@ u32 Pvs::GetHullIndexForPoint(Vector3 lPoint) const
 }
 
 // ----------------------------------------------------------------------------
-// Pvs::GetHullIndexForPoint(Vector3, s32&, s32&)  @ 0x827106B8   (DWARF BrnTrafficPvs.h:64)
+// Pvs::GetHullIndexForPoint(Vector3, s32&, s32&) @ 0x827106B8 (DWARF BrnTrafficPvs.h:64).
+// The rectangle-walk form: the same point-to-cell mapping as the one-argument overload,
+// plus the two clamped grid coordinates handed back so the caller can enumerate a box of
+// cells. Assert baked at BrnTrafficPvs.h:171.
 //
-// ADDITIVE 2026-08-21 (wave T1 round 2, cluster R2A). The rectangle-walk form: the same
-// point->cell mapping as the one-argument overload, plus the two clamped grid coordinates
-// handed back so the caller can enumerate a BOX of cells. It is the single missing piece
-// that round 1 recorded as "the unnamed Pvs helper at 0x827106B8"; the DWARF names it.
-//
-// Instruction for instruction (0x827106C8..0x82710768):
-//     lvx128    v0, r0, r3          ; mGridMin        (this + 0x00)
-//     vsubfp    v0, v1, v0          ; lPoint - mGridMin   (the point arrives in v1)
-//     lvx128    v13, r3, 0x20       ; mRecipCellSize  (this + 0x20)
-//     vmulfp128 v0, v0, v13
-//     stvx128   v0, r0, sp          ; spill, then read lanes X and Z only
-//     lfs/fctiwz/stfiwx -> *r4      ; liX = (s32)scaled.x
-//     lfs/fctiwz/stfiwx -> *r5      ; liZ = (s32)scaled.z
-//     clamp *r4 into [0, muNumCells_X - 1]   with a WRITE-BACK after each step
-//     clamp *r5 into [0, muNumCells_Z - 1]   with a WRITE-BACK after each step
-//     r31 = muNumCells_X * (*r5) + (*r4)
-//     assert(r31 < muNumCells)      ; BrnTrafficPvs.h:171   (li r5, 0xAB)
-//     return r31
-//
-// ⚠️ THE WRITE-BACKS ARE LOAD-BEARING and are the whole reason this overload exists: the
-// console re-loads `*r4` / `*r5` after each clamp (`stw r11,0(r4)` then `lwz`), so what the
-// caller receives is the CLAMPED pair. UpdateRaceCarHulls walks
-// [minX..maxX] x [minZ..maxZ] with those values; without the clamp write-back a sim box
-// whose corner fell off the map would walk cells that do not exist.
-//
-// Only lanes X and Z are consumed -- exactly as in the one-argument overload -- so this is
-// written as scalar float math for host parity, matching that body's style.
+// THE WRITE-BACKS ARE LOAD-BEARING. The console stores each clamp back through the
+// reference (`stw r11,0(r4)` then re-loads), so the caller receives the CLAMPED pair.
+// UpdateRaceCarHulls walks [minX..maxX] x [minZ..maxZ] with those values; without the
+// write-back a sim box whose corner fell off the map would walk cells that do not exist.
 // ----------------------------------------------------------------------------
 u32 Pvs::GetHullIndexForPoint(Vector3 lPoint, s32& lriOutX, s32& lriOutZ) const
 {
@@ -115,17 +95,13 @@ u32 Pvs::GetHullIndexForPoint(Vector3 lPoint, s32& lriOutX, s32& lriOutZ) const
 }
 
 // ----------------------------------------------------------------------------
-// Pvs::GetHullIndexForIndices(s32, s32)  (DWARF BrnTrafficPvs.h:70)
+// Pvs::GetHullIndexForIndices(s32, s32) (DWARF BrnTrafficPvs.h:70). NO standalone X360
+// symbol -- every caller inlines it, so this is an inlining reversal recovered from
+// TrafficEntityModule::UpdateRaceCarHulls' rectangle walk at 0x827216A4..0x827216D4.
+// Assert baked at BrnTrafficPvs.h:188.
 //
-// ADDITIVE 2026-08-21 (wave T1 round 2, cluster R2A). NO standalone X360 symbol -- every
-// caller inlines it, so this is an inlining reversal recovered from the one call site this
-// tree needs: TrafficEntityModule::UpdateRaceCarHulls' rectangle walk at
-// 0x827216A4..0x827216D4 (mullw muNumCells_X * liZ, add liX, compare against muNumCells,
-// FireAssert "luIndex < muNumCells" at BrnTrafficPvs.h:188).
-//
-// NOTE the absent clamp: the console does not re-clamp here. Both callers have already been
-// handed clamped coordinates by the :64 overload above, and the assert is what catches a
-// caller that has not.
+// No clamp here, matching the console: callers arrive with coordinates the :64 overload
+// already clamped, and the assert catches one that has not.
 // ----------------------------------------------------------------------------
 u32 Pvs::GetHullIndexForIndices(s32 liX, s32 liZ) const
 {
@@ -147,12 +123,11 @@ const Set<u16, 8>& Pvs::GetHullPvs(u32 luIndex) const
 
 // -----------------------------------------------------------------------------
 // Pvs::FixUp @0x827623E8 / Pvs::FixDown @0x827624A0 -- load-time pointer relocation.
-//
-// The grid holds exactly ONE serialised pointer (mpaHullPvs). The console guards that
-// `this` is 16-byte aligned (BrnTrafficPvs.cpp:45 -- the three leading Vector3 lanes are
-// loaded with aligned VMX loads), then rebases the slot, then walks every cell asserting
-// its Set was Constructed (CgsSet.h:430 on the FixUp side, :453 on the FixDown side).
-// FixDown runs the walk BEFORE un-rebasing, since the walk dereferences the pointer.
+// The grid holds exactly one serialised pointer (mpaHullPvs). The console guards that
+// `this` is 16-byte aligned (the three leading Vector3 lanes use aligned VMX loads),
+// rebases the slot, then walks every cell asserting its Set was Constructed. FixDown
+// runs the walk BEFORE un-rebasing, since the walk dereferences the pointer.
+// Asserts baked at BrnTrafficPvs.cpp:45 and CgsSet.h:430 (FixUp) / :453 (FixDown).
 // -----------------------------------------------------------------------------
 void Pvs::FixUp(const void* lpBaseData)
 {
@@ -163,8 +138,7 @@ void Pvs::FixUp(const void* lpBaseData)
 
     for (u32 luCell = 0; luCell < muNumCells; ++luCell)
     {
-        // NOTE the local typedef: `Set<u16, 8>` inside a macro argument would split on its
-        // comma, so the set type is named once here (CgsSet's own asserts do the same).
+        // Local typedef because `Set<u16, 8>` inside a macro argument splits on its comma.
         typedef Set<u16, 8> HullPvsSet;
         CGS_ASSERT(mpaHullPvs[luCell].GetLength() != HullPvsSet::KU_INVALID,
                    "Set used before Construct/Clear was called");
@@ -175,8 +149,7 @@ void Pvs::FixDown(const void* lpBaseData)
 {
     for (u32 luCell = 0; luCell < muNumCells; ++luCell)
     {
-        // NOTE the local typedef: `Set<u16, 8>` inside a macro argument would split on its
-        // comma, so the set type is named once here (CgsSet's own asserts do the same).
+        // Local typedef because `Set<u16, 8>` inside a macro argument splits on its comma.
         typedef Set<u16, 8> HullPvsSet;
         CGS_ASSERT(mpaHullPvs[luCell].GetLength() != HullPvsSet::KU_INVALID,
                    "Set used before Construct/Clear was called");

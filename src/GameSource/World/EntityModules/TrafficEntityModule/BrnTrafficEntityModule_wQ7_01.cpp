@@ -1,70 +1,22 @@
 // ============================================================================
-// BrnTrafficEntityModule_wQ7_01.cpp  --  wave Q7 / cluster `traffic`, partfile 1 of 2
+// BrnTrafficEntityModule_wQ7_01.cpp -- the traffic side of "a smashed traffic light changes
+// the traffic system".
 //
-// THE CONSUMER SIDE OF "a smashed traffic light tells the traffic system to change".
+//   * TrafficEntityModule::HandlePropModuleRequests @0x82720A90 (118 insns)  REAL
+//   * TrafficEntityModule::PrePhysicsUpdate         @0x8274C690 (120 insns)  PARTIAL
 //
-//   PropEntityModule::ChangePropState / PropZoneManager::SendTrafficLightRestoreEvents
-//        -> PropToTrafficInterface's two rings                              [LIVE]
-//   -> WorldModule::BridgePropModuleToTrafficModule_PrePhysics @0x827AEA70  [LIVE]
-//        (WorldBridgePropModule.cpp:485; last drive logged
-//         "[Q6-lights] first traffic-light requests -> traffic module: knockdown 0 restore 12")
-//   -> BrnTrafficIO::InputBuffer_PrePhysics::mPropToTrafficInterface @+0x30C60,
-//        Constructed by InputBuffer_PrePhysics::Construct @0x827615F8            [LIVE]
-//   -> TrafficEntityModule::PrePhysicsUpdate @0x8274C690         <-- THIS FILE (PARTIAL)
-//   -> TrafficEntityModule::HandlePropModuleRequests @0x82720A90 <-- THIS FILE (REAL)
-//   -> TrafficLightManager::TrafficLightGot{Smashed,Restored}                    [REAL]
-//   -> TrafficLightRuntimeState::muFlags bit 0x80
+// The chain: the prop module's ChangePropState / SendTrafficLightRestoreEvents fill the two
+// PropToTrafficInterface rings, WorldModule::BridgePropModuleToTrafficModule_PrePhysics
+// @0x827AEA70 carries them into InputBuffer_PrePhysics, PrePhysicsUpdate calls
+// HandlePropModuleRequests, and TrafficLightManager::TrafficLightGot{Smashed,Restored} set
+// TrafficLightRuntimeState::muFlags bit 0x80.
 //
-// THIS FILE CONTAINS:
-//   * TrafficEntityModule::HandlePropModuleRequests  -- REAL, complete, 118/118 insns.
-//   * TrafficEntityModule::PrePhysicsUpdate          -- the documented PARTIAL pattern:
-//       every leg the console runs is REAL except EIGHT sibling legs that have no body
-//       anywhere in the tree; each of those is a NAMED one-shot gate INSIDE the body
-//       (never a call to a declared-but-bodyless member -- that would be a link hole the
-//       per-TU `cl /c` gate cannot see, AGENTS.md gotcha 12). The eight are listed in
-//       the PARTIAL banner over the function.
-//
-// ⚠️ THIS FILE ALONE IS CODE-COMPLETE BUT RUNTIME-DEAD, BY DESIGN AND ON PURPOSE.
-//   `meState` @+0x300 is E_STATE_STARTING_UP (0) on this build -- TrafficEntityModule::
-//   Construct and ::Prepare are inert gates in WorldLinkStubs.cpp, the module storage is
-//   zero-initialised, and the only console writer of E_STATE_RUNNING is EnterRunningState
-//   @0x827080E8, reachable only through PostPhysicsUpdate @0x8274E6D0 (581 insns) after
-//   Reset @0x8272CDA0 (824 insns) -- neither reconstructed. A FAITHFUL PrePhysicsUpdate
-//   therefore takes the starting-up arm and never reaches the HandlePropModuleRequests leg.
-//   That is CORRECT behaviour for this file, not a bug to paper over: the bring-up that
-//   makes the leg reachable (seat `mpData`, then latch the running state) lives in the
-//   SIBLING partfile BrnTrafficEntityModule_wQ7_02.cpp, which the conductor mounts as a
-//   SEPARATE decision because it changes the boot Prepare ladder. Mounting THIS file with
-//   its gate retired is safe on its own and changes no observable behaviour.
-//
-// ⭐ BANNER CORRECTION 2026-08-21 (wave T1, cluster C4 -- COMMENT ONLY, no code change).
-//   Two claims above are now STALE:
-//     * "neither reconstructed" -- Construct @0x82740220, Reset @0x8272CDA0,
-//       EnterStartingUpState @0x82708038, PostPhysicsUpdate @0x8274E6D0's STARTING_UP arm and
-//       EnterRunningState @0x827080E8 all have bodies in BrnTrafficEntityModule_wT1_01.cpp.
-//     * "the bring-up ... latch the running state" -- that latch is DELETED. It skipped
-//       E_STARTINGUPSTATE_POPULATING, which is the only place parked traffic is ever created.
-//   The CONCLUSION for this file is unchanged and, for the moment, MORE true: meState still
-//   sits at E_STATE_STARTING_UP, because the WAITING_FOR_PLAYER -> POPULATING transition
-//   lives in TrafficEntityModule::PreSceneUpdate @0x8274A968 (an ARTIST export HOLE, still an
-//   inert gate at WorldLinkStubs.cpp:2687). Until that lands, PrePhysicsUpdate's starting-up
-//   early-out fires every frame and the prop->traffic light rings are not drained -- a
-//   deliberate, named regression of the wQ7 bring-up, traded for a real state machine.
-//
-// ⚠️ AND THE *VISIBLE* CONSUMER OF THE SMASHED BIT IS SEPARATELY DEAD. muFlags bit 0x80 is
-//   read by TrafficLightManager::RenderLightsForHull @0x8275DBF0 (152) and
-//   ::RenderAllLightsToBeInStateForHull @0x8275DE50 (90) -- both skip
-//   TrafficLightCollection::RenderCoronasForInstance for a smashed light -- driven by
-//   TrafficEntityModule::RenderTrafficLightCoronas @0x8271EC80 (389), driven in turn by
-//   GenerateDispatchLists (itself an inert gate, WorldLinkStubs.cpp:789). NONE of those
-//   three has a body in the tree. So the visible effect of a knock-down is "that light's
-//   coronas stop being submitted", and on THIS build the flip is provable in the LOG ONLY.
-//   Do not promise a dark traffic light.
-//
-// SOURCES: X360 ARTIST asm+pseudocode (.ida-exports/BURNOUT_X360_ARTIST.XEX/0x82720A90.json
-// and 0x8274C690.json) for behaviour; DecFIGS DWARF (references/DecFIGS/dwarfdump/GameSource/
-// World/EntityModules/TrafficEntityModule/BrnTrafficEntityModule.h) for declaration shape,
-// member NAMES and local names.
+// OPEN PARK: the VISIBLE consumer of bit 0x80 has no body anywhere in the tree.
+// TrafficLightManager::RenderLightsForHull @0x8275DBF0 and
+// ::RenderAllLightsToBeInStateForHull @0x8275DE50 skip RenderCoronasForInstance for a smashed
+// light; both are driven by RenderTrafficLightCoronas @0x8271EC80. None of the three is
+// reconstructed, so on this build a knock-down is provable in the log only. Do not promise a
+// dark traffic light.
 // ============================================================================
 
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficEntityModule.h"
@@ -85,30 +37,18 @@ namespace BrnTraffic
 {
 namespace
 {
-    // ------------------------------------------------------------------------
-    // ⭐ 2026-08-21 (wave T1, cluster C1): the FieldAt<T>(this, X360_BYTE_OFFSET) helper and
-    // its KU_OFFSET_* table that used to live here are GONE. The module class now carries its
-    // real member list (BrnTrafficEntityModule.h), so every read below is a named member.
-    // The console offsets those constants carried are retained inline as the attestation
-    // comment at each use site -- they were never valid displacements on this target
-    // (32-bit-pointer values on an LP64 host); they are only evidence for WHICH member.
+    // Console displacements for the members read below, kept as attestation only. They are
+    // 32-bit-pointer values and never valid on this LP64 host; every read is by name.
     //   0x300 meState (:607) . 0x304 meStartingUpState (:608) . 0x310 meTearingDownState (:611)
     //   0x53790 mTrafficLightManager (:661) . 0x71840 mpData (:752)
     //   0x717DD mbPlayingShowtimeMode (:716) . 0x729FC miPerfMon_PrePhysicsUpdate (:898)
-    // ------------------------------------------------------------------------
 
-    // BrnUpdateSet bit 0 == "the simulation did not step this frame". The NAME comes from
-    // the same measurement PropEntityModule_wQ_07.cpp:178 already carries; the BIT is
-    // measured here too (`clrlwi r29,r29,31` on the r8 parameter at 0x8274C6C0).
+    // BrnUpdateSet bit 0 == "the simulation did not step this frame", measured here as
+    // `clrlwi r29,r29,31` on the r8 parameter at 0x8274C6C0.
     const BrnUpdateSet KU_UPDATESET_SIM_PAUSED = 0x1;
 
-    // ------------------------------------------------------------------------
-    // PARTIAL-pattern leg gate. One NAMED one-shot line per console leg that has no body
-    // anywhere in the tree, logged the first time control reaches its position. Same shape
-    // and same gating condition (`gxMessageFilterFlags & 1`) as the existing boot gates in
-    // WorldLinkStubs.cpp, so a boot log reads uniformly.
+    // One-shot leg gate, one named line per console leg with no body in the tree.
     // [DIAG] NOT IN THE X360 BINARY.
-    // ------------------------------------------------------------------------
     inline void LogMissingLeg(bool& lrbAlreadyLogged, const char* lpcLegNameAndAddress)
     {
         if (lrbAlreadyLogged)
@@ -128,43 +68,27 @@ namespace
 
 // ============================================================================
 // BrnTraffic::TrafficEntityModule::HandlePropModuleRequests  @ 0x82720A90  (118 insns)  REAL
-//
 // DWARF :1443  void HandlePropModuleRequests(const InputBuffer_PrePhysics*,
 //                                            OutputBuffer_PrePhysics*)
-// DWARF locals: lpTrafficLightKnockDownQueue, liEvent, lpEvent, lpTrafficLightRestoreQueue.
 //
-// REGISTER -> PARAMETER MAP (prologue 0x82720A9C..0x82720AA8, measured):
-//   r3 -> r24 this | r4 -> r23 lpInput | r5 -> r31 lpOutput
-// Two constants are hoisted into the prologue and re-formed per iteration:
-//   r25 = 0x71840 (mpData), r26 = 0x53790 (mTrafficLightManager);
-//   r28 = this + r25, r27 = this + r26 recomputed at the top of EACH ring's loop
-//   (0x82720B50/54 and 0x82720BF8/FC).
+// lpOutput is asserted and then never read: r31 holds it across the assert block
+// (0x82720AD4..0x82720AF4) and is reused as the loop counter from `li r31,0` @0x82720B30 on.
+// The parameter is in the DWARF signature and the assert is a real side effect, so both stay
+// and no use is invented.
 //
-// ⚠️ lpOutput IS ASSERTED AND THEN NEVER READ. Its assert block runs 0x82720AD4..0x82720AF4
-//    (`cmplwi cr6,r31,0` .. `bl EndAssert`); r31 is then clobbered by `li r31,0` at
-//    0x82720B30 -- 0x3C bytes / fifteen instructions past the end of that block, and r31 is
-//    re-used from there on as the loop counter. The parameter is part of the DWARF signature
-//    and the assert is a real console side effect, so both stay; NO use is added.
+// The two "lpEvent" asserts collapse: the console calls GetEvent(int) out of line and
+// null-checks the returned pointer, but in-tree GetEvent returns `const T&`
+// (CgsBaseEventQueue.h:146), so the check has no expressible subject.
 //
-// ⚠️ THE TWO "lpEvent" ASSERTS COLLAPSE. The console calls the per-instantiation
-//    BaseEventQueue<T>::GetEvent(int) out of line (0x82709FA0 / 0x8270A048), gets a pointer
-//    back and null-checks it. In-tree GetEvent returns `const T&` (CgsBaseEventQueue.h:146,
-//    the DWARF-attested shape), so the check has no expressible subject. Stated here rather
-//    than faked with a pointer round-trip.
+// The restore ring is reached by name, not by the console's +0x8C == 12 + 32*4 ==
+// sizeof(EventQueue<TrafficLightKnockDownEvent,32>). The host queue's mpEvents is 8 bytes, so
+// that literal is wrong here; GetTrafficLightRestoreQueue() is the same expression correctly.
 //
-// ⚠️ THE RESTORE RING IS REACHED BY NAME, NOT BY +0x8C. The console re-calls
-//    GetPropToTrafficInterface() and adds the literal 0x8C == 12 + 32*4 ==
-//    sizeof(EventQueue<TrafficLightKnockDownEvent,32>) on the CONSOLE. On the x64 host that
-//    queue carries an 8-byte mpEvents, so 0x8C is the wrong number (gotcha 1); the member
-//    accessor GetTrafficLightRestoreQueue() is the same expression, correctly.
+// operator-> runs once per event inside each loop (0x82720B90 / 0x82720C38) and the loop bound
+// is re-read from the queue every pass (0x82720BA8 / 0x82720C50). Neither is hoisted.
 //
-// ⚠️ operator-> IS CALLED INSIDE EACH ITERATION, once per event (0x82720B90 / 0x82720C38),
-//    and the loop bound is RE-READ from the queue every pass (`lwz r11,8(r29)` at 0x82720BA8
-//    / 0x82720C50). Both reproduced; neither hoisted.
-//
-// PAYLOAD SPELLING: the DWARF names the accessor TrafficLightRestoreEvent::GetInstanceID();
-// the committed tree spells the member muPayload (BrnPropToTrafficInterface.h:47/:67, with
-// the divergence already documented there). muPayload is used.
+// The DWARF names the accessor TrafficLightRestoreEvent::GetInstanceID(); the tree spells the
+// member muPayload (BrnPropToTrafficInterface.h:47/:67), which is what is used.
 // ============================================================================
 void TrafficEntityModule::HandlePropModuleRequests(
         const BrnTrafficIO::InputBuffer_PrePhysics* lpInput,
@@ -183,12 +107,10 @@ void TrafficEntityModule::HandlePropModuleRequests(
     TrafficLightManager& lrTrafficLightManager = mTrafficLightManager;
     CgsResource::ResourcePtr<TrafficData>& lrData = mpData;
 
-    // ---- ring 0: the traffic lights that were knocked down this frame ---------------
-    // 0x82720AFC `bl BrnTraffic__BrnTrafficIO__InputBuffer_PreP` == the CONST (read-lock)
-    // GetPropToTrafficInterface @0x827113B8, returning &mPropToTrafficInterface (this+199776).
-    // The console asserts THAT pointer under the QUEUE's name because the knock-down ring is
-    // the interface's FIRST member (+0), so the two addresses coincide -- which is also why it
-    // never calls a getter here. Reproduced with the console's assert string.
+    // Ring 0: the traffic lights knocked down this frame. 0x82720AFC calls the const
+    // (read-lock) GetPropToTrafficInterface @0x827113B8. The console asserts that pointer under
+    // the QUEUE's name because the knock-down ring is the interface's first member (+0), so the
+    // two addresses coincide; the console's assert string is kept.
     {
         const PropToTrafficInterface* const lpInterface = lpInput->GetPropToTrafficInterface();
         CGS_ASSERT( lpInterface != 0, "lpTrafficLightKnockDownQueue" );   // line 0x195B == 6491
@@ -198,31 +120,26 @@ void TrafficEntityModule::HandlePropModuleRequests(
 
         for ( s32 liEvent = 0; liEvent < lpTrafficLightKnockDownQueue->GetLength(); ++liEvent )
         {
-            // 0x82720B60 `bl sub_82709FA0` ==
-            // BaseEventQueue<TrafficLightKnockDownEvent>::GetEvent(int) const, stride 4.
-            // (the console's "lpEvent" assert, line 0x1961 == 6497, collapses -- see banner)
+            // 0x82720B60 == BaseEventQueue<TrafficLightKnockDownEvent>::GetEvent(int) const,
+            // stride 4. The console's "lpEvent" assert (line 6497) collapses; see the banner.
             const TrafficLightKnockDownEvent& lrEvent =
                 lpTrafficLightKnockDownQueue->GetEvent( liEvent );
 
-            // 0x82720B90 `bl BrnTraffic__TrafficData___operator__` then `addi r4,r11,0x3C`:
-            // ResourcePtr<TrafficData>::operator->() + TrafficData::mTrafficLights. The console's
-            // +0x3C is its 4-byte-pointer offset for that member; on the host it is +0x68
-            // (BrnTrafficDataResourceType.h static_assert), so the member is reached BY NAME.
+            // 0x82720B90 is ResourcePtr<TrafficData>::operator->() then `addi r4,r11,0x3C` for
+            // TrafficData::mTrafficLights. That +0x3C is the console's 4-byte-pointer offset;
+            // the host's is +0x68 (BrnTrafficDataResourceType.h static_assert), so the member
+            // is reached by name.
             lrTrafficLightManager.TrafficLightGotSmashed( &lrData->mTrafficLights,
                                                           lrEvent.muPayload );
         }
     }
 
-    // ---- ring 1: the traffic lights being restored ----------------------------------
-    // 0x82720BBC: the SAME const getter is called a second time (not cached), then
-    // `addi r29,r3,0x8C` (0x82720BC0) -- and it is THAT +0x8C-adjusted address, not the
-    // interface pointer, that the console null-checks at 0x82720BC4 under the string
-    // "lpTrafficLightRestoreQueue". The reconstruction asserts the INTERFACE pointer instead,
-    // because 0x8C is a console-only literal (gotcha 1: the host EventQueue widens mpEvents
-    // 4->8) and the host has no expression for "the restore queue's address" that is not just
-    // the getter below. Both conditions are vacuously true -- `lpInterface + 0x8C` can only be
-    // NULL if lpInterface is -- so the subject swap is documented, not behavioural. Contrast
-    // the knock-down ring above, where the two addresses genuinely coincide (+0).
+    // Ring 1: the traffic lights being restored. 0x82720BBC calls the same const getter again
+    // (not cached), then null-checks the +0x8C-adjusted address, not the interface pointer,
+    // under the string "lpTrafficLightRestoreQueue". This asserts the interface pointer
+    // instead, because 0x8C is a console-only literal (the host EventQueue widens mpEvents
+    // 4 -> 8). Both conditions are vacuously equivalent: `lpInterface + 0x8C` is null only if
+    // lpInterface is.
     {
         const PropToTrafficInterface* const lpInterface = lpInput->GetPropToTrafficInterface();
         CGS_ASSERT( lpInterface != 0, "lpTrafficLightRestoreQueue" );     // line 0x1969 == 6505
@@ -232,9 +149,8 @@ void TrafficEntityModule::HandlePropModuleRequests(
 
         for ( s32 liEvent = 0; liEvent < lpTrafficLightRestoreQueue->GetLength(); ++liEvent )
         {
-            // 0x82720C08 `bl sub_8270A048` ==
-            // BaseEventQueue<TrafficLightRestoreEvent>::GetEvent(int) const, stride 4.
-            // (the console's "lpEvent" assert, line 0x196E == 6510, collapses -- see banner)
+            // 0x82720C08 == BaseEventQueue<TrafficLightRestoreEvent>::GetEvent(int) const,
+            // stride 4. The console's "lpEvent" assert (line 6510) collapses; see the banner.
             const TrafficLightRestoreEvent& lrEvent =
                 lpTrafficLightRestoreQueue->GetEvent( liEvent );
 
@@ -243,22 +159,12 @@ void TrafficEntityModule::HandlePropModuleRequests(
         }
     }
 
-    // ---------------------------------------------------------------------------------
-    // [DIAG] NOT IN THE X360 BINARY. Opt-in behind BRN_PROP_DIAG, ONE-SHOT, ever.
-    // Fires the first frame either ring carried anything, i.e. the first time the traffic
-    // module actually CONSUMES a prop-side traffic-light request. This is the only proof
-    // available on this build that the chain closed (the corona render leg that would show
-    // it on screen has no body -- see the file banner).
-    //
-    // `I` is the DENSE instance index the manager resolved from the persistent instance ID,
-    // read back through the manager TU's diag accessor: the id->index hash lives on the
-    // Junctions/ copy of TrafficLightCollection, which this TU cannot include (it holds the
-    // SharedClasses/Traffic/ copy by value inside TrafficData -- see the duplicate-type
-    // report BL-1 in scratchpad/waveQ7/traffic.owner.md). -1 means the id was not in the
-    // baked table. With the current route the RESTORE ring is the one that fires (every
-    // traffic-light prop posts a restore on LOAD, PropZoneManager::LoadProp), so `I` is
-    // normally the last restored light unless the drive actually struck one.
-    // ---------------------------------------------------------------------------------
+    // [DIAG] NOT IN THE X360 BINARY. One-shot, opt-in behind BRN_PROP_DIAG. Fires the first
+    // frame either ring carries anything, which is the only proof on this build that the chain
+    // closed, since the corona render leg has no body. The logged instance index is the dense
+    // index the manager resolved from the persistent id, read through the manager TU's diag
+    // accessor; -1 means the id was not in the baked table. Every traffic-light prop posts a
+    // restore on load, so the restore ring is normally the one that fires.
     {
         static const bool sbPropDiag        = ( getenv( "BRN_PROP_DIAG" ) != 0 );
         static bool       sbLoggedFirstFlip = false;
@@ -285,50 +191,28 @@ void TrafficEntityModule::HandlePropModuleRequests(
 }
 
 // ============================================================================
-// BrnTraffic::TrafficEntityModule::PrePhysicsUpdate  @ 0x8274C690  (120 insns)
-//                                                                        *** PARTIAL ***
-// PARTIAL PATTERN (AGENTS.md gotcha 18). Every console leg is REAL except the EIGHT below,
-// which have NO body and NO declaration anywhere in the tree. Each is a NAMED one-shot gate
-// at its exact console position INSIDE this body -- deliberately NOT a call to a
-// declared-but-bodyless member, because `cl /c` cannot see an unresolved external and the
-// declaration alone would turn a green gate into a broken link (gotcha 12).
+// BrnTraffic::TrafficEntityModule::PrePhysicsUpdate  @ 0x8274C690  (120 insns)  PARTIAL
 //
-//   1 BuildPotentialCollisionList          @0x8274B378
-//   2 UpdateJunctionFUP                     (no export dumped)
-//   3 GenerateDriverInputs                 @0x82748E78
-//   4 SendPhysicalRequests                 @0x8274C510
-//   5 SendEmergencyCrashEvents             @0x82747BB8
-//   6 CreateBodiesForCrashingNetworkTraffic@0x8274B4B0
-//   7 CleanUpCrashedVehiclePhysics         @0x82720960   (THREE call positions: the paused
-//                                                         running arm, the tearing-down arm,
-//                                                         and the tail of the normal arm)
-//   8 StoreAISceneResultsForNextFrame       (no export dumped)
+// Every console leg is real except eight, which have no body and no declaration in the tree.
+// Each is a named one-shot gate at its console position inside this body, never a call to a
+// declared-but-bodyless member: `cl /c` cannot see an unresolved external, so the declaration
+// alone would turn a green gate into a broken link.
 //
-// REAL here: the PerfMon bracket, both lock brackets, SetPlayingShowtime, the complete
-// three-way state machine with all FOUR console asserts, the BitArray<601> local + UnSetAll,
-// and HandlePropModuleRequests.
+// Parameters, from the prologue 0x8274C69C..0x8274C6B0: r3 this, r4/r5 the two IOBufferStacks
+// (never touched), r6 lpInput, r7 lpOutput, r8 lUpdateSet with `clrlwi r29,r29,31` applied
+// immediately.
 //
-// REGISTER -> PARAMETER MAP (prologue 0x8274C69C..0x8274C6B0, measured):
-//   r3 -> r31 this | r4 UNUSED | r5 UNUSED | r6 -> r28 lpInput | r7 -> r30 lpOutput
-//   | r8 -> r29 lUpdateSet, immediately `clrlwi r29,r29,31` == lUpdateSet & 1.
-// r4/r5 are the two IOBufferStacks; this body never touches them (WorldModule creates and
-// destroys the buffers around the call). NOT the float-skips-a-GPR case (gotcha 3).
+// SIGNATURE DIVERGENCE: DWARF :1094 spells the third parameter const. The committed
+// declaration is non-const and must stay so, since const changes the mangled name and orphans
+// the caller (BrnWorldModule.cpp:1714) and the WorldLinkStubs.cpp gate. Const is honoured
+// internally: HandlePropModuleRequests takes the const pointer, which is also what picks the
+// const/read-lock GetPropToTrafficInterface @0x827113B8 the console calls.
 //
-// ⚠️ SIGNATURE: DWARF :1094 spells the third parameter `const InputBuffer_PrePhysics*`. The
-//    COMMITTED declaration (BrnTrafficEntityModule.h) is non-const and MUST STAY non-const:
-//    adding const changes the mangled name and orphans both the caller
-//    (BrnWorldModule.cpp:1714) and the WorldLinkStubs.cpp gate. Recorded as a divergence to
-//    note, not to chase. The const is honoured internally -- HandlePropModuleRequests takes
-//    the DWARF's const pointer, which is also what picks the const/read-lock
-//    GetPropToTrafficInterface @0x827113B8 the console calls.
+// UNLOCK ORDER: the console releases WRITE first, then READ (0x8274C854 / 0x8274C85C), the
+// opposite of PropEntityModule::PrePhysicsUpdate. Do not "fix" it.
 //
-// ⚠️ UNLOCK ORDER: the console releases WRITE first, then READ (0x8274C854 / 0x8274C85C) --
-//    the OPPOSITE order to PropEntityModule::PrePhysicsUpdate. Reproduced. Do not "fix" it.
-//
-// ⚠️ THE PERFMON HANDLE IS UNSEATED ON THIS BUILD (miPerfMon_PrePhysicsUpdate @+0x729FC is 0
-//    because the module Construct is an inert gate) AND THAT IS SAFE: PerfMonCpu::StartMonitor
-//    is `if (!IsValidHandle(h)) return;` with no assert (CgsPerfMonCpu.cpp:119). Calling it is
-//    faithful and costs nothing; suppressing it would be the deviation.
+// The perfmon handle is unseated on this build and that is safe: PerfMonCpu::StartMonitor is
+// `if (!IsValidHandle(h)) return;` with no assert (CgsPerfMonCpu.cpp:119).
 // ============================================================================
 void TrafficEntityModule::PrePhysicsUpdate( CgsModule::IOBufferStack* /*lpInputBufferStack*/,
                                             CgsModule::IOBufferStack* /*lpOutputBufferStack*/,
@@ -346,20 +230,14 @@ void TrafficEntityModule::PrePhysicsUpdate( CgsModule::IOBufferStack* /*lpInputB
     // 0x8274C6C0 `clrlwi r29,r29,31` -- the local the DWARF names lbSimPaused (:2641).
     const bool lbSimPaused = ( ( lUpdateSet & KU_UPDATESET_SIM_PAUSED ) != 0 );
 
-    // 0x8274C6E0/E4 `lbzx r11,r31,0x717DD ; stbx r11,r30,0x24720` -- mbPlayingShowtimeMode
-    // (DWARF :716) is republished into the output buffer's mbPlayingShowtime (console +149280
-    // == 0x24720, BrnTrafficEntityModuleIO.h:795). Both ends reached by name.
+    // 0x8274C6E0 republishes mbPlayingShowtimeMode (DWARF :716) into the output buffer's
+    // mbPlayingShowtime (console +0x24720, BrnTrafficEntityModuleIO.h:795). Both ends by name.
     lpOutput->SetPlayingShowtime( mbPlayingShowtimeMode );
 
-    // ---------------------------------------------------------------------------------
-    // [DIAG] NOT IN THE X360 BINARY. DELETE-WHEN-STABLE bring-up probe (wave T1, cluster C1).
-    // One-shot host-layout dump for the module object, gated on BRN_TRAFFIC_DIAG. This is the
-    // instrument for the change C1 made: the class went from one 471,040-byte opaque blob to a
-    // real member list, so the first thing the next cluster needs to see is that the HOST
-    // object is sane and that the pools are the right length. Prints sizeof plus the four
-    // anchor members' host offsets (they will NOT match the console displacements quoted in the
-    // comments above -- that is the point).
-    // ---------------------------------------------------------------------------------
+    // [DIAG] NOT IN THE X360 BINARY. DELETE-WHEN-STABLE. One-shot host-layout dump for the
+    // module object, gated on BRN_TRAFFIC_DIAG: sizeof plus four anchor members' host offsets
+    // and the pool lengths. The offsets deliberately do not match the console displacements
+    // quoted above.
     {
         static const bool sbTrafficDiag = ( getenv( "BRN_TRAFFIC_DIAG" ) != 0 );
         static bool sbLoggedLayout = false;
@@ -381,10 +259,9 @@ void TrafficEntityModule::PrePhysicsUpdate( CgsModule::IOBufferStack* /*lpInputB
         }
     }
 
-    // ---- 0x8274C6E8: switch (meState) ----------------------------------------------
-    // The console emits the unsigned three-way ladder `cmplwi 1 / blt / beq / cmplwi 3 / blt`,
-    // i.e. a switch with cases 0/1/2 and an asserting default. E_STATE_INVALID (-1) lands in
-    // the default arm on both sides (it compares as >= 3 unsigned).
+    // 0x8274C6E8. The console emits an unsigned three-way ladder, i.e. cases 0/1/2 with an
+    // asserting default. E_STATE_INVALID (-1) lands in the default arm, comparing >= 3
+    // unsigned.
     switch ( meState )
     {
     case E_STATE_STARTING_UP:
@@ -413,14 +290,12 @@ void TrafficEntityModule::PrePhysicsUpdate( CgsModule::IOBufferStack* /*lpInputB
         }
         else
         {
-            // ---- 0x8274C778: THE LEG THIS WAVE EXISTS FOR ---------------------------
-            HandlePropModuleRequests( lpInput, lpOutput );
+            HandlePropModuleRequests( lpInput, lpOutput );   // 0x8274C778
 
-            // 0x8274C77C..0x8274C794: ten 64-bit zero stores over the 80-byte stack local.
-            // 601 bits -> kuNumberOfBitFields == 10 -> exactly 80 bytes (CgsBitArray.h:23).
-            // DWARF names the local lCreatedBodies (:2661); it is an OUT parameter of legs
-            // 1/4/5/6 below, all of which are gated, so nothing reads it back yet -- it is
-            // kept REAL because it is cheap and it keeps the local's identity honest.
+            // 0x8274C77C..0x8274C794: ten 64-bit zero stores over the 80-byte stack local
+            // (601 bits -> 10 bit fields -> 80 bytes, CgsBitArray.h:23). DWARF names it
+            // lCreatedBodies (:2661). It is an OUT parameter of four gated legs below, so
+            // nothing reads it back yet.
             CgsContainers::BitArray<601u> lCreatedBodies;
             lCreatedBodies.UnSetAll();
 

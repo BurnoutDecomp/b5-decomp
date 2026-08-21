@@ -64,10 +64,8 @@ OutputBuffer_PreScene::GetActiveRaceCarOutputInterface() const
 // X360 0x8279D5A8 (R, :291) -- const GLOBAL race-car output-interface accessor of
 // OutputBuffer_PreScene. Read-lock (`lbz status; extrwi ...,1,27` == bit 4,
 // eStatusLockedForRead) => IsBufferLockedForReading(), "Not locked for reading" assert,
-// then returns &mGlobalRaceCarOutputInterface (by name, not by offset). BODIED 2026-08-21
-// (wave T1 round-4 consolidation): it became the last unresolved external the moment
-// WorldBridgeRaceCarToTrafficModule.cpp mounted -- BridgeRaceCarModuleToTrafficModule_
-// PreScene @0x827A50E0 (`bl sub_8279D5A8`) is its caller; nothing needed it before.
+// then returns &mGlobalRaceCarOutputInterface by name, not by offset. Its one caller is
+// BridgeRaceCarModuleToTrafficModule_PreScene @0x827A50E0 (`bl sub_8279D5A8`).
 // Pairs with the non-const overload (:292) in the catch-all IO.cpp.
 const RCEntityGlobalRaceCarOutputInterface*
 OutputBuffer_PreScene::GetGlobalRaceCarOutputInterface() const

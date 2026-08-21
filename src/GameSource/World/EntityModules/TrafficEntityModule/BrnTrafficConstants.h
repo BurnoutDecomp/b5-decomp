@@ -1,58 +1,26 @@
 #pragma once
 
 // =============================================================================
-// BrnTrafficConstants.h -- the BrnTraffic subsystem's sizing constants + the small
-// id-packing free functions.
+// BrnTrafficConstants.h -- the BrnTraffic sizing constants and the id-packing free
+// functions. DWARF home: references/DecFIGS/dwarfdump/GameSource/World/EntityModules/
+// TrafficEntityModule/BrnTrafficConstants.h, which carries every value and source line
+// (cited below as `DWARF :NNN`). The DWARF supplies the names and most values; where the
+// X360 asm disagrees, the asm wins.
 //
-// DWARF home: references/DecFIGS/dwarfdump/GameSource/World/EntityModules/
-// TrafficEntityModule/BrnTrafficConstants.h (which lists every constant below with its
-// value and its source line, cited as `DWARF :NNN`).
-//
-// -----------------------------------------------------------------------------
-// 2026-08-21 (wave T1, cluster C1): the KU_MAX_* pool sizes land here at SHIP values.
-//
-// SOURCE LADDER. The DecFIGS DWARF supplies the NAMES and most of the values; where the
-// X360 ARTIST assembly disagrees, THE ASM WINS. Three constants differ between the two
-// builds, and all three are pinned by the pool accessors' element-index arithmetic in
-// TrafficEntityModule (every accessor is `base_element_index` + `index`, at a fixed
-// element stride, so consecutive pools' base indices differ by exactly the preceding
-// pool's capacity):
-//
+// The pool sizes are pinned by the accessors' element-index arithmetic (each is
+// base_element_index + index at a fixed stride, so consecutive pools' base indices differ
+// by the preceding pool's capacity):
 //   GetStandardVehicle @0x82707A38   -> ((index + 85)  << 7) + this
 //   GetStaticVehicle   @0x827079D0   -> ((index + 485) << 7) + this   ; 485-85  == 400
 //   GetTrailerVehicle  @0x82707AA0   -> ((index + 684) << 7) + this   ; 684-485 == 199
 //   GetVehicleAxles    @0x82707C28   -> ((index + 1370)<< 6) + this   ; 1370*64 == 684*128 + 128
+// The static accessors also range-assert `luIndex < 0xC7` against
+// "luIndex < KU_MAX_STATIC_TRAFFIC", and GetVehicleSpecies @0x821F4648 asserts `< 0x258`.
 //
-//   => KU_MAX_STANDARD_TRAFFIC == 400, KU_MAX_STATIC_TRAFFIC == 199,
-//      KU_MAX_TRAILER_TRAFFIC  == 1,   KU_MAX_TOTAL_TRAFFIC  == 600.
-//
-// Corroboration, independent of the arithmetic:
-//   * GetStaticVehicle / GetStaticTrafficParam / GetVehicleIndexFromStaticIndex all
-//     range-assert `luIndex < 0xC7` (199) against the literal string
-//     "luIndex < KU_MAX_STATIC_TRAFFIC";
-//   * BrnTraffic::GetVehicleSpecies @0x821F4648 asserts `luIndex < 0x258` (600) against
-//     "luIndex < KU_MAX_TOTAL_TRAFFIC" and splits the ranges at 400 / 599;
-//   * the container instantiation TUs already committed beside this header spell the same
-//     capacities in their file names: Array_PurgatoryInfo_400 / _199 / _1,
-//     Array_HullChangeInfo_400, Array_PhysicalVehicleInfo_33, Array_VehicleRenderInfo_64,
-//     Array_CollidableVehicleInfo4_16, Array_TrafficCrashInfo_160, Array_short_9,
-//     Array_char_16, CgsSetUnsignedShort72.
-//
-// The DecFIGS values for those three (200 / 601, with KU_TRAILER_TRAFFIC_OFFSET 600) are
-// the PS3 Dec-2007 build's, and are recorded in the per-constant comments so the delta is
-// never re-litigated.
-//
-// NOT LANDED HERE (deliberately, to avoid an ODR collision with an existing home):
-//   * KU_PARAM_NUM_PLANS / KU_PARAM_NUM_SEGMENTS_TO_REMEMBER -- already defined at
-//     BrnTraffic namespace scope in BrnTrafficParam.h.
-//   * KU_INVALID_HULL -- already defined at BrnTraffic namespace scope in
-//     BrnTrafficStaticParam.h (non-canonical home; its canonical home is
-//     BrnTrafficSharedConstants.h).
-//   * every KF_* float whose VALUE the DWARF does not carry (the dwarfdump prints
-//     `const float32_t KF_JUNCTION_FUP_MAX_RADIUS;` with no initialiser). Those values
-//     live in the X360 rodata and are recovered per-call-site by the clusters that use
-//     them; inventing them here would be fabrication. Only the KF_* whose values are
-//     derivable from integer constants already attested are defined.
+// Not defined here, to avoid ODR collisions with existing homes: KU_PARAM_NUM_PLANS and
+// KU_PARAM_NUM_SEGMENTS_TO_REMEMBER (BrnTrafficParam.h); KU_INVALID_HULL
+// (BrnTrafficStaticParam.h, canonical home BrnTrafficSharedConstants.h); and every KF_*
+// whose value the DWARF omits, which lives in X360 rodata and is recovered per call site.
 // =============================================================================
 
 #include "types.hpp"        // u8/u32/s32/f32
@@ -60,7 +28,7 @@
 
 namespace BrnTraffic
 {
-    // ---- vehicle / param pool capacities (see the header banner for the attestation) ----
+    // ---- vehicle / param pool capacities (banner has the attestation) ----
 
     // DWARF :48. The moving-traffic pool.
     static const u32 KU_MAX_STANDARD_TRAFFIC = 400;
@@ -69,16 +37,15 @@ namespace BrnTraffic
     // DWARF :50.
     static const u32 KU_MAX_PARAMS_UPDATE_ON_NON_DECISION_FRAME = 100;
 
-    // DWARF :51 says 200 (PS3 Dec-2007). SHIP == 199: every static-pool accessor asserts
-    // against 0xC7, and the trailer pool's base element index is exactly 199 above the
-    // static pool's.
+    // DWARF :51 says 200 (PS3). Ship is 199: every static-pool accessor asserts against 0xC7,
+    // and the trailer pool's base element index is exactly 199 above the static pool's.
     static const u32 KU_MAX_STATIC_TRAFFIC = 199;
     // DWARF :52. The single articulated-trailer slot.
     static const u32 KU_MAX_TRAILER_TRAFFIC = 1;
 
-    // DWARF :53 / :54. Where each pool starts in the FLAT vehicle index space.
-    // KU_TRAILER_TRAFFIC_OFFSET is 600 on DecFIGS and 599 on ship (it is derived, so it
-    // tracks the KU_MAX_STATIC_TRAFFIC delta).
+    // DWARF :53 / :54. Where each pool starts in the flat vehicle index space.
+    // KU_TRAILER_TRAFFIC_OFFSET is 600 on DecFIGS and 599 on ship; it is derived, so it
+    // tracks the KU_MAX_STATIC_TRAFFIC delta.
     static const u32 KU_STATIC_TRAFFIC_OFFSET  = KU_MAX_STANDARD_TRAFFIC;
     static const u32 KU_TRAILER_TRAFFIC_OFFSET = KU_STATIC_TRAFFIC_OFFSET + KU_MAX_STATIC_TRAFFIC;
 
@@ -125,10 +92,10 @@ namespace BrnTraffic
 
     // ---- update cadence ----------------------------------------------------------------
 
-    // DWARF :89 / :90 / :91 / :93. The traffic sim takes a "decision" every 5th 50 Hz frame
-    // / 6th 60 Hz frame, i.e. 10 decisions a second -- which is what KF_UPDATE_TIME_DELTA_
-    // NO_SLOWMO spells. (The DWARF prints the two floats without initialisers; both are
-    // derived from the integer cadence above, not invented.)
+    // DWARF :89 / :90 / :91 / :93. The sim takes a decision every 5th 50 Hz frame or 6th
+    // 60 Hz frame, so 10 a second, which is what KF_UPDATE_TIME_DELTA_NO_SLOWMO spells.
+    // The DWARF prints the two floats without initialisers; both are derived from the
+    // integer cadence above, not invented.
     static const u32 KU_NUM_FRAMES_BETWEEN_DECISIONS_50HZ = 5;
     static const u32 KU_NUM_FRAMES_BETWEEN_DECISIONS_60HZ = 6;
     static const f32 KF_UPDATE_TIME_DELTA_NO_SLOWMO       = 1.0f / 10.0f;
@@ -173,33 +140,27 @@ namespace BrnTraffic
 
     // ---- debug -------------------------------------------------------------------------
 
-    // DWARF BrnTrafficEntityModule.h:357. X360-ATTESTED: Prepare @0x8274A578 stage 4
-    // allocates 2560 bytes for this many DEBUG_VehicleFuzzyLogic records (2560/40 == 64,
-    // which is exactly that record's size).
+    // DWARF BrnTrafficEntityModule.h:357. X360-attested: Prepare @0x8274A578 stage 4
+    // allocates 2560 bytes for this many DEBUG_VehicleFuzzyLogic records, and 2560/40 == 64,
+    // that record's size.
     static const u32 KU_DEBUG_MAX_FUZZY_LOGIC = 40;
 
     // ---- id packing --------------------------------------------------------------------
 
-    // Pack a traffic vehicle's index into a scene EntityId.
-    //
-    // GROUND TRUTH (X360 asm @ 0x827048C0, store-for-store):
+    // Pack a traffic vehicle's index into a scene EntityId. X360 @0x827048C0, store-for-store:
     //   slwi  r11, entityIndex, 10     ; entityIndex << 10
-    //   oris  r11, r11, 0x200          ; OR in (0x200 << 16) == 0x02000000 == owner(2) << 24
+    //   oris  r11, r11, 0x200          ; (0x200 << 16) == 0x02000000 == owner(2) << 24
     //   stw   r11, 0(result)
-    // guarded by  cmplwi entityIndex, 0x4000 (assert luEntityIndex < (1U << 14)).
-    //
-    // So a traffic EntityId is laid out owner:[31..24]=2, entityIndex:[23..10] (14 bits),
-    // partIndex:[9..0]=0. NOTE: this is the traffic subsystem's own 14/10 entity/part split
-    // (asm-authoritative); it is intentionally distinct from CgsSceneManager::EntityId's
-    // committed 8/12/12 split (the helper packs the raw u32 directly, it does not call
-    // EntityId::Set). The constants below are grounded entirely by the asm immediates.
+    // guarded by `cmplwi entityIndex, 0x4000` (assert luEntityIndex < (1U << 14)).
+    // So a traffic EntityId is owner:[31..24]=2, entityIndex:[23..10] (14 bits),
+    // partIndex:[9..0]=0. That 14/10 split is the traffic subsystem's own and differs from
+    // CgsSceneManager::EntityId's 8/12/12: this helper packs the raw u32 rather than calling
+    // EntityId::Set.
     EntityId MakeTrafficEntityId(u32 luEntityIndex);
 
-    // ⭐ ADDED 2026-08-21 (wave T1 round 4, item 2). The scene entity-TYPE flag word traffic
-    // vehicles register under. X360 CreateNewVehicleEntities @0x8272FA30, 0x8272FF74:
-    // `li r29, 0x488` staged straight into AddEntity's r5. It is the exact sibling of
-    // PropCellManager::KU_PROP_SCENE_ENTITY_TYPE_FLAG == 0x490 (BrnPropCellManager.h:146) and
-    // of the race car's KU_RACECAR_SCENE_ENTITY_TYPE_FLAG == 0x484, so it is named the same
-    // way rather than left as a literal at the call site.
+    // The scene entity-type flag word traffic vehicles register under. X360
+    // CreateNewVehicleEntities @0x8272FA30, 0x8272FF74: `li r29, 0x488` staged straight into
+    // AddEntity's r5. Sibling of PropCellManager::KU_PROP_SCENE_ENTITY_TYPE_FLAG == 0x490 and
+    // the race car's KU_RACECAR_SCENE_ENTITY_TYPE_FLAG == 0x484, so it is named, not inlined.
     static const u32 KU_TRAFFIC_SCENE_ENTITY_TYPE_FLAG = 0x488;
 }

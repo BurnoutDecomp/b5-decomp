@@ -1,25 +1,17 @@
 #pragma once
 
 // =============================================================================
-// BrnTrafficHull.h  (NEW OWNING HEADER)
+// BrnTraffic::Hull -- the per-hull traffic-graph geometry block of the TrafficData
+// resource. Member order and names are DWARF-authoritative
+// (dwarfdump/SharedClasses/Traffic/BrnTrafficHull.h, struct @ :53).
 //
-// Home for BrnTraffic::Hull -- the per-hull traffic-graph geometry block of the
-// TrafficData resource (the Hull subsystem gates OnlineStuntRunMode start-grid
-// setup). This slice reconstructs the single attested standalone accessor:
+// The pointer block starts at +0x10, where the X360 asm reads mpaSections
+// (`lwz r10, 0x10(r30)`). The 16 leading scalar bytes (7 u8, 1 alignment pad, u16
+// muNumRungs, 2 u16 lights, 2 u8 counters) put it there with no synthetic padding.
 //
-//   BrnTraffic::Hull::GetSection  @ 0x821F52E0
-//
-// LAYOUT: the scalar-then-pointer member order and names are DWARF-authoritative
-// (references/DecFIGS/dwarfdump/SharedClasses/Traffic/BrnTrafficHull.h, struct @
-// line 53). The pointer block begins at byte offset 0x10, which is exactly where
-// the X360 asm reads mpaSections (`lwz r10, 0x10(r30)`); the 16 leading scalar
-// bytes (7 u8 + 1 alignment pad + u16 muNumRungs + 2*u16 lights + 2 u8 counters)
-// place it there with no synthetic padding beyond the natural pad7 hole the
-// DWARF list implies between muNumVehicleAssets (+6) and muNumRungs (+8).
-//
-// X360 NOTE: pointers are 4 bytes on X360 and 8 bytes on the host. Members are
-// pinned BY NAME; absolute offsets are not static_asserted across the pointer
-// block because pointer width differs between target and host.
+// X360 pointers are 4 bytes and host pointers 8, so the console offsets hold only
+// for the scalar header. Members are pinned BY NAME; the static_asserts below pin
+// the HOST layout against the lane_transcode.py emitter, not the console's.
 // =============================================================================
 
 #include "types.hpp"
@@ -32,34 +24,9 @@
 namespace BrnTraffic
 {
 
-// -----------------------------------------------------------------------------
-// DEPENDENCY TYPES  (this list SHRANK on 2026-08-21, wave T1 cluster C2)
-//
-// HOMED, no longer placeholders:
-//   * Section / LaneRung / Neighbour -- real definitions in BrnTrafficSection.h,
-//     now INCLUDED above instead of being shadowed by a 48-byte
-//     `struct Section { u8 maPlaceholder[48]; }` stand-in.
-//     ⚠️ RETIRED TRAP: the stand-in was guarded by BRNTRAFFIC_SECTION_DEFINED so the
-//     real home would win *if it happened to be included first*. That contract broke
-//     silently once GetRungLengthsForSection landed below and dereferenced
-//     Section::muRungOffset -- a member the stand-in does not have -- so ANY TU that
-//     included this header without remembering to include BrnTrafficSection.h first
-//     failed with C2039. Four did (BrnTrafficHull_embed_check.cpp,
-//     BrnOnlineStuntRunMode.cpp, BrnTrafficDebugComponent.cpp, BrnTrafficVehicle.cpp).
-//     Including the real home from here removes the ordering requirement entirely;
-//     there is no include cycle, because BrnTrafficSection.h only forward-declares Hull.
-//   * StaticTrafficVehicle -- real home BrnTrafficStaticTraffic.h (included above), so
-//     GetStaticVehicle returns the DWARF-declared `const StaticTrafficVehicle*` instead
-//     of an opaque `const void*` walked by a raw 80-byte stride.
-//   * SectionFlow -- real home BrnTrafficSectionFlow.h (included above).
-//
-// STILL UN-HOMED (pointer targets only inside Hull, so opaque forward declarations
-// are sufficient): SectionSpan, StopLine, LightTrigger, LightTriggerStartData,
-// JunctionLogicBox. Their real DWARF homes (BrnTrafficSection.h siblings /
-// BrnTrafficStopLine.h / BrnJunctionLogicBox.h) are not reconstructed yet and are not
-// owned by this group.
-// -----------------------------------------------------------------------------
-
+// PARK -- still un-homed. These are pointer targets only inside Hull, so opaque
+// forward declarations suffice. Their DWARF homes (BrnTrafficSection.h siblings,
+// BrnTrafficStopLine.h, BrnJunctionLogicBox.h) are not reconstructed yet.
 struct SectionSpan;
 struct StopLine;
 struct LightTrigger;
@@ -102,52 +69,40 @@ struct Hull
     static const u32 KU_MAX_VEHICLE_ASSETS_PER_HULL = 16;
     u8 mauVehicleAssets[KU_MAX_VEHICLE_ASSETS_PER_HULL];
 
-    // --- attested standalone accessor (this TU) ------------------------------
-    // X360 @ 0x821F52E0. Bounds-asserts luIndex against muNumSections, then
-    // returns &mpaSections[luIndex] (stride 48, proven by the asm index math).
+    // X360 @ 0x821F52E0. Bounds-asserts luIndex against muNumSections, then returns
+    // &mpaSections[luIndex] (stride 48, from the asm index math).
     inline const Section* GetSection(u32 luIndex) const;
 
-    // DWARF BrnBehaviourRoadRunner.cpp names this in both MoveAlongTrafficLane{Forwards,
-    // Backwards} call lists; the console inlines it (asm 0x8222A804..0x8222A814:
-    // `lwz r9, 0x18(hull)` then `add r28, lpSection->muRungOffset << 2, r9`). The cumulative
-    // rung-length table is ONE array for the whole hull; a section's slice starts at its own
-    // muRungOffset, so `lengths[i+1] - lengths[i]` is the length of local segment i.
+    // Console-inlined (asm 0x8222A804..0x8222A814: `lwz r9, 0x18(hull)` then
+    // `add r28, lpSection->muRungOffset << 2, r9`); DWARF names it in
+    // BrnBehaviourRoadRunner.cpp's MoveAlongTrafficLane{Forwards,Backwards}. The
+    // cumulative rung-length table is one array for the whole hull, so a section's
+    // slice starts at its own muRungOffset.
     inline const f32* GetRungLengthsForSection(const Section* lpSection) const;
 
-    // --- attested standalone accessors (brn-traffic3 group) ------------------
-    // FLAG (opaque-element stride, NARROWED 2026-08-21): Neighbour and the stop-line
-    // index element are still forward-declared-only in this slice (their real record
-    // layouts belong to the not-yet-reconstructed BrnTrafficSection.h /
-    // BrnTrafficStopLine.h homes), so those two accessors stay bodied store-for-store
-    // off the X360 asm's EXPLICIT element stride:
-    //   GetNeighbour      stride 4   (`slwi r11, r29, 2`)        @ 0x821F5358
-    //   GetStopLine       stride 2   (`slwi r10, r30, 1`)        @ 0x82705C20
-    // GetStaticVehicle NO LONGER does: StaticTrafficVehicle now has a real home and
-    // sizeof(StaticTrafficVehicle) == 80 is static_asserted there, so the asm's
-    // `80 * luIndex + *(hull + 36)` becomes plain `&mpaStaticTrafficVehicles[luIndex]`
-    // with no byte arithmetic and no cast.
+    // FLAG (opaque-element stride): Neighbour and the stop-line index element are
+    // forward-declared only, so these two accessors stay bodied off the asm's
+    // explicit element stride. DELETE WHEN the BrnTrafficSection.h /
+    // BrnTrafficStopLine.h records are reconstructed and can be indexed by name.
 
     // X360 @ 0x821F5358. asm: assert(mpaNeighbourData != 0); assert(luIndex <
-    // muNumNeighbours); return mpaNeighbourData + 4*luIndex.
+    // muNumNeighbours); return mpaNeighbourData + 4*luIndex (`slwi r11, r29, 2`).
     inline const void* GetNeighbour(u32 luIndex) const;
 
-    // X360 @ 0x82705C90 (DWARF BrnTrafficHull.h:130 -- returns const StaticTrafficVehicle*).
-    // asm: `if (luIndex >= *(this+5)) assert("luIndex < muNumStaticTraffic",
-    // "...\\sharedclasses\\traffic\\BrnTrafficHull.h", 297);
-    //  return 80 * luIndex + *(this + 36);`  -- +36 is X360's mpaStaticTrafficVehicles
-    // slot (the sixth 4-byte pointer after the 16-byte scalar header) and 80 is
-    // sizeof(StaticTrafficVehicle), so indexing by name reproduces it exactly.
+    // X360 @ 0x82705C90 (DWARF BrnTrafficHull.h:130). asm:
+    // `return 80 * luIndex + *(this + 36);` -- +36 is the console's
+    // mpaStaticTrafficVehicles slot and 80 is sizeof(StaticTrafficVehicle), so
+    // indexing by name reproduces it. Assert baked at BrnTrafficHull.h:297.
     inline const StaticTrafficVehicle* GetStaticVehicle(u32 luIndex) const;
 
     // X360 @ 0x82705C20. asm: assert(luIndex < muNumStoplines);
-    // return mpaStopLines + 2*luIndex.
+    // return mpaStopLines + 2*luIndex (`slwi r10, r30, 1`).
     inline const void* GetStopLine(u32 luIndex) const;
 
-    // --- load-time pointer relocation (DWARF :135 / :140) ---------------------
-    // X360 @0x827620A0 / @0x827622E0. Rebases the twelve consecutive pointer slots
-    // (X360 +0x10..+0x3C) against the resource block base, then asserts the junction
-    // count and the two 16-byte alignment guards. Called per hull from
-    // TrafficData::FixUp / FixDown; bodied in BrnTrafficHull.cpp.
+    // X360 @0x827620A0 / @0x827622E0 (DWARF :135 / :140). Rebases the twelve
+    // consecutive pointer slots (console +0x10..+0x3C) against the resource block
+    // base, then asserts the junction count and the two 16-byte alignment guards.
+    // Called per hull from TrafficData::FixUp / FixDown; bodied in the .cpp.
     void FixUp(const void* lpBaseData);
     void FixDown(const void* lpBaseData);
 };

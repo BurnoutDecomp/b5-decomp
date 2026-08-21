@@ -1,80 +1,25 @@
 // ============================================================================
-// BrnTrafficEntityModule_wT1_06.cpp  --  wave T1 (parked traffic cars) ROUND 4, item 1:
-// THE STEADY-STATE LOOP.
+// BrnTrafficEntityModule_wT1_06.cpp -- the traffic steady-state loop.
 //
-// THREE FUNCTIONS LIVE HERE:
-//   TrafficEntityModule::UpdateTimers           @0x82715858   (DWARF :1287)
-//   TrafficEntityModule::UpdateDecisionFrame    @0x8274E508   (DWARF :1476)
-//   TrafficEntityModule::UpdateNonDecisionFrame @0x8274C1A8   (DWARF :1479)
+//   TrafficEntityModule::UpdateTimers           @0x82715858  (DWARF :1287)
+//   TrafficEntityModule::UpdateDecisionFrame    @0x8274E508  (DWARF :1476)  PARTIAL
+//   TrafficEntityModule::UpdateNonDecisionFrame @0x8274C1A8  (DWARF :1479)  PARTIAL
 //
-// ============================================================================
-// ⭐⭐ WHAT THE ASM SAYS, AND WHY THE ROUND-4 BRIEF'S SHAPE HAD TO CHANGE
+// PostPhysicsUpdate's E_STATE_RUNNING arm @0x8274E6D0 calls none of the spawn ladder itself.
+// It is a two-way dispatch: paused does nothing, IsDecisionFrame() picks UpdateDecisionFrame,
+// otherwise UpdateNonDecisionFrame. The spawn ladder lives in UpdateDecisionFrame.
 //
-// The brief asked for "the PostPhysicsUpdate E_STATE_RUNNING-arm legs the console runs every
-// decision frame -- RecalculateActiveHulls, SpawnNewTraffic, the StaticVehicles_* updates".
-// Derived from the asm @0x8274E6D0, THOSE THREE ARE NOT IN PostPhysicsUpdate AT ALL. Its
-// RUNNING arm (0x8274E6D0's `v14 == 1` branch) contains no call to any of them. What it has
-// is a two-way dispatch:
+// Outside E_STATE_STARTING_UP, IsDecisionFrame() returns mbDecisionFrame, whose only writer in
+// the whole image is UpdateTimers here (the +0x713F5 store), itself called only from
+// PreSceneUpdate's E_STATE_RUNNING arm. Reset() seeds it false, so without UpdateTimers every
+// frame takes the non-decision branch for ever. That is why the three land together and why
+// _wT1_02.cpp un-gates the UpdateTimers call in the same change.
 //
-//     if (IsPaused() || lbSimPaused) { ...nothing but the perfmon bracket... }
-//     else if (IsDecisionFrame())  UpdateDecisionFrame(lpInput, lpOutput);
-//     else                         UpdateNonDecisionFrame(lpInput, lpOutput);
-//
-// and UpdateDecisionFrame @0x8274E508 is where the spawn ladder actually lives:
-//     assert(IsDecisionFrame());                                     ; .cpp 7150
-//     ++muUpdateCount;
-//     RecalculateActiveHulls(lpInput, lpOutput, &lNew, &lOld);
-//     KillOutOfAreaTraffic(&lOld);
-//     KillTrafficOnStartGridWholeSale(GetPlayerRaceCarState(...)->pos);
-//     SpawnNewTraffic(lNew);
-//     if (mbPlayingShowtimeMode) SpawnShowtimeTraffic();
-//     UpdateJunctions();
-//     UpdateParams(lpInput);
-//     StaticVehicles_UpdateStaticParams();
-//     UpdateVehicles(lpInput, lpOutput);
-//     StaticVehicles_UpdateVehicles(lpInput);
-//     UpdateTrailers(lpInput, lpOutput);
-//     muLastParamCalculated = 0;  mbNeedToRunTrafficJamNuker = true;
-//     ...the online start-protect countdown...
-//
-// ⚠️⚠️ AND THE LOOP HAS A GATE THE BRIEF DID NOT NAME: IsDecisionFrame(). Outside
-// E_STATE_STARTING_UP it returns mbDecisionFrame, and mbDecisionFrame HAS EXACTLY ONE WRITER
-// IN THE ENTIRE IMAGE -- UpdateTimers @0x82715858, whose only caller is PreSceneUpdate's
-// E_STATE_RUNNING arm (verified by grepping the whole export set for the +0x713F5 store and
-// by UpdateTimers' own `xrefs_to`). Reset() seeds it FALSE. So on this build, the instant the
-// module left E_STATE_STARTING_UP, IsDecisionFrame() became permanently false and
-// UpdateDecisionFrame could never have run even with a perfect RUNNING-arm dispatch: every
-// frame would have taken the NON-decision branch for ever.
-//
-// That is why UpdateTimers lands here alongside the two frame functions, and why
-// BrnTrafficEntityModule_wT1_02.cpp un-gates it in the same change. Landing the dispatch
-// without the flag's producer would have produced a build that looks wired and still never
-// recalculates a hull -- the "gate-green != closeable" shape this campaign keeps recording.
-//
-// ============================================================================
-// WHAT IS REAL / WHAT IS GATED
-//
-// REAL: all of UpdateTimers except one store (below); both frame functions' skeletons,
-// asserts and bookkeeping; and, inside them, exactly the four parked-path legs whose bodies
-// exist -- RecalculateActiveHulls, SpawnNewTraffic, StaticVehicles_UpdateStaticParams,
-// StaticVehicles_UpdateVehicles.
-//
-// GATED, every one because it has NO BODY ANYWHERE IN THE TREE (grep-verified against the
-// post-round-3 tree, not assumed): KillOutOfAreaTraffic, KillTrafficOnStartGridWholeSale,
-// SpawnShowtimeTraffic, UpdateJunctions, UpdateParams, UpdateVehicles, UpdateTrailers,
-// UpdateLerpedParamTransforms, UpdateParams_DoTimeSlicedLogic, NukeTrafficJams. All ten are
-// driving-traffic work; a PARKED car is created by RecalculateActiveHulls -> SpawnNewTraffic
-// -> FillNewHull -> StaticVehicles_Generate and made alive by StaticVehicles_CreateNewVehicles
-// (reached through StaticVehicles_UpdateVehicles), and none of the ten is on that path.
-//
-// ⚠️ THE ONE GATE WITH A REAL BEHAVIOURAL COST, STATED PLAINLY: KillOutOfAreaTraffic is the
-// function that retires params for hulls that just went OUT of range. With it gated, a static
-// param is never handed back to mFreeStaticParamStack, so over a long drive the 199-slot pool
-// drains and new hulls stop producing parked cars. THAT IS BOUNDED AND SILENT-SAFE, not a
-// crash: StaticVehicles_Generate's first statement is `if (mFreeStaticParamStack.GetLength()
-// == 0) return;` (wT1_01), so an empty pool is a no-op, not an assert. The visible symptom is
-// "parked cars stop appearing after driving far enough", which is the right failure direction
-// for a bring-up wave and is reported by the [T1-static] probe's aliveParams count.
+// The ten gated legs below all lack a body anywhere in the tree and are all driving-traffic
+// work. A parked car comes from RecalculateActiveHulls -> SpawnNewTraffic -> FillNewHull ->
+// StaticVehicles_Generate, then StaticVehicles_CreateNewVehicles via
+// StaticVehicles_UpdateVehicles; none of the ten is on that path. The one with a real cost is
+// KillOutOfAreaTraffic; see its gate in UpdateDecisionFrame.
 // ============================================================================
 
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficEntityModule.h"
@@ -90,11 +35,8 @@ namespace BrnTraffic
 {
 namespace
 {
-    // ------------------------------------------------------------------------------------
-    // NAMED LEG GATE + diag plumbing -- the same shape (and the same "[FLAG PC partial gate]"
-    // tail) as the sibling partfiles, so one boot log reads as a single stream. File-local by
-    // design; this directory's convention. [DIAG] NOT IN THE X360 BINARY.
-    // ------------------------------------------------------------------------------------
+    // NAMED LEG GATE + diag plumbing, same shape as the sibling partfiles', file-local by
+    // convention. [DIAG] NOT IN THE X360 BINARY. DELETE-WHEN-STABLE.
     inline void LogMissingLeg(bool& lrbAlreadyLogged, const char* lpcLegNameAndReason)
     {
         if (lrbAlreadyLogged)
@@ -126,13 +68,8 @@ namespace
         return CgsDev::Log::gpDebugPrint;
     }
 
-    // ---- the console's own literals, all plain .rdata floats read by the asm ------------
-    // flt_820BA570 -- the scale on dt^2 for the VecFloat at X360 +0x72700 (see the gate in
-    // UpdateTimers). flt_82004014 == 0.1f is the online sim-time-since-decision floor.
-    // The 50 Hz test itself is NOT open-coded here: it is
-    // CgsSystem::TimerStatusInterface::IsSimTimerFrequency50Hz(), whose committed body is
-    // literally `mSimTimerStatus.GetCurrentTimeStep() == 0.02f` -- the same compare against
-    // flt_82005574 the console inlines at 0x82715988.
+    // The console's own .rdata literals. IsSimTimerFrequency50Hz() is the committed
+    // `GetCurrentTimeStep() == 0.02f`, the same compare the console inlines at 0x82715988.
     const f32 KF_SIM_TIMESTEP_SQ_SCALE            = 360.0f;   // flt_820BA570
     const f32 KF_ONLINE_SIM_TIME_SINCE_DECISION   = 0.1f;     // flt_82004014
 
@@ -141,53 +78,32 @@ namespace
     const u32 KU_FRAMES_PER_DECISION_50HZ = 5;
     const u32 KU_FRAMES_PER_DECISION_60HZ = 6;
 
-    // (0x8274E694 `cmplwi r11, 0x64` is BrnTraffic::KU_START_PROTECT_UPDATE_FRAME_ONLINE ==
-    // 100, which BrnTrafficConstants.h:153 already carries from DWARF :108 -- the canonical
-    // one is used below rather than a second file-local copy.)
+    // 0x8274E694 `cmplwi r11, 0x64` is KU_START_PROTECT_UPDATE_FRAME_ONLINE == 100, already in
+    // BrnTrafficConstants.h:153; the canonical one is used below.
 }
 
 // ----------------------------------------------------------------------------
 // TrafficEntityModule::UpdateTimers  @ 0x82715858   (.cpp 1922)
 //
-// The frame clock for the whole traffic sim. Store map, every offset resolved to a named
-// member (nothing below is reached by arithmetic):
+// The frame clock for the whole traffic sim. Offsets, since the C++ reaches these by name:
 //   +0x713F4  muFramesSinceDecision   +0x713F5  mbDecisionFrame
 //   +0x713F8  mfSimTimeSinceLastDecision
 //   +0x713FC  mfSimTimeStep           +0x71400  mfSimTimeStepMultiplier
 //   +0x71410  mfSimTimeStepVec        +0x717E7  mbAllowDivergentBehaviour
 //
-// Console, statement for statement:
-//   if (IsDecisionFrame())  mfSimTimeSinceLastDecision = 0.0f;      ; flt_82001CC0
-//   mfSimTimeStep           = lpInput->GetTimerStatusInterface()
-//                                     ->GetSimTimerStatus()->GetCurrentTimeStep();
-//   mfSimTimeStepMultiplier = ...->GetSimTimerStatus()->GetTimeStepMultiplier();
-//   mfSimTimeStepVec        = splat(mfSimTimeStep);
-//   <the +0x72700 splat -- GATED, see below>
-//   muFramesSinceDecision  += 1;   mbDecisionFrame = false;
-//   if (muFramesSinceDecision >= (IsSimTimerFrequency50Hz() ? 5 : 6))
-//   { mbDecisionFrame = true; muFramesSinceDecision = 0; }
-//   mfSimTimeSinceLastDecision += <current sim step>;
-//   if (!mbAllowDivergentBehaviour && IsDecisionFrame())
-//       mfSimTimeSinceLastDecision = 0.1f;
+// ORDER IS LOAD-BEARING. mbDecisionFrame is cleared BEFORE the counter test and set again only
+// when the counter reaches its limit, so a frame is a decision frame for exactly one visit.
+// Clearing it after the test makes every frame a decision frame; clearing it in the else arm
+// leaves it latched high.
 //
-// ⚠️ ORDER IS LOAD-BEARING AND EASY TO "TIDY" WRONG. mbDecisionFrame is cleared BEFORE the
-// counter test and set again only if the counter reached its limit -- so a frame is a
-// decision frame for exactly one visit. Clearing it after the test would make every frame a
-// decision frame; clearing it in the else arm would leave it latched high.
+// The first frame is a decision frame: Reset() seeds muFramesSinceDecision = 100, so the first
+// increment gives 101, over both the 5- and 6-frame limits. The module does not wait 0.1 s for
+// its first RUNNING recalculation, so a POPULATING-time hull miss self-heals.
 //
-// ⚠️ WHY THE FIRST FRAME IS A DECISION FRAME. Reset() seeds muFramesSinceDecision = 100, so
-// the first increment gives 101, which is >= 5 and >= 6 either way -- the module does not
-// wait a tenth of a second before its first RUNNING recalculation. That is the console's
-// behaviour, and it is what makes item 1's "self-heal" claim true: even if the one
-// POPULATING-time RecalculateActiveHulls produced zero hulls, the first RUNNING decision
-// frame recomputes them.
-//
-// ⚠️ THE CONSOLE CALLS GetTimerStatusInterface FOUR TIMES (0x82715894 / 0x827158B8 /
-// 0x82715968 / 0x827159C0) and recomputes the same product from it each time. That is the
-// compiler re-materialising an inlined accessor across a call-free stretch, not four
-// different buffers; de-inlined to one local here, exactly as round 2 did for
-// PostPhysicsUpdate's triple GetActiveRaceCarOutputInterface. The read-lock assert inside the
-// getter is idempotent.
+// The console calls GetTimerStatusInterface four times (0x82715894, 0x827158B8, 0x82715968,
+// 0x827159C0) and recomputes the same product each time. That is the compiler rematerialising
+// an inlined accessor, not four buffers; de-inlined to one local, and the getter's read-lock
+// assert is idempotent.
 // ----------------------------------------------------------------------------
 void TrafficEntityModule::UpdateTimers(const BrnTrafficIO::InputBuffer_PreScene* lpInput)
 {
@@ -204,35 +120,22 @@ void TrafficEntityModule::UpdateTimers(const BrnTrafficIO::InputBuffer_PreScene*
     mfSimTimeStep           = lpSimTimer->GetCurrentTimeStep();
     mfSimTimeStepMultiplier = lpSimTimer->GetTimeStepMultiplier();
 
-    // 0x8272158F0..0x82715924: build a 4-lane splat of mfSimTimeStep on the stack (three zero
-    // words then the float, `lvx128` + `vspltw ,0`) and store it. Expressed as the broadcast
-    // it is; the zero-word staging is the console's way of getting a scalar into a lane.
+    // 0x8272158F0..0x82715924 builds a 4-lane splat of mfSimTimeStep through the stack
+    // (`lvx128` + `vspltw ,0`); the zero-word staging is just how the console gets a scalar
+    // into a lane.
     mfSimTimeStepVec.x = mfSimTimeStep;
     mfSimTimeStepVec.y = mfSimTimeStep;
     mfSimTimeStepVec.z = mfSimTimeStep;
     mfSimTimeStepVec.w = mfSimTimeStep;
 
     {
-        // ---- THE ONE GATED STORE IN THIS FUNCTION ----
-        // 0x82715928..0x82715954 computes `splat(mfSimTimeStep * mfSimTimeStep *
-        // flt_820BA570)` with flt_820BA570 == 360.0f and stores it to a VecFloat member at
-        // X360 +0x72700.
-        //
-        // THAT MEMBER HAS NO ATTESTED NAME. +0x72700 falls between
-        // kfParamAvoidCrashCone_CosAngle_Length_RecipYScale_W (DWARF :821) and
-        // mpDebugComponent (DWARF :834, X360 +0x727B0) -- i.e. inside the DecFIGS
-        // UN-EMITTED :822..:833 window, the same class of hole as [MEMBER HOLE 6]
-        // mCameraLastFrame. Inventing a member there would fake a layout on a keystone
-        // header, which is this tree's #1 recurring defect.
-        //
-        // ⭐ AND IT IS WRITE-ONLY ON THIS BUILD, which is why gating it costs nothing:
-        // scanning EVERY per-function export for `468736` / `0x72700` returns exactly ONE
-        // file -- this function. There is no reader anywhere in the image. (Caveat recorded
-        // honestly: a reader that reached it as base+displacement off some other anchor would
-        // not match that scan. None is known.)
-        //
-        // UNBLOCKED BY: naming DWARF :822..:833. The expression is written above so whoever
-        // names it can land the store in one line.
+        // GATE -- the store at 0x82715928..0x82715954, `splat(mfSimTimeStep * mfSimTimeStep *
+        // 360.0f)` into a VecFloat member at X360 +0x72700. That offset falls in the DecFIGS
+        // un-emitted :822..:833 window (between :821 and mpDebugComponent :834 @+0x727B0), so
+        // the member has no attested name and inventing one would fake a keystone layout.
+        // Write-only on this build: an export-wide scan for 468736/0x72700 finds only this
+        // function, so no consumer is starved.
+        // DELETE WHEN: DWARF :822..:833 is named. The expression above lands in one line then.
         static bool sbLogged = false;
         LogMissingLeg(sbLogged,
             "UpdateTimers' splat(mfSimTimeStep^2 * 360.0f) store to the VecFloat at X360 "
@@ -259,9 +162,8 @@ void TrafficEntityModule::UpdateTimers(const BrnTrafficIO::InputBuffer_PreScene*
 
         if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())
         {
-            // [T1-loop] one-shot: the first time the steady-state clock declares a decision
-            // frame. Its absence is the single most diagnostic fact about a dead loop.
-            // DELETE-WHEN-STABLE.
+            // [T1-loop] one-shot: the first time the clock declares a decision frame. If this
+            // never prints, the loop is dead. DELETE-WHEN-STABLE.
             static bool sbFirst = true;
             if (sbFirst)
             {
@@ -279,9 +181,8 @@ void TrafficEntityModule::UpdateTimers(const BrnTrafficIO::InputBuffer_PreScene*
 
     if (!mbAllowDivergentBehaviour)
     {
-        // ONLINE-ONLY: offline mbAllowDivergentBehaviour is always true (EnterStartingUpState
-        // sets it from !mbIsOnlineGameMode), so this arm is dead on this build. Written
-        // anyway -- it is two instructions and a literal, not a blocker.
+        // Online-only: offline mbAllowDivergentBehaviour is always true (EnterStartingUpState
+        // sets it from !mbIsOnlineGameMode), so this arm is dead on this build.
         if (IsDecisionFrame())
         {
             mfSimTimeSinceLastDecision = KF_ONLINE_SIM_TIME_SINCE_DECISION;
@@ -290,18 +191,15 @@ void TrafficEntityModule::UpdateTimers(const BrnTrafficIO::InputBuffer_PreScene*
 }
 
 // ----------------------------------------------------------------------------
-// TrafficEntityModule::UpdateDecisionFrame  @ 0x8274E508   *** PARTIAL ***  (.cpp 7046)
+// TrafficEntityModule::UpdateDecisionFrame  @ 0x8274E508   PARTIAL   (.cpp 7046)
 //
-// ⭐⭐ THIS IS THE STEADY-STATE SPAWN LOOP. Everything the POPULATING arm does once, this
-// does every decision frame (5 or 6 render frames, i.e. 10 Hz) for as long as the module is
-// RUNNING -- which is what makes a one-frame miss at POPULATING self-healing rather than
-// terminal, and is exactly why the round-4 boot evidence said not to reorder anything.
+// The steady-state spawn loop: everything the POPULATING arm does once, repeated every
+// decision frame (5 or 6 render frames, 10 Hz) while the module is RUNNING.
 //
-// ⚠️ WHICH SET GOES WHERE. RecalculateActiveHulls fills lNewActiveHulls (r6, the 4th arg) and
-// lOldActiveHulls (r7, the 5th). KillOutOfAreaTraffic then takes the OLD set
-// (`0x8274E590 addi r4, r1, var_170` == the 5th arg's buffer) and SpawnNewTraffic takes the
-// NEW one (`0x8274E5C0 addi r4, r1, var_D0`). Crossing them would kill the hulls that just
-// arrived and try to fill the ones that just left.
+// ARGUMENT ORDER. RecalculateActiveHulls fills lNewActiveHulls (r6, 4th arg) and
+// lOldActiveHulls (r7, 5th). KillOutOfAreaTraffic takes the OLD set (0x8274E590 `addi r4, r1,
+// var_170`) and SpawnNewTraffic the NEW one (0x8274E5C0 `addi r4, r1, var_D0`). Crossing them
+// kills the hulls that just arrived and fills the ones that just left.
 // ----------------------------------------------------------------------------
 void TrafficEntityModule::UpdateDecisionFrame(
     const BrnTrafficIO::InputBuffer_PostPhysics* lpInput,
@@ -309,16 +207,14 @@ void TrafficEntityModule::UpdateDecisionFrame(
 {
     CGS_ASSERT(IsDecisionFrame(), "IsDecisionFrame()");   // baked .cpp 7150
 
-    // 0x8274E564..0x8274E570: `lhz / addi 1 / sth` on the u16 at +0x71B30. It is read back
-    // by this function's own start-protect arm below.
+    // 0x8274E564: `lhz / addi 1 / sth` on the u16 at +0x71B30, read back by the start-protect
+    // arm below.
     ++muUpdateCount;
 
     {
-        // The console brackets the spawn half in PerfMonCpu Start/StopMonitor(+0x72A40) and
-        // the update half in +0x72A44. Same reason as every other traffic perfmon bracket in
-        // this cluster: Construct's twenty AddMonitor registrations are themselves a gate, so
-        // the handles are never issued and passing one would index the monitor registry with
-        // a handle nothing allocated.
+        // GATE: the PerfMonCpu Start/StopMonitor brackets (+0x72A40 spawn half, +0x72A44
+        // update half). The handles are never issued because Construct's twenty AddMonitor
+        // registrations are gated. DELETE WHEN those registrations land.
         static bool sbLogged = false;
         LogMissingLeg(sbLogged,
             "UpdateDecisionFrame PerfMonCpu Start/StopMonitor brackets (+0x72A40 spawn half, "
@@ -335,16 +231,14 @@ void TrafficEntityModule::UpdateDecisionFrame(
 
     if (lOldActiveHulls.GetLength() != 0)
     {
-        // ---- THE ONE GATE IN THIS FUNCTION WITH A BEHAVIOURAL COST ----
-        // KillOutOfAreaTraffic @? (DWARF :1539 `void KillOutOfAreaTraffic(Set<uint16_t,72u>
-        // *)`) has no body in this tree -- it is the retire half of the spawn ladder, and it
-        // retires DRIVING params as well as parked ones (it walks the param pools by hull).
-        // CONSEQUENCE, stated in full at the file banner: parked params for hulls that go out
-        // of range are never handed back to mFreeStaticParamStack, so the 199-slot pool drains
-        // monotonically and new hulls eventually stop producing parked cars. Bounded and
-        // assert-free (StaticVehicles_Generate no-ops on an empty stack), and visible in the
-        // [T1-static] aliveParams count. NOT worked around with a host-side recycler -- that
-        // would be inventing a retirement policy the binary does not have.
+        // GATE with a real behavioural cost: KillOutOfAreaTraffic (DWARF :1539
+        // `void KillOutOfAreaTraffic(Set<uint16_t,72u>*)`) has no body. It is the retire half
+        // of the spawn ladder, so static params for out-of-range hulls are never handed back
+        // to mFreeStaticParamStack: the 199-slot pool drains monotonically and parked cars
+        // stop appearing after a long drive. Bounded and assert-free, since
+        // StaticVehicles_Generate no-ops on an empty stack, and visible in [T1-static]
+        // aliveParams. Do not paper over it with a host-side recycler; that would invent a
+        // retirement policy the binary does not have. DELETE WHEN the body lands.
         static bool sbLogged = false;
         LogMissingLeg(sbLogged,
             "UpdateDecisionFrame leg KillOutOfAreaTraffic (DWARF :1539) -- no body in this "
@@ -355,10 +249,9 @@ void TrafficEntityModule::UpdateDecisionFrame(
     }
 
     {
-        // KillTrafficOnStartGridWholeSale (DWARF :1794, `void ...(Vector3)`): no body, and its
-        // argument comes through sub_823102F0 off the post-physics active-race-car interface
-        // (the player's grid position). Event-start-only surface; on a free drive there is no
-        // start grid to clear.
+        // GATE: KillTrafficOnStartGridWholeSale (DWARF :1794, takes a Vector3), no body. Its
+        // argument is the player position via sub_823102F0 on the post-physics active-race-car
+        // interface. Event-start-only; a free drive has no start grid to clear.
         static bool sbLogged = false;
         LogMissingLeg(sbLogged,
             "UpdateDecisionFrame leg KillTrafficOnStartGridWholeSale (DWARF :1794) -- no body; "
@@ -392,7 +285,7 @@ void TrafficEntityModule::UpdateDecisionFrame(
             "ParamNeedToSlowData / [MEMBER HOLE 2] ParamListNode (wave 2)");
     }
 
-    // ---- REAL: the parked param lifecycle (purgatory tick + kill/remove sweep) -----------
+    // The parked param lifecycle: purgatory tick plus the kill/remove sweep.
     StaticVehicles_UpdateStaticParams();
 
     {
@@ -403,10 +296,9 @@ void TrafficEntityModule::UpdateDecisionFrame(
             "its PARKED counterpart StaticVehicles_UpdateVehicles IS called below");
     }
 
-    // ---- REAL: the parked vehicle update, and with it StaticVehicles_CreateNewVehicles ----
-    // ⭐ THIS IS THE CALL THAT MAKES PARKED CARS EXIST IN STEADY STATE. Its first statement
-    // is StaticVehicles_CreateNewVehicles(lpInput), the function that turns an alive static
-    // PARAM into an alive static VEHICLE via Vehicle::InitialiseAsStatic.
+    // This is what makes parked cars exist in steady state: its first statement is
+    // StaticVehicles_CreateNewVehicles(lpInput), which turns an alive static PARAM into an
+    // alive static VEHICLE via Vehicle::InitialiseAsStatic.
     StaticVehicles_UpdateVehicles(lpInput);
 
     {
@@ -424,11 +316,9 @@ void TrafficEntityModule::UpdateDecisionFrame(
 
     if (mbAtStartLineSoProtectRaceCarsFromTraffic && mbIsOnlineGameMode)
     {
-        // 0x8274E67C..0x8274E6BC. ONLINE-only start-line protection: after
-        // KU_START_PROTECT_UPDATE_FRAME_ONLINE decision frames the protection is dropped, and
-        // the console asserts that it lands on the frame EXACTLY (a `>` would mean a frame was
-        // missed). Written rather than gated -- it is a counter compare and a flag clear, both
-        // on members this header already has.
+        // 0x8274E67C..0x8274E6BC. Online-only start-line protection: it is dropped after
+        // KU_START_PROTECT_UPDATE_FRAME_ONLINE decision frames, and the console asserts the
+        // count lands on that frame exactly, since `>` would mean a frame was missed.
         if (muUpdateCount >= KU_START_PROTECT_UPDATE_FRAME_ONLINE)
         {
             CGS_ASSERT(muUpdateCount == KU_START_PROTECT_UPDATE_FRAME_ONLINE,
@@ -439,33 +329,20 @@ void TrafficEntityModule::UpdateDecisionFrame(
 }
 
 // ----------------------------------------------------------------------------
-// TrafficEntityModule::UpdateNonDecisionFrame  @ 0x8274C1A8   *** PARTIAL ***  (.cpp 7124)
+// TrafficEntityModule::UpdateNonDecisionFrame  @ 0x8274C1A8   PARTIAL   (.cpp 7124)
 //
-// The other four frames in five: no hull recalculation and no spawning, just the per-frame
-// movement of what already exists plus a slice of the param logic.
-//   assert(!IsDecisionFrame());                                    ; .cpp 7228
-//   assert(lpInput);                                               ; .cpp 7229
-//   UpdateLerpedParamTransforms();
-//   UpdateVehicles(lpInput, lpOutput);
-//   StaticVehicles_UpdateVehicles(lpInput);
-//   UpdateTrailers(lpInput, lpOutput);
-//   if (muLastParamCalculated < KU_MAX_PARAMS)
-//       UpdateParams_DoTimeSlicedLogic(muLastParamCalculated, muLastParamCalculated + 100,
-//                                      lpInput->GetActiveRaceCarOutputInterface());
-//   if (mbNeedToRunTrafficJamNuker && !mbNeedToKillAllZombies)
-//   { NukeTrafficJams(); mbNeedToRunTrafficJamNuker = false; }
+// The other four frames in five: no hull recalculation and no spawning, just per-frame
+// movement of what exists plus a slice of the param logic.
 //
-// ⚠️ THE PARKED LEG RUNS ON EVERY FRAME, NOT ONLY DECISION FRAMES. StaticVehicles_UpdateVehicles
-// appears in BOTH functions, which means StaticVehicles_CreateNewVehicles is attempted every
-// frame -- so a param generated on a decision frame becomes a live vehicle on the very next
-// frame rather than 100 ms later. That is the console's shape and it is why this function is
-// landed at all instead of being left as one gate.
+// The parked leg runs on every frame, not only decision frames. StaticVehicles_UpdateVehicles
+// appears in both functions, so StaticVehicles_CreateNewVehicles is attempted every frame and
+// a param generated on a decision frame becomes a live vehicle on the next frame rather than
+// 100 ms later.
 //
-// ⚠️ THE TIME-SLICE CURSOR IS NOT ADVANCED HERE. The console reads muLastParamCalculated and
+// The time-slice cursor is not advanced here. The console reads muLastParamCalculated and
 // passes [cursor, cursor+100) to UpdateParams_DoTimeSlicedLogic, which is what advances it.
-// With that callee gated the cursor stays 0 and the window is re-requested every frame -- and
-// since the callee does nothing, so does the whole leg. Advancing it locally would be
-// inventing progress through a pass that never ran.
+// With that callee gated the cursor stays 0; advancing it locally would fake progress through
+// a pass that never ran.
 // ----------------------------------------------------------------------------
 void TrafficEntityModule::UpdateNonDecisionFrame(
     const BrnTrafficIO::InputBuffer_PostPhysics* lpInput,
@@ -491,7 +368,6 @@ void TrafficEntityModule::UpdateNonDecisionFrame(
             "driving-traffic function UpdateDecisionFrame gates (wave 2)");
     }
 
-    // ---- REAL: parked vehicles are created/updated on every frame, not just decision ones --
     StaticVehicles_UpdateVehicles(lpInput);
 
     {
@@ -512,10 +388,9 @@ void TrafficEntityModule::UpdateNonDecisionFrame(
 
     if (mbNeedToRunTrafficJamNuker && !mbNeedToKillAllZombies)
     {
-        // NukeTrafficJams (DWARF :1551) has no body. The flag CLEAR is gated with it on
-        // purpose: clearing a request whose work never ran would make the request look
-        // serviced. Nothing else in the tree reads mbNeedToRunTrafficJamNuker, so leaving it
-        // latched high is inert.
+        // GATE: NukeTrafficJams (DWARF :1551), no body. The flag clear is gated with it, since
+        // clearing a request whose work never ran would mark it serviced. Nothing else reads
+        // mbNeedToRunTrafficJamNuker, so leaving it latched high is inert.
         static bool sbLogged = false;
         LogMissingLeg(sbLogged,
             "UpdateNonDecisionFrame leg NukeTrafficJams (DWARF :1551) -- no body; the "

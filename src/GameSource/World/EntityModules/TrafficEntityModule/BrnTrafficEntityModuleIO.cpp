@@ -7,24 +7,22 @@
 
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // CgsDev::Log::gpDebugPrint ([T1-rinfo] only)
 
-// BrnTraffic::BrnTrafficIO::OutputBuffer_PostScene::GetTrafficAIInterface() (non-const, write)
-//   @ 0x827111C0. Reconstructed from BURNOUT_X360_ARTIST.XEX. Asserts the buffer is locked for
-// writing (status bit 3, IsBufferLockedForWriting()) then returns the embedded AI interface
-// (the X360 returns `a1 + 16416`, i.e. &this->mTrafficAIInterface). The producer
-// (ConvertSceneResultsToTrafficDataForAI @ 0x82728518) calls this, reads the entity count at the
-// interface's offset 0 and memcpy's 176-byte TrafficAIEntity records onto the active list.
+// BrnTrafficIO IO-buffer bodies, from BURNOUT_X360_ARTIST.XEX. Each accessor tests its lock bit
+// (read = bit 4, write = bit 3) and returns the member by name; the console offsets in the
+// comments are provenance for which member, never arithmetic in the body.
 
 namespace BrnTraffic
 {
 namespace BrnTrafficIO
 {
-    // X360 0x827111C0: write-lock; return this + 16416.
+    // X360 0x827111C0: write-lock; return this + 16416. Its producer
+    // (ConvertSceneResultsToTrafficDataForAI @0x82728518) reads the entity count at the
+    // interface's offset 0 and memcpy's 176-byte TrafficAIEntity records onto the active list.
     TrafficAIInterface* OutputBuffer_PostScene::GetTrafficAIInterface()
     {
-        // The AI-interface offset is load-bearing for this getter (the X360 returns this+16416).
-        // Pinned from inside the member so offsetof can see the private members. The coarse-query
-        // queue precedes it: the X360 places the queue at status+4 (its status word is 4 bytes vs
-        // our 1-byte IOBuffer FlagSet), but the 16-aligned mTrafficAIInterface still lands at 16416.
+        // The offset is load-bearing here, and pinned from inside the member so offsetof can see
+        // the private ones. The coarse-query queue precedes it at status+4 (the console's status
+        // word is 4 bytes to our 1-byte FlagSet), and the 16-aligned interface still lands at 16416.
         static_assert(offsetof(OutputBuffer_PostScene, mTrafficAIInterface) == 16416,
                       "mTrafficAIInterface @16416");
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
@@ -32,20 +30,14 @@ namespace BrnTrafficIO
     }
 
     // ========================================================================
-    // OutputBuffer_PostPhysics handle accessors (reconstructed from BURNOUT_X360_ARTIST.XEX).
-    // Each tests the lock state (read = bit 4, write = bit 3) then returns the member's address
-    // BY NAME. No host byte offset is pinned: several members are queue aggregates whose host
-    // header is 16 bytes where the console's is 12, so host offsets legitimately exceed the
-    // console ones (see the header's FLAG). The rodata lock messages carry the verbatim "\n".
-    //
-    // ⭐ RELAID OUT 2026-08-19 (wave Q6 cluster C3) from Construct @0x82761908 -- see the header
-    // for the full store-for-store roll-call and for what the old +834784 scene seat was.
+    // OutputBuffer_PostPhysics accessors. No host byte offset is pinned: several members are
+    // queue aggregates whose host header is 16 bytes where the console's is 12, so host offsets
+    // legitimately exceed the console ones. The rodata lock messages carry the verbatim "\n".
     // ========================================================================
     void OutputBuffer_PostPhysics::_AssertLayout()
     {
-        // Parity is by NAMED MEMBER + SEQUENCE, so no offsetof pin is possible here. What IS
-        // pinnable is the fact that made the old layout wrong: the scene seat has to be able to
-        // hold the whole 25-queue aggregate, not a 44-byte span.
+        // Parity is by named member and sequence, so no offsetof pin is possible. What is
+        // pinnable is that the scene seat must hold the whole 25-queue aggregate, not 44 bytes.
         static_assert(sizeof(OutputBuffer_PostPhysics::SceneInputInterface) > 800000,
                       "mSceneInputInterface is the real InSceneUpdateInterface (console 818768 B "
                       "at +11376), not the 44-byte span the +834784 accessor returns");
@@ -53,27 +45,20 @@ namespace BrnTrafficIO
                       "the X360-only member at console +834784 is 44 bytes (Construct zeroes 11 words)");
     }
 
-    // X360 0x82761908 -- run by CreateIOBuffer<OutputBuffer_PostPhysics> @0x827B79D0 (which
-    // allocates 0xD3D20 == 867,616 bytes). Store for store -- ⭐ TRUE ONLY AS OF THE Q6
-    // ROUND-1 FIX below: the three members with no Construct call of their own
-    // (mTrafficSoundOutputInterface's leading halfword, the array count inside
-    // mTrafficDirectorOutputInterface, and the whole 44-byte mInterfaceAt834784) reach the
-    // console as raw zero stores, and all three were missing from this body while the banner
-    // already claimed store-for-store parity.
-    //
-    // RECOVERED THIS CLUSTER: 0x82761908 has no per-address JSON under .ida-exports/ (an
-    // export-run gap, not a missing function -- AGENTS gotcha 6); dumped by a targeted headless
-    // idat run on a PRIVATE .i64 copy, scratchpad/waveQ6/ida_bridges/.
+    // X360 0x82761908, store for store -- run by CreateIOBuffer<OutputBuffer_PostPhysics>
+    // @0x827B79D0, which allocates 0xD3D20 == 867,616 bytes. Three members have no Construct call
+    // of their own and reach the console as raw zero stores: mTrafficSoundOutputInterface's
+    // leading halfword, the array count inside mTrafficDirectorOutputInterface, and the whole
+    // 44-byte mInterfaceAt834784. 0x82761908 has no per-address JSON under .ida-exports/, an
+    // export-run gap rather than a missing function.
     void OutputBuffer_PostPhysics::Construct()
     {
         CgsModule::IOBuffer::Construct();               // stb 1, 0(this)
         mCrashTrafficInputInterface.Construct();        // +8
         mNetworkInterface.Construct();                  // +0xDA0  (3488)
 
-        // ⭐ Q6 FIX (round-1 verifier, bridges #2): THREE console legs were dropped by the
-        // "store for store" claim above. CreateIOBuffer stopped zero-filling on 2026-08-15,
-        // so without these the three regions keep whatever the IO stack's previous tenant
-        // left. All three are re-measured off 0x82761908 (scratchpad/waveQ6/ida_bridges).
+        // CreateIOBuffer does not zero-fill, so without the next two stores these regions keep
+        // whatever the IO stack's previous tenant left.
         //
         //   0x82761938  sth r29,0xE30(r31)   -- +3632 == mTrafficSoundOutputInterface's
         //                                       leading mu16EntityCount. A halfword store of
@@ -89,7 +74,7 @@ namespace BrnTrafficIO
         mTrafficDirectorOutputInterface.GetTrafficDirectorEntityArray().Construct();
 
         mGameEventQueue.Construct();                    // +0x2660 (9824)
-        mSceneInputInterface.Construct();               // +0x2C70 (11376)  ⭐
+        mSceneInputInterface.Construct();               // +0x2C70 (11376)
         mResourceRequestInterface.Construct();          // +0xCAB90 (830672)
         mResourceRequestInterface.Clear();              // the console's paired Clear
 
@@ -143,11 +128,10 @@ namespace BrnTrafficIO
         return &mNetworkInterface;
     }
 
-    // X360 0x827A0A28 (baked 400): read-lock; return &mTrafficDirectorOutputInterface (this + 6208).
-    // ⚠ RE-HOMED 2026-08-19 (wave Q6/C3): this accessor used to be modelled as the const read of
-    // mGameEventQueue. Its epilogue is `addi r3,r28,0x1840` == +6208, which is the director
-    // interface's seat (Construct's `stw 0,0x2650` lands inside its span); the game-event queue's
-    // read accessor is 0x827A0AD0 (baked 403) at +0x2660 == 9824.
+    // X360 0x827A0A28 (baked 400): read-lock; return &mTrafficDirectorOutputInterface (this+6208).
+    // Not mGameEventQueue: its epilogue is `addi r3,r28,0x1840` == +6208, the director interface's
+    // seat (Construct's `stw 0,0x2650` lands inside that span), while the game-event queue's read
+    // accessor is 0x827A0AD0 (baked 403) at +0x2660 == 9824.
     const TrafficDirectorOutputInterface* OutputBuffer_PostPhysics::GetTrafficDirectorOutputInterface() const
     {
         CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
@@ -183,12 +167,11 @@ namespace BrnTrafficIO
         return &mInterfaceAt834784;
     }
 
-    // ⭐ X360 0x827A0C20 (baked 409): read-lock; return &mSceneInputInterface (this + 11376).
+    // X360 0x827A0C20 (baked 409): read-lock; return &mSceneInputInterface (this + 11376).
     // The leg WorldModule::BridgeEntityModulesToScene_PostPhysics @0x827AB608 calls first
-    // (0x827AB6C0). Construct @0x82761908 builds this member with
-    // InSceneUpdateInterface::Construct(this+0x2C70), and 11376 + 818768 == 830144 == the next
-    // member -- the two witnesses that put the aggregate here rather than at the 44-byte +834784
-    // seat the old model used.
+    // (0x827AB6C0). Two witnesses put the aggregate here rather than at the 44-byte +834784 seat:
+    // Construct @0x82761908 builds it with InSceneUpdateInterface::Construct(this+0x2C70), and
+    // 11376 + 818768 == 830144, the next member.
     const OutputBuffer_PostPhysics::SceneInputInterface* OutputBuffer_PostPhysics::GetSceneInputInterface() const
     {
         CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
@@ -209,13 +192,9 @@ namespace BrnTrafficIO
         return &mResourceRequestInterface;
     }
 
-    // ⭐ X360 0x82711F88 (baked 416): WRITE-lock; return &mResourceRequestInterface
-    // (this + 830672). Landed 2026-08-21 (wave T1 round 3, closure item 1) -- it is the
-    // interface TrafficEntityModule::UpdateStreaming @0x82748848 appends the traffic
-    // streamer's own GameData request queue into, and it is that function's ONLY caller.
-    // Exact sibling of the const getter above, with the lock assert flipped, matching the
-    // read/write pairs this class already carries (GetGuiEventQueue, GetGameEventQueue,
-    // GetTrafficSoundOutputInterface, GetCrashTrafficInputInterface).
+    // X360 0x82711F88 (baked 416): write-lock; return &mResourceRequestInterface (this + 830672).
+    // TrafficEntityModule::UpdateStreaming @0x82748848 is its only caller, and appends the
+    // traffic streamer's own GameData request queue into it.
     OutputBuffer_PostPhysics::ResourceRequestInterface* OutputBuffer_PostPhysics::GetResourceRequestInterface()
     {
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
@@ -283,12 +262,9 @@ namespace BrnTrafficIO
     // X360 0x82710BD8 (IDA `sub_82710BD8`): InputBuffer_PreScene::
     // GetActiveRaceCarOutputInterface() const.  DWARF :153.
     //
-    // ⭐⭐ ADDITIVE 2026-08-21 (wave T1 round 2, cluster R2A). This one declaration is round
-    // 1's blocker B2: TrafficEntityModule::PreSceneUpdate's
-    // E_STARTINGUPSTATE_WAITING_FOR_PLAYER arm tests
-    // `lpInput->GetActiveRaceCarOutputInterface()->IsPlayerCarActive()`, and without it the
-    // module could never leave WAITING_FOR_PLAYER, so POPULATING never ran and no parked car
-    // was ever created.
+    // TrafficEntityModule::PreSceneUpdate's E_STARTINGUPSTATE_WAITING_FOR_PLAYER arm tests
+    // `lpInput->GetActiveRaceCarOutputInterface()->IsPlayerCarActive()`. Without this the module
+    // never leaves WAITING_FOR_PLAYER, so POPULATING never runs and no parked car is created.
     //
     // Body, instruction for instruction (0x82711850's twin shape):
     //     lbz    r11, 0(r28) ; extrwi r11,r11,1,27      ; IsBufferLockedForReading (bit 4)
@@ -349,12 +325,11 @@ namespace BrnTrafficIO
     }
 
     // ========================================================================
-    // InputBuffer_PostScene (batch 0x8279FEA8 / 0x827ACDE8). SetActiveRaceCarOutputInterface
-    // block-copies the embedded race-car output interface; SetCrashTrafficOutputInterface
-    // clear-then-appends each of the crash-traffic interface's two event queues.
-    // NOTE: these two verifier-authoritative bodies KEEP the rodata's trailing "\n" in the lock
-    // message (the X360 rodata string aNotLockedForWr is "Not locked for writing\n"); this differs
-    // from the no-\n convention the other buffers in this file use.
+    // InputBuffer_PostScene (0x8279FEA8 / 0x827ACDE8). SetActiveRaceCarOutputInterface block-copies
+    // the embedded race-car output interface; SetCrashTrafficOutputInterface clear-then-appends
+    // each of the crash-traffic interface's two event queues.
+    // These two keep the rodata's trailing "\n" in the lock message (the X360 string
+    // aNotLockedForWr is "Not locked for writing\n"), unlike the other buffers in this file.
     // ========================================================================
 
     // BrnTraffic::BrnTrafficIO::InputBuffer_PostScene::SetActiveRaceCarOutputInterface @ 0x8279FEA8.
@@ -401,24 +376,18 @@ namespace BrnTrafficIO
     }
 
     // ========================================================================
-    // InputBuffer_PostPhysics -- the one getter this file owns.
-    //
-    // (The rest of this buffer's getters live in the sibling TU
-    // BrnTrafficEntityModuleIO_InputBuffer_Getters.cpp, which cluster R2A does not own; this
-    // one is added here so no file outside the cluster is touched. Same class, different TU:
-    // no duplicate definition, no declaration change beyond the header line above.)
+    // InputBuffer_PostPhysics -- the one getter this file owns. The rest live in the sibling TU
+    // BrnTrafficEntityModuleIO_InputBuffer_Getters.cpp.
     // ========================================================================
 
     // ------------------------------------------------------------------------
     // X360 0x82711850 (IDA `sub_82711850`): InputBuffer_PostPhysics::
     // GetActiveRaceCarOutputInterface() const.  DWARF :358.
     //
-    // ⭐⭐ ADDITIVE 2026-08-21 (wave T1 round 2, cluster R2A). Round 1's blocker B1(c): the
-    // traffic module reads the player car through THIS getter in three places --
-    // TrafficEntityModule::UpdateRaceCarHulls @0x82721460 (the sim-box centre),
-    // PostPhysicsUpdate @0x8274E6D0's tail (meLocalPlayerIndex / mLocalPlayerPosition /
-    // mLocalPlayerDirection) and StaticVehicles_CreateNewVehicles @0x827229F0's online-only
-    // proximity reject.
+    // The traffic module reads the player car through this getter in three places:
+    // UpdateRaceCarHulls @0x82721460 (the sim-box centre), PostPhysicsUpdate @0x8274E6D0's tail
+    // (meLocalPlayerIndex / mLocalPlayerPosition / mLocalPlayerDirection), and
+    // StaticVehicles_CreateNewVehicles @0x827229F0's online-only proximity reject.
     //
     // Body (0x82711860..0x827118EC):
     //     lbz    r11, 0(r28) ; extrwi r11,r11,1,27      ; IsBufferLockedForReading (bit 4)
@@ -426,11 +395,10 @@ namespace BrnTrafficIO
     //     ... BeginAssert / "Not locked for reading\n" /
     //         FireAssert(msg, "d:\\p4\\...\\BrnTrafficEntityModuleIO.h", 362) / EndAssert
     //     addis  r3, r28, 1 ; addi r3, r3, 0x28C0       ; == this + 0x128C0 == 75968
-    // 75968 is mActiveRaceCarOutputInterface's console offset -- the same destination the
-    // 0x827A06C0 setter's XMemCpy(0x28F0) writes. NOT static_asserted: the members ahead of
-    // it (VehicleOutputInterface, the two queues, VehicleManagerOutputInterface) carry SIMD
-    // aggregates and pointers that widen on the 64-bit host, exactly as this buffer's own
-    // banner records. The member is reached BY NAME.
+    // 75968 is mActiveRaceCarOutputInterface's console offset, the same destination the
+    // 0x827A06C0 setter's XMemCpy(0x28F0) writes. Not static_asserted: the members ahead of it
+    // (VehicleOutputInterface, the two queues, VehicleManagerOutputInterface) carry SIMD
+    // aggregates and pointers that widen on the 64-bit host.
     // ------------------------------------------------------------------------
     const InputBuffer_PostPhysics::ActiveRaceCarOutputInterface*
     InputBuffer_PostPhysics::GetActiveRaceCarOutputInterface() const
@@ -463,18 +431,12 @@ namespace BrnTrafficIO
     //   TrafficLightKnockDownEvent<32>::Construct        this+0x30C60  mPropToTrafficInterface queue 0
     //   TrafficLightRestoreEvent<80>::Construct          this+0x30CEC  mPropToTrafficInterface queue 1
     //
-    // ⭐⭐ COMPLETED 2026-08-19 (wave Q6 cluster C3). The 2026-08-19 (wave Q5 round-3) landing
-    // ran only three of the six legs, because mSceneResultQueue and mPropToTrafficInterface were
-    // opaque byte spans that no expression could reach; both are their real types now
-    // (see the header), so all six legs are here in the console's order.
-    //
-    // ⚠️ THIS IS THE gotcha-14 CASE, TWICE OVER, AND IT IS NOT THEORETICAL: the last two legs
-    // are the two rings WorldModule::BridgePropModuleToTrafficModule_PrePhysics @0x827AEA70
-    // Clear()s and Append()s every pre-physics frame from this wave on. Without them
-    // mpEvents stays at whatever the IO stack's previous tenant left and the first smashed
-    // traffic light writes events through a foreign pointer. The mSceneResultQueue leg is the
-    // same trap one member earlier (a never-Constructed VariableEventQueue asserts
-    // "Not Constructed" on its first AddEvent, CgsVariableEventQueue.h).
+    // The last two legs are the two rings
+    // WorldModule::BridgePropModuleToTrafficModule_PrePhysics @0x827AEA70 Clear()s and Append()s
+    // every pre-physics frame. Without them mpEvents stays at whatever the IO stack's previous
+    // tenant left and the first smashed traffic light writes events through a foreign pointer.
+    // The mSceneResultQueue leg is the same trap one member earlier: a never-Constructed
+    // VariableEventQueue asserts "Not Constructed" on its first AddEvent.
     void InputBuffer_PrePhysics::Construct()
     {
         CgsModule::IOBuffer::Construct();              // stb 1, 0(this)
@@ -526,9 +488,8 @@ namespace BrnTrafficIO
     }
 
     // ========================================================================
-    // OutputBuffer_PostScene extra accessors (wave35): the non-const scene coarse-query queue
-    // (0x82711118) and the const traffic-AI interface (0x827A0008). The committed non-const
-    // GetTrafficAIInterface / Construct live above; these grow the same buffer.
+    // OutputBuffer_PostScene extra accessors: the non-const scene coarse-query queue (0x82711118)
+    // and the const traffic-AI interface (0x827A0008).
     // ========================================================================
 
     // X360 0x82711118: write-lock; return &mSceneCoarseQueryQueue (this + 4, first member).
@@ -546,13 +507,9 @@ namespace BrnTrafficIO
     }
 
     // ========================================================================
-    // OutputBuffer_PreScene accessors.
-    //
-    // ⭐ RELAID OUT 2026-08-19 (wave Q6 cluster C3) from Construct @0x82761790 + the recovered
-    // read-lock ladder (baked lines 186 -> +16, 189 -> +818784, 192 -> +819328, a uniform +4 skew
-    // off the DecFIGS declaration lines :182/:185/:188). See the header for what was wrong: the
-    // +63424 accessor 0x827A00B0 bakes line 262 and belongs to OutputBuffer_PostScene, and the
-    // +818784 pair was homed one member too early.
+    // OutputBuffer_PreScene accessors, laid out from Construct @0x82761790 plus the read-lock
+    // ladder (baked lines 186 -> +16, 189 -> +818784, 192 -> +819328, a uniform +4 skew off the
+    // DecFIGS declaration lines :182/:185/:188).
     // ========================================================================
     void OutputBuffer_PreScene::_AssertLayout()
     {
@@ -565,9 +522,8 @@ namespace BrnTrafficIO
         static_assert(sizeof(OutputBuffer_PreScene::TrafficToRaceCarInterface_PreScene) == 544,
                       "the traffic->race-car pre-scene block is console [818784, 819328) == 544 B");
         // Everything after mSceneInputInterface drifts: the aggregate's 25 queues carry an 8-byte
-        // mpEvents on the host where the console has 4, so its host sizeof EXCEEDS the console's
-        // 818768. Parity from here down is by NAMED MEMBER + SEQUENCE (the same disposition
-        // PhysicsModuleIO::OutputBuffer's scene seat took on 2026-08-19).
+        // mpEvents on the host where the console has 4, so its host sizeof exceeds the console's
+        // 818768. Parity from here down is by named member and sequence.
         static_assert(sizeof(OutputBuffer_PreScene::SceneInputInterface) >= 818768,
                       "the host scene aggregate must cover the console span [16, 818784)");
     }
@@ -580,13 +536,11 @@ namespace BrnTrafficIO
     // mTriggerManagementInputInterface, in member order; then the count word of mPotentialScorees
     // (console +951072), which this slice does not model.
     //
-    // ⭐ Q6 ROUND-1 FIX (bridges #1): the 544-byte block used to be value-initialised as an
-    // opaque whole, on the (false) grounds that "the member has no home in the tree". It does --
-    // BrnTraffic::BrnTrafficIO::TrafficToRaceCarInterface_PreScene, in this subsystem's own
-    // SharedIO -- so the leg is now that type's own Construct(), which spells the console's zero
-    // pattern FIELD BY FIELD (7 doublewords of mSympatheticCrashers; the two near-miss Array
-    // counts; miPotentialStompeeCount; muNearbyStaticVehicleCount; the four flt_82001CC0 floats)
-    // instead of blanket-zeroing bytes the console leaves alone (mPotentialStompees[8]).
+    // The 544-byte block's leg is TrafficToRaceCarInterface_PreScene::Construct(), which spells
+    // the console's zero pattern field by field (7 doublewords of mSympatheticCrashers, the two
+    // near-miss Array counts, miPotentialStompeeCount, muNearbyStaticVehicleCount, the four
+    // flt_82001CC0 floats). Blanket-zeroing the block would also clear mPotentialStompees[8],
+    // which the console leaves alone.
     void OutputBuffer_PreScene::Construct()
     {
         CgsModule::IOBuffer::Construct();                            // stb 1, 0(this)
@@ -596,7 +550,7 @@ namespace BrnTrafficIO
         mTriggerManagementInputInterface.GetRemoveTriggerEventQueue().Construct();  // +0xE8090
     }
 
-    // ⭐ X360 0x8279FD58 (baked 186, DWARF :182): read-lock; return &mSceneInputInterface
+    // X360 0x8279FD58 (baked 186, DWARF :182): read-lock; return &mSceneInputInterface
     // (this+16). The leg WorldModule::BridgeEntityModulesToSceneModule_PreScene @0x827AB490 calls
     // first (0x827AB570).
     const OutputBuffer_PreScene::SceneInputInterface*
@@ -606,11 +560,9 @@ namespace BrnTrafficIO
         return &mSceneInputInterface;
     }
 
-    // ⭐ X360 sub_82710D28 (baked 187): WRITE-lock; return &mSceneInputInterface (this+16).
-    // Landed 2026-08-21 (wave T1 round 4, item 2) -- the producer side of the scene seat, i.e.
-    // the interface TrafficEntityModule::CreateNewVehicleEntities calls AddEntity on. Exact
-    // sibling of the const getter above with the lock assert flipped, matching every other
-    // read/write accessor pair in this file.
+    // X360 sub_82710D28 (baked 187): write-lock; return &mSceneInputInterface (this+16). The
+    // producer side of the scene seat, i.e. the interface
+    // TrafficEntityModule::CreateNewVehicleEntities calls AddEntity on.
     OutputBuffer_PreScene::SceneInputInterface*
     OutputBuffer_PreScene::GetSceneInputInterface()
     {
@@ -654,19 +606,16 @@ namespace BrnTrafficIO
     }
 
     // ========================================================================
-    // OutputBuffer_Prepare accessors (wave35 new home).
+    // OutputBuffer_Prepare accessors.
     // ========================================================================
     void OutputBuffer_Prepare::_AssertLayout()
     {
         static_assert(offsetof(OutputBuffer_Prepare, mSceneInputInterface) == 16,
                       "mSceneInputInterface @16 (console; Construct @0x82761740 calls "
                       "InSceneUpdateInterface::Construct(this+0x10))");
-        // ⛔ THE `offsetof(mResourceRequestInterface) == 818784` PIN IS DELETED, and that is the
-        // CORRECT direction (wave Q6/C3). It pinned a CONSOLE byte offset on a host layout whose
-        // preceding member is now the real 25-queue aggregate -- whose host sizeof exceeds the
-        // console's 818,768 because each queue carries an 8-byte mpEvents. Parity from here down
-        // is by NAMED MEMBER + SEQUENCE (the standing x64 rule). What survives is the relation
-        // that actually matters:
+        // No offsetof pin on mResourceRequestInterface: the member ahead of it is the real
+        // 25-queue aggregate, whose host sizeof exceeds the console's 818,768 because each queue
+        // carries an 8-byte mpEvents. What survives is the relation that matters:
         static_assert(sizeof(OutputBuffer_Prepare::SceneInputInterface) >= 818768,
                       "the host scene aggregate must cover the console span [16, 818784)");
     }
@@ -712,20 +661,14 @@ namespace BrnTrafficIO
     }
 
     // ========================================================================
-    // OutputBuffer_PrePhysics (wave35 new home; the three interfaces made REAL 2026-08-10 --
-    // see the retype banner in the header for why the 1-byte slice was a memory bug and why
-    // the console-offset static_assert had to go with it).
+    // OutputBuffer_PrePhysics. The header banner has the layout witnesses.
     // ========================================================================
 
-    // ⭐ @0x827618A0 (DWARF :307) -- NEW 2026-08-10 (pre-physics bridge wave).
-    // Was inherited base-only (`lpTrafficOutput_PrePhysics->Construct()` in WorldModule::Update
-    // resolved to CgsModule::IOBuffer::Construct), which left every embedded queue's mpEvents
-    // NULL. Harmless while nothing read the buffer; fatal the moment
-    // BridgeEntityModulesToPhysicsModule_PrePhysics started merging all three interfaces --
-    // the exact "mpEvents != NULL" + "Reached Max length" death the race-car pre-physics buffer
-    // already suffered once (BrnVehicleInputInterface.h's Construct banner). 25 X360
-    // instructions, read verbatim; every member reached BY NAME, not by the console offset the
-    // comment records:
+    // @0x827618A0 (DWARF :307). Without this the buffer inherits
+    // CgsModule::IOBuffer::Construct and every embedded queue's mpEvents stays NULL, which kills
+    // BridgeEntityModulesToPhysicsModule_PrePhysics on "mpEvents != NULL" the moment it merges
+    // the three interfaces. 25 X360 instructions, read verbatim; every member reached by name,
+    // not by the console offsets the comments record:
     //   0x827618B8  stb  1, 0(this)                          -- IOBuffer::Construct (status = 1)
     //   0x827618BC  bl   VehicleInputInterface::Construct     (this+16)
     //   0x827618CC  bl   CreateAirRamEvent<20>::Construct     (this+142192)  \  == the effects
@@ -733,10 +676,10 @@ namespace BrnTrafficIO
     //   0x827618E4  stw  0, 8(this+142192) ; stw 0, 0x518(this+142192)  -- the two queue lengths
     //   0x826718EC  bl   VehicleDriverInputInterface::Construct(this+143984)
     //   0x827618F8  stbx 0, this, 0x24720                     -- mbPlayingShowtime = false
-    // ⭐ The two explicit length stores are what VehicleEffectsInputInterface::Construct's two
-    // queue Constructs already do (EventQueue::Construct writes mpEvents AND clears miLength);
-    // the X360 emits them separately because it inlined both Constructs and the compiler kept
-    // the redundant zeroing. Calling the named Construct reproduces the end state exactly.
+    // The two explicit length stores are what VehicleEffectsInputInterface::Construct's two queue
+    // Constructs already do (EventQueue::Construct writes mpEvents and clears miLength); the X360
+    // emits them separately because it inlined both Constructs and kept the redundant zeroing.
+    // Calling the named Construct reproduces the end state exactly.
     void OutputBuffer_PrePhysics::Construct()
     {
         CgsModule::IOBuffer::Construct();
@@ -791,86 +734,33 @@ namespace BrnTrafficIO
     }
 
     // ========================================================================
-    // The PRE-DISPATCH pair -- the traffic render seam.
+    // The PRE-DISPATCH pair -- the traffic render seam. The header's pre-dispatch banner
+    // carries the allocator/Construct/Clear attestation for both interiors.
     //
-    // ⭐⭐ REAL BODIES LANDED 2026-08-21 (traffic wave T1, cluster C5). Both
-    // Construct()s, and both setters, previously lived as inert one-shot-logging
-    // gates in GameSource/World/WorldLinkStubs.cpp whose whole body was
-    // `memset(this, 0, sizeof(*this))` over a 16-byte opaque payload.
+    // LINK BLOCKER -- READ BEFORE BUILDING THE EXE. GameSource/World/WorldLinkStubs.cpp still
+    // defines four gates that duplicate the bodies below:
+    //   BrnTrafficIO::InputBuffer_PreDispatch::Construct()
+    //   BrnTrafficIO::InputBuffer_PreDispatch::SetCameraPosition(rw::math::vpu::Vector3)
+    //   BrnTrafficIO::InputBuffer_PreDispatch::SetVisibleEntities(
+    //       const Array<CgsSceneManager::EntityId,650>&)
+    //   BrnTrafficIO::OutputBuffer_PreDispatch::Construct()
+    // Both TUs are mounted in tools/build/build_game_exe.bat (this file at :2032,
+    // WorldLinkStubs.cpp at :2168), so the exe link fails with four LNK2005s until the four gate
+    // DEFINITIONS are deleted outright. DELETE THIS BANNER WHEN they are gone. The per-TU
+    // `cl /c` gate cannot see duplicate definitions, so a green selfcheck here proves nothing
+    // about the link.
     //
-    // ⛔⛔ LINK BLOCKER -- READ BEFORE BUILDING THE EXE.
-    //
-    //     Written out IN FULL here, 2026-08-21, in the C5 FIX ROUND. The previous
-    //     revision of this banner said only that the retirement had been "recorded
-    //     in this wave's gates_to_retire" -- and NO SUCH RECORD EXISTED ANYWHERE,
-    //     so the dependency this file's correctness rests on was invisible to the
-    //     next reader. The lesson is the reason for the format below: a hand-off
-    //     that lives in a wave artifact outside the tree is a hand-off that can go
-    //     missing. THIS BANNER IS THEREFORE SELF-SUFFICIENT -- everything needed to
-    //     perform the retirement is in the tree, right here, and cites nothing
-    //     external. (It is ALSO reported through the wave's gates_to_retire
-    //     channel, but that is now the redundant copy, not the authority.)
-    //
-    //     Those four gates are DEAD DUPLICATES of the four bodies below. Both TUs
-    //     are mounted in tools/build/build_game_exe.bat (this file at :2032,
-    //     WorldLinkStubs.cpp at :2168), so until the gates are deleted THE EXE
-    //     LINK FAILS. That is measured, not predicted -- `link /DLL io.obj
-    //     wls.obj` returns 1169 with four LNK2005s, and dumpbin shows all four as
-    //     non-COMDAT SECT External definitions in both objects:
-    //
-    //       ?Construct@InputBuffer_PreDispatch@BrnTrafficIO@BrnTraffic@@QEAAXXZ
-    //       ?SetCameraPosition@InputBuffer_PreDispatch@BrnTrafficIO@BrnTraffic@@QEAAXUVector3@vpu@math@rw@@@Z
-    //       ?SetVisibleEntities@InputBuffer_PreDispatch@BrnTrafficIO@BrnTraffic@@QEAAXAEBV?$Array@VEntityId@CgsSceneManager@@$0CIK@@@@Z
-    //       ?Construct@OutputBuffer_PreDispatch@BrnTrafficIO@BrnTraffic@@QEAAXXZ
-    //
-    //     THE RETIREMENT, for whoever owns WorldLinkStubs.cpp: delete these four
-    //     gate DEFINITIONS outright (not just their bodies) and leave a note in
-    //     that file's own established style -- see its "TWO GATES RETIRED
-    //     2026-08-10 (pre-physics bridge wave)" block, which is the template:
-    //
-    //       void BrnTraffic::BrnTrafficIO::InputBuffer_PreDispatch::Construct()
-    //       void BrnTraffic::BrnTrafficIO::InputBuffer_PreDispatch::SetCameraPosition(
-    //                struct rw::math::vpu::Vector3)
-    //       void BrnTraffic::BrnTrafficIO::InputBuffer_PreDispatch::SetVisibleEntities(
-    //                class Array<class CgsSceneManager::EntityId,650> const &)
-    //       void BrnTraffic::BrnTrafficIO::OutputBuffer_PreDispatch::Construct()
-    //
-    //     This is the tree's own established failure mode, in the words of the
-    //     build script itself (build_game_exe.bat :274, post-fx rung 10): "Those
-    //     8 gates are DELETED in WorldLinkStubs.cpp in the same step -- leaving
-    //     one beside a mounted TU is LNK2005 (measured, 8 duplicate
-    //     definitions)." C5 does not own WorldLinkStubs.cpp and may not edit it,
-    //     so the deletion is handed to the WorldLinkStubs owner rather than done
-    //     here. The per-TU `cl /c` gate is blind to duplicate definitions, so a
-    //     green selfcheck on this file proves nothing about the link -- do not
-    //     read one as clearance.
-    //
-    //     Note for whoever retires them: the two Construct gates are NOT pure
-    //     no-ops, so retiring them IS a behaviour change on a live path, in two
-    //     ways -- both of them corrections:
-    //       (1) Each gate is `memset(this, 0, sizeof(*this))` and never calls
-    //           CgsModule::IOBuffer::Construct, so it leaves mxStatusFlags at 0 --
-    //           i.e. every PreDispatch buffer in the build so far has been running
-    //           with eStatusConstructed CLEAR, which is not a state the console
-    //           can be in (@0x8275CEE8 and @0x8275CF28 both open with `stb 1,
-    //           0(r3)`). The real bodies below set it.
-    //       (2) The gate bulk-zeroes the element buffers; the real bodies write
-    //           only the console's stores (the live-count word, and for the input
-    //           buffer mCameraPosition), leaving bytes past the live count as the
-    //           allocation left them -- again matching the console, and safe
-    //           because Array<> bounds-checks every access against miCount.
-    //     The two setter gates are true no-ops whose retirement simply stops
-    //     dropping WorldModule::GenerateDispatchLists' two stores on the floor.
-    //
-    // See BrnTrafficEntityModuleIO.h's PRE-DISPATCH banner for the complete
-    // allocator/Construct/Clear attestation chain that fixes both interiors.
+    // BEHAVIOUR CHANGE on retirement, in both cases a correction: each Construct gate is
+    // `memset(this, 0, sizeof(*this))` and never calls CgsModule::IOBuffer::Construct, so every
+    // PreDispatch buffer so far has run with eStatusConstructed clear, a state the console cannot
+    // be in (@0x8275CEE8 and @0x8275CF28 both open with `stb 1, 0(r3)`). The gates also
+    // bulk-zero the element buffers where the real bodies write only the console's stores.
     // ========================================================================
 
     void InputBuffer_PreDispatch::_AssertLayout()
     {
-        // POINTER-INVARIANT ONLY. Every member here is pointer-free, so the
-        // console's own spans survive to x64 and can be pinned as facts about the
-        // TYPES rather than as X360 byte offsets.
+        // Pointer-invariant pins only. Every member here is pointer-free, so the console's spans
+        // survive to x64 and can be pinned as facts about the types, not as X360 byte offsets.
         static_assert(sizeof(CgsSceneManager::EntityId) == 4,
                       "EntityId is one packed 32-bit handle on both platforms");
         static_assert(sizeof(Array<CgsSceneManager::EntityId, 650u>) == 650 * 4 + 4,
@@ -909,12 +799,10 @@ namespace BrnTrafficIO
         maTrafficEntityIds.Clear();
     }
 
-    // The two de-inlined writers. WorldModule::GenerateDispatchLists @0x827D1CE8
-    // fills both members inline, between the buffer's Construct() and its
-    // LockForRead() -- so, unlike every other setter in this file, neither takes
-    // or asserts a WRITE lock (there is none held at that point; see
-    // BrnWorldModule.cpp's "traffic pre-dispatch + the vehicle LOD policy" block).
-    // Adding one here would fire on the first frame.
+    // The two de-inlined writers. WorldModule::GenerateDispatchLists @0x827D1CE8 fills both
+    // members inline, between the buffer's Construct() and its LockForRead(), so unlike every
+    // other setter in this file neither takes or asserts a write lock. None is held at that
+    // point, and adding an assert here would fire on the first frame.
     void InputBuffer_PreDispatch::SetVisibleEntities(
         const Array<CgsSceneManager::EntityId, 650u>& lrEntities)
     {
@@ -960,12 +848,9 @@ namespace BrnTrafficIO
 
     // ------------------------------------------------------------------------
     // [T1-rinfo] BRING-UP PROBE -- NOT IN THE X360 BINARY. DELETE WHEN STABLE.
-    // Value-latched: prints only when the produced render-info count differs from
-    // the last one printed, and only under BRN_TRAFFIC_DIAG. This is the single
-    // number that separates "the traffic module produced no cars" from "the
-    // renderer dropped them", which is the whole reason wave T1 has three
-    // candidate culprits (C4 spawn / C5 stream / C6 render) and needs a dump
-    // rather than an argument to pick between them.
+    // Value-latched: prints only when the produced render-info count differs from the last one
+    // printed, and only under BRN_TRAFFIC_DIAG. It is the one number that separates "the traffic
+    // module produced no cars" from "the renderer dropped them".
     // ------------------------------------------------------------------------
     void T1Diag_ReportTrafficRenderInfoCount(const OutputBuffer_PreDispatch& lrBuffer)
     {
@@ -976,8 +861,7 @@ namespace BrnTrafficIO
         }
 
         // GetCount(), not GetLength(): the latter asserts the array left the
-        // KI_UNCONSTRUCTED(-1) sentinel, and a probe must never be the thing that
-        // fires an assert.
+        // KI_UNCONSTRUCTED(-1) sentinel, and a probe must never fire an assert.
         const s32 liCount = lrBuffer.maTrafficRenderInfos.GetCount();
 
         static s32 siLastReported = -2;   // distinct from both 0 and the -1 sentinel
