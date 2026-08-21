@@ -4,28 +4,19 @@
 #include "types.hpp"
 
 // ---------------------------------------------------------------------------
-// BrnTraffic::StaticTrafficParam
+// BrnTraffic::StaticTrafficParam -- the per-parked-vehicle parameter record, sibling to
+// BrnTraffic::Param. DWARF/asm home is this path; the X360 assert strings all cite it.
+// Holds the hull it lives on, its index in that hull's static-vehicle list, a packed
+// lifecycle flag byte, and the vehicle type.
 //
-// DWARF/asm home: GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficStaticParam.h
-// (the assert strings in the X360 retail XEX all cite this header path).
-//
-// A per-static-(parked)-vehicle parameter record, sibling to BrnTraffic::Param. Holds the
-// hull it lives on, its index within that hull's static-vehicle list, a packed lifecycle
-// flag byte, and the vehicle type. Construct resets it to "no vehicle"; Initialise stamps
-// it live; the lifecycle setters (SetZombie / SetShouldBeRemoved / SetDivorced / ClearDying)
-// flip flag bits with debug-assert preconditions; GetHull / GetIndexInHull read the slot
-// identity (asserting the slot is alive first).
-//
-// Layout pinned by the X360 retail XEX (BURNOUT_X360_ARTIST.XEX) member STORE/LOAD offsets,
-// corroborated by the Feb-2007 leak (SharedClasses/Traffic/BrnTrafficStaticParam.cpp ground
-// truth for Construct/Initialise):
+// Layout from the X360 XEX store/load offsets, corroborated by the Feb-2007 leak:
 //   0x00 muHull (u16)                       -- GetHull: lhz r3, 0(this)
 //   0x02 muStaticTrafficIndexOnHull (u8)    -- GetIndexInHull: lbz r3, 2(this)
-//   0x03 mxFlags (u8)                       -- all lifecycle bits live here (lbz/stb 3(this))
+//   0x03 mxFlags (u8)                       -- all lifecycle bits (lbz/stb 3(this))
 //   0x04 muVehicleType (u8)
 //
-// Flag bit values match the sibling BrnTraffic::Param (X360 asm: ClearDying clears 0x02,
-// SetZombie sets 0x20, SetShouldBeRemoved sets 0x10, SetDivorced sets 0x40; alive == 0x01).
+// Flag bit values match BrnTraffic::Param: ClearDying clears 0x02, SetZombie sets 0x20,
+// SetShouldBeRemoved sets 0x10, SetDivorced sets 0x40, alive == 0x01.
 // ---------------------------------------------------------------------------
 
 namespace BrnTraffic

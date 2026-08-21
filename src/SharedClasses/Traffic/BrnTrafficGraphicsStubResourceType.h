@@ -7,15 +7,13 @@
 namespace BrnTraffic
 {
     // Resource-type handler for the traffic car's graphics stub, type 65557
-    // (0x10015). Registered by CgsResourceTypeRegistration.cpp in the console's
-    // own slot -- RegisterResourceTypes @0x82667EA8 registers "GraphicsStubResourceType"
-    // immediately after "TrafficDataResourceType" and before "LoopModelResourceType".
+    // (0x10015). RegisterResourceTypes @0x82667EA8 registers it immediately after
+    // "TrafficDataResourceType" and before "LoopModelResourceType".
     //
-    // The six virtuals below are exactly the six the DecFIGS DWARF declares
-    // (SharedClasses/Traffic/BrnTrafficGraphicsStubResourceType.h:38) and the six
-    // the leaked Feb-2007 header declares; DeSerialise / PostFixUp / ReBase /
-    // CanDefrag / DebugValidate / GetDebugResourceCategory are inherited from the
-    // non-pure CgsResource::Type base, unoverridden, on both.
+    // These six virtuals are the six the DWARF declares
+    // (SharedClasses/Traffic/BrnTrafficGraphicsStubResourceType.h:38). DeSerialise,
+    // PostFixUp, ReBase, CanDefrag, DebugValidate and GetDebugResourceCategory are
+    // inherited unoverridden from the non-pure CgsResource::Type base.
     class GraphicsStubResourceType : public CgsResource::Type
     {
     public:

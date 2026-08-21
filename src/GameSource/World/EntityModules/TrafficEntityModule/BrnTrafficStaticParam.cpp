@@ -3,27 +3,20 @@
 
 #include <cstddef>   // offsetof, for the never-called _AssertLayout pin below
 
-// BrnTrafficStaticParam.cpp - BrnTraffic::StaticTrafficParam methods.
-//
-// Construct / Initialise are corroborated by the Feb-2007 leak
-// (SharedClasses/Traffic/BrnTrafficStaticParam.cpp, ground truth). The six lifecycle /
-// accessor methods are reconstructed from the BURNOUT_X360_ARTIST.XEX disassembly
-// (authoritative): each reads/writes the packed flag byte mxFlags (offset 0x03) and asserts
-// its lifecycle precondition in the same order the asm fires them. The layout lives in the
-// owning header BrnTrafficStaticParam.h.
+// BrnTraffic::StaticTrafficParam methods. Construct / Initialise are corroborated by the
+// Feb-2007 leak (SharedClasses/Traffic/BrnTrafficStaticParam.cpp); the six lifecycle and
+// accessor methods come from the BURNOUT_X360_ARTIST.XEX disassembly. Each reads or writes
+// the packed flag byte mxFlags (+0x03) and asserts its precondition in the asm's order. The
+// layout lives in the owning header BrnTrafficStaticParam.h.
 
 namespace BrnTraffic
 {
-    // ---------------------------------------------------------------------------
-    // Layout pin. NEVER CALLED. The record holds no pointers -- one u16 and three bytes --
-    // so the console offsets are the host offsets. AUDIT 2026-08-21 (cluster C3): every
-    // offset below was re-read off the raw instruction encodings rather than the
-    // pseudocode, and Construct/Initialise match the XEX store for store:
+    // Layout pin. NEVER CALLED. The record holds no pointers, one u16 and three bytes, so
+    // the console offsets are the host offsets. Offsets read off the raw encodings:
     //   Construct  @0x82751EF8   stb 0xFF,2 ; sth -1,0 ; stb 0,3 ; stb 0xFF,4
     //   Initialise @0x82751F18   stb r4,4 ; sth r5,0 ; stb r6,2 ; stb 1,3
-    // i.e. Initialise's parameter order really is (luVehicleType, luHull, luIndexOnHull),
-    // and it stamps mxFlags LAST. Both bodies already matched; no correction was needed.
-    // ---------------------------------------------------------------------------
+    // Initialise's parameter order is (luVehicleType, luHull, luIndexOnHull) and it stamps
+    // mxFlags last.
     void StaticTrafficParam::_AssertLayout()
     {
         static_assert(offsetof(StaticTrafficParam, muHull) == 0x00, "muHull");
@@ -34,7 +27,7 @@ namespace BrnTraffic
         static_assert(sizeof(StaticTrafficParam) == 6, "sizeof(StaticTrafficParam)");
     }
 
-    // @ Construct  (Feb-2007 leak) - reset to "no vehicle".
+    // @0x82751EF8 (Feb-2007 leak) - reset to "no vehicle".
     void StaticTrafficParam::Construct()
     {
         muHull = KU_INVALID_HULL;
@@ -43,7 +36,7 @@ namespace BrnTraffic
         muVehicleType = static_cast<u8>(~0);
     }
 
-    // @ Initialise  (Feb-2007 leak) - stamp live with a vehicle type, hull and per-hull index.
+    // @0x82751F18 (Feb-2007 leak) - stamp live with a vehicle type, hull and per-hull index.
     void StaticTrafficParam::Initialise(u8 luVehicleType, u16 luHull, u8 luIndexOnHull)
     {
         mxFlags = E_FLAG_ALIVE;

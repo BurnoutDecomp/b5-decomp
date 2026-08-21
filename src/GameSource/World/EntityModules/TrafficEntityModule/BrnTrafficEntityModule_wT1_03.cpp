@@ -1,68 +1,28 @@
 // ============================================================================
-// BrnTrafficEntityModule_wT1_03.cpp  --  wave T1 round 2, cluster R2C, partfile 3
+// BrnTrafficEntityModule_wT1_03.cpp -- part of the BrnTrafficEntityModule.cpp ledger TU.
 //
-// Bodies that belong to the BrnTrafficEntityModule.cpp ledger TU but not to the
-// Prepare/LoadData partfile (BrnTrafficEntityModule_wQ7_02.cpp) or the spawn-leg partfile
-// (BrnTrafficEntityModule_wT1_01.cpp).
+//   * BrnTraffic::TrafficPhysicsInfo::Construct @0x82751E88 (14 insns) PARTIAL
+//   * BrnTraffic::TrafficPhysicsInfo::Destruct  @0x82751EE8 (2 insns)  COMPLETE
 //
-// CONTAINS:
-//   * BrnTraffic::TrafficPhysicsInfo::Construct  @0x82751E88  (14 insns)  *** PARTIAL ***
-//   * BrnTraffic::TrafficPhysicsInfo::Destruct   @0x82751EE8  (2 insns)   *** COMPLETE ***
+// OPEN PARK: nothing found so far binds mDetachedPartQueue.mpEvents. The console's
+// Construct writes one zero byte inside the queue's span and nothing else, so the
+// embedded EventQueue<DetachedPartRenderEvent,20> is constructed elsewhere if at all.
+// Candidates: TrafficEntityModule::Construct @0x82740220's tail, and the 102,800-byte
+// maTrafficPhysicsInfoList memset that runs before the 25 Construct calls.
 //
-// ⭐ 2026-08-21 (wave T1 ROUND 3, closure item 4): Construct's owner-index store is now REAL
-// and Destruct is landed. R2C's `sth r4, 0x100A(r3)` gate was a LAYOUT gap, and the layout
-// patch it spelled out has been applied to BrnTrafficEntityModule.h
-// (`u8 muPad205; u16 muOwningVehicleIndex;` after muContactSideFlags :204). Exactly ONE gate
-// survives in this file -- the `stb 0, 0(this)` zero byte at record +0x00 -- and one grep for
-// LogMissingLeg proves it.
-//
-// WHY THIS FILE EXISTS AT ALL -- the round-1 park it closes:
-//   "TrafficPhysicsInfo::Construct(s32) -- 25 records in both Reset and Construct. Declared
-//    at BrnTrafficEntityModule.h:214 and bodied nowhere. THIS IS THE LIVE INSTANCE OF
-//    RECURRING-BUG CLASS (a): the record embeds EventQueue<DetachedPartRenderEvent,20>
-//    mDetachedPartQueue, which therefore has NO Construct on this build."
-//
-// BOTH HALVES OF THAT PARK TURN OUT TO BE WRONG, and the second one matters:
-//
-//   (1) THE X360 BODY EXISTS AND IS NOT A CATCH-ALL MISATTRIBUTION. It is at 0x82751E88 --
-//       progress/identity.json lists it under `BrnTraffic::TrafficPhysicsInfo::Construct`
-//       with has_pseudocode true, and .ida-exports/BURNOUT_X360_ARTIST.XEX/0x82751E88.json
-//       is a real 14-instruction leaf. It sits immediately before Destruct @0x82751EE8 and
-//       StaticTrafficParam::Construct @0x82751EF8, i.e. in the middle of the traffic
-//       constructor run. Three callers xref it: TrafficEntityModule::Construct @0x82740220,
-//       TrafficEntityModule::Reset @0x8272CDA0, and -- the one that pins its argument --
-//       TrafficEntityModule::RecordTrafficVehicleIsPhysical @0x82720EC0.
-//
-//   (2) ⭐ THE CONSOLE'S Construct DOES NOT CALL EventQueue::Construct. It writes ONE BYTE of
-//       zero at record +0x00 (`stb r11, 0(r3)` with r11 == 0) and nothing else in the queue's
-//       span. So "the embedded EventQueue has no Construct on this build" is NOT a defect this
-//       function was going to close -- the SHIPPED BINARY does not construct it here either,
-//       and whoever binds mDetachedPartQueue.mpEvents does it somewhere else (the only
-//       remaining candidates are Construct @0x82740220's own tail and the 102,800-byte
-//       maTrafficPhysicsInfoList memset that precedes the 25 Constructs). Recurring bug class
-//       (a) is therefore STILL OPEN for that queue and is NOT closed by landing this function.
-//       Named again in this file's park list so it is not lost.
-//
-// SOURCES: X360 ARTIST asm+pseudocode (0x82751E88, 0x82751EE8, 0x82720EC0, 0x82708D48) for
-// behaviour; DecFIGS DWARF (BrnTrafficEntityModule.h:156-:224) for shape. Feb-2007 has NO
-// TrafficPhysicsInfo at all -- physical traffic is post-Feb code -- so rung 3 is empty here
-// and rung 1 arbitrates alone.
+// Shape from DecFIGS DWARF (BrnTrafficEntityModule.h:156-:224). Feb-2007 has no
+// TrafficPhysicsInfo, so the X360 asm arbitrates behaviour alone.
 // ============================================================================
 
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficEntityModule.h"
 
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // gpDebugPrint / gxMessageFilterFlags
 
-// (No <cstdlib> here: this file carries no BRN_TRAFFIC_DIAG probe -- its one bring-up
-// diagnostic is the LogMissingLeg one-shot below, which needs only CgsLog. The sibling
-// partfiles own the [T1-stream] / [T1-prepare] / [T1-scene] getenv probes.)
-
 namespace BrnTraffic
 {
 namespace
 {
-    // Same PARTIAL-pattern one-shot leg gate the sibling partfiles in this directory use.
-    // [DIAG] NOT IN THE X360 BINARY.
+    // One-shot leg gate, same pattern as the sibling partfiles. [DIAG] NOT IN THE X360 BINARY.
     void LogMissingLeg( bool& lrbAlreadyLogged, const char* lpcLegNameAndReason )
     {
         if ( lrbAlreadyLogged )
@@ -81,22 +41,17 @@ namespace
 }
 
 // ----------------------------------------------------------------------------
-// BrnTraffic::TrafficPhysicsInfo::Construct  @ 0x82751E88   (14 insns)   *** PARTIAL ***
-//
-// DWARF :214  `void Construct(int32_t)`.
+// BrnTraffic::TrafficPhysicsInfo::Construct  @ 0x82751E88  (14 insns)  PARTIAL
+// DWARF BrnTrafficEntityModule.h:214  `void Construct(int32_t)`.
 //
 // Seeds one physical-traffic scratch record. The argument is the OWNING VEHICLE INDEX, not a
 // slot index: RecordTrafficVehicleIsPhysical @0x82720EC0 picks a free bit out of
-// maTrafficPhysicsInfoListBits, computes `v34 = 4112 * slot + this`, and calls
-//     TrafficPhysicsInfo::Construct( v34 + 360976, a2 )
-// where `a2` is its own `luVehicle` parameter (asserted `< 0x258` == KU_MAX_TOTAL_TRAFFIC ==
-// 600 at BrnTrafficEntityModule.h:2459). Destruct @0x82751EE8 writes -1 to the same field, so
-// it is a "which vehicle owns this slot, 0xFFFF for none" back-pointer.
+// maTrafficPhysicsInfoListBits, computes `record = this + 360976 + 4112 * slot`, and passes
+// its own `luVehicle` (asserted < KU_MAX_TOTAL_TRAFFIC == 600). Destruct writes -1 to the
+// same field, so it is a "which vehicle owns this slot, 0xFFFF for none" back-pointer.
 //
-// THE ASM, store for store (r3 == this, r4 == the vehicle index, r11 == 0,
-// f0 == flt_82001CC0 == 0.0f -- PROVEN zero by wave T1 cluster C5 via
-// DepthOfField::SetParams @0x821F1AC8, whose `lfBlurriness >= 0.0f` assert uses that exact
-// address as its RHS; recurring bug class (c) checked and closed):
+// LAYOUT ATTESTATION -- the stores, with the offsets the C++ cannot show
+// (r3 == this, r4 == the vehicle index, r11 == 0, f0 == flt_82001CC0 == 0.0f):
 //
 //   0x82751E9C  stfs f0, 0xFCC(r3)      4044   mfStuckTimeFront      = 0.0f
 //   0x82751EA0  stfs f0, 0xFD0(r3)      4048   mfStuckTimeBack       = 0.0f
@@ -113,45 +68,28 @@ namespace
 //   0x82751EC8  stb  r11, 0x1008(r3)    4104   muContactSideFlags    = 0
 //   0x82751EDC  sth  r4, 0x100A(r3)     4106   <the owner index -- GATED, below>
 //
-// THE TAIL MAPPING IS FORCED, not fitted. Working backwards from the attested stride
-// (RecordTrafficVehicleIsPhysical's `4112 * v24`, and 463776 - 360976 == 102800 == 25 * 4112
-// from UpdateSerialiser @0x8272DA80), the DWARF's declaration order over the last eight
-// members tiles the last 68 bytes with ZERO slack, and TWO of the slots are independently
-// pinned by a second function: UpdateVehicleStuckTimers @0x82708D48 calls
-//     UpdateVehicleStuckSideTime( *(record + 4104), 1, ..., record + 4044, 2.0f, 0.1f )
-//     UpdateVehicleStuckSideTime( *(record + 4104), 2, ..., record + 4048, 2.0f, 0.1f )
-// i.e. +4104 IS muContactSideFlags and +4044/+4048 ARE mfStuckTimeFront/mfStuckTimeBack.
-// RecordTrafficVehicleIsPhysical pins two more: right after this call it writes its two float
-// arguments to record + 4060 and record + 4064 -- the steering/driving direction pair.
+// The record stride is 4112 bytes (RecordTrafficVehicleIsPhysical, and 463776 - 360976 ==
+// 102800 == 25 * 4112 from UpdateSerialiser @0x8272DA80); the DWARF order over the last eight
+// members tiles the last 68 bytes with no slack. Four slots are pinned independently:
+// UpdateVehicleStuckTimers @0x82708D48 passes +4104 as the contact-side flags and +4044/+4048
+// as the front/back stuck times, and RecordTrafficVehicleIsPhysical writes its two float
+// arguments to +4060 and +4064 (the steering/driving direction pair).
 //
-// ⚠️ NOT ZEROED, DELIBERATELY: mDetachedPartQueue's real contents, mvRoadTestNormal_
-// HeightAboveRoad, maSkinningOffsets_Scratch, maWheelTransforms, maLightLocatorPositions,
-// maLightTagPointTypes and mabWheelExists. The console leaves all of them alone (the record
-// is bulk-cleared once, by its owner, before the 25 Constructs run). Do not "complete" this.
+// NOT ZEROED, DELIBERATELY: mDetachedPartQueue's contents, mvRoadTestNormal_HeightAboveRoad,
+// maSkinningOffsets_Scratch, maWheelTransforms, maLightLocatorPositions, maLightTagPointTypes,
+// mabWheelExists. The owner bulk-clears the record once before the 25 Constructs run, so the
+// console leaves them alone. Do not "complete" this.
 // ----------------------------------------------------------------------------
 void TrafficPhysicsInfo::Construct( s32 liOwningVehicleIndex )
 {
 
     {
-        // GATED LEG 1 -- `stb r11, 0(r3)`, the single zero BYTE at record +0x00.
-        //
-        // Offset 0 is the first byte of mDetachedPartQueue, whose base
-        // CgsModule::BaseEventQueue<T> lays out { T* mpEvents; s32 miMaxLength; s32 miLength; }
-        // (DecFIGS CgsBaseEventQueue.h -- the same order for all seven instantiations dumped
-        // there). On the big-endian X360 that byte is the MOST SIGNIFICANT byte of the 4-byte
-        // mpEvents, which is not a member this tree can name: on the host mpEvents is 8 bytes,
-        // so "the top byte of the pointer" is not even the same storage.
-        //
-        // TWO READINGS, and NEITHER is attestable from this function alone:
-        //   (a) the shipped TrafficPhysicsInfo has a LEADING member the DecFIGS DWARF does not
-        //       (physical traffic is post-Feb-2007, post-FIGS-merge-window code), and the byte
-        //       is that member;
-        //   (b) it really is a partial store into mpEvents.
-        // (b) is very unlikely to be source-level intent, which makes (a) the live hypothesis
-        // -- and (a) cannot be confirmed without a reader, which this cluster did not find.
-        //
-        // WRITING EITHER WOULD BE FABRICATION, and writing (b) would additionally corrupt an
-        // 8-byte host pointer. Skipped, loudly.
+        // GATED LEG -- `stb r11, 0(r3)` @0x82751EB0, the one zero byte at record +0x00.
+        // Offset 0 is the top byte of the console's 4-byte mDetachedPartQueue.mpEvents
+        // (CgsModule::BaseEventQueue<T> = { T* mpEvents; s32 miMaxLength; s32 miLength; }).
+        // The host pointer is 8 bytes, so that is not the same storage, and the alternative
+        // reading -- a leading member the DecFIGS DWARF lacks -- has no reader to confirm it.
+        // DELETE WHEN: an xref walk finds a reader of TrafficPhysicsInfo +0x00..+0x03.
         static bool sbLogged = false;
         LogMissingLeg( sbLogged,
             "Construct's `stb 0, 0(this)` -- the one zero byte at record +0x00. It lands on the "
@@ -161,7 +99,6 @@ void TrafficPhysicsInfo::Construct( s32 liOwningVehicleIndex )
             "TrafficPhysicsInfo +0x00..+0x03" );
     }
 
-    // ---- the six timers / directions (0x82751E9C..0x82751EB4) ----------------------------
     mfStuckTimeFront      = 0.0f;
     mfStuckTimeBack       = 0.0f;
     mfStuckTimerDebounce  = 0.0f;
@@ -169,58 +106,33 @@ void TrafficPhysicsInfo::Construct( s32 liOwningVehicleIndex )
     mfSteeringDirection   = 0.0f;
     mfDrivingDirection    = 0.0f;
 
-    // ---- the four state bytes (0x82751EB8..0x82751EC4) -----------------------------------
     miNumLightLocators    = 0;
     mbIsDeforming         = false;
     mbIsFatallyCrashing   = false;
     mu8RenderDamageFlags  = 0;
 
-    // ---- the glass-pane fracture amounts (the `mtctr 8` loop @0x82751ED0) ----------------
-    // The console stores integer zero with `stw`; same bit pattern, and the member is a float
-    // array, so it is spelled as the float zero it is.
+    // The `mtctr 8` loop @0x82751ED0 stores integer zero with `stw`; same bit pattern as the
+    // float zero this member array takes.
     for ( u32 luGlassPane = 0; luGlassPane < KU_NUM_GLASS_PANES; luGlassPane++ )
     {
         mafGlassPaneFractureAmounts[luGlassPane] = 0.0f;
     }
 
-    // ---- the contact-side flags (0x82751EC8) ---------------------------------------------
     muContactSideFlags    = 0;
 
-    // ---- the owner index (0x82751EDC `sth r4, 0x100A(r3)`) --------------------------------
-    // ⭐⭐ UN-GATED 2026-08-21 (wave T1 round 3, closure item 4). R2C parked this store as a
-    // LAYOUT gap, not an evidence gap: the evidence was already complete (Construct stores its
-    // own s32 argument here as a HALFWORD; Destruct @0x82751EE8 is `li r11,-1 ; sth r11,
-    // 0x100A(r3)` and nothing else; the caller asserts the argument < KU_MAX_TOTAL_TRAFFIC
-    // (600); HandleExternalResponses @0x82732C68 is the reader) -- the blocker was that
-    // BrnTrafficEntityModule.h had no member and was not that cluster's file.
-    //
-    // The member is now declared (BrnTrafficEntityModule.h, TrafficPhysicsInfo tail:
-    // `u8 muPad205; u16 muOwningVehicleIndex;`), so the store is real. The console's `sth` of
-    // a 32-bit register is the source-level narrowing of the s32 parameter to the u16 member;
-    // it is spelled as an explicit cast rather than reproduced as a truncating store.
-    //
-    // ⚠️ ORDER NOTE FOR ANY FUTURE READER: this store had to land BEFORE the 25 call sites in
-    // BrnTrafficEntityModule_wT1_01.cpp were un-gated. With the store missing, every record
-    // would read owner index 0 (zero-initialised storage) instead of "no owner", i.e. vehicle
-    // 0 would appear to own all 25 physical slots. Header first, body second, call sites last
-    // -- that is the order this round used.
+    // `sth r4, 0x100A(r3)` @0x82751EDC narrows the s32 argument to the u16 member; spelled as
+    // an explicit cast rather than a truncating store. Reader: HandleExternalResponses
+    // @0x82732C68.
     muOwningVehicleIndex = static_cast< u16 >( liOwningVehicleIndex );
 }
 
 // ----------------------------------------------------------------------------
-// TrafficPhysicsInfo::Destruct  @ 0x82751EE8   *** COMPLETE ***
+// TrafficPhysicsInfo::Destruct  @ 0x82751EE8  COMPLETE
+// DWARF BrnTrafficEntityModule.h:218  `void Destruct();`.
 //
-// The console body is two instructions and a return:
-//     0x82751EE8  li   r11, -1
-//     0x82751EEC  sth  r11, 0x100A(r3)
-// i.e. the entire teardown of a physical-traffic record is "mark the slot unowned". Nothing
-// else in the 4112-byte record is touched -- the queue, the transforms, the timers and the
-// glass-pane amounts are all left as they are, because the record is bulk-reused rather than
-// released. Reproduced exactly; the 0xFFFF sentinel is spelled through the named constant on
-// the declaration (KU16_NO_OWNING_VEHICLE) instead of the console's sign-extended -1, which
-// is the same 16 bits.
-//
-// DWARF :218 attests the declaration (`void Destruct();`); the body is rung-1 only.
+// The whole console body is `li r11, -1 ; sth r11, 0x100A(r3)`: teardown just marks the slot
+// unowned. Nothing else in the 4112-byte record is touched, because the record is reused
+// rather than released. KU16_NO_OWNING_VEHICLE is the same 16 bits as the console's -1.
 // ----------------------------------------------------------------------------
 void TrafficPhysicsInfo::Destruct()
 {

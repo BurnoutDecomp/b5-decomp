@@ -9,21 +9,16 @@
 //   BrnTraffic::GraphicsStubResourceType::GetSerialisedResourceDescriptor  @ 0x82760708
 //   BrnTraffic::GraphicsStubResourceType::GetImportPointer                 @ 0x82752780
 // FixDown / FixUp / GetImportCount are ICF-folded on the console (empty bodies and a
-// `return 2` fold into shared thunks, so they carry no distinct export); their shapes come
-// from the DecFIGS DWARF (BrnTrafficGraphicsStubResourceType.h:38) and the leaked Feb-2007
-// SharedClasses/Traffic/BrnTrafficGraphicsStubResourceType.cpp, which agree exactly:
-// both Fix* are EMPTY and GetImportCount returns 2 -- which the shipped bundles corroborate
-// (importCount 2 with offsets {0x0, 0x4} in 42/42 retail VEH_T*_GR.BIN).
+// `return 2` fold into shared thunks, so neither carries a distinct export). Their shapes
+// come from the DWARF (BrnTrafficGraphicsStubResourceType.h:38): both Fix* are empty and
+// GetImportCount returns 2, which the shipped bundles corroborate (importCount 2 with
+// offsets {0x0, 0x4} in 42/42 retail VEH_T*_GR.BIN).
 
 namespace BrnResource
 {
     // The one enumerator this handler needs out of BrnResource's resource-type id enum.
-    // The leaked source spells it BrnResource::E_BRN_TRAFFIC_GFX_STUB_RESOURCE_TYPE at
-    // GLOBAL scope -- it was previously declared here as BrnTraffic::BrnResource, a
-    // namespace that does not exist in the game and that would have silently shadowed the
-    // real ::BrnResource for any later code written inside namespace BrnTraffic.
-    // PARK: the full BrnResource resource-type id enum has no reconstructed home in this
-    // tree yet (every other handler carries a file-local id constant the same way).
+    // PARK: that enum has no reconstructed home in this tree yet, so it lives here as a
+    // file-local constant, the same way every other handler carries its id.
     enum { E_BRN_TRAFFIC_GFX_STUB_RESOURCE_TYPE = 65557 };   // 0x10015
 }
 
@@ -35,14 +30,10 @@ namespace BrnTraffic
         return BrnResource::E_BRN_TRAFFIC_GFX_STUB_RESOURCE_TYPE;
     }
 
-    // GetSerialisedResourceDescriptor @ 0x82760708 (store-for-store). A CONSTANT
-    // descriptor: the X360 stores the 64-bit literal 0x800000004 at +0 -- the `std`
-    // packs {size = 8, alignment = 4} -- then writes {0, 1} into entries 1..4.
-    //
-    // The size is the SERIALISED footprint: two 4-byte slots. Because GraphicsStub's
-    // members are CgsGraphics::Ptr32<T>, host sizeof(GraphicsStub) is also 8 and the two
-    // agree (pinned by GraphicsStub::_AssertLayout) -- but the literal is written out
-    // here as the console's own constant, exactly as the asm has it.
+    // GetSerialisedResourceDescriptor @ 0x82760708. A constant descriptor: the X360
+    // stores the 64-bit literal 0x800000004 at +0 ({size 8, alignment 4}), then writes
+    // {0, 1} into entries 1..4. The size is the serialised footprint of two 4-byte
+    // slots; host sizeof(GraphicsStub) is also 8, pinned by GraphicsStub::_AssertLayout.
     CgsResource::ResourceDescriptor GraphicsStubResourceType::GetSerialisedResourceDescriptor(const void*) const
     {
         CgsResource::ResourceDescriptor lDescriptor;
@@ -56,9 +47,9 @@ namespace BrnTraffic
         return lDescriptor;
     }
 
-    // Empty on the console and in the leak: both of this resource's words are import
-    // slots, which CgsResource::Pool::ResolveImportForEntry overwrites outright, so
-    // there is nothing for the type to relocate or byte-swap.
+    // Empty on the console: both of this resource's words are import slots, which
+    // CgsResource::Pool::ResolveImportForEntry overwrites outright, so there is
+    // nothing to relocate or byte-swap.
     void GraphicsStubResourceType::FixDown(void*, const rw::Resource&) const
     {
     }
@@ -73,10 +64,8 @@ namespace BrnTraffic
     }
 
     // GetImportPointer @ 0x82752780. The console constant-folds the two offsets to the
-    // literals 0 and 4 (`*a4 = 0` / `*a4 = 4`); the leaked source computes them as the
-    // member's address minus the resource base, which is what is written here. The two
-    // are the same number on this host ONLY because GraphicsStub's slots are Ptr32<T>
-    // (4 bytes), and GraphicsStub::_AssertLayout is the assert that keeps it that way.
+    // literals 0 and 4; the offsetof form here matches only because GraphicsStub's slots
+    // are Ptr32<T>, which GraphicsStub::_AssertLayout keeps true.
     void GraphicsStubResourceType::GetImportPointer(const void* lpResource, uint32_t luImportIndex, uint32_t* lpuOutOffset, const void** lppOutResource) const
     {
         const GraphicsStub* lpStub = static_cast<const GraphicsStub*>(lpResource);
@@ -94,8 +83,7 @@ namespace BrnTraffic
                 break;
 
             default:
-                // "Tried to access out-of-range import <i> on TrafficGraphicsStub resource"
-                // (BrnTrafficGraphicsStubResourceType.cpp:175 in the console's baked path).
+                // Baked at BrnTrafficGraphicsStubResourceType.cpp:175.
                 CGS_ASSERT(false, "Tried to access out-of-range import on TrafficGraphicsStub resource");
                 break;
         }

@@ -7,72 +7,40 @@
 //   BrnTraffic::TrafficEntityModule::GenerateDispatchLists @ 0x8273B280
 //   BrnTraffic::TrafficEntityModule::RenderTrafficCar      @ 0x82728B08   (3,252 ln)
 //
-// Wave T1 round 2, cluster R2B. Round 1's cluster C6 landed the BrnWorldModule wire and
-// correctly refused to ship these three bodies without declarations; the declarations now
-// exist in BrnTrafficEntityModule.h (this change), the streamer accessors are landed
-// header inlines, and the two PreDispatch buffers have real public members.
-//
-// ---- SIGNATURES COME FROM THE DWARF + THE ASM, NOT FROM THE OLD DECLARATIONS -----
-// All three parameter lists are the DecFIGS DWARF's verbatim ones
+// All three parameter lists are the DecFIGS DWARF's
 // (dwarfdump/_compile/BrnTrafficUnity.cpp :19315 / :23926 / :23103), each cross-checked
-// against the X360 call site and the callee prologue. The two corrections the committed
-// 6-arg GenerateDispatchLists declaration needed (arg 2 is the ARRAY inside the buffer, and
-// four vector arguments were missing) are written out on the declaration itself.
+// against the X360 call site and the callee prologue.
 //
-// ---- THE RENDER MODEL: TRAFFIC IS THE RACE CAR'S TWIN, NOT THE LEAK'S ------------
-// The Feb-2007 leak (BrnTrafficEntityModule.cpp:8497) is the STRUCTURAL KEY -- its flow maps
-// one-for-one onto ship pseudocode :633-656 -- but its IO contract is stale in two ways and
-// the ship's is what b5-decomp follows:
-//   * the leak computes visibility + LOD inline over a stack RenderSortInfo[600]; the ship
-//     split that into PreDispatchUpdate -> Array<VehicleRenderInfo,64> ->
-//     WorldModule::CalculateVehicleLODs (which writes mLOD) -> GenerateDispatchLists;
-//   * the leak submits through CgsGraphics::Model::Render / RenderZOnly; the ship submits
-//     through DrawRenderable::AddToBin + DispatchList::Submit, i.e. exactly the idiom the
-//     committed BrnRaceCarEntityModule_Render.cpp already carries, into the SAME three
-//     dispatch lists (12 object / 19 opaque mesh / 20 transparent mesh).
-// So this file mirrors the race-car render TU deliberately: same packet shape, same
-// technique-bit scheme, same instanced wheel draw, same shadow-pass split.
+// The render model follows the ship, not the Feb-2007 leak. The leak
+// (BrnTrafficEntityModule.cpp:8497) is the structural key, mapping one-for-one onto ship
+// pseudocode :633-656, but its IO contract is stale twice over: it computes visibility and LOD
+// inline over a stack RenderSortInfo[600] where the ship splits that into PreDispatchUpdate ->
+// Array<VehicleRenderInfo,64> -> WorldModule::CalculateVehicleLODs -> GenerateDispatchLists,
+// and it submits through CgsGraphics::Model::Render where the ship uses
+// DrawRenderable::AddToBin + DispatchList::Submit into the three dispatch lists (12 object /
+// 19 opaque mesh / 20 transparent mesh). So this file mirrors BrnRaceCarEntityModule_Render.cpp:
+// same packet shape, technique-bit scheme, instanced wheel draw and shadow-pass split.
 //
-// ---- WHAT IS REAL HERE, AND WHAT IS A NAMED GATE ---------------------------------
-// REAL (this is the path that puts a parked car on screen):
-//   * PreDispatchUpdate -- PARTIAL, one named gate (G7). ⭐ FIX ROUND 2026-08-21: the first
-//     draft of this file called it "complete" while omitting, unnamed, two console behaviours
-//     the DecFIGS DWARF spells out at :19315 -- the FastBitArray duplicate suppression and the
-//     SPECIES-DISPATCHED liveness predicate. The dedup is now REAL; two of the three species
-//     arms are REAL; the third (trailer) is gate G7. An unnamed predicate substitution under a
-//     "complete" banner is exactly what this file's own house rule forbids.
-//   * GenerateDispatchLists, complete apart from the corona pass (below).
-//   * RenderTrafficCar's entry gates, asset/spec resolution, paint colour, the
-//     pitch/roll-composed body transform, shader constants 20/21/22/23/24/26, the BODY-PART
-//     loop (locator * bodyTransform -> DoesStateExist -> AddToBin -> Submit, shadow and
-//     camera variants) and the WHEEL loop (per-wheel matrix from the deformation spec's
-//     wheel positions/scales -> one instanced AddToBin).
-// NAMED GATES, each with the exact blocker (none of them is a fabricated body):
+// NAMED GATES, each with its blocker:
 //   G1 the replay-serialiser pose source (module +468256 selects it);
-//   G2 the PHYSICAL (crashing) vehicle arm -- wheel rotations/positions from the crashing-
-//      parts list, and the damaged verlet-offset upload;
+//   G2 the physical (crashing) vehicle arm: wheel rotations and positions from the
+//      crashing-parts list, and the damaged verlet-offset upload;
 //   G3 the glass-fracture reset + the damaged-vehicle budget leg;
 //   G4 the detached-body-part override table;
-//   G5 SubmitCoronasForVehicle @0x82727BB0 / RenderTrafficLightCoronas @0x8271EC80 (wave 2);
-//   G6 BrnBlobbyShadowBuffer::AddShadow -- the buffer has NO OWNER on this build;
-//   G7 RETIRED 2026-08-21 (wave T1 round 4 sweep). Its blocker -- "Vehicle::GetCabIndex has
-//      no declaration anywhere in b5-decomp/src" -- was true and is no longer: GetCabIndex
-//      @0x8270E4C8 (DWARF BrnTrafficVehicle.h:339) is declared and bodied, and
-//      PreDispatchUpdate's trailer arm now runs the console's own cab-param test instead of
-//      the documented stand-in. (It had been mis-filed under the CgsStrStream.h catch-all
-//      primary_file, the same ledger defect that hid FindVehicleTypeAttribKey_EXPENSIVE and
-//      Vehicle::SetHasEntity.)
+//   G5 SubmitCoronasForVehicle @0x82727BB0 / RenderTrafficLightCoronas @0x8271EC80;
+//   G6 BrnBlobbyShadowBuffer::AddShadow -- the buffer has no owner on this build.
+// PreDispatchUpdate is otherwise real, including the FastBitArray duplicate suppression and the
+// species-dispatched liveness predicate; GenerateDispatchLists is complete apart from G5;
+// RenderTrafficCar's entry gates, asset/spec resolution, paint colour, body transform, shader
+// constants 20/21/22/23/24/26, body-part loop and wheel loop are real.
 //
-// ---- FOUR UNRECOVERED .rodata CONSTANTS, PARKED NOT GUESSED ----------------------
-// unk_8300D000 (the constant-24 scale), unk_8300C9A0 / unk_8300C8F0 (the wheel-blur speed
-// scale pair) and unk_8300CC60 (the blur technique threshold) all read ZERO in the shipped
-// image and are seeded by UNNAMED MSVC dynamic-initialiser thunks in 0x82C6xxxx, which are
-// not functions in the IDA DB and therefore invisible to every per-function export scan.
-// Per the wave's own rule (scratchpad recovered_constants.md): an export-JSON grep can NEVER
-// prove "no dyn-init thunk exists" -- recovering them needs an XrefsTo walk in the .i64.
-// That walk was run for five of these globals this wave and recovered all five; these four
-// were not in that set. They are named, seeded 0.0f, FLAGGED, and their consequence is
-// stated at each use. NOT guessed from the race car's numerically-similar twins.
+// FOUR UNRECOVERED .rodata CONSTANTS, PARKED NOT GUESSED: unk_8300D000 (the constant-24 scale),
+// unk_8300C9A0 / unk_8300C8F0 (the wheel-blur speed scale pair) and unk_8300CC60 (the blur
+// technique threshold) all read zero in the shipped image and are seeded by unnamed MSVC
+// dyn-init thunks in 0x82C6xxxx, which are not functions in the IDA DB and so are invisible to
+// every per-function export scan. Recovering them needs an XrefsTo walk in the .i64; an
+// export-JSON grep can never prove no thunk exists. They are named, seeded 0.0f, FLAGged, and
+// their consequence is stated at each use.
 // ============================================================================
 
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficEntityModule.h"
@@ -127,18 +95,18 @@ static const u32 KU_VERLET_OFFSET_COUNT = 128u;
 // shared all-zero .rodata block. Zero-initialised here, which is the value, not a stand-in.
 static const Vector4 gaNullVerletOffsets[ KU_VERLET_OFFSET_COUNT ] = {};
 
-// ---- THE FOUR UNRECOVERED DYN-INIT CONSTANTS (see the file banner) ----------------------
-// ⛔ FLAG (unrecovered .rodata): all four read ZERO in the shipped image and are written by
+// ---- the four unrecovered dyn-init constants (see the file banner) ----------------------
+// FLAG (unrecovered .rodata): all four read zero in the shipped image and are written by
 // unnamed dyn-init thunks in 0x82C6xxxx that no per-function export carries. Named at their
 // console addresses so the .i64 xref walk that recovers them has an exact target list.
 
 // unk_8300D000 -- `lvx128 v0, r0, unk_8300D000 ; vmulfp128 v1, v118, v0` @ pseudocode :1291,
 // i.e. constant 24 == lRearLights * splat(this). The race car's positional twin
-// (unk_82FAD990 -> flt_82004C88) measured 8.0f; that is NOT imported here, because the two
-// are different globals and "numerically similar neighbour" is not attestation.
-// CONSEQUENCE TODAY: zero. Harmless while lRearLights is itself all-zero (its producer,
-// SubmitCoronasForVehicle, is gate G5), but it will keep the traffic lamps dark AFTER wave 2
-// lands that producer -- so this constant must be recovered in the same wave.
+// (unk_82FAD990 -> flt_82004C88) measured 8.0f; that is not imported here, because the two are
+// different globals and a numerically similar neighbour is not attestation.
+// Harmless today, since lRearLights is itself all-zero while its producer
+// SubmitCoronasForVehicle is gate G5. Recover it in the same change that lands that producer,
+// or the traffic lamps stay dark.
 static const f32 KF_TRAFFIC_SELF_ILLUMINATION_INTENSITY = 0.0f;
 
 // unk_8300C9A0 and unk_8300C8F0 -- the wheel-spin blur pair:
@@ -161,26 +129,22 @@ static const f32 KF_TRAFFIC_WHEEL_BLUR_THRESHOLD = 0.0f;
 // whose vehicle is alive and inside the render cull radius, and hand the dispatch leg a
 // near-to-far sorted, capped Array<VehicleRenderInfo,64>.
 //
-// SHIP vs LEAK, both real divergences:
-//   * the leak reads a file-scope KF_RENDER_CULL_DISTANCE_SQ and KU_MAX_VEHICLES_TO_RENDER;
-//     the ship PROMOTED BOTH TO MEMBERS -- mfRenderCullDistanceSq (DWARF :690) and
-//     muMaxVehiclesToRender (:689). mfRenderCullDistanceSq's shipped value is RECOVERED:
-//     62500.0f == 250 m squared, lane 2 of the vector at 0x8300CF10 seeded by the dyn-init
-//     thunk @0x82C66F18 (this wave's recovered_constants.md).
-//   * the leak's SECOND output -- a separate corona list culled at KF_CORONA_CULL_DISTANCE_SQ
-//     -- has no counterpart in the ship's VehicleRenderInfo, because the ship's corona pass
-//     re-walks this very array.
+// Ship vs leak, two real divergences: the leak reads a file-scope KF_RENDER_CULL_DISTANCE_SQ
+// and KU_MAX_VEHICLES_TO_RENDER where the ship promoted both to members,
+// mfRenderCullDistanceSq (DWARF :690, shipped 62500.0f == 250 m squared, lane 2 of the vector
+// at 0x8300CF10 seeded by the dyn-init thunk @0x82C66F18) and muMaxVehiclesToRender (:689);
+// and the leak's second output, a corona list culled at KF_CORONA_CULL_DISTANCE_SQ, has no
+// counterpart here because the ship's corona pass re-walks this array.
 //
 // mLOD is NOT written here. WorldModule::CalculateVehicleLODs writes it afterwards
-// (`stw r9, 8(r3)` @0x827C3C34) into these same records, between the two locks -- which is
-// why BrnWorldModule.cpp brackets PreDispatchUpdate and CalculateVehicleLODs together.
+// (`stw r9, 8(r3)` @0x827C3C34) into these same records, between the two locks, which is why
+// BrnWorldModule.cpp brackets PreDispatchUpdate and CalculateVehicleLODs together.
 //
-// ---- FIX ROUND 2026-08-21: RUNG 1 IS UNAVAILABLE HERE, RUNG 2 IS NOT --------------------
-// @0x8274D900 really is an export hole -- confirmed by listing .ida-exports/
-// BURNOUT_X360_ARTIST.XEX: the nearest neighbours are 0x8274C870 and 0x8274E508, so there is
-// no pseudocode AND no assembly for this body at all. That makes the DecFIGS DWARF the
-// HIGHEST rung available, and its scope/callee tree at dwarfdump/_compile/BrnTrafficUnity.cpp
-// :19315-:19425 is therefore the specification, not a hint. Transcribed in source order:
+// @0x8274D900 is an export hole: the nearest neighbours in
+// .ida-exports/BURNOUT_X360_ARTIST.XEX are 0x8274C870 and 0x8274E508, so there is no
+// pseudocode and no assembly for this body. The DecFIGS DWARF is therefore the highest rung
+// available, and its scope/callee tree at dwarfdump/_compile/BrnTrafficUnity.cpp
+// :19315-:19425 is the specification. Transcribed in source order:
 //
 //   Array<EntityId,650u>::GetLength
 //   FastBitArray<601>::UnSetAll                          <-- cleared once per call
@@ -201,36 +165,25 @@ static const f32 KF_TRAFFIC_WHEEL_BLUR_THRESHOLD = 0.0f;
 //           { const VehicleRenderInfo& lRenderInfo } } } } }                        // :13800
 //   { luVisibleCount; CgsNumeric::Min; std::sort<...>; Array<VehicleRenderInfo,64u>::Append }
 //
-// TWO console behaviours the first draft of this file dropped, both now restored:
+// Two console behaviours worth calling out:
 //
-// (1) THE DUPLICATE SUPPRESSION. maTrafficEntityIds is filled by
+// (1) The duplicate suppression. maTrafficEntityIds is filled by
 //     WorldModule::FilterFrustumTestResults from the scene manager's coarse-test results, and
-//     the leak's equivalent walk (BrnTrafficEntityModule.cpp:7897-7947) loops over MULTIPLE
-//     SceneResultQueue events -- an entity that lands in more than one result appears more
-//     than once. The leak has no bit array; the SHIP spends a 601-bit one per call, which is
-//     the ship ADDING a fix the leak lacked, not the DWARF drifting. Without it a duplicated
-//     id is appended twice, the same parked car is submitted twice into dispatch lists
-//     12/19/20, and it burns two of the muMaxVehiclesToRender slots -- silently, with no
-//     assert and no non-finite value. That is the exact failure shape the [T1-dispatch] diag
-//     below exists to catch, so the diag now counts suppressed duplicates too.
-//     TEMPLATE ARGUMENT: the DWARF instantiation is FastBitArray<601>, which is DecFIGS'
-//     KU_MAX_TOTAL_TRAFFIC. The SHIP value is 600 -- BrnTraffic::GetVehicleSpecies @0x821F4648
-//     asserts `luIndex < 0x258` against the literal "luIndex < KU_MAX_TOTAL_TRAFFIC"
-//     (BrnTrafficConstants.h carries the full derivation, and the module's own three
-//     FastBitArray members already spell KU_MAX_TOTAL_TRAFFIC for the same reason). Rung 1
-//     beats rung 2 on a value, so this is <KU_MAX_TOTAL_TRAFFIC>, not <601>.
+//     an entity landing in more than one result appears more than once. The leak has no bit
+//     array; the ship spends a 601-bit one per call. Without it a duplicated id is appended
+//     twice, the same parked car is submitted twice into dispatch lists 12/19/20, and it burns
+//     two muMaxVehiclesToRender slots, silently. The [T1-dispatch] diag below counts them.
+//     The DWARF instantiation is FastBitArray<601>, DecFIGS' KU_MAX_TOTAL_TRAFFIC, but the ship
+//     value is 600 (GetVehicleSpecies @0x821F4648 asserts `luIndex < 0x258`), so this is
+//     <KU_MAX_TOTAL_TRAFFIC>, not <601>.
 //
-// (2) THE SPECIES-DISPATCHED LIVENESS PREDICATE `lbAboutToDie`. The ship does NOT ask the
-//     Vehicle; it asks the vehicle's PARAM, and which param depends on the species:
-//       * E_SPECIES_STANDARD -> GetParam(luVehicle)->IsAlive()                    REAL below
-//       * E_SPECIES_STATIC   -> GetStaticTrafficParamFromFullV(luVehicle)->IsAlive()  REAL below
-//         (that accessor DOES exist here -- @0x827078D0, bodied in BrnTrafficEntityModule.cpp;
-//         "GetStaticTrafficParamFromFullV" is the console's own symbol truncation of the
-//         DWARF's GetStaticTrafficParamFromFullVehicleIndex, not a different function)
-//       * E_SPECIES_TRAILER  -> GetVehicle(luVehicle)->GetCabIndex() then
-//         GetParam(cab)->IsAlive()                                                GATE G7
-//     Only the trailer arm is blocked, and only on one missing accessor. The STATIC arm is the
-//     one parked traffic takes, and it is real.
+// (2) The species-dispatched liveness predicate `lbAboutToDie`. The ship does not ask the
+//     Vehicle, it asks the vehicle's param, and which param depends on species:
+//       E_SPECIES_STANDARD -> GetParam(luVehicle)->IsAlive()
+//       E_SPECIES_STATIC   -> GetStaticTrafficParamFromFullV(luVehicle)->IsAlive()
+//       E_SPECIES_TRAILER  -> GetVehicle(luVehicle)->GetCabIndex(), then GetParam(cab)->IsAlive()
+//     GetStaticTrafficParamFromFullV @0x827078D0 is the console's own truncation of the DWARF's
+//     GetStaticTrafficParamFromFullVehicleIndex, not a different function.
 // ============================================================================
 void
 TrafficEntityModule::PreDispatchUpdate( const BrnTrafficIO::InputBuffer_PreDispatch* lpInput,
@@ -246,9 +199,7 @@ TrafficEntityModule::PreDispatchUpdate( const BrnTrafficIO::InputBuffer_PreDispa
     const ::Array< CgsSceneManager::EntityId, 650u >& lrVisible = lpInput->maTrafficEntityIds;
 
     // DWARF :19315 -- `FastBitArray<601>::UnSetAll` at the top of the body, before the walk.
-    // See the "(1) THE DUPLICATE SUPPRESSION" block in this function's header comment for why
-    // the ship has this and the leak does not, and why the template argument is the SHIP's
-    // KU_MAX_TOTAL_TRAFFIC (600) rather than the DWARF's DecFIGS-era 601.
+    // See note (1) in this function's header for the ship-vs-DWARF extent.
     CgsContainers::FastBitArray< KU_MAX_TOTAL_TRAFFIC > lVehiclesAlreadySeen;
     lVehiclesAlreadySeen.UnSetAll();
 
@@ -310,31 +261,16 @@ TrafficEntityModule::PreDispatchUpdate( const BrnTrafficIO::InputBuffer_PreDispa
         }
         else if ( leSpecies == Vehicle::E_SPECIES_STATIC )
         {
-            // DWARF :13776 -- GetStaticTrafficParamFromFullVehicleIndex, which is this tree's
-            // GetStaticTrafficParamFromFullV @0x827078D0 (console symbol truncation; the body
-            // in BrnTrafficEntityModule.cpp is real). THIS IS THE PARKED-CAR ARM.
+            // DWARF :13776. This is the parked-car arm.
             const StaticTrafficParam* lpParam = GetStaticTrafficParamFromFullV( luVehicle );
             lbAboutToDie = !lpParam->IsAlive();
         }
         else
         {
-            // ⭐⭐ GATE G7 RETIRED 2026-08-21 (wave T1 ROUND 4, item 4 sweep) -- the TRAILER
-            // arm is now the console's own (DWARF :13786-:13789), and the stand-in below it
-            // is gone.
-            //
-            // The banner that stood here said the blocker was "exactly one:
-            // BrnTraffic::Vehicle::GetCabIndex has NO declaration anywhere in b5-decomp/src",
-            // and that it was "two lines" once someone named it. Both were true, and the
-            // reason it survived three rounds is that GetCabIndex's ledger row sits under the
-            // same CgsStrStream.h CATCH-ALL primary_file that hid FindVehicleTypeAttribKey_
-            // EXPENSIVE and Vehicle::SetHasEntity. It is X360 @0x8270E4C8, fourteen
-            // instructions (`IsOfTrailerSpecies()` assert + `lhz 2(this)`), DWARF-declared at
-            // BrnTrafficVehicle.h:339, and it is declared + bodied as of this round.
-            //
-            // The stand-in it replaces was the trailer's OWN alive flag. That was documented
-            // and conservative, but it was not the console's test: the console asks the CAB's
-            // PARAM, which is a different bit that can differ for a frame while a cab is
-            // dying.
+            // The trailer arm, DWARF :13786-:13789. GetCabIndex is X360 @0x8270E4C8, fourteen
+            // instructions (an IsOfTrailerSpecies() assert plus `lhz 2(this)`), DWARF-declared
+            // at BrnTrafficVehicle.h:339. The console asks the CAB's param, not the trailer's
+            // own alive flag; the two can differ for a frame while a cab is dying.
             const u32 luCab = GetVehicle( luVehicle )->GetCabIndex();
             lbAboutToDie = !GetParam( luCab )->IsAlive();
         }
@@ -344,14 +280,12 @@ TrafficEntityModule::PreDispatchUpdate( const BrnTrafficIO::InputBuffer_PreDispa
             continue;
         }
 
-        // The array is structurally 64 slots; the console's own cap is
-        // muMaxVehiclesToRender, applied after the sort. Appending past the capacity would
-        // fire Array's "out of space" assert, so the insert is a bounded near-to-far
-        // INSERTION SORT rather than an append-then-qsort: it produces exactly the console's
-        // ordering and exactly the console's kept set (the nearest N), while never touching a
-        // slot the container does not have. (The console can append freely because its
-        // pre-sort scratch is the caller's 600-entry stack array; the ship's 64-entry output
-        // array is the object it sorts INTO.)
+        // The array is structurally 64 slots and the console's cap, muMaxVehiclesToRender, is
+        // applied after the sort. Appending past capacity fires Array's "out of space" assert,
+        // so this is a bounded near-to-far insertion sort rather than append-then-qsort: same
+        // ordering, same kept set (the nearest N), no slot the container does not have. The
+        // console can append freely because its pre-sort scratch is the caller's 600-entry
+        // stack array; here the 64-entry output array is the object being sorted into.
         VehicleRenderInfo lInfo;
         lInfo.muEntityIndex = luVehicle;
         lInfo.mfDistanceSq  = lfDistanceSq;
@@ -399,24 +333,17 @@ TrafficEntityModule::PreDispatchUpdate( const BrnTrafficIO::InputBuffer_PreDispa
         }
     }
 
-    // [T1-rinfo] the probe C5 homed in BrnTrafficEntityModuleIO.h, called at the frame
-    // position C5 asked for -- "right after PreDispatchUpdate produces the number".
-    // ⛔ DELETE-WHEN parked traffic is confirmed on a booted run.
+    // [T1-rinfo] probe, called right after PreDispatchUpdate produces the number.
+    // DELETE-WHEN parked traffic is confirmed on a booted run.
     BrnTrafficIO::T1Diag_ReportTrafficRenderInfoCount( *lpOutput );
 
-    // ---- [DIAG T1-dispatch] the CULL witness -------------------------------
-    // ⛔ DELETE-WHEN parked traffic is confirmed on a booted run. Gated on BRN_TRAFFIC_DIAG.
-    // This exists because of a specific, twice-burned failure mode: BOTH gates in this
-    // function are module members seeded by Construct @0x82740220 (cluster C4), and a
-    // placeholder-zero mfRenderCullDistanceSq would make `dSq >= 0` true for EVERY vehicle --
-    // an empty render list, no assert, no non-finite value, nothing to trip on. (Verified
-    // seeded as 62500.0f / 32 in BrnTrafficEntityModule_wT1_01.cpp at the time of writing;
-    // this line is what makes a regression in that seeding visible in one frame instead of in
-    // a day.) Latched on the kept COUNT, so a steady scene stays quiet.
-    // ⭐ FIX ROUND 2026-08-21: the suppressed-duplicate count is reported here too. Duplicate
-    // ids in maTrafficEntityIds are the OTHER silent failure this function can have (the same
-    // car submitted twice, burning two of the muMaxVehiclesToRender slots), and it is equally
-    // assert-free -- so the witness for the dedup lives beside the witness for the cull.
+    // ---- [T1-dispatch] the cull and dedup witness --------------------------
+    // DELETE-WHEN parked traffic is confirmed on a booted run. Gated on BRN_TRAFFIC_DIAG.
+    // Both gates in this function are module members seeded by Construct @0x82740220, and a
+    // placeholder-zero mfRenderCullDistanceSq makes `dSq >= 0` true for every vehicle: an empty
+    // render list, no assert, no non-finite value, nothing to trip on. Duplicate ids in
+    // maTrafficEntityIds are the same shape of silent failure, so both are reported here.
+    // Latched on the kept count, so a steady scene stays quiet.
     {
         static const bool skbTrafficDiag = ( std::getenv( "BRN_TRAFFIC_DIAG" ) != 0 );
         if ( skbTrafficDiag && CgsDev::Log::gpDebugPrint != 0 )
@@ -475,26 +402,19 @@ TrafficEntityModule::GenerateDispatchLists( const BrnTrafficIO::InputBuffer_Disp
 {
     // ---- step 1, NAMED GATE ------------------------------------------------
     // The console copies the whole dispatch camera into mCameraLastFrame (module +0x72890,
-    // DWARF :881) with BrnDirector::Camera::Camera::operator= @0x8273B2C8, unconditionally,
-    // before the state gates. THE MEMBER IS [MEMBER HOLE 6] in BrnTrafficEntityModule.h: its
-    // type is BrnDirector::Camera::Camera, whose owning header would pull the director camera
-    // graph into this keystone header's include list (and thence into BrnWorldModule.h, i.e.
-    // most of the world build) -- a deliberate C1 decision, not a missing type.
-    // BEHAVIOURALLY INERT ON THIS BUILD: the member's only consumer is the
-    // mbDEBUGPickVehicleFromCamera debug tool, which is not reconstructed.
-    // ⛔ DELETE-WHEN [MEMBER HOLE 6] closes; the line is `mCameraLastFrame = lBrnCamera;`.
+    // DWARF :881) with Camera::operator= @0x8273B2C8, before the state gates. That member is
+    // [MEMBER HOLE 6] in BrnTrafficEntityModule.h. Inert on this build: its only consumer is
+    // the mbDEBUGPickVehicleFromCamera debug tool, which is not reconstructed.
+    // DELETE-WHEN [MEMBER HOLE 6] closes; the line is `mCameraLastFrame = lBrnCamera;`.
     (void)lBrnCamera;
 
-    // ---- step 2 ------------------------------------------------------------
-    // The unconditional store at module +0x71870. ⭐ This was parked in round 1 as "an unnamed
-    // 16-byte member absent from C1's layout"; it is NOT a member of this class at all -- see
-    // the arithmetic on the RenderTrafficCar declaration in BrnTrafficEntityModule.h. It is
-    // FuzzyBehaviourLogic::mDEBUGLastCameraPos, i.e. this call, inlined by the console.
-    // ⛔ NAMED GATE (link, not knowledge): FuzzyBehaviourLogic::DEBUGSetLastCameraPos is
-    // declaration-only -- BrnTrafficFuzzyLogicBehaviours.cpp has no body for it and that TU is
-    // not on tools/build/build_game_exe.bat -- so calling it would leave an unresolved
-    // external. Debug-render-only member; omitting the store changes nothing that is drawn.
-    // ⛔ DELETE-WHEN that TU is mounted with a real body:
+    // ---- step 2, NAMED GATE (link, not knowledge) --------------------------
+    // The unconditional store at module +0x71870 is FuzzyBehaviourLogic::mDEBUGLastCameraPos,
+    // not a member of this class (see the arithmetic on the RenderTrafficCar declaration in
+    // BrnTrafficEntityModule.h). FuzzyBehaviourLogic::DEBUGSetLastCameraPos is declaration-only
+    // and BrnTrafficFuzzyLogicBehaviours.cpp is not on tools/build/build_game_exe.bat, so
+    // calling it leaves an unresolved external. Debug-render-only; omitting it draws the same.
+    // DELETE-WHEN that TU is mounted with a real body:
     //     mFuzzyBehaviours.DEBUGSetLastCameraPos( lCameraPosition );
 
     // ---- step 3: the two state gates ---------------------------------------
@@ -518,12 +438,11 @@ TrafficEntityModule::GenerateDispatchLists( const BrnTrafficIO::InputBuffer_Disp
 
     CGS_ASSERT( lpDispatchFrame != 0, "lpDispatchFrame" );
     CGS_ASSERT( lpShadowMap != 0, "lpShadowMap" );
-    // ⛔ The console also asserts lpBlobbyShadowRenderer (:14055) and
-    // lpCoronaSubmissionInterface (:14060). NEITHER IS ASSERTED HERE, and that is deliberate:
-    // nothing in this tree owns a BrnBlobbyShadowManager and nothing anywhere calls
-    // InputBuffer_Dispatch::SetBlobbyShadowBuffer, so the handle is legitimately null on this
-    // build (gate G6). Asserting it would turn a known, documented gap into a per-frame stop.
-    // ⛔ DELETE-WHEN a BrnBlobbyShadowManager owner exists.
+    // The console also asserts lpBlobbyShadowRenderer (:14055) and lpCoronaSubmissionInterface
+    // (:14060). Neither is asserted here: nothing in this tree owns a BrnBlobbyShadowManager and
+    // nothing calls InputBuffer_Dispatch::SetBlobbyShadowBuffer, so the handle is legitimately
+    // null on this build (gate G6), and asserting it turns a known gap into a per-frame stop.
+    // DELETE-WHEN a BrnBlobbyShadowManager owner exists.
 
     if ( lpDispatchFrame == 0 || lpShadowMap == 0 )
     {
@@ -536,10 +455,9 @@ TrafficEntityModule::GenerateDispatchLists( const BrnTrafficIO::InputBuffer_Disp
     // stack Vector4[length] arrays before the corona pass. Sized to the array's structural
     // capacity rather than to `length` -- same values, no variable-length stack array.
     //
-    // ⚠️ THESE ARE NOT A STUB. They are the console's own state whenever the corona pass is
-    // skipped (which the console itself does on every shadow-map pass), and they are OUT
-    // params of SubmitCoronasForVehicle that RenderTrafficCar CONSUMES -- not a corona-only
-    // side channel. Passing zeros while gate G5 is open is faithful, not invented.
+    // These are not a stub. They are the console's own state whenever the corona pass is skipped,
+    // which it is on every shadow-map pass, and they are out params of SubmitCoronasForVehicle
+    // that RenderTrafficCar consumes. Passing zeros while gate G5 is open is faithful.
     Vector4 laFrontLights[ 64 ];
     Vector4 laRearLights[ 64 ];
     for ( u32 luZero = 0; luZero < luLength && luZero < 64u; ++luZero )
@@ -549,7 +467,7 @@ TrafficEntityModule::GenerateDispatchLists( const BrnTrafficIO::InputBuffer_Disp
     }
 
     // ---- step 7: the corona pass -- NAMED GATE G5 --------------------------
-    // The console's shape, kept here as the record of what must land in wave 2:
+    // The console's shape, kept as the record of what must land:
     //   if ( !lpShadowMap->IsRenderingShadowMap() )
     //   {
     //       CgsDev::PerfMonCpu::StartMonitor( <ship-only monitor id at module +0x72A38> );
@@ -562,13 +480,12 @@ TrafficEntityModule::GenerateDispatchLists( const BrnTrafficIO::InputBuffer_Disp
     //       RenderTrafficLightCoronas( lpInput->GetCoronaSubmissionInterface(),
     //                                  lCameraPosition, lCameraDirection );
     //   }
-    // BLOCKERS: SubmitCoronasForVehicle @0x82727BB0 (DWARF :22445) and
-    // RenderTrafficLightCoronas @0x8271EC80 (DWARF :7711, an EXPORT HOLE) are wave 2 and have
-    // no declaration in this tree; the monitor id at +0x72A38 is a ship-only member with no
-    // DWARF name. Note the ORDER is load-bearing and matches the race-car leg's own
-    // mbRenderingShadowMap `continue`: the corona pass runs BEFORE the draw pass and ONLY off
-    // the shadow pass -- the same double-post trap the coronas step-2 fix documents.
-    // ⛔ DELETE-WHEN wave 2 lands the two producers.
+    // BLOCKERS: SubmitCoronasForVehicle @0x82727BB0 (DWARF :22445) and RenderTrafficLightCoronas
+    // @0x8271EC80 (DWARF :7711, an export hole) have no declaration in this tree; the monitor id
+    // at +0x72A38 is a ship-only member with no DWARF name. The order is load-bearing: the corona
+    // pass runs before the draw pass and only off the shadow pass, matching the race-car leg's
+    // own mbRenderingShadowMap `continue`.
+    // DELETE-WHEN the two producers land.
 
     // ---- step 8/9 ----------------------------------------------------------
     // ONE budget for the whole loop. The console seeds it to 0 before the loop and passes its
@@ -599,11 +516,11 @@ TrafficEntityModule::GenerateDispatchLists( const BrnTrafficIO::InputBuffer_Disp
     // ---- step 10 -----------------------------------------------------------
     lpInput->UnlockForRead();
 
-    // ---- [DIAG T1-dispatch] the PRODUCER-side witness ----------------------
-    // ⛔ DELETE-WHEN parked traffic is confirmed on a booted run. Gated on BRN_TRAFFIC_DIAG.
-    // The consuming-end counterpart (records reaching object list 12) already lives in
-    // BrnWorldModule.cpp; this is the other half, so "the leg ran and drew nothing" and "the
-    // leg never ran" read differently. Latched on the VALUE, never on a printed-once bool.
+    // ---- [T1-dispatch] the producer-side witness ---------------------------
+    // DELETE-WHEN parked traffic is confirmed on a booted run. Gated on BRN_TRAFFIC_DIAG.
+    // The consuming end (records reaching object list 12) is in BrnWorldModule.cpp; this half
+    // makes "the leg ran and drew nothing" read differently from "the leg never ran".
+    // Latched on the value, never on a printed-once bool.
     {
         static const bool skbTrafficDiag = ( std::getenv( "BRN_TRAFFIC_DIAG" ) != 0 );
         if ( skbTrafficDiag && CgsDev::Log::gpDebugPrint != 0 )
@@ -678,14 +595,13 @@ TrafficEntityModule::RenderTrafficCar( CgsGraphics::DispatchFrame* lpDispatchFra
     }
 
     // ---- entry gate 2 (G1): the replay-serialiser pose source -------------
-    // ⛔ NAMED GATE. When module +468256 is set the console takes the vehicle's TYPE, damage
-    // record and TRANSFORM from BrnReplays::TrafficEntitySerialiser (module +468160) instead
-    // of from the live pools, and derives the "not physical" latch from the serialised flag
-    // bit 5 rather than from Vehicle::mxFlags. BLOCKER: the serialiser is not reconstructed
-    // (TrafficEntitySerialiser::GetVehicleData / GetPhysicsInfo / GetVehicleTransform have no
-    // declarations in this tree) and the module member at +468256 is not named in C1's layout.
-    // The live arm below is the one that runs outside replay playback -- i.e. the arm that
-    // matters for a parked car in a normal race. ⛔ DELETE-WHEN the replay wave lands.
+    // NAMED GATE. When module +468256 is set the console takes the vehicle's type, damage record
+    // and transform from BrnReplays::TrafficEntitySerialiser (module +468160) instead of from the
+    // live pools, and derives the "not physical" latch from the serialised flag bit 5 rather than
+    // from Vehicle::mxFlags. BLOCKER: the serialiser is not reconstructed
+    // (TrafficEntitySerialiser::GetVehicleData / GetPhysicsInfo / GetVehicleTransform are
+    // undeclared here) and the member at +468256 is unnamed. The live arm below runs outside
+    // replay playback. DELETE-WHEN the replay wave lands.
 
     const Vehicle* lpVehicle = GetVehicle( luEntityIdx );
     if ( lpVehicle == 0 )
@@ -700,27 +616,24 @@ TrafficEntityModule::RenderTrafficCar( CgsGraphics::DispatchFrame* lpDispatchFra
     {
         return;
     }
-    // ⛔ FLAG (partial gate read): the console requires flags bit 1 as well as bit 0
-    // (`rlwinm r10, r11, 0,30,30` @0x82728C10, beq -> bail). Vehicle's PC flag enum does not
-    // yet name bit 1, and GetFlags() is the only raw accessor. The test is spelled through it
-    // rather than invented as a predicate, so the console's gate is honoured exactly and the
-    // naming stays with whoever owns BrnTrafficVehicle.h.
+    // FLAG (partial gate read): the console requires flags bit 1 as well as bit 0
+    // (`rlwinm r10, r11, 0,30,30` @0x82728C10, beq -> bail). Vehicle's PC flag enum does not name
+    // bit 1 yet, and GetFlags() is the only raw accessor, so the test goes through it rather than
+    // inventing a predicate. Naming stays with whoever owns BrnTrafficVehicle.h.
     if ( ( lpVehicle->GetFlags() & 0x02u ) == 0u )
     {
         return;
     }
 
-    // ---- G2: the PHYSICAL (crashing) arm ----------------------------------
-    // ⛔ NAMED GATE. `rlwinm r11, r11, 0,28,28` @0x82728C1C -> Vehicle::IsPhysical(): the
-    // console fetches GetTrafficPhysicsInfoForVehicl(idx) (asserting it non-null, :15106) and
-    // clears the "not physical" latch, which then (a) sources every wheel's rotation and
-    // world position from maCrashingVehiclePartsList instead of from the deformation spec,
-    // (b) enables the damaged verlet-offset upload, and (c) SUPPRESSES the blobby shadow.
-    // BLOCKER: TrafficEntityModule::GetTrafficPhysicsInfoForVehicl @0x82714500 is
-    // declaration-only and returns void in this tree (BrnTrafficEntityModule.h marks it
-    // "(FLAG)"), and maCrashingVehiclePartsList has no home. A PARKED car is never physical,
-    // so this gate does not stand between the wave and a car on screen.
-    // ⛔ DELETE-WHEN the crash/deformation traffic wave lands.
+    // ---- G2: the physical (crashing) arm ----------------------------------
+    // NAMED GATE. `rlwinm r11, r11, 0,28,28` @0x82728C1C -> Vehicle::IsPhysical(). The console
+    // fetches GetTrafficPhysicsInfoForVehicl(idx) (asserting it non-null, :15106) and clears the
+    // "not physical" latch, which sources every wheel's rotation and world position from
+    // maCrashingVehiclePartsList instead of the deformation spec, enables the damaged
+    // verlet-offset upload, and suppresses the blobby shadow. BLOCKER:
+    // GetTrafficPhysicsInfoForVehicl @0x82714500 is declaration-only and returns void here, and
+    // maCrashingVehiclePartsList has no home. A parked car is never physical.
+    // DELETE-WHEN the crash/deformation traffic wave lands.
     const bool lbIsPhysical = lpVehicle->IsPhysical();
     if ( lbIsPhysical )
     {
@@ -768,13 +681,12 @@ TrafficEntityModule::RenderTrafficCar( CgsGraphics::DispatchFrame* lpDispatchFra
     }
 
     // maTrafficVehiclePhysicsSpecs[type]. The console reads it as
-    // `CreateFromHandle(local, 32*VehicleType + this + 482156)` -- a 32-byte stride because a
-    // CONSOLE CgsResource::ResourcePtr is 32 bytes. THAT STRIDE IS X360 AND MUST NOT SURVIVE:
-    // on the host the array is indexed by name and the host ResourcePtr has its own size.
-    // ⛔ FLAG (extent): the DWARF declares this array KU_MAX_VEHICLE_ASSETS (64) long but the
-    // console indexes it by VEHICLE TYPE, whose bound is KU_MAX_VEHICLE_TYPES (96). Both the
-    // leak (`maTrafficVehiclePhysicsSpecs[ liModelId ]`, liModelId == muVehicleType) and the
-    // asm agree on the INDEX; the extent is C1's to reconcile. Bounded here so a type past 64
+    // `CreateFromHandle(local, 32*VehicleType + this + 482156)`, a 32-byte stride because a
+    // console CgsResource::ResourcePtr is 32 bytes. That stride is X360 and must not survive: on
+    // the host the array is indexed by name and the host ResourcePtr has its own size.
+    // FLAG (extent): the DWARF declares this array KU_MAX_VEHICLE_ASSETS (64) long, but the
+    // console indexes it by vehicle type, bounded by KU_MAX_VEHICLE_TYPES (96). The leak and the
+    // asm agree on the index; the extent is still to reconcile. Bounded here so a type past 64
     // declines to draw rather than reading off the end.
     if ( luVehicleType >= KU_MAX_VEHICLE_ASSETS )
     {
@@ -811,7 +723,7 @@ TrafficEntityModule::RenderTrafficCar( CgsGraphics::DispatchFrame* lpDispatchFra
                            && lpShadowMap->IsUsingZOnlyRenderingPath();
 
     // ---- G3: glass fracture + the damaged-vehicle budget -------------------
-    // ⛔ NAMED GATE. The console's shape at pseudocode :1254-1281:
+    // NAMED GATE. The console's shape at pseudocode :1254-1281:
     //     if ( physicsInfo && physicsInfo->mbDamaged && *lpiUpdated... < 5 )
     //     {
     //         ++*lpiUpdatedNumDamagedVehiclesRendered;
@@ -820,15 +732,13 @@ TrafficEntityModule::RenderTrafficCar( CgsGraphics::DispatchFrame* lpDispatchFra
     //         SetShaderConstantData( 23, {0,0,0,0} );
     //     }
     //     else { BrnWorld::SetGlassFractureConstants( 0.0f, 1.0f, ... ); }
-    // TWO BLOCKERS, both link-level rather than knowledge-level: (a) the only definition of
-    // BrnWorld::SetGlassFractureConstants lives in BrnRaceCarEntityModule_GlassFracture.cpp,
-    // which is NOT on tools/build/build_game_exe.bat (the race-car render TU carries the same
-    // gate for the same reason), so calling it is an unresolved external; (b) the damaged
-    // verlet block hangs off the traffic physics info, which is gate G2.
-    // CONSEQUENCE, and it is the same one the race-car TU documents: shader constants 30/31/32
-    // are never published by anything on this build, and an unset external constant is SKIPPED
-    // rather than zeroed, so the glass programs read the previous draw's registers.
-    // ⛔ DELETE-WHEN the GlassFracture TU is mounted.
+    // Two blockers, both link-level: BrnWorld::SetGlassFractureConstants is defined only in
+    // BrnRaceCarEntityModule_GlassFracture.cpp, which is not on tools/build/build_game_exe.bat,
+    // so calling it is an unresolved external; and the damaged verlet block hangs off the
+    // traffic physics info, which is gate G2.
+    // CONSEQUENCE: shader constants 30/31/32 go unpublished on this build, and an unset external
+    // constant is SKIPPED rather than zeroed, so the glass programs read the previous draw's
+    // registers. DELETE-WHEN the GlassFracture TU is mounted.
     (void)lpiUpdatedNumDamagedVehiclesRendered;
 
     // ---- the technique index -----------------------------------------------
@@ -849,11 +759,10 @@ TrafficEntityModule::RenderTrafficCar( CgsGraphics::DispatchFrame* lpDispatchFra
     }
 
     // ---- shader constants 20 / 21: the paint ------------------------------
-    // ⚠️ BOTH SLOTS TAKE THE SAME VECTOR on traffic (`vmr128 v1, v121` twice, pseudocode
-    // :1284-:1288) -- unlike the race car, which publishes a separate pearlescent tint. The
-    // vector is VehicleTypeRuntime::PickPaintColourForVehicle( luEntityIdx, numColours,
-    // mpData->mpaPaintColours ), seeded by the VEHICLE INDEX so a given parked car keeps its
-    // colour frame to frame.
+    // Both slots take the same vector on traffic (`vmr128 v1, v121` twice, pseudocode
+    // :1284-:1288), unlike the race car, which publishes a separate pearlescent tint. The vector
+    // is VehicleTypeRuntime::PickPaintColourForVehicle(luEntityIdx, numColours,
+    // mpData->mpaPaintColours), seeded by the vehicle index so a parked car keeps its colour.
     Vector4 lv4PaintColour = { 1.0f, 1.0f, 1.0f, 1.0f };
     {
         const VehicleTypeRuntime* lpVehicleTypeRuntime = GetVehicleTypeRuntime( luVehicleType );
@@ -868,16 +777,15 @@ TrafficEntityModule::RenderTrafficCar( CgsGraphics::DispatchFrame* lpDispatchFra
 
     // ---- shader constant 24: the self-illumination mask -------------------
     // `lvx128 v0, r0, unk_8300D000 ; vmulfp128 v1, v118, v0 ; SetShaderConstantData(24)`
-    // (pseudocode :1289-:1294) with v118 == lRearLights, the 5th vector argument. So TRAFFIC
-    // DERIVES ITS LAMP EMISSION FROM THE CORONA PRODUCER'S OUT-VECTOR rather than from
-    // per-car brake/reverse booleans the way the race car does -- which is why the DWARF
-    // names that pair lFrontLights / lRearLights and why they are not a corona-only channel.
-    // ⛔ FLAG: the scale is one of this file's four unrecovered dyn-init constants. See its
-    // declaration at the head of the file for the exact consequence.
-    // ⛔ FLAG: lFrontLights has NO OBSERVED CONSUMER in the reconstructed legs -- only v5
-    // (lRearLights) is re-homed at the prologue. It is carried faithfully rather than dropped,
-    // because SubmitCoronasForVehicle writes both and the front vector is presumably consumed
-    // by a leg inside one of the gates above. Do not delete it to silence the warning.
+    // (pseudocode :1289-:1294) with v118 == lRearLights, the 5th vector argument. Traffic derives
+    // its lamp emission from the corona producer's out-vector, where the race car uses per-car
+    // brake/reverse booleans, which is why the DWARF names the pair lFrontLights / lRearLights.
+    // FLAG: the scale is one of this file's four unrecovered dyn-init constants; see its
+    // declaration at the head of the file for the consequence.
+    // FLAG: lFrontLights has no observed consumer in the reconstructed legs (only v5 is re-homed
+    // at the prologue). Carried rather than dropped, because SubmitCoronasForVehicle writes both
+    // and a leg inside one of the gates above presumably reads it. Do not delete it to silence
+    // the warning.
     (void)lFrontLights;
     {
         const Vector4 lv4SelfIlluminationMask = {
@@ -889,17 +797,15 @@ TrafficEntityModule::RenderTrafficCar( CgsGraphics::DispatchFrame* lpDispatchFra
     }
 
     // ---- shader constants 22 / 23: the verlet block -----------------------
-    // TRAFFIC NEVER DEFORMS: the leak publishes g_NullVerletOffsets here unconditionally
-    // (:8580) and a zeroed damage vector as 23 (:8577).
+    // Traffic never deforms: the leak publishes g_NullVerletOffsets here unconditionally (:8580)
+    // and a zeroed damage vector as 23 (:8577).
     //
-    // ⚠ DELIBERATE DEVIATION, and it is the SAME one the race-car render TU already carries,
-    // for the same measured reason: the ship folds the constant-22 publish into the DAMAGED
-    // arm only. Leaving it unpublished is NOT neutral -- sixteen vertex programs in
-    // SHADERS_PC.BNDL declare g_verletOffsets at c0 count 128, and an external constant whose
-    // source pointer is null is SKIPPED, not zeroed (shadowingdevice.cpp:847), so the program
-    // reads whatever the preceding world draws left in c0..c127 (c20..c23 being the last world
-    // object's world matrix, translations in the thousands of metres). That is exactly the
-    // panel-stretch defect. Publishing the leak's own null block costs one 2 KB copy per car.
+    // DELIBERATE DEVIATION, the same one the race-car render TU carries: the ship folds the
+    // constant-22 publish into the damaged arm only. Leaving it unpublished is not neutral.
+    // Sixteen vertex programs in SHADERS_PC.BNDL declare g_verletOffsets at c0 count 128, and an
+    // external constant whose source pointer is null is SKIPPED, not zeroed
+    // (shadowingdevice.cpp:847), so the program reads whatever the preceding world draws left in
+    // c0..c127 -- the panel-stretch defect. The null block costs one 2 KB copy per car.
     CgsGraphics::mShaderConstantTable.SetShaderConstantArrayData( 22, gaNullVerletOffsets );
     {
         const Vector4 lv4DamageConstants = { 0.0f, 0.0f, 0.0f, 0.0f };
@@ -936,14 +842,13 @@ TrafficEntityModule::RenderTrafficCar( CgsGraphics::DispatchFrame* lpDispatchFra
     // ========================================================================
     // THE BODY-PART LOOP
     //
-    // ⛔ G4 (detached parts). Before the loop the console builds a 128-slot lookup from part
-    // index -> detached-part record (pseudocode :1319-:1345, asserting luPartCount < 128 at
-    // :15368 and luDetachedPartIndex < luPartCount at :15374) and, for a part that HAS a
-    // record, takes the record's own four matrix rows as the world matrix instead of composing
-    // the locator. BLOCKER: the traffic detached-part queue hangs off the traffic physics info
-    // (gate G2) and has no home in this tree. A parked car has no detached parts, so every
-    // part takes the composed path below -- which is the console's own else-arm, not a
-    // simplification of it. ⛔ DELETE-WHEN G2 closes.
+    // G4 (detached parts). Before the loop the console builds a 128-slot lookup from part index
+    // to detached-part record (pseudocode :1319-:1345, asserting luPartCount < 128 at :15368 and
+    // luDetachedPartIndex < luPartCount at :15374) and, for a part that has a record, takes the
+    // record's four matrix rows as the world matrix instead of composing the locator. BLOCKER:
+    // the traffic detached-part queue hangs off the traffic physics info (gate G2) and has no
+    // home here. A parked car has no detached parts, so every part takes the composed path
+    // below, which is the console's own else-arm. DELETE-WHEN G2 closes.
     // ========================================================================
     {
         const u32 luPartCount = lpGraphicsSpec->muPartsCount;
@@ -1070,10 +975,9 @@ TrafficEntityModule::RenderTrafficCar( CgsGraphics::DispatchFrame* lpDispatchFra
 
             // Shader constant 25, "g_wheelConstants": the spin blur factor in lane x and
             // nothing else (`vrlimi128 v11, v0, 8, 0` -- mask 8 is lane X, so yzw stay zero).
-            // ⛔ FLAG: both scales are unrecovered dyn-init constants (see the head of this
-            // file), so the product is 0 today and the blurred technique is always selected.
-            // The console arithmetic is kept rather than a divisor invented, exactly as the
-            // race-car TU keeps its own all-zero gvWheelBlurConstants read.
+            // FLAG: both scales are unrecovered dyn-init constants (see the head of this file),
+            // so the product is 0 today and the blurred technique is always selected. The console
+            // arithmetic is kept rather than a divisor invented.
             const f32 lfSpeed = lpVehicle->GetSpeed().x;
             const f32 lfScaledSpeed = lfSpeed * KF_TRAFFIC_WHEEL_SPIN_SPEED_SCALE;
             f32 lfBlur = lfScaledSpeed * KF_TRAFFIC_WHEEL_BLUR_SCALE;
@@ -1106,10 +1010,10 @@ TrafficEntityModule::RenderTrafficCar( CgsGraphics::DispatchFrame* lpDispatchFra
             Matrix44Affine        laWheelMatrices[ KI_TRAFFIC_WHEELS_TO_RENDER_MAX ];
             const Matrix44Affine* lapWheelMatrices[ KI_TRAFFIC_WHEELS_TO_RENDER_MAX ] = { 0, 0, 0, 0 };
 
-            // ⚠️ Sized to what SetupShaderConstantsForInstancing READS
-            // (KU_MAX_INSTANCES_PER_GROUP == 5), not to what the console DECLARES (4) -- the
-            // console overreads its own stack slot by 16 bytes. Same correction the race-car
-            // TU already carries; it changes no value the console produces.
+            // Sized to what SetupShaderConstantsForInstancing reads
+            // (KU_MAX_INSTANCES_PER_GROUP == 5), not to what the console declares (4): the
+            // console overreads its own stack slot by 16 bytes. Same correction the race-car TU
+            // carries; it changes no value the console produces.
             Vector4 laWheelConstants[ CgsGraphics::Model::KU_MAX_INSTANCES_PER_GROUP ] =
                 { { 0.f, 0.f, 0.f, 0.f }, { 0.f, 0.f, 0.f, 0.f }, { 0.f, 0.f, 0.f, 0.f },
                   { 0.f, 0.f, 0.f, 0.f }, { 0.f, 0.f, 0.f, 0.f } };
@@ -1127,16 +1031,15 @@ TrafficEntityModule::RenderTrafficCar( CgsGraphics::DispatchFrame* lpDispatchFra
                 const bool lbIsFrontWheel = ( liWheel == 0 || liWheel == 1 );
                 const bool lbIsLeftWheel  = ( liWheel == 0 || liWheel == 2 );
 
-                // ⛔ NAMED GATE (road noise). The console draws a per-wheel road-noise
-                // amplitude from mEffectRand (its LCG is inlined at pseudocode :2823 --
-                // `1284865837 * seed + 1`, writing the module's own ring buffer at +4992/+5000)
-                // and offsets the wheel by it in Y, scaled by a speed ramp between
-                // KF_VEHICLE_MIN/MAX_ROAD_NOISE_SPEED. It is OMITTED, not faked: the ramp's two
-                // endpoints and KF_VEHICLE_ROAD_NOISE_AMPLITUDE_SCALE are module tuning members
-                // seeded by Construct @0x82740220 (cluster C4) and are not yet named in the PC
-                // layout. A PARKED car's amplitude is identically zero (speed 0 clamps the ramp
-                // to 0), so this omission is invisible for this wave's milestone and only
-                // matters for driving traffic. ⛔ DELETE-WHEN C4 names the three constants.
+                // NAMED GATE (road noise). The console draws a per-wheel road-noise amplitude
+                // from mEffectRand (its LCG is inlined at pseudocode :2823, `1284865837 * seed
+                // + 1`, writing the module's ring buffer at +4992/+5000) and offsets the wheel
+                // by it in Y, scaled by a speed ramp between KF_VEHICLE_MIN/MAX_ROAD_NOISE_SPEED.
+                // BLOCKER: that ramp's endpoints and KF_VEHICLE_ROAD_NOISE_AMPLITUDE_SCALE are
+                // module tuning members seeded by Construct @0x82740220 and are not named in the
+                // PC layout. A parked car's amplitude is zero anyway (speed 0 clamps the ramp),
+                // so this only matters for driving traffic.
+                // DELETE-WHEN the three constants are named.
                 const f32 lfRoadNoiseAmplitude = 0.0f;
 
                 Matrix44Affine lWheelMatrix;
@@ -1227,13 +1130,12 @@ TrafficEntityModule::RenderTrafficCar( CgsGraphics::DispatchFrame* lpDispatchFra
             {
                 liWheelDiagCode = 3 + liInstanceCount;
 
-                // ⛔ THE CONSOLE'S OWN GATE, honoured here for the reason the race-car TU
-                // documents at length: `CGS_ASSERT( lpWheelModel->GetFlag(
-                // E_FLAG_MODEL_USES_INSTANCE_SHADER ) )` (the assert string is baked into the
-                // traffic body too, pseudocode :1502 "lbInstancing == GetFlag(...)"). A model
-                // without the flag is not fit for the instanced path and submitting it anyway
-                // draws screen-filling shards. The flag is COMPUTED AT LOAD by
-                // ModelResourceType::PostFixUp, so a correctly-ported wheel bundle carries it.
+                // The console's own gate: `CGS_ASSERT( lpWheelModel->GetFlag(
+                // E_FLAG_MODEL_USES_INSTANCE_SHADER ) )`, whose assert string is baked into the
+                // traffic body too (pseudocode :1502, "lbInstancing == GetFlag(...)"). A model
+                // without the flag is not fit for the instanced path, and submitting it anyway
+                // draws screen-filling shards. ModelResourceType::PostFixUp computes the flag at
+                // load, so a correctly-ported wheel bundle carries it.
                 if ( !lpWheelModel->GetFlag( CgsGraphics::Model::E_FLAG_MODEL_USES_INSTANCE_SHADER ) )
                 {
                     liWheelDiagCode = 9;
@@ -1275,21 +1177,18 @@ TrafficEntityModule::RenderTrafficCar( CgsGraphics::DispatchFrame* lpDispatchFra
     }
 
     // ---- G6: the blobby ground shadow --------------------------------------
-    // ⛔ NAMED GATE, and the guard is the point. The console's tail (pseudocode :3183, the
-    // leak :8777-:8786) is
+    // NAMED GATE. The console's tail (pseudocode :3183, leak :8777-:8786) is
     //     if ( !lpShadowMap->IsRenderingShadowMap() && !lpVehicle->IsPhysical() )
     //         lpBlobbyShadowRenderer->AddShadow( <quad built from the four contact points> );
-    // TWO reasons it does not run: (a) NOTHING ON THIS BUILD OWNS A BrnBlobbyShadowManager --
-    // no code anywhere calls InputBuffer_Dispatch::SetBlobbyShadowBuffer, so the handle is
-    // always null and the console's own entry assert (@0x8273B39C) is deliberately not
-    // reproduced in GenerateDispatchLists; and (b) the PC AddShadow signature is
-    // (Matrix44Affine&, Vector4&, VecFloat, VecFloat) -- a transform plus packed extents --
-    // where the leak's four-position form is stale, and the console's construction of those
-    // four arguments is a dense VMX cross-product block that is NOT decoded here. Inventing
-    // the arguments would be fabrication; the contact points ARE collected above so the leg is
-    // a pure addition when the owner lands.
-    // ⛔ DELETE-WHEN a BrnBlobbyShadowManager owner exists AND the argument construction is
-    // decoded from @0x8272B868..0x8272B930.
+    // TWO BLOCKERS: nothing on this build owns a BrnBlobbyShadowManager (no code calls
+    // InputBuffer_Dispatch::SetBlobbyShadowBuffer, so the handle is always null, which is why
+    // GenerateDispatchLists does not reproduce the console's entry assert @0x8273B39C); and the
+    // PC AddShadow signature is (Matrix44Affine&, Vector4&, VecFloat, VecFloat), a transform plus
+    // packed extents, where the leak's four-position form is stale and the console builds those
+    // arguments in a dense VMX cross-product block that is not decoded. The contact points are
+    // collected above, so the leg is a pure addition once the owner lands.
+    // DELETE-WHEN a BrnBlobbyShadowManager owner exists and the argument construction is decoded
+    // from @0x8272B868..0x8272B930.
     if ( lpBlobbyShadowRenderer != 0 && !lpShadowMap->IsRenderingShadowMap() )
     {
         static bool sbLoggedBlobbyGate = false;
@@ -1304,8 +1203,8 @@ TrafficEntityModule::RenderTrafficCar( CgsGraphics::DispatchFrame* lpDispatchFra
     }
     (void)laWheelContactPositions;
 
-    // ---- [DIAG T1-dispatch] the first-car one-shot + the wheel outcome -----
-    // ⛔ DELETE-WHEN parked traffic is confirmed on a booted run. Gated on BRN_TRAFFIC_DIAG.
+    // ---- [T1-dispatch] the first-car one-shot and the wheel outcome --------
+    // DELETE-WHEN parked traffic is confirmed on a booted run. Gated on BRN_TRAFFIC_DIAG.
     {
         static const bool skbTrafficDiag = ( std::getenv( "BRN_TRAFFIC_DIAG" ) != 0 );
         if ( skbTrafficDiag && CgsDev::Log::gpDebugPrint != 0 )

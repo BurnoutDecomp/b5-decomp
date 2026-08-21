@@ -1,10 +1,9 @@
 // =============================================================================
-// BrnTrafficVehicleType.cpp  (owning .cpp for the BrnTraffic vehicle-type records)
-//
-// Both EndianSwap declarations (:120 / :151) are parked -- no standalone ARTIST
-// symbol, no rw::EndianSwap reconstruction in this tree, and the shipped PC payload
-// is already little-endian (evidence in BrnTrafficStaticTraffic.cpp). What lands here
-// is the never-called layout pin for each record.
+// BrnTrafficVehicleType.cpp -- owning .cpp for the BrnTraffic vehicle-type records.
+// What lands here is the never-called layout pin for each record.
+// PARK: both EndianSwap declarations (:120 / :151) stay declared-only -- no ARTIST
+// symbol, no rw::EndianSwap in this tree, and the shipped PC payload is already
+// little-endian (BrnTrafficStaticTraffic.cpp).
 // =============================================================================
 
 #include "SharedClasses/Traffic/BrnTrafficVehicleType.h"
@@ -12,10 +11,9 @@
 
 namespace BrnTraffic
 {
-    // 20 bytes, five contiguous f32. The block is 16-byte aligned on disc, which is
-    // what TrafficData::FixUp's Is16Aligned(mpaVehicleTypesUpdate) assert guards --
-    // that is a BLOCK alignment, not an element alignment, so the record itself stays
-    // 4-aligned and 20 bytes long.
+    // 20 bytes, five contiguous f32. TrafficData::FixUp's
+    // Is16Aligned(mpaVehicleTypesUpdate) guards the BLOCK, not the element, so the
+    // record itself stays 4-aligned and 20 bytes long.
     void VehicleTypeUpdateData::_AssertLayout()
     {
         static_assert(offsetof(VehicleTypeUpdateData, mfWheelRadius)      == 0x00, "mfWheelRadius");

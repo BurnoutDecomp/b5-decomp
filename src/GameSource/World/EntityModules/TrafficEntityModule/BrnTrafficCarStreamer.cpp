@@ -22,22 +22,16 @@
 // GetWheelGraphicsSpec @0x8271D678, NotifyAssetRenderedThisFrame ✱0x82706300)
 // and ClearAssetList (inlined into its callers on the console).
 //
-// The class's own constructor, BrnTraffic::TrafficCarStreamer::TrafficCarStreamer
-// @0x827E3E98, is deliberately NOT written by hand: reading it instruction by
-// instruction shows it is the COMPILER-GENERATED default constructor, not source.
-// It installs the vtable at +0, stores 0 at +0x18 (the leading `bool
-// mbIsConstructed` of the base's embedded VariableEventQueue), and then runs 64
-// iterations of a 32-byte-stride loop that writes 0 to +0/+4/+8, `&record` to
-// +0xC/+0x10/+0x14 and 0 to +0x18 of each record starting at +10232. That is
-// exactly CgsResource::BaseResourcePtr::BaseResourcePtr() @0x82204E20 (see its
-// banner in CgsBaseResourcePtr.cpp: "mpResourceMemory + the two mHandle pointers
-// are zeroed, the list is self-circular, mpThis = this, muThreadId = 0") applied
-// to maGraphicsStubs[64]. Declaring an explicit constructor here would ADD a
-// symbol the original does not have; the implicit one emits the same stores.
+// The class's constructor @0x827E3E98 is deliberately not written by hand: instruction by
+// instruction it is the compiler-generated default constructor, not source. It installs the
+// vtable at +0, stores 0 at +0x18 (the base's embedded VariableEventQueue's leading
+// mbIsConstructed), then runs 64 iterations of a 32-byte-stride loop writing 0 to +0/+4/+8,
+// `&record` to +0xC/+0x10/+0x14 and 0 to +0x18 from +10232 -- exactly
+// CgsResource::BaseResourcePtr::BaseResourcePtr() @0x82204E20 applied to maGraphicsStubs[64].
+// An explicit constructor would add a symbol the original does not have.
 //
-// ⚠ The X360 assert messages that streamed an index/name into the message buffer
-// are reproduced with the house CGS_ASSERT carrying the static text, per project
-// convention (the same treatment BrnRaceCarComponentStreamers.cpp uses).
+// The X360 assert messages that streamed an index or name into the message buffer are
+// reproduced with the house CGS_ASSERT carrying the static text, per project convention.
 // =============================================================================
 
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficCarStreamer.h"
@@ -54,15 +48,13 @@ namespace BrnTraffic
 // -----------------------------------------------------------------------------
 // [T1-stream] BRING-UP PROBE -- NOT IN THE X360 BINARY. DELETE WHEN STABLE.
 //
-// Latched per-asset load-state transition trace. It exists because the whole
-// point of this cluster is "does a VEH_T*_GR bundle ever get requested, and does
-// it come back?", and the only honest answer is a dump rather than an argument.
-// Opt-in behind BRN_TRAFFIC_DIAG; VALUE-LATCHED per asset, so a slot that keeps
-// re-reporting the same state prints once, and a full load cycle prints exactly
-// four lines (0 -> 1 -> 2, then 3 -> 0 on unload).
+// Latched per-asset load-state transition trace: does a VEH_T*_GR bundle get requested, and
+// does it come back? Opt-in behind BRN_TRAFFIC_DIAG and value-latched per asset, so a slot
+// re-reporting the same state prints once and a full load cycle prints four lines
+// (0 -> 1 -> 2, then 3 -> 0 on unload).
 //
-// The latch array is a FILE STATIC on purpose: putting it in the class would
-// change the object's layout, which is the one thing this wave must not do.
+// The latch array is a file static on purpose: putting it in the class would change the
+// object's layout.
 // -----------------------------------------------------------------------------
 namespace
 {
@@ -104,40 +96,27 @@ namespace
 
 
 // -----------------------------------------------------------------------------
-// ✱ @0x827539A0 -- EXPORT HOLE. There is NO .ida-exports JSON for this address,
-// so neither its pseudocode nor its assembly can be read; the body below is the
-// leaked Feb-2007 TrafficCarStreamer::Construct with ONE adaptation, flagged.
+// ✱ @0x827539A0 -- EXPORT HOLE. No .ida-exports JSON for this address, so neither
+// pseudocode nor assembly can be read; the body below is the leaked Feb-2007
+// TrafficCarStreamer::Construct with one adaptation.
 //
-// WHAT IS SOLID:
-//   * The call itself is attested from the CALLER: TrafficEntityModule::Construct
-//     @0x82740220 calls `TrafficCarStreamer::Construct( this + 469848 )`, and
-//     TrafficEntityModule::UpdateStreaming @0x82748848 addresses the same member
-//     as `v4 = a1 + 469848`. So the function exists, takes only `this`, and is
-//     called exactly once from the module's own Construct.
-//   * Every store in the leak's body is corroborated by a READER in the exported
-//     siblings: mauLoadStates must start at 0 (OnLoadBegin @0x82757E40 asserts
-//     ==0 before the first load), maxLoadFlags must start at 0 (AreAllAssetsLoaded
-//     @0x82706288 skips slots whose low two bits are clear), mauRenderingHistory
-//     must start at 0 (Update @0x8274F740 treats non-zero as "recently drawn"),
-//     and every maGraphicsStubs slot must start NULL (OnLoadBegin asserts exactly
-//     that). muNumAssets starts 0 and is (re)set by SetAssetList.
+// The call is attested from the caller: TrafficEntityModule::Construct @0x82740220 calls
+// `TrafficCarStreamer::Construct( this + 469848 )`, and UpdateStreaming @0x82748848
+// addresses the same member. Every store in the leak's body has a reader in the exported
+// siblings: mauLoadStates starts 0 (OnLoadBegin @0x82757E40 asserts ==0), maxLoadFlags
+// starts 0 (AreAllAssetsLoaded @0x82706288 skips slots with the low two bits clear),
+// mauRenderingHistory starts 0 (Update @0x8274F740 treats non-zero as recently drawn), and
+// every maGraphicsStubs slot starts null (OnLoadBegin asserts it).
 //
-// ⚠ THE ONE ADAPTATION -- the base Construct's parameter list changed after the
-// leak. The leak calls the 3-parameter form:
-//     BaseClass::Construct( E_POOL_TRAFFIC, E_ASSETSET_GRAPHICS, false );
-// The SHIP base is 4-parameter (BrnBaseStreamer.h, pinned by
-// WorldGraphicsStreamer::Construct @0x827CA388 passing list/pool/slot-pool/
-// asset-set/allow-failure): `Construct( liPoolId, lbSlotPoolSystem, leAssetSet,
-// lbAllowFailure )`. The inserted argument is lbSlotPoolSystem, and it is passed
-// FALSE here for the same reason RaceCarBaseComponentStreamer::Construct passes
-// false: InternalBaseStreamer::PostLoadRequest only adds the entry index to the
-// pool id when that flag is set, and traffic graphics all land in the single
-// E_POOL_TRAFFIC pool (one pool per streamer, not pool+slot).
-// ⚠ FLAG: because this body is an export hole, `false` for lbSlotPoolSystem and
-// the E_POOL_TRAFFIC value itself (15, DWARF ps3mem.h; see the enum banner in
-// BrnGameDataEvents.h) are the two facts here that the ARTIST build does not
-// directly attest. If a traffic bundle is later observed being requested from
-// pool 15+slot instead of pool 15, this flag is the line to revisit.
+// The adaptation: the leak calls the 3-parameter
+// `BaseClass::Construct( E_POOL_TRAFFIC, E_ASSETSET_GRAPHICS, false )`, but the ship base is
+// 4-parameter, `Construct( liPoolId, lbSlotPoolSystem, leAssetSet, lbAllowFailure )` (pinned
+// by WorldGraphicsStreamer::Construct @0x827CA388). lbSlotPoolSystem is false here because
+// InternalBaseStreamer::PostLoadRequest only adds the entry index to the pool id when it is
+// set, and traffic graphics all land in the single E_POOL_TRAFFIC pool.
+// FLAG: this body is an export hole, so `false` for lbSlotPoolSystem and the E_POOL_TRAFFIC
+// value itself (15, DWARF ps3mem.h) are the two facts ARTIST does not directly attest.
+// Revisit this line if a traffic bundle is ever seen requested from pool 15+slot.
 // -----------------------------------------------------------------------------
 void TrafficCarStreamer::Construct()
 {
@@ -154,17 +133,14 @@ void TrafficCarStreamer::Construct()
         mauLoadStates[luAsset]        = E_LOADSTATE_NOT_LOADED;
         mauRenderingHistory[luAsset]  = 0;
 
-        // The leak spells this as the fully-expanded base-40 fold of the empty
-        // string -- `((CgsID)0) + (CgsID)40 * (...)` twelve deep -- which is
-        // CgsIDCompress("") and evaluates to 0. Written as the constant it is.
+        // The leak spells this as the fully-expanded base-40 fold of the empty string,
+        // `((CgsID)0) + (CgsID)40 * (...)` twelve deep, which is CgsIDCompress("") == 0.
         maAssetIds[luAsset]           = 0;
 
-        // Leak: `maGraphicsStubs[luAsset] = CgsResource::NULLResourcePtr;`. The
-        // console spells that assignment as CreateFromHandle(slot, &<sentinel>+0x14)
-        // -- the {mpThis, muThreadId} pair of the null sentinel -- which is the
-        // committed CgsResource::NULLResourceHandle idiom (see the note on
-        // ResourcePtr<T>::operator=(const ResourceHandle&) in CgsResourcePtr.h,
-        // and RaceCarStreamer::Construct @0x822F7FA0 which does the same thing).
+        // Leak: `maGraphicsStubs[luAsset] = CgsResource::NULLResourcePtr;`. The console
+        // spells that as CreateFromHandle(slot, &<sentinel>+0x14), the {mpThis, muThreadId}
+        // pair of the null sentinel, which is the CgsResource::NULLResourceHandle idiom
+        // (RaceCarStreamer::Construct @0x822F7FA0 does the same).
         maGraphicsStubs[luAsset]      = CgsResource::NULLResourceHandle;
     }
 }
@@ -180,8 +156,7 @@ void TrafficCarStreamer::Destruct()
 
 
 // -----------------------------------------------------------------------------
-// @0x82753A38 -- THE HIGHEST-LEVERAGE FUNCTION OF THIS WAVE.
-//
+// @0x82753A38.
 // Publish TrafficData's vehicle-asset catalogue into the streamer: for each
 // asset, uncompress its CgsID to text, truncate at the first space (the baked
 // ids are space-padded to 12 characters by CgsIDUnCompress), and re-compress the
@@ -204,9 +179,8 @@ void TrafficCarStreamer::Destruct()
 //   then the O(n^2) duplicate scan (v22/v25 walking by 2 dwords == 8 bytes)
 //               -> assert "Duplicate asset id ... - ids <i> and <j>"                  (cpp:147)
 //
-// The line numbers moved by two versus the leak (113/114/129/130/145) -- normal
-// post-Feb-2007 drift, and a useful confirmation that this really is the same
-// function rather than a look-alike.
+// The baked line numbers moved by two versus the leak (113/114/129/130/145), which is normal
+// post-Feb-2007 drift and confirms this is the same function rather than a look-alike.
 // -----------------------------------------------------------------------------
 void TrafficCarStreamer::SetAssetList( u32 luNumAssets, const VehicleAsset* lpaAssets )
 {
@@ -286,7 +260,7 @@ void TrafficCarStreamer::AddVehiclesToTargetList( u32 luNumVehicles, const u8* l
 // @0x8274F740. Rebuild the base streamer's target list for this frame, then pump
 // the base engine.
 //
-// ⭐ SHIP DIVERGENCE (the asm wins over the leak): Update takes an OVERRIDE bonus
+// SHIP DIVERGENCE (the asm wins over the leak): Update takes an override bonus
 // list. The asm's first block is `if (a3 > 2) assert("luNumBonusAssets <=
 // KU_MAX_BONUS_STREAMED_ASSETS", cpp:195)`, then ClearTargetList, then a
 // two-armed branch on a2:
@@ -362,14 +336,12 @@ void TrafficCarStreamer::Update( const u8* lpauOverrideBonusAssets, u32 luNumBon
     {
         // [T1-stream] ONE-SHOT -- NOT IN THE X360 BINARY. DELETE-WHEN-STABLE.
         //
-        // ⭐ THE LINE THAT ANSWERS THE WHOLE WAVE-1 QUESTION. Everything upstream of here can
-        // look healthy and still request nothing: the rounds-1+2 boot printed
-        // "[T1-stream] SetAssetList published 27 traffic vehicle assets" and then never asked
-        // for a bundle, because UpdateStreaming (the only pump of this function) was gated.
-        // This prints the FIRST frame on which a non-empty target list actually reaches the
-        // base streamer -- which is the frame a VEH_T*_GR request can first be posted.
+        // Prints the first frame on which a non-empty target list reaches the base streamer,
+        // which is the frame a VEH_T*_GR request can first be posted. Everything upstream can
+        // look healthy and still request nothing, so this is the line that separates
+        // "published the catalogue" from "asked for a bundle".
         //
-        // THE CHAIN THIS SITS ON, verified end to end for round 3 rather than assumed:
+        // The chain it sits on:
         //   AddEntry(...)                        -> the base target list
         //   BaseClass::Update()                  -> InternalBaseStreamer::Update
         //   ...UpdateLoading, E_LOADSTREAM_REQUEST -> PostLoadRequest(slot)
@@ -378,11 +350,10 @@ void TrafficCarStreamer::Update( const u8* lpauOverrideBonusAssets, u32 luNumBon
         //   TrafficEntityModule::UpdateStreaming -> Append that queue into
         //                                           OutputBuffer_PostPhysics's
         //                                           mResourceRequestInterface
-        // (BrnBaseStreamer.cpp:354/364/416.) Note the ORDER dependence: UpdateLoading clears
-        // mGDRequestInterface at the top of its WAIT stage, i.e. on the NEXT visit -- so the
-        // Append has to happen in the same frame as this Update, after it. UpdateStreaming
-        // does exactly that (its step 3 then its step 5), which is why the pump and the
-        // carry-over cannot be split across functions.
+        // (BrnBaseStreamer.cpp:354/364/416.) The order matters: UpdateLoading clears
+        // mGDRequestInterface at the top of its WAIT stage, on the next visit, so the Append
+        // must happen in the same frame as this Update and after it. UpdateStreaming does that
+        // in its step 3 then step 5, which is why the pump and the carry-over cannot be split.
         static const bool sbTrafficDiag = ( getenv( "BRN_TRAFFIC_DIAG" ) != 0 );
         static bool sbLogged = false;
         if( sbTrafficDiag && !sbLogged && luNumEntriesAdded != 0
@@ -435,22 +406,14 @@ void TrafficCarStreamer::GetBonusAssets( u8* lpauOutBonusAssets, u32* lpuOutNumB
 // streamer declines to arbitrate -- it drives everything through the target list
 // it rebuilds each Update -- so both are `return 0`.
 //
-// ⚠ NEITHER IS IN THE X360 LEDGER for this class. progress/identity.json holds
-// FOURTEEN BrnTraffic::TrafficCarStreamer symbols -- AddVehiclesToTargetList,
-// AreAllAssetsLoaded, Destruct, GetBonusAssets, GetGraphicsSpec,
-// GetWheelGraphicsSpec, IsTrafficAssetLoaded, OnLoadBegin, OnLoadComplete,
-// OnUnloadBegin, OnUnloadComplete, SetAssetList, TrafficCarStreamer (the ctor),
-// Update -- and QueryLoad/QueryUnload are not among them. (An earlier revision of
-// this banner said "twelve"; corrected 2026-08-21 in the C5 fix round. The
-// conclusion was and is unchanged.)
-// That is expected rather than suspicious: a body that is one `li r3,0 ; blr` is
-// identical for every streamer that declines, so the console's ICF folds them all
-// onto one shared thunk and no per-class symbol survives. Rung 2 settles that they
-// are nevertheless real members of this class: the DecFIGS DWARF
-// (dwarfdump/.../BrnTrafficCarStreamer.h) declares both, at .cpp:247 and .cpp:258,
-// in the protected virtual block. The bodies are the leak's
-// (BrnTrafficCarStreamer.cpp:242 / :258) verbatim, and they MUST exist because
-// InternalBaseStreamer declares both pure virtual.
+// Neither is in the X360 ledger for this class: the fourteen TrafficCarStreamer
+// symbols in progress/identity.json do not include them. That is expected, not
+// suspicious -- a body that is one `li r3,0 ; blr` is identical for every streamer
+// that declines, so the console's ICF folds them all onto one shared thunk. The
+// DecFIGS DWARF declares both in the protected virtual block (.cpp:247 / .cpp:258),
+// which is what makes these recoveries rather than inventions, and they must exist
+// because InternalBaseStreamer declares both pure virtual. Bodies are the leak's
+// (BrnTrafficCarStreamer.cpp:242 / :258) verbatim.
 // -----------------------------------------------------------------------------
 s32 TrafficCarStreamer::QueryLoad( const BrnWorld::StreamerTargetEntry* lpPotentialList,
                                    s32 liPotentialListLength )
@@ -535,12 +498,10 @@ void TrafficCarStreamer::OnUnloadBegin( s32 liListIndex )
 // The asm's binding step is
 //     CgsResource::BaseResourcePtr::CreateFromHandle( &maGraphicsStubs[asset],
 //                                                     lpEvent + 32 );
-// -- event byte +0x20, which is the GetTrafficVehicleGraphicsResponse's own
-// resource handle (see the ⭐ banner over that struct in BrnGameDataEvents.h for
-// why the committed model reaches it through the inherited `mHandle`, and why
-// re-declaring a handle on the derived type would be a bug). The downcast below
-// is the leak's (BrnTrafficCarStreamer.cpp:342) and is what gives the response
-// type its consumer.
+// -- event byte +0x20, the GetTrafficVehicleGraphicsResponse's own resource handle,
+// reached through the inherited `mHandle` (see that struct's banner in
+// BrnGameDataEvents.h). The downcast below is the leak's
+// (BrnTrafficCarStreamer.cpp:342) and is what gives the response type its consumer.
 // -----------------------------------------------------------------------------
 void TrafficCarStreamer::OnLoadComplete( const BrnResource::GameDataIO::GameDataAssetEvent* lpEvent,
                                          s32 liListIndex )

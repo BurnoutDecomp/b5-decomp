@@ -232,7 +232,8 @@ void BridgePropToOutput_PreScene(
 // (BrnWorldModuleIO_UpdateOutputBuffer.cpp :: Construct, `mGameEventQueue.Construct()`).
 //
 // STILL DROPPED, DELIBERATELY (each now exactly specified above, so landing one is mechanical):
-//   * legs 3/4/6/7/13 -- every traffic transfer. Source getters un-homed on this build.
+//   * legs 4/6/7/13 -- the remaining traffic transfers. Source getters un-homed on this
+//     build. (Leg 3, the resource-request flush, has landed -- see the body.)
 //   * legs 8/9  -- the prop became-physical + VFX-locator queues. Both destinations exist and
 //     are typed (BrnWorldModuleIO.h :: AppendPropBecamePhysicalEventQueue /
 //     SetPropVFXLocatorQueue) and both const source getters now exist, so these are two
@@ -271,15 +272,12 @@ void BridgeEntityModulesToOutput_PostPhysics(
             lpWorldEntityOutput_PostPhysics->GetResourceRequestInterface()->mRequestQueue);
     }
 
-    // ⭐ LEG 3 LANDED (wave T1 round-4 consolidation 2026-08-21): the TRAFFIC resource-request
-    // flush @0x827AEFC0 -- Append<4096,16>( out->GetResourceRequestResourceInterface(),
-    // trafficOut->GetResourceRequestInterface() ). The banner above said "source getters
-    // un-homed on this build"; STALE since round 3 homed OutputBuffer_PostPhysics::
-    // mResourceRequestInterface and bodied BOTH getter halves (BrnTrafficEntityModuleIO.cpp).
-    // Without this, TrafficEntityModule::UpdateStreaming's per-frame carry-over fills the
-    // traffic output buffer and the requests die there -- the boot proved it: the streamer
-    // reached OnLoadBegin but no VEH_T*_GR bundle file was ever opened. The console's
-    // PerfMon bracket (a1+6167724) takes this file's standing disposition (not modelled).
+    // Leg 3, the TRAFFIC resource-request flush @0x827AEFC0 --
+    // Append<4096,16>( out->GetResourceRequestResourceInterface(),
+    // trafficOut->GetResourceRequestInterface() ). Without it,
+    // TrafficEntityModule::UpdateStreaming's per-frame carry-over fills the traffic output
+    // buffer and the requests die there. The console's PerfMon bracket (a1+6167724) takes
+    // this file's standing disposition and is not modelled.
     lpOutputBuffer->GetResourceRequestResourceInterface()->mRequestQueue.Append(
         lpTrafficOutput_PostPhysics->GetResourceRequestInterface()->mRequestQueue);
 

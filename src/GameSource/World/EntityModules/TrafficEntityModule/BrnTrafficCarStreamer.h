@@ -14,31 +14,13 @@
 //   "...code\\gamesource\\world\\entitymodules\\trafficentitymodule\\BrnTrafficCarStreamer.h"
 //   "...code\\gamesource\\unity\\../World/EntityModules/TrafficEntityModule/BrnTrafficCarStreamer.cpp"
 //
-// ⭐⭐ 2026-08-21 (traffic wave T1, cluster C5) -- THIS HEADER WAS REPLACED, AND
-// THE THING IT REPLACED WAS THE REASON NO TRAFFIC CAR EVER LOADED.
+// SHAPE SOURCES (the asm arbitrates):
 //
-// The previous version was an honest but blind OFFSET-FIRST slice: a standalone
-// (non-derived) class with `u8 mPad_0019[0x2578 - 0x19]`, four query methods, and
-// no SetAssetList / Update / On*Complete at all. Because SetAssetList was not even
-// DECLARED, TrafficEntityModule::LoadData's stage-1 leg could not be written, so
-// `muNumAssets` stayed 0, so `Update()` added no entries, so **no VEH_T*_GR bundle
-// was ever requested at any point in the boot** -- which is exactly what the boot
-// log reported by name:
-//   [Q7-traffic-leg] ... TrafficCarStreamer::SetAssetList(...) -- no declaration/
-//   body in tree [FLAG PC partial gate]
-// The padding was also a live instance of the tree's #1 recurring bug: `mPad_0019`
-// reserved a CONSOLE byte span inside a HOST object whose base class is wider,
-// so the "proven offsets" it was protecting could not hold on x64 anyway.
-//
-// ⭐ WHERE THE REAL SHAPE COMES FROM (three sources; the ASM arbitrates)
-//
-// 1. The leaked Feb-2007 BrnTrafficCarStreamer.h/.cpp contain this class in full --
-//    member list, member ORDER, the two enums, both constants, and every body.
-// 2. The X360 ARTIST asm confirms that member order byte for byte. progress/identity.json
-//    holds FOURTEEN BrnTraffic::TrafficCarStreamer symbols (the thirteen bodies listed in
-//    the .cpp banner, plus the compiler-generated constructor @0x827E3E98), and every one
-//    of them addresses the members at fixed displacements off `this` -- displacements that
-//    tile EXACTLY over the leak's declaration order with no slack anywhere:
+// 1. The leaked Feb-2007 BrnTrafficCarStreamer.h/.cpp carry this class in full: member list,
+//    member order, the two enums, both constants, and every body.
+// 2. The X360 ARTIST asm confirms that member order byte for byte. progress/identity.json holds
+//    fourteen TrafficCarStreamer symbols, and every one addresses the members at fixed
+//    displacements off `this` that tile over the leak's declaration order with no slack:
 //
 //      console  size   member                         attested by
 //      -------  -----  -----------------------------  -------------------------------
@@ -61,66 +43,37 @@
 //
 //    9080+512 == 9592, +64 == 9656, +64 == 9720, +512 == 10232, +2048 == 12280. The
 //    base BrnWorld::BaseStreamer<64> therefore occupies [0, 9080) on the console.
-// 3. ⚠ CORRECTED 2026-08-21 (C5 fix round). An earlier revision of this banner said
-//    "there is NO DecFIGS DWARF entry for this class" and told the next reader not to
-//    go looking. THAT WAS FALSE, and it was the worst kind of error to leave in a
-//    banner: it instructed the next agent to skip rung 2 of the ladder. The entry is
-//    at references/DecFIGS/dwarfdump/GameSource/World/EntityModules/
-//    TrafficEntityModule/BrnTrafficCarStreamer.h and it declares the whole class:
+// 3. The DecFIGS DWARF entry at references/DecFIGS/dwarfdump/GameSource/World/EntityModules/
+//    TrafficEntityModule/BrnTrafficCarStreamer.h declares the whole class as
+//    `struct BrnTraffic::TrafficCarStreamer : public BrnWorld::BaseStreamer<64>` and
+//    corroborates the base class and its template argument, all six members in this order,
+//    both private constants, the six protected virtuals in the order used below, and the
+//    trailing `const` on the four query methods. QueryLoad / QueryUnload are declared there
+//    but absent from the X360 ledger, which is why overriding them is recovery, not invention.
 //
-//      struct BrnTraffic::TrafficCarStreamer : public BrnWorld::BaseStreamer<64>
+//    THREE DWARF-DECLARED METHODS ARE DELIBERATELY NOT DECLARED HERE:
+//      ClearRenderingHistory()   (DWARF .h:216)
+//      GetAssetID( u32 )         (DWARF .h:346)
+//    Neither appears among the fourteen TrafficCarStreamer symbols in progress/identity.json,
+//    so under "DWARF supplies names/types; the X360 ledger decides what exists" they are
+//    PS3-side-only as far as we can attest. Named here so a later reader knows they were
+//    considered and gated out. Adding one, if it turns up attested, is a pure addition.
 //
-//    It independently corroborates -- it does not merely echo the leak -- every shape
-//    decision this header makes:
-//      * the BASE CLASS and its 64 template argument;
-//      * all six members, with these names/types, IN THIS ORDER: mauRenderingHistory
-//        (u64[64]), maxLoadFlags (u8[64]), mauLoadStates (u8[64]), maAssetIds
-//        (CgsID[64]), maGraphicsStubs (ResourcePtr<BrnTraffic::GraphicsStub>[64]),
-//        muNumAssets (u32) -- i.e. exactly the order the asm displacements tile over;
-//      * both private constants (KU_ASSET_RENDERED_FLAG, KU_MAX_BONUS_ASSETS = 2);
-//      * the six PROTECTED virtuals in the order used below, including QueryLoad /
-//        QueryUnload, which the X360 ledger does not attest (see the .cpp banner) --
-//        so the DWARF is the reason we know they are real members and not an
-//        invention needed to de-abstract the class;
-//      * GetGraphicsSpec / GetWheelGraphicsSpec returning `const GraphicsSpec*` and
-//        being trailing-`const`; IsTrafficAssetLoaded / AreAllAssetsLoaded `const`.
-//    So rung 2 agrees with rung 1 everywhere here. Where the DWARF and the ship asm
-//    DO differ, the asm still wins and is flagged at the member/method (the
-//    KU_MAX_BONUS_ASSETS -> KU_MAX_BONUS_STREAMED_ASSETS rename, and Update's two new
-//    parameters, are both such cases -- see the divergence list below).
+// HOST LAYOUT: the console displacements above are provenance, not targets. On x64 the base is
+// wider (8-byte pointers in InternalBaseStreamer and its queues) and each
+// ResourcePtr<GraphicsStub> is 40 bytes rather than 32, so the absolute offsets move.
+// Everything is accessed by name, and _AssertLayout() pins only the pointer-invariant facts:
+// the three pointer-free runs and their order.
 //
-//    ⭐ THREE DWARF-DECLARED METHODS ARE DELIBERATELY NOT DECLARED HERE, and the
-//    omission is stated rather than implied:
-//      * AreAllAssetsUnloaded() const   (DWARF .h:275)  ⭐ RETIRED 2026-08-21 (wave T1
-//        round 3): it IS attested after all -- see its declaration below. The other two
-//        stand.
-//      * ClearRenderingHistory()        (DWARF .h:216)
-//      * GetAssetID( u32 )              (DWARF .h:346)
-//    None of the three appears among the fourteen TrafficCarStreamer symbols in
-//    progress/identity.json, so under AGENTS.md's "DWARF supplies names/types; the
-//    X360 ledger decides what EXISTS" rule they are PS3-side-only as far as we can
-//    attest and must stay out. They are named here so a later agent who finds them in
-//    the dwarfdump knows they were considered and gated out, not missed. If a future
-//    X360 export hole is filled and one of them turns up attested, adding it is a
-//    pure addition -- none of them is load-bearing for any body below.
-//
-// ⭐ HOST LAYOUT: the console displacements above are PROVENANCE, not targets. On
-// x64 the base is wider (8-byte pointers in InternalBaseStreamer + its queues) and
-// each ResourcePtr<GraphicsStub> is 40 bytes rather than 32, so the absolute
-// offsets legitimately move. Everything is accessed BY NAME. `_AssertLayout()`
-// pins only the POINTER-INVARIANT facts -- the three pointer-free runs and their
-// order -- exactly as AGENTS.md requires.
-//
-// ⭐ SHIP-vs-LEAK DIVERGENCES (the asm wins; each is marked at its member/method):
-//   * `Update` gained TWO PARAMETERS: `( const u8* lpauOverrideBonusAssets, u32
-//     luNumBonusAssets )`. The leak's Update() takes none and always derives the
-//     bonus set from the rendering history. See Update's banner.
-//   * `GetBonusAssets` @0x8274F8C0 is NEW in ship (absent from the leak) -- it is
-//     the producer that feeds the override list back in through the new parameters.
-//   * The constant is spelled KU_MAX_BONUS_STREAMED_ASSETS in ship (the assert
-//     strings say so verbatim); the leak calls it KU_MAX_BONUS_ASSETS.
-//   * `IsTrafficAssetLoaded` gained a leading `luAssetId < KU_MAX_VEHICLE_ASSETS`
-//     assert the leak does not have.
+// SHIP-vs-LEAK DIVERGENCES (the asm wins; each is marked at its member or method):
+//   * Update gained two parameters, `( const u8* lpauOverrideBonusAssets, u32
+//     luNumBonusAssets )`. The leak's Update() takes none and derives the bonus set from the
+//     rendering history.
+//   * GetBonusAssets @0x8274F8C0 is ship-only, and is the producer that feeds that override
+//     list back in through the new parameters.
+//   * The constant is KU_MAX_BONUS_STREAMED_ASSETS in ship (the assert strings say so); the
+//     leak calls it KU_MAX_BONUS_ASSETS.
+//   * IsTrafficAssetLoaded gained a leading `luAssetId < KU_MAX_VEHICLE_ASSETS` assert.
 //   * The base Construct gained the `lbSlotPoolSystem` parameter (see Construct).
 // =============================================================================
 
@@ -133,7 +86,7 @@
 #include "GameSource/Resource/SharedIO/BrnGameDataEvents.h"              // GameDataAssetEvent, GetTrafficVehicleGraphicsResponse, E_POOL_TRAFFIC
 #include "SharedClasses/Traffic/BrnTrafficSharedConstants.h"             // BrnTraffic::KU_MAX_VEHICLE_ASSETS
 #include "SharedClasses/Traffic/BrnTrafficVehicleAsset.h"                // BrnTraffic::VehicleAsset
-#include "SharedClasses/Traffic/BrnTrafficGraphicsStub.h"                // BrnTraffic::GraphicsStub + the two GraphicsSpec homes (cluster C0)
+#include "SharedClasses/Traffic/BrnTrafficGraphicsStub.h"                // BrnTraffic::GraphicsStub + the two GraphicsSpec homes
 
 #include <cstddef>   // offsetof (used only by the never-called _AssertLayout)
 
@@ -157,8 +110,8 @@ public:
 
     // ---- the asset catalogue ----------------------------------------------
 
-    // @0x82753A38. THE function whose absence kept every traffic bundle
-    // unrequested: publish TrafficData's vehicle-asset list into the streamer.
+    // @0x82753A38. Publish TrafficData's vehicle-asset list into the streamer. Nothing
+    // requests a traffic bundle until this has run.
     void SetAssetList( u32 luNumAssets, const VehicleAsset* lpaAssets );
 
     // Leaked inline (BrnTrafficCarStreamer.h:187). Drop every "should be loaded"
@@ -171,17 +124,15 @@ public:
     // `maxLoadFlags[lpauVehicleAssetIds[v]] |= E_LOADFLAG_REQUESTED`.
     void AddVehiclesToTargetList( u32 luNumVehicles, const u8* lpauVehicleAssetIds );
 
-    // @0x8274F740. Rebuild the base streamer's target list from the flags and
-    // pump the base. ⭐ SHIP SIGNATURE (asm: r4 = list pointer, r5 = count; the
-    // sole call site, TrafficEntityModule::UpdateStreaming @0x82748848, passes
-    // `TrafficCarStreamer::Update( v4, v12, v6 )` with v12 either 0 or a byte
-    // list and v6 its length). The leak's Update() has no parameters.
+    // @0x8274F740. Rebuild the base streamer's target list from the flags and pump the base.
+    // Ship signature, from the asm (r4 = list pointer, r5 = count): the sole call site,
+    // TrafficEntityModule::UpdateStreaming @0x82748848, passes `Update( v4, v12, v6 )` with v12
+    // either 0 or a byte list and v6 its length. The leak's Update() has no parameters.
     void Update( const u8* lpauOverrideBonusAssets = 0, u32 luNumBonusAssets = 0 );
 
-    // @0x8274F8C0. SHIP-ONLY (not in the leak). Collect the indices of the assets
-    // currently flagged BONUS into lpauOutBonusAssets (as bytes) and write the
-    // count to *lpuOutNumBonusAssets. The out array must hold at least
-    // KU_MAX_BONUS_STREAMED_ASSETS entries.
+    // @0x8274F8C0, ship-only. Collect the indices of the assets currently flagged BONUS into
+    // lpauOutBonusAssets as bytes and write the count to *lpuOutNumBonusAssets. The out array
+    // must hold at least KU_MAX_BONUS_STREAMED_ASSETS entries.
     void GetBonusAssets( u8* lpauOutBonusAssets, u32* lpuOutNumBonusAssets ) const;
 
     // ---- queries (leaked inlines; the X360 emitted these three out-of-line) --
@@ -192,24 +143,14 @@ public:
     // @0x82706288.
     inline bool AreAllAssetsLoaded() const;
 
-    // ⭐ DECLARED 2026-08-21 (wave T1 round 3, closure item 1). This is the DWARF .h:275
-    // method the banner above listed as "deliberately NOT declared here ... PS3-side-only as
-    // far as we can attest", with the standing instruction: "If a future X360 export hole is
-    // filled and one of them turns up attested, adding it is a pure addition." IT IS NOW
-    // ATTESTED, from the caller rather than from a symbol of its own:
-    //   * TrafficEntityModule::UpdateStreaming @0x82748848, arm meEmptyTrafficPoolState == 1,
-    //     inlines the loop at 0x827488D0..0x827488FC -- walk mauLoadStates (streamer +9656)
-    //     bounded by muNumAssets, bail with FALSE on the first non-zero, return TRUE on an
-    //     empty catalogue (`beq` straight to `li r11,1`);
-    //   * the DecFIGS scope tree for that same function (_compile/BrnTrafficUnity.cpp:15427)
-    //     names `TrafficCarStreamer::AreAllAssetsUnloaded` in its call list.
-    // Two independent sources, same function, same loop. It has no standalone X360 symbol
-    // because the compiler inlined its only call site -- which is precisely the case
-    // AGENTS.md's "inlined / ICF-folded bodies" note covers.
-    //
-    // NOTE the asymmetry with AreAllAssetsLoaded above, and it is the CONSOLE's: this one
-    // tests the STATE bytes for every KNOWN asset, with no maxLoadFlags filter at all. It
-    // means "nothing is resident", not "nothing that was wanted is resident".
+    // DWARF .h:275. No standalone X360 symbol, because the compiler inlined its only call site:
+    // TrafficEntityModule::UpdateStreaming @0x82748848's meEmptyTrafficPoolState == 1 arm
+    // carries the loop at 0x827488D0..0x827488FC (walk mauLoadStates bounded by muNumAssets,
+    // bail false on the first non-zero, return true on an empty catalogue). The DecFIGS scope
+    // tree for that same function (_compile/BrnTrafficUnity.cpp:15427) names it in the call list.
+    // Note the console's asymmetry with AreAllAssetsLoaded: this one tests the state bytes for
+    // every known asset with no maxLoadFlags filter, so it means "nothing is resident", not
+    // "nothing that was wanted is resident".
     inline bool AreAllAssetsUnloaded() const;
 
     // @0x8271D440 -- returns `*ResourcePtr<GraphicsStub>::operator*()` slot 0.
@@ -317,12 +258,10 @@ TrafficCarStreamer::ClearAssetList()
 
 
 // -----------------------------------------------------------------------------
-// @0x82706160. An asset is "loaded" exactly when its state byte is
-// E_LOADSTATE_LOADED. The FIRST assert is ship-only (the leak has only the
-// second): `cmplwi r28,0x40 @0x82706178` against KU_MAX_VEHICLE_ASSETS, baked
-// file BrnTrafficCarStreamer.h line 244. The second (line 245) streamed the id
-// and muNumAssets into the message buffer; the house CGS_ASSERT carries the
-// static text instead, per project convention.
+// @0x82706160. An asset is loaded exactly when its state byte is E_LOADSTATE_LOADED.
+// The first assert is ship-only (`cmplwi r28,0x40` @0x82706178, baked line 244); the
+// leak has only the second (baked line 245), which streamed the id and muNumAssets
+// into the message buffer where the house CGS_ASSERT carries static text.
 // -----------------------------------------------------------------------------
 inline bool
 TrafficCarStreamer::IsTrafficAssetLoaded( u32 luAssetId ) const
@@ -336,16 +275,11 @@ TrafficCarStreamer::IsTrafficAssetLoaded( u32 luAssetId ) const
 
 
 // -----------------------------------------------------------------------------
-// @0x82706288. Every asset that SHOULD be loaded IS loaded. Slots with no
-// request bit set are skipped (the console's `(flags & 3) == 0` continue).
-// -----------------------------------------------------------------------------
-// -----------------------------------------------------------------------------
 // Inlined into TrafficEntityModule::UpdateStreaming @0x82748848 (0x827488D0..0x827488FC);
-// DWARF .h:275. "Nothing is resident" -- every KNOWN asset's state byte is
-// E_LOADSTATE_NOT_LOADED. Unlike AreAllAssetsLoaded below there is NO maxLoadFlags
-// filter: the console's inlined loop indexes mauLoadStates directly. An empty
-// catalogue is trivially "all unloaded", which is the console's own `beq` past the
-// loop to `v9 = 1`.
+// DWARF .h:275. "Nothing is resident": every known asset's state byte is
+// E_LOADSTATE_NOT_LOADED. Unlike AreAllAssetsLoaded below there is no maxLoadFlags
+// filter; the console's inlined loop indexes mauLoadStates directly. An empty
+// catalogue is trivially all-unloaded, the console's own `beq` past the loop.
 // -----------------------------------------------------------------------------
 inline bool
 TrafficCarStreamer::AreAllAssetsUnloaded() const
@@ -362,6 +296,10 @@ TrafficCarStreamer::AreAllAssetsUnloaded() const
 }
 
 
+// -----------------------------------------------------------------------------
+// @0x82706288. Every asset that should be loaded is loaded. Slots with no request
+// bit set are skipped (the console's `(flags & 3) == 0` continue).
+// -----------------------------------------------------------------------------
 inline bool
 TrafficCarStreamer::AreAllAssetsLoaded() const
 {
@@ -381,11 +319,9 @@ TrafficCarStreamer::AreAllAssetsLoaded() const
 
 
 // -----------------------------------------------------------------------------
-// @0x8271D440. Three asserts (baked BrnTrafficCarStreamer.h lines 309/310/311),
-// then the stub's first import slot. The X360's last two instructions are
-//   result = *BrnTraffic::GraphicsStub_::operat( 32*asset + this + 10232 );
-// i.e. ResourcePtr<GraphicsStub>::operator*() then slot 0 -- which is
-// `maGraphicsStubs[luAssetId]->mpVehicleGraphics` written by name.
+// @0x8271D440. Three asserts (baked lines 309/310/311), then the stub's first import
+// slot: the X360 tail is `*GraphicsStub::operator*( 32*asset + this + 10232 )` then
+// slot 0, i.e. maGraphicsStubs[luAssetId]->mpVehicleGraphics by name.
 // -----------------------------------------------------------------------------
 inline const BrnVehicle::GraphicsSpec*
 TrafficCarStreamer::GetGraphicsSpec( u32 luAssetId ) const
@@ -419,16 +355,14 @@ TrafficCarStreamer::GetWheelGraphicsSpec( u32 luAssetId ) const
 
 
 // -----------------------------------------------------------------------------
-// @0x82706300 -- EXPORT HOLE (no .ida-exports JSON). Body from the leak
-// (BrnTrafficCarStreamer.h:284), and it is corroborated by the CONSUMER that IS
-// exported: Update @0x8274F740 reads the same 64-bit word at this+9080+8*asset,
-// shifts it right by one, and treats a non-zero result as "this asset was
-// rendered recently, keep it resident as a bonus". A producer that sets the TOP
-// bit is the only thing that makes that ageing shift meaningful.
+// @0x82706300 -- export hole (no .ida-exports JSON). Body from the leak
+// (BrnTrafficCarStreamer.h:284), corroborated by the exported consumer: Update
+// @0x8274F740 reads the same 64-bit word at this+9080+8*asset, shifts it right by one,
+// and treats a non-zero result as "rendered recently, keep it resident as a bonus".
+// A producer setting the top bit is what makes that ageing shift meaningful.
 //
-// [T1-stream] note: the per-asset diagnostic latch lives in the .cpp beside the
-// four load hooks; this inline stays free of it because RenderTrafficCar calls it
-// once per drawn car per frame.
+// The [T1-stream] latch lives in the .cpp beside the four load hooks; this inline stays
+// free of it because RenderTrafficCar calls it once per drawn car per frame.
 // -----------------------------------------------------------------------------
 inline void
 TrafficCarStreamer::NotifyAssetRenderedThisFrame( u32 luAssetId )

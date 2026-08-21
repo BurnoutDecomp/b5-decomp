@@ -154,20 +154,12 @@ namespace GameDataIO
         return mRequestQueue.AddEvent(&lEvent, 26);
     }
 
-    // -------- LoadVehicle -- ADDED 2026-08-21 (wave T1 round 2, cluster R2C) --------
-    // Declaration + the full evidence chain: BrnGameDataRequestQueue.h (this method's
-    // DWARF signature block). Summary of the two attesting sites, both inlined expansions
-    // in BrnTraffic::TrafficEntityModule::LoadData @0x82746A88:
-    //   stage 8 (E_RESOURCE_LOAD_ATTRIBS) : miPoolId 1, meType 4 (ATTRIBS)
-    //   stage 6 (E_RESOURCE_LOAD_PHYSICS) : miPoolId 1, meType 1 (PHYSICS)
-    // Both: miEventId = the running vehicle-TYPE index, mpReceiverQueue = &mReceiverQueue,
-    // mId = MakeVehicleId(<space-truncated CgsIDUnCompress of the asset's vehicle id>),
-    // mbFailFlag = 0, AddEvent<LoadGameDataEvent>(..., 26).
-    //
-    // MakeVehicleId lives INSIDE this builder (the caller hands over the bare name): in the
-    // console the strstr-truncated stack buffer `v143`/`v144` is what feeds MakeVehicleId in
-    // the same basic block as the record stores, and the DWARF's 4th parameter is
-    // `const char*`. Its own "Vehicle name too long" assert therefore fires from here.
+    // -------- LoadVehicle --------
+    // Declaration and the evidence chain: BrnGameDataRequestQueue.h. The two attesting
+    // sites are inlined expansions in TrafficEntityModule::LoadData @0x82746A88: stage 8
+    // (E_RESOURCE_LOAD_ATTRIBS, miPoolId 1, meType 4) and stage 6 (E_RESOURCE_LOAD_PHYSICS,
+    // miPoolId 1, meType 1). MakeVehicleId lives inside this builder, so its own
+    // "Vehicle name too long" assert fires from here.
     template <s32 N>
     bool RequestInterface<N>::LoadVehicle(
             CgsModule::BaseEventReceiverQueue* lpReceiverQueue,

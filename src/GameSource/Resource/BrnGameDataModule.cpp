@@ -2239,20 +2239,13 @@ namespace BrnResource
             2 /*LoadBundle*/, static_cast<s32>(sizeof(lRequest)));
     }
 
-    // @ 0x8266EF00 -- service a LOAD traffic-vehicle request (dispatch id 28). Landed wave T1
-    // round-4 consolidation 2026-08-21 (was a DeferredGameDataRequest; the boot log named it
-    // as the reason no VEH_T*_GR bundle was ever opened). The wheel handler's shape with the
-    // traffic-vehicle differences the asm is explicit about:
-    //   * ONE asset set: `if (event->meType) assert` -- "Invalid asset type for traffic
-    //     vehicles\n" (X360 baked line 4052); the suffix table is indexed UNREMAPPED, so a
-    //     valid request always picks KAPC_ASSET_SET_SUFFIXES[0] == "GR".
-    //   * `strncpy(lacID, "VEH_", 4)` @0x8266EF68 -- the id arrives as "TVEH<code>" (the
-    //     streamer's MakeTrafficVehicleId spelling) and the FIRST FOUR CHARS are overwritten
-    //     in place with the literal at 0x8201594C == "VEH_" (dumped 56 45 48 5F), so the file
-    //     name comes out "Vehicles\VEH_<code>_GR.bin" -- exactly the 42 converted files.
-    //   * No SOUND leg, no PHYSICS->ATTRIBS remap.
-    // No reply is posted: the completion rides ProcessInternalLoadBundleResponse's case 28,
-    // which chains into ProcessGetTrafficVehicleRequest -- the response id is staged first.
+    // @ 0x8266EF00 -- service a LOAD traffic-vehicle request (dispatch id 28). The wheel
+    // handler's shape, GRAPHICS only: the suffix table is indexed unremapped, so a valid
+    // request always picks KAPC_ASSET_SET_SUFFIXES[0] == "GR". `strncpy(lacID, "VEH_", 4)`
+    // @0x8266EF68 overwrites the id's "TVEH" prefix in place with the literal at 0x8201594C,
+    // so the file name comes out "Vehicles\VEH_<code>_GR.bin". No SOUND leg, no
+    // PHYSICS->ATTRIBS remap. No reply is posted: the completion rides
+    // ProcessInternalLoadBundleResponse's case 28, which chains into the GET half below.
     void GameDataModule::ProcessLoadTrafficVehicleRequest(CgsResource::ResourceIO::InputBuffer* lpResourceInput,
                                                           const GameDataIO::GameDataAssetEvent* lpEvent,
                                                           s32 liEventId, s32 liSlotIndex)
@@ -2295,12 +2288,10 @@ namespace BrnResource
     }
 
     // @ 0x82670280 -- service a GET traffic-vehicle request (dispatch id 51). Hop 2: the
-    // VEH_<code>_GR.bin bundle is resident, so acquire its GraphicsStub by name --
-    // "%s_%s" of (id WITHOUT its 4-char "TVEH" prefix, "TrafficStub"), e.g.
-    // "TUSSL01_TrafficStub". Landed with the LOAD half above (was deferred).
-    // The reply rides ProcessInternalAcquireResponse case 51 (already real), which posts
-    // the id-51 response with the resolved handle back to the traffic car streamer's
-    // receiver queue -- OnLoadComplete's food.
+    // VEH_<code>_GR.bin bundle is resident, so acquire its GraphicsStub by name, "%s_%s" of
+    // (id without its 4-char "TVEH" prefix, "TrafficStub"), e.g. "TUSSL01_TrafficStub".
+    // The reply rides ProcessInternalAcquireResponse case 51, which posts the id-51 response
+    // with the resolved handle back to the traffic car streamer's receiver queue.
     void GameDataModule::ProcessGetTrafficVehicleRequest(CgsResource::ResourceIO::InputBuffer* lpResourceInput,
                                                          const GameDataIO::GameDataAssetEvent* lpEvent,
                                                          s32 liEventId, s32 liSlotIndex)

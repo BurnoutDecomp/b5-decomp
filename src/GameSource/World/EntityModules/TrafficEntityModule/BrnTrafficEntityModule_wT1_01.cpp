@@ -1,10 +1,8 @@
 // ============================================================================
-// BrnTrafficEntityModule_wT1_01.cpp -- wave T1 (parked traffic cars), cluster C4:
-// THE SPAWN LEGS.
+// BrnTrafficEntityModule_wT1_01.cpp -- the traffic spawn legs.
 //
-// WHAT THIS FILE IS. The console's traffic module reaches a parked car through a single
-// chain that starts in the module's own state machine and ends in a transform written into
-// maVehicleTransforms:
+// The console reaches a parked car through one chain, from the module's state machine to a
+// transform written into maVehicleTransforms:
 //
 //   Construct @0x82740220 -> ResetEventData @0x827088B8 -> Reset @0x8272CDA0
 //                                            -> EnterStartingUpState @0x82708038
@@ -16,67 +14,32 @@
 //           PickVehicleToSpawn @0x827235F8        -> a vehicle TYPE from the flow type
 //           StaticVehicles_Generate @0x82722680   -> pop a free StaticTrafficParam slot
 //       StaticVehicles_CreateNewVehicles @0x827229F0
-//         Vehicle::InitialiseAsStatic @0x827567F0 (C3)
-//         SetVehicleTransform  @0x827142B8        -> the car now HAS a place in the world
+//         Vehicle::InitialiseAsStatic @0x827567F0
+//         SetVehicleTransform  @0x827142B8        -> the car now has a place in the world
 //     E_STARTINGUPSTATE_WAITING_FOR_STREAMING
 //       EnterRunningState      @0x827080E8
 //
-// ⭐⭐ AND, SINCE 2026-08-21 (wave T1 ROUND 4, item 1), THE SAME CHAIN IN STEADY STATE. The
-// ladder above runs ONCE, on the POPULATING frame. The console then re-runs its top half
-// every decision frame for as long as the module is RUNNING, through a path this file's
-// PostPhysicsUpdate now dispatches into:
+// That ladder runs once, on the POPULATING frame. In steady state PostPhysicsUpdate's RUNNING
+// arm dispatches to UpdateDecisionFrame @0x8274E508 or UpdateNonDecisionFrame @0x8274C1A8
+// (both in _wT1_06.cpp), and UpdateDecisionFrame re-runs RecalculateActiveHulls,
+// SpawnNewTraffic and the StaticVehicles_* updates bodied here.
 //
-//   PostPhysicsUpdate @0x8274E6D0, state E_STATE_RUNNING
-//     if (!IsPaused() && !simPaused)
-//       IsDecisionFrame() ? UpdateDecisionFrame @0x8274E508 : UpdateNonDecisionFrame @0x8274C1A8
-//         (both landed in BrnTrafficEntityModule_wT1_06.cpp)
-//         UpdateDecisionFrame -> RecalculateActiveHulls / SpawnNewTraffic /
-//                                StaticVehicles_UpdateStaticParams /
-//                                StaticVehicles_UpdateVehicles   -- all bodied HERE
+// Every function on the STARTING_UP chain is bodied here. A leg that reaches code or data this
+// tree cannot recover is a NAMED one-shot gate, never an invented body or a silent omission.
 //
-// and the flag that gate turns on (mbDecisionFrame) is produced by UpdateTimers @0x82715858,
-// called from PreSceneUpdate's RUNNING arm in _wT1_02.cpp. Before round 4 that flag had no
-// writer in this tree at all, so the whole steady-state half was unreachable.
+// TWO KNOBS THE LEAK GETS WRONG OR HIDES:
+//   * mbDEBUGTurnTrafficOff ships FALSE, not the leak's true. Construct @0x82740220 stores
+//     zero at 0x82740D2C (`stbx r30`, r30 == 0, offset 0x7287E), in a run whose neighbours pin
+//     the offset with no slack. Ship traffic is on by default.
+//   * mfTrafficAmountScale gates the PARKED half too: FillNewHull's first act is
+//     `if (mfTrafficAmountScale == 0.0f) return;` @0x82743634. The chain is Construct's
+//     mfBaseDensityScale = 1.0f, ResetEventData copying it into mfGameModeDensityScale, and
+//     UpdateDensity copying that into mfTrafficAmountScale every frame, so a default-
+//     constructed module runs at density 1.0. FillNewHull's driving half is suppressed by an
+//     explicit gate, never by zeroing the density.
 //
-// Every function on the STARTING_UP chain is bodied here. Where a leg of a bodied function reaches
-// code or data this cluster cannot recover, the leg is a NAMED one-shot gate -- the
-// convention BrnTrafficEntityModule_wQ7_02.cpp established in this directory -- never an
-// invented body and never a silent omission.
-//
-// ---------------------------------------------------------------------------
-// THE SHIP DEFAULT OF mbDEBUGTurnTrafficOff IS **false** -- THE LEAK IS WRONG.
-//
-// The scout report flagged Feb-2007's `mbDEBUGTurnTrafficOff = true` as a trap. Measured
-// from the SHIP Construct @0x82740220, it is FALSE:
-//     0x8274024C  li    r30, 0                 ; r30 stays 0 for the whole function
-//     0x82740D10  ori   r8, r8, 0x287E         ; 0x7287E == 469118 == mbDEBUGTurnTrafficOff
-//     0x82740D2C  stbx  r30, r31, r8           ; = 0
-// The neighbouring debug bools in the same store run pin the offset with zero slack
-// (0x72877 mbDEBUGPickVehicleFromCamera = 0, 0x72878 muDEBUGPickedVehicle = -1,
-//  0x7287C/0x7287D mbDEBUGPick_* = 0, 0x7287E mbDEBUGTurnTrafficOff = 0), and the same run
-// shows the two debug bools the ship turns ON: 0x72868 mbDEBUGEnablePressureSystem = 1 and
-// 0x72869 mbDEBUGEnableAvoidance = 1 (`stbx r27` with r27 = 1 from 0x82740988).
-// SHIP TRAFFIC IS ON BY DEFAULT. Nothing in this file copies the leak's dev default.
-//
-// ---------------------------------------------------------------------------
-// THE OTHER KNOB: mfTrafficAmountScale. FillNewHull's very first act is
-// `if (mfTrafficAmountScale == 0.0f) return;` (0x82743634 `lfs f0,0(r14)` with
-// r14 == this+464924, compared against flt_82001CC0 == 0.0f). So a density of zero kills
-// the PARKED half too -- exactly as the scout warned. The value chain is
-//   Construct   : mfBaseDensityScale = flt_82001C98 == 1.0f   (0x827413E0 stfsx -> 0x71810)
-//   ResetEventData: mfGameModeDensityScale = mfBaseDensityScale; mfTrafficAmountScale = same
-//   UpdateDensity (every PostPhysicsUpdate): mfTrafficAmountScale = mfGameModeDensityScale
-// all three of which are bodied below, so a default-constructed module runs at density 1.0.
-// The DRIVING half of FillNewHull is suppressed by an explicit NAMED gate, never by zeroing
-// the density.
-//
-// ---------------------------------------------------------------------------
-// SOURCES. X360 ARTIST pseudocode + assembly (.ida-exports/BURNOUT_X360_ARTIST.XEX) is rung
-// 1 and arbitrates every offset, branch and store below; DecFIGS DWARF supplies declaration
-// shape; the Feb-2007 leak is used ONLY where this file says so in-line (and never for a
-// function ARTIST exports). Layout is HOST-NATIVE throughout: no member is reached by an
-// X360 byte offset, and the console displacements quoted in the comments are attestation of
-// WHICH member a line resolves to, nothing more.
+// Layout is host-native throughout: no member is reached by an X360 byte offset, and the
+// console displacements in the comments only attest which member a line resolves to.
 // ============================================================================
 
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficEntityModule.h"
@@ -105,12 +68,8 @@ namespace BrnTraffic
 {
 namespace
 {
-    // ------------------------------------------------------------------------------------
-    // NAMED LEG GATE. One line per console leg that has no body in this tree, logged once
-    // per process. Same shape (and the same "[FLAG PC partial gate]" tail) as
-    // BrnTrafficEntityModule_wQ7_02.cpp's LogMissingLeg, so a boot log reads as one stream.
-    // [DIAG] NOT IN THE X360 BINARY.
-    // ------------------------------------------------------------------------------------
+    // NAMED LEG GATE. One line per console leg with no body in this tree, logged once per
+    // process. [DIAG] NOT IN THE X360 BINARY.
     inline void LogMissingLeg(bool& lrbAlreadyLogged, const char* lpcLegNameAndReason)
     {
         if (lrbAlreadyLogged)
@@ -127,13 +86,9 @@ namespace
         }
     }
 
-    // ------------------------------------------------------------------------------------
-    // DELETE-WHEN-STABLE bring-up probes. Gated on the BRN_TRAFFIC_DIAG environment knob
-    // (this wave's own knob -- the wQ7 files borrowed BRN_PROP_DIAG, which is what cluster
-    // C8 exists to retire). Every probe below is either one-shot or value-latched, so a
-    // steady state costs one env lookup per call and nothing else.
+    // DELETE-WHEN-STABLE bring-up probes, gated on BRN_TRAFFIC_DIAG. Every probe below is
+    // one-shot or value-latched, so steady state costs one env lookup per call.
     // [DIAG] NOT IN THE X360 BINARY.
-    // ------------------------------------------------------------------------------------
     bool TrafficDiagEnabled()
     {
         static const bool sbEnabled = (getenv("BRN_TRAFFIC_DIAG") != 0);
@@ -149,10 +104,8 @@ namespace
         return CgsDev::Log::gpDebugPrint;
     }
 
-    // ------------------------------------------------------------------------------------
-    // The X360 immediates this file needs that are NOT rodata reads -- each one is an
-    // instruction operand, i.e. recovered, not guessed.
-    // ------------------------------------------------------------------------------------
+    // The X360 immediates this file needs that are not rodata reads. Each is an instruction
+    // operand, recovered rather than guessed.
 
     // FillNewHull @0x82743600 / PickVehicleToSpawn @0x827235F8 both draw a 1..100 roll with
     // the same magic-division sequence (`mulhwu r,x,0x51EB851F ; srwi r,r,5 ; mulli r,r,100`
@@ -196,11 +149,10 @@ namespace
 //                                                            ; lbzx 0x717DC / 0x717DD, stbx 0x717E7
 //   mpLogger-><byte 0>        = mbAllowDivergentBehaviour    ; lwzx 0x727B4 ; stb r11, 0(r10)
 //
-// THE SHIP CACHES WHAT THE LEAK COMPUTED. Feb-2007 has an inline predicate
-// `AllowDivergentBehaviour() { return !IsPlayingOnlineGameMode(); }`; ship hoists it into
-// the member at +0x717E7 here and ORs in the showtime case. That member is the single
-// biggest behavioural switch on this whole chain -- OFFLINE IT IS TRUE, which is what makes
-// PostPhysicsUpdate's POPULATING arm create vehicles locally at all (see the arm below).
+// The leak computes AllowDivergentBehaviour() as an inline predicate; the ship caches it in
+// the member at +0x717E7 here and ORs in the showtime case. It is the biggest behavioural
+// switch on this chain: offline it is TRUE, which is what lets PostPhysicsUpdate's POPULATING
+// arm create vehicles locally at all.
 // ----------------------------------------------------------------------------
 void TrafficEntityModule::EnterStartingUpState()
 {
@@ -212,29 +164,18 @@ void TrafficEntityModule::EnterStartingUpState()
     mbAllowDivergentBehaviour = (!mbIsOnlineGameMode) || mbPlayingShowtimeMode;
 
     {
-        // The console's last store is a byte written THROUGH mpLogger (+0x727B4, the pointer
-        // Construct fills from the debug allocator). BrnTrafficLogger.cpp does not compile in
-        // this tree, so the Logger type has no usable declaration here.
-        //
-        // ⭐ REASON RE-MEASURED 2026-08-21 (wave T1 round 4 sweep, item 4). Two earlier
-        // spellings of this banner were both wrong about WHY, and the difference decides who
-        // can fix it. It is NOT "C2027" (round 1's) and NOT "a memcpy called with two
-        // arguments at line 296" (round 3's). Running the gate today, the FIRST errors are
-        // REDEFINITIONS: BrnTrafficLogger.cpp re-declares `KU_MAX_PARAMS` (:32, against
-        // BrnTrafficConstants.h:68), `class HullRuntime` (:58, against BrnTrafficHullRuntime.h:46),
-        // `class ParamTransform` (:81, against BrnTrafficParam.h:196) and `class
-        // TrafficEntityModule` (:90, against BrnTrafficEntityModule.h:414). The C2027s that
-        // follow are the CASCADE from that last one -- the local fork is incomplete, so every
-        // member use fails. In other words this file is a textbook instance of the AGENTS.md
-        // "don't locally redefine a type that has a real home" rule, and the fix is to delete
-        // its four local declarations and include the four real headers -- NOT to chase a
-        // memcpy. That is a one-file job for whoever owns the logger, plus a mount decision;
-        // it would un-gate the three mpLogger legs in this file.
+        // GATE: the console's last store is a byte written through mpLogger (+0x727B4).
+        // BrnTrafficLogger.cpp is unmounted and does not compile, so the Logger type has no
+        // usable declaration. It locally redeclares KU_MAX_PARAMS (:32), HullRuntime (:58),
+        // ParamTransform (:81) and TrafficEntityModule (:90), all of which have real headers,
+        // so it fails C2374/C2086/C2011 first and the C2027s are the cascade.
+        // DELETE WHEN: those four local forks are replaced by the real includes and the file
+        // is mounted. That also un-gates the other two mpLogger legs here.
         static bool sbLogged = false;
         LogMissingLeg(sbLogged,
             "EnterStartingUpState mpLogger-><leading byte> = mbAllowDivergentBehaviour "
             "(X360 0x827080CC) -- BrnTrafficLogger.cpp is unmounted and does not compile. "
-            "MEASURED CAUSE (round 4): it LOCALLY REDECLARES KU_MAX_PARAMS, HullRuntime, "
+            "CAUSE: it LOCALLY REDECLARES KU_MAX_PARAMS, HullRuntime, "
             "ParamTransform and TrafficEntityModule, all of which have real headers, so it "
             "fails C2374/C2086/C2011 first and the C2027s are the cascade. Fix = delete the "
             "four local forks and include the real headers");
@@ -366,11 +307,10 @@ HullRuntime* TrafficEntityModule::GetHullRuntimeSafe(u32 luHull)
 //   assert(RwMath::IsValid(lTransform));
 //   maVehicleTransforms[luIndex] = lTransform;      ; (luIndex + 0x7B2) << 6, four stvx128
 //
-// The console spells IsValid as a per-row / per-lane `vcmpeqfp` self-equality cascade over
-// the x/y/z lanes of all four rows, ANDed together -- which is exactly what the committed
-// rw::math::vpu::IsValid(Matrix44Affine) reduces to. 0x7B2 * 64 == 126080 == the end of
-// maVehicleAxles (87680 + 600*64), i.e. the transform array immediately follows it; on the
-// host that is `&maVehicleTransforms[luIndex]` with no byte arithmetic at all.
+// The console spells IsValid as a per-lane `vcmpeqfp` self-equality cascade over the x/y/z
+// lanes of all four rows, ANDed together, which is what rw::math::vpu::IsValid(Matrix44Affine)
+// reduces to. 0x7B2 * 64 == 126080 is the end of maVehicleAxles (87680 + 600*64), so the
+// transform array immediately follows it.
 // ----------------------------------------------------------------------------
 void TrafficEntityModule::SetVehicleTransform(u32 luIndex, const Matrix44Affine& lTransform)
 {
@@ -392,14 +332,11 @@ void TrafficEntityModule::SetVehicleTransform(u32 luIndex, const Matrix44Affine&
 //       mfTrafficAmountScale =
 //           lerp(flt_82F2FDE0, flt_82F2FDDC, (mActiveHulls.GetLength() - 9) * 0.015873017);
 //
-// The FIRST line is the one the parked chain depends on and it is exact. The online arm is
-// gated: its two endpoints live in .data at 0x82F2FDDC / 0x82F2FDE0 (initialised data, no
-// writer anywhere in the export set -- the same class of unrecoverable constant C3 parked
-// KF_VEHICLE_UPDATE_MATRIX_OLD_UP_FACTOR for), so writing it would mean inventing the
-// density curve. It is unreachable offline anyway: mbAllowDivergentBehaviour is TRUE
-// whenever !mbIsOnlineGameMode (EnterStartingUpState above), so the branch is dead in every
-// single-player boot. 0.015873017f == 1/63 is an instruction immediate, not a guess, and is
-// recorded here so the next agent only has to dump two floats.
+// The first line is what the parked chain depends on. The online arm is gated: its two
+// endpoints are un-dumped .data floats at 0x82F2FDDC / 0x82F2FDE0 with no writer in the export
+// set, so writing the arm would mean inventing the density curve. It is dead offline anyway,
+// since mbAllowDivergentBehaviour is true whenever !mbIsOnlineGameMode. The 0.015873017f
+// (== 1/63) is an instruction immediate, so only the two floats are missing.
 // ----------------------------------------------------------------------------
 void TrafficEntityModule::UpdateDensity()
 {
@@ -549,18 +486,12 @@ void TrafficEntityModule::StaticVehicles_UpdateStaticParams()
 // Asserts (in the console's order), then kills the param and, when the param was neither a
 // zombie nor divorced, kills the vehicle with it.
 //
-// ⚠️ FAITHFUL READ-AFTER-WRITE. The console loads mxFlags, applies the kill mask, STORES it,
-// and only then tests bit 0x40 for "divorced" (0x82721DB8..0x82721DD0):
-//     lbz   r11, 3(r30)
-//     andi. r11, r11, 0x8C
-//     ori   r11, r11, 2
-//     stb   r11, 3(r30)
-//     rlwinm r11, r11, 0,25,25      <- bit 0x40 OF THE POST-KILL VALUE
-// The kill mask clears 0x40, so that test can never be true and both "divorced" arms are
-// unreachable in the shipped binary. This is reproduced exactly rather than "fixed": the
-// zombie flag IS captured before the kill (the console does that too, `extrwi r26,r11,1,26`
-// at 0x82721D5C), so only the divorced arms are dead, and turning them live would ADD
-// behaviour the binary does not have.
+// FAITHFUL READ-AFTER-WRITE. The console loads mxFlags, applies the kill mask, stores it, and
+// only then tests bit 0x40 for "divorced" (0x82721DB8..0x82721DD0), i.e. on the POST-KILL
+// value. The kill mask clears 0x40, so that test can never be true and both divorced arms are
+// unreachable in the shipped binary. Kept as-is: the zombie flag is captured before the kill
+// (`extrwi r26,r11,1,26` @0x82721D5C), so only the divorced arms are dead, and making them
+// live would add behaviour the binary does not have.
 // ----------------------------------------------------------------------------
 void TrafficEntityModule::StaticVehicles_KillParam(u32 luParam)
 {
@@ -635,9 +566,8 @@ void TrafficEntityModule::StaticVehicles_Generate(u8 luVehicleType, u16 luHull, 
         if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())
         {
             // [T1-static] one-shot: the pool ran dry. With KillOutOfAreaTraffic gated (see
-            // _wT1_06.cpp) this is the EXPECTED long-drive end state, not a defect -- but it
-            // is the line that explains "parked cars stopped appearing", so it is worth one
-            // print. DELETE-WHEN-STABLE.
+            // _wT1_06.cpp) this is the expected long-drive end state, and it is the line that
+            // explains "parked cars stopped appearing". DELETE-WHEN-STABLE.
             static bool sbLogged = false;
             if (!sbLogged)
             {
@@ -655,10 +585,9 @@ void TrafficEntityModule::StaticVehicles_Generate(u8 luVehicleType, u16 luHull, 
 
     if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())
     {
-        // [T1-static] the GENERATE roll: the first ten slots taken, then every 25th. This is
-        // the "StaticVehicles_Generate rolls" line the round-4 brief asked for -- it is where
-        // FillNewHull's mExistsAtAllChance roll turned into a real param, and it names the
-        // slot / vehicle type / hull / index-on-hull that InitialiseAsStatic will use next.
+        // [T1-static] the generate roll: the first ten slots taken, then every 25th. This is
+        // where FillNewHull's mExistsAtAllChance roll became a real param, and it names the
+        // slot, vehicle type, hull and index-on-hull InitialiseAsStatic will use next.
         // DELETE-WHEN-STABLE.
         static u32 suGenerated = 0;
         ++suGenerated;
@@ -692,49 +621,17 @@ void TrafficEntityModule::StaticVehicles_Generate(u8 luVehicleType, u16 luHull, 
 }
 
 // ----------------------------------------------------------------------------
-// TrafficEntityModule::StaticVehicles_CreateNewVehicles  @ 0x827229F0   *** THE PARKED-CAR MAKER ***
+// TrafficEntityModule::StaticVehicles_CreateNewVehicles  @ 0x827229F0
+// The parked-car maker. Feb-2007 calls it StaticVehicles_MakeAliveTheDeadOnesWithAliveParams
+// and has no race-car proximity rejection; the ship renamed it and added that rejection, and
+// the shape below is the ship's.
 //
-// SHIP RENAME: Feb-2007 calls this StaticVehicles_MakeAliveTheDeadOnesWithAliveParams and it
-// has no race-car proximity rejection. Ship renamed it AND added that rejection; the shape
-// below is the SHIP's.
-//
-// Whole body:
-//   if (mbWaitingForStreaming) return;                          ; lbz +464910
-//   Array<Vector3,8> laPlayerPositions;
-//   if (mbDontCreateStaticVehiclesNearAnyPlayers && !mbAllowDivergentBehaviour)  [GATED]
-//       ... collect every active race car's position ...
-//   for (luStatic = 0; luStatic < KU_MAX_STATIC_TRAFFIC; ++luStatic)
-//   {
-//       if (!param.IsAlive() || param.IsZombie() || vehicle->IsAlive()) continue;
-//       lpRuntime  = GetVehicleTypeRuntime(param.muVehicleType);
-//       lpHull     = GetHull(param.GetHull());
-//       lpRecord   = lpHull->GetStaticVehicle(param.GetIndexInHull());
-//       lTransform = lpRecord->mTransform;                       ; four lvx128 into a stack copy
-//       lTransform.SetW( lTransform.GetW() - lTransform.GetY() );  ; THE ONE-METRE DROP
-//       if (mbDontCreateStaticVehiclesNearAnyPlayers && !mbAllowDivergentBehaviour) [GATED]
-//           ... reject + zombie/divorce when within lane 1 of unk_8300CF70 of any player ...
-//       luVehicle = luStatic + KU_STATIC_TRAFFIC_OFFSET;
-//       assert(luVehicle < KU_MAX_TOTAL_TRAFFIC);                ; header baked 2475
-//       vehicle->InitialiseAsStatic(&maVehicleAxles[luVehicle], lOutMatrix,
-//                                   mEffectRand.RandomFloat(),
-//                                   param.muVehicleType, lpRuntime,
-//                                   &mpData->mpaVehicleTypesUpdate[param.muVehicleType],
-//                                   lTransform, luVehicle, mVehicleSoaData);
-//       SetVehicleTransform(luVehicle, lOutMatrix);
-//   }
-//   mbDontCreateStaticVehiclesNearAnyPlayers = false;
-//
-// THE ARGUMENT MAP IS READ OFF THE PROLOGUE, NOT HEX-RAYS (0x82722E50..0x82722ED8). Hex-Rays
-// renders the 7th argument as literal `0`; the asm builds it as
-//     lbz r31, 1(r24)                       ; param.muVehicleType
-//     slwi r9, r31, 2 ; add r11, r31, r9 ; slwi r11, r11, 2      ; * 20
-//     lwz  r10, 0x30(TrafficData)           ; mpaVehicleTypesUpdate  (X360 +0x30)
-//     add  r27, r10, r11                    ; -> &mpaVehicleTypesUpdate[type]
-// i.e. it is a REAL pointer to the 20-byte VehicleTypeUpdateData whose mfWheelRadius
-// VehicleAxles::SetFromVehicleTransform then reads (`lfs 0(r6)` -- C3's finding). Passing
-// Hex-Rays' zero would have null-dereferenced on the very first parked car.
-// The register that LOOKS like the 4th argument (r6) is the PPC float-arg GPR skip slot for
-// f1 -- the same trap C3 documented on InitialiseAsStatic itself.
+// ARGUMENT MAP FROM THE PROLOGUE, NOT HEX-RAYS (0x82722E50..0x82722ED8). Hex-Rays renders the
+// 7th argument as literal 0; the asm builds `&mpaVehicleTypesUpdate[type]` (TrafficData +0x30,
+// element stride 20), a real pointer to the VehicleTypeUpdateData whose mfWheelRadius
+// VehicleAxles::SetFromVehicleTransform reads. Passing the zero null-dereferences on the first
+// parked car. The register that looks like the 4th argument (r6) is the PPC float-arg GPR skip
+// slot for f1.
 // ----------------------------------------------------------------------------
 void TrafficEntityModule::StaticVehicles_CreateNewVehicles(
     const BrnTrafficIO::InputBuffer_PostPhysics* lpInput)
@@ -751,23 +648,13 @@ void TrafficEntityModule::StaticVehicles_CreateNewVehicles(
 
     if (lbRejectNearPlayers)
     {
-        // GATE 1 of 2 for this function. ⭐ RE-DERIVED 2026-08-21 (wave T1 round 2, cluster
-        // R2A): BOTH of round 1's stated blockers are now closed --
-        //   (a) InputBuffer_PostPhysics::GetActiveRaceCarOutputInterface() (X360 0x82711850)
-        //       EXISTS, declared at BrnTrafficEntityModuleIO.h DWARF :358 and bodied in
-        //       BrnTrafficEntityModuleIO.cpp this round;
-        //   (b) the rejection radius is RECOVERED: unk_8300CF70 = { 6400.0f, 900.0f, 0, 0 }
-        //       from the unnamed dyn-init thunk at 0x82C66E98, so `vspltw lane 1` == 900.0f
-        //       == 30 m squared (lane 0 is 6400 == 80^2, read elsewhere).
-        // -- AND YET THE LEG STAYS GATED, DELIBERATELY. It is OFFLINE-DEAD by construction:
-        // its guard is `mbDontCreateStaticVehiclesNearAnyPlayers && !mbAllowDivergentBehaviour`
-        // and EnterStartingUpState sets mbAllowDivergentBehaviour = !mbIsOnlineGameMode ||
-        // mbPlayingShowtimeMode, so offline the guard can never be true and the block below
-        // is unreachable. Landing it would add an untestable online-only path (its collection
-        // half also walks every ACTIVE race car, i.e. the rival slots this build never
-        // populates) to a wave whose goal is parked cars offline. Round 2's spec keeps it
-        // parked for exactly that reason; the two facts above are recorded here so the wave
-        // that DOES own online traffic can write it without another recovery pass.
+        // GATE (1 of 2 in this function): the race-car proximity rejection. Parked by choice,
+        // not by a blocker. Its guard is offline-dead, since EnterStartingUpState sets
+        // mbAllowDivergentBehaviour = !mbIsOnlineGameMode || mbPlayingShowtimeMode, and its
+        // collection half walks every active race car, i.e. rival slots this build never fills.
+        // Both pieces it needs are already recovered for whoever writes online traffic: the
+        // getter is DWARF :358 (X360 0x82711850) and the radius is unk_8300CF70 lane 1 ==
+        // 900.0f == 30 m squared (lane 0 is 6400 == 80^2).
         static bool sbLogged = false;
         LogMissingLeg(sbLogged,
             "StaticVehicles_CreateNewVehicles race-car proximity rejection (mbDontCreate"
@@ -800,46 +687,26 @@ void TrafficEntityModule::StaticVehicles_CreateNewVehicles(
 
         const StaticTrafficVehicle* lpRecord = lpHull->GetStaticVehicle(luIndexInHull);
 
-        // ⭐⭐ THE ONE-METRE DROP -- `lTransform.SetW( lTransform.GetW() - lTransform.GetY() )`.
-        // RESTORED 2026-08-21 (wave T1 round 5). Round 1..4 copied the record transform
-        // verbatim and every parked car hung ~1.03 m in the air.
+        // THE ONE-METRE DROP. The authored StaticTrafficVehicle records sit deliberately one
+        // metre high: across the 583 shipped records with a WORLDCOL surface beneath them,
+        // recordY - groundY is +1.026 m median (p25 +1.014, p75 +1.049). The car model's origin
+        // is its wheel-contact plane, so the record must come down by one unit of its OWN up
+        // axis before it becomes a render transform, and this line is what does it. Drop it and
+        // every parked car hangs in the air.
         //
-        // THE AUTHORED RECORD IS DELIBERATELY ONE METRE HIGH. Measured, not argued: for all
-        // 583 of the 875 shipped StaticTrafficVehicle records that have a WORLDCOL surface
-        // directly beneath them, recordY - groundY is +1.026 m median (p25 +1.014, p75 +1.049;
-        // 505 of them inside [+0.9,+1.1]). The car MODEL's origin is the wheel-contact plane
-        // -- from the type's own StreamedDeformationSpec, wheel centre y -0.4337 in handling-
-        // body space, wheel radius 0.5*mScale.y == 0.325, and mCarModelSpaceToHandlingBody-
-        // SpaceTransform's translation y -0.7557, so contact sits at car-model y -0.003. So the
-        // record has to come DOWN by one unit of its own up axis before it becomes a render
-        // transform, and it is this line, not the axle seeding, that does it.
+        // The console does it at 0x82722CD4..0x82722D20: `vsubfp v0, v13, v0` with v13 the
+        // wAxis row and v0 still holding the yAxis row, storing the difference over the raw
+        // wAxis. The yAxis is a unit up vector, which is why the correction is one metre and why
+        // it follows the car's tilt on a banked road rather than being a world-Y constant.
         //
-        // SHIP ASM, 0x82722CD4..0x82722D20, store for store (r3 == the record):
-        //     lvx128  v0,  r0, r3        ; row 0  xAxis                 -> stack var_1B0
-        //     lvx128  v0,  r3, 0x10      ; row 1  yAxis (the UP row)    -> stack var_1A0
-        //     lvx128  v13, r3, 0x20      ; row 2  zAxis                 -> stack var_190
-        //     lvx128  v13, r3, 0x30      ; row 3  wAxis (the position)
-        //     vsubfp  v0,  v13, v0       ; wAxis - yAxis    <-- v0 STILL HOLDS ROW 1
-        //     stvx128 v13, r0, var_180   ; the raw wAxis is stored...
-        //     stvx128 v0,  r0, var_180   ; ...and immediately overwritten by the difference
-        // The Feb-2007 original spells the identical statement inline in
-        // StaticVehicles_MakeAliveTheDeadOnesWithAliveParams (leak BrnTrafficEntityModule.cpp
-        // :4722), so leak and ship agree and the ship did NOT drop the line when it renamed
-        // the function. The record's yAxis is a UNIT up vector (hull 122 record 3 reads
-        // (0.0031, 1.0000, 0.0000)), which is why the correction is one metre and why it
-        // follows the car's own tilt on a banked road instead of being a world-Y constant.
-        //
-        // The GATED player-proximity leg below differences THIS transform's position, not the
-        // raw record's (the console reads back var_180 at 0x82722D90), so the drop belongs
-        // before it, exactly where it sits.
+        // The gated proximity leg below differences THIS transform's position, not the raw
+        // record's (the console reads back var_180 at 0x82722D90), so the drop belongs here.
         Matrix44Affine lTransform = lpRecord->mTransform;
         lTransform.wAxis = lTransform.wAxis - lTransform.yAxis;
 
         if (lbRejectNearPlayers)
         {
-            // Second half of GATE 1: the reject itself (SetZombie + SetDivorced). Not
-            // emitted, for the reasons above -- and emitting it with a guessed radius would
-            // silently delete parked cars.
+            // Second half of the same gate: the reject itself (SetZombie + SetDivorced).
             continue;
         }
 
@@ -849,16 +716,12 @@ void TrafficEntityModule::StaticVehicles_CreateNewVehicles(
 
         const u8  luVehicleType = lrParam.muVehicleType;
 
-        // ⚠️ DO NOT ADD A `- 1.0f` HERE. The console's expansion at
-        // 0x82722E7C..0x82722ED4 is: read the ring slot (a [1,2) float), refill that slot
-        // from the OLD seed's high word, step the LCG, advance the cursor, then
-        // `fsubs f1, f0, f31` with f31 == flt_82001C98 == 1.0f. That IS
-        // CgsNumeric::Random::RandomFloat() in this tree -- its committed body
-        // (CgsRandom.cpp) already ends on `lfRandomFractionPlusOne - 1.0f` and returns a
-        // [0,1) value. Subtracting again would hand InitialiseAsStatic a NEGATIVE
-        // mfRandomVal, which nothing would assert on: every consumer treats it as a 0..1
-        // phase/jitter, so a [-1,0) value would silently invert wheel-rot and headlight
-        // phase on every parked car. Caught by reading the committed callee, not the asm.
+        // DO NOT ADD A `- 1.0f` HERE. The console's expansion at 0x82722E7C..0x82722ED4 (read
+        // the [1,2) ring slot, refill it, step the LCG, then `fsubs f1, f0, f31` with f31 ==
+        // 1.0f) IS CgsNumeric::Random::RandomFloat(), whose committed body already ends on that
+        // subtraction and returns [0,1). Subtracting again hands InitialiseAsStatic a negative
+        // mfRandomVal, which nothing asserts on: consumers treat it as a 0..1 phase, so a
+        // [-1,0) value silently inverts wheel rotation and headlight phase on every parked car.
         const f32 lfRandomVal   = mEffectRand.RandomFloat();
 
         Matrix44Affine lOutMatrix;
@@ -877,11 +740,10 @@ void TrafficEntityModule::StaticVehicles_CreateNewVehicles(
 
         if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())
         {
-            // [T1-static] FIRST InitialiseAsStatic, one-shot, with slot + type + the world
-            // POSITION the console seated (lOutMatrix's translation row, i.e. what
-            // CreateNewVehicleEntities will hand AddEntity next frame). If this position is
-            // (0,0,0) the record's transform never arrived; if it is plausible but nothing
-            // renders, the fault is downstream of the module. DELETE-WHEN-STABLE.
+            // [T1-static] one-shot on the first InitialiseAsStatic, with the world position
+            // seated (what CreateNewVehicleEntities hands AddEntity next frame). (0,0,0) means
+            // the record transform never arrived; a plausible position with nothing on screen
+            // means the fault is downstream of the module. DELETE-WHEN-STABLE.
             static bool sbLogged = false;
             if (!sbLogged)
             {
@@ -892,11 +754,9 @@ void TrafficEntityModule::StaticVehicles_CreateNewVehicles(
                         << " type=" << static_cast<s32>(luVehicleType)
                         << " pos=(" << lrPos.x << ", " << lrPos.y << ", " << lrPos.z << ")\n";
 
-                // [T1-height] the one-metre drop, both ends of it, so a future reader can see
-                // in one line whether 0x82722D14's `vsubfp wAxis, yAxis` is being applied.
-                // recordY - droppedY must equal the record's up-vector length (1.0 m on flat
-                // road); the authored records sit +1.026 m median above the WORLDCOL surface.
-                // DELETE-WHEN-STABLE.
+                // [T1-height] both ends of the one-metre drop, so one line shows whether
+                // 0x82722D14's `vsubfp wAxis, yAxis` is being applied: recordY - droppedY must
+                // equal the record's up-vector length. DELETE-WHEN-STABLE.
                 *lpDiag << "[T1-height] record pos=(" << lpRecord->mTransform.wAxis.x
                         << ", " << lpRecord->mTransform.wAxis.y
                         << ", " << lpRecord->mTransform.wAxis.z << ")"
@@ -943,15 +803,12 @@ void TrafficEntityModule::StaticVehicles_CreateNewVehicles(
 // The loop bounds are the console's literals: it starts at 400 and runs while `< 0x257`
 // (== 599 == KU_TRAILER_TRAFFIC_OFFSET), i.e. the 199 static slots exactly.
 //
-// ⭐ SIGNATURE CORRECTED 2026-08-21 (wave T1 round 4, item 1) -- IT TAKES lpInput AND FORWARDS
-// IT, and the fix removes a latent null deref. IDA types @0x82722F98 as one-argument, which is
-// a Hex-Rays artefact of a PASS-THROUGH: the prologue saves only r3 and never writes r4, so
-// whatever r4 held on entry flows straight into StaticVehicles_CreateNewVehicles' second
-// parameter. The caller proves what that is -- UpdateDecisionFrame @0x8274E508 does
-// `0x8274E61C mr r4, r30` (r30 == lpInput) immediately before the `bl` -- and the DWARF spells
-// it out at BrnTrafficEntityModule.h:1839. The old body passed a LITERAL 0, which is inert
-// only while StaticVehicles_CreateNewVehicles' race-car proximity arm stays gated; the moment
-// the online wave un-gates it, that arm dereferences lpInput.
+// SIGNATURE: it takes lpInput and forwards it, despite IDA typing @0x82722F98 as
+// one-argument. That is a Hex-Rays artefact of a pass-through: the prologue saves only r3 and
+// never writes r4, so whatever r4 held on entry flows into StaticVehicles_CreateNewVehicles'
+// second parameter. UpdateDecisionFrame @0x8274E508 does `mr r4, r30` (r30 == lpInput) right
+// before the `bl`, and the DWARF spells it out at BrnTrafficEntityModule.h:1839. Passing a
+// literal 0 here is inert only while the race-car proximity arm stays gated.
 // ----------------------------------------------------------------------------
 void TrafficEntityModule::StaticVehicles_UpdateVehicles(
     const BrnTrafficIO::InputBuffer_PostPhysics* lpInput)
@@ -995,16 +852,13 @@ void TrafficEntityModule::StaticVehicles_UpdateVehicles(
 //             == KU_SHOWTIME_ONLY_VEHICLE_ASSET_ID);
 //   return ok ? luType : (u8)lpFlowType->mpauVehicleTypeIds[0];
 //
-// ⚠️ RECURRING-BUG CLASS (b) CAUGHT HERE. The console reads the showtime comparand with
-// `ldx r11, mpaVehicleAssets, assetId*8` -- a full 64-bit load -- and compares `cmpld`
-// against the 64-bit literal. An earlier reading of the same site as "the dword at +4"
-// would be an X360-big-endian artefact: on this little-endian host the low half of a u64
-// lives at +0, not +4. It is done BY VALUE through VehicleAsset::GetVehicleId(), which is
-// width- and endian-correct on both.
+// The showtime comparand is a full 64-bit load (`ldx r11, mpaVehicleAssets, assetId*8` then
+// `cmpld`), not "the dword at +4"; that reading is a big-endian artefact, since on this host
+// the low half of a u64 lives at +0. Done by value through VehicleAsset::GetVehicleId(), which
+// is width- and endian-correct on both.
 //
-// The 8-bit roll is deliberate and attested: `clrlwi r29, r11, 24` truncates the LCG's high
-// word to a byte before the comparison, which is what makes comparing it against the u8
-// cumulative-probability table meaningful (the table is 0..255, not 0..100).
+// The 8-bit roll is attested: `clrlwi r29, r11, 24` truncates the LCG's high word to a byte,
+// which is what makes it comparable against the 0..255 cumulative-probability table.
 // ----------------------------------------------------------------------------
 u8 TrafficEntityModule::PickVehicleToSpawn(u32 luFlowTypeId)
 {
@@ -1034,19 +888,11 @@ u8 TrafficEntityModule::PickVehicleToSpawn(u32 luFlowTypeId)
 
     if (!lbFound)
     {
-        // ⚠️ TWO DISTINCT CONSOLE FALLBACKS -- do not collapse them.
-        // This one (the ".cpp 9209" assert, LABEL_12) returns a LITERAL ZERO and never
-        // touches the type-id table:
-        //     0x82723A30  bl   CgsDev__Assert__FireAssert     ; ..., 9209
-        //     0x82723A34  bl   CgsDev__Assert__EndAssert
-        //     0x82723A38  li   r3, 0                          <-- the return value
-        //     0x82723A3C  addi r1, r1, 0xB0 ; b __restgprlr_23
-        // The `mpauVehicleTypeIds[0]` fallback is the OTHER path -- the not-acceptable
-        // tail at 0x827238CC (`lwz r11,0(r26)` / `lhz r11,0(r11)` / `clrlwi r3,r11,24`),
-        // reached only when the big-vehicle/showtime predicate in r29 is 0. Returning it
-        // here would also DEREFERENCE a table the console deliberately avoids: LABEL_12 is
-        // reached from `if (!*(v19+8))`, i.e. exactly when muNumVehicleTypes == 0 and the
-        // array may be empty.
+        // TWO DISTINCT CONSOLE FALLBACKS, do not collapse them. This one (LABEL_12, assert
+        // .cpp 9209) returns a LITERAL zero at 0x82723A38 and never touches the type-id table.
+        // The `mpauVehicleTypeIds[0]` fallback is the other path, the not-acceptable tail at
+        // 0x827238CC. Returning it here would dereference a table the console avoids: LABEL_12
+        // is reached exactly when muNumVehicleTypes == 0 and the array may be empty.
         CGS_ASSERT(false, "Invalid flow type");
         return 0;
     }
@@ -1100,9 +946,8 @@ u8 TrafficEntityModule::PickVehicleToSpawn(u32 luFlowTypeId)
 //       StaticVehicles_Generate(PickVehicleToSpawn(lpRec->mFlowTypeID), luHull, i);  ; +0x40
 //   }
 //
-// The two `muFlags` bits are exactly the SHIP-ONLY mode gates the scout predicted (the byte
-// at +0x43 postdates the Feb-2007 record); cluster C2 landed the field and recorded that
-// ARTIST tests only these two bits, so no enumerator is invented for them here either.
+// The `muFlags` byte at +0x43 is ship-only (it postdates the Feb-2007 record) and ARTIST tests
+// only these two bits, so no enumerator is invented for them.
 // ----------------------------------------------------------------------------
 void TrafficEntityModule::FillNewHull(u16 luHull)
 {
@@ -1110,13 +955,10 @@ void TrafficEntityModule::FillNewHull(u16 luHull)
 
     if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())
     {
-        // [T1-fill] FIRST VISIT PER HULL, and only per hull -- a 400-bit seen-set keyed by
-        // hull index, so a hull that is entered, left and re-entered prints once. This is the
-        // line that says the spawn chain reached a real hull with real records in it; a
-        // muNumStaticTraffic of 0 here means the hull genuinely has no parked slots, which is
-        // a DATA answer, not a code one. DELETE-WHEN-STABLE. [DIAG] NOT IN THE X360 BINARY.
-        // (function-scope static of a POD aggregate -> zero-initialised before first use, so
-        // no explicit clear is needed or wanted.)
+        // [T1-fill] first visit per hull, keyed by a 400-bit seen-set so a hull entered, left
+        // and re-entered prints once. It says the spawn chain reached a real hull; a
+        // muNumStaticTraffic of 0 means that hull has no parked slots in the data.
+        // DELETE-WHEN-STABLE. [DIAG] NOT IN THE X360 BINARY.
         static CgsContainers::BitArray<KU_MAX_HULLS> sSeenHulls;
         if (luHull < KU_MAX_HULLS && !sSeenHulls.IsBitSet(luHull))
         {
@@ -1135,15 +977,13 @@ void TrafficEntityModule::FillNewHull(u16 luHull)
     }
 
     {
-        // ---- THE DRIVING HALF, GATED BY NAME (never by density -- see the file banner) ----
-        // The console's first loop walks the hull's sections, converts each section's
-        // SectionFlow::muVehiclesPerMinute into a spacing along the lane
-        // (Section::CalcParamFromStartParamAndDistanceAlongSection) and calls
-        // GenerateNewVehicle for each slot. NONE of that chain exists in this tree:
-        // Section::CalcParamFromStartParamAndDistanceAlongSection and
-        // TrafficEntityModule::GenerateNewVehicle @0x82736528 are both bodiless, and the
-        // half depends on the lane-param pool ([MEMBER HOLE 1] ParamNeedToSlowData and
-        // [MEMBER HOLE 2] ParamListNode are still not modelled), which is wave 2's scope.
+        // GATE: the DRIVING half. The console's first loop walks the hull's sections, turns
+        // each SectionFlow::muVehiclesPerMinute into a spacing along the lane, and calls
+        // GenerateNewVehicle per slot. None of that chain is bodied
+        // (Section::CalcParamFromStartParamAndDistanceAlongSection, GenerateNewVehicle
+        // @0x82736528), and it needs the lane-param pool ([MEMBER HOLE 1] ParamNeedToSlowData,
+        // [MEMBER HOLE 2] ParamListNode), which is not modelled. Gated by name, never by
+        // zeroing the density, which would kill the parked half too.
         static bool sbLogged = false;
         LogMissingLeg(sbLogged,
             "FillNewHull DRIVING half (per-section generator seeding -> "
@@ -1179,52 +1019,21 @@ void TrafficEntityModule::FillNewHull(u16 luHull)
         }
         else
         {
-            // ---- THE PROXIMITY CULL, GATED BY NAME ----
-            // 0x82743AFC..0x82743B28:
-            //     lvx128 v0, r20, 0x728C0        ; the reference position
-            //     lvx128 v12, rec, 0x30          ; the record's transform translation row
-            //     vsubfp / vmsum3fp128 / vcmpgtfp.  unk_8300CC90 vs distSq -> skip when nearer
+            // GATE: the parked-half proximity cull, 0x82743AFC..0x82743B28 (the +0x728C0
+            // reference position against the record's translation row, `vmsum3fp128` +
+            // `vcmpgtfp.` versus unk_8300CC90).
             //
-            // ⭐ RE-DERIVED 2026-08-21 (wave T1 round 2, cluster R2A). Round 1 recorded TWO
-            //   blockers here. ONE IS NOW CLOSED and one still stands, so the gate REMAINS --
-            //   with the reason narrowed to a single item.
+            // BLOCKER: the reference position at X360 +0x728C0 falls inside the un-modelled
+            // [MEMBER HOLE 6] `Camera mCameraLastFrame` window (mfSpeedMultiplier :879 ends at
+            // +0x72884; mbDEBUGWorstCase :883 resumes at +0x729D8), so it has no attested name.
+            // The radius IS recovered: unk_8300CC90 == 1600.0f == 40 m squared, from the
+            // dyn-init thunk at 0x82C662D0 squaring the 40.0f splat at 0x8300CB80.
+            // DELETE WHEN: `Camera mCameraLastFrame` is modelled at DWARF :881, or the lane is
+            // named some other attested way.
             //
-            //   (b) RETIRED. The squared radius unk_8300CC90 is 1600.0f. It is seeded by an
-            //       unnamed MSVC dynamic-initialiser thunk at 0x82C662D0 that computes it as
-            //       0x8300CB80 (splat 40.0f, thunk 0x82C66110, source flt_820BA590 == 40.0)
-            //       multiplied by itself -- `vmulfp128 v0, v0, v0`, this codebase's `_SQ`
-            //       idiom. So the cull radius is 40 m, and 40^2 == 1600. (Recovered by
-            //       walking XrefsTo in the .i64: a dyn-init thunk is not a function in the
-            //       database, so NO per-function export grep can ever prove one absent --
-            //       which is why round 1 read the slot as "un-dumped rodata". Evidence:
-            //       scratchpad traffic_wave/recovered_constants.md + thunk_dump*.txt.)
-            //
-            //   (a) STANDS, and is now the ONLY blocker. The reference position at X360
-            //       +0x728C0 falls inside the un-modelled [MEMBER HOLE 6]
-            //       `Camera mCameraLastFrame` window of the keystone header, which this
-            //       cluster may not edit this round. The window is bounded on both sides:
-            //       mfSpeedMultiplier (:879) ends at +0x72884, and mbDEBUGWorstCase (:883)
-            //       resumes at +0x729D8 (pinned backwards from miPerfMon_PrePhysicsUpdate
-            //       @+0x729FC through :886..:891), so +0x728C0 is 0x3C bytes into a member
-            //       with no reconstructed interior.
-            //       ⭐ NEW CORROBORATION, from UpdateRaceCarHulls @0x82721460 landed above:
-            //       that function reads the IDENTICAL +0x728C0 lane as an OVERRIDE for the
-            //       player-car sim-box centre, selected by a flag bit at +0x729D4 (also
-            //       inside the window) and re-forced by mpDebugComponent->+0x34. A datum
-            //       that lives in a `Camera` member, is switched by a flag in the same
-            //       member, and is forced by the debug component, is a debug camera position.
-            //       That is a much sharper reading than round 1's "suggestive", but it is
-            //       still an inference about a member with no DWARF name, so it is NOT
-            //       written.
-            //
-            // EFFECT OF THE GATE: parked cars near the reference position are NOT culled, so
-            // this build spawns a SUPERSET of the console's parked set. That fails loud in
-            // the log and visibly (a car may sit where the player starts) rather than
-            // silently deleting cars, which is the safer direction for wave 1.
-            //
-            // UNBLOCKED BY exactly one thing now: modelling `Camera mCameraLastFrame` at
-            // DWARF :881 in BrnTrafficEntityModule.h (or naming the lane some other attested
-            // way). The radius is ready: `const f32 KF_PARKED_TRAFFIC_CULL_RADIUS_SQ = 1600.0f;`
+            // EFFECT: parked cars near the reference position are not culled, so this build
+            // spawns a superset of the console's parked set. A car may sit where the player
+            // starts, which fails visibly rather than silently deleting cars.
             static bool sbLogged = false;
             LogMissingLeg(sbLogged,
                 "FillNewHull parked-half proximity cull -- ONE blocker left: the reference "
@@ -1279,16 +1088,13 @@ void TrafficEntityModule::SpawnNewTraffic(const ActiveHullSet& lrNewActiveHulls)
 
     if (muNumGenerators != 0)
     {
-        // ---- THE GENERATOR HALF, GATED BY NAME (driving traffic; wave 2) ----
-        // 0x82748BB0..: each of muNumGenerators entries counts mafTimesTillNextGeneration
-        // down by mfSimTimeStep, and on expiry runs PickVehicleToSpawn ->
-        // Section::CalcParamFromStartParamAndDistanceAlongSection ->
-        // HullRuntime::GetFirstParamInSection -> Section::CalcDistanceAlongSection ->
-        // GenerateNewVehicle -> CalcTimeToNextGeneration. Of that chain only
-        // HullRuntime::GetFirstParamInSection exists (C3); the four Section/module functions
-        // are bodiless and the whole leg is lane-param work, i.e. wave 2.
-        // It is UNREACHABLE today anyway: muNumGenerators is only ever raised by
-        // RebuildGeneratorList @0x82742DD0, which has no body either.
+        // GATE: the generator half (driving traffic). From 0x82748BB0, each of
+        // muNumGenerators entries counts mafTimesTillNextGeneration down by mfSimTimeStep and
+        // on expiry runs PickVehicleToSpawn -> CalcParamFromStartParamAndDistanceAlongSection
+        // -> GetFirstParamInSection -> CalcDistanceAlongSection -> GenerateNewVehicle ->
+        // CalcTimeToNextGeneration. Only GetFirstParamInSection is bodied. Unreachable today
+        // anyway: muNumGenerators is raised only by RebuildGeneratorList @0x82742DD0, which
+        // has no body either.
         static bool sbLogged = false;
         LogMissingLeg(sbLogged,
             "SpawnNewTraffic GENERATOR half (mafTimesTillNextGeneration tick -> "
@@ -1303,33 +1109,26 @@ void TrafficEntityModule::SpawnNewTraffic(const ActiveHullSet& lrNewActiveHulls)
 // ============================================================================
 
 // ----------------------------------------------------------------------------
-// TrafficEntityModule::RecalculateActiveHulls  @ 0x8274C870   *** PARTIAL ***  (.cpp 7275..7367)
+// TrafficEntityModule::RecalculateActiveHulls  @ 0x8274C870   PARTIAL   (.cpp 7275..7367)
 //
-// REAL here: the five entry asserts, the previous-set snapshot, the rebuild of mActiveHulls
+// Real here: the five entry asserts, the previous-set snapshot, the rebuild of mActiveHulls
 // from maaRaceCarHulls, the two SetDifferences that produce the caller's new/old sets, the
-// miDEBUGOverBudgetness reset, and the same rebuild for mActiveHullsForLocalPlayer.
+// miDEBUGOverBudgetness reset, the same rebuild for mActiveHullsForLocalPlayer, and
+// UpdateRaceCarHulls @0x82721460's offline arm expanded at its single call site below.
 //
-// ⭐ ALSO REAL SINCE 2026-08-21 (wave T1 round 2, cluster R2A): UpdateRaceCarHulls
-// @0x82721460's offline arm, expanded at its single call site below -- the function that
-// FILLS maaRaceCarHulls, i.e. the reason this function has anything to rebuild from. Only
-// its two DEBUG sim-centre overrides and its online (predicted-hull-change) arm are gated.
-//
-// GATED here, each with its own reason:
-//   * PredictHullChanges @0x827348E8 -- an EXPORT HOLE (no per-function JSON at all), and
-//     online-only (`!mbAllowDivergentBehaviour && meState == E_STATE_RUNNING`).
-//   * the baked debug hull-override list (the bool at X360 +0x729F0 selects a 15-entry table
-//     at unk_820BA81C) -- that byte sits in the DWARF's un-emitted :892..:895 window between
-//     mfDEBUGAvoidance_PassScore and miPerfMon_PreSceneUpdate, so it has no name; C1 parked
-//     the identically-un-nameable byte at +0x72521 for the same reason.
-//   * the std::_Sort of mActiveHulls -- ::Set<T,N> has no Sort and CgsSet.h is not this
-//     cluster's file. Order-only: SetDifference is order-independent, so the new/old sets
-//     are identical either way; only the order FillNewHull visits hulls in changes.
-//   * mHullsToAddTriggersFor / mHullsToRemoveTriggersFor -- these need
-//     ::Array<T,N>::AppendSet, which CgsArray.h does not declare (it has AppendArray only).
-//   * the per-old-hull HullRuntime::Release + mUsedHullRuntimeData free and the per-new-hull
-//     allocate + HullRuntime::Prepare, plus the trigger/light-manager events they drive.
-//     Parked cars do not read HullRuntime (only the driving generator does), so this gate
-//     does not block wave 1; SpawnNewTraffic's generator half is gated for the same wave.
+// Gated, each with its own reason:
+//   * PredictHullChanges @0x827348E8 -- an export hole (no per-function JSON), and online-only
+//     (`!mbAllowDivergentBehaviour && meState == E_STATE_RUNNING`).
+//   * the baked debug hull-override list (the bool at X360 +0x729F0 selecting the 15-entry
+//     table at unk_820BA81C) -- that byte sits in the un-emitted DWARF :892..:895 window
+//     between mfDEBUGAvoidance_PassScore and miPerfMon_PreSceneUpdate, so it has no name.
+//   * the std::_Sort of mActiveHulls -- ::Set<T,N> has no Sort. Order-only: SetDifference is
+//     order-independent, so only the order FillNewHull visits hulls in changes.
+//   * mHullsToAddTriggersFor / mHullsToRemoveTriggersFor -- they need ::Array<T,N>::AppendSet,
+//     which CgsArray.h does not declare (it has AppendArray only).
+//   * the per-old-hull HullRuntime::Release + free and the per-new-hull allocate +
+//     HullRuntime::Prepare, with the trigger/light-manager events they drive. Parked cars do
+//     not read HullRuntime; only the driving generator does.
 // ----------------------------------------------------------------------------
 void TrafficEntityModule::RecalculateActiveHulls(
     const BrnTrafficIO::InputBuffer_PostPhysics* lpInput,
@@ -1352,36 +1151,19 @@ void TrafficEntityModule::RecalculateActiveHulls(
     }
 
     // ====================================================================================
-    // ⭐⭐ GATE RETIRED 2026-08-21 (wave T1 round 2, cluster R2A) -- THE BODY OF
-    //     TrafficEntityModule::UpdateRaceCarHulls @0x82721460, ROUND 1's BLOCKER B1.
+    // THE BODY OF TrafficEntityModule::UpdateRaceCarHulls @0x82721460, expanded at its single
+    // call site. It is the only producer of maaRaceCarHulls, which mActiveHulls is rebuilt
+    // from, so without it the new-hull set is always empty and FillNewHull never runs.
     //
-    // This is the only producer of maaRaceCarHulls, and mActiveHulls is rebuilt from nothing
-    // else, so until it ran the new-hull set was always empty and FillNewHull never executed.
-    // All three of round 1's blockers are closed: the Pvs overload is declared and bodied
-    // (BrnTrafficPvs.h/.cpp, DWARF :64 / :70), mfTrafficSimRadius is seeded from the
-    // recovered 0x8300CF10 lane 0 (Construct, below), and
-    // InputBuffer_PostPhysics::GetActiveRaceCarOutputInterface() exists (DWARF :358).
-    //
-    // ⚠️ WHY THE BODY IS EXPANDED HERE INSTEAD OF LIVING AT `TrafficEntityModule::
-    //    UpdateRaceCarHulls` IN A PARTFILE. The console has it as a separate member function
-    //    with EXACTLY ONE caller (its `xrefs_to` names only RecalculateActiveHulls
-    //    @0x8274C870), and it is NOT declared in BrnTrafficEntityModule.h. That header is
-    //    owned by a different cluster this round, so the declaration line cannot be added
-    //    from here, and a member function cannot be defined without one. Turning it into a
-    //    free function taking `TrafficEntityModule&` would be the `Apt*_<verb>` shim
-    //    anti-pattern the faithfulness gate exists to catch. Expanding it at its single call
-    //    site is therefore the only faithful option available -- and it is REVERSIBLE IN ONE
-    //    EDIT. FLAG: OUTLINE-ME. THE EXACT DECLARATION TEXT, verbatim, is this one line:
+    // FLAG: OUTLINE-ME. The console has this as a member function with exactly one caller, but
+    // it is not declared in BrnTrafficEntityModule.h and a member cannot be defined without a
+    // declaration. A free function taking `TrafficEntityModule&` would be the shim
+    // anti-pattern the faithfulness gate catches, so it is expanded here instead. To outline
+    // it, add this line to BrnTrafficEntityModule.h beside RecalculateActiveHulls (private,
+    // like its caller) and move the block below into a partfile verbatim; it reads only
+    // lpInput and members, so nothing else changes:
     //
     //        void UpdateRaceCarHulls( const BrnTrafficIO::InputBuffer_PostPhysics* lpInput );
-    //
-    //    Add it to BrnTrafficEntityModule.h beside RecalculateActiveHulls (same access
-    //    section; the console's only caller is RecalculateActiveHulls @0x8274C870, so it is
-    //    private like its caller), then move the block below into a partfile verbatim -- the
-    //    body already reads only `lpInput` and members, so no other edit is needed.
-    //    It is spelled out HERE, in the tree, ON PURPOSE: the first pass cited an external
-    //    wave document for it, and a hand-off that lives outside the tree is a hand-off that
-    //    can go missing (the C5 banner in this directory says exactly that -- and it did).
     //
     // WHAT THE CONSOLE DOES (0x82721484..0x827217FC):
     //   assert(IsDecisionFrame());                                     ; baked .cpp 7575
@@ -1405,10 +1187,9 @@ void TrafficEntityModule::RecalculateActiveHulls(
     //   }
     //   else { ...the ONLINE predicted-hull-change replay, GATED below... }
     //
-    // ⚠️ THE RETURN VALUE OF THE TWO CORNER CALLS IS DISCARDED. The console keeps only the
-    // four grid coordinates; the linear cell index it also computes is dead in both cases
-    // (its `result` register is simply overwritten). Reproduced -- the calls are still made
-    // because their bounds ASSERT is a real side effect.
+    // The return value of the two corner calls is discarded: the console keeps only the four
+    // grid coordinates and overwrites the linear cell index. The calls still happen, because
+    // their bounds assert is a real side effect.
     // ====================================================================================
     {
         CGS_ASSERT(IsDecisionFrame(), "IsDecisionFrame()");   // baked .cpp 7575
@@ -1432,58 +1213,31 @@ void TrafficEntityModule::RecalculateActiveHulls(
                                "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT");
                 }
 
-                // ---- the centre of the traffic sim box ------------------------------------
-                // Console default (0x82721590..0x827215A4): the PLAYER CAR's world position,
-                // read as `GetRaceCarState(lePlay)->mTransform.wAxis` -- the asm builds
-                // `addi r11, <state>, 0x1F0 ; lvx128 v126, r11, 0x30`, and 0x1F0 == 496 ==
-                // RaceCarState::mTransform with +0x30 == Matrix44Affine::wAxis, the
-                // translation row. (The X360 symbol at that call is IDA's
-                // `RCEntityActiveRaceCarO...` == GetRaceCarStateMutable @0x8227D690; the
-                // const twin GetRaceCarState was ICF-folded onto it, which is exactly what
-                // BrnRCEntityActiveRaceCarOutputInterface.cpp's own banner for :220 records.
-                // A const interface pointer must use the const form.)
+                // The sim-box centre, console default (0x82721590): the player car's world
+                // position, `GetRaceCarState(lePlay)->mTransform.wAxis` (asm `addi r11, state,
+                // 0x1F0 ; lvx128 v126, r11, 0x30`, where 0x1F0 is RaceCarState::mTransform and
+                // +0x30 its translation row). IDA names the call GetRaceCarStateMutable
+                // @0x8227D690 because the const twin was ICF-folded onto it; a const interface
+                // pointer needs the const form.
                 //
-                // ⚠️ ONE ASSERT DIFFERS, deliberately, and it is recorded rather than
-                // "fixed": 0x8227D690 carries THREE asserts (index >= 0, index < COUNT, and
-                // `IsRaceCarActive(index)` at BrnRaceCarEntityModuleOutputInterface.h:792);
-                // the committed const :220 body carries only the two bounds asserts. The
-                // third is unreachable here anyway -- IsPlayerCarActive() has already
-                // returned true, and the player slot cannot be simultaneously the player's
-                // and inactive -- so adding it would be new surface on someone else's file
-                // for no behavioural gain. Same note applies to PostPhysicsUpdate's tail,
-                // which reaches the same accessor.
+                // ASSERT DELTA, deliberate: 0x8227D690 carries three asserts (index >= 0,
+                // index < COUNT, IsRaceCarActive(index)); the committed const :220 body carries
+                // only the two bounds ones. The third is unreachable here, since
+                // IsPlayerCarActive() already returned true. Same applies at
+                // PostPhysicsUpdate's tail, which reaches the same accessor.
                 const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface::RaceCarState*
                     lpPlayerState = lpActiveRaceCars->GetRaceCarState(lePlayerCar);
                 const Vector3 lSimCentre = lpPlayerState->mTransform.wAxis;
 
                 {
-                    // ---- THE TWO DEBUG CENTRE OVERRIDES, GATED BY NAME ----
-                    // Both replace lSimCentre with the SAME 16-byte lane at X360 +0x728C0:
-                    //   (a) 0x82721554..0x8272158C: `ldx r11, this, 0x729D0` then
-                    //       `rlwinm r11,r11,0,17,17` -- i.e. the word at +0x729D4 tested
-                    //       against 0x4000 -- selects the lane instead of the car;
-                    //   (b) 0x827215A8..0x827215C8: `lwzx r11, this, 0x727B0` (mpDebugComponent,
-                    //       pinned by its neighbour mpLogger at +0x727B4 -- see
-                    //       EnterStartingUpState) and, if non-null, its byte at +0x34,
-                    //       overrides it again.
-                    // BOTH the datum (+0x728C0) and the flag word (+0x729D4) fall inside the
-                    // un-modelled [MEMBER HOLE 6] `Camera mCameraLastFrame` window of the
-                    // keystone header (mfSpeedMultiplier :879 ends at +0x72884;
-                    // mbDEBUGWorstCase :883 resumes at +0x729D8, pinned backwards from
-                    // miPerfMon_PrePhysicsUpdate @+0x729FC), so neither has an attested member
-                    // name and neither can be reached from this cluster's files.
-                    //
-                    // ⭐ THIS IS ALSO NEW EVIDENCE FOR FillNewHull's parked-half cull, which
-                    // reads the identical +0x728C0 lane: a datum that (i) lives inside a
-                    // `Camera` member, (ii) is selected by a flag bit that lives inside the
-                    // same member, and (iii) is overridden by the DEBUG COMPONENT, is a debug
-                    // camera position -- consistent with mbDEBUGPickVehicleFromCamera being
-                    // the only consumer [MEMBER HOLE 6]'s banner names. Still not attestation
-                    // of a NAME, so still not written.
-                    //
-                    // EFFECT OF THE GATE: NONE on a normal boot. Both arms are debug-only
-                    // overrides of a default this code takes; the live path is the console's
-                    // live path.
+                    // GATE: the two DEBUG sim-centre overrides, both substituting the same
+                    // 16-byte lane at X360 +0x728C0 -- one selected by the +0x729D4 word tested
+                    // against 0x4000 (0x82721554), one forced by mpDebugComponent->+0x34
+                    // (0x827215A8). Both the lane and the flag word fall inside the un-modelled
+                    // [MEMBER HOLE 6] `Camera mCameraLastFrame` window, so neither has an
+                    // attested name. No effect on a normal boot: the live default is taken.
+                    // DELETE WHEN: that window is modelled. FillNewHull's parked-half cull
+                    // reads the same lane and unblocks with it.
                     static bool sbLogged = false;
                     LogMissingLeg(sbLogged,
                         "UpdateRaceCarHulls DEBUG sim-centre overrides (the +0x729D4 & 0x4000 "
@@ -1494,15 +1248,11 @@ void TrafficEntityModule::RecalculateActiveHulls(
                         "position) is taken");
                 }
 
-                // ---- the box half-extent --------------------------------------------------
-                // 0x827215CC..0x82721604: `lvx128 v0, this, 0x713B0` (mfTrafficSimRadius),
-                // then `vperm128 v127, v0, <zero>, <table at unk_82CDA350>` +
-                // `vrlimi128 v127, v0, 2, 0` -- the SDK's standard VecFloat -> Vector3 lane
-                // shuffle (w zeroed, y restored from the source). Since Construct seeds the
-                // member as a SPLAT of 195.0f, every lane the shuffle can select is 195.0f;
-                // and only the X and Z lanes reach the Pvs at all (both GetHullIndexForPoint
-                // overloads read lanes 0 and 2 only), so the shuffle is expressed as the
-                // Vector3 it produces rather than transcribed as VMX.
+                // The box half-extent, 0x827215CC..0x82721604: mfTrafficSimRadius through the
+                // SDK's VecFloat -> Vector3 lane shuffle (w zeroed, y restored). Construct
+                // seeds the member as a splat of 195.0f, so every lane the shuffle can select
+                // is 195.0f, and only lanes 0 and 2 reach the Pvs. Written as the Vector3 it
+                // produces rather than transcribed as VMX.
                 Vector3 lHalfExtent;
                 lHalfExtent.x = mfTrafficSimRadius.x;
                 lHalfExtent.y = mfTrafficSimRadius.y;
@@ -1564,16 +1314,11 @@ void TrafficEntityModule::RecalculateActiveHulls(
         }
         else
         {
-            // ---- THE ONLINE ARM, GATED BY NAME ----
-            // 0x82721870..: replays maPredictedHullChanges (the Array<HullChangeInfo,400>
-            // PredictHullChanges @0x827348E8 fills) instead of computing the box locally, so
-            // every client turns the same hulls on in the same frame; on a miss it prints
-            // "HULL SYNC DIVERGENCE: hit historical prediction", calls
-            // DEBUGDumpHullPredictions @0x827211B0 and latches mbHullSyncDivergence.
-            // GATED because its producer PredictHullChanges is an ARTIST EXPORT HOLE (no
-            // per-function JSON exists at all), so maPredictedHullChanges is never filled in
-            // this tree and replaying it would only assert. UNREACHABLE OFFLINE:
-            // mbAllowDivergentBehaviour is true whenever !mbIsOnlineGameMode.
+            // GATE: the online arm from 0x82721870, which replays maPredictedHullChanges
+            // instead of computing the box locally so every client turns the same hulls on in
+            // the same frame, and on a miss latches mbHullSyncDivergence. Its producer
+            // PredictHullChanges @0x827348E8 is an ARTIST export hole, so the array is never
+            // filled here and replaying it would only assert. Dead offline anyway.
             static bool sbLogged = false;
             LogMissingLeg(sbLogged,
                 "UpdateRaceCarHulls ONLINE arm (!mbAllowDivergentBehaviour) -- replays "
@@ -1582,9 +1327,8 @@ void TrafficEntityModule::RecalculateActiveHulls(
         }
     }
 
-    // ---- snapshot the previous set, then rebuild it -------------------------------------
-    // The console memcpy's 148 bytes (Set<u16,72>: 144 element bytes + the 4-byte length) of
-    // mActiveHulls into a stack temp before clearing it.
+    // Snapshot the previous set, then rebuild it. The console memcpy's 148 bytes (Set<u16,72>:
+    // 144 element bytes plus the 4-byte length) into a stack temp before clearing.
     const ActiveHullSet lPreviousActiveHulls = mActiveHulls;
     mActiveHulls.Clear();
 
@@ -1625,11 +1369,10 @@ void TrafficEntityModule::RecalculateActiveHulls(
 
     if (lpOutNewHulls->GetLength() != 0 || lpOutOldHulls->GetLength() != 0)
     {
-        // 0x8274CA00-ish LABEL_43: the debug over-budget counter is reset whenever the active
-        // set actually moved. +468932 == miDEBUGOverBudgetness (:845) -- pinned by the debug
-        // block's own run: mpLogger @+468916, mbDEBUGStopTrafficMoving @+468920,
-        // meDEBUGAirRamToFire @+468924, miDEBUGOverrideVehicleToSpawn @+468928 (Construct
-        // stores -1 there), miDEBUGOverBudgetness @+468932.
+        // LABEL_43: the debug over-budget counter resets whenever the active set moved.
+        // +468932 == miDEBUGOverBudgetness (:845), pinned by the debug block's run: mpLogger
+        // @+468916, mbDEBUGStopTrafficMoving @+468920, meDEBUGAirRamToFire @+468924,
+        // miDEBUGOverrideVehicleToSpawn @+468928.
         miDEBUGOverBudgetness = 0;
     }
 
@@ -1683,51 +1426,27 @@ void TrafficEntityModule::RecalculateActiveHulls(
 // ============================================================================
 
 // ----------------------------------------------------------------------------
-// TrafficEntityModule::PostPhysicsUpdate  @ 0x8274E6D0   *** PARTIAL ***
+// TrafficEntityModule::PostPhysicsUpdate  @ 0x8274E6D0   PARTIAL
 //
-// REAL here: the buffer lock bracket, the streaming-complete latch, UpdateDensity, the
-// mbDEBUGTurnTrafficOff tear-down trigger, and the ENTIRE E_STATE_STARTING_UP arm (which is
-// the arm this cluster exists for -- POPULATING is where parked cars are created).
+// Real here: the buffer lock bracket, the streaming-complete latch, UpdateDensity, the
+// mbDEBUGTurnTrafficOff tear-down trigger, the whole E_STATE_STARTING_UP arm (POPULATING is
+// where parked cars are created), and the tail's local-player refresh (meLocalPlayerIndex,
+// mLocalPlayerPosition, mLocalPlayerDirection).
 //
-// ⭐ ALSO REAL SINCE 2026-08-21 (wave T1 round 2, cluster R2A): the tail's LOCAL PLAYER
-// refresh (meLocalPlayerIndex / mLocalPlayerPosition / mLocalPlayerDirection), un-gated now
-// that InputBuffer_PostPhysics::GetActiveRaceCarOutputInterface() exists.
+// Gated: the pre-state head (UpdateDEBUG, HandleExternalRequests), most of the
+// E_STATE_RUNNING arm, the E_STATE_TEARING_DOWN arm, and the rest of the tail (perfmon,
+// UpdateEventStarts, the network, traffic-type and replay legs). None is bodied in this tree
+// and none is on the parked-car path.
 //
-// GATED here: the pre-state head (UpdateDEBUG / HandleExternalRequests / UpdateStreaming),
-// the E_STATE_RUNNING arm, the E_STATE_TEARING_DOWN arm, and the REST of the tail (perfmon,
-// UpdateEventStarts, the network + traffic-type + replay legs). None of them has a body in
-// this tree and none of them is on the parked-car path.
-//
-// ⚠️ ONE-WAY DEPENDENCE ON PreSceneUpdate -- SATISFIED IN SOURCE 2026-08-21 (wave T1 round 2,
-// cluster R2A), CONDITIONAL ON THE MOUNT: PreSceneUpdate is REAL in the sibling partfile
-// BrnTrafficEntityModule_wT1_02.cpp and its WorldLinkStubs.cpp gate is RETIRED in the same
-// change -- so meStartingUpState reaches POPULATING and the arm below is entered AS SOON AS
-//     echo "%SRC%\GameSource\World\EntityModules\TrafficEntityModule\BrnTrafficEntityModule_wT1_02.cpp"
-// is added to tools/build/build_game_exe.bat beside this file's own mount. That bat line is
-// CONDUCTOR-OWNED (agents may not edit the build script), so until it lands the partfile is
-// not compiled into the exe and the exe does not link at all (LNK2019 on PreSceneUpdate --
-// loud, not silent, which is the point of retiring the gate in the same change).
-// ⚠️ DO NOT re-promote this to an unconditional "the arm below is entered" claim without
-// grepping the bat first: the per-TU `cl /c` gate is blind to the mount, so a green selfcheck
-// proves nothing about it. That is exactly the stale-banner class this wave was told to hunt.
-// The paragraph that follows is kept because it records WHY the dependence exists and why the
-// transition could not simply be moved here.
-//
-// The console advances
-// E_STARTINGUPSTATE_WAITING_FOR_PLAYER -> _POPULATING in **PreSceneUpdate** @0x8274A968, not
-// here (Feb-2007 spells that arm at BrnTrafficEntityModule.cpp:1196; the X360 export for
-// PreSceneUpdate is a HOLE, so the leak is the only rung available for it). BEFORE this round
-// PreSceneUpdate was an inert gate in WorldLinkStubs.cpp, so meStartingUpState never
-// left WAITING_FOR_PLAYER and the POPULATING arm below was never entered. That was the
-// SECOND of the two blockers named in the C4 report -- and it could not be bodied here
-// either, because the leak's arm reads
-// `lpInput->GetActiveRaceCarOutputInterface()->IsPlayerCarActive()` on the PRE-SCENE input
-// buffer, which this function does not have. (That getter itself was the round-1 gap: it is
-// now REAL -- InputBuffer_PreScene::GetActiveRaceCarOutputInterface, DWARF :153 / sub_82710BD8
-// -- in BrnTrafficEntityModuleIO.cpp, landed by this same cluster.) Emitting the
-// transition WITHOUT that test would advance to POPULATING before the player car exists,
-// which is strictly worse than not advancing at all (no hulls, no cars, and the module then
-// walks on to RUNNING with an empty world).
+// DEPENDS ON PreSceneUpdate BEING MOUNTED. The console advances
+// E_STARTINGUPSTATE_WAITING_FOR_PLAYER -> _POPULATING in PreSceneUpdate @0x8274A968, not here,
+// and its body lives in BrnTrafficEntityModule_wT1_02.cpp. That transition cannot be moved
+// here: it reads `lpInput->GetActiveRaceCarOutputInterface()->IsPlayerCarActive()` on the
+// PRE-SCENE input buffer, which this function does not have, and emitting it without that test
+// would advance to POPULATING before the player car exists, reaching RUNNING with an empty
+// world. So the POPULATING arm below runs only once _wT1_02.cpp is in
+// tools/build/build_game_exe.bat. Until then the exe fails to link with LNK2019 on
+// PreSceneUpdate; the per-TU `cl /c` gate cannot see the mount either way.
 // ----------------------------------------------------------------------------
 void TrafficEntityModule::PostPhysicsUpdate(CgsModule::IOBufferStack* lpInputBufferStack,
                                             CgsModule::IOBufferStack* lpOutputBufferStack,
@@ -1737,8 +1456,6 @@ void TrafficEntityModule::PostPhysicsUpdate(CgsModule::IOBufferStack* lpInputBuf
 {
     (void)lpInputBufferStack;
     (void)lpOutputBufferStack;
-    // NOTE: lUpdateSet is READ as of wave T1 round 4 -- see the E_STATE_RUNNING arm's
-    // lbSimPaused (X360 0x8274E710 `clrlwi r27, r30, 31`). Its `(void)` cast is gone.
 
     lpOutput->LockForWrite();
     lpInput->LockForRead();
@@ -1747,27 +1464,16 @@ void TrafficEntityModule::PostPhysicsUpdate(CgsModule::IOBufferStack* lpInputBuf
         static bool sbLogged = false;
         LogMissingLeg(sbLogged,
             "PostPhysicsUpdate head legs UpdateDEBUG @0x8271DC78 / HandleExternalRequests -- "
-            "neither is bodied in this tree. Consequence for wave 1: the module never consumes "
-            "game-mode requests, so mfGameModeDensityScale keeps the value ResetEventData "
-            "seeded (mfBaseDensityScale == 1.0f), which is the density parked cars need. "
-            "(The third leg this gate used to cover, UpdateStreaming @0x82748848, is LIVE as "
-            "of wave T1 round 3 -- see the call immediately below)");
+            "neither is bodied in this tree. Consequence: the module never consumes game-mode "
+            "requests, so mfGameModeDensityScale keeps the value ResetEventData seeded "
+            "(mfBaseDensityScale == 1.0f), which is the density parked cars need");
     }
 
-    // ---- THE STREAMER PUMP, head call (0x8274E740 `bl UpdateStreaming`) -------------------
-    // (address corrected 2026-08-21 round-3 FIX pass: the old comment said 0x8274E718, which
-    // is inside the preceding block; the `bl` is at 0x8274E740, and UpdateDensity's is at
-    // 0x8274E7A0 -- so "before UpdateDensity" is confirmed, only the address was off.)
-    // ⭐⭐ UN-GATED 2026-08-21 (wave T1 round 3, closure item 1). The body now exists in the
-    // sibling partfile BrnTrafficEntityModule_wT1_04.cpp. This is the call that makes the
-    // game ASK for a VEH_T*_GR bundle: LoadData's SetAssetList publishes the catalogue, and
-    // nothing requests anything until TrafficCarStreamer::Update runs -- whose only pump is
-    // UpdateStreaming, whose only two call sites are this one and the POPULATING one below.
-    //
-    // ⚠️ MOUNT DEPENDENCE, stated so nobody reads a green selfcheck as proof: the per-TU
-    // `cl /c` gate cannot see whether _wT1_04.cpp is on tools/build/build_game_exe.bat. If it
-    // is not mounted this call is an LNK2019 at exe link -- loud, which is the point. The bat
-    // line is conductor-owned and is in this round's report.
+    // The streamer pump, head call (`bl UpdateStreaming` @0x8274E740, before UpdateDensity's
+    // at 0x8274E7A0). This is what makes the game ASK for a VEH_T*_GR bundle: SetAssetList
+    // publishes the catalogue, and nothing is requested until TrafficCarStreamer::Update runs,
+    // whose only pump is UpdateStreaming (body in BrnTrafficEntityModule_wT1_04.cpp, which
+    // must be mounted or this is an LNK2019).
     UpdateStreaming(lpOutput);
 
     if (mbWaitingForStreaming && mStreamer.AreAllAssetsLoaded())
@@ -1776,21 +1482,14 @@ void TrafficEntityModule::PostPhysicsUpdate(CgsModule::IOBufferStack* lpInputBuf
 
         static bool sbLogged = false;
         LogMissingLeg(sbLogged,
-            "PostPhysicsUpdate StreamingCompleteEvent(E_MODULE_TRAFFIC_ENTITY) emit -- "
-            "BANNER CORRECTED 2026-08-21 (wave T1 round 3 sweep): the old text said 'the GsmIO "
-            "event type ... is not reconstructed', and that HALF IS FALSE -- "
-            "BrnGameState::GameStateModuleIO::StreamingCompleteEvent is real "
-            "(GameSource/GameState/BrnGameEvents.h:99) and the queue getter is real "
-            "(GetGameEventQueue non-const, BrnTrafficEntityModuleIO.h). TWO REAL BLOCKERS "
-            "REMAIN, both one-step: (a) that struct's EModule enum in the tree carries only an "
-            "INVENTED-name E_MODULE_WORLD_GRAPHICS=2; the DecFIGS DWARF gives the whole set "
-            "(E_MODULE_TRAFFIC_ENTITY=0, RACE_CAR_ENTITY=1, WORLD_ENTITY=2, GUI_SCREEN=3, "
-            "COUNT=4) and the X360 emit here stores literal 0, so the traffic enumerator is "
-            "doubly attested and needs an ADDITIVE completion in BrnGameEvents.h (not this "
-            "wave's file); (b) the console posts `AddEvent(&record, 9, 16)` writing ONLY word 0 "
-            "-- 16 is the CONSOLE record size and the host record is not 16 bytes, so the size "
-            "argument has to be derived from the host type, not copied. The FLAG ITSELF is "
-            "cleared, faithfully, so the module does not wait forever");
+            "PostPhysicsUpdate StreamingCompleteEvent(E_MODULE_TRAFFIC_ENTITY) emit -- TWO "
+            "blockers, both one step: (a) the tree's EModule enum in BrnGameEvents.h carries "
+            "only an invented-name E_MODULE_WORLD_GRAPHICS=2, while the DecFIGS DWARF gives the "
+            "whole set (TRAFFIC_ENTITY=0, RACE_CAR_ENTITY=1, WORLD_ENTITY=2, GUI_SCREEN=3, "
+            "COUNT=4) and the X360 emit stores literal 0, so it needs an additive completion in "
+            "a header this wave does not own; (b) the console posts `AddEvent(&record, 9, 16)` "
+            "where 16 is the CONSOLE record size, so the host size must come from the host "
+            "type. The FLAG ITSELF is cleared, so the module does not wait forever");
     }
 
     UpdateDensity();
@@ -1806,14 +1505,11 @@ void TrafficEntityModule::PostPhysicsUpdate(CgsModule::IOBufferStack* lpInputBuf
         switch (meStartingUpState)
         {
         case E_STARTINGUPSTATE_WAITING_FOR_PLAYER:
-            // The console's arm is empty HERE -- the transition lives in PreSceneUpdate
-            // @0x8274A968, which is REAL as of 2026-08-21 in the sibling partfile
-            // BrnTrafficEntityModule_wT1_02.cpp (see the banner). PreScene runs before
-            // PostPhysics in the frame, so the state can flip and this arm's successor run on
-            // the SAME frame -- which is why meLocalPlayerIndex, refreshed in this function's
-            // tail, is one frame old when POPULATING reads it. That is the console's ordering
-            // too, and offline the POPULATING guard falls through on mbAllowDivergentBehaviour
-            // regardless.
+            // The console's arm is empty here; the transition lives in PreSceneUpdate
+            // @0x8274A968 (_wT1_02.cpp). PreScene runs before PostPhysics, so the state can
+            // flip and the next arm run on the same frame, which is why meLocalPlayerIndex,
+            // refreshed in this function's tail, is one frame old when POPULATING reads it.
+            // That is the console's ordering too.
             break;
 
         case E_STARTINGUPSTATE_POPULATING:
@@ -1849,19 +1545,12 @@ void TrafficEntityModule::PostPhysicsUpdate(CgsModule::IOBufferStack* lpInputBuf
                     StaticVehicles_CreateNewVehicles(lpInput);
                 }
 
-                // ---- THE STREAMER PUMP, POPULATING call (0x8274ED58) ------------------
-                // (address corrected 2026-08-21 round-3 FIX pass: 0x8274ED60 is the FOLLOWING
-                // `bl sub_82711850`; the `bl UpdateStreaming` is at 0x8274ED58, right after
-                // SpawnNewTraffic @0x8274ED28. The placement claim is unchanged and re-derived.)
-                // ⭐⭐ UN-GATED 2026-08-21 (wave T1 round 3, closure item 1). Note the console
-                // places it OUTSIDE the mbAllowDivergentBehaviour block above -- an online
-                // client that created no vehicles locally still streams the assets its hull
-                // declares. Order reproduced exactly: after the spawn legs, before
-                // UpdateParams_DoTimeSlicedLogic, before the state advance.
-                //
-                // This is the call that matters for the parked-car frontier: it runs on the
-                // ONE frame the module populates, with the player's hull list freshly built
-                // by RecalculateActiveHulls, so AddVehiclesToTargetList has a hull to read.
+                // The streamer pump, POPULATING call (`bl UpdateStreaming` @0x8274ED58, right
+                // after SpawnNewTraffic @0x8274ED28). The console places it OUTSIDE the
+                // mbAllowDivergentBehaviour block above, so an online client that created no
+                // vehicles locally still streams the assets its hull declares. It runs on the
+                // one frame the module populates, with the player's hull list freshly built by
+                // RecalculateActiveHulls, so AddVehiclesToTargetList has a hull to read.
                 UpdateStreaming(lpOutput);
 
                 {
@@ -1869,9 +1558,7 @@ void TrafficEntityModule::PostPhysicsUpdate(CgsModule::IOBufferStack* lpInputBuf
                     LogMissingLeg(sbLogged,
                         "PostPhysicsUpdate POPULATING leg UpdateParams_DoTimeSlicedLogic "
                         "@0x82743FE8 -- an EXPORT HOLE with no body in this tree. It is the "
-                        "DRIVING-param time-slicer (wave 2); parked cars have no param plan "
-                        "to slice. (Its companion on this gate, UpdateStreaming @0x82748848, "
-                        "is LIVE as of wave T1 round 3 -- see the call immediately above)");
+                        "DRIVING-param time-slicer; parked cars have no param plan to slice");
                 }
 
                 meStartingUpState = E_STARTINGUPSTATE_WAITING_FOR_STREAMING;
@@ -1902,22 +1589,10 @@ void TrafficEntityModule::PostPhysicsUpdate(CgsModule::IOBufferStack* lpInputBuf
         break;
 
     // ====================================================================================
-    // ⭐⭐ THE STEADY-STATE ARM, UN-GATED 2026-08-21 (wave T1 round 4, item 1).
-    //
-    // Round 3's banner here listed eleven legs and said "none is bodied". THREE OF THE
-    // ELEVEN NOW ARE -- UpdateDecisionFrame @0x8274E508 and UpdateNonDecisionFrame
-    // @0x8274C1A8 (both landed this round in BrnTrafficEntityModule_wT1_06.cpp) and the
-    // dispatch between them -- and those three are the whole reason the arm exists on the
-    // parked path. Everything else in the old list stays gated below, each on its own line
-    // with its own reason.
-    //
-    // ⚠️ THE ROUND-4 BRIEF NAMED THE WRONG HOME FOR THESE LEGS, AND THE ASM SETTLES IT.
-    // The brief asked to "un-gate the PostPhysicsUpdate E_STATE_RUNNING-arm legs ...
-    // RecalculateActiveHulls, SpawnNewTraffic, the StaticVehicles_* updates". This arm calls
-    // NONE of those three. It dispatches to UpdateDecisionFrame, which calls all of them.
-    // Un-gating "them" here would have meant writing a second, invented copy of the decision
-    // frame inside PostPhysicsUpdate. See _wT1_06.cpp's banner for the full derivation, and
-    // for the gate the brief did not name at all (IsDecisionFrame's producer, UpdateTimers).
+    // THE STEADY-STATE ARM. It calls neither RecalculateActiveHulls, SpawnNewTraffic nor the
+    // StaticVehicles_* updates; it dispatches to UpdateDecisionFrame / UpdateNonDecisionFrame
+    // (_wT1_06.cpp), which call them. Writing them here would be a second, invented copy of
+    // the decision frame.
     //
     // Console order, 0x8274E7F0..0x8274E8FC, reproduced exactly:
     //   StartMonitor(+0x72A0C)
@@ -1946,14 +1621,10 @@ void TrafficEntityModule::PostPhysicsUpdate(CgsModule::IOBufferStack* lpInputBuf
                 "produces or consumes a parked car");
         }
 
-        // 0x8274E710 `clrlwi r27, r30, 31` -- bit 0 of the update set is the SIM-PAUSED bit.
-        // ⚠️ FLAG (no enumerator): BrnUpdateSet is a bare `typedef u16` with no named bits in
-        // this tree (SharedClasses/BrnSharedConstants.h), and PreSceneUpdate gates its own
-        // update-set decode for exactly that reason -- but there the ARTIST body is an export
-        // hole, so nothing attests the mask. HERE IT IS ATTESTED: this function's own asm
-        // masks bit 0 and feeds it straight into the `IsPaused() || ...` test below. The bit's
-        // NAME is still unrecovered (the Feb-2007 leak calls it E_HLA_UPDATE_PAUSED); the bit
-        // itself is not a guess, so the leg is written rather than gated.
+        // 0x8274E710 `clrlwi r27, r30, 31` -- bit 0 of the update set is the sim-paused bit,
+        // fed straight into the `IsPaused() || ...` test below. FLAG (no enumerator):
+        // BrnUpdateSet is a bare `typedef u16` with no named bits, so the bit is written as a
+        // literal. Its name is unrecovered; the leak calls it E_HLA_UPDATE_PAUSED.
         const bool lbSimPaused = ((lUpdateSet & 1u) != 0);
 
         if (IsPaused() || lbSimPaused)
@@ -1963,7 +1634,6 @@ void TrafficEntityModule::PostPhysicsUpdate(CgsModule::IOBufferStack* lpInputBuf
         }
         else
         {
-            // ⭐⭐ THE DISPATCH. This is the whole of item 1.
             if (IsDecisionFrame())
             {
                 UpdateDecisionFrame(lpInput, lpOutput);
@@ -1974,15 +1644,10 @@ void TrafficEntityModule::PostPhysicsUpdate(CgsModule::IOBufferStack* lpInputBuf
             }
 
             {
-                // GenerateSceneUpdateEvents: the per-frame MOVER (one scene update event per
-                // vehicle whose transform changed). No body in this tree, and it is the
-                // driving half by construction -- a parked car's transform never changes
-                // after StaticVehicles_CreateNewVehicles seats it, and its scene entity was
-                // already created AT its world position by CreateNewVehicleEntities' AddEntity
-                // (which carries the bounding-sphere centre). So parked cars are correctly
-                // placed without it; only moving traffic would be stale. Recorded here
-                // because "does the parked path also need a per-frame position leg?" was an
-                // explicit round-4 question: the answer is NO, and this is where the seam is.
+                // GATE: GenerateSceneUpdateEvents, the per-frame mover (one scene update event
+                // per vehicle whose transform changed). No body, and the parked path does not
+                // need it: AddEntity already carries the world-space sphere centre and a parked
+                // transform never changes. Only moving traffic goes stale without it.
                 static bool sbLogged = false;
                 LogMissingLeg(sbLogged,
                     "PostPhysicsUpdate RUNNING leg GenerateSceneUpdateEvents -- no body; it is "
@@ -1992,9 +1657,8 @@ void TrafficEntityModule::PostPhysicsUpdate(CgsModule::IOBufferStack* lpInputBuf
             }
 
             {
-                // TrafficLightManager::Update(mfSimTimeStep) -- DECLARED
-                // (BrnTrafficLightManager.h:93) and bodied NOWHERE
-                // (recurring bug class (d)). Traffic-light phase state, not parked cars.
+                // GATE: TrafficLightManager::Update, declared at BrnTrafficLightManager.h:93
+                // and bodied nowhere. Traffic-light phase state, not parked cars.
                 static bool sbLogged = false;
                 LogMissingLeg(sbLogged,
                     "PostPhysicsUpdate RUNNING leg TrafficLightManager::Update(mfSimTimeStep) "
@@ -2036,42 +1700,18 @@ void TrafficEntityModule::PostPhysicsUpdate(CgsModule::IOBufferStack* lpInputBuf
     }
 
     // ====================================================================================
-    // ⭐⭐ TAIL LEG UN-GATED 2026-08-21 (wave T1 round 2, cluster R2A): the LOCAL PLAYER
-    //     position / direction / index refresh, X360 0x8274ED90..0x8274EE88.
+    // The local-player refresh, X360 0x8274ED90..0x8274EE88. meLocalPlayerIndex is what this
+    // function's POPULATING arm and RecalculateActiveHulls' mActiveHullsForLocalPlayer rebuild
+    // both key off; mLocalPlayerPosition / mLocalPlayerDirection are the module's cached copy
+    // of where the player is, read by the driving and streaming legs of later waves.
     //
-    // Round 1 gated this because it reads the player car through
-    // InputBuffer_PostPhysics::GetActiveRaceCarOutputInterface(), which had no declaration.
-    // It does now (DWARF :358). This leg matters twice over on the parked path:
-    //   * meLocalPlayerIndex is what PostPhysicsUpdate's POPULATING arm and
-    //     RecalculateActiveHulls' mActiveHullsForLocalPlayer rebuild both key off; while it
-    //     stayed E_ACTIVE_RACE_CAR_INDEX_INVALID the local-player hull set was always empty;
-    //   * mLocalPlayerPosition / mLocalPlayerDirection are the module's own cached copy of
-    //     where the player is, read by the driving/streaming legs of later waves.
+    // The console calls the getter three times (0x8274ED94, 0x8274EE30, 0x8274EE5C) and re-reads
+    // the index from the member between them. Same buffer and interface each time, i.e. the
+    // compiler rematerialising an inlined accessor, so it is de-inlined to one local; the
+    // getter's read-lock assert is idempotent.
     //
-    // Console, statement for statement:
-    //     lpActive = lpInput->GetActiveRaceCarOutputInterface();      ; 0x8274ED94 sub_82711850
-    //     if (lpActive->IsPlayerCarActive())                          ; INLINED 0x8274ED9C..
-    //         ; (the inline is the committed body: assert mePlayerActiveRaceCarIndex < COUNT
-    //         ;  at BrnRaceCarEntityModuleOutputInterface.h:967, then `index != -1 && +0x2860`)
-    //     {
-    //         meLocalPlayerIndex = lpActive->GetPlayerActiveRaceCarIndex();  ; 0x82277BF8, inlined
-    //                                                                        ; stw -> +0x713F0
-    //         mLocalPlayerPosition  = state->mTransform.wAxis;        ; addi +0x1F0 ; lvx +0x30
-    //                                                                 ; stvx -> +0x713D0
-    //         mLocalPlayerDirection = state->mTransform.zAxis;        ; addi +0x1F0 ; lvx +0x20
-    //                                                                 ; stvx -> +0x713E0
-    //     }
-    //     else  { meLocalPlayerIndex = -1; }                          ; 0x8274EE84 li r11,-1 ; stwx
-    //
-    // ⚠️ THE CONSOLE CALLS THE GETTER THREE TIMES (0x8274ED94 / 0x8274EE30 / 0x8274EE5C) and
-    // re-reads the index out of the member between them (`lwz r30, 0(r29)` at 0x8274EE44).
-    // It is the same buffer and the same interface every time -- the repetition is the
-    // compiler re-materialising an inlined accessor, not three different objects -- so it is
-    // de-inlined here to one local. The read-lock assert inside the getter is idempotent.
-    //
-    // ⚠️ +0x1F0 == 496 == RaceCarState::mTransform; +0x30 == Matrix44Affine::wAxis (the
-    // translation row) and +0x20 == zAxis (the forward row). Two different displacements off
-    // one base -- position and DIRECTION, not the same vector twice.
+    // +0x1F0 == RaceCarState::mTransform, +0x30 == wAxis (translation) and +0x20 == zAxis
+    // (forward). Two displacements off one base: position and DIRECTION, not one vector twice.
     // ====================================================================================
     {
         const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpActiveRaceCars =
@@ -2098,9 +1738,7 @@ void TrafficEntityModule::PostPhysicsUpdate(CgsModule::IOBufferStack* lpInputBuf
         LogMissingLeg(sbLogged,
             "PostPhysicsUpdate remaining tail legs -- the perfmon bracket, UpdateEventStarts "
             "@0x82743B80, GenerateNetworkUpdateEvents, ProcessTrafficTypeRequests "
-            "@0x8272B880 (EXPORT HOLE) and the replay-serialiser registration/write. The "
-            "local-player position/direction/index refresh that used to be named here is NOW "
-            "REAL (see the block above)");
+            "@0x8272B880 (EXPORT HOLE) and the replay-serialiser registration/write");
     }
 
     lpInput->UnlockForRead();
@@ -2114,9 +1752,8 @@ void TrafficEntityModule::PostPhysicsUpdate(CgsModule::IOBufferStack* lpInputBuf
 // ----------------------------------------------------------------------------
 // TrafficEntityModule::ResetEventData  @ 0x827088B8
 //
-// The per-event ("we are entering a new game mode/event") default block. Landed because it,
-// and nothing else, seeds the density the whole parked chain gates on. Store for store, with
-// every offset resolved to its member:
+// The per-event default block, and the only thing that seeds the density the parked chain
+// gates on. LAYOUT ATTESTATION, every console offset resolved to its member:
 //   mTrafficLightTriggerId = -1              (+464852)   meGameMode = -1            (+464856)
 //   mbIsOnlineGameMode = false               (+464860)   mbPlayingShowtimeMode = false (+464861)
 //   mbGameModeAllowsSwerving = true          (+464862)   mbHardcoreSwerveForMode = false (+464863)
@@ -2136,11 +1773,10 @@ void TrafficEntityModule::PostPhysicsUpdate(CgsModule::IOBufferStack* lpInputBuf
 //                                            (+468144 / +468148 / +468156)
 //   mfPlayerIdleTime = 0.0f                  (+468260)
 //
-// The +468260 naming is not a guess: the run 468144/468148/468152/468156 is :772..:775, the
-// replay serialiser occupies the DWARF's un-emitted :776/:777 window from +468160 (the
-// console registers it as `RegisterSerialiser(..., this + 468160)`), and Reset's next member
-// is the 8-aligned FastBitArray mVehiclesToUpdateCollidables at +468264 -- which leaves
-// exactly one 4-byte slot at +468260 for :778 mfPlayerIdleTime.
+// mfPlayerIdleTime at +468260 is forced, not guessed: 468144..468156 is :772..:775, the replay
+// serialiser occupies the un-emitted :776/:777 window from +468160 (the console registers it as
+// `RegisterSerialiser(..., this + 468160)`), and the next member is the 8-aligned
+// mVehiclesToUpdateCollidables at +468264, leaving exactly one 4-byte slot for :778.
 // ----------------------------------------------------------------------------
 void TrafficEntityModule::ResetEventData()
 {
@@ -2161,14 +1797,13 @@ void TrafficEntityModule::ResetEventData()
     mbNeedToBroadcastHullChange = false;
 
     {
-        // `v1 = mpLogger; *v1 = 1;` -- same un-named leading Logger byte EnterStartingUpState
-        // writes; same blocker (BrnTrafficLogger.cpp does not compile).
+        // GATE: `*mpLogger = 1`, the same unnamed leading Logger byte EnterStartingUpState
+        // writes, blocked the same way.
         static bool sbLogged = false;
         LogMissingLeg(sbLogged,
             "ResetEventData mpLogger-><leading byte> = 1 -- Logger has no usable declaration "
-            "(BrnTrafficLogger.cpp is unmounted and does not compile; it locally REDECLARES "
-            "KU_MAX_PARAMS / HullRuntime / ParamTransform / TrafficEntityModule -- see the "
-            "measured breakdown at EnterStartingUpState)");
+            "(BrnTrafficLogger.cpp is unmounted and does not compile; see the breakdown at "
+            "EnterStartingUpState)");
     }
 
     const f32 lfBaseDensityScale = mfBaseDensityScale;
@@ -2199,75 +1834,30 @@ void TrafficEntityModule::ResetEventData()
 }
 
 // ----------------------------------------------------------------------------
-// TrafficEntityModule::Reset  @ 0x8272CDA0   *** PARTIAL ***
+// TrafficEntityModule::Reset  @ 0x8272CDA0   PARTIAL
 //
-// The pool constructor: it is what makes 199 static params and 600 vehicles exist in a
-// usable state. REAL here, in the console's order:
-//   mRand.Construct(); mEffectRand.Construct();
-//   muFramesSinceDecision = 100; mbDecisionFrame = false; mfSimTimeStep = 0;
-//   meState = meStartingUpState = meRunningState = meTearingDownState = -1;
-//   muUpdateCount = 0;
-//   EnterStartingUpState();
-//   mfTrafficAmountScale = mfGameModeDensityScale;
-//   mfTimeSincePlayerHullChange = 0; mfTimeSincePlayerWasDrivingQuickly = 0;
-//   muNumFramesBeforeStateChange = 0xFF; mbAllVehiclesDead = true;
-//   muPreviousPlayerHull = 0xFFFF; mbNeedToKillAllZombies = false;
-//   the container clears (mFreeParams / maPurgatoryList / mParamsToReinsert /
-//     mFreeStaticParamStack / mStaticParamPurgatoryList / mTrailerPurgatoryList /
-//     mFreeTrailerStack / the six 160-arrays / muNumGenerators / mActiveHulls /
-//     mActiveHullsForLocalPlayer / mHullsToAddTriggersFor / mHullsToRemoveTriggersFor /
-//     maPredictedHullChanges / mCachedCollidableList-full);
-//   mVehiclesAddedToCrashModule + maTrafficPhysicsInfoListBits cleared;
-//   mParamSoaData's mAliveParams / mDyingParams / mZombieParams cleared (three inlined
-//     10-qword zeroing blocks at +251648 / +251728 / +251808);
-//   mVehicleSoaData.Construct();
-//   199x StaticTrafficParam::Construct + push the slot onto mFreeStaticParamStack;
-//   the single trailer slot pushed (599);
-//   600x Vehicle::Construct + SetVehicleTransform;
-//   mauHullRuntimeDataIndices[0..399] = KU_INVALID_HULL_RUNTIME;
-//   72x HullRuntime::Construct; mUsedHullRuntimeData cleared;
-//   maStoredAITrafficData[i] = { i, 0 };
-//   maaRaceCarHulls[i].Clear(); muCurrentlyPredictedHull = 0xFFFF;
-//   mbNeedToBroadcastHullChange = false; mbHullSyncDivergence = false;
-//   mbNetworkHasDetectedDivergence = false; miDEBUGOverBudgetness = 0;
-//   the four crash-slider stores (CrashScore = 0, Decay = 0.5f, Factor = 0.80000001f,
-//     FinalValue = 0) -- the two seeds are flt_820BA62C / flt_820BA5B4, the same two
-//     symbols Construct's tail and ResetEventData load;
-//   mShowtimePlayerGroundPos = 0; mAveragePhysicalCentre = 0;
-//   mfJunctionFUP = 0; mfJunctionFUP_TimeTillNextPhysicalKill = 1.0f; mbInPictureParadise = false;
-//   mVehiclesToUpdateCollidables / mVehiclesAvoidableLastFrame cleared, then the first 300
-//     bits of mVehiclesToUpdateCollidables set.
+// The pool constructor: what makes 199 static params and 600 vehicles exist in a usable state.
+// The order below is the console's; gated legs carry their reason at the site.
 //
-// The offset->member resolution above is not ordering guesswork: it closes with zero slack
-// at three independent anchors -- maVehicles @+10880 / maVehicleAxles @+87680 (the Construct
-// loop's two bases and their 128/64 strides), the six 160-array live-count words at
-// +357100/+359664/+359988/+360312/+360636/+360960 (deltas 2564,324,324,324,324, which is
-// exactly TrafficCrashInfo(16)*160+4 then u16(2)*160+4), and
-// maHullRuntimeData @+257216 + 72*1176 == mUsedHullRuntimeData @+341888.
-//
-// GATED here, each with its reason at the site.
+// The offset-to-member resolution this body rests on closes with no slack at three independent
+// anchors: maVehicles @+10880 and maVehicleAxles @+87680 (the Construct loop's two bases, with
+// their 128/64 strides); the six 160-array live-count words at
+// +357100/+359664/+359988/+360312/+360636/+360960 (deltas 2564, then 324 four times, which is
+// TrafficCrashInfo(16)*160+4 then u16(2)*160+4); and maHullRuntimeData @+257216 + 72*1176 ==
+// mUsedHullRuntimeData @+341888.
 // ----------------------------------------------------------------------------
 void TrafficEntityModule::Reset()
 {
-    // ⚠️ FLAG -- A KNOWN, NAMED DIVERGENCE, NOT AN OVERSIGHT.
-    // The console does NOT call the canonical CgsNumeric::Random::Construct here. Read at
-    // 0x8272CDB8..0x8272CE88 it is, for BOTH generators (mRand @+4912, mEffectRand @+4960):
-    //     li  r11, 0x6DC2 ; oris r7, r11, 0x8FE0   -> r7 = 0x000000008FE06DC2
-    //     std r7, 0x20(rand)                       -> muSeed = that literal
-    //     stw r24(0), 0x28(rand)                   -> muOldestBufferIndex = 0
-    //     8x { bits = Convert(hi32(muSeed)) ; muSeed = muSeed*K + 1 ;
-    //          ring[muOldestBufferIndex] = bits ; muOldestBufferIndex = (idx+1) & 7 }
-    // i.e. a TRAFFIC-SPECIFIC seed plus a full 8-slot prime that writes the CURRENT slot and
-    // then advances. Random::Construct() (CgsRandom.h) instead installs
-    // KU_RANDOM_DEFAULT_SEED, forces slot 0 to exactly 1.0f, and primes slots 1..7 by
-    // advancing FIRST. Both end with muOldestBufferIndex == 0 and all eight slots live, so
-    // the ring is correctly primed either way -- what differs is WHICH pseudo-random stream
-    // the traffic module runs on, and therefore which parked record wins its
-    // mExistsAtAllChance roll and which vehicle type PickVehicleToSpawn draws.
-    // Construct() is called because leaving the ring unprimed would make RandomFloat()
-    // return uninitialised storage, which is strictly worse and silent.
-    // ONE-METHOD FIX (CgsRandom.h is not this cluster's file -- see the C4 report's parks):
-    // add `void ConstructWithSeed(u64 lu64Seed)` doing exactly the block above, and call it
+    // FLAG -- a known divergence, not an oversight. The console does not call the canonical
+    // Random::Construct here. At 0x8272CDB8..0x8272CE88 it seeds both generators with the
+    // traffic-specific literal 0x8FE06DC2, then primes all eight ring slots writing the CURRENT
+    // slot before advancing. Random::Construct() instead installs KU_RANDOM_DEFAULT_SEED,
+    // forces slot 0 to 1.0f, and primes slots 1..7 by advancing first. Both leave the ring
+    // valid, so what differs is WHICH pseudo-random stream the traffic module runs on, and
+    // therefore which parked record wins its mExistsAtAllChance roll and which vehicle type
+    // PickVehicleToSpawn draws. Construct() is called anyway, because an unprimed ring makes
+    // RandomFloat() return uninitialised storage.
+    // FIX: add `void ConstructWithSeed(u64)` to CgsRandom.h doing the block above, and call it
     // here with 0x8FE06DC2ull.
     mRand.Construct();
     mEffectRand.Construct();
@@ -2295,17 +1885,14 @@ void TrafficEntityModule::Reset()
     miDEBUGOverBudgetness              = 0;
 
     {
-        // `BaseCollisionGenerator::Destruct(mpLogger)` in the pseudocode is an ICF fold --
-        // the callee shares a body with that unrelated symbol. Whatever it is, it takes
-        // mpLogger (+468916, the pointer Construct fills) and the Logger type is unusable
-        // here (see EnterStartingUpState).
+        // GATE: the pseudocode's `BaseCollisionGenerator::Destruct(mpLogger)` is an ICF fold;
+        // the real callee is a Logger reset, and the Logger type is unusable here.
         static bool sbLogged = false;
         LogMissingLeg(sbLogged,
             "Reset leg <ICF-folded>(mpLogger) @0x8272CE9C -- IDA attributes the callee to "
             "CgsSceneManager::CgsCollision::BaseCollisionGenerator::Destruct, which is an "
             "identical-code-folding artefact; the real callee is a Logger reset and "
-            "BrnTrafficLogger.cpp does not compile (local redeclaration fork -- see the "
-            "measured breakdown at EnterStartingUpState)");
+            "BrnTrafficLogger.cpp does not compile (see EnterStartingUpState)");
     }
 
     // ---- container resets ---------------------------------------------------------------
@@ -2331,42 +1918,26 @@ void TrafficEntityModule::Reset()
     mVehiclesAddedToCrashModule.UnSetAll();
     maTrafficPhysicsInfoListBits.Prepare();
 
-    // ---- the 25 physical-traffic scratch records ---------------------------------------
-    // ⭐⭐ UN-GATED 2026-08-21 (wave T1 round 3, closure item 4). BOTH halves of the round-1
-    // gate text above were refuted by R2C and are now retired:
-    //   * "bodied nowhere" is FALSE -- TrafficPhysicsInfo::Construct is a real 14-instruction
-    //     X360 leaf at 0x82751E88 and is bodied in the sibling partfile
-    //     BrnTrafficEntityModule_wT1_03.cpp;
-    //   * "RECURRING-BUG CLASS (a): mDetachedPartQueue would be left un-Constructed" is a
-    //     MISATTRIBUTION of the bug, not of the fact. The console's Construct DOES NOT CALL
-    //     EventQueue::Construct -- it writes one zero byte at record +0x00 and nothing else in
-    //     the queue's span. Running this loop was never going to bind that queue and NOT
-    //     running it never prevented anything. Class (a) is still open for mDetachedPartQueue
-    //     and is re-flagged where it actually lives (wT1_03's park list + the Construct-tail
-    //     gate below), NOT here.
+    // The 25 physical-traffic scratch records; body in BrnTrafficEntityModule_wT1_03.cpp.
+    // The argument is the OWNING VEHICLE INDEX and Reset passes the "no owner" sentinel: the
+    // console literal is 0xFFFF here and a sign-extended -1 in Construct @0x82740220, the same
+    // 16 bits into the u16 member.
     //
-    // The argument is the OWNING VEHICLE INDEX; Reset passes the "no owner" sentinel. The
-    // console literal is 0xFFFF here and a sign-extended -1 in Construct @0x82740220 -- the
-    // same 16 bits into the u16 member, spelled through the named constant.
+    // This loop does not bind mDetachedPartQueue and never did: the console's Construct writes
+    // one zero byte at record +0x00 and nothing else in the queue's span. That park lives in
+    // wT1_03.cpp and at the Construct-tail gate below.
     for ( u32 luSlot = 0; luSlot < KU_MAX_PHYSICAL_TRAFFIC_VEHICLES; luSlot++ )
     {
         maTrafficPhysicsInfoList[luSlot].Construct(
             static_cast< s32 >( TrafficPhysicsInfo::KU16_NO_OWNING_VEHICLE ) );
     }
 
-    // ---- the param membership sets ---------------------------------------------------------
-    // Console (0x8272D7xx region, pseudocode `v21 = _R30 + 251648`): three consecutive
-    // 10-qword zeroing blocks at this+251648 / +251728 / +251808 --
-    //     do   *(8 * v20++ + v21) = 0;        while (v20 < 0xA);   -> mAliveParams
-    //     for (i = 0; i < 0xA; ++i) *(8 * (i + 10) + v21) = 0;     -> mDyingParams
-    //     for (j = 0; j < 0xA; ++j) *(8 * (j + 20) + v21) = 0;     -> mZombieParams
-    // mParamSoaData is at +251648 (member map) and BrnTrafficParam.h pins mAliveParams @0x00,
-    // mDyingParams @0x50, mZombieParams @0xA0; FastBitArray<601> is exactly 10 u64 fields
-    // (0x50 bytes), so 251648+0x50 == 251728 and +0xA0 == 251808 with ZERO slack. The console
-    // inlines the clears rather than calling ParamSoaData::Construct, and so do we -- the
-    // three UnSetAll() bodies are the same field-zeroing loop.
-    // RECURRING-BUG CLASS (a): without these, Param::IsAlive()/IsDying()/IsZombie() read
-    // uninitialised storage on a MODELLED member. This is not a gated leg.
+    // The param membership sets: three consecutive 10-qword zeroing blocks at this+251648 /
+    // +251728 / +251808. mParamSoaData is at +251648 and BrnTrafficParam.h pins mAliveParams
+    // @0x00, mDyingParams @0x50, mZombieParams @0xA0; FastBitArray<601> is exactly 10 u64
+    // fields (0x50 bytes), so the three offsets tile with no slack. The console inlines the
+    // clears rather than calling ParamSoaData::Construct, and UnSetAll() is that same loop.
+    // Without these, Param::IsAlive()/IsDying()/IsZombie() read uninitialised storage.
     mParamSoaData.mAliveParams.UnSetAll();
     mParamSoaData.mDyingParams.UnSetAll();
     mParamSoaData.mZombieParams.UnSetAll();
@@ -2402,31 +1973,17 @@ void TrafficEntityModule::Reset()
     // The single trailer slot, pushed by FULL vehicle index (599 == KU_TRAILER_TRAFFIC_OFFSET).
     mFreeTrailerStack.Push(static_cast<u16>(KU_TRAILER_TRAFFIC_OFFSET));
 
-    // ---- the two pool shuffles ------------------------------------------------------------
-    // ⭐⭐ STALE-BANNER UN-GATE 2026-08-21 (wave T1 round 3 sweep). The gate above used to say
-    // "CgsAlgorithms::Shuffle has no reconstruction in the tree". THAT IS FALSE and one grep
-    // kills it: GameShared/GameClasses/Algorithms/CgsShuffle.h exists, and its own banner
-    // names THESE THREE INSTANTIATIONS as its provenance --
-    //     Shuffle<u16, Stack<u16,400>> @0x8271B110   (mFreeParams)
-    //     Shuffle<u8,  Stack<u8,199>>  @0x8271B298   (mFreeStaticParamStack)
-    //     Shuffle<u16, Stack<u16,1>>   @0x8271B420   (mFreeTrailerStack)
-    // -- "all driven by BrnTraffic::TrafficEntityModule::Reset", i.e. by this exact function.
-    // The container types match the members here exactly and Stack<T,N>::operator[] /
-    // GetLength are both present. This is the false-helpful banner class round 1 warned about:
-    // it named a real console leg, gave a plausible reason, and the reason had already been
-    // paid off in another cluster's file.
+    // The pool shuffles. The console's three instantiations are Shuffle<u16, Stack<u16,400>>
+    // @0x8271B110 (mFreeParams), Shuffle<u8, Stack<u8,199>> @0x8271B298
+    // (mFreeStaticParamStack) and Shuffle<u16, Stack<u16,1>> @0x8271B420 (mFreeTrailerStack).
     //
-    // ARGUMENTS, from the asm (0x8272D204..0x8272D284), all three calls identical in shape:
-    //     r3 = the stack, r4 = 0, r5 = the stack's OWN GetLength(), r6 = this + 0x1330
-    // and this + 0x1330 is mRand (:615) -- it lands immediately after mReceiverQueue (:613,
-    // an EventReceiverQueue<4096,16> based at +0x314), and mRand is the first member after it.
-    // The window is [0, GetLength()), i.e. the whole live stack.
+    // ARGUMENTS, from the asm (0x8272D204..0x8272D284), identical in all three calls:
+    // r3 = the stack, r4 = 0, r5 = the stack's own GetLength(), r6 = this + 0x1330 == mRand
+    // (:615, the first member after mReceiverQueue :613). The window is the whole live stack.
     //
-    // ⚠️ THIS ONE IS ON THE PARKED-CAR PATH. mFreeStaticParamStack is what
-    // StaticVehicles_CreateNewVehicles pops a parked slot from; unshuffled, slots come out in
-    // reverse push order (198..0) every single boot, so which record lands in which slot is
-    // deterministic instead of randomised. It never breaks anything -- every record still gets
-    // a slot -- which is exactly why it could sit gated for two rounds without anyone noticing.
+    // The static one is on the parked-car path: unshuffled, StaticVehicles_CreateNewVehicles
+    // pops slots in reverse push order (198..0) every boot, so which record lands in which slot
+    // is deterministic instead of randomised. Nothing breaks, which is why it is easy to miss.
     CgsAlgorithms::Shuffle<u8>( mFreeStaticParamStack, 0, mFreeStaticParamStack.GetLength(), mRand );
     CgsAlgorithms::Shuffle<u16>( mFreeTrailerStack, 0, mFreeTrailerStack.GetLength(), mRand );
 
@@ -2506,23 +2063,14 @@ void TrafficEntityModule::Reset()
             "surface (wave 2)");
     }
 
-    // ---- the four crash-slider stores -------------------------------------------------------
-    // The two ZEROS are `stfsx f31` with f31 == flt_82001CC0 == 0.0f (0x8272D838 / 0x8272D848).
-    // The two SEEDS are `stfsx f0/f13` fed by
-    //     0x8272D7F4  lfs f0,  0x3F0(r21)   ; r21 == &flt_820BA23C  -> 0x820BA62C
-    //     0x8272D7FC  lfs f13, 0x378(r21)                           -> 0x820BA5B4
-    //     0x8272D814  stfsx f0,  r30, r10   ; r10 = 0x72374 (Decay)
-    //     0x8272D840  stfsx f13, r30, r9    ; r9  = 0x72378 (Factor)
-    // Those are the SAME TWO SYMBOLS Construct's tail loads (0x827414AC flt_820BA62C ->
-    // 0x72374, 0x827414B4 flt_820BA5B4 -> 0x72378) and the same two ResetEventData
-    // @0x827088B8 loads (0x82708AA8 / 0x82708AAC -> r7 = 0x72374, r6 = 0x72378), where IDA
-    // resolves them outright as 0.5 and 0.80000001. The values are therefore ATTESTED, not
-    // guessed -- an earlier gate here rested on a premise the exports refute.
-    // WHY IT MATTERS: PostPhysicsUpdate's TEARING_DOWN arm calls Reset() with NO Construct
-    // (`if (*(_R31+464909)) --*(...); else Reset(_R31);`), and UpdateCrashSlider @0x82715A18
-    // overwrites both members at runtime (0.0f/10.0f, then 0.1f/1.5f) -- so dropping these
-    // two stores would leave the tear-down -> Reset path running on the LAST FRAME's slider
-    // tuning instead of the re-seeded defaults.
+    // The four crash-slider stores. The two zeros are `stfsx f31` with f31 == 0.0f; the two
+    // seeds come from flt_820BA62C (Decay) and flt_820BA5B4 (Factor), which IDA resolves as 0.5
+    // and 0.80000001 and which Construct's tail and ResetEventData load through the same two
+    // symbols.
+    //
+    // WHY THEY MATTER: PostPhysicsUpdate's TEARING_DOWN arm calls Reset() with no Construct,
+    // and UpdateCrashSlider @0x82715A18 overwrites both members at runtime, so dropping these
+    // stores leaves the tear-down path running on last frame's slider tuning.
     mfCrashSliderCrashScore       = 0.0f;         // 0x72370  stfsx f31
     mfCrashSliderCrashScoreDecay  = 0.5f;         // 0x72374  flt_820BA62C
     mfCrashSliderCrashScoreFactor = 0.80000001f;  // 0x72378  flt_820BA5B4
@@ -2542,9 +2090,8 @@ void TrafficEntityModule::Reset()
 
     mVehiclesToUpdateCollidables.UnSetAll();
     mVehiclesAvoidableLastFrame.UnSetAll();
-    // 0x8272D8xx: the console then sets the FIRST 300 bits (`while (v79 < 0x12C)`) of
-    // mVehiclesToUpdateCollidables -- not all 600. Transcribed as the literal bound it is;
-    // no constant in BrnTrafficConstants.h spells 300 and inventing one would be a guess.
+    // 0x8272D8xx sets the FIRST 300 bits of mVehiclesToUpdateCollidables, not all 600. No
+    // constant in BrnTrafficConstants.h spells 300, so the literal bound stands as it is.
     for (u32 luBit = 0; luBit < 300u; ++luBit)
     {
         mVehiclesToUpdateCollidables.SetBit(luBit);
@@ -2552,19 +2099,17 @@ void TrafficEntityModule::Reset()
 }
 
 // ----------------------------------------------------------------------------
-// TrafficEntityModule::Construct  @ 0x82740220   *** PARTIAL ***
+// TrafficEntityModule::Construct  @ 0x82740220   PARTIAL
 //
-// REAL here: the base construct, the receiver queue, the streamer, the two density seeds,
-// the debug-flag defaults (INCLUDING the mbDEBUGTurnTrafficOff = false this cluster was
-// asked to settle -- see the file banner), the render caps, ResetEventData + Reset, and the
-// 96 VehicleTypeRuntime constructs.
+// Real here: the base construct, the receiver queue, the streamer, the two density seeds, the
+// debug-flag defaults (including mbDEBUGTurnTrafficOff = false), the render caps, the 25
+// TrafficPhysicsInfo constructs, ResetEventData + Reset, and the 96 VehicleTypeRuntime
+// constructs.
 //
-// GATED here: the ~25 vectorised tuning members (:799..:821), the four TrafficJobStub
-// constructs ([MEMBER HOLE 5]), the replay serialiser, the fuzzy-behaviour logic, the
-// 102,800-byte maTrafficPhysicsInfoList memset, the debug component + logger allocations,
-// the twenty perfmon monitors, and the debug-render stream reader. Each is a named one-shot
-// below. (The 25 TrafficPhysicsInfo::Construct calls were on this list until 2026-08-21 wave
-// T1 round 3; they are now REAL -- body in BrnTrafficEntityModule_wT1_03.cpp.)
+// Gated: the ~25 vectorised tuning members (:799..:821), the four TrafficJobStub constructs
+// ([MEMBER HOLE 5]), the replay serialiser, the fuzzy-behaviour logic, the 102,800-byte
+// maTrafficPhysicsInfoList memset, the debug component and logger allocations, the twenty
+// perfmon monitors, and the debug-render stream reader. Each is a named one-shot below.
 // ----------------------------------------------------------------------------
 void TrafficEntityModule::Construct()
 {
@@ -2586,15 +2131,10 @@ void TrafficEntityModule::Construct()
             "BrnWorldModule.h's). Deliberate include-graph decision, recorded by C1");
     }
 
-    // The console's EventReceiverQueue<4096,16>::Construct is INLINED here at
-    // 0x827407E0..0x82740844 (mpBuffer = &maBuffer, miCapacity = 0x1000, miAlignment = 0x10,
-    // miCount = 0, then the alignment fix-up Clear() repeats). Calling the real Construct is
-    // the de-inlined form.
-    //
-    // ⭐ THIS RETIRES THE wQ7_02 RELOCATION. BrnTrafficEntityModule_wQ7_02.cpp's Prepare
-    // stage 0 carried a "[FLAG PC bring-up] Construct relocated here" block precisely because
-    // this Construct was an inert gate; with a real body the queue is bound at construction
-    // time, where the console binds it.
+    // The console inlines EventReceiverQueue<4096,16>::Construct at 0x827407E0..0x82740844
+    // (mpBuffer = &maBuffer, miCapacity = 0x1000, miAlignment = 0x10, miCount = 0, then the
+    // alignment fix-up Clear() repeats). This is the de-inlined form, and it is what binds the
+    // queue at construction time rather than in _wQ7_02.cpp's Prepare stage-0 safety net.
     mReceiverQueue.Construct();
 
     mStreamer.Construct();
@@ -2613,55 +2153,37 @@ void TrafficEntityModule::Construct()
             "Construct -- none of those callees has a body or a usable declaration in this tree");
     }
 
-    // ---- the 25 physical-traffic scratch records (0x82740220's own loop) -----------------
-    // ⭐⭐ UN-GATED 2026-08-21 (wave T1 round 3, closure item 4) -- same retirement as Reset's
-    // copy above; the body is real in BrnTrafficEntityModule_wT1_03.cpp. The console's literal
-    // here is a sign-extended -1 (`li r11,-1`), which is the same 16 bits the u16 member takes.
+    // The 25 physical-traffic scratch records; body in BrnTrafficEntityModule_wT1_03.cpp. The
+    // console's literal is a sign-extended -1, the same 16 bits the u16 member takes.
     //
-    // ⚠️ THE MEMSET IS STILL GATED (immediately above) AND THAT ORDER MATTERS ON THE CONSOLE:
-    // the console memsets the 102,800-byte array and THEN runs these 25 Constructs, so every
-    // field this Construct does not touch is zero on the console and is whatever the host
-    // module's storage holds here. Nothing on the parked-car path reads any of them (every
-    // reader is a gated wave-3 physical-traffic leg), which is why the Construct loop is safe
-    // to run without the memset -- but do not promote that to "the record is initialised".
+    // ORDER WARNING: the console memsets the 102,800-byte array and THEN runs these Constructs,
+    // and that memset is gated above. So every field Construct does not touch is zero on the
+    // console and is whatever the host storage holds here. Every reader of those fields is a
+    // gated physical-traffic leg, so the loop is safe to run without the memset, but the record
+    // is not initialised.
     for ( u32 luSlot = 0; luSlot < KU_MAX_PHYSICAL_TRAFFIC_VEHICLES; luSlot++ )
     {
         maTrafficPhysicsInfoList[luSlot].Construct(
             static_cast< s32 >( TrafficPhysicsInfo::KU16_NO_OWNING_VEHICLE ) );
     }
 
-    // ---- the sim box + render caps (X360 +463792 / +463808 / +463812 / +463816) ----------
+    // The sim box and render caps. The source vector at .data 0x8300CF10 is
+    // { 195.0f, 395.0f, 62500.0f, 160000.0f }, seeded by an unnamed MSVC dynamic-initialiser
+    // thunk at 0x82C66F18 (not a function in the IDA database, so invisible to per-function
+    // export scans). Lanes 2 and 3 corroborate the naming: 62500 == 250^2, 160000 == 400^2.
     //
-    // ⭐⭐ GATE RETIRED 2026-08-21 (wave T1 round 2, cluster R2A). Round 1 left these two
-    // UNWRITTEN because the source vector at .data 0x8300CF10 read as zero in every
-    // per-function export -- and deliberately did NOT write a placeholder zero, which was the
-    // right call: a zero mfTrafficSimRadius collapses the traffic sim box to one Pvs cell
-    // without ever producing a non-finite value (the shadow-system wave's exact failure
-    // mode). The values are now RECOVERED: the whole 16-byte vector is seeded by an UNNAMED
-    // MSVC dynamic-initialiser thunk at 0x82C66F18, which is not a function in the IDA
-    // database and is therefore invisible to any per-function export scan; the conductor
-    // found it by walking XrefsTo in the .i64 (scratchpad traffic_wave/recovered_constants.md,
-    // raw evidence thunk_dump*.txt). It builds
-    //     0x8300CF10 = { 195.0f, 395.0f, 62500.0f, 160000.0f }
-    // and lanes 2 and 3 corroborate each other and the naming: 62500 == 250^2 and
-    // 160000 == 400^2, i.e. squared distances, which is what `...DistanceSq` must hold.
-    //
-    // Construct's own instructions decide WHICH lane goes where -- no inference:
-    //     0x82740790  lis    r11, unk_8300CF10@ha
-    //     0x82740794  addi   r11, r11, unk_8300CF10@l
-    //     0x82740798  lvx128 v0, r0, r11              ; the whole 16-byte vector
-    //     0x8274079C  vspltw v0, v0, 0                ; SPLAT LANE 0  -> {195,195,195,195}
-    //     0x827407A0  stvx128 v0, r31, r10            ; r10 == 0x713B0 == mfTrafficSimRadius
-    //     0x827407A4  lfs    f0, (flt_8300CF18 - 0x8300CF10)(r11)   ; +8 == LANE 2 == 62500
-    //     0x827407A8  li     r11, 0x20
-    //     0x827407AC  stfsx  f0, r31, r9              ; r9  == 0x713C4 == mfRenderCullDistanceSq
-    //     0x827407B0  stbx   r30, r31, r7             ; r7  == 0x713C8 == mbInOfflineCarSelect (r30 == 0)
-    //     0x827407B4  stwx   r11, r31, r8             ; r8  == 0x713C0 == muMaxVehiclesToRender = 32
-    // So mfTrafficSimRadius is a SPLAT of lane 0 (all four lanes 195.0f), NOT the raw vector:
-    // lanes 1 and 3 of 0x8300CF10 are read by other functions (HandleExternalRequests) and
-    // never reach this member. 195 m is the half-extent of the box UpdateRaceCarHulls builds
-    // around the player, which at the shipped Pvs cell size is the handful of hulls the
-    // "too many hulls turned on: > 4" assert further down that function polices.
+    // Construct decides which lane goes where, no inference:
+    //     0x8274079C  vspltw v0, v0, 0          ; SPLAT LANE 0 -> {195,195,195,195}
+    //     0x827407A0  stvx128 v0, r31, r10      ; 0x713B0 == mfTrafficSimRadius
+    //     0x827407A4  lfs f0, +8(r11)           ; LANE 2 == 62500
+    //     0x827407AC  stfsx f0, r31, r9         ; 0x713C4 == mfRenderCullDistanceSq
+    //     0x827407B0  stbx r30, r31, r7         ; 0x713C8 == mbInOfflineCarSelect (r30 == 0)
+    //     0x827407B4  stwx r11, r31, r8         ; 0x713C0 == muMaxVehiclesToRender = 32
+    // So mfTrafficSimRadius is a splat of lane 0, not the raw vector; lanes 1 and 3 are read by
+    // other functions and never reach this member. A zero here would collapse the sim box to
+    // one Pvs cell without ever producing a non-finite value.
+    // 195 m is the half-extent of the box UpdateRaceCarHulls builds around the player, which at
+    // the shipped Pvs cell size gives the handful of hulls its "> 4" assert polices.
     mfTrafficSimRadius.x = 195.0f;
     mfTrafficSimRadius.y = 195.0f;
     mfTrafficSimRadius.z = 195.0f;
@@ -2693,11 +2215,10 @@ void TrafficEntityModule::Construct()
     mbDEBUGAllowAnarchy               = false;  // 0x727C9
     mfDEBUGTrafficLightTimeMultiplier = 1.0f;   // 0x727D0 stfsx flt_82001C98 == 1.0f
     mbDEBUGEnableKillzones            = true;   // 0x727D4 stbx r27
-    // ⚠️ LOAD-BEARING, AND EASY TO MISS: 0x727D8 `stwx r29` == miDEBUGFlowtypeOverride = -1.
-    // PickVehicleToSpawn gates on `miDEBUGFlowtypeOverride >= 0`, so if this store were
-    // dropped the ZERO-INITIALISED member would read as flow type 0 and EVERY spawn in the
-    // world -- parked and driving -- would be forced onto flow type 0's vehicle mix. Nothing
-    // would assert; it would just look like the city only owns one kind of car.
+    // LOAD-BEARING: PickVehicleToSpawn gates on `miDEBUGFlowtypeOverride >= 0`, so dropping
+    // this store leaves the zero-initialised member reading as flow type 0 and forces every
+    // spawn in the world onto that flow type's vehicle mix. Nothing asserts; the city just
+    // looks like it owns one kind of car.
     miDEBUGFlowtypeOverride           = -1;     // 0x727D8 stwx r29
     mDEBUGRecentlyFiredKillZones.Clear();       // 0x72860 stwx r30 -- the live-count word
 
@@ -2732,11 +2253,10 @@ void TrafficEntityModule::Construct()
     // 0x82741448 `stw r30, 0x2FC(r31)`.
     meEmptyTrafficPoolState = E_EMPTYTRAFFICPOOLSTATE_IDLE;
 
-    // ---- the console's TAIL stores (0x827414D4..0x8274175C), i.e. everything Construct
-    // re-seeds AFTER ResetEventData + Reset have run. All four crash-slider values and the
-    // three showtime timers are the same numbers ResetEventData writes; mfJunctionFUP's
-    // partner is flt_82001C98 == 1.0f (the pseudocode resolves the load as
-    // `*(0x82000000 + 0x1C98)`, the same datum mfBaseDensityScale is seeded from).
+    // The console's tail stores (0x827414D4..0x8274175C): everything Construct re-seeds after
+    // ResetEventData and Reset have run. The crash-slider values and showtime timers are the
+    // same numbers ResetEventData writes; mfJunctionFUP's partner is flt_82001C98 == 1.0f, the
+    // datum mfBaseDensityScale is also seeded from.
     mfCrashSliderCrashScore       = 0.0f;   // 0x72370
     mfCrashSliderCrashScoreDecay  = 0.5f;   // 0x72374
     mfCrashSliderCrashScoreFactor = 0.80000001f; // 0x72378
@@ -2756,57 +2276,32 @@ void TrafficEntityModule::Construct()
     mbInPictureParadise                      = false; // 0x725EB
 
     {
-        // Two stores in the DecFIGS un-emitted :776/:777 window that C1 already parked from
-        // the other side. NEW EVIDENCE from this body, worth recording: Construct writes
-        // ZERO to +0x72520 and **ONE** to +0x72521, while EnterReplay @0x827081D8 and
-        // LeaveReplay @0x82708248 BOTH write ZERO to +0x72521. A flag that constructs to 1
-        // and is cleared on entering AND on leaving replay is a "not currently inside the
-        // replay serialiser's own window" latch, not mbInReplay -- which corroborates C1's
-        // refusal to name it. The window is the BrnReplays::TrafficEntitySerialiser member
-        // the console registers at `this + 468160`.
+        // GATE: two stores inside the un-emitted DWARF :776/:777 window, i.e. the
+        // BrnReplays::TrafficEntitySerialiser member the console registers at `this + 468160`.
+        // Construct writes zero to +0x72520 and ONE to +0x72521, while EnterReplay @0x827081D8
+        // and LeaveReplay @0x82708248 both write zero to +0x72521. A flag that constructs to 1
+        // and clears on entering AND leaving replay is not mbInReplay, so it stays unnamed.
         static bool sbLogged = false;
         LogMissingLeg(sbLogged,
             "Construct stores +0x72520 = 0 and +0x72521 = 1 -- both inside the replay "
             "serialiser's DWARF un-emitted :776/:777 window; no attested member name "
-            "(C1 parked the same byte from EnterReplay/LeaveReplay)");
+            "(the same byte EnterReplay/LeaveReplay clear)");
     }
 
-    // 0x82741450..0x82741460: `stvx128 v127, r31, 0x713D0` (mLocalPlayerPosition = 0) and
-    // `stwx r29, r31, 0x713F0` with r29 == -1 (meLocalPlayerIndex = INVALID).
-    // NOTE: mLocalPlayerDirection @+0x713E0 is NOT written here -- the console leaves it to
-    // PostPhysicsUpdate's tail. Not adding a store the binary does not have.
+    // 0x82741450..0x82741460. mLocalPlayerDirection @+0x713E0 is NOT written here; the console
+    // leaves it to PostPhysicsUpdate's tail.
     mLocalPlayerPosition.SetZero();
     meLocalPlayerIndex = E_ACTIVE_RACE_CAR_INDEX_INVALID;
 
-    // ⭐⭐ ADDED 2026-08-21 -- wave T1 ROUND 2, cluster R2C.
-    // ⚠️ CROSS-CLUSTER EDIT, ONE LINE, AND IT IS LOAD-BEARING FOR Prepare STAGE 1.
+    // The console's very last store, immediately before the epilogue: `li r11, 1 ; stb r11,
+    // 4(r31)` @0x82741758. Byte +4 is CgsModule::Module::mbIsNewModule, which the base
+    // Construct at the top of this function set to zero and the traffic module flips back.
     //
-    // THE CONSOLE'S VERY LAST STORE IN THIS FUNCTION, immediately before the epilogue:
-    //     0x82741758  li   r11, 1
-    //     0x82741760  stb  r11, 4(r31)         ; r31 == this, byte +4
-    // `this + 4` is CgsModule::Module::mbIsNewModule (the vptr occupies +0, and
-    // ModuleSingleBuffered::Construct @0x8286E768's own pseudocode names the same three slots
-    // -- `field_4 = 0` (this flag), `field_8 = 0` (mePrepareStage), `field_C = 6`
-    // (meReleaseStage)). The base Construct called at the top of this function sets it to
-    // ZERO; the traffic module flips it back to ONE here.
-    //
-    // WHY IT MATTERS, and why its absence was invisible: CgsModule::ModuleSingleBuffered::
-    // Prepare @0x8286E7A0 tests `*(a1 + 4)` at EVERY stage. Non-zero => it skips the whole
-    // old-style DataStructure ladder and falls straight to LABEL_20 (`a1[3] = 0; a1[2] = 6;
-    // return 1`). ZERO => it calls vtable slot 56 (CreateInputDataStructure) and
-    // `if (!v4) return 0;`. TrafficEntityModule overrides NEITHER CreateInputDataStructure nor
-    // CreateOutputDataStructure (the DecFIGS TrafficEntityModule declares neither), so the
-    // base placeholder runs and returns nullptr -- i.e. with this store missing, the base
-    // Prepare returns FALSE FOR EVERY FRAME, FOREVER.
-    //
-    // That is a BOOT HANG, not a cosmetic gap: TrafficEntityModule::Prepare stage 1 (now
-    // un-gated in BrnTrafficEntityModule_wQ7_02.cpp) forwards the base's false as its own,
-    // and WorldModule::Prepare's traffic stage would never advance. It was dormant only
-    // because stage 1 was still a log-once gate.
-    //
-    // Purely additive: one store the console makes, at the position the console makes it, on
-    // a member this class inherits as `protected` (CgsModule::Module::mbIsNewModule,
-    // CgsModule.h:66). Owner of this file: please keep it.
+    // LOAD-BEARING for Prepare stage 1: ModuleSingleBuffered::Prepare @0x8286E7A0 tests that
+    // byte at every stage. Non-zero skips the old-style DataStructure ladder and returns 1;
+    // zero calls CreateInputDataStructure through the vtable, which this class does not
+    // override, so the base placeholder returns null and Prepare returns FALSE every frame,
+    // forever. That is a boot hang at WorldModule::Prepare's traffic stage.
     mbIsNewModule = true;
 
     if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())

@@ -6,23 +6,19 @@
 #include "BrnCommonTypes.h"
 
 // ---------------------------------------------------------------------------
-// BrnTraffic::Param  (and the ParamSoaData / ParamPlan it embeds)
+// BrnTraffic::Param (and the ParamSoaData / ParamPlan it embeds)
 //
-// DWARF home: GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficParam.h.
-// A traffic-system per-vehicle parameter block: an accessor-heavy record holding the
-// vehicle's position-along (mfParamAlong), behaviour/speed scalars, a small ring of
-// "where it has been" history (mauHistorySegments / mauHistoryHulls) and a packed flag
-// byte (mxFlags) plus a separate effect/history-state byte (mxEffectAndHistoryState).
+// The traffic system's per-vehicle parameter block: position-along (mfParamAlong),
+// behaviour and speed scalars, a small ring of where-it-has-been history
+// (mauHistorySegments / mauHistoryHulls), a packed flag byte (mxFlags) and a separate
+// effect/history byte (mxEffectAndHistoryState).
 //
-// Layout reconstructed from the X360 retail XEX (BURNOUT_X360_ARTIST.XEX) member STORE
-// OFFSETS, corroborated by the DWARF type listing (BrnTrafficParam.h DWARF). The retail
-// build is LATER than the Feb-2007 leak: the leak's flag bit values and method set
-// differ (retail adds purgatory/divorce, moves the alive/dying/zombie membership into
-// the separate ParamSoaData bit-sets and renumbers mxFlags), so the X360 asm is taken as
-// the source of truth wherever it diverges from the leak.
+// Layout from the X360 XEX member STORE offsets, corroborated by the DWARF type listing.
+// Retail is later than the Feb-2007 leak and diverges from it: retail adds
+// purgatory/divorce, moves alive/dying/zombie membership into the ParamSoaData bit-sets,
+// and renumbers mxFlags. The X360 asm wins wherever they differ.
 //
-// Byte offsets pinned by name from the asm (this == u8*; all offsets verified against the
-// store/load instructions):
+// Byte offsets pinned by name from the store/load instructions (this == u8*):
 //   0x00 muHullIndex (u16)         0x02 muSectionIndex (u8)   0x03 muCurrentSegment (u8)
 //   0x04 mfParamAlong (f32)        0x08 maPlans[2] (ParamPlan, stride 6)
 //   0x14 mfSpeed (f32)            0x18 muNextStopLineIndex   0x19 muVehicleType
@@ -48,10 +44,8 @@ static const u32 KU_PARAM_NUM_PLANS = 2;
 // FastBitArray<601> so a valid traffic param index is in [0, 600).
 static const u32 KU_PARAM_MAX_PARAMS = 601;
 
-// ---------------------------------------------------------------------------
 // ParamSoaData: three FastBitArray<601> membership sets, one quadword-block each.
 // Offsets proven by the asm: mAliveParams @0x00, mDyingParams @0x50, mZombieParams @0xA0.
-// ---------------------------------------------------------------------------
 struct ParamSoaData
 {
     CgsContainers::FastBitArray<KU_PARAM_MAX_PARAMS> mAliveParams;  // 0x000
@@ -61,9 +55,7 @@ struct ParamSoaData
     void Construct();
 };
 
-// ---------------------------------------------------------------------------
-// ParamPlan: a queued lane / section change (6 bytes; verified by the maPlans stride).
-// ---------------------------------------------------------------------------
+// ParamPlan: a queued lane / section change (6 bytes, verified by the maPlans stride).
 struct ParamPlan
 {
     enum Types
@@ -167,36 +159,25 @@ public:
     bool IsDying() const { return (mxFlags & E_FLAG_DYING) != 0; }
     bool HasDied() const { return (mxEffectAndHistoryState & E_HISTORY_DIED) != 0; }
     bool IsInPurgatory() const { return (mxFlags & E_FLAG_IN_PURGATORY) != 0; }
-    // ⭐ ADDED 2026-08-21 (wave T1 round 4, item 2). The sibling of
-    // StaticTrafficParam::IsZombie (BrnTrafficStaticParam.h:71), which this class was simply
-    // missing. X360-attested by TrafficEntityModule::IsVehiclesParamAZombie @0x82715D70,
-    // whose STANDARD-species arm is `(*(GetParam(luVehicle) + 64) >> 5) & 1` -- offset 0x40
-    // is mxFlags and bit 5 is the E_FLAG_ZOMBIE (0x20) this enum already declares (its writer
-    // Param::SetZombie is likewise already declared above).
+    // Attested by TrafficEntityModule::IsVehiclesParamAZombie @0x82715D70, whose
+    // STANDARD-species arm is `(*(GetParam(luVehicle) + 64) >> 5) & 1`: offset 0x40 is
+    // mxFlags and bit 5 is E_FLAG_ZOMBIE.
     bool IsZombie() const { return (mxFlags & E_FLAG_ZOMBIE) != 0; }
 };
 
-// ---------------------------------------------------------------------------
 // BrnTraffic::ParamTransform -- the per-vehicle orientation/position transform block.
-// DWARF-AUTHORITATIVE (references/DecFIGS/dwarfdump/.../BrnTrafficParam.h:314): a struct
-// with four private 16-byte, 16-aligned SIMD vectors (sizeof == 0x40) and the public method
-// set below. Offsets pinned by the store/load displacements in the X360 asm (GetRight +0x20,
-// GetLerpedPos/GetSpeed +0x30, Initialise stores mPos@0x00 / mDirAndAccel@0x10 / mRight@0x20 /
-// mLerpedPosAndSpeed@0x30) AND corroborated field-for-field by the DWARF member listing:
+// DWARF BrnTrafficParam.h:314: four private 16-byte, 16-aligned SIMD vectors (sizeof ==
+// 0x40) plus the method set below. Offsets pinned by the X360 store/load displacements
+// (GetRight +0x20, GetLerpedPos/GetSpeed +0x30, Initialise stores all four) and corroborated
+// field for field by the DWARF member listing:
 //   0x00 mPos               (Vector3)      -- deterministic world position
 //   0x10 mDirAndAccel       (Vector3Plus)  -- forward dir in xyz, accel scalar in w/plus
 //   0x20 mRight             (Vector3)      -- right axis
 //   0x30 mLerpedPosAndSpeed (Vector3Plus)  -- render-lerped pos in xyz, speed in w/plus
-//
-// This batch reconstructs CalcUp/GetLerpedPos/GetRight/GetSpeed/Initialise. The remaining
-// DWARF-listed methods are DECLARED here (DWARF shape) for later waves. GetDirection is
-// DWARF-real (BrnTrafficParam.h:130) and is CALLED by CalcUp; because its own body is not in
-// this batch it is provided here as a minimal inline accessor mirror of the mDirAndAccel slot
-// so the TU links -- FLAGGED, to be replaced (not duplicated) by its own wave.
+// Methods without an address below are declared in DWARF shape for later waves.
 class ParamTransform
 {
 public:
-    // 0x82712500 / 0x827126A0 / 0x82712770 / 0x827128E0 / 0x82712BA8 (this batch)
     Vector3  GetDeterministicPos() const;                      // later wave
     Vector3  GetLerpedPos() const;                             // 0x82712500
     Vector3  GetDirection() const;                             // FLAGGED inline stub (see below)
@@ -217,9 +198,10 @@ private:
 };
 // sizeof(ParamTransform) == 0x40
 
-// FLAGGED stub: GetDirection is a DWARF-real accessor (its own X360 body is a later wave).
-// Provided inline so CalcUp compiles/links now; the trivial mDirAndAccel.GetVector3() mirror
-// matches GetRight's slot-accessor shape. Its own wave replaces this definition.
+// FLAG: GetDirection is a DWARF-real accessor (BrnTrafficParam.h:130) whose X360 body is a
+// later wave, but CalcUp calls it. This inline mirror of the mDirAndAccel slot matches
+// GetRight's shape and lets the TU link. DELETE-WHEN the real body lands; replace this
+// definition rather than adding a second one.
 inline Vector3 ParamTransform::GetDirection() const
 {
     return mDirAndAccel.GetVector3();

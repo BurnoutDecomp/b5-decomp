@@ -50,40 +50,22 @@ namespace BrnResource
     // ========================================================================
     // EGeneratedPoolIds -- the generated resource-pool id table.
     //
-    // ⚠ CANONICAL HOME IS **GameSource/Resource/ps3mem.h** (the generated
-    // memory-map header), per the DecFIGS DWARF, which spells the whole enum at
-    // ps3mem.h:77. That header has NO reconstruction in b5-decomp yet, and the
-    // tree consequently carries the pool ids as bare X360 literals with a comment
-    // at every site (e.g. BrnRaceCarComponentStreamers.cpp's `KI_POOL_SOUND = 6`,
-    // BrnWorldGraphicsStreamer.cpp's `Construct( 3, ... )`, and the ~12 "pool 5"
-    // comments across the GameData/GameState/Director TUs). Landing it here --
-    // the SharedIO header every one of those request/response consumers already
-    // includes -- gives the ids a single named home without inventing a new file.
-    // GREPPED before adding: no other declaration of EGeneratedPoolIds or of any
-    // E_POOL_* enumerator exists anywhere under b5-decomp/src, so this is NOT a
-    // fork. ⛔ MOVE IT to GameSource/Resource/ps3mem.h (and delete it here) the
-    // day that generated header is reconstructed.
+    // ⛔ CANONICAL HOME is GameSource/Resource/ps3mem.h, per the DWARF, which spells
+    // the whole enum at ps3mem.h:77. That generated header has no reconstruction in
+    // b5-decomp yet. MOVE THIS THERE and delete it here the day it lands. It sits in
+    // this SharedIO header meanwhile because every request/response consumer already
+    // includes it, and no other declaration of EGeneratedPoolIds or of any E_POOL_*
+    // enumerator exists under b5-decomp/src.
     //
-    // The values are DWARF-verbatim, and THREE of them are independently
-    // corroborated on the X360 ARTIST build, which is what makes the whole table
-    // trustworthy for that build rather than PS3-only:
-    //   E_POOL_OW_GRAPHICS == 3  -- WorldGraphicsStreamer::Construct @0x827CA388
-    //                              passes liPoolId 3 to InternalBaseStreamer::Construct.
-    //   E_POOL_GAMEDATA    == 5  -- TrafficEntityModule::LoadData @0x82746A88 stage 0
-    //                              calls RequestInterface<4096>::LoadTrafficLanes(
-    //                              &mReceiverQueue, 1, 5); GetVehicleList @0x82746928
-    //                              bakes miPoolId 5; the boot log's
-    //                              "LoadBundle 'B5Traffic.bndl' -> pool 5" agrees.
-    //   E_POOL_SOUND       == 6  -- RaceCarAudioStreamer::Construct @0x822ECA68
-    //                              passes liPoolId 6.
+    // Values are DWARF-verbatim. Three are corroborated on the X360 ARTIST build:
+    // E_POOL_OW_GRAPHICS == 3 (WorldGraphicsStreamer::Construct @0x827CA388 passes
+    // liPoolId 3), E_POOL_GAMEDATA == 5 (TrafficEntityModule::GetVehicleList
+    // @0x82746928 bakes miPoolId 5), E_POOL_SOUND == 6 (RaceCarAudioStreamer::
+    // Construct @0x822ECA68 passes liPoolId 6).
     //
-    // E_POOL_TRAFFIC (15) itself is DWARF-only: its single X360 consumer,
-    // TrafficCarStreamer::Construct @0x827539A0, is an EXPORT HOLE (no
-    // .ida-exports JSON), so the value cannot be read back off the ARTIST build.
-    // The leaked Feb-2007 BrnTrafficCarStreamer.cpp names the SYMBOL at that call
-    // (`BaseClass::Construct( BrnResource::E_POOL_TRAFFIC, ... )`), and the DWARF
-    // supplies its value; the three corroborations above are the evidence that the
-    // DWARF's numbering is the shipped numbering. FLAGGED as such at the call site.
+    // ⚠ E_POOL_TRAFFIC (15) is DWARF-only. Its single X360 consumer,
+    // TrafficCarStreamer::Construct @0x827539A0, is an EXPORT HOLE, so the value
+    // cannot be read back off the ARTIST build. FLAGGED as such at the call site.
     // ========================================================================
     enum EGeneratedPoolIds
     {
@@ -125,26 +107,13 @@ namespace GameDataIO
     // WorldEntityModule::PrepareSurfaceList @0x822F9B70; observed value 66).
     static const s32 EVENT_GET_SURFACE_LIST = 66;
 
-    // ADDITIVE GROW 2026-08-21 (traffic wave T1, cluster C5).
-    // Receiver-side reply id for the traffic-lane (TrafficData) fetch.
-    // X360-ATTESTED, not inferred: TrafficEntityModule::LoadData @0x82746A88
-    // posts the request in stage E_RESOURCE_LOAD_LANES --
-    //   RequestInterface<4096>::LoadTrafficLanes( &mReceiverQueue, 1, 5 )
-    // -- and then, in the reply stage, reads the receiver record's leading
-    // event-kind word and guards it against the literal 55 before accepting the
-    // resource:
-    //   v13 = mReceiverQueue base;  if ( *v13 == 55 ) { ... }  else assert
-    //   "TrafficEntityModule::LoadData has received a resource with an ID that
-    //    wasn't requested"  (BrnTrafficEntityModule.cpp:1051)
-    // The very next test in the same arm reads the PAYLOAD's own
-    // GameDataEvent::miEventId (record + 8) and checks it against 1 -- the
-    // console spells that one out in its assert text, "lpAcquire->GetEventId()
-    // == KI_DATA_ACQUIRE_REQUEST" (:1055), matching the 1 passed as liEventId
-    // above. So 55 is the queue-record kind (this constant) and 1 is the
-    // per-request id; the two are different words. The same record shape is what
-    // EVENT_GET_SURFACE_LIST (66) names for the surface-list fetch, and the
-    // vehicle-graphics / vehicle-physics replies drained later in LoadData are
-    // guarded against 50 in exactly the same position (:1214 / :1291).
+    // Receiver-side reply id for the traffic-lane (TrafficData) fetch. X360-attested:
+    // TrafficEntityModule::LoadData @0x82746A88 guards the receiver record's leading
+    // event-kind word against the literal 55 before accepting the resource, else
+    // asserts (BrnTrafficEntityModule.cpp:1051). The record's own
+    // GameDataEvent::miEventId at +8 is a DIFFERENT word, checked against the
+    // liEventId passed to LoadTrafficLanes. Same record shape as
+    // EVENT_GET_SURFACE_LIST (66); the vehicle replies use 50 (:1214 / :1291).
     static const s32 EVENT_GET_TRAFFIC_LANES = 55;
 
     struct GameDataEvent : public CgsModule::Event
@@ -223,40 +192,22 @@ namespace GameDataIO
     struct SwapOutCollisionWorldRequest : public GameDataEvent {};
 
     // ========================================================================
-    // ADDITIVE GROW 2026-08-21 (traffic wave T1, cluster C5) -- the two
-    // "here is your loaded asset" responses the traffic module consumes.
+    // The two "here is your loaded asset" responses the traffic module consumes.
     //
-    // ⭐ READ THIS BEFORE ADDING A HANDLE MEMBER TO EITHER OF THEM.
-    // The DecFIGS DWARF declares each of these with its OWN private handle:
-    //     GetTrafficVehicleGraphicsResponse : GameDataAssetEvent
-    //         ResourceHandle mVehicleGraphicsObjectHandle;   (BrnGameDataEvents.h:232)
-    //     GetVehiclePhysicsResponse : GameDataAssetEvent
-    //         ResourceHandle mVehiclePhysicsObjectHandle;    (BrnGameDataEvents.h:443)
-    // and the DWARF's GameDataAssetEvent has NO handle at all (:123-:126 are
-    // miPoolId / mId / meType / mbFailFlag and nothing else). The committed
-    // GameDataAssetEvent above nevertheless carries `mHandle` at +0x20 -- an
-    // earlier wave hoisted it into the base because that is the byte the console
-    // consumers read (WorldGraphicsStreamer::OnLoadComplete @0x827BE5C8 binds
-    // from event+0x20). +0x20 is EXACTLY where the derived class's own handle
-    // sits, since the base ends at 0x20; the hoist is a naming difference, not a
-    // layout one.
+    // ⚠ DO NOT ADD A HANDLE MEMBER TO EITHER OF THEM. The DWARF gives each its own
+    // private ResourceHandle (:232 / :443) and gives GameDataAssetEvent none, but
+    // the committed GameDataAssetEvent above carries `mHandle` at +0x20 -- exactly
+    // where the derived handle would sit, since the base ends at 0x20. Declaring it
+    // again here creates a SECOND handle at +0x28 and every reader takes the wrong
+    // one. So both are empty derivatives whose DWARF-named accessors return the
+    // inherited mHandle: layout and source vocabulary both stay right, and sizeof is
+    // 0x28 either way. X360: TrafficCarStreamer::OnLoadComplete @0x82758270 binds the
+    // stub ResourcePtr from event+0x20.
     //
-    // Re-declaring the handle HERE would therefore create a SECOND handle at
-    // +0x28 and every reader would take the wrong one. These two responses are
-    // consequently modelled as empty derivatives whose DWARF-named accessors
-    // return the inherited `mHandle`, which keeps both the byte layout and the
-    // source vocabulary correct. (The right long-term fix is to push mHandle
-    // back down out of GameDataAssetEvent into the response family; that is a
-    // cross-TU reorder touching BrnBaseStreamer.cpp, BrnRaceCarComponentStreamers
-    // .cpp and BrnWorldGraphicsStreamer.cpp, so it is PARKED for a coordinated
-    // pass rather than done from this cluster.)
-    //
-    // X360 attestation for the graphics one: TrafficCarStreamer::OnLoadComplete
-    // @0x82758270 does
-    //     CgsResource::BaseResourcePtr::CreateFromHandle( &maGraphicsStubs[i],
-    //                                                     lpEvent + 32 );
-    // i.e. it binds the stub ResourcePtr from the handle at event+0x20 -- the
-    // handle this accessor names. sizeof is 0x28 either way.
+    // ⛔ PARKED: the long-term fix is to push mHandle back down out of
+    // GameDataAssetEvent into the response family. That is a cross-TU reorder
+    // touching BrnBaseStreamer.cpp, BrnRaceCarComponentStreamers.cpp and
+    // BrnWorldGraphicsStreamer.cpp, so it needs a coordinated pass.
     // ========================================================================
 
     // DWARF: BrnGameDataEvents.h:220. The reply to a traffic-vehicle GRAPHICS
@@ -272,11 +223,11 @@ namespace GameDataIO
     };
 
     // DWARF: BrnGameDataEvents.h:425. The reply to a vehicle PHYSICS load (asset
-    // set E_ASSETSET_PHYSICS); the handle names the loaded
-    // BrnPhysics::Deformation model data the VehicleTypeRuntime is Prepare'd from
-    // (TrafficEntityModule::LoadData @0x82746A88 stage E_RESOURCE_LOAD_PHYSICS
-    // binds maTrafficVehiclePhysicsSpecs[type] from the record's +0x20 handle and
-    // then calls VehicleTypeRuntime::Prepare @0x82761B10).
+    // set E_ASSETSET_PHYSICS); the handle names the loaded BrnPhysics::Deformation
+    // model data the VehicleTypeRuntime is Prepare'd from. TrafficEntityModule::
+    // LoadData @0x82746A88 stage E_RESOURCE_LOAD_PHYSICS binds
+    // maTrafficVehiclePhysicsSpecs[type] from the record's +0x20 handle, then calls
+    // VehicleTypeRuntime::Prepare @0x82761B10.
     struct GetVehiclePhysicsResponse : public GameDataAssetEvent
     {
         // DWARF :437 / :440.
