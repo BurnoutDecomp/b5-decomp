@@ -64,9 +64,13 @@ namespace
     const f32 KF_YAW_ROTATED_EPSILON    = 1.1920929e-7f;  // flt_82001770 / flt_82002514 (+/-)
 
     // flt_82CDAD50 -- the lerp amount easing mfYawReturnRate toward KF_YAW_RETURN_TARGET.
-    // Its numeric value is NOT resolved in the available rodata dumps (Hex-Rays left it
-    // symbolic); named here and left for a rodata pass to pin. FLAG: value unattested.
-    const f32 KF_YAW_RETURN_RATE_LERP   = 0.1f;    // flt_82CDAD50 (value unconfirmed)
+    // ⛔ VALUE CORRECTION 2026-08-20: this was a PLACEHOLDER 0.1f carrying an explicit
+    // "FLAG: value unattested" note (Hex-Rays left the constant symbolic). DUMPED now from
+    // the decrypted ARTIST image -- file_off = 0x3000 + 0x82CDAD50 - 0x82000000 = 0xCDDD50,
+    // big-endian word 0x3D4CCCCD == 0.05f. The guess was 2x TOO LARGE, i.e. the camera's
+    // yaw returned to centre at twice the console's rate, which reads as the chase camera
+    // being pulled back in line with the car instead of trailing it.
+    const f32 KF_YAW_RETURN_RATE_LERP   = 0.05f;   // flt_82CDAD50 (0x3D4CCCCD, dumped)
 
     const f32 KF_ZERO = 0.0f;   // flt_82001CC0
 }

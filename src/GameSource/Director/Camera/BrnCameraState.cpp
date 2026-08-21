@@ -135,5 +135,97 @@ void CameraState::Construct()
     Clear();                      // the X360 tail call
 }
 
+
+// ----------------------------------------------------------------------------
+// Interpolate @ 0x82220BC0   (170 asm lines, DWARF BrnCameraState.cpp:121)
+//
+// The flag-set half of a camera blend. CameraInterpolationController::Update @0x822513D8
+// calls it once per frame and copies all three qwords back over the live camera's state.
+//
+// IT IS A MERGE, NOT AN INTERPOLATION -- lfT only chooses between two merge modes:
+//   lfT >= 1.0 : the result IS lrTo, wholesale (all three fields).
+//   otherwise  : head = lrFrom's; current = lrFrom.current AND lrTo.current; and previous is
+//                set to that same merged current, NOT carried from either input's previous.
+// The AND is the conservative choice for a blend: a flag only one endpoint asserts is not
+// true of the in-between camera.
+//
+// FIVE BITS ARE OR-ed INSTEAD, and none is arbitrary -- every one is a VALIDITY bit, where
+// "either endpoint says so" is the safe direction:
+//   bit 0  (mask 0x1)         within ValidityAccount's FAILED range   [0, 14)
+//   bit 3  (mask 0x8)         within the FAILED range
+//   bit 13 (mask 0x2000)      the last of the FAILED range
+//   bit 27 (mask 0x8000000)   == ValidityAccount::E_FIRST_NOCUTFROM_FLAG
+//   bit 28 (mask 0x10000000)  within the NOCUTFROM range [27, 31)
+// Bits 0 and 13 are merged INSIDE the `lfT < 1` arm (asm 0x82220C48 / 0x82220C88, each with
+// a matching else-branch that CLEARS the bit); bits 3, 27 and 28 are OR-ed AFTER the
+// if/else, so they apply on the `lfT >= 1` path too (0x82220CC0 / 0x82220CE8 / 0x82220D10,
+// no clear branch). That asymmetry is the console's, which is why this is two groups.
+//
+// THE MASKS MAP STRAIGHT TO BIT INDICES. The console reads them from `*(state + 12)` -- the
+// LOW dword of the 8-byte field on big-endian PPC -- and CgsBitArray's own bit math is
+// `1 << index` into a u64, so mask 0x8000000 is index 27, not 27+32. That the two highest
+// land exactly on E_FIRST_NOCUTFROM_FLAG and its neighbour is the cross-check.
+// ----------------------------------------------------------------------------
+CameraState CameraState::Interpolate(const CameraState& lrFrom, const CameraState& lrTo, f32 lfT)
+{
+    CGS_ASSERT(lfT >= 0.0f && lfT <= 1.0f, "lfT >= 0.0f && lfT <= 1.0f");   // .cpp:121
+
+    // The FAILED-range bits merged inside the `lfT < 1` arm (set OR clear).
+    static const u32 KAU_MERGED_IN_ARM[2] = { 0u, 13u };
+    // The bits OR-ed unconditionally, on both arms.
+    static const u32 KAU_MERGED_ALWAYS[3] =
+        { 3u, static_cast<u32>(ValidityAccount::E_FIRST_NOCUTFROM_FLAG), 28u };
+
+    CameraState lResult = lrFrom;   // asm 0x82220C00: all three qwords seeded from lrFrom
+
+    if (lfT >= 1.0f)
+    {
+        lResult = lrTo;
+    }
+    else
+    {
+        for (u32 luIndex = 0; luIndex < KU_NUM_FLAGS; ++luIndex)
+        {
+            if (lrFrom.mCurrentFlags.IsBitSet(luIndex) && lrTo.mCurrentFlags.IsBitSet(luIndex))
+            {
+                lResult.mCurrentFlags.SetBit(luIndex);
+            }
+            else
+            {
+                lResult.mCurrentFlags.UnSetBit(luIndex);
+            }
+        }
+
+        for (u32 luSlot = 0; luSlot < 2; ++luSlot)
+        {
+            const u32 luIndex = KAU_MERGED_IN_ARM[luSlot];
+            if (lrFrom.mCurrentFlags.IsBitSet(luIndex) || lrTo.mCurrentFlags.IsBitSet(luIndex))
+            {
+                lResult.mCurrentFlags.SetBit(luIndex);
+            }
+            else
+            {
+                lResult.mCurrentFlags.UnSetBit(luIndex);
+            }
+        }
+
+        // asm `a1[2] = v13` with v13 == the merged current: the PREVIOUS set is overwritten
+        // with the merged CURRENT one, not carried from either input.
+        lResult.mPreviousFlags = lResult.mCurrentFlags;
+    }
+
+    // The three that apply on both arms -- OR only, never cleared.
+    for (u32 luSlot = 0; luSlot < 3; ++luSlot)
+    {
+        const u32 luIndex = KAU_MERGED_ALWAYS[luSlot];
+        if (lrFrom.mCurrentFlags.IsBitSet(luIndex) || lrTo.mCurrentFlags.IsBitSet(luIndex))
+        {
+            lResult.mCurrentFlags.SetBit(luIndex);
+        }
+    }
+
+    return lResult;
+}
+
 } // namespace Camera
 } // namespace BrnDirector

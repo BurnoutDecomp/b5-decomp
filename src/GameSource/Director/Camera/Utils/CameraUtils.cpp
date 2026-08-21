@@ -848,6 +848,314 @@ f32 SineLerp(f32 lfFrom, f32 lfTo, f32 lfParameter)
 }
 
 // ----------------------------------------------------------------------------
+// ExponentialLerp @0x821F8C78   (DWARF CameraUtils.cpp:840 -- the assert line)
+//
+// The second of BehaviourInterpolate's four blend mappings (linear / SineLerp /
+// ExponentialLerp / the k^100 curve). A SYMMETRIC exponential S-curve: each half is a
+// pow() ramp mirrored about (0.5, 0.5), so it starts and ends far flatter than SineLerp.
+//
+// asm walk (f1 = lfFrom stored at arg_14, f2 = lfTo stored at arg_1C, f31 = f3 = param):
+//   0x821F8CAC  assert lfParameter >= 0.0f && lfParameter <= 1.0f      (.cpp:840)
+//   0x821F8CE8  fcmpu f31, f30(=0.5)   ; bgt -> the upper arm
+//   -- lower arm (param <= 0.5), 0x821F8D04 --
+//     fnmsubs f2, f31, f0(=100.0), f13(=50.0)   == 50.0 - param*100.0
+//     bl sub_82C09970                           == pow(dbl_820049D8, that)
+//     frsp f0, f1 ; fmuls f0, f0, f30           == (f32)pow(...) * 0.5
+//   -- upper arm (param > 0.5), 0x821F8D18 --
+//     fmsubs  f2, f31, f0(=100.0), f13(=50.0)   == param*100.0 - 50.0
+//     bl sub_82C09970
+//     frsp f0, f1 ; fnmsubs f0, f0, f30, f29    == 1.0 - (f32)pow(...) * 0.5
+//   -- the tail, 0x821F8D28..0x821F8D58 -- the lerp, done in VMX on splatted scalars:
+//     vsubfp  v13, v13, v0     == lfTo - lfFrom
+//     vmaddfp v0, v13, v0, v12 == lfFrom + eased * (lfTo - lfFrom)
+//
+// EVERY CONSTANT DUMPED from the decrypted ARTIST image, not read off the pseudocode's
+// printed decimals (file_off = 0x3000 + vaddr - 0x82000000, big-endian):
+//   flt_820049E0 = 0x42C80000 = 100.0f      flt_82001B04 = 0x42480000 = 50.0f
+//   flt_82001DA0 = 0x3F000000 = 0.5f        flt_82001C98 = 0x3F800000 = 1.0f
+//   dbl_820049D8 = 0x3FE99999A0000000 = 0.800000011920929 -- a DOUBLE, and exactly the
+//                  double value of the float 0.8f, which is why it is spelled as a
+//                  widened 0.8f below rather than as a decimal literal.
+//
+// ⚠ THE BASE IS RAISED IN DOUBLE PRECISION AND THE RESULT ROUNDED TO SINGLE (`frsp`)
+//   BEFORE the 0.5 scale -- pow() is the double-precision libm one (sub_82C09970 takes the
+//   base in f1 and the exponent in f2 and returns in f1). Doing the whole thing in f32
+//   would drift at the flat ends where pow(0.8, 50) ~= 1.4e-5.
+// ⚠ THE TWO ARMS MEET EXACTLY: at param == 0.5 both reduce to pow(0.8, 0) * 0.5 == 0.5
+//   (the upper arm as 1.0 - 0.5). The <= / > split is the console's `bgt`, i.e. 0.5 itself
+//   takes the LOWER arm.
+// ⚠ The assert is NON-GATING and inclusive at both ends, exactly as in SineLerp; an
+//   out-of-range parameter extrapolates rather than clamping.
+// ----------------------------------------------------------------------------
+f32 ExponentialLerp(f32 lfFrom, f32 lfTo, f32 lfParameter)
+{
+    const f64 KD_EXPONENTIAL_BASE = static_cast<f64>(0.8f);  // dbl_820049D8
+    const f32 KF_EXPONENT_SCALE   = 100.0f;                  // flt_820049E0
+    const f32 KF_EXPONENT_BIAS    = 50.0f;                   // flt_82001B04
+    const f32 KF_HALF             = 0.5f;                    // flt_82001DA0
+    const f32 KF_ONE              = 1.0f;                    // flt_82001C98
+
+    CGS_ASSERT(lfParameter >= 0.0f && lfParameter <= 1.0f,                 // .cpp:840
+               "lfParameter >= 0.0f && lfParameter <= 1.0f");
+
+    f32 lfEased;
+    if (lfParameter > KF_HALF)
+    {
+        const f32 lfExponent = lfParameter * KF_EXPONENT_SCALE - KF_EXPONENT_BIAS;
+        const f32 lfPower    = static_cast<f32>(std::pow(KD_EXPONENTIAL_BASE,
+                                                        static_cast<f64>(lfExponent)));
+        lfEased = KF_ONE - lfPower * KF_HALF;
+    }
+    else
+    {
+        const f32 lfExponent = KF_EXPONENT_BIAS - lfParameter * KF_EXPONENT_SCALE;
+        const f32 lfPower    = static_cast<f32>(std::pow(KD_EXPONENTIAL_BASE,
+                                                        static_cast<f64>(lfExponent)));
+        lfEased = lfPower * KF_HALF;
+    }
+
+    return lfFrom + lfEased * (lfTo - lfFrom);
+}
+
+// ----------------------------------------------------------------------------
+// DirectionPreservingSLerp @0x82205558   (322 asm lines, DWARF CameraUtils.h:742)
+//
+// The orientation blend the whole camera-interpolation family sits on. An ordinary slerp
+// re-derives the rotation axis every frame from the CURRENT pair of orientations; when the
+// blend passes through a half turn that axis flips sign and the camera visibly snaps to the
+// short way round. This one remembers the axis it used last frame and, when the freshly
+// extracted one points the other way, deliberately takes the LONG way (angle - 2*pi) so the
+// rotation keeps going in the same direction.
+//
+// asm walk (r3 = sret, r4 = lrFrom, r5 = lrTo, r6 = lrLastAxis, r7 = lrbWasInverted, v1 = t):
+//   0x822055A8  assert lpbWasInvertedLastTime != NULL                  (CameraUtils.h:742)
+//   0x822055D8  vcmpgefp128. 0, t   -> t <= 0: copy lrFrom's three rows out and return
+//   0x82205618  vcmpgefp128. t, 1   -> t >= 1: copy lrTo's three rows out and return
+//   0x82205660..0x822056D8  a vmrghw/vmrglw TRANSPOSE of lrFrom, then a row cascade against
+//                           lrTo == R = lrFrom^T * lrTo, the relative rotation
+//   0x822056E0  QueryRotate(R, &axis, &angle)
+//   0x82205708  vcmpgtfp. 0.034906585, angle   -> the SMALL-ANGLE arm
+//   ... otherwise the axis-memory arm, then out = lrFrom * RotationAxis(axis, angle')
+//   0x822058xx  store the three result rows to the sret
+//
+// ⭐ THE ROUND TRIP IS THE PROOF OF THE DECODE, and it is exact at both ends:
+//   t == 0 -> lrFrom (the early-out), and the general path also gives lrFrom * I.
+//   t == 1 -> lrTo   (the early-out), and the general path gives
+//             lrFrom * R == lrFrom * lrFrom^T * lrTo == lrTo.
+// Getting the multiply order backwards (R = lrTo * lrFrom^T, or out = M * lrFrom) breaks
+// one of those two, which is what pinned the order rather than pattern-matching.
+//
+// ⚠️ THE SMALL-ANGLE ARM IS NOT A SLERP AT ALL. Under ~2 degrees the console abandons the
+// axis/angle form entirely and does a COMPONENTWISE LERP of the three basis rows, then
+// re-normalises each one (three separate vmsum3fp128 + vrsqrtefp + two-Newton pipelines).
+// That is cheaper and better conditioned than an axis extracted from a near-identity matrix,
+// where the antisymmetric part is all rounding noise. It also means the axis memory is NOT
+// consulted on this path.
+// ⚠️ THE INVERSION TEST HAS TWO CLAUSES AND BOTH MATTER: the axis is only inverted when it
+// has flipped relative to the remembered one (dot < 0) AND EITHER the rotation is more than
+// a quarter turn OR it was already inverted last frame. The second disjunct is the latch
+// that keeps a long blend consistent once it has committed to the long way round; dropping
+// it makes the camera flip back mid-transition, which is exactly the artefact this function
+// is named for.
+// ⚠️ THE THREE ANGLE CONSTANTS ARE DUMPED, not derived: 0.034906585 (2 degrees in radians,
+// the same threshold rw's own Matrix44Affine SLerp uses), 1.5707964 (pi/2) and 6.2831855
+// (2*pi).
+// ----------------------------------------------------------------------------
+Matrix33 DirectionPreservingSLerp(const Matrix33& lrFrom, const Matrix33& lrTo,
+                                  Vector3& lrLastAxis, bool& lrbWasInvertedLastTime,
+                                  VecFloat lvT)
+{
+    const f32 KF_SMALL_ANGLE_RADS = 0.034906585f;   // 2 degrees
+    const f32 KF_QUARTER_TURN     = 1.5707964f;     // pi/2
+    const f32 KF_FULL_TURN        = 6.2831855f;     // 2*pi
+
+    CGS_ASSERT(&lrbWasInvertedLastTime != 0, "lpbWasInvertedLastTime != NULL");   // h:742
+
+    // BrnDirector::VecFloat (NOT the global rw Vector4 alias -- see CameraUtils.h's
+    // load-bearing-include note) exposes the broadcast scalar through operator f32().
+    const f32 lfT = lvT;
+
+    // 0x822055D8 / 0x82205618 -- the two early-outs, both plain three-row copies.
+    if (0.0f >= lfT)
+    {
+        return lrFrom;
+    }
+    if (lfT >= 1.0f)
+    {
+        return lrTo;
+    }
+
+    // R = lrFrom^T * lrTo -- the rotation that carries lrFrom onto lrTo.
+    Matrix44Affine lFromAffine;
+    lFromAffine.xAxis = lrFrom.xAxis;
+    lFromAffine.yAxis = lrFrom.yAxis;
+    lFromAffine.zAxis = lrFrom.zAxis;
+    lFromAffine.wAxis = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };
+
+    Matrix44Affine lToAffine;
+    lToAffine.xAxis = lrTo.xAxis;
+    lToAffine.yAxis = lrTo.yAxis;
+    lToAffine.zAxis = lrTo.zAxis;
+    lToAffine.wAxis = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };
+
+    // The console's transpose is the vmrghw/vmrglw lane merge; for an orthonormal basis the
+    // SDK's orthonormal inverse is the same 3x3 (its translation lane is computed from a zero
+    // position here and then never read).
+    const Matrix44Affine lFromTranspose =
+        rw::math::vpu::InverseOfMatrixWithOrthonormal3x3(lFromAffine);
+    const Matrix44Affine lRelative = rw::math::vpu::Mult(lFromTranspose, lToAffine);
+
+    Vector3 lAxis;
+    f32     lfAngle = 0.0f;
+    rw::math::vpu::QueryRotate(lRelative, lAxis, lfAngle);
+
+    Matrix33 lResult;
+
+    if (KF_SMALL_ANGLE_RADS > lfAngle)
+    {
+        // 0x82205720..0x822057F0 -- componentwise lerp of the three rows, each renormalised.
+        lResult.xAxis = Normalize(Lerp(lrFrom.xAxis, lrTo.xAxis, lfT));
+        lResult.yAxis = Normalize(Lerp(lrFrom.yAxis, lrTo.yAxis, lfT));
+        lResult.zAxis = Normalize(Lerp(lrFrom.zAxis, lrTo.zAxis, lfT));
+
+        // The console still refreshes the remembered axis on this path (`stvx128 v11, r0,
+        // r22`), so a later frame that leaves the small-angle band has something to compare
+        // against rather than a stale axis from before the blend.
+        lrLastAxis = lAxis;
+        return lResult;
+    }
+
+    // ---- the axis-memory arm -------------------------------------------------------------
+    const f32 lfDotWithLast = rw::math::vpu::Dot(lrLastAxis, lAxis);
+
+    f32 lfBlendedAngle;
+    if (0.0f > lfDotWithLast &&
+        (lfAngle > KF_QUARTER_TURN || lrbWasInvertedLastTime))
+    {
+        // Take the long way round, and remember that we did.
+        lrLastAxis              = rw::math::vpu::Mult(lAxis, -1.0f);   // the vxor sign flip
+        lfBlendedAngle          = (lfAngle - KF_FULL_TURN) * lfT;
+        lrbWasInvertedLastTime  = true;
+    }
+    else
+    {
+        lrLastAxis              = lAxis;
+        lfBlendedAngle          = lfAngle * lfT;
+        lrbWasInvertedLastTime  = false;
+    }
+
+    const Matrix44Affine lStep = rw::math::vpu::Matrix44AffineFromAxisRotationAngle(
+        lAxis, Vector4{ lfBlendedAngle, lfBlendedAngle, lfBlendedAngle, lfBlendedAngle });
+
+    const Matrix44Affine lRotated = rw::math::vpu::Mult(lFromAffine, lStep);
+
+    lResult.xAxis = lRotated.xAxis;
+    lResult.yAxis = lRotated.yAxis;
+    lResult.zAxis = lRotated.zAxis;
+    return lResult;
+}
+
+// ----------------------------------------------------------------------------
+// DirectionPreservingSLerp(Matrix44Affine) @0x82217C08   (501 asm lines, CameraUtils.h:821)
+//
+// The AFFINE overload of the direction-preserving slerp -- the one
+// CameraInterpolationController::Update selects for interpolation METHOD 0 (the plain camera
+// slerp, as opposed to method 1's rotate-about-pivot). It is the same idea as the Matrix33
+// overload above and shares its axis memory, but it differs in two ways that matter:
+//
+//   1. IT CARRIES A TRANSLATION. Four rows in, four rows out, and the fourth is a PLAIN
+//      LERP -- never slerped, never normalised (asm 0x82218xxx tail:
+//          lvx128 v11, From+0x30 ; lvx128 v10, To+0x30
+//          vsubfp v0, v10, v11 ; vmaddcfp128 v0, t, v0, v11 ; stvx128 v0, out+0x30
+//      i.e. From.wAxis + t * (To.wAxis - From.wAxis)).
+//   2. THERE IS NO SMALL-ANGLE ARM. The Matrix33 overload drops to a componentwise row lerp
+//      under ~2 degrees; this one has no such branch at all (the 0.034906585 constant does
+//      not appear anywhere in the function). Every non-degenerate blend goes through
+//      axis/angle. Adding the shortcut "for consistency" would be a divergence.
+//
+// Everything else matches the Matrix33 overload store for store: the same
+// lpbWasInvertedLastTime assert (at :821 rather than :742), the same two early-outs (t <= 0
+// copies From, t >= 1 copies To -- all FOUR rows in this overload), the same
+// R = From^T * To relative rotation, and the same inversion latch (dot against the
+// remembered axis < 0, AND either the angle exceeds pi/2 or we were already inverted, then
+// take angle - 2*pi and remember it).
+//
+// ⚠️ THE CONSOLE REACHES THE AXIS/ANGLE EXTRACTION THROUGH sub_82216510 @0x82216510
+// (210 asm lines), NOT through QueryRotate. That helper has the same two callees as
+// QueryRotate (XMVectorATan and rw::math::vpu::QueryRotateDegenerateUnitAxis) and publishes
+// THREE outputs -- the axis, the angle, and a third value this call site never reads (its
+// other caller, rw::math::vpu::SLerp @0x82216858, is what consumes it). Since the two values
+// this path does use are exactly QueryRotate's pair, the extraction is expressed through
+// QueryRotate here rather than duplicating it. FLAG: if sub_82216510's third output is ever
+// found to differ from QueryRotate's arithmetic on some input, this is the site to revisit.
+//
+// ⚠️ THE ROTATION MATRIX IS BUILT INLINE at the console (the vsubfp 1-cos / three T*axis
+// multiplies / vperm+vrlimi assembly near the tail) rather than through a call. That is the
+// standard axis-angle-to-matrix construction, which is what
+// Matrix44AffineFromAxisRotationAngle already is; using it changes no arithmetic.
+// ----------------------------------------------------------------------------
+Matrix44Affine DirectionPreservingSLerp(const Matrix44Affine& lrFrom, const Matrix44Affine& lrTo,
+                                        Vector3& lrLastAxis, bool& lrbWasInvertedLastTime,
+                                        VecFloat lvT)
+{
+    const f32 KF_QUARTER_TURN = 1.5707964f;     // pi/2
+    const f32 KF_FULL_TURN    = 6.2831855f;     // 2*pi
+
+    CGS_ASSERT(&lrbWasInvertedLastTime != 0, "lpbWasInvertedLastTime != NULL");   // h:821
+
+    const f32 lfT = lvT;
+
+    // The two early-outs copy all FOUR rows (asm 0x82217C70 / 0x82217CC0).
+    if (0.0f >= lfT)
+    {
+        return lrFrom;
+    }
+    if (lfT >= 1.0f)
+    {
+        return lrTo;
+    }
+
+    // R = lrFrom^T * lrTo, the relative rotation. (Only the 3x3 of R is consulted below;
+    // the console computes a fourth row here too and then never reads it.)
+    const Matrix44Affine lFromTranspose =
+        rw::math::vpu::InverseOfMatrixWithOrthonormal3x3(lrFrom);
+    const Matrix44Affine lRelative = rw::math::vpu::Mult(lFromTranspose, lrTo);
+
+    Vector3 lAxis;
+    f32     lfAngle = 0.0f;
+    rw::math::vpu::QueryRotate(lRelative, lAxis, lfAngle);
+
+    const f32 lfDotWithLast = rw::math::vpu::Dot(lrLastAxis, lAxis);
+
+    f32 lfBlendedAngle;
+    if (0.0f > lfDotWithLast &&
+        (lfAngle > KF_QUARTER_TURN || lrbWasInvertedLastTime))
+    {
+        lrLastAxis             = rw::math::vpu::Mult(lAxis, -1.0f);
+        lfBlendedAngle         = (lfAngle - KF_FULL_TURN) * lfT;
+        lrbWasInvertedLastTime = true;
+    }
+    else
+    {
+        lrLastAxis             = lAxis;
+        lfBlendedAngle         = lfAngle * lfT;
+        lrbWasInvertedLastTime = false;
+    }
+
+    const Matrix44Affine lStep = rw::math::vpu::Matrix44AffineFromAxisRotationAngle(
+        lAxis, Vector4{ lfBlendedAngle, lfBlendedAngle, lfBlendedAngle, lfBlendedAngle });
+
+    Matrix44Affine lResult = rw::math::vpu::Mult(lrFrom, lStep);
+
+    // The fourth row is a PLAIN LERP -- see the banner. Mult above already wrote a wAxis
+    // (lrFrom's translation put through lStep); this overwrites it, which is what the
+    // console's separate tail store does.
+    lResult.wAxis = Lerp(lrFrom.wAxis, lrTo.wAxis, lfT);
+
+    return lResult;
+}
+
+// ----------------------------------------------------------------------------
 // GetSizeOnScreen @0x82221918   (360 asm lines)
 //
 // The on-screen footprint of an oriented AABB, in NORMALISED SCREEN FRACTIONS: project all

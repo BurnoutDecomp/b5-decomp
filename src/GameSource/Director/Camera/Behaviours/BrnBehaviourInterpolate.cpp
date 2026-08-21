@@ -124,14 +124,10 @@ BehaviourInterpolate::Construct()
 {
     Behaviour::Construct();
 
-    // ⚠️ GATE: the two Utils::Interpolater sub-objects inside mInterpolator (console
-    //   this+0x260 / this+0x280, each `stvx 0` + `stb 0` at +0x10). mInterpolator is a NAMED
-    //   opaque sub-object here (see the header FLAG -- the CameraInterpolationController TU
-    //   has not landed), so the block is zeroed as storage rather than reached by offset.
-    //   Same observable state; re-point at the real Interpolater::Construct pair when the type
-    //   becomes includable. DELETE-WHEN: as the header FLAG.
-    for (u32 luByte = 0; luByte < sizeof(mInterpolator.maOpaque); ++luByte)
-        mInterpolator.maOpaque[luByte] = 0;
+    // The console INLINES the two Utils::Interpolater constructions here (this+0x260 and
+    // this+0x280, each `stvx 0` + `stb 0` at +0x10). Now that the controller is a real type,
+    // this reaches them BY NAME through its own Construct rather than zeroing raw storage.
+    mInterpolator.Construct();
 
     mFromCamera.Construct();
     mToCamera.Construct();
@@ -290,52 +286,29 @@ BehaviourInterpolate::PostCollisionUpdate(Camera& lrCamera, const BehaviourShare
     lrCamera.GetEffects().mu8InterpolateType =
         static_cast<u8>(mpParameters->GetInterpolationMethod());
 
-    // ⭐⭐ THE ENDPOINT OF THE BLEND. The console's last statement is
-    //     BrnDirector::CameraInterpolationController::Update(&mInterpolator, lrCamera, lTo,
-    //                                                        lrSharedInfo.GetEyeTarget())
-    //   @0x822513D8 (227 asm lines). It reads the three fields written just above, maps the
-    //   parametric time through the selected easing curve (linear / Utils::SineLerp /
-    //   Utils::ExponentialLerp / 1-pow(k, t^3*100)), blends the TRANSFORM (slerp @sub_82217C08
-    //   for E_METHOD_SLERP, CameraInterpolationController::RotateAboutPivot for
-    //   E_METHOD_ROTATE_ABOUT_PLAYER_CAR), then lerps CameraState, CameraEffects, the
-    //   5-float DepthOfField block, the FOV and the near-clip distance toward lTo.
+    // ⭐⭐ THE ENDPOINT OF THE BLEND -- now the REAL one.
+    // The console's last statement is
+    //     CameraInterpolationController::Update(&mInterpolator, lrCamera, lTo,
+    //                                           lrSharedInfo.GetEyeTarget())   @0x822513D8
+    // and that is exactly what runs here. It reads the three fields written just above,
+    // maps the parametric time through the selected easing curve, blends the TRANSFORM by
+    // the selected method, then lerps CameraState, CameraEffects, the five-float
+    // DepthOfField block, the FOV and the near-clip distance toward lTo.
     //
-    //   AT PARAMETRIC TIME 1.0 THAT WHOLE PIPELINE'S OUTPUT IS EXACTLY lTo -- every component,
-    //   under every one of the four mappings (the fourth's k^100 term is identically zero in
-    //   f32) and under both methods (an endpoint is an endpoint for slerp and for
-    //   rotate-about-pivot alike; the extract/rebuild pair is a round trip at t == 1). So the
-    //   endpoint needs NO interpolation maths and is reproduced here exactly, not approximated.
+    // ⛔ THE t == 1 CUT THAT USED TO LIVE HERE IS GONE (2026-08-20). It read
+    //     if (lfParametricTime >= KF_ONE) { lrCamera = lTo; }
+    // with a documented gate saying the in-between needed
+    // CameraInterpolationController::Update + RotateAboutPivot +
+    // ExtractRotateAboutPivotParams + Matrix44AffineFromRota + CameraState::Interpolate +
+    // the direction-preserving slerp. All of those landed, so the ramp is real: this is the
+    // fix for camera transitions snapping instead of easing.
     //
-    //   ⭐ THIS IS THE WHOLE OF THE LIVE JUNKYARD SHOT, not an edge case.
-    //   ArbStateCarSelect::Prepare only enters E_STATE_ROTATE_ABOUT_CAR once
-    //   mToGameplayInterpolater.HasFinished() (BrnArbStateCarSelect.cpp:635), and that state
-    //   publishes THIS behaviour's produced camera every frame. The interpolater is therefore
-    //   at t == 1 for the entire state, so what is written below is the console's own output
-    //   for every frame of the junkyard car-select shot.
-    if (lfParametricTime >= KF_ONE)
-    {
-        lrCamera = lTo;
-    }
-
-    // ⚠️ STILL GATED: THE IN-BETWEEN (0 < t < 1) only. Reproducing it needs
-    //   CameraInterpolationController::Update itself plus, for this call site's
-    //   E_METHOD_ROTATE_ABOUT_PLAYER_CAR, RotateAboutPivot -> ExtractRotateAboutPivotParams
-    //   (declaration-only, a dense VMX pipeline) and Matrix44AffineFromRota (an honest
-    //   documented floor), and Camera::CameraState::Interpolate @0x82220BC0.
-    //   CONSEQUENCE while gated: the transition into a blended camera is a CUT at t == 1
-    //   rather than the console's eased ramp. On the junkyard path that ramp is
-    //   KF_INTERPOLATE_ONTO_CAR_SECS == 1.0f long and is over before the state that shows the
-    //   result is entered, so nothing on that path is visibly short-changed.
-    //   ⛔ THE PREVIOUS, WIDER GATE'S JUSTIFICATION HAS EXPIRED AND IS RETRACTED. It read
-    //   "the 'to' camera ... is mLookAroundCarCam, a BehaviourRotateAboutVehicle -- and THAT
-    //   behaviour has no Construct and no Update in this tree either ... interpolating toward
-    //   it would walk the published camera INTO the origin", with
-    //   "DELETE-WHEN: BehaviourRotateAboutVehicle::{Construct,Update} land". Both landed
-    //   (BrnBehaviourRotateAboutVehicle.cpp Construct @:247 / Update @:332) and Update runs
-    //   every frame, so the "to" camera is a real orbit-about-car shot and the hold it
-    //   justified was, by then, the only thing freezing the junkyard camera.
-    //   DELETE-WHEN: CameraInterpolationController::Update + CameraState::Interpolate +
-    //   the two VMX pivot helpers are transcribed.
+    // ⚠️ Update ALSO reaches the t == 1 endpoint by itself -- at a parametric time of 1
+    // every one of its blends returns lTo exactly (an endpoint is an endpoint for the
+    // rotate-about-pivot round trip and for every one of the four easing mappings). So the
+    // removed special case was never doing anything Update does not also do; it was only
+    // ever the *rest* of the ramp that was missing.
+    mInterpolator.Update(lrCamera, lTo, lrInfo.GetEyeTarget());
 
     // [BRING-UP MEASUREMENT, camera 1:1 wave] the blend's two endpoints and the parametric
     // time, so a frozen or mis-framed shot can be attributed to the SOURCE camera, the TARGET
