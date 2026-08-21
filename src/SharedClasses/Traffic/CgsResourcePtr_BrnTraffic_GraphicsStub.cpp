@@ -1,5 +1,5 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourcePtr.h"
-#include "SharedClasses/Traffic/BrnTrafficGraphicsStubResourceType.h"   // BrnTraffic::GraphicsStub
+#include "SharedClasses/Traffic/BrnTrafficGraphicsStub.h"   // BrnTraffic::GraphicsStub (its own home; was the ResourceType header's fork)
 
 // Per-instantiation TU for CgsResource::ResourcePtr<BrnTraffic::GraphicsStub>.
 // The body is the generic inline non-const operator*() in CgsResourcePtr.h; this

@@ -271,6 +271,18 @@ void BridgeEntityModulesToOutput_PostPhysics(
             lpWorldEntityOutput_PostPhysics->GetResourceRequestInterface()->mRequestQueue);
     }
 
+    // ⭐ LEG 3 LANDED (wave T1 round-4 consolidation 2026-08-21): the TRAFFIC resource-request
+    // flush @0x827AEFC0 -- Append<4096,16>( out->GetResourceRequestResourceInterface(),
+    // trafficOut->GetResourceRequestInterface() ). The banner above said "source getters
+    // un-homed on this build"; STALE since round 3 homed OutputBuffer_PostPhysics::
+    // mResourceRequestInterface and bodied BOTH getter halves (BrnTrafficEntityModuleIO.cpp).
+    // Without this, TrafficEntityModule::UpdateStreaming's per-frame carry-over fills the
+    // traffic output buffer and the requests die there -- the boot proved it: the streamer
+    // reached OnLoadBegin but no VEH_T*_GR bundle file was ever opened. The console's
+    // PerfMon bracket (a1+6167724) takes this file's standing disposition (not modelled).
+    lpOutputBuffer->GetResourceRequestResourceInterface()->mRequestQueue.Append(
+        lpTrafficOutput_PostPhysics->GetResourceRequestInterface()->mRequestQueue);
+
     // The RACE-CAR (per-car streamer) resource-request flush -- the same transfer, one
     // buffer over. RaceCarEntityModule::PostPhysicsUpdate -> SendStreamerEvents @0x82304F70
     // has just drained the five component streamers' rings into this buffer's request

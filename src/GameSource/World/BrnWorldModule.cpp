@@ -3324,37 +3324,12 @@ static_assert( offsetof( BrnTraffic::VehicleRenderInfo, mfDistanceSq ) == 4,
 static_assert( offsetof( BrnTraffic::VehicleRenderInfo, mLOD ) == 8,
                "VehicleRenderInfo::mLOD @ +0x08 (X360 stw r9, 8(r3) @0x827C3C34)" );
 
-// ============================================================================
-// [FLAG PC bring-up] GetTrafficRenderInfosBringUp -- NOT an X360 function.
-//
-// The console hands CalculateVehicleLODs the Array<VehicleRenderInfo,64> that lives
-// INSIDE the traffic pre-dispatch output buffer: WorldModule::GenerateDispatchLists
-// @0x827D1CE8 computes it as `addi r22, r19, 4` (r19 = the OutputBuffer_PreDispatch,
-// so the array starts at buffer + 4) and passes r22 in r6 @0x827D24BC.
-//
-// On this build BrnTrafficIO::OutputBuffer_PreDispatch is still a 16-byte opaque
-// slice (BrnTrafficEntityModuleIO.h:501, `u8 maDeferredPayload[16]`) with no
-// accessor for that array, and its only producer -- TrafficEntityModule::
-// PreDispatchUpdate -- is itself an inert stub in WorldLinkStubs.cpp, so there are
-// no traffic render infos to classify yet. This returns an empty (Clear()-ed, i.e.
-// miCount = 0) array so the RACE CAR leg -- the actual defect -- runs, without
-// inventing traffic data that the build does not produce.
-//
-// ⚠ The function-local static is SHARED by both call sites (the console producer and
-// the bring-up producer). That is safe ONLY because the array is permanently length
-// 0, so neither site can observe the other's state -- it is deliberately not
-// re-entrancy-safe, and must not outlive the stand-in.
-//
-// DELETE and replace with `lpTrafficRenderInfos->GetVehicleRenderInfos()` the moment
-// OutputBuffer_PreDispatch's interior is homed.
-// ============================================================================
-static Array< BrnTraffic::VehicleRenderInfo, 64u >&
-GetTrafficRenderInfosBringUp( BrnTraffic::BrnTrafficIO::OutputBuffer_PreDispatch* /*lpBuffer*/ )
-{
-    static Array< BrnTraffic::VehicleRenderInfo, 64u > sEmptyTrafficRenderInfos;
-    sEmptyTrafficRenderInfos.Clear();
-    return sEmptyTrafficRenderInfos;
-}
+// (The `GetTrafficRenderInfosBringUp` stand-in that used to sit here -- a permanently
+// empty file-local Array<VehicleRenderInfo,64> handed to CalculateVehicleLODs while
+// OutputBuffer_PreDispatch was a 16-byte opaque slice -- is GONE. Cluster C5 homed the
+// interior, so both call sites now pass the real
+// OutputBuffer_PreDispatch::maTrafficRenderInfos, i.e. the console's own
+// `addi r22, r19, 4` @0x827D24B0.)
 
 // Pick the first band the distance falls short of; LOD 4 (the coarsest) when it is
 // past every band. The X360 compiler emits this loop TWICE inside
@@ -4040,9 +4015,10 @@ WorldModule::GenerateDispatchLists(
     lpTrafficPreDispatchInput->LockForRead();
     lpTrafficRenderInfos->LockForWrite();
     mTrafficEntityModule.PreDispatchUpdate( lpTrafficPreDispatchInput, lpTrafficRenderInfos );
+    // `addi r22, r19, 4` @0x827D24B0 -- the array INSIDE the output buffer, not the buffer.
     CalculateVehicleLODs( lpCameraInput->GetPosition(), lfLodZoomFactor,
                           lpFilteredEntityData->maRaceCarEntityIds,
-                          GetTrafficRenderInfosBringUp( lpTrafficRenderInfos ) );
+                          lpTrafficRenderInfos->maTrafficRenderInfos );
     lpTrafficRenderInfos->UnlockForWrite();
     lpTrafficPreDispatchInput->UnlockForRead();
 
@@ -4103,9 +4079,17 @@ WorldModule::GenerateDispatchLists(
         if ( lpDispatchInputBuffer->GetRenderSwitches()->mbRenderTraffic )
         {
             PerfMonCpu::StartMonitor( miTrafficGenerateDispListClearPM );
+            // ⭐ 2026-08-21 (wave T1 round 2, cluster R2B): now the console's OWN argument
+            // list. Arg 2 is `lpTrafficRenderInfos->maTrafficRenderInfos`, the array INSIDE
+            // the buffer (`addi r22, r19, 4` @0x827D24B0), and the four vectors the call site
+            // loads into v1..v4 are present: fog scattering / fog colour + white level /
+            // camera POSITION / camera FORWARD (@0x827D27F8..0x827D2810). The three ints are
+            // liModelOnlyDisplayList / liOpaqueList / liTransparentList in that order.
             mTrafficEntityModule.GenerateDispatchLists(
-                lpTrafficDispatchInput, lpTrafficRenderInfos,
-                12, 19, 20, &mLastCameraInput );
+                lpTrafficDispatchInput, lpTrafficRenderInfos->maTrafficRenderInfos,
+                lvFogScattering, lvFogColourPlusWhiteLevel,
+                gDispatchCamera.GetPosition(), gDispatchCamera.GetDirection(),
+                12, 19, 20, mLastCameraInput );
             PerfMonCpu::StopMonitor( miTrafficGenerateDispListClearPM );
         }
     }
@@ -4430,10 +4414,15 @@ WorldModule::GenerateShadowMapDispatchLists(
         PerfMonCpu::StartMonitor( miTrafficGenerateDispListClearPM );
         if ( lbTraffic )
         {
+            // The shadow-cascade pass: all three list ids are the cascade's own list, and the
+            // fog vectors are zero (the same shape the race-car cascade call above uses -- a
+            // shadow pass has no fog blend to publish). Arg 2 is the array inside the buffer.
             mTrafficEntityModule.GenerateDispatchLists(
-                lpTrafficDispatchInput, lpTrafficRenderInfos,
+                lpTrafficDispatchInput, lpTrafficRenderInfos->maTrafficRenderInfos,
+                Vector4{ 0.0f, 0.0f, 0.0f, 0.0f }, Vector4{ 0.0f, 0.0f, 0.0f, 0.0f },
+                lpCameraInput->GetPosition(), lpCameraInput->GetDirection(),
                 static_cast<s32>( luCascade ) + 2, static_cast<s32>( luCascade ) + 2,
-                static_cast<s32>( luCascade ) + 2, lpCameraInput );
+                static_cast<s32>( luCascade ) + 2, *lpCameraInput );
         }
         PerfMonCpu::StopMonitor( miTrafficGenerateDispListClearPM );
 
@@ -5122,6 +5111,7 @@ namespace
         f64 mfMainWorldUs;      // main view: WorldEntityModule::GenerateDispatchLists
         f64 mfMainCarUs;        // main view: CalculateVehicleLODs + the race-car leg
         f64 mfMainPropUs;       // main view: the prop leg
+        f64 mfMainTrafficUs;    // main view: the traffic dispatch leg (wave T1)
         f64 mfPropCacheUs;      // PropEntityModule::CachePropGraphicsLists (same-day sibling
                                 // change -- timed so the arm is not blamed for its cost)
         f64 mfCascadeUs;        // PART 2 in total (loop overhead included)
@@ -5161,6 +5151,7 @@ namespace
         {
             mfTotalUs = 0.0; mfCamerasUs = 0.0; mfStageUs = 0.0; mfQueryUs = 0.0;
             mfMainFilterUs = 0.0; mfMainWorldUs = 0.0; mfMainCarUs = 0.0; mfMainPropUs = 0.0;
+            mfMainTrafficUs = 0.0;
             mfPropCacheUs = 0.0;
             mfCascadeUs = 0.0; mfCascadeFilterUs = 0.0; mfCascadeCarUs = 0.0;
             mfCascadeWorldUs = 0.0; mfFramePeriodUs = 0.0;
@@ -6316,6 +6307,16 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
         // the two above, for the same reason (BridgeWorldModuleToEntityModules_Render is
         // still gated). Retire all three together.
         static PropEntityIO::InputBuffer_Dispatch                  sPropDispatchInput;
+        // ⭐ [FLAG PC bring-up] THE TRAFFIC LEG's three stand-in IO buffers (wave T1, cluster
+        // C6). Same stand-in pattern and the same retirement condition as the three above:
+        // the console gets all three off the dispatch IO stacks inside
+        // WorldModule::GenerateDispatchLists @0x827D1CE8 (`lpTrafficDispatchInput`,
+        // `lpTrafficPreDispatchInput`, `lpTrafficRenderInfos` -- this file, :4022/:4035/:4036)
+        // and stages the dispatch one through BridgeWorldModuleToEntityModules_Render, which
+        // is still an inert gate here. Retire all six together.
+        static BrnTraffic::BrnTrafficIO::InputBuffer_Dispatch      sTrafficDispatchInput;
+        static BrnTraffic::BrnTrafficIO::InputBuffer_PreDispatch   sTrafficPreDispatchInput;
+        static BrnTraffic::BrnTrafficIO::OutputBuffer_PreDispatch  sTrafficRenderInfos;
         static FilteredEntityData                                  sFilteredEntityData;
         static bool sbBuffersConstructed = false;
         if ( !sbBuffersConstructed )
@@ -6324,6 +6325,12 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
             sWorldDispatchInput.Construct();
             sRaceCarDispatchInput.Construct();
             sPropDispatchInput.Construct();
+            // InputBuffer_Dispatch::Construct @0x8275CF40 is REAL (it seeds the four handle
+            // words the traffic dispatch leg reads); the two PreDispatch Constructs are still
+            // WorldLinkStubs gates that memset their own buffer. Constructed here once,
+            // alongside the siblings, so the buffers never carry foreign bytes -- recurring
+            // bug class (a).
+            sTrafficDispatchInput.Construct();
             sFilteredEntityData.Construct();
         }
         sQueryInput.Construct();
@@ -6699,9 +6706,117 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
             }
             lpRaceCarLodIds = &sRaceCarLodIdsBringUp;
         }
+
+        // ==================================================================
+        // ⭐ [FLAG PC bring-up] THE TRAFFIC PRE-DISPATCH LEG (wave T1, cluster C6).
+        //
+        // MIRRORS WorldModule::GenerateDispatchLists @0x827D1CE8 -- this file, :4022-4047 --
+        // at the CONSOLE'S OWN POSITION: the traffic dispatch input is seeded with the frustum
+        // result alongside the world/race-car/prop ones, then the pre-dispatch pair is
+        // Construct()ed fresh, fed the filtered traffic ids + the dispatch camera position, and
+        // PreDispatchUpdate runs INSIDE the (input read / output write) lock bracket with
+        // CalculateVehicleLODs -- which is why the LOD call now sits between the two locks
+        // instead of standing alone.
+        //
+        // WHY THIS WIRE EXISTS AT ALL: FilterFrustumTestResults above has ALWAYS been filling
+        // sFilteredEntityData.maTrafficEntityIds (its owner-2 arm), and this bring-up producer
+        // dropped the array on the floor every frame -- the scout's blocker #3, "nothing
+        // renders without this wire". The console producer WorldModule::GenerateDispatchLists
+        // has no callers on PC; this stand-in is the live per-frame producer.
+        //
+        // ⚠ WHAT IS STILL INERT, and it is NOT this leg: both module entry points below are
+        // WorldLinkStubs gates (GenerateDispatchLists :770 / PreDispatchUpdate :802), so this
+        // leg currently drives two one-shot "inert" log lines and produces no render infos.
+        // The BUFFERS are no longer part of that gap -- cluster C5 homed both PreDispatch
+        // interiors and bodied their Construct/Clear/setters in BrnTrafficEntityModuleIO.cpp
+        // (the old "still `u8[16]` slices" claim in this banner was true when it was written
+        // and is not any more). See the [T1-dispatch] probe below -- it reports the leg's own
+        // liveness, not just the module's.
+        // ==================================================================
+        {
+            sTrafficDispatchInput.LockForWrite();
+            // The console clears + re-adds the raw frustum result event on the traffic
+            // dispatch input exactly as it does for the other three (:4022-4025). The PC
+            // accessor is still a gate that returns NULL (WorldLinkStubs.cpp:611), so the
+            // seeding is guarded and today does nothing. The traffic GenerateDispatchLists
+            // body @0x8273B280 does not read this queue (it walks the render-info array), so
+            // a NULL queue costs nothing today.
+            //
+            // ⛔ DO NOT RETIRE WorldLinkStubs.cpp:611 (InputBuffer_Dispatch::GetSceneResultQueue)
+            // UNTIL THE QUEUE MEMBER IS HOMED *AND* CONSTRUCTED. This block does NOT "start
+            // working by itself" when that gate goes -- an earlier version of this banner
+            // claimed it would, and that claim was wrong. The console's
+            // InputBuffer_Dispatch::Construct @0x8275CF40 has a
+            // `VariableEventQueue<32768,16>::Construct(this+4)` leg that the PC body
+            // DELIBERATELY does not emit (BrnTrafficEntityModuleIO_InputBuffer_Dispatch.cpp,
+            // InputBuffer_Dispatch::Construct, and its own FLAG says so): the queue still
+            // lives inside the opaque maPayloadAndPad span with no named member to reach.
+            // sTrafficDispatchInput is a zero-initialised function-local static, so its
+            // mbIsConstructed is false for ever, and both VariableEventQueue::Clear and
+            // ::AddEvent FireAssert on `!mbIsConstructed` (CgsVariableEventQueue.h; the flag
+            // is set only by Construct) -- an assert every frame, not a working seed. This is
+            // the tree's recurring never-Constructed-IO-queue bug class, the same shape as the
+            // OutputBuffer_Prepare::SceneInputInterface landmine documented in
+            // BrnTrafficEntityModuleIO.h. Home the member + restore that Construct leg FIRST.
+            if ( sTrafficDispatchInput.GetSceneResultQueue() != 0
+                 && liResultType >= 0 && lpFrustumTestResult != 0 )
+            {
+                sTrafficDispatchInput.GetSceneResultQueue()->Clear();
+                sTrafficDispatchInput.GetSceneResultQueue()->AddEvent(
+                    lpFrustumTestResult, liResultType, liResultSize );
+            }
+            sTrafficDispatchInput.SetDispatchFrame( lpDispatchFrame );
+            sTrafficDispatchInput.SetShadowMap( &mShadowMap );
+            // The corona sink, same source and same per-frame reason as the race-car leg's
+            // (BrnCoronaManager::Swap moves the write slot). The traffic corona producers
+            // (SubmitCoronasForVehicle @0x82727BB0 / RenderTrafficLightCoronas @0x8271EC80)
+            // are wave 2, so nothing consumes this yet -- it is staged because the console
+            // asserts it non-null on entry to GenerateDispatchLists (@0x8273B3CC).
+            sTrafficDispatchInput.SetCoronaSubmissionInterface( mpBringUpCoronaSubmissionInterface );
+            // ⚠ NOT staged: the blobby-shadow buffer (console assert "lpBlobbyShadowRenderer"
+            // @0x8273B39C). BrnBlobbyShadowManager has no owner on this build -- WorldModule
+            // holds no BrnBlobbyShadowBuffer and nothing calls SetBlobbyShadowBuffer anywhere
+            // in the tree -- so there is no pointer to publish and inventing one would be
+            // fabrication. RenderTrafficCar's AddShadow leg is blocked on the same gap.
+            sTrafficDispatchInput.UnlockForWrite();
+
+            // :4035-4036 -- the console Construct()s both pre-dispatch buffers every frame
+            // (they are fresh IO-stack allocations there; here they are the statics above).
+            // Both are now the REAL bodies (BrnTrafficEntityModuleIO.cpp, X360 @0x8275CEE8 /
+            // @0x8275CF28) and each opens with CgsModule::IOBuffer::Construct(), which is what
+            // arms eStatusConstructed for the LockForRead/LockForWrite below. The explicit
+            // `CgsModule::IOBuffer::Construct()` re-arm that used to follow these two lines was
+            // there only because the WorldLinkStubs :631/:689 gates memset the buffer flat; it
+            // is dead now and has been removed with them (those gates are duplicate definitions
+            // of C5's bodies -- see this round's gates_to_retire).
+            sTrafficPreDispatchInput.Construct();
+            sTrafficRenderInfos.Construct();
+
+            sTrafficPreDispatchInput.SetVisibleEntities( sFilteredEntityData.maTrafficEntityIds );
+            sTrafficPreDispatchInput.SetCameraPosition( lEye );
+
+            sTrafficPreDispatchInput.LockForRead();
+            sTrafficRenderInfos.LockForWrite();
+            mTrafficEntityModule.PreDispatchUpdate( &sTrafficPreDispatchInput, &sTrafficRenderInfos );
+        }
         CalculateVehicleLODs( lEye, lfLodZoomFactor,
                               *lpRaceCarLodIds,
-                              GetTrafficRenderInfosBringUp( 0 ) );
+                              // ⭐ THE REAL ARRAY (fix round, wave T1 C6). The console passes
+                              // `lpTrafficRenderInfos + 4`: `addi r22, r19, 4` @0x827D24B0 with
+                              // r19 == the OutputBuffer_PreDispatch, handed to
+                              // CalculateVehicleLODs in r6 @0x827D24BC. That +4 object is
+                              // OutputBuffer_PreDispatch::maTrafficRenderInfos, homed by cluster
+                              // C5 (BrnTrafficEntityModuleIO.h; public per DWARF :457, sizes
+                              // attested from CreateIOBuffer @0x827B7320 `Alloc 0x308` and
+                              // Construct @0x8275CF28 `stw r10, 0x304(r3)`).
+                              //
+                              // It used to be a permanently-empty file-local stand-in, which
+                              // meant the classifier wrote VehicleRenderInfo::mLOD
+                              // (`stw r9, 8(r3)` @0x827C3C34) into one object while the
+                              // dispatch leg below read mLOD out of another. Same object now.
+                              sTrafficRenderInfos.maTrafficRenderInfos );
+        sTrafficRenderInfos.UnlockForWrite();
+        sTrafficPreDispatchInput.UnlockForRead();
         // [DIAG racecar-lod] value-latched: which slots were banded, from where, to what.
         {
             static u32 suLastKey = 0xFFFFFFFFu;
@@ -6752,6 +6867,162 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
                 lEye );
         }
         gShadowPerf.mfMainCarUs += ShadowPerfUsSince( lMainCarStart );
+
+        // ==================================================================
+        // ⭐ [FLAG PC bring-up] THE TRAFFIC DISPATCH LEG (wave T1, cluster C6).
+        //
+        // MIRRORS WorldModule::GenerateDispatchLists @0x827D1CE8's own traffic call -- this
+        // file, :4103-4110 -- at the CONSOLE'S OWN POSITION: immediately after the race-car
+        // leg (X360 @0x827D27D4 tests render switch byte 5 the instruction after the race-car
+        // leg's StopMonitor) and before the world pass republishes the unscaled key light.
+        //
+        // ON THE CONSOLE the order is load-bearing because both vehicle legs run while shader
+        // constants 9/12/18/19 still carry the CAR multipliers (this file, :4071-4090 -- the
+        // console producer). ⚠ ON THIS BRING-UP PATH THAT IS NOT YET TRUE and the position is
+        // kept for fidelity, not for that effect: GenerateDispatchListsBringUp publishes only
+        // 8 / 3 / 34 itself, and 9/12/18/19 arrive UNSCALED from GenerateShaderConstants
+        // (:4842-4860) -- mfCarKeyLightMultiplier is not applied anywhere on the bring-up
+        // path. (An earlier version of this banner asserted the car multipliers were live
+        // here; they are not on this build.) When the car-multiplier bracket is restored, it
+        // must wrap BOTH vehicle legs, and this leg is already inside where it belongs.
+        //
+        // THE THREE LIST IDS ARE THE CONSOLE'S OWN LITERALS, read off the call site
+        // (`li r8,0x14` @0x827D27FC, `li r7,0x13` @0x827D2804, `li r6,0xC` @0x827D280C):
+        // 12 is the dispatch OBJECT list, 19/20 the OPAQUE and TRANSPARENT mesh bins -- the
+        // same three the race car uses, which is why they are spelled with the race-car
+        // constants rather than re-minted here.
+        //
+        // ⭐⭐ THE TWO DECLARATION DEFECTS BELOW ARE FIXED (2026-08-21, wave T1 round 2,
+        // cluster R2B). They were fixed together with the body and the WorldLinkStubs gate, in
+        // ONE change, because they could not move apart (the gate defined the symbol
+        // out-of-line, so a header-only edit was C2511). The evidence is KEPT, not deleted --
+        // it is what makes the current argument list checkable -- but read it as the record of
+        // WHY the call site looks like this, not as outstanding work:
+        //
+        //   (1) [FIXED] ARGUMENT 2 IS THE WRONG OBJECT'S TYPE. The console passes the
+        //       Array<VehicleRenderInfo,64> that lives INSIDE the output buffer, not the
+        //       buffer: `addi r22, r19, 4` @0x827D24B0 (r19 == the OutputBuffer_PreDispatch)
+        //       then `mr r5, r22` @0x827D2814 into the call @0x827D2824 -- and r22 is not
+        //       rewritten in between (its only other definitions are @0x827D1FF4 and
+        //       @0x827D2AC4). Inside the callee the FIRST use of that argument proves the
+        //       type: `mr r26, r5` @0x8273B2B8, `mr r3, r26` @0x8273B324,
+        //       `bl Array<VehicleRenderInfo,64>::GetLength` @0x8273B328. DecFIGS DWARF is
+        //       verbatim: `GenerateDispatchLists( const InputBuffer_Dispatch*,
+        //       const Array<BrnTraffic::VehicleRenderInfo,64u>& laTrafficRenderInfos, Vector4,
+        //       Vector4, Vector3, Vector3, int32_t, int32_t, int32_t, const Camera& )`.
+        //       Contrast PreDispatchUpdate above, which genuinely DOES take the buffer
+        //       (`mr r5, r19` @0x827D249C).
+        //       The call now passes sTrafficRenderInfos.maTrafficRenderInfos and the body in
+        //       BrnTrafficEntityModule_Render.cpp is written against the ARRAY. That mattered:
+        //       on the host the two addresses genuinely differ (IOBuffer leads with a 1-byte
+        //       FlagSet8 and the Array is 4-aligned), so a body treating arg 2 as an Array
+        //       while receiving the buffer would read miCount / element 0 out of the status
+        //       byte. The DWARF parameter names for the whole list, verbatim, are:
+        //         lpInput, laTrafficRenderInfos, lFogScattering, lFogColourPlusWhiteLevel,
+        //         lCameraPosition, lCameraDirection, liModelOnlyDisplayList, liOpaqueList,
+        //         liTransparentList, lBrnCamera.
+        //       Note the third int is the TRANSPARENT list and the FIRST is the model-only
+        //       display list -- so the console's `li r6,0xC` is liModelOnlyDisplayList.
+        //
+        //   (2) [FIXED] FOUR VECTOR ARGUMENTS WERE MISSING, and they are not optional: the console call
+        //       site loads v1..v4 = fog scattering / fog colour + white level / camera POSITION
+        //       / camera FORWARD (`vmr128 v4,v114` @0x827D27F8, `v3,v127` @0x827D2800,
+        //       `v2,v115` @0x827D2808, `v1,v116` @0x827D2810; identified by comparing the same
+        //       registers at the race-car site @0x827D27A0, whose PC declaration already names
+        //       the first three, and at the world site @0x827D28BC, whose v1/v2 are the eye and
+        //       forward rows). The callee stores the camera position to module +0x71870
+        //       (`stvx128 v127, r29, r11` with r11 == 0x71870 @0x8273B2DC) and forwards
+        //       (position, forward) to the two corona producers and (position, scattering,
+        //       colour) to RenderTrafficCar.
+        //       ⭐ AND +0x71870 IS NOT AN UNNAMED MODULE MEMBER, which round 1 parked it as: it
+        //       is mFuzzyBehaviours + 0x10 == FuzzyBehaviourLogic::mDEBUGLastCameraPos, i.e.
+        //       DEBUGSetLastCameraPos inlined. The arithmetic is on the RenderTrafficCar
+        //       declaration in BrnTrafficEntityModule.h.
+        // ==================================================================
+        {
+            const ShadowPerfClock::time_point lMainTrafficStart = ShadowPerfNow();
+
+            // [DIAG T1-dispatch] the OBJECT-list occupancy across the traffic leg. Read at the
+            // consuming end (the dispatch list the submission leaf actually appends to), so a
+            // module that runs but submits nothing and a module that never runs are different
+            // readings rather than the same silence.
+            const s32 liTrafficRecordsBefore =
+                lpDispatchFrame->GetList( KI_RACE_CAR_OBJECT_LIST )->GetCount();
+
+            // ⭐ 2026-08-21 (wave T1 round 2, cluster R2B): the declaration is now the DWARF's
+            // 10-argument one, so this call is the console's own. Arg 2 is the ARRAY inside
+            // the buffer (`addi r22,r19,4` @0x827D24B0) and the four vectors are present.
+            //
+            // ⛔ FLAG (bring-up): the two FOG vectors are ZERO here, exactly as the race-car
+            // leg twelve lines above passes zeros -- GenerateDispatchListsBringUp has no
+            // DispatchOutputBuffer to read lvFogScattering / lvFogColourPlusWhiteLevel from
+            // (they are produced by GenerateShaderConstants into the buffer the DEAD console
+            // producer reads at :3918). Consequence: shader constant 26's per-car fog blend is
+            // {0,0,0,1} for traffic, i.e. no distance fog on traffic cars -- the same
+            // deviation the race car already has, so both vehicle classes agree.
+            // ⛔ DELETE-WHEN BridgeRendererToWorld carries the dispatch output buffer.
+            mTrafficEntityModule.GenerateDispatchLists(
+                &sTrafficDispatchInput, sTrafficRenderInfos.maTrafficRenderInfos,
+                Vector4{ 0.0f, 0.0f, 0.0f, 0.0f }, Vector4{ 0.0f, 0.0f, 0.0f, 0.0f },
+                lEye, lForward,
+                KI_RACE_CAR_OBJECT_LIST, KI_RACE_CAR_OPAQUE_MESH_LIST,
+                KI_RACE_CAR_TRANSPARENT_MESH_LIST,
+                *GetLastCameraInput() );
+
+            gShadowPerf.mfMainTrafficUs += ShadowPerfUsSince( lMainTrafficStart );
+
+            // ---- [DIAG T1-dispatch -- traffic wave 2026-08-21] --------------------
+            // ⛔ DELETE-WHEN parked traffic is confirmed on a booted run.
+            // Gated on BRN_TRAFFIC_DIAG (the wave's own knob -- the traffic TUs used to borrow
+            // BRN_PROP_DIAG). Two probes, and NEITHER is a "printed once" bool:
+            //   * the FIRST frame a traffic renderable reaches the object list -- the single
+            //     line that says the whole chain (spawn -> streamer -> pre-dispatch ->
+            //     dispatch -> submission) closed;
+            //   * the per-frame submitted count, LATCHED ON THE VALUE, so 0 -> 7 -> 12 prints
+            //     three lines and a steady world stays quiet. A one-shot here could only ever
+            //     report the first frame's answer, which on this build is always zero.
+            {
+                static const bool skbTrafficDiag = ( std::getenv( "BRN_TRAFFIC_DIAG" ) != 0 );
+                if ( skbTrafficDiag && CgsDev::Log::gpDebugPrint != 0 )
+                {
+                    const s32 liTrafficRecords =
+                        lpDispatchFrame->GetList( KI_RACE_CAR_OBJECT_LIST )->GetCount()
+                        - liTrafficRecordsBefore;
+
+                    static bool sbLoggedFirstTrafficRecord = false;
+                    if ( !sbLoggedFirstTrafficRecord && liTrafficRecords > 0 )
+                    {
+                        sbLoggedFirstTrafficRecord = true;
+                        *CgsDev::Log::gpDebugPrint
+                            << "[T1-dispatch] FIRST traffic renderable submitted: "
+                            << liTrafficRecords << " record(s) into object list "
+                            << KI_RACE_CAR_OBJECT_LIST << " (mesh bins "
+                            << KI_RACE_CAR_OPAQUE_MESH_LIST << "/"
+                            << KI_RACE_CAR_TRANSPARENT_MESH_LIST << ") from eye ("
+                            << lEye.x << ", " << lEye.y << ", " << lEye.z << ")\n";
+                    }
+
+                    static s32 siLastTrafficRecords = -1;
+                    static u32 suLastVisibleTraffic = 0xFFFFFFFFu;
+                    const u32  luVisibleTraffic =
+                        sFilteredEntityData.maTrafficEntityIds.GetLength();
+                    if ( liTrafficRecords != siLastTrafficRecords
+                         || luVisibleTraffic != suLastVisibleTraffic )
+                    {
+                        siLastTrafficRecords = liTrafficRecords;
+                        suLastVisibleTraffic = luVisibleTraffic;
+                        *CgsDev::Log::gpDebugPrint
+                            << "[T1-dispatch] visibleTrafficIds " << static_cast< s32 >( luVisibleTraffic )
+                            // GetCount(), not GetLength(): GetLength() asserts the array has
+                            // left the KI_UNCONSTRUCTED(-1) sentinel, and a probe must never be
+                            // the thing that fires an assert (same rule as C5's [T1-rinfo]).
+                            << " renderInfos " << static_cast< s32 >(
+                                   sTrafficRenderInfos.maTrafficRenderInfos.GetCount() )
+                            << " submitted " << liTrafficRecords << "\n";
+                    }
+                }
+            }
+        }
 
         // ==================================================================
         // ⭐ [FLAG PC bring-up] THE PROPS (prop-spawn wave, 2026-08-12).
@@ -7378,6 +7649,7 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
                         << " mainWorld=" << static_cast< f32 >( gShadowPerf.mfMainWorldUs * lfInvFrames )
                         << " mainCar=" << static_cast< f32 >( gShadowPerf.mfMainCarUs * lfInvFrames )
                         << " mainProp=" << static_cast< f32 >( gShadowPerf.mfMainPropUs * lfInvFrames )
+                        << " mainTraffic=" << static_cast< f32 >( gShadowPerf.mfMainTrafficUs * lfInvFrames )
                         << " propCache=" << static_cast< f32 >( gShadowPerf.mfPropCacheUs * lfInvFrames )
                         << " casc=" << static_cast< f32 >( gShadowPerf.mfCascadeUs * lfInvFrames )
                         << " cascFilter=" << static_cast< f32 >( gShadowPerf.mfCascadeFilterUs * lfInvFrames )

@@ -129,6 +129,46 @@ public:
         return true;
     }
 
+    // ⭐ ADDED 2026-08-21 (wave T1 round 4). The two field-wise combiners that sit either side
+    // of SetOr in the DWARF's own method list (:534 / :545 / :556) and complete the trio. They
+    // are not inferred from SetOr's shape: TrafficEntityModule::CreateNewVehicleEntities
+    // @0x8272FA30 opens with exactly these two operations over a 10-field local, and the
+    // DecFIGS scope tree for that function NAMES them --
+    //     FastBitArray<601>::SetInverse(...); FastBitArray<601>::SetAnd(...);
+    // -- against its two locals lVehicles_NoEntity / lVehicles_Alive_And_NoEntity
+    // (BrnTrafficEntityModule.cpp:4529/:4530). The X360 spells them as two 10-iteration
+    // ld/nor-or-and/std loops at 0x8272FA84..0x8272FAE4.
+    //
+    // ⚠️ CROSS-FILE ADDITION, DISCLOSED: this header is not a traffic-module file. The edit is
+    // PURELY ADDITIVE (two new inline template members; no member, no layout, no existing
+    // signature touched) and neither name previously existed anywhere in b5-decomp/src, so no
+    // TU that includes this header can change behaviour or fail to compile because of it.
+    //
+    // NOTE ON SetInverse'S TAIL BITS. Both operate on whole 64-bit fields, so when tuNumBits
+    // is not a multiple of 64 SetInverse sets the padding bits above tuNumBits as well. That
+    // is the console's behaviour, not an oversight -- and it is harmless for the same reason
+    // it is harmless there: every consumer either ANDs the result with a real set (as
+    // CreateNewVehicleEntities does) or iterates with Iterator, which stops at tuNumBits.
+    // Masking the tail would be a host-side "fix" the binary does not have.
+
+    // DWARF CgsFastBitArray.h:534 -- this = ~a, field-wise.
+    void SetInverse(const FastBitArray<tuNumBits>& lrA)
+    {
+        for (u32 luField = 0; luField < KU_NUMBER_OF_BIT_FIELDS; ++luField)
+        {
+            maxBits[luField] = ~lrA.maxBits[luField];
+        }
+    }
+
+    // DWARF CgsFastBitArray.h:545 -- this = a & b, field-wise.
+    void SetAnd(const FastBitArray<tuNumBits>& lrA, const FastBitArray<tuNumBits>& lrB)
+    {
+        for (u32 luField = 0; luField < KU_NUMBER_OF_BIT_FIELDS; ++luField)
+        {
+            maxBits[luField] = lrA.maxBits[luField] & lrB.maxBits[luField];
+        }
+    }
+
     // DWARF CgsFastBitArray.h:556 -- this = a | b, field-wise (X360 inline: ld/or/std per
     // field, e.g. @0x824F9DDC..E8 for the 1-field <15> instantiation).
     void SetOr(const FastBitArray<tuNumBits>& lrA, const FastBitArray<tuNumBits>& lrB)

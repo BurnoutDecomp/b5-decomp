@@ -44,6 +44,18 @@
 #include "GameSource/World/EntityModules/TrafficEntityModule/SharedIO/BrnTrafficToRaceCarInterface.h"  // TrafficToRaceCarInterface_PreScene (OutputBuffer_PreScene @+818784; typedef'd, was a padding fork)
 #include "GameSource/World/EntityModules/TriggerEntityModule/SharedIO/BrnTriggerEntityModuleInputInterface.h" // BrnWorld::TriggerEntityModuleIO::TriggerManagementInputInterface (OutputBuffer_PreScene @+819328)
 
+// ---- OutputBuffer_PreDispatch member type home ----
+// BrnTraffic::VehicleRenderInfo is stored BY VALUE inside an Array<...,64>, so a
+// forward declaration cannot serve (AGENTS.md permits one only for pointer/
+// reference-only use) and the complete type must come in. Its committed home is
+// BrnTrafficEntityModule.h (which carries it with the X360 attestation of its
+// 12-byte stride and the two offsetof pins BrnWorldModule.cpp holds on it); the
+// DWARF's own home for it is BrnTrafficVehicle.h:159, so if that record ever
+// MOVES there this include should narrow to BrnTrafficVehicle.h. VERIFIED NOT A
+// CYCLE: nothing reachable from BrnTrafficEntityModule.h includes this IO header
+// (walked its full 60-header transitive closure).
+#include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficEntityModule.h"  // BrnTraffic::VehicleRenderInfo
+
 // ---- InputBuffer_Dispatch member type homes (pointer slots) ----
 // BrnBlobbyShadowBuffer and BrnSubmissionInterface are NESTED classes, so they cannot be
 // forward-declared -- the real headers come in, exactly as the sibling race-car IO header
@@ -165,6 +177,21 @@ namespace BrnTrafficIO
         const CgsSystem::TimerStatusInterface* GetTimerStatusInterface() const;                                       // DWARF :150
         // X360 0x8279FAD8 -- write-lock; field-copies the source timer status into +4 (operator=).
         void SetTimerStatusInterface(const CgsSystem::TimerStatusInterface* lpTimerStatusInterface);                  // DWARF :151
+        // ⭐⭐ ADDITIVE 2026-08-21 (wave T1 round 2, cluster R2A). THE GETTER THAT UNBLOCKS
+        // TrafficEntityModule::PreSceneUpdate's WAITING_FOR_PLAYER -> POPULATING transition
+        // (round 1's blocker B2). X360 0x82710BD8, IDA-unnamed (`sub_82710BD8`), identified
+        // beyond doubt by its own baked assert: read-lock test `extrwi r11,r11,1,27`, then
+        // FireAssert("Not locked for reading\n", "...trafficentitymodule\\BrnTrafficEntity
+        // ModuleIO.h", 157), then `addi r3, r28, 0x40` -- i.e. it returns THIS BUFFER'S
+        // this+0x40, which is exactly where mActiveRaceCarOutputInterface sits (@64, pinned
+        // by _AssertLayout below and by the 0x8279FBE8 setter). DWARF declares it at :153,
+        // one line above the :154 setter, and its body's assert lands at :157 -- the same
+        // decl/body offset the sibling GetTimerStatusInterface (:150 / assert 0x82710B30)
+        // shows. Its four X360 callers are PreSceneUpdate @0x8274A968,
+        // GenerateNearbyParkedTrafficOutput @0x8271FA18,
+        // GeneratePotentialLeapedAndStompedCarsOutput @0x8271F298 and
+        // UpdateCollidableVehicles @0x827302C8 -- every one of them a PreScene-buffer reader.
+        const ActiveRaceCarOutputInterface* GetActiveRaceCarOutputInterface() const;                                  // DWARF :153
         // X360 0x8279FBE8 -- write-lock; flat 10480B member copy into +64.
         void SetActiveRaceCarOutputInterface(const ActiveRaceCarOutputInterface* lpInterface);                        // DWARF :154
         // X360 0x8279FCA0 -- write-lock; flat 2416B member copy into +10544.
@@ -358,6 +385,18 @@ namespace BrnTrafficIO
         void SetVehicleOutputInterface(const VehicleOutputInterface* lpVehicleOutputInterface);
         // X360 0x827AA000 (:353): write-lock; mVehicleManagerOutputInterface = *src.
         void SetVehicleManagerOutputInterface(const VehicleManagerOutputInterface* lpVehicleManagerOutputInterface);
+        // ⭐⭐ ADDITIVE 2026-08-21 (wave T1 round 2, cluster R2A). THE GETTER THAT UNBLOCKS
+        // TrafficEntityModule::UpdateRaceCarHulls (round 1's blocker B1) AND PostPhysicsUpdate's
+        // local-player position/direction refresh. X360 0x82711850, IDA-unnamed
+        // (`sub_82711850`): read-lock test, FireAssert("Not locked for reading\n",
+        // "...BrnTrafficEntityModuleIO.h", 362), then `addis r3,r28,1 ; addi r3,r3,0x28C0`
+        // == this + 0x128C0 == 75968 == mActiveRaceCarOutputInterface's console offset (the
+        // one the 0x827A06C0 setter writes). DWARF declares it at :358, one line above the
+        // :359 setter, and the body's assert is :362 -- the same decl/body pairing as every
+        // other getter in this buffer (GetVehicleOutputInterface :346 / GetGameActionQueue
+        // :355 / ...). Distinct from InputBuffer_PreScene's :153 getter above: different
+        // buffer, different member offset, different assert line.
+        const ActiveRaceCarOutputInterface* GetActiveRaceCarOutputInterface() const;   // :358 (0x82711850)
         // X360 0x827A06C0 (:359): write-lock; mActiveRaceCarOutputInterface = *src (X360 XMemCpy 0x28F0 == 10480).
         void SetActiveRaceCarOutputInterface(const ActiveRaceCarOutputInterface* lpActiveRaceCarOutputInterface);
         // X360 0x827AA0B8 (:362): write-lock; mDeformationOutputInterfaceForEntityModules = *src.
@@ -539,6 +578,15 @@ namespace BrnTrafficIO
         const TrafficTypeResponseQueue* GetTrafficTypeResponseQueue() const;      // 0x827A0CC8 (baked 412)
         // +830672 read mResourceRequestInterface.
         const ResourceRequestInterface* GetResourceRequestInterface() const;      // 0x827A0D70 (baked 415)
+        // ⭐ ADDED 2026-08-21 (wave T1 round 3, closure item 1) -- the WRITE half, and the
+        // last of the four declarations round 2 parked TrafficEntityModule::UpdateStreaming on.
+        // X360 sub_82711F88, whose ONLY xref is UpdateStreaming @0x82748848: it asserts
+        // IsBufferLockedForWriting ("Not locked for writing", BrnTrafficEntityModuleIO.h
+        // baked line 416) and returns `this + 830672` -- which is mResourceRequestInterface,
+        // the SAME member the const getter above returns at the same console offset. Modelled
+        // as `return &mResourceRequestInterface;` (by NAME): the console offset is provenance
+        // for WHICH member, never arithmetic in the body.
+        ResourceRequestInterface*       GetResourceRequestInterface();            // 0x82711F88 (baked 416)
         // +834828 read/write mGuiEventQueue.
         const GuiEventInputQueue* GetGuiEventQueue() const;                       // 0x827A0E18 (baked 418)
         GuiEventInputQueue*       GetGuiEventQueue();                             // 0x82712030 (baked 419)
@@ -642,6 +690,21 @@ namespace BrnTrafficIO
         // ⭐ +16 read -- the leg WorldModule::BridgeEntityModulesToSceneModule_PreScene
         // @0x827AB490 calls (its first merge, 0x827AB570).
         const SceneInputInterface* GetSceneInputInterface() const;                              // 0x8279FD58 [186]
+        // ⭐ ADDED 2026-08-21 (wave T1 round 4, item 2) -- the WRITE half, and the last
+        // declaration TrafficEntityModule::CreateNewVehicleEntities @0x8272FA30 was blocked on.
+        // X360 sub_82710D28 (IDA-unnamed, the same blind spot class as the :153 getter above):
+        // it tests the WRITE lock bit (`(*a1 >> 3) & 1`), fires
+        // FireAssert("Not locked for writing\n", "...\\BrnTrafficEntityModuleIO.h", 187) and
+        // returns `a1 + 16` -- which is mSceneInputInterface, the SAME member the const getter
+        // above returns (Construct @0x82761790 calls InSceneUpdateInterface::Construct on
+        // this+0x10). Its four callers are all PreScene-buffer WRITERS:
+        // GenerateCrashedVehicleEvents @0x82720030, KillDyingVehicleEntity @0x8272EB40,
+        // CreateNewVehicleEntities @0x8272FA30 and UpdateCollidableVehicles @0x827302C8.
+        // Modelled as `return &mSceneInputInterface;` BY NAME; the console's +16 is provenance
+        // for WHICH member, never arithmetic in the body. Exact sibling of the
+        // OutputBuffer_PostPhysics::GetResourceRequestInterface() non-const half landed in
+        // round 3.
+        SceneInputInterface*       GetSceneInputInterface();                                    // 0x82710D28 [187]
         // +818784 read/write.
         const TrafficToRaceCarInterface_PreScene* GetTrafficToRaceCarInterface_PreScene() const; // 0x827BB090 [189]
         TrafficToRaceCarInterface_PreScene*       GetTrafficToRaceCarInterface_PreScene();       // 0x82710DD0 [190]
@@ -659,28 +722,165 @@ namespace BrnTrafficIO
     };
 
     // ============================================================================
-    // ------------------------------------------------------------------------
-    // Dispatch-pass buffers (ADDITIVE minimal slices; callers: WorldModule::
-    // GenerateDispatchLists @0x827D1CE8. FLAG: interiors deferred to this IO
-    // TU's own growth -- sizes NOT X360-attested).
+    // The PRE-DISPATCH pair -- the traffic render seam.
+    // ============================================================================
+    //
+    // ⭐⭐ INTERIORS HOMED 2026-08-21 (traffic wave T1, cluster C5). Both classes
+    // used to be `u8 maDeferredPayload[16]` with a "sizes NOT X360-attested" FLAG.
+    // That FLAG was the *reason* the traffic render seam was dead: with no array
+    // inside OutputBuffer_PreDispatch there was nothing for
+    // TrafficEntityModule::PreDispatchUpdate to fill and nothing for
+    // WorldModule::CalculateVehicleLODs to classify, so BrnWorldModule.cpp had to
+    // route the LOD pass through the stand-in GetTrafficRenderInfosBringUp(),
+    // which hands back a permanently length-0 array.
+    //
+    // THE SIZES ARE NOW FULLY X360-ATTESTED -- from the allocators, not inferred:
+    //
+    //   CreateIOBuffer<InputBuffer_PreDispatch>  @0x827B7250
+    //       IOBufferStack::Alloc( stack, 0xA50 /* 2640 */, tag )
+    //   InputBuffer_PreDispatch::Construct       @0x8275CEE8
+    //       stb  r9(=1), 0(r3)             -- IOBuffer::Construct (status)
+    //       stw  r10(=0), 0xA48(r3)        -- +2632
+    //       stvx128 v0, r3, r8(=16)        -- a 16-byte {0,0,0,0} store at +16
+    //         (v0 is built on the stack from three stfs of flt_82001CC0 plus a
+    //          zero word; flt_82001CC0 is 0.0f -- proven independently by
+    //          DepthOfField::SetParams @0x821F1AC8, which loads that same address
+    //          into f31 and uses it as the right-hand side of the assert
+    //          "lfBlurriness >= 0.0f")
+    //     => a 16-byte Vector3 at +16, then an Array whose ELEMENTS start at +32
+    //        and whose live-count word lands at +2632. 2632 - 32 == 2600 == 650 * 4
+    //        == sizeof(EntityId) * 650. Total 2636, rounded to the 2640 allocated.
+    //
+    //   CreateIOBuffer<OutputBuffer_PreDispatch> @0x827B7320
+    //       IOBufferStack::Alloc( stack, 0x308 /* 776 */, tag )
+    //   OutputBuffer_PreDispatch::Construct      @0x8275CF28
+    //       stb r11(=1), 0(r3) ; stw r10(=0), 0x304(r3)      -- +772
+    //   OutputBuffer_PreDispatch::Clear          @0x82755BB8
+    //       stw r11(=0), 0x304(r3)                            -- +772
+    //     => one Array whose elements start at +4 and whose count word is at +772.
+    //        772 - 4 == 768 == 64 * 12 == sizeof(VehicleRenderInfo) * 64, and
+    //        4 + 772 == 776 exactly. INDEPENDENTLY CORROBORATED by the consumer:
+    //        WorldModule::GenerateDispatchLists @0x827D1CE8 computes the array it
+    //        passes to CalculateVehicleLODs as `addi r22, r19, 4` (r19 == the
+    //        buffer) -- the same "+4" (already written down in BrnWorldModule.cpp's
+    //        GetTrafficRenderInfosBringUp banner).
+    //
+    // THE MEMBER NAMES ARE DecFIGS DWARF-EXACT (dwarfdump
+    // GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficEntityModuleIO.h):
+    //   InputBuffer_PreDispatch  : Vector3 mCameraPosition                       (:444)
+    //                              Array<CgsSceneManager::EntityId,650u> maTrafficEntityIds (:445)
+    //                              Construct (:439), Clear (:442)
+    //   OutputBuffer_PreDispatch : Array<BrnTraffic::VehicleRenderInfo,64u> maTrafficRenderInfos (:457)
+    //                              Construct (:452), Clear (:455)
+    // and the DWARF shows BOTH members PUBLIC (unlike the sibling
+    // InputBuffer_Dispatch, which the same dump prints under an explicit
+    // `private:`). That is why the console can do `addi r22, r19, 4` inline with
+    // no accessor call, and why there is no Get* pair to reconstruct: the DWARF
+    // lists Construct and Clear as this pair's ONLY methods.
+    //
+    // ⭐ CONTRACT FOR CLUSTER C6 (the render wire): the replacement for
+    // `GetTrafficRenderInfosBringUp( lpTrafficRenderInfos )` in BrnWorldModule.cpp
+    // is simply `lpTrafficRenderInfos->maTrafficRenderInfos` -- the exact object
+    // the console's `buffer + 4` names. Deleting the stand-in is C6's edit; this
+    // header is the half of the contract C5 owed.
+    //
+    // ⛔ NO Get*() ACCESSORS EXIST ON EITHER OF THESE TWO BUFFERS, AND NONE MAY BE
+    //    ADDED (checked 2026-08-21, wave T1 round 2, cluster R2A -- the round-2 spec
+    //    asked for `GetVisibleEntities()` / `GetCameraPosition()` and an
+    //    `Array<VehicleRenderInfo,64>` accessor; that premise is REFUTED, so they are
+    //    parked rather than fabricated). Two independent checks agree:
+    //      * DecFIGS DWARF (dwarfdump .../BrnTrafficEntityModuleIO.h, structs at :436
+    //        and :449) lists exactly FOUR members between the pair -- Construct (:439),
+    //        Clear (:442), Construct (:452), Clear (:455) -- and NO accessor of any
+    //        kind, with both data members emitted OUTSIDE any access label (i.e. public
+    //        in a `struct`), unlike the sibling InputBuffer_Dispatch which the same dump
+    //        prints under an explicit `private:`;
+    //      * the X360 ledger (progress/status.json -> func) carries only
+    //        InputBuffer_PreDispatch::Construct, OutputBuffer_PreDispatch::Construct and
+    //        OutputBuffer_PreDispatch::Clear for these two classes. Adding an accessor
+    //        would therefore be surface the shipped binary does not have.
+    //    THE MEMBERS ARE ALREADY PUBLIC, so a consumer reads them directly -- which is
+    //    precisely what the console does inline (`addi r22, r19, 4`, no call):
+    //        lpInput->mCameraPosition            // the camera position  (:444)
+    //        lpInput->maTrafficEntityIds         // the visible-entity list (:445)
+    //        lpOutput->maTrafficRenderInfos      // the render-info array  (:457)
+    //    The two Set* writers below are a de-inlining of WorldModule::
+    //    GenerateDispatchLists' two inline stores and are marked as such; they are the
+    //    only non-DWARF surface on this pair and no read-side twin is warranted.
+    //
+    // ⭐ HOST LAYOUT: every member of both buffers is POINTER-FREE (a Vector3, a
+    // 4-byte EntityId array, and a 12-byte VehicleRenderInfo array), so unlike
+    // most IO buffers in this file the console spans really do survive to x64 --
+    // and _AssertLayout() pins them as pointer-invariant facts rather than as
+    // console byte offsets. The one host-vs-console difference is the leading
+    // status byte: CgsModule::IOBuffer is a 1-byte FlagSet8, so the explicit pads
+    // below reproduce the console's start-of-payload alignment.
+    //
+    // NEVER-CONSTRUCTED-QUEUE CHECK (AGENTS.md gotcha (a)): neither buffer holds
+    // an EventQueue, a VariableEventQueue, a RequestInterface or any other
+    // aggregate with its own Construct -- the complete member set is the four
+    // fields listed above. What they DO hold are two Array<T,N>, and an Array is
+    // unusable until its count word leaves the KI_UNCONSTRUCTED(-1) sentinel; the
+    // console's Construct writes that word for both (the +2632 and +772 stores
+    // above), and so does each Construct() below. That is the same class of bug
+    // in this file's own vocabulary, and it is closed here rather than assumed.
     // ------------------------------------------------------------------------
     class InputBuffer_PreDispatch : public CgsModule::IOBuffer
     {
     public:
+        // @0x8275CEE8 -- run by CreateIOBuffer<InputBuffer_PreDispatch> @0x827B7250.
         void Construct();
+
+        // DWARF :442. Not separately exported (the console inlines it); the empty
+        // state is "no visible entities", i.e. the Array's count word back to 0 --
+        // the same store Construct makes at +2632.
+        void Clear();
+
+        // The two de-inlined writers WorldModule::GenerateDispatchLists fills the
+        // buffer through (@0x827D1CE8 writes both members inline, between
+        // Construct() and its LockForRead(); there is NO write lock around them,
+        // so neither asserts one -- see BrnWorldModule.cpp's
+        // "traffic pre-dispatch + the vehicle LOD policy" block).
         void SetVisibleEntities( const Array<CgsSceneManager::EntityId, 650u>& lrEntities );
         void SetCameraPosition( Vector3 lvCameraPosition );
-    private:
-        u8 maDeferredPayload[16];   // FLAG: interior deferred
+
+        static void _AssertLayout();
+
+        // PUBLIC, per the DWARF -- the traffic module reads them directly.
+        u8                                     maStatusPadTo16[16 - 1];   // +1..+15 (force the Vector3 to +16)
+        Vector3                                mCameraPosition;           // console +16    :444
+        Array<CgsSceneManager::EntityId, 650u> maTrafficEntityIds;        // console +32    :445
     };
 
     class OutputBuffer_PreDispatch : public CgsModule::IOBuffer
     {
     public:
+        // @0x8275CF28 -- run by CreateIOBuffer<OutputBuffer_PreDispatch> @0x827B7320.
         void Construct();
-    private:
-        u8 maDeferredPayload[16];   // FLAG: interior deferred
+
+        // @0x82755BB8 -- `*(this + 772) = 0`, i.e. maTrafficRenderInfos.Clear().
+        void Clear();
+
+        static void _AssertLayout();
+
+        // PUBLIC, per the DWARF. Producer: TrafficEntityModule::PreDispatchUpdate
+        // @0x8274D900 (cluster C6). Consumers: WorldModule::CalculateVehicleLODs
+        // (writes VehicleRenderInfo::mLOD) and TrafficEntityModule::
+        // GenerateDispatchLists @0x8273B280.
+        Array<BrnTraffic::VehicleRenderInfo, 64u> maTrafficRenderInfos;   // console +4     :457
     };
+
+    // ------------------------------------------------------------------------
+    // [T1-rinfo] BRING-UP PROBE -- NOT IN THE X360 BINARY. DELETE WHEN STABLE.
+    // Latched report of how many VehicleRenderInfos the traffic module produced;
+    // prints only when the count CHANGES, and only under BRN_TRAFFIC_DIAG. It is
+    // a free function rather than a member so it adds nothing at all to the
+    // buffer's shape. Call it right after TrafficEntityModule::PreDispatchUpdate
+    // returns -- that is the frame position where the number first means
+    // something. OutputBuffer_PreDispatch::Clear() also calls it, so the probe
+    // still reports even before C6 wires the call site.
+    // ------------------------------------------------------------------------
+    void T1Diag_ReportTrafficRenderInfoCount( const OutputBuffer_PreDispatch& lrBuffer );
 
     // OutputBuffer_Prepare  (DWARF :2/:115, prepare/boot output buffer)  -- NEW HOME
     // ============================================================================

@@ -1931,7 +1931,7 @@ namespace BrnResource
         }
         else if (memcmp(lacName, "TVEH", 4) == 0)
         {
-            DeferredGameDataRequest("LoadTrafficVehicle (0x8266EF00, id 28)", lpSlot);
+            ProcessLoadTrafficVehicleRequest(lpResourceInput, lpEvent, 28, liIndex);
         }
         else if (memcmp(lacName, "ICE_", 4) == 0)
         {
@@ -2008,7 +2008,7 @@ namespace BrnResource
         }
         else if (memcmp(lacName, "TVEH", 4) == 0)
         {
-            DeferredGameDataRequest("GetTrafficVehicle (0x82670280, id 51)", lpSlot);
+            ProcessGetTrafficVehicleRequest(lpResourceInput, lpEvent, 51, liIndex);
         }
         else if (memcmp(lacName, "VL__", 4) == 0)
         {
@@ -2237,6 +2237,98 @@ namespace BrnResource
         lpResourceInput->GetResourceQueue()->AddEvent(
             reinterpret_cast<const CgsModule::Event*>(&lRequest),
             2 /*LoadBundle*/, static_cast<s32>(sizeof(lRequest)));
+    }
+
+    // @ 0x8266EF00 -- service a LOAD traffic-vehicle request (dispatch id 28). Landed wave T1
+    // round-4 consolidation 2026-08-21 (was a DeferredGameDataRequest; the boot log named it
+    // as the reason no VEH_T*_GR bundle was ever opened). The wheel handler's shape with the
+    // traffic-vehicle differences the asm is explicit about:
+    //   * ONE asset set: `if (event->meType) assert` -- "Invalid asset type for traffic
+    //     vehicles\n" (X360 baked line 4052); the suffix table is indexed UNREMAPPED, so a
+    //     valid request always picks KAPC_ASSET_SET_SUFFIXES[0] == "GR".
+    //   * `strncpy(lacID, "VEH_", 4)` @0x8266EF68 -- the id arrives as "TVEH<code>" (the
+    //     streamer's MakeTrafficVehicleId spelling) and the FIRST FOUR CHARS are overwritten
+    //     in place with the literal at 0x8201594C == "VEH_" (dumped 56 45 48 5F), so the file
+    //     name comes out "Vehicles\VEH_<code>_GR.bin" -- exactly the 42 converted files.
+    //   * No SOUND leg, no PHYSICS->ATTRIBS remap.
+    // No reply is posted: the completion rides ProcessInternalLoadBundleResponse's case 28,
+    // which chains into ProcessGetTrafficVehicleRequest -- the response id is staged first.
+    void GameDataModule::ProcessLoadTrafficVehicleRequest(CgsResource::ResourceIO::InputBuffer* lpResourceInput,
+                                                          const GameDataIO::GameDataAssetEvent* lpEvent,
+                                                          s32 liEventId, s32 liSlotIndex)
+    {
+        // X360 store order: the response id is staged FIRST (`stw ...,0x28(slot)`).
+        mGameDataEventSlotPool[static_cast<s16>(liSlotIndex)].miResponseEventId = liEventId;
+
+        char lacTrafficVehicleID[KI_CGSID_STRING_LEN];
+        CgsIDConvertToString(lpEvent->mId, lacTrafficVehicleID);
+
+        CGS_ASSERT(lpEvent->meType == E_ASSETSET_GRAPHICS,
+                   "Invalid asset type for traffic vehicles\n");   // X360 line 4052
+
+        // The in-place prefix swap: "TVEH<code>" -> "VEH_<code>" (0x8201594C == "VEH_").
+        strncpy(lacTrafficVehicleID, "VEH_", 4);
+
+        const u32 luBundleAssetSet = static_cast<u32>(lpEvent->meType);
+        const char* lpcSuffix =
+            (luBundleAssetSet < (sizeof(KAPC_ASSET_SET_SUFFIXES) / sizeof(KAPC_ASSET_SET_SUFFIXES[0])))
+                ? KAPC_ASSET_SET_SUFFIXES[luBundleAssetSet]
+                : KAPC_ASSET_SET_SUFFIXES[0];
+
+        char lacResourceName[208];
+        CgsCore::SPrintf(lacResourceName, 128, KPC_VEHICLE_FILE_FORMAT,
+                         lacTrafficVehicleID, lpcSuffix);
+
+        CgsResource::Events::LoadBundleRequest lRequest;
+        memset(&lRequest, 0, sizeof(lRequest));
+        lRequest.mpUser    = &mReceiverQueue;
+        lRequest.miEventId = liSlotIndex;
+        lRequest.SetFileName(lacResourceName);
+        lRequest.mbLiveUpdateReplace = false;
+        lRequest.miPoolId            = lpEvent->miPoolId;
+        lRequest.mbAllowFailiure     = lpEvent->mbFailFlag;
+        lRequest.mbUseHDCache        = false;
+
+        lpResourceInput->GetResourceQueue()->AddEvent(
+            reinterpret_cast<const CgsModule::Event*>(&lRequest),
+            2 /*LoadBundle*/, static_cast<s32>(sizeof(lRequest)));
+    }
+
+    // @ 0x82670280 -- service a GET traffic-vehicle request (dispatch id 51). Hop 2: the
+    // VEH_<code>_GR.bin bundle is resident, so acquire its GraphicsStub by name --
+    // "%s_%s" of (id WITHOUT its 4-char "TVEH" prefix, "TrafficStub"), e.g.
+    // "TUSSL01_TrafficStub". Landed with the LOAD half above (was deferred).
+    // The reply rides ProcessInternalAcquireResponse case 51 (already real), which posts
+    // the id-51 response with the resolved handle back to the traffic car streamer's
+    // receiver queue -- OnLoadComplete's food.
+    void GameDataModule::ProcessGetTrafficVehicleRequest(CgsResource::ResourceIO::InputBuffer* lpResourceInput,
+                                                         const GameDataIO::GameDataAssetEvent* lpEvent,
+                                                         s32 liEventId, s32 liSlotIndex)
+    {
+        mGameDataEventSlotPool[static_cast<s16>(liSlotIndex)].miResponseEventId = liEventId;
+
+        char lacTrafficVehicleID[KI_CGSID_STRING_LEN];
+        CgsIDConvertToString(lpEvent->mId, lacTrafficVehicleID);
+
+        CGS_ASSERT(lpEvent->meType == E_ASSETSET_GRAPHICS,
+                   "Invalid asset type for traffic vehicle\n");   // X360 line 4804
+
+        char lacResourceName[208];
+        CgsCore::SPrintf(lacResourceName, 128, KPC_VEHICLE_RESOURCE_FORMAT,
+                         lacTrafficVehicleID + 4, "TrafficStub");
+
+        CgsResource::Events::AcquireResourceRequest lRequest;
+        memset(&lRequest, 0, sizeof(lRequest));
+        lRequest.mpUser    = &mReceiverQueue;
+        lRequest.miEventId = liSlotIndex;
+        lRequest.miPoolId  = lpEvent->miPoolId;
+        lRequest.mResourceId.SetHash(static_cast<u64>(static_cast<u32>(
+            CgsResource::ID::HashString(reinterpret_cast<const u8*>(lacResourceName)))));
+        lRequest.mbCheckRefCount = false;
+
+        lpResourceInput->GetResourceQueue()->AddEvent(
+            reinterpret_cast<const CgsModule::Event*>(&lRequest),
+            4 /*AcquireResource*/, static_cast<s32>(sizeof(lRequest)));
     }
 
     // @ 0x8266EDB8 -- service a LOAD wheel request (dispatch id 36). The bodyshell's twin:
@@ -3300,7 +3392,7 @@ namespace BrnResource
                 mGameDataEventSlotPool.PushIndex(static_cast<s16>(liSlotIndex));
             }
             else
-                DeferredGameDataRequest("GetTrafficVehicle after load (0x82670280, id 51)", lpSlot);
+                ProcessGetTrafficVehicleRequest(lpResourceInput, &lpSlot->mEvent, 51, liSlotIndex);
             break;
 
         case 29:   // AI lanes -- hop 2: AI.dat is resident, acquire "WorldMapData"
