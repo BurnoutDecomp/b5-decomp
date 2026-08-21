@@ -212,6 +212,34 @@ namespace Utils
     // One non-gating assert that the parameter is in [0, 1] (line 810).
     f32 SineLerp(f32 lfFrom, f32 lfTo, f32 lfParameter);
 
+    // @0x821F8C78 (DWARF CameraUtils.cpp:840 -- the assert line, 30 lines after SineLerp's).
+    // The OTHER easing curve BehaviourInterpolate can select: a symmetric exponential
+    // S-curve, remapping the parameter through
+    //     p <= 0.5 :        pow(0.8, 50 - p*100) * 0.5
+    //     p >  0.5 :  1.0 - pow(0.8, p*100 - 50) * 0.5
+    // (0 -> ~7.1e-6, 0.5 -> exactly 0.5 from either arm, 1 -> ~1) and then using it as an
+    // ordinary lerp weight. Same non-gating [0, 1] parameter assert as SineLerp.
+    f32 ExponentialLerp(f32 lfFrom, f32 lfTo, f32 lfParameter);
+
+    // @0x82205558 (DWARF CameraUtils.h:742 -- the assert line, so the DECLARATION lives in
+    // the header even though the body is out of line). The direction-preserving orientation
+    // slerp: interpolate lrFrom -> lrTo by lvT while REMEMBERING the rotation axis used last
+    // frame, so successive frames never flip to the antipodal axis mid-blend. lrLastAxis and
+    // lrbWasInvertedLastTime are that memory -- they are Utils::Interpolater's two members,
+    // which is why the console passes them as two loose pointers 16 bytes apart.
+    Matrix33 DirectionPreservingSLerp(const Matrix33& lrFrom, const Matrix33& lrTo,
+                                      Vector3& lrLastAxis, bool& lrbWasInvertedLastTime,
+                                      VecFloat lvT);
+
+    // @0x82217C08 (DWARF CameraUtils.h:821). The AFFINE overload: same axis memory, but it
+    // also carries a translation row (a PLAIN LERP, never slerped) and it has NO
+    // small-angle shortcut. This is the one CameraInterpolationController::Update selects
+    // for interpolation method 0, the plain camera slerp.
+    Matrix44Affine DirectionPreservingSLerp(const Matrix44Affine& lrFrom,
+                                            const Matrix44Affine& lrTo,
+                                            Vector3& lrLastAxis, bool& lrbWasInvertedLastTime,
+                                            VecFloat lvT);
+
     // @0x822183E0. Rotate a look-at frame about a world pivot by a pitch angle (radians).
     // Used by CollisionPolicyAttachedToVehicle::GenerateSceneQueries.
     // FLAG (declaration-only): NOT YET DONE. ⛔ ITS OLD REASON IS RETIRED (2026-08-02) -- it

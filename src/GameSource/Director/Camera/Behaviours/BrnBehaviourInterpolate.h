@@ -6,6 +6,7 @@
 #include "GameSource/Director/Camera/Behaviours/Behaviour.h"       // THE canonical Camera::Behaviour base
 #include "GameSource/Director/Camera/BrnCollisionPolicy.h"         // VisibilityCollisionPolicy (mCollisionPolicy)
 #include "GameSource/Director/Camera/BrnCameraReference.h"         // THE real CameraReference (mFromCamera / mToCamera)
+#include "GameSource/Director/Shots/ShotControllers/BrnCameraInterpolationController.h"  // THE real blend evaluator
 
 // ============================================================================
 // GameSource/Director/Camera/Behaviours/BrnBehaviourInterpolate.h
@@ -178,13 +179,11 @@ public:
     // Layout members are public-of-layout so consumers reach them BY NAME.
     VisibilityCollisionPolicy mCollisionPolicy;   // +0x020
 
-    // FLAG: CameraInterpolationController -- the per-frame blend evaluator. Never read by any
-    //   function bodied here, no recovered layout, and no other TU names it. Kept as a NAMED,
-    //   sized-by-nothing sub-object so the member ORDER stays right; nothing depends on its
-    //   width (x64 parity is by named member).
-    //   DELETE-WHEN: the interpolation-controller TU lands.
-    struct OpaqueInterpolationController { u8 maOpaque[4]; };
-    OpaqueInterpolationController mInterpolator;
+    // The per-frame blend evaluator, by value. Was a 4-byte OpaqueInterpolationController
+    // stand-in until 2026-08-20; the real type is two Utils::Interpolater sub-objects (the
+    // "two 16-byte blocks + a trailing byte" Construct below zeroes), and it is what turns
+    // the parametric time into an actual blended camera in PostCollisionUpdate.
+    CameraInterpolationController mInterpolator;
 
     // ⭐ +0x2A0. NOT initialised by BehaviourInterpolate::Construct @0x82255FC8 (that
     // function's store set does not touch +0x2A0) -- which is precisely why Update

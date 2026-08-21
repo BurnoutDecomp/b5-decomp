@@ -451,6 +451,136 @@ namespace vpu
         lResult.wAxis = Lerp(lrFrom.wAxis, lrTo.wAxis, lfAmount);
         return lResult;
     }
+
+    // -- axis/angle extraction ------------------------------------------------------------
+
+    // QueryRotateDegenerateUnitAxis @0x82203768 (98 asm lines).
+    //
+    // The axis of a rotation that is (very nearly) HALF A TURN. At theta == pi the
+    // antisymmetric part of R vanishes, so QueryRotate below cannot recover the axis from it
+    // and falls through to here, which reads the SYMMETRIC part instead.
+    //
+    // The console picks the largest diagonal element and builds an unnormalised vector whose
+    // dominant lane is (1 + m_ii) SQUARED and whose other two lanes are the symmetric sums,
+    // then normalises. All three branches are the same shape (asm 0x822037C8 / 0x82203870 /
+    // 0x82203824, each assembled through the same vperm control at unk_82CDA350 =
+    // 00 01 02 03 | 14 15 16 17 | 00 01 02 03 | 00 01 02 03 -- take lane0 of the first
+    // operand then lane1 of the second, with a vrlimi128 supplying the third lane):
+    //     m00 largest ->  ( (1+m00)^2 ,  m01+m10  ,  m02+m20  )
+    //     m11 largest ->  (  m10+m01  , (1+m11)^2 ,  m12+m21  )
+    //     m22 largest ->  (  m20+m02  ,  m21+m12  , (1+m22)^2 )
+    //
+    // WARNING -- REPRODUCED, NOT CORRECTED. The squared term is mathematically wrong: at
+    // theta == pi, R = 2*a*a^T - I, so (1 + m_ii) == 2*a_i^2 while the off-diagonal sums are
+    // 4*a_i*a_j. Dividing through by 4*a_i leaves (a_i^3, a_j, a_k) -- proportional to the
+    // true axis only when the axis is ~exactly a principal axis (a_i ~= 1), which is also
+    // when this branch is most likely to be taken. Squaring is what the ARTIST image does
+    // (raw asm `vaddfp v10, v0, v11` then `vmulfp128 v12, v10, v10`, checked at all three
+    // sites), so it is what is written here. DO NOT "fix" it to (1 + m_ii) without
+    // re-reading 0x822037F8 -- that would be a divergence, not a repair.
+    inline Vector3 QueryRotateDegenerateUnitAxis(const Matrix44Affine& lrMatrix)
+    {
+        const float lfM00 = lrMatrix.xAxis.x;
+        const float lfM11 = lrMatrix.yAxis.y;
+        const float lfM22 = lrMatrix.zAxis.z;
+
+        Vector3 lAxis;
+        if (lfM00 > lfM11 && lfM00 > lfM22)
+        {
+            const float lfDominant = 1.0f + lfM00;
+            lAxis.x = lfDominant * lfDominant;
+            lAxis.y = lrMatrix.xAxis.y + lrMatrix.yAxis.x;   // m01 + m10
+            lAxis.z = lrMatrix.xAxis.z + lrMatrix.zAxis.x;   // m02 + m20
+        }
+        else if (lfM11 > lfM22)
+        {
+            const float lfDominant = 1.0f + lfM11;
+            lAxis.x = lrMatrix.yAxis.x + lrMatrix.xAxis.y;   // m10 + m01
+            lAxis.y = lfDominant * lfDominant;
+            lAxis.z = lrMatrix.yAxis.z + lrMatrix.zAxis.y;   // m12 + m21
+        }
+        else
+        {
+            const float lfDominant = 1.0f + lfM22;
+            lAxis.x = lrMatrix.zAxis.x + lrMatrix.xAxis.z;   // m20 + m02
+            lAxis.y = lrMatrix.zAxis.y + lrMatrix.yAxis.z;   // m21 + m12
+            lAxis.z = lfDominant * lfDominant;
+        }
+        lAxis.w = 0.0f;
+
+        return Normalize(lAxis);
+    }
+
+    // QueryRotate @0x822038F0 (142 asm lines).
+    //
+    // Decompose an orthonormal 3x3 into a UNIT AXIS and an ANGLE IN RADIANS. This is the
+    // primitive Camera::Utils::DirectionPreservingSLerp is built on.
+    //
+    // asm walk (r3 = the matrix, r4 = the axis out, r5 = the angle out):
+    //   0x82203910..0x82203978  the antisymmetric part, assembled lane by lane through three
+    //                           vrlimi128 inserts:  ( m12-m21 , m20-m02 , m01-m10 ),
+    //                           whose length is 2*sin(theta).
+    //   0x8220397C  vmsum3fp128 -> its squared length; vrsqrtefp + TWO Newton refinements;
+    //               multiplied back by the input to give the length itself; a vsel forces
+    //               exactly 0 when the square was 0.
+    //   0x82203980  vsubfp128 v125, trace, 1.0        -- 2*cos(theta)
+    //   0x822039C4  if (length > 0) axis = antisym * (1/length)  else axis = (0,0,0,0)
+    //   0x82203A30..0x82203A50  angle = XMVectorATan( (2 sin) / (2 cos) ), then the QUADRANT
+    //               fix: += pi when the cosine is negative, and exactly pi/2 when it is zero.
+    //   0x82203A80  if (length <= unk_8200176C && cos <= 0) the rotation is a half turn:
+    //               overwrite the axis from QueryRotateDegenerateUnitAxis.
+    //
+    // THE DEGENERACY THRESHOLD IS A DENORMAL. unk_8200176C is 0x00200000 ==
+    // 2.938735877055719e-39, NOT the 1.1920929e-7 epsilon its immediate neighbour
+    // flt_82001770 holds. Both dumped from the decrypted image; taking the neighbour by
+    // mistake would widen the half-turn branch by thirty-odd orders of magnitude.
+    // NOT std::atan2: the console reconstructs the quadrant by hand from the sign of the
+    // cosine and hands back exactly pi/2 when the cosine is zero, regardless of the
+    // numerator's sign -- the same convention CameraUtils' own atan sites document.
+    inline void QueryRotate(const Matrix44Affine& lrMatrix, Vector3& lrOutAxis,
+                            float& lrOutAngleRads)
+    {
+        // The antisymmetric part: length 2*sin(theta), direction along the rotation axis.
+        Vector3 lAntisymmetric;
+        lAntisymmetric.x = lrMatrix.yAxis.z - lrMatrix.zAxis.y;   // m12 - m21
+        lAntisymmetric.y = lrMatrix.zAxis.x - lrMatrix.xAxis.z;   // m20 - m02
+        lAntisymmetric.z = lrMatrix.xAxis.y - lrMatrix.yAxis.x;   // m01 - m10
+        lAntisymmetric.w = 0.0f;
+
+        const float lfTwoSin = Magnitude(lAntisymmetric);
+        const float lfTwoCos = (lrMatrix.xAxis.x + lrMatrix.yAxis.y + lrMatrix.zAxis.z) - 1.0f;
+
+        if (lfTwoSin > 0.0f)
+        {
+            lrOutAxis = Mult(lAntisymmetric, 1.0f / lfTwoSin);
+        }
+        else
+        {
+            lrOutAxis = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };
+        }
+
+        float lfAngle;
+        if (lfTwoCos == 0.0f)
+        {
+            lfAngle = 1.5707964f;                 // v33[0] in the frame, dumped
+        }
+        else
+        {
+            lfAngle = std::atan(lfTwoSin / lfTwoCos);
+            if (lfTwoCos < 0.0f)
+            {
+                lfAngle = 3.1415927f + lfAngle;   // v29 in the frame, dumped
+            }
+        }
+        lrOutAngleRads = lfAngle;
+
+        // The half-turn fall-back: no usable antisymmetric part AND a non-positive cosine.
+        const float KF_DEGENERATE_SIN_LIMIT = 2.938735877055719e-39f;   // unk_8200176C
+        if (KF_DEGENERATE_SIN_LIMIT >= lfTwoSin && lfTwoCos <= 0.0f)
+        {
+            lrOutAxis = QueryRotateDegenerateUnitAxis(lrMatrix);
+        }
+    }
 }
 }
 }

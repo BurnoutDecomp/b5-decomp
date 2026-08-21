@@ -65,6 +65,12 @@ public:
     // True iff flag luIndex's current bit differs from its previous-frame bit. @0x8227D380.
     bool HasChanged(u32 luIndex) const;
 
+    // @0x82220BC0 (DWARF BrnCameraState.cpp:121 -- the assert line). Merge two states for a
+    // camera blend. NOT a numeric interpolation: the flag sets are combined with AND, so a
+    // flag survives only while BOTH endpoints hold it -- EXCEPT five bits that are OR-ed, so
+    // they propagate if EITHER endpoint has them. See the .cpp for which and why.
+    static CameraState Interpolate(const CameraState& lrFrom, const CameraState& lrTo, f32 lfT);
+
     // ADDITIVE GROW (BrnDirector::InertiaController::Update @0x8221ECD0): read one
     // current flag. The X360 inlines it as the 64-bit field load + mask test (the
     // same bit math as BitArray::IsBitSet); exposed by name so consumers stay off the

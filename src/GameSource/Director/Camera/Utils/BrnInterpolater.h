@@ -3,6 +3,17 @@
 #include "types.hpp"
 #include "BrnCommonTypes.h"   // Vector3 / Matrix33 / Matrix44Affine / VecFloat (rw::math::vpu)
 
+// ⛔ LOAD-BEARING INCLUDE, same hazard CameraUtils.h documents at length: `VecFloat` inside
+// `namespace BrnDirector` resolves to TWO different types depending on include order -- the
+// global `typedef rw::math::vpu::Vector4 VecFloat` from BrnCommonTypes.h, or
+// `BrnDirector::VecFloat` from BrnDirectorTimestep.h -- and the two MANGLE DIFFERENTLY. The
+// Interpolate overloads below were declaration-only until now, so no TU ever had to agree
+// with another; the moment they got bodies (BrnInterpolater.cpp, which reaches
+// BrnDirectorTimestep.h through CameraUtils.h) a caller that had not seen that header would
+// have emitted a different symbol and read as a missing body rather than a type mismatch.
+// Forcing it here puts every consumer on BrnDirector::VecFloat.
+#include "GameSource/Director/Utils/BrnDirectorTimestep.h"   // BrnDirector::VecFloat
+
 // BrnDirector::Camera::Utils::Interpolater - a direction-preserving orientation
 // interpolator: it slerps between two rotations while remembering the rotation axis it
 // used last frame (mLastAxis) and whether it had to invert it (mbWasInvertedLastTime),
@@ -29,6 +40,13 @@ namespace Utils
         // lvT, updating the remembered axis state.
         Matrix33       Interpolate(Matrix33 lFrom, Matrix33 lTo, VecFloat lvT);
         Matrix44Affine Interpolate(Matrix44Affine lFrom, Matrix44Affine lTo, VecFloat lvT);
+
+        // The console reaches these two as LOOSE POINTERS -- CameraInterpolationController::
+        // Update hands DirectionPreservingSLerp this object and this+0x10 directly rather
+        // than going through an Interpolate method (asm 0x82251520 method-0 arm). Exposed by
+        // name so that call site stays off raw offsets.
+        Vector3& GetLastAxis() { return mLastAxis; }
+        bool&    GetWasInvertedLastTime() { return mbWasInvertedLastTime; }
 
     private:
         Vector3 mLastAxis;              // h:67 (+0x00)
