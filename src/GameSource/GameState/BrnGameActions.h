@@ -384,7 +384,7 @@ struct PrepareForModeAction : public GameAction<E_ACTION_PREPARE_FOR_MODE>
 
     void                  Construct(const GameModeParams* lpGameModeParams, s32 liCurrentRound,
                                     bool lbComingFromOnlineLobbyMode);   // X360 0x8230FDF0 (defined)
-    const GameModeParams* GetGameModeParams() const;                     // declared-only (own ledger entry)
+    const GameModeParams* GetGameModeParams() const;                     // [gateui] DEFINED in BrnGameActions.cpp (round 8)
     s32                   GetCurrentRound() const;                       // declared-only
     bool                  IsMovingBetweenOnlineLobbyModes() const;       // declared-only
     void                  SetPlayerScoringIndex(s32 liIndex, EPlayerScoringIndex leIndex); // declared-only

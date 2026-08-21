@@ -6,6 +6,7 @@
 #include <d3d9.h>
 
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [gateui r7] the exit-path diagnostics
 #include "pc/gcm/renderengine/device.h"
 
 static const char *kDefaultAutoTestScript = "autotest.txt";
@@ -110,6 +111,12 @@ static const DWORD KU_SHUTDOWN_BUDGET_MS = 5000;
 static DWORD WINAPI ShutdownWatchdogProc(LPVOID)
 {
     Sleep(KU_SHUTDOWN_BUDGET_MS);
+    // ⭐ [gateui r7 / defect B] the watchdog is a TerminateProcess, i.e. one of the ways this
+    // process can vanish without a fault. Say so before it fires, so a log that ends here is
+    // never mistaken for a crash.
+    *CgsDev::Log::gpDebugPrint
+        << "[exit-diag] shutdown watchdog expired after " << static_cast<s32>(KU_SHUTDOWN_BUDGET_MS)
+        << " ms -- TerminateProcess\n";
     TerminateProcess(GetCurrentProcess(), 0);
     return 0;
 }
@@ -118,6 +125,10 @@ void CgsSystem::HardwareInit::RequestShutdown()
 {
     if (mbHardwareRequestsShutdown)
         return;                                   // already requested; the watchdog is armed
+
+    // ⭐ [gateui r7 / defect B] the ONE place the run is told to end. Anything that reaches here
+    // has a window-message cause; a run that dies with no [exit-diag] line at all did not.
+    *CgsDev::Log::gpDebugPrint << "[exit-diag] RequestShutdown -- the run was asked to end\n";
 
     mbHardwareRequestsShutdown = true;
 
@@ -135,12 +146,22 @@ static LRESULT CALLBACK windowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM l
         // (-> WM_DESTROY). The flag is what actually ends the run -- WM_QUIT alone is not
         // enough, because whichever message pump happens to be running when the close arrives
         // consumes it, and the assert screen's modal pump used to consume it and discard it.
+        // [gateui defect-B closure] name the cause: an external WM_CLOSE (a human clicking the
+        // window's X, Alt+F4, taskbar close, or another process's CloseMainWindow). The
+        // 2026-08-20 "silent mid-drive exits" all resolved to this route once the exit net
+        // named it -- deliberate closes during concurrent play-testing, not a game defect.
+        if (CgsDev::Log::gpDebugPrint != 0)
+            *CgsDev::Log::gpDebugPrint
+                << "[exit-diag] WM_CLOSE received (external close request; foreground="
+                << (GetForegroundWindow() == hwnd ? 1 : 0) << ")\n";
         CgsSystem::HardwareInit::RequestShutdown();
         DestroyWindow(hwnd);
         return 0;
     case WM_DESTROY:
         // Also covers a destroy that did not come through WM_CLOSE. Post WM_QUIT as well so a
         // plain `while (message != WM_QUIT)` pump still ends the moment it sees it.
+        if (CgsDev::Log::gpDebugPrint != 0)
+            *CgsDev::Log::gpDebugPrint << "[exit-diag] WM_DESTROY received\n";
         CgsSystem::HardwareInit::RequestShutdown();
         PostQuitMessage(0);
         return 0;

@@ -159,6 +159,52 @@ void GameStateModule::ProcessGameEventsPropHitBringUp(
         {
             const GameStateModuleIO::RecordPropHitEvent* lpPropHit =
                 reinterpret_cast<const GameStateModuleIO::RecordPropHitEvent*>(lpEvent);
+
+            // [DIAG] NOT IN THE X360 BINARY -- the gateui ROUND-7 GameState-side RECEPTION rung,
+            // the missing middle of the ladder. Rung order is now:
+            //     world producer  `[prop-diag] BREAK`                (PropEntityModule_wQ_04.cpp)
+            //     world producer  `Hit dont respawn prop:`           (ProcessContacts LEG 1)
+            //     world bridge    `[UI-gate] bridged prop-hit`       (WorldBridgeEntityModulesToOutput.cpp)
+            //  -> GAMESTATE       `[UI-gate] prop-hit event`         (HERE)
+            //     latch           `[UI-gate] OnPropHit ... latch=`   (BrnStuntManager.cpp)
+            //
+            // WHY IT EARNS ITS PLACE: on the run-9 drive the two rungs either side of this one were
+            // in perfect 1:1 lockstep (8 `bridged prop-hit` lines, 8 `OnPropHit` lines, every latch
+            // SMASH), which is what proved the first-gate failure is upstream of GameState
+            // entirely. ⭐ ROUND-8 CORRECTIONS: (i) this round-7 note used to add "each pair 2 log
+            // lines apart" -- MEASURED, 3 of the 8 pairs are 2 lines apart and 5 are 3, so do NOT
+            // use spacing as a matching heuristic; the 1:1 COUNT is the claim that holds.
+            // (ii) this rung is instrumentation for a garbled-payload failure, not evidence about
+            // defect A: the bridge->OnPropHit segment it sits in was already proven 1:1, and the
+            // defect-A break is upstream of the world bridge entirely, in ProcessContacts' LEG-1
+            // gate (see the "[prop-diag] LEG1 REJECT" rung in PropEntityModule_wQ2_03.cpp).
+            // Without a rung HERE that lockstep has to be inferred
+            // from line proximity across two modules; with it, a bridged-but-not-received event
+            // (a carry-queue Clear race, a lock-bracket bug, an event-id mismatch) separates from a
+            // never-produced one in a single grep. It reports the payload the console's case-111 arm
+            // actually reads, so a garbled zone/prop id shows up here rather than as a mystery
+            // `latch=none` further down.
+            //
+            // First-N guarded at the SAME budget as the OnPropHit rung it pairs with, so the two
+            // stay aligned line-for-line (a multi-panel gate fires this once per panel).
+            {
+                static const bool sbDiag       = (getenv("BRN_PROP_DIAG") != 0);
+                static s32        siEventLines = 0;
+                const s32         KI_PROP_HIT_EVENT_DIAG_FIRST_N = 16;
+                if (sbDiag && siEventLines < KI_PROP_HIT_EVENT_DIAG_FIRST_N &&
+                    CgsDev::Log::gpDebugPrint != 0)
+                {
+                    ++siEventLines;
+                    *CgsDev::Log::gpDebugPrint
+                        << "[UI-gate] prop-hit event zone=" << lpPropHit->muZoneId
+                        << " prop=" << lpPropHit->muPropId
+                        << " hitBefore=" << (lpPropHit->mbHitBefore ? 1 : 0)
+                        << " pos=(" << lpPropHit->mPosition.x
+                        << "," << lpPropHit->mPosition.y
+                        << "," << lpPropHit->mPosition.z << ")\n";
+                }
+            }
+
             mStuntManager.OnPropHit(lpPropHit->muZoneId, lpPropHit->muPropId, lpPropHit->mPosition);
         }
 
@@ -219,6 +265,14 @@ void GameStateModule::PreWorldUpdateStuntBringUp(f32 lfGameTimestep, bool lbIsAG
     // BILLBOARD (sub-type 12). This is the line that separates "the prop was outside every smash
     // region" from "the trigger pump never ran" -- the wave's known blocker. Same logger and same
     // env guard (BRN_PROP_DIAG) as the "[prop-diag] BREAK" rung this ladder hangs off.
+    //
+    // ⓘ ROUND-7 NOTE -- READ THIS BEFORE DRAWING A CONCLUSION FROM THIS LINE. It is a ONE-SHOT and
+    // it fires at the FIRST non-empty set, which on a junk-yard start is the junk-yard interior:
+    // run 9 printed `armed smash=0 billboard=0 of=3` (BrnGame.log:863) and that line says NOTHING
+    // about what was armed later. The per-rebuild timeline that does answer that question lives in
+    // BrnTriggerQueryManager.cpp :: UpdateTriggers (`[UI-gate] trig rebuild #<n> pos=(...)`), which
+    // reports every rebuild of the set with the position it was keyed on. Use that rung, not this
+    // one, to decide whether a given gate's region was armed when the gate broke.
     {
         static bool       sbArmedLogged = false;
         static const bool sbDiag        = (getenv("BRN_PROP_DIAG") != 0);

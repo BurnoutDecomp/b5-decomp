@@ -184,7 +184,13 @@ public:
     void    Construct(GameStateModuleIO::EGameModeType leGameModeType);
 
     s32     GetCheckpointCount() const;                        // # checkpoints registered
-    bool    GetFlag(u64 luFlag) const;                         // test flag bit(s) against muFlags
+    // [gateui r8 link fix] GetFlag @0x821F2C88 is `ld r11,0x860(r3); and; cntlzw-normalise` --
+    // a pure muFlags bit test. Its out-of-line body lives only in an UNMOUNTED (and currently
+    // non-compiling) TU, and the round-8 PREPARE_FOR_MODE re-route in the MOUNTED
+    // WorldBridgeInputToEntityModules.cpp now calls it -> LNK2019 without this inline
+    // (measured by the r8 verifier). Inline body per the console semantics; fold back into the
+    // full TU when it mounts.
+    bool    GetFlag(u64 luFlag) const                   { return (muFlags & luFlag) != 0; }
     Vector3 GetStartPosition(s32 liStartLocationIndex) const;  // spawn pos for grid slot
     Vector3 GetStartDirection(s32 liStartLocationIndex) const; // facing for grid slot
     s32     GetStartLocationCount() const;                     // # start-grid slots registered
@@ -215,6 +221,25 @@ public:
     // Returned as the s32 OnModeStart treats this word as (the value stored into the s32 crash
     // target). Inlined in the X360 build (no standalone export) -> modelled as an inline accessor.
     s32  GetAStarDistanceFunctionRaw() const            { return static_cast<s32>(meAStarDistanceFunction); }
+
+    // ⭐ [gateui] ADDED 2026-08-20 (round 8). DWARF-attested method (BrnGameModeParams.h:417,
+    // `EGameModeType GetGameModeType() const`), inlined by the X360 compiler at every call site,
+    // so it has no standalone export -- same shape as the accessors above.
+    //
+    // THE MEMBER IS PINNED BY THE ASM, not by DWARF source order:
+    //   GameModeParams::Construct @0x8231C370, first instruction that touches `this`:
+    //       0x8231C374  stw  r4, 0x148(r3)      <- the EGameModeType argument -> +0x148
+    //   (the neighbouring word is a different field: 0x8231C414 `stw r11, 0x144(r3)` zeroes it.)
+    // and the ONE consumer this wave cares about reads it through the embedded copy inside
+    // PrepareForModeAction (mGameModeParams @ action+0x30, so member+0x30 == 0x178):
+    //   WorldModule::BridgeInputToEntityModules @0x827ADF88, prepare-for-mode case:
+    //       0x827AE8E8  lwz   r11, 0x178(r31)   ; r31 = the action record
+    //       0x827AE8EC  cmpwi cr6, r11, 0xA     ; SIGNED -- E_MODE_NONE is -1
+    //       0x827AE8F4  bge   -> "this is an online mode"
+    // 0x178 - 0x30 == 0x148 == the offset Construct stores to, which is what identifies the two
+    // as the same member. NOTHING below indexes by offset; the host layout is by named member
+    // (the x64 divergence is deliberate -- see the header banner and BrnGameActions.h).
+    GameStateModuleIO::EGameModeType GetGameModeType() const { return meGameModeType; }
 
 public:
     // ---- Data members (DWARF source order, BrnGameModeParams.h:503-573) -----

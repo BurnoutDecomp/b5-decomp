@@ -297,6 +297,15 @@ void EngineUpdate()
         }
         else
         {
+            // ⭐ [gateui r7 / defect B] the process-health poll: a stack high-water tripwire (one
+            // gs-relative read, prints only on a new 32 KB step), a footprint line every 10 s, and
+            // an opt-in heap sweep (BRN_HEAP_CHECK). The first separates "the process overflowed
+            // its 1 MB stack" -- which kills it with NO log line, no BrnCrash.png and no WER entry
+            // (see CgsCrashHandlerPC.h) -- from every other silent-exit candidate; the second turns
+            // "the allocator counter looks like it is climbing" into a slope you can read. Placed
+            // on the idle branch so it samples once per frame.
+            CgsSystem::CrashHandler::PollProcessHealth();
+
             gGameModule.OnStartOfUpdateFrame();
             gGameModule.OnCompletionOfVsyncWait();
             gGameModule.UpdateThread();
@@ -314,6 +323,17 @@ void EngineUpdate()
             gGameModule.DispatchThread();
         }
     }
+
+    // ⭐ [gateui r7 / defect B] NAME THE EXIT. A run that ends here ended because the game was
+    // ASKED to stop; a run whose log simply stops mid-frame with none of these lines was killed
+    // (fault, __fastfail, or an external terminate). Until this line existed the two were
+    // indistinguishable in BrnGame.log, which is why the mid-drive exits of runs 8 and 9 could be
+    // read either way.
+    *CgsDev::Log::gpDebugPrint
+        << "[exit-diag] EngineUpdate loop left: WM_QUIT="
+        << ((lMsg.message == WM_QUIT) ? 1 : 0)
+        << " shutdownRequested="
+        << (CgsSystem::HardwareInit::IsHardwareWantingToShutdown() ? 1 : 0) << "\n";
 }
 
 void EngineRelease()
@@ -423,6 +443,10 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         GameRelease();
 
     }
+    // [gateui r7 / defect B] the last line a NORMAL run ever writes. Its absence, paired with the
+    // absence of every [exit-diag] line above it, is the proof that the process was killed rather
+    // than asked to stop.
+    *CgsDev::Log::gpDebugPrint << "[exit-diag] WinMain returning 0 (normal shutdown)\n";
     return 0;
 }
 #endif

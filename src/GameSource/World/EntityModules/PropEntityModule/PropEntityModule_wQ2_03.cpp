@@ -295,10 +295,79 @@ namespace BrnWorld
             // enabled and the player not mid-crash. Four separate `bne/beq -> loc_822FAD60`
             // at 0x822FAB68 / 0x822FAB78 / 0x822FAB88 / 0x822FAB9C, in this order.
             // -------------------------------------------------------------------------------
-            if ( static_cast<u32>( lPlayerCarEntityId ) == lrContact.mEntityIdB.muValue
-                 && ( lpInstance->mu8Flags & KU_MOVED_BIT ) == 0
-                 && mbAllowPropProgression
-                 && !mbPlayerCrashing )
+            // The four clauses are named so the [DIAG] rung below can report WHICH ONE rejected a
+            // contact. Each is a plain member/word read with NO side effect, so computing all
+            // four ahead of the `&&` chain (which still short-circuits) is observationally
+            // identical to the console's four separate branches.
+            const bool lbPlayerCarStruckIt =
+                ( static_cast<u32>( lPlayerCarEntityId ) == lrContact.mEntityIdB.muValue );
+            const bool lbPropNotMoved    = ( ( lpInstance->mu8Flags & KU_MOVED_BIT ) == 0 );
+            const bool lbProgressionAllowed = mbAllowPropProgression;
+            const bool lbPlayerNotCrashing  = !mbPlayerCrashing;
+
+            // [DIAG] NOT IN THE X360 BINARY. ROUND-8 LEG-1 CLAUSE PROBE -- the cheapest probe the
+            // round-7 verifier named, and the one rung that can redirect round 9.
+            //
+            // WHY IT EXISTS. Run 9 (scratch\flow_run\20260820_200848\BrnGame.log:4720-4745) shows
+            // the first smashed gate printing "[prop-diag] contact" (LEG 0, above) and
+            // "[prop-diag] BREAK" (LEG 2, below) but NEITHER "Hit dont respawn prop:" NOR
+            // "Hit respawn changed prop:" -- so the contact reached this function, qualified as a
+            // whole-prop-vs-race-car contact, went on to smash, and was rejected somewhere inside
+            // LEG 1. A later gate on the same drive (:5226-5232) passed LEG 1 and produced the
+            // whole [UI-gate] ladder, so nothing about the leg is structurally missing. The five
+            // candidate rejectors are the four clauses above plus the E_RESPAWN early-out, and
+            // the existing "[prop-diag] contact" line cannot separate them: it prints
+            // `car=GetEntityIndex()`, which hides the part-index and owner bits that the clause-1
+            // compare (a WHOLE-word compare against the player car's packed entity id) actually
+            // uses. Hence: both ids IN FULL, plus each clause, plus GetRespawnType().
+            //
+            // COST WHEN OFF: one already-evaluated bool test. GetRespawnType() is called only
+            // inside the guard -- it is const and side-effect free (BrnPropZoneManager.cpp's
+            // body is two BitArray::IsBitSet reads plus non-gating tripwires), so the shipped
+            // path is byte-for-byte the console's.
+            //
+            // SCOPE: smashable props only (KU_SMASHABLE_BIT, the same mask LEG 2 gates on at
+            // asm 0x822FAD60). Gates and billboards are smashable; kerbside clutter is not, and
+            // letting clutter spend the first-16 budget before the junkyard exit is exactly how
+            // this rung would fail to answer the question it was added for. The full mu8Flags
+            // decode is not printed -- the two bits that matter are printed by name.
+            {
+                static const bool sbPropDiag = ( getenv( "BRN_PROP_DIAG" ) != 0 );
+                static s32 siLeg1DiagLinesLeft = 16;
+
+                if ( sbPropDiag && siLeg1DiagLinesLeft > 0 && CgsDev::Log::gpDebugPrint != 0
+                     && ( lpInstance->mu8Flags & KU_SMASHABLE_BIT ) != 0 )
+                {
+                    const BrnPhysics::Props::eRespawnType leDiagRespawnType =
+                        mZoneManager.GetRespawnType( PropEntityID( lrContact.mEntityIdA.muValue ) );
+
+                    const bool lbLeg1Records =
+                        lbPlayerCarStruckIt && lbPropNotMoved && lbProgressionAllowed
+                        && lbPlayerNotCrashing
+                        && leDiagRespawnType != BrnPhysics::Props::E_RESPAWN;
+
+                    if ( !lbLeg1Records )
+                    {
+                        --siLeg1DiagLinesLeft;
+                        *CgsDev::Log::gpDebugPrint
+                            << "[prop-diag] LEG1 REJECT prop=" << lPropEntityId.GetValue()
+                            << " playerCarId="     << static_cast<u32>( lPlayerCarEntityId )
+                            << " contactEntityB="  << lrContact.mEntityIdB.muValue
+                            << " isPlayerCar="     << ( lbPlayerCarStruckIt ? 1 : 0 )
+                            << " movedBit="        << static_cast<s32>( lpInstance->mu8Flags
+                                                                       & KU_MOVED_BIT )
+                            << " allowProgression="<< ( lbProgressionAllowed ? 1 : 0 )
+                            << " playerCrashing="  << ( mbPlayerCrashing ? 1 : 0 )
+                            << " respawnType="     << static_cast<s32>( leDiagRespawnType )
+                            << "\n";
+                    }
+                }
+            }
+
+            if ( lbPlayerCarStruckIt
+                 && lbPropNotMoved
+                 && lbProgressionAllowed
+                 && lbPlayerNotCrashing )
             {
                 const BrnPhysics::Props::eRespawnType leRespawnType =
                     mZoneManager.GetRespawnType( PropEntityID( lrContact.mEntityIdA.muValue ) );

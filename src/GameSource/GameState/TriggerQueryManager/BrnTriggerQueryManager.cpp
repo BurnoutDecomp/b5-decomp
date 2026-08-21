@@ -1,6 +1,7 @@
 #include "GameSource/GameState/TriggerQueryManager/BrnTriggerQueryManager.h"
 
 #include <cstddef>   // offsetof (layout asserts)
+#include <stdlib.h>  // getenv ([UI-gate] arming-timeline diag; same env guard as the wQ_04 rung)
 
 #include "rw/math/vpu/vector3_operation.h"  // rw::math::vpu operator-/Dot/MagnitudeSquared (refresh-gate + entry-direction maths)
 
@@ -209,9 +210,11 @@ void TriggerQueryManager::UpdateTriggers(
     }
 
     // ---- 3) active-set rebuild: ENTIRELY gated on the player car being active ----
-    // X360 0x823922F8-0x8239233C: the player-active-index assert fires unconditionally, then the
+    // X360 0x823922F8-0x82392340: the player-active-index assert fires unconditionally, then the
     // whole rebuild block (LABEL_32 @0x823923C4) is entered only when mbIsPlayerCarActive == 1
-    // (bne loc_8239265C skips it otherwise). When the player is inactive UpdateTriggers does
+    // (0x8239233C `cmplwi cr6, r11, 1` / 0x82392340 `bne cr6, loc_8239265C` skips it otherwise --
+    // ⭐ ROUND 8: the citation used to name 0x8239233C as the branch; it is the COMPARE, and the
+    // branch is the next instruction. Re-read off the export this pass). When the player is inactive UpdateTriggers does
     // nothing further but set mbTriggersUpdated=true -- it does NOT rebuild even on the first
     // un-updated frame.
     CGS_ASSERT(lpActiveRaceCarInterface->GetPlayerActiveRaceCarIndex() < E_ACTIVE_RACE_CAR_INDEX_COUNT,
@@ -294,6 +297,141 @@ void TriggerQueryManager::UpdateTriggers(
 
             // Cache the player position used for this rebuild.
             mLastPlayerPosition = lPlayerPosition;
+
+            // -----------------------------------------------------------------------------
+            // [DIAG] NOT IN THE X360 BINARY -- the gateui ARMING TIMELINE.
+            //
+            // ⭐ ROUND-8 CORRECTION. The round-7 banner that stood here justified this rung with
+            // "the round-7 brief's whole defect-A premise (an armed-set warm-up race) could be
+            // neither confirmed nor killed". That is FALSE and is removed. The run-9 log KILLED
+            // that premise: for the first smashed gate, StuntManager::OnPropHit was never called
+            // at all (no `[UI-gate] bridged prop-hit` and no `[UI-gate] OnPropHit` line exists for
+            // it -- BrnGame.log:4720-4745), so whatever maActiveTriggers held at that moment is
+            // causally irrelevant to the first-gate failure. The break is upstream, in the world
+            // module: PropEntityModule ProcessContacts' LEG-1 gate, which round 8 instruments
+            // directly (PropEntityModule_wQ2_03.cpp, the "[prop-diag] LEG1 REJECT" rung).
+            //
+            // WHAT THIS RUNG IS, THEN: general arming instrumentation, not evidence for or
+            // against defect A. The round-6 ladder had exactly ONE arming rung -- the
+            // `[UI-gate] armed` one-shot in GameStateModule_gUI_00.cpp, which fires on the FIRST
+            // non-empty active set and never again; on the run-9 drive that shot landed in the
+            // junk yard (`armed smash=0 billboard=0 of=3`, BrnGame.log:863) and the log then said
+            // nothing about arming for the rest of the drive. This rung reports EVERY rebuild of
+            // the active set -- the only event that can change what OnPropHit walks -- with the
+            // player position the rebuild was keyed on and the SMASH/BILLBOARD census of the
+            // resulting set. It is what you read when a prop-hit event DOES reach OnPropHit and
+            // latches `none`; correlate the positions against the `[prop-diag] contact` /
+            // `[Q6-world] first part ... pos` lines.
+            //
+            // BUDGET (the PREAMBLE's "keep the ladder readable" rule). Three windows:
+            //   * the first KI_UI_GATE_REBUILD_DIAG_FIRST_N rebuilds;
+            //   * one extra line the first time a SMASH region enters the set (FIRST-SMASH-ARMED);
+            //   * ⭐ ROUND 8: the KI_UI_GATE_REBUILD_DIAG_AFTER_SMASH rebuilds AFTER that, because
+            //     the one-shot alone is spendable on the wrong region -- 400 of the world's 4670
+            //     generic regions are SMASH ([UI-gate] prepare tally, BrnGame.log:217) and the
+            //     clip radius is max(halfX,halfZ)+70, so an arbitrary early smash region burns the
+            //     shot and the rebuild that arms the gate you care about prints nothing.
+            // ⚠️ Do NOT read the first-N window as route coverage. A rebuild needs >30 u of travel
+            // FROM THE PREVIOUS REBUILD POSITION, so N rebuilds is a lower bound of 30*N u of net
+            // displacement and an unbounded amount of actual driving; nothing here establishes
+            // that it reaches any particular gate. (The round-7 banner asserted "covers the whole
+            // junk-yard exit and the first ~240 m"; that was unsupported and is withdrawn.)
+            // The census loop itself now stops running once all three windows are spent, so a
+            // long BRN_PROP_DIAG run pays nothing per rebuild after that.
+            // ⚠️ PERF: what remains runs INSIDE the gsiUpdateTriggersPM monitored span
+            // (StopMonitor(gsiUpdateTriggersPM) is after this block), so UpdateTriggers' perf
+            // number is inflated while BRN_PROP_DIAG is set. Do not profile with it on.
+            //
+            // Same logger and same env guard (BRN_PROP_DIAG) as the `[prop-diag] BREAK` rung this
+            // ladder hangs off (PropEntityModule_wQ_04.cpp).
+            // -----------------------------------------------------------------------------
+            {
+                static const bool sbDiag              = (getenv("BRN_PROP_DIAG") != 0);
+                static s32        siRebuildCount      = 0;
+                static bool       sbFirstSmashLogged  = false;
+                static s32        siPostSmashLinesLeft = 0;
+                const s32         KI_UI_GATE_REBUILD_DIAG_FIRST_N     = 8;
+                const s32         KI_UI_GATE_REBUILD_DIAG_AFTER_SMASH = 8;
+
+                // Once every window is spent there is nothing left to print, so skip the census
+                // walk entirely rather than paying it on every rebuild for the life of the run.
+                const bool lbCensusStillWanted =
+                    (siRebuildCount < KI_UI_GATE_REBUILD_DIAG_FIRST_N)
+                    || !sbFirstSmashLogged
+                    || (siPostSmashLinesLeft > 0);
+
+                if (sbDiag && lbCensusStillWanted && CgsDev::Log::gpDebugPrint != 0)
+                {
+                    const u32 luArmedCount = maActiveTriggers.GetLength();
+                    s32 liSmash     = 0;
+                    s32 liBillboard = 0;
+                    for (u32 luArmed = 0; luArmed < luArmedCount; ++luArmed)
+                    {
+                        const BrnTrigger::TriggerRegion* lpArmedRegion =
+                            lpTriggerData->GetRegion(maActiveTriggers[luArmed]);
+                        if (lpArmedRegion->GetType() != BrnTrigger::TriggerRegion::E_TYPE_GENERIC_REGION)
+                        {
+                            continue;
+                        }
+                        const BrnTrigger::GenericRegion* lpArmedGeneric =
+                            static_cast<const BrnTrigger::GenericRegion*>(lpArmedRegion);
+                        if (lpArmedGeneric->GetType() == BrnTrigger::GenericRegion::E_TYPE_SMASH)
+                        {
+                            ++liSmash;
+                        }
+                        else if (lpArmedGeneric->GetType() == BrnTrigger::GenericRegion::E_TYPE_OVERDRIVE_BOOST)
+                        {
+                            ++liBillboard;
+                        }
+                    }
+
+                    const bool lbFirstSmashNow = (!sbFirstSmashLogged && liSmash > 0);
+                    if (lbFirstSmashNow)
+                    {
+                        sbFirstSmashLogged   = true;
+                        siPostSmashLinesLeft = KI_UI_GATE_REBUILD_DIAG_AFTER_SMASH;
+                    }
+
+                    bool lbPrintLine = (siRebuildCount < KI_UI_GATE_REBUILD_DIAG_FIRST_N)
+                                       || lbFirstSmashNow;
+                    if (!lbPrintLine && siPostSmashLinesLeft > 0)
+                    {
+                        --siPostSmashLinesLeft;
+                        lbPrintLine = true;
+                    }
+
+                    if (lbPrintLine)
+                    {
+                        *CgsDev::Log::gpDebugPrint
+                            << "[UI-gate] trig rebuild #" << siRebuildCount
+                            << " pos=(" << lPlayerPosition.x
+                            << "," << lPlayerPosition.y
+                            << "," << lPlayerPosition.z
+                            << ") armed=" << static_cast<s32>(luArmedCount)
+                            << " smash=" << liSmash
+                            << " billboard=" << liBillboard
+                            << (lbFirstSmashNow ? " FIRST-SMASH-ARMED\n" : "\n");
+                    }
+                    ++siRebuildCount;
+                }
+            }
+        }
+    }
+    else
+    {
+        // [DIAG] NOT IN THE X360 BINARY. The one-shot twin of the rung above: the console skips
+        // the ENTIRE rebuild while the player car is inactive (asm 0x82392340 `bne cr6,
+        // loc_8239265C`; 0x8239233C is the `cmplwi cr6, r11, 1` it branches on -- ⭐ ROUND 8
+        // corrected an off-by-one-instruction citation here and at the gate above),
+        // so a log with no `trig rebuild` lines at all is answered here -- "the pump ran, the
+        // player car was never active" -- rather than by silence. One line per process.
+        static const bool sbDiag             = (getenv("BRN_PROP_DIAG") != 0);
+        static bool       sbInactiveLogged   = false;
+        if (sbDiag && !sbInactiveLogged && CgsDev::Log::gpDebugPrint != 0)
+        {
+            sbInactiveLogged = true;
+            *CgsDev::Log::gpDebugPrint
+                << "[UI-gate] trig update SKIPPED: player car inactive (no rebuild)\n";
         }
     }
 
