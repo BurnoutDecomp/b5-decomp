@@ -328,27 +328,6 @@ namespace Vehicle
             CgsGeometric::AxisAlignedBox lAABB;
             lpSpec->GetBoundingBox(lAABB);
 
-            // ⛔ THE ODR FORK RaceCarPhysics.h FLAGGED IS LIVE AT THIS ONE LINE, AND IT IS THE
-            // ONLY PLACE IN THE TREE WHERE THE TWO SPELLINGS OF THIS BOX MEET.
-            // The console hands the SAME 32 bytes straight from GetBoundingBox's out-param to
-            // Prepare's r5 (`addi r4,r1,var_760 ; bl GetBoundingBox` then `addi r5,r1,var_760`).
-            // In this tree those 32 bytes have two names:
-            //     CgsGeometric::AxisAlignedBox        { Vector4 mMin; Vector4 mMax; }  <- what
-            //         StreamedDeformationSpec::GetBoundingBox fills (the PS3 mangle's spelling)
-            //     BrnPhysics::Vehicle::AxisAlignedBox { Vector3 mMin; Vector3 mMax; }  <- what
-            //         VehiclePhysics::Prepare / SimpleVehiclePhysics::Prepare declare
-            // Same size, same two fields, same lane widths -- but they are DIFFERENT TYPES, and a
-            // reinterpret_cast here would be exactly the silent-fork trade RaceCarPhysics.h's
-            // banner warns about. Converted BY NAMED FIELD instead, so the day either side changes
-            // shape this line fails to compile rather than mis-reading a corner.
-            // DELETE-WHEN the geometry group re-homes the in-namespace slice onto
-            // CgsGeometric::AxisAlignedBox.
-            AxisAlignedBox lSeatAABB;
-            lSeatAABB.mMin.x = lAABB.mMin.x; lSeatAABB.mMin.y = lAABB.mMin.y;
-            lSeatAABB.mMin.z = lAABB.mMin.z; lSeatAABB.mMin.w = lAABB.mMin.w;
-            lSeatAABB.mMax.x = lAABB.mMax.x; lSeatAABB.mMax.y = lAABB.mMax.y;
-            lSeatAABB.mMax.z = lAABB.mMax.z; lSeatAABB.mMax.w = lAABB.mMax.w;
-
             if (!lEvent.mbDisablePhysicsStateReset)
             {
                 // ⛔ THE VCALL AT CONSOLE VTABLE SLOT +0x30 (`lwz r11,0(r3) ; lwz r11,0x30(r11) ;
@@ -363,21 +342,16 @@ namespace Vehicle
                 //   stack@0xBF (a byte)  = lEvent.miCarStrengthStat
                 // Spelled as a plain member call: this tree reaches members BY NAME, never by
                 // console vtable slot (the host slot numbering is the compiler's).
-                // ⚠️ The AABB parameter is spelled CgsGeometric::AxisAlignedBox here because that
-                // is what StreamedDeformationSpec::GetBoundingBox fills. RaceCarPhysics.h's own
-                // banner flags that VehiclePhysics::Prepare's declaration spells it with the
-                // in-namespace BrnPhysics::Vehicle::AxisAlignedBox slice instead -- the same 32
-                // bytes and the same two fields, but a live ODR fork. Re-homing the slice onto
-                // CgsGeometric::AxisAlignedBox is a geometry-group change; if the declaration
-                // still carries the slice when it lands, this argument needs the conversion, not
-                // a cast.
+                // Breaker passes the exact 32-byte buffer filled by GetBoundingBox straight to
+                // Prepare in r5. All three physics declarations now use the canonical
+                // CgsGeometric::AxisAlignedBox type, so no bridge object or cast is involved.
                 maRaceCarVehicles[luRaceCar].Prepare(
                     lEvent.mInitialTransform,
                     lEvent.mInitialVelocity,
                     lEvent.mAngularVelocity,
                     lvHandlingBodyOffset,
                     lpSpec->mHandlingBodyDimensions,
-                    lSeatAABB,
+                    lAABB,
                     lSeatInertia,
                     &lVehicleAttribs,
                     lavWheelPositions,

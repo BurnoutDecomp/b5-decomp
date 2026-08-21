@@ -36,7 +36,8 @@ namespace Vehicle
     //   SetWheelVelocities, then seeds the freak-out fields.
     // -------------------------------------------------------------------------------------------
     bool TrafficPhysics::PreparePhysical(const CreatePhysicalTrafficEvent* lpEvent,
-                                         VehicleAttribs* lpAttribs, const AxisAlignedBox& lrAABB,
+                                         VehicleAttribs* lpAttribs,
+                                         const CgsGeometric::AxisAlignedBox& lrAABB,
                                          const StreamedDeformationSpec* lpDeformSpec,
                                          const Vector3* lpWheelPositions, const f32* lpafWheelRadii)
     {

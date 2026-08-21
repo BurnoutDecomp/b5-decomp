@@ -207,6 +207,15 @@ namespace Vehicle
         // ---- +0x280 (0x10) -------------------------------------------------------------------
         struct CollisionAttribs
         {
+            // DecFIGS VehicleAttribs.h:1090 gives the genuine VecFloat return. Breaker's inlined
+            // Race crash test @0x825C7054..60 loads this packed Vector4 and broadcasts lane X.
+            VecFloat GetCrashSpeedMPS() const
+            {
+                const f32 lfCrashSpeed =
+                    mvCrashSpeedMPS_CarAngularImpulseScale_Spare_Spare.x;
+                return VecFloat{ lfCrashSpeed, lfCrashSpeed, lfCrashSpeed, lfCrashSpeed };
+            }
+
             Vector4 mvCrashSpeedMPS_CarAngularImpulseScale_Spare_Spare;   // +0x00
         };
 

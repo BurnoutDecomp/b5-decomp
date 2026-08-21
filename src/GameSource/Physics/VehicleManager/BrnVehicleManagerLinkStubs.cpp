@@ -219,7 +219,7 @@ namespace Vehicle
         // to a valid RefSpec), the reader is inert -- byte-for-byte the pre-2026-08-20
         // behaviour under which every drive of waves Q..gateui worked. DELETE-WHEN the
         // attrib array-attribute read path is landed and this body survives a boot-drive.
-        const bool KB_ATTRIB_ARRAY_PATH_PROVEN = false;
+        const bool KB_ATTRIB_ARRAY_PATH_PROVEN = true;
         if (!KB_ATTRIB_ARRAY_PATH_PROVEN)
         {
             static bool sbLoggedNoCollection = false;

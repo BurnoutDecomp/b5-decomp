@@ -1281,7 +1281,8 @@ namespace Vehicle
     // ===============================================================================================
     bool SimpleVehiclePhysics::Prepare(Matrix44Affine lTransform, Vector3 lLinearVelocity,
                                        Vector3 lAngularVelocity, Vector3 lHandlingBodyOffset,
-                                       Vector3 lHalfExtent, const AxisAlignedBox& lrAABB,
+                                       Vector3 lHalfExtent,
+                                       const CgsGeometric::AxisAlignedBox& lrAABB,
                                        VehicleAttribs* lpAttribs, const Vector3* lpWheelPositions,
                                        const f32* lpafWheelRadii)
     {

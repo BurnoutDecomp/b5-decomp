@@ -625,6 +625,7 @@ namespace Vehicle
         // @0x8262DD58: paired teardown/reset path.  This is an explicit engine lifecycle method,
         // not the C++ destructor.
         void Destruct();
+        void Release();
 
         // ==========================================================================================
         // ⛔⛔ SIGNATURE CORRECTED 2026-08-11 (the create-drain wave). THIS DECLARATION WAS A FORK.
@@ -671,23 +672,14 @@ namespace Vehicle
         // four of the five rodata constants, and the fact that the two `std` at +0x1158/+0x1220
         // are `BitArray<N>::Prepare()` calls rather than raw zero stores. All folded into the body.
         //
-        // ⚠️⚠️ ODR FORK FLAGGED, NOT FIXED (found by this correction). The PS3 mangle spells the
-        // AABB parameter `RKN12CgsGeometric14AxisAlignedBoxE` == `const CgsGeometric::
-        // AxisAlignedBox&`, but this class hierarchy carries its OWN
-        // `BrnPhysics::Vehicle::AxisAlignedBox` (BrnSimpleVehiclePhysics.h:147, a "MINIMAL OWNING
-        // SLICE" of {Vector3 mMin, Vector3 mMax}) and types mDeformableAABB / mOriginalAABB with it.
-        // The two are the same 32 bytes and the same two fields; the real one
-        // (CgsAxisAlignedBox.h:28) spells them Vector4 mMin/mMax and adds Set/ContainsPoint. The
-        // parameter below is spelled with the IN-NAMESPACE slice so that it matches the sibling
-        // SimpleVehiclePhysics::Prepare declaration this function forwards into -- a mismatch there
-        // would be the [[odr-forks-link-silently]] defect, where a body written against one class
-        // links cleanly against a call site using the other. Re-homing the slice onto
-        // CgsGeometric::AxisAlignedBox is a geometry-group change and is recorded here rather than
-        // done inside a physics wave.
+        // The AABB spelling is canonical and matches both the DecFIGS mangle
+        // (`RKN12CgsGeometric14AxisAlignedBoxE`) and Breaker's r5 pass-through from
+        // StreamedDeformationSpec::GetBoundingBox. The former in-namespace duplicate type has been
+        // removed, so this declaration and SimpleVehiclePhysics::Prepare cannot silently diverge.
         // ==========================================================================================
         bool Prepare(Matrix44Affine lTransform, Vector3 lLinearVelocity, Vector3 lAngularVelocity,
                      Vector3 lHandlingBodyOffset, Vector3 lHalfExtent,
-                     const AxisAlignedBox& lrAABB, VehicleAttribs* lpAttribs,
+                     const CgsGeometric::AxisAlignedBox& lrAABB, VehicleAttribs* lpAttribs,
                      const Vector3* lpaWheelPositions, const f32* lpafWheelRadii);
         // ⭐⭐ SIGNATURE CONFORMED 2026-08-09 (crash/shunt wave). The committed 1-arg const form
         // was a slice artifact off the delegation guess. The real @0x825FC748 prologue consumes
@@ -1180,14 +1172,14 @@ namespace Vehicle
         //   speed via mvLatDriftForceFactor_..._.w = CurrentDriftAngle lane) and clamped.
         virtual VecFloat GetSteeringAngle() const;
 
-        // @0x825D34D8: caps the wheel angle during a slide. Builds a steering direction from the
-        //   stiffened steer input, takes acos against the velocity, scales to a max via
-        //   mpAttribs->mvDriftParams (+0xF0) lane .x with deg->rad (0.017453292), returns the angle.
+        // @0x825D34D8: signed drift steering target. The Breaker body does not read the retained
+        //   DecFIGS f32 parameter: it scales the velocity/forward angle by 1.5*abs(live Steering),
+        //   caps it by steering MaxAngle (degrees -> radians), and signs it from body-right dot.
         f32 GetMaxSteeringAngleDuringDrift(f32 lfSteeringInput);
 
-        // @0x825CFB70: quartic stick-stiffening: s' = -1 - sign(s)*(s^4 * 1.25). Softens centre,
-        //   sharpens the extremes. Writes back lrControls.mfSteering; when on a wheel device it
-        //   blends the steering direction toward the body forward (unk_82FB9370 weight).
+        // @0x825CFB70: wheel input curve s'=clamp(sign(s)*1.25*s^4,-1,1), followed by a 5%
+        //   body-Y yaw-rate bleed when yaw and the transformed steer have the same sign. The caller
+        //   owns the mbIsSteeringWheel gate; this method does not test it again.
         void ModifyControlsForSteeringWheelInput(BrnPlayerDriverControls* lpControls);
 
         // @0x825CFC68: re-maps steer to drift control while sliding (gated on mu8DriftState!=0 and

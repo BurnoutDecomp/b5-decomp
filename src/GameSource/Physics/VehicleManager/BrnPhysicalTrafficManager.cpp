@@ -675,11 +675,8 @@ void PhysicalTrafficVehicle::OnChecked(EActiveRaceCarIndex leOwner,
     miCheckOwner           = static_cast<s8>(leOwner);   // +0x33
     mfTimeSinceCheckNotify = 0.0f;                        // +0x18
 
-    // FLAG (un-homed RaceCarPhysics field): the console gates the crash-impulse on a byte at
-    // RaceCarPhysics +0x140E (a checker-strength / collision-severity field owned by the
-    // RaceCarPhysics TU). Read here by raw offset -- the only honest way to touch an un-homed field
-    // without fabricating the full layout -- purely to reproduce the `> 8` gate.
-    const u8 lu8CheckerStrength = *(reinterpret_cast<const u8*>(lpRaceCarPhysics) + 0x140E);
+    // Breaker @0x8261E3F0 inlines RaceCarPhysics::GetStrengthStat as `lbz +0x140E`.
+    const u8 lu8CheckerStrength = lpRaceCarPhysics->GetStrengthStat();
     if (lu8CheckerStrength > 8u)
     {
         CGS_ASSERT(mu8PhysicalType < E_PHYSICAL_TRAFFIC_TYPE_COUNT,

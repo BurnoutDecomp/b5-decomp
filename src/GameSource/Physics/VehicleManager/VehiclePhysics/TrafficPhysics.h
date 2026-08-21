@@ -118,7 +118,8 @@ namespace Vehicle
         // into VehiclePhysics::Prepare + SetWheelVelocities, then seeds the freak-out fields (state
         // OFF, direction 0, time 0, owner id = *(event+8)). Bodied in TrafficPhysics.cpp.
         bool PreparePhysical(const CreatePhysicalTrafficEvent* lpEvent, VehicleAttribs* lpAttribs,
-                             const AxisAlignedBox& lrAABB, const StreamedDeformationSpec* lpDeformSpec,
+                             const CgsGeometric::AxisAlignedBox& lrAABB,
+                             const StreamedDeformationSpec* lpDeformSpec,
                              const Vector3* lpWheelPositions, const f32* lpafWheelRadii);
 
         // @0x82639590: the per-frame traffic update. ⭐⭐ RECONCILED FULL 2026-08-09 (crash/shunt

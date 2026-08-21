@@ -209,7 +209,8 @@ namespace Vehicle
 
         virtual bool Prepare(Matrix44Affine lOnRoadTransform, Vector3 lLinearVelocity,
                              Vector3 lAngularVelocity, Vector3 lHandlingBodyOffset,
-                             Vector3 lHalfExtent, const AxisAlignedBox& lrAABB,
+                             Vector3 lHalfExtent,
+                             const CgsGeometric::AxisAlignedBox& lrAABB,
                              rw::physics::Inertia lInertia, VehicleAttribs* lpAttribs,
                              const Vector3* lpaWheelPositions, const f32* lpafWheelRadii,
                              u8 lu8StrengthStat);   // @0x82639CB8 (41)
@@ -232,7 +233,7 @@ namespace Vehicle
         // dot(lPoint - wheelContact.mPosition, wheelContact.mNormal). Return type is the DWARF's
         // VecFloat (the splat the X360 stvx128-returns). No caller existed until
         // ValidateRaceCarWorldContact landed, so the wrong arity was latent, never load-bearing.
-        VecFloat GetHeightAboveRoad(Vector3 lPoint) const;
+        VecFloat GetHeightAboveRoad(Vector3 lPoint);
 
         // ----- ADDITIVE GROW (Deformation car-car-impulse group): two bounce-state methods the
         //       car-car shunt path calls. DECLARE-ONLY -- their bodies are owned by a separate
@@ -260,6 +261,46 @@ namespace Vehicle
         //       @0x825B8A70. DecFIGS supplies the source-level overload shape.
         void SetCrashing() override;
         void SetCrashing(bool lbActivateAISlowMo);
+
+        // Explicit engine lifecycle entries. Breaker folds Release into the manager's three
+        // stores; DecFIGS emits both wrappers and fixes their source-level signatures.
+        void Destruct();
+        void Release();
+
+        // Non-Showtime inline surface. Breaker pins the member seats and live state transitions;
+        // DecFIGS supplies the exact source-level const/return shape. The 2-second recent-takedown
+        // threshold comes from DecFIGS' initialized KF_POST_PLAYER_TD_INVULNERABILITY_TIME.
+        bool HasRecentlyTakendownPlayer() const
+        {
+            return mfTimeSinceTookDownPlayer < 2.0f;
+        }
+
+        void OnTakendownPlayer() { mfTimeSinceTookDownPlayer = 0.0f; }
+        bool IsInAICrashSlowMo() { return mbAISlowMo; }
+        void SetWrittenIntoRWInSlowMo(bool lbSlowMo) { mbWroteIntoRWInSlowMo = lbSlowMo; }
+        bool GetWrittenIntoRWInSlowMo() { return mbWroteIntoRWInSlowMo; }
+        f32 GetSlamSteering() const { return mfSlamSteering; }
+        void ClearSlamSteering() { mfSlamSteering = 0.0f; }
+
+        void SetCrashEntityIdAndNormal(EntityId lGlobalEntityId, Vector3 lNormal)
+        {
+            mEntityCausingCrash = lGlobalEntityId;
+            mCrashNormal = lNormal;
+        }
+
+        EntityId GetEntityCausingCrash() { return mEntityCausingCrash; }
+
+        void SetDeformedBeyondDriveTimeLimitsInCrash(bool lbBeyondLimits)
+        {
+            mbDeformedBeyondDriveTimeLimitsInCrash = lbBeyondLimits;
+        }
+
+        u8 GetStrengthStat() const { return mu8StrengthStat; }
+
+        VecFloat GetSameWayCrashSpeed() const
+        {
+            return mpAttribs->mCollisionAttribs.GetCrashSpeedMPS();
+        }
 
         // =====================================================================================
         // ADDITIVE GROW (C10 showtime / aftertouch / target-assist / bounce-boost group).
@@ -391,9 +432,9 @@ namespace Vehicle
         // @0x825B8CE0: true if the next impact should bounce-boost (the latched ShouldBounceBoost bit).
         bool ShouldBounceBoostNextImpact() const;
 
-        // @0x825B3928: copy out the collision normal that caused the crash (asserts mbIsCrashing).
-        // Writes to *lpNormal (return is lpNormal).
-        Vector3* GetNormalCausingCrash(Vector3* lpNormal) const;
+        // @0x825B3928: return the collision normal that caused the crash. r3 is the hidden PPC
+        // result pointer and r4 is this; it is not an explicit pointer parameter.
+        Vector3 GetNormalCausingCrash();
 
         // @0x82600780: flush the accumulated per-frame prop-collision impulse (mPropCollisionImpulseSum)
         // into the body, soft-clamping its magnitude (against the car's mass/speed) so props can't
@@ -425,6 +466,17 @@ namespace Vehicle
         // The old 2-arg spelling (s32, u32) existed nowhere in the image.
         void AddTractionPoint(EVehicleDrivenWheel leWheel, Vector3 lvPosition, Vector3 lvNormal,
                               u32 lu32CollisionTag);
+
+    protected:
+        // DecFIGS declares a bool and names the threshold as a scalar f32, not VecFloat. Breaker
+        // inlines the query at 0x8263D7CC: splat the time-in-air lane (+0x1060.z), compare it with
+        // the compiler-materialized vector at 0x82FB82A0, and return the CR bit. The otherwise
+        // unexported initializer at 0x82C5BAF0 loads scalar 0x82004744 (0x3E4CCCCD == 0.2f), splats
+        // it, and stores the result at 0x82FB82A0.
+        bool IsReallyInAir() const
+        {
+            return mvTimeStandingStill_CoolDown_TimeWithoutTraction_TimeWithTraction.z > 0.2f;
+        }
 
     public:
         // Never called. Bodied in RaceCarPhysics_layout_check.cpp (a MOUNTED TU) and nothing but
@@ -602,13 +654,6 @@ namespace Vehicle
         // @+0x1434 (DWARF :409). While set, Update scales the simulation timestep by
         // KVF_AI_CRASH_SLOWMO_FACTOR (the AI crash slow-motion). Read by IsInAICrashSlowMo (:292).
         bool mbAISlowMo;
-
-        // ⭐ 2026-08-14 (walls leg 4): named view of the +0x1434 byte for DeformableObject::Update's
-        // slow-mo timestep gate (the console reads the byte directly; accessor per the
-        // GetHandlingBodyIdHighByte precedent).
-    public:
-        bool IsAISlowMo() const { return mbAISlowMo; }
-    private:
 
         // @+0x1435 (DWARF :410). Latched by VehicleManager::GetUpdatedVehicleBodies once a slow-mo
         // frame's state has been written back into RenderWare, so it is written at most once per

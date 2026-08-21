@@ -5,6 +5,7 @@
 #include "GameShared/GameClasses/Geometric/Primitives/CgsSweptSphere.h"                   // CgsGeometric::SweptSphere
 #include "GameShared/GameClasses/SceneManager/CgsVolumeInstanceId.h"                      // CgsSceneManager::VolumeInstanceId
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/VehiclePhysics.h"              // VehiclePhysics (mfSpeedMPH/IsCrashing/GetTransform/mpAttribs)
+#include "GameSource/Physics/VehicleManager/VehiclePhysics/RaceCarPhysics.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                                // gpDebugPrint / gxMessageFilterFlags (the null-attribs gate)
 
 #include <cstdlib>                                                                        // getenv (the [sweptsel] opt-in probe)
@@ -90,10 +91,6 @@ namespace Deformation
 
 		// VehiclePhysics::IsCrashing flag -- `*(vehiclePhysics + 0x710)`; mfSpeedMPH @ +0x6C0. Both are
 		// reached by name below (IsCrashing()/the speed read), retained here for the asm cross-ref only.
-
-		// RaceCarPhysics "deformed beyond drive-time limits in crash" bool -- `*(vehiclePhysics + 5174)`
-		// (SetDeformedBeyondDriveTimeLimitsInCrash's store target).
-		static const u32 KU_DEFORMED_BEYOND_LIMITS_OFFSET = 5174;
 
 		// DeformableObject state word UpdateDeformedBBox gates on -- `*(this + 26384)`, HIGH byte == 1.
 		// No separately-named member in the frozen DWARF sequence; read by the asm-proven console offset.
@@ -451,10 +448,11 @@ namespace Deformation
 			else if ( lDMax.y > KVF_DEFORMED_BBOX_TOLERANCE.y ) lbBeyond = true;
 			else if ( lDMax.z > KVF_DEFORMED_BBOX_TOLERANCE.z ) lbBeyond = true;
 
-			// *(vehiclePhysics + 5174) = beyond  (RaceCarPhysics::SetDeformedBeyondDriveTimeLimitsInCrash).
-			BrnPhysics::Vehicle::VehiclePhysics* lpPhysics = mVehicleBody.GetVehiclePhysics();
-			*(reinterpret_cast<char*>(lpPhysics) + KU_DEFORMED_BEYOND_LIMITS_OFFSET) = lbBeyond ? 1 : 0;
-		}
+            // Breaker @0x825E0EBC inlines RaceCarPhysics::
+            // SetDeformedBeyondDriveTimeLimitsInCrash as `stb +0x1436`.
+            BrnPhysics::Vehicle::RaceCarPhysics* lpPhysics = AsRaceCarPhysics();
+            lpPhysics->SetDeformedBeyondDriveTimeLimitsInCrash(lbBeyond);
+        }
 	}
 
 	// =============================================================================================
