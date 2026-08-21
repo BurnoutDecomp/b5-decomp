@@ -192,46 +192,12 @@ namespace Vehicle
     }
 
     // Breaker @0x825C7BB8; DecFIGS BrnVehicleManager.cpp:9410.
-    // ⚠️ HOST MITIGATION 2026-08-21 (wave T1 conductor): SAME re-gate as WorldEntityModule::
-    // PrepareSurfaceList and for the same measured reason -- on this machine's data the
-    // Attrib::Gen::surface read path dies ([ASSERT] "Cannot get non-array data from a
-    // non-zero index." attribcollection.cpp:221 via THIS function's callstack, then an AV
-    // reading 0xFFFFFFFFFFFFFFFF). The interior is kept verbatim; opt in with
-    // BRN_SURFACE_REBIND=1. While skipped, gbReadSurfaceProperties stays false and every
-    // consumer keeps the static surface tables -- the exact behaviour of every working boot
-    // before 2026-08-21. DELETE-WHEN the attrib read path is fixed (task chip filed).
+    // A STALE SURFACELIST.BIN makes this walk die in Attrib::Collection::GetData ("Cannot
+    // get non-array data from a non-zero index", then an AV): the vault must come from the
+    // CURRENT attribsys-vault converter (build_game_data.py --only "SURFACELIST.BIN"
+    // --force). Data from the pre-built drop predates it.
     void VehicleManager::ReadSurfaceProperties(u64 luSurfaceListKey)
     {
-        if (getenv("BRN_SURFACE_REBIND") == 0)
-        {
-            // IDENTITY SEED, deliberately NOT console data: grip 1.0 makes GetSurfaceGrip's
-            // lerp `1 - (1-grip)*blend` a no-op, roughness/drag 0 zero their contributions --
-            // i.e. exactly the surface-agnostic behaviour of every build before the
-            // 2026-08-21 physics wave introduced these readers. The flag is set so the new
-            // accessors' "properties have been loaded" tripwires stay quiet; the [FLAG] line
-            // below keeps the lie visible in every boot log.
-            for (s32 liSurface = 0; liSurface < KI_MAX_NUM_SURFACES; ++liSurface)
-            {
-                KAVF_SURFACE_ROUGHNESS[liSurface]   = VecFloat{0.0f, 0.0f, 0.0f, 0.0f};
-                KAVF_SURFACE_GRIP[liSurface]        = VecFloat{1.0f, 1.0f, 1.0f, 1.0f};
-                KAVF_SURFACE_LINEAR_DRAG[liSurface] = VecFloat{0.0f, 0.0f, 0.0f, 0.0f};
-                KAB_SURFACE_IS_WATER[liSurface]     = false;
-            }
-            gbReadSurfaceProperties = true;
-
-            static bool s_bLoggedSurfaceMitigation = false;
-            if (!s_bLoggedSurfaceMitigation)
-            {
-                s_bLoggedSurfaceMitigation = true;
-                if (CgsDev::Message::gxMessageFilterFlags & 1)
-                    *CgsDev::Log::gpDebugPrint
-                        << "VehicleManager::ReadSurfaceProperties: IDENTITY-SEEDED, attrib "
-                           "read SKIPPED (host mitigation; GetData assert + AV on this data; "
-                           "BRN_SURFACE_REBIND=1 to reproduce) [FLAG]\n";
-            }
-            return;
-        }
-
         Attrib::Gen::surfacelist lSurfaceList;
         lSurfaceList.ChangeWithDefault(luSurfaceListKey);
 
