@@ -46,6 +46,15 @@ namespace Gen
         // @0x8227EFC8.
         Collection* ChangeWithDefault(u64 luCollectionKey = 0);
 
+        // [FLAG PC bring-up, additive host helper] expose the private base's collection
+        // pointer so callers can tell a FAILED resolve (FindCollectionWithDefault returned
+        // null: database uninitialised or the class/collection absent) from a real bind.
+        // ReadSurfaceProperties' boot guard needs this -- running the reader on a
+        // collection-less instance trips attribcollection.cpp:221 and then AVs
+        // (boot-drive 2026-08-21 08:57). DELETE-WHEN the attrib database bring-up (gap G5)
+        // guarantees the surfacelist collection resolves at WorldModule::Prepare time.
+        using Instance::GetCollection;
+
         // The generated "Surfaces" indexed-array accessor (DWARF Attrib::Gen::surfacelist
         // ::Surfaces): return the attribute pointer for element luIndex of the Surfaces
         // array. Inlined at its call sites in the X360 build (e.g. WheelStateMachine::
