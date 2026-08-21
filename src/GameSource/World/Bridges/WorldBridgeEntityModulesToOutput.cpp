@@ -359,7 +359,18 @@ void BridgeEntityModulesToOutput_PostPhysics(
         // ProcessContacts' lbRecord gate rather than to this bridge.
         {
             static const bool sbPropDiag = ( getenv( "BRN_PROP_DIAG" ) != 0 );
-            static s32 siDiagLinesLeft = 8;
+            // ⭐ [gateui] ROUND 8: 8 -> 64. Run 9 produced exactly 8 of these lines across a
+            // 158 s drive, i.e. the budget was spent, so a long boot-drive lost the
+            // bridged/OnPropHit correlation for every smash after the eighth -- which is the
+            // correlation the wave's acceptance criterion is read off. 64 keeps it for a full
+            // 275 s route without flooding the log.
+            // ⚠️ The DOWNSTREAM rungs this one is correlated against are still first-16
+            // (`[UI-gate] prop-hit event` in GameStateModule_gUI_00.cpp and
+            // `[UI-gate] OnPropHit`/stunt-element in the StuntManager TUs, all
+            // KI_UI_GATE_DIAG_FIRST_N == 16). So past the 16th smash a bridged line with no
+            // matching downstream line means "the downstream budget is spent", NOT "the event
+            // was dropped". Raise those three to match before reading a late gap as a break.
+            static s32 siDiagLinesLeft = 64;
 
             const s32 liQueued = lpRecordHitPropQueue->GetLength();
             if ( sbPropDiag && liQueued > 0 && siDiagLinesLeft > 0 && CgsDev::Log::gpDebugPrint != 0 )
