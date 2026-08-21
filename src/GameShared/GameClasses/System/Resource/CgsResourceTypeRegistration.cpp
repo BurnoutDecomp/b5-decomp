@@ -35,6 +35,7 @@
 #include "SharedClasses/Trigger/BrnTriggerResourceType.h"                      // BrnTrigger::TriggerResourceType (0x10003)
 #include "SharedClasses/AI/AISectionsResourceType.h"                           // BrnAI::AISectionsResourceType (0x10001)
 #include "SharedClasses/Traffic/BrnTrafficDataResourceType.h"                  // BrnTraffic::TrafficDataResourceType (0x10002)
+#include "SharedClasses/Traffic/BrnTrafficGraphicsStubResourceType.h"          // BrnTraffic::GraphicsStubResourceType (0x10015)
 #include "SharedClasses/DataLists/VehicleListResourceType.h"                   // BrnResource::VehicleListResourceType (0x10005)
 #include "SharedClasses/DataLists/WheelListResourceType.h"                     // BrnResource::WheelListResourceType (0x10009)
 #include "SharedClasses/World/BrnVehicleGraphicsSpecResourceType.h"            // BrnVehicle::GraphicsSpecResourceType (0x10006)
@@ -201,6 +202,47 @@ namespace CgsResource
         TypeRegistry::Register(&sTriggerData, "TriggerData");
         static BrnTraffic::TrafficDataResourceType    sTrafficData;  // 0x10002 (65538)
         TypeRegistry::Register(&sTrafficData, "TrafficData");
+        // ---- the TRAFFIC CAR graphics stub (parked-traffic wave T1, 2026-08-21) --------------
+        // GraphicsStub (0x10015 / 65557), the resource each of the 42 traffic
+        // VEHICLES/VEH_T<code>_GR.BIN carries INSTEAD of a BrnVehicle::GraphicsSpec: a pair of
+        // import slots naming the body graphics and the wheel graphics that car reuses.
+        // This is the console's OWN registration slot -- RegisterResourceTypes @0x82667EA8
+        // registers the name string "GraphicsStubResourceType" immediately after
+        // "TrafficDataResourceType" and immediately before "LoopModelResourceType", so the
+        // ordering here mirrors the monolith rather than being appended at the end.
+        //
+        // LOAD-BEARING for the SAME reason WheelGraphicsSpec was, and worse. BundleLoader::
+        // LoadBundle gates all three fix-up passes on `mpResourceType != 0`, so an unregistered
+        // type skips ResolveImportsForEntry -- and for THIS type every meaningful byte is an
+        // import. Unregistered, the stub loads as two serialised-null words and
+        // TrafficCarStreamer::GetGraphicsSpec / ::GetWheelGraphicsSpec hand the renderer a NULL
+        // body spec and a NULL wheel spec, i.e. an invisible traffic car with no error anywhere.
+        // MEASURED over all 568 retail X360 VEH_*/WHE_* graphics bundles: exactly 42 carry a
+        // 65557 resource and they are exactly the 42 T-prefixed traffic bundles; importCount is
+        // 2 and the declared import offsets are {0x0, 0x4} in 42/42 (see the GraphicsStub
+        // section of tools/assets/bundles/vehicle_transcode.py).
+        //
+        // DATA STATE, MEASURED 2026-08-21 (re-run the checks, do not trust this line):
+        // all 42 VEH_T*_GR bundles ARE converted and deployed --
+        // `ls build/game/VEHICLES/ | grep -c "^VEH_T.*_GR\.BIN$"` -> 42, each version 2 /
+        // platform 4 (the little-endian PC form; the X360 originals are BE platform 2), each
+        // carrying exactly one 65557 resource with muImportCount 2 and import offsets {0x0,
+        // 0x4}. Both traffic wheels (WHEELS/WHE_TW01800_GR.BNDL, WHE_TW01800F_GR.BNDL) are
+        // deployed too, and all 84 import targets resolve inside their own bundle to type
+        // 65542 (BrnVehicle::GraphicsSpec) / 65546 (BrnWheel::GraphicsSpec), both already
+        // registered above. So the data half of this seam is satisfied.
+        //
+        // ⚠️ THE OUTSTANDING HALF IS THE MOUNT, NOT THE DATA. This declaration makes MSVC
+        // emit the GraphicsStubResourceType vtable in THIS object, which references all six
+        // virtuals, so the exe does not link until
+        // SharedClasses\Traffic\BrnTrafficGraphicsStubResourceType.cpp is on the build list in
+        // tools/build/build_game_exe.bat (beside BrnTrafficDataResourceType.cpp /
+        // BrnTrafficHull.cpp). It was absent when this block landed -- `grep -n "GraphicsStub"
+        // tools/build/build_game_exe.bat` -> 0 hits, and a canonical-flag compile of this TU
+        // leaves the six virtuals plus the vftable UNDEF. BrnTrafficGraphicsStub.cpp and
+        // CgsResourcePtr_BrnTraffic_GraphicsStub.cpp belong on the same list.
+        static BrnTraffic::GraphicsStubResourceType   sTrafficGraphicsStub;  // 0x10015 (65557)
+        TypeRegistry::Register(&sTrafficGraphicsStub, "TrafficGraphicsStub");
 
         // ---- the vehicle/wheel LIST types (vehicle-load wave, 2026-07-31) --------------------
         // GameDataModule::Prepare stages 9 and 12 stream Vehicles/VehicleList.bundle and

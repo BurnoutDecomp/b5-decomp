@@ -63,6 +63,8 @@ public:
     void SetShouldBeRemoved();  // @ 0x82706D88
     void SetZombie();           // @ 0x82706C48
 
+    static void _AssertLayout();   // never called; body in the .cpp
+
     // Predicates the asm inlines into the assert preconditions above.
     bool IsAlive() const { return (mxFlags & E_FLAG_ALIVE) != 0; }
     bool IsDying() const { return (mxFlags & E_FLAG_DYING) != 0; }

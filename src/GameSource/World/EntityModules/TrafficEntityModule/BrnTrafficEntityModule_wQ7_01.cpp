@@ -37,6 +37,20 @@
 //   SEPARATE decision because it changes the boot Prepare ladder. Mounting THIS file with
 //   its gate retired is safe on its own and changes no observable behaviour.
 //
+// ⭐ BANNER CORRECTION 2026-08-21 (wave T1, cluster C4 -- COMMENT ONLY, no code change).
+//   Two claims above are now STALE:
+//     * "neither reconstructed" -- Construct @0x82740220, Reset @0x8272CDA0,
+//       EnterStartingUpState @0x82708038, PostPhysicsUpdate @0x8274E6D0's STARTING_UP arm and
+//       EnterRunningState @0x827080E8 all have bodies in BrnTrafficEntityModule_wT1_01.cpp.
+//     * "the bring-up ... latch the running state" -- that latch is DELETED. It skipped
+//       E_STARTINGUPSTATE_POPULATING, which is the only place parked traffic is ever created.
+//   The CONCLUSION for this file is unchanged and, for the moment, MORE true: meState still
+//   sits at E_STATE_STARTING_UP, because the WAITING_FOR_PLAYER -> POPULATING transition
+//   lives in TrafficEntityModule::PreSceneUpdate @0x8274A968 (an ARTIST export HOLE, still an
+//   inert gate at WorldLinkStubs.cpp:2687). Until that lands, PrePhysicsUpdate's starting-up
+//   early-out fires every frame and the prop->traffic light rings are not drained -- a
+//   deliberate, named regression of the wQ7 bring-up, traded for a real state machine.
+//
 // ⚠️ AND THE *VISIBLE* CONSUMER OF THE SMASHED BIT IS SEPARATELY DEAD. muFlags bit 0x80 is
 //   read by TrafficLightManager::RenderLightsForHull @0x8275DBF0 (152) and
 //   ::RenderAllLightsToBeInStateForHull @0x8275DE50 (90) -- both skip
@@ -72,35 +86,16 @@ namespace BrnTraffic
 namespace
 {
     // ------------------------------------------------------------------------
-    // Byte-offset field access into the opaque module object. Identical in form to the
-    // helper BrnTrafficEntityModule.cpp:38-48 already establishes for this class (the
-    // "opaque external field by attested offset" allowance -- the module has no
-    // reconstructable member layout, see the header banner). Every offset used below is
-    // quoted with the DWARF member NAME it corresponds to and the asm site that attests it.
+    // ⭐ 2026-08-21 (wave T1, cluster C1): the FieldAt<T>(this, X360_BYTE_OFFSET) helper and
+    // its KU_OFFSET_* table that used to live here are GONE. The module class now carries its
+    // real member list (BrnTrafficEntityModule.h), so every read below is a named member.
+    // The console offsets those constants carried are retained inline as the attestation
+    // comment at each use site -- they were never valid displacements on this target
+    // (32-bit-pointer values on an LP64 host); they are only evidence for WHICH member.
+    //   0x300 meState (:607) . 0x304 meStartingUpState (:608) . 0x310 meTearingDownState (:611)
+    //   0x53790 mTrafficLightManager (:661) . 0x71840 mpData (:752)
+    //   0x717DD mbPlayingShowtimeMode (:716) . 0x729FC miPerfMon_PrePhysicsUpdate (:898)
     // ------------------------------------------------------------------------
-    template <typename T>
-    inline T& FieldAt(void* lpBase, size_t luByteOffset)
-    {
-        return *reinterpret_cast<T*>(reinterpret_cast<u8*>(lpBase) + luByteOffset);
-    }
-
-    // ---- attested module offsets used by this file -------------------------------------
-    // meState                    (DWARF :607)  -- PrePhysicsUpdate `lwz r11,0x300(r31)`;
-    //                                             EnterRunningState `stw 1,0x300`; IsPaused.
-    const size_t KU_OFFSET_ME_STATE              = 0x300;
-    // meStartingUpState          (DWARF :608)  -- PrePhysicsUpdate `lwz r11,0x304(r31)`.
-    const size_t KU_OFFSET_ME_STARTING_UP_STATE  = 0x304;
-    // meTearingDownState         (DWARF :611)  -- PrePhysicsUpdate `lwz r11,0x310(r31)`.
-    const size_t KU_OFFSET_ME_TEARING_DOWN_STATE = 0x310;
-    // mTrafficLightManager       (DWARF :661)  -- HandlePropModuleRequests `ori r26,r10,0x3790`.
-    const size_t KU_OFFSET_TRAFFIC_LIGHT_MANAGER = 0x53790;
-    // mpData                     (DWARF :752)  -- HandlePropModuleRequests `ori r25,r10,0x1840`;
-    //                                             also LoadData + RenderTrafficLightCoronas.
-    const size_t KU_OFFSET_DATA                  = 0x71840;
-    // mbPlayingShowtimeMode      (DWARF :619)  -- PrePhysicsUpdate `lbzx r11,r31,0x717DD`.
-    const size_t KU_OFFSET_PLAYING_SHOWTIME_MODE = 0x717DD;
-    // miPerfMon_PrePhysicsUpdate (DWARF :976)  -- PrePhysicsUpdate `addis r27,r31,7 ; addi 0x29FC`.
-    const size_t KU_OFFSET_PERFMON_PREPHYSICS    = 0x729FC;
 
     // BrnUpdateSet bit 0 == "the simulation did not step this frame". The NAME comes from
     // the same measurement PropEntityModule_wQ_07.cpp:178 already carries; the BIT is
@@ -184,11 +179,9 @@ void TrafficEntityModule::HandlePropModuleRequests(
     CGS_ASSERT( lpInput  != 0, "lpInput != NULL" );    // baked source line 0x1955 == 6485
     CGS_ASSERT( lpOutput != 0, "lpOutput != NULL" );   // baked source line 0x1956 == 6486
 
-    // mTrafficLightManager @ +0x53790 and mpData @ +0x71840 (see the offset table above).
-    TrafficLightManager& lrTrafficLightManager =
-        FieldAt<TrafficLightManager>( this, KU_OFFSET_TRAFFIC_LIGHT_MANAGER );
-    CgsResource::ResourcePtr<TrafficData>& lrData =
-        FieldAt< CgsResource::ResourcePtr<TrafficData> >( this, KU_OFFSET_DATA );
+    // mTrafficLightManager (console +0x53790, DWARF :661) and mpData (+0x71840, :752).
+    TrafficLightManager& lrTrafficLightManager = mTrafficLightManager;
+    CgsResource::ResourcePtr<TrafficData>& lrData = mpData;
 
     // ---- ring 0: the traffic lights that were knocked down this frame ---------------
     // 0x82720AFC `bl BrnTraffic__BrnTrafficIO__InputBuffer_PreP` == the CONST (read-lock)
@@ -344,7 +337,7 @@ void TrafficEntityModule::PrePhysicsUpdate( CgsModule::IOBufferStack* /*lpInputB
                                             BrnUpdateSet lUpdateSet )
 {
     // 0x8274C6B4 `lwz r3,0(r27)` with r27 == this + 0x729FC.
-    CgsDev::PerfMonCpu::StartMonitor( FieldAt<s32>( this, KU_OFFSET_PERFMON_PREPHYSICS ) );
+    CgsDev::PerfMonCpu::StartMonitor( miPerfMon_PrePhysicsUpdate );
 
     // 0x8274C6C4 / 0x8274C6CC -- write lock the OUTPUT, then read lock the INPUT.
     lpOutput->LockForWrite();
@@ -354,20 +347,50 @@ void TrafficEntityModule::PrePhysicsUpdate( CgsModule::IOBufferStack* /*lpInputB
     const bool lbSimPaused = ( ( lUpdateSet & KU_UPDATESET_SIM_PAUSED ) != 0 );
 
     // 0x8274C6E0/E4 `lbzx r11,r31,0x717DD ; stbx r11,r30,0x24720` -- mbPlayingShowtimeMode
-    // (DWARF :619) is republished into the output buffer's mbPlayingShowtime (console +149280
+    // (DWARF :716) is republished into the output buffer's mbPlayingShowtime (console +149280
     // == 0x24720, BrnTrafficEntityModuleIO.h:795). Both ends reached by name.
-    lpOutput->SetPlayingShowtime( FieldAt<u8>( this, KU_OFFSET_PLAYING_SHOWTIME_MODE ) != 0 );
+    lpOutput->SetPlayingShowtime( mbPlayingShowtimeMode );
+
+    // ---------------------------------------------------------------------------------
+    // [DIAG] NOT IN THE X360 BINARY. DELETE-WHEN-STABLE bring-up probe (wave T1, cluster C1).
+    // One-shot host-layout dump for the module object, gated on BRN_TRAFFIC_DIAG. This is the
+    // instrument for the change C1 made: the class went from one 471,040-byte opaque blob to a
+    // real member list, so the first thing the next cluster needs to see is that the HOST
+    // object is sane and that the pools are the right length. Prints sizeof plus the four
+    // anchor members' host offsets (they will NOT match the console displacements quoted in the
+    // comments above -- that is the point).
+    // ---------------------------------------------------------------------------------
+    {
+        static const bool sbTrafficDiag = ( getenv( "BRN_TRAFFIC_DIAG" ) != 0 );
+        static bool sbLoggedLayout = false;
+        if ( sbTrafficDiag && !sbLoggedLayout && CgsDev::Log::gpDebugPrint != 0 )
+        {
+            sbLoggedLayout = true;
+            *CgsDev::Log::gpDebugPrint
+                << "[T1-C1-layout] TrafficEntityModule host sizeof=" << (s32)sizeof( TrafficEntityModule )
+                << " meState@" << (s32)offsetof( TrafficEntityModule, meState )
+                << " mReceiverQueue@" << (s32)offsetof( TrafficEntityModule, mReceiverQueue )
+                << " maVehicles@" << (s32)offsetof( TrafficEntityModule, maVehicles )
+                << " mpData@" << (s32)offsetof( TrafficEntityModule, mpData )
+                << " maVehicleTypeRuntime@" << (s32)offsetof( TrafficEntityModule, maVehicleTypeRuntime )
+                << " | vehicles=" << (s32)( sizeof( maVehicles ) / sizeof( maVehicles[0] ) )
+                << " staticParams=" << (s32)( sizeof( maStaticTrafficParams ) / sizeof( maStaticTrafficParams[0] ) )
+                << " params=" << (s32)( sizeof( maParams ) / sizeof( maParams[0] ) )
+                << " vehTypes=" << (s32)( sizeof( maVehicleTypeRuntime ) / sizeof( maVehicleTypeRuntime[0] ) )
+                << " [DELETE-WHEN-STABLE]\n";
+        }
+    }
 
     // ---- 0x8274C6E8: switch (meState) ----------------------------------------------
     // The console emits the unsigned three-way ladder `cmplwi 1 / blt / beq / cmplwi 3 / blt`,
     // i.e. a switch with cases 0/1/2 and an asserting default. E_STATE_INVALID (-1) lands in
     // the default arm on both sides (it compares as >= 3 unsigned).
-    switch ( FieldAt<s32>( this, KU_OFFSET_ME_STATE ) )
+    switch ( meState )
     {
     case E_STATE_STARTING_UP:
         // 0x8274C818: nothing runs while starting up; the arm exists only to validate
         // meStartingUpState (DWARF :608). Cases 0/1/2 are empty; the default asserts.
-        switch ( FieldAt<s32>( this, KU_OFFSET_ME_STARTING_UP_STATE ) )
+        switch ( meStartingUpState )
         {
         case E_STARTINGUPSTATE_WAITING_FOR_PLAYER:
         case E_STARTINGUPSTATE_POPULATING:
@@ -444,7 +467,7 @@ void TrafficEntityModule::PrePhysicsUpdate( CgsModule::IOBufferStack* /*lpInputB
     case E_STATE_TEARING_DOWN:
         // 0x8274C71C: validate meTearingDownState (DWARF :611) and, in the FLUSHING phase
         // only, run the crashed-vehicle clean-up.
-        switch ( FieldAt<s32>( this, KU_OFFSET_ME_TEARING_DOWN_STATE ) )
+        switch ( meTearingDownState )
         {
         case E_TEARINGDOWNSTATE_WIPING:
             break;
@@ -475,7 +498,7 @@ void TrafficEntityModule::PrePhysicsUpdate( CgsModule::IOBufferStack* /*lpInputB
     lpInput->UnlockForRead();
 
     // 0x8274C860 `lwz r3,0(r27)`.
-    CgsDev::PerfMonCpu::StopMonitor( FieldAt<s32>( this, KU_OFFSET_PERFMON_PREPHYSICS ) );
+    CgsDev::PerfMonCpu::StopMonitor( miPerfMon_PrePhysicsUpdate );
 }
 
 }

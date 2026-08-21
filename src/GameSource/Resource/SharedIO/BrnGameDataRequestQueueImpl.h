@@ -154,6 +154,37 @@ namespace GameDataIO
         return mRequestQueue.AddEvent(&lEvent, 26);
     }
 
+    // -------- LoadVehicle -- ADDED 2026-08-21 (wave T1 round 2, cluster R2C) --------
+    // Declaration + the full evidence chain: BrnGameDataRequestQueue.h (this method's
+    // DWARF signature block). Summary of the two attesting sites, both inlined expansions
+    // in BrnTraffic::TrafficEntityModule::LoadData @0x82746A88:
+    //   stage 8 (E_RESOURCE_LOAD_ATTRIBS) : miPoolId 1, meType 4 (ATTRIBS)
+    //   stage 6 (E_RESOURCE_LOAD_PHYSICS) : miPoolId 1, meType 1 (PHYSICS)
+    // Both: miEventId = the running vehicle-TYPE index, mpReceiverQueue = &mReceiverQueue,
+    // mId = MakeVehicleId(<space-truncated CgsIDUnCompress of the asset's vehicle id>),
+    // mbFailFlag = 0, AddEvent<LoadGameDataEvent>(..., 26).
+    //
+    // MakeVehicleId lives INSIDE this builder (the caller hands over the bare name): in the
+    // console the strstr-truncated stack buffer `v143`/`v144` is what feeds MakeVehicleId in
+    // the same basic block as the record stores, and the DWARF's 4th parameter is
+    // `const char*`. Its own "Vehicle name too long" assert therefore fires from here.
+    template <s32 N>
+    bool RequestInterface<N>::LoadVehicle(
+            CgsModule::BaseEventReceiverQueue* lpReceiverQueue,
+            s32 liEventId, s32 liPoolId, const char* lpcVehicleName,
+            BrnResource::EAssetSet leAssetSet)
+    {
+        LoadGameDataEvent lEvent;
+        lEvent.miEventId       = liEventId;                          // +0x00
+        lEvent.mpReceiverQueue = lpReceiverQueue;                    // +0x04
+        lEvent.miPoolId        = liPoolId;                           // +0x08
+        lEvent.mId             = MakeVehicleId(lpcVehicleName);      // +0x10
+        lEvent.meType          = leAssetSet;                         // +0x18
+        lEvent.mbFailFlag      = false;                              // +0x1C
+
+        return mRequestQueue.AddEvent(&lEvent, 26);
+    }
+
     // -------- GetAILanes @ 0x822563C0 (<512>) --------
     // ASM store order: v5[0]@var_30 = liEventId (r5/a3), v5[1]@var_2C = lpReceiverQueue
     // (r4/a2), v5[2]@var_28 = liPoolId (r6/a4); v6 = id, v7 = meType(3), v8 = 0; type 49.

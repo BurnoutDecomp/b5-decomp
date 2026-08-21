@@ -621,85 +621,19 @@ class CgsModule::VariableEventQueue<32768,16> * BrnTraffic::BrnTrafficIO::InputB
 }
 
 // -------------------------------------------------------------------------
-// BrnTraffic::BrnTrafficIO::InputBuffer_PreDispatch
+// BrnTraffic::BrnTrafficIO::InputBuffer_PreDispatch / OutputBuffer_PreDispatch
 // -------------------------------------------------------------------------
-// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
-// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
-// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
-// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
-// not this gate.
-void BrnTraffic::BrnTrafficIO::InputBuffer_PreDispatch::Construct()
-{
-    // FLAG PC (2026-08-15): stands in for the unrecovered body. CreateIOBuffer<T>
-    // @0x827B7250 (Alloc 2640) no longer zero-fills (it default-inits + Constructs,
-    // as every X360 instantiation does), so this gate must zero its own buffer or the
-    // members it never brings up would hold the previous stack tenant's bytes.
-    // Delete with the gate when the real Construct lands.
-    memset(this, 0, sizeof(*this));
-
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "BrnTraffic::BrnTrafficIO::InputBuffer_PreDispatch::Construct: inert (body not reconstructed) [FLAG PC boot gate]\n";
-    }
-}
-
-// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
-// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
-// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
-// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
-// not this gate.
-void BrnTraffic::BrnTrafficIO::InputBuffer_PreDispatch::SetCameraPosition(struct rw::math::vpu::Vector3)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "BrnTraffic::BrnTrafficIO::InputBuffer_PreDispatch::SetCameraPosition: inert (body not reconstructed) [FLAG PC boot gate]\n";
-    }
-}
-
-// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
-// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
-// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
-// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
-// not this gate.
-void BrnTraffic::BrnTrafficIO::InputBuffer_PreDispatch::SetVisibleEntities(class Array<class CgsSceneManager::EntityId,650> const &)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "BrnTraffic::BrnTrafficIO::InputBuffer_PreDispatch::SetVisibleEntities: inert (body not reconstructed) [FLAG PC boot gate]\n";
-    }
-}
-
-// -------------------------------------------------------------------------
-// BrnTraffic::BrnTrafficIO::OutputBuffer_PreDispatch
-// -------------------------------------------------------------------------
-// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
-// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
-// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
-// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
-// not this gate.
-void BrnTraffic::BrnTrafficIO::OutputBuffer_PreDispatch::Construct()
-{
-    // FLAG PC (2026-08-15): stands in for the unrecovered body -- same reason as
-    // InputBuffer_PreDispatch::Construct above. X360 CreateIOBuffer @0x827B7320 (Alloc 776).
-    memset(this, 0, sizeof(*this));
-
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "BrnTraffic::BrnTrafficIO::OutputBuffer_PreDispatch::Construct: inert (body not reconstructed) [FLAG PC boot gate]\n";
-    }
-}
+// ⛔⛔ FOUR GATES RETIRED 2026-08-21 (wave T1, parked traffic cars):
+//     `InputBuffer_PreDispatch::Construct` (X360 @0x8275CEE8), `::SetCameraPosition`,
+//     `::SetVisibleEntities`, and `OutputBuffer_PreDispatch::Construct` (@0x8275CF28)
+//     now have REAL bodies in BrnTrafficEntityModuleIO.cpp (mounted), with the buffer
+//     interiors homed (Vector3 mCameraPosition + Array<EntityId,650> / the
+//     Array<VehicleRenderInfo,64>) -- keeping the gates was an LNK2005 x4.
+//     ⚠️ Behaviour change on a live path, a CORRECTION toward the console: the gate
+//     Constructs were memset(this,0,...) and never called CgsModule::IOBuffer::
+//     Construct, leaving eStatusConstructed CLEAR -- a state the console cannot be in
+//     (both real Constructs open with `stb 1,0(r3)`). The two setters were silent
+//     drops of WorldModule::GenerateDispatchLists' stores; they now store for real.
 
 // -------------------------------------------------------------------------
 // BrnTraffic::BrnTrafficIO::OutputBuffer_Prepare
@@ -722,13 +656,11 @@ void BrnTraffic::BrnTrafficIO::OutputBuffer_PreDispatch::Construct()
 // -------------------------------------------------------------------------
 // BrnTraffic::TrafficEntityModule
 // -------------------------------------------------------------------------
-// BOOT-GATE (world-module mount 2026-07-26): REACHED at boot by the wired
-// WorldModule::Construct @0x827CF540 fleet cascade; quiet no-op (see
-// AIModule::Construct above). Reconstruct from X360 before wiring Prepare.
-// FLAG PC-platform leaf: boot-gate no-op (world-module mount 2026-07-26) -- reached by the wired WorldModule::Construct cascade; real body pending X360 reconstruction (see note above).
-void BrnTraffic::TrafficEntityModule::Construct()
-{
-}
+// ⛔⛔ GATE RETIRED 2026-08-21 (wave T1): `TrafficEntityModule::Construct` @0x82740220
+//     is REAL (PARTIAL, named in-body gates) in BrnTrafficEntityModule_wT1_01.cpp --
+//     it runs mReceiverQueue.Construct() + mStreamer.Construct() (closing the
+//     never-Constructed-queue park on the streamer's three base queues), settles
+//     mbDEBUGTurnTrafficOff = FALSE from the ship asm, and seeds the whole flag block.
 
 // BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
 // one-shot log. This symbol is REACHED every frame now that WorldModule::Update
@@ -746,37 +678,24 @@ void BrnTraffic::TrafficEntityModule::Destruct()
     }
 }
 
-// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
-// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
-// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
-// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
-// not this gate.
-void BrnTraffic::TrafficEntityModule::EnterTearingDownState()
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "BrnTraffic::TrafficEntityModule::EnterTearingDownState: inert (body not reconstructed) [FLAG PC boot gate]\n";
-    }
-}
+// ⛔⛔ GATE RETIRED 2026-08-21 (wave T1): `TrafficEntityModule::EnterTearingDownState`
+//     @0x82708168 is REAL (complete) in BrnTrafficEntityModule_wT1_01.cpp.
 
 // BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
 // one-shot log. This symbol is REACHED every frame now that WorldModule::Update
 // @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
 // body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
 // not this gate.
-void BrnTraffic::TrafficEntityModule::GenerateDispatchLists(class BrnTraffic::BrnTrafficIO::InputBuffer_Dispatch *,class BrnTraffic::BrnTrafficIO::OutputBuffer_PreDispatch *,int,int,int,struct BrnDirector::Camera::Camera const *)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "BrnTraffic::TrafficEntityModule::GenerateDispatchLists: inert (body not reconstructed) [FLAG PC boot gate]\n";
-    }
-}
+// GATE RETIRED 2026-08-21 (wave T1 round 2, cluster R2B): BrnTraffic::TrafficEntityModule::
+// GenerateDispatchLists @0x8273B280 is REAL in EntityModules/TrafficEntityModule/
+// BrnTrafficEntityModule_Render.cpp. It is retired in the SAME change that lands the body
+// because it could not move separately: the gate defined the symbol out-of-line with the OLD
+// (6-argument) signature, so correcting the declaration alone would have been a C2511 here.
+// The new signature is the DecFIGS DWARF's 10-argument one (arg 2 is the
+// Array<VehicleRenderInfo,64> INSIDE the output buffer, plus the four vector arguments the
+// console's call site loads) -- see the evidence block at the call site in BrnWorldModule.cpp.
+// Documented PARTIAL: the corona pass (SubmitCoronasForVehicle / RenderTrafficLightCoronas)
+// is a NAMED in-body gate for wave 2.
 
 // BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
 // one-shot log. This symbol is REACHED every frame now that WorldModule::Update
@@ -799,16 +718,20 @@ void BrnTraffic::TrafficEntityModule::PostSceneUpdate(struct CgsModule::IOBuffer
 // @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
 // body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
 // not this gate.
-void BrnTraffic::TrafficEntityModule::PreDispatchUpdate(class BrnTraffic::BrnTrafficIO::InputBuffer_PreDispatch *,class BrnTraffic::BrnTrafficIO::OutputBuffer_PreDispatch *)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "BrnTraffic::TrafficEntityModule::PreDispatchUpdate: inert (body not reconstructed) [FLAG PC boot gate]\n";
-    }
-}
+// GATE RETIRED 2026-08-21 (wave T1 round 2, cluster R2B): BrnTraffic::TrafficEntityModule::
+// PreDispatchUpdate @0x8274D900 is REAL in EntityModules/TrafficEntityModule/
+// BrnTrafficEntityModule_Render.cpp -- documented PARTIAL (one named gate, G7). @0x8274D900 is
+// an EXPORT HOLE (no .ida-exports/BURNOUT_X360_ARTIST.XEX/0x8274D900.json -- the nearest
+// exported neighbours are 0x8274C870 and 0x8274E508), so there is neither pseudocode nor asm
+// and the DecFIGS DWARF :19315 is the highest rung available; the body is written against its
+// scope/callee tree, with the ship's two member promotions (mfRenderCullDistanceSq == 62500.0f
+// recovered, muMaxVehiclesToRender). Its input parameter is const now, per the DWARF; the
+// gate's non-const spelling could not survive that.
+// ⭐ FIX ROUND 2026-08-21: this comment previously read "COMPLETE, not partial" while the body
+// dropped the DWARF's FastBitArray duplicate suppression and substituted a plain
+// Vehicle::IsAlive() for the species-dispatched lbAboutToDie predicate. Both are addressed:
+// the dedup is real, the STANDARD and STATIC (parked-car) liveness arms are real, and only the
+// TRAILER arm is a gate -- it needs Vehicle::GetCabIndex, which has no declaration in the tree.
 
 // GATE RETIRED 2026-08-19 (wave Q7, cluster traffic): BrnTraffic::TrafficEntityModule::PrePhysicsUpdate @0x8274C690
 // is REAL (documented PARTIAL: all real legs + 8 named one-shot gates inside the body) in
@@ -2316,21 +2239,14 @@ RealmcIface::MemcardInterface::~MemcardInterface()
 // own TUs.
 // ===========================================================================
 
-// BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
-// WorldModule::Update @0x827D63E8 once the drive is wired. Per-frame world bridge.
-// X360 0x827A50E0 -- reconstruct and DELETE this gate.
-// One-shot log + inert: the module/interface it would feed is itself gated
-// inert, so dropping the transfer is the consistent observable.
-void WorldModule::BridgeRaceCarModuleToTrafficModule_PreScene(void *,class BrnTraffic::BrnTrafficIO::InputBuffer_PreScene *,class BrnTraffic::BrnTrafficIO::InputBuffer_PostScene *,class BrnTraffic::BrnTrafficIO::InputBuffer_PostPhysics *,struct BrnWorld::RaceCarEntityModuleIO::OutputBuffer_PreScene const *)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "WorldModule::BridgeRaceCarModuleToTrafficModule_PreScene: inert [FLAG PC boot gate]\n";
-    }
-}
+// ⛔⛔ GATE RETIRED 2026-08-21 (wave T1 round-4 consolidation): WorldModule::
+//     BridgeRaceCarModuleToTrafficModule_PreScene @0x827A50E0 is REAL in
+//     GameSource/World/Bridges/WorldBridgeRaceCarToTrafficModule.cpp. The round-4 verifier
+//     proved this gate was THE activeHulls==0 blocker: it is the ONLY producer (xrefs_to on
+//     all three setters) that primes the traffic input buffers' ActiveRaceCarOutputInterface,
+//     so PreSceneUpdate's IsPlayerCarActive() and UpdateRaceCarHulls read a buffer nothing
+//     filled. ⚠️ Behaviour change on a live path: the traffic module now sees the real
+//     race-car state each frame.
 
 // GATE RETIRED 2026-08-12 (prop-spawn wave): WorldModule::BridgeRaceCarModuleToPropModule_PreScene @0x827A5510
 // is now REAL -- body in GameSource/World/Bridges/ (see the 'PROP SPAWN WAVE'
@@ -2679,37 +2595,30 @@ void WorldModule::BridgePhysicsSceneQueriesToScene(void *,struct CgsSceneManager
 // @0x82304F70). The rest of both console spines is still un-homed and FLAGGED there.
 
 
-// BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
-// WorldModule::Update @0x827D63E8 once the drive is wired. the traffic pre-scene tick.
-// Reconstruct from X360 and DELETE this gate.
-// One-shot log + inert: the module/interface it would feed is itself gated
-// inert, so dropping the transfer is the consistent observable.
-void BrnTraffic::TrafficEntityModule::PreSceneUpdate(struct CgsModule::IOBufferStack *,struct CgsModule::IOBufferStack *,class BrnTraffic::BrnTrafficIO::InputBuffer_PreScene *,class BrnTraffic::BrnTrafficIO::OutputBuffer_PreScene *,unsigned short)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "TrafficEntityModule::PreSceneUpdate: inert [FLAG PC boot gate]\n";
-    }
-}
+// GATE RETIRED 2026-08-21 (wave T1 round 2, cluster R2A): BrnTraffic::TrafficEntityModule::
+// PreSceneUpdate @0x8274A968 is REAL (documented PARTIAL -- the IO lock bracket, the whole
+// meState switch, and the E_STARTINGUPSTATE_WAITING_FOR_PLAYER -> _POPULATING transition
+// including its GetActiveRaceCarOutputInterface()->IsPlayerCarActive() test; the RUNNING /
+// TEARING_DOWN arms and the five output producers are NAMED in-body gates) in
+// EntityModules/TrafficEntityModule/BrnTrafficEntityModule_wT1_02.cpp.
+//
+// It is retired in the SAME change that lands the body, because it CANNOT move separately:
+// the gate defined the symbol out-of-line with a token-identical signature (BrnUpdateSet is a
+// bare `typedef u16`, so `unsigned short` here and `BrnUpdateSet` there mangle the same), which
+// the per-TU `cl /c` gate is blind to. MEASURED, not predicted --
+//   link /DLL /NOENTRY t102.obj wls.obj
+//   wls.obj : error LNK2005: "public: void __cdecl BrnTraffic::TrafficEntityModule::
+//     PreSceneUpdate(...)" already defined in t102.obj
+// ⚠️ PAIRED BUILD-SCRIPT CHANGE (conductor-owned; agents may not edit the bat):
+//     echo "%SRC%\GameSource\World\EntityModules\TrafficEntityModule\BrnTrafficEntityModule_wT1_02.cpp"
+// must be added beside the _wT1_01.cpp mount in tools/build/build_game_exe.bat. Retiring this
+// gate WITHOUT that mount is LNK2019 at exe link (loud); mounting without retiring is the
+// LNK2005 above. Both land together or the exe does not link.
 
-// BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
-// WorldModule::Update @0x827D63E8 once the drive is wired. the traffic post-physics tick (also driven by UpdateForBootUpVideo @0x827CFDE0).
-// Reconstruct from X360 and DELETE this gate.
-// One-shot log + inert: the module/interface it would feed is itself gated
-// inert, so dropping the transfer is the consistent observable.
-void BrnTraffic::TrafficEntityModule::PostPhysicsUpdate(struct CgsModule::IOBufferStack *,struct CgsModule::IOBufferStack *,class BrnTraffic::BrnTrafficIO::InputBuffer_PostPhysics *,class BrnTraffic::BrnTrafficIO::OutputBuffer_PostPhysics *,unsigned short)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "TrafficEntityModule::PostPhysicsUpdate: inert [FLAG PC boot gate]\n";
-    }
-}
+// ⛔⛔ GATE RETIRED 2026-08-21 (wave T1): `TrafficEntityModule::PostPhysicsUpdate`
+//     @0x8274E6D0 is REAL (PARTIAL: lock bracket, streaming latch, UpdateDensity,
+//     tear-down trigger and the whole E_STATE_STARTING_UP arm; head/RUNNING/
+//     TEARING_DOWN/tail are NAMED in-body gates) in BrnTrafficEntityModule_wT1_01.cpp.
 
 // GATE RETIRED 2026-08-12 (prop-spawn wave): BrnWorld::PropEntityModule::PreSceneUpdate @0x82309A40 is now REAL.
 

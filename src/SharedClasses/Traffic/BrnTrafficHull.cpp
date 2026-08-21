@@ -33,6 +33,16 @@ namespace BrnTraffic
     // muNeighbourOffset / muStopLineOffset are INDICES into the hull's own tables, not
     // pointers -- they must not be relocated or widened.
     //
+    // ENDIAN CONFIRMATION (wave T1 / C2, 2026-08-21): the "walks NO sub-elements" claim above
+    // is not just about pointers -- it also means nothing on this path byte-swaps a record, and
+    // that is CORRECT for the shipped PC data. build/game/B5TRAFFIC.BNDL is a platform-4 (PC)
+    // bnd2 whose payload is ALREADY little-endian: all 875 StaticTrafficVehicle records read as
+    // orthonormal transforms with in-range mFlowTypeID little-endian and as garbage big-endian,
+    // and each one matches the X360 original's big-endian read value-for-value with the
+    // multi-byte fields byte-reversed. tools/assets/bundles/lane_transcode.py did the swap at
+    // convert time. Full measurement: SharedClasses/Traffic/BrnTrafficStaticTraffic.cpp.
+    // Adding a StaticTrafficVehicle::FixUp call here would corrupt correct data.
+    //
     // Asserts, in the asm's order: muNumJunctions < 16 (BrnTrafficHull.cpp:143), then the two
     // 16-byte alignment guards on the rung tables (cpp:146 / :147). FixDown checks the same
     // two on the offset form (cpp:259 / :260) and rebases in the same slot order.
@@ -56,7 +66,12 @@ namespace BrnTraffic
             return (reinterpret_cast<uintptr_t>(lpAddress) & 0xFu) == 0u;
         }
 
-        static const u32 KU_MAX_JUNCTIONS_PER_HULL = 16;
+        // DE-FORKED 2026-08-21 (wave T1, cluster C1): the local
+        // `static const u32 KU_MAX_JUNCTIONS_PER_HULL = 16;` that used to sit here is gone --
+        // the constant now lives at its canonical DWARF home,
+        // SharedClasses/Traffic/BrnTrafficSharedConstants.h (:60), which this TU already sees
+        // through BrnTrafficHull.h -> BrnTrafficSection.h. Same value (16); the local copy
+        // became an ambiguous-symbol error the moment the canonical home carried it too.
     }
 
     void Hull::FixUp(const void* lpBaseData)
@@ -109,7 +124,7 @@ namespace BrnTraffic
         return lrHull.GetNeighbour(luIndex);
     }
 
-    const void* Hull_GetStaticVehicle(const Hull& lrHull, u32 luIndex)
+    const StaticTrafficVehicle* Hull_GetStaticVehicle(const Hull& lrHull, u32 luIndex)
     {
         return lrHull.GetStaticVehicle(luIndex);
     }

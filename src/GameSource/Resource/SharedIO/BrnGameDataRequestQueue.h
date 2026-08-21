@@ -126,6 +126,44 @@ namespace GameDataIO
         bool LoadWorldCollision(CgsModule::BaseEventReceiverQueue* lpReceiverQueue,
                                 s32 liEventId, s32 liPoolId);
 
+        // ---- ADDITIVE GROW 2026-08-21 (wave T1 round 2, cluster R2C) ---------------------
+        // Load ONE named vehicle's asset slice. Unlike every sibling above, the asset id is
+        // NOT baked: the caller supplies the <=8-char vehicle NAME and the builder compresses
+        // it through BrnResource::MakeVehicleId, and the caller also chooses the asset SET.
+        //
+        // SHAPE (rung 2, DecFIGS DWARF -- GameSource/Resource/SharedIO/BrnGameDataRequestQueue.h,
+        // the same line repeated once per instantiated N at :126/:355/:584/:813/:1042/:1271/
+        // :1500/:1729/:1984/:2209/:2434/:2659):
+        //     bool LoadVehicle(BaseEventReceiverQueue*, int, int, const char*,
+        //                      BrnResource::EAssetSet);
+        // ⚠ The 4th parameter is a `const char*` NAME, NOT a prebuilt CgsID. An earlier
+        // round's hand-off note proposed `CgsID lVehicleId`; the DWARF says otherwise and the
+        // ASM AGREES -- the X360 keeps MakeVehicleId INSIDE the builder (see below), so a
+        // CgsID parameter would have moved a call out of the callee into every caller.
+        //
+        // BEHAVIOUR (rung 1, X360 ARTIST): <4096>'s out-of-line body is an EXPORT HOLE, but
+        // the console INLINES the whole builder into its one traffic caller,
+        // TrafficEntityModule::LoadData @0x82746A88, TWICE -- once in the ATTRIBS pass
+        // (LABEL_20 / stage 8) and once in the PHYSICS pass (LABEL_33 / stage 6). Both
+        // expansions stage the SAME 32-byte record on the stack and post it with the SAME
+        // typed AddEvent, and they differ in exactly one field (meType 4 vs 1), which is the
+        // parameter. Read off the pseudocode's stack slots (`v147`@[sp+A0h] .. `v152`@[sp+BCh],
+        // i.e. record +0x00 .. +0x1C):
+        //     v147 = liEventId            -> miEventId       +0x00
+        //     v148 = a1 + 197             -> mpReceiverQueue +0x04   (&mReceiverQueue)
+        //     v149 = 1                    -> miPoolId        +0x08   (E_POOL_PHYSICS, the
+        //                                                             caller's literal)
+        //     v150 = MakeVehicleId(buf)   -> mId             +0x10   (64-bit CgsID)
+        //     v151 = 4 (ATTRIBS) / 1 (PHYSICS) -> meType     +0x18
+        //     v152 = 0                    -> mbFailFlag      +0x1C
+        //     AddEvent<LoadGameDataEvent>(queue, &record, 26)
+        // -- i.e. field for field the LoadTrafficLanes/LoadWorldCollision/LoadPropPhysics
+        // shape with mId and meType promoted from baked constants to arguments. Body in
+        // BrnGameDataRequestQueueImpl.h beside its siblings.
+        bool LoadVehicle(CgsModule::BaseEventReceiverQueue* lpReceiverQueue,
+                         s32 liEventId, s32 liPoolId, const char* lpcVehicleName,
+                         BrnResource::EAssetSet leAssetSet);
+
         // ---- additive sibling request-builders (bodied by the per-N instance TUs) ----
         // All share the generic event-builder shape: stack-build a typed GameData event
         // (members set BY NAME in the X360 store order), then queue.AddEvent<EventT>(...).

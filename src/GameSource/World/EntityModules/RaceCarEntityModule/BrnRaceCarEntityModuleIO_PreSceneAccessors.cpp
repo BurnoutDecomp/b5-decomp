@@ -61,6 +61,21 @@ OutputBuffer_PreScene::GetActiveRaceCarOutputInterface() const
     return &mActiveRaceCarOutputInterface;
 }
 
+// X360 0x8279D5A8 (R, :291) -- const GLOBAL race-car output-interface accessor of
+// OutputBuffer_PreScene. Read-lock (`lbz status; extrwi ...,1,27` == bit 4,
+// eStatusLockedForRead) => IsBufferLockedForReading(), "Not locked for reading" assert,
+// then returns &mGlobalRaceCarOutputInterface (by name, not by offset). BODIED 2026-08-21
+// (wave T1 round-4 consolidation): it became the last unresolved external the moment
+// WorldBridgeRaceCarToTrafficModule.cpp mounted -- BridgeRaceCarModuleToTrafficModule_
+// PreScene @0x827A50E0 (`bl sub_8279D5A8`) is its caller; nothing needed it before.
+// Pairs with the non-const overload (:292) in the catch-all IO.cpp.
+const RCEntityGlobalRaceCarOutputInterface*
+OutputBuffer_PreScene::GetGlobalRaceCarOutputInterface() const
+{
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+    return &mGlobalRaceCarOutputInterface;
+}
+
 // X360 0x8279D650 (R, :294) -- const REPLAY active-race-car output-interface accessor of
 // OutputBuffer_PreScene. Same shape as the :288 accessor above, one member along.
 // BODIED 2026-08-12 (prop-spawn link-closure pass): it became the last unresolved external

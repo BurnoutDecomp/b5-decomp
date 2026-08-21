@@ -2,6 +2,8 @@
 
 #include "GameShared/GameClasses/Numeric/CgsRandom.h"
 #include "GameSource/Math/BrnMathUtils.h"
+#include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficConstants.h"
+#include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficPatternGenerator.h"
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficParam.h"
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficVehicleTypeRuntime.h"
 #include "GameSource/World/Traffic/BrnVehicleSoaData.h"
@@ -13,15 +15,25 @@
 
 namespace BrnTraffic
 {
+// VALUE RECOVERED 2026-08-21 (wave T1 consolidation): X360 .data 0x8300D190 is zero in the
+// image because it is seeded by an UNNAMED dynamic-initialiser thunk @0x82C67830 (found via
+// xref walk in the .i64 -- export-based scans cannot see these, the wave-Q lesson again):
+// lfs f0, flt_820054CC (= 20.0f); vspltw v0,v0,0; stvx128 -> all four lanes 20.0f.
+const VecFloat KF_VEHICLE_UPDATE_MATRIX_OLD_UP_FACTOR = { 20.0f, 20.0f, 20.0f, 20.0f };
+
 namespace
 {
 const f32 KF_AXLE_LINE_TEST_HALF_HEIGHT = 10.0f;
 const f32 KF_TRIANGLE_INTERSECT_EPSILON = 1.0e-8f;
 const f32 KF_TRIANGLE_INTERSECT_EDGE_EPSILON = 1.0e-5f;
 const f32 KF_MIN_CORRECTION_DIST_SQ = 2.5e-5f;
-const u32 KU_MAX_TRAFFIC = 600;
-const u32 KU_MAX_STANDARD_TRAFFIC = 400;
-const u16 KU_INVALID_VEHICLE = 0xFFFF;
+
+// AUDIT 2026-08-21 (cluster C3): this anonymous namespace used to carry TU-local copies of
+// KU_MAX_TRAFFIC(600) / KU_MAX_STANDARD_TRAFFIC(400) / KU_INVALID_VEHICLE(0xFFFF). All three
+// now have a real home in BrnTrafficConstants.h (landed by the keystone cluster), so the
+// forks are deleted and the file includes that header instead. KU_MAX_TRAFFIC was itself a
+// mis-name for the pool-wide bound the X360 asserts against (0x258); its canonical spelling
+// is KU_MAX_TOTAL_TRAFFIC. The baked assert STRINGS are left exactly as the XEX spells them.
 
 bool TriangleLineSegIntersect(
     Vector3 lV0,
@@ -115,6 +127,37 @@ bool Axle::TryIntersectWithLane(const LaneRung& lRung0, const LaneRung& lRung1)
     return true;
 }
 
+// FLAG PC boot gates (wave T1 consolidation 2026-08-21): three TRAILER-path callees are
+// NOT reconstructed -- Axle::ForceIntersectWithLane @0x8275ED98, Vehicle::SetSpeed, and
+// Vehicle::CalcTowBarPos (the latter two are ship-only additions: absent from the Feb-2007
+// leak AND from the ARTIST per-function exports -- suspected export holes, addresses
+// unconfirmed). Their only reach is Vehicle::InitialiseAsTrailer, which cannot run before
+// articulated traffic lands (wave 2+). Trap loud rather than fake motion; the real bodies
+// replace these gates.
+void Axle::ForceIntersectWithLane(const LaneRung& lRung0, const LaneRung& lRung1)
+{
+    (void)lRung0;
+    (void)lRung1;
+    CGS_ASSERT(false,
+               "Axle::ForceIntersectWithLane @0x8275ED98 not reconstructed [FLAG PC boot gate]");
+}
+
+void Vehicle::SetSpeed(VecFloat lfSpeed)
+{
+    (void)lfSpeed;
+    CGS_ASSERT(false,
+               "Vehicle::SetSpeed not reconstructed (trailer path) [FLAG PC boot gate]");
+}
+
+Vector3 Vehicle::CalcTowBarPos(Matrix44Affine lTransform, const VehicleTypeRuntime* lpTypeRuntime) const
+{
+    (void)lTransform;
+    (void)lpTypeRuntime;
+    CGS_ASSERT(false,
+               "Vehicle::CalcTowBarPos not reconstructed (trailer path) [FLAG PC boot gate]");
+    return Vector3{ 0.0f, 0.0f, 0.0f };
+}
+
 void VehicleAxles::UpdateRearAxleForRoadCollision(const Param* lpParam, Hull** lpapHulls)
 {
     CGS_ASSERT(lpParam != nullptr, "lpParam");
@@ -137,6 +180,44 @@ void VehicleAxles::UpdateRearAxleForRoadCollision(const Param* lpParam, Hull** l
     }
 }
 
+// ---------------------------------------------------------------------------
+// VehicleAxles::SetFromVehicleTransform (X360 @0x82756738, a leaf tail-called only by
+// Vehicle::InitialiseAsStatic @0x827567F0 -- r3 this, r4 lTransform, r5 lpVehicleTypeRuntime,
+// r6 lpVehicleTypeUpdate). The ship factored this out of the Feb-2007 InitialiseAsStatic
+// body, which spelled the same six statements inline (leak BrnTrafficVehicle.cpp:407-414).
+//
+// Asm-attested, store for store:
+//   v0  = *(r4+0x20)                        lTransform.At()
+//   v13 = *(r4+0x30)                        lTransform.Pos()
+//   v10 = splat(*(r5+0x20), lane 3)         VehicleTypeRuntime::GetForwardAxleOffset()
+//   v12 = splat(*(r5+0x20), lane 2)         VehicleTypeRuntime::GetBackAxleOffset()
+//   front = At*fwd + Pos ; back = At*back + Pos          (two vmaddfp)
+//   each stored through `vrlimi128 <new>, <old>, 1, 0`  -- lane 3 (the "plus" lane) is taken
+//   from the OLD value, i.e. exactly Vector3Plus::SetVector3 (xyz only).
+//   then both plus lanes are overwritten from `lfs 0(r6)` == VehicleTypeUpdateData::
+//   mfWheelRadius (offset 0) via the SDK's store/load round-trip == SetPlus().
+//   finally both mUpAndDebug get lTransform.Up() with their own lane 3 preserved == SetUp().
+// No lane intersection, no physics: this is what makes a parked car cheap.
+// ---------------------------------------------------------------------------
+void VehicleAxles::SetFromVehicleTransform(Matrix44Affine lTransform,
+                                           const VehicleTypeRuntime* lpVehicleTypeRuntime,
+                                           const VehicleTypeUpdateData* lpVehicleTypeUpdate)
+{
+    const Vector3 lAt = lTransform.At();
+    const Vector3 lPos = lTransform.Pos();
+
+    mFrontAxle.mPosAndWheelRadius.SetVector3(
+        lPos + lAt * lpVehicleTypeRuntime->GetForwardAxleOffset());
+    mBackAxle.mPosAndWheelRadius.SetVector3(
+        lPos + lAt * lpVehicleTypeRuntime->GetBackAxleOffset());
+
+    mFrontAxle.mPosAndWheelRadius.SetPlus(lpVehicleTypeUpdate->mfWheelRadius);
+    mBackAxle.mPosAndWheelRadius.SetPlus(lpVehicleTypeUpdate->mfWheelRadius);
+
+    mFrontAxle.SetUp(lTransform.Up());
+    mBackAxle.SetUp(lTransform.Up());
+}
+
 void Vehicle::Construct(VehicleAxles* lpAxles, Matrix44Affine& lOutMatrix)
 {
     CGS_ASSERT(lpAxles != nullptr, "lpAxles");
@@ -149,10 +230,91 @@ void Vehicle::Construct(VehicleAxles* lpAxles, Matrix44Affine& lOutMatrix)
     mfPhysicalTime = 0.0f;
     mxEffectState = 0;
     mfSympCrashTime = 0.0f;
-    muOtherHalfIndex = KU_INVALID_VEHICLE;
+    muOtherHalfIndex = static_cast<u16>(KU_INVALID_VEHICLE);
     muCrashTrafficType = static_cast<u8>(BrnPhysics::Vehicle::eCrashTrafficType_Invalid);
     mSympCrashTarget.muValue = 0xFFFFFFFF;
     meSympCrashState = E_SYMPATHETIC_NONE;
+}
+
+// ===========================================================================
+// Vehicle::InitialiseAsStatic (X360 @0x827567F0) -- THE function that makes a parked
+// traffic car exist. No physics body, no lane Param, no plan: it stamps the vehicle
+// record alive, copies the authored StaticTrafficVehicle transform straight out to the
+// module's transform slot, and seats the two axles off that transform.
+//
+// SHIP vs Feb-2007 (leak BrnTrafficVehicle.cpp:383). The leak's six-parameter form grew
+// three parameters and five stores:
+//   + f32 lfRandomVal                 -> mfRandomVal            (stfs 0x3C, from f1)
+//   + u32 luVehicle + VehicleSoaData& -> mAliveVehicles.SetBit  (the SoA bit the leak's
+//                                        build did not have; asserted !IsBitSet first)
+//   + miBrakelightState = 0           (stb 0x38)
+//   + miPhysicalReason  = -1          (stb 0x39)
+//   + miManoeuvre = E_MANOEUVRE_NONE  (stb 0x3A)
+//   + mSympCrashTarget = invalid      (stw 0x40, li -1)
+//   + mLinearVelocity = At * speed    (stvx 0x50)
+//   and the leak's inline axle block became VehicleAxles::SetFromVehicleTransform.
+// Everything the leak DOES have is present and matches byte for byte (mxFlags,
+// muSpecies, muVehicleType, the transform copy, mxEffectState, muHeadlightWarmth=0,
+// muHeadlightFlashPattern=E_HEADLIGHTFLASH_COUNT(3), muHeadlightFlashState=0xFF,
+// the two vector zeroes, mfSwerveTime=0 via flt_82001CC0, muOtherHalfIndex=0xFFFF,
+// muCrashTrafficType=0xFF).
+//
+// Assert order is the asm's (BrnTrafficVehicle.cpp lines 475/476/477/478/479 baked into
+// the XEX): lpAxles, lpVehicleTypeRuntime, lpVehicleTypeUpdate, IsValid(lTransform),
+// !mAliveVehicles.IsBitSet(luVehicle). The two CgsFastBitArray.h:396/:431 range asserts
+// the asm also inlines belong to FastBitArray's own checked accessors, not to this body.
+//
+// mLinearVelocity: the asm keeps the just-zeroed speed lane in v0 and does
+// `vmulfp128 v0, lTransform.At(), splat(speed)` -- i.e. the source multiplies the At axis
+// by the (zero) speed exactly as InitialiseAsTrailer does, rather than storing a literal
+// zero vector. Written that way so the intent survives, not the constant-folded form.
+// ===========================================================================
+void Vehicle::InitialiseAsStatic(
+    VehicleAxles* lpAxles,
+    Matrix44Affine& lOutMatrix,
+    f32 lfRandomVal,
+    u32 luVehicleType,
+    const VehicleTypeRuntime* lpVehicleTypeRuntime,
+    const VehicleTypeUpdateData* lpVehicleTypeUpdate,
+    Matrix44Affine lTransform,
+    u32 luVehicle,
+    VehicleSoaData& lVehicleSoaData)
+{
+    CGS_ASSERT(lpAxles != nullptr, "lpAxles");
+    CGS_ASSERT(lpVehicleTypeRuntime != nullptr, "lpVehicleTypeRuntime");
+    CGS_ASSERT(lpVehicleTypeUpdate != nullptr, "lpVehicleTypeUpdate");
+    CGS_ASSERT(rw::math::vpu::IsValid(lTransform), "RwMath::IsValid( lTransform )");
+    CGS_ASSERT(!lVehicleSoaData.mAliveVehicles.IsBitSet(luVehicle),
+               "!lVehicleSoaData.mAliveVehicles.IsBitSet( luVehicle )");
+
+    mxFlags = E_FLAG_ALIVE;
+    lVehicleSoaData.mAliveVehicles.SetBit(luVehicle);
+
+    mfRandomVal = lfRandomVal;
+    muSpecies = E_SPECIES_STATIC;
+    muVehicleType = static_cast<u8>(luVehicleType);
+
+    lOutMatrix = lTransform;
+
+    mxEffectState = 0;
+    muHeadlightWarmth = 0;
+    muHeadlightFlashPattern = PatternGenerator::E_HEADLIGHTFLASH_COUNT;
+    muHeadlightFlashState = 0xFF;
+    miBrakelightState = 0;
+    miPhysicalReason = -1;
+
+    lpAxles->SetFromVehicleTransform(lTransform, lpVehicleTypeRuntime, lpVehicleTypeUpdate);
+
+    mPitch_Roll_Steering_WheelRot.SetZero();
+    mSpeed_DistAcrossLane_SwerveAmount_W.SetZero();
+
+    miManoeuvre = E_MANOEUVRE_NONE;
+    mfSwerveTime = 0.0f;
+    muOtherHalfIndex = static_cast<u16>(KU_INVALID_VEHICLE);
+    muCrashTrafficType = static_cast<u8>(BrnPhysics::Vehicle::eCrashTrafficType_Invalid);
+
+    mLinearVelocity = lTransform.At() * mSpeed_DistAcrossLane_SwerveAmount_W.x;
+    mSympCrashTarget.muValue = 0xFFFFFFFF;
 }
 
 void Vehicle::InitialiseAsTrailer(
@@ -180,7 +342,7 @@ void Vehicle::InitialiseAsTrailer(
     CGS_ASSERT(lpCabVehicle != nullptr, "lpCabVehicle");
     CGS_ASSERT(lpCabVehicleTypeUpdate != nullptr, "lpCabVehicleTypeUpdate");
     CGS_ASSERT(lpCabVehicleTypeRuntime != nullptr, "lpCabVehicleTypeRuntime");
-    CGS_ASSERT(luVehicle < KU_MAX_TRAFFIC, "luVehicle < KU_MAX_TRAFFIC");
+    CGS_ASSERT(luVehicle < KU_MAX_TOTAL_TRAFFIC, "luVehicle < KU_MAX_TRAFFIC");
     CGS_ASSERT(!lVehicleSoaData.mAliveVehicles.IsBitSet(luVehicle),
                "!lVehicleSoaData.mAliveVehicles.IsBitSet( luVehicle )");
     CGS_ASSERT(luCabIndex < KU_MAX_STANDARD_TRAFFIC,
@@ -251,6 +413,84 @@ void Vehicle::OnPhysical(BrnPhysics::Vehicle::eCrashTrafficType leCrashTrafficTy
     {
         mxFlags |= E_FLAG_LEFT_SLAMMED;
     }
+}
+
+// ===========================================================================
+// Vehicle::UpdateMatrix (X360 @0x82757768) -- rebuild a traffic car's world transform
+// from its two axle positions and axle up-vectors.
+//   r3 this, r4 lpAxles, r5 lOutMatrix, r6 lpVehicleTypeRuntime, v1 lOldUp
+// (DWARF BrnTrafficVehicle.h:310 -- the ship grew the `Vector3 lOldUp` fourth parameter the
+// Feb-2007 three-parameter form did not have.)
+//
+// The recovered algorithm, asm line by asm line:
+//   lAxleDelta = mFrontAxle.pos - mBackAxle.pos                    (vsubfp -> v125)
+//   guard: at least one |component| exceeds an epsilon             (0x8275786C..0x827578A4)
+//   lAt  = Normalize(lAxleDelta)                                   (vrsqrtefp + 2 Newton steps)
+//   lUp  = Normalize(lOldUp*K + (frontUp + backUp))                (vmaddcfp128 @0x827579B4)
+//   lOutMatrix.At()    = lAt                                       (stvx r20+0x20)
+//   lOutMatrix.Pos()   = frontAxlePos - lAt*GetForwardAxleOffset() (stvx r20+0x30)
+//   lOutMatrix.Right() = Normalize(Cross(lUp, lAt))                (stvx r20+0x00)
+//   lOutMatrix.Up()    = Normalize(Cross(lAt, Right))              (stvx r20+0x10)
+//   mLinearVelocity    = lAt * GetSpeed()                          (stvx this+0x50)
+// Both crosses are the `vpermwi 0x63` (yzx) form: perm(a*perm(b) - perm(a)*b); expanding the
+// lanes gives Cross(lUp,lAt) for the first and Cross(lAt,Right) for the second, i.e. the
+// standard right-handed Gram-Schmidt for a Right/Up/At row order.
+//
+// FLAG -- ONE UNREAD DATUM, and it is deliberately NOT guessed.
+// `KF_VEHICLE_UPDATE_MATRIX_OLD_UP_FACTOR` (declared in this TU's header) is the 16-byte
+// lane register the asm loads from X360 .data 0x8300D190. It is initialised DATA: no
+// function in the 30,093-function ARTIST export set references that address other than this
+// one read, so there is no dynamic initialiser to decompile, and this repo carries no
+// data-segment dump for the XEX (the existing dumps are produced by an IDA headless script
+// and idat is not available here). Recovering it is one `idat -A -S dump_rodata.py` run over
+// BURNOUT_X360_ARTIST.XEX.i64 for 0x8300D190 len 16, read big-endian. Until then the symbol
+// stays DECLARED AND UNDEFINED on purpose: a loud unresolved-external naming the exact
+// datum beats a silent placeholder zero, which in this tree has already cost a five-day
+// shadow bug (KF_DEFAULT_ASPECTRATIO).
+//
+// FLAG (assert-only, behaviour-neutral): the X360's "Bad AT vector" guard compares each
+// |lAxleDelta| lane against an explicit epsilon at rodata flt_820C0BC0, also unread. The
+// guard is a debug assert with no live effect, so it is reproduced with the SDK's own
+// default-tolerance IsZero() rather than a made-up constant.
+// ===========================================================================
+void Vehicle::UpdateMatrix(const VehicleAxles* lpAxles,
+                           Matrix44Affine& lOutMatrix,
+                           const VehicleTypeRuntime* lpVehicleTypeRuntime,
+                           Vector3 lOldUp)
+{
+    CGS_ASSERT(lpAxles != nullptr, "lpAxles");
+    CGS_ASSERT(rw::math::vpu::IsValid(lOldUp), "IsValid(lOldUp)");
+
+    const Vector3 lFrontAxlePos = lpAxles->mFrontAxle.mPosAndWheelRadius.GetVector3();
+    const Vector3 lBackAxlePos  = lpAxles->mBackAxle.mPosAndWheelRadius.GetVector3();
+    const Vector3 lAxleDelta    = lFrontAxlePos - lBackAxlePos;
+
+    // X360 streams "Bad AT vector in traffic. Vehicle type <t>, front axle = <v>,
+    // back axle = <v>"; the stringized condition carries the same guard.
+    CGS_ASSERT(!rw::math::vpu::IsZero(lAxleDelta), "Bad AT vector in traffic");
+
+    const Vector3 lAt = rw::math::vpu::Normalize(lAxleDelta);
+
+    const Vector3 lAxleUpSum = lpAxles->mFrontAxle.GetUp() + lpAxles->mBackAxle.GetUp();
+    const Vector3 lUp = rw::math::vpu::Normalize(
+        lOldUp * KF_VEHICLE_UPDATE_MATRIX_OLD_UP_FACTOR.x + lAxleUpSum);
+
+    // X360 streams "Invalid UP calculating traffic matrix: <up> (front axle UP = <v>,
+    // rear axle UP = <v> )".
+    CGS_ASSERT(rw::math::vpu::IsValid(lUp), "Invalid UP calculating traffic matrix");
+
+    lOutMatrix.At() = lAt;
+    lOutMatrix.Pos() = lFrontAxlePos - lAt * lpVehicleTypeRuntime->GetForwardAxleOffset();
+    lOutMatrix.Right() = rw::math::vpu::Normalize(rw::math::vpu::Cross(lUp, lAt));
+    lOutMatrix.Up() =
+        rw::math::vpu::Normalize(rw::math::vpu::Cross(lAt, lOutMatrix.Right()));
+
+    // X360 streams "Invalid traffic vehicle transform: <matrix>".
+    CGS_ASSERT(rw::math::vpu::IsValid(lOutMatrix), "Invalid traffic vehicle transform");
+
+    // The asm really does call the checked GetSpeed() accessor here (bl @0x82757E1C) and
+    // multiplies the At axis by the broadcast lane.
+    mLinearVelocity = lAt * GetSpeed().x;
 }
 
 // ---------------------------------------------------------------------------
@@ -808,6 +1048,70 @@ void Vehicle::SetDead(u32 luVehicle, VehicleSoaData& lSoaData)
 }
 
 // ---------------------------------------------------------------------------
+// Vehicle::SetHasEntity  @ 0x8270EB38   ⭐ LANDED 2026-08-21 (wave T1 round 4, item 2)
+//
+// The scene-entity half of the same pattern as SetPhysical/SetDead above: it flips
+// E_FLAG_HASENTITY on the vehicle and the matching mVehiclesWithEntities bit in the shared
+// VehicleSoaData, keeping the two in lockstep -- which is what the second assert exists to
+// enforce. Its two callers are TrafficEntityModule::CreateNewVehicleEntities @0x8272FA30
+// (with true) and TrafficEntityModule::KillDyingVehicleEntity @0x8272EB40 (with false).
+//
+// STORE MAP, read off the asm (r6 == &lSoaData, r15 == r6 + 0x50):
+//   r6  + 0x00  lSoaData.mAliveVehicles          (the IsBitSet in the third assert)
+//   r15 + 0x00  lSoaData.mVehiclesWithEntities   (the array actually mutated -- 0x50 == 80
+//                                                 == sizeof(FastBitArray<601>), i.e. the
+//                                                 SECOND member of VehicleSoaData)
+//   this+ 0x05  mxFlags, `ori r11,r11,2` / `andi. r11,r11,0xFD` == E_FLAG_HASENTITY
+//
+// ⚠️ THE FIRST ASSERT'S POLARITY IS THE OPPOSITE OF WHAT THE ASM LOOKS LIKE. The console
+// branches AROUND the FireAssert on `bne` (0x8270EB68), i.e. it fires when
+// HasEntity() == lbHasEntity -- so the CONDITION is `HasEntity() != lbHasEntity`, exactly as
+// the baked string says. Transcribing the branch instead of the string would invert it and
+// turn a correct call into a guaranteed assert.
+//
+// ⚠️ THE FOUR "Index N is out of range (max bits: 600)" StrStream asserts the asm carries
+// (CgsFastBitArray.h:396/:431/:452) are the container's own inlined bounds checks, which this
+// tree's FastBitArray deliberately does not reproduce (see that header's policy banner). They
+// are not dropped behaviour: the four calls below are the bit ops those checks guard.
+// ---------------------------------------------------------------------------
+void Vehicle::SetHasEntity(bool lbHasEntity, u32 luVehicle, VehicleSoaData& lSoaData)
+{
+    CGS_ASSERT(HasEntity() != lbHasEntity, "HasEntity() != lbHasEntity");            // .h:979
+    CGS_ASSERT(lSoaData.mVehiclesWithEntities.IsBitSet(luVehicle) == HasEntity(),
+               "lSoaData.mVehiclesWithEntities.IsBitSet( luVehicle ) == HasEntity()"); // .h:980
+
+    if (lbHasEntity)
+    {
+        CGS_ASSERT(IsAlive(), "IsAlive()");                                          // .h:984
+        CGS_ASSERT(lSoaData.mAliveVehicles.IsBitSet(luVehicle),
+                   "lSoaData.mAliveVehicles.IsBitSet( luVehicle )");                 // .h:985
+
+        mxFlags |= E_FLAG_HASENTITY;
+        lSoaData.mVehiclesWithEntities.SetBit(luVehicle);
+    }
+    else
+    {
+        // `andi. r11, r11, 0xFD` -- clears ONLY bit 1; unlike SetDead/SetNotPhysical above
+        // this arm touches no other flag.
+        mxFlags &= static_cast<u8>(~static_cast<u8>(E_FLAG_HASENTITY));
+        lSoaData.mVehiclesWithEntities.UnSetBit(luVehicle);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Vehicle::GetCabIndex  @ 0x8270E4C8   ⭐ LANDED 2026-08-21 (wave T1 round 4, item 2)
+// DWARF BrnTrafficVehicle.h:339. Assert then one `lhz 2(this)`; muOtherHalfIndex is the
+// TRAILER's view of the pair (the cab's twin accessor GetTrailerIndex, DWARF :338, reads the
+// same member from the cab side -- it is not landed here because nothing in this round calls
+// it and its own species assert is the mirror image, i.e. it needs its own attestation).
+// ---------------------------------------------------------------------------
+u16 Vehicle::GetCabIndex() const
+{
+    CGS_ASSERT(IsOfTrailerSpecies(), "IsOfTrailerSpecies()");   // BrnTrafficVehicle.h:778
+    return muOtherHalfIndex;
+}
+
+// ---------------------------------------------------------------------------
 // SetFlashingHeadlights (X360 @0x827536D0): starting a flash resets the flash
 // timer, raises effect-state bit7, zeroes the flash state, and draws a fresh
 // three-way flash pattern from the shared RNG. The asm inlines
@@ -850,5 +1154,76 @@ void Vehicle::CopyEffectsFromCab(const Vehicle* lpCab)
 
     mxEffectState = lpCab->mxEffectState;
     miBrakelightState = lpCab->miBrakelightState;
+}
+
+// ---------------------------------------------------------------------------
+// Layout pins. NEVER CALLED -- a static member function so offsetof() reaches Vehicle's
+// private members.
+//
+// Why absolute offsets are legitimate here (they are NOT in most of this tree): Axle,
+// VehicleAxles and Vehicle are POINTER-FREE records -- four 16-byte lane registers, some
+// bytes, some floats, one 32-bit EntityId and one 32-bit enum. Widening a pointer cannot
+// move anything, so the console footprint and the host footprint are identical and every
+// offset below is the one the X360 asm stores to. Sources, one per pin group:
+//   Vehicle::Construct          @0x82752080  5 / 0x44 / 7 / 0x4C / 2 / 1 / 0x40 / 0x48
+//   Vehicle::InitialiseAsStatic @0x827567F0  0 / 4 / 8 / 0xC / 0xE / 0xF / 0x10 / 0x20 /
+//                                            0x38 / 0x39 / 0x3A / 0x3C / 0x50
+//   Vehicle::GetPhysicalPartsIndex @0x8270F928 -> 6
+//   Vehicle::GetIndicatorBulbWarmth @0x82705618 -> 0xD
+//   Vehicle::SetFlashingHeadlights @0x827536D0 -> 0x30
+//   Vehicle::SetIndicatingLeft     @0x8270FCF8 -> 0x34
+//   Vehicle::SetCurrentManoeuvrePhase @0x8270E7C8 -> 0x3B
+//   Vehicle::SetCurrentManoeuvre   @0x8270E648 -> 0x60
+//   Vehicle::GetTargetPos          @0x8270E200 -> 0x70
+//   VehicleAxles::SetFromVehicleTransform @0x82756738 -> 0/0x10/0x20/0x30 within the pair
+// The Feb-2007 leak independently pins Axle at 32 and VehicleAxles at 64 via its
+// CheckClassSize<> guards; sizeof(Vehicle) == 128 is pinned by TrafficEntityModule::
+// Construct's per-type walk stride and by the module's vehicle array in the keystone header.
+// ---------------------------------------------------------------------------
+void Axle::_AssertLayout()
+{
+    static_assert(offsetof(Axle, mPosAndWheelRadius) == 0x00, "Axle::mPosAndWheelRadius");
+    static_assert(offsetof(Axle, mUpAndDebug) == 0x10, "Axle::mUpAndDebug");
+    static_assert(sizeof(Axle) == 32, "sizeof(Axle)");
+}
+
+void VehicleAxles::_AssertLayout()
+{
+    static_assert(offsetof(VehicleAxles, mFrontAxle) == 0x00, "VehicleAxles::mFrontAxle");
+    static_assert(offsetof(VehicleAxles, mBackAxle) == 0x20, "VehicleAxles::mBackAxle");
+    static_assert(sizeof(VehicleAxles) == 64, "sizeof(VehicleAxles)");
+}
+
+void Vehicle::_AssertLayout()
+{
+    static_assert(offsetof(Vehicle, muVehicleType) == 0x00, "muVehicleType");
+    static_assert(offsetof(Vehicle, muCrashTrafficType) == 0x01, "muCrashTrafficType");
+    static_assert(offsetof(Vehicle, muOtherHalfIndex) == 0x02, "muOtherHalfIndex");
+    static_assert(offsetof(Vehicle, muSpecies) == 0x04, "muSpecies");
+    static_assert(offsetof(Vehicle, mxFlags) == 0x05, "mxFlags");
+    static_assert(offsetof(Vehicle, miPhysicalPartsIndex) == 0x06, "miPhysicalPartsIndex");
+    static_assert(offsetof(Vehicle, mxEffectState) == 0x07, "mxEffectState");
+    static_assert(offsetof(Vehicle, mfSwerveTime) == 0x08, "mfSwerveTime");
+    static_assert(offsetof(Vehicle, muHeadlightWarmth) == 0x0C, "muHeadlightWarmth");
+    static_assert(offsetof(Vehicle, muIndicatorBulbWarmth) == 0x0D, "muIndicatorBulbWarmth");
+    static_assert(offsetof(Vehicle, muHeadlightFlashPattern) == 0x0E, "muHeadlightFlashPattern");
+    static_assert(offsetof(Vehicle, muHeadlightFlashState) == 0x0F, "muHeadlightFlashState");
+    static_assert(offsetof(Vehicle, mSpeed_DistAcrossLane_SwerveAmount_W) == 0x10, "mSpeed_...");
+    static_assert(offsetof(Vehicle, mPitch_Roll_Steering_WheelRot) == 0x20, "mPitch_...");
+    static_assert(offsetof(Vehicle, mfHeadlightTimeToFlash) == 0x30, "mfHeadlightTimeToFlash");
+    static_assert(offsetof(Vehicle, mfIndicatorTimeToFlash) == 0x34, "mfIndicatorTimeToFlash");
+    static_assert(offsetof(Vehicle, miBrakelightState) == 0x38, "miBrakelightState");
+    static_assert(offsetof(Vehicle, miPhysicalReason) == 0x39, "miPhysicalReason");
+    static_assert(offsetof(Vehicle, miManoeuvre) == 0x3A, "miManoeuvre");
+    static_assert(offsetof(Vehicle, miManoeuvrePhase) == 0x3B, "miManoeuvrePhase");
+    static_assert(offsetof(Vehicle, mfRandomVal) == 0x3C, "mfRandomVal");
+    static_assert(offsetof(Vehicle, mSympCrashTarget) == 0x40, "mSympCrashTarget");
+    static_assert(offsetof(Vehicle, mfPhysicalTime) == 0x44, "mfPhysicalTime");
+    static_assert(offsetof(Vehicle, meSympCrashState) == 0x48, "meSympCrashState");
+    static_assert(offsetof(Vehicle, mfSympCrashTime) == 0x4C, "mfSympCrashTime");
+    static_assert(offsetof(Vehicle, mLinearVelocity) == 0x50, "mLinearVelocity");
+    static_assert(offsetof(Vehicle, mfManoeuvreTime) == 0x60, "mfManoeuvreTime");
+    static_assert(offsetof(Vehicle, mTargetPos) == 0x70, "mTargetPos");
+    static_assert(sizeof(Vehicle) == 128, "sizeof(Vehicle)");
 }
 }

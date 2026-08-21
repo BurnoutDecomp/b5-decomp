@@ -16,6 +16,19 @@ class Param;
 class VehicleTypeRuntime;
 struct LaneRung;
 
+// ---------------------------------------------------------------------------
+// DWARF BrnTrafficVehicle.h:53 -- `const VecFloat KF_VEHICLE_UPDATE_MATRIX_OLD_UP_FACTOR`.
+// The weight the ship-only `lOldUp` argument carries into Vehicle::UpdateMatrix's blended
+// up-vector (X360 @0x82757768 loads the whole 16-byte lane register from .data 0x8300D190
+// and feeds it to a single vmaddcfp128 -- see the derivation in BrnTrafficVehicle.cpp).
+//
+// VALUE RECOVERED 2026-08-21 (wave T1 consolidation). The earlier "no writer anywhere"
+// claim was the export-scan blind spot: 0x8300D190 is seeded by an UNNAMED dyn-init thunk
+// @0x82C67830 (not a function in the DB, invisible to every per-function export), which
+// splats flt_820054CC = 20.0f across all four lanes. Defined in BrnTrafficVehicle.cpp.
+// ---------------------------------------------------------------------------
+extern const VecFloat KF_VEHICLE_UPDATE_MATRIX_OLD_UP_FACTOR;
+
 struct Axle
 {
     Vector3Plus mPosAndWheelRadius;
@@ -32,6 +45,8 @@ struct Axle
 
     void SetUp(Vector3 lUp) { mUpAndDebug.SetVector3(lUp); }
     Vector3 GetUp() const { return mUpAndDebug.GetVector3(); }
+
+    static void _AssertLayout();   // never called; body in the .cpp
 };
 
 struct VehicleAxles
@@ -40,6 +55,15 @@ struct VehicleAxles
     Axle mBackAxle;
 
     void UpdateRearAxleForRoadCollision(const Param* lpParam, Hull** lpapHulls);
+
+    // DWARF BrnTrafficVehicle.h:148 -- X360 @0x82756738. Seats both axles straight off a
+    // finished vehicle transform (no lane intersection); the parked-car initialiser is its
+    // only caller in the wave-1 chain.
+    void SetFromVehicleTransform(Matrix44Affine lTransform,
+                                 const VehicleTypeRuntime* lpVehicleTypeRuntime,
+                                 const VehicleTypeUpdateData* lpVehicleTypeUpdate);
+
+    static void _AssertLayout();   // never called; body in the .cpp
 };
 
 class Vehicle
@@ -84,6 +108,23 @@ public:
 
     void Construct(VehicleAxles* lpAxles, Matrix44Affine& lOutMatrix);
 
+    // ---- THE parked-car constructor. DWARF BrnTrafficVehicle.h:272, X360 @0x827567F0.
+    // Parameter order/width read off the prologue, NOT the pseudocode: r3 this, r4 lpAxles,
+    // r5 lOutMatrix, f1 lfRandomVal (its GPR slot r6 is RESERVED AND UNUSED -- the PPC
+    // float-arg GPR skip), r7 luVehicleType, r8 lpVehicleTypeRuntime, r9 lpVehicleTypeUpdate,
+    // r10 lTransform, then two 8-byte right-justified stack slots: luVehicle and
+    // &lVehicleSoaData. Nine parameters, exactly the DWARF list.
+    void InitialiseAsStatic(
+        VehicleAxles* lpAxles,
+        Matrix44Affine& lOutMatrix,
+        f32 lfRandomVal,
+        u32 luVehicleType,
+        const VehicleTypeRuntime* lpVehicleTypeRuntime,
+        const VehicleTypeUpdateData* lpVehicleTypeUpdate,
+        Matrix44Affine lTransform,
+        u32 luVehicle,
+        VehicleSoaData& lVehicleSoaData);
+
     void InitialiseAsTrailer(
         VehicleAxles* lpAxles,
         Matrix44Affine& lOutMatrix,
@@ -108,7 +149,29 @@ public:
     bool IsAlive() const { return (mxFlags & E_FLAG_ALIVE) != 0; }
     bool IsPhysical() const { return (mxFlags & E_FLAG_PHYSICAL) != 0; }
     bool IsOfTrailerSpecies() const { return (muSpecies & 0xF) == E_SPECIES_TRAILER; }
+    // ⭐ ADDED 2026-08-21 (wave T1 round 4, item 2). The predicate BOTH of SetHasEntity's
+    // first two asserts name by their own baked strings ("HasEntity() != lbHasEntity" /
+    // "lSoaData.mVehiclesWithEntities.IsBitSet( luVehicle ) == HasEntity()",
+    // BrnTrafficVehicle.h:979/:980) and the one CreateNewVehicleEntities @0x8272FA30 asserts
+    // per candidate ("!lpVehicle->HasEntity()", BrnTrafficEntityModule.cpp:4648). The console
+    // inlines it everywhere as `(mxFlags >> 1) & 1` -- e.g. 0x8270EB44 `lbz r11,5(r3) ;
+    // extrwi r11,r11,1,30` -- i.e. E_FLAG_HASENTITY, which this enum already carries.
+    // StaticVehicles_RemoveDeadParam (wT1_01) already open-codes the same test via
+    // GetFlags(); it is left alone rather than churned.
+    bool HasEntity() const { return (mxFlags & E_FLAG_HASENTITY) != 0; }
     Manoeuvre GetCurrentManoeuvre() const;
+
+    // ⭐ ADDED 2026-08-21 (wave T1 round 4, item 2). DWARF BrnTrafficVehicle.h:339,
+    // X360 @0x8270E4C8 -- 14 instructions:
+    //     lbz r11,4(this) ; clrlwi r11,r11,28 ; cmplwi r11,2      -> IsOfTrailerSpecies()
+    //     (on mismatch) FireAssert("IsOfTrailerSpecies()", BrnTrafficVehicle.h, 778)
+    //     lhz r3,2(this)                                          -> muOtherHalfIndex
+    // BrnTrafficEntityModule_Render.cpp:317-319 and WorldLinkStubs.cpp:734 BOTH record a
+    // parked leg blocked on "Vehicle::GetCabIndex has no declaration anywhere in the tree".
+    // That is now false; the two banners are corrected where they stand.
+    // ⚠️ THE RETURN IS 16 BITS (`lhz`, not `lbz`): the sentinel its callers compare against
+    // is KU_INVALID_VEHICLE == 0xFFFF, which a u8 could never hold.
+    u16 GetCabIndex() const;
 
     // ---- per-frame state / identity accessors (out-of-line, bodied in the .cpp) ----
     VecFloat GetSpeed() const;
@@ -174,6 +237,28 @@ public:
     void SetPhysical(s8 liPartsIndex, u32 luVehicle, VehicleSoaData& lSoaData);
     void SetNotPhysical(u32 luVehicle, VehicleSoaData& lSoaData);
     void SetDead(u32 luVehicle, VehicleSoaData& lSoaData);
+
+    // ⭐ ADDED 2026-08-21 (wave T1 round 4, item 2) -- the OTHER half of the scene-entity
+    // registration CreateNewVehicleEntities @0x8272FA30 performs, and its ONLY blocker that
+    // was a real declaration gap.
+    //
+    // ⚠️ THE LEDGER ROW IS A CATCH-ALL MISATTRIBUTION, exactly like
+    // FindVehicleTypeAttribKey_EXPENSIVE was (round 3): progress/identity.json files
+    // Vehicle::SetHasEntity under the GameShared/GameClasses/Development/CgsStrStream.h
+    // primary_file, which is why two rounds of "not declared anywhere" parks. It is plainly a
+    // Vehicle member: its four baked assert strings all cite
+    // GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficVehicle.h (:979/:980/
+    // :984/:985) and it reads/writes mxFlags at this+5.
+    //
+    // SIGNATURE from the DWARF (BrnTrafficVehicle.h:373 `void SetHasEntity(bool, uint32_t,
+    // VehicleSoaData &)`) and confirmed register-for-register in the ARTIST prologue:
+    //   r3 this, r4 lbHasEntity (`clrlwi r17,r4,24`), r5 luVehicle, r6 &lSoaData.
+    // The soa reference is NON-const and that is not a style choice: the body STORES through
+    // it (`stdx r10, r11, r15` with r15 == r6+0x50 == &mVehiclesWithEntities). The `_compile`
+    // dwarfdump's `const VehicleSoaData &` spelling for this one function is a dumper
+    // artifact contradicted both by the header dump above and by rung 1; the sibling setters
+    // SetPhysical / SetNotPhysical / SetDead already take it non-const for the same reason.
+    void SetHasEntity(bool lbHasEntity, u32 luVehicle, VehicleSoaData& lSoaData);
     Vector3 CalcTowBarPos(Matrix44Affine lTransform,
                           const VehicleTypeRuntime* lpVehicleTypeRuntime) const;
     Vector3 CalcFrontAxlePos(Matrix44Affine lTransform,
@@ -205,6 +290,9 @@ public:
         CGS_ASSERT(miPhysicalPartsIndex >= 0, "miPhysicalPartsIndex >= 0");
         return static_cast<u8>(miPhysicalPartsIndex);
     }
+
+    // Never called; defined in the .cpp so offsetof() reaches the private members below.
+    static void _AssertLayout();
 
 private:
     u8 muVehicleType;

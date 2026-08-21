@@ -167,6 +167,13 @@ public:
     bool IsDying() const { return (mxFlags & E_FLAG_DYING) != 0; }
     bool HasDied() const { return (mxEffectAndHistoryState & E_HISTORY_DIED) != 0; }
     bool IsInPurgatory() const { return (mxFlags & E_FLAG_IN_PURGATORY) != 0; }
+    // ⭐ ADDED 2026-08-21 (wave T1 round 4, item 2). The sibling of
+    // StaticTrafficParam::IsZombie (BrnTrafficStaticParam.h:71), which this class was simply
+    // missing. X360-attested by TrafficEntityModule::IsVehiclesParamAZombie @0x82715D70,
+    // whose STANDARD-species arm is `(*(GetParam(luVehicle) + 64) >> 5) & 1` -- offset 0x40
+    // is mxFlags and bit 5 is the E_FLAG_ZOMBIE (0x20) this enum already declares (its writer
+    // Param::SetZombie is likewise already declared above).
+    bool IsZombie() const { return (mxFlags & E_FLAG_ZOMBIE) != 0; }
 };
 
 // ---------------------------------------------------------------------------
