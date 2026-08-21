@@ -1548,6 +1548,15 @@ namespace Vehicle
         Reset(Vector3{ 0.0f, 0.0f, 0.0f, 0.0f });
     }
 
+    void VehiclePhysics::Release()
+    {
+        // Breaker folds this source method into VehicleManager::Release and
+        // ProcessRemoveEvents: std 0 at +0x1158/+0x1220, then stb 0 at +0x1359.
+        mUsedAirRams.UnSetAll();
+        mUsedSpins.UnSetAll();
+        mbDeformationModelIsActive = false;
+    }
+
     // =====================================================================================
     // C08 airborne/water/freeze/spin group -- BODIES.
     //   UpdateInWaterBehaviour @0x825B81A8, UpdateAirRam @0x825FC8D8, UpdateSpinEffects @0x825FCCF8,
@@ -1866,7 +1875,6 @@ namespace Vehicle
     //   0x825D1494  SHARED TAIL: the restoring-torque / angular-bleed pair, then
     //               mWheelFFSpring.mfSpringCoefficient = 0 on every path.
     // =====================================================================================
-
     // The two-vsel sign ladder the X360 emits for `sign(x)` (`vcmpgtfp`+`vsel`, then
     // `vcmpgefp`+`vsel` against -1.0): +1 above zero, 0 AT zero, -1 below (and -1 for NaN).
     // Used verbatim in four places below; not a std::copysign (which has no zero case).
@@ -2511,15 +2519,13 @@ namespace Vehicle
     // The heavy CgsDev::Assert/StrStream "Invalid ... during drift" machinery and the per-phase
     // ExternalPhysicsBody::CheckState debug calls are ELIDED (debug-build guards, no output effect).
     //
-    // FLAG (rodata): several scalar gains/clamps the steering+drift forces use are un-homed .rdata
-    // (flt_8208F620 / unk_82FB9020 / unk_82FB9370 / flt_830180B0 / unk_82FB8AC0 / unk_82FB9ED0 /
-    // unk_82FB80F0 / unk_8327F240 / kDamp_BlendRate / unk_82014AC0.. / unk_82FB9080 / unk_82FB8B00 /
-    // unk_82FB9080 etc.) absent from the function exports. Each is carried as an honest flagged-0
-    // (or flagged enable) placeholder so the math + the named-member reads/writes are exact while the
-    // numeric gain stays inert until the .rdata is recovered. NEVER fabricated.
+    // Historical note: this block originally described several constants as un-homed zero
+    // placeholders. Their values and consumers are now pinned below from Breaker image data/static
+    // initialisers. In particular, unk_82014AC0..AF0 are the PPC compiler's inlined Pow
+    // approximation coefficients, not source-level steering/drift tuning data.
     // =====================================================================================
 
-    // small file-static placeholders for the un-homed steering/drift rodata gains (flagged-inert).
+    // File-static steering/drift gains, recovered from Breaker image data and initialiser thunks.
     // ⭐ stru_8208F620 is plain readable .rdata and holds 1.1920929e-07 -- FLT_EPSILON. This is the one
     //   placeholder in this file whose zero really WAS harmless: a zero-vs-epsilon guard on a magnitude
     //   differs only for denormal inputs. Recording it as an honest negative rather than quietly
@@ -2631,65 +2637,64 @@ namespace Vehicle
     }
 
     // @0x825D34D8  VehiclePhysics::GetMaxSteeringAngleDuringDrift
-    //   Builds a steering direction from the quartic-stiffened steer input, takes acos against the
-    //   velocity direction, then scales by the per-car max steering angle (mpAttribs->mSteeringAttribs.mvMaxAngle_StraightReactionBias @+0xF0 .x,
-    //   in DEGREES) * deg->rad. Returns the capped wheel angle (radians).
-    //   asm: dir = normalize(mLinearVelocity); stiff = -1 - sign(s)*(s); angle = acos(dot(dir, steerDir))
-    //        result = angle... * (mpAttribs->mSteeringAttribs.mvMaxAngle_StraightReactionBias.x * 0.017453292).
-    f32 VehiclePhysics::GetMaxSteeringAngleDuringDrift(f32 lfSteeringInput)
+    //   Signed drift steering target in radians. Breaker uses the live cached steering magnitude,
+    //   the angle between normalized velocity and body forward, a 1.5 scale, and the attrib max-angle
+    //   cap; body-right dot supplies the sign. The DecFIGS f32 parameter is optimized out on X360.
+    f32 VehiclePhysics::GetMaxSteeringAngleDuringDrift(f32 /*lfSteeringInput*/)
     {
-        const Vector3 lUnitVel = vpu::Normalize(mLinearVelocity);   // zero-guarded
+        // Breaker 0x825D350C..0x825D3570: normalize the linear velocity with the standard
+        // zero-select around the vrsqrtefp/Newton chain. DecFIGS retains a trailing f32 parameter,
+        // but the X360 body never reads f1; it reads the live steering lane at this+0xFE0.y.
+        const Vector3 lvUnitVelocity = vpu::Normalize(mLinearVelocity);
 
-        // the steer-direction lane built from the (already stiffened) input; clamp dot to [0,1] then acos.
-        f32 lfDot = vpu::Dot(lUnitVel, mTransform.zAxis);           // forward axis
-        if (lfDot < 0.0f) lfDot = 0.0f;
-        if (lfDot > 1.0f) lfDot = 1.0f;
-        const f32 lfAngle = std::acos(lfDot);                      // XMVectorACos
+        // 0x825D35F8..0x825D3634: acos(clamp(dot(unitVel, forward), -1, 1)). The lower
+        // clamp is -1, not zero, so reverse travel can produce the full pi-angle response.
+        f32 lfForwardDot = vpu::Dot(lvUnitVelocity, mTransform.zAxis);
+        if (lfForwardDot < -1.0f) lfForwardDot = -1.0f;
+        if (lfForwardDot >  1.0f) lfForwardDot =  1.0f;
+        const f32 lfVelocityAngle = std::acos(lfForwardDot);   // XMVectorACos
 
-        // per-car max angle (degrees) -> radians cap.
-        const f32 lfMaxDeg = mpAttribs->mSteeringAttribs.mvMaxAngle_StraightReactionBias.x;                    // mpAttribs->mSteeringAttribs.mvMaxAngle_StraightReactionBias (+0xF0) .x
-        // (void) the unused stiffened-sign term; the asm folds the sign into the steer-direction build.
-        (void)lfSteeringInput;
-        return lfAngle * (lfMaxDeg * KF_DEG_TO_RAD);
+        // 0x825D3644..0x825D36D4: scale by |Steering| and 1.5, cap at the attrib max
+        // angle converted to radians, then take the sign from dot(unitVel, transform X).
+        static const f32 KF_DRIFT_STEERING_ANGLE_SCALE = 1.5f;   // flt_820945DC
+        const f32 lfSteeringMagnitude =
+            std::fabs(mvSteeringAngle_Steering_PrevSteering_DriftGasLetOffAmount.y);
+        const f32 lfMaxAngle =
+            mpAttribs->mSteeringAttribs.mvMaxAngle_StraightReactionBias.x * KF_DEG_TO_RAD;
+        f32 lfResult = std::min(
+            lfVelocityAngle * lfSteeringMagnitude * KF_DRIFT_STEERING_ANGLE_SCALE,
+            lfMaxAngle);
+        if (vpu::Dot(lvUnitVelocity, mTransform.xAxis) < 0.0f)
+            lfResult = -lfResult;
+        return lfResult;
     }
 
     // @0x825CFB70  VehiclePhysics::ModifyControlsForSteeringWheelInput
-    //   Quartic stick-stiffening: s' = -1 - sign(s) * (s^4 * 1.25). Softens centre, sharpens extremes.
-    //   When the device is a steering wheel (mbIsSteeringWheel) it additionally blends the steering
-    //   direction toward the body forward axis by unk_82FB9370 (flagged-inert).
+    //   Breaker 0x825CFB70..0x825CFC60: apply the quartic wheel curve
+    //     clamp(sign(s) * 1.25 * s^4, -1, 1),
+    //   then damp 5% of the angular-velocity component about transform Y when the resulting
+    //   steering and the current yaw rate have the same sign. The caller has already gated this
+    //   method on controls+0x41 (mbIsSteeringWheel); the method itself has no second device test.
     void VehiclePhysics::ModifyControlsForSteeringWheelInput(BrnPlayerDriverControls* lpControls)
     {
         BrnPlayerDriverControls& lrControls = *lpControls;
-        const f32 lfS = lrControls.mfSteering;                      // *(a2+16)
-        if (lfS == 0.0f)
-        {
-            // asm: fsel keeps sign 0; the stiffening below collapses to -1 - 0 = ... but the original
-            // leaves a 0-input centred. Preserve: a 0 stick stays 0 after the sign-select gate.
-        }
+        const f32 lfS = lrControls.mfSteering;   // lfs f0,0x10(r4)
         const f32 lfSign = (lfS > 0.0f) ? 1.0f : ((lfS < 0.0f) ? -1.0f : 0.0f);
-
         const f32 lfS2 = lfS * lfS;
         const f32 lfS4 = lfS2 * lfS2;
-        const f32 lfStiffened = -1.0f - lfSign * (lfS4 * KF_QUARTIC_STIFFEN);
+        f32 lfSteering = lfSign * lfS4 * KF_QUARTIC_STIFFEN;
+        if (lfSteering < -1.0f) lfSteering = -1.0f;   // fsel @0x825CFBFC
+        if (lfSteering >  1.0f) lfSteering =  1.0f;   // fsel @0x825CFC04
 
-        // The asm fsel-routes between the stiffened value and the raw value by sign; the net result it
-        // stores to *(a2+16) is the stiffened magnitude carrying the input sign.
-        f32 lfOut = (lfSign != 0.0f) ? (lfStiffened * lfSign * -1.0f) : lfS;
-        // Faithful simplification: |s'| = 1 + s^4*1.25, signed by the input -> a centre-soft, extreme-sharp
-        // curve. (The double sign-fold above reduces to this.)
-        lfOut = lfSign * (1.0f + lfS4 * KF_QUARTIC_STIFFEN);
-
-        lrControls.mfSteering = lfOut;                              // *(a2+16) = s'
-
-        // steering-wheel device path: blend the cached steering direction toward forward by a weight.
-        if (lrControls.mbIsSteeringWheel)
+        const Vector3& lvUp = mTransform.yAxis;       // lvx128 this+0x20
+        const f32 lfYawRate = vpu::Dot(lvUp, mAngularVelocity);
+        if (lfYawRate * lfSteering > 0.0f)             // 0x825CFC24..0x825CFC38
         {
-            // The unk_82FB9370 weight is RECOVERED (0.05); what is still missing is the BLEND ITSELF --
-            // the asm reads mTransform.zAxis (forward) and the cached steering register and lerps them
-            // by that weight, and this body has never modelled the lerp. Flagged as an unmodelled BODY
-            // now, not as an unknown constant: filling the number does not fill the code.
-            (void)KF_WHEEL_STEER_BLEND;
+            mAngularVelocity = mAngularVelocity
+                - lvUp * (lfYawRate * KF_WHEEL_STEER_BLEND);        // unk_82FB9370 = 0.05
         }
+
+        lrControls.mfSteering = lfSteering;             // stfs f0,0x10(r4) @0x825CFC5C
     }
 
     // @0x825CFC68  VehiclePhysics::ModifyControlsForDrift
@@ -3504,19 +3509,17 @@ namespace Vehicle
     void VehiclePhysics::ApplyDriftForces(const BrnPlayerDriverControls* lpControls, f32 lfAbsSteering,
                                           f32 lfAbsDriftScale, f32 lfSpeedMPS, VecFloat lvfTimeStep)
     {
-        // ⚠️ FLAG (arity, unfixed): the DWARF gives the other three sub-forces signatures this header
-        //    still does not carry, and the tree's stand-in forms cannot express them --
+        // DecFIGS supplies the vector-heavy subordinate signatures, and Breaker pins their
+        // register order:
         //      MaintainDriftSpeed     (const BrnPlayerDriverControls*, Vector3, VecFloat)   :1463
         //      ApplyDriftLatForce     (VecFloat x6)                                          :1472
         //      ApplyNaturalDriftForces(VecFloat x5)                                          :1475
-        //    The asm operands, for whoever corrects them:
+        //    The asm operands are:
         //      MaintainDriftSpeed  v1 = mTransform.zAxis (this+0x30), v2 = splat(lfSpeedMPS)
         //      ApplyDriftYaw       v1 = splat(lfAbsSteering),  v2 = splat(lfAbsDriftScale)
         //      ApplyDriftLatForce  v1 = splat(lfAbsDriftScale), v2 = splat(lfSpeedMPS),
         //                          v3 = splat(controls->mfSteering), v4 = splat(controls->mfBrake),
         //                          v5 = splat(controls->mfGas),      v6 = the VecFloat dt
-        //    Only the ARGUMENT ORDER is corrected here, against those operands; the three parameter
-        //    LISTS are left as they are so this wave stays scoped to the link closure.
         const VecFloat lvfSpeed{ lfSpeedMPS, lfSpeedMPS, lfSpeedMPS, lfSpeedMPS };
         const VecFloat lvfAbsSteer{ lfAbsSteering, lfAbsSteering, lfAbsSteering, lfAbsSteering };
         const VecFloat lvfAbsScale{ lfAbsDriftScale, lfAbsDriftScale, lfAbsDriftScale, lfAbsDriftScale };
@@ -3536,21 +3539,20 @@ namespace Vehicle
         }
     }
 
+// [clean] UpdateDrift  @0x8262E200
     // @0x8262E200  VehiclePhysics::UpdateDrift
     //   The per-frame drift entry. Refreshes the cached steering direction (normalize(mLinearVelocity)
     //   into the steering register), runs the drift state machine (UpdateDriftState), then:
-    //     * when drifting (mu8DriftState != 0): applies the drift forces (ApplyDriftForces), advancing
-    //       the drift register from the per-car drift attrib lanes (mvDriftParams* @+0x110/+0x120) +
-    //       the landing/damp coefficient cascade (unk_82014AC0..AF0, flagged).
-    //     * when NOT drifting: eases the cached steering direction back toward forward by the per-car
-    //       drift damp factor (mpAttribs->mDriftAttribs.mvDriftAngularDamping_MaxDriftAngle_CounterSteerTorqueScaleFactor_DriftPushTime @+0x170 .y) when above the drift slip threshold.
+    //     * when drifting: advances TimeDrifting; damps body-Y angular velocity with
+    //       Pow(DriftAngularDamping, 60*dt); damps body-X linear velocity with
+    //       Pow(DriftSidewaysDamping, 60*dt); then applies drift forces when traction permits.
+    //     * when NOT drifting: decrements TimeDrifting and applies the speed-scaled
+    //       VehicleBaseAttribs high-speed yaw damping while off the handbrake.
     //   Uses the ORIGINAL controls when the drift-override byte is set. The per-phase CheckState debug
     //   calls are elided.
-    //   FIDELITY: PARTIAL -- the dispatch (steering-dir refresh, the drift/not-drift split, the
-    //   UpdateDriftState + ApplyDriftForces calls, the not-drift ease) is reconstructed against named
-    //   lanes; the two drift-register advance cascades (the vexptefp/vlogefp + unk_82014AC0.. landing/
-    //   damp polynomials) are un-homed rodata curves carried as flagged-inert blends -- no fabricated
-    //   coefficients emitted.
+    //   The vexptefp/vlogefp + unk_82014AC0..AF0 cascades are compiler-expanded
+    //   rw::math::vpu::Pow calls: Breaker supplies the dataflow, and DecFIGS names both VecFloat
+    //   damping locals plus Pow. They are lowered to source-level std::pow below.
     void VehiclePhysics::UpdateDrift(const BrnPlayerDriverControls* lpOriginalControls, VecFloat lvfTimeStep)
     {
         // ⭐⭐ THE THREE SCALARS, CORRECTED 2026-08-03 FROM THE ASM (0x8262E230-2D8). The committed
@@ -3579,27 +3581,65 @@ namespace Vehicle
             // the second real consumer of the VecFloat the tree had dropped.
             mvTimeToReachTargetDriftSlipRecip_StartSlip_TimeDrifting_BrakeScale.z += lvfTimeStep.x;
 
-            // drift register advance: the asm runs two unk_82014AC0.. landing/damp polynomial cascades
-            // over the per-car drift attrib lanes (mpAttribs->mDriftAttribs.mvBrakingDriftScaleFactor_GasDriftScaleFactor_TimeToCapScale_CappedScale @+0x120 +16 / +0 = +0x130/+0x120) and
-            // folds the result into the +0x1000-region scratch + the body local velocity (+0x60). FLAG:
-            // the coefficient tables are un-homed -> carried inert; the named lanes + the structure are
-            // exact, the numeric advance stays 0 until the .rdata is recovered.
+            // Breaker 0x8262E344..0x8262E520: the first vlogefp/vexptefp polynomial is the
+            // inlined rw::math::vpu::Pow(GetDriftAngularDamping(), 60*dt), followed by
+            //   angularVelocity -= transform.Y * dot(transform.Y, angularVelocity) * factor.
+            // DecFIGS names the source local `VecFloat lvfDriftAngularDamping` and the Pow call.
+            // Its VecFloat is genuine declaration shape, while the damping getter's one scalar
+            // attrib lane and 60*dt are uniform splats; spelling the equivalent lane operation as
+            // scalar std::pow on PC avoids reproducing the PPC compiler's approximation tables.
+            static const f32 KF_DRIFT_DAMP_BLEND_RATE = 60.0f;   // kDamp_BlendRate
+            const f32 lfDampExponent = KF_DRIFT_DAMP_BLEND_RATE * lvfTimeStep.x;
+            const f32 lfAngularDamping = static_cast<f32>(std::pow(
+                mpAttribs->mDriftAttribs
+                    .mvDriftAngularDamping_MaxDriftAngle_CounterSteerTorqueScaleFactor_DriftPushTime.x,
+                lfDampExponent));
+            const Vector3& lvUp = mTransform.yAxis;
+            const f32 lfYawRate = vpu::Dot(lvUp, mAngularVelocity);
+            mAngularVelocity = mAngularVelocity - lvUp * (lfYawRate * lfAngularDamping);
+
+            // Breaker 0x8262E528..0x8262E6BC: the second identical Pow implementation consumes
+            // GetDriftSidewaysDamping(), then removes that fraction of the linear-velocity
+            // component along transform X. DecFIGS names this genuine source local
+            // `VecFloat lvfDriftSidewaysDamping`; again every lane is a scalar splat here.
+            const f32 lfSidewaysDamping = static_cast<f32>(std::pow(
+                mpAttribs->mDriftAttribs
+                    .mvNaturalYawTorque_NaturalYawTorqueCutOffAngle_TorqueKickFromGasLetOff_DriftSidewaysDamping.w,
+                lfDampExponent));
+            const Vector3& lvRight = mTransform.xAxis;
+            const f32 lfSidewaysSpeed = vpu::Dot(lvRight, mLinearVelocity);
+            mLinearVelocity = mLinearVelocity - lvRight * (lfSidewaysSpeed * lfSidewaysDamping);
+
             if (mbAllWheelsHaveTraction)
                 ApplyDriftForces(lpOriginalControls, lfAbsSteering, lfAbsDriftScale, lfSpeedMPS, lvfTimeStep);
         }
         else
         {
-            // NOT drifting: ease the cached steering direction back toward forward by the per-car drift
-            // damp factor (mpAttribs->mDriftAttribs.mvDriftAngularDamping_MaxDriftAngle_CounterSteerTorqueScaleFactor_DriftPushTime @+0x170 .y) when the body speed exceeds the per-car slip lane
-            // (mpAttribs->mDriftAttribs.mvBrakingDriftScaleFactor_GasDriftScaleFactor_TimeToCapScale_CappedScale @+0x120 .y). The asm builds (1 - 1/speed*...)*dampedDir and subtracts it.
-            const f32 lfSlipThresh = mpAttribs->mDriftAttribs.mvBrakingDriftScaleFactor_GasDriftScaleFactor_TimeToCapScale_CappedScale.y;   // *(attribs+144) .y
-            if (mfSpeedMPH.x > lfSlipThresh && !mbHandBrake)   // && !*(this+4952)
+            // 0x8262E708..0x8262E72C: IncPackedTimeDrifting(-lfTimeStep). The xor with the
+            // sign-bit splat negates the incoming VecFloat, then vrlimi writes only lane .z.
+            mvTimeToReachTargetDriftSlipRecip_StartSlip_TimeDrifting_BrakeScale.z
+                -= lvfTimeStep.x;
+
+            // 0x8262E72C..0x8262E824: above LowSpeedDrivingMPH, remove a progressively larger
+            // component of angular velocity about the body Y axis. The damping reaches the
+            // HighSpeedAngularDamping value at MaxSpeed and is capped there. These are the exact
+            // +0x90.y, +0x70.z and +0xA0.z VehicleBaseAttribs lanes loaded by the assembly.
+            const VehicleAttribs::VehicleBaseAttribs& lrBase = mpAttribs->mBaseAttribs;
+            const f32 lfLowSpeedMPH =
+                lrBase.mvTractionLineLength_LowSpeedDrivingMPH_LowSpeedTyreFrictionTractionControl_LowSpeedThrottleTractionControl.y;
+            if (mfSpeedMPH.x > lfLowSpeedMPH && !mbHandBrake)
             {
-                const f32 lfDamp = mpAttribs->mDriftAttribs.mvDriftAngularDamping_MaxDriftAngle_CounterSteerTorqueScaleFactor_DriftPushTime.y;     // *(attribs+160) .y drift damp
-                // ease the local velocity's lateral component toward the forward direction by lfDamp.
-                mAngularVelocity.x -= mAngularVelocity.x * lfDamp * 0.0f;   // FLAG: damp gain folded with the
-                mAngularVelocity.z -= mAngularVelocity.z * lfDamp * 0.0f;   // (homed) speed-recip; carried inert.
-                (void)lfDamp;
+                const f32 lfMaxSpeedMPH =
+                    lrBase.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.z;
+                const f32 lfHighSpeedAngularDamping =
+                    lrBase.mvLinearDrag_AngularDrag_HighSpeedAngularDamping_FrontWheelMass.z;
+                const f32 lfDampeningFactor = std::min(
+                    (mfSpeedMPH.x - lfLowSpeedMPH) / (lfMaxSpeedMPH - lfLowSpeedMPH),
+                    1.0f);
+                const Vector3& lvUp = mTransform.yAxis;
+                const f32 lfYawRate = vpu::Dot(lvUp, mAngularVelocity);
+                mAngularVelocity = mAngularVelocity
+                    - lvUp * (lfYawRate * lfHighSpeedAngularDamping * lfDampeningFactor);
             }
         }
     }
@@ -6807,7 +6847,8 @@ namespace Vehicle
     // ==============================================================================================
     bool VehiclePhysics::Prepare(Matrix44Affine lTransform, Vector3 lLinearVelocity,
                                  Vector3 lAngularVelocity, Vector3 lHandlingBodyOffset,
-                                 Vector3 lHalfExtent, const AxisAlignedBox& lrAABB,
+                                 Vector3 lHalfExtent,
+                                 const CgsGeometric::AxisAlignedBox& lrAABB,
                                  VehicleAttribs* lpAttribs, const Vector3* lpaWheelPositions,
                                  const f32* lpafWheelRadii)
     {

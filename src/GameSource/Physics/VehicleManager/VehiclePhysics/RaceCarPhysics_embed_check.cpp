@@ -16,11 +16,11 @@ namespace Vehicle
 
 using BrnPhysics::Vehicle::RaceCarPhysics;
 
-bool RaceCarPhysics_embed_check(const RaceCarPhysics& lrCar)
+bool RaceCarPhysics_embed_check(RaceCarPhysics& lrCar)
 {
     const bool lbShowtime = lrCar.IsPlayerVehicleActuallyInShowtime();
     const bool lbNormal   = lrCar.IsCrashingNormally();
-    const Vector3 lHeight = lrCar.GetHeightAboveRoad();
+    const VecFloat lHeight = lrCar.GetHeightAboveRoad(lrCar.GetPosition());
     return lbShowtime && lbNormal && (lHeight.x < 1.0e30f);
 }
 

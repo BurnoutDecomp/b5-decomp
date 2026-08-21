@@ -1416,8 +1416,8 @@ namespace Deformation
         VecFloat lvfStep = lvfTimeStep;
         if ( ((mGlobalEntityId.muValue >> 24) & 0xFFu) == 1u )   // HIBYTE(+26392) == E_ENTITYTYPE_RACECAR
         {
-            const BrnPhysics::Vehicle::RaceCarPhysics* lpRaceCar = AsRaceCarPhysics();
-            if ( lpRaceCar != nullptr && lpRaceCar->IsAISlowMo() )
+            BrnPhysics::Vehicle::RaceCarPhysics* lpRaceCar = AsRaceCarPhysics();
+            if ( lpRaceCar != nullptr && lpRaceCar->IsInAICrashSlowMo() )
             {
                 lvfStep.x *= 0.01f; lvfStep.y *= 0.01f; lvfStep.z *= 0.01f; lvfStep.w *= 0.01f;
             }

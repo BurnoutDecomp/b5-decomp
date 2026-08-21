@@ -424,9 +424,7 @@ namespace Vehicle
             // then `std 0,0x1158`, `std 0,0x1220`, `stb 0,0x1359` -- i.e. drop every queued air-ram
             // and spin slot and clear the deformation-model-is-active latch. All three reached BY
             // NAME (VehiclePhysics.h pins +0x1158 / +0x1220 / +0x1359 to these members).
-            maRaceCarVehicles[luRaceCar].mUsedAirRams.UnSetAll();
-            maRaceCarVehicles[luRaceCar].mUsedSpins.UnSetAll();
-            maRaceCarVehicles[luRaceCar].mbDeformationModelIsActive = false;
+            maRaceCarVehicles[luRaceCar].Release();
 
             mUsedRaceCars.UnSetBit(luRaceCar);   // CgsBitArray.h:241 bounds tripwire
 

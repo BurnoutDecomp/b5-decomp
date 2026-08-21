@@ -376,7 +376,7 @@ namespace Vehicle
                       "SuspensionSpring: 0x30 == the maSprings stride Construct's Prepare loop uses");
         static_assert(sizeof(AboveGroundTestResult) == X360Layout::KU_SVP_ABOVEGROUND_SIZE,
                       "AboveGroundTestResult: 0x30 == the 0x5A0 - 0x570 gap Construct pins");
-        static_assert(sizeof(AxisAlignedBox) == X360Layout::KU_SVP_AABB_SIZE,
+        static_assert(sizeof(CgsGeometric::AxisAlignedBox) == X360Layout::KU_SVP_AABB_SIZE,
                       "AxisAlignedBox: 0x20 == the 32 bytes SetRaceCarCrashing copies 0x6F0 -> 0x6D0");
 
         // The two classes' own members must at least still EXIST under the names the map uses.

@@ -81,7 +81,7 @@ namespace Vehicle
 
         // If the player was the one taken down, reset the aggressor's recovery timer.
         if (mePlayerActiveRaceCarIndex == liVictimActiveRaceCarIndex)
-            maRaceCarVehicles[liAggressorActiveRaceCarIndex].mfTimeSinceTookDownPlayer = 0.0f;
+            maRaceCarVehicles[liAggressorActiveRaceCarIndex].OnTakendownPlayer();
 
         // Record who took the victim down, and flag the aggressor as having scored a takedown this frame.
         mafNoImpactTimeSeconds[liVictimActiveRaceCarIndex]   = mfMinSecondsBetweenImpacts;

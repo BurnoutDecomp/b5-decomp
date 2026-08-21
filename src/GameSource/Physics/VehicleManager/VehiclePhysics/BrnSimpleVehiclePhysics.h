@@ -13,6 +13,7 @@
 #include <cstddef>            // offsetof (the SimpleVehicleAttribs interior gate)
 #include "GameSource/Physics/PhysicsUtilities/ExternalPhysicsBody.h"   // BrnPhysics::ExternalPhysicsBody (base)
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/Wheel.h"    // BrnPhysics::Vehicle::Wheel (full 0xE0 layout)
+#include "GameShared/GameClasses/Geometric/Primitives/CgsAxisAlignedBox.h"
 
 namespace BrnPhysics
 {
@@ -127,7 +128,8 @@ namespace Vehicle
     // bodied (the two graphics-transform funcs + IsContactBelowWheelPlane). The remaining ~50
     // methods listed in the DWARF (Construct/Prepare/SwitchAttribs/SetAttributes/wheel & traction
     // accessors/...) are a separate future TU and are NOT declared here. The embedded sibling
-    // types (Wheel, SweptSphere, SimpleVehicleAttribs, AxisAlignedBox) are their own TUs; the
+    // types (Wheel, SweptSphere, SimpleVehicleAttribs, AxisAlignedBox) are owned by their normal
+    // headers; the
     // ones whose storage precedes the funcs' members are reconstructed minimally so the members
     // this group touches resolve BY NAME. POINTER/SIZE DIVERGENCE: the X360 absolute offsets
     // (mTransform @+16, mSimpleAttribs.mCOMOffset @+1648, mbMinWheelDistValid @+1812,
@@ -140,15 +142,6 @@ namespace Vehicle
     struct SweptSphere
     {
         u8 mData[0x20];   // opaque (flagged): real fields owned by a collision TU
-    };
-
-    // AxisAlignedBox -- the deformable/original collision AABB (min,max). MINIMAL OWNING SLICE
-    // (flagged): full type owned by a geometry TU; carried as min/max Vector3 BY NAME so the two
-    // AABB members lay out in DWARF sequence.
-    struct AxisAlignedBox
-    {
-        Vector3 mMin;
-        Vector3 mMax;
     };
 
     class SimpleVehiclePhysics : public ExternalPhysicsBody
@@ -257,7 +250,8 @@ namespace Vehicle
         //       are DECLARED here (so the class is complete) and their structural skeletons are in the
         //       group's flags -- no fabricated math is committed. -----
         bool Prepare(Matrix44Affine lTransform, Vector3 lLinearVelocity, Vector3 lAngularVelocity,
-                     Vector3 lHandlingBodyOffset, Vector3 lHalfExtent, const AxisAlignedBox& lrAABB,
+                     Vector3 lHandlingBodyOffset, Vector3 lHalfExtent,
+                     const CgsGeometric::AxisAlignedBox& lrAABB,
                      VehicleAttribs* lpAttribs, const Vector3* lpWheelPositions,
                      const f32* lpafWheelRadii);
 
@@ -392,8 +386,8 @@ namespace Vehicle
         Vector3      mHalfExtent;                     // :363  @0x6A0
         Vector3Plus  mWheelPlanePosAndHeight;         // :364  @0x6B0 (pos in xyz, plane height in w)
         VecFloat     mfSpeedMPH;                      // :365  @0x6C0
-        AxisAlignedBox mDeformableAABB;               // :366  @0x6D0
-        AxisAlignedBox mOriginalAABB;                 // :367  @0x6F0
+        CgsGeometric::AxisAlignedBox mDeformableAABB; // :366  @0x6D0
+        CgsGeometric::AxisAlignedBox mOriginalAABB;   // :367  @0x6F0
         bool         mbCrashing;                      // :368  @0x710
         bool         mbStartedFatallyCrashing;        // :369  @0x711
         bool         mbStartedDeforming;              // :370  @0x712

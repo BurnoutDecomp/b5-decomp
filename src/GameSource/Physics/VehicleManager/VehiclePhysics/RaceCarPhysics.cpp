@@ -11,53 +11,6 @@
 // CapShowtimeVelocities, the showtime singleton PlayerParameters, ...). The X360 build is VMX128
 // inline asm; these are the de-SIMD'd named-member equivalents. Showtime state lives in the
 // module-static singleton msPlayerParams (defined below), not per-instance.
-//
-// =============================================================================================
-// ⭐⭐ THIS TU IS MOUNTED (2026-08-11, prepare-chain wave -- build_game_exe.bat:597) AND THE
-// BANNER THAT STOOD HERE ("WHY THIS TU IS STILL UNMOUNTED ... the orchestrator is the hole")
-// IS RETIRED: it misdirected a whole agent brief into re-landing work that had been done since
-// 2026-08-07. The historical LNK2019 measurement below is KEPT because its method (measure the
-// link, never inherit counts) is the lesson -- but every one of its five holes is now closed:
-// VehiclePhysics::Update @0x826412C0 / UpdateSteering @0x825D3720 are real (VehiclePhysics.cpp
-// :5849/:5661, re-verified callee-exact 2026-08-11); the 2-arg AddTractionPoint never existed
-// (hidden-base decl deleted; the real 4-arg pair is RaceCarPhysics.cpp:619 ->
-// BrnSimpleVehiclePhysics.cpp:388); the GetAftertouchValues overload fork is resolved (the
-// 4-arg ref form @0x825B2E88 is the leaf; BrnPlayerDriverControls.cpp is mounted); and
-// gbVehicleBounceBoosting was retired as a data fork of msPlayerParams.mbLaunchActive.
-// -- The ORIGINAL 2026-08-03 measurement, for the method's sake: --
-// MEASURED by actually adding the line to the source list and linking -- not inherited, not
-// reasoned about, because the counts in this campaign have gone 15 -> 13 -> 12 -> 23 -> 14 and
-// were wrong every single time they were inherited. The measurement: 0 compile errors, 0
-// LNK2005, and exactly FIVE LNK2019:
-//
-//   1-3. VehiclePhysics::Update(int, const BrnPlayerDriverControls*, bool, int, int, int,
-//                               Vector3, Vector3)
-//        VehiclePhysics::UpdateSteering(signed char, float)
-//        VehiclePhysics::AddTractionPoint(int, unsigned int)
-//        ⚠️ These are NOT missing because their TU is unmounted -- VehiclePhysics.cpp IS mounted.
-//        They have NO DEFINITION ANYWHERE IN THE TREE. VehiclePhysics.cpp bodies fifteen
-//        Update* sub-steps (UpdateBoost, UpdateDrift, UpdateSuspension, UpdateHandBrake, ...) but
-//        never the top-level VehiclePhysics::Update that orders them. The orchestrator is the hole.
-//
-//   4.   BrnPlayerDriverControls::GetAftertouchValues(float*, float*, float*)  [returns bool]
-//        ⚠️ THIS ONE IS AN OVERLOAD FORK, the defect class that only a LINK can see.
-//        BrnVehicleDriverControls.h declares GetAftertouchValues TWICE on the SAME class:
-//          :112  void GetAftertouchValues(f32&, f32&, f32&, bool) const;   <- BODIED
-//                                                       (BrnPlayerDriverControls.cpp:39)
-//          :131  bool GetAftertouchValues(f32*, f32*, f32*) const;         <- DECLARE-ONLY
-//        and the two comments contradict each other about which one is the standalone X360 leaf
-//        @0x825B2E88. UpdateAftertouch below calls the pointer form, which mangles to a symbol no
-//        TU defines or ever could. Per-TU compile gates cannot see this -- both forms are declared,
-//        so every TU compiles green. Resolve it by deciding from the asm which form the console
-//        leaf actually has, then deleting the other; do not add a body for both.
-//        (BrnPlayerDriverControls.cpp is also unmounted, so even the bodied form is not linked.)
-//
-//   5.   gbVehicleBounceBoosting -- the known un-homed module static, already flagged below.
-//
-// So the mount is gated on ONE missing orchestrator function, ONE overload fork and ONE un-homed
-// global -- none of them a constant. The build file's note is stale and should be replaced when
-// someone next edits it; it is left alone here because this file cannot edit the parent repo.
-// =============================================================================================
 
 namespace BrnPhysics
 {
@@ -109,6 +62,16 @@ namespace Vehicle
         }
     }
 
+    void RaceCarPhysics::Destruct()
+    {
+        VehiclePhysics::Destruct();
+    }
+
+    void RaceCarPhysics::Release()
+    {
+        VehiclePhysics::Release();
+    }
+
     // ---------------------------------------------------------------------------------------
     // Prepare  @0x82639CB8  (41 insns -- verifier-recounted; the "42" included the pad word) -- the create leg's vcall target (console vtable slot
     // +0x30), called once per created race car by VehicleManager::ProcessCreateEvents
@@ -143,7 +106,8 @@ namespace Vehicle
     // ---------------------------------------------------------------------------------------
     bool RaceCarPhysics::Prepare(Matrix44Affine lOnRoadTransform, Vector3 lLinearVelocity,
                                  Vector3 lAngularVelocity, Vector3 lHandlingBodyOffset,
-                                 Vector3 lHalfExtent, const AxisAlignedBox& lrAABB,
+                                 Vector3 lHalfExtent,
+                                 const CgsGeometric::AxisAlignedBox& lrAABB,
                                  rw::physics::Inertia /* dropped on X360 -- see banner */,
                                  VehicleAttribs* lpAttribs, const Vector3* lpaWheelPositions,
                                  const f32* lpafWheelRadii, u8 lu8StrengthStat)
@@ -196,7 +160,7 @@ namespace Vehicle
     //   No caller existed until ValidateRaceCarWorldContact (walls leg 3) -- the wrong-arity body
     //   was latent, never load-bearing (grep witness: zero in-tree callers before this wave).
     // ---------------------------------------------------------------------------------------
-    VecFloat RaceCarPhysics::GetHeightAboveRoad(Vector3 lPoint) const
+    VecFloat RaceCarPhysics::GetHeightAboveRoad(Vector3 lPoint)
     {
         static const f32 KF_SEED_MAX_HEIGHT         = 3.4028234663852886e+38f; // flt_8208F5EC == 0x7F7FFFFF == FLT_MAX (image-read)
         static const f32 KF_ON_GROUND_DOT_THRESHOLD = 0.5f;                    // flt_82001DA0 (image-read)
@@ -529,7 +493,7 @@ namespace Vehicle
             && maWheels[eRearLeftWheel].mbHasTraction
             && maWheels[eRearRightWheel].mbHasTraction;
 
-        if (GetSpeedMPH().x * KF_MPH_TO_MPS >= 1.0f
+        if (GetSpeedMPH().x * KF_MPH_TO_MPS < 1.0f
             && !mbHasAir
             && !lbEveryWheelHasTraction
             && mbContactingWall
@@ -652,18 +616,16 @@ namespace Vehicle
 
     // ---------------------------------------------------------------------------------------
     // RaceCarPhysics::GetNormalCausingCrash  @0x825B3928  (asserts the crash-active latch)
-    //   Copy the stored crash normal (mCrashNormal @ this+0x1440) into the caller's sret buffer and
-    //   return the buffer pointer. The asm asserts the crash-active flag at this+0x710 first
+    //   Return the stored crash normal (mCrashNormal @ this+0x1440) through the compiler's hidden
+    //   result buffer. The asm asserts the crash-active flag at this+0x710 first
     //   (`lbz r11,0x710(r30); cmplwi; bne` -> assert 'mbCrashing'). That +0x710 byte lives in the
     //   base VehiclePhysics (mbIsCrashing) and is read via the base IsCrashing() accessor -- it is
     //   NOT a fresh RaceCarPhysics member (declaring one at +0x710 would collide with the base).
     // ---------------------------------------------------------------------------------------
-    Vector3* RaceCarPhysics::GetNormalCausingCrash(Vector3* lpNormal) const
+    Vector3 RaceCarPhysics::GetNormalCausingCrash()
     {
         CGS_ASSERT(IsCrashing(), "mbCrashing");   // lbz this+0x710 (base mbIsCrashing)
-
-        *lpNormal = mCrashNormal;   // lvx128 this+0x1440 -> stvx128 into *lpNormal
-        return lpNormal;
+        return mCrashNormal;   // lvx128 this+0x1440 -> hidden-sret stvx128
     }
 
     // ---------------------------------------------------------------------------------------
