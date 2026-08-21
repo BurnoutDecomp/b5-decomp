@@ -771,7 +771,101 @@ void RaceCarEntityModule::ResetActiveRaceCar(
     if( lpActiveRaceCar->IsActive() )
     {
         CGS_ASSERT( lpActiveRaceCar->IsAttached(), "IsAttached()" );   // BrnActiveRaceCar.h:1089
-        // [FLAG PC bring-up] the already-ACTIVE re-reset arm -- see the banner.
+
+        // ⭐⭐ [teleport] THE ALREADY-ACTIVE RE-RESET ARM, 2026-08-21 (gateui r9). It used to be
+        // a bare `return` with the banner's "[FLAG PC bring-up] ... UNREACHABLE on this build:
+        // nothing re-requests placement for a car that is already ACTIVE". It IS reached now --
+        // the harness teleport (BrnPlaceOnTrackManager.cpp, the [teleport] block) issues exactly
+        // such a request -- and this arm is the ONLY way a live car's transform can be written.
+        //
+        // WHAT THE CONSOLE DOES HERE (asm 0x822F4990..0x822F4B2C), and what is reproduced:
+        //   0x822F4990  lbz r11, 0x52A(car)   -- mPhysicsState.mbCrashing
+        //   crashing:                                                     ⛔ PARKED, see below
+        //     IsDriveableAfterCrash()        -> resetTransform=0, resetDeformation=0
+        //     else IsDeformationFixedAfterCrash() -> resetTransform=1, resetDeformation=1,
+        //                                            resettingAfterWreck = IsPlayer()
+        //     else                           -> resetTransform=1, resetDeformation=0
+        //   NOT crashing (0x822F4A00):
+        //     resetTransform      = 1        (`li r26, 1` at 0x822F4960, never overwritten)
+        //     resetDeformation    = IsWrecked()   (the cntlzw/extrwi/xori idiom at 0x822F4A04..10)
+        //     resettingAfterWreck = 0        (`mr r22, r25` with r25 == 0)
+        //   0x822F4A14  the deformation-amount pair: when this slot IS the player's and the
+        //               module's one-shot request byte (+99548) is set, resetDeformation is
+        //               forced and the byte cleared; otherwise the reset TYPE comes from +99536
+        //               and the amount from +99544. Defaults (nothing pending) are -1 / 0.0f.
+        //   0x822F4B2C  VehicleInputInterface::ResetRaceCar(...)                 ⭐ REPRODUCED
+        //   0x822F4B30+ the module's reset BitArray bit (+65760) and
+        //               ActiveRaceCar::ResetAfterCrash @0x822BF3A0                ⛔ PARKED
+        //
+        // ⛔ PARK 1 -- the CRASHING classification. ActiveRaceCar::IsDriveableAfterCrash and
+        //    ::IsDeformationFixedAfterCrash have no declaration or body anywhere in this tree;
+        //    guessing either would decide whether a wrecked car's transform is reset at all.
+        //    A crashing car is therefore left alone, LOUDLY.
+        // ⛔ PARK 2 -- the three unnamed module members at +99536/+99544/+99548 (the deformation
+        //    reset type, its amount, and its one-shot flag) are inside maTailPadB1 and unnamed,
+        //    exactly as this function's own banner records. Their NOTHING-PENDING values are the
+        //    console's own initialisers -- type -1 (`li r29, -1` @0x822F4A24) and amount
+        //    flt_82001CC0 == 0.0f (@0x822F4A2C) -- and those are what is passed. That is the
+        //    console's behaviour whenever no deformation reset is queued, which is every frame
+        //    outside a crash.
+        // ⛔ PARK 3 -- the reset BitArray + ResetAfterCrash, unchanged from the banner above.
+        //    Neither is on the transform path: the bit is read by the deformation legs and
+        //    ResetAfterCrash re-seats crash bookkeeping.
+        if( lpActiveRaceCar->IsCrashing() )
+        {
+            static bool sbLoggedCrashingReset = false;
+            if( !sbLoggedCrashingReset && CgsDev::Log::gpDebugPrint != 0 )
+            {
+                sbLoggedCrashingReset = true;
+                *CgsDev::Log::gpDebugPrint
+                    << "[teleport] ResetActiveRaceCar PARK: a CRASHING active car was re-requested;"
+                       " the console's classification needs ActiveRaceCar::IsDriveableAfterCrash /"
+                       " ::IsDeformationFixedAfterCrash, neither of which exists in this tree --"
+                       " the car is left where it is\n";
+            }
+            return;
+        }
+
+        RaceCar* lpGlobalRaceCar = lpActiveRaceCar->GetGlobalRaceCar();
+        if( lpGlobalRaceCar == 0 || mpVehicleList == 0 || lpVehicleInputInterface == 0 )
+        {
+            return;
+        }
+
+        // 0x822F493C/0x822F4950 -- the model index the console hands to ResetRaceCar's r6 slot.
+        // Nothing reads it (see that function's banner); it is passed because the console does.
+        const s32 liResetModelIndex =
+            mpVehicleList->GetVehicleIndex( lpGlobalRaceCar->GetModelId() );
+
+        const bool lbResetTransform      = true;                             // r26
+        const bool lbResetDeformation    = lpActiveRaceCar->IsWrecked();     // r24
+        const bool lbResettingAfterWreck = false;                            // r22
+        const f32  lfHowCloseToTotalled  = 0.0f;                             // f31, flt_82001CC0
+        const BrnPhysics::Deformation::DeformationResetType leDeformationResetType =
+            static_cast<BrnPhysics::Deformation::DeformationResetType>( -1 );   // r29
+
+        // 0x822F4B0C `vspltisw v2, 0` -- the ANGULAR velocity argument is a hard zero; only the
+        // linear velocity this call was handed travels through.
+        const Vector3 lZeroAngularVelocity = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };
+
+        lpVehicleInputInterface->ResetRaceCar(
+            static_cast<u32>( leActiveRaceCarIndex ),
+            lrTransform, lrVelocity, lZeroAngularVelocity,
+            static_cast<u8>( liResetModelIndex ),
+            lbResetTransform, lbResetDeformation,
+            lfHowCloseToTotalled, lbResettingAfterWreck,
+            leDeformationResetType );
+
+        if( CgsDev::Log::gpDebugPrint != 0 )
+        {
+            *CgsDev::Log::gpDebugPrint
+                << "[teleport] ResetActiveRaceCar RE-RESET car "
+                << static_cast<s32>( leActiveRaceCarIndex ) << " -> road ("
+                << lrTransform.wAxis.x << ", " << lrTransform.wAxis.y << ", "
+                << lrTransform.wAxis.z << ") vel (" << lrVelocity.x << ", " << lrVelocity.y
+                << ", " << lrVelocity.z << ") resetDeform="
+                << ( lbResetDeformation ? 1 : 0 ) << "\n";
+        }
         return;
     }
 

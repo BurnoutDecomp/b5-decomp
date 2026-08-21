@@ -86,20 +86,49 @@ namespace Vehicle
 
     // @0x822CC2A0  VehicleInputInterface::ResetRaceCar
     //   Enqueues a reset-vehicle request (transform/velocity/deformation reset after a wreck).
-    //   NOTE: the DWARF signature (:161) carries a u8 + THREE bool params but ResetVehicleEvent has
-    //   only three bool fields (and the asm stores exactly three bytes), so one boolean parameter is
-    //   unused. The three struct bools are filled in declaration order from the leading boolean
-    //   params; the trailing bool is accepted for signature fidelity but not stored.
+    //
+    // ⛔⛔ [teleport] PARAMETER MAPPING CORRECTED 2026-08-21 (gateui r9), AND IT WAS AN
+    //   OFF-BY-ONE. The old body said "the DWARF signature carries a u8 + THREE bool params but
+    //   ResetVehicleEvent has only three bool fields ... the trailing bool is accepted for
+    //   signature fidelity but not stored", and filled the three struct bools from params 5/6/7.
+    //   Read against the asm that is wrong by one slot: it is the LEADING u8 that is unused, not
+    //   the trailing bool. This function had ZERO callers until this wave, which is the only
+    //   reason nothing caught it -- the very first caller would have posted an event whose
+    //   mbResetTransform came from a vehicle-list INDEX and whose mbResettingAfterWreck came from
+    //   the wrong flag.
+    //
+    //   THE ASM, store for store (0x822CC2B0..0x822CC324; var_90 is the 128-byte event base):
+    //       r4  -> var_90      == event +0x00   miRaceCarIndex
+    //       r5  -> the four `lvx128 v*, r5, {0,0x10,0x20,0x30}` rows copied to var_80..var_50
+    //                          == event +0x10   mInitialTransform         (aggregate by ref)
+    //       v1  -> var_40      == event +0x50   mInitialVelocity
+    //       v2  -> var_30      == event +0x60   mAngularVelocity
+    //       r7  -> var_20      == event +0x70   mbResetTransform
+    //       r8  -> var_1F      == event +0x71   mbResetDeformation
+    //       r10 -> var_1E      == event +0x72   mbResettingAfterWreck
+    //       f1  -> var_1C      == event +0x74   mfRoadRageHowCloseToWrecked
+    //       arg_7C(stack)      == event +0x78   meDeformationResetType
+    //   r6 is READ BY NOTHING -- it is the unused parameter. And the register run closes exactly
+    //   on the declaration below once the PPC float rule is applied: r6 = p5 (the u8), r7 = p6,
+    //   r8 = p7, f1 = p8 AND IT SKIPS ITS GPR SLOT r9, r10 = p9, stack = p10. (That skip is this
+    //   project's standing PPC float-ABI hazard; it is what makes p9 land in r10 and hides the
+    //   off-by-one from a naive left-to-right read.)
+    //   The one caller confirms it: RaceCarEntityModule::ResetActiveRaceCar @0x822F4B18 passes
+    //   `clrlwi r6, r21, 24` where r21 is VehicleList::GetVehicleIndex's return -- a MODEL INDEX,
+    //   which is meaningless as "reset the transform" and is exactly the discarded slot.
+    //
+    // ⚠️ The parameter NAMES below are re-ordered to match; the declaration in the header moves
+    //   with them, and no other caller exists to update.
     void VehicleInputInterface::ResetRaceCar(
             u32              luRaceCarIndex,
             Matrix44Affine   lInitialTransform,
             Vector3          lInitialVelocity,
             Vector3          lAngularVelocity,
-            u8               lu8ResetTransform,
-            bool             lbResetDeformation,
-            bool             lbResettingAfterWreck,
-            f32              lfRoadRageHowCloseToWrecked,
+            u8               lu8VehicleListIndexUnused,
             bool             lbResetTransform,
+            bool             lbResetDeformation,
+            f32              lfRoadRageHowCloseToWrecked,
+            bool             lbResettingAfterWreck,
             BrnPhysics::Deformation::DeformationResetType leDeformationResetType)
     {
         ResetVehicleEvent lEvent;
@@ -107,12 +136,12 @@ namespace Vehicle
         lEvent.mInitialTransform           = lInitialTransform;
         lEvent.mInitialVelocity            = lInitialVelocity;
         lEvent.mAngularVelocity            = lAngularVelocity;
-        lEvent.mbResetTransform            = (lu8ResetTransform != 0);
+        lEvent.mbResetTransform            = lbResetTransform;
         lEvent.mbResetDeformation          = lbResetDeformation;
         lEvent.mbResettingAfterWreck       = lbResettingAfterWreck;
         lEvent.mfRoadRageHowCloseToWrecked = lfRoadRageHowCloseToWrecked;
         lEvent.meDeformationResetType      = leDeformationResetType;
-        (void)lbResetTransform;
+        (void)lu8VehicleListIndexUnused;   // r6 -- read by nothing; see the banner
 
         mResetRaceCarEventQueue.AddEvent(lEvent);
     }

@@ -87,6 +87,8 @@
 #include "GameSource/Physics/VehicleManager/BrnVehicleManager.h"
 #include "GameSource/Physics/VehicleManager/BrnPhysicalTrafficManager.h"
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleOutputInterface.h"
+#include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleInputInterface.h"          // [teleport] the reset queue
+#include "GameSource/Physics/DeformationManager/SharedIO/BrnDeformationInputInterface.h"  // [teleport] DeactivateDeformationModelEvent
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/RaceCarPhysics.h"
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/BrnSimpleVehiclePhysics.h"
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarType.h"
@@ -291,6 +293,231 @@ void VehicleManager::WriteOutVehicleStats(VehicleOutputInterface* lpOutputInterf
     mPhysicalTrafficManager.WriteOutVehicleStats(lpOutputInterface);
 
     mbPlayerCarStuckInCollision = false;
+}
+
+// =================================================================================================
+// @0x82617820  VehicleManager::ProcessResetEvents   (526 insns)   [was a BRN_CONDUCTOR_GATE]
+//
+// ⭐⭐ THE ONLY MECHANISM IN THE GAME THAT MOVES AN ALREADY-SIMULATED CAR.  Landed 2026-08-21
+// (gateui r9) because the wave needed a way to PUT THE CAR AT COORDINATES, and this is what the
+// console does -- there is no other writer of a live car's transform outside the integrator.
+// PhysicsModule::Update @0x825B0640 has always called it, every frame, on both the normal and the
+// network-catchup path (BrnPhysicsModuleUpdateFunctions.cpp, "the shared tail"); until now that
+// call reached the inert gate in BrnPhysicsConductorGates.cpp, which is DELETED in the same commit
+// (LNK2005 is the intended tripwire if it returns).
+//
+// THE PRODUCER SIDE, so the whole chain is on one page:
+//     ActiveRaceCar::RequestPlaceOnTrack(pos, dir, speed)          -- the request latch
+//       -> PlaceOnTrackManager::PrePhysicsUpdate                    -- 100 m vertical line test
+//          (on PC: ApplyPendingRequestsWithoutSceneQueryBringUp over the shipped WORLDCOL)
+//       -> PlaceOnTrackManager::PlaceCarOnTrack                     -- BrnMath::BuildTransform
+//       -> RaceCarEntityModule::ResetActiveRaceCar                  -- its IsActive() arm
+//       -> VehicleInputInterface::ResetRaceCar  @0x822CC2A0         -- enqueues ResetVehicleEvent
+//       -> THIS FUNCTION.
+//
+// ⚠️⚠️ IT IS A SLICE, AND THE PARKED LEGS ARE NAMED. What is reproduced is the TRANSFORM/VELOCITY
+// core plus the two posts, read instruction by instruction out of the ARTIST asm:
+//
+//   0x82617BD0  lrEvent = queue->GetEvent(i)                        (sub_825BB948 == GetEvent)
+//   0x82617BE0  v127 = event+0x50 (mInitialVelocity), v126 = event+0x60 (mAngularVelocity)
+//   0x82617BF0  r30 = event+0x70 mbResetTransform, r29 = +0x71 mbResetDeformation,
+//               r24 = +0x72 mbResettingAfterWreck, f29 = +0x74 mfRoadRageHowCloseToWrecked,
+//               r26 = +0x78 meDeformationResetType; the four transform rows +0x10..0x40 are
+//               copied to a stack Matrix44Affine (var_150).
+//   0x82617C5C  if (index == mePlayerActiveRaceCarIndex) `ori r10,r10,0x20` into
+//               mStuntOffencesManager(+0xACD0).muCurrentRaceCarState(+0x28) -- the named setter
+//               SetCurrentRaceCarState(E_CURRENT_CAR_STATE_CAR_HAS_BEEN_RESET). RESTORED (the
+//               original park (P1) mis-read the offset by 0x10000 -- verify_r9_billboard W2).
+//   0x82617C74  lpRaceCar = &maRaceCarVehicles[index]      (mulli 0x1460 ; addi 0x740 -- the same
+//               stride/base WriteOutVehicleStats above uses, reached by name here)
+//   0x82617C84  the inlined VehicleDriver::ClearControls over maRaceCarDrivers[index] (0xE0
+//               stride; the -1 at +0x40/+0x78, the twelve 0.0f, the lone f30 at +0x74, the ten
+//               zero bytes) -- byte for byte the block ProcessRemoveEvents also inlines, which is
+//               why the same out-of-line helper is called here.
+//   0x82617D00  assert mpAttribs->IsValid()  ("Trying to reset a car without valid physics
+//               attributes", BrnVehicleManager.cpp:0x69B == 1691)
+//   0x82617D34  if (mbResetTransform) SetTransformFromPositionOnRoad(lTransform)   ⭐ THE SEAT
+//   0x82617D44  ... then stvx v127 -> car+0x50 (mLinearVelocity) and v126 -> car+0x60
+//               (mAngularVelocity), and mfMass (+0xE0) = splat(mpAttribs+0x70 lane 0)
+//   0x82617D60  if (!mbResetDeformation) the four-wheel "wheel is attached" assert loop
+//               (BrnVehicleManager.cpp:0x6AB == 1707)                  ⛔ PARKED -- see (P2)
+//   0x82617DB0  if (mbResetDeformation) DeactivateDeformationModelEvent::AddEvent
+//               { maRaceCarHandlingBodyIDs[index], mfRoadRageHowCloseToWrecked,
+//                 meDeformationResetType }
+//   0x82617DF0  if (mbResetTransform) VehiclePhysics::Reset(mInitialVelocity)     ⭐ THE RE-SEED
+//               else                  vtable slot 1 (the non-transform reset)      ⛔ PARKED (P3)
+//   0x82617E28  RaceCarResetEvent::AddEvent(managerOut+0x5B0,
+//               { index, mbResettingAfterWreck, <the transform's translation row, v125> })
+//   0x82617E34+ the `index == player` tail: a bit test at +0x1908, SetAllNetworkRaceCarsHidden,
+//               and four gpcMessageBuffer streams                      ⛔ PARKED -- see (P4)
+//
+// (P1) RETIRED (r9 verify): the "un-homed +0x1ACD0 flags word" was a 0x10000 mis-read of
+//      +0xACD0 == mStuntOffencesManager; the leg is the named SetCurrentRaceCarState call,
+//      restored in the body above.
+// (P2) Wheel::IsAttached has no reconstructed body; the assert is debug-only and its absence
+//      cannot change behaviour.
+// (P3) the `!mbResetTransform` arm dispatches vtable slot 1 on RaceCarPhysics, whose occupant is
+//      not settled in this tree's vtable map. Every producer that exists on this build sets
+//      mbResetTransform, so the arm is unreachable here; it LOGS ONCE rather than guessing.
+// (P4) the player tail is the network-car un-hide + four debug streams; the un-hide's own
+//      SetAllNetworkRaceCarsHidden IS bodied, but its guard is the +0x1908 bit of an unnamed
+//      member. Parked for the same reason as (P1), and it is a no-op with no network cars.
+// =================================================================================================
+void VehicleManager::ProcessResetEvents(
+        const VehicleInputInterface* lpInputInterface,
+        BrnPhysics::Vehicle::VehicleOutputRequestInterface* /*lpRequestOutputInterface*/,
+        VehicleManagerOutputInterface* lpManagerOutputInterface,
+        BrnPhysics::Deformation::DeformationInputInterface* lpDeformationInterface)
+{
+    CGS_ASSERT(lpInputInterface != 0, "lpInputInterface != NULL");
+    if (lpInputInterface == 0)
+    {
+        return;
+    }
+
+    // 0x82617870..0x82617AFC -- THE OPENING LEG (restored per verify_r9_billboard W1): before
+    // the queue length is even read, the console walks mUsedRaceCars and UNCONDITIONALLY
+    // clears every live car's VehiclePhysics::mbResetCarTransform (`stb r18(=0), 0x1A9C(r10)`,
+    // r10 = this + i*0x1460 -> maRaceCarVehicles[i]+0x135C). This function is the flag's ONLY
+    // image-wide writer of FALSE (VehiclePhysics::Prepare @0x8263809C writes TRUE); without
+    // this leg the flag latches TRUE from car creation forever and is copied every frame into
+    // RaceCarState::mbResetCarTransform (+0x44E), which AirTimeManager / ScoringSystem /
+    // StuntModeScoring / ChallengeManager / BurnoutSkillzManager all read as "this car was
+    // just reset -- drop the run".
+    for (u32 luCar = 0; luCar < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++luCar)
+    {
+        if (mUsedRaceCars.IsBitSet(luCar))
+            maRaceCarVehicles[luCar].mbResetCarTransform = false;
+    }
+
+    const VehicleInputInterface::ResetRaceCarEventQueue* lpQueue =
+        lpInputInterface->GetResetRaceCarEvents();
+
+    for (s32 liEvent = 0; liEvent < lpQueue->GetLength(); ++liEvent)
+    {
+        const ResetVehicleEvent& lrEvent = lpQueue->GetEvent(liEvent);
+
+        const s32 liRaceCar = static_cast<s32>(lrEvent.miRaceCarIndex);
+
+        // ⚠️ NOT the console's: the console indexes maRaceCarVehicles with the event's word and
+        // would alias on a bad one. On this build that is a stack smash, so the range is checked
+        // and the drain skips (loudly) rather than corrupting the manager.
+        if (liRaceCar < 0 || liRaceCar >= E_ACTIVE_RACE_CAR_INDEX_COUNT
+            || !mUsedRaceCars.IsBitSet(static_cast<u32>(liRaceCar)))
+        {
+            if (CgsDev::Log::gpDebugPrint != 0)
+            {
+                *CgsDev::Log::gpDebugPrint
+                    << "[teleport] ProcessResetEvents: reset for race car " << liRaceCar
+                    << " ignored (out of range or not a live slot)\n";
+            }
+            continue;
+        }
+
+        // 0x82617C5C (restored per verify_r9_billboard W2 -- park (P1) was WRONG: the address
+        // is +0xACD0 == 44240 == the pinned, named VehicleManager::mStuntOffencesManager, and
+        // the `ori 0x20` triple into its +0x28 is exactly the existing named setter, already
+        // called the same way at BrnVehicleManager_ProcessCreateEvents.cpp). Tell the stunt
+        // detector the player car was just reset so in-flight air-time/spin/drift accumulation
+        // is abandoned instead of emitting a stale stunt-complete on landing.
+        if (liRaceCar == static_cast<s32>(mePlayerActiveRaceCarIndex))
+        {
+            mStuntOffencesManager.SetCurrentRaceCarState(E_CURRENT_CAR_STATE_CAR_HAS_BEEN_RESET);
+        }
+
+        RaceCarPhysics* lpRaceCar = &maRaceCarVehicles[liRaceCar];
+
+        // 0x82617C84 -- the inlined VehicleDriver::ClearControls (see the banner).
+        maRaceCarDrivers[liRaceCar].ClearControls();
+
+        // 0x82617D00 -- `lwz r11,0x720(car) ; lbz r11,0x360(r11)` == mpAttribs->IsValid().
+        CGS_ASSERT(lpRaceCar->GetAttribs() != 0 && lpRaceCar->GetAttribs()->IsValid(),
+                   "Trying to reset a car without valid physics attributes");   // :1691
+        if (lpRaceCar->GetAttribs() == 0 || !lpRaceCar->GetAttribs()->IsValid())
+        {
+            continue;
+        }
+
+        if (lrEvent.mbResetTransform)
+        {
+            // ⭐ THE SEAT. The event's transform's translation row is a point ON THE ROAD (the
+            // place-on-track line test put it there); SetTransformFromPositionOnRoad lifts the
+            // handling frame to its at-rest height above that point.
+            lpRaceCar->SetTransformFromPositionOnRoad(lrEvent.mInitialTransform);
+
+            // 0x82617D44/0x82617D4C -- the two velocity registers, straight from the event.
+            lpRaceCar->SetLinearVelocity(lrEvent.mInitialVelocity);
+            lpRaceCar->SetAngularVelocity(lrEvent.mAngularVelocity);
+
+            // 0x82617D50..0x82617D5C -- mfMass (+0xE0) = splat(mpAttribs+0x70 lane 0). NOT
+            // reproduced, and it cannot diverge: UpdateDriving re-splats mfMass from the SAME
+            // attribute lane at the top of every single frame (VehiclePhysics.cpp, the
+            // `mfMass = VecFloat{lfM,...}` line right after mfSpeedMPH), so the console's store
+            // here is overwritten before anything reads it. Stated rather than silently dropped.
+        }
+
+        if (lrEvent.mbResetDeformation)
+        {
+            // 0x82617DDC -- the same three-field event ProcessRemoveEvents posts, with THIS
+            // event's damage amount and reset type instead of the remove drain's 0.0f/-1.
+            Deformation::DeactivateDeformationModelEvent lDeactivate;
+            lDeactivate.mHandlingBodyID        =
+                CgsPhysics::RigidBodyId(maRaceCarHandlingBodyIDs[liRaceCar]);
+            lDeactivate.mfInitialDamageAmount  = lrEvent.mfRoadRageHowCloseToWrecked;
+            lDeactivate.meDeformationResetType = lrEvent.meDeformationResetType;
+            if (lpDeformationInterface != 0)
+            {
+                lpDeformationInterface->GetDeactivateDeformationModelQueue().AddEvent(lDeactivate);
+            }
+        }
+
+        if (lrEvent.mbResetTransform)
+        {
+            // ⭐ THE RE-SEED. Kills every force/impulse, zeroes the drift/boost/slam/shunt banks,
+            // re-seats the wall-contact timers and sets mbResetCarTransform -- the flag the whole
+            // game side reads as "this car was just reset, drop the run".
+            lpRaceCar->Reset(lrEvent.mInitialVelocity);
+        }
+        else
+        {
+            // (P3) -- see the banner. Loud, once, never silent.
+            static bool sbLoggedNonTransformReset = false;
+            if (!sbLoggedNonTransformReset && CgsDev::Log::gpDebugPrint != 0)
+            {
+                sbLoggedNonTransformReset = true;
+                *CgsDev::Log::gpDebugPrint
+                    << "[teleport] ProcessResetEvents PARK: the !mbResetTransform arm dispatches "
+                       "RaceCarPhysics vtable slot 1 (X360 0x82617E00); that slot's occupant is "
+                       "not settled in this tree, so nothing is dispatched\n";
+            }
+        }
+
+        // 0x82617E28 -- the world-side notification.
+        if (lpManagerOutputInterface != 0)
+        {
+            RaceCarResetEvent lResult;
+            lResult.meActiveRaceCarIndex  = static_cast<EActiveRaceCarIndex>(liRaceCar);
+            lResult.mbResettingAfterWreck = lrEvent.mbResettingAfterWreck;
+            lResult.mResetPosition        = lrEvent.mInitialTransform.wAxis;
+            lpManagerOutputInterface->AddRaceCarResetEvent(lResult);
+        }
+
+        if (CgsDev::Log::gpDebugPrint != 0)
+        {
+            const Matrix44Affine& lrSeated = lpRaceCar->GetTransform();
+            *CgsDev::Log::gpDebugPrint
+                << "[teleport] ProcessResetEvents car " << liRaceCar
+                << " road (" << lrEvent.mInitialTransform.wAxis.x << ", "
+                << lrEvent.mInitialTransform.wAxis.y << ", "
+                << lrEvent.mInitialTransform.wAxis.z << ")"
+                << " -> seated (" << lrSeated.wAxis.x << ", " << lrSeated.wAxis.y << ", "
+                << lrSeated.wAxis.z << ")"
+                << " at (" << lrSeated.zAxis.x << ", " << lrSeated.zAxis.y << ", "
+                << lrSeated.zAxis.z << ")"
+                << " resetTransform=" << (lrEvent.mbResetTransform ? 1 : 0)
+                << " resetDeform=" << (lrEvent.mbResetDeformation ? 1 : 0) << "\n";
+        }
+    }
 }
 
 }

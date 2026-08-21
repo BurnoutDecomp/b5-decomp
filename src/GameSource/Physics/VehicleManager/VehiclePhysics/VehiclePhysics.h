@@ -440,6 +440,15 @@ namespace Vehicle
         // (transposed into car space) to score rolls/spins.
         const Vector3& GetAngularVelocity() const { return mAngularVelocity; }
 
+        // ----- [teleport] ADDED 2026-08-21 (gateui r9, the reset-drain wave). The WRITE twin of
+        //       GetAngularVelocity, and the read of the live attribute set, both needed by
+        //       VehicleManager::ProcessResetEvents @0x82617820 -- the console reaches the same two
+        //       places by raw offset there (`stvx128 v126, r31, r23` with r23 == 96 == the +0x60
+        //       register, and `lwz r11, 0x720(r31)` == mpAttribs) because it is inside the class's
+        //       own friend/member scope. Same members, reached BY NAME. -----
+        void SetAngularVelocity(const Vector3& lvAngularVelocity) { mAngularVelocity = lvAngularVelocity; }
+        const VehicleAttribs* GetAttribs() const { return mpAttribs; }
+
         // ----- @0x825FD218: re-seed every wheel's body-point velocity and spin rate from the body's
         //       current motion, then re-seed the engine from their average. Called on the three
         //       car-PLACEMENT paths: Reset (mpAttribs != NULL), TrafficPhysics::PreparePhysical, and

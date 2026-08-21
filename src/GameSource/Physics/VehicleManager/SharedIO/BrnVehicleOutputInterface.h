@@ -313,6 +313,22 @@ namespace Vehicle
             return &mCreateVehicleResultQueue;
         }
 
+        // ⭐ [teleport] ADDED 2026-08-21 (gateui r9, the reset-drain wave). Same shape and the
+        // same derivation as AddCreateVehicleResult above: the console inlines it as a bare
+        // `<managerOut> + 0x5B0` handed to BaseEventQueue<RaceCarResetEvent>::AddEvent at the
+        // tail of VehicleManager::ProcessResetEvents (@0x82617E1C loads the pre-computed
+        // pointer into r3, @0x82617E28 `bl BrnPhysics__Vehicle__RaceCarResetEvent___AddEvent`).
+        // 0x5B0 == 1456 == mRaceCarResetEventQueue's seat below, so this is the same member the
+        // console addresses, reached by name instead of by that offset.
+        // ⚠️ The queue is the WORLD side's notification that a car was re-placed; nothing on this
+        // build drains it yet (RaceCarEntityModule::ProcessResetOnTrackResultQueue is not
+        // reconstructed), so posting into it is inert-but-faithful.
+        s32 AddRaceCarResetEvent(const RaceCarResetEvent& lrEvent)
+        {
+            mRaceCarResetEventQueue.AddEvent(lrEvent);
+            return mRaceCarResetEventQueue.GetLength() - 1;
+        }
+
     private:
         TrafficCrashedEventQueue     mCrashedTrafficEventQueue;     // @0x0000  (DWARF :176)
         TrafficSlammedEventQueue     mSlammedTrafficEventQueue;     // @0x0150  (DWARF :177)

@@ -147,6 +147,11 @@ private:
     void ApplyPendingRequestsWithoutSceneQueryBringUp(
                          RaceCarEntityModuleIO::OutputBuffer_PrePhysics* lpOutput);
 
+    // [teleport] NOT an X360 function -- the harness `BRN_CAR_TELEPORT` trigger. It issues ONE
+    // ActiveRaceCar::RequestPlaceOnTrack and nothing else; every store the move makes is the
+    // console's own. PERMANENT harness capability, not a bring-up shim. See the .cpp banner.
+    void ArmCarTeleportBringUp();
+
     // BrnPlaceOnTrackManager.h:67 (DWARF). Set by Construct.
     RaceCarEntityModule* mpRaceCarEntityModule;
 
