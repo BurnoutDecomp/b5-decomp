@@ -22,10 +22,87 @@
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnRaceCarEntityModule.h"
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnActiveRaceCar.h"
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnRaceCar.h"
+#include "GameSource/GameState/BrnGameActions.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 
 namespace BrnWorld
 {
+
+// ----------------------------------------------------------------------------
+// HandlePrepareForModeAction @0x823092F0 -- common non-Showtime boost spine.
+//
+// The full ARTIST function also rebuilds online grids/opponents, publishes an
+// AI-control event, configures CrashPlay and copies unrelated mode flags. Those
+// branches remain outside this BoostManager pass. The state below is the exact
+// subset that selects/preserves the boost strategy, seeds its mode bar, gates
+// earning until START_PLAYING_MODE, and arms attached cars. Showtime's
+// KU_FLAG_USE_SHOWTIME_VEHICLE_BEHAVIOUR branch is deliberately not implemented.
+// ----------------------------------------------------------------------------
+void RaceCarEntityModule::HandlePrepareForModeAction(
+    const BrnGameState::GameStateModuleIO::PrepareForModeAction* lpPFMAction,
+    RaceCarEntityModuleIO::OutputBuffer_PreScene* lpOutput)
+{
+    CGS_ASSERT(lpPFMAction != 0, "lpPFMAction != NULL");
+    CGS_ASSERT(lpOutput != 0, "lpOutput != NULL");
+
+    const BrnGameState::GameModeParams* lpGameModeParams =
+        lpPFMAction->GetGameModeParams();
+    CGS_ASSERT(lpGameModeParams != 0, "lpGameModeParams != NULL");
+
+    ClearAllActiveRaceCarToPlayerScoringMappings();
+
+    if (mbIsInGameMode)
+    {
+        CGS_ASSERT(mbIsInOnlineGameMode == lpGameModeParams->mbIsOnline,
+                   "mbIsInOnlineGameMode == lpGameModeParams->mbIsOnline");
+    }
+    else
+    {
+        mbIsInOnlineGameMode = lpGameModeParams->mbIsOnline;
+    }
+
+    // ARTIST 0x82309390..0x823093F8: online boost type 1/2/3 maps to
+    // Burnout 2/3/5, then the saved +0x454/+0x458 car stats are re-applied.
+    if (mbIsInOnlineGameMode)
+    {
+        switch (static_cast<s32>(lpGameModeParams->meOnlineBoostStrategy))
+        {
+        case 1:
+            mBoostManager.SetBoostStrategy(BoostManager::E_BOOSTSTRATEGY_BURNOUT2);
+            mBoostManager.ApplyPreviousCarStats();
+            break;
+        case 2:
+            mBoostManager.SetBoostStrategy(BoostManager::E_BOOSTSTRATEGY_BURNOUT3);
+            mBoostManager.ApplyPreviousCarStats();
+            break;
+        case 3:
+            mBoostManager.SetBoostStrategy(BoostManager::E_BOOSTSTRATEGY_BURNOUT5);
+            mBoostManager.ApplyPreviousCarStats();
+            break;
+        default:
+            break;
+        }
+    }
+
+    mbCarSelectAllowedInGameMode =
+        lpGameModeParams->GetFlag(BrnGameState::GameModeParams::KU_FLAG_CAR_SELECT_ALLOWED);
+    meGameModeType = lpGameModeParams->GetGameModeType();
+    mbIsInGameMode = true;
+
+    // ARTIST 0x8230995C..0x8230997C. The manager wrapper supplies the B2 flag
+    // from its selected strategy id.
+    mBoostManager.OnModeStart(meGameModeType);
+
+    if (!lpGameModeParams->GetFlag(
+            BrnGameState::GameModeParams::KU_FLAG_USE_SHOWTIME_VEHICLE_BEHAVIOUR))
+    {
+        // ARTIST 0x823099D8..0x823099F0: non-Showtime modes cannot earn until
+        // game action 34 (START_PLAYING_MODE) reenables it.
+        mBoostManager.SetBoostEarningEnabled(false);
+    }
+
+    SetAllActiveCarsInGameMode(mbCarSelectAllowedInGameMode);
+}
 
 // ----------------------------------------------------------------------------
 // SetAllActiveCarsInGameMode @ 0x822BE0A0.

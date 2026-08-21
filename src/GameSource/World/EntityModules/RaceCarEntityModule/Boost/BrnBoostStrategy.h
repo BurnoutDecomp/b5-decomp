@@ -182,7 +182,7 @@ public:
 
     // -- slot 8 --  pure. Fired by SetWrecking on the false->true edge
     //               (X360: inlined into BoostManager::SetWrecking @0x822B8E40).
-    virtual void OnWrecked(bool lbInstantWreck) = 0;
+    virtual void OnWrecked(bool lbIsInOnlineGameMode) = 0;
 
     // -- slot 9 --  pure.
     virtual void OnSlammed() = 0;
@@ -239,7 +239,7 @@ public:
     // body is inlined into BoostManager::SetWrecking @0x822B8E40 (OnWrecked
     // (slot 8) on the false->true edge, then store mbWrecking). Body belongs
     // to the .cpp TU wave.
-    void SetWrecking(bool lbWrecking, bool lbInstantWreck);
+    void SetWrecking(bool lbWrecking, bool lbIsInOnlineGameMode);
 
     // -- slot 31 -- @0x822A6110: stores mbIsTailgating + meTailgatedCarIndex.
     virtual void SetTailgating(bool lbTailgating, EActiveRaceCarIndex leTailgatedCarIndex);

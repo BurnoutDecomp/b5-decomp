@@ -1137,6 +1137,19 @@ Matrix44Affine ActiveRaceCar::GetTransform() const
 }
 
 // ----------------------------------------------------------------------------
+// GetPosition @ 0x822CCF78. The three asserts and their order are visible in
+// the Breaker body; the final accessor is the inlined RaceCar::GetPosition.
+// ----------------------------------------------------------------------------
+Vector3 ActiveRaceCar::GetPosition() const
+{
+    CGS_ASSERT(IsAttached(), "IsAttached()");
+    CGS_ASSERT(GetGlobalRaceCar() != nullptr, "mpRaceCar != NULL");
+    CGS_ASSERT(IsAttached(), "IsAttached()");
+
+    return GetGlobalRaceCar()->GetPosition();
+}
+
+// ----------------------------------------------------------------------------
 // GetDirection @ 0x822CD038. Forwards to the paired global slot's facing direction.
 // ----------------------------------------------------------------------------
 Vector3 ActiveRaceCar::GetDirection() const

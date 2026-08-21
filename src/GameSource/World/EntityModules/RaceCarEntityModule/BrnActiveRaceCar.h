@@ -234,6 +234,9 @@ public:
     // RaceCar::GetTransform() on the paired global slot.
     Matrix44Affine GetTransform() const;
 
+    // X360 0x822CCF78: forward to RaceCar::GetPosition() on the paired global slot.
+    Vector3 GetPosition() const;
+
     // X360 0x822CD038: forward to RaceCar::GetDirection() on the paired global slot.
     Vector3 GetDirection() const;
 

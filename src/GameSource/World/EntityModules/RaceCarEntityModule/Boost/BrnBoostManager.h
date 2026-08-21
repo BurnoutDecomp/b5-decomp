@@ -1,114 +1,115 @@
 #pragma once
 
-// ============================================================================
-// BrnWorld::BoostManager -- the per-race-car boost state manager.
-//   GameSource/World/EntityModules/RaceCarEntityModule/Boost/BrnBoostManager.{h,cpp}
+// BrnWorld::BoostManager
 //
-// Reconstructed from BURNOUT_X360_ARTIST.XEX. Three functions are ledgered:
-//   Prepare                @ 0x822B8D08
-//   SetBoostEarningEnabled @ 0x822A33B0
-//   SetWrecking            @ 0x822B8E40
-//
-// KEYSTONE (layout + vtable-ordinal dispatch). No DWARF/leak home exists for
-// BoostManager. The X360 bodies access the manager and its owning race-car entity
-// purely through fixed byte offsets and VIRTUAL-TABLE ORDINALS:
-//   * the manager stores its flags at +0x00 (boost-earning enabled) and dispatches
-//     work to the owning entity held at +0x450;
-//   * Prepare additionally constructs sub-managers at +0x10 / +0x160 / +0x2A0,
-//     writes float/int state at +0x454/+0x458/+0x45C, sets a state byte at +0x04,
-//     and emits two CgsDev debug-log lines;
-//   * SetBoostEarningEnabled calls the entity's virtual slot +0xA8;
-//   * SetWrecking reads/writes a wrecking flag at entity+0xBD and calls the entity's
-//     virtual slot +0x20.
-//
-// Those vtable ordinals (+0x20, +0xA8) map to specific RaceCarEntityModule virtual
-// methods whose SOURCE NAMES are not recoverable from these call sites, and the
-// manager's preceding ~0x450 bytes of sub-manager state are likewise unattested.
-// Reconstructing the dispatches would require fabricating either raw-offset casts
-// (forbidden) or invented method names; per the project rules the bodies are left as
-// honest, documented stubs that DO reproduce the recoverable observable stores (the
-// boost-earning flag) without inventing the entity notifications. FLAG: this whole TU
-// is a layout/vtable keystone -- fold it into the real RaceCarEntityModule boost home
-// when that layout and the entity vtable map are recovered.
-// ============================================================================
+// Declaration shape is from the DecFIGS DWARF BrnBoostManager.h. The three
+// strategies are embedded by value; Breaker SetBoostStrategy @0x822A3288 and
+// Prepare @0x822B8D08 independently pin their console offsets as +0x10,
+// +0x160 and +0x2A0 and the selected-strategy pointer as +0x450.
+
+#include <cstddef>
 
 #include "types.hpp"
+#include "GameSource/World/EntityModules/RaceCarEntityModule/Boost/BrnBoostBurnout2.h"
+#include "GameSource/World/EntityModules/RaceCarEntityModule/Boost/BrnBoostBurnout3.h"
+#include "GameSource/World/EntityModules/RaceCarEntityModule/Boost/BrnBoostBurnout5.h"
 
 namespace BrnWorld
 {
 
-// Owning race-car entity, forward-declared. Its vtable layout (slots +0x20, +0xA8)
-// and its wrecking flag (entity+0xBD) are not modelled by name here (see FLAG).
-class RaceCarEntityModule;
-
-// ⭐ NAMED 2026-08-11 (player-input wave). The "owning entity held at +0x450" the banner above
-// describes IS a BrnWorld::BoostStrategy -- BrnBoostStrategy.h's own vtable table already records
-// the identification from the other end ("slot 42 (+0xA8) SetBoostEarningEnabled <-
-// BoostManager::SetBoostEarningEnabled @0x822A33B0", "slot 6 (+0x18) OnNearMiss <-
-// BoostManager::OnNearMiss site", "slot 8 (+0x20) OnWrecked <- BoostManager::SetWrecking"), i.e.
-// all three of this manager's vtable ordinals are BoostStrategy slots. Pointer-only use here, so
-// a forward declaration is the documented exception; consumers include BrnBoostStrategy.h.
-class BoostStrategy;
-
 class BoostManager
 {
 public:
-    // SetBoostEarningEnabled @ 0x822A33B0 -- notify the owning entity (virtual slot
-    // +0xA8) then store the enabled flag. Only the flag store is reconstructed; the
-    // entity notification is a documented keystone stub (see .cpp).
-    void SetBoostEarningEnabled(bool lbEnabled);
+    enum BoostStrategyId
+    {
+        E_BOOSTSTRATEGY_BURNOUT1 = 1,
+        E_BOOSTSTRATEGY_BURNOUT2 = 2,
+        E_BOOSTSTRATEGY_BURNOUT3 = 3,
+        E_BOOSTSTRATEGY_BURNOUT4 = 4,
+        E_BOOSTSTRATEGY_BURNOUT5 = 5
+    };
 
-    // SetWrecking @ 0x822B8E40 -- when turning wrecking on for an entity that is not
-    // already wrecking, call the entity's wreck handler (virtual slot +0x20); always
-    // store the wrecking flag into the entity. Keystone (see .cpp): the flag lives in
-    // the entity at +0xBD and the handler is a vtable ordinal, neither modelled here.
-    void SetWrecking(bool lbWrecking, s32 liParam);
+    bool Prepare();                                      // 0x822B8D08
+    void SetBoostStrategy(BoostStrategyId leStrategy);   // 0x822A3288
+    void OnModeStart(BrnGameState::GameStateModuleIO::EGameModeType leGameModeType);
+    void ApplyCarStats(s32 liCurrentCarBoostLevel, s32 liCurrentPlayerBoostLevel);
+    void ApplyPreviousCarStats();
 
-    // Prepare @ 0x822B8D08 -- (re)initialise the boost manager and its sub-managers
-    // for a fresh entity. Keystone (see .cpp): constructs sub-managers at unattested
-    // offsets and dispatches through entity vtable ordinals.
-    bool Prepare();
+    BoostStrategyId GetBoostStrategyId() const { return meBoostStrategy; }
+    BoostStrategy* GetBoostStrategy() const { return mpBoostStrategy; }
 
-    // OnNearMiss -- notify the owning boost strategy of a near miss. The X360 inlines this
-    // at NearMissManager::NearMissEvent into a dispatch through the pointer at +0x450, i.e.
-    // `mpBoostStrategy->` vtable slot +0x18 == BoostStrategy::OnNearMiss (BrnBoostStrategy.h's
-    // own slot table records the identification from the other end). ⚠ CORRECTED 2026-08-11:
-    // this comment used to call +0x450 "the owning race-car entity" and slot +0x18 an entity
-    // vtable slot. It is not an entity pointer -- three attested call sites pin +0x450 as
-    // `BoostStrategy* mpBoostStrategy` (see GetBoostStrategy below), and all three of this
-    // manager's vtable ordinals (+0x18, +0x20, +0xA8) are BoostStrategy slots.
-    // Its source name is recovered from the Feb-2007 partial (BrnNearMissManager.cpp).
-    // Declared here additively; its body is part of the deferred BoostManager keystone and
-    // is not modelled in this build.
-    void OnNearMiss();
+    void UpdateChainExploits(Vector3 lCurrentPosition)
+    {
+        mpBoostStrategy->UpdateChainExploits(lCurrentPosition);
+    }
 
-    // ⭐ ADDED 2026-08-11 (player-input wave). RaceCarEntityModule::ProcessPlayerVehicleInput
-    // @0x822FFE30 reads the boost button for the player's driver record as
-    //     lwzx r3, r28, 0x17CE0 ; lwz r11, 0(r3) ; lwz r11, 0x4C(r11) ; mtctr ; bctrl
-    // and 0x17CE0 (97504) == mBoostManager (module+96400, the receiver
-    // `BoostManager::SetBoostEarningEnabled` is called with a few lines later) + 0x450, i.e. it
-    // is exactly this pointer. Vtable slot 0x4C/4 == 19 == BoostStrategy::IsBoosting() const
-    // (BrnBoostStrategy.h, @0x822A5E58). UpdateOutputBoostInfo and HandlePrepareForModeAction
-    // reach the same pointer the same way (`BoostStrategy::OnModeStart(*(a1 + 97504), ...)`),
-    // which is the independent corroboration that +0x450 holds a BoostStrategy*.
-    //
-    // ⚠️ NO WRITER ON THIS BUILD: BoostManager::Prepare is the console's only site that seeds it
-    // and it is a documented keystone stub, so this stays NULL. Consumers must null-check and
-    // say so; DELETE-WHEN Prepare lands.
-    BoostStrategy*       GetBoostStrategy()       { return mpBoostStrategy; }
-    const BoostStrategy* GetBoostStrategy() const { return mpBoostStrategy; }
+    void Update(RaceCarEntityModuleIO::GameEventQueue* lpEventQueue,
+                f32 lfTimeStep, f32 lfBoostModifier)
+    {
+        mpBoostStrategy->Update(lpEventQueue, lfTimeStep, lfBoostModifier);
+    }
+
+    void SetBoostEarningEnabled(bool lbEnabled);            // 0x822A33B0
+    void SetWrecking(bool lbWrecking, bool lbIsInOnlineGameMode);  // 0x822B8E40
+
+    void SetCrashing(bool lbCrashing) { mpBoostStrategy->SetCrashing(lbCrashing); }
+    void SetForceBoost(bool lbForceBoost) { mpBoostStrategy->SetForceBoost(lbForceBoost); }
+    void SetInfiniteBoost(bool lbInfiniteBoost) { mpBoostStrategy->SetInfiniteBoost(lbInfiniteBoost); }
+    void SetSpeed(f32 lfSpeed) { mpBoostStrategy->SetSpeed(lfSpeed); }
+    void SetBoostRequested(bool lbRequested) { mpBoostStrategy->SetBoostRequested(lbRequested); }
+    void SetTailgating(bool lbTailgating, EActiveRaceCarIndex leCar)
+    {
+        mpBoostStrategy->SetTailgating(lbTailgating, leCar);
+    }
+    // DecFIGS manager signature is the raw air time.  KF_MIN_AIR_TIME_FOR_BOOST
+    // is 0.5f (big-endian 0x3F000000); the manager reduces it to the strategy's
+    // boolean state exactly as the Breaker inline witness does.
+    void SetInAir(f32 lfAirTime) { mpBoostStrategy->SetInAir(lfAirTime > 0.5f); }
+    void SetDrifting(bool lbDrifting) { mpBoostStrategy->SetDrifting(lbDrifting); }
+    void SetSpinAngle(f32 lfAngle) { mpBoostStrategy->SetSpinAngle(lfAngle); }
+    void SetOncomingState(OncomingState leState) { mpBoostStrategy->SetOncomingState(leState); }
+    void TurnOffBoosting() { mpBoostStrategy->TurnOffBoosting(); }
+    void UpdateStuntBoost(
+        const BrnGameState::GameStateModuleIO::CompletedStuntAction* lpCompletedStuntAction)
+    {
+        mpBoostStrategy->UpdateStuntBoost(lpCompletedStuntAction);
+    }
+
+    bool IsBoosting() const { return mpBoostStrategy->IsBoosting(); }
+    f32 GetBoostAmount() const { return mpBoostStrategy->GetBoostAmount(); }
+    f32 GetMaxBoost() const { return mpBoostStrategy->GetMaxBoost(); }
+
+    f32 GetJustBounceBoostedTimer() const { return mfJustBounceBoostedTimer; }
+    void UpdateJustBounceBoostedTimer(f32 lfTimeStep)
+    {
+        if (mfJustBounceBoostedTimer > 0.0f)
+            mfJustBounceBoostedTimer -= lfTimeStep;
+    }
 
 private:
-    // +0x00: boost-earning-enabled flag (SetBoostEarningEnabled stores here). Modelled
-    // BY NAME; the remaining ~0x450 bytes of manager/sub-manager state up to the entity
-    // pointer are a DEFERRED keystone and are NOT modelled.
-    bool mbBoostEarningEnabled;
+    bool            mbBoostEarningEnabled;       // X360 +0x000
+    BoostStrategyId meBoostStrategy;             // X360 +0x004
+    BoostBurnout2   mBoostBurnout2;              // X360 +0x010
+    BoostBurnout3   mBoostBurnout3;              // X360 +0x160
+    BoostBurnout5   mBoostBurnout5;              // X360 +0x2A0
+    BoostStrategy*  mpBoostStrategy;             // X360 +0x450
+    s32             miCurrentCarBoostLevel;      // X360 +0x454
+    s32             miCurrentPlayerBoostLevel;   // X360 +0x458
+    f32             mfJustBounceBoostedTimer;    // X360 +0x45C
 
-    // +0x450 (console): the owning boost strategy this manager dispatches every vtable ordinal
-    // through. Named this wave (see GetBoostStrategy above). The ~0x450 bytes of sub-manager
-    // state in front of it are still the deferred keystone, so the x64 offset is NOT the console
-    // offset -- parity here is by name, as everywhere else in this tree.
-    BoostStrategy* mpBoostStrategy = nullptr;
+    static void _AssertConsoleInvariantPrefix()
+    {
+        static_assert(offsetof(BoostManager, meBoostStrategy) == 0x4,
+                      "Breaker SetBoostStrategy stores the id at +0x4");
+        static_assert(offsetof(BoostManager, mBoostBurnout2) == 0x10,
+                      "Breaker manager B2 embed is +0x10");
+        static_assert(offsetof(BoostManager, mBoostBurnout3) == 0x160,
+                      "Breaker manager B3 embed is +0x160");
+        static_assert(offsetof(BoostManager, mBoostBurnout5) == 0x2A0,
+                      "Breaker manager B5 embed is +0x2A0");
+        static_assert(offsetof(BoostManager, mpBoostStrategy) == 0x450,
+                      "Breaker selected strategy pointer is +0x450");
+    }
 };
 
 } // namespace BrnWorld

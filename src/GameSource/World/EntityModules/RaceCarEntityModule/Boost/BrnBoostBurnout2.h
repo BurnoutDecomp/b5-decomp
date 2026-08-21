@@ -55,10 +55,10 @@
 //   OnShortcut, OnSlammed) are PURE in the base, so C++ forces this class to
 //   override them or it could not be embedded by value at manager+0x10 -- which
 //   PROVES the linker folds identical bodies away in exactly these gaps. The
-//   other two are declared on the same evidence and the same precedent the
-//   committed base header sets for its own symbol-less virtuals
-//   (BrnBoostStrategy.h slots 13/14/16/17). Their bodies are NOT recovered and
-//   belong to a later wave; they are declared, not defined, here.
+//   ARTIST's concrete vtable at 0x820CEC30 resolves the folds: slots 4/9/11
+//   target the shared empty body 0x8284CB38, slot 13 targets 0x822D5330, and
+//   slot 26 targets the base IsBoostFull body 0x822A5EE0. Their source-level
+//   identities are restored in BoostFoldedVirtualBodies.cpp.
 // ============================================================================
 
 #include <cstddef>   // offsetof (layout asserts)
@@ -123,7 +123,7 @@ public:
     virtual void OnNearMiss(BrnWorld::ENearMissType leNearMissType);
 
     // -- base slot 8 -- @0x822C15D8 (pure in the base).
-    virtual void OnWrecked(bool lbInstantWreck);
+    virtual void OnWrecked(bool lbIsInOnlineGameMode);
 
     // -- base slot 10 -- @0x822A6210 (pure in the base).
     virtual void OnStuntCompletion(BrnGameState::StuntElementType leElementType);
@@ -132,36 +132,32 @@ public:
     virtual void OnCrash();
 
     // -- base slot 9 -- PURE in the base, so this override must exist for the
-    // class to be concrete; no standalone X360 symbol (ICF-folded -- DWARF
-    // cpp:617 falls in the zero-byte gap between OnPropHit @0x822A63A8 and
-    // GetName @0x822A63E0). Body not recovered.
+    // class to be concrete; ARTIST vtable slot 9 targets the shared empty body
+    // @0x8284CB38.
     virtual void OnSlammed();
 
     // -- base slot 16 -- @0x822A63A8 (NON-pure in the base; NON-const).
     virtual void OnPropHit();
 
     // -- base slot 4 -- PURE in the base; no standalone X360 symbol
-    // (ICF-folded -- DWARF cpp:396 falls in the zero-byte gap between
-    // OnStuntCompletion @0x822A6210 and OnTakedown @0x822A6288). Body not
-    // recovered.
+    // (ICF-folded); ARTIST vtable slot 4 targets the shared empty body
+    // @0x8284CB38.
     virtual void OnTakenDownByAIOrPlayer();
 
     // -- base slot 5 -- @0x822A6E68 (pure in the base).
     virtual void OnPlayerAttacksRival(BrnPhysics::Vehicle::EImpactType leImpactType);
 
     // -- base slot 11 -- PURE in the base; no standalone X360 symbol
-    // (ICF-folded -- DWARF cpp:555 falls in the zero-byte gap between
-    // OnNearMiss @0x822A62C0 and OnTrafficCheck @0x822A6358). Body not
-    // recovered. (0x822A6E50 is BoostBurnout5::OnShortcut, a DIFFERENT class --
-    // do not attribute it here.)
+    // (ICF-folded); ARTIST vtable slot 11 targets the shared empty body
+    // @0x8284CB38.
     virtual void OnShortcut();
 
     // -- base slot 12 -- @0x822A6358 (pure in the base).
     virtual void OnTrafficCheck();
 
     // -- base slot 13 -- NON-pure in the base. DWARF cpp:681; no standalone
-    // X360 symbol (ICF-folded; B3's twin is @0x822A6AA0 and B5's @0x822D5330,
-    // but neither address may be attributed to B2). Body not recovered.
+    // X360 symbol because ARTIST vtable slot 13 targets the byte-identical B5
+    // body @0x822D5330.
     virtual void OnStartCrashPlay();
 
     // -- base slot 14 -- @0x822D5350 (NON-pure in the base).
@@ -190,9 +186,7 @@ public:
 
     // -- base slot 26 -- NON-pure in the base (@0x822A5EE0, CONST). DWARF
     // cpp:757 declares a B2-specific override (neither B3 nor B5 declares one);
-    // no standalone X360 symbol -- ICF-folded, cpp:757 falls in the zero-byte
-    // gap between AreWeAllowedToBoost @0x822A6408 and UpdateStuntBoost
-    // @0x822A6478. Body not recovered.
+    // ARTIST vtable slot 26 targets the base body @0x822A5EE0.
     virtual bool IsBoostFull() const;
 
 private:

@@ -210,6 +210,9 @@ void RaceCarEntityModule::Construct()
     }
 
     mbIsInGameMode            = false;
+    mbIsInOnlineGameMode      = false;
+    mbOnlineModeJustFinished  = false;
+    mbCarSelectAllowedInGameMode = false;
     mbInCarSelectScreen       = false;
     mbCarSelectDontStreamAudio = false;
 
@@ -449,6 +452,9 @@ bool RaceCarEntityModule::Prepare( RaceCarEntityModuleIO::OutputBuffer_Prepare* 
         // at slot 0 last wave. Without it the manager's mpRaceCarEntityModule is whatever the
         // module memory held and PrePhysicsUpdate dereferences it. DELETE when Construct lands.
         mPlaceOnTrackManager.Construct( this );
+        // Breaker RaceCarEntityModule::Prepare @0x82303FB0..0x82303FB8. This
+        // establishes the selected B5 strategy before the first physics frame.
+        mBoostManager.Prepare();
         mePrepareStage = 0;
     // fall through
     case 1:
@@ -2110,18 +2116,17 @@ void RaceCarEntityModule::HandleResetPlayerCarAction(
 // 0x8230C098). Nearly every case reaches an un-reconstructed handler or the un-homed
 // RaceCar/ActiveRaceCar/manager interiors.
 //
-// REPRODUCED: the queue walk, case 0 (ResetPlayerCarAction) and case 79
-// (CarSelectChangeColourAction -> ChangePlayerCarColour). Neither is an arbitrary choice --
-// they are the two actions on this build that have a live producer (CarSelectManager) AND a
-// fully reachable consumer, and together they are the whole "spawn the player's car, then
-// paint it its authored colour" pair.
+// REPRODUCED: the queue walk, cases 0 and 79 for the player-car spawn/paint pair, plus the
+// boost actions 15, 34, 70, 71 and 198. Those latter cases are the retail state seam
+// that enables earning once play starts, applies an explicit earning gate, and cancels a
+// boost in progress; dropping them leaves a prepared strategy permanently unable to earn.
 //
 // [FLAG PC bring-up] every other case is DROPPED, not paraphrased. The named handlers the
 // console dispatches to and that are still un-reconstructed:
 //   3   RaceCar::RequestResetOnTrack        4   HandleSetPlayerOpponentsAction
 //   5   HandleSetupNetworkCarAction         7   the player-control-changed AI publish
 //   11  HandleRemotePlayerDisconnected      23  HandlePrepareForModeAction
-//   34  the payback arm                     39  HandleStopModeAction
+//   39  HandleStopModeAction
 //   73/74/76/77     the car-select / drive-thru arms
 //   126 SwitchCarColourAction (an AI car's colour; asserts :7393/:7397/:7398)
 //   219 the network setup-car arm, which also writes the colour pair (:7212/:7215)
@@ -2129,6 +2134,33 @@ void RaceCarEntityModule::HandleResetPlayerCarAction(
 // Because the walk itself is real, adding any one of them later is a case label, not a
 // re-derivation. DELETE-WHEN the handlers land.
 // ============================================================================
+void RaceCarEntityModule::HandleCarStatsUpdate(BrnResource::ECarType leCarType,
+                                                s32 liBoostLevel,
+                                                s32 liBoostLossLevel)
+{
+    // ARTIST @0x822A4720..0x822A4770: unsigned 0/1/2 selection, then the
+    // manager prefix at this+0x17890.
+    switch (leCarType)
+    {
+    case BrnResource::E_CARTYPE_DANGER:
+        mBoostManager.SetBoostStrategy(BoostManager::E_BOOSTSTRATEGY_BURNOUT2);
+        break;
+    case BrnResource::E_CARTYPE_AGGRESSION:
+        mBoostManager.SetBoostStrategy(BoostManager::E_BOOSTSTRATEGY_BURNOUT3);
+        break;
+    case BrnResource::E_CARTYPE_STUNTS:
+        mBoostManager.SetBoostStrategy(BoostManager::E_BOOSTSTRATEGY_BURNOUT5);
+        break;
+    default:
+        CGS_ASSERT(false, "Unknown car type");
+        break;
+    }
+
+    // ARTIST @0x822A4774..0x822A4798 stores +0x454/+0x458 and dispatches
+    // virtual slot 43 on the selected strategy.
+    mBoostManager.ApplyCarStats(liBoostLevel, liBoostLossLevel);
+}
+
 void RaceCarEntityModule::HandleGameActions(
         RaceCarEntityModuleIO::InputBuffer_PreScene* lpInput,
         RaceCarEntityModuleIO::OutputBuffer_PreScene* lpOutput )
@@ -2160,6 +2192,55 @@ void RaceCarEntityModule::HandleGameActions(
                 lpOutput );
             break;
 
+        // ARTIST 0x8230C418..0x8230C450: payload assertion followed by the
+        // selected strategy's vtable slot 48.
+        case BrnGameState::GameStateModuleIO::E_ACTION_COMPLETED_STUNT: // 15
+        {
+            const BrnGameState::GameStateModuleIO::CompletedStuntAction* lpCompletedStunt =
+                reinterpret_cast<
+                    const BrnGameState::GameStateModuleIO::CompletedStuntAction*>(lpEvent);
+            CGS_ASSERT(lpCompletedStunt != 0, "lpCompletedStuntAction != NULL");
+            mBoostManager.UpdateStuntBoost(lpCompletedStunt);
+            break;
+        }
+
+        // ARTIST 0x8230C75C..0x8230C76C forwards this/action/output with no
+        // reshaping. The handler's non-Showtime boost spine is reconstructed
+        // in BrnRaceCarEntityModule_ModeArming.cpp.
+        case BrnGameState::GameStateModuleIO::E_ACTION_PREPARE_FOR_MODE: // 23
+            HandlePrepareForModeAction(
+                reinterpret_cast<
+                    const BrnGameState::GameStateModuleIO::PrepareForModeAction*>(lpEvent),
+                lpOutput);
+            break;
+
+        // ARTIST 0x8230C7A0..0x8230C7E0.  The trailing non-boost stores and
+        // optional donut-start placement live at 0x8230C7E4..0x8230C880 and
+        // remain with the wider mode-action reconstruction.
+        case BrnGameState::GameStateModuleIO::E_ACTION_START_PLAYING_MODE: // 34
+            CGS_ASSERT(mbIsInGameMode, "mbIsInGameMode");
+            SetAllCarsOnStartLine(ActiveRaceCar::E_RACE_START_STATE_RACING, true);
+            mBoostManager.SetBoostEarningEnabled(true);
+            break;
+
+        // ARTIST 0x8230C3D8..0x8230C408.  DecFIGS gives the exact one-bool
+        // AllowBoostEarningAction declaration used here.
+        case BrnGameState::GameStateModuleIO::E_ACTION_ALLOW_BOOST_EARNING: // 70
+        {
+            const BrnGameState::GameStateModuleIO::AllowBoostEarningAction* lpAllow =
+                reinterpret_cast<
+                    const BrnGameState::GameStateModuleIO::AllowBoostEarningAction*>(lpEvent);
+            CGS_ASSERT(lpAllow != 0, "lpAllowBoostEarningAction != NULL");
+            mBoostManager.SetBoostEarningEnabled(lpAllow->mbAllowBoostEarning);
+            break;
+        }
+
+        // ARTIST 0x8230C40C..0x8230C414 is the selected strategy's +0xC5
+        // mbBoosting byte store.  TurnOffBoosting is that exact named base body.
+        case BrnGameState::GameStateModuleIO::E_ACTION_STOP_BOOSTING: // 71
+            mBoostManager.TurnOffBoosting();
+            break;
+
         // X360 `case 79`: ChangePlayerCarColour(payload[0], payload[4]). The payload is
         // CarSelectChangeColourAction -- PALETTE first (see the record's banner in
         // BrnGameActions.h). This is the action that carries the car's AUTHORED default
@@ -2172,6 +2253,19 @@ void RaceCarEntityModule::HandleGameActions(
                     const BrnGameState::GameStateModuleIO::CarSelectChangeColourAction*>(
                         lpEvent );
             ChangePlayerCarColour( lpColour->muPaletteIndex, lpColour->muColourIndex );
+            break;
+        }
+
+        // ARTIST case 198 reads +0x14/+0x0C/+0x08 in that order and calls
+        // HandleCarStatsUpdate @0x822A4700.
+        case BrnGameState::GameStateModuleIO::E_ACTION_UPDATE_CAR_STATS: // 198
+        {
+            const BrnGameState::GameStateModuleIO::SendCarStatsAction* lpStats =
+                reinterpret_cast<
+                    const BrnGameState::GameStateModuleIO::SendCarStatsAction*>(lpEvent);
+            CGS_ASSERT(lpStats != 0, "lpSendCarStatsAction != NULL");
+            HandleCarStatsUpdate(
+                lpStats->meCarType, lpStats->miCarBoost, lpStats->miCarControl);
             break;
         }
 
@@ -3863,6 +3957,17 @@ void RaceCarEntityModule::PrePhysicsUpdate(
                           mPlayerVehicleControls.mfAcceleration,
                           mPlayerVehicleControls.mfBraking );
 
+        // Breaker @0x823072FC..0x82307318: tailgate state is updated first,
+        // then the writable game-event queue is passed to UpdateBoost. The PC
+        // bring-up path can tick before a player is attached; use the same
+        // temporary precondition gate as ProcessPlayerVehicleInput below.
+        if( static_cast<u32>( mePlayerActiveRaceCarIndex ) < E_ACTIVE_RACE_CAR_INDEX_COUNT
+            && GetActiveRaceCar( mePlayerActiveRaceCarIndex )->IsAttached() )
+        {
+            UpdateTailgateTimer( mfTimeStep );
+            UpdateBoost( mfTimeStep, lpInput, lpOutput->GetGameEventQueue() );
+        }
+
         ProcessPlayerVehicleInput( mfTimeStep, lpInput, lpOutput );
     }
 
@@ -3919,6 +4024,112 @@ void RaceCarEntityModule::UpdateActiveCars( f32 lfTimeStep, f32 lfAcceleration, 
 }
 
 // ============================================================================
+// UpdateBoost @ 0x82304690 -- regular gameplay branch.
+//
+// The signature is taken from the PPC call at 0x82307300..0x82307318, not the
+// decompiler: r3=this, f1=lfTimeStep, r5=lpInput and r6=lpEventQueue. All
+// speed/time inputs below are scalar `lfs` values. Only the in-air rotations
+// are a genuine Vector3 load; fsubs/fsel then chooses max(abs(y), abs(z)).
+//
+// Two regular-branch side effects remain outside this bounded boost closure:
+// the post-takedown AI RenderDamaged latch needs the unhomed damaged-car count,
+// and OnSlammed needs the still-opaque aggressive-driving flags at +0x1836C.
+// ============================================================================
+void RaceCarEntityModule::UpdateBoost(
+        f32 lfTimeStep,
+        const RaceCarEntityModuleIO::InputBuffer_PrePhysics* lpInput,
+        RaceCarEntityModuleIO::GameEventQueue* lpEventQueue )
+{
+    const f32 KF_MPH_TO_MPS                 = 0.447039992f; // bits 0x3EE4E26D
+    const f32 KF_MIN_SPEED_FOR_BOOST_MPH    = 25.0f;
+    const f32 KF_MIN_IN_AIR_SPEED_MPH       = 2.0f;
+    const f32 KF_MIN_TAILGATE_DURATION      = 1.0f;
+    const f32 KF_DEFAULT_BOOST_MODIFIER     = 1.0f;
+    const f32 KF_FIRST_PLACE_BOOST_MODIFIER = 0.5f;
+
+    f32 lfBoostModifier = KF_DEFAULT_BOOST_MODIFIER;
+    const BrnGameState::GameStateModuleIO::ScoringOutputInterface* lpScoringInterface =
+            lpInput->GetScoringInterface();
+
+    CGS_ASSERT( mePlayerActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
+                "mePlayerActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0" );
+    CGS_ASSERT( mePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                "mePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT" );
+
+    ActiveRaceCar* lpActiveRaceCar = GetActiveRaceCar( mePlayerActiveRaceCarIndex );
+    CGS_ASSERT( lpActiveRaceCar->IsAttached(), "lpActiveRaceCar->IsAttached()" );
+
+    const BrnPhysics::Vehicle::RaceCarState* lpRaceCarState =
+            lpActiveRaceCar->GetPhysicsState();
+    const Vector3& lrRotations = lpActiveRaceCar->GetCurrentInAirRotations();
+    const f32 lfAbsYaw  = std::fabs( lrRotations.y );
+    const f32 lfAbsRoll = std::fabs( lrRotations.z );
+
+    mBoostManager.SetSpinAngle( lfAbsYaw >= lfAbsRoll ? lfAbsYaw : lfAbsRoll );
+    mBoostManager.SetCrashing( lpRaceCarState->mbCrashing );
+    mBoostManager.SetWrecking(
+            lpActiveRaceCar->IsWrecked() && lpActiveRaceCar->IsCrashing(),
+            mbIsInOnlineGameMode );
+
+    const bool lbBoostRequested =
+            ( mPlayerVehicleControls.mbBoost
+              || meActivePaybackType == BrnNetwork::E_PAYBACK_TYPE_BOOST_LOCK )
+            && !lpRaceCarState->mbCrashing
+            && lpRaceCarState->mfSpeedMPH >= KF_MIN_SPEED_FOR_BOOST_MPH
+            && lpActiveRaceCar->GetEngineState()
+                    == RaceCarEntityModuleIO::E_ACTIVE_RACE_CAR_ENGINE_STATE_RUNNING
+            && !lpActiveRaceCar->IsInAnyRaceStartState();
+    mBoostManager.SetBoostRequested( lbBoostRequested );
+
+    const bool lbInAir = lpRaceCarState->mfTimeInAir > 0.0f
+                         && std::fabs( lpRaceCarState->mfSpeedMPH )
+                                > KF_MIN_IN_AIR_SPEED_MPH;
+    // The DecFIGS manager wrapper takes f32 and applies its 0.5f threshold;
+    // Breaker has already reduced this call site's conditions to a boolean.
+    mBoostManager.SetInAir( static_cast<f32>( lbInAir ) );
+    mBoostManager.SetSpeed( lpRaceCarState->mfSpeedMPH * KF_MPH_TO_MPS );
+    mBoostManager.SetDrifting( lpRaceCarState->mfTimeDrifting > 0.0f );
+    mBoostManager.SetTailgating(
+            mfCurrentTailgateDuration > KF_MIN_TAILGATE_DURATION,
+            meIndexOfCarPlayerIsTailgating );
+
+    const RaceCarEntityModuleIO::TakedownEventQueue* lpTakedownQueue =
+            lpInput->GetTakedownEventQueue();
+    for( s32 liEvent = 0; liEvent < lpTakedownQueue->GetLength(); ++liEvent )
+    {
+        const BrnGameState::TakedownEvent& lrEvent = lpTakedownQueue->GetEvent( liEvent );
+        if( static_cast<s32>( lrEvent.meAggressorIndex )
+                == static_cast<s32>( mePlayerActiveRaceCarIndex ) )
+        {
+            mBoostManager.GetBoostStrategy()->OnTakedown();
+        }
+    }
+
+    const BrnGameState::GameStateModuleIO::CarScoreData& lrPlayerScore =
+            lpScoringInterface->maCarScoreData[mePlayerActiveRaceCarIndex];
+    const s32 liRacePosition = lrPlayerScore.GetRacePosition();
+    if( lpScoringInterface->mbIsOnlineGameMode
+        && liRacePosition > 0
+        && lpScoringInterface->miNumPlayersInGame > 1
+        && liRacePosition <= lpScoringInterface->miNumPlayersInGame )
+    {
+        CGS_ASSERT( liRacePosition <= E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                    "liRacePosition <= E_ACTIVE_RACE_CAR_INDEX_COUNT" );
+
+        const f32 lfPositionRatio =
+                static_cast<f32>( liRacePosition - 1 )
+                / static_cast<f32>( lpScoringInterface->miNumPlayersInGame - 1 );
+        CGS_ASSERT( lfPositionRatio > -0.01f, "lfPositionRatio > -0.01f" );
+        CGS_ASSERT( lfPositionRatio < 1.01f, "lfPositionRatio < 1.01f" );
+        lfBoostModifier = KF_FIRST_PLACE_BOOST_MODIFIER + lfPositionRatio;
+    }
+
+    mBoostManager.UpdateChainExploits( lpActiveRaceCar->GetPosition() );
+    mBoostManager.UpdateJustBounceBoostedTimer( lfTimeStep );
+    mBoostManager.Update( lpEventQueue, lfTimeStep, lfBoostModifier );
+}
+
+// ============================================================================
 // ProcessPlayerVehicleInput  @ 0x822FFE30   (572 instructions)   -- COMPLETE
 //   (player-input wave 2026-08-11)
 //
@@ -3971,18 +4182,13 @@ void RaceCarEntityModule::UpdateActiveCars( f32 lfTimeStep, f32 lfAcceleration, 
 //   flt_8201F7F8 0.1    flt_82005450 0.9
 //
 // ---- DIVERGENCES / FLAGS --------------------------------------------------------------------
-//  1. [FLAG PC bring-up] mBoostManager.GetBoostStrategy() is NULL on this build (BoostManager::
-//     Prepare is a documented keystone stub, and it is the console's only writer of that
-//     pointer). The console dispatches IsBoosting() through it unconditionally; here it is
-//     null-guarded so the boot survives, and the guard is the ONLY added behaviour in this body.
-//     DELETE-WHEN BoostManager::Prepare lands.
-//  2. The default arm of the payback switch streams the offending value into the assert message
+//  1. The default arm of the payback switch streams the offending value into the assert message
 //     on the console (`"Unknown dirty trick type " << meActivePaybackType`); CGS_ASSERT takes a
 //     fixed string, so the value is dropped from the TEXT only -- the assert itself fires at the
 //     same place, on the same condition.
-//  3. The tilt-steering remap is emitted as a VMX sign/deadzone sequence with no console symbol;
+//  2. The tilt-steering remap is emitted as a VMX sign/deadzone sequence with no console symbol;
 //     it is outlined below as a file-static helper (NOT a console function -- see its banner).
-//  4. [FLAG PC bring-up] a LOUD log-once early-out when there is no attached player car. The
+//  3. [FLAG PC bring-up] a LOUD log-once early-out when there is no attached player car. The
 //     console has no such test -- see the gate's own comment for why the console body would
 //     otherwise index maActiveRaceCars[-1] on this build's first pre-physics frames.
 // ============================================================================
@@ -4118,9 +4324,9 @@ void RaceCarEntityModule::ProcessPlayerVehicleInput(
                == RaceCarEntityModuleIO::E_ACTIVE_RACE_CAR_ENGINE_STATE_RUNNING )
     {
         // ---- the LIVE fill ----------------------------------------------------------------
-        // [FLAG PC bring-up] the null guard -- see divergence 1 in the banner.
-        const BoostStrategy* lpBoostStrategy = mBoostManager.GetBoostStrategy();
-        lControls.mbBoost = ( lpBoostStrategy != 0 ) && lpBoostStrategy->IsBoosting();
+        // Breaker virtual-dispatches IsBoosting through the selected strategy
+        // unconditionally. Prepare stage 0 now establishes that pointer.
+        lControls.mbBoost = mBoostManager.GetBoostStrategy()->IsBoosting();
 
         lControls.mbReset  = mPlayerVehicleControls.mbReset;
         lControls.mbToggle = mPlayerVehicleControls.mbToggle;
