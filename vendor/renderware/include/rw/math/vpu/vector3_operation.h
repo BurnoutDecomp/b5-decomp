@@ -90,7 +90,16 @@ namespace vpu
     }
 
     // Scalar broadcast Mult/operator* (SDK `operator*(Vector3, VecFloat)` = vmaddfp v,s,0).
-    // The VecFloat scalar is de-modelled to a plain float broadcast over the lanes.
+    // Vector4 is the portable VecFloat storage type (BrnCommonTypes.h); retain a float overload
+    // as a convenience for older call sites that de-modelled the broadcast scalar.
+    inline Vector3 Mult(Vector3 lrVector, Vector4 lvfScalar)
+    {
+        return Vector3{ lrVector.x * lvfScalar.x, lrVector.y * lvfScalar.y,
+                        lrVector.z * lvfScalar.z, lrVector.w * lvfScalar.w };
+    }
+    inline Vector3 operator*(Vector3 lrVector, Vector4 lvfScalar) { return Mult(lrVector, lvfScalar); }
+    inline Vector3 operator*(Vector4 lvfScalar, Vector3 lrVector) { return Mult(lrVector, lvfScalar); }
+
     inline Vector3 Mult(Vector3 lrVector, float lfScalar)
     {
         return Vector3{ lrVector.x * lfScalar, lrVector.y * lfScalar,

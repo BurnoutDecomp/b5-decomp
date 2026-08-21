@@ -197,45 +197,6 @@ namespace Vehicle
         Attrib::Gen::surfacelist lSurfaceList;
         lSurfaceList.ChangeWithDefault(luSurfaceListKey);
 
-        // ⚠️ [FLAG PC bring-up boot guard, 2026-08-21] If the resolve FAILED (the attrib
-        // database is uninitialised or the surfacelist class/collection is absent -- the
-        // known gap-G5 state on this build), the instance holds NO collection: running the
-        // reader then trips AttribSys's "Cannot get non-array data from a non-zero index"
-        // (attribcollection.cpp:221) and AVs in the surface ctor -- a 100% boot crash at
-        // WorldModule::Prepare (boot-drive 2026-08-21 08:57, exit 0xC0000005). Bail with
-        // the tables untouched, which is byte-for-byte the pre-2026-08-20 behaviour (this
-        // body was an inert link stub and driving worked). DELETE-WHEN gap G5 lands and the
-        // resolve is guaranteed at Prepare time.
-        // ⚠️ [FLAG PC bring-up — THE WHOLE READER IS PARKED ON THIS BUILD, 2026-08-21].
-        // Three successive boot-drives (08:57, 09:06, 09:12) crashed 0xC0000005 inside this
-        // body at WorldModule::Prepare, each behind AttribSys's "Cannot get non-array data
-        // from a non-zero index" (attribcollection.cpp:221): first suspected a failed
-        // resolve, then the class-default fallback -- but the 09:12 run proves the REAL
-        // "340654" collection resolves (the FindCollection probe passed) and the ARRAY READ
-        // ITSELF still mis-parses, i.e. the host AttribSys runtime's array-attribute path
-        // (GetAttributePointer on an array attr) does not yet decode this data. That is a
-        // gap-G5-family attrib-runtime hole, not a surface-list data problem. Until the
-        // array path is proven (probe: an offline reader over ATTRIBS decoding Surfaces[1]
-        // to a valid RefSpec), the reader is inert -- byte-for-byte the pre-2026-08-20
-        // behaviour under which every drive of waves Q..gateui worked. DELETE-WHEN the
-        // attrib array-attribute read path is landed and this body survives a boot-drive.
-        const bool KB_ATTRIB_ARRAY_PATH_PROVEN = true;
-        if (!KB_ATTRIB_ARRAY_PATH_PROVEN)
-        {
-            static bool sbLoggedNoCollection = false;
-            if (!sbLoggedNoCollection)
-            {
-                sbLoggedNoCollection = true;
-                if (CgsDev::Log::gpDebugPrint != 0)
-                    *CgsDev::Log::gpDebugPrint
-                        << "[exit-diag] PARK: ReadSurfaceProperties -- surfacelist collection "
-                           "did not resolve (attrib DB gap G5); surface tables keep their "
-                           "static seeds\n";
-            }
-            gbReadSurfaceProperties = true;
-            return;
-        }
-
         // The console sanity-checks surface element 1's leading colour/vector. Its
         // sign bits are cleared, every lane is compared with FLT_EPSILON, and CR6.EQ
         // fires the assert only when NONE of the four lanes is greater than epsilon.
