@@ -375,13 +375,15 @@ namespace Vehicle
                            "the TRAFFIC half of the per-frame publish; race-car half is LANDED");
     }
 
-    void VehicleManager::ProcessResetEvents(const VehicleInputInterface*,
-                                            BrnPhysics::Vehicle::VehicleOutputRequestInterface*,
-                                            VehicleManagerOutputInterface*,
-                                            BrnPhysics::Deformation::DeformationInputInterface*)
-    {
-        BRN_CONDUCTOR_GATE("VehicleManager::ProcessResetEvents @0x82617820 (526)");
-    }
+    // ⭐⭐ [teleport] GATE DELETED 2026-08-21 (gateui r9, the reset-drain wave):
+    // VehicleManager::ProcessResetEvents @0x82617820 is REAL, in
+    // BrnVehicleManager_WriteOutVehicleStats.cpp (its sibling in the shared tail of
+    // PhysicsModule::Update, which calls the two back to back). It is a NAMED SLICE -- the
+    // transform/velocity core plus the deformation-deactivate and RaceCarResetEvent posts are
+    // reproduced; four legs are parked with their reasons in that file's banner (P1..P4).
+    // It is the only mechanism in the game that moves an already-simulated car, which is why the
+    // gateui billboard wave needed it. If a gate for it ever reappears here the link will say so
+    // (LNK2005).
 
     void VehicleManager::ProcessContactSpies(const ContactSpy::ContactSpyData*,
                                              BrnPhysics::Vehicle::VehicleOutputRequestInterface*,

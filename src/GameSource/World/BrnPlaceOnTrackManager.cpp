@@ -16,6 +16,8 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourceBundle2.h"
 #include "GameShared/GameClasses/Geometric/Primitives/PolygonSoup/CgsPolygonSoup.h"
 
+#include <cstdio>   // [teleport] sscanf (the BRN_CAR_TELEPORT spec parse)
+#include <cstdlib>  // [teleport] getenv
 #include <cfloat>   // FLT_MAX
 #include <cstddef>  // offsetof
 #include <cstring>  // memset
@@ -199,6 +201,10 @@ void PlaceOnTrackManager::PrePhysicsUpdate(
         const RaceCarEntityModuleIO::InputBuffer_PrePhysics* lpInput,
         RaceCarEntityModuleIO::OutputBuffer_PrePhysics* lpOutput )
 {
+    // [teleport] the harness teleport, armed here so its request is answered by THIS frame's
+    // ApplyPendingRequestsWithoutSceneQueryBringUp below. See the block at the bottom of this file.
+    ArmCarTeleportBringUp();
+
     const RaceCarEntityModuleIO::SceneResultQueue* lpSceneResultQueue =
         lpInput->GetSceneResultQueue();
 
@@ -849,6 +855,182 @@ void PlaceOnTrackManager::ApplyPendingRequestsWithoutSceneQueryBringUp(
         }
 
         PlaceCarOnTrack( leActiveRaceCarIndex, lpBestIntersection, lpOutput );
+    }
+}
+
+// ===========================================================================
+// [teleport] ArmCarTeleportBringUp -- NOT an X360 function, and DELIBERATELY PERMANENT.
+//
+// ⭐ WHAT IT IS. `BRN_CAR_TELEPORT="x,y,z[,headingDeg]"` puts the player's car at a world
+// position, once, as soon as it is actually driving. It exists because a boot-drive harness that
+// can only start at the junkyard can only ever test what is within 275 seconds of the junkyard --
+// which is how the SMASH flavour of the gate-UI ladder got proven and the BILLBOARD flavour (120
+// type-12 GenericRegions, none of them on the junkyard-exit route) did not.
+//
+// ⭐⭐ IT IS A TRIGGER, NOT A MECHANISM. Every metre of the actual move is the game's own code:
+//     ActiveRaceCar::RequestPlaceOnTrack @0x822BFB58   <- THE ONLY THING THIS BLOCK CALLS
+//       -> PlaceOnTrackManager::PrePhysicsUpdate       -- the 100 m vertical line test through the
+//          request (on PC: ApplyPendingRequestsWithoutSceneQueryBringUp, over the SHIPPED
+//          WORLDCOL.BIN, which is why the Y a teleport lands on is a vertex of the collision mesh
+//          and never a number chosen here)
+//       -> ComputeBestPlaceOnT @0x822BE238             -- the console's own candidate ranking
+//       -> PlaceCarOnTrack                             -- BrnMath::BuildTransform(pos, at, up)
+//       -> RaceCarEntityModule::ResetActiveRaceCar @0x822F4880, its IsActive() arm
+//       -> VehicleInputInterface::ResetRaceCar @0x822CC2A0
+//       -> VehicleManager::ProcessResetEvents @0x82617820
+//       -> VehiclePhysics::SetTransformFromPositionOnRoad @0x825D1C00  (the analytic rest seat)
+//        + VehiclePhysics::Reset @0x825FDD78                            (kill all motion, re-seed)
+// Nothing here writes a transform, a velocity, a force or a physics field, and nothing here
+// bypasses the seat -- which is the whole reason the teleported car drives normally afterwards
+// instead of sitting 0.74 m in the road or exploding on the first suspension tick.
+//
+// ⭐ WHY THE TRIGGER IS DISTANCE-BASED AND NOT A TIMER. The car reaches E_STATE_ACTIVE at CAR
+// SELECT, tens of seconds before the flow reaches DRIVING, and boot timing drifts by seconds run
+// to run -- exactly the reason every mark in tools/diagnostics/flow_run.ps1 is anchored to a flow
+// state and not to a frame index. So the arm waits for the car to have MOVED
+// KF_TELEPORT_ARM_DISTANCE from where it was first seen ACTIVE, i.e. for the drive to have
+// actually started. Self-synchronising, no clock, no assumption about the physics tick rate.
+// `BRN_CAR_TELEPORT_ARM_DISTANCE` overrides it (metres); 0 means "fire on the first ACTIVE frame".
+//
+// ⚠️ THE STREAMER. A long jump is NOT free: the world streams around the player, and the
+// teleport does not wait for it. The car lands on WORLDCOL.BIN (which is resident whole, read
+// once by the drop query) so it never falls through the world, but the visible world and the
+// breakable props around the destination arrive over the following seconds. A run plan must
+// leave the car sitting for a few seconds before it is asked to smash anything -- which is what
+// flow_run.ps1's -DriveDelay already provides.
+//
+// ⛔ DELETE-WHEN: NOTHING. This is a permanent harness capability, not a bring-up shim. It is
+// inert unless BRN_CAR_TELEPORT is set, it adds one strcmp-free getenv on the first pre-physics
+// update and one bool test per update after that, and a default run is byte-identical.
+// ===========================================================================
+void PlaceOnTrackManager::ArmCarTeleportBringUp()
+{
+    // Metres the car must have travelled since it was first seen ACTIVE before the teleport fires.
+    static const f32 KF_TELEPORT_ARM_DISTANCE = 8.0f;
+
+    enum ETeleportStage
+    {
+        E_TELEPORT_UNREAD = 0,   // the env var has not been looked at yet
+        E_TELEPORT_OFF,          // not set / unparseable -- never look again
+        E_TELEPORT_WAITING,      // parsed; waiting for the car to start driving
+        E_TELEPORT_REQUESTED     // the request has been issued; done for this process
+    };
+
+    static ETeleportStage seStage = E_TELEPORT_UNREAD;
+    static Vector3 sTarget     = { 0.0f, 0.0f, 0.0f, 0.0f };
+    static Vector3 sDirection  = { 0.0f, 0.0f, 1.0f, 0.0f };
+    static Vector3 sArmOrigin  = { 0.0f, 0.0f, 0.0f, 0.0f };
+    static f32     sfArmDistance = KF_TELEPORT_ARM_DISTANCE;
+    static bool    sbArmOriginSeen = false;
+
+    if( seStage == E_TELEPORT_OFF || seStage == E_TELEPORT_REQUESTED )
+    {
+        return;
+    }
+
+    if( seStage == E_TELEPORT_UNREAD )
+    {
+        seStage = E_TELEPORT_OFF;
+
+        const char* lpcSpec = std::getenv( "BRN_CAR_TELEPORT" );
+        if( lpcSpec == 0 || lpcSpec[0] == '\0' )
+        {
+            return;
+        }
+
+        // "x,y,z" or "x,y,z,headingDeg". A malformed spec is a HARD REFUSAL with a log line, never
+        // a silent partial teleport -- a run that quietly did not move the car would be scored as
+        // "the billboard never fired" rather than as a typo.
+        f32 lfX = 0.0f, lfY = 0.0f, lfZ = 0.0f, lfHeadingDeg = 0.0f;
+        const int liFields = std::sscanf( lpcSpec, "%f,%f,%f,%f", &lfX, &lfY, &lfZ, &lfHeadingDeg );
+        if( liFields < 3 )
+        {
+            if( CgsDev::Log::gpDebugPrint != 0 )
+            {
+                *CgsDev::Log::gpDebugPrint
+                    << "[teleport] FAIL: BRN_CAR_TELEPORT=\"" << lpcSpec
+                    << "\" is not \"x,y,z[,headingDeg]\" -- the car is NOT moved\n";
+            }
+            return;
+        }
+
+        // The heading is degrees CLOCKWISE FROM +Z looking down, i.e. the same convention the
+        // world's own authored directions use: at = (sin h, 0, cos h). h=0 faces +Z.
+        const f32 KF_DEG_TO_RAD = 0.0174532925199433f;
+        const f32 lfHeading = lfHeadingDeg * KF_DEG_TO_RAD;
+
+        sTarget    = Vector3{ lfX, lfY, lfZ, 0.0f };
+        sDirection = Vector3{ std::sin( lfHeading ), 0.0f, std::cos( lfHeading ), 0.0f };
+
+        const char* lpcArm = std::getenv( "BRN_CAR_TELEPORT_ARM_DISTANCE" );
+        if( lpcArm != 0 && lpcArm[0] != '\0' )
+        {
+            float lfArm = KF_TELEPORT_ARM_DISTANCE;
+            if( std::sscanf( lpcArm, "%f", &lfArm ) == 1 && lfArm >= 0.0f )
+            {
+                sfArmDistance = lfArm;
+            }
+        }
+
+        seStage = E_TELEPORT_WAITING;
+
+        if( CgsDev::Log::gpDebugPrint != 0 )
+        {
+            *CgsDev::Log::gpDebugPrint
+                << "[teleport] armed: BRN_CAR_TELEPORT -> (" << lfX << ", " << lfY << ", " << lfZ
+                << ") heading=" << lfHeadingDeg << " deg at=(" << sDirection.x << ", "
+                << sDirection.y << ", " << sDirection.z << "); fires once the player car has "
+                   "driven " << sfArmDistance << " m from its spawn\n";
+        }
+    }
+
+    if( mpRaceCarEntityModule == 0 )
+    {
+        return;
+    }
+
+    const EActiveRaceCarIndex lePlayerIndex =
+        mpRaceCarEntityModule->GetPlayerActiveRaceCarIndex();
+    if( lePlayerIndex == E_ACTIVE_RACE_CAR_INDEX_INVALID )
+    {
+        return;
+    }
+
+    ActiveRaceCar* lpPlayerCar = mpRaceCarEntityModule->GetActiveRaceCar( lePlayerIndex );
+    if( lpPlayerCar == 0 || !lpPlayerCar->IsActive() || lpPlayerCar->ToBePlacedOnTrack() )
+    {
+        return;   // not live yet, or a placement it did not ask for is already in flight
+    }
+
+    // The readback's own copy of the physics pose -- the same member the [uoi] probe prints.
+    const Vector3& lrHere = lpPlayerCar->GetPhysicsState()->mTransform.wAxis;
+
+    if( !sbArmOriginSeen )
+    {
+        sbArmOriginSeen = true;
+        sArmOrigin = lrHere;
+    }
+
+    const f32 lfDX = lrHere.x - sArmOrigin.x;
+    const f32 lfDY = lrHere.y - sArmOrigin.y;
+    const f32 lfDZ = lrHere.z - sArmOrigin.z;
+    if( ( lfDX * lfDX + lfDY * lfDY + lfDZ * lfDZ ) < ( sfArmDistance * sfArmDistance ) )
+    {
+        return;   // still parked where it spawned -- the drive has not started
+    }
+
+    // ⭐ THE ONE CALL. Speed 0.0f: PlaceCarOnTrack multiplies the reset direction by it, so the
+    // car arrives at rest and VehiclePhysics::Reset re-seeds every motion register from that
+    // zero. The console asserts `GetPlaceOnTrackSpeed() >= 0.0f` on the way through.
+    lpPlayerCar->RequestPlaceOnTrack( sTarget, sDirection, 0.0f );
+    seStage = E_TELEPORT_REQUESTED;
+
+    if( CgsDev::Log::gpDebugPrint != 0 )
+    {
+        *CgsDev::Log::gpDebugPrint
+            << "[teleport] car -> (" << sTarget.x << ", " << sTarget.y << ", " << sTarget.z
+            << ") heading=(" << sDirection.x << ", " << sDirection.y << ", " << sDirection.z
+            << ") from (" << lrHere.x << ", " << lrHere.y << ", " << lrHere.z << ")\n";
     }
 }
 

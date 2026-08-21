@@ -72,10 +72,15 @@ namespace Vehicle
         }
 
         // @0x822CC2A0: enqueue a reset-vehicle request.
+        // ⛔ [teleport] PARAMETER NAMES CORRECTED 2026-08-21 -- the LEADING u8 is the unused slot,
+        // not the trailing bool, and the three bools are ResetTransform / ResetDeformation /
+        // ResettingAfterWreck in THAT order with the f32 between the last two. Full asm derivation
+        // in the .cpp body's banner (the PPC float-arg GPR skip is what hid it).
         void ResetRaceCar(u32 luRaceCarIndex, Matrix44Affine lInitialTransform,
-                          Vector3 lInitialVelocity, Vector3 lAngularVelocity, u8 lu8ResetTransform,
-                          bool lbResetDeformation, bool lbResettingAfterWreck,
-                          f32 lfRoadRageHowCloseToWrecked, bool lbResetTransform,
+                          Vector3 lInitialVelocity, Vector3 lAngularVelocity,
+                          u8 lu8VehicleListIndexUnused,
+                          bool lbResetTransform, bool lbResetDeformation,
+                          f32 lfRoadRageHowCloseToWrecked, bool lbResettingAfterWreck,
                           BrnPhysics::Deformation::DeformationResetType leDeformationResetType);
 
         // @0x8271D138 / @0x8271D1B8: enqueue a "traffic vehicle (not) crashing" event.
@@ -193,6 +198,17 @@ namespace Vehicle
         // is {T*, s32, s32}, so the inline array starts at +12 when T needs no more than 4-byte
         // alignment and at +16 when it needs 16.)
         const RemoveRaceCarEventQueue*   GetRemoveRaceCarEvents() const   { return &mRemoveRaceCarEventQueue; }
+
+        // ⭐ [teleport] ADDED 2026-08-21 (gateui r9, the reset-drain wave). Same shape and the
+        // same derivation as the five above: DWARF-declared (BrnVehicleInputInterface.h, the
+        // Get*Events run), no out-of-line X360 symbol, and inlined by the console at its ONE
+        // consumer -- VehicleManager::ProcessResetEvents @0x82617820 opens with
+        //     0x82617B08  result = (a2 + 129408)          -- the pseudocode's own literal
+        //     0x82617E58  lwz r11, 8(result)              -- BaseEventQueue::miLength
+        // and 129408 is EXACTLY this member's seat in the run the banner above computes
+        // (128032 + (16 + 8*160) = 129328, + (16 + 8*8) = 129408). The Append body in the
+        // sibling .cpp already cites the same +0x1F980. Reached by NAME here.
+        const ResetRaceCarEventQueue*    GetResetRaceCarEvents() const    { return &mResetRaceCarEventQueue; }
         const ValidateRaceCarEventQueue* GetValidateRaceCarEvents() const { return &mValidateRaceCarEventQueue; }
         const SetRaceCarCollisionEventQueue* GetSetRaceCarCollisionEvents() const
         {
