@@ -1035,6 +1035,21 @@ WorldEntityModule::PrepareSurfaceList( WorldEntityIO::OutputBuffer_Prepare* lpOu
                                 "liEventId == BrnResource::GameDataIO::EVENT_GET_SURFACE_LIST" );
             }
 
+            // ⚠️ HOST MITIGATION 2026-08-21 (wave T1 conductor) -- TEMPORARY RE-GATE of the
+            // interior below, which landed upstream the same day (756e9e95..1d979161,
+            // "vehicle physics updates"). MEASURED on this machine's data: the first boot
+            // with it live died in BOOT --
+            //   [ASSERT] "Cannot get non-array data from a non-zero index."
+            //     (SDKs/.../attribcollection.cpp:221, Attrib::Collection::GetData, callstack
+            //      through WorldEntityModule::PrepareSurfaceList), then
+            //   EXCEPTION_ACCESS_VIOLATION reading 0xFFFFFFFFFFFFFFFF one frame later.
+            // The vault DOES load ("[ATTRIBSYS LOAD] Just loaded vault resource with ID
+            // 316c094300000000 ... ref count is 1"), so the break is in the rebind/probe
+            // path, not the resource. Opt back in with BRN_SURFACE_REBIND=1 to reproduce.
+            // DELETE-WHEN the physics wave's owner fixes the GetData path on this data --
+            // the interior is kept verbatim below.
+            if ( getenv( "BRN_SURFACE_REBIND" ) != 0 )
+            {
             mSurfaceList.ChangeWithDefault( gs_uSurfaceListKey );
 
             // Breaker loads the first four floats of surface element 1 as a genuine
@@ -1054,6 +1069,20 @@ WorldEntityModule::PrepareSurfaceList( WorldEntityIO::OutputBuffer_Prepare* lpOu
                             std::fabs( lpfSampleColour[2] ) > KF_SURFACE_SANITY_EPSILON ||
                             std::fabs( lpfSampleColour[3] ) > KF_SURFACE_SANITY_EPSILON,
                         "Surface list appears to be corrupt" );
+            }
+            else
+            {
+                static bool s_bLoggedSurfaceMitigation = false;
+                if ( !s_bLoggedSurfaceMitigation )
+                {
+                    s_bLoggedSurfaceMitigation = true;
+                    if ( CgsDev::Message::gxMessageFilterFlags & 1 )
+                        *CgsDev::Log::gpDebugPrint
+                            << "WorldEntityModule::PrepareSurfaceList: attrib rebind+probe "
+                               "SKIPPED (host mitigation; GetData assert + AV on this data; "
+                               "BRN_SURFACE_REBIND=1 to reproduce) [FLAG]\n";
+                }
+            }
 
             meSurfaceListPrepareStage = E_SURFACELIST_PREPARESTAGE_DONE;
             return false;
