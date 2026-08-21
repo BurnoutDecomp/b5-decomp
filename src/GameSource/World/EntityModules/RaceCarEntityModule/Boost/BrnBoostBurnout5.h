@@ -114,21 +114,16 @@ public:
     virtual void OnTakedown() override;
 
     // -- slot 4 --  PURE in the base, so a concrete BoostBurnout5 must supply
-    // it; the body is ICF-folded onto the one surviving twin, which the export
-    // names BoostBurnout3::OnTakenDownByAIOrPlayer @0x822A6930 (that slot is
-    // pure, so the base contributes no body -- all three strategy bodies are
-    // byte-identical and only one name survives). Reconstruct from that body.
+    // it; ARTIST vtable slot 4 targets the shared empty body @0x8284CB38.
     virtual void OnTakenDownByAIOrPlayer() override;
 
     // -- slot 5 --  PURE in the base; no BoostBurnout5 symbol. Folded onto one
-    // of the two surviving twins, BoostBurnout2::OnPlayerAttacksRival
-    // @0x822A6E68 or BoostBurnout3::OnPlayerAttacksRival @0x822A6960 -- which
-    // one is not decidable from the image alone.
+    // directly targets BoostBurnout2's implementation @0x822A6E68 in the
+    // ARTIST vtable.
     virtual void OnPlayerAttacksRival(BrnPhysics::Vehicle::EImpactType leImpactType) override;
 
     // -- slot 6 --  PURE in the base; no BoostBurnout5 symbol. Folded onto
-    // BoostBurnout2::OnNearMiss @0x822A62C0 or BoostBurnout3::OnNearMiss
-    // @0x822A66A8.
+    // BoostBurnout3::OnNearMiss @0x822A66A8 in the ARTIST vtable.
     virtual void OnNearMiss(ENearMissType leNearMissType) override;
 
     // -- slot 7 --  @0x822A6F78. `mbBoosting = false` (stb +0xC5) and nothing
@@ -136,9 +131,8 @@ public:
     virtual void OnCrash() override;
 
     // -- slot 8 --  PURE in the base; no BoostBurnout5 symbol. Folded onto
-    // BoostBurnout2::OnWrecked @0x822C15D8 or BoostBurnout3::OnWrecked
-    // @0x822C2438.
-    virtual void OnWrecked(bool lbInstantWreck) override;
+    // BoostBurnout3::OnWrecked @0x822C2438 in the ARTIST vtable.
+    virtual void OnWrecked(bool lbIsInOnlineGameMode) override;
 
     // -- slot 9 --  @0x822A6A20 (BoostBurnout2/3 fold onto this body).
     virtual void OnSlammed() override;

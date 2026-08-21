@@ -114,15 +114,16 @@ public:
     // -- base slot 5 --  @0x822A6960.
     virtual void OnPlayerAttacksRival(BrnPhysics::Vehicle::EImpactType leImpactType);
 
-    // -- base slot 9 --  no standalone X360 symbol (trivial body, ICF-folded).
-    // DWARF gives it a .cpp body (BrnBoostBurnout3.cpp:548) and the base slot is
-    // pure, so the override must exist for the class to be concrete.
+    // -- base slot 9 -- ARTIST vtable slot 9 targets BoostBurnout5's body
+    // @0x822A6A20: RemoveBoost(mfBeingSlammed).
     virtual void OnSlammed();
 
-    // -- base slot 11 -- no standalone X360 symbol (ICF-folded); DWARF cpp:465.
+    // -- base slot 11 -- ARTIST vtable slot 11 targets the shared empty body
+    // @0x8284CB38.
     virtual void OnShortcut();
 
-    // -- base slot 12 -- no standalone X360 symbol (ICF-folded); DWARF cpp:477.
+    // -- base slot 12 -- ARTIST vtable slot 12 targets BoostBurnout2's body
+    // @0x822A6358: AddBoost(mfTrafficCheck).
     virtual void OnTrafficCheck();
 
     // -- base slot 13 -- @0x822A6AA0: miOldBoostLevel = miBoostLevel;
@@ -130,7 +131,7 @@ public:
     virtual void OnStartCrashPlay();
 
     // -- base slot 8 --  @0x822C2438.
-    virtual void OnWrecked(bool lbInstantWreck);
+    virtual void OnWrecked(bool lbIsInOnlineGameMode);
 
     // -- base slot 14 -- @0x822A6AF8: restores miBoostLevel from
     // miOldBoostLevel (lwz/stw 0x138 @0x822A6B0C..0x822A6B30), UpdateMaxBoost.

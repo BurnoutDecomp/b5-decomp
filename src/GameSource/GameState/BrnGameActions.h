@@ -12,6 +12,11 @@
 #include "GameSource/GameState/BrnGameStateTypes.h"           // BrnGameState::StuntElementType (WorldStuntAction / OnStuntElementCompleteAction)
 #include "SharedClasses/World/BrnWorldRegion.h"               // [gateui] BrnWorld::ECounty (OnStuntElementCompleteForCountyAction)
 
+namespace BrnResource
+{
+enum ECarType : int;
+}
+
 // Owning header for the BrnGameState::GameStateModuleIO GameAction<> family slices reconstructed
 // by the GameMode/ModeManager leaf batch. Each struct is a minimal slice: only the members the
 // reconstructed body touches are declared. The GameAction<T> base is modelled as an empty
@@ -74,6 +79,12 @@ enum EGameActionType
     E_ACTION_RANK_INFO_RESPONSE         = 173,   // DWARF BrnGameActions.h:183
     E_ACTION_TROPHY_UNLOCK              = 196,   // DWARF BrnGameActions.h:206
     E_ACTION_FINISHED_MODE              = 31,    // DWARF BrnGameActions.h:41
+    // The DecFIGS values are 30/65/66.  ARTIST's HandleGameActions jump table
+    // pins the merged-X360 ids at 34/70/71 respectively (0x8230C7A0,
+    // 0x8230C3D8 and 0x8230C40C).
+    E_ACTION_START_PLAYING_MODE         = 34,
+    E_ACTION_ALLOW_BOOST_EARNING        = 70,
+    E_ACTION_STOP_BOOSTING              = 71,
     // ⛔ VALUE CORRECTION 2026-08-20 -- this carried the PS3-DWARF value (19). The X360 ARTIST
     // build posts 23, asm-pinned at BOTH ends:
     //   producer  ModeManager::PrepareForMode @0x82342930 -- `li r5,0x17` (23) + `li r6,0x8E0`
@@ -129,6 +140,9 @@ enum EGameActionType
     // The PS3 DWARF enumerator is also 15 (BrnGameActions.h:25), i.e. no X360 shift here --
     // consistent with every other sub-53 slot in this enum.
     E_ACTION_COMPLETED_STUNT            = 15,    // DWARF BrnGameActions.h:25 (X360-attested)
+    // DecFIGS value 190 shifted to ARTIST 198. HandleGameActions' high jump
+    // table reads the 24-byte SendCarStatsAction below.
+    E_ACTION_UPDATE_CAR_STATS           = 198,
 
     // X360-ATTESTED value: the DWARF (PS3) enumerator is 74, but every X360 producer posts
     // `li r5, 0x4F` (79) with size 8, and the X360 consumer is HandleGameActions' `case 79`.
@@ -160,6 +174,18 @@ enum EGameActionType
 
 template <EGameActionType T>
 struct GameAction { };
+
+// DecFIGS BrnGameActions.h:3977.  ARTIST case 70 reads the payload with one
+// `lbz 0(r27)` before forwarding it to BoostManager.
+struct AllowBoostEarningAction : public GameAction<E_ACTION_ALLOW_BOOST_EARNING>
+{
+    bool mbAllowBoostEarning;
+};
+
+// DecFIGS names an empty tag record for case 71; ARTIST consumes no payload.
+struct StopBoostingAction : public GameAction<E_ACTION_STOP_BOOSTING>
+{
+};
 
 // X360 0x822A0250 (HasToChangeLocation).
 //
@@ -876,5 +902,27 @@ static_assert(offsetof(CompletedStuntAction, miCompletedBarrelRolls) == 0x18,
               "barrel-roll COUNT at +0x18 (UpdateStuntBoost lwz+extsw 0x18(r30)) -- not the DWARF's bool");
 static_assert(offsetof(CompletedStuntAction, mbSuccessfulLanding) == 0x1C,
               "landing flag at +0x1C (ProcessGameEvents stb @0x823A1994)");
+
+// ARTIST HandleGameActions case 198 reads type/+0x14, boost/+0x0C and
+// control/+0x08 before calling HandleCarStatsUpdate @0x822A4700. DecFIGS
+// supplies the exact source member names and declaration order.
+struct SendCarStatsAction : public GameAction<E_ACTION_UPDATE_CAR_STATS>
+{
+    s32                   miCarSpeed;     // +0x00
+    s32                   miCarStrength;  // +0x04
+    s32                   miCarControl;   // +0x08 (boost-loss level at this consumer)
+    s32                   miCarBoost;     // +0x0C
+    f32                   mfDamageLimit;  // +0x10
+    BrnResource::ECarType meCarType;      // +0x14
+};
+
+static_assert(sizeof(SendCarStatsAction) == 24,
+              "ARTIST SendCarStatsAction case-198 payload is 24 bytes");
+static_assert(offsetof(SendCarStatsAction, miCarControl) == 0x08,
+              "HandleGameActions case 198 loads boost-loss from +0x08");
+static_assert(offsetof(SendCarStatsAction, miCarBoost) == 0x0C,
+              "HandleGameActions case 198 loads boost level from +0x0C");
+static_assert(offsetof(SendCarStatsAction, meCarType) == 0x14,
+              "HandleGameActions case 198 loads ECarType from +0x14");
 }
 }

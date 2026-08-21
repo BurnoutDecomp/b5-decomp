@@ -37,6 +37,18 @@ namespace CgsSceneManager { namespace CgsCollision
 namespace BrnResource
 {
 
+// DecFIGS VehicleListEntry.h:44; ARTIST HandleCarStatsUpdate @0x822A4700
+// compares the word-valued action member against 0/1/2 and maps it to boost
+// strategies 2/3/5 respectively.
+enum ECarType : int
+{
+    E_CARTYPE_DANGER     = 0,
+    E_CARTYPE_AGGRESSION = 1,
+    E_CARTYPE_STUNTS     = 2,
+    E_CARTYPE_COUNT      = 3,
+    E_CARTYPE_INVALID    = E_CARTYPE_COUNT
+};
+
 struct VehicleListEntry
 {
     // Livery-kind tag for a derived car's livery list. The X360 stores it as a 4-byte word

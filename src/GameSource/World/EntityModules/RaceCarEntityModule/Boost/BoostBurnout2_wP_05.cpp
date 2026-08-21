@@ -139,7 +139,7 @@ BoostBurnout2::OnTrafficCheck()
 //   0x822C1640  blr
 //
 // THE PARAMETER IS UNUSED. DWARF declares `virtual void OnWrecked(bool)` and
-// the base spells it lbInstantWreck, but r4 is never read anywhere in this
+// DecFIGS names it lbIsInOnlineGameMode, but r4 is never read anywhere in this
 // body -- BoostBurnout2 wrecks identically either way. (Register check: the
 // only GPR sourced is r3 = this; the two float operands come from `this`, not
 // from f1, so there is no hidden PPC float argument being missed here.)
@@ -172,7 +172,7 @@ BoostBurnout2::OnTrafficCheck()
 // retail asm.
 // ---------------------------------------------------------------------------
 void
-BoostBurnout2::OnWrecked(bool /* lbInstantWreck -- unused; r4 never read */)
+BoostBurnout2::OnWrecked(bool /* lbIsInOnlineGameMode -- unused; r4 never read */)
 {
     if (mbBoosting)
     {

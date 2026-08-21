@@ -129,7 +129,7 @@ BoostBurnout3::OnTakenDownByAIOrPlayer()
 }
 
 // ---------------------------------------------------------------------------
-// OnWrecked @ 0x822C2438 -- vtable slot 8 (r3 = this, r4 = lbInstantWreck).
+// OnWrecked @ 0x822C2438 -- vtable slot 8 (r3 = this, r4 = lbIsInOnlineGameMode).
 // Fired by BoostStrategy::SetWrecking on the false->true edge (X360: inlined
 // into BoostManager::SetWrecking @0x822B8E40).
 //
@@ -149,7 +149,7 @@ BoostBurnout3::OnTakenDownByAIOrPlayer()
 //            (@0x822A6370..0x822A6390). Reversing the inline restores the call.
 //   loc_822C245C:
 //   0x822C245C  lfs    f13, 0xA0(r3)      ; v = mfBoostAmount
-//   0x822C2460  clrlwi r11, r4, 24        ; r11 = (u8)lbInstantWreck
+//   0x822C2460  clrlwi r11, r4, 24        ; r11 = (u8)lbIsInOnlineGameMode
 //   0x822C2464  fneg   f11, f13
 //   0x822C2468  lfs    f0,  0xA4(r3)      ; f0 = mfMaxBoost (LIVE to the end)
 //   0x822C246C  cmplwi cr6, r11, 0        ; ...the compare, hoisted here
@@ -157,7 +157,7 @@ BoostBurnout3::OnTakenDownByAIOrPlayer()
 //   0x822C2474  fsubs  f11, f0,  f13
 //   0x822C2478  fsel   f13, f11, f13, f0  ; (max-v >= 0) ? v    : max
 //   0x822C247C  stfs   f13, 0xA0(r3)
-//   0x822C2480  beqlr  cr6                ; ...and its branch: !lbInstantWreck -> return
+//   0x822C2480  beqlr  cr6                ; ...and its branch: offline -> return
 //   0x822C2484  lfs    f11, 0x100(r3)     ; mfMinBoostAllowedAmount
 //   0x822C2488  fcmpu  cr6, f13, f11
 //   0x822C248C  bgelr  cr6
@@ -175,8 +175,8 @@ BoostBurnout3::OnTakenDownByAIOrPlayer()
 // to a byte at 0x822C2460 and compared at 0x822C246C, but its branch is the
 // `beqlr cr6` five instructions later at 0x822C2480 -- the compiler hoisted the
 // compare into the floating-point clamp to fill slots, so a straight read of the
-// listing can miss that lbInstantWreck is tested at all. It is: everything from
-// 0x822C2484 onward runs ONLY when lbInstantWreck is true. The identical
+// listing can miss that lbIsInOnlineGameMode is tested at all. It is: everything from
+// 0x822C2484 onward runs ONLY in an online mode. The identical
 // hoisting appears in BoostBurnout3::UpdateMaxBoost, where `clrlwi r11,r30,24`
 // @0x822C1D10 / `cmplwi cr6,r11,0` @0x822C1D1C sit three instructions apart from
 // their `beq cr6` @0x822C1D30. DWARF agrees the parameter exists
@@ -221,7 +221,7 @@ BoostBurnout3::OnTakenDownByAIOrPlayer()
 // ---------------------------------------------------------------------------
 void
 BoostBurnout3::OnWrecked(
-    bool lbInstantWreck )
+    bool lbIsInOnlineGameMode )
 {
     RemoveBoost( mfOnWrecked );
 
@@ -235,7 +235,7 @@ BoostBurnout3::OnWrecked(
         mfBoostAmount = mfMaxBoost;
     }
 
-    if( lbInstantWreck )
+    if( lbIsInOnlineGameMode )
     {
         // An instant wreck must not leave the car below the amount the mode
         // guarantees, so top the bar back up to just over that floor.

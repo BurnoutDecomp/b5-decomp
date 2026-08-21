@@ -56,11 +56,14 @@ namespace BrnWorld { struct ShadowMap; }
 
 
 namespace CgsResource { struct ResourceHandle; }
-namespace BrnResource { struct VehicleList; class WheelList; }
+namespace BrnResource { struct VehicleList; class WheelList; enum ECarType : int; }
 // The game-action consumer's two argument types (pointer-only here; the .cpp includes both
 // owning headers). ResetPlayerCarAction is game action 0's 80-byte payload,
 // RaceCarAIInterface is the AI publish surface SpawnRaceCar posts its attach event into.
-namespace BrnGameState { namespace GameStateModuleIO { struct ResetPlayerCarAction; } }
+namespace BrnGameState { namespace GameStateModuleIO {
+    struct ResetPlayerCarAction;
+    struct PrepareForModeAction;
+} }
 namespace BrnAI       { namespace AIModuleIO         { struct RaceCarAIInterface;   } }
 namespace BrnPhysics  { namespace Vehicle            { struct VehicleInputInterface; } }
 // DetachActiveRaceCar's fourth argument (DWARF spells it
@@ -87,7 +90,7 @@ const s32 KI_TRAINING_REQUEST_QUEUE_SIZE = 8;
 // SharedIO/BrnRaceCarEntityModuleOutputInterface.h). CopyActiveRaceCarToPlayerScoringMappingToOutput
 // only takes a pointer to it, so a forward declaration suffices here.
 namespace RaceCarEntityModuleIO { struct RCEntityActiveRaceCarOutputInterface; }
-namespace RaceCarEntityModuleIO { class InputBuffer_PrePhysics; class OutputBuffer_PrePhysics; class InputBuffer_PostScene; class OutputBuffer_PostScene; class InputBuffer_GenerateDispatchLists; struct InputBuffer_PreScene; struct OutputBuffer_PreScene; struct InputBuffer_PostPhysics; struct OutputBuffer_PostPhysics; struct OutputBuffer_Prepare; }
+namespace RaceCarEntityModuleIO { struct GameEventQueue; class InputBuffer_PrePhysics; class OutputBuffer_PrePhysics; class InputBuffer_PostScene; class OutputBuffer_PostScene; class InputBuffer_GenerateDispatchLists; struct InputBuffer_PreScene; struct OutputBuffer_PreScene; struct InputBuffer_PostPhysics; struct OutputBuffer_PostPhysics; struct OutputBuffer_Prepare; }
 
 // The "CarColours" palette resource LoadGlobalResources acquires (real home
 // SharedClasses/Graphics/BrnGlobalColourPalette.h); held by pointer only here.
@@ -392,6 +395,17 @@ public:
         void HandleGameActions( RaceCarEntityModuleIO::InputBuffer_PreScene* lpInput,
                                 RaceCarEntityModuleIO::OutputBuffer_PreScene* lpOutput );
 
+        // ARTIST 0x822A4700; DecFIGS supplies the BrnResource::ECarType shape.
+        void HandleCarStatsUpdate(BrnResource::ECarType leCarType,
+                                  s32 liBoostLevel,
+                                  s32 liBoostLossLevel);
+
+        // ARTIST 0x823092F0. The currently reconstructed body owns the common
+        // non-Showtime mode/boost arming spine; see ModeArming.cpp.
+        void HandlePrepareForModeAction(
+            const BrnGameState::GameStateModuleIO::PrepareForModeAction* lpPFMAction,
+            RaceCarEntityModuleIO::OutputBuffer_PreScene* lpOutput);
+
         // X360 0x82304FE8 -- game action 0. Place (or re-spawn) the player's car. THE
         // record CarSelectManager posts to put the player in a junkyard.
         // ⚠️ THREE arguments again (this / lpAction / the pre-scene output buffer; r22/r16/r25
@@ -591,7 +605,10 @@ private:
     // it. DWARF BrnRaceCarEntityModule.h:357 -> float32_t.
     f32 mfCurrentTailgateDuration;      // +0x182F0 (99056) .. +0x182F4 (99060)
 
-    u8 maTailPadA1a[0x182F8 - 0x182F4]; // +0x182F4 (99060) .. +0x182F8 (99064)
+    // X360 +0x182F4 (99060). UpdateBoost loads this exact 32-bit enum for
+    // BoostStrategy::SetTailgating at 0x82304B50..0x82304B64.
+    EActiveRaceCarIndex meIndexOfCarPlayerIsTailgating = E_ACTIVE_RACE_CAR_INDEX_INVALID;
+                                        // +0x182F4 (99060) .. +0x182F8 (99064)
 
     // X360 +0x182F8 (99064). The active-race-car slot the local player is driving, or
     // E_ACTIVE_RACE_CAR_INDEX_INVALID. UpdateTailgateTimer reads it (asm `lwzx` at 0x182F8)
@@ -951,6 +968,12 @@ private:
                                     const RaceCarEntityModuleIO::InputBuffer_PrePhysics* lpInput,
                                     RaceCarEntityModuleIO::OutputBuffer_PrePhysics* lpOutput );
 
+    // X360 0x82304690. ABI is r3=this, f1=time step, r5=input and r6=event queue;
+    // the scalar float consumes the skipped r4 GPR argument position on PPC.
+    void UpdateBoost( f32 lfTimeStep,
+                      const RaceCarEntityModuleIO::InputBuffer_PrePhysics* lpInput,
+                      RaceCarEntityModuleIO::GameEventQueue* lpEventQueue );
+
     // ⭐ X360 0x822FF250 (73 insns) -- PARTIAL SLICE (engine wave 2026-08-12). The eight-slot
     // active-car tick: `for (i = 0; i < 8; ++i) if (maActiveRaceCars[i].IsActive())
     // maActiveRaceCars[i].Update(...)`, then SendAddedForCollisionStateToPhysics.
@@ -987,6 +1010,7 @@ private:
     //   +99150 mbPaybackSixaxisSteering / (and +99150 is what the SIX_AXIS payback arm clears)
     bool mbIsInOnlineGameMode;          // +0x18345 (99141)
     bool mbOnlineModeJustFinished;      // +0x18346 (99142)
+    bool mbCarSelectAllowedInGameMode;  // +0x18347 (99143)
     bool mbSixaxisSteeringEnabled;      // +0x1834D (99149)
     bool mbPaybackSixaxisSteering;      // +0x1834E (99150)
 

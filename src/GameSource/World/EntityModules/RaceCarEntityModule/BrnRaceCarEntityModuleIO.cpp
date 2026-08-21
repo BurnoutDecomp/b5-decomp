@@ -877,6 +877,17 @@ InputBuffer_PrePhysics::SetTakedownEventQueue(const TakedownEventQueue* lpTakedo
     mTakedownEventQueue.Append(*lpTakedownEventQueue);
 }
 
+// DecFIGS declares this const accessor at BrnRaceCarEntityModuleIO.h:421.  It
+// is inlined into ARTIST's RaceCarEntityModule::UpdateBoost, where the returned
+// queue is immediately consumed through BaseEventQueue::GetEvent; the same
+// read-lock assertion shape is emitted by the neighbouring const accessors.
+const InputBuffer_PrePhysics::TakedownEventQueue*
+InputBuffer_PrePhysics::GetTakedownEventQueue() const
+{
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+    return &mTakedownEventQueue;
+}
+
 // X360 0x8279DC40 (W, :434) -- copy the frame's scoring output block into the buffer
 // (console memcpy of the 2736-byte interface into this+209312 == &mScoringInterface).
 // [EVIDENCE NOTE] 0x8279DC40 is a HOLE in the .ida-exports dump. It is the middle member
