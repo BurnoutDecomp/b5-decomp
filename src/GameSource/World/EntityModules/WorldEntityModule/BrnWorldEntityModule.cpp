@@ -41,7 +41,7 @@
 #include "GameSource/GameState/BrnGameEvents.h"
 #include "GameSource/World/ShadowMap/BrnShadowMap.h"
 #include "GameShared/GameClasses/Graphics/CgsShaderConstants.h"
-#include "GameShared/GameClasses/System/AttribSys/CgsAttribSysModule.h"  // IsSchemaLoadedStatic (the surface-list rebind gate)
+#include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/AttributeKey.h"
 
 #include <cmath>   // sqrtf (the [FLAG PC bring-up] loaded-world bounds helper)
 
@@ -71,9 +71,13 @@ static bool sbDrawInstanceCircles = false;
 // Scene-manager entity owner id for world instances (the X360 EntityId::Set owner 5).
 static const u32 KU_ENTITY_OWNER_WORLD = 5;
 
-// X360 rodata flt_82014460: the surface-list sanity threshold PrepareSurfaceList
-// compares the probed first attribute against.
-static const f32 KF_SURFACE_SANITY_THRESHOLD = 10000.0f;
+// WorldEntityModule TU initializer @0x82C4B988: StringToKey("340654") is stored
+// as a full 64-bit collection key and loaded by PrepareSurfaceList @0x822F9C58.
+static const u64 gs_uSurfaceListKey = Attrib::StringToKey("340654");
+
+// X360 rodata flt_82014460 == FLT_EPSILON. PrepareSurfaceList splats this scalar
+// across the four lanes of the sample-colour comparison.
+static const f32 KF_SURFACE_SANITY_EPSILON = 1.1920928955078125e-07f;
 
 // Maximum axis scale of an affine transform (the X360 inline: max of the three
 // basis-row magnitudes via the vrsqrte refinement pipeline).
@@ -1031,56 +1035,25 @@ WorldEntityModule::PrepareSurfaceList( WorldEntityIO::OutputBuffer_Prepare* lpOu
                                 "liEventId == BrnResource::GameDataIO::EVENT_GET_SURFACE_LIST" );
             }
 
-            // ⭐ REASON CORRECTED 2026-08-16 (boot audit F-P7-20), and the correction was
-            // earned the hard way. This interior sat under `if (false)` with the note "the
-            // AttribSys schema is not yet loaded -- the exe-baked BE schema blobs need an LE
-            // port, so the surfacelist vault was never registered into the DB".
-            //
-            // HALF OF THAT HAS EXPIRED. The ported schema.vlt / schema.bin ship with the
-            // build, PrepareAttribSysSchemaResource registers them, IsSchemaLoaded() is
-            // true, and the boot log shows vaults registering for real ("[ATTRIBSYS LOAD]
-            // Just loaded vault resource ... ref count is 1").
-            //
-            // THE OTHER HALF IS THE ACTUAL BLOCKER, and it is one level down: running this
-            // interior on the live DB faults, because Attrib::FindCollectionWithDefault --
-            // which ChangeWithDefault calls straight into -- is still a LINK STUB
-            // (WorldLinkStubs.cpp:2682, "attrib gap G5 -- reconstruct"). Lifting the gate
-            // produced exactly that assert followed by an access violation. So the skip
-            // stays, but keyed on what is really missing, and it now also states the
-            // condition that IS satisfied so the next reader does not re-port a schema that
-            // is already ported.
-            // DELETE-WHEN: the Attrib SDK runtime cluster (gap G5) is reconstructed. The
-            // schema half of the old precondition is already met.
-            {
-                static bool s_bLoggedSurfaceGate = false;
-                if ( !s_bLoggedSurfaceGate )
-                {
-                    s_bLoggedSurfaceGate = true;
-                    if ( CgsDev::Message::gxMessageFilterFlags & 1 )
-                        *CgsDev::Log::gpDebugPrint
-                            << "WorldEntityModule::PrepareSurfaceList: attrib rebind skipped -- "
-                               "schema IS loaded ("
-                            << (CgsAttribSys::AttribSysModule::IsSchemaLoadedStatic() ? 1 : 0)
-                            << "), blocked on Attrib::FindCollectionWithDefault (gap G5) [FLAG]\n";
-                }
-            }
-            if ( false )   // the gated X360 interior, kept verbatim:
-            {
-                mSurfaceList.ChangeWithDefault();
+            mSurfaceList.ChangeWithDefault( gs_uSurfaceListKey );
 
-                // Sanity-probe surface 0: an implausible first attribute means the
-                // streamed surface list is corrupt.
-                Attrib::RefSpec* lpRefSpec =
-                    static_cast<Attrib::RefSpec*>( mSurfaceList.Surfaces( 0 ) );
-                Attrib::Gen::surface lSurface(
-                    const_cast<Attrib::Collection*>( lpRefSpec->GetCollection() ), 0 );
-                const f32* lpfFirstAttribute =
-                    static_cast<const f32*>( lSurface.GetAttributeData() );
-                const f32 lfMagnitude =
-                    ( lpfFirstAttribute[0] < 0.0f ) ? -lpfFirstAttribute[0] : lpfFirstAttribute[0];
-                CGS_ASSERT( !( lfMagnitude > KF_SURFACE_SANITY_THRESHOLD ),
-                            "Surface list appears to be corrupt" );
-            }
+            // Breaker loads the first four floats of surface element 1 as a genuine
+            // Vector4 sample colour. The comparison threshold is the scalar epsilon
+            // splatted by vspltw; CR6.EQ is set only when no lane exceeds it.
+            void* lpSampleRefData = mSurfaceList.Surfaces( 1 );
+            if ( !lpSampleRefData )
+                lpSampleRefData = Attrib::DefaultDataArea( sizeof( Attrib::RefSpec ) );
+
+            Attrib::RefSpec* lpSampleRef = static_cast<Attrib::RefSpec*>( lpSampleRefData );
+            Attrib::Gen::surface lSampleSurface(
+                const_cast<Attrib::Collection*>( lpSampleRef->GetCollection() ), 0 );
+            const f32* lpfSampleColour =
+                static_cast<const f32*>( lSampleSurface.GetAttributeData() );
+            CGS_ASSERT( std::fabs( lpfSampleColour[0] ) > KF_SURFACE_SANITY_EPSILON ||
+                            std::fabs( lpfSampleColour[1] ) > KF_SURFACE_SANITY_EPSILON ||
+                            std::fabs( lpfSampleColour[2] ) > KF_SURFACE_SANITY_EPSILON ||
+                            std::fabs( lpfSampleColour[3] ) > KF_SURFACE_SANITY_EPSILON,
+                        "Surface list appears to be corrupt" );
 
             meSurfaceListPrepareStage = E_SURFACELIST_PREPARESTAGE_DONE;
             return false;

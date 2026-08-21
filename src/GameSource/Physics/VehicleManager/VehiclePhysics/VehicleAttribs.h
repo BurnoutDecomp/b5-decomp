@@ -104,6 +104,34 @@ namespace Vehicle
             Vector4        mvFrontSurfaceGripFactor_RearSurfaceGripFactor_SurfaceRoughnessFactor_SurfaceLinearDragFactor; // +0xD0
 
             void SetMass(VecFloat lValue) { mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.x = lValue.x; }
+
+            // DecFIGS VehicleAttribs.h:234/238/242/246 declares these as VecFloat returns,
+            // not float returns. Breaker UpdateInAirBehaviour @0x825D0C88-0x825D0C98 and
+            // @0x825D0F5C-0x825D106C/@0x825D113C-0x825D1158 loads the packed +0xC0 row and
+            // splats lanes 0/1/2/3 respectively, which is the SDK VecFloat accessor lowering.
+            VecFloat GetPitchDampingOnTakeOff() const
+            {
+                const f32 lfValue = mvPitchDampingOnTakeOff_YawDampingOnTakeOff_RollDampingOnTakeOff_RollLimitOnTakeOff.x;
+                return VecFloat{ lfValue, lfValue, lfValue, lfValue };
+            }
+
+            VecFloat GetYawDampingOnTakeOff() const
+            {
+                const f32 lfValue = mvPitchDampingOnTakeOff_YawDampingOnTakeOff_RollDampingOnTakeOff_RollLimitOnTakeOff.y;
+                return VecFloat{ lfValue, lfValue, lfValue, lfValue };
+            }
+
+            VecFloat GetRollDampingOnTakeOff() const
+            {
+                const f32 lfValue = mvPitchDampingOnTakeOff_YawDampingOnTakeOff_RollDampingOnTakeOff_RollLimitOnTakeOff.z;
+                return VecFloat{ lfValue, lfValue, lfValue, lfValue };
+            }
+
+            VecFloat GetRollLimitOnTakeOff() const
+            {
+                const f32 lfValue = mvPitchDampingOnTakeOff_YawDampingOnTakeOff_RollDampingOnTakeOff_RollLimitOnTakeOff.w;
+                return VecFloat{ lfValue, lfValue, lfValue, lfValue };
+            }
         };
 
         // ---- +0x0E0 (0x20) -------------------------------------------------------------------
