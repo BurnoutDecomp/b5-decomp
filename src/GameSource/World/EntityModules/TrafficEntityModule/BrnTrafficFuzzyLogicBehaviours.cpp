@@ -182,6 +182,18 @@ namespace Fuzzy
     // outputs and a final Select. The X360 body is fully VMX-vectorised and lane-shuffled;
     // the per-category CalcScores evaluations, the lane picks (vperm/vspltw), and the
     // combine-with-Fuzzy{AND,OR,NOT}/Select tree below are re-derived directly from the RAW
+    // The two debug position caches. Console-inlined at every call site (the caller stores
+    // the quadword itself), which is why neither has its own X360 symbol.
+    void FuzzyBehaviourLogic::DEBUGSetLastCameraPos(Vector3 lCameraPos) const
+    {
+        mDEBUGLastCameraPos = lCameraPos;
+    }
+
+    void FuzzyBehaviourLogic::DEBUGSetCurrentParamPos(Vector3 lParamPos) const
+    {
+        mDEBUGCurrentParamPos = lParamPos;
+    }
+
     // PPC/VMX assembly at 0x82750C28..0x82751080. The six VecFloat outputs are written to
     // lpafOutputs[0..5] (stores at r30 offsets 0x00/0x10/0x20/0x30/0x40/0x50).
     //

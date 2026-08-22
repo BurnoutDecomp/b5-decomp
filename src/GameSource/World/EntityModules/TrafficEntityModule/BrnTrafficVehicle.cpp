@@ -25,6 +25,21 @@ const f32 KF_AXLE_LINE_TEST_HALF_HEIGHT = 10.0f;
 const f32 KF_TRIANGLE_INTERSECT_EPSILON = 1.0e-8f;
 const f32 KF_TRIANGLE_INTERSECT_EDGE_EPSILON = 1.0e-5f;
 const f32 KF_MIN_CORRECTION_DIST_SQ = 2.5e-5f;
+// Stand-in for the un-dumped flt_820C0BC0 (see ForceIntersectWithLane's FLAG); the value is
+// the SDK's default IsZero tolerance.
+const f32 KF_AXLE_LANE_NORMAL_EPSILON = 1.0e-6f;
+// flt_82004270, splatted by InitialiseAsStandard @0x8275F828; Feb-2007 spells it
+// KF_VEHICLE_START_DISTANCE_FROM_TARGET.
+const f32 KF_VEHICLE_START_DISTANCE_FROM_TARGET = 3.0f;
+// The ship folds Feb-2007's Lerp(KF_VEHICLE_MIN/MAX_INDICATOR_FLASH_TIME, 0.5f) to a literal
+// 0.3f, and uses the 0.4f MAX value for the alarm / give-up blink period.
+const f32 KF_VEHICLE_INDICATOR_FLASH_TIME = 0.30000001f;
+const f32 KF_VEHICLE_ALARM_FLASH_TIME     = 0.40000001f;
+// The alarm arm toggles horn|left|right|headlights-flashed; the give-up arm toggles the two
+// indicator bits (hazards). Masks read straight off 0x82756DEC / 0x82756E5C.
+const u8  KX_EFFECT_ALARM_TOGGLE_MASK  = 0x0F;
+const u8  KX_EFFECT_HAZARD_TOGGLE_MASK = 0x06;
+const s32 KI_BULB_WARMTH_MAX = 255;
 
 bool TriangleLineSegIntersect(
     Vector3 lV0,
@@ -118,26 +133,54 @@ bool Axle::TryIntersectWithLane(const LaneRung& lRung0, const LaneRung& lRung1)
     return true;
 }
 
-// FLAG PC boot gates: three trailer-path callees are not reconstructed --
-// Axle::ForceIntersectWithLane @0x8275ED98, Vehicle::SetSpeed and Vehicle::CalcTowBarPos
-// (the last two have no ARTIST per-function export, so their addresses are unconfirmed).
-// Only Vehicle::InitialiseAsTrailer reaches them. DELETE-WHEN the real bodies land with
-// articulated traffic.
+// Axle::ForceIntersectWithLane @0x8275ED98. Drop the axle onto the plane of the lane
+// quad, along the axle's own up vector, and adopt the lane normal as the new up.
+// Reached by Vehicle::InitialiseAsStandard @0x8275F3A0 AND ::InitialiseAsTrailer, so it is
+// NOT trailer-only; the ship form takes two rungs, not (hull, segment) as Feb-2007 did.
+// The ship dropped Feb-2007's Abs(normal.y) and the +/-KF_AXLE_MAX_ADJUST_DISTANCE clamp:
+// neither appears anywhere between the normal assert and the store.
 void Axle::ForceIntersectWithLane(const LaneRung& lRung0, const LaneRung& lRung1)
 {
-    (void)lRung0;
-    (void)lRung1;
-    CGS_ASSERT(false,
-               "Axle::ForceIntersectWithLane @0x8275ED98 not reconstructed [FLAG PC boot gate]");
+    const Vector3 lCorner0 = lRung0.maPoints[0];
+    const Vector3 lEdge0   = lRung0.maPoints[1] - lCorner0;
+    const Vector3 lEdge1   = lRung1.maPoints[1] - lCorner0;
+
+    const Vector3 lNormal = rw::math::vpu::Normalize(rw::math::vpu::Cross(lEdge1, lEdge0));
+    CGS_ASSERT(rw::math::vpu::IsValid(lNormal), "Invalid normal on lane");
+
+    const f32 lfPlaneDist   = rw::math::vpu::Dot(lNormal, lCorner0);
+    const Vector3 lUp       = GetUp();
+    const f32 lfUpDotNormal = rw::math::vpu::Dot(lNormal, lUp);
+
+    // FLAG (assert-only): the console compares |lfUpDotNormal| against rodata flt_820C0BC0,
+    // which is un-dumped; the SDK default tolerance stands in, as it already does for
+    // UpdateMatrix's "Bad AT vector" guard. DELETE-WHEN that literal is dumped.
+    CGS_ASSERT(lfUpDotNormal > KF_AXLE_LANE_NORMAL_EPSILON
+                   || lfUpDotNormal < -KF_AXLE_LANE_NORMAL_EPSILON,
+               "Traffic vehicle has axle at right angles to the lane");
+
+    const Vector3 lOldPos = mPosAndWheelRadius.GetVector3();
+    const f32 lfIsectParam =
+        (lfPlaneDist - rw::math::vpu::Dot(lNormal, lOldPos)) / lfUpDotNormal;
+
+    mPosAndWheelRadius.SetVector3(lOldPos + lUp * lfIsectParam);
+    SetUp(lNormal);
 }
 
+// Vehicle::SetSpeed. DWARF BrnTrafficVehicle.h:321; EXPORT HOLE (no per-function JSON), so
+// the lane comes from the committed GetSpeed pair: mSpeed_DistAcrossLane_SwerveAmount_W lane
+// 0. Its hot caller is the per-vehicle driving update, not the trailer path.
 void Vehicle::SetSpeed(VecFloat lfSpeed)
 {
-    (void)lfSpeed;
-    CGS_ASSERT(false,
-               "Vehicle::SetSpeed not reconstructed (trailer path) [FLAG PC boot gate]");
+    CGS_ASSERT(IsAlive(), "IsAlive()");
+    CGS_ASSERT(lfSpeed.x == lfSpeed.x, "RwMath::IsValid( lfValue )");
+    mSpeed_DistAcrossLane_SwerveAmount_W.x = lfSpeed.x;
 }
 
+// FLAG PC boot gate: Vehicle::CalcTowBarPos is not reconstructed. No ARTIST per-function
+// export and no Feb-2007 counterpart; only Vehicle::InitialiseAsTrailer reaches it, and the
+// driving-traffic maker keeps its trailer leg gated for that reason.
+// DELETE-WHEN articulated traffic lands.
 Vector3 Vehicle::CalcTowBarPos(Matrix44Affine lTransform, const VehicleTypeRuntime* lpTypeRuntime) const
 {
     (void)lTransform;
@@ -209,6 +252,103 @@ void Vehicle::Construct(VehicleAxles* lpAxles, Matrix44Affine& lOutMatrix)
     muCrashTrafficType = static_cast<u8>(BrnPhysics::Vehicle::eCrashTrafficType_Invalid);
     mSympCrashTarget.muValue = 0xFFFFFFFF;
     meSympCrashState = E_SYMPATHETIC_NONE;
+}
+
+// Vehicle::InitialiseAsStandard (X360 @0x8275F3A0) -- makes a DRIVING traffic car exist on a
+// lane param. Assert order is the asm's, baked at BrnTrafficVehicle.cpp:390-399.
+//
+// TWO ASM-FORCED DIVERGENCES FROM Feb-2007: the ship writes 0.0f into the W lane of
+// mSpeed_DistAcrossLane_SwerveAmount_W where the leak wrote lpVehicleTraits->GetSwervingModifier()
+// (arg_5C is read nowhere but the null assert), and it seats the axles with
+// ForceIntersectWithLane against the param's history rung pair instead of a plain Y-axis up.
+void Vehicle::InitialiseAsStandard(
+    VehicleAxles* lpAxles,
+    Matrix44Affine& lOutMatrix,
+    const Param* lpParam,
+    f32 lfRandomVal,
+    Hull** lpapHulls,
+    u32 luVehicleType,
+    const VehicleTypeRuntime* lpVehicleTypeRuntime,
+    const VehicleTypeUpdateData* lpVehicleTypeUpdate,
+    const VehicleTraits* lpVehicleTraits,
+    f32 lfDistAcrossLane,
+    f32 lfSpeed,
+    Vector3 lParamPos,
+    Vector3 lParamDirection,
+    u32 luVehicle,
+    VehicleSoaData& lVehicleSoaData,
+    u16 luTrailerIndex)
+{
+    CGS_ASSERT(lpAxles != nullptr, "lpAxles");
+    CGS_ASSERT(lpParam != nullptr, "lpParam");
+    CGS_ASSERT(lpapHulls != nullptr, "lpapHulls");
+    CGS_ASSERT(lpVehicleTypeRuntime != nullptr, "lpVehicleTypeRuntime");
+    CGS_ASSERT(lpVehicleTypeUpdate != nullptr, "lpVehicleTypeUpdate");
+    CGS_ASSERT(lpVehicleTraits != nullptr, "lpVehicleTraits");
+    CGS_ASSERT(rw::math::vpu::IsValid(lParamPos), "RwMath::IsValid( lParamPos )");
+    CGS_ASSERT(rw::math::vpu::IsValid(lParamDirection), "RwMath::IsValid( lParamDirection )");
+    CGS_ASSERT(!lVehicleSoaData.mAliveVehicles.IsBitSet(luVehicle),
+               "!lVehicleSoaData.mAliveVehicles.IsBitSet( luVehicle )");
+    CGS_ASSERT((luTrailerIndex >= KU_TRAILER_TRAFFIC_OFFSET
+                && luTrailerIndex < KU_MAX_TOTAL_TRAFFIC)
+                   || luTrailerIndex == KU_INVALID_VEHICLE,
+               "( luTrailerIndex >= KU_TRAILER_TRAFFIC_OFFSET && luTrailerIndex < "
+               "KU_MAX_TOTAL_TRAFFIC ) || luTrailerIndex == KU_INVALID_VEHICLE");
+    (void)lpVehicleTraits;   // assert-only in the ship body
+
+    mxFlags = E_FLAG_ALIVE;
+    lVehicleSoaData.mAliveVehicles.SetBit(luVehicle);
+
+    const Vector3 lFrontAxlePos =
+        lParamPos - lParamDirection * KF_VEHICLE_START_DISTANCE_FROM_TARGET;
+    const Vector3 lBackAxlePos =
+        lFrontAxlePos
+        - lParamDirection * (lpVehicleTypeRuntime->GetForwardAxleOffset()
+                             - lpVehicleTypeRuntime->GetBackAxleOffset());
+
+    mfRandomVal   = lfRandomVal;
+    muSpecies     = E_SPECIES_STANDARD;
+    muVehicleType = static_cast<u8>(luVehicleType);
+
+    lpAxles->mFrontAxle.mPosAndWheelRadius.SetVector3(lFrontAxlePos);
+    lpAxles->mBackAxle.mPosAndWheelRadius.SetVector3(lBackAxlePos);
+    lpAxles->mFrontAxle.mPosAndWheelRadius.SetPlus(lpVehicleTypeUpdate->mfWheelRadius);
+    lpAxles->mBackAxle.mPosAndWheelRadius.SetPlus(lpVehicleTypeUpdate->mfWheelRadius);
+
+    u32 luSegmentIndex;
+    u32 luHullIndex;
+    lpParam->GetHistoryEntry(0, &luSegmentIndex, &luHullIndex);
+    const LaneRung& lRung0 = lpapHulls[luHullIndex]->mpaRungs[luSegmentIndex];
+    const LaneRung& lRung1 = lpapHulls[luHullIndex]->mpaRungs[luSegmentIndex + 1];
+    lpAxles->mFrontAxle.ForceIntersectWithLane(lRung0, lRung1);
+    lpAxles->mBackAxle.ForceIntersectWithLane(lRung0, lRung1);
+
+    UpdateMatrix(lpAxles, lOutMatrix, lpVehicleTypeRuntime,
+                 Vector3{ 0.0f, 1.0f, 0.0f, 0.0f });
+
+    mxEffectState           = 0;
+    miBrakelightState       = 0;
+    miPhysicalReason        = -1;
+    muHeadlightWarmth       = 0xFF;
+    muHeadlightFlashPattern = PatternGenerator::E_HEADLIGHTFLASH_COUNT;
+    muHeadlightFlashState   = 0xFF;
+
+    mPitch_Roll_Steering_WheelRot.SetZero();
+    mSpeed_DistAcrossLane_SwerveAmount_W =
+        Vector4{ lfSpeed, lfDistAcrossLane, 0.0f, 0.0f };
+
+    miManoeuvre      = E_MANOEUVRE_NONE;
+    mfSwerveTime     = 0.0f;
+    muOtherHalfIndex = luTrailerIndex;
+    mLinearVelocity  = lOutMatrix.At() * mSpeed_DistAcrossLane_SwerveAmount_W.x;
+
+    if (luTrailerIndex != KU_INVALID_VEHICLE)
+    {
+        lVehicleSoaData.mArticulatedVehicles.SetBit(luVehicle);
+    }
+
+    muCrashTrafficType = static_cast<u8>(BrnPhysics::Vehicle::eCrashTrafficType_Invalid);
+    mSympCrashTarget.muValue = 0xFFFFFFFF;
 }
 
 // Vehicle::InitialiseAsStatic (X360 @0x827567F0) -- makes a parked traffic car exist. No
@@ -436,6 +576,112 @@ Vector3 Vehicle::CalcFrontAxlePos(Matrix44Affine lTransform,
     return lArticulationPoint + lTransform.At() * lfReach;
 }
 
+// Vehicle::UpdateEffects (X360 @0x82756D48, DWARF BrnTrafficVehicle.h:302) -- one blink step
+// for the headlight-flash pattern, the indicators and the two bulb-warmth ramps.
+//
+// The ship grew three things over Feb-2007: the crash prologue, an ALARM arm and a GIVE_UP
+// arm. Both new arms run the indicator timer on the 0.4f period, toggle a fixed effect-state
+// mask, then SKIP the flash/indicator work and carry IsLeftIndicatorOn() forward as the
+// indicator-bulb condition.
+void Vehicle::UpdateEffects(f32 lfTimeDelta, s32 liBulbWarmthDelta, CgsNumeric::Random* lpRand)
+{
+    bool lbIndicatorLit = false;
+
+    if (IsCrashing() || IsSympatheticallyCrashing())
+    {
+        SetFlashingHeadlights(false, lpRand);
+    }
+
+    if (IsAlarmOn())
+    {
+        mfIndicatorTimeToFlash -= lfTimeDelta;
+        if (mfIndicatorTimeToFlash < 0.0f)
+        {
+            mfIndicatorTimeToFlash += KF_VEHICLE_ALARM_FLASH_TIME;
+            mxEffectState ^= KX_EFFECT_ALARM_TOGGLE_MASK;
+        }
+        lbIndicatorLit = IsLeftIndicatorOn();
+    }
+    else if (GetCurrentManoeuvre() == E_MANOEUVRE_GIVE_UP)
+    {
+        mfIndicatorTimeToFlash -= lfTimeDelta;
+        if (mfIndicatorTimeToFlash < 0.0f)
+        {
+            mfIndicatorTimeToFlash += KF_VEHICLE_ALARM_FLASH_TIME;
+            mxEffectState ^= KX_EFFECT_HAZARD_TOGGLE_MASK;
+        }
+        lbIndicatorLit = IsLeftIndicatorOn();
+    }
+    else
+    {
+        if (IsFlashingHeadlights())
+        {
+            bool lbHeadlightsFlashed = AreHeadlightsFlashed();
+
+            // PatternGenerator carries no state; the console passes luPattern in r3 with no
+            // `this`, and this tree models the stepper as a member of the empty struct.
+            PatternGenerator lPatternGenerator;
+            const bool lbPatternPlaying = lPatternGenerator.UpdateHeadlightFlash(
+                muHeadlightFlashPattern, lfTimeDelta, &mfHeadlightTimeToFlash,
+                &muHeadlightFlashState, &lbHeadlightsFlashed);
+
+            SetHeadlightsFlashed(lbHeadlightsFlashed);
+
+            if (!lbPatternPlaying)
+            {
+                SetFlashingHeadlights(false, lpRand);
+            }
+        }
+
+        if (IsIndicatingLeft() || IsIndicatingRight())
+        {
+            mfIndicatorTimeToFlash -= lfTimeDelta;
+            if (mfIndicatorTimeToFlash < 0.0f)
+            {
+                if (IsIndicatingLeft())
+                {
+                    ToggleLeftIndicatorOn();
+                }
+                if (IsIndicatingRight())
+                {
+                    ToggleRightIndicatorOn();
+                }
+                mfIndicatorTimeToFlash += KF_VEHICLE_INDICATOR_FLASH_TIME;
+            }
+        }
+    }
+
+    CGS_ASSERT(IsAlive(), "IsAlive()");   // baked BrnTrafficVehicle.h:1743
+
+    s32 liHeadlightWarmth = muHeadlightWarmth;
+    if (AreHeadlightsFlashed())
+    {
+        liHeadlightWarmth -= liBulbWarmthDelta;
+        if (liHeadlightWarmth < 0) { liHeadlightWarmth = 0; }
+    }
+    else
+    {
+        liHeadlightWarmth += liBulbWarmthDelta;
+        if (liHeadlightWarmth > KI_BULB_WARMTH_MAX) { liHeadlightWarmth = KI_BULB_WARMTH_MAX; }
+    }
+    muHeadlightWarmth = static_cast<u8>(liHeadlightWarmth);
+
+    s32 liIndicatorWarmth = muIndicatorBulbWarmth;
+    if (lbIndicatorLit
+        || (IsIndicatingLeft() && IsLeftIndicatorOn())
+        || (IsIndicatingRight() && IsRightIndicatorOn()))
+    {
+        liIndicatorWarmth += liBulbWarmthDelta;
+        if (liIndicatorWarmth > KI_BULB_WARMTH_MAX) { liIndicatorWarmth = KI_BULB_WARMTH_MAX; }
+    }
+    else
+    {
+        liIndicatorWarmth -= liBulbWarmthDelta;
+        if (liIndicatorWarmth < 0) { liIndicatorWarmth = 0; }
+    }
+    muIndicatorBulbWarmth = static_cast<u8>(liIndicatorWarmth);
+}
+
 // Packed lanes:
 //   mSpeed_DistAcrossLane_SwerveAmount_W = { Speed, DistAcrossLane, SwerveAmount, - }
 //   mPitch_Roll_Steering_WheelRot        = { Pitch, Roll, Steering, WheelRot }
@@ -581,6 +827,24 @@ bool Vehicle::AreBrakelightsOn() const
 // ---- crash/physical classifiers. IsCrashing/IsRecoveringFromSlam/IsBeingChecked test
 // muCrashTrafficType (+0x01, `lbz r11,1`); IsExtremeSwerving/IsNormalPhysical test
 // miPhysicalReason (+0x39). The IsPhysical() assert fires only on the hit path. ----
+// EXPORT HOLE (UpdateEffects @0x82756D48 calls it by name). Bit 1 of mxEffectState, the
+// partner of the bit-2 IsRightIndicatorOn; SetLeftIndicatorOn / ToggleLeftIndicatorOn in this
+// file already write that bit.
+bool Vehicle::IsLeftIndicatorOn() const
+{
+    CGS_ASSERT(IsAlive(), "IsAlive()");
+    return ((mxEffectState >> 1) & 1) != 0;
+}
+
+// FLAG: DWARF BrnTrafficVehicle.h:393, EXPORT HOLE -- the body is REASONED, not attested.
+// meSympCrashState is the only sympathetic-crash state field and Construct seeds it
+// E_SYMPATHETIC_NONE. DELETE-WHEN a per-function export or an inlined copy turns up.
+bool Vehicle::IsSympatheticallyCrashing() const
+{
+    CGS_ASSERT(IsAlive(), "IsAlive()");
+    return meSympCrashState != E_SYMPATHETIC_NONE;
+}
+
 bool Vehicle::IsCrashing() const
 {
     CGS_ASSERT(IsAlive(), "IsAlive()");

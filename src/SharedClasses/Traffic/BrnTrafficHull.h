@@ -80,14 +80,20 @@ struct Hull
     // slice starts at its own muRungOffset.
     inline const f32* GetRungLengthsForSection(const Section* lpSection) const;
 
-    // FLAG (opaque-element stride): Neighbour and the stop-line index element are
-    // forward-declared only, so these two accessors stay bodied off the asm's
-    // explicit element stride. DELETE WHEN the BrnTrafficSection.h /
-    // BrnTrafficStopLine.h records are reconstructed and can be indexed by name.
+    // FLAG (opaque-element stride): the stop-line index element is forward-declared only,
+    // so GetStopLine stays bodied off the asm's explicit element stride. DELETE WHEN the
+    // BrnTrafficStopLine.h record is reconstructed and can be indexed by name.
 
     // X360 @ 0x821F5358. asm: assert(mpaNeighbourData != 0); assert(luIndex <
-    // muNumNeighbours); return mpaNeighbourData + 4*luIndex (`slwi r11, r29, 2`).
-    inline const void* GetNeighbour(u32 luIndex) const;
+    // muNumNeighbours); return mpaNeighbourData + 4*luIndex (`slwi r11, r29, 2`), which is
+    // sizeof(Neighbour) -- the element type is modelled and sizeof-pinned in
+    // BrnTrafficSection.h, so this indexes by name.
+    inline const Neighbour* GetNeighbour(u32 luIndex) const;
+
+    // DWARF BrnTrafficHull.h:100. Console-inlined; the ship's assert sits at
+    // BrnTrafficHull.h:231 (Section::FindNeighbourForRung @0x82752C2C hoists it out of the
+    // scan loop, which is why the whole array -- not one element -- is the accessor).
+    inline const Neighbour* GetNeighbours() const;
 
     // X360 @ 0x82705C90 (DWARF BrnTrafficHull.h:130). asm:
     // `return 80 * luIndex + *(this + 36);` -- +36 is the console's
@@ -127,11 +133,17 @@ inline const f32* Hull::GetRungLengthsForSection(const Section* lpSection) const
     return mpafCumulativeRungLengths + lpSection->muRungOffset;
 }
 
-inline const void* Hull::GetNeighbour(u32 luIndex) const
+inline const Neighbour* Hull::GetNeighbour(u32 luIndex) const
 {
     CGS_ASSERT(mpaNeighbourData != nullptr, "mpaNeighbourData");
     CGS_ASSERT(luIndex < muNumNeighbours, "luIndex < muNumNeighbours");
-    return reinterpret_cast<const u8*>(mpaNeighbourData) + 4u * luIndex;
+    return &mpaNeighbourData[luIndex];
+}
+
+inline const Neighbour* Hull::GetNeighbours() const
+{
+    CGS_ASSERT(mpaNeighbourData != nullptr, "mpaNeighbourData");
+    return mpaNeighbourData;
 }
 
 inline const StaticTrafficVehicle* Hull::GetStaticVehicle(u32 luIndex) const

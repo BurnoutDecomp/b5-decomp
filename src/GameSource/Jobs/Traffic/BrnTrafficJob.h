@@ -20,6 +20,7 @@
 #include "SDKs/EATech/eajobs/job_scheduler.h"          // EA::Jobs::JobScheduler (gJobManager)
 #include "SDKs/EATech/eajobs/job_types.h"              // EA::Jobs::Param
 #include "GameSource/Jobs/Traffic/TrafficCommon.h"     // BrnTraffic::JobParams / UpdateVehiclesJobParams
+#include "GameSource/Jobs/Traffic/BrnUpdateVehiclesJob.h" // BrnTraffic::UpdateVehiclesJob (embedded by value)
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficMiscRuntimeClasses.h" // BrnTraffic::PhysicalRequestInfoList
 
 namespace BrnTraffic {
@@ -32,9 +33,31 @@ struct TrafficJobData
     JobParams mParams;    // Traffic.h:31
 };
 
+// GameSource/Jobs/Traffic/TrafficJob.cpp -- the per-worker job object. TrafficJobEntry picks
+// one out of a fixed table by worker id and calls Execute on it. Layout from the X360:
+// mpData at +0 (`stw r30, 0(r28)` @0x8291752C) and the embedded UpdateVehiclesJob at +0x80
+// (`addi r3, r29, 0x80` @0x829174A0); the console record is 1280 bytes (TrafficJobEntry
+// strides the table by 1280 @0x829172E0). ExecuteUpdateVehicles also hands the job a third
+// argument at this+0x300 that neither Execute nor Initialise reads -- not modelled.
+struct TrafficJob
+{
+    void Execute(JobParams* lpData);                  // @0x829174B0 (TrafficJob.cpp:51/:69)
+    void ExecuteUpdateVehicles(JobParams* lpParams);  // @0x82917420 (TrafficJob.cpp:89)
+
+    JobParams*        mpData;              // +0x000
+    UpdateVehiclesJob mUpdateVehiclesJob;  // +0x080
+};
+
+// TrafficJobEntry @0x829172E0 asserts the worker id is < 6 ("SPU Id out of range: ",
+// Traffic.cpp:57) and indexes a fixed table of that many TrafficJobs (X360 unk_831B9C80).
+static const u32 KU_MAX_TRAFFIC_JOB_WORKERS = 6;
+
+// X360 unk_831B9C80 -- the worker-indexed TrafficJob table. Defined in BrnTrafficJob.cpp.
+extern TrafficJob gaTrafficJobs[KU_MAX_TRAFFIC_JOB_WORKERS];
+
 // The traffic vehicle-update worker entry (the local job function whose address is handed to
-// EntryPoint::SetCode). Its body lives in the traffic-job worker TU; declared BY NAME here to
-// match the X360 `bl TrafficJobEntry`.
+// EntryPoint::SetCode). X360 @0x829172E0; the JobParams arrive in the SECOND EA::Jobs::Param
+// (`mr r29, r4` then `bl TrafficJob::Execute` with r4 == r29).
 void TrafficJobEntry(EA::Jobs::Param, EA::Jobs::Param, EA::Jobs::Param, EA::Jobs::Param);
 
 // X360 unk_830EA650 -- the process-wide job scheduler singleton (CgsSystem::HardwareInit brings

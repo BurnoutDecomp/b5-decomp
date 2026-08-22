@@ -118,6 +118,47 @@ namespace BrnTraffic
         return &maParams[luParam].maPlans[luPlan];
     }
 
+    // @ 0x827077D0 -- `16 * (luParam + 13528) + this`. Both console asserts kept: the second
+    // one is the pool-warm-up guard (muLastParamCalculated is seeded past KU_MAX_PARAMS).
+    ParamNeedToSlowData* TrafficEntityModule::GetParamNeedToSlowData(u32 luParam)
+    {
+        CGS_ASSERT(luParam < KU_MAX_PARAMS, "luParam < KU_MAX_PARAMS");
+        CGS_ASSERT(muLastParamCalculated >= KU_MAX_PARAMS, "muLastParamCalculated >= KU_MAX_PARAMS");
+        return &maParamNeedToSlowData[luParam];
+    }
+
+    // @ 0x82707700 (EXPORT HOLE). Shape mirrors GetParam @0x82707630: bounds assert then the
+    // element. Console stride 64 from base +226048 == &maParamTransforms[0].
+    ParamTransform* TrafficEntityModule::GetParamTransform(u32 luParam)
+    {
+        CGS_ASSERT(luParam < KU_MAX_PARAMS, "luParam < KU_MAX_PARAMS");
+        return &maParamTransforms[luParam];
+    }
+
+    // DWARF BrnTrafficUnity.cpp:15022. No standalone ARTIST symbol: every caller inlines the
+    // bounds assert plus the `8 * (luParam + 27856) + this` index (== &maParamListNodes[luParam]).
+    ParamListNode* TrafficEntityModule::GetParamListNode(u32 luParam)
+    {
+        CGS_ASSERT(luParam < KU_MAX_PARAMS, "luParam < KU_MAX_PARAMS");
+        return &maParamListNodes[luParam];
+    }
+
+    // DWARF :1602 (BrnTrafficUnity.cpp:18527, .cpp 9146). Every X360 caller inlines it to the
+    // list node's muPrevParam.
+    u32 TrafficEntityModule::GetParamBehind(u32 luParam) const
+    {
+        CGS_ASSERT(luParam < KU_MAX_PARAMS, "luParam < KU_MAX_PARAMS");
+        return maParamListNodes[luParam].muPrevParam;
+    }
+
+    // @ 0x82707C90 (EXPORT HOLE). DWARF :2558 returns Matrix44Affine BY VALUE; every call site
+    // passes an sret buffer. SetVehicleTransform @0x827142B8 is the writer.
+    Matrix44Affine TrafficEntityModule::GetVehicleTransform(u32 luIndex) const
+    {
+        CGS_ASSERT(luIndex < KU_MAX_TOTAL_TRAFFIC, "luIndex < KU_MAX_TOTAL_TRAFFIC");
+        return maVehicleTransforms[luIndex];
+    }
+
     // leak :1655 -- the per-vehicle-type runtime record (bbox, axle offsets, paint colours).
     // X360-attested: Prepare @0x8274A578 stage 3 walks the array from
     // `this + 0x76390` == &maVehicleTypeRuntime[0].mBBoxHalfSize at a 128-byte stride.

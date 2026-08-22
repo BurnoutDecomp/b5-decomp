@@ -50,6 +50,10 @@ namespace Gen
         // @0x8262E04C -- both do `addi r3, dataArea, 0x158 ; bl RefSpec::GetCollection` and
         // feed the result to the physicsvehiclehandling ctor.
         static const u32 KU_PHYSICS_VEHICLE_HANDLING_REFSPEC_OFFSET = 0x158;  // 344 -> physicsvehiclehandling
+        // The graphics-asset RefSpec. VehicleTypeRuntime::Prepare @0x82761FAC does
+        // `addi r3, dataArea, 0x170 ; bl RefSpec::GetCollection` and feeds the result to the
+        // burnoutcargraphicsasset ctor. DWARF name: Attrib::Hash::burnoutcarasset::GraphicsAsset.
+        static const u32 KU_GRAPHICS_ASSET_REFSPEC_OFFSET = 0x170;  // 368 -> burnoutcargraphicsasset
 
         // ⭐ THE KEY CTOR -- X360 sub_82204998 (out-of-line here, inlined into
         // ProcessNewVehicleEvents). Resolve this car's burnoutcarasset collection by its
@@ -77,6 +81,8 @@ namespace Gen
         RefSpec* GetExternalCamRefSpec() const { return RefSpecAt(KU_EXTERNAL_CAM_REFSPEC_OFFSET); }
         RefSpec* GetPhysicsVehicleHandlingRefSpec() const
         { return RefSpecAt(KU_PHYSICS_VEHICLE_HANDLING_REFSPEC_OFFSET); }
+        RefSpec* GetGraphicsAssetRefSpec() const
+        { return RefSpecAt(KU_GRAPHICS_ASSET_REFSPEC_OFFSET); }
         const char* GetAssetName() const
         {
             const u8* lpData = static_cast<const u8*>(GetLayoutPointer());

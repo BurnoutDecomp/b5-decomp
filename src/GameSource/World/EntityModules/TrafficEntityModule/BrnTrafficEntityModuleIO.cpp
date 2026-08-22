@@ -178,6 +178,14 @@ namespace BrnTrafficIO
         return &mSceneInputInterface;
     }
 
+    // X360 sub_82711E38 (baked 410): write-lock; return &mSceneInputInterface (this + 11376).
+    // GenerateSceneUpdateEvents @0x8273B568 is its only caller.
+    OutputBuffer_PostPhysics::SceneInputInterface* OutputBuffer_PostPhysics::GetSceneInputInterface()
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        return &mSceneInputInterface;
+    }
+
     // X360 0x827A0CC8 (baked 412): read-lock; return &mTrafficTypeResponseQueue (this + 830144).
     const OutputBuffer_PostPhysics::TrafficTypeResponseQueue* OutputBuffer_PostPhysics::GetTrafficTypeResponseQueue() const
     {

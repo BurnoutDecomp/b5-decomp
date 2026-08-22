@@ -2,8 +2,6 @@
 
 #include <cstddef>   // offsetof, for the never-called _AssertLayout pin below
 
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // gpDebugPrint / gxMessageFilterFlags
-
 // BrnTraffic::VehicleTypeRuntime::PickPaintColourForVehicle @ 0x827049A8
 //
 // Register map, with the 16-byte return going through the hidden sret pointer in r3:
@@ -54,25 +52,6 @@ Vector4 VehicleTypeRuntime::PickPaintColourForVehicle(u32 luSeed,
                                                       const Vector4* lpaPaintColours) const
 {
     CGS_ASSERT(lpaPaintColours != nullptr, "lpaPaintColours");
-
-    // FLAG PC bring-up gate: miNumPaintColours is seeded by VehicleTypeRuntime::Prepare's
-    // ATTRIB half, still gated on Attrib::Gen::burnoutcargraphicsasset. Until it lands every
-    // type has ZERO paint colours and the assert below would halt the first rendered traffic
-    // car, so degrade to a one-shot log plus palette entry 0.
-    // DELETE-WHEN Prepare's attrib half seeds the table; the assert then guards real data.
-    if (miNumPaintColours == 0)
-    {
-        static bool s_bLoggedNoPaint = false;
-        if (!s_bLoggedNoPaint)
-        {
-            s_bLoggedNoPaint = true;
-            if (CgsDev::Message::gxMessageFilterFlags & 1)
-                *CgsDev::Log::gpDebugPrint
-                    << "[T1-paint] PickPaintColourForVehicle: miNumPaintColours == 0 "
-                       "(Prepare attrib half gated) -- palette entry 0 stand-in [FLAG]\n";
-        }
-        return lpaPaintColours[0];
-    }
 
     CGS_ASSERT(miNumPaintColours != 0, "miNumPaintColours != 0");
 

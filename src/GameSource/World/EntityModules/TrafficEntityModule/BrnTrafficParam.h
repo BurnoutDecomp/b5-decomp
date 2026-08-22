@@ -31,11 +31,24 @@
 //   0x4C mauHistorySegments[6] (u16)  0x58 mauHistoryHulls[6] (u16)
 //   0x64 muNextHistoryToWrite (u8) 0x65 muStartSectionIndex 0x66 muStartHullIndex (u16)
 //   0x68 mfBackDist (f32)         0x6C muExtraBehaviourFlags (u8)
-// sizeof(Param) == 0x70 (DWARF tail field at 0x6C plus the trailing word pad).
+// Console Param record stride is 128, not 0x70: GetParam @0x82707630 returns
+// ((luParam + 1291) << 7) + this, UpdateParams @0x82744A80 strides the pool by 128, and
+// maParamNeedToSlowData starts at 165248 + 400*128. [MEMBER HOLE 7] RESOLVED: no ARTIST load
+// or store reaches a Param base at 0x6D..0x7F, and neither Param::Construct @0x82751B60 nor
+// Param::Initialise @0x82755F40 writes there, so the 19-byte tail is record padding, not an
+// unmodelled member. The Feb-2007 mfSpeedDiff is gone from the ship record: Initialise seeds
+// mfAcceleration (0x30) and mfLastSpeed (0x34) in its place, and both are DWARF-named.
+// HOST-NATIVE: this header pins no console size; nothing may assume sizeof(Param) == 128.
 // ---------------------------------------------------------------------------
 
 namespace BrnTraffic
 {
+// Pointer-only in the Param::Initialise signature below (DWARF BrnTrafficParam.h:330).
+struct Hull;
+struct VehicleTypeData;
+struct VehicleTraits;
+class  VehicleTypeRuntime;
+
 // KU_PARAM_NUM_SEGMENTS_TO_REMEMBER / KU_PARAM_NUM_PLANS (BrnTrafficConstants.h, leak).
 static const u32 KU_PARAM_NUM_SEGMENTS_TO_REMEMBER = 6;
 static const u32 KU_PARAM_NUM_PLANS = 2;
@@ -98,16 +111,30 @@ public:
         E_FLAG_DYING            = 0x02,
         E_FLAG_SHOULD_BE_REMOVED = 0x10,
         E_FLAG_ZOMBIE           = 0x20,
+        // SetDivorced sets 0x40 (sibling StaticTrafficParam::SetDivorced @0x82706CE8
+        // `ori r11, r11, 0x40`); KillParam @0x82721FB8 reads the same bit.
+        E_FLAG_DIVORCED         = 0x40,
         E_FLAG_IN_PURGATORY     = 0x80,
     };
 
     // mxEffectAndHistoryState bits used by this TU (asm): SetChangedSection sets 0x08,
     // SetDyingState sets 0x04 (HasDied), and HasDied tests 0x04.
+    // 0x02 / 0x10: Initialise @0x82755F40 seeds the byte with 0x12, and UpdateParams
+    // @0x82744A80 tests 0x02 (skip a param born this frame) and 0x10 (needs a new plan).
     enum EffectAndHistoryFlags
     {
+        E_HISTORY_BORN            = 0x02,
         E_HISTORY_DIED            = 0x04,
         E_HISTORY_CHANGED_SECTION = 0x08,
+        E_HISTORY_NEEDS_NEW_PLAN  = 0x10,
     };
+
+    // UpdateParams_UpdateBehaviour @0x82716C90 asserts miBehaviour in [0, 7).
+    // FLAG: only the NORMAL enumerator is attested (Initialise @0x82755F40 seeds 6).
+    // The other six ship enumerators are not recoverable from this TU.
+    static const s8 KI_BEHAVIOUR_NORMAL   = 6;
+    static const s8 KI_BEHAVIOUR_INVALID  = -1;   // Construct @0x82751B60 seed
+    static const s32 KI_BEHAVIOURS_COUNT  = 7;
 
     u16 muHullIndex;            // 0x00
     u8  muSectionIndex;         // 0x02
@@ -142,6 +169,21 @@ public:
     u8  muExtraBehaviourFlags;  // 0x6C
 
     // --- the 11 functions owned by this TU ---
+    void Construct();                                            // @ 0x82751B60
+    // @ 0x82755F40. Parameter list is DWARF BrnTrafficParam.h:330, confirmed slot for slot
+    // against the prologue (r4/r5, f1/f2 with r6/r7 skipped, r8/r9/r10, then four 8-byte
+    // right-justified stack slots).
+    void Initialise(u32 luHullIndex,
+                    u32 luSectionIndex,
+                    f32 lfParamAlong,
+                    f32 lfRandomVal,
+                    u32 luVehicleType,
+                    const Hull* lpHull,
+                    const VehicleTypeData* lpVehicleTypeData,
+                    const VehicleTypeRuntime* lpVehicleTypeRuntime,
+                    const VehicleTraits* lpVehicleTraits,
+                    u32 luParam,
+                    ParamSoaData& lParamSoaData);
     void ClearDying(u32 luParam, ParamSoaData& lSoaData);
     void GetHistoryEntry(u32 luHistoryIndex, u32* lpOutSegmentIndex, u32* lpOutHullIndex) const;
     bool IsQueueing() const;
@@ -151,6 +193,10 @@ public:
     void SetInPurgatory(bool lbInPurgatory);
     void SetParamAlong(f32 lfParamAlong);
     void SetShouldBeRemoved();
+    // @ 0x82736918 (ARTIST EXPORT HOLE -- no per-function JSON; GenerateNewVehicle
+    // @0x82736528 calls it by name). Shape from the sibling StaticTrafficParam::SetDivorced
+    // @0x82706CE8, whose flag byte carries the same bit values.
+    void SetDivorced();
     void SetZombie(u32 luParam, ParamSoaData& lSoaData);
     bool ShouldBeIndicatingRight() const;
 
@@ -178,17 +224,22 @@ public:
 class ParamTransform
 {
 public:
-    Vector3  GetDeterministicPos() const;                      // later wave
+    Vector3  GetDeterministicPos() const;                      // 0x82712430 (export hole)
     Vector3  GetLerpedPos() const;                             // 0x82712500
-    Vector3  GetDirection() const;                             // FLAGGED inline stub (see below)
+    Vector3  GetDirection() const;                             // 0x827125D0
     Vector3  GetRight() const;                                 // 0x827126A0
     Vector3  CalcUp() const;                                   // 0x82712770
     VecFloat GetSpeed() const;                                 // 0x827128E0
-    Vector3  GetLerpedPositionAcross(VecFloat lfAcross) const; // later wave
-    void     UpdateLerpedPosition(VecFloat lfBlend);           // later wave
-    void     Construct();                                      // later wave
+    // PARK: no ARTIST symbol and no caller in the traffic function set, so there is no
+    // attested body. Declaration only.
+    Vector3  GetLerpedPositionAcross(VecFloat lfAcross) const;
+    void     UpdateLerpedPosition(VecFloat lfSimTimeStep);     // 0x82712968
+    void     Construct();                                      // 0x82751AF8
     void     Initialise(Vector3 lPos, Vector3 lDir, Vector3 lRight, VecFloat lfSpeed); // 0x82712BA8
-    void     Update(Vector3 lPos, Vector3 lDir, Vector3 lRight, VecFloat lfSpeed, VecFloat lfBlend); // later wave
+    // 0x82712E28. The fifth argument is lfAcceleration, not a blend factor: the console's
+    // own assert string at BrnTrafficParam.h:697 names it.
+    void     Update(Vector3 lPos, Vector3 lDir, Vector3 lRight, VecFloat lfSpeed,
+                    VecFloat lfAcceleration);
 
 private:
     Vector3     mPos;                // 0x00
@@ -198,14 +249,38 @@ private:
 };
 // sizeof(ParamTransform) == 0x40
 
-// FLAG: GetDirection is a DWARF-real accessor (BrnTrafficParam.h:130) whose X360 body is a
-// later wave, but CalcUp calls it. This inline mirror of the mDirAndAccel slot matches
-// GetRight's shape and lets the TU link. DELETE-WHEN the real body lands; replace this
-// definition rather than adding a second one.
-inline Vector3 ParamTransform::GetDirection() const
+// BrnTraffic::ParamListNode -- DWARF BrnTrafficParam.h:416. One node of the ordered
+// "params on this section" doubly-linked list the UpdateParams_UpdateLinkedList pipeline
+// walks; the module owns maParamListNodes[KU_MAX_PARAMS]. Record is 8 bytes on the console
+// (Reset @0x8272CDA0 Constructs 400 of them from +222848 with an 8-byte stride, and
+// 222848 + 400*8 == 226048 == the maParamTransforms base UpdateVehicles @0x82744F58 passes).
+struct ParamListNode
 {
-    return mDirAndAccel.GetVector3();
-}
+    u16 muNextParam;   // :418
+    u16 muPrevParam;   // :419
+    f32 mfParamAlong;  // :421
+
+    void Construct();  // @ 0x82751C38
+};
+
+// BrnTraffic::ParamNeedToSlowData -- DWARF BrnTrafficParam.h:439. The per-param
+// "who is in front of me and how hard must I brake" record UpdateParams_PrecalcBehaviourParams
+// writes and UpdateParams_UpdateBehaviour @0x82716C90 copies into the Param. Record is 16 bytes
+// on the console (GetParamNeedToSlowData @0x827077D0 returns 16 * (luParam + 13528) + this, and
+// 16*13528 == 216448 == 165248 + 400*128). Member offsets confirmed by Reset @0x8272CDA0's
+// inlined per-param seed (+0 u16, +2 s8, +4/+8/+12 f32) and by UpdateParams_UpdateBehaviour
+// copying +12 into Param::mfStopDist and +8 into Param::mfTargetSpeed.
+struct ParamNeedToSlowData
+{
+    u16 muParamInFront;  // :442  +0x00
+    s8  miBehaviour;     // :443  +0x02
+    f32 mfNextParamDist; // :445  +0x04
+    f32 mfTargetSpeed;   // :446  +0x08
+    f32 mfStopDist;      // :447  +0x0C
+
+    void Construct();    // :452
+    void Clear();        // :456
+};
 }
 
 #endif

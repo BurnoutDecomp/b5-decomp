@@ -3,10 +3,24 @@
 #include <cmath>                                          // std::floor (CalcPositionAtParameter)
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"      // CGS_ASSERT
+#include "SharedClasses/Traffic/BrnTrafficHull.h"     // Hull::GetNeighbours (FindNeighbourForRung)
 #include "rw/math/vpu/vector3_operation.h"               // operator-, IsZero, Normalize, MultAdd
 
 namespace BrnTraffic
 {
+    namespace
+    {
+        // CalcParamFromStartParamAndDistanceAlongSection's ship-only fraction clamp,
+        // flt_82013F90 / flt_82008984 (0x827102EC / 0x827102FC).
+        const f32 KF_LOCAL_PARAM_MIN = 0.001f;
+        const f32 KF_LOCAL_PARAM_MAX = 0.99900001f;
+
+        // FindNeighbourForRung's "no neighbour" return (0x82752C98 `li r3, -1` truncated to
+        // the u16 return). Distinct from the module's KU_UNKNOWN_NEIGHBOUR (0xFFFE) cache
+        // sentinel, which lives in another directory's BrnTrafficConstants.h.
+        const u16 KU_NO_NEIGHBOUR = 0xFFFFu;
+    }
+
     // -------------------------------------------------------------------------
     // BrnTraffic::LaneRung::GetRightVector  @ 0x821F4A88  -> Vector3 (by value)
     //   called by BrnTraffic::Section::CalcTransformAtParameter and
@@ -298,5 +312,168 @@ namespace BrnTraffic
         const f32 lfDistB = CalcDistanceAlongSection(lfParamB, luSegmentB, lpafRungLengths);
         const f32 lfDistA = CalcDistanceAlongSection(lfParamA, luSegmentA, lpafRungLengths);
         return lfDistB - lfDistA;
+    }
+
+    // BrnTraffic::Section::CalcDistanceAlongSection  @ 0x82705900  -> float32_t
+    // Arc-length from the section start to (lfParam, luSegment). The table is SECTION-LOCAL:
+    // 0x82705B5C indexes it with luSegment alone, where the Feb-2007 body (BrnTrafficSection.h)
+    // adds muRungOffset. Its inline caller CalcSignedDistanceAlongSection @0x82705BC0 passes
+    // the pointer straight through, so both take Hull::GetRungLengthsForSection's slice.
+    f32 Section::CalcDistanceAlongSection(f32 lfParam, u32 luSegment,
+                                          const f32* lpafRungLengths) const
+    {
+        CGS_ASSERT(lfParam >= 0.0f && lfParam <= static_cast<f32>(GetNumSegments()),
+                   "Out-of-range param");
+        CGS_ASSERT(lpafRungLengths != NULL, "lpafCumulativeLengths != NULL");
+        CGS_ASSERT(luSegment == static_cast<u32>(lfParam), "Mismatched segment & param");
+
+        // 0x82705B1C..0x82705B34: the shipped table's last entry must be the section length.
+        CGS_ASSERT(muNumRungs > 0, "muNumRungs > 0");
+        CGS_ASSERT(lpafRungLengths[muNumRungs - 1] == mfLength,
+                   "lpafCumulativeLengths[muNumRungs - 1] == mfLength");
+
+        const f32 lfLength        = lpafRungLengths[luSegment];
+        const f32 lfSegmentLength = lpafRungLengths[luSegment + 1] - lfLength;
+        const f32 lfLocalParam    = lfParam - std::floor(lfParam);
+
+        return lfLocalParam * lfSegmentLength + lfLength;   // 0x82705BAC fmadds
+    }
+
+    // BrnTraffic::Section::CalcParamFromStartParamAndDistanceAlongSection  @ 0x8270FF58
+    //   -> float32_t (f1), args f1 = lfStartParam, f2 = lfDistanceForward, r6 = the table.
+    // Feb-2007 counterpart: BrnTrafficSection.h:405. THREE SHIP DIVERGENCES from it:
+    //   * the table is section-local, so the console indexes it with no muRungOffset;
+    //   * the forward walk stops one rung earlier (`luRung + 1 < GetNumSegments()`, 0x82710174);
+    //   * the local fraction is CLAMPED to [0.001, 0.999] (flt_82013F90 / flt_82008984,
+    //     0x827102EC..0x82710304) instead of only asserted about.
+    // The asserts' [-0.001, 1.001] window is flt_820BBDD0 / flt_820BBDCC.
+    f32 Section::CalcParamFromStartParamAndDistanceAlongSection(
+            f32 lfStartParam, f32 lfDistanceForward, const f32* lpafCumulativeLengths) const
+    {
+        CGS_ASSERT(lfStartParam >= 0.0f && lfStartParam < static_cast<f32>(GetNumSegments()),
+                   "Out-of-range param");
+        CGS_ASSERT(lpafCumulativeLengths != NULL, "lpafCumulativeLengths != NULL");
+
+        // 0x827100BC fctidz + the double-precision Floor idiom at 0x827100E0..0x82710118.
+        const u32 luStartRung  = static_cast<u32>(lfStartParam);
+        const f32 lfLocalStart = lfStartParam - std::floor(lfStartParam);
+
+        f32 lfSegmentLength = lpafCumulativeLengths[luStartRung + 1] - lpafCumulativeLengths[luStartRung];
+        f32 lfReturnParam;
+
+        if (lfDistanceForward > 0.0f)
+        {
+            u32 luRung   = luStartRung + 1;
+            f32 lfLength = (1.0f - lfLocalStart) * lfSegmentLength;
+
+            while (lfLength < lfDistanceForward)
+            {
+                if ((luRung + 1) >= GetNumSegments())
+                {
+                    break;
+                }
+                lfSegmentLength = lpafCumulativeLengths[luRung + 1] - lpafCumulativeLengths[luRung];
+                lfLength += lfSegmentLength;
+                ++luRung;
+            }
+
+            lfReturnParam = static_cast<f32>(luRung);
+            CGS_ASSERT(lfReturnParam <= static_cast<f32>(GetNumSegments()), "Estimation off the end (F)");
+            CGS_ASSERT(lfReturnParam >= 0.0f, "lfReturnParam >= 0.0f");
+
+            if (lfLength > lfDistanceForward)
+            {
+                f32 lfLocalParam = (lfLength - lfDistanceForward) / lfSegmentLength;
+                CGS_ASSERT(lfLocalParam >= -0.001f && lfLocalParam <= 1.001f,
+                           "lfLocalParam >= -0.001f && lfLocalParam <= 1.001f");
+
+                lfLocalParam = (lfLocalParam < KF_LOCAL_PARAM_MIN) ? KF_LOCAL_PARAM_MIN : lfLocalParam;
+                lfLocalParam = (lfLocalParam > KF_LOCAL_PARAM_MAX) ? KF_LOCAL_PARAM_MAX : lfLocalParam;
+
+                lfReturnParam -= lfLocalParam;
+                CGS_ASSERT(lfReturnParam < static_cast<f32>(GetNumSegments()), "Estimation off the end (FNL)");
+            }
+            else
+            {
+                lfReturnParam -= KF_LOCAL_PARAM_MIN;
+                CGS_ASSERT(lfReturnParam < static_cast<f32>(GetNumSegments()), "Estimation off the end (FL)");
+            }
+        }
+        else
+        {
+            s32 liRung        = static_cast<s32>(luStartRung) - 1;
+            f32 lfLength      = lfLocalStart * lfSegmentLength;
+            const f32 lfBack  = -lfDistanceForward;
+
+            while (lfLength < lfBack)
+            {
+                if (liRung < 0)
+                {
+                    break;
+                }
+                lfSegmentLength = lpafCumulativeLengths[liRung + 1] - lpafCumulativeLengths[liRung];
+                lfLength += lfSegmentLength;
+                --liRung;
+            }
+
+            lfReturnParam = static_cast<f32>(static_cast<u32>(liRung + 1));
+            CGS_ASSERT(lfReturnParam < static_cast<f32>(GetNumSegments()), "Estimation off the end (B)");
+            CGS_ASSERT(lfReturnParam >= 0.0f, "lfReturnParam >= 0.0f");
+
+            if (lfLength > lfBack)
+            {
+                f32 lfLocalParam = (lfLength + lfDistanceForward) / lfSegmentLength;
+                CGS_ASSERT(lfLocalParam >= -0.001f && lfLocalParam <= 1.001f,
+                           "lfLocalParam >= -0.001f && lfLocalParam <= 1.001f");
+
+                lfLocalParam = (lfLocalParam < KF_LOCAL_PARAM_MIN) ? KF_LOCAL_PARAM_MIN : lfLocalParam;
+                lfLocalParam = (lfLocalParam > KF_LOCAL_PARAM_MAX) ? KF_LOCAL_PARAM_MAX : lfLocalParam;
+
+                lfReturnParam += lfLocalParam;
+                CGS_ASSERT(lfReturnParam < static_cast<f32>(GetNumSegments()), "Estimation off the end (BL)");
+            }
+        }
+
+        return lfReturnParam;
+    }
+
+    // BrnTraffic::Section::FindNeighbourForRung  @ 0x82752B70  -> uint16_t
+    // The first neighbour record whose shared rung span covers luRung on the given side, as an
+    // index into the hull's neighbour array, or 0xFFFF when the side has none. Callers:
+    // WorldMap::WalkLaneLeft, UpdateParams_UpdateNeighbours, UpdateParams_UpdatePlan.
+    //
+    // SHIP DIVERGENCE from the Feb-2007 twin (BrnTrafficSection.cpp:158): that version starts
+    // the E_RIGHT scan at muNeighbourOffset + muLeftNeighbourCount. The console does not --
+    // 0x82752C4C loads muNeighbourOffset once and 0x82752C54 adds only the per-side COUNT, so
+    // both sides scan from the same base. Kept as the console has it.
+    u16 Section::FindNeighbourForRung(u32 luRung, Side leSide, const Hull* lpHull) const
+    {
+        CGS_ASSERT(static_cast<u32>(leSide) < E_SIDE_COUNT, "(uint32_t)leSide < E_SIDE_COUNT");
+        CGS_ASSERT(luRung <= muNumRungs, "luRung <= muNumRungs");
+        CGS_ASSERT(lpHull != NULL, "lpHull");
+
+        const u32 luNeighbourCount =
+            (leSide == E_RIGHT) ? muRightNeighbourCount : muLeftNeighbourCount;
+
+        if (luNeighbourCount == 0)
+        {
+            return KU_NO_NEIGHBOUR;
+        }
+
+        const Neighbour* lpaNeighbours = lpHull->GetNeighbours();
+        const u32 luMaxNeighbour = muNeighbourOffset + luNeighbourCount;
+
+        for (u32 luNeighbour = muNeighbourOffset; luNeighbour < luMaxNeighbour; ++luNeighbour)
+        {
+            const Neighbour& lrNeighbour = lpaNeighbours[luNeighbour];
+
+            if (luRung >= lrNeighbour.muOurStartRung &&
+                luRung < static_cast<u32>(lrNeighbour.muOurStartRung + lrNeighbour.muSharedLength))
+            {
+                return static_cast<u16>(luNeighbour);
+            }
+        }
+
+        return KU_NO_NEIGHBOUR;
     }
 }

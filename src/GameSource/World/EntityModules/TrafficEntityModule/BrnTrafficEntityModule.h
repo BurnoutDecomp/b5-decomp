@@ -12,11 +12,12 @@
 // HOST-NATIVE LAYOUT: nothing strides or offsets by an X360 byte, every access is by member
 // name, and the _AssertLayout pins cover relative order plus asm-attested array counts only.
 // Ship pool sizes differ from the DWARF (KU_MAX_STATIC_TRAFFIC 199, KU_MAX_TOTAL_TRAFFIC
-// 600); see BrnTrafficConstants.h. Four members are absent, each marked `[MEMBER HOLE]` at
-// its ordered position with the header that must land first.
+// 600); see BrnTrafficConstants.h. One member is still absent, marked `[MEMBER HOLE 5]` at
+// its ordered position with the exact blocker (holes 1, 2, 4 and 6 closed).
 // =============================================================================
 
 #include "types.hpp"        // u8/u16/u32/s8/s32/u64/f32
+#include "GameShared/GameClasses/Core/CgsAssert.h"  // CGS_ASSERT (UpdateVehicleStuckSideTime inline)
 #include "BrnCommonTypes.h" // EntityId, Vector2/3/4, Vector3Plus, VecFloat, Matrix44Affine
 #include "SharedClasses/BrnSharedConstants.h"   // BrnUpdateSet
 #include "GameSource/BurnoutConstants.h"        // EActiveRaceCarIndex
@@ -37,7 +38,9 @@
 #include "SharedClasses/Traffic/BrnTrafficSharedConstants.h"           // KU_MAX_VEHICLE_TYPES, ...
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficConstants.h"
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficVehicle.h"          // Vehicle, VehicleAxles, VehicleSoaData
-#include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficParam.h"            // Param, ParamSoaData, ParamTransform
+#include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficParam.h"            // Param, ParamSoaData, ParamTransform, ParamListNode, ParamNeedToSlowData
+#include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficRaceCarCache.h"     // RaceCarStateData
+#include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficPhysicalVehicleInfo.h" // PhysicalVehicleInfo
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficStaticParam.h"      // StaticTrafficParam
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficVehicleTypeRuntime.h"
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficHullRuntime.h"      // HullRuntime
@@ -51,9 +54,9 @@
 // BrnBlobbyShadowManager::BrnBlobbyShadowBuffer is a nested class, so the render trio below
 // cannot forward-declare it. Cheap include, and it reaches back to nothing here.
 #include "GameSource/Graphics/BrnBlobbyShadowManager.h"  // BrnBlobbyShadowManager::BrnBlobbyShadowBuffer
+#include "GameSource/Director/Camera/Camera.h"      // BrnDirector::Camera::Camera (mCameraLastFrame, DWARF :881)
 
 namespace CgsModule { struct IOBufferStack; }
-namespace BrnDirector { namespace Camera { class Camera; } }
 namespace BrnPhysics { namespace Deformation { class StreamedDeformationSpec; } }
 // Pointer-only uses in the render declarations (forward-declaration exception (b)):
 // including CgsDispatcher.h / BrnShadowMap.h here would pull the renderer and the
@@ -61,9 +64,17 @@ namespace BrnPhysics { namespace Deformation { class StreamedDeformationSpec; } 
 namespace CgsGraphics { class DispatchFrame; }
 namespace BrnWorld { struct ShadowMap; }
 namespace BrnResource { struct VehicleList; }   // mpVehicleList (:943) -- by pointer only
+// CacheRaceCarState's parameter, by pointer only. Real home
+// GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h;
+// including it here would pull the race-car IO graph into BrnWorldModule.h.
+namespace BrnWorld { namespace RaceCarEntityModuleIO { struct RCEntityActiveRaceCarOutputInterface; } }
 
 namespace BrnTraffic
 {
+    // Pointer-only in the driving-traffic declarations below; real home
+    // SharedClasses/Traffic/BrnTrafficSection.h.
+    struct Section;
+
     class TrafficData;
     // The DWARF spells mpVehicleList's type unqualified (:943), but it is
     // BrnResource::VehicleList (home SharedClasses/DataLists/VehicleList.h), not a
@@ -525,6 +536,31 @@ namespace BrnTrafficIO { class InputBuffer_PreScene; class OutputBuffer_PreScene
         ParamPlan* GetParamPlan(u32 luParam, u32 luPlan);            // @ 0x82707D70
         const VehicleTypeRuntime* GetVehicleTypeRuntime(u32 luVehicleType) const; // leak :1655
 
+        // @ 0x827077D0. Bounds-asserts luParam < KU_MAX_PARAMS AND
+        // muLastParamCalculated >= KU_MAX_PARAMS, then returns &maParamNeedToSlowData[luParam].
+        // FLAG: DWARF :2469 spells only the const overload; the ship needs the mutable one
+        // (UpdateParams_PrecalcBehaviourParams @0x82717C48 writes through it).
+        ParamNeedToSlowData* GetParamNeedToSlowData(u32 luParam);
+
+        // @ 0x82707700 (EXPORT HOLE -- no per-function JSON; DEBUG_AddFuzzyLogicData
+        // @0x82716040 calls it by name). DWARF :2455. Shape is GetParam's: bounds assert then
+        // &maParamTransforms[luParam].
+        ParamTransform* GetParamTransform(u32 luParam);
+
+        // @ 0x82707C90 (EXPORT HOLE -- GetSympCrashingTargetPos @0x82708C10 calls it by name).
+        // DWARF :2558 returns Matrix44Affine BY VALUE; SetVehicleTransform @0x827142B8 is the
+        // writer.
+        Matrix44Affine GetVehicleTransform(u32 luIndex) const;
+
+        // DWARF :2698 (const overload) / BrnTrafficUnity.cpp:15022. No standalone ARTIST
+        // symbol: every X360 caller inlines the bounds assert plus the array index. Declared
+        // mutable because UpdateParams_UpdateLinkedList @0x82739660 relinks through it.
+        ParamListNode* GetParamListNode(u32 luParam);
+
+        // DWARF :1602 (BrnTrafficUnity.cpp:18527, .cpp 9146). Reads the param's list node
+        // and returns muPrevParam. No standalone ARTIST symbol: every caller inlines it.
+        u32 GetParamBehind(u32 luParam) const;
+
         // X360 @0x8273F0B8. Body in BrnTrafficEntityModule_wQ7_02.cpp beside its one caller,
         // LoadData stage 7. It is a TrafficEntityModule member: its pseudocode reaches mpData
         // and mpVehicleList, and its three baked asserts cite BrnTrafficEntityModule.cpp.
@@ -546,7 +582,6 @@ namespace BrnTrafficIO { class InputBuffer_PreScene; class OutputBuffer_PreScene
         // ---- declaration-only and FLAGged. These reach sub-aggregate interiors that are
         //      only partially recovered (Vehicle / Param tails, the VMX avoidance pipeline),
         //      so they land with the waves that own those types. ----
-        void* GetParamNeedToSlowData(u32 luParam);                   // @ 0x827077D0 (FLAG: [MEMBER HOLE 1])
         void* Avoidance_CalculateDistancePosVelToOrig(void* lpResult);// @ 0x82708DD0 (FLAG: VMX)
         void  Avoidance_CalculatePassingScore();                     // @ 0x827199B8 (FLAG: VMX)
         void  CalculateAndSetSteeringUsingAvoidance();               // @ 0x8273D258 (FLAG: VMX)
@@ -571,15 +606,32 @@ namespace BrnTrafficIO { class InputBuffer_PreScene; class OutputBuffer_PreScene
         void  PutParamInPurgatory(u32 luParam);                      // @ 0x82716510 (FLAG: Array interior)
         void  RebuildGeneratorList();                                // @ 0x82742DD0 (FLAG)
         void  UpdateNormalPhysical(u32 luIndex, void* lpDriverControls); // @ 0x8273EF08 (FLAG)
-        void  UpdateParams_CalcDesiredSpeed();                       // @ 0x82717928 (FLAG: VMX)
-        void  UpdateParams_TryAvoidCrashing();                       // @ 0x82716948 (FLAG: VMX)
-        void  UpdateParams_TryToReinsertParam();                     // @ 0x827247F0 (FLAG)
         void  UpdateSerialiser();                                    // @ 0x8272DA80 (FLAG)
-        // FLAG (unrecoverable rodata): the stuck-side timer floor constant flt_82001CC0 (the
-        // fsel else-value at 0x82707FB0) is not attested in the dossier pseudocode, so the
-        // timer clamp cannot be written without fabricating it. Declaration-only until it is.
+        // @ 0x82707F00. Console defines it here (its assert names BrnTrafficEntityModule.h:2637).
+        // The fsel else-value flt_82001CC0 is 0.0f: Param::Construct @0x82751B60 loads it as the
+        // SetParamAlong argument `0.0`, ParamListNode::Construct @0x82751C38 as `mfParamAlong = 0.0`.
         void  UpdateVehicleStuckSideTime(s32 liFlags, s32 liMask, f32 lfReset,
-                                         f32 lfThreshold, f32* lpfTimer);   // @ 0x82707F00 (FLAG)
+                                         f32 lfThreshold, f32* lpfTimer)
+        {
+            CGS_ASSERT(lpfTimer != 0, "lpfTimer");   // 0x82707F2C..0x82707F50, .h:2637
+
+            if ((liFlags & liMask) != 0)
+            {
+                if (*lpfTimer < lfThreshold)    // 0x82707F64 fcmpu / bge
+                {
+                    *lpfTimer = lfReset;
+                }
+                *lpfTimer = mfSimTimeStep + *lpfTimer;   // 0x82707F80 fadds
+            }
+            else
+            {
+                *lpfTimer = *lpfTimer - mfSimTimeStep;   // 0x82707FA8 fsubs
+                if (*lpfTimer < 0.0f)                    // 0x82707FB4 fsel f0, f0, f0, 0.0f
+                {
+                    *lpfTimer = 0.0f;
+                }
+            }
+        }
         void  UpdateVehicleStuckTimers(void* lpPhysicsInfo, f32 lfReset, f32 lfThreshold); // @ 0x82708D48 (FLAG)
 
         // ---- the spawn legs. Bodies in BrnTrafficEntityModule_wT1_01.cpp; the address on
@@ -619,6 +671,9 @@ namespace BrnTrafficIO { class InputBuffer_PreScene; class OutputBuffer_PreScene
         const Hull*   GetHull(u32 luIndex) const;             // @ 0x8271D8B0
         HullRuntime*  GetHullRuntime(u32 luHull);             // @ 0x8271D9D0
         HullRuntime*  GetHullRuntimeSafe(u32 luHull);         // @ 0x8271DA70 (returns 0 when unallocated)
+        // DWARF :2270 / :2274 spell both accessors const; the ship needs the mutable pair too.
+        const HullRuntime* GetHullRuntime(u32 luHull) const;
+        const HullRuntime* GetHullRuntimeSafe(u32 luHull) const;
 
         // @ 0x827142B8 -- validity-asserts the affine and stores it into maVehicleTransforms.
         void SetVehicleTransform(u32 luIndex, const Matrix44Affine& lTransform);
@@ -669,6 +724,122 @@ namespace BrnTrafficIO { class InputBuffer_PreScene; class OutputBuffer_PreScene
         void UpdateNonDecisionFrame(const BrnTrafficIO::InputBuffer_PostPhysics* lpInput,
                                     BrnTrafficIO::OutputBuffer_PostPhysics* lpOutput);
 
+        // ---- the driving-traffic set. DECLARATIONS ONLY: every body belongs to a later
+        //      cluster of this round. Each signature is the DecFIGS DWARF's, checked argument
+        //      for argument against the X360 call site where one exists; the address on each
+        //      line is its ARTIST entry point. `EXPORT HOLE` means the image has the function
+        //      (a named call site proves it) but no per-function JSON.
+
+        // generation
+        void AddGenerator(u32 luHull, u32 luSection, f32* lpfTimeTillNextGeneration); // @0x82734B00
+        f32  CalcTimeToNextGeneration(u32 luHull, u32 luSection);    // @0x82721B08
+        void GenerateNewVehicle(u32 luHull, u32 luSection, u32 luVehicleType, f32 lfParamAlong); // @0x82736528
+        u32  TryAllocateParamId();                                   // @0x82723370
+        void InsertParamIntoList(u32 luParam, u32 luHull, u32 luSection, f32 lfParamAlong); // @0x82725CB8
+        void RemoveParamFromList(u32 luParam);                       // @0x82726340
+        // @0x827261E8 (EXPORT HOLE -- UpdateParams_UpdateLinkedList @0x82739660 calls it
+        // by name). DWARF BrnTrafficEntityModule.cpp:12824.
+        void SwapParamsInList(u32 luParamA, u32 luParamB);
+
+        // per-decision-frame param simulation
+        // @0x82744A80 (DWARF :1626). lpInput is forwarded to UpdateParams_BuildListOfCrashingThings:
+        // `mr r29, r4` @0x82744A94, `mr r5, r29` @0x82744C20, `bl ..._BuildListOfCrashingThings`
+        // @0x82744C6C -- and that callee asserts r5 non-null against the string "lpInput".
+        void UpdateParams(const BrnTrafficIO::InputBuffer_PostPhysics* lpInput);
+        void UpdateParams_UpdateDead();                              // @0x827369A8
+        void UpdateParams_UpdatePurgatoryList();                     // @0x827244E0
+        void UpdateParams_UpdatePlan(u32 luParam, u32 luSectionIndex); // @0x82737CE8
+        void UpdateParams_UpdateBehaviour(u32 luParam);              // @0x82716C90
+        void UpdateParams_PrecalcBehaviourParams(u32 luParam,
+                                                 const Section* lpSection,
+                                                 const Hull* lpHull,
+                                                 Vector4 lConeA,
+                                                 Vector4 lConeB,
+                                                 Vector4 lConeC);    // @0x82717C48
+        void UpdateParams_CalcDesiredSpeed(u32 luParam,
+                                           const Section* lpSection,
+                                           const Hull* lpHull,
+                                           const CgsContainers::FastBitArray<KU_PARAM_MAX_PARAMS>& lrAvoidSet); // @0x82717928
+        f32  UpdateParams_CalcAcceleration(u32 luParam,
+                                           const Param* lpParam,
+                                           const Section* lpSection,
+                                           const CgsContainers::FastBitArray<KU_PARAM_MAX_PARAMS>& lrAvoidSet) const; // @0x827172B8
+        void UpdateParams_IncrementParam(u32 luParam,
+                                         const Hull** lpapHull,
+                                         const Section** lpapSection); // @0x82738C80
+        void UpdateParams_HandleLaneChanges(u32 luParam,
+                                            const Hull* lpHull,
+                                            const Section** lpapSection); // @0x82725880
+        void UpdateParams_UpdateLinkedList();                        // @0x82739660
+        // @0x82743FE8 (ARTIST EXPORT HOLE; DWARF :1635, BrnTrafficUnity.cpp:18355, .cpp 9770).
+        // The non-decision-frame param time-slicer: it is what advances muLastParamCalculated.
+        void UpdateParams_DoTimeSlicedLogic(
+            u32 luBeginParam,
+            u32 luEndParam,
+            const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface*
+                lpActiveRaceCarInterface);
+        void UpdateParams_UpdateNeighbours(Param* lpParam,
+                                           const Section* lpSection,
+                                           const Hull* lpHull);      // @0x82708AC8
+        void UpdateParams_TryToReinsertParam(u32 luParam);           // @0x827247F0
+        void UpdateParam_CheckIfNeedToSlow(u32 luParam,
+                                           const Hull* lpHull,
+                                           u32 luSectionIndex,
+                                           const Section* lpSection,
+                                           const ::Array<PhysicalVehicleInfo,
+                                                         KU_MAX_PHYSICAL_VEHICLES_TO_CACHE>* lpaPhysicalVehicles); // @0x82738468
+        void UpdateParam_CheckIfInsideParamInFront(u32 luParam);     // @0x82717A70
+        bool DoesParamNeedToStopForStopline(u32 luParam,
+                                            u32 luSectionIndex,
+                                            const Section* lpSection,
+                                            const Hull* lpHull,
+                                            f32* lpfOutStopDist) const; // @0x827249F8
+        void EatParamsNextPlan(u32 luParam);                         // @0x827087D0
+        u32  FindNextParam(u32 luParam, u32 luSectionIndex, f32 lfParamAlong) const; // @0x82723A48
+        u32  FindNextParamRelative(u32 luParam, f32 lfParamAlong) const; // @0x82708400
+        u32  FindNearestParamInFront(u32 luParam, f32 lfMaxDist, f32* lpfOutDist) const; // @0x82725060
+        u32  FindFirstParamAfterPos(u32 luHull, u32 luSectionIndex, f32 lfParamAlong,
+                                    f32* lpfOutParamAlong) const;    // @0x82723B80
+        void UpdatePressure_Reset();                                 // @0x8272BB88
+        void Pressure_PickSplitToTake(const Section* lpSection,
+                                      u8* lpuOutSplit,
+                                      u16* lpuOutHull,
+                                      u8* lpuOutSection) const;      // @0x8272BC68
+        void KillParam(u32 luParam);                                 // @0x82721FB8
+        void KillAllZombies();                                       // @0x82734DF8
+        void KillOutOfAreaTraffic(ActiveHullSet* lpActiveHulls);     // @0x82734C78
+
+        // crash surface -- GATED for round 1, declared so the two consumers above link.
+        void UpdateParams_BuildListOfCrashingThings(
+                ::Array<CrashingThingData, 168u>* lpaOut,
+                const BrnTrafficIO::InputBuffer_PostPhysics* lpInput,
+                const CgsContainers::FastBitArray<KU_PARAM_MAX_PARAMS>& lrAvoidSet); // @0x82737270
+        void UpdateParams_TryAvoidCrashing(u32 luParam,
+                                           const ::Array<CrashingThingData, 168u>* lpaCrashingThings); // @0x82716948
+        void UpdateParams_TryStartSympatheticCrashing(u32 luParam,
+                                                      const ::Array<CrashingThingData, 168u>* lpaCrashingThings); // @0x827165D8
+
+        // vehicle creation + the kinematic move
+        void UpdateVehicles_CreateNewVehicles(const BrnTrafficIO::InputBuffer_PostPhysics* lpInput); // @0x8273A308
+        void UpdateVehicles(const BrnTrafficIO::InputBuffer_PostPhysics* lpInput,
+                            BrnTrafficIO::OutputBuffer_PostPhysics* lpOutput); // @0x82744F58
+        // @0x827185D0 (EXPORT HOLE -- UpdateVehicles calls it by name). DWARF :1716 spells the
+        // parameter InputBuffer_PreScene::ActiveRaceCarOutputInterface, which is a typedef for
+        // the type below; spelled through the real type because the IO buffers are only
+        // forward-declared here.
+        void CacheRaceCarState(
+                const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface*
+                    lpRaceCars);
+
+        // scene presence
+        void GenerateSceneUpdateEvents(BrnTrafficIO::OutputBuffer_PostPhysics* lpOutput); // @0x8273B568
+        // @0x82739CD8 (EXPORT HOLE -- UpdateNonDecisionFrame @0x8274C1A8 calls it by name).
+        void UpdateLerpedParamTransforms();
+
+        // PARKED, deliberately NOT declared: FindFirstParamOnSection (DWARF :1596, leak
+        // BrnTrafficEntityModule.cpp:4959). It has no progress/status.json row and no named
+        // ARTIST call site, so nothing attests it exists in the ship image.
+
         // @0x8272FA30, DWARF :1317. Per-vehicle scene registration: it turns an alive traffic
         // vehicle into an entity the scene manager can hand to the renderer. Body in
         // BrnTrafficEntityModule_wT1_05.cpp; its only caller is PreSceneUpdate's
@@ -703,11 +874,14 @@ namespace BrnTrafficIO { class InputBuffer_PreScene; class OutputBuffer_PreScene
         CgsNumeric::Random    mEffectRand;                       // :616
 
         // [MEMBER HOLE 5 -- DWARF :619] TrafficJobStub maJobs[4]
-        //   BLOCKER: BrnTraffic::TrafficJobStub (home GameSource/Jobs/Traffic/BrnTrafficJob.h)
-        //   embeds EA::Jobs::Job by value, which would drag the whole EATech eajobs SDK into
-        //   this header's include graph, and BrnWorldModule.h includes this header. The type
-        //   is fully declared; this is an include-graph choice. Insert HERE when a job wave
-        //   needs it.
+        //   BLOCKER (measured, wave T2 r2): including BrnTrafficJob.h here fails every mounted
+        //   traffic TU with C2011 on EA::Thread::{Semaphore,Mutex,Condition,RWMutex}Parameters
+        //   -- SDKs/EATech/eathread/BrnEAThreadX360.h redefines the vendor/EAThread snapshot's
+        //   types, and it arrives ONLY through BrnTrafficJob.h -> eajobs/job_scheduler.h.
+        //   BrnTrafficJob.h's other includes are clean against this header (probed).
+        //   FIX (one line, owner GameSource/Jobs/Traffic): move job_scheduler.h out of
+        //   BrnTrafficJob.h into BrnTrafficJob.cpp; `extern JobScheduler gJobManager;` needs
+        //   only an incomplete type. Insert HERE then, and drop the host split in _wT2_04.cpp.
         u32                   muNumUpdateVehiclesJobs;           // :620
 
         // ---- the vehicle pools: three pools in one array (X360-attested). Standard is
@@ -723,16 +897,14 @@ namespace BrnTrafficIO { class InputBuffer_PreScene; class OutputBuffer_PreScene
         VehicleSoaData        mVehicleSoaData;                   // :635
 
         Param                 maParams[KU_MAX_PARAMS];           // :637
-        // [MEMBER HOLE 1 -- DWARF :638] ParamNeedToSlowData maParamNeedToSlowData[400]
-        //   BLOCKER: BrnTraffic::ParamNeedToSlowData's DWARF home is BrnTrafficParam.h, which
-        //   does not declare it. X360-attested shape: GetParamNeedToSlowData @0x827077D0
-        //   returns `16 * (luParam + 13528) + this`, so the record is 16 bytes and the array is
-        //   KU_MAX_PARAMS long. Add the struct to BrnTrafficParam.h, insert the member HERE,
-        //   then body GetParamNeedToSlowData.
-        // [MEMBER HOLE 2 -- DWARF :639] ParamListNode maParamListNodes[400]
-        //   BLOCKER: same, BrnTraffic::ParamListNode is undeclared in BrnTrafficParam.h. It is
-        //   the doubly-linked "params in this section, in order" node the
-        //   UpdateParams_UpdateLinkedList pipeline walks. Insert HERE.
+        // Console bases close with zero slack across all four pool arrays: maParams +165248
+        // (GetParam @0x82707630), maParamNeedToSlowData +216448 == 165248 + 400*128
+        // (GetParamNeedToSlowData @0x827077D0), maParamListNodes +222848 == 216448 + 400*16
+        // (Reset @0x8272CDA0 Constructs 400 of them from there at an 8-byte stride), and
+        // maParamTransforms +226048 == 222848 + 400*8 (the base UpdateVehicles @0x82744F58
+        // passes as mpaParamTransforms).
+        ParamNeedToSlowData   maParamNeedToSlowData[KU_MAX_PARAMS]; // :638
+        ParamListNode         maParamListNodes[KU_MAX_PARAMS];   // :639
         ParamTransform        maParamTransforms[KU_MAX_PARAMS];  // :640
         ParamSoaData          mParamSoaData;                     // :641
         ::Array<u16, 1u>      mParamsToReinsert;                 // :642
@@ -812,12 +984,9 @@ namespace BrnTrafficIO { class InputBuffer_PreScene; class OutputBuffer_PreScene
         f32                   mfTrafficLightChangeBackDelay;        // :705
         VecFloat              mfSimTimeStepVec;                     // :706
 
-        // [MEMBER HOLE 4 -- DWARF :708] RaceCarStateData mRaceCarState
-        //   BLOCKER: BrnTraffic::RaceCarStateData's DWARF home,
-        //   TrafficEntityModule/BrnTrafficRaceCarCache.h, does not exist in the tree. It is the
-        //   per-frame cache of the active race cars the traffic sim reacts to (>= 928 bytes on
-        //   the console: Prepare stage 0 zeroes an 8-byte field at this+0x713A0, inside it).
-        //   Reconstruct that header, then insert the member HERE.
+        // Filled once per UpdateVehicles @0x82744F58 by CacheRaceCarState @0x827185D0, then
+        // handed to the vehicle job by const pointer (UpdateVehiclesJobParams).
+        RaceCarStateData      mRaceCarState;                     // :708
 
         Vector3               maEventGridStartPositions[E_ACTIVE_RACE_CAR_INDEX_COUNT]; // :710
         u8                    muNumberOfParticipantsInCurrentEvent;              // :711
@@ -994,10 +1163,10 @@ namespace BrnTrafficIO { class InputBuffer_PreScene; class OutputBuffer_PreScene
 
         f32                   mfSpeedMultiplier;                    // :879
 
-        // [MEMBER HOLE 6 -- DWARF :881] Camera mCameraLastFrame
-        //   BLOCKER: DWARF type `Camera` is BrnDirector::Camera::Camera, whose header would
-        //   pull the director camera graph into BrnWorldModule.h's includes. Its only consumer
-        //   is the mbDEBUGPickVehicleFromCamera tool. Insert HERE when that tool lands.
+        // :881. X360 +0x72890; the position lane the proximity culls and the job split read
+        // at +0x728C0 is this camera's transform Pos row (+0x30). Written by
+        // GenerateDispatchLists @0x8273B280 (Camera::operator= @0x8273B2C8).
+        BrnDirector::Camera::Camera mCameraLastFrame;                // :881
 
         bool                  mbDEBUGWorstCase;                     // :883
 

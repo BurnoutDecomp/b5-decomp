@@ -11,10 +11,11 @@ namespace CgsNumeric { class Random; }
 
 namespace BrnTraffic
 {
-class Hull;
+struct Hull;   // struct, not class: BrnTrafficHull.h defines it as a struct and MSVC mangles the key
 class Param;
 class VehicleTypeRuntime;
 struct LaneRung;
+struct VehicleTraits;
 
 // DWARF BrnTrafficVehicle.h:53. The weight the ship-only `lOldUp` argument carries into
 // Vehicle::UpdateMatrix's blended up-vector: X360 @0x82757768 loads the whole 16-byte lane
@@ -100,6 +101,31 @@ public:
 
     void Construct(VehicleAxles* lpAxles, Matrix44Affine& lOutMatrix);
 
+    // The driving-car constructor. DWARF BrnTrafficVehicle.h:259, X360 @0x8275F3A0.
+    // Register/stack split from the prologue: r3 this, r4 lpAxles, r5 lOutMatrix, r6 lpParam,
+    // f1 lfRandomVal (r7 reserved by the PPC float-arg GPR skip), r8 lpapHulls,
+    // r9 luVehicleType, r10 lpVehicleTypeRuntime, then the 8-byte right-justified stack slots
+    // arg_54 lpVehicleTypeUpdate, arg_5C lpVehicleTraits, f2 lfDistAcrossLane, f3 lfSpeed,
+    // v1 lParamPos, v2 lParamDirection, arg_94 luVehicle, arg_9C lVehicleSoaData,
+    // arg_A6 luTrailerIndex. Sixteen parameters, exactly the DWARF list.
+    void InitialiseAsStandard(
+        VehicleAxles* lpAxles,
+        Matrix44Affine& lOutMatrix,
+        const Param* lpParam,
+        f32 lfRandomVal,
+        Hull** lpapHulls,
+        u32 luVehicleType,
+        const VehicleTypeRuntime* lpVehicleTypeRuntime,
+        const VehicleTypeUpdateData* lpVehicleTypeUpdate,
+        const VehicleTraits* lpVehicleTraits,
+        f32 lfDistAcrossLane,
+        f32 lfSpeed,
+        Vector3 lParamPos,
+        Vector3 lParamDirection,
+        u32 luVehicle,
+        VehicleSoaData& lVehicleSoaData,
+        u16 luTrailerIndex);
+
     // The parked-car constructor. DWARF BrnTrafficVehicle.h:272, X360 @0x827567F0.
     // Parameter order and width come from the prologue, not the pseudocode: r3 this,
     // r4 lpAxles, r5 lOutMatrix, f1 lfRandomVal (its GPR slot r6 is reserved and unused, the
@@ -135,6 +161,10 @@ public:
         u16 luCabIndex);
 
     void OnPhysical(BrnPhysics::Vehicle::eCrashTrafficType leCrashTrafficType);
+
+    // DWARF BrnTrafficVehicle.h:302, X360 @0x82756D48. Per-frame headlight-flash / indicator /
+    // bulb-warmth tick.
+    void UpdateEffects(f32 lfTimeDelta, s32 liBulbWarmthDelta, CgsNumeric::Random* lpRand);
 
     // ---- inline state predicates (X360 inlines these flag/species reads at every
     // call site; the bodies below assert against them by NAME). ----
@@ -172,6 +202,10 @@ public:
 
     bool IsHornOn() const;
     bool IsAlarmOn() const;
+    // DWARF BrnTrafficVehicle.h:459. Bit 1 of mxEffectState, the partner of the bit-2
+    // IsRightIndicatorOn below. EXPORT HOLE: no per-function JSON; UpdateEffects @0x82756D48
+    // calls it by name.
+    bool IsLeftIndicatorOn() const;
     bool IsRightIndicatorOn() const;
     bool IsIndicatingLeft() const;
     bool IsIndicatingRight() const;
@@ -179,6 +213,12 @@ public:
     bool AreHeadlightsFlashed() const;
     bool AreBrakelightsOn() const;
     bool IsCrashing() const;
+    // DWARF BrnTrafficVehicle.h:393. EXPORT HOLE (UpdateEffects @0x82756D48 and
+    // GenerateDriverInputs @0x82748E78 call it by name); body reasoned, see the .cpp FLAG.
+    bool IsSympatheticallyCrashing() const;
+    // E_FLAG_FROZEN, attested by GenerateSceneUpdateEvents @0x8273C17C
+    // (`lbz r11,5(this) ; rlwinm r11,r11,0,27,27` == mxFlags & 0x10).
+    bool IsFrozen() const { return (mxFlags & E_FLAG_FROZEN) != 0; }
     bool IsRecoveringFromSlam() const;
     bool IsExtremeSwerving() const;
     bool IsBeingChecked() const;

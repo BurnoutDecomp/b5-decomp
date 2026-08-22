@@ -2,6 +2,18 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "rw/math/vpu/vector3_operation.h"   // IsZero / IsValid / Normalize / Cross (ParamTransform)
 
+// Param::Construct / Param::Initialise reach these; all four are leaf headers.
+#include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficConstants.h"        // KU_UNKNOWN_STOPLINE / KU_UNKNOWN_NEIGHBOUR
+#include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficStaticParam.h"      // KU_INVALID_HULL
+#include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficVehicleTypeRuntime.h" // GetBBoxOffset / GetBBoxHalfSize
+#include "SharedClasses/Traffic/BrnTrafficSharedConstants.h"  // KU_INVALID_SECTION, E_DIR_STRAIGHT_ON, E_SIDE_COUNT
+#include "SharedClasses/Traffic/BrnTrafficHull.h"             // Hull::GetSection
+#include "SharedClasses/Traffic/BrnTrafficSection.h"          // Section::mfSpeed / muRungOffset
+#include "SharedClasses/Traffic/BrnTrafficVehicleType.h"      // VehicleTypeData::mxVehicleFlags
+#include "SharedClasses/Traffic/BrnTrafficVehicleTraits.h"    // VehicleTraits::GetAccelerationModifier
+
+#include <cfloat>   // FLT_MAX (the console's 0x7F7FFFFF seeds)
+
 // Reconstructed from BURNOUT_X360_ARTIST.XEX:
 //   BrnTraffic::Param::ClearDying              @ 0x82713130
 //   BrnTraffic::Param::GetHistoryEntry         @ 0x8274FA08
@@ -30,6 +42,147 @@ void ParamSoaData::Construct()
     mAliveParams.Construct();
     mDyingParams.Construct();
     mZombieParams.Construct();
+}
+
+// rodata flt_820C0DFC, the scale Construct stores straight into mfMaxAcceleration and
+// Initialise multiplies by VehicleTraits::GetAccelerationModifier(). The Feb-2007 source names
+// it KF_PARAM_MAX_ACCEL_FORCE (BrnTrafficParam.cpp:139).
+static const f32 KF_PARAM_MAX_ACCEL_FORCE = 0.23999999f;
+
+// rodata flt_820C0F68, subtracted from mfBackDist when the vehicle type tows a trailer
+// (VehicleTypeData::mxVehicleFlags bit 0). Not named by the leak, which has no such leg.
+static const f32 KF_PARAM_CAB_BACK_DIST_EXTENSION = 12.0f;
+
+// The sentinel Construct/Initialise store into both mauNeighbourEndRung slots. The leak
+// spells it ~0 over a uint8_t; the asm stores 0xFF.
+static const u8 KU_PARAM_INVALID_NEIGHBOUR_END_RUNG = 0xFFu;
+
+// 0x82751B60 — the pool-wide reset Reset @0x8272CDA0 runs 400 times. Store order is the asm's.
+void Param::Construct()
+{
+    muHullIndex         = KU_INVALID_HULL;
+    muStartHullIndex    = KU_INVALID_HULL;
+    muSectionIndex      = KU_INVALID_SECTION;
+    muStartSectionIndex = KU_INVALID_SECTION;
+
+    SetParamAlong(0.0f);
+
+    mfMaxAcceleration         = KF_PARAM_MAX_ACCEL_FORCE;
+    mxFlags                   = 0;
+    mxEffectAndHistoryState   = 0;
+    muCurrentSectionDirection = E_DIR_STRAIGHT_ON;
+    miBehaviour               = KI_BEHAVIOUR_INVALID;
+    muNextStopLineIndex       = static_cast<u8>(KU_UNKNOWN_STOPLINE);
+    muExtraBehaviourFlags     = 0;
+    mSympCrashTarget.muValue  = 0xFFFFFFFFu;
+
+    for (u32 luPlan = 0; luPlan < KU_PARAM_NUM_PLANS; ++luPlan)
+    {
+        maPlans[luPlan].muType = ParamPlan::E_TYPE_NONE;
+    }
+
+    for (u32 luSide = E_LEFT; luSide < E_SIDE_COUNT; ++luSide)
+    {
+        mauNeighbourData[luSide]    = static_cast<u16>(KU_UNKNOWN_NEIGHBOUR);
+        mauNeighbourEndRung[luSide] = KU_PARAM_INVALID_NEIGHBOUR_END_RUNG;
+    }
+}
+
+// 0x82755F40 — bring a free pool slot to life on a lane. The ledger files this row under
+// GameShared/GameClasses/Development/CgsStrStream.h; that is the catch-all misattribution the
+// baked FastBitArray StrStream asserts cause. The console's own assert strings cite
+// BrnTrafficParam.cpp, so this is its real home.
+//
+// Divergences from the Feb-2007 original, asm-decided: mfSpeedDiff is gone (mfAcceleration and
+// mfLastSpeed take its place), mauNeighbourData seeds KU_UNKNOWN_NEIGHBOUR (0xFFFE) rather than
+// KU_INVALID_NEIGHBOUR, the alive/dying SoA bit-sets replace the old flag bits, and mfFrontDist /
+// mfBackDist are derived from the vehicle type's bbox lanes.
+void Param::Initialise(u32 luHullIndex,
+                       u32 luSectionIndex,
+                       f32 lfParamAlong,
+                       f32 lfRandomVal,
+                       u32 luVehicleType,
+                       const Hull* lpHull,
+                       const VehicleTypeData* lpVehicleTypeData,
+                       const VehicleTypeRuntime* lpVehicleTypeRuntime,
+                       const VehicleTraits* lpVehicleTraits,
+                       u32 luParam,
+                       ParamSoaData& lParamSoaData)
+{
+    CGS_ASSERT(lpVehicleTypeData != 0, "lpVehicleTypeData");
+    CGS_ASSERT(lpVehicleTypeRuntime != 0, "lpVehicleTypeRuntime");
+    CGS_ASSERT(!IsAlive(), "!IsAlive()");
+    CGS_ASSERT(!IsDying(), "!IsDying()");
+    CGS_ASSERT(luParam < 600, "luParam in range");
+    CGS_ASSERT(!lParamSoaData.mAliveParams.IsBitSet(luParam),
+               "!lParamSoaData.mAliveParams.IsBitSet( luParam )");
+    CGS_ASSERT(!lParamSoaData.mDyingParams.IsBitSet(luParam),
+               "!lParamSoaData.mDyingParams.IsBitSet( luParam )");
+    CGS_ASSERT(lpHull != 0, "lpHull");
+
+    const Section* lpSection = lpHull->GetSection(luSectionIndex);
+    CGS_ASSERT(lpSection != 0, "lpSection");
+
+    muSectionIndex      = static_cast<u8>(luSectionIndex);
+    muStartHullIndex    = KU_INVALID_HULL;
+    muStartSectionIndex = KU_INVALID_SECTION;
+    muHullIndex         = static_cast<u16>(luHullIndex);
+
+    SetParamAlong(lfParamAlong);
+
+    mfRandomVal    = lfRandomVal;
+    muVehicleType  = static_cast<u8>(luVehicleType);
+    mfSpeed        = lpSection->mfSpeed;
+    mfAcceleration = 0.0f;
+    mxFlags        = static_cast<u8>(E_FLAG_ALIVE);
+    mfLastSpeed    = lpSection->mfSpeed;
+
+    lParamSoaData.mAliveParams.SetBit(luParam);
+
+    mxEffectAndHistoryState =
+        static_cast<u8>(E_HISTORY_BORN | E_HISTORY_NEEDS_NEW_PLAN);          // asm: 0x12
+    mfNextStopLineParam       = FLT_MAX;
+    mSympCrashTarget.muValue  = 0xFFFFFFFFu;
+    miBehaviour               = KI_BEHAVIOUR_NORMAL;
+    muCurrentSectionDirection = E_DIR_STRAIGHT_ON;
+    muNextStopLineIndex       = static_cast<u8>(KU_UNKNOWN_STOPLINE);
+    mfMaxAcceleration         = lpVehicleTraits->GetAccelerationModifier() * KF_PARAM_MAX_ACCEL_FORCE;
+    muNextHistoryToWrite      = 0;
+
+    const u16 luSegmentId =
+        static_cast<u16>(muCurrentSegment + lpSection->muRungOffset);
+    for (u32 luHistoryIndex = 0;
+         luHistoryIndex < KU_PARAM_NUM_SEGMENTS_TO_REMEMBER;
+         ++luHistoryIndex)
+    {
+        mauHistorySegments[luHistoryIndex] = luSegmentId;
+        mauHistoryHulls[luHistoryIndex]    = static_cast<u16>(luHullIndex);
+    }
+
+    mfStopDist     = FLT_MAX;
+    mfTargetSpeed  = 0.0f;
+    mfTimeQueueing = 0.0f;
+
+    // asm: vspltw lane 2 of the runtime's bbox offset and half-size, then vaddfp / vsubfp.
+    const f32 lfBBoxOffsetZ   = lpVehicleTypeRuntime->GetBBoxOffset().z;
+    const f32 lfBBoxHalfSizeZ = lpVehicleTypeRuntime->GetBBoxHalfSize().z;
+    mfFrontDist = lfBBoxOffsetZ + lfBBoxHalfSizeZ;
+    mfBackDist  = lfBBoxOffsetZ - lfBBoxHalfSizeZ;
+    if ((lpVehicleTypeData->mxVehicleFlags & 1u) != 0)
+    {
+        mfBackDist -= KF_PARAM_CAB_BACK_DIST_EXTENSION;
+    }
+
+    for (u32 luPlan = 0; luPlan < KU_PARAM_NUM_PLANS; ++luPlan)
+    {
+        maPlans[luPlan].muType = ParamPlan::E_TYPE_NONE;
+    }
+
+    for (u32 luSide = E_LEFT; luSide < E_SIDE_COUNT; ++luSide)
+    {
+        mauNeighbourData[luSide]    = static_cast<u16>(KU_UNKNOWN_NEIGHBOUR);
+        mauNeighbourEndRung[luSide] = KU_PARAM_INVALID_NEIGHBOUR_END_RUNG;
+    }
 }
 
 // 0x827069D0 — stamp the position-along and the derived integer segment.
@@ -125,6 +278,18 @@ void Param::SetShouldBeRemoved()
     CGS_ASSERT(IsAlive(), "IsAlive()");
 
     mxFlags |= E_FLAG_SHOULD_BE_REMOVED;
+}
+
+// 0x82736918 (EXPORT HOLE) — divorce a param from its still-alive vehicle.
+// FLAG: reconstructed from the sibling StaticTrafficParam::SetDivorced @0x82706CE8
+// (assert IsAlive, assert !ShouldBeRemoved, then `mxFlags |= 0x40`). DELETE-WHEN the
+// export hole is filled.
+void Param::SetDivorced()
+{
+    CGS_ASSERT(IsAlive(), "IsAlive()");
+    CGS_ASSERT((mxFlags & E_FLAG_SHOULD_BE_REMOVED) == 0, "!ShouldBeRemoved()");
+
+    mxFlags |= E_FLAG_DIVORCED;
 }
 
 // 0x82713CD0 — enter / leave the purgatory list (toggles the 0x80 flag bit).
@@ -289,10 +454,6 @@ VecFloat ParamTransform::GetSpeed() const
 //   mDirAndAccel       = { lDir.xyz, plus = 0 }                    (@0x10, accel lane cleared)
 //   mRight             = lRight                                    (@0x20)
 //   mLerpedPosAndSpeed = { (lPos - lDir*lfSpeed*KF_INIT_LERP_STEP).xyz, plus = lfSpeed } (@0x30)
-// FLAG(medium): the rodata float flt_82004014 scaling lDir*lfSpeed is a shared cross-binary
-// constant; its usages elsewhere (equality/threshold compares) indicate it is the shared ZERO
-// constant, so KF_INIT_LERP_STEP is modelled as 0.0f -- the lerp-history seed is then simply
-// lPos. The store structure is faithful regardless of the constant's exact value.
 void ParamTransform::Initialise(Vector3 lPos, Vector3 lDir, Vector3 lRight, VecFloat lfSpeed)
 {
     CGS_ASSERT(rw::math::vpu::IsValid(lPos),   "RwMath::IsValid( lPos )");
@@ -300,10 +461,8 @@ void ParamTransform::Initialise(Vector3 lPos, Vector3 lDir, Vector3 lRight, VecF
     CGS_ASSERT(rw::math::vpu::IsValid(lRight), "RwMath::IsValid( lRight )");
     CGS_ASSERT(lfSpeed.x == lfSpeed.x,         "RwMath::IsValid( lfSpeed )");
 
-    // FLAG: rodata flt_82004014 (shared ZERO constant per cross-binary usage). The back-step
-    // scaling lDir*lfSpeed before the subtract; value INFERRED 0.0f (seeds the lerp history at
-    // lPos). A future wave that hard-pins the rodata should confirm/adjust.
-    const f32 KF_INIT_LERP_STEP = 0.0f;
+    // flt_82004014 = 0.1f (rodata 3D CC CC CD @0x82004014).
+    const f32 KF_INIT_LERP_STEP = 0.1f;
 
     mPos   = lPos;
     mRight = lRight;
@@ -319,5 +478,125 @@ void ParamTransform::Initialise(Vector3 lPos, Vector3 lDir, Vector3 lRight, VecF
         lPos.z - lDir.z * lfStep,
         0.0f });
     mLerpedPosAndSpeed.SetPlus(lfSpeedScalar);
+}
+
+// 0x82751AF8 -- the pool-wide reset, run 400 times from Reset @0x8272CDA0. The asm loads the
+// two SDK basis registers by address: unk_82181520 == (0,0,1,0) and
+// rw::math::vpu::detail::gIVector @0x82181500 == (1,0,0,0).
+void ParamTransform::Construct()
+{
+    mPos.SetZero();
+
+    mDirAndAccel.SetVector3(rw::math::vpu::GetVector3_ZAxis());
+    mDirAndAccel.SetPlus(0.0f);
+
+    mRight = rw::math::vpu::GetVector3_XAxis();
+
+    mLerpedPosAndSpeed.SetVector3(Vector3{ 0.0f, 0.0f, 0.0f, 0.0f });
+    mLerpedPosAndSpeed.SetPlus(0.0f);
+}
+
+// 0x82712430 -- EXPORT HOLE (no per-function JSON at that address; UpdateParam_CheckIfNeedToSlow,
+// UpdateParams_PrecalcBehaviourParams, GetDeterministicParamPos @0x82714258 and five
+// DebugComponent draw walks all call it by name). The body is the byte-identical shape of the
+// three sibling accessors: the entry spans 0x82712430..0x827124FF, exactly the 0xD0 bytes
+// GetLerpedPos / GetDirection / GetRight each occupy, and each of those is one IsValid guard plus
+// a return of its own member. The guard string is the one ParamTransform::Update fires at
+// BrnTrafficParam.h:700. DELETE-WHEN 0x82712430 is exported and the body can be read directly.
+Vector3 ParamTransform::GetDeterministicPos() const
+{
+    CGS_ASSERT(rw::math::vpu::IsValid(mPos), "RwMath::IsValid( mPos )");
+
+    return mPos;
+}
+
+// 0x827125D0 -- the forward axis (xyz of mDirAndAccel; the w lane holds acceleration).
+// Replaces the FLAGged inline stub that used to live in BrnTrafficParam.h.
+Vector3 ParamTransform::GetDirection() const
+{
+    CGS_ASSERT(rw::math::vpu::IsValid(mDirAndAccel.GetVector3()),
+               "RwMath::IsValid( mDirAndAccel.GetVector3() )");
+
+    return mDirAndAccel.GetVector3();
+}
+
+// 0x82712968 -- advance the render-lerped position one sim step under the stored acceleration.
+// asm: speed' = max(speed + accel*dt, 0) (vmaddfp then vmaxfp against vspltisw 0); pos' =
+// pos + dir*speed'*dt (vmulfp then vmaddfp); both lanes stored back through vrlimi128, so the
+// vector store and the plus store are two separate writes to mLerpedPosAndSpeed.
+void ParamTransform::UpdateLerpedPosition(VecFloat lfSimTimeStep)
+{
+    CGS_ASSERT(rw::math::vpu::IsValid(mLerpedPosAndSpeed.GetVector3()),
+               "RwMath::IsValid( mLerpedPosAndSpeed.GetVector3() )");
+    CGS_ASSERT(mLerpedPosAndSpeed.GetPlus() == mLerpedPosAndSpeed.GetPlus(),
+               "RwMath::IsValid( mLerpedPosAndSpeed.GetPlus() )");
+    CGS_ASSERT(rw::math::vpu::IsValid(mDirAndAccel.GetVector3()),
+               "RwMath::IsValid( mDirAndAccel.GetVector3() )");
+    CGS_ASSERT(mDirAndAccel.GetPlus() == mDirAndAccel.GetPlus(),
+               "RwMath::IsValid( mDirAndAccel.GetPlus() )");
+    CGS_ASSERT(lfSimTimeStep.x == lfSimTimeStep.x, "RwMath::IsValid( lfSimTimeStep )");
+
+    const f32 lfStep     = lfSimTimeStep.x;
+    const f32 lfAccelled = mLerpedPosAndSpeed.GetPlus() + mDirAndAccel.GetPlus() * lfStep;
+    const f32 lfSpeed    = (lfAccelled > 0.0f) ? lfAccelled : 0.0f;   // asm: vmaxfp vs zero
+
+    mLerpedPosAndSpeed.SetVector3(mLerpedPosAndSpeed.GetVector3()
+                                 + mDirAndAccel.GetVector3() * (lfSpeed * lfStep));
+    mLerpedPosAndSpeed.SetPlus(lfSpeed);
+}
+
+// 0x82712E28 -- per-decision-frame restamp. The previous deterministic position becomes the
+// lerp origin BEFORE mPos takes the new one (the asm loads this+0x00 into v0 before the
+// this+0x00 store), and the fifth argument is the acceleration lane, not a blend factor.
+void ParamTransform::Update(Vector3 lPos, Vector3 lDir, Vector3 lRight,
+                            VecFloat lfSpeed, VecFloat lfAcceleration)
+{
+    CGS_ASSERT(rw::math::vpu::IsValid(lPos),   "RwMath::IsValid( lPos )");
+    CGS_ASSERT(rw::math::vpu::IsValid(lDir),   "RwMath::IsValid( lDir )");
+    CGS_ASSERT(rw::math::vpu::IsValid(lRight), "RwMath::IsValid( lRight )");
+    CGS_ASSERT(lfSpeed.x == lfSpeed.x,               "RwMath::IsValid( lfSpeed )");
+    CGS_ASSERT(lfAcceleration.x == lfAcceleration.x, "RwMath::IsValid( lfAcceleration )");
+    CGS_ASSERT(rw::math::vpu::IsValid(mPos), "RwMath::IsValid( mPos )");
+
+    mLerpedPosAndSpeed.SetVector3(mPos);
+    mLerpedPosAndSpeed.SetPlus(lfSpeed.x);
+
+    mPos = lPos;
+
+    mDirAndAccel.SetVector3(lDir);
+    mDirAndAccel.SetPlus(lfAcceleration.x);
+
+    mRight = lRight;
+}
+
+// ===========================================================================
+// BrnTraffic::ParamListNode / BrnTraffic::ParamNeedToSlowData
+// ===========================================================================
+
+// 0x82751C38 -- Reset @0x8272CDA0 runs this over all 400 nodes.
+void ParamListNode::Construct()
+{
+    mfParamAlong = 0.0f;                                  // rodata flt_82001CC0
+    muNextParam  = static_cast<u16>(KU_INVALID_PARAM);
+    muPrevParam  = static_cast<u16>(KU_INVALID_PARAM);
+}
+
+// Console-inlined, no standalone symbol. The only attested body is the five-store seed
+// Reset @0x8272CDA0 emits per param inside the same loop that calls Param::Construct
+// (u16 0xFFFF at +0, s8 -1 at +2, FLT_MAX at +4 / +8 / +12).
+// FLAG: DWARF declares Construct and Clear separately (BrnTrafficParam.h:452/:456); only one
+// body is attested, so Construct delegates. DELETE-WHEN a site that inlines Clear alone turns up.
+void ParamNeedToSlowData::Clear()
+{
+    muParamInFront  = static_cast<u16>(KU_INVALID_PARAM);
+    miBehaviour     = -1;
+    mfNextParamDist = FLT_MAX;
+    mfTargetSpeed   = FLT_MAX;
+    mfStopDist      = FLT_MAX;
+}
+
+void ParamNeedToSlowData::Construct()
+{
+    Clear();
 }
 }

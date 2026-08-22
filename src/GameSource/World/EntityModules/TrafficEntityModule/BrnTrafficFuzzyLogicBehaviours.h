@@ -70,8 +70,11 @@ namespace Fuzzy
 
         // --- members (verified offsets in parentheses) -----------------------------------
         bool    mbDEBUGRenderParamScores;        // 0x00
-        Vector3 mDEBUGLastCameraPos;             // 0x10
-        Vector3 mDEBUGCurrentParamPos;           // 0x20
+        // mutable: the DWARF marks both setters const and the console stores straight
+        // through them (UpdateParams_PrecalcBehaviourParams @0x82717F1C
+        // `stvx128 v0, r31, 465024` == this + 0x20).
+        mutable Vector3 mDEBUGLastCameraPos;     // 0x10
+        mutable Vector3 mDEBUGCurrentParamPos;   // 0x20
 
         FuzzyEnvelopeSet4 mDistanceEnvelopes;    // 0x30  (category 0)
         FuzzyEnvelopeSet4 mHeightEnvelopes;      // 0x70  (category 1)

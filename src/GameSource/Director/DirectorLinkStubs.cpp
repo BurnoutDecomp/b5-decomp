@@ -428,26 +428,6 @@ namespace Camera
 
 namespace BrnTraffic
 {
-    // ------------------------------------------------------------------------
-    // ⚠️ THESE FOUR ARE ON THE FLY-BY'S OWN DATA PATH. They are declared in
-    // SharedClasses/Traffic/BrnTrafficSection.h and their siblings (GetNumSegments @0x821F4B78,
-    // CalcPositionAtParameter @0x821F4BD8, GetGlobalRungForSegment @0x821F5068,
-    // CalcSignedDistanceAlongSection @0x82705BC0) ARE bodied in BrnTrafficSection.cpp -- these
-    // four simply have not been transcribed yet.
-    //
-    // WHAT A STUB COSTS HERE, precisely:
-    //   * CalcDirectionAtParameter / CalcTransformAtParameter feed WorldMap::
-    //     GetSafePositionNearest and the lane truck's frame. Zeroed outputs mean a lane frame
-    //     with no forward and no up.
-    //   * FindNeighbourForRung feeds WorldMap::WalkLaneLeft; 0xFFFF == "no neighbour" is the
-    //     console's own sentinel, so the walk simply stops at the current section.
-    //   * CalcDistanceAlongSection feeds CalcSignedDistanceAlongSection (which IS real).
-    // The road-runner's own Update leg is still gated, so nothing calls these yet -- but the
-    // moment that gate lifts these MUST be transcribed or the fly-by will fly a degenerate
-    // lane. They are deliberately left OBVIOUSLY wrong (zeroed / sentinel) rather than
-    // plausibly wrong.
-    // DELETE-WHEN: transcribed into BrnTrafficSection.cpp beside their four landed siblings.
-    // ------------------------------------------------------------------------
     // CalcDirectionAtParameter is GONE FROM HERE (2026-07-29): transcribed for real into
     // SharedClasses/Traffic/BrnTrafficSection.cpp beside its landed siblings, from
     // @0x821F4DB8. It was on the fly-by's own data path -- the road runner's lane frame -- and
@@ -460,22 +440,14 @@ namespace BrnTraffic
     // lane point through it -- and the stub's zeroed axes would have produced a look-at with
     // no forward at every step of the walk.
 
-    u16 Section::FindNeighbourForRung(u32 luRung, Side leSide, const Hull* lpHull) const
-    {
-        (void)luRung;
-        (void)leSide;
-        (void)lpHull;
-        return 0xFFFFu;   // the console's "no neighbour" sentinel
-    }
+    // FindNeighbourForRung is GONE FROM HERE (2026-08-22): real body @0x82752B70 transcribed
+    // into SharedClasses/Traffic/BrnTrafficSection.cpp. It is on the driving-traffic path
+    // (UpdateParams_UpdateNeighbours / UpdateParams_UpdatePlan lane changes), where the
+    // 0xFFFF sentinel meant no traffic car ever found a lane to change into.
 
-    f32 Section::CalcDistanceAlongSection(f32 lfParam, u32 luSegment,
-                                          const f32* lpafRungLengths) const
-    {
-        (void)lfParam;
-        (void)luSegment;
-        (void)lpafRungLengths;
-        return 0.0f;
-    }
+    // CalcDistanceAlongSection is GONE FROM HERE (2026-08-22): the real body @0x82705900 was
+    // already landed in SharedClasses/Traffic/BrnTrafficSection.cpp, so this stub was an
+    // LNK2005 against it as well as a 0.0f on every UpdateParams lookahead and gap test.
 }
 
 namespace ICE

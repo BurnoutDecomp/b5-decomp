@@ -35,8 +35,8 @@
 //     `if (mfTrafficAmountScale == 0.0f) return;` @0x82743634. The chain is Construct's
 //     mfBaseDensityScale = 1.0f, ResetEventData copying it into mfGameModeDensityScale, and
 //     UpdateDensity copying that into mfTrafficAmountScale every frame, so a default-
-//     constructed module runs at density 1.0. FillNewHull's driving half is suppressed by an
-//     explicit gate, never by zeroing the density.
+//     constructed module runs at density 1.0. Never suppress a spawn half by zeroing the
+//     density: it also gates the WAITING_FOR_PLAYER and POPULATING early-outs.
 //
 // Layout is host-native throughout: no member is reached by an X360 byte offset, and the
 // console displacements in the comments only attest which member a line resolves to.
@@ -49,6 +49,8 @@
 #include "SharedClasses/Traffic/BrnTrafficPvs.h"                // Pvs (UpdateRaceCarHulls' grid walk)
 #include "SharedClasses/Traffic/BrnTrafficHull.h"               // Hull, StaticTrafficVehicle
 #include "SharedClasses/Traffic/BrnTrafficFlowType.h"           // FlowType
+#include "SharedClasses/Traffic/BrnTrafficSection.h"            // Section (the generator lane walk)
+#include "SharedClasses/Traffic/BrnTrafficSectionFlow.h"        // SectionFlow (per-section spawn rate)
 #include "SharedClasses/Traffic/BrnTrafficVehicleType.h"        // VehicleTypeData / UpdateData
 #include "SharedClasses/Traffic/BrnTrafficVehicleAsset.h"       // VehicleAsset
 
@@ -62,6 +64,8 @@
 
 #include "rw/math/vpu/matrix44affine_operation.h"               // rw::math::vpu::IsValid
 
+#include <cfloat>    // FLT_MAX (the KF_MAX_FLOAT tuning seed)
+#include <cmath>     // std::floor, std::cos, std::sin
 #include <cstdlib>   // getenv
 
 namespace BrnTraffic
@@ -132,6 +136,46 @@ namespace
     // (BrnTrafficConstants.h, both already attested at 5), which is why the console can bake
     // one immediate for both cases.
     const u16 KU_STATIC_PURGATORY_DECISION_FRAMES = 5u;
+
+    // FillNewHull's driving half @0x827436B0 flt_820224B0. The random fractional car the
+    // section walk starts with, so a hull does not emit its whole row in lockstep.
+    const f32 KF_INITIAL_SPAWN_PHASE = 0.99000001f;
+
+    // FillNewHull @0x82743878 flt_820BA8BC. Per-car forward jitter, as a fraction of spacing.
+    // unk_8300CC90 == 1600.0f == 40 m squared (dyn-init thunk 0x82C662D0 squares the 40.0f
+    // splat at 0x8300CB80). FillNewHull parked-half proximity cull, 0x82743B18.
+    const f32 KF_PARKED_PROXIMITY_CULL_RADIUS_SQ = 1600.0f;
+
+    // 0x82722FE8: the per-second bulb-warmth step UpdateEffects @0x82756D48 takes.
+    const f32 KF_BULB_WARMTH_RATE = 5000.0f;
+
+    const f32 KF_SPAWN_JITTER_FRACTION = 0.30000001f;
+
+    // FillNewHull @0x82743698 flt_82001C98, the same clamp pair CalcTimeToNextGeneration
+    // @0x82721B08 uses: raise the scaled rate to this floor, never above the section's own.
+    const f32 KF_MIN_VEHICLES_PER_MINUTE = 1.0f;
+
+    // SpawnNewTraffic's generator half @0x82748?? -- the headway a generator demands behind the
+    // section's first param, expressed in seconds of lane speed (`fmuls f0, mfSpeed, 2.0`).
+    const f32 KF_GENERATOR_MIN_HEADWAY_SECONDS = 2.0f;
+
+    // Construct's tuning block writes each member as one 16-byte store; these two spell the
+    // `vspltw`-then-`stvx128` and the lane-wise forms. [DIAG-FREE] pure de-inlining.
+    inline void SetTuningSplat(Vector4& lrOut, f32 lfValue)
+    {
+        lrOut.x = lfValue;
+        lrOut.y = lfValue;
+        lrOut.z = lfValue;
+        lrOut.w = lfValue;
+    }
+
+    inline void SetTuningLanes(Vector4& lrOut, f32 lfX, f32 lfY, f32 lfZ, f32 lfW)
+    {
+        lrOut.x = lfX;
+        lrOut.y = lfY;
+        lrOut.z = lfZ;
+        lrOut.w = lfW;
+    }
 }
 
 // ============================================================================
@@ -298,6 +342,17 @@ HullRuntime* TrafficEntityModule::GetHullRuntimeSafe(u32 luHull)
         return 0;
     }
     return &maHullRuntimeData[luHullRuntime];
+}
+
+// The const overloads (DWARF :2270 / :2274). Same lookup.
+const HullRuntime* TrafficEntityModule::GetHullRuntime(u32 luHull) const
+{
+    return const_cast<TrafficEntityModule*>(this)->GetHullRuntime(luHull);
+}
+
+const HullRuntime* TrafficEntityModule::GetHullRuntimeSafe(u32 luHull) const
+{
+    return const_cast<TrafficEntityModule*>(this)->GetHullRuntimeSafe(luHull);
 }
 
 // ----------------------------------------------------------------------------
@@ -815,13 +870,23 @@ void TrafficEntityModule::StaticVehicles_UpdateVehicles(
 {
     StaticVehicles_CreateNewVehicles(lpInput);
 
-    static bool sbLogged = false;
-    LogMissingLeg(sbLogged,
-        "StaticVehicles_UpdateVehicles per-vehicle Vehicle::UpdateEffects leg -- "
-        "BrnTraffic::Vehicle::UpdateEffects has no declaration or body anywhere in the tree "
-        "(C3 landed 64 Vehicle functions; this is not one of them). Headlight/indicator "
-        "effect state on parked cars is therefore static, which is correct-looking for a "
-        "parked car and wrong only for its blinking-hazard variants");
+    // The bulb-warmth delta is hoisted out of the loop by the console (0x82722FE8).
+    const s32 liBulbWarmthDelta = static_cast<s32>(mfSimTimeStep * KF_BULB_WARMTH_RATE);
+
+    // The second set is mVehicleSoaData + 240 == mPhysicalVehicles (mVehicleSoaData is at
+    // module +164560 and each FastBitArray<601> is 80 bytes).
+    for (u32 luVehicle = KU_STATIC_TRAFFIC_OFFSET;
+         luVehicle < KU_TRAILER_TRAFFIC_OFFSET;
+         ++luVehicle)
+    {
+        if (!mVehicleSoaData.mAliveVehicles.IsBitSet(luVehicle)
+            || !mVehicleSoaData.mPhysicalVehicles.IsBitSet(luVehicle))
+        {
+            continue;
+        }
+
+        GetVehicle(luVehicle)->UpdateEffects(mfSimTimeStep, liBulbWarmthDelta, &mEffectRand);
+    }
 }
 
 // ============================================================================
@@ -934,7 +999,8 @@ u8 TrafficEntityModule::PickVehicleToSpawn(u32 luFlowTypeId)
 //
 //   lpHull = GetHull(luHull);
 //   if (mfTrafficAmountScale == 0.0f) return;        ; 0x82743634 vs flt_82001CC0 == 0.0f
-//   ---- DRIVING HALF (GATED) : per section, per lane, seed moving vehicles ----
+//   ---- DRIVING HALF (REAL, 0x82743640..0x827439F8) : per section, lay cars at even
+//        distance spacing and carry the leftover fractional car to the next section ----
 //   ---- PARKED HALF (REAL, 0x82743A74..0x82743B60) ----
 //   for (i = 0; i < lpHull->muNumStaticTraffic; ++i)
 //   {
@@ -976,20 +1042,73 @@ void TrafficEntityModule::FillNewHull(u16 luHull)
         return;
     }
 
+    // ---- DRIVING HALF, 0x82743640..0x827439F8 --------------------------------------------
+    // The section loop lays cars along each lane at even DISTANCE spacing (the leak walks in
+    // param units and Modulos; the ship walks in metres through
+    // Section::CalcParamFromStartParamAndDistanceAlongSection) and carries the leftover
+    // fractional car from one section to the next. Two ship-only additions over Feb-2007:
+    // the initial phase is random, and each car gets a jitter of up to 0.3 spacings.
+    f32 lfVehiclesToSpawn = mRand.RandomFloat(0.0f, KF_INITIAL_SPAWN_PHASE);
+
+    for (u32 luSection = 0; luSection < lpHull->muNumSections; ++luSection)
     {
-        // GATE: the DRIVING half. The console's first loop walks the hull's sections, turns
-        // each SectionFlow::muVehiclesPerMinute into a spacing along the lane, and calls
-        // GenerateNewVehicle per slot. None of that chain is bodied
-        // (Section::CalcParamFromStartParamAndDistanceAlongSection, GenerateNewVehicle
-        // @0x82736528), and it needs the lane-param pool ([MEMBER HOLE 1] ParamNeedToSlowData,
-        // [MEMBER HOLE 2] ParamListNode), which is not modelled. Gated by name, never by
-        // zeroing the density, which would kill the parked half too.
-        static bool sbLogged = false;
-        LogMissingLeg(sbLogged,
-            "FillNewHull DRIVING half (per-section generator seeding -> "
-            "Section::CalcParamFromStartParamAndDistanceAlongSection + GenerateNewVehicle "
-            "@0x82736528) -- WAVE 2. Explicitly gated, NOT suppressed by setting "
-            "mfTrafficAmountScale to zero (that would also kill the parked half)");
+        const Section*     lpSection = lpHull->GetSection(luSection);
+        const SectionFlow* lpFlow    = &lpHull->mpaSectionFlows[luSection];  // Hull::GetFlowData, inlined
+
+        if (lpFlow->muVehiclesPerMinute == 0)
+        {
+            continue;
+        }
+
+        CGS_ASSERT(lpSection->muNumRungs > 0, "muNumRungs > 0");   // 0x82743784, GetNumSegments inlined
+
+        const f32 lfTimeToDrive = lpSection->mfLength / lpSection->mfSpeed;
+
+        // 0x827437E8 / 0x827437F0, the same two fsels CalcTimeToNextGeneration @0x82721B08
+        // uses: raise the scaled rate to the floor, never above the section's own rate.
+        f32 lfVehiclesPerMinute = 0.0f;
+        if (lpFlow->muVehiclesPerMinute != 0 && mfTrafficAmountScale > 0.0f)
+        {
+            const f32 lfSectionRate = static_cast<f32>(lpFlow->muVehiclesPerMinute);
+            const f32 lfFloor       = (lfSectionRate >= KF_MIN_VEHICLES_PER_MINUTE)
+                                          ? KF_MIN_VEHICLES_PER_MINUTE
+                                          : lfSectionRate;
+            const f32 lfScaled      = mfTrafficAmountScale * lfSectionRate;
+            lfVehiclesPerMinute     = (lfScaled >= lfFloor) ? lfScaled : lfFloor;
+        }
+        CGS_ASSERT(lfVehiclesPerMinute > 0.0f, "lfVehiclesPerMinute > 0.0f");
+
+        const f32 lfSecondsPerVehicle = KF_SECONDS_PER_MINUTE / lfVehiclesPerMinute;
+
+        lfVehiclesToSpawn += lfTimeToDrive / lfSecondsPerVehicle;
+
+        const f32 lfWholeVehicles     = std::floor(lfVehiclesToSpawn);   // 0x82743868 frsp f31
+        const f32 lfVehiclesLeftOver  = lfVehiclesToSpawn - lfWholeVehicles;
+
+        const f32 lfDistPerVehicle = lpSection->mfLength / lfWholeVehicles;
+        const f32 lfJitterRange    = lfDistPerVehicle * KF_SPAWN_JITTER_FRACTION;
+
+        const f32* lpafRungLengths = lpHull->GetRungLengthsForSection(lpSection);
+
+        f32 lfParamAlong = lpSection->CalcParamFromStartParamAndDistanceAlongSection(
+                               0.0f, lfDistPerVehicle * lfVehiclesLeftOver, lpafRungLengths);
+
+        for (u32 luVehicle = static_cast<u32>(lfWholeVehicles); luVehicle != 0; --luVehicle)
+        {
+            const f32 lfJitter = mRand.RandomFloat(0.0f, lfJitterRange);
+            const f32 lfSpawnParam = lpSection->CalcParamFromStartParamAndDistanceAlongSection(
+                                         lfParamAlong, lfJitter, lpafRungLengths);
+
+            GenerateNewVehicle(PickVehicleToSpawn(lpFlow->muFlowTypeId),
+                               luHull,
+                               luSection,
+                               lfSpawnParam);
+
+            lfParamAlong = lpSection->CalcParamFromStartParamAndDistanceAlongSection(
+                               lfParamAlong, lfDistPerVehicle, lpafRungLengths);
+        }
+
+        lfVehiclesToSpawn = lfVehiclesLeftOver;   // 0x827439F0 fmr f30, f27
     }
 
     for (u32 luStatic = 0; luStatic < lpHull->muNumStaticTraffic; ++luStatic)
@@ -1019,28 +1138,14 @@ void TrafficEntityModule::FillNewHull(u16 luHull)
         }
         else
         {
-            // GATE: the parked-half proximity cull, 0x82743AFC..0x82743B28 (the +0x728C0
-            // reference position against the record's translation row, `vmsum3fp128` +
-            // `vcmpgtfp.` versus unk_8300CC90).
-            //
-            // BLOCKER: the reference position at X360 +0x728C0 falls inside the un-modelled
-            // [MEMBER HOLE 6] `Camera mCameraLastFrame` window (mfSpeedMultiplier :879 ends at
-            // +0x72884; mbDEBUGWorstCase :883 resumes at +0x729D8), so it has no attested name.
-            // The radius IS recovered: unk_8300CC90 == 1600.0f == 40 m squared, from the
-            // dyn-init thunk at 0x82C662D0 squaring the 40.0f splat at 0x8300CB80.
-            // DELETE WHEN: `Camera mCameraLastFrame` is modelled at DWARF :881, or the lane is
-            // named some other attested way.
-            //
-            // EFFECT: parked cars near the reference position are not culled, so this build
-            // spawns a superset of the console's parked set. A car may sit where the player
-            // starts, which fails visibly rather than silently deleting cars.
-            static bool sbLogged = false;
-            LogMissingLeg(sbLogged,
-                "FillNewHull parked-half proximity cull -- ONE blocker left: the reference "
-                "position X360 +0x728C0 lies in the un-modelled [MEMBER HOLE 6] "
-                "mCameraLastFrame window (no attested name). The squared radius is RECOVERED "
-                "(unk_8300CC90 == 1600.0f == 40m^2, dyn-init thunk 0x82C662D0). Not culling "
-                "spawns a SUPERSET of the console's parked set");
+            // 0x82743AFC..0x82743B28. Reference position = the +0x728C0 lane == the
+            // mCameraLastFrame transform's Pos row. Radius unk_8300CC90 == 1600.0f == 40 m
+            // squared (dyn-init thunk 0x82C662D0 squares the 40.0f splat at 0x8300CB80).
+            const Vector3 lToRecord = lpRecord->mTransform.Pos() - mCameraLastFrame.GetPosition();
+            if (rw::math::vpu::Dot(lToRecord, lToRecord) < KF_PARKED_PROXIMITY_CULL_RADIUS_SQ)
+            {
+                continue;
+            }
         }
 
         StaticVehicles_Generate(PickVehicleToSpawn(lpRecord->mFlowTypeID),
@@ -1058,7 +1163,7 @@ void TrafficEntityModule::FillNewHull(u16 luHull)
 //                                                       ; byte the committed
 //                                                       ; NeedToTakeActionAgainstJunctionFUP
 //   for (i = 0; i < lrNewActiveHulls.GetLength(); ++i)  FillNewHull(lrNewActiveHulls[i]);
-//   ---- GENERATOR HALF (GATED) : tick mafTimesTillNextGeneration, emit driving cars ----
+//   ---- GENERATOR HALF (REAL, 0x82748BB0..) : tick mafTimesTillNextGeneration, emit ----
 // ----------------------------------------------------------------------------
 void TrafficEntityModule::SpawnNewTraffic(const ActiveHullSet& lrNewActiveHulls)
 {
@@ -1086,21 +1191,58 @@ void TrafficEntityModule::SpawnNewTraffic(const ActiveHullSet& lrNewActiveHulls)
         FillNewHull(lrNewActiveHulls[luIndex]);
     }
 
-    if (muNumGenerators != 0)
+    // ---- GENERATOR HALF, 0x82748BB0.. -----------------------------------------------------
+    // Each generator counts down by the decision-frame interval. On expiry the overshoot is
+    // turned back into a distance along the lane (speed * overshoot), the car is placed there,
+    // and the emission is skipped when the first param already on that section is closer than
+    // two seconds of lane speed behind it.
+    for (u32 luGenerator = 0; luGenerator < muNumGenerators; ++luGenerator)
     {
-        // GATE: the generator half (driving traffic). From 0x82748BB0, each of
-        // muNumGenerators entries counts mafTimesTillNextGeneration down by mfSimTimeStep and
-        // on expiry runs PickVehicleToSpawn -> CalcParamFromStartParamAndDistanceAlongSection
-        // -> GetFirstParamInSection -> CalcDistanceAlongSection -> GenerateNewVehicle ->
-        // CalcTimeToNextGeneration. Only GetFirstParamInSection is bodied. Unreachable today
-        // anyway: muNumGenerators is raised only by RebuildGeneratorList @0x82742DD0, which
-        // has no body either.
-        static bool sbLogged = false;
-        LogMissingLeg(sbLogged,
-            "SpawnNewTraffic GENERATOR half (mafTimesTillNextGeneration tick -> "
-            "GenerateNewVehicle @0x82736528 / CalcTimeToNextGeneration) -- WAVE 2; "
-            "unreachable today because RebuildGeneratorList @0x82742DD0 has no body so "
-            "muNumGenerators stays 0");
+        mafTimesTillNextGeneration[luGenerator] -= mfSimTimeSinceLastDecision;
+
+        if (mafTimesTillNextGeneration[luGenerator] > 0.0f)
+        {
+            continue;
+        }
+
+        const u32 luHull    = maGenerators[luGenerator].muHull;
+        const u32 luSection = maGenerators[luGenerator].muSection;
+
+        const Hull*        lpHull    = GetHull(luHull);
+        const SectionFlow* lpFlow    = &lpHull->mpaSectionFlows[luSection];  // Hull::GetFlowData, inlined
+        const Section*     lpSection = lpHull->GetSection(luSection);
+
+        const u8  luVehicleType  = PickVehicleToSpawn(lpFlow->muFlowTypeId);
+        const f32 lfDistanceIn   = -(mafTimesTillNextGeneration[luGenerator] * lpSection->mfSpeed);
+        const f32* lpafRungLengths = lpHull->GetRungLengthsForSection(lpSection);
+
+        const f32 lfParamAlong = lpSection->CalcParamFromStartParamAndDistanceAlongSection(
+                                     0.0f, lfDistanceIn, lpafRungLengths);
+
+        bool lbGenerate = true;
+
+        const u16 luFirstParam = GetHullRuntime(luHull)->GetFirstParamInSection(luSection);
+        if (luFirstParam != static_cast<u16>(KU_INVALID_PARAM))
+        {
+            const Param* lpFirstParam = GetParam(luFirstParam);
+
+            const f32 lfFrontDist = lpSection->CalcDistanceAlongSection(lpFirstParam->mfParamAlong,
+                                                                        lpFirstParam->muCurrentSegment,
+                                                                        lpafRungLengths)
+                                    - lpFirstParam->mfBackDist;
+
+            if ((lfFrontDist - lfDistanceIn) < (lpSection->mfSpeed * KF_GENERATOR_MIN_HEADWAY_SECONDS))
+            {
+                lbGenerate = false;
+            }
+        }
+
+        if (lbGenerate)
+        {
+            GenerateNewVehicle(luVehicleType, luHull, luSection, lfParamAlong);
+        }
+
+        mafTimesTillNextGeneration[luGenerator] += CalcTimeToNextGeneration(luHull, luSection);
     }
 }
 
@@ -1126,9 +1268,11 @@ void TrafficEntityModule::SpawnNewTraffic(const ActiveHullSet& lrNewActiveHulls)
 //     order-independent, so only the order FillNewHull visits hulls in changes.
 //   * mHullsToAddTriggersFor / mHullsToRemoveTriggersFor -- they need ::Array<T,N>::AppendSet,
 //     which CgsArray.h does not declare (it has AppendArray only).
-//   * the per-old-hull HullRuntime::Release + free and the per-new-hull allocate +
-//     HullRuntime::Prepare, with the trigger/light-manager events they drive. Parked cars do
-//     not read HullRuntime; only the driving generator does.
+//   * the light-manager events either side of the HullRuntime loops, and the stopline walk
+//     ending in HullRuntime::SetStoplineRed @0x8274D82C -- TrafficLightManager has no body.
+//
+// The per-old-hull HullRuntime::Release + free, the per-new-hull allocate + HullRuntime::Prepare
+// and the tail call to RebuildGeneratorList @0x8274D8F4 are LIVE (wave T2 round 1).
 // ----------------------------------------------------------------------------
 void TrafficEntityModule::RecalculateActiveHulls(
     const BrnTrafficIO::InputBuffer_PostPhysics* lpInput,
@@ -1230,22 +1374,16 @@ void TrafficEntityModule::RecalculateActiveHulls(
                 const Vector3 lSimCentre = lpPlayerState->mTransform.wAxis;
 
                 {
-                    // GATE: the two DEBUG sim-centre overrides, both substituting the same
-                    // 16-byte lane at X360 +0x728C0 -- one selected by the +0x729D4 word tested
-                    // against 0x4000 (0x82721554), one forced by mpDebugComponent->+0x34
-                    // (0x827215A8). Both the lane and the flag word fall inside the un-modelled
-                    // [MEMBER HOLE 6] `Camera mCameraLastFrame` window, so neither has an
-                    // attested name. No effect on a normal boot: the live default is taken.
-                    // DELETE WHEN: that window is modelled. FillNewHull's parked-half cull
-                    // reads the same lane and unblocks with it.
+                    // GATE: the two DEBUG sim-centre overrides @0x82721554 / 0x827215A8, both
+                    // substituting mCameraLastFrame.GetPosition() for lSimCentre.
+                    // BLOCKER: the selector word at X360 +0x729D4 is mCameraLastFrame+0x144,
+                    // an unnamed Camera field, and DebugComponent::+0x34 has no name either.
+                    // DELETE-WHEN both are named. DEBUG-ONLY; the live default is taken.
                     static bool sbLogged = false;
                     LogMissingLeg(sbLogged,
-                        "UpdateRaceCarHulls DEBUG sim-centre overrides (the +0x729D4 & 0x4000 "
-                        "flag arm and the mpDebugComponent->+0x34 arm, both substituting the "
-                        "+0x728C0 lane) -- both the lane and the flag lie inside the "
-                        "un-modelled [MEMBER HOLE 6] mCameraLastFrame window, so neither has "
-                        "an attested name. DEBUG-ONLY: the live default (the player car's "
-                        "position) is taken");
+                        "UpdateRaceCarHulls DEBUG sim-centre overrides @0x82721554 / "
+                        "0x827215A8 -- selector words mCameraLastFrame+0x144 and "
+                        "DebugComponent+0x34 are unnamed. DEBUG-ONLY, no live effect");
                 }
 
                 // The box half-extent, 0x827215CC..0x82721604: mfTrafficSimRadius through the
@@ -1394,15 +1532,89 @@ void TrafficEntityModule::RecalculateActiveHulls(
     }
 
     {
+        // GATE: the two Array<u16,72>::AppendSet calls @0x8274?? that feed
+        // mHullsToAddTriggersFor / mHullsToRemoveTriggersFor. BLOCKER: ::Array<T,N>::AppendSet
+        // is absent from CgsArray.h, which declares AppendArray only.
+        // DELETE-WHEN CgsArray.h grows AppendSet. Triggers are not on the round-1 driving path.
         static bool sbLogged = false;
         LogMissingLeg(sbLogged,
-            "RecalculateActiveHulls trigger/hull-runtime legs -- (a) the two "
-            "Array<u16,72>::AppendSet calls that feed mHullsToAddTriggersFor / "
-            "mHullsToRemoveTriggersFor need ::Array<T,N>::AppendSet, absent from CgsArray.h "
-            "(it declares AppendArray only); (b) the per-old-hull HullRuntime::Release + "
-            "mUsedHullRuntimeData free and the per-new-hull allocate + HullRuntime::Prepare "
-            "and their light-manager events. Parked cars never read HullRuntime -- only the "
-            "driving generator does, which is gated for wave 2");
+            "RecalculateActiveHulls trigger legs -- the two Array<u16,72>::AppendSet calls "
+            "feeding mHullsToAddTriggersFor / mHullsToRemoveTriggersFor need "
+            "::Array<T,N>::AppendSet, absent from CgsArray.h (it declares AppendArray only)");
+    }
+
+    // ---- HullRuntime free, one per hull that left the set ---------------------------------
+    // 0x8274?? .. `HullRuntime::Release(1176 * idx + this + 257216)` then the bit-array free
+    // and the index reset. mauHullRuntimeDataIndices / maHullRuntimeData are reached by name.
+    for (u32 luOld = 0; luOld < lpOutOldHulls->GetLength(); ++luOld)
+    {
+        const u16 luHull        = lpOutOldHulls->GetItem(luOld);
+        const u8  luHullRuntime = mauHullRuntimeDataIndices[luHull];
+
+        if (luHullRuntime == KU_INVALID_HULL_RUNTIME)
+        {
+            continue;
+        }
+
+        CGS_ASSERT(luHullRuntime < KU_MAX_ACTIVE_HULLS, "luIndex < NUMBITS");
+        CGS_ASSERT(mUsedHullRuntimeData.IsBitSet(luHullRuntime),
+                   "mUsedHullRuntimeData.IsBitSet( luHullRuntime )");
+
+        maHullRuntimeData[luHullRuntime].Release();
+        mUsedHullRuntimeData.UnSetBit(luHullRuntime);
+        mauHullRuntimeDataIndices[luHull] = KU_INVALID_HULL_RUNTIME;
+    }
+
+    // ---- HullRuntime allocate, one per hull that joined ------------------------------------
+    // The console picks the slot with a cntlzd scan for the first CLEAR bit of
+    // mUsedHullRuntimeData; CgsBitArray.h exposes no such primitive, so the scan is written
+    // as the linear loop it was strength-reduced from (same result: the lowest free slot).
+    for (u32 luNew = 0; luNew < lpOutNewHulls->GetLength(); ++luNew)
+    {
+        const u16 luHull = lpOutNewHulls->GetItem(luNew);
+
+        CGS_ASSERT(mauHullRuntimeDataIndices[luHull] == KU_INVALID_HULL_RUNTIME,
+                   "mauHullRuntimeDataIndices[luHull] == KU_INVALID_HULL_RUNTIME");
+
+        s32 liHullRuntime = -1;
+        for (u32 luSlot = 0; luSlot < KU_MAX_ACTIVE_HULLS; ++luSlot)
+        {
+            if (!mUsedHullRuntimeData.IsBitSet(luSlot))
+            {
+                liHullRuntime = static_cast<s32>(luSlot);
+                break;
+            }
+        }
+
+        CGS_ASSERT(liHullRuntime >= 0, "liHullRuntime >= 0");
+        if (liHullRuntime < 0)
+        {
+            continue;
+        }
+
+        maHullRuntimeData[liHullRuntime].Prepare(GetHull(luHull), luHull);
+        mUsedHullRuntimeData.SetBit(static_cast<u32>(liHullRuntime));
+        mauHullRuntimeDataIndices[luHull] = static_cast<u8>(liHullRuntime);
+    }
+
+    {
+        // GATE: the light-manager events either side of the two loops above, and the trailing
+        // per-hull stopline walk that ends in HullRuntime::SetStoplineRed.
+        // BLOCKER: TrafficLightManager has no Construct/Update body in this tree (see the
+        // Reset and PostPhysicsUpdate gates). DELETE-WHEN the light manager lands.
+        static bool sbLogged = false;
+        LogMissingLeg(sbLogged,
+            "RecalculateActiveHulls light-manager legs -- the per-hull add/remove events and "
+            "the stopline walk ending in HullRuntime::SetStoplineRed. TrafficLightManager has "
+            "no Construct/Update body in this tree; lights stay in their default phase");
+    }
+
+    // @0x8274D890..0x8274D8F4. The generator list is rebuilt only when the active-hull set
+    // actually moved; RecalculateActiveHulls is its ONLY xref, so muNumGenerators has no other
+    // producer. Both GetLength reads carry the Set's own "length != -1" assert (CgsSet.h 227).
+    if (lpOutNewHulls->GetLength() != 0 || lpOutOldHulls->GetLength() != 0)
+    {
+        RebuildGeneratorList();
     }
 
     if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())
@@ -1533,14 +1745,8 @@ void TrafficEntityModule::PostPhysicsUpdate(CgsModule::IOBufferStack* lpInputBuf
 
                 if (mbAllowDivergentBehaviour)
                 {
-                    {
-                        static bool sbLogged = false;
-                        LogMissingLeg(sbLogged,
-                            "PostPhysicsUpdate POPULATING leg UpdateVehicles_CreateNewVehicles "
-                            "@0x8273A308 -- the DRIVING-traffic maker (wave 2); its lane-param "
-                            "pool needs [MEMBER HOLE 1] ParamNeedToSlowData and [MEMBER HOLE 2] "
-                            "ParamListNode, neither modelled");
-                    }
+                    // @0x8273A308.
+                    UpdateVehicles_CreateNewVehicles(lpInput);
 
                     StaticVehicles_CreateNewVehicles(lpInput);
                 }
@@ -1553,13 +1759,12 @@ void TrafficEntityModule::PostPhysicsUpdate(CgsModule::IOBufferStack* lpInputBuf
                 // RecalculateActiveHulls, so AddVehiclesToTargetList has a hull to read.
                 UpdateStreaming(lpOutput);
 
-                {
-                    static bool sbLogged = false;
-                    LogMissingLeg(sbLogged,
-                        "PostPhysicsUpdate POPULATING leg UpdateParams_DoTimeSlicedLogic "
-                        "@0x82743FE8 -- an EXPORT HOLE with no body in this tree. It is the "
-                        "DRIVING-param time-slicer; parked cars have no param plan to slice");
-                }
+                // The POPULATING pass slices the WHOLE pool in one call ([0, 400), not the
+                // non-decision frame's 100), so muLastParamCalculated is 400 before the first
+                // decision frame. Body in _wT2_05.cpp.
+                UpdateParams_DoTimeSlicedLogic(0,
+                                               KU_MAX_PARAMS,
+                                               lpInput->GetActiveRaceCarOutputInterface());
 
                 meStartingUpState = E_STARTINGUPSTATE_WAITING_FOR_STREAMING;
             }
@@ -1643,18 +1848,8 @@ void TrafficEntityModule::PostPhysicsUpdate(CgsModule::IOBufferStack* lpInputBuf
                 UpdateNonDecisionFrame(lpInput, lpOutput);
             }
 
-            {
-                // GATE: GenerateSceneUpdateEvents, the per-frame mover (one scene update event
-                // per vehicle whose transform changed). No body, and the parked path does not
-                // need it: AddEntity already carries the world-space sphere centre and a parked
-                // transform never changes. Only moving traffic goes stale without it.
-                static bool sbLogged = false;
-                LogMissingLeg(sbLogged,
-                    "PostPhysicsUpdate RUNNING leg GenerateSceneUpdateEvents -- no body; it is "
-                    "the per-frame scene MOVER for traffic that moved. Parked cars do not need "
-                    "it: AddEntity already carries the world-space bounding-sphere centre and a "
-                    "parked transform never changes. Needed by wave 2 (driving traffic)");
-            }
+            // The per-frame scene MOVER; body @0x8273B568 belongs to cluster C3.
+            GenerateSceneUpdateEvents(lpOutput);
 
             {
                 // GATE: TrafficLightManager::Update, declared at BrnTrafficLightManager.h:93
@@ -1944,23 +2139,22 @@ void TrafficEntityModule::Reset()
 
     mVehicleSoaData.Construct();
 
+    // ---- the lane-param pool. 0x8272D0FC..0x8272D148, one loop over 400 slots: the three
+    // Constructs at their own strides (maParams 0x80, maParamTransforms 0x40,
+    // maParamNeedToSlowData 0x10 -- that third one is ParamNeedToSlowData::Construct INLINED,
+    // storing FLT_MAX to +4/+8/+12 and the two sentinels to +0/+2), then the mFreeParams push.
+    // The maParamListNodes Constructs are a separate 400-iteration loop at 0x8272D158.
+    for (u32 luParam = 0; luParam < KU_MAX_PARAMS; ++luParam)
     {
-        // 400x Param::Construct + ParamTransform::Construct + ParamListNode::Construct, the
-        // per-param MAX_FLOAT/-1 seeds, the mFreeParams push and the two CgsAlgorithms::
-        // Shuffle calls over mFreeParams / mFreeStaticParamStack.
-        static bool sbLogged = false;
-        LogMissingLeg(sbLogged,
-            "Reset lane-param pool construction (400x Param::Construct + "
-            "ParamTransform::Construct + ParamListNode::Construct + the mFreeParams seed) -- "
-            "Param::Construct and ParamTransform::Construct are declared-only in "
-            "BrnTrafficParam.h and ParamListNode has no type at all ([MEMBER HOLE 2]). "
-            "WAVE 2; parked cars never touch a Param");
-        static bool sbLoggedShuffle = false;
-        LogMissingLeg(sbLoggedShuffle,
-            "Reset CgsAlgorithms::Shuffle over mFreeParams -- the SHUFFLE is real (see the "
-            "static/trailer ones below); it is the STACK that is never filled here, because "
-            "the 400x Param::Construct seed above it is gated. Shuffling an empty stack is a "
-            "no-op, so the call is skipped with the pool it operates on rather than pretended");
+        maParams[luParam].Construct();
+        maParamTransforms[luParam].Construct();
+        maParamNeedToSlowData[luParam].Construct();
+        mFreeParams.Push(static_cast<u16>(luParam));
+    }
+
+    for (u32 luNode = 0; luNode < KU_MAX_PARAMS; ++luNode)
+    {
+        maParamListNodes[luNode].Construct();
     }
 
     // ---- the static (parked) param pool -- THE ONE THIS WAVE NEEDS ----------------------
@@ -1984,6 +2178,7 @@ void TrafficEntityModule::Reset()
     // The static one is on the parked-car path: unshuffled, StaticVehicles_CreateNewVehicles
     // pops slots in reverse push order (198..0) every boot, so which record lands in which slot
     // is deterministic instead of randomised. Nothing breaks, which is why it is easy to miss.
+    CgsAlgorithms::Shuffle<u16>( mFreeParams, 0, mFreeParams.GetLength(), mRand );
     CgsAlgorithms::Shuffle<u8>( mFreeStaticParamStack, 0, mFreeStaticParamStack.GetLength(), mRand );
     CgsAlgorithms::Shuffle<u16>( mFreeTrailerStack, 0, mFreeTrailerStack.GetLength(), mRand );
 
@@ -2115,21 +2310,61 @@ void TrafficEntityModule::Construct()
 {
     CgsModule::ModuleSingleBuffered::Construct();
 
-    {
-        static bool sbLogged = false;
-        LogMissingLeg(sbLogged,
-            "Construct vectorised tuning-member seeds (:799..:821 -- KF_TWO_PI, KF_MAX_FLOAT, "
-            "the lane/steering/pitch/roll blocks, the four sympathetic/avoidance cones and "
-            "mTweakValues) -- every one of them is a splat of an un-dumped X360 rodata float "
-            "or an XMVectorSin/cos of one. They are DRIVING-traffic tuning: nothing on the "
-            "parked path reads any of them");
-        static bool sbLoggedJobs = false;
-        LogMissingLeg(sbLoggedJobs,
-            "Construct 4x TrafficJobStub::Construct -- [MEMBER HOLE 5]: BrnTraffic::"
-            "TrafficJobStub embeds EA::Jobs::Job by value and would drag the EATech eajobs "
-            "SDK into this keystone header's include graph (and therefore into "
-            "BrnWorldModule.h's). Deliberate include-graph decision, recorded by C1");
-    }
+    // ---- the vectorised tuning members, DWARF :799..:821 ---------------------------------
+    // 0x8274028C..0x8274078C, one 16-byte store per member at this + 0x725F0 + 0x10*n. Every
+    // source float was recovered from .rdata (0x820BA23C+); the two runtime-computed ones are
+    // marked at their line. :816 mfVehicleRollFilterTime and :817 mTweakValues are NOT part of
+    // this run: the console leaves the first to UpdateTimers and hands the second to
+    // FuzzyBehaviourLogic::Construct (still gated below).
+    SetTuningSplat(KF_TWO_PI,                            6.2831855f);      // 0x725F0 flt_820BA250
+    SetTuningSplat(KF_MAX_FLOAT,                         FLT_MAX);         // 0x72600 flt_820BA23C
+    SetTuningSplat(KF_APPROX_LANE_WIDTH,                 4.5f);            // 0x72610 flt_820BA580
+    SetTuningSplat(KF_MAX_DIST_ACROSS_LANE,              0.69999999f);     // 0x72620 flt_820BA4D0
+    SetTuningSplat(KF_VEHICLE_STOPLINE_SIDE_SPACE,       0.89999998f);     // 0x72630 flt_820BA540
+    SetTuningSplat(KF_VEHICLE_STOPLINE_SIDE_VARIATION,   0.25f);           // 0x72640 flt_820BA544
+    SetTuningSplat(KF_VEHICLE_MAX_DIST_FROM_LANE_CENTRE, 1.29999995f);     // 0x72650 flt_820BA554
+
+    // 0x72660, the one lane-wise Vector4 of the run (var_1E0 assembled at 0x82740370..0x827403B4).
+    SetTuningLanes(kfVehicle_OptimalDistFromTarget_SpeedBalanceFactor_DirectionDampingFactor_MinDistToMove,
+                   2.0f, 2.0f, 2.5f, 0.40000001f);
+
+    SetTuningSplat(KF_VEHICLE_MAX_STEERING_DELTA,        0.025f);          // 0x72670 flt_820BA524
+
+    // 0x72680: XMVectorSin(splat(flt_820BA528 == 25.0f) * splat(flt_820BA244 == KF_DEG_TO_RAD)).
+    SetTuningSplat(KF_VEHICLE_SIN_MAX_STEERING_ANGLE,
+                   std::sin(25.0f * 0.01745329238474369f));
+
+    // 0x72690: flt_8300CB58, seeded by the dyn-init thunk at 0x82C66280 as
+    // flt_82001C98(1.0f) / (flt_82F31928(0.44704f, mph->m/s) * flt_820BA5E4(10.0f)), i.e. the
+    // reciprocal of 10 mph in m/s.
+    SetTuningSplat(KF_VEHICLE_RECIP_ROLL_SPEED_MIN,      1.0f / (0.44704f * 10.0f));
+
+    SetTuningSplat(KF_VEHICLE_ROLL_FACTOR,               -0.1f);           // 0x726A0 flt_8200D530
+    SetTuningSplat(KF_VEHICLE_PITCH_RECIP_MAX_DECEL,     0.2f);            // 0x726B0 flt_82004744
+    SetTuningSplat(KF_VEHICLE_PITCH_DAMPING_FACTOR,      0.94999999f);     // 0x726C0 flt_820BA57C
+    SetTuningSplat(KF_VEHICLE_PITCH_SCALE,               0.050000001f);    // 0x726D0 flt_820047C8
+
+    // The four cones, {cos(half-angle), length, recip-Y-scale, w}. The console builds each with
+    // a read-modify-write of the member's own lanes, so the lanes it never stores keep whatever
+    // the record held; they are written as 0.0f here. Angles: dbl_8200D500 == 10 degrees,
+    // dbl_820BFBF0 == 20 degrees, both in radians.
+    SetTuningLanes(kfParamSympatheticCone_CosAngle_Length_RecipYScale_W,
+                   static_cast<f32>(std::cos(0.1745329238474369)), 30.0f, 0.25f, 0.0f);   // 0x726E0
+    SetTuningLanes(kfParamSympatheticConeShowTime_CosAngle_Length_RecipYScale_W,
+                   static_cast<f32>(std::cos(0.3490658476948738)), 50.0f, 0.0f, 0.0f);    // 0x726F0
+    SetTuningLanes(kfVehicle_AvoidancePassingFactor_Constants,
+                   4.0f, 10.0f, 10.0f, 3.0f);                                             // 0x72770
+    SetTuningLanes(kfVehicle_AvoidanceCone_CosAngle_Length_RecipYScale_W,
+                   static_cast<f32>(std::cos(0.1745329238474369)), 15.0f, 0.25f, 0.0f);   // 0x72780
+    SetTuningLanes(kfVehicle_Avoidance_Constants,
+                   10.0f, 50.0f, 0.0f, 0.0f);                                             // 0x72790
+    SetTuningLanes(kfParamAvoidCrashCone_CosAngle_Length_RecipYScale_W,
+                   static_cast<f32>(std::cos(0.1745329238474369)), 30.0f, 0.25f, 0.0f);   // 0x727A0
+
+    // 0x827407B8..0x827407CC is `for (4) maJobs[i].Construct()`; 0x827407D8/0x827407F8 is
+    // `li r8, 4; stw r8, 0x2A00(r31)`. The stub Constructs live in the host job table in
+    // _wT2_04.cpp while [MEMBER HOLE 5] is open (blocker measured in the header).
+    muNumUpdateVehiclesJobs = KU_MAX_JOBS;
 
     // The console inlines EventReceiverQueue<4096,16>::Construct at 0x827407E0..0x82740844
     // (mpBuffer = &maBuffer, miCapacity = 0x1000, miAlignment = 0x10, miCount = 0, then the
