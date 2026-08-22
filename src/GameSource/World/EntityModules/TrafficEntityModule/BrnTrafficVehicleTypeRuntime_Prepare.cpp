@@ -10,8 +10,8 @@
 //   vrlimi v12,v0,1,3   -> this+0x20 .w    ..._FwdAxle                   REAL
 //   vrlimi v0, v13,2,0  -> this+0x20 .z    ..._BackAxle                  REAL
 //   vrlimi v12,v127,4,0 -> this+0x30 .y    mMass_WheelRadius_Z_W.y       REAL (wheel radius)
-//   vrlimi v12,v13, 8,0 -> this+0x30 .x    mMass_WheelRadius_Z_W.x       GATED (leg 1)
-//   stb 0x5C(r16) + 0x48+i                 miNumPaintColours / maiPaint  GATED (leg 1)
+//   vrlimi v12,v13, 8,0 -> this+0x30 .x    mMass_WheelRadius_Z_W.x       REAL
+//   stb 0x5C(r16) + 0x48+i                 miNumPaintColours / maiPaint  REAL
 //   vrlimi v13,v0,8,2 @0x82761F24          .x mCabPivot     (tag 29)     GATED (leg 3)
 //   vrlimi v13,v0,4,1 @0x82761F88          .y mTrailerPivot (tag 28)     GATED (leg 3)
 //
@@ -31,11 +31,16 @@
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficVehicleTypeRuntime.h"
 
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnStreamedDeformationSpec.h"
+#include "GameSource/Physics/VehicleManager/VehiclePhysics/VehicleAttribs.h"
+#include "GameSource/AttribSys/Generated/classes/burnoutcarasset.h"
+#include "GameSource/AttribSys/Generated/classes/burnoutcargraphicsasset.h"
+#include "GameSource/AttribSys/Generated/classes/physicsvehiclehandling.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"           // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // gpDebugPrint / gxMessageFilterFlags
 
 #include <cmath>   // fabsf -- the console's `vandc` sign-bit clear on the wheel-size compare
+#include <cstdlib> // getenv -- the [T2-attrib] diag gate only
 
 namespace BrnTraffic
 {
@@ -85,47 +90,21 @@ void VehicleTypeRuntime::Prepare(
     // with it; the next instruction hands the same register to Attrib::Instance. Order kept.
     mAttribKey = lAttribKey;
 
+    // ---- 0x82761B40..0x82761B84: the attrib chase --------------------------------------
+    // burnoutcarasset(key,0) -> RefSpec at dataArea+0x158 -> physicsvehiclehandling ->
+    // VehicleAttribs::Construct + SetupAttribs. DWARF names the locals at .cpp:96/:97/:98.
+    // The by-value SetupAttribs argument goes through the out-of-line copy ctor @0x825BDB88.
+    BrnPhysics::Vehicle::VehicleAttribs lVehicleAttribs;
+    Attrib::Gen::burnoutcarasset lBaseCarAsset( mAttribKey, NULL );
+    Attrib::Gen::physicsvehiclehandling lHandling(
+        const_cast<Attrib::Collection*>(
+            lBaseCarAsset.GetPhysicsVehicleHandlingRefSpec()->GetCollection() ), NULL );
+    lVehicleAttribs.Construct();
     {
-        // GATED LEG 1 -- the ATTRIB half, both ends of it. The console opens with
-        //     Attrib::Instance lInstance( lAttribKey, 0 );                       sub_82204998
-        //     Attrib::Gen::physicsvehiclehandling lHandling(
-        //         Attrib::RefSpec::GetCollection( lInstance.<+344> ), 0 );
-        //     BrnPhysics::Vehicle::VehicleAttribs lVehicleAttribs;
-        //     lVehicleAttribs.Construct();
-        //     lVehicleAttribs.SetupAttribs( sub_825BDB88( lHandling ) );
-        // and closes with
-        //     Attrib::Gen::burnoutcargraphicsasset lGraphics(
-        //         Attrib::RefSpec::GetCollection( lInstance.<+368> ), 0 );
-        //     miNumPaintColours = min( 20, Attrib::Attribute::GetLength(
-        //         Attrib::Instance::Get( lGraphics, -1309769630 ) ) );
-        //     for (i < miNumPaintColours)
-        //         maiPaintColours[i] = *Attrib::Instance::GetAttributePointer(
-        //                                   lGraphics, -1309769630, i );
-        // Between them the VehicleAttribs serve only the mass:
-        //     CGS_ASSERT( lVehicleAttribs.mBaseAttribs.GetMass() > 0.0f, ... )   (.cpp:125)
-        //     mMass_WheelRadius_Z_W.x = mass                                     vrlimi ...,8,0
-        //
-        // BLOCKER: none of Attrib::Instance's key constructor (sub_82204998),
-        // Attrib::RefSpec::GetCollection, the two generated attrib classes,
-        // BrnPhysics::Vehicle::VehicleAttribs or sub_825BDB88 has a declaration reachable from
-        // this TU's include graph. DELETE-WHEN they do.
-        //
-        // Consequences while gated:
-        //  (1) mMass_WheelRadius_Z_W.x keeps whatever the module's storage holds. Every
-        //      GetMass() reader is a wave-3 physical-traffic leg and all are gated too.
-        //  (2) miNumPaintColours likewise -- and PickPaintColourForVehicle @0x827049A8 asserts
-        //      `miNumPaintColours != 0` and indexes maiPaintColours with it. If the render leg
-        //      in BrnTrafficEntityModule_Render.cpp is un-gated before this one lands, it will
-        //      index a garbage table. Seeding a fabricated colour count here would be worse.
-        static bool sbLogged = false;
-        LogMissingLeg( sbLogged,
-            "VehicleTypeRuntime::Prepare attrib half -- Attrib::Instance(key)/RefSpec::"
-            "GetCollection, Attrib::Gen::physicsvehiclehandling + BrnPhysics::Vehicle::"
-            "VehicleAttribs (the mMass_WheelRadius_Z_W.x mass seat) and Attrib::Gen::"
-            "burnoutcargraphicsasset (the maiPaintColours/miNumPaintColours table, attrib id "
-            "-1309769630). No declarations reachable from this TU. mBBoxOffset/mBBoxHalfSize/"
-            "the axle lanes/the wheel radius ARE seated -- only mass and the paint table are "
-            "skipped" );
+        // Only the by-value copy is scoped; lHandling and lBaseCarAsset stay alive to the end
+        // of the function, which is the console's destruction order (0x82762074..0x82762088).
+        Attrib::Gen::physicsvehiclehandling lHandlingCopy( lHandling );   // @0x825BDB88
+        lVehicleAttribs.SetupAttribs( lHandlingCopy );
     }
 
     // ---- the four wheel placements (0x82761BF4..0x82761D34, `do { } while (v8 < 4)`) -----
@@ -182,10 +161,19 @@ void VehicleTypeRuntime::Prepare(
     //   lvx128 v0, r28, 1680 ; stvx128 v0, r0,  r16      this+0x00 <- spec + 1680
     //   lvx128 v0, r28, 64   ; stvx128 v0, r16, r27(16)  this+0x10 <- spec + 64
     // TrafficEntityModule::Prepare stage 3 reads both to build each vehicle type's
-    // rw::collision::BoxVolume. Leave them at Construct's SetZero() and stage 3 registers a
-    // zero-extent box per type, which CgsVolumeManager rejects with three asserts each.
+    // rw::collision::BoxVolume.
     mBBoxOffset   = lpSpec->mCollisionOffset;
     mBBoxHalfSize = lpSpec->mHandlingBodyDimensions;
+
+    // ---- 0x82761DD0 assert (.cpp:125) then 0x82761E24 vrlimi128 v12, v13, 8, 0 -> .x ----
+    // DWARF calls the local lfMass (.cpp:126) and reads it through
+    // VehicleAttribs::VehicleBaseAttribs::GetMass, which is base+0x70 lane 0. The console
+    // stack proves the offset: VehicleAttribs sits at sp+0x190 and the splat loads sp+0x200.
+    // This released assert is LIVE; a fire on shipped data is data news, do not re-gate it.
+    const f32 lfMass =
+        lVehicleAttribs.mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.x;
+    CGS_ASSERT( lfMass > 0.0f, "lVehicleAttribs.mBaseAttribs.GetMass() > 0.0f" );   // .cpp:125
+    mMass_WheelRadius_Z_W.x = lfMass;
 
     {
         // GATED LEG 3 -- the LOCATOR walk over mGenericTags (0x82761E00..0x82761E60).
@@ -217,6 +205,49 @@ void VehicleTypeRuntime::Prepare(
             "(tag 29) and .y mTrailerPivot (tag 28) -- NOT the axle lanes -- so types WITHOUT "
             "such a locator are unaffected and types with one keep Construct's {-1.5f, 1.5f} "
             "placeholder, which BrnTrafficVehicle.cpp:511 reads via GetTrailerPivotDistance()" );
+    }
+
+    // ---- 0x82761FA8..0x82762070: the random-traffic paint palette (DWARF .cpp:176/:179) ----
+    // burnoutcargraphicsasset off the RefSpec at dataArea+0x170, then
+    // miNumPaintColours = min( Num_RandomTrafficColours(), 20 ) and one s8 per entry. The
+    // console's branchless min (srawi/not/and/andi/or) is the structured min; the element read
+    // is `lwz r10,0(r3) ; stb r10,0x48(r9)` -- the Int32 value truncated to its low byte, so it
+    // is a value truncation on the host, not a first-byte read.
+    {
+        Attrib::Gen::burnoutcargraphicsasset lGraphicsAsset(
+            const_cast<Attrib::Collection*>(
+                lBaseCarAsset.GetGraphicsAssetRefSpec()->GetCollection() ), NULL );
+
+        const s32 liNumColours = static_cast<s32>( lGraphicsAsset.Num_RandomTrafficColours() );
+        miNumPaintColours = static_cast<s8>(
+            liNumColours < static_cast<s32>( KU_NUM_PAINT_COLOURS_PER_VEHICLE )
+                ? liNumColours
+                : static_cast<s32>( KU_NUM_PAINT_COLOURS_PER_VEHICLE ) );
+
+        for ( u8 luTrafficColourIndex = 0; luTrafficColourIndex < miNumPaintColours;
+              luTrafficColourIndex++ )
+        {
+            maiPaintColours[luTrafficColourIndex] = static_cast<s8>(
+                lGraphicsAsset.RandomTrafficColours( luTrafficColourIndex ) );
+        }
+    }
+
+    // [T2-attrib] one-shot: the first attrib seat. NOT IN THE X360 BINARY. DELETE-WHEN-STABLE.
+    if ( getenv( "BRN_TRAFFIC_DIAG" ) != 0 )
+    {
+        static bool sbDiagLogged = false;
+        if ( !sbDiagLogged )
+        {
+            sbDiagLogged = true;
+            if ( ( CgsDev::Message::gxMessageFilterFlags & 1 ) != 0 && CgsDev::Log::gpDebugPrint != 0 )
+            {
+                *CgsDev::Log::gpDebugPrint
+                    << "[T2-attrib] VehicleTypeRuntime::Prepare seated mass*1000="
+                    << static_cast<s32>( lfMass * 1000.0f )
+                    << " paintColours=" << static_cast<s32>( miNumPaintColours )
+                    << " attribKeyLo=" << static_cast<s32>( mAttribKey & 0xFFFFFFFFu ) << "\n";
+            }
+        }
     }
 }
 

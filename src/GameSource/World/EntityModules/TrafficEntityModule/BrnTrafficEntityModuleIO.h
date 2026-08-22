@@ -492,6 +492,9 @@ namespace BrnTrafficIO
         // +11376 read mSceneInputInterface -- the leg
         // WorldModule::BridgeEntityModulesToScene_PostPhysics @0x827AB608 calls.
         const SceneInputInterface* GetSceneInputInterface() const;                // 0x827A0C20 (baked 409)
+        // The write half. X360 sub_82711E38 (baked 410); its only xref is
+        // TrafficEntityModule::GenerateSceneUpdateEvents @0x8273B568.
+        SceneInputInterface*       GetSceneInputInterface();                      // 0x82711E38 (baked 410)
         // +830144 read mTrafficTypeResponseQueue.
         const TrafficTypeResponseQueue* GetTrafficTypeResponseQueue() const;      // 0x827A0CC8 (baked 412)
         // +830672 read mResourceRequestInterface.

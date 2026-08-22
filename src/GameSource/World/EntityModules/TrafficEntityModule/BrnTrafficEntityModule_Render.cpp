@@ -400,13 +400,11 @@ TrafficEntityModule::GenerateDispatchLists( const BrnTrafficIO::InputBuffer_Disp
                                             s32 liTransparentList,
                                             const BrnDirector::Camera::Camera& lBrnCamera )
 {
-    // ---- step 1, NAMED GATE ------------------------------------------------
-    // The console copies the whole dispatch camera into mCameraLastFrame (module +0x72890,
-    // DWARF :881) with Camera::operator= @0x8273B2C8, before the state gates. That member is
-    // [MEMBER HOLE 6] in BrnTrafficEntityModule.h. Inert on this build: its only consumer is
-    // the mbDEBUGPickVehicleFromCamera debug tool, which is not reconstructed.
-    // DELETE-WHEN [MEMBER HOLE 6] closes; the line is `mCameraLastFrame = lBrnCamera;`.
-    (void)lBrnCamera;
+    // ---- step 1 -------------------------------------------------------------
+    // Camera::operator= @0x8273B2C8 (module +0x72890, DWARF :881), before the state gates.
+    // Its Pos row is the +0x728C0 lane the two proximity culls and UpdateVehicles' job split
+    // read, so this store must stay ahead of them.
+    mCameraLastFrame = lBrnCamera;
 
     // ---- step 2, NAMED GATE (link, not knowledge) --------------------------
     // The unconditional store at module +0x71870 is FuzzyBehaviourLogic::mDEBUGLastCameraPos,

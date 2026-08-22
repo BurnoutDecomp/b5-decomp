@@ -15,11 +15,10 @@
 // frame takes the non-decision branch for ever. That is why the three land together and why
 // _wT1_02.cpp un-gates the UpdateTimers call in the same change.
 //
-// The ten gated legs below all lack a body anywhere in the tree and are all driving-traffic
-// work. A parked car comes from RecalculateActiveHulls -> SpawnNewTraffic -> FillNewHull ->
-// StaticVehicles_Generate, then StaticVehicles_CreateNewVehicles via
-// StaticVehicles_UpdateVehicles; none of the ten is on that path. The one with a real cost is
-// KillOutOfAreaTraffic; see its gate in UpdateDecisionFrame.
+// Live legs: KillOutOfAreaTraffic, UpdateParams, UpdateVehicles, UpdateLerpedParamTransforms
+// and UpdateParams_DoTimeSlicedLogic. Still gated: UpdateJunctions, UpdateTrailers,
+// SpawnShowtimeTraffic, KillTrafficOnStartGridWholeSale, NukeTrafficJams; each gate names its
+// own blocker and cost.
 // ============================================================================
 
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficEntityModule.h"
@@ -231,21 +230,9 @@ void TrafficEntityModule::UpdateDecisionFrame(
 
     if (lOldActiveHulls.GetLength() != 0)
     {
-        // GATE with a real behavioural cost: KillOutOfAreaTraffic (DWARF :1539
-        // `void KillOutOfAreaTraffic(Set<uint16_t,72u>*)`) has no body. It is the retire half
-        // of the spawn ladder, so static params for out-of-range hulls are never handed back
-        // to mFreeStaticParamStack: the 199-slot pool drains monotonically and parked cars
-        // stop appearing after a long drive. Bounded and assert-free, since
-        // StaticVehicles_Generate no-ops on an empty stack, and visible in [T1-static]
-        // aliveParams. Do not paper over it with a host-side recycler; that would invent a
-        // retirement policy the binary does not have. DELETE WHEN the body lands.
-        static bool sbLogged = false;
-        LogMissingLeg(sbLogged,
-            "UpdateDecisionFrame leg KillOutOfAreaTraffic (DWARF :1539) -- no body in this "
-            "tree; it is the RETIRE half of the spawn ladder and covers driving params too. "
-            "COST: static params for out-of-range hulls are never freed, so the 199-slot pool "
-            "drains over a long drive and parked cars stop appearing. Bounded, assert-free, "
-            "visible in [T1-static] aliveParams");
+        // The retire half of the spawn ladder (DWARF :1539, @0x82734C78): it takes the OLD
+        // hull set, not the new one.
+        KillOutOfAreaTraffic(&lOldActiveHulls);
     }
 
     {
@@ -277,24 +264,18 @@ void TrafficEntityModule::UpdateDecisionFrame(
             "give-way/priority logic for DRIVING traffic (wave 2)");
     }
 
-    {
-        static bool sbLogged = false;
-        LogMissingLeg(sbLogged,
-            "UpdateDecisionFrame leg UpdateParams (DWARF :1626) -- no body; it is the whole "
-            "lane-param simulation for DRIVING traffic and needs [MEMBER HOLE 1] "
-            "ParamNeedToSlowData / [MEMBER HOLE 2] ParamListNode (wave 2)");
-    }
+    // The whole lane-param simulation for DRIVING traffic (DWARF :1626, @0x82744A80). It
+    // forwards lpInput to UpdateParams_BuildListOfCrashingThings, which asserts on it.
+    UpdateParams(lpInput);
 
     // The parked param lifecycle: purgatory tick plus the kill/remove sweep.
     StaticVehicles_UpdateStaticParams();
 
-    {
-        static bool sbLogged = false;
-        LogMissingLeg(sbLogged,
-            "UpdateDecisionFrame leg UpdateVehicles (DWARF :1713) -- no body; the DRIVING "
-            "vehicles' per-decision-frame update (steering/avoidance/effects), wave 2. Note "
-            "its PARKED counterpart StaticVehicles_UpdateVehicles IS called below");
-    }
+    // The DRIVING vehicles' update (DWARF :1713, @0x82744F58). Its first statement is
+    // UpdateVehicles_CreateNewVehicles, which turns an alive lane PARAM into an alive standard
+    // VEHICLE via Vehicle::InitialiseAsStandard. Its PARKED counterpart
+    // StaticVehicles_UpdateVehicles is called below.
+    UpdateVehicles(lpInput, lpOutput);
 
     // This is what makes parked cars exist in steady state: its first statement is
     // StaticVehicles_CreateNewVehicles(lpInput), which turns an alive static PARAM into an
@@ -313,6 +294,35 @@ void TrafficEntityModule::UpdateDecisionFrame(
     // the jam-nuker request that UpdateNonDecisionFrame consumes on a later frame.
     muLastParamCalculated       = 0;      // stwx 0 -> +0x71830
     mbNeedToRunTrafficJamNuker  = true;   // stbx 1 -> +0x71404
+
+    if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())
+    {
+        // [T2-loop] value-latched steady-state census: it prints only when the driving counts
+        // change, so a still log means the driving half is not turning over. Populations only;
+        // the moved-this-frame count lives with the mover ([T2-scene] in _wT2_04.cpp) because
+        // the scene walk is where it is observable. DELETE-WHEN-STABLE.
+        u32 luAliveParams = 0;
+        u32 luAliveStandard = 0;
+        for (u32 luParam = 0; luParam < KU_MAX_PARAMS; ++luParam)
+        {
+            if (mParamSoaData.mAliveParams.IsBitSet(luParam))     { ++luAliveParams; }
+            if (mVehicleSoaData.mAliveVehicles.IsBitSet(luParam)) { ++luAliveStandard; }
+        }
+
+        static u32 suLastParams     = 0xFFFFFFFFu;
+        static u32 suLastStandard   = 0xFFFFFFFFu;
+        static u32 suLastGenerators = 0xFFFFFFFFu;
+        if (luAliveParams != suLastParams || luAliveStandard != suLastStandard
+            || muNumGenerators != suLastGenerators)
+        {
+            suLastParams     = luAliveParams;
+            suLastStandard   = luAliveStandard;
+            suLastGenerators = muNumGenerators;
+            *lpDiag << "[T2-loop] aliveParams=" << static_cast<s32>(luAliveParams)
+                    << " aliveStandardVehicles=" << static_cast<s32>(luAliveStandard)
+                    << " generators=" << static_cast<s32>(muNumGenerators) << "\n";
+        }
+    }
 
     if (mbAtStartLineSoProtectRaceCarsFromTraffic && mbIsOnlineGameMode)
     {
@@ -348,25 +358,13 @@ void TrafficEntityModule::UpdateNonDecisionFrame(
     const BrnTrafficIO::InputBuffer_PostPhysics* lpInput,
     BrnTrafficIO::OutputBuffer_PostPhysics* lpOutput)
 {
-    (void)lpOutput;   // only read by the two GATED driving legs below
-
     CGS_ASSERT(!IsDecisionFrame(), "!IsDecisionFrame()");   // baked .cpp 7228
     CGS_ASSERT(lpInput != 0, "lpInput");                    // baked .cpp 7229
 
-    {
-        static bool sbLogged = false;
-        LogMissingLeg(sbLogged,
-            "UpdateNonDecisionFrame leg UpdateLerpedParamTransforms (DWARF :1710) -- no body; "
-            "it interpolates DRIVING params between decision frames. A parked car's transform "
-            "never changes, so nothing on the parked path reads its output");
-    }
+    // Interpolates DRIVING params between decision frames (DWARF :1710, @0x82739CD8).
+    UpdateLerpedParamTransforms();
 
-    {
-        static bool sbLogged = false;
-        LogMissingLeg(sbLogged,
-            "UpdateNonDecisionFrame leg UpdateVehicles (DWARF :1713) -- no body; same "
-            "driving-traffic function UpdateDecisionFrame gates (wave 2)");
-    }
+    UpdateVehicles(lpInput, lpOutput);
 
     StaticVehicles_UpdateVehicles(lpInput);
 
@@ -376,14 +374,14 @@ void TrafficEntityModule::UpdateNonDecisionFrame(
             "UpdateNonDecisionFrame leg UpdateTrailers (DWARF :1725) -- no body (wave 2)");
     }
 
+    // 0x8274C2A4: [cursor, cursor + KU_MAX_PARAMS_UPDATE_ON_NON_DECISION_FRAME); the callee
+    // advances the cursor. Body in _wT2_05.cpp.
     if (muLastParamCalculated < KU_MAX_PARAMS)
     {
-        static bool sbLogged = false;
-        LogMissingLeg(sbLogged,
-            "UpdateNonDecisionFrame leg UpdateParams_DoTimeSlicedLogic (DWARF :1635, X360 "
-            "@0x82743FE8 -- an ARTIST EXPORT HOLE) -- no body. It is the DRIVING-param "
-            "time-slicer; the cursor muLastParamCalculated is deliberately NOT advanced here "
-            "because the callee is what advances it");
+        UpdateParams_DoTimeSlicedLogic(
+            muLastParamCalculated,
+            muLastParamCalculated + KU_MAX_PARAMS_UPDATE_ON_NON_DECISION_FRAME,
+            lpInput->GetActiveRaceCarOutputInterface());
     }
 
     if (mbNeedToRunTrafficJamNuker && !mbNeedToKillAllZombies)

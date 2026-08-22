@@ -135,6 +135,13 @@ namespace BrnTraffic
                                              f32 lfParamB, u32 luSegmentB,
                                              const f32* lpafRungLengths) const;
 
+        // Walk lfDistanceForward metres along the lane from lfStartParam and return the
+        // parameter you land on. lpafCumulativeLengths is the SECTION-LOCAL slice
+        // (Hull::GetRungLengthsForSection), so the console indexes it without muRungOffset.
+        f32   CalcParamFromStartParamAndDistanceAlongSection(                             // @ 0x8270FF58
+                  f32 lfStartParam, f32 lfDistanceForward,
+                  const f32* lpafCumulativeLengths) const;
+
         // -- BrnTrafficSection.h siblings this batch depends on (bodied elsewhere) ----
         // Arc-length from the section start to (lfParam, luSegment). Declared here so
         // CalcSignedDistanceAlongSection can call it; bodied in its own slice.

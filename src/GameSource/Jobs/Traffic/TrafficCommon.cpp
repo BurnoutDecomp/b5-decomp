@@ -13,15 +13,15 @@ void BrnTraffic::UpdateVehiclesJobParams::Construct(
     BrnTraffic::Hull**         lpapHulls,
     u16                        luNumHulls,
     const BrnTraffic::Param*   lpaParams,
-    const ParamTransform*      lpaParamTransforms,
-    Vehicle*                   lpaVehicles,
+    const BrnTraffic::ParamTransform* lpaParamTransforms,
+    BrnTraffic::Vehicle*       lpaVehicles,
     Matrix44Affine*            lpaVehicleTransforms,
-    VehicleAxles*              lpaVehicleAxles,
-    const VehicleTypeRuntime*  lpaVehicleRuntimeData,
-    const RaceCarStateData*    lpRaceCarState,
+    BrnTraffic::VehicleAxles*  lpaVehicleAxles,
+    const BrnTraffic::VehicleTypeRuntime* lpaVehicleRuntimeData,
+    const BrnTraffic::RaceCarStateData*   lpRaceCarState,
     f32                        lfSimTimeStep,
     f32                        lfSimTimeSinceLastDecision,
-    const Random*              lpEffectRand,
+    const BrnTraffic::Random*  lpEffectRand,
     EActiveRaceCarIndex        leLocalPlayerIndex,
     bool                       lbGameModeAllowsHardcoreSwerving,
     bool                       lbGameModeAllowsSwerving,
@@ -75,4 +75,13 @@ void BrnTraffic::UpdateVehiclesJobParams::Construct(
     mbGameModeAllowsHardcoreSwerving = lbGameModeAllowsHardcoreSwerving;
     mbGameModeAllowsSwerving         = lbGameModeAllowsSwerving;
     mbDEBUGStopTrafficMoving         = lbDEBUGStopTrafficMoving;
+}
+
+// X360: inlined into TrafficJobStub::Execute @0x82752CB0 (it asserts the incoming list pointer
+// then stores it at the params' +0x90). DWARF body _compile/BrnTrafficUnity2.cpp:229.
+void BrnTraffic::UpdateVehiclesJobParams::SetOutputs(
+    BrnTraffic::PhysicalRequestInfoList* lpOutNewPhysicalRequests)
+{
+    CGS_ASSERT(lpOutNewPhysicalRequests, "lpOutNewPhysicalRequests");
+    mpOutNewPhysicalRequests = lpOutNewPhysicalRequests;
 }

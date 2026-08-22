@@ -7,9 +7,8 @@
 // evaluated with two subtract/multiply/min pairs per lane.
 //
 // Declaration shape from the DecFIGS DWARF (SharedClasses/Traffic/BrnTrafficFuzzyEnvelopeSet.h),
-// gated on the X360 ARTIST ledger (FuzzyEnvelopeSet4::SetEnvelope is attested). Bodies live in
-// SharedClasses/Traffic/BrnTrafficFuzzyEnvelopeSet.cpp -- only the declarations are needed to
-// compile callers (per-TU `cl /c` gate).
+// gated on the X360 ARTIST ledger (Construct @0x82752570 / SetEnvelope @0x82752598 are attested).
+// Bodies live in SharedClasses/Traffic/BrnTrafficFuzzyEnvelopeSet.cpp (landed 2026-08-22).
 
 #include "types.hpp"          // s32
 #include "BrnCommonTypes.h"   // Vector4, VecFloat (== rw::math::vpu::Vector4)
@@ -27,13 +26,13 @@ namespace BrnTraffic
 
         // Define envelope liEnvelope (0..3). Stores mAttackStart/mDecayStop in that lane and
         // precomputes mAttackGradient = 1/(attackStop-attackStart),
-        // mDecayGradient = 1/(decayStop-decayStart).
+        // mDecayGradient = 1/(decayStart-decayStop) (negative for a falling ramp).
         void SetEnvelope(s32 liEnvelope, VecFloat lfAttackStart, VecFloat lfAttackStop,
                          VecFloat lfDecayStart, VecFloat lfDecayStop);
 
         // Evaluate all four envelopes against the broadcast scalar lfValue, returning the four
         // clamped [0,1] membership scores (one per lane):
-        //   clamp01( min( (x-AttackStart)*AttackGradient, (DecayStop-x)*DecayGradient ) ).
+        //   clamp01( min( (x-AttackStart)*AttackGradient, (x-DecayStop)*DecayGradient ) ).
         Vector4 CalcScores(VecFloat lfValue) const;
 
         // Evaluate a single envelope (liEnvelope).
@@ -43,6 +42,6 @@ namespace BrnTraffic
         Vector4 mAttackStart;     // 0x00  per-lane attack-ramp start corner
         Vector4 mDecayStop;       // 0x10  per-lane decay-ramp stop corner
         Vector4 mAttackGradient;  // 0x20  1/(attackStop-attackStart)
-        Vector4 mDecayGradient;   // 0x30  1/(decayStop-decayStart)
+        Vector4 mDecayGradient;   // 0x30  1/(decayStart-decayStop)
     };
 }

@@ -32,7 +32,7 @@
 
 namespace BrnTraffic
 {
-    class Hull;
+    struct Hull;   // struct, not class: BrnTrafficHull.h defines it as a struct and MSVC mangles the key
 
     class HullRuntime
     {

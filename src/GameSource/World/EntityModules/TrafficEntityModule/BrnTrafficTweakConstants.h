@@ -12,10 +12,14 @@
 // needs); the rest of BrnTrafficTweakConstants.h (the file-scope KF_*/KU_* constant pool)
 // is left for the TU that owns those constants.
 
-#include "types.hpp"   // f32
+#include "types.hpp"   // u32/f32
 
 namespace BrnTraffic
 {
+    // DWARF BrnTrafficTweakConstants.h:48. The UpdateVehicles job-split width;
+    // TrafficEntityModule::maJobs[4] (DWARF BrnTrafficEntityModule.h:619).
+    static const u32 KU_MAX_JOBS = 4;
+
     class TweakValues
     {
     public:

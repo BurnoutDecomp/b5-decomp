@@ -19,12 +19,14 @@
 #include "GameSource/BurnoutConstants.h"  // EActiveRaceCarIndex
 #include "GameShared/GameClasses/Numeric/CgsRandom.h"  // CgsNumeric::Random
 
-// -- opaque peripheral types (used only as pointers here) ------------------------
-struct ParamTransform;
-struct Vehicle;
-struct VehicleAxles;
-struct VehicleTypeRuntime;
-struct RaceCarStateData;
+// All five pointee types live in namespace BrnTraffic (Vehicle / VehicleTypeRuntime are
+// `class`), and UpdateVehiclesJob dereferences all five, so they come in by real include.
+#include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficParam.h"            // Param / ParamTransform
+#include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficRaceCarCache.h"     // RaceCarStateData
+#include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficVehicle.h"          // Vehicle / VehicleAxles
+#include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficVehicleTypeRuntime.h" // VehicleTypeRuntime
+
+// -- opaque peripheral type (used only as a pointer here) -------------------------
 struct DebugRenderStreamReader;
 
 namespace BrnTraffic {
@@ -32,7 +34,6 @@ namespace BrnTraffic {
 using CgsNumeric::Random;
 
 struct Hull;
-struct Param;
 // The output physical-request list the traffic job fills; real home is
 // BrnTrafficMiscRuntimeClasses.h (Array<PhysicalRequestInfo,25>). Forward-declared here
 // (only used by-pointer).
