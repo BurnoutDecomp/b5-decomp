@@ -118,6 +118,11 @@ namespace BrnTraffic
         return &maParams[luParam].maPlans[luPlan];
     }
 
+    const ParamPlan* TrafficEntityModule::GetParamPlan(u32 luParam, u32 luPlan) const
+    {
+        return const_cast<TrafficEntityModule*>(this)->GetParamPlan(luParam, luPlan);
+    }
+
     // @ 0x827077D0 -- `16 * (luParam + 13528) + this`. Both console asserts kept: the second
     // one is the pool-warm-up guard (muLastParamCalculated is seeded past KU_MAX_PARAMS).
     ParamNeedToSlowData* TrafficEntityModule::GetParamNeedToSlowData(u32 luParam)

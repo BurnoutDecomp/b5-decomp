@@ -155,6 +155,18 @@ namespace PhysicsModuleIO
         const CustomPotentialContactQueue& GetTrafficWithWorldQueue() const { return maCustomEventQueues[9]; }
         const CustomPotentialContactQueue& GetTrafficWithTrafficQueue() const { return maCustomEventQueues[13]; }
 
+        // ADDED 2026-08-22 (wave T3 C5). VehicleManager::DoTrafficWorldContactOrdering @0x825C8F18
+        // REWRITES the records of two queues in place, so it needs the DWARF's non-const overloads
+        // (BrnPhysicsModuleIO.h:86 GetTrafficWithWorldQueue(), :89/:92 GetSimpleTrafficWithWorldQueue()).
+        // Index proof from that body: `a2 + 1474720` == 16 + 9*0x28010 -> [9]; `a2 + 1638576` ==
+        // 16 + 10*0x28010 -> [10]. [10] is the SIMPLE/box traffic-world queue -- the same `li r7, 0xA`
+        // user tag DoTrafficCarWorldContactGeneration's two CollidePrimitiveListAgainstTriangleList
+        // arms pass. (Reference return matches this header's committed accessor style; the DWARF
+        // spells them pointer-returning.)
+        CustomPotentialContactQueue&       GetTrafficWithWorldQueue()       { return maCustomEventQueues[9]; }
+        const CustomPotentialContactQueue& GetSimpleTrafficWithWorldQueue() const { return maCustomEventQueues[10]; }
+        CustomPotentialContactQueue&       GetSimpleTrafficWithWorldQueue()       { return maCustomEventQueues[10]; }
+
     private:
         const InPotentialContactQueue* mpQueue;                    // +4  :246 (const source queue)
         CustomPotentialContactQueue    maCustomEventQueues[KI_CUSTOM_QUEUE_COUNT]; // +16 :247

@@ -191,6 +191,11 @@
 #include "GameShared/GameClasses/Module/CgsIOBufferStack.h"          // CgsModule::IOBufferStack
 #include "GameShared/GameClasses/System/Resource/CgsResourceHandle.h" // CgsResource::ResourceHandle
 #include "GameSource/BurnoutConstants.h"                              // EActiveRaceCarIndex
+// ⭐ ADDED 2026-08-22 (wave T3 r2, owner B): TestForNearMissFreakOut takes a PotentialContact BY
+// VALUE (DWARF :386, and the X360 splits the 80-byte record across r4..r10 + three stack slots),
+// so the complete type is needed here -- the pointer-only forward declaration below no longer
+// covers every use.
+#include "GameShared/GameClasses/SceneManager/SharedIO/CgsPotentialContact.h"
 #include "GameSource/Physics/VehicleManager/BrnVehicleConstants.h"    // KU_ENTITYTYPE_TRAFFIC_VEHICLE
 // ⭐ DE-FORKED 2026-08-03: this header used to declare its own opaque
 // `struct PhysicalTrafficManagerDebugComponent { void* mpVTable; u8 mOpaque[60]; };` at namespace
@@ -247,6 +252,14 @@ namespace CgsMemory { struct SimpleDataStreamProducer; struct SimpleDataStreamRe
 // Class key matches CgsPhysicsSimulationModuleIO.h.
 namespace CgsPhysics { namespace PhysicsSimulationIO { struct OutputBuffer; } }
 
+// The physics resource allocator Prepare carves the three traffic pools from. Class key
+// `struct` per rwcore_structs.h:168 (MSVC mangles struct vs class).
+namespace rw { struct IResourceAllocator; }
+
+// ⭐ ADDED 2026-08-22 (wave T3 r1, C2). ComputeTrafficVehicleInertia's out-parameter, pointer
+// use only. Class key `class` per vendor/renderware/include/rw/physics/inertia.h:55.
+namespace rw { namespace physics { class Inertia; } }
+
 namespace BrnPhysics
 {
 // Forward decl of the streamed deformation model spec (real home
@@ -268,6 +281,12 @@ namespace Vehicle
 struct CreatePhysicalTrafficEvent;   // spawn event -- SharedIO/BrnVehicleEvents.h
 struct CreateAirRamEvent;            // air-ram event -- SharedIO/BrnVehicleEvents.h (ProcessAddAirRamEvent arg)
 class  RaceCarPhysics;               // the checking race car -- RaceCarPhysics.h
+// ⭐ ADDED 2026-08-22 (wave T3 r1, C2). The two create/remove drain element types. Only
+// EventQueue<T,N>* PARAMETERS name them here, so the incomplete type suffices and
+// BrnVehicleEvents.h stays out of this header. Class keys checked against their single home
+// (SharedIO/BrnVehicleEvents.h:300 / :409) -- MSVC mangles struct vs class.
+struct RemoveTrafficEvent;
+struct CreateArticulatedTrafficEvent;
 
 // VecFloat: a single 16-byte VMX float lane (the DWARF spells the members below as VecFloat).
 // Its canonical home is rw::math::vpu; here it is the 16-byte 4-lane vector value used for the
@@ -592,10 +611,15 @@ public:
     // ⭐ ADDED 2026-08-10 (create-path wave). X360 0x82649768 (246 insns) -- the traffic twin of
     // VehicleManager::ProcessVehicleMaintenanceEvents and its sixth and last call, taking that
     // function's whole argument list verbatim (r3 = &mPhysicalTrafficManager, i.e. the vehicle
-    // manager + 44768). ⚠ FLAG: DECLARED for the maintenance closure; body is a LOUD one-shot
-    // gate (BrnVehicleManager_MaintenanceEvents.cpp) -- its own create/remove/crash arms over
-    // mUsedTrafficVehicles are unreconstructed, and the same ground ordering applies to traffic
-    // as to race cars.
+    // manager + 44768).
+    //
+    // ⭐⭐ CORRECTED 2026-08-22 (wave T3 r1, cluster C2): THE LIST IS TEN PARAMETERS, NOT SEVEN.
+    // DWARF BrnPhysicalTrafficManager.h:143 spells the last three, and the console passes them on
+    // the stack -- 0x8264ACC4..0x8264ACF0 stores `r31+0x740` (maRaceCarVehicles), `r31+0x40`
+    // (maRaceCarDrivers) and `r31+0x10000-0x5340` == +44224 (mUsedRaceCars) into the outgoing
+    // param-save slots at r1+0x54 / +0x5C / +0x64. The callee reads them back at exactly those
+    // three offsets (0x82649898 / 0x826498C0 / 0x826498E8) and asserts each non-NULL
+    // (BrnPhysicalTrafficManager.cpp:3697/:3698/:3699). Body: BrnVehicleManager_MaintenanceEvents.cpp.
     void ProcessTrafficMaintenanceEvents(
         CgsModule::IOBufferStack* lpInputBufferStack,
         CgsModule::IOBufferStack* lpOutputBufferStack,
@@ -603,7 +627,57 @@ public:
         VehicleOutputRequestInterface* lpOutputInterface,
         VehicleManagerOutputInterface* lpManagerOutputInterface,
         VehicleOutputInterface* lpVehicleOutputInterface,
-        BrnPhysics::Deformation::DeformationInputInterface* lpDeformationInterface); // @0x82649768
+        BrnPhysics::Deformation::DeformationInputInterface* lpDeformationInterface,
+        RaceCarPhysics* lpaRaceCarVehicles,
+        VehicleDriver* lpaRaceCarDrivers,
+        CgsContainers::BitArray<8u>* lpUsedRaceCars);                 // @0x82649768
+
+    // =========================================================================================
+    // ⭐ WAVE T3 ROUND 1, CLUSTER C2 -- the physics-side CREATE / REMOVE drain.
+    // Every signature below is the DecFIGS DWARF's (BrnPhysicalTrafficManager.h:266..:369),
+    // gated on an X360 ledger/export row. Bodies live in the two sibling slice TUs
+    // BrnPhysicalTrafficManager_Create.cpp and _Remove.cpp.
+    // ⚠️ The two queue parameters are spelled as the EventQueue template-ids the DWARF's nested
+    // VehicleInputInterface typedefs alias, so this header does not have to include the 42 KB
+    // BrnVehicleInputInterface.h. Same type, same mangled name.
+    // =========================================================================================
+
+    // @0x826495E8 (95; export hole closed by the wave-T3 scout). Six null asserts, then
+    // RemoveBrokenJointsFromSimulation + the two create drains. DWARF :318.
+    void ProcessCreateEvents(const VehicleInputInterface* lpInputInterface,
+                             VehicleManagerOutputInterface* lpManagerOutputInterface,
+                             VehicleOutputRequestInterface* lpOutputRequestInterface,
+                             BrnPhysics::Deformation::DeformationInputInterface* lpDeformationInterface,
+                             RaceCarPhysics* lpaRaceCarVehicles,
+                             VehicleDriver* lpaRaceCarDrivers,
+                             CgsContainers::BitArray<8u>* lpUsedRaceCars);
+
+    // @0x8262D0C0 (125). DWARF :321. Drains the world's remove queue, then the manager's own
+    // mUnusedPotentialTrafficQueue, then clears it.
+    void ProcessRemoveEvents(const CgsModule::EventQueue<RemoveTrafficEvent, 25>* lpRemoveTrafficQueue,
+                             VehicleOutputRequestInterface* lpOutputInterface,
+                             BrnPhysics::Deformation::DeformationInputInterface* lpDeformationInterface);
+
+    // @0x825F2088 (990). DWARF :342. Publishes this frame's added/removed/made-simple traffic
+    // into the simulation request + deformation queues, then clears the three bitsets.
+    void SendCreateRemoveTrafficEvents(VehicleOutputRequestInterface* lpOutputRequestInterface,
+                                       BrnPhysics::Deformation::DeformationInputInterface* lpDeformationInterface);
+
+    // @0x82615A38 (53; export hole closed by the wave-T3 scout). DWARF :269. The AllocateInternalBuffers
+    // twin: DestroyIOBuffer<ArticulatedJointCreateBuffer> off the INPUT stack.
+    void DeallocateInternalBuffers(CgsModule::IOBufferStack* lpInputBufferStack,
+                                   CgsModule::IOBufferStack* lpOutputBufferStack);
+
+    // @0x82643FB0 (72) / @0x8261DDF0 (347). DWARF :146 / :369. Both are crash-side arms of
+    // ProcessTrafficMaintenanceEvents; both are named one-shot gates this round (see the .cpp).
+    void ProcessTrafficEvents(const VehicleInputInterface* lpInputInterface,
+                              VehicleOutputRequestInterface* lpOutputRequestInterface,
+                              VehicleManagerOutputInterface* lpManagerOutputInterface,
+                              VehicleOutputInterface* lpVehicleOutputInterface,
+                              BrnPhysics::Deformation::DeformationInputInterface* lpDeformationInterface);
+    void CheckForTrafficHittingWater(VehicleManagerOutputInterface* lpManagerOutputInterface,
+                                     VehicleOutputRequestInterface* lpOutputRequestInterface,
+                                     BrnPhysics::Deformation::DeformationInputInterface* lpDeformationInterface);
 
     // X360 0x825B4900: &mpaTrafficDrivers[idx] (stride 224).
     VehicleDriver* GetTrafficDriver(s32 liVehicle);
@@ -681,6 +755,15 @@ public:
     // 20 traffic entity ids, null the four pool pointers, seed the joint-break limits, clear the
     // traffic bitsets, construct the unused-potential queue and the debug component.
     // Its ONLY caller in the image is VehicleManager::Construct @0x8263B7C8.
+    // @0x8262CA48 (290). DWARF :131 `bool Prepare(rw::LinearResourceAllocator*)`. THE ONLY
+    // SEATER of mpaTrafficDrivers / mpaTrafficVehicles / mpaSimpleVehiclePhysics. Body in
+    // BrnPhysicalTrafficManager_Prepare.cpp; sole caller VehicleManager::PrepareData @0x82633568.
+    // PARAM KEY: the DWARF spells the more-derived LinearResourceAllocator*, but this tree's one
+    // caller carries the BASE spelling (BrnVehicleManager.h:485 + the WorldLinkStubs.cpp:543 gate
+    // it retires) and the body only uses DoAllocate, which is the base's virtual. `struct` is the
+    // class-key rwcore_structs.h uses -- MSVC mangles struct vs class.
+    bool Prepare(rw::IResourceAllocator* lpPhysicsAllocator);
+
     void Construct();
 
     // X360 0x825E8808: reset the above-ground (down-ray) test results for every used vehicle.
@@ -720,11 +803,125 @@ public:
                                 const CgsSceneManager::SceneManagerIO::TriangleCacheInterface* lpTriCacheInterface,
                                 f32 lfTimeStep);
 
+    // ---- WAVE T3 ROUND 2, OWNER B -- the race-car-hits-traffic RESPONSE surface ---------------
+    // Signatures verbatim from DWARF BrnPhysicalTrafficManager.h:174/:190/:202/:386/:451.
+    // Bodies in BrnPhysicalTrafficManager_CrashResponse.cpp. All five are reached from
+    // VehicleManager::HandleRaceCarTrafficCarPotentialContact @0x8263FA50.
+
+    // @0x82636E38 (229) DWARF :174. Latch the traffic car into its CRASHING state: state = 1,
+    // body->SetCrashing(), drop the potential bit, post the crashed-traffic event + the 32-byte
+    // game event. No-ops when the car is already crashing.
+    void SetTrafficVehicleCrashing(EntityId lTrafficEntityID, EntityId lCrasherEntityID,
+                                   VehicleManagerOutputInterface* lpManagerOutputInterface,
+                                   VehicleOutputInterface* lpVehicleOutputInterface,
+                                   BrnPhysics::Deformation::DeformationInputInterface* lpDeformationInterface);
+
+    // @0x8262D748 (177) DWARF :190. The CHECKED response: OnChecked (the impulse fold + check
+    // owner), state = 2, drop the potential bit, post a TrafficSlammedEvent.
+    void SetTrafficVehicleChecked(EntityId lTrafficEntityID, EntityId lCrasherEntityID,
+                                  const RaceCarPhysics* lpRaceCarPhysics,
+                                  VehicleManagerOutputInterface* lpManagerOutputInterface,
+                                  VehicleOutputInterface* lpVehicleOutputInterface,
+                                  BrnPhysics::Deformation::DeformationInputInterface* lpDeformationInterface,
+                                  Vector3 lContactPointOnTraffic);
+
+    // @0x825EFDE8 (188; export HOLE closed by wave T3 r2) DWARF :202. The SLAMMED response:
+    // state = 2 only from state 0, drop the potential bit, post a magnitude-scaled
+    // TrafficSlammedEvent.
+    void SetTrafficVehicleSlammed(EntityId lTrafficEntityID, EntityId lCrasherEntityID,
+                                  const SimpleVehiclePhysics* lpRaceCarPhysics,
+                                  VehicleManagerOutputInterface* lpManagerOutputInterface,
+                                  VehicleOutputInterface* lpVehicleOutputInterface,
+                                  BrnPhysics::Deformation::DeformationInputInterface* lpDeformationInterface,
+                                  Vector3 lContactPointOnTraffic, VecFloat lvfSlamMagnitude);
+
+    // @0x82637A30 (148) DWARF :386. The NEAR MISS: a fast race car that just failed the
+    // intersection prediction makes a slow traffic car freak out (and crash).
+    void TestForNearMissFreakOut(CgsSceneManager::SceneManagerIO::PotentialContact lContact,
+                                 EntityId lTrafficPhysicsEntityID, EntityId lRaceCarPhysicsEntityID,
+                                 const RaceCarPhysics* lpRaceCarPhysics,
+                                 VehicleManagerOutputInterface* lpManagerOutputInterface,
+                                 VehicleOutputInterface* lpVehicleOutputInterface,
+                                 BrnPhysics::Deformation::DeformationInputInterface* lpDeformationInterface);
+
+    // @0x825CAC10 (42) DWARF :451. Mint the crashing car's VolumeInstanceId. See the .cpp for
+    // why the console's body ENDS there.
+    void PhysicallyCrashTrafficCar(u16 lu16TrafficCarIndex,
+                                   BrnPhysics::Deformation::DeformationInputInterface* lpDeformationInterface);
+
 private:
     // The X360 post-simulation tail calls ResolveArticulatedJoints and then executes the
     // DecFIGS-named ProcessJointSpys pass over lpSimModuleOutputBuffer.
     void ProcessJointSpys(const CgsPhysics::PhysicsSimulationIO::OutputBuffer* lpSimModuleOutputBuffer);
     void ResolveArticulatedJoints();
+
+    // ---- WAVE T3 ROUND 1, CLUSTER C2 -- the private create/remove chain -----------------------
+    // Signatures verbatim from DWARF BrnPhysicalTrafficManager.h:291..:330. Bodies in
+    // BrnPhysicalTrafficManager_Create.cpp / _Remove.cpp.
+
+    // @0x82647E20 (617) DWARF :324. Validate + drain VehicleInputInterface::mCreateTrafficEventQueue.
+    void ProcessCreateNonArticulatedTraffic(
+            const CgsModule::EventQueue<CreatePhysicalTrafficEvent, 25>* lpCreateTrafficEvents,
+            VehicleManagerOutputInterface* lpManagerOutputInterface,
+            VehicleOutputRequestInterface* lpOutputRequestInterface,
+            BrnPhysics::Deformation::DeformationInputInterface* lpDeformationInterface,
+            RaceCarPhysics* lpaRaceCarVehicles, VehicleDriver* lpaRaceCarDrivers,
+            CgsContainers::BitArray<8u>* lpUsedRaceCars);
+
+    // @0x826487C8 (614) DWARF :327. Trailer half; a named gate this round.
+    void ProcessCreateArticulatedTrafficEvents(
+            const CgsModule::EventQueue<CreateArticulatedTrafficEvent, 10>* lpCreateArticulatedTrafficEvents,
+            VehicleManagerOutputInterface* lpManagerOutputInterface,
+            VehicleOutputRequestInterface* lpOutputRequestInterface,
+            BrnPhysics::Deformation::DeformationInputInterface* lpDeformationInterface,
+            RaceCarPhysics* lpaRaceCarVehicles, VehicleDriver* lpaRaceCarDrivers,
+            CgsContainers::BitArray<8u>* lpUsedRaceCars);
+
+    // @0x82646E70 (656) DWARF :330. Claim a slot, seat the physics, latch the global->physical map.
+    s32  CreateTrafficVehicle(const CreatePhysicalTrafficEvent& lrCreateTrafficEvent,
+                              VehicleManagerOutputInterface* lpManagerOutputInterface,
+                              VehicleOutputRequestInterface* lpOutputRequestInterface,
+                              BrnPhysics::Deformation::DeformationInputInterface* lpDeformationInterface,
+                              RaceCarPhysics* lpaRaceCarVehicles, VehicleDriver* lpaRaceCarDrivers,
+                              CgsContainers::BitArray<8u>* lpUsedRaceCars,
+                              const TotalPhysicalTrafficBitArray* lpDoNotRecycleBitArray);
+
+    // @0x82637608 (266) DWARF :306. Free slot, or recycle the least interesting one.
+    s32  GetFreeTrafficVehicleWithPhysics(VehicleManagerOutputInterface* lpManagerOutputInterface,
+                                          VehicleOutputRequestInterface* lpOutputRequestInterface,
+                                          BrnPhysics::Deformation::DeformationInputInterface* lpDeformationInterface,
+                                          RaceCarPhysics* lpaRaceCarVehicles, VehicleDriver* lpaRaceCarDrivers,
+                                          CgsContainers::BitArray<8u>* lpUsedRaceCars,
+                                          const TotalPhysicalTrafficBitArray* lpDoNotRecycleBitArray);
+
+    // @0x825F1990 (446) DWARF :309 / @0x825F1658 (206) DWARF :303.
+    s32  GetLeastInterestingFullyPhysicalVehicle(RaceCarPhysics* lpaRaceCarVehicles,
+                                                 VehicleDriver* lpaRaceCarDrivers,
+                                                 CgsContainers::BitArray<8u>* lpUsedRaceCars,
+                                                 const TotalPhysicalTrafficBitArray* lpDoNotRecycleBitArray);
+    f32  GetTrafficInterest(const PhysicalTrafficVehicle* lpTrafficVehicle,
+                            RaceCarPhysics* lpaRaceCarVehicles, VehicleDriver* lpaRaceCarDrivers,
+                            CgsContainers::BitArray<8u>* lpUsedRaceCars);
+
+    // @0x8262DA10 (112) DWARF :312 / @0x8261CC98 (570) DWARF :291.
+    void RecycleTrafficVehicle(s32 liIndexToRecycle,
+                               VehicleManagerOutputInterface* lpManagerOutputInterface,
+                               VehicleOutputRequestInterface* lpOutputRequestInterface,
+                               BrnPhysics::Deformation::DeformationInputInterface* lpDeformationInterface);
+    void RemoveTrafficVehicle(u8 lu8TrafficEntityNum,
+                              VehicleOutputRequestInterface* lpOutputRequestInterface,
+                              BrnPhysics::Deformation::DeformationInputInterface* lpDeformationInterface,
+                              bool lbRemoveFromSimulation);
+
+    // @0x826440D0 (210) DWARF :300 / @0x825CAF60 (201) DWARF :345.
+    void PreparePhysicsForNewTrafficVehicle(const CreatePhysicalTrafficEvent& lrCreateTrafficEvent,
+                                            s32 liTrafficVehicleIndex);
+    void ComputeTrafficVehicleInertia(s32 liTrafficVehicleIndex, rw::physics::Inertia* lpOutInertia);
+
+    // @0x825F00D8 (140) DWARF :297. Crash-side; RemoveTrafficVehicle calls it unconditionally.
+    // Named gate this round (see BrnPhysicalTrafficManager_Remove.cpp).
+    void PhysicallyUncrashTrafficCar(u16 lu16TrafficEntityNum,
+                                     BrnPhysics::Deformation::DeformationInputInterface* lpDeformationInterface);
 
     // ⭐ 2026-08-03 (the un-pin wave). VehicleManager owns this object by value and reaches TWO of
     // its tables directly, with bare loads that fire none of the asserts the matching accessors do.

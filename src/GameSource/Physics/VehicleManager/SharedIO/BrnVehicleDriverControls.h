@@ -286,8 +286,12 @@ namespace Vehicle
     };
 
     // Adds no members (DWARF BrnVehicleDriverControls.h:195). sizeof == sizeof(base) == 0x48.
+    // The ctor seeds meDriverType = E_DRIVER_TYPE_TRAFFIC: the console record carries 3 at +0x44
+    // (GenerateDriverInputs @0x82748E78), and VehiclePhysics::UpdateDriving selects the
+    // PLAYER/AI/TRAFFIC handling bank from it.
     struct BrnTrafficDriverControls : public BrnPlayerDriverControls
     {
+        BrnTrafficDriverControls() { meDriverType = E_DRIVER_TYPE_TRAFFIC; }
     };
 
     // The layout gate. These are the four numbers every attestation above closes on; if a member

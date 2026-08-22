@@ -12,7 +12,11 @@
 //   ProcessCollisionEvents                 @0x825E8F28  ( 57)  ⭐ BODIED THIS WAVE  <- the "export hole"
 //   AddRaceCarDeformationModel             @0x825E9118  (153)  ⭐ BODIED THIS WAVE
 //   SetAllNetworkRaceCarsHidden            @0x825E9380  (175)  ⭐ BODIED THIS WAVE
-//   PhysicalTrafficManager::ProcessTrafficMaintenanceEvents @0x82649768 (246)  ⛔ still a GATE
+//   PhysicalTrafficManager::ProcessTrafficMaintenanceEvents @0x82649768 (246)  ⭐ BODIED 2026-08-22
+//       (wave T3 round 1, cluster C2 -- the gate is DELETED; its eight arms live here and in the
+//        two sibling slices BrnPhysicalTrafficManager_Create.cpp / _Remove.cpp. Two of the eight,
+//        ProcessTrafficEvents and CheckForTrafficHittingWater, stay named gates at the bottom of
+//        this file: both are crash-side and both are parked for round 1.)
 //   ProcessCreateEvents                    @0x82616770  (1067) -> its OWN slice TU (see below)
 //
 // Slice TU (home BrnVehicleManager.cpp is still unmounted) -- the same shape as the sibling
@@ -200,9 +204,14 @@ namespace Vehicle
 
         ProcessCollisionEvents(lpInputInterface, lpDeformationInterface);
 
+        // ⭐ CORRECTED 2026-08-22 (wave T3 r1, C2): TEN arguments, not seven. The last three ride
+        // the outgoing param-save slots at r1+0x54/+0x5C/+0x64 (0x8264ACC4..0x8264ACF0) and are
+        // `r31+0x740` == maRaceCarVehicles, `r31+0x40` == maRaceCarDrivers and
+        // `r31+0x10000-0x5340` == +44224 == mUsedRaceCars. Reached BY NAME here.
         mPhysicalTrafficManager.ProcessTrafficMaintenanceEvents(
             lpInputBufferStack, lpOutputBufferStack, lpInputInterface, lpOutputInterface,
-            lpManagerOutputInterface, lpVehicleOutputInterface, lpDeformationInterface);
+            lpManagerOutputInterface, lpVehicleOutputInterface, lpDeformationInterface,
+            maRaceCarVehicles, maRaceCarDrivers, &mUsedRaceCars);
     }
 
     // =============================================================================================
@@ -688,16 +697,113 @@ namespace Vehicle
         }
     }
 
-    // ---- the traffic twin, still a LOUD one-shot gate --------------------------------------------
-    // ⛔ NEVER silently no-op this: the log-once IS the loudness. @0x82649768 (246) carries its own
-    // create/remove/crash arms over the twenty traffic slots and is its own wave.
+    // =============================================================================================
+    // ⭐⭐ THE TRAFFIC TWIN IS BODIED (2026-08-22, wave T3 round 1, cluster C2). The
+    // BRN_MAINTENANCE_GATE that stood here since 2026-08-10 is DELETED.
+    //
+    // PhysicalTrafficManager::ProcessTrafficMaintenanceEvents @0x82649768 (246)
+    //   asserts BrnPhysicalTrafficManager.cpp:3690..:3699 then :3701/:3702/:3703, then eight
+    //   unconditional calls with no branch between them. DWARF BrnPhysicalTrafficManager.h:143.
+    //
+    // Argument routing verbatim from the asm at 0x82649A9C..0x82649B34 -- the arms do NOT all take
+    // the same list, and three of them re-order it:
+    //     AllocateInternalBuffers          (in, out)
+    //     ProcessRemoveEvents              (inputInterface+139544, outReq, deform)
+    //     ProcessCreateEvents              (in, mgrOut, outReq, deform, raceCars, drivers, usedCars)
+    //     ProcessTrafficEvents             (in, outReq, mgrOut, vehOut, deform)
+    //     CheckForTrafficHittingWater      (mgrOut, outReq, deform)
+    //     SendCreateRemoveTrafficEvents    (outReq, deform)
+    //     BridgeArticulatedJointRequestsToSim (outReq)
+    //     DeallocateInternalBuffers        (in, out)
+    //
+    // ⚠️ THE THREE OPENING BITSET ASSERTS ARE THE ROUND'S REAL TRIPWIRE. mAddedTrafficVehicles /
+    // mRemovedTrafficVehicles / mMadeSimpleTrafficVehicles must be EMPTY at the top of every frame,
+    // which is only true because SendCreateRemoveTrafficEvents clears all three at its own tail
+    // (BrnPhysicalTrafficManager_Remove.cpp). Gate that function and these three fire on the frame
+    // after the first promotion.
+    //
+    // ⚠️ The console returns DeallocateInternalBuffers' r3 (it falls through). Declared void, the
+    // shape ProcessVehicleMaintenanceEvents actually uses -- same call as its own return.
+    // =============================================================================================
     void PhysicalTrafficManager::ProcessTrafficMaintenanceEvents(
-        CgsModule::IOBufferStack*, CgsModule::IOBufferStack*,
+        CgsModule::IOBufferStack* lpInputBufferStack,
+        CgsModule::IOBufferStack* lpOutputBufferStack,
+        const VehicleInputInterface* lpInputInterface,
+        VehicleOutputRequestInterface* lpOutputInterface,
+        VehicleManagerOutputInterface* lpManagerOutputInterface,
+        VehicleOutputInterface* lpVehicleOutputInterface,
+        BrnPhysics::Deformation::DeformationInputInterface* lpDeformationInterface,
+        RaceCarPhysics* lpaRaceCarVehicles,
+        VehicleDriver* lpaRaceCarDrivers,
+        CgsContainers::BitArray<8u>* lpUsedRaceCars)
+    {
+        CGS_ASSERT(lpInputBufferStack       != 0, "lpInputBufferStack != NULL");        // :3690
+        CGS_ASSERT(lpOutputBufferStack      != 0, "lpOutputBufferStack != NULL");       // :3691
+        CGS_ASSERT(lpInputInterface         != 0, "lpInputInterface != NULL");          // :3692
+        CGS_ASSERT(lpOutputInterface        != 0, "lpOutputRequestInterface != NULL");  // :3693
+        CGS_ASSERT(lpManagerOutputInterface != 0, "lpManagerOutputInterface != NULL");  // :3694
+        CGS_ASSERT(lpVehicleOutputInterface != 0, "lpVehicleOutputInterface != NULL");  // :3695
+        CGS_ASSERT(lpDeformationInterface   != 0, "lpDeformationInterface != NULL");    // :3696
+        CGS_ASSERT(lpaRaceCarVehicles       != 0, "lpaRaceCarVehicles != NULL");        // :3697
+        CGS_ASSERT(lpaRaceCarDrivers        != 0, "lpaRaceCarDrivers != NULL");         // :3698
+        CGS_ASSERT(lpUsedRaceCars           != 0, "lpUsedRaceCars != NULL");            // :3699
+
+        CGS_ASSERT(mAddedTrafficVehicles.GetFirstNonZeroBit()
+                       == TotalPhysicalTrafficBitArray::KI_INVALID_BITINDEX,
+                   "mAddedTrafficVehicles.GetFirstNonZeroBit() == -1");                 // :3701
+        CGS_ASSERT(mRemovedTrafficVehicles.GetFirstNonZeroBit()
+                       == TotalPhysicalTrafficBitArray::KI_INVALID_BITINDEX,
+                   "mRemovedTrafficVehicles.GetFirstNonZeroBit() == -1");               // :3702
+        CGS_ASSERT(mMadeSimpleTrafficVehicles.GetFirstNonZeroBit()
+                       == TotalPhysicalTrafficBitArray::KI_INVALID_BITINDEX,
+                   "mMadeSimpleTrafficVehicles.GetFirstNonZeroBit() == -1");            // :3703
+
+        AllocateInternalBuffers(lpInputBufferStack, lpOutputBufferStack);
+
+        // `addis r4,r26,2 ; addi r4,r4,0x2118` == lpInputInterface + 139544 ==
+        // mRemoveCrashedTrafficEventQueue, reached by name through the DWARF-attested reader.
+        ProcessRemoveEvents(lpInputInterface->GetRemoveTrafficEvents(),
+                            lpOutputInterface, lpDeformationInterface);
+
+        ProcessCreateEvents(lpInputInterface, lpManagerOutputInterface, lpOutputInterface,
+                            lpDeformationInterface, lpaRaceCarVehicles, lpaRaceCarDrivers,
+                            lpUsedRaceCars);
+
+        ProcessTrafficEvents(lpInputInterface, lpOutputInterface, lpManagerOutputInterface,
+                             lpVehicleOutputInterface, lpDeformationInterface);
+
+        CheckForTrafficHittingWater(lpManagerOutputInterface, lpOutputInterface,
+                                    lpDeformationInterface);
+
+        SendCreateRemoveTrafficEvents(lpOutputInterface, lpDeformationInterface);
+
+        BridgeArticulatedJointRequestsToSim(lpOutputInterface);
+
+        DeallocateInternalBuffers(lpInputBufferStack, lpOutputBufferStack);
+    }
+
+    // ---- the two crash-side arms, named one-shot gates -------------------------------------------
+    // ⛔ GATE PhysicalTrafficManager::ProcessTrafficEvents @0x82643FB0 (72)
+    //    blocker: it dispatches the whole crash sub-tree (ProcessSetTrafficCrashingEvents ->
+    //    SetTrafficVehicleCrashing -> PhysicallyCrashTrafficCar), parked for wave T3 round 1.
+    //    DELETE-WHEN the crash/takedown wave lands. Contact IMPULSE does not need it.
+    void PhysicalTrafficManager::ProcessTrafficEvents(
         const VehicleInputInterface*, VehicleOutputRequestInterface*,
         VehicleManagerOutputInterface*, VehicleOutputInterface*,
         BrnPhysics::Deformation::DeformationInputInterface*)
     {
-        BRN_MAINTENANCE_GATE("PhysicalTrafficManager::ProcessTrafficMaintenanceEvents @0x82649768 (246)");
+        BRN_MAINTENANCE_GATE("PhysicalTrafficManager::ProcessTrafficEvents @0x82643FB0 (72)");
+    }
+
+    // ⛔ GATE PhysicalTrafficManager::CheckForTrafficHittingWater @0x8261DDF0 (347)
+    //    blocker: needs the water-volume query at 0x825C0758's sibling seam plus the crash
+    //    sub-tree it removes cars through; parked for wave T3 round 1.
+    //    DELETE-WHEN the water/crash wave lands.
+    void PhysicalTrafficManager::CheckForTrafficHittingWater(
+        VehicleManagerOutputInterface*, VehicleOutputRequestInterface*,
+        BrnPhysics::Deformation::DeformationInputInterface*)
+    {
+        BRN_MAINTENANCE_GATE("PhysicalTrafficManager::CheckForTrafficHittingWater @0x8261DDF0 (347)");
     }
 }
 }

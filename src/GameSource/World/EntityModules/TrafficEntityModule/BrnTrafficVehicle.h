@@ -171,6 +171,8 @@ public:
     bool IsAlive() const { return (mxFlags & E_FLAG_ALIVE) != 0; }
     bool IsPhysical() const { return (mxFlags & E_FLAG_PHYSICAL) != 0; }
     bool IsOfTrailerSpecies() const { return (muSpecies & 0xF) == E_SPECIES_TRAILER; }
+    // DriveTowardsTarget @0x8273E080 / @0x8273E0C4 (`lbz r11,4(this) ; clrlwi r11,r11,28`).
+    bool IsOfStandardSpecies() const { return (muSpecies & 0xF) == E_SPECIES_STANDARD; }
     // Named by SetHasEntity's baked assert strings (BrnTrafficVehicle.h:979/:980). The console
     // inlines it as `(mxFlags >> 1) & 1`, e.g. 0x8270EB44 `lbz r11,5(r3) ; extrwi r11,r11,1,30`.
     bool HasEntity() const { return (mxFlags & E_FLAG_HASENTITY) != 0; }
@@ -181,6 +183,13 @@ public:
     // The return is 16 bits (`lhz`, not `lbz`): callers compare it against
     // KU_INVALID_VEHICLE == 0xFFFF, which a u8 could never hold.
     u16 GetCabIndex() const;
+
+    // The UNASSERTED read of the same halfword. ADDITIVE GROW (wave T3 r3): the console reaches
+    // it this way where the species is not yet known -- ReturnPhysicalVehicleToTraffic
+    // @0x8273DF18 is a bare `lhz r11, 2(r24)` with no assert before it, and the species test
+    // comes AFTER. GetCabIndex asserts IsOfTrailerSpecies() and so cannot serve that site.
+    // KU_INVALID_VEHICLE (0xFFFF) means "no other half".
+    u16 GetOtherHalfIndex() const { return muOtherHalfIndex; }
 
     // ---- per-frame state / identity accessors (out-of-line, bodied in the .cpp) ----
     VecFloat GetSpeed() const;
@@ -194,6 +203,12 @@ public:
     Vector3 GetLinearVelocity() const;
     f32 GetSwerveTime() const;
     f32 GetRandomVal() const;
+    // Vehicle+0x44 / +0x60. DriveTowardsTarget @0x8273E27C reads mfPhysicalTime against 5.0
+    // and @0x8273E664 against 3.0; GenerateDriverInputs @0x827492A8 accumulates both.
+    f32 GetPhysicalTime() const;
+    f32 GetManoeuvreTime() const;
+    void AddPhysicalTime(f32 lfDelta);
+    void AddManoeuvreTime(f32 lfDelta);
     s32 GetPhysicalReason() const;
     s32 GetCurrentManoeuvrePhase() const;
     EntityId GetSympatheticCrashTarget() const;
@@ -233,6 +248,7 @@ public:
     void SetPitch_Roll_Steering_WheelRot(Vector4 lValues);
 
     void SetHornOn(bool lbOn);
+    void SetAlarmOn(bool lbOn);   // @0x8270FC10
     void SetHeadlightsFlashed(bool lbOn);
     void SetLeftIndicatorOn(bool lbOn);
     void SetRightIndicatorOn(bool lbOn);
@@ -250,6 +266,12 @@ public:
     void SetCurrentManoeuvre(Manoeuvre leManoeuvre);
     void SetCurrentManoeuvrePhase(s8 liPhase);
     void SetWantsToExtremeSwerve(bool lbWants);
+    // ADDITIVE (wave T3 r3 fix round) -- the two sympathetic-crash fields UpdateExtremeSwerving
+    // @0x8273EB08/@0x8273EB14/@0x8273EB24 writes INLINE (`stfs f0,0x4C(r30)` then
+    // `stw r10,0x48(r30)`); the console emits no call, so these are header inlines, not
+    // out-of-line accessors. No layout change: both members already exist.
+    void SetSympCrashTime(f32 lfTime) { mfSympCrashTime = lfTime; }
+    void SetSympCrashState(SympatheticCrashState leState) { meSympCrashState = leState; }
     void StartGiveUpManoeuvre();
     void CopyEffectsFromCab(const Vehicle* lpCab);
 

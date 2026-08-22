@@ -19,6 +19,7 @@
 #include "SharedClasses/Traffic/BrnTrafficSection.h"        // Section / LaneRung / Neighbour (real home)
 #include "SharedClasses/Traffic/BrnTrafficStaticTraffic.h"  // StaticTrafficVehicle (by value in the array)
 #include "SharedClasses/Traffic/BrnTrafficSectionFlow.h"    // SectionFlow (real pointee for mpaSectionFlows)
+#include "SharedClasses/Traffic/Junctions/BrnTrafficStopLine.h" // StopLine (real pointee for mpaStopLines)
 #include <cstddef>   // offsetof (host layout static_asserts)
 
 namespace BrnTraffic
@@ -26,9 +27,9 @@ namespace BrnTraffic
 
 // PARK -- still un-homed. These are pointer targets only inside Hull, so opaque
 // forward declarations suffice. Their DWARF homes (BrnTrafficSection.h siblings,
-// BrnTrafficStopLine.h, BrnJunctionLogicBox.h) are not reconstructed yet.
+// BrnJunctionLogicBox.h) are not reconstructed yet. StopLine is homed now
+// (Junctions/BrnTrafficStopLine.h, included above).
 struct SectionSpan;
-struct StopLine;
 struct LightTrigger;
 struct LightTriggerStartData;
 class  JunctionLogicBox;
@@ -80,10 +81,6 @@ struct Hull
     // slice starts at its own muRungOffset.
     inline const f32* GetRungLengthsForSection(const Section* lpSection) const;
 
-    // FLAG (opaque-element stride): the stop-line index element is forward-declared only,
-    // so GetStopLine stays bodied off the asm's explicit element stride. DELETE WHEN the
-    // BrnTrafficStopLine.h record is reconstructed and can be indexed by name.
-
     // X360 @ 0x821F5358. asm: assert(mpaNeighbourData != 0); assert(luIndex <
     // muNumNeighbours); return mpaNeighbourData + 4*luIndex (`slwi r11, r29, 2`), which is
     // sizeof(Neighbour) -- the element type is modelled and sizeof-pinned in
@@ -102,8 +99,9 @@ struct Hull
     inline const StaticTrafficVehicle* GetStaticVehicle(u32 luIndex) const;
 
     // X360 @ 0x82705C20. asm: assert(luIndex < muNumStoplines);
-    // return mpaStopLines + 2*luIndex (`slwi r10, r30, 1`).
-    inline const void* GetStopLine(u32 luIndex) const;
+    // return mpaStopLines + 2*luIndex (`slwi r10, r30, 1`) -- 2 == sizeof(StopLine), so
+    // this indexes by name.
+    inline const StopLine* GetStopLine(u32 luIndex) const;
 
     // X360 @0x827620A0 / @0x827622E0 (DWARF :135 / :140). Rebases the twelve
     // consecutive pointer slots (console +0x10..+0x3C) against the resource block
@@ -152,10 +150,10 @@ inline const StaticTrafficVehicle* Hull::GetStaticVehicle(u32 luIndex) const
     return &mpaStaticTrafficVehicles[luIndex];
 }
 
-inline const void* Hull::GetStopLine(u32 luIndex) const
+inline const StopLine* Hull::GetStopLine(u32 luIndex) const
 {
     CGS_ASSERT(luIndex < muNumStoplines, "luIndex < muNumStoplines");
-    return reinterpret_cast<const u8*>(mpaStopLines) + 2u * luIndex;
+    return &mpaStopLines[luIndex];
 }
 
 }

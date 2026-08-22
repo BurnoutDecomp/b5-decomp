@@ -540,17 +540,9 @@ void MassiveAdClient3::CMassiveAdObjectSubscriber::operator delete(void *)
 // them. That is harmless today (ProcessAddToCacheEvents stamps a radius and a used bit and does
 // not touch mbIsDirty, and StartUpdateTriangleCaches skips every non-dirty slot), and it becomes
 // load-bearing the moment UpdateCachedPositions lands.
-bool BrnPhysics::Vehicle::VehicleManager::PrepareData(struct rw::IResourceAllocator *)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "VehicleManager::PrepareData: inert [FLAG PC boot gate]\n";
-    }
-    return true;
-}
+// GATE RETIRED 2026-08-22 (traffic wave T3): VehicleManager::PrepareData @0x82633568 is REAL in
+// GameSource/Physics/VehicleManager/BrnVehicleManager_PrepareData.cpp; it is the only caller of
+// PhysicalTrafficManager::Prepare @0x8262CA48, the sole seater of the three physics traffic arrays.
 
 // ⭐⭐ LINK STUB DELETED 2026-08-14 (deformation-mount wave): DeformationManager::Prepare
 // @0x82630230's REAL body (BrnDeformationManager.cpp) is MOUNTED as of this wave -- the stub that
@@ -2242,21 +2234,9 @@ RealmcIface::MemcardInterface::~MemcardInterface()
 // that file (their blockers are named there). If a gate for it reappears here the link will say
 // so (LNK2005).
 
-// BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
-// WorldModule::Update @0x827D63E8 once the drive is wired. Per-frame world bridge.
-// X360 0x827AB910 -- reconstruct and DELETE this gate.
-// One-shot log + inert: the module/interface it would feed is itself gated
-// inert, so dropping the transfer is the consistent observable.
-void WorldModule::BridgePhysicsModuleToTrafficModule_PostPhysics(void *,class BrnTraffic::BrnTrafficIO::InputBuffer_PostPhysics *,class BrnPhysics::PhysicsModuleIO::OutputBuffer const *)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "WorldModule::BridgePhysicsModuleToTrafficModule_PostPhysics: inert [FLAG PC boot gate]\n";
-    }
-}
+// GATE RETIRED 2026-08-22 (traffic wave T3): WorldModule::BridgePhysicsModuleToTrafficModule_PostPhysics
+// @0x827AB910 is REAL in GameSource/World/Bridges/WorldBridgePhysicsToEntityModules.cpp (the
+// physics->traffic readback leg; its destination queues are Constructed in InputBuffer_PostPhysics).
 
 // BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
 // WorldModule::Update @0x827D63E8 once the drive is wired. Per-frame world bridge.

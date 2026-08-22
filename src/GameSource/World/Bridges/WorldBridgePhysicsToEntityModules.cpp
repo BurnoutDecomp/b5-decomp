@@ -133,3 +133,83 @@ namespace WorldModule
         }
     }
 }
+
+// =================================================================================================
+// WorldModule::BridgePhysicsModuleToTrafficModule_PostPhysics @0x827AB910 (33 insns)
+// -- landed wave T3 (physical traffic). Its boot gate at WorldLinkStubs.cpp:2250 is RETIRED with it.
+//
+// THE TRAFFIC READ-BACK HANDOVER. PhysicalTrafficManager::WriteOutVehicleStats fills the PHYSICS
+// module's output buffer (mTrafficStateQueue + the vehicle-manager crash/slam queues);
+// TrafficEntityModule::HandleExternalResponses reads the TRAFFIC module's post-physics INPUT
+// buffer. This bridge is the only thing in the XEX that copies one into the other.
+//
+// Four accessor->setter pairs, in this asm order (0x827AB92C..0x827AB978), each callee's member
+// offset read off its own epilogue:
+//   1  OutputBuffer::GetVehicleOutputInterface() const                  @0x8279F598 -> +44128
+//        -> InputBuffer_PostPhysics::SetVehicleOutputInterface          @0x827A9F50
+//   2  OutputBuffer::GetVehicleManagerOutputInterface() const           @0x8279F4F0 -> +41952
+//        -> InputBuffer_PostPhysics::SetVehicleManagerOutputInterface   @0x827AA000
+//   3  OutputBuffer::GetDeformationOutputInterfaceForEntityModules() const @0x8279F790 -> +159648
+//        -> InputBuffer_PostPhysics::SetDeformationOutputInterfaceForEntityModules @0x827AA0B8
+//   4  OutputBuffer::GetContactSpyInterface() const                     @0x8279F8E0 -> +998192
+//        -> InputBuffer_PostPhysics::SetContactSpyInterface             @0x827A0778
+// r3 (the WorldModule `this`) is never read.
+// =================================================================================================
+
+namespace WorldModule
+{
+    void BridgePhysicsModuleToTrafficModule_PostPhysics(
+        void* /*lpWorldModule*/,
+        BrnTraffic::BrnTrafficIO::InputBuffer_PostPhysics* lpTrafficInputBuffer_PostPhysics,
+        const BrnPhysics::PhysicsModuleIO::OutputBuffer* lpPhysicsModuleOutputBuffer)
+    {
+        // ⚠️ DIVERGENCE (named): the console has no null guards -- EntityModulePostPhysicsUpdate
+        // always passes live buffers. Same bring-up guard the race-car sibling above carries.
+        CGS_ASSERT(lpTrafficInputBuffer_PostPhysics != 0, "lpTrafficInputBuffer_PostPhysics != NULL");
+        CGS_ASSERT(lpPhysicsModuleOutputBuffer != 0, "lpPhysicsModuleOutputBuffer != NULL");
+        if (lpTrafficInputBuffer_PostPhysics == 0 || lpPhysicsModuleOutputBuffer == 0)
+        {
+            return;
+        }
+
+        // CONDUCTOR PREREQ for legs 1/2. Both setters run operator=, which Clear()+Append()s
+        // every embedded EventQueue, and Append memcpys through mpEvents -- seated only by
+        // EventQueue<T,N>::Construct. BrnTrafficEntityModuleIO_InputBuffer_Getters.cpp:31
+        // InputBuffer_PostPhysics::Construct still runs IOBuffer::Construct + mGameActionQueue
+        // only; it must grow mVehicleOutputInterface.Construct() and
+        // mVehicleManagerOutputInterface.Construct() (race-car precedent
+        // BrnRaceCarEntityModuleIO.cpp:1013) BEFORE WorldLinkStubs.cpp:2250 is retired, or the
+        // first non-empty source queue faults in memcpy. Not an owned file.
+
+        // Leg 1 -- mTrafficStateQueue (the per-frame physical-traffic pose snapshots).
+        lpTrafficInputBuffer_PostPhysics->SetVehicleOutputInterface(
+            lpPhysicsModuleOutputBuffer->GetVehicleOutputInterface());
+
+        // Leg 2 -- the vehicle-manager event queues (crashed / slammed traffic, race-car crash).
+        lpTrafficInputBuffer_PostPhysics->SetVehicleManagerOutputInterface(
+            lpPhysicsModuleOutputBuffer->GetVehicleManagerOutputInterface());
+
+        // Leg 4 -- the contact-spy handle (read-locked const twin @0x8279F8E0).
+        lpTrafficInputBuffer_PostPhysics->SetContactSpyInterface(
+            lpPhysicsModuleOutputBuffer->GetContactSpyInterface());
+
+        // GATE leg 3 GetDeformationOutputInterfaceForEntityModules @0x8279F790 -> Set... @0x827AA0B8.
+        // BLOCKER: PhysicsModuleIO::OutputBuffer models that seat as 1-byte opaque storage
+        // (BrnPhysicsModuleIO.h:114) while the traffic setter takes the real
+        // BrnPhysics::Deformation::DeformationOutputInterfaceForEntityModules; bridging today is a
+        // 1-byte-onto-multi-KB copy. Same blocker as the race-car sibling's leg 3.
+        // DELETE-WHEN that seat is promoted to its real type.
+        {
+            static bool sbLoggedDeformationPark = false;
+            if (!sbLoggedDeformationPark && CgsDev::Log::gpDebugPrint != 0)
+            {
+                sbLoggedDeformationPark = true;
+                *CgsDev::Log::gpDebugPrint
+                    << "[T3-bridge] BridgePhysicsModuleToTrafficModule_PostPhysics: legs 1/2/4 LIVE; "
+                       "leg 3 (deformation-for-entity-modules @0x8279F790) parked -- "
+                       "PhysicsModuleIO::OutputBuffer still models that seat as 1-byte opaque "
+                       "storage [FLAG PC partial gate]\n";
+            }
+        }
+    }
+}

@@ -23,8 +23,8 @@
 //
 // NAMED GATES, each with its blocker:
 //   G1 the replay-serialiser pose source (module +468256 selects it);
-//   G2 the physical (crashing) vehicle arm: wheel rotations and positions from the
-//      crashing-parts list, and the damaged verlet-offset upload;
+//   G2 CLOSED wave T3 round 1 -- a physical traffic car now RENDERS: its wheels come from
+//      TrafficPhysicsInfo::maWheelTransforms and its blobby ground shadow is suppressed;
 //   G3 the glass-fracture reset + the damaged-vehicle budget leg;
 //   G4 the detached-body-part override table;
 //   G5 SubmitCoronasForVehicle @0x82727BB0 / RenderTrafficLightCoronas @0x8271EC80;
@@ -84,6 +84,15 @@ namespace BrnTraffic
 // The console's wheel matrix / pointer stack arrays are four entries long, which is also
 // the debug variable's upper bound (identical to the race car's KU_WHEELS_TO_RENDER_MAX).
 static const s32 KI_TRAFFIC_WHEELS_TO_RENDER_MAX = 4;
+
+// GATE G-WHEELEXISTS -- TrafficPhysicsInfo::mabWheelExists (console info+4040 == +0xFC8) has no
+// writer in this tree. RE-VERIFIED wave T3 r2 against the ARTIST image: the ONLY store to that
+// offset in the whole XEX is ProcessDeformationData @0x8271DEB0 (`addi r25, r22, 0xFC8` at
+// 0x8271E41C), and that function is still gated in _wT1_01.cpp's PostPhysicsUpdate leg list.
+// Honouring the always-false array would draw every promoted car with zero wheels, so the arm
+// draws the composed wheels under this named gate instead.
+// DELETE-WHEN ProcessDeformationData @0x8271DEB0 lands.
+static const bool KB_T3_FORCE_PHYSICAL_WHEEL_EXISTS = true;
 
 // The verlet-offset array length shader constant 22 declares (128 registers). Same block the
 // race car publishes; see the deliberate-deviation note at the publish site.
@@ -562,8 +571,9 @@ TrafficEntityModule::GenerateDispatchLists( const BrnTrafficIO::InputBuffer_Disp
 //
 // ---- THE LIVE ARM (@0x82728BF8 onward) ----------------------------------------------
 //   GetVehicle(idx) -> flags byte at +5: bit0 (ALIVE) and bit1 must BOTH be set, else bail;
-//   bit3 (PHYSICAL) -> GetTrafficPhysicsInfoForVehicl + "not physical" latch cleared (gate
-//   G2). Then GetVehicleType, GetVehicleTransform, GetPitch_Roll_Steering_WheelRot, GetSpeed.
+//   bit3 (PHYSICAL) -> GetTrafficPhysicsInfoForVehicl (asserting non-null, :15106) and the
+//   "not physical" latch cleared. Then GetVehicleType, GetVehicleTransform,
+//   GetPitch_Roll_Steering_WheelRot, GetSpeed.
 // ============================================================================
 void
 TrafficEntityModule::RenderTrafficCar( CgsGraphics::DispatchFrame* lpDispatchFrame,
@@ -623,32 +633,24 @@ TrafficEntityModule::RenderTrafficCar( CgsGraphics::DispatchFrame* lpDispatchFra
         return;
     }
 
-    // ---- G2: the physical (crashing) arm ----------------------------------
-    // NAMED GATE. `rlwinm r11, r11, 0,28,28` @0x82728C1C -> Vehicle::IsPhysical(). The console
-    // fetches GetTrafficPhysicsInfoForVehicl(idx) (asserting it non-null, :15106) and clears the
-    // "not physical" latch, which sources every wheel's rotation and world position from
-    // maCrashingVehiclePartsList instead of the deformation spec, enables the damaged
-    // verlet-offset upload, and suppresses the blobby shadow. BLOCKER:
-    // GetTrafficPhysicsInfoForVehicl @0x82714500 is declaration-only and returns void here, and
-    // maCrashingVehiclePartsList has no home. A parked car is never physical.
-    // DELETE-WHEN the crash/deformation traffic wave lands.
+    // ---- G2 (CLOSED wave T3 round 1): the physical (promoted) arm ----------
+    // `rlwinm r11, r11, 0,28,28` @0x82728C1C -> Vehicle::IsPhysical(); the console then fetches
+    // GetTrafficPhysicsInfoForVehicl(idx), asserts it non-null (pseudocode :3188-:3197, baked
+    // .cpp line 15106) and clears the "not physical" latch (`LOBYTE(v68) = 0` @0x82733200's
+    // twin at :3200). That latch does three things downstream, and all three are now honoured:
+    //   * the wheel block takes maWheelTransforms instead of composing the locator (see below);
+    //   * the blobby ground shadow is suppressed at the tail (`if (v68) ... AddShadow`);
+    //   * the damaged verlet-offset upload is enabled -- still G3, see that gate.
+    // The accessor landed with the wave-T3 keystone (_wT3_00.cpp) and returns the real
+    // TrafficPhysicsInfo*; the record itself has always been modelled and Constructed
+    // (_wT1_03.cpp). Nothing here is gated any more.
     const bool lbIsPhysical = lpVehicle->IsPhysical();
+    const TrafficPhysicsInfo* lpPhysicsInfo = 0;
     if ( lbIsPhysical )
     {
-        static bool sbLoggedPhysicalGate = false;
-        if ( !sbLoggedPhysicalGate && CgsDev::Log::gpDebugPrint != 0 )
-        {
-            sbLoggedPhysicalGate = true;
-            *CgsDev::Log::gpDebugPrint
-                << "[T1-dispatch] RenderTrafficCar: PHYSICAL traffic vehicle skipped -- the"
-                   " crashing-parts pose source is not reconstructed"
-                   " (GetTrafficPhysicsInfoForVehicl @0x82714500 is declaration-only)"
-                   " [FLAG PC partial gate]\n";
-        }
-        return;
+        lpPhysicsInfo = GetTrafficPhysicsInfoForVehicl( luEntityIdx );
+        CGS_ASSERT( lpPhysicsInfo != 0, "lpPhysicsInfo" );                       // baked .cpp 15106
     }
-    // "not physical" is also what enables the blobby shadow at the tail (pseudocode :3183
-    // mirrors the leak's `if (!lpVehicle->IsPhysical()) AddShadow(...)`).
 
     const u32 luVehicleType = static_cast< u32 >( lpVehicle->GetVehicleType() );
 
@@ -730,10 +732,10 @@ TrafficEntityModule::RenderTrafficCar( CgsGraphics::DispatchFrame* lpDispatchFra
     //         SetShaderConstantData( 23, {0,0,0,0} );
     //     }
     //     else { BrnWorld::SetGlassFractureConstants( 0.0f, 1.0f, ... ); }
-    // Two blockers, both link-level: BrnWorld::SetGlassFractureConstants is defined only in
+    // ONE blocker now, link-level: BrnWorld::SetGlassFractureConstants is defined only in
     // BrnRaceCarEntityModule_GlassFracture.cpp, which is not on tools/build/build_game_exe.bat,
-    // so calling it is an unresolved external; and the damaged verlet block hangs off the
-    // traffic physics info, which is gate G2.
+    // so calling it is an unresolved external. (The second blocker used to be G2; G2 is closed,
+    // and the verlet block it named is TrafficPhysicsInfo::maSkinningOffsets_Scratch.)
     // CONSEQUENCE: shader constants 30/31/32 go unpublished on this build, and an unset external
     // constant is SKIPPED rather than zeroed, so the glass programs read the previous draw's
     // registers. DELETE-WHEN the GlassFracture TU is mounted.
@@ -741,10 +743,11 @@ TrafficEntityModule::RenderTrafficCar( CgsGraphics::DispatchFrame* lpDispatchFra
 
     // ---- the technique index -----------------------------------------------
     // Two bits, exactly the race car's scheme: bit 0 == "not damaged", bit 1 == "shadow pass"
-    // (`v188 = damaged ? (shadow ? 3 : 0) : (shadow ? 2 : 1)`). Traffic on this build is never
-    // damaged (gate G2 above returns before here for a physical car), so the undamaged pair is
-    // the only reachable one -- written as the full expression rather than folded, so the
-    // damaged arm is already correct when G2 closes.
+    // (`v188 = damaged ? (shadow ? 3 : 0) : (shadow ? 2 : 1)`).
+    // GATE (damaged arm) -- the damage source is now reachable
+    // (TrafficPhysicsInfo::mu8RenderDamageFlags, console info+4071) but selecting technique 0/3
+    // without the glass-fracture constants G3 still parks would draw a damaged car with the
+    // previous draw's registers. DELETE-WHEN G3 closes.
     const bool lbDamaged = false;
     u8 lu8Technique;
     if ( lbDamaged )
@@ -795,8 +798,8 @@ TrafficEntityModule::RenderTrafficCar( CgsGraphics::DispatchFrame* lpDispatchFra
     }
 
     // ---- shader constants 22 / 23: the verlet block -----------------------
-    // Traffic never deforms: the leak publishes g_NullVerletOffsets here unconditionally (:8580)
-    // and a zeroed damage vector as 23 (:8577).
+    // The leak publishes g_NullVerletOffsets here unconditionally (:8580) and a zeroed damage
+    // vector as 23 (:8577); the ship folds the live block into the damaged arm, which is G3.
     //
     // DELIBERATE DEVIATION, the same one the race-car render TU carries: the ship folds the
     // constant-22 publish into the damaged arm only. Leaving it unpublished is not neutral.
@@ -844,9 +847,10 @@ TrafficEntityModule::RenderTrafficCar( CgsGraphics::DispatchFrame* lpDispatchFra
     // to detached-part record (pseudocode :1319-:1345, asserting luPartCount < 128 at :15368 and
     // luDetachedPartIndex < luPartCount at :15374) and, for a part that has a record, takes the
     // record's four matrix rows as the world matrix instead of composing the locator. BLOCKER:
-    // the traffic detached-part queue hangs off the traffic physics info (gate G2) and has no
-    // home here. A parked car has no detached parts, so every part takes the composed path
-    // below, which is the console's own else-arm. DELETE-WHEN G2 closes.
+    // the detached-part queue is TrafficPhysicsInfo::mDetachedPartQueue, which nothing on this
+    // build ever fills -- detached parts are the deformation wave, not this one. A car with no
+    // detached parts takes the composed path below, which is the console's own else-arm.
+    // DELETE-WHEN traffic deformation lands. (This gate used to name G2; G2 is closed.)
     // ========================================================================
     {
         const u32 luPartCount = lpGraphicsSpec->muPartsCount;
@@ -1024,6 +1028,56 @@ TrafficEntityModule::RenderTrafficCar( CgsGraphics::DispatchFrame* lpDispatchFra
                   liWheel < giWheelsToRender && liWheel < KI_TRAFFIC_WHEELS_TO_RENDER_MAX;
                   ++liWheel )
             {
+                // ---- THE PHYSICAL ARM (pseudocode :2209-:2300, `if (v439)`) ----------------
+                // A promoted car's wheels are already posed by the physics side: the console
+                // takes TrafficPhysicsInfo::maWheelTransforms[i] (info+3376+64*i) and applies
+                // ONLY the spec's per-wheel scale on the left -- no road noise, no steer, no
+                // wheel-rotation compose, and NO left-side mirror (the physics transforms are
+                // already per-corner). The per-wheel `if` is mabWheelExists[i] (info+4040+i),
+                // so a shed wheel simply does not draw.
+                if ( lpPhysicsInfo != 0 )
+                {
+                    // GATE G-WHEELEXISTS. Console: `if (info[4040 + i])` -- the wheel's
+                    // on-ground/still-attached byte. NOTHING IN THIS TREE WRITES IT: the sole
+                    // console writer is ProcessDeformationData @0x8271DEB0
+                    // (0x8271E41C addi r25,r22,0xFC8 == info+4040, from deformation byte
+                    // +624+24*i), which has no body and whose call site stays gated in
+                    // _wT1_01.cpp. TrafficPhysicsInfo::Construct deliberately leaves the array
+                    // bulk-cleared (_wT1_03.cpp:78), so honouring it draws a promoted car with
+                    // ZERO WHEELS. Forced true until the writer lands; a wheel torn off in a
+                    // crash cannot happen yet either way.
+                    // DELETE-WHEN ProcessDeformationData @0x8271DEB0 lands: drop lbWheelExists
+                    // and test lpPhysicsInfo->mabWheelExists[liWheel] directly.
+                    const bool lbWheelExists = KB_T3_FORCE_PHYSICAL_WHEEL_EXISTS
+                                                   ? true
+                                                   : lpPhysicsInfo->mabWheelExists[ liWheel ];
+                    if ( !lbWheelExists )
+                    {
+                        continue;
+                    }
+
+                    const BrnPhysics::Deformation::WheelSpec* lpPhysicalWheelSpec =
+                        lpPhysicsSpec->GetWheelSpec( liWheel );
+                    if ( lpPhysicalWheelSpec == 0 )
+                    {
+                        continue;
+                    }
+
+                    Matrix44Affine lPhysicalScale;
+                    lPhysicalScale.SetIdentity();
+                    lPhysicalScale.xAxis.x = lpPhysicalWheelSpec->mScale.x;
+                    lPhysicalScale.yAxis.y = lpPhysicalWheelSpec->mScale.y;
+                    lPhysicalScale.zAxis.z = lpPhysicalWheelSpec->mScale.z;
+
+                    laWheelMatrices[ liInstanceCount ] = rw::math::vpu::Mult(
+                        lPhysicalScale, lpPhysicsInfo->maWheelTransforms[ liWheel ] );
+                    laWheelConstants[ liInstanceCount ] = lv4WheelConstants;
+                    lapWheelMatrices[ liInstanceCount ] = &laWheelMatrices[ liInstanceCount ];
+                    ++liInstanceCount;
+                    continue;
+                }
+
+
                 // BrnPhysics::Vehicle::VehiclePhysics wheel order (the leak's enumerators):
                 // 0 front-left, 1 front-right, 2 rear-left, 3 rear-right.
                 const bool lbIsFrontWheel = ( liWheel == 0 || liWheel == 1 );
@@ -1187,7 +1241,10 @@ TrafficEntityModule::RenderTrafficCar( CgsGraphics::DispatchFrame* lpDispatchFra
     // collected above, so the leg is a pure addition once the owner lands.
     // DELETE-WHEN a BrnBlobbyShadowManager owner exists and the argument construction is decoded
     // from @0x8272B868..0x8272B930.
-    if ( lpBlobbyShadowRenderer != 0 && !lpShadowMap->IsRenderingShadowMap() )
+    // `if (v68)` -- the "not physical" latch. A promoted car does NOT get a blobby shadow (it
+    // is in the real shadow map by then), which is what the leak spells as
+    // `if (!lpVehicle->IsPhysical()) AddShadow(...)`.
+    if ( lpBlobbyShadowRenderer != 0 && !lpShadowMap->IsRenderingShadowMap() && !lbIsPhysical )
     {
         static bool sbLoggedBlobbyGate = false;
         if ( !sbLoggedBlobbyGate && CgsDev::Log::gpDebugPrint != 0 )
@@ -1224,6 +1281,35 @@ TrafficEntityModule::RenderTrafficCar( CgsGraphics::DispatchFrame* lpDispatchFra
                     << ", " << lBodyTransform.wAxis.z << ")"
                     << " physicsSpec " << ( lrPhysicsSpecPtr.HasMemoryResource() ? 1 : 0 )
                     << "\n";
+            }
+
+            // [T3-render] the first PHYSICAL traffic car this build ever draws. Distinct latch:
+            // the parked-car one-shot above fires long before any promotion.
+            // DELETE-WHEN-STABLE.
+            static bool sbLoggedFirstPhysicalCar = false;
+            if ( lbIsPhysical && !sbLoggedFirstPhysicalCar )
+            {
+                sbLoggedFirstPhysicalCar = true;
+                *CgsDev::Log::gpDebugPrint
+                    << "[T3-render] FIRST PHYSICAL RenderTrafficCar: vehicle "
+                    << static_cast< s32 >( luEntityIdx )
+                    << " at (" << lBodyTransform.wAxis.x << ", " << lBodyTransform.wAxis.y
+                    << ", " << lBodyTransform.wAxis.z << ")\n";
+            }
+
+            // [T3-gate] G-WHEELEXISTS one-shot, fired only when the forced arm really changed an
+            // outcome (the record still says "no wheels"). DELETE-WHEN-STABLE.
+            static bool sbLoggedWheelExistsGate = false;
+            if ( KB_T3_FORCE_PHYSICAL_WHEEL_EXISTS && lbIsPhysical && !sbLoggedWheelExistsGate )
+            {
+                if ( lpPhysicsInfo != 0 && !lpPhysicsInfo->mabWheelExists[ 0 ] )
+                {
+                    sbLoggedWheelExistsGate = true;
+                    *CgsDev::Log::gpDebugPrint
+                        << "[T3-gate] G-WHEELEXISTS forcing mabWheelExists true (vehicle "
+                        << static_cast< s32 >( luEntityIdx )
+                        << "); writer ProcessDeformationData 0x8271DEB0 absent\n";
+                }
             }
 
             // Latched on the VALUE: this block has five different ways to draw no wheels and a

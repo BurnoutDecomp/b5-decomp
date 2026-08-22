@@ -140,6 +140,25 @@ namespace Vehicle
         eCrashTrafficType_Invalid     = 255
     };
 
+    // ⭐ ADDED 2026-08-22 (wave T3 r2, owner B). The RaceCarTrafficImpactResponse bit flags
+    // DecideOutcomeOfRaceCarTrafficContact @0x825C70A0 writes and
+    // HandleRaceCarTrafficCarPotentialContact @0x8263FA50 dispatches on. The console's own
+    // assert string at BrnVehicleManager.cpp:7836 names the family and the mask
+    // ("E_RCTIR_CRASH_TRAFFIC", "E_RCTIR_TRAFFIC_MASK"); the VALUES are asm-literal:
+    //     &1  (`clrlwi r11,r25,31` / `clrrwi`)            -> the RACE CAR crashes
+    //     &2  (`rlwinm r24,r25,0,30,30`)                  -> the TRAFFIC car crashes
+    //     &4  (`rlwinm r11,r25,0,29,29`)                  -> the TRAFFIC car is slammed
+    //     &8  (`rlwinm r27,r25,0,28,28`)                  -> the TRAFFIC car is checked
+    //     mask 0x1E (`rlwinm r11,r11,0,27,30`)            -> at most one traffic bit may be set
+    // ADDITIVE GROW: the DWARF does not carry this enum (it is a BrnVehicleManager.cpp-local
+    // family on PS3 too), so these are named constants rather than an invented enum type -- the
+    // console stores the word as a plain uint32_t.
+    const u32 KU_RCTIR_CRASH_RACECAR = 1u;
+    const u32 KU_RCTIR_CRASH_TRAFFIC = 2u;
+    const u32 KU_RCTIR_SLAM_TRAFFIC  = 4u;
+    const u32 KU_RCTIR_CHECK_TRAFFIC = 8u;
+    const u32 KU_RCTIR_TRAFFIC_MASK  = 0x1Eu;
+
     // ⭐ ADDED 2026-08-10 (producer wave). The bounding-sphere radius every vehicle -- race car
     // AND traffic -- claims its triangle-cache slot with. ONE datum, TWO readers: both
     // VehicleManager::PrepareTriangleCache @0x82615BE4 and PhysicalTrafficManager::

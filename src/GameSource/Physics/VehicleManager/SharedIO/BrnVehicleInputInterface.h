@@ -71,6 +71,52 @@ namespace Vehicle
             return mRemoveRaceCarEventQueue.AddEvent(lEvent) ? 1 : 0;
         }
 
+
+        // ---- wave-T3 (PHYSICAL TRAFFIC) producers ---------------------------------------------
+        // @0x8271C600 (240). DWARF BrnVehicleInputInterface.h:141. THE world->physics spawn hop
+        // for a promoted traffic car: fills a CreatePhysicalTrafficEvent and appends it to
+        // mCreateTrafficEventQueue (console this+132976). Four baked asserts at the console's own
+        // header lines :483/:484/:485/:486. The DWARF return is void; the console leaves
+        // AddEvent's result in r3 and its one caller (TrafficEntityModule::AddVehicleToPhysics
+        // @0x827427C0) does not read it.
+        void CreatePhysicalTraffic(VolumeInstanceId lVolumeInstanceId, EntityId lCrasherId,
+                                   Matrix44Affine lInitialTransform,
+                                   Vector3 lInitialVelocity, Vector3 lAngularVelocity,
+                                   u64 lCarAssetAttribKey,       // Attribute::Key -- 8 bytes
+                                   ResourceHandle lModelHandle,
+                                   ETrafficType leTrafficType, bool lbIsCab, CgsID lCgsID);
+
+        // THE DEMOTION TWIN of CreatePhysicalTraffic (wave T3 round 3). The console inlines
+        // this at its single call site -- TrafficEntityModule::CleanUpCrashedVehiclePhysics
+        // @0x82720A6C `bl RemoveTrafficEvent::AddEvent` on the interface + 0x22118, which is
+        // mRemoveCrashedTrafficEventQueue -- so it emits no out-of-line symbol, exactly like
+        // RemoveRaceCar above. PhysicalTrafficManager::ProcessRemoveEvents drains it and
+        // frees the physical slot.
+        void RemovePhysicalTraffic(VolumeInstanceId lVolumeInstanceId)
+        {
+            RemoveTrafficEvent lEvent;
+            lEvent.mVolumeInstanceID = lVolumeInstanceId;
+            mRemoveCrashedTrafficEventQueue.AddEvent(lEvent);
+        }
+
+        // @0x8271C9C0 (478). DWARF :144. The trailer (cab + trailer) twin. DECLARED so
+        // AddVehicleToPhysics' articulated arm compiles; the body is a named gate (trailers are
+        // parked for wave-T3 round 1 -- wave-T2 generation only builds InitialiseAsStandard cars,
+        // so the arm is unreachable today).
+        void CreateArticulatedTraffic(VolumeInstanceId lVolumeInstanceId_Cab,
+                                      Matrix44Affine lInitialTransform_Cab,
+                                      Vector3 lInitialVelocity_Cab, Vector3 lAngularVelocity_Cab,
+                                      u64 lAssetAttribKey_Cab, ResourceHandle lModelHandle_Cab,
+                                      CgsID lCgsId_Cab,
+                                      VolumeInstanceId lVolumeInstanceId_Trailer,
+                                      Matrix44Affine lInitialTransform_Trailer,
+                                      Vector3 lInitialVelocity_Trailer,
+                                      Vector3 lAngularVelocity_Trailer,
+                                      u64 lAssetAttribKey_Trailer,
+                                      ResourceHandle lModelHandle_Trailer,
+                                      CgsID lCgsId_Trailer,
+                                      ETrafficType leTrafficType);
+
         // @0x822CC2A0: enqueue a reset-vehicle request.
         // ⛔ [teleport] PARAMETER NAMES CORRECTED 2026-08-21 -- the LEADING u8 is the unused slot,
         // not the trailing bool, and the three bools are ResetTransform / ResetDeformation /
@@ -248,6 +294,29 @@ namespace Vehicle
         {
             CGS_ASSERT(lpRaceCarsAddedForCollision != 0, "lpRaceCarsAddedForCollision != NULL");
             mRaceCarsAddedForCollision = *lpRaceCarsAddedForCollision;
+        }
+
+        // ⭐ ADDED 2026-08-22 (wave T3 r1, C2 -- the physics-side create/remove drain). The three
+        // TRAFFIC queue readers, DWARF-attested (BrnVehicleInputInterface.h:207 / :225 / :201) and
+        // spelled with the DWARF's own names. Same shape as the race-car readers above: header
+        // inlines with no out-of-line X360 symbol, folded at their call sites as a bare
+        // `addis/addi` off the interface --
+        //     0x8264970C  addis r4, r29, 2 ; addi r4, r4, 0x770   == +132976 mCreateTrafficEventQueue
+        //     0x82649734  addis r4, r29, 2 ; addi r4, r4, 0x1590  == +136592 mCreateArticulatedTrafficEventQueue
+        //     0x82649AA0  addis r4, r26, 2 ; addi r4, r4, 0x2118  == +139544 mRemoveCrashedTrafficEventQueue
+        // (PhysicalTrafficManager::ProcessCreateEvents / ::ProcessTrafficMaintenanceEvents).
+        // Each is the same member the console addresses, reached by name instead of by that offset.
+        const CreateTrafficEventQueue* GetCreateTrafficBodyEvents() const
+        {
+            return &mCreateTrafficEventQueue;
+        }
+        const CreateArticulatedTrafficEventQueue* GetCreateArticulatedTrafficQueue() const
+        {
+            return &mCreateArticulatedTrafficEventQueue;
+        }
+        const RemoveTrafficEventQueue* GetRemoveTrafficEvents() const
+        {
+            return &mRemoveCrashedTrafficEventQueue;
         }
 
     private:

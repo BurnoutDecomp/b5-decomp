@@ -1816,14 +1816,20 @@ void TrafficEntityModule::PostPhysicsUpdate(CgsModule::IOBufferStack* lpInputBuf
     // ====================================================================================
     case E_STATE_RUNNING:
     {
+        // ⭐ UN-GATED wave T3 (physical traffic): HandleExternalResponses @0x82732C68 is the
+        // second of the five head legs and is BODIED (_wT3_04.cpp). It is what turns the physics
+        // side's PhysicalTrafficState queue back into world vehicle transforms, so a car the
+        // player hits actually moves. The other four legs keep their gate below.
+        HandleExternalResponses(lpInput);
+
         {
             static bool sbLogged = false;
             LogMissingLeg(sbLogged,
                 "PostPhysicsUpdate E_STATE_RUNNING head legs -- HandleRecycledTraffic "
-                "@0x82741AF8 / HandleExternalResponses / HandleResetRaceCarEvents / "
-                "HandleContactPoints / ProcessDeformationData. None is bodied in this tree; "
-                "all five consume DRIVING/crash input rings (waves 2 and 3) and none of them "
-                "produces or consumes a parked car");
+                "@0x82741AF8 / HandleResetRaceCarEvents / HandleContactPoints / "
+                "ProcessDeformationData. None is bodied in this tree; all four consume crash / "
+                "deformation input rings (later T3 rounds). HandleExternalResponses is LIVE "
+                "as of wave T3 round 1");
         }
 
         // 0x8274E710 `clrlwi r27, r30, 31` -- bit 0 of the update set is the sim-paused bit,
@@ -2302,7 +2308,7 @@ void TrafficEntityModule::Reset()
 // constructs.
 //
 // Gated: the ~25 vectorised tuning members (:799..:821), the four TrafficJobStub constructs
-// ([MEMBER HOLE 5]), the replay serialiser, the fuzzy-behaviour logic, the 102,800-byte
+// ([MEMBER HOLE 5]), the replay serialiser, the 102,800-byte
 // maTrafficPhysicsInfoList memset, the debug component and logger allocations, the twenty
 // perfmon monitors, and the debug-render stream reader. Each is a named one-shot below.
 // ----------------------------------------------------------------------------
@@ -2315,7 +2321,7 @@ void TrafficEntityModule::Construct()
     // source float was recovered from .rdata (0x820BA23C+); the two runtime-computed ones are
     // marked at their line. :816 mfVehicleRollFilterTime and :817 mTweakValues are NOT part of
     // this run: the console leaves the first to UpdateTimers and hands the second to
-    // FuzzyBehaviourLogic::Construct (still gated below).
+    // FuzzyBehaviourLogic::Construct (LANDED below -- it seeds all 21 mega-tweek constants).
     SetTuningSplat(KF_TWO_PI,                            6.2831855f);      // 0x725F0 flt_820BA250
     SetTuningSplat(KF_MAX_FLOAT,                         FLT_MAX);         // 0x72600 flt_820BA23C
     SetTuningSplat(KF_APPROX_LANE_WIDTH,                 4.5f);            // 0x72610 flt_820BA580
@@ -2374,12 +2380,25 @@ void TrafficEntityModule::Construct()
 
     mStreamer.Construct();
 
+    // ⭐⭐ 0x8274087C..0x8274088C -- FuzzyBehaviourLogic::Construct(this+0x71860, this+0x72710),
+    // i.e. mFuzzyBehaviours.Construct(&mTweakValues). LANDED wave 3 round 3; it was inside the
+    // gate below and the gate's "no body in this tree" claim was STALE -- the body has been in
+    // BrnTrafficFuzzyLogicBehaviours.cpp (mounted, build_game_exe.bat:2176) all along.
+    // WHAT IT COST: with this call missing, every fuzzy envelope AND all 21 mega-tweek constants
+    // stayed at their zero-init values, so ProcessParamRules returned six zero scores. The
+    // action pick (UpdateParams_PrecalcBehaviourParams @0x827180FC) seeds best = 0.0 / index = 0
+    // and only replaces on `>`, so a six-zero score vector elects action 0 == DRIVE_AROUND_
+    // OBSTRUCTION -- which is exactly the boot's `[T3-behaviour] histogram [2]=5462`, with the
+    // case-0 signature stopDist 2.0 and targetSpeed (rand+1)*scale == 4.586. The NORMAL arm
+    // (action 5) can only win once mNormalScore lane x is its real 0.2.
+    mFuzzyBehaviours.Construct(&mTweakValues);
+
     {
         static bool sbLogged = false;
         LogMissingLeg(sbLogged,
             "Construct sub-object legs TrafficEntitySerialiser::Construct, "
             "CgsResource::BaseResourcePtr::CreateFromHandle(mpData-adjacent slot), "
-            "FuzzyBehaviourLogic::Construct, the 102800-byte maTrafficPhysicsInfoList memset "
+            "the 102800-byte maTrafficPhysicsInfoList memset "
             "(RECURRING-BUG CLASS (a) LIVES HERE, not in the 25 Constructs: this memset -- or "
             "Construct's own tail -- is the only remaining candidate for whoever binds "
             "mDetachedPartQueue.mpEvents, and neither has been read yet), the 32-slot showtime "

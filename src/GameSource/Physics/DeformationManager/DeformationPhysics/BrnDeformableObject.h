@@ -359,7 +359,13 @@ namespace Deformation
         Vector3 GetMeshOffset() const;                                                          // :504
         Vector3 GetComOffset() const;                                                           // :507
         Vector3 GetRigidBodySpecPosition() const;                                               // :511
-        EPartState GetPartState(s32 liIndex) const;                                             // :516
+        // :516. HEADER-INLINE 2026-08-22 (wave T3 C5): no X360 export under any name; the console
+        // inlines the maPartStates read at every use site (DeformationManager::AddHingedBodyPartPairs
+        // @0x82605B28 `lbzx r11, r23, r26`). GetNumSensors / GetWorldSpaceSpheres precedent.
+        EPartState GetPartState(s32 liIndex) const                                              // :516
+        {
+            return static_cast<EPartState>(maPartStates[liIndex]);
+        }
         bool HasDeformedThisFrame() const;                                                      // :519
         void ClearDeformedThisFrameFlag();                                                      // :522
 

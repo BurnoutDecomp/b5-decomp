@@ -284,9 +284,8 @@ void TrafficEntityModule::PrePhysicsUpdate( CgsModule::IOBufferStack* /*lpInputB
         if ( lbSimPaused )
         {
             // 0x8274C80C: a paused frame runs the crashed-vehicle clean-up and nothing else.
-            static bool sbLoggedCleanUpPaused = false;
-            LogMissingLeg( sbLoggedCleanUpPaused,
-                           "CleanUpCrashedVehiclePhysics @0x82720960 (paused-running arm)" );
+            // ⭐ LANDED wave T3 round 3 (was a gate) -- body in _wT3_02.cpp.
+            CleanUpCrashedVehiclePhysics( lpOutput );
         }
         else
         {
@@ -294,9 +293,12 @@ void TrafficEntityModule::PrePhysicsUpdate( CgsModule::IOBufferStack* /*lpInputB
 
             // 0x8274C77C..0x8274C794: ten 64-bit zero stores over the 80-byte stack local
             // (601 bits -> 10 bit fields -> 80 bytes, CgsBitArray.h:23). DWARF names it
-            // lCreatedBodies (:2661). It is an OUT parameter of four gated legs below, so
-            // nothing reads it back yet.
-            CgsContainers::BitArray<601u> lCreatedBodies;
+            // lCreatedBodies (:2661).
+            // ⭐ RETYPED wave T3 r1: spelled through TrafficEntityModule::TotalTrafficBitArray
+            // (BitArray<KU_MAX_TOTAL_TRAFFIC>, the ship's 600) so it matches the parameter type
+            // of SendPhysicalRequests below. Same 10 bit fields, same 80 bytes; the DWARF's 601
+            // is the off-by-one it also carries on the index map.
+            TotalTrafficBitArray lCreatedBodies;
             lCreatedBodies.UnSetAll();
 
             {
@@ -308,15 +310,12 @@ void TrafficEntityModule::PrePhysicsUpdate( CgsModule::IOBufferStack* /*lpInputB
                 static bool sbLogged = false;
                 LogMissingLeg( sbLogged, "UpdateJunctionFUP (no export dumped)" );
             }
-            {
-                static bool sbLogged = false;
-                LogMissingLeg( sbLogged, "GenerateDriverInputs @0x82748E78 (out)" );
-            }
-            {
-                static bool sbLogged = false;
-                LogMissingLeg( sbLogged,
-                    "SendPhysicalRequests @0x8274C510 (out, &lCreatedBodies)" );
-            }
+            // 0x8274C7BC -- LIVE wave T3 r1 (cluster C3 owns the body).
+            GenerateDriverInputs( lpOutput );
+
+            // 0x8274C7CC -- LIVE wave T3 r1 (cluster C1, _wT3_01.cpp). lCreatedBodies stops
+            // being write-only here: it is this leg's OUT parameter.
+            SendPhysicalRequests( lpOutput, &lCreatedBodies );
             {
                 static bool sbLogged = false;
                 LogMissingLeg( sbLogged,
@@ -327,11 +326,10 @@ void TrafficEntityModule::PrePhysicsUpdate( CgsModule::IOBufferStack* /*lpInputB
                 LogMissingLeg( sbLogged,
                     "CreateBodiesForCrashingNetworkTraffic @0x8274B4B0 (out, &lCreatedBodies)" );
             }
-            {
-                static bool sbLogged = false;
-                LogMissingLeg( sbLogged,
-                    "CleanUpCrashedVehiclePhysics @0x82720960 (normal-running arm)" );
-            }
+            // ⭐ LANDED wave T3 round 3 (was a gate) -- body in _wT3_02.cpp. THIS is the leg
+            // that turns the module's maNewRemovedVehicles into physics RemoveTrafficEvents,
+            // i.e. the only thing that ever frees a slot in the 20-car physical pool.
+            CleanUpCrashedVehiclePhysics( lpOutput );
             {
                 static bool sbLogged = false;
                 LogMissingLeg( sbLogged, "StoreAISceneResultsForNextFrame (in) (no export dumped)" );
@@ -348,10 +346,8 @@ void TrafficEntityModule::PrePhysicsUpdate( CgsModule::IOBufferStack* /*lpInputB
             break;
         case E_TEARINGDOWNSTATE_FLUSHING:
         {
-            // 0x8274C750.
-            static bool sbLoggedCleanUpTearDown = false;
-            LogMissingLeg( sbLoggedCleanUpTearDown,
-                           "CleanUpCrashedVehiclePhysics @0x82720960 (tearing-down arm)" );
+            // 0x8274C750. ⭐ LANDED wave T3 round 3 (was a gate) -- body in _wT3_02.cpp.
+            CleanUpCrashedVehiclePhysics( lpOutput );
             break;
         }
         case E_TEARINGDOWNSTATE_WAITING_TO_RESET:

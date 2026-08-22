@@ -279,20 +279,9 @@ namespace Vehicle
         }
     }
 
-    // LINK STUB (UpdateVehiclePhysics wave): body not reconstructed yet (.ida-exports hole;
-    // X360 @0x82644418 -- the traffic-side conductor).
-    void PhysicalTrafficManager::UpdateTrafficPhysics(f32, f32, const Matrix44Affine*, bool, bool)
-    {
-        // BOOT GATE (conductor wave 2026-08-09): reached every frame by the landed
-        // UpdateVehiclePhysics. Reconstruct and DELETE this gate.
-        static bool s_bLogged = false;
-        if (!s_bLogged)
-        {
-            s_bLogged = true;
-            if (CgsDev::Message::gxMessageFilterFlags & 1)
-                *CgsDev::Log::gpDebugPrint << "conductor gate: PhysicalTrafficManager::UpdateTrafficPhysics @0x82644418 (export hole) inert [FLAG PC boot gate]\n";
-        }
-    }
+    // GATE RETIRED 2026-08-22 (traffic wave T3): PhysicalTrafficManager::UpdateTrafficPhysics
+    // @0x82644418 is REAL in BrnPhysicalTrafficManager_UpdateTrafficPhysics.cpp (export hole closed
+    // with headless idat).
 
     // LINK STUB (UpdateVehiclePhysics wave): body not reconstructed yet.
     void PhysicalTrafficManager::PassNearbyCrashingTrafficIdsToRaceCarModule(

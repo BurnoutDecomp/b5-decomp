@@ -747,6 +747,29 @@ f32 Vehicle::GetRandomVal() const
     return mfRandomVal;
 }
 
+// Vehicle+0x44 / +0x60 accessors. The console reads/accumulates both fields inline
+// (DriveTowardsTarget @0x8273E27C / @0x8273E664, GenerateDriverInputs @0x827492A8 /
+// @0x827492D4); the fields are private, so these are the by-name spellings.
+f32 Vehicle::GetPhysicalTime() const
+{
+    return mfPhysicalTime;
+}
+
+f32 Vehicle::GetManoeuvreTime() const
+{
+    return mfManoeuvreTime;
+}
+
+void Vehicle::AddPhysicalTime(f32 lfDelta)
+{
+    mfPhysicalTime += lfDelta;
+}
+
+void Vehicle::AddManoeuvreTime(f32 lfDelta)
+{
+    mfManoeuvreTime += lfDelta;
+}
+
 s32 Vehicle::GetPhysicalReason() const
 {
     CGS_ASSERT(IsAlive(), "IsAlive()");
@@ -975,6 +998,29 @@ void Vehicle::SetHornOn(bool lbOn)
     else
     {
         mxEffectState &= 0xFE;
+    }
+}
+
+// Vehicle::SetAlarmOn @0x8270FC10. Bit 0x10 of mxEffectState; turning the alarm ON also seeds
+// mfIndicatorTimeToFlash (+0x34) = 0.4f; any change clears flash/indicators/horn.
+void Vehicle::SetAlarmOn(bool lbOn)
+{
+    CGS_ASSERT(IsAlive(), "IsAlive()");   // BrnTrafficVehicle.h:1498
+    if (IsAlarmOn() != lbOn)
+    {
+        if (lbOn)
+        {
+            mxEffectState |= 0x10;
+            mfIndicatorTimeToFlash = 0.4f;
+        }
+        else
+        {
+            mxEffectState &= 0xEF;
+        }
+        SetHeadlightsFlashed(false);
+        SetLeftIndicatorOn(false);
+        SetRightIndicatorOn(false);
+        SetHornOn(false);
     }
 }
 

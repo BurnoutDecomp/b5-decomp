@@ -2,15 +2,15 @@
 // BrnTrafficEntityModule_wT2_03.cpp -- per-param behaviour, speed and THE ADVANCE.
 //
 //   TrafficEntityModule::UpdateParams_UpdatePlan          @0x82737CE8  PARTIAL
-//   TrafficEntityModule::UpdateParams_UpdateBehaviour     @0x82716C90  PARTIAL
+//   TrafficEntityModule::UpdateParams_UpdateBehaviour     @0x82716C90
 //   TrafficEntityModule::UpdateParams_CalcDesiredSpeed    @0x82717928
 //   TrafficEntityModule::UpdateParams_CalcAcceleration    @0x827172B8  PARTIAL
 //   TrafficEntityModule::UpdateParams_IncrementParam      @0x82738C80
 //   TrafficEntityModule::UpdateParams_HandleLaneChanges   @0x82725880  PARTIAL
 //   TrafficEntityModule::UpdateParam_CheckIfInsideParamInFront @0x82717A70  GATED
 //   TrafficEntityModule::UpdateParams_PrecalcBehaviourParams   @0x82717C48  PARTIAL
-//   TrafficEntityModule::UpdateParam_CheckIfNeedToSlow    @0x82738468  GATED
-//   TrafficEntityModule::DoesParamNeedToStopForStopline   @0x827249F8  GATED
+//   TrafficEntityModule::UpdateParam_CheckIfNeedToSlow    @0x82738468  PARTIAL
+//   TrafficEntityModule::DoesParamNeedToStopForStopline   @0x827249F8
 //   TrafficEntityModule::FindNearestParamInFront          @0x82725060
 //   TrafficEntityModule::EatParamsNextPlan                @0x827087D0
 //   TrafficEntityModule::FindNextParam                    @0x82723A48
@@ -28,6 +28,9 @@
 #include "SharedClasses/Traffic/BrnTrafficDataResourceType.h"   // TrafficData
 #include "SharedClasses/Traffic/BrnTrafficHull.h"               // Hull
 #include "SharedClasses/Traffic/BrnTrafficSection.h"            // Section, LaneRung, Neighbour
+#include "SharedClasses/Traffic/Junctions/BrnTrafficStopLine.h"  // StopLine
+#include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficMathsUtils.h" // IsPointWithinSquishedCone
+#include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficPhysicalVehicleInfo.h"
 
 #include "rw/math/vpu/vector3_operation.h"                      // Magnitude
 #include "rw/math/vpu/vector4_operation.h"                      // Min/Max on Vector4
@@ -35,7 +38,7 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 
-#include <cmath>     // std::floor
+#include <cmath>     // std::floor, std::sqrt
 #include <cstdlib>   // getenv
 
 namespace BrnTraffic
@@ -101,6 +104,21 @@ namespace
     const f32 KF_PARAM_CRASH_SLIDER_MIN_VALUE   = 0.01f;  // flt_820BA5D4
     const f32 KF_PARAM_ACTION_SCORE_EPSILON     = 0.05f;  // flt_820047C8
     const f32 KF_PARAM_NO_STOP_DIST             = 3.4028235e38f;   // flt_820BA23C
+
+    // UpdateParam_CheckIfNeedToSlow @0x82738468 / DoesParamNeedToStopForStopline @0x827249F8.
+    const f32 KF_STOP_LINE_REACTION_DISTANCE      = 40.0f;   // flt_820BA590
+    const f32 KF_SECTION_POSITION_TOLERANCE       = -0.1f;   // the "negative position" asserts
+    const f32 KF_PARAM_NEXT_PARAM_TIME_THRESHOLD  = 2.0f;    // flt_820BA86C
+    const f32 KF_PARAM_MIN_NEXT_PARAM_DIST        = 25.0f;   // flt_820BA4F0
+    const f32 KF_PARAM_LOOKAHEAD_SCALE            = 1.5f;    // flt_820BA5DC
+    const f32 KF_PARAM_AVOIDANCE_BIAS             = 3.0f;    // flt_820BA5F4 (also the space factor)
+    const f32 KF_PARAM_TIME_QUEUEING_RANDOM_SCALE = 2.5f;    // flt_82005548
+    const f32 KF_PARAM_DRIVE_AROUND_STICKINESS    = 0.15f;   // flt_820BA8D4
+    // The "which physical vehicle is interesting to me" cone (DWARF locals
+    // KF_PHYSICAL_INTEREST_CONE_ANGLE / _LENGTH / _RECIP_Y at .cpp 11061..11063).
+    const f32 KF_PHYSICAL_INTEREST_CONE_ANGLE   = 0.70709997f; // flt_8200D514
+    const f32 KF_PHYSICAL_INTEREST_CONE_LENGTH  = 30.0f;       // flt_820BA5E8
+    const f32 KF_PHYSICAL_INTEREST_CONE_RECIP_Y = 2.5f;        // flt_82005548
 
     // mxEffectAndHistoryState bit 0, set/cleared by UpdateParams_CalcDesiredSpeed
     // (`stb r11, 0x1A(r20)` at 0x82717A4C / 0x82717A60): the brake-light effect bit.
@@ -288,8 +306,7 @@ void TrafficEntityModule::UpdateParams_UpdatePlan(u32 luParam, u32 luMaxLaneChan
 // TrafficEntityModule::UpdateParams_UpdateBehaviour  @0x82716C90  (.cpp 10808..10818)
 //
 // Copies the behaviour the fuzzy pre-pass chose (and its target speed / stop distance) out of
-// maParamNeedToSlowData into the Param, then ticks the queueing timer. The copy is gated; the
-// timer tick is not.
+// maParamNeedToSlowData into the Param, then ticks the queueing timer.
 // ----------------------------------------------------------------------------
 void TrafficEntityModule::UpdateParams_UpdateBehaviour(u32 luParam)
 {
@@ -298,38 +315,45 @@ void TrafficEntityModule::UpdateParams_UpdateBehaviour(u32 luParam)
     Param* lpParam = &maParams[luParam];
     const ParamNeedToSlowData* lpParamNeedToSlowData = GetParamNeedToSlowData(luParam);
 
-    // GATE: UpdateParams_UpdateBehaviour @0x82716C90 behaviour copy, plus the console's own
-    // `miBehaviour >= 0` assert (.cpp 10808), which would fire on every param every frame.
-    // BLOCKER: UpdateParam_CheckIfNeedToSlow @0x82738468 is gated (see _wT2_03 above), so the
-    // producer never runs and miBehaviour stays at Clear's -1.
-    // DELETE-WHEN CheckIfNeedToSlow lands: arm the assert and drop the branch.
+    // 0x82716CE8 -- the console assert is `(u8)miBehaviour < 0x80`, i.e. miBehaviour >= 0. It
+    // is REACHABLE here: UpdateParams_DoTimeSlicedLogic @0x82743FE8 leaves Clear()'s -1 in the
+    // slot for any param that was dead or E_HISTORY_BORN when its 100-param slice ran
+    // (0x82744968 / 0x82744978), and nothing in this tree clears E_HISTORY_BORN yet. Demoted
+    // to a one-shot report + skip so it cannot break the round's 0-assert boot baseline; the
+    // console would store the -1 through.
+    // DELETE-WHEN the E_HISTORY_BORN clear lands and slice coverage is provable.
     if (lpParamNeedToSlowData->miBehaviour < 0)
     {
-        static bool sbLogged = false;
-        LogMissingLeg(sbLogged,
-                      "UpdateParams_UpdateBehaviour @0x82716C90 behaviour copy -- "
-                      "DoTimeSlicedLogic @0x82743FE8 landed but its CheckIfNeedToSlow "
-                      "@0x82738468 leg is gated, so miBehaviour stays at Clear's -1");
+        if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())
+        {
+            static bool sbWarnedNoBehaviour = false;
+            if (!sbWarnedNoBehaviour)
+            {
+                sbWarnedNoBehaviour = true;
+                *lpDiag << "[T3-behaviour] param " << static_cast<s32>(luParam)
+                        << " reached UpdateBehaviour with miBehaviour -1 (its time slice has "
+                           "not run since it became alive) -- console asserts here\n";
+            }
+        }
+        return;
     }
-    else
-    {
-        CGS_ASSERT(lpParamNeedToSlowData->miBehaviour < Param::KI_BEHAVIOURS_COUNT,
-                   "lpParamNeedToSlowData->miBehaviour < Param::E_BEHAVIOURS_COUNT");
 
-        // .cpp 10815 / 10818, message-streamed on console as
-        // "Param <n> decided on divergent behaviour <b>".
-        CGS_ASSERT(mbAllowDivergentBehaviour || mbAtStartLineSoProtectRaceCarsFromTraffic ||
-                       (lpParamNeedToSlowData->miBehaviour != 0 &&
-                        lpParamNeedToSlowData->miBehaviour != 1 &&
-                        lpParamNeedToSlowData->miBehaviour != 3),
-                   "Param decided on divergent behaviour");
-        CGS_ASSERT(mbAllowDivergentBehaviour || lpParamNeedToSlowData->miBehaviour != 2,
-                   "Param decided on divergent behaviour");
+    CGS_ASSERT(lpParamNeedToSlowData->miBehaviour < Param::KI_BEHAVIOURS_COUNT,
+               "lpParamNeedToSlowData->miBehaviour < Param::E_BEHAVIOURS_COUNT"); // 0x82716D18
 
-        lpParam->miBehaviour   = lpParamNeedToSlowData->miBehaviour;
-        lpParam->mfStopDist    = lpParamNeedToSlowData->mfStopDist;
-        lpParam->mfTargetSpeed = lpParamNeedToSlowData->mfTargetSpeed;
-    }
+    // .cpp 10815 / 10818, message-streamed on console as
+    // "Param <n> decided on divergent behaviour <b>".
+    CGS_ASSERT(mbAllowDivergentBehaviour || mbAtStartLineSoProtectRaceCarsFromTraffic ||
+                   (lpParamNeedToSlowData->miBehaviour != 0 &&
+                    lpParamNeedToSlowData->miBehaviour != 1 &&
+                    lpParamNeedToSlowData->miBehaviour != 3),
+               "Param decided on divergent behaviour");
+    CGS_ASSERT(mbAllowDivergentBehaviour || lpParamNeedToSlowData->miBehaviour != 2,
+               "Param decided on divergent behaviour");
+
+    lpParam->miBehaviour   = lpParamNeedToSlowData->miBehaviour;              // 0x82716EA8
+    lpParam->mfStopDist    = lpParamNeedToSlowData->mfStopDist;               // 0x82716EB0
+    lpParam->mfTargetSpeed = lpParamNeedToSlowData->mfTargetSpeed;            // 0x82716EB8
 
     if (lpParam->IsQueueing() && mbAllowDivergentBehaviour)
     {
@@ -952,11 +976,9 @@ u32 TrafficEntityModule::FindFirstParamAfterPos(u32 luHull, u32 luSectionIndex,
 }
 
 // ----------------------------------------------------------------------------
-// The behaviour pre-pass and its helpers. PrecalcBehaviourParams and FindNearestParamInFront
-// are landed below; UpdateParam_CheckIfNeedToSlow -- the only caller of Precalc -- is still
-// gated, so maParamNeedToSlowData keeps Clear()'s miBehaviour -1 in this build and
-// UpdateParams_UpdateBehaviour skips its copy, leaving Param::Initialise's
-// KI_BEHAVIOUR_NORMAL standing.
+// The behaviour pre-pass and its helpers. PrecalcBehaviourParams, FindNearestParamInFront,
+// UpdateParam_CheckIfNeedToSlow and DoesParamNeedToStopForStopline are all landed below, so
+// maParamNeedToSlowData carries a real behaviour and UpdateParams_UpdateBehaviour copies it.
 // ----------------------------------------------------------------------------
 
 // ----------------------------------------------------------------------------
@@ -1097,6 +1119,34 @@ void TrafficEntityModule::UpdateParams_PrecalcBehaviourParams(u32 luParam,
 
     CGS_ASSERT(liNewAction >= 0, "liNewAction >= 0");
 
+    // [T3-behaviour] DIAG. NOT IN THE X360 BINARY. Opt-in, first four params only: the six
+    // fuzzy scores and the cone inputs behind one action pick. This is the probe that names
+    // the culprit when the histogram goes one-sided -- an all-zero score vector elects action 0
+    // by default (best starts at 0.0 and only `>` replaces it). DELETE-WHEN-STABLE.
+    {
+        static s32 siPrinted = 0;
+        if (siPrinted < 4)
+        {
+            if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())
+            {
+                ++siPrinted;
+                *lpDiag << "[T3-behaviour] scores param " << static_cast<s32>(luParam)
+                        << " action " << liNewAction
+                        << " s=";
+                for (u32 luScore = 0; luScore < KU_PARAM_NUM_BEHAVIOUR_SCORES; ++luScore)
+                {
+                    *lpDiag << " " << lafScores[luScore].x;
+                }
+                *lpDiag << " | coneA " << lConeA.x << " " << lConeA.y << " " << lConeA.z
+                        << " " << lConeA.w
+                        << " | coneB " << lConeB.x << " " << lConeB.y << " " << lConeB.z
+                        << " " << lConeB.w
+                        << " | coneC " << lConeC.x << " " << lConeC.y << " " << lConeC.z
+                        << "\n";
+            }
+        }
+    }
+
     const f32 lfLaneSpeed = mfSpeedMultiplier * lpSection->mfSpeed;   // +0x72880 * section+0x24
 
     switch (liNewAction)
@@ -1189,19 +1239,22 @@ void TrafficEntityModule::UpdateParams_PrecalcBehaviourParams(u32 luParam,
     }
 }
 
-// GATE: UpdateParam_CheckIfNeedToSlow @0x82738468 (.cpp 11110..11167), the only caller of
-// UpdateParams_PrecalcBehaviourParams. BLOCKERS, all four re-derived from its listing:
-//   (1) unk_82CDA3C0 / unk_82CDA400 / unk_8327F140 are vperm CONTROL vectors (0x82738...
-//       vperm128 v11,v121,v120,v7 etc). They decide which accumulated scalar lands in which
-//       ProcessParamRules input lane, and no lane assignment is derivable without them.
-//   (2) CalcRaceCarOnStartGridFuzzyScores @0x82716F10 is exported but unreconstructed and
-//       undeclared in this tree (the start-line arm).
-//   (3) BrnTraffic::IsPointWithinSquishedCone is declared-only in BrnTrafficMathsUtils.h
-//       (inlined at every ARTIST call site), and it is the per-physical-vehicle test.
-//   (4) DoesParamNeedToStopForStopline @0x827249F8 below is itself gated on the opaque
-//       BrnTraffic::StopLine record.
-// DELETE-WHEN all four land. COST: maParamNeedToSlowData keeps Clear()'s miBehaviour -1, so
-// no param ever queues, stops at a stopline or slows for the player.
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::UpdateParam_CheckIfNeedToSlow  @0x82738468  (.cpp 10979..11175)
+//
+// Builds the three fuzzy input vectors for one param and hands them to
+// UpdateParams_PrecalcBehaviourParams. Lane names are the DWARF locals at .cpp 11028..11030.
+//
+// The three vperm control vectors the console uses are recovered, not guessed:
+//   unk_82CDA3C0 = 00 01 02 03 | 00 01 02 03 | 00 01 02 03 | 14 15 16 17
+//   unk_82CDA400 = 08 09 0A 0B | 1C 1D 1E 1F | 00 01 02 03 | 00 01 02 03
+// with `vsldoi128 v126, v11, v13, 8` those two assemble
+// {RCDistance, RCHeight, RCClosingSpeed, RCLanePos} -- i.e. cone A lane for lane.
+// unk_8327F140 is the ENGINE-WIDE SetLane permute table. INFERRED, not read: the table is
+// all zeros in the image (dyn-init, written at 0x82C741C8), so the lane mapping comes from
+// FuzzyEnvelopeSet4::SetEnvelope @0x827526C0's `slwi r9, r28, 6` stride, not from the data.
+// On that inference the +0x00 / +0x40 / +0x80 loads are SetLane<0/1/2> on cone C.
+// ----------------------------------------------------------------------------
 void TrafficEntityModule::UpdateParam_CheckIfNeedToSlow(
         u32 luParam,
         const Hull* lpHull,
@@ -1209,13 +1262,216 @@ void TrafficEntityModule::UpdateParam_CheckIfNeedToSlow(
         const Section* lpSection,
         const ::Array<PhysicalVehicleInfo, KU_MAX_PHYSICAL_VEHICLES_TO_CACHE>* lpaPhysicalVehicles)
 {
-    (void)luParam; (void)lpHull; (void)luSectionIndex; (void)lpSection; (void)lpaPhysicalVehicles;
+    CGS_ASSERT(lpaPhysicalVehicles != 0, "lpPhysicalVehicleArray");      // .cpp 11110
+    CGS_ASSERT(luParam < KU_MAX_PARAMS, "luParam < KU_MAX_PARAMS");      // .h 2350
 
-    static bool sbLogged = false;
-    LogMissingLeg(sbLogged,
-                  "UpdateParam_CheckIfNeedToSlow @0x82738468 -- the unk_82CDA3C0 / unk_82CDA400 "
-                  "/ unk_8327F140 vperm control vectors, CalcRaceCarOnStartGridFuzzyScores "
-                  "@0x82716F10 (unreconstructed) and IsPointWithinSquishedCone (declared-only)");
+    Param* const lpParam = &maParams[luParam];
+
+    CGS_ASSERT(luParam < KU_MAX_PARAMS, "luParam < KU_MAX_PARAMS");      // .h 2387
+    const ParamTransform* const lpParamTransform = GetParamTransform(luParam);
+    const Vector3 lParamPos = lpParamTransform->GetDeterministicPos();
+
+    CGS_ASSERT(luParam < KU_MAX_PARAMS, "luParam < KU_MAX_PARAMS");      // .cpp 11115
+    ParamNeedToSlowData* const lpNeedToSlow = &maParamNeedToSlowData[luParam];
+
+    // --- cone B lane 0: how far to the next red stop line -----------------------------
+    f32 lfStoplineStopDist = KF_PARAM_NO_STOP_DIST;                      // seeded @0x8273857C
+    DoesParamNeedToStopForStopline(luParam, luSectionIndex, lpSection, lpHull,
+                                   &lfStoplineStopDist);
+
+    // --- who is in front, and how far --------------------------------------------------
+    const f32 lfSpeedLookahead = lpParam->mfSpeed * KF_PARAM_NEXT_PARAM_TIME_THRESHOLD;
+    const f32 lfParamLookaheadDist =
+        ((lfSpeedLookahead >= KF_PARAM_MIN_NEXT_PARAM_DIST) ? lfSpeedLookahead
+                                                            : KF_PARAM_MIN_NEXT_PARAM_DIST) *
+        KF_PARAM_LOOKAHEAD_SCALE;
+
+    f32 lfNextParamDist = 0.0f;
+    u32 luNextParam = FindNearestParamInFront(luParam, lfParamLookaheadDist, &lfNextParamDist);
+
+    if (mbAllowDivergentBehaviour)
+    {
+        // 0x827385CC..0x82738728 -- a car that is recovering from a slam is something you
+        // drive AROUND, not something you queue behind; likewise the debug-picked vehicle.
+        if (luNextParam != KU_INVALID_PARAM &&
+            mVehicleSoaData.mPhysicalVehiclesTryingToRecover.IsBitSet(luNextParam))
+        {
+            luNextParam = KU_INVALID_PARAM;
+        }
+
+        if (mbDEBUGPick_DontStopForPickedVehicle && luNextParam == muDEBUGPickedVehicle)
+        {
+            luNextParam = KU_INVALID_PARAM;
+        }
+    }
+
+    lpNeedToSlow->muParamInFront  = static_cast<u16>(luNextParam);        // 0x82738738
+    lpNeedToSlow->mfNextParamDist = lfNextParamDist;                      // 0x82738740
+
+    f32 lfNPDistance     = KF_PARAM_NO_STOP_DIST;
+    f32 lfNPClosingSpeed = KF_PARAM_NO_STOP_DIST;
+
+    if (luNextParam != KU_INVALID_PARAM)
+    {
+        // 0x82738754..0x8273878C. One constant serves as both the avoidance bias and the
+        // per-car random spacing factor.
+        const f32 lfRaw = ((lfNextParamDist - lpParam->mfFrontDist) - KF_PARAM_AVOIDANCE_BIAS) -
+                          lpParam->mfRandomVal * KF_PARAM_AVOIDANCE_BIAS;
+        lfNPDistance     = (lfRaw >= 0.0f) ? lfRaw : 0.0f;
+        lfNPClosingSpeed = lpParam->mfSpeed - GetParam(luNextParam)->mfSpeed;
+    }
+
+    // --- the race-car ("physical vehicle") scalars -------------------------------------
+    // All five default to KF_MAX_FLOAT (the console loads this+0x72600 into v121/v120/v126/
+    // v122/v125 at 0x82738794).
+    f32 lfRCDistance       = KF_PARAM_NO_STOP_DIST;
+    f32 lfRCHeight         = KF_PARAM_NO_STOP_DIST;
+    f32 lfRCClosingSpeed   = KF_PARAM_NO_STOP_DIST;
+    f32 lfRCLanePos        = KF_PARAM_NO_STOP_DIST;
+    f32 lfRCSpeedInOurLane = KF_PARAM_NO_STOP_DIST;
+
+    if (mbAllowDivergentBehaviour || mbAtStartLineSoProtectRaceCarsFromTraffic)
+    {
+        if (mbAtStartLineSoProtectRaceCarsFromTraffic)
+        {
+            // GATE: CalcRaceCarOnStartGridFuzzyScores @0x82716F10 (0x82738B18), the start-grid
+            // replacement for the cone scan below. BLOCKER: 233 insns, unreconstructed, and it
+            // only runs while the race is still on the grid.
+            // DELETE-WHEN it lands. COST: on the grid the five race-car lanes stay KF_MAX_FLOAT,
+            // so traffic scores NORMAL instead of protecting the grid.
+            static bool sbLoggedStartGrid = false;
+            LogMissingLeg(sbLoggedStartGrid,
+                          "UpdateParam_CheckIfNeedToSlow @0x82738468 start-grid arm -- "
+                          "CalcRaceCarOnStartGridFuzzyScores @0x82716F10 is unreconstructed");
+        }
+        else if (!(GetVehicle(luParam)->IsAlive() && GetVehicle(luParam)->IsExtremeSwerving()))
+        {
+            // 0x827388AC..0x82738AFC -- pick the physical vehicle inside our interest cone
+            // with the smallest importance-weighted squared distance, then measure it.
+            const VecFloat lfConeAngle  = SplatLane(KF_PHYSICAL_INTEREST_CONE_ANGLE);
+            const VecFloat lfConeLength = SplatLane(KF_PHYSICAL_INTEREST_CONE_LENGTH);
+            const VecFloat lfConeRecipY = SplatLane(KF_PHYSICAL_INTEREST_CONE_RECIP_Y);
+
+            u32 luBestVehicle = 0xFFFFFFFFu;
+            f32 lfBestScore   = KF_PARAM_NO_STOP_DIST;
+
+            for (u32 luPhysicalVehicle = 0;
+                 luPhysicalVehicle < lpaPhysicalVehicles->GetLength();
+                 ++luPhysicalVehicle)
+            {
+                const PhysicalVehicleInfo& lInfo = (*lpaPhysicalVehicles)[luPhysicalVehicle];
+
+                Vector3 lTargetPos;
+                lTargetPos.x = lInfo.mPositionAndImportance.x;
+                lTargetPos.y = lInfo.mPositionAndImportance.y;
+                lTargetPos.z = lInfo.mPositionAndImportance.z;
+                lTargetPos.w = 0.0f;
+
+                if (!IsPointWithinSquishedCone(lpParamTransform->GetDeterministicPos(),
+                                               lpParamTransform->GetDirection(),
+                                               lfConeAngle, lfConeLength, lfConeRecipY,
+                                               lTargetPos))
+                {
+                    continue;
+                }
+
+                const Vector3 lDiff = lTargetPos - lpParamTransform->GetDeterministicPos();
+                const f32 lfImportance = lInfo.mPositionAndImportance.w;     // vspltw v0,v0,3
+                const f32 lfScore = rw::math::vpu::Dot(lDiff, lDiff) * lfImportance;
+
+                if (lfBestScore > lfScore)
+                {
+                    lfBestScore   = lfScore;
+                    luBestVehicle = luPhysicalVehicle;
+                }
+            }
+
+            if (luBestVehicle != 0xFFFFFFFFu)
+            {
+                const PhysicalVehicleInfo& lInfo = (*lpaPhysicalVehicles)[luBestVehicle];
+
+                Vector3 lInfoPos;
+                lInfoPos.x = lInfo.mPositionAndImportance.x;
+                lInfoPos.y = lInfo.mPositionAndImportance.y;
+                lInfoPos.z = lInfo.mPositionAndImportance.z;
+                lInfoPos.w = 0.0f;
+
+                const Vector3 lDiff = lInfoPos - lpParamTransform->GetDeterministicPos();
+
+                lfRCDistance = rw::math::vpu::Dot(lDiff, lpParamTransform->GetDirection());
+                lfRCHeight   = rw::math::vpu::Dot(lDiff, lpParamTransform->CalcUp());
+
+                // 0x82738A48..0x82738A84 -- the lateral offset, scaled up as the race car's
+                // own right vector lines up with ours: 0.5 + 0.5 * |alignment|.
+                const f32 lfAlignment =
+                    rw::math::vpu::Dot(lpParamTransform->GetRight(), lInfo.mRight);
+                const f32 lfAlignScale =
+                    0.5f + 0.5f * ((lfAlignment < 0.0f) ? -lfAlignment : lfAlignment);
+                lfRCLanePos =
+                    rw::math::vpu::Dot(lDiff, lpParamTransform->GetRight()) * lfAlignScale;
+
+                // 0x82738A94..0x82738AF0 -- closing speed along the unit separation.
+                const Vector3 lParamLinearVel =
+                    lpParamTransform->GetDirection() * lpParamTransform->GetSpeed();
+                const Vector3 lClosingVel = lParamLinearVel - lInfo.mLinearVelocity;
+
+                // FLAG (host guard, no console equivalent): the console does the raw rsqrt and
+                // lets a coincident vehicle produce a NaN closing speed. Zero kept here instead.
+                const f32 lfDistSq = rw::math::vpu::Dot(lDiff, lDiff);
+                if (lfDistSq > 0.0f)
+                {
+                    const Vector3 lUnitDiff = lDiff * (1.0f / std::sqrt(lfDistSq));
+                    lfRCClosingSpeed = rw::math::vpu::Dot(lUnitDiff, lClosingVel);
+                }
+
+                lfRCSpeedInOurLane =
+                    rw::math::vpu::Dot(lpParamTransform->GetDirection(), lInfo.mLinearVelocity);
+            }
+        }
+    }
+
+    // --- cone C: queueing / obstructedness / drive-around stickiness -------------------
+    const s8 liBehaviour = lpParam->miBehaviour;                              // Param+0x1B
+
+    // 0x82738B54 -- the raw queueing timer, biased by the car's own random value.
+    const f32 lfTimeQueueing =
+        lpParam->mfTimeQueueing + lpParam->mfRandomVal * KF_PARAM_TIME_QUEUEING_RANDOM_SCALE;
+
+    // 0x82738BD0 -- SetLane<2>: a car already driving around an obstruction wants to keep
+    // doing so.
+    const f32 lfDriveAroundStickiness =
+        (liBehaviour == 2) ? KF_PARAM_DRIVE_AROUND_STICKINESS : 0.0f;
+
+    // 0x82738BF0..0x82738C40 -- SetLane<1>: we count as obstructed while we are stopping for
+    // or following the player, or while queueing behind someone who is.
+    bool lbObstructed = (liBehaviour == 1) || (liBehaviour == 3);
+    if (!lbObstructed && liBehaviour == 5 && luNextParam != KU_INVALID_PARAM)
+    {
+        const s32 liNextParamBehaviour = GetParam(luNextParam)->miBehaviour;
+        lbObstructed = (liNextParamBehaviour == 1) || (liNextParamBehaviour == 3);
+    }
+
+    Vector4 lConeA;
+    lConeA.x = lfRCDistance;
+    lConeA.y = lfRCHeight;
+    lConeA.z = lfRCClosingSpeed;
+    lConeA.w = lfRCLanePos;
+
+    Vector4 lConeB;
+    lConeB.x = lfStoplineStopDist;
+    lConeB.y = lfNPDistance;
+    lConeB.z = lfNPClosingSpeed;
+    lConeB.w = lfRCSpeedInOurLane;
+
+    Vector4 lConeC;
+    lConeC.x = lfTimeQueueing;
+    lConeC.y = lbObstructed ? 1.0f : 0.0f;
+    lConeC.z = lfDriveAroundStickiness;
+    lConeC.w = KF_PARAM_NO_STOP_DIST;   // lane 3 of KF_MAX_FLOAT survives the three SetLanes
+
+    (void)lParamPos;   // the console loads it (0x82738530) but only the transform is read on
+
+    UpdateParams_PrecalcBehaviourParams(luParam, lpSection, lpHull, lConeA, lConeB, lConeC);
 }
 
 // @0x82717A70 (.cpp 11335). BLOCKER: unk_8300CAC0, a three-lane distance-squared threshold
@@ -1230,26 +1486,175 @@ void TrafficEntityModule::UpdateParam_CheckIfInsideParamInFront(u32 luParam)
                   "are an unrecovered dyn-init .data vector");
 }
 
-// @0x827249F8 (.cpp 11433). BLOCKER: the stopline record type is opaque (Hull::GetStopLine
-// returns const void* in BrnTrafficHull.h), so the stopline parameter cannot be read by name.
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::DoesParamNeedToStopForStopline  @0x827249F8  (.cpp 11690..11840)
+//
+// True when a RED stop line lies within KF_STOP_LINE_REACTION_DISTANCE ahead of the param,
+// with the distance to it in *lpfOutStopDist. The param caches its next stop line
+// (muNextStopLineIndex / mfNextStopLineParam) and only re-scans once it has driven past it.
+// Structure matches the Feb-2007 leak (BrnTrafficEntityModule.cpp:6116) except for the
+// divergent-behaviour head arm, which retail adds.
+// ----------------------------------------------------------------------------
 bool TrafficEntityModule::DoesParamNeedToStopForStopline(u32 luParam,
                                                          u32 luSectionIndex,
                                                          const Section* lpSection,
                                                          const Hull* lpHull,
                                                          f32* lpfOutStopDist) const
 {
-    (void)luParam; (void)luSectionIndex; (void)lpSection; (void)lpHull;
+    CGS_ASSERT(lpHull->GetSection(luSectionIndex) == lpSection,
+               "lpHull->GetSection( luSection ) == lpSection");             // .cpp 11698
+    CGS_ASSERT(luParam < KU_MAX_PARAMS, "luParam < KU_MAX_PARAMS");         // .h 2365
 
-    static bool sbLogged = false;
-    LogMissingLeg(sbLogged,
-                  "DoesParamNeedToStopForStopline @0x827249F8 -- BrnTraffic::StopLine is "
-                  "forward-declared only and Hull::GetStopLine returns const void*");
+    Param* const lpParam = const_cast<Param*>(&maParams[luParam]);
 
-    if (lpfOutStopDist != 0)
+    // 0x82724A90..0x82724AE8 -- a slammed or extreme-swerving car ignores stop lines.
+    if (mbAllowDivergentBehaviour)
     {
-        *lpfOutStopDist = 0.0f;
+        const Vehicle* const lpVehicle = GetVehicle(luParam);
+        if (lpVehicle->IsAlive() &&
+            (lpVehicle->IsRecoveringFromSlam() || lpVehicle->IsExtremeSwerving()))
+        {
+            return false;
+        }
     }
-    return false;
+
+    u32 luStopline      = lpParam->muNextStopLineIndex;
+    f32 lfStoplineParam = lpParam->mfNextStopLineParam;
+    u32 luStoplineSegment;
+
+    if (luStopline == KU_UNKNOWN_STOPLINE || lfStoplineParam <= lpParam->mfParamAlong)
+    {
+        luStopline = lpSection->FindNextStopLineIndex(lpParam->mfParamAlong, lpHull);
+
+        if (luStopline == KU_INVALID_STOPLINE)
+        {
+            lfStoplineParam   = KF_PARAM_NO_STOP_DIST;
+            luStoplineSegment = 0xFFFFFFFFu;
+        }
+        else
+        {
+            const StopLine* const lpStopline = lpHull->GetStopLine(luStopline);
+            lfStoplineParam   = StopLine::ConvertToFloat(lpStopline->GetParameterAlongSection());
+            luStoplineSegment = lpStopline->GetSegmentAlongSection();
+        }
+
+        lpParam->mfNextStopLineParam = lfStoplineParam;
+        lpParam->muNextStopLineIndex = static_cast<u8>(luStopline);
+    }
+    else
+    {
+        // 0x82724B70 -- the cached param is the 8.8 value in float form, so its integer part
+        // is the segment (the console re-reads the same stack slot's high word).
+        luStoplineSegment = static_cast<u32>(lfStoplineParam);
+    }
+
+    CGS_ASSERT(lpHull->GetSection(luSectionIndex) == lpSection,
+               "lpHull->GetSection( luSection ) == lpSection");             // .cpp 11751
+
+    const f32* const lpafRungLengths = lpHull->GetRungLengthsForSection(lpSection);
+
+    f32 lfStopLineAlongSection = 0.0f;
+
+    if (luStopline != KU_INVALID_STOPLINE)
+    {
+        CGS_ASSERT(luStopline != KU_UNKNOWN_STOPLINE, "luStopline != KU_UNKNOWN_STOPLINE");
+
+        const HullRuntime* const lpHullRuntime = GetHullRuntime(lpParam->muHullIndex);
+        if (!lpHullRuntime->IsStoplineRed(luStopline))
+        {
+            return false;
+        }
+
+        lfStopLineAlongSection =
+            lpSection->CalcDistanceAlongSection(lfStoplineParam, luStoplineSegment, lpafRungLengths);
+        CGS_ASSERT(lfStopLineAlongSection >= KF_SECTION_POSITION_TOLERANCE,
+                   "Stopline is at a negative position along is section");  // .cpp 11764
+    }
+    else
+    {
+        // 0x82724D04 -- nothing on this section, so look one section down each queued plan.
+        const f32 lfDistFromEndOfSection =
+            lpSection->mfLength -
+            lpSection->CalcDistanceAlongSection(lpParam->mfParamAlong, lpParam->muCurrentSegment,
+                                                lpafRungLengths);
+        CGS_ASSERT(lfDistFromEndOfSection >= KF_SECTION_POSITION_TOLERANCE,
+                   "Param is well beyond the end of its section");          // .cpp 11770
+
+        if (lfDistFromEndOfSection >= KF_STOP_LINE_REACTION_DISTANCE)
+        {
+            return false;
+        }
+
+        for (u32 luPlan = 0; luPlan < KU_PARAM_NUM_PLANS; ++luPlan)
+        {
+            const ParamPlan* const lpPlan = GetParamPlan(luParam, luPlan);
+            CGS_ASSERT(lpPlan != 0, "lpPlan");                              // .cpp 11781
+
+            if (lpPlan->muType != ParamPlan::E_TYPE_CHANGE_SECTION ||
+                lpPlan->mChangeSectionData.muNewHull == KU_INVALID_HULL)
+            {
+                if (lpPlan->muType == ParamPlan::E_TYPE_NONE)
+                {
+                    return false;
+                }
+                continue;
+            }
+
+            const Hull* const    lpNextHull    = GetHull(lpPlan->mChangeSectionData.muNewHull);
+            const Section* const lpNextSection =
+                lpNextHull->GetSection(lpPlan->mChangeSectionData.muNewSection);
+
+            luStopline = lpNextSection->FindNextStopLineIndex(0.0f, lpNextHull);
+            if (luStopline == KU_INVALID_STOPLINE)
+            {
+                continue;
+            }
+
+            const HullRuntime* const lpNextHullRuntime =
+                GetHullRuntimeSafe(lpPlan->mChangeSectionData.muNewHull);
+            if (lpNextHullRuntime == 0 || !lpNextHullRuntime->IsStoplineRed(luStopline))
+            {
+                return false;
+            }
+
+            const StopLine* const lpStopline = lpNextHull->GetStopLine(luStopline);
+            lfStoplineParam = StopLine::ConvertToFloat(lpStopline->GetParameterAlongSection());
+
+            lfStopLineAlongSection = lpNextSection->CalcDistanceAlongSection(
+                lfStoplineParam, lpStopline->GetSegmentAlongSection(),
+                lpNextHull->GetRungLengthsForSection(lpNextSection));
+            CGS_ASSERT(lfStopLineAlongSection >= KF_SECTION_POSITION_TOLERANCE,
+                       "Stopline is at a negative position along is section");   // .cpp 11805
+
+            lfStopLineAlongSection += lpSection->mfLength;
+            break;
+        }
+
+        if (luStopline == KU_INVALID_STOPLINE)
+        {
+            return false;
+        }
+    }
+
+    CGS_ASSERT(lpHull->GetSection(luSectionIndex) == lpSection,
+               "lpHull->GetSection( luSection ) == lpSection");             // .cpp 11827
+
+    const f32 lfParamAlongSection =
+        lpSection->CalcDistanceAlongSection(lpParam->mfParamAlong, lpParam->muCurrentSegment,
+                                            lpafRungLengths);
+    CGS_ASSERT(lfParamAlongSection >= KF_SECTION_POSITION_TOLERANCE,
+               "Param is at a negative position along is section");         // .cpp 11829
+
+    const f32 lfCarFromStopLine = lfStopLineAlongSection - lfParamAlongSection;
+    CGS_ASSERT(lfCarFromStopLine >= 0.0f, "Next stopline was behind param"); // .cpp 11832
+
+    if (lfCarFromStopLine >= KF_STOP_LINE_REACTION_DISTANCE)
+    {
+        return false;
+    }
+
+    *lpfOutStopDist = lfCarFromStopLine;
+    return true;
 }
 
 // ----------------------------------------------------------------------------

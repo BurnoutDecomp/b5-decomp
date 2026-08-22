@@ -476,4 +476,61 @@ namespace BrnTraffic
 
         return KU_NO_NEIGHBOUR;
     }
+
+    // -------------------------------------------------------------------------
+    // BrnTraffic::Section::FindNextStopLineIndex  @ 0x82752A38   (DWARF :118)
+    //
+    // Two passes over this section's slice of the hull stop-line table. Pass one just
+    // asks "is there one at all ahead of us"; pass two picks the NEAREST one ahead.
+    // Returns the HULL-WIDE index (muStopLineOffset + local), so it feeds
+    // Hull::GetStopLine and HullRuntime::IsStoplineRed unchanged.
+    // -------------------------------------------------------------------------
+    u8 Section::FindNextStopLineIndex(f32 lfParamAlong, const Hull* lpHull) const
+    {
+        const u16 luParamFixed = StopLine::ConvertToFixed(lfParamAlong);   // 0x82752A4C
+
+        // 0x82752A74..0x82752AC0 -- any stop line at all ahead of us?
+        u32 luFirstAhead = muNumStopLines;
+        for (u32 luLocal = 0; luLocal < muNumStopLines; ++luLocal)
+        {
+            const u32 luIndex = static_cast<u32>(muStopLineOffset) + luLocal;
+            CGS_ASSERT(luIndex < lpHull->muNumStoplines, "luIndex < muNumStoplines");
+
+            if (lpHull->mpaStopLines[luIndex].GetParameterAlongSection() > luParamFixed)
+            {
+                luFirstAhead = luLocal;
+                break;
+            }
+        }
+
+        if (luFirstAhead >= muNumStopLines)
+        {
+            return KU_INVALID_STOPLINE;                                    // 0x82752AC4
+        }
+
+        // 0x82752AD0 -- 255 is the sentinel, so a stop line that lands on it is unusable.
+        if (static_cast<u32>(muStopLineOffset) + luFirstAhead == KU_INVALID_STOPLINE)
+        {
+            return KU_INVALID_STOPLINE;
+        }
+
+        // 0x82752AF8..0x82752B60 -- nearest one ahead (smallest param strictly greater).
+        u8  luBestIndex = KU_INVALID_STOPLINE;
+        u16 luBestParam = 0xFFFFu;                                         // `li r27, -1`
+
+        for (u32 luLocal = 0; luLocal < muNumStopLines; ++luLocal)
+        {
+            const u32 luIndex = static_cast<u32>(muStopLineOffset) + luLocal;
+            CGS_ASSERT(luIndex < lpHull->muNumStoplines, "luIndex < muNumStoplines");
+
+            const u16 luParam = lpHull->mpaStopLines[luIndex].GetParameterAlongSection();
+            if (luParam > luParamFixed && luParam < luBestParam)
+            {
+                luBestParam = luParam;
+                luBestIndex = static_cast<u8>(luIndex);
+            }
+        }
+
+        return luBestIndex;
+    }
 }
