@@ -321,7 +321,21 @@ namespace Deformation
             const AddDeformationModelEvent& lrEvent = lrQueue.GetEvent(liI);
 
             // Already simulating this entity? Skip (re-add is a no-op).
-            const s32 liExisting = FindModelIndexByEntityID(lrEvent.mGlobalEntityId);
+            // ⭐ THE ID IS THE HANDLING BODY'S (LOCAL PHYSICS) ENTITY WORD, NOT mGlobalEntityId
+            // (traffic wave 3 round 3). FindModelIndexByEntityID indexes ma8TrafficToModelIndex,
+            // which is keyed by the PHYSICAL slot (0..19) -- feeding it the global traffic index
+            // (64 on the first promoted car) tripped its `lu16TrafficIndex <
+            // ku8TotalMaxNumPhysicalTraffic` bound 24x in one boot. X360 @0x82644934..0x826449D8:
+            //     ld    r9, 8(r11)     ; event+0x08 == mHandlingBodyID (the 8-byte RigidBodyId)
+            //     srdi  r9, r9, 32     ; RigidBodyId::GetEntityId() -- the HIGH dword
+            //     clrlwi r26, r9, 0
+            //     mr    r4, r26
+            //     bl    DeformationManager::FindModelIndexByEntityID
+            // mGlobalEntityId (event+0x10) is read later, for the owner assert and the
+            // ma8GlobalTrafficToModelIndex mapping -- the two ids are NOT interchangeable.
+            const EntityId lHandlingEntityId =
+                { static_cast<u32>(lrEvent.mHandlingBodyID.GetEntityId()) };
+            const s32 liExisting = FindModelIndexByEntityID(lHandlingEntityId);
             if (liExisting != -1)
                 continue;
 

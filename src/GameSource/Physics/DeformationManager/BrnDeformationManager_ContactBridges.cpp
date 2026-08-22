@@ -20,11 +20,15 @@
 //     structural oracle (debug names lPotentialContact/lContactId/lpSimInput,
 //     liModelIndexA/B from its baked asserts).
 //   * BridgeBodyPartCarContactsToSimulation @0x825DD7D0 + BridgeDetachedWheelCar-
-//     ContactsToSimulation @0x825DDD48 -- ⚠⚠ TRAP STUBS (closure enforcement; 348/392 X360
-//     asm lines each -- named, not landed, this wave). RECONSTRUCT-NEXT.
+//     ContactsToSimulation @0x825DDD48 -- GATES, not traps (log-once, live every frame;
+//     348/392 X360 asm lines each, not reconstructed). RECONSTRUCT-NEXT.
+//   * AddRaceCarBodyPartPair @0x82605928 + AddHingedBodyPartPairs @0x82605A98 -- REAL as of
+//     wave T3 (2026-08-22, cluster C5); their traps are deleted. AddRaceCarWheelPair
+//     @0x82605BE8 is a NAMED GATE (one missing cylinder-vs-box appender).
 //
-// Everything is dead code today: the only caller chain is PhysicsModule::Update @0x825B0640,
-// still a link stub, so /OPT:REF strips this TU's bodies. Mounted for closure enforcement.
+// STALE CLAIM RETIRED 2026-08-22: this banner said "everything is dead code today ... 
+// PhysicsModule::Update @0x825B0640 is still a link stub". Update is a REAL BODY and the
+// three pair feeders run every frame from VehicleManager::StartVehicleContactGeneration.
 // ============================================================================
 
 #include "GameSource/Physics/DeformationManager/BrnDeformationManager.h"
@@ -35,6 +39,8 @@
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnDeformableObject.h" // DeformableObject (+ DeformationSensor)
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/VehiclePhysics.h"              // VehiclePhysics (GetTransform + the timer bank)
 #include "rw/math/vpu/vector3_operation.h"                                                // Normalize / IsValid
+#include "GameShared/GameClasses/SceneManager/Collision/Primitives/CgsPrimitivePairListBuilder.h" // PrimitivePairListBuilder::AddPrimitivePair (+ CgsGeometric::Box)
+#include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnIKBodyPart.h"     // IKBodyPart::GetPartPoolIndex (the hinged-panel walk)
 
 namespace BrnPhysics
 {
@@ -53,6 +59,11 @@ namespace Deformation
         const u32 KU_OWNER_TRAFFIC_VEHICLE = 2;      // BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE
         const u32 KU_MAX_NUM_RACE_CARS     = 8;      // Vehicle::ku8MaxNumRaceCars
         const u32 KU_MAX_TOTAL_TRAFFIC     = 0x258;  // BrnTraffic::KU_MAX_TOTAL_TRAFFIC (600)
+
+        // Pair-builder feeder constants (wave T3 C5), read off the three bodies' asm.
+        const f32 KF_PART_VS_CAR_CONTACT_PADDING  = 0.5f;   // flt_82001DA0 @0x82605A88
+        const f32 KF_HINGED_PART_CONTACT_PADDING  = 1.0f;   // flt_82001C98 @0x82605B20
+        const s32 KI_MAX_PARTS_PER_MODEL          = 50;     // `cmpwi r26, 0x32` (maPartStates[50])
 
         // Per-lane NaN self-compare (the asm's vspltw + vcmpeqfp. over lanes x/y/z) -- the
         // vendor vpu tree's own IsValid(Vector3).
@@ -298,9 +309,9 @@ namespace Deformation
     // =================================================================================================
     // DeformationManager::BridgeBodyPartCarContactsToSimulation  @0x825DD7D0  (PS3 DecFIGS 0x6F728C)
     //
-    // ⚠⚠ TRAP STUB (closure enforcement, 2026-08-06 big-five #2 wave) -- the REAL body (348 X360
-    // asm lines / 11 callees) is NOT reconstructed yet. Dead code today (Update @0x825B0640 is
-    // still a link stub; /OPT:REF strips this). RECONSTRUCT-NEXT.
+    // GATE (not a trap; log-once boot gate). Blocker: the real body (348 X360 asm lines, 11
+    // callees) is not reconstructed. LIVE every frame: BridgeContactsToSimulation @0x825A99E8:933
+    // <- PhysicsModule::Update @0x825B0640, both REAL. DELETE-WHEN the body lands.
     // =================================================================================================
     void DeformationManager::BridgeBodyPartCarContactsToSimulation(
         CgsPhysics::PhysicsSimulationIO::InputBuffer* /*lpSimInput*/,
@@ -324,8 +335,9 @@ namespace Deformation
     // =================================================================================================
     // DeformationManager::BridgeDetachedWheelCarContactsToSimulation  @0x825DDD48  (PS3 0x741E28)
     //
-    // ⚠⚠ TRAP STUB (closure enforcement, 2026-08-06 big-five #2 wave) -- the REAL body (392 X360
-    // asm lines / 12 callees) is NOT reconstructed yet. Dead code today. RECONSTRUCT-NEXT.
+    // GATE (not a trap; log-once boot gate). Blocker: the real body (392 X360 asm lines, 12
+    // callees) is not reconstructed. LIVE every frame: BridgeContactsToSimulation @0x825A99E8:935.
+    // DELETE-WHEN the body lands.
     // =================================================================================================
     void DeformationManager::BridgeDetachedWheelCarContactsToSimulation(
         CgsPhysics::PhysicsSimulationIO::InputBuffer* /*lpSimInput*/,
@@ -348,31 +360,159 @@ namespace Deformation
 
     // =================================================================================================
     // The three pair-builder feeders StartVehicleContactGeneration @0x8262AEE8 calls.
-    // ⚠⚠ TRAP STUBS (closure enforcement, 2026-08-06 big-five #2 wave) -- the REAL bodies (91 /
-    // 136 / 83 X360 asm lines @0x82605928 / @0x82605BE8 / @0x82605A98; PS3 DecFIGS 0x760100 /
-    // 0x75B050 / 0x760E6C) are NOT reconstructed yet. Dead code today. RECONSTRUCT-NEXT.
+    // Two of the three CGS_ASSERT(false) TRAPS THAT STOOD HERE ARE DELETED (wave T3, 2026-08-22,
+    // cluster C5). AddHingedBodyPartPairs was the ARMED one: the driver calls it UNCONDITIONALLY for
+    // EVERY overlapping car-car pair (BrnVehicleManagerContactGeneration.cpp:321), race-car-vs-traffic
+    // included, so it fired on the first shove. The third (AddRaceCarWheelPair) is a NAMED GATE with
+    // one missing leaf, see there.
+    //
+    // Common shape: resolve the car's deformable model, take its aligned deformed bounding box, take
+    // the part's oriented bounding box, and append ONE box-vs-box record to the caller's builder with
+    // (part pool slot, car model index) as the two primitive tags. StartVehicleContactGeneration
+    // collides the finished builders at the end of its overlap walk.
     // =================================================================================================
-    void DeformationManager::AddRaceCarBodyPartPair(EntityId /*lEntityId*/,
-                                                    CgsSceneManager::VolumeInstanceId /*lVolumeInstanceId*/,
-                                                    PrimitivePairListBuilder* /*lpBuilder*/)
+
+    // -------------------------------------------------------------------------------------------------
+    // AddRaceCarBodyPartPair @0x82605928 (92)  -- one DETACHED body part vs one car.
+    //   0x82605938  the part's pool slot == the LOW 16 bits of the packed volume-instance id
+    //               (`clrlwi r31, r5, 16` over the whole 64-bit id the caller loads with `ld r5,8(r21)`;
+    //               VolumeInstanceId packs {entityWord<<32 | subA<<16 | subB}, so this is muSubB)
+    //   0x82605954  IsPartIndexUsed / GetPart on mDetachedPartManager (console this+48112 == mPartPool)
+    //   0x8260597C  mbJoinedToVehicle (+0x1E4) -> STILL HINGED, so AddHingedBodyPartPairs owns it
+    //   0x82605990  FindModelIndexByEntityID, -1 == the car has no deformable model, nothing to pair
+    //   0x826059C8  the tags: `ld 0x1D0(part)` (mRigidBodyId) low byte == GetPoolIndex, and the model
+    //               index as a u16; padding flt_82001DA0 == 0.5f
+    // -------------------------------------------------------------------------------------------------
+    void DeformationManager::AddRaceCarBodyPartPair(EntityId lEntityId,
+                                                    CgsSceneManager::VolumeInstanceId lVolumeInstanceId,
+                                                    PrimitivePairListBuilder* lpBuilder)
     {
-        CGS_ASSERT(false, "TRAP: DeformationManager::AddRaceCarBodyPartPair @0x82605928 "
-                          "not reconstructed (big-five #2 closure stub)\n");
+        const u16 lu16PoolSlot = static_cast<u16>(lVolumeInstanceId.muId & 0xFFFFu);
+
+        if (!mDetachedPartManager.IsPartIndexUsed(lu16PoolSlot))
+        {
+            return;
+        }
+        PhysicalBodyPart* lpPart = mDetachedPartManager.GetPartFromIndex(lu16PoolSlot);
+        if (lpPart == nullptr || lpPart->IsJoinedToVehicle())
+        {
+            return;
+        }
+
+        const s32 liModelIndex = FindModelIndexByEntityID(lEntityId);
+        if (liModelIndex == -1)
+        {
+            return;
+        }
+
+        CgsGeometric::Box lPartBox;
+        lpPart->GetBoundingBox(&lPartBox);
+        CgsGeometric::Box lCarBox;
+        mpaModels[liModelIndex].GetAlignedDeformedBoundingBox(&lCarBox);
+
+        const u8 lu8PartIndex = lpPart->GetPoolIndex();
+        CGS_ASSERT(lu8PartIndex < PhysicalBodyPartPool::KU_MAX_DETACHED_PARTS,
+                   "luPartIndex < (int32_t)KU_MAX_DETACHED_PARTS");                            // :2186
+        // The streamed value tail is lowered to the static prefix per the standing project rule.
+        CGS_ASSERT(mDetachedPartManager.IsPartIndexUsed(lu8PartIndex), "Bad Part index: ");    // :2187
+
+        lpBuilder->AddPrimitivePair(&lPartBox, &lCarBox, KF_PART_VS_CAR_CONTACT_PADDING,
+                                    lu8PartIndex, static_cast<u16>(liModelIndex));
     }
 
+    // -------------------------------------------------------------------------------------------------
+    // AddHingedBodyPartPairs @0x82605A98 (84)  -- every STILL-HINGED panel of car A vs car B's body
+    // box, and every still-hinged panel of car B vs car A's. Two fixed 50-iteration walks
+    // (`cmpwi r26, 0x32`), gated on maPartStates[i] == E_PART_STATE_HINGED (`lbzx` == 3), reading the
+    // panel's pool slot out of maIKParts[i].miPartPoolIndex (`lhz` at stride 0x10, then `extsh`).
+    // Padding is flt_82001C98 == 1.0f, not the 0.5f its two siblings use.
+    //
+    // CONSOLE DEFECT, REPRODUCED: BOTH loops pass modelIndex A as the SECOND primitive tag
+    // (`clrlwi r8, r28, 16` at 0x82605B50 AND 0x82605BB0; r28 is loaded once at 0x82605AB8 and never
+    // re-derived). The second loop's records therefore name car A while carrying car B's box. Kept as
+    // issued -- the tag is a debug/attribution field on the pair record, not a lookup key.
+    // -------------------------------------------------------------------------------------------------
+    void DeformationManager::AddHingedBodyPartPairs(EntityId lEntityIdA, EntityId lEntityIdB,
+                                                    PrimitivePairListBuilder* lpBuilder)
+    {
+        const s32 liModelIndexA = FindModelIndexByEntityID(lEntityIdA);
+        const s32 liModelIndexB = FindModelIndexByEntityID(lEntityIdB);
+        if (liModelIndexA == -1 || liModelIndexB == -1)
+        {
+            return;
+        }
+
+        DeformableObject& lrModelA = mpaModels[liModelIndexA];
+        DeformableObject& lrModelB = mpaModels[liModelIndexB];
+
+        CgsGeometric::Box lCarBoxA;
+        CgsGeometric::Box lCarBoxB;
+        lrModelA.GetAlignedDeformedBoundingBox(&lCarBoxA);
+        lrModelB.GetAlignedDeformedBoundingBox(&lCarBoxB);
+
+        // car A's hinged panels vs car B's body box (0x82605B28..0x82605B78)
+        for (s32 liPart = 0; liPart < KI_MAX_PARTS_PER_MODEL; ++liPart)
+        {
+            if (lrModelA.GetPartState(liPart) != DeformableObject::E_PART_STATE_HINGED)
+            {
+                continue;
+            }
+            const s16 li16PoolSlot = lrModelA.GetIKPartDebug(liPart).GetPartPoolIndex();
+            CgsGeometric::Box lPartBox;
+            mDetachedPartManager.GetPartFromIndex(static_cast<u16>(li16PoolSlot))
+                                ->GetBoundingBox(&lPartBox);
+            lpBuilder->AddPrimitivePair(&lPartBox, &lCarBoxB, KF_HINGED_PART_CONTACT_PADDING,
+                                        static_cast<u16>(li16PoolSlot),
+                                        static_cast<u16>(liModelIndexA));
+        }
+
+        // car B's hinged panels vs car A's body box (0x82605B88..0x82605BD8)
+        for (s32 liPart = 0; liPart < KI_MAX_PARTS_PER_MODEL; ++liPart)
+        {
+            if (lrModelB.GetPartState(liPart) != DeformableObject::E_PART_STATE_HINGED)
+            {
+                continue;
+            }
+            const s16 li16PoolSlot = lrModelB.GetIKPartDebug(liPart).GetPartPoolIndex();
+            CgsGeometric::Box lPartBox;
+            mDetachedPartManager.GetPartFromIndex(static_cast<u16>(li16PoolSlot))
+                                ->GetBoundingBox(&lPartBox);
+            lpBuilder->AddPrimitivePair(&lPartBox, &lCarBoxA, KF_HINGED_PART_CONTACT_PADDING,
+                                        static_cast<u16>(li16PoolSlot),
+                                        static_cast<u16>(liModelIndexA));   // A, per the defect note
+        }
+    }
+
+    // -------------------------------------------------------------------------------------------------
+    // AddRaceCarWheelPair @0x82605BE8 (136) -- NAMED GATE, wave T3 cluster C5. Reachable only once a
+    // wheel has been torn off, so nothing on the "player rams a traffic car" path reaches it.
+    // BLOCKER: its appender is NOT AddPrimitivePair(Box*, Box*) -- it is sub_828149F8, a CYLINDER-vs-BOX
+    // overload (AddCollisionHeader types 5/4, then two 0x50 payload copies) that has no declaration and
+    // no body in the tree; its home is CgsPrimitivePairListBuilder.h/.cpp, not this cluster's files, and
+    // this body is its only caller in the image. Calling the Box/Box overload instead would stamp the
+    // wrong volume type into the record, so nothing honest can stand in.
+    // DELETE-WHEN AddPrimitivePair(Cylinder*, Box*, f32, u16, u16) @0x828149F8 lands. The rest of the
+    // body is fully recovered: DetachedWheelManager::IsSlotUsed/Get on this+72928, FindModelIndexBy-
+    // EntityID, a hand-built 5-row cylinder from the wheel's transform (row0 = -wheelRow2, row1/row2 =
+    // wheelRow1/row0, row3 = wheelRow3, row4.xy = wheel+0x7C/+0x78) with the sign-splat vxor, the car
+    // box via CgsGeometric::Box::Set off model+0x194C, the "Bad Pool Index: " tripwire (:2324), and
+    // padding flt_82001DA0 == 0.5f.
+    // -------------------------------------------------------------------------------------------------
     void DeformationManager::AddRaceCarWheelPair(EntityId /*lEntityId*/,
                                                  CgsSceneManager::VolumeInstanceId /*lVolumeInstanceId*/,
                                                  PrimitivePairListBuilder* /*lpBuilder*/)
     {
-        CGS_ASSERT(false, "TRAP: DeformationManager::AddRaceCarWheelPair @0x82605BE8 "
-                          "not reconstructed (big-five #2 closure stub)\n");
-    }
-
-    void DeformationManager::AddHingedBodyPartPairs(EntityId /*lEntityIdA*/, EntityId /*lEntityIdB*/,
-                                                    PrimitivePairListBuilder* /*lpBuilder*/)
-    {
-        CGS_ASSERT(false, "TRAP: DeformationManager::AddHingedBodyPartPairs @0x82605A98 "
-                          "not reconstructed (big-five #2 closure stub)\n");
+        static bool sbLoggedWheelPairGate = false;
+        if (!sbLoggedWheelPairGate)
+        {
+            sbLoggedWheelPairGate = true;
+            if (CgsDev::Message::gxMessageFilterFlags & 1)
+                *CgsDev::Log::gpDebugPrint
+                    << "conductor gate: DeformationManager::AddRaceCarWheelPair @0x82605BE8 reached "
+                       "(a detached wheel overlapped a car) but not landed -- needs PrimitivePairList"
+                       "Builder::AddPrimitivePair(Cylinder*, Box*) @0x828149F8, undeclared "
+                       "[FLAG PC boot gate]. Reported once, not per frame\n";
+        }
     }
 }
 }

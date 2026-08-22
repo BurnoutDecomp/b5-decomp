@@ -6,6 +6,11 @@
 // Matches the two sibling vehicle-manager TUs (BrnVehicleManager.cpp:7,
 // BrnVehicleManager_Construct.cpp:5), which have always included it directly.
 #include "GameShared/GameClasses/Physics/CgsRigidBody.h"
+// AddTrafficState @0x825EC390 only: the traffic body it projects and the wheel type it walks.
+#include "GameSource/Physics/VehicleManager/BrnPhysicalTrafficManager.h"                // PhysicalTrafficVehicle
+#include "GameSource/Physics/VehicleManager/VehiclePhysics/BrnSimpleVehiclePhysics.h"   // SimpleVehiclePhysics
+#include "GameSource/Physics/VehicleManager/VehiclePhysics/Wheel.h"                     // Wheel / Wheel::RoadContact
+#include <cmath>                                                                        // std::fabs
 
 #include <cstring>   // std::memcpy (models the Xbox XMemCpy block-copy intrinsic)
 #include <cstddef>   // offsetof (VehicleOutputRequestInterface::_AssertLayout)
@@ -13,12 +18,15 @@
 // BrnPhysics::Vehicle::VehicleOutputInterface + CrashingRaceCarInterface -- the bodied ledger
 // functions homed by this group. Reconstructed from BURNOUT_X360_ARTIST.XEX.
 //
-// FLAG -- VehicleOutputInterface::AddTrafficState @0x825EC390 is declared on the class but
-// intentionally NOT bodied: its X360 body is a deep VMX128 per-wheel projection routine reaching
-// SimpleVehiclePhysics wheel/contact-frame internals whose full layout is not homed in any
-// committed header, and whose per-wheel reciprocal-magnitude Newton-Raphson normalization + lane
-// splats cannot be reconstructed BY NAME without fabricating a large accessor surface. It remains
-// declaration-only until the BrnSimpleVehiclePhysics wheel-state TU lands its own ledger.
+// ⭐ THE FLAG THAT USED TO STAND HERE IS RETIRED (wave T3, physical traffic).
+// VehicleOutputInterface::AddTrafficState @0x825EC390 IS BODIED at the tail of this file. The old
+// note said its wheel internals were unhomed; they are not. Its per-wheel loop is instruction-for-
+// instruction the SAME loop as the already-landed race-car twin UpdateRaceCarState @0x825EC808
+// (source register at wheel+0x30, dest at WheelLite+0x44, strides 224/112, the same vrefp+2xNR
+// reciprocal for mfSuspensionHeight), and every field it reads is a named member of Wheel /
+// SimpleVehiclePhysics today. The one accessor that was genuinely missing -- the BASE's
+// `const Wheel* GetWheel(EVehicleDrivenWheel) const` (DWARF BrnSimpleVehiclePhysics.h:214) -- was
+// added to that header with this wave.
 
 namespace BrnPhysics
 {
@@ -362,5 +370,166 @@ namespace Vehicle
             }
         }
     }
+
+// =================================================================================================
+// @0x825EC390  VehicleOutputInterface::AddTrafficState   (285 insns, DWARF :352)
+//
+// THE PRODUCER OF PhysicalTrafficState. One call per live physical-traffic slot per frame, from
+// PhysicalTrafficManager::WriteOutVehicleStats @0x825F0308 (its only xref).
+//
+// SIGNATURE from the asm prologue: r3 this, r4 the EntityId, r5 the PhysicalTrafficVehicle.
+// r31 is `*(r5 + 28)` == PhysicalTrafficVehicle::mpVehicleBody, so every physics read below goes
+// through that body, whose static type is SimpleVehiclePhysics.
+//
+// THE SLOT. `_R30 = <queue>(this + 9760)` @0x825E5010 is BaseEventQueue<PhysicalTrafficState>::
+// AddEvent() -- the no-arg "reserve the next slot and bump miLength" overload (its own body is the
+// two CgsBaseEventQueue.h:360/:361 asserts, `816 * miLength + mpEvents`, `++miLength`). 9760 ==
+// 0x2620 == mTrafficStateQueue.
+//
+// FIELD MAP, read off the asm (r30 == the new state, r31 == the SimpleVehiclePhysics):
+//   state +800  mEntityID            <- the argument
+//   state +448  mTransform  (4 rows) <- GetGraphicsVehicleTransform()       (@0x825BF158)
+//   state +528  mLinearVelocity      <- physics +0x50
+//   state +804  mfSpeed              <- physics +0x6C0 lane .x * flt_82F31928 (0.44704) == GetSpeed().x
+//   state +808  mbFrozen             <- physics +0x70
+//   state +809  mbIsDeforming        <- physics +0x712  (mbStartedDeforming)
+//   state +810  mbIsFatallyCrashing  <- physics +0x711  (mbStartedFatallyCrashing)
+//   state +812  mfSteering           <- the vtable slot-0 call == GetSteeringAngle()
+//   state +544/608/672/736  maWheelTransforms[0..3] <- GetWheelsWorldTransfrom(i, false) (@0x825D8878)
+//   state +0..447           maWheels[0..3]          <- the per-wheel loop
+//   state +512  mvRoadTestNormal_HeightAboveRoad <- the above-ground rebase (below)
+//
+// THE WHEEL LOOP (0x825EC5B0..0x825EC79C) -- four iterations, source stride 224 == sizeof(Wheel),
+// dest stride 112 == sizeof(WheelLite), identical register geometry to UpdateRaceCarState's loop
+// (source r10 at wheel+0x30, dest r11 at WheelLite+0x44). It writes ELEVEN of WheelLite's fields
+// and deliberately leaves four alone:
+//   WARNING mfWheelLongSpeed / mfRoadLongSpeed / mfRoadLatSpeed / mbHasTraction are NOT written
+//   here. There is no store to dest+84/+88/+92/+97 anywhere in the function (checked against the
+//   RAW ASM, not the pseudocode); the race-car twin does write them. Reproduced as-is.
+//
+// ONE DIVERGENCE, REPRODUCED NOT "FIXED": the two ground bools are SWAPPED on the way in.
+//     0x825EC740  lbz r6, var_138(r1)   ; var_138 == roadContact+40 == mbIsOnGround
+//     0x825EC75C  stb r6, -0x1B(r11)    ; dest+41 == mbWasOnGroundLastUpdate
+//     0x825EC750  lbz r9, -7(r10)       ; r10 == wheel+0x30, so wheel+0x29 == mbWasOnGroundLastUpdate
+//     0x825EC768  stb r9, -0x1C(r11)    ; dest+40 == mbIsOnGround
+// UpdateRaceCarState @0x825ECE78/0x825ECE80 stores the same two bytes straight through
+// (+40 -> +40, +41 -> +41), so this is a real console asymmetry, not a decode error. Kept, and
+// flagged for the verifier. (mbIsCloseToGround @+42 is copied by neither function.)
+//
+// THE ABOVE-GROUND REBASE (0x825EC7A0..0x825EC7F8). The result was captured against the PHYSICS
+// pose; the published transform is the GRAPHICS pose, so the height is corrected by the .y of the
+// difference:
+//     delta = physics.GetPosition() - state.mTransform.wAxis
+//     state.mvRoadTestNormal_HeightAboveRoad.xyz = aboveGround.mIntersectionNormal.xyz
+//     state.mvRoadTestNormal_HeightAboveRoad.w   = aboveGround.mfVerticalDistance - delta.y
+// (the console writes that .w twice -- once splicing in the slot's stale lane, once with the real
+// value -- so only the second store survives; the dead first store is not reproduced.)
+// =================================================================================================
+
+// The wheel state byte the console compares against 2 (`lbz r3, 0xA7(r10)` == Wheel +0xD7 ==
+// mu8State). 2 == detached; mbAttached is its negation. Same constant the race-car twin carries in
+// its own file-local block.
+static const u8 KU8_ADDTRAFFICSTATE_WHEEL_STATE_DETACHED = 2;
+
+void VehicleOutputInterface::AddTrafficState(EntityId lEntityID,
+                                             const PhysicalTrafficVehicle* lpPhysicalTrafficVehicle)
+{
+    // DIVERGENCE (named): the console has no null guards -- WriteOutVehicleStats only calls this
+    // for a bit set in mUsedTrafficVehicles, whose body pointer is always seated. Kept as a
+    // bring-up guard, same as the race-car twin above.
+    CGS_ASSERT(lpPhysicalTrafficVehicle != 0, "lpPhysicalTrafficVehicle != NULL");
+    if (lpPhysicalTrafficVehicle == 0 || lpPhysicalTrafficVehicle->mpVehicleBody == 0)
+    {
+        return;
+    }
+
+    const SimpleVehiclePhysics& lrPhysics = *lpPhysicalTrafficVehicle->mpVehicleBody;
+    PhysicalTrafficState&       lrState   = mTrafficStateQueue.AddEvent();
+
+    lrState.mEntityID           = lEntityID;
+    lrState.mTransform          = lrPhysics.GetGraphicsVehicleTransform();
+    lrState.mLinearVelocity     = lrPhysics.GetLinearVelocity();
+    lrState.mfSpeed             = lrPhysics.GetSpeed().x;
+    lrState.mbFrozen            = lrPhysics.IsFrozen();
+    lrState.mbIsDeforming       = lrPhysics.HasStartedDeforming();
+    lrState.mbIsFatallyCrashing = lrPhysics.IsFatallyCrashing();
+    lrState.mfSteering          = lrPhysics.GetSteeringAngle().x;
+
+    // The four wheel meshes' world matrices. lbHackDontReverseRightWheels is false at every
+    // committed call site, this one included (`li r6, 0` before each bl).
+    for (s32 liWheel = 0; liWheel < eNumDrivenWheels; ++liWheel)
+    {
+        lrState.maWheelTransforms[liWheel] =
+            lrPhysics.GetWheelsWorldTransfrom(static_cast<EVehicleDrivenWheel>(liWheel), false);
+    }
+
+    const Matrix44Affine lPhysicsTransform = lrPhysics.GetTransform();
+
+    for (s32 liWheel = 0; liWheel < eNumDrivenWheels; ++liWheel)
+    {
+        const Wheel& lrWheel     = *lrPhysics.GetWheel(static_cast<EVehicleDrivenWheel>(liWheel));
+        WheelLite&   lrWheelLite = lrState.maWheels[liWheel];
+
+        lrWheelLite.mVelocity          = lrWheel.mBodyPointVelocity;
+        lrWheelLite.mfRadiansPerSecond = lrWheel.mIntegrationVariables.x;
+        lrWheelLite.mfRadius           = lrWheel.mSlipVariables.w;
+        lrWheelLite.mfRotation         = lrWheel.mIntegrationVariables.z;
+        lrWheelLite.mfSkidFactor       = lrWheel.mSlipVariables.z;
+
+        // The suspension height, normalised by whichever travel limit the wheel is inside. The
+        // console emits vrefp + two Newton-Raphson steps + one vmulfp, i.e. a divide, and negates
+        // the numerator on the below-rest branch (`vxor` against 0x80000000).
+        // (`lvx128 v13, r10, 80` == wheel+0x80 == mPosition, lane .y;
+        //  `lvx128 v0, r10, 48` == wheel+0x60 == mSuspensionAndInertiaVariables, lane .y or .x)
+        const f32 lfWheelHeight = lrWheel.mPosition.y;
+        if (lfWheelHeight >= 0.0f)
+        {
+            lrWheelLite.mfSuspensionHeight = lfWheelHeight / lrWheel.mSuspensionAndInertiaVariables.y;
+        }
+        else
+        {
+            lrWheelLite.mfSuspensionHeight = -lfWheelHeight / lrWheel.mSuspensionAndInertiaVariables.x;
+        }
+
+        // `lbz r3, 0xA7(r10)` == Wheel +0xD7 == mu8State; 2 == detached.
+        lrWheelLite.mbAttached = (lrWheel.mu8State != KU8_ADDTRAFFICSTATE_WHEEL_STATE_DETACHED);
+
+        lrWheelLite.mRoadContact.mNormal              = lrWheel.mRoadContact.mNormal;
+        lrWheelLite.mRoadContact.mfLineDistanceToRoad = lrWheel.mRoadContact.mfLineDistanceToRoad;
+        lrWheelLite.mRoadContact.mCollisionTag        = lrWheel.mRoadContact.mCollisionTag;
+        lrWheelLite.mRoadContact.mbLineTestIsValid    = lrWheel.mRoadContact.mbLineTestIsValid;
+        // THE SWAP -- see the banner. Do not "correct" it without re-reading 0x825EC738..0x825EC768.
+        lrWheelLite.mRoadContact.mbWasOnGroundLastUpdate = lrWheel.mRoadContact.mbIsOnGround;
+        lrWheelLite.mRoadContact.mbIsOnGround            = lrWheel.mRoadContact.mbWasOnGroundLastUpdate;
+
+        // The world-space traction point: the vmaddfp chain row0*p.x + row1*p.y + row2*p.z + wAxis,
+        // with p == maLocalTractionPoints[i] (`r3 = (i + 0x53) << 4` == +0x530 + 16*i).
+        const Vector3 lvLocal = lrPhysics.GetLocalTractionPoint(static_cast<u8>(liWheel));
+        lrWheelLite.mRoadContact.mPosition.x =
+            lPhysicsTransform.xAxis.x * lvLocal.x + lPhysicsTransform.yAxis.x * lvLocal.y
+          + lPhysicsTransform.zAxis.x * lvLocal.z + lPhysicsTransform.wAxis.x;
+        lrWheelLite.mRoadContact.mPosition.y =
+            lPhysicsTransform.xAxis.y * lvLocal.x + lPhysicsTransform.yAxis.y * lvLocal.y
+          + lPhysicsTransform.zAxis.y * lvLocal.z + lPhysicsTransform.wAxis.y;
+        lrWheelLite.mRoadContact.mPosition.z =
+            lPhysicsTransform.xAxis.z * lvLocal.x + lPhysicsTransform.yAxis.z * lvLocal.y
+          + lPhysicsTransform.zAxis.z * lvLocal.z + lPhysicsTransform.wAxis.z;
+        lrWheelLite.mRoadContact.mPosition.w = 0.0f;
+    }
+
+    // ---- the above-ground rebase: physics pose -> the graphics pose just published -------------
+    {
+        const AboveGroundTestResult& lrAboveGround =
+            *lrPhysics.GetAboveGroundTestResult();
+
+        const f32 lfDeltaY = lPhysicsTransform.wAxis.y - lrState.mTransform.wAxis.y;
+
+        lrState.mvRoadTestNormal_HeightAboveRoad.x = lrAboveGround.mIntersectionNormal.x;
+        lrState.mvRoadTestNormal_HeightAboveRoad.y = lrAboveGround.mIntersectionNormal.y;
+        lrState.mvRoadTestNormal_HeightAboveRoad.z = lrAboveGround.mIntersectionNormal.z;
+        lrState.mvRoadTestNormal_HeightAboveRoad.w = lrAboveGround.mfVerticalDistance - lfDeltaY;
+    }
+}
+
 }
 }

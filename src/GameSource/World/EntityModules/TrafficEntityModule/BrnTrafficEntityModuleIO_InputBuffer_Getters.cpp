@@ -32,6 +32,10 @@ namespace BrnTrafficIO
     {
         CgsModule::IOBuffer::Construct();
         mGameActionQueue.Construct();
+        // The physics->traffic readback bridge assigns both interfaces (operator= Clears +
+        // Appends every embedded EventQueue), so their queues must be Constructed here.
+        mVehicleOutputInterface.Construct();
+        mVehicleManagerOutputInterface.Construct();
     }
 
 

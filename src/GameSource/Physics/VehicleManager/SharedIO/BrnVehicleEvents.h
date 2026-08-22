@@ -244,7 +244,7 @@ namespace Vehicle
         // trivially copyable, so a defaulted copy-assignment reproduces it exactly; kept
         // out-of-line in the .cpp so this ledger func has a definition site. ADDITIVE GROW
         // (flagged): an explicitly-declared-and-defaulted operator= over the same trivial copy.
-        CreatePhysicalTrafficEvent& operator=( const CreatePhysicalTrafficEvent& );
+        CreatePhysicalTrafficEvent& operator=( const CreatePhysicalTrafficEvent& ) = default;   // @0x825B7AE8 is the trivial copy
         CreatePhysicalTrafficEvent() = default;
         CreatePhysicalTrafficEvent( const CreatePhysicalTrafficEvent& ) = default;
     };

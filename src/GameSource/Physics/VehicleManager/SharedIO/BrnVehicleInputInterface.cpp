@@ -1,5 +1,8 @@
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleInputInterface.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // the CreateArticulatedTraffic gate log
+#include "rw/math/vpu/vector3_operation.h"          // rw::math::vpu::IsValid(Vector3)
+#include "rw/math/vpu/matrix44affine_operation.h"   // rw::math::vpu::IsValid(Matrix44Affine)
 // ⭐ 2026-08-03 (task #113): this TU's own `static const u32 KU_ENTITYTYPE_TRAFFIC_VEHICLE = 2;`
 // was the THIRD copy of that constant at BrnPhysics::Vehicle namespace scope (the others were
 // BrnPhysicalTrafficManager.h:272 and BrnArticulatedJoint.h:42). It is owned by
@@ -82,6 +85,74 @@ namespace Vehicle
 
         mCreateRaceCarEventQueue.AddEvent(lEvent);
         return mCreateRaceCarEventQueue.GetLength() - 1;
+    }
+
+
+    // @0x8271C600  VehicleInputInterface::CreatePhysicalTraffic
+    //   Fill the spawn event and append it to mCreateTrafficEventQueue. Field order is the
+    //   parameter order (DWARF BrnVehicleInputInterface.h:141); the event layout is
+    //   BrnVehicleEvents.h:223 (sizeof 144, key @0x70, handle @0x78, type @0x80, cab @0x84,
+    //   CgsID @0x88), and the asm stores land on exactly those seats.
+    //   PPC: r4/r5/r6(ptr)/r7/r8/r9/r10 + v1/v2 + one 8-byte stack slot (arg_70 = lCgsID);
+    //   the floats ride VMX, so they cost no GPR.
+    void VehicleInputInterface::CreatePhysicalTraffic(
+            VolumeInstanceId lVolumeInstanceId,
+            EntityId         lCrasherId,
+            Matrix44Affine   lInitialTransform,
+            Vector3          lInitialVelocity,
+            Vector3          lAngularVelocity,
+            u64              lCarAssetAttribKey,
+            ResourceHandle   lModelHandle,
+            ETrafficType     leTrafficType,
+            bool             lbIsCab,
+            CgsID            lCgsID)
+    {
+        CGS_ASSERT(leTrafficType < E_TRAFFIC_TYPE_COUNT,
+                   "leTrafficType < BrnPhysics::Vehicle::E_TRAFFIC_TYPE_COUNT");     // .h:483
+        CGS_ASSERT(rw::math::vpu::IsValid(lInitialTransform),
+                   "rw::math::IsValid( lInitialTransform )");                        // .h:484
+        CGS_ASSERT(rw::math::vpu::IsValid(lInitialVelocity),
+                   "rw::math::IsValid( lInitialVelocity )");                         // .h:485
+        CGS_ASSERT(rw::math::vpu::IsValid(lAngularVelocity),
+                   "rw::math::IsValid( lAngularVelocity )");                         // .h:486
+
+        CreatePhysicalTrafficEvent lEvent;
+        lEvent.mVolumeInstanceID  = lVolumeInstanceId;
+        lEvent.mCrasherID         = lCrasherId;
+        lEvent.mInitialTransform  = lInitialTransform;
+        lEvent.mInitialVelocity   = lInitialVelocity;
+        lEvent.mAngularVelocity   = lAngularVelocity;
+        lEvent.mCarAssetAttribKey = lCarAssetAttribKey;
+        lEvent.mModelHandle       = lModelHandle;
+        lEvent.meTrafficType      = leTrafficType;
+        lEvent.mbIsCab            = lbIsCab;
+        lEvent.mCgsID             = lCgsID;
+
+        mCreateTrafficEventQueue.AddEvent(lEvent);
+    }
+
+    // @0x8271C9C0 (478)  VehicleInputInterface::CreateArticulatedTraffic
+    // GATE: trailers are parked for wave-T3 round 1; the 31-argument fill is not reconstructed.
+    // BLOCKER: the whole articulated sub-tree (ProcessCreateArticulatedTrafficEvents @0x826487C8,
+    // ResolveArticulatedJoints @0x825F0A90) is parked with it, so a posted event has no consumer.
+    // DELETE-WHEN the trailer wave lands. Unreachable today: wave-T2 generation only builds
+    // InitialiseAsStandard cars, so AddVehicleToPhysics never takes its articulated arm.
+    void VehicleInputInterface::CreateArticulatedTraffic(
+            VolumeInstanceId, Matrix44Affine, Vector3, Vector3, u64, ResourceHandle, CgsID,
+            VolumeInstanceId, Matrix44Affine, Vector3, Vector3, u64, ResourceHandle, CgsID,
+            ETrafficType)
+    {
+        static bool sbLogged = false;
+        if (!sbLogged)
+        {
+            sbLogged = true;
+            if (CgsDev::Log::gpDebugPrint != 0)
+            {
+                *CgsDev::Log::gpDebugPrint
+                    << "[T3-gate] VehicleInputInterface::CreateArticulatedTraffic @0x8271C9C0:"
+                       " inert (trailers parked) [FLAG PC partial gate]\n";
+            }
+        }
     }
 
     // @0x822CC2A0  VehicleInputInterface::ResetRaceCar

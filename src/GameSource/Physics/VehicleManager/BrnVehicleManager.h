@@ -315,6 +315,11 @@ namespace Vehicle
                                                    // fix as the term above; +428 is the number
                                                    // BrnVehicleManager_layout_check.cpp:411 quotes)
 
+    // ⭐ ADDED 2026-08-22 (wave T3 r2, owner B). Pointer-only use here; the complete type is
+    // BrnPotentialContactAverager.h (the DWARF only ever forward-declares it too --
+    // BrnVehicleConstants.h:1597 -- because the console defines it inside BrnVehicleManager.cpp).
+    struct PotentialContactAverager;
+
     class VehicleManager
     {
     public:
@@ -1327,40 +1332,31 @@ namespace Vehicle
         void SetPlayerCarToShowtimeMode(bool lbInShowtime);
 
         // ==========================================================================================
-        // ⭐⭐ DoCrashPrediction @0x82645FE0 (814 insns) -- CENSUS BANKED 2026-08-09 (crash/shunt
-        // wave), NOT BODIED. The decode-and-bank rule applies on both counts:
-        //   1. Its middle (0x82646540..0x82646AF8) is a ~410-insn dense VMX128 prediction loop
-        //      walking stride-0xE0 vehicle records (cross/dot ladders, vsel lane logic, plus the
-        //      lazy-init constant splats dword_82FBA370 / unk_82FBA350/360 seeded from
-        //      flt_82004018/flt_82004C68) -- force-prediction math whose correctness cannot be
-        //      checked until the sim ticks.
-        //   2. Its MEASURED missing closure is a web, not a leaf. Level 1 (all absent from the
-        //      tree): DoCrashPredictionForRaceCarAndTrafficVehicle @0x82643D30 (159),
-        //      HandleCrashPredictionForRaceCarAndTrafficVehicle @0x82640AB0 (93),
-        //      HandleTrafficCarTrafficCarPotentialContact @0x8263EC90 (279),
-        //      HandleTrafficCarWorldPotentialContact @0x8263F0F0 (220), sub_8259D670 (43, shared
-        //      with FixUpVehicleContacts / DoTrafficWorldContactOrdering),
-        //      PhysicalTrafficManager::{Allocate,Deallocate}InternalBuffers (@0x82615958 / hole),
-        //      ArticulatedJointPool::SendCreateRemoveJointEvents @0x826013C0,
-        //      CgsContainers::BasePriorityQueue::Clear @0x82815E58. Level 2:
-        //      PotentialContactAverager (type + AddContactPair + GetAveragedContactPoint),
-        //      HandleRaceCarTrafficCarPotentialContact, PredictCarCarIntersection,
-        //      GetTrafficInterest_0, SetTrafficVehicleCrashing/-Slammed,
-        //      BrnTraffic::GetVehicleSpecies, sub_82203F70 -- and this slice's own
-        //      PredictCarWorldContactTime / HandleRaceCarWorldPotentialContact declare-onlys.
-        // Its ONLY caller is PhysicsModule::Update @0x82645FE0's xref -- itself still the
-        // WorldLinkStubs trap -- so the body is neither runtime-reachable nor link-demanded
-        // today. DWARF signature (BrnVehicleManager.h:899), for the conductor wave that lands it:
-        //     void DoCrashPrediction(IOBufferStack*, IOBufferStack*, float32_t,
-        //         const VehicleInputInterface*, VehicleOutputInterface*,
-        //         VehicleOutputRequestInterface*, VehicleManagerOutputInterface*,
-        //         DeformationInputInterface*, PotentialContactInterface*);
-        // Spine (calls in asm order): asserts, AllocateInternalBuffers, sub_8259D670, two
-        // BasePriorityQueue::Clear + bctrl drains, HandleTrafficCarTrafficCarPotentialContact,
-        // the VMX prediction loop, DoCrashPredictionForRaceCarAndTrafficVehicle,
-        // HandleCrashPredictionForRaceCarAndTrafficVehicle,
-        // HandleCrashPredictionForRaceCarAndWorld, HandleTrafficCarWorldPotentialContact,
-        // SendCreateRemoveJointEvents, DeallocateInternalBuffers.
+        // ⭐⭐ DoCrashPrediction @0x82645FE0 (814 insns) -- BODIED 2026-08-22 (wave T3 r2 owner B fix
+        // round) in BrnVehicleManager_DoCrashPrediction.cpp. The 2026-08-09 census below is kept
+        // only as the closure map; every "absent from the tree" claim in it is now STALE.
+        // Spine, in ASM order (0x82645FE0..0x82646C90):
+        //   asserts x8 -> muCachedCarA/BSlot = 0 -> AllocateInternalBuffers -> the stack-local
+        //   PotentialContactAverager (sp+0x150, count sp+0x7E0) -> mDiscardedContacts.Clear()
+        //   -> queue[13] traffic-vs-traffic owner check + HandleTrafficCarTrafficCarPotentialContact
+        //   -> queue[8] race-car-vs-traffic -> DoCrashPredictionForRaceCarAndTrafficVehicle
+        //   -> HandleCrashPredictionForRaceCarAndTrafficVehicle
+        //   -> HandleCrashPredictionForRaceCarAndWorld
+        //   -> the ~410-insn VMX128 triangle-cache block that CLEARS mbForceNoSlowMo
+        //      (0x82646450..0x82646B8C -- it sits AFTER the world arm, not in the middle; the old
+        //      "its middle is the VMX loop" reading below was wrong)
+        //   -> queue[9] traffic-vs-world -> HandleTrafficCarWorldPotentialContact
+        //   -> BridgeArticulatedJointRequestsToSim -> DeallocateInternalBuffers.
+        // The two BasePriorityQueue::Clear calls are the assert StrStream constructions at
+        // :2911/:2912, not queue drains. sub_8259D670 / CgsScen are EventQueue<T>::GetEvent(s32).
+        // FOUR NAMED GATES remain inside the landed body, none on the race-car-vs-traffic path:
+        //   HandleTrafficCarTrafficCarPotentialContact @0x8263EC90 (279)  -- unbodied
+        //   HandleTrafficCarWorldPotentialContact      @0x8263F0F0 (220)  -- unbodied
+        //   HandleCrashPredictionForRaceCarAndWorld    @0x82640C28        -- bodied but unmountable
+        //      (HandleRaceCarWorldPotentialContact @0x8263E3B8 and PredictCarWorldContactTime
+        //       @0x825B5300 are declare-only, :1393/:1402)
+        //   the mbForceNoSlowMo triangle-cache clear                      -- no cache reader yet
+        // DWARF signature (BrnVehicleManager.h:899): as declared at :1019 above.
         // ==========================================================================================
 
         // ==========================================================================================
@@ -1395,6 +1391,84 @@ namespace Vehicle
             f32 lfTimestep);
 
         VecFloat PredictCarWorldContactTime(const CgsSceneManager::SceneManagerIO::PotentialContact& lContact);
+
+        // ==========================================================================================
+        // ⭐ WAVE T3 ROUND 2, OWNER B -- the RACE-CAR-vs-PHYSICAL-TRAFFIC contact branch of the
+        // crash-prediction web. Bodied in BrnVehicleManager_RaceCarTrafficContact.cpp; signatures
+        // verbatim from the DecFIGS DWARF (BrnVehicleManager.h :1290 / :1293 / :1143 / :1197 /
+        // :1194 / :1286) and confirmed against the ARTIST prologues.
+        //
+        // ⚠️ THE FLOAT ARGUMENT SKIPS A GPR. HandleCrashPredictionForRaceCarAndTrafficVehicle takes
+        // (averager, float32_t, veh, req, mgr, deform) and the console loads r4=averager, r6/r7/r8/r9
+        // for the four interfaces with **r5 unused** and f1 carrying the timestep -- the standing
+        // PPC float-arg GPR-skip. That is why the DWARF's 2nd parameter looks "missing" in the asm.
+        // ==========================================================================================
+
+        // @0x82643D30 (159). Validate one race-car-vs-traffic potential contact, fold it into the
+        // averager, and FLUSH the averager (through the Handle* driver below) when it is full.
+        void DoCrashPredictionForRaceCarAndTrafficVehicle(
+            PotentialContactAverager* lpContactPairAverager,
+            const CgsSceneManager::SceneManagerIO::PotentialContact* lpContact,
+            f32 lfTimestep,
+            BrnPhysics::Vehicle::VehicleOutputInterface* lpVehicleOutputInterface,
+            BrnPhysics::Vehicle::VehicleOutputRequestInterface* lpRequestOutputInterface,
+            VehicleManagerOutputInterface* lpManagerOutputInterface,
+            BrnPhysics::Deformation::DeformationInputInterface* lpDeformationInterface);
+
+        // @0x82640AB0 (93). Drain every averaged pair through HandleRaceCarTrafficCarPotentialContact
+        // and reset the averager.
+        void HandleCrashPredictionForRaceCarAndTrafficVehicle(
+            PotentialContactAverager* lpContactPairAverager,
+            f32 lfTimestep,
+            BrnPhysics::Vehicle::VehicleOutputInterface* lpVehicleOutputInterface,
+            BrnPhysics::Vehicle::VehicleOutputRequestInterface* lpRequestOutputInterface,
+            VehicleManagerOutputInterface* lpManagerOutputInterface,
+            BrnPhysics::Deformation::DeformationInputInterface* lpDeformationInterface);
+
+        // @0x8263FA50 (783; export HOLE closed by the wave-T3 scout). THE handler: decide the
+        // outcome of one race-car-vs-traffic contact and commit it.
+        void HandleRaceCarTrafficCarPotentialContact(
+            CgsSceneManager::SceneManagerIO::PotentialContact lContact,
+            BrnPhysics::Vehicle::VehicleOutputRequestInterface* lpRequestOutputInterface,
+            BrnPhysics::Vehicle::VehicleOutputInterface* lpVehicleOutputInterface,
+            VehicleManagerOutputInterface* lpManagerOutputInterface,
+            BrnPhysics::Deformation::DeformationInputInterface* lpDeformationInterface,
+            f32 lfTimestep);
+
+        // @0x825C70A0 (305). The classifier: crash / check / slam / nothing, plus the slam
+        // magnitude the SLAMMED arm scales its event by.
+        void DecideOutcomeOfRaceCarTrafficContact(u16 luActiveRaceCarIndex, u16 lu16TrafficCarIndex,
+                                                  Vector3 lContactNormal, Vector3 lPointOnRaceCar,
+                                                  Vector3 lPointOnTraffic,
+                                                  VecFloat* lpTrafficSlamMagnitude,
+                                                  u32* lpxOutResponseFlags);
+
+        // @0x825C6FF8 (42). The impact-severity predicate, DWARF shape (:1194).
+        //
+        // ⚠️ THIS IS **NOT** THE 3-ARGUMENT `ShouldRaceCarCrashOnCarImpact` DECLARED ABOVE. That one
+        // is a FLAGged, signature-INFERRED declaration with no definition anywhere in the tree, kept
+        // only because BrnVehicleManager.cpp's classifier ladder (which this round does not own and
+        // is not mounted) calls it. The DWARF and the ARTIST prologue BOTH give five parameters --
+        // r4 = victim index, r5 = victim RaceCarPhysics, r6 = the OTHER body (a SimpleVehiclePhysics,
+        // which is what a traffic car is), v1 = the impact speed, v2 = a per-arm scale.
+        // DELETE-WHEN BrnVehicleManager.cpp's HandleRaceCarRaceCarContact family is next opened and
+        // its three call sites are re-decoded onto this spelling.
+        bool ShouldRaceCarCrashOnCarImpact(EActiveRaceCarIndex leVictimActiveRaceCarIndex,
+                                           const RaceCarPhysics* lpVictim,
+                                           const SimpleVehiclePhysics* lpOtherBody,
+                                           VecFloat lvfImpactSpeed, VecFloat lvfScale) const;
+
+        // @0x825C57B0 (565). Swept-box prediction: will these two cars actually meet inside the
+        // step? NAMED GATE this round -- see the .cpp.
+        bool PredictCarCarIntersection(const SimpleVehiclePhysics* lpBodyA,
+                                       const SimpleVehiclePhysics* lpBodyB,
+                                       f32 lfTimestep);
+
+        // NOT AN X360 SYMBOL. HandleRaceCarTrafficCarPotentialContact emits this test TWICE
+        // inline (0x82640510 / 0x826405B8, instruction-identical with the two cars swapped);
+        // outlined here per the de-optimisation rule. STATIC because it reads nothing off the
+        // manager -- only the body it is handed.
+        static bool IsFrontCornerClip(const SimpleVehiclePhysics& lrBody, Vector3 lContactPoint);
 
     private:
         // DecFIGS BrnVehicleManager.h:1454/:1459; both are X360-attested calls in

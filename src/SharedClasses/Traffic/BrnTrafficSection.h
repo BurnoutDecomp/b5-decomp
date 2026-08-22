@@ -142,6 +142,10 @@ namespace BrnTraffic
                   f32 lfStartParam, f32 lfDistanceForward,
                   const f32* lpafCumulativeLengths) const;
 
+        // First stop-line of this section strictly ahead of lfParam, as a HULL-WIDE index
+        // (muStopLineOffset + local), or KU_INVALID_STOPLINE. @ 0x82752A38 (DWARF :118).
+        u8    FindNextStopLineIndex(f32 lfParamAlong, const Hull* lpHull) const;
+
         // -- BrnTrafficSection.h siblings this batch depends on (bodied elsewhere) ----
         // Arc-length from the section start to (lfParam, luSegment). Declared here so
         // CalcSignedDistanceAlongSection can call it; bodied in its own slice.

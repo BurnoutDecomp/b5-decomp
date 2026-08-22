@@ -81,8 +81,12 @@ namespace
     // @0x82752CB0 already runs the worker inline on this host, so the split runs it here.
     // File scope, like the console's own gaTrafficJobs table -- no module member invented.
     // DELETE-WHEN BrnTrafficJob.h stops pulling eajobs/job_scheduler.h.
+    }  // anonymous namespace -- the two host tables need external linkage (SendPhysicalRequests
+       // in _wT2_01 drains gaHostNewPhysicalRequests).
     UpdateVehiclesJob       gaHostUpdateVehiclesJobs[KU_MAX_JOBS];
     PhysicalRequestInfoList gaHostNewPhysicalRequests[KU_MAX_JOBS];
+    namespace
+    {
 
     // Stands in for Construct's 4x TrafficJobStub::Construct @0x827407B8 (which only
     // Constructs the request list and clears mbRunningJob).
@@ -450,7 +454,7 @@ void TrafficEntityModule::UpdateVehicles(
             *lpDiag << "[T2-job] FIRST UpdateVehicles split jobs="
                     << static_cast<s32>(muNumUpdateVehiclesJobs)
                     << " paramsPerJob=" << static_cast<s32>(luParamsPerJob)
-                    << " dispatch=sync\n";
+                    << " dispatch=sync\n";
         }
     }
 }

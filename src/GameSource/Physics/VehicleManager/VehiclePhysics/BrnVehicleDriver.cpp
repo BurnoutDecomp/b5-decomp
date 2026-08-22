@@ -74,6 +74,39 @@ namespace Vehicle
         mbSnappedThisFrame  = false;                        // +0xD5
     }
 
+    // @0x825B8680  VehicleDriver::Prepare (98 instructions). Store-for-store the same body as
+    // Construct (the controls word + seven floats + seven flag bytes zeroed, both transforms the
+    // identity affine built from flt_82001C98 / flt_82001CC0, meDriverType = 4, +0xD4/+0xD5 = 0),
+    // returning true. Callers: VehicleManager::PrepareData @0x82633568 (x8 + the spare) and
+    // PhysicalTrafficManager::Prepare @0x8262CA48 (x20).
+    bool VehicleDriver::Prepare()
+    {
+        mControls.miVehicleID       = 0;
+        mControls.mfGas             = 0.0f;
+        mControls.mfBrake           = 0.0f;
+        mControls.mfHandBrake       = 0.0f;
+        mControls.mfSteering        = 0.0f;
+        mControls.mfForwardSteering = 0.0f;
+        mControls.mfSpin            = 0.0f;
+        mControls.mfRequestedGas    = 0.0f;
+
+        mControls.mbReset                    = false;
+        mControls.mbBoost                    = false;
+        mControls.mbIsInvulnerableToVehicles = false;
+        mControls.mbIsInvulnerableToWorld    = false;
+        mControls.mbForceDrift               = false;
+        mControls.mbBoostBounce              = false;
+        mControls.mbIsSteeringWheel          = false;
+
+        mCatchupTargetTransform.SetIdentity();
+        mSlerpTransform.SetIdentity();
+
+        meDriverType        = E_NUM_E_DRIVER_TYPE_EVENTS;
+        mi8NumOfInterpSteps = 0;
+        mbSnappedThisFrame  = false;
+        return true;
+    }
+
     // =============================================================================================
     // @0x825D7290  BrnPhysics::Vehicle::VehicleDriver::UpdateVehicle  (219 instructions)
     //

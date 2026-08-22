@@ -13,7 +13,8 @@
 //     BrnTraffic::GetLineLineIntersectionParamXZ @0x8291AC60 (BrnTrafficMathsUtils.h, not ours)
 //   UpdateVehicle's partial-update latch into Vehicle+4    @0x8291D9E4  needs a Vehicle
 //     accessor for muSpecies bit 7 (BrnTrafficVehicle.h, not ours)
-//   RequestNewPhysicalVehicle                              @0x8291CE48  GATED (no consumer)
+//   (RequestNewPhysicalVehicle @0x8291CE48 was gated on "no consumer" -- LIVE since wave T3
+//    r1; SendPhysicalRequests @0x8274C510 drains the lists it fills.)
 
 #include "GameSource/Jobs/Traffic/BrnUpdateVehiclesJob.h"
 
@@ -57,6 +58,16 @@ namespace
         return sbEnabled;
     }
 
+    // [T3-swerve] DIAG SLOTS. NOT IN THE X360 BINARY. DELETE-WHEN-STABLE.
+    // CalcSwerveAmount fills these on its way through so UpdateVehicle can print one line
+    // without changing the console signature. RACY BY DESIGN: muNumUpdateVehiclesJobs can be
+    // > 1, so a printed line may mix two vehicles' values. Diag only; never read by logic.
+    f32  gfDiagSignedDist  = 0.0f;
+    f32  gfDiagClosingSpeed = 0.0f;
+    f32  gfDiagRule0       = 0.0f;
+    f32  gfDiagRule1       = 0.0f;
+    bool gbDiagRulesRan    = false;
+
     CgsDev::Log::DebugPrint* TrafficDiagStream()
     {
         if (!TrafficDiagEnabled() || CgsDev::Log::gpDebugPrint == 0)
@@ -66,10 +77,11 @@ namespace
         return CgsDev::Log::gpDebugPrint;
     }
 
-    // RequestNewPhysicalVehicle @0x8291CE48 only appends to mpOutNewPhysicalRequests, and
-    // nothing in the tree reads TrafficJobStub::GetNewPhysicalRequests().
-    // DELETE-WHEN the physical-traffic wave lands that consumer.
-    const bool KB_T2_ALLOW_PHYSICAL_PROMOTION = false;
+    // OPENED wave T3 r1 (cluster C1). The consumer this waited for is
+    // TrafficEntityModule::SendPhysicalRequests @0x8274C510 (_wT3_01.cpp), live in
+    // PrePhysicsUpdate's RUNNING arm; it drains the same lists and clears them each frame.
+    // The knob itself is kept as the one-line kill switch for the whole promotion chain.
+    const bool KB_T2_ALLOW_PHYSICAL_PROMOTION = true;
 
     // ---- console rodata, dumped out of BURNOUT_X360_ARTIST.XEX.i64 -----------------------
     // Initialise's envelope corners. Every one is a plain .rdata float; the module-side twin
@@ -506,9 +518,10 @@ void UpdateVehiclesJob::UpdateVehicle()
     {
         static bool sbLogged = false;
         LogMissingLeg(sbLogged,
-            "UpdateVehicle's partial-update latch @0x8291D9E4 -- needs a Vehicle accessor for "
-            "muSpecies bit 0x80 (Vehicle+4), and BrnTrafficVehicle.h belongs to another cluster. "
-            "The in-function behaviour is unaffected; no consumer of the bit exists yet");
+            "UpdateVehicle's partial-update latch @0x8291D9E4 -- sets bit 0x80 of Vehicle+4 "
+            "(muSpecies), which is private and has no setter. PARKED because NOTHING IN THE "
+            "TREE READS THE BIT: adding the setter would land a write with no consumer. "
+            "DELETE-WHEN a reader of muSpecies bit 0x80 lands");
     }
 
     f32  lfSwerveAmount = 0.0f;
@@ -524,6 +537,32 @@ void UpdateVehiclesJob::UpdateVehicle()
                                               lRaceCarDirection, lfRaceCarSpeed,
                                               &lbIsExtreme, &lbIsNormalPhysical).x;
             UpdateSwerveState(lRaceCarPosition, &lfSwerveAmount, &lbIsExtreme);
+        }
+
+        // [T3-swerve] one-shot, the first frame a race car is actually found for this job.
+        // NOT IN THE X360 BINARY. DELETE-WHEN-STABLE.
+        if (lbFoundRaceCar)
+        {
+            static bool sbFirstSwerveReported = false;
+            if (!sbFirstSwerveReported)
+            {
+                if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())
+                {
+                    sbFirstSwerveReported = true;
+                    *lpDiag << "[T3-swerve] vehicle " << static_cast<s32>(muCurrentVehicle)
+                            << " rulesRan " << (gbDiagRulesRan ? 1 : 0)
+                            << " dist " << gfDiagSignedDist
+                            << " closing " << gfDiagClosingSpeed
+                            << " rule0 " << gfDiagRule0
+                            << " rule1 " << gfDiagRule1
+                            << " extreme " << (lbIsExtreme ? 1 : 0)
+                            << " normalPhysical " << (lbIsNormalPhysical ? 1 : 0)
+                            << " miBehaviour " << static_cast<s32>(lpParam->miBehaviour)
+                            << " partial " << (lbPartialUpdate ? 1 : 0)
+                            << " allowsSwerving "
+                            << (mpParams->mbGameModeAllowsSwerving ? 1 : 0) << "\n";
+                }
+            }
         }
 
         // 0x8291DAB0: either swerve flag makes CalcTargetPos treat the car as swerving.
@@ -749,17 +788,18 @@ void UpdateVehiclesJob::PlaceVehicleOnRoad()
     lpAxles->mBackAxle.SetUp(lpAxles->mFrontAxle.GetUp());
 }
 
-// @0x8291CE48 (:1668). Body fully reconstructed; GATED because nothing reads
-// TrafficJobStub::GetNewPhysicalRequests().
+// @0x8291CE48 (:1668). LIVE since wave T3 r1: TrafficEntityModule::SendPhysicalRequests
+// @0x8274C510 drains mpOutNewPhysicalRequests every PrePhysicsUpdate.
 void UpdateVehiclesJob::RequestNewPhysicalVehicle(u16 luVehicle, PhysicalReason leReason,
                                                   EntityId lTargetEntityId)
 {
     if (!KB_T2_ALLOW_PHYSICAL_PROMOTION)
     {
+        // Kill switch only (KB_T2_ALLOW_PHYSICAL_PROMOTION above). Flip it to false to take
+        // the whole world-side promotion chain out of the frame without unmounting anything.
         static bool sbLogged = false;
         LogMissingLeg(sbLogged,
-            "RequestNewPhysicalVehicle @0x8291CE48 -- body reconstructed below; no reader of "
-            "TrafficJobStub::GetNewPhysicalRequests() exists yet");
+            "RequestNewPhysicalVehicle @0x8291CE48 -- KB_T2_ALLOW_PHYSICAL_PROMOTION is off");
         return;
     }
 
@@ -983,6 +1023,13 @@ VecFloat UpdateVehiclesJob::CalcSwerveAmount(Vector3 lRaceCarPosition,
                          rw::math::vpu::Splat(lfSignedDist), lfClosingSpeed,
                          lfAbsLanePos, lfAngleDot);
 
+    // [T3-swerve] DIAG. NOT IN THE X360 BINARY. DELETE-WHEN-STABLE.
+    gfDiagSignedDist   = lfSignedDist;
+    gfDiagClosingSpeed = lfClosingSpeed.x;
+    gfDiagRule0        = laOutputs[0].x;
+    gfDiagRule1        = laOutputs[1].x;
+    gbDiagRulesRan     = true;
+
     bool lbIsExtreme = false;
     f32  lfSwerveAmount;
 
@@ -1024,8 +1071,9 @@ VecFloat UpdateVehiclesJob::CalcSwerveAmount(Vector3 lRaceCarPosition,
         lfSwerveAmount = laOutputs[1].x * maTuning[E_TUNE_LIMITS].z;
     }
 
-    // 0x8291D794: Param+0x1B == 2 is one of the six unattested miBehaviour enumerators; such a
-    // param always goes normal-physical at full swerve.
+    // 0x8291D794: Param+0x1B == 2 is KI_BEHAVIOUR_DRIVE_AROUND_OBSTRUCTION (attested wave T3
+    // r2 by UpdateParams_PrecalcBehaviourParams' switch case 0 @0x827181E8); such a param
+    // always goes normal-physical at full swerve.
     if (GetCurrentParam()->miBehaviour == 2)
     {
         *lpbOutIsExtreme = false;

@@ -30,6 +30,14 @@ namespace BrnPhysics
 namespace Vehicle
 {
 
+// byte_82F2A1A6 -- the "Allow traffic freezing" debug toggle
+// (PhysicalTrafficManagerDebugComponent::OnActivate @0x8261C678 registers it by that label).
+// A free .data byte, not a class member. ⭐ THE SHIPPED VALUE IS 1, read out of the ARTIST image
+// (headless idat, wave T3): freezing IS allowed by default, so the CoolDown-lane clear in
+// PhysicalTrafficVehicle::Update does NOT run in a default game. Its ONLY reader in the image is
+// that function.
+bool gbAllowTrafficFreezing = true;
+
 // ---------------------------------------------------------------------------------------
 // GetTrafficVehicle (non-const)   @ 0x825B4800   (the unnamed body shares this with
 // GetTrafficInterest_0 @ 0x825B4880; both return &mpaTrafficVehicles[idx], stride 0x40)
@@ -582,15 +590,16 @@ Vector3 PhysicalTrafficVehicle::GetArticulationPointWorldSpace() const
 // PhysicalTrafficVehicle wave-8 methods (their own ledger funcs, homed here alongside the
 // wave-7 set). Reconstructed from BURNOUT_X360_ARTIST.XEX.
 //
-// FLAG (opaque-TrafficPhysics contract): this TU models the full-physics body as the opaque
-// `struct TrafficPhysics` (manager header) and, per the wave-7 precedent, reinterpret_casts the
-// raw mpVehicleBody / GetFullTrafficPhysics() pointer to the concrete VehiclePhysics for the base
-// entries it can reach BY NAME. The real `class TrafficPhysics : VehiclePhysics` (TrafficPhysics.h)
-// CANNOT be included here -- its name collides with the opaque slice -- so the TrafficPhysics-derived
-// forwards (TrafficPhysics::PreparePhysical / TrafficPhysics::Update) are DELEGATED to the
-// TrafficPhysics TU, exactly as every other full-physics operation in this TU is. Each function
-// below reproduces the observable PhysicalTrafficVehicle member-state writes (the fields this class
-// OWNS) store-for-store; the delegated / un-homed collaborator work is flagged inline, never faked.
+// ⭐ 2026-08-22 (wave T3, C3): THE OPAQUE-TrafficPhysics CONTRACT IS RETIRED AND THE TWO INERT
+// DELEGATIONS BELOW ARE WIRED. The FLAG that stood here claimed "the real
+// `class TrafficPhysics : VehiclePhysics` CANNOT be included here -- its name collides with the
+// opaque slice". That has been false since the 2026-08-03 de-fork: BrnPhysicalTrafficManager.h:207
+// includes TrafficPhysics.h and :748 embeds `TrafficPhysics maFullTrafficPhysics[20]` as the real
+// class. GetFullTrafficPhysics() already returns TrafficPhysics*, so PreparePhysical and Update
+// now call TrafficPhysics::PreparePhysical / VehiclePhysics::UpdateFreezing + TrafficPhysics::Update
+// directly. The reinterpret_casts from the raw mpVehicleBody (SimpleVehiclePhysics*) to
+// VehiclePhysics* remain -- that base-to-derived narrowing is what the console's single body
+// pointer is, and the wave-7 sites already spell it that way.
 // =========================================================================================
 
 // PhysicalTrafficVehicle::PreparePhysical   @0x82641058
@@ -615,16 +624,13 @@ bool PhysicalTrafficVehicle::PreparePhysical(const CreatePhysicalTrafficEvent* l
         CgsGeometric::AxisAlignedBox lAABB;
         lpModelData->GetBoundingBox(lAABB);
 
-        // FLAG (delegated full-physics prepare): the console then calls
-        //   TrafficPhysics::PreparePhysical(GetFullTraffic(), event, attribs, lAABB, model,
-        //                                   wheelPositions, wheelRadii)
-        // to build the full body. That entry lives on the real TrafficPhysics class, which this
-        // opaque-contract TU cannot include (see the group note above); it is owned by the
-        // TrafficPhysics TU (TrafficPhysics.cpp) and is NOT fabricated here.
-        (void)lAABB;
-        (void)lpAttribs;
-        (void)lpWheelPositions;
-        (void)lpafWheelRadii;
+        // ⭐ 2026-08-22 (wave T3, C3) WIRED. X360 0x826410F0..0x82641104:
+        //   bl PhysicalTrafficVehicle::GetFullTraffic ; bl TrafficPhysics::PreparePhysical
+        // with (event, attribs, &lAABB, model, wheelPositions, wheelRadii) in r4..r9. The body
+        // lives in TrafficPhysics.cpp @0x82639380 -- MOUNT THAT TU (build_game_exe.bat:1510-1515
+        // still carries a stale blocker rem). The console drops the bool return.
+        GetFullTrafficPhysics()->PreparePhysical(lpEvent, lpAttribs, lAABB, lpModelData,
+                                                 lpWheelPositions, lpafWheelRadii);
     }
 
     // ---- this vehicle's own id/state fields (unconditional, in X360 store order) ----
@@ -710,21 +716,33 @@ void PhysicalTrafficVehicle::Update(f32 lfSimTimerTimeStep, f32 lfGameTimerTimeS
 
     if (mu8PhysicalType == E_PHYSICAL_TRAFFIC_TYPE_FULL)
     {
-        // FLAG (delegated full-physics tick): the console fetches GetFullTraffic() and runs, in order,
-        //   VehiclePhysics::UpdateFreezing(body, controls, dt)   -- BLOCKED in the VehiclePhysics TU,
-        //   a conditional freeze-state vector insert at TrafficPhysics +0x1060 guarded by the global
-        //     freeze-disable flag (byte_82F2A1A6),
-        //   and, when the body is not already settled (+0x70 == 0),
-        //   TrafficPhysics::Update(body, camera, controls, ...).
-        // All of that lands inside the opaque TrafficPhysics/VehiclePhysics slice and the BLOCKED
-        // UpdateFreezing, so it is delegated to those TUs (this opaque-contract TU cannot include the
-        // real TrafficPhysics class). Not fabricated here.
-        (void)lpCameraMatrix;
-        (void)lpControls;
-        (void)lbImpactTime;
-        (void)lbDoForceAdditiveAftertouch;
-        (void)lbUseSixaxis;
-        (void)lfGameTimerTimeStep;
+        // ⭐ 2026-08-22 (wave T3, C3) WIRED. X360 0x82641230..0x8264129C, in order:
+        //   bl GetFullTraffic
+        //   `lvlx v0,[stack sim dt] ; vspltw v1,v0,0 ; mr r4,controls` -> UpdateFreezing(controls, splat(dt))
+        //   `lbz byte_82F2A1A6 ; bne` -> when traffic freezing is NOT allowed, zero lane .y of the
+        //     Vector4 at TrafficPhysics +0x1060 (`vspltisw v0,0 ; vrlimi128 v13,v0,4,0`; mask 4 ==
+        //     lane 1). That lane is mvTimeStandingStill_CoolDown_...'s CoolDown, i.e. the
+        //     time-still-and-not-spinning accumulator UpdateFreezing just advanced -- clearing it
+        //     every frame is what stops a traffic car ever latching frozen.
+        //   `lbz r11,0x70(full) ; bne` -> skip the tick when the body is already frozen
+        //   bl TrafficPhysics::Update(sim, game, camera, controls, impact, forceAdditive, sixaxis)
+        TrafficPhysics* const lpFullTraffic = GetFullTrafficPhysics();
+
+        lpFullTraffic->UpdateFreezing(lpControls,
+                                      VecFloat{ lfSimTimerTimeStep, lfSimTimerTimeStep,
+                                                lfSimTimerTimeStep, lfSimTimerTimeStep });
+
+        if (!gbAllowTrafficFreezing)
+        {
+            lpFullTraffic->mvTimeStandingStill_CoolDown_TimeWithoutTraction_TimeWithTraction.y = 0.0f;
+        }
+
+        if (!lpFullTraffic->IsFrozen())
+        {
+            lpFullTraffic->Update(lfSimTimerTimeStep, lfGameTimerTimeStep, lpCameraMatrix,
+                                  lpControls, lbImpactTime, lbDoForceAdditiveAftertouch,
+                                  lbUseSixaxis);
+        }
     }
 
     // The one member write this vehicle owns each frame: accumulate the check-notify timer (+0x18).
@@ -770,22 +788,112 @@ void PhysicalTrafficVehicle::SetArticulated(const CreatePhysicalTrafficEvent& lr
 
 // =================================================================================================
 // PhysicalTrafficManager::ValidateTrafficContact  @0x825CACB8  (PS3 DecFIGS 0x6E5DF8)
+// ⭐⭐ BODIED 2026-08-22 (wave T3, C3) -- the TRAP that stood here is gone. It is NOT dead code any
+// more: PhysicsModule::BridgeContactsToSimulation is real and mounted, and its queue-[9] arm calls
+// this for every traffic-vs-world potential contact (BrnPhysicsModuleBridgeFunctions.cpp:844). The
+// first physical traffic car would have fired the trap.
 //
-// ⚠⚠ TRAP STUB (closure enforcement, 2026-08-06 big-five #2 wave) -- the REAL body (169 X360 asm
-// lines, 6 callees: validate one traffic-vs-world potential contact against the vehicle-input
-// triangle cache) is NOT reconstructed yet. Dead code today: the only caller chain is
-// VehicleManager::ValidateTrafficContact <- PhysicsModule::BridgeContactsToSimulation <-
-// Update @0x825B0640, still a link stub, so /OPT:REF strips this. RECONSTRUCT-NEXT.
+// WHAT IT IS: a REJECTION filter for road contacts that a wheel is already handling. A traffic car
+// rests on traction lines, not contacts; letting the road's own polygon contacts through as well
+// would fight the suspension. So an upright car sitting on the surface its down-ray found has its
+// ground contacts dropped, and everything else (kerbs, walls, a car on its roof, a car with a wheel
+// torn off) is kept.
+//
+// Read off the asm, in order:
+//   0x825CAD28  assert idA's owner is TRAFFIC_VEHICLE (.cpp:3594)
+//   0x825CAD98  GetTrafficPhysicsEntityIDFromGlobalEntityID_Safe INLINED (its own h:944 bound
+//               assert + the CgsEntityId.h:116 index assert): global index -> the physical slot
+//               through mu8GlobalToPhysicalEntityIndexMap. KU8_INVALID_MAP -> reject.
+//   0x825CAE28  `srwi r11, idBHigh, 24 ; bne -> return 1` -- when B is NOT the world, accept
+//               unconditionally.
+//   0x825CAE34  the lazily-seeded splat of flt_8200473C == 0.4f (the console's function-local
+//               static, guarded by bit 0 of dword_82FBA090). Two roles: the wheel-plane threshold
+//               and the ground-plane distance below.
+//   0x825CAE98  lbValid = !mpVehicleBody->IsContactBelowWheelPlane(mPointOnB, 0.4f)
+//   0x825CAEAC  `lbz r11, 0x715(body)` == mbAnyWheelsDetatched -> accept unconditionally
+//   0x825CAEC8  dot3(mTransform.yAxis, mAboveGroundTestResult.mIntersectionNormal) > 0.8f (upright on
+//               the surface its down-ray hit) AND
+//   0x825CAF04  0.4f > dot3(mPointOnB - mAboveGroundTestResult.mIntersectionPosition, same normal)
+//               (the contact point is within 0.4 m of that ground plane)  ->  reject.
+//
+// ⚠️ THE TWO vcmpgtfp. TESTS READ THE "ALL LANES" CR BIT (`mfocrf r11,2 ; extrwi r11,r11,1,24`),
+// but both operands are vmsum3fp128 broadcasts of one dot product against a splat, so every lane
+// carries the same comparison -- a scalar `>` is the same predicate, not a narrowing.
+// ⚠️ THE PARAMETER lfTimeStep IS UNREAD (f1 is never touched in the 170 instructions). Declared
+// because the caller passes it and the DWARF types it.
 // =================================================================================================
 bool PhysicalTrafficManager::ValidateTrafficContact(
-    CgsSceneManager::SceneManagerIO::PotentialContact* /*lpContact*/,
-    const CgsSceneManager::SceneManagerIO::TriangleCacheInterface* /*lpTriCacheInterface*/,
+    CgsSceneManager::SceneManagerIO::PotentialContact* lpContact,
+    const CgsSceneManager::SceneManagerIO::TriangleCacheInterface* lpTriCacheInterface,
     f32 /*lfTimeStep*/)
 {
-    CGS_ASSERT(false,
-               "TRAP: PhysicalTrafficManager::ValidateTrafficContact @0x825CACB8 "
-               "not reconstructed (big-five #2 closure stub)\n");
-    return false;
+    CGS_ASSERT(lpContact != 0, "lpContact != NULL");                             // .cpp:3590
+    CGS_ASSERT(lpTriCacheInterface != 0, "lpTriCacheInterface != NULL");         // .cpp:3591
+    CGS_ASSERT(lpContact->muVolumeInstanceIdA.GetEntityIDOwner() == KU_ENTITYTYPE_TRAFFIC_VEHICLE,
+               "lpContact->muVolumeInstanceIdA.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE"); // .cpp:3594
+
+    // ---- inlined GetTrafficPhysicsEntityIDFromGlobalEntityID_Safe ----
+    const u32 luGlobalIndex = lpContact->muVolumeInstanceIdA.GetEntityIDEntityIndex();
+    CGS_ASSERT(luGlobalIndex < sizeof(mu8GlobalToPhysicalEntityIndexMap),
+               "lGlobalEntityId.GetEntityIndex() < sizeof(mu8GlobalToPhysicalEntityIndexMap)");   // h:944
+
+    const u8 lu8PhysicalIndex = mu8GlobalToPhysicalEntityIndexMap[luGlobalIndex];
+    if (lu8PhysicalIndex == KU8_INVALID_MAP)
+    {
+        return false;
+    }
+    CGS_ASSERT(lu8PhysicalIndex < (1u << KU_NUM_BITS_FOR_ENTITY_NUM),
+               "luEntityIndex < (1U << KU_NUM_BITS_FOR_ENTITY_NUM)");
+
+    const PhysicalTrafficVehicle* const lpTrafficVehicle =
+        GetTrafficVehicle(static_cast<s32>(lu8PhysicalIndex));
+
+    // B is not the world -> nothing to filter against; accept.
+    if (lpContact->muVolumeInstanceIdB.GetEntityIDOwner() != 0u)
+    {
+        return true;
+    }
+
+    const SimpleVehiclePhysics* const lpBody = lpTrafficVehicle->mpVehicleBody;
+
+    // flt_8200473C, the console's lazily-splatted function-local static.
+    const f32 KF_GROUND_CONTACT_THRESHOLD = 0.40000001f;
+    const f32 KF_UPRIGHT_ON_GROUND_DOT    = 0.80000001f;
+
+    bool lbValid = !lpBody->IsContactBelowWheelPlane(
+                        lpContact->mPointOnB,
+                        VecFloat{ KF_GROUND_CONTACT_THRESHOLD, KF_GROUND_CONTACT_THRESHOLD,
+                                  KF_GROUND_CONTACT_THRESHOLD, KF_GROUND_CONTACT_THRESHOLD });
+
+    // GATE SimpleVehiclePhysics::AreAnyWheelsDetatched (DWARF BrnSimpleVehiclePhysics.h:286) --
+    // the console's `lbz r11,0x715(body)` early-accept. mbAnyWheelsDetatched is PROTECTED and the
+    // DWARF accessor is not declared in this tree; that header is not this cluster's to edit.
+    // DELETE-WHEN the accessor lands (unreachable today: nothing detaches a traffic wheel yet).
+
+    const AboveGroundTestResult* const lpGround = lpBody->GetAboveGroundTestResult();  // body +0x570
+    const Matrix44Affine lBodyTransform = lpBody->GetTransform();
+    const Vector3 lvUp           = lBodyTransform.yAxis;                        // body +0x20
+    const Vector3 lvGroundNormal = lpGround->mIntersectionNormal;               // body +0x580
+
+    const f32 lfUprightness = lvUp.x * lvGroundNormal.x
+                            + lvUp.y * lvGroundNormal.y
+                            + lvUp.z * lvGroundNormal.z;
+    if (lfUprightness > KF_UPRIGHT_ON_GROUND_DOT)
+    {
+        const Vector3 lvToContact = { lpContact->mPointOnB.x - lpGround->mIntersectionPosition.x,
+                                      lpContact->mPointOnB.y - lpGround->mIntersectionPosition.y,
+                                      lpContact->mPointOnB.z - lpGround->mIntersectionPosition.z,
+                                      lpContact->mPointOnB.w - lpGround->mIntersectionPosition.w };
+        const f32 lfHeightAboveGround = lvToContact.x * lvGroundNormal.x
+                                      + lvToContact.y * lvGroundNormal.y
+                                      + lvToContact.z * lvGroundNormal.z;
+        if (KF_GROUND_CONTACT_THRESHOLD > lfHeightAboveGround)
+        {
+            lbValid = false;
+        }
+    }
+
+    return lbValid;
 }
 
 // =================================================================================================

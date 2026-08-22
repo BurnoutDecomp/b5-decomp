@@ -275,23 +275,12 @@ namespace Vehicle
     // ValidateRaceCarWorldContact @0x825C6088 (988) is REAL in
     // BrnVehicleManager_ValidateRaceCarWorldContact.cpp.
 
-    void VehicleManager::DoTrafficWorldContactOrdering(
-        BrnPhysics::PhysicsModuleIO::PotentialContactInterface*)
-    {
-        BRN_CONDUCTOR_GATE("VehicleManager::DoTrafficWorldContactOrdering @0x825C8F18 (143)");
-    }
+    // GATE DELETED 2026-08-22 (traffic wave T3): VehicleManager::DoTrafficWorldContactOrdering
+    // @0x825C8F18 is REAL in BrnVehicleManagerContactGeneration.cpp.
 
-    // ⚠ NOT dead-gated on the console -- unconditional in the non-catchup path. The L1/L2
-    // web is banked in BrnVehicleManager.h's census banner.
-    void VehicleManager::DoCrashPrediction(CgsModule::IOBufferStack*, CgsModule::IOBufferStack*,
-                                           f32, const VehicleInputInterface*, VehicleOutputInterface*,
-                                           BrnPhysics::Vehicle::VehicleOutputRequestInterface*,
-                                           VehicleManagerOutputInterface*,
-                                           BrnPhysics::Deformation::DeformationInputInterface*,
-                                           BrnPhysics::PhysicsModuleIO::PotentialContactInterface*)
-    {
-        BRN_CONDUCTOR_GATE("VehicleManager::DoCrashPrediction @0x82645FE0 (814 + the L1/L2 web)");
-    }
+    // GATE DELETED 2026-08-22 (traffic wave T3 r2): VehicleManager::DoCrashPrediction
+    // @0x82645FE0 is REAL in BrnVehicleManager_DoCrashPrediction.cpp (the L1/L2 crash-prediction
+    // web that routes race-car-vs-traffic potential contacts to HandleRaceCarTrafficCarPotentialContact).
 
     // ⭐⭐ 2026-08-11 (prepare-chain wave): the VehicleManager::UpdateDrivers @0x82642C68 gate that
     // stood here is DELETED. The real 120-instruction body is in
@@ -367,13 +356,8 @@ namespace Vehicle
     // maRaceCarStates[] are written every frame and the world-side readback stops being gated off.
     // If a gate for it ever reappears here the link will say so (LNK2005).
     //
-    // ⛔ ...but the TRAFFIC half of the same publish is NOT landed, so it keeps a gate of its own.
-    // The console's own call sequence is preserved: WriteOutVehicleStats tail-calls this.
-    void PhysicalTrafficManager::WriteOutVehicleStats(VehicleOutputInterface*)
-    {
-        BRN_CONDUCTOR_GATE("PhysicalTrafficManager::WriteOutVehicleStats @0x825F0308 (481) -- "
-                           "the TRAFFIC half of the per-frame publish; race-car half is LANDED");
-    }
+    // GATE DELETED 2026-08-22 (traffic wave T3): the TRAFFIC half, PhysicalTrafficManager::
+    // WriteOutVehicleStats @0x825F0308, is REAL in BrnPhysicalTrafficManager_WriteOutVehicleStats.cpp.
 
     // ⭐⭐ [teleport] GATE DELETED 2026-08-21 (gateui r9, the reset-drain wave):
     // VehicleManager::ProcessResetEvents @0x82617820 is REAL, in
@@ -399,26 +383,10 @@ namespace Vehicle
         BRN_CONDUCTOR_GATE("VehicleManager::UpdateFatalCrashFlags @0x825EA970 (173)");
     }
 
-    // ---- 2026-08-11 (lifetime wave): the TRAFFIC traction-line pair. Same pairing rule as the
-    // player-stuck four above -- Add and Read are one leg and must be un-gated together.
-    s32 PhysicalTrafficManager::AddTrafficTractionLineTests(
-            CgsSceneManager::CgsCollision::CollisionGenerator*,
-            CgsMemory::SimpleDataStreamProducer*,
-            const CgsSceneManager::SceneManagerIO::TriangleCacheInterface*)
-    {
-        BRN_CONDUCTOR_GATE("PhysicalTrafficManager::AddTrafficTractionLineTests @0x8261D580 (418) "
-                           "-- PAIRED with ReadTrafficTractionLineTestResults @0x8262D2B8; "
-                           "reconstruct and un-gate BOTH together");
-        return 0;
-    }
-
-    void PhysicalTrafficManager::ReadTrafficTractionLineTestResults(
-            CgsMemory::SimpleDataStreamResultIterator*)
-    {
-        BRN_CONDUCTOR_GATE("PhysicalTrafficManager::ReadTrafficTractionLineTestResults @0x8262D2B8 "
-                           "(291) -- PAIRED with AddTrafficTractionLineTests @0x8261D580; leaving "
-                           "it inert is CORRECT while the Add posts nothing");
-    }
+    // GATES DELETED 2026-08-22 (traffic wave T3): the TRAFFIC traction-line pair,
+    // PhysicalTrafficManager::AddTrafficTractionLineTests @0x8261D580 and
+    // ReadTrafficTractionLineTestResults @0x8262D2B8, are REAL together in
+    // BrnPhysicalTrafficManager_TractionLineTests.cpp.
 
     // UpdateTrafficPhysicsPostSimulation @0x826371D0 is real now. Its articulated-joint tail is
     // orthogonal to the vehicle post-simulation dispatch and remains loudly deferred here.

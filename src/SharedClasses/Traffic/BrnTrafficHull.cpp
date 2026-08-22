@@ -113,7 +113,7 @@ namespace BrnTraffic
         return lrHull.GetStaticVehicle(luIndex);
     }
 
-    const void* Hull_GetStopLine(const Hull& lrHull, u32 luIndex)
+    const StopLine* Hull_GetStopLine(const Hull& lrHull, u32 luIndex)
     {
         return lrHull.GetStopLine(luIndex);
     }

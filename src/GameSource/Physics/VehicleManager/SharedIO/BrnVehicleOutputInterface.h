@@ -38,6 +38,10 @@ namespace Vehicle
     // are included by BrnVehicleOutputInterface_UpdateRaceCarState.cpp, which owns the bodies.
     class  RaceCarPhysics;   // RaceCarPhysics.h  (class)
     struct VehicleDriver;    // BrnVehicleDriver.h (struct)
+    // AddTrafficState @0x825EC390 takes this by pointer and never dereferences it in the header.
+    // MANGLING: the real home spells it `struct` (BrnPhysicalTrafficManager.h:369) -- keep the
+    // class-key or the body will not link.
+    struct PhysicalTrafficVehicle;  // BrnPhysicalTrafficManager.h (struct)
 
     // The per-frame aggressive-driving summary published to the GUI/scoring (5 bools).
     // DWARF BrnVehicleOutputInterface.h:283.
@@ -80,10 +84,17 @@ namespace Vehicle
         // used-cars bitset and the aggressive-driving flags.
         void Construct();
 
-        // @0x825EC390 (declaration-only in this ledger; see BrnPhysicsVehicle_FlaggedUnhomed.cpp /
-        // the .cpp FLAG): a deep VMX128 per-wheel projection routine reaching SimpleVehiclePhysics
-        // internals not homed in a committed header, so it is intentionally NOT bodied here.
-        void AddTrafficState(EntityId lEntityID, const void* lpPhysicalTrafficVehicle);
+        // @0x825EC390 (285) -- BODIED wave T3 (physical traffic) in this group's .cpp. Retyped
+        // from the old `const void*` to the DWARF's second parameter (BrnVehicleOutputInterface.h
+        // :352, `void AddTrafficState(EntityId, const PhysicalTrafficVehicle*)`); the caller
+        // PhysicalTrafficManager::WriteOutVehicleStats @0x825F0308 passes &mpaTrafficVehicles[i].
+        void AddTrafficState(EntityId lEntityID, const PhysicalTrafficVehicle* lpPhysicalTrafficVehicle);
+
+        // DWARF :354. The read half of the pair above. No out-of-line X360 symbol: the console
+        // inlines it as a bare `<vehicleOut> + 0x2620` at its one consumer,
+        // TrafficEntityModule::HandleExternalResponses @0x82732C68 (0x2620 == 9760 ==
+        // mTrafficStateQueue's seat below), then walks it with GetLength()/GetEvent.
+        const PhysicalTrafficStateQueue* GetTrafficStateQueue() const { return &mTrafficStateQueue; }
 
         RaceCarState*       GetRaceCarState(s32 liRaceCarIndex);         // @0x822B4860 (non-const)
         const RaceCarState* GetRaceCarState(s32 liRaceCarIndex) const;  // @0x825C08D0 (const)
@@ -264,6 +275,14 @@ namespace Vehicle
         // @0x825C0658: queue a "physical-traffic vehicle crashed" event and return its slot index.
         s32 AddCrashedTrafficEvent(VolumeInstanceId lVolumeInstanceID, EntityId lCrasherEntityID);
 
+        // ⭐ ADDED 2026-08-22 (wave T3 r1, C2). @0x825C0758 (25 insns) -- a REAL out-of-line body,
+        // not an inline: it was simply missing from .ida-exports and was dumped with headless idat
+        // for this wave. DWARF BrnVehicleOutputInterface.h:217 `int32_t AddTrafficRemovedEvent(
+        // EntityId, ETrafficType)`. Three asserts (this header's own :481/:482/:484), then append
+        // to mRemovedTrafficEventQueue (console +0x7A0) and return miLength - 1.
+        // Callers: PhysicalTrafficManager::RecycleTrafficVehicle x2, ::CheckForTrafficHittingWater.
+        s32 AddTrafficRemovedEvent(EntityId lRemovedVehicleEntityId, ETrafficType leTrafficType);
+
         // @0x827A9B20: hand-written copy assignment. Clears each event queue member (miLength = 0,
         // the same store-8-zero the generic BaseEventQueue<T>::Clear() does) then Append()s the
         // matching member from lOther onto it -- i.e. "become a copy of lOther's live events" rather
@@ -327,6 +346,39 @@ namespace Vehicle
         {
             mRaceCarResetEventQueue.AddEvent(lrEvent);
             return mRaceCarResetEventQueue.GetLength() - 1;
+        }
+
+        // ⭐ ADDED wave T3 (physical traffic): the three DWARF-declared read accessors
+        // (BrnVehicleOutputInterface.h :223 / :226 / :229) this interface's only world-side
+        // consumer needs. All three are HEADER INLINES on the console -- no out-of-line symbol
+        // exists -- and TrafficEntityModule::HandleExternalResponses @0x82732C68 folds each as a
+        // bare displacement off the interface it just fetched: +0 (mCrashedTrafficEventQueue),
+        // +336 == 0x150 (mSlammedTrafficEventQueue), +928 == 0x3A0 (mRaceCarCrashEventQueue).
+        // Those three displacements are exactly the member seats below. No layout, member or
+        // existing signature is touched.
+        const TrafficCrashedEventQueue* GetCrashedTrafficEventQueue() const { return &mCrashedTrafficEventQueue; }
+        const TrafficSlammedEventQueue* GetSlammedTrafficEventQueue() const { return &mSlammedTrafficEventQueue; }
+        const RaceCarCrashEventQueue*   GetRaceCarCrashEventQueue()   const { return &mRaceCarCrashEventQueue; }
+
+        // ⭐ ADDED 2026-08-22 (wave T3 r2, owner B). DWARF-attested
+        // (BrnVehicleOutputInterface.h:205 `void AddSlammedTrafficEvent(EntityId, EntityId,
+        // eCrashTrafficType, float32_t, float32_t)`) and X360-attested at its two call sites:
+        // PhysicalTrafficManager::SetTrafficVehicleChecked @0x8262D9F8 and ::SetTrafficVehicleSlammed
+        // @0x825F00C0 both fold it to a bare `addi r3, <managerOut>, 0x150` handed to
+        // BaseEventQueue<TrafficSlammedEvent>::AddEvent over a 5-word stack record. 0x150 == 336 ==
+        // mSlammedTrafficEventQueue's seat below, so this reaches the same member by name. The five
+        // parameters ARE the five TrafficSlammedEvent fields, in order.
+        void AddSlammedTrafficEvent(EntityId lTrafficId, EntityId lEntityThatSlammedIt,
+                                    eCrashTrafficType leCrashTrafficType,
+                                    f32 lfSteeringDirection, f32 lfDriveDirection)
+        {
+            TrafficSlammedEvent lEvent;
+            lEvent.mTrafficId           = lTrafficId;
+            lEvent.mEntityThatSlammedIt = lEntityThatSlammedIt;
+            lEvent.meCrashTrafficType   = leCrashTrafficType;
+            lEvent.mfSteeringDirection  = lfSteeringDirection;
+            lEvent.mfDriveDirection     = lfDriveDirection;
+            mSlammedTrafficEventQueue.AddEvent(lEvent);
         }
 
     private:

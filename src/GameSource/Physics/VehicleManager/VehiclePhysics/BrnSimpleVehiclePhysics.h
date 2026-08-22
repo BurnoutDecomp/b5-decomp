@@ -427,6 +427,14 @@ namespace Vehicle
                 mfSpeedMPH.w * KF_MPH_TO_MPS
             };
         }
+        // ⭐ ADDED 2026-08-22 (wave T3 r2, owner B). ADDITIVE GROW, read-only, no layout change.
+        // VehicleManager::HandleRaceCarTrafficCarPotentialContact @0x82640518/@0x826405C0 and
+        // ::PredictCarCarIntersection @0x825C5A54 both reach mDeformableAABB with BARE loads off
+        // a body they were handed (`addi r9, <body>, 0x6D0` then `lvx128` at +0 / +0x10), from a
+        // class that is not a friend. This is the smallest honest seam that lets those bodies read
+        // it BY NAME instead of by offset; it invents no API surface beyond the read.
+        const CgsGeometric::AxisAlignedBox& GetDeformableAABB() const { return mDeformableAABB; }
+
         bool     IsFatallyCrashing() const { return mbStartedFatallyCrashing; }      // @0x711 (`lbz r11,0x711(r30)`)
         bool     HasStartedDeforming() const { return mbStartedDeforming; }          // @0x712 (`lbz r11,0x712(r30)`)
         const AboveGroundTestResult* GetAboveGroundTestResult() const                // @0x570 (`addi r11,r31,0x570`)
@@ -437,6 +445,16 @@ namespace Vehicle
         {                                                                            // (`r29 = (wheel+0x53)<<4 ; lvx128 v0,r29,r30`)
             return maLocalTractionPoints[lu8Wheel];
         }
+
+        // ⭐ ADDED wave T3 (physical traffic). DWARF BrnSimpleVehiclePhysics.h:214
+        // (`const Wheel* GetWheel(EVehicleDrivenWheel) const`) -- the BASE's own wheel accessor,
+        // which the tree previously carried only on the derived VehiclePhysics (:244, by
+        // reference). X360-attested by VehicleOutputInterface::AddTrafficState @0x825EC390, whose
+        // per-wheel loop walks `<physics>+0x130 + 224*i` -- maWheels below -- off a
+        // SimpleVehiclePhysics*, the static type PhysicalTrafficVehicle::mpVehicleBody has.
+        // Declaration + inline body only: no member, layout or existing signature is touched, and
+        // VehiclePhysics::GetWheel continues to hide this one for every existing caller.
+        const Wheel* GetWheel(EVehicleDrivenWheel leWheel) const { return &maWheels[leWheel]; }
     };
 
     // ⭐ The console sizes this block closes on, exported so the layout gate and the VehiclePhysics
