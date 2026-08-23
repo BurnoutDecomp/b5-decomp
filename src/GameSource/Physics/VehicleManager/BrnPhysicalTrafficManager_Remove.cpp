@@ -1,37 +1,37 @@
 // =================================================================================================
 // GameSource/Physics/VehicleManager/BrnPhysicalTrafficManager_Remove.cpp
 //
-// Wave T3 round 1, cluster C2 -- the PHYSICS-SIDE REMOVE / RECYCLE drain and the frame's
-// create/remove PUBLISH. Without these the twenty traffic slots never recycle and the manager's
-// three per-frame bitsets never clear, so the first promotion arms three asserts at the top of
-// ProcessTrafficMaintenanceEvents on the NEXT frame (:3701 / :3702 / :3703).
+// The PHYSICS-SIDE REMOVE / RECYCLE drain and the frame's create/remove PUBLISH. Without these
+// the twenty traffic slots never recycle and the manager's three per-frame bitsets never clear,
+// so the first promotion arms three asserts at the top of ProcessTrafficMaintenanceEvents on the
+// NEXT frame (:3701 / :3702 / :3703).
 //
 //   ProcessRemoveEvents            @0x8262D0C0 (125)
 //   RemoveTrafficVehicle           @0x8261CC98 (570)
 //   RecycleTrafficVehicle          @0x8262DA10 (112)
-//   DeallocateInternalBuffers      @0x82615A38 ( 53)  export HOLE, closed by the wave-T3 scout
+//   DeallocateInternalBuffers      @0x82615A38 ( 53)  .ida-exports HOLE, dumped headless
 //   ComputeTrafficVehicleInertia   @0x825CAF60 (201)
 //   SendCreateRemoveTrafficEvents  @0x825F2088 (990)
-//   PhysicallyUncrashTrafficCar    @0x825F00D8 (140)  -- named gate (crash side parked)
+//   PhysicallyUncrashTrafficCar    @0x825F00D8 (140)  -- named gate (body not reconstructed)
 //
 // -------------------------------------------------------------------------------------------------
-// ⭐ TWO ENTITY-ID SPACES CROSS HERE, AND THE CONSOLE SPLICES A DIFFERENT OWNER BYTE INTO EACH.
+// TWO ENTITY-ID SPACES CROSS HERE, AND THE CONSOLE SPLICES A DIFFERENT OWNER BYTE INTO EACH.
 //   * The DEFORMATION model's handling-body id keeps the TRAFFIC owner (2):
 //       `extldi r30, r11, 64,32`   == (u64)entityWord << 32, posted verbatim (0x825F229C).
 //   * The rw::physics SIMULATION's rigid-body id gets owner 0x0C spliced in:
 //       `clrlwi r11,r11,8 ; oris r11,r11,0xC00 ; sldi 32 ; or lo`   (0x825F2228 / 0x825F2C9C).
 // Both are built from the SAME entity word in the same three instructions apart. Do not unify them.
 //
-// ⚠️ THE OUTPUT OF SendCreateRemoveTrafficEvents IS INERT THIS ROUND, ON PURPOSE. Its two rigid-body
-// queues (VehicleOutputRequestInterface::mRequiredRigidBodiesQueue / mRemoveRigidBodyQueue) drain
-// only through WorldModule::BridgeVehicleManagerToSimulation_PostScene, which is a deliberately
-// inert link stub (WorldLinkStubs.cpp:2694). Round 1 does NOT open that bridge: Burnout integrates
-// its own vehicles (ExternalPhysicsBody + ReadUpdatedBodies + IntegrateTransform), so a promoted
-// traffic car reacts through the VehicleManager-generated contacts, not through rw::physics. The
-// posts still have to happen -- they are what CLEARS mAddedTrafficVehicles / mRemovedTrafficVehicles
-// / mMadeSimpleTrafficVehicles at the tail of this function.
+// THE OUTPUT OF SendCreateRemoveTrafficEvents IS INERT ON PURPOSE. Its two rigid-body queues
+// (VehicleOutputRequestInterface::mRequiredRigidBodiesQueue / mRemoveRigidBodyQueue) drain only
+// through WorldModule::BridgeVehicleManagerToSimulation_PostScene, a deliberately inert link stub
+// (WorldLinkStubs.cpp:2694): Burnout integrates its own vehicles (ExternalPhysicsBody +
+// ReadUpdatedBodies + IntegrateTransform), so a promoted traffic car reacts through the
+// VehicleManager-generated contacts, not through rw::physics. The posts still have to happen --
+// they are what CLEARS mAddedTrafficVehicles / mRemovedTrafficVehicles /
+// mMadeSimpleTrafficVehicles at the tail of this function.
 //
-// ⚠️ NO FEB-2007 SOURCE. ARTIST pseudocode + asm, DecFIGS DWARF for declaration shape.
+// No Feb-2007 source. ARTIST pseudocode + asm, DecFIGS DWARF for declaration shape.
 // =================================================================================================
 
 #include "GameSource/Physics/VehicleManager/BrnPhysicalTrafficManager.h"
@@ -45,8 +45,6 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                           // the named gates
 #include "rw/physics/inertia.h"                                                      // rw::physics::Inertia
 
-#include <cstdlib>                                                                   // getenv ([T4-*] diagnostics only)
-
 namespace
 {
     inline void TrafficRemoveLogOnce(bool& lrbLogged, const char* lpcMessage)
@@ -57,18 +55,6 @@ namespace
             if (CgsDev::Message::gxMessageFilterFlags & 1)
                 *CgsDev::Log::gpDebugPrint << lpcMessage;
         }
-    }
-
-    // [DIAG] NOT IN THE X360 BINARY. Opt-in on BRN_TRAFFIC_DIAG, same shape as the
-    // TrafficDiagStream helper in the sibling _Create.cpp. DELETE-WHEN-STABLE.
-    inline CgsDev::Log::DebugPrint* TrafficRemoveDiagStream()
-    {
-        static const bool sbOn = (std::getenv("BRN_TRAFFIC_DIAG") != 0);
-        if (!sbOn || CgsDev::Log::gpDebugPrint == 0)
-        {
-            return 0;
-        }
-        return CgsDev::Log::gpDebugPrint;
     }
 
     // The simulation-side owner byte the console splices into a traffic rigid-body id
@@ -99,7 +85,7 @@ namespace Vehicle
     //   asserts BrnPhysicalTrafficManager.h:865 / :866 / :867 / :872 (this one is in the HEADER,
     //   not the .cpp -- the console string is d:\...\vehiclemanager\BrnPhysicalTrafficManager.h).
     //   DWARF :269. The AllocateInternalBuffers twin: the buffer is popped off the INPUT stack.
-    // ⚠️ lpOutputBufferStack is NULL-checked and then unused, exactly as in AllocateInternalBuffers.
+    // lpOutputBufferStack is NULL-checked and then unused, exactly as in AllocateInternalBuffers.
     // =============================================================================================
     void PhysicalTrafficManager::DeallocateInternalBuffers(CgsModule::IOBufferStack* lpInputBufferStack,
                                                            CgsModule::IOBufferStack* lpOutputBufferStack)
@@ -116,11 +102,9 @@ namespace Vehicle
     }
 
     // =============================================================================================
-    // PhysicallyUncrashTrafficCar @0x825F00D8 (140)  -- NAMED GATE
-    //   blocker: the whole crash/takedown sub-tree (SetTrafficVehicleCrashing, ProcessTrafficEvents,
-    //   PhysicallyCrashTrafficCar) is parked for wave T3 round 1; nothing in this build ever puts a
-    //   traffic car into E_TRAFFIC_TYPE_CRASHING, so the un-crash has nothing to undo.
-    //   DELETE-WHEN the crash wave lands PhysicallyCrashTrafficCar @0x825CAC10 and its drain.
+    // GATE PhysicalTrafficManager::PhysicallyUncrashTrafficCar @0x825F00D8 (140)
+    //   blocker: body not reconstructed (it posts the DeactivateDeformationModelEvent that tears
+    //   the crashed car's deformation model down). DELETE-WHEN that body lands.
     // =============================================================================================
     void PhysicalTrafficManager::PhysicallyUncrashTrafficCar(u16, Deformation::DeformationInputInterface*)
     {
@@ -128,80 +112,31 @@ namespace Vehicle
     }
 
     // =============================================================================================
-    // DisposeOfNonCrashingTraffic @0x825EFB40 (72)   ⭐ LANDED 2026-08-23 (traffic wave 4, fix B)
-    //   DWARF :165 / BrnPhysicalTrafficManager.cpp:2041. No asserts of its own: the only streamed
-    //   message in the body is the inlined BitArray<20>::IsBitSet bound ("invalid index : " <<
-    //   i << " < " << 20, CgsBitArray.h:203) and the queue-full tripwire lives inside
-    //   BaseEventQueue<s8>::AddEvent.
-    //
-    // THE MISSING WIRE OF WAVE 4. Nothing in the tree ever APPENDED to mUnusedPotentialTrafficQueue,
-    // so a POTENTIAL body created by the overlap route (HandleHalfPotentialContact ->
-    // AddVehicleToPhysics, which deliberately never calls RecordTrafficVehicleIsPhysical) held its
-    // slot for ever: the world-side E_FLAG_PHYSICAL stayed clear, the same overlap pair re-promoted
-    // the same car every frame ("Traffic already has body" / "added twice" / the
-    // mu8GlobalToPhysicalEntityIndexMap assert), and WriteOutVehicleStats re-published a
-    // PhysicalTrafficState for it every frame into a world that does not think it is physical.
+    // DisposeOfNonCrashingTraffic @0x825EFB40 (72)
+    //   DWARF :165 / BrnPhysicalTrafficManager.cpp:2041. No asserts of its own.
     //
     // THE WALK, verbatim from 0x825EFB4C..0x825EFDE4:
-    //   r19 = this + 0x20000 - 0x6780 == this + 104576 == mPotentialTrafficVehicles
-    //   r15 = this + 0x20000 - 0x6750 == this + 104624 == mUnusedPotentialTrafficQueue
+    //   r19 = this + 104576 == mPotentialTrafficVehicles
+    //   r15 = this + 104624 == mUnusedPotentialTrafficQueue
     //   `for (i = GetFirstNonZeroBit(); i >= 0; i = GetNextNonZeroBit(i)) AddEvent((s8)i)`
-    //   (the first-iteration `cmpwi r31,0x14 ; bge exit` at 0x825EFBA8 is the inlined
-    //    GetFirstNonZeroBit's own bound and is redundant for a BitArray<20>; the loop-bottom test
-    //    at 0x825EFDD8 is the `>= 0` reproduced here. `stb r31, var_B0(r1)` + `addi r4,r1,var_B0`
-    //    is the s8 passed by address -- AddEvent(const s8&).)
+    //   (`stb r31, var_B0(r1)` + `addi r4,r1,var_B0` is the s8 passed by address.)
     //
-    // ⚠️ IT DOES NOT CLEAR THE BIT. RemoveTrafficVehicle does that (:320) when ProcessRemoveEvents
+    // IT DOES NOT CLEAR THE BIT. RemoveTrafficVehicle does that (:320) when ProcessRemoveEvents
     // drains the queue on the NEXT frame's PostSceneUpdate, BEFORE ProcessCreateEvents -- which is
-    // exactly why the pair may legitimately re-promote that frame without tripping :1110.
+    // why an overlap pair may legitimately re-promote that frame without tripping :1110.
     //
-    // ⚠️ CONSOLE CALL POSITION: the TAIL of VehicleManager::ProcessContactSpies @0x82646E5C, i.e.
-    // inside PhysicsModule::Update's non-catchup contact-spy leg, AFTER WriteOutVehicleStats.
-    // ProcessContactSpies is still a BRN_CONDUCTOR_GATE in the forbidden BrnPhysicsConductorGates
-    // .cpp, so the call is seated at that exact frame position in BrnPhysicsModuleUpdateFunctions
-    // .cpp instead; see the [wave4-B] note there.  DELETE-WHEN ProcessContactSpies is bodied.
+    // CONSOLE CALL POSITION: the TAIL of VehicleManager::ProcessContactSpies @0x82646E5C, inside
+    // PhysicsModule::Update's non-catchup contact-spy leg, AFTER WriteOutVehicleStats.
+    // ProcessContactSpies is still a conductor gate, so the call is seated at that same frame
+    // position in BrnPhysicsModuleUpdateFunctions.cpp. DELETE-WHEN ProcessContactSpies is bodied.
     // =============================================================================================
     void PhysicalTrafficManager::DisposeOfNonCrashingTraffic()
     {
-        s32 liRetired = 0;
-
         for (s32 liVehicle = mPotentialTrafficVehicles.GetFirstNonZeroBit();
              liVehicle >= 0;
              liVehicle = mPotentialTrafficVehicles.GetNextNonZeroBit(liVehicle))
         {
             mUnusedPotentialTrafficQueue.AddEvent(static_cast<s8>(liVehicle));
-            ++liRetired;
-
-            // [T4-retire] one-shot per build. DELETE-WHEN-STABLE.
-            if (CgsDev::Log::DebugPrint* lpDiag = TrafficRemoveDiagStream())
-            {
-                static bool sbFirstRetire = false;
-                if (!sbFirstRetire)
-                {
-                    sbFirstRetire = true;
-                    *lpDiag << "[T4-retire] FIRST potential-proxy retirement: slot " << liVehicle
-                            << " entity index "
-                            << static_cast<s32>((maTrafficEntityIDs[liVehicle].muValue >> 10) & 0x3FFFu)
-                            << " queued for RemoveTrafficVehicle next frame\n";
-                }
-            }
-        }
-
-        // [T4-potential] the LIVE census (the create-time one in _Create.cpp only ever rises).
-        // Value-latched on the pair (population, retired-this-frame). DELETE-WHEN-STABLE.
-        if (CgsDev::Log::DebugPrint* lpDiag = TrafficRemoveDiagStream())
-        {
-            static s32 siLastPopulation = -1;
-            static s32 siLastRetired    = -1;
-
-            const s32 liPopulation = static_cast<s32>(mPotentialTrafficVehicles.CountSetBits());
-            if (liPopulation != siLastPopulation || liRetired != siLastRetired)
-            {
-                siLastPopulation = liPopulation;
-                siLastRetired    = liRetired;
-                *lpDiag << "[T4-potential] live census: proxied cars=" << liPopulation
-                        << " of 20 physical slots, retired this frame=" << liRetired << "\n";
-            }
         }
     }
 
@@ -256,7 +191,7 @@ namespace Vehicle
     // RecycleTrafficVehicle @0x8262DA10 (112)
     //   asserts BrnPhysicalTrafficManager.cpp:3426, :3455, :3466. DWARF :312.
     //
-    // ⛔⛔ CONSOLE DEFECT, REPRODUCED VERBATIM AND FLAGGED (the final three instructions):
+    // CONSOLE DEFECT, REPRODUCED VERBATIM AND FLAGGED (the final three instructions):
     //       0x8262DBB8  add   r11, r27, r31       ; r27 == liIndexToRecycle, r31 == this
     //       0x8262DBBC  lbzx  r11, r11, r30       ; == mu8GlobalToPhysicalEntityIndexMap[SLOT]
     //       0x8262DBC0  add   r11, r11, r31
@@ -269,7 +204,7 @@ namespace Vehicle
     // silently corrected; the store is in bounds (the byte read is <= 127, the map is 600 wide) so
     // it cannot fault.
     //
-    // ⛔ AND THE :3466 ASSERT READS PAST THE ARRAY. The console re-loads maTrafficEntityIDs[slot]
+    // AND THE :3466 ASSERT READS PAST THE ARRAY. The console re-loads maTrafficEntityIDs[slot]
     // AFTER RemoveTrafficVehicle stored the 0xFFFFFFFF sentinel there (0x8262DB84 `lwzx r11,r29,r31`
     // follows the `bl` at 0x8262DB80; sentinel written at 0x8261D3FC..0x8261D404 from
     // dword_82F2A3A4 == 0xFFFFFFFF), so `extrwi 14,8` yields 16383 every time. On console that is
@@ -290,7 +225,7 @@ namespace Vehicle
         PhysicalTrafficVehicle* lpVehicle = GetTrafficVehicle(liIndexToRecycle);
         if (lpVehicle->HasNonBrokenJoint())
         {
-            // ⛔ GATE ArticulatedJointPool::GetIndexOfOtherHalf @0x825D8490 (304)
+            // GATE ArticulatedJointPool::GetIndexOfOtherHalf @0x825D8490 (304)
             //    blocker: declare-only on the pool's surface, and its DWARF parameter is
             //    PhysicalTrafficVehicle::EArticulatedVehicleType -- a nested enum of a class whose
             //    header INCLUDES the pool's, so it cannot be named there without an include cycle.
@@ -322,7 +257,7 @@ namespace Vehicle
                        "GetEntityIndex()] != KU8_INVALID_MAP");                              // :3466
         }
 
-        // ⛔ THE DEFECT ABOVE, VERBATIM: the console indexes the map WITH THE MAP, not with the
+        // THE DEFECT ABOVE, VERBATIM: the console indexes the map WITH THE MAP, not with the
         // entity index the assert on the line above just read.
         mu8GlobalToPhysicalEntityIndexMap[mu8GlobalToPhysicalEntityIndexMap[liIndexToRecycle]] =
             KU8_INVALID_MAP;
@@ -333,7 +268,7 @@ namespace Vehicle
     //   asserts BrnPhysicalTrafficManager.cpp:660, :682, :689, :694, :702, :736, :744, :749;
     //   BrnPhysicalTrafficVehicle.h:382; CgsBitArray.h:203/:241. DWARF :291.
     //
-    // ⚠️ TWO OF THE FOUR PARAMETERS ARE DEAD IN THIS BUILD. lpOutputRequestInterface (r5) and
+    // TWO OF THE FOUR PARAMETERS ARE DEAD IN THIS BUILD. lpOutputRequestInterface (r5) and
     // lbRemoveFromSimulation (r7) are never read after the prologue -- the removal is published a
     // frame later out of mRemovedTrafficVehicles by SendCreateRemoveTrafficEvents, not here. Kept
     // in the signature because the DWARF and every call site have them.
@@ -352,7 +287,7 @@ namespace Vehicle
         PhysicalTrafficVehicle* lpVehicle = GetTrafficVehicle(lu8TrafficEntityNum);
         if (lpVehicle->HasNonBrokenJoint())
         {
-            // ⛔ GATE the articulated teardown -- ArticulatedJointPool::GetIndexOfOtherHalf
+            // GATE the articulated teardown -- ArticulatedJointPool::GetIndexOfOtherHalf
             //    @0x825D8490 (304) + ::RemoveJoint @0x825D8248 (580), both declare-only on the
             //    pool's surface, both parked with the trailer sub-tree.
             //    DELETE-WHEN the trailer wave lands. Unreachable today: nothing creates a joint.
@@ -427,7 +362,7 @@ namespace Vehicle
     //   * max angular velocity is 5 (flt_8200426C) against the race car's 30, and both drags are 0
     //     (flt_82001CC0) against the race car's 1e-5.
     // The vrefp/vnmsubfp/vmaddfp triples are the VMX reciprocal expansion of the three divides.
-    // ⚠️ Lane .w of the inverse-inertia vector is never written by the console (three `vrlimi128`
+    // Lane .w of the inverse-inertia vector is never written by the console (three `vrlimi128`
     // inserts touch lanes 0/1/2 only); zeroed here rather than left as stack residue.
     // =============================================================================================
     void PhysicalTrafficManager::ComputeTrafficVehicleInertia(s32 liTrafficVehicleIndex,
@@ -512,7 +447,7 @@ namespace Vehicle
                        "leType < E_PHYSICAL_TRAFFIC_TYPE_COUNT");
             if (lu8Type != PhysicalTrafficVehicle::E_PHYSICAL_TRAFFIC_TYPE_SIMPLE)
             {
-                // ⚠️ THE DEFORMATION ID KEEPS THE TRAFFIC OWNER -- no 0x0C splice here.
+                // THE DEFORMATION ID KEEPS THE TRAFFIC OWNER -- no 0x0C splice here.
                 lpDeformationInterface->RemoveDeformationModel(
                         CgsPhysics::RigidBodyId(lu64DeformationBodyId));
             }
@@ -582,7 +517,7 @@ namespace Vehicle
                     lGlobalEntityId = maTrafficEntityIDs[(lGlobalEntityId.muValue >> 10) & 0x3FFFu];
                 }
 
-                // ⚠️ [FLAG PC bring-up] NULL-mpAttribs TRIPWIRE -- the SAME one
+                // [FLAG PC bring-up] NULL-mpAttribs TRIPWIRE -- the SAME one
                 // BrnVehicleManager_MaintenanceEvents.cpp's AddRaceCarDeformationModel carries, for
                 // the same reason. The console reads mpAttribs unconditionally here
                 // (`lwz r9, 0x720(r11)` @0x825F2D44), but VehiclePhysics::Construct seeds it NULL
@@ -598,7 +533,7 @@ namespace Vehicle
                     continue;
                 }
 
-                // ⚠️ NOT the race car's argument set: the traffic post carries the body's REAL
+                // NOT the race car's argument set: the traffic post carries the body's REAL
                 // velocities, zero damage, reset type -1 and NO swept-sphere tests.
                 lpDeformationInterface->AddDeformationModel(
                         maTrafficCarModelHandles[liTrafficIndex],

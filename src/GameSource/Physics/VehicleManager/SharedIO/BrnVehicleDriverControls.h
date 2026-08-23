@@ -34,7 +34,7 @@ namespace Vehicle
     // queue-payload base, so the first data member sits at offset 0. Member ORDER and NAMES are
     // the DWARF's (BrnVehicleDriverControls.h:84..113); every OFFSET below is X360-asm-literal.
     //
-    // ⭐⭐ RE-SEATED 2026-08-03 (driver-controls layout wave). The committed layout put
+    // RE-SEATED 2026-08-03 (driver-controls layout wave). The committed layout put
     // miVehicleIDToMerge at +0x34, the ten bools at +0x35..+0x3E and meDriverType at +0x40, for a
     // sizeof of 0x44 (68). ALL FOUR were wrong: the X360 build carries a THIRTEENTH control float
     // at +0x34, which pushes miVehicleIDToMerge to +0x38, the bool run to +0x39..+0x42 and
@@ -60,7 +60,7 @@ namespace Vehicle
     //     @0x82746808 bakes `li r6, 0x48` == sizeof. That is an independent witness of the 72.
     struct BrnPlayerDriverControls : public CgsModule::Event
     {
-        // ⭐ DEFAULT CTOR ADDED 2026-08-11 (player-input wave, RaceCarEntityModule::
+        // DEFAULT CTOR ADDED 2026-08-11 (player-input wave, RaceCarEntityModule::
         // ProcessPlayerVehicleInput @0x822FFE30). DWARF-attested (BrnVehicleDriverControls.h:63
         // declares the ctor) and X360-attested at the CONSTRUCTION SITE: the very first thing
         // ProcessPlayerVehicleInput does with its stack record is
@@ -100,7 +100,7 @@ namespace Vehicle
         // 1.0f, and the only observed consumer is VehiclePhysics::UpdateBoost @0x825FAD98, which
         // uses it as the multiplier on the attribs' MaxBoostSpeed to form the boost speed cap
         // (`cap = MaxBoostSpeed * this`). A default of 1.0 == "no reduction" is consistent.
-        // ⚠️ The committed UpdateBoost body substituted mfRequestedGas (+0x1C) for this slot; that
+        // The committed UpdateBoost body substituted mfRequestedGas (+0x1C) for this slot; that
         // is a DIFFERENT field and was corrected in that TU this wave.
         f32  mfBoostMaxSpeedScale;        // @0x34   FLAG: role-derived name
         s8   miVehicleIDToMerge;          // @0x38   (Clear seeds -1 == "nothing to merge")
@@ -120,7 +120,7 @@ namespace Vehicle
 
     public:
         // GetAftertouchValues @0x825B2E88 -- bodied in BrnPlayerDriverControls.cpp.
-        // ⚠️ CORRECTED 2026-08-03: the committed comment claimed the trailing bool selector was
+        // the committed comment claimed the trailing bool selector was
         // "a spilled arg slot rendered as +0x41 by the decompiler". It is not a spilled argument.
         // The X360 leaf reads it out of the OBJECT: `lbz r11, 0x41(r3)` @0x825B2EA0, i.e. the
         // selector is **mbIsSteeringWheel**. The DWARF's four-parameter form is a different
@@ -131,10 +131,9 @@ namespace Vehicle
         // ctor @ BrnVehicleDriverControls.h:63, Clear :67, GetType :74.
         E_DRIVER_TYPE GetType() const { return meDriverType; }
 
-        // ⭐ ADDED 2026-08-11 (landed independently by BOTH create-path waves; banners merged).
         // DWARF-attested by NAME -- references/DecFIGS/dwarfdump/.../BrnVehicleDriverControls.h:107
         // `void ResetType()` on BrnPlayerDriverControls (and again at :148/:174/:191 on the three
-        // derived variants). ⚠ The sibling wave cited :70 for this; :70 is a different declaration --
+        // derived variants). The sibling wave cited :70 for this; :70 is a different declaration --
         // :107 is the one, verified at the merge. Header-inline because the console INLINES it at
         // every site: there is no out-of-line body in either export set.
         //
@@ -143,7 +142,7 @@ namespace Vehicle
         // of the same statement emits the same bare store (at its own +0x10C0; see the Δ note in
         // VehiclePhysics.cpp -- this field is one of the two places the two builds' offsets differ).
         //
-        // ⭐ WHY A METHOD AND NOT A DIRECT WRITE, which is what the asm literally shows: **meDriverType
+        // WHY A METHOD AND NOT A DIRECT WRITE, which is what the asm literally shows: **meDriverType
         // is `protected`** (the DWARF says so, not this tree's guess), and VehiclePhysics neither
         // derives from nor befriends this class, so the source of that store cannot be a direct
         // assignment. Of the four methods the DWARF attests, three are excluded -- the ctor and
@@ -151,7 +150,7 @@ namespace Vehicle
         // BrnNetworkDriverControls::Clear @0x82581200, which walks +0x00..+0x42 and STOPS, never
         // touching +0x44. ResetType is what is left, and its name means exactly this.
         //
-        // ⚠️ INFERRED, and labelled so. The STORE is verbatim on two ISAs and 0 ==
+        // INFERRED, and labelled so. The STORE is verbatim on two ISAs and 0 ==
         // E_DRIVER_TYPE_PLAYER is this enum's own committed value; which METHOD emits it is the
         // inferred step. If a second write site ever turns up storing something else, this is the
         // declaration to revisit -- the member stays protected precisely so there is one door.
@@ -161,7 +160,7 @@ namespace Vehicle
         //       declare-only stubs while the interior of this struct was unrecovered; every one of
         //       them is now a plain read of a NAMED member at the console offset it documents, so
         //       they are bodied inline here and are no longer link blockers.
-        //       ⭐ RETIRED THIS WAVE: GetMode() and GetFlag78(). Those two read +0x44 and +0x4D,
+        // RETIRED THIS WAVE: GetMode() and GetFlag78(). Those two read +0x44 and +0x4D,
         //       which are meDriverType and BrnAIDriverControls::mbForceComeOutOfDrift -- see the
         //       note on BrnAIDriverControls below. Their call sites now do the console's own
         //       "check the driver type, then look at the AI payload" instead. -----
@@ -170,7 +169,7 @@ namespace Vehicle
         f32  GetSixaxisTilt() const      { return mfSpin; }              // *(controls + 0x18)
         bool GetButton63() const         { return mbBoostBounce; }       // *(controls + 0x3F)
 
-        // ⭐⭐ FORK RESOLVED 2026-08-06 (UpdateVehiclePhysics wave). The 3-pointer overload
+        // FORK RESOLVED 2026-08-06 (UpdateVehiclePhysics wave). The 3-pointer overload
         //   `bool GetAftertouchValues(f32*, f32*, f32*) const;`
         // that used to be declared here is DELETED. It was the overload fork the
         // RaceCarPhysics.cpp mount banner flagged (a symbol no TU defines or ever could).
@@ -182,7 +181,7 @@ namespace Vehicle
         //     r7 = 0 (raw image bytes) -- re-pointed to the 4-arg form with `false`.
         // One leaf, one declaration.
 
-        // ⭐⭐ FULL-RECORD LAYOUT ORACLE (player-input wave 2026-08-11). The file-scope
+        // FULL-RECORD LAYOUT ORACLE (player-input wave 2026-08-11). The file-scope
         // static_asserts below this class pin five offsets; this one pins ALL TWENTY-SIX, and it
         // has to, because RaceCarEntityModule::ProcessPlayerVehicleInput @0x822FFE30 -- the ONLY
         // producer of the player record -- fills every single field and the record then crosses a
@@ -232,7 +231,7 @@ namespace Vehicle
         }
     };
 
-    // ⭐⭐ RE-TYPED 2026-08-03. All three variants were opaque byte blobs sized to the record-size
+    // RE-TYPED 2026-08-03. All three variants were opaque byte blobs sized to the record-size
     // immediate baked into their X360 VariableEventQueue<5040,16> AddEvent thunks:
     //     BrnAIDriverControls       @0x82794C50  li r6,0x50  (80)
     //     BrnNetworkDriverControls  @0x82595618  li r6,0xC0  (192)
@@ -256,7 +255,7 @@ namespace Vehicle
         //     -> mbForceComeOutOfDrift, read inside UpdateDriftScale. Again a name-level match.
         //   RaceCarPhysics::Update @0x82641700: lwz r11,0x44(r29); cmpwi 1; bne; lbz r11,0x4E(r29)
         //     -> mbSlamPlayer, gating the AI slam-steer term. Third name-level match.
-        // ⚠️ This RESOLVES the contradiction the tree carried: the committed header said the
+        // This RESOLVES the contradiction the tree carried: the committed header said the
         // invented "GetFlag78()" read +0x4E and the build-list comment said the asm proved +0x4D.
         // BOTH were right -- one accessor was standing in for TWO different console reads at two
         // different offsets in two different functions. Neither offset was a mistake; the single

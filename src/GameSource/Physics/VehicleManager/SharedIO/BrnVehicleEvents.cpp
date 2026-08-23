@@ -79,7 +79,7 @@ RaceCarState::RaceCarState(const RaceCarState&) = default;
 // assignment site, and the copy constructor above proves the shape: a pure bitwise copy
 // of the whole 1120-byte object.
 //
-// ⚠️⚠️ WHY THIS EXISTS NOW (2026-08-01, camera wave). This declared-but-undefined operator
+// WHY THIS EXISTS NOW (2026-08-01, camera wave). This declared-but-undefined operator
 // had been resolving from BrnBaselineLinkStubs.cpp as `{}` -- an EMPTY BODY -- whose own
 // comment said "Only the Director camera path -- OFF the boot/title/menu path -- reaches
 // it". That path is now live, and the effect was invisible and total: EVERY RaceCarState

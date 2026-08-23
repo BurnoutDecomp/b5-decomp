@@ -1,7 +1,7 @@
 // Layout check for the BrnPhysics::Vehicle::SimpleVehiclePhysics and ::VehiclePhysics
 // OWN-MEMBER BLOCKS (X360 +0x130..+0x720 and +0x720..+0x13F0).
 //
-// ⚠️⚠️ WHY THIS TU EXISTS -- READ BEFORE DELETING IT.
+// WHY THIS TU EXISTS -- READ BEFORE DELETING IT.
 // BrnSimpleVehiclePhysics.h and VehiclePhysics.h now carry two recovered own-member blocks whose
 // whole claim to being a DERIVATION rather than sixty separate guesses is that the DecFIGS DWARF's
 // member ORDER and the X360 asm's member OFFSETS meet with zero slack at BOTH ends:
@@ -11,7 +11,7 @@
 //                          RaceCarPhysics block closes on the 0x1460 per-car stride.
 // A claim like that is worth exactly as much as the gate that checks it.
 //
-// ⭐⭐ WHY THIS GATE IS ARITHMETIC AND NOT `offsetof` -- and why that is the STRONGER choice here.
+// WHY THIS GATE IS ARITHMETIC AND NOT `offsetof` -- and why that is the STRONGER choice here.
 // The RaceCarPhysics own block could be gated with offsetof because it is width-identical on x64
 // (no pointer, no vptr anywhere in it) and it is declared in DWARF order. NEITHER holds here:
 //   * VehiclePhysics owns two POINTERS (mpAttribs @0x720, mpDebugComponent @0x13E4) which widen
@@ -28,7 +28,7 @@
 // on 0x13F0.** Every number on the right-hand side of every assert below is an X360 literal quoted
 // from the map in the two headers; none is computed from the left-hand side.
 //
-// ⚠️ THE BLIND SPOT, stated rather than hidden. This gate cannot see a member that occupies no
+// THE BLIND SPOT, stated rather than hidden. This gate cannot see a member that occupies no
 // space (an omitted trailing bool inside alignment padding), exactly as the RaceCarPhysics gate
 // could not. What guards that is that the DWARF list is exhaustive and is quoted verbatim in the
 // two headers, so a missing member would have to be deleted from a quoted list. The gate DOES fire
@@ -300,7 +300,7 @@ namespace Vehicle
                       "VP: the 4-aligned console pointer mpDebugComponent on the asm-literal "
                       "0x13E4 (ApplySuspensionForces / UpdateDownForce `lwz r11,0x13E4`)");
 
-        // ⭐⭐ THE CLOSURE. The last member is a 4-byte console pointer, so the block's last data
+        // THE CLOSURE. The last member is a 4-byte console pointer, so the block's last data
         // byte is 0x13E7; 16-rounding lands on 0x13F0 -- which is where a DIFFERENT wave, from a
         // DIFFERENT function, put RaceCarPhysics::mPropCollisionImpulseSum, and from which THAT
         // block closes with zero slack on the 0x1460 per-car stride a THIRD function bakes as a
@@ -322,7 +322,7 @@ namespace Vehicle
     {
         static_assert(sizeof(VehiclePhysics::SlamEffect) == 0x30,
                       "SlamEffect: Vector3 + six f32 + s8 -> 0x30 (the 0x1130 - 0x1100 gap)");
-        // ⭐ AddSlam @0x825D4870 addresses SIX of SlamEffect's seven fields by absolute offset off
+        // AddSlam @0x825D4870 addresses SIX of SlamEffect's seven fields by absolute offset off
         // the 0x1100 base, so each of these is an asm literal minus 0x1100 -- and unlike the sizeof
         // above they are NOT blind to a member added inside the struct (tamper case 6).
         static_assert(offsetof(VehiclePhysics::SlamEffect, mfSteering) == 0x14,
@@ -400,7 +400,7 @@ namespace Vehicle
         static_assert(offsetof(V, mbRollingInAir) < offsetof(V, meCarType), "DWARF :974 < :977");
         static_assert(offsetof(V, meCarType) < offsetof(V, mpDebugComponent), "DWARF :977 < :982");
 
-        // ⚠️ THE MEASURED BLIND SPOT, and what covers it. Two runs of this block live entirely
+        // THE MEASURED BLIND SPOT, and what covers it. Two runs of this block live entirely
         // inside alignment padding, so NO arithmetic and NO sizeof can see a member added to or
         // dropped from them (tamper cases 2, 6 and 9 of this wave -- all three silent, by
         // construction, not by oversight):

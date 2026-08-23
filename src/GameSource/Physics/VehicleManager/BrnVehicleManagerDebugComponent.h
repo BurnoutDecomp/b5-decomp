@@ -11,7 +11,7 @@
 // gives the COMPLETE member sequence; every byte offset below is asm-literal out of
 // VehicleManagerDebugComponent::Construct @ 0x825B5A78 (194 instructions).
 //
-// ⭐ THE X360 LAYOUT CLOSES TO THE BYTE, three independent ways:
+// THE X360 LAYOUT CLOSES TO THE BYTE, three independent ways:
 //   1. sizeof(CgsDev::DebugComponent) == 12 on X360 (vptr 4 + mbActive 1 + pad 3 +
 //      mpDebugLinkedListNext 4) and OutContactSpy is alignas(16), so maWorldContactSpies starts
 //      at +16.  16 + 4*112 == 464, which is exactly where the asm's next named member
@@ -26,13 +26,13 @@
 //      (VehicleManagerDebugComponent::Construct(this + 161968, this) followed by
 //      maRaceCarDebugComponent at +163264).
 //
-// ⚠️ THE X360 OFFSETS BELOW ARE NOT THE HOST OFFSETS. Two members widen on x64 -- the vtable
+// THE X360 OFFSETS BELOW ARE NOT THE HOST OFFSETS. Two members widen on x64 -- the vtable
 // pointer inside the base and `mpVehicleManager` -- so everything after them shifts. Per the
 // project's x64 rule (parity by NAMED MEMBERS, not byte offsets) the _AssertLayout() pins below
 // are written as RELATIVE deltas, which are X360-identical for every member from
 // mPlayerCarContactPosition onwards (that whole tail contains no pointers).
 //
-// ⭐⭐ UPDATED 2026-08-03 (the un-pin wave). This banner used to end: "VehicleManager keeps its own
+// This banner used to end: "VehicleManager keeps its own
 // `mDebugComponent` as the X360-sized 1296-byte opaque span so its byte-pinned offsetof chain stays
 // intact -- exactly as it already does for mStuntOffencesManager and the contained
 // PhysicalTrafficManager." Every clause of that is now out of date:
@@ -78,7 +78,7 @@ namespace Vehicle
         // ------------------------------------------------------------------------------------
         void Construct(VehicleManager* lpVehicleManager);
 
-        // ⭐ ADDED 2026-08-14 (walls leg 3): read access to the two contact-classification render
+        // read access to the two contact-classification render
         // gates ValidateRaceCarWorldContact checks (the console reads the component's bytes
         // +597/+598 directly from inside the VehicleManager method; the host goes through these
         // ADDITIVE inline getters instead of a friend grant). Both stay false on this build --
@@ -142,7 +142,7 @@ namespace Vehicle
         Matrix44Affine mLastTrafficContact_TrafficTransform;             // :200  X360 +672  SetIdentity
         Vector3        mLastTrafficContact_RaceCarHalfExt;               // :201  X360 +736  zeroed
         Vector3        mLastTrafficContact_TrafficHalfExt;               // :202  X360 +752  zeroed
-        // ⚠️ Construct does NOT zero these two, even though it zeroes the two half-extents above
+        // Construct does NOT zero these two, even though it zeroes the two half-extents above
         // and both of the crash-contact vectors. Transcribed as-is; do not "fix" it.
         Vector3        mLastTrafficContact_RaceCarVelocity;              // :203  X360 +768  (NOT written)
         Vector3        mLastTrafficContact_TrafficVelocity;              // :204  X360 +784  (NOT written)

@@ -63,7 +63,7 @@ namespace Vehicle
         // arrays) from another interface into this one.
         void CopyBaseDeformationParams(const VehicleDriverInputInterface* lpInterfaceToCopy);
 
-        // ⭐ ADDED 2026-08-10 (pre-physics bridge wave). DWARF-ATTESTED, NOT INVENTED:
+        // DWARF-ATTESTED, NOT INVENTED:
         // DecFIGS `BrnVehicleDriverInputInterface.h:102` declares
         //   `void CopyTargetAssistParams(const VehicleDriverInputInterface *)`.
         // It has no out-of-line X360 symbol because every caller inlines it; the one call site
@@ -86,7 +86,7 @@ namespace Vehicle
 
         // @0x823DB640  Merge another interface's staged driver state into this one: append its
         // update-driver queue, then adopt its target-assist list when we have none of our own.
-        // ⭐ ADDED 2026-08-09 (feed wave) -- the callee of
+        // the callee of
         // WorldModule::BridgeInputToPhysicsModule @0x827AB830.
         void Append(const VehicleDriverInputInterface* lpInterfaceToAppend);
 

@@ -26,17 +26,17 @@ namespace PhysicsModuleIO
     void OutputBuffer::_AssertLayout()
     {
         static_assert(offsetof(OutputBuffer, mVehicleOutputRequestInterface) == 16,     "mVehicleOutputRequestInterface @16");
-        // ⭐ 2026-08-09 (conductor wave): the :378 manager seat, previously folded into
+        // the :378 manager seat, previously folded into
         // padding, is a real member now -- 16 + 41936 == 41952 (the request interface is
         // byte-identical on both targets, so this pin stays ABSOLUTE).
         static_assert(offsetof(OutputBuffer, mVehicleManagerOutputInterface) == 41952,  "mVehicleManagerOutputInterface @41952");
-        // ⚠ From here down the buffer GROWS on the host (12- vs 16-byte console queue
+        // From here down the buffer GROWS on the host (12- vs 16-byte console queue
         // headers inside the two vehicle interfaces -- see the header note), so the gates
         // are the console DELTAS between seats, not absolutes. Console deltas: 44128-41952
         // is sizeof(VMOI)'s console span (adjacent members, gated trivially by adjacency);
         // 148656-71792 == 76864; 159648-148656 == 11000... NO -- the deltas below are the
         // PAD-under-written spans, which this file's own pad arrays hold by construction:
-        // ⭐ 2026-08-19 (wave Q6/A1): this relation is no longer held by a pad -- it is held by
+        // this relation is no longer held by a pad -- it is held by
         // sizeof(Props::PropOutputInterface) itself, now that mPropManagerOutputInterface IS
         // that type. Console delta 76,864; MEASURED host sizeof 76,864 -- exactly equal, because
         // all four of the interface's EventQueue<T,200> element types are 16-byte aligned, so
@@ -55,7 +55,7 @@ namespace PhysicsModuleIO
         static_assert(offsetof(OutputBuffer, mSceneInputInterface)
                     - offsetof(OutputBuffer, mDeformationOutputInterfaceForEntityModules) == 179424 - 159648,
                       "entity-modules -> scene console delta");
-        // ⭐ 2026-08-19 (wave Q5/F2): this relation is no longer held by a pad -- it is held by
+        // this relation is no longer held by a pad -- it is held by
         // sizeof(InSceneUpdateInterface) itself, now that mSceneInputInterface IS that type.
         // Console delta 818,768; measured host 818,944 (the 16-vs-12-byte queue headers). The
         // `>=` is what makes the promotion safe: if a later wave ever SHRINKS the interface
@@ -65,7 +65,7 @@ namespace PhysicsModuleIO
                       "scene -> contact-spy console delta (>=: the spy seat 8-aligns)");
     }
 
-    // ⛔⛔ 2026-08-10 (root-cause wave) -- THIS BUFFER HAD NO Construct AT ALL.
+    // THIS BUFFER HAD NO Construct AT ALL.
     // The X360 CreateIOBuffer<T> stack template runs T::Construct after the alloc, and so does
     // the PC one: CreateIOBuffer<T> runs T::Construct (2026-08-15). While the PC template only
     // placement-new'd, every embedded queue in the physics module's OUTPUT
@@ -82,7 +82,7 @@ namespace PhysicsModuleIO
     //   +171552  Deformation::DetachedPartRenderEvent<50>::Construct   ) inside
     //   +175568  Deformation::GlassSmashOrCrackEvent<20>::Construct    ) mDeformationOutput-
     //            + zero stores at +159648/+171088/+171316/+171560/+175576 ) InterfaceForEntityModules
-    //            (⚠ TWO SEATS CORRECTED 2026-08-10: this line read +171072/+171300. r28 is
+    // (TWO SEATS CORRECTED 2026-08-10: this line read +171072/+171300. r28 is
     //             `addis 2; addi 0x6FA0` == this+159648, and the two stores are `stw r31,
     //             0x2CB0(r28)` and `stw r31, 0x2D94(r28)` -- 11440 and 11668, i.e. 171088 and
     //             171316. Both sit inside the opaque entity-modules span, so nothing consumed
@@ -100,7 +100,7 @@ namespace PhysicsModuleIO
     //   +71792   Props::PropOutputInterface::Construct
     //   +998192  stwx 0        == mContactSpyInterface (drop the data pointer)
     //
-    // ⭐ 2026-08-10 (create-path wave): TWO OF THE SIX BLOCKED LEGS ARE NOW EMITTED.
+    // TWO OF THE SIX BLOCKED LEGS ARE NOW EMITTED.
     // mVehicleManagerOutputInterface (+41952) and mVehicleOutputInterface (+44128) were never
     // opaque -- both are real committed types that simply had no Construct member. They have
     // one now, recovered from the console: VehicleManagerOutputInterface::Construct is an
@@ -110,7 +110,7 @@ namespace PhysicsModuleIO
     // The game-event-queue leg inside VehicleOutputInterface runs through that class's
     // sanctioned span cast, gated by a static_assert on the span size -- see its .cpp.
     //
-    // ⭐⭐ 2026-08-19 (wave Q5 cluster F2): THE SCENE LEG IS LIVE. mSceneInputInterface was the
+    // THE SCENE LEG IS LIVE. mSceneInputInterface was the
     // fourth of the blocked legs, parked only because the member was a 1-byte opaque span. It is
     // the real CgsSceneManager::SceneManagerIO::InSceneUpdateInterface now -- the CONSOLE names
     // that type in this very function (0x825ABBEC: `addis r3,r30,3 ; addi r3,r3,-0x4320` ==
@@ -123,7 +123,7 @@ namespace PhysicsModuleIO
     //     because nothing constructed this interface's queue storage. It can be un-guarded now.
     //     Reported, not edited -- that file belongs to another owner.
     //
-    // ⭐⭐ 2026-08-19 (wave Q6 cluster A1): THE PROP LEG IS LIVE. mPropManagerOutputInterface was
+    // THE PROP LEG IS LIVE. mPropManagerOutputInterface was
     // the fifth of the blocked legs, parked only because the member was a 1-byte opaque span. It
     // is the real BrnPhysics::Props::PropOutputInterface now -- the CONSOLE names that type in
     // this very function (0x825ABBF8: `addis r3,r30,1 ; addi r3,r3,0x1870` == this+71792,
@@ -134,7 +134,7 @@ namespace PhysicsModuleIO
     // would fire "mpEvents != NULL" on its first AppendUpdatedProps -- the never-Constructed
     // EventQueue family that has broken every previous producer bring-up.
     //
-    // ⚠️ TWO legs still CANNOT be emitted and are NOT faked: mDeformationOutputInterface
+    // TWO legs still CANNOT be emitted and are NOT faked: mDeformationOutputInterface
     // (+148656) and mDeformationOutputInterfaceForEntityModules (+159648) are 1-byte opaque
     // *Storage spans (each size-pinned by the pad that follows it) with no members to construct.
     // Their seats and exact console call lists are transcribed above. Any consumer reaching one
@@ -231,7 +231,7 @@ namespace PhysicsModuleIO
     }
 
     // X360 0x8279F640's sibling @0x8279F8E0 (DWARF :369): read-lock; return this + 998192.
-    // ⭐ ADDITIVE 2026-08-18 (wave Q4, prop bridges) -- the const twin of the accessor above.
+    // ADDITIVE 2026-08-18 (wave Q4, prop bridges) -- the const twin of the accessor above.
     // The consumers are the two post-physics bridges that carry the contact-spy handle out of
     // the physics module; both hold a `const OutputBuffer*` because their callers read-lock the
     // source buffer. See the declaration's banner in BrnPhysicsModuleIO.h for why this was a

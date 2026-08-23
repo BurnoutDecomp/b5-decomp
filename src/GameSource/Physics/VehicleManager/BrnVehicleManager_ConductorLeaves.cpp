@@ -1,7 +1,7 @@
 // ============================================================================
 // GameSource/Physics/VehicleManager/BrnVehicleManager_ConductorLeaves.cpp
 //
-// ⭐ 2026-08-09 (conductor wave). Two small per-frame leaves of the real
+// Two small per-frame leaves of the real
 // PhysicsModule::Update @0x825B0640, bodied off the X360 image (home
 // BrnVehicleManager.cpp is still unmounted -- the established slice pattern;
 // fold back when the home mounts).
@@ -22,7 +22,7 @@ namespace Vehicle
         mCameraMatrix = *lpCameraMatrix;
     }
 
-    // DWARF :375, X360 @0x8284CB38. ⭐ EMPTY AS SHIPPED -- the retail body is a single
+    // DWARF :375, X360 @0x8284CB38. EMPTY AS SHIPPED -- the retail body is a single
     // `blr` (image word 0x4E800020 at 0x8284CB38, read 2026-08-09), ICF-folded with
     // BaseCollisionGenerator::Destruct; the Update call site's `bl` therefore appears to
     // target that symbol with r3 == &mVehicleManager and f1 == the timestep. The PS3

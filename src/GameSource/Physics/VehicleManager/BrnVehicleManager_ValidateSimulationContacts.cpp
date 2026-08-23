@@ -30,7 +30,7 @@
 // StrStream machinery; lowered to the project CGS_ASSERT with the static message per the
 // standing rule (see e.g. CgsScriptedFsm.cpp / CgsTimeManager.cpp banners).
 //
-// ⚠️ ONE DELIBERATE HOST DIVERGENCE, flagged: when the bounds tripwire fires (index >= 20)
+// ONE DELIBERATE HOST DIVERGENCE, flagged: when the bounds tripwire fires (index >= 20)
 // the console goes on to compute the bit test anyway, reading (index>>6)*8 bytes past the
 // 1-word bit array -- an out-of-bounds read whose result only feeds the second (already
 // garbage) diagnostic. The host skips the IsBitSet call for out-of-range indices instead of

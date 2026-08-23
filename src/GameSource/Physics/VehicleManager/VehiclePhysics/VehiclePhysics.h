@@ -79,7 +79,7 @@
 //      snapshots mLinearVelocity, NOT a "weight register", so CalculateWeightTransfer can
 //      difference it against this frame's velocity. maSpinEffects[8] ends at exactly 0x1330.)
 //
-// ⚠️ CORRECTION -- the committed note on mLinearImpulseAccumulator was WRONG, and so was the
+// CORRECTION -- the committed note on mLinearImpulseAccumulator was WRONG, and so was the
 // wave-2 finding that repeated it ("mLinearImpulseAccumulator IS the base's mTotalLinearImpulse").
 // Its "+0x100" is a VehiclePhysics-frame offset, so it is base+0xF0 == mTotalTorque, not
 // base+0x100 == mTotalLinearImpulse. ApplyBoostKickForce @0x825D338C-0x825D3408 damps exactly
@@ -103,12 +103,12 @@
 #include "GameSource/Physics/PhysicsUtilities/Spring1D.h"   // BrnPhysics::SuspensionSpring (canonical home)
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/Engine.h"   // BrnPhysics::Vehicle::Engine (mEngine @+0xF00)
 #include "GameShared/GameClasses/System/Input/CgsInputTypes.h"   // CgsInput::Device::WheelFFSpring (mWheelFFSpring @+0x13D0)
-// ⭐ own-block closure wave (2026-08-03): mPreviousControls @+0x1090 is the WHOLE 0x48-byte
+// own-block closure wave (2026-08-03): mPreviousControls @+0x1090 is the WHOLE 0x48-byte
 // BrnPlayerDriverControls by value (DWARF VehiclePhysics.h:905), so the complete type is needed
 // here. That header includes only BrnCommonTypes/types/CgsVariableEventQueue -- no cycle.
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleDriverControls.h"   // BrnPlayerDriverControls (0x48)
 
-// ⚠️ CLASS-KEY FIX 2026-08-06 (UpdateVehiclePhysics wave): this fwd-decl said `struct Random`
+// CLASS-KEY FIX 2026-08-06 (UpdateVehiclePhysics wave): this fwd-decl said `struct Random`
 // while CgsRandom.h defines `class Random` -- the silent ?AU/?AV mangling fork the moment any
 // TU references Random through only this declaration (Update now takes a Random&). Keyed to
 // match the definition.
@@ -117,7 +117,7 @@ namespace CgsNumeric { class Random; }   // UpdateRoadNoise draws from the share
 namespace BrnPhysics
 {
 // Forward decl: the streamed deformation spec Prepare and the seat bring-up leg consume by
-// pointer. Full type owned by BrnStreamedDeformationSpec.h. ⚠️ RETIRED (seat wave 2026-08-05):
+// pointer. Full type owned by BrnStreamedDeformationSpec.h. RETIRED (seat wave 2026-08-05):
 // this used to be forward-declared INSIDE namespace Vehicle -- a namespace FORK of the real
 // BrnPhysics::Deformation::StreamedDeformationSpec, so any body written against the fork could
 // never link against the real spec ([[odr-forks-link-silently]] pattern, caught at compile here
@@ -126,7 +126,7 @@ namespace Deformation { struct StreamedDeformationSpec; }
 
 namespace Vehicle
 {
-    // ⚠️ RETIRED 2026-08-03 (own-block closure wave): this file used to forward-declare
+    // this file used to forward-declare
     // `class BrnPlayerDriverControls;` (also mis-keyed as `class` where the DWARF says `struct`).
     // The type is now INCLUDED above, because mPreviousControls @+0x1090 embeds it BY VALUE.
 
@@ -144,7 +144,7 @@ namespace Vehicle
     //       include of the real type once that landed. VehicleAttribs.h has now landed, at the
     //       DWARF member order, so the slice is gone and the include above supplies the type.
     //
-    //       ⭐ For the record: the slice's OFFSETS were right and the full definition that used to
+    // For the record: the slice's OFFSETS were right and the full definition that used to
     //       live inside VehicleAttribs.cpp was wrong (it transposed mDriftAttribs and
     //       mEngineAttribs). The register->member map the bodies below were written against is
     //       preserved exactly -- every lane index is unchanged, only the register NAMES move to
@@ -334,7 +334,7 @@ namespace Vehicle
         // ----- ADDITIVE GROW (C11 group): the crash master-gate accessors the TrafficPhysics layer
         //       consults. (DWARF BrnSimpleVehiclePhysics.h :285 IsCrashing / .cpp:805 SetCrashing.)
         //
-        // ⚠️ RETIRED 2026-08-02 (physics wave 3): this home used to RE-DECLARE
+        // this home used to RE-DECLARE
         //   `bool IsCrashing() const;`
         // as "DECLARE-ONLY ... bodied by the SimpleVehiclePhysics/VehiclePhysics TU". That comment
         // described an intention, not C++ semantics: a redeclaration in the derived class HIDES the
@@ -348,7 +348,7 @@ namespace Vehicle
         // @0x825D3720 -- the per-frame steering model (577 X360 insns, standalone; also called by
         // UpdateDriving @0x82638354 and UpdateCrashing @0x82638F6C, and by RaceCarPhysics::Update
         // @0x826418A4 on the frozen/engine-only path).
-        // ⭐⭐ SIGNATURE CONFORMED 2026-08-07 (orchestrator wave). The committed 2-arg
+        // SIGNATURE CONFORMED 2026-08-07 (orchestrator wave). The committed 2-arg
         // `(s8 li8CarType, f32 lfSteer)` was an arg-map guess off one call site. The DWARF
         // (VehiclePhysics.h:1499) and the PS3 out-of-line copy
         // (`_ZN...14UpdateSteeringEffN2rw4math3vpu8VecFloatEb` @0x6DB90C) both spell
@@ -372,7 +372,7 @@ namespace Vehicle
         void AddAirRam(u32 luFlags, f32 lfFactor, f32 lfDecay,
                        Vector3 lvCustomImpulse, Vector3 lvCustomPosition, f32 lfTimerTillFire);
 
-        // ⚠️ RETIRED 2026-08-02 (physics wave 3). This home used to re-declare all four
+        // This home used to re-declare all four
         // ExternalPhysicsBody accumulators:
         //     void AddWorldSpaceForce(const Vector3&);          // @0x825BE710
         //     void AddWorldSpaceImpulse(const Vector3&);        // @0x825BE8F8
@@ -393,10 +393,10 @@ namespace Vehicle
 
         // @0x825FA448: the drift-entry test UpdateDriftState chains into to LATCH a new drift (it
         // tail-calls EnterDrift when the entry conditions are met).
-        // ⭐ BODIED 2026-08-03 -- and it was the LAST unresolved external standing between
+        // and it was the LAST unresolved external standing between
         // VehiclePhysics.cpp and the build. It had been declare-only ("bodied by its own TU") for as
         // long as this header existed, with a FIVE-f32 signature that no console function ever had.
-        // ⚠️ It is ABSENT from `.ida-exports/BURNOUT_X360_ARTIST.XEX/` (third confirmed export-set
+        // It is ABSENT from `.ida-exports/BURNOUT_X360_ARTIST.XEX/` (third confirmed export-set
         // hole). It is a perfectly ordinary named function in the IDB -- headless IDA 9.3 reports
         // `0x825FA448..0x825FA748`, 192 instructions -- and `fn_index.txt` shows the gap directly
         // (EnterDrift @0x825FA268 +120 instrs ends exactly at 0x825FA448; the next indexed symbol is
@@ -404,7 +404,7 @@ namespace Vehicle
         void CheckForEnteringDrift(const BrnPlayerDriverControls* lpControls, f32 lfAbsSteering,
                                    f32 lfAbsDriftScale, f32 lfSpeedMPS, VecFloat lvfTimeStep);
 
-        // ⭐⭐ RETIRED 2026-08-07 (orchestrator wave). This home used to declare a 2-argument
+        // This home used to declare a 2-argument
         // stand-in `void AddTractionPoint(s32, u32);` that HID the base's real 4-argument
         // SimpleVehiclePhysics::AddTractionPoint(EVehicleDrivenWheel, Vector3, Vector3, u32).
         // The X360 asm settles it: RaceCarPhysics::AddTractionPoint @0x825FFB04 does `bl
@@ -455,22 +455,22 @@ namespace Vehicle
         //       VehicleManager::HandleRaceCarRaceCarContact (once per car, after a slam/shunt
         //       impulse). BODIED 2026-08-03 in VehiclePhysics.cpp -- see the block comment there.
         //
-        //       ⭐ THE SIGNATURE IS NOW ATTESTED, NOT INFERRED. This declaration used to carry
+        // THE SIGNATURE IS NOW ATTESTED, NOT INFERRED. This declaration used to carry
         //       "FLAG: arg shape inferred from the call site". The PS3 ELF export 0x3E10FC is
         //       `_ZN10BrnPhysics7Vehicle14VehiclePhysics18SetWheelVelocitiesEN2rw4math3vpu7Vector3E`
         //       == SetWheelVelocities(rw::math::vpu::Vector3). Flag removed.
         //
-        //       ⚠️ The parameter is DEAD in the console body (see the .cpp) -- kept because it is
+        // The parameter is DEAD in the console body (see the .cpp) -- kept because it is
         //       the console's own signature and both surviving call sites pass it.
         void SetWheelVelocities(Vector3 lvVelocity);
 
         // ==========================================================================================
-        // ⭐ Construct @0x8262DBD0 / Reset(Vector3) @0x825FDD78 -- BOTH BODIED IN VehiclePhysics.cpp
+        // Construct @0x8262DBD0 / Reset(Vector3) @0x825FDD78 -- BOTH BODIED IN VehiclePhysics.cpp
         //    as of 2026-08-03. Reset was decoded out of BURNOUT_X360_ARTIST.XEX.i64 with headless
         //    IDA 9.3 and replayed through a symbolic VMX128 simulator (it IS an `.ida-exports`
         //    hole); the decode is preserved below because it is the record of that work.
         //
-        // ⚠️ CORRECTION (Construct wave): the sentence that stood here said "Both are `.ida-exports`
+        // CORRECTION (Construct wave): the sentence that stood here said "Both are `.ida-exports`
         //    holes". **Construct is not one.** `.ida-exports/BURNOUT_X360_ARTIST.XEX/0x8262DBD0.json`
         //    exists and carries the full `assembly` plus a complete `xrefs_from`; only its
         //    `pseudocode` is degenerate (the bare prototype), which is what got mis-read as a hole.
@@ -485,7 +485,7 @@ namespace Vehicle
         //       maWheels[0..3].Reset(0);                         // this+0x130/0x210/0x2F0/0x3D0
         //       mEngine.Reset(0);                                // this+0xF00
         //   } else {
-        //       SetWheelVelocities(lvVelocity);                  // ⛔ THE BLOCKER -- see below
+        // SetWheelVelocities(lvVelocity);                  // THE BLOCKER -- see below
         //   }
         //   maLocalTractionPoints[0..3]                       = 0     // +0x530/540/550/560
         //   mvSpeedOnLastCrashMPH_TimeCrashing_...            = 0     // +0xEF0 (whole register)
@@ -499,7 +499,7 @@ namespace Vehicle
         //   mvPropSpeedMaintainAlongZ_...  .x = -0.1f (unk_8208FAE4), .y = 1.0f
         //                                  (unk_8208FAE8), .z = 100.0f (flt_820049E0)   // +0x1050
         //   mvTimeStandingStill_...   all four = 0                    // +0x1060
-        //   mvDampRollVel_...  .x = 0, .z = 0, .w = 10000.0f          // +0x1080  ⚠️ SEE BELOW
+        // mvDampRollVel_...  .x = 0, .z = 0, .w = 10000.0f          // +0x1080  SEE BELOW
         //   mSteeringDirection                                = 0     // +0x10E0
         //   mfTimeUntilStuckInCollisionTest                   = 5.0f  // +0x10F0 (flt_8200426C ==
         //                                                             //   KF_STUCK_IN_COLLISION_TEST_INTERVAL)
@@ -523,7 +523,7 @@ namespace Vehicle
         //   mWheelFFSpring.mfSpringCoefficient = mfSpringSaturation = 0   // +0x13D0 / +0x13D4
         //   mi8LastAttackersRaceCarIndex = -1                         // +0x13E0
         //
-        // ⚠️⚠️ THE SILENT-ZERO CONSTANT IN THAT LIST. `TimeSinceLastHandBrake` (+0x1080 .w) is
+        // THE SILENT-ZERO CONSTANT IN THAT LIST. `TimeSinceLastHandBrake` (+0x1080 .w) is
         //   seeded from `unk_82FB9080`, which reads **all-zero in the shipped image** (.data,
         //   perm=6). It is NOT zero: an IDA-UNMARKED static-init thunk at 0x82C5C398 does
         //       lis r11, flt_82005D9C@ha ; lfs f0 ; stfs ; lvlx ; vspltw v0,v0,0 ;
@@ -557,7 +557,7 @@ namespace Vehicle
         //   mbFrozen = false;                                            // inlined 0-arg-wrapper tail
         //   Reset(Vector3(0,0,0));                                       // the Vector3 overload
         //
-        //   ⚠️⚠️ TWO CORRECTIONS TO THE DECODE THAT USED TO SIT HERE. It ended in an elided line,
+        // TWO CORRECTIONS TO THE DECODE THAT USED TO SIT HERE. It ended in an elided line,
         //   `"... zero +0x690/+0x6A0/+0x1330/+0x570 ; mSlamEffect partial seed at +0x590+0x20 ..."`,
         //   followed by `mbCrashing(+0x70) = false;`. BOTH are wrong, and both were caught by
         //   re-pulling the asm rather than transcribing the note:
@@ -575,12 +575,12 @@ namespace Vehicle
         //        pair {+0x70, +0x10F6} is {mbFrozen, mbForceFrozen}, not the crash flag.
         //   Clearing +0x710 instead of +0x70 would have been an invented store in mounted code.
         //
-        //   ⭐ `VehicleAttribs::Construct(this+0x730)` and `(this+0xAA0)` are an INDEPENDENT
+        // `VehicleAttribs::Construct(this+0x730)` and `(this+0xAA0)` are an INDEPENDENT
         //   confirmation of the DWARF member sequence: mpAttribs @0x720, then two VehicleAttribs
         //   of 0x370 each land mAIVehicleAttribs at 0x730 and mPlayerVehicleAttribs at 0xAA0
         //   exactly, and maSprings then falls on its asm-pinned +0xE10.
         //
-        //   ⭐⭐ THE LANE-Z INSERT IS PROVEN TWICE, ON TWO ISAs. X360 does
+        // THE LANE-Z INSERT IS PROVEN TWICE, ON TWO ISAs. X360 does
         //   `lvx128 ; vrlimi128 v0,v127,2,0 ; stvx128` (mask 2 == lane z under the 8/4/2/1 ==
         //   x/y/z/w convention). The PS3 build of the same two statements does
         //   `lvx ; vperm v1,v1,v31,<VectorPermuteConstant<0,1,6,3>> ; stvx` -- selector lanes
@@ -604,7 +604,7 @@ namespace Vehicle
         // It hides both base overloads by C++ name lookup; its body explicitly calls the base
         // Vector3 overload, exactly matching the X360 branch target @0x825D9A58.
         //
-        // ⭐ Construct() is BODIED TOO as of 2026-08-03. The three members it needed --
+        // Construct() is BODIED TOO as of 2026-08-03. The three members it needed --
         // mAIVehicleAttribs / mPlayerVehicleAttribs (+0x730/+0xAA0) and mvSpringMassScalers
         // (+0xED0) -- are now declared below, each name and type verbatim from the DecFIGS DWARF
         // (VehiclePhysics.h:840 / :843 / :849). EVERY callee of Construct was already bodied
@@ -628,7 +628,7 @@ namespace Vehicle
         void Release();
 
         // ==========================================================================================
-        // ⛔⛔ SIGNATURE CORRECTED 2026-08-11 (the create-drain wave). THIS DECLARATION WAS A FORK.
+        // SIGNATURE CORRECTED 2026-08-11 (the create-drain wave). THIS DECLARATION WAS A FORK.
         //
         // What was here, since the C11_simple_traffic_attribs group:
         //     bool Prepare(const Matrix44Affine*, const StreamedDeformationSpec*, VehicleAttribs*,
@@ -640,7 +640,7 @@ namespace Vehicle
         // because the only caller (TrafficPhysics::PreparePhysical) lives in an UNMOUNTED TU. It
         // would have surfaced as an LNK2019 the first time anything mounted that file.
         //
-        // ⭐ THE REAL SIGNATURE IS DWARF-ATTESTED, not inferred. PS3 export 0x735DEC:
+        // THE REAL SIGNATURE IS DWARF-ATTESTED, not inferred. PS3 export 0x735DEC:
         //     _ZN10BrnPhysics7Vehicle14VehiclePhysics7PrepareE
         //       N2rw4math3vpu14Matrix44AffineE NS4_7Vector3E S6_ S6_ S6_
         //       RKN12CgsGeometric14AxisAlignedBoxE PNS0_14VehicleAttribsE PKS6_ PKf
@@ -651,7 +651,7 @@ namespace Vehicle
         // register for register: r4 = &transform, v1..v4 = the four vectors in declaration order,
         // r5 = the AABB, r6/r7/r8 = attribs / wheel positions / wheel radii.
         //
-        // ⭐⭐ BODIED 2026-08-11 (prepare-chain wave). The 306-insn body @0x82637C80 is in
+        // The 306-insn body @0x82637C80 is in
         // VehiclePhysics.cpp, store for store: VehicleAttribs::operator= into
         // mPlayerVehicleAttribs, mpAttribs, the nine-parameter forward into
         // SimpleVehiclePhysics::Prepare, the 3-arg SetAttributes @0x8262E140 (also landed this
@@ -660,10 +660,10 @@ namespace Vehicle
         // seeds at +0xFD0/+0xFF0/+0x1050/+0x1060/+0x1070/+0x10D4/+0x1114..+0x1140/+0x1158/
         // +0x1220/+0x1359..+0x1362/+0x1370/+0x13B0/+0x13DC. Every one lands on a member this
         // header already names; nothing new was invented to hold a store.
-        // ⭐ THE +0x1050 .w SEED IS NOW GROUND TRUTH: `unk_8208FB18` was read out of the ARTIST
+        // THE +0x1050 .w SEED IS NOW GROUND TRUTH: `unk_8208FB18` was read out of the ARTIST
         // database by the conductor's targeted IDA export (2026-08-11, same day) -- 0x3F800000
         // == exactly 1.0f, confirming the role-derived stand-in. See the .cpp.
-        // ⭐⭐ AND IT WAS DERIVED TWICE. The sibling wave reached the same body independently by
+        // AND IT WAS DERIVED TWICE. The sibling wave reached the same body independently by
         // cross-reading the PS3 build of the same source (export 0x735DEC, 424 insns) store for
         // store and lane for lane -- X360 `vrlimi128` masks 8/4/2/1 against PS3
         // `VectorPermuteConstant<4,1,2,3>/<0,5,2,3>/<0,1,6,3>/<0,1,2,7>`. The two agree on every
@@ -681,24 +681,24 @@ namespace Vehicle
                      Vector3 lHandlingBodyOffset, Vector3 lHalfExtent,
                      const CgsGeometric::AxisAlignedBox& lrAABB, VehicleAttribs* lpAttribs,
                      const Vector3* lpaWheelPositions, const f32* lpafWheelRadii);
-        // ⭐⭐ SIGNATURE CONFORMED 2026-08-09 (crash/shunt wave). The committed 1-arg const form
+        // SIGNATURE CONFORMED 2026-08-09 (crash/shunt wave). The committed 1-arg const form
         // was a slice artifact off the delegation guess. The real @0x825FC748 prologue consumes
         // v1 (saved into v127 and SUBTRACTED from the shunt life lane at 0x825FC888 -- the dt
         // splat) and WRITES the control block through r4 (`stfs` to +4/+8/+0xC -- mfGas floored
         // to 0.8, mfBrake/mfHandBrake zeroed), so the pointer is non-const. The DWARF spells it
         // exactly (references\DecFIGS\...\VehiclePhysics.h:1505):
         //     void UpdateShunt(BrnPlayerDriverControls *, VecFloat);
-        // BODIED 2026-08-09 in VehiclePhysics.cpp (100 insns, store-for-store); the LOUD TRAP in
+        // in VehiclePhysics.cpp (100 insns, store-for-store); the LOUD TRAP in
         // VehiclePhysicsLinkStubs.cpp is deleted in the same commit.
         void UpdateShunt(BrnPlayerDriverControls* lpControls, VecFloat lvfTimeStep);
 
-        // ⭐ SIGNATURE CONFORMED 2026-08-07 (orchestrator wave). The committed 2-arg form
+        // SIGNATURE CONFORMED 2026-08-07 (orchestrator wave). The committed 2-arg form
         // `(f32, const BrnPlayerDriverControls*)` came off TrafficPhysics's PC-side delegation,
         // not the console. The real @0x82638810 prologue consumes f1=dt (r4 slot), r5=camera
         // matrix (saved r21), r6=controls (r22), r8=lbPlayerAftertouchForceAdditive (r24),
         // r9=lbShowtimeAllowed (r20), with the r7 slot (lbImpactTime) carried by the caller
         // (VehiclePhysics::Update @0x826414F8 `mr r7, r23`).
-        // ⭐⭐ BODIED 2026-08-09 (crash/shunt wave) in VehiclePhysics.cpp -- the 732-insn
+        // in VehiclePhysics.cpp -- the 732-insn
         // crash-state orchestrator, read line-by-line from the X360 asm; the LinkStubs trap is
         // deleted in the same commit. lbImpactTime (the r7 slot) is DEAD in the body (never
         // read -- the first r7 mention is the block-local `li r7, 0x390`); it exists so the
@@ -743,9 +743,9 @@ namespace Vehicle
 
         // ----- ADDITIVE GROW (C04 wheels/tire group): two per-frame wheel-geometry funcs bodied in
         //       VehiclePhysics.cpp (CalculateBodyVelocityAtWheelContact, StoreLocalWheelPositions).
-        //       ⭐ 2026-08-07 (wheel-cluster wave): the wheels orchestrator UpdateWheels
+        // the wheels orchestrator UpdateWheels
         //       @0x8261E4F0 is BODIED (no longer BLOCKED -- see the driving spine below).
-        //       ⚠️ This note used to lump SetWheelVelocities @0x825FD218 in with it as
+        // This note used to lump SetWheelVelocities @0x825FD218 in with it as
         //       "un-recoverable degenerate VMX128 + a dozen un-committed helpers / un-homed rodata".
         //       That was wrong on all three counts -- it is bodied below as of 2026-08-03. Treat the
         //       remaining "BLOCKED" labels in this file as UNVERIFIED CLAIMS until disassembled. ----
@@ -755,7 +755,7 @@ namespace Vehicle
         // r_contact = the wheel's road-contact position when on the ground, else its streamed
         // position (mStreamedPositionPlusTwistAmount). Stored into maWheels[leWheel].mBodyPointVelocity
         // (+0xA0 within the wheel). (mAngularVelocity is the +0x60 register, here mLocalVelocity.)
-        // ⭐ SIGNATURE CONFORMED 2026-08-07 (wheel-cluster wave): DWARF VehiclePhysics.cpp:5148
+        // SIGNATURE CONFORMED 2026-08-07 (wheel-cluster wave): DWARF VehiclePhysics.cpp:5148
         // spells (EVehicleDrivenWheel, Vector3, VecFloat). Both extra args are DEAD in the callee
         // (the only v1 mention in @0x825FB200 is a WRITE at 0x825FB390) -- the SetWheelVelocities
         // dead-parameter precedent. UpdateWheels passes the pair roll direction + dt as shipped.
@@ -770,14 +770,14 @@ namespace Vehicle
 
         // ----- ADDITIVE GROW (C08 airborne/water/freeze/spin group): three more bodies in
         //       VehiclePhysics.cpp.
-        //       ⭐ 2026-08-07 (orchestrator wave): the old claim here that UpdateFreezing
+        // the old claim here that UpdateFreezing
         //       @0x825CFD20 is "BLOCKED -- heavy un-recoverable VMX damping / un-committed
         //       control+vtable surface" was UNVERIFIED and is FALSE on both counts: the body is
         //       185 insns of abs/max/dot timer bookkeeping, every member it touches was already
         //       named, and the one vcall (+0x14) is IsPlayerVehicleActuallyInShowtime -- the same
         //       slot the committed RaceCarPhysics::Update had already identified. It is DECLARED
         //       below with the driving spine and BODIED in VehiclePhysics.cpp.
-        //       ⭐ 2026-08-11 (driving-path wave): UpdateInAirBehaviour (809 insns) is no longer a
+        // UpdateInAirBehaviour (809 insns) is no longer a
         //       trap either -- BODIED in VehiclePhysics.cpp, stub deleted from
         //       VehiclePhysicsLinkStubs.cpp. -----
 
@@ -811,7 +811,7 @@ namespace Vehicle
         f32 GetCarGroundDistanceCheck();
 
         // ==========================================================================================
-        // ⭐⭐ THE DRIVING SPINE (orchestrator wave, 2026-08-07). The per-car frame chain that
+        // THE DRIVING SPINE (orchestrator wave, 2026-08-07). The per-car frame chain that
         // VehiclePhysics::Update @0x826412C0 conducts and UpdateDriving @0x82638148 orders.
         // Bodies in VehiclePhysics.cpp unless marked TRAP (loud stubs in
         // VehiclePhysicsLinkStubs.cpp -- delete the stub in the same commit as any body).
@@ -866,7 +866,7 @@ namespace Vehicle
         // mirrors the magnitude into the handling debug component when attached.
         void UpdateDownForce();
 
-        // @0x82638148 (433): ⭐⭐ THE ORDERER. The exact phase chain is transcribed in the body;
+        // @0x82638148 (433): THE ORDERER. The exact phase chain is transcribed in the body;
         // every stage is bracketed by ExternalPhysicsBody::CheckState with the console's own
         // stage strings ("Before driving update" ... "End of driving update").
         void UpdateDriving(VecFloat lvfTimeStep,
@@ -874,7 +874,7 @@ namespace Vehicle
                            const BrnPlayerDriverControls* lpControls,
                            CgsNumeric::Random& lrRandom);
 
-        // @0x8261E4F0 (1130): ⭐⭐ THE WHEEL ORCHESTRATOR -- BODIED 2026-08-07 (wheel-cluster
+        // @0x8261E4F0 (1130): THE WHEEL ORCHESTRATOR -- BODIED 2026-08-07 (wheel-cluster
         // wave) in VehiclePhysics.cpp, with its four exclusive helper callees below. The full
         // stage list is transcribed at the body.
         void UpdateWheels(const BrnPlayerDriverControls* lpControls, VecFloat lvfTimeStep);
@@ -906,7 +906,7 @@ namespace Vehicle
         // (mIntegrationVariables.x) into a +/-10% band around their average.
         void LimitDifferential(EVehicleDrivenWheel leWheelA, EVehicleDrivenWheel leWheelB);
 
-        // @0x825D0BE8 (809): ⭐ BODIED 2026-08-11 (driving-path wave) in VehiclePhysics.cpp -- the
+        // @0x825D0BE8 (809): BODIED 2026-08-11 (driving-path wave) in VehiclePhysics.cpp -- the
         // ACTIVE airborne attitude controller (the reason jumps feel good): a one-shot take-off
         // damp whose roll strength scales with how rolled the car already was, a per-frame landing
         // assist driven by steering-against-the-roll, and a restoring torque that pitches/rolls the
@@ -917,12 +917,12 @@ namespace Vehicle
         // @0x8262DE58 (185): re-derive the attribs-dependent state after a reset: base 0-arg
         // SetAttributes, the wheel position/radius capture against mpAttribs, the AttribSys
         // handling re-stream (VehicleAttribs::SetupAttribs -- TRAP until its wave), the COM
-        // nudge, the 2-arg chain, the engine re-prepare and SetupSuspension. ⭐ BODIED
-        // 2026-08-09 in VehiclePhysics.cpp. ⚠️ Returns bool (DWARF VehiclePhysics.h:1072) --
+        // nudge, the 2-arg chain, the engine re-prepare and SetupSuspension. BODIED
+        // in VehiclePhysics.cpp. Returns bool (DWARF VehiclePhysics.h:1072) --
         // the committed `void` was a slice artifact; the console returns a literal true.
         bool SetAttributes();
 
-        // ⭐⭐ @0x8262E140 (48 insns) -- ADDED AND BODIED 2026-08-11 (prepare-chain wave). The
+        // @0x8262E140 (48 insns) -- ADDED AND BODIED 2026-08-11 (prepare-chain wave). The
         // THREE-ARG SetAttributes: DWARF-attested (references/DecFIGS/.../VehiclePhysics.h:1075
         // `bool SetAttributes(VehicleAttribs *, const rw::math::vpu::Vector3 *, const float32_t *)`)
         // and the ONLY consumer of the console's `sub_8262E140` -- an export the IDA database leaves
@@ -934,26 +934,26 @@ namespace Vehicle
         //   * its callee set (SimpleVehicleAttribs::SetupAttribs, SimpleVehiclePhysics::
         //     SetAttributes, Engine::Prepare, VehiclePhysics::SetupSuspension) is the 0-arg
         //     SetAttributes' tail with the attribs pointer supplied instead of chased.
-        // ⭐⭐ AND THE IDENTIFICATION IS NOW BY SYMBOL, NOT BY ELIMINATION (2026-08-11 merge). The
+        // AND THE IDENTIFICATION IS NOW BY SYMBOL, NOT BY ELIMINATION (2026-08-11 merge). The
         // PS3 build EXPORTS IT NAMED at 0x735D20 -- `_ZN10BrnPhysics7Vehicle14VehiclePhysics13Set`
         // `AttributesEPNS0_14VehicleAttribsEPKN2rw4math3vpu7Vector3EPKf` -- and the PS3 body of
         // VehiclePhysics::Prepare @0x735DEC calls it by that name with `this + 2704 ==
         // &mPlayerVehicleAttribs`, exactly the `addi r4,r31,0xAA0` the X360 passes. The three
         // circumstantial facts above are corroboration now.
         // Its first three statements are the console-INLINED SimpleVehiclePhysics::SetAttributes(
-        // VehicleAttribs*, const Vector3*, const f32*). ⭐ THAT OVERLOAD IS NO LONGER DECLARE-ONLY:
+        // VehicleAttribs*, const Vector3*, const f32*). THAT OVERLOAD IS NO LONGER DECLARE-ONLY:
         // it is bodied in BrnSimpleVehiclePhysics.cpp (recovered from this inline plus the matching
         // one in SimpleVehiclePhysics::Prepare, PS3-attested at 0x734B10), so the body below CALLS
         // it instead of spelling the block flat -- the inlining-reversal this project's rules ask
         // for, and it closes a declared-but-undefined symbol no per-TU gate could see.
-        // ⚠️ The 2-arg base overload really is called TWICE (0x8262E1A0 inside the inlined 3-arg,
+        // The 2-arg base overload really is called TWICE (0x8262E1A0 inside the inlined 3-arg,
         // then 0x8262E1D8 after mpAttribs is re-seated) -- the same doubled-call shape
         // SimpleVehiclePhysics::Prepare already carries for SetupAttribs. Not a transcription slip.
         bool SetAttributes(VehicleAttribs* lpAttribs, const Vector3* lpaWheelPositions,
                            const f32* lpafWheelRadii);
 
-        // @0x825D0008 (139): the debug reset/fly-around handler (gated on mbReset). ⭐ BODIED
-        // 2026-08-09 in VehiclePhysics.cpp.
+        // @0x825D0008 (139): the debug reset/fly-around handler (gated on mbReset). BODIED
+        // in VehiclePhysics.cpp.
         void HackedResetAndFlyAround(const BrnPlayerDriverControls* lpControls,
                                      VecFloat lvfTimeStep);
 
@@ -967,7 +967,7 @@ namespace Vehicle
         // and run the full SwitchAttribs sequence on it. Bodied in VehiclePhysics.cpp.
         void SwitchAIDonuttingAttribs(bool lbDonutting);
 
-        // ⭐ VIRTUAL, IMAGE-ATTESTED (orchestrator wave, 2026-08-07). The DWARF declares this
+        // VIRTUAL, IMAGE-ATTESTED (orchestrator wave, 2026-08-07). The DWARF declares this
         // virtual (VehiclePhysics.h:1195) and the vtable is now READ OFF THE IMAGE, not
         // reasoned about: the VehiclePhysics/TrafficPhysics vtable @0x820D0C68 carries
         // `li r3,0 ; blr` (an ICF-folded return-false, aliased in the IDB as
@@ -1038,20 +1038,20 @@ namespace Vehicle
         // r x F TORQUE via AddWorldSpaceTorque and accumulates the linear residual into
         // mTotalLinearForce (+0xF0) scaled by mvfWheelFrictionLinearMultiplier (+0xFD0). Wheel-spin
         // reaction feeds back via Wheel::ApplyFrictionReaction; wheels without traction are masked out.
-        // ⭐⭐⭐ BODIED 2026-08-12 (tyre-force wave). The old "FLAG (blocked): degenerate VMX128, the
+        // The old "FLAG (blocked): degenerate VMX128, the
         // per-lane semantics are not recoverable" is RETIRED: the pseudocode is degenerate but the
         // 1141-instruction disassembly is not, and it was read end to end and cross-mapped against the
         // BPR twin sub_B9BD60 (algorithm oracle ONLY -- no BPR offset is used). The lane question was
         // settled from the image (`vmrghw <A>,<B>` -> lane0 = A; the four grip-curve lanes pack as
         // {A-long, A-lat, B-long, B-lat}; `vpermwi128 0x27/0x72` un-packs) and then made moot by
         // writing the solver per wheel. See the VehiclePhysics.cpp banner for the full derivation.
-        // ⛔ ONE thing is still gated, and only one: mSlipVariables.z (the reported skid factor) needs
+        // ONE thing is still gated, and only one: mSlipVariables.z (the reported skid factor) needs
         // three .bss constants no other exported function references. It feeds no force.
-        // ⚠️ CORRECTIONS from the asm: the linear residual lands in mTotalLinearForce (+0xF0), NOT the
+        // CORRECTIONS from the asm: the linear residual lands in mTotalLinearForce (+0xF0), NOT the
         // "+0x240" this note used to claim; the drift/normal grip-curve selector at +0x1352 is
         // mu8DriftState; and the +0x85 "linear-force cap" (unk_82FBA1E0 <- flt_82013A78) is only
         // INITIALISED here -- this function never reads it, so no such cap is applied.
-        // ⭐ SIGNATURE CONFORMED 2026-08-07 (wheel-cluster wave): the old 2-arg form was a slice
+        // SIGNATURE CONFORMED 2026-08-07 (wheel-cluster wave): the old 2-arg form was a slice
         // artifact. DWARF VehiclePhysics.h (decl :5377 block) spells the 9-arg form, and UpdateWheels'
         // register map @0x8261F2CC-0x8261F2F4 names every slot: r4/r5 = the two wheel indices,
         // v1 = the pair's roll direction (mTransform.At() for the rear pair, mSteeringDirection for
@@ -1067,14 +1067,14 @@ namespace Vehicle
         // A wheel with no traction, or in the burnout inertia state, has its spin decayed by 0.95 and
         // nothing else; otherwise a slip-driven scrub force is applied as r x F torque via
         // AddWorldSpaceTorque and accumulated into mTotalLinearForce (+0xF0).
-        // ⭐ 2026-08-12 (tyre-force wave): the INACTIVE decay branch is now BODIED (and its 0.95 is
+        // the INACTIVE decay branch is now BODIED (and its 0.95 is
         // sourced -- `lfs flt_82004FDC`, the same .rdata scalar Engine.cpp homes, not the "inline
-        // immediate" the old note claimed). ⛔ The ACTIVE scrub stays GATED, but the reason narrowed:
+        // immediate" the old note claimed). The ACTIVE scrub stays GATED, but the reason narrowed:
         // its eight tunables' .rdata seeds are NAMED and six of eight are already homed in this tree
         // (30.0 / 3.0 / 0.95 / 1.0 / 20.0 / 4.0 / 1.0 / 0.2, selected by
         // mPreviousControls.meDriverType @+0x10D4 -- types 1 and 3 vs the rest). What is missing is
         // only which slot each occupies in the 0x825D460C.. cascade. Not guessed.
-        // ⭐ SIGNATURE CONFORMED 2026-08-07 (wheel-cluster wave): DWARF VehiclePhysics.h spells
+        // SIGNATURE CONFORMED 2026-08-07 (wheel-cluster wave): DWARF VehiclePhysics.h spells
         // (EVehicleDrivenWheel, VecFloat) -- UpdateWheels passes v1 = dt at all four call sites.
         void HandleWheelFrictionCrashing(EVehicleDrivenWheel leWheel, VecFloat lvfTimeStep);
 
@@ -1114,7 +1114,7 @@ namespace Vehicle
         //   * else if the yaw rate is NOT below -0.5 -> false.
         //   * else (yaw < -0.5) counter-steering iff steering is mild (<= 0.1).
         //
-        // ⭐ SIGNATURE CONFORMED 2026-08-07 (wheel-cluster wave). The old 2-arg (steering, speed)
+        // SIGNATURE CONFORMED 2026-08-07 (wheel-cluster wave). The old 2-arg (steering, speed)
         // form was a slice artifact: DWARF VehiclePhysics.h:2069 spells (VecFloat, float32_t,
         // float32_t), and UpdateWheels' call site @0x8261F19C-0x8261F1C4 maps v1 = splat(dot3(
         // mLinearVelocity, At)) [the forward speed], f1 = controls->mfSteering, f2 = controls->
@@ -1186,7 +1186,7 @@ namespace Vehicle
         //   the original-controls drift-override byte). Direction signed by the drift state.
         void ModifyControlsForDrift(BrnPlayerDriverControls* lpControls);
 
-        // ⭐⭐ SIGNATURES CORRECTED 2026-08-03 (the "cheap prize" wave). The DecFIGS DWARF declares
+        // SIGNATURES CORRECTED 2026-08-03 (the "cheap prize" wave). The DecFIGS DWARF declares
         //    the WHOLE drift family with a TRAILING `VecFloat` time-step that this header had
         //    dropped from every one of them (VehiclePhysics.h:1439/1451/1457/1460/1466):
         //        UpdateDrift          (const BrnPlayerDriverControls*, VecFloat)
@@ -1390,7 +1390,7 @@ namespace Vehicle
         // frame by Update via SwitchAttribs). GetDownForce reads mpAttribs->mBaseAttribs.mvRearWheelMass_PowerToFront_PowerToRear_DownForceLiftCo (asm:
         // `lwz r11,0x720(r4)`). Pinned BY NAME (the intervening handling state is not reproduced as
         // padding; mpAttribs points at one of the two embedded VehicleAttribs sets owned by the
-        // full VehiclePhysics TU). ⚠️ NON-const, per the DWARF (VehiclePhysics.h:837
+        // full VehiclePhysics TU). NON-const, per the DWARF (VehiclePhysics.h:837
         // `VehicleAttribs * mpAttribs`) -- and the console MUTATES through it:
         // VehiclePhysics::SetAttributes @0x8262E070/@0x8262E098 re-streams the pointed-to set
         // and nudges its COM. The `const` that stood here was a reconstruction guess.
@@ -1425,11 +1425,11 @@ namespace Vehicle
         //     mWaterContactTag          +0x594 -> mAboveGroundTestResult.mCollisionTag, BE-high u16
         //     mRepresentativeContactTag +0x596 -> mAboveGroundTestResult.mCollisionTag, BE-low  u16
         //     mbAboveGroundTestValid    +0x598 -> mAboveGroundTestResult.mbValid
-        // ⚠️ mfVerticalDistance is NOT a "water depth": the asm computes it as
+        // mfVerticalDistance is NOT a "water depth": the asm computes it as
         // mTransform.wAxis.y - lineTestResult.y (0x826029D4-0x826029F8), i.e. the height of the car
         // above the road. UpdateInWaterBehaviour tests that height against a threshold; the old
         // "water-depth scalar" name inverted the quantity's meaning.
-        // ⚠️ mWaterContactTag / mRepresentativeContactTag were TWO names for the two halves of ONE
+        // mWaterContactTag / mRepresentativeContactTag were TWO names for the two halves of ONE
         // u32 CollisionTag. On the X360 the +0x594 halfword is the HIGH half of that word and +0x596
         // the LOW half; on x64 the byte positions swap, so a consumer must take the halves from
         // mCollisionTag.muValue by SHIFT, never by re-deriving a byte offset. Helpers below.
@@ -1484,7 +1484,7 @@ namespace Vehicle
         //   .w = CurrentDriftAngle (the speed-blend authority lane GetSteeringAngle uses).
         Vector4 mvLatDriftForceFactor_DriftPushTime_MaxSteeringAngle_CurrentDriftAngle;
 
-        // ⭐ ADDED 2026-08-06 (UpdateVehiclePhysics wave). Two DWARF-attested inlines over the
+        // Two DWARF-attested inlines over the
         // steering bank, both recovered from the stationary-wheel-pose tail of
         // VehicleManager::UpdateVehiclePhysics @0x82645F58..0x82645FA0:
         //   GetMaxSteeringAngle (DWARF :1745; `lvx +0x1030 ; vspltw lane 2` -- the .z lane,
@@ -1561,7 +1561,7 @@ namespace Vehicle
         // sets it from `CurrentBoostKickTime > TimeBoosting` (`stb r11,0x10F5(r31)`). Pinned BY NAME.
         bool       mbInBoostKick;
 
-        // ⚠️ RETIRED, AND THE OLD NOTE WAS WRONG. This home used to declare
+        // RETIRED, AND THE OLD NOTE WAS WRONG. This home used to declare
         //     Vector3 mLinearImpulseAccumulator;      // +0x100
         //     Vector3 mAngularImpulseAccumulatorRow;  // +0x120
         // with the justification "+0x100 = linear impulse accumulator, +0x110/+0x120 = angular".
@@ -1648,7 +1648,7 @@ namespace Vehicle
         bool mbForceFrozen;
         bool mbGivenAftertouchAirBoost;
 
-        // ⭐ ADDED 2026-08-06 (UpdateVehiclePhysics wave). DWARF :1381 `void SetForceFrozen(bool)`;
+        // DWARF :1381 `void SetForceFrozen(bool)`;
         // the X360 inlines it as the single byte store at +0x10F6 (UpdateVehiclePhysics
         // @0x826458EC `stb r11, 0x1836(this+5216*player)`).
         void SetForceFrozen(bool lbFrozen) { mbForceFrozen = lbFrozen; }
@@ -1660,7 +1660,7 @@ namespace Vehicle
         bool mbHasAir;
         bool mbHadAirLastFrame;
 
-        // @+0x135C (4956, DWARF :1014). ⚠️ Reset sets this one TRUE, not false -- it is the request
+        // @+0x135C (4956, DWARF :1014). Reset sets this one TRUE, not false -- it is the request
         // that the next update re-seat the car's transform. The byte order mbAllWheelsHaveTraction
         // +0x135B / mbResetCarTransform +0x135C / mbJustBeenSlammed +0x135D (already documented
         // above) places it exactly.
@@ -1723,7 +1723,7 @@ namespace Vehicle
         Vector3 mPreviousWorldSpaceVelocity;
 
         // ==========================================================================================
-        // ⭐⭐ THE OWN-MEMBER BLOCK CLOSES -- 2026-08-03 (VehiclePhysics own-block wave).
+        // THE OWN-MEMBER BLOCK CLOSES -- 2026-08-03 (VehiclePhysics own-block wave).
         //
         // The DecFIGS DWARF (VehiclePhysics.h:822-982) lists this class's own members in ORDER; the
         // X360 asm gives OFFSETS. Laid against each other they meet with **zero slack at both
@@ -1789,7 +1789,7 @@ namespace Vehicle
         //   0x10F6  mbForceFrozen                            UpdateFreezing `lbz r9,0x10F6(r31)`
         //   0x10F7  mbIsUsingAIDonutAttribs                  DWARF order between two attested bytes
         //   0x10F8  mbGivenAftertouchAirBoost                (already committed)
-        //   0x1100  mSlamEffect            (0x30)            ⭐ AddSlam touches ALL SEVEN fields at
+        // 0x1100  mSlamEffect            (0x30)            AddSlam touches ALL SEVEN fields at
         //                                                    the DWARF's own intra-struct offsets off
         //                                                    0x1100: +0x14/+0x18 mfSteering and
         //                                                    mfOriginalSteering (the SAME value to
@@ -1816,26 +1816,26 @@ namespace Vehicle
         //                                                    UpdateSuspensionPostSimulation
         //   0x1351  mbHadAirLastFrame                        UpdateInAirBehaviour, read immediately
         //                                                    after 0x1350
-        //   0x1352  mu8DriftState                            ⭐ ExitDrift `stb r5,0x1352(r3)`
+        // 0x1352  mu8DriftState                            ExitDrift `stb r5,0x1352(r3)`
         //   0x1353  mi8NumWorldCollisions                    ApplyCrashed/ShowtimeContactImpulse
         //                                                    `lbz`+`stb` (byte counter)
         //   0x1354  miNumCollisions                          the same three impulse funcs,
         //                                                    `lwz`+`stw` (4-byte counter)
-        //   0x1358  mbHandBrake                              ⭐ UpdateHandBrake `lbz`/`stb 0x1358`
-        //   0x1359  mbDeformationModelIsActive               ⭐ VehicleManager::SetRaceCarCrashing
+        // 0x1358  mbHandBrake                              UpdateHandBrake `lbz`/`stb 0x1358`
+        // 0x1359  mbDeformationModelIsActive               VehicleManager::SetRaceCarCrashing
         //                                                    `stb 1,0x1359(record)` immediately
         //                                                    before the ResetDeformableAABB copy
         //   0x135A  mbDeformedThisFrame                      VehicleOutputInterface::UpdateRaceCarState
         //   0x135B  mbAllWheelsHaveTraction                  (already committed)
         //   0x135C  mbResetCarTransform                      (already committed)
-        //   0x135D  mbJustBeenSlammed                        ⭐ AddSlam `stb r10,0x135D`
+        // 0x135D  mbJustBeenSlammed                        AddSlam `stb r10,0x135D`
         //   0x135E  mbOverrideSteering                       DWARF order (no direct site; bracketed
         //                                                    by 0x135D and 0x135F, both attested)
-        //   0x135F  mbIsWedgedInWorld                        ⭐ VehicleManager::DoPlayerStuckLineTests
+        // 0x135F  mbIsWedgedInWorld                        VehicleManager::DoPlayerStuckLineTests
         //                                                    `stb ...,0x135F`
-        //   0x1360  mbIsFrontRayOccluded                     ⭐ DoPlayerStuckLineTests `stb ...,0x1360`
-        //   0x1361  mbDoingBurnout                           ⭐ UpdateBurnout `lbz`/`stb 0x1361`
-        //   0x1362  mbContactingWall                         ⭐ CheckForGrindingAndRubbing
+        // 0x1360  mbIsFrontRayOccluded                     DoPlayerStuckLineTests `stb ...,0x1360`
+        // 0x1361  mbDoingBurnout                           UpdateBurnout `lbz`/`stb 0x1361`
+        // 0x1362  mbContactingWall                         CheckForGrindingAndRubbing
         //                                                    `lbz 0x1362`; HackedResetAndFlyAround `stb`
         //   0x1370  mPreviousTransform     (0x40)            GetTransformDelta `addi r11,r4,0x1370`
         //                                                    + the four row loads
@@ -1847,14 +1847,14 @@ namespace Vehicle
         //                                                    `stfs f30,0x13D0`. Two floats -- exactly
         //                                                    the DWARF's mfStrength/mfOffset.
         //   0x13D8  mbRollingInAir                           UpdateInAirBehaviour `stb`/`lbz 0x13D8`
-        //   0x13DC  meCarType                                ⭐ VehiclePhysics::Prepare `stw r8,0x13DC`
+        // 0x13DC  meCarType                                VehiclePhysics::Prepare `stw r8,0x13DC`
         //   0x13E0  mi8LastAttackersRaceCarIndex             AddSlam `stb r8,0x13E0`; AddShunt
         //                                                    `stb r4,0x13E0` (already committed)
         //   0x13E4  mpDebugComponent                         ApplySuspensionForces / UpdateDownForce
         //                                                    `lwz r11,0x13E4`
         //                                                    -> ends 0x13E8, 16-rounds to **0x13F0**
         //
-        // ⚠️ HOST DIVERGENCE, stated once and NOT pretended away. This block is NOT width-identical
+        // HOST DIVERGENCE, stated once and NOT pretended away. This block is NOT width-identical
         // on x64 (unlike the RaceCarPhysics one): mpAttribs and mpDebugComponent are pointers, and
         // several embedded sub-types in this tree are reconstructions rather than byte-exact copies
         // of the console's. So NO absolute console offset in this class is static_asserted on the
@@ -1884,7 +1884,7 @@ namespace Vehicle
         // mbGivenAftertouchAirBoost, both of which were already declared.
         bool mbIsUsingAIDonutAttribs;
 
-        // @+0x1359 (4953, DWARF :954). ⭐ The seat the record's `mbCrashCommitted` was really at.
+        // @+0x1359 (4953, DWARF :954). The seat the record's `mbCrashCommitted` was really at.
         // VehicleManager::SetRaceCarCrashing @0x82635440 sets it to 1 and, in the same guarded
         // block, copies mOriginalAABB over mDeformableAABB (ResetDeformableAABB) -- i.e. "arm the
         // deformation model and reset its box" is one action.
@@ -1919,7 +1919,7 @@ namespace Vehicle
         // writer and reader.
         bool mbRollingInAir;
 
-        // @+0x13DC (5084, DWARF :977). ⭐ The seat the record's `mfPlayerBoostStrengthStat` was
+        // @+0x13DC (5084, DWARF :977). The seat the record's `mfPlayerBoostStrengthStat` was
         // really at -- and it is an INT, not a float: VehiclePhysics::Prepare @0x826380F0 stores it
         // with `stw`, and VehicleManager::ApplyPlayerStats @0x8259BFE8 stores the car-stats action's
         // sixth word into it with `stw` too.
@@ -1935,19 +1935,19 @@ namespace Vehicle
         DebugComponent* mpDebugComponent;
 
         // ----- C03 suspension phases (bodies in VehiclePhysics.cpp) -----
-        // ⚠️ ARITY CONFORMED 2026-08-09 (attribs-setup wave): the DWARF (VehiclePhysics.h:1646)
+        // ARITY CONFORMED 2026-08-09 (attribs-setup wave): the DWARF (VehiclePhysics.h:1646)
         // spells `void SetupSuspension()` -- NO parameter -- and the @0x8262E10C call site sets
         // no f1. The committed `f64 lfTimeStep` was a slice artifact; the blocked skeleton and
         // its call sites are re-pointed.
-        // @0x825CF718 (190) -- ⭐ BODIED 2026-08-11 (ground-contact wave); the 2026-08-03 BLOCKED
+        // @0x825CF718 (190) -- BODIED 2026-08-11 (ground-contact wave); the 2026-08-03 BLOCKED
         // verdict is RETRACTED in the .cpp with the four rodata values read out of the image.
         // Seeds maSprings[i].{stiffness, damping, mass} from mvSpringMassScalers x the body mass.
         void SetupSuspension();                             // @0x825CF718
-        // ⭐ BODIED 2026-08-11 (suspension-springs wave). Its "PARTIAL / un-pinned lane" verdict is
+        // Its "PARTIAL / un-pinned lane" verdict is
         // RETRACTED in the .cpp: it writes maWheels[i].mPosition.y -- the exact input the grounded
         // arm of UpdateSuspensionSprings reads -- and every offset it touches is a committed member.
         void ApplyWheelWeight(VecFloat lvfTimeStep);        // @0x825F7898
-        // @0x825F9DD0 -- ⭐⭐ THE MassOnWheel WRITER (the per-frame load pass). dt IS AN ARGUMENT:
+        // @0x825F9DD0 -- THE MassOnWheel WRITER (the per-frame load pass). dt IS AN ARGUMENT:
         // UpdateSuspension parks the incoming vector (`vmr128 v127,v1`) and re-issues `vmr128 v1,v127`
         // before this call at 0x8261F6EC, and the callee's first instruction is `vrefp v13,v1` -- the
         // 1/dt that turns the velocity delta into an acceleration. The old no-arg spelling was a slice
@@ -1955,8 +1955,8 @@ namespace Vehicle
         void CalculateWeightTransfer(VecFloat lvfTimeStep);
         void ApplySuspensionForces(VecFloat lvfTimeStep);   // @0x825D1EE8 (lever arm + direction + gate corrected 2026-08-11)
         // UpdateSuspension(VecFloat) is declared on the canonical virtual surface above.
-        // ⭐ BODIED 2026-08-11 (suspension-springs wave); the BLOCKED verdict is RETRACTED in the
-        // .cpp. ⚠️ ARITY CONFORMED at the same time: UpdateSuspension @0x8261F698 parks the
+        // the BLOCKED verdict is RETRACTED in the
+        // .cpp. ARITY CONFORMED at the same time: UpdateSuspension @0x8261F698 parks the
         // incoming dt (`vmr128 v127,v1`); ApplyWheelWeight is called while incoming v1 remains
         // untouched, and v1 is explicitly restored for later phase calls. The integrating callees
         // consume it (for example 0x825F9058/0x825F9074). The committed
@@ -1969,7 +1969,7 @@ namespace Vehicle
         // The contact-impulse handlers + the slam enqueue/tick. (SetCrashing override + UpdateShunt +
         // UpdateCrashing are already declared above / left declare-only.)
         //
-        // ⚠️⚠️ SIGNATURES CORRECTED 2026-08-02 (physics wave 3) -- THE DROPPED-ARGUMENT TRAP, AGAIN.
+        // SIGNATURES CORRECTED 2026-08-02 (physics wave 3) -- THE DROPPED-ARGUMENT TRAP, AGAIN.
         // All four of these forward TWO `rw::physics::InputSpace` tags straight into the base
         // ExternalPhysicsBody::GetImpulsesFromLocalImpulse, and the committed 2-/3-argument forms
         // dropped both. This is the same defect wave 2b settled for the AddLocal* family, in four
@@ -2020,14 +2020,14 @@ namespace Vehicle
                     VecFloat lvfSpeedIncreaseToQuit,
                     s8 li8RaceCarId);                                                                        // @0x825FC630
         void UpdateSlam(BrnPlayerDriverControls* lpControlsCopy, VecFloat lvfFrameTime);                     // @0x825D4950
-        // ⚠️ RETIRED 2026-08-02: a 4-argument `GetImpulsesFromLocalImpulse(const Vector3&, const
+        // a 4-argument `GetImpulsesFromLocalImpulse(const Vector3&, const
         // Vector3&, Vector3&, Vector3&) const` used to sit here, marked "declare-only (base)". It was
         // not the base's function -- the base's is SIX arguments with the two InputSpace tags above,
         // so this declaration both HID the inherited name and mangled to a symbol nothing defines.
         // The name is now inherited from ExternalPhysicsBody.
 
         // ===== ADDITIVE GROW (deformation impulse-passing group) =====
-        // ⭐⭐ SETTLED 2026-08-09 (crash/shunt wave): the +0x10 slot's role-inferred name
+        // SETTLED 2026-08-09 (crash/shunt wave): the +0x10 slot's role-inferred name
         // `IsIgnoringPassedOnImpulses` was WRONG. Both concrete vtables are now read off the
         // image: the VehiclePhysics/TrafficPhysics vtable @0x820D0C68/@0x820D0C98 carries
         // `li r3,0 ; blr` at +0x10, and the RaceCarPhysics vtable @0x820D1034 carries
@@ -2041,7 +2041,7 @@ namespace Vehicle
         // RaceCarPhysics.h's existing declaration is the override.
         // Declared in ABI order on the canonical virtual surface near the class head.
 
-        // ⭐⭐ VIRTUAL, IMAGE-ATTESTED (crash/shunt wave, 2026-08-09). Vtable slot +0x18 (DWARF
+        // VIRTUAL, IMAGE-ATTESTED (crash/shunt wave, 2026-08-09). Vtable slot +0x18 (DWARF
         // VehiclePhysics.h:1204). The base/traffic default @0x82C296C8 is `li r3,1 ; blr` (an
         // ICF fold aliased in the IDB as CgsSound Content::DoOnPostLoad): a crashing vehicle
         // crashes "normally" unless a subclass says otherwise. The RaceCarPhysics vtable
@@ -2050,7 +2050,7 @@ namespace Vehicle
         // down-force + the synthetic-mass regime.
         // Declared in ABI order on the canonical virtual surface near the class head.
 
-        // ⭐⭐ VIRTUAL, IMAGE-ATTESTED (crash/shunt wave, 2026-08-09). Vtable slot +0x28 (DWARF
+        // VIRTUAL, IMAGE-ATTESTED (crash/shunt wave, 2026-08-09). Vtable slot +0x28 (DWARF
         // VehiclePhysics.h:1514: `void UpdateAftertouch(const BrnPlayerDriverControls *,
         // const rw::math::vpu::Matrix44Affine *, VecFloat, bool, bool)`). The base/traffic
         // default @0x8284CB38 is `blr` (the ICF-folded empty function) -- traffic cars have no
@@ -2061,7 +2061,7 @@ namespace Vehicle
         // lbPlayerAftertouchForceAdditive.
         // Declared in ABI order on the canonical virtual surface near the class head.
 
-        // ⚠️ NOT A CONSOLE FUNCTION. The layout gate for the two own-member blocks recovered above.
+        // NOT A CONSOLE FUNCTION. The layout gate for the two own-member blocks recovered above.
         // It is a STATIC MEMBER so that offsetof() reaches the protected members this class
         // inherits from SimpleVehiclePhysics; it is never called, and its whole body is
         // static_asserts, which fire at COMPILE time -- so /OPT:REF discarding it afterwards is
@@ -2071,7 +2071,7 @@ namespace Vehicle
     };
 
     // ==============================================================================================
-    // ⭐⭐ THE CONSOLE ANCHORS THE OWN-BLOCK MAP CLOSES ON (2026-08-03).
+    // THE CONSOLE ANCHORS THE OWN-BLOCK MAP CLOSES ON (2026-08-03).
     //
     // Every constant here is an X360 ASM LITERAL taken from the map inside VehiclePhysics -- not a
     // computed value. VehiclePhysics_layout_check.cpp re-derives the same numbers by walking the

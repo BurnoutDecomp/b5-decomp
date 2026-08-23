@@ -1,7 +1,7 @@
 // =================================================================================================
 // GameSource/Physics/VehicleManager/BrnVehicleManager_ReadUpdatedBodies.cpp
 //
-// ⭐⭐ THE PER-FRAME GRAVITY + INTEGRATION STEP, for race cars AND traffic.
+// THE PER-FRAME GRAVITY + INTEGRATION STEP, for race cars AND traffic.
 //   VehicleManager::ReadUpdatedBodies          @0x82619A10 (198 insns)
 //   PhysicalTrafficManager::ReadUpdatedBodies  @0x825EF608 (334 insns)
 //
@@ -9,7 +9,7 @@
 // gate for the first is DELETED in the same commit (LNK2005 is the intended tripwire if it comes
 // back).
 //
-// ⛔⛔ THE NAME IS A LIE AND THE COMMITTED HEADER COMMENT WAS WRONG. "ReadUpdatedBodies" reads
+// THE NAME IS A LIE AND THE COMMITTED HEADER COMMENT WAS WRONG. "ReadUpdatedBodies" reads
 // NOTHING back from the simulation. The X360 body takes the OutUpdateRigidBody queue in r4,
 // stashes it at var_1C, and NEVER DEREFERENCES IT -- it only forwards it, unread, to the traffic
 // manager's twin, where it is consumed by a DEBUG DUPLICATE CHECK and nothing else. The header's
@@ -27,7 +27,7 @@
 // banked at BrnVehicleConstants.h:10-46, [V] 2026-08-03; this wave re-derived the same reading
 // independently from the asm before writing a line.)
 //
-// ⚠️ AS-SHIPPED, NAMED HONESTLY: the y-lane subtraction below is a raw Euler velocity step with no
+// AS-SHIPPED, NAMED HONESTLY: the y-lane subtraction below is a raw Euler velocity step with no
 // ground reaction of any kind, because the traction-line family that produces the road contact
 // (StartVehicleTractionLineTests / EndVehicleTractionLineTests / ReadRaceCarTractionLineTest-
 // Results) is still gated. That is the console's own arithmetic, not a simplification -- but it
@@ -88,7 +88,7 @@ namespace
 //   tail:          r3 = this + 44768, r4 = the (still unread) queue, v1 = dt
 //                  -> PhysicalTrafficManager::ReadUpdatedBodies
 //
-// ⭐ EVERY SEAT IS REACHED BY NAME. The console's 0x1460 stride is 5216 and the host's
+// EVERY SEAT IS REACHED BY NAME. The console's 0x1460 stride is 5216 and the host's
 // sizeof(RaceCarPhysics) is 5008 (BrnVehicleManager.h's KU_HOST_DRIFT_AFTER_RACECAR_ARRAY note),
 // so an offset-based transcription of this function would have indexed into the wrong car from
 // slot 1 onward while still compiling, linking and running.
@@ -134,7 +134,7 @@ void VehicleManager::ReadUpdatedBodies(
 //     vehicle's mu8PhysicalType (`lbz 0x32`) being E_PHYSICAL_TRAFFIC_TYPE_FULL and by the body's
 //     own mbFrozen (`lbz 0x70`).
 //
-// ⚠️ THE TYPE TEST IS EMITTED TWICE and both copies are kept. The console reads mu8PhysicalType,
+// THE TYPE TEST IS EMITTED TWICE and both copies are kept. The console reads mu8PhysicalType,
 // range-asserts it (BrnPhysicalTrafficVehicle.h:382) and branches on it; then RE-READS it,
 // range-asserts it AGAIN and asserts "IsFullyPhysical()" (:391) before dereferencing
 // mpVehicleBody. That is `if (!IsFullyPhysical()) continue;` followed by an inlined

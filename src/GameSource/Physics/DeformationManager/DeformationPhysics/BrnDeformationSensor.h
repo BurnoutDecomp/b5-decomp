@@ -23,14 +23,10 @@
 //     mPointDisplacement_BiggestImpulseThisFrame (the +0x10 16-byte vector the detach test splats its
 //     w lane from), replacing the previous declared-only stub over the opaque leading run.
 //
-// ⭐⭐⭐ STORED-CONTACT PROMOTED TO ITS REAL DWARF MEMBERS 2026-08-23 (traffic wave 4, stored-contact
-// wave). StoredContact used to be an opaque 64-byte X360 POD (maHead[0x34] + mu32NonWorldFlag +
-// maTail), with the real members reached through an anonymous-namespace `StoredContactView` that
-// declared them HOST-NATIVELY -- an 80-byte view over a 64-byte record, so its last two fields
-// (mpOtherSensor, mbValid) ran PAST THE END and aliased the next contact. See the FIXED banner in
-// BrnDeformationSensor.cpp. The record is now a real host-native struct with the seven DWARF
-// members and the mu32NonWorldFlag alias is retired: console +0x34 IS mpOtherVehicle (4-byte
-// console pointer), proven twice --
+// StoredContact carries its seven real DWARF members host-natively; there is no opaque POD and no
+// `StoredContactView` (an 80-byte view over a 64-byte record ran past the end -- see the layout pin
+// in BrnDeformationSensor.cpp). Console +0x34 IS mpOtherVehicle (a 4-byte console pointer), so the
+// old mu32NonWorldFlag alias is gone. Proven twice --
 //   ClearNonWorldContacts        @0x825C1064 `addi r6,r3,0x54` + `lwz r10,0(r6)`  (sensor+0x54 ==
 //                                contact[0]+0x34) then `addi r6,r6,0x40` per contact;
 //   AddContactsToPenetrationSolver @0x825E1EAC `addi r30,r29,0x24` (r29 == contact+0x10, so r30 ==
@@ -121,8 +117,7 @@ namespace Deformation
 	// (3 deepest per sensor) and AddContactsToPenetrationSolver drains. The member SEQUENCE + names +
 	// types are DWARF-authoritative (references/DecFIGS/dwarfdump/.../BrnDeformationSensor.h:42).
 	//
-	// ⭐⭐⭐ HOST-NATIVE 2026-08-23 (traffic wave 4, stored-contact wave). This was an opaque 64-byte
-	// X360 POD; the console packs mfProjectedDist +0x30 / mpOtherVehicle +0x34 / mpOtherSensor +0x38 /
+	// HOST-NATIVE. The console packs mfProjectedDist +0x30 / mpOtherVehicle +0x34 / mpOtherSensor +0x38 /
 	// mbValid +0x3C into 64 bytes only because its pointers are 4 bytes. On the host the two pointers
 	// widen, so the record is 80 bytes -- and that is the CORRECT host layout, exactly as every other
 	// reconstructed record in this tree. Nothing indexes it by byte offset; the console offsets below
@@ -138,8 +133,8 @@ namespace Deformation
 	struct StoredContact
 	{
 		Vector3            mLocalPointOnA;   // console +0x00 -- sphere-relative point on THIS body
-		// ⭐⭐⭐ 2026-08-23 (traffic wave 4, SOLVER wave) -- THE FIELD HAS TWO SPACES, BY DESIGN, and
-		// mixing them was the +-1667 m launch. For a VEHICLE contact (mpOtherVehicle != 0) this is
+		// ⚠️ THE FIELD HAS TWO SPACES, BY DESIGN; mixing them is the +-1667 m launch. For a VEHICLE
+		// contact (mpOtherVehicle != 0) this is
 		// sphere-relative in the OTHER CAR's body space, exactly like mLocalPointOnA is in this
 		// one's -- ValidateAndAddContact @0x825E1940..0x825E19B8 builds it, and Solve()'s vehicle
 		// loop transforms it by body B. For a WORLD contact it is a RAW WORLD point, because the

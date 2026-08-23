@@ -67,7 +67,7 @@ namespace PhysicsModuleIO
         void SetConstQueue(const InPotentialContactQueue* lpQueue); // @0x825A03C8 :44 (:138) write-lock
         void AddEvent(const CgsSceneManager::SceneManagerIO::PotentialContact& lEvent); // @0x825E72F0 :47 (:142) write-lock
 
-        // ⭐ ADDED 2026-08-14 (walls leg 3, harvest wave). DWARF :51 (:147, body hint :601): the
+        // DWARF :51 (:147, body hint :601): the
         // CUSTOM-QUEUE AddEvent overload -- inline in the console header (assert
         // BrnPhysicsModuleIO.h:596), which is why the X360 also emits an out-of-line local copy
         // (sub_825E73D0) that AddContactResultsToQueue / EndPartContactGeneration /
@@ -79,7 +79,7 @@ namespace PhysicsModuleIO
         s32  GetLength() const;                                    // @0x825A0498  :59 (:150) read-lock
         const CgsSceneManager::SceneManagerIO::PotentialContact& GetEvent(s32 liIndex) const; // @0x825A0578 :62 (:154) read-lock
 
-        // ⭐ ADDED 2026-08-06 (bridge de-facade wave). DWARF :65 (:159): the ContactId-keyed
+        // DWARF :65 (:159): the ContactId-keyed
         // accessor @0x825A06A0 -- resolve a contact spy's muTag back to its potential-contact
         // record. Queue id 0 (E_QUEUE_TYPE_EXTERNAL_FROM_SCENE_CONTACTS) routes through
         // GetEvent(s32) (the mpQueue/custom split); any other id indexes maCustomEventQueues
@@ -92,14 +92,14 @@ namespace PhysicsModuleIO
         // @0x82640C28) reaches this queue via an inlined `this + 983152`, which is
         // maCustomEventQueues[6] (983152 == 16-byte base + 6 * 0x28010 stride). ADDITIVE inline
         // accessor -- byte offset (index 6) is asm-proven.
-        // ⭐ NAME PROVEN 2026-08-14 (walls leg 3): the old "FLAGGED as unproven" caveat retires --
+        // NAME PROVEN 2026-08-14 (walls leg 3): the old "FLAGGED as unproven" caveat retires --
         // DoRaceCarWorldContactValidation @0x825EB6C8 asserts
         // "lpPotentialContactInterface->GetRaceCarWithWorldQueueValidated()->GetLength() == 0"
         // (BrnVehicleManagerContactGeneration.cpp:1384) against EXACTLY this+983152, binding the
         // DWARF accessor name to index 6 by the console's own assert string.
         const CustomPotentialContactQueue& GetRaceCarWithWorldQueueValidated() const { return maCustomEventQueues[6]; }
 
-        // ⭐ ADDED 2026-08-14 (walls leg 3): the RAW (unvalidated) race-car-vs-world queue,
+        // the RAW (unvalidated) race-car-vs-world queue,
         // maCustomEventQueues[5]. Index binding asm-proven twice over: the harvest posts race-car
         // world contacts with UserTagA == 5 (DoRaceCarWorldContactGeneration's baked `li 5` queue
         // selector -> AddContactResultsToQueue -> AddEvent(5, ...)), and
@@ -109,16 +109,16 @@ namespace PhysicsModuleIO
         // validated pairing is exactly the raw/Validated name split.
         const CustomPotentialContactQueue& GetRaceCarWithWorldQueue() const { return maCustomEventQueues[5]; }
 
-        // ⭐ ADDED 2026-08-14 (walls leg 4). DeformationManager::AddArticulatedJointContacts
+        // DeformationManager::AddArticulatedJointContacts
         // @0x825DB190 (PS3 0x739FAC names the drain verbatim) walks `maCustomEventQueues[12]` --
         // the articulated-joint (traffic cab/trailer) contact queue; both entity ids are asserted
         // TRAFFIC_VEHICLE owners at :1033/:1034. Same additive-inline pattern as [5]/[6] above.
         const CustomPotentialContactQueue& GetArticulatedJointQueue() const { return maCustomEventQueues[12]; }
 
-        // ⭐ ADDED 2026-08-14 (walls leg 4). The two hinged-body-part queues the pool's
+        // The two hinged-body-part queues the pool's
         // UpdateJoinedParts drains.
         //
-        // ⛔⛔ INDEX CORRECTED 2026-08-23 (traffic wave 4, fix B) -- THEY WERE [7]/[8], WHICH
+        // INDEX CORRECTED 2026-08-23 (traffic wave 4, fix B) -- THEY WERE [7]/[8], WHICH
         // COLLIDED HEAD-ON WITH GetRaceCarWithRaceCarQueue/GetRaceCarWithTrafficQueue BELOW.
         // The old note quoted ifc+0x118080 / ifc+0x140090; those are FixUpVehicleContacts'
         // race-car offsets, not the pool's. PhysicalBodyPartPool::UpdateJoinedParts @0x8260D200
@@ -141,7 +141,7 @@ namespace PhysicsModuleIO
         const CustomPotentialContactQueue& GetHingedBodyPartWithWorldQueue() const { return maCustomEventQueues[1]; }
         const CustomPotentialContactQueue& GetHingedBodyPartWithCarQueue()   const { return maCustomEventQueues[2]; }
 
-        // ⭐ ADDED 2026-08-06 (FixUpVehicleContacts wave). Three more custom-queue accessors, same
+        // Three more custom-queue accessors, same
         // ADDITIVE pattern as [6] above -- byte offsets (indices) are asm-proven from
         // PhysicsModule::FixUpVehicleContacts @0x825A6010, which walks:
         //     ifc+0x140090 == 16 + 8*0x28010  ->  maCustomEventQueues[8]   (queue asserts owner
@@ -159,7 +159,7 @@ namespace PhysicsModuleIO
         const CustomPotentialContactQueue& GetRaceCarWithRaceCarQueue() const { return maCustomEventQueues[7]; }
         const CustomPotentialContactQueue& GetSceneManagerContactQueue() const { return maCustomEventQueues[0]; }
 
-        // ⭐ ADDED 2026-08-06 (BridgeContactsToSimulation wave). Two more custom-queue accessors,
+        // Two more custom-queue accessors,
         // same ADDITIVE pattern -- byte offsets (indices) are asm-proven from PhysicsModule::
         // BridgeContactsToSimulation @0x825A99E8, which walks:
         //     ifc+0x168090 == 16 + 9*0x28010  ->  maCustomEventQueues[9]  (loop asserts owner pair
@@ -167,14 +167,14 @@ namespace PhysicsModuleIO
         //     ifc+0x208110 == 16 + 13*0x28010 ->  maCustomEventQueues[13] (loop asserts owner pair
         //         (TRAFFIC_VEHICLE, TRAFFIC_VEHICLE) @:410/:411)
         // NAMES: the DWARF accessors whose meaning those owner asserts prove
-        // (GetTrafficWithWorldQueue :83 / GetTrafficWithTrafficQueue :119). ⭐ Note the bridge's
+        // (GetTrafficWithWorldQueue :83 / GetTrafficWithTrafficQueue :119). Note the bridge's
         // per-queue ContactId owner byte EQUALS the queue index everywhere it walks a queue
         // ([6]->0x6000000, [7]->0x7..., [8]->0x8..., [9]->0x9..., [13]->0xD...) -- five
         // independent confirmations of the index<->meaning binding.
         const CustomPotentialContactQueue& GetTrafficWithWorldQueue() const { return maCustomEventQueues[9]; }
         const CustomPotentialContactQueue& GetTrafficWithTrafficQueue() const { return maCustomEventQueues[13]; }
 
-        // ADDED 2026-08-22 (wave T3 C5). VehicleManager::DoTrafficWorldContactOrdering @0x825C8F18
+        // VehicleManager::DoTrafficWorldContactOrdering @0x825C8F18
         // REWRITES the records of two queues in place, so it needs the DWARF's non-const overloads
         // (BrnPhysicsModuleIO.h:86 GetTrafficWithWorldQueue(), :89/:92 GetSimpleTrafficWithWorldQueue()).
         // Index proof from that body: `a2 + 1474720` == 16 + 9*0x28010 -> [9]; `a2 + 1638576` ==

@@ -1,7 +1,7 @@
 // =================================================================================================
 // GameSource/Physics/VehicleManager/SharedIO/BrnVehicleOutputInterface_UpdateRaceCarState.cpp
 //
-// ⭐⭐ THE PHYSICS -> OUTPUT PUBLISH. This file is the console's ONLY writer of
+// THE PHYSICS -> OUTPUT PUBLISH. This file is the console's ONLY writer of
 // BrnPhysics::Vehicle::RaceCarState -- i.e. the only thing that ever puts a simulated car's pose,
 // velocity, wheels and drive state where the world side can read them.
 //
@@ -10,7 +10,7 @@
 //   VehicleOutputInterface::SetRaceCarHidden                 (inlined)     DWARF :333
 //   VehicleOutputInterface::SetWheelTransform                (inlined)     DWARF :339
 //
-// ⚠️ IT WAS NOT ON ANY GATE LIST. The conductor's three named deferrals for this leg were
+// IT WAS NOT ON ANY GATE LIST. The conductor's three named deferrals for this leg were
 // GetUpdatedVehicleBodies @0x82619340, UpdateVehiclePhysicsPostSimulation @0x826426E0 and
 // WriteOutVehicleStats @0x8263F460. The first two do NOT touch VehicleOutputInterface at all
 // (they are the sim-queue push and the post-sim suspension step); the third is the caller. The
@@ -23,7 +23,7 @@
 //   Hex-Rays renders the last as `char a5`; the asm stores it straight into a bool member
 //   (`stb r16, 0x454(r31)`), so it is the DWARF's bool.
 //
-// ⚠️ THE INDEX IS THE ENTITY INDEX. `mulli r11, r4, 0x460 ; add r11,r11,r3 ; addi r31,r11,0x10`
+// THE INDEX IS THE ENTITY INDEX. `mulli r11, r4, 0x460 ; add r11,r11,r3 ; addi r31,r11,0x10`
 // == &maRaceCarStates[a2] (stride 1120, member base +16), and the caller passes
 // maRaceCarEntityIDs[liRaceCar].GetEntityIndex(), not liRaceCar. Reproduced verbatim; see the
 // FLAG on the declaration in BrnVehicleOutputInterface.h.
@@ -86,7 +86,7 @@
 //   mRoadContact.mNormal            <- wheel.mRoadContact.mNormal
 //   mRoadContact.mfLineDistanceToRoad / mCollisionTag / mbIsOnGround /
 //   mbWasOnGroundLastUpdate / mbLineTestIsValid  <- the same fields of wheel.mRoadContact
-//     ⚠️ mbIsCloseToGround (+42 / wheel +0x2A) is NOT copied by the console. Reproduced as-is.
+// mbIsCloseToGround (+42 / wheel +0x2A) is NOT copied by the console. Reproduced as-is.
 //   mVelocity                       <- wheel.mBodyPointVelocity            (+0xA0)
 //   mfRadiansPerSecond              <- wheel.mIntegrationVariables.x       (+0x30 .x)
 //   mfRotation                      <- wheel.mIntegrationVariables.z       (+0x30 .z)
@@ -126,7 +126,7 @@
 // (`vmsum3fp128` before the branch); the short-circuit here is behaviour-identical because they
 // are pure.
 //
-// ⛔ ONE DIVERGENCE, NAMED. The console dispatches GetSteeringAngle through vtable slot 0 with a
+// ONE DIVERGENCE, NAMED. The console dispatches GetSteeringAngle through vtable slot 0 with a
 // 16-byte sret (`lwz r11,0(r30) ; lwz r11,0(r11) ; bctrl` then `lfs f0,0(r3)`), and the DWARF
 // declares it `virtual VecFloat GetSteeringAngle() const` on SimpleVehiclePhysics. This tree
 // declares it non-virtual, returning f32, on VehiclePhysics. Calling it by name is semantically
@@ -220,7 +220,7 @@ void VehicleOutputInterface::UpdateRaceCarState(s32 liRaceCarIndex,
                                                 const VehicleDriver*  lpDriver,
                                                 bool                  lbForceReset)
 {
-    // ⚠️ DIVERGENCE (named): the console has no null guard here -- WriteOutVehicleStats is its only
+    // DIVERGENCE (named): the console has no null guard here -- WriteOutVehicleStats is its only
     // caller and always passes live objects. On this build the create path is young enough that a
     // null would be an AV inside a per-frame publish, so the two pointers are checked. Nothing else
     // about the body is conditional.
@@ -367,7 +367,7 @@ void VehicleOutputInterface::UpdateRaceCarState(s32 liRaceCarIndex,
         lrWheelLite.mRoadContact.mbIsOnGround            = lrWheel.mRoadContact.mbIsOnGround;
         lrWheelLite.mRoadContact.mbWasOnGroundLastUpdate = lrWheel.mRoadContact.mbWasOnGroundLastUpdate;
         lrWheelLite.mRoadContact.mbLineTestIsValid       = lrWheel.mRoadContact.mbLineTestIsValid;
-        // ⚠️ mbIsCloseToGround is deliberately NOT copied -- the console does not copy it (there is
+        // mbIsCloseToGround is deliberately NOT copied -- the console does not copy it (there is
         // no store to WheelLite+42 anywhere in this function). Reproduced as-is.
         lrWheelLite.mRoadContact.mPosition = TransformPoint(
             lPhysicsTransform,

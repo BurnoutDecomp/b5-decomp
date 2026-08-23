@@ -1,7 +1,7 @@
 #pragma once
 
 #include "types.hpp"
-// ⚠️ FIXED 2026-08-03: this was `#include "DebugSystem/Core/CgsDebugComponent.h"`, which resolves
+// FIXED 2026-08-03: this was `#include "DebugSystem/Core/CgsDebugComponent.h"`, which resolves
 // against NO -I directory in either the per-TU gate or build_game_exe.bat -- i.e. this header had
 // never been compiled by anything. The real path is below.
 #include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugComponent.h"   // CgsDev::DebugComponent (real base)
@@ -26,7 +26,7 @@ namespace Vehicle
         // debug overlay. Copies the whole 80-byte AOSTriangle into mLastWallTriangle @+0x350.
         void SetLastWallTriangle(const CgsGeometric::Triangle4::AOSTriangle* lpTriangle);
 
-        // ⭐ ADDED 2026-08-06 (UpdateVehiclePhysics wave). The per-frame tick
+        // The per-frame tick
         // VehicleManager::UpdateVehiclePhysics calls once per live car (bl @0x82645A78,
         // f1 = the sim timestep). Declaration-only here -- the body is a named FLAG trap
         // stub in BrnVehicleManagerLinkStubs.cpp until this component's own reconstruction

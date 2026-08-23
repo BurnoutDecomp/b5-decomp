@@ -90,9 +90,8 @@ namespace
         }
     }
 
-    // DELETE-WHEN-STABLE bring-up probes, gated on BRN_TRAFFIC_DIAG. Every probe below is
-    // one-shot or value-latched, so steady state costs one env lookup per call.
-    // [DIAG] NOT IN THE X360 BINARY.
+    // BRN_TRAFFIC_DIAG bring-up probes -- NOT IN THE X360 BINARY. Every surviving probe is
+    // one-shot or capped, so steady state costs one env lookup per call.
     bool TrafficDiagEnabled()
     {
         static const bool sbEnabled = (getenv("BRN_TRAFFIC_DIAG") != 0);
@@ -248,13 +247,6 @@ void TrafficEntityModule::EnterRunningState()
     meRunningState                  = leRunningStateToUse;
     meRunningStateToUseAfterStartup = E_RUNNINGSTATE_NORMAL;
     meStartingUpState               = E_STARTINGUPSTATE_INVALID;
-
-    if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())
-    {
-        // [T1-static] the transition that makes the module live. One-shot by construction --
-        // EnterRunningState runs once per start-up.  DELETE-WHEN-STABLE.
-        *lpDiag << "[T1-static] EnterRunningState: meState -> E_STATE_RUNNING\n";
-    }
 }
 
 // ----------------------------------------------------------------------------
@@ -618,45 +610,11 @@ void TrafficEntityModule::StaticVehicles_Generate(u8 luVehicleType, u16 luHull, 
 {
     if (mFreeStaticParamStack.GetLength() == 0)
     {
-        if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())
-        {
-            // [T1-static] one-shot: the pool ran dry. With KillOutOfAreaTraffic gated (see
-            // _wT1_06.cpp) this is the expected long-drive end state, and it is the line that
-            // explains "parked cars stopped appearing". DELETE-WHEN-STABLE.
-            static bool sbLogged = false;
-            if (!sbLogged)
-            {
-                sbLogged = true;
-                *lpDiag << "[T1-static] mFreeStaticParamStack EXHAUSTED (199 slots all in "
-                           "use) -- no more parked params until one is retired; "
-                           "KillOutOfAreaTraffic is gated, so none will be\n";
-            }
-        }
         return;
     }
 
     const u32 luSlot = mFreeStaticParamStack.Peek();
     mFreeStaticParamStack.Pop();
-
-    if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())
-    {
-        // [T1-static] the generate roll: the first ten slots taken, then every 25th. This is
-        // where FillNewHull's mExistsAtAllChance roll became a real param, and it names the
-        // slot, vehicle type, hull and index-on-hull InitialiseAsStatic will use next.
-        // DELETE-WHEN-STABLE.
-        static u32 suGenerated = 0;
-        ++suGenerated;
-        if (suGenerated <= 10u || (suGenerated % 25u) == 0u)
-        {
-            *lpDiag << "[T1-static] Generate #" << static_cast<s32>(suGenerated)
-                    << " slot=" << static_cast<s32>(luSlot)
-                    << " type=" << static_cast<s32>(luVehicleType)
-                    << " hull=" << static_cast<s32>(luHull)
-                    << " indexOnHull=" << static_cast<s32>(luIndexOnHull)
-                    << " freeLeft=" << static_cast<s32>(mFreeStaticParamStack.GetLength())
-                    << "\n";
-        }
-    }
 
     CGS_ASSERT(!maStaticTrafficParams[luSlot].IsAlive(),
                "Static param was still alive when we tried to regenerate it");
@@ -719,7 +677,6 @@ void TrafficEntityModule::StaticVehicles_CreateNewVehicles(
             "available now");
     }
 
-    u32 luCreated = 0;
 
     for (u32 luStatic = 0; luStatic < KU_MAX_STATIC_TRAFFIC; ++luStatic)
     {
@@ -791,37 +748,9 @@ void TrafficEntityModule::StaticVehicles_CreateNewVehicles(
                                       mVehicleSoaData);
 
         SetVehicleTransform(luVehicle, lOutMatrix);
-        ++luCreated;
 
         if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())
         {
-            // [T1-static] one-shot on the first InitialiseAsStatic, with the world position
-            // seated (what CreateNewVehicleEntities hands AddEntity next frame). (0,0,0) means
-            // the record transform never arrived; a plausible position with nothing on screen
-            // means the fault is downstream of the module. DELETE-WHEN-STABLE.
-            static bool sbLogged = false;
-            if (!sbLogged)
-            {
-                sbLogged = true;
-                const Vector3& lrPos = lOutMatrix.wAxis;
-                *lpDiag << "[T1-static] FIRST InitialiseAsStatic vehicle=" << static_cast<s32>(luVehicle)
-                        << " (staticSlot=" << static_cast<s32>(luStatic) << ")"
-                        << " type=" << static_cast<s32>(luVehicleType)
-                        << " pos=(" << lrPos.x << ", " << lrPos.y << ", " << lrPos.z << ")\n";
-
-                // [T1-height] both ends of the one-metre drop, so one line shows whether
-                // 0x82722D14's `vsubfp wAxis, yAxis` is being applied: recordY - droppedY must
-                // equal the record's up-vector length. DELETE-WHEN-STABLE.
-                *lpDiag << "[T1-height] record pos=(" << lpRecord->mTransform.wAxis.x
-                        << ", " << lpRecord->mTransform.wAxis.y
-                        << ", " << lpRecord->mTransform.wAxis.z << ")"
-                        << " up=(" << lpRecord->mTransform.yAxis.x
-                        << ", " << lpRecord->mTransform.yAxis.y
-                        << ", " << lpRecord->mTransform.yAxis.z << ")"
-                        << " -> dropped Y=" << lrPos.y
-                        << " (drop=" << (lpRecord->mTransform.wAxis.y - lrPos.y) << ")\n";
-            }
-
             // [T4-static] ONE LINE PER CAR, capped, so the conductor can pick a ram target
             // without a debugger: index, type, seated world position, the transform's zAxis
             // (the direction the car faces, which is what a -Teleport heading has to match),
@@ -846,25 +775,6 @@ void TrafficEntityModule::StaticVehicles_CreateNewVehicles(
     }
 
     mbDontCreateStaticVehiclesNearAnyPlayers = false;
-
-    if (luCreated != 0)
-    {
-        if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())
-        {
-            // [T1-static] value-latched: only prints on a frame that actually made cars.
-            // DELETE-WHEN-STABLE.
-            u32 luAliveParams = 0;
-            u32 luAliveVehicles = 0;
-            for (u32 luStatic = 0; luStatic < KU_MAX_STATIC_TRAFFIC; ++luStatic)
-            {
-                if (maStaticTrafficParams[luStatic].IsAlive())                       ++luAliveParams;
-                if (maVehicles[KU_STATIC_TRAFFIC_OFFSET + luStatic].IsAlive())       ++luAliveVehicles;
-            }
-            *lpDiag << "[T1-static] created=" << static_cast<s32>(luCreated)
-                    << " aliveParams=" << static_cast<s32>(luAliveParams)
-                    << " aliveVehicles=" << static_cast<s32>(luAliveVehicles) << "\n";
-        }
-    }
 }
 
 // ----------------------------------------------------------------------------
@@ -1040,24 +950,6 @@ void TrafficEntityModule::FillNewHull(u16 luHull)
 {
     const Hull* lpHull = GetHull(luHull);
 
-    if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())
-    {
-        // [T1-fill] first visit per hull, keyed by a 400-bit seen-set so a hull entered, left
-        // and re-entered prints once. It says the spawn chain reached a real hull; a
-        // muNumStaticTraffic of 0 means that hull has no parked slots in the data.
-        // DELETE-WHEN-STABLE. [DIAG] NOT IN THE X360 BINARY.
-        static CgsContainers::BitArray<KU_MAX_HULLS> sSeenHulls;
-        if (luHull < KU_MAX_HULLS && !sSeenHulls.IsBitSet(luHull))
-        {
-            sSeenHulls.SetBit(luHull);
-            *lpDiag << "[T1-fill] FillNewHull first visit hull=" << static_cast<s32>(luHull)
-                    << " staticRecords=" << static_cast<s32>(lpHull->muNumStaticTraffic)
-                    << " density=" << mfTrafficAmountScale
-                    << " freeStaticParams=" << static_cast<s32>(mFreeStaticParamStack.GetLength())
-                    << "\n";
-        }
-    }
-
     if (mfTrafficAmountScale == 0.0f)
     {
         return;
@@ -1195,18 +1087,6 @@ void TrafficEntityModule::SpawnNewTraffic(const ActiveHullSet& lrNewActiveHulls)
         return;
     }
 
-    if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())
-    {
-        // [T1-spawn] first visit only.  DELETE-WHEN-STABLE.
-        static bool sbFirstVisit = true;
-        if (sbFirstVisit)
-        {
-            sbFirstVisit = false;
-            *lpDiag << "[T1-spawn] SpawnNewTraffic first visit, newHulls="
-                    << static_cast<s32>(lrNewActiveHulls.GetLength()) << "\n";
-        }
-    }
-
     for (u32 luIndex = 0; luIndex < lrNewActiveHulls.GetLength(); ++luIndex)
     {
         FillNewHull(lrNewActiveHulls[luIndex]);
@@ -1293,7 +1173,7 @@ void TrafficEntityModule::SpawnNewTraffic(const ActiveHullSet& lrNewActiveHulls)
 //     ending in HullRuntime::SetStoplineRed @0x8274D82C -- TrafficLightManager has no body.
 //
 // The per-old-hull HullRuntime::Release + free, the per-new-hull allocate + HullRuntime::Prepare
-// and the tail call to RebuildGeneratorList @0x8274D8F4 are LIVE (wave T2 round 1).
+// and the tail call to RebuildGeneratorList @0x8274D8F4 are LIVE.
 // ----------------------------------------------------------------------------
 void TrafficEntityModule::RecalculateActiveHulls(
     const BrnTrafficIO::InputBuffer_PostPhysics* lpInput,
@@ -1637,21 +1517,6 @@ void TrafficEntityModule::RecalculateActiveHulls(
     {
         RebuildGeneratorList();
     }
-
-    if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())
-    {
-        // [T1-hull] value-latched: prints only when the active-hull count changes.
-        // DELETE-WHEN-STABLE.
-        static s32 siLastActiveHullCount = -1;
-        const s32 liActiveHullCount = static_cast<s32>(mActiveHulls.GetLength());
-        if (liActiveHullCount != siLastActiveHullCount)
-        {
-            siLastActiveHullCount = liActiveHullCount;
-            *lpDiag << "[T1-hull] activeHulls=" << liActiveHullCount
-                    << " new=" << static_cast<s32>(lpOutNewHulls->GetLength())
-                    << " old=" << static_cast<s32>(lpOutOldHulls->GetLength()) << "\n";
-        }
-    }
 }
 
 // ============================================================================
@@ -1837,10 +1702,10 @@ void TrafficEntityModule::PostPhysicsUpdate(CgsModule::IOBufferStack* lpInputBuf
     // ====================================================================================
     case E_STATE_RUNNING:
     {
-        // ⭐ UN-GATED wave T3 (physical traffic): HandleExternalResponses @0x82732C68 is the
-        // second of the five head legs and is BODIED (_wT3_04.cpp). It is what turns the physics
-        // side's PhysicalTrafficState queue back into world vehicle transforms, so a car the
-        // player hits actually moves. The other four legs keep their gate below.
+        // HandleExternalResponses @0x82732C68 is the second of the five head legs and IS bodied
+        // (_wT3_04.cpp): it turns the physics side's PhysicalTrafficState queue back into world
+        // vehicle transforms, so a car the player hits actually moves. The other four legs keep
+        // their gate below.
         HandleExternalResponses(lpInput);
 
         {
@@ -1958,14 +1823,9 @@ void TrafficEntityModule::PostPhysicsUpdate(CgsModule::IOBufferStack* lpInputBuf
             if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())
             {
                 // [T4-player] every 60 frames: where the player is, how fast and which way.
-                // Read against [T4-static] it says whether a -Teleport actually put the car
-                // near a parked one; read against [T4-collide] it says whether the collidable
-                // sweep is following the player at all.
-                //
-                // SEAT NOTE: the wave spec asked for PostPhysicsUpdate's RUNNING arm; this is
-                // the same function's local-player refresh tail, ~90 lines later, which is the
-                // one place that already holds position, direction AND the RaceCarState the
-                // velocity comes from. Same frame, same data, no extra interface fetch.
+                // Read against [T4-static] it says whether a -Teleport put the car near a parked
+                // one. Seated in PostPhysicsUpdate's local-player refresh tail, the one place that
+                // already holds position, direction AND the RaceCarState the velocity comes from.
                 // DELETE-WHEN-STABLE.
                 static u32 suFrame = 0;
                 if ((suFrame % 60u) == 0u)
@@ -2436,17 +2296,11 @@ void TrafficEntityModule::Construct()
 
     mStreamer.Construct();
 
-    // ⭐⭐ 0x8274087C..0x8274088C -- FuzzyBehaviourLogic::Construct(this+0x71860, this+0x72710),
-    // i.e. mFuzzyBehaviours.Construct(&mTweakValues). LANDED wave 3 round 3; it was inside the
-    // gate below and the gate's "no body in this tree" claim was STALE -- the body has been in
-    // BrnTrafficFuzzyLogicBehaviours.cpp (mounted, build_game_exe.bat:2176) all along.
-    // WHAT IT COST: with this call missing, every fuzzy envelope AND all 21 mega-tweek constants
-    // stayed at their zero-init values, so ProcessParamRules returned six zero scores. The
-    // action pick (UpdateParams_PrecalcBehaviourParams @0x827180FC) seeds best = 0.0 / index = 0
-    // and only replaces on `>`, so a six-zero score vector elects action 0 == DRIVE_AROUND_
-    // OBSTRUCTION -- which is exactly the boot's `[T3-behaviour] histogram [2]=5462`, with the
-    // case-0 signature stopDist 2.0 and targetSpeed (rand+1)*scale == 4.586. The NORMAL arm
-    // (action 5) can only win once mNormalScore lane x is its real 0.2.
+    // 0x8274087C..0x8274088C -- FuzzyBehaviourLogic::Construct(this+0x71860, this+0x72710),
+    // i.e. mFuzzyBehaviours.Construct(&mTweakValues). Without this call every fuzzy envelope
+    // and all 21 mega-tweek constants stay at their zero-init values, ProcessParamRules returns
+    // six zero scores, and the action pick (@0x827180FC, seeds best 0.0 / index 0 and replaces
+    // only on `>`) elects action 0 == DRIVE_AROUND_OBSTRUCTION for every param.
     mFuzzyBehaviours.Construct(&mTweakValues);
 
     {
@@ -2613,16 +2467,6 @@ void TrafficEntityModule::Construct()
     // override, so the base placeholder returns null and Prepare returns FALSE every frame,
     // forever. That is a boot hang at WorldModule::Prepare's traffic stage.
     mbIsNewModule = true;
-
-    if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())
-    {
-        // [T1-static] one-shot construction tell.  DELETE-WHEN-STABLE.
-        *lpDiag << "[T1-static] TrafficEntityModule::Construct done, mbDEBUGTurnTrafficOff="
-                << (mbDEBUGTurnTrafficOff ? 1 : 0)
-                << " mfTrafficAmountScale*1000=" << static_cast<s32>(mfTrafficAmountScale * 1000.0f)
-                << " freeStaticParams=" << static_cast<s32>(mFreeStaticParamStack.GetLength())
-                << "\n";
-    }
 }
 
 }

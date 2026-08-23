@@ -44,8 +44,7 @@ namespace Deformation
     }
 
     // :383 -- the world -> model affine inverse of the attached body's transform.
-    // ⭐ BODIED 2026-08-23 (traffic wave 4, SOLVER wave). Declared since the header was written but
-    // BODYLESS, because it has NO out-of-line symbol on either console: every caller inlines it.
+    // NO out-of-line symbol on either console: every caller inlines it.
     // The X360 inlining that forced it is DeformationSensor::ValidateAndAddContact @0x825E1788's
     // vehicle arm -- 0x825E1970..0x825E198C is the vmrglw/vmrghw 3x3 transpose and
     // 0x825E199C..0x825E19A4 the negated-Pos cascade, i.e. exactly

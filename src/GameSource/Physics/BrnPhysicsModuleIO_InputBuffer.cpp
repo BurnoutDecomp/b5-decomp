@@ -36,7 +36,7 @@ namespace PhysicsModuleIO
 {
     void InputBuffer::_AssertLayout()
     {
-        // ⚠ REBASED 2026-08-06 (big-five #2 wave): mVehicleInputInterface is the REAL
+        // REBASED 2026-08-06 (big-five #2 wave): mVehicleInputInterface is the REAL
         // Vehicle::VehicleInputInterface now (see the header banner), and its host sizeof
         // exceeds the 142176-byte console span, so every member AFTER it drifts by one uniform
         // host constant (the interface is alignas(16), 368 + sizeof is 16-aligned, and the
@@ -52,14 +52,14 @@ namespace PhysicsModuleIO
             static_assert(sizeof(VehicleInputInterfaceStorage) >= 142176,
                           "vehicle-input span smaller than the console span -- retype regressed");
             static_assert(offsetof(InputBuffer, mVehicleDriverInterface)       == 142544 + KU_DRIFT, "mVehicleDriverInterface @142544+D");
-            // ⭐ 2026-08-09 (feed wave): mVehicleDriverInterface is the REAL
+            // mVehicleDriverInterface is the REAL
             // Vehicle::VehicleDriverInputInterface now. Unlike the vehicle-input span it does NOT
             // grow on the host -- every member is pointer-free -- so it must land EXACTLY on the
             // console span or the members below it would need a second drift constant. Pin it.
             static_assert(sizeof(VehicleDriverInputInterfaceStorage) == 147840 - 142544,
                           "vehicle-driver span must equal the console 5296 (host type is pointer-free)");
             static_assert(offsetof(InputBuffer, mVehicleEffectsInputInterface) == 147840 + KU_DRIFT, "mVehicleEffectsInputInterface @147840+D");
-            // ⭐ 2026-08-10 (pre-physics bridge wave): mVehicleEffectsInputInterface is the REAL
+            // mVehicleEffectsInputInterface is the REAL
             // Vehicle::VehicleEffectsInputInterface now (it was a 1-byte span the pre-physics
             // bridge Appends up to 1792 bytes into -- see the header). Like the driver interface
             // and unlike the vehicle-input span it does NOT grow on the host, so it must land
@@ -67,13 +67,13 @@ namespace PhysicsModuleIO
             static_assert(sizeof(VehicleEffectsInputInterfaceStorage) == 149632 - 147840,
                           "vehicle-effects span must equal the console 1792 (both queue headers are 16 on both targets)");
             static_assert(offsetof(InputBuffer, mRCEntityOutputInterface)      == 149632 + KU_DRIFT, "mRCEntityOutputInterface @149632+D");
-            // ⭐ 2026-08-10 (create-path wave): mRCEntityOutputInterface is the REAL
+            // mRCEntityOutputInterface is the REAL
             // BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface now, and like
             // the vehicle-input and prop-input spans it GROWS on the host (its eight
             // CgsResource::ResourceHandle slots and the WorldMap2D carry x64-widened pointers), so
             // every member below it takes a THIRD uniform drift. Computing it from sizeof keeps the
             // gate's teeth: any wrong pad run still fails.
-            // ⚠️ THE OLD 0x28F0 OPAQUE SPAN WAS A LATENT TRUNCATION, not a neutral placeholder --
+            // THE OLD 0x28F0 OPAQUE SPAN WAS A LATENT TRUNCATION, not a neutral placeholder --
             // WorldBridgeEntityModulesToPhysics.cpp memcpy's sizeof(RCEntityOutputInterfaceStorage)
             // bytes out of a host source object that is LARGER than that, so the copy stopped
             // short of the tail members. Its own banner said so and said "retype the seat when a
@@ -89,7 +89,7 @@ namespace PhysicsModuleIO
             static_assert(offsetof(InputBuffer, mTimerInterface)               == 327152 + KU_DRIFT + KU_RCENTITY_DRIFT, "mTimerInterface @327152+D+RD");
             static_assert(offsetof(InputBuffer, mSolverMaxIterations)          == 327200 + KU_DRIFT + KU_RCENTITY_DRIFT, "mSolverMaxIterations @327200+D+RD");
             static_assert(offsetof(InputBuffer, mPropManagerInputInterface)    == 327216 + KU_DRIFT + KU_RCENTITY_DRIFT, "mPropManagerInputInterface @327216+D+RD");
-            // ⭐ 2026-08-10 (root-cause wave): mPropManagerInputInterface is the REAL
+            // mPropManagerInputInterface is the REAL
             // Props::PropInputInterface now, and -- unlike the driver interface -- it DOES grow
             // on the host (four embedded event queues with an 8-byte mpEvents, plus a
             // two-pointer ResourceHandle), so mGameActionQueue takes a SECOND uniform drift.
@@ -110,7 +110,7 @@ namespace PhysicsModuleIO
                       "PhysicsModuleIO::InputBuffer::mGameActionQueue must be VariableEventQueue<13312,16> (13328 bytes)");
     }
 
-    // ⛔ 2026-08-01 (BridgeGameStateToWorld wave). The X360 CreateIOBuffer<T> stack template runs
+    // The X360 CreateIOBuffer<T> stack template runs
     // T::Construct after the alloc -- and so does the PC one: CreateIOBuffer<T> runs T::Construct
     // (2026-08-15). Historically the PC template placement-new'd only, so WorldModule::Update
     // called Construct explicitly -- and until this body landed that resolved to the base
@@ -119,7 +119,7 @@ namespace PhysicsModuleIO
     // BridgeActionsToPhysicsModule AddEvent fired "Not Constructed"
     // (CgsVariableEventQueue.h:454 / :728). Measured live the moment BridgeGameStateToWorld
     // started delivering game actions to the world.
-    // ⛔⛔ 2026-08-09 (feed wave) -- THE BODY ABOVE WAS A TWO-LINE PARTIAL AND IT COST 913
+    // THE BODY ABOVE WAS A TWO-LINE PARTIAL AND IT COST 913
     // ASSERTS THE MOMENT THE INPUT FEED LANDED.
     // The console body (X360 0x825ABA18) is SIXTY-ONE instructions and constructs FIFTEEN
     // members; the 2026-08-01 wave added only the one member it needed. The first frame
@@ -146,21 +146,21 @@ namespace PhysicsModuleIO
     //   +0x4F1E0  SceneManagerIO::OutOverlapPair<128>::Construct     -> mOverlapPairsQueue
     //   +0x4FE20  mSolverMaxIterations = 0
     //
-    // ⚠️ TWO of those calls cannot be emitted yet and are NOT faked: mCreateWorldEventQueue is
+    // TWO of those calls cannot be emitted yet and are NOT faked: mCreateWorldEventQueue is
     // still a 96-byte pad, and mCameraInput is still a correctly-sized opaque *Storage span with
     // no members to construct. They are listed above by console seat so the next wave that
     // retypes either one knows exactly which call to restore -- and any consumer that reaches one
     // of those spans will fire the same loud "Not Constructed" this one did, by design.
-    // ⭐ 2026-08-15 (IO-buffer zero-fill removal audit): mRCEntityOutputInterface is OFF that
+    // mRCEntityOutputInterface is OFF that
     // list and its console call is restored below. The FLAG text that used to stand here still
     // called it "a correctly-sized opaque *Storage span with no members to construct", but it was
     // retyped to the real BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface on
-    // 2026-08-10 (BrnPhysicsModuleIO.h:250/:358) -- so the console's +0x24880
+    // so the console's +0x24880
     // RCEntityActiveRaceCarOutputInterface::Clear has been a live omission ever since, and became
     // a real defect the moment CreateIOBuffer<T> stopped zero-filling: this interface carries the
     // per-active-car state tables PhysicsModule::Update reads, and stale IO-stack bytes there are
     // per-car state for cars that are not in the race.
-    // ⭐ 2026-08-10 (root-cause wave): the PROP leg is off that blocked list. The four console
+    // the PROP leg is off that blocked list. The four console
     // calls at +0x4FE30 / +0x51D90 / +0x526FC / +0x50DE0 (and their five zero stores) are
     // exactly PropInputInterface::Construct, now that the member holds the real type -- see
     // that body for the asm. Three committed bridges Append into this member every frame.
@@ -170,7 +170,7 @@ namespace PhysicsModuleIO
 
         mVehicleInputInterface.Construct();      // +0x00170
         mVehicleDriverInterface.Construct();     // +0x22CD0
-        // ⭐ 2026-08-10 (pre-physics bridge wave): now that the effects seat is the REAL type it
+        // now that the effects seat is the REAL type it
         // can -- and MUST -- be Constructed. It was omitted only because a 1-byte span has no
         // Construct; leaving it out now would hand the pre-physics bridge two event queues with
         // a NULL mpEvents, which is the "mpEvents != NULL" + "Reached Max length" death the

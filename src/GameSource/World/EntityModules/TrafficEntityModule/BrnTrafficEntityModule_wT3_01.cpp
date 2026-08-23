@@ -1,5 +1,5 @@
 // ============================================================================
-// BrnTrafficEntityModule_wT3_01.cpp -- wave T3 round 1, cluster C1: WORLD-SIDE PROMOTION.
+// BrnTrafficEntityModule_wT3_01.cpp -- cluster C1: WORLD-SIDE PROMOTION.
 // The five-step chain that turns a driving traffic car into a physics body request.
 //
 //   TrafficEntityModule::SendPhysicalRequests           @0x8274C510 (96)   DWARF :1569
@@ -27,11 +27,8 @@
 #include "SharedClasses/Traffic/BrnTrafficVehicleType.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "GameShared/GameClasses/SceneManager/CgsVolumeInstanceId.h"
 #include "GameShared/GameClasses/System/Resource/CgsResourceHandle.h"
-
-#include <cstdlib>   // getenv
 
 namespace BrnTraffic
 {
@@ -46,24 +43,6 @@ namespace BrnTraffic
 // gaHostUpdateVehiclesJobs / gaHostNewPhysicalRequests out of _wT2_04.cpp's anonymous
 // namespace (into namespace BrnTraffic) so this declaration resolves. See REPORT section 2.
 extern PhysicalRequestInfoList gaHostNewPhysicalRequests[KU_MAX_JOBS];
-
-namespace
-{
-    bool TrafficDiagEnabled()
-    {
-        static const bool sbEnabled = (getenv("BRN_TRAFFIC_DIAG") != 0);
-        return sbEnabled;
-    }
-
-    CgsDev::Log::DebugPrint* TrafficDiagStream()
-    {
-        if (!TrafficDiagEnabled() || CgsDev::Log::gpDebugPrint == 0)
-        {
-            return 0;
-        }
-        return CgsDev::Log::gpDebugPrint;
-    }
-}
 
 // ----------------------------------------------------------------------------
 // TrafficEntityModule::SendPhysicalRequests  @ 0x8274C510 (96)   DWARF :1569
@@ -104,21 +83,6 @@ void TrafficEntityModule::SendPhysicalRequests(BrnTrafficIO::OutputBuffer_PrePhy
         for (u32 luRequest = 0; luRequest < lrRequests.GetLength(); ++luRequest)
         {
             const PhysicalRequestInfo& lrInfo = lrRequests[luRequest];
-
-            if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())
-            {
-                // [T3-req] one-shot. DELETE-WHEN-STABLE.
-                static bool sbFirstRequest = true;
-                if (sbFirstRequest)
-                {
-                    sbFirstRequest = false;
-                    *lpDiag << "[T3-req] FIRST promotion request vehicle="
-                            << static_cast<s32>(lrInfo.muVehicle)
-                            << " reason=" << static_cast<s32>(lrInfo.miReason)
-                            << " target=" << static_cast<s32>(lrInfo.mTargetEntityId.muValue)
-                            << " job=" << static_cast<s32>(luJob) << "\n";
-                }
-            }
 
             SafeRequestMakeVehiclePhysical(lrInfo.muVehicle,
                                            static_cast<PhysicalReason>(lrInfo.miReason),
@@ -190,7 +154,7 @@ void TrafficEntityModule::SafeRequestMakeVehiclePhysical(
     // GATE trailers @0x8274B208: when Vehicle::muOtherHalfIndex != KU_INVALID_VEHICLE the
     // console takes the OTHER budget -- CountSetBits() + 2 <= 25, two slots for the pair.
     // BLOCKER: muOtherHalfIndex is private with no unconditional accessor and
-    // BrnTrafficVehicle.h is not this cluster's file. Unreachable today (wave-T2 generation is
+    // BrnTrafficVehicle.h is not this cluster's file. Unreachable today (generation is
     // InitialiseAsStandard only, which seeds it to KU_INVALID_VEHICLE).
     // DELETE-WHEN Vehicle gains the DWARF :338 GetTrailerIndex / other-half accessor.
     const s32 liFreeSlot = maTrafficPhysicsInfoListBits.GetFirstClearBit();
@@ -363,25 +327,6 @@ void TrafficEntityModule::AddVehicleToPhysics(
                                           lbIsCab,
                                           lCgsID);
 
-    if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())
-    {
-        // [T3-create] one-shot. DELETE-WHEN-STABLE.
-        static bool sbFirstCreate = true;
-        if (sbFirstCreate)
-        {
-            sbFirstCreate = false;
-            *lpDiag << "[T3-create] FIRST CreatePhysicalTraffic queued vehicle="
-                    << static_cast<s32>(luVehicle)
-                    << " type=" << static_cast<s32>(luVehicleType)
-                    << " volumeInstanceIdHi="
-                    << static_cast<s32>(lVolumeInstanceId.muId >> 32)
-                    << " trafficType=" << static_cast<s32>(leTrafficType)
-                    << " modelHandleValid="
-                    << static_cast<s32>(lModelHandle.mpResourceMemory != 0 ? 1 : 0)
-                    << " attribsId=" << static_cast<s32>(lu8AttribsId) << "\n";
-        }
-    }
-
     // 0x827427C4..0x82742888 -- the inlined BitArray<601>::SetBit with its streamed bounds
     // message ("Index: " << luVehicle << ", Number of bits: " << 600).
     CGS_ASSERT(luVehicle < KU_MAX_TOTAL_TRAFFIC, "Index: ");   // CgsBitArray.h:222
@@ -437,7 +382,7 @@ void TrafficEntityModule::RecordTrafficVehicleIsPhysical(
             (leCrashType != BrnPhysics::Vehicle::eCrashTrafficType_Slammed);
         // TRIPWIRE, not a gate: both console drains of this 160-slot array
         // (GenerateCrashedVehicleEvents @0x82720030, GenerateVehicleCrashedEvents @0x82727768)
-        // are still gated, so only Reset clears it. Bounded below 160 in round 1 -- the
+        // are still gated, so only Reset clears it. Bounded below 160 -- the
         // free-slot guard caps live promotions at 25 and demotion/recycling has not landed.
         maNewCrashedVehicles.Append(lCrashInfo);
     }

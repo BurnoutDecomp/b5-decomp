@@ -2,18 +2,18 @@
 
 // ============================================================================================
 // BrnPhysics::Vehicle::RaceCarPhysics::Construct -- SPLIT OUT of RaceCarPhysics.cpp on
-// 2026-08-03. BUILD-MECHANICS SPLIT ONLY: the body below is byte-identical to the one that was
+// BUILD-MECHANICS SPLIT ONLY: the body below is byte-identical to the one that was
 // written into that file and its declared home is unchanged. Same precedent, same reason, as
 // BrnSimpleVehiclePhysics_Construct.cpp.
 //
-// ⭐ WHY THE SPLIT. VehicleManager::Construct's eight-car loop calls this function, so mounting
+// WHY THE SPLIT. VehicleManager::Construct's eight-car loop calls this function, so mounting
 // BrnVehicleManager.cpp requires it to be linkable. RaceCarPhysics.cpp as a whole CANNOT be
 // mounted -- its Update path reads flt_820037C8 (the AI crash-timer re-seed) and unk_82FB8880
 // (KVF_AI_CRASH_SLOWMO_FACTOR), neither of which has been read out of the image yet, so that TU
 // still carries unresolved constants. This body reads none of them: its only callee is
 // VehiclePhysics::Construct, which is bodied in the already-mounted VehiclePhysics.cpp.
 //
-// ⛔ DO NOT re-merge this into RaceCarPhysics.cpp while that file is unmountable. TO RE-MERGE:
+// DO NOT re-merge this into RaceCarPhysics.cpp while that file is unmountable. TO RE-MERGE:
 // read the two constants, mount RaceCarPhysics.cpp, then move this body back and delete the TU.
 // ============================================================================================
 
@@ -39,10 +39,10 @@ namespace Vehicle
     //     0x8263BF30  lvx128    v0, r0, r11
     //     0x8263BF34  vrlimi128 v0, v127, 2, 0                -> lane .z only (mask 2 == z)
     //     0x8263BF38  stvx128   v0, r0, r11
-    // Every one of those six offsets is a NAMED member of this class's own block (the ⭐⭐ map in
+    // Every one of those six offsets is a NAMED member of this class's own block (the map in
     // RaceCarPhysics.h), and 0x1070 is a named VehiclePhysics register. Nothing here is a poke.
     //
-    // ⚠️ The order below is the ISSUE order, not the declaration order -- the X360 writes
+    // The order below is the ISSUE order, not the declaration order -- the X360 writes
     // mfTimeSinceTookDownPlayer, mbPlayerCarInShowtime, mfBeachedTime, mbUsingAftertouch,
     // mPropCollisionImpulseSum, then the lane insert. Kept as issued because the pairing
     // (0x1400/0x140C then 0x1408/0x140D) is what the scheduler produced from the source order and

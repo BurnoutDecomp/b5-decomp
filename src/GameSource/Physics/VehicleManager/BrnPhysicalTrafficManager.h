@@ -23,7 +23,7 @@
 // require, and flagged where a future TU must complete them.
 //
 // ============================================================================================
-// ⚠️⚠️ OPEN FINDINGS, 2026-08-03 (the Construct wave). Read before growing this header.
+// OPEN FINDINGS, 2026-08-03 (the Construct wave). Read before growing this header.
 //
 // (1) FIXED HERE: the `ArticulatedJointPool` slice below was **720 bytes too small** (112 vs the
 //     real 832). PhysicalTrafficManager::Construct @0x82636CA8 proves 832 two ways:
@@ -36,7 +36,7 @@
 //     seated 720 bytes early -- including mUsedTrafficVehicles, whose own comment here claims
 //     "X360 word base this+104552", an offset the declarations did not produce.
 //
-// (2) ✅ CLOSED 2026-08-03 (task #113). ZERO ODR FORKS LEFT, was four (really five). This header
+// (2) CLOSED 2026-08-03 (task #113). ZERO ODR FORKS LEFT, was four (really five). This header
 //     used to define, at namespace scope in BrnPhysics::Vehicle, its own private copies of names
 //     that already have real definitions elsewhere in the SAME namespace:
 //        PhysicalTrafficManagerDebugComponent  retired
@@ -47,13 +47,13 @@
 //        ArticulatedJointCreateBuffer          retired (task #113) -- the FIFTH, which nobody had
 //                                              counted: a 16-byte opaque standing in for the
 //                                              2032-byte class BrnPhysicalTrafficManagerIO.h owns.
-//                                              ⚠️ That one was an ALLOCATION BUG, not a stand-in --
+// That one was an ALLOCATION BUG, not a stand-in --
 //                                              see the note at its old seat.
-//     ⭐ THE STANDING LESSON, now four for four: a local stand-in for a type that has (or should
+// THE STANDING LESSON, now four for four: a local stand-in for a type that has (or should
 //     have) a real owner elsewhere is THE recurring defect in this header. When you open it, grep
 //     every namespace-scope type it declares against the rest of the tree before adding anything.
 //
-//     ⭐ THE MEASURED CONSEQUENCE: this TU is MOUNTED as of task #113. The previous wave measured
+// THE MEASURED CONSEQUENCE: this TU is MOUNTED as of task #113. The previous wave measured
 //     the mount at UNRESOLVED COUNT = 1
 //         ?SendCreateRemoveJointEvents@ArticulatedJointPool@Vehicle@BrnPhysics@@QEAAXPEBXPEAU...
 //     and read that as "one body away". It was not: that mangled name -- `PEBX` for the request
@@ -62,7 +62,7 @@
 //     could ever have defined the symbol that call site asked for. De-forking first, as the
 //     TrafficPhysics wave's note instructed, is what made the body land on the right symbol.
 //
-//     ⚠️ THE OLD NOTE'S REASON FOR LEAVING THE TrafficPhysics FORK ALONE WAS WRONG, TWICE OVER. It
+// THE OLD NOTE'S REASON FOR LEAVING THE TrafficPhysics FORK ALONE WAS WRONG, TWICE OVER. It
 //     said de-forking it "means pulling VehiclePhysics.h in here, which is its own wave" -- pulling
 //     VehiclePhysics.h in cost ONE include and broke nothing; and it said the real class is LARGER
 //     on the host "(pointer widening -- the same +176 drift this header already tabulates)". It is
@@ -71,7 +71,7 @@
 //     come close to making that back. The whole-manager drift therefore moved +192 -> **-3968**, in
 //     the opposite direction the note predicted. MEASURED, not reasoned.
 //
-//     ⭐ VehicleDriver is DE-FORKED as of 2026-08-03 (the Construct-blocker wave), and the old
+// VehicleDriver is DE-FORKED as of 2026-08-03 (the Construct-blocker wave), and the old
 //     note's reasoning was wrong about it: BrnVehicleDriver.h does NOT pull VehiclePhysics.h in
 //     (it needs only types.hpp + BrnCommonTypes.h + SharedIO/BrnVehicleDriverControls.h), so that
 //     fork was separable from the other two and cost one include. It was also the one fork that
@@ -93,8 +93,8 @@
 //     settled" -- that was too pessimistic; see (4). The head of the class IS pointer-free and is
 //     now pinned, and the tail is pinned by the DERIVED X360 size below.
 //
-// (4) ⭐⭐ THE X360 sizeof(PhysicalTrafficManager) IS 105648, DERIVED TWO INDEPENDENT WAYS
-//     2026-08-03 (the un-pin wave). This number matters far outside this header: BrnVehicleManager.h
+// (4) THE X360 sizeof(PhysicalTrafficManager) IS 105648, DERIVED TWO INDEPENDENT WAYS
+//     This number matters far outside this header: BrnVehicleManager.h
 //     carried this class as an opaque span of **103360** bytes (+44768..+148128) and concluded from
 //     that span that the real class "overruns by +2480" and so cannot be embedded. THE SPAN WAS
 //     WRONG BY 2288 BYTES, and the header's own notes contradicted it -- it simultaneously claimed
@@ -137,10 +137,10 @@
 //       Do NOT "absorb" it by shrinking a neighbouring pad: maNonPhysicalContacts is a real DWARF
 //       member with a derived size, and shrinking it would be inventing layout.
 //
-//     ⭐ AND IT IS ACCOUNTED FOR MEMBER BY MEMBER -- it is not a residue. Walking both layouts in
+// AND IT IS ACCOUNTED FOR MEMBER BY MEMBER -- it is not a residue. Walking both layouts in
 //     parallel (X360 offset -> host offset, running delta in the last column):
 //        maFullTrafficPhysics       0      ->      0        0    (TrafficPhysics 4960 vs 5168, x20)
-//        maTrafficEntityIDs         103360 ->  99200    -4160    ⭐ MEASURED (compiler offsetof)
+// maTrafficEntityIDs         103360 ->  99200    -4160    MEASURED (compiler offsetof)
 //        maTrafficCarModelHandles   103440 ->  99280    -4160
 //        mpaTrafficDrivers          103600 ->  99600    -4000    (ResourceHandle 16 vs 8, x20: +160)
 //        mArticulatedJointPool      103616 ->  99632    -3984    (four pointers 4 -> 8: +16)
@@ -162,7 +162,7 @@
 //     naive width sum (160+16+8+16 = 200) never matched the +192 the old table ended on: it
 //     double-counts the Array's -4 and misses the map's -8 of pad.
 //
-//     ⚠️ ONE ASYMMETRY WORTH KNOWING, found by tamper-testing: the 600-vs-601 choice for
+// ONE ASYMMETRY WORTH KNOWING, found by tamper-testing: the 600-vs-601 choice for
 //     mu8GlobalToPhysicalEntityIndexMap (asm `cmplwi 0x258` vs the DWARF's 601) does NOT change the
 //     X360 size -- 105288 and 105289 both round to the same 105296 -- but it DOES change the host
 //     size, because the host map does not start on the same alignment phase as the console's and 601
@@ -175,7 +175,7 @@
 //     symbol from mounted code. Its only definition was in BrnPhysicalTrafficManager.cpp, which is
 //     NOT mounted (finding (2)'s remaining ArticulatedJointPool fork makes mounting it a wave of its
 //     own), so the link failed with LNK2019.
-//     ⛔ THE REJECTED ALTERNATIVE was a link stub -- an empty
+// THE REJECTED ALTERNATIVE was a link stub -- an empty
 //     `PhysicalTrafficManager::PhysicalTrafficManager() {}` in a stubs TU. That is the silent-drop
 //     failure class exactly: it links, it runs, and it leaves mpaTrafficDrivers / mpaTrafficVehicles
 //     / mpaSimpleVehiclePhysics / mpArticulatedJointCreateBuffer as uninitialised garbage that every
@@ -191,26 +191,26 @@
 #include "GameShared/GameClasses/Module/CgsIOBufferStack.h"          // CgsModule::IOBufferStack
 #include "GameShared/GameClasses/System/Resource/CgsResourceHandle.h" // CgsResource::ResourceHandle
 #include "GameSource/BurnoutConstants.h"                              // EActiveRaceCarIndex
-// ⭐ ADDED 2026-08-22 (wave T3 r2, owner B): TestForNearMissFreakOut takes a PotentialContact BY
+// TestForNearMissFreakOut takes a PotentialContact BY
 // VALUE (DWARF :386, and the X360 splits the 80-byte record across r4..r10 + three stack slots),
 // so the complete type is needed here -- the pointer-only forward declaration below no longer
 // covers every use.
 #include "GameShared/GameClasses/SceneManager/SharedIO/CgsPotentialContact.h"
 #include "GameSource/Physics/VehicleManager/BrnVehicleConstants.h"    // KU_ENTITYTYPE_TRAFFIC_VEHICLE
-// ⭐ DE-FORKED 2026-08-03: this header used to declare its own opaque
+// DE-FORKED 2026-08-03: this header used to declare its own opaque
 // `struct PhysicalTrafficManagerDebugComponent { void* mpVTable; u8 mOpaque[60]; };` at namespace
 // scope, a second definition of a name that already had a real one. The real class is included.
 #include "GameSource/Physics/VehicleManager/BrnPhysicalTrafficManagerDebugComponent.h"
-// ⭐ DE-FORKED 2026-08-03 (second one): `struct VehicleDriver { u8 mOpaque[224]; }` used to be
+// DE-FORKED 2026-08-03 (second one): `struct VehicleDriver { u8 mOpaque[224]; }` used to be
 // declared at namespace scope below. The real struct lives here and is 224 bytes, so the stride
 // this header depends on is unchanged -- see the note at the old fork's seat.
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/BrnVehicleDriver.h"
-// ⭐⭐ DE-FORKED 2026-08-03 (third one): `struct TrafficPhysics { void Construct(); u8[5168]; }` used
+// DE-FORKED 2026-08-03 (third one): `struct TrafficPhysics { void Construct(); u8[5168]; }` used
 // to be declared at namespace scope below. The real class -- and, transitively, VehiclePhysics and
 // SimpleVehiclePhysics -- is included here. See the note at the old fork's seat for why the mangled
 // name made this a correctness item and not a tidiness one.
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/TrafficPhysics.h"
-// ⭐⭐ DE-FORKED 2026-08-03 (fourth and fifth, task #113 -- finding (2) is now CLOSED).
+// DE-FORKED 2026-08-03 (fourth and fifth, task #113 -- finding (2) is now CLOSED).
 //   * `struct ArticulatedJointPool { int Construct(); void SendCreateRemoveJointEvents(const void*,
 //      ArticulatedJointCreateBuffer*); u8 mOpaque[832]; }` used to be declared at namespace scope
 //     below. The real class had no header at all (it was declared inside
@@ -224,7 +224,7 @@
 // UpdateVehiclePhysics-wave collaborator (pointer-only on this surface).
 namespace BrnPhysics { namespace Vehicle { struct VehicleManagerOutputInterface; } }
 
-// ⭐ ADDED 2026-08-10 (create-path wave): ProcessTrafficMaintenanceEvents' remaining parameter
+// ProcessTrafficMaintenanceEvents' remaining parameter
 // types, pointer use only. CLASS KEYS CHECKED AGAINST THE SINGLE HOME OF EACH BEFORE WRITING
 // THEM, per the standing ODR-fork rule -- BrnVehicleInputInterface.h:28 and
 // BrnVehicleOutputInterface.h:62 both spell `struct alignas(16)` (the alignment belongs to the
@@ -233,16 +233,16 @@ namespace BrnPhysics { namespace Vehicle { struct VehicleInputInterface;
                                            struct VehicleOutputInterface; } }
 namespace BrnPhysics { namespace Deformation { class DeformationInputInterface; } }
 
-// ⭐ ADDED 2026-08-06 (big-five #2): ValidateTrafficContact collaborators, pointer use only.
+// ValidateTrafficContact collaborators, pointer use only.
 // Class key `struct`, matching CgsPotentialContact.h / the TriangleCacheInterface home.
 namespace CgsSceneManager { namespace SceneManagerIO { struct PotentialContact;
                                                        struct TriangleCacheInterface; } }
 
-// ⭐ ADDED 2026-08-10 (producer wave): PrepareTriangleCache's parameter, pointer use only.
+// PrepareTriangleCache's parameter, pointer use only.
 // Class key `struct`, matching the single home CgsSceneManagerIO.h:31.
 namespace CgsSceneManager { namespace SceneManagerIO { struct InputBuffer_Update; } }
 
-// ⭐ ADDED 2026-08-11 (lifetime wave): the traction-line pair's collaborators, pointer use only.
+// the traction-line pair's collaborators, pointer use only.
 // Class keys match their single homes -- CgsCollisionGenerator.h spells CollisionGenerator
 // `struct`, CgsSimpleDataStreamProducer.h spells both stream types `struct`.
 namespace CgsSceneManager { namespace CgsCollision { struct CollisionGenerator; } }
@@ -256,7 +256,7 @@ namespace CgsPhysics { namespace PhysicsSimulationIO { struct OutputBuffer; } }
 // `struct` per rwcore_structs.h:168 (MSVC mangles struct vs class).
 namespace rw { struct IResourceAllocator; }
 
-// ⭐ ADDED 2026-08-22 (wave T3 r1, C2). ComputeTrafficVehicleInertia's out-parameter, pointer
+// ComputeTrafficVehicleInertia's out-parameter, pointer
 // use only. Class key `class` per vendor/renderware/include/rw/physics/inertia.h:55.
 namespace rw { namespace physics { class Inertia; } }
 
@@ -271,7 +271,7 @@ namespace Vehicle
 
 // Forward decls for the PhysicalTrafficVehicle wave-8 method params (real homes elsewhere; only
 // pointers/refs are taken here so incomplete types suffice).
-// ⚠️ CLASS-KEYS CORRECTED 2026-08-03 with the TrafficPhysics de-fork: including the real
+// CLASS-KEYS CORRECTED 2026-08-03 with the TrafficPhysics de-fork: including the real
 // TrafficPhysics.h drags in VehiclePhysics.h / BrnSimpleVehiclePhysics.h, which declare
 // VehicleAttribs and BrnPlayerDriverControls for real. The keys here said `struct VehicleAttribs`
 // against the real `class`, and `class BrnPlayerDriverControls` against the real `struct` -- a
@@ -281,7 +281,7 @@ namespace Vehicle
 struct CreatePhysicalTrafficEvent;   // spawn event -- SharedIO/BrnVehicleEvents.h
 struct CreateAirRamEvent;            // air-ram event -- SharedIO/BrnVehicleEvents.h (ProcessAddAirRamEvent arg)
 class  RaceCarPhysics;               // the checking race car -- RaceCarPhysics.h
-// ⭐ ADDED 2026-08-22 (wave T3 r1, C2). The two create/remove drain element types. Only
+// The two create/remove drain element types. Only
 // EventQueue<T,N>* PARAMETERS name them here, so the incomplete type suffices and
 // BrnVehicleEvents.h stays out of this header. Class keys checked against their single home
 // (SharedIO/BrnVehicleEvents.h:300 / :409) -- MSVC mangles struct vs class.
@@ -298,7 +298,7 @@ typedef rw::math::vpu::Vector4 VecFloat;
 // mpaSimpleVehiclePhysics. This manager only takes/returns SimpleVehiclePhysics*
 // (GetVehiclePhysics) and, in ResetAboveGroundTestResults, reaches into its above-ground-test
 // sub-objects.
-// ⚠️ THE FORWARD DECLARATION HERE WAS `struct SimpleVehiclePhysics;` AGAINST THE REAL `class`
+// THE FORWARD DECLARATION HERE WAS `struct SimpleVehiclePhysics;` AGAINST THE REAL `class`
 // (BrnSimpleVehiclePhysics.h:99). It is gone: the real header now arrives with TrafficPhysics.h,
 // which is strictly better -- ResetAboveGroundTestResults can reach the sub-objects BY NAME through
 // a complete type instead of through the incomplete one it was flagged against.
@@ -317,7 +317,7 @@ const u8 KU8_INVALID_MAP = 127;
 // packs an EntityId as (entityIndex << 10) | (ownerType << 24); the index field is 14 bits.
 const u32 KU_NUM_BITS_FOR_ENTITY_NUM = 14;
 
-// ⭐ KU_ENTITYTYPE_TRAFFIC_VEHICLE MOVED OUT 2026-08-03 (task #113) to BrnVehicleConstants.h,
+// KU_ENTITYTYPE_TRAFFIC_VEHICLE MOVED OUT 2026-08-03 (task #113) to BrnVehicleConstants.h,
 // included above. It was defined here AND, identically, at BrnArticulatedJoint.h:42 -- each
 // comment describing itself as a mirror of the other. That cost nothing while the two headers
 // could not meet; the ArticulatedJointPool de-fork made them meet and it became a hard C2374.
@@ -328,7 +328,7 @@ const u32 KU_NUM_BITS_FOR_ENTITY_NUM = 14;
 // TrafficPhysics: the per-vehicle full-physics block (BrnPhysicalTrafficManager.h:396,
 // maFullTrafficPhysics[20]).
 //
-// ⭐⭐ DE-FORKED 2026-08-03 (the TrafficPhysics::Construct wave). This slot used to hold a second,
+// DE-FORKED 2026-08-03 (the TrafficPhysics::Construct wave). This slot used to hold a second,
 // opaque `struct TrafficPhysics { void Construct(); u8 mOpaque[5168]; };` at namespace scope in
 // BrnPhysics::Vehicle -- a redefinition of the class VehiclePhysics/TrafficPhysics.h already owns,
 // disagreeing with it on the class-key AND on the bases. The real header is included above.
@@ -354,12 +354,12 @@ const u32 KU_NUM_BITS_FOR_ENTITY_NUM = 14;
 // VehicleDriver: the AI/driver block, pointed at by mpaTrafficDrivers (stride 224 / 0xE0 from
 // GetTrafficDriver).
 //
-// ⭐ DE-FORKED 2026-08-03. This slot used to be a second, opaque `struct VehicleDriver
+// DE-FORKED 2026-08-03. This slot used to be a second, opaque `struct VehicleDriver
 // { u8 mOpaque[224]; }` at namespace scope in BrnPhysics::Vehicle -- a redefinition of the real
 // struct that VehiclePhysics/BrnVehicleDriver.h already owns. The real header is included above
 // and the stride assert below is what keeps the two readings honest.
 //
-// ⚠️ CORRECTION to finding (2) in the banner, which said de-forking "means pulling VehiclePhysics.h
+// CORRECTION to finding (2) in the banner, which said de-forking "means pulling VehiclePhysics.h
 // in here, which is its own wave". That is true of TrafficPhysics and ArticulatedJointPool -- both
 // really do derive from VehiclePhysics -- but it was NOT true of VehicleDriver: BrnVehicleDriver.h
 // stands alone (types.hpp + BrnCommonTypes.h + SharedIO/BrnVehicleDriverControls.h) and pulls no
@@ -465,13 +465,13 @@ struct PhysicalTrafficVehicle
 // ArticulatedJointCreateBuffer: the IO buffer pushed onto the input stack by
 // AllocateInternalBuffers (CreateIOBuffer<ArticulatedJointCreateBuffer>).
 //
-// ⭐⭐ DE-FORKED 2026-08-03 (task #113). This slot used to hold
+// DE-FORKED 2026-08-03 (task #113). This slot used to hold
 //     struct ArticulatedJointCreateBuffer { u8 mOpaque[16]; };
 // -- a second definition, at namespace scope in BrnPhysics::Vehicle, of a class
 // BrnPhysicalTrafficManagerIO.h has owned in full since its own wave. The real header is included
 // at the top.
 //
-// ⚠️⚠️ AND THIS ONE WAS NOT A LAYOUT-NEUTRAL STAND-IN, IT WAS AN ALLOCATION BUG WITH A FUSE.
+// AND THIS ONE WAS NOT A LAYOUT-NEUTRAL STAND-IN, IT WAS AN ALLOCATION BUG WITH A FUSE.
 // The real class is IOBuffer(16) + InAddJoint[10](1920) + InRemoveJoint[10](80) + 2*BitArray<10>
 // == 2032 bytes. AllocateInternalBuffers below calls
 //     lpInputBufferStack->CreateIOBuffer<ArticulatedJointCreateBuffer>(...)
@@ -484,7 +484,7 @@ struct PhysicalTrafficVehicle
 
 // ArticulatedJointPool: embedded by value (BrnPhysicalTrafficManager.h:406).
 //
-// ⭐⭐ DE-FORKED 2026-08-03 (task #113). This slot used to hold an opaque
+// DE-FORKED 2026-08-03 (task #113). This slot used to hold an opaque
 //     struct ArticulatedJointPool { int Construct(); void SendCreateRemoveJointEvents(const void*,
 //                                   ArticulatedJointCreateBuffer*); u8 mOpaque[832]; };
 // The real class had NO header -- it was declared inside VehiclePhysics/BrnArticulatedJointPool.cpp
@@ -497,12 +497,12 @@ struct PhysicalTrafficVehicle
 // declaration and the real class's definition were ONE symbol -- the identical silent-link trap the
 // TrafficPhysics fork carried until the wave before.
 //
-// ⭐ THE FOLD IS LAYOUT-NEUTRAL, MEASURED: the real class is pointer-free (10*80 + 8 + 8 + 4*4)
+// THE FOLD IS LAYOUT-NEUTRAL, MEASURED: the real class is pointer-free (10*80 + 8 + 8 + 4*4)
 // and is 832 bytes on the host as well as on the console, so -- unlike the TrafficPhysics fold,
 // which moved everything behind it by -4160 -- NOTHING in this class's layout moves. The drift
 // table in finding (4) is unchanged by this wave.
 //
-// ⚠️ ONE SIGNATURE CORRECTION CAME WITH IT, and it is the reason the fork could never have worked:
+// ONE SIGNATURE CORRECTION CAME WITH IT, and it is the reason the fork could never have worked:
 // `SendCreateRemoveJointEvents` is `(VehicleOutputRequestInterface*, const ArticulatedJointCreateBuffer*)`
 // in the DWARF (BrnArticulatedJointPool.h:104). The fork declared it `(const void*,
 // ArticulatedJointCreateBuffer*)` -- wrong on both parameters -- so the symbol its call site
@@ -510,7 +510,7 @@ struct PhysicalTrafficVehicle
 // `void`, not `int`; see the pool header.
 
 // Forward-declared IO/interface dependencies (their own TUs).
-// ⭐ VehicleOutputRequestInterface HAS A REAL HOME as of 2026-08-03 --
+// VehicleOutputRequestInterface HAS A REAL HOME as of 2026-08-03 --
 // SharedIO/BrnVehicleOutputInterface.h, where its six-queue layout is derived and gated. It is kept
 // as a forward declaration HERE (rather than an include) deliberately: this TU only ever passes the
 // pointer through, and the real header is ~42 KB of event-queue storage that nothing in this
@@ -521,7 +521,7 @@ struct VehicleOutputRequestInterface;
 // two of its tables with BARE loads -- no accessor, no assert (see the friend declaration below).
 class VehicleManager;
 
-// ⭐ The X360 sizeof(PhysicalTrafficManager), DERIVED (finding (4) in the banner), not measured on
+// The X360 sizeof(PhysicalTrafficManager), DERIVED (finding (4) in the banner), not measured on
 // the host and not guessed. VehicleManager subtracts this from the host sizeof to get the drift it
 // carries through the rest of its own layout, so a change to either number is visible there.
 const u32 KU_X360_SIZEOF_PHYSICAL_TRAFFIC_MANAGER = 105648u;
@@ -544,17 +544,17 @@ public:
     PhysicalTrafficVehicle*       GetTrafficVehicle(s32 liVehicle);
     const PhysicalTrafficVehicle* GetTrafficVehicle(s32 liVehicle) const;
 
-    // ⭐ ADDED 2026-08-10 (producer wave). X360 @0x825EE5A0 (39 insns); home
+    // X360 @0x825EE5A0 (39 insns); home
     // BrnPhysicalTrafficManager.cpp:244 per its own baked assert path. Claims this manager's
     // 20 triangle-cache slots (indices 8..27, i.e. immediately after the 8 race cars) by
     // posting one InEventAddToCache each into the scene input's mAddToCacheQueue.
     // Sole caller: VehicleManager::PrepareTriangleCache @0x82615BA0.
-    // ⚠️ `this` IS UNUSED in the console body -- r3 is never read after the prologue. Kept as a
+    // `this` IS UNUSED in the console body -- r3 is never read after the prologue. Kept as a
     // non-static member because that is what the console's `bl` with r3 = this + 44768 is.
     bool PrepareTriangleCache(
         CgsSceneManager::SceneManagerIO::InputBuffer_Update* lpSceneInputBuffer_Update);
 
-    // ⭐⭐ @0x825EE640 (261 insns) -- BODIED 2026-08-11 (lifetime wave). The traffic half of the
+    // @0x825EE640 (261 insns) -- BODIED 2026-08-11 (lifetime wave). The traffic half of the
     // per-frame cache-position push: per live traffic vehicle, post one
     // InEventUpdateCachedPosition carrying {world position, bounding radius} for cache slot
     // 8 + liVehicle (the 8 race-car slots come first -- together they are the 28 slots
@@ -563,14 +563,14 @@ public:
     void UpdateTriangleCache(
         CgsSceneManager::SceneManagerIO::InputBuffer_Update* lpSceneInputBuffer_Update);
 
-    // ---- ⚠ FLAG: gate-bodied (BrnPhysicsConductorGates.cpp) ---------------------------------
+    // ---- FLAG: gate-bodied (BrnPhysicsConductorGates.cpp) ---------------------------------
     // The TRAFFIC traction-line pair, gated together 2026-08-11 (lifetime wave). A race car on
-    // the ground needs neither, and they are 709 console instructions. ⛔ KEEP THEM PAIRED: the
+    // the ground needs neither, and they are 709 console instructions. KEEP THEM PAIRED: the
     // Add posts one command per live traffic vehicle and the Read consumes exactly that many
     // records off the SHARED result cursor EndVehicleTractionLineTests hands all three harvests
     // in turn. One without the other mis-seats every harvest downstream of it.
     //   0x8261D580 (418) AddTrafficTractionLineTests <-> 0x8262D2B8 (291) ReadTrafficTraction...
-    // ⚠️ AddTraffic is also the witness that a stream command carries FIVE line slots, not four:
+    // AddTraffic is also the witness that a stream command carries FIVE line slots, not four:
     // it writes `miNumLines = 5` (0x8261D9F4 `stw r10, 0xA8(r30)`) where both race-car and
     // player-stuck producers write 4.
     s32 AddTrafficTractionLineTests(
@@ -580,16 +580,16 @@ public:
     void ReadTrafficTractionLineTestResults(
         CgsMemory::SimpleDataStreamResultIterator* lpResultIterator);
 
-    // ⭐ ADDED 2026-08-11 (prepare-chain wave). @0x825CA8A0 (169 insns). The TRAFFIC arm of
+    // @0x825CA8A0 (169 insns). The TRAFFIC arm of
     // VehicleManager::UpdateDrivers' four-way control dispatch -- case 3 of the switch, reached
     // with `add r3, r31, r28` where r28 == 0xAEE0 == 44768 == the manager's own
     // mPhysicalTrafficManager seat, so the `this` really is this class and not the vehicle manager.
     // DWARF-attested verbatim (references/DecFIGS/.../BrnPhysicalTrafficManager.h:158).
-    // ⛔ STILL BODYLESS -- a named BRN_CONDUCTOR_GATE in BrnPhysicsConductorGates.cpp.
+    // STILL BODYLESS -- a named BRN_CONDUCTOR_GATE in BrnPhysicsConductorGates.cpp.
     void UpdateTrafficDriver(const BrnTrafficDriverControls* lpControls,
                              CgsContainers::BitArray<8u>& lrUpdatedCars);
 
-    // ⭐ ADDED 2026-08-10 (create-path wave). X360 0x825EF608 (334 insns), bodied in
+    // X360 0x825EF608 (334 insns), bodied in
     // GameSource/Physics/VehicleManager/BrnVehicleManager_ReadUpdatedBodies.cpp alongside its
     // only caller, VehicleManager::ReadUpdatedBodies @0x82619A10 (xrefs_to == that one entry).
     // Despite the name it reads no body state back: the queue feeds a dev duplicate-id assert
@@ -600,7 +600,7 @@ public:
         const CgsModule::EventQueue<CgsPhysics::PhysicsSimulationIO::OutUpdateRigidBody, 200>* lpUpdatedBodies,
         VecFloat lvfTimeStep);
 
-    // ⭐ ADDED 2026-08-23 (traffic wave 4, cluster B) -- THE MISSING PRODUCER of
+    // THE MISSING PRODUCER of
     // mUnusedPotentialTrafficQueue. X360 0x825EFB40 (72 insns), DWARF :165 /
     // BrnPhysicalTrafficManager.cpp:2041. Walks mPotentialTrafficVehicles (this+104576) and
     // AddEvents every still-POTENTIAL slot into mUnusedPotentialTrafficQueue (this+104624), which
@@ -611,20 +611,20 @@ public:
     // 0x82646E5C, `addis r3,r28,1 ; addi r3,r3,-0x5120` == this + 44768).
     void DisposeOfNonCrashingTraffic();
 
-    // ⭐ ADDED 2026-08-11 (physics->output publish wave). X360 0x825F0308 (481 insns) -- the TRAFFIC
+    // X360 0x825F0308 (481 insns) -- the TRAFFIC
     // half of the per-frame publish, and the tail call of VehicleManager::WriteOutVehicleStats
     // @0x8263FA28 (`addis r3,r18,1 ; addi r3,r3,-0x5120` == this + 44768 == &mPhysicalTrafficManager,
     // r4 = the same VehicleOutputInterface). Its own body walks mUsedTrafficVehicles into the
-    // interface's PhysicalTrafficStateQueue. ⚠ FLAG: DECLARED so the race-car half can reproduce the
+    // interface's PhysicalTrafficStateQueue. FLAG: DECLARED so the race-car half can reproduce the
     // console's call sequence; the body is a LOUD one-shot gate (BrnPhysicsConductorGates.cpp).
     void WriteOutVehicleStats(Vehicle::VehicleOutputInterface* lpOutputInterface);
 
-    // ⭐ ADDED 2026-08-10 (create-path wave). X360 0x82649768 (246 insns) -- the traffic twin of
+    // X360 0x82649768 (246 insns) -- the traffic twin of
     // VehicleManager::ProcessVehicleMaintenanceEvents and its sixth and last call, taking that
     // function's whole argument list verbatim (r3 = &mPhysicalTrafficManager, i.e. the vehicle
     // manager + 44768).
     //
-    // ⭐⭐ CORRECTED 2026-08-22 (wave T3 r1, cluster C2): THE LIST IS TEN PARAMETERS, NOT SEVEN.
+    // THE LIST IS TEN PARAMETERS, NOT SEVEN.
     // DWARF BrnPhysicalTrafficManager.h:143 spells the last three, and the console passes them on
     // the stack -- 0x8264ACC4..0x8264ACF0 stores `r31+0x740` (maRaceCarVehicles), `r31+0x40`
     // (maRaceCarDrivers) and `r31+0x10000-0x5340` == +44224 (mUsedRaceCars) into the outgoing
@@ -644,11 +644,11 @@ public:
         CgsContainers::BitArray<8u>* lpUsedRaceCars);                 // @0x82649768
 
     // =========================================================================================
-    // ⭐ WAVE T3 ROUND 1, CLUSTER C2 -- the physics-side CREATE / REMOVE drain.
+    // WAVE T3 ROUND 1, CLUSTER C2 -- the physics-side CREATE / REMOVE drain.
     // Every signature below is the DecFIGS DWARF's (BrnPhysicalTrafficManager.h:266..:369),
     // gated on an X360 ledger/export row. Bodies live in the two sibling slice TUs
     // BrnPhysicalTrafficManager_Create.cpp and _Remove.cpp.
-    // ⚠️ The two queue parameters are spelled as the EventQueue template-ids the DWARF's nested
+    // The two queue parameters are spelled as the EventQueue template-ids the DWARF's nested
     // VehicleInputInterface typedefs alias, so this header does not have to include the 42 KB
     // BrnVehicleInputInterface.h. Same type, same mangled name.
     // =========================================================================================
@@ -697,7 +697,7 @@ public:
     // volume id names a GLOBAL traffic entity: assert the owner byte is TRAFFIC_VEHICLE, map the
     // global index through mu8GlobalToPhysicalEntityIndexMap (KU8_INVALID_MAP = no physical
     // vehicle -> drop), and hand the impulse to that PhysicalTrafficVehicle's AddAirRam.
-    // ADDED 2026-08-06 (PhysicsModule::Update leaves wave); bodied in this manager's own TU.
+    // bodied in this manager's own TU.
     void ProcessAddAirRamEvent(const CreateAirRamEvent* lpEvent);
 
     // X360 0x825B4A28: mpaTrafficVehicles[ lPhysicsVehicleId.GetEntityIndex() ].mpVehicleBody
@@ -726,7 +726,7 @@ public:
     // CgsCollision::BaseCollisionGenerator sub-arrays; then sets the unused-potential-traffic
     // queue head sentinel (*(this+104544) = -1) and the debug-component vtable (*(this+105616)).
     //
-    // ⭐ UPDATED 2026-08-03 (the de-fork wave). maFullTrafficPhysics is now a real
+    // maFullTrafficPhysics is now a real
     // `TrafficPhysics[20]`, so the compiler's own implicit default-initialisation of that array IS
     // the per-element vtable walk the X360 constructor does -- it is no longer "left to an un-homed
     // TU", it happens because the member is the real type. What remains genuinely un-homed is the
@@ -734,7 +734,7 @@ public:
     // that class's embedded sub-arrays; those sub-objects are not modelled in the reconstruction, so
     // there is nothing to iterate and nothing is faked in their place.
     //
-    // ⭐⭐ MOVED HERE (INLINE) FROM BrnPhysicalTrafficManager.cpp, 2026-08-03 (the un-pin wave),
+    // MOVED HERE (INLINE) FROM BrnPhysicalTrafficManager.cpp, 2026-08-03 (the un-pin wave),
     // VERBATIM -- the eight member initialisers are byte-for-byte the ones that were in the .cpp
     // and all three FLAG notes came with them; nothing was dropped or simplified. See finding (5)
     // in the banner for WHY it had to move and what the rejected alternative was.
@@ -780,7 +780,7 @@ public:
     // X360 0x825E8808: reset the above-ground (down-ray) test results for every used vehicle.
     void ResetAboveGroundTestResults();
 
-    // ⭐ ADDED 2026-08-06 (big-five #3, UpdateVehiclePhysics wave). Two DWARF-attested
+    // Two DWARF-attested
     // per-frame members the manager's conductor calls (BrnPhysicalTrafficManager.h:152/:155).
     // Both DECLARED for the conductor's closure; bodies are named FLAG TRAP STUBS in
     // BrnVehicleManagerLinkStubs.cpp (dead until PhysicsModule::Update lands):
@@ -804,9 +804,9 @@ public:
     // X360 0x8259BD10: validate (and fix up) a traffic-vs-traffic potential contact.
     bool ValidateAndFixUpTrafficTrafficContact(void* lpContact) const;
 
-    // ⭐ ADDED 2026-08-06 (big-five #2, contact-generation wave). @0x825CACB8 (PS3 DecFIGS
+    // @0x825CACB8 (PS3 DecFIGS
     // 0x6E5DF8; DWARF h:260). Validate one traffic-vs-world potential contact against the
-    // vehicle-input triangle cache. ⚠ FLAG: DECLARED for VehicleManager::ValidateTrafficContact's
+    // vehicle-input triangle cache. FLAG: DECLARED for VehicleManager::ValidateTrafficContact's
     // closure; body still a TRAP STUB (169 X360 asm lines / 6 callees -- named, not landed,
     // this wave). The tri-cache arg is VehicleInputInterface::InTriangleCacheInterface ==
     // CgsSceneManager::SceneManagerIO::TriangleCacheInterface.
@@ -934,7 +934,7 @@ private:
     void PhysicallyUncrashTrafficCar(u16 lu16TrafficEntityNum,
                                      BrnPhysics::Deformation::DeformationInputInterface* lpDeformationInterface);
 
-    // ⭐ 2026-08-03 (the un-pin wave). VehicleManager owns this object by value and reaches TWO of
+    // VehicleManager owns this object by value and reaches TWO of
     // its tables directly, with bare loads that fire none of the asserts the matching accessors do.
     // Both are asm-proven, and both used to be modelled as SIBLING members of VehicleManager at
     // absolute class offsets that in fact fall INSIDE this object:

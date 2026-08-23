@@ -1,5 +1,5 @@
 // =================================================================================================
-// BrnTrafficEntityModule_wT3_04.cpp -- wave T3 round 1 (PHYSICAL TRAFFIC), cluster C4.
+// BrnTrafficEntityModule_wT3_04.cpp -- PHYSICAL TRAFFIC, cluster C4.
 //
 //   BrnTraffic::TrafficEntityModule::HandleExternalResponses @0x82732C68 (1,302 insns, DWARF :1432)
 //
@@ -19,7 +19,7 @@
 //   2  VehicleManagerOutputInterface::GetSlammedTrafficEventQueue()  (interface +336 == 0x150)
 //        -> the same promotion, carrying the slam's crash type and its two direction floats
 //   3  VehicleOutputInterface::GetTrafficStateQueue()                (interface +9760 == 0x2620)
-//        -> THE POSE READ-BACK. This is the loop the goal of the wave depends on.
+//        -> THE POSE READ-BACK: the loop that makes a hit car move on screen.
 //   4  VehicleManagerOutputInterface::GetRaceCarCrashEventQueue()    (interface +928 == 0x3A0)
 //        -> the crash-slider score again, weighted by whether the crasher was AI
 //
@@ -31,19 +31,18 @@
 // generic affine product at 0x82733E60..0x82733EE0). Flip either sign and every promoted car jumps
 // by the bbox offset on its first physical frame.
 //
-// TWO RECOVERED CONSTANTS (headless idat dump of the ARTIST image, this wave):
+// TWO RECOVERED CONSTANTS (headless idat dump of the ARTIST image):
 //   flt_820BA5C0 == 50.0f     flt_820BA5C8 == 100.0f
 // Both feed mfCrashSliderCrashScore, whose factor member is mfCrashSliderCrashScoreFactor
 // (console +0x72370 / +0x72378 -- anchored by UpdateCrashSlider @0x82715A18, see
 // BrnTrafficEntityModule.cpp:195).
 //
-// NAMED GATES INSIDE THIS FILE (each also listed in the wave report):
-//   G-ALARM      (retired: Vehicle::SetAlarmOn @0x8270FC10 landed in BrnTrafficVehicle.cpp) -- this
-//                cluster's files and the method is neither declared nor bodied there.
-//   G-ARTIC      loops 1's cab/trailer pairing arms + Array<TrafficCrashInfo,160>::Append.
-//                Unreachable this round (wave-T2 generation builds InitialiseAsStandard cars only,
-//                so muOtherHalfIndex is always KU_INVALID_VEHICLE) and it needs
+// NAMED GATE INSIDE THIS FILE:
+//   G-ARTIC      loop 1's cab/trailer pairing arms + Array<TrafficCrashInfo,160>::Append.
+//                Unreachable: generation builds InitialiseAsStandard cars only, so
+//                muOtherHalfIndex is always KU_INVALID_VEHICLE, and it needs
 //                Vehicle::GetTrailerIndex, which does not exist in this tree.
+//                DELETE-WHEN trailers land.
 // =================================================================================================
 
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficEntityModule.h"
@@ -56,8 +55,16 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "rw/math/vpu/matrix44affine_operation.h"                      // Mult(Matrix44Affine, Matrix44Affine)
 
-#include <cmath>     // std::sqrt (the [T3-apply] delta only)
+#include <cmath>     // std::sqrt (the [T5-apply] delta only)
 #include <cstdlib>   // getenv
+
+// [T5-apply] DIAG state, DEFINED in
+// GameSource/Physics/VehicleManager/BrnPhysicalTrafficManager_UpdateTrafficPhysics.cpp.
+// NOT IN THE X360 BINARY. DELETE-WHEN-STABLE.
+namespace BrnPhysics { namespace Vehicle {
+    extern s32 gT5RamFramesLeft;
+    extern s32 gT5RamGlobalIndex;
+} }
 
 namespace BrnTraffic
 {
@@ -96,9 +103,6 @@ namespace
     // (BE u32 0x42480000 / 0x42C80000).
     const f32 KF_CRASH_SLIDER_TRAFFIC_CRASH_SCORE = 50.0f;   // flt_820BA5C0
     const f32 KF_CRASH_SLIDER_PLAYER_CRASH_SCORE  = 100.0f;  // flt_820BA5C8
-
-    // The distance a read-back has to move a car before the one-shot [T3-apply] diag re-latches.
-    const f32 KF_T3_APPLY_REPORT_DELTA = 0.05f;
 
     // `vmsum3fp128 v1, v0, v126` -- the 3-lane dot the speed publish uses.
     inline f32 Dot3(const Vector3& lvA, const Vector3& lvB)
@@ -201,7 +205,7 @@ void TrafficEntityModule::HandleExternalResponses(const BrnTrafficIO::InputBuffe
             // GATE G-ARTIC: the cab/trailer pairing arms and their
             // Array<TrafficCrashInfo,160>::Append. BLOCKER: needs Vehicle::GetTrailerIndex, absent
             // here; and the standard-species arm early-outs on muOtherHalfIndex == KU_INVALID_VEHICLE,
-            // which every wave-T2-generated car has. DELETE-WHEN trailers land.
+            // which every generated car has. DELETE-WHEN trailers land.
             {
                 static bool sbLoggedArticGate = false;
                 LogGateOnce(sbLoggedArticGate,
@@ -334,8 +338,7 @@ void TrafficEntityModule::HandleExternalResponses(const BrnTrafficIO::InputBuffe
             const Matrix44Affine lTransform =
                 rw::math::vpu::Mult(lBBoxTranslate, lrState.mTransform);
 
-            // [T3-apply] the first read-back this build applies, plus a value-latched repeat the
-            // first time a car actually MOVES. DELETE-WHEN-STABLE.
+            // |delta| for the [T5-apply] probe below.
             f32 lfDeltaLength = 0.0f;
             {
                 const Matrix44Affine lPrevious = GetVehicleTransform(luVehicle);
@@ -383,31 +386,30 @@ void TrafficEntityModule::HandleExternalResponses(const BrnTrafficIO::InputBuffe
 
             lpVehicle->SetSteering(lrState.mfSteering);
 
-            // ---- [T3-apply] ----------------------------------------------------------------
+            // ---- [T5-apply] DIAG. NOT IN THE X360 BINARY. DELETE-WHEN-STABLE. ---------------
+            // The MODULE-side half of [T5-ram]: what the world (and therefore the renderer and
+            // the scene volume) actually believes about the rammed car, printed on the same
+            // 10-frame cadence as the physics-side probe.
+            if (BrnPhysics::Vehicle::gT5RamFramesLeft > 0
+                && static_cast<s32>(luVehicle) == BrnPhysics::Vehicle::gT5RamGlobalIndex)
             {
-                static const bool skbTrafficDiag = (std::getenv("BRN_TRAFFIC_DIAG") != 0);
-                if (skbTrafficDiag && CgsDev::Log::gpDebugPrint != 0)
+                static const bool skbT5Diag = (std::getenv("BRN_TRAFFIC_DIAG") != 0);
+                static s32 s_iT5ApplyFrame = 0;
+                ++s_iT5ApplyFrame;
+                if (skbT5Diag && CgsDev::Log::gpDebugPrint != 0 && (s_iT5ApplyFrame % 10) == 1)
                 {
-                    static bool sbLoggedFirstApply = false;
-                    static bool sbLoggedFirstMove  = false;
-                    const bool  lbMoved = (lfDeltaLength > KF_T3_APPLY_REPORT_DELTA);
-
-                    if (!sbLoggedFirstApply || (lbMoved && !sbLoggedFirstMove))
-                    {
-                        if (lbMoved)
-                        {
-                            sbLoggedFirstMove = true;
-                        }
-                        const char* lpcWhich = sbLoggedFirstApply ? "FIRST MOVE" : "FIRST";
-                        sbLoggedFirstApply = true;
-                        *CgsDev::Log::gpDebugPrint
-                            << "[T3-apply] " << lpcWhich << " physical-traffic read-back: vehicle "
-                            << static_cast<s32>(luVehicle)
-                            << " |delta| " << lfDeltaLength
-                            << " speed " << Dot3(lrState.mLinearVelocity, lTransform.zAxis)
-                            << " at (" << lTransform.wAxis.x << ", " << lTransform.wAxis.y
-                            << ", " << lTransform.wAxis.z << ")\n";
-                    }
+                    *CgsDev::Log::gpDebugPrint
+                        << "[T5-apply] f=" << s_iT5ApplyFrame
+                        << " vehicle=" << static_cast<s32>(luVehicle)
+                        << " |delta|=" << lfDeltaLength
+                        << " worldPos=(" << lTransform.wAxis.x << "," << lTransform.wAxis.y
+                        << "," << lTransform.wAxis.z << ")"
+                        << " vel=(" << lrState.mLinearVelocity.x << ","
+                        << lrState.mLinearVelocity.y << "," << lrState.mLinearVelocity.z << ")"
+                        << " frozen=" << static_cast<s32>(lrState.mbFrozen ? 1 : 0)
+                        << " physical=" << static_cast<s32>(lpVehicle->IsPhysical() ? 1 : 0)
+                        << " collidable=" << static_cast<s32>(lpVehicle->IsCollidable() ? 1 : 0)
+                        << "\n";
                 }
             }
         }

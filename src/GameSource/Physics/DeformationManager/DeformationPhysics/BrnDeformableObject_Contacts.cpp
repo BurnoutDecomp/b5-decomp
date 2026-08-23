@@ -113,7 +113,7 @@ namespace Deformation
     //
     // Push every deformation sensor's stored contacts into the shared penetration solver. The asm:
     //   v11 = *(*(this+6476) + 4955);              // +0x135B == VehiclePhysics::mbAllWheelsHaveTraction
-    //                                              // (NOT a "world" flag -- see the body's ⭐ 2026-08-23 note)
+    //                                              // (NOT a "world" flag -- see the body's note)
     //   if ( *(*(this+6368) + 1618) )              // mpDeformationSpec->mu8NumDeformationSensors > 0
     //     do
     //       DeformationSensor::AddContactsToPenetrationSolver(sensor, lpSolver, lpDefObjBase,
@@ -131,12 +131,10 @@ namespace Deformation
                                                           DeformableObject* lpDefObjBase,
                                                           s32 liWorldObjectIndex, s32 liObjectIndex) const
     {
-        // ⭐ 2026-08-23 (traffic wave 4, SOLVER wave) -- FLAG RETIRED + NAME CORRECTED. The byte the
-        // asm reads at physics-body +4955 is +0x135B, and VehiclePhysics DOES name that member:
-        // mbAllWheelsHaveTraction (VehiclePhysics.h:1584, accessor :1624). It is NOT a "world" flag:
-        // the sensor uses it as one half of the vehicle-arm normal-flattening gate, and the DWARF
-        // spells the parameter it becomes `lbVehicleWheelsAllHaveTraction`
-        // (BrnPhysicsUnity2.cpp:6563). Same byte, same value, now by name -- one less offset poke.
+        // The byte the asm reads at physics-body +4955 is +0x135B == VehiclePhysics::
+        // mbAllWheelsHaveTraction (VehiclePhysics.h:1584, accessor :1624) -- NOT a "world" flag: the
+        // sensor uses it as one half of the vehicle-arm normal-flattening gate, and the DWARF spells
+        // the parameter it becomes `lbVehicleWheelsAllHaveTraction` (BrnPhysicsUnity2.cpp:6563).
         // The parameter names here are the DWARF's too (BrnDeformableObject.cpp:1877).
         const bool lbVehicleWheelsAllHaveTraction =
             mVehicleBody.GetVehiclePhysics()->GetAllWheelsHaveTraction();

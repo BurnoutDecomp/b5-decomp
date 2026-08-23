@@ -40,7 +40,6 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // gpDebugPrint / gxMessageFilterFlags
 
 #include <cmath>   // fabsf -- the console's `vandc` sign-bit clear on the wheel-size compare
-#include <cstdlib> // getenv -- the [T2-attrib] diag gate only
 
 namespace BrnTraffic
 {
@@ -229,24 +228,6 @@ void VehicleTypeRuntime::Prepare(
         {
             maiPaintColours[luTrafficColourIndex] = static_cast<s8>(
                 lGraphicsAsset.RandomTrafficColours( luTrafficColourIndex ) );
-        }
-    }
-
-    // [T2-attrib] one-shot: the first attrib seat. NOT IN THE X360 BINARY. DELETE-WHEN-STABLE.
-    if ( getenv( "BRN_TRAFFIC_DIAG" ) != 0 )
-    {
-        static bool sbDiagLogged = false;
-        if ( !sbDiagLogged )
-        {
-            sbDiagLogged = true;
-            if ( ( CgsDev::Message::gxMessageFilterFlags & 1 ) != 0 && CgsDev::Log::gpDebugPrint != 0 )
-            {
-                *CgsDev::Log::gpDebugPrint
-                    << "[T2-attrib] VehicleTypeRuntime::Prepare seated mass*1000="
-                    << static_cast<s32>( lfMass * 1000.0f )
-                    << " paintColours=" << static_cast<s32>( miNumPaintColours )
-                    << " attribKeyLo=" << static_cast<s32>( mAttribKey & 0xFFFFFFFFu ) << "\n";
-            }
         }
     }
 }

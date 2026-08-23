@@ -40,10 +40,10 @@
 // OPAQUE TYPES accessed by console byte offset (NOT renamed -- ODR-stable with the committed model):
 //   * Sphere is forward-declared; its leading 16 bytes are centre.xyz + radius.w (header note). The
 //     world-placement math reads/writes that leading Vector4 through a typed view.
-//   * StoredContact is NO LONGER one of them -- it is a real host-native struct in the header as of
-//     2026-08-23 and every field here is reached BY NAME. Its console offsets (+0/+16/+32 points,
-//     +48 mfProjectedDist, +52 mpOtherVehicle, +56 mpOtherSensor, +60 mbValid, stride 0x40) are
-//     documented on the struct and are asm-reading aids only. See the FIXED banner below.
+//   * StoredContact is NOT one of them -- it is a real host-native struct in the header and every
+//     field here is reached BY NAME. Its console offsets (+0/+16/+32 points, +48 mfProjectedDist,
+//     +52 mpOtherVehicle, +56 mpOtherSensor, +60 mbValid, stride 0x40) are documented on the struct
+//     as asm-reading aids only. See the layout pin below.
 //   * PotentialContact (CgsSceneManager) is forward-declared; ValidateAndAddContact reads its two
 //     contact points + normal from its leading Vector4 lanes (offsets +0 / +16 / +32) through a view.
 //
@@ -64,25 +64,13 @@ namespace Deformation
 {
 	namespace
 	{
-		// ⭐⭐⭐ FIXED 2026-08-23 (traffic wave 4, stored-contact wave) -- THE 80-OVER-64 OVERRUN.
-		// This namespace used to carry a `StoredContactView` -- a HOST-NATIVE struct (three Vector3,
-		// f32, two pointers, u32) reinterpret_cast over a StoredContact that the header declared as
-		// an opaque 64-BYTE X360 POD. The console fits f32 +48 / ptr +52 / ptr +56 / bool +60 into
-		// 64 bytes only because its pointers are 4 bytes; on x64 the same members land at
-		// f32 @48 / ptr @56 / ptr @64 / bool @72 == 80 bytes, so
-		//     mpOtherSensor and mbValid lived PAST THE END of the record
-		// and aliased maStoredContacts[i+1]'s leading points (or mImpulseContact for the last of the
-		// three). Reader AND writer shared the view, so mpOtherVehicle (@56, still inside)
-		// round-tripped; the two overrun fields were overwritten by the neighbour between store and
-		// read. WITNESS (scratch/flow_run/20260823_103301, the [T4-defcontact] probe below, on the
-		// first race-car-vs-traffic deformation contact this tree ever produced):
-		//     otherVehicle=433736560 (sane)  otherSensor=0xBDB15400BEE21176 (garbage)
-		//     valid=0x3C5B0000 (a FLOAT bit pattern -- a Vector3 lane of the next contact)
-		// -> 0xC0000005 in this function's vehicle arm. It was never traffic-specific: ANY sensor
-		// holding 2+ stored contacts corrupted them; the vehicle arm is simply the only consumer of
-		// the two overrun fields, which is why nothing caught it until a car-car contact existed.
-		// StoredContact is now a real host-native struct (BrnDeformationSensor.h, 80 B, static_assert
-		// -pinned) and every reader/writer reaches its members BY NAME. Do not reintroduce a view.
+		// LAYOUT PIN -- StoredContact is HOST-NATIVE (80 B, static_assert-pinned in the header) and
+		// every reader/writer reaches its members BY NAME. Do NOT reintroduce the old
+		// `StoredContactView` reinterpret_cast over a 64-byte X360 POD: the console fits
+		// f32 +48 / ptr +52 / ptr +56 / bool +60 into 64 bytes only because its pointers are 4 bytes;
+		// on x64 those members land at 48 / 56 / 64 / 72, so mpOtherSensor and mbValid sat PAST THE END
+		// of the record and aliased maStoredContacts[i+1]'s leading points -- garbage pointer, float
+		// bit-pattern in mbValid, and an access violation in the vehicle arm of the contact walk.
 
 		// Leading Vector4 view of an opaque Sphere (centre.xyz + radius.w).
 		inline Vector4& SphereVec(Sphere* lpSphere)
@@ -183,7 +171,7 @@ namespace Deformation
 		// ⛔ DO NOT USE IT IN HOST POINTER ARITHMETIC. It is the X360 sizeof(DeformableObject);
 		// the host array is allocated with the HOST sizeof (BrnDeformationManager.cpp:113), so
 		// dividing a host byte difference by this yields a bogus index. The derive at :~940 is a
-		// typed pointer difference now (traffic wave 4, fix B). Kept only as the documented
+		// typed pointer difference. Kept only as the documented
 		// console figure, e.g. for reading the asm's `mulli 26496` seats.
 		static const s32 KI_DEFORMABLE_OBJECT_STRIDE = 26496;   // reference only -- see above
 
@@ -198,10 +186,9 @@ namespace Deformation
 	// The ctor zero-inits the sensor (the DWARF routes it through ClearVariables @ 0x82?? --
 	// declared-only). NO ctor asm is present in the X360 exports, but the PS3 twin SHIPS the
 	// ClearVariables body (@0x6B5F28) and it is the authoritative store list: mfMaxPointDisplacement
-	// = 100.0 (NOT 0 -- `lfs f0, dword_100A62C(r2); stfs f0, 0x118(this)`), the two post-physics
-	// vectors + reset flag zeroed, count/spec/sphere-pointers/scratch zeroed. ⭐ CORRECTED
-	// 2026-08-14 (deformation-mount wave): the previous "honest zero" guess had 0.0 for the
-	// max-point-displacement seed; the PS3 body says 100.0 (the same rest seed Prepare re-writes).
+	// = 100.0 (NOT 0 -- `lfs f0, dword_100A62C(r2); stfs f0, 0x118(this)`; the same rest seed Prepare
+	// re-writes), the two post-physics vectors + reset flag zeroed, count/spec/sphere-pointers/
+	// scratch zeroed.
 	// ClearVariables does NOT touch mPointDisplacement_BiggestImpulseThisFrame or the contact
 	// records; the zero here is the ctor's own baseline (kept).
 	// =============================================================================================
@@ -490,7 +477,7 @@ namespace Deformation
 	}
 
 	// =============================================================================================
-	// ValidateAndAddContact @ 0x825E1788 -- ⭐ MOVED 2026-08-06 (big-five #2 wave) to the MOUNTED
+	// ValidateAndAddContact @ 0x825E1788 -- MOVED to the MOUNTED
 	// slice TU BrnDeformationSensor_ValidateAndAddContact.cpp: it is the storage callee of the
 	// mounted DeformationManager contact-bridge slice (ReadPotentialContact /
 	// ReadPotentialVehicleWorldContact) and this TU's other bodies carry link demands of their
@@ -504,8 +491,7 @@ namespace Deformation
 	//
 	// Flow (this == result/v7, a2 == lpSolver, a3 == lpDefObjBase, a4 == liWorldObjectIndex,
 	//       a5 == liParentObjectIndex, a6 == lbVehicleWheelsAllHaveTraction -- DWARF names, see the
-	//       header's ⭐ 2026-08-23 note: the old liBodyIndex/liWorldIndex pair was the wrong way
-	//       round and a6 was mis-named lbWorld):
+	//       header's note on the argument names):
 	//   1) Partition the stored contacts (count == this[102] == mi32NumStoredContacts) into two index
 	//      lists by the contact's mpOtherVehicle field (contact +52, the asm's *_R30 discriminator):
 	//        - mpOtherVehicle != 0  -> VEHICLE list (v136[], count v10)
@@ -525,16 +511,15 @@ namespace Deformation
 	//      (asm line ~904, /26496). The contact indices are (indexA = liParentObjectIndex == a5,
 	//      indexB = liOtherCarIndex). The vehicle arm ALSO flattens the normal against the other
 	//      car's up axis when both cars have all wheels on the ground (0x825E22C4..0x825E231C) --
-	//      see the ⭐⭐ 2026-08-23 block at that code.
+	//      see the flattening block at that code.
 	// The X360 does NOT call AddObject; it writes the solver's contact arrays + running counts inline.
 	// Modelled through the matching PenetrationSolver methods (AddWorldContact / AddVehicleContact);
 	// the partition + dedupe control flow is reproduced; the dense VMX point math is modelled per-lane.
 	// =============================================================================================
 	// =============================================================================================
 	// ApplyLocalImpulse -- X360 **sub_825E1320** (0x825E1320..0x825E1787, 1128 bytes == 282
-	// instructions). ⭐⭐⭐ RECONSTRUCTED 2026-08-15 (walls leg 8). This is the CollidableBody
-	// override the sensor vtable needs (slot 0) and the HEAD of the ordinary wall-contact momentum
-	// path; it was a log-once gate from 2026-08-14 until this wave.
+	// instructions). This is the CollidableBody override the sensor vtable needs (slot 0) and the
+	// HEAD of the ordinary wall-contact momentum path.
 	//
 	// ⭐ THE CHAIN THIS FUNCTION HEADS (verified by address, walls leg 7):
 	//   DeformableObject::ApplySensorImpulse's six-direction loop -> (vtable slot 0, @0x82607F5C)
@@ -905,7 +890,7 @@ namespace Deformation
 			CGS_ASSERT(liNumWorldContacts < KI_MAX_PENETRATION_CONTACTS,
 			           "liNumWorldContacts < KI_MAX_PENETRATION_CONTACTS");   // line 816
 
-			// ⭐⭐ FIXED 2026-08-14 (walls leg 4, at-rest probe): the console RE-ADDS this sensor's
+			// The console RE-ADDS this sensor's
 			// LOCAL sphere centre to the stored point (PS3 @0x6C11A8 `vaddfp v31, v0, v29`, v29 ==
 			// *(mpLocalSpaceSphere)) -- the stored record is sphere-relative (ValidateAndAddContact
 			// subtracts the centre when it stores). The miss was a constant per-contact depth bias
@@ -935,25 +920,18 @@ namespace Deformation
 
 			// (mpOtherVehicle - lpDefObjBase) / sizeof(DeformableObject) -- the other car's index into
 			// the solver's body array.
-			// ⛔ FIXED 2026-08-23 (traffic wave 4, fix B) -- X360 VALUE ON THE HOST. This used to
-			// divide the BYTE difference by the console constant KI_DEFORMABLE_OBJECT_STRIDE
-			// (26496 == the X360 sizeof(DeformableObject)), but the array these two pointers come
-			// from is allocated with the HOST sizeof (BrnDeformationManager.cpp:113,
-			// `luCount * sizeof(DeformableObject)`), so on x64 the quotient is not the element
-			// index at all. A typed pointer difference is the same expression the console emits
-			// and is stride-correct on both. MEASURED: the first race-car-vs-traffic deformation
-			// contact ever generated (traffic wave 4) handed the resulting garbage index to
-			// PenetrationSolver::AddVehicleContact -> 0xC0000005 in
-			// DeformationSensor::AddContactsToPenetrationSolver, boot
-			// scratch/flow_run/20260823_101342. Dead before wave 4 (no car-car contact reached it).
+			// ⚠ TYPED pointer difference, never the console constant KI_DEFORMABLE_OBJECT_STRIDE
+			// (26496 == the X360 sizeof(DeformableObject)): the array both pointers come from is
+			// allocated with the HOST sizeof (BrnDeformationManager.cpp:113), so dividing a host byte
+			// difference by 26496 yields a garbage index -- an access violation in
+			// PenetrationSolver::AddVehicleContact on the first car-car contact.
 			const s32 liOtherCarIndex = static_cast<s32>(lContact.mpOtherVehicle - lpDefObjBase);
 
 			// Same sphere-relative rebase as the world loop (PS3 @0x6C0D08/0x6C0D2C): pointA gets
 			// THIS sensor's local centre back; pointB gets the OTHER sensor's local centre back.
-			// ⭐ 2026-08-23: this is the SECOND witness that mLocalPointOnB is sphere-relative in the
-			// OTHER car's body space -- re-adding the other sensor's LOCAL centre to a WORLD point
-			// would be meaningless. ValidateAndAddContact now stores it that way (it used to store a
-			// raw world point, and Solve() then transformed it a second time: the +-1667 m launch).
+			// mLocalPointOnB is sphere-relative in the OTHER car's body space -- re-adding the other
+			// sensor's LOCAL centre to a WORLD point would be meaningless. Storing a raw world point
+			// here made Solve() transform it a second time: the +-1667 m launch.
 			Vector3 lPointA = lContact.mLocalPointOnA;
 			if ( mpLocalSpaceSphere != nullptr )
 			{
@@ -968,8 +946,7 @@ namespace Deformation
 				lPointB.x += lrC.x; lPointB.y += lrC.y; lPointB.z += lrC.z;
 			}
 
-			// ⭐⭐ ADDED 2026-08-23 (traffic wave 4, SOLVER wave) -- THE NORMAL FLATTENING, dropped by
-			// the earlier reconstruction. When BOTH cars have all four wheels on the ground the
+			// THE NORMAL FLATTENING. When BOTH cars have all four wheels on the ground the
 			// console strips the OTHER car's UP component out of the contact normal, so a car-car
 			// penetration pushes the pair apart HORIZONTALLY and cannot launch a grounded car
 			// vertically. Asm (@0x825E22C4..0x825E231C):
@@ -1000,58 +977,6 @@ namespace Deformation
 				lNormal.x -= lrOtherUp.x * lfAlongUp;
 				lNormal.y -= lrOtherUp.y * lfAlongUp;
 				lNormal.z -= lrOtherUp.z * lfAlongUp;
-			}
-
-			// [T4-defcontact] ONE-SHOT bring-up probe -- NOT IN THE X360 BINARY, opt-in on
-			// BRN_TRAFFIC_DIAG. It named the 80-over-64 overrun (garbage mpOtherSensor / a float
-			// in mbValid) that faulted this loop; it now prints the whole HOP 2 arithmetic -- the
-			// stored (local) pair, both sphere centres, the rebased pair actually handed to the
-			// solver, and the normal before/after flattening. NO behaviour change. DELETE-WHEN-STABLE.
-			{
-				static const bool skbDefDiag = (std::getenv("BRN_TRAFFIC_DIAG") != 0);
-				static bool sbLoggedDefContact = false;
-				if ( skbDefDiag && !sbLoggedDefContact && CgsDev::Log::gpDebugPrint != 0 )
-				{
-					sbLoggedDefContact = true;
-					const Vector4 lThisCentre = ( mpLocalSpaceSphere != nullptr )
-						? *reinterpret_cast<const Vector4*>(mpLocalSpaceSphere)
-						: Vector4{ 0.0f, 0.0f, 0.0f, 0.0f };
-					const Vector4 lOtherCentre =
-						( lContact.mpOtherSensor != nullptr
-						  && lContact.mpOtherSensor->mpLocalSpaceSphere != nullptr )
-						? *reinterpret_cast<const Vector4*>(lContact.mpOtherSensor->mpLocalSpaceSphere)
-						: Vector4{ 0.0f, 0.0f, 0.0f, 0.0f };
-					*CgsDev::Log::gpDebugPrint
-						<< "[T4-defcontact] HOP2 FIRST deformation VEHICLE contact: thisSensor="
-						<< reinterpret_cast<u64>(this)
-						<< " thisSphere=" << reinterpret_cast<u64>(mpLocalSpaceSphere)
-						<< " lpDefObjBase=" << reinterpret_cast<u64>(lpDefObjBase)
-						<< " otherVehicle=" << reinterpret_cast<u64>(lContact.mpOtherVehicle)
-						<< " otherSensor=" << reinterpret_cast<u64>(lContact.mpOtherSensor)
-						<< " otherIndex=" << liOtherCarIndex
-						<< " worldObjectIndex=" << liWorldObjectIndex
-						<< " parentObjectIndex=" << liParentObjectIndex
-						<< " numVehicleContacts=" << liNumVehicle
-						<< " valid=" << static_cast<s32>(lContact.mbValid ? 1 : 0)
-						<< " projDist=" << lContact.mfProjectedDist
-						<< " sizeofContact=" << static_cast<s32>(sizeof(StoredContact))
-						<< " | STORED localA " << lContact.mLocalPointOnA.x << " "
-						<< lContact.mLocalPointOnA.y << " " << lContact.mLocalPointOnA.z
-						<< " | STORED localB " << lContact.mLocalPointOnB.x << " "
-						<< lContact.mLocalPointOnB.y << " " << lContact.mLocalPointOnB.z
-						<< " | thisCentre " << lThisCentre.x << " " << lThisCentre.y << " " << lThisCentre.z
-						<< " | otherCentre " << lOtherCentre.x << " " << lOtherCentre.y << " " << lOtherCentre.z
-						<< " | SOLVER A " << lPointA.x << " " << lPointA.y << " " << lPointA.z
-						<< " | SOLVER B " << lPointB.x << " " << lPointB.y << " " << lPointB.z
-						<< " | nrm " << lContact.mNormal.x << " " << lContact.mNormal.y << " "
-						<< lContact.mNormal.z
-						<< " -> flat " << lNormal.x << " " << lNormal.y << " " << lNormal.z
-						<< " (thisTraction=" << static_cast<s32>(lbVehicleWheelsAllHaveTraction ? 1 : 0)
-						<< " otherTraction="
-						<< static_cast<s32>((lpOtherPhysics != nullptr
-						                     && lpOtherPhysics->GetAllWheelsHaveTraction()) ? 1 : 0)
-						<< ")\n";
-				}
 			}
 
 			lpSolver->AddVehicleContact(lPointA, lPointB, lNormal,

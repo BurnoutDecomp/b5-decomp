@@ -21,7 +21,7 @@
 // re-expanded here). Members are accessed BY NAME; every console offset the asm touches
 // is cited at its use and lands on a member the committed headers already pin.
 //
-// ⭐ sub_82635B78 IDENTITY (previously unnamed in the export set): it is the FIVE-argument
+// sub_82635B78 IDENTITY (previously unnamed in the export set): it is the FIVE-argument
 // ForceRaceCarCrash overload. Proof, three-legged: (1) DWARF declares the overload PAIR at
 // BrnVehicleManager.h:1239 (5-arg) / :1242 (6-arg, + EntityId) and MSVC lays adjacent
 // overloads in reversed declaration order -- 0x82635B00 (named ForceRaceCarCrash in the
@@ -58,6 +58,12 @@ namespace BrnPhysics
 namespace Vehicle
 {
     namespace vpu = rw::math::vpu;
+
+    // [T5-ram] DIAG state, DEFINED in BrnPhysicalTrafficManager_UpdateTrafficPhysics.cpp.
+    // NOT IN THE X360 BINARY. DELETE-WHEN-STABLE.
+    extern s32 gT5RamFramesLeft;
+    extern f32 gT5PlayerPos[3];
+    extern f32 gT5PlayerVel[3];
 
     // ------------------------------------------------------------------------------------
     // File-scope statics of the console BrnVehicleManager.cpp translation unit that this
@@ -138,7 +144,7 @@ namespace Vehicle
             const u32 luEntityId =
                 static_cast<u32>(maRaceCarHandlingBodyIDs[leRaceCarIndex] >> 32);
 
-            // ⭐ CAST RETIRED 2026-08-11 (consolidation wave). SetRaceCarCrashing's committed
+            // CAST RETIRED 2026-08-11 (consolidation wave). SetRaceCarCrashing's committed
             // declaration used to type its output-interface parameter
             // BrnGameState::GameStateModuleIO::VehicleOutputInterface* -- a fork type that does
             // not exist in the DWARF at all -- while the DWARF (BrnVehicleManager.h:1218) and
@@ -216,7 +222,7 @@ namespace Vehicle
     // (event 53, 1 byte; the latch byte_82FB848A == msPlayerParams.mbSixaxisTiltApplied
     // is CONSUMED here: read then cleared, asm 0x82633ED0/0x82633ED4).
     //
-    // ⭐ THE GetAftertouchValues FORK RESOLVES AT THIS CALL SITE. The out-of-line leaf
+    // THE GetAftertouchValues FORK RESOLVES AT THIS CALL SITE. The out-of-line leaf
     // @0x825B2E88 is called here (bl @0x82633E44) with FOUR arguments -- three float
     // pointers AND the bool r7 = (meShowtimeBehaviour == 2) -- and no return read: it is
     // the reference form `void GetAftertouchValues(f32&, f32&, f32&, bool) const` bodied
@@ -394,8 +400,8 @@ namespace Vehicle
 
         // ---- STAGE: traction line tests (dword_82F2A154) -------------------------------
         CgsDev::PerfMonCpu::StartMonitor(gs_iTractionLTsPM);
-        // ⛔ RE-POINTED AGAIN 2026-08-11 (lifetime wave): TWO arguments, restoring what the
-        // 2026-08-10 note removed. That note reasoned from the callee ("the 68 instructions never
+        // RE-POINTED AGAIN 2026-08-11 (lifetime wave): TWO arguments, restoring what the
+        // note removed. That note reasoned from the callee ("the 68 instructions never
         // touch r5") and concluded the parameter was fabricated -- but an unread argument is not
         // an absent one, and THIS call site is the proof: the console emits `mr r5, r29` at
         // 0x8264565C, loading r29 fresh from an incoming argument slot at 0x82645638. The PS3
@@ -410,7 +416,7 @@ namespace Vehicle
 
         // The handbrake-turn crash test (asm 0x82645680..0x826457FC): the player car is
         // "sliding, not driving" when faster than 20 with its velocity more than 60 deg
-        // off its nose -- force the crash. ⚠️ As shipped, the player index is read with NO
+        // off its nose -- force the crash. As shipped, the player index is read with NO
         // != -1 guard on this path (the gate bool is only ever set with a live player).
         if (mbCrashOnHandbrakeTurn)
         {
@@ -513,7 +519,7 @@ namespace Vehicle
             CgsDev::PerfMonCpu::StopMonitor(gs_iUpdateVehiclesPM);
 
             // Per-car debug component tick (asm 0x82645A68..78; f1 = lfSimTimerTimeStep).
-            // ⚠️ FLAG (span cast, deliberate): maRaceCarDebugComponent is the opaque 8x1024
+            // FLAG (span cast, deliberate): maRaceCarDebugComponent is the opaque 8x1024
             // span (console DebugComponent is 1024B, host is not) -- same sanctioned cast
             // seam as Construct's mpDebugComponent store; see BrnVehicleManager.h.
             reinterpret_cast<DebugComponent*>(&maRaceCarDebugComponent[liCar][0])
@@ -523,7 +529,7 @@ namespace Vehicle
             CgsDev::PerfMonCpu::StartMonitor(gs_iRBChangePM);
             if (maRaceCarDrivers[liCar].mControls.mbReset)         // lbz +0x79(record)
             {
-                // ⚠️⚠️ SHIPPED-DEAD COMPUTATION, reconstructed as shipped and FLAGGED, not
+                // SHIPPED-DEAD COMPUTATION, reconstructed as shipped and FLAGGED, not
                 // "fixed": the console recomputes the car's inverse box inertia here (asm
                 // 0x82645A90..0x82645BD4 -- extent = (mHalfExtent + |COM offset|) * 2, the
                 // m/12 box formula, three reciprocal-refined lanes assembled into v127) --
@@ -562,6 +568,18 @@ namespace Vehicle
 
         CgsDev::PerfMonCpu::StopMonitor(gs_iUpdateRaceCarsPM);
 
+        // ---- [T5-ram] DIAG. NOT IN THE X360 BINARY. DELETE-WHEN-STABLE. -----------------
+        // Publish the player car's pose for the traffic-side probe, which runs inside
+        // PhysicalTrafficManager::UpdateTrafficPhysics and has no race car in scope.
+        if (gT5RamFramesLeft > 0 && mePlayerActiveRaceCarIndex >= 0)
+        {
+            const RaceCarPhysics& lrPlayer = maRaceCarVehicles[mePlayerActiveRaceCarIndex];
+            const Vector3 lvPos = lrPlayer.GetTransform().wAxis;
+            const Vector3 lvVel = lrPlayer.GetLinearVelocity();
+            gT5PlayerPos[0] = lvPos.x; gT5PlayerPos[1] = lvPos.y; gT5PlayerPos[2] = lvPos.z;
+            gT5PlayerVel[0] = lvVel.x; gT5PlayerVel[1] = lvVel.y; gT5PlayerVel[2] = lvVel.z;
+        }
+
         // ---- STAGE: traffic physics (dword_82F2A190) -----------------------------------
         CgsDev::PerfMonCpu::StartMonitor(gs_iUpdateTrafficPM);
         mPhysicalTrafficManager.UpdateTrafficPhysics(
@@ -586,7 +604,7 @@ namespace Vehicle
         // ---- STAGE: traffic pass-bys (dword_82F2A19C) ----------------------------------
         CgsDev::PerfMonCpu::StartMonitor(gs_iUpdatePassBysPM);
         // v1 = the player car's position row (lvx this+5216*player+0x780 == RCP+0x40 ==
-        // mTransform.wAxis). ⚠️ As shipped: no player != -1 guard (index -1 reads the tail
+        // mTransform.wAxis). As shipped: no player != -1 guard (index -1 reads the tail
         // of the drivers array on the console; reconstructed verbatim).
         mPhysicalTrafficManager.PassNearbyCrashingTrafficIdsToRaceCarModule(
             lpVehicleManagerOutputInterface,
@@ -621,7 +639,7 @@ namespace Vehicle
 
         // ---- publish the player's wheel force-feedback spring (asm 0x82645FA4..C4) -----
         // Two-word copy RCP+0x13D0 -> manager-out+0x874; DWARF names the accessor
-        // SetPlayerWheelFFSpring (BrnVehicleOutputInterface.h:256). ⚠️ As shipped: no
+        // SetPlayerWheelFFSpring (BrnVehicleOutputInterface.h:256). As shipped: no
         // player != -1 guard here either.
         lpVehicleManagerOutputInterface->SetPlayerWheelFFSpring(
             maRaceCarVehicles[mePlayerActiveRaceCarIndex].mWheelFFSpring);

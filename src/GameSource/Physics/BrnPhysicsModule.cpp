@@ -17,7 +17,7 @@
 // ================================================================================================
 // BrnPhysics::PhysicsModule -- constructor (X360 @0x827E5400) + Construct (X360 @0x825AE308).
 //
-// ⭐⭐ Construct IS BODIED as of 2026-08-03 (task #123). It was a no-op stub in WorldLinkStubs.cpp
+// Construct IS BODIED as of 2026-08-03 (task #123). It was a no-op stub in WorldLinkStubs.cpp
 // for the whole campaign, NOT because of link closure (that has been green since 54e1868d) but
 // because the class layout ended 26,012 bytes before the last store. BrnPhysicsModule.h is
 // re-seated now -- all five formerly-opaque sub-objects are real typed members and the trailing
@@ -28,7 +28,7 @@
 //
 // REACHABILITY: Construct is a virtual override reached at boot through the wired
 // WorldModule::Construct @0x827CF540 fleet cascade, so it is not /OPT:REF-able and it really runs.
-// ⭐ PROVEN, not assumed. A temporary one-shot witness was compiled into this body, run, observed
+// PROVEN, not assumed. A temporary one-shot witness was compiled into this body, run, observed
 // and removed (2026-08-03):
 //   [t123] PhysicsModule::Construct RAN; sizeof=429968 simMod=672 vehMgr=20288 contact=187312
 //          defMgr=309856 defIn=387408 defOut=392768 propMgr=403776 tail=429824
@@ -62,7 +62,7 @@ namespace BrnPhysics
     //   *(this+0x63684 +C/+10/+14)  = this+0x63684  //    self-circular alias ring
     //   *(this+0x63684 +18)         = 0             //    muThreadId
     //
-    // ⭐⭐ THE TRAILING EIGHT STORES ARE NOT THIS CONSTRUCTOR'S OWN WORK -- RESOLVED 2026-08-03.
+    // THE TRAILING EIGHT STORES ARE NOT THIS CONSTRUCTOR'S OWN WORK -- RESOLVED 2026-08-03.
     // They used to be reproduced here by hand against a fabricated `ContainedListInterface
     // mContainedList` member, described as "a trailing contained interface-with-intrusive-list
     // sub-object". There is no such sub-object. +0x63630 is mPropManager, and:
@@ -153,7 +153,7 @@ namespace BrnPhysics
         CGS_ASSERT(miPhysicsUpdateValidateRaceCarWorldContactPM >= 0,
                    "miPhysicsUpdateValidateRaceCarWorldContactPM >= 0");                     // :90
 
-        // ⚠️⚠️ REPRODUCED BUG, NOT A TRANSCRIPTION SLIP -- the shipped console source asserts the
+        // REPRODUCED BUG, NOT A TRANSCRIPTION SLIP -- the shipped console source asserts the
         // WRONG member here. The asm is unambiguous (0x825AE674 `stwx r3,r31,0x69C30` stores the
         // handle into miPhysicsUpdateFixUpVehContactsPM @+433200, then 0x825AE678 `lwz r11,0(r30)`
         // with r30 == this+0x69BD8 == +433112 reads miPhysicsUpdateCrashPredictionPM and asserts on
@@ -271,7 +271,7 @@ namespace BrnPhysics
 
     // PhysicsModule::Prepare -- X360 @0x825ADB68 (BrnPhysicsModule.cpp:192).
     //
-    // ⭐⭐ THE POINT OF THIS FUNCTION, for this campaign, IS STAGE 3. Until 2026-08-04 the whole
+    // THE POINT OF THIS FUNCTION, for this campaign, IS STAGE 3. Until 2026-08-04 the whole
     // body was a one-line `return true` stub in WorldLinkStubs.cpp, so the simulation module's own
     // Prepare -- the ONLY assignment to CgsPhysics::PhysicsSimulationModule::mpSimulation anywhere
     // in the tree -- was never called, and every reconstructed rw::physics solver object linked and
@@ -282,12 +282,12 @@ namespace BrnPhysics
     // world spine re-enters next frame), then does its work; the last arm resets the cursor to
     // MANAGER and reports success. `default` fires the console's "Invalid Stage\n" assert.
     //
-    // ⚠️ STAGE 7 (CREATE_PLAYER_VEHICLE) HAS NO ARM OF ITS OWN. The console's `case 7` jumps
+    // STAGE 7 (CREATE_PLAYER_VEHICLE) HAS NO ARM OF ITS OWN. The console's `case 7` jumps
     // straight to LABEL_17, which stamps stage 8 and falls into the world-rigid-body arm. That is
     // not an omission here: the stage exists in the enum and is reachable as a resume point, but no
     // code runs for it.
     //
-    // ⛔⛔ NOT REPRODUCED, DELIBERATELY AND VISIBLY -- three groups. None of them is reachable
+    // NOT REPRODUCED, DELIBERATELY AND VISIBLY -- three groups. None of them is reachable
     // work today (each one's target subsystem is itself inert), but every one of them is a REAL
     // console store or call and this comment is the whole record of that:
     //
@@ -307,7 +307,7 @@ namespace BrnPhysics
     //       the whole module. DeformationManager::Prepare actually EXISTS (bodied in the unmounted
     //       BrnDeformationManager.cpp); mounting that TU is its own closure job.
     //
-    //   (c) ⭐⭐ RETIRED 2026-08-19 (wave Q6 round 4) -- STAGE 8 IS LANDED IN FULL. This entry used
+    // (c) RETIRED 2026-08-19 (wave Q6 round 4) -- STAGE 8 IS LANDED IN FULL. This entry used
     //       to read "PrepareWorldRigidBody is not reconstructed, so creating a multi-kilobyte IO
     //       buffer on the stack purely to hand it to nothing would be pure risk for zero
     //       observable". The objection was correct AND it expired the moment the function was
@@ -316,7 +316,7 @@ namespace BrnPhysics
     //       urgent is that the hole was not inert -- mWorldEntityId stayed at K_INVALID_ENTITY_ID
     //       (owner byte 0xFF), which is what made every prop-vs-world contact fail
     //       ValidateSimulationContactTypes' `case 3` the first frame narrow-phase produced any.
-    //       ⛔ ONE STORE OF STAGE 8 IS STILL NOT REPRODUCED, and it is called out at its own site
+    // ONE STORE OF STAGE 8 IS STILL NOT REPRODUCED, and it is called out at its own site
     //       below: `mDeformationManager.SetWorldBodyId( mWorldRigidBodyId )`.
     // ================================================================================================
     bool PhysicsModule::Prepare( CgsModule::IOBufferStack* lpInputBufferStack,
@@ -360,7 +360,7 @@ namespace BrnPhysics
             // Hex-Rays recovered directly (v20[1] = -9.8100004, v22 = 0.1, v23 = 0.016666668,
             // v24 = 2); the gravity vector is moved into the params block with one lvx/stvx pair.
             //
-            // ⚠️ THIS -9.81 IS NOT rw::physics::Simulation::Initialize's DEFAULT GRAVITY. That
+            // THIS -9.81 IS NOT rw::physics::Simulation::Initialize's DEFAULT GRAVITY. That
             // one is -600.0f (read out of the X360 .rdata this wave). Initialize seeds the SDK
             // default and this call overwrites it with the GAME's; both numbers are real and they
             // are not the same number.
@@ -391,7 +391,7 @@ namespace BrnPhysics
             mePrepareStage = E_PREPARESTAGE_DEFORMATIONMANAGER;        // *v11 = 4
             if ( !mDeformationManager.Prepare( lpAllocatorList->GetRWLinearResourceAllocator( 23 ) ) )
                 return false;
-            // ⛔ the fourteen deformation-IO clears go here -- see (a) in the banner.
+            // the fourteen deformation-IO clears go here -- see (a) in the banner.
             // fall through
 
         case E_PREPARESTAGE_PROPMANAGER:
@@ -419,7 +419,7 @@ namespace BrnPhysics
             // test CreateIOBuffer's bool and does NOT test PrepareWorldRigidBody's bool -- r3 is
             // dead after both -- so neither result is branched on here either.
             //
-            // ⚠️ THIS BUFFER IS ~227 kB ON THE CONSOLE (the DestroyIOBuffer instantiation
+            // THIS BUFFER IS ~227 kB ON THE CONSOLE (the DestroyIOBuffer instantiation
             // @0x8259DAC0 frees `0x373E0` bytes), which is why it comes off the IO STACK and not
             // off the C stack. It is created, filled, drained and freed inside this one stage.
             CgsPhysics::PhysicsSimulationIO::InputBuffer* lpSimulationModuleInputBuffer = 0;
@@ -433,7 +433,7 @@ namespace BrnPhysics
             // +390296 lands 76,024 bytes into mDeformationManager (+314272), which
             // BrnDeformationManager.h:674 names `mWorldRigidBodyId` -- so this is
             // `mDeformationManager.SetWorldBodyId( mWorldRigidBodyId )` (DWARF
-            // BrnDeformationManager.h:156). ⚠️ That setter was DECLARED-ONLY in this tree until
+            // BrnDeformationManager.h:156). That setter was DECLARED-ONLY in this tree until
             // this wave -- the one-line body it needs to stop being an LNK2019 was added to
             // BrnDeformationManager.cpp with this store as its whole attestation.
             mDeformationManager.SetWorldBodyId( mWorldRigidBodyId );
@@ -456,7 +456,7 @@ namespace BrnPhysics
     // PhysicsModule::PrepareWorldRigidBody  @0x825A9750  (165 insns)
     // DWARF BrnPhysicsModule.h:207, body BrnPhysicsModule.cpp:472 (its own assert is .cpp:474).
     //
-    // ⭐⭐ BODIED 2026-08-19 (wave Q6 round 4). ⚠️ NOT IN .ida-exports -- there is no
+    // NOT IN .ida-exports -- there is no
     // .ida-exports/BURNOUT_X360_ARTIST.XEX/0x825A9750.json; the disassembly below was pulled from
     // BURNOUT_X360_ARTIST.XEX.i64 with headless IDA 9.3 (the same export-set hole
     // PhysicsSimulationModule::Destruct and RigidBodyData::RigidBodyData were). Note the address
@@ -475,7 +475,7 @@ namespace BrnPhysics
     // owner 0xFF is in none of that case's ten legal owners. With this bodied, entity B is owner
     // 0 == BrnWorld::E_ENTITYTYPE_WORLD, which `case 3` accepts.
     //
-    // ⭐ THE TWO IDS ARE LITERAL ZERO, and that is a derivation rather than a shrug:
+    // THE TWO IDS ARE LITERAL ZERO, and that is a derivation rather than a shrug:
     //   * `li r31, 0` @0x825A9790 is the only source of the entity id -- it is not read from any
     //     global, allocator or counter. `stw r31, 0(r11)` with r11 == this+0x69BC0 (433088) is
     //     the mWorldEntityId store. EntityId 0 unpacks (CgsEntityId.h's 8/14/10 split) as
@@ -515,23 +515,23 @@ namespace BrnPhysics
     // STATIC, not "frozen" and not an ordinal). +0x98/+0x9C are Inertia's tail PADDING and the
     // console copies them UNINITIALISED; nothing reads them and nothing here writes them.
     //
-    // ⚠️⚠️ mSpherical IS +INFINITY HERE AND THAT IS THE CONSOLE'S OWN VALUE, NOT A DEFECT AND NOT
+    // mSpherical IS +INFINITY HERE AND THAT IS THE CONSOLE'S OWN VALUE, NOT A DEFECT AND NOT
     // A PLACEHOLDER ZERO. The asm computes it as `fdivs f0, f13(1.0f), f12` where f12 is
     // min(mInvTens.x, mInvTens.y, mInvTens.z) read back from the stack slot the zero vector was
     // just stored into -- so the divisor is 0.0f and the quotient is +inf. That is precisely what
     // rw::physics::Inertia::SetInverseInertia does with a zero inverse-inertia diagonal (an
     // infinitely resistant-to-rotation body), and this tree's SetInverseInertia already carries
     // the same fcmpu/blt/fmr/fdivs shape recovered independently from
-    // ProcessChangeRigidBodyInertiaQueue. ⛔ Do NOT "fix" this to 0 or 1: the value is only ever
+    // ProcessChangeRigidBodyInertiaQueue. Do NOT "fix" this to 0 or 1: the value is only ever
     // read by RigidBody::DynamicUpdate's sleep-energy scale, which never runs for a STATIC_BODY.
     // (Note the console emits only the FINAL store to +0x84, not SetInverseInertia's intermediate
     // one -- the intermediate is dead in a stack temp. Same final value either way.)
     //
-    // ⚠️ mInvMass IS 0.1f, NOT 0.0f. A static body with a non-zero inverse mass reads oddly, and
+    // mInvMass IS 0.1f, NOT 0.0f. A static body with a non-zero inverse mass reads oddly, and
     // it was double-checked against the image byte-for-byte rather than reasoned about:
     // flt_82004014 == 0x3DCCCCCD == 0.1f. Reconstructed as shipped -- flag, don't fix.
     //
-    // ⭐ THE POSTED EVENT IS DRAINED BY THIS FUNCTION ITSELF, which is the answer to "the console
+    // THE POSTED EVENT IS DRAINED BY THIS FUNCTION ITSELF, which is the answer to "the console
     // destroys the buffer immediately, so how does the InAddRigidBody survive?". It does not have
     // to survive: the tail of this body is
     //     0x825A99C0  lwz   r11, 0x230(r29)   // the vptr of the sub-object at this+0x230
@@ -544,13 +544,13 @@ namespace BrnPhysics
     // is `(const InputBuffer*)`. So the queue is appended, then drained through
     // ProcessInputBuffers' nineteen drains, all of which are bodied in this tree, before Prepare
     // ever calls DestroyIOBuffer. Nothing is dropped and no IOBufferStack lifetime is stretched.
-    // ⚠️ This is the FIRST caller ProcessInput/ProcessInputBuffers has ever had at runtime in this
+    // This is the FIRST caller ProcessInput/ProcessInputBuffers has ever had at runtime in this
     // tree -- CgsPhysicsSimulationModule.cpp's banner still says "NOTHING REACHES ANY OF THIS AT
     // RUNTIME YET". It does now, and rw::physics::Simulation::AddRigidBody runs for real.
     //
     // The three assert sites are the console's own, with its own file/line: :474 here, and
     // CgsModuleUtils.h:238/:248 inside the inlined single-buffer Lock/UnlockBuffersForIO pair
-    // (Feb-2007 CgsModuleUtils.h names both outright). ⚠️ FLAG: this tree's
+    // (Feb-2007 CgsModuleUtils.h names both outright). FLAG: this tree's
     // CgsModule::Lock/UnlockBuffersForIO<TBuffer> single-buffer templates do NOT carry those two
     // `CGS_ASSERT(lpInputBuffer, "lpInputBuffer")` tripwires. Not added here because that header
     // has ~dozens of includers and the change belongs to it, not to this call site.
@@ -569,7 +569,7 @@ namespace BrnPhysics
         mWorldRigidBodyId = lWorldRigidBodyId;            // stdx -> +433080
 
         // ---- the body description ---------------------------------------------------------------
-        // ⚠️ rw::physics::Inertia HAS a default constructor on the PC (1.0f / 1.0f / FLT_MAX /
+        // rw::physics::Inertia HAS a default constructor on the PC (1.0f / 1.0f / FLT_MAX /
         // FLT_MAX / 0 / 0 and a unit mInvTens) and the console runs no such thing -- the block is
         // raw stack there. All SEVEN of its fields are overwritten below, so the two agree at the
         // point the event is copied; the ctor's stores are the only extra work the PC does.
@@ -603,7 +603,7 @@ namespace BrnPhysics
         lAddRigidBodyQueue.AddEvent( lAddRigidBodyEvent );         // BaseEventQueue::AddEvent @0x825A3000
 
         // ---- publish into the simulation module's input buffer ----------------------------------
-        // ⚠️ The console IGNORES AppendAddRigidBodyQueue's result (the mangled name @0x825A8298
+        // The console IGNORES AppendAddRigidBodyQueue's result (the mangled name @0x825A8298
         // even spells the return type `X` == void, against this tree's `bool`); r3 is dead at the
         // next instruction. Not branched on here either.
         CgsModule::LockBuffersForIO( lpSimulationModuleInputBuffer );                    // :238
@@ -623,7 +623,7 @@ namespace BrnPhysics
             if ( sbPropDiag && sbFirst && CgsDev::Log::gpDebugPrint != 0 )
             {
                 sbFirst = false;
-                // ⚠️ The handle is printed as its two 32-bit halves ON PURPOSE. RigidBodyId
+                // The handle is printed as its two 32-bit halves ON PURPOSE. RigidBodyId
                 // carries the EntityId in its HIGH word, so a single `(s32)` cast of the u64
                 // would print 0 whatever the world entity id turned out to be -- a diagnostic
                 // that cannot fail is not a diagnostic.
@@ -643,7 +643,7 @@ namespace BrnPhysics
 
     // ================================================================================================
     // PhysicsModule::UpdateCachedPositions  @0x8259C370  (34 insns)
-    // ⭐⭐ BODIED 2026-08-11 (lifetime wave). Its WorldLinkStubs boot gate is DELETED.
+    // Its WorldLinkStubs boot gate is DELETED.
     //
     // WHY IT MATTERS, and it is not the 34 instructions: this is the ONLY writer of a triangle-cache
     // slot's SPHERE CENTRE anywhere in the XEX. Until it runs, all 28 claimed slots sit at the WORLD
@@ -651,7 +651,7 @@ namespace BrnPhysics
     // would then be traction-tested against triangles three kilometres away -- valid, green, and
     // wrong. That is why it lands WITH the traction-line lifetime rather than after it.
     //
-    // ⚠️ THREE ARMS, NOT SIX -- read off the asm at 0x8259C3BC / CC / DC, because three earlier logs
+    // THREE ARMS, NOT SIX -- read off the asm at 0x8259C3BC / CC / DC, because three earlier logs
     // in this tree say six. The other three (PhysicalTrafficManager, DetachedPartManager,
     // DetachedWheelManager) are CALLEES of these, not siblings. The member offsets the console folds
     // into each `addi` are this tree's members by name and they check out exactly:
@@ -659,10 +659,10 @@ namespace BrnPhysics
     //     this + 0x63630 == 407088 == mPropManager
     //     this + 0x4CBA0 == 314272 == mDeformationManager
     //
-    // ⚠️ AND ITS ONE CALLER IS WorldModule::Update @0x827D63E8, NOT PhysicsModule::Update -- `xrefs_to`
+    // AND ITS ONE CALLER IS WorldModule::Update @0x827D63E8, NOT PhysicsModule::Update -- `xrefs_to`
     // is a one-element set. It is already wired that way (BrnWorldModule.cpp, under LockForWrite).
     //
-    // ⚠️ ARMS 2 AND 3 ARE NAMED GATES THIS WAVE (BrnPhysicsConductorGates.cpp). That is a matched
+    // ARMS 2 AND 3 ARE NAMED GATES THIS WAVE (BrnPhysicsConductorGates.cpp). That is a matched
     // split, not a partial: the five per-manager producers write INDEPENDENT per-slot events into one
     // queue whose consumer is per-slot, and props/deformation own ZERO cache slots today
     // (usedSlots == 28 == 8 race cars + 20 traffic, runtime-witnessed). A manager that does not push

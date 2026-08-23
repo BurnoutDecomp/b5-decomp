@@ -11,7 +11,7 @@
 //
 // Reconstructed from the X360 ASM (read line by line 2026-08-10), not from the Hex-Rays.
 //
-// ⭐⭐ WHY THIS IS THE `usedSlots` LEG, stated once so no later wave re-derives it.
+// WHY THIS IS THE `usedSlots` LEG, stated once so no later wave re-derives it.
 // TriangleCacheManager::mUsedCacheSlots -- the bitset whose popcount is the "usedSlots" probe --
 // has exactly ONE setter in the whole console image: ProcessAddToCacheEvents, draining
 // InSceneUpdateInterface::mAddToCacheQueue. That queue has exactly one filler on the race-car
@@ -19,7 +19,7 @@
 // DIFFERENT queue (mUpdateCachedPositionQueue) whose consumer ASSERTS the used bit is already
 // set ("Bit not set for event index "), so the position half can only run AFTER this one.
 //
-// ⭐⭐ AND WHY STAGING INTO A DOOMED BUFFER IS CORRECT HERE. WorldModule::Prepare's
+// AND WHY STAGING INTO A DOOMED BUFFER IS CORRECT HERE. WorldModule::Prepare's
 // eWorldPreparePhysicsModule stage creates a scene input buffer, runs PhysicsModule::Prepare
 // into it, calls UpdateScene(..., lbPrepare = TRUE) and destroys the buffer -- all in one call.
 // That looks like the silent-drop shape that ate the world-collision events, and it is not:
@@ -63,17 +63,17 @@ namespace Vehicle
     //   0x82615C24  bl  PhysicalTrafficManager::PrepareTriangleCache  (r3 = this + 44768)
     //   0x82615C28  li r3, 1
     //
-    // ⭐ The stack record is the two adjacent slots var_30/var_2C -- i.e. {s32, f32} at +0/+4,
+    // The stack record is the two adjacent slots var_30/var_2C -- i.e. {s32, f32} at +0/+4,
     // which is exactly the committed InEventAddToCache (sizeof 8, X360-attested by AddEvent's
     // `slwi r11, miLength, 3`). The console hoists the radius store out of the loop because it
     // never changes; written here as a whole-record assignment per iteration, which is the same
     // source shape and the same bytes appended.
     //
-    // ⭐ The traffic call is `addis r3,r28,1 ; addi r3,r3,-0x5120` == this + 0x10000 - 0x5120
+    // The traffic call is `addis r3,r28,1 ; addi r3,r3,-0x5120` == this + 0x10000 - 0x5120
     // == this + 44768 == mPhysicalTrafficManager, reached BY NAME here (the console offset is
     // 44768 on X360 and 44768+drift on the host -- see this header's KU_HOST_DRIFT_* block).
     //
-    // ⚠️ AS-SHIPPED: the return is the constant 1; there is no failure path. Reproduced because
+    // AS-SHIPPED: the return is the constant 1; there is no failure path. Reproduced because
     // Prepare tests it (`clrlwi r11, r3, 24 ; beq`).
     // ------------------------------------------------------------------------------------
     bool VehicleManager::PrepareTriangleCache(
@@ -99,12 +99,12 @@ namespace Vehicle
 
     // ------------------------------------------------------------------------------------
     // VehicleManager::UpdateTriangleCache  @0x82615C38  (240 insns)
-    // ⭐⭐ BODIED 2026-08-11 (lifetime wave). THE POSITION HALF, and the sibling of
+    // THE POSITION HALF, and the sibling of
     // PrepareTriangleCache above: Prepare CLAIMS the 28 slots (mAddToCacheQueue, once), this
     // MOVES them (mUpdateCachedPositionQueue, every frame). Arm 1 of
     // PhysicsModule::UpdateCachedPositions @0x8259C370.
     //
-    // ⛔ WHY IT IS NOT OPTIONAL: CacheSlot::mLastCachedSphere is written NOWHERE ELSE. Until this
+    // WHY IT IS NOT OPTIONAL: CacheSlot::mLastCachedSphere is written NOWHERE ELSE. Until this
     // runs, every claimed slot's sphere centre is (0,0,0) and the fill worker caches the geometry
     // around the world origin -- so a car at the Junkyard would be traction-tested against real,
     // valid triangles from three kilometres away.
@@ -121,7 +121,7 @@ namespace Vehicle
     //   0x82615DEC  InEventUpdateCachedPosition::AddEvent, miCacheSlot = the car index
     // then 0x82615FE0 chains to the traffic pool, whose slots are 8 + liVehicle.
     //
-    // ⚠️ FLAG -- `unk_82FB91D0` IS A ZERO VECTOR AND THE ADD IS AN IDENTITY. Sixteen bytes of
+    // FLAG -- `unk_82FB91D0` IS A ZERO VECTOR AND THE ADD IS AN IDENTITY. Sixteen bytes of
     // zero in the image; a full-text scan of all 30,084 X360 export JSONs finds exactly THREE
     // readers (this function, PhysicalTrafficManager::UpdateTriangleCache and
     // RaceCarPhysics::ApplyPropCollisionImpulseSum) and NO writer, so it is zero at runtime too.
@@ -129,7 +129,7 @@ namespace Vehicle
     // is rather than modelled as a mystery global; if a later wave finds a writer hiding in an
     // export hole, this is the line to revisit.
     //
-    // ⚠️ THE ZERO GUARD IS `== 0`, NOT `> 0`: the console selects the zero vector on
+    // THE ZERO GUARD IS `== 0`, NOT `> 0`: the console selects the zero vector on
     // `vcmpeqfp128 v9, 0, lensq` (0x82615DA0) and multiplies otherwise. Kept exactly.
     // ------------------------------------------------------------------------------------
     void VehicleManager::UpdateTriangleCache(
@@ -182,13 +182,13 @@ namespace Vehicle
     //             return true;
     //   default:  assert "Invalid prepare stage\n"  :867 (0x363);  return false;
     //
-    // ⭐ Both tail bytes are `stbx` (BYTE stores), not words -- read off the asm, and both land
+    // Both tail bytes are `stbx` (BYTE stores), not words -- read off the asm, and both land
     // on members this header already maps by name, so neither console literal appears below.
-    // ⚠️ Unlike PhysicsModule::Prepare, this one does NOT rewind its own cursor on success: it
+    // Unlike PhysicsModule::Prepare, this one does NOT rewind its own cursor on success: it
     // leaves mePrepareStage at 3, so a second call re-enters case 3 and re-stamps the same two
     // bytes. Faithful; noted because it differs from its sibling FSM.
     //
-    // ⛔ PrepareData is a named LINK STUB (WorldLinkStubs.cpp) -- see the declaration in
+    // PrepareData is a named LINK STUB (WorldLinkStubs.cpp) -- see the declaration in
     // BrnVehicleManager.h for the two measured reasons. It returns true there, which is what the
     // console body always returns too, so the FSM's control flow is unchanged by the drop; what
     // IS dropped is the per-car data build, and that is stated at the stub.

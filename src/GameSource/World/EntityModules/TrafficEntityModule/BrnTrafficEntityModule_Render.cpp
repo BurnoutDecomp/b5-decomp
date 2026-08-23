@@ -23,7 +23,7 @@
 //
 // NAMED GATES, each with its blocker:
 //   G1 the replay-serialiser pose source (module +468256 selects it);
-//   G2 CLOSED wave T3 round 1 -- a physical traffic car now RENDERS: its wheels come from
+//   G2 CLOSED -- a physical traffic car RENDERS: its wheels come from
 //      TrafficPhysicsInfo::maWheelTransforms and its blobby ground shadow is suppressed;
 //   G3 the glass-fracture reset + the damaged-vehicle budget leg;
 //   G4 the detached-body-part override table;
@@ -62,7 +62,6 @@
 #include "rw/math/vpu/matrix44affine_operation.h"                           // Mult / MakeRotationX/Y/Z / Inverse / TransformPoint
 
 #include <cmath>    // powf / sqrtf
-#include <cstdlib>  // getenv  (the [T1-dispatch] diagnostics only)
 
 // The global runtime shader-constant register (X360 symbol mShaderConstantTable; bodied by
 // the CgsShaderConstants TU). Same extern the sibling render TUs carry.
@@ -86,8 +85,8 @@ namespace BrnTraffic
 static const s32 KI_TRAFFIC_WHEELS_TO_RENDER_MAX = 4;
 
 // GATE G-WHEELEXISTS -- TrafficPhysicsInfo::mabWheelExists (console info+4040 == +0xFC8) has no
-// writer in this tree. RE-VERIFIED wave T3 r2 against the ARTIST image: the ONLY store to that
-// offset in the whole XEX is ProcessDeformationData @0x8271DEB0 (`addi r25, r22, 0xFC8` at
+// writer in this tree. The ONLY store to that offset in the whole XEX is
+// ProcessDeformationData @0x8271DEB0 (`addi r25, r22, 0xFC8` at
 // 0x8271E41C), and that function is still gated in _wT1_01.cpp's PostPhysicsUpdate leg list.
 // Honouring the always-false array would draw every promoted car with zero wheels, so the arm
 // draws the composed wheels under this named gate instead.
@@ -181,7 +180,7 @@ static const f32 KF_TRAFFIC_WHEEL_BLUR_THRESHOLD = 0.0f;
 //     an entity landing in more than one result appears more than once. The leak has no bit
 //     array; the ship spends a 601-bit one per call. Without it a duplicated id is appended
 //     twice, the same parked car is submitted twice into dispatch lists 12/19/20, and it burns
-//     two muMaxVehiclesToRender slots, silently. The [T1-dispatch] diag below counts them.
+//     two muMaxVehiclesToRender slots, silently.
 //     The DWARF instantiation is FastBitArray<601>, DecFIGS' KU_MAX_TOTAL_TRAFFIC, but the ship
 //     value is 600 (GetVehicleSpecies @0x821F4648 asserts `luIndex < 0x258`), so this is
 //     <KU_MAX_TOTAL_TRAFFIC>, not <601>.
@@ -215,7 +214,6 @@ TrafficEntityModule::PreDispatchUpdate( const BrnTrafficIO::InputBuffer_PreDispa
     // The producer (WorldModule::FilterFrustumTestResults) has already kept only the
     // owner-byte-2 (traffic) ids, so every entry here names a traffic vehicle slot.
     const u32 luVisibleCount = lrVisible.GetLength();
-    u32 luDuplicatesSuppressed = 0;                       // [T1-dispatch] witness only
     for ( u32 luVisible = 0; luVisible < luVisibleCount; ++luVisible )
     {
         const u32 luVehicle = lrVisible[ luVisible ].GetEntityIndex();
@@ -233,7 +231,6 @@ TrafficEntityModule::PreDispatchUpdate( const BrnTrafficIO::InputBuffer_PreDispa
         // DWARF :19315 -- `FastBitArray<601>::IsBitSet` guards the whole per-vehicle block.
         if ( lVehiclesAlreadySeen.IsBitSet( luVehicle ) )
         {
-            ++luDuplicatesSuppressed;
             continue;
         }
 
@@ -339,38 +336,6 @@ TrafficEntityModule::PreDispatchUpdate( const BrnTrafficIO::InputBuffer_PreDispa
         for ( u32 luCopy = 0; luCopy < luKeep; ++luCopy )
         {
             lrRenderInfos.Append( laKept[ luCopy ] );
-        }
-    }
-
-    // [T1-rinfo] probe, called right after PreDispatchUpdate produces the number.
-    // DELETE-WHEN parked traffic is confirmed on a booted run.
-    BrnTrafficIO::T1Diag_ReportTrafficRenderInfoCount( *lpOutput );
-
-    // ---- [T1-dispatch] the cull and dedup witness --------------------------
-    // DELETE-WHEN parked traffic is confirmed on a booted run. Gated on BRN_TRAFFIC_DIAG.
-    // Both gates in this function are module members seeded by Construct @0x82740220, and a
-    // placeholder-zero mfRenderCullDistanceSq makes `dSq >= 0` true for every vehicle: an empty
-    // render list, no assert, no non-finite value, nothing to trip on. Duplicate ids in
-    // maTrafficEntityIds are the same shape of silent failure, so both are reported here.
-    // Latched on the kept count, so a steady scene stays quiet.
-    {
-        static const bool skbTrafficDiag = ( std::getenv( "BRN_TRAFFIC_DIAG" ) != 0 );
-        if ( skbTrafficDiag && CgsDev::Log::gpDebugPrint != 0 )
-        {
-            static s32 siLastKept = -1;
-            const s32 liKept = lrRenderInfos.GetCount();
-            if ( liKept != siLastKept )
-            {
-                siLastKept = liKept;
-                *CgsDev::Log::gpDebugPrint
-                    << "[T1-dispatch] PreDispatchUpdate visible " << static_cast< s32 >( luVisibleCount )
-                    << " -> kept " << liKept
-                    << " (dupsSuppressed " << static_cast< s32 >( luDuplicatesSuppressed )
-                    << ", cullDistSq " << mfRenderCullDistanceSq
-                    << ", maxToRender " << static_cast< s32 >( muMaxVehiclesToRender )
-                    << ", camera (" << lCameraPosition.x << ", " << lCameraPosition.y
-                    << ", " << lCameraPosition.z << "))\n";
-            }
         }
     }
 }
@@ -522,30 +487,6 @@ TrafficEntityModule::GenerateDispatchLists( const BrnTrafficIO::InputBuffer_Disp
 
     // ---- step 10 -----------------------------------------------------------
     lpInput->UnlockForRead();
-
-    // ---- [T1-dispatch] the producer-side witness ---------------------------
-    // DELETE-WHEN parked traffic is confirmed on a booted run. Gated on BRN_TRAFFIC_DIAG.
-    // The consuming end (records reaching object list 12) is in BrnWorldModule.cpp; this half
-    // makes "the leg ran and drew nothing" read differently from "the leg never ran".
-    // Latched on the value, never on a printed-once bool.
-    {
-        static const bool skbTrafficDiag = ( std::getenv( "BRN_TRAFFIC_DIAG" ) != 0 );
-        if ( skbTrafficDiag && CgsDev::Log::gpDebugPrint != 0 )
-        {
-            static u32 suLastLength = 0xFFFFFFFFu;
-            if ( luLength != suLastLength )
-            {
-                suLastLength = luLength;
-                *CgsDev::Log::gpDebugPrint
-                    << "[T1-dispatch] GenerateDispatchLists walked " << static_cast< s32 >( luLength )
-                    << " renderInfo(s); shadowPass "
-                    << ( lpShadowMap->IsRenderingShadowMap() ? 1 : 0 )
-                    << " blobbyBuffer " << ( lpBlobbyShadowRenderer != 0 ? 1 : 0 )
-                    << " lists " << liModelOnlyDisplayList << "/" << liOpaqueList
-                    << "/" << liTransparentList << "\n";
-            }
-        }
-    }
 }
 
 
@@ -633,7 +574,7 @@ TrafficEntityModule::RenderTrafficCar( CgsGraphics::DispatchFrame* lpDispatchFra
         return;
     }
 
-    // ---- G2 (CLOSED wave T3 round 1): the physical (promoted) arm ----------
+    // ---- G2 (CLOSED): the physical (promoted) arm --------------------------
     // `rlwinm r11, r11, 0,28,28` @0x82728C1C -> Vehicle::IsPhysical(); the console then fetches
     // GetTrafficPhysicsInfoForVehicl(idx), asserts it non-null (pseudocode :3188-:3197, baked
     // .cpp line 15106) and clears the "not physical" latch (`LOBYTE(v68) = 0` @0x82733200's
@@ -641,7 +582,7 @@ TrafficEntityModule::RenderTrafficCar( CgsGraphics::DispatchFrame* lpDispatchFra
     //   * the wheel block takes maWheelTransforms instead of composing the locator (see below);
     //   * the blobby ground shadow is suppressed at the tail (`if (v68) ... AddShadow`);
     //   * the damaged verlet-offset upload is enabled -- still G3, see that gate.
-    // The accessor landed with the wave-T3 keystone (_wT3_00.cpp) and returns the real
+    // The accessor landed with the keystone (_wT3_00.cpp) and returns the real
     // TrafficPhysicsInfo*; the record itself has always been modelled and Constructed
     // (_wT1_03.cpp). Nothing here is gated any more.
     const bool lbIsPhysical = lpVehicle->IsPhysical();
@@ -850,7 +791,7 @@ TrafficEntityModule::RenderTrafficCar( CgsGraphics::DispatchFrame* lpDispatchFra
     // the detached-part queue is TrafficPhysicsInfo::mDetachedPartQueue, which nothing on this
     // build ever fills -- detached parts are the deformation wave, not this one. A car with no
     // detached parts takes the composed path below, which is the console's own else-arm.
-    // DELETE-WHEN traffic deformation lands. (This gate used to name G2; G2 is closed.)
+    // DELETE-WHEN traffic deformation lands.
     // ========================================================================
     {
         const u32 luPartCount = lpGraphicsSpec->muPartsCount;
@@ -945,18 +886,11 @@ TrafficEntityModule::RenderTrafficCar( CgsGraphics::DispatchFrame* lpDispatchFra
         laWheelContactPositions[ liInit ].SetZero();
     }
 
-    // [DIAG T1-dispatch] the wheel-block outcome code, reported once per DISTINCT value:
-    //   0 no deformation spec / block skipped   1 spec has no wheel model
-    //   2 no LOD state on the model             3 no wheel matrix built
-    //   4..8 SUBMITTED with 1..5 instances      9 GATED (model lacks the instance-shader flag)
-    s32 liWheelDiagCode = 0;
 
     if ( lrPhysicsSpecPtr.HasMemoryResource() && lpWheelModel != 0 )
     {
         const BrnPhysics::Deformation::StreamedDeformationSpec* lpPhysicsSpec =
             lrPhysicsSpecPtr.operator->();
-
-        liWheelDiagCode = 1;
 
         // The wheels never draw at LOD 0 on the race car; traffic's own clamp is
         // `if (a42 <= 1) v440 = 1` at pseudocode :636 -- the SAME floor, applied to the LOD
@@ -973,8 +907,6 @@ TrafficEntityModule::RenderTrafficCar( CgsGraphics::DispatchFrame* lpDispatchFra
 
         if ( lpWheelModel->DoesStateExist( leWheelLOD ) )
         {
-            liWheelDiagCode = 2;
-
             // Shader constant 25, "g_wheelConstants": the spin blur factor in lane x and
             // nothing else (`vrlimi128 v11, v0, 8, 0` -- mask 8 is lane X, so yzw stay zero).
             // FLAG: both scales are unrecovered dyn-init constants (see the head of this file),
@@ -1176,23 +1108,15 @@ TrafficEntityModule::RenderTrafficCar( CgsGraphics::DispatchFrame* lpDispatchFra
                 ++liInstanceCount;
             }
 
-            liWheelDiagCode = 3;
-
             if ( liInstanceCount > 0 )
             {
-                liWheelDiagCode = 3 + liInstanceCount;
-
                 // The console's own gate: `CGS_ASSERT( lpWheelModel->GetFlag(
                 // E_FLAG_MODEL_USES_INSTANCE_SHADER ) )`, whose assert string is baked into the
                 // traffic body too (pseudocode :1502, "lbInstancing == GetFlag(...)"). A model
                 // without the flag is not fit for the instanced path, and submitting it anyway
                 // draws screen-filling shards. ModelResourceType::PostFixUp computes the flag at
                 // load, so a correctly-ported wheel bundle carries it.
-                if ( !lpWheelModel->GetFlag( CgsGraphics::Model::E_FLAG_MODEL_USES_INSTANCE_SHADER ) )
-                {
-                    liWheelDiagCode = 9;
-                }
-                else
+                if ( lpWheelModel->GetFlag( CgsGraphics::Model::E_FLAG_MODEL_USES_INSTANCE_SHADER ) )
                 {
                     const CgsGraphics::Renderable* lpWheelRenderable =
                         lpWheelModel->GetRenderable( leWheelLOD );
@@ -1257,77 +1181,6 @@ TrafficEntityModule::RenderTrafficCar( CgsGraphics::DispatchFrame* lpDispatchFra
         }
     }
     (void)laWheelContactPositions;
-
-    // ---- [T1-dispatch] the first-car one-shot and the wheel outcome --------
-    // DELETE-WHEN parked traffic is confirmed on a booted run. Gated on BRN_TRAFFIC_DIAG.
-    {
-        static const bool skbTrafficDiag = ( std::getenv( "BRN_TRAFFIC_DIAG" ) != 0 );
-        if ( skbTrafficDiag && CgsDev::Log::gpDebugPrint != 0 )
-        {
-            // The single line that says the whole chain (spawn -> streamer -> pre-dispatch ->
-            // dispatch -> submission) closed for the first time. A genuine one-shot: it can
-            // only ever be true once, and it is the event, not a per-frame number.
-            static bool sbLoggedFirstCar = false;
-            if ( !sbLoggedFirstCar )
-            {
-                sbLoggedFirstCar = true;
-                *CgsDev::Log::gpDebugPrint
-                    << "[T1-dispatch] FIRST RenderTrafficCar: vehicle " << static_cast< s32 >( luEntityIdx )
-                    << " type " << static_cast< s32 >( luVehicleType )
-                    << " asset " << static_cast< s32 >( luAssetId )
-                    << " parts " << static_cast< s32 >( lpGraphicsSpec->muPartsCount )
-                    << " lod " << static_cast< s32 >( lLOD )
-                    << " at (" << lBodyTransform.wAxis.x << ", " << lBodyTransform.wAxis.y
-                    << ", " << lBodyTransform.wAxis.z << ")"
-                    << " physicsSpec " << ( lrPhysicsSpecPtr.HasMemoryResource() ? 1 : 0 )
-                    << "\n";
-            }
-
-            // [T3-render] the first PHYSICAL traffic car this build ever draws. Distinct latch:
-            // the parked-car one-shot above fires long before any promotion.
-            // DELETE-WHEN-STABLE.
-            static bool sbLoggedFirstPhysicalCar = false;
-            if ( lbIsPhysical && !sbLoggedFirstPhysicalCar )
-            {
-                sbLoggedFirstPhysicalCar = true;
-                *CgsDev::Log::gpDebugPrint
-                    << "[T3-render] FIRST PHYSICAL RenderTrafficCar: vehicle "
-                    << static_cast< s32 >( luEntityIdx )
-                    << " at (" << lBodyTransform.wAxis.x << ", " << lBodyTransform.wAxis.y
-                    << ", " << lBodyTransform.wAxis.z << ")\n";
-            }
-
-            // [T3-gate] G-WHEELEXISTS one-shot, fired only when the forced arm really changed an
-            // outcome (the record still says "no wheels"). DELETE-WHEN-STABLE.
-            static bool sbLoggedWheelExistsGate = false;
-            if ( KB_T3_FORCE_PHYSICAL_WHEEL_EXISTS && lbIsPhysical && !sbLoggedWheelExistsGate )
-            {
-                if ( lpPhysicsInfo != 0 && !lpPhysicsInfo->mabWheelExists[ 0 ] )
-                {
-                    sbLoggedWheelExistsGate = true;
-                    *CgsDev::Log::gpDebugPrint
-                        << "[T3-gate] G-WHEELEXISTS forcing mabWheelExists true (vehicle "
-                        << static_cast< s32 >( luEntityIdx )
-                        << "); writer ProcessDeformationData 0x8271DEB0 absent\n";
-                }
-            }
-
-            // Latched on the VALUE: this block has five different ways to draw no wheels and a
-            // printed-once flag could only ever report the first car's answer.
-            static u32 suSeenWheelDiagCodes = 0u;
-            const u32  luBit = 1u << static_cast< u32 >( liWheelDiagCode );
-            if ( ( suSeenWheelDiagCodes & luBit ) == 0u )
-            {
-                suSeenWheelDiagCodes |= luBit;
-                *CgsDev::Log::gpDebugPrint
-                    << "[T1-dispatch] RenderTrafficCar wheel block outcome " << liWheelDiagCode
-                    << " (0 no deformation spec, 1 no wheel model, 2 no LOD state, "
-                       "3 no wheel built, 4..8 submitted with 1..5 instances, "
-                       "9 GATED -- model lacks E_FLAG_MODEL_USES_INSTANCE_SHADER); "
-                       "wheels-to-render " << giWheelsToRender << "\n";
-            }
-        }
-    }
 }
 
 }  // namespace BrnTraffic

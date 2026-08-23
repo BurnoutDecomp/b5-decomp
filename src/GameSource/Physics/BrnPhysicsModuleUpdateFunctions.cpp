@@ -4,7 +4,7 @@
 // BrnPhysics::PhysicsModule -- the per-frame Update helper functions' home TU
 // (the console path baked into this TU's asserts is
 // "...\gamesource\unity\../Physics/BrnPhysicsModuleUpdateFunctions.cpp").
-// ⚠️ The dossier keys this function to BrnPhysicsModule.cpp; the baked :915 path
+// The dossier keys this function to BrnPhysicsModule.cpp; the baked :915 path
 // above is the byte-grounded correction.
 //
 // This slice: FixUpVehicleContacts @ 0x825A6010 (1067 insns) -- the big-five
@@ -14,7 +14,7 @@
 // GlobalEntityID and the queue GetEvent out-of-line where the X360 inlines /
 // out-of-lines differently).
 //
-// ⭐⭐ 2026-08-09 (CONDUCTOR WAVE): PhysicsModule::Update @0x825B0640 (1,999 insns)
+// PhysicsModule::Update @0x825B0640 (1,999 insns)
 // LANDS BELOW -- the WorldLinkStubs boot gate is DELETED and this TU is the real
 // per-frame physics conductor now. FixUpVehicleContacts' old "still a link stub"
 // caller note is retired by the same commit.
@@ -63,7 +63,7 @@ namespace BrnPhysics
             return lResult;
         }
 
-        // ⚠ [FLAG PC bring-up] PostSceneUpdate's player-index EDGE. NOT console state -- see the
+        // [FLAG PC bring-up] PostSceneUpdate's player-index EDGE. NOT console state -- see the
         // PC-BUILD GUARD #1 banner at its use site. A file-scope static rather than a member
         // because PhysicsModule's layout is offset-pinned and this state is not the console's
         // (the same device, and the same reason, as
@@ -203,16 +203,16 @@ namespace BrnPhysics
     //     or the contact-spy leg (BridgeSimulationToOutput + ProcessContactSpies +
     //     UpdateFatalCrashFlags), BridgeVehicleManagerToOutput, DestroyIOBuffer x5.
     //
-    // ⚠️ CATCHUP (lUpdateSet & 1): the console's network-catchup fast path -- locks the sim
+    // CATCHUP (lUpdateSet & 1): the console's network-catchup fast path -- locks the sim
     // output READ up front, skips the whole generation/step block, and calls the sim's
     // ProcessInput instead of the spy leg at the tail. Reconstructed as shipped even though
     // nothing sets the bit on PC yet.
     //
-    // ⚠️ The streamed dev asserts (gpcMessageBuffer + StrStream hex ids) are LOWERED to
+    // The streamed dev asserts (gpcMessageBuffer + StrStream hex ids) are LOWERED to
     // plain CGS_ASSERT with the console's message prefix -- the committed physics-TU
     // convention (see BrnPhysicsModuleBridgeFunctions.cpp:371).
     //
-    // ⚠️⚠️ HONEST-CLOSURE NOTE: several callees below are LOUD one-shot inert gates this
+    // HONEST-CLOSURE NOTE: several callees below are LOUD one-shot inert gates this
     // wave (BrnPhysicsConductorGates.cpp names each with its X360 address + insn count).
     // The CALL SEQUENCE here is complete and faithful; the gated legs log once per boot
     // and do nothing until their bodies land. No call is dropped, no order changed.
@@ -230,7 +230,7 @@ namespace BrnPhysics
 
         const bool lbNetworkCatchup = (lUpdateSet & 1) != 0;   // r30 = lUpdateSet & 1
 
-        // ⚠⚠ PC-BUILD GUARD (conductor wave 2026-08-09). On the PC the world spine reaches
+        // PC-BUILD GUARD (conductor wave 2026-08-09). On the PC the world spine reaches
         // this function during BOOT/marketing frames too -- states in which the SIM TIMER has
         // never started, so both timer products are 0.0. The console never conducted physics
         // in that state (its boot flow doesn't drive WorldModule::Update -- the BF_LOADING
@@ -288,7 +288,7 @@ namespace BrnPhysics
         lpOutputBufferStack->CreateIOBuffer(&lpPotentialContacts, "PotentialContacts"); // @0x825AC3C8
         lpOutputBufferStack->CreateIOBuffer(&lpPropRaceCarContacts, "PropRaceCarContacts"); // @0x825AC4A0
 
-        // ⭐ 2026-08-10 (root-cause wave): a const VIEW of the sim output buffer, nothing more.
+        // a const VIEW of the sim output buffer, nothing more.
         // The post-step read-back legs run with that buffer READ-locked, and the console reads
         // its update-rigid-body queue there through the CONST accessor @0x8259EFD0. Naming the
         // const view once is how those two call sites select that overload; it aliases the same
@@ -311,7 +311,7 @@ namespace BrnPhysics
         const f32 lfGameTimerTimeStep =
             lpPhysicsModuleInputBuffer->GetTimerInterface()->GetGameTimerStatus()->GetCurrentTimeStep();
 
-        // ⚠ FLAG: gate-bodied this wave (BrnPhysicsConductorGates.cpp) -- the dispatch's own
+        // FLAG: gate-bodied this wave (BrnPhysicsConductorGates.cpp) -- the dispatch's own
         // ~10-method web is not reconstructed. The call and its arguments are the console's.
         HandleGameActions(lpPhysicsModuleInputBuffer->GetGameActionQueue(), lpPhysicsModuleOutputBuffer);
 
@@ -447,8 +447,8 @@ namespace BrnPhysics
                 mVehicleManager.ResetForceNoSlowMo();
             }
 
-            // ⚠ FLAG: gate-bodied. Console: the per-driver control dispatch.
-            // ⚠ FLAG (storage->real seam cast, deliberate -- the driver-input span is still a
+            // FLAG: gate-bodied. Console: the per-driver control dispatch.
+            // FLAG (storage->real seam cast, deliberate -- the driver-input span is still a
             // size-pinned opaque storage; retire when it adopts the real type):
             mVehicleManager.UpdateDrivers(
                 lfSimTimerTimeStep,
@@ -517,7 +517,7 @@ namespace BrnPhysics
             CGS_ASSERT(lpPropRaceCarContacts != 0, "lpInputBuffer");                     // CgsModuleUtils.h:238
             lpPropRaceCarContacts->LockForWrite();
             lpVehManagerBuffer->LockForRead();
-            // ⛔ 2026-08-10 (root-cause wave): this used to read `lpVehManagerBuffer->
+            // this used to read `lpVehManagerBuffer->
             // GetVehicleOutputRequestInterface()` directly, and because lpVehManagerBuffer is a
             // NON-const pointer, C++ overload resolution picked the MUTABLE accessor -- whose
             // tripwire is IsBufferLockedForWriting(). The buffer is READ-locked on this leg, so
@@ -641,7 +641,7 @@ namespace BrnPhysics
 
             // ---- read the stepped bodies back ------------------------------------------------
             CgsDev::PerfMonCpu::StartMonitor(miPhysicsUpdateReadUpdatedBodiesPM);        // +433104
-            // ⛔ 2026-08-10 (root-cause wave): the sim output buffer is READ-locked here
+            // the sim output buffer is READ-locked here
             // (LockForRead above), so the mutable GetUpdateRigidBodyQueue() this used to select
             // fired "Not locked for writing" every frame. The console calls the CONST twin
             // @0x8259EFD0 at exactly this site; it is declared now, and both ReadUpdatedBodies
@@ -669,7 +669,7 @@ namespace BrnPhysics
             mDeformationManager.VerifyPartIndices();
             mDeformationManager.VerifyPartIndices();
 
-            // ⚠ FLAG (storage->real seam casts, deliberate): the output buffer's two
+            // FLAG (storage->real seam casts, deliberate): the output buffer's two
             // deformation seats are still size-pinned opaque storages; OutputData's DWARF
             // signature takes the real interface types. Same sanctioned seam as the
             // ProcessDeformationStates cast below -- retire both when the interfaces adopt
@@ -686,7 +686,7 @@ namespace BrnPhysics
                     lpPhysicsModuleOutputBuffer->GetDeformationOutputInterface()));
             mDeformationManager.VerifyPartIndices();
 
-            // ⚠ FLAG: gate-bodied (image-only address 0x8263C7C0).
+            // FLAG: gate-bodied (image-only address 0x8263C7C0).
             mVehicleManager.ProcessCrashingNetworkCars(
                 reinterpret_cast<const Vehicle::VehicleDriverInputInterface*>(
                     lpPhysicsModuleInputBuffer->GetVehicleDriverInterface()),  // FLAG: storage->real seam cast
@@ -828,10 +828,10 @@ namespace BrnPhysics
 
     // =============================================================================================
     // PostSceneUpdate  @0x825ABC10  (278 insns; own asserts BrnPhysicsModuleUpdateFunctions.cpp
-    // :68..:71). ⭐ LANDED 2026-08-10 (create-path wave) -- the WorldLinkStubs boot gate that stood
+    // :68..:71). LANDED 2026-08-10 (create-path wave) -- the WorldLinkStubs boot gate that stood
     // at WorldLinkStubs.cpp:3529 since 2026-07-27 is DELETED.
     //
-    // ⭐⭐ WHY THIS FUNCTION AND NOT THE CREATE PATH. The campaign brief named
+    // WHY THIS FUNCTION AND NOT THE CREATE PATH. The campaign brief named
     // VehicleManager::ProcessCreateEvents @0x82616770 as the head of the list. It is the only
     // writer in the XEX that SETS a bit in mUsedRaceCars, so that is right about the destination --
     // but `xrefs_to` on it is a ONE-element set (ProcessVehicleMaintenanceEvents), and `xrefs_to`
@@ -867,7 +867,7 @@ namespace BrnPhysics
     //   UnlockForRead(in) ; mSimulationModule.ProcessInput(sim) ; DestroyIOBuffer x2
     //   CheckState ; StopMonitor
     //
-    // ⭐ Every `this`-relative operand above was resolved to a NAMED member before it was written:
+    // Every `this`-relative operand above was resolved to a NAMED member before it was written:
     // 0x4AA0 -> mVehicleManager, `addis 5/-0x3460` -> mDeformationManager, `addis 6/-0x890` ->
     // mDeformationInput, `addis 6/+0x3630` -> mPropManager, 0x230 -> mSimulationModule, and the
     // three perf handles to their names in BrnPhysicsModule.h's 27-handle run. No console byte
@@ -955,7 +955,7 @@ namespace BrnPhysics
 
         lpPhysicsModuleOutputBuffer->UnlockForWrite();
 
-        // ⛔ THE SIM FIREWALL. Gate-bodied on purpose -- see its banner in
+        // THE SIM FIREWALL. Gate-bodied on purpose -- see its banner in
         // BrnPhysicsConductorGates.cpp. The call and its lock bracket are the console's; what is
         // deferred is the callee, which is the ONLY thing that would move the vehicle manager's
         // mRequiredRigidBodiesQueue into the simulation.
@@ -975,7 +975,7 @@ namespace BrnPhysics
         // assert(h:967); if (idx != -1) active = mbIsPlayerCarActive;` -- which is exactly the
         // inlined IsPlayerCarActive() (its assert IS the h:967 one). It does NOT go through the
         // "hasn't been set" getter (h:980) for this test: -1 is an expected value at this site.
-        // ⚠ Fixed 2026-08-15: this used to call GetPlayerActiveRaceCarIndex() twice for the raw
+        // Fixed 2026-08-15: this used to call GetPlayerActiveRaceCarIndex() twice for the raw
         // reads, whose own assert fires on -1 -- silent while the (PC-only) IO-buffer zero-fill
         // made the index read 0, an assert storm (440/boot) the moment the interface was cleared
         // to -1 as the console does and the producer bridge is still a PC gate.
@@ -986,7 +986,7 @@ namespace BrnPhysics
             lbPlayerCarActive = lpRCEntity->IsPlayerCarActive();                         // h:967 inline
         }
 
-        // ⚠ TWO DIFFERENT EntityId TYPES LIVE IN THIS TREE and this leg touches both: the packed
+        // TWO DIFFERENT EntityId TYPES LIVE IN THIS TREE and this leg touches both: the packed
         // CgsSceneManager::EntityId class (which owns the K_INVALID_ENTITY_ID constant == the
         // console's dword_82F2A07C) and the plain ::EntityId storage word from BrnCommonTypes.h,
         // which is what both GetPlayerRaceCarEntityId and FindModelIndexByEntityID deal in. The
@@ -1013,7 +1013,7 @@ namespace BrnPhysics
             // BrnVehicleManagerPlayerStats.cpp:251) is emitted at this site -- passing -1 ALWAYS
             // fails that range test, so the console fires the dialog on every frame this arm runs.
             //
-            // ⚠⚠ PC-BUILD GUARD #1 (create-path wave 2026-08-10). MEASURED on the first boot with
+            // PC-BUILD GUARD #1 (create-path wave 2026-08-10). MEASURED on the first boot with
             // this function live: 267 dialogs from this one line before the flow even reached the
             // junkyard handover. The console's flow does not conduct physics in menus at all, so
             // this arm is transient there; the PC world spine drives WorldModule::Update from BOOT,
@@ -1032,7 +1032,7 @@ namespace BrnPhysics
 
         mDeformationManager.SetPlayerModelIndex(-1);   // `li r11,-1 ; stw r11, 0(&miPlayerModelIndex)` on BOTH arms
 
-        // ⚠⚠ PC-BUILD GUARD #2 (create-path wave 2026-08-10), and this one is a DIRECT CONSEQUENCE
+        // PC-BUILD GUARD #2 (create-path wave 2026-08-10), and this one is a DIRECT CONSEQUENCE
         // OF THIS WAVE'S DELIBERATE DEFERRAL -- worth stating exactly, because the assert it holds
         // is a real one that found a real fact.
         //

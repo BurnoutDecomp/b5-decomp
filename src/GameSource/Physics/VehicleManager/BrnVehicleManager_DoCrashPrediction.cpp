@@ -1,34 +1,31 @@
 // =================================================================================================
 // GameSource/Physics/VehicleManager/BrnVehicleManager_DoCrashPrediction.cpp
 //
-// Wave T3 round 2, owner B, FIX ROUND -- the HEAD of the crash-prediction web.
+// The HEAD of the crash-prediction web.
 //
 //   VehicleManager::DoCrashPrediction  @0x82645FE0 (814)  -- DWARF BrnVehicleManager.h:341
 //
-// This is the function that was still a BRN_CONDUCTOR_GATE, and the reason every body landed in
-// BrnVehicleManager_RaceCarTrafficContact.cpp / BrnPhysicalTrafficManager_CrashResponse.cpp was
-// unreachable: PhysicsModule::Update calls it every frame (BrnPhysicsModuleUpdateFunctions.cpp:416)
-// and the gate did nothing. Landing it wires
+// Called every frame by PhysicsModule::Update (BrnPhysicsModuleUpdateFunctions.cpp:416). The chain:
 //   DoCarCarContactGeneration -> maCustomEventQueues[8] -> DoCrashPredictionForRaceCarAndTrafficVehicle
 //   -> HandleCrashPredictionForRaceCarAndTrafficVehicle -> HandleRaceCarTrafficCarPotentialContact
 //   -> PhysicalTrafficManager::SetTrafficVehicle{Crashing,Slammed,Checked} / TestForNearMissFreakOut
-//   -> the PhysicalTrafficState readback the world already consumes.
+//   -> the PhysicalTrafficState readback the world consumes.
 //
-// ⚠️ Read off the ARTIST asm (.ida-exports 0x82645FE0). Hex-Rays renders it as a 31-int prototype
+// Read off the ARTIST asm (.ida-exports 0x82645FE0). Hex-Rays renders it as a 31-int prototype
 // because of the PPC float-arg GPR skip: r3=this, r4/r5 = the two stacks, f1 = timestep with r6
 // SKIPPED, then r7 input / r8 vehicle-out / r9 request-out / r10 manager-out and the last two
 // interfaces on the stack. The eight leading asserts name every parameter (BrnVehicleManager.cpp
 // :2880..:2887), which is what pins the mapping.
 //
-// ⭐ THE AVERAGER IS A STACK LOCAL OF THIS FUNCTION. `v149[1680] @ sp+0x150` with `v150 @ sp+0x7E0`
+// THE AVERAGER IS A STACK LOCAL OF THIS FUNCTION. `v149[1680] @ sp+0x150` with `v150 @ sp+0x7E0`
 // == 0x150+0x690 is exactly PotentialContactAverager (20 * 0x50 pairs, 20 weights @0x640, count
 // @0x690), and `v150 = 0` right after AllocateInternalBuffers is its only initialisation. That is
 // why no PotentialContactAverager instance exists anywhere else in the tree: the console has none.
 //
-// ⭐ QUEUE INDICES, byte-proven against BrnPhysicsModuleIO_PotentialContactInterface.h's
+// QUEUE INDICES, byte-proven against BrnPhysicsModuleIO_PotentialContactInterface.h's
 // `16 + n * 0x28010` map:
 //     ifc + 2130144 -> [13] traffic-with-traffic        (count at +2130152)
-//     ifc + 1310864 -> [ 8] race-car-with-traffic       (count at +1310872)   <- THE ROUND'S PATH
+//     ifc + 1310864 -> [ 8] race-car-with-traffic       (count at +1310872)
 //     ifc + 1474720 -> [ 9] traffic-with-world          (count at +1474728)
 //
 // THREE NAMED GATES, each at its seat below. None of them is on the race-car-vs-traffic path.
@@ -41,23 +38,11 @@
 #include "GameShared/GameClasses/SceneManager/SharedIO/CgsPotentialContact.h"
 #include "GameShared/GameClasses/Module/CgsIOBufferStack.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"
-
-#include <cstdlib>   // getenv (BRN_TRAFFIC_DIAG)
 
 namespace BrnPhysics
 {
 namespace Vehicle
 {
-namespace
-{
-    // [T3-*] DIAG. NOT IN THE X360 BINARY. DELETE-WHEN-STABLE.
-    inline bool TrafficDiagOn()
-    {
-        static const bool sbEnabled = (getenv("BRN_TRAFFIC_DIAG") != 0);
-        return sbEnabled;
-    }
-}
 
 // -------------------------------------------------------------------------------------------
 // DoCrashPrediction  @0x82645FE0 (814)  -- DWARF BrnVehicleManager.h:341
@@ -119,28 +104,15 @@ void VehicleManager::DoCrashPrediction(
                            "Found a traffic-world potential contact outside of traffic-world queue");    // :2912
             }
 
-            if (lu8OwnerA == 2u && lu8OwnerB == 2u)
-            {
-                // GATE: VehicleManager::HandleTrafficCarTrafficCarPotentialContact @0x8263EC90 (279)
-                // -- unbodied (traffic-vs-traffic outcome arm, out of this round's scope).
-                // DELETE-WHEN that body lands; args are (contact BY VALUE, request, vehicle,
-                // manager, deformation, timestep) -- same shape as the race-car arm.
-                if (TrafficDiagOn() && CgsDev::Log::gpDebugPrint != 0)
-                {
-                    static bool sbSeen = false;   // DIAG. DELETE-WHEN-STABLE.
-                    if (!sbSeen)
-                    {
-                        sbSeen = true;
-                        *CgsDev::Log::gpDebugPrint
-                            << "[T3-contact] traffic-vs-traffic pair reached the gate (@0x8263EC90)\n";
-                    }
-                }
-            }
+            // GATE VehicleManager::HandleTrafficCarTrafficCarPotentialContact @0x8263EC90 (279)
+            //   blocker: unbodied. Args are (contact BY VALUE, request, vehicle, manager,
+            //   deformation, timestep) -- same shape as the race-car arm. DELETE-WHEN it lands.
+            (void)(lu8OwnerA == 2u && lu8OwnerB == 2u);
         }
     }
 
     // ---- (2) race-car-vs-PHYSICAL-traffic, custom queue [8] ---------------------------------
-    // THE ROUND'S PATH. THE QUEUE RECORDS STILL HOLD **GLOBAL** ENTITY IDS ON BOTH SIDES.
+    // THE QUEUE RECORDS STILL HOLD GLOBAL ENTITY IDS ON BOTH SIDES.
     // FixUpVehicleContacts splices the physical id into a LOCAL VolumeInstanceId and passes it to
     // the DeformationManager (BrnPhysicsModuleUpdateFunctions.cpp:110-119); it never writes the id
     // back into the record (the console's @0x825A6010 has no `std` into the queue storage, only
@@ -152,59 +124,6 @@ void VehicleManager::DoCrashPrediction(
     // 80-byte record to the stack before the call; the by-value local reproduces both.
     {
         const Queue& lrQueue = lpContactInterface->GetRaceCarWithTrafficQueue();
-
-        // [T3-contact] DIAG. NOT IN THE X360 BINARY. DELETE-WHEN-STABLE.
-        if (TrafficDiagOn() && lrQueue.GetLength() > 0 && CgsDev::Log::gpDebugPrint != 0)
-        {
-            static bool sbSeenQueue = false;
-            if (!sbSeenQueue)
-            {
-                sbSeenQueue = true;
-                *CgsDev::Log::gpDebugPrint
-                    << "[T3-contact] DoCrashPrediction: first race-car-vs-traffic queue, len="
-                    << lrQueue.GetLength() << "\n";
-            }
-        }
-
-        // ---- [T4-q8] the queue-[8] witness ----------------------------------------------------
-        // [DIAG] NOT IN THE X360 BINARY. Opt-in (BRN_TRAFFIC_DIAG). One-shot for the first pair
-        // (ids + owners + separation), then value-latched on the queue length so a changing pair
-        // count reprints and a steady one is silent. BOTH indices are GLOBAL entity indices
-        // (0..599) -- nothing rewrites the record's ids in place; the physical 0..19 slot only
-        // appears past mu8GlobalToPhysicalEntityIndexMap, inside the handler. DELETE-WHEN-STABLE.
-        if (TrafficDiagOn() && CgsDev::Log::gpDebugPrint != 0)
-        {
-            const s32 liLength = lrQueue.GetLength();
-
-            static bool sbFirstPair = false;
-            if (!sbFirstPair && liLength > 0)
-            {
-                sbFirstPair = true;
-                const PotentialContact& lrFirst = lrQueue.GetEvent(0);
-                const u32 luWordA = static_cast<u32>(lrFirst.muVolumeInstanceIdA.muId >> 32);
-                const u32 luWordB = static_cast<u32>(lrFirst.muVolumeInstanceIdB.muId >> 32);
-                const f32 lfDX = lrFirst.mPointOnB.x - lrFirst.mPointOnA.x;
-                const f32 lfDY = lrFirst.mPointOnB.y - lrFirst.mPointOnA.y;
-                const f32 lfDZ = lrFirst.mPointOnB.z - lrFirst.mPointOnA.z;
-                *CgsDev::Log::gpDebugPrint
-                    << "[T4-q8] first race-car-vs-traffic potential contact: len=" << liLength
-                    << " A=" << CgsDev::E_PRINTMODE_HEXONCE << static_cast<u32>(luWordA)
-                    << " ownerA=" << static_cast<s32>(luWordA >> 24)
-                    << " globalIdxA=" << static_cast<s32>((luWordA >> 10) & 0x3FFFu)
-                    << " B=" << CgsDev::E_PRINTMODE_HEXONCE << static_cast<u32>(luWordB)
-                    << " ownerB=" << static_cast<s32>(luWordB >> 24)
-                    << " globalIdxB=" << static_cast<s32>((luWordB >> 10) & 0x3FFFu)
-                    << " sepSq=" << (lfDX * lfDX + lfDY * lfDY + lfDZ * lfDZ)
-                    << "\n";
-            }
-
-            static s32 siLastLength = -1;
-            if (liLength != siLastLength)
-            {
-                siLastLength = liLength;
-                *CgsDev::Log::gpDebugPrint << "[T4-q8] queue[8] len=" << liLength << "\n";
-            }
-        }
 
         for (s32 liIndex = 0; liIndex < lrQueue.GetLength(); ++liIndex)
         {

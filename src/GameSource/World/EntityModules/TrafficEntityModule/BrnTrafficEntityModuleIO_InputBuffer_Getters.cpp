@@ -15,13 +15,13 @@ namespace BrnTraffic
 {
 namespace BrnTrafficIO
 {
-    // FILE-SPLIT NOTE (2026-08-01, BridgeGameStateToWorld wave): InputBuffer_PostPhysics::Construct
+    // FILE-SPLIT NOTE: InputBuffer_PostPhysics::Construct
     // lives HERE, not with its siblings in BrnTrafficEntityModuleIO_InputBuffer_PostPhysics.cpp,
     // because that TU is NOT MOUNTED -- MEASURED mount cost is 4 unresolved externals (the
     // VehicleOutputInterface / VehicleManagerOutputInterface / DeformationOutputInterface
     // ForEntityModules / RCEntityActiveRaceCarOutputInterface operator=s its five setters call).
     // Construct touches none of them. Re-home it when that TU is mounted.
-    // ⛔ 2026-08-01 (BridgeGameStateToWorld wave): raise the IOBuffer status AND Construct the
+    // Raise the IOBuffer status AND Construct the
     // embedded game-action queue. Before this the explicit ->Construct() calls in
     // WorldModule::Update / UpdateForBootUpVideo resolved to the base
     // CgsModule::IOBuffer::Construct (status byte only), so BridgeActionsToTrafficModule's

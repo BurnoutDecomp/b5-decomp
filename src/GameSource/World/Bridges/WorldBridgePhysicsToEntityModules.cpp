@@ -4,36 +4,19 @@
 // WorldModule physics -> entity-module post-physics bridges (X360 TU
 // GameSource/Unity/../World/Bridges/WorldBridgePhysicsToEntityModules.cpp).
 //
-// RETIRED BODY NOTE (world-drive wave 2026-07-27)
-// -----------------------------------------------
-// This TU previously carried a single reconstruction of
-// WorldModule::BridgePhysicsModuleToAIModule_PostPhysics (X360 0x827A5680) written
-// against by-name STAND-IN buffer structs, because BrnAI::AIModuleIO::
-// InputBuffer_PostPhysics / BrnPhysics::PhysicsModuleIO::OutputBuffer were not
-// committed when it landed. The real IO homes exist now and the world-drive spine
-// (WorldModule::Update @0x827D63E8 -> EntityModulePostPhysicsUpdate @0x827D3F10)
-// calls all five of this TU's bridges with the REAL buffer types, so the header was
-// retyped and the stand-in structs retired -- keeping the old body would have
-// bound the drive call site to fabricated types.
+// Bodied here: BridgePhysicsModuleToRaceCarModule_PostPhysics @0x827AE9D0 and
+// BridgePhysicsModuleToTrafficModule_PostPhysics @0x827AB910 (banners at each body).
 //
-// The X360 data flow it recorded is preserved verbatim for the reconstruction that
-// replaces the boot gate (WorldLinkStubs.cpp):
-//   BridgePhysicsModuleToAIModule_PostPhysics @0x827A5680
-//     if (!aiInput)       assert "lpAIModuleInputBuffer_PostPhysics != NULL"  (:142)
-//     if (!physicsOutput) assert "lpPhysicsModuleOutputBuffer != NULL"        (:143)
-//     read-lock check on the physics output (bit 0x10, "Not locked for reading",
-//       Physics/BrnPhysicsModuleIO.h:369)
-//     *(aiInput + 4) = *(physicsOutput + 998192)   ; 0xF3CB0, the post-physics
-//                                                  ; AI sub-interface's leading word
-//   (the X360 `bl sub_8279F8E0` getter is the read-lock + that direct read; the PS3
-//    DecFIGS body @0xA2B84C inlines it.)
+// GATE BridgePhysicsModuleToAIModule_PostPhysics @0x827A5680 -- not reconstructed; its boot
+// gate lives in WorldLinkStubs.cpp. DELETE-WHEN the body lands. Recovered flow:
+//   assert "lpAIModuleInputBuffer_PostPhysics != NULL" (:142) / "lpPhysicsModuleOutputBuffer
+//   != NULL" (:143); read-lock check on the physics output (bit 0x10,
+//   Physics/BrnPhysicsModuleIO.h:369); *(aiInput + 4) = *(physicsOutput + 0xF3CB0) -- the
+//   post-physics AI sub-interface's leading word (the `bl sub_8279F8E0` getter is that
+//   read-lock plus the read; the PS3 DecFIGS body @0xA2B84C inlines it).
 //
-// The four sibling bridges (@0x827AE9D0 race car, @0x827AB910 traffic,
-// @0x827AB998 prop, @0x827AB8B0 crash) are declaration-only here for the same
-// reason: their bodies walk physics-output sub-interfaces whose accessor band is
-// not homed yet. This TU is therefore intentionally body-free; it stays in the tree
-// as the declared home so the reconstruction lands here (and not in the link-stub
-// TU) when the physics IO pass runs.
+// The prop @0x827AB998 and crash @0x827AB8B0 siblings are declaration-only: their bodies walk
+// physics-output sub-interfaces whose accessor band is not homed yet.
 // ============================================================================
 
 #include "GameSource/World/Bridges/WorldBridgePhysicsToEntityModules.h"
@@ -41,15 +24,12 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 
 // =================================================================================================
-// ⭐⭐ WorldModule::BridgePhysicsModuleToRaceCarModule_PostPhysics @0x827AE9D0 (39 insns)
-//     -- landed 2026-08-11 (physics->output publish wave). Its boot gate in WorldLinkStubs.cpp is
-//     DELETED in the same commit.
+// WorldModule::BridgePhysicsModuleToRaceCarModule_PostPhysics @0x827AE9D0 (39 insns)
 //
-// THIS IS THE HANDOVER. VehicleManager::WriteOutVehicleStats fills the PHYSICS module's output
-// buffer; RaceCarEntityModule::ReadUpdatedActiveRaceCarDataFromPhysics reads the RACE-CAR module's
-// post-physics INPUT buffer. Nothing joined them: this bridge is the only thing in the XEX that
-// copies one into the other, and while it was inert the readback's mUsedRaceCars gate could never
-// pass no matter what the physics side published.
+// The physics->race-car handover: VehicleManager::WriteOutVehicleStats fills the PHYSICS module's
+// output buffer, RaceCarEntityModule::ReadUpdatedActiveRaceCarDataFromPhysics reads the RACE-CAR
+// module's post-physics INPUT buffer, and this bridge is the only thing in the XEX that copies one
+// into the other (the readback's mUsedRaceCars gate cannot pass without it).
 //
 // The console body is six accessor->setter pairs, in this exact order (asm at 0x827AE9E4..0x827AEA60,
 // each callee's return offset read off its own epilogue):
@@ -70,23 +50,16 @@
 //  addi r3,r3,-0x5C20` == +41952, assert cite BrnPhysicsModuleIO.h:351. It is the const twin of
 //  the already-declared GetVehicleManagerOutputInterface, so no new declaration was needed.)
 //
-// ⭐ LANDED HERE: legs 1 and 2 -- the two that carry the car state and the vehicle-manager event
-//    queues, i.e. everything the pose readback consumes.
-// ⛔ PARKED, LOUDLY (one log-once for the set, listing each blocker):
-//    legs 3, 4 and 5 -- BrnPhysics::PhysicsModuleIO::OutputBuffer models
-//    mDeformationOutputInterface, mDeformationOutputInterfaceForEntityModules and
-//    mSceneInputInterface as ONE-BYTE OPAQUE STORAGE structs (BrnPhysicsModuleIO.h's own
-//    "FLAG (foreign types)" block), while the RaceCarEntityModuleIO setters take the REAL
-//    BrnPhysics::Deformation::* / OutputBuffer_PreScene::SceneInputInterface types. Bridging them
-//    today would mean reinterpret_cast'ing a 1-byte placeholder onto a multi-kilobyte interface and
-//    copy-assigning through it -- a guaranteed live corruption, and precisely the bug class this
-//    project keeps paying for. DELETE-WHEN those three seats are promoted to their real types (the
-//    same promotion the vehicle trio already had, BrnPhysicsModuleIO.h 2026-08-09).
-//    leg 6 -- the physics-side accessor exists only in its NON-const form in this tree
-//    (`ContactSpy::ContactSpyInterface* GetContactSpyInterface()`), and this bridge holds a
-//    `const OutputBuffer*`. The console's read-locked const twin is @0x8279F8E0; adding and bodying
-//    it is a two-line follow-up, deliberately not bundled into this wave. Nothing in the pose path
-//    reads the contact-spy interface.
+// LIVE: legs 1 and 2 -- the car state and the vehicle-manager event queues, i.e. everything the
+// pose readback consumes.
+// GATE legs 3/4/5 (deformation-for-entity-modules, deformation, scene-update Append). BLOCKER:
+//   PhysicsModuleIO::OutputBuffer models those three seats as 1-byte opaque storage
+//   (BrnPhysicsModuleIO.h "FLAG (foreign types)") while the RaceCarEntityModuleIO setters take the
+//   real BrnPhysics::Deformation::* / OutputBuffer_PreScene::SceneInputInterface types -- bridging
+//   today is a 1-byte-onto-multi-KB copy. DELETE-WHEN those seats are promoted to their real types.
+// GATE leg 6 (contact spy). BLOCKER: only the NON-const physics accessor exists in this tree and
+//   this bridge holds a `const OutputBuffer*`; the console's read-locked const twin is @0x8279F8E0.
+//   DELETE-WHEN that const twin is declared and bodied.
 // =================================================================================================
 
 namespace WorldModule
@@ -136,9 +109,8 @@ namespace WorldModule
 
 // =================================================================================================
 // WorldModule::BridgePhysicsModuleToTrafficModule_PostPhysics @0x827AB910 (33 insns)
-// -- landed wave T3 (physical traffic). Its boot gate at WorldLinkStubs.cpp:2250 is RETIRED with it.
 //
-// THE TRAFFIC READ-BACK HANDOVER. PhysicalTrafficManager::WriteOutVehicleStats fills the PHYSICS
+// The traffic read-back handover: PhysicalTrafficManager::WriteOutVehicleStats fills the PHYSICS
 // module's output buffer (mTrafficStateQueue + the vehicle-manager crash/slam queues);
 // TrafficEntityModule::HandleExternalResponses reads the TRAFFIC module's post-physics INPUT
 // buffer. This bridge is the only thing in the XEX that copies one into the other.
@@ -172,14 +144,10 @@ namespace WorldModule
             return;
         }
 
-        // CONDUCTOR PREREQ for legs 1/2. Both setters run operator=, which Clear()+Append()s
-        // every embedded EventQueue, and Append memcpys through mpEvents -- seated only by
-        // EventQueue<T,N>::Construct. BrnTrafficEntityModuleIO_InputBuffer_Getters.cpp:31
-        // InputBuffer_PostPhysics::Construct still runs IOBuffer::Construct + mGameActionQueue
-        // only; it must grow mVehicleOutputInterface.Construct() and
-        // mVehicleManagerOutputInterface.Construct() (race-car precedent
-        // BrnRaceCarEntityModuleIO.cpp:1013) BEFORE WorldLinkStubs.cpp:2250 is retired, or the
-        // first non-empty source queue faults in memcpy. Not an owned file.
+        // PREREQ, satisfied: both setters run operator=, which Clear()+Append()s every embedded
+        // EventQueue and memcpys through mpEvents -- seated only by EventQueue<T,N>::Construct.
+        // BrnTrafficEntityModuleIO_InputBuffer_Getters.cpp InputBuffer_PostPhysics::Construct now
+        // Constructs mVehicleOutputInterface and mVehicleManagerOutputInterface.
 
         // Leg 1 -- mTrafficStateQueue (the per-frame physical-traffic pose snapshots).
         lpTrafficInputBuffer_PostPhysics->SetVehicleOutputInterface(
@@ -205,7 +173,7 @@ namespace WorldModule
             {
                 sbLoggedDeformationPark = true;
                 *CgsDev::Log::gpDebugPrint
-                    << "[T3-bridge] BridgePhysicsModuleToTrafficModule_PostPhysics: legs 1/2/4 LIVE; "
+                    << "[FLAG PC bring-up] BridgePhysicsModuleToTrafficModule_PostPhysics: legs 1/2/4 LIVE; "
                        "leg 3 (deformation-for-entity-modules @0x8279F790) parked -- "
                        "PhysicsModuleIO::OutputBuffer still models that seat as 1-byte opaque "
                        "storage [FLAG PC partial gate]\n";

@@ -1,5 +1,5 @@
 // ============================================================================
-// BrnTrafficEntityModule_wT3_00.cpp -- wave T3 round 1 (PHYSICAL TRAFFIC) keystone leaves.
+// BrnTrafficEntityModule_wT3_00.cpp -- PHYSICAL TRAFFIC keystone leaves.
 // The three tiny shared accessors every other wave-T3 cluster calls.
 //
 //   TrafficEntityModule::GetVehicle(u32) const                 DWARF :1230 (ICF twin of :1227)

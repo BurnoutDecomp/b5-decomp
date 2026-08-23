@@ -19,13 +19,11 @@
 #include "GameSource/Jobs/Traffic/BrnUpdateVehiclesJob.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "rw/math/vpu/matrix44affine_operation.h"
 #include "rw/math/vpu/vector3_operation.h"
 #include "rw/math/vpu/vector4_operation.h"
 
 #include <cmath>
-#include <cstdlib>
 
 namespace BrnTraffic
 {
@@ -45,17 +43,6 @@ namespace
     // The two wheel-radius sanity streams the console prints (leak :7604 / :7605).
     const f32 KF_MIN_SANE_WHEEL_RADIUS = 0.1f;
     const f32 KF_MAX_SANE_WHEEL_RADIUS = 2.0f;
-
-    // [T2-move] diagnostics. DELETE-WHEN-STABLE.
-    CgsDev::Log::DebugPrint* MoveDiagStream()
-    {
-        static const bool sbEnabled = (getenv("BRN_TRAFFIC_DIAG") != 0);
-        if (!sbEnabled || CgsDev::Log::gpDebugPrint == 0)
-        {
-            return 0;
-        }
-        return CgsDev::Log::gpDebugPrint;
-    }
 }
 
 // @0x8291BEE0. lTargetPos arrives in v1, lbPartialUpdate in r4.
@@ -218,29 +205,6 @@ void UpdateVehiclesJob::MoveToTarget(Vector3 lTargetPos, bool lbPartialUpdate)
     lpVehicle->UpdateMatrix(lpVehicleAxles, lVehicleTransform, lpVehicleTypeRuntime, lOldUp);
     SetCurrentVehicleTransform(lVehicleTransform);
     lpVehicle->SetPitch_Roll_Steering_WheelRot(lPitch_Roll_Steering_WheelRot);
-
-    if (CgsDev::Log::DebugPrint* lpDiag = MoveDiagStream())
-    {
-        // [T2-move] one-shot + a value-latched repeat past 0.05 m. DELETE-WHEN-STABLE.
-        const f32 lfDelta = lfDistanceToMove < 0.0f ? -lfDistanceToMove : lfDistanceToMove;
-        static bool sbFirst = true;
-        static bool sbBigDelta = false;
-        if (sbFirst || (!sbBigDelta && lfDelta > 0.05f))
-        {
-            const bool lbWasFirst = sbFirst;
-            sbFirst = false;
-            if (lfDelta > 0.05f)
-            {
-                sbBigDelta = true;
-            }
-            *lpDiag << (lbWasFirst ? "[T2-move] FIRST vehicle=" : "[T2-move] DELTA>0.05 vehicle=")
-                    << static_cast<s32>(muCurrentVehicle)
-                    << " dPos=" << lfDelta
-                    << " speed=" << lfNewSpeed
-                    << " steering=" << lfSinTheta
-                    << (lbStopped ? " stopped=1\n" : " stopped=0\n");
-        }
-    }
 }
 
 } // namespace BrnTraffic

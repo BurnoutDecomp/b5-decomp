@@ -29,7 +29,6 @@
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"// CgsModule::Event / AddEvent / Append
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"      // gpDebugPrint / gxMessageFilterFlags
 
-#include <cstdlib>   // getenv (the BRN_TRAFFIC_DIAG probes)
 
 namespace BrnTraffic
 {
@@ -70,14 +69,6 @@ namespace
                 << "[T1-traffic-leg] TrafficEntityModule leg NOT RECONSTRUCTED, skipped: "
                 << lpcLegNameAndReason << " [FLAG PC partial gate]\n";
         }
-    }
-
-    // BRN_TRAFFIC_DIAG bring-up knob, same spelling as every sibling partfile.
-    // [DIAG] NOT IN THE X360 BINARY. DELETE-WHEN-STABLE.
-    bool IsTrafficDiagOn()
-    {
-        static const bool sbOn = ( getenv( "BRN_TRAFFIC_DIAG" ) != 0 );
-        return sbOn;
     }
 }
 
@@ -188,23 +179,6 @@ void TrafficEntityModule::AddVehiclesToTargetList()
 
         mStreamer.AddVehiclesToTargetList( lpHull->muNumVehicleAssets,
                                            lpHull->mauVehicleAssets );
-
-        if ( IsTrafficDiagOn() && CgsDev::Log::gpDebugPrint != 0 )
-        {
-            // [T1-stream] one-shot: the first time the module asks the streamer for anything.
-            // If this never prints, the pump is not turning and no VEH_T* bundle can be
-            // requested. DELETE-WHEN-STABLE.
-            static bool sbLogged = false;
-            if ( !sbLogged )
-            {
-                sbLogged = true;
-                *CgsDev::Log::gpDebugPrint
-                    << "[T1-stream] AddVehiclesToTargetList: hull " << luHull
-                    << " requests " << static_cast<s32>( lpHull->muNumVehicleAssets )
-                    << " vehicle assets (player " << static_cast<s32>( meLocalPlayerIndex )
-                    << ")\n";
-            }
-        }
     }
 }
 

@@ -5,65 +5,34 @@
 // ============================================================================
 // GameSource/World/Bridges/WorldBridgeRaceCarToWorldModule.cpp
 //
-// ⭐⭐ FILE SPLIT, 2026-08-01 (car-select hand-off wave). This function's body already
-// existed, verbatim as below, in WorldBridgeEntityModulesToEntityModules.cpp -- and that TU
-// IS NOT MOUNTED (its other two bridges each need an IO accessor that is still
+// FILE SPLIT: this bridge's body also lives in WorldBridgeEntityModulesToEntityModules.cpp,
+// which is NOT MOUNTED (its two file-mates each need an IO accessor that is still
 // declaration-only: TriggerEntityModuleIO::InputBuffer_PreScene::GetInputInterface,
-// BrnTrafficIO::OutputBuffer_PostScene::GetTrafficToRaceCarInterface_PostScene and
+// BrnTrafficIO::OutputBuffer_PostScene::GetTrafficToRaceCarInterface_PostScene,
 // BrnTrafficIO::OutputBuffer_PreScene::GetTriggerManagementInputInterface -- MEASURED, +3
-// unresolved for the whole TU). So the copy that actually LINKED was the inert one-shot log
-// in WorldLinkStubs.cpp, whose own comment said "real body @0x827A52B0 in its own home TU
-// (not mounted: IO accessor closure)".
+// unresolved for the whole TU). This TU exists so the one closed bridge can be mounted.
+// DELETE-WHEN those three accessors are bodied and WorldBridgeEntityModulesToEntityModules.cpp
+// mounts whole -- then fold this back.
 //
-// ⛔ THAT INERT STUB WAS THE ONLY PRODUCER OF WorldModule::meLocalPlayerActiveRaceCarIndex.
-// With it in the link the index stayed at Construct's -1 for the whole session, so:
-//   * WorldModule::HandleGameActions case 7 (the junkyard drive-thru's "put the player car
-//     under AI control" action, posted by CarSelectManager::ReallyEnterJunkyardAtStartOfGame)
-//     asserted "Unable to set the player car under AI control, as we don't know who they are
-//     yet" (BrnWorldModule.cpp:1327) and then had to BAIL to avoid the console's own
-//     `maeCarControls[-1]` out-of-bounds write, so the player car's control mode was never
-//     set at all;
-//   * every other consumer of the player's active-race-car slot in WorldModule saw -1.
-// The data was there the whole time: RaceCarEntityModule::UpdateOutputInterfaces publishes
-// `playerIdx 1` into the race-car module's own output interface every frame (its [uoi] diag
-// prints it) -- nothing was carrying it across the module boundary.
-//
-// This TU exists so the ONE bridge that is fully closed can be mounted without waiting on the
-// three IO accessors its two file-mates need. Same pattern, same reason, as
-// GameSource/Director/BrnDirectorICEWrapperPrepare.cpp.
-// DELETE-WHEN: the three accessors above are bodied and
-// WorldBridgeEntityModulesToEntityModules.cpp can be mounted whole -- then fold this back.
-//
-// ⛔⛔ SECOND BUG, FIXED 2026-08-11 (junkyard-entry wave). Mounting this TU was necessary but
-// NOT sufficient: the body wrote its two WorldModule outputs through the X360 BYTE OFFSETS
-//     +6167272 (meLocalPlayerActiveRaceCarIndex) and +6167280 (maeCarControls)
-// applied to the x64 PC object. MEASURED with a compile-time offsetof probe on this build:
+// HOST-LAYOUT PIN -- do not reintroduce X360 byte offsets here. WorldModule embeds the whole
+// sub-module fleet BY VALUE (RaceCar/Traffic/World/Prop/Trigger/Physics/EnvironmentManager/
+// Scene/AI/Crash), each an independently reconstructed x64 layout, so its members drift 67,504
+// bytes from the console. MEASURED with a compile-time offsetof probe on this build:
 //     PC offsetof(WorldModule, meLocalPlayerActiveRaceCarIndex) == 6234776  (X360 6167272)
 //     PC offsetof(WorldModule, maeCarControls)                  == 6234784  (X360 6167280)
 //     PC sizeof  (WorldModule)                                  == 6243504
-// -- WorldModule embeds the whole sub-module fleet BY VALUE (RaceCar/Traffic/World/Prop/
-// Trigger/Physics/EnvironmentManager/Scene/AI/Crash), every one an independently reconstructed
-// x64 layout, so the console offsets drift by 67,504 bytes here. Consequences:
-//   * the real meLocalPlayerActiveRaceCarIndex was NEVER written -- it stayed at Prepare's -1
-//     for the whole session, so WorldModule::HandleGameActions case 7 (the junkyard drive-thru
-//     "put the player car under AI control" action posted by
-//     CarSelectManager::ReallyEnterJunkyardAtStartOfGame) asserted
-//     "Unable to set the player car under AI control, as we don't know who they are yet"
-//     (BrnWorldModule.cpp:1327) and bailed -- the junkyard entry never handed the car over;
-//   * and the 4 + 32 bytes it did write landed 67,504 bytes short, INSIDE the embedded
-//     sub-module fleet -- a silent live corruption every pre-scene frame.
-// The old one-shot "[bridge] ... player active race-car index published = 0" diag hid this:
-// it printed the SOURCE interface value, never the WorldModule member, so it read as proof the
-// hand-off worked. It is removed with the offsets.
+// Writing through the console offsets left meLocalPlayerActiveRaceCarIndex at Prepare's -1
+// (HandleGameActions case 7 then asserted "Unable to set the player car under AI control, as we
+// don't know who they are yet", BrnWorldModule.cpp:1327, and bailed) and put the 4 + 32 bytes it
+// did write inside the embedded fleet. Both outputs are written BY NAME below.
 //
-// Both outputs are now written BY NAME. The DWARF settles the model: BrnWorldModule.h:473
-// declares this as a WorldModule METHOD
+// DWARF BrnWorldModule.h:473 declares this as a WorldModule METHOD
 //     void BridgeRaceCarModuleToWorldModule_PreScene(InputBuffer_PreScene*,
 //                                                    const OutputBuffer_PreScene*);
-// -- `this` == the X360 r3 -- so it is reconstructed as a member here. (The rest of the
-// WorldBridge* family stays namespace functions with an explicit `void* lpWorldModule`; this
-// is the only one of them that ever dereferences it. A global `namespace WorldModule` cannot
-// be pulled into BrnWorldModule.h either: BrnGameModule.hpp does `using BrnWorld::WorldModule`.)
+// -- `this` == the X360 r3, so it is reconstructed as a member here. (The rest of the
+// WorldBridge* family stays namespace functions with an explicit `void* lpWorldModule`; this is
+// the only one that ever dereferences it. A global `namespace WorldModule` cannot be pulled into
+// BrnWorldModule.h either: BrnGameModule.hpp does `using BrnWorld::WorldModule`.)
 // ============================================================================
 
 namespace BrnWorld

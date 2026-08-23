@@ -67,7 +67,7 @@ namespace BrnTrafficIO
         // X360 0x82706028: record a traffic vehicle the player could stomp.
         void AddPotentialStompee(u32 luEntityIndex, Vector3 lPosition, f32 lfDistanceSquared); // :118 (0x82706028)
 
-        // ⭐ ADDITIVE GROW (wave Q6 round-1 fix, bridges #1). The console has no out-of-line
+        // ADDITIVE GROW. The console has no out-of-line
         // body for this: OutputBuffer_PreScene::Construct @0x82761790 INLINES the whole
         // initialisation of this member as a run of raw stores over the console span
         // [818784, 819328). De-inlining it here (AGENTS "inlining reversal") is what lets that

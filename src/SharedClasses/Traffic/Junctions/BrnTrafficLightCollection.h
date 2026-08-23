@@ -71,7 +71,7 @@ namespace BrnTraffic
     //    console's own baked assert file literal agrees ("..\..\..\SharedClasses\Traffic/
     //    BrnTrafficSharedMaths.h", lines 83/84). That header has no mirror in this tree, so
     //    the BODY currently lives in BrnTrafficLightCollection.cpp beside its only in-tree
-    //    caller (landed 2026-08-19, wave Q7). Move both this declaration and that body to a
+    //    caller. Move both this declaration and that body to a
     //    real BrnTrafficSharedMaths.h the day one lands.
     //
     // ⚠️ The parameter is `const Vector3Plus&` here and in the retail mangled name (AEB);
@@ -122,7 +122,7 @@ namespace BrnTraffic
         const TrafficLightType* GetTrafficLightType(u32 luType) const;
         // GetCoronaState @ 0x8274F510 -- mpaCoronaTypes[luCorona] as ETrafficLightState.
         // NOT an inline: a real out-of-line symbol (32 insns), asserts baked at :222/:223.
-        // Body in BrnTrafficLightCollection.cpp (landed 2026-08-19, wave Q7).
+        // Body in BrnTrafficLightCollection.cpp.
         ETrafficLightState GetCoronaState(u32 luCorona) const;
         // GetCoronaPosition @ 0x82753820 -- mpaCoronaPositions[luCorona] (validated).
         Vector3 GetCoronaPosition(u32 luCorona) const;

@@ -56,7 +56,7 @@ namespace Vehicle
     // from the DWARF (BrnVehicleEvents.h:144); the reconstructed member offsets sum to
     // sizeof == 1120, matching the X360 `memset(this, 0, 1120)` in Clear(). 16-byte aligned.
     //
-    // ⭐⭐ THE "+4 DRIFT" IS SETTLED (2026-08-01, physics wave 1) -- and it was
+    // THE "+4 DRIFT" IS SETTLED (2026-08-01, physics wave 1) -- and it was
     // mCarAssetAttribKey, which is EIGHT bytes, not four. Two earlier waves bounded the drift
     // without locating it (GameBridgeWorldToX.cpp's banner narrowed it to "between mHalfExtent
     // @848 and mEntityId @964"); the producer settles it outright.
@@ -256,7 +256,7 @@ namespace Vehicle
         Matrix44Affine         mInitialTransform;
         Vector3                mInitialVelocity;
         Vector3                mAngularVelocity;
-        // ⭐ 8 BYTES (X360 event +0x70), and this one is LOAD-BEARING TODAY. The event is
+        // 8 BYTES (X360 event +0x70), and this one is LOAD-BEARING TODAY. The event is
         // already posted every boot (ActiveRaceCar::AddHandlingModel ->
         // VehicleInputInterface::CreateRaceCar @0x822CC1E8) and its consumer,
         // VehicleManager::ProcessCreateEvents @0x82616770, does:

@@ -4,8 +4,8 @@
 #include "GameSource/World/EntityModules/TriggerEntityModule/SharedIO/BrnTriggerEntityModuleInputInterface.h" // TriggerManagementInputInterface (real aggregate)
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleDriverInputInterface.h"                        // VehicleDriverInputInterface::UpdateDriverEventQueue
 #include "GameSource/World/EntityModules/WorldEntityModule/SharedIO/BrnWorldEntityRequestInterface.h"         // WorldEntityIO::RequestInterface (real type)
-#include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnPlayerVehicleControls.h"             // BrnWorld::PlayerVehicleControls (named members for [controls-diag])
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"                                                    // gpDebugPrint / gxMessageFilterFlags ([controls-diag])
+#include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnPlayerVehicleControls.h"             // BrnWorld::PlayerVehicleControls
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"                                                    // gpDebugPrint ([UI-gate] opt-in probe)
 #include "GameSource/GameState/BrnGameActions.h"                                                              // [gateui] PrepareForModeAction (pulls BrnGameModeParams.h -> GameModeParams::GetFlag/GetGameModeType)
 
 #include <stdlib.h>                                                                                           // getenv (BRN_PROP_DIAG, host-side diagnostic only)
@@ -124,75 +124,6 @@ void BridgeInputToEntityModules(
                 lpWorldInput->GetPlayerVehicleControls());
 
         lpRaceCarInputBuffer_PreScene->SetPlayerVehicleControls(lpPlayerControls);
-
-        // ---- [controls-diag] --------------------------------------------------------
-        // PC bring-up diagnostic -- DELETE WHEN the car moves.
-        //
-        // Two log-once probes on the ONE seam where the player's keystrokes enter the
-        // race-car pre-scene input buffer. They exist to tell three failures apart, which
-        // the log otherwise cannot:
-        //   "bridge never runs"                -> NEITHER line appears
-        //   "bridge runs, controls are zero"   -> only the "first call" line appears
-        //   "controls arrive"                  -> both appear, with the values that arrived
-        // Read BY NAME off BrnWorld::PlayerVehicleControls (13 f32 + 8 bool, the DWARF's own
-        // member list) -- no offsets. Cost is one bool test per frame after the first hit.
-        if (lpPlayerControls != 0)
-        {
-            static bool sbLoggedFirstControlsCall = false;
-            if (!sbLoggedFirstControlsCall)
-            {
-                sbLoggedFirstControlsCall = true;
-                if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0
-                    && CgsDev::Log::gpDebugPrint != 0)
-                {
-                    *CgsDev::Log::gpDebugPrint
-                        << "[controls-diag] FIRST SetPlayerVehicleControls into the race-car "
-                           "pre-scene buffer -- accel " << lpPlayerControls->mfAcceleration
-                        << " brake " << lpPlayerControls->mfBraking
-                        << " steer " << lpPlayerControls->mfSteering
-                        << " handbrake " << lpPlayerControls->mfHandBrake
-                        << " boost " << (lpPlayerControls->mbBoost ? 1 : 0) << "\n";
-                }
-            }
-
-            static bool sbLoggedFirstNonZeroControls = false;
-            if (!sbLoggedFirstNonZeroControls
-                && (lpPlayerControls->mfAcceleration != 0.0f
-                    || lpPlayerControls->mfBraking != 0.0f
-                    || lpPlayerControls->mfSteering != 0.0f))
-            {
-                sbLoggedFirstNonZeroControls = true;
-                if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0
-                    && CgsDev::Log::gpDebugPrint != 0)
-                {
-                    *CgsDev::Log::gpDebugPrint
-                        << "[controls-diag] FIRST NON-ZERO control reached the race-car "
-                           "pre-scene buffer -- accel " << lpPlayerControls->mfAcceleration
-                        << " brake " << lpPlayerControls->mfBraking
-                        << " steer " << lpPlayerControls->mfSteering
-                        << " handbrake " << lpPlayerControls->mfHandBrake
-                        << " spin " << lpPlayerControls->mfSpin
-                        << " boost " << (lpPlayerControls->mbBoost ? 1 : 0)
-                        << " reset " << (lpPlayerControls->mbReset ? 1 : 0) << "\n";
-                }
-            }
-        }
-        else
-        {
-            static bool sbLoggedNullControls = false;
-            if (!sbLoggedNullControls)
-            {
-                sbLoggedNullControls = true;
-                if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0
-                    && CgsDev::Log::gpDebugPrint != 0)
-                {
-                    *CgsDev::Log::gpDebugPrint
-                        << "[controls-diag] UpdateInputBuffer::GetPlayerVehicleControls "
-                           "returned NULL -- the controller bridge never published.\n";
-                }
-            }
-        }
-        // ---- end [controls-diag] ----------------------------------------------------
     }
     lpRaceCarInputBuffer_PreScene->SetActivePaybackType(lpWorldInput->GetActivePaybackType());
     lpRaceCarInputBuffer_PreScene->SetActivePaybackAggressor(lpWorldInput->GetActivePaybackAggressor());

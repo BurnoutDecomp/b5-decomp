@@ -67,7 +67,7 @@ bool VehicleManager::PrepareData(rw::IResourceAllocator* lpPhysicsAllocator)
     mDebugComponent.Register();                           // 0x826335C4 (this + 161968)
 
     // ---- FIRST eight-car loop (0x826335F4..0x82633638) -------------------------------------
-    // ⚠️ THE SAME EIGHT OBJECTS AS THE SECOND LOOP: r28 is a COPY of r31 taken at 0x826335E0 and
+    // THE SAME EIGHT OBJECTS AS THE SECOND LOOP: r28 is a COPY of r31 taken at 0x826335E0 and
     // r31 is not advanced by this loop, so both walk maRaceCarVehicles[0..7] at the 5216 stride.
     // The console really does run the per-car Construct + seeds twice; reproduced as issued.
     // `bl VehiclePhysics::Construct` plus the six in-record seeds (+0x1070 z-lane, +0x13F0 16B,

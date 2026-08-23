@@ -44,7 +44,7 @@
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficStaticParam.h"      // StaticTrafficParam
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficVehicleTypeRuntime.h"
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficMiscRuntimeClasses.h" // BrnTraffic::PhysicalReason
-#include "GameSource/Physics/VehicleManager/BrnVehicleConstants.h"   // ETrafficType, eCrashTrafficType (wave-T3 promotion)
+#include "GameSource/Physics/VehicleManager/BrnVehicleConstants.h"   // ETrafficType, eCrashTrafficType (promotion)
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficHullRuntime.h"      // HullRuntime
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficLightManager.h"     // TrafficLightManager
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficCarStreamer.h"      // TrafficCarStreamer
@@ -533,7 +533,7 @@ namespace BrnTrafficIO { class InputBuffer_PreScene; class OutputBuffer_PreScene
         //      console accessor whose element-index arithmetic attests the pool bounds. ----
         Vehicle* GetVehicle(u32 luIndex);                            // leak :1590
         // DWARF :1230 -- the const twin the console ICF-folds onto :1227. Body in
-        // _wT3_00.cpp; added so the const wave-T3 accessors reach the vehicle pool.
+        // _wT3_00.cpp; added so the const accessors reach the vehicle pool.
         const Vehicle* GetVehicle(u32 luIndex) const;                // DWARF :1230
         Vehicle* GetStandardVehicle(u32 luIndex);                    // @ 0x82707A38
         Vehicle* GetStaticVehicle(u32 luIndex);                      // @ 0x827079D0
@@ -605,14 +605,14 @@ namespace BrnTrafficIO { class InputBuffer_PreScene; class OutputBuffer_PreScene
                                          Vector3 lParamLinearVelocity);
         void  DEBUG_AddFuzzyLogicData();                             // @ 0x82716040 (FLAG: debug)
         void  DEBUG_RenderContactPoint();                            // @ 0x827082B8 (FLAG: debug)
-        // @0x8273EFC8 (59). BODIED wave T3 in _wT3_00.cpp. DWARF :1812 spells it
+        // @0x8273EFC8 (59). BODIED in _wT3_00.cpp. DWARF :1812 spells it
         // `const Attribute::Key GetCarAssetAttribKey(uint32_t) const` -- the trailing const
         // is restored here (the body only reads; it reaches Vehicle through the const
         // GetVehicle overload below). Return width is the console's 8-byte key.
         VehicleTypeRuntime::AttribKey GetCarAssetAttribKey(u32 luVehicle) const;
         void  GetDeterministicParamPos(u32 luParam);                 // @ 0x82714258 (FLAG: ParamTransform)
         void  GetSympCrashingTargetPos(u32 luParam, void* lpOut);    // @ 0x82708C10 (FLAG)
-        // @0x82714500 (153). BODIED wave T3 in _wT3_00.cpp. DWARF :1242/:1245
+        // @0x82714500 (153). BODIED in _wT3_00.cpp. DWARF :1242/:1245
         // (`GetTrafficPhysicsInfoForVehicle`; the X360/ledger symbol truncates the name).
         // Returns &maTrafficPhysicsInfoList[ GetVehicle(luVehicle)->GetPhysicalPartsIndex() ].
         TrafficPhysicsInfo*       GetTrafficPhysicsInfoForVehicl(u32 luVehicle);
@@ -660,7 +660,7 @@ namespace BrnTrafficIO { class InputBuffer_PreScene; class OutputBuffer_PreScene
 
         // =====================================================================================
         // WAVE T3 ROUND 1 -- PHYSICAL TRAFFIC. The world-side promotion chain plus the driver
-        // producer, declared together so every wave-T3 cluster compiles against one header.
+        // producer, declared together so every cluster compiles against one header.
         // Signatures are the DecFIGS DWARF's (BrnTrafficEntityModule.h :1170..:1578).
         // =====================================================================================
 
@@ -698,7 +698,7 @@ namespace BrnTrafficIO { class InputBuffer_PreScene; class OutputBuffer_PreScene
                                  BrnPhysics::Vehicle::ETrafficType leTrafficType,
                                  TotalTrafficBitArray* lpMadePhysical);
 
-        // ---- THE DEMOTION HALF (wave T3 round 3). Bodies in _wT3_02.cpp beside their caller.
+        // ---- THE DEMOTION HALF. Bodies in _wT3_02.cpp beside their caller.
         // The chain, end to end: DriveTowardsTarget -> ReturnPhysicalVehicleToTraffic ->
         // StopVehicleBeingPhysical (frees the module's TrafficPhysicsInfo slot AND queues the
         // vehicle index in maNewRemovedVehicles) -> CleanUpCrashedVehiclePhysics (drains that
@@ -721,7 +721,7 @@ namespace BrnTrafficIO { class InputBuffer_PreScene; class OutputBuffer_PreScene
         // queue and clear it. Called from PrePhysicsUpdate's three arms.
         void CleanUpCrashedVehiclePhysics(BrnTrafficIO::OutputBuffer_PrePhysics* lpOutput);
 
-        // @0x8271DD30 (96). BODIED wave T3 in _wT3_00.cpp. DWARF :1578; the Feb-2007 leak
+        // @0x8271DD30 (96). BODIED in _wT3_00.cpp. DWARF :1578; the Feb-2007 leak
         // spells the body verbatim at BrnTrafficEntityModule.cpp:1410.
         void CalculateInitialPhysicalState(const Vehicle* lpInVehicle,
                                            Matrix44Affine lVehicleTransform,
@@ -743,7 +743,7 @@ namespace BrnTrafficIO { class InputBuffer_PreScene; class OutputBuffer_PreScene
 
         // The manoeuvre arms GenerateDriverInputs dispatches to (DWARF :1371..:1398).
         // UpdateExtremeSwerving is @0x8273E8D0 (164 insns) -- it has no per-function export
-        // JSON, but IDA names it and the body was dumped headless in the wave T3 r3 fix round.
+        // JSON, but IDA names it and the body was dumped headless.
         // lpOutput is the console's r5 (GenerateDriverInputs' arg_1C); the arm never reads it.
         void UpdateExtremeSwerving(u32 luVehicle,
                                    BrnTrafficIO::OutputBuffer_PrePhysics* lpOutput,
@@ -956,7 +956,7 @@ namespace BrnTrafficIO { class InputBuffer_PreScene; class OutputBuffer_PreScene
         void KillAllZombies();                                       // @0x82734DF8
         void KillOutOfAreaTraffic(ActiveHullSet* lpActiveHulls);     // @0x82734C78
 
-        // crash surface -- GATED for round 1, declared so the two consumers above link.
+        // crash surface -- GATED, declared so the two consumers above link.
         void UpdateParams_BuildListOfCrashingThings(
                 ::Array<CrashingThingData, 168u>* lpaOut,
                 const BrnTrafficIO::InputBuffer_PostPhysics* lpInput,
@@ -1053,7 +1053,7 @@ namespace BrnTrafficIO { class InputBuffer_PreScene; class OutputBuffer_PreScene
         CgsNumeric::Random    mEffectRand;                       // :616
 
         // [MEMBER HOLE 5 -- DWARF :619] TrafficJobStub maJobs[4]
-        //   BLOCKER (measured, wave T2 r2): including BrnTrafficJob.h here fails every mounted
+        //   BLOCKER (measured): including BrnTrafficJob.h here fails every mounted
         //   traffic TU with C2011 on EA::Thread::{Semaphore,Mutex,Condition,RWMutex}Parameters
         //   -- SDKs/EATech/eathread/BrnEAThreadX360.h redefines the vendor/EAThread snapshot's
         //   types, and it arrives ONLY through BrnTrafficJob.h -> eajobs/job_scheduler.h.

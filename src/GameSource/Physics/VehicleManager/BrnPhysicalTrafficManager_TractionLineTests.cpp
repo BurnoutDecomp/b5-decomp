@@ -1,23 +1,23 @@
 // =================================================================================================
 // GameSource/Physics/VehicleManager/BrnPhysicalTrafficManager_TractionLineTests.cpp
 //
-// ⭐⭐ THE GROUND, FOR TRAFFIC. The traffic leg of the traction-line chain, both halves:
+// THE GROUND, FOR TRAFFIC. The traffic leg of the traction-line chain, both halves:
 //   PhysicalTrafficManager::AddTrafficTractionLineTests      @0x8261D580 (418 insns)
 //   PhysicalTrafficManager::ReadTrafficTractionLineTestResults @0x8262D2B8 (291 insns)
 //
-// ⛔⛔ THEY ARE ONE LEG AND MUST NEVER BE SPLIT. All three harvests (race car, traffic, player
+// THEY ARE ONE LEG AND MUST NEVER BE SPLIT. All three harvests (race car, traffic, player
 // stuck) walk ONE shared result cursor that EndVehicleTractionLineTests copies once and passes in
 // turn (BrnVehicleManager_TractionLineTests.cpp @0x82633DA4). An Add without its Read leaves the
 // next leg reading this leg's records; a Read without its Add reads the previous leg's.
 // Both conductor gates (BrnPhysicsConductorGates.cpp:409 / :418) are retired together with this.
 //
-// ⭐ WHY THIS ROUND NEEDS IT: PhysicalTrafficManager::ReadUpdatedBodies applies
+// WHY THIS ROUND NEEDS IT: PhysicalTrafficManager::ReadUpdatedBodies applies
 // `mLinearVelocity.y -= KF_GRAVITY*dt` to every fully-physical traffic body every frame with
 // nothing opposing it. The road reaction arrives ONLY through AddTractionPoint, which is what this
 // harvest calls. Without this pair a promoted traffic car falls through the road -- the trap the
 // race-car banner records at BrnVehicleManager_ReadUpdatedBodies.cpp:30-35, now armed for traffic.
 //
-// ⭐ THE TRAFFIC COMMAND CARRIES **FIVE** LINES, NOT FOUR. Four wheel suspension probes plus a
+// THE TRAFFIC COMMAND CARRIES **FIVE** LINES, NOT FOUR. Four wheel suspension probes plus a
 // fifth, body-origin, straight-down probe whose result feeds
 // SimpleVehiclePhysics::SetAboveGroundTestResult -- the above-ground (down-ray) latch this manager
 // resets every frame in ResetAboveGroundTestResults and that ValidateTrafficContact reads. The
@@ -96,7 +96,7 @@ namespace
 // Per live vehicle:
 //   1. 0x8261D7xx  the two BOUND asserts h:740 (`liVehicle >= 0`) and h:741, then
 //      &mpaTrafficVehicles[i] and the "lpTrafficVehicle->IsFullyPhysical()" assert whose own
-//      __FILE__/__LINE__ is BrnPhysicalTrafficManager.cpp:1424. ⚠️ IT IS AN ASSERT, NOT A FILTER:
+// __FILE__/__LINE__ is BrnPhysicalTrafficManager.cpp:1424. IT IS AN ASSERT, NOT A FILTER:
 //      the console posts a command for EVERY set bit of mUsedTrafficVehicles and only complains
 //      when one is not fully physical. Reproduced as an assert; turning it into a `continue`
 //      would desynchronise the shared result cursor the harvest walks.
@@ -113,7 +113,7 @@ namespace
 //   6. miNumLines = 5, and the command counter is bumped once per VEHICLE (the return is a
 //      COMMAND count, which is what StartVehicleTractionLineTests adds to miNumSPUTractionLineTests).
 //
-// ⚠️ lpTractionContactGen IS UNREAD past its null assert -- r4 is never touched again in the 418
+// lpTractionContactGen IS UNREAD past its null assert -- r4 is never touched again in the 418
 // instructions. Declared and asserted, as the console has it.
 // =================================================================================================
 s32 PhysicalTrafficManager::AddTrafficTractionLineTests(

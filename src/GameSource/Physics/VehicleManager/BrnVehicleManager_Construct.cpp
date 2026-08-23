@@ -7,7 +7,7 @@
 
 // ==================================================================================================
 // BrnPhysics::Vehicle::VehicleManager::Construct -- SPLIT OUT of BrnVehicleManager.cpp on
-// 2026-08-03 (task #116). BUILD-MECHANICS SPLIT ONLY: the body below, its recipe comment and the
+// BUILD-MECHANICS SPLIT ONLY: the body below, its recipe comment and the
 // twenty-nine file-scope perfmon handles it owns were MOVED verbatim, not retyped or re-derived.
 // Same precedent, same reason, as RaceCarPhysics_Construct.cpp / BrnSimpleVehiclePhysics_Construct.cpp
 // / TrafficPhysics_Construct.cpp.
@@ -39,13 +39,13 @@ namespace BrnPhysics
 namespace Vehicle
 {
     // ==============================================================================================
-    // ⭐ THE THIRTY PerfMonCpu MONITOR HANDLES. Twenty-nine of them are FILE-SCOPE globals on the
+    // THE THIRTY PerfMonCpu MONITOR HANDLES. Twenty-nine of them are FILE-SCOPE globals on the
     // console (dword_82F2A14C..dword_82F2A290); the thirtieth is the member
     // miRaceCarWorldContactValidationPM. Every call passes page/min/budget/tag as (r4, r5, f1, r7)
-    // with r6 never written, i.e. the FIVE-argument AddMonitor -- see the ⚠️⚠️ note in
+    // with r6 never written, i.e. the FIVE-argument AddMonitor -- see the note in
     // CgsPerfMonCpu.h, which was settled from this very function.
     //
-    // ⚠️ SEVEN OF THE TWENTY-NINE ARE GUARDED (`if (global < 0) global = AddMonitor(...)`), so they
+    // SEVEN OF THE TWENTY-NINE ARE GUARDED (`if (global < 0) global = AddMonitor(...)`), so they
     // MUST start NEGATIVE or they never register at all and the handle stays 0 -- a valid handle
     // belonging to somebody else's monitor. The guard is the console's register-once idiom for the
     // seven VehiclePhysics-LEVEL sub-monitors, which whichever object constructs first owns.
@@ -53,11 +53,11 @@ namespace Vehicle
     // the committed sentinel this tree already uses for an unregistered handle, and it is also what
     // AddMonitor itself returns when the registry is full. The other twenty-two are unconditional,
     // so their initial value is never read; they are seeded identically for uniformity.
-    // ⚠️ HOIST 2026-08-06 (UpdateVehiclePhysics wave): the THIRTEEN handles the per-frame
+    // HOIST 2026-08-06 (UpdateVehiclePhysics wave): the THIRTEEN handles the per-frame
     // conductor brackets with (14C..19C) are now EXTERNAL (declared in
     // BrnVehicleManagerPerfMonHandles.h) because the UpdateVehiclePhysics slice TU reads them --
     // on the console both functions share one TU's file-scope statics. The rest stay static here.
-    // ⚠️ These are file-scope HERE because nothing else in the tree registers them yet. On the
+    // These are file-scope HERE because nothing else in the tree registers them yet. On the
     // console the seven guarded slots are shared with the VehiclePhysics timing sites; when those
     // land they must bind to THESE symbols, not declare their own.
     // ==============================================================================================
@@ -71,12 +71,12 @@ namespace Vehicle
     s32 gs_iUpdateVehicleImpactsPM    = KI_PERFMON_UNREGISTERED;   // dword_82F2A14C
     s32 gs_iProcessAboveGroundLTsPM   = KI_PERFMON_UNREGISTERED;   // dword_82F2A150
     s32 gs_iTractionLTsPM             = KI_PERFMON_UNREGISTERED;   // dword_82F2A154
-    // ⭐ HOISTED 2026-08-11 (lifetime wave): Start/EndVehicleTractionLineTests are real bodies now
+    // HOISTED 2026-08-11 (lifetime wave): Start/EndVehicleTractionLineTests are real bodies now
     // and bracket their stages with these five, so per the handles header's rule they move to
     // external linkage there rather than being re-declared locally.
     s32 gs_iTractionGetLinesPM        = KI_PERFMON_UNREGISTERED;   // dword_82F2A158
     s32 gs_iTractionLineTestsPM       = KI_PERFMON_UNREGISTERED;   // dword_82F2A15C
-    // ⭐ HOISTED 2026-08-10 (ground wave): RunTractionLineTestJobs @0x825B5168 brackets its Begin /
+    // HOISTED 2026-08-10 (ground wave): RunTractionLineTestJobs @0x825B5168 brackets its Begin /
     // RunStream stages with these two ids, so per the handles header's rule they move to external
     // linkage there rather than being re-declared locally.
     s32 gs_iLineTestsBeginPM          = KI_PERFMON_UNREGISTERED;   // dword_82F2A168
@@ -89,7 +89,7 @@ namespace Vehicle
     s32 gs_iUpdateRaceCarsPM          = KI_PERFMON_UNREGISTERED;   // dword_82F2A17C
     s32 gs_iUpdateDriversPM           = KI_PERFMON_UNREGISTERED;   // dword_82F2A180
     s32 gs_iUpdateVehiclesPM          = KI_PERFMON_UNREGISTERED;   // dword_82F2A184
-    // ⭐ HOISTED 2026-08-07 (orchestrator wave): the seven guarded VPhys sub-monitors gained a
+    // HOISTED 2026-08-07 (orchestrator wave): the seven guarded VPhys sub-monitors gained a
     // second reader (VehiclePhysics::Update @0x826412C0 brackets its stages with them), so per
     // the handles header's rule they move to external linkage there. [GUARDED] registration
     // below is unchanged.
@@ -111,7 +111,7 @@ namespace Vehicle
     // VehicleManager::Construct  @0x8263B7C8 -- 943 instructions.
     //
     // The shape, in issue order (the full instruction-level recipe, every rodata symbol and every
-    // default value live in the ⭐ recipe block in BrnVehicleManager.h; this body is written off it
+    // default value live in the recipe block in BrnVehicleManager.h; this body is written off it
     // and adds no new decode):
     //     ~1..310    the thirty AddMonitor calls
     //     ~311..410  mePrepareStage / meReleaseStage, the debug component, then an INLINED
@@ -121,19 +121,19 @@ namespace Vehicle
     //                AI driver and the four RaceCarBitArray clears
     //     ~601..943  the TUNING BANK -- 91 seats
     //
-    // ⛔ THE BANK IS NOT OPTIONAL. A body that ran the spine and skipped the last ~340 instructions
+    // THE BANK IS NOT OPTIONAL. A body that ran the spine and skipped the last ~340 instructions
     // would leave every takedown/slam/shunt threshold at zero while LOOKING complete -- the
     // silent-drop-stub failure class this project keeps paying for. All 91 seats are here, and the
     // 85 scalar ones were emitted by a machine join of the asm seat table against this class's own
     // declarations rather than retyped, so a value cannot drift from the header it was proven in.
     //
-    // ⚠️ WHAT THIS FUNCTION DOES *NOT* DO, stated so it is not "completed" later: it never touches
+    // WHAT THIS FUNCTION DOES *NOT* DO, stated so it is not "completed" later: it never touches
     // mbEasyCrashingEnabled, DEBUG_mbAlwaysCrashRaceCarToRaceCar, DEBUG_mbHornTakedownEnabled,
     // mbDebugModifyTrafficContacts, mbUpdatedPlayerDriver, mbForceNoSlowMo, miPlayerSpeed/Strength/
     // Control/Boost, mn8RoundRobinControlWord, mCurrentTime/mStartModeTime, or the whole
     // contact-generation block at +172465..+172580. Those are the console's own omissions.
     //
-    // ⚠️ ORDERING. Two things are issued LATE and are kept late because the asm puts them there:
+    // ORDERING. Two things are issued LATE and are kept late because the asm puts them there:
     // StuntOffencesManager::Construct fires BETWEEN the +172580 and +172584 counter stores
     // (0x8263C61C / 0x8263C620 / 0x8263C640), and the thirtieth monitor + its assert sit inside the
     // bank, not with the other twenty-nine. Neither is tidied up.
@@ -233,7 +233,7 @@ namespace Vehicle
         {
             maRaceCarDrivers[liCar].Construct();    // +64,   stride 224
 
-            // ⭐ ONE CALL, not a base call plus six pokes. The X360 inlines RaceCarPhysics::Construct
+            // ONE CALL, not a base call plus six pokes. The X360 inlines RaceCarPhysics::Construct
             // here (`bl VehiclePhysics::Construct` then its own six writes); the PS3 build calls it
             // out of line at 0x6EB3D4 with exactly that body. See RaceCarPhysics::Construct.
             maRaceCarVehicles[liCar].Construct();   // +1856, stride 5216 on the console
@@ -244,14 +244,14 @@ namespace Vehicle
             mauNetworkCarHiddenFramesRemaining[liCar] = 0;
 
             // The console's own assert, at the console's own file/line (`li r5, 0x8B4` ==
-            // VehiclePhysics.h:2228). ⚠️ It is VACUOUS HERE and that is stated rather than dressed
+            // VehiclePhysics.h:2228). It is VACUOUS HERE and that is stated rather than dressed
             // up: on the X360 the argument is a walking cursor register (`addi r27,r27,0x400`) that
             // the compiler cannot prove non-null, while here it is the address of an array element,
             // which the standard guarantees is never null. Kept because it is the console's own
             // check at the console's own site, not because it can fire.
             CGS_ASSERT(&maRaceCarDebugComponent[liCar] != NULL, "lpDebugComponent != NULL");
 
-            // ⚠️ FLAG (span cast, deliberate and inert). maRaceCarDebugComponent is an OPAQUE
+            // FLAG (span cast, deliberate and inert). maRaceCarDebugComponent is an OPAQUE
             // 8x1024 byte span -- the console's DebugComponent is 1024 bytes and this tree
             // reconstructs 112 of them -- so the pointer this stores does not address a constructed
             // object. That is faithful to the store the console makes (it only records the address;
@@ -259,7 +259,7 @@ namespace Vehicle
             // in the mounted tree dereferences VehiclePhysics::mpDebugComponent (grep: zero hits in
             // VehiclePhysics.cpp / RaceCarPhysics.cpp / Wheel.cpp). Size and alignment are at least
             // safe -- 112 <= 1024 and both the span base and the 1024 stride are 16-aligned.
-            // ⛔ The day a debug-draw body reads through this pointer, the 1024-byte span has to
+            // The day a debug-draw body reads through this pointer, the 1024-byte span has to
             // become a real DebugComponent[8] first. Do not "just" dereference it.
             maRaceCarVehicles[liCar].mpDebugComponent =
                 reinterpret_cast<DebugComponent*>(&maRaceCarDebugComponent[liCar]);
@@ -314,7 +314,7 @@ namespace Vehicle
         mfMinAmountOfSlamForce                = 0.2f;    // +171544
         mfMinAmountOfShuntForce               = 0.25f;   // +171548
 
-        // ⭐ The one value X360 Hex-Rays carried in a register (it renders as `v62`). The PS3 build
+        // The one value X360 Hex-Rays carried in a register (it renders as `v62`). The PS3 build
         // gives it literally at its +170880, and the symbol the X360 loads it from is flt_82001C98 --
         // the SAME slot this function uses for the mCameraMatrix identity diagonal, so this function
         // alone proves the value is 1.0f without leaving the X360 image.
@@ -390,7 +390,7 @@ namespace Vehicle
         mbCrashRaceCarWhenFatal      = true;    // +172452
         meShowtimeBehaviour          = 2;       // +172456
 
-        // ⭐ THE THIRTIETH MONITOR -- page 6, not 12, and the only one stored INTO the object. The
+        // THE THIRTIETH MONITOR -- page 6, not 12, and the only one stored INTO the object. The
         // console asserts its handle immediately (BrnVehicleManager.cpp:778, `li r5, 0x30A`), which
         // is where the member's DWARF name came from.
         miRaceCarWorldContactValidationPM = CgsDev::PerfMonCpu::AddMonitor(
@@ -400,7 +400,7 @@ namespace Vehicle
 
         miNumTrafficSphereWorldTests = 0;;  // +172580 (renamed at the 2026-08-06 carve; DWARF :1072)
 
-        // ⚠️ ISSUED HERE, between the two counter stores -- 0x8263C61C stores +172580, 0x8263C620 is
+        // ISSUED HERE, between the two counter stores -- 0x8263C61C stores +172580, 0x8263C620 is
         // this call, 0x8263C640 stores +172612. Not moved next to the other sub-constructors.
         mStuntOffencesManager.Construct();   // +44240
 

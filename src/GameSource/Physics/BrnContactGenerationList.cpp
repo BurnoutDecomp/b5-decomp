@@ -38,8 +38,6 @@ namespace BrnPhysics
     }
 
     // =================================================================================================
-    // ⭐ ADDED 2026-08-06 (big-five #2, contact-generation wave).
-    //
     // ContactGenList::Construct -- the X360 CreateIOBuffer<ContactGenList> template runs
     // T::Construct after the alloc, and so does the PC one now: CreateIOBuffer<T> runs
     // T::Construct (2026-08-15). StartVehicleContactGeneration still calls this explicitly after
@@ -79,7 +77,7 @@ namespace BrnPhysics
     }
 
     // =================================================================================================
-    // ⭐ ADDED 2026-08-14 (walls leg 3, harvest wave). The two read accessors -- declared since the
+    // The two read accessors -- declared since the
     // class landed, never bodied (nothing read the list until AddContactResultsToQueue). The console
     // inlines both everywhere; GetEntry's bounds tripwire is the header's own
     // "liEntry < miNumEntries" (BrnContactGenerationList.h:89 -- the line the harvest asserts at on

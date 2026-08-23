@@ -801,30 +801,20 @@ public:
     // [FLAG PC bring-up] SeedPhysicsStateFromCreateEventBringUp -- NOT an X360 function.
     //
     // CLOSES THE OPEN HALF OF THE CREATE EVENT. AddHandlingModel hands the placement
-    // transform to VehicleInputInterface::CreateRaceCar; on the console the vehicle
-    // manager answers on the very next tick with a RaceCarState whose mTransform IS that
-    // transform (the car has not moved yet), and UpdatePhysicsState @0x822D4418 memcpy's
-    // the whole snapshot into mPhysicsState. On this build nothing answers -- the create
-    // event has no consumer -- so mPhysicsState.mTransform keeps the value Attach seeded
-    // from RaceCar::GetTransform(), i.e. the SPAWN ANCHOR, and the render pose
-    // (PublishRenderPoseWithoutPhysicsBringUp -> CalcBodyTransform) publishes that instead
-    // of where the car was actually placed.
+    // transform to VehicleInputInterface::CreateRaceCar; on the console the vehicle manager
+    // answers on the very next tick with a RaceCarState whose mTransform IS that transform
+    // (the car has not moved yet), and UpdatePhysicsState @0x822D4418 memcpy's the whole
+    // snapshot into mPhysicsState. Without this seat, mPhysicsState.mTransform kept the value
+    // Attach seeded from RaceCar::GetTransform() -- the SPAWN ANCHOR, not the placement -- and
+    // the render pose published that (it is what left the junkyard car 4.534 m in the air).
+    // It invents nothing: the value stored is the argument the console's own CreateRaceCar was
+    // just given, which is what the console's own readback writes back for a car at rest.
     //
-    // ⛔ MEASURED 2026-08-02: this is what kept the junkyard car 4.534 m in the air even
-    // after the place-on-track drop query started returning the real ground. The log said
-    // "race car 0 -> E_STATE_ACTIVE at (2986.933105, -3.525000, -2011.417969)" while the
-    // very next [uoi] publish still read (2986.933105, 1.009405, -2011.417969).
-    //
-    // It invents nothing: the value stored is the argument the console's own
-    // CreateRaceCar was just given, which is exactly what the console's own readback would
-    // write back for a car at rest.
-    // DELETE-WHEN ReadUpdatedActiveRaceCarDataFromPhysics + UpdatePhysicsState are wired to
-    // a real VehicleOutputInterface::maRaceCarStates.
-    // ⭐ THAT CONDITION IS NOW MET (MEASURED 2026-08-23, booted drive run): the readback runs
-    // every PostPhysics frame, its mUsedRaceCars gate passes, and mPhysicsState tracks the car
-    // at 73 mph. This seat is retire-ready -- left standing only because retiring it (and
-    // PublishRenderPoseWithoutPhysicsBringUp with it) is the conductor's consolidation and
-    // needs its own boot check on the create/car-select edge, not this wave's.
+    // DELETE-WHEN ReadUpdatedActiveRaceCarDataFromPhysics + UpdatePhysicsState are wired to a
+    // real VehicleOutputInterface::maRaceCarStates. That condition is MET (the readback runs
+    // every PostPhysics frame and its mUsedRaceCars gate passes); retiring this seat and
+    // PublishRenderPoseWithoutPhysicsBringUp together needs its own boot check on the
+    // create/car-select edge.
     // ========================================================================
     void SeedPhysicsStateFromCreateEventBringUp(const Matrix44Affine& lrTransform);
 

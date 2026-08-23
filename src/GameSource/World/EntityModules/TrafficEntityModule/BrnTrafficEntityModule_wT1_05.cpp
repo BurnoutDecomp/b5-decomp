@@ -27,35 +27,13 @@
 
 #include "GameShared/GameClasses/Containers/CgsFastBitArray.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "GameShared/GameClasses/SceneManager/CgsEntityId.h"
 
 #include "rw/math/vpu/matrix44affine_operation.h"   // TransformPoint
 #include "rw/math/vpu/vector3_operation.h"          // Magnitude
 
-#include <cstdlib>   // getenv
-
 namespace BrnTraffic
 {
-namespace
-{
-    // DELETE-WHEN-STABLE bring-up probe plumbing, gated on BRN_TRAFFIC_DIAG. Same as the
-    // sibling partfiles'. [DIAG] NOT IN THE X360 BINARY.
-    bool TrafficDiagEnabled()
-    {
-        static const bool sbEnabled = (getenv("BRN_TRAFFIC_DIAG") != 0);
-        return sbEnabled;
-    }
-
-    CgsDev::Log::DebugPrint* TrafficDiagStream()
-    {
-        if (!TrafficDiagEnabled() || CgsDev::Log::gpDebugPrint == 0)
-        {
-            return 0;
-        }
-        return CgsDev::Log::gpDebugPrint;
-    }
-}
 
 // ----------------------------------------------------------------------------
 // TrafficEntityModule::IsVehiclesParamAZombie  @ 0x82715D70   (.cpp 4656)
@@ -130,7 +108,6 @@ void TrafficEntityModule::CreateNewVehicleEntities(BrnTrafficIO::OutputBuffer_Pr
     CgsContainers::FastBitArray<VehicleSoaData::KU_MAX_VEHICLES> lVehicles_Alive_And_NoEntity;
     lVehicles_Alive_And_NoEntity.SetAnd(mVehicleSoaData.mAliveVehicles, lVehicles_NoEntity);
 
-    u32 luRegistered = 0;
 
     for (CgsContainers::FastBitArray<VehicleSoaData::KU_MAX_VEHICLES>::Iterator lItVehicle =
              lVehicles_Alive_And_NoEntity.Begin();
@@ -182,33 +159,6 @@ void TrafficEntityModule::CreateNewVehicleEntities(BrnTrafficIO::OutputBuffer_Pr
             lfRadius);
 
         lpVehicle->SetHasEntity(true, luVehicle, mVehicleSoaData);
-        ++luRegistered;
-    }
-
-    if (luRegistered != 0)
-    {
-        if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())
-        {
-            // [T1-scene] first AddEntity, then a running total. A non-zero total here is the
-            // count the scene manager should hand back through [T1-rinfo] / [T1-dispatch].
-            // DELETE-WHEN-STABLE.
-            static u32 suTotalRegistered = 0;
-            const bool lbFirst = (suTotalRegistered == 0);
-            suTotalRegistered += luRegistered;
-
-            if (lbFirst)
-            {
-                *lpDiag << "[T1-scene] FIRST CreateNewVehicleEntities AddEntity: registered "
-                        << static_cast<s32>(luRegistered)
-                        << " traffic entities (flag 0x488)\n";
-            }
-            else
-            {
-                *lpDiag << "[T1-scene] CreateNewVehicleEntities registered "
-                        << static_cast<s32>(luRegistered) << " (total "
-                        << static_cast<s32>(suTotalRegistered) << ")\n";
-            }
-        }
     }
 }
 

@@ -1,7 +1,7 @@
 // Layout gate for BrnPhysics::PhysicsModule (X360 sizeof 433,209 raw; seven embedded
 // sub-objects + a 136-byte trailing state/perf-monitor block).
 //
-// ⚠️⚠️ WHY THIS TU EXISTS -- READ BEFORE DELETING IT.
+// WHY THIS TU EXISTS -- READ BEFORE DELETING IT.
 // BrnPhysicsModule.h was re-seated on 2026-08-03 (task #123) from an opaque
 // `u8 maTailPlaceholder[...]` + a fabricated `ContainedListInterface` into seven real typed
 // members plus the DWARF's trailing block. The whole claim that this is a DERIVATION rather
@@ -12,14 +12,14 @@
 //     derived by a different wave from a different function).
 // A claim like that is worth exactly as much as the gate that checks it.
 //
-// ⭐⭐ THIS TU MUST STAY MOUNTED IN tools/build/build_game_exe.bat.
+// THIS TU MUST STAY MOUNTED IN tools/build/build_game_exe.bat.
 // BrnVehicleManager.h learned this the hard way: its `_AssertLayout` / `_AssertLayoutPlayerStats`
 // live in UNMOUNTED TUs, so for every wave that touched them a static_assert was a comment and a
 // green build said nothing about the layout. Nothing is emitted by this file at link time --
 // static_assert fires at compile time, so /OPT:REF discarding _AssertLayout afterwards is
 // irrelevant -- but it has to be COMPILED.
 //
-// ⭐ WHY PART 1 IS ARITHMETIC AND PART 2 IS RELATIVE-offsetof, AND WHY THAT SPLIT IS THE POINT.
+// WHY PART 1 IS ARITHMETIC AND PART 2 IS RELATIVE-offsetof, AND WHY THAT SPLIT IS THE POINT.
 // The seven sub-objects are all reconstructions whose HOST size differs from the console's --
 // measured, not assumed: SimulationModule +1072, VehicleManager -5600, ContactSpyData +/-0,
 // DeformationManager +800, DeformationInput +288, DeformationOutput +16, PropManager +64. An
@@ -31,7 +31,7 @@
 // it -- so it is WIDTH-INVARIANT and its host spacing must equal its console spacing exactly.
 // PART 2 pins all thirty-three tail members to their X360 seats relative to mePrepareStage.
 //
-// ⚠️ THE BLIND SPOTS, stated rather than hidden.
+// THE BLIND SPOTS, stated rather than hidden.
 //  (a) PART 1 cannot see inside a sub-object; it checks that each one OCCUPIES its proven span.
 //      What guards the interiors is each class's own gate/header map.
 //  (b) PART 1's seven KU_X360_SIZEOF_* constants are DEFINITIONS quoted from the sub-classes'
@@ -103,7 +103,7 @@ namespace BrnPhysics
         static_assert(KU_OFF_RELEASESTAGE + 4u == KU_OFF_WORLDRIGIDBODYID, "PhysicsModule: mWorldRigidBodyId at 433080");
         static_assert(KU_OFF_WORLDRIGIDBODYID % 8u == 0u, "PhysicsModule: mWorldRigidBodyId's seat must be 8-aligned");
 
-        // ⭐ THE LOAD-BEARING ONE. If RigidBodyId were 4 bytes the whole tail would shift and every
+        // THE LOAD-BEARING ONE. If RigidBodyId were 4 bytes the whole tail would shift and every
         // assert below would move. The 8 comes from PrepareWorldRigidBody's `stdx r30,r29,r4`
         // (r4 == 0x69BB8) -- a store-DOUBLEWORD -- corroborated by CgsRigidBody.h deriving
         // CgsPhysics::RigidBodyId as a single u64 from a different function in a different class.
@@ -117,7 +117,7 @@ namespace BrnPhysics
         static_assert(KU_OFF_CURRENTGAMEMODE + 4u == KU_OFF_FIRSTPERFMON,
                       "PhysicsModule: miPhysicsPreSceneUpdatePM on the asm-literal 0x69BC8");
 
-        // ⭐ THE SECOND CLOSURE. KU_NUM_PERFMON_IDS is counted from the DWARF declaration list
+        // THE SECOND CLOSURE. KU_NUM_PERFMON_IDS is counted from the DWARF declaration list
         // (BrnPhysicsModule.h:211..:237), NOT from these two offsets -- and 27 four-byte ids fill
         // the asm-literal span 0x69BC8..0x69C30 with nothing left over. The brief this wave was
         // given said "twenty-one"; 21 leaves the block 24 bytes short and this assert is what says so.
@@ -156,7 +156,7 @@ namespace BrnPhysics
         // ------------------------------------------------------------------------------------
         // PART 2 -- the seven sub-objects are REAL TYPED MEMBERS, in DWARF declaration order.
         //
-        // ⭐ THIS IS THE ANTI-SLICING CHECK and it is the reason this file exists at all. The
+        // THIS IS THE ANTI-SLICING CHECK and it is the reason this file exists at all. The
         // failure this wave was called in to prevent is a sub-Construct being handed a raw offset
         // into a `u8[]` -- the ArticulatedJointPool sliced-call-site shape. If any of these seven
         // members is ever demoted back to a padding blob, or retyped to a base/other class, the
@@ -195,7 +195,7 @@ namespace BrnPhysics
         static_assert(offsetof(PhysicsModule, mDeformationOutput)  < offsetof(PhysicsModule, mPropManager),         "order :196 < :198");
         static_assert(offsetof(PhysicsModule, mPropManager)        < offsetof(PhysicsModule, mePrepareStage),       "order :198 < :200");
 
-        // ⭐ ADJACENCY. Each declared member must be followed IMMEDIATELY by the next declared one,
+        // ADJACENCY. Each declared member must be followed IMMEDIATELY by the next declared one,
         // with nothing but alignment padding in between. Without these, an EIGHTH sub-object could
         // be inserted anywhere in the chain and every other assert in this file would still pass:
         // PART 1 never touches a host type, and PART 3's seats are all relative to mePrepareStage,
@@ -306,7 +306,7 @@ namespace BrnPhysics
 //          list is quoted verbatim in BrnPhysicsModule.h, so an ADDED member has to be added to a
 //          quoted list, and a DELETED one fires immediately (see the miPropManagerPreScenePM case).
 //
-// ⭐ THE ADJACENCY BLOCK IN PART 2 EXISTS BECAUSE OF THIS LOG. The first run of the harness had a
+// THE ADJACENCY BLOCK IN PART 2 EXISTS BECAUSE OF THIS LOG. The first run of the harness had a
 // badly-built "reorder" case that INSERTED a member instead of swapping two, and it came back
 // SILENT -- correctly, because PART 1 never touches a host type and every PART 3 seat is relative
 // to mePrepareStage, so both were blind to an inserted eighth sub-object. The adjacency asserts

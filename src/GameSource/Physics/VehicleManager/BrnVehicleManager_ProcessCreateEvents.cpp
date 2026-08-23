@@ -10,7 +10,7 @@
 // file size -- see the mounting block below.
 //
 // =================================================================================================
-// ⭐⭐ MOUNTING: THIS TU **IS** IN tools/build/build_game_exe.bat as of the boot-verified wave
+// MOUNTING: THIS TU **IS** IN tools/build/build_game_exe.bat as of the boot-verified wave
 //     (the `echo "%SRC%\GameSource\Physics\VehicleManager\BrnVehicleManager_ProcessCreateEvents.cpp"`
 //     line, with the conductor's rationale in the rem block above it). This banner used to say the
 //     opposite -- "**NOT** IN build_game_exe.bat ... the reason is RUNTIME, not COMPILE" -- and that
@@ -22,7 +22,7 @@
 // mounted too. (The commented-out declaration at RaceCarPhysics.h:135 is the retired park block,
 // not the live declaration -- do not read it as the current state, as this banner briefly did.)
 //
-// ⚠️⚠️ WHY THE MOUNT WAS HELD BACK, AND WHAT IT TURNS ON NOW THAT IT IS LANDED.
+// WHY THE MOUNT WAS HELD BACK, AND WHAT IT TURNS ON NOW THAT IT IS LANDED.
 // ProcessVehicleMaintenanceEvents IS LIVE on this build (PhysicsModule::PostSceneUpdate reaches it
 // every frame -- a read-only probe recorded three real drains on one boot, naming race-car slots
 // 0, 1 and 2). Setting a bit in mUsedRaceCars switches on FOUR already-mounted, already-called
@@ -40,7 +40,7 @@
 //   the compensating-pair shape this project has paid for repeatedly. Do not re-introduce a gate.
 //
 // =================================================================================================
-// ⭐ WHAT THE BODY IS, LEG BY LEG (asm @0x82616770..0x82617818; the whole loop is one iteration
+// WHAT THE BODY IS, LEG BY LEG (asm @0x82616770..0x82617818; the whole loop is one iteration
 // per event over mCreateRaceCarEventQueue, input + 128032).
 //
 //   head     copy the 0xA0-byte event to a local (four VMX matrix rows, two vectors, the scalar
@@ -65,7 +65,7 @@
 //            clear, the log, and the network/player hide arms.
 //
 // =================================================================================================
-// ⭐⭐ THE INERTIA BLOCK IS NOT "~200 INSNS OF VMX" ANY MORE -- IT IS THE SOLID-BOX TENSOR, and
+// THE INERTIA BLOCK IS NOT "~200 INSNS OF VMX" ANY MORE -- IT IS THE SOLID-BOX TENSOR, and
 // every constant in it was READ OUT OF THE IMAGE (targeted headless idat over the ARTIST .i64),
 // not inferred from role:
 //     flt_82001CC0 = 0.0f      flt_82001C98 = 1.0f       flt_82001D9C = 2.0f
@@ -81,9 +81,9 @@
 // `vnmsubfp/vmaddfp` pairs around every one of those divides are the compiler's Newton-Raphson
 // expansion of a float divide; they are DE-OPTIMISED back to `/` here, per the standing rule.
 //
-// ⭐⭐⭐ AND THE 48-BYTE BLOCK IT BUILDS IS EXACTLY `rw::physics::Inertia`, FIELD FOR FIELD.
+// AND THE 48-BYTE BLOCK IT BUILDS IS EXACTLY `rw::physics::Inertia`, FIELD FOR FIELD.
 // The RaceCarPhysics.h banner says "`rw::physics::Inertia` has NO type in this tree yet ... the
-// parameter is spelled in the declaration below only when that type lands". ⛔ THAT IS STALE: the
+// parameter is spelled in the declaration below only when that type lands". THAT IS STALE: the
 // type has had a committed home since task #141 (vendor/renderware/include/rw/physics/inertia.h),
 // complete with a compiled seven-member layout gate. Laying the console's stack block onto it:
 //     +0x00 (16B)  the three reciprocals          -> mInvTens
@@ -97,7 +97,7 @@
 // and the +0x14 store is, instruction for instruction, `SetInverseInertia`'s own documented body
 // (`fcmpu/blt/fmr` min-of-three then `fdivs 1.0f`). Seven of seven, including the hole.
 //
-// ⚠️ TWO Inertia VALUES, NOT ONE, and they differ in three fields. The console builds the block
+// TWO Inertia VALUES, NOT ONE, and they differ in three fields. The console builds the block
 // once, copies it to a second stack slot, and then OVERWRITES three of the copy's fields before
 // handing that copy to the SIMULATION -- while the ORIGINAL goes to Prepare:
 //                        to Prepare (var_920)     to InAddRigidBody (var_600)
@@ -139,7 +139,7 @@ namespace
     const f32 KF_SIM_INERTIA_SCALE   = 1.2f;        // flt_82009B84 -- the sim's softer tensor
 
     // `vandc v13, v13, v124` with v124 == the per-lane sign mask (`vspltisw v0,-1 ; vslw v124,v0,v0`
-    // == 0x80000000 in every lane). ⚠ The console clears the sign bit in ALL FOUR lanes -- vandc is
+    // == 0x80000000 in every lane). The console clears the sign bit in ALL FOUR lanes -- vandc is
     // a whole-register operation and knows nothing about Vector3's three-lane convention. This
     // helper deliberately PRESERVES .w instead of taking its absolute value: the .w lane is dead
     // downstream (the only consumer is the x/y/z box-dimension math at the mHandlingBodyDimensions
@@ -168,7 +168,7 @@ namespace Vehicle
         const VehicleInputInterface::CreateRaceCarEventQueue* lpQueue =
             lpInputInterface->GetCreateRaceCarEventQueue();
 
-        // ⚠️ The bound is re-read every iteration (`lwz r10,8(r10)` at 0x826177F4). Live test.
+        // The bound is re-read every iteration (`lwz r10,8(r10)` at 0x826177F4). Live test.
         for (s32 liEvent = 0; liEvent < lpQueue->GetLength(); ++liEvent)
         {
             // The console copies the whole 0xA0-byte record to the stack before touching it
@@ -282,7 +282,7 @@ namespace Vehicle
             lvInverseInertia.x = 1.0f / (lfCoeff * (lfYY + lfZZ));
             lvInverseInertia.y = 1.0f / (lfCoeff * (lfXX + lfZZ));
             lvInverseInertia.z = 1.0f / (lfCoeff * (lfXX + lfYY));
-            // ⚠️ Lane .w is NEVER written by the console: the three `vrlimi128` inserts touch
+            // Lane .w is NEVER written by the console: the three `vrlimi128` inserts touch
             // lanes 0, 1 and 2 only, so v126's .w carries whatever the previous iteration left.
             // Reproduced as an explicit zero rather than as uninitialised stack -- the lane is
             // the Vector3 pad and nothing downstream reads it.
@@ -305,7 +305,7 @@ namespace Vehicle
             lSimInertia.SetAngularDrag(KF_SIM_DRAG);
 
             // ---- post the body into the simulation request channel -------------------------
-            // ⚠️ Its ONLY consumer is PhysicsModule::BridgeVehicleManagerToSimulation_PostScene
+            // Its ONLY consumer is PhysicsModule::BridgeVehicleManagerToSimulation_PostScene
             // @0x825AB408, a DELIBERATELY INERT gate, and PostSceneUpdate destroys the VehManager
             // buffer in the same call that creates it -- so on this build the post is a producer
             // into a buffer nothing drains, BY THE CONSOLE'S OWN DESIGN. Reproduced as shipped.
@@ -330,7 +330,7 @@ namespace Vehicle
 
             if (!lEvent.mbDisablePhysicsStateReset)
             {
-                // ⛔ THE VCALL AT CONSOLE VTABLE SLOT +0x30 (`lwz r11,0(r3) ; lwz r11,0x30(r11) ;
+                // THE VCALL AT CONSOLE VTABLE SLOT +0x30 (`lwz r11,0(r3) ; lwz r11,0x30(r11) ;
                 // mtctr ; bctrl` @0x82617224..0x8261724C) == RaceCarPhysics::Prepare @0x82639CB8.
                 // Eleven arguments, every one of them identified at the call site:
                 //   r4 = &lEvent.mInitialTransform     v1 = lEvent.mInitialVelocity
@@ -369,7 +369,7 @@ namespace Vehicle
                 CgsDev::DebugComponent* lpComponent = reinterpret_cast<CgsDev::DebugComponent*>(
                     &maRaceCarDebugComponent[luRaceCar][0]);
 
-                // ⛔ [FLAG PC bring-up] NULL-VPTR GATE (conductor, 2026-08-11, crash-measured on
+                // [FLAG PC bring-up] NULL-VPTR GATE (conductor, 2026-08-11, crash-measured on
                 // the FIRST live create event this project ever drained): the console constructs
                 // the per-car debug components in VehicleManager's ctor chain; this build's chain
                 // is gated, so the span is zero storage and Register()'s first virtual dispatch
@@ -398,7 +398,7 @@ namespace Vehicle
                 }
             }
 
-            // ---- ⭐⭐⭐ THE BIT ---------------------------------------------------------------
+            // ---- THE BIT ---------------------------------------------------------------
             // The four latches the console emits as one interleaved block (0x826173B8..0x826173E0):
             // the result event, the live-car bit, the entity id and the handling-body id.
             CGS_ASSERT(luRaceCar < 8u, "Index: liRaceCar, Number of bits: 8");   // CgsBitArray.h:222
@@ -428,7 +428,7 @@ namespace Vehicle
             // Byte for byte the SAME inlined VehicleDriver::ClearControls as ProcessRemoveEvents
             // (0x82617420..0x8261748C vs 0x826163D4..0x82616444): the identical store set with the
             // identical two omissions (+0x3A mbToggle, +0x44 meDriverType).
-            // ⭐ DELETE-WHEN HONOURED 2026-08-11 (merge of the two create-drain waves):
+            // DELETE-WHEN HONOURED 2026-08-11 (merge of the two create-drain waves):
             // VehicleDriver::ClearControls now HAS a body (BrnVehicleDriver.cpp), recovered from
             // these two inline sites together. The 28-store block that stood open here was checked
             // field-for-field against it before the swap -- identical, omissions included -- and the
@@ -465,7 +465,7 @@ namespace Vehicle
             }
             else if (static_cast<s32>(luRaceCar) == static_cast<s32>(mePlayerActiveRaceCarIndex))
             {
-                // ⚠️ The console prints mePlayerActiveRaceCarIndex here, NOT the loop's slot
+                // The console prints mePlayerActiveRaceCarIndex here, NOT the loop's slot
                 // (`lwz r10,var_9AC ; lwz r5,0(r10)` @0x82617768). They are equal on this branch,
                 // so the difference is invisible -- reproduced as written rather than "tidied".
                 if (CgsDev::Message::gxMessageFilterFlags & 1)

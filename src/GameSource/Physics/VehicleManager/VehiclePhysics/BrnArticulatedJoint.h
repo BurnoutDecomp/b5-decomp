@@ -30,7 +30,7 @@
 #include "types.hpp"
 #include "BrnCommonTypes.h"                           // EntityId
 #include "rw/math/vpu/types.h"                        // rw::math::vpu::Matrix44Affine
-// ⭐ 2026-08-03 (task #113): KU_ENTITYTYPE_TRAFFIC_VEHICLE moved OUT of this header and into
+// KU_ENTITYTYPE_TRAFFIC_VEHICLE moved OUT of this header and into
 // BrnVehicleConstants.h. It was defined identically here and in BrnPhysicalTrafficManager.h, and
 // the ArticulatedJointPool de-fork made those two headers meet for the first time -- turning a
 // duplicate that had never mattered into a hard C2374. See that header for the note.

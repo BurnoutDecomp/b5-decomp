@@ -5,15 +5,15 @@
 // Every stub is LOUD (a CGS_ASSERT(false) trap), dead until its caller's path goes live, and
 // exists for one measured link-closure reason.
 //
-// ⭐⭐⭐ 2026-08-11 (driving-path wave): THIS FILE NOW DEFINES NOTHING. UpdateInAirBehaviour was the
+// THIS FILE NOW DEFINES NOTHING. UpdateInAirBehaviour was the
 // LAST surviving trap, and it is bodied in VehiclePhysics.cpp. What remains below is the wave-by-wave
 // record of which trap fell to which wave -- kept deliberately, because that ledger is the only place
 // several of those addresses/insn-counts are written down. The TU stays mounted so the record travels
 // with the build and so a future stub lands here rather than being scattered; it costs one empty
-// object file. ⚠️ CONDUCTOR: if you would rather retire the mount entirely, this is the moment --
+// object file. CONDUCTOR: if you would rather retire the mount entirely, this is the moment --
 // nothing links against it any more.
 //
-// ⭐ WHY THEY EXIST. `PhysicalTrafficManager::maFullTrafficPhysics[20]` was folded from a byte-pinned
+// WHY THEY EXIST. `PhysicalTrafficManager::maFullTrafficPhysics[20]` was folded from a byte-pinned
 // `u8[5168]` stand-in to the real `BrnPhysics::Vehicle::TrafficPhysics` (the ODR de-fork -- see
 // BrnPhysicalTrafficManager.h). TrafficPhysics is polymorphic, VehicleManager embeds the traffic
 // manager by value, PhysicsModule embeds VehicleManager, and PhysicsModule's constructor is mounted
@@ -21,7 +21,7 @@
 // of TrafficPhysics's vtable. Exactly one slot was missing (`TrafficPhysics::Update`, the only
 // virtual the class introduces), and defining it dragged two VehiclePhysics callees.
 //
-// ⭐⭐ 2026-08-09 (CRASH/SHUNT WAVE): both of those stubs are GONE --
+// both of those stubs are GONE --
 //     VehiclePhysics::UpdateShunt     @0x825FC748  BODIED in VehiclePhysics.cpp (100 insns,
 //         signature conformed to the DWARF: (BrnPlayerDriverControls*, VecFloat) -- the old
 //         1-arg const form was a slice artifact; both call sites re-pointed)
@@ -30,13 +30,13 @@
 //         image-read damping constants per the DampenAngularVelocity precedent)
 // TrafficPhysics::Update itself was reconciled in the same wave (TrafficPhysics_Construct.cpp).
 //
-// ⚠️ THIS IS NOT "the de-fork needed stubs". The de-fork needed the VTABLE, and the vtable is the
+// THIS IS NOT "the de-fork needed stubs". The de-fork needed the VTABLE, and the vtable is the
 // console's own behaviour: PhysicalTrafficManager's constructor @0x827E42E8 writes those same vptrs.
 // The alternative was to leave the ODR fork standing, which is the silent-corruption trade the fold
 // exists to retire -- a `TrafficPhysics::Construct` body written against the real class linking
 // against a call site that strides the array by the console's 5168 while the host class is 4960.
 //
-// ⛔ NEVER ADD BEHAVIOUR HERE. Reconstruct the real body in VehiclePhysics.cpp and DELETE the stub.
+// NEVER ADD BEHAVIOUR HERE. Reconstruct the real body in VehiclePhysics.cpp and DELETE the stub.
 // The failure mode if you forget is the good one: two definitions of the same symbol is a hard
 // LNK2005, so you cannot body either function without being told about this file.
 // =================================================================================================
@@ -50,12 +50,12 @@ namespace BrnPhysics
 {
 namespace Vehicle
 {
-    // ⭐⭐ 2026-08-09 (crash/shunt wave): the UpdateShunt @0x825FC748 and UpdateCrashing
+    // the UpdateShunt @0x825FC748 and UpdateCrashing
     // @0x82638810 traps this file was created for are GONE -- both BODIED in
     // VehiclePhysics.cpp (see the top banner).
 
     // =============================================================================================
-    // ⭐⭐ 2026-08-07 (ORCHESTRATOR WAVE). The three stubs this file carried for the conductor
+    // The three stubs this file carried for the conductor
     // set -- Update @0x826412C0, UpdateSteering @0x825D3720, AddTractionPoint(s32,u32) -- are
     // GONE: Update and UpdateSteering are BODIED in VehiclePhysics.cpp, and the 2-arg
     // AddTractionPoint never existed on the console (the real 4-arg chain
@@ -67,18 +67,18 @@ namespace Vehicle
     // every stub is a LOUD trap, each names its console address and size, and bodying one
     // FAILS LNK2005 until its stub is deleted in the same commit.
     //
-    // ⛔ NEVER ADD BEHAVIOUR HERE. Each of these is a force- or state-producer; a silent no-op
+    // NEVER ADD BEHAVIOUR HERE. Each of these is a force- or state-producer; a silent no-op
     // would be the invisible-forever handling bug.
     // =============================================================================================
 
-    // ⭐ 2026-08-07 (WHEEL-CLUSTER WAVE): the UpdateWheels @0x8261E4F0 and
+    // the UpdateWheels @0x8261E4F0 and
     // SimpleVehiclePhysics::CalculateNewWheelPlane @0x82602CB8 stubs are GONE -- both are
     // BODIED (VehiclePhysics.cpp / BrnSimpleVehiclePhysics.cpp), along with their four
     // exclusive helper callees UpdateBurnout / UpdateWheelInertia /
     // UpdateBrakesAndGetBrakingFactor / LimitDifferential (never stubbed here: nothing else
     // called them, so they carried no link pressure until this wave).
 
-    // ⭐⭐ 2026-08-11 (DRIVING-PATH WAVE): the VehiclePhysics::UpdateInAirBehaviour @0x825D0BE8
+    // the VehiclePhysics::UpdateInAirBehaviour @0x825D0BE8
     // trap that stood here is GONE -- the real 809-instruction body is BODIED in VehiclePhysics.cpp.
     // The census banner it carried was accurate about the STRUCTURE and about the closure being
     // clean (DampPitchYawRoll + AddWorldSpaceTorque, both bodied in ExternalPhysicsBody.cpp), and
@@ -95,8 +95,8 @@ namespace Vehicle
     // fired once per driving car per frame the moment a car existed.
 
     // =============================================================================================
-    // ⭐⭐ THE TRAP THAT STOOD HERE IS GONE -- 2026-08-11 (the VehiclePhysics::Prepare wave).
-    // ⭐ DELETED TWICE, INDEPENDENTLY -- which is the point. The trap was installed by the wave
+    // THE TRAP THAT STOOD HERE IS GONE -- 2026-08-11 (the VehiclePhysics::Prepare wave).
+    // DELETED TWICE, INDEPENDENTLY -- which is the point. The trap was installed by the wave
     // that landed RaceCarPhysics::Prepare without its callee and used the resulting LNK2019 to
     // hold the link closure; two different waves then landed the real body on the same day and
     // both removed it. Keeping either copy would be an LNK2005 and would SHADOW a real function.
@@ -107,7 +107,7 @@ namespace Vehicle
     // const Vector3*, const f32*)` it calls. The census below is preserved because it is the record
     // of how the blocker was found -- the LNK2019 in it is what NAMED the function.
     //
-    // ⚠️⚠️ CORRECTED AT THE MERGE. The note that landed with this body said "nothing calls it at
+    // CORRECTED AT THE MERGE. The note that landed with this body said "nothing calls it at
     // runtime yet: the only two callers are ProcessCreateEvents (a LOUD gate) and
     // TrafficPhysics::PreparePhysical (an UNMOUNTED TU)". That was true in the wave that wrote it
     // and is NOT true in this tree: VehicleManager::ProcessCreateEvents @0x82616770 is BODIED and
@@ -130,22 +130,22 @@ namespace Vehicle
     // moment a real caller existed, the linker named it. Trap installed so the closure STAYS
     // enforced while the body is recovered.
     //
-    // ⭐ IT IS UNREACHABLE TODAY, and that is measured, not hoped: the only two callers are
+    // IT IS UNREACHABLE TODAY, and that is measured, not hoped: the only two callers are
     // VehicleManager::ProcessCreateEvents @0x82616770 (a LOUD gate AT THE TIME; bodied and
     // mounted since) and TrafficPhysics::PreparePhysical @0x82639380
     // (in an UNMOUNTED TU). `grep -c` for either in the mounted set: zero live call sites.
     //
-    // ⛔⛔ THE 306 INSTRUCTIONS ARE THE WHOLE REASON THE CAR IS NOT IN THE WORLD YET. This is the
+    // THE 306 INSTRUCTIONS ARE THE WHOLE REASON THE CAR IS NOT IN THE WORLD YET. This is the
     // ONLY thing that seats mTransform / mHalfExtent / mSimpleAttribs on a race car, so every
     // observable the campaign is chasing -- the cache sphere leaving the origin, the slot filling
     // with batches, mbIsOnGround -- hangs off it. Read from @0x82637C80:
     //     VehicleAttribs::operator=            @0x82637CF4   (the incoming attribs, by value)
     //     mpAttribs = <the copy>               @0x82637D18   (`stw r29, 0x720(r31)`)
-    //     SimpleVehiclePhysics::Prepare        @0x82637D24   ⭐ BODIED (2026-08-11, 554 insns)
+    // SimpleVehiclePhysics::Prepare        @0x82637D24   BODIED (2026-08-11, 554 insns)
     //     sub_8262E140                         @0x82637DC8   (the AttribSys handling re-stream)
-    //     VehicleAttribs::Construct            @0x82637F90   ⭐ BODIED
-    //     VehicleAttribs::SetupAttribsForAI    @0x82637F9C   ⭐ BODIED
-    //     VehiclePhysics::Reset                @0x82637FB0   ⭐ BODIED
+    // VehicleAttribs::Construct            @0x82637F90   BODIED
+    // VehicleAttribs::SetupAttribsForAI    @0x82637F9C   BODIED
+    // VehiclePhysics::Reset                @0x82637FB0   BODIED
     //   then ~40 own-block seeds, every one at an offset this class's header ALREADY NAMES:
     //     +0x1114/+0x1118/+0x111C/+0x1120 = 0.0f · +0x1128 = <the bool arg> · +0x1158/+0x1220 = 0
     //     +0x710/+0x712/+0x1359/+0x10F7/+0x135A/+0x135D/+0x135E/+0x1362 = 0 · +0x135C = <arg>
@@ -153,14 +153,14 @@ namespace Vehicle
     // ⇒ SEVEN of its eight callees are already bodied and mounted. What is left is transcription
     // plus naming the VMX lanes -- big, but NOT blocked on anything. That is the next wave.
     //
-    // ⭐ AND THAT IS WHAT HAPPENED: the eighth callee (`sub_8262E140`) turned out to be
+    // AND THAT IS WHAT HAPPENED: the eighth callee (`sub_8262E140`) turned out to be
     // `VehiclePhysics::SetAttributes`, the "~40 own-block seeds" are all named members of this
     // class, and every lane was confirmed twice (X360 `vrlimi128` masks 8/4/2/1 vs PS3
     // `VectorPermuteConstant<4,1,2,3>/<0,5,2,3>/<0,1,6,3>/<0,1,2,7>`). The body is in
     // VehiclePhysics.cpp; the trap is deleted.
     // =============================================================================================
 
-    // ⭐ 2026-08-09 (powertrain wave): the Engine::Update @0x825CB288 trap is GONE -- BODIED in
+    // the Engine::Update @0x825CB288 trap is GONE -- BODIED in
     // Engine.cpp. The 3937-line X360 debug Opt-vs-Unopt assert harness turned out to be ONE
     // algorithm run in two register files (branchy member leg + branchless vsel leg, cross-
     // asserted with tolerance 0.01); the body reproduces the branchless leg the epilogue commits,
@@ -168,27 +168,27 @@ namespace Vehicle
     // constants recovered from the X360 image (rdata floats + the 0x82C5Bxxx init-thunk bank);
     // provenance banner on the body.
 
-    // ⭐ 2026-08-09 (attribs-setup wave): the SimpleVehiclePhysics::SwitchAttribs @0x82601978
+    // the SimpleVehiclePhysics::SwitchAttribs @0x82601978
     // stub is GONE -- BODIED in BrnSimpleVehiclePhysics.cpp. The blocker fell with it: the full
     // 240-byte SimpleVehicleAttribs now lives in BrnSimpleVehiclePhysics.h, and its Construct
     // @0x825E6580 + SetupAttribs @0x825BE0C8 are bodied in VehicleAttribs.cpp.
 
-    // ⭐ 2026-08-09 (attribs-setup wave): the VehiclePhysics::SetAttributes @0x8262DE58 stub is
+    // the VehiclePhysics::SetAttributes @0x8262DE58 stub is
     // GONE -- BODIED in VehiclePhysics.cpp, together with the whole overload web it drags:
     // SimpleVehiclePhysics::SetAttributes() @0x82620498 (the former sub_82620498) and
     // SetAttributes(const Vector3*, const f32*) @0x826020A0 in BrnSimpleVehiclePhysics.cpp, and
     // SimpleVehicleAttribs::SetupAttribs(handling) @0x825E6778 in VehicleAttribs.cpp. ONE leg of
     // that web is still a trap -- the stub below.
 
-    // ⭐ 2026-08-09 (attribs-data wave): the VehicleAttribs::SetupAttribs(handling) @0x825F4CD8
+    // the VehicleAttribs::SetupAttribs(handling) @0x825F4CD8
     // stub is GONE -- BODIED in VehicleAttribs.cpp (770 insns, the streamed-attribute loader;
     // every lane recovered by symbolic emulation of the raw image bytes, and the tire permute
     // table + the two per-car tire scatters landed REAL in Wheel.cpp in the same commit).
 
-    // ⭐ 2026-08-09 (attribs-setup wave): the HackedResetAndFlyAround @0x825D0008 stub is
+    // the HackedResetAndFlyAround @0x825D0008 stub is
     // GONE -- BODIED in VehiclePhysics.cpp (139 insns, leaf, full transcription).
 
-    // ⭐ 2026-08-09 (attribs-setup wave): the SetupAttribsForAI @0x825F58E0 stub is GONE --
+    // the SetupAttribsForAI @0x825F58E0 stub is GONE --
     // BODIED in VehicleAttribs.cpp (622 insns, full store-for-store transcription).
 }
 }

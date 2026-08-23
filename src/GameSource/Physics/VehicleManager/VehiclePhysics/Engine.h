@@ -24,7 +24,7 @@
 // are NOT cross-pointer static_asserted here; the leading-member offsets that ARE load-bearing
 // for memcpy size (sizeof(EngineAttribs)==0xA0) are asserted in the embed check.
 //
-// ⚠️ RETIRED FORK (2026-08-03): this header used to declare its own `struct EngineAttribs` at
+// RETIRED FORK (2026-08-03): this header used to declare its own `struct EngineAttribs` at
 // NAMESPACE scope, `BrnPhysics::Vehicle::EngineAttribs`. The console's type is NESTED --
 // `BrnPhysics::Vehicle::VehicleAttribs::EngineAttribs` -- which is what Engine::Construct
 // @0x825F3EE8 calls (`bl VehicleAttribs::EngineAttribs::Construct` @0x825B7B90, read from the
@@ -72,7 +72,7 @@ namespace Vehicle
         // @0x825CF010: the automatic-gearbox selector. Returns the highest gear 1..5 whose gear-up
         // RPM threshold is exceeded by `|drive * gearRatio[g] * Differential * 60/(2*pi)|`, or 0
         // (reverse/neutral) when the drive is below -0.01.
-        // ⚠️ The parameter is a VecFloat, not an f32: the asm's compare and multiplies use the
+        // The parameter is a VecFloat, not an f32: the asm's compare and multiplies use the
         // vector register v1 (`vcmpgefp. v0,v1,v0`, `vmulfp128 v12,v1,v12`), and a PPC `f32`
         // argument would arrive in f1. It was declared `f32` here until 2026-08-03.
         s32 ComputeGear(VecFloat lvfEngineDrive) const;
@@ -84,7 +84,7 @@ namespace Vehicle
         Vector4 GetMaxWheelAngularVelocity() const;
 
         // @0x825CB288: THE POWERTRAIN TORQUE CORE (throttle -> clutch -> flywheel -> gearbox ->
-        // drive force). ⭐ BODIED 2026-08-09 (powertrain wave) in Engine.cpp -- the trap stub is
+        // drive force). BODIED 2026-08-09 (powertrain wave) in Engine.cpp -- the trap stub is
         // gone. Both console copies ship as a debug Opt-vs-Unopt assert harness (X360 3937 asm
         // lines, 62 FireAsserts, "Mismatch: Opt/Unopt ... Tell Graham D and include the TTY!");
         // the harness turned out to be ONE algorithm run in two register files (a branchy
@@ -96,7 +96,7 @@ namespace Vehicle
         // shares this exact Engine layout. The 9-arg signature is the PS3 mangled name
         // (_ZN...6Engine6UpdateEN2rw4math3vpu8VecFloatES5_S5_bS5_S5_bS5_S5_) laid against the X360
         // ApplyEngineForces @0x8261FC10 register map (v1..v7 + r4/r5).
-        // ⚠️ AS-SHIPPED: lvfRearWheelRadius (v5) is DEAD on both X360 and BPR -- the prologue
+        // AS-SHIPPED: lvfRearWheelRadius (v5) is DEAD on both X360 and BPR -- the prologue
         // overwrites v5 before any read. Kept for signature fidelity.
         void Update(VecFloat lvfWheelAngularVelocity, VecFloat lvfGas, VecFloat lvfBrake,
                     bool lbHandBrake, VecFloat lvfSteering, VecFloat lvfRearWheelRadius,
@@ -115,7 +115,7 @@ namespace Vehicle
         // angular velocity -- zero the drive/torque/clutch lanes, park the flywheel at idle
         // (1000 RPM in rad/s), pick a gear, derive RPM from the gearing, and re-arm both
         // allow-change flags. Bodied in Engine.cpp.
-        // ⚠️ EXPORT-SET HOLE (the fourth): no JSON in .ida-exports; ComputeGear @0x825CF010 is 72
+        // EXPORT-SET HOLE (the fourth): no JSON in .ida-exports; ComputeGear @0x825CF010 is 72
         // instrs so it ends exactly at 0x825CF130, and the next indexed symbol is 0x825CF278.
         void Reset(VecFloat lvfWheelAngularVelocity);
 
@@ -137,7 +137,7 @@ namespace Vehicle
         // Exposed as one named getter so those hosts read the named member, not an offset cast.
         u32 GetCurrentGear() const { return mu8CurrentGear; }
 
-        // ⭐ ADDED 2026-08-11 (physics->output publish wave). The live crank speed, X360-attested by
+        // The live crank speed, X360-attested by
         // VehicleOutputInterface::UpdateRaceCarState @0x825ECB14 (`addi r11,r30,0xFB0 ; lvx128 v0 ;
         // vspltw v0,v0,1` -- VehiclePhysics base +0xF00 == mEngine, +0xB0 == the clutch/RPM register,
         // lane .y == RPM), which publishes it as RaceCarState::mfRPM. It is the same value the DWARF
@@ -155,7 +155,7 @@ namespace Vehicle
         // out-of-line so that `Engine` is complete at the point the asserts are evaluated. Never
         // called, never emitted.
         //
-        // ⚠️ A `sizeof` assert would be PERMUTATION-BLIND here: swapping the two Vector4s, or the
+        // A `sizeof` assert would be PERMUTATION-BLIND here: swapping the two Vector4s, or the
         // two bools, keeps sizeof(Engine) at 0xD0. The per-member offsetof block in that function
         // is what catches those, and it is the part to extend. Tamper-tested 2026-08-03.
         static void BpAssertConsoleLayout();

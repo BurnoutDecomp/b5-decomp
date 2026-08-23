@@ -5,8 +5,8 @@
 // table. See BrnTrafficCarStreamer.h for the member map, the three sources it was
 // recovered from, and the ship-vs-leak divergence list.
 //
-// Bodies recovered here (X360 ARTIST addresses; ✱ = EXPORT HOLE, see each banner):
-//   Construct()                                   ✱ 0x827539A0
+// Bodies recovered here (X360 ARTIST addresses; * = EXPORT HOLE, see each banner):
+//   Construct()                                   * 0x827539A0
 //   Destruct()                                      0x8274F690
 //   SetAssetList( u32, const VehicleAsset* )        0x82753A38
 //   AddVehiclesToTargetList( u32, const u8* )       0x8274F6A0
@@ -19,7 +19,7 @@
 //   OnUnloadComplete( const UnloadGameDataResponse*, s32 ) 0x82753F08
 // plus the five header inlines (IsTrafficAssetLoaded @0x82706160,
 // AreAllAssetsLoaded @0x82706288, GetGraphicsSpec @0x8271D440,
-// GetWheelGraphicsSpec @0x8271D678, NotifyAssetRenderedThisFrame ✱0x82706300)
+// GetWheelGraphicsSpec @0x8271D678, NotifyAssetRenderedThisFrame *0x82706300)
 // and ClearAssetList (inlined into its callers on the console).
 //
 // The class's constructor @0x827E3E98 is deliberately not written by hand: instruction by
@@ -37,66 +37,15 @@
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficCarStreamer.h"
 
 #include <cstring>   // strstr, strlen
-#include <cstdlib>   // getenv  ([T1-stream] diagnostic only)
 
 #include "GameShared/GameClasses/Core/CgsID.h"                        // CgsIDUnCompress, KI_CGSID_STRING_LEN
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"            // CgsDev::Log::gpDebugPrint ([T1-stream] only)
 
 namespace BrnTraffic
 {
 
-// -----------------------------------------------------------------------------
-// [T1-stream] BRING-UP PROBE -- NOT IN THE X360 BINARY. DELETE WHEN STABLE.
-//
-// Latched per-asset load-state transition trace: does a VEH_T*_GR bundle get requested, and
-// does it come back? Opt-in behind BRN_TRAFFIC_DIAG and value-latched per asset, so a slot
-// re-reporting the same state prints once and a full load cycle prints four lines
-// (0 -> 1 -> 2, then 3 -> 0 on unload).
-//
-// The latch array is a file static on purpose: putting it in the class would change the
-// object's layout.
-// -----------------------------------------------------------------------------
-namespace
-{
-    void TrafficStreamDiag_NoteLoadState( u64 luAsset, u32 luNewState, const char* lpcHook )
-    {
-        static const bool sbTrafficDiag = ( getenv( "BRN_TRAFFIC_DIAG" ) != 0 );
-        if( !sbTrafficDiag || CgsDev::Log::gpDebugPrint == 0 )
-        {
-            return;
-        }
-
-        static u8 sauLastLogged[KU_MAX_VEHICLE_ASSETS] = { 0 };
-        static bool sbSeeded = false;
-        if( !sbSeeded )
-        {
-            sbSeeded = true;
-            for( u32 luSlot = 0; luSlot < KU_MAX_VEHICLE_ASSETS; luSlot++ )
-            {
-                sauLastLogged[luSlot] = 0xFFu;   // "nothing logged yet" sentinel
-            }
-        }
-
-        if( luAsset >= KU_MAX_VEHICLE_ASSETS )
-        {
-            return;
-        }
-        if( sauLastLogged[luAsset] == static_cast< u8 >( luNewState ) )
-        {
-            return;
-        }
-        sauLastLogged[luAsset] = static_cast< u8 >( luNewState );
-
-        *CgsDev::Log::gpDebugPrint
-            << "[T1-stream] asset " << static_cast< s32 >( luAsset )
-            << " -> loadstate " << static_cast< s32 >( luNewState )
-            << " (" << lpcHook << ") [DELETE-WHEN-STABLE]\n";
-    }
-}
-
 
 // -----------------------------------------------------------------------------
-// ✱ @0x827539A0 -- EXPORT HOLE. No .ida-exports JSON for this address, so neither
+// * @0x827539A0 -- EXPORT HOLE. No .ida-exports JSON for this address, so neither
 // pseudocode nor assembly can be read; the body below is the leaked Feb-2007
 // TrafficCarStreamer::Construct with one adaptation.
 //
@@ -218,22 +167,6 @@ void TrafficCarStreamer::SetAssetList( u32 luNumAssets, const VehicleAsset* lpaA
                         "Duplicate asset id found in traffic asset list" );
         }
     }
-
-    // ---- [T1-stream] bring-up probe (NOT in the X360 binary) ----------------
-    // One-shot: how many assets the catalogue published. If this never prints,
-    // nothing upstream ever called SetAssetList and no traffic bundle can load --
-    // which is the exact failure this cluster exists to close.
-    {
-        static const bool sbTrafficDiag = ( getenv( "BRN_TRAFFIC_DIAG" ) != 0 );
-        static bool sbLogged = false;
-        if( sbTrafficDiag && !sbLogged && CgsDev::Log::gpDebugPrint != 0 )
-        {
-            sbLogged = true;
-            *CgsDev::Log::gpDebugPrint
-                << "[T1-stream] SetAssetList published " << static_cast< s32 >( luNumAssets )
-                << " traffic vehicle assets [DELETE-WHEN-STABLE]\n";
-        }
-    }
 }
 
 
@@ -322,51 +255,20 @@ void TrafficCarStreamer::Update( const u8* lpauOverrideBonusAssets, u32 luNumBon
         }
     }
 
-    u32 luNumEntriesAdded = 0;
-
     for( u32 luAsset = 0; luAsset < muNumAssets; luAsset++ )
     {
         if( maxLoadFlags[luAsset] & E_LOADFLAG_SHOULD_BE_LOADED )
         {
             AddEntry( maAssetIds[luAsset], true /*lbIsSafe*/, luAsset /*luUserId*/ );
-            luNumEntriesAdded++;
         }
     }
 
-    {
-        // [T1-stream] ONE-SHOT -- NOT IN THE X360 BINARY. DELETE-WHEN-STABLE.
-        //
-        // Prints the first frame on which a non-empty target list reaches the base streamer,
-        // which is the frame a VEH_T*_GR request can first be posted. Everything upstream can
-        // look healthy and still request nothing, so this is the line that separates
-        // "published the catalogue" from "asked for a bundle".
-        //
-        // The chain it sits on:
-        //   AddEntry(...)                        -> the base target list
-        //   BaseClass::Update()                  -> InternalBaseStreamer::Update
-        //   ...UpdateLoading, E_LOADSTREAM_REQUEST -> PostLoadRequest(slot)
-        //   PostLoadRequest                      -> mGDRequestInterface.mRequestQueue
-        //                                           .AddEvent(LoadGameDataEvent, 26)
-        //   TrafficEntityModule::UpdateStreaming -> Append that queue into
-        //                                           OutputBuffer_PostPhysics's
-        //                                           mResourceRequestInterface
-        // (BrnBaseStreamer.cpp:354/364/416.) The order matters: UpdateLoading clears
-        // mGDRequestInterface at the top of its WAIT stage, on the next visit, so the Append
-        // must happen in the same frame as this Update and after it. UpdateStreaming does that
-        // in its step 3 then step 5, which is why the pump and the carry-over cannot be split.
-        static const bool sbTrafficDiag = ( getenv( "BRN_TRAFFIC_DIAG" ) != 0 );
-        static bool sbLogged = false;
-        if( sbTrafficDiag && !sbLogged && luNumEntriesAdded != 0
-            && CgsDev::Log::gpDebugPrint != 0 )
-        {
-            sbLogged = true;
-            *CgsDev::Log::gpDebugPrint
-                << "[T1-stream] FIRST traffic bundle request: " << static_cast< s32 >( luNumEntriesAdded )
-                << " of " << static_cast< s32 >( muNumAssets )
-                << " assets pushed into the base streamer target list"
-                << " [DELETE-WHEN-STABLE]\n";
-        }
-    }
+    // ORDER: UpdateLoading clears mGDRequestInterface at the top of its WAIT stage on the NEXT
+    // visit, so TrafficEntityModule::UpdateStreaming must Append that queue in the SAME frame as
+    // this Update and after it (its step 3 then step 5) -- the pump and the carry-over cannot
+    // be split. Chain: AddEntry -> BaseClass::Update -> InternalBaseStreamer::UpdateLoading
+    // E_LOADSTREAM_REQUEST -> PostLoadRequest -> mGDRequestInterface.mRequestQueue
+    // .AddEvent(LoadGameDataEvent, 26).  (BrnBaseStreamer.cpp:354/364/416.)
 
     BaseClass::Update();
 }
@@ -458,8 +360,6 @@ void TrafficCarStreamer::OnLoadBegin( s32 liListIndex )
                 "Loading a traffic asset which already has a resource" );
 
     mauLoadStates[luAsset] = E_LOADSTATE_LOAD_STARTED;
-
-    TrafficStreamDiag_NoteLoadState( luAsset, E_LOADSTATE_LOAD_STARTED, "OnLoadBegin" );
 }
 
 
@@ -486,8 +386,6 @@ void TrafficCarStreamer::OnUnloadBegin( s32 liListIndex )
     mauLoadStates[luAsset] = E_LOADSTATE_UNLOAD_STARTED;
 
     maGraphicsStubs[luAsset] = CgsResource::NULLResourceHandle;
-
-    TrafficStreamDiag_NoteLoadState( luAsset, E_LOADSTATE_UNLOAD_STARTED, "OnUnloadBegin" );
 }
 
 
@@ -524,8 +422,6 @@ void TrafficCarStreamer::OnLoadComplete( const BrnResource::GameDataIO::GameData
 
     CGS_ASSERT( !CgsResource::NULLResourcePtr.IsEqual( &maGraphicsStubs[luAsset] ),
                 "Didn't get a resource back after loading a traffic asset" );
-
-    TrafficStreamDiag_NoteLoadState( luAsset, E_LOADSTATE_LOADED, "OnLoadComplete" );
 }
 
 
@@ -545,8 +441,6 @@ void TrafficCarStreamer::OnUnloadComplete( const BrnResource::GameDataIO::Unload
                 "Traffic asset was in the wrong state when finished unloading" );
 
     mauLoadStates[luAsset] = E_LOADSTATE_NOT_LOADED;
-
-    TrafficStreamDiag_NoteLoadState( luAsset, E_LOADSTATE_NOT_LOADED, "OnUnloadComplete" );
 }
 
 

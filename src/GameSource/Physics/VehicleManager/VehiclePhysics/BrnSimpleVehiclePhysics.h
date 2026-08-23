@@ -20,7 +20,7 @@ namespace BrnPhysics
 namespace Vehicle
 {
     // Forward decl: the per-car tuning block (full type owned by the VehicleAttribs TU).
-    // ⚠️ struct, not class -- the committed home (VehicleAttribs.h:83) spells `struct`, and MSVC
+    // struct, not class -- the committed home (VehicleAttribs.h:83) spells `struct`, and MSVC
     // bakes the class-key into the mangling (?AU vs ?AV): a `class` forward-decl here made
     // SimpleVehicleAttribs::SetupAttribs(const VehicleAttribs*) mangle to a symbol no TU defines.
     struct VehicleAttribs;
@@ -62,8 +62,8 @@ namespace Vehicle
     };
 
     // SimpleVehicleAttribs -- the per-car physics attribute block (DecFIGS DWARF
-    // VehicleAttribs.h:1831). ⭐ GROWN TO THE FULL 240-BYTE TYPE (attribs-setup wave,
-    // 2026-08-09) from the 20-byte {mCOMOffset, mbIsValid} slice, additively per the slice's
+    // VehicleAttribs.h:1831). GROWN TO THE FULL 240-BYTE TYPE (attribs-setup wave,
+    // ) from the 20-byte {mCOMOffset, mbIsValid} slice, additively per the slice's
     // own contract: every member below is the DWARF's, in DWARF sequence. The console offsets
     // in the right column CLOSE EXACTLY at 0xF0 == 240 == the 0x690-0x5A0 gap the layout gate
     // already pinned, and mCOMOffset lands at +0xD0 => SimpleVehiclePhysics+0x670, matching the
@@ -101,7 +101,7 @@ namespace Vehicle
 
         // @0x825E6778 (104 insns) -- stream the simple set out of a loaded AttribSys handling
         // record (the physicsvehiclebaseattribs + physicsvehiclesuspensionattribs sub-records).
-        // Bodied in VehicleAttribs.cpp. ⚠️ The DWARF/PS3 signature takes the wrapper BY VALUE
+        // Bodied in VehicleAttribs.cpp. The DWARF/PS3 signature takes the wrapper BY VALUE
         // (the console call site runs the checked copy-ctor @0x825BDB88 then passes the copy,
         // and the callee destroys it); spelled const-ref here with the explicit copy transcribed
         // at each call site -- identical semantics without dragging the generated header into
@@ -201,13 +201,13 @@ namespace Vehicle
         void SetAboveGroundTestResult(Vector3 lvPosition, Vector3 lvNormal,
                                       u16 lu16TagHi, u16 lu16TagLo);
 
-        // ⭐⭐ @0x825D85C0 (174 insns) -- BODIED 2026-08-11 (lifetime wave). THE SUSPENSION PROBE:
+        // @0x825D85C0 (174 insns) -- BODIED 2026-08-11 (lifetime wave). THE SUSPENSION PROBE:
         // one wheel's downward traction line, in world space. This is the last piece of the
         // ground chain's GENERATION half -- VehicleManager::AddRaceCarTractionLineTests calls it
         // once per wheel and drops the two points straight into the stream command's
         // maLineStart[w] / maLineEnd[w].
         //
-        // ⚠️ THE X360 EXPORT SET HAS NO JSON FOR IT (a true directory hole, re-verified this wave
+        // THE X360 EXPORT SET HAS NO JSON FOR IT (a true directory hole, re-verified this wave
         // by a name index over all 30,084). Recovered TWO independent ways that agree:
         //   1. the image bytes at 0x825D85C0..0x825D8874, decoded with a VMX128 decoder fitted
         //      and self-tested against an EXPORTED twin (VehicleManager::UpdateTriangleCache
@@ -221,7 +221,7 @@ namespace Vehicle
         void GetTractionLine(EVehicleDrivenWheel leWheel,
                              Vector3& lOutSusLineStart, Vector3& lOutSusLineEnd) const;
 
-        // ⭐ ADDED 2026-08-06 (UpdateVehiclePhysics wave). DWARF BrnSimpleVehiclePhysics.h:193.
+        // DWARF BrnSimpleVehiclePhysics.h:193.
         // Per-frame reset of the wheel/road latch set + the car-level above-ground result. The
         // X360 inlines it whole into VehicleManager::UpdateVehiclePhysics' live-car loop
         // (asm 0x826453B0..0x82645444), which is the byte source for the body: per wheel
@@ -255,7 +255,7 @@ namespace Vehicle
                      VehicleAttribs* lpAttribs, const Vector3* lpWheelPositions,
                      const f32* lpafWheelRadii);
 
-        // ⭐ OUT of the BLOCKED list 2026-08-09 (attribs-setup wave): BODIED in
+        // OUT of the BLOCKED list 2026-08-09 (attribs-setup wave): BODIED in
         // BrnSimpleVehiclePhysics.cpp from @0x82601978 (458 insns) -- the blocker (the 20-byte
         // SimpleVehicleAttribs slice) fell with the full 240-byte type above.
         void SwitchAttribs(VehicleAttribs* lpAttribs);
@@ -263,11 +263,11 @@ namespace Vehicle
         // The three DWARF overloads (BrnSimpleVehiclePhysics.h:163/:166/:170; the PS3 export set
         // carries all three mangled names -- 7355CC/734B10/734274). ALL return bool.
         //   0-arg @0x82620498 (142): refresh mSimpleAttribs from the AttribSys handling record
-        //     keyed by mSimpleAttribs.mAttribsKey, then chain to the 2-arg. ⭐ BODIED 2026-08-09
+        // keyed by mSimpleAttribs.mAttribsKey, then chain to the 2-arg. BODIED 2026-08-09
         //     (was the unnamed sub_82620498 -- recovered by caller set + the
         //     "mSimpleAttribs.IsValid()" assert's __FILE__/__LINE__).
         //   2-arg @0x826020A0 (503): the shared tail -- mass/inertia from mSimpleAttribs +
-        //     per-wheel Wheel::Prepare. ⭐ BODIED 2026-08-09.
+        // per-wheel Wheel::Prepare. BODIED 2026-08-09.
         //   3-arg: declared for the class surface (the PS3 attests it); no X360 body recovered
         //     to it yet.
         bool SetAttributes();
@@ -275,13 +275,13 @@ namespace Vehicle
         bool SetAttributes(VehicleAttribs* lpAttribs, const Vector3* lpWheelPositions,
                            const f32* lpafWheelRadii);
 
-        // ⭐ OUT of the BLOCKED list 2026-08-07 (orchestrator wave): BODIED in
+        // OUT of the BLOCKED list 2026-08-07 (orchestrator wave): BODIED in
         // BrnSimpleVehiclePhysics.cpp from @0x825D9608 -- the "cannot be reproduced BY NAME"
         // claim was unverified and false (every lane it touches was already a named member).
         void AddTractionPoint(EVehicleDrivenWheel leWheel, Vector3 lvPosition, Vector3 lvNormal,
                               u32 lu32CollisionTag);
 
-        // ⭐⭐ @0x825D8878 (868 insns) -- BODIED 2026-08-13 (wheel-transform wave). THE WHEELS'
+        // @0x825D8878 (868 insns) -- BODIED 2026-08-13 (wheel-transform wave). THE WHEELS'
         // WORLD TRANSFORM: one wheel's render matrix -- spin (mIntegrationVariables.z) about the
         // axle, steer (GetSteeringAngle, front wheels only) about up, the crash arm's
         // buckle/spin/twist triple instead while mbCrashing, composed onto mTransform, left
@@ -289,7 +289,7 @@ namespace Vehicle
         // body-rotated mPosition (suspension travel lives in mPosition.y). Decode bank:
         // scratchpad wheeltransform_bank.md; body in BrnSimpleVehiclePhysics.cpp.
         //
-        // ⚠️ PARAMETER NAME CORRECTED from this tree's earlier `lbApplySteer` guess: the PS3
+        // PARAMETER NAME CORRECTED from this tree's earlier `lbApplySteer` guess: the PS3
         // DWARF prototype (export 0x6E78CC) names it lbHackDontReverseRightWheels, and the body
         // agrees -- the bool NEVER gates steering (steer runs unconditionally for wheels 0/1);
         // it only gates the left-wheel mirror. (The console name says "Right", the DWARF enum
@@ -300,7 +300,7 @@ namespace Vehicle
                                                bool lbHackDontReverseRightWheels) const;
         void GetSimpleVehicleBox(CgsGeometric::Box& lrOutBox) const;
 
-        // ⭐ OUT of the BLOCKED list 2026-08-07 (wheel-cluster wave): BODIED in
+        // OUT of the BLOCKED list 2026-08-07 (wheel-cluster wave): BODIED in
         // BrnSimpleVehiclePhysics.cpp from @0x82602CB8 -- the min-height plane fit over the four
         // wheels' line-test contacts, publishing mWheelPlanePosAndHeight / mbMinWheelDistValid /
         // mbAnyWheelsDetatched. Every lane it touches was already a named member; the exported
@@ -308,7 +308,7 @@ namespace Vehicle
         void CalculateNewWheelPlane();
         virtual void SetCrashing();
 
-        // ⭐ ADDED 2026-08-06 (FixUpVehicleContacts wave). DWARF BrnSimpleVehiclePhysics.h:244 --
+        // DWARF BrnSimpleVehiclePhysics.h:244 --
         // the body-space box half extents (mHalfExtent @+0x6A0), by value. Consumed through
         // DeformableObject::GetHalfExtents() by the WithBoxes contact fix-up (its inside-the-
         // traffic-box test, `lvx [vehPhys+0x6A0]` @0x825DC0xx).
@@ -316,7 +316,7 @@ namespace Vehicle
 
     protected:
         // ==========================================================================================
-        // ⭐⭐ THE OWN-MEMBER BLOCK, SEATED 2026-08-03 (VehiclePhysics own-block wave).
+        // THE OWN-MEMBER BLOCK, SEATED 2026-08-03 (VehiclePhysics own-block wave).
         //
         // Member SEQUENCE is the DecFIGS DWARF's (BrnSimpleVehiclePhysics.h:357-373). Every OFFSET
         // in the right-hand column is an X360 ASM LITERAL or is forced with zero slack between two
@@ -324,7 +324,7 @@ namespace Vehicle
         // its last data byte is 0x715, which 16-rounds to **0x720 == 1824**, and 0x720 is exactly
         // where `VehiclePhysics::Construct` @0x8262DC8C puts `mpAttribs` (`stw r30, 0x720(r31)`).
         //
-        // ⭐ THE FRAME. `SimpleVehiclePhysics::Construct` @0x82620400 calls
+        // THE FRAME. `SimpleVehiclePhysics::Construct` @0x82620400 calls
         // `ExternalPhysicsBody::Construct(this + 0x10)`, so the leaf's vptr occupies +0x00 and the
         // 16-aligned base sub-object starts at +0x10. Laid out from the committed base headers the
         // chain ends at +0x130 -- the asm-literal `addi r3, r31, 0x130` this Construct then uses as
@@ -335,11 +335,11 @@ namespace Vehicle
         //     +0xF0 mTotalLinearForce  +0x100 mTotalTorque  +0x110 mTotalLinearImpulse
         //     +0x120 mTotalAngularImpulse                                    -> ends 0x130
         //
-        // ⚠️ HOST DIVERGENCE, stated once. The leaf vptr widens 4 -> 8 on x64 but the base is
+        // HOST DIVERGENCE, stated once. The leaf vptr widens 4 -> 8 on x64 but the base is
         // 16-aligned either way, so the base chain does NOT drift. Some sub-types embedded below
         // are MINIMAL OWNING SLICES in this tree (SweptSphere is an opaque 0x20 -- correct, see
         // the closure note on it -- and Wheel/AxisAlignedBox are their own reconstructions;
-        // ⭐ SimpleVehicleAttribs is the FULL width-identical 240 as of 2026-08-09). So the
+        // SimpleVehicleAttribs is the FULL width-identical 240 as of 2026-08-09). So the
         // absolute console offsets below are NOT reproducible as host offsetofs and are NOT
         // static_asserted. What IS gated (VehiclePhysics_layout_check.cpp) is the DWARF
         // ORDER and every pointer-free RELATIVE run.
@@ -363,7 +363,7 @@ namespace Vehicle
         //   0x6B0  mWheelPlanePosAndHeight      (bracketed, zero slack)
         //   0x6C0  mfSpeedMPH                   UpdateHandBrake `li r7,0x6C0 ; lvx128 v13,r3,r7`;
         //                                       AddSlam `li r10,0x6C0`
-        //   0x6D0  mDeformableAABB (32)         ⭐ VehicleManager::SetRaceCarCrashing
+        // 0x6D0  mDeformableAABB (32)         VehicleManager::SetRaceCarCrashing
         //   0x6F0  mOriginalAABB   (32)         @0x82635438-0x82635468 copies 32 bytes FROM +0x6F0
         //                                       TO +0x6D0 -- ResetDeformableAABB() inlined. Pins
         //                                       both AABBs and sizeof(AxisAlignedBox) == 32.
@@ -396,13 +396,13 @@ namespace Vehicle
         bool         mbAnyWheelsDetatched;            // :373  @0x715
 
     public:
-        // DWARF :283. ⭐ ADDED 2026-08-09 (conductor wave): X360-attested by
+        // DWARF :283. ADDED 2026-08-09 (conductor wave): X360-attested by
         // PhysicsModule::Update @0x825B0640's slow-motion block, which inlines the read
         // (`lbz 0x713(car)`) against the car GetRaceCarPhysics resolved. Placed after the
         // member run so the access-specifier does not split the layout block.
         bool HasCrashedThisFrame() const { return mbCrashedThisFrame; }
 
-        // ⭐ ADDED 2026-08-11 (physics->output publish wave). FIVE DWARF-declared read accessors
+        // FIVE DWARF-declared read accessors
         // over the protected member run above, every one of them X360-ATTESTED by the same
         // function: BrnPhysics::Vehicle::VehicleOutputInterface::UpdateRaceCarState @0x825EC808,
         // the console's ONLY writer of RaceCarState, which inlines all five against the
@@ -427,7 +427,7 @@ namespace Vehicle
                 mfSpeedMPH.w * KF_MPH_TO_MPS
             };
         }
-        // ⭐ ADDED 2026-08-22 (wave T3 r2, owner B). ADDITIVE GROW, read-only, no layout change.
+        // ADDITIVE GROW, read-only, no layout change.
         // VehicleManager::HandleRaceCarTrafficCarPotentialContact @0x82640518/@0x826405C0 and
         // ::PredictCarCarIntersection @0x825C5A54 both reach mDeformableAABB with BARE loads off
         // a body they were handed (`addi r9, <body>, 0x6D0` then `lvx128` at +0 / +0x10), from a
@@ -446,7 +446,7 @@ namespace Vehicle
             return maLocalTractionPoints[lu8Wheel];
         }
 
-        // ⭐ ADDED wave T3 (physical traffic). DWARF BrnSimpleVehiclePhysics.h:214
+        // ADDED wave T3 (physical traffic). DWARF BrnSimpleVehiclePhysics.h:214
         // (`const Wheel* GetWheel(EVehicleDrivenWheel) const`) -- the BASE's own wheel accessor,
         // which the tree previously carried only on the derived VehiclePhysics (:244, by
         // reference). X360-attested by VehicleOutputInterface::AddTrafficState @0x825EC390, whose
@@ -457,7 +457,7 @@ namespace Vehicle
         const Wheel* GetWheel(EVehicleDrivenWheel leWheel) const { return &maWheels[leWheel]; }
     };
 
-    // ⭐ The console sizes this block closes on, exported so the layout gate and the VehiclePhysics
+    // The console sizes this block closes on, exported so the layout gate and the VehiclePhysics
     // own-block map can assert against ONE copy of each number instead of re-typing literals.
     // Every one is an X360 asm literal or forced with zero slack between two of them (see the map
     // above). They describe the CONSOLE object, not the host reconstruction.

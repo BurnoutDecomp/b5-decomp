@@ -1,7 +1,7 @@
 // =================================================================================================
 // GameSource/Physics/VehicleManager/BrnPhysicalTrafficManager_UpdateTrafficDriver.cpp
 //
-// ⭐ PhysicalTrafficManager::UpdateTrafficDriver @0x825CA8A0 (169 insns) -- the TRAFFIC arm of
+// PhysicalTrafficManager::UpdateTrafficDriver @0x825CA8A0 (169 insns) -- the TRAFFIC arm of
 // VehicleManager::UpdateDrivers' four-way driver-control dispatch (case 3 of the jumptable,
 // reached with `add r3, r31, r28` where r28 == 0xAEE0 == the embedded mPhysicalTrafficManager, so
 // the `this` really is this class). DWARF BrnPhysicalTrafficManager.h:158.
@@ -22,19 +22,19 @@
 //      normal "this car is not physical right now" answer and the record is dropped SILENTLY;
 //   4. install the record into mpaTrafficDrivers[physicsIndex].
 //
-// ⚠️ IT NEVER TOUCHES THE BitArray<8>. The parameter is declared (DWARF) and passed by the caller,
+// IT NEVER TOUCHES THE BitArray<8>. The parameter is declared (DWARF) and passed by the caller,
 // and the console's r5 is dead from the prologue to the epilogue -- confirmed by reading the asm,
 // not by trusting Hex-Rays (which drops the parameter from its 2-arg prototype entirely). That is
 // correct and not an omission: the bitset tracks RACE CARS, and a traffic index is not one.
 //
-// ⚠️ COST NOTE: only ONE absent callee across the whole body -- BrnTraffic::GetVehicleSpecies
+// COST NOTE: only ONE absent callee across the whole body -- BrnTraffic::GetVehicleSpecies
 // @0x821F4648 (32 insns, a pure range ladder, xrefs_from == the assert triple). It is LANDED this
 // wave as a header-inline in its own console home
 // (GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficVehicle.h), not parked. The other
 // two non-assert callees, memcpy and VolumeInstanceId::SetEntityIDEntityIndex @0x822B0E70, are
 // already real in this tree.
 //
-// ⚠️ CONSOLE OFFSETS NOT REPRODUCED (this class's standing rule): the map at `this+104688`, the
+// CONSOLE OFFSETS NOT REPRODUCED (this class's standing rule): the map at `this+104688`, the
 // driver array behind `this+103600` and the 224-byte driver stride are ALL reached by name. The
 // host pointer width alone moves two of the three.
 // =================================================================================================

@@ -17,7 +17,7 @@
 //
 // SHAPE, off the export. The console is VMX-heavy (vperm lane splices into a
 // struct-of-arrays packet, vrlimi128 masks, a vrefp + one Newton-Raphson step for the
-// reciprocal). It is written here as the plain scalar loop the wave brief permits: behaviour
+// reciprocal). It is written here as a plain scalar loop: behaviour
 // parity is the bar, mCachedCollidableList's only other readers are DebugComponent::
 // DrawAvoidance and the avoidance steering, and every lane assignment below is transcribed
 // from the vperm control-mask index (mask A == component x, B == y, C == z) rather than
@@ -30,8 +30,8 @@
 //                  == { 2500.0f, 400.0f, FLT_MAX, 0.0f } -- a 50 m AVOID radius and a 20 m
 //                  COLLIDE radius. The console's own name for it comes from the baked assert
 //                  string at .cpp 4953.
-//   unk_8300C980 = splat(flt_82013F90) == 0.001f. NOT a radius (the wave brief's scout guessed
-//                  "collidable radius^2"): it is the epsilon that decides whether a car's
+//   unk_8300C980 = splat(flt_82013F90) == 0.001f. NOT a radius:
+//                  it is the epsilon that decides whether a car's
 //                  velocity is worth caching or whether its facing direction should stand in.
 //   flt_82001CC0 = 0.0f (already attested in-tree).
 // ============================================================================
@@ -57,35 +57,12 @@
 #include "rw/math/vpu/vector3_operation.h"
 #include "rw/math/vpu/vector4_operation.h"
 
-#include <cstdlib>   // getenv
 
 namespace BrnTraffic
 {
 namespace
 {
-    // ---- DELETE-WHEN-STABLE bring-up probe plumbing, gated on BRN_TRAFFIC_DIAG.
-    // [DIAG] NOT IN THE X360 BINARY.
-    bool TrafficDiagEnabled()
-    {
-        static s32 siCached = -1;
-        if (siCached < 0)
-        {
-            const char* lpcEnv = getenv("BRN_TRAFFIC_DIAG");
-            siCached = (lpcEnv != 0 && lpcEnv[0] != '0') ? 1 : 0;
-        }
-        return siCached != 0;
-    }
-
-    CgsDev::Log::DebugPrint* TrafficDiagStream()
-    {
-        if (!TrafficDiagEnabled() || CgsDev::Log::gpDebugPrint == 0)
-        {
-            return 0;
-        }
-        return CgsDev::Log::gpDebugPrint;
-    }
-
-    // NAMED LEG GATE -- same shape as the sibling partfiles'. [DIAG] NOT IN THE X360 BINARY.
+    // NAMED LEG GATE, file-local. NOT IN THE X360 BINARY.
     inline void LogMissingLeg(bool& lrbAlreadyLogged, const char* lpcLegNameAndReason)
     {
         if (lrbAlreadyLogged)
@@ -415,22 +392,8 @@ void TrafficEntityModule::UpdateCollidableVehicles(
             lpOutput->GetSceneInputInterface()->RemoveForCollision(lVolumeInstanceId);
             lpOutput->GetSceneInputInterface()->RemoveVolumeInstance(lVolumeInstanceId);
             GetVehicle(luVehicle)->SetCollidable(false, lIt, mVehicleSoaData);
-
-            if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())
-            {
-                static bool sbLogged = false;
-                if (!sbLogged)
-                {
-                    sbLogged = true;
-                    *lpDiag << "[T4-collide] FIRST stale collision volume retired for DEAD "
-                               "vehicle " << static_cast<s32>(luVehicle)
-                            << " -- the console's remove half is gated [DELETE-WHEN-STABLE]\n";
-                }
-            }
         }
     }
-
-    u32 luDiagTurnedCollidable = 0;   // [T4-collide] DIAG
 
     for (TrafficBitArray::Iterator lIt = lAliveWithEntities.Begin();
          lIt != lAliveWithEntities.End();
@@ -596,26 +559,6 @@ void TrafficEntityModule::UpdateCollidableVehicles(
                 CgsSceneManager::SceneManagerIO::E_DO_NOT_ADD_TO_CACHE_MANAGER);   // li r7, 2
 
             lpVehicle->SetCollidable(true, lIt, mVehicleSoaData);
-            ++luDiagTurnedCollidable;
-
-            if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())
-            {
-                // [T4-collide] one-shot on the FIRST traffic volume instance ever added for
-                // collision. A missing line means gate 1 never fired; a line with a plausible
-                // id means the scene now has a traffic collision volume. DELETE-WHEN-STABLE.
-                static bool sbLogged = false;
-                if (!sbLogged)
-                {
-                    sbLogged = true;
-                    *lpDiag << "[T4-collide] FIRST AddForCollision vehicle="
-                            << static_cast<s32>(luVehicle)
-                            << " type=" << static_cast<s32>(lpVehicle->GetVehicleType())
-                            << " volumeId=" << static_cast<s32>(36u + lpVehicle->GetVehicleType())
-                            << " volInstIdHi=" << static_cast<s32>(lVolumeInstanceId.muId >> 32)
-                            << " sources=" << static_cast<s32>(lSourcePositions.GetLength())
-                            << " [DELETE-WHEN-STABLE]\n";
-                }
-            }
         }
         else
         {
@@ -655,23 +598,6 @@ void TrafficEntityModule::UpdateCollidableVehicles(
     // Construct seeds the first 300 bits, so this alternates which half of the 600-car pool is
     // re-evaluated. It is NOT a clear-and-rebuild: dropping it pins the sweep to one half.
     mVehiclesToUpdateCollidables.SetInverse(mVehiclesToUpdateCollidables);
-
-    if (luDiagTurnedCollidable != 0)
-    {
-        if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())
-        {
-            // [T4-collide] value-latched on the per-frame transition count, so the log shows
-            // the population changing rather than one frame. DELETE-WHEN-STABLE.
-            static s32 siLastCount = -1;
-            if (siLastCount != static_cast<s32>(luDiagTurnedCollidable))
-            {
-                siLastCount = static_cast<s32>(luDiagTurnedCollidable);
-                *lpDiag << "[T4-collide] turned collidable this frame: " << siLastCount
-                        << " (cached packets " << static_cast<s32>(mCachedCollidableList.GetLength())
-                        << ") [DELETE-WHEN-STABLE]\n";
-            }
-        }
-    }
 }
 
 }

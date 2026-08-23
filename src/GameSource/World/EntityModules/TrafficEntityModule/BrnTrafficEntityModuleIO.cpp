@@ -3,9 +3,6 @@
 
 #include <cstddef>   // offsetof
 #include <cstring>   // std::memcpy (InputBuffer_PostScene::SetActiveRaceCarOutputInterface)
-#include <cstdlib>   // getenv  ([T1-rinfo] bring-up probe only)
-
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // CgsDev::Log::gpDebugPrint ([T1-rinfo] only)
 
 // BrnTrafficIO IO-buffer bodies, from BURNOUT_X360_ARTIST.XEX. Each accessor tests its lock bit
 // (read = bit 4, write = bit 3) and returns the member by name; the console offsets in the
@@ -860,40 +857,7 @@ namespace BrnTrafficIO
     // X360 0x82755BB8 -- `*(this + 772) = 0` and nothing else.
     void OutputBuffer_PreDispatch::Clear()
     {
-        // [T1-rinfo] report what is being dropped BEFORE the count goes to zero.
-        T1Diag_ReportTrafficRenderInfoCount(*this);
-
         maTrafficRenderInfos.Clear();
-    }
-
-    // ------------------------------------------------------------------------
-    // [T1-rinfo] BRING-UP PROBE -- NOT IN THE X360 BINARY. DELETE WHEN STABLE.
-    // Value-latched: prints only when the produced render-info count differs from the last one
-    // printed, and only under BRN_TRAFFIC_DIAG. It is the one number that separates "the traffic
-    // module produced no cars" from "the renderer dropped them".
-    // ------------------------------------------------------------------------
-    void T1Diag_ReportTrafficRenderInfoCount(const OutputBuffer_PreDispatch& lrBuffer)
-    {
-        static const bool sbTrafficDiag = (getenv("BRN_TRAFFIC_DIAG") != 0);
-        if (!sbTrafficDiag || CgsDev::Log::gpDebugPrint == 0)
-        {
-            return;
-        }
-
-        // GetCount(), not GetLength(): the latter asserts the array left the
-        // KI_UNCONSTRUCTED(-1) sentinel, and a probe must never fire an assert.
-        const s32 liCount = lrBuffer.maTrafficRenderInfos.GetCount();
-
-        static s32 siLastReported = -2;   // distinct from both 0 and the -1 sentinel
-        if (siLastReported == liCount)
-        {
-            return;
-        }
-        siLastReported = liCount;
-
-        *CgsDev::Log::gpDebugPrint
-            << "[T1-rinfo] traffic VehicleRenderInfo count = " << liCount
-            << " [DELETE-WHEN-STABLE]\n";
     }
 }
 }

@@ -27,12 +27,12 @@ namespace Vehicle
     // ---------------------------------------------------------------------------------------
     // _AssertLayout -- never called; the gate that keeps this class on its console seats.
     //
-    // ⭐ AN ABSOLUTE offsetof GATE IS LEGITIMATE HERE, unlike the console-arithmetic gates one
+    // AN ABSOLUTE offsetof GATE IS LEGITIMATE HERE, unlike the console-arithmetic gates one
     // level up (VehiclePhysics_layout_check.cpp): this class owns NO pointers and embeds no
     // reconstruction whose host size can drift -- Matrix44Affine is four 16-byte float rows and
     // ArticulatedJointId is one u64 -- so the host layout must reproduce the X360's byte for byte.
     //
-    // ⚠️⚠️ THE FIRST VERSION OF THIS GATE WAS VACUOUS AND THE TAMPER TEST CAUGHT IT. It was
+    // THE FIRST VERSION OF THIS GATE WAS VACUOUS AND THE TAMPER TEST CAUGHT IT. It was
     // `static_assert(sizeof(ArticulatedJoint) == 80)` alone, in BrnArticulatedJointPool.cpp.
     // Adding a spare `u32` member to this class did NOT fail it: 64 + 8 == 72 and the type is
     // alignas(16) via Matrix44Affine, so there are EIGHT bytes of tail padding and anything up to
@@ -76,7 +76,7 @@ namespace Vehicle
     // so the whole seed qword_82F2A3B0 is dead and the surviving value is exactly
     //     (u64)KU_INVALID_ENTITY_ID << 32.
     //
-    // ⭐ Written as a SHIFT on the named u64, not as byte stores, because "the first four bytes"
+    // Written as a SHIFT on the named u64, not as byte stores, because "the first four bytes"
     // is the HIGH dword on the big-endian console and the LOW dword on the little-endian host.
     // The shift form is endian-neutral and matches the field packing ArticulatedJointId::Set
     // (below) already commits to: cab EntityId in bits 63..32, trailer entity index in 31..16,
@@ -98,7 +98,7 @@ namespace Vehicle
     // four rows' .w lanes. That is Matrix44Affine::SetIdentity() -- which sets wAxis to
     // (0,0,0,0), matching the console (an AFFINE matrix's implicit last column is not stored).
     //
-    // ⚠️ RETURN TYPE. IDA types this `int __fastcall(int result)` and the pseudocode "returns"
+    // RETURN TYPE. IDA types this `int __fastcall(int result)` and the pseudocode "returns"
     // r3. There is no return value: r3 is simply still live at the `blr` because it is the
     // implicit `this`. The DWARF declares `void Construct()` (BrnArticulatedJoint.h:100) and the
     // ladder puts DWARF above Hex-Rays for declaration shape, so `void` is what is committed.

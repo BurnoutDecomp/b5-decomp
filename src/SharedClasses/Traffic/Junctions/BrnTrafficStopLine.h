@@ -19,7 +19,7 @@
 // converts a lane-parameter float in [0, 256) into an 8.8 unsigned fixed-point
 // value, the on-disk packing the stop-line records use for their lane parameter.
 //
-// LAYOUT GROWN (wave T3 r2). The record is one u16:
+// The record is one u16:
 //   * leak references/Feb-2007/BrnEntityModuleUnity/SharedClasses/Traffic/Junctions/
 //     BrnTrafficStopLine.h -- `uint16_t muParamFixed;` plus the compile-time
 //     `sizeof( StopLine ) == 2` check, and the four inline accessors below;

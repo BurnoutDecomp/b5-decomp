@@ -1,6 +1,6 @@
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleOutputInterface.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
-// ⭐ CgsPhysics::K_INVALID_RIGID_BODY_ID, the real one (X360 qword_82F2A3A8 in this TU). Was
+// CgsPhysics::K_INVALID_RIGID_BODY_ID, the real one (X360 qword_82F2A3A8 in this TU). Was
 // mirrored as a local u64 constant until 2026-08-04 because the RigidBodyId ODR fork made
 // including this header a hard C2011; the fork is retired (task #141) and the mirror with it.
 // Matches the two sibling vehicle-manager TUs (BrnVehicleManager.cpp:7,
@@ -18,7 +18,7 @@
 // BrnPhysics::Vehicle::VehicleOutputInterface + CrashingRaceCarInterface -- the bodied ledger
 // functions homed by this group. Reconstructed from BURNOUT_X360_ARTIST.XEX.
 //
-// ⭐ THE FLAG THAT USED TO STAND HERE IS RETIRED (wave T3, physical traffic).
+// THE FLAG THAT USED TO STAND HERE IS RETIRED (wave T3, physical traffic).
 // VehicleOutputInterface::AddTrafficState @0x825EC390 IS BODIED at the tail of this file. The old
 // note said its wheel internals were unhomed; they are not. Its per-wheel loop is instruction-for-
 // instruction the SAME loop as the already-landed race-car twin UpdateRaceCarState @0x825EC808
@@ -100,14 +100,14 @@ namespace Vehicle
     // ---------------------------------------------------------------------------------------
     // VehicleOutputRequestInterface::_AssertLayout   -- the gate for the derived six-queue layout.
     //
-    // ⚠️ THIS IS **CONSOLE ARITHMETIC THAT THE HOST HAPPENS TO REPRODUCE**, not a lucky host
+    // THIS IS **CONSOLE ARITHMETIC THAT THE HOST HAPPENS TO REPRODUCE**, not a lucky host
     // offsetof. It is legitimate here (and it is NOT the vacuous kind of gate) for one specific
     // reason: every one of the six members is pointer-free storage, and BaseEventQueue<T>'s single
     // pointer sits in a header that is padded to 16 on BOTH targets (X360 4+4+4 rounded up to the
     // 16-byte element alignment; host 8+4+4 == 16 exactly). So the X360 offsets ARE the host
     // offsets, member for member, and asserting them asserts the derivation.
     //
-    // ⭐ WHAT MAKES IT A DERIVATION RATHER THAN SIX GUESSES: two of the offsets are read straight
+    // WHAT MAKES IT A DERIVATION RATHER THAN SIX GUESSES: two of the offsets are read straight
     // off the asm, and the chain that produces them is built from strides attested elsewhere.
     //   PIN 1  mAddJointQueue @ 39904  -- AddJoint @0x825E7170: `addis r3,r28,1 ; addi r3,r3,-0x6420`
     //   PIN 2  mRemoveJointQueue @ 41840 -- SendCreateRemoveJointEvents @0x826013C0:
@@ -115,7 +115,7 @@ namespace Vehicle
     // Walking the DWARF member order forward from 0 with the per-type strides derived in
     // CgsPhysicsSimulationIO_Events.h hits both, with zero slack, and ends at 41936.
     //
-    // ⚠️ ITS BLIND SPOT, stated: nothing here proves mRequestFineLineQueue's own INTERNAL layout --
+    // ITS BLIND SPOT, stated: nothing here proves mRequestFineLineQueue's own INTERNAL layout --
     // it proves only that 13456 bytes sit between mRemoveRigidBodyQueue and
     // mChangeRigidBodyInertiaQueue, which is what VariableEventQueue<13440,16> is. If that queue is
     // ever re-typed to the DWARF's InFineQueryQueue<13440> the number must not move (that class adds
@@ -138,12 +138,12 @@ namespace Vehicle
         static_assert(offsetof(InAddJoint, mu64Id) == 0,            "AddJoint's `ld r10, 0(r29)`");
         static_assert(offsetof(InAddJoint, mu64ParentBodyId) == 8,  "AddJoint's `ld r10, 8(r29)`");
         static_assert(offsetof(InAddJoint, mu64ChildBodyId) == 16,  "AddJoint's `ld r10, 0x10(r29)`");
-        // ⚠️ ADDED AFTER THE TAMPER TEST FOUND A HOLE: with only the sizeof==192 line above, shrinking
+        // ADDED AFTER THE TAMPER TEST FOUND A HOLE: with only the sizeof==192 line above, shrinking
         // the tail 168 -> 160 was **SILENT** -- 24 + 160 == 184 and alignas(16) rounds it right
         // back to 192. That is the standing over-aligned-type trap (the same one that let a u32 be
         // added to ArticulatedJoint without moving its 80). Pinning the tail makes 192 an actual SUM.
         //
-        // ⭐ 2026-08-04 (task #144): the tail is no longer opaque -- InAddJoint's payload was a
+        // the tail is no longer opaque -- InAddJoint's payload was a
         // `u8 macOpaquePayload[168]` whose note claimed no DWARF/source existed, and the DWARF
         // names all six members. The two lines this replaces pinned that span's start and size;
         // these pin the SAME closure over the real members, so the trap they were guarding
@@ -183,7 +183,7 @@ namespace Vehicle
     // ---------------------------------------------------------------------------------------
     // @0x825E7170  VehicleOutputRequestInterface::AddJoint            NEW 2026-08-03
     //
-    // ⚠️ RECOVERED FROM AN `.ida-exports` HOLE. This address has no 0x825E7170.json and no entry in
+    // RECOVERED FROM AN `.ida-exports` HOLE. This address has no 0x825E7170.json and no entry in
     // progress/identity.json, and the PS3 DecFIGS set has no twin either (PS3 inlines it) -- but the
     // caller's asm names the symbol, so it exists. Pulled with headless IDA 9.3: 53 instructions,
     // func range 0x825E7170..0x825E7244. Same "absent from JSON is not absent from image" rule that
@@ -196,11 +196,11 @@ namespace Vehicle
     //   addis r3,r28,1 ; addi r3,r3,-0x6420 ; bl BaseEventQueue<InAddJoint>::AddEvent
     // The two sentinels are the module-global invalid handles (qword_82F2A3B0 == invalid JointId,
     // qword_82F2A3A8 == CgsPhysics::K_INVALID_RIGID_BODY_ID).
-    // ⭐ 2026-08-04 (task #141): the rigid-body sentinel is now the REAL CgsRigidBody.h one, not a
+    // the rigid-body sentinel is now the REAL CgsRigidBody.h one, not a
     // local mirror. This note used to justify mirroring both with "CgsPhysics::RigidBodyId /
     // JointId are each declared twice in this tree (CgsRigidBody.h vs CgsPhysicsSimulationModule.h
     // -- an open ODR fork), so including either header here would turn a latent fork into a hard
-    // C2011". Half of that was true and is now fixed; ⛔ THE OTHER HALF WAS NEVER TRUE:
+    // C2011". Half of that was true and is now fixed; THE OTHER HALF WAS NEVER TRUE:
     // CgsRigidBody.h declares no JointId whatsoever, so `CgsPhysics::JointId` was never forked --
     // the only other JointId in the tree is BrnPhysics::Vehicle::JointId (BrnArticulatedJoint.h:52),
     // a different namespace. KU64_INVALID_JOINT_ID stays a local constant only because
@@ -275,7 +275,7 @@ namespace Vehicle
     // ---------------------------------------------------------------------------------------
     void VehicleOutputInterface::Construct()
     {
-        // ⭐ THE OPAQUE SPAN IS GATED BEFORE IT IS CONSTRUCTED THROUGH. mGameEventQueue is
+        // THE OPAQUE SPAN IS GATED BEFORE IT IS CONSTRUCTED THROUGH. mGameEventQueue is
         // still modelled as a size-pinned storage array, and GetGameEventQueue() is this file's
         // sanctioned cast seam; running a Construct through that cast is only sound if the real
         // queue fits the span EXACTLY. It does, on the host as on the console:
@@ -303,11 +303,11 @@ namespace Vehicle
     //   sth r11(=0), 0x79C   +  stb r11, 0x79E     == mVehicleGuiOutputMessages (3 bools)
     //   stfs f0, 0x874       +  stfs f0, 0x878     == mWheelFFSpring, f0 = flt_82001CC0
     //
-    // ⭐ AS-SHIPPED ODDITY, reproduced rather than tidied: the console constructs
+    // AS-SHIPPED ODDITY, reproduced rather than tidied: the console constructs
     // mCreateVehicleResultQueue (+0x6C0) FIRST, before the queue that sits at offset 0. The
     // remaining seven then run in member order. No `bl` is reordered here.
     //
-    // ⭐ flt_82001CC0 == 0.0f, read out of the X360 image (x360rd.py, DELTA -1594), with the
+    // flt_82001CC0 == 0.0f, read out of the X360 image (x360rd.py, DELTA -1594), with the
     // reader self-tested in the same run against two constants this tree already names by other
     // means: flt_8208F83C -> 9.8100004196167 (KF_GRAVITY) and flt_82001D9C -> 2.0f (the
     // handbrake drift window). Its neighbours read as live data (1.875 / 176.0 / -176.0, then
@@ -338,7 +338,7 @@ namespace Vehicle
     //
     // X360-attested INLINE in PhysicsModule::Update @0x825B0640 (0x825B2480..0x825B24C0):
     // merge the source interface's request queues onto this one, five appends in the
-    // console's order. ⚠️ mChangeRigidBodyInertiaQueue is deliberately NOT appended --
+    // console's order. mChangeRigidBodyInertiaQueue is deliberately NOT appended --
     // Update drains that queue into the SIM input buffer through
     // BridgeVehicleManagerToSimulation_PostPhysics @0x825ADF60 instead; appending it here
     // too would double-apply every inertia change.

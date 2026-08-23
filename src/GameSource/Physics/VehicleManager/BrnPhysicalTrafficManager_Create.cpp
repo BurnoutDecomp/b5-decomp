@@ -1,10 +1,10 @@
 // =================================================================================================
 // GameSource/Physics/VehicleManager/BrnPhysicalTrafficManager_Create.cpp
 //
-// Wave T3 round 1, cluster C2 -- the PHYSICS-SIDE CREATE DRAIN. Everything between
+// The PHYSICS-SIDE CREATE DRAIN: everything between
 // PhysicalTrafficManager::ProcessTrafficMaintenanceEvents' create arm and a seated physics body.
 //
-//   ProcessCreateEvents                 @0x826495E8 ( 95)  export HOLE, closed by the wave-T3 scout
+//   ProcessCreateEvents                 @0x826495E8 ( 95)  .ida-exports HOLE, dumped headless
 //   ProcessCreateNonArticulatedTraffic  @0x82647E20 (617)
 //   CreateTrafficVehicle                @0x82646E70 (656)
 //   GetFreeTrafficVehicleWithPhysics    @0x82637608 (266)
@@ -14,11 +14,10 @@
 //   ProcessCreateArticulatedTrafficEvents @0x826487C8 (614)  -- named gate (trailers parked)
 //
 // Slice TU: the console home BrnPhysicalTrafficManager.cpp is a different, already-mounted file,
-// so these bodies land in their own translation unit -- the same shape as the sibling
-// BrnPhysicalTrafficManager_Prepare.cpp / _UpdateTrafficDriver.cpp slices.
+// so these bodies land in their own translation unit.
 //
 // -------------------------------------------------------------------------------------------------
-// ⭐ ONE INDEX, TWO NAMES (GetFreeTrafficVehicleWithPhysics). The console computes
+// ONE INDEX, TWO NAMES (GetFreeTrafficVehicleWithPhysics). The console computes
 // mUsedTrafficVehicles.GetFirstZeroBit() ONCE (r31 @0x82637790) and then fires BOTH of the source's
 // bound asserts against it -- ":3002 liFreeFullTrafficPhysics < ku8MaxNumFullyPhysicalTraffic"
 // (0x826377F0 `li r5,0xBBA`) and ":3003 liFreeTrafficVehicle < ku8TotalMaxNumPhysicalTraffic"
@@ -28,12 +27,10 @@
 // traffic-vehicle slot index and the FULL-physics pool index are the same number by construction.
 // Reproduced as one value with both assert texts, not as two independently derived indices.
 //
-// ⚠️ NO FEB-2007 SOURCE EXISTS FOR ANY OF THIS. references/Feb-2007/.../Physics/VehicleManager/
-// holds only BrnVehicleConstants.h, SharedIO/ and VehiclePhysics/ -- there is no leaked
-// PhysicalTrafficManager at all. Everything below is ARTIST pseudocode + asm, with the DecFIGS
-// DWARF for declaration shape.
+// No Feb-2007 source exists for any of this (the leak holds no PhysicalTrafficManager).
+// Everything below is ARTIST pseudocode + asm, with the DecFIGS DWARF for declaration shape.
 //
-// ⚠️ HEX-RAYS MERGES THE SWITCH/BIT-WALK ARMS in ProcessCreateNonArticulatedTraffic and
+// HEX-RAYS MERGES THE SWITCH/BIT-WALK ARMS in ProcessCreateNonArticulatedTraffic and
 // GetLeastInterestingFullyPhysicalVehicle. Both are written from the ASM; the pseudocode's
 // interleaved `GetFirstNonZeroBit`/`GetNextNonZeroBit` cursor expansions are re-rolled into the
 // container's own accessors, which is what the source had.
@@ -46,15 +43,14 @@
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnStreamedDeformationSpec.h"
 #include "GameSource/AttribSys/Generated/classes/burnoutcarasset.h"                // the +0x158 handling RefSpec
 #include "GameSource/AttribSys/Generated/classes/physicsvehiclehandling.h"
-#include "GameShared/GameClasses/Geometric/Primitives/CgsBox.h"                    // Box ([T4-potential] extents)
 #include "rw/math/vpu/matrix44affine_operation.h"                                  // IsValid(Matrix44Affine)
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                 // CGS_ASSERT
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"                         // the named gates + [T3-*] diag
-#include <cstdlib>                                                                 // getenv (BRN_TRAFFIC_DIAG)
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"                         // the named gates
 
 namespace
 {
-    // ---- named one-shot gate + [T3-*] diag plumbing (DELETE-WHEN-STABLE) ------------------------
+    // named one-shot gate banner. gpDebugPrint (CgsLog.h:33) is NULL until the log front-end is
+    // constructed and this drain runs at PostSceneUpdate, so it must be null-tested.
     inline void TrafficCreateLogOnce(bool& lrbLogged, const char* lpcMessage)
     {
         if (!lrbLogged)
@@ -63,24 +59,6 @@ namespace
             if ((CgsDev::Message::gxMessageFilterFlags & 1) && CgsDev::Log::gpDebugPrint != 0)
                 *CgsDev::Log::gpDebugPrint << lpcMessage;
         }
-    }
-
-    inline bool TrafficDiagOn()
-    {
-        static const bool sbOn = (getenv("BRN_TRAFFIC_DIAG") != 0);
-        return sbOn;
-    }
-
-    // gpDebugPrint is an extern DebugPrint* (CgsLog.h:33) that is NULL until the log front-end is
-    // constructed; this drain runs at PostSceneUpdate, so every [T3-*] line must null-test it.
-    // Same shape as the wave-T3 precedent BrnTrafficJob.cpp:36 / BrnUpdateVehiclesJob.cpp:61.
-    inline CgsDev::Log::DebugPrint* TrafficDiagStream()
-    {
-        if (!TrafficDiagOn() || CgsDev::Log::gpDebugPrint == 0)
-        {
-            return 0;
-        }
-        return CgsDev::Log::gpDebugPrint;
     }
 
     // 2.0f flt_82001D9C, 0.5f flt_82001DA0 -- the same two the race-car create drain names.
@@ -102,7 +80,7 @@ namespace Vehicle
     //   DWARF BrnPhysicalTrafficManager.h:318.
     //
     // The two queue arguments are the console's `lpInputInterface + 132976` and `+ 136592`, reached
-    // BY NAME through the DWARF-attested readers this wave added to BrnVehicleInputInterface.h.
+    // BY NAME through the DWARF-attested readers in BrnVehicleInputInterface.h.
     // =============================================================================================
     void PhysicalTrafficManager::ProcessCreateEvents(
             const VehicleInputInterface* lpInputInterface,
@@ -120,11 +98,10 @@ namespace Vehicle
         CGS_ASSERT(lpaRaceCarVehicles        != 0, "lpaRaceCarVehicles != NULL");        // :795
         CGS_ASSERT(lpUsedRaceCars            != 0, "lpUsedRaceCars != NULL");            // :796
 
-        // ⛔ GATE ArticulatedJointPool::RemoveBrokenJointsFromSimulation @0x82601028 (920)
-        //    blocker: declare-only on the pool's reconstructed surface (BrnArticulatedJointPool.h
-        //    scores it "not bodied"); the whole articulated sub-tree is parked this round.
-        //    DELETE-WHEN ProcessCreateArticulatedTrafficEvents lands -- until then no joint is ever
-        //    created, so the pool's broken-joint set is always empty and this pass is a no-op.
+        // GATE ArticulatedJointPool::RemoveBrokenJointsFromSimulation @0x82601028 (920)
+        //   blocker: declare-only (BrnArticulatedJointPool.h).
+        //   DELETE-WHEN ProcessCreateArticulatedTrafficEvents lands; until then no joint exists,
+        //   so the broken-joint set is always empty and this pass is a no-op.
         BRN_T3_CREATE_GATE("ArticulatedJointPool::RemoveBrokenJointsFromSimulation @0x82601028 (920)");
 
         ProcessCreateNonArticulatedTraffic(lpInputInterface->GetCreateTrafficBodyEvents(),
@@ -140,9 +117,8 @@ namespace Vehicle
 
     // =============================================================================================
     // ProcessCreateArticulatedTrafficEvents @0x826487C8 (614)  -- NAMED GATE
-    //   blocker: trailers/cab-trailer articulation are parked for wave T3 round 1 (the whole
-    //   ArticulatedJointPool create/remove surface is declare-only, and wave-T2 generation builds
-    //   InitialiseAsStandard cars only, so this queue is empty at runtime).
+    //   blocker: the whole ArticulatedJointPool create/remove surface is declare-only, and
+    //   traffic generation builds InitialiseAsStandard cars only, so this queue is empty.
     //   DELETE-WHEN the articulated wave lands VehicleInputInterface::CreateArticulatedTraffic
     //   @0x8271C9C0 and the pool's ConstructArticulatedJoint/CreateJoint bodies.
     // =============================================================================================
@@ -318,65 +294,6 @@ namespace Vehicle
         mu8GlobalToPhysicalEntityIndexMap[luEntityIndex] = static_cast<u8>(liFreeVehicleIndex);
         mAddedTrafficVehicles.SetBit(static_cast<u32>(liFreeVehicleIndex));
 
-        // [T3-drain] one-shot: the first CreatePhysicalTraffic event ever drained.
-        // DELETE-WHEN-STABLE.
-        if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())
-        {
-            static bool sbLogged = false;
-            if (!sbLogged)
-            {
-                sbLogged = true;
-                *lpDiag << "[T3-drain] first CreatePhysicalTraffic drained: global="
-                    << static_cast<s32>(luGlobalEntityId) << " idx=" << static_cast<s32>(luEntityIndex)
-                    << " slot=" << liFreeVehicleIndex
-                    << " type=" << static_cast<s32>(lrCreateTrafficEvent.meTrafficType)
-                    << " FULL(mu8PhysicalType="
-                    << static_cast<s32>(GetTrafficVehicle(liFreeVehicleIndex)->mu8PhysicalType)
-                    << ")\n";
-            }
-        }
-
-        // ---- [T4-potential] the wave-4 promotion witness -----------------------------------------
-        // [DIAG] NOT IN THE X360 BINARY. Opt-in (BRN_TRAFFIC_DIAG). One-shot for the first
-        // POTENTIAL promotion, plus a value-latched population of mPotentialTrafficVehicles
-        // against the 20-slot pool.
-        // ⚠️ NAMING: this is NOT a "simple" slot. E_TRAFFIC_TYPE_POTENTIAL selects a FULL
-        // TrafficPhysics body (GetFreeTrafficVehicleWithPhysics @0x82637608 has no simple arm);
-        // it only means "not crashing yet". mu8PhysicalType below WILL read 0 == FULL.
-        // DELETE-WHEN-STABLE.
-        if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())
-        {
-            const PhysicalTrafficVehicle* const lpNew = GetTrafficVehicle(liFreeVehicleIndex);
-
-            static bool sbFirstPotential = false;
-            if (!sbFirstPotential
-                && lrCreateTrafficEvent.meTrafficType == E_TRAFFIC_TYPE_POTENTIAL)
-            {
-                sbFirstPotential = true;
-                CgsGeometric::Box lBox;
-                lpNew->mpVehicleBody->GetSimpleVehicleBox(lBox);
-                const Vector3 lvHalf = lBox.GetDimensions();
-                *lpDiag << "[T4-potential] first POTENTIAL promotion: global="
-                        << static_cast<s32>(luGlobalEntityId)
-                        << " idx=" << static_cast<s32>(luEntityIndex)
-                        << " slot=" << liFreeVehicleIndex
-                        << " mu8PhysicalType=" << static_cast<s32>(lpNew->mu8PhysicalType)
-                        << " (0==FULL, NOT simple)"
-                        << " halfBox=" << lvHalf.x << "," << lvHalf.y << "," << lvHalf.z
-                        << "\n";
-            }
-
-            static s32 siLastPotentialCount = -1;
-            const s32  liPotentialCount =
-                static_cast<s32>(mPotentialTrafficVehicles.CountSetBits());
-            if (liPotentialCount != siLastPotentialCount)
-            {
-                siLastPotentialCount = liPotentialCount;
-                *lpDiag << "[T4-potential] proxied cars=" << liPotentialCount
-                        << " of 20 physical slots\n";
-            }
-        }
-
         return liFreeVehicleIndex;
     }
 
@@ -410,7 +327,7 @@ namespace Vehicle
                                   lpOutputRequestInterface, lpDeformationInterface);
         }
 
-        // ⭐ ONE INDEX, TWO NAMES -- see the banner. r31 feeds both asserts and both SetBits.
+        // ONE INDEX, TWO NAMES -- see the banner. r31 feeds both asserts and both SetBits.
         const s32 liFreeFullTrafficPhysics = liFreeTrafficVehicle;
 
         // Verbatim console texts: the FIRST names ku8MaxNumFullyPhysicalTraffic, the second
@@ -439,21 +356,6 @@ namespace Vehicle
             static_cast<u8>(PhysicalTrafficVehicle::E_PHYSICAL_TRAFFIC_TYPE_FULL);
         lpTrafficVehicle->mu8PhysicsPoolIndex = static_cast<u8>(liFreeFullTrafficPhysics);
 
-        // [T3-body] one-shot: the first physics body ever seated. DELETE-WHEN-STABLE.
-        if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())
-        {
-            static bool sbLogged = false;
-            if (!sbLogged)
-            {
-                sbLogged = true;
-                *lpDiag << "[T3-body] first traffic physics body: slot="
-                    << liFreeTrafficVehicle << " pool=" << liFreeFullTrafficPhysics
-                    << " mu8PhysicalType=" << static_cast<s32>(lpTrafficVehicle->mu8PhysicalType)
-                    << " usedPopcount=" << static_cast<s32>(mUsedTrafficVehicles.CountSetBits())
-                    << "\n";
-            }
-        }
-
         return liFreeTrafficVehicle;
     }
 
@@ -461,7 +363,7 @@ namespace Vehicle
     // GetLeastInterestingFullyPhysicalVehicle @0x825F1990 (446)
     //   asserts BrnPhysicalTrafficManager.cpp:3345..:3348, :3356, :3400. DWARF :309.
     //
-    // ⚠️ ONLY FULLY-PHYSICAL SLOTS ARE CANDIDATES (`lbz +0x32 ; cmpwi 0 ; bne skip`) and only ones
+    // ONLY FULLY-PHYSICAL SLOTS ARE CANDIDATES (`lbz +0x32 ; cmpwi 0 ; bne skip`) and only ones
     // whose bit is clear in lpDoNotRecycleBitArray. liNumRecyclable is bumped for every candidate,
     // and the FIRST candidate always wins the compare (`cntlzw`/`extrwi` == "is the count zero").
     // =============================================================================================
@@ -578,10 +480,9 @@ namespace Vehicle
     //   VehicleAttribs::Construct
     //   sub_825BDB88                    == the checked physicsvehiclehandling COPY (by-value arg)
     //   VehicleAttribs::SetupAttribs(copy)
-    // ⚠️ THE TRAFFIC ARM DOES **NOT** RE-CENTRE THE COM ON THE WHEEL MEAN. The race-car drain adds
-    // the four-wheel mean into mBaseAttribs.mCOMOffset before building the box; this one does not
-    // (no vaddfp/vmulfp on v125 anywhere in 0x82644290..0x826442F4). Do not "fix" that by copying
-    // the sibling.
+    // THE TRAFFIC ARM DOES NOT RE-CENTRE THE COM ON THE WHEEL MEAN. The race-car drain adds the
+    // four-wheel mean into mBaseAttribs.mCOMOffset before building the box; this one does not (no
+    // vaddfp/vmulfp on v125 anywhere in 0x82644290..0x826442F4). Do not copy the sibling here.
     // =============================================================================================
     void PhysicalTrafficManager::PreparePhysicsForNewTrafficVehicle(
             const CreatePhysicalTrafficEvent& lrCreateTrafficEvent, s32 liTrafficVehicleIndex)

@@ -1,6 +1,6 @@
 // Layout check for BrnVehicleManager.h's TUNING BANK (this+171464 .. this+172616).
 //
-// ⚠️⚠️ WHY THIS TU EXISTS -- READ BEFORE DELETING IT.
+// WHY THIS TU EXISTS -- READ BEFORE DELETING IT.
 // BrnVehicleManager.h advertises that its recovered offsets are "pinned by the offsetof asserts in
 // _AssertLayout / _AssertLayoutPlayerStats", and that "the gate FAILS if any padding run is wrong,
 // which is the signal". That was NOT TRUE as of 2026-08-03: both of those functions live in
@@ -26,7 +26,7 @@
 
 #include "GameSource/Physics/VehicleManager/BrnVehicleManager.h"
 
-// ⭐ ADDED 2026-08-03 (the Construct-blocker wave) -- THIS INCLUDE IS ITSELF A GATE, not a
+// THIS INCLUDE IS ITSELF A GATE, not a
 // convenience. BrnPhysicalTrafficManager.h used to define its own `struct VehicleDriver
 // { u8 mOpaque[224]; }` at namespace scope in BrnPhysics::Vehicle, while BrnVehicleManager.h
 // (above) pulls in the REAL VehicleDriver for maRaceCarDrivers[8] / mPlayerAiDriver. The two
@@ -39,7 +39,7 @@
 // The two sub-object classes whose real x64 size decides whether Construct can call their
 // constructors at all. Included so the size verdicts below are compiled facts.
 #include "GameSource/Physics/VehicleManager/BrnVehicleManagerDebugComponent.h"
-// ⭐ ADDED 2026-08-03 (the un-pin wave) -- also a gate, not a convenience. sizeof(PotentialContact)
+// also a gate, not a convenience. sizeof(PotentialContact)
 // is the one load-bearing INPUT to the backward derivation of the X360 sizeof(PhysicalTrafficManager)
 // (see BrnPhysicalTrafficManager.h finding (4), derivation B). If that record ever gets a different
 // committed layout, the derivation it feeds has to be redone -- so it is asserted here rather than
@@ -60,7 +60,7 @@ namespace Vehicle
     {
 
         // ==========================================================================================
-        // ⛔ THE `VehicleManager::Construct` SUB-CONSTRUCTOR BLOCKER TABLE, as compiled asserts.
+        // THE `VehicleManager::Construct` SUB-CONSTRUCTOR BLOCKER TABLE, as compiled asserts.
         //
         // These are not decoration. Construct @0x8263B7C8 calls six sub-constructors; three of them
         // take a `this` that VehicleManager cannot supply, because the member is an X360-sized
@@ -70,17 +70,17 @@ namespace Vehicle
         // VehicleManagerDebugComponent to 1296 or re-seats the traffic manager, one of these fires
         // and says "the blocker you were told about is gone".
         //
-        // ⚠️ Deliberately written as `!=` / `==` against the MEASURED values rather than as
+        // Deliberately written as `!=` / `==` against the MEASURED values rather than as
         // `<= span`, so they are tripwires, not permissions.
         // ==========================================================================================
 
-        // ✅ READY -- fits exactly, so `VehicleDriver::Construct` is callable by name today.
+        // READY -- fits exactly, so `VehicleDriver::Construct` is callable by name today.
         static_assert(sizeof(VehicleDriver) == 224,
                       "VehicleDriver fits maRaceCarDrivers[8] (stride 0xE0) and mPlayerAiDriver");
         static_assert(sizeof(VehicleManager::maRaceCarDrivers) == 8 * 224,
                       "the eight-car driver array is 1792 bytes: 64 + 1792 == 1856 == maRaceCarVehicles");
 
-        // ✅ READY -- the ONE contained sub-object whose real class fits its X360 span on x64.
+        // READY -- the ONE contained sub-object whose real class fits its X360 span on x64.
         static_assert(sizeof(BrnPhysics::StuntOffencesManager) == 464,
                       "StuntOffencesManager fits this+44240..44704 exactly (no pointer members; "
                       "last member ends at 0x1C4 == 452, padded to 464 at align 16 on both ISAs)");
@@ -88,7 +88,7 @@ namespace Vehicle
                       offsetof(VehicleManager, mStuntOffencesManager) % 16 == 0,
                       "and its 16-byte alignment is satisfied at 44240, so typing it moved nothing");
 
-        // ✅ READY -- the discarded-contact queue fits because the pointer widening lands in the
+        // READY -- the discarded-contact queue fits because the pointer widening lands in the
         // padding the X360 header already carried: {T* , s32, s32} is 12->16 there and 8+4+4 == 16
         // here, then 16 + 20*64 == 1296 either way.
         static_assert(sizeof(VehicleManager::mDiscardedContacts) == 1296,
@@ -99,9 +99,9 @@ namespace Vehicle
                       "asm: addis r29,r31,2 ; addi r29,r29,0x73A0 ; stw r28,0(r29)");
 
         // ==========================================================================================
-        // ✅ UN-BLOCKED 2026-08-03 -- the manager's own debug component, embedded BY NAME.
+        // UN-BLOCKED 2026-08-03 -- the manager's own debug component, embedded BY NAME.
         //
-        // This block read "⛔ BLOCKED -- grows 32 bytes on x64 ... CANNOT be called by name until
+        // This block read "BLOCKED -- grows 32 bytes on x64 ... CANNOT be called by name until
         // this class is 1296 or VehicleManager stops being byte-pinned". The second disjunct is what
         // happened. Note the difference from the traffic manager: THAT span was wrong, this one is
         // right -- 161968 and 163264 are both asm-literal -- so the +32 is a genuine host/console
@@ -127,9 +127,9 @@ namespace Vehicle
                       "and the discarded-contact queue abuts it with no gap, exactly as on the X360");
 
         // ==========================================================================================
-        // ✅ UN-BLOCKED 2026-08-03 -- the contained traffic manager, embedded BY NAME.
+        // UN-BLOCKED 2026-08-03 -- the contained traffic manager, embedded BY NAME.
         //
-        // This block used to read "⛔ BLOCKED -- grows 2480 bytes on x64", measured against a
+        // This block used to read "BLOCKED -- grows 2480 bytes on x64", measured against a
         // 103360-byte opaque span. The SPAN was wrong, not the class: the X360 size is 105648
         // (BrnPhysicalTrafficManager.h finding (4), derived twice) and the host DRIFT is -3968
         // (2026-08-03, once maFullTrafficPhysics became the real TrafficPhysics[20]; it was +192
@@ -138,7 +138,7 @@ namespace Vehicle
         //
         // The three numbers are tied together here so none of them can drift alone.
         // ==========================================================================================
-        // ⭐⭐ REBASED 2026-08-11 (the create-drain wave), and this assert FIRED, exactly as designed.
+        // REBASED 2026-08-11 (the create-drain wave), and this assert FIRED, exactly as designed.
         // It used to read `44768 + KU_HOST_DRIFT_AFTER_RACECAR_ARRAY`, which was correct only while
         // maRaceCarModelHandles / maRaceCarGraphicsModelHandles were the opaque `mPadAA60[128]`.
         // Splitting them into the real CgsResource::ResourceHandle[8] pair (see BrnVehicleManager.h)
@@ -169,13 +169,13 @@ namespace Vehicle
                       "the first member BEHIND the split: X360 +43744 (Construct's `addi r26,r26,-0x5520`)");
         static_assert(offsetof(VehicleManager, mUsedRaceCars) == 44224 + KU_HOST_DRIFT_AFTER_MODEL_HANDLES,
                       "the live-car bitset: X360 +44224 (ProcessCreateEvents `addi r10,r25,0x1598 ; slwi 3`)");
-        // ⭐ 2026-08-03 (the record-fold wave): this used to read
+        // this used to read
         // `KU_X360_SIZEOF_... + KU_HOST_DRIFT_AFTER_TRAFFIC_MANAGER`, which was right only while
         // that term was the FIRST drift zone. It is now the SECOND (the race-car array's -1664 sits
         // ahead of it), so what belongs here is the ZONE STEP -- the difference between the term
         // after this sub-object and the term before it. That is a strictly stronger assert: it fires
         // if either term moves independently, which the absolute form could not see.
-        // ⛔ THIS FIRED FOR REAL when the third term landed, and the wrong fix would have been to
+        // THIS FIRED FOR REAL when the third term landed, and the wrong fix would have been to
         // bump the literal. The right one is here.
         static_assert(sizeof(PhysicalTrafficManager)
                           == KU_X360_SIZEOF_PHYSICAL_TRAFFIC_MANAGER
@@ -199,7 +199,7 @@ namespace Vehicle
         // offsets survive verbatim on the host -- and the one that matters is maTrafficEntityIDs,
         // because VehicleManager used to model it as a sibling of its own called
         // `maRaceCarEntityIdRemap[8]` at class +148128.
-        // ⚠️⚠️ REWRITTEN 2026-08-03 (the TrafficPhysics de-fork). What stood here was
+        // REWRITTEN 2026-08-03 (the TrafficPhysics de-fork). What stood here was
         //     static_assert(sizeof(TrafficPhysics) == 5168, "asm: mulli r11, r29, 0x1430 ...");
         // -- a HOST sizeof gate wearing a console literal. It held only because TrafficPhysics was a
         // byte-pinned `u8[5168]` stand-in, i.e. it asserted that the stand-in was still a stand-in.
@@ -242,7 +242,7 @@ namespace Vehicle
         static_assert(sizeof(CgsSceneManager::SceneManagerIO::PotentialContact) == 80,
                       "3 x Vector3 + 2 VolumeInstanceId + 2 uint32 + 2 uint16, 16-aligned (DWARF "
                       "CgsPotentialContact.h:60-68). This is derivation B's only non-asm input.");
-        // ⭐ REBASED 2026-08-06 (big-five #2): the old opaque mPadNonPhysicalContacts span was
+        // REBASED 2026-08-06 (big-five #2): the old opaque mPadNonPhysicalContacts span was
         // PROMOTED to the DWARF's real maNonPhysicalContacts[128] + miNonPhysicalContactCount
         // (+ 12 tail-pad bytes). The derivation closure is unchanged -- it is now stated over
         // the real members' combined span.
@@ -355,7 +355,7 @@ namespace Vehicle
                       "asm stvx128 v0,r31,r9 with r9 == 172432 -- the 16 bytes of unk_82181520, i.e. {0,0,1,0}");
         static_assert(offsetof(VehicleManager, mCachedCarCarPredictionNormal) % 16 == 0,
                       "loaded/stored with lvx128/stvx128 -- must be 16-aligned");
-        // ⚠️ The pointer-width decision this span depends on. If muCachedCarA/BSlot are ever widened
+        // The pointer-width decision this span depends on. If muCachedCarA/BSlot are ever widened
         // to real 8-byte pointers, the assert above is what will catch it -- do not "fix" it by
         // moving the normal.
         static_assert(sizeof(VehicleManager::muCachedCarASlot) == 4,
@@ -367,7 +367,7 @@ namespace Vehicle
         static_assert(offsetof(VehicleManager, meShowtimeBehaviour)      == 172456 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "asm stwx 2 @+172456");
         static_assert(offsetof(VehicleManager, miRaceCarWorldContactValidationPM) == 172460 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT,
                       "asm stores the 30th AddMonitor handle here; named by the console's own assert text");
-        // ⭐ ADDED 2026-08-06 (PhysicsModule::Update leaves wave): the two contact-generation
+        // the two contact-generation
         // pointers carved from the head of the old +172465..+172580 opaque span (DWARF :1045/:1046;
         // asm seats FreeAllocations @0x8261BAE0 / StartVehicleTractionLineTests @0x82629CE0). The
         // extra +4/+8 terms are the HOST-ONLY widening inside the carve: 4 alignment bytes so the
@@ -379,7 +379,7 @@ namespace Vehicle
                       "console +172468; +4 = host 8-alignment of the pointer pair");
         static_assert(offsetof(VehicleManager, mpContactGenerator)  == 172472 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT + 8,
                       "console +172472; +8 = the alignment pad + mpContactGenList's own 4->8 widening");
-        // ⭐⭐ REBASED 2026-08-06 (big-five #2): the +172476..+172592 span is CARVED IN FULL now
+        // REBASED 2026-08-06 (big-five #2): the +172476..+172592 span is CARVED IN FULL now
         // (see the header banner over the block) -- five real PrimitivePairListBuilders, nine
         // pointers, the BitArray<64> and the two renamed tail members (miContactStreamCounterA/B's
         // role-neutral FLAG retired: the DWARF sequence pins +172580 as
@@ -413,24 +413,24 @@ namespace Vehicle
         // a 4->8 array growth to tail padding).
         static_assert(sizeof(VehicleManager) >= 172616 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT,
                       "the class must extend at least to the end of muTakedownEventsThisFrame");
-        // ⭐ AND PIN THE END EXACTLY, not just `>=`. The standing rule from the wave that lost a
+        // AND PIN THE END EXACTLY, not just `>=`. The standing rule from the wave that lost a
         // 4 -> 8 array growth to tail padding: a `>=` on sizeof cannot see a trailing member that
         // grew into slack. 172616 + (-1440) == 171176, rounded up to this class's 16-alignment
         // == 171184 (MEASURED).
-        // ⭐ THIS ASSERT HAS NOW EARNED ITS KEEP TWICE. It was written as 172816 (the one-drift-term
+        // THIS ASSERT HAS NOW EARNED ITS KEEP TWICE. It was written as 172816 (the one-drift-term
         // number) and was the ONLY thing that fired when the debug component was un-pinned; it was
         // 172848 (the two-term number) and was one of two things that fired when the race-car array
         // was folded to the real RaceCarPhysics. Both times the correct response was the named drift
         // term above, not a bigger literal here -- and both times the literal moved only after the
         // term did.
-        // ⭐ THREE TIMES NOW: 172816 -> 172848 -> 171184 -> 167024, and every move followed a named
+        // THREE TIMES NOW: 172816 -> 172848 -> 171184 -> 167024, and every move followed a named
         // drift term, never the other way round. This one is the TrafficPhysics de-fork.
-        // ⭐ FOUR: 167024 -> 167104 (2026-08-06, the contact-generation block carve's +76 term;
+        // FOUR: 167024 -> 167104 (2026-08-06, the contact-generation block carve's +76 term;
         // 172616 + (-5600) + 76 == 167092 -> 16-aligned 167104).
-        // ⭐ FIVE: 167104 -> 172928 (2026-08-09, the 240-byte SimpleVehicleAttribs landed and BOTH
+        // FIVE: 167104 -> 172928 (2026-08-09, the 240-byte SimpleVehicleAttribs landed and BOTH
         // negative array terms vanished -- see BrnVehicleManager.h; 172616 + 300 == 172916 ->
         // 16-aligned 172928).
-        // ⭐ SIX: 172928 -> 173056 (2026-08-11, the create-drain wave). `mPadAA60[128]` became the
+        // SIX: 172928 -> 173056 (2026-08-11, the create-drain wave). `mPadAA60[128]` became the
         // two real `CgsResource::ResourceHandle[8]` arrays the DWARF names there; the host handle is
         // 16 bytes against the console's 8, so 2*8*16 == 256 replaces 2*8*8 == 128 and every drift
         // term from the handle arrays on picks up +128 (KU_HOST_DRIFT_AFTER_CONTACT_GEN_BLOCK is
@@ -447,7 +447,7 @@ namespace Vehicle
         static_assert(sizeof(VehicleManager::mStuckInCollisionTestCacheSphere) == 16, "one stvx128 == 16 bytes");
 
         // =========================================================================================
-        // ⭐⭐⭐ THE RECORD IS GONE -- FOLDED 2026-08-03. `maRaceCarVehicles` is
+        // THE RECORD IS GONE -- FOLDED 2026-08-03. `maRaceCarVehicles` is
         // `BrnPhysics::Vehicle::RaceCarPhysics[8]`, the real class.
         //
         // WHAT STOOD HERE, and why it could not be kept. This block held ten
@@ -472,7 +472,7 @@ namespace Vehicle
                       "stride since the 240-byte SimpleVehicleAttribs landed (2026-08-09). This "
                       "line exists so the class cannot change size without the drift term below "
                       "being revisited");
-        // ⭐⭐ RE-STATED 2026-08-11 (create-drain wave). This assert used to read
+        // RE-STATED 2026-08-11 (create-drain wave). This assert used to read
         //     8 * (5216 - sizeof(RaceCarPhysics)) == -KU_HOST_DRIFT_AFTER_RACECAR_ARRAY
         // i.e. it assumed the race-car array was the ONLY thing in that drift term's range. It is
         // not any more: the two resource-handle arrays at +43616 landed the same day. They are a
@@ -510,7 +510,7 @@ namespace Vehicle
                       "closure the X360's 1856 + 8*5216 == 43584 has");
         static_assert(sizeof(RaceCarCrashData) == 12, "RaceCarCrashData stride (asm: 12)");
 
-        // ⭐ The eight-car loop bound VehicleManager::Construct uses must BE the width of every
+        // The eight-car loop bound VehicleManager::Construct uses must BE the width of every
         // per-car array it walks. The 8 is asm-literal (`li r23, 8`); this pins that the constant
         // and the arrays cannot drift apart, which is the only way that loop could run off an end.
         static_assert(sizeof(VehicleManager::maRaceCarVehicles) / sizeof(RaceCarPhysics)
@@ -525,7 +525,7 @@ namespace Vehicle
                           == VehicleManager::KI_MAX_ACTIVE_RACE_CARS, "maeRaceCarTypes[8]");
         static_assert(sizeof(VehicleManager::mauNetworkCarHiddenFramesRemaining) / sizeof(u32)
                           == VehicleManager::KI_MAX_ACTIVE_RACE_CARS, "mauNetworkCarHiddenFrames[8]");
-        // ⭐ AND the debug-component span the loop casts into: 8 slots of 1024, big enough and
+        // AND the debug-component span the loop casts into: 8 slots of 1024, big enough and
         // aligned enough for the reconstructed DebugComponent (112 bytes, align 16). If the class
         // ever outgrows the slot, the reinterpret_cast in the loop stops being merely inert.
         static_assert(sizeof(VehicleManager::maRaceCarDebugComponent)

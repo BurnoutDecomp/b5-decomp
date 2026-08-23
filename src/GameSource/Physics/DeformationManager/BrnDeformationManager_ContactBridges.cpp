@@ -2,7 +2,7 @@
 // GameSource/Physics/DeformationManager/BrnDeformationManager_ContactBridges.cpp
 //
 // BrnPhysics::Deformation::DeformationManager -- the contact-BRIDGE slice consumed by
-// PhysicsModule::BridgeContactsToSimulation @0x825A99E8 (big-five #2 wave, 2026-08-06).
+// PhysicsModule::BridgeContactsToSimulation @0x825A99E8.
 // Slice TU: home BrnDeformationManager.cpp / the _Contacts group is still unmounted (its
 // SolvePenetration / UpdateTriangleCache tail carries ~19 unresolved of its own). Fold back
 // when the home mounts.
@@ -15,24 +15,22 @@
 //     it was waiting on exists (vector3_operation_inline.h, FAITHFUL).
 //   * FindModelIndexByGlobalEntityID @0x825B45B0 -- MOVED VERBATIM (same reason; callee of
 //     the above).
-//   * ReadPotentialContact @0x826053F8 -- NEW this wave. Reconstructed from the
+//   * ReadPotentialContact @0x826053F8 -- reconstructed from the
 //     BURNOUT_X360_ARTIST.XEX asm with the PS3 DecFIGS out-of-line body @0x6F048C as the
 //     structural oracle (debug names lPotentialContact/lContactId/lpSimInput,
 //     liModelIndexA/B from its baked asserts).
 //   * BridgeBodyPartCarContactsToSimulation @0x825DD7D0 + BridgeDetachedWheelCar-
 //     ContactsToSimulation @0x825DDD48 -- GATES, not traps (log-once, live every frame;
 //     348/392 X360 asm lines each, not reconstructed). RECONSTRUCT-NEXT.
-//   * AddRaceCarBodyPartPair @0x82605928 + AddHingedBodyPartPairs @0x82605A98 -- REAL as of
-//     wave T3 (2026-08-22, cluster C5); their traps are deleted. AddRaceCarWheelPair
-//     @0x82605BE8 is a NAMED GATE (one missing cylinder-vs-box appender).
+//   * AddRaceCarBodyPartPair @0x82605928 + AddHingedBodyPartPairs @0x82605A98 -- REAL.
+//     AddRaceCarWheelPair @0x82605BE8 is a NAMED GATE (one missing cylinder-vs-box appender).
 //
-// STALE CLAIM RETIRED 2026-08-22: this banner said "everything is dead code today ... 
-// PhysicsModule::Update @0x825B0640 is still a link stub". Update is a REAL BODY and the
-// three pair feeders run every frame from VehicleManager::StartVehicleContactGeneration.
+// This TU is LIVE: PhysicsModule::Update @0x825B0640 is a real body and the three pair feeders
+// run every frame from VehicleManager::StartVehicleContactGeneration.
 // ============================================================================
 
 #include "GameSource/Physics/DeformationManager/BrnDeformationManager.h"
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // gpDebugPrint / gxMessageFilterFlags (the two boot gates, 2026-08-09)
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // gpDebugPrint / gxMessageFilterFlags (the boot gates)
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                        // CGS_ASSERT
 #include "GameShared/GameClasses/SceneManager/SharedIO/CgsPotentialContact.h"             // PotentialContact
@@ -44,6 +42,15 @@
 
 namespace BrnPhysics
 {
+// [T5-def] DIAG counters, DEFINED in
+// GameSource/Physics/VehicleManager/BrnPhysicalTrafficManager_UpdateTrafficPhysics.cpp.
+// NOT IN THE X360 BINARY. DELETE-WHEN-STABLE.
+namespace Vehicle
+{
+    extern u32 gT5Q8Routed;
+    extern u32 gT5Q8Accepted;
+}
+
 namespace Deformation
 {
     namespace
@@ -60,7 +67,7 @@ namespace Deformation
         const u32 KU_MAX_NUM_RACE_CARS     = 8;      // Vehicle::ku8MaxNumRaceCars
         const u32 KU_MAX_TOTAL_TRAFFIC     = 0x258;  // BrnTraffic::KU_MAX_TOTAL_TRAFFIC (600)
 
-        // Pair-builder feeder constants (wave T3 C5), read off the three bodies' asm.
+        // Pair-builder feeder constants, read off the three bodies' asm.
         const f32 KF_PART_VS_CAR_CONTACT_PADDING  = 0.5f;   // flt_82001DA0 @0x82605A88
         const f32 KF_HINGED_PART_CONTACT_PADDING  = 1.0f;   // flt_82001C98 @0x82605B20
         const s32 KI_MAX_PARTS_PER_MODEL          = 50;     // `cmpwi r26, 0x32` (maPartStates[50])
@@ -293,11 +300,24 @@ namespace Deformation
             lrModelA.GetDeformationSensorFromVolumeInstance(lrPotentialContact.muVolumeInstanceIdA);
 
         // Same cross-TU namespace cast FLAG as ReadPotentialVehicleWorldContact above.
+        // [T5-def] DIAG. NOT IN THE X360 BINARY. DELETE-WHEN-STABLE. Count the race-car-vs-traffic
+        // (queue [8]) contacts that actually reach a sensor, and how many the sensor keeps -- the
+        // two numbers that separate "no contact was ever routed" from "the sensor rejected it".
+        const bool lbT5Q8 = ((static_cast<u32>(lContactId) >> 24) == 0x08u);
+        if (lbT5Q8)
+        {
+            ++BrnPhysics::Vehicle::gT5Q8Routed;
+        }
+
         if (lrSensorA.ValidateAndAddContact(
                 lWorldToModelA,
                 reinterpret_cast<const CgsSceneManager::PotentialContact&>(lrPotentialContact),
                 lContactId, &lrModelB, &lrSensorB))
         {
+            if (lbT5Q8)
+            {
+                ++BrnPhysics::Vehicle::gT5Q8Accepted;
+            }
             // Accepted: zero BOTH cars' contact cool-down (the Y lane of the packed timer bank).
             lrModelA.GetVehiclePhysics()
                 ->mvTimeStandingStill_CoolDown_TimeWithoutTraction_TimeWithTraction.y = 0.0f;
@@ -360,11 +380,9 @@ namespace Deformation
 
     // =================================================================================================
     // The three pair-builder feeders StartVehicleContactGeneration @0x8262AEE8 calls.
-    // Two of the three CGS_ASSERT(false) TRAPS THAT STOOD HERE ARE DELETED (wave T3, 2026-08-22,
-    // cluster C5). AddHingedBodyPartPairs was the ARMED one: the driver calls it UNCONDITIONALLY for
-    // EVERY overlapping car-car pair (BrnVehicleManagerContactGeneration.cpp:321), race-car-vs-traffic
-    // included, so it fired on the first shove. The third (AddRaceCarWheelPair) is a NAMED GATE with
-    // one missing leaf, see there.
+    // AddHingedBodyPartPairs is called UNCONDITIONALLY for EVERY overlapping car-car pair
+    // (BrnVehicleManagerContactGeneration.cpp:321), race-car-vs-traffic included. The third
+    // (AddRaceCarWheelPair) is a NAMED GATE with one missing leaf, see there.
     //
     // Common shape: resolve the car's deformable model, take its aligned deformed bounding box, take
     // the part's oriented bounding box, and append ONE box-vs-box record to the caller's builder with
@@ -484,19 +502,15 @@ namespace Deformation
     }
 
     // -------------------------------------------------------------------------------------------------
-    // AddRaceCarWheelPair @0x82605BE8 (136) -- NAMED GATE, wave T3 cluster C5. Reachable only once a
-    // wheel has been torn off, so nothing on the "player rams a traffic car" path reaches it.
-    // BLOCKER: its appender is NOT AddPrimitivePair(Box*, Box*) -- it is sub_828149F8, a CYLINDER-vs-BOX
-    // overload (AddCollisionHeader types 5/4, then two 0x50 payload copies) that has no declaration and
-    // no body in the tree; its home is CgsPrimitivePairListBuilder.h/.cpp, not this cluster's files, and
-    // this body is its only caller in the image. Calling the Box/Box overload instead would stamp the
-    // wrong volume type into the record, so nothing honest can stand in.
-    // DELETE-WHEN AddPrimitivePair(Cylinder*, Box*, f32, u16, u16) @0x828149F8 lands. The rest of the
-    // body is fully recovered: DetachedWheelManager::IsSlotUsed/Get on this+72928, FindModelIndexBy-
-    // EntityID, a hand-built 5-row cylinder from the wheel's transform (row0 = -wheelRow2, row1/row2 =
-    // wheelRow1/row0, row3 = wheelRow3, row4.xy = wheel+0x7C/+0x78) with the sign-splat vxor, the car
-    // box via CgsGeometric::Box::Set off model+0x194C, the "Bad Pool Index: " tripwire (:2324), and
-    // padding flt_82001DA0 == 0.5f.
+    // GATE AddRaceCarWheelPair @0x82605BE8 (136 insns) -- reachable only once a wheel has been torn
+    // off. BLOCKER: its appender is sub_828149F8, a CYLINDER-vs-BOX AddPrimitivePair overload that has
+    // no declaration and no body in the tree (its home is CgsPrimitivePairListBuilder.h/.cpp); the
+    // Box/Box overload would stamp the wrong volume type into the record.
+    // DELETE-WHEN AddPrimitivePair(Cylinder*, Box*, f32, u16, u16) @0x828149F8 lands.
+    // The rest of the body is recovered: DetachedWheelManager::IsSlotUsed/Get on this+72928,
+    // FindModelIndexByEntityID, a 5-row cylinder built from the wheel transform (row0 = -wheelRow2,
+    // row1/row2 = wheelRow1/row0, row3 = wheelRow3, row4.xy = wheel+0x7C/+0x78), the car box via
+    // CgsGeometric::Box::Set off model+0x194C, the "Bad Pool Index: " tripwire (:2324), padding 0.5f.
     // -------------------------------------------------------------------------------------------------
     void DeformationManager::AddRaceCarWheelPair(EntityId /*lEntityId*/,
                                                  CgsSceneManager::VolumeInstanceId /*lVolumeInstanceId*/,

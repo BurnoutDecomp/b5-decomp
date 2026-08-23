@@ -47,7 +47,7 @@ namespace
 // ----------------------------------------------------------------------------
 // TrafficEntityModule::UpdateParams_DoTimeSlicedLogic  @ 0x82743FE8..0x82744A7C
 //
-// EXPORT HOLE CLOSED (wave 3 r2 fix round): dumped straight from the ARTIST .i64 with headless
+// EXPORT HOLE CLOSED: dumped straight from the ARTIST .i64 with headless
 // idat -- see wave3r2/A/fix/dump1.txt. Every line below is now asm-attested; the previous
 // DWARF-shaped reconstruction had the importance weight INVERTED, was missing the rival gate
 // and the mbAllowDivergentBehaviour gate, and called an unbodied predicate.
@@ -87,23 +87,6 @@ void TrafficEntityModule::UpdateParams_DoTimeSlicedLogic(
     // off (online, non-Showtime): the fuzzy pre-pass then sees no physical vehicles at all and
     // cannot pick a divergent behaviour. Offline this is always true
     // (mbAllowDivergentBehaviour = !mbIsOnlineGameMode || mbPlayingShowtimeMode, _wT1_01:208).
-    if (!mbAllowDivergentBehaviour)
-    {
-        // [T3-behaviour] one-shot: with the cache empty the fuzzy pre-pass can never reach
-        // miBehaviour 2, so no traffic car is ever promoted. DELETE-WHEN-STABLE.
-        if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())
-        {
-            static bool sbWarnedNoDivergent = false;
-            if (!sbWarnedNoDivergent)
-            {
-                sbWarnedNoDivergent = true;
-                *lpDiag << "[T3-behaviour] mbAllowDivergentBehaviour is FALSE -- the console "
-                           "skips the whole physical-vehicle cache (0x827440C0), so no param "
-                           "can pick a divergent behaviour and nothing will be promoted\n";
-            }
-        }
-    }
-
     if (mbAllowDivergentBehaviour)
     {
         // 0x82744100..0x82744228 -- every active race car. The importance scalar multiplies the
@@ -221,18 +204,6 @@ void TrafficEntityModule::UpdateParams_DoTimeSlicedLogic(
 
     if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())
     {
-        // [T2-param] one-shot. DELETE-WHEN-STABLE.
-        static bool sbFirst = true;
-        if (sbFirst)
-        {
-            sbFirst = false;
-            *lpDiag << "[T2-param] FIRST DoTimeSlicedLogic begin="
-                    << static_cast<s32>(luBeginParam)
-                    << " end=" << static_cast<s32>(luEndParam)
-                    << " physicalVehicles="
-                    << static_cast<s32>(lPhysicalVehicleInfo.GetLength()) << "\n";
-        }
-
         // [T3-behaviour] first param that reaches DRIVE_AROUND_OBSTRUCTION (miBehaviour 2 --
         // the ONLY value UpdateVehiclesJob::CalcSwerveAmount @0x8291CF18 turns into a
         // normal-physical promotion), plus a ~5 s histogram of every behaviour value.
@@ -271,13 +242,9 @@ void TrafficEntityModule::UpdateParams_DoTimeSlicedLogic(
                         << static_cast<s32>(sauBehaviourCounts[luBehaviour]);
                 sauBehaviourCounts[luBehaviour] = 0;
             }
-            // The occupancy counter that says whether the physical pool is leaking: physSlots
-            // is the module's own 25-slot TrafficPhysicsInfo list, which StopVehicleBeingPhysical
-            // is the ONLY thing that ever frees. MEASURED 2026-08-22 (run 20260822_204334):
-            // it rose 0 -> 10 and never fell, because every promotion dead-ended in the then-
-            // bodiless UpdateExtremeSwerving arm and so never reached DriveTowardsTarget ->
-            // ReturnPhysicalVehicleToTraffic. That arm is landed now; a still-monotonic
-            // physSlots means demotion is STILL unreachable and is the next thing to chase.
+            // physSlots is the module's own 25-slot TrafficPhysicsInfo list, which
+            // StopVehicleBeingPhysical is the ONLY thing that ever frees. A monotonic
+            // physSlots means demotion is unreachable.
             *lpDiag << " physSlots="
                     << static_cast<s32>(maTrafficPhysicsInfoListBits.CountSetBits())
                     << "\n";

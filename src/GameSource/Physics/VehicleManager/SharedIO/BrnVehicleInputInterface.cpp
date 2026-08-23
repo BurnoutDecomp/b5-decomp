@@ -3,7 +3,7 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // the CreateArticulatedTraffic gate log
 #include "rw/math/vpu/vector3_operation.h"          // rw::math::vpu::IsValid(Vector3)
 #include "rw/math/vpu/matrix44affine_operation.h"   // rw::math::vpu::IsValid(Matrix44Affine)
-// ⭐ 2026-08-03 (task #113): this TU's own `static const u32 KU_ENTITYTYPE_TRAFFIC_VEHICLE = 2;`
+// this TU's own `static const u32 KU_ENTITYTYPE_TRAFFIC_VEHICLE = 2;`
 // was the THIRD copy of that constant at BrnPhysics::Vehicle namespace scope (the others were
 // BrnPhysicalTrafficManager.h:272 and BrnArticulatedJoint.h:42). It is owned by
 // BrnVehicleConstants.h now; see the note there.
@@ -158,7 +158,7 @@ namespace Vehicle
     // @0x822CC2A0  VehicleInputInterface::ResetRaceCar
     //   Enqueues a reset-vehicle request (transform/velocity/deformation reset after a wreck).
     //
-    // ⛔⛔ [teleport] PARAMETER MAPPING CORRECTED 2026-08-21 (gateui r9), AND IT WAS AN
+    // [teleport] PARAMETER MAPPING CORRECTED 2026-08-21 (gateui r9), AND IT WAS AN
     //   OFF-BY-ONE. The old body said "the DWARF signature carries a u8 + THREE bool params but
     //   ResetVehicleEvent has only three bool fields ... the trailing bool is accepted for
     //   signature fidelity but not stored", and filled the three struct bools from params 5/6/7.
@@ -188,7 +188,7 @@ namespace Vehicle
     //   `clrlwi r6, r21, 24` where r21 is VehicleList::GetVehicleIndex's return -- a MODEL INDEX,
     //   which is meaningless as "reset the transform" and is exactly the discarded slot.
     //
-    // ⚠️ The parameter NAMES below are re-ordered to match; the declaration in the header moves
+    // The parameter NAMES below are re-ordered to match; the declaration in the header moves
     //   with them, and no other caller exists to update.
     void VehicleInputInterface::ResetRaceCar(
             u32              luRaceCarIndex,
@@ -256,7 +256,7 @@ namespace Vehicle
 
     // @0x823C87C0  VehicleInputInterface::Append
     //
-    // ⭐ RECONSTRUCTED 2026-08-09 (feed wave). This was DECLARATION-ONLY -- no body existed
+    // RECONSTRUCTED 2026-08-09 (feed wave). This was DECLARATION-ONLY -- no body existed
     // anywhere -- while two committed callers already named it
     // (UpdateInputBuffer::AppendVehicleInputInterface @0x823C8AD0 and
     // WorldModule::BridgeInputToPhysicsModule @0x827AB830).
@@ -289,7 +289,7 @@ namespace Vehicle
     // ========================================================================
     // @0x8279B978  VehicleInputInterface::AppendTriangleCacheInterface   (25 insns)
     //
-    // ⭐ RECONSTRUCTED 2026-08-11 (triangle-cache wiring wave). It was MISSING ENTIRELY, and
+    // RECONSTRUCTED 2026-08-11 (triangle-cache wiring wave). It was MISSING ENTIRELY, and
     // that is exactly why the traction-line leg crashed the moment a race car existed: the
     // physics side read GetTriangleCacheInterface()->GetCache(...) on an interface whose
     // mpTriangleCacheManager had never been written by anything.

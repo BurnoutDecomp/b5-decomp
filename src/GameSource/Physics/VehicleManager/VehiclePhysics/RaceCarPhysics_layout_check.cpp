@@ -1,6 +1,6 @@
 // Layout check for the BrnPhysics::Vehicle::RaceCarPhysics OWN-MEMBER BLOCK (X360 +0x13F0..+0x1460).
 //
-// ⚠️⚠️ WHY THIS TU EXISTS -- READ BEFORE DELETING IT.
+// WHY THIS TU EXISTS -- READ BEFORE DELETING IT.
 // RaceCarPhysics.h now carries a sixteen-member recovered block whose whole claim to being a
 // DERIVATION rather than sixteen separate guesses is that the DWARF's member ORDER and the X360
 // asm's member OFFSETS meet, with zero slack, on sizeof == 5216 (the asm-literal per-car stride in
@@ -20,7 +20,7 @@
 // cannot be optimised away before it has done its job. Being a STATIC MEMBER is what gives it the
 // access to private members that offsetof needs.
 //
-// ⭐ WHY THE ASSERTS ARE RELATIVE AND NOT ABSOLUTE. RaceCarPhysics is deliberately not byte-pinned:
+// WHY THE ASSERTS ARE RELATIVE AND NOT ABSOLUTE. RaceCarPhysics is deliberately not byte-pinned:
 // the ~0x13F0 bytes of ExternalPhysicsBody / SimpleVehiclePhysics / VehiclePhysics state ahead of
 // the own block are NOT reproduced as padding (project rule -- parity by named members), so
 // offsetof(RaceCarPhysics, mCrashNormal) is NOT 0x1440 on the host and must not be asserted to be.
@@ -117,7 +117,7 @@ namespace Vehicle
                           == 0x1454 - 0x13F0,
                       "mbDebugShowTargetAssist @X360 +0x1454 (UpdateTargetAssist @0x826202F4)");
 
-        // ---- ⭐⭐ THE CLOSURE. This is the assert the whole recovery rests on.
+        // ---- THE CLOSURE. This is the assert the whole recovery rests on.
         // The DWARF gave the member ORDER and the asm gave the OFFSETS; neither knows about the
         // stride. Lay the block out and its last data byte is a bool at +0x1454, so sizeof must
         // round up to the 16-byte alignment the four Vector3s force -- 0x1455 -> 0x1460 == 5216 --

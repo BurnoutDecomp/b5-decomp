@@ -54,7 +54,7 @@ namespace BrnTrafficIO
         void AddTrafficEntity(const TrafficDirectorEntity&);                    // :95
         const Array<TrafficDirectorEntity, 32u>& GetTrafficDirectorEntityArray() const; // :98
 
-        // ⭐ ADDITIVE GROW (wave Q6 round-1 fix, bridges #2) -- non-const overload of the DWARF
+        // ADDITIVE GROW -- non-const overload of the DWARF
         // :98 accessor, header-inline. No new member, no layout change.
         // WHY IT EXISTS: OutputBuffer_PostPhysics::Construct @0x82761908 INLINES
         // `maActiveEntityArray.Construct()` as the single raw `stw r29,0x2650(r31)` at

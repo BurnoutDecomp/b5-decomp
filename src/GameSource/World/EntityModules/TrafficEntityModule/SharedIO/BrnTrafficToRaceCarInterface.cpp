@@ -23,7 +23,7 @@ namespace BrnTrafficIO
     // stores over the console span [818784, 819328). De-inlined here (AGENTS "inlining reversal")
     // so that Construct can spell its leg by name instead of value-initialising an opaque blob.
     //
-    // ⭐ ADDED wave Q6 round-1 fix (bridges #1). Store roll-call, offsets relative to the member:
+    // Store roll-call, offsets relative to the member:
     //   7 x `std 0` @ +0..55  -> mSympatheticCrashers        (BitArray<400> == 7 u64 fields)
     //   `stw 0`     @ +448    -> mNearMissTrafficCollection  (320 + 16*8 == the Array miCount)
     //   `stw 0`     @ +516    -> mNearMissRaceCarCollection  (452 +  8*8 == the Array miCount)

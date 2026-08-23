@@ -360,9 +360,6 @@ TrafficCarStreamer::GetWheelGraphicsSpec( u32 luAssetId ) const
 // @0x8274F740 reads the same 64-bit word at this+9080+8*asset, shifts it right by one,
 // and treats a non-zero result as "rendered recently, keep it resident as a bonus".
 // A producer setting the top bit is what makes that ageing shift meaningful.
-//
-// The [T1-stream] latch lives in the .cpp beside the four load hooks; this inline stays
-// free of it because RenderTrafficCar calls it once per drawn car per frame.
 // -----------------------------------------------------------------------------
 inline void
 TrafficCarStreamer::NotifyAssetRenderedThisFrame( u32 luAssetId )

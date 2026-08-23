@@ -28,7 +28,6 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "GameShared/GameClasses/System/Timer/CgsTimerStatusInterface.h"
 
-#include <cstdlib>   // getenv
 
 namespace BrnTraffic
 {
@@ -50,21 +49,6 @@ namespace
                 << "[T1-traffic-leg] TrafficEntityModule leg NOT RECONSTRUCTED, skipped: "
                 << lpcLegNameAndReason << " [FLAG PC partial gate]\n";
         }
-    }
-
-    bool TrafficDiagEnabled()
-    {
-        static const bool sbEnabled = (getenv("BRN_TRAFFIC_DIAG") != 0);
-        return sbEnabled;
-    }
-
-    CgsDev::Log::DebugPrint* TrafficDiagStream()
-    {
-        if (!TrafficDiagEnabled() || CgsDev::Log::gpDebugPrint == 0)
-        {
-            return 0;
-        }
-        return CgsDev::Log::gpDebugPrint;
     }
 
     // The console's own .rdata literals. IsSimTimerFrequency50Hz() is the committed
@@ -158,20 +142,6 @@ void TrafficEntityModule::UpdateTimers(const BrnTrafficIO::InputBuffer_PreScene*
     {
         mbDecisionFrame       = true;
         muFramesSinceDecision = 0;
-
-        if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())
-        {
-            // [T1-loop] one-shot: the first time the clock declares a decision frame. If this
-            // never prints, the loop is dead. DELETE-WHEN-STABLE.
-            static bool sbFirst = true;
-            if (sbFirst)
-            {
-                sbFirst = false;
-                *lpDiag << "[T1-loop] FIRST decision frame (dt=" << mfSimTimeStep
-                        << ", period=" << static_cast<s32>(luFramesPerDecision)
-                        << " frames, meState=" << static_cast<s32>(meState) << ")\n";
-            }
-        }
     }
 
     // `fmadds f0, f0, f13, f12` -- the accumulate uses the timer's current step again, not
@@ -294,35 +264,6 @@ void TrafficEntityModule::UpdateDecisionFrame(
     // the jam-nuker request that UpdateNonDecisionFrame consumes on a later frame.
     muLastParamCalculated       = 0;      // stwx 0 -> +0x71830
     mbNeedToRunTrafficJamNuker  = true;   // stbx 1 -> +0x71404
-
-    if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())
-    {
-        // [T2-loop] value-latched steady-state census: it prints only when the driving counts
-        // change, so a still log means the driving half is not turning over. Populations only;
-        // the moved-this-frame count lives with the mover ([T2-scene] in _wT2_04.cpp) because
-        // the scene walk is where it is observable. DELETE-WHEN-STABLE.
-        u32 luAliveParams = 0;
-        u32 luAliveStandard = 0;
-        for (u32 luParam = 0; luParam < KU_MAX_PARAMS; ++luParam)
-        {
-            if (mParamSoaData.mAliveParams.IsBitSet(luParam))     { ++luAliveParams; }
-            if (mVehicleSoaData.mAliveVehicles.IsBitSet(luParam)) { ++luAliveStandard; }
-        }
-
-        static u32 suLastParams     = 0xFFFFFFFFu;
-        static u32 suLastStandard   = 0xFFFFFFFFu;
-        static u32 suLastGenerators = 0xFFFFFFFFu;
-        if (luAliveParams != suLastParams || luAliveStandard != suLastStandard
-            || muNumGenerators != suLastGenerators)
-        {
-            suLastParams     = luAliveParams;
-            suLastStandard   = luAliveStandard;
-            suLastGenerators = muNumGenerators;
-            *lpDiag << "[T2-loop] aliveParams=" << static_cast<s32>(luAliveParams)
-                    << " aliveStandardVehicles=" << static_cast<s32>(luAliveStandard)
-                    << " generators=" << static_cast<s32>(muNumGenerators) << "\n";
-        }
-    }
 
     if (mbAtStartLineSoProtectRaceCarsFromTraffic && mbIsOnlineGameMode)
     {

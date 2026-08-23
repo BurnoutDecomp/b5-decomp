@@ -1,35 +1,30 @@
 // =================================================================================================
 // GameSource/Physics/VehicleManager/BrnPhysicalTrafficManager_CrashResponse.cpp
 //
-// Wave T3 round 2, owner B -- WHAT THE TRAFFIC CAR DOES WHEN THE PLAYER HITS IT. The four
-// response arms VehicleManager::HandleRaceCarTrafficCarPotentialContact dispatches, plus the
-// crash latch they share.
+// The four traffic-car response arms VehicleManager::HandleRaceCarTrafficCarPotentialContact
+// dispatches, plus the crash latch they share.
 //
 //   PhysicalTrafficManager::SetTrafficVehicleCrashing  @0x82636E38 (229)
 //   PhysicalTrafficManager::SetTrafficVehicleChecked   @0x8262D748 (177)
-//   PhysicalTrafficManager::SetTrafficVehicleSlammed   @0x825EFDE8 (188)  export HOLE, closed here
+//   PhysicalTrafficManager::SetTrafficVehicleSlammed   @0x825EFDE8 (188)  .ida-exports HOLE;
+//                                                      dumped headless from a COPY of the .i64
 //   PhysicalTrafficManager::TestForNearMissFreakOut    @0x82637A30 (148)
 //   PhysicalTrafficManager::PhysicallyCrashTrafficCar  @0x825CAC10 ( 42)
 //
-// ⚠️ SetTrafficVehicleSlammed was an .ida-exports HOLE and is absent from progress/identity.json.
-// Dumped headless from a COPY of the ARTIST .i64 during this round
-// (scratchpad .../traffic_wave/wave3r2/B/holes/0x825EFDE8.txt: pseudocode + full asm + xrefs).
+// No Feb-2007 source for any of these (the leak has no physics-side PhysicalTrafficManager).
+// ARTIST pseudocode + asm; DecFIGS DWARF for declaration shape.
 //
-// ⚠️ NO FEB-2007 SOURCE for any of these (the leak has no physics-side PhysicalTrafficManager at
-// all). ARTIST pseudocode + asm; DecFIGS DWARF for declaration shape.
-//
-// ⭐ THE STATE MACHINE, read off the three state stores:
+// THE STATE MACHINE, read off the three state stores:
 //     E_TRAFFIC_TYPE_POTENTIAL(0) --Slammed/Checked--> E_TRAFFIC_TYPE_PHYSICAL(2)
 //                                 --Crashing--------> E_TRAFFIC_TYPE_CRASHING(1)
-//   and every arm drops the car's bit in mPotentialTrafficVehicles, i.e. "it is no longer merely
-//   a candidate". SetTrafficVehicleSlammed acts ONLY from POTENTIAL; SetTrafficVehicleCrashing
-//   no-ops when already CRASHING; SetTrafficVehicleChecked is unconditional.
+//   Every arm drops the car's bit in mPotentialTrafficVehicles. SetTrafficVehicleSlammed acts
+//   ONLY from POTENTIAL; SetTrafficVehicleCrashing no-ops when already CRASHING;
+//   SetTrafficVehicleChecked is unconditional.
 //
-// ⭐ RECOVERED CONSTANTS (all three were dyn-init .data splats reading ZERO in the image; taken
-//    from their static-init thunks at 0x82C5BB88..0x82C5BD30 instead -- the standing
-//    "dyn-init-thunk zeros" recipe):
+// RECOVERED CONSTANTS (all dyn-init .data splats reading ZERO in the image; taken from their
+//   static-init thunks at 0x82C5BB88..0x82C5BD30 instead):
 //     unk_82FB8B50 = 1.0f / unk_82FB9350.x = 1.0f / 1000.0f  (the slam-magnitude scale)
-//     unk_83017FE0 = 0.44704f                                (MPH -> m/s, already in the tree)
+//     unk_83017FE0 = 0.44704f                                (MPH -> m/s)
 //     flt_820047C4 = 15.0f, flt_82001C98 = 1.0f, flt_82001DA0 = 0.5f
 // =================================================================================================
 
@@ -45,25 +40,43 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 
 #include <cstdlib>   // getenv (BRN_TRAFFIC_DIAG)
-#include <cmath>     // sqrtf ([T3-impulse])
+#include <cmath>     // sqrtf (diag speed readouts)
 
 namespace BrnPhysics
 {
 namespace Vehicle
 {
+// [T5-ram] DIAG state, DEFINED in BrnPhysicalTrafficManager_UpdateTrafficPhysics.cpp.
+// NOT IN THE X360 BINARY. DELETE-WHEN-STABLE.
+extern s32 gT5RamFramesLeft;
+extern s32 gT5RamTrafficSlot;
+extern s32 gT5RamGlobalIndex;
+
 namespace
 {
-    // [T3-*] DIAG. NOT IN THE X360 BINARY. DELETE-WHEN-STABLE.
+    // DIAG. NOT IN THE X360 BINARY. DELETE-WHEN-STABLE.
     bool TrafficDiagEnabled()
     {
         static const bool sbEnabled = (getenv("BRN_TRAFFIC_DIAG") != 0);
         return sbEnabled;
     }
-    bool s_bCrashReported   = false;
-    bool s_bImpulseReported = false;
+
+    // [T5-ram] arm the post-hit measurement window on the FIRST outcome only, so a later
+    // secondary contact cannot re-point the probe at a different car mid-measurement.
+    // 180 frames at 60 Hz == the 3 s the finisher round asks for.
+    void ArmT5RamWindow(u16 lu16TrafficSlot, EntityId lGlobalTrafficID)
+    {
+        if (gT5RamTrafficSlot >= 0)
+        {
+            return;
+        }
+        gT5RamTrafficSlot = static_cast<s32>(lu16TrafficSlot);
+        gT5RamGlobalIndex = static_cast<s32>((lGlobalTrafficID.muValue >> 10) & 0x3FFFu);
+        gT5RamFramesLeft  = 180;
+    }
 
     // [T4-hit] DIAG. NOT IN THE X360 BINARY. DELETE-WHEN-STABLE. One latch PER OUTCOME so the
-    // first crash does not mask the first check/slam/near-miss (the [T3-impulse] pair share one).
+    // first crash does not mask the first check/slam/near-miss.
     bool s_bT4CrashingReported = false;
     bool s_bT4CheckedReported  = false;
     bool s_bT4SlammedReported  = false;
@@ -156,12 +169,10 @@ namespace
 // -------------------------------------------------------------------------------------------
 // PhysicallyCrashTrafficCar  @0x825CAC10 (42)  -- DWARF :451
 //
-// ⚠️ THE CONSOLE BODY REALLY DOES END HERE. It mints the crashing car's VolumeInstanceId
-// (owner = TRAFFIC_VEHICLE, entity index = the traffic slot) and then RETURNS -- the tail is
-// `bl SetEntityIDEntityIndex ; addi r1 ; b __restgprlr_29` with nothing in between. Whatever
-// consumed that id (the deformation post the parameter name implies) is gone from this build;
-// lpDeformationInterface is asserted non-null and never dereferenced. Reproduced as-is rather
-// than "completed" -- the drop is the binary's, not this reconstruction's.
+// The console body really does end here: it mints the crashing car's VolumeInstanceId (owner =
+// TRAFFIC_VEHICLE, entity index = the traffic slot) and returns -- the tail is
+// `bl SetEntityIDEntityIndex ; addi r1 ; b __restgprlr_29` with nothing in between.
+// lpDeformationInterface is asserted non-null and never dereferenced. Reproduced as-is.
 // -------------------------------------------------------------------------------------------
 void PhysicalTrafficManager::PhysicallyCrashTrafficCar(
     u16 lu16TrafficCarIndex,
@@ -278,17 +289,9 @@ void PhysicalTrafficManager::SetTrafficVehicleCrashing(
     lpVehicleOutputInterface->GetGameEventQueue()->AddEvent(
         reinterpret_cast<const CgsModule::Event*>(&lEvent), 63, 32);
 
-    // [T3-crash] DIAG. NOT IN THE X360 BINARY. DELETE-WHEN-STABLE.
-    if (!s_bCrashReported && TrafficDiagEnabled() && CgsDev::Log::gpDebugPrint != 0)
-    {
-        s_bCrashReported = true;
-        *CgsDev::Log::gpDebugPrint
-            << "[T3-crash] SetTrafficVehicleCrashing traffic=" << static_cast<s32>(lu16TrafficIndex)
-            << " globalTraffic=0x" << static_cast<s32>(lGlobalTrafficID.muValue)
-            << " crasher=0x" << static_cast<s32>(lGlobalCrasherID.muValue)
-            << " mass=" << lEvent.mfMass
-            << "\n";
-    }
+    // [T5-ram] DIAG. NOT IN THE X360 BINARY. DELETE-WHEN-STABLE. Open the post-hit
+    // measurement window on this car.
+    ArmT5RamWindow(lu16TrafficIndex, lGlobalTrafficID);
 
     // [T4-hit] DIAG. NOT IN THE X360 BINARY. Per-outcome latch. DELETE-WHEN-STABLE.
     if (!s_bT4CrashingReported && TrafficDiagEnabled() && CgsDev::Log::gpDebugPrint != 0)
@@ -311,11 +314,10 @@ void PhysicalTrafficManager::SetTrafficVehicleCrashing(
 // -------------------------------------------------------------------------------------------
 // SetTrafficVehicleChecked  @0x8262D748 (177)  -- DWARF :190
 //
-// The response to E_RCTIR_CHECK_TRAFFIC. Unlike the SLAMMED arm this one is unconditional and it
-// runs OnChecked first (which is what latches the checking race car and arms the full body's
-// crash state). The posted event is a TrafficSlammedEvent with meCrashTrafficType == Slammed(3)
-// -- that is what the asm stores (`li r9,3`), NOT Checked(1); the type word distinguishes the
-// EVENT SHAPE, not the arm, and both arms use the same one.
+// The response to E_RCTIR_CHECK_TRAFFIC. Unconditional, and it runs OnChecked first (which
+// latches the checking race car and arms the full body's crash state). The posted event is a
+// TrafficSlammedEvent with meCrashTrafficType == Slammed(3) -- that is what the asm stores
+// (`li r9,3`), NOT Checked(1): the type word distinguishes the EVENT SHAPE, not the arm.
 // -------------------------------------------------------------------------------------------
 void PhysicalTrafficManager::SetTrafficVehicleChecked(
     EntityId lTrafficEntityID, EntityId lCrasherEntityID,
@@ -365,19 +367,9 @@ void PhysicalTrafficManager::SetTrafficVehicleChecked(
                                                      lfSteeringSide * 0.5f,
                                                      lfDriveDirection);
 
-    // [T3-impulse] DIAG. NOT IN THE X360 BINARY. DELETE-WHEN-STABLE. OnChecked's own crash-impulse
-    // fold is a FLAGged omission in BrnPhysicalTrafficManager.cpp:695, so what this reports is the
-    // observable that matters: the traffic body's linear velocity at the first handled response.
-    if (!s_bImpulseReported && TrafficDiagEnabled() && CgsDev::Log::gpDebugPrint != 0)
-    {
-        s_bImpulseReported = true;
-        const Vector3 lvVelocity = lpVehicle->mpVehicleBody->GetLinearVelocity();
-        *CgsDev::Log::gpDebugPrint
-            << "[T3-impulse] checked traffic=" << static_cast<s32>(lu16TrafficIndex)
-            << " |v|=" << sqrtf(lvVelocity.x * lvVelocity.x + lvVelocity.y * lvVelocity.y
-                                + lvVelocity.z * lvVelocity.z)
-            << " side=" << lfSteeringSide << " drive=" << lfDriveDirection << "\n";
-    }
+    // [T5-ram] DIAG. NOT IN THE X360 BINARY. DELETE-WHEN-STABLE. Open the post-hit
+    // measurement window on this car.
+    ArmT5RamWindow(lu16TrafficIndex, lGlobalTrafficID);
 
     // [T4-hit] DIAG. NOT IN THE X360 BINARY. Per-outcome latch. DELETE-WHEN-STABLE.
     if (!s_bT4CheckedReported && TrafficDiagEnabled() && CgsDev::Log::gpDebugPrint != 0)
@@ -394,7 +386,7 @@ void PhysicalTrafficManager::SetTrafficVehicleChecked(
 // -------------------------------------------------------------------------------------------
 // SetTrafficVehicleSlammed  @0x825EFDE8 (188)  -- DWARF :202
 //
-// The response to E_RCTIR_SLAM_TRAFFIC. ⭐ THE WHOLE BODY IS GUARDED ON
+// The response to E_RCTIR_SLAM_TRAFFIC. The whole body is guarded on
 // `mePhysicalTrafficState == E_TRAFFIC_TYPE_POTENTIAL` (`if (!*(result+32))` @0x825EFE94) -- a
 // car that is already PHYSICAL or CRASHING is not re-slammed. No OnChecked here: a slam does not
 // latch a check owner.
@@ -455,17 +447,9 @@ void PhysicalTrafficManager::SetTrafficVehicleSlammed(
                                                      lfSteeringSide * lfMagnitude,
                                                      lfDriveDirection);
 
-    // [T3-impulse] DIAG. NOT IN THE X360 BINARY. DELETE-WHEN-STABLE.
-    if (!s_bImpulseReported && TrafficDiagEnabled() && CgsDev::Log::gpDebugPrint != 0)
-    {
-        s_bImpulseReported = true;
-        const Vector3 lvVelocity = lpVehicle->mpVehicleBody->GetLinearVelocity();
-        *CgsDev::Log::gpDebugPrint
-            << "[T3-impulse] slammed traffic=" << static_cast<s32>(lu16TrafficIndex)
-            << " |v|=" << sqrtf(lvVelocity.x * lvVelocity.x + lvVelocity.y * lvVelocity.y
-                                + lvVelocity.z * lvVelocity.z)
-            << " mag=" << lfMagnitude << " side=" << lfSteeringSide << "\n";
-    }
+    // [T5-ram] DIAG. NOT IN THE X360 BINARY. DELETE-WHEN-STABLE. Open the post-hit
+    // measurement window on this car.
+    ArmT5RamWindow(lu16TrafficIndex, lGlobalTrafficID);
 
     // [T4-hit] DIAG. NOT IN THE X360 BINARY. Per-outcome latch. DELETE-WHEN-STABLE.
     if (!s_bT4SlammedReported && TrafficDiagEnabled() && CgsDev::Log::gpDebugPrint != 0)

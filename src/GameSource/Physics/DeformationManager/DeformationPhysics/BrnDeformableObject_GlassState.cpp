@@ -146,13 +146,11 @@ namespace Deformation
         static const u32 KU_CARSTATE_WHEEL_TAG_BASE  = 1632;   // the 4 wheel tag-point world positions
 
         // DeformationSensor stride / fields OutputState walks (console).
-        // ⛔ RETIRED 2026-08-23 (traffic wave 4, stored-contact wave) -- X360 VALUES ON THE HOST.
-        // `this+6484` is &maDeformationSensors[0].mpSpec and 432 is the CONSOLE
-        // sizeof(DeformationSensor); on x64 every pointer in the sensor widens, so neither the base
-        // nor the stride lands on a sensor at all. OutputState now walks maDeformationSensors[] BY
-        // NAME and reads mpSpec / mpLocalSpaceSphere / mpWorldSpaceSphere as members. Kept here only
-        // as the documented console figures for reading the asm (`v8 = result + 1621`, `v8[102]`,
-        // `v8[103]`). ⛔ DO NOT USE EITHER IN HOST POINTER ARITHMETIC.
+        // ⛔ X360 VALUES -- DO NOT USE EITHER IN HOST POINTER ARITHMETIC. `this+6484` is
+        // &maDeformationSensors[0].mpSpec and 432 is the CONSOLE sizeof(DeformationSensor); on x64
+        // every pointer in the sensor widens, so neither lands on a sensor. OutputState walks
+        // maDeformationSensors[] BY NAME. Kept only as the figures for reading the asm
+        // (`v8 = result + 1621`, `v8[102]`, `v8[103]`).
         static const u32 KU_SENSOR_ARRAY_OFFSET      = 6484;   // reference only -- see above
         static const u32 KU_SENSOR_STRIDE            = 432;    // reference only -- see above
 
@@ -515,13 +513,11 @@ namespace Deformation
             s32 liRemaining = liNumSensors;
             do
             {
-                // ⭐ 2026-08-23: the sensor walk is BY NAME. It used to be
-                // `lpcSensor = this + 6484; ... lpcSensor += 432`, i.e. the console base + console
-                // sizeof(DeformationSensor) -- both X360 values that do not land on a sensor on the
-                // host. The three pointers the asm loads out of the sensor record (*v8, v8[102],
-                // v8[103]) are mpSpec, mpLocalSpaceSphere and mpWorldSpaceSphere; their INTERIORS
-                // (SensorSpec's leading rest vector + its +40 scalar, the spheres' leading Vector4)
-                // stay raw-offset because neither type's layout is homed in this TU.
+                // The sensor walk is BY NAME (never this+6484 / stride 432 -- X360 values). The
+                // three pointers the asm loads out of the sensor record (*v8, v8[102], v8[103]) are
+                // mpSpec, mpLocalSpaceSphere and mpWorldSpaceSphere; their INTERIORS (SensorSpec's
+                // leading rest vector + its +40 scalar, the spheres' leading Vector4) stay
+                // raw-offset because neither type's layout is homed in this TU.
                 const DeformationSensor& lrSensor = maDeformationSensors[liSensor];
 
                 const char* lpA = reinterpret_cast<const char*>(lrSensor.mpSpec);              // *v8

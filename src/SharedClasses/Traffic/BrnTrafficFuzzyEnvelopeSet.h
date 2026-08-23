@@ -8,7 +8,7 @@
 //
 // Declaration shape from the DecFIGS DWARF (SharedClasses/Traffic/BrnTrafficFuzzyEnvelopeSet.h),
 // gated on the X360 ARTIST ledger (Construct @0x82752570 / SetEnvelope @0x82752598 are attested).
-// Bodies live in SharedClasses/Traffic/BrnTrafficFuzzyEnvelopeSet.cpp (landed 2026-08-22).
+// Bodies live in SharedClasses/Traffic/BrnTrafficFuzzyEnvelopeSet.cpp.
 
 #include "types.hpp"          // s32
 #include "BrnCommonTypes.h"   // Vector4, VecFloat (== rw::math::vpu::Vector4)

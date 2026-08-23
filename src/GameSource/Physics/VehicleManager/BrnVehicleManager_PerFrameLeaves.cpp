@@ -42,7 +42,7 @@ namespace Vehicle
     // gen list (this+172468). Each DestroyIOBuffer<T> pops the allocation off the stack and
     // NULLs the member through the passed T**.
     //
-    // ⚠️ KNOWN TEMPLATE-SHAPE DIVERGENCE, inherited (not introduced here): the committed
+    // KNOWN TEMPLATE-SHAPE DIVERGENCE, inherited (not introduced here): the committed
     // CgsIOBufferStack.h DestroyIOBuffer<T> guards a null pointer and calls ~T(), where the
     // console instantiation @0x8259DE50 asserts on null ("Must pass in pointer to pointer to
     // buffer", CgsIOBufferStack.h:180), calls T's two-phase Destruct(), and returns Free's
@@ -123,7 +123,7 @@ namespace Vehicle
     //   * forward to the car's ExternalPhysicsBody base (asm this + 0x750 + idx*0x1460 ==
     //     &maRaceCarVehicles[idx] + 0x10, the base sub-object -- spelled here as the derived
     //     object's member call, which the compiler seats identically).
-    // ⚠️ HOST DIVERGENCE, flagged: for idx >= 8 the console runs the `ldx` compare anyway
+    // HOST DIVERGENCE, flagged: for idx >= 8 the console runs the `ldx` compare anyway
     // (an OOB read past the 8-slot id table whose result feeds an id compare that then almost
     // surely fails); the host guards it -- the ValidateSimulationContacts precedent.
     // ------------------------------------------------------------------------------------
@@ -190,7 +190,6 @@ namespace Vehicle
     }
 
     // ------------------------------------------------------------------------------------
-    // ⭐ ADDED 2026-08-06 (big-five #2, contact-generation wave).
     // VehicleManager::ValidateTrafficContact @0x825EAC28 (PS3 DecFIGS 0x6E6178; DWARF h:941).
     // Thin forwarder: three tripwires, then the embedded traffic manager's own validation.
     // Register-truth (X360): the wrapper reads muVolumeInstanceIdA's entity word only for the

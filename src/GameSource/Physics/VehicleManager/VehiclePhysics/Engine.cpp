@@ -44,7 +44,7 @@ namespace Vehicle
 
 namespace
 {
-    // ⭐ RECOVERED 2026-08-03. Two `.data` slots that read ALL ZEROS in the image and are filled by
+    // RECOVERED 2026-08-03. Two `.data` slots that read ALL ZEROS in the image and are filled by
     // IDA-unmarked static initialisers -- so a literal scan finds only readers, and
     // scratch/GVM/init_map_table.txt gets both of them wrong (it reports NO source for the first
     // and two contradictory sources, "2" and "1000", for the second). Both were recovered by
@@ -200,17 +200,17 @@ namespace
     //   @gear[g].z (`vspltw v10,v10,2`). gear[g] is at `16*(g+4) + this` -- the `+4` is the 0x40
     //   base of mAttribs.mavGearRatios.
     //
-    //   ⚠️ THREE CORRECTIONS 2026-08-03, all asm-derived:
+    // THREE CORRECTIONS 2026-08-03, all asm-derived:
     //   * the metric is |.| -- `vandc v12,v12,vslw(vspltisw(-1),...)` clears the sign bit before
     //     `vcmpgtfp.`. The previous body dropped it. It matters: gear ratio 0 is NEGATIVE (-2.5).
     //   * the multiply order is `drive * ratio * differential * metric` (0x825CF090..0x825CF09C),
     //     not `drive * differential * ratio * metric`.
-    //   * ⭐ KF_RPM_GEAR_METRIC was a FLAGGED 0.0f placeholder for the un-homed unk_82FB9110. With
+    // * KF_RPM_GEAR_METRIC was a FLAGGED 0.0f placeholder for the un-homed unk_82FB9110. With
     //     it zero the metric is IDENTICALLY ZERO, `metric > gearUpRPM` is never true and the
     //     gearbox is welded in gear 1 forever. The real value is 9.54929638 (see the anon
     //     namespace at the top of this file for how it was recovered).
     //
-    //   ⚠️ The parameter is a VecFloat, not an f32: the asm compares and multiplies register **v1**
+    // The parameter is a VecFloat, not an f32: the asm compares and multiplies register **v1**
     //   (`vcmpgefp. v0, v1, v0` / `vmulfp128 v12, v1, v12`), which is the first VECTOR argument.
     //   PPC would pass an `f32` in f1. Reset @0x825CF130 -- its only in-tree caller -- forwards its
     //   own VecFloat argument untouched, exactly as the console does.
@@ -249,7 +249,7 @@ namespace
     // ---------------------------------------------------------------------------------------
     // Reset  @0x825CF130 .. 0x825CF274 (82 items)
     //
-    // ⚠️ EXPORT-SET HOLE -- the FOURTH confirmed one. There is no
+    // EXPORT-SET HOLE -- the FOURTH confirmed one. There is no
     // `.ida-exports/BURNOUT_X360_ARTIST.XEX/0x825CF130.json`; the hole is visible from the index
     // alone (ComputeGear @0x825CF010 is 72 instrs, so it ends exactly at 0x825CF130, and the next
     // indexed symbol is InitializeFromAttribs @0x825CF278). Body pulled with headless IDA 9.3.
@@ -306,7 +306,7 @@ namespace
     //   ('!RwMathVPU::IsZero(mAttribs.GetGearRati'...). Only the attested prefix is reproduced; the
     //   tail past the truncation is NOT recoverable, so it is NOT fabricated here.
     //
-    //   ⭐ RESOLVED 2026-08-03: the denominator's extra factor flt_82F2A3E0 was a FLAGGED 1.0f
+    // RESOLVED 2026-08-03: the denominator's extra factor flt_82F2A3E0 was a FLAGGED 1.0f
     //   placeholder. It is the SAME constant ComputeGear and Reset use -- 9.54929638 == 60/(2*pi)
     //   -- and it is not un-homed at all: it sits in `.data` but IS initialised in the image (raw
     //   41 18 C9 EB) and has no writer among its five xrefs. With the placeholder at 1.0 the rev
@@ -333,7 +333,7 @@ namespace
     }
 
     // ---------------------------------------------------------------------------------------
-    // Update  @0x825CB288 -- THE POWERTRAIN TORQUE CORE.  ⭐ BODIED 2026-08-09 (powertrain wave).
+    // Update  @0x825CB288 -- THE POWERTRAIN TORQUE CORE.  BODIED 2026-08-09 (powertrain wave).
     //
     // PROVENANCE (three witnesses, cross-checked lane by lane):
     //   1. X360 @0x825CB288 (3937 asm lines): a debug Opt-vs-Unopt harness -- ONE algorithm run
@@ -362,7 +362,7 @@ namespace
     //   elided here); mbAllowToChangeUpGear IS cleared by the lock block (the epilogue does not
     //   restore it -- UpdateDriving re-arms both flags every frame via SetAllowGearChanges).
     //
-    //   ⚠️ FLAG (BPR divergence, X360 wins): the flywheel-friction clamp uses the freshly
+    // FLAG (BPR divergence, X360 wins): the flywheel-friction clamp uses the freshly
     //   INTEGRATED flywheel velocity in `min(fly*sgn, friction*sgn*dt)` on X360 (both legs read
     //   the member/local AFTER the lerp+torque step); the BPR twin reads its still-unwritten
     //   member, i.e. the PRE-frame value. Reproduced as the X360 shipped it.
@@ -539,7 +539,7 @@ namespace
                 const char* lpcEnv = getenv("BRN_ENGINE_PROBE");
                 siPowertrainProbe = (lpcEnv != 0 && lpcEnv[0] != '0') ? 1 : 0;
             }
-            // ⚠️ Sample on a counter that only advances for THROTTLED calls. A single global
+            // Sample on a counter that only advances for THROTTLED calls. A single global
             // counter aliases: several vehicles call Update in a fixed order every tick, so
             // `count % 30` lands on the same slot forever and the player is never sampled.
             static u32 suPowertrainCount = 0;

@@ -41,7 +41,7 @@ namespace Vehicle
     extern s32 gs_iUpdateCrashesPM;           // dword_82F2A198
     extern s32 gs_iUpdatePassBysPM;           // dword_82F2A19C
 
-    // ⭐ ADDITIVE HOIST 2026-08-07 (orchestrator wave), per this header's own rule: the seven
+    // ADDITIVE HOIST 2026-08-07 (orchestrator wave), per this header's own rule: the seven
     // GUARDED VPhys sub-monitors stop being Construct-TU statics because VehiclePhysics::Update
     // @0x826412C0 brackets its stages with exactly these ids (the console reads the same seven
     // file-scope slots: dword_82F2A278..dword_82F2A290).
@@ -53,14 +53,14 @@ namespace Vehicle
     extern s32 gs_iVPhysUpdateDrivingPM;      // dword_82F2A28C
     extern s32 gs_iVPhysUpdateLVPM;           // dword_82F2A290
 
-    // ⭐ ADDITIVE HOIST 2026-08-10 (ground wave), per this header's own rule: two of the traction
+    // ADDITIVE HOIST 2026-08-10 (ground wave), per this header's own rule: two of the traction
     // sub-stage handles gain a second reader because VehicleManager::RunTractionLineTestJobs
     // @0x825B5168 brackets its two stages with exactly these ids (the console reads the same two
     // file-scope slots). The rest of the traction sub-stages stay Construct-TU statics.
     extern s32 gs_iLineTestsBeginPM;          // dword_82F2A168  ("           Begin")
     extern s32 gs_iLineTestsRunStreamPM;      // dword_82F2A16C  ("           RunStream")
 
-    // ⭐ ADDITIVE HOIST 2026-08-11 (lifetime wave), per this header's own rule: the last five
+    // ADDITIVE HOIST 2026-08-11 (lifetime wave), per this header's own rule: the last five
     // traction sub-stage handles gain a second reader now that StartVehicleTractionLineTests
     // @0x82629CE0 and EndVehicleTractionLineTests @0x82633CD8 are real bodies in
     // BrnVehicleManager_TractionLineTests.cpp -- they bracket their stages with exactly these

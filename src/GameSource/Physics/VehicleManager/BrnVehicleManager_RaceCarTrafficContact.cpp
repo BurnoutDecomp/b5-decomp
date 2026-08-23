@@ -19,20 +19,20 @@
 // The last two are the RACE-CAR side of the outcome (flag bit 0). This round is the TRAFFIC car's
 // reaction; the traffic-side arms (bits 1..3) are all live.
 //
-// ⚠️ HandleRaceCarTrafficCarPotentialContact was an .ida-exports HOLE (dumped by the wave-T3 scout,
+// HandleRaceCarTrafficCarPotentialContact was an .ida-exports HOLE (dumped by the wave-T3 scout,
 // scratchpad .../wave3/scout/holes/0x8263FA50.txt) AND its Hex-Rays output is the degenerate
 // "local variable allocation has failed" form. Every step below is read off the ASM.
 //
-// ⚠️ NO FEB-2007 SOURCE for any of these. ARTIST asm; DecFIGS DWARF for declaration shape
+// NO FEB-2007 SOURCE for any of these. ARTIST asm; DecFIGS DWARF for declaration shape
 // (BrnVehicleManager.h :1290 / :1293 / :1143 / :1197 / :1194 / :1286).
 //
-// ⭐ THE OUTCOME FLAGS. DecideOutcomeOfRaceCarTrafficContact writes one word whose bits the
+// THE OUTCOME FLAGS. DecideOutcomeOfRaceCarTrafficContact writes one word whose bits the
 // handler dispatches on; the console's own assert at BrnVehicleManager.cpp:7836 names the mask:
 //     ( ( ( lxImpactResponseFlags & E_RCTIR_TRAFFIC_MASK ) - 1 )
 //         & ( lxImpactResponseFlags & E_RCTIR_TRAFFIC_MASK ) ) == 0
 // i.e. AT MOST ONE traffic-side bit may be set. The asm computes that mask as 0x1E.
 //
-// ⭐ RECOVERED CONSTANTS (dyn-init .data splats -- ZERO in the image, taken from their static-init
+// RECOVERED CONSTANTS (dyn-init .data splats -- ZERO in the image, taken from their static-init
 //    thunks at 0x82C5BB88..0x82C5BD30 instead):
 //     unk_82FB8270 = splat(flt_82004F5C) = 30.0f    the slam-vs-check magnitude threshold
 //     unk_82FB8350 = splat(flt_82019638) = 5000.0f  the other-body mass clamp
@@ -41,7 +41,7 @@
 //                                                   in-place by this very function)
 //     BrnTraffic::KF_MAX_MASS_FOR_TRAFFIC_CHECKING @0x82F2FFF0 = 5000.0f
 //
-// ⭐⭐ unk_8300D01C IS GENUINELY ZERO, and that is load-bearing. It is the damping factor handed
+// unk_8300D01C IS GENUINELY ZERO, and that is load-bearing. It is the damping factor handed
 // to ExternalPhysicsBody::DampenAngularVelocity after a CHECK or a SLAM. It has exactly ONE xref
 // in the whole image -- this read -- so nothing ever writes it (its neighbours at 0x8300D000 /
 // 0x8300D010 / 0x8300D018 belong to BrnTraffic's Logger + DebugComponent block, which is what it
@@ -73,13 +73,12 @@ namespace Vehicle
 {
 namespace
 {
-    // [T3-contact] DIAG. NOT IN THE X360 BINARY. DELETE-WHEN-STABLE.
+    // DIAG. NOT IN THE X360 BINARY. DELETE-WHEN-STABLE.
     bool TrafficDiagEnabled()
     {
         static const bool sbEnabled = (getenv("BRN_TRAFFIC_DIAG") != 0);
         return sbEnabled;
     }
-    bool s_bContactReported = false;
     bool s_bPredictGateLogged = false;
 
     // unk_82FB8270 -- above this the contact is a CHECK, below it a SLAM.
@@ -187,7 +186,7 @@ bool VehicleManager::ShouldRaceCarCrashOnCarImpact(EActiveRaceCarIndex leVictimA
 //     0x825C57F4 and 0x825C5924), returning mbCachedCarCarPredictionResult (+172424) after
 //     re-asserting mCachedCarCarPredictionNormal (+172432) is unit length
 //     ("Bad cached normal in PredictCarCarIntersection", BrnVehicleManager.cpp:0x1835/0x183C).
-//     ⚠️ THE TREE MODELS mpCachedCarA/B AS `u32 muCachedCarASlot/BSlot` to hold the +172432 seat
+// THE TREE MODELS mpCachedCarA/B AS `u32 muCachedCarASlot/BSlot` to hold the +172432 seat
 //     on x64; a real body needs a pointer-shaped identity there (or the slot index the console's
 //     pointers stand for). That is a HEADER decision, not a body one.
 //   * both half-extents come from SimpleVehiclePhysics::mDeformableAABB (+0x6D0 min / +0x6E0
@@ -472,30 +471,13 @@ void VehicleManager::HandleRaceCarTrafficCarPotentialContact(
                "( ( ( lxImpactResponseFlags & E_RCTIR_TRAFFIC_MASK ) - 1 ) "
                "& ( lxImpactResponseFlags & E_RCTIR_TRAFFIC_MASK ) ) == 0");
 
-    // [T3-contact] DIAG. NOT IN THE X360 BINARY. DELETE-WHEN-STABLE.
-    if (!s_bContactReported && TrafficDiagEnabled() && CgsDev::Log::gpDebugPrint != 0)
-    {
-        s_bContactReported = true;
-        const Vector3 lvSeparation = Sub3(lPointOnTraffic, lPointOnRaceCar);
-        *CgsDev::Log::gpDebugPrint
-            << "[T3-contact] raceCar=" << static_cast<s32>(lu16RaceCarIndex)
-            << " traffic=" << static_cast<s32>(lu16TrafficIndex)
-            << " globalTraffic=" << static_cast<s32>(lu16TrafficGlobalIndex)
-            << " dist=" << sqrtf(Dot3(lvSeparation, lvSeparation))
-            << " outcome=" << CgsDev::E_PRINTMODE_HEXONCE << static_cast<u32>(luImpactResponseFlags)
-            << " slamMag=" << lvfTrafficSlamMagnitude.x
-            << "\n";
-    }
-
     // ---- [T4-hit] the DECODED outcome, once per outcome kind --------------------------------
-    // [DIAG] NOT IN THE X360 BINARY. Opt-in (BRN_TRAFFIC_DIAG). [T3-contact] above prints the raw
-    // flag word once; this names WHICH arm ran, and latches per kind so the first crash does not
-    // mask the first slam. FIVE kinds, not three: DecideOutcome can return CRASH_RACECAR ALONE
-    // (:341-345, the traffic car is already crashing) -- that IS "the player crashed into a
-    // traffic car" and must not be invisible -- and it can return 0 (:375-386 clear SLAM|CHECK for
-    // trailer/cab/uncheckable and CRASH_RACECAR for network cars). The NEARMISS kind never reaches
-    // here (its arm returned above); it is reported from TestForNearMissFreakOut.
-    // DELETE-WHEN-STABLE.
+    // DIAG. NOT IN THE X360 BINARY. Opt-in (BRN_TRAFFIC_DIAG). Names WHICH arm ran and latches per
+    // kind so the first crash does not mask the first slam. FIVE kinds, not three: DecideOutcome
+    // can return CRASH_RACECAR ALONE (:341-345, the traffic car is already crashing), and it can
+    // return 0 (:375-386 clear SLAM|CHECK for trailer/cab/uncheckable and CRASH_RACECAR for
+    // network cars). The NEARMISS kind never reaches here; it is reported from
+    // TestForNearMissFreakOut. DELETE-WHEN-STABLE.
     if (TrafficDiagEnabled() && CgsDev::Log::gpDebugPrint != 0)
     {
         static bool sbCrashSeen    = false;

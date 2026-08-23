@@ -39,13 +39,12 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 
 #include <cmath>     // std::floor, std::sqrt
-#include <cstdlib>   // getenv
 
 namespace BrnTraffic
 {
 namespace
 {
-    // NAMED LEG GATE, same shape as the sibling partfiles'. [DIAG] NOT IN THE X360 BINARY.
+    // NAMED LEG GATE, file-local. NOT IN THE X360 BINARY.
     inline void LogMissingLeg(bool& lrbAlreadyLogged, const char* lpcLegNameAndReason)
     {
         if (lrbAlreadyLogged)
@@ -60,22 +59,6 @@ namespace
                 << "[T2-traffic-leg] TrafficEntityModule leg NOT RECONSTRUCTED, skipped: "
                 << lpcLegNameAndReason << " [FLAG PC partial gate]\n";
         }
-    }
-
-    // DELETE-WHEN-STABLE bring-up probes. [DIAG] NOT IN THE X360 BINARY.
-    bool TrafficDiagEnabled()
-    {
-        static const bool sbEnabled = (getenv("BRN_TRAFFIC_DIAG") != 0);
-        return sbEnabled;
-    }
-
-    CgsDev::Log::DebugPrint* TrafficDiagStream()
-    {
-        if (!TrafficDiagEnabled() || CgsDev::Log::gpDebugPrint == 0)
-        {
-            return 0;
-        }
-        return CgsDev::Log::gpDebugPrint;
     }
 
     // .rdata literals this TU reads by value, each named by the expression it appears in.
@@ -319,22 +302,10 @@ void TrafficEntityModule::UpdateParams_UpdateBehaviour(u32 luParam)
     // is REACHABLE here: UpdateParams_DoTimeSlicedLogic @0x82743FE8 leaves Clear()'s -1 in the
     // slot for any param that was dead or E_HISTORY_BORN when its 100-param slice ran
     // (0x82744968 / 0x82744978), and nothing in this tree clears E_HISTORY_BORN yet. Demoted
-    // to a one-shot report + skip so it cannot break the round's 0-assert boot baseline; the
-    // console would store the -1 through.
+    // to a skip so it cannot break the 0-assert boot baseline; the console stores the -1 through.
     // DELETE-WHEN the E_HISTORY_BORN clear lands and slice coverage is provable.
     if (lpParamNeedToSlowData->miBehaviour < 0)
     {
-        if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())
-        {
-            static bool sbWarnedNoBehaviour = false;
-            if (!sbWarnedNoBehaviour)
-            {
-                sbWarnedNoBehaviour = true;
-                *lpDiag << "[T3-behaviour] param " << static_cast<s32>(luParam)
-                        << " reached UpdateBehaviour with miBehaviour -1 (its time slice has "
-                           "not run since it became alive) -- console asserts here\n";
-            }
-        }
         return;
     }
 
@@ -606,8 +577,6 @@ void TrafficEntityModule::UpdateParams_IncrementParam(u32 luParam,
         lfDistanceToTravel = 0.0f;
     }
 
-    const f32 lfParamAlongBefore = lfParamAlong;   // [DIAG] DELETE-WHEN-STABLE
-
     bool lbChangedRung = false;
 
     for (;;)
@@ -729,23 +698,6 @@ void TrafficEntityModule::UpdateParams_IncrementParam(u32 luParam,
 
     lpParam->PushHistory(lpParam->muCurrentSegment + lpSection->muRungOffset,
                          lpParam->muHullIndex);
-
-    // [T2-move] the go/no-go for the whole round: did a param actually advance?
-    {
-        static bool sbLogged = false;
-        if (!sbLogged && lfNewParamAlong != lfParamAlongBefore)
-        {
-            if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())
-            {
-                sbLogged = true;
-                *lpDiag << "[T2-move] FIRST PARAM ADVANCE: param " << luParam
-                        << " mfParamAlong " << lfParamAlongBefore << " -> " << lfNewParamAlong
-                        << " delta " << (lfNewParamAlong - lfParamAlongBefore)
-                        << " mfSpeed " << lpParam->mfSpeed
-                        << " mfAccel " << lpParam->mfAcceleration << "\n";
-            }
-        }
-    }
 
     if (lbChangedRung)
     {
@@ -1118,34 +1070,6 @@ void TrafficEntityModule::UpdateParams_PrecalcBehaviourParams(u32 luParam,
     }
 
     CGS_ASSERT(liNewAction >= 0, "liNewAction >= 0");
-
-    // [T3-behaviour] DIAG. NOT IN THE X360 BINARY. Opt-in, first four params only: the six
-    // fuzzy scores and the cone inputs behind one action pick. This is the probe that names
-    // the culprit when the histogram goes one-sided -- an all-zero score vector elects action 0
-    // by default (best starts at 0.0 and only `>` replaces it). DELETE-WHEN-STABLE.
-    {
-        static s32 siPrinted = 0;
-        if (siPrinted < 4)
-        {
-            if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())
-            {
-                ++siPrinted;
-                *lpDiag << "[T3-behaviour] scores param " << static_cast<s32>(luParam)
-                        << " action " << liNewAction
-                        << " s=";
-                for (u32 luScore = 0; luScore < KU_PARAM_NUM_BEHAVIOUR_SCORES; ++luScore)
-                {
-                    *lpDiag << " " << lafScores[luScore].x;
-                }
-                *lpDiag << " | coneA " << lConeA.x << " " << lConeA.y << " " << lConeA.z
-                        << " " << lConeA.w
-                        << " | coneB " << lConeB.x << " " << lConeB.y << " " << lConeB.z
-                        << " " << lConeB.w
-                        << " | coneC " << lConeC.x << " " << lConeC.y << " " << lConeC.z
-                        << "\n";
-            }
-        }
-    }
 
     const f32 lfLaneSpeed = mfSpeedMultiplier * lpSection->mfSpeed;   // +0x72880 * section+0x24
 

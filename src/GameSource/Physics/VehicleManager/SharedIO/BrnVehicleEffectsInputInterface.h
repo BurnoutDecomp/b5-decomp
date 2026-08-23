@@ -5,7 +5,7 @@
 // (UpdateVehicleEffects @0x82629E18 walks mAirRamQueue directly through the inlined accessor:
 // its loop reads queue+8 == BaseEventQueue::miLength and GetEvent's 64-byte stride).
 //
-// ⭐ PROMOTED 2026-08-06 (PhysicsModule::Update leaves wave). This header carried a 256-byte
+// PROMOTED 2026-08-06 (PhysicsModule::Update leaves wave). This header carried a 256-byte
 // NOMINAL blob ("only returned-by-pointer from the IO buffers, so a reserved-byte blob
 // suffices"). That claim EXPIRED twice over: (1) BrnRaceCarEntityModuleIO.h embeds this type
 // BY VALUE (mVehicleEffectsInterface), so the blob under-sized a real sub-object; (2)
@@ -22,7 +22,7 @@
 // inline here as the only shape it can have: the two queue Constructs, in member order.
 // CreateAirRam/CreateSpin/Clear (DWARF :94..:117) are NOT declared yet -- declaring them
 // without recovered bodies would be dead API; add them when their inline sites are read.
-// ⭐ Append (DWARF :88) IS declared as of 2026-08-10 (pre-physics bridge wave), because its
+// Append (DWARF :88) IS declared as of 2026-08-10 (pre-physics bridge wave), because its
 // inline site HAS now been read -- see the body below.
 
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleEvents.h"  // CreateAirRamEvent (64B) / CreateSpinEvent (48B)
@@ -46,7 +46,7 @@ namespace Vehicle
             mSpinQueue.Construct();
         }
 
-        // DWARF :88. ⭐ ADDED 2026-08-10 (pre-physics bridge wave). No out-of-line symbol -- the
+        // DWARF :88. ADDED 2026-08-10 (pre-physics bridge wave). No out-of-line symbol -- the
         // console inlines it, and WorldModule::BridgeEntityModulesToPhysicsModule_PrePhysics
         // @0x827AAEC0 inlines it TWICE, once per source (race-car then traffic), each time as
         // exactly this pair of queue merges:

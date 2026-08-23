@@ -234,31 +234,6 @@ void TrafficEntityModule::PrePhysicsUpdate( CgsModule::IOBufferStack* /*lpInputB
     // mbPlayingShowtime (console +0x24720, BrnTrafficEntityModuleIO.h:795). Both ends by name.
     lpOutput->SetPlayingShowtime( mbPlayingShowtimeMode );
 
-    // [DIAG] NOT IN THE X360 BINARY. DELETE-WHEN-STABLE. One-shot host-layout dump for the
-    // module object, gated on BRN_TRAFFIC_DIAG: sizeof plus four anchor members' host offsets
-    // and the pool lengths. The offsets deliberately do not match the console displacements
-    // quoted above.
-    {
-        static const bool sbTrafficDiag = ( getenv( "BRN_TRAFFIC_DIAG" ) != 0 );
-        static bool sbLoggedLayout = false;
-        if ( sbTrafficDiag && !sbLoggedLayout && CgsDev::Log::gpDebugPrint != 0 )
-        {
-            sbLoggedLayout = true;
-            *CgsDev::Log::gpDebugPrint
-                << "[T1-C1-layout] TrafficEntityModule host sizeof=" << (s32)sizeof( TrafficEntityModule )
-                << " meState@" << (s32)offsetof( TrafficEntityModule, meState )
-                << " mReceiverQueue@" << (s32)offsetof( TrafficEntityModule, mReceiverQueue )
-                << " maVehicles@" << (s32)offsetof( TrafficEntityModule, maVehicles )
-                << " mpData@" << (s32)offsetof( TrafficEntityModule, mpData )
-                << " maVehicleTypeRuntime@" << (s32)offsetof( TrafficEntityModule, maVehicleTypeRuntime )
-                << " | vehicles=" << (s32)( sizeof( maVehicles ) / sizeof( maVehicles[0] ) )
-                << " staticParams=" << (s32)( sizeof( maStaticTrafficParams ) / sizeof( maStaticTrafficParams[0] ) )
-                << " params=" << (s32)( sizeof( maParams ) / sizeof( maParams[0] ) )
-                << " vehTypes=" << (s32)( sizeof( maVehicleTypeRuntime ) / sizeof( maVehicleTypeRuntime[0] ) )
-                << " [DELETE-WHEN-STABLE]\n";
-        }
-    }
-
     // 0x8274C6E8. The console emits an unsigned three-way ladder, i.e. cases 0/1/2 with an
     // asserting default. E_STATE_INVALID (-1) lands in the default arm, comparing >= 3
     // unsigned.
@@ -284,7 +259,7 @@ void TrafficEntityModule::PrePhysicsUpdate( CgsModule::IOBufferStack* /*lpInputB
         if ( lbSimPaused )
         {
             // 0x8274C80C: a paused frame runs the crashed-vehicle clean-up and nothing else.
-            // ⭐ LANDED wave T3 round 3 (was a gate) -- body in _wT3_02.cpp.
+            // LANDED (was a gate) -- body in _wT3_02.cpp.
             CleanUpCrashedVehiclePhysics( lpOutput );
         }
         else
@@ -294,14 +269,14 @@ void TrafficEntityModule::PrePhysicsUpdate( CgsModule::IOBufferStack* /*lpInputB
             // 0x8274C77C..0x8274C794: ten 64-bit zero stores over the 80-byte stack local
             // (601 bits -> 10 bit fields -> 80 bytes, CgsBitArray.h:23). DWARF names it
             // lCreatedBodies (:2661).
-            // ⭐ RETYPED wave T3 r1: spelled through TrafficEntityModule::TotalTrafficBitArray
+            // RETYPED: spelled through TrafficEntityModule::TotalTrafficBitArray
             // (BitArray<KU_MAX_TOTAL_TRAFFIC>, the ship's 600) so it matches the parameter type
             // of SendPhysicalRequests below. Same 10 bit fields, same 80 bytes; the DWARF's 601
             // is the off-by-one it also carries on the index map.
             TotalTrafficBitArray lCreatedBodies;
             lCreatedBodies.UnSetAll();
 
-            // ⭐ UN-GATED wave 4: BuildPotentialCollisionList @0x8274B378 is BODIED
+            // UN-GATED: BuildPotentialCollisionList @0x8274B378 is BODIED
             // (_wT4_02.cpp). 0x8274C7A4, the FIRST leg of this arm -- it walks the scene's raw
             // overlap-pair list and promotes every non-physical traffic half to a physics body
             // BEFORE the driver inputs are generated, so a car the player is about to hit
@@ -312,10 +287,10 @@ void TrafficEntityModule::PrePhysicsUpdate( CgsModule::IOBufferStack* /*lpInputB
                 static bool sbLogged = false;
                 LogMissingLeg( sbLogged, "UpdateJunctionFUP (no export dumped)" );
             }
-            // 0x8274C7BC -- LIVE wave T3 r1 (cluster C3 owns the body).
+            // 0x8274C7BC -- LIVE (cluster C3 owns the body).
             GenerateDriverInputs( lpOutput );
 
-            // 0x8274C7CC -- LIVE wave T3 r1 (cluster C1, _wT3_01.cpp). lCreatedBodies stops
+            // 0x8274C7CC -- LIVE (cluster C1, _wT3_01.cpp). lCreatedBodies stops
             // being write-only here: it is this leg's OUT parameter.
             SendPhysicalRequests( lpOutput, &lCreatedBodies );
             {
@@ -328,7 +303,7 @@ void TrafficEntityModule::PrePhysicsUpdate( CgsModule::IOBufferStack* /*lpInputB
                 LogMissingLeg( sbLogged,
                     "CreateBodiesForCrashingNetworkTraffic @0x8274B4B0 (out, &lCreatedBodies)" );
             }
-            // ⭐ LANDED wave T3 round 3 (was a gate) -- body in _wT3_02.cpp. THIS is the leg
+            // LANDED (was a gate) -- body in _wT3_02.cpp. THIS is the leg
             // that turns the module's maNewRemovedVehicles into physics RemoveTrafficEvents,
             // i.e. the only thing that ever frees a slot in the 20-car physical pool.
             CleanUpCrashedVehiclePhysics( lpOutput );
@@ -348,7 +323,7 @@ void TrafficEntityModule::PrePhysicsUpdate( CgsModule::IOBufferStack* /*lpInputB
             break;
         case E_TEARINGDOWNSTATE_FLUSHING:
         {
-            // 0x8274C750. ⭐ LANDED wave T3 round 3 (was a gate) -- body in _wT3_02.cpp.
+            // 0x8274C750. LANDED (was a gate) -- body in _wT3_02.cpp.
             CleanUpCrashedVehiclePhysics( lpOutput );
             break;
         }

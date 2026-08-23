@@ -609,22 +609,43 @@ namespace BrnPhysics
         const f32 lfClosingSpeed = vpu::Dot(lImpactVel, lCollisionNormal);
         const f32 lfNumerator    = -(1.0f + lfRestitution) * lfClosingSpeed;
 
-        // Body A angular coupling: n . ( (Ia^-1 (rA x n)) x rA ),  rA = lPoint1, Ia^-1 = this body.
-        const Vector3 lvRAxN = vpu::Cross(lPoint1, lCollisionNormal);
+        // ⭐⭐⭐ 2026-08-23 (traffic wave 5) -- THE LEVER ARMS ARE BODY-RELATIVE, AND THIS FUNCTION
+        // DERIVES THEM ITSELF. Both contact points arrive in WORLD space (ApplyCarCarImpulse hands
+        // over lContact.mPointOnA / mPointOnB raw: X360 0x82624CE0/0x82624CE4 are bare `lvx128`
+        // loads of contact+0x00 / contact+0x10), and this body subtracts each object's own position
+        // before using them as moment arms:
+        //     0x8259CB20  lvx128 v0,  r4, 0x30    ; bodyA base + 0x30 == mTransform.wAxis
+        //     0x8259CB28  vsubfp v0,  v1, v0      ; rA = lPoint1 - bodyA position
+        //     0x8259CB2C  lvx128 v13, r5, 0x30    ; bodyB position
+        //     0x8259CB30  vsubfp v13, v2, v13     ; rB = lPoint2 - bodyB position
+        // (The same +0x30 / +0xA0 / +0xD0 body-relative seats the rest of this function uses:
+        //  0x8259CB08 `addi r11, r4, 0xA0` == mWorldInverseInertia, 0x8259CBE0/CBF4 `0xD0` == mfMass.)
+        // ⛔ WHY IT MATTERED: the tree used the raw WORLD points as the arms. At the junkyard the
+        // contact point is ~3,800 m from the origin, so `r x n` was ~3.8e3 instead of ~1.5, the
+        // angular terms grew by ~1e7, and the denominator swamped the numerator. MEASURED on the
+        // rear-end ram (scratch/flow_run/20260823_135317, closing speed 15.6 m/s, masses 1150 kg
+        // and ~1200 kg): the shaped impulse LENGTH came out at 0.0017 where the two inverse masses
+        // alone bound it near 4.8e3. The INANIMATE sibling above never had this bug -- it has done
+        // the same subtraction since it landed, which is why walls take momentum and cars do not.
+        const Vector3 lvArmA = vpu::Subtract(lPoint1, mTransform.wAxis);          // 0x8259CB28
+        const Vector3 lvArmB = vpu::Subtract(lPoint2, lBody2.mTransform.wAxis);   // 0x8259CB30
+
+        // Body A angular coupling: n . ( (Ia^-1 (rA x n)) x rA ),  Ia^-1 = this body.
+        const Vector3 lvRAxN = vpu::Cross(lvArmA, lCollisionNormal);
         const Vector3 lvAngularA = vpu::Add(
             vpu::Add(vpu::Mult(mWorldInverseInertia.xAxis, lvRAxN.x),
                      vpu::Mult(mWorldInverseInertia.yAxis, lvRAxN.y)),
             vpu::Mult(mWorldInverseInertia.zAxis, lvRAxN.z));
-        const Vector3 lApart = vpu::Cross(lvAngularA, lPoint1);
+        const Vector3 lApart = vpu::Cross(lvAngularA, lvArmA);
         const f32 lfAngularA = vpu::Dot(lCollisionNormal, lApart);
 
-        // Body B angular coupling: rB = lPoint2, Ib^-1 = lBody2's world inverse inertia.
-        const Vector3 lvRBxN = vpu::Cross(lPoint2, lCollisionNormal);
+        // Body B angular coupling: Ib^-1 = lBody2's world inverse inertia.
+        const Vector3 lvRBxN = vpu::Cross(lvArmB, lCollisionNormal);
         const Vector3 lvAngularB = vpu::Add(
             vpu::Add(vpu::Mult(lBody2.mWorldInverseInertia.xAxis, lvRBxN.x),
                      vpu::Mult(lBody2.mWorldInverseInertia.yAxis, lvRBxN.y)),
             vpu::Mult(lBody2.mWorldInverseInertia.zAxis, lvRBxN.z));
-        const Vector3 lBpart = vpu::Cross(lvAngularB, lPoint2);
+        const Vector3 lBpart = vpu::Cross(lvAngularB, lvArmB);
         const f32 lfAngularB = vpu::Dot(lCollisionNormal, lBpart);
 
         // Inverse masses (m stored as VecFloat, broadcast).
@@ -643,8 +664,23 @@ namespace BrnPhysics
         VecFloat lvfInvInertiaB; lvfInvInertiaB.x = lvfInvInertiaB.y = lvfInvInertiaB.z = lvfInvInertiaB.w = lfInvInertiaB;
         *lpfInvInertiaAOut = lvfInvInertiaA;
         *lpfInvInertiaBOut = lvfInvInertiaB;
+        // ⭐ 2026-08-23 (traffic wave 5): the impulse VECTOR carries a forced NEGATIVE magnitude,
+        // while the hidden return keeps the signed value:
+        //     0x8259CD04  vmulfp128 v0,  v0, v119        ; j == numerator / denominator
+        //     0x8259CD08  vandc     v13, v0, v12(sign)   ; |j|      (clear the sign bit)
+        //     0x8259CD10  vxor      v0,  v13, v11(sign)  ; -|j|     (set it)
+        //     0x8259CD14  vmulfp128 v0,  v126(n), v0     ; impulse == n * -|j|
+        //     0x8259CD18  stvx128   v0,  r0, r27         ; -> lpImpulseOut
+        //     0x8259CD0C  stvx128   v0(the SIGNED j), r0, r28  ; -> the sret return
+        // With the caller's negated normal and a positive closing speed j is negative anyway, so
+        // this is the same vector either way on the live path; the INANIMATE sibling's twin store
+        // uses +|j| because its caller passes the un-negated normal. Reproduced as shipped rather
+        // than folded, so a separating contact that somehow reached here keeps the console's sign.
         if (lpImpulseOut != nullptr)
-            *lpImpulseOut = vpu::Mult(lCollisionNormal, lfImpVal);
+        {
+            const f32 lfNegativeMagnitude = -std::fabs(lfImpVal);
+            *lpImpulseOut = vpu::Mult(lCollisionNormal, lfNegativeMagnitude);
+        }
 
         VecFloat lvfResult; lvfResult.x = lvfResult.y = lvfResult.z = lvfResult.w = lfImpVal;
         return lvfResult;

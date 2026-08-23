@@ -58,7 +58,7 @@ const f32 KF_DEFAULT_GEAR_RATIO_4 = 1.0f;                        // flt_82001C98
 const f32 KF_DEFAULT_GEAR_RATIO_5 = 0.75f;                       // flt_82004018
 const f32 KF_DEFAULT_DIFFERENTIAL = 4.11000013f;                 // flt_820920B4
 const f32 KF_DEFAULT_TRANSMISSION_EFFICIENCY = 1.0f;             // flt_82001C98
-// ⚠️ A REAL 0.0f, not a placeholder: flt_82001CC0 is `.rdata perm=4`, it sits in the compiler's
+// A REAL 0.0f, not a placeholder: flt_82001CC0 is `.rdata perm=4`, it sits in the compiler's
 // shared scalar pool next to 1.0/2.0/0.5, and scratch/GVM/init_map_table.txt lists it only ever as
 // a static-init SOURCE, never as a target. These are the *defaults*; EngineAttribs::
 // InitializeFromAttribs @0x825CF278 overwrites them from the per-car data record.
@@ -84,7 +84,7 @@ const f32 KF_DEFAULT_GEAR_UP_RPM_3 = 5945.0f;                    // flt_8209209C
 const f32 KF_DEFAULT_GEAR_UP_RPM_4 = 6000.0f;                    // flt_820920A8 (same slot as gear 0)
 const f32 KF_DEFAULT_GEAR_UP_RPM_5 = 6000.0f;                    // flt_820920A8 (same slot as gear 0)
 
-// The torque-curve domain. ⚠️ The DWARF names InterpedParam3::Prepare's parameters generically
+// The torque-curve domain. The DWARF names InterpedParam3::Prepare's parameters generically
 // (lParamA/lParamB/lParamC); the "input min / input max / output at min" reading is this tree's
 // interpretation of the roles, not a console name. The VALUES are asm-literal.
 const f32 KF_DEFAULT_TORQUE_CURVE_INPUT_MIN = 37.0f;             // flt_82092094
@@ -116,7 +116,7 @@ namespace HandlingDefaults
 // static-init `.data` family whose image bytes are meaningless. The ONE `.data` slot the body
 // touches is handled explicitly below (KF_MPH_TO_MPS).
 //
-// ⭐ FOUR INDEPENDENT CONFIRMATIONS that this landed on the right layout:
+// FOUR INDEPENDENT CONFIRMATIONS that this landed on the right layout:
 //   1. every out-of-line call lands exactly on a member base --
 //        InterpedParam3::Construct/Prepare(this+0x60)  == mBaseAttribs.mBrakeScaleToFactorCurve
 //        InterpedParam3::Construct/Prepare(this+0x100) == mDriftAttribs.mDriftScaleToYawTorque
@@ -235,7 +235,7 @@ const f32 KF_FACTOR_OF_WEIGHT_Z                = 0.300000012f;  // flt_82004740
 const f32 KF_WHEEL_LONG_FORCE_HEIGHT_OFFSET    = 0.100000001f;  // flt_82004014
 const f32 KF_WHEEL_LAT_FORCE_HEIGHT_OFFSET     = 0.100000001f;  // flt_82004014
 
-// ⚠️⚠️ THE SILENT-ZERO SLOT. The asm forms the default crash speed as
+// THE SILENT-ZERO SLOT. The asm forms the default crash speed as
 //     vmulfp128 v0, [unk_83017FE0], splat(150.0f)
 // and `unk_83017FE0` reads **all-zero in the image** (`.data perm=6`). It is NOT zero: an
 // IDA-unmarked static-init thunk at 0x82C6D160 does
@@ -339,7 +339,7 @@ void VehicleAttribs::EngineAttribs::Construct()
 // insert is one scalar copy. The source-wrapper byte offsets are EXACT (asm-confirmed); the
 // wrapper's own type is un-homed, so it is read here as a byte-addressed float source.
 //
-// ⚠️⚠️ CORRECTED 2026-08-13 (drivetrain wave). The previous body had the two per-gear DESTINATION
+// The previous body had the two per-gear DESTINATION
 // lanes TRANSPOSED -- it sent the gear-up-RPM source block into `.y` (TorqueScale) and the
 // torque-scale source block into `.z` (GearUpRPM). Consequence, measured in-game: gearUpRPM[1]
 // came out as 1.0, so at the 1000 rpm idle the gearbox up-shifted on EVERY tick and the car sat
@@ -367,7 +367,7 @@ void VehicleAttribs::EngineAttribs::Construct()
 //             src+0x78 -> FlyWheelInertia       (@+0x30.x, mask 8, lvlx r8=0x78)
 //             src+0x7C -> FlyWheelFriction      (@+0x30.y, mask 4, lvlx r7=0x7C)
 //             src+0x74 -> GearChangeTime        (@+0x30.z, mask 2, lvlx r6=0x74)
-//   ⭐ GearDownRPM (@+0x10.w) is NOT streamed: there is no mask-1 store to this+0x10 anywhere in
+// GearDownRPM (@+0x10.w) is NOT streamed: there is no mask-1 store to this+0x10 anywhere in
 //     the function. Engine::Update recomputes it from the gearing every frame. The previous body
 //     wrote src+0x68 there, which was both the wrong lane and the wrong field.
 //
@@ -481,7 +481,7 @@ void VehicleAttribs::EngineAttribs::InitializeFromAttribs(const void* lpSourceWr
 
 // @0x825F3FB8 (840 instrs)  BrnPhysics::Vehicle::VehicleAttribs::Construct
 //
-// ⚠️ ABSENT from `.ida-exports` (an export-set hole: `Engine::Prepare` @0x825F3F38 ends at
+// ABSENT from `.ida-exports` (an export-set hole: `Engine::Prepare` @0x825F3F38 ends at
 // 0x825F3FB4 and the next indexed symbol is 0x825F4CD8). Pulled from `BURNOUT_X360_ARTIST.XEX.i64`
 // with headless IDA 9.3; `ida_funcs.get_func` bounds it at 0x825F3FB8..0x825F4CD4.
 //
@@ -495,7 +495,7 @@ void VehicleAttribs::EngineAttribs::InitializeFromAttribs(const void* lpSourceWr
 // console emits ONE whole-vector `stvx128` (a register it built entirely on the stack first)
 // the assignment below is a whole-vector assignment.
 //
-// ⚠️ ONE LANE IS DELIBERATELY NOT WRITTEN: mvLinearDrag_AngularDrag_... `.y` (AngularDrag,
+// ONE LANE IS DELIBERATELY NOT WRITTEN: mvLinearDrag_AngularDrag_... `.y` (AngularDrag,
 // this+0xA4). The body touches that register exactly three times (mask 2 -> .z, mask 1 -> .w,
 // mask 8 -> .x) and never mask 4. It is NOT an omission in this transcription -- do not "fix" it.
 // Every other unwritten lane in the block is a lane the DWARF register name does not name at all
@@ -531,7 +531,7 @@ void VehicleAttribs::Construct()
 
     mBaseAttribs.miRaceCarID = 0;                                     // 0x825F4250 stw r28,0x50(r31)
 
-    // ⚠️ .y (AngularDrag) intentionally absent -- see the banner.
+    // .y (AngularDrag) intentionally absent -- see the banner.
     mBaseAttribs.mvLinearDrag_AngularDrag_HighSpeedAngularDamping_FrontWheelMass.x = KF_LINEAR_DRAG;
     mBaseAttribs.mvLinearDrag_AngularDrag_HighSpeedAngularDamping_FrontWheelMass.z = KF_HIGH_SPEED_ANGULAR_DAMPING;
     mBaseAttribs.mvLinearDrag_AngularDrag_HighSpeedAngularDamping_FrontWheelMass.w = KF_WHEEL_MASS;
@@ -566,7 +566,7 @@ void VehicleAttribs::Construct()
     mEngineAttribs.Construct();
 
     // ---- mSteeringAttribs ------------------------------------------------------------------
-    // ⭐ the asm's single `fdivs f0, f30, f0` is literally 1.0f / <the .y lane just written>,
+    // the asm's single `fdivs f0, f30, f0` is literally 1.0f / <the .y lane just written>,
     // and its quotient goes into the .z lane -- SpeedForMinAngle / SpeedForMinAngleRecip.
     mSteeringAttribs.mvReactionPerSec_SpeedForMinAngle_SpeedForMinAngleRecip_MinAngle.x = KF_STEERING_REACTION_PER_SEC;
     mSteeringAttribs.mvReactionPerSec_SpeedForMinAngle_SpeedForMinAngleRecip_MinAngle.y = KF_STEERING_SPEED_FOR_MIN_ANGLE;
@@ -689,7 +689,7 @@ void VehicleAttribs::Construct()
 // where the shipped read disagrees with the schema's primary offset are flagged inline.
 // The function is STRAIGHT-LINE except one branch (the CarAngularImpulseScale clamp below).
 //
-// ⚠️ LANES THE CONSOLE DOES NOT STREAM (left at their Construct values -- do NOT "complete"):
+// LANES THE CONSOLE DOES NOT STREAM (left at their Construct values -- do NOT "complete"):
 //   * mvLinearDrag_AngularDrag_HighSpeedAngularDamping_FrontWheelMass.y  (AngularDrag)
 //   * mvSideForcePeakDriftAngle_SideForceMagnitude_NaturalDriftDecay_NaturalDriftDecayPower.w
 //   * mvDriftPushScaleLimit_DriftPushBaseFactor_MaxPowerSlideFactor.x / .y
@@ -768,7 +768,7 @@ void VehicleAttribs::SetupAttribs(const Attrib::Gen::physicsvehiclehandling& lrH
         mBaseAttribs.mvTractionLineLength_LowSpeedDrivingMPH_LowSpeedTyreFrictionTractionControl_LowSpeedThrottleTractionControl.w
             = BP_VA_SRC_F(lpData, 0xB8);                              // LowSpeedThrottleTractionControl
 
-        // ⚠️ record +0xC4 is LinearDrag's shipped seat (the schema's ALT offset 196; the primary
+        // record +0xC4 is LinearDrag's shipped seat (the schema's ALT offset 196; the primary
         // +0x04 seat is NOT what the console reads). The .y lane (AngularDrag) is NOT streamed.
         mBaseAttribs.mvLinearDrag_AngularDrag_HighSpeedAngularDamping_FrontWheelMass.x
             = BP_VA_SRC_F(lpData, 0xC4);                              // LinearDrag (ALT seat 0xC4)
@@ -816,7 +816,7 @@ void VehicleAttribs::SetupAttribs(const Attrib::Gen::physicsvehiclehandling& lrH
         mBaseAttribs.mDrivetimeDeformLimits.z = BP_VA_SRC_F(lpData, 0x10C);       // DriveTimeDeformLimitPosZ
         mBaseAttribs.mDrivetimeDeformLimits.w = BP_VA_SRC_F(lpData, 0x110);       // DriveTimeDeformLimitNegZ
 
-        // ⚠️ AS SHIPPED: the drift block's TorqueKickFromGasLetOff lane is streamed from the
+        // AS SHIPPED: the drift block's TorqueKickFromGasLetOff lane is streamed from the
         // BASE record's word +0x20 -- the word the schema names CoMOffset.x (whose own dest
         // lane above is force-zeroed). Transcribed exactly; do not "fix" to a drift field.
         mDriftAttribs.mvNaturalYawTorque_NaturalYawTorqueCutOffAngle_TorqueKickFromGasLetOff_DriftSidewaysDamping.z
@@ -1123,7 +1123,7 @@ void VehicleAttribs::SetupAttribs(const Attrib::Gen::physicsvehiclehandling& lrH
 
 // @0x825F6298 (40 instrs)  BrnPhysics::Vehicle::VehicleAttribs::SetupAttribsForDonutAI
 //
-// ⚠️ CORRECTED with the layout de-fork. The whole function is five stores, and the asm names its
+// CORRECTED with the layout de-fork. The whole function is five stores, and the asm names its
 // destinations by absolute offset:
 //     [this+0x110].x = 0.0f              (flt_82001CC0)
 //     [this+0x1B0].x = flt_8205820C
@@ -1188,7 +1188,7 @@ VehicleAttribs& VehicleAttribs::operator=(const VehicleAttribs& lrSource)
 // Decoded from the X360 asm store-for-store (every `lfs`+`lvlx`/`vspltw`+`vrlimi128` lane
 // insert dataflow-tracked through its stack slot; vrlimi masks 8/4/2/1 == lanes x/y/z/w).
 // Every constant below was read out of the shipped image with the self-calibrating .id1
-// reader (10/10 self-test). ⚠️ SEVERAL STORES ARE REDUNDANT BY CONSTRUCTION: operator=
+// reader (10/10 self-test). SEVERAL STORES ARE REDUNDANT BY CONSTRUCTION: operator=
 // already copied the whole 0x370 block, and the console then RE-copies individual source
 // lanes (+0xD0 surface factors, the whole suspension block, the boost block, the engine
 // memcpy) -- inlined SetX(source.GetX()) patterns. They are transcribed as shipped, marked
@@ -1370,7 +1370,7 @@ void VehicleAttribs::SetupAttribsForAI(VehicleAttribs* lpSource)
     mDriftAttribs.mvNaturalYawTorque_NaturalYawTorqueCutOffAngle_TorqueKickFromGasLetOff_DriftSidewaysDamping.z = 0.0f;  // TorqueKickFromGasLetOff
     mDriftAttribs.mvDriftPushScaleLimit_DriftPushBaseFactor_MaxPowerSlideFactor.z = 0.0f;       // MaxPowerSlideFactor
 
-    // 0x825F6258..0x825F6274: BoostLinearDrag = 0.75 * this LinearDrag. ⚠️ AS SHIPPED this is
+    // 0x825F6258..0x825F6274: BoostLinearDrag = 0.75 * this LinearDrag. AS SHIPPED this is
     // 0.75 * 0.0 == 0.0 -- LinearDrag was zeroed above -- but the console computes the product
     // from the live lane, so the dependence is kept.
     mBoostAttribs.mvBoostBase_MaxBoostSpeed_BoostLinearDrag_NormalBoostHeightOffset.z
@@ -1510,7 +1510,7 @@ void SimpleVehicleAttribs::SetupAttribs(const Attrib::Gen::physicsvehiclehandlin
         // The stack round-trip that zeroes the COM x lane (stvx -> stfs 0.0 -> lvx -> stvx).
         mCOMOffset.x = 0.0f;
 
-        // ⭐ 2026-08-09 (attribs-data wave): the two tire scatters are REAL (the permute table
+        // the two tire scatters are REAL (the permute table
         // is homed and both bodies are image-emulated -- see the Wheel.cpp banner).
         mFrontTireAttribs.PrepareFrontTire(lBase);                    // this+0x20
         mRearTireAttribs.PrepareRearTire(lBase);                      // this+0x60
