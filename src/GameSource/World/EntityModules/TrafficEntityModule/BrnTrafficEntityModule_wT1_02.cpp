@@ -193,17 +193,14 @@ void TrafficEntityModule::PreSceneUpdate(CgsModule::IOBufferStack* lpInputBuffer
             // exe link. The per-TU `cl /c` gate cannot see that.
             CreateNewVehicleEntities(lpOutput);
 
-            {
-                // GATE: UpdateCollidableVehicles @0x827302C8, no body. It posts
-                // AddVolumeInstance for vehicles near the player, so parked cars render but
-                // are not solid until it lands. DELETE WHEN the body lands.
-                static bool sbLogged = false;
-                LogMissingLeg(sbLogged,
-                    "PreSceneUpdate E_STATE_RUNNING leg UpdateCollidableVehicles @0x827302C8 "
-                    "-- no body; the COLLISION-volume half (wave 3). Parked cars register a "
-                    "scene entity here but no collision volume, so they render and are not "
-                    "solid");
-            }
+            // ⭐ UN-GATED wave 4: UpdateCollidableVehicles @0x827302C8 is BODIED
+            // (_wT4_01.cpp). It is the COLLISION-volume half of the registration above -- the
+            // only producer of mVehicleSoaData.mCollidableVehicles and the only caller of
+            // AddVolumeInstance / AddForCollision for a traffic vehicle. Without it a parked
+            // car has a scene entity and no volume, so nothing is solid and the broad phase
+            // never emits a race-car-vs-traffic overlap pair. Mount _wT4_01.cpp in
+            // tools/build/build_game_exe.bat or this call is an LNK2019 at exe link.
+            UpdateCollidableVehicles(lpInput, lpOutput);
         }
 
         {

@@ -482,9 +482,60 @@ void VehicleManager::HandleRaceCarTrafficCarPotentialContact(
             << " traffic=" << static_cast<s32>(lu16TrafficIndex)
             << " globalTraffic=" << static_cast<s32>(lu16TrafficGlobalIndex)
             << " dist=" << sqrtf(Dot3(lvSeparation, lvSeparation))
-            << " outcome=0x" << static_cast<s32>(luImpactResponseFlags)
+            << " outcome=" << CgsDev::E_PRINTMODE_HEXONCE << static_cast<u32>(luImpactResponseFlags)
             << " slamMag=" << lvfTrafficSlamMagnitude.x
             << "\n";
+    }
+
+    // ---- [T4-hit] the DECODED outcome, once per outcome kind --------------------------------
+    // [DIAG] NOT IN THE X360 BINARY. Opt-in (BRN_TRAFFIC_DIAG). [T3-contact] above prints the raw
+    // flag word once; this names WHICH arm ran, and latches per kind so the first crash does not
+    // mask the first slam. FIVE kinds, not three: DecideOutcome can return CRASH_RACECAR ALONE
+    // (:341-345, the traffic car is already crashing) -- that IS "the player crashed into a
+    // traffic car" and must not be invisible -- and it can return 0 (:375-386 clear SLAM|CHECK for
+    // trailer/cab/uncheckable and CRASH_RACECAR for network cars). The NEARMISS kind never reaches
+    // here (its arm returned above); it is reported from TestForNearMissFreakOut.
+    // DELETE-WHEN-STABLE.
+    if (TrafficDiagEnabled() && CgsDev::Log::gpDebugPrint != 0)
+    {
+        static bool sbCrashSeen    = false;
+        static bool sbCheckSeen    = false;
+        static bool sbSlamSeen     = false;
+        static bool sbRaceOnlySeen = false;
+        static bool sbNoneSeen     = false;
+
+        const bool lbCrashRaceCar = (luImpactResponseFlags & KU_RCTIR_CRASH_RACECAR) != 0;
+        const bool lbCrash    = (luImpactResponseFlags & KU_RCTIR_CRASH_TRAFFIC) != 0;
+        const bool lbCheck    = !lbCrash && (luImpactResponseFlags & KU_RCTIR_CHECK_TRAFFIC) != 0;
+        const bool lbSlam     = !lbCrash && (luImpactResponseFlags & KU_RCTIR_SLAM_TRAFFIC) != 0;
+        const bool lbRaceOnly = !lbCrash && !lbCheck && !lbSlam && lbCrashRaceCar;
+        const bool lbNone     = (luImpactResponseFlags == 0u);
+
+        if ((lbCrash && !sbCrashSeen) || (lbCheck && !sbCheckSeen) || (lbSlam && !sbSlamSeen)
+            || (lbRaceOnly && !sbRaceOnlySeen) || (lbNone && !sbNoneSeen))
+        {
+            if (lbCrash)    sbCrashSeen    = true;
+            if (lbCheck)    sbCheckSeen    = true;
+            if (lbSlam)     sbSlamSeen     = true;
+            if (lbRaceOnly) sbRaceOnlySeen = true;
+            if (lbNone)     sbNoneSeen     = true;
+            *CgsDev::Log::gpDebugPrint
+                << "[T4-hit] decided outcome="
+                << (lbCrash    ? "CRASH_TRAFFIC"
+                  : lbCheck    ? "CHECK_TRAFFIC"
+                  : lbSlam     ? "SLAM_TRAFFIC"
+                  : lbRaceOnly ? "CRASH_RACECAR_ONLY"
+                               : "NONE")
+                << ((lbCrashRaceCar && !lbRaceOnly) ? "+CRASH_RACECAR" : "")
+                << " flags=" << CgsDev::E_PRINTMODE_HEXONCE << static_cast<u32>(luImpactResponseFlags)
+                << " raceCar=" << static_cast<s32>(lu16RaceCarIndex)
+                << " trafficSlot=" << static_cast<s32>(lu16TrafficIndex);
+            // DecideOutcome writes the magnitude only on the CHECK/SLAM arm; the crash arms leave
+            // the out param untouched, so do not read it there.
+            if (lbCheck || lbSlam)
+                *CgsDev::Log::gpDebugPrint << " slamMag=" << lvfTrafficSlamMagnitude.x;
+            *CgsDev::Log::gpDebugPrint << "\n";
+        }
     }
 
     // 0x82640244: the PLAYER-only "you checked a traffic car" 2-byte game event (type 73). Its

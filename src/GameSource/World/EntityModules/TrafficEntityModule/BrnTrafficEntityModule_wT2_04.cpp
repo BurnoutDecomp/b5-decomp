@@ -567,6 +567,91 @@ void TrafficEntityModule::GenerateSceneUpdateEvents(BrnTrafficIO::OutputBuffer_P
         ++luMoved;
     }
 
+    if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())
+    {
+        // ------------------------------------------------------------------------------
+        // [T4-clip] THE DECISIVE NEGATIVE WITNESS on the world side. [DIAG] NOT IN THE X360
+        // BINARY. Each frame, test the local player's position against every alive vehicle's
+        // OBB (the type runtime's bbox, offset and expanded 0.5 m) and shout once per vehicle.
+        //
+        // The two strings MUST stay different:
+        //   "NON-physical" -- the player is INSIDE a traffic car that never got a physics
+        //                     slot. That is the wave-4 break: gate 1 or gate 2 did not fire.
+        //   "PHYSICAL"     -- promotion worked and the CONTACTS failed. A completely different
+        //                     bug, on the physics side, and chasing the module for it wastes a
+        //                     round.
+        //
+        // Seated here because this function already walks exactly this bit set with the
+        // transform and the type runtime in hand. DELETE-WHEN-STABLE.
+        // ------------------------------------------------------------------------------
+        if (meLocalPlayerIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID &&
+            mRaceCarState.mabRaceCarActive[meLocalPlayerIndex])
+        {
+            const Vector3 lPlayerPos = mRaceCarState.maActiveRaceCarPositions[meLocalPlayerIndex];
+
+            static bool sabReported[KU_MAX_TOTAL_TRAFFIC] = { false };
+
+            TrafficBitArray lAlivePresent;
+            lAlivePresent.SetAnd(mVehicleSoaData.mVehiclesWithEntities,
+                                 mVehicleSoaData.mAliveVehicles);
+
+            for (TrafficBitArray::Iterator lIt = lAlivePresent.Begin();
+                 lIt != lAlivePresent.End();
+                 ++lIt)
+            {
+                const u32 luVehicle = static_cast<u32>(lIt.GetIndex());
+                if (luVehicle >= KU_MAX_TOTAL_TRAFFIC || sabReported[luVehicle])
+                {
+                    continue;
+                }
+
+                const Vehicle* lpVehicle = GetVehicle(luVehicle);
+                const VehicleTypeRuntime* lpVehicleTypeRuntime =
+                    GetVehicleTypeRuntime(lpVehicle->GetVehicleType());
+
+                const Matrix44Affine lTransform = GetVehicleTransform(luVehicle);
+                const Vector3 lCentre = rw::math::vpu::TransformPoint(
+                    lTransform, lpVehicleTypeRuntime->GetBBoxOffset());
+                const Vector3 lHalf = lpVehicleTypeRuntime->GetBBoxHalfSize();
+
+                const Vector3 lToPlayer = lPlayerPos - lCentre;
+                const f32 lfLocalX = rw::math::vpu::Dot(lToPlayer, lTransform.xAxis);
+                const f32 lfLocalY = rw::math::vpu::Dot(lToPlayer, lTransform.yAxis);
+                const f32 lfLocalZ = rw::math::vpu::Dot(lToPlayer, lTransform.zAxis);
+
+                const f32 KF_T4_CLIP_EXPAND = 0.5f;
+                const bool lbInside =
+                    (lfLocalX > -(lHalf.x + KF_T4_CLIP_EXPAND) && lfLocalX < (lHalf.x + KF_T4_CLIP_EXPAND)) &&
+                    (lfLocalY > -(lHalf.y + KF_T4_CLIP_EXPAND) && lfLocalY < (lHalf.y + KF_T4_CLIP_EXPAND)) &&
+                    (lfLocalZ > -(lHalf.z + KF_T4_CLIP_EXPAND) && lfLocalZ < (lHalf.z + KF_T4_CLIP_EXPAND));
+
+                if (!lbInside)
+                {
+                    continue;
+                }
+
+                sabReported[luVehicle] = true;
+
+                if (lpVehicle->IsPhysical())
+                {
+                    *lpDiag << "[T4-clip] player inside PHYSICAL traffic vehicle "
+                            << static_cast<s32>(luVehicle)
+                            << " at " << lPlayerPos.x << "," << lPlayerPos.y << "," << lPlayerPos.z
+                            << " -- promotion WORKED, the CONTACTS failed (physics side)"
+                               " [DELETE-WHEN-STABLE]\n";
+                }
+                else
+                {
+                    *lpDiag << "[T4-clip] player inside NON-physical traffic vehicle "
+                            << static_cast<s32>(luVehicle)
+                            << " at " << lPlayerPos.x << "," << lPlayerPos.y << "," << lPlayerPos.z
+                            << " (collidable=" << (lpVehicle->IsCollidable() ? 1 : 0)
+                            << ") -- no physics slot [DELETE-WHEN-STABLE]\n";
+                }
+            }
+        }
+    }
+
     if (luMoved != 0)
     {
         if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())

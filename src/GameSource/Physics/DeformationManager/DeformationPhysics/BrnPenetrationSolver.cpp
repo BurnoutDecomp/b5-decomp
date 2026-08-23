@@ -1,8 +1,11 @@
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnPenetrationSolver.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"          // CGS_ASSERT
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"  // gpDebugPrint -- the opt-in [T4-solve] probe only
 #include "rw/math/vpu/vector3_operation.h"                  // rw::math::vpu::{Dot, Max, Subtract, Mult, ...}
 #include "rw/math/vpu/matrix44affine_operation.h"           // rw::math::vpu::TransformPoint
+
+#include <cstdlib>                                          // getenv -- the opt-in [T4-solve] probe only
 
 // BrnPhysics::Deformation::PenetrationSolver -- the post-physics interpenetration resolver.
 //
@@ -242,6 +245,45 @@ namespace Deformation
                 const f32 lfWeightSumRecip = 1.0f / (lfWeightA + lfWeightB);
 
                 const Vector3 lDisp = vpu::Mult(lContact.mNormal, lvfAToBDotN * lfWeightSumRecip);
+
+                // ---- [T4-solve] HOP 3 bring-up probe -- NOT IN THE X360 BINARY. One shot, opt-in
+                // on BRN_TRAFFIC_DIAG, printed BEFORE the two Pos writes so the before/after pair is
+                // in one line. This is the hop that TURNED the defect into a launch: it transforms
+                // mPointOnB by body B, so a mPointOnB that was left in world space got body B's
+                // ~3.7 km translation added twice and lvfAToBDotN became a world-scale "depth".
+                // NO behaviour change. DELETE-WHEN-STABLE.
+                {
+                    static const bool skbSolveDiag = ( std::getenv("BRN_TRAFFIC_DIAG") != 0 );
+                    static bool sbLoggedSolve = false;
+                    if ( skbSolveDiag && !sbLoggedSolve && CgsDev::Log::gpDebugPrint != 0 )
+                    {
+                        sbLoggedSolve = true;
+                        *CgsDev::Log::gpDebugPrint
+                            << "[T4-solve] HOP3 FIRST vehicle penetration contact: idxA="
+                            << lContact.miIndexA << " idxB=" << lContact.miIndexB
+                            << " | storedA " << lContact.mPointOnA.x << " " << lContact.mPointOnA.y
+                            << " " << lContact.mPointOnA.z
+                            << " | storedB " << lContact.mPointOnB.x << " " << lContact.mPointOnB.y
+                            << " " << lContact.mPointOnB.z
+                            << " | posA " << lrTransformA.Pos().x << " " << lrTransformA.Pos().y
+                            << " " << lrTransformA.Pos().z
+                            << " | posB " << lrTransformB.Pos().x << " " << lrTransformB.Pos().y
+                            << " " << lrTransformB.Pos().z
+                            << " | worldA " << lvWorldA.x << " " << lvWorldA.y << " " << lvWorldA.z
+                            << " | worldB " << lvWorldB.x << " " << lvWorldB.y << " " << lvWorldB.z
+                            << " | AtoB " << lAToB.x << " " << lAToB.y << " " << lAToB.z
+                            << " | nrm " << lContact.mNormal.x << " " << lContact.mNormal.y
+                            << " " << lContact.mNormal.z
+                            << " | depth " << lvfAToBDotN
+                            << " wA " << lfWeightA << " wB " << lfWeightB
+                            << " | disp " << lDisp.x << " " << lDisp.y << " " << lDisp.z
+                            << " | dA " << (lDisp.x * lfWeightA) << " " << (lDisp.y * lfWeightA)
+                            << " " << (lDisp.z * lfWeightA)
+                            << " | dB " << (-lDisp.x * lfWeightB) << " " << (-lDisp.y * lfWeightB)
+                            << " " << (-lDisp.z * lfWeightB)
+                            << "\n";
+                    }
+                }
 
                 // Push the two bodies apart: A advances (vmaddfp into A's Pos row), B retreats
                 // (vsubfp out of B's Pos row), each by its own weighted share.

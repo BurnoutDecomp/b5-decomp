@@ -1271,6 +1271,59 @@ void Vehicle::SetDead(u32 luVehicle, VehicleSoaData& lSoaData)
     lSoaData.mAliveVehicles.UnSetBit(luVehicle);
 }
 
+// ----------------------------------------------------------------------------
+// Vehicle::SetCollidable @0x8271BB30 -- the COLLISION twin of SetHasEntity below, and the
+// blocker that kept TrafficEntityModule::UpdateCollidableVehicles out of the tree.
+//
+// Store map off the asm:
+//   set   arm 0x82731xxx..: `*(this+5) |= 4`   then  field |= mask   at soa+160+8*(idx>>6)
+//   clear arm 0x82732530..: `*(this+5) &= ~4`  then  field &= ~mask  (`v70 = a4 + 160`)
+// soa+160 is mCollidableVehicles, the third FastBitArray<601> member (0/80/160/240 = alive /
+// withEntities / collidable / physical, and 0x282D0+0xA0 == the 0x506E*8 field base the
+// caller's own out-of-sync check reads).
+//
+// The iterator, not an index: r5 is a FastBitArray<600>::Iterator by reference. miIndex is the
+// vehicle index, mxMask is the precomputed 1<<(miIndex&63), and the console ORs/ANDCs THAT
+// mask rather than recomputing it. SetBit/UnSetBit(miIndex) is value-identical --
+// Iterator::Advance maintains mxMask as exactly 1<<(miIndex%64) -- so the bit math is written
+// through the container's own named API here and the iterator supplies the index.
+//
+// The four "Index N is out of range (max bits: 600)" CgsFastBitArray.h asserts the asm carries
+// (h:235/374/415/442/463) are the container's own inlined bounds checks, which this tree's
+// FastBitArray deliberately does not reproduce; the ONE bound that is not the container's --
+// the caller-visible `miIndex < KU_MAX_TOTAL_TRAFFIC` -- is kept.
+// ----------------------------------------------------------------------------
+void Vehicle::SetCollidable(bool lbCollidable,
+                            const CgsContainers::FastBitArray<VehicleSoaData::KU_MAX_VEHICLES>::Iterator& lrVehicleIt,
+                            VehicleSoaData& lSoaData)
+{
+    const u32 luVehicle = static_cast<u32>(lrVehicleIt.GetIndex());
+    CGS_ASSERT(luVehicle < 600u, "luIndex < KU_MAX_TOTAL_TRAFFIC");
+
+    // 0x8271BE4C-ish: the SoA bit and the flag must agree BEFORE the write (the console's
+    // `((field & mask) != 0) != ((mxFlags >> 2) & 1)` tripwire).
+    CGS_ASSERT(lSoaData.mCollidableVehicles.IsBitSet(luVehicle) == IsCollidable(),
+               "lSoaData.mCollidableVehicles.IsBitSet( luVehicle ) == IsCollidable()");
+
+    if (lbCollidable)
+    {
+        CGS_ASSERT(IsAlive(), "IsAlive()");
+        CGS_ASSERT(lSoaData.mAliveVehicles.IsBitSet(luVehicle),
+                   "lSoaData.mAliveVehicles.IsBitSet( luVehicle )");
+
+        mxFlags |= static_cast<u8>(E_FLAG_COLLIDABLE);
+        lSoaData.mCollidableVehicles.SetBit(luVehicle);
+    }
+    else
+    {
+        // `andi.` clears only bit 2; unlike SetDead / SetNotPhysical this arm touches no
+        // other flag, and it does NOT assert IsAlive() -- the console clears the collision
+        // state of a vehicle that is on its way out.
+        mxFlags &= static_cast<u8>(~static_cast<u8>(E_FLAG_COLLIDABLE));
+        lSoaData.mCollidableVehicles.UnSetBit(luVehicle);
+    }
+}
+
 // Vehicle::SetHasEntity @0x8270EB38 -- the scene-entity twin of SetPhysical/SetDead above.
 // Store map off the asm: mxFlags at this+0x05 (`ori 2` / `andi. 0xFD`), and the mutated
 // array is lSoaData + 0x50 == mVehiclesWithEntities, the second FastBitArray<601> member.

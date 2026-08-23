@@ -600,6 +600,17 @@ public:
         const CgsModule::EventQueue<CgsPhysics::PhysicsSimulationIO::OutUpdateRigidBody, 200>* lpUpdatedBodies,
         VecFloat lvfTimeStep);
 
+    // ⭐ ADDED 2026-08-23 (traffic wave 4, cluster B) -- THE MISSING PRODUCER of
+    // mUnusedPotentialTrafficQueue. X360 0x825EFB40 (72 insns), DWARF :165 /
+    // BrnPhysicalTrafficManager.cpp:2041. Walks mPotentialTrafficVehicles (this+104576) and
+    // AddEvents every still-POTENTIAL slot into mUnusedPotentialTrafficQueue (this+104624), which
+    // ProcessRemoveEvents @0x8262D0C0 drains on the NEXT frame. A slot whose bit was cleared by
+    // SetTrafficVehicleCrashing / Checked / Slammed (or by Remove) is NOT retired -- that is the
+    // whole type distinction: a collision proxy that did not turn into a crash is thrown away.
+    // xrefs_to is the single entry VehicleManager::ProcessContactSpies @0x82646C98 (its TAIL call,
+    // 0x82646E5C, `addis r3,r28,1 ; addi r3,r3,-0x5120` == this + 44768).
+    void DisposeOfNonCrashingTraffic();
+
     // ⭐ ADDED 2026-08-11 (physics->output publish wave). X360 0x825F0308 (481 insns) -- the TRAFFIC
     // half of the per-frame publish, and the tail call of VehicleManager::WriteOutVehicleStats
     // @0x8263FA28 (`addis r3,r18,1 ; addi r3,r3,-0x5120` == this + 44768 == &mPhysicalTrafficManager,

@@ -820,6 +820,11 @@ public:
     // write back for a car at rest.
     // DELETE-WHEN ReadUpdatedActiveRaceCarDataFromPhysics + UpdatePhysicsState are wired to
     // a real VehicleOutputInterface::maRaceCarStates.
+    // ⭐ THAT CONDITION IS NOW MET (MEASURED 2026-08-23, booted drive run): the readback runs
+    // every PostPhysics frame, its mUsedRaceCars gate passes, and mPhysicsState tracks the car
+    // at 73 mph. This seat is retire-ready -- left standing only because retiring it (and
+    // PublishRenderPoseWithoutPhysicsBringUp with it) is the conductor's consolidation and
+    // needs its own boot check on the create/car-select edge, not this wave's.
     // ========================================================================
     void SeedPhysicsStateFromCreateEventBringUp(const Matrix44Affine& lrTransform);
 

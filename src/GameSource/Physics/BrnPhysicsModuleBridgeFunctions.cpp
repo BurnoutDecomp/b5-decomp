@@ -940,10 +940,12 @@ namespace BrnPhysics
     // =================================================================================================
     // BrnPhysics::PhysicsModule::BridgeSimpleTrafficWithWorldContactsToSimulation  @0x825A5618
     //
-    // ⚠⚠ TRAP STUB (closure enforcement, 2026-08-06 big-five #2 wave) -- the REAL body (484 X360
-    // asm lines; PS3 DecFIGS 0x699594, same TU) is NOT reconstructed yet. Dead code today: the
-    // only caller chain is Update @0x825B0640, still a link stub, so /OPT:REF strips this. The
-    // trap keeps the lie loud if that ever changes. RECONSTRUCT-NEXT.
+    // GATE (2026-08-06 big-five #2 wave) -- the REAL body (484 X360 asm lines; PS3 DecFIGS
+    // 0x699594, same TU) is NOT reconstructed. Reached every frame from BridgeContactsToSimulation
+    // (Update @0x825B0640 is real); the one-shot log below is the gate.
+    // ⚠ SCOPE (wave 4, 2026-08-23): its queue is EMPTY BY CONSTRUCTION. No create path -- console or
+    // host -- ever allocates an E_PHYSICAL_TRAFFIC_TYPE_SIMPLE slot (GetFreeTrafficVehicleWithPhysics
+    // @0x82637608 has no simple arm), so this gate drops nothing. Not a crash-into-traffic blocker.
     // =================================================================================================
     void PhysicsModule::BridgeSimpleTrafficWithWorldContactsToSimulation(
         CgsPhysics::PhysicsSimulationIO::InputBuffer::InAddContactQueue* /*lpContactQueue*/,

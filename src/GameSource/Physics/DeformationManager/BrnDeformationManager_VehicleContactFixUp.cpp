@@ -37,6 +37,8 @@
 
 #include "GameSource/Physics/DeformationManager/BrnDeformationManager.h"
 
+#include <cstdlib>   // getenv -- the opt-in [T4-boxfix] bring-up probe only
+
 #include <cmath>   // std::acos / std::sin / std::cos / std::fabs -- stand-ins for the console's
                    // XMVectorACos call + inlined XM sin/cos minimax polynomials, per the
                    // CameraUtils.cpp precedent ("std::acos stands in for the external
@@ -46,6 +48,7 @@
 #include "rw/math/vpu/matrix44affine_operation.h"                                         // TransformPoint / TransformVector / InverseOfMatrixWithOrthonormal3x3
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                        // CGS_ASSERT
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"                                // gpDebugPrint -- the opt-in [T4-boxfix] probe only
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"                 // CgsDev::PerfMonCpu::Start/StopMonitor
 #include "GameShared/GameClasses/Geometric/Primitives/CgsSphere.h"                        // CgsGeometric::Sphere
 #include "GameShared/GameClasses/SceneManager/SharedIO/CgsPotentialContact.h"             // PotentialContact
@@ -66,18 +69,24 @@ namespace Deformation
         // rw::math::fpu::EPSILON, lane 0 of stru_8208F620 == FLT_EPSILON (1.1920929e-07f).
         const f32 KF_RW_EPSILON = 1.1920928955078125e-07f;
 
-        // ⚠️ FLAG (value un-recovered -- NOT fabricated silently): the console keeps this as a
-        // dynamically-initialised `const VecFloat BrnPhysics::Deformation::
-        // KVF_PROJECTSPHERE_RADIUS_PADDING` (DWARF BrnDeformationManager.h:12, X360 .data
-        // @0x82FB9660). The DUMPED image bytes read 0.0f -- but that address is written by a
-        // static initialiser at boot (a non-trivial VecFloat ctor), so the dump shows the
-        // PRE-INIT value, not necessarily the shipped one. The initialiser is not in the export
-        // set and an image-wide lis/addi materialisation scan finds only the two consumers
-        // (0x825DC07C / 0x825DCF34), so the true value is presently unrecoverable statically.
-        // 0.0f (the dumped bytes) is carried with this flag; RE-MEASURE it from a live console
-        // capture (or the BPR x86 .rdata once its ProjectSphereContactOntoBox is located) when
-        // this path goes live -- it only widens/narrows the face-band of the OUT normal below.
-        const f32 KF_PROJECTSPHERE_RADIUS_PADDING = 0.0f;
+        // ✅ RECOVERED 2026-08-23 (was FLAGged 0.0f). The console keeps this as a dynamically-
+        // initialised `const VecFloat BrnPhysics::Deformation::KVF_PROJECTSPHERE_RADIUS_PADDING`
+        // (DWARF BrnDeformationManager.h:12, X360 .data @0x82FB9660), so the raw image bytes read
+        // 0.0f -- the PRE-INIT value. Its static initialiser IS in the image, at 0x82C5B7E0:
+        //     lis  r11, flt_820047C8@ha / lfs f0, flt_820047C8@l(r11) / stfs f0, -0x10(r1)
+        //     lis  r11, unk_82FB9660@ha / lvlx v0 / addi r11, r11, unk_82FB9660@l
+        //     vspltw v0, v0, 0          / stvx128 v0, r0, r11
+        // and flt_820047C8 == 0x3D4CCCCD == 0.05f. (The earlier lis/addi scan missed it because
+        // 0x9660 has the high bit set, so the pair is emitted as lis 0x82FC / addi -0x69A0.)
+        //
+        // It MATTERS: the out-normal band below is `radius - padding`, and the moved contact point
+        // sits EXACTLY at `radius` along the dominant box axis by construction. With padding 0 the
+        // dominant axis fails `|axisDot| > radius` on a coin-flip of FP rounding, the axis sum comes
+        // out {0,0,0}, and Normalize(zero) returns zero -- a NON-UNIT contact normal that trips
+        // :1568/:1580 here, BrnDeformationSensor_ValidateAndAddContact's |normal|==1 gate and the
+        // bridge's "Un-normalised race car-traffic car contact". 0.05 m of slack is what makes the
+        // face the point was projected onto always count.
+        const f32 KF_PROJECTSPHERE_RADIUS_PADDING = 0.05f;   // flt_820047C8, via init @0x82C5B7E0
 
         inline f32 Sign(f32 lfValue)   // vcmpgtfp/vcmpgefp + vsel chain: >0 -> +1, ==0 -> 0, <0 -> -1
         {
@@ -563,11 +572,24 @@ namespace Deformation
             rw::math::vpu::TransformVector(lTrafficInverse, lrContact.mNormal);
         const Vector3 lHalfExtents = lpTrafficModel->GetHalfExtents();
 
+        // ⚠️ THE X TEST IS NOT THE Y/Z TEST -- the console's three vcmpgefp. have DIFFERENT operand
+        // order and the tree had all three the same way round. Verbatim:
+        //   0x825DC508  vcmpgefp. v0, v12(|local.x|), v0(halfExtents.x)   -> |local.x| >= hx
+        //   0x825DC538  vcmpgefp. v0, v0(halfExtents.y), v12(|local.y|)   -> hy >= |local.y|
+        //   0x825DC568  vcmpgefp. v0, v0(halfExtents.z), v13(|local.z|)   -> hz >= |local.z|
+        // which is what the name says: the race car's point is BEYOND the traffic box laterally
+        // while still level with it and alongside it -- it hit the SIDE. (Inside-the-box on all
+        // three axes would be a containment test, and would snap the normal to +-xAxis for
+        // head-on hits too.)
         const bool lbRaceCarHitSideOfTraffic =
-            lHalfExtents.x >= std::fabs(lPointOnRaceCarLocal.x) &&
+            std::fabs(lPointOnRaceCarLocal.x) >= lHalfExtents.x &&
             lHalfExtents.y >= std::fabs(lPointOnRaceCarLocal.y) &&
             lHalfExtents.z >= std::fabs(lPointOnRaceCarLocal.z) &&
             (lPointOnRaceCarLocal.x * lNormalTrafficLocal.x) > 0.0f;
+
+        f32 lfDiagDotA = 0.0f;   // [T4-boxfix] probe only -- the console keeps these inside the else
+        f32 lfDiagDotB = 0.0f;
+        const char* lpcDiagPick = "SIDE(traffic.xAxis * Sign)";
 
         if (lbRaceCarHitSideOfTraffic)
         {
@@ -587,11 +609,55 @@ namespace Deformation
                                     ? rw::math::vpu::Negate(lRaceCarNormal)
                                     : lTrafficNormal;
 
+            lfDiagDotA  = lvfRelativeVelocityDotA;
+            lfDiagDotB  = lvfRelativeVelocityDotB;
+            lpcDiagPick = lvfRelativeVelocityDotB > lvfRelativeVelocityDotA
+                              ? "VEL(-lRaceCarNormal)" : "VEL(lTrafficNormal)";
+
             // Console streams mNormal/lNormal/the dots/velocities/lPointOnRaceCarLocal/
             // lRaceCarNormal/lTrafficNormal/lbRaceCarHitSideOfTraffic/lTrafficTransform; lowered
             // per the standing rule.
             CGS_ASSERT(rw::math::vpu::Dot(lrContact.mNormal, lNormal) > 0.0f,
                        "lPotentialContact.mNormal: ");   // :1568
+        }
+
+        // ---- [T4-boxfix] bring-up probe -- NOT IN THE X360 BINARY. One shot, opt-in on
+        // BRN_TRAFFIC_DIAG. This is the hop that OVERWRITES the queue-[8] normal, so it names
+        // whether a non-unit / wrong-signed mNormal was born here: it prints the incoming normal,
+        // both projected face normals with their magnitudes (a zero one means the axis sum missed
+        // -- the KVF_PROJECTSPHERE_RADIUS_PADDING failure), the branch taken, and the final normal
+        // with |normal| and Dot(final, incoming). DELETE-WHEN-STABLE.
+        {
+            static const bool skbBoxDiag = ( getenv( "BRN_TRAFFIC_DIAG" ) != 0 );
+            static bool sbLoggedBox = false;
+            if ( skbBoxDiag && !sbLoggedBox && CgsDev::Log::gpDebugPrint != 0 )
+            {
+                sbLoggedBox = true;
+                const Vector3 lFinal = lrContact.mNormal;
+                const f32 lfMagA = std::sqrt( rw::math::vpu::Dot( lRaceCarNormal, lRaceCarNormal ) );
+                const f32 lfMagB = std::sqrt( rw::math::vpu::Dot( lTrafficNormal, lTrafficNormal ) );
+                const f32 lfMagF = std::sqrt( rw::math::vpu::Dot( lFinal, lFinal ) );
+                *CgsDev::Log::gpDebugPrint
+                    << "[T4-boxfix] FIRST race car-traffic box fix-up:"
+                    << " incoming nrm " << lNormal.x << " " << lNormal.y << " " << lNormal.z
+                    << " | lRaceCarNormal " << lRaceCarNormal.x << " " << lRaceCarNormal.y << " "
+                    << lRaceCarNormal.z << " |A| " << lfMagA
+                    << " | lTrafficNormal " << lTrafficNormal.x << " " << lTrafficNormal.y << " "
+                    << lTrafficNormal.z << " |B| " << lfMagB
+                    << " | localPtOnRaceCar " << lPointOnRaceCarLocal.x << " "
+                    << lPointOnRaceCarLocal.y << " " << lPointOnRaceCarLocal.z
+                    << " | halfExtents " << lHalfExtents.x << " " << lHalfExtents.y << " "
+                    << lHalfExtents.z
+                    << " | radii A " << lRaceCarSphere.mPositionRadius.w
+                    << " B " << lTrafficSphere.mPositionRadius.w
+                    << " | hitSide " << ( lbRaceCarHitSideOfTraffic ? 1 : 0 )
+                    << " dotA " << lfDiagDotA << " dotB " << lfDiagDotB
+                    << " | PICK " << lpcDiagPick
+                    << " | FINAL " << lFinal.x << " " << lFinal.y << " " << lFinal.z
+                    << " |n| " << lfMagF
+                    << " Dot(final,incoming) " << rw::math::vpu::Dot( lFinal, lNormal )
+                    << "\n";
+            }
         }
 
         // Common exit gate -- streams the full local set incl. both spheres and

@@ -45,6 +45,8 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                           // the named gates
 #include "rw/physics/inertia.h"                                                      // rw::physics::Inertia
 
+#include <cstdlib>                                                                   // getenv ([T4-*] diagnostics only)
+
 namespace
 {
     inline void TrafficRemoveLogOnce(bool& lrbLogged, const char* lpcMessage)
@@ -55,6 +57,18 @@ namespace
             if (CgsDev::Message::gxMessageFilterFlags & 1)
                 *CgsDev::Log::gpDebugPrint << lpcMessage;
         }
+    }
+
+    // [DIAG] NOT IN THE X360 BINARY. Opt-in on BRN_TRAFFIC_DIAG, same shape as the
+    // TrafficDiagStream helper in the sibling _Create.cpp. DELETE-WHEN-STABLE.
+    inline CgsDev::Log::DebugPrint* TrafficRemoveDiagStream()
+    {
+        static const bool sbOn = (std::getenv("BRN_TRAFFIC_DIAG") != 0);
+        if (!sbOn || CgsDev::Log::gpDebugPrint == 0)
+        {
+            return 0;
+        }
+        return CgsDev::Log::gpDebugPrint;
     }
 
     // The simulation-side owner byte the console splices into a traffic rigid-body id
@@ -111,6 +125,84 @@ namespace Vehicle
     void PhysicalTrafficManager::PhysicallyUncrashTrafficCar(u16, Deformation::DeformationInputInterface*)
     {
         BRN_T3_REMOVE_GATE("PhysicalTrafficManager::PhysicallyUncrashTrafficCar @0x825F00D8 (140)");
+    }
+
+    // =============================================================================================
+    // DisposeOfNonCrashingTraffic @0x825EFB40 (72)   ⭐ LANDED 2026-08-23 (traffic wave 4, fix B)
+    //   DWARF :165 / BrnPhysicalTrafficManager.cpp:2041. No asserts of its own: the only streamed
+    //   message in the body is the inlined BitArray<20>::IsBitSet bound ("invalid index : " <<
+    //   i << " < " << 20, CgsBitArray.h:203) and the queue-full tripwire lives inside
+    //   BaseEventQueue<s8>::AddEvent.
+    //
+    // THE MISSING WIRE OF WAVE 4. Nothing in the tree ever APPENDED to mUnusedPotentialTrafficQueue,
+    // so a POTENTIAL body created by the overlap route (HandleHalfPotentialContact ->
+    // AddVehicleToPhysics, which deliberately never calls RecordTrafficVehicleIsPhysical) held its
+    // slot for ever: the world-side E_FLAG_PHYSICAL stayed clear, the same overlap pair re-promoted
+    // the same car every frame ("Traffic already has body" / "added twice" / the
+    // mu8GlobalToPhysicalEntityIndexMap assert), and WriteOutVehicleStats re-published a
+    // PhysicalTrafficState for it every frame into a world that does not think it is physical.
+    //
+    // THE WALK, verbatim from 0x825EFB4C..0x825EFDE4:
+    //   r19 = this + 0x20000 - 0x6780 == this + 104576 == mPotentialTrafficVehicles
+    //   r15 = this + 0x20000 - 0x6750 == this + 104624 == mUnusedPotentialTrafficQueue
+    //   `for (i = GetFirstNonZeroBit(); i >= 0; i = GetNextNonZeroBit(i)) AddEvent((s8)i)`
+    //   (the first-iteration `cmpwi r31,0x14 ; bge exit` at 0x825EFBA8 is the inlined
+    //    GetFirstNonZeroBit's own bound and is redundant for a BitArray<20>; the loop-bottom test
+    //    at 0x825EFDD8 is the `>= 0` reproduced here. `stb r31, var_B0(r1)` + `addi r4,r1,var_B0`
+    //    is the s8 passed by address -- AddEvent(const s8&).)
+    //
+    // ⚠️ IT DOES NOT CLEAR THE BIT. RemoveTrafficVehicle does that (:320) when ProcessRemoveEvents
+    // drains the queue on the NEXT frame's PostSceneUpdate, BEFORE ProcessCreateEvents -- which is
+    // exactly why the pair may legitimately re-promote that frame without tripping :1110.
+    //
+    // ⚠️ CONSOLE CALL POSITION: the TAIL of VehicleManager::ProcessContactSpies @0x82646E5C, i.e.
+    // inside PhysicsModule::Update's non-catchup contact-spy leg, AFTER WriteOutVehicleStats.
+    // ProcessContactSpies is still a BRN_CONDUCTOR_GATE in the forbidden BrnPhysicsConductorGates
+    // .cpp, so the call is seated at that exact frame position in BrnPhysicsModuleUpdateFunctions
+    // .cpp instead; see the [wave4-B] note there.  DELETE-WHEN ProcessContactSpies is bodied.
+    // =============================================================================================
+    void PhysicalTrafficManager::DisposeOfNonCrashingTraffic()
+    {
+        s32 liRetired = 0;
+
+        for (s32 liVehicle = mPotentialTrafficVehicles.GetFirstNonZeroBit();
+             liVehicle >= 0;
+             liVehicle = mPotentialTrafficVehicles.GetNextNonZeroBit(liVehicle))
+        {
+            mUnusedPotentialTrafficQueue.AddEvent(static_cast<s8>(liVehicle));
+            ++liRetired;
+
+            // [T4-retire] one-shot per build. DELETE-WHEN-STABLE.
+            if (CgsDev::Log::DebugPrint* lpDiag = TrafficRemoveDiagStream())
+            {
+                static bool sbFirstRetire = false;
+                if (!sbFirstRetire)
+                {
+                    sbFirstRetire = true;
+                    *lpDiag << "[T4-retire] FIRST potential-proxy retirement: slot " << liVehicle
+                            << " entity index "
+                            << static_cast<s32>((maTrafficEntityIDs[liVehicle].muValue >> 10) & 0x3FFFu)
+                            << " queued for RemoveTrafficVehicle next frame\n";
+                }
+            }
+        }
+
+        // [T4-potential] the LIVE census (the create-time one in _Create.cpp only ever rises).
+        // Value-latched on the pair (population, retired-this-frame). DELETE-WHEN-STABLE.
+        if (CgsDev::Log::DebugPrint* lpDiag = TrafficRemoveDiagStream())
+        {
+            static s32 siLastPopulation = -1;
+            static s32 siLastRetired    = -1;
+
+            const s32 liPopulation = static_cast<s32>(mPotentialTrafficVehicles.CountSetBits());
+            if (liPopulation != siLastPopulation || liRetired != siLastRetired)
+            {
+                siLastPopulation = liPopulation;
+                siLastRetired    = liRetired;
+                *lpDiag << "[T4-potential] live census: proxied cars=" << liPopulation
+                        << " of 20 physical slots, retired this frame=" << liRetired << "\n";
+            }
+        }
     }
 
     // =============================================================================================

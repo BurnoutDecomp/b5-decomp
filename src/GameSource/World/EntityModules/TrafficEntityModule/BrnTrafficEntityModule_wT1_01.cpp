@@ -821,6 +821,27 @@ void TrafficEntityModule::StaticVehicles_CreateNewVehicles(
                         << " -> dropped Y=" << lrPos.y
                         << " (drop=" << (lpRecord->mTransform.wAxis.y - lrPos.y) << ")\n";
             }
+
+            // [T4-static] ONE LINE PER CAR, capped, so the conductor can pick a ram target
+            // without a debugger: index, type, seated world position, the transform's zAxis
+            // (the direction the car faces, which is what a -Teleport heading has to match),
+            // and the hull it belongs to. The cap keeps a full junkyard populate from
+            // flooding BrnGame.log. DELETE-WHEN-STABLE.
+            static u32 suT4StaticLogged = 0;
+            const u32 KU_T4_STATIC_LOG_CAP = 64;
+            if (suT4StaticLogged < KU_T4_STATIC_LOG_CAP)
+            {
+                ++suT4StaticLogged;
+                const Vector3& lrPos = lOutMatrix.wAxis;
+                const Vector3& lrAt  = lOutMatrix.zAxis;
+                *lpDiag << "[T4-static] vehicle=" << static_cast<s32>(luVehicle)
+                        << " type=" << static_cast<s32>(luVehicleType)
+                        << " pos=(" << lrPos.x << ", " << lrPos.y << ", " << lrPos.z << ")"
+                        << " at=(" << lrAt.x << ", " << lrAt.y << ", " << lrAt.z << ")"
+                        << " hull=" << static_cast<s32>(lrParam.GetHull())
+                        << " indexInHull=" << static_cast<s32>(luIndexInHull)
+                        << " [DELETE-WHEN-STABLE]\n";
+            }
         }
     }
 
@@ -1873,12 +1894,18 @@ void TrafficEntityModule::PostPhysicsUpdate(CgsModule::IOBufferStack* lpInputBuf
             static bool sbLogged = false;
             LogMissingLeg(sbLogged,
                 "PostPhysicsUpdate E_STATE_RUNNING tail legs -- "
-                "ProcessNearbyTrafficSceneQueryResults, GenerateRemovedVehicleEvents, "
+                "ProcessNearbyTrafficSceneQueryResults @0x82726CD0 (NOT crash-module surface: "
+                "it is the NEAR-MISS / HORN / SOUND / traffic-director consumer of the 70 m "
+                "sphere query PostNearbyTrafficSceneQueryRequest @0x827478C8 posts -- xrefs "
+                "Vehicle::IsHornOn, Vehicle::IsCrashing, NearMissData::Append, "
+                "TrafficSoundOutputInterface::AddTrafficEntity, TrafficDirectorEntity::Append. "
+                "It creates NO physics body and touches no collision volume, so it is not on "
+                "the crash-into-traffic path), GenerateRemovedVehicleEvents, "
                 "GenerateSlamRecoveryEvents, GenerateVehicleCrashedEvents, and the three "
                 "80-byte mVehicleSoaData -> OutputBuffer_PostPhysics copies (soa members "
                 "mPhysicalVehicles / mVehiclesRenderedLastFrame / mPhysicalVehiclesFarFrom"
                 "Player into the crash-traffic input interface at console +3240/+3320/+3400). "
-                "None is bodied; all are crash-module surface (wave 3)");
+                "None is bodied; the last four are crash-module surface (wave 3)");
         }
     }
     break;
@@ -1927,6 +1954,35 @@ void TrafficEntityModule::PostPhysicsUpdate(CgsModule::IOBufferStack* lpInputBuf
 
             mLocalPlayerPosition  = lpPlayerState->mTransform.wAxis;
             mLocalPlayerDirection = lpPlayerState->mTransform.zAxis;
+
+            if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())
+            {
+                // [T4-player] every 60 frames: where the player is, how fast and which way.
+                // Read against [T4-static] it says whether a -Teleport actually put the car
+                // near a parked one; read against [T4-collide] it says whether the collidable
+                // sweep is following the player at all.
+                //
+                // SEAT NOTE: the wave spec asked for PostPhysicsUpdate's RUNNING arm; this is
+                // the same function's local-player refresh tail, ~90 lines later, which is the
+                // one place that already holds position, direction AND the RaceCarState the
+                // velocity comes from. Same frame, same data, no extra interface fetch.
+                // DELETE-WHEN-STABLE.
+                static u32 suFrame = 0;
+                if ((suFrame % 60u) == 0u)
+                {
+                    const Vector3& lrVel = lpPlayerState->mLinearVelocity;
+                    *lpDiag << "[T4-player] idx=" << static_cast<s32>(meLocalPlayerIndex)
+                            << " pos=(" << mLocalPlayerPosition.x
+                            << ", " << mLocalPlayerPosition.y
+                            << ", " << mLocalPlayerPosition.z << ")"
+                            << " vel=(" << lrVel.x << ", " << lrVel.y << ", " << lrVel.z << ")"
+                            << " at=(" << mLocalPlayerDirection.x
+                            << ", " << mLocalPlayerDirection.y
+                            << ", " << mLocalPlayerDirection.z << ")"
+                            << " [DELETE-WHEN-STABLE]\n";
+                }
+                ++suFrame;
+            }
         }
         else
         {

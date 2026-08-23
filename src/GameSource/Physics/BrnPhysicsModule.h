@@ -324,10 +324,11 @@ namespace Vehicle         { struct VehicleManagerOutputBuffer; } // home BrnVehi
         // ⭐ ADDED 2026-08-06 (FixUpVehicleContacts wave). @0x825A6010, home TU
         // BrnPhysicsModuleUpdateFunctions.cpp (:915 -- its own baked assert path names the file).
         // The big-five opener: walk the three vehicle-vs-vehicle potential-contact queues and
-        // deform-fix each contact -- racecar-vs-traffic ([8], the B id rewritten global->physical
-        // through VehicleManager::GetPhysicsEntityIDFromGlobalEntityID), racecar-vs-racecar ([7]),
-        // and the scene queue's traffic-vs-traffic pairs ([0], both ids rewritten). Caller:
-        // PhysicsModule::Update @0x825B0640 (still a link stub).
+        // deform-fix each contact -- racecar-vs-traffic ([8]), racecar-vs-racecar ([7]), and the
+        // scene queue's traffic-vs-traffic pairs ([0]). The global->physical traffic id splice is
+        // into LOCALS passed to the fix-up; the queue records keep GLOBAL ids on both sides
+        // (asm @0x825A6010: no store into the record), so consumers do their own map lookup.
+        // Caller: PhysicsModule::Update @0x825B0640 (real; every frame).
         void FixUpVehicleContacts( PhysicsModuleIO::PotentialContactInterface* lpPotentialContactsInterface );
 
         // ⭐ ADDED 2026-08-06 (big-five #2, contact-generation wave). @0x825A99E8, home THIS TU
@@ -337,7 +338,7 @@ namespace Vehicle         { struct VehicleManagerOutputBuffer; } // home BrnVehi
         // per-material frictions), then drain the five typed custom queues ([6] vehicle-world,
         // [9] traffic-world, [7] racecar-racecar, [13] traffic-traffic, [8] racecar-traffic)
         // into the deformation sensors, bridge the two simple-traffic passes, and validate the
-        // sim queue. Caller: Update @0x825B0640 (still a link stub). Signature per the PS3
+        // sim queue. Caller: Update @0x825B0640 (real; every frame). Signature per the PS3
         // DecFIGS mangle @0x6999C0.
         void BridgeContactsToSimulation( CgsPhysics::PhysicsSimulationIO::InputBuffer* lpSimModuleInputBuffer,
                                          const PhysicsModuleIO::InputBuffer* lpInputBuffer,

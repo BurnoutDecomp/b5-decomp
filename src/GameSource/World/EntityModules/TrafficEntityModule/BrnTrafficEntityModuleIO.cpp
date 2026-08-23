@@ -472,6 +472,18 @@ namespace BrnTrafficIO
         mOverlapPairsQueue.Append(*lpOverlapPairsQueue);
     }
 
+    // X360 0x82711268 (27 insns, :280): read-lock tripwire then `return this + 163872`
+    // (`addis r3,this,3 ; addi r3,r3,-0x7FE0` == +0x28020 == &mOverlapPairsQueue). The queue
+    // itself is Constructed above and refilled every pre-physics frame by the LIVE bridge
+    // WorldModule::BridgeSceneContactsToTrafficModule_PrePhysics @0x827ABC50; this getter was
+    // the only thing missing, and it is TrafficEntityModule::BuildPotentialCollisionList's
+    // sole blocker. The displacement is reached BY NAME here (host layout differs).
+    const InputBuffer_PrePhysics::OverlapPairsQueue* InputBuffer_PrePhysics::GetOverlapPairsQueue() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");   // .h:284
+        return &mOverlapPairsQueue;
+    }
+
     // X360 0x827A0158: write-lock; copy the 32-byte race-car player-reset interface into the
     // buffer (the X360 does 4 QWORD load/store pairs -> a whole-struct assignment; the struct is
     // 32B: alignas(16) Vector3 mRestPos + bool, padded up).

@@ -289,6 +289,31 @@ public:
     // with r15 == r6+0x50 == &mVehiclesWithEntities). The `_compile` dwarfdump's
     // `const VehicleSoaData &` for this one function is a dumper artifact.
     void SetHasEntity(bool lbHasEntity, u32 luVehicle, VehicleSoaData& lSoaData);
+
+    // X360 @0x8271BB30 -- SetHasEntity's collision twin, and the ONE blocker that kept
+    // TrafficEntityModule::UpdateCollidableVehicles @0x827302C8 out of the tree.
+    //
+    // ARITY, settled off the export (the dropped-argument trap the wave brief warns about):
+    // the prototype is `SetCollidable(this, char, int, int)` and the ONE call site passes
+    // `li r4,1 ; addi r5,r1,var_880 ; addis r6,module,3 ; addi r6,r6,-0x7D30` -- r6 is
+    // &mVehicleSoaData (module+0x282D0) and r5 is a STACK-RESIDENT
+    // FastBitArray<600>::Iterator, not a bare index: the body reads `lwz r11,0(r5)` (miIndex,
+    // bounds-asserted against 0x258) and `ld ...,8(r5)` (mxMask), and ORs / ANDCs that mask
+    // into `soa + 160 + 8*(miIndex>>6)` == mCollidableVehicles' bit field. Passing a bare u32
+    // would compile and silently desync the SoA bit from the flag on the 64-bit boundary.
+    //
+    // Both stores are the console's: `*(this+5) |= 4` / `&= ~4` (E_FLAG_COLLIDABLE) AND the
+    // SoA bit. DEBUGValidateSoaData @0x82714A60 pins them equal.
+    void SetCollidable(bool lbCollidable,
+                       const CgsContainers::FastBitArray<VehicleSoaData::KU_MAX_VEHICLES>::Iterator& lrVehicleIt,
+                       VehicleSoaData& lSoaData);
+
+    // The predicate the SetCollidable / DEBUGValidateSoaData assert strings name
+    // ("GetVehicle( luVehicle )->IsCollidable() == mCollidableVehicles",
+    // BrnTrafficEntityModule_wT2_02.cpp:293 already quotes it). mxFlags bit 2, the same read
+    // the console folds inline as `lbz r11,5(rN) ; extrwi r11,r11,1,29` (0x8273228C).
+    bool IsCollidable() const { return (mxFlags & E_FLAG_COLLIDABLE) != 0; }
+
     Vector3 CalcTowBarPos(Matrix44Affine lTransform,
                           const VehicleTypeRuntime* lpVehicleTypeRuntime) const;
     Vector3 CalcFrontAxlePos(Matrix44Affine lTransform,

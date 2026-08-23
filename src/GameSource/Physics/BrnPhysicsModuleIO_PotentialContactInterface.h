@@ -116,11 +116,30 @@ namespace PhysicsModuleIO
         const CustomPotentialContactQueue& GetArticulatedJointQueue() const { return maCustomEventQueues[12]; }
 
         // ⭐ ADDED 2026-08-14 (walls leg 4). The two hinged-body-part queues the pool's
-        // UpdateJoinedParts drains -- index binding attested by the header's own offset notes
-        // (ifc+0x118080 == 16 + 7*stride -> [7] hinged-vs-CAR; ifc+0x140090 == 16 + 8*stride ->
-        // [8] hinged-vs-WORLD, owner asserts (RACECAR_DEFORMABLE_PART, ...)).
-        const CustomPotentialContactQueue& GetHingedBodyPartWithCarQueue()   const { return maCustomEventQueues[7]; }
-        const CustomPotentialContactQueue& GetHingedBodyPartWithWorldQueue() const { return maCustomEventQueues[8]; }
+        // UpdateJoinedParts drains.
+        //
+        // ⛔⛔ INDEX CORRECTED 2026-08-23 (traffic wave 4, fix B) -- THEY WERE [7]/[8], WHICH
+        // COLLIDED HEAD-ON WITH GetRaceCarWithRaceCarQueue/GetRaceCarWithTrafficQueue BELOW.
+        // The old note quoted ifc+0x118080 / ifc+0x140090; those are FixUpVehicleContacts'
+        // race-car offsets, not the pool's. PhysicalBodyPartPool::UpdateJoinedParts @0x8260D200
+        // builds its two queue pointers in the prologue:
+        //     0x8260D224 addis r21,r4,3 ; 0x8260D23C addi r21,r21,-0x7FE0
+        //         -> r4 + 0x28020 == 163872 == 16 + 1*0x28010  ->  [1]  (WORLD, used first,
+        //            `mr r3,r21` @0x8260D510 into the AddContact loop @0x8260D6E8)
+        //     0x8260D22C addis r18,r4,5 ; 0x8260D240 addi r18,r18,0x30
+        //         -> r4 + 0x50030 == 327728 == 16 + 2*0x28010  ->  [2]  (CAR, `mr r3,r18`
+        //            @0x8260D724 into the second AddContact loop @0x8260D930)
+        // Those are the same two displacements BrnPhysicalBodyPartPool.cpp's own asm notes and
+        // BrnPhysicalBodyPartPool.h's model banner already quote ("maCustomEventQueues[1]/[2]
+        // seats -- +163872/+327728"); only this binding was wrong.
+        // MEASURED CONSEQUENCE: queue [8] was empty until traffic wave 4 produced the first
+        // race-car-vs-traffic potential contact. The moment it did, UpdateJoinedParts drained the
+        // race-car/traffic pair as a hinged-part contact, failed the DEFORMABLE_PART owner
+        // tripwire (BrnPhysicalBodyPartPool.cpp:247, owner byte 2 == TRAFFIC_VEHICLE) and then
+        // indexed maParts[] with a PotentialContact word that is not a part index --
+        // 0xC0000005 in UpdateJoinedParts, boot scratch/flow_run/20260823_100207.
+        const CustomPotentialContactQueue& GetHingedBodyPartWithWorldQueue() const { return maCustomEventQueues[1]; }
+        const CustomPotentialContactQueue& GetHingedBodyPartWithCarQueue()   const { return maCustomEventQueues[2]; }
 
         // ⭐ ADDED 2026-08-06 (FixUpVehicleContacts wave). Three more custom-queue accessors, same
         // ADDITIVE pattern as [6] above -- byte offsets (indices) are asm-proven from
