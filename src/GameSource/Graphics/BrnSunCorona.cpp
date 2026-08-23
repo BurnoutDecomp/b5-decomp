@@ -218,6 +218,18 @@ namespace
 // (mounted, build_game_exe.bat:316).
 void* RenderEngineDeviceBeginShaderStates(void* lpShaderStateBlock, void** lppShaderStateOut);
 
+// ⚠ A RE-DECLARATION OF TWO EXISTING GLOBALS, NOT NEW ONES. The PC back-buffer extent is declared at
+// pc/gcm/renderengine/device.h:12-13 and DEFINED at device.cpp, where its semantics live; that
+// header pulls <Windows.h>, so it is declared here instead -- the same one-definition/two-
+// declaration shape pc/gcm/renderengine/Xbox2SurfaceShims.h:129 already uses for gAntiAliasing.
+// READ ONLY, and read ONLY by the [FLAG PC bring-up] line at the end of RenderOccludedFlare: the
+// flare quad itself is built entirely in NDC and does not depend on the display extent.
+namespace renderengine
+{
+    extern s32 gDisplayWidth;
+    extern s32 gDisplayHeight;
+}
+
 // The Xenon immediate-vertex ring intrinsics (defined for PC in
 // pc/gcm/renderengine/XenonD3D9Shims.cpp:3646/3775). Declared at file scope exactly as
 // CgsIm2dUntex.cpp:102-104, BrnSkidVertex.cpp:103-104 and rwgcoronarenderer.cpp declare them.
@@ -829,12 +841,29 @@ void BrnSunCorona::RenderOccludedFlare(CgsRenderTarget* lpOcclusionRt,
                     lfVisibility = static_cast<f32>(luTexel & 0xFFu) / 255.0f;
                 }
             }
-            char lacMessage[400];
+            // [FLAG PC bring-up] the PIXEL rect, added by the 2026-08-23 "rectangular artifact"
+            // bug wave. The NDC numbers alone cost that wave a frame-forensics detour: the quad is
+            // 4*mfSunSize wide and 4*mfSunSize*KF_FLARE_ASPECT tall, i.e. ~768x768 px at 1280x720,
+            // and it is its CORNERS -- not its centre -- that a screenshot shows when the pixel
+            // program's falloff clamp is wrong. Printing the rect in pixels makes that one
+            // comparison, not an investigation. DELETE with the bring-up.
+            const f32 lfPixelWidth  = static_cast<f32>(renderengine::gDisplayWidth);
+            const f32 lfPixelHeight = static_cast<f32>(renderengine::gDisplayHeight);
+            const f32 lfPxLeft   = (lfLeft   + 1.0f) * 0.5f * lfPixelWidth;
+            const f32 lfPxRight  = (lfRight  + 1.0f) * 0.5f * lfPixelWidth;
+            const f32 lfPxTop    = (1.0f - lfTop)    * 0.5f * lfPixelHeight;
+            const f32 lfPxBottom = (1.0f - lfBottom) * 0.5f * lfPixelHeight;
+
+            char lacMessage[512];
             std::snprintf(lacMessage, sizeof(lacMessage),
                           "[suncorona] first flare: screen=(%.4f %.4f) ndc=(%.3f %.3f)-(%.3f %.3f)"
+                          " px=(%.1f %.1f)-(%.1f %.1f) [%.0fx%.0f px of %dx%d]"
                           " colour=(%.3f %.3f %.3f) power=%.2f whiteLevel=%.3f brightness=%.3f"
                           " visibility=%.4f (readback %s, texel=0x%08X fmt=%d)\n",
                           mfXPos, mfYPos, lfLeft, lfBottom, lfRight, lfTop,
+                          lfPxLeft, lfPxTop, lfPxRight, lfPxBottom,
+                          lfPxRight - lfPxLeft, lfPxBottom - lfPxTop,
+                          (int)renderengine::gDisplayWidth, (int)renderengine::gDisplayHeight,
                           lafColourAndPower[0], lafColourAndPower[1], lafColourAndPower[2],
                           mfSunFlarePow, lfWhiteLevel, lfBrightness,
                           lfVisibility, lbRead ? "OK" : "FAILED", (unsigned)luTexel, (int)liFormat);
