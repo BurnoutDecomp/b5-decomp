@@ -958,10 +958,26 @@ namespace BrnDirector
     // ⚠️ WHAT IS BODIED HERE: the prologue, the walk, and the NINE junkyard / car-select cases
     // (62, 63, 64, 65, 73, 75, 76, 77, 85) plus the three handshakes. Those are the complete
     // set of arms that touch GameState +0x180..+0x1AC, i.e. the whole junkyard sub-machine.
+    // ⭐⭐ [bugwave 2026-08-23] PLUS cases 56 and 58 -- THE STUNT/JUMP CAMERA ARMS. Both were
+    // on the gated list below with the blanket reason "writes into a part of the GameState that
+    // is still opaque". MEASURED AND FALSE for these two: both write ONLY
+    // miThisFramesActionFlags (GameState +0x0E4 == MainDirector +211140) and
+    // miActionRequestedCamera (+0x0E8 == +211144), and BOTH are real named members of
+    // BrnDirector::GameState (BrnDirectorGameState.h:102/:105). Their consumers are already
+    // mounted and already read those exact bits by name:
+    //     flags 0x10 -> ArbStateRoaming::ProcessPossibleFX "Smash_Effect"
+    //     flags 0x04 -> ArbStateRoaming::ProcessPossibleFX "Billboard_Effect"
+    //     flags 0x08 -> MomentPlayerJumping::Update  (the plain airborne jump camera)
+    //     flags 0x01 / 0x02 + miActionRequestedCamera
+    //                 -> MomentPlayerStunt::Update   (the AUTHORED super-jump camera and its
+    //                    first-time variant)
+    // With these two arms gated, the smash/billboard camera post-FX never fired either, even
+    // though the smash HUD banner chain has been proven end to end since the gateui wave -- so
+    // this was a live defect for SMASHES today, not only for jumps.
     //
     // ⚠️ WHAT IS GATED, and why (each is a NO-OP here, never a wrong value):
-    //   * the other 36 handled cases (0, 6, 12, 23, 24, 29, 30, 33, 34, 37, 39, 42, 43, 47,
-    //     53, 54, 56, 58, 97, 98, 100, 102, 107, 113, 120, 132, 140, 144, 145, 146, 150, 151,
+    //   * the other 34 handled cases (0, 6, 12, 23, 24, 29, 30, 33, 34, 37, 39, 42, 43, 47,
+    //     53, 54, 97, 98, 100, 102, 107, 113, 120, 132, 140, 144, 145, 146, 150, 151,
     //     205, 215, 216, 218, 223, 224) -- every one of them writes into a part of the
     //     GameState or the MainDirector flag tail that is still opaque, or calls an un-homed
     //     aggregate (AllVehicleData, the VMX drive-thru transform pipeline, DebugRender).
@@ -1025,6 +1041,99 @@ namespace BrnDirector
 
             switch (liActionType)
             {
+            // ---- 56  E_ACTION_ON_JUMP_START (24 bytes) -------------------------------
+            // ⭐⭐ THE JUMP CAMERA REQUEST. Producer: StuntManager::UpdateJumps @0x8239D460
+            // (`li r6,0x18 / li r5,0x38`), whose record the asm builds as
+            //     std @+0x00 the stunt-element key (group id, or own id when grouped to 0)
+            //     stw @+0x08 the camera CUT   (lbz region+0x34 forwards / +0x35 backwards, extsb)
+            //     stw @+0x0C the camera TYPE  (lhz region+0x30 forwards / +0x32 backwards, extsh)
+            //     stb @+0x10 the FIRST-TIME flag (a BYTE -- see the note below)
+            // This arm, transcribed from 0x822381B4..0x82238230:
+            //     lwz r11, 8(r30)        ; cut
+            //     cmpwi r11, 1 ; bne ->  ; lwz r10, 0xC(r30) ; cmpwi r10,0 ; ble ->
+            //     lbz r11, 0x10(r30)     ; first-time
+            //     flags |= firstTime ? 2 : 1                   (stw  +0x338C4)
+            //     miActionRequestedCamera = extsw(cameraType)  (stdx +0x338C8)
+            //   else if (cut == 2 || cut == 0)  flags |= 8      (stw  +0x338C4)
+            //
+            // ⚠️ THE FIRST-TIME FIELD IS A BYTE AT +0x10, NOT A WORD. The console's consumer
+            // reads it with `lbz 0x10(r30)`; on big-endian PPC that is the MOST-significant byte
+            // of the word at +0x10, so a 0/1 stored there as an s32 would read as 0 on the
+            // console every single time. The producer's `stb r30, 0xE0+var_80(r1)` @0x8239D6B4
+            // proves the field really is a byte -- and the producer-side record in
+            // BrnStuntManager.cpp is corrected to match in this same change. Read as a byte here
+            // for the same reason.
+            case 56:
+            {
+                // [bugwave 2026-08-23] NAMES CORRECTED (offsets unchanged, so behaviour here is
+                // unchanged): +0x08 carries the StuntCameraType enum and +0x0C the authored camera
+                // CUT index -- see the producer banner in BrnStuntManager.cpp, which had the two
+                // values in each other's slots. The predicates below always tested the right
+                // OFFSETS; only these local names were misleading.
+                s32 liCameraType = 0;   // +0x08 -- E_STUNT_CAMERA_TYPE_{NO_CUTS,CUSTOM,NORMAL}
+                s32 liCameraCut  = 0;   // +0x0C -- the authored camera index
+                std::memcpy(&liCameraType, lpacPayload + 0x08, sizeof(s32));
+                std::memcpy(&liCameraCut,  lpacPayload + 0x0C, sizeof(s32));
+                const bool lbFirstTime = (lpacPayload[0x10] != 0);
+
+                if (liCameraType == 1 && liCameraCut > 0)
+                {
+                    // An AUTHORED jump camera: raise the stunt-camera request bit
+                    // (0x02 == "first time on this jump", 0x01 == a repeat) and publish which
+                    // authored camera the region asks for. MomentPlayerStunt::Update reads both.
+                    maGameState.miThisFramesActionFlags |= (lbFirstTime ? 0x2 : 0x1);
+                    maGameState.miActionRequestedCamera  = static_cast<s64>(liCameraCut);
+                }
+                else if (liCameraType == 2 || liCameraType == 0)
+                {
+                    // No authored camera on this jump: raise the plain "player is jumping" bit
+                    // MomentPlayerJumping::Update gates its attached-rig shot on.
+                    maGameState.miThisFramesActionFlags |= 0x8;
+                }
+
+                // [DIAG] NOT IN THE X360 BINARY. One-shot: the jump ladder reached the Director.
+                {
+                    static bool sbLoggedJumpStart = false;
+                    if (!sbLoggedJumpStart && CgsDev::Log::gpDebugPrint != 0)
+                    {
+                        sbLoggedJumpStart = true;
+                        *CgsDev::Log::gpDebugPrint
+                            << "[FLAG PC bring-up] [jump-ladder] Director action=56 OnJumpStart"
+                               " cut=" << liCameraCut
+                            << " type=" << liCameraType
+                            << " firstTime=" << (lbFirstTime ? 1 : 0)
+                            << " -> actionFlags(dec)=" << maGameState.miThisFramesActionFlags << "\n";
+                    }
+                }
+                break;
+            }
+
+            // ---- 58  E_ACTION_ON_STUNT_ELEMENT_COMPLETE (24 bytes) -------------------
+            // ⭐⭐ THE SMASH / BILLBOARD CAMERA POST-FX REQUEST. Producer:
+            // StuntManager::ProcessStuntElement @0x8239CDB0, whose 24-byte
+            // OnStuntElementCompleteAction is { mID @+0x00, meStuntElementType @+0x08,
+            // miCurrentCount @+0x0C, miTotalCount @+0x10, meCurrentGameMode @+0x14 }.
+            // This arm, transcribed from 0x82238234..0x82238274 -- it switches on the STUNT
+            // ELEMENT TYPE word at +0x08 (0 JUMP / 1 SMASH / 2 BILLBOARD):
+            //     type == 1 -> flags |= 0x10   (ArbStateRoaming: "Smash_Effect")
+            //     type == 2 -> flags |= 0x04   (ArbStateRoaming: "Billboard_Effect")
+            // JUMP (0) raises nothing here -- the jump's camera comes from case 56 above, which
+            // fires at TAKE-OFF, not at the landing completion this action reports.
+            case 58:
+            {
+                s32 liStuntElementType = 0;
+                std::memcpy(&liStuntElementType, lpacPayload + 0x08, sizeof(s32));
+                if (liStuntElementType == 1)
+                {
+                    maGameState.miThisFramesActionFlags |= 0x10;
+                }
+                else if (liStuntElementType == 2)
+                {
+                    maGameState.miThisFramesActionFlags |= 0x04;
+                }
+                break;
+            }
+
             // ---- 62  E_ACTION_NEW_CAR_UNLOCKED (16 bytes) ----------------------------
             case 62:
                 maGameState.meJunkyardState          = GameState::E_JY_CAR_UNLOCK;  // = 3

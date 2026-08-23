@@ -62,6 +62,33 @@
 //       this park. It publishes the player's in-progress stunt scalars only; it has no bearing on
 //       the pose.
 //
+//       ⛔⛔ [bugwave 2026-08-23] READ THIS BEFORE SPENDING A WAVE ON THIS PARK. It was the
+//       PRIME SUSPECT for the "super jumps do not get counted / camera does not fire" report,
+//       and it is NOT the cause -- of either half. Measured, not argued:
+//         * The super-jump TALLY comes from the GameState collectible ladder
+//           (TriggerQueryManager player-trigger fan-out -> StuntManager::LatchJumpElement ->
+//            UpdateJumps -> ProcessStuntElement(isJump) -> Profile::AddStuntElement + game
+//            action 58), which never touches StuntOffencesManager at all. The real break was
+//           that ProcessPlayerTriggers had NO CALLER in the tree; fixed this wave in
+//           BrnTriggerQueryManager.cpp :: PreWorldUpdatePlayerTriggersBringUp.
+//         * What this leg publishes is the STUNT-RUN / FREEBURN-SKILL telemetry (air time,
+//           jump distance, barrel-roll / flat-spin / drift angles) as game EVENT 120
+//           (InProgressStuntEvent). ON THIS BUILD THAT EVENT HAS NO CONSUMER: the only
+//           GameState-side drain that exists is GameStateModule_gUI_00.cpp ::
+//           ProcessGameEventsPropHitBringUp, whose `if (liType == E_EVENT_RECORD_PROP_HIT)`
+//           accepts event 111 and nothing else. Its would-be readers -- ChallengeManager
+//           (BrnChallengeManager_wC_06.cpp) and StuntModeScoring (Scoring/*) -- are in TUs
+//           that are not on the build list.
+//         * Its SIBLING is already live and equally unread: StuntOffencesManager::Update
+//           (BrnVehicleManager_UpdateVehiclePhysics.cpp:681) calls OutputStuntsCompleted every
+//           frame, which posts game event 119 into the same queue. So retyping this fork today
+//           would add a SECOND event nobody reads -- the textbook "publishes scalars nobody
+//           consumes is not a fix".
+//       The park therefore STAYS, and its cost is restated honestly: no freeburn stunt-run
+//       skill telemetry. RESTORE-WHEN a GameState ProcessGameEvents arm drains event 120
+//       (i.e. when ChallengeManager or the Scoring subsystem mounts) -- retyping the signature
+//       is then worth doing and the shape of that change is spelled out above.
+//
 // THE CONSOLE'S OWN ASSERTS ARE KEPT AS ASSERTS, with one exception, named. The
 // "Player car stuck in world. Resetting." tripwire at :7269 fires on a PC-only precondition (the
 // stuck-in-collision test chain that sets mbPlayerCarStuckInCollision is
@@ -198,8 +225,11 @@ void VehicleManager::WriteOutVehicleStats(VehicleOutputInterface* lpOutputInterf
                        "OutputStuntsInProgress @0x8263B278 NOT called -- its declared arg types "
                        "(BrnPhysics::RaceCarState / BrnGameState::GameStateModuleIO::"
                        "GameEventQueue) are a fork of the committed BrnPhysics::Vehicle::"
-                       "RaceCarState / CgsModule::VariableEventQueue<1536,16>. Player stunt "
-                       "scalars are not published. DELETE-WHEN that signature is retyped.\n";
+                       "RaceCarState / CgsModule::VariableEventQueue<1536,16>. COST: no "
+                       "freeburn stunt-run skill telemetry (game event 120). NOT the super-jump "
+                       "bug -- that is the StuntManager collectible ladder, and event 120 has no "
+                       "drain on this build (ProcessGameEvents accepts 111 only). "
+                       "DELETE-WHEN a ProcessGameEvents arm consumes event 120.\n";
             }
         }
 

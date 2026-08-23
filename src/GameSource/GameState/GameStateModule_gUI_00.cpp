@@ -260,6 +260,31 @@ void GameStateModule::PreWorldUpdateStuntBringUp(f32 lfGameTimestep, bool lbIsAG
     // set. That is the console's own order and it is deliberate -- do not "fix" it.
     mTriggerQueryManager.UpdateTriggers(mpOutputBuffer, &mLastActiveRaceCarInterface);
 
+    // ---- 2b) TriggerQueryManager: FAN THE PLAYER'S TRIGGER HITS OUT --------------------------
+    // [bugwave 2026-08-23] THE SUPER-JUMP ROOT-CAUSE FIX. The park note directly above used to
+    // stop at UpdateTriggers and record "the per-player-trigger fan-out that posts action 109 and
+    // calls ProcessPlayerTriggers ... parked, not faked". That park is what made super jumps
+    // uncountable: ProcessPlayerTriggers is the ONLY caller of StuntManager::LatchJumpElement,
+    // which is the ONLY writer of mpLastJumpElement, which is the gate on StuntManager::
+    // UpdateJumps -- so with the park in place the jump state machine never ran, no game action
+    // 56 (OnJumpStart -> the jump camera) was ever posted, and ProcessStuntElement was never
+    // reached with lbIsJump == true, so the super-jump tally never moved.
+    // The leg is the console's own (X360 PreWorldUpdate @0x8239F5C8, 0x8239F714..0x8239F83C);
+    // see BrnTriggerQueryManager.cpp for the leg-by-leg map and for the ONE documented PC
+    // bring-up stand-in it carries (the producer of maLastPlayerTriggers, whose console producer
+    // -- the world TriggerEntityModule line-test chain -- is inert on this build).
+    // ⓘ ORDER IS THE CONSOLE'S: the fan-out runs AFTER UpdateTriggers (it reads the set
+    // UpdateTriggers just armed) and BEFORE StuntManager::Update (which consumes the latch it
+    // writes). Both halves of that sandwich are load-bearing -- do not reorder.
+    // [FLAG PC bring-up] the DriveThruManager argument is NULL: the console passes
+    // GameStateModule+44240, a sub-object this tree's GameStateModule does not model, and
+    // ProcessPlayerTriggers' drive-thru arm is itself parked ((void)lpDriveThruManager, see the
+    // measured LNK cost recorded there), so the pointer is never dereferenced.
+    // DELETE-WHEN BrnDriveThruManager.cpp compiles and the sub-object is modelled.
+    mTriggerQueryManager.PreWorldUpdatePlayerTriggersBringUp(
+        mpOutputBuffer, &mLastActiveRaceCarInterface, &mStuntManager,
+        /*lpDriveThruManager*/ 0, GetVehicleList());
+
     // [DIAG] NOT IN THE X360 BINARY. Rung 0 of the `[UI-gate]` ladder, one-shot on the first frame
     // the armed set is non-empty: how many armed regions are SMASH (generic-region sub-type 8) and
     // BILLBOARD (sub-type 12). This is the line that separates "the prop was outside every smash

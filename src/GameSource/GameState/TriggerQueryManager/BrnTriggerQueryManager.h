@@ -109,6 +109,26 @@ public:
                                DriveThruManager*                                                 lpDriveThruManager,
                                const BrnResource::VehicleList*                                   lpVehicleList);
 
+    // ⭐⭐ [bugwave 2026-08-23] THE PLAYER-TRIGGER FAN-OUT -- the leg of the console's
+    // TriggerQueryManager::PreWorldUpdate @0x8239F5C8 that actually CALLS ProcessPlayerTriggers.
+    // Until this landed, ProcessPlayerTriggers had NO caller anywhere in b5-decomp/src, so
+    // StuntManager::LatchJumpElement never ran, mpLastJumpElement was permanently NULL, and
+    // StuntManager::UpdateJumps -- the whole super-jump state machine -- never executed once.
+    // That is the root cause of "super jumps do not get counted at all"; see the body.
+    //
+    // The console's own second loop (0x8239F714..0x8239F83C) plus its tail
+    // (0x8239F8A8..0x8239F8BC) are reproduced verbatim. What is a PC BRING-UP STAND-IN, and is
+    // marked as such in the body, is the PRODUCER of maLastPlayerTriggers: on the console that
+    // array is filled by TriggerQueryManager::PostWorldUpdate @0x82386BD8 from the world
+    // TriggerEntityModule's line-test result queue, and every stage of that chain is inert on
+    // this build (see the body's FLAG for the measured list).
+    void PreWorldUpdatePlayerTriggersBringUp(
+        GameStateModuleIO::OutputBuffer*                                              lpOutput,
+        const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface*  lpActiveRaceCarInterface,
+        StuntManager*                                                                 lpStuntManager,
+        DriveThruManager*                                                             lpDriveThruManager,
+        const BrnResource::VehicleList*                                               lpVehicleList);
+
     // ---- previously-committed functions of this class (kept) ----
 
     // X360 0x82326538. Drain every armed landmark index back out as a "remove trigger" event onto
