@@ -161,6 +161,36 @@ namespace BrnWorld
                         }
                     }
                 }
+
+                // ---- ADDED 2026-08-23 (bug-wave round 2): the WHOLE-PROP arm -------------
+                // The two rungs above witness the batch and the first PART. Neither can
+                // answer the question the "reacts slow, nothing fast" report actually turns
+                // on: a prop promoted to E_PHYSICAL gets NO direct response -- every
+                // millimetre of its motion has to arrive here as a whole-prop
+                // UpdatePropEvent. `[Q6-read] props=N` upstream only proves the event was
+                // QUEUED; this proves a POSE arrived and, across consecutive lines, whether
+                // it is actually changing. Budgeted, opt-in, whole props only (part index 0).
+                static s32 siWholePropLinesLeft = 24;
+                for ( s32 liScan = 0; siWholePropLinesLeft > 0 && liScan < liQueueLength;
+                      ++liScan )
+                {
+                    const BrnPhysics::Props::UpdatePropEvent& lrScanEvent =
+                        lpUpdatePropEventQueue->GetEvent( liScan );
+                    if ( lrScanEvent.mEntityId.GetPartIndex() == 0 )
+                    {
+                        --siWholePropLinesLeft;
+                        const Vector3& lScanPosition = lrScanEvent.mTransform.Pos();
+                        *CgsDev::Log::gpDebugPrint
+                            << "[Q6-world] whole prop " << lrScanEvent.mEntityId.GetValue()
+                            << " pos (" << lScanPosition.x
+                            << ", "     << lScanPosition.y
+                            << ", "     << lScanPosition.z
+                            << ") |linVel|="
+                            << rw::math::vpu::Magnitude( lrScanEvent.mLinearVelocity )
+                            << " frozen=" << ( lrScanEvent.mbFrozen ? 1 : 0 )
+                            << "\n";
+                    }
+                }
             }
         }
 

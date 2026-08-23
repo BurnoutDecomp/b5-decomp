@@ -211,6 +211,44 @@ namespace BrnWorld
             mpPropPhysicsDataHeader.GetMemoryResource()->GetType(lpProp->muTypeId);
         CGS_ASSERT(lpPropTypeData != NULL, "lpPropTypeData");                            // :1590
 
+        // ---- [DIAG] NOT IN THE X360 BINARY -- the BUG-WAVE STATE rung --------------------
+        // ⛔ DELETE-WHEN the high-speed prop reaction is confirmed on screen. Set BRN_PROP_DIAG.
+        //
+        // The two rungs either side of this one (CLASSIFY / COMMIT in PropEntityModule_wQ_05.cpp)
+        // can only say that a transition was asked for and whether it stuck. This one names WHICH
+        // OF THE TWO LEGS ran, and -- the reason it exists -- catches the ONE silent refusal in
+        // the whole promotion chain: leg B's `if (!GetPhysicalPropSlot(...)) return;`. There are
+        // only KU_MAX_PHYSICAL_PROPS == 15 physical prop slots, the console's own broker returns
+        // false when it cannot free one, and that return is a NO-OP with no assert and no log --
+        // a prop that loses that race simply never reacts, at any speed. A `legB-NOSLOT` line is
+        // therefore a complete diagnosis on its own.
+        // Rate-limited first-N; the getenv latch is a function-local static.
+        {
+            static const bool sbPropDiag = ( getenv( "BRN_PROP_DIAG" ) != 0 );
+            static s32        siStateLinesLeft = 32;
+
+            if ( sbPropDiag && siStateLinesLeft > 0 && CgsDev::Log::gpDebugPrint != 0 )
+            {
+                --siStateLinesLeft;
+                *CgsDev::Log::gpDebugPrint
+                    << "[prop-diag] STATE prop=" << lPropEntityId.GetValue()
+                    << " old="      << static_cast<s32>( leOldState )
+                    << " new="      << static_cast<s32>( leNewState )
+                    << " extraCom=" << ( lbAddExtraComOffset ? 1 : 0 )
+                    << " leg="      << ( ( leOldState == E_STATIC || leOldState == E_LEANING ) ? "A" : "B" )
+                    // ⚠️ RENAMED 2026-08-23. This read happens BEFORE leg B brokers a slot,
+                    // so on leg B it is the prop's PREVIOUS mu8PhysicsIndex (0 for a prop
+                    // that has never been physical) -- NOT the slot it is about to get.
+                    // Spelled `physIdx` it read as "the allocator handed out slot 0 again",
+                    // and a whole bug-wave finding was raised off four such lines. The slot
+                    // actually granted is printed by the legB-SLOT rung below and by the
+                    // COMMIT rung (PropEntityModule_wQ_05.cpp); in that same drive they read
+                    // 0 / 0 / 1 / 0, i.e. the pool behaved.
+                    << " physIdxBefore=" << static_cast<s32>( lpProp->mu8PhysicsIndex )
+                    << "\n";
+            }
+        }
+
         if (leOldState == E_STATIC || leOldState == E_LEANING)
         {
             // ---- leg A (0x822EF814): already in the sim, keep the slot ----------------
@@ -242,6 +280,27 @@ namespace BrnWorld
 
         if (!mZoneManager.GetPhysicalPropSlot(lPropEntityId, liPhysicsSlot, lEvictedId, lbEvicted))
         {
+            // ---- [DIAG] NOT IN THE X360 BINARY -- see the STATE rung above ---------------
+            // ⛔ DELETE-WHEN the high-speed prop reaction is confirmed on screen.
+            // THE SILENT REFUSAL. The console returns here with no assert and no message; a
+            // prop that cannot get one of the 15 physical slots never reacts and nothing in
+            // the log says so. This line is the only way a boot-drive can tell "the promotion
+            // never happened" from "the promotion happened and the sim did nothing".
+            {
+                static const bool sbPropDiag = ( getenv( "BRN_PROP_DIAG" ) != 0 );
+                static s32        siNoSlotLinesLeft = 16;
+
+                if ( sbPropDiag && siNoSlotLinesLeft > 0 && CgsDev::Log::gpDebugPrint != 0 )
+                {
+                    --siNoSlotLinesLeft;
+                    *CgsDev::Log::gpDebugPrint
+                        << "[prop-diag] STATE legB-NOSLOT prop=" << lPropEntityId.GetValue()
+                        << " old=" << static_cast<s32>( leOldState )
+                        << " new=" << static_cast<s32>( leNewState )
+                        << "\n";
+                }
+            }
+
             // 0x822EF73C -- no slot available: the prop keeps its old state entirely.
             return;
         }
@@ -277,6 +336,28 @@ namespace BrnWorld
         // 0x822EF7B4. Here the state lands BEFORE the add (contrast leg A).
         lpProp->SetState(leNewState);
         lpProp->SetPhysicsIndex(liPhysicsSlot);
+
+        // ---- [DIAG] NOT IN THE X360 BINARY -- the granted slot, ADDED 2026-08-23 -------
+        // ⛔ DELETE-WHEN the high-speed prop reaction is confirmed on screen.
+        // The STATE rung above can only print the slot the prop had BEFORE the broker ran.
+        // This one prints what GetPhysicalPropSlot actually granted, plus whether it had to
+        // evict a resident, so "slot 0 every time" can be told from "slot 0 because the
+        // previous tenant was released" without cross-reading the COMMIT rung.
+        {
+            static const bool sbPropDiag = ( getenv( "BRN_PROP_DIAG" ) != 0 );
+            static s32        siSlotLinesLeft = 32;
+
+            if ( sbPropDiag && siSlotLinesLeft > 0 && CgsDev::Log::gpDebugPrint != 0 )
+            {
+                --siSlotLinesLeft;
+                *CgsDev::Log::gpDebugPrint
+                    << "[prop-diag] STATE legB-SLOT prop=" << lPropEntityId.GetValue()
+                    << " grantedSlot=" << liPhysicsSlot
+                    << " evicted="     << ( lbEvicted ? 1 : 0 )
+                    << " evictedProp=" << lEvictedId.GetValue()
+                    << "\n";
+            }
+        }
 
         lpPropManagerInterface->AddPropInstance(lPropEntityId,
                                                 lpProp->muTypeId,

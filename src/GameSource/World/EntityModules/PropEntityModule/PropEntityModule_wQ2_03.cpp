@@ -158,6 +158,13 @@ namespace BrnWorld
         // the move threshold before comparing it with the smash threshold. Loaded once into
         // f31 at 0x822FA9DC and used at 0x822FAE98 (`fadds f0, f0, f31`).
         const f32 KF_EASY_SMASH_THRESHOLD_EPSILON = 0.1f;
+
+        // [DIAG] NOT IN THE X360 BINARY. Line budget for the LEG-0 per-contact rung below.
+        // ADDED 2026-08-23 (bug-wave round 2): that rung shipped with NO budget at all and
+        // printed one line per qualifying car-vs-prop contact per frame -- an unbounded
+        // per-frame log line, which the wave's own probe rules forbid. Budgeted like every
+        // sibling rung in this file set.
+        const s32 KI_DIAG_MAX_CONTACT_LINES = 64;
     }
 
     // ========================================================================================
@@ -272,20 +279,45 @@ namespace BrnWorld
             // inside the gate (same dot/abs/MPH the smash test uses further down) so the
             // shipped path pays nothing when the probe is off.
             // The latch is evaluated ONCE: getenv per contact would be a per-frame syscall.
+            //
+            // ⚠️ ROUND-2 CORRECTION 2026-08-23 -- READ THIS BEFORE FILING `speed=` AS A BUG.
+            // `speed=` is |dot(carVelocity, contactNormal)| in MPH: the closing speed ALONG
+            // THE CONTACT NORMAL. It is NOT the car's speed, and the two coincide only for a
+            // dead-on hit. A car riding OVER a prop has a near-vertical normal, so `speed=`
+            // collapses to the car's VERTICAL velocity (a few cm/s == ~0.1 mph) while the car
+            // is doing 74 mph -- that is geometry, not a mis-read slot. The 2026-08-23 drive
+            // (scratch/flow_run/bugwave_verify1/BrnGame.log) carries BOTH readings out of this
+            // ONE expression -- 74.15 / 73.39 / 55.44 / 32.77 mph on head-on contacts and
+            // 0.13-0.27 mph on the ride-over frames -- which is what rules out "the wrong
+            // velocity slot is being read". Both operands are printed now so nobody has to
+            // re-litigate it from the scalar alone.
             {
                 static const bool sbPropDiag = ( getenv( "BRN_PROP_DIAG" ) != 0 );
-                if ( sbPropDiag && CgsDev::Log::gpDebugPrint != 0 )
+                static s32        siContactDiagLinesLeft = KI_DIAG_MAX_CONTACT_LINES;
+
+                if ( sbPropDiag && siContactDiagLinesLeft > 0 && CgsDev::Log::gpDebugPrint != 0 )
                 {
-                    const s32 liStrikingCar =
+                    --siContactDiagLinesLeft;
+
+                    const s32     liStrikingCar =
                         static_cast<s32>( lOtherEntityId.GetEntityIndex() );
-                    const f32 lfDiagSpeedMph =
-                        fabsf( rw::math::vpu::Dot( GetRaceCarVelocity( liStrikingCar ),
-                                                   lrContact.mNormal ) ) * KF_MPS_TO_MPH;
+                    const Vector3 lDiagCarVelocity = GetRaceCarVelocity( liStrikingCar );
+                    const Vector3 lDiagNormal      = lrContact.mNormal;
+                    const f32     lfDiagDotMps     =
+                        rw::math::vpu::Dot( lDiagCarVelocity, lDiagNormal );
+
                     *CgsDev::Log::gpDebugPrint
                         << "[prop-diag] contact prop=" << lPropEntityId.GetValue()
                         << " type=" << lpInstance->muTypeId
                         << " car=" << liStrikingCar
-                        << " speed=" << lfDiagSpeedMph
+                        << " speed=" << ( fabsf( lfDiagDotMps ) * KF_MPS_TO_MPH )
+                        << " carSpeedMph=" << GetRaceCarSpeed( liStrikingCar )
+                        << " dotMps=" << lfDiagDotMps
+                        << " n=(" << lDiagNormal.x << "," << lDiagNormal.y
+                        << "," << lDiagNormal.z << ")"
+                        << " |n|=" << rw::math::vpu::Magnitude( lDiagNormal )
+                        << " v=(" << lDiagCarVelocity.x << "," << lDiagCarVelocity.y
+                        << "," << lDiagCarVelocity.z << ")"
                         << "\n";
                 }
             }
@@ -509,6 +541,76 @@ namespace BrnWorld
                 ( lpType->GetNumberOfParts() != 0 )
                 && ( lpType->GetSmashThreshold()
                      < lpType->GetMoveThreshold() + KF_EASY_SMASH_THRESHOLD_EPSILON );
+
+            // ---- [DIAG] NOT IN THE X360 BINARY -- the BUG-WAVE LEG2 rung -----------------
+            // ⛔ DELETE-WHEN the high-speed prop reaction is confirmed on screen. BRN_PROP_DIAG.
+            //
+            // The bug report is "props react slow, do nothing fast", and the smash gate is the
+            // one place in the POST-physics half where a SPEED decides. This rung names the
+            // rejecting clause instead of leaving the caller to guess between four of them:
+            //   full=1        -> maRecentlyBrokenProps (32) never drained this frame;
+            //   hard=0        -> the NORMAL-COMPONENT impact speed lost to the type threshold
+            //                    (note that is |dot(carVel, contactNormal)|, NOT the car speed
+            //                    GetDesiredState is fed -- a glancing 130 mph pass reads ~0);
+            //                    MEASURED 2026-08-23: this is the ONLY clause that ever fired
+            //                    in the bug-wave drive, and it was CORRECT every time -- the
+            //                    three rejects were ride-over contacts with a near-vertical
+            //                    normal, while head-on contacts in the same run read 74.15 /
+            //                    73.39 / 55.44 / 32.77 mph out of this same expression and
+            //                    smashed. Do NOT "fix" the dot;
+            //   easy=0        -> the type is not an easy-smash type, so `hard` had to carry it;
+            //   dup=1         -> already recorded this frame, which is not a failure.
+            // Rate-limited first-N and printed only for a REJECT, so a working smash is silent.
+            {
+                static const bool sbPropDiag = ( getenv( "BRN_PROP_DIAG" ) != 0 );
+                static s32        siLeg2DiagLinesLeft = 16;
+
+                // Computed INSIDE the latch so the shipped path never pays for the Contains
+                // scan; the real gate below still evaluates them in the console's own order.
+                if ( sbPropDiag && siLeg2DiagLinesLeft > 0 && CgsDev::Log::gpDebugPrint != 0 )
+                {
+                    const bool lbFull = maRecentlyBrokenProps.IsFull();
+                    const bool lbDup  = maRecentlyBrokenProps.Contains( lPropEntityId );
+                    const bool lbLeg2Breaks =
+                        !lbFull && ( lbHitHardEnough || lbEasySmashType ) && !lbDup;
+
+                    if ( !lbLeg2Breaks )
+                    {
+                        --siLeg2DiagLinesLeft;
+
+                        // ADDED 2026-08-23: BOTH OPERANDS of the impact-speed dot, plus the
+                        // car's scalar speed, on the SAME line. `impactMph` is |v.n| and
+                        // `carSpeedMph` is |v|; printing only the first is what let a
+                        // near-vertical contact normal be read as "the wrong quantity is
+                        // being read" instead of "the car is riding over the prop".
+                        const s32     liDiagCar =
+                            static_cast<s32>( lOtherEntityId.GetEntityIndex() );
+                        const Vector3 lDiagCarVelocity = GetRaceCarVelocity( liDiagCar );
+                        const Vector3 lDiagNormal      = lrContact.mNormal;
+
+                        *CgsDev::Log::gpDebugPrint
+                            << "[prop-diag] LEG2 REJECT prop=" << lPropEntityId.GetValue()
+                            << " type="       << lpInstance->muTypeId
+                            << " state="      << static_cast<s32>( lpInstance->GetState() )
+                            << " impactMph="  << lfImpactSpeedMph
+                            << " carSpeedMph="<< GetRaceCarSpeed( liDiagCar )
+                            << " car="        << liDiagCar
+                            << " n=("         << lDiagNormal.x << "," << lDiagNormal.y
+                            << "," << lDiagNormal.z << ")"
+                            << " |n|="        << rw::math::vpu::Magnitude( lDiagNormal )
+                            << " v=("         << lDiagCarVelocity.x << ","
+                            << lDiagCarVelocity.y << "," << lDiagCarVelocity.z << ")"
+                            << " smashThr="   << lfSmashThreshold
+                            << " typeSmash="  << lpType->GetSmashThreshold()
+                            << " typeMove="   << lpType->GetMoveThreshold()
+                            << " hard="       << ( lbHitHardEnough ? 1 : 0 )
+                            << " easy="       << ( lbEasySmashType ? 1 : 0 )
+                            << " full="       << ( lbFull ? 1 : 0 )
+                            << " dup="        << ( lbDup ? 1 : 0 )
+                            << "\n";
+                    }
+                }
+            }
 
             // Evaluation ORDER is the console's: IsFull first (0x822FAEB8), then the OR of the
             // two smash predicates (0x822FAECC), then Contains (0x822FAEE4).
