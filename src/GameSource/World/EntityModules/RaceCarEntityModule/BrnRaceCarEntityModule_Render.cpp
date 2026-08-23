@@ -114,14 +114,65 @@ s32 giWheelsToRender = 4;
 // unk_82FAD6F0. The wheel-spin blur reference: constant 25's lane x is
 // angularVelocity / gvWheelBlurConstants.x clamped to 1, and the same value picks the
 // blurred-vs-static wheel technique.
-// ⚠️ MEASURED: all 16 bytes read ZERO in the shipped image and a whole-export scan finds
-// exactly ONE reference -- RenderRaceCar's own read. So on the console the divide is by
-// zero, the quotient is +inf for any spinning wheel, and the vminfp clamp pins the
-// constant at 1.0f; a stationary wheel gives 0/0. The PC keeps the console arithmetic
-// (x87/SSE produce the same inf/NaN without trapping, and the fallback shader does not
-// sample constant 25) rather than inventing a divisor. Named, zero-initialised, and
-// left for the day a writer turns up -- the export set is known to have holes.
-Vector4 gvWheelBlurConstants = { 0.0f, 0.0f, 0.0f, 0.0f };
+//
+// ✅ RECOVERED 2026-08-23 (wheel-blur bug wave). VALUE = 30.0f in ALL FOUR LANES.
+// The previous banner claimed "all 16 bytes read ZERO in the shipped image and a whole-export
+// scan finds exactly ONE reference", and concluded the console really divides by zero. BOTH
+// halves of that were wrong, and the second one is why: THE WRITER IS NOT A FUNCTION EXPORT.
+// It is an unnamed C++ dynamic initialiser -- the same class of writer that hid s_atlasUVs
+// (unk_82FAFC10) from an export-only scan -- so grepping .ida-exports could never find it.
+//
+// The writer, read out of the decrypted XEX2 basefile (devkit key, "basic" compression,
+// load address 0x82000000; controls flt_82001C98 == 1.0f and dword_82F24240 == 1280 both pass):
+//
+//   0x82C4B160  lis     r11, 0x8201
+//   0x82C4B164  addi    r10, r1, -0x10
+//   0x82C4B168  lfs     f0, 0x499C(r11)                      ; flt_8201499C == 0x41F00000 == 30.0f
+//   0x82C4B16C  lis     r11, 0x82FB
+//   0x82C4B170  stfs    f0, -0x10(r1)
+//   0x82C4B174  lvlx    v0, r0, r10
+//   0x82C4B178  addi    r11, r11, -0x2910                    ; r11 = 0x82FAD6F0
+//   0x82C4B17C  vspltw  v0, v0, 0                            ; splat the scalar into all 4 lanes
+//   0x82C4B180  stvx128 v0, r0, r11                          ; gvWheelBlurConstants = VecFloat(30)
+//   0x82C4B184  blr
+//
+// It is REACHED, not dead: its address is entry 0x82CD0370 of the module's static-initialiser
+// pointer table (a monotonically increasing run of 0x82C4Axxx/0x82C4Bxxx thunks at
+// 0x82CD0300..), i.e. the CRT dynamic-init list the loader walks before main.
+//
+// Two independent attestations that 30.0f is the right number and that the unit is rad/s:
+//   1. The very next initialiser, 0x82C4B188, reads THIS global back, divides flt_82001C98
+//      (1.0f) by it and splats the quotient into unk_82FAD540 -- the classic
+//      `const VecFloat KVF_X(30.0f); const VecFloat KVF_ONE_OVER_X(1.0f/KVF_X);` pair.
+//   2. The TRAFFIC twin is the same number reached the same way: BrnTrafficEntityModule's
+//      blur threshold unk_8300CC60 is seeded 30.0f by 0x82C65C20 (from flt_820BA5E8), its
+//      reciprocal unk_8300C8F0 by 0x82C65C48, and its speed->spin scale unk_8300C9A0 is
+//      3.3333333f == 1/0.3 m (flt_8205873C) -- i.e. traffic converts m/s to rad/s with a
+//      0.3 m wheel radius and then compares against the SAME 30 rad/s. 30 rad/s on a
+//      0.33 m race-car tyre is ~10 m/s (~22 mph), which is where a tyre visually smears.
+//
+// ⚠️ WHY THIS WAS A BUG, NOT A CURIOSITY: with the divisor left at 0.0f the quotient was
+// 0/0 == NaN for a parked car and +inf for a moving one, and -- far worse -- the technique
+// test `gvWheelBlurConstants.x > angularVelocity` was `0 > w`, FALSE for every non-negative
+// w including a stationary wheel, so lu8Technique never left 0 (the BLURRED variant) and
+// EVERY wheel in the game rendered blurred, junkyard and car-select included. Same family as
+// KF_DEFAULT_ASPECTRATIO == 0.0f making every camera 180 degrees tall.
+//
+// Declared Vector4 here (the committed type) but written to all four lanes because the console
+// global is a VecFloat splat and the console's technique test is an ALL-LANE `vcmpgtfp.` +
+// CR6 bit 24; with four equal lanes that is identical to the lane-x test spelled below.
+//
+// ⚠️ RESIDUAL, NAMED: this fixes SHARP-AT-REST, and only that, for the RACE CAR. The other
+// half -- BLURRED-AT-SPEED -- cannot happen yet, because nothing on this build writes
+// RaceCarRenderParams::mafWheelAngularVelocities (RenderParams+0xD8C): there is not one
+// caller of SetWheelAngularVelocity in the tree, and the console's producer,
+// ActiveRaceCar::CalculateWheelAngularVelocities @0x822BFCF8, is one of the four functions
+// BrnActiveRaceCar.cpp's Update banner lists as absent (item 6, "why the wheels still do not
+// spin"). So every wheel reads 0 rad/s, every wheel picks technique 1, and constant 25 lane x
+// stays 0. The TRAFFIC twin has no such hole -- it derives its spin from Vehicle::GetSpeed(),
+// which is live -- so traffic wheels are the ones that will visibly blur at speed.
+// DELETE-WHEN CalculateWheelAngularVelocities lands.
+Vector4 gvWheelBlurConstants = { 30.0f, 30.0f, 30.0f, 30.0f };
 
 // The console's wheel matrix / pointer stack arrays are four entries long
 // (`__vector_constructor_iterator(v390, 64, 4, ...)`), which is also the debug
@@ -876,9 +927,22 @@ RaceCarEntityModule::RenderRaceCar( CgsGraphics::DispatchFrame* lpDispatchFrame,
                     // yzw are ZERO. (The previous wave's decode had the lanes the other way
                     // round; the mask bit settles it, and the fog block eight lines up uses
                     // mask 1 == lane w for contrast.)
-                    const f32 lfSpin =
-                        lpRenderParams->GetWheelAngularVelocity( static_cast< u32 >( liWheel ) )
-                        / gvWheelBlurConstants.x;
+                    const f32 lfWheelAngularVelocity =
+                        lpRenderParams->GetWheelAngularVelocity( static_cast< u32 >( liWheel ) );
+
+                    // The recovered divisor (30.0f, see the banner on gvWheelBlurConstants).
+                    // [FLAG PC bring-up guard] The console divides unconditionally -- its
+                    // dynamic initialiser has always run by the time a car renders. Guarded
+                    // here because this build can render before/without that seeding and a
+                    // 0/0 quotient is exactly the NaN that shipped the "wheels are always
+                    // blurred" bug. DELETE-WHEN nothing can reach this leaf with a zero
+                    // reference.
+                    const f32 lfBlurReference = gvWheelBlurConstants.x;
+                    CGS_ASSERT( lfBlurReference > 0.0f, "lfBlurReference > 0.0f" );
+
+                    const f32 lfSpin = ( lfBlurReference > 0.0f )
+                        ? ( lfWheelAngularVelocity / lfBlurReference )
+                        : 0.0f;
                     Vector4 lv4WheelConstants = { lfSpin, 0.0f, 0.0f, 0.0f };
                     if ( lv4WheelConstants.x > 1.0f )   // vminfp128 against vcsxwfp(1) == 1.0f
                     {
@@ -887,9 +951,11 @@ RaceCarEntityModule::RenderRaceCar( CgsGraphics::DispatchFrame* lpDispatchFrame,
                     CgsGraphics::mShaderConstantTable.SetShaderConstantData( 25, lv4WheelConstants );
 
                     // `vcmpgtfp. v0, v0, v13` + the CR6 "all lanes" bit: a wheel turning
-                    // slower than the threshold selects the non-blurred technique.
-                    if ( gvWheelBlurConstants.x >
-                         lpRenderParams->GetWheelAngularVelocity( static_cast< u32 >( liWheel ) ) )
+                    // slower than the threshold selects the non-blurred technique. The console
+                    // compares ALL FOUR lanes of the global against the splatted angular
+                    // velocity; the recovered global is a VecFloat splat (four identical
+                    // 30.0f lanes), so the lane-x test below is the same predicate.
+                    if ( lfBlurReference > lfWheelAngularVelocity )
                     {
                         lu8Technique = 1u;
                     }
@@ -908,6 +974,27 @@ RaceCarEntityModule::RenderRaceCar( CgsGraphics::DispatchFrame* lpDispatchFrame,
                     laWheelConstants[ liInstanceCount ]  = lv4WheelConstants;
                     lapWheelMatrices[ liInstanceCount ]  = &laWheelMatrices[ liInstanceCount ];
                     ++liInstanceCount;
+
+                    // [FLAG PC bring-up] ONE-SHOT wheel-blur witness. Latched on a file-static
+                    // so it costs one predictable branch per wheel after the first car and
+                    // never streams. It reports the resolved reference and, for the first car
+                    // only, every wheel's angular velocity, the clamped constant-25 lane x and
+                    // the technique that lane selects -- so a boot-drive can prove
+                    // SHARP-at-rest / BLURRED-at-speed instead of inferring it from a frame.
+                    // DELETE-WHEN the blur is confirmed on a moving car.
+                    static s32 siWheelBlurLinesLogged = 0;
+                    if ( siWheelBlurLinesLogged < KU_WHEELS_TO_RENDER_MAX
+                         && CgsDev::Log::gpDebugPrint != 0 )
+                    {
+                        ++siWheelBlurLinesLogged;
+                        *CgsDev::Log::gpDebugPrint
+                            << "[wheel-blur] reference " << lfBlurReference
+                            << " rad/s | wheel " << liWheel
+                            << " angVel " << lfWheelAngularVelocity
+                            << " -> c25.x " << lv4WheelConstants.x
+                            << " technique " << static_cast< s32 >( lu8Technique )
+                            << " (0 blurred, 1 sharp, 2 shadow)\n";
+                    }
                 }
 
                 if ( liInstanceCount > 0 )
