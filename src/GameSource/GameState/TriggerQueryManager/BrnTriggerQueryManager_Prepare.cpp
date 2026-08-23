@@ -43,6 +43,9 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourceHandle.h"     // CgsResource::ResourceHandle
 #include "SharedClasses/Trigger/BrnTriggerData.h"                         // [diagnostic] record census
 #include "SharedClasses/Trigger/BrnSpawnLocation.h"                       // [diagnostic] SpawnLocation::GetType
+#include "SharedClasses/Trigger/BrnGenericRegion.h"                       // [diagnostic] GenericRegion::E_TYPE_JUMP
+#include "SharedClasses/Trigger/BrnRegion.h"                              // [diagnostic] BoxRegion::GetPosition
+#include <stdlib.h>                                                       // [diagnostic] getenv
 
 namespace BrnGameState
 {
@@ -290,6 +293,59 @@ bool TriggerQueryManager::Prepare(GameStateModuleIO::OutputBuffer* lpOutput,
                     << "[TriggerQueryManager] spawn types: player=" << laiByType[0]
                     << " selectL=" << laiByType[1] << " selectR=" << laiByType[2]
                     << " unlock="  << laiByType[3] << " BAD=" << laiByType[4] << "\n";
+
+                // ------------------------------------------------------------------
+                // [FLAG PC bring-up] JUMP-REGION GAZETTEER -- opt in with BRN_JUMP_DUMP=1.
+                //
+                // Conductor tooling for the 2026-08-23 bug wave: the super-jump ladder can
+                // only be witnessed by DRIVING THROUGH an E_TYPE_JUMP region, and the
+                // boot-drive harness places the car by world coordinate
+                // (flow_run.ps1 -Teleport "x,y,z,heading").  Nothing in the tree could say
+                // where those regions ARE, so a verification run had to hope it happened to
+                // drive over one.  This prints the first KI_JUMP_DUMP_MAX of them, once, at
+                // load.  Costs nothing on a normal run -- the env var is read once and the
+                // whole block is skipped when it is unset.
+                // DELETE-WHEN the jump ladder is boot-proven and the wave closes.
+                // ------------------------------------------------------------------
+                if ( getenv( "BRN_JUMP_DUMP" ) != 0 )
+                {
+                    const s32 KI_JUMP_DUMP_MAX = 24;
+                    s32 liDumped    = 0;
+                    s32 liJumpTotal = 0;
+
+                    const s32 liGenericCount = lpData->GetGenericRegionCount();
+                    for ( s32 liGeneric = 0; liGeneric < liGenericCount; ++liGeneric )
+                    {
+                        const BrnTrigger::GenericRegion* lpGeneric =
+                            lpData->GetGenericRegion( liGeneric );
+                        if ( lpGeneric == 0 )
+                            continue;
+                        if ( lpGeneric->GetType() != BrnTrigger::GenericRegion::E_TYPE_JUMP )
+                            continue;
+
+                        liJumpTotal += 1;
+                        if ( liDumped >= KI_JUMP_DUMP_MAX )
+                            continue;
+                        liDumped += 1;
+
+                        const BrnTrigger::BoxRegion* lpBox = lpGeneric->GetBoxRegion();
+                        const Vector3 lPosition = lpBox->GetPosition();
+                        *CgsDev::Log::gpDebugPrint
+                            << "[jump-dump] "  << liDumped
+                            << " index="      << liGeneric
+                            << " pos=("       << lPosition.x
+                            << ","            << lPosition.y
+                            << ","            << lPosition.z << ")"
+                            << " dim=("       << lpBox->GetDimensionX()
+                            << ","            << lpBox->GetDimensionY()
+                            << ","            << lpBox->GetDimensionZ() << ")"
+                            << "\n";
+                    }
+
+                    *CgsDev::Log::gpDebugPrint
+                        << "[jump-dump] E_TYPE_JUMP regions total=" << liJumpTotal
+                        << " listed=" << liDumped << "\n";
+                }
             }
         }
         return true;

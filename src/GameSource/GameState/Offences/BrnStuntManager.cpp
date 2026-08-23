@@ -1,6 +1,7 @@
 #include "GameSource/GameState/Offences/BrnStuntManager.h"
 
 #include <cmath>                                            // std::fabs
+#include <cstring>                                          // std::memset (the OnJumpStart record)
 #include <stdlib.h>                                         // getenv  ([UI-gate] diag ladder)
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"          // CgsDev::Assert::Begin/Fire/EndAssert (verbatim X360 strings)
@@ -904,20 +905,48 @@ void StuntManager::UpdateJumps(const BrnWorld::RaceCarEntityModuleIO::RCEntityAc
             mpProgressionManager->IsStuntElementDone(E_STUNT_ELEMENT_TYPE_JUMP, lJumpKey);
 
         // Speed gate: |speed| < 40 mph (== KF_MIN_JUMP_SPEED_MPH) -> too slow, no jump.
-        // FLAG: the X360 reads RaceCarState float @ +0x3CC (== result[243]), which the committed
-        // RaceCarState layout names mfMaxSpeedMPH. Semantically a "min speed to count" gate reads more
-        // like the CURRENT speed (mfSpeedMPH @ +0x3C8); kept byte-faithful to the +0x3CC read but
-        // flagged in case the committed RaceCarState offset diverges from this X360 build.
+        //
+        // ⭐⭐ [bugwave 2026-08-23] FIELD-NAME DEFECT FIXED, and the old FLAG RETIRED. This read
+        // used to be `mfMaxSpeedMPH`, justified by a FLAG that said "the X360 reads +0x3CC, which
+        // the committed RaceCarState layout names mfMaxSpeedMPH ... semantically it reads more
+        // like mfSpeedMPH @ +0x3C8". BOTH halves of that FLAG were wrong by exactly one field.
+        // The producer settles it -- BrnVehicleOutputInterface_UpdateRaceCarState.cpp:50-51 (and
+        // the identical map in BrnVehicleEvents.h:72) transcribe the only writer of this struct,
+        // VehicleOutputInterface::UpdateRaceCarState @0x825EC808:
+        //     +0x3CC  972  mfSpeedMPH      <- physics+0x6C0 lane .x   (the CURRENT speed)
+        //     +0x3D0  976  mfMaxSpeedMPH   <- spec+0x70   lane .z     (the car's SPEC top speed)
+        // and three independent consumers agree that +0x3CC is mfSpeedMPH (GameBridgeWorldToX.cpp
+        // :103, BrnGameModule.cpp:1967/:2000, BrnBehaviourGameplayExternal.cpp:1604).
+        // So the console's take-off gate tests the CURRENT speed, and reading mfMaxSpeedMPH here
+        // compared a car's ~150 mph spec top speed against the 40 mph gate -- i.e. the gate could
+        // never reject, and a jump region would arm a take-off at a standstill.
+        // (This is the recurring "X360 number used on the host" class in its offset-arithmetic
+        // form: the offset was right, the field it was mapped to was one slot off.)
         const RaceCarState* lpPlayerRaceCarState = lpActiveRaceCarInterface->GetPlayerRaceCarState();
-        const f32 lfPlayerSpeed = lpPlayerRaceCarState->mfMaxSpeedMPH; // X360 result[243] (@+0x3CC)
+        const f32 lfPlayerSpeed = lpPlayerRaceCarState->mfSpeedMPH;   // X360 +0x3CC == 972
         if (std::fabs(lfPlayerSpeed) < 40.0f || (lbHasBeenDoneBefore && !mbAlwaysToJumpCameras))
         {
+            // [DIAG] NOT IN THE X360 BINARY. Rung 2a of the `[jump-ladder]`: the region WAS
+            // entered and the state machine DID run -- it declined the jump, and says why. This
+            // is the line that separates "no jump trigger reached the StuntManager" (no
+            // `[jump-ladder]` line at all) from "the take-off gate rejected it".
+            static s32 siDropLines = 0;
+            const s32  KI_JUMP_DROP_DIAG_FIRST_N = 8;
+            if (siDropLines < KI_JUMP_DROP_DIAG_FIRST_N && CgsDev::Log::gpDebugPrint != 0)
+            {
+                ++siDropLines;
+                *CgsDev::Log::gpDebugPrint
+                    << "[FLAG PC bring-up] [jump-ladder] take-off DECLINED speed="
+                    << lfPlayerSpeed
+                    << " (gate 40 mph) doneBefore=" << (lbHasBeenDoneBefore ? 1 : 0)
+                    << " alwaysToJumpCameras=" << (mbAlwaysToJumpCameras ? 1 : 0) << "\n";
+            }
             mpLastJumpElement = 0;   // drop the jump
             return;
         }
 
         // Direction gate: did the player enter the jump region facing forwards? dot(playerDir,
-        // jumpDir) >= 0. If the region is one-way (CameraCut1 > 0) and the player entered backwards,
+        // jumpDir) >= 0. If the region is one-way (miIsOneWay @+0x37) and the player entered backwards,
         // also drop the jump.
         // FLAG: BoxRegion::ComputeDirection is a foreign TU returning the region's forward vector; the
         // X360 dots it with the player's facing (vmsum3fp128). Reconstructed by name; the player facing
@@ -927,7 +956,15 @@ void StuntManager::UpdateJumps(const BrnWorld::RaceCarEntityModuleIO::RCEntityAc
         const f32 lfDot = lPlayerDir.x * lTriggerDir.x + lPlayerDir.y * lTriggerDir.y + lPlayerDir.z * lTriggerDir.z;
         const bool lbEnteredJumpForwards = (lfDot >= 0.0f);
 
-        if (mpLastJumpElement->GetCameraCut1() > 0 && lfDot < 0.0f)
+        // ⭐ [bugwave 2026-08-23] THE ONE-WAY GATE READ THE WRONG FIELD. The console loads a
+        // BYTE at region +0x37 and tests it signed-greater-than-zero
+        // (UpdateJumps @0x8239D650 `lbz r11, 0x37(r10)` / `extsb` / `cmpwi r11, 0` / `bgt`),
+        // and +0x37 is `miIsOneWay` in the DWARF-gated layout (BrnGenericRegion.h:175).
+        // This tested `GetCameraCut1()`, the int16 at +0x30 -- a different member entirely,
+        // and one that is non-zero on every region that has an authored camera. The effect was
+        // to treat ordinary two-way jumps as one-way and silently drop them whenever the player
+        // crossed the region facing 'backwards' by the ComputeDirection convention.
+        if (mpLastJumpElement->IsOneWay() && lfDot < 0.0f)
         {
             mpLastJumpElement = 0;   // one-way jump entered backwards -> drop
             return;
@@ -938,8 +975,8 @@ void StuntManager::UpdateJumps(const BrnWorld::RaceCarEntityModuleIO::RCEntityAc
             // Post the jump-start action (type 56, 24 bytes). VERIFIED field ORDER against the X360
             // asm (UpdateJumps 0x8239D460, the !a6 block building &v34): the stack record is
             //   v34 @+0  (8B)        = the stunt key (group id, or own id when grouped to 0)
-            //   v35 @+8  (4B, extsb) = the camera-CUT byte: lbz @+0x34 forwards / @+0x35 backwards
-            //   v36 @+12 (4B, extsh) = the camera-TYPE half: lhz @+0x30 forwards / @+0x32 backwards
+            //   v35 @+8  (4B, extsb) = the camera-TYPE byte: lbz @+0x34 forwards / @+0x35 backwards
+            //   v36 @+12 (4B, extsh) = the camera-CUT  half: lhz @+0x30 forwards / @+0x32 backwards
             //   v37 @+16 (word)      = the FIRST-TIME flag == !doneBefore
             //                          (X360 v37 = (cntlzw(doneBefore) & 0x20) != 0)
             //   pad @+20 (4B)        rounds the record to 24 bytes.
@@ -947,23 +984,70 @@ void StuntManager::UpdateJumps(const BrnWorld::RaceCarEntityModuleIO::RCEntityAc
             // (mbDoneBefore@+8 / cut@+12 / type@+16) AND wrote the INVERTED 'doneBefore' at +8 where
             // the X360 actually writes the !doneBefore first-time flag (at +16).
             // FLAG: the OnJumpStartAction struct shape is not committed; built as this X360 raw record.
+            //
+            // ⭐⭐ [bugwave 2026-08-23] CORRECTION: THE FIRST-TIME FIELD AT +0x10 IS A BYTE.
+            // The previous shape declared it `s32 miFirstTimeFlag`. The asm says otherwise at
+            // BOTH ends, and on the console the difference is total:
+            //   producer @0x8239D6B4  `stb  r30, 0xE0+var_80(r1)`   -- a BYTE store at +0x10
+            //   consumer @0x822381CC  `lbz  r11, 0x10(r30)`         -- a BYTE load  at +0x10
+            //     (MainDirector::ProcessInputQueue case 56, bodied this same wave)
+            // Had the producer really stored a word, the consumer's `lbz` would have read the
+            // MOST-SIGNIFICANT byte of a big-endian 0/1 -- i.e. always 0 -- and the authored
+            // super-jump camera could never have taken its first-time arm. This is the
+            // X360-numbers-on-the-x64-host bug class in its endianness form: on this
+            // little-endian host an s32 1 at +0x10 happens to read back as byte 1, so the
+            // mismatch would have been invisible here and wrong on the console. Modelled as the
+            // byte it is, with the record explicitly zeroed (the console leaves +0x11..+0x17 as
+            // stale stack; nothing reads them).
             struct OnJumpStartActionPayload
             {
-                CgsID mKey;            // +0  (8)  -- v34
-                s32   miCameraCut;     // +8       -- v35 (cut byte: 0x34 fwd / 0x35 bwd)
-                s32   miCameraType;    // +12      -- v36 (type half: 0x30 fwd / 0x32 bwd)
-                s32   miFirstTimeFlag; // +16      -- v37 (== !doneBefore)
-                s32   miPad;           // +20      -- rounds to 24 bytes
+                CgsID mKey;            // +0x00 (8)  -- std  (the stunt-element key)
+                // ⭐⭐ [bugwave 2026-08-23] THESE TWO WERE IN EACH OTHER'S SLOTS. The offsets
+                // the previous banner quoted are right; the LABELS on them were guesses, and
+                // the wiring below followed the labels instead of the offsets. Settled by the
+                // DWARF-gated layout in BrnGenericRegion.h:169-175 --
+                //     0x30/0x32  int16_t miCameraCut1/2     (the authored camera INDEX)
+                //     0x34/0x35  int8_t  miCameraType1/2    (a StuntCameraType: 0/1/2)
+                // and the console reads the BYTE into +0x08 and the HALF into +0x0C
+                // (UpdateJumps @0x8239D6BC-0x8239D6EC: `lbz 0x34` -> stw var_88 == +0x08,
+                //  `lhz 0x30` -> stw var_84 == +0x0C). So +0x08 is the TYPE and +0x0C the CUT.
+                // The consumer proves it independently: MainDirector::ProcessInputQueue case 56
+                // @0x822381B4 tests `+0x08 == 1` -- i.e. E_STUNT_CAMERA_TYPE_CUSTOM -- and then
+                // publishes `+0x0C` as miActionRequestedCamera, the camera id. A cut INDEX can
+                // never equal the enum, which is exactly what the boot-drive measured:
+                // `[jump-ladder] action=56 OnJumpStart posted cut=42 type=1` fell through every
+                // arm and left miThisFramesActionFlags at 0, so no jump camera was ever
+                // requested. Swapping the two declarations puts each value in its own slot.
+                s32   miCameraType;    // +0x08      -- stw  (TYPE byte: 0x34 fwd / 0x35 bwd, extsb)
+                s32   miCameraCut;     // +0x0C      -- stw  (CUT  half: 0x30 fwd / 0x32 bwd, extsh)
+                u8    mbFirstTime;     // +0x10      -- stb  (== !doneBefore)
+                u8    mauPad[7];       // +0x11..+0x17 (console: stale stack; zeroed here)
             } lJumpStartAction;
+            std::memset(&lJumpStartAction, 0, sizeof(lJumpStartAction));
 
             lJumpStartAction.mKey = lJumpKey;
             lJumpStartAction.miCameraType =
                 lSelectJumpCameraTypeCut(mpLastJumpElement, lbEnteredJumpForwards, &lJumpStartAction.miCameraCut);
-            lJumpStartAction.miFirstTimeFlag = lbHasBeenDoneBefore ? 0 : 1;   // X360 v37 = !doneBefore
-            lJumpStartAction.miPad = 0;
+            lJumpStartAction.mbFirstTime = lbHasBeenDoneBefore ? 0u : 1u;   // X360: extrwi(cntlzw(doneBefore),1,26)
 
             lpActionQueueImpl->AddEvent(
                 reinterpret_cast<const CgsModule::Event*>(&lJumpStartAction), KI_EVENT_ON_JUMP_START, 24);
+
+            // [DIAG] NOT IN THE X360 BINARY. Rung 3 of the `[jump-ladder]`: the take-off action
+            // that carries the camera request actually went onto the game-action queue.
+            {
+                static s32 siJumpStartLines = 0;
+                const s32  KI_JUMP_START_DIAG_FIRST_N = 8;
+                if (siJumpStartLines < KI_JUMP_START_DIAG_FIRST_N && CgsDev::Log::gpDebugPrint != 0)
+                {
+                    ++siJumpStartLines;
+                    *CgsDev::Log::gpDebugPrint
+                        << "[FLAG PC bring-up] [jump-ladder] action=56 OnJumpStart posted cut="
+                        << lJumpStartAction.miCameraCut
+                        << " type=" << lJumpStartAction.miCameraType
+                        << " firstTime=" << static_cast<s32>(lJumpStartAction.mbFirstTime) << "\n";
+                }
+            }
 
             mbShowJumpNameNextFrame = true;                    // +1558
             mbIsAttemptingJumpForFirstTime = !lbHasBeenDoneBefore; // +1559
@@ -1024,6 +1108,22 @@ void StuntManager::UpdateJumps(const BrnWorld::RaceCarEntityModuleIO::RCEntityAc
         // flt_82001DA0 == 0.5: 0.5s settle after the player has left + returned to the ground.
         if (lbLeftGround && mfJumpLandingTime > 0.5f)
         {
+            // [DIAG] NOT IN THE X360 BINARY. Rung 4 of the `[jump-ladder]` -- THE COUNT. This
+            // is the call that reaches Profile::AddStuntElement(JUMP, key, county) and posts
+            // game action 58, i.e. the one that makes a super jump count. If the fan-out and
+            // take-off rungs print and this one does not, the break is in the landing settle.
+            {
+                static s32 siLandLines = 0;
+                const s32  KI_JUMP_LAND_DIAG_FIRST_N = 8;
+                if (siLandLines < KI_JUMP_LAND_DIAG_FIRST_N && CgsDev::Log::gpDebugPrint != 0)
+                {
+                    ++siLandLines;
+                    *CgsDev::Log::gpDebugPrint
+                        << "[FLAG PC bring-up] [jump-ladder] JUMP COMPLETED -- ProcessStuntElement"
+                           "(isJump=true), landingTime=" << mfJumpLandingTime << "\n";
+                }
+            }
+
             // X360 0x8239D7C0 `mr r6, r24` / 0x8239D7C4 `li r5, 1` -- four arguments.
             ProcessStuntElement(lpActionQueue, /*lbIsJump*/true, lbIsAGameModeActive);
             mpLastJumpElement = 0;   // +1544
@@ -1300,7 +1400,24 @@ bool StuntManager::LoadDistrictMap(GameStateModuleIO::OutputBuffer* lpOutput)
 void StuntManager::LatchJumpElement(const BrnTrigger::GenericRegion* lpRegion)
 {
     if (!mbJumpActive)
+    {
         mpLastJumpElement = lpRegion;
+
+        // [DIAG] NOT IN THE X360 BINARY. Rung 1 of the `[jump-ladder]`: the jump region reached
+        // the StuntManager at all. Until the player-trigger fan-out landed
+        // (BrnTriggerQueryManager.cpp :: PreWorldUpdatePlayerTriggersBringUp) this function had
+        // no caller in the tree, so this line is the direct witness that the root-cause fix is
+        // live. First-N, because a jump region is re-entered every frame until take-off arms.
+        static s32 siLatchLines = 0;
+        const s32  KI_JUMP_LATCH_DIAG_FIRST_N = 8;
+        if (siLatchLines < KI_JUMP_LATCH_DIAG_FIRST_N && CgsDev::Log::gpDebugPrint != 0)
+        {
+            ++siLatchLines;
+            *CgsDev::Log::gpDebugPrint
+                << "[FLAG PC bring-up] [jump-ladder] LatchJumpElement: jump region latched (id="
+                << static_cast<s32>(lpRegion->GetRegionIndex()) << ")\n";
+        }
+    }
 }
 
 // ----------------------------------------------------------------------------

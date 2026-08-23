@@ -2,6 +2,9 @@
 
 #include <cstddef>   // offsetof (layout asserts)
 #include <stdlib.h>  // getenv ([UI-gate] arming-timeline diag; same env guard as the wQ_04 rung)
+#include <cstring>   // std::memset (the 24-byte player-trigger action record)
+
+#include "GameSource/Math/BrnMathUtils.h"   // BrnMath::IsPointInsideBox (the player-trigger stand-in)
 
 #include "rw/math/vpu/vector3_operation.h"  // rw::math::vpu operator-/Dot/MagnitudeSquared (refresh-gate + entry-direction maths)
 
@@ -75,6 +78,32 @@ static const bool KB_POST_TRIGGER_REGIONS_TO_WORLD = false;
 static const s32 KI_GAME_ACTION_KILLZONE       = 110;
 static const s32 KI_KILLZONE_ACTION_EVENT_SIZE = 264;
 
+// ----------------------------------------------------------------------------------------
+// [bugwave 2026-08-23] The PLAYER-TRIGGER game action PreWorldUpdate's fan-out posts:
+// event type 109 (0x6D), record size 24 (0x18) -- `li r6,0x18 / li r5,0x6D` @0x8239F804.
+// ----------------------------------------------------------------------------------------
+static const s32 KI_GAME_ACTION_PLAYER_TRIGGER       = 109;
+static const s32 KI_PLAYER_TRIGGER_ACTION_EVENT_SIZE = 24;
+
+// maLastPlayerTriggers / maLastFrameTriggers are Array<u16,32> (BrnTriggerQueryManager.h:173).
+static const u32 KU_MAX_PLAYER_TRIGGERS_PER_FRAME = 32u;
+
+// The 24-byte record itself. FLAG: its DWARF name/home is not recovered -- the console builds it
+// on the stack inside PreWorldUpdate and no consumer of action 109 is reconstructed in this tree
+// yet -- so it is modelled here exactly as the five stores the asm makes, the same treatment
+// StuntManager::UpdateJumps gives its own OnJumpStart record. Pointer-free, so the X360 offsets
+// hold on the x64 gate. Move to BrnGameActions.h when its consumer lands and names it.
+struct PlayerTriggerAction
+{
+    CgsID mId;             // +0x00  std   (lwz  region+0x24, extsw)
+    s32   miRegionType;    // +0x08  stw   (lbz  region+0x2A -- TriggerRegion::meType)
+    s32   miGenericType;   // +0x0C  stw   (lbz  region+0x36 -- GenericRegion::meType; type 2 only)
+    s32   miRegionIndex;   // +0x10  stw   (lhz  maLastPlayerTriggers[i])
+    u8    mbFirstFrame;    // +0x14  stb   (FindFirstInstanceOf(maLastFrameTriggers, idx) == -1)
+    u8    mauPad[3];       // +0x15..+0x17 (the console never writes these; zeroed here)
+};
+static_assert(sizeof(PlayerTriggerAction) == 24, "PlayerTriggerAction is the console's 24 bytes");
+
 // ============================================================================
 // X360 0x82364BF0 — BrnGameState::TriggerQueryManager::Construct
 // ============================================================================
@@ -91,6 +120,14 @@ void TriggerQueryManager::Construct(BrnProgression::ProgressionManager* lpProgre
     // at +896/+1492/+1560/+1564; the two modelled here are the ones later code touches.
     maActiveTriggers.Construct();      // X360: stw 0 @ +1424
     mLandmarkIndexArray.Construct();   // X360: stw 0 @ +1864
+    // ⭐ [bugwave 2026-08-23] DEFECT FIX, not an addition. The comment above used to say these
+    // two "are Construct'd in the full build" and leave them alone -- but the X360 Construct's
+    // zero-store loop covers +1492 and +1560 as well, and Array<T,N>'s live-count word carries a
+    // -1 UNCONSTRUCTED sentinel until Construct/Clear runs. With the player-trigger fan-out below
+    // now live, GetLength() on either of these would fire the console's own "Array used before
+    // Construct/Clear was called" assert (CgsArray.h:336) on the very first frame.
+    maLastPlayerTriggers.Construct();  // X360: stw 0 @ +1492
+    maLastFrameTriggers.Construct();   // X360: stw 0 @ +1560
 
     // Cached refresh position (X360: stvx128 v0 zero store @ +1776).
     mLastPlayerPosition = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };
@@ -632,6 +669,241 @@ void TriggerQueryManager::ProcessPlayerTriggers(
             // Other generic-region categories are not routed by this dispatcher.
             break;
     }
+}
+
+// ============================================================================
+// X360 0x8239F5C8 - BrnGameState::TriggerQueryManager::PreWorldUpdate, ITS PLAYER-TRIGGER
+// FAN-OUT LEG.  [bugwave 2026-08-23 -- THE SUPER-JUMP ROOT CAUSE]
+//
+// ROOT CAUSE THIS CLOSES, measured rather than argued. Before this landed,
+// `grep -rn ProcessPlayerTriggers b5-decomp/src` found the DEFINITION and nothing else: the
+// function had no caller anywhere in the tree. It is the ONLY thing in the image that calls
+// StuntManager::LatchJumpElement (console case 7 @0x8239C1F8), which is the ONLY writer of
+// StuntManager::mpLastJumpElement (+1544). StuntManager::Update runs UpdateJumps only under
+// `if (mpLastJumpElement)`, so on this build the ENTIRE jump state machine -- the take-off
+// gate, game action 56 (OnJumpStart, the camera request), game action 57 (ShowJumpName), the
+// 0.5 s landing settle and its ProcessStuntElement(lbIsJump=true) that increments the
+// super-jump tally -- never executed once. Both halves of the user report ("super jumps do not
+// get counted at all. camera is also not firing") hang off this one missing call.
+// The SMASH/BILLBOARD half of the same ladder survived because it enters through a completely
+// different door: RecordPropHitEvent -> ProcessGameEvents case 111 -> StuntManager::OnPropHit,
+// which walks maActiveTriggers directly and never touches ProcessPlayerTriggers.
+//
+// THE CONSOLE'S BODY, leg by leg (r29 == this):
+//   0x8239F630  UpdateTriggers(this, lpOutput, lpActiveRaceCarInterface)     [already mounted,
+//               in GameStateModule_gUI_00.cpp :: PreWorldUpdateStuntBringUp]
+//   0x8239F63C  SubmitTriggerQueries(this, lpOutput, lpActiveRaceCarInterface)  [PARKED, see (P1)]
+//   0x8239F650  the 8-slot loop caching each active car position into
+//               maActiveRaceCarPosLastFrame[] (this+1632)                       [PARKED, see (P2)]
+//   0x8239F714  THIS LEG: for i in [0, maLastPlayerTriggers.GetLength())
+//                   liRegionIndex = maLastPlayerTriggers.GetItem(i)
+//                   assert liRegionIndex < GetRegionCount()   (BrnTriggerData.h:624)
+//                   lpRegion = mpTriggerData->GetRegion(liRegionIndex)
+//                   record.mId          = (s64)lpRegion->GetId()         std  @+0x00 (lwz +0x24)
+//                   record.miRegionType = lpRegion->GetType()            stw  @+0x08 (lbz +0x2A)
+//                   if (miRegionType == 2)
+//                       record.miGenericType = generic->GetType()        stw  @+0x0C (lbz +0x36)
+//                   record.miRegionIndex = liRegionIndex                 stw  @+0x10 (lhz)
+//                   record.mbFirstFrame  =
+//                       (maLastFrameTriggers.FindFirstInstanceOf(liRegionIndex) == -1)
+//                                                                         stb  @+0x14
+//                   lpOutput->GetGameActionQueue()->AddEvent(&record, 109, 24)
+//                   ProcessPlayerTriggers(record.mbFirstFrame, lpActiveRaceCarInterface,
+//                                         lpRegion, lpOutput, lpStuntManager,
+//                                         lpDriveThruManager, lpVehicleList)
+//   0x8239F848  the maSoundActions drain -> game action 218 (32 bytes)          [PARKED, see (P3)]
+//   0x8239F8AC  maSoundActions count = 0;  maLastFrameTriggers count = 0;
+//   0x8239F8B8  maLastFrameTriggers.AppendArray(maLastPlayerTriggers);
+//   0x8239F8BC  maLastPlayerTriggers count = 0;
+//
+// THE ONE PC BRING-UP STAND-IN, NAMED. maLastPlayerTriggers (+1428) is written in exactly ONE
+// place in the whole X360 image: TriggerQueryManager::PostWorldUpdate @0x82386BD8, at
+// `short_32_::Append(this + 1428, &regionIndex)` inside its walk of the PostWorldInputBuffer's
+// TRIGGER LINE-TEST RESULT QUEUE (a VariableEventQueue<1024,16> of owner-56 line-test results
+// produced by the world's TriggerEntityModule). EVERY stage of that producer chain is inert on
+// this build -- the baseline boot log prints all five, verbatim:
+//     "TriggerEntityModule::PreSceneUpdate: inert [FLAG PC boot gate]"
+//     "BrnWorld::TriggerEntityModule::PostSceneUpdate: inert (body not reconstructed)"
+//     "WorldModule::BridgeTriggerModuleToSceneModule_PostScene: inert (body not reconstructed)"
+//     "WorldModule::BridgeSceneQueryResultsToTriggerModule_PrePhysics: inert (body not reconstructed)"
+//     "BrnWorld::TriggerEntityModule::PrePhysicsUpdate: inert (body not reconstructed)"
+// -- and TriggerQueryManager::SubmitTriggerQueries, the request half, has no body here either.
+// So the fan-out below would walk an array that can never be non-empty.
+// The stand-in fills maLastPlayerTriggers by testing the PLAYER'S WORLD POSITION against the
+// armed regions in maActiveTriggers, using the SAME two-stage broadphase + IsPointInsideBox
+// idiom StuntManager::OnPropHit @0x8236EE18 already uses against the same array. It is a POINT
+// test where the console runs a swept LINE test from the car, so a region thinner than one
+// frame of travel could be missed; jump regions are tens of metres deep, so this is sound for
+// the jump ladder and is stated rather than hidden.
+// DELETE-WHEN the TriggerEntityModule line-test chain lands and TriggerQueryManager::
+// PostWorldUpdate @0x82386BD8 becomes the real producer: then delete stage (0) below, mount
+// PostWorldUpdate, and this function is the console's leg verbatim.
+//
+// (P1) SubmitTriggerQueries @0x82392680 -- no body in this tree, and its only consumer is the
+//      same inert TriggerEntityModule. Its absence is exactly what stage (0) stands in for.
+// (P2) maActiveRaceCarPosLastFrame[8] lives inside mauReserved_AfterTrafficData (+1632..+1775),
+//      which this slice does not model as members. Nothing in the mounted set reads it.
+// (P3) the maSoundActions -> action-218 drain: maSoundActions (+376) is likewise reserved
+//      storage here and has no producer on this build (CheckSoundActions @0x82379710 is not
+//      mounted), so the loop would be over an array that is always empty. The two count-zeroing
+//      stores the console makes at 0x8239F8AC for it are therefore also omitted.
+// ============================================================================
+void TriggerQueryManager::PreWorldUpdatePlayerTriggersBringUp(
+        GameStateModuleIO::OutputBuffer*            lpOutput,
+        const RCEntityActiveRaceCarOutputInterface* lpActiveRaceCarInterface,
+        StuntManager*                               lpStuntManager,
+        DriveThruManager*                           lpDriveThruManager,
+        const BrnResource::VehicleList*             lpVehicleList)
+{
+    CGS_ASSERT(lpOutput != 0, "lpOutput != NULL");
+    CGS_ASSERT(lpActiveRaceCarInterface != 0, "lpActiveRaceCarInterface != NULL");
+    CGS_ASSERT(lpStuntManager != 0, "lpStuntManager != NULL");
+    if (lpOutput == 0 || lpActiveRaceCarInterface == 0 || lpStuntManager == 0)
+    {
+        return;
+    }
+
+    const BrnTrigger::TriggerData* lpTriggerData = mpTriggerData.operator->();
+    if (lpTriggerData == 0)
+    {
+        return;   // Triggers.dat not bound yet (Prepare has not reached E_TRIGGER_LOAD_DONE)
+    }
+
+    CgsDev::PerfMonCpu::StartMonitor(gsiPreWorldUpdatePM);
+
+    // ------------------------------------------------------------------------------------
+    // (0) [FLAG PC bring-up] THE PRODUCER STAND-IN -- see the banner. NOT IN THE X360 BINARY.
+    //     Console equivalent: TriggerQueryManager::PostWorldUpdate @0x82386BD8's
+    //     `short_32_::Append(this + 1428, ...)` over the world trigger line-test results.
+    // ------------------------------------------------------------------------------------
+    if (lpActiveRaceCarInterface->IsPlayerCarActive())
+    {
+        const Vector3 lPlayerPosition = lpActiveRaceCarInterface->GetPlayerPosition();
+        const u32     luArmedCount    = maActiveTriggers.GetLength();
+
+        for (u32 luArmed = 0; luArmed < luArmedCount; ++luArmed)
+        {
+            // maLastPlayerTriggers is Array<u16,32>; Append past capacity fires the container's
+            // own assert. The console's producer has the same bound, so stop at it.
+            if (maLastPlayerTriggers.GetLength() >= KU_MAX_PLAYER_TRIGGERS_PER_FRAME)
+            {
+                break;
+            }
+
+            const u16 luRegionIndex = maActiveTriggers[luArmed];
+            const BrnTrigger::TriggerRegion* lpArmedRegion = lpTriggerData->GetRegion(luRegionIndex);
+            if (lpArmedRegion->GetType() != BrnTrigger::TriggerRegion::E_TYPE_GENERIC_REGION)
+            {
+                continue;
+            }
+
+            const BrnTrigger::BoxRegion* lpBoxRegion = lpArmedRegion->GetBoxRegion();
+
+            // Conservative broadphase (NOT the console's -- OnPropHit's `0.5 * largestExtent`
+            // radius is only sound for a roughly-cubic box, and a false NEGATIVE here would be
+            // exactly the silent-no-jump bug this function exists to fix). The sum of the three
+            // dimensions is >= the box's bounding-sphere radius under either reading of
+            // GetDimensions (full extent or half extent), so it can only over-accept.
+            const Vector3 lCentre  = lpBoxRegion->GetPosition();
+            const f32 lfDeltaX = lCentre.x - lPlayerPosition.x;
+            const f32 lfDeltaY = lCentre.y - lPlayerPosition.y;
+            const f32 lfDeltaZ = lCentre.z - lPlayerPosition.z;
+            const f32 lfDistSq = lfDeltaX * lfDeltaX + lfDeltaY * lfDeltaY + lfDeltaZ * lfDeltaZ;
+            const f32 lfRadius = lpBoxRegion->GetDimensionX()
+                               + lpBoxRegion->GetDimensionY()
+                               + lpBoxRegion->GetDimensionZ();
+            if (lfDistSq > (lfRadius * lfRadius))
+            {
+                continue;
+            }
+
+            const Matrix44Affine lBoxTransform = lpBoxRegion->ComputeTransform();
+            const Vector3        lHalfExtents  = lpBoxRegion->GetDimensions();
+            if (BrnMath::IsPointInsideBox(lBoxTransform, lPlayerPosition, lHalfExtents))
+            {
+                maLastPlayerTriggers.Append(luRegionIndex);
+            }
+        }
+    }
+
+    // ------------------------------------------------------------------------------------
+    // (1) THE CONSOLE'S FAN-OUT (0x8239F714..0x8239F83C), verbatim.
+    // ------------------------------------------------------------------------------------
+    CgsModule::VariableEventQueue<13312, 16>* lpGameActionQueue =
+        reinterpret_cast<CgsModule::VariableEventQueue<13312, 16>*>(lpOutput->GetGameActionQueue());
+
+    const u32 luPlayerTriggerCount = maLastPlayerTriggers.GetLength();
+    for (u32 luTrigger = 0; luTrigger < luPlayerTriggerCount; ++luTrigger)
+    {
+        const u16 luRegionIndex = maLastPlayerTriggers.GetItem(luTrigger);
+
+        CGS_ASSERT(static_cast<s32>(luRegionIndex) < lpTriggerData->GetRegionCount(),
+                   "liRegionIndex < miRegionCount");   // BrnTriggerData.h:624
+
+        const BrnTrigger::TriggerRegion* lpRegion = lpTriggerData->GetRegion(luRegionIndex);
+
+        // The 24-byte PLAYER-TRIGGER game action (id 109). Field offsets are the console's own
+        // stack record (base == r1 + var_B0): std @+0x00, stw @+0x08, stw @+0x0C, stw @+0x10,
+        // stb @+0x14. The console leaves +0x0C stale when the region is not generic and never
+        // writes +0x15..+0x17; zeroed here so the record is deterministic.
+        PlayerTriggerAction lAction;
+        std::memset(&lAction, 0, sizeof(lAction));
+        lAction.mId          = lpRegion->GetId();                                  // lwz +0x24, extsw
+        lAction.miRegionType = static_cast<s32>(lpRegion->GetType());              // lbz +0x2A
+        if (lpRegion->GetType() == BrnTrigger::TriggerRegion::E_TYPE_GENERIC_REGION)
+        {
+            lAction.miGenericType = static_cast<s32>(
+                static_cast<const BrnTrigger::GenericRegion*>(lpRegion)->GetType());   // lbz +0x36
+        }
+        lAction.miRegionIndex = static_cast<s32>(luRegionIndex);
+        // `subf r11, r11, r27(-1) ; cntlzw ; extrwi 1,26` == (FindFirstInstanceOf(..) == -1).
+        lAction.mbFirstFrame  = (maLastFrameTriggers.FindFirstInstanceOf(luRegionIndex) == -1);
+
+        lpGameActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lAction),
+                                    KI_GAME_ACTION_PLAYER_TRIGGER,
+                                    KI_PLAYER_TRIGGER_ACTION_EVENT_SIZE);
+
+        ProcessPlayerTriggers(lAction.mbFirstFrame, lpActiveRaceCarInterface, lpRegion,
+                              lpOutput, lpStuntManager, lpDriveThruManager, lpVehicleList);
+    }
+
+    // [DIAG] NOT IN THE X360 BINARY. First-N: what the fan-out routed. This is the rung that
+    // separates "the player never entered a jump region" from "the region was entered and the
+    // StuntManager dropped it" -- pair it with the `[jump-ladder]` rungs in BrnStuntManager.cpp.
+    if (luPlayerTriggerCount != 0)
+    {
+        static s32 siFanOutLines = 0;
+        const s32  KI_FANOUT_DIAG_FIRST_N = 12;
+        if (siFanOutLines < KI_FANOUT_DIAG_FIRST_N && CgsDev::Log::gpDebugPrint != 0)
+        {
+            ++siFanOutLines;
+            *CgsDev::Log::gpDebugPrint
+                << "[FLAG PC bring-up] [jump-ladder] player-trigger fan-out: hits="
+                << static_cast<s32>(luPlayerTriggerCount) << " genericTypes=";
+            for (u32 luDiag = 0; luDiag < luPlayerTriggerCount; ++luDiag)
+            {
+                const BrnTrigger::TriggerRegion* lpDiagRegion =
+                    lpTriggerData->GetRegion(maLastPlayerTriggers.GetItem(luDiag));
+                s32 liGenericType = -1;
+                if (lpDiagRegion->GetType() == BrnTrigger::TriggerRegion::E_TYPE_GENERIC_REGION)
+                {
+                    liGenericType = static_cast<s32>(
+                        static_cast<const BrnTrigger::GenericRegion*>(lpDiagRegion)->GetType());
+                }
+                *CgsDev::Log::gpDebugPrint << " " << liGenericType;
+            }
+            *CgsDev::Log::gpDebugPrint << " (7 == E_TYPE_JUMP)\n";
+        }
+    }
+
+    // ------------------------------------------------------------------------------------
+    // (2) THE CONSOLE'S TAIL (0x8239F8AC..0x8239F8BC): this frame's set becomes last frame's.
+    // ------------------------------------------------------------------------------------
+    maLastFrameTriggers.Clear();                          // stw 0, 0x618(r29)
+    maLastFrameTriggers.AppendArray(maLastPlayerTriggers);
+    maLastPlayerTriggers.Clear();                         // stw 0, 0x5D4(r29)
+
+    CgsDev::PerfMonCpu::StopMonitor(gsiPreWorldUpdatePM);
 }
 
 // ============================================================================
