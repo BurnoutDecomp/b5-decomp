@@ -34,13 +34,14 @@
 // RenderTrafficCar's entry gates, asset/spec resolution, paint colour, body transform, shader
 // constants 20/21/22/23/24/26, body-part loop and wheel loop are real.
 //
-// FOUR UNRECOVERED .rodata CONSTANTS, PARKED NOT GUESSED: unk_8300D000 (the constant-24 scale),
-// unk_8300C9A0 / unk_8300C8F0 (the wheel-blur speed scale pair) and unk_8300CC60 (the blur
-// technique threshold) all read zero in the shipped image and are seeded by unnamed MSVC
-// dyn-init thunks in 0x82C6xxxx, which are not functions in the IDA DB and so are invisible to
-// every per-function export scan. Recovering them needs an XrefsTo walk in the .i64; an
-// export-JSON grep can never prove no thunk exists. They are named, seeded 0.0f, FLAGged, and
-// their consequence is stated at each use.
+// THE FOUR "UNRECOVERED" .rodata CONSTANTS ARE NOW RECOVERED (2026-08-23, wheel-blur bug wave).
+// unk_8300D000 (the constant-24 scale), unk_8300C9A0 / unk_8300C8F0 (the wheel-blur speed scale
+// pair) and unk_8300CC60 (the blur technique threshold) do read zero in the shipped image, and
+// this file was right that they are seeded by unnamed MSVC dyn-init thunks in 0x82C6xxxx that no
+// per-function export carries. They were read out of the DECRYPTED XEX2 BASEFILE instead -- no
+// .i64 walk needed: decrypt (devkit key) + de-"basic"-compress the basefile at load address
+// 0x82000000, scan .text for the instruction that materialises each address, and follow the
+// thunk's `lfs` to its .rodata literal. Per-constant evidence sits at each definition below.
 // ============================================================================
 
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficEntityModule.h"
@@ -104,29 +105,51 @@ static const u32 KU_VERLET_OFFSET_COUNT = 128u;
 static const Vector4 gaNullVerletOffsets[ KU_VERLET_OFFSET_COUNT ] = {};
 
 // ---- the four unrecovered dyn-init constants (see the file banner) ----------------------
-// FLAG (unrecovered .rodata): all four read zero in the shipped image and are written by
-// unnamed dyn-init thunks in 0x82C6xxxx that no per-function export carries. Named at their
-// console addresses so the .i64 xref walk that recovers them has an exact target list.
+// ---- RECOVERED 2026-08-23 (wheel-blur bug wave) -----------------------------------------
+// All four do read zero in the shipped image and ARE written by unnamed dyn-init thunks in
+// 0x82C6xxxx that no per-function export carries -- so the old "unrecoverable without an .i64
+// xref walk" note was half right. The missing half: the thunks are plainly visible in the
+// DECRYPTED XEX2 BASEFILE. Decrypt (devkit key) + de-"basic"-compress the basefile at load
+// address 0x82000000, scan .text for the instruction that materialises each .bss address, and
+// follow the thunk's `lfs` to its .rodata literal. Each definition below carries its thunk.
 
 // unk_8300D000 -- `lvx128 v0, r0, unk_8300D000 ; vmulfp128 v1, v118, v0` @ pseudocode :1291,
-// i.e. constant 24 == lRearLights * splat(this). The race car's positional twin
-// (unk_82FAD990 -> flt_82004C88) measured 8.0f; that is not imported here, because the two are
-// different globals and a numerically similar neighbour is not attestation.
-// Harmless today, since lRearLights is itself all-zero while its producer
-// SubmitCoronasForVehicle is gate G5. Recover it in the same change that lands that producer,
-// or the traffic lamps stay dark.
-static const f32 KF_TRAFFIC_SELF_ILLUMINATION_INTENSITY = 0.0f;
+// i.e. constant 24 == lRearLights * splat(this).
+// RECOVERED = 8.0f. Dyn-init thunk @0x82C66758:
+//     lis r11,0x820C / lfs f0, flt_820BA8E0 (0x41000000 == 8.0f) / lis r11,0x8301 /
+//     stfs f0,-0x10(r1) / lvlx v0,r0,r10 / addi r11,r11,0xD000 (-> 0x8300D000) /
+//     vspltw v0,v0,0 / stvx128 v0,r0,r11 / blr
+// The race car's positional twin (unk_82FAD990 -> flt_82004C88) also measures 8.0f; that
+// agreement is now a CROSS-CHECK, not the evidence -- this global was read on its own.
+// Still inert today, because lRearLights is all-zero while its producer
+// SubmitCoronasForVehicle is gate G5; landing that producer is what makes it visible.
+static const f32 KF_TRAFFIC_SELF_ILLUMINATION_INTENSITY = 8.0f;
 
 // unk_8300C9A0 and unk_8300C8F0 -- the wheel-spin blur pair:
-//   `vmulfp128 v124, v117, unk_8300C9A0` (v117 == Vehicle::GetSpeed())
+//   `vmulfp128 v124, v117, unk_8300C9A0` (v117 == Vehicle::GetSpeed())   @0x8272A9CC
 //   `vmulfp128 v0,   v124, unk_8300C8F0` -> vminfp against 1.0f -> constant 25 lane X.
-static const f32 KF_TRAFFIC_WHEEL_SPIN_SPEED_SCALE = 0.0f;
-static const f32 KF_TRAFFIC_WHEEL_BLUR_SCALE       = 0.0f;
+// RECOVERED:
+//   unk_8300C9A0 = 3.3333333f  -- dyn-init @0x82C66C78 from flt_8205873C (0x40555555).
+//        That is 1 / 0.3, i.e. metres-per-second -> radians-per-second for a 0.3 m traffic
+//        wheel, which is what makes v124 an ANGULAR VELOCITY and lets it be compared against
+//        the same 30 rad/s threshold the race car uses.
+//   unk_8300C8F0 = 1.0f / 30.0f == 0.033333335f -- dyn-init @0x82C65C48, which READS
+//        unk_8300CC60 back, divides flt_82001C98 (1.0f) by it and splats the quotient. It is
+//        literally the reciprocal of the threshold below, so the product
+//        (speed * 3.3333) * (1/30) is `angularVelocity / 30` -- the race car's divide,
+//        strength-reduced to a multiply.
+static const f32 KF_TRAFFIC_WHEEL_SPIN_SPEED_SCALE = 3.3333333f;
+static const f32 KF_TRAFFIC_WHEEL_BLUR_SCALE       = 1.0f / 30.0f;
 
-// unk_8300CC60 -- `vcmpgtfp128. v0, unk_8300CC60, v124`: a wheel turning slower than this
-// selects the non-blurred technique (the exact shape of the race car's
+// unk_8300CC60 -- `vcmpgtfp128. v0, unk_8300CC60, v124` @0x8272AA10: a wheel turning slower
+// than this selects the non-blurred technique (the exact shape of the race car's
 // `gvWheelBlurConstants.x > angularVelocity` test).
-static const f32 KF_TRAFFIC_WHEEL_BLUR_THRESHOLD = 0.0f;
+// RECOVERED = 30.0f. Dyn-init thunk @0x82C65C20 from flt_820BA5E8 (0x41F00000 == 30.0f) --
+// the SAME number, reached the same way, as the race car's unk_82FAD6F0 (flt_8201499C).
+// WITH IT AT 0.0f THE TEST WAS `0 > 0`, FALSE, so lu8WheelTechnique never left 0 (the BLURRED
+// variant) and every traffic wheel rendered blurred, parked cars included -- the traffic half
+// of the reported "wheels in the junkyard are blurred" bug.
+static const f32 KF_TRAFFIC_WHEEL_BLUR_THRESHOLD = 30.0f;
 
 // ============================================================================
 // PreDispatchUpdate  @ 0x8274D900   (EXPORT HOLE -- reconstructed from the leak's
@@ -909,10 +932,14 @@ TrafficEntityModule::RenderTrafficCar( CgsGraphics::DispatchFrame* lpDispatchFra
         {
             // Shader constant 25, "g_wheelConstants": the spin blur factor in lane x and
             // nothing else (`vrlimi128 v11, v0, 8, 0` -- mask 8 is lane X, so yzw stay zero).
-            // FLAG: both scales are unrecovered dyn-init constants (see the head of this file),
-            // so the product is 0 today and the blurred technique is always selected. The console
-            // arithmetic is kept rather than a divisor invented.
+            // Both scales and the threshold are now RECOVERED (see their definitions at the
+            // head of this file); the console arithmetic below is unchanged, only the numbers
+            // it operates on stopped being placeholder zeros.
             const f32 lfSpeed = lpVehicle->GetSpeed().x;
+
+            // lfScaledSpeed IS an angular velocity in rad/s (m/s divided by the 0.3 m wheel
+            // radius), which is why it can be compared against the same 30 rad/s threshold
+            // the race car applies to GetWheelAngularVelocity.
             const f32 lfScaledSpeed = lfSpeed * KF_TRAFFIC_WHEEL_SPIN_SPEED_SCALE;
             f32 lfBlur = lfScaledSpeed * KF_TRAFFIC_WHEEL_BLUR_SCALE;
             if ( lfBlur > 1.0f )   // vminfp128 against vcsxwfp(1) == 1.0f
@@ -924,7 +951,11 @@ TrafficEntityModule::RenderTrafficCar( CgsGraphics::DispatchFrame* lpDispatchFra
 
             // `vcmpgtfp128. v0, unk_8300CC60, v124` + the CR6 "all lanes" bit: a wheel turning
             // slower than the threshold selects the non-blurred technique. Sticky across
-            // wheels on the console (seeded outside the loop, only ever raised).
+            // wheels on the console (seeded outside the loop, only ever raised). The console
+            // compares all four lanes of a VecFloat splat, so this scalar test is the same
+            // predicate.
+            CGS_ASSERT( KF_TRAFFIC_WHEEL_BLUR_THRESHOLD > 0.0f,
+                        "KF_TRAFFIC_WHEEL_BLUR_THRESHOLD > 0.0f" );
             u8 lu8WheelTechnique = 0u;
             if ( KF_TRAFFIC_WHEEL_BLUR_THRESHOLD > lfScaledSpeed )
             {
@@ -933,6 +964,24 @@ TrafficEntityModule::RenderTrafficCar( CgsGraphics::DispatchFrame* lpDispatchFra
             if ( lbShadowPass )
             {
                 lu8WheelTechnique = 2u;
+            }
+
+            // [FLAG PC bring-up] ONE-SHOT traffic wheel-blur witness -- the traffic twin of the
+            // race car's [wheel-blur] line. One line for the first traffic car drawn, never
+            // per frame. DELETE-WHEN the blur is confirmed on a moving traffic car.
+            {
+                static bool sbLoggedTrafficWheelBlur = false;
+                if ( !sbLoggedTrafficWheelBlur && CgsDev::Log::gpDebugPrint != 0 )
+                {
+                    sbLoggedTrafficWheelBlur = true;
+                    *CgsDev::Log::gpDebugPrint
+                        << "[traffic-wheel-blur] threshold " << KF_TRAFFIC_WHEEL_BLUR_THRESHOLD
+                        << " rad/s | speed " << lfSpeed
+                        << " m/s -> angVel " << lfScaledSpeed
+                        << " -> c25.x " << lfBlur
+                        << " technique " << static_cast< s32 >( lu8WheelTechnique )
+                        << " (0 blurred, 1 sharp, 2 shadow)\n";
+                }
             }
 
             // The inverse of the car-model -> handling-body transform, hoisted out of the loop
