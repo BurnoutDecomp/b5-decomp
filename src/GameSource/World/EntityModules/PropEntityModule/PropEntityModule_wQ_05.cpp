@@ -96,6 +96,8 @@
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerModuleIO.h"
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // gpDebugPrint ([DIAG] BRN_PROP_DIAG)
+#include <stdlib.h>                                          // getenv    ([DIAG] BRN_PROP_DIAG)
 // ---------------------------------------------------------------------------------
 // Named explicitly on top of the spec block (both already reachable transitively; spelled
 // out because this TU names the symbols directly).
@@ -105,6 +107,16 @@
 
 namespace BrnWorld
 {
+    // ------------------------------------------------------------------------------------
+    // [DIAG] NOT IN THE X360 BINARY -- the two rate limits for this file's BRN_PROP_DIAG
+    // rungs. ⛔ DELETE-WHEN the high-speed prop reaction is confirmed on screen.
+    // First-N, not per-frame: a car sliding along a fence produces one contact per prop per
+    // frame, so an ungated line here is a log flood that hides its own answer. 24 is enough
+    // to cover a teleport-and-throttle run into a run of kerbside props plus one gate.
+    // ------------------------------------------------------------------------------------
+    static const s32 KI_DIAG_MAX_CLASSIFY_LINES = 24;
+    static const s32 KI_DIAG_MAX_COMMIT_LINES   = 24;
+
     // ROUND-2 UPDATE (2026-08-18): this file no longer has an anonymous namespace at all.
     //   * `KI_MAX_CONTACTED_PROPS` was a file constant; the DWARF makes it FUNCTION-LOCAL to
     //     ProcessPotentialContacts (BrnPropEntityModule.cpp:1179), which is where it now
@@ -265,9 +277,37 @@ namespace BrnWorld
             const EPropState leState     = lpProp->GetState();
             const EPropState leNextState = lpProp->GetNextState();
 
-            if ( CanChangeState( leState, leNextState ) )
+            const bool lbCanChange = CanChangeState( leState, leNextState );
+
+            if ( lbCanChange )
             {
                 ChangePropState( lpProp, lPropEntityId, leState, leNextState, lpOutput );
+            }
+
+            // ---- [DIAG] NOT IN THE X360 BINARY -- the BUG-WAVE COMMIT rung ---------------
+            // ⛔ DELETE-WHEN the high-speed prop reaction is confirmed on screen.
+            // The CLASSIFY rung above says what the contact ASKED for; this one says what the
+            // prop actually GOT. `stateAfter != state` is the proof the transition committed;
+            // `stateAfter == state` with canChange=1 means ChangePropState refused it, and the
+            // [prop-diag] STATE rung in PropEntityModule_wQ_04.cpp names which of its two legs
+            // dropped it (the physical-slot broker is the silent one).
+            {
+                static const bool sbPropDiag = ( getenv( "BRN_PROP_DIAG" ) != 0 );
+                static s32        siCommitLinesLeft = KI_DIAG_MAX_COMMIT_LINES;
+
+                if ( sbPropDiag && siCommitLinesLeft > 0 && CgsDev::Log::gpDebugPrint != 0
+                     && leNextState != leState )
+                {
+                    --siCommitLinesLeft;
+                    *CgsDev::Log::gpDebugPrint
+                        << "[prop-diag] COMMIT prop=" << lPropEntityId.GetValue()
+                        << " state="      << static_cast<s32>( leState )
+                        << " next="       << static_cast<s32>( leNextState )
+                        << " canChange="  << ( lbCanChange ? 1 : 0 )
+                        << " stateAfter=" << static_cast<s32>( lpProp->GetState() )
+                        << " physIdx="    << static_cast<s32>( lpProp->mu8PhysicsIndex )
+                        << "\n";
+                }
             }
 
             // Whatever happened, the pending state is retired to the state the prop is
@@ -418,7 +458,62 @@ namespace BrnWorld
         // the round-2 note where the file-local copy used to be.
         const EPropState leNextState = lpProp->GetNextState();
 
-        if ( CanChangeState( leNextState, leDesiredState ) )
+        const bool lbLatched = CanChangeState( leNextState, leDesiredState );
+
+        // ---- [DIAG] NOT IN THE X360 BINARY -- the BUG-WAVE CLASSIFY rung -----------------
+        // ⛔ DELETE-WHEN the high-speed prop reaction is confirmed on screen. Set BRN_PROP_DIAG.
+        //
+        // WHY IT EXISTS. This is the ONE place in the world module where the car's SPEED picks
+        // which response a prop will get, and the whole "reacts slow, does nothing fast" report
+        // turns on that pick:
+        //     carSpeedMph <= mfMoveThreshold  -> E_LEANING (2)  -> the prop enters the sim as a
+        //         jointed STATIC_BODY and PropManager::HandleContactWithLeanProp /
+        //         HandleContactWithTiltProp move it DIRECTLY (lerp + AddWorldSpaceImpulse +
+        //         their own UpdatePropEvent tail).
+        //     carSpeedMph >  mfMoveThreshold  -> E_PHYSICAL (4) -> the prop enters the sim as a
+        //         free ACTIVE_BODY and gets NO direct response at all: every millimetre of its
+        //         motion has to come back through sim -> PropManager::ReadUpdatedBodies ->
+        //         OutputUpdatedProps -> PropEntityModule::UpdateProps ->
+        //         PropZoneManager::UpdateInstance.
+        // So one line here plus the existing [Q6-world] line in UpdateProps
+        // (PropEntityModule_wQ_06.cpp) brackets the entire question: this line says which arm
+        // the contact took and at what speed; that one says whether the ACTIVE_BODY arm ever
+        // delivered a pose back.
+        //
+        // SCOPE + COST. RACE-CAR contacts only (the ones the player makes) and the first
+        // KI_DIAG_MAX_CLASSIFY_LINES of the run -- never an unbounded per-frame line. The getenv
+        // latch is a function-local static, so the shipped path pays one predicted branch. Every
+        // value printed is a member/accessor read with no side effect.
+        {
+            static const bool sbPropDiag = ( getenv( "BRN_PROP_DIAG" ) != 0 );
+            static s32        siClassifyLinesLeft = KI_DIAG_MAX_CLASSIFY_LINES;
+
+            if ( sbPropDiag && siClassifyLinesLeft > 0 && CgsDev::Log::gpDebugPrint != 0
+                 && lContactEntityId.GetOwner() == E_ENTITYTYPE_RACECAR )
+            {
+                --siClassifyLinesLeft;
+
+                const s32 liCarIndex = static_cast<s32>( lContactEntityId.GetEntityIndex() );
+
+                *CgsDev::Log::gpDebugPrint
+                    << "[prop-diag] CLASSIFY prop="  << lPropEntityId.GetValue()
+                    << " type="        << static_cast<u32>( lpProp->GetTypeId() )
+                    << " car="         << liCarIndex
+                    << " carSpeedMph=" << GetRaceCarSpeed( liCarIndex )
+                    << " lean="        << lpType->GetLeanThreshold()
+                    << " move="        << lpType->GetMoveThreshold()
+                    << " smash="       << lpType->GetSmashThreshold()
+                    << " jointType="   << static_cast<s32>( lpType->GetJointType() )
+                    << " state="       << static_cast<s32>( lpProp->GetState() )
+                    << " next="        << static_cast<s32>( leNextState )
+                    << " desired="     << static_cast<s32>( leDesiredState )
+                    << " latched="     << ( lbLatched ? 1 : 0 )
+                    << " easySmash="   << ( mbEasySmashProps ? 1 : 0 )
+                    << "\n";
+            }
+        }
+
+        if ( lbLatched )
         {
             lpProp->SetNextState( leDesiredState );
         }
