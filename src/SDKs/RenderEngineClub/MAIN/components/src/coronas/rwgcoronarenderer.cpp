@@ -3,6 +3,7 @@
 #include <cstdio>    // snprintf (the three one-shot bring-up lines)
 #include <cstring>   // memcpy (the constant rows -- the row pointer carries no alignment guarantee)
 #include <cstddef>   // offsetof (the CoronaVertex layout pins)
+#include <cmath>     // std::sqrt (the one-shot screen-placement mirror of the vertex program)
 
 #include "GameSource/Graphics/BrnCoronaManager.h"                          // renderengine::Corona / CoronaBuffer
 #include "GameShared/GameClasses/Core/CgsAssert.h"                         // CGS_ASSERT
@@ -85,7 +86,7 @@
 //     (CgsIm2dUntex.cpp:69, CgsIm2dColTex.cpp:77/80, CgsIm3d.cpp:77/80, CgsIm3dUntex.cpp:72/74,
 //     BrnLionBlendIm3d.cpp:71), so the identification is the tree's own, not this file's.
 //     ⚠ RISK, stated rather than buried: if the console word is really a D3DCOLOR (ARGB-ordered)
-//     rather than a UBYTE4N (memory-ordered), red and blue swap. The one-shot `[corona] first draw`
+//     rather than a UBYTE4N (memory-ordered), red and blue swap. The one-shot `[corona] draw #N`
 //     line below prints the first corona's colour word so a night screenshot can settle it.
 //
 // ---- THE PASS STATE (asm-proven, carlights step 1 finding 1.7, re-derived this wave) -----------
@@ -98,6 +99,18 @@
 // (`li r10,1` / `stw r10, var_8C` @0x8240769C/@0x824076AC), so the LIVE corona pass is
 // ADDITIVE, NO ALPHA TEST, DEPTH-TESTED LEQ, NO DEPTH WRITE.
 // =================================================================================================
+
+// ⚠ A RE-DECLARATION OF TWO EXISTING GLOBALS, NOT NEW ONES. The PC back-buffer extent is declared
+// at pc/gcm/renderengine/device.h:12-13 and DEFINED at device.cpp, where its semantics live; that
+// header pulls <Windows.h>, so it is declared here instead -- the same one-definition/two-
+// declaration shape pc/gcm/renderengine/Xbox2SurfaceShims.h:129 already uses for gAntiAliasing.
+// READ ONLY, and read ONLY by the [FLAG PC bring-up] screen-placement line: nothing in the pass
+// itself depends on the display extent (the console's own quad is built entirely in clip space).
+namespace renderengine
+{
+    extern s32 gDisplayWidth;
+    extern s32 gDisplayHeight;
+}
 
 namespace
 {
@@ -208,9 +221,95 @@ namespace
     f32 gfCalibViewXyScaleX = 0.0f;
     f32 gfCalibViewXyScaleY = 0.0f;
 
+    // ---------------------------------------------------------------------------------------------
+    // [FLAG PC bring-up] THE SCREEN-PLACEMENT CAPTURE (bug wave 2026-08-23).
+    //
+    // Begin also parks the camera position and the view-projection matrix it publishes, so the
+    // `[corona] first draws` line below can mirror the VERTEX PROGRAM on the CPU and print, per
+    // corona, WHERE ON SCREEN it lands and HOW BIG it is in pixels. Those two numbers are the only
+    // ones a screenshot can be checked against, and neither is derivable from the world-space
+    // numbers the pass already printed.
+    //
+    // DELETE-WHEN the corona bring-up is signed off (with the `[corona-calib]` block above it).
+    // ---------------------------------------------------------------------------------------------
+    Vector4  gvCalibCameraPosition;
+    Matrix44 gCalibViewProjectionMatrix;
+    bool     gbCalibCameraValid = false;
+
+    // How many individual coronas the one-shot draw diagnostic reports. Small on purpose: this is a
+    // boot-log line, not a per-frame trace, and the first handful is what identifies the pass.
+    const u32 KU_CALIB_LOGGED_CORONAS = 4u;
+
     void CoronaLog(const char* lpcMessage)
     {
         CgsDev::Log::WriteToLog(lpcMessage);
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // [FLAG PC bring-up] CalibProjectCorona -- a CPU MIRROR of mainCoronaVS, for the diagnostic
+    // line only. Nothing in the pass consumes it and no vertex is built from it.
+    //
+    // It reproduces, in order, exactly what tools/assets/shaders/brn_corona.fx's vertex program
+    // does with the constants Begin published (instructions 8-12 = the bias pull toward the camera,
+    // 13-15 = the ROW-VECTOR view-projection, 25 = the clip-space corner offset scaled by
+    // viewXyScale). So a mismatch between this line and the screenshot means the SHADER and this
+    // agree but the DATA is wrong, and a match with a wrong-looking screenshot means the shader is.
+    //
+    // The half-extents it reports are the UNROTATED axis extents (the VS rotates the corner offsets
+    // into the flare's radial frame, which is a rotation of the same square, so the size is right
+    // and only the orientation is dropped).
+    //
+    // DELETE-WHEN the corona bring-up is signed off.
+    // ---------------------------------------------------------------------------------------------
+    bool CalibProjectCorona(const Vector3& lrPosition, f32 lfBias, f32 lfSizeX, f32 lfSizeY,
+                            f32* lpfScreenPxX, f32* lpfScreenPxY,
+                            f32* lpfHalfPxX, f32* lpfHalfPxY, f32* lpfClipW)
+    {
+        if (!gbCalibCameraValid)
+            return false;
+
+        // [8-11] normalize(camera - position)
+        f32 lfToCameraX = gvCalibCameraPosition.x - lrPosition.x;
+        f32 lfToCameraY = gvCalibCameraPosition.y - lrPosition.y;
+        f32 lfToCameraZ = gvCalibCameraPosition.z - lrPosition.z;
+        const f32 lfLengthSquared = lfToCameraX * lfToCameraX
+                                  + lfToCameraY * lfToCameraY
+                                  + lfToCameraZ * lfToCameraZ;
+        if (!(lfLengthSquared > 0.0f))
+            return false;
+        const f32 lfInverseLength = 1.0f / std::sqrt(lfLengthSquared);
+        lfToCameraX *= lfInverseLength;
+        lfToCameraY *= lfInverseLength;
+        lfToCameraZ *= lfInverseLength;
+
+        // [12] pull the flare toward the camera by the record's bias distance.
+        const f32 lfWorldX = lrPosition.x + lfToCameraX * lfBias;
+        const f32 lfWorldY = lrPosition.y + lfToCameraY * lfBias;
+        const f32 lfWorldZ = lrPosition.z + lfToCameraZ * lfBias;
+
+        // [13-15] the ROW-VECTOR transform (the same convention BrnSunCorona::
+        // ComputeSunPositionOnScreen and gBrnSkyCameraBringUp use).
+        const Matrix44& lrM = gCalibViewProjectionMatrix;
+        const f32 lfClipX = lrM.xAxis.x * lfWorldX + lrM.yAxis.x * lfWorldY
+                          + lrM.zAxis.x * lfWorldZ + lrM.wAxis.x;
+        const f32 lfClipY = lrM.xAxis.y * lfWorldX + lrM.yAxis.y * lfWorldY
+                          + lrM.zAxis.y * lfWorldZ + lrM.wAxis.y;
+        const f32 lfClipW = lrM.xAxis.w * lfWorldX + lrM.yAxis.w * lfWorldY
+                          + lrM.zAxis.w * lfWorldZ + lrM.wAxis.w;
+        if (!(lfClipW > 0.0f))
+            return false;
+
+        const f32 lfWidth  = static_cast<f32>(renderengine::gDisplayWidth);
+        const f32 lfHeight = static_cast<f32>(renderengine::gDisplayHeight);
+
+        *lpfScreenPxX = (lfClipX / lfClipW + 1.0f) * 0.5f * lfWidth;
+        *lpfScreenPxY = (1.0f - lfClipY / lfClipW) * 0.5f * lfHeight;
+
+        // [25] the corner offset is added in CLIP space, so its NDC size is offset/w.
+        *lpfHalfPxX = (lfSizeX * gfCalibViewXyScaleX / lfClipW) * 0.5f * lfWidth;
+        *lpfHalfPxY = (lfSizeY * gfCalibViewXyScaleY / lfClipW) * 0.5f * lfHeight;
+        *lpfClipW   = lfClipW;
+        return true;
     }
 }
 
@@ -474,6 +573,11 @@ namespace renderengine
         gfCalibWhiteLevel   = lrParameters.mvCameraPositionPlusWhiteLevel.w;
         gfCalibViewXyScaleX = lrParameters.mvViewXyScale.x;
         gfCalibViewXyScaleY = lrParameters.mvViewXyScale.y;
+
+        // [FLAG PC bring-up] the screen-placement capture (see the globals' banner).
+        gvCalibCameraPosition     = lrParameters.mvCameraPositionPlusWhiteLevel;
+        gCalibViewProjectionMatrix = lrParameters.mViewProjectionMatrix;
+        gbCalibCameraValid        = true;
     }
 
     // =============================================================================================
@@ -604,12 +708,18 @@ namespace renderengine
         if (lpCorona == 0)
             return;
 
-        // [FLAG PC bring-up diagnostic] one line, the first time the pass actually emits geometry.
-        // It prints the EXTENT of what is drawn and the first corona's atlas row, because the two
-        // ways this pass can fail silently are (a) a zeroed atlas UV table -- every quad samples one
-        // texel and the frame still "looks fine", and (b) a wrong colour lane. DELETE with the
-        // bring-up.
-        static bool sbLoggedFirstDraw = false;
+        // [FLAG PC bring-up diagnostic] the first KU_CALIB_LOGGED_CORONAS coronas the pass actually
+        // emits, one line each, the first time it emits geometry. It prints
+        //   * the EXTENT of the draw and the record's atlas row -- the two ways this pass can fail
+        //     silently are (a) a zeroed atlas UV table (every quad samples one texel and the frame
+        //     still "looks fine") and (b) a wrong colour lane;
+        //   * and, added by the 2026-08-23 "rectangular artifact" bug wave, WHERE ON SCREEN each
+        //     corona lands and HOW BIG it is in PIXELS -- CalibProjectCorona mirrors the vertex
+        //     program on the CPU (see its banner). Those are the only two numbers a screenshot can
+        //     be checked against, and they are what separates "that rectangle is a corona" from
+        //     "that rectangle is not a corona" without another boot.
+        // DELETE with the bring-up.
+        static u32 suCoronasLogged = 0u;
 
         while (luCoronasLeft != 0u)
         {
@@ -664,22 +774,36 @@ namespace renderengine
                         ++lpVertex;
                     }
 
-                    if (!sbLoggedFirstDraw && luIndex == 0u)
+                    if (suCoronasLogged < KU_CALIB_LOGGED_CORONAS)
                     {
-                        sbLoggedFirstDraw = true;
-                        char lacMessage[288];
+                        f32 lfScreenPxX = 0.0f, lfScreenPxY = 0.0f;
+                        f32 lfHalfPxX   = 0.0f, lfHalfPxY   = 0.0f, lfClipW = 0.0f;
+                        const bool lbOnScreen = CalibProjectCorona(
+                            lrCorona.mvPosition, lrCorona.mfDistance, lfSizeX, lfSizeY,
+                            &lfScreenPxX, &lfScreenPxY, &lfHalfPxX, &lfHalfPxY, &lfClipW);
+
+                        char lacMessage[448];
                         std::snprintf(lacMessage, sizeof(lacMessage),
-                                      "[corona] first draw: %u quads (%u tris), stride=%u, sampler unit 0,"
-                                      " corona0 pos=(%.2f %.2f %.2f) size=(%.3f %.3f) tex=%d"
-                                      " colour=0x%08X uvRow=(%.3f,%.3f)(%.3f,%.3f)(%.3f,%.3f)(%.3f,%.3f)\n",
+                                      "[corona] draw #%u (of %u quads / %u tris, stride=%u,"
+                                      " sampler unit 0): pos=(%.2f %.2f %.2f) size=(%.3f %.3f)"
+                                      " tex=%d colour=0x%08X"
+                                      " uvRow=(%.3f,%.3f)(%.3f,%.3f)(%.3f,%.3f)(%.3f,%.3f)"
+                                      " | %s w=%.2f screenPx=(%.1f %.1f) halfPx=(%.1f %.1f)"
+                                      " display=%dx%d\n",
+                                      (unsigned)suCoronasLogged,
                                       (unsigned)luChunk, (unsigned)(luChunk * 2u),
                                       (unsigned)KU_CORONA_VERTEX_STRIDE,
                                       lafPosition[0], lafPosition[1], lafPosition[2],
                                       lfSizeX, lfSizeY, (int)lrCorona.miTextureID,
                                       (unsigned)lrCorona.muColour,
                                       lpUvRow[0].x, lpUvRow[0].y, lpUvRow[1].x, lpUvRow[1].y,
-                                      lpUvRow[2].x, lpUvRow[2].y, lpUvRow[3].x, lpUvRow[3].y);
+                                      lpUvRow[2].x, lpUvRow[2].y, lpUvRow[3].x, lpUvRow[3].y,
+                                      lbOnScreen ? "onscreen" : "BEHIND-OR-NO-CAMERA",
+                                      lfClipW, lfScreenPxX, lfScreenPxY, lfHalfPxX, lfHalfPxY,
+                                      (int)renderengine::gDisplayWidth,
+                                      (int)renderengine::gDisplayHeight);
                         CoronaLog(lacMessage);
+                        ++suCoronasLogged;
                     }
                 }
             }
