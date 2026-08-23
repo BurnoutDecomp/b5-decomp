@@ -5,6 +5,7 @@
 #include "GameSource/Director/Camera/Behaviours/BehaviourRig.h"             // Camera::BehaviourRig(::Parameters) + the Behaviour base slice
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourBystanderCam.h" // Camera::BehaviourBystanderCam(::Parameters)
 #include "GameShared/GameClasses/Containers/CgsArray.h"                     // Array<T,N> (the collections' shot tables)
+#include "GameSource/Director/Camera/Behaviours/BrnBehaviourInterpolate.h"  // Camera::BehaviourInterpolate(::Parameters) -- mInterpolaterParams is held BY VALUE (h:185), so the class must be COMPLETE here; BrnBehaviourManager.h only forward-declares it (:124), which is why this TU never compiled
 
 // BrnDirector::MomentPlayerJumping - the "player jumping" camera moment: while
 // the player is airborne off a jump, cut to one of several authored shot

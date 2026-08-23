@@ -10,8 +10,9 @@
 //
 // Member layout is the DecFIGS DWARF member list (BrnMomentParameterBank.h:90-101): one
 // hard-stop record, two bystander records, and seven tumbling records, each held by value.
-// The per-record field layouts are the real subclass Parameters (BrnMomentSubclasses.h /
-// BrnMoment.h), so the bank layout is faithful (not offset-pinned -- x64 host).
+// The per-record field layouts are the real subclass Parameters (Moments/BrnMomentHardStop.h,
+// Moments/BrnMomentTumbling.h, BrnMoment.h), so the bank layout is faithful (not offset-pinned
+// -- x64 host).
 //
 // NOTE: GetParameters/Construct bodies are already homed in the standalone
 // BrnMomentParameterBank.cpp ledger TU (which models the bank with its own local field
@@ -20,7 +21,20 @@
 
 #include "types.hpp"
 #include "GameSource/Director/MomentController/BrnMoment.h"             // Moment::Parameters, MomentBystanderSeesAction::Parameters
-#include "GameSource/Director/MomentController/BrnMomentSubclasses.h"   // MomentHardStop::Parameters, MomentTumbling::Parameters
+#include "GameSource/Director/MomentController/Moments/BrnMomentTumbling.h"   // MomentTumbling::Parameters (held by value) -- THE REAL HOME
+#include "GameSource/Director/MomentController/BrnMomentSubclasses.h"          // MomentHardStop::Parameters -- the LAST remaining slice, see that file
+// ⚠️ 2026-08-23: these two used to BOTH come from BrnMomentSubclasses.h, which carried its own
+// layout-stubbed MomentHardStop / MomentTumbling (plus nine more stub moment classes). Ten of
+// the eleven stubs are retired; MomentTumbling now comes from its real home. MomentHardStop
+// could NOT follow -- its real home drags BrnDirectorVehicleTracker.h, whose
+// BrnDirector::DirectorIO::InputBuffer slice is a SECOND definition of the one in
+// BrnDirectorModuleIO.h, so any TU that sees both dies with C2011 -- and this header reaches
+// BrnMainDirector.cpp (MomentController holds the bank by value; MainDirector reaches
+// MomentController). Read BrnMomentSubclasses.h for the full note and the DELETE-WHEN.
+//
+// ⛔ KEEP THIS HEADER LIGHT. It is on the include path of BrnMainDirector.cpp. The umbrella
+// over the other nine real moment homes deliberately lives in BrnMomentControllerNewMoment.cpp
+// (its only consumer), NOT here.
 
 namespace BrnDirector
 {
