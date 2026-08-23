@@ -1,144 +1,81 @@
 #pragma once
 
-// Minimal concrete homes for the eleven director-moment subclasses that
-// BrnDirector::MomentController::NewMoment (@0x82255850) allocates through
-// AbstractPool<70,20,Vector4>::AllocateVoid<MomentXxx>(). The twelfth subclass,
-// MomentBystanderSeesAction, is already homed (concretely) in BrnMoment.h and is
-// NOT redefined here.
+// ============================================================================
+// GameSource/Director/MomentController/BrnMomentSubclasses.h
 //
-// SCOPE / FLAG: these are deliberately MINIMAL, layout-stubbed slices -- each derives
-// from BrnDirector::Moment and overrides the pure-virtual interface just enough to be a
-// concrete type (so AllocateVoid<T> can placement-construct one and static_cast the slot
-// to it). Each real subclass carries a large member set in its own DWARF home
-// (Moments/BrnMomentXxx.h: BehaviourHandles, ShotSelectionInfo, CrashAnalysis, the
-// per-type Parameters, etc.); those full layouts land with each moment's own ledger TU.
-// The dossier action for the NewMoment TU explicitly permits stubbing these layouts.
-// FLAG: subclass DATA MEMBERS are not modelled here (sizeof is the bare Moment base);
-// NewMoment never reads any subclass field -- it only allocates, type-tags via the vtable,
-// and forwards SetParameters -- so semantic parity for NewMoment holds.
+// RETIRED FROM ELEVEN STUBS DOWN TO ONE, 2026-08-23 (jump/stunt cutaway-camera wave).
 //
-// The two nested Parameters records that MomentParameterBank holds by value
-// (MomentHardStop::Parameters, MomentTumbling::Parameters) ARE modelled faithfully from
-// the DecFIGS DWARF (Moments/BrnMomentHardStop.h, Moments/BrnMomentTumbling.h) so the
-// parameter-bank layout is real.
+// WHAT THIS FILE USED TO BE. Eleven `class MomentXxx : public Moment` definitions, each with
+// NO data members and a BRN_MOMENT_STUB_OVERRIDES macro that made every virtual a one-liner
+// (`Prepare -> return true`, `Update -> {}`, `Release -> return true`). Its own banner called
+// them "deliberately MINIMAL, layout-stubbed slices" whose real member sets "land with each
+// moment's own ledger TU".
+//
+// THEY ALL LANDED -- every one of the eleven has a real, complete home under Moments/ with the
+// DWARF member set and real bodies -- and MomentController::NewMoment @0x82255850 was still
+// allocating THE STUBS, because this header is what it included. That is a straight ODR
+// violation (two definitions of e.g. BrnDirector::MomentPlayerJumping in one program, with
+// different sizes and different vtables), and it is also why un-stubbing NewMoment on its own
+// would have changed nothing: a stubbed MomentPlayerJumping's Update() is `{}`, so its meState
+// never leaves E_STATE_INVALID_INACTIVE, so it is never IsValid(), so muValidMoments stays 0.
+//
+// TEN OF THE ELEVEN ARE GONE. Their only consumer, BrnMomentControllerNewMoment.cpp, now
+// includes the ten real homes directly. That umbrella lives in that .cpp on purpose and must
+// NOT be moved back into a header -- see the next paragraph.
+//
+// ⛔ WHY MomentHardStop COULD NOT FOLLOW -- AND WHAT WOULD LET IT.
+// This header is reached by BrnMomentParameterBank.h (which needs MomentHardStop::Parameters
+// by value), which is reached by BrnMomentController.h (holds the bank by value), which is
+// reached by BrnMomentSelector.h, which is reached by BrnMainDirector.cpp. The REAL
+// Moments/BrnMomentHardStop.h includes GameSource/Director/Utils/BrnDirectorVehicleTracker.h
+// for BrnDirector::CrashAnalysis (MomentHardStop holds one by value at h:101), and that header
+// carries its own `class BrnDirector::DirectorIO::InputBuffer` slice (:126) -- a SECOND
+// definition of the `struct BrnDirector::DirectorIO::InputBuffer` in
+// GameSource/Director/DirectorModule/BrnDirectorModuleIO.h (:145). The two have different
+// class keys AND different method sets, so any TU that sees both dies with C2011. MEASURED
+// 2026-08-23: routing the bank at the real MomentHardStop breaks BrnMainDirector.cpp outright.
+//
+// ⇒ DELETE-WHEN (this is the last stub in this file, and it is blocked on someone else's fork):
+//    de-fork BrnDirector::DirectorIO::InputBuffer -- delete the declaration-only slice from
+//    BrnDirectorVehicleTracker.h:126, include BrnDirectorModuleIO.h there instead, and adapt
+//    BrnDirectorVehicleTracker.cpp's seven call sites (GetUsedRaceCars / IsRaceCarUsed /
+//    GetVehicleInfo / GetTimerStatusInterface / GetPlayerScoreData / GetPlayerSpeedMph /
+//    IsForcedFastTopDownCrashArmed) to the real InputBuffer's API. Then replace the include
+//    below with Moments/BrnMomentHardStop.h and delete this file.
+//
+// ⭐ THE HARM THIS ONE STILL DOES IS BOUNDED AND NAMED: the nested Parameters record below is
+//    layout-identical to the real one (DWARF Moments/BrnMomentHardStop.h:111 -- two floats),
+//    so the parameter BANK's layout is correct either way. The live defect is that
+//    NewMoment's `AllocateVoid<MomentHardStop>()` arm would allocate this empty slice instead
+//    of the real 528-byte moment. That arm is unreachable today (NewMoment itself is a GROUP F
+//    stub, and no mounted arbitrator state registers E_MOMENT_HARD_STOP), but it MUST be fixed
+//    before the moment closure is mounted.
+// ============================================================================
 
 #include "types.hpp"
 #include "GameSource/Director/MomentController/BrnMoment.h"   // BrnDirector::Moment
 
 namespace BrnDirector
 {
-    namespace Camera { class BehaviourManager; }
-
-    // Shared minimal concrete-override block. Every stub subclass needs the same set of
-    // overrides to satisfy Moment's pure-virtual interface; expressed once via a macro so
-    // the eleven stubs stay one-liners and obviously identical in shape.
-    #define BRN_MOMENT_STUB_OVERRIDES(MOMENT_ENUM)                                  \
-        bool Prepare(void* /*lrBehaviourController*/) override { return true; }      \
-        void Update(f32, void*, const void*) override {}                            \
-        bool Release() override { return true; }                                    \
-        const char* GetName() const override { return #MOMENT_ENUM; }               \
-        EType GetInstanceType() override { return MOMENT_ENUM; }
-
-    // case 0
+    // ⛔ LAYOUT-STUBBED SLICE -- see the banner. The real home is
+    // Moments/BrnMomentHardStop.h and the two CANNOT share a TU.
     class MomentHardStop : public Moment
     {
     public:
         // DWARF: Moments/BrnMomentHardStop.h:111. The hard-stop "ultra slow-mo" tuning the
-        // parameter bank stores by value.
+        // parameter bank stores by value. Layout-identical to the real home's record, which is
+        // what makes the bank's layout correct despite the enclosing slice.
         struct Parameters : public Moment::Parameters
         {
             f32 mfDuration;             // BrnMomentHardStop.h:117
             f32 mfSpeedDiffThreshold;   // BrnMomentHardStop.h:118
         };
-        BRN_MOMENT_STUB_OVERRIDES(E_MOMENT_HARD_STOP)
-    };
 
-    // case 1
-    class MomentHitTraffic : public Moment
-    {
-    public:
-        BRN_MOMENT_STUB_OVERRIDES(E_MOMENT_HIT_TRAFFIC)
+        bool        Prepare(void* /*lrBehaviourController*/) override { return true; }
+        void        Update(f32, void*, const void*) override {}
+        bool        Release() override { return true; }
+        const char* GetName() const override { return "E_MOMENT_HARD_STOP"; }
+        EType       GetInstanceType() override { return E_MOMENT_HARD_STOP; }
     };
-
-    // case 2
-    class MomentTumbling : public Moment
-    {
-    public:
-        // DWARF: Moments/BrnMomentTumbling.h:111.
-        struct Parameters : public Moment::Parameters
-        {
-            // DWARF: Moments/BrnMomentTumbling.h:119.
-            enum ESubType
-            {
-                E_SUBTYPE_TRUCKING_SIDE  = 0,
-                E_SUBTYPE_TRUCKING_FRONT = 1,
-                E_SUBTYPE_FOLLOW         = 2,
-                E_SUBTYPE_LEAD           = 3,
-                E_SUBTYPE_SIDE           = 4
-            };
-            ESubType meSubType;        // BrnMomentTumbling.h:128
-            bool     mbCrashMoment;    // BrnMomentTumbling.h:130
-            bool     mbTakedownMoment; // BrnMomentTumbling.h:131
-        };
-        BRN_MOMENT_STUB_OVERRIDES(E_MOMENT_TUMBLING)
-    };
-
-    // case 3
-    class MomentTakedownLookback : public Moment
-    {
-    public:
-        BRN_MOMENT_STUB_OVERRIDES(E_MOMENT_TAKEDOWN_LOOKBACK)
-    };
-
-    // case 4
-    class MomentPassengerSeesAction : public Moment
-    {
-    public:
-        BRN_MOMENT_STUB_OVERRIDES(E_MOMENT_PASSENGER_SEES_ACTION)
-    };
-
-    // case 6  (case 5 == MomentBystanderSeesAction, homed in BrnMoment.h)
-    class MomentFailSafe : public Moment
-    {
-    public:
-        BRN_MOMENT_STUB_OVERRIDES(E_MOMENT_FAILSAFE)
-    };
-
-    // case 7
-    class MomentPlayerJumping : public Moment
-    {
-    public:
-        BRN_MOMENT_STUB_OVERRIDES(E_MOMENT_PLAYER_JUMPING)
-    };
-
-    // case 8
-    class MomentPlayerStunt : public Moment
-    {
-    public:
-        BRN_MOMENT_STUB_OVERRIDES(E_MOMENT_PLAYER_STUNT)
-    };
-
-    // case 9
-    class MomentStaticCamImpact : public Moment
-    {
-    public:
-        BRN_MOMENT_STUB_OVERRIDES(E_MOMENT_STATIC_CAM_IMPACT)
-    };
-
-    // case 10
-    class MomentNewCarJoined : public Moment
-    {
-    public:
-        BRN_MOMENT_STUB_OVERRIDES(E_MOMENT_NEW_CAR_JOINED)
-    };
-
-    // case 11
-    class MomentStationaryCrash : public Moment
-    {
-    public:
-        BRN_MOMENT_STUB_OVERRIDES(E_MOMENT_STATIONARY_CRASH)
-    };
-
-    #undef BRN_MOMENT_STUB_OVERRIDES
 
 } // namespace BrnDirector

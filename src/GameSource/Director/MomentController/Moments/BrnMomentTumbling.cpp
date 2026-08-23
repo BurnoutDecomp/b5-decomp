@@ -64,9 +64,13 @@ namespace detail
 
     const AllVehicleData* MomentSharedInfo_GetAllVehicleData(const void* lpSharedInfo);   // +1288
 
-    // The victim race car's velocity lane (VehicleInfo +816; the record type is
-    // reference-only codebase-wide). DECLARATION-ONLY.
-    const rw::math::vpu::Vector3& VehicleInfo_GetVelocity(const VehicleInfo& lrVehicle);
+    // ⭐ RETIRED 2026-08-23 (moment-camera wave). This used to be a DECLARATION-ONLY
+    // `VehicleInfo_GetVelocity(const VehicleInfo&)` shim -- an unresolved external AND an
+    // undeclared type (`VehicleInfo` is not a name in BrnDirector; the real record is
+    // BrnDirector::Camera::VehicleInfo), which is why this TU never compiled.
+    // The "+816" lane it stood for IS a named member: Camera::VehicleInfo::mRaceCarState
+    // .mLinearVelocity (BrnVehicleEvents.h RaceCarState @816). Both call sites now read it
+    // by name, so nothing is stubbed and nothing is guessed.
 }
 using namespace detail;
 
@@ -186,7 +190,8 @@ void MomentTumbling::Update(f32 lfTimeStep, void* lrBehaviourController,
             if (lpAllVehicles->GetUsedRaceCarsBitArray().IsBitSet(liVictim))   // the CgsBitArray.h:203 tripwire
             {
                 const rw::math::vpu::Vector3& lv3VictimVelocity =
-                    VehicleInfo_GetVelocity(lpAllVehicles->GetRaceCar(EActiveRaceCarIndex(liVictim)));
+                    lpAllVehicles->GetRaceCar(EActiveRaceCarIndex(liVictim))
+                        .mRaceCarState.mLinearVelocity;   // VehicleInfo +816
                 lbTakedownCondition =
                     rw::math::vpu::Dot(lv3VictimVelocity, lv3VictimVelocity) > KF_TUMBLE_START_THRESHOLD;
             }
@@ -285,7 +290,8 @@ void MomentTumbling::Update(f32 lfTimeStep, void* lrBehaviourController,
         if (lpAllVehicles->GetUsedRaceCarsBitArray().IsBitSet(liVictim))   // :203 tripwire
         {
             const rw::math::vpu::Vector3& lv3VictimVelocity =
-                VehicleInfo_GetVelocity(lpAllVehicles->GetRaceCar(EActiveRaceCarIndex(liVictim)));
+                lpAllVehicles->GetRaceCar(EActiveRaceCarIndex(liVictim))
+                    .mRaceCarState.mLinearVelocity;   // VehicleInfo +816
             lbTakedownKeep =
                 rw::math::vpu::Dot(lv3VictimVelocity, lv3VictimVelocity) > KF_TUMBLE_START_THRESHOLD;
         }

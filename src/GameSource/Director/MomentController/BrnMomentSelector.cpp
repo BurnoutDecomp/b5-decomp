@@ -27,6 +27,7 @@
 
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [DIAG] one-shot jump-ladder rungs only
 
 namespace BrnDirector
 {
@@ -245,6 +246,24 @@ void MomentSelector::Update(f32 lfTimestep)
         }
     }
 
+    // [DIAG] NOT IN THE X360 BINARY. Rung 6 of the `[jump-ladder]`: the selector saw at
+    // least one moment go VALID + switchable. This is the number ArbStateRoaming::Update's
+    // DRIVING arm gates SelectBestMoment on, and it was PINNED AT 0 for the whole project
+    // (MomentController::NewMoment was a stub that allocated nothing, so every handle stayed
+    // !IsAllocated() and the loop above `continue`d on all of them). One-shot.
+    {
+        static bool sbLoggedFirstValid = false;
+        if (!sbLoggedFirstValid && muValidMoments != 0 && CgsDev::Log::gpDebugPrint != 0)
+        {
+            sbLoggedFirstValid = true;
+            *CgsDev::Log::gpDebugPrint
+                << "[FLAG PC bring-up] [jump-ladder] MomentSelector muValidMoments="
+                << static_cast<s32>(muValidMoments)
+                << " of " << liMomentCount
+                << " candidates (frames=" << static_cast<s32>(miFramesActive) << ")\n";
+        }
+    }
+
     // [GATED @0x8223A41C..0x8223A658 -- the max-active-moments REBALANCE]
     //   if (mbHasMaxLimit && luInhibitedCandidate != 0)
     //   {
@@ -349,6 +368,151 @@ bool MomentSelector::AddMoment(Moment::EType meMomentType,
     lDescription.mbCanBeInhibited = mbCanBeInhibited;
 
     return AddMoment(lDescription);
+}
+
+// ---------------------------------------------------------------------------------------
+// SelectBestMomentWithExclusion -- BrnMomentSelector.cpp:320   @0x82250FC8   NEW 2026-08-23
+//
+// ⭐ THIS WAS A GROUP-F STUB IN DirectorLinkStubs.cpp UNTIL TODAY, AND THE STUB WAS
+// `return false` -- i.e. "no moment was selected", every frame, forever. It sits directly on
+// the cutaway path: ArbStateRoaming::Update's DRIVING arm calls SelectBestMoment(random)
+// (the header inline @0x82254DA8, which is just this with exclusion == -1) and the ONLY
+// writer of mbHasSelectedMoment is the body below. With the stub standing, even a correctly
+// allocated, valid, switchable jump moment could never be picked.
+//
+// Signature FROM ASM: r3 = this, r4 = CgsNumeric::Random&, r5 = the excluded slot (s32).
+// The LRU arm re-loads r5 into r4 (`mr r4, r5` @0x8225102C) before its call, which is what
+// pins SelectBestLRUMomentWithExclusion's arity at (this, exclusion) with no Random.
+//
+// Dispatch on meSelectionMode (+0x1DC): 0 -> LRU, 1 -> random-weighted, anything else fires
+// "unhandled type" (BrnMomentSelector.cpp:338) and reports false. `cmplwi 1 / blt / beq` is
+// an UNSIGNED compare, so the LRU arm is taken for 0 only.
+// ---------------------------------------------------------------------------------------
+bool MomentSelector::SelectBestMomentWithExclusion(CgsNumeric::Random& lRandom, s32 liExclusion)
+{
+    switch (meSelectionMode)
+    {
+        case E_MODE_LRU_BEST:
+            return SelectBestLRUMomentWithExclusion(liExclusion);
+
+        case E_MODE_RANDOM_BEST:
+            return SelectBestRandomMomentWithExclusion(lRandom, liExclusion);
+
+        default:
+            CGS_ASSERT(false, "unhandled type");   // cpp:338
+            return false;
+    }
+}
+
+// ---------------------------------------------------------------------------------------
+// SelectBestLRUMomentWithExclusion -- BrnMomentSelector.cpp:351   @0x8221BE50   NEW 2026-08-23
+//
+// The least-recently-used picker, and the ONE the game actually runs: MomentSelector::
+// Construct writes meSelectionMode = E_MODE_LRU_BEST (0) and nothing in this tree ever calls
+// SetSelectionMode (grep is clean), so every selection in the shipped path lands here.
+//
+// Score each candidate as (1 - recency) * weighting and keep the best; on success latch the
+// winner and drive its recency to 1.0 so it is the least attractive candidate next time --
+// that is the whole "LRU" mechanism, and it is why MomentSelector::Update multiplies the
+// recency array by mfRecencyFactor every frame (the decay back toward selectable).
+//
+// Signature FROM ASM: r3 = this, r4 = liExclusion. Returns bool (`li r3,1` / `li r3,0`).
+//
+// ASM WALK (0x8221BE50..0x8221C024), every branch attested:
+//   0x8221BE6C  muValidMoments (+0x1D0) == 0  -> return false BEFORE touching anything else.
+//   0x8221BE78  GetLength() on the DESCRIPTION array (+0xA0) -- its "Array used before
+//               Construct/Clear was called" tripwire is emitted here, unconditionally.
+//   0x8221BEAC  f31 = flt_82001CC0 == 0.0f (the running best score, so a candidate scoring
+//               exactly 0 still wins -- the compare is `>=`), f30 = flt_82001C98 == 1.0f.
+//   loop 0x8221BEE0..0x8221BFD0, five ordered tests, each falling to the `continue` label:
+//               IsAllocated / GetState()==E_STATE_VALID (+0x174==3) /
+//               CanSwitchToMeNow() (+0x178) / index != exclusion / score >= best.
+//               The console re-fetches the handle and re-calls GetMoment() before EACH of the
+//               two moment reads (two separate BrnMomentController.h:141 tripwires per
+//               iteration); hoisting them is the same reads in the same order.
+//   0x8221BFB4  `fcmpu; blt -> skip` == keep when score >= best, so on a TIE the LATER index
+//               wins. Preserved deliberately: with ArbStateRoaming's three equal-weight
+//               (0.5f) candidates and equal recency, that is what decides the pick.
+//   0x8221BFE4  miSelectedMoment (+0x1D8) = best, mbHasSelectedMoment (+0x1E0) = true,
+//               mRecencyArray[best] = 1.0f (f30).
+// ---------------------------------------------------------------------------------------
+bool MomentSelector::SelectBestLRUMomentWithExclusion(s32 liExclusion)
+{
+    if (muValidMoments == 0)                                        // 0x8221BE6C
+    {
+        return false;
+    }
+
+    const s32 liMomentCount = static_cast<s32>(mMomentDescriptionArray.GetLength());   // +0x0A0
+
+    bool lbFoundOne    = false;   // r26
+    s32  liBestMoment  = 0;       // r27
+    f32  lfBestScore   = 0.0f;    // f31 (flt_82001CC0)
+
+    for (s32 liLoop = 0; liLoop < liMomentCount; ++liLoop)
+    {
+        if (!mMomentHandleArray[static_cast<u32>(liLoop)].IsAllocated())
+        {
+            continue;
+        }
+
+        if (mMomentHandleArray[static_cast<u32>(liLoop)].GetMoment()->GetState() !=
+            Moment::E_STATE_VALID)                                   // +0x174 == 3
+        {
+            continue;
+        }
+
+        if (!mMomentHandleArray[static_cast<u32>(liLoop)].GetMoment()->CanSwitchToMeNow())
+        {                                                            // +0x178
+            continue;
+        }
+
+        if (liLoop == liExclusion)
+        {
+            continue;
+        }
+
+        const MomentDescription& lrDescription = mMomentDescriptionArray[static_cast<u32>(liLoop)];
+        const f32 lfScore =
+            (1.0f - mRecencyArray[static_cast<u32>(liLoop)]) * lrDescription.mfWeighting;
+
+        if (lfScore >= lfBestScore)                                  // 0x8221BFB4 (ties: later wins)
+        {
+            lbFoundOne   = true;
+            lfBestScore  = lfScore;
+            liBestMoment = liLoop;
+        }
+    }
+
+    if (!lbFoundOne)
+    {
+        return false;
+    }
+
+    miSelectedMoment    = liBestMoment;   // +0x1D8
+    mbHasSelectedMoment = true;           // +0x1E0
+    mRecencyArray[static_cast<u32>(liBestMoment)] = 1.0f;   // f30 == flt_82001C98
+
+    // [DIAG] NOT IN THE X360 BINARY. Rung 7 of the `[jump-ladder]`: a cutaway moment was
+    // actually PICKED. One-shot; costs one predictable branch per successful selection and
+    // nothing at all once it has fired.
+    {
+        static bool sbLoggedFirstSelection = false;
+        if (!sbLoggedFirstSelection && CgsDev::Log::gpDebugPrint != 0)
+        {
+            sbLoggedFirstSelection = true;
+            *CgsDev::Log::gpDebugPrint
+                << "[FLAG PC bring-up] [jump-ladder] MomentSelector SELECTED moment slot="
+                << liBestMoment
+                << " type=" << static_cast<s32>(
+                       mMomentDescriptionArray[static_cast<u32>(liBestMoment)].meMomentType)
+                << " (7=PLAYER_JUMPING 8=PLAYER_STUNT 10=NEW_CAR_JOINED)"
+                << " valid=" << static_cast<s32>(muValidMoments)
+                << " excl=" << liExclusion << "\n";
+        }
+    }
+
+    return true;
 }
 
 } // namespace BrnDirector

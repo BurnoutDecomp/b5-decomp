@@ -75,12 +75,14 @@ void MomentPlayerJumping::Construct()
     mIceCollection.Construct(0, this);
     mInterpolater.Clear();                 // the X360 zeroes the five handle fields inline
     mInterpolaterParams.Construct();       // {type 8, no name, slerp, sinusoidal} (inlined)
-    mInterpolaterParams.meInterpolationMethod = 1;   // E_METHOD_ROTATE_ABOUT_PLAYER_CAR
+    mInterpolaterParams.meInterpolationMethod =
+        Camera::BehaviourInterpolate::E_METHOD_ROTATE_ABOUT_PLAYER_CAR;   // stw 1, +0x374
     mfCooldownTimer = KF_COOLDOWN_TIME;
     meType          = E_INVALID_TYPE;
     mbPrepared      = false;
     mpParameters    = 0;
-    mInterpolaterParams.meInterpolationMapping = 3;  // E_MAPPING_EXPONENTIAL_OUT_X_CUBED
+    mInterpolaterParams.meInterpolationMapping =
+        Camera::BehaviourInterpolate::E_MAPPING_EXPONENTIAL_OUT_X_CUBED;  // stw 3, +0x378 (stored LAST)
 }
 
 // @ 0x82251048 -- cpp:209. Enter SEARCHING (before the once-only guard), then on

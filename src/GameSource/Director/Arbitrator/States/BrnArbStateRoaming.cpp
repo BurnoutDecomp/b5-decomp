@@ -344,6 +344,27 @@ namespace BrnDirector
                 // moment +0x10 == the moment's own camera (two separate GetSelectedMoment
                 // calls in the asm, 0x82264594 and 0x822645A8; either shape is parity).
                 GetNonConstCamera() = mMomentSelector.GetSelectedMoment()->GetCamera();
+
+                // [DIAG] NOT IN THE X360 BINARY. Rung 8 -- THE LAST RUNG of the
+                // `[jump-ladder]`: the DRIVING arm has just published a MOMENT's camera
+                // instead of GetSelectedGameplayCamera(), i.e. THE CUTAWAY IS ON SCREEN.
+                // Every earlier rung can pass and this one still not fire (the moment must
+                // still be IsValid() on the frame the camera is chosen), so this is the line
+                // that actually witnesses the bug being fixed. One-shot.
+                {
+                    static bool sbLoggedFirstCutaway = false;
+                    if (!sbLoggedFirstCutaway && CgsDev::Log::gpDebugPrint != 0)
+                    {
+                        sbLoggedFirstCutaway = true;
+                        *CgsDev::Log::gpDebugPrint
+                            << "[FLAG PC bring-up] [jump-ladder] ROAMING DRIVING arm took the"
+                               " MOMENT camera -- cutaway live (moment="
+                            << mMomentSelector.GetSelectedMoment()->GetName()
+                            << " state=" << static_cast<s32>(
+                                   mMomentSelector.GetSelectedMoment()->GetState())
+                            << ")\n";
+                    }
+                }
             }
             else if (lrSharedInfo.mpGameState->mDirectorProfileData.maOpaque[0x05] != 0)
             {
