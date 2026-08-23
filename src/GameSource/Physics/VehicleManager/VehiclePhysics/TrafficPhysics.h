@@ -9,7 +9,7 @@
 // Member SEQUENCE verbatim from the DecFIGS DWARF (TrafficPhysics.h:117-122).
 //
 // ==================================================================================================
-// ⭐⭐ THE OWN BLOCK IS DERIVED, NOT GUESSED, AND IT CLOSES WITH ZERO SLACK AT BOTH ENDS
+// THE OWN BLOCK IS DERIVED, NOT GUESSED, AND IT CLOSES WITH ZERO SLACK AT BOTH ENDS
 // (2026-08-03, the Construct wave -- from the X360 asm of Construct @0x8262E980, pulled out of
 // BURNOUT_X360_ARTIST.XEX.i64 with headless IDA 9.3 because that address is an `.ida-exports` hole:
 // the JSON set jumps 0x8262E848 -> 0x8262EBE8, and IDA confirms the gap is one whole function,
@@ -34,7 +34,7 @@
 // literals, mRandom's own 16-alignment landing it exactly on the Construct literal 0x1400, and the
 // manager's 0x1430 stride closing it. Gated by TrafficPhysics_layout_check.cpp (tamper-tested).
 //
-// ⚠️⚠️ TWO LOCAL TYPE FORKS RETIRED HERE, 2026-08-03. This header used to declare, at namespace
+// TWO LOCAL TYPE FORKS RETIRED HERE, 2026-08-03. This header used to declare, at namespace
 // scope in BrnPhysics::Vehicle, its own private copies of two names that already have real homes:
 //
 //   (1) `typedef u32 EntityId;` -- a SHADOW of the global `struct EntityId { u32 muValue; }`
@@ -47,7 +47,7 @@
 //
 //   (2) `struct Random { u32 muState; };` -- a 4-byte stand-in for CgsNumeric::Random, which has an
 //       owning home (GameShared/GameClasses/Numeric/CgsRandom.h) and is **48 bytes, 16-aligned**.
-//       ⭐ The X360 asm settles it beyond argument: Construct's tail is CgsNumeric::Random::Construct
+// The X360 asm settles it beyond argument: Construct's tail is CgsNumeric::Random::Construct
 //       INLINED, statement for statement --
 //           muSeed = 0xC87CD8C91AD0891B          (`insrdi` of 0xC87CD8C9 : 0x1AD0891B, `std 0x20`)
 //           muOldestBufferIndex = 0              (`stw r30, 0x28(r11)`)
@@ -71,7 +71,7 @@
 // driven by the un-homed rodata coefficient tables unk_82014AC0..AF0) is delegated to the committed
 // VehiclePhysics::UpdateCrashing entry rather than fabricated.
 //
-// ⚠️ TU SPLIT (same precedent as RaceCarPhysics_Construct.cpp / BrnSimpleVehiclePhysics_Construct.cpp):
+// TU SPLIT (same precedent as RaceCarPhysics_Construct.cpp / BrnSimpleVehiclePhysics_Construct.cpp):
 // Construct + SetFreakedOut live in TrafficPhysics_Construct.cpp, which IS mounted; PreparePhysical
 // and Update stay in TrafficPhysics.cpp, which is NOT, because they call VehiclePhysics::Prepare /
 // UpdateShunt / UpdateCrashing and all three are still declare-only.
@@ -108,7 +108,7 @@ namespace Vehicle
         // per-car random ring. Bodied in TrafficPhysics_Construct.cpp; see the banner above for
         // the instruction-level decode and the layout it pins.
         //
-        // ⚠️ Its ONLY caller in the image is PhysicalTrafficManager::Construct @0x82636CA8
+        // Its ONLY caller in the image is PhysicalTrafficManager::Construct @0x82636CA8
         // (`bl` at 0x82636D80), which runs it over maFullTrafficPhysics[0..19] at a 0x1430 stride.
         void Construct();
 
@@ -122,7 +122,7 @@ namespace Vehicle
                              const StreamedDeformationSpec* lpDeformSpec,
                              const Vector3* lpWheelPositions, const f32* lpafWheelRadii);
 
-        // @0x82639590: the per-frame traffic update. ⭐⭐ RECONCILED FULL 2026-08-09 (crash/shunt
+        // @0x82639590: the per-frame traffic update. RECONCILED FULL 2026-08-09 (crash/shunt
         // wave) -- the flagged stand-ins are gone; bodied in TrafficPhysics_Construct.cpp (457
         // insns read line by line). Param roles are the pass-through map into
         // VehiclePhysics::UpdateCrashing @0x82639C88 (r5/r7/r8/r9 forwarded verbatim); the f2
@@ -171,7 +171,7 @@ namespace Vehicle
     //
     // They are written as products, not as pre-multiplied literals, because that is how the console
     // computes them (one `fmuls` in a static initialiser) and it keeps both recovered factors
-    // visible. ⚠️ FLAG: the two Update magnitudes are compared against a SQUARED gate inside
+    // visible. FLAG: the two Update magnitudes are compared against a SQUARED gate inside
     // SetFreakedOut, which is dimensionally odd (250000 clears it, 6400 does not) -- but that IS what
     // the four thunks and the compare produce, so it is recorded rather than "corrected".
     const f32 KF_MPH_TO_MPS                    = 0.447039992f;               // flt_82F31928

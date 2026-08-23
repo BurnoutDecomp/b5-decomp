@@ -700,17 +700,6 @@ namespace BrnTrafficIO
         // TrafficEntityModule::GenerateDispatchLists @0x8273B280.
         Array<BrnTraffic::VehicleRenderInfo, 64u> maTrafficRenderInfos;   // console +4     :457
     };
-
-    // ------------------------------------------------------------------------
-    // [T1-rinfo] BRING-UP PROBE -- NOT IN THE X360 BINARY. DELETE WHEN STABLE.
-    // Latched report of how many VehicleRenderInfos the traffic module produced. Prints only
-    // when the count changes, and only under BRN_TRAFFIC_DIAG. A free function, so it adds
-    // nothing to the buffer's shape. Call it right after
-    // TrafficEntityModule::PreDispatchUpdate returns; OutputBuffer_PreDispatch::Clear() also
-    // calls it, so it reports even before the call site is wired.
-    // ------------------------------------------------------------------------
-    void T1Diag_ReportTrafficRenderInfoCount( const OutputBuffer_PreDispatch& lrBuffer );
-
     // OutputBuffer_Prepare  (DWARF :2/:115, prepare/boot output buffer)
     // ============================================================================
     // Owns the scene-input interface (@16, read 0x8279F988 [baked 126] / write 0x827109E0) and the

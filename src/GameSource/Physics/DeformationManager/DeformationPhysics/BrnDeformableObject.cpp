@@ -27,6 +27,17 @@
 
 namespace BrnPhysics
 {
+// [T5-imp] DIAG counters, DEFINED in
+// GameSource/Physics/VehicleManager/BrnPhysicalTrafficManager_UpdateTrafficPhysics.cpp.
+// NOT IN THE X360 BINARY. DELETE-WHEN-STABLE.
+namespace Vehicle
+{
+    extern u32 gT5CarCarCalls;
+    extern u32 gT5CarCarApplied;
+    extern f32 gT5LastImpulseMag;
+    extern f32 gT5LastClosing;
+}
+
 namespace Deformation
 {
     namespace vpu = rw::math::vpu;
@@ -41,7 +52,7 @@ namespace Deformation
     //   * unk_82FB7F70 / unk_82FB8040 -- the per-axis clamp band (min/max) for the shaped scale.
     //   * unk_82FB82F0 -- the double-bounce damp scale (the "already bounced this frame" path).
     // ---------------------------------------------------------------------------------------------
-    // ⭐ RECOVERED 2026-08-03. These are NOT "un-homed rodata": they are .data slots that read zero
+    // These are NOT "un-homed rodata": they are .data slots that read zero
     // in the image and are filled at static-init time by tiny unexported blr-terminated splat runs.
     // Each line names its initialiser and the .rdata scalar it splats. The clamp band reading
     // [0.75, 1.5] and the two bounce scales landing either side of it is a self-consistent set.
@@ -75,31 +86,77 @@ namespace Deformation
         DeformableObject&          lOtherCar  = *lContact.mpOtherVehicle;
         ExternalPhysicsBody&       lOtherBody = lOtherCar.GetVehicleBody();
 
-        // The contact wakes both bodies: the impulse must integrate, so neither stays frozen
-        // (asm: the +112 reset + the SetFrozen(false) the body hint names).
+        // [T5-imp] DIAG. NOT IN THE X360 BINARY. DELETE-WHEN-STABLE.
+        ++BrnPhysics::Vehicle::gT5CarCarCalls;
+
+        // The contact wakes THIS body (asm 0x82624CAC `stb r29(0), 0x70(vehiclePhysics)` == mbFrozen).
+        // ⚠️ ONLY this one: the console never clears the OTHER car's frozen byte here, and the
+        // banner that used to read "wakes both bodies" was wrong about the console, not about the
+        // code. The other car is woken by its own UpdateFreezing once this impulse gives it speed.
         lThisBody.SetFrozen(false);
+
+        // THE CONTACT COOL-DOWN RESET THIS BODY OWNS.
+        // asm 0x82624CB4..0x82624CC8:
+        //     lwz  r11, 0x194C(this)            ; the attached VehiclePhysics
+        //     addi r11, r11, 0x1060             ; mvTimeStandingStill_CoolDown_...
+        //     lvx128 v0 ; vrlimi128 v0, v126(0), 4, 0 ; stvx128 v0
+        // mask 4 == insert lane 1 == the .y CoolDown lane. Same lane ReadPotentialContact zeroes
+        // for both cars on acceptance; the console zeroes it AGAIN here, for the car being solved.
+        {
+            BrnPhysics::Vehicle::VehiclePhysics* const lpThisVehicle = mVehicleBody.GetVehiclePhysics();
+            if (lpThisVehicle != nullptr)
+            {
+                lpThisVehicle->mvTimeStandingStill_CoolDown_TimeWithoutTraction_TimeWithTraction.y = 0.0f;
+            }
+        }
 
         // -------- closing velocity at the contact --------
         // Velocity of each body at its contact point (linear + omega x r), in world space.
         const Vector3 lPointVel  = lThisBody.GetLocalVelocity(lContact.mPointOnA, rw::physics::WORLD_SPACE);
         const Vector3 lPoint2Vel = lOtherBody.GetLocalVelocity(lContact.mPointOnB, rw::physics::WORLD_SPACE);
 
-        // Relative motion of A w.r.t. B, projected onto the contact normal -> closing speed.
+        // THE NEGATED NORMAL. The closing-speed test is computed against -mNormal; against
+        // +mNormal no car-on-car contact -- race car vs traffic or race car vs race car -- ever
+        // transfers momentum.
+        //   X360 0x82624CD8  lvx128  v10, r0, r23         ; r23 == &lContact.mNormal (contact+0x20)
+        //        0x82624CD4  vslw128 v0, v127, v127       ; v0 == 0x80000000 splat (the sign bit)
+        //        0x82624CEC  vxor    v9, v10, v0          ; v9  == -mNormal
+        //        0x82624D4C  vsubfp128 v125, v0, v13      ; v125 == pointVelA - pointVelB
+        //        0x82624D50  vmsum3fp128 v122, v125, v9   ; closing == dot3(relMotion, -mNormal)
+        //        0x82624D54  vcmpgefp128. v0, v126(0), v122 ; `0 >= closing` -> return 0
+        // The contact normal points from B to A, so a car CLOSING on the other has
+        // dot(relMotion, +normal) < 0 and dot(relMotion, -normal) > 0. With the un-negated normal
+        // the `<= 0` gate rejected exactly the contacts it is meant to accept.
+        // ⚠️ The same -mNormal is handed to CalculateCollisionImpulseWithBody below
+        // (asm 0x82624D8C `vxor v4, v10, v0` -> the v4 argument slot).
         const Vector3 lRelativeMotion = vpu::Subtract(lPointVel, lPoint2Vel);
-        const f32     lfClosingSpeed  = vpu::Dot(lRelativeMotion, lContact.mNormal);
+        const Vector3 lNegatedNormal  = vpu::Negate(lContact.mNormal);          // 0x82624CEC / 0x82624D8C
+        const f32     lfClosingSpeed  = vpu::Dot(lRelativeMotion, lNegatedNormal);
+
+        // [T5-imp] DIAG. NOT IN THE X360 BINARY. DELETE-WHEN-STABLE. Recorded BEFORE the gate so a
+        // rejected contact still prints the number it was rejected on.
+        BrnPhysics::Vehicle::gT5LastClosing = lfClosingSpeed;
 
         // Separating (or at rest): nothing to do (asm: the `0 >= closingSpeed` early `_restvmx_122(0)`).
         if (lfClosingSpeed <= 0.0f)
             return false;
 
         // -------- solve the two-body collision impulse --------
-        const VecFloat lvfRestitution = GetVehicleWorldRestitution(lContact);
+        // THE RESTITUTION ARGUMENT IS A HARD ZERO, not
+        // GetVehicleWorldRestitution. `vmr128 v5, v126` @0x82624D98 with v126 == vspltisw128 0
+        // (@0x82624C94), and the function's xrefs_from carries NO call to
+        // GetVehicleWorldRestitution at all (only CalculateCollisionImpulseWithBody,
+        // SetJustBounced, IsBounceBoosting and ApplySensorImpulse). The GetVehicleWorldRestitution
+        // call that stood here was imported from the WORLD sibling, where the PS3 body really does
+        // consult it. A car-on-car shunt in Burnout is perfectly inelastic; cars do not bounce off
+        // each other.
+        const VecFloat lvfRestitution = { 0.0f, 0.0f, 0.0f, 0.0f };   // v5 == v126 == 0
 
         Vector3  lImpulse;        // j * n  (the impulse vector the solver writes)
         VecFloat lvfInvInertiaA;  // this car's inverse effective-mass term
         VecFloat lvfInvInertiaB;  // the other car's inverse effective-mass term
         const VecFloat lvfImpulseMagnitude = lThisBody.CalculateCollisionImpulseWithBody(
-            lOtherBody, lContact.mPointOnA, lContact.mPointOnB, lRelativeMotion, lContact.mNormal,
+            lOtherBody, lContact.mPointOnA, lContact.mPointOnB, lRelativeMotion, lNegatedNormal,
             lvfRestitution, &lImpulse, &lvfInvInertiaA, &lvfInvInertiaB);
 
         // -------- showtime / bounce-boost shaping --------
@@ -202,7 +259,7 @@ namespace Deformation
         // -------- apply the equal-and-opposite impulse to both cars --------
         // Build the impulse parameter block.
         //
-        // ⭐⭐⭐ 2026-08-16 (walls leg 9) -- THE DROPPED STORES. `ImpulseParams` is a 0xC0 == 192-byte
+        // THE DROPPED STORES. `ImpulseParams` is a 0xC0 == 192-byte
         // POD and `ImpulseParams lParams;` leaves every field this function does not assign as
         // UNINITIALISED STACK. Five fields the console writes here were never written in-tree, and
         // one of them (mpImpulsePasser) was the leg-8 access violation: the sensor's chain forward
@@ -232,7 +289,7 @@ namespace Deformation
         // (+0xB4 meAbsorptionSet is written by ApplySensorImpulse itself, `lwz r10,0x675C(this)`
         //  @0x8260793C -> `stw r10, var_1DC` @0x82607940; see that TU.)
 
-        // ⭐⭐⭐ 2026-08-16 (walls leg 9) -- THE NORMALIZE THE TREE HAD DROPPED. ApplySensorImpulse's
+        // THE NORMALIZE THE TREE HAD DROPPED. ApplySensorImpulse's
         // arg 5 is named `lImpulseDir` and arg 6 `lvfImpulseMagnitude`, and the console means both
         // names literally: it runs ONE rsqrt pipeline over the shaped impulse and hands the callee
         // the UNIT direction and the LENGTH separately. X360 @0x82625044..0x826250EC:
@@ -256,6 +313,12 @@ namespace Deformation
         const f32 lfImpulseLength = vpu::NormalizeReturnMagnitude(lImpulse, lImpulseUnit);
         const VecFloat lvfShapedMagnitude =
             VecFloat{ lfImpulseLength, lfImpulseLength, lfImpulseLength, lfImpulseLength };
+
+        // [T5-imp] DIAG. NOT IN THE X360 BINARY. DELETE-WHEN-STABLE. The two numbers that say
+        // whether momentum was actually transferred: the closing speed the solve ran on and the
+        // shaped impulse LENGTH both halves are about to receive.
+        ++BrnPhysics::Vehicle::gT5CarCarApplied;
+        BrnPhysics::Vehicle::gT5LastImpulseMag = lfImpulseLength;
 
         // This car: apply the impulse as-is at the contact (sensor liSensorIndex), adding to the spy.
         DeformationSensor* lpSensor = GetDeformationSensor(liSensorIndex);
@@ -284,7 +347,7 @@ namespace Deformation
     }
 
     // =============================================================================================
-    // WALLS LEG 4 (2026-08-14): ApplyCarWorldImpulse -- the CAR-vs-WORLD impulse orchestrator.
+    // ApplyCarWorldImpulse -- the CAR-vs-WORLD impulse orchestrator.
     // X360 @0x82624898 is an EXPORT HOLE; the PS3 body @0x746D68 (253 insns) is the authority,
     // with the sibling ApplyCarCarImpulse (this TU, derived from both consoles) settling the
     // shared idioms (the (iteration+1)*0.5 shaping literals are asm-visible vcfsx immediates in
@@ -373,7 +436,7 @@ namespace Deformation
 
         // The WORLD-contact params block; the remaining fields are filled by ApplySensorImpulse.
         //
-        // ⭐⭐⭐ 2026-08-16 (walls leg 9) -- TWO DROPPED STORES, from the PS3 twin @0x746D68 (the X360
+        // TWO DROPPED STORES, from the PS3 twin @0x746D68 (the X360
         // is an export hole). Params base there is var_190; the +0xB8/+0x50 stores below it pin the
         // base exactly (`stb 1, var_D8` == mbWorldContact and `stw 0, var_140` == mePositionSpace,
         // which are 8 and 0x40 off the two fields this block already set correctly).

@@ -54,9 +54,9 @@ bool VehiclePhysics_embed_check(VehiclePhysics& lrPhysics, f32 lfSteering, f32 l
 //
 // MEASURED 2026-08-03: the whole Reset chain resolved with zero LNK2019, and the file has been a
 // STANDING mount in tools/build/build_game_exe.bat since (parent-repo commit be5f2fd, "build: mount
-// VehiclePhysics_embed_check.cpp as a link-closure guard"). ⚠️ The sentence that stood here --
+// VehiclePhysics_embed_check.cpp as a link-closure guard"). The sentence that stood here --
 // "The mount line was then REVERTED" -- was wrong; the mount was kept, and it costs zero exe bytes.
-// ⭐ TAMPER-TESTED 2026-08-03 (Construct wave), because "a stripped COMDAT still LNK2019s" had been
+// TAMPER-TESTED 2026-08-03 (Construct wave), because "a stripped COMDAT still LNK2019s" had been
 // an INHERITED claim, never checked. A call to a declared-but-undefined
 // `BpTamperProbe_NoSuchSymbol_2026_08_03()` was added here and the exe rebuilt:
 //     VehiclePhysics_embed_check.obj : error LNK2019: unresolved external symbol ...

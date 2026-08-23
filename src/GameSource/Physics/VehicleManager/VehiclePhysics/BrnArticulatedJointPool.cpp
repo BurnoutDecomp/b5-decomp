@@ -13,12 +13,12 @@
 // the two were one symbol to the linker).
 //
 // ==================================================================================================
-// ⭐⭐ ODR FORK #1 RETIRED 2026-08-03 (task #110). This TU used to declare, at namespace scope in
+// ODR FORK #1 RETIRED 2026-08-03 (task #110). This TU used to declare, at namespace scope in
 // BrnPhysics::Vehicle, its own
 //         class ArticulatedJoint { public: int Construct(); private: u8 mPad0[80]; };
 // while the real class lives in BrnArticulatedJoint.h.
 //
-// ⚠️⚠️ IT WAS NOT MERELY UNTIDY, IT WAS UNSATISFIABLE. The fork declared `int Construct()`; the
+// IT WAS NOT MERELY UNTIDY, IT WAS UNSATISFIABLE. The fork declared `int Construct()`; the
 // DWARF (BrnArticulatedJoint.h:100) declares `void Construct()`. MSVC folds the return type into
 // the mangled name, so the fork's call site demanded
 //     ?Construct@ArticulatedJoint@Vehicle@BrnPhysics@@QEAAHXZ
@@ -28,7 +28,7 @@
 // standing "shadowing redeclaration" failure: invisible to every per-TU compile gate, visible only
 // to a LINK (measured then as LNK2019 the moment this TU was first mounted).
 //
-// ⭐⭐ ODR FORK #2 RETIRED 2026-08-03 (task #113): the pool class ITSELF. See BrnArticulatedJointPool.h.
+// ODR FORK #2 RETIRED 2026-08-03 (task #113): the pool class ITSELF. See BrnArticulatedJointPool.h.
 // The same return-type trap was live here too, in the opposite direction: this file declared
 // `int Construct()` purely to agree with the fork in BrnPhysicalTrafficManager.h. It is now `void`,
 // per the DWARF (BrnArticulatedJointPool.h:73), and the fork it was agreeing with is gone.
@@ -42,10 +42,10 @@ namespace Vehicle
 // ---------------------------------------------------------------------------------------
 // ArticulatedJointPool::_AssertLayout   -- the gate that keeps the de-fork honest.
 //
-// ⚠️ A `sizeof(ArticulatedJoint) == 80` line CANNOT carry this gate and used to be all there was.
+// A `sizeof(ArticulatedJoint) == 80` line CANNOT carry this gate and used to be all there was.
 // ArticulatedJoint is Matrix44Affine(64) + ArticulatedJointId(8) == 72 and alignas(16) via the
 // matrix, so eight bytes of tail padding absorb any small addition and 80 never moves
-// (tamper-verified 2026-08-03: adding a u32 did NOT fail that line). ⭐ ON AN OVER-ALIGNED TYPE,
+// (tamper-verified 2026-08-03: adding a u32 did NOT fail that line). ON AN OVER-ALIGNED TYPE,
 // GATE OFFSETS, NOT SIZE. Every line below is an OFFSET into this class, plus the three
 // sizeof(member) lines that catch a member being retyped in place.
 // ---------------------------------------------------------------------------------------
@@ -76,7 +76,7 @@ void ArticulatedJointPool::_AssertLayout()
     // (the TrafficPhysics tamper test proved this: u8 -> u32 in a 3-byte pad hole is SILENT to
     //  every offset and size assert around it)
     static_assert(sizeof(ArticulatedJointPool::ArticulatedJointBitArray) == 8, "BitArray<10> is one u64 field");
-    // ⚠️ ADDED AFTER THE TAMPER TEST FOUND A HOLE. `sizeof(f32) == 4` is a tautology, and with only
+    // ADDED AFTER THE TAMPER TEST FOUND A HOLE. `sizeof(f32) == 4` is a tautology, and with only
     // that line case 6 (`mfSwingAngleDegrees` f32 -> u32) was **SILENT**: same width, same offset,
     // same class size -- and semantically wrong, because the console stores these four with `stfsx`,
     // a FLOAT store. The type check is what actually catches it.
@@ -107,7 +107,7 @@ void ArticulatedJointPool::_AssertLayout()
 // by offset (@816=30, @820=10, @824=15, @828=10 -- the asm reuses the same loaded register/
 // value for @820 and @828).
 //
-// ⚠️ RETURN TYPE: `void`, per the DWARF (BrnArticulatedJointPool.h:73). The console ends `blr`
+// RETURN TYPE: `void`, per the DWARF (BrnArticulatedJointPool.h:73). The console ends `blr`
 // with r3 still holding the last ArticulatedJoint::Construct's `this`, which is why Hex-Rays
 // types it `int`; the value is read by nobody (PhysicalTrafficManager::Construct @0x82636CA8,
 // the sole caller, discards it). See the header banner.
@@ -152,7 +152,7 @@ bool ArticulatedJointPool::IsJointInUse(s32 liJointIndex) const
 // the simulation request interface: every slot flagged for creation becomes an AddJoint, every slot
 // flagged for removal becomes a RemoveJoint. The asserts are at BrnArticulatedJointPool.cpp:431/432.
 //
-// ⭐ THIS FUNCTION NEVER DEREFERENCES `this`. The X360 prologue keeps r4/r5 (the two arguments) and
+// THIS FUNCTION NEVER DEREFERENCES `this`. The X360 prologue keeps r4/r5 (the two arguments) and
 // simply drops r3; nothing in the 1464 bytes reads a pool member. It is a member only because the
 // DWARF declares it as one (BrnArticulatedJointPool.h:104) -- which is also why the retired fork in
 // BrnPhysicalTrafficManager.h could carry a WRONG `this` layout and still not crash. What the fork

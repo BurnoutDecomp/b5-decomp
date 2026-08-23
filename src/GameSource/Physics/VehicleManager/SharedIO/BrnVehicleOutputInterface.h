@@ -77,7 +77,7 @@ namespace Vehicle
         typedef CgsModule::EventQueue<ImpactEvent, 16>          ImpactEventQueue;           // BrnVehicleEvents.h:575
         typedef CgsModule::EventQueue<PhysicalTrafficState, 20> PhysicalTrafficStateQueue;  // BrnVehicleEvents.h:574
 
-        // ⭐ ADDED 2026-08-10 (create-path wave). DWARF BrnVehicleOutputInterface.h:312.
+        // DWARF BrnVehicleOutputInterface.h:312.
         // X360-ATTESTED as the INLINED body of PhysicsModuleIO::OutputBuffer::Construct
         // @0x825ABB10 over its +44128 seat -- see the .cpp for the instruction-by-instruction
         // decode. Constructs the two event queues and the game-event queue, then zeroes the
@@ -104,7 +104,7 @@ namespace Vehicle
 
         const CgsContainers::BitArray<8u>& GetUsedCarsBitArray() const { return mUsedRaceCars; } // DWARF :370
 
-        // ⭐⭐ ADDED 2026-08-11 (physics->output publish wave) -- THE PUBLISH SURFACE.
+        // THE PUBLISH SURFACE.
         // Four DWARF-declared methods (BrnVehicleOutputInterface.h :323 / :328 / :333 / :339),
         // all four X360-ATTESTED by VehicleManager::WriteOutVehicleStats @0x8263F460, which is
         // the console's only caller of the first and inlines the other three:
@@ -114,7 +114,7 @@ namespace Vehicle
         //     SetWheelTransform   -> inlined,  the 4x4 `lvx128/stvx128` run at 0x8263F7F4..0x8263F844
         // Bodied in BrnVehicleOutputInterface_UpdateRaceCarState.cpp.
         //
-        // ⚠️ THE INDEX ARGUMENT IS THE ENTITY INDEX, NOT THE RACE-CAR SLOT, on UpdateRaceCarState
+        // THE INDEX ARGUMENT IS THE ENTITY INDEX, NOT THE RACE-CAR SLOT, on UpdateRaceCarState
         // ALONE -- and that is the console's own arithmetic, reproduced rather than "corrected":
         // WriteOutVehicleStats passes `maRaceCarEntityIDs[liRaceCar].GetEntityIndex()`
         // (`lwzx r11,r31,r18 ; extrwi r4,r11,14,8` == (id >> 10) & 0x3FFF) while every OTHER
@@ -130,7 +130,7 @@ namespace Vehicle
         void SetRaceCarHidden(s32 liRaceCarIndex, bool lbHidden);
         void SetWheelTransform(u8 lu8RaceCarIndex, u8 lu8Wheel, Matrix44Affine lTransform);
 
-        // ⚠️ ADDITIVE GROW, flagged. The DWARF names only the CONST bitset accessor (:370); this is
+        // ADDITIVE GROW, flagged. The DWARF names only the CONST bitset accessor (:370); this is
         // its non-const sibling, and it exists because WriteOutVehicleStats' very first act is a
         // whole-word write of the vehicle manager's live-car bitset over this member --
         //     addis r9,r18,1 ; addi r9,r9,-0x5340   ; == &VehicleManager::mUsedRaceCars (this+44224)
@@ -144,7 +144,7 @@ namespace Vehicle
         // DWARF member set; no field reordered/retyped).
         VehicleOutputInterface& operator=(const VehicleOutputInterface& lOther);
 
-        // ⭐ ADDED 2026-08-06 (UpdateVehiclePhysics wave). The game-event queue @0x65F0 as its
+        // The game-event queue @0x65F0 as its
         // LIVE type -- DWARF :386 types the member GameEventQueue == CgsModule::
         // VariableEventQueue<1536,16>; the storage stays the size-correct opaque span until the
         // queue is homed as a typed member, and this accessor is the one sanctioned span-cast
@@ -195,7 +195,7 @@ namespace Vehicle
         // ---- ADDITIVE (moved 2026-07-24 from the retired BrnVehicleManager.h shell;
         //      declare-only surface, bodied by this interface's own TU) ----
         //
-        // ⛔⛔ TWO OF THE THREE BELOW ARE ON THE WRONG CLASS -- PROVEN 2026-08-03 (task #110),
+        // TWO OF THE THREE BELOW ARE ON THE WRONG CLASS -- PROVEN 2026-08-03 (task #110),
         // NOT FIXED HERE. They are not X360 symbols at all (nothing named GetEventQueue,
         // AddRemappedEntityIdEvent or FlagTakedownScoredForDriver exists in progress/identity.json);
         // they are accessor names a previous wave minted over raw offsets on the sink pointer the
@@ -214,12 +214,12 @@ namespace Vehicle
         // ⇒ Before bodying any of these, move the two out-of-bounds ones onto the VehicleOutputInterface
         // the contact handler is actually handed (mind that BrnGameState::GameStateModuleIO has its
         // own same-named class -- decide which of the two r17 is) and re-point the call sites.
-        // ⭐ AddRemappedEntityIdEvent is the one that DOES belong here: its +1872 == 0x750 is
+        // AddRemappedEntityIdEvent is the one that DOES belong here: its +1872 == 0x750 is
         // mTrafficTypeRequestQueue, in bounds and on this class.
 
         // sink+26096: the IO event queue the crash record + takedown/grind events push onto.
         // Returned by reference so the bodies can call .AddEvent / .AddEventSafe by name.
-        // ⛔ WRONG CLASS -- see the block above. 0x65F0 is VehicleOutputInterface's.
+        // WRONG CLASS -- see the block above. 0x65F0 is VehicleOutputInterface's.
         CgsModule::VariableEventQueue<1536, 16>& GetEventQueue();
 
         // The cross-module "a race car crashed" event (X360 AddRaceCarCrashEvent). FLAG: the X360
@@ -227,7 +227,7 @@ namespace Vehicle
         // local-vs-remote flag, an optional crash matrix, the was-crash-state-1 bool, a 0, and the
         // splatted crash position). The load-bearing args are kept; the rest are MODELLED as a single
         // packed call. Declare-only -- bodied by the interface's own TU.
-        // ⭐⭐ TWO ARGUMENT ROLES CORRECTED 2026-08-03 (VehiclePhysics own-block wave). This used to
+        // TWO ARGUMENT ROLES CORRECTED 2026-08-03 (VehiclePhysics own-block wave). This used to
         // take `const Matrix44Affine& lCrashMatrix` and `Vector3 lvCrashPosition`. BOTH were wrong,
         // and both errors came from the same mis-based reading of VehicleManager::SetRaceCarCrashing:
         //   * the "crash matrix" was a single 16-byte `stvx128 v127, r30, 0x1440` -- a VECTOR store
@@ -246,12 +246,12 @@ namespace Vehicle
                                   f32 lfCrashSpeedMPH);
 
         // sink+1872: the secondary "remapped entity id" sub-event the type-2-id path fires. Declare-only.
-        // ⭐ IN BOUNDS AND ON THE RIGHT CLASS: 1872 == 0x750 == mTrafficTypeRequestQueue below.
+        // IN BOUNDS AND ON THE RIGHT CLASS: 1872 == 0x750 == mTrafficTypeRequestQueue below.
         void AddRemappedEntityIdEvent(u32 luRemappedActiveRaceCarIndex);
 
         // sink+27648 / sink+27649: the two driver-feedback bytes HandleRaceCarRaceCarContact OR-sets
         // when a takedown is scored (the asm `*(a32+27648) |= ...; *(a32+27649) = ...`). Declare-only.
-        // ⛔ WRONG CLASS -- see the ⛔⛔ block above. 27648 == 0x6C00 is VehicleOutputInterface::
+        // WRONG CLASS -- see the block above. 27648 == 0x6C00 is VehicleOutputInterface::
         // mAggressiveDrivingFlags, whose first two bools are mbPlayerWonSlamThisFrame (+0) and
         // mbPlayerLostSlamThisFrame (+1) -- which is what "takedown scored, for which slot" means.
         void FlagTakedownScoredForDriver(bool lbVictimIsHighSlot);
@@ -266,7 +266,7 @@ namespace Vehicle
         typedef CgsModule::EventQueue<u16, 32>                 TrafficTypeRequestQueue;       // BrnTrafficTypeInterface.h:50
         typedef CgsModule::EventQueue<TrafficRemovedEvent, 25> RemovedTrafficEventQueue;      // :60
 
-        // ⭐ ADDED 2026-08-10 (create-path wave). DWARF BrnVehicleOutputInterface.h:86, and an
+        // DWARF BrnVehicleOutputInterface.h:86, and an
         // OUT-OF-LINE X360 symbol at 0x822E6790 (25 instructions) -- not an inline, so the body
         // in the .cpp is a direct transcription rather than an inference. Called by
         // PhysicsModuleIO::OutputBuffer::Construct @0x825ABB10 over its +41952 seat.
@@ -275,7 +275,7 @@ namespace Vehicle
         // @0x825C0658: queue a "physical-traffic vehicle crashed" event and return its slot index.
         s32 AddCrashedTrafficEvent(VolumeInstanceId lVolumeInstanceID, EntityId lCrasherEntityID);
 
-        // ⭐ ADDED 2026-08-22 (wave T3 r1, C2). @0x825C0758 (25 insns) -- a REAL out-of-line body,
+        // @0x825C0758 (25 insns) -- a REAL out-of-line body,
         // not an inline: it was simply missing from .ida-exports and was dumped with headless idat
         // for this wave. DWARF BrnVehicleOutputInterface.h:217 `int32_t AddTrafficRemovedEvent(
         // EntityId, ETrafficType)`. Three asserts (this header's own :481/:482/:484), then append
@@ -294,7 +294,7 @@ namespace Vehicle
         // WorldModule::BridgePhysicsToOutput.
         VehicleManagerOutputInterface& operator=(const VehicleManagerOutputInterface& lOther);
 
-        // ⭐ ADDED 2026-08-06 (UpdateVehiclePhysics wave). DWARF-attested accessor
+        // DWARF-attested accessor
         // (BrnVehicleOutputInterface.h:256 `void SetPlayerWheelFFSpring(const CgsInput::
         // Device::WheelFFSpring&)`); the X360 inlines it as the two-word copy into +0x874
         // (UpdateVehiclePhysics @0x82645FB8..C4).
@@ -303,13 +303,13 @@ namespace Vehicle
             mWheelFFSpring = lrSpring;
         }
 
-        // ⭐ ADDED 2026-08-11 (create-drain wave). DWARF-attested (BrnVehicleOutputInterface.h:214
+        // DWARF-attested (BrnVehicleOutputInterface.h:214
         // `int32_t AddCreateVehicleResult(CreateVehicleResult)`), and the X360 inlines it as a bare
         // `addi r11, <managerOut>, 0x6C0` + `bl BaseEventQueue<CreateVehicleResult>::AddEvent` at
         // the tail of VehicleManager::ProcessCreateEvents (@0x82616818 / @0x826173E4). 0x6C0 ==
         // 1728 == mCreateVehicleResultQueue's seat below, so the accessor is the same member the
         // console addresses, reached by name instead of by that offset.
-        // ⚠️ The DWARF returns int32_t (the slot index -- the queue length after the append, minus
+        // The DWARF returns int32_t (the slot index -- the queue length after the append, minus
         // one, the same convention as AddCrashedTrafficEvent). ProcessCreateEvents ignores it.
         s32 AddCreateVehicleResult(CreateVehicleResult lResult)
         {
@@ -317,7 +317,7 @@ namespace Vehicle
             return mCreateVehicleResultQueue.GetLength() - 1;
         }
 
-        // ⭐ ADDED 2026-08-18 (wave Q5, car-registration finisher). The READ half of the pair
+        // The READ half of the pair
         // above. DWARF-attested (BrnVehicleOutputInterface.h:148, dumpfile :232
         // `const VehicleManagerOutputInterface::CreateVehicleResultQueue* GetCreateVehicleResults()
         // const`), and X360-attested at its one consumer: RaceCarEntityModule::
@@ -332,14 +332,14 @@ namespace Vehicle
             return &mCreateVehicleResultQueue;
         }
 
-        // ⭐ [teleport] ADDED 2026-08-21 (gateui r9, the reset-drain wave). Same shape and the
+        // [teleport] ADDED 2026-08-21 (gateui r9, the reset-drain wave). Same shape and the
         // same derivation as AddCreateVehicleResult above: the console inlines it as a bare
         // `<managerOut> + 0x5B0` handed to BaseEventQueue<RaceCarResetEvent>::AddEvent at the
         // tail of VehicleManager::ProcessResetEvents (@0x82617E1C loads the pre-computed
         // pointer into r3, @0x82617E28 `bl BrnPhysics__Vehicle__RaceCarResetEvent___AddEvent`).
         // 0x5B0 == 1456 == mRaceCarResetEventQueue's seat below, so this is the same member the
         // console addresses, reached by name instead of by that offset.
-        // ⚠️ The queue is the WORLD side's notification that a car was re-placed; nothing on this
+        // The queue is the WORLD side's notification that a car was re-placed; nothing on this
         // build drains it yet (RaceCarEntityModule::ProcessResetOnTrackResultQueue is not
         // reconstructed), so posting into it is inert-but-faithful.
         s32 AddRaceCarResetEvent(const RaceCarResetEvent& lrEvent)
@@ -348,7 +348,7 @@ namespace Vehicle
             return mRaceCarResetEventQueue.GetLength() - 1;
         }
 
-        // ⭐ ADDED wave T3 (physical traffic): the three DWARF-declared read accessors
+        // ADDED wave T3 (physical traffic): the three DWARF-declared read accessors
         // (BrnVehicleOutputInterface.h :223 / :226 / :229) this interface's only world-side
         // consumer needs. All three are HEADER INLINES on the console -- no out-of-line symbol
         // exists -- and TrafficEntityModule::HandleExternalResponses @0x82732C68 folds each as a
@@ -360,7 +360,7 @@ namespace Vehicle
         const TrafficSlammedEventQueue* GetSlammedTrafficEventQueue() const { return &mSlammedTrafficEventQueue; }
         const RaceCarCrashEventQueue*   GetRaceCarCrashEventQueue()   const { return &mRaceCarCrashEventQueue; }
 
-        // ⭐ ADDED 2026-08-22 (wave T3 r2, owner B). DWARF-attested
+        // DWARF-attested
         // (BrnVehicleOutputInterface.h:205 `void AddSlammedTrafficEvent(EntityId, EntityId,
         // eCrashTrafficType, float32_t, float32_t)`) and X360-attested at its two call sites:
         // PhysicalTrafficManager::SetTrafficVehicleChecked @0x8262D9F8 and ::SetTrafficVehicleSlammed
@@ -401,7 +401,7 @@ namespace Vehicle
     // "please do this to the simulation" events, drained by
     // PhysicsModule::BridgeVehicleManagerRequestsToSimulation.
     //
-    // ⭐⭐ THE LAYOUT IS DERIVED, NOT GUESSED, AND IT CLOSES ON TWO INDEPENDENT ASM PINS.
+    // THE LAYOUT IS DERIVED, NOT GUESSED, AND IT CLOSES ON TWO INDEPENDENT ASM PINS.
     // The member ORDER is the DecFIGS DWARF's (BrnVehicleOutputInterface.h:263,264,265,268,270,271).
     // Two absolute member offsets are pinned by the X360 asm:
     //   * mAddJointQueue    @ 39904 -- VehicleOutputRequestInterface::AddJoint @0x825E7170 ends
@@ -450,7 +450,7 @@ namespace Vehicle
         typedef CgsModule::EventQueue<InAddJoint, 10>                                                 AddArticulatedJointQueue;      // BrnVehicleQueues.h:39
         typedef CgsModule::EventQueue<InRemoveJoint, 10>                                              RemoveArticulatedJointQueue;   // BrnVehicleQueues.h:41
 
-        // ⭐ ADDED 2026-08-09 (conductor wave) -- DWARF :204 / :201, both now X360-ATTESTED
+        // DWARF :204 / :201, both now X360-ATTESTED
         // by PhysicsModule::Update @0x825B0640, which inlines BOTH bodies:
         //   * Construct: CreateIOBuffer<VehicleManagerOutputBuffer> @0x8259DAF0 constructs
         //     the buffer's embedded interface (PS3 keeps VehicleManagerOutputBuffer::
@@ -462,7 +462,7 @@ namespace Vehicle
         //     InRemoveRigidBody<50>::Append @0x825A3988 (+9616), VariableEventQueue
         //     <13440,16>::Append<13440,16> @0x825AC068 (+10432), InAddJoint<10>::Append
         //     @0x825A3A68 (+39904), InRemoveJoint<10>::Append @0x825A3B58 (+41840).
-        //     ⚠️ mChangeRigidBodyInertiaQueue (+23888) is NOT appended here -- that queue
+        // mChangeRigidBodyInertiaQueue (+23888) is NOT appended here -- that queue
         //     is drained separately by BridgeVehicleManagerToSimulation_PostPhysics
         //     @0x825ADF60 into the SIM input buffer. Reproduced as-is.
         // Bodied in BrnVehicleOutputInterface.cpp.
@@ -484,7 +484,7 @@ namespace Vehicle
             mRemoveJointQueue.AddEvent(lRemoveJointEvent);
         }
 
-        // ⭐ ADDED 2026-08-06 (bridge de-facade wave): the two joint-queue read accessors
+        // the two joint-queue read accessors
         // (DWARF :256 / :259). Now X360-ATTESTED, which is what had gated them out: the drain
         // PhysicsModule::BridgeVehicleManagerRequestsToSimulation @0x825AB968 names
         // GetAddJointQueue in its own assert string ("lpRequestInterface->GetAddJointQueue()->
@@ -494,7 +494,7 @@ namespace Vehicle
         const AddArticulatedJointQueue*    GetAddJointQueue()    const { return &mAddJointQueue; }
         const RemoveArticulatedJointQueue* GetRemoveJointQueue() const { return &mRemoveJointQueue; }
 
-        // ⭐ ADDED 2026-08-09 (conductor wave): three more of the DWARF's five Get*Queue
+        // three more of the DWARF's five Get*Queue
         // accessors, now X360-ATTESTED by BridgeVehicleManagerToSimulation_PostPhysics
         // @0x825ADF60, which reads exactly these three seats (+9616 / +0 / +23888) off the
         // request interface and feeds them to the sim Append*Queue drains.
@@ -507,14 +507,14 @@ namespace Vehicle
         static void _AssertLayout();
 
         // The invalid-JointId sentinel the two joint asserts compare against (X360 qword_82F2A3B0).
-        // ⛔ THE REASON RECORDED HERE UNTIL 2026-08-04 WAS FALSE (corrected in task #141). It read:
+        // THE REASON RECORDED HERE UNTIL 2026-08-04 WAS FALSE (corrected in task #141). It read:
         // "CgsPhysics::JointId is one of the names that is currently declared TWICE in this tree
         // (CgsPhysicsSimulationModule.h:102 vs the CgsRigidBody.h family), so pulling either header
         // in here would make an open ODR fork meet and fail to compile." CgsRigidBody.h declares
         // exactly one type -- RigidBodyId -- and no JointId at all, so there was never a JointId
         // fork to meet. (The RigidBodyId fork WAS real; it is retired, and the .cpp now includes
         // CgsRigidBody.h and uses the real K_INVALID_RIGID_BODY_ID.)
-        // ⭐ This constant survives for a different and honest reason: `CgsPhysics::JointId`
+        // This constant survives for a different and honest reason: `CgsPhysics::JointId`
         // (CgsPhysicsSimulationModule.h) carries no sentinel of its own anywhere in the tree, so
         // there is nothing to include. Give it a real home when a JointId consumer needs one.
         static const u64 KU64_INVALID_JOINT_ID = 0xFFFFFFFFFFFFFFFFull;

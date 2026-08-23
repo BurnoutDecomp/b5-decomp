@@ -190,7 +190,7 @@ namespace Deformation
                     Matrix44Affine lPre; mpaModels[liModelIndex].GetTransform(lPre);
                     if ( CgsDev::Message::gxMessageFilterFlags & 1 )
                         *CgsDev::Log::gpDebugPrint
-                            << "â­ penetration solver LIVE: "
+                            << "penetration solver LIVE: "
                             << lpSolver->GetNumWorldContacts() << " world contact(s); pos "
                             << lPre.wAxis.x << " " << lPre.wAxis.y << " " << lPre.wAxis.z
                             << " -> " << lpSolvedTransform->wAxis.x << " "
@@ -201,7 +201,7 @@ namespace Deformation
 
             // ---- [wall] PC bring-up instrument -- DELETE WHEN the wall test is banked ---------
             // OPT-IN (BRN_WALL_PROBE=1) so a default run and every golden gate are byte-identical
-            // to a build without it -- same discipline as [motion] in BrnRaceCarEntityModule.
+            // to a build without it.
             //
             // ⭐ WHY A SEPARATE PROBE AT ALL. The boot witness above fires ONCE and only proves the
             // solver ran. "The car stopped against a wall" needs three things the witness cannot

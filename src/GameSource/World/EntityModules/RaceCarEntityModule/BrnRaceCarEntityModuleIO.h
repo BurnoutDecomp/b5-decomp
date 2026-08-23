@@ -671,17 +671,15 @@ namespace RaceCarEntityModuleIO
         typedef BrnPhysics::ContactSpy::ContactSpyInterface        ContactSpyInterface;           // :90
         typedef BrnAI::AIModuleIO::AIRaceCarInterface              AIRaceCarInterface;            // :82
         void Construct();                                                                  // :510
-        // ⛔ CORRECTION (3) -- 2026-08-11 (physics-readback wave). EVERY const-getter address
-        // below was attributed ONE-TO-TWO SLOTS TOO EARLY. The six out-of-line const getters
-        // in the ARTIST image are, by the offset each one returns:
+        // ⚠️ ADDRESS PIN. The six out-of-line const getters in the ARTIST image are, by the
+        // offset each one returns:
         //     0x822B5F48 -> this+16      == &mVehicleOutputInterface
         //     0x822B5FF0 -> this+27680   == &mVehicleManagerOutputInterface
         //     0x822B6098 -> this+848624  == &mDeformationOutputInterfaceForEntityModules
         //     0x822B6140 -> this+868400  == &mDeformationOutputInterface
         //     0x822B61E8 -> this+879392  == &mContactSpyInterface
         //     0x822B6290 -> this+879408  == &mAIRaceCarInterface
-        // 0x822B6098 and 0x822B61E8 were MISSING from the previous attribution entirely,
-        // which is what shifted the other four. Three independent proofs:
+        // Omitting 0x822B6098 or 0x822B61E8 shifts the other four. Three independent proofs:
         //   (a) +16 is the FIRST member after the 16-byte IOBuffer base, and
         //       ReadUpdatedActiveRaceCarDataFromPhysics @0x822E87B8 feeds 0x822B5F48's
         //       return value straight into VehicleOutputInterface::GetRaceCar;

@@ -40,7 +40,7 @@ namespace Vehicle
     // restores full precision to the hardware estimate). The region blend matches the vcmpgefp/vsel
     // selection chain.
     //
-    // ⭐⭐ 2026-08-12 (tyre-force wave): the old "FIDELITY: PARTIAL on region 2 -- the interior
+    // the old "FIDELITY: PARTIAL on region 2 -- the interior
     // curvature is not store-verified" FLAG is RETIRED, and the lerp below is CONFIRMED EXACT.
     // HandleWheelPairFriction @0x825FB458 evaluates this same curve INLINE, four lanes at a time,
     // and its copy is unambiguous (0x825FBAAC..0x825FBAF8):
@@ -165,7 +165,7 @@ namespace Vehicle
     // ===========================================================================================
     //  Wheel::Reset   @0x825D7190
     // ===========================================================================================
-    // ⛔⛔ REBODIED 2026-08-11 (suspension-springs wave). THE PREVIOUS BODY DESTROYED TWO LIVE
+    // REBODIED 2026-08-11 (suspension-springs wave). THE PREVIOUS BODY DESTROYED TWO LIVE
     // VALUES AND IT WAS FOUND BY A NaN, NOT BY A REVIEW -- the textbook [[silent-drop-stubs]]
     // shape: three `SetZero()` calls where the console writes SINGLE LANES.
     //
@@ -178,14 +178,14 @@ namespace Vehicle
     // `mSlipVariables.w` (THE WHEEL RADIUS) both SURVIVE a Reset on console. The old body wiped
     // both, and wiped all four lanes of the +0x70 register instead of just .z.
     //
-    // ⭐ WHAT THAT COST, MEASURED: with the unsprung mass gone, the airborne arm of
+    // WHAT THAT COST, MEASURED: with the unsprung mass gone, the airborne arm of
     // UpdateSuspensionSprings @0x825F7AF0 divides the spring force by a zero mass -- 730 NaN
     // asserts in one boot, and the flow never left BOOT. With the radius gone,
     // ApplyWheelWeight's `radius - gap` silently loses the radius and seats every wheel at the
     // wrong height. One defect, two consumers, and it only became visible when the first real
-    // consumer landed. ⚠️ Nothing about the old body was detectable by a compile gate.
+    // consumer landed. Nothing about the old body was detectable by a compile gate.
     //
-    // ⭐ AND THE ARGUMENT IS A VELOCITY, NOT A POSITION. The asm takes |v1| (vmsum3fp128 +
+    // AND THE ARGUMENT IS A VELOCITY, NOT A POSITION. The asm takes |v1| (vmsum3fp128 +
     // vrsqrtefp with two Newton steps), multiplies by unk_82FB8AB0 and DIVIDES BY THE WHEEL
     // RADIUS, then writes **lane 0 only** (`vrlimi128 v11,v0,8,0`):
     //     0x825D7254  v13 = |v|^2 * (1/|v|)            == |v|
@@ -204,7 +204,7 @@ namespace Vehicle
     // The tail is `lvx128 v1,[r3+0x90] ; b Wheel::SetPosition` -- a TAIL CALL, unchanged.
     void Wheel::Reset(Vector3 lvPosition)
     {
-        // ⭐ IDENTIFIED, not just filled (kept verbatim from the previous body -- this part was
+        // IDENTIFIED, not just filled (kept verbatim from the previous body -- this part was
         // right). unk_82FB8AB0 <- flt_8200D4DC, static-init splat @0x82C5AF90, and the value
         // 0.447039992 is BIT-IDENTICAL to flt_82F31928 -- the MPH->m/s conversion this image uses
         // everywhere. So Reset seeds the wheel spin from a speed expressed in MPH.
@@ -213,7 +213,7 @@ namespace Vehicle
         // 0x825D71B8: mBodyPointVelocity (+0xA0) IS cleared whole (`stvx128 v0, r3, 0xA0`).
         mBodyPointVelocity.SetZero();
 
-        // +0x30 / +0x40: lanes x, y, z only. ⛔ .w is the unsprung mass / the wheel radius --
+        // +0x30 / +0x40: lanes x, y, z only. .w is the unsprung mass / the wheel radius --
         // the console preserves both and so must this.
         mIntegrationVariables.x = 0.0f;
         mIntegrationVariables.y = 0.0f;
@@ -254,7 +254,7 @@ namespace Vehicle
     // running state, assert the attribs pointer, store mpTireAttribs (+0xD0), scatter the four
     // scalars into their SIMD lanes, then SetPosition().
     //
-    // ⭐ LANE MAP CORRECTED (seat wave 2026-08-05). The old body's scatter -- "inferred from the
+    // LANE MAP CORRECTED (seat wave 2026-08-05). The old body's scatter -- "inferred from the
     // SwitchAttribs sibling" -- was wrong on every lane: it put (radius ± min/max) into the +0x30/
     // +0x40 Y lanes and invented a twist store into the +0x90 w lane. The raw asm (dossier,
     // 0x825FEC48..0x825FED10) does none of that:
@@ -266,7 +266,7 @@ namespace Vehicle
     //   0x825FECFC  vrlimi128 v0, v12, 1, 1    -> +0x40 lane w = f1   (v12 = splat(f1))
     //   0x825FED08  vrlimi128 v11, v0, 1, 0    -> +0x90 = {pos.xyz, OLD +0x90 w} (w PRESERVED)
     // The caller (SimpleVehiclePhysics::SetAttributes, asm 0x826027F4..0x82602840) passes
-    //   f1 = lpafWheelRadii[i]  (lfs f1, 0(r31))       -- ⭐ the analytic seat reads this lane
+    // f1 = lpafWheelRadii[i]  (lfs f1, 0(r31))       -- the analytic seat reads this lane
     //   f2 = flt_82FB8BB0       (a .data scalar, 0 in the image -- runtime-initialised)
     //   f3 = mSimpleAttribs+0x00 lane x
     //   f4 = max(mSimpleAttribs+0x00 lane y, unk_82FB8440)
@@ -300,7 +300,7 @@ namespace Vehicle
     // ===========================================================================================
     //  Wheel::SwitchAttribs   @0x825D6D38   (83 insns, leaf)
     // ===========================================================================================
-    // ⭐⭐ REBODIED 2026-08-09 (attribs-setup wave) from its OWN asm -- the standing FLAG on the
+    // REBODIED 2026-08-09 (attribs-setup wave) from its OWN asm -- the standing FLAG on the
     // old body ("inherits Prepare's disproven scatter, re-verify before anything consumes it")
     // was right to demand it: every derived lane was wrong. The real scatter MIRRORS Prepare's
     // PROVEN map (f1 -> mSlipVariables.w == radius; f2 -> mIntegrationVariables.w;
@@ -344,7 +344,7 @@ namespace Vehicle
     // ===========================================================================================
     //  Wheel::UpdateVelocity   @0x825D7008   (97 insns, leaf)
     // ===========================================================================================
-    // ⭐⭐ REBODIED 2026-08-07 (wheel-cluster wave). The previous body was a SLICE ARTIFACT twice
+    // REBODIED 2026-08-07 (wheel-cluster wave). The previous body was a SLICE ARTIFACT twice
     // over: its 3-arg signature dropped the five VecFloat args the callee consumes (see Wheel.h),
     // and it read/wrote the WRONG LANE (+0x30 lane .y -- the torque accumulator -- where the asm's
     // final `vrlimi128 v7,v13,8,0` writes lane .x, the angular velocity). Its "un-homed globals"
@@ -499,7 +499,7 @@ namespace Vehicle
     // packed register (maPackedVariables @+0x30) by `vperm`-ing the scalars through the permute
     // table at 0x8327F140.
     //
-    // ⭐ 2026-08-09 (attribs-data wave): the table is HOMED and the scatters are REAL. The table
+    // the table is HOMED and the scatters are REAL. The table
     // is .bss (all-zero in the image), splatted at static-init by the constant-pool writer bank
     // 0x82C74000..0x82C743F4 (an export hole; individual stvx writers at 0x82C741E0..0x82C74360),
     // recovered by instruction-level emulation of the writer bank directly against the image
@@ -518,7 +518,7 @@ namespace Vehicle
     //     record (through the wrapper's data pointer, `lwz +4` == GetLayoutPointer);
     //   * the Default/AI/DonutAI presets source .rdata tuning constants (each spelled with its
     //     image address at its use);
-    //   * ⚠️ the DonutAI pair runs 15 vperms, not 16: maPackedVariables.w (the long-force-bias
+    // * the DonutAI pair runs 15 vperms, not 16: maPackedVariables.w (the long-force-bias
     //     lane) is DELIBERATELY PRESERVED, not written. See the note on the pair.
 
     // The attrib-driven pair read the record as a byte-addressed float array, same convention as
@@ -679,7 +679,7 @@ namespace Vehicle
 
     // @0x825D66B8  Wheel::TireAttribs::PrepareFrontTireForDonutAI
     //
-    // ⚠️⚠️ FIDELITY: the DonutAI pair is 15 vperms, NOT 16 -- there is no insert into
+    // FIDELITY: the DonutAI pair is 15 vperms, NOT 16 -- there is no insert into
     // maPackedVariables.w. The long-force-bias lane KEEPS whatever the tire already carried
     // (image-proven: the dest tag survives full emulation of both bodies). DO NOT "complete"
     // the scatter by writing w; the preservation is the shipped behaviour.
@@ -707,7 +707,7 @@ namespace Vehicle
     }
 
     // @0x825D6958  Wheel::TireAttribs::PrepareRearTireForDonutAI
-    // Same w-lane preservation as the front variant -- see the ⚠️⚠️ note above.
+    // Same w-lane preservation as the front variant -- see the note above.
     void Wheel::TireAttribs::PrepareRearTireForDonutAI()
     {
         mLongGripCurve.maGripVariables.x = 0.3f;       // peakSlipRatio    flt_82004740

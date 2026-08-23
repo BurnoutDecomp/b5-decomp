@@ -7,11 +7,11 @@
 //   CalcInstanceTransform             @ 0x82753910
 //   CalcArbitraryAmberCoronaTransform @ 0x82757478
 //   GetCoronaPosition                 @ 0x82753820
-//   GetCoronaState                    @ 0x8274F510   (added 2026-08-19, wave Q7)
+//   GetCoronaState                    @ 0x8274F510
 //   GetInstanceIndexForInstanceID     @ 0x8274F590
 //   GetInstanceType                   @ 0x8274F438
 //   GetTrafficLightType               @ 0x8274F4A0
-//   BrnTraffic::ExpandPosPlusYRotToTransform @ 0x823610B8  (added 2026-08-19, wave Q7 --
+//   BrnTraffic::ExpandPosPlusYRotToTransform @ 0x823610B8  (
 //                                     a FREE function whose DWARF home is a header this
 //                                     tree has no mirror of; see its own banner below)
 //
@@ -260,7 +260,7 @@ namespace BrnTraffic
     }
 
     // -- GetCoronaState @ 0x8274F510 (32 insns) -----------------------------------
-    // ADDED 2026-08-19 (wave Q7). NOT a console header inline as this header's own
+    // NOT a console header inline as this header's own
     // banner assumed: it is a real out-of-line symbol, found via xrefs_from of
     // RenderCoronasForInstance @0x827571B8 and dumped with headless idat on a private
     // .i64 copy (scratchpad/waveQ7/ida_q7t/). It has no .ida-exports JSON and no ledger

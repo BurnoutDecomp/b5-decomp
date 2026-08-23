@@ -35,7 +35,7 @@ namespace BrnTrafficIO
         mActivateHullQueue.AddEventSafe(lEvent);
     }
 
-    // ⭐ ADDED 2026-08-10 (pre-physics bridge wave). The three DWARF-declared accessors
+    // The three DWARF-declared accessors
     // (BrnTrafficNetworkInterfaces.h:88/:92/:95) had no bodies anywhere in the tree; mounting
     // BrnTrafficEntityModuleIO.cpp for the pre-physics OutputBuffer produced three LNK2019s for
     // them, referenced from the already-committed

@@ -13,7 +13,7 @@
 // The DecFIGS DWARF only forward-declares the type, so the header's layout is asm-recovered --
 // see the header banner.
 //
-// ⚠️ FindSlotForContact was an .ida-exports HOLE; dumped headless from a COPY of the ARTIST .i64
+// FindSlotForContact was an .ida-exports HOLE; dumped headless from a COPY of the ARTIST .i64
 // for this round (scratchpad .../wave3r2/B/findslot.txt).
 // =================================================================================================
 

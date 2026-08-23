@@ -13,8 +13,8 @@
 //     BrnTraffic::GetLineLineIntersectionParamXZ @0x8291AC60 (BrnTrafficMathsUtils.h, not ours)
 //   UpdateVehicle's partial-update latch into Vehicle+4    @0x8291D9E4  needs a Vehicle
 //     accessor for muSpecies bit 7 (BrnTrafficVehicle.h, not ours)
-//   (RequestNewPhysicalVehicle @0x8291CE48 was gated on "no consumer" -- LIVE since wave T3
-//    r1; SendPhysicalRequests @0x8274C510 drains the lists it fills.)
+//   (RequestNewPhysicalVehicle @0x8291CE48 is LIVE: SendPhysicalRequests @0x8274C510
+//    drains the lists it fills.)
 
 #include "GameSource/Jobs/Traffic/BrnUpdateVehiclesJob.h"
 
@@ -28,14 +28,12 @@
 #include "rw/math/vpu/vector4_operation.h"
 
 #include <cmath>
-#include <cstdlib>   // getenv
 
 namespace BrnTraffic
 {
 namespace
 {
-    // NAMED LEG GATE + diag plumbing, the shape the mounted traffic partfiles use.
-    // [DIAG] NOT IN THE X360 BINARY. DELETE-WHEN-STABLE.
+    // NAMED LEG GATE, file-local. NOT IN THE X360 BINARY.
     inline void LogMissingLeg(bool& lrbAlreadyLogged, const char* lpcLegNameAndReason)
     {
         if (lrbAlreadyLogged)
@@ -52,32 +50,7 @@ namespace
         }
     }
 
-    bool TrafficDiagEnabled()
-    {
-        static const bool sbEnabled = (getenv("BRN_TRAFFIC_DIAG") != 0);
-        return sbEnabled;
-    }
-
-    // [T3-swerve] DIAG SLOTS. NOT IN THE X360 BINARY. DELETE-WHEN-STABLE.
-    // CalcSwerveAmount fills these on its way through so UpdateVehicle can print one line
-    // without changing the console signature. RACY BY DESIGN: muNumUpdateVehiclesJobs can be
-    // > 1, so a printed line may mix two vehicles' values. Diag only; never read by logic.
-    f32  gfDiagSignedDist  = 0.0f;
-    f32  gfDiagClosingSpeed = 0.0f;
-    f32  gfDiagRule0       = 0.0f;
-    f32  gfDiagRule1       = 0.0f;
-    bool gbDiagRulesRan    = false;
-
-    CgsDev::Log::DebugPrint* TrafficDiagStream()
-    {
-        if (!TrafficDiagEnabled() || CgsDev::Log::gpDebugPrint == 0)
-        {
-            return 0;
-        }
-        return CgsDev::Log::gpDebugPrint;
-    }
-
-    // OPENED wave T3 r1 (cluster C1). The consumer this waited for is
+    // The consumer this waited for is
     // TrafficEntityModule::SendPhysicalRequests @0x8274C510 (_wT3_01.cpp), live in
     // PrePhysicsUpdate's RUNNING arm; it drains the same lists and clears them each frame.
     // The knob itself is kept as the one-line kill switch for the whole promotion chain.
@@ -439,7 +412,6 @@ void UpdateVehiclesJob::Execute(UpdateVehiclesJobParams* lpParams)
 {
     Initialise(lpParams);
 
-    u32 luTouched = 0;
     while (MoveToNextVehicle())
     {
         const Vehicle* lpVehicle = GetCurrentVehicle();
@@ -447,22 +419,6 @@ void UpdateVehiclesJob::Execute(UpdateVehiclesJobParams* lpParams)
         {
             UpdateVehicle();
             WriteBackCurrentVehicle();
-            ++luTouched;
-        }
-    }
-
-    if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())
-    {
-        // [T2-job] one-shot. DELETE-WHEN-STABLE.
-        static bool sbFirst = true;
-        if (sbFirst)
-        {
-            sbFirst = false;
-            *lpDiag << "[T2-job] FIRST UpdateVehiclesJob::Execute begin="
-                    << static_cast<s32>(lpParams->muBeginVehicle)
-                    << " end=" << static_cast<s32>(lpParams->muEndVehicle)
-                    << " touched=" << static_cast<s32>(luTouched)
-                    << " dispatch=sync\n";
         }
     }
 
@@ -537,32 +493,6 @@ void UpdateVehiclesJob::UpdateVehicle()
                                               lRaceCarDirection, lfRaceCarSpeed,
                                               &lbIsExtreme, &lbIsNormalPhysical).x;
             UpdateSwerveState(lRaceCarPosition, &lfSwerveAmount, &lbIsExtreme);
-        }
-
-        // [T3-swerve] one-shot, the first frame a race car is actually found for this job.
-        // NOT IN THE X360 BINARY. DELETE-WHEN-STABLE.
-        if (lbFoundRaceCar)
-        {
-            static bool sbFirstSwerveReported = false;
-            if (!sbFirstSwerveReported)
-            {
-                if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())
-                {
-                    sbFirstSwerveReported = true;
-                    *lpDiag << "[T3-swerve] vehicle " << static_cast<s32>(muCurrentVehicle)
-                            << " rulesRan " << (gbDiagRulesRan ? 1 : 0)
-                            << " dist " << gfDiagSignedDist
-                            << " closing " << gfDiagClosingSpeed
-                            << " rule0 " << gfDiagRule0
-                            << " rule1 " << gfDiagRule1
-                            << " extreme " << (lbIsExtreme ? 1 : 0)
-                            << " normalPhysical " << (lbIsNormalPhysical ? 1 : 0)
-                            << " miBehaviour " << static_cast<s32>(lpParam->miBehaviour)
-                            << " partial " << (lbPartialUpdate ? 1 : 0)
-                            << " allowsSwerving "
-                            << (mpParams->mbGameModeAllowsSwerving ? 1 : 0) << "\n";
-                }
-            }
         }
 
         // 0x8291DAB0: either swerve flag makes CalcTargetPos treat the car as swerving.
@@ -788,7 +718,7 @@ void UpdateVehiclesJob::PlaceVehicleOnRoad()
     lpAxles->mBackAxle.SetUp(lpAxles->mFrontAxle.GetUp());
 }
 
-// @0x8291CE48 (:1668). LIVE since wave T3 r1: TrafficEntityModule::SendPhysicalRequests
+// @0x8291CE48 (:1668). LIVE: TrafficEntityModule::SendPhysicalRequests
 // @0x8274C510 drains mpOutNewPhysicalRequests every PrePhysicsUpdate.
 void UpdateVehiclesJob::RequestNewPhysicalVehicle(u16 luVehicle, PhysicalReason leReason,
                                                   EntityId lTargetEntityId)
@@ -1023,13 +953,6 @@ VecFloat UpdateVehiclesJob::CalcSwerveAmount(Vector3 lRaceCarPosition,
                          rw::math::vpu::Splat(lfSignedDist), lfClosingSpeed,
                          lfAbsLanePos, lfAngleDot);
 
-    // [T3-swerve] DIAG. NOT IN THE X360 BINARY. DELETE-WHEN-STABLE.
-    gfDiagSignedDist   = lfSignedDist;
-    gfDiagClosingSpeed = lfClosingSpeed.x;
-    gfDiagRule0        = laOutputs[0].x;
-    gfDiagRule1        = laOutputs[1].x;
-    gbDiagRulesRan     = true;
-
     bool lbIsExtreme = false;
     f32  lfSwerveAmount;
 
@@ -1071,8 +994,8 @@ VecFloat UpdateVehiclesJob::CalcSwerveAmount(Vector3 lRaceCarPosition,
         lfSwerveAmount = laOutputs[1].x * maTuning[E_TUNE_LIMITS].z;
     }
 
-    // 0x8291D794: Param+0x1B == 2 is KI_BEHAVIOUR_DRIVE_AROUND_OBSTRUCTION (attested wave T3
-    // r2 by UpdateParams_PrecalcBehaviourParams' switch case 0 @0x827181E8); such a param
+    // 0x8291D794: Param+0x1B == 2 is KI_BEHAVIOUR_DRIVE_AROUND_OBSTRUCTION (attested by
+    // UpdateParams_PrecalcBehaviourParams' switch case 0 @0x827181E8); such a param
     // always goes normal-physical at full swerve.
     if (GetCurrentParam()->miBehaviour == 2)
     {

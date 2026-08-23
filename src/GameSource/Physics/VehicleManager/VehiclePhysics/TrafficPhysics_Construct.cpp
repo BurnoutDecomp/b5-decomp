@@ -10,14 +10,14 @@
 // =================================================================================================
 // BrnPhysics::Vehicle::TrafficPhysics -- Construct + SetFreakedOut + Update.
 //
-// ⭐ WHY THIS IS A SEPARATE TU FROM TrafficPhysics.cpp (the RaceCarPhysics_Construct.cpp /
+// WHY THIS IS A SEPARATE TU FROM TrafficPhysics.cpp (the RaceCarPhysics_Construct.cpp /
 // BrnSimpleVehiclePhysics_Construct.cpp precedent). TrafficPhysics.cpp cannot be mounted:
 // PreparePhysical calls VehiclePhysics::Prepare, which is still declare-only. Everything that CAN
 // be mounted lives here, and THIS file is on the build's source list.
-// ⛔ There is exactly ONE definition of each function in the tree. Update MOVED here from
+// There is exactly ONE definition of each function in the tree. Update MOVED here from
 // TrafficPhysics.cpp (it had to -- see the note above its body); it was not copied.
 //
-// ⭐⭐ Construct @0x8262E980 IS AN `.ida-exports` HOLE and was pulled first-hand. The X360 JSON set
+// Construct @0x8262E980 IS AN `.ida-exports` HOLE and was pulled first-hand. The X360 JSON set
 // jumps 0x8262E848 (VehiclePhysics::UpdateEngine, which ends at 0x8262E97C) -> 0x8262EBE8
 // (RaceCarPhysics::UpdateAftertouch), and headless IDA 9.3 on BURNOUT_X360_ARTIST.XEX.i64 shows the
 // gap is one whole function, 0x8262E980..0x8262EBE8, 154 instructions, already named
@@ -37,7 +37,7 @@ namespace Vehicle
     namespace vpu = rw::math::vpu;
     // The four freak-out FSM constants (moved here with Update, 2026-08-03; they were in
     // TrafficPhysics.cpp and Update is their only consumer).
-    // ⭐ RE-NAMED 2026-08-09 (crash/shunt wave): the gate's operand is splat(mpAttribs Mass .x)
+    // RE-NAMED 2026-08-09 (crash/shunt wave): the gate's operand is splat(mpAttribs Mass .x)
     // -- the SAME +0x70 lane UpdateCrashing's mass regime reads -- vs flt_82019638 == 5000.0.
     // It is a heavy-vehicle MASS gate, not a speed gate.
     static const f32 KF_TRAFFIC_CONTROL_HALVE_MASS = 5000.0f;   // flt_82019638
@@ -55,7 +55,7 @@ namespace Vehicle
     //   addi r9,r31,0x1070 ; lvx128 ; vrlimi128 v0,v127,2,0 ; stvx128   the +0x1070 LANE-Z insert
     //   addi r11,r31,0x1400 ; <CgsNumeric::Random::Construct inlined>   mRandom.Construct()
     //
-    // ⚠️ THE MIDDLE THREE STATEMENTS ARE THE SAME THREE `VehiclePhysics::Construct` ITSELF ENDS
+    // THE MIDDLE THREE STATEMENTS ARE THE SAME THREE `VehiclePhysics::Construct` ITSELF ENDS
     // WITH, in the same order (0x8262DD14 / 0x8262DD2C / 0x8262DD3C) -- so this really does run them
     // a second time. That is not a mis-read of the caller: both `bl` targets were resolved
     // numerically (0x825D9A58 and 0x825FDD78) and both functions carry their own copy.
@@ -111,12 +111,12 @@ namespace Vehicle
     //   li r11, 2 ; bne -> keep 2 ; else li r11, 3
     //   stb  r11, 0x13F4(r3)                     mu8FreakOutState
     //
-    // ⚠️ THE PARAMETER ORDER IS THE ASM'S, NOT A GUESS: f1 is the value stored into
+    // THE PARAMETER ORDER IS THE ASM'S, NOT A GUESS: f1 is the value stored into
     // mfFreakOutDirection and f2 is the value compared against the (120 mph)^2 gate. The call site
     // in Update @0x82639878 loads f1 from a stack local and f2 from one of the two `.data` tuning
     // floats, which is why the second parameter is named for what it is measured against.
     //
-    // ⚠️ THE STATE NEVER COMES OUT AS INITIAL OR OFF. Both branches end in TURN_AND_ROLL (2) or
+    // THE STATE NEVER COMES OUT AS INITIAL OR OFF. Both branches end in TURN_AND_ROLL (2) or
     // SPIN_OUT (3) -- there is no path to 0 or 1 here -- so the "freaked out" flag IsFreakedOut()
     // reads is always set by this call. That is the console's behaviour, not a simplification.
     //
@@ -141,10 +141,10 @@ namespace Vehicle
     }
 
     // ---------------------------------------------------------------------------------------------
-    // Update  @0x82639590  ⭐⭐ RECONCILED FULL 2026-08-09 (crash/shunt wave; 457 insns read
+    // Update  @0x82639590  RECONCILED FULL 2026-08-09 (crash/shunt wave; 457 insns read
     // line by line -- every flagged stand-in below is gone).
     //
-    // ⚠️⚠️ WHY THIS BODY IS IN THE **MOUNTED** TU RATHER THAN NEXT TO PreparePhysical. It is
+    // WHY THIS BODY IS IN THE **MOUNTED** TU RATHER THAN NEXT TO PreparePhysical. It is
     // `virtual`, and it is the only virtual TrafficPhysics introduces. Folding
     // `PhysicalTrafficManager::maFullTrafficPhysics[20]` to the real class (2026-08-03) put this
     // class's vtable on the link's critical path -- BrnPhysicsModule.obj emits the constructor chain

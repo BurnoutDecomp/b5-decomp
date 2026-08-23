@@ -46,7 +46,7 @@ namespace Vehicle
     }
 
     // @0x825C0758 (25 insns) VehicleManagerOutputInterface::AddTrafficRemovedEvent
-    //   ⭐ BODIED 2026-08-22 (wave T3 r1, cluster C2). This function was ABSENT from
+    // This function was ABSENT from
     //   .ida-exports/BURNOUT_X360_ARTIST.XEX (no per-function JSON); the body below is a direct
     //   transcription of a headless-idat dump taken for this wave, not an inference. DWARF
     //   BrnVehicleOutputInterface.h:217.
@@ -54,7 +54,7 @@ namespace Vehicle
     //   Three asserts in order, then one append. The queue seat is the console's +0x7A0 == 1952
     //   (`addi r3, r29, 0x7A0` @0x825C08B4), reached BY NAME here; the length/max reads at +0x7A8
     //   and +0x7A4 are the same member's miLength/miMaxLength.
-    //   ⚠️ The FIRST assert is the console's own capacity tripwire and it is NOT gating -- the
+    // The FIRST assert is the console's own capacity tripwire and it is NOT gating -- the
     //   append happens either way, exactly as shipped (25 slots, one frame).
     s32 VehicleManagerOutputInterface::AddTrafficRemovedEvent(EntityId     lRemovedVehicleEntityId,
                                                               ETrafficType leTrafficType)

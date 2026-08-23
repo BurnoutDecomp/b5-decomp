@@ -24,7 +24,7 @@
 //     mBodyRollAttribs mCollisionAttribs mBoostAttribs mFrontTireAttribs mRearTireAttribs
 //     miRaceCarID mAttribsKey mbIsValid
 //
-// ⚠️ The previously-committed VehicleAttribs.cpp had **mEngineAttribs and mDriftAttribs
+// The previously-committed VehicleAttribs.cpp had **mEngineAttribs and mDriftAttribs
 // transposed** (engine @0x100, drift @0x1A0) and five static_asserts that baked the error in.
 //
 // The referee is BrnPhysics::Vehicle::VehicleAttribs::SetupAttribsForDonutAI @0x825F6298, which
@@ -53,7 +53,7 @@
 //     +0x270 mvWheelLongForceHeightOffset_WheelLatForceHeightOffset <- HandleWheelPairFriction
 //     +0x280 mvCrashSpeedMPS_CarAngularImpulseScale_...   <- ApplyCrashedContactImpulse (.y)
 //
-// ⭐ Consequence: VehiclePhysics.h's retired by-name slice had its OFFSETS right all along; it
+// Consequence: VehiclePhysics.h's retired by-name slice had its OFFSETS right all along; it
 // was VehicleAttribs.cpp that was wrong. The two sub-block sizes the old file did get right --
 // `mPadAfterDrift[0xA0]` @0x230 and the 0x350/0x358/0x360 tail -- are exactly
 // SuspensionAttribs+BodyRollAttribs+CollisionAttribs+BoostAttribs (0x30+0x20+0x10+0x40 == 0xA0)
@@ -261,10 +261,10 @@ namespace Vehicle
 
         // --- functions -------------------------------------------------------------------------
 
-        // @0x825F3FB8 (840 instrs) -- the console constructor. ⚠️ ABSENT from `.ida-exports` (an
+        // @0x825F3FB8 (840 instrs) -- the console constructor. ABSENT from `.ida-exports` (an
         // export-set hole: Engine::Prepare @0x825F3F38 is 31 instrs and ends at 0x825F3FB4, and the
         // next indexed symbol is 0x825F4CD8); pulled from the .i64 with headless IDA and replayed
-        // through a symbolic VMX128 simulator. ⚠️ The "declared only -- no body in the tree yet"
+        // through a symbolic VMX128 simulator. The "declared only -- no body in the tree yet"
         // that stood here is STALE: it is BODIED in VehicleAttribs.cpp (commit 05456841), and
         // VehiclePhysics::Construct calls it twice (mAIVehicleAttribs / mPlayerVehicleAttribs).
         void Construct();
@@ -272,14 +272,14 @@ namespace Vehicle
         // @0x825F4CD8 (770 instrs) -- the streamed-attribute loader: per-sub-block generated
         // wrappers (base/steering/engine/drift/collision/boost/bodyroll/suspension) streamed
         // into the packed lanes + the two tire scatters + EngineAttribs::InitializeFromAttribs.
-        // ⭐ BODIED in VehicleAttribs.cpp (attribs-data wave, 2026-08-09; full per-lane map
+        // BODIED in VehicleAttribs.cpp (attribs-data wave, 2026-08-09; full per-lane map
         // recovered by symbolic emulation of the raw image bytes). The signature is conformed
         // to the committed generated wrapper (DWARF/PS3 take it BY VALUE -- 6D41E0
         // `..12SetupAttribsEN6Attrib3Gen22physicsvehiclehandlingE`; spelled const-ref per the
         // SimpleVehicleAttribs precedent, with the explicit checked copy at each call site).
         void SetupAttribs(const Attrib::Gen::physicsvehiclehandling& lrHandling);
 
-        // @0x825F58E0 (622 instrs) -- derive the plain-AI set from a source set. ⭐ BODIED in
+        // @0x825F58E0 (622 instrs) -- derive the plain-AI set from a source set. BODIED in
         // VehicleAttribs.cpp (attribs-setup wave, 2026-08-09).
         void SetupAttribsForAI(VehicleAttribs* lpSource);
 
@@ -315,7 +315,7 @@ namespace Vehicle
     // ---- THE ASSERT SET ----------------------------------------------------------------------
     // Every number below is asm-literal or DWARF-ordered.
     //
-    // ⚠️ A `sizeof` assert is PERMUTATION-INVARIANT -- it cannot see two members swapped, which is
+    // A `sizeof` assert is PERMUTATION-INVARIANT -- it cannot see two members swapped, which is
     // exactly the defect this file exists to correct. Tamper-tested 2026-08-03: with sizeof +
     // top-level offsetof asserts only, transposing two registers INSIDE DriftAttribs compiled
     // clean. The per-member offsetof block below is what closes that, and it is the part to keep

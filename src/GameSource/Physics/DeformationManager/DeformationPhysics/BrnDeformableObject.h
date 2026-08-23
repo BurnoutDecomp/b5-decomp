@@ -359,7 +359,7 @@ namespace Deformation
         Vector3 GetMeshOffset() const;                                                          // :504
         Vector3 GetComOffset() const;                                                           // :507
         Vector3 GetRigidBodySpecPosition() const;                                               // :511
-        // :516. HEADER-INLINE 2026-08-22 (wave T3 C5): no X360 export under any name; the console
+        // :516. HEADER-INLINE: no X360 export under any name; the console
         // inlines the maPartStates read at every use site (DeformationManager::AddHingedBodyPartPairs
         // @0x82605B28 `lbzx r11, r23, r26`). GetNumSensors / GetWorldSpaceSpheres precedent.
         EPartState GetPartState(s32 liIndex) const                                              // :516
@@ -380,10 +380,9 @@ namespace Deformation
 
         // DWARF :553. Push this car's stored contacts into the shared penetration solver (vs the
         // model-pool base). const. DECLARE-ONLY.
-        // ⭐ 2026-08-23 (traffic wave 4, SOLVER wave): parameter names are the DWARF's
-        // (BrnDeformableObject.cpp:1877) -- a3 is the WORLD pseudo-body index (the caller passes
-        // KI_MAX_DEFORMATION_MODELS), a4 is THIS car's model index. The old liBodyIndex/liWorldIndex
-        // pair named them the wrong way round.
+        // Parameter names are the DWARF's (BrnDeformableObject.cpp:1877): a3 is the WORLD
+        // pseudo-body index (the caller passes KI_MAX_DEFORMATION_MODELS), a4 is THIS car's model
+        // index -- not the other way round.
         void AddContactsToPenetrationSolver(PenetrationSolver* lpSolver, DeformableObject* lpDefObjBase,
                                             s32 liWorldObjectIndex, s32 liObjectIndex) const;    // :553
 

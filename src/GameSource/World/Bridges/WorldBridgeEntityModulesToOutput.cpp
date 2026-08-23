@@ -223,9 +223,8 @@ void BridgePropToOutput_PreScene(
 // writing". (See the read-lock twin table in BrnPropEntityModuleIO.h -- those six symbols are
 // real but IDA-unnamed, which is why an export-set grep previously concluded they don't exist.)
 //
-// ⭐ LANDED THIS WAVE: leg 10, the RecordPropHitEvent transfer. It is the ONLY world-side hop
-// on the smash-gate / billboard UI chain, and it was explicitly dropped
-// (`(void)lpPropOutput_PostPhysics;`). PropEntityModule::ProcessContacts already fills the
+// Leg 10, the RecordPropHitEvent transfer, is the ONLY world-side hop on the smash-gate /
+// billboard UI chain. PropEntityModule::ProcessContacts fills the
 // source queue at run time (PropEntityModule_wQ2_03.cpp :: ProcessContacts, the `lbRecord`
 // block) and the source queue IS Constructed (BrnPropEntityModuleIO_OutputBuffer_PostPhysics.cpp
 // :: Construct -- the never-Constructed-queue trap does not apply here), as is the destination
@@ -240,12 +239,10 @@ void BridgePropToOutput_PreScene(
 //     one-liners; they are OFF the OnPropHit chain, so the gateui brief says note-don't-land.
 //   * leg 11 -- the overhead-sign transfer (game event 118). ⚠️ NOT the billboard/smash-gate
 //     feature: it feeds CrashModeScoring::DealWithHitOverheadSign, the Showtime overhead-sign
-//     scorer (gateui scout §0.1). Out of this wave's scope.
-//   (leg 12 IS NO LONGER DROPPED -- landed 2026-08-20 round 2, see the block at the end of the
-//    body. The `E_EVENT_REQUEST_PROP_PROGRESSION = 112` + `struct RequestPropProgression` it
-//    waited on now exist in GameSource/GameState/BrnGameEvents.h :43 / :138. ⚠️ The round-1
-//    banner here claimed the need was "Filed as a shared_header_request" when no report had
-//    been written at all -- corrected: it was filed in round 2 and answered in the same round.)
+//     scorer (gateui scout §0.1).
+//   (leg 12 is LANDED -- see the block at the end of the body; `E_EVENT_REQUEST_PROP_PROGRESSION
+//    = 112` + `struct RequestPropProgression` live in GameSource/GameState/BrnGameEvents.h
+//    :43 / :138.)
 //   * leg 16's prop arm -- AppendReplayRequestInterface(propOut->GetReplayRequestInterface()).
 //   * The console's two CPU monitors (a1+6167720 / +6167724) are not modelled on any leg here;
 //     every sibling bridge in this file takes the same disposition.
@@ -400,10 +397,8 @@ void BridgeEntityModulesToOutput_PostPhysics(
         //                           112 /*E_EVENT_REQUEST_PROP_PROGRESSION*/,
         //                           1 /*sizeof(RequestPropProgression)*/)
         //
-        // LANDED 2026-08-20 (round 2): it was BLOCKED, not dropped, on
-        // `E_EVENT_REQUEST_PROP_PROGRESSION = 112` + `struct RequestPropProgression` having no
-        // home. Both now exist (GameSource/GameState/BrnGameEvents.h:43 and :138, landed by the
-        // GameState owner this wave), so the world side is the console's own `if`.
+        // `E_EVENT_REQUEST_PROP_PROGRESSION = 112` + `struct RequestPropProgression` live in
+        // GameSource/GameState/BrnGameEvents.h:43 and :138, so the world side is the console's `if`.
         //
         // [FLAG] The console's payload is an UNINITIALISED 1-byte stack slot -- the event is a
         // pure marker and its consumer never reads the byte. An uninitialised read is not

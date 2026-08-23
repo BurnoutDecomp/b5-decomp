@@ -107,7 +107,7 @@ namespace BrnTraffic
         void TrafficLightGotSmashed(const TrafficLightCollection* lpTrafficLightData,
                                     u32 luInstanceID);
 
-        // TrafficLightGotRestored @ 0x82751A40 (40 insns) -- ADDED 2026-08-19 (wave Q7, cluster
+        // TrafficLightGotRestored @ 0x82751A40 (40 insns) -- (cluster
         // `traffic`). The exact twin of TrafficLightGotSmashed with ONE instruction different:
         // `clrlwi r11,r11,25` (clear the top bit) where the smashed twin's tail is a single
         // `ori r11,r11,0x80` (0x82751A30, between `lbz r11,5(r31)` and `stb r11,5(r31)`) --

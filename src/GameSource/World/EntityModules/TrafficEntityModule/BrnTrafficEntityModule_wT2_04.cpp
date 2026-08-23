@@ -42,8 +42,7 @@ namespace BrnTraffic
 {
 namespace
 {
-    // NAMED LEG GATE + diag plumbing, file-local by convention, same shape as the sibling
-    // partfiles'. [DIAG] NOT IN THE X360 BINARY. DELETE-WHEN-STABLE.
+    // NAMED LEG GATE + BRN_TRAFFIC_DIAG plumbing, file-local. NOT IN THE X360 BINARY.
     inline void LogMissingLeg(bool& lrbAlreadyLogged, const char* lpcLegNameAndReason)
     {
         if (lrbAlreadyLogged)
@@ -160,7 +159,6 @@ void TrafficEntityModule::UpdateVehicles_CreateNewVehicles(
     lNoVehicle.SetInverse(mVehicleSoaData.mAliveVehicles);
     lParamsToCreate.SetAnd(lNoVehicle, lParamsToCreate);
 
-    u32 luCreated = 0;
 
     for (CgsContainers::FastBitArray<VehicleSoaData::KU_MAX_VEHICLES>::Iterator lItParam =
              lParamsToCreate.Begin();
@@ -242,35 +240,9 @@ void TrafficEntityModule::UpdateVehicles_CreateNewVehicles(
                                         luTrailerIndex);
 
         SetVehicleTransform(luParam, lOutMatrix);
-        ++luCreated;
-
-        if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())
-        {
-            // [T2-make] one-shot on the first driving car. DELETE-WHEN-STABLE.
-            static bool sbFirst = true;
-            if (sbFirst)
-            {
-                sbFirst = false;
-                const Vector3& lrPos = lOutMatrix.wAxis;
-                *lpDiag << "[T2-make] FIRST InitialiseAsStandard param=" << static_cast<s32>(luParam)
-                        << " type=" << static_cast<s32>(luVehicleType)
-                        << " speed=" << lpParam->mfSpeed
-                        << " pos=(" << lrPos.x << ", " << lrPos.y << ", " << lrPos.z << ")\n";
-            }
-        }
     }
 
     mbDontCreateVehiclesNearAnyPlayers = false;
-
-    if (luCreated != 0)
-    {
-        if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())
-        {
-            // [T2-make] value-latched: only on a frame that actually made cars.
-            // DELETE-WHEN-STABLE.
-            *lpDiag << "[T2-make] created=" << static_cast<s32>(luCreated) << " driving vehicle(s)\n";
-        }
-    }
 }
 
 // ----------------------------------------------------------------------------
@@ -443,20 +415,6 @@ void TrafficEntityModule::UpdateVehicles(
 
     // The console's second loop is 4x TrafficJobStub::WaitOn @0x827451CC..0x827451E4. Under the
     // synchronous dispatch above every slice has already completed, so the join is a no-op.
-
-    if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())
-    {
-        // [T2-job] one-shot. DELETE-WHEN-STABLE.
-        static bool sbFirstSplit = true;
-        if (sbFirstSplit)
-        {
-            sbFirstSplit = false;
-            *lpDiag << "[T2-job] FIRST UpdateVehicles split jobs="
-                    << static_cast<s32>(muNumUpdateVehiclesJobs)
-                    << " paramsPerJob=" << static_cast<s32>(luParamsPerJob)
-                    << " dispatch=sync\n";
-        }
-    }
 }
 
 // ----------------------------------------------------------------------------
@@ -569,21 +527,12 @@ void TrafficEntityModule::GenerateSceneUpdateEvents(BrnTrafficIO::OutputBuffer_P
 
     if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())
     {
-        // ------------------------------------------------------------------------------
-        // [T4-clip] THE DECISIVE NEGATIVE WITNESS on the world side. [DIAG] NOT IN THE X360
-        // BINARY. Each frame, test the local player's position against every alive vehicle's
-        // OBB (the type runtime's bbox, offset and expanded 0.5 m) and shout once per vehicle.
-        //
-        // The two strings MUST stay different:
-        //   "NON-physical" -- the player is INSIDE a traffic car that never got a physics
-        //                     slot. That is the wave-4 break: gate 1 or gate 2 did not fire.
-        //   "PHYSICAL"     -- promotion worked and the CONTACTS failed. A completely different
-        //                     bug, on the physics side, and chasing the module for it wastes a
-        //                     round.
-        //
-        // Seated here because this function already walks exactly this bit set with the
-        // transform and the type runtime in hand. DELETE-WHEN-STABLE.
-        // ------------------------------------------------------------------------------
+        // [T4-clip] player-inside-a-traffic-car witness. NOT IN THE X360 BINARY. Each frame,
+        // test the local player's position against every alive vehicle's OBB (the type
+        // runtime's bbox, offset and expanded 0.5 m) and shout once per vehicle. The two
+        // strings MUST stay different: NON-physical == the car never got a physics slot
+        // (module-side break); PHYSICAL == promotion worked and the CONTACTS failed
+        // (physics-side break). DELETE-WHEN-STABLE.
         if (meLocalPlayerIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID &&
             mRaceCarState.mabRaceCarActive[meLocalPlayerIndex])
         {
@@ -648,24 +597,6 @@ void TrafficEntityModule::GenerateSceneUpdateEvents(BrnTrafficIO::OutputBuffer_P
                             << " (collidable=" << (lpVehicle->IsCollidable() ? 1 : 0)
                             << ") -- no physics slot [DELETE-WHEN-STABLE]\n";
                 }
-            }
-        }
-    }
-
-    if (luMoved != 0)
-    {
-        if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())
-        {
-            // [T2-scene] one-shot, then value-latched on the published count so a reader can
-            // see the population change rather than a single frame. DELETE-WHEN-STABLE.
-            static s32 siLastPublished = -1;
-            if (siLastPublished != static_cast<s32>(luMoved))
-            {
-                const bool lbFirst = (siLastPublished < 0);
-                siLastPublished = static_cast<s32>(luMoved);
-                *lpDiag << (lbFirst ? "[T2-scene] FIRST GenerateSceneUpdateEvents: moved "
-                                    : "[T2-scene] published count changed: moved ")
-                        << siLastPublished << " traffic entities\n";
             }
         }
     }

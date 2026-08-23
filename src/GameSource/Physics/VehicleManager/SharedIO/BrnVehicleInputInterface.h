@@ -118,7 +118,7 @@ namespace Vehicle
                                       ETrafficType leTrafficType);
 
         // @0x822CC2A0: enqueue a reset-vehicle request.
-        // ⛔ [teleport] PARAMETER NAMES CORRECTED 2026-08-21 -- the LEADING u8 is the unused slot,
+        // [teleport] PARAMETER NAMES CORRECTED 2026-08-21 -- the LEADING u8 is the unused slot,
         // not the trailing bool, and the three bools are ResetTransform / ResetDeformation /
         // ResettingAfterWreck in THAT order with the f32 between the last two. Full asm derivation
         // in the .cpp body's banner (the PPC float-arg GPR skip is what hid it).
@@ -136,7 +136,7 @@ namespace Vehicle
         // @0x822B4770: mark an active-race-car slot as added-for-collision.
         void SetRaceCarAddedForCollision(EActiveRaceCarIndex leRaceCarIndex);
 
-        // ⛔⛔ @0x822E66A0 -- ADDED 2026-08-01 (drivable wave) AND IT WAS A LIVE DEFECT.
+        // @0x822E66A0 -- ADDED 2026-08-01 (drivable wave) AND IT WAS A LIVE DEFECT.
         // This interface embeds FIFTEEN EventQueues by value, every one of which needs its
         // mpEvents pointed at its own inline storage. Nothing in the PC tree ever called
         // this: RaceCarEntityModuleIO::OutputBuffer_PrePhysics::Construct was a base-only
@@ -162,18 +162,18 @@ namespace Vehicle
         // @0x82592FD0: hand-written copy assignment (Clear()+Append() per queue).
         VehicleInputInterface& operator=(const VehicleInputInterface& lrOther);
 
-        // ⭐ ADDED 2026-08-11 (triangle-cache wiring wave) -- THE LAST HOP OF THE CHAIN THAT
+        // THE LAST HOP OF THE CHAIN THAT
         // FEEDS EVERY VEHICLE LINE TEST. Real out-of-line X360 symbol @0x8279B978 (25 insns),
         // DWARF-declared at BrnVehicleInputInterface.h:171; body in the sibling .cpp.
         //
-        // ⚠️ NOTE WHAT DOES **NOT** CARRY IT: VehicleInputInterface::Append @0x823C87C0 is a
+        // NOTE WHAT DOES **NOT** CARRY IT: VehicleInputInterface::Append @0x823C87C0 is a
         // FOURTEEN-QUEUE merge that emits NO store for mTriangleCacheInterface (confirmed in
         // its asm -- the 14 `bl`s are all *Event_::Append). So the four world->physics bridges
         // that call Append never seed the cache; this dedicated entry point, driven once per
         // frame by WorldModule::BridgeSceneQueryResultsToPhysics @0x827A8FDC, is the only path.
         void AppendTriangleCacheInterface(const InTriangleCacheInterface* lpTriangleCacheInterface);
 
-        // ⭐ ADDED 2026-08-11 (triangle-cache wiring wave). DWARF-declared (BrnVehicleInputInterface.h,
+        // DWARF-declared (BrnVehicleInputInterface.h,
         // `void AddLineTestResult(OutEventLineTestNearestResult)` -- BY VALUE, and the console agrees:
         // BridgeSceneQueryResultsToPhysics copies the 64-byte event off the variable queue into a
         // stack temporary (`ld/std` x8 loop @0x827A8F74) before the call). No out-of-line symbol --
@@ -192,7 +192,7 @@ namespace Vehicle
         // out-of-line symbol), so host addressing stays layout-correct without the X360 byte offset.
         const InTriangleCacheInterface* GetTriangleCacheInterface() const { return &mTriangleCacheInterface; }
 
-        // ⭐ ADDED 2026-08-06 (UpdateVehiclePhysics wave). Both accessors are DWARF-attested
+        // Both accessors are DWARF-attested
         // (BrnVehicleInputInterface.h:186 GetLineTestResults / :216 GetImpactEventQueue); the
         // X360 inlines them as `this + 0` and `this + 141376` at the UpdateVehiclePhysics call
         // sites (asm 0x82645640 / 0x826452A0..B0). ADDITIVE header-only inlines -- host
@@ -200,7 +200,7 @@ namespace Vehicle
         const InLineTestResultQueue* GetLineTestResults() const { return &mLineTestResultsQueue; }
         const ImpactEventQueue*      GetImpactEventQueue() const { return &mImpactEventQueue; }
 
-        // ⭐ ADDED 2026-08-10 (create-path wave). Same ADDITIVE header-only inline as the two
+        // Same ADDITIVE header-only inline as the two
         // above: the X360 reaches this queue as a raw `this + 128032` -- the pair
         // `addis r3,r4,2 ; addi r3,r3,-0xBE0` at the head of
         // VehicleManager::ProcessCreateEvents @0x82616770, which then reads the length at
@@ -210,7 +210,7 @@ namespace Vehicle
         // the same member the console addresses, reached by name instead of by that offset.
         const CreateRaceCarEventQueue* GetCreateRaceCarEventQueue() const { return &mCreateRaceCarEventQueue; }
 
-        // ⭐ ADDED 2026-08-11 (create-drain wave). FOUR MORE OF THE SAME SHAPE -- every one is
+        // FOUR MORE OF THE SAME SHAPE -- every one is
         // DWARF-declared (BrnVehicleInputInterface.h:192 / :219 / :195 / :198 / :228), every one is
         // inlined by the X360 as a raw `this + <byte offset>` at the maintenance-arm drain that
         // reads it, and every offset below is that raw literal reproduced by NAME:
@@ -224,7 +224,7 @@ namespace Vehicle
         //                                                      (`addis r30,r28,2 ; addi r30,r30,0x2FC`)
         //   mNetworkCarsAddedRemovedForCollisionQueue +131928  RecordNetworkRaceCarsAddedForCollision
         //                                                      @0x825C7F08 (`addis r3,r31,2 ; addi r3,r3,0x358`)
-        // ⭐ THE FIVE LITERALS CROSS-CHECK THE WHOLE MEMBER RUN, which is why they are quoted: run
+        // THE FIVE LITERALS CROSS-CHECK THE WHOLE MEMBER RUN, which is why they are quoted: run
         // the declared element sizes forward from mCreateRaceCarEventQueue's attested +128032 and
         // every one of them is hit with ZERO slack:
         //   128032 + (16 + 8*160) = 129328   mRemoveRaceCarEventQueue
@@ -233,7 +233,7 @@ namespace Vehicle
         //          + (16 + 8*32)  = 131744   mSetRaceCarCollisionEventQueue
         //          + 92           = 131836   mSetRaceCarCullingGroupEventQueue   (12 + 10*8)
         //          + 92           = 131928   mNetworkCarsAddedRemovedForCollisionQueue
-        // ⚠️ CORRECTED 2026-08-11: the reset step used to read `(16 + 16*112) = 131216`, and every
+        // the reset step used to read `(16 + 16*112) = 131216`, and every
         // sum after it was mislabelled (131216 + 272 is 131488, not the attested 131472 -- the chain
         // did not close). sizeof(ResetVehicleEvent) on the console is **128, not 112**: u32 index (4)
         // + pad to the struct's own 16-byte alignment (16) + Matrix44Affine (64 -> 80) + two Vector3
@@ -245,7 +245,7 @@ namespace Vehicle
         // alignment and at +16 when it needs 16.)
         const RemoveRaceCarEventQueue*   GetRemoveRaceCarEvents() const   { return &mRemoveRaceCarEventQueue; }
 
-        // ⭐ [teleport] ADDED 2026-08-21 (gateui r9, the reset-drain wave). Same shape and the
+        // [teleport] ADDED 2026-08-21 (gateui r9, the reset-drain wave). Same shape and the
         // same derivation as the five above: DWARF-declared (BrnVehicleInputInterface.h, the
         // Get*Events run), no out-of-line X360 symbol, and inlined by the console at its ONE
         // consumer -- VehicleManager::ProcessResetEvents @0x82617820 opens with
@@ -268,7 +268,7 @@ namespace Vehicle
         {
             return &mNetworkCarsAddedRemovedForCollisionQueue;
         }
-        // ⭐ THE REMOVE QUEUE'S SEAT WAS DERIVED TWICE, 2026-08-11, by two independent waves reading
+        // THE REMOVE QUEUE'S SEAT WAS DERIVED TWICE, 2026-08-11, by two independent waves reading
         // the same three instructions -- and the cross-check caught an arithmetic slip. The second
         // wave quoted the same `addis r3,r4,2 ; addi r3,r3,-0x6D0 ; lwz r11,8(r3)` prologue but
         // evaluated it as +130352 (and as mCreateRaceCarEventQueue's +128032 plus a 2320-byte
@@ -278,7 +278,7 @@ namespace Vehicle
         // GetRemoveRaceCarEvents(), which is the DWARF's own spelling (:192). No second accessor
         // under a different name is added: one member, one attested name.
 
-        // ⭐ ADDED 2026-08-10 (pre-physics bridge wave). BOTH ARE DWARF-DECLARED, not invented:
+        // BOTH ARE DWARF-DECLARED, not invented:
         // DecFIGS BrnVehicleInputInterface.h:245 `const RaceCarBitArray* GetRaceCarsAddedForCollision() const`
         // and :252 `void SetRaceCarsAddedForCollision(const RaceCarBitArray*)`. Neither has an
         // out-of-line X360 symbol; the pair is inlined at the tail of
@@ -296,7 +296,7 @@ namespace Vehicle
             mRaceCarsAddedForCollision = *lpRaceCarsAddedForCollision;
         }
 
-        // ⭐ ADDED 2026-08-22 (wave T3 r1, C2 -- the physics-side create/remove drain). The three
+        // The three
         // TRAFFIC queue readers, DWARF-attested (BrnVehicleInputInterface.h:207 / :225 / :201) and
         // spelled with the DWARF's own names. Same shape as the race-car readers above: header
         // inlines with no out-of-line X360 symbol, folded at their call sites as a bare

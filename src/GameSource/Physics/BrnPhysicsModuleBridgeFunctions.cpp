@@ -23,7 +23,7 @@
 // ValidateSimulationContacts driver methods of BrnPhysics::PhysicsModule; each body below carries
 // its DWARF TU line).
 //
-// ⭐⭐ DE-FACADED 2026-08-06. This TU's previous revision reconstructed six of these bodies as RAW
+// DE-FACADED 2026-08-06. This TU's previous revision reconstructed six of these bodies as RAW
 // FREE FUNCTIONS over u8* ("FACADE MODEL": PhysicsModule_BridgeSimulationToOutput(u8*, ...)) --
 // no real caller could ever dispatch them, and a trial mount produced 18 LNK2019 against helper
 // facades no TU defines. Every type the slice touches is homed now (OutContactSpy / the
@@ -35,7 +35,7 @@
 //     module+0x2BE40 -> mVehicleManager.GetDiscardedContacts()
 //     contactData+0x00000/0x070A0/0x106C0/0x167E0 + run lists -> the typed queue/run-list members
 //
-// ⚠️⚠️ TWO FACADE MISREADINGS CORRECTED AGAINST THE ASM (dossier bridge_dossier.txt, re-read):
+// TWO FACADE MISREADINGS CORRECTED AGAINST THE ASM (dossier bridge_dossier.txt, re-read):
 //   * ProcessContactSpy stores EVERY surviving contact TWICE -- the id-assert paths and the
 //     deformation-fixup paths all fall into the same store/swap/store tail (0x825AB87C..0x825AB958,
 //     no branch between) -- the facade emitted the second store only for the deformable paths.
@@ -61,7 +61,7 @@ namespace BrnPhysics
     namespace
     {
         // The entity-type-owner histogram width baked into CheckContactQueueSize @0x825A1100
-        // (`li r9, 0x23` loop bound + the two `cmplwi ..., 0x23` bound asserts). ⚠️ FLAGGED
+        // (`li r9, 0x23` loop bound + the two `cmplwi ..., 0x23` bound asserts). FLAGGED
         // DISCREPANCY, carried not smoothed: the assert strings spell it
         // "BrnWorld::E_ENTITYTYPE_COUNT", but the DecFIGS (PS3) DWARF enum pins
         // E_ENTITYTYPE_COUNT == 34 (the committed BrnEntityTypes.h). The X360 image bakes 35 in
@@ -488,7 +488,7 @@ namespace BrnPhysics
         {
             const InAddPotentialContact& lrContactEvent = lpContactQueue->GetEvent(liIndex);
 
-            // ⚠️ Host bounds guard on the increments (the console's rlwinm masks the bucket to
+            // Host bounds guard on the increments (the console's rlwinm masks the bucket to
             // (owner & 0xFF)*4 and writes whatever stack byte that hits when the tripwire above
             // has already fired; the host skips the out-of-bounds write instead -- diagnostics
             // only, nothing live changes).
@@ -943,7 +943,7 @@ namespace BrnPhysics
     // GATE (2026-08-06 big-five #2 wave) -- the REAL body (484 X360 asm lines; PS3 DecFIGS
     // 0x699594, same TU) is NOT reconstructed. Reached every frame from BridgeContactsToSimulation
     // (Update @0x825B0640 is real); the one-shot log below is the gate.
-    // ⚠ SCOPE (wave 4, 2026-08-23): its queue is EMPTY BY CONSTRUCTION. No create path -- console or
+    // SCOPE (wave 4, 2026-08-23): its queue is EMPTY BY CONSTRUCTION. No create path -- console or
     // host -- ever allocates an E_PHYSICAL_TRAFFIC_TYPE_SIMPLE slot (GetFreeTrafficVehicleWithPhysics
     // @0x82637608 has no simple arm), so this gate drops nothing. Not a crash-into-traffic blocker.
     // =================================================================================================
@@ -968,7 +968,7 @@ namespace BrnPhysics
     }
 
     // =================================================================================================
-    // ⭐ THE THREE REMAINING UPDATE BRIDGES -- landed 2026-08-09 (conductor wave), full bodies.
+    // THE THREE REMAINING UPDATE BRIDGES -- landed 2026-08-09 (conductor wave), full bodies.
     // =================================================================================================
 
     // BrnPhysics::PhysicsModule::BridgeUpdatedVehiclesToSimulation @0x825ADEA8 (45 insns;
@@ -1009,7 +1009,7 @@ namespace BrnPhysics
         CGS_ASSERT(lpSimModuleInputBuffer != 0, "lpSimModuleInputBuffer != NULL");   // :993
         CGS_ASSERT(lpVehManagerOutputBuffer != 0, "lpVehManagerOutputBuffer != NULL"); // :994
 
-        // ⚠ FLAG (const seam, deliberate): the console reads the queues through the
+        // FLAG (const seam, deliberate): the console reads the queues through the
         // READ-locked buffer's const request interface (accessor @0x825A0FB0), yet the three
         // sim Append*Queue templates were committed with NON-const source params (their own
         // mangle note). Append only reads the source (BaseEventQueue<T>::Append takes const&),
@@ -1025,10 +1025,10 @@ namespace BrnPhysics
 
     // =================================================================================================
     // BrnPhysics::PhysicsModule::BridgeVehicleManagerToSimulation_PostScene @0x825AB408 (52 insns)
-    // ⭐⭐ THE SIM FIREWALL -- LANDED 2026-08-11 (prepare-chain wave); its BrnPhysicsConductorGates
+    // THE SIM FIREWALL -- LANDED 2026-08-11 (prepare-chain wave); its BrnPhysicsConductorGates
     // .cpp boot gate is DELETED in the same commit (LNK2005 is the tripwire if it ever comes back).
     //
-    // ⛔ THE GATE'S PRECONDITION IS SATISFIED, CHECKED RATHER THAN ASSUMED. The gate banner said
+    // THE GATE'S PRECONDITION IS SATISFIED, CHECKED RATHER THAN ASSUMED. The gate banner said
     // "DO NOT LAND THIS UNTIL THE TRACTION-LINE CHAIN IS CLOSED -- a body that enters the simulation
     // before the wheels can find the road falls forever." Both halves of that lifetime are now real
     // bodies in BrnVehicleManager_TractionLineTests.cpp: StartVehicleTractionLineTests @0x82629CE0
@@ -1044,14 +1044,14 @@ namespace BrnPhysics
     //     AppendAddJointQueue       <10>(simIn, vehOut + 39904)  == mAddJointQueue
     //     AppendRemoveJointQueue    <10>(simIn, vehOut + 41840)  == mRemoveJointQueue
     //
-    // ⚠ FLAG (call-count, behaviour-free): the console re-issues `BrnPhysics::Vehicle::
+    // FLAG (call-count, behaviour-free): the console re-issues `BrnPhysics::Vehicle::
     // VehicleManagerOut` (@0x825A0FB0 -- the read-lock tripwire that returns `buffer + 16`) ONCE PER
     // APPEND, four times. The already-committed sibling BridgeVehicleManagerToSimulation_PostPhysics
     // @0x825ADF60 has the identical shape (three calls) and hoists it into one local; that precedent
     // is followed here so the two bodies read the same. The accessor has no side effect other than
     // the "Not locked for reading" assert, so the collapse is behaviour-free.
     //
-    // ⚠ FLAG (const seam): identical to the PostPhysics sibling's -- the console reads the queues
+    // FLAG (const seam): identical to the PostPhysics sibling's -- the console reads the queues
     // through the const request interface while two of the four sim Append*Queue templates were
     // committed with NON-const source params. Append only reads the source, so the const_casts are
     // behaviour-free; reconcile the template params at their own wave.

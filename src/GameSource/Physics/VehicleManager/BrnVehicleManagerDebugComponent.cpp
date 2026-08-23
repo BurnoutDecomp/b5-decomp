@@ -150,7 +150,7 @@ namespace Vehicle
     // ========================================================================================
     // Layout pins. Never called.
     //
-    // ⚠️ These are written as RELATIVE deltas, not absolute offsets, because two members widen
+    // These are written as RELATIVE deltas, not absolute offsets, because two members widen
     // on x64 (the base's vtable pointer and mpVehicleManager) and shift everything after them.
     // Every delta below IS X360-identical, and every number is asm-literal:
     //   * the head deltas are the byte gaps between the asm's own store targets;
@@ -182,7 +182,7 @@ namespace Vehicle
 
         // ---- the pointer-free tail, anchored at mPlayerCarContactPosition (X360 +480) ----------
         const size_t KI_HEAD = offsetof(V, mPlayerCarContactPosition);
-        // ⚠️ The head->tail bridge is the ONE delta that is not ABI-invariant: on X360 it is
+        // The head->tail bridge is the ONE delta that is not ABI-invariant: on X360 it is
         // 480 - 476 == 4, but on x64 the widened base vptr + mpVehicleManager push the three
         // gates to a different residue and the 16-aligned Vector3 lands 16 bytes later. What IS
         // invariant -- and what the X360 +480 attests -- is that the contact readout opens a
@@ -247,7 +247,7 @@ namespace Vehicle
         static_assert(offsetof(V, maStuckInCollisionLineTestPoint) - KI_HEAD == 736, "X360 +1216 == r9 + 64");
         static_assert(offsetof(V, mabStuckInCollisionIntersection) - KI_HEAD == 800, "X360 +1280 == r27");
 
-        // ⚠️ sizeof() ALONE CANNOT PIN THE LAST MEMBER. Growing mabStuckInCollisionIntersection
+        // sizeof() ALONE CANNOT PIN THE LAST MEMBER. Growing mabStuckInCollisionIntersection
         // from 4 to 8 bytes leaves sizeof(V) at 1296 (the 16-byte tail padding absorbs it), and a
         // tamper test caught exactly that: the sizeof assert below MISSED the wrong array count.
         // The end-of-DATA pin is what catches it -- 1284 - 480 == 804, the loop's own trip count.

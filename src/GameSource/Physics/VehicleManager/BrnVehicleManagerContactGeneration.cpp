@@ -1,47 +1,15 @@
 // ============================================================================
 // GameSource/Physics/VehicleManager/BrnVehicleManagerContactGeneration.cpp
 //
-// BrnPhysics::Vehicle::VehicleManager -- the per-frame vehicle contact-generation driver
-// (big-five #2 wave, 2026-08-06). Home TU per the body's OWN baked assert path
+// BrnPhysics::Vehicle::VehicleManager -- the per-frame vehicle contact-generation driver.
+// Home TU per the body's OWN baked assert path
 // ("...gamesource\unity\../Physics/VehicleManager/BrnVehicleManagerContactGeneration.cpp") and
 // the DecFIGS dwarfdump TU listing.
 //
-// This slice: StartVehicleContactGeneration @0x8262AEE8 (~1228 insns) -- the second of the
-// big-five pair. Reconstructed from the BURNOUT_X360_ARTIST.XEX asm with the PS3 DecFIGS
-// out-of-line build @0x78A754 as the structural oracle (its mangle is the signature
-// authority; it keeps the accessors the X360 inlines out-of-line).
-//
-// Caller: PhysicsModule::Update @0x825B0640 is a REAL BODY (BrnPhysicsModuleUpdateFunctions.cpp,
-// mounted) and it DRIVES THIS TU EVERY NON-CATCHUP FRAME. Everything in here is reachable at
-// runtime; this is not a closure-enforcement mount. (This banner said "STILL A LINK STUB" for
-// several waves after the caller landed -- gotcha 9 + gotcha 10, and it is why the wave-Q7
-// car-car witness looked unreachable to readers.)
-//
-// ⭐⭐ Callee state (2026-08-14 walls leg 1): DoRaceCarWorldContactGeneration @0x825EB140 is
-// REAL (its log-once gate deleted) and the collide-stream family behind it is REAL
-// (CgsCollisionGenerator_CollideStreams.cpp) — one sphere/swept command per live car per frame
-// now flows into ContactGeneratorJob::Execute, where the type-6/14 workers are LOUD NAMED
-// GATES until the sphere-vs-Triangle4 contact kernels land.
-//
-// ⭐⭐ 2026-08-22 (wave T3, cluster C5): DoTrafficCarWorldContactGeneration @0x8261BF28 (226)
-// IS REAL -- the entry that stood here calling it a trap is gone with it (the export hole was
-// closed by the wave-T3 scout). Its SWEPT arm is one named gate; see the body. NEW in this TU:
-// DoTrafficWorldContactOrdering @0x825C8F18, whose home this file is (its own baked assert
-// __FILE__ strings say so, :1458/:1475/:1476/:1493/:1494).
-//
-// ⭐⭐ 2026-08-19 (wave Q7, cluster `carcar`): DoCarCarContactGeneration @0x8261BB38 (251) IS REAL
-// and its log-once gate is DELETED. The entry that stood in the list above ("250 asm / 15 callees;
-// PS3 0x75C0C8 — log-once gate") went with it: a banner that still calls a landed body a gate is
-// this campaign's most repeated defect. Its sphere-sphere arm is complete end to end — its poster
-// AddSphereListWithSphereListToStream @0x828119F0 landed with it, in
-// CgsCollisionGenerator_CollideStreams.cpp — so the sphere-sphere collide stream carries real
-// commands for the first time. ⭐ Its SIMPLE-TRAFFIC arm is REAL as of wave T3 (2026-08-22): the
-// gate's blocker -- "GetSimpleVehicleBox @0x82602A20 has no body in the tree" -- stopped being
-// true at 8ea763bc; the arm needed no reconstruction, only the stale banner deleted.
-// ⭐⭐ 2026-08-14 (walls leg 3): EndVehicleContactGeneration @0x8261AC38 + AddContactResultsToQueue
-// @0x825EB350 (THE HARVEST) + DoRaceCarWorldContactValidation @0x825EB6C8 are REAL in this TU;
-// ValidateRaceCarWorldContact @0x825C6088 is REAL in the _ValidateRaceCarWorldContact slice.
-// (IsRaceCarHidden @0x825C2EA0 is REAL since 2026-08-11 — see the note at the foot of this TU.)
+// Entry: StartVehicleContactGeneration @0x8262AEE8 (~1228 insns), reconstructed from the
+// BURNOUT_X360_ARTIST.XEX asm with the PS3 DecFIGS out-of-line build @0x78A754 as the structural
+// oracle (its mangle is the signature authority; it keeps the accessors the X360 inlines
+// out-of-line). Driven every non-catchup frame by PhysicsModule::Update @0x825B0640.
 // ============================================================================
 
 #include "GameSource/Physics/VehicleManager/BrnVehicleManager.h"
@@ -88,8 +56,7 @@ namespace Vehicle
         // The stream-producer command capacity (`li 100` at the three Create* calls) and the
         // CollidePrimitivePairList arguments (`li 200 ; li 11 ; li 0`).
         //
-        // ⚠️ THE LAST TWO ARE USER TAGS, NOT A FLAG WORD (renamed wave Q7, 2026-08-19; they used to
-        // be spelled as a "flags" word and a single "tag"). CollidePrimitivePairList's third and fourth
+        // THE LAST TWO ARE USER TAGS, NOT A FLAG WORD. CollidePrimitivePairList's third and fourth
         // parameters are `luUserTagA` (u32) and `lu16UserTagB` (u16) -- the DWARF's own names --
         // and it passes them STRAIGHT THROUGH to PrepareNewPrimitiveTestResultsList, which stores
         // them into the CollisionResultList header as the caller's tags. Nothing in the tree reads
@@ -100,15 +67,13 @@ namespace Vehicle
         const u32 KU_COLLIDE_USER_TAG_A       = 11;    // luUserTagA -- the baked `li r5, 11`
         const u16 KU16_COLLIDE_USER_TAG_B     = 0;     // lu16UserTagB -- the baked `li r6, 0`
 
-        // ⭐ 2026-08-14 (walls leg 1): DoRaceCarWorldContactGeneration's two contact-padding
-        // floats, image-read this wave (x360rd): flt_82001D9C == 2.0f rides the in-place sphere
-        // pass, flt_82001DA0 == 0.5f the swept (continuous) pass. Both go to the poster's f1 and
-        // land in StreamCommand::mfPadding.
+        // DoRaceCarWorldContactGeneration's two contact-padding floats, image-read (x360rd):
+        // flt_82001D9C == 2.0f rides the in-place sphere pass, flt_82001DA0 == 0.5f the swept
+        // (continuous) pass. Both go to the poster's f1 and land in StreamCommand::mfPadding.
         const f32 KF_SPHERE_TRIANGLE_CONTACT_PADDING       = 2.0f;   // flt_82001D9C
         const f32 KF_SWEPT_SPHERE_TRIANGLE_CONTACT_PADDING = 0.5f;   // flt_82001DA0
 
-        // ⭐ 2026-08-19 (wave Q7, cluster `carcar`): DoCarCarContactGeneration's constants.
-        // The float is the SAME rodata word flt_82001DA0 (0.5f) the swept padding above reads --
+        // DoCarCarContactGeneration's constants. The float is the SAME rodata word flt_82001DA0 (0.5f) the swept padding above reads --
         // one literal in the image, several roles, so each role gets its own name rather than one
         // name that would be a lie at the other sites. (The gated simple-traffic arm reads the
         // same word a third time, as AddPrimitivePair's f1; no constant is minted for it until
@@ -131,7 +96,7 @@ namespace Vehicle
         // rebuilds the contact's VolumeInstanceIds.
         const u8 KU8_CARCAR_VOL_INST_OFFSET      = 1;
 
-        // ⭐ 2026-08-22 (wave T3, cluster C5). DoCarCarContactGeneration's SIMPLE arm padding --
+        // DoCarCarContactGeneration's SIMPLE arm padding --
         // flt_82001DA0 a third time (`lfs f1` @0x8261BF10), its own name per the note above.
         const f32 KF_SIMPLE_TRAFFIC_CONTACT_PADDING = 0.5f;
 
@@ -213,20 +178,9 @@ namespace Vehicle
         mpSphereSphereStreamProducer =
             mpContactGenerator->CreateCollideSphereListWithSphereListStream(KI_STREAM_MAX_COMMANDS); // +172520
 
-        // ---- [T4-drop] counters. NOT IN THE X360 BINARY. BRN_TRAFFIC_DIAG. DELETE-WHEN-STABLE. ---
-        // The decisive negative witness for wave 4: it splits "traffic has no collision volume,
-        // so the scene never emits a pair" (all zero) from "pairs arrive but every traffic half
-        // is unpromoted, so the 127 fixup eats them" (pairs != 0, dropped == pairs).
-        s32 liDiagPairsTotal      = 0;   // every pair the scene published this frame
-        s32 liDiagTrafficPairs    = 0;   // car-car pairs with at least one TRAFFIC half
-        s32 liDiagTrafficDropped  = 0;   // ...of those, dropped at the global->physical 127 fixup
-        s32 liDiagQueue8Pairs     = 0;   // ...of those, race-car-vs-traffic that reached queue [8]
-
         // ---- (3) the overlap-pair walk ----------------------------------------------------------
         for (s32 liPair = 0; liPair < lpOverlapPairs->GetLength(); ++liPair)
         {
-            ++liDiagPairsTotal;   // [T4-drop] DIAG
-
             const OutOverlapPair& lrPair = lpOverlapPairs->GetEvent(liPair);
 
             const u64 luIdA64  = lrPair.muVolumeInstanceIdA.muId;
@@ -248,11 +202,6 @@ namespace Vehicle
                 u64 luQwB        = luIdB64;
                 u16 lu16QueueIdx = 7;         // racecar-racecar unless rewritten below
 
-                if (luOwnerA == 2u || luOwnerB == 2u)
-                {
-                    ++liDiagTrafficPairs;     // [T4-drop] DIAG
-                }
-
                 // Traffic A: global -> physical (127 == unmapped, skip the pair).
                 if (luOwnerA == 2u)
                 {
@@ -263,7 +212,6 @@ namespace Vehicle
                         mPhysicalTrafficManager.mu8GlobalToPhysicalEntityIndexMap[luIndex];
                     if (lu8Physical == 127u)
                     {
-                        ++liDiagTrafficDropped;   // [T4-drop] DIAG
                         continue;
                     }
                     luPhysA = (static_cast<u32>(lu8Physical) << 10) | 0x02000000u;
@@ -279,7 +227,6 @@ namespace Vehicle
                         mPhysicalTrafficManager.mu8GlobalToPhysicalEntityIndexMap[luIndex];
                     if (lu8Physical == 127u)
                     {
-                        ++liDiagTrafficDropped;   // [T4-drop] DIAG
                         continue;
                     }
                     luPhysB = (static_cast<u32>(lu8Physical) << 10) | 0x02000000u;
@@ -336,16 +283,6 @@ namespace Vehicle
                     {
                         continue;
                     }
-                }
-
-                // ⭐ The trap that used to be documented here is GONE (wave T3, 2026-08-22):
-                // AddHingedBodyPartPairs @0x82605A98 -- called unconditionally for EVERY
-                // overlapping pair -- and AddRaceCarBodyPartPair @0x82605928 are REAL bodies in
-                // BrnDeformationManager_ContactBridges.cpp. AddRaceCarWheelPair @0x82605BE8 is
-                // still a NAMED GATE there (one missing cylinder-vs-box appender).
-                if (lu16QueueIdx == 8)
-                {
-                    ++liDiagQueue8Pairs;   // [T4-drop] DIAG
                 }
 
                 DoCarCarContactGeneration(CgsSceneManager::EntityId(static_cast<u32>(luQwA >> 32)),
@@ -432,49 +369,6 @@ namespace Vehicle
             // any other owner pairing: dropped, exactly as the console falls through
         }
 
-        // ---- [T4-drop] the wave-4 split line ---------------------------------------------------
-        // [DIAG] NOT IN THE X360 BINARY. Opt-in (BRN_TRAFFIC_DIAG). Latched on the traffic tuple
-        // AND on a NEW HIGH-WATER MARK of the total pair count -- the raw total changes almost
-        // every frame, so latching on it verbatim would spam, but latching only on the traffic
-        // fields froze the line at the pre-gameplay frame ("pairs=0" printed once, 60 s before
-        // the car drove, reading as "the scene publishes no pairs at all"). pairsMax is monotone,
-        // so a reader can always tell an empty scene from a busy one. Reading it:
-        //   pairsMax=0                     -> the scene published no overlap pair AT ALL (look
-        //                                     upstream of the physics module entirely).
-        //   traffic=0                      -> no traffic half in ANY pair: the scene has no
-        //                                     traffic collision volume (gate 1, UpdateCollidableVehicles).
-        //   traffic>0 && dropped==traffic  -> pairs arrive but nothing was promoted (gate 2,
-        //                                     BuildPotentialCollisionList / HandleHalfPotentialContact).
-        //   q8>0                           -> a race-car-vs-traffic pair reached custom queue [8];
-        //                                     the ram is live from here on.
-        // DELETE-WHEN-STABLE.
-        {
-            static const bool sbT4Diag = (getenv("BRN_TRAFFIC_DIAG") != 0);
-            static s32        siLastTraffic = -1;
-            static s32        siLastDropped = -1;
-            static s32        siLastQueue8  = -1;
-            static s32        siMaxPairs    = -1;
-            const bool lbNewPairMax = (liDiagPairsTotal > siMaxPairs);
-            if (sbT4Diag && CgsDev::Log::gpDebugPrint != 0
-                && (lbNewPairMax
-                    || liDiagTrafficPairs != siLastTraffic
-                    || liDiagTrafficDropped != siLastDropped
-                    || liDiagQueue8Pairs != siLastQueue8))
-            {
-                if (lbNewPairMax) siMaxPairs = liDiagPairsTotal;
-                siLastTraffic = liDiagTrafficPairs;
-                siLastDropped = liDiagTrafficDropped;
-                siLastQueue8  = liDiagQueue8Pairs;
-                *CgsDev::Log::gpDebugPrint
-                    << "[T4-drop] overlap pairs=" << liDiagPairsTotal
-                    << " pairsMax=" << siMaxPairs
-                    << " withTrafficHalf=" << liDiagTrafficPairs
-                    << " droppedAt127=" << liDiagTrafficDropped
-                    << " reachedQueue8=" << liDiagQueue8Pairs
-                    << "\n";
-            }
-        }
-
         // ---- (4) the two simple-traffic pair lists + the triangle-cache streams -----------------
         if (mTrafficSimpleTrafficPrimPairBuilder.GetNumTests() != 0)                             // +172558
         {
@@ -507,17 +401,13 @@ namespace Vehicle
 
             const s32 liModelIndex = lpDeformationManager->FindModelIndexByEntityID(
                 EntityId{ (static_cast<u32>(liCar) << 10) | 0x01000000u });
-            // ⚠️ [FLAG PC bring-up] the console CGS_ASSERT(liModelIndex != -1, "liIndex != -1")
-            // (BrnDeformationManager.h:560) is DEGRADED to the log-once below (conductor,
-            // 2026-08-11, create-drain wave: with the first live car it fired per frame, 178 halts
-            // in 80 s, because the model table was then permanently -1).
-            // ⭐ BANNER CORRECTED 2026-08-23 (wave 4, cluster B): the reason given here -- "Process-
-            // AddDeformationModelEvents lives in the UNMOUNTED BrnDeformationManager.cpp" -- IS NO
-            // LONGER TRUE. That TU is mounted (build_game_exe.bat) and the drain is bodied and
-            // keyed correctly by the HANDLING BODY id (BrnDeformationManager.cpp:310, the wave-3
-            // r3 fix). So this line firing now means a genuinely UNREGISTERED car, not an expected
-            // bring-up state -- and it matters to the ram: the same table feeds GetSpheresForCar,
-            // whose null result trips DoCarCarContactGeneration's :877/:878 (see [T4-spheres]).
+            // [FLAG PC bring-up] the console CGS_ASSERT(liModelIndex != -1, "liIndex != -1")
+            // (BrnDeformationManager.h:560) is DEGRADED to the log-once below: with the first
+            // live car it fired per frame (178 halts in 80 s) while the model table was
+            // permanently -1. ProcessAddDeformationModelEvents is now mounted and keyed by the
+            // HANDLING BODY id (BrnDeformationManager.cpp:310), so this line firing means a
+            // genuinely UNREGISTERED car -- the same table feeds GetSpheresForCar, whose null
+            // result trips DoCarCarContactGeneration's :877/:878.
             // RESTORE the console assert once a boot shows this line silent.
             if (liModelIndex == -1)
             {
@@ -562,10 +452,6 @@ namespace Vehicle
         }
 
         // ---- (5) begin the three producers, kick the three collide jobs -------------------------
-        // ⭐ 2026-08-14 (walls leg 1): the PC-BUILD GUARD that sat here since the conductor wave
-        // (2026-08-09) is DELETED per its own instruction ("Delete with the stream family") --
-        // the three CreateCollide*Stream factories are REAL now
-        // (CgsCollisionGenerator_CollideStreams.cpp) and assert rather than return null.
         mpSphereTriangleStreamProducer->Begin();        // the three inlined Begin bodies
         mpSweptSphereTriangleStreamProducer->Begin();   // (see CgsSimpleDataStreamProducer_Begin.cpp)
         mpSphereSphereStreamProducer->Begin();
@@ -579,8 +465,7 @@ namespace Vehicle
     }
 
     // ==============================================================================================
-    // ⭐⭐ DoCarCarContactGeneration @0x8261BB38 (251) — REAL as of wave Q7 (2026-08-19).
-    // THE LOG-ONCE GATE THAT WAS HERE ("car-car contacts NOT generated") IS DELETED.
+    // DoCarCarContactGeneration @0x8261BB38 (251).
     // PS3 DecFIGS 0x75C0C8 (its mangle is the signature authority; the DWARF also names every
     // local this body uses: lpSpheresA/B, liNumSpheresA/B, lfPadding, lVelocityCarA/B,
     // lbAIsSimpleTraffic/lbBIsSimpleTraffic, lpSimplePhysicsA/B).
@@ -592,12 +477,10 @@ namespace Vehicle
     //     both cars' deformation spheres MINUS THE LAST FOUR, then mark the pair in the
     //     contact-gen list so the harvest (AddContactResultsToQueue) knows an entry exists for it.
     //   * EITHER simple — box-vs-box into one of the two simple-traffic pair builders, which
-    //     StartVehicleContactGeneration collides at the end of its overlap walk. NOT gated: the
-    //     arm is real since wave T3 (GetSimpleVehicleBox @0x82602A20 has a body,
-    //     BrnSimpleVehiclePhysics.cpp:793) and both end-of-walk drains are live. Wave 4 confirmed
-    //     it is also UNREACHABLE by construction: the create path never allocates a SIMPLE slot.
+    //     StartVehicleContactGeneration collides at the end of its overlap walk. Real, but
+    //     UNREACHABLE by construction: the create path never allocates a SIMPLE slot.
     //
-    // ⚠️⚠️ ARGUMENT ORDER IS THE CONSOLE'S, AND THE SLOTS LOOK WRONG AT A GLANCE (gotcha 3).
+    // ARGUMENT ORDER IS THE CONSOLE'S, AND THE SLOTS LOOK WRONG AT A GLANCE (gotcha 3).
     // The X360 reads the stream producer as `lwz r10, arg_54` and the queue id as
     // `lhz r8, arg_5E` — a 10-byte gap that reads like a skipped parameter. It is not: the
     // Xbox 360 parameter save area uses 8-BYTE doubleword slots with the value RIGHT-JUSTIFIED
@@ -626,7 +509,7 @@ namespace Vehicle
     //               AddPrimitivePair(boxA, boxB, 0.5f, indexA, indexB) into the builder the
     //               owner byte selects (+172564 race-car-vs-simple, +172552 traffic-vs-simple)
     //
-    // ⭐ WHAT THIS CHANGES AT RUNTIME, PLAINLY: the sphere-sphere collide stream carried ZERO
+    // WHAT THIS CHANGES AT RUNTIME, PLAINLY: the sphere-sphere collide stream carried ZERO
     // commands for the whole campaign because this producer was a gate. It now carries one per
     // overlapping car pair per frame, so RunCollideSphereListWithSphereListStream stops
     // early-returning null and the type-8 worker actually runs. Nothing else in the chain moved.
@@ -685,26 +568,6 @@ namespace Vehicle
                 EntityId{ static_cast<u32>(lCarPhysicsIdA) }, &lpSpheresA);
             const s32 liNumSpheresB = lpDefMan->GetSpheresForCar(
                 EntityId{ static_cast<u32>(lCarPhysicsIdB) }, &lpSpheresB);
-            // ---- [T4-spheres] the assert's cause, named BEFORE it fires -----------------------
-            // [DIAG] NOT IN THE X360 BINARY. Opt-in (BRN_TRAFFIC_DIAG), one-shot. A freshly
-            // promoted traffic car whose AddDeformationModel event has not been drained yet has
-            // no model, GetSpheresForCar returns -1 and leaves the out pointer null, and :877/:878
-            // fire. On the console the model is always registered first. DELETE-WHEN-STABLE.
-            if (lpSpheresA == 0 || lpSpheresB == 0)
-            {
-                static const bool sbT4Diag  = (getenv("BRN_TRAFFIC_DIAG") != 0);
-                static bool       sbReported = false;
-                if (sbT4Diag && !sbReported && CgsDev::Log::gpDebugPrint != 0)
-                {
-                    sbReported = true;
-                    *CgsDev::Log::gpDebugPrint
-                        << "[T4-spheres] no deformation model for a car-car pair: A=" << CgsDev::E_PRINTMODE_HEXONCE
-                        << static_cast<u32>(lCarPhysicsIdA) << " nA=" << liNumSpheresA
-                        << " B=" << CgsDev::E_PRINTMODE_HEXONCE << static_cast<u32>(lCarPhysicsIdB) << " nB=" << liNumSpheresB
-                        << " queue=" << static_cast<s32>(lu16QueueID) << "\n";
-                }
-            }
-
             CGS_ASSERT(lpSpheresA != nullptr, "lpSpheresA");                                  // :877
             CGS_ASSERT(lpSpheresB != nullptr, "lpSpheresB");                                  // :878
 
@@ -718,26 +581,6 @@ namespace Vehicle
                 const_cast<CgsGeometric::Sphere*>(lpSpheresB));
             lSphereListB.miNumSpheres = liNumSpheresB - KI_NUM_APPENDED_WHEEL_SPHERES;
 
-            // ---- [T4-normal] the sphere-count witness for the same hop ---------------------
-            // [DIAG] NOT IN THE X360 BINARY. Opt-in, value-latched per queue. The worker masks
-            // both counts to u16, so a car whose deformation model carries <= 4 spheres would
-            // walk 65532+ garbage spheres and hand back garbage normals. DELETE-WHEN-STABLE.
-            {
-                static const bool sbT4Diag = (getenv("BRN_TRAFFIC_DIAG") != 0);
-                static s32        siLastA  = -9999;
-                static s32        siLastB  = -9999;
-                if (sbT4Diag && CgsDev::Log::gpDebugPrint != 0
-                    && (lSphereListA.miNumSpheres != siLastA || lSphereListB.miNumSpheres != siLastB))
-                {
-                    siLastA = lSphereListA.miNumSpheres;
-                    siLastB = lSphereListB.miNumSpheres;
-                    *CgsDev::Log::gpDebugPrint
-                        << "[T4-normal] car-car sphere lists: queue=" << static_cast<s32>(lu16QueueID)
-                        << " rawA=" << liNumSpheresA << " rawB=" << liNumSpheresB
-                        << " testedA=" << siLastA << " testedB=" << siLastB << "\n";
-                }
-            }
-
             // The contact padding is HOW FAR THE TWO CARS CLOSE ON EACH OTHER THIS STEP: the
             // relative-velocity magnitude times the step, so a fast approach fattens the spheres
             // enough that the pair is not missed between frames. Floored at 0.5f.
@@ -747,7 +590,7 @@ namespace Vehicle
                 rw::math::vpu::Magnitude(lVelocityCarB - lVelocityCarA) * lfTimeStep;
 
             // 0x8261BDA4  fsubs f12, 0.5f, f13 ; fsel f1, f12, 0.5f, f13.
-            // ⚠️ NaN POLARITY (gotcha 4): `fsel` takes the FALSE arm for a NaN condition, so a
+            // NaN POLARITY (gotcha 4): `fsel` takes the FALSE arm for a NaN condition, so a
             // NaN padding must survive as NaN. Spelled as the subtraction test rather than
             // `lfPadding > 0.5f ? lfPadding : 0.5f`, which would silently return 0.5f on NaN.
             if ((KF_MIN_CARCAR_CONTACT_PADDING - lfPadding) >= 0.0f)
@@ -791,13 +634,6 @@ namespace Vehicle
         else
         {
             // ---- the SIMPLE-TRAFFIC arm (0x8261BDD4..0x8261BF14) --------------------------------
-            // ⭐⭐ RESTORED 2026-08-22 (wave T3, cluster C5). The log-once gate that stood here is
-            // DELETED with the banner it rested on: that banner said SimpleVehiclePhysics::
-            // GetSimpleVehicleBox @0x82602A20 was "declared-only ... with NO definition anywhere in
-            // the tree". True on 2026-08-19, FALSE since 8ea763bc -- it is bodied and mounted at
-            // BrnSimpleVehiclePhysics.cpp:793, signature `void GetSimpleVehicleBox(CgsGeometric::Box&)
-            // const`. NOTHING ELSE in this arm was ever missing; no reconstruction was needed.
-            //
             // Box-vs-box into the builder the A-side owner selects (both are Prepared every frame by
             // StartVehicleContactGeneration and collided at the end of its walk):
             //   owner A == RACECAR -> +172564 mRaceCarSimpleTrafficPrimPairBuilder (`addi r3,r3,-0x5DEC`)
@@ -829,19 +665,16 @@ namespace Vehicle
     }
 
     // ==============================================================================================
-    // ⭐⭐ DoRaceCarWorldContactGeneration @0x825EB140 (131) — REAL as of walls leg 1 (2026-08-14).
-    // THE GATE THAT WAS HERE (log-once, "world contacts NOT generated") IS DELETED.
+    // DoRaceCarWorldContactGeneration @0x825EB140 (131).
     //
     // One live unfrozen race car per call, per frame: take the car's window into the triangle
-    // cache, take its deformation spheres from the LIVE model table (the mount the previous wave
-    // landed), and post ONE sphere-list-vs-triangle-list command into this frame's collide
-    // stream — swept (continuous) spheres when the car is fast enough (IsUsingSweptSpheres),
-    // in-place spheres otherwise. Then mark the car in the contact-gen list so the harvest
-    // (EndVehicleContactGeneration, REAL as of walls leg 3) knows a world entry exists for it.
+    // cache, take its deformation spheres from the live model table, and post ONE
+    // sphere-list-vs-triangle-list command into this frame's collide stream — swept (continuous)
+    // spheres when the car is fast enough (IsUsingSweptSpheres), in-place spheres otherwise. Then
+    // mark the car in the contact-gen list so EndVehicleContactGeneration's harvest knows a world
+    // entry exists for it.
     //
-    // The asm, top to bottom (every callee LANDED as of this wave — the queries were sliced to
-    // the mounted BrnDeformationManager_ContactQueries.cpp, GetSpheresForCar lifted from its
-    // export hole, the posters written in CgsCollisionGenerator_CollideStreams.cpp):
+    // The asm, top to bottom:
     //   0x825EB168  index < 0x4000 tripwire            (the inlined EntityId build, CgsEntityId.h:116)
     //   0x825EB190  interface GetCache (inlined: assert "mpTriangleCacheManager != NULL" + forward)
     //   0x825EB1DC  GetNumCachedTriangleBatches
@@ -857,7 +690,7 @@ namespace Vehicle
     //   0x825EB344  ContactGenList::AddEntry(EntityId{0}, EntityId{car}, 0, 1)  (@0x825B59B0 —
     //               the WORLD marker entry: side A owner 0 == E_ENTITYTYPE_WORLD)
     //
-    // ⭐ WHAT THIS CHANGES AT RUNTIME, STATED PLAINLY: commands now FLOW — one per live car per
+    // WHAT THIS CHANGES AT RUNTIME, STATED PLAINLY: commands now FLOW — one per live car per
     // frame — and the Run* dispatcher drains them into ContactGeneratorJob::Execute, where case 6
     // (ExecuteSphereListWithTriangleListStream @0x829235C8) is a LOUD NAMED GATE: the sphere-vs-
     // Triangle4 contact kernel (IntersectTriangle4Sphere_HackyBurnoutVersion @0x829238E8-family)
@@ -896,7 +729,7 @@ namespace Vehicle
         // ---- [cgen] PC bring-up instrument -- DELETE WHEN world collision is proven map-wide ----
         // OPT-IN (BRN_WALL_PROBE=1), same latch as [cvalid] downstream.
         //
-        // ⭐ WHY: [cvalid] proved raw world-contact candidates stop the moment the car leaves the
+        // WHY: [cvalid] proved raw world-contact candidates stop the moment the car leaves the
         // junkyard, and the run log shows exactly ONE contact-generator gate firing --
         // ExecuteSweptSphereListWithTriangleListStream @0x82925238, the kernel behind the SWEPT
         // branch below. That makes "the car went fast, took the swept branch, and the swept kernel
@@ -920,10 +753,6 @@ namespace Vehicle
             if (siCGenProbe == 1 && CgsDev::Log::gpDebugPrint != nullptr
                 && (lbEdge || (suCGenFrame % 300u) == 0u))
             {
-                // ⚠️ THE LABELS WERE UPDATED WITH THE CODE (swept leg, 2026-08-16). They used to
-                // read "SWEPT(gated kernel)", which was true when the swept worker was a boot
-                // gate and became a LIE the moment it landed. A diagnostic that describes a
-                // state the build has left is this campaign's most repeated bug.
                 *CgsDev::Log::gpDebugPrint
                     << "[cgen] n " << static_cast<s32>(suCGenFrame)
                     << " car " << liRaceCarIndex
@@ -996,11 +825,8 @@ namespace Vehicle
     }
 
     // ==============================================================================================
-    // DoTrafficCarWorldContactGeneration @0x8261BF28 (226) -- REAL as of wave T3 (2026-08-22).
-    // THE CGS_ASSERT(false) TRAP THAT WAS HERE IS DELETED. It was armed: the mounted per-traffic
-    // loop above calls this for every bit of mUsedTrafficVehicles, so it fired the frame the first
-    // physical traffic body appeared. Body from the export hole closed by the wave-T3 scout
-    // (wave3/scout/holes/0x8261BF28.txt: pseudocode + full asm).
+    // DoTrafficCarWorldContactGeneration @0x8261BF28 (226).
+    // Body from an .ida-exports HOLE, dumped headless from a COPY of the ARTIST .i64.
     //
     // One live physical traffic car per call, per frame. THREE arms, and only the middle one needs
     // the deformation model:
@@ -1087,8 +913,8 @@ namespace Vehicle
             // GetSweptSpheresForCar / GetDeformedBBox all index mpaModels[FindModelIndexByEntityID]
             // after a FIRE-AND-CONTINUE assert, so a promoted traffic car with no registered
             // deformation model reads mpaModels[-1] on the host. The console always has the model.
-            // RESTORE the unguarded path WHEN the traffic create path (wave T3 C2) is confirmed to
-            // register a deformation model for every promoted car. Returns before the marker entry.
+            // RESTORE the unguarded path once every promoted traffic car is confirmed to have a
+            // registered deformation model. Returns before the marker entry.
             if (lpDeformationManager->FindModelIndexByEntityID(lPhysicsEntityId) == -1)
             {
                 static bool sbLoggedNoTrafficDeformationModel = false;
@@ -1175,34 +1001,13 @@ namespace Vehicle
             EntityId{ 0u },
             mPhysicalTrafficManager.GetGlobalTrafficEntityId(static_cast<u16>(liTrafficIndex)),
             0, 1);
-
-        // ---- [T3-contact] one-shot bring-up witness ------------------------------------------
-        // [DIAG] NOT IN THE X360 BINARY. Opt-in (BRN_TRAFFIC_DIAG), one-shot. DELETE-WHEN-STABLE.
-        {
-            static const bool sbTrafficDiag = (getenv("BRN_TRAFFIC_DIAG") != 0);
-            static bool       sbFirstTraffic = true;
-            if (sbTrafficDiag && sbFirstTraffic && CgsDev::Log::gpDebugPrint != 0)
-            {
-                sbFirstTraffic = false;
-                *CgsDev::Log::gpDebugPrint
-                    << "[T3-contact] first traffic world contact gen slot=" << liTrafficIndex
-                    << " physType=" << static_cast<s32>(lu8PhysicalType)
-                    << " batches=" << liNumTriangleBatches
-                    << " queue=" << static_cast<s32>(luQueueIndex)
-                    << "\n";
-            }
-        }
     }
 
-    // ⭐⭐ TRAP STUB DELETED 2026-08-11 (physics->output publish wave). VehicleManager::
-    // IsRaceCarHidden @0x825C2EA0 is REAL, in BrnVehicleManager_WriteOutVehicleStats.cpp beside
-    // its per-frame caller. It was NOT an ".ida-exports HOLE" -- the banner at the top of this
-    // file said so because the address has no JSON, but the function is in the IDB and a targeted
-    // headless IDA 9.3 pull produced all 104 instructions. MISSING JSON != MISSING FUNCTION.
-    // If a definition for it reappears here the link will say so (LNK2005).
+    // VehicleManager::IsRaceCarHidden @0x825C2EA0 lives in
+    // BrnVehicleManager_WriteOutVehicleStats.cpp beside its per-frame caller, not here.
 
     // ==============================================================================================
-    // ⭐⭐ AddContactResultsToQueue @0x825EB350 (222) — THE HARVEST (walls leg 3, 2026-08-14).
+    // AddContactResultsToQueue @0x825EB350 (222) — THE HARVEST.
     // PS3 DecFIGS 0x70F454 (392; the mangle is the signature authority). DWARF h:1116.
     //
     // Walk the contact-gen entries [0, miFirstPartContactGenEntry) — the pre-part window the
@@ -1304,60 +1109,6 @@ namespace Vehicle
                 lContact.mu16PrimitiveIndexA = lrRecord.muPrimitive0Index;
                 lContact.mu16PrimitiveIndexB = lrRecord.muPrimitive1Index;
 
-                // ---- [T4-normal] the un-normalised-contact hop, NAMED ------------------------
-                // [DIAG] NOT IN THE X360 BINARY. Opt-in (BRN_TRAFFIC_DIAG), one-shot per queue.
-                // The bridge asserts |mNormal| == 1 on queues [7]/[8]/[13]
-                // (BrnPhysicsModuleBridgeFunctions.cpp:868/:893/:925) and the deformation sensor
-                // repeats it (BrnDeformationSensor_ValidateAndAddContact.cpp:107). This is the
-                // LAST place the value is ours before it leaves the vehicle manager, so it prints
-                // BOTH candidate source normals and the record's own indices: that separates
-                // "the worker wrote a bad normal" from "the harvest picked the wrong record".
-                // DELETE-WHEN-STABLE.
-                {
-                    const f32 lfLenSq = lContact.mNormal.x * lContact.mNormal.x
-                                      + lContact.mNormal.y * lContact.mNormal.y
-                                      + lContact.mNormal.z * lContact.mNormal.z;
-                    if (lfLenSq < 0.98f || lfLenSq > 1.02f || lfLenSq != lfLenSq)
-                    {
-                        static const bool sbT4Diag = (getenv("BRN_TRAFFIC_DIAG") != 0);
-                        static u32        suReportedQueues = 0;
-                        const u32         luQueueBit =
-                            1u << (lResultList.mu32UserTagA & 31u);
-                        if (sbT4Diag && (suReportedQueues & luQueueBit) == 0
-                            && CgsDev::Log::gpDebugPrint != 0)
-                        {
-                            suReportedQueues |= luQueueBit;
-                            const f32 lfLen0 = lrRecord.mPrimitive0Normal.x * lrRecord.mPrimitive0Normal.x
-                                             + lrRecord.mPrimitive0Normal.y * lrRecord.mPrimitive0Normal.y
-                                             + lrRecord.mPrimitive0Normal.z * lrRecord.mPrimitive0Normal.z;
-                            const f32 lfLen1 = lrRecord.mPrimitive1Normal.x * lrRecord.mPrimitive1Normal.x
-                                             + lrRecord.mPrimitive1Normal.y * lrRecord.mPrimitive1Normal.y
-                                             + lrRecord.mPrimitive1Normal.z * lrRecord.mPrimitive1Normal.z;
-                            *CgsDev::Log::gpDebugPrint
-                                << "[T4-normal] non-unit contact normal leaving AddContactResultsToQueue:"
-                                << " queue=" << static_cast<s32>(lResultList.mu32UserTagA)
-                                << " tagB=" << static_cast<s32>(lResultList.mu16UserTagB)
-                                << " type=" << static_cast<s32>(lResultList.meResultType)
-                                << " entry=" << liEntry
-                                << " result=" << static_cast<s32>(lu16Result)
-                                << "/" << static_cast<s32>(lu16NumResults)
-                                << " max=" << static_cast<s32>(lResultList.mu16MaxNumResults)
-                                << " |n|^2=" << lfLenSq
-                                << " n0=(" << lrRecord.mPrimitive0Normal.x << ","
-                                << lrRecord.mPrimitive0Normal.y << ","
-                                << lrRecord.mPrimitive0Normal.z << ") |n0|^2=" << lfLen0
-                                << " n1=(" << lrRecord.mPrimitive1Normal.x << ","
-                                << lrRecord.mPrimitive1Normal.y << ","
-                                << lrRecord.mPrimitive1Normal.z << ") |n1|^2=" << lfLen1
-                                << " primIdx=" << static_cast<s32>(lrRecord.muPrimitive0Index)
-                                << "/" << static_cast<s32>(lrRecord.muPrimitive1Index)
-                                << " ownerA=" << static_cast<s32>(GetWordOwner(luEntityWordA))
-                                << " ownerB=" << static_cast<s32>(GetWordOwner(luEntityWordB))
-                                << "\n";
-                        }
-                    }
-                }
-
                 // sub_825E73D0 == the out-of-line PotentialContactInterface::AddEvent(u32, ...)
                 // (assert + overflow warning + bounds-gated append).
                 lpPotentialContactsInterface->AddEvent(lResultList.mu32UserTagA, lContact);
@@ -1366,8 +1117,7 @@ namespace Vehicle
     }
 
     // ==============================================================================================
-    // ⭐⭐ EndVehicleContactGeneration @0x8261AC38 (661) — REAL as of walls leg 3 (2026-08-14).
-    // THE CONDUCTOR GATE OF THIS NAME (BrnPhysicsConductorGates.cpp) IS DELETED.
+    // EndVehicleContactGeneration @0x8261AC38 (661).
     //
     // The async-generation join + harvest, mirroring Start step (5) in reverse:
     //   1) WaitOn the three collide-stream jobs (+172536 sphere-tri, +172540 swept, +172532
@@ -1384,17 +1134,13 @@ namespace Vehicle
     //      mNetworkCarsAddedForCollisionThisFrame / mNetworkCarsRecievedFirstUpdate gates, the
     //      mauNetworkCarHiddenFramesRemaining countdown, the mbPlayerCarInJunkYard hold, then
     //      "HIDE_ONLINE: Making race car N, type T visible and collidable\n" + UnSetBit).
-    //      ⭐ GATED, NOT RECONSTRUCTED, and the gate is PROVABLY UNREACHABLE TODAY: the only
+    // GATED, NOT RECONSTRUCTED, and the gate is PROVABLY UNREACHABLE TODAY: the only
     //      in-tree writer of mHiddenRaceCars is Construct's UnSetAll (grep witness, walls leg 3),
     //      so no bit can be set on this offline build — the tail is network-only behaviour.
-    //      ⭐ THE GEOMETRY BLOCKER IS GONE (wave Q7, 2026-08-19). This used to read "CgsGeometric::
-    //      Box / Box::Set @0x825E6918 / BoxOverlappingTest (PS3 0x7A7B18) are also absent from the
-    //      tree; reconstruct them WITH this tail". All three now exist: Box::Set is a real inline
-    //      in CgsBox.h and both BoxOverlappingTest overloads (@0x825BEFA0 / @0x825BF090) are real
-    //      bodies in CgsBox.cpp. The ONLY remaining blocker on this tail is the network bookkeeping
-    //      path itself -- mHiddenRaceCars / mRaceCarsAddedForCollision /
-    //      mNetworkCarsAddedForCollisionThisFrame / mNetworkCarsRecievedFirstUpdate /
-    //      mauNetworkCarHiddenFramesRemaining / mbPlayerCarInJunkYard.
+    //      The only blocker on this tail is the network bookkeeping path itself --
+    //      mHiddenRaceCars / mRaceCarsAddedForCollision / mNetworkCarsAddedForCollisionThisFrame /
+    //      mNetworkCarsRecievedFirstUpdate / mauNetworkCarHiddenFramesRemaining /
+    //      mbPlayerCarInJunkYard.
     // ==============================================================================================
     void VehicleManager::EndVehicleContactGeneration(
         const CgsSceneManager::SceneManagerIO::TriangleCacheInterface* /*lpTriangleCacheInterface*/,
@@ -1418,7 +1164,7 @@ namespace Vehicle
         // ---- (3) THE HARVEST -------------------------------------------------------------------
         AddContactResultsToQueue(mpContactGenerator, mpContactGenList, lpPotentialContactInterface);
 
-        // ⭐ [FLAG PC boot witness] one-shot: the first frame the harvest posts anything, say so
+        // [FLAG PC boot witness] one-shot: the first frame the harvest posts anything, say so
         // with the count — the leg-3 successor of leg-2's "24 PrimitiveTestResult(s)" witness.
         {
             static bool sbLoggedHarvest = false;
@@ -1457,8 +1203,7 @@ namespace Vehicle
     }
 
     // ==============================================================================================
-    // ⭐ StartPartContactGeneration @0x8262C220 (114) — PARTIAL as of walls leg 3 (2026-08-14);
-    // the conductor gate of this name (BrnPhysicsConductorGates.cpp) is DELETED.
+    // StartPartContactGeneration @0x8262C220 (114) -- PARTIAL.
     //
     // REAL: the function's FIRST store — `miFirstPartContactGenEntry = mpContactGenList->
     // GetNumEntries()` (X360 0x8262C238: `lwz r11, 0xC08(list) ; stw r11, 0x2A1D4(this)`).
@@ -1498,8 +1243,7 @@ namespace Vehicle
     }
 
     // ==============================================================================================
-    // ⭐⭐ DoRaceCarWorldContactValidation @0x825EB6C8 (416) — REAL as of walls leg 3 (2026-08-14).
-    // PS3 DecFIGS 0x70FA74 (804). THE CONDUCTOR GATE OF THIS NAME IS DELETED.
+    // DoRaceCarWorldContactValidation @0x825EB6C8 (416). PS3 DecFIGS 0x70FA74 (804).
     //
     // Drain the RAW race-car-vs-world queue [5] the harvest just filled; every surviving contact
     // is appended to the VALIDATED queue [6] the bridge (BridgeContactsToSimulation ->
@@ -1582,7 +1326,7 @@ namespace Vehicle
         // OPT-IN (BRN_WALL_PROBE=1, the switch that already arms the body-shell trace it pairs
         // with), so a default run and every golden gate stay byte-identical to a build without it.
         //
-        // ⭐ WHY HERE. [wall] proved the driven car contributes ZERO world contacts to the
+        // WHY HERE. [wall] proved the driven car contributes ZERO world contacts to the
         // penetration solver from the moment it starts moving -- it drives through the wall of a
         // solid structure at 30 m/s without one contact, and the EDGE latch rules out sampling.
         // This line is the SPLIT that says which half is at fault, and it is the only place both
@@ -1610,7 +1354,7 @@ namespace Vehicle
         }
         // ---- end [cvalid] ------------------------------------------------------------------------
 
-        // ⭐ [FLAG PC boot witness] one-shot: first frame anything survives validation.
+        // [FLAG PC boot witness] one-shot: first frame anything survives validation.
         {
             static bool sbLoggedValidated = false;
             if (!sbLoggedValidated && liValidatedContacts > 0)
@@ -1629,15 +1373,12 @@ namespace Vehicle
     }
 
     // ==============================================================================================
-    // DoTrafficWorldContactOrdering @0x825C8F18 (143) -- NEW, wave T3 (2026-08-22, cluster C5).
-    // Called EVERY FRAME from PhysicsModule::Update; the conductor gate at
-    // BrnPhysicsConductorGates.cpp:281 retires with this body.
+    // DoTrafficWorldContactOrdering @0x825C8F18 (143).
+    // Called EVERY FRAME from PhysicsModule::Update.
     //
-    // HOME NOTE: this is BrnVehicleManagerContactGeneration.cpp, not a new slice. The cluster brief
-    // said the home was the unmounted BrnVehicleManager.cpp; the console disagrees -- all four of
-    // this body's baked assert __FILE__ strings are
-    // ".../Physics/VehicleManager/BrnVehicleManagerContactGeneration.cpp" (:1458/:1475/:1476/:1493/
-    // :1494), and progress/identity.json gives the same primary_file. No new bat line is needed.
+    // HOME: this TU. Every one of this body's baked assert __FILE__ strings is
+    // ".../Physics/VehicleManager/BrnVehicleManagerContactGeneration.cpp"
+    // (:1458/:1475/:1476/:1493/:1494), and progress/identity.json gives the same primary_file.
     //
     // WHAT IT DOES: every traffic-vs-world contact is PRODUCED with the WORLD as side A --
     // DoTrafficCarWorldContactGeneration's marker entry is AddEntry(EntityId{0}, trafficGlobalId,
@@ -1688,44 +1429,6 @@ namespace Vehicle
                        "lContact.muVolumeInstanceIdB.GetEntityId().GetOwner() == "
                        "BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE");                           // :1494
             lrContact.SwapEntityOrder();
-        }
-
-        // ---- [T3-contact] the REAL traffic-contact witness ------------------------------------
-        // [DIAG] NOT IN THE X360 BINARY. Opt-in (BRN_TRAFFIC_DIAG). One-shot, then latched on the
-        // pair (sphere count, box count) so a changing count reprints and a steady one is silent.
-        // This is the first place a HARVESTED traffic contact exists (the sibling witness in
-        // DoTrafficCarWorldContactGeneration only proves a command was posted). DELETE-WHEN-STABLE.
-        {
-            static const bool sbTrafficDiag = (getenv("BRN_TRAFFIC_DIAG") != 0);
-            static s32        siLastSphere  = -1;
-            static s32        siLastBox     = -1;
-            const s32 liSphere = lrSphereQueue.GetLength();
-            const s32 liBox    = lrBoxQueue.GetLength();
-            if (sbTrafficDiag && (liSphere + liBox) != 0
-                && (liSphere != siLastSphere || liBox != siLastBox)
-                && CgsDev::Log::gpDebugPrint != 0)
-            {
-                siLastSphere = liSphere;
-                siLastBox    = liBox;
-                const PotentialContact& lrFirst =
-                    (liSphere != 0) ? lrSphereQueue.GetEvent(0) : lrBoxQueue.GetEvent(0);
-                *CgsDev::Log::gpDebugPrint
-                    << "[T3-contact] traffic-world contacts ordered sphereQ=" << liSphere
-                    << " boxQ=" << liBox
-                    // post-swap side A is the traffic vehicle, and the marker entry that produced
-                    // it carried the car's GLOBAL entity id (0x8261C288 GetGlobalTrafficEntityId),
-                    // so this index is the GLOBAL traffic index, not the physical slot. The
-                    // global->physical rewrite happens later, in FixUpVehicleContacts, and only
-                    // for the vehicle-vs-vehicle queues.
-                    << " firstTrafficGlobalIdx="
-                    << static_cast<s32>(GetWordIndex(
-                           static_cast<u32>(lrFirst.muVolumeInstanceIdA.muId >> 32)))
-                    << " sideAOwner="
-                    << static_cast<s32>(lrFirst.muVolumeInstanceIdA.GetEntityIDOwner())
-                    << " otherOwner="              // post-swap: side B is the world (0)
-                    << static_cast<s32>(lrFirst.muVolumeInstanceIdB.GetEntityIDOwner())
-                    << "\n";
-            }
         }
     }
 }

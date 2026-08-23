@@ -17,7 +17,7 @@
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnStreamedDeformationSpec.h"  // Deformation::StreamedDeformationSpec::GetBoundingBox + CgsGeometric::AxisAlignedBox
 #include "rw/math/vpu/vector3_operation.h"                               // rw::math::vpu::IsValid(Vector3)
 #include "rw/math/vpu/matrix44affine_operation.h"                        // rw::math::vpu::IsValid(Matrix44Affine), TransformPoint
-// ⭐ 2026-08-10 (producer wave) -- PrepareTriangleCache's collaborators.
+// PrepareTriangleCache's collaborators.
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO.h"             // SceneManagerIO::InputBuffer_Update::GetInSceneUpdateInterface (@0x825BD8C0, write-lock twin)
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_SceneUpdate.h" // InSceneUpdateInterface::mAddToCacheQueue (X360 +0xC4930)
 #include "GameSource/Physics/VehicleManager/BrnVehicleManager.h"               // VehicleManager::KI_MAX_ACTIVE_RACE_CARS (the +8 slot bias)
@@ -32,7 +32,7 @@ namespace Vehicle
 
 // byte_82F2A1A6 -- the "Allow traffic freezing" debug toggle
 // (PhysicalTrafficManagerDebugComponent::OnActivate @0x8261C678 registers it by that label).
-// A free .data byte, not a class member. ⭐ THE SHIPPED VALUE IS 1, read out of the ARTIST image
+// A free .data byte, not a class member. THE SHIPPED VALUE IS 1, read out of the ARTIST image
 // (headless idat, wave T3): freezing IS allowed by default, so the CoolDown-lane clear in
 // PhysicalTrafficVehicle::Update does NOT run in a default game. Its ONLY reader in the image is
 // that function.
@@ -199,7 +199,7 @@ void PhysicalTrafficManager::BridgeArticulatedJointRequestsToSim(
 // ---------------------------------------------------------------------------------------
 // PhysicalTrafficManager (constructor)   @ 0x827E42E8  -- MOVED, NOT DELETED.
 //
-// ⭐ 2026-08-03 (the un-pin wave): the body (and its full FLAG commentary) now lives INLINE in
+// the body (and its full FLAG commentary) now lives INLINE in
 // BrnPhysicalTrafficManager.h, verbatim. It had to move because VehicleManager embeds this class
 // by value now, VehicleManager is embedded by value in PhysicsModule, and PhysicsModule's ctor is
 // MOUNTED -- so the implicit constructor chain references this symbol from mounted code while THIS
@@ -225,11 +225,11 @@ void PhysicalTrafficManager::BridgeArticulatedJointRequestsToSim(
 //          EventQueue<char,50>::Construct(this + 104624)           mUnusedPotentialTrafficQueue
 //          mDebugComponent.Construct(this)  (inlined, this+105616)
 //
-// ⭐ The chain closes to the byte, which is what re-seats mArticulatedJointPool to 832 (see the
+// The chain closes to the byte, which is what re-seats mArticulatedJointPool to 832 (see the
 // header banner, finding (1)): 104624 + 64 == 104688 == mu8GlobalToPhysicalEntityIndexMap, +600
 // == 105288, 16-aligned -> 105296, + 20*16 == 105616 == mDebugComponent.
 //
-// ⚠️ `mTestedTrafficVehicles` IS NOT CLEARED. Nine BitArrays sit at 104552..104624 at stride 8;
+// `mTestedTrafficVehicles` IS NOT CLEARED. Nine BitArrays sit at 104552..104624 at stride 8;
 // the body writes eight of them and skips exactly the one at 104592. That is transcribed here as
 // an omission, not "fixed" -- do not add it without new evidence.
 //
@@ -271,7 +271,7 @@ void PhysicalTrafficManager::Construct()
     mUsedSimpleVehiclePhysics.UnSetAll();       // std 0, this + 104568
     mPotentialTrafficVehicles.UnSetAll();       // std 0, this + 104576
     mTrafficDeformationModelsActive.UnSetAll(); // std 0, this + 104584
-    // ⚠️ mTestedTrafficVehicles (this + 104592) is deliberately NOT written -- see the banner.
+    // mTestedTrafficVehicles (this + 104592) is deliberately NOT written -- see the banner.
     mAddedTrafficVehicles.UnSetAll();           // std 0, this + 104600
     mRemovedTrafficVehicles.UnSetAll();         // std 0, this + 104608
     mMadeSimpleTrafficVehicles.UnSetAll();      // std 0, this + 104616
@@ -457,7 +457,7 @@ void PhysicalTrafficVehicle::AddAirRam(u32 luFlags, f32 lfFactor, f32 lfDecay,
 //       field->argument map UpdateVehicleEffects uses for race cars: (muEffectFlags,
 //       mDirectionAndMagnitude.w, mfDecay, mDirectionAndMagnitude, mPosition, mfStartTime)
 //       == asm r4 / f1(+0x1C) / f2(+0x0C) / v1(+0x10) / v2(+0x20) / f3(+0x30).
-//   ⚠️ HOST DIVERGENCE, flagged: for a map index >= 600 the console runs the map read anyway
+// HOST DIVERGENCE, flagged: for a map index >= 600 the console runs the map read anyway
 //   (an OOB read feeding the sentinel test); the host guards it -- the same accepted
 //   divergence as BrnVehicleManager_ValidateSimulationContacts.cpp's bounds tripwire.
 void PhysicalTrafficManager::ProcessAddAirRamEvent(const CreateAirRamEvent* lpEvent)
@@ -590,7 +590,7 @@ Vector3 PhysicalTrafficVehicle::GetArticulationPointWorldSpace() const
 // PhysicalTrafficVehicle wave-8 methods (their own ledger funcs, homed here alongside the
 // wave-7 set). Reconstructed from BURNOUT_X360_ARTIST.XEX.
 //
-// ⭐ 2026-08-22 (wave T3, C3): THE OPAQUE-TrafficPhysics CONTRACT IS RETIRED AND THE TWO INERT
+// THE OPAQUE-TrafficPhysics CONTRACT IS RETIRED AND THE TWO INERT
 // DELEGATIONS BELOW ARE WIRED. The FLAG that stood here claimed "the real
 // `class TrafficPhysics : VehiclePhysics` CANNOT be included here -- its name collides with the
 // opaque slice". That has been false since the 2026-08-03 de-fork: BrnPhysicalTrafficManager.h:207
@@ -624,7 +624,7 @@ bool PhysicalTrafficVehicle::PreparePhysical(const CreatePhysicalTrafficEvent* l
         CgsGeometric::AxisAlignedBox lAABB;
         lpModelData->GetBoundingBox(lAABB);
 
-        // ⭐ 2026-08-22 (wave T3, C3) WIRED. X360 0x826410F0..0x82641104:
+        // X360 0x826410F0..0x82641104:
         //   bl PhysicalTrafficVehicle::GetFullTraffic ; bl TrafficPhysics::PreparePhysical
         // with (event, attribs, &lAABB, model, wheelPositions, wheelRadii) in r4..r9. The body
         // lives in TrafficPhysics.cpp @0x82639380 -- MOUNT THAT TU (build_game_exe.bat:1510-1515
@@ -716,7 +716,7 @@ void PhysicalTrafficVehicle::Update(f32 lfSimTimerTimeStep, f32 lfGameTimerTimeS
 
     if (mu8PhysicalType == E_PHYSICAL_TRAFFIC_TYPE_FULL)
     {
-        // ⭐ 2026-08-22 (wave T3, C3) WIRED. X360 0x82641230..0x8264129C, in order:
+        // X360 0x82641230..0x8264129C, in order:
         //   bl GetFullTraffic
         //   `lvlx v0,[stack sim dt] ; vspltw v1,v0,0 ; mr r4,controls` -> UpdateFreezing(controls, splat(dt))
         //   `lbz byte_82F2A1A6 ; bne` -> when traffic freezing is NOT allowed, zero lane .y of the
@@ -788,7 +788,7 @@ void PhysicalTrafficVehicle::SetArticulated(const CreatePhysicalTrafficEvent& lr
 
 // =================================================================================================
 // PhysicalTrafficManager::ValidateTrafficContact  @0x825CACB8  (PS3 DecFIGS 0x6E5DF8)
-// ⭐⭐ BODIED 2026-08-22 (wave T3, C3) -- the TRAP that stood here is gone. It is NOT dead code any
+// the TRAP that stood here is gone. It is NOT dead code any
 // more: PhysicsModule::BridgeContactsToSimulation is real and mounted, and its queue-[9] arm calls
 // this for every traffic-vs-world potential contact (BrnPhysicsModuleBridgeFunctions.cpp:844). The
 // first physical traffic car would have fired the trap.
@@ -816,10 +816,10 @@ void PhysicalTrafficVehicle::SetArticulated(const CreatePhysicalTrafficEvent& lr
 //   0x825CAF04  0.4f > dot3(mPointOnB - mAboveGroundTestResult.mIntersectionPosition, same normal)
 //               (the contact point is within 0.4 m of that ground plane)  ->  reject.
 //
-// ⚠️ THE TWO vcmpgtfp. TESTS READ THE "ALL LANES" CR BIT (`mfocrf r11,2 ; extrwi r11,r11,1,24`),
+// THE TWO vcmpgtfp. TESTS READ THE "ALL LANES" CR BIT (`mfocrf r11,2 ; extrwi r11,r11,1,24`),
 // but both operands are vmsum3fp128 broadcasts of one dot product against a splat, so every lane
 // carries the same comparison -- a scalar `>` is the same predicate, not a narrowing.
-// ⚠️ THE PARAMETER lfTimeStep IS UNREAD (f1 is never touched in the 170 instructions). Declared
+// THE PARAMETER lfTimeStep IS UNREAD (f1 is never touched in the 170 instructions). Declared
 // because the caller passes it and the DWARF types it.
 // =================================================================================================
 bool PhysicalTrafficManager::ValidateTrafficContact(
@@ -899,7 +899,7 @@ bool PhysicalTrafficManager::ValidateTrafficContact(
 // =================================================================================================
 // PhysicalTrafficManager::PrepareTriangleCache  @0x825EE5A0  (39 insns)
 //
-// ⭐ ADDED 2026-08-10 (producer wave). Claims this manager's 20 triangle-cache slots. Decoded off
+// Claims this manager's 20 triangle-cache slots. Decoded off
 // the ASM (the Hex-Rays view is faithful here, but the two stack slots are what carry the record):
 //
 //   0x825EE5B8  cmplwi r31, 0  -> assert "lpSceneInputBuffer_Update != NULL"
@@ -915,13 +915,13 @@ bool PhysicalTrafficManager::ValidateTrafficContact(
 //   0x825EE618  cmpwi r31, 0x14        -> 20 iterations == KU8_TOTAL_MAX_NUM_PHYSICAL_TRAFFIC
 //   return true
 //
-// ⭐ THE RADIUS IS READ FROM THE IMAGE, NOT FROM HEX-RAYS: `flt_8200426C` == 0x40A00000 == 5.0f
+// THE RADIUS IS READ FROM THE IMAGE, NOT FROM HEX-RAYS: `flt_8200426C` == 0x40A00000 == 5.0f
 // (x360rd.py, whose 10-point calibration passed on the same read).
-// ⭐ THE +8 BIAS IS THE RACE-CAR BLOCK: VehicleManager::PrepareTriangleCache claims 0..7 first and
+// THE +8 BIAS IS THE RACE-CAR BLOCK: VehicleManager::PrepareTriangleCache claims 0..7 first and
 // then calls this, so traffic owns 8..27. Spelled as KI_MAX_ACTIVE_RACE_CARS rather than the
 // literal 8 -- that is what the bias IS, and the two counts are the same two array bounds.
 //
-// ⚠️ AS-SHIPPED: `this` is never read (r3 is dead after the prologue) and the return value is the
+// AS-SHIPPED: `this` is never read (r3 is dead after the prologue) and the return value is the
 // constant 1. Both are reproduced rather than "cleaned up": the caller tests the return.
 // =================================================================================================
 bool PhysicalTrafficManager::PrepareTriangleCache(
@@ -947,7 +947,7 @@ bool PhysicalTrafficManager::PrepareTriangleCache(
 
 // =================================================================================================
 // PhysicalTrafficManager::UpdateTriangleCache  @0x825EE640  (261 insns)
-// ⭐⭐ BODIED 2026-08-11 (lifetime wave). The traffic sibling of the function above and the second
+// The traffic sibling of the function above and the second
 // half of VehicleManager::UpdateTriangleCache @0x82615C38: Prepare CLAIMS slots 8..27 once, this
 // MOVES them every frame. Both are arm 1 of PhysicsModule::UpdateCachedPositions @0x8259C370.
 //

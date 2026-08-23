@@ -10,14 +10,14 @@
 // the DecFIGS DWARF.
 //
 // ============================================================================
-// ⭐⭐ WHY THIS HEADER EXISTS (2026-08-03, task #113). Until this wave the class was declared
+// WHY THIS HEADER EXISTS (2026-08-03, task #113). Until this wave the class was declared
 // INSIDE BrnArticulatedJointPool.cpp, so it had no home a second TU could include -- and
 // BrnPhysicalTrafficManager.h therefore carried its OWN
 //     struct ArticulatedJointPool { int Construct(); void SendCreateRemoveJointEvents(const void*,
 //                                   ArticulatedJointCreateBuffer*); u8 mOpaque[832]; };
 // at namespace scope in BrnPhysics::Vehicle, and embedded THAT by value.
 //
-// ⚠️⚠️ THAT FORK WAS ALREADY LINKING SILENTLY, WHICH IS THE HAZARD RATHER THAN THE GOOD NEWS.
+// THAT FORK WAS ALREADY LINKING SILENTLY, WHICH IS THE HAZARD RATHER THAN THE GOOD NEWS.
 // The previous wave measured `ArticulatedJointPool::Construct` as RESOLVED when
 // BrnPhysicalTrafficManager.cpp was trial-mounted -- resolved against the real class's body in
 // BrnArticulatedJointPool.cpp, while the call site was the 832-byte opaque slice. The mangled
@@ -27,14 +27,14 @@
 // member would have written host-laid-out fields into console-strided storage.
 // Identical to the TrafficPhysics trap retired in `1d114be6` / `7843135d`.
 //
-// ⭐ THE DE-FORK IS LAYOUT-NEUTRAL, MEASURED NOT ASSUMED. Every member is pointer-free:
+// THE DE-FORK IS LAYOUT-NEUTRAL, MEASURED NOT ASSUMED. Every member is pointer-free:
 //     10 * sizeof(ArticulatedJoint)==80  +  2 * BitArray<10>==8  +  4 * f32  ==  800 + 16 + 16 == 832
 // on BOTH targets -- exactly the 832 the retired opaque asserted and exactly the span
 // PhysicalTrafficManager::Construct @0x82636CA8 pins (`ArticulatedJointPool::Construct(this+103616)`
 // then `stfsx` at this+104448; 104448-103616 == 832). So unlike the TrafficPhysics fold, this one
 // moves NOTHING in PhysicalTrafficManager's own layout.
 //
-// ⚠️ `Construct` IS NARROWED int -> void HERE, and that is part of the de-fork, not a tidy-up.
+// `Construct` IS NARROWED int -> void HERE, and that is part of the de-fork, not a tidy-up.
 // The DWARF (BrnArticulatedJointPool.h:73) declares `void Construct()`. The console @0x82600938
 // ends `blr` with r3 still holding whatever the last ArticulatedJoint::Construct left there (its
 // own `this`), which is why Hex-Rays types it `int` -- a return value NOBODY reads (its sole

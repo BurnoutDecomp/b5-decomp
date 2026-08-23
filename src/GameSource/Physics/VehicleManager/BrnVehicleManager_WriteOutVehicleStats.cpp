@@ -1,19 +1,12 @@
 // =================================================================================================
 // GameSource/Physics/VehicleManager/BrnVehicleManager_WriteOutVehicleStats.cpp
 //
-// ⭐⭐ THE PER-FRAME PUBLISH CALL SITE -- the function PhysicsModule::Update runs to hand the
+// THE PER-FRAME PUBLISH CALL SITE -- the function PhysicsModule::Update runs to hand the
 // simulated cars to the world side.
 //
-//   VehicleManager::WriteOutVehicleStats  @0x8263F460  (380 insns)  [was a BRN_CONDUCTOR_GATE]
-//   VehicleManager::IsRaceCarHidden       @0x825C2EA0  (104 insns)  [was a TRAP STUB]
-//
-// Both gates are DELETED in the same commit (LNK2005 is the intended tripwire if either returns).
-//
-// ⚠️ IsRaceCarHidden WAS WRITTEN OFF AS AN ".ida-exports HOLE" (BrnVehicleManagerContactGeneration
-// .cpp:21 -- "no PS3 twin surfaced either"). It is not a hole: it is absent from the JSON export
-// set but present in the IDB, and a targeted headless IDA 9.3 pull produced its 104 instructions,
-// its three assert strings and its three __LINE__s. Same lesson as the joint-queue accessor and
-// EndVehicleTractionLineTests before it -- MISSING JSON != MISSING FUNCTION.
+//   VehicleManager::WriteOutVehicleStats  @0x8263F460  (380 insns)
+//   VehicleManager::IsRaceCarHidden       @0x825C2EA0  (104 insns)  -- absent from the JSON
+//                                         export set, dumped headless from a COPY of the .i64
 //
 // -------------------------------------------------------------------------------------------------
 // WriteOutVehicleStats, leg by leg (r18 == this, r19 == lpOutputInterface):
@@ -43,14 +36,13 @@
 //                 "RwMath::IsValid( maRaceCarVehicles[liRaceCar].GetSteeringAngle() )"  (:7294)
 //     0x8263F7F4  the four-wheel loop: SetWheelTransform(liRaceCar, wheel,
 //                     lpRaceCar->GetWheelsWorldTransfrom(wheel, /*lbHackDontReverseRightWheels*/ false))
-//                 (`li r6, 0` is the third argument. ⚠️ GLOSS CORRECTED 2026-08-13: this bool
-//                  was mis-named lbApplySteer here and in the header; the PS3 DWARF names it
+// (`li r6, 0` is the third argument: the PS3 DWARF names it
 //                  lbHackDontReverseRightWheels and the body agrees -- steer IS applied to the
 //                  front wheels regardless; false ENABLES the left-wheel pi-about-Y mirror.)
 //   0x8263FA28  mPhysicalTrafficManager.WriteOutVehicleStats(lpOutputInterface)
 //   0x8263FA38  mbPlayerCarStuckInCollision = false     (`stbx r23(0), r18, 0x2A240`)
 //
-// ⛔⛔ TWO LEGS ARE PARKED, LOUDLY, EACH WITH ITS OWN LOG-ONCE -- never a silent no-op:
+// ONE LEG IS PARKED, LOUDLY, WITH ITS OWN LOG-ONCE -- never a silent no-op:
 //
 //   (1) StuntOffencesManager::OutputStuntsInProgress @0x8263B278 IS bodied
 //       (BrnStuntOffencesManager.cpp:819) but its declared signature takes
@@ -70,17 +62,12 @@
 //       this park. It publishes the player's in-progress stunt scalars only; it has no bearing on
 //       the pose.
 //
-//   (2) PhysicalTrafficManager::WriteOutVehicleStats @0x825F0308 (481 insns) is the TRAFFIC half
-//       of the same publish and is not reconstructed. It is declared and gated in
-//       BrnPhysicsConductorGates.cpp so the console's call is reproduced here and the deferral is
-//       audible once per boot, rather than being dropped from the call sequence.
-//
-// ⚠️ THE CONSOLE'S OWN ASSERTS ARE KEPT AS ASSERTS, with one exception, named. The
+// THE CONSOLE'S OWN ASSERTS ARE KEPT AS ASSERTS, with one exception, named. The
 // "Player car stuck in world. Resetting." tripwire at :7269 fires on a PC-only precondition (the
 // stuck-in-collision test chain that sets mbPlayerCarStuckInCollision is
 // DoPlayerStuckLineTests, still gated, so the flag's producer is not the console's), and it is a
-// PER-FRAME assert inside a per-frame publish. Per this wave's established pattern (three
-// precedents) it is degraded to a log-once [FLAG PC bring-up] gate. The other three asserts
+// PER-FRAME assert inside a per-frame publish, so it is degraded to a log-once
+// [FLAG PC bring-up] gate. The other three asserts
 // (:7251 null check, :7286 null state, :7294 IsValid steering) are cheap and are kept.
 // =================================================================================================
 
@@ -104,7 +91,7 @@ namespace Vehicle
 // @0x825C2EA0  VehicleManager::IsRaceCarHidden   (DWARF BrnVehicleManager.h -- asserts cite :1941/
 // :1948/:1949, which are the X360 header's own __LINE__s)
 //
-// Body from the headless IDA pull:
+// Body:
 //   0x825C2EB8  assert (liRaceCarIndex >= 0 && liRaceCarIndex < KI_MAX_ACTIVE_RACE_CARS)
 //   0x825C2EE8  the BitArray<8u> bounds assert (CgsBitArray.h:203) -- the container's own, hoisted
 //               to the call site here exactly as ReadUpdatedBodies/CrashingRaceCarInterface do
@@ -124,7 +111,7 @@ bool VehicleManager::IsRaceCarHidden(s32 liRaceCarIndex)
 
     if (liRaceCarIndex < 0 || liRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_COUNT)
     {
-        // ⚠️ DIVERGENCE (named): the console reads the bitset regardless and would fault/alias on an
+        // DIVERGENCE (named): the console reads the bitset regardless and would fault/alias on an
         // out-of-range index; on this build the same read is a stack smash. The assert above is the
         // console's; this early-out is the guard.
         return false;
@@ -154,7 +141,7 @@ void VehicleManager::WriteOutVehicleStats(VehicleOutputInterface* lpOutputInterf
         return;
     }
 
-    // ⭐⭐ THE ONE STORE THE WHOLE READBACK IS GATED ON. `ld r10,0(r9) ; std r10,0(r19)`.
+    // THE ONE STORE THE WHOLE READBACK IS GATED ON. `ld r10,0(r9) ; std r10,0(r19)`.
     lpOutputInterface->GetUsedCarsBitArray() = mUsedRaceCars;
 
     for (s32 liRaceCar = mUsedRaceCars.GetFirstNonZeroBit();
@@ -186,7 +173,7 @@ void VehicleManager::WriteOutVehicleStats(VehicleOutputInterface* lpOutputInterf
 
         const bool lbForceReset = lpRaceCar->IsBeached() || lbPlayerStuck;
 
-        // ⚠️ The console indexes maRaceCarStates by the ENTITY INDEX here and by liRaceCar
+        // The console indexes maRaceCarStates by the ENTITY INDEX here and by liRaceCar
         // everywhere else in this loop. Reproduced; see the FLAG on the declaration.
         const CgsSceneManager::EntityId lEntityID(maRaceCarEntityIDs[liRaceCar].muValue);
         lpOutputInterface->UpdateRaceCarState(static_cast<s32>(lEntityID.GetEntityIndex()),
@@ -199,7 +186,7 @@ void VehicleManager::WriteOutVehicleStats(VehicleOutputInterface* lpOutputInterf
             RaceCarState* lpPlayerRaceCarState = lpOutputInterface->GetRaceCarState(liRaceCar);
             CGS_ASSERT(lpPlayerRaceCarState != 0, "lpPlayerRaceCarState != NULL");
 
-            // ⛔ PARKED -- see park (1) in this file's banner. The callee exists and is bodied; its
+            // PARKED -- see park (1) in this file's banner. The callee exists and is bodied; its
             // declared parameter types are a fork of the committed ones.
             (void)lpPlayerRaceCarState;
             static bool sbLoggedStuntPark = false;
@@ -227,22 +214,14 @@ void VehicleManager::WriteOutVehicleStats(VehicleOutputInterface* lpOutputInterf
         CGS_ASSERT(lfSteeringAngle == lfSteeringAngle,
                    "RwMath::IsValid( maRaceCarVehicles[liRaceCar].GetSteeringAngle() )");
 
-        // ⭐⭐ UNPARKED 2026-08-13 (wheel-transform wave) -- park (3) retired, DELETE-WHEN
-        // honoured: SimpleVehiclePhysics::GetWheelsWorldTransfrom @0x825D8878 is BODIED
-        // (BrnSimpleVehiclePhysics.cpp, from the operand-level decode bank). The console's
-        // four-wheel publish loop @0x8263F7F4, verbatim: one call per wheel, bool false
-        // (`li r6, 0` -- the left-wheel mirror ACTIVE; see the corrected gloss in the banner).
+        // The console's four-wheel publish loop @0x8263F7F4, verbatim: one call per wheel, bool
+        // false (`li r6, 0` -- the left-wheel mirror ACTIVE; see the gloss in the banner).
         //
-        // ⚠️ The park's "third site" flag RESOLVED, and the answer is: THERE IS NO THIRD SITE.
-        // A full-image scan of all 30,084 X360 exports (this wave) finds NO store to
-        // RaceCarState+0x446..0x449 anywhere except the RaceCarState COPY ctor @0x8220A4C0
-        // (and no stbx/addi-computed store either); the PS3 set agrees (+1094 has only
-        // readers). The render-side wheel EXISTS on the console comes from the DEFORMATION
-        // half of the readback instead -- ActiveRaceCar::UpdateWheelPhysicsState @0x822B8738,
-        // fed by the deformation output's per-wheel data, a leg that is parked (L3 of
-        // ReadUpdatedActiveRaceCarDataFromPhysics). RaceCarState::mabWheelExists is left
-        // untouched here, exactly as the console leaves it; the render module carries the
-        // bring-up seam for the exists flag (see BrnRaceCarEntityModule.cpp).
+        // NOTHING here writes RaceCarState::mabWheelExists: a full-image scan of all 30,084 X360
+        // exports finds no store to RaceCarState+0x446..0x449 outside the copy ctor @0x8220A4C0,
+        // and the PS3 set agrees (+1094 has only readers). The render-side wheel-exists flag comes
+        // from the DEFORMATION half of the readback (ActiveRaceCar::UpdateWheelPhysicsState
+        // @0x822B8738), a leg parked at L3 of ReadUpdatedActiveRaceCarDataFromPhysics.
         for (u8 lu8Wheel = 0; lu8Wheel < 4; ++lu8Wheel)
         {
             lpOutputInterface->SetWheelTransform(
@@ -251,45 +230,10 @@ void VehicleManager::WriteOutVehicleStats(VehicleOutputInterface* lpOutputInterf
                     static_cast<EVehicleDrivenWheel>(lu8Wheel),
                     /*lbHackDontReverseRightWheels*/ false));
         }
-
-        // ---- [move-probe] DELETE-WHEN motion is confirmed on a booted run --------------------
-        // A per-boot, once-every-N-publishes readout of the PLAYER's PHYSICS-side position, so
-        // that movement can be measured without reading it off a stable-looking screen. It prints
-        // the source the publish leg actually reads (the RaceCarPhysics transform), not the
-        // rendered pose.
-        //
-        // ⚠️⚠️ THIS USED TO SAY `liRaceCar == 0`, AND THAT MADE IT A LYING DIAGNOSTIC.
-        // Race car 0 is NOT the local player in this build: three cars are created at boot
-        // (`HIDE_ONLINE: Created race car 0/1/2`) and the drive runs of 2026-08-16 all report
-        // `playerIdx 2`. Cars 0 and 1 sit at the junkyard spawn for the whole session, so the
-        // probe faithfully printed `pos 2986.97 -3.20 -2011.40 vel 0 0 0 gas 0.000000` for
-        // ~19,000 consecutive frames of a run in which the player's car was driving at 29.7 m/s
-        // 165 m away -- and that line was then quoted, in good faith, as evidence that the car
-        // does not move. It is the same failure mode as `staticGroups=5`: a number that is
-        // correct about the wrong subject. The label now carries the index so the line cannot be
-        // read as "the car" ever again.
-        if (lbIsLocalPlayer)
-        {
-            static u32 suProbeCounter = 0;
-            if ((suProbeCounter % 300u) == 0u)
-            {
-                const Matrix44Affine lProbeTransform = lpRaceCar->GetTransform();
-                const Vector3        lvProbeVelocity = lpRaceCar->GetLinearVelocity();
-                *CgsDev::Log::gpDebugPrint
-                    << "[move-probe] player car" << liRaceCar << " physics pos "
-                    << lProbeTransform.wAxis.x << " "
-                    << lProbeTransform.wAxis.y << " " << lProbeTransform.wAxis.z
-                    << " vel " << lvProbeVelocity.x << " " << lvProbeVelocity.y << " "
-                    << lvProbeVelocity.z
-                    << " speedMPH " << lpRaceCar->GetSpeedMPH().x
-                    << " gas " << maRaceCarDrivers[liRaceCar].mControls.mfGas << "\n";
-            }
-            ++suProbeCounter;
-        }
-        // ---- end [move-probe] ----------------------------------------------------------------
     }
 
-    // The traffic half of the same publish -- gated (park (2) in this file's banner).
+    // 0x8263FA28 -- the traffic half of the same publish
+    // (BrnPhysicalTrafficManager_WriteOutVehicleStats.cpp).
     mPhysicalTrafficManager.WriteOutVehicleStats(lpOutputInterface);
 
     mbPlayerCarStuckInCollision = false;
@@ -298,7 +242,7 @@ void VehicleManager::WriteOutVehicleStats(VehicleOutputInterface* lpOutputInterf
 // =================================================================================================
 // @0x82617820  VehicleManager::ProcessResetEvents   (526 insns)   [was a BRN_CONDUCTOR_GATE]
 //
-// ⭐⭐ THE ONLY MECHANISM IN THE GAME THAT MOVES AN ALREADY-SIMULATED CAR.  Landed 2026-08-21
+// THE ONLY MECHANISM IN THE GAME THAT MOVES AN ALREADY-SIMULATED CAR.  Landed 2026-08-21
 // (gateui r9) because the wave needed a way to PUT THE CAR AT COORDINATES, and this is what the
 // console does -- there is no other writer of a live car's transform outside the integrator.
 // PhysicsModule::Update @0x825B0640 has always called it, every frame, on both the normal and the
@@ -315,7 +259,7 @@ void VehicleManager::WriteOutVehicleStats(VehicleOutputInterface* lpOutputInterf
 //       -> VehicleInputInterface::ResetRaceCar  @0x822CC2A0         -- enqueues ResetVehicleEvent
 //       -> THIS FUNCTION.
 //
-// ⚠️⚠️ IT IS A SLICE, AND THE PARKED LEGS ARE NAMED. What is reproduced is the TRANSFORM/VELOCITY
+// IT IS A SLICE, AND THE PARKED LEGS ARE NAMED. What is reproduced is the TRANSFORM/VELOCITY
 // core plus the two posts, read instruction by instruction out of the ARTIST asm:
 //
 //   0x82617BD0  lrEvent = queue->GetEvent(i)                        (sub_825BB948 == GetEvent)
@@ -336,20 +280,20 @@ void VehicleManager::WriteOutVehicleStats(VehicleOutputInterface* lpOutputInterf
 //               why the same out-of-line helper is called here.
 //   0x82617D00  assert mpAttribs->IsValid()  ("Trying to reset a car without valid physics
 //               attributes", BrnVehicleManager.cpp:0x69B == 1691)
-//   0x82617D34  if (mbResetTransform) SetTransformFromPositionOnRoad(lTransform)   ⭐ THE SEAT
+// 0x82617D34  if (mbResetTransform) SetTransformFromPositionOnRoad(lTransform)   THE SEAT
 //   0x82617D44  ... then stvx v127 -> car+0x50 (mLinearVelocity) and v126 -> car+0x60
 //               (mAngularVelocity), and mfMass (+0xE0) = splat(mpAttribs+0x70 lane 0)
 //   0x82617D60  if (!mbResetDeformation) the four-wheel "wheel is attached" assert loop
-//               (BrnVehicleManager.cpp:0x6AB == 1707)                  ⛔ PARKED -- see (P2)
+// (BrnVehicleManager.cpp:0x6AB == 1707)                  PARKED -- see (P2)
 //   0x82617DB0  if (mbResetDeformation) DeactivateDeformationModelEvent::AddEvent
 //               { maRaceCarHandlingBodyIDs[index], mfRoadRageHowCloseToWrecked,
 //                 meDeformationResetType }
-//   0x82617DF0  if (mbResetTransform) VehiclePhysics::Reset(mInitialVelocity)     ⭐ THE RE-SEED
-//               else                  vtable slot 1 (the non-transform reset)      ⛔ PARKED (P3)
+// 0x82617DF0  if (mbResetTransform) VehiclePhysics::Reset(mInitialVelocity)     THE RE-SEED
+// else                  vtable slot 1 (the non-transform reset)      PARKED (P3)
 //   0x82617E28  RaceCarResetEvent::AddEvent(managerOut+0x5B0,
 //               { index, mbResettingAfterWreck, <the transform's translation row, v125> })
 //   0x82617E34+ the `index == player` tail: a bit test at +0x1908, SetAllNetworkRaceCarsHidden,
-//               and four gpcMessageBuffer streams                      ⛔ PARKED -- see (P4)
+// and four gpcMessageBuffer streams                      PARKED -- see (P4)
 //
 // (P1) RETIRED (r9 verify): the "un-homed +0x1ACD0 flags word" was a 0x10000 mis-read of
 //      +0xACD0 == mStuntOffencesManager; the leg is the named SetCurrentRaceCarState call,
@@ -399,7 +343,7 @@ void VehicleManager::ProcessResetEvents(
 
         const s32 liRaceCar = static_cast<s32>(lrEvent.miRaceCarIndex);
 
-        // ⚠️ NOT the console's: the console indexes maRaceCarVehicles with the event's word and
+        // NOT the console's: the console indexes maRaceCarVehicles with the event's word and
         // would alias on a bad one. On this build that is a stack smash, so the range is checked
         // and the drain skips (loudly) rather than corrupting the manager.
         if (liRaceCar < 0 || liRaceCar >= E_ACTIVE_RACE_CAR_INDEX_COUNT
@@ -440,7 +384,7 @@ void VehicleManager::ProcessResetEvents(
 
         if (lrEvent.mbResetTransform)
         {
-            // ⭐ THE SEAT. The event's transform's translation row is a point ON THE ROAD (the
+            // THE SEAT. The event's transform's translation row is a point ON THE ROAD (the
             // place-on-track line test put it there); SetTransformFromPositionOnRoad lifts the
             // handling frame to its at-rest height above that point.
             lpRaceCar->SetTransformFromPositionOnRoad(lrEvent.mInitialTransform);
@@ -473,7 +417,7 @@ void VehicleManager::ProcessResetEvents(
 
         if (lrEvent.mbResetTransform)
         {
-            // ⭐ THE RE-SEED. Kills every force/impulse, zeroes the drift/boost/slam/shunt banks,
+            // THE RE-SEED. Kills every force/impulse, zeroes the drift/boost/slam/shunt banks,
             // re-seats the wall-contact timers and sets mbResetCarTransform -- the flag the whole
             // game side reads as "this car was just reset, drop the run".
             lpRaceCar->Reset(lrEvent.mInitialVelocity);

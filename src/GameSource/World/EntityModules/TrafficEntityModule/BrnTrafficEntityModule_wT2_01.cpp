@@ -32,13 +32,12 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 
 #include <cmath>     // std::floor, std::cos, std::sin
-#include <cstdlib>   // getenv
 
 namespace BrnTraffic
 {
 namespace
 {
-    // NAMED LEG GATE, same shape as the sibling partfiles'. [DIAG] NOT IN THE X360 BINARY.
+    // NAMED LEG GATE, file-local. NOT IN THE X360 BINARY.
     inline void LogMissingLeg(bool& lrbAlreadyLogged, const char* lpcLegNameAndReason)
     {
         if (lrbAlreadyLogged)
@@ -53,22 +52,6 @@ namespace
                 << "[T2-traffic-leg] TrafficEntityModule leg NOT RECONSTRUCTED, skipped: "
                 << lpcLegNameAndReason << " [FLAG PC partial gate]\n";
         }
-    }
-
-    // DELETE-WHEN-STABLE bring-up probes. [DIAG] NOT IN THE X360 BINARY.
-    bool TrafficDiagEnabled()
-    {
-        static const bool sbEnabled = (getenv("BRN_TRAFFIC_DIAG") != 0);
-        return sbEnabled;
-    }
-
-    CgsDev::Log::DebugPrint* TrafficDiagStream()
-    {
-        if (!TrafficDiagEnabled() || CgsDev::Log::gpDebugPrint == 0)
-        {
-            return 0;
-        }
-        return CgsDev::Log::gpDebugPrint;
     }
 
     // ---- the generation tuning constants, recovered per call site -------------------------
@@ -138,19 +121,6 @@ void TrafficEntityModule::RebuildGeneratorList()
             {
                 AddGenerator(luHull, luSection, &lfPhase);
             }
-        }
-    }
-
-    if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())
-    {
-        // [T2-gen] one-shot. DELETE-WHEN-STABLE.
-        static bool sbFirst = true;
-        if (sbFirst)
-        {
-            sbFirst = false;
-            *lpDiag << "[T2-gen] RebuildGeneratorList first run activeHulls="
-                    << static_cast<s32>(mActiveHulls.GetLength())
-                    << " generators=" << static_cast<s32>(muNumGenerators) << "\n";
         }
     }
 }
@@ -363,22 +333,6 @@ void TrafficEntityModule::GenerateNewVehicle(u32 luVehicleTypeId,
     {
         CGS_ASSERT(!GetVehicle(luFreeSlot)->IsAlive(),
                    "Vehicle was still alive when its param was reallocated");
-    }
-
-    if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())
-    {
-        // [T2-gen] one-shot first driving car. DELETE-WHEN-STABLE.
-        static bool sbFirst = true;
-        if (sbFirst)
-        {
-            sbFirst = false;
-            *lpDiag << "[T2-gen] GenerateNewVehicle FIRST fire param=" << static_cast<s32>(luFreeSlot)
-                    << " hull=" << static_cast<s32>(luHullIndex)
-                    << " section=" << static_cast<s32>(luSectionIndex)
-                    << " paramAlong*1000=" << static_cast<s32>(lfParamAlong * 1000.0f)
-                    << " type=" << static_cast<s32>(luVehicleTypeId)
-                    << " freeParamsLeft=" << static_cast<s32>(mFreeParams.GetLength()) << "\n";
-        }
     }
 }
 

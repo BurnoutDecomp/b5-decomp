@@ -5,7 +5,7 @@
 // per-frame physics publish. Its race-car half, VehicleManager::WriteOutVehicleStats @0x8263F460,
 // is already real and mounted and tail-calls this one at 0x8263FA28
 // (`addis r3,r18,1 ; addi r3,r3,-0x5120` == this + 44768 == &mPhysicalTrafficManager, r4 == the
-// same VehicleOutputInterface). Its gate at BrnPhysicsConductorGates.cpp:374 RETIRES with this file.
+// same VehicleOutputInterface). Its conductor gate is already retired.
 //
 // SIGNATURE from the asm prologue: r3 this, r4 the VehicleOutputInterface. The Hex-Rays `a3`/`a4`
 // are stale register noise -- the only two registers the body reads are r3 (walked as v5) and the
@@ -15,19 +15,15 @@
 // this+104552, capacity ku8TotalMaxNumPhysicalTraffic == 20), open-coded by the console as the
 // usual `cntlzd`-over-64-bit-fields first/next-set-bit pair plus the CgsBitArray.h:203
 // "invalid index : " bound assert. Per set bit:
-// THE POTENTIAL GATE (0x825F0534..0x825F056C) -- recovered wave 4, was MISSING from this file.
+// THE POTENTIAL GATE (0x825F0534..0x825F056C):
 //   clrldi r10,r29,58 / srwi r11,r29,6 / addi r11,r11,0x3310 / slwi r11,r11,3 / ldx r11,r11,r19
 //   sld r10,r9,r10 / and r11,r10,r11 / bne cr6, loc_825F08B0
-// (0x3310 << 3 == 104576 == mPotentialTrafficVehicles, the fourth 8-byte BitArray after
-// mUsedTrafficVehicles @104552; loc_825F08B0 is the GetNextNonZeroBit continuation.)
-// A slot that is still merely POTENTIAL -- a proxy body promoted by HandleHalfPotentialContact so
-// the solver can see the car, which the WORLD was never told about (AddVehicleToPhysics does not
-// call RecordTrafficVehicleIsPhysical) -- publishes NOTHING. It is skipped before the :730 index
-// assert, so no assert fires for it either. Only a proxy that a contact converted (Crashing /
-// Checked / Slammed each UnSetBit it) or a normally-added physical car reaches AddTrafficState.
-// Dropping this gate is what made TrafficEntityModule::HandleExternalResponses' pose read-back
-// assert five times per frame on every unconverted proxy (_wT3_04.cpp:308 -> _wT3_00.cpp:38 ->
-// BrnTrafficVehicle.h:340 -> _wT3_00.cpp:53 -> BrnTrafficVehicle.cpp:1164).
+// (0x3310 << 3 == 104576 == mPotentialTrafficVehicles; loc_825F08B0 is the GetNextNonZeroBit
+// continuation.) A slot that is still merely POTENTIAL -- a proxy body promoted by
+// HandleHalfPotentialContact that the WORLD was never told about (AddVehicleToPhysics does not
+// call RecordTrafficVehicleIsPhysical) -- publishes NOTHING, and is skipped before the :730 index
+// assert so no assert fires for it either. Only a proxy a contact converted (Crashing / Checked /
+// Slammed each UnSetBit it) or a normally-added physical car reaches AddTrafficState.
 //
 //   v22 = *(this + 103604) + (i << 6)   == &mpaTrafficVehicles[i]   (stride 64)
 //   v25 = *(this + 103360 + 4*i)        == maTrafficEntityIDs[i]
@@ -52,9 +48,6 @@
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleOutputInterface.h"
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/BrnSimpleVehiclePhysics.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"
-
-#include <cstdlib>   // getenv  ([T3-state] diagnostics only)
 
 namespace BrnPhysics
 {
@@ -89,9 +82,6 @@ void PhysicalTrafficManager::WriteOutVehicleStats(Vehicle::VehicleOutputInterfac
         return;
     }
 
-    s32 liPublished = 0;   // [T4-publish] diag only
-    s32 liSkipped   = 0;   // [T4-publish] diag only
-
     for (s32 liVehicle = mUsedTrafficVehicles.GetFirstNonZeroBit();
          liVehicle >= 0;
          liVehicle = mUsedTrafficVehicles.GetNextNonZeroBit(liVehicle))
@@ -100,31 +90,8 @@ void PhysicalTrafficManager::WriteOutVehicleStats(Vehicle::VehicleOutputInterfac
         // and do not even run the :730 index assert for it. See "THE POTENTIAL GATE" above.
         if (mPotentialTrafficVehicles.IsBitSet(static_cast<u32>(liVehicle)))
         {
-            // [T4-publish] one-shot + value-latched census, so the skipped hop is NAMED in the log.
-            // DELETE-WHEN-STABLE.
-            {
-                static const bool skbTrafficDiag = (std::getenv("BRN_TRAFFIC_DIAG") != 0);
-                if (skbTrafficDiag && CgsDev::Log::gpDebugPrint != 0)
-                {
-                    static bool sbLoggedFirstSkip = false;
-                    if (!sbLoggedFirstSkip)
-                    {
-                        sbLoggedFirstSkip = true;
-                        *CgsDev::Log::gpDebugPrint
-                            << "[T4-publish] FIRST potential-proxy publish SKIPPED: slot "
-                            << liVehicle << " entity index "
-                            << static_cast<s32>((maTrafficEntityIDs[liVehicle].muValue >> 10)
-                                                & 0x3FFFu)
-                            << " (mPotentialTrafficVehicles set; world was never told it is"
-                               " physical, so no PhysicalTrafficState is published)\n";
-                    }
-                }
-            }
-            ++liSkipped;
             continue;
         }
-
-        ++liPublished;
 
         CGS_ASSERT(static_cast<u32>(liVehicle) < KU8_TOTAL_MAX_NUM_PHYSICAL_TRAFFIC,
                    "liVehicle < ku8TotalMaxNumPhysicalTraffic");                       // :730
@@ -142,40 +109,6 @@ void PhysicalTrafficManager::WriteOutVehicleStats(Vehicle::VehicleOutputInterfac
         }
 
         lpOutputInterface->AddTrafficState(lEntityId, lpVehicle);
-
-        // [T3-state] the first PhysicalTrafficState this build ever publishes. DELETE-WHEN-STABLE.
-        {
-            static const bool skbTrafficDiag = (std::getenv("BRN_TRAFFIC_DIAG") != 0);
-            static bool       sbLoggedFirstState = false;
-            if (skbTrafficDiag && !sbLoggedFirstState && CgsDev::Log::gpDebugPrint != 0
-                && lpVehicle->mpVehicleBody != 0)
-            {
-                sbLoggedFirstState = true;
-                const Vector3 lvPos = lpVehicle->mpVehicleBody->GetPosition();
-                *CgsDev::Log::gpDebugPrint
-                    << "[T3-state] FIRST PhysicalTrafficState published: slot " << liVehicle
-                    << " entity index " << static_cast<s32>((lEntityId.muValue >> 10) & 0x3FFFu)
-                    << " at (" << lvPos.x << ", " << lvPos.y << ", " << lvPos.z << ")\n";
-            }
-        }
-    }
-
-    // [T4-publish] value-latched census of the split this gate makes. DELETE-WHEN-STABLE.
-    {
-        static const bool skbTrafficDiag = (std::getenv("BRN_TRAFFIC_DIAG") != 0);
-        if (skbTrafficDiag && CgsDev::Log::gpDebugPrint != 0)
-        {
-            static s32 siLastPublished = -1;
-            static s32 siLastSkipped   = -1;
-            if (liPublished != siLastPublished || liSkipped != siLastSkipped)
-            {
-                siLastPublished = liPublished;
-                siLastSkipped   = liSkipped;
-                *CgsDev::Log::gpDebugPrint
-                    << "[T4-publish] states published=" << liPublished
-                    << " potential-proxies skipped=" << liSkipped << "\n";
-            }
-        }
     }
 }
 

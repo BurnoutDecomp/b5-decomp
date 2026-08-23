@@ -42,7 +42,7 @@
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_SceneUpdate.h"   // InSceneUpdateInterface (the Detach chain's four Remove* posts)
 #include "GameSource/World/BrnEntityTypes.h"              // BrnWorld::E_ENTITYTYPE_RACECAR (the Attach seed)
 #include "SharedClasses/World/BrnCollisionTag.h"          // BrnWorld::KU_COLLISION_FLAG_FATAL (IsWrecked)
-#include "GameShared/GameClasses/Development/Log/CgsLog.h" // gpDebugPrint / gxMessageFilterFlags ([engine-diag])
+#include "GameShared/GameClasses/Development/Log/CgsLog.h" // gpDebugPrint / gxMessageFilterFlags
 #include "GameShared/GameClasses/System/Timer/CgsFrameInterpolation.h" // ⚠️ FLAG PC QoL: BlendTransform (the render-pose interpolator)
 
 #include <cstring>   // memset (the console's own inlined clears)
@@ -734,20 +734,15 @@ void ActiveRaceCar::ApplyRenderPoseInterpolation(f32 lfAlpha)
 //   0x822D4864..0x822D48F4  the three-way brake/reverse/engine-off tail on meEngineState
 //               (this+0x768) and lpState->mi8Gear (state+0x444) -- see the code below.
 //
-// ⭐ FOURTH INDEPENDENT CONFIRMATION OF THE RaceCarState "+4" FIX. Every state offset this
-// body touches -- 0x444 mi8Gear, 0x446 mabWheelExists[0], 0x44A mbCrashing, 0x452 mbIsHidden,
-// 0x40C mfBrake -- lands on those members ONLY with the 8-byte mCarAssetAttribKey committed
-// this wave (BrnVehicleEvents.h's banner). Under the old 4-byte model every one of them was
-// off by one member.
+// The RaceCarState "+4" layout pin: every state offset this body touches -- 0x444 mi8Gear,
+// 0x446 mabWheelExists[0], 0x44A mbCrashing, 0x452 mbIsHidden, 0x40C mfBrake -- lands on those
+// members ONLY with the 8-byte mCarAssetAttribKey (BrnVehicleEvents.h's banner). Under a
+// 4-byte key every one of them is off by one member.
 //
-// ⭐ LIVE AS OF 2026-08-23 -- the "NO CALLER YET" banner that stood here is RETIRED, MEASURED.
-// The console's only caller, RaceCarEntityModule::ReadUpdatedActiveRaceCarDataFromPhysics
-// @0x822E87B8, runs every PostPhysics frame and its mUsedRaceCars gate PASSES, so this body
-// owns mPhysicsState and the render pose. Proof on a booted drive run (flow_run -Drive
-// -MotionProbe, no teleport, 0 asserts): [motion] pos 3002.70 7.12 -1728.06 vel |v| 33.28
-// mph 73.42 gear 3 gas 1.000000 engine 2, tracking frame by frame, with [T4-player] and the
-// world->director publish carrying the same pose. maRaceCarStates IS populated (vehicle
-// manager ProcessCreateEvents + WriteOutVehicleStats are both landed and mounted).
+// LIVE: the console's only caller, RaceCarEntityModule::ReadUpdatedActiveRaceCarDataFromPhysics
+// @0x822E87B8, runs every PostPhysics frame with its mUsedRaceCars gate passing (vehicle-manager
+// ProcessCreateEvents + WriteOutVehicleStats are landed and mounted), so this body owns
+// mPhysicsState and the render pose.
 // ----------------------------------------------------------------------------
 void ActiveRaceCar::UpdatePhysicsState(const BrnPhysics::Vehicle::RaceCarState* lpState,
                                        CgsWorld::WorldMap2D* lpWorldMap)
@@ -1565,31 +1560,8 @@ void ActiveRaceCar::Update(f32 lfTimeStep,
                 "muType < E_RACE_CAR_TYPE_COUNT" );      // BrnRaceCar.h:577
     if( mpRaceCar->GetType() == E_RACE_CAR_TYPE_PLAYER )
     {
-        // ---- [engine-diag] PC bring-up instrument -- DELETE WHEN the car drives -----------
-        // Placed in the CALLER so the reconstructed UpdateEngineState body stays byte-for-byte
-        // the console's shape (it has six early returns; wrapping it would have restructured
-        // it). Logs only TRANSITIONS, so the whole ignition chain is four lines in BrnGame.log.
-        const RaceCarEntityModuleIO::EActiveRaceCarEngineState leEntryState = meEngineState;
-
         UpdateEngineState( lfTimeStep, lfAcceleration, lfBraking,
                            lbIsInOnlineGameMode, lbInCarSelectScreen );
-
-        if( meEngineState != leEntryState
-            && ( CgsDev::Message::gxMessageFilterFlags & 1 ) != 0
-            && CgsDev::Log::gpDebugPrint != 0 )
-        {
-            *CgsDev::Log::gpDebugPrint
-                << "[engine-diag] meEngineState " << static_cast<s32>( leEntryState )
-                << " -> " << static_cast<s32>( meEngineState )
-                << "  (0=OFF 1=STARTING 2=RUNNING 3=STOPPING)"
-                << "  accel " << lfAcceleration
-                << " brake " << lfBraking
-                << " mph "   << mPhysicsState.mfSpeedMPH
-                << " carsel " << ( lbInCarSelectScreen ? 1 : 0 )
-                << " swoff "  << ( mbEnableEngineSwitchOff ? 1 : 0 )
-                << " ingame " << ( mbIsInGameMode ? 1 : 0 ) << "\n";
-        }
-        // ---- end [engine-diag] ------------------------------------------------------------
     }
 
     mbAIToBeActivated = false;                           // +0x781 (0x822F7E54)

@@ -166,7 +166,7 @@ namespace BrnTraffic
     // FLAG (IsZero epsilon): flt_82001740 is an un-valued .rdata float; rw::math::vpu::IsZero's
     //   committed default supplies the small-epsilon test the vandc+vcmpgtfp pair computes.
     //
-    // ⭐ THIS BODY IS WHAT PINNED A REAL BUG IN ITS SIBLING. CalcPositionAtParameter above used
+    // THIS BODY IS WHAT PINNED A REAL BUG IN ITS SIBLING. CalcPositionAtParameter above used
     //   to read the same fused-multiply-add's operands as `span * p0 + 0.5` (position times
     //   position, plus a constant) and never used the fractional weight; the vmaddcfp128 form
     //   here is unambiguously `span * 0.5 + p0` == the rung midpoint. The sibling is corrected
@@ -211,7 +211,7 @@ namespace BrnTraffic
     // Only the outer symbol has callers, so the pair is joined here (a de-inlining split, not
     // two semantics); the inner's own asserts are reproduced in place.
     //
-    // ⭐ THE ARITHMETIC IS NOT A SPLINE. The inner body's assert literals say "DoSplineInterp
+    // THE ARITHMETIC IS NOT A SPLINE. The inner body's assert literals say "DoSplineInterp
     // gave us zero vector for " / "DoSplineInterp gave us invalid vector: " -- the shipped
     // interpolation is straight linear, exactly the sampler CalcPositionAtParameter and
     // CalcDirectionAtParameter above already implement. Walked op for op (r21 = &rungA,

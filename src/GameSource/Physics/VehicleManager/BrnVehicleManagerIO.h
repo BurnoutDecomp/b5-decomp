@@ -17,7 +17,7 @@
 //     @0x825A1058  write  (write-lock bit 3: extrwi r11,r11,1,28) -> this + 16
 // Their assert paths cite ".../VehicleManager/BrnVehicleManagerIO.h:60/61".
 //
-// ⛔⛔ CORRECTED 2026-08-09 (conductor wave). Until this pass the file declared a
+// Until this pass the file declared a
 // class named `VehicleManagerIO` whose +16 member was a 1-byte
 // `VehicleManagerOutputInterfaceStorage` returned by accessors named
 // `GetVehicleManagerOutputInterface`. ALL THREE NAMES WERE INVENTED: the DWARF

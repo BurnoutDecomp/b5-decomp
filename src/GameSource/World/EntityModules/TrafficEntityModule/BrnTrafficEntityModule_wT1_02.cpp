@@ -31,7 +31,6 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"              // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"      // gpDebugPrint / gxMessageFilterFlags
 
-#include <cstdlib>   // getenv
 
 namespace BrnTraffic
 {
@@ -53,23 +52,6 @@ namespace
                 << "[T1-traffic-leg] TrafficEntityModule leg NOT RECONSTRUCTED, skipped: "
                 << lpcLegNameAndReason << " [FLAG PC partial gate]\n";
         }
-    }
-
-    // DELETE-WHEN-STABLE bring-up probe plumbing, gated on BRN_TRAFFIC_DIAG.
-    // [DIAG] NOT IN THE X360 BINARY.
-    bool TrafficDiagEnabled()
-    {
-        static const bool sbEnabled = (getenv("BRN_TRAFFIC_DIAG") != 0);
-        return sbEnabled;
-    }
-
-    CgsDev::Log::DebugPrint* TrafficDiagStream()
-    {
-        if (!TrafficDiagEnabled() || CgsDev::Log::gpDebugPrint == 0)
-        {
-            return 0;
-        }
-        return CgsDev::Log::gpDebugPrint;
     }
 }
 
@@ -193,7 +175,7 @@ void TrafficEntityModule::PreSceneUpdate(CgsModule::IOBufferStack* lpInputBuffer
             // exe link. The per-TU `cl /c` gate cannot see that.
             CreateNewVehicleEntities(lpOutput);
 
-            // ⭐ UN-GATED wave 4: UpdateCollidableVehicles @0x827302C8 is BODIED
+            // UN-GATED: UpdateCollidableVehicles @0x827302C8 is BODIED
             // (_wT4_01.cpp). It is the COLLISION-volume half of the registration above -- the
             // only producer of mVehicleSoaData.mCollidableVehicles and the only caller of
             // AddVolumeInstance / AddForCollision for a traffic vehicle. Without it a parked
@@ -249,14 +231,6 @@ void TrafficEntityModule::PreSceneUpdate(CgsModule::IOBufferStack* lpInputBuffer
             }
 
             meStartingUpState = E_STARTINGUPSTATE_POPULATING;
-
-            if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())
-            {
-                // [T1-populate] one-shot by construction: POPULATING is entered once per
-                // starting-up cycle. DELETE-WHEN-STABLE.
-                *lpDiag << "[T1-populate] meStartingUpState -> E_STARTINGUPSTATE_POPULATING"
-                        << " (density=" << mfTrafficAmountScale << ")\n";
-            }
         }
         break;
 

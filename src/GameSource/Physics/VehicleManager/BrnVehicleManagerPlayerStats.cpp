@@ -73,7 +73,7 @@ namespace Vehicle
                    "( mePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT ) && ( mePlayerActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID )");
 
         // The raw stats block (asm writes [0],[1],[2],[3],[5] as WORDS).
-        // ⚠️ CORRECTED 2026-08-03: the destination used to be modelled as `f32 maPlayerCarStats[5]`.
+        // the destination used to be modelled as `f32 maPlayerCarStats[5]`.
         // The DWARF names these `int32_t miCarSpeed/miCarStrength/miCarControl/miCarBoost` +
         // `BrnResource::ECarType meCarType`, and VehicleManager::Construct proves the types at the
         // opcode level (it seeds +172320/+172324 with `stfsx` and +172328..+172344 with `stwx`).
@@ -88,7 +88,7 @@ namespace Vehicle
         std::memcpy(&miCarBoost,    &lpSendCarStatsAction[3], sizeof(miCarBoost));
         std::memcpy(&meCarType,     &lpSendCarStatsAction[5], sizeof(meCarType));
 
-        // ⭐⭐ NAME + TYPE FIXED 2026-08-03 (VehiclePhysics own-block wave). This used to write a
+        // NAME + TYPE FIXED 2026-08-03 (VehiclePhysics own-block wave). This used to write a
         // proposed-name `f32 mfPlayerBoostStrengthStat`. The asm stores the SAME word twice --
         // `lwz r10,0x14(r30) ; stwx r10,r31,0x2A138` (this class's meCarType, three lines above)
         // and `lwz r10,0x14(r30) ; stw r10,0x1B1C(r11)` (the record) -- and in-record 5084 is
@@ -122,7 +122,7 @@ namespace Vehicle
         CGS_ASSERT(lpOutPhysicsEntityId != nullptr, "lpOutPhysicsEntityId != NULL");
 
         const u32 luGlobalIndex = (luGlobalEntityId >> KU_ENTITY_INDEX_SHIFT) & KU_ENTITY_INDEX_MASK;
-        // ⭐ RE-SEATED 2026-08-03: the map is the embedded traffic manager's own member
+        // RE-SEATED 2026-08-03: the map is the embedded traffic manager's own member
         // (VehicleManager +149456 == 44768 + 104688), not a sibling of VehicleManager. The assert
         // condition is the console's own text, and it can now be spelled against the real
         // `sizeof(map)` it names instead of against a hand-copied 600.
@@ -148,7 +148,7 @@ namespace Vehicle
     //   TRAFFIC_VEHICLE(2) -> PhysicalTrafficManager::GetVehiclePhysics on the contained subobject.
     // The X360 returns a raw pointer.
     //
-    // ⚠️ CORRECTED 2026-08-19 (wave Q7): THE TWO BRANCH TYPES DO SHARE A BASE. `struct
+    // THE TWO BRANCH TYPES DO SHARE A BASE. `struct
     // VehiclePhysics : public SimpleVehiclePhysics` (VehiclePhysics.h), so RaceCarPhysics IS-A
     // SimpleVehiclePhysics and both branches return one. The DWARF types the console accessor
     // `SimpleVehiclePhysics* GetVehiclePhysics(EntityId)` (BrnVehicleManager.h:1299), and
@@ -159,7 +159,7 @@ namespace Vehicle
     // SimpleVehiclePhysics* and drop the two static_casts at the call site in
     // DoCarCarContactGeneration (BrnVehicleManagerContactGeneration.cpp).
     //
-    // ⭐ THE TRAFFIC BRANCH IS REAL AS OF 2026-08-03. The old note here read: "the contained
+    // THE TRAFFIC BRANCH IS REAL AS OF 2026-08-03. The old note here read: "the contained
     // PhysicalTrafficManager subobject @ +44768 is modelled as opaque padding in this layout (it
     // cannot be embedded by its real type because the takedown TU already names
     // maRaceCarEntityIdRemap as a direct sibling at +148128, which falls inside the subobject's byte
@@ -202,7 +202,7 @@ namespace Vehicle
     // Recency throttle: true while this car's post-impact cooldown is still running, i.e. while
     // mafNoImpactTimeSeconds[idx] > 0.0f (asm: load *(4*(idx+42921)+this) as a float, fcmpu > 0.0;
     // 4*(idx+42921) == 4*idx + 171684).
-    // ⭐ SIMPLIFIED 2026-08-03. This body used to read the slot as an s32 and memcpy it to a float,
+    // SIMPLIFIED 2026-08-03. This body used to read the slot as an s32 and memcpy it to a float,
     // because the member was modelled as `s32 maRaceCarLastAttacker[8]`. That workaround was the
     // symptom, not the fix: DWARF :925 names the array `mafNoImpactTimeSeconds` and types it
     // float32_t[8], and HandleRaceCarRaceCarContact seeds it with `lfsx`/`stfsx` from the f32
@@ -306,7 +306,7 @@ namespace Vehicle
     // -------------------------------------------------------------------------------------------
     void VehicleManager::_AssertLayoutPlayerStats()
     {
-        // ⭐ 2026-08-03 (the record-fold wave): `offsetof(RaceCarVehicleRecord, meCarType) == 5084`
+        // `offsetof(RaceCarVehicleRecord, meCarType) == 5084`
         // stood here. The record is gone -- `maRaceCarVehicles` is the real RaceCarPhysics -- and a
         // host class does not reproduce a console in-record seat, so the assert cannot be kept and
         // must not be re-based to whatever the host produces. The 0x13DC seat is asserted as console
@@ -318,7 +318,7 @@ namespace Vehicle
                       "(asm 0x8259BFE8), not the f32 the retired record modelled");
         static_assert(offsetof(VehicleManager, mHiddenRaceCars)          == 44704 + KU_HOST_DRIFT_AFTER_MODEL_HANDLES,  "mHiddenRaceCars (asm +44704)");
         static_assert(offsetof(VehicleManager, mauNetworkCarHiddenFramesRemaining)               == 44736 + KU_HOST_DRIFT_AFTER_MODEL_HANDLES,  "mauNetworkCarHiddenFramesRemaining (asm base 44736)");
-        // ⭐ RE-SEATED 2026-08-03: the map is the embedded traffic manager's own member, not a
+        // RE-SEATED 2026-08-03: the map is the embedded traffic manager's own member, not a
         // sibling of this class. The old assert claimed `offsetof(VehicleManager,
         // mau8GlobalToPhysicalEntityIndexMap) == 149456`; the X360 address is indeed 149456 ==
         // 44768 + 104688, but that in-manager 104688 does NOT reproduce on the host -- ResourceHandle

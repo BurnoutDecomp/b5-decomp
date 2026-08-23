@@ -31,12 +31,12 @@ namespace BrnPhysics
 {
 namespace Vehicle
 {
-    // ⭐ 2026-08-09 (attribs-setup wave): the `PhysicsVehicleBaseAttribs` MINIMAL OWNING SLICE
+    // the `PhysicsVehicleBaseAttribs` MINIMAL OWNING SLICE
     // that stood here is RETIRED, exactly per its own contract ("MUST be reconciled when the
     // real physicsvehiclebaseattribs type lands") -- the real generated wrapper is committed at
     // GameSource/AttribSys/Generated/classes/physicsvehiclebaseattribs.h. The tire scatters take
     // it by const-ref (fwd-declared; the X360 reads the record via the wrapper's data pointer,
-    // `lwz +4`). ⭐ 2026-08-09 (attribs-data wave): the scatters are REAL -- the permute table
+    // `lwz +4`). 2026-08-09 (attribs-data wave): the scatters are REAL -- the permute table
     // 0x8327F140 is homed (static-init writer bank @0x82C74000) and all eight bodies are
     // image-emulated; see the Wheel.cpp banner.
     // Forward decl only -- the full generated header is pulled by the TUs that construct one.
@@ -109,8 +109,8 @@ namespace Vehicle
             // three curves + the packed register via the lane-insert permute table @0x8327F140.
             // They differ only in their source numbers, not logic. The attrib-driven pair take
             // the per-car base-attribs record; the Default/AI/DonutAI presets lay out .rdata
-            // tuning constants. ⭐ 2026-08-09 (attribs-data wave): table homed + all eight bodies
-            // REAL (image-emulated, values exact -- see the Wheel.cpp banner). ⚠️ The DonutAI
+            // tuning constants. 2026-08-09 (attribs-data wave): table homed + all eight bodies
+            // REAL (image-emulated, values exact -- see the Wheel.cpp banner). The DonutAI
             // pair deliberately PRESERVES maPackedVariables.w (15 vperms, not 16).
             void PrepareDefaultFrontTire();
             void PrepareDefaultRearTire();
@@ -166,7 +166,7 @@ namespace Vehicle
         // @0x825FEBE8: prepare the wheel from a streamed position + per-wheel scalars + tire attribs
         // (Clear, set mpTireAttribs, scatter the scalars into their SIMD lanes, then SetPosition).
         // Bodied in Wheel.cpp.
-        // ⭐ LANE MAP CORRECTED against the raw asm (seat wave 2026-08-05) -- the old "inferred from
+        // LANE MAP CORRECTED against the raw asm (seat wave 2026-08-05) -- the old "inferred from
         // the SwitchAttribs sibling" scatter was wrong on every lane. Proven map (asm 0x825FEC48..
         // 0x825FED10, caller SimpleVehiclePhysics::SetAttributes asm 0x826027F4..0x82602840):
         //   f1 -> mSlipVariables.w                 = THE WHEEL RADIUS (the analytic seat's input;
@@ -181,7 +181,7 @@ namespace Vehicle
 
         // @0x825D6D38: re-point the tire attribs + re-derive the suspension lanes WITHOUT
         // clearing the running state (the in-place sibling of Prepare). Bodied in Wheel.cpp.
-        // ⭐⭐ RE-VERIFIED against its own asm 2026-08-09 (attribs-setup wave), exactly as the
+        // RE-VERIFIED against its own asm 2026-08-09 (attribs-setup wave), exactly as the
         // old FLAG here demanded -- the old parameter roles WERE the disproven inference. The
         // real scatter mirrors Prepare's proven map (f1 = radius -> mSlipVariables.w,
         // f2 = integration seed -> mIntegrationVariables.w, f3/f4 = travel up/down ->
@@ -196,7 +196,7 @@ namespace Vehicle
         // then resolve it against the brakes (the per-wheel spin/brake/lock-up step UpdateWheels
         // runs per wheel). Bodied in Wheel.cpp.
         //
-        // ⭐⭐ SIGNATURE CONFORMED 2026-08-07 (wheel-cluster wave). The previous 3-arg
+        // SIGNATURE CONFORMED 2026-08-07 (wheel-cluster wave). The previous 3-arg
         // (maxAngVel, bool, bool) form was a SLICE ARTIFACT: the callee asm CONSUMES v1..v5
         // (`vmulfp128 v31,v9,v1` dt; `vmulfp128 v7,v3,v4` brakeFactor*capacityScale;
         // `vmulfp128 v5,v5,v3` decelScale*brakeFactor; the clamp vs v2), and the DWARF spells
@@ -205,7 +205,7 @@ namespace Vehicle
         // rev limit, negative in reverse), v3 = the axle brake factor, v4 = unk_82FB9E10 ==
         // 100.0 (the brake-capacity scale), v5 = unk_82FB9380 == 1000.0 (the brake-decel
         // scale), r4 = (gas < 0.1), r5 = (reversing || gear 0).
-        // ⭐ The old FLAG called unk_82FB9CF0/8BC0/8B40/8327F240 "un-homed / absent from the
+        // The old FLAG called unk_82FB9CF0/8BC0/8B40/8327F240 "un-homed / absent from the
         // exports": FALSE (another absence banner down). All four are static-init'd BSS with
         // rdata-attested writers -- 9000.0 / 100.0 / 500.0 / the shared FALSE|TRUE vsel mask
         // pair (see Wheel.cpp).
@@ -223,7 +223,7 @@ namespace Vehicle
         // never overshooting the free-rolling speed (roadLongSpeed / radius), then zeroes a locked
         // wheel. Bodied in Wheel.cpp.
         //
-        // ⭐ 2026-08-12 (tyre-force wave). Its own .ida-exports JSON is a HOLE -- the address and
+        // Its own .ida-exports JSON is a HOLE -- the address and
         // the name came out of HandleWheelPairFriction's `xrefs_from`, exactly the documented
         // hole-recovery route -- and the BODY did not need the hole closed at all: the X360
         // compiler INLINED this call for the pair's first wheel (0x825FBE6C..0x825FBF00) and only
@@ -238,7 +238,7 @@ namespace Vehicle
         // here to avoid breaking the committed callers).
         const RoadContact& GetRoadContact() const { return mRoadContact; }
 
-        // ⭐ ADDED 2026-08-19 (wave Q6 / the jointed lean+tilt prop response). The wheel's
+        // The wheel's
         // road-relative LONGITUDINAL contact speed -- lane .x of mSpeedAndMassOnWheelVariables,
         // broadcast into all four lanes.
         //

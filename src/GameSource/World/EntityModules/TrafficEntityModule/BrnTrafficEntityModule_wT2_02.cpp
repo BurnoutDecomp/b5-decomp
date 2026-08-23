@@ -27,7 +27,6 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "GameShared/GameClasses/Containers/CgsFastBitArray.h"
 
-#include <cstdlib>   // getenv
 
 namespace BrnTraffic
 {
@@ -48,22 +47,6 @@ namespace
                 << "[T2-traffic-leg] TrafficEntityModule leg NOT RECONSTRUCTED, skipped: "
                 << lpcLegNameAndReason << " [FLAG PC partial gate]\n";
         }
-    }
-
-    // DELETE-WHEN-STABLE bring-up probes. [DIAG] NOT IN THE X360 BINARY.
-    bool TrafficDiagEnabled()
-    {
-        static const bool sbEnabled = (getenv("BRN_TRAFFIC_DIAG") != 0);
-        return sbEnabled;
-    }
-
-    CgsDev::Log::DebugPrint* TrafficDiagStream()
-    {
-        if (!TrafficDiagEnabled() || CgsDev::Log::gpDebugPrint == 0)
-        {
-            return 0;
-        }
-        return CgsDev::Log::gpDebugPrint;
     }
 
     // .rdata literals this TU reads by value.
@@ -220,30 +203,6 @@ void TrafficEntityModule::UpdateParams(const BrnTrafficIO::InputBuffer_PostPhysi
     UpdateParams_UpdateLinkedList();
 
     mParamsToReinsert.Clear();   // +0x3D7F4 `stwx r17(0)`
-
-    // [T2-param] one-shot: did the driver run, and with what clock?
-    {
-        static bool sbLogged = false;
-        if (!sbLogged)
-        {
-            if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())
-            {
-                u32 luAlive = 0;
-                for (u32 luParam = 0; luParam < KU_MAX_PARAMS; ++luParam)
-                {
-                    if (maParams[luParam].IsAlive())
-                    {
-                        ++luAlive;
-                    }
-                }
-                sbLogged = true;
-                *lpDiag << "[T2-param] FIRST UpdateParams pass: aliveParams " << luAlive
-                        << " decisionFrame " << (mbDecisionFrame ? 1 : 0)
-                        << " dtSinceDecision " << mfSimTimeSinceLastDecision
-                        << " diceRoll " << luMaxLaneChangeDiceRoll << "\n";
-            }
-        }
-    }
 
     CgsDev::PerfMonCpu::StopMonitor(miPerfMon_UpdateParam);
 }

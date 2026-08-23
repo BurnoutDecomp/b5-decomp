@@ -184,7 +184,7 @@ public:
     // KU_INVALID_VEHICLE == 0xFFFF, which a u8 could never hold.
     u16 GetCabIndex() const;
 
-    // The UNASSERTED read of the same halfword. ADDITIVE GROW (wave T3 r3): the console reaches
+    // The UNASSERTED read of the same halfword. ADDITIVE GROW: the console reaches
     // it this way where the species is not yet known -- ReturnPhysicalVehicleToTraffic
     // @0x8273DF18 is a bare `lhz r11, 2(r24)` with no assert before it, and the species test
     // comes AFTER. GetCabIndex asserts IsOfTrailerSpecies() and so cannot serve that site.
@@ -266,7 +266,7 @@ public:
     void SetCurrentManoeuvre(Manoeuvre leManoeuvre);
     void SetCurrentManoeuvrePhase(s8 liPhase);
     void SetWantsToExtremeSwerve(bool lbWants);
-    // ADDITIVE (wave T3 r3 fix round) -- the two sympathetic-crash fields UpdateExtremeSwerving
+    // ADDITIVE -- the two sympathetic-crash fields UpdateExtremeSwerving
     // @0x8273EB08/@0x8273EB14/@0x8273EB24 writes INLINE (`stfs f0,0x4C(r30)` then
     // `stw r10,0x48(r30)`); the console emits no call, so these are header inlines, not
     // out-of-line accessors. No layout change: both members already exist.
@@ -293,7 +293,7 @@ public:
     // X360 @0x8271BB30 -- SetHasEntity's collision twin, and the ONE blocker that kept
     // TrafficEntityModule::UpdateCollidableVehicles @0x827302C8 out of the tree.
     //
-    // ARITY, settled off the export (the dropped-argument trap the wave brief warns about):
+    // ARITY, settled off the export (the dropped-argument trap):
     // the prototype is `SetCollidable(this, char, int, int)` and the ONE call site passes
     // `li r4,1 ; addi r5,r1,var_880 ; addis r6,module,3 ; addi r6,r6,-0x7D30` -- r6 is
     // &mVehicleSoaData (module+0x282D0) and r5 is a STACK-RESIDENT

@@ -4,9 +4,7 @@
 #include "SDKs/EATech/eajobs/job_scheduler.h"                 // EA::Jobs::JobScheduler::AddJobs
 #include "SDKs/EATech/eajobs/job_types.h"                     // EA::Jobs::JOB_ENVIRONMENT_LOCAL
 
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"    // CgsDev::Log::gpDebugPrint
 
-#include <cstdlib>   // getenv (BRN_TRAFFIC_DIAG)
 #include <cstring>   // std::memcpy (models the X360 memcpy intrinsic)
 
 // GameSource/Jobs/Traffic/BrnTrafficJob.cpp
@@ -27,21 +25,6 @@ namespace BrnTraffic
 {
 namespace
 {
-    bool TrafficDiagEnabled()
-    {
-        static const bool sbEnabled = (getenv("BRN_TRAFFIC_DIAG") != 0);
-        return sbEnabled;
-    }
-
-    CgsDev::Log::DebugPrint* TrafficDiagStream()
-    {
-        if (!TrafficDiagEnabled() || CgsDev::Log::gpDebugPrint == 0)
-        {
-            return 0;
-        }
-        return CgsDev::Log::gpDebugPrint;
-    }
-
     // FLAG PC-platform leaf: single-threaded job dispatch. The console submits mJob to
     // EA::Jobs::JobScheduler gJobManager (X360 unk_830EA650), which CgsSystem::HardwareInit
     // brings up; that singleton has no committed home on this host, so TrafficJobEntry runs
@@ -118,21 +101,6 @@ void TrafficJobStub::Execute(JobParams* lpParams)
     {
         // FLAG PC-platform leaf: run the worker inline instead of gJobManager.AddJobs(&mJob, 1).
         // Reason + DELETE-WHEN are on KB_PC_SYNCHRONOUS_JOB_DISPATCH above.
-        if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())
-        {
-            // [T2-job] one-shot. DELETE-WHEN-STABLE.
-            static bool sbFirst = true;
-            if (sbFirst)
-            {
-                sbFirst = false;
-                *lpDiag << "[T2-job] FIRST TrafficJobStub::Execute dispatch=sync begin="
-                        << static_cast<s32>(lpParams->mUpdateVehicles.muBeginVehicle)
-                        << " end="
-                        << static_cast<s32>(lpParams->mUpdateVehicles.muEndVehicle)
-                        << " workers=" << static_cast<s32>(KU_MAX_TRAFFIC_JOB_WORKERS) << "\n";
-            }
-        }
-
         TrafficJobEntry(EA::Jobs::Param(static_cast<u32>(KU_PC_SYNCHRONOUS_WORKER_ID)),
                         EA::Jobs::Param(static_cast<void*>(&mJobData)),
                         EA::Jobs::Param(),

@@ -99,7 +99,7 @@ namespace Vehicle
 
     // @0x823DB640  VehicleDriverInputInterface::Append
     //
-    // ⭐ RECONSTRUCTED 2026-08-09 (feed wave) -- the callee of
+    // RECONSTRUCTED 2026-08-09 (feed wave) -- the callee of
     // WorldModule::BridgeInputToPhysicsModule @0x827AB830, which had no body anywhere in the
     // tree. Three steps, verbatim from the 31-instruction X360 body:
     //   1. merge the source's update-driver queue into ours (`bl VariableEventQueue<5040,16>::

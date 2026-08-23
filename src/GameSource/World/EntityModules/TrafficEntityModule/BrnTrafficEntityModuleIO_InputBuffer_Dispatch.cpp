@@ -26,7 +26,7 @@ namespace BrnTrafficIO
     void InputBuffer_Dispatch::_AssertLayout()
     {
         // HOST layout, not the console's: all four tail slots are real 8-byte host pointers now
-        // (see the header's POINTER WIDTH note, 2026-08-19 wave Q6), so the block starts at the
+        // (see the header's POINTER WIDTH note), so the block starts at the
         // next 8-byte boundary after the 0x8014-byte opaque payload and steps by sizeof(void*).
         // Transcribing the console's 0x8014/0x8018/0x801C/0x8020 here would re-assert exactly the
         // 32-bit-word shape the widening removes.
@@ -46,7 +46,7 @@ namespace BrnTrafficIO
     // ------------------------------------------------------------------------
     // InputBuffer_Dispatch::Construct   @ 0x8275CF40
     // ------------------------------------------------------------------------
-    // ⭐ ADDED 2026-08-15 (IO-buffer zero-fill removal audit). The console body is five
+    // The console body is five
     // statements:
     //     stb 1, 0(this)                                   -> IOBuffer::Construct()
     //     bl  VariableEventQueue<32768,16>::Construct(+4)   -> the scene-result queue

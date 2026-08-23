@@ -70,8 +70,8 @@
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_SceneUpdate.h"                // InSceneUpdateInterface::SetVolumeInstanceTransform / SetEntityPosition / ClearEntityVolumesPadding
 
 #include <cstring>   // memset
-#include <cstdlib>   // getenv  ([motion] bring-up probe only)
-#include <cmath>     // sqrtf   ([motion] bring-up probe only)
+#include <cstdlib>   // getenv  ([motion] opt-in probe)
+#include <cmath>     // sqrtf
 
 namespace BrnWorld
 {
@@ -2730,48 +2730,8 @@ void RaceCarEntityModule::UpdateOutputInterfaces(
 
         const Vector4 lPaintColour = lpActiveRaceCar->GetRenderParams()->GetPaintColour();
 
-        // Bring-up diagnostic (same cadence as BridgeWorldToDirector's own): the SOURCE end
-        // of the world->director chain. Keeping both ends printed is what bisected the
-        // RaceCarState::operator= empty-link-stub bug in one run -- the source read
-        // (3008.17, -1.16, -1874.30) while the destination read the origin.
-        //
-        // ⚠️ mph/gas ADDED 2026-08-23 BECAUSE THE LINE WAS A LYING DIAGNOSTIC WITHOUT THEM.
-        // At 1-in-3000 publishes (~25 s) two consecutive lines carrying an unchanged pose read
-        // as "the publish is frozen" whether the publish is stale OR the car is simply PARKED.
-        // A whole verify round was spent on that reading: the car sat in car-select for 87 s of
-        // flow (gas 0, engine OFF -- correct), and the pose that "should have moved" only moved
-        // because place-on-track teleported it. mph/gas come out of the very RaceCarState this
-        // line publishes, so a parked car now says so on its own line. Same failure mode the
-        // [move-probe] banner in BrnVehicleManager_WriteOutVehicleStats.cpp records.
-        // DELETE-WHEN the [uoi] probe goes (with the rest of the bring-up instruments).
-        {
-            static u32 suSrcCount = 0;
-            ++suSrcCount;
-            if (suSrcCount == 1u || (suSrcCount % 3000u) == 0u)
-            {
-                if (CgsDev::Log::gpDebugPrint != 0)
-                {
-                    const BrnPhysics::Vehicle::RaceCarState* lpS = lpActiveRaceCar->GetPhysicsState();
-                    const Vector3& lP = lpS->mTransform.Pos();
-                    const Vector3& lR = lpActiveRaceCar->GetRenderParams()->GetBodyTransform().Pos();
-                    *CgsDev::Log::gpDebugPrint
-                        << "[uoi] #" << static_cast<s32>(suSrcCount) << " slot " << liSlot
-                        << " physics (" << lP.x << ", " << lP.y << ", " << lP.z
-                        << ") render (" << lR.x << ", " << lR.y << ", " << lR.z
-                        << ") flags " << static_cast<s32>(luFlags)
-                        << " engine " << static_cast<s32>(lpActiveRaceCar->GetEngineState())
-                        << " mph " << lpS->mfSpeedMPH
-                        << " gas " << lpS->mfGas
-                        << " playerIdx " << static_cast<s32>(mePlayerActiveRaceCarIndex) << "\n";
-                }
-            }
-        }
-
-        // ---- [motion] PC bring-up instrument -- DELETE WHEN the car drives ----------------
-        // OPT-IN (BRN_MOTION_PROBE=1) so a default run and every golden gate are byte-identical
-        // to a build without it. Prints the player slot's pose, heading and velocity every 30
-        // presents, which is the cadence a distance/acceleration trace needs; [uoi] above is
-        // every 3000 (~50 s) and cannot measure an acceleration.
+        // [motion] opt-in harness probe (BRN_MOTION_PROBE=1, flow_run.ps1 -MotionProbe): the player
+        // slot's pose/heading/velocity every 30 presents. Off by default; not console code.
         {
             static s32 siMotionProbe = -1;
             if( siMotionProbe < 0 )
@@ -2807,7 +2767,6 @@ void RaceCarEntityModule::UpdateOutputInterfaces(
                 }
             }
         }
-        // ---- end [motion] ----------------------------------------------------------------
 
         lpActiveCarInterface->SetRaceCarState(
             leSlot,
@@ -2890,15 +2849,9 @@ void RaceCarEntityModule::PreSceneUpdate(
     UpdateStreaming( lpInput, lpOutput );
 
     // ---- step 12: LATCH THIS FRAME'S PAD STATE ------------------------------
-    // ⛔⛔ THIS WAS A SILENT DROP, AND IT IS THE ONE THAT KEPT THE CAR PARKED.
-    // ProcessPlayerVehicleInput reads mPlayerVehicleControls by name at fifteen sites; NOTHING
-    // in this tree ever wrote it, so it served its zero-initialised value for ever and every
-    // control the player (or the harness) pressed was thrown away one hop before it was used.
-    // ⚠️ The label lied: ProcessPlayerVehicleInput's own banner at :2837 lists
-    // "PreSceneUpdate's `memcpy(module + 99240, controls, 60)`" among the things that "was
-    // already landed". It was not in the body. MEASURED 2026-08-12: `[controls-diag] FIRST
-    // NON-ZERO control reached the race-car pre-scene buffer -- accel 1.000000` in the SAME run
-    // where the physics probe read `gas 0.000` on every frame.
+    // ⚠️ Load-bearing: ProcessPlayerVehicleInput reads mPlayerVehicleControls by name at
+    // fifteen sites, so dropping this latch serves a zero-initialised control set for ever and
+    // throws away every control the player (or the harness) pressed one hop before it is used.
     //
     // The console's three consecutive stores, verbatim from PreSceneUpdate @0x8230D928:
     //     *(a1 + 99300) = InputBuffer_PreScene::GetActivePaybackType(v5);

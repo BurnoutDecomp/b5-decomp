@@ -1,7 +1,7 @@
 // =================================================================================================
 // GameSource/Physics/VehicleManager/BrnVehicleManager_DriverArms.cpp
 //
-// ⭐⭐ THE FOUR VehicleManager ARMS OF VehicleManager::UpdateDrivers @0x82642C68 -- the functions
+// THE FOUR VehicleManager ARMS OF VehicleManager::UpdateDrivers @0x82642C68 -- the functions
 // that move a frame's driver-control record OUT of the drained queue and INTO the per-car driver
 // state the vehicle sim reads. UpdateDrivers itself landed last wave
 // (BrnVehicleManager_UpdateDrivers.cpp) with all five callees as named BRN_CONDUCTOR_GATEs; this
@@ -13,7 +13,7 @@
 //   VehicleManager::UpdateNetworkDriver  @0x825C4D08  (258 insns)  DWARF BrnVehicleManager.h:878
 //   VehicleManager::DoHornTakedowns      @0x8263CC68  (333 insns)  DWARF BrnVehicleManager.h:1254
 //
-// ⭐ THE PRIOR WAVE'S "SHALLOW CLOSURE" CLAIM IS CONFIRMED, costed by address first. xrefs_from
+// THE PRIOR WAVE'S "SHALLOW CLOSURE" CLAIM IS CONFIRMED, costed by address first. xrefs_from
 // over all four, minus the assert/stream machinery (BeginAssert/FireAssert/EndAssert,
 // BasePriorityQueue::Clear, StrStreamBase::AppendFormat, sub_821F0E50/sub_821F0EC8 = the streamed
 // `operator<<(int)` helpers) and minus the __savegprlr_NN frame helpers, leaves exactly TWO real
@@ -22,12 +22,12 @@
 //     VehicleManager::InstantTakedown @0x82636108 -- ALREADY BODIED (BrnVehicleManager.cpp:499)
 // There is no absent callee here. Nothing in this TU is parked and nothing is gated.
 //
-// ⚠️ THE INSTRUCTION COUNTS ARE 90% ASSERT MACHINERY. UpdatePlayerDriver's 401 instructions carry
+// THE INSTRUCTION COUNTS ARE 90% ASSERT MACHINERY. UpdatePlayerDriver's 401 instructions carry
 // FOUR streamed asserts (each ~45 instructions of stream setup) plus the fully-inlined BitArray<8>
 // iterator; its actual behaviour is ~35 instructions. Same for the other three. Per the standing
 // project rule the streamed asserts are lowered to CGS_ASSERT with the static message text.
 //
-// ⚠️ WHAT THE CONSOLE INLINED, AND WHY IT IS *NOT* DE-INLINED HERE. All four arms end in the same
+// WHAT THE CONSOLE INLINED, AND WHY IT IS *NOT* DE-INLINED HERE. All four arms end in the same
 // three-to-four-store idiom against a VehicleDriver -- set meDriverType, copy the 0x48-byte
 // BrnPlayerDriverControls base into mControls, clear the AI tail's mfSpeedMatchSpeed and
 // mbForceComeOutOfDrift -- and BrnVehicleDriver.h declares a `VehicleDriver::Update` overload set
@@ -38,12 +38,12 @@
 // binary does not attest. The stores are written out by name at each site instead, with this note.
 // (VehicleDriver::Update has no X360 address of its own; it is inlined at every site in the image.)
 //
-// ⚠️ SECOND WITNESS on the two seats BrnVehicleManager_UpdateDrivers.cpp flagged:
+// SECOND WITNESS on the two seats BrnVehicleManager_UpdateDrivers.cpp flagged:
 //   * `maRaceCarDrivers` at class +64, stride 224 -- CONFIRMED INDEPENDENTLY. UpdatePlayerDriver
 //     computes its element three times, each as `mulli r11, r11, 0xE0 ; add r11,r11,r17 ;
 //     addi rX, r11, 0x40` (0x825EA1E8, 0x825EA270, 0x825EA2E4). Same base, same stride.
 //   * `mControls.mbIsInvulnerableToVehicles` / `mbIsInvulnerableToWorld` at in-record 0x3C / 0x3D --
-//     ⭐ NOW CONFIRMED, and by a ROLE-DISCRIMINATING witness rather than a coincidence of offsets.
+// NOW CONFIRMED, and by a ROLE-DISCRIMINATING witness rather than a coincidence of offsets.
 //     This passage used to say "NEITHER CONFIRMED NOR REFUTED", because UpdatePlayerDriver never
 //     addresses either byte on its own. The witness is in the sibling commit routine:
 //     VehicleManager::SetRaceCarCrashing @0x82634CF0-0x82634D40 reads BOTH bytes off the victim's
@@ -63,7 +63,7 @@
 //     record (+0x38 miVehicleIDToMerge, +0x3B mbBoost, +0x04/+0x08/+0x0C/+0x10 the four control
 //     floats) all land on their committed names coherently.
 //
-// ⛔ WHAT STILL DOES NOT REACH A WHEEL -- see the closing note at the bottom of this file.
+// WHAT STILL DOES NOT REACH A WHEEL -- see the closing note at the bottom of this file.
 // =================================================================================================
 
 #include "GameSource/Physics/VehicleManager/BrnVehicleManager.h"
@@ -138,14 +138,14 @@ namespace Vehicle
     //      local plus HALF the remote, clamped to [-1,1]);
     //   4. clear every live car's one-frame `mbJustBeenSlammed` latch.
     //
-    // ⚠️ Step 4 is genuinely global and genuinely here -- it is not inside either branch and it is
+    // Step 4 is genuinely global and genuinely here -- it is not inside either branch and it is
     // not indexed by this record's car (asm 0x825EA314..0x825EA56C, the fully-inlined
     // BitArray<8>::GetFirstNonZeroBit/GetNextNonZeroBit walk over mUsedRaceCars, storing 0 to
     // `5216*idx + 0x1A9D` == maRaceCarVehicles[idx] + 0x135D == mbJustBeenSlammed). The 5216 is the
     // CONSOLE stride and is NOT reproduced: the host RaceCarPhysics is 5008 bytes, so the element is
     // reached by NAME through the typed array. Same rule the whole file follows.
     //
-    // ⚠️ ASSERTS NOT REPRODUCED, named rather than dropped silently: the console fires the
+    // ASSERTS NOT REPRODUCED, named rather than dropped silently: the console fires the
     // CgsBitArray.h:203 ("invalid index : N < 8") and :222 ("Index: N, Number of bits: 8") bounds
     // tripwires from inside the inlined IsBitSet/SetBit at three sites. This tree's CgsBitArray.h
     // deliberately carries no assert dependency (see its banner), and every one of those three sites
@@ -258,7 +258,7 @@ namespace Vehicle
     //     record already arrived this frame (`mbUpdatedPlayerDriver`) -- i.e. a live pad beats the
     //     AI for the same car, but the AI's copy still sits in mPlayerAiDriver.
     //
-    // ⚠️ THE COPY IS 80 BYTES HERE, not 72: `memcpy(dst, src, 0x50)` at both sites installs the WHOLE
+    // THE COPY IS 80 BYTES HERE, not 72: `memcpy(dst, src, 0x50)` at both sites installs the WHOLE
     // BrnAIDriverControls -- base plus mfSpeedMatchSpeed/mbDoSpeedMatch/mbForceComeOutOfDrift/
     // mbSlamPlayer -- which is exactly why this arm, alone of the four, does not clear the AI tail
     // afterwards. Expressed as a whole-object assignment rather than a base-slice.
@@ -303,19 +303,19 @@ namespace Vehicle
     // car; a record aimed at an INACTIVE slot is asserted-and-dropped, and any other type is a hard
     // tripwire.
     //
-    // ⚠️ THE COPY IS 72 BYTES, not 192. BrnNetworkDriverControls is 0xC0 (it carries mTransform,
+    // THE COPY IS 72 BYTES, not 192. BrnNetworkDriverControls is 0xC0 (it carries mTransform,
     // the two velocities, mfCatchupTime, meCrasherRaceCarIndex, mbSnap, mbCrash) but this arm's
     // `memcpy` is `li r5, 0x48` -- ONLY the BrnPlayerDriverControls base reaches the driver record.
     // The catch-up interpolation half of a network record is consumed elsewhere (the
     // VehicleDriver::StartCatchupInterpolation path), NOT here. Reproduced as a base-slice
     // assignment so the extra 120 bytes provably cannot leak into the 80-byte mControls.
     //
-    // ⚠️ The console re-loads maeRaceCarTypes[id] and tests `== E_RACE_CAR_TYPE_NETWORK`
+    // The console re-loads maeRaceCarTypes[id] and tests `== E_RACE_CAR_TYPE_NETWORK`
     // THREE times, not twice: 0x825C4E30, 0x825C4ECC and 0x825C50CC. (This note used to say
     // "TWICE"; corrected 2026-08-11.) Nothing between the three tests can change it, so it is
     // written as one `if` here; the reloads are a scheduling artefact, not re-reads of changed state.
     //
-    // ⚠️ SILENT ENUM COUPLING at the meDriverType store: the console does NOT materialise a literal 2
+    // SILENT ENUM COUPLING at the meDriverType store: the console does NOT materialise a literal 2
     // there -- it stores the maeRaceCarTypes[id] value it just LOADED, i.e. it writes an
     // ERaceCarType into an EDriverType field and relies on E_RACE_CAR_TYPE_NETWORK == 2 ==
     // E_DRIVER_TYPE_NETWORK (BrnRaceCarType.h:12 / BrnVehicleDriverControls.h:27). Written by name
@@ -366,12 +366,12 @@ namespace Vehicle
     // When both hold it finds the live race car NEAREST the player (excluding the player) and
     // instantly takes it down.
     //
-    // ⚠️ THE COMMITTED SIGNATURE'S PARAMETER ORDER IS (Request, Vehicle, Manager, Deformation) --
+    // THE COMMITTED SIGNATURE'S PARAMETER ORDER IS (Request, Vehicle, Manager, Deformation) --
     // that is UpdateDrivers' own call order (r4..r7 @0x82642E14) -- while InstantTakedown's is
     // (Request, Manager, Vehicle, Deformation). The forward below CROSSES the middle two on purpose;
     // the asm agrees exactly (0x8263D130..0x8263D17C loads r7=arg1, r8=arg3, r9=arg2, r10=arg4).
     //
-    // ⚠️ leTakedownType == E_TAKEDOWN_T_BONE (2). This is asm-literal but SEMANTICALLY ODD, so it is
+    // leTakedownType == E_TAKEDOWN_T_BONE (2). This is asm-literal but SEMANTICALLY ODD, so it is
     // flagged rather than "corrected": the value is `li r6, 2 ; stw r6, sp+0x7C` @0x8263D14C/D168,
     // and sp+0x7C is the same outgoing stack slot CheckForHeadToHead @0x8263D1A0 writes its
     // E_TAKEDOWN_HEAD_ON (5) into at `stw r26, 0xF0+var_74(r1)` -- two frames of different size,
@@ -380,7 +380,7 @@ namespace Vehicle
     // scratch at the call, because lfNormalStressSq's float skips its GPR slot -- the same PPC
     // float-ABI hole BrnVehicleManager_UpdateDrivers.cpp documents for UpdateDrivers' own r4.)
     //
-    // ⚠️ The collision normal is a CONSTANT world-up (0,1,0) built on the stack at
+    // The collision normal is a CONSTANT world-up (0,1,0) built on the stack at
     // 0x8263D120..0x8263D13C and loaded into v1; the contact point is the victim's own position.
     // A horn takedown has no real contact, so the commit is handed a synthetic one.
     // ==============================================================================================
@@ -445,7 +445,7 @@ namespace Vehicle
         CGS_ASSERT(static_cast<u32>(liPlayerRaceCarIndex) < (1u << 14),
                    "luEntityIndex < (1U << KU_NUM_BITS_FOR_ENTITY_NUM)");
 
-        // ⭐ CAST RETIRED 2026-08-11 (consolidation wave). This seam used to reinterpret_cast
+        // CAST RETIRED 2026-08-11 (consolidation wave). This seam used to reinterpret_cast
         // `lpVehicleOutputInterface` into a `BrnGameState::GameStateModuleIO::VehicleOutputInterface*`
         // because InstantTakedown's committed declaration named that (non-existent) fork type. The
         // DWARF settled it -- NS0_ is BrnPhysics::Vehicle in all three takedown-chain mangles --
@@ -468,7 +468,7 @@ namespace Vehicle
     }
 
     // ==============================================================================================
-    // ⭐⭐ WHAT THIS WAVE ACTUALLY CONNECTS, and what it does NOT. Stated here because the caller's
+    // WHAT THIS WAVE ACTUALLY CONNECTS, and what it does NOT. Stated here because the caller's
     // banner ends with "a control still does not reach a wheel" and that sentence now needs an
     // exact successor.
     //
@@ -482,7 +482,7 @@ namespace Vehicle
     // `VehicleManager::maRaceCarDrivers[carIndex].mControls` and survives the frame. That was not
     // true before this wave -- it stopped at a log-once gate.
     //
-    // ⭐ CONNECTED AFTER ALL -- the "next seam" this banner originally named was a mis-diagnosis,
+    // CONNECTED AFTER ALL -- the "next seam" this banner originally named was a mis-diagnosis,
     // corrected the same day (conductor, 2026-08-11) once the 219 instructions were actually read.
     // `VehicleDriver::UpdateVehicle(VehiclePhysics*)` @0x825D7290 is landed (BrnVehicleDriver.cpp)
     // and it NEVER TOUCHES mControls: it is the slerp-transform applier (gated on

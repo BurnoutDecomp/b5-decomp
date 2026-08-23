@@ -26,7 +26,7 @@ namespace PhysicsModuleIO
     }
 
     // X360 0x8279EDD0 (DWARF :279): write-lock; return &mVehicleDriverInterface (this+142544).
-    // ⭐ ADDED 2026-08-09 (feed wave). This function is a HOLE in the IDA export set -- it is
+    // This function is a HOLE in the IDA export set -- it is
     // named at its one call site (WorldModule::BridgeInputToPhysicsModule @0x827AB830,
     // `bl 0x8279EDD0`) but has no per-function export; the body below was recovered by
     // disassembling the image bytes directly: status bit 3 test (`rlwinm r11,r11,0x1d,0x1f,0x1f`),
@@ -58,7 +58,7 @@ namespace PhysicsModuleIO
         return &mGameActionQueue;
     }
 
-    // ⭐ ADDED 2026-08-10 (create-path wave). X360 0x8259FA98: read-lock; return
+    // X360 0x8259FA98: read-lock; return
     // &mRCEntityOutputInterface (this+149632). Both facts are read off the image rather than
     // inferred from the neighbours: the lock test is `rlwinm r11,r11,0x1c,0x1f,0x1f` (bit 4 ==
     // READ, with the "Not locked for reading\n" literal), the assert line is `li r5, 0x11C` ==
@@ -75,7 +75,7 @@ namespace PhysicsModuleIO
 }
 }
 
-// ⭐ ADDED 2026-08-09 (conductor wave): the two queue getters PhysicsModule::Update
+// the two queue getters PhysicsModule::Update
 // @0x825B0640 consumes -- the potential-contact queue feeds
 // PotentialContactInterface::SetConstQueue, the overlap-pairs queue feeds
 // Start/EndVehicleContactGeneration. Same lock-tripwire pattern as every getter above.

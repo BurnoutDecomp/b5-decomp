@@ -13,9 +13,8 @@
 //
 // BOOT RISK: Prepare is a resumable multi-frame ladder that returns false until each reply
 // lands, so if a reply never arrives on this route the world Prepare ladder stalls at the
-// traffic stage and the game never finishes loading. The [T1-prepare] and [T1-stream] probes
-// (BRN_TRAFFIC_DIAG=1) name the stalled stage; the revert is per-leg, restoring a
-// LogMissingLeg call in whichever stage stalled.
+// traffic stage and the game never finishes loading. The revert is per-leg: restore a
+// LogMissingLeg call in whichever stage stalls.
 // ============================================================================
 
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficEntityModule.h"
@@ -39,7 +38,6 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"             // gpDebugPrint / gxMessageFilterFlags
 
 #include <cstddef>   // size_t
-#include <cstdlib>   // getenv (the BRN_TRAFFIC_DIAG probes)
 #include <cstring>   // strstr (the CgsIDUnCompress space truncation)
 
 namespace BrnTraffic
@@ -124,16 +122,8 @@ namespace
     // and is kept.
     const size_t KU_VOLUME_SCRATCH_BYTES = 4096;
 
-    // Bring-up diagnostics knob. [DIAG] NOT IN THE X360 BINARY. Every probe below is one-shot
-    // and marked DELETE-WHEN-STABLE.
-    bool IsTrafficDiagOn()
-    {
-        static const bool sbOn = ( getenv( "BRN_TRAFFIC_DIAG" ) != 0 );
-        return sbOn;
-    }
-
     // One-shot leg gate, one named line per console leg with no body in the tree.
-    // [DIAG] NOT IN THE X360 BINARY.
+    // NOT IN THE X360 BINARY.
     inline void LogMissingLeg(bool& lrbAlreadyLogged, const char* lpcLegNameAndReason)
     {
         if (lrbAlreadyLogged)
@@ -203,24 +193,6 @@ namespace
             lpOutputBuffer->GetResourceRequestInterface()->LoadVehicle(
                 lpReceiverQueue, liEventId, KI_VEHICLE_ASSET_POOL_ID,
                 lacAssetName, leAssetSet );
-
-            // [T1-stream] probe, NOT IN THE X360 BINARY. One-shot on the first per-vehicle-type
-            // asset request. If this never prints, LoadData never reached its request stages
-            // and no VEH_T* asset is asked for during the boot. DELETE-WHEN-STABLE.
-            {
-                static bool sbLogged = false;
-                if ( IsTrafficDiagOn() && !sbLogged && CgsDev::Log::gpDebugPrint != 0 )
-                {
-                    sbLogged = true;
-                    *CgsDev::Log::gpDebugPrint
-                        << "[T1-stream] LoadData posted its FIRST traffic vehicle asset "
-                           "request: name='" << lacAssetName
-                        << "' assetSet=" << static_cast<s32>( leAssetSet )
-                        << " pool=" << KI_VEHICLE_ASSET_POOL_ID
-                        << " of " << static_cast<s32>( lpData->muNumVehicleTypes )
-                        << " vehicle types [DELETE-WHEN-STABLE]\n";
-                }
-            }
         }
 
         lpReceiverQueue->Clear();
@@ -554,27 +526,6 @@ bool TrafficEntityModule::LoadData( BrnTrafficIO::OutputBuffer_Prepare* lpOutput
                 lpPhysicsSpec,
                 FindVehicleTypeAttribKey_EXPENSIVE( static_cast<u32>( liVehicleType ) ) );
 
-            if ( IsTrafficDiagOn() && CgsDev::Log::gpDebugPrint != 0 )
-            {
-                CgsDev::Log::DebugPrint* lpDiag = CgsDev::Log::gpDebugPrint;
-                // [T1-scene] one-shot: the first type whose scene box is real. Pairs with the
-                // "FIRST traffic volume registered" probe in Prepare stage 3. If that one
-                // still prints zero extents after this line prints non-zeros, the fault is
-                // somewhere else. DELETE-WHEN-STABLE.
-                static bool sbLogged = false;
-                if ( !sbLogged )
-                {
-                    sbLogged = true;
-                    const Vector3 lHalfSize =
-                        maVehicleTypeRuntime[liVehicleType].GetBBoxHalfSize();
-                    *lpDiag << "[T1-scene] VehicleTypeRuntime::Prepare seated type "
-                            << liVehicleType << " bbox halfExtents*1000=("
-                            << static_cast<s32>( lHalfSize.x * 1000.0f ) << ","
-                            << static_cast<s32>( lHalfSize.y * 1000.0f ) << ","
-                            << static_cast<s32>( lHalfSize.z * 1000.0f ) << ")\n";
-                }
-            }
-
             const CgsModule::Event* lpNext = 0;
             liKind = lrReceiverQueue.GetNextEvent( lpEvent, &lpNext, &liSize );
             lpEvent = lpNext;
@@ -682,25 +633,9 @@ bool TrafficEntityModule::Prepare( BrnTrafficIO::OutputBuffer_Prepare* lpOutputB
         // overrides neither Create*DataStructure, so with mbIsNewModule false the base
         // placeholder returns null and Prepare returns FALSE every frame, hanging the boot at
         // WorldModule::Prepare's traffic stage. Construct only runs once its WorldLinkStubs.cpp
-        // gate (~:729) is retired, so retire that gate in the same build as this call. The
-        // [T1-prepare] probe below names the cause; the revert is a LogMissingLeg call here.
+        // gate (~:729) is retired, so retire that gate in the same build as this call.
         if ( !CgsModule::ModuleSingleBuffered::Prepare() )
         {
-            // [T1-prepare] probe, NOT IN THE X360 BINARY. One-shot on the first false. For this
-            // module the base either passes on the first call or never passes at all, so seeing
-            // this line at all is the diagnosis. DELETE-WHEN-STABLE.
-            static bool sbLogged = false;
-            if ( IsTrafficDiagOn() && !sbLogged && CgsDev::Log::gpDebugPrint != 0 )
-            {
-                sbLogged = true;
-                *CgsDev::Log::gpDebugPrint
-                    << "[T1-prepare] ModuleSingleBuffered::Prepare returned FALSE for the "
-                       "traffic module. If this repeats every frame the world Prepare ladder "
-                       "is STALLED: it means mbIsNewModule is still false, i.e. "
-                       "TrafficEntityModule::Construct @0x82740220 never ran -- retire the "
-                       "WorldLinkStubs.cpp Construct gate [DELETE-WHEN-STABLE]\n";
-            }
-
             return false;                                // console: LABEL_22, `result = 0`
         }
 
@@ -790,27 +725,6 @@ bool TrafficEntityModule::Prepare( BrnTrafficIO::OutputBuffer_Prepare* lpOutputB
 
             lpOutputBuffer->GetSceneInputInterface()->AddDynamicVolume(
                 lVolumeId, lpVolume, KU8_TRAFFIC_VEHICLE_VOLUME_TYPE_FLAG );
-
-            // [T1-scene] probe, NOT IN THE X360 BINARY. One-shot on the first traffic volume
-            // registered, printing the extents so a zero-sized box is visible without a
-            // debugger. DELETE-WHEN-STABLE.
-            {
-                static bool sbLogged = false;
-                if ( IsTrafficDiagOn() && !sbLogged && CgsDev::Log::gpDebugPrint != 0 )
-                {
-                    sbLogged = true;
-                    *CgsDev::Log::gpDebugPrint
-                        << "[T1-scene] FIRST traffic volume registered: volumeId="
-                        << static_cast<s32>( KU_HACK_BASE_VOLUME_ID + luVehicleType )
-                        << " typeFlag=" << static_cast<s32>( KU8_TRAFFIC_VEHICLE_VOLUME_TYPE_FLAG )
-                        << " halfExtents=(" << lfBoxHalfX << ", " << lfBoxHalfY
-                        << ", " << lfBoxHalfZ << ") fatness=" << lfFatness
-                        << " of " << static_cast<s32>( mpData->muNumVehicleTypes )
-                        << " vehicle types."
-                        << " ZERO EXTENTS MEAN VehicleTypeRuntime::Prepare NEVER RAN"
-                           " [DELETE-WHEN-STABLE]\n";
-                }
-            }
         }
 
         lpOutputBuffer->UnlockForWrite();

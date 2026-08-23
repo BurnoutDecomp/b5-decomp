@@ -71,7 +71,7 @@ namespace Vehicle
     // The takedown-scored event HandleRaceCarRaceCarContact pushes when a takedown registers
     // (asm AddEvent(..., 31, 12) @0x82643B58). FLAG: 12-byte layout modelled; size 12 asm-proven.
     //
-    // ⚠️ CORRECTED 2026-08-03: +0 was declared `f32 mfImpactMagnitude`. All three of the event's
+    // +0 was declared `f32 mfImpactMagnitude`. All three of the event's
     // stack stores are `stw` (0x82643B34 / 0x82643B3C / 0x82643B54), and +0's r23 is the very same
     // register 0x826439E8 stamps into maeImpactType[victim] -- loaded once at 0x82643908 from
     // var_14C and never rewritten in between. It is the EImpactType word. (Same mis-typing that
@@ -169,7 +169,7 @@ namespace Vehicle
         // (asm asserts !(A-is-player && B-is-player) and liIndexA != liIndexB -- debug-only.)
 
         // Cache the two transforms (the classifiers read mRaceCarA/BTransform).
-        // ⭐⭐ FIXED 2026-08-03 (VehiclePhysics own-block wave). This used to build an IDENTITY
+        // FIXED 2026-08-03 (VehiclePhysics own-block wave). This used to build an IDENTITY
         // BASIS and fill only the position lane from a phantom member called `mvWorldPosition`,
         // with a FLAG saying "the full transform basis lives in the unmodelled RaceCarPhysics
         // layout". It does not: the base sub-object starts at record +0x10 (the leaf vptr occupies
@@ -276,7 +276,7 @@ namespace Vehicle
         // ---- Step 7: slam/shunt physics + last-attacker / revenge bookkeeping ----
         // Guard: neither car already crashing (asm: *(record+3664)==0 both) AND the player's car is
         // actually being driven by the PLAYER.
-        // ⭐ NAME FIXED 2026-08-03: the second half used to read a role-guessed byte called
+        // NAME FIXED 2026-08-03: the second half used to read a role-guessed byte called
         // `mbPlayerGrace` at +4308. The asm reads FOUR bytes (`lwz r7, 0x1814(r7)` @0x826438E8,
         // class-relative -> in-record 4308) and compares against 0, and 4308 is
         // mPreviousControls.meDriverType -- 0x1090 + 0x44, the seat BrnVehicleDriverControls.h
@@ -285,7 +285,7 @@ namespace Vehicle
         // network-driven player car), which is a different predicate from a grace timer.
         const bool lbEitherCrashing = (lrRecordA.mbCrashing != 0) || (lrRecordB.mbCrashing != 0);
         bool lbPlayerSlotNotPlayerDriven = false;   // asm: (idxA==player && recA+6164 != 0) || (idxB==...)
-        // ⭐ 2026-08-03 (the record-fold wave): this used to read the seat as a bare
+        // this used to read the seat as a bare
         // `record.meDriverType`. The real member is `protected` inside BrnPlayerDriverControls and
         // its public reader is GetType() (BrnVehicleDriverControls.h:116), which is a plain
         // `return meDriverType;` -- no assert, no side effect -- so this is the same single `lwz`
@@ -300,7 +300,7 @@ namespace Vehicle
         {
             // The value the asm names v248 is the +0xF4 lane == meImpactType (NOT meImpactSitutation
             // @+0x108 -- the stack offset 0x1F4-0x100 == 0xF4 proves it).
-            // ⚠️ CORRECTED 2026-08-03: this used to read "it is read both as a float (== 0.0 test)
+            // this used to read "it is read both as a float (== 0.0 test)
             // and as an int", and stamped `(f32)(s32)leImpactType` into the array. Both halves were
             // wrong, and they were wrong because the destination member was mis-typed as f32[8]:
             //   0x82643908  lwz   r23, var_14C(r1)      <- the type, loaded as a WORD
@@ -333,7 +333,7 @@ namespace Vehicle
                         // asm 0x826439FC `stbx r10, r8, r7`, r7 == 171676, r10 == 1.
                         mauImpactScore[liOther] = 1;
 
-                        // Set the victim's bit (asm: v141 = v39 + 171736). ⚠️ DWARF :934 names this
+                        // Set the victim's bit (asm: v141 = v39 + 171736). DWARF :934 names this
                         // mPlayerWonImpact, not a taken-down set -- see the header FLAG.
                         mPlayerWonImpact.SetBit(static_cast<u32>(liOther));
 
@@ -344,7 +344,7 @@ namespace Vehicle
                         // Push the takedown event, throttled to < 32 per frame (asm: v157 < 32).
                         if (muTakedownEventsThisFrame < 32 && lpManagerOutputInterface)
                         {
-                            // ⚠️⚠️ 2026-08-03 -- THIS LINE DID NOT COMPILE. `lfImpactValue` is used
+                            // THIS LINE DID NOT COMPILE. `lfImpactValue` is used
                             // here and DECLARED NOWHERE IN THIS FILE (its only occurrence in the
                             // whole TU was this one), so BrnVehicleManager.cpp has never once been
                             // through a compiler -- which is why the ~90 offsetof asserts in
@@ -362,7 +362,7 @@ namespace Vehicle
                             TakedownIoEventRecord lTakedownEvent;
                             lTakedownEvent.miImpactType      = static_cast<s32>(leImpactType);  // asm r23 == var_14C
                             lTakedownEvent.miAttackerIndex   = static_cast<s32>(lInfo.meAggressorActiveRaceCarIndex); // asm v205 = v138
-                            // ⛔ FLAG, NOT FIXED: the asm's +8 is var_144, written once at
+                            // FLAG, NOT FIXED: the asm's +8 is var_144, written once at
                             // 0x826435BC (`stw r31, var_144(r1)`) -- it is NOT the -1 committed here,
                             // and +4's r26 traces to var_148 (0x82643998), not necessarily the
                             // aggressor index. Both need r19/r31/var_148 traced through a function
@@ -459,7 +459,7 @@ namespace Vehicle
     }
 
     // -------------------------------------------------------------------------------------------
-    // ⭐ RETIRED 2026-08-03 (VehicleManager layout wave): `KI_RACECAR_CRASH_STATE_FATAL = 2`.
+    // `KI_RACECAR_CRASH_STATE_FATAL = 2`.
     // The array it guarded is not a crash-state array at all -- it is
     // `BrnWorld::ERaceCarType maeRaceCarTypes[8]` (DWARF BrnVehicleManager.h:828), and
     // VehicleManager::Construct seeds every slot with 3 == E_RACE_CAR_TYPE_INACTIVE
@@ -555,17 +555,17 @@ namespace Vehicle
         // entity id the traffic manager holds for that traffic slot. The asserts are debug-only; the
         // lookup is the load-bearing part for the secondary event below.
         //
-        // ⭐ RE-SEATED 2026-08-03 (the un-pin wave). This read used to be
+        // RE-SEATED 2026-08-03 (the un-pin wave). This read used to be
         // `maRaceCarEntityIdRemap[liVictimIndex]`, a proposed-by-role sibling of VehicleManager at
         // class +148128 declared `EntityId[8]`. It is really
         // `mPhysicalTrafficManager.maTrafficEntityIDs` -- 44768 + 103360 == 148128, and
         // PhysicalTrafficManager::Construct @0x82636CA8 seeds exactly that array with
         // `stwx -1` over 4*(i+25840) for i<20. Two things were wrong and one was right:
-        //   ✅ the ADDRESS was right (the byte the asm loads is unchanged),
-        //   ⚠️ the BOUND was wrong -- this branch is taken for a TRAFFIC id, so liVictimIndex is a
+        // the ADDRESS was right (the byte the asm loads is unchanged),
+        // the BOUND was wrong -- this branch is taken for a TRAFFIC id, so liVictimIndex is a
         //      traffic index in [0,20) and the old [8] declaration made slots 8..19 an
         //      out-of-bounds read of the following member,
-        //   ⚠️ the NAME/role was wrong -- it is not a "race car remap", it is the traffic slot's
+        // the NAME/role was wrong -- it is not a "race car remap", it is the traffic slot's
         //      global entity id.
         // The read stays a BARE one (no accessor): the X360 here is a plain `lwzx`, whereas
         // PhysicalTrafficManager::GetGlobalTrafficEntityId @0x825C2C38 fires an index assert AND an
@@ -599,7 +599,7 @@ namespace Vehicle
                     /*lbLocalPhysicalCrash=*/false,
                     lrVictimRecord.mCrashNormal,          // asm v1 == the crash normal register
                     lbWasInCrashState1,
-                    // ⭐ 2026-08-03: this argument used to be a phantom `mvCrashPosition`. Both
+                    // this argument used to be a phantom `mvCrashPosition`. Both
                     // AddRaceCarCrashEvent sites do `lvx128 ; vspltw v0,v0,0 ; stvx128 ; lfs f1`
                     // on record+0xEF0 -- they pass LANE .x as the scalar float f1, and +0xEF0 is
                     // mvSpeedOnLastCrashMPH_... So the event carries the crash SPEED IN MPH.
@@ -617,7 +617,7 @@ namespace Vehicle
             const s32 liPlayerIndex = static_cast<s32>(mePlayerActiveRaceCarIndex);   // asm v109
             RaceCarPhysics& lrPlayerRecord = maRaceCarVehicles[liPlayerIndex];  // asm _R10 = 5216*v109 + this
 
-            // ⭐⭐ RE-DECODED 2026-08-03 (VehiclePhysics own-block wave). This used to be
+            // RE-DECODED 2026-08-03 (VehiclePhysics own-block wave). This used to be
             //     ||victim.pos - player.pos||^2 < victim.mfProximityRadiusSq
             // built on two PHANTOM members (`mvWorldPosition` @+1920, `mfProximityRadiusSq` @+1904).
             // Both offsets are applied to a CLASS-relative base in the asm, so the in-record seats
@@ -654,10 +654,10 @@ namespace Vehicle
             // Stamp the vehicle record: mCrashNormal @ +5184 and mEntityCausingCrash @ +5200 (the
             // console's SetCrashEntityIdAndNormal inlined -- `stvx128 v127, r30, 0x1440` four
             // instructions before `stw r26, 0x1450(r30)`).
-            // ⭐⭐ RE-SEATED 2026-08-03: the flag this used to set was `mbCrashCommitted` at +3097.
+            // RE-SEATED 2026-08-03: the flag this used to set was `mbCrashCommitted` at +3097.
             // The asm store is `stb r20(1), 0x1359(r11)` and r11 was made the RECORD base two
             // instructions earlier (`addi r11, r11, 0x740`), so the seat is in-record 4953 and the
-            // member is VehiclePhysics::mbDeformationModelIsActive. ⚠️ AND ITS GUARD IS INVERTED
+            // member is VehiclePhysics::mbDeformationModelIsActive. AND ITS GUARD IS INVERTED
             // HERE: the console sets it (together with an inlined ResetDeformableAABB, a 32-byte
             // copy of mOriginalAABB over mDeformableAABB) only when the RE-READ mbCrashing is
             // NON-zero, i.e. on the already-crashing path -- not on this local one. FLAG: left on
@@ -741,7 +741,7 @@ namespace Vehicle
         // &packed) with that id's entity index in the high word. FLAG: the asm keys this off
         // HIBYTE(v149) (the meType-slot word); we key it off the documented cause sub-code (the
         // aggressor id owner byte) which carries the same type-2 signal.
-        // ⭐ Same re-seat as Step 2: +148128 is mPhysicalTrafficManager.maTrafficEntityIDs.
+        // Same re-seat as Step 2: +148128 is mPhysicalTrafficManager.maTrafficEntityIDs.
         if (luCauseSubCode == 2 && lpManagerOutputInterface)
         {
             const u32 luRemappedIndex =
@@ -1450,7 +1450,7 @@ namespace Vehicle
         static_assert(sizeof(VehicleDriver)  == 224,  "VehicleDriver stride (asm: addi r25, r25, 0xE0)");
         // The three named bytes are at ABSOLUTE class offsets 224*idx + 123/124/125; with the array
         // correctly seated at +64 that is in-record 59/60/61 (inside VehicleDriver::mControls).
-        // ⭐ RE-NAMED 2026-08-03: the stand-in record retired, so these now pin REAL members.
+        // RE-NAMED 2026-08-03: the stand-in record retired, so these now pin REAL members.
         static_assert(offsetof(VehicleDriver, mControls) + offsetof(BrnAIDriverControls, mbBoost) == 59,
                       "mControls.mbBoost -- the boost-eligible byte (asm: 224*idx + 123)");
         static_assert(offsetof(VehicleDriver, mControls) + offsetof(BrnAIDriverControls, mbIsInvulnerableToVehicles) == 60,
@@ -1459,7 +1459,7 @@ namespace Vehicle
                       "mControls.mbIsInvulnerableToWorld (asm: 224*idx + 125)");
         static_assert(offsetof(VehicleManager, maRaceCarDrivers) + 224 * 1 + 59 == 224 * 1 + 123,
                       "the re-seat is byte-identical to the old model for every element");
-        // ⭐⭐⭐ THE RECORD IS GONE (2026-08-03, the fold wave). Ten `offsetof(RaceCarVehicleRecord,
+        // THE RECORD IS GONE (2026-08-03, the fold wave). Ten `offsetof(RaceCarVehicleRecord,
         // ...) == <X360 in-record seat>` asserts used to stand here. They cannot survive the fold
         // and must not be faked: `maRaceCarVehicles` is now the real `RaceCarPhysics`, a HOST class
         // whose members sit at host offsets, so asserting a console seat on it would be simply
@@ -1474,7 +1474,7 @@ namespace Vehicle
                       "host sizeof(RaceCarPhysics) == the console's 0x1460 stride (width-identical "
                       "since the 240-byte SimpleVehicleAttribs landed, 2026-08-09) -- the number "
                       "KU_HOST_DRIFT_AFTER_RACECAR_ARRAY (now 0) is derived from");
-        // ⭐ RE-STATED 2026-08-11 (create-drain wave), and RE-SEATED at the merge of the two waves.
+        // RE-STATED 2026-08-11 (create-drain wave), and RE-SEATED at the merge of the two waves.
         // The +128 the model-handle split costs is NOT part of the race-car array's term: the two
         // components are independently derived from two different sizeofs, so they get two
         // constants and TWO asserts, and neither can absorb an error in the other. Mirrors the
@@ -1496,7 +1496,7 @@ namespace Vehicle
 
         static_assert(offsetof(VehicleManager, maRaceCarDrivers)         == 64,     "maRaceCarDrivers (asm addi r25, r31, 0x40) -- was WRONGLY seated at 0");
         static_assert(offsetof(VehicleManager, maRaceCarVehicles)        == 1856,   "maRaceCarVehicles (asm r29 - 0x140D)");
-        // ⚠️ NO DRIFT TERM ON THIS ONE (corrected 2026-08-11). The +128 of
+        // NO DRIFT TERM ON THIS ONE (corrected 2026-08-11). The +128 of
         // KU_HOST_DRIFT_AFTER_MODEL_HANDLES arises at +43616 -- the head of maRaceCarModelHandles,
         // which sits AFTER this array. Nothing before +43616 moves.
         static_assert(offsetof(VehicleManager, maRaceCarEntityIDs)       == 43584,  "maRaceCarEntityIDs (asm base 43584)");
@@ -1518,18 +1518,18 @@ namespace Vehicle
         static_assert(offsetof(VehicleManager, mRaceCarsAddedForCollision)             == 44712 + KU_HOST_DRIFT_AFTER_MODEL_HANDLES, "mRaceCarsAddedForCollision (asm +44712)");
         static_assert(offsetof(VehicleManager, mNetworkCarsAddedForCollisionThisFrame) == 44720 + KU_HOST_DRIFT_AFTER_MODEL_HANDLES, "mNetworkCarsAddedForCollisionThisFrame (asm +44720)");
         static_assert(offsetof(VehicleManager, mNetworkCarsRecievedFirstUpdate)        == 44728 + KU_HOST_DRIFT_AFTER_MODEL_HANDLES, "mNetworkCarsRecievedFirstUpdate (asm +44728)");
-        // ⭐ RE-SEATED 2026-08-03: the old `maRaceCarEntityIdRemap` sibling at +148128 is really the
+        // RE-SEATED 2026-08-03: the old `maRaceCarEntityIdRemap` sibling at +148128 is really the
         // embedded traffic manager's maTrafficEntityIDs. Same byte, real owner -- and the sum below
         // is a STRONGER assert than the old one, because it also pins the manager's own head.
         static_assert(offsetof(VehicleManager, mPhysicalTrafficManager) == 44768 + KU_HOST_DRIFT_AFTER_MODEL_HANDLES, "mPhysicalTrafficManager (asm PhysicalTrafficManager::Construct(this + 44768))");
-        // ⚠️⚠️ CORRECTED 2026-08-03 (task #113), AND IT HAD BEEN FAILING SINCE task #112.
+        // AND IT HAD BEEN FAILING SINCE task #112.
         // This line used to read `== 148128 + KU_HOST_DRIFT_AFTER_RACECAR_ARRAY`, i.e. it applied
         // only the race-car array's drift to a seat that also sits behind maFullTrafficPhysics[20].
         // The TrafficPhysics de-fork shrank that array by 20 * (5168 - 4960) == 4160 bytes, so the
         // assert had been false -- by exactly 4160 -- from the moment that wave landed. NOTHING
         // CAUGHT IT: this TU is not in the build, so the only compiler that would ever have seen the
         // line is a per-TU gate nobody ran on it. It surfaced the instant task #113 trial-mounted
-        // this file to measure its link closure. ⭐ The lesson is general: a fold that re-measures
+        // this file to measure its link closure. The lesson is general: a fold that re-measures
         // its own drift constants must also re-compile every UNMOUNTED TU that consumes them.
         //
         // The correction is derived, not typed: `20*sizeof(TrafficPhysics) - 103360` IS the array's
@@ -1610,7 +1610,7 @@ namespace Vehicle
         static_assert(offsetof(VehicleManager, meShowtimeBehaviour)   == 172456 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT, "meShowtimeBehaviour (asm +172456; seeded 2)");
         static_assert(offsetof(VehicleManager, miRaceCarWorldContactValidationPM) == 172460 + KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT,
                       "miRaceCarWorldContactValidationPM (asm +172460; named by the console's own assert at BrnVehicleManager.cpp:778)");
-        // ⛔ THESE FOUR WERE STALE, AND NOT BECAUSE OF THIS WAVE (corrected 2026-08-11). They
+        // THESE FOUR WERE STALE, AND NOT BECAUSE OF THIS WAVE (corrected 2026-08-11). They
         // carried KU_HOST_DRIFT_AFTER_DEBUG_COMPONENT for seats that sit PAST the 2026-08-06
         // contact-generation carve, so each was 76 bytes short -- and nothing ever said so, because
         // this whole TU is UNMOUNTED (that is exactly the hole BrnVehicleManager_layout_check.cpp

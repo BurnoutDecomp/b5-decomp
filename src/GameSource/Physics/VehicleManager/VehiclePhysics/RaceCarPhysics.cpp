@@ -18,7 +18,7 @@ namespace Vehicle
 {
     namespace vpu = rw::math::vpu;
 
-    // ⭐⭐ DATA FORK RETIRED 2026-08-06 (UpdateVehiclePhysics wave). This file used to declare
+    // DATA FORK RETIRED 2026-08-06 (UpdateVehiclePhysics wave). This file used to declare
     //     extern bool gbVehicleBounceBoosting;   // "X360 byte_82FB84B2, un-homed"
     // -- but byte_82FB84B2 is a byte THIS FILE ALREADY MODELS: the showtime singleton's
     // mbLaunchActive (PlayerParameters +0x32; base lbBounceBoosting @0x82FB8480; the layout is
@@ -100,7 +100,7 @@ namespace Vehicle
     //       stb  0,  0x1436    mbDeformedBeyondDriveTimeLimitsInCrash = false
     //   0x82639D54/58     epilogue; r3 = r28 (the callee's bool, returned verbatim)
     //
-    // ⚠️ lInertia: received by value (48 bytes -- r6..r10 plus one stack doubleword at the
+    // lInertia: received by value (48 bytes -- r6..r10 plus one stack doubleword at the
     // call site) and NEVER READ on X360 -- see the header banner. Deliberately unnamed here
     // so a future reader cannot believe it is consumed.
     // ---------------------------------------------------------------------------------------
@@ -138,7 +138,7 @@ namespace Vehicle
     // GetHeightAboveRoad  @0x825B3998   (PS3 DecFIGS 0x7A4BD8 -- the mangle is the signature
     //   authority; DWARF prototype RaceCarPhysics.h dwarfdump :310)
     //
-    //   ⭐⭐ REWRITTEN 2026-08-14 (walls leg 3): the old body here was built on the DROPPED-
+    // REWRITTEN 2026-08-14 (walls leg 3): the old body here was built on the DROPPED-
     //   ARGUMENT TRAP -- the X360 Hex-Rays rendered the function with no parameters, and the
     //   reconstruction "resolved" the query vector (`v1`) into the wheel's own contact data,
     //   substituting mfLineDistanceToRoad for the projection. The real function takes the QUERY
@@ -197,13 +197,13 @@ namespace Vehicle
     //
     // The module-static showtime singleton (X360 msPlayerParams; base symbol lbBounceBoosting). One
     // car at a time.
-    // ⭐ 2026-08-06 (PhysicsModule::Update leaves wave): the DEFINITION moved to the mounted slice
+    // the DEFINITION moved to the mounted slice
     // RaceCarPhysics_ShowtimeBounce.cpp (along with UpdateShowtimeBounceModifiers) -- this TU is
     // still unmounted, and the leaves slice links against the singleton. The extern declaration in
     // RaceCarPhysics.h is unchanged; fold the definition back here when this TU mounts.
     namespace { PlayerParameters& MS = msPlayerParams; }   // short alias for the bodies below
     // -----------------------------------------------------------------------------------------
-    // ⭐⭐ THE SEED CONSTANTS ARE READ (2026-08-03, constants wave). The banner that used to sit
+    // THE SEED CONSTANTS ARE READ (2026-08-03, constants wave). The banner that used to sit
     // here said "the exports do NOT contain their numeric values (verified: 0x82F2A2xx have no
     // function/data export)". That verification was sound but it answered the wrong question: the
     // IDA *function* exports carry no data, and the whole 0x82F2A2xx block is not un-homed .rdata
@@ -212,7 +212,7 @@ namespace Vehicle
     // to disassemble and nothing to recover: one image read settles every row below. Each value
     // here was decoded from the raw 16 bytes IDA reports at that address (big-endian f32).
     //
-    // ⚠️ FOR THE NEXT PERSON: "absent from the exports" is not the same as "absent from the image".
+    // FOR THE NEXT PERSON: "absent from the exports" is not the same as "absent from the image".
     // Five sweeps re-derived this block's *addresses* and none of them read the *bytes*.
     static const f32 KF_TIMEUNTILPUSH_DELAY      = 0.4f;         // flt_82F2A2A4 (SetPlayerVehicleInShowtime seed)
     static const f32 KF_LAUNCH_PUSH_SPEED        = 20.0f;        // flt_82F2A2A0 (launch impulse scale, m/s)
@@ -225,7 +225,7 @@ namespace Vehicle
     static const f32 KF_PUSH_AIRRAM_FACTOR       = 0.01f;        // flt_82F2A29C
     static const f32 KF_PUSH_AIRRAM_ARG          = 0.2f;         // flt_82F2A298
     static const f32 KF_PUSH_SPIN_SCALE          = 500.0f;       // flt_82F2A2A8
-    // ⛔ RENAMED, NOT JUST FILLED. The five CapShowtimeVelocities caps were carried as a single
+    // RENAMED, NOT JUST FILLED. The five CapShowtimeVelocities caps were carried as a single
     // "speed then vertical" ladder, and the numbers made that reading impossible (an "uncapped"
     // vertical of 9 sitting BELOW the boosting vertical of 20). Re-deriving @0x825D7600 from the
     // asm shows the function clamps TWO DIFFERENT REGISTERS, not one:
@@ -291,7 +291,7 @@ namespace Vehicle
     //   VehiclePhysics::Update, then tick mfTimeSinceTookDownPlayer / mfBeachedTime and latch
     //   mbUsingAftertouch.
     //
-    // ⛔⛔ THE TOP-LEVEL BRANCH IN THIS BODY WAS THE WRONG FLAG -- CORRECTED 2026-08-03 (own-block
+    // THE TOP-LEVEL BRANCH IN THIS BODY WAS THE WRONG FLAG -- CORRECTED 2026-08-03 (own-block
     //   recovery wave). It read `if (mbUsingAftertouch)` with the comment "byte710 in the asm". The
     //   asm is `lbz r11, 0x710(r31)` @0x82641624 and +0x710 is **mbCrashing** -- proven first-hand,
     //   not inferred: RaceCarPhysics::GetNormalCausingCrash @0x825B3944 loads the same +0x710 and
@@ -300,13 +300,13 @@ namespace Vehicle
     //   the committed form branched on its own previous-frame output. Classic address-right /
     //   meaning-wrong, with a self-referential twist.
     //
-    // ⛔ AND THE MEMBER THE CRASHING BRANCH DRIVES IS mfCrashTimer, NOT A "SLAM-STEER ENVELOPE".
+    // AND THE MEMBER THE CRASHING BRANCH DRIVES IS mfCrashTimer, NOT A "SLAM-STEER ENVELOPE".
     //   +0x1430 is the AI crash timer (DWARF RaceCarPhysics.h:408); it is compared against
     //   KVF_AI_CRASH_PAUSE_TIME to clear mbAISlowMo @+0x1434, which is what gates the
     //   KVF_AI_CRASH_SLOWMO_FACTOR timestep scale. Full asm trace in RaceCarPhysics.h's own-block
     //   comment. Three call sites re-pointed here.
     //
-    // ⭐⭐ THE THREE RODATA SEEDS ARE READ (2026-08-03, constants wave). All three were image
+    // THE THREE RODATA SEEDS ARE READ (2026-08-03, constants wave). All three were image
     //   reads, not guesses, and the elided AI-crash slow-mo block below is restored:
     //     flt_820037C8       @0x820037C8 .rdata = 0xBF800000 = -1.0   (mfCrashTimer "not crashing"
     //                        re-seed; the committed placeholder happened to already be -1.0, so the
@@ -317,7 +317,7 @@ namespace Vehicle
     //     unk_82FB8880       .data splat, init@0x82C5B6C0 from unk_8208F9B8 @0x8208F9B8
     //                        = 0x42C80000 = 100.0 == KVF_AI_CRASH_SLOWMO_FACTOR
     //
-    //   ⭐ THE FACTOR IS A DIVISOR, and that is proved by the instruction SHAPE, not by taste.
+    // THE FACTOR IS A DIVISOR, and that is proved by the instruction SHAPE, not by taste.
     //   0x826416A8..0x826416D8 loads unk_82FB8880, then runs `vrefp` + TWO Newton-Raphson steps
     //   (`vnmsubfp`/`vmaddfp` pairs against a vcfsx-built 1.0) before the `vmulfp128`. A compiler
     //   emitting `v1 * K` needs none of that -- it would multiply by the loaded vector directly.
@@ -325,10 +325,10 @@ namespace Vehicle
     //   the sim timestep is 1/100 = 0.01, i.e. a 100x slow-motion window, not a 100x speed-up.
     //   (Same idiom, same reading, at 0x82C5D7D0 and 0x82C5C1C8 elsewhere in the image.)
     //
-    //   lfTimeStep arrives in a VMX lane (the asm splats v2/v1). ⚠️ THE TWO VECTORS ARE NOT
+    // lfTimeStep arrives in a VMX lane (the asm splats v2/v1). THE TWO VECTORS ARE NOT
     //   INTERCHANGEABLE: mfCrashTimer integrates v2 (the REAL frame time, so the slow-mo window is
     //   bounded in real time) while mfTimeSinceTookDownPlayer and mfBeachedTime integrate v1 (the
-    //   SIM timestep, which the slow-mo path scales). ⭐ THE SPLIT IS NOW APPLIED. It was deferred
+    // SIM timestep, which the slow-mo path scales). THE SPLIT IS NOW APPLIED. It was deferred
     //   only because the scaling that makes the two differ was elided; with the factor read, leaving
     //   those integrations on v2 would be a NEWLY WRONG result rather than an inert one. The asm
     //   stores v127 (== v1) -- not v126 (== v2) -- into the scratch it adds at 0x826418CC
@@ -340,14 +340,14 @@ namespace Vehicle
                                 bool lbPlayerAftertouchForceAdditive, bool lbShowtimeAllowed,
                                 CgsNumeric::Random& lrRandom)
     {
-        // ⭐⭐ THE ZERO TIMESTEP IS GONE (2026-08-01, physics wave 1). This used to read
+        // THE ZERO TIMESTEP IS GONE (2026-08-01, physics wave 1). This used to read
         //     static const f32 KF_DT = 0.0f;   // FLAG: frame dt ... un-homed here
         // -- a committed zero that made EVERY timer in this function a no-op, and a `0.0f`
         // "placeholder" is never inert: it means *immediately* / *never*. The dt is lane 0 of
         // the second incoming vector register; the asm is quoted in RaceCarPhysics.h above the
         // declaration (`stvx128 v126 ; lfs f13 ; fadds` on mfCrashTimer, at the top of the
         // CRASHING branch). NOT un-homed -- just never read off the asm.
-        // ⭐ TWO dt's, as the console has. lvfRealTimeStep is v2 and lvfSimTimeStep
+        // TWO dt's, as the console has. lvfRealTimeStep is v2 and lvfSimTimeStep
         // is v1 (the SIM timestep, which the AI crash slow-mo branch below scales by 1/100). Only
         // mfCrashTimer integrates v2; every other timer in this function integrates v1, so v1 is
         // read at its use sites (AFTER the possible scaling) rather than snapshotted here.
@@ -359,7 +359,7 @@ namespace Vehicle
             // once it passes KVF_AI_CRASH_PAUSE_TIME the slow-motion window closes.
             mfCrashTimer += lfRealDT;       // asm 0x82641640..0x82641664 (`fadds f0,f0,v2.x`)
 
-            // ⭐ RESTORED 2026-08-03, both constants now read off the image (see the block comment).
+            // both constants now read off the image (see the block comment).
             // asm 0x82641668..0x82641698: splat mfCrashTimer, `vcmpgtfp. v13, v0` against
             // unk_82FB83B0 (0.75), and on greater-than clear mbAISlowMo @+0x1434.
             static const f32 KVF_AI_CRASH_PAUSE_TIME   = 0.75f;    // unk_82FB83B0 <- unk_8208F9B4
@@ -391,7 +391,7 @@ namespace Vehicle
             mbAISlowMo = false;             // asm: `stb r30(0), 0x1434(r31)`
             mfCrashTimer = -1.0f;           // flt_820037C8 == -1.0f (image-attested)
 
-            // ⭐ RE-NAMED 2026-08-03. The asm is `lwz r11,0x44(r29); cmpwi 1; bne` then
+            // RE-NAMED 2026-08-03. The asm is `lwz r11,0x44(r29); cmpwi 1; bne` then
             // `lbz r11,0x4E(r29)` (@0x82641700..0x82641714): the console checks the DRIVER TYPE and,
             // if this car is AI-driven, looks at the AI payload's mbSlamPlayer. Was two invented
             // accessors (GetMode()==1 / GetFlag78()); both are retired.
@@ -430,13 +430,13 @@ namespace Vehicle
                                lbImpactTime, lbPlayerAftertouchForceAdditive,
                                lbShowtimeAllowed, lrRandom);
 
-        // ⭐⭐ RE-POINTED 2026-08-03 (VehiclePhysics own-block wave). The console gates this
+        // RE-POINTED 2026-08-03 (VehiclePhysics own-block wave). The console gates this
         // follow-up steering pass on a byte at +0x70 (asm @0x82641884: `lbz r11, 0x70(r31) ;
         // cmplwi ; beq`), and the committed body read mbUsingAftertouch (+0x140D) instead -- a
         // different member, and one THIS FUNCTION WRITES twenty lines below, so the condition was
         // reading its own previous-frame output.
         //
-        // ⛔ THE PREVIOUS WAVE'S BLOCKER WAS FALSE. It left this line unfixed because "mbFrozen has
+        // THE PREVIOUS WAVE'S BLOCKER WAS FALSE. It left this line unfixed because "mbFrozen has
         // no declared member in this tree yet (only a comment in VehiclePhysics.h)". It has had one
         // all along: BrnPhysics::ExternallySimulatedBody::mbFrozen (ExternallySimulatedBody.h:112),
         // whose own banner already documents the leaf seat as +0x70, with the public IsFrozen()
@@ -444,10 +444,10 @@ namespace Vehicle
         // Independent attestation added this wave: SimpleVehiclePhysics::Construct @0x8262047C does
         // `stb r30(0), 0x70(r31)` with r31 == the leaf `this` -- Construct clearing mbFrozen -- and
         // the base chain closes on +0x130 from exactly that framing (see BrnSimpleVehiclePhysics.h).
-        // ⭐ RE-NAMED 2026-08-03: the byte at controls+0x41 is mbIsSteeringWheel, not a "car type"
+        // RE-NAMED 2026-08-03: the byte at controls+0x41 is mbIsSteeringWheel, not a "car type"
         // (UpdateDriving @0x82638348 passes the same +0x41 byte to UpdateSteering, and
         // ModifyControlsForSteeringWheelInput is gated on it @0x826381A8).
-        // ⭐⭐ RE-POINTED 2026-08-07 (orchestrator wave) to the real 4-arg signature. The asm
+        // RE-POINTED 2026-08-07 (orchestrator wave) to the real 4-arg signature. The asm
         // @0x82641890..0x826418A4: f1 = controls->mfSteering (+0x10), f2 = f31 which this
         // function loads from flt_82001CC0 == 0.0f (no gas on the frozen path), v1 = v127
         // (the sim timestep, slow-mo scaled), r6 = mbIsSteeringWheel.
@@ -458,23 +458,23 @@ namespace Vehicle
                 lpControls->mbIsSteeringWheel);
 
         // Decay the uncapped-speed window timer while it is positive.
-        // ⭐ v1, NOT v2: asm 0x826418CC stores v127 (the sim timestep, slow-mo scaled) into the
+        // v1, NOT v2: asm 0x826418CC stores v127 (the sim timestep, slow-mo scaled) into the
         // scratch it then subtracts at 0x826418D4. Was lfDT (v2) while the scaling was elided.
         if (mbPlayerCarInShowtime && MS.mfUncappedSpeedTimer > 0.0f)
             MS.mfUncappedSpeedTimer -= lvfSimTimeStep.x;
 
-        // ⭐ RE-POINTED 2026-08-03. This store is at +0x1400 (asm 0x826418E0: `lfs f0,0x1400(r31)`
+        // RE-POINTED 2026-08-03. This store is at +0x1400 (asm 0x826418E0: `lfs f0,0x1400(r31)`
         // / 0x826418F8: `stfs f0,0x1400(r31)`), i.e. mfTimeSinceTookDownPlayer -- the post-takedown
         // invulnerability clock HasRecentlyTakendownPlayer reads. It was written into the +0x1430
         // member, which is a different timer entirely.
-        // ⭐ v1, NOT v2: asm 0x826418E4 stores v127 (the sim timestep) into the scratch it adds at
+        // v1, NOT v2: asm 0x826418E4 stores v127 (the sim timestep) into the scratch it adds at
         // 0x826418F0. Was lfDT (v2) while the slow-mo scaling that makes the two differ was elided.
         mfTimeSinceTookDownPlayer += lvfSimTimeStep.x;
 
         // Latch aftertouch-active for this frame: needs the request flag (a5), an aftertouch-enable
         // input ( > 0 ) and the virtual "can use aftertouch" query (vtbl+20).
         bool lbUsing = true;
-        // ⭐ RE-BOUND at the signature conform: the latch reads the AFTERTOUCH request flag --
+        // RE-BOUND at the signature conform: the latch reads the AFTERTOUCH request flag --
         // r7 == lbPlayerAftertouchForceAdditive under the recovered arg map (the old binding
         // read r6, which is the manager's mbImpactTime byte; this body's own comment already
         // said "the request flag (a5)").
@@ -630,7 +630,7 @@ namespace Vehicle
 
     // ---------------------------------------------------------------------------------------
     // RaceCarPhysics::AddTractionPoint  @0x825FFAE8  (49 insns)
-    // ⭐⭐ RE-SIGNATURED 2026-08-07 (orchestrator wave). The committed 2-arg form and its
+    // RE-SIGNATURED 2026-08-07 (orchestrator wave). The committed 2-arg form and its
     //   "chains to a 2-argument VehiclePhysics entry" reading were a slice artefact: the asm
     //   at 0x825FFB04 does `bl SimpleVehiclePhysics::AddTractionPoint` with EVERY incoming
     //   register untouched (r4 = wheel, r5 = tag, v1 = position, v2 = normal), and the PS3
@@ -827,7 +827,7 @@ namespace Vehicle
     // ---------------------------------------------------------------------------------------
     // RaceCarPhysics::CapShowtimeVelocities  @0x825D7600  (gated on mbLaunchActive)
     //
-    // ⛔ REWRITTEN 2026-08-03. The committed body clamped ONE vector (mLinearVelocity) with both
+    // REWRITTEN 2026-08-03. The committed body clamped ONE vector (mLinearVelocity) with both
     //   cap pairs. The asm clamps TWO SEPARATE REGISTERS, and the second one it never touched:
     //     0x825D7634  `addi r29, r30, 0x60`  -> mAngularVelocity, clamped first
     //     0x825D7730  `addi r28, r30, 0x50`  -> mLinearVelocity,  clamped second
@@ -1067,7 +1067,7 @@ namespace Vehicle
             // candidate id matches the current target.
             const f32 lfAlign = vpu::Dot(vpu::Normalize(lvToTarget), vpu::Normalize(lvVel));
             f32 lfWeight = (2.0f - lfAlign) * ((lfDist > 0.0f) ? (1.0f / lfDist) : 0.0f);
-            // ⚠️ 2026-08-11: maTargetIds re-typed s32 -> EntityId (the type
+            // maTargetIds re-typed s32 -> EntityId (the type
             // GetTargetAssistParams writes into it); the console compares the raw dwords.
             if (static_cast<s32>(MS.maTargetIds[liT].muValue) == MS.miCurrentTargetId)
                 lfWeight *= 1.0f;   // FLAG: stickiness bonus flt_82F2A32C (un-homed) -> identity
@@ -1109,7 +1109,7 @@ namespace Vehicle
     //   UpdateShowtimePhysics. FLAG: all magnitude rodata are un-homed placeholders; the camera-axis
     //   normalisation, the yaw/pitch channels and the showtime chaining are faithful.
     // ---------------------------------------------------------------------------------------
-    // ⭐⭐ WIDENED 2026-08-09 (crash/shunt wave) to the 5-arg DWARF virtual form
+    // WIDENED 2026-08-09 (crash/shunt wave) to the 5-arg DWARF virtual form
     // (VehiclePhysics.h:1514) so it OVERRIDES the base slot +0x28 that UpdateCrashing
     // dispatches -- the committed 4-arg form was the dropped-VecFloat trap (the @0x8262EBE8
     // prologue saves v1, `vmr128 v121, v1` @0x8262EC08, and restores it before the showtime
@@ -1125,7 +1125,7 @@ namespace Vehicle
         // gate: airborne/crash (this+1808). The minimal slice models this via the aftertouch latch.
         if (!mbUsingAftertouch /* *(this+1808): in-air/crash */)
             return;
-        // ⭐ RE-NAMED 2026-08-03. `lbz r11, 0x40(r25)` @0x8262EC28, must be ZERO to proceed --
+        // RE-NAMED 2026-08-03. `lbz r11, 0x40(r25)` @0x8262EC28, must be ZERO to proceed --
         // decimal 64 IS 0x40, and 0x40 is mbIsOnStartLine, not the +0x44 driver type the invented
         // GetMode() accessor read. Aftertouch is disabled while the car sits on the start line.
         if (lpControls->mbIsOnStartLine)          // asm lbz +0x40, bne -> bail
@@ -1155,7 +1155,7 @@ namespace Vehicle
         if (lbDoForceAdditiveAftertouch && lfEnable > 0.0f)
         {
             f32 lfYaw = 0.0f, lfPitch = 0.0f, lfScalar = 0.0f;
-            // ⭐ FORK RESOLVED 2026-08-06 (UpdateVehiclePhysics wave): the console leaf
+            // FORK RESOLVED 2026-08-06 (UpdateVehiclePhysics wave): the console leaf
             // @0x825B2E88 is the 4-arg reference form; THIS call site passes the bool as a
             // literal FALSE (`li r7, 0` @0x8262EE64, bl @0x8262EE78 -- raw image bytes).
             // The 3-pointer declaration is deleted (BrnVehicleDriverControls.h).
@@ -1203,7 +1203,7 @@ namespace Vehicle
             // TWICE (@0x8262F49C and @0x8262F5D0) and both sites set `li r5,0 ; li r4,0` -- BOTH
             // vectors WORLD_SPACE. This is the only one of the five AddLocal* call sites in the
             // vehicle tree whose POSITION is world-space rather than body-space.
-            // ⛔ FLAG (position argument, pre-existing): the zero vector below is a STAND-IN and the
+            // FLAG (position argument, pre-existing): the zero vector below is a STAND-IN and the
             // asm contradicts it -- v2 at the call is `vsubfp v2, v0, v12` (@0x8262F458), a live
             // difference of two vectors, not a literal zero. With a WORLD_SPACE tag a zero position
             // means "the world origin", so AddLocalImpulse would use r = -mTransform.wAxis (the car's

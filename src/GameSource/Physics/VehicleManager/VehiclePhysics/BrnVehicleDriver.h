@@ -17,7 +17,7 @@
 //   sizeof == 224 (0xE0) -- independently confirmed by VehicleManager::Construct's per-car
 //   cursor advance `addi r25, r25, 0xE0`, eight times, from this+64 to this+1856.
 //
-// ⭐ This type is what retires VehicleManager's `RaceCarDriverRecord` stand-in. That stand-in
+// This type is what retires VehicleManager's `RaceCarDriverRecord` stand-in. That stand-in
 // carried three role-named bytes at in-record 59/60/61 behind an explicit HYPOTHESIS flag; all
 // three land inside mControls and are now real members, and the DWARF names match the recovered
 // roles exactly:

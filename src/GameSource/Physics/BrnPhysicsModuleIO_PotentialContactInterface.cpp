@@ -50,7 +50,7 @@ namespace PhysicsModuleIO
         maCustomEventQueues[0].AddEventSafe(lEvent);
     }
 
-    // ⭐ ADDED 2026-08-14 (walls leg 3, harvest wave). X360 0x825E73D0 (the out-of-line copy of
+    // X360 0x825E73D0 (the out-of-line copy of
     // the console-inline DWARF :147 overload; assert BrnPhysicsModuleIO.h:596, warning gated on
     // `miLength >= 0x800` + message filter bit 0). No lock tripwire -- the console body has none
     // (its three callers all run under the physics update's write lock). The bool AddEventSafe

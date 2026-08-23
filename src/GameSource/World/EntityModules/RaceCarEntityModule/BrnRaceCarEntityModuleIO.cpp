@@ -391,17 +391,11 @@ InputBuffer_PostPhysics::GetSceneInputInterface()
     return &mSceneInputInterface;
 }
 
-// ⛔ CORRECTION (3) -- 2026-08-11 (physics-readback wave). The five const getters below were
-// each attributed to the WRONG X360 body: 0x822B6098 (+848624) and 0x822B61E8 (+879392) were
-// missing from the attribution entirely, so every address slid one-to-two rungs early. The
-// six out-of-line const getters are, by returned offset, 0x822B5F48/+16,
-// 0x822B5FF0/+27680, 0x822B6098/+848624, 0x822B6140/+868400, 0x822B61E8/+879392 and
-// 0x822B6290/+879408 -- i.e. exactly the member order below. Full proof (offsets, layouts and
-// the 522/525/531/534/537/540 assert-line ladder) is in the header's CORRECTION (3) banner.
-// This also RETIRES two link holes: GetVehicleOutputInterface and
-// GetVehicleManagerOutputInterface were declared but had no body anywhere in the tree, and
-// the physics readback (RaceCarEntityModule::ReadUpdatedActiveRaceCarDataFromPhysics) is the
-// first reconstructed caller of the first one.
+// ⚠️ ADDRESS PIN for the const getters below. The six out-of-line const getters are, by
+// returned offset, 0x822B5F48/+16, 0x822B5FF0/+27680, 0x822B6098/+848624, 0x822B6140/+868400,
+// 0x822B61E8/+879392 and 0x822B6290/+879408 -- exactly the member order below. Full proof
+// (offsets, layouts, the 522/525/531/534/537/540 assert-line ladder) is in the header's banner.
+// Attributions that omit 0x822B6098 or 0x822B61E8 slide every later address one-to-two rungs.
 
 // X360 0x822B5F48 (R, :513 / X360 h:522, +16) -- const vehicle-output accessor. This is the
 // interface ReadUpdatedActiveRaceCarDataFromPhysics reads every race car's published

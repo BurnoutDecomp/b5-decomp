@@ -21,7 +21,7 @@ namespace Vehicle
     extern VecFloat KAVF_SURFACE_LINEAR_DRAG[KI_MAX_NUM_SURFACES];
     extern bool     KAB_SURFACE_IS_WATER[KI_MAX_NUM_SURFACES];
 
-    // ⭐⭐ GRAVITY -- what actually accelerates a Burnout race car downward. [V] 2026-08-03.
+    // GRAVITY -- what actually accelerates a Burnout race car downward. [V] 2026-08-03.
     //
     // A race car is a BrnPhysics::ExternalPhysicsBody: the game integrates it ITSELF and only
     // publishes the pose to rw::physics. So the rw::physics SimulationParams::mGravity that
@@ -46,7 +46,7 @@ namespace Vehicle
     // DecFIGS DWARF names that local **lvfGravity** (VehiclePhysics.cpp:3202) -- which is what
     // identifies this slot by NAME and not merely by value.
     //
-    // ⚠️ WHY FIVE WAVES OF LITERAL SCANS MISSED IT. On the X360 the value lives in a .data slot
+    // WHY FIVE WAVES OF LITERAL SCANS MISSED IT. On the X360 the value lives in a .data slot
     // (unk_82FB9160) that reads **all zeros in the image**; it is filled at static-init time by a
     // tiny unexported, IDA-unmarked initialiser at 0x82C5B128 that splats the .rdata scalar
     // flt_8208F83C. Read out of the IDB with headless IDA: flt_8208F83C == 0x411CF5C3 ==
@@ -55,7 +55,7 @@ namespace Vehicle
     // conclusion about the game. (Console storage is a splatted VecFloat; the datum is the scalar.)
     const f32 KF_GRAVITY = 9.81000042f;   // X360 flt_8208F83C -> unk_82FB9160 (splat)
 
-    // ⭐ How long the handbrake has to have been RELEASED before a car may enter a drift.
+    // How long the handbrake has to have been RELEASED before a car may enter a drift.
     // [V] 2026-08-03. Read by VehiclePhysics::CheckForEnteringDrift @0x825FA4E4 against the
     // TimeSinceLastHandBrake lane (+0x1080 .w):
     //     addi   r11, r3, 0x1080
@@ -69,14 +69,14 @@ namespace Vehicle
     // why it is homed here and not as a function-scope static. The lane the X360 tests it against
     // was independently named TimeSinceLastHandBrake by this tree before the constant was found.
     //
-    // ⚠️ SAME TRAP AS KF_GRAVITY: unk_82FB9170 reads ALL ZEROS in the X360 image. It is filled at
+    // SAME TRAP AS KF_GRAVITY: unk_82FB9170 reads ALL ZEROS in the X360 image. It is filled at
     // static-init by an unexported, IDA-unmarked initialiser (disassembled at 0x82C5C9D8) that
     // splats the .rdata scalar flt_82001D9C == 2.0f. Console storage is a splatted VecFloat; the
     // datum is the scalar. Verified by reading that initialiser, NOT by trusting the splat-pattern
     // table -- the table mis-pairs multi-store blocks (it shows one slot receiving 2, 100 and 80).
     const f32 KVF_HANDBRAKE_OFF_TIME_TO_ALLOW_DRIFT = 2.0f;   // X360 flt_82001D9C -> unk_82FB9170
 
-    // ⭐ DE-DUPLICATED HERE 2026-08-03 (task #113). The EntityId owner-type byte (bits 24..31) that
+    // DE-DUPLICATED HERE 2026-08-03 (task #113). The EntityId owner-type byte (bits 24..31) that
     // the traffic/articulation code asserts for physics-traffic ids ("...GetOwner() ==
     // BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE", value 2). It was defined TWICE at BrnPhysics::Vehicle
     // namespace scope -- BrnPhysicalTrafficManager.h:272 and BrnArticulatedJoint.h:42 -- each with a
@@ -140,7 +140,7 @@ namespace Vehicle
         eCrashTrafficType_Invalid     = 255
     };
 
-    // ⭐ ADDED 2026-08-22 (wave T3 r2, owner B). The RaceCarTrafficImpactResponse bit flags
+    // The RaceCarTrafficImpactResponse bit flags
     // DecideOutcomeOfRaceCarTrafficContact @0x825C70A0 writes and
     // HandleRaceCarTrafficCarPotentialContact @0x8263FA50 dispatches on. The console's own
     // assert string at BrnVehicleManager.cpp:7836 names the family and the mask
@@ -159,13 +159,13 @@ namespace Vehicle
     const u32 KU_RCTIR_CHECK_TRAFFIC = 8u;
     const u32 KU_RCTIR_TRAFFIC_MASK  = 0x1Eu;
 
-    // ⭐ ADDED 2026-08-10 (producer wave). The bounding-sphere radius every vehicle -- race car
+    // The bounding-sphere radius every vehicle -- race car
     // AND traffic -- claims its triangle-cache slot with. ONE datum, TWO readers: both
     // VehicleManager::PrepareTriangleCache @0x82615BE4 and PhysicalTrafficManager::
     // PrepareTriangleCache @0x825EE5E8 load the SAME .rdata slot `flt_8200426C`, which is why it
     // is homed here (the shared vehicle-constants header) rather than duplicated at either site.
     //
-    // ⭐ READ FROM THE IMAGE, not from Hex-Rays: x360rd.py at 0x8200426C returns
+    // READ FROM THE IMAGE, not from Hex-Rays: x360rd.py at 0x8200426C returns
     // `40a00000` == 5.0f, on a read whose 10-point calibration passed. (The neighbouring word
     // is 0x40400000 == 3.0f, so the slot is not ambiguous.)
     //
@@ -175,7 +175,7 @@ namespace Vehicle
     // kept live around every car.
     const f32 KF_TRIANGLE_CACHE_SPHERE_RADIUS = 5.0f;   // X360 flt_8200426C
 
-    // ⭐ ADDED 2026-08-13 (wheel-transform wave). The two crash-visual constants of
+    // The two crash-visual constants of
     // SimpleVehiclePhysics::GetWheelsWorldTransfrom @0x825D8878. Both are BrnPhysics::Vehicle
     // namespace-scope (the PS3 DecFIGS pseudocode names them through TOC symbols:
     // `KVF_MAX_BUCKLE_ANGLE_CRASHING` / `KAVF_WHEEL_TWIST_DIRECTIONS`), and BOTH are the
@@ -189,7 +189,7 @@ namespace Vehicle
     //                stvx128 v0 @+0x00, v13 @+0x10, v0 @+0x20, v13 @+0x30 -> 0x82FB91E0
     //
     // KVF_MAX_BUCKLE_ANGLE_CRASHING clamps the crash "buckle" rotation (about the local Z
-    // axis): angle = min((2*|posZ - streamedZ|)^2, this). ⚠️ The SQUARE is the angle -- both
+    // axis): angle = min((2*|posZ - streamedZ|)^2, this). The SQUARE is the angle -- both
     // platforms agree instruction-for-instruction; it LOOKS like a porter-bait bug, do not
     // "fix" it. 0.2 rad ~= 11.46 degrees.
     // Console storage is a splatted VecFloat; the datum is the scalar.

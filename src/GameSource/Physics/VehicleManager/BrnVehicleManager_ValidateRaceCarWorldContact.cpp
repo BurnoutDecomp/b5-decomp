@@ -11,11 +11,11 @@
 // REWRITE the contact in place (the wall-normal flatten; the wheel/bottom-plane projection)
 // and returns whether it survives into the Validated queue.
 //
-// ⭐ EVERY CONSTANT BELOW IS MEASURED, none inferred (walls leg 3, x360rd out of the unpacked
+// EVERY CONSTANT BELOW IS MEASURED, none inferred (walls leg 3, x360rd out of the unpacked
 // .i64 image; addresses cited per value). The two file-scope values are namespace globals on
 // the console; the function-locals are its guarded function-statics (guard dword_82FBA030).
 //
-// ⭐⭐ METHOD NOTE: the two VMX-dense blocks (the bottom-plane rewrite and the final AABB
+// METHOD NOTE: the two VMX-dense blocks (the bottom-plane rewrite and the final AABB
 // acceptance) were derived from the RAW INSTRUCTION WORDS with the leg-2-validated field
 // decoders (sim_kernel field layouts), NOT from the IDA operand text -- the +32 per-operand-
 // field hazard and one vperm operand-order trap live exactly there. Where the raw words
@@ -39,7 +39,7 @@ namespace BrnPhysics
 {
 namespace Vehicle
 {
-    // ⭐ MEASURED namespace globals (console .data):
+    // MEASURED namespace globals (console .data):
     //   gfGroundContactCullHeight: STATICALLY-INITIALISED .data @0x82F2A148 == 0x3ECCCCCD ==
     //     0.4f (image-read; same ordinary-initialised .data bank as the flt_82F2A2xx seed
     //     constants -- nothing to disassemble).
@@ -301,7 +301,7 @@ namespace Vehicle
         const f32 lfLowerY = lrCar.mDeformableAABB.mMin.y - KF_AABB_MARGIN_XY - fabsf(lfDispY);
         const f32 lfLowerZ = lrCar.mDeformableAABB.mMin.z - 0.0f            - fabsf(lfDispZ);
 
-        // ⚠⚠ CONSOLE QUIRK REPRODUCED, raw-word verified: the three LOWER-bound compares all
+        // CONSOLE QUIRK REPRODUCED, raw-word verified: the three LOWER-bound compares all
         // test the LOCAL-Y coordinate (0x825C6DAC == 0x825C6DE4 == word 112C4EC6 -> vcmpgtfp.
         // v9, v12(localY), v9(lower splat); 0x825C6E20 -> 100C06C6 likewise), where the upper-
         // bound compares use x/y/z correctly. The PS3 compiles the SAME pairing (its cmp2/4/6
@@ -361,12 +361,12 @@ namespace Vehicle
     }
 
     // ==========================================================================================
-    // ⭐ Vehicle::DebugComponent::SetLastWallTriangle @0x825B4D60 (32) -- defined HERE because
+    // Vehicle::DebugComponent::SetLastWallTriangle @0x825B4D60 (32) -- defined HERE because
     // its declared home TU (B5PhysicsHandlingDebugComponent.cpp) is deliberately NOT mounted:
     // compiling it would emit the class vtable (GetPath is its key-function override) and drag
     // the CgsDev::DebugComponent base's unreconstructed virtual surface onto the link (the
     // DebugUI base-layout block). This is the identical body that TU carries -- assert + the
-    // 10-qword (80-byte) AOSTriangle copy into mLastWallTriangle @console+0x350. ⚠ The day
+    // 10-qword (80-byte) AOSTriangle copy into mLastWallTriangle @console+0x350. The day
     // B5PhysicsHandlingDebugComponent.cpp mounts, DELETE this copy (the link will say so:
     // LNK2005).
     // ==========================================================================================

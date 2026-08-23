@@ -7,36 +7,107 @@
 // the body, then run the full-physics update. Sole caller VehicleManager::UpdateVehiclePhysics
 // @0x82645E44. Its link stub at BrnVehicleManagerLinkStubs.cpp:284 must be DELETED with this.
 //
-// The address was an .ida-exports HOLE (and is absent from progress/identity.json); the body was
-// dumped headless from a COPY of the ARTIST .i64 during the wave-T3 scout
-// (scratchpad .../wave3/scout/holes/0x82644418.txt: pseudocode + full asm + xrefs).
-// DWARF BrnPhysicalTrafficManager.h:152
+// The address was an .ida-exports HOLE (absent from progress/identity.json); the body was dumped
+// headless from a COPY of the ARTIST .i64. DWARF BrnPhysicalTrafficManager.h:152
 //   void UpdateTrafficPhysics(float32_t, float32_t, const Matrix44Affine*, bool, bool)
 // ============================================================================
 
 #include "GameSource/Physics/VehicleManager/BrnPhysicalTrafficManager.h"
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/VehiclePhysics.h"
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/BrnSimpleVehiclePhysics.h"
+#include "GameSource/Physics/VehicleManager/VehiclePhysics/BrnVehicleDriver.h"
+#include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleDriverControls.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 
 #include <cstdlib>   // getenv (BRN_TRAFFIC_DIAG)
-#include <cmath>     // sqrtf ([T3-tick] velocity magnitude)
+#include <cmath>     // sqrtf ([T5-ram] velocity magnitude)
 
 namespace BrnPhysics
 {
 namespace Vehicle
 {
+// =================================================================================================
+// [T5-ram] DIAG STATE. NOT IN THE X360 BINARY. DELETE-WHEN-STABLE.
+//
+// Defined here (the per-frame traffic tick is the natural print site); the arming sites live in
+// BrnPhysicalTrafficManager_CrashResponse.cpp, the player pose is published by
+// BrnVehicleManager_UpdateVehiclePhysics.cpp, the deformation counters are bumped by the
+// DeformationManager contact bridge / DeformableObject impulse TUs, and the module-side pose is
+// printed by TrafficEntityModule::HandleExternalResponses -- all through `extern` declarations, so
+// no header this cluster does not own is touched.
+// =================================================================================================
+s32 gT5RamFramesLeft  = 0;     // > 0 while the post-hit measurement window is open
+s32 gT5RamTrafficSlot = -1;    // the PHYSICAL traffic slot that was hit
+s32 gT5RamGlobalIndex = -1;    // ...and its GLOBAL traffic vehicle index (for the module side)
+f32 gT5PlayerPos[3]   = { 0.0f, 0.0f, 0.0f };
+f32 gT5PlayerVel[3]   = { 0.0f, 0.0f, 0.0f };
+u32 gT5Q8Routed       = 0;     // queue-[8] contacts handed to DeformationManager::ReadPotentialContact
+u32 gT5Q8Accepted     = 0;     // ...of which DeformationSensor::ValidateAndAddContact kept one
+u32 gT5CarCarCalls    = 0;     // DeformableObject::ApplyCarCarImpulse entries
+u32 gT5CarCarApplied  = 0;     // ...that returned true (an impulse actually went into both bodies)
+f32 gT5LastImpulseMag = 0.0f;  // the last car-car impulse LENGTH handed to ApplySensorImpulse
+f32 gT5LastClosing    = 0.0f;  // ...and the closing speed it was solved from
+
 namespace
 {
-    // [T3-tick] DIAG. NOT IN THE X360 BINARY. DELETE-WHEN-STABLE.
+    // DIAG. NOT IN THE X360 BINARY. DELETE-WHEN-STABLE.
     bool TrafficDiagEnabled()
     {
         static const bool sbEnabled = (getenv("BRN_TRAFFIC_DIAG") != 0);
         return sbEnabled;
     }
-    bool s_bTickReported = false;
+
+    // [T5-ram] one line per print, in two halves (pre-tick / post-tick) so "the impulse landed and
+    // TrafficPhysics::Update then wiped it" is distinguishable from "no impulse ever landed".
+    void PrintT5Line(const char* lpcWhen, s32 liFrame, s32 liSlot,
+                     const PhysicalTrafficVehicle& lrVehicle, const VehicleDriver* lpDriver)
+    {
+        const SimpleVehiclePhysics* const lpBody = lrVehicle.mpVehicleBody;
+        if (lpBody == 0 || CgsDev::Log::gpDebugPrint == 0)
+        {
+            return;
+        }
+        const Vector3 lvVel = lpBody->GetLinearVelocity();
+        const Vector3 lvPos = lpBody->GetTransform().wAxis;
+        const f32 lfSpeed = sqrtf(lvVel.x * lvVel.x + lvVel.y * lvVel.y + lvVel.z * lvVel.z);
+        const f32 lfPlayerSpeed = sqrtf(gT5PlayerVel[0] * gT5PlayerVel[0]
+                                        + gT5PlayerVel[1] * gT5PlayerVel[1]
+                                        + gT5PlayerVel[2] * gT5PlayerVel[2]);
+
+        *CgsDev::Log::gpDebugPrint
+            << "[T5-ram] " << lpcWhen << " f=" << liFrame << " slot=" << liSlot
+            << " state=" << static_cast<s32>(lrVehicle.mePhysicalTrafficState)
+            << " ptype=" << static_cast<s32>(lrVehicle.mu8PhysicalType)
+            << " frozen=" << static_cast<s32>(lpBody->IsFrozen() ? 1 : 0)
+            << " mass=" << lpBody->GetMass().x
+            << " tpos=(" << lvPos.x << "," << lvPos.y << "," << lvPos.z << ")"
+            << " tvel=(" << lvVel.x << "," << lvVel.y << "," << lvVel.z << ")"
+            << " |tv|=" << lfSpeed;
+
+        if (lpDriver != 0)
+        {
+            const BrnPlayerDriverControls* const lpControls = lpDriver->GetControls();
+            *CgsDev::Log::gpDebugPrint
+                << " gas=" << lpControls->mfGas
+                << " brake=" << lpControls->mfBrake
+                << " hb=" << lpControls->mfHandBrake
+                << " steer=" << lpControls->mfSteering;
+        }
+
+        *CgsDev::Log::gpDebugPrint
+            << " ppos=(" << gT5PlayerPos[0] << "," << gT5PlayerPos[1] << "," << gT5PlayerPos[2] << ")"
+            << " pvel=(" << gT5PlayerVel[0] << "," << gT5PlayerVel[1] << "," << gT5PlayerVel[2] << ")"
+            << " |pv|=" << lfPlayerSpeed
+            << " q8routed=" << static_cast<s32>(gT5Q8Routed)
+            << " q8acc=" << static_cast<s32>(gT5Q8Accepted)
+            << " ccCalls=" << static_cast<s32>(gT5CarCarCalls)
+            << " ccApplied=" << static_cast<s32>(gT5CarCarApplied)
+            << " lastMag=" << gT5LastImpulseMag
+            << " lastClose=" << gT5LastClosing
+            << "\n";
+    }
 }
 
 // -------------------------------------------------------------------------------------------
@@ -60,24 +131,44 @@ namespace
 //     0x82644618  VehicleDriver::UpdateVehicle(driver, body)
 //     0x8264463C  PhysicalTrafficVehicle::Update(vehicle, ...)
 //
-// ⚠️ THE CONTROLS ARGUMENT IS THE DRIVER ITSELF. r7 into PhysicalTrafficVehicle::Update is
-// `mr r7, r31` -- the raw &mpaTrafficDrivers[i]. That address IS &driver.mControls
-// (BrnVehicleDriver.h pins mControls at +0), so the console is passing the driver's control
-// block; spelled BY NAME here through VehicleDriver::GetControls().
+// THE CONTROLS ARGUMENT IS THE DRIVER ITSELF: r7 into PhysicalTrafficVehicle::Update is
+// `mr r7, r31` == the raw &mpaTrafficDrivers[i], which IS &driver.mControls (BrnVehicleDriver.h
+// pins mControls at +0). Spelled by name here through VehicleDriver::GetControls().
 //
-// ⚠️ THE LAST ARGUMENT IS A HARD ZERO. `li r10, 0` at 0x8264461C -- lbUseSixaxis is false for
-// traffic on every frame, not a forwarded parameter. lbUnknownFalse (this function's own r8)
-// is forwarded into lbDoForceAdditiveAftertouch (r9), and lbImpactTime into r8.
+// THE LAST ARGUMENT IS A HARD ZERO: `li r10, 0` @0x8264461C -- lbUseSixaxis is false for traffic
+// every frame, not a forwarded parameter. lbUnknownFalse (r8) forwards into
+// lbDoForceAdditiveAftertouch (r9), and lbImpactTime into r8.
 //
-// ⚠️ NOTE ON THE X360 STRIDES: the console reaches both pools by `slwi 6` (64) and `mulli 0xE0`
-// (224). Both are reached BY NAME here; sizeof(VehicleDriver) is 224 on the host too, but
-// sizeof(PhysicalTrafficVehicle) is NOT 64 on the host (the pointer member widens), so an
-// offset transcription would have indexed into the wrong vehicle from slot 1 onward.
+// X360 STRIDES: the console reaches both pools by `slwi 6` (64) and `mulli 0xE0` (224). Both are
+// reached BY NAME here; sizeof(PhysicalTrafficVehicle) is NOT 64 on the host (the pointer member
+// widens), so an offset transcription would index the wrong vehicle from slot 1 onward.
 // -------------------------------------------------------------------------------------------
 void PhysicalTrafficManager::UpdateTrafficPhysics(f32 lfSimTimeStep, f32 lfGameTimeStep,
                                                   const Matrix44Affine* lpCameraMatrix,
                                                   bool lbImpactTime, bool lbUnknownFalse)
 {
+    // ---- [T5-ram] DIAG. NOT IN THE X360 BINARY. DELETE-WHEN-STABLE. -------------------------
+    // The measurement window the finisher round asked for: every 10th frame for ~3 s after the
+    // first race-car-vs-traffic outcome, print the hit car's whole physical state twice -- once
+    // BEFORE the driver+physics tick and once AFTER it -- so a wiped velocity and an absent
+    // impulse are two different readings rather than one ambiguous zero.
+    s32 liT5Frame = 0;
+    bool lbT5Print = false;
+    if (gT5RamFramesLeft > 0)
+    {
+        --gT5RamFramesLeft;
+        static s32 s_iT5Frame = 0;
+        liT5Frame = ++s_iT5Frame;
+        lbT5Print = ((liT5Frame % 10) == 1) && TrafficDiagEnabled() && CgsDev::Log::gpDebugPrint != 0;
+    }
+    if (lbT5Print && gT5RamTrafficSlot >= 0
+        && static_cast<u32>(gT5RamTrafficSlot) < KU8_TOTAL_MAX_NUM_PHYSICAL_TRAFFIC
+        && mUsedTrafficVehicles.IsBitSet(static_cast<u32>(gT5RamTrafficSlot)))
+    {
+        PrintT5Line("pre ", liT5Frame, gT5RamTrafficSlot,
+                    mpaTrafficVehicles[gT5RamTrafficSlot], &mpaTrafficDrivers[gT5RamTrafficSlot]);
+    }
+
     for (s32 liVehicle = mUsedTrafficVehicles.GetFirstNonZeroBit();
          liVehicle != TotalPhysicalTrafficBitArray::KI_INVALID_BITINDEX;
          liVehicle = mUsedTrafficVehicles.GetNextNonZeroBit(liVehicle))
@@ -110,23 +201,18 @@ void PhysicalTrafficManager::UpdateTrafficPhysics(f32 lfSimTimeStep, f32 lfGameT
         // The driver installs its latest controls into the body (BrnVehicleDriver.cpp @0x825D7290).
         lrDriver.UpdateVehicle(reinterpret_cast<VehiclePhysics*>(lpBody));
 
-        // [T3-tick] DIAG. NOT IN THE X360 BINARY. DELETE-WHEN-STABLE.
-        if (!s_bTickReported && TrafficDiagEnabled() && CgsDev::Log::gpDebugPrint != 0)
-        {
-            s_bTickReported = true;
-            const Vector3 lvVelocity = lpBody->GetLinearVelocity();
-            *CgsDev::Log::gpDebugPrint
-                << "[T3-tick] UpdateTrafficPhysics first live slot=" << liVehicle
-                << " simDt=" << lfSimTimeStep
-                << " |v|=" << sqrtf(lvVelocity.x * lvVelocity.x
-                                    + lvVelocity.y * lvVelocity.y
-                                    + lvVelocity.z * lvVelocity.z)
-                << "\n";
-        }
-
         lrVehicle.Update(lfSimTimeStep, lfGameTimeStep, lpCameraMatrix,
                          lrDriver.GetControls(), lbImpactTime, lbUnknownFalse,
                          false /* lbUseSixaxis -- `li r10, 0` @0x8264461C */);
+    }
+
+    // ---- [T5-ram] the POST-tick half of the same frame. DELETE-WHEN-STABLE. ------------------
+    if (lbT5Print && gT5RamTrafficSlot >= 0
+        && static_cast<u32>(gT5RamTrafficSlot) < KU8_TOTAL_MAX_NUM_PHYSICAL_TRAFFIC
+        && mUsedTrafficVehicles.IsBitSet(static_cast<u32>(gT5RamTrafficSlot)))
+    {
+        PrintT5Line("post", liT5Frame, gT5RamTrafficSlot,
+                    mpaTrafficVehicles[gT5RamTrafficSlot], &mpaTrafficDrivers[gT5RamTrafficSlot]);
     }
 }
 }

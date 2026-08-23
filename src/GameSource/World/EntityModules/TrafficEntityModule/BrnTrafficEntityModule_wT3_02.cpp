@@ -1,17 +1,16 @@
 // =================================================================================================
 // GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficEntityModule_wT3_02.cpp
 //
-// Wave T3 round 1, cluster C3 (world side). The driver-input producer leg.
+// The driver-input producer leg.
 //   TrafficEntityModule::UpdateVehicleStuckTimers @0x82708D48 (33 insns)
 //   TrafficEntityModule::GenerateDriverInputs     @0x82748E78 (1,439 insns)
 //   TrafficEntityModule::CalculateDriverGasBrake  @0x82718CD8
 //   TrafficEntityModule::CalculateAndSetSteering  @0x82718E48
 //   TrafficEntityModule::DriveTowardsTarget       @0x8273DFC0  PARTIAL
 //   TrafficEntityModule::UpdateNormalPhysical     @0x8273EF08
-//   TrafficEntityModule::UpdateExtremeSwerving    @0x8273E8D0  (wave T3 r3 fix round)
+//   TrafficEntityModule::UpdateExtremeSwerving    @0x8273E8D0
 // The NORMAL and EXTREME_SWERVE manoeuvre arms are live; the other five are gated at the
 // dispatch site.
-// Full asm decode in scratchpad .../wave3/C3-tick-and-driver-inputs/REPORT.md.
 // =================================================================================================
 
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficEntityModule.h"
@@ -34,23 +33,18 @@
 #include "rw/math/vpu/vector3_operation.h"   // Dot, Cross, IsValid
 
 #include <cmath>     // std::sqrt
-#include <cstdlib>   // getenv (BRN_TRAFFIC_DIAG)
 
 namespace BrnTraffic
 {
 namespace
 {
-    // The two tuning floats UpdateVehicleStuckTimers loads from RODATA, read out of the ARTIST
-    // image (headless idat, wave T3):
-    //   flt_820BA86C == 2.0f   the value a side timer is RESET to when it starts accumulating
-    //   flt_82004014 == 0.1f   the threshold under which that reset happens
-    // THEY ARE NOT PARAMETERS ON THE CONSOLE. The X360 body loads both itself (`lfs f1,
-    // flt_820BA86C ; lfs f2, flt_82004014` at 0x82708DA0/0x82708D9C) and its ONE caller,
-    // GenerateDriverInputs @0x827492F8, sets neither f1 nor f2 (r6/r7 are consumed by the PPC
-    // float-arg GPR skip, so the register file proves the omission). The declaration in
-    // BrnTrafficEntityModule.h carries an (f32, f32) pair the console does not have; that header
-    // is not this cluster's to edit, so the body honours the declaration and GenerateDriverInputs
-    // passes exactly these. Retire the pair when the header is next opened.
+    // UpdateVehicleStuckTimers' own RODATA (headless idat): flt_820BA86C == 2.0f (the value a
+    // side timer is RESET to when it starts accumulating) and flt_82004014 == 0.1f (the
+    // threshold). THEY ARE NOT PARAMETERS ON THE CONSOLE: the X360 body loads both itself
+    // (lfs at 0x82708DA0 / 0x82708D9C) and its one caller GenerateDriverInputs @0x827492F8 sets
+    // neither f1 nor f2. BrnTrafficEntityModule.h declares an (f32, f32) pair the console does
+    // not have; the body honours the declaration.
+    // PARK: retire that pair when the header is next opened.
     const f32 KF_STUCK_SIDE_TIMER_RESET     = 2.0f;
     const f32 KF_STUCK_SIDE_TIMER_THRESHOLD = 0.1f;
 
@@ -60,7 +54,7 @@ namespace
     const s32 KI_CONTACT_SIDE_FRONT = 1;
     const s32 KI_CONTACT_SIDE_BACK  = 2;
 
-    // GenerateDriverInputs' own RODATA, dumped headless from the ARTIST image (wave T3 r1):
+    // GenerateDriverInputs' own RODATA, dumped headless from the ARTIST image:
     //   flt_820047C8 == 0.05f  stuck-timer threshold that forces gas/brake to zero and re-sends
     //   flt_820BA5E4 == 10.0f  mfTimeNotDriving after which the car gives up
     //   flt_820BA8BC == 0.3f   per-frame gas ramp on the Showtime divergent-behaviour leg
@@ -82,7 +76,7 @@ namespace
     // `li r4, 1` into Vehicle::SetCurrentManoeuvrePhase at 0x827497FC.
     const s8 KI8_GIVE_UP_PHASE = 1;
 
-    // ---- the normal-physical driving leg's own RODATA (headless idat, wave T3 r2) --------
+    // ---- the normal-physical driving leg's own RODATA (headless idat) --------
     // CalculateDriverGasBrake @0x82718CD8
     const f32 KF_DRIVER_OPTIMAL_TIME_TO_TARGET = 1.5f;    // flt_820BA5DC
     const f32 KF_DRIVER_PEDAL_GAIN             = 0.5f;    // flt_820BA62C
@@ -104,7 +98,7 @@ namespace
     const f32 KF_DRIVER_SWERVE_STEERING_TIME       = 3.0f;    // flt_820BA5F4
     const f32 KF_DRIVER_REVERSE_TURN_DIST          = -15.0f;  // folded -15.0
 
-    // ---- UpdateExtremeSwerving @0x8273E8D0's own RODATA (headless idat, wave T3 r3 fix) ----
+    // ---- UpdateExtremeSwerving @0x8273E8D0's own RODATA (headless idat) ----
     //   flt_8200473C  == 0.4f    the crash-slider level below which the arm just drives
     //   unk_8300C9F0  == splat(1600.0f), dyn-init thunk 0x82C66C50 from flt_820BA810 (1600) --
     //                            a SQUARED distance, so 40 m to the local player's car
@@ -137,7 +131,7 @@ namespace
         return lZero;
     }
 
-    // One-shot leg gate. [T3-drive] DIAG, NOT IN THE X360 BINARY. DELETE-WHEN-STABLE.
+    // One-shot gate banner -- NOT IN THE X360 BINARY. Retire with the last gate below.
     void LogMissingLeg(bool& lrbAlreadyLogged, const char* lpcLegNameAndAddress)
     {
         if (lrbAlreadyLogged)
@@ -152,34 +146,6 @@ namespace
                 << "[T3-drive] GenerateDriverInputs leg NOT RECONSTRUCTED, skipped: "
                 << lpcLegNameAndAddress << "\n";
         }
-    }
-
-    // [T3-drive] DIAG. NOT IN THE X360 BINARY. DELETE-WHEN-STABLE.
-    bool TrafficDiagEnabled()
-    {
-        static const bool sbEnabled = (getenv("BRN_TRAFFIC_DIAG") != 0);
-        return sbEnabled;
-    }
-    bool s_bFirstControlsReported = false;
-
-    // [T3-return] DIAG accumulators. NOT IN THE X360 BINARY. DELETE-WHEN-STABLE.
-    // The three return-to-traffic predicates DriveTowardsTarget tests, sampled over each 5 s
-    // window across every physical car that reached the test with the gate ARMED. Written
-    // there, printed and reset from GenerateDriverInputs' [T3-phys] block.
-    s32 s_iReturnArmedCalls  = 0;
-    f32 s_fReturnMinDist     = 1.0e9f;
-    f32 s_fReturnDotAtMin    = 0.0f;
-    f32 s_fReturnMaxPhysTime = 0.0f;
-
-    // [T3-demote] DIAG. NOT IN THE X360 BINARY. DELETE-WHEN-STABLE. Same shape as the sibling
-    // partfiles' helper so the demotion probes read like the rest of the wave.
-    CgsDev::Log::DebugPrint* TrafficDiagStream()
-    {
-        if (!TrafficDiagEnabled() || CgsDev::Log::gpDebugPrint == 0)
-        {
-            return 0;
-        }
-        return CgsDev::Log::gpDebugPrint;
     }
 }
 
@@ -229,11 +195,9 @@ void TrafficEntityModule::UpdateVehicleStuckTimers(void* lpPhysicsInfo, f32 lfRe
 // The last two are the pair CLEARED in place at 0x82748F48/0x82748F68. Every access below is by
 // name; no console displacement reaches the host.
 //
-// ROUND-1 FINDING, and the reason this lands with the arms gated: the SEND label at 0x82749814
-// is taken whenever `GetPhysicalReason() == E_PHYSICALREASON_CRASHED` (0x827493A4 `lbz r11,
-// 0x39 ; cmplwi 0 ; beq`). A traffic car promoted because the player crashed into it therefore
-// gets a ZERO-CONTROL record and never reaches a manoeuvre arm at all. The hit car is limp by
-// design, so the wave-T3 round-1 scenario is covered entirely by legs landed here.
+// The SEND label at 0x82749814 is taken whenever GetPhysicalReason() == E_PHYSICALREASON_CRASHED
+// (0x827493A4 `lbz r11, 0x39 ; cmplwi 0 ; beq`): a traffic car promoted because the player
+// crashed into it gets a ZERO-CONTROL record and never reaches a manoeuvre arm at all.
 // -------------------------------------------------------------------------------------------
 void TrafficEntityModule::GenerateDriverInputs(BrnTrafficIO::OutputBuffer_PrePhysics* lpOutput)
 {
@@ -251,14 +215,6 @@ void TrafficEntityModule::GenerateDriverInputs(BrnTrafficIO::OutputBuffer_PrePhy
     mVehicleSoaData.mPhysicalVehiclesFarFromPlayer.UnSetAll();
     mVehicleSoaData.mPhysicalVehiclesTryingToRecover.UnSetAll();
 
-    // [T3-phys] DIAG census of THIS frame's physical population, printed every 5 s below.
-    // It answers the one question the demotion chain now turns on: does a promoted car's
-    // manoeuvre ever wind back to NONE (the only state that arms return-to-traffic)?
-    // NOT IN THE X360 BINARY. DELETE-WHEN-STABLE.
-    s32 laiCensusManoeuvre[Vehicle::E_MANOEUVRE_COUNT] = { 0, 0, 0, 0, 0 };
-    s32 laiCensusReason[6] = { 0, 0, 0, 0, 0, 0 };
-    s32 liCensusPhysical = 0;
-
     for (CgsContainers::FastBitArray<KU_PARAM_MAX_PARAMS>::Iterator lIterator =
              lPhysicalAliveVehicles.Begin();
          lIterator != lPhysicalAliveVehicles.End();
@@ -273,7 +229,7 @@ void TrafficEntityModule::GenerateDriverInputs(BrnTrafficIO::OutputBuffer_PrePhy
 
         // GATE TrafficEntityModule (second section) @0x82749B48 -- the >= 400 static/parked pool
         // arm, ~600 insns with its own TryClearupOffscreenTraffic @0x8274A1E8.
-        // Blocker: parked cars are never promoted in wave T3 r1 (only standard traffic is).
+        // Blocker: parked cars are never promoted on this build (only standard traffic is).
         // DELETE-WHEN the static pool gains physical promotion.
         if (liVehicle >= static_cast<s32>(KU_MAX_STANDARD_TRAFFIC))            // 0x82749224
         {
@@ -283,12 +239,8 @@ void TrafficEntityModule::GenerateDriverInputs(BrnTrafficIO::OutputBuffer_PrePhy
         }
 
         // GATE TrafficEntityModule::TryClearupOffscreenTraffic @0x8273C4C8 (453) -- removal
-        // polish; the console `continue`s when it returns true. Blocker: out of scope wave T3 r1.
-        // DELETE-WHEN the arm lands. Treated as "returned false", i.e. nothing is cleaned up.
-        // COST (measured run 20260822_220648): the only demotion route for an outrun car. The
-        // DriveTowardsTarget route is ARMED (manoeuvre NONE, dot 0.998, physTime 137 s) but its
-        // 1.5 m target-proximity test never passes ([T3-return] minDist 2.38 -> 110 m), so the
-        // pools only fill until this lands.
+        // polish; the console `continue`s when it returns true. BLOCKER: unreconstructed, and it
+        // is the only demotion route for an outrun car. DELETE-WHEN it lands. Taken as false.
         {
             static bool sbLoggedClearup = false;
             LogMissingLeg(sbLoggedClearup, "TryClearupOffscreenTraffic @0x8273C4C8");
@@ -367,16 +319,9 @@ void TrafficEntityModule::GenerateDriverInputs(BrnTrafficIO::OutputBuffer_PrePhy
             }
             else if (lpVehicle->IsExtremeSwerving())                            // 0x82749478
             {
-                // ⭐ LANDED wave T3 r3 fix round. 0x8274949C, with the console's own argument
-                // set (r4 vehicle, r5 arg_1C == lpOutput, r6 &lControls). Every promotion on
-                // this build arrives as reason SWERVING, so this is THE arm; while it was a
-                // gate, promoted traffic got a zero-control record and could never demote.
-                // RESIDUAL (measured run 20260822_220648): the arm drives (gas 1.0, steer 0.88)
-                // and the manoeuvre winds back to NONE in 0.67 s, so return-to-traffic ARMS;
-                // what still fails is the 1.5 m target-proximity predicate in DriveTowardsTarget
-                // (KF_DRIVER_RETURN_TO_TRAFFIC_DIST, flt_820BA5DC): [T3-return] minDist bottoms
-                // at 2.38 m then diverges to 110 m as the param outruns its car. Outrun cars are
-                // reclaimed only by TryClearupOffscreenTraffic @0x8273C4C8 (gated above).
+                // 0x8274949C, with the console's own argument set (r4 vehicle, r5 arg_1C ==
+                // lpOutput, r6 &lControls). Every promotion on this build arrives as reason
+                // SWERVING, so this is THE arm.
                 UpdateExtremeSwerving(static_cast<u32>(liVehicle), lpOutput, &lControls);
             }
             else if (leManoeuvre == Vehicle::E_MANOEUVRE_NONE)                  // 0x827494B4
@@ -505,66 +450,6 @@ void TrafficEntityModule::GenerateDriverInputs(BrnTrafficIO::OutputBuffer_PrePhy
             lpDriverInputInterface->GetUpdateDriverQueue()
                 ->AddEvent<BrnPhysics::Vehicle::BrnTrafficDriverControls>(
                     &lControls, KI_DRIVER_EVENT_TYPE_TRAFFIC);                 // 0x82749834
-        }
-
-        // [T3-drive] DIAG. NOT IN THE X360 BINARY. DELETE-WHEN-STABLE.
-        if (!s_bFirstControlsReported && TrafficDiagEnabled() && CgsDev::Log::gpDebugPrint != 0)
-        {
-            s_bFirstControlsReported = true;
-            *CgsDev::Log::gpDebugPrint
-                << "[T3-drive] first BrnTrafficDriverControls: vehicle " << liVehicle
-                << " gas " << lControls.mfGas
-                << " brake " << lControls.mfBrake
-                << " steer " << lControls.mfSteering
-                << " reason " << lpVehicle->GetPhysicalReason()
-                << " manoeuvre " << static_cast<s32>(leManoeuvre) << "\n";
-        }
-
-        // [T3-phys] DIAG. NOT IN THE X360 BINARY. DELETE-WHEN-STABLE.
-        {
-            ++liCensusPhysical;
-            if (leManoeuvre >= 0 && leManoeuvre < Vehicle::E_MANOEUVRE_COUNT)
-            {
-                ++laiCensusManoeuvre[leManoeuvre];
-            }
-            const s32 liReason = lpVehicle->GetPhysicalReason();
-            if (liReason >= 0 && liReason < 6)
-            {
-                ++laiCensusReason[liReason];
-            }
-        }
-    }
-
-    // [T3-phys] DIAG. NOT IN THE X360 BINARY. DELETE-WHEN-STABLE.
-    if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())
-    {
-        static f32 sfCensusTimer = 0.0f;
-        sfCensusTimer += mfSimTimeStep;
-        if (sfCensusTimer >= 5.0f)
-        {
-            sfCensusTimer = 0.0f;
-            *lpDiag << "[T3-phys] physical=" << liCensusPhysical << " manoeuvre";
-            for (s32 liM = 0; liM < Vehicle::E_MANOEUVRE_COUNT; ++liM)
-            {
-                *lpDiag << " [" << liM << "]=" << laiCensusManoeuvre[liM];
-            }
-            *lpDiag << " reason";
-            for (s32 liR = 0; liR < 6; ++liR)
-            {
-                *lpDiag << " [" << liR << "]=" << laiCensusReason[liR];
-            }
-            *lpDiag << "\n";
-
-            // [T3-return] the three return-to-traffic predicates over the same window:
-            // demotion needs minDist < 1.5, dot > 0.98 and physicalTime > 5.0 on ONE car.
-            *lpDiag << "[T3-return] armedCalls=" << s_iReturnArmedCalls
-                    << " minDist=" << s_fReturnMinDist
-                    << " dotAtMin=" << s_fReturnDotAtMin
-                    << " maxPhysTime=" << s_fReturnMaxPhysTime << "\n";
-            s_iReturnArmedCalls  = 0;
-            s_fReturnMinDist     = 1.0e9f;
-            s_fReturnDotAtMin    = 0.0f;
-            s_fReturnMaxPhysTime = 0.0f;
         }
     }
 }
@@ -738,23 +623,6 @@ void TrafficEntityModule::DriveTowardsTarget(u32 luVehicle, bool lbAllowReturnTo
         mVehicleSoaData.mPhysicalVehiclesTryingToRecover.SetBit(luVehicle);
     }
 
-    // [T3-return] DIAG. NOT IN THE X360 BINARY. DELETE-WHEN-STABLE. Sample the three
-    // predicates whenever the gate is armed, so a run that never demotes still says WHICH
-    // test failed and by how much.
-    if (lbAllowReturnToTraffic && TrafficDiagEnabled())
-    {
-        ++s_iReturnArmedCalls;
-        if (lfDist < s_fReturnMinDist)
-        {
-            s_fReturnMinDist  = lfDist;
-            s_fReturnDotAtMin = rw::math::vpu::Dot(lUnitDiff, lpParamTransform->GetDirection());
-        }
-        if (lpVehicle->GetPhysicalTime() > s_fReturnMaxPhysTime)
-        {
-            s_fReturnMaxPhysTime = lpVehicle->GetPhysicalTime();
-        }
-    }
-
     // 0x8273E27C..0x8273E32C -- sitting on its target, pointing the same way, and physical for
     // more than five seconds: hand it back to the param sim.
     if (lbAllowReturnToTraffic &&
@@ -765,10 +633,9 @@ void TrafficEntityModule::DriveTowardsTarget(u32 luVehicle, bool lbAllowReturnTo
     {
         CGS_ASSERT(!lpVehicle->IsOfTrailerSpecies(), "!lpVehicle->IsOfTrailerSpecies()"); // 16648
 
-        // ⭐ LANDED wave T3 round 3 (was a gate). 0x8273E4B4 the call, 0x8273E4B8 the
-        // `b loc_8273E75C` that RETURNS out of the driver for this frame -- the car is no
-        // longer physical, so steering, pedals and the reverse-turn test below must not run
-        // on it. Both halves are reproduced; the perf-mon stop is the console's own tail.
+        // 0x8273E4B4 the call, 0x8273E4B8 the `b loc_8273E75C` that RETURNS out of the driver
+        // for this frame -- the car is no longer physical, so steering, pedals and the
+        // reverse-turn test below must not run on it. The perf-mon stop is the console's tail.
         ReturnPhysicalVehicleToTraffic(luVehicle);
         CgsDev::PerfMonCpu::StopMonitor(miPerfMon_Driving);
         return;
@@ -784,12 +651,10 @@ void TrafficEntityModule::DriveTowardsTarget(u32 luVehicle, bool lbAllowReturnTo
     }
     else
     {
-        // GATE: CalculateAndSetSteeringUsingAvoidance @0x8273D258 (0x8273E6A0) -- the avoidance
-        // variant, unreconstructed (VMX feeler pipeline + the mbDEBUGEnableAvoidance block).
-        // FALLBACK: the console's own direct-target steering with the same normalized target
-        // direction and lvfScale 0 -- i.e. avoidance disabled, not steering disabled.
-        // DELETE-WHEN it lands. It also OUTPUTS the avoidance score the handbrake leg below
-        // reads, which is why that leg is gated too.
+        // GATE: CalculateAndSetSteeringUsingAvoidance @0x8273D258 (0x8273E6A0) -- unreconstructed
+        // (VMX feeler pipeline + the mbDEBUGEnableAvoidance block). FALLBACK: the console's own
+        // direct-target steering with lvfScale 0, i.e. avoidance disabled, not steering disabled.
+        // DELETE-WHEN it lands; it also outputs the score the gated handbrake leg reads.
         static bool sbLoggedAvoid = false;
         LogMissingLeg(sbLoggedAvoid,
                       "DriveTowardsTarget's CalculateAndSetSteeringUsingAvoidance @0x8273D258 -- "
@@ -837,7 +702,6 @@ void TrafficEntityModule::DriveTowardsTarget(u32 luVehicle, bool lbAllowReturnTo
 // --------------------------------------------------------------------------------------------
 // TrafficEntityModule::UpdateExtremeSwerving  @0x8273E8D0  (164 insns, .cpp 16770..)
 //
-// ⭐ LANDED wave T3 round 3 FIX ROUND (was the bodiless gate every promotion dead-ended in).
 // The arm GenerateDriverInputs takes for ANY physical car whose reason is SWERVING (4), which
 // on this build is every promotion. Two outcomes:
 //   * crash slider < 0.4, or no local player, or the player is >40 m away AND this car's own
@@ -901,34 +765,6 @@ void TrafficEntityModule::UpdateExtremeSwerving(
         const bool lbAllowReturnToTraffic =
             (lpVehicle->GetCurrentManoeuvre() != Vehicle::E_MANOEUVRE_EXTREME_SWERVE);
 
-        // [T3-swerve-arm] DIAG. NOT IN THE X360 BINARY. Two one-shots: the first time this arm
-        // drives at all, and the first time it drives with the return-to-traffic test ARMED
-        // (manoeuvre wound back to NONE) -- the second is the precondition for any demotion
-        // through this route, so its absence is the proof that the route is still closed.
-        // DELETE-WHEN-STABLE.
-        if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())
-        {
-            static bool sbFirstSwerveDrive = true;
-            static bool sbFirstArmedReturn = true;
-            if (sbFirstSwerveDrive || (lbAllowReturnToTraffic && sbFirstArmedReturn))
-            {
-                const bool lbFirst = sbFirstSwerveDrive;
-                sbFirstSwerveDrive = false;
-                if (lbAllowReturnToTraffic)
-                {
-                    sbFirstArmedReturn = false;
-                }
-                *lpDiag << "[T3-swerve-arm] "
-                        << (lbFirst ? "first" : "first ARMED")
-                        << " UpdateExtremeSwerving -> DriveTowardsTarget"
-                        << " vehicle=" << static_cast<s32>(luVehicle)
-                        << " manoeuvre=" << static_cast<s32>(lpVehicle->GetCurrentManoeuvre())
-                        << " allowReturn=" << static_cast<s32>(lbAllowReturnToTraffic)
-                        << " physicalTime=" << lpVehicle->GetPhysicalTime()
-                        << " crashSlider=" << mfCrashSliderFinalValue << "\n";
-            }
-        }
-
         DriveTowardsTarget(luVehicle, lbAllowReturnToTraffic, lpControls);
         return;
     }
@@ -986,10 +822,7 @@ void TrafficEntityModule::UpdateNormalPhysical(u32 luVehicle,
 }
 
 // =================================================================================================
-// THE DEMOTION CHAIN (wave T3 round 3). Three functions, in call order.
-//
-// Before this round nothing on the world side ever gave a physical slot back: the 20-slot pool
-// only filled. The console path is
+// THE DEMOTION CHAIN. Three functions, in call order. The console path is
 //   DriveTowardsTarget @0x8273DFC0 (car on its target, pointing the right way, physical > 5 s)
 //     -> ReturnPhysicalVehicleToTraffic @0x8273DCD0
 //       -> StopVehicleBeingPhysical @0x8271FED0  (frees the MODULE's TrafficPhysicsInfo slot and
@@ -999,13 +832,10 @@ void TrafficEntityModule::UpdateNormalPhysical(u32 luVehicle,
 //                                                  RemoveTrafficEvent queue, then clears it)
 //   -> PhysicalTrafficManager::ProcessRemoveEvents frees the PHYSICS slot.
 //
-// WHICH array is maNewRemovedVehicles (:682) and not maRecentlyRecoveredSlammedTraffic (:683):
-// StopVehicleBeingPhysical's own base is `addis r3,r30,5 ; addi r3,r3,0x7F7C` == this+0x57F7C and
-// CleanUpCrashedVehiclePhysics reads its count at +0x140 (== 160 u16 elements). The same
-// function pins maTrafficPhysicsInfoList at this+0x58210 (`mulli r10,r31,0x1010` with
-// `addis 6 / addi -0x7DF0`). 0x57F7C + 324 + 324 + 12 bytes of 16-byte padding == 0x58210, i.e.
-// EXACTLY ONE Array<u16,160> sits between it and the physics-info list -- so it is the
-// second-to-last of the six, :682.
+// WHICH array is maNewRemovedVehicles (:682), not maRecentlyRecoveredSlammedTraffic (:683):
+// StopVehicleBeingPhysical's base is this+0x57F7C and CleanUpCrashedVehiclePhysics reads its
+// count at +0x140 (160 u16 elements). 0x57F7C + 324 + 324 + 12 bytes of padding == 0x58210 ==
+// maTrafficPhysicsInfoList, so exactly one Array<u16,160> sits between them.
 // =================================================================================================
 
 // --------------------------------------------------------------------------------------------
@@ -1110,28 +940,11 @@ void TrafficEntityModule::ReturnPhysicalVehicleToTraffic(u32 luVehicle)
     {
         // GATE: RemoveVehicle @0x8272E370 (499) -- unreconstructed. BLOCKER: GetVehicleSpecies /
         // Vehicle::DetachArticulation / StaticTrafficParam::SetShouldBeRemoved are not bodied.
-        // COST: the vehicle record survives with a dead param until the next wipe. The PHYSICAL
-        // slot is still freed, because StopVehicleBeingPhysical ran above -- but that only helps
-        // where this function runs at all; see the reachability note on UpdateExtremeSwerving.
-        // DELETE-WHEN RemoveVehicle lands.
+        // COST: the record survives with a dead param. DELETE-WHEN RemoveVehicle lands.
         static bool sbLoggedRemoveVehicle = false;
         LogMissingLeg(sbLoggedRemoveVehicle,
                       "ReturnPhysicalVehicleToTraffic's RemoveVehicle @0x8272E370 -- "
                       "unreconstructed; the demoted car keeps its (dead) param record");
-    }
-
-    // [T3-demote] DIAG. NOT IN THE X360 BINARY. One-shot. DELETE-WHEN-STABLE.
-    if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())
-    {
-        static bool sbFirstDemote = true;
-        if (sbFirstDemote)
-        {
-            sbFirstDemote = false;
-            *lpDiag << "[T3-demote] FIRST ReturnPhysicalVehicleToTraffic vehicle="
-                    << static_cast<s32>(luVehicle)
-                    << " queuedForPhysicsRemoval="
-                    << static_cast<s32>(maNewRemovedVehicles.GetLength()) << "\n";
-        }
     }
 }
 
@@ -1163,20 +976,6 @@ void TrafficEntityModule::CleanUpCrashedVehiclePhysics(
         lVolumeInstanceId.SetEntityIDEntityIndex(lu16Vehicle);
 
         lpOutput->GetVehicleInputInterface()->RemovePhysicalTraffic(lVolumeInstanceId);
-
-        // [T3-demote] DIAG. NOT IN THE X360 BINARY. One-shot. DELETE-WHEN-STABLE.
-        if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())
-        {
-            static bool sbFirstRemoveEvent = true;
-            if (sbFirstRemoveEvent)
-            {
-                sbFirstRemoveEvent = false;
-                *lpDiag << "[T3-demote] FIRST RemoveTrafficEvent posted: vehicle="
-                        << static_cast<s32>(lu16Vehicle)
-                        << " volumeInstanceIdHi="
-                        << static_cast<s32>(lVolumeInstanceId.muId >> 32) << "\n";
-            }
-        }
     }
 
     maNewRemovedVehicles.Clear();   // 0x82720A78..0x82720A84 (`stwx 0` into the count word)

@@ -37,37 +37,12 @@
 
 #include "GameShared/GameClasses/Containers/CgsBitArray.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_EventOutOverlapPair.h"
-
-#include <cstdlib>   // getenv
 
 namespace BrnTraffic
 {
 namespace
 {
-    // DELETE-WHEN-STABLE bring-up probe plumbing, gated on BRN_TRAFFIC_DIAG.
-    // [DIAG] NOT IN THE X360 BINARY.
-    bool TrafficDiagEnabled()
-    {
-        static s32 siCached = -1;
-        if (siCached < 0)
-        {
-            const char* lpcEnv = getenv("BRN_TRAFFIC_DIAG");
-            siCached = (lpcEnv != 0 && lpcEnv[0] != '0') ? 1 : 0;
-        }
-        return siCached != 0;
-    }
-
-    CgsDev::Log::DebugPrint* TrafficDiagStream()
-    {
-        if (!TrafficDiagEnabled() || CgsDev::Log::gpDebugPrint == 0)
-        {
-            return 0;
-        }
-        return CgsDev::Log::gpDebugPrint;
-    }
-
     // The scene owner byte a traffic volume-instance id carries (E_ENTITYTYPE_TRAFFIC).
     // `srwi r11, r30, 24 ; cmplwi r11, 2` at 0x8274B44C / 0x8274B474.
     const u32 KU_TRAFFIC_ENTITY_OWNER = 2;
@@ -127,28 +102,6 @@ void TrafficEntityModule::BuildPotentialCollisionList(
         const u32 luWordA = static_cast<u32>(lu64IdA >> 32);
         const u32 luWordB = static_cast<u32>(lu64IdB >> 32);
 
-        if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())
-        {
-            // [T4-overlap] one-shot on the FIRST pair this module ever sees. If the queue is
-            // non-empty but no half is owner 2, gate 1 never registered the traffic volumes;
-            // if there is no line at all, the bridge or the broad phase is the break.
-            // DELETE-WHEN-STABLE.
-            static bool sbLogged = false;
-            if (!sbLogged)
-            {
-                sbLogged = true;
-                *lpDiag << "[T4-overlap] FIRST overlap pair seen: queueLen=" << liLength
-                        << " wordA=0x" << static_cast<s32>(luWordA)
-                        << " ownerA=" << static_cast<s32>(GetEntityWordOwner(luWordA))
-                        << " wordB=0x" << static_cast<s32>(luWordB)
-                        << " ownerB=" << static_cast<s32>(GetEntityWordOwner(luWordB))
-                        << " trafficHalf="
-                        << ((GetEntityWordOwner(luWordA) == KU_TRAFFIC_ENTITY_OWNER ||
-                             GetEntityWordOwner(luWordB) == KU_TRAFFIC_ENTITY_OWNER) ? 1 : 0)
-                        << " [DELETE-WHEN-STABLE]\n";
-            }
-        }
-
         if (GetEntityWordOwner(luWordA) == KU_TRAFFIC_ENTITY_OWNER)
         {
             HandleHalfPotentialContact(luWordA, lu64IdA, luWordB, lpOutput, lpCreatedBodies);
@@ -206,23 +159,6 @@ void TrafficEntityModule::HandleHalfPotentialContact(
     if (lpCreatedBodies->IsBitSet(luVehicle))
     {
         return;
-    }
-
-    if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())
-    {
-        // [T4-req] one-shot on the FIRST promotion this route ever asks for. Pairs with the
-        // physics side's [T3-req]/[T4-potential]: a line here and none there means the create
-        // event was posted and dropped. DELETE-WHEN-STABLE.
-        static bool sbLogged = false;
-        if (!sbLogged)
-        {
-            sbLogged = true;
-            *lpDiag << "[T4-req] FIRST overlap-driven promotion: vehicle="
-                    << static_cast<s32>(luVehicle)
-                    << " otherHalfOwner=" << static_cast<s32>(GetEntityWordOwner(luOtherHalfEntityWord))
-                    << " otherHalfIndex=" << static_cast<s32>(GetEntityWordIndex(luOtherHalfEntityWord))
-                    << " type=E_TRAFFIC_TYPE_POTENTIAL [DELETE-WHEN-STABLE]\n";
-        }
     }
 
     // 0x827480AC..0x827480CC. NOTE the type: E_TRAFFIC_TYPE_POTENTIAL is NOT a lightweight

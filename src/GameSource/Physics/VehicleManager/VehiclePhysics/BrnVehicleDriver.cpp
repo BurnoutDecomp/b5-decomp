@@ -1,7 +1,7 @@
 // BrnPhysics::Vehicle::VehicleDriver -- the per-car driver.
 //
 // This TU holds Construct @0x825B83C8 (96 instructions, ZERO callees) and -- since the
-// 2026-08-11 driving-path wave -- UpdateVehicle @0x825D7290 (219 instructions). Everything
+// driving-path wave -- UpdateVehicle @0x825D7290 (219 instructions). Everything
 // else on the class is declare-only in the header.
 
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/BrnVehicleDriver.h"
@@ -24,7 +24,7 @@ namespace Vehicle
     // this+64, stride 224, and again for the spare mPlayerAiDriver at this+171968) and
     // PhysicalTrafficManager::Prepare @0x8262CA48.
     //
-    // ⚠️ IT IS A PARTIAL INITIALISER, DELIBERATELY. The console clears only the subset of
+    // IT IS A PARTIAL INITIALISER, DELIBERATELY. The console clears only the subset of
     // mControls listed below -- it is NOT `mControls.Clear()` (compare
     // BrnNetworkDriverControls::Clear @0x82581200, which writes every member of the base plus the
     // network tail, seeds miVehicleID to -1 rather than 0, and seeds +0x34 to 1.0f and
@@ -110,7 +110,7 @@ namespace Vehicle
     // =============================================================================================
     // @0x825D7290  BrnPhysics::Vehicle::VehicleDriver::UpdateVehicle  (219 instructions)
     //
-    // ⭐⭐ THE TRAP THIS REPLACES CARRIED A WRONG COMMENT, AND THE WRONG COMMENT IS THE LESSON.
+    // THE TRAP THIS REPLACES CARRIED A WRONG COMMENT, AND THE WRONG COMMENT IS THE LESSON.
     // BrnVehicleManagerLinkStubs.cpp:196 described this function as "the driver-type dispatch into
     // the four Update(controls) overloads". It is nothing of the sort -- there is no `meDriverType`
     // read, no switch, and no call to any Update overload anywhere in the 219 instructions. It is
@@ -120,7 +120,7 @@ namespace Vehicle
     // Callers (both per-live-car, every frame): VehicleManager::UpdateVehiclePhysics @0x82644FA8
     // and PhysicalTrafficManager::UpdateTrafficPhysics @0x82644418.
     //
-    // ⭐ IT IS A NO-OP ON A NORMAL DRIVING FRAME. `lbz r11,0xD4(r3) ; extsb ; cmpwi ; ble` gates the
+    // IT IS A NO-OP ON A NORMAL DRIVING FRAME. `lbz r11,0xD4(r3) ; extsb ; cmpwi ; ble` gates the
     // WHOLE body on mi8NumOfInterpSteps > 0, and Construct seeds that byte to 0. Only a network snap
     // (StartCatchupInterpolation, which seats mSlerpTransform and loads the counter with
     // ki8NumNetworkSlerpSteps == 10) ever makes it do work. That is why the trap did not fire in the
@@ -148,11 +148,11 @@ namespace Vehicle
     //                  |E.row1|^2 + |E.row2|^2; assert |err| <= 0.1f (flt_82004014, image-read).
     //   0x825D75E0  --this->mi8NumOfInterpSteps;                                    // lbz/addi -1/stb
     //
-    // ⚠️ BOTH tripwires are UNCONDITIONAL side-effect-free asserts on the console -- they run even
+    // BOTH tripwires are UNCONDITIONAL side-effect-free asserts on the console -- they run even
     // when the concat was skipped because the vehicle was frozen (the `beq` at 0x825D7434 /
     // 0x825D7590 skips only the Fire, never the maths). Reproduced in that position.
     //
-    // ⚠️ The console builds its assert text through CgsDev::StrStream over
+    // The console builds its assert text through CgsDev::StrStream over
     // CgsDev::Assert::gpcMessageBuffer (the `BasePriorityQueue::Clear` in the pseudocode is the
     // ICF-folded StrStream constructor). Per house style that is lowered to CGS_ASSERT with the
     // console's own literal message; no values are streamed in either of these two.
@@ -228,7 +228,7 @@ namespace Vehicle
     // holding 0.0f/1.0f differs: create has f30=0.0f/f31=1.0f, remove has f31=0.0f/f30=1.0f -- both
     // read from flt_82001CC0 / flt_82001C98, values read from the image, not guessed).
     //
-    // ⭐ THE SIGNATURE OF AN INLINED `ClearControls` RATHER THAN A MEMSET: the block writes 28 of
+    // THE SIGNATURE OF AN INLINED `ClearControls` RATHER THAN A MEMSET: the block writes 28 of
     // BrnAIDriverControls' 30 scalar fields and SKIPS EXACTLY TWO -- `mbToggle` (+0x3A) and
     // `meDriverType` (+0x44). Both gaps are visible as holes in the store run (create: 0x79 then
     // 0x7B, no 0x7A) and both make sense only for a *semantic* clear: the driver's TYPE must
@@ -236,7 +236,7 @@ namespace Vehicle
     // defaulted ctor would have written them. That is what makes this ClearControls (declared in
     // BrnVehicleDriver.h, DWARF-attested) and not something invented to hold the block.
     //
-    // ⭐⭐ VERIFIED AGAINST A SECOND, INDEPENDENT TRANSCRIPTION (2026-08-11 merge). The other
+    // VERIFIED AGAINST A SECOND, INDEPENDENT TRANSCRIPTION (2026-08-11 merge). The other
     // create-drain wave wrote the same block out INLINE at both console call sites rather than
     // recovering it as a function, and its two copies are FIELD-FOR-FIELD identical to this body:
     // same 28 writes, same two omissions (mbToggle, meDriverType), same lone non-zero (1.0f into
@@ -247,7 +247,7 @@ namespace Vehicle
     // recovered store SET was in dispute. This body is now the single home; both inline copies
     // are retired to a call, per their own DELETE-WHEN markers.
     //
-    // ⚠️ mfBoostMaxSpeedScale (+0x34) is seeded to 1.0f, not 0.0f -- the ONE non-zero float, and the
+    // mfBoostMaxSpeedScale (+0x34) is seeded to 1.0f, not 0.0f -- the ONE non-zero float, and the
     // reason this cannot be spelled as a zero-fill.
     // =============================================================================================
     void VehicleDriver::ClearControls()

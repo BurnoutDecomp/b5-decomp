@@ -210,44 +210,6 @@ namespace Deformation
 		lCandidate.mpOtherSensor   = lpOtherSensor;
 		lCandidate.mbValid         = true;                       // v100 = 1 (console: the +0x3C byte)
 
-		// ---- [T4-vac] HOP 1 bring-up probe -- NOT IN THE X360 BINARY. One shot, opt-in on
-		// BRN_TRAFFIC_DIAG. This is the hop where the +-1667 m launch was born: it prints the two
-		// WORLD points the contact arrived with, this sensor's local sphere centre, the other car's
-		// world position, and the two LOCAL points actually stored -- so "the stored B is a 3.7 km
-		// world coordinate" vs "the stored B is a ~1 m body-local offset" is a reading, not an
-		// inference. DELETE-WHEN-STABLE.
-		if ( lpOtherCar != nullptr )
-		{
-			static const bool skbVacDiag = ( getenv( "BRN_TRAFFIC_DIAG" ) != 0 );
-			static bool sbLoggedVac = false;
-			if ( skbVacDiag && !sbLoggedVac && CgsDev::Log::gpDebugPrint != 0 )
-			{
-				sbLoggedVac = true;
-				Matrix44Affine lOtherTransform;
-				lpOtherCar->GetTransform( lOtherTransform );
-				const Vector4 lThisCentre = ( mpLocalSpaceSphere != 0 )
-					? SphereVec( mpLocalSpaceSphere ) : Vector4{ 0.0f, 0.0f, 0.0f, 0.0f };
-				const Vector4 lOtherCentre =
-					( lpOtherSensor != 0 && lpOtherSensor->mpLocalSpaceSphere != 0 )
-					? SphereVec( lpOtherSensor->mpLocalSpaceSphere ) : Vector4{ 0.0f, 0.0f, 0.0f, 0.0f };
-				*CgsDev::Log::gpDebugPrint
-					<< "[T4-vac] HOP1 ValidateAndAddContact FIRST vehicle contact:"
-					<< " worldA " << lPointOnA.x << " " << lPointOnA.y << " " << lPointOnA.z
-					<< " | worldB " << lPointOnB.x << " " << lPointOnB.y << " " << lPointOnB.z
-					<< " | nrm " << lNormal.x << " " << lNormal.y << " " << lNormal.z
-					<< " | thisCentre " << lThisCentre.x << " " << lThisCentre.y << " " << lThisCentre.z
-					<< " | otherPos " << lOtherTransform.Pos().x << " " << lOtherTransform.Pos().y
-					<< " " << lOtherTransform.Pos().z
-					<< " | otherCentre " << lOtherCentre.x << " " << lOtherCentre.y << " " << lOtherCentre.z
-					<< " | STORED localA " << lCandidate.mLocalPointOnA.x << " "
-					<< lCandidate.mLocalPointOnA.y << " " << lCandidate.mLocalPointOnA.z
-					<< " | STORED localB " << lCandidate.mLocalPointOnB.x << " "
-					<< lCandidate.mLocalPointOnB.y << " " << lCandidate.mLocalPointOnB.z
-					<< " | projDist " << lCandidate.mfProjectedDist
-					<< "\n";
-			}
-		}
-
 		// --- (3) insert into the 3-slot stored-contact array --------------------------------------
 		const s32 liNum = mi32NumStoredContacts;            // v31 = *(this+408)
 		if ( liNum >= static_cast<s32>(KU_MAX_STORED_CONTACTS) )

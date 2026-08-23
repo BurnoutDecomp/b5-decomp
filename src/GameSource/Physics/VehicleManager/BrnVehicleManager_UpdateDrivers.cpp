@@ -1,7 +1,7 @@
 // =================================================================================================
 // GameSource/Physics/VehicleManager/BrnVehicleManager_UpdateDrivers.cpp
 //
-// ⭐⭐ THE DRIVER-CONTROLS CONSUMER -- VehicleManager::UpdateDrivers @0x82642C68 (120 insns).
+// THE DRIVER-CONTROLS CONSUMER -- VehicleManager::UpdateDrivers @0x82642C68 (120 insns).
 // This is the function that moves the frame's driver-control records out of the shared
 // VehicleDriverInputInterface queue and into the per-car physics. It is called LIVE, every frame,
 // from BrnPhysicsModuleUpdateFunctions.cpp (PhysicsModule::Update's driver stage) with the
@@ -15,7 +15,7 @@
 //                        DeformationInputInterface *, VehicleOutputInterface *);
 // and the X360 prologue confirms it EXACTLY -- including the fact that r4 is never read:
 //     r3  = this            (r31)
-//     f1  = lfTimeStep      (f31)   ⚠️ the float SKIPS its GPR slot, so r4 is a hole
+// f1  = lfTimeStep      (f31)   the float SKIPS its GPR slot, so r4 is a hole
 //     r5  = lpDriverInputInterface        (r29)
 //     r6  = lpRequestOutputInterface      (r25)
 //     r7  = lpManagerOutputInterface      (r24)
@@ -29,7 +29,7 @@
 //   1. clear mbUpdatedPlayerDriver (+172316) and mbPlayerAiDriverValid (+172192)
 //   2. build a zeroed BitArray<8> on the stack -- the "which race cars did a driver record touch
 //      this frame" set every arm receives by reference (DWARF types all four arms with it)
-//   3. default the player's own car to world-invulnerable (see the ⚠️ below)
+// 3. default the player's own car to world-invulnerable (see the below)
 //   4. drain the interface's VariableEventQueue<5040,16> with GetFirstEvent/GetNextEvent and
 //      switch on the event TYPE, which is E_DRIVER_TYPE:
 //          0 PLAYER -> UpdatePlayerDriver    1 AI      -> UpdateAIDriver
@@ -41,11 +41,11 @@
 //   6. DoHornTakedowns(requests, vehicleOut, managerOut, deformationIn)
 //   7. publish this frame's target-assist list into the showtime singleton
 //
-// ⚠️ THE ONE STORE A VERIFIER SHOULD RE-DERIVE. Step 3 is
+// THE ONE STORE A VERIFIER SHOULD RE-DERIVE. Step 3 is
 //     `stb 1, 0x7D(this + 224 * mePlayerActiveRaceCarIndex)`   (0x82642CD8..0x82642CE4)
 // and 0x7D == 125 == 64 + 61: maRaceCarDrivers is at +64 (independently pinned -- UpdatePlayerDriver
 // @0x825EA1E8 computes a maRaceCarDrivers element with the SAME base and stride, `idx*0xE0 + this +
-// 0x40`; ⚠ note its `idx` is the record's miVehicleIDToMerge -- the OTHER driver on the same car, on
+// 0x40`; note its `idx` is the record's miVehicleIDToMerge -- the OTHER driver on the same car, on
 // the two-drivers merge path -- not the miVehicleID this store uses, so it corroborates the base and
 // the stride, not the index), and in-record 61 == 0x3D is
 // mControls.mbIsInvulnerableToWorld per this tree's committed BrnPlayerDriverControls map. So the
@@ -55,7 +55,7 @@
 // is exactly the "address right, meaning wrong" class this project keeps paying for -- flagged, and
 // reproduced BY NAME rather than by offset so a correction there corrects this too.
 //
-// ⛔⛔ ALL FIVE OF ITS CALLEES ARE STILL BODYLESS -- PARKED, NOT FAKED. Costed by address first, as
+// ALL FIVE OF ITS CALLEES ARE STILL BODYLESS -- PARKED, NOT FAKED. Costed by address first, as
 // the standing rule demands (every one of them is a real export with full assembly; none is a hole):
 //     VehicleManager::UpdatePlayerDriver              @0x825E9F38  401
 //     VehicleManager::UpdateNetworkDriver             @0x825C4D08  258
@@ -122,7 +122,7 @@ namespace Vehicle
         s32 liEventSize = 0;
         s32 liEventType = lpQueue->GetFirstEvent(&lpEvent, &liEventSize);   // bl @0x82642CC4
 
-        // ⚠️ Issued AFTER GetFirstEvent and BEFORE the loop -- the console interleaves it into the
+        // Issued AFTER GetFirstEvent and BEFORE the loop -- the console interleaves it into the
         // call's shadow (0x82642CC8..0x82642CE4), so the order is preserved rather than tidied.
         maRaceCarDrivers[mePlayerActiveRaceCarIndex].mControls.mbIsInvulnerableToWorld = true;
 

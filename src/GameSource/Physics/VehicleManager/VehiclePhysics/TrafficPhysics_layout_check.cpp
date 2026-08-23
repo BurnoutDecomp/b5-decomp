@@ -1,6 +1,6 @@
 // Layout check for the BrnPhysics::Vehicle::TrafficPhysics OWN-MEMBER BLOCK (X360 0x13F0..0x1430).
 //
-// ⚠️⚠️ WHY THIS TU EXISTS -- READ BEFORE DELETING IT.
+// WHY THIS TU EXISTS -- READ BEFORE DELETING IT.
 // Until 2026-08-03 the 0x1430 stride of `PhysicalTrafficManager::maFullTrafficPhysics[20]` was
 // "checked" by `static_assert(sizeof(TrafficPhysics) == 5168)` in BrnVehicleManager_layout_check.cpp
 // -- a HOST sizeof gate on a byte-pinned `u8[5168]` STAND-IN. It asserted that the stand-in was
@@ -8,7 +8,7 @@
 // host class is 4960), and the console 0x1430 has to be checked where it is actually derived: as
 // arithmetic over the recovered member seats. That is what this file does.
 //
-// ⭐⭐ WHY THE GATE IS ARITHMETIC AND NOT `offsetof` -- the same argument
+// WHY THE GATE IS ARITHMETIC AND NOT `offsetof` -- the same argument
 // VehiclePhysics_layout_check.cpp makes one level down, and for the same reason: the block sits on
 // top of VehiclePhysics, which owns two pointers and several minimal-slice sub-objects, so the host
 // puts this block at 0x1320 rather than the console's 0x13F0. An absolute `offsetof` gate here would
@@ -29,7 +29,7 @@
 // a 48-byte CgsNumeric::Random and not the 4-byte local `struct Random { u32 muState; }` this
 // header forked until 2026-08-03 -- the fork that made the class close on 0x1404.
 //
-// ⚠️ THE BLIND SPOT, stated rather than hidden: the arithmetic cannot see a member that occupies no
+// THE BLIND SPOT, stated rather than hidden: the arithmetic cannot see a member that occupies no
 // space. Between mu8FreakOutState (0x13F4) and mfFreakOutDirection (0x13F8) there are three bytes of
 // alignment pad, so a byte added in that hole moves nothing. Between mfFreakOutTime (0x13FC) and
 // mRandom (0x1400) there is NO slack, which PART 1 asserts explicitly, so the same trick does not
@@ -46,7 +46,7 @@
 //   FIRES  CgsNumeric::KU_FLOAT_BUFFER_SIZE 8 -> 4                           (seed seat + closure)
 //   FIRES  a second Random declared ahead of the two timers                  (block size 64 -> 112)
 //   SILENT insert a bool between mu8FreakOutState and mfFreakOutDirection    (the 3 bytes of pad)
-// ⚠️ Case 3 was SILENT on the first run and is the reason the four `sizeof(member)` asserts exist in
+// Case 3 was SILENT on the first run and is the reason the four `sizeof(member)` asserts exist in
 // PART 2: u8-plus-3-bytes-of-pad and u32 occupy the same space, so widening the state byte was
 // invisible to every offset in the file even though the console plainly uses `stb`/`lbz`. The gate
 // was not finished until a case that had passed was made to fail.
@@ -110,7 +110,7 @@ namespace Vehicle
                       "TP: the u64 seed must land muOldestBufferIndex on the asm-literal 0x1428 "
                       "(Construct `stw r30, 0x28(r11)`)");
 
-        // ⭐⭐ THE CLOSURE. muOldestBufferIndex's last data byte is 0x142B; Random is 16-aligned so
+        // THE CLOSURE. muOldestBufferIndex's last data byte is 0x142B; Random is 16-aligned so
         // it rounds to 0x1430 -- which is the per-element stride PhysicalTrafficManager::Construct
         // bakes as a literal for maFullTrafficPhysics[20]. Nothing in this file knows about that
         // function; it just has to land on it.
@@ -140,7 +140,7 @@ namespace Vehicle
                       "the 8-slot ring TrafficPhysics::Construct primes -- it emits exactly ONE "
                       "direct store (slot 0 = 1.0f) plus SEVEN unrolled refills");
 
-        // ⭐ THE MEMBER WIDTHS PART 1 ASSUMES, ASSERTED. Added after tamper case 3 came back SILENT:
+        // THE MEMBER WIDTHS PART 1 ASSUMES, ASSERTED. Added after tamper case 3 came back SILENT:
         // mu8FreakOutState sits in front of three bytes of alignment pad, so widening it u8 -> u32
         // moves NOTHING and the offset arithmetic cannot see it -- yet the console plainly stores it
         // with `stb` (SetFreakedOut @0x825B89B0) and loads it with `lbz` (Update @0x82639690). These

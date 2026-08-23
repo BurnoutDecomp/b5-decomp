@@ -119,7 +119,7 @@ namespace Vehicle
 
     static const Vector3 KV_ZERO = { 0.0f, 0.0f, 0.0f, 0.0f };
 
-    // ⭐ The two GetTractionLine @0x825D85C0 scalars, READ OUT OF THE X360 IMAGE at the addresses
+    // The two GetTractionLine @0x825D85C0 scalars, READ OUT OF THE X360 IMAGE at the addresses
     // its own `lfs` instructions name (x360rd, 10/10 self-calibration) rather than guessed:
     //   0x825D87D4  lfs f0, 7320(0x82000000)   -> *0x82001C98 == 1.0f
     //   0x825D87E8  lfs f0, 18236(0x82000000)  -> *0x8200473C == 0.4f
@@ -129,7 +129,7 @@ namespace Vehicle
     static const f32 KF_TRACTION_LINE_START_LIFT   = 0.4f;   // start point, up the body Y axis
 
     // -------------------------------------------------------------------------------------------
-    // Construct @0x826203E8 -- ⭐ RE-MERGED 2026-08-09 (attribs-setup wave), exactly per the
+    // Construct @0x826203E8 -- RE-MERGED 2026-08-09 (attribs-setup wave), exactly per the
     // split TU's own contract ("TO RE-MERGE: body SimpleVehicleAttribs::Construct, then move
     // this body back and delete the TU"). SimpleVehicleAttribs::Construct @0x825E6580 is now
     // BODIED in VehicleAttribs.cpp (every constant image-read), so the 2026-08-02 build-mechanics
@@ -179,7 +179,7 @@ namespace Vehicle
     //   (+1808 mbCrashing, +1809 mbStartedFatallyCrashing, +1812 mbMinWheelDistValid,
     //   +1813 mbAnyWheelsDetatched).
     //
-    // ⚠️⚠️ CORRECTED 2026-08-03. The four 16-byte stores at +1328/+1344/+1360/+1376 were
+    // The four 16-byte stores at +1328/+1344/+1360/+1376 were
     // FLAGGED here as "the body's velocity / angular-velocity / transform-delta scratch
     // registers" and reproduced as `mLinearVelocity = 0; mAngularVelocity = 0;
     // mWheelPlanePosAndHeight = 0;`. All THREE of those were INVENTED STORES -- this function
@@ -353,7 +353,7 @@ namespace Vehicle
     // ===========================================================================================
     //  SimpleVehiclePhysics::AddTractionPoint   @0x825D9608  (185 insns)
     // ===========================================================================================
-    // ⭐ BODIED 2026-08-07 (orchestrator wave) -- this had sat in this header's BLOCKED list as
+    // this had sat in this header's BLOCKED list as
     // "deep VMX whose math cannot be faithfully reproduced BY NAME"; the claim was UNVERIFIED
     // and false: every lane it touches was already a named member. The traction-line
     // ingestion point: VehicleManager::ReadRaceCarTractionLineTestResults /
@@ -374,7 +374,7 @@ namespace Vehicle
     //                                    + wheel.mSlipVariables.w) > lineDist
     //   0x825D98AC  lbIsCloseToGround = (same sum + the +0x5A0 register's .w lane) > lineDist
     //
-    // ⛔⛔ CORRECTED 2026-08-11 (lifetime wave) -- A LIVE STALE-MEMBER BUG, not a comment fix.
+    // A LIVE STALE-MEMBER BUG, not a comment fix.
     // This body used to spell that .w lane `mSimpleAttribs.mCOMOffset.w`, and the note here said
     // "the attribs block's leading vector; the committed slice names it mCOMOffset". That was
     // true when it was written: SimpleVehicleAttribs was then a 20-byte slice whose LEADING
@@ -386,7 +386,7 @@ namespace Vehicle
     // The console is unambiguous (0x825D9880 `lvx128 v13, r0, r10` with r10 = this+0x5A0, then
     // 0x825D988C `vspltw v13, v13, 3`): it is the LEADING vector's .w, which the grown type
     // names `mvUpwardMovement_DownwardMovement_Mass_TractionLineLength` -- i.e. the attribute is
-    // literally TractionLineLength. ⭐ Independently corroborated by
+    // literally TractionLineLength. Independently corroborated by
     // SimpleVehiclePhysics::GetTractionLine @0x825D85C0 (bodied this wave), which adds the SAME
     // lane to the SAME three-term reach to size the suspension probe it shoots.
     //   0x825D98D0  Wheel::SetRoadContact(onGround, close, position, normal, tagHi, tagLo,
@@ -440,13 +440,13 @@ namespace Vehicle
     }
 
     // ===========================================================================================
-    //  SimpleVehiclePhysics::GetTractionLine   @0x825D85C0  (174 insns)   ⭐⭐ THE SUSPENSION PROBE
+    // SimpleVehiclePhysics::GetTractionLine   @0x825D85C0  (174 insns)   THE SUSPENSION PROBE
     // ===========================================================================================
-    // BODIED 2026-08-11 (lifetime wave). One wheel's downward traction line, in WORLD space --
+    // One wheel's downward traction line, in WORLD space --
     // the two points VehicleManager::AddRaceCarTractionLineTests drops into the stream command's
     // maLineStart[w] / maLineEnd[w].
     //
-    // ⚠️ EXPORT HOLE: no per-function JSON in the 30,084-file X360 set (directory gap
+    // EXPORT HOLE: no per-function JSON in the 30,084-file X360 set (directory gap
     // 0x825D8490+76 -> 0x825D8878), re-verified this wave by a name index over all of them.
     // Recovered TWO ways that agree, neither of them guesswork:
     //
@@ -457,7 +457,7 @@ namespace Vehicle
     //      VD128 = D|(bits28..29<<5), VA128 = A|(bit26<<5)|(bit21<<6), VB128 = B|(bits30..31<<5);
     //      op5 opcode bits {22,23,24,25,27}: 0x010 vaddfp128 / 0x050 vsubfp128 / 0x090 vmulfp128 /
     //      0x0D0 vmaddfp128 / 0x150 vnmsubfp128 / 0x190 vmsum3fp128 / 0x2D0 vor128).
-    //      ⚠️⚠️ AND THE TRAP THAT COMES WITH IT, because it changes the arithmetic: for the op-4
+    // AND THE TRAP THAT COMES WITH IT, because it changes the arithmetic: for the op-4
     //      A-form IDA prints operands in ENCODING order vD,vA,vB,vC, not the assembler's
     //      vD,vA,vC,vB. `vmaddfp v13, v7, v13, v6` (0x11A769AE: A=7,B=13,C=6) is
     //      v13 = v7*v6 + v13, NOT v7*v13 + v6. Read the natural way it turns the standard
@@ -470,7 +470,7 @@ namespace Vehicle
     //      the X360's byte for byte (maWheels +0x130 stride 0xE0, mTransform +0x10,
     //      mSimpleAttribs +0x5A0 with the IsValid byte at +0xE4 inside it).
     //
-    // ⭐⭐ THE PROBE LENGTH IS CORROBORATED BY A DIFFERENT CONSOLE FUNCTION ALREADY IN THIS TREE.
+    // THE PROBE LENGTH IS CORROBORATED BY A DIFFERENT CONSOLE FUNCTION ALREADY IN THIS TREE.
     // AddTractionPoint above (bodied 2026-08-07 from @0x825D9608, an unrelated body) computes
     // exactly `mPosition.y - mSuspensionAndInertiaVariables.x + mSlipVariables.w` and then adds
     // the same mSimpleAttribs leading-vector .w lane for its close-to-ground test. This function
@@ -481,7 +481,7 @@ namespace Vehicle
     // BOTH FLOAT CONSTANTS READ OUT OF THE IMAGE, NOT GUESSED:
     //   0x825D87D4  lfs f0, 0x82001C98   ==  1.0f   -> added to the probe length
     //   0x825D87E8  lfs f0, 0x8200473C   ==  0.4f   -> the start point's lift up the body Y axis
-    // ⚠️ FLAG -- A BUILD DIVERGENCE, reproduced as the X360 has it: the PS3 body uses 0.4f for
+    // FLAG -- A BUILD DIVERGENCE, reproduced as the X360 has it: the PS3 body uses 0.4f for
     // BOTH terms (it materialises one stack vector, 0x3ECCCCCD in all lanes, and uses it twice).
     // The X360 loads two DIFFERENT .rdata floats. The X360 image is the reconstruction target.
     //
@@ -546,7 +546,7 @@ namespace Vehicle
     // ===========================================================================================
     //  SimpleVehiclePhysics::GetWheelsWorldTransfrom   @0x825D8878  (868 insns)
     // ===========================================================================================
-    // ⭐⭐ BODIED 2026-08-13 (wheel-transform wave) from the operand-level decode bank
+    // from the operand-level decode bank
     // (scratchpad wheeltransform_bank.md -- X360 export 0x825D8878 + PS3 twin 0x6E78CC + image
     // reads for every constant). This is the reader that turns wheel physics state into the four
     // render transforms: WriteOutVehicleStats' SetWheelTransform loop consumes it once per wheel.
@@ -605,7 +605,7 @@ namespace Vehicle
     }
 
     // ------------------------------------------------------------------------------------------
-    // ⭐ THE ONE PLACE THE ROTATION HANDEDNESS IS DECIDED (bank §7.1). The asm proves, per
+    // THE ONE PLACE THE ROTATION HANDEDNESS IS DECIDED (bank §7.1). The asm proves, per
     // build, WHICH row is the untouched axis row and that one polynomial output is sign-flipped
     // into an off-diagonal -- but not which output is sine. All five rotation builds in
     // GetWheelsWorldTransfrom route through these three builders so the sign convention is a
@@ -701,7 +701,7 @@ namespace Vehicle
                        "Invalid wheel position: , please tell Graham D.");
 
             // Buckle angle (0x825D8B10..0x825D8B9C): (2*|posZ - streamedZ|)^2, clamped.
-            // ⚠️ The SQUARE is the angle in radians -- faithful on both platforms (bank §7.3);
+            // The SQUARE is the angle in radians -- faithful on both platforms (bank §7.3);
             // it looks like a bug a porter would "fix". Do not.
             const f32 lfDeltaZ =
                 lrWheel.mPosition.z - lrWheel.mStreamedPositionPlusTwistAmount.z;
@@ -836,12 +836,12 @@ namespace Vehicle
     // ===========================================================================================
     //  SimpleVehiclePhysics::CalculateNewWheelPlane   @0x82602CB8  (171 insns)
     // ===========================================================================================
-    // ⭐ BODIED 2026-08-07 (wheel-cluster wave). Derive the frame's wheel/road plane from the
+    // Derive the frame's wheel/road plane from the
     // four wheels' line-test contacts: keep the contact whose wheel-bottom sits LOWEST above it
     // (measured along the body up axis) and publish {contact.xyz, max(minHeight, 0)} into
     // mWheelPlanePosAndHeight (+0x6B0) -- the register IsContactBelowWheelPlane consumes.
     //
-    // ⚠️ The exported pseudocode mis-renders the whole loop (base "this+108", stride 56); the
+    // The exported pseudocode mis-renders the whole loop (base "this+108", stride 56); the
     // ASM is unambiguous: `addi r29, r20, 0x1B0` (= &maWheels[0].mPosition) and `addi r29, r29,
     // 0xE0` -- the standard wheel stride. Decoded from the asm:
     //
@@ -943,7 +943,7 @@ namespace Vehicle
     // ===========================================================================================
     //  SimpleVehiclePhysics::SwitchAttribs   @0x82601978   (458 insns)
     // ===========================================================================================
-    // ⭐ BODIED 2026-08-09 (attribs-setup wave) -- the "BLOCKED on the 240-byte
+    // the "BLOCKED on the 240-byte
     // SimpleVehicleAttribs" stub is retired: the full type now lives in the header. Decoded
     // store-for-store from the X360 asm. Four phases:
     //   1. mfMass = splat(new attribs Mass), asserted positive        (0x826019B0..0x82601A18)
@@ -1043,7 +1043,7 @@ namespace Vehicle
     // ===========================================================================================
     //  SimpleVehiclePhysics::SetAttributes()   @0x82620498   (142 insns)
     // ===========================================================================================
-    // ⭐ BODIED 2026-08-09 (attribs-setup wave). This was the unnamed `sub_82620498`; identity
+    // This was the unnamed `sub_82620498`; identity
     // recovered from its caller set (VehiclePhysics::SetAttributes' first call, `this` in r3)
     // and its own "mSimpleAttribs.IsValid()" assert -- it is the DWARF's 0-arg overload
     // (BrnSimpleVehiclePhysics.h:163, PS3 mangled 7355CC).
@@ -1097,7 +1097,7 @@ namespace Vehicle
     // ===========================================================================================
     //  SimpleVehiclePhysics::SetAttributes(const Vector3*, const f32*)  @0x826020A0  (503 insns)
     // ===========================================================================================
-    // ⭐ BODIED 2026-08-09 (attribs-setup wave). The shared tail of every SetAttributes wrapper:
+    // The shared tail of every SetAttributes wrapper:
     // mass + solid-box inverse inertia from the (freshly re-streamed) mSimpleAttribs, then a
     // per-wheel Wheel::Prepare. The Wheel.h Prepare lane map (proven 2026-08-05) named this
     // function's asm (0x826027F4..0x82602840) as its caller witness; the register roles here
@@ -1189,14 +1189,14 @@ namespace Vehicle
     // ===============================================================================================
     // SimpleVehiclePhysics::SetAttributes(VehicleAttribs*, const Vector3*, const f32*)
     //
-    // ⭐ BODIED 2026-08-11 (the VehiclePhysics::Prepare wave). This header's own note said
+    // This header's own note said
     // "3-arg: declared for the class surface (the PS3 attests it); no X360 body recovered to it
     // yet" -- i.e. a DECLARED-BUT-UNDEFINED member, which is the [[shadowing-redeclarations]]
     // landmine: it mangles fine, no per-TU gate can see it, and the first real caller turns into
     // an LNK2019. VehiclePhysics::SetAttributes @0x8262E140 is exactly that first real caller,
     // so the symbol is closed here rather than routed around.
     //
-    // ⚠️ There is no out-of-line X360 body to read: the console INLINES this at every site. It is
+    // There is no out-of-line X360 body to read: the console INLINES this at every site. It is
     // recovered from TWO independent inlined copies that agree statement for statement, which is
     // the same evidence standard the VehicleDriver::ClearControls recovery used last wave:
     //   * VehiclePhysics::SetAttributes @0x8262E16C..0x8262E1A0 --
@@ -1207,7 +1207,7 @@ namespace Vehicle
     //     same file symbol, same line 0x12B. That copy is already spelled out inline in Prepare
     //     below (it was written before this overload had a body); it is left as it is, because
     //     what the console emits there IS the inline.
-    // ⭐ The PS3 build carries the overload out of line and NAMED (0x734B10,
+    // The PS3 build carries the overload out of line and NAMED (0x734B10,
     // `_ZN10BrnPhysics7Vehicle20SimpleVehiclePhysics13SetAttributesEPNS0_14VehicleAttribsE...`),
     // which is what identifies the three-statement run as one function rather than three
     // statements of the caller.

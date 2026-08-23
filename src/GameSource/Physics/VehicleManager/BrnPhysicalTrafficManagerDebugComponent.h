@@ -1,7 +1,7 @@
 #pragma once
 
 #include "types.hpp"
-// ⚠️ FIXED 2026-08-03: this was `#include "DebugSystem/Core/CgsDebugComponent.h"`, which resolves
+// FIXED 2026-08-03: this was `#include "DebugSystem/Core/CgsDebugComponent.h"`, which resolves
 // against NO -I directory in either the per-TU gate or build_game_exe.bat -- i.e. this header had
 // never been compiled by anything. The real path is below. (B5PhysicsHandlingDebugComponent.h
 // carried the identical broken include and is fixed the same way.)
@@ -13,7 +13,7 @@
 // render helpers declared in the DecFIGS DWARF are owned by its own dev-UI pass. Incremental:
 // this TU implements the leaf name getter (GetName @0x827DBA50) and Construct.
 //
-// ⭐ THE DATA LAYOUT IS NOW REAL (2026-08-03). It was an empty slice here and, separately, an
+// THE DATA LAYOUT IS NOW REAL (2026-08-03). It was an empty slice here and, separately, an
 // opaque `{ void* mpVTable; u8 [60]; }` FORK of the same fully-qualified name inside
 // BrnPhysicalTrafficManager.h. The ten members below come verbatim from the DecFIGS DWARF
 // (BrnPhysicalTrafficManagerDebugComponent.h:137-146) and are confirmed one-for-one by the

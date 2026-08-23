@@ -53,7 +53,7 @@ namespace BrnPhysics
         void OutputStuntsInProgress(RaceCarState* lpRaceCarState,
                                     BrnGameState::GameStateModuleIO::GameEventQueue* lpGameEventQueue); // @0x8263B278
 
-        // ⭐ ADDED 2026-08-11 (create-drain wave). DWARF-attested
+        // DWARF-attested
         // (BrnStuntOffencesManager.h:232 `void SetCurrentRaceCarState(BrnPhysics::ECurrentCarState)`),
         // no out-of-line X360 symbol -- the console inlines it. Its one attested emission is inside
         // VehicleManager::ProcessCreateEvents @0x82616C38..0x82616C48, where the newly-created car

@@ -1150,10 +1150,12 @@ void SceneManagerModule::BridgeInputSceneUpdateInterfaceToSubModules(
     }
 
     // ---- leg 15: culling-group pairs (X360 0x828D3210..0x828D323C) --------------------
-    // ⭐ LOAD-BEARING FOR THIS WAVE: PropEntityModule::InitializePropPhysicsData @0x822DA840
-    // posts seven of these, including CARS x PROPS. Without this leg the adjacency grid stays
-    // empty and SceneSweeper::BuildCollidingPairs rejects every car-vs-prop pair, so the whole
-    // chain downstream of here produces nothing even when every volume is registered.
+    // PropEntityModule::InitializePropPhysicsData @0x822DA840 posts seven of these, including
+    // CARS x PROPS. The adjacency grid this fills is what SceneSweeper::BuildCollidingPairs
+    // @0x828C2190 reads to STAMP each pair's mbCull -- it does NOT accept or reject pairs itself;
+    // the stamped verdict gates the NARROW phase (CgsOverlapCullingModule.cpp:569,
+    // `if (!lPair.mbCull)`). Without this leg the grid keeps whatever leg 14's fill left in it, so
+    // every pair carries that one default verdict instead of its own group pair's.
     //
     // ⚠️ REPORTED, NOT FIXED (foreign file): the console reads the third field with
     // `lbz r6, 8(event)` -- a BYTE -- and DWARF CgsSceneManagerIO_SceneUpdate.h:230 spells the

@@ -7,22 +7,18 @@
 // (Construct leaves all three NULL, BrnPhysicalTrafficManager.h's inline ctor). Until this
 // body ran, the first SetBit on mUsedTrafficVehicles' owner arrays was a null deref.
 //
-// The address was an .ida-exports HOLE and is absent from progress/identity.json; the body
-// was dumped headless from a COPY of the ARTIST .i64 during the wave-T3 scout
-// (scratchpad .../wave3/scout/holes/0x8262CA48.txt: pseudocode + full asm + xrefs).
-// Its own asserts name the console file/lines BrnPhysicalTrafficManager.cpp:133/157/168/180.
+// The address was an .ida-exports HOLE (absent from progress/identity.json); the body was
+// dumped headless from a COPY of the ARTIST .i64. Its own asserts name the console file/lines BrnPhysicalTrafficManager.cpp:133/157/168/180.
 // DWARF: BrnPhysicalTrafficManager.h:131 `bool Prepare(rw::LinearResourceAllocator*)`.
 // ============================================================================
 
 #include "GameSource/Physics/VehicleManager/BrnPhysicalTrafficManager.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "rw/rwcore_structs.h"      // rw::ResourceDescriptor / rw::Resource / IResourceAllocator
 
 #include <cstring>   // memset (the console's 600-byte map fill)
 #include <new>       // placement new (the array constructor the allocator call runs)
-#include <cstdlib>   // getenv (BRN_TRAFFIC_DIAG)
 
 namespace BrnPhysics
 {
@@ -30,25 +26,16 @@ namespace Vehicle
 {
 namespace
 {
-    // Console allocation sizes, as (size << 32 | alignment) doublewords in the asm at
-    // 0x8262CB44 / 0x8262CC2C / 0x8262CCF4. Kept as literals because they are the X360's, and
-    // the request below is sized from HOST sizeof -- the two agree for VehicleDriver (224) and
-    // diverge for the other two, which is exactly why the host must not use the console number.
-    const u32 KU_X360_DRIVER_POOL_BYTES  = 0x1180;   // 4480 == 20 * 224
-    const u32 KU_X360_VEHICLE_POOL_BYTES = 0x500;    // 1280 == 20 * 64
-    const u32 KU_X360_SIMPLE_POOL_BYTES  = 0x720;    // 1824 ==  1 * 1824
-    const u32 KU_POOL_ALIGNMENT          = 16;
+    // The console allocation sizes are (size << 32 | alignment) doublewords in the asm at
+    // 0x8262CB44 / 0x8262CC2C / 0x8262CCF4: drivers 0x1180 (20*224), vehicles 0x500 (20*64),
+    // simple 0x720 (1*1824). The requests below are sized from HOST sizeof -- the two agree for
+    // VehicleDriver (224) and diverge for the other two, which is why the host must not
+    // transcribe the console number.
+    const u32 KU_POOL_ALIGNMENT = 16;
 
     // The SIMPLE pool is ONE element: SimpleTrafficBitArray is BitArray<1u>
     // (BrnPhysicalTrafficManager.h:519) and the console's 0x720 is one whole object.
     const u32 KU_NUM_SIMPLE_TRAFFIC_PHYSICS = 1;
-
-    // [T3-seat] DIAG. NOT IN THE X360 BINARY. DELETE-WHEN-STABLE.
-    bool TrafficDiagEnabled()
-    {
-        static const bool sbEnabled = (getenv("BRN_TRAFFIC_DIAG") != 0);
-        return sbEnabled;
-    }
 }
 
 // @0x8262CA48. DWARF :131. Returns the constant 1 -- there is no failure path; each of the
@@ -133,7 +120,7 @@ bool PhysicalTrafficManager::Prepare(rw::IResourceAllocator* lpPhysicsAllocator)
         mpaTrafficDrivers[luDriver].Prepare();
     }
 
-    // ⛔ CONSOLE DEFECT, GATED NOT COPIED. Both loops below close with
+    // CONSOLE DEFECT, GATED NOT COPIED. Both loops below close with
     // `VehicleDriver::Prepare(mpaTrafficDrivers + 4480)` -- element 20 of a 20-element pool
     // (r28 is pinned to 224*20 at 0x8262CE30 and never re-derived). VehicleDriver::Prepare
     // @0x825B8680 WRITES 214 bytes, so on the host that is a heap overrun into the very
@@ -177,22 +164,6 @@ bool PhysicalTrafficManager::Prepare(rw::IResourceAllocator* lpPhysicsAllocator)
     }
 
     mDebugComponent.Register();   // 0x8262CEC0 (this + 105616)
-
-    // [T3-seat] DIAG. NOT IN THE X360 BINARY. DELETE-WHEN-STABLE.
-    if (TrafficDiagEnabled() && CgsDev::Log::gpDebugPrint != 0)
-    {
-        *CgsDev::Log::gpDebugPrint
-            << "[T3-seat] PhysicalTrafficManager::Prepare: drivers=" << mpaTrafficDrivers
-            << " (" << static_cast<s32>(sizeof(VehicleDriver) * KU8_TOTAL_MAX_NUM_PHYSICAL_TRAFFIC)
-            << "B, X360 " << static_cast<s32>(KU_X360_DRIVER_POOL_BYTES) << "B)"
-            << " vehicles=" << mpaTrafficVehicles
-            << " (" << static_cast<s32>(sizeof(PhysicalTrafficVehicle) * KU8_TOTAL_MAX_NUM_PHYSICAL_TRAFFIC)
-            << "B, X360 " << static_cast<s32>(KU_X360_VEHICLE_POOL_BYTES) << "B)"
-            << " simple=" << mpaSimpleVehiclePhysics
-            << " (" << static_cast<s32>(sizeof(SimpleVehiclePhysics) * KU_NUM_SIMPLE_TRAFFIC_PHYSICS)
-            << "B, X360 " << static_cast<s32>(KU_X360_SIMPLE_POOL_BYTES) << "B)"
-            << " map fill=" << static_cast<s32>(KU8_INVALID_MAP) << "\n";
-    }
 
     return true;   // 0x8262CEC4 `li r3, 1`
 }
