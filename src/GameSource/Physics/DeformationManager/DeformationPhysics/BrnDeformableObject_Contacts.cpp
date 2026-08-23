@@ -1,6 +1,7 @@
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnDeformableObject.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"          // CGS_ASSERT
+#include "GameSource/Physics/VehicleManager/VehiclePhysics/VehiclePhysics.h"   // VehiclePhysics::GetAllWheelsHaveTraction (the +0x135B byte, by name)
 #include "rw/math/vpu/vector3_operation.h"                  // rw::math::vpu::{Abs, ...}
 
 #include <cmath>                                            // std::fabs
@@ -111,10 +112,12 @@ namespace Deformation
     // AddContactsToPenetrationSolver @0x82609F98
     //
     // Push every deformation sensor's stored contacts into the shared penetration solver. The asm:
-    //   v11 = *(*(this+6476) + 4955);              // the per-body "is world" flag, off the physics body
+    //   v11 = *(*(this+6476) + 4955);              // +0x135B == VehiclePhysics::mbAllWheelsHaveTraction
+    //                                              // (NOT a "world" flag -- see the body's ⭐ 2026-08-23 note)
     //   if ( *(*(this+6368) + 1618) )              // mpDeformationSpec->mu8NumDeformationSensors > 0
     //     do
-    //       DeformationSensor::AddContactsToPenetrationSolver(sensor, lpSolver, lpOther, body, world, v11);
+    //       DeformationSensor::AddContactsToPenetrationSolver(sensor, lpSolver, lpDefObjBase,
+    //           liWorldObjectIndex, liObjectIndex, v11);
     //       sensor += 432; ++i;
     //     while ( i < *(*(this+6368) + 1618) );
     // The loop count is the spec's BARE sensor count `*(mpDeformationSpec + 1618)` ==
@@ -124,17 +127,19 @@ namespace Deformation
     // StreamedDeformationSpec with no public accessor, so the bare count is spelled GetNumSensors() - 4
     // here -- matching the committed siblings (Update.cpp UpdateSensorDisplacements etc.). const.
     // =================================================================================================
-    void DeformableObject::AddContactsToPenetrationSolver(PenetrationSolver* lpSolver, DeformableObject* lpOther,
-                                                          s32 liBodyIndex, s32 liWorldIndex) const
+    void DeformableObject::AddContactsToPenetrationSolver(PenetrationSolver* lpSolver,
+                                                          DeformableObject* lpDefObjBase,
+                                                          s32 liWorldObjectIndex, s32 liObjectIndex) const
     {
-        // The per-body world/vehicle discriminator the solver needs (asm: byte at physics-body +4955).
-        // FLAG: there is no named member at this offset on the modelled VehiclePhysics -- it is read
-        // through a byte view of mVehicleBody's attached physics at the asm-confirmed offset (the same
-        // un-named-flag idiom the committed BrnPhysicalWheel.cpp / BrnDeformationSensor.cpp use). Promote
-        // to a named accessor when the body's world-flag field is re-homed.
-        const u32 KU_PHYSICS_BODY_IS_WORLD_OFFSET = 4955;  // FLAG: asm-confirmed; field un-named on the modelled body
-        const u8 lbWorld = *(reinterpret_cast<const u8*>(mVehicleBody.GetVehiclePhysics()) +
-                             KU_PHYSICS_BODY_IS_WORLD_OFFSET);
+        // ⭐ 2026-08-23 (traffic wave 4, SOLVER wave) -- FLAG RETIRED + NAME CORRECTED. The byte the
+        // asm reads at physics-body +4955 is +0x135B, and VehiclePhysics DOES name that member:
+        // mbAllWheelsHaveTraction (VehiclePhysics.h:1584, accessor :1624). It is NOT a "world" flag:
+        // the sensor uses it as one half of the vehicle-arm normal-flattening gate, and the DWARF
+        // spells the parameter it becomes `lbVehicleWheelsAllHaveTraction`
+        // (BrnPhysicsUnity2.cpp:6563). Same byte, same value, now by name -- one less offset poke.
+        // The parameter names here are the DWARF's too (BrnDeformableObject.cpp:1877).
+        const bool lbVehicleWheelsAllHaveTraction =
+            mVehicleBody.GetVehiclePhysics()->GetAllWheelsHaveTraction();
 
         // The bare deformation-sensor count (asm: *(mpDeformationSpec + 1618)). == GetNumSensors() - 4.
         // FLAG: the frozen header declares GetNumSensors() non-const, so it is reached through a const_cast
@@ -147,8 +152,8 @@ namespace Deformation
         s32 liIndex = 0;
         do
         {
-            lpSensor->AddContactsToPenetrationSolver(lpSolver, lpOther, liBodyIndex, liWorldIndex,
-                                                     lbWorld != 0u);
+            lpSensor->AddContactsToPenetrationSolver(lpSolver, lpDefObjBase, liWorldObjectIndex,
+                                                     liObjectIndex, lbVehicleWheelsAllHaveTraction);
             ++liIndex;
             ++lpSensor;
         }

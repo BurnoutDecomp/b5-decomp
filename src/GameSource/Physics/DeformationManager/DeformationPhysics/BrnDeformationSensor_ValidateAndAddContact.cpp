@@ -7,9 +7,9 @@
 // the mounted DeformationManager contact-bridge slice (ReadPotentialContact /
 // ReadPotentialVehicleWorldContact), and the sensor home TU's OTHER bodies carry link demands
 // of their own (AbsorptionTable / ImpulsePasser / PenetrationSolver), so the home stays
-// unmounted. The file-scope helpers this body uses (the StoredContact view, the sphere view,
-// Dot3/Sub3, the 0.01 tolerance) are duplicated from the home TU's anonymous namespace --
-// internal linkage, no ODR exposure. Fold back when the home mounts.
+// unmounted. The file-scope helpers this body uses (the sphere view, Dot3/Sub3, the 0.01
+// tolerance) are duplicated from the home TU's anonymous namespace -- internal linkage, no ODR
+// exposure. Fold back when the home mounts.
 //
 // Dead code today: the caller chain tops out at PhysicsModule::Update @0x825B0640, still a
 // link stub; /OPT:REF strips this. Mounted for closure enforcement.
@@ -20,6 +20,7 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // gpDebugPrint -- the opt-in [latch] probe only
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnDeformableObject.h"    // DeformableObject
+#include "rw/math/vpu/matrix44affine_operation.h"    // rw::math::vpu::TransformPoint (the localB rebase)
 
 #include <cstdlib>   // getenv    -- the opt-in [latch] bring-up probe only
 #include <cstdint>   // uintptr_t -- the opt-in [latch] bring-up probe only
@@ -32,23 +33,12 @@ namespace Deformation
 	{
 		// ---- duplicated from BrnDeformationSensor.cpp's anonymous namespace (see TU banner) ----
 
-		// Typed view over a 64-byte StoredContact record (reached by offset; never renames the
-		// committed opaque members, so ClearNonWorldContacts stays byte-stable).
-		struct StoredContactView
-		{
-			Vector3 mLocalPointOnA;   // +0
-			Vector3 mLocalPointOnB;   // +16
-			Vector3 mNormal;          // +32
-			f32     mfProjectedDist;  // +48
-			DeformableObject*  mpOtherVehicle;   // +52
-			DeformationSensor* mpOtherSensor;    // +56
-			u32     mu32Valid;        // +60
-		};
-
-		inline StoredContactView& AsContactView(StoredContact& lContact)
-		{
-			return *reinterpret_cast<StoredContactView*>(&lContact);
-		}
+		// ⭐⭐⭐ 2026-08-23 (traffic wave 4, stored-contact wave): the `StoredContactView` that stood
+		// here -- an 80-byte host-native struct reinterpret_cast over a 64-byte X360 StoredContact --
+		// is GONE, together with its twin in the home TU. It overran the record by 16 bytes, so the
+		// mpOtherSensor / mbValid this function WROTE landed in the next contact and the reader got
+		// whatever the neighbour's points happened to be. StoredContact is now a real host-native
+		// struct (BrnDeformationSensor.h) and every field below is written BY NAME.
 
 		// Leading Vector4 view of an opaque Sphere (centre.xyz + radius.w).
 		inline Vector4& SphereVec(Sphere* lpSphere)
@@ -99,10 +89,10 @@ namespace Deformation
 	//   [latch] WALLFACE nrm 0.512652 0 0.858597 | pen 208.821777 basis 1.000000 t 208.821747
 	//           latched 0        <- "t" was a WORLD COORDINATE, so the t <= 1.0 gate could not pass
 	// =============================================================================================
-	bool DeformationSensor::ValidateAndAddContact(Matrix44Affine lWorldTransform,
+	bool DeformationSensor::ValidateAndAddContact(Matrix44Affine lInverseVehicleTransform,
 	                                              const CgsSceneManager::PotentialContact& lrPotential,
 	                                              ContactId lContactId,
-	                                              DeformableObject* lpOtherVehicle,
+	                                              DeformableObject* lpOtherCar,
 	                                              DeformationSensor* lpOtherSensor)
 	{
 		// --- (1) normal magnitude tripwire (non-gating) -------------------------------------------
@@ -123,17 +113,17 @@ namespace Deformation
 		// The PS3 words (@0x6CC104..0x6CC1A4) are:
 		//   localA = lInverseVehicleTransform * pointA   (FULL affine: rows * splats + ROW3)
 		//            - mpLocalSpaceSphere->centre        (vsubfp v10, v10, *(this+0x19C))
-		//   localB = pointB RAW                          (stvx v8 -- world point, untransformed)
+		//   localB = pointB RAW                          (stvx v8) -- BUT ONLY FOR A WORLD CONTACT;
+		//            see the ⭐⭐⭐ 2026-08-23 block at the store for the vehicle-contact rebase.
 		//   normal = the (head-normalised) contact normal
 		//   projDist = dot3( normal, pointA + mPointDisplacement_BiggestImpulseThisFrame.xyz
 		//              - pointB )  -- see the corrected note at the projDist store below
 		StoredContact lCandidate;
-		StoredContactView& lView = AsContactView(lCandidate);
 
-		const Vector3& lR  = lWorldTransform.Right();
-		const Vector3& lU  = lWorldTransform.Up();
-		const Vector3& lAt = lWorldTransform.At();
-		const Vector3& lT  = lWorldTransform.Pos();
+		const Vector3& lR  = lInverseVehicleTransform.Right();
+		const Vector3& lU  = lInverseVehicleTransform.Up();
+		const Vector3& lAt = lInverseVehicleTransform.At();
+		const Vector3& lT  = lInverseVehicleTransform.Pos();
 
 		Vector3 lLocalA{
 			lPointOnA.x * lR.x + lPointOnA.y * lU.x + lPointOnA.z * lAt.x + lT.x,
@@ -146,9 +136,58 @@ namespace Deformation
 			lLocalA.y -= lrCentre.y;
 			lLocalA.z -= lrCentre.z;
 		}
-		lView.mLocalPointOnA = lLocalA;
-		lView.mLocalPointOnB = lPointOnB;
-		lView.mNormal        = lNormal;
+		lCandidate.mLocalPointOnA = lLocalA;
+
+		// ⭐⭐⭐ 2026-08-23 (traffic wave 4, SOLVER wave) -- THE +-1667 m LAUNCH.
+		// mLocalPointOnB was stored RAW WORLD for EVERY contact. That is right for a WORLD
+		// contact and catastrophically wrong for a VEHICLE one: PenetrationSolver::Solve's
+		// vehicle loop does `TransformPoint(transformB, mPointOnB)`, so a point that was
+		// already world got body B's ~3.7 km translation applied a SECOND time, the A->B
+		// vector came out ~3.4 km long, and its projection on the normal became the
+		// "penetration depth". Measured: a 0.06 m contact threw the two cars +-1667 m apart.
+		// The console branches here (X360 @0x825E1788, the arm the earlier reconstruction
+		// dropped entirely):
+		//     0x825E1900  cmplwi cr6, r27, 0            ; lpOtherCar == 0 ?
+		//     0x825E1914  stvx128 v0, r0, &var_110      ; localB = pointB RAW
+		//     0x825E193C  beq    cr6, loc_825E19BC      ; WORLD contact -> keep it raw, done
+		//     0x825E1940  lwz  r11, 0x194C(r27)         ; otherCar->GetVehiclePhysics()
+		//     0x825E194C  lwz  r8,  0x19C(r26)          ; otherSensor->mpLocalSpaceSphere
+		//     0x825E1950  addi r11, r11, 0x10           ; &vehPhys->mTransform
+		//     0x825E1970..0x825E198C  vmrglw/vmrghw x7  ; the 3x3 TRANSPOSE
+		//     0x825E199C..0x825E19A4                    ; R^T * (-Pos)
+		//     0x825E19A8..0x825E19B0                    ; + R^T * pointB   == R^T*(pointB-Pos)
+		//     0x825E19B4  vsubfp v0, v0, v7             ; - other sensor sphere centre
+		//     0x825E19B8  stvx128 v0, r0, &var_110      ; localB = that
+		// i.e. the EXACT MIRROR of the localA above, in the OTHER car's frame. The transpose
+		// + negated-Pos cascade IS rw::math::vpu::InverseOfMatrixWithOrthonormal3x3 inlined,
+		// which the DWARF confirms by name: BrnPhysicsUnity2.cpp:10334 lists a nested inline
+		// block { DeformableObject::GetInverseTransform; TransformPoint;
+		// Matrix44Affine::Matrix44Affine; InverseOfMatrixWithOrthonormal3x3; operator-; }
+		// inside this very function -- that block is this branch.
+		// SECOND WITNESS: AddContactsToPenetrationSolver's vehicle arm re-adds the OTHER
+		// sensor's sphere centre to B (@0x825E22BC/0x825E22D4), which is only meaningful
+		// against a sphere-relative B.
+		lCandidate.mLocalPointOnB = lPointOnB;              // world (a world contact keeps this)
+		if ( lpOtherCar != nullptr )
+		{
+			// The console dereferences lpOtherSensor->mpLocalSpaceSphere unconditionally on this
+			// arm (the two are always supplied together by ReadPotentialContact); the null tests
+			// are host tripwires that document that invariant, not console behaviour.
+			Matrix44Affine lInverseOtherCarTransform;
+			lpOtherCar->GetInverseTransform(lInverseOtherCarTransform);
+
+			Vector3 lLocalB = rw::math::vpu::TransformPoint(lInverseOtherCarTransform, lPointOnB);
+			if ( lpOtherSensor != nullptr && lpOtherSensor->mpLocalSpaceSphere != nullptr )
+			{
+				const Vector4& lrOtherCentre = SphereVec(lpOtherSensor->mpLocalSpaceSphere);
+				lLocalB.x -= lrOtherCentre.x;
+				lLocalB.y -= lrOtherCentre.y;
+				lLocalB.z -= lrOtherCentre.z;
+			}
+			lCandidate.mLocalPointOnB = lLocalB;
+		}
+
+		lCandidate.mNormal        = lNormal;
 
 		// projDist: the swept penetration depth ALONG THE NORMAL.
 		// ⭐⭐ FIXED 2026-08-16 (walls leg 10). This was a plain LANE SUM, on the strength of a
@@ -166,10 +205,48 @@ namespace Deformation
 		const Vector3 lSweptDelta = { lPointOnA.x + lrDisp.x - lPointOnB.x,
 		                              lPointOnA.y + lrDisp.y - lPointOnB.y,
 		                              lPointOnA.z + lrDisp.z - lPointOnB.z, 0.0f };
-		lView.mfProjectedDist = Dot3(lNormal, lSweptDelta);
-		lView.mpOtherVehicle  = lpOtherVehicle;
-		lView.mpOtherSensor   = lpOtherSensor;
-		lView.mu32Valid       = 1;                          // v100 = 1
+		lCandidate.mfProjectedDist = Dot3(lNormal, lSweptDelta);
+		lCandidate.mpOtherVehicle  = lpOtherCar;
+		lCandidate.mpOtherSensor   = lpOtherSensor;
+		lCandidate.mbValid         = true;                       // v100 = 1 (console: the +0x3C byte)
+
+		// ---- [T4-vac] HOP 1 bring-up probe -- NOT IN THE X360 BINARY. One shot, opt-in on
+		// BRN_TRAFFIC_DIAG. This is the hop where the +-1667 m launch was born: it prints the two
+		// WORLD points the contact arrived with, this sensor's local sphere centre, the other car's
+		// world position, and the two LOCAL points actually stored -- so "the stored B is a 3.7 km
+		// world coordinate" vs "the stored B is a ~1 m body-local offset" is a reading, not an
+		// inference. DELETE-WHEN-STABLE.
+		if ( lpOtherCar != nullptr )
+		{
+			static const bool skbVacDiag = ( getenv( "BRN_TRAFFIC_DIAG" ) != 0 );
+			static bool sbLoggedVac = false;
+			if ( skbVacDiag && !sbLoggedVac && CgsDev::Log::gpDebugPrint != 0 )
+			{
+				sbLoggedVac = true;
+				Matrix44Affine lOtherTransform;
+				lpOtherCar->GetTransform( lOtherTransform );
+				const Vector4 lThisCentre = ( mpLocalSpaceSphere != 0 )
+					? SphereVec( mpLocalSpaceSphere ) : Vector4{ 0.0f, 0.0f, 0.0f, 0.0f };
+				const Vector4 lOtherCentre =
+					( lpOtherSensor != 0 && lpOtherSensor->mpLocalSpaceSphere != 0 )
+					? SphereVec( lpOtherSensor->mpLocalSpaceSphere ) : Vector4{ 0.0f, 0.0f, 0.0f, 0.0f };
+				*CgsDev::Log::gpDebugPrint
+					<< "[T4-vac] HOP1 ValidateAndAddContact FIRST vehicle contact:"
+					<< " worldA " << lPointOnA.x << " " << lPointOnA.y << " " << lPointOnA.z
+					<< " | worldB " << lPointOnB.x << " " << lPointOnB.y << " " << lPointOnB.z
+					<< " | nrm " << lNormal.x << " " << lNormal.y << " " << lNormal.z
+					<< " | thisCentre " << lThisCentre.x << " " << lThisCentre.y << " " << lThisCentre.z
+					<< " | otherPos " << lOtherTransform.Pos().x << " " << lOtherTransform.Pos().y
+					<< " " << lOtherTransform.Pos().z
+					<< " | otherCentre " << lOtherCentre.x << " " << lOtherCentre.y << " " << lOtherCentre.z
+					<< " | STORED localA " << lCandidate.mLocalPointOnA.x << " "
+					<< lCandidate.mLocalPointOnA.y << " " << lCandidate.mLocalPointOnA.z
+					<< " | STORED localB " << lCandidate.mLocalPointOnB.x << " "
+					<< lCandidate.mLocalPointOnB.y << " " << lCandidate.mLocalPointOnB.z
+					<< " | projDist " << lCandidate.mfProjectedDist
+					<< "\n";
+			}
+		}
 
 		// --- (3) insert into the 3-slot stored-contact array --------------------------------------
 		const s32 liNum = mi32NumStoredContacts;            // v31 = *(this+408)
@@ -182,12 +259,12 @@ namespace Deformation
 			// == a full record swap). Because the candidate becomes the evicted slot's old contact,
 			// each swap carries the *largest* projected distance forward -- an iterative min-keep that
 			// ends with the deepest three contacts retained.
-			if ( lView.mu32Valid > 0 )
+			if ( lCandidate.mbValid )
 			{
 				for ( s32 li = 0; li < mi32NumStoredContacts; ++li )
 				{
-					StoredContactView& lSlot = AsContactView(maStoredContacts[li]);
-					if ( AsContactView(lCandidate).mfProjectedDist < lSlot.mfProjectedDist )  // v103 < *(slot+48)
+					const StoredContact& lSlot = maStoredContacts[li];
+					if ( lCandidate.mfProjectedDist < lSlot.mfProjectedDist )  // v103 < *(slot+48)
 					{
 						const StoredContact lEvicted = maStoredContacts[li];   // slot -> v94
 						maStoredContacts[li] = lCandidate;                     // old candidate -> slot
@@ -199,7 +276,7 @@ namespace Deformation
 		else
 		{
 			// Append to slot liNum and bump the count.
-			maStoredContacts[liNum] = lCandidate;          // (v31<<6)+this+32 copied 8x64-bit
+			maStoredContacts[liNum] = lCandidate;          // console: (v31<<6)+this+32, 8x64-bit
 			++mi32NumStoredContacts;                       // ++*(this+408)
 		}
 
@@ -331,7 +408,7 @@ namespace Deformation
 			mImpulseContact.mPointOnA           = lPointOnA;       // stvx v9,  this,0xE0  (potential +0)
 			mImpulseContact.mPointOnB           = lPointOnB;       // stvx v0,  this,0xF0  (potential +0x10)
 			mImpulseContact.mNormal             = lNormal;         // stvx v30, this,0x100 (potential +0x20)
-			mImpulseContact.mpOtherVehicle      = lpOtherVehicle;  // stw  this,0x110
+			mImpulseContact.mpOtherVehicle      = lpOtherCar;  // stw  this,0x110
 			mImpulseContact.mpOtherSensor       = lpOtherSensor;   // stw  this,0x114
 			mImpulseContact.mfImpactTimeInFrame = lfImpactTime;    // stw  this,0x118
 			mImpulseContact.mContactId          = lContactId;      // stw  this,0x11C

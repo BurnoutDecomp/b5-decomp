@@ -62,6 +62,29 @@ namespace
     bool s_bCrashReported   = false;
     bool s_bImpulseReported = false;
 
+    // [T4-hit] DIAG. NOT IN THE X360 BINARY. DELETE-WHEN-STABLE. One latch PER OUTCOME so the
+    // first crash does not mask the first check/slam/near-miss (the [T3-impulse] pair share one).
+    bool s_bT4CrashingReported = false;
+    bool s_bT4CheckedReported  = false;
+    bool s_bT4SlammedReported  = false;
+    bool s_bT4NearMissReported = false;
+
+    f32 SpeedOf(const SimpleVehiclePhysics& lrBody)
+    {
+        const Vector3 lv = lrBody.GetLinearVelocity();
+        return sqrtf(lv.x * lv.x + lv.y * lv.y + lv.z * lv.z);
+    }
+
+    f32 RelativeSpeed(const SimpleVehiclePhysics& lrA, const SimpleVehiclePhysics& lrB)
+    {
+        const Vector3 lvA = lrA.GetLinearVelocity();
+        const Vector3 lvB = lrB.GetLinearVelocity();
+        const f32 lfX = lvB.x - lvA.x;
+        const f32 lfY = lvB.y - lvA.y;
+        const f32 lfZ = lvB.z - lvA.z;
+        return sqrtf(lfX * lfX + lfY * lfY + lfZ * lfZ);
+    }
+
     // MPH -> m/s (unk_83017FE0, the same splat SimpleVehiclePhysics.h:422 already names).
     const f32 KF_CRASHRESP_MPH_TO_MPS = 0.447039992f;
 
@@ -267,6 +290,18 @@ void PhysicalTrafficManager::SetTrafficVehicleCrashing(
             << "\n";
     }
 
+    // [T4-hit] DIAG. NOT IN THE X360 BINARY. Per-outcome latch. DELETE-WHEN-STABLE.
+    if (!s_bT4CrashingReported && TrafficDiagEnabled() && CgsDev::Log::gpDebugPrint != 0)
+    {
+        s_bT4CrashingReported = true;
+        *CgsDev::Log::gpDebugPrint
+            << "[T4-hit] outcome=CRASHING trafficSlot=" << static_cast<s32>(lu16TrafficIndex)
+            << " crasherOwner=" << static_cast<s32>(EntityOwnerOf(lCrasherEntityID))
+            << " crasherIdx=" << static_cast<s32>(EntityIndexOf(lCrasherEntityID))
+            << " trafficSpeed=" << SpeedOf(*lpVehicle->mpVehicleBody)
+            << "\n";
+    }
+
     // GATE: PhysicalTrafficManager::SetTrafficVehicleCrashing @0x826371C0 -- the articulated
     // other-half recursion. Blocker: ArticulatedJointPool::GetIndexOfOtherHalf @0x825D8490 has no
     // body (BrnArticulatedJointPool.h:57). DELETE-WHEN the trailer wave lands it.
@@ -342,6 +377,17 @@ void PhysicalTrafficManager::SetTrafficVehicleChecked(
             << " |v|=" << sqrtf(lvVelocity.x * lvVelocity.x + lvVelocity.y * lvVelocity.y
                                 + lvVelocity.z * lvVelocity.z)
             << " side=" << lfSteeringSide << " drive=" << lfDriveDirection << "\n";
+    }
+
+    // [T4-hit] DIAG. NOT IN THE X360 BINARY. Per-outcome latch. DELETE-WHEN-STABLE.
+    if (!s_bT4CheckedReported && TrafficDiagEnabled() && CgsDev::Log::gpDebugPrint != 0)
+    {
+        s_bT4CheckedReported = true;
+        *CgsDev::Log::gpDebugPrint
+            << "[T4-hit] outcome=CHECKED trafficSlot=" << static_cast<s32>(lu16TrafficIndex)
+            << " raceCarIdx=" << static_cast<s32>(EntityIndexOf(lCrasherEntityID))
+            << " relSpeed=" << RelativeSpeed(*lpRaceCarPhysics, *lpVehicle->mpVehicleBody)
+            << "\n";
     }
 }
 
@@ -420,6 +466,18 @@ void PhysicalTrafficManager::SetTrafficVehicleSlammed(
                                 + lvVelocity.z * lvVelocity.z)
             << " mag=" << lfMagnitude << " side=" << lfSteeringSide << "\n";
     }
+
+    // [T4-hit] DIAG. NOT IN THE X360 BINARY. Per-outcome latch. DELETE-WHEN-STABLE.
+    if (!s_bT4SlammedReported && TrafficDiagEnabled() && CgsDev::Log::gpDebugPrint != 0)
+    {
+        s_bT4SlammedReported = true;
+        *CgsDev::Log::gpDebugPrint
+            << "[T4-hit] outcome=SLAMMED trafficSlot=" << static_cast<s32>(lu16TrafficIndex)
+            << " raceCarIdx=" << static_cast<s32>(EntityIndexOf(lCrasherEntityID))
+            << " relSpeed=" << RelativeSpeed(*lpRaceCarPhysics, *lpVehicle->mpVehicleBody)
+            << " slamMag=" << lfMagnitude
+            << "\n";
+    }
 }
 
 // -------------------------------------------------------------------------------------------
@@ -489,6 +547,20 @@ void PhysicalTrafficManager::TestForNearMissFreakOut(
     const f32 lfSeverity = Dot3(lvRelative, lvRelative);
 
     lpFull->SetFreakedOut(lfSide, lfSeverity);
+
+    // [T4-hit] DIAG. NOT IN THE X360 BINARY. Per-outcome latch. DELETE-WHEN-STABLE. lfSeverity is
+    // the SQUARED relative speed the console feeds SetFreakedOut, reported as-is.
+    if (!s_bT4NearMissReported && TrafficDiagEnabled() && CgsDev::Log::gpDebugPrint != 0)
+    {
+        s_bT4NearMissReported = true;
+        *CgsDev::Log::gpDebugPrint
+            << "[T4-hit] outcome=NEARMISS trafficSlot="
+            << static_cast<s32>(EntityIndexOf(lTrafficPhysicsEntityID))
+            << " raceCarIdx=" << static_cast<s32>(EntityIndexOf(lRaceCarPhysicsEntityID))
+            << " relSpeedSq=" << lfSeverity
+            << " side=" << lfSide
+            << "\n";
+    }
 }
 
 }   // namespace Vehicle

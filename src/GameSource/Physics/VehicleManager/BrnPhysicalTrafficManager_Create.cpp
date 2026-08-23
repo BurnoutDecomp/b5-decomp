@@ -46,6 +46,7 @@
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnStreamedDeformationSpec.h"
 #include "GameSource/AttribSys/Generated/classes/burnoutcarasset.h"                // the +0x158 handling RefSpec
 #include "GameSource/AttribSys/Generated/classes/physicsvehiclehandling.h"
+#include "GameShared/GameClasses/Geometric/Primitives/CgsBox.h"                    // Box ([T4-potential] extents)
 #include "rw/math/vpu/matrix44affine_operation.h"                                  // IsValid(Matrix44Affine)
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                 // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                         // the named gates + [T3-*] diag
@@ -332,6 +333,47 @@ namespace Vehicle
                     << " FULL(mu8PhysicalType="
                     << static_cast<s32>(GetTrafficVehicle(liFreeVehicleIndex)->mu8PhysicalType)
                     << ")\n";
+            }
+        }
+
+        // ---- [T4-potential] the wave-4 promotion witness -----------------------------------------
+        // [DIAG] NOT IN THE X360 BINARY. Opt-in (BRN_TRAFFIC_DIAG). One-shot for the first
+        // POTENTIAL promotion, plus a value-latched population of mPotentialTrafficVehicles
+        // against the 20-slot pool.
+        // ⚠️ NAMING: this is NOT a "simple" slot. E_TRAFFIC_TYPE_POTENTIAL selects a FULL
+        // TrafficPhysics body (GetFreeTrafficVehicleWithPhysics @0x82637608 has no simple arm);
+        // it only means "not crashing yet". mu8PhysicalType below WILL read 0 == FULL.
+        // DELETE-WHEN-STABLE.
+        if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())
+        {
+            const PhysicalTrafficVehicle* const lpNew = GetTrafficVehicle(liFreeVehicleIndex);
+
+            static bool sbFirstPotential = false;
+            if (!sbFirstPotential
+                && lrCreateTrafficEvent.meTrafficType == E_TRAFFIC_TYPE_POTENTIAL)
+            {
+                sbFirstPotential = true;
+                CgsGeometric::Box lBox;
+                lpNew->mpVehicleBody->GetSimpleVehicleBox(lBox);
+                const Vector3 lvHalf = lBox.GetDimensions();
+                *lpDiag << "[T4-potential] first POTENTIAL promotion: global="
+                        << static_cast<s32>(luGlobalEntityId)
+                        << " idx=" << static_cast<s32>(luEntityIndex)
+                        << " slot=" << liFreeVehicleIndex
+                        << " mu8PhysicalType=" << static_cast<s32>(lpNew->mu8PhysicalType)
+                        << " (0==FULL, NOT simple)"
+                        << " halfBox=" << lvHalf.x << "," << lvHalf.y << "," << lvHalf.z
+                        << "\n";
+            }
+
+            static s32 siLastPotentialCount = -1;
+            const s32  liPotentialCount =
+                static_cast<s32>(mPotentialTrafficVehicles.CountSetBits());
+            if (liPotentialCount != siLastPotentialCount)
+            {
+                siLastPotentialCount = liPotentialCount;
+                *lpDiag << "[T4-potential] proxied cars=" << liPotentialCount
+                        << " of 20 physical slots\n";
             }
         }
 

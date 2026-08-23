@@ -213,9 +213,20 @@ namespace Vehicle
         mpSphereSphereStreamProducer =
             mpContactGenerator->CreateCollideSphereListWithSphereListStream(KI_STREAM_MAX_COMMANDS); // +172520
 
+        // ---- [T4-drop] counters. NOT IN THE X360 BINARY. BRN_TRAFFIC_DIAG. DELETE-WHEN-STABLE. ---
+        // The decisive negative witness for wave 4: it splits "traffic has no collision volume,
+        // so the scene never emits a pair" (all zero) from "pairs arrive but every traffic half
+        // is unpromoted, so the 127 fixup eats them" (pairs != 0, dropped == pairs).
+        s32 liDiagPairsTotal      = 0;   // every pair the scene published this frame
+        s32 liDiagTrafficPairs    = 0;   // car-car pairs with at least one TRAFFIC half
+        s32 liDiagTrafficDropped  = 0;   // ...of those, dropped at the global->physical 127 fixup
+        s32 liDiagQueue8Pairs     = 0;   // ...of those, race-car-vs-traffic that reached queue [8]
+
         // ---- (3) the overlap-pair walk ----------------------------------------------------------
         for (s32 liPair = 0; liPair < lpOverlapPairs->GetLength(); ++liPair)
         {
+            ++liDiagPairsTotal;   // [T4-drop] DIAG
+
             const OutOverlapPair& lrPair = lpOverlapPairs->GetEvent(liPair);
 
             const u64 luIdA64  = lrPair.muVolumeInstanceIdA.muId;
@@ -237,6 +248,11 @@ namespace Vehicle
                 u64 luQwB        = luIdB64;
                 u16 lu16QueueIdx = 7;         // racecar-racecar unless rewritten below
 
+                if (luOwnerA == 2u || luOwnerB == 2u)
+                {
+                    ++liDiagTrafficPairs;     // [T4-drop] DIAG
+                }
+
                 // Traffic A: global -> physical (127 == unmapped, skip the pair).
                 if (luOwnerA == 2u)
                 {
@@ -247,6 +263,7 @@ namespace Vehicle
                         mPhysicalTrafficManager.mu8GlobalToPhysicalEntityIndexMap[luIndex];
                     if (lu8Physical == 127u)
                     {
+                        ++liDiagTrafficDropped;   // [T4-drop] DIAG
                         continue;
                     }
                     luPhysA = (static_cast<u32>(lu8Physical) << 10) | 0x02000000u;
@@ -262,6 +279,7 @@ namespace Vehicle
                         mPhysicalTrafficManager.mu8GlobalToPhysicalEntityIndexMap[luIndex];
                     if (lu8Physical == 127u)
                     {
+                        ++liDiagTrafficDropped;   // [T4-drop] DIAG
                         continue;
                     }
                     luPhysB = (static_cast<u32>(lu8Physical) << 10) | 0x02000000u;
@@ -325,6 +343,11 @@ namespace Vehicle
                 // overlapping pair -- and AddRaceCarBodyPartPair @0x82605928 are REAL bodies in
                 // BrnDeformationManager_ContactBridges.cpp. AddRaceCarWheelPair @0x82605BE8 is
                 // still a NAMED GATE there (one missing cylinder-vs-box appender).
+                if (lu16QueueIdx == 8)
+                {
+                    ++liDiagQueue8Pairs;   // [T4-drop] DIAG
+                }
+
                 DoCarCarContactGeneration(CgsSceneManager::EntityId(static_cast<u32>(luQwA >> 32)),
                                           CgsSceneManager::EntityId(static_cast<u32>(luQwB >> 32)),
                                           CgsSceneManager::EntityId(luPhysA),
@@ -409,6 +432,49 @@ namespace Vehicle
             // any other owner pairing: dropped, exactly as the console falls through
         }
 
+        // ---- [T4-drop] the wave-4 split line ---------------------------------------------------
+        // [DIAG] NOT IN THE X360 BINARY. Opt-in (BRN_TRAFFIC_DIAG). Latched on the traffic tuple
+        // AND on a NEW HIGH-WATER MARK of the total pair count -- the raw total changes almost
+        // every frame, so latching on it verbatim would spam, but latching only on the traffic
+        // fields froze the line at the pre-gameplay frame ("pairs=0" printed once, 60 s before
+        // the car drove, reading as "the scene publishes no pairs at all"). pairsMax is monotone,
+        // so a reader can always tell an empty scene from a busy one. Reading it:
+        //   pairsMax=0                     -> the scene published no overlap pair AT ALL (look
+        //                                     upstream of the physics module entirely).
+        //   traffic=0                      -> no traffic half in ANY pair: the scene has no
+        //                                     traffic collision volume (gate 1, UpdateCollidableVehicles).
+        //   traffic>0 && dropped==traffic  -> pairs arrive but nothing was promoted (gate 2,
+        //                                     BuildPotentialCollisionList / HandleHalfPotentialContact).
+        //   q8>0                           -> a race-car-vs-traffic pair reached custom queue [8];
+        //                                     the ram is live from here on.
+        // DELETE-WHEN-STABLE.
+        {
+            static const bool sbT4Diag = (getenv("BRN_TRAFFIC_DIAG") != 0);
+            static s32        siLastTraffic = -1;
+            static s32        siLastDropped = -1;
+            static s32        siLastQueue8  = -1;
+            static s32        siMaxPairs    = -1;
+            const bool lbNewPairMax = (liDiagPairsTotal > siMaxPairs);
+            if (sbT4Diag && CgsDev::Log::gpDebugPrint != 0
+                && (lbNewPairMax
+                    || liDiagTrafficPairs != siLastTraffic
+                    || liDiagTrafficDropped != siLastDropped
+                    || liDiagQueue8Pairs != siLastQueue8))
+            {
+                if (lbNewPairMax) siMaxPairs = liDiagPairsTotal;
+                siLastTraffic = liDiagTrafficPairs;
+                siLastDropped = liDiagTrafficDropped;
+                siLastQueue8  = liDiagQueue8Pairs;
+                *CgsDev::Log::gpDebugPrint
+                    << "[T4-drop] overlap pairs=" << liDiagPairsTotal
+                    << " pairsMax=" << siMaxPairs
+                    << " withTrafficHalf=" << liDiagTrafficPairs
+                    << " droppedAt127=" << liDiagTrafficDropped
+                    << " reachedQueue8=" << liDiagQueue8Pairs
+                    << "\n";
+            }
+        }
+
         // ---- (4) the two simple-traffic pair lists + the triangle-cache streams -----------------
         if (mTrafficSimpleTrafficPrimPairBuilder.GetNumTests() != 0)                             // +172558
         {
@@ -443,14 +509,16 @@ namespace Vehicle
                 EntityId{ (static_cast<u32>(liCar) << 10) | 0x01000000u });
             // ⚠️ [FLAG PC bring-up] the console CGS_ASSERT(liModelIndex != -1, "liIndex != -1")
             // (BrnDeformationManager.h:560) is DEGRADED to the log-once below (conductor,
-            // 2026-08-11, create-drain wave, boot-measured: with the first live car it fired per
-            // frame -- 178 halts in 80 s -- because the deformation model table is permanently -1
-            // on this build: ProcessAddDeformationModelEvents lives in the UNMOUNTED
-            // BrnDeformationManager.cpp, and behind that sit the mpAttribs Prepare-skip guard and
-            // the parked NULL model handle. On the console the model is always registered and the
-            // assert never fires. The `continue` is the honest deferral consequence: race-car
-            // world CONTACT generation (the crash/body-shell path) stays off; traction lines do
-            // not need it. RESTORE the console assert WHEN the deformation-manager mount lands.
+            // 2026-08-11, create-drain wave: with the first live car it fired per frame, 178 halts
+            // in 80 s, because the model table was then permanently -1).
+            // ⭐ BANNER CORRECTED 2026-08-23 (wave 4, cluster B): the reason given here -- "Process-
+            // AddDeformationModelEvents lives in the UNMOUNTED BrnDeformationManager.cpp" -- IS NO
+            // LONGER TRUE. That TU is mounted (build_game_exe.bat) and the drain is bodied and
+            // keyed correctly by the HANDLING BODY id (BrnDeformationManager.cpp:310, the wave-3
+            // r3 fix). So this line firing now means a genuinely UNREGISTERED car, not an expected
+            // bring-up state -- and it matters to the ram: the same table feeds GetSpheresForCar,
+            // whose null result trips DoCarCarContactGeneration's :877/:878 (see [T4-spheres]).
+            // RESTORE the console assert once a boot shows this line silent.
             if (liModelIndex == -1)
             {
                 static bool sbLoggedNoDeformationModel = false;
@@ -460,9 +528,9 @@ namespace Vehicle
                     if (CgsDev::Message::gxMessageFilterFlags & 1)
                         *CgsDev::Log::gpDebugPrint
                             << "[FLAG PC bring-up] StartVehicleContactGeneration: no deformation "
-                               "model for live race car (table is -1 until the deformation-manager "
-                               "mount) -- car SKIPPED for world contact generation, console assert "
-                               "'liIndex != -1' degraded to this line. Reported once, not per frame\n";
+                               "model for live race car -- car SKIPPED for world contact "
+                               "generation, console assert 'liIndex != -1' degraded to this line. "
+                               "Reported once, not per frame\n";
                 }
                 continue;   // host bounds guard; the console's assert is fire-and-continue
             }
@@ -524,8 +592,10 @@ namespace Vehicle
     //     both cars' deformation spheres MINUS THE LAST FOUR, then mark the pair in the
     //     contact-gen list so the harvest (AddContactResultsToQueue) knows an entry exists for it.
     //   * EITHER simple — box-vs-box into one of the two simple-traffic pair builders, which
-    //     StartVehicleContactGeneration collides at the end of its overlap walk. ⚠ GATED, see the
-    //     named gate in that arm: its box getter has no body in the tree.
+    //     StartVehicleContactGeneration collides at the end of its overlap walk. NOT gated: the
+    //     arm is real since wave T3 (GetSimpleVehicleBox @0x82602A20 has a body,
+    //     BrnSimpleVehiclePhysics.cpp:793) and both end-of-walk drains are live. Wave 4 confirmed
+    //     it is also UNREACHABLE by construction: the create path never allocates a SIMPLE slot.
     //
     // ⚠️⚠️ ARGUMENT ORDER IS THE CONSOLE'S, AND THE SLOTS LOOK WRONG AT A GLANCE (gotcha 3).
     // The X360 reads the stream producer as `lwz r10, arg_54` and the queue id as
@@ -615,6 +685,26 @@ namespace Vehicle
                 EntityId{ static_cast<u32>(lCarPhysicsIdA) }, &lpSpheresA);
             const s32 liNumSpheresB = lpDefMan->GetSpheresForCar(
                 EntityId{ static_cast<u32>(lCarPhysicsIdB) }, &lpSpheresB);
+            // ---- [T4-spheres] the assert's cause, named BEFORE it fires -----------------------
+            // [DIAG] NOT IN THE X360 BINARY. Opt-in (BRN_TRAFFIC_DIAG), one-shot. A freshly
+            // promoted traffic car whose AddDeformationModel event has not been drained yet has
+            // no model, GetSpheresForCar returns -1 and leaves the out pointer null, and :877/:878
+            // fire. On the console the model is always registered first. DELETE-WHEN-STABLE.
+            if (lpSpheresA == 0 || lpSpheresB == 0)
+            {
+                static const bool sbT4Diag  = (getenv("BRN_TRAFFIC_DIAG") != 0);
+                static bool       sbReported = false;
+                if (sbT4Diag && !sbReported && CgsDev::Log::gpDebugPrint != 0)
+                {
+                    sbReported = true;
+                    *CgsDev::Log::gpDebugPrint
+                        << "[T4-spheres] no deformation model for a car-car pair: A=" << CgsDev::E_PRINTMODE_HEXONCE
+                        << static_cast<u32>(lCarPhysicsIdA) << " nA=" << liNumSpheresA
+                        << " B=" << CgsDev::E_PRINTMODE_HEXONCE << static_cast<u32>(lCarPhysicsIdB) << " nB=" << liNumSpheresB
+                        << " queue=" << static_cast<s32>(lu16QueueID) << "\n";
+                }
+            }
+
             CGS_ASSERT(lpSpheresA != nullptr, "lpSpheresA");                                  // :877
             CGS_ASSERT(lpSpheresB != nullptr, "lpSpheresB");                                  // :878
 
@@ -627,6 +717,26 @@ namespace Vehicle
             lSphereListB.mpSpheres    = reinterpret_cast<u8*>(
                 const_cast<CgsGeometric::Sphere*>(lpSpheresB));
             lSphereListB.miNumSpheres = liNumSpheresB - KI_NUM_APPENDED_WHEEL_SPHERES;
+
+            // ---- [T4-normal] the sphere-count witness for the same hop ---------------------
+            // [DIAG] NOT IN THE X360 BINARY. Opt-in, value-latched per queue. The worker masks
+            // both counts to u16, so a car whose deformation model carries <= 4 spheres would
+            // walk 65532+ garbage spheres and hand back garbage normals. DELETE-WHEN-STABLE.
+            {
+                static const bool sbT4Diag = (getenv("BRN_TRAFFIC_DIAG") != 0);
+                static s32        siLastA  = -9999;
+                static s32        siLastB  = -9999;
+                if (sbT4Diag && CgsDev::Log::gpDebugPrint != 0
+                    && (lSphereListA.miNumSpheres != siLastA || lSphereListB.miNumSpheres != siLastB))
+                {
+                    siLastA = lSphereListA.miNumSpheres;
+                    siLastB = lSphereListB.miNumSpheres;
+                    *CgsDev::Log::gpDebugPrint
+                        << "[T4-normal] car-car sphere lists: queue=" << static_cast<s32>(lu16QueueID)
+                        << " rawA=" << liNumSpheresA << " rawB=" << liNumSpheresB
+                        << " testedA=" << siLastA << " testedB=" << siLastB << "\n";
+                }
+            }
 
             // The contact padding is HOW FAR THE TWO CARS CLOSE ON EACH OTHER THIS STEP: the
             // relative-velocity magnitude times the step, so a fast approach fattens the spheres
@@ -1193,6 +1303,60 @@ namespace Vehicle
                 lContact.muPolyTagB          = lrRecord.muPrimitive1Tag;
                 lContact.mu16PrimitiveIndexA = lrRecord.muPrimitive0Index;
                 lContact.mu16PrimitiveIndexB = lrRecord.muPrimitive1Index;
+
+                // ---- [T4-normal] the un-normalised-contact hop, NAMED ------------------------
+                // [DIAG] NOT IN THE X360 BINARY. Opt-in (BRN_TRAFFIC_DIAG), one-shot per queue.
+                // The bridge asserts |mNormal| == 1 on queues [7]/[8]/[13]
+                // (BrnPhysicsModuleBridgeFunctions.cpp:868/:893/:925) and the deformation sensor
+                // repeats it (BrnDeformationSensor_ValidateAndAddContact.cpp:107). This is the
+                // LAST place the value is ours before it leaves the vehicle manager, so it prints
+                // BOTH candidate source normals and the record's own indices: that separates
+                // "the worker wrote a bad normal" from "the harvest picked the wrong record".
+                // DELETE-WHEN-STABLE.
+                {
+                    const f32 lfLenSq = lContact.mNormal.x * lContact.mNormal.x
+                                      + lContact.mNormal.y * lContact.mNormal.y
+                                      + lContact.mNormal.z * lContact.mNormal.z;
+                    if (lfLenSq < 0.98f || lfLenSq > 1.02f || lfLenSq != lfLenSq)
+                    {
+                        static const bool sbT4Diag = (getenv("BRN_TRAFFIC_DIAG") != 0);
+                        static u32        suReportedQueues = 0;
+                        const u32         luQueueBit =
+                            1u << (lResultList.mu32UserTagA & 31u);
+                        if (sbT4Diag && (suReportedQueues & luQueueBit) == 0
+                            && CgsDev::Log::gpDebugPrint != 0)
+                        {
+                            suReportedQueues |= luQueueBit;
+                            const f32 lfLen0 = lrRecord.mPrimitive0Normal.x * lrRecord.mPrimitive0Normal.x
+                                             + lrRecord.mPrimitive0Normal.y * lrRecord.mPrimitive0Normal.y
+                                             + lrRecord.mPrimitive0Normal.z * lrRecord.mPrimitive0Normal.z;
+                            const f32 lfLen1 = lrRecord.mPrimitive1Normal.x * lrRecord.mPrimitive1Normal.x
+                                             + lrRecord.mPrimitive1Normal.y * lrRecord.mPrimitive1Normal.y
+                                             + lrRecord.mPrimitive1Normal.z * lrRecord.mPrimitive1Normal.z;
+                            *CgsDev::Log::gpDebugPrint
+                                << "[T4-normal] non-unit contact normal leaving AddContactResultsToQueue:"
+                                << " queue=" << static_cast<s32>(lResultList.mu32UserTagA)
+                                << " tagB=" << static_cast<s32>(lResultList.mu16UserTagB)
+                                << " type=" << static_cast<s32>(lResultList.meResultType)
+                                << " entry=" << liEntry
+                                << " result=" << static_cast<s32>(lu16Result)
+                                << "/" << static_cast<s32>(lu16NumResults)
+                                << " max=" << static_cast<s32>(lResultList.mu16MaxNumResults)
+                                << " |n|^2=" << lfLenSq
+                                << " n0=(" << lrRecord.mPrimitive0Normal.x << ","
+                                << lrRecord.mPrimitive0Normal.y << ","
+                                << lrRecord.mPrimitive0Normal.z << ") |n0|^2=" << lfLen0
+                                << " n1=(" << lrRecord.mPrimitive1Normal.x << ","
+                                << lrRecord.mPrimitive1Normal.y << ","
+                                << lrRecord.mPrimitive1Normal.z << ") |n1|^2=" << lfLen1
+                                << " primIdx=" << static_cast<s32>(lrRecord.muPrimitive0Index)
+                                << "/" << static_cast<s32>(lrRecord.muPrimitive1Index)
+                                << " ownerA=" << static_cast<s32>(GetWordOwner(luEntityWordA))
+                                << " ownerB=" << static_cast<s32>(GetWordOwner(luEntityWordB))
+                                << "\n";
+                        }
+                    }
+                }
 
                 // sub_825E73D0 == the out-of-line PotentialContactInterface::AddEvent(u32, ...)
                 // (assert + overflow warning + bounds-gated append).

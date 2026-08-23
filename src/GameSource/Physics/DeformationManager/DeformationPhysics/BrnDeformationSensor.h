@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>                                       // offsetof -- the StoredContact layout pins
 #include "types.hpp"
 #include "BrnCommonTypes.h"                              // Vector3, Vector3Plus, Matrix44Affine, VecFloat
 #include "GameShared/GameClasses/SceneManager/CgsVolumeInstanceId.h"  // CgsSceneManager::VolumeInstanceId (mVolInstId, DWARF :269)
@@ -17,28 +18,30 @@
 // maStoredContacts[3], mImpulseContact, mContactSpy, mVolInstId, miNumStoredContacts, mpLocalSpaceSphere,
 // mpWorldSpaceSphere, mfScratchAmount.
 //
-// RECONCILIATION (committed-TU safety) -- IMPORTANT, two committed/Wave-2 consumers constrain this header:
-//   (1) BrnDeformationSensor.cpp (committed) :: ClearNonWorldContacts reads, BY NAME:
-//         maStoredContacts[i].mu32NonWorldFlag, mi32NumStoredContacts, mfMaxPointDisplacement,
-//         maPostPhysicsVec0[4], maPostPhysicsVec1[4], mu32PostPhysicsReset.
-//       Those names are KEPT verbatim (renaming them would break the committed .cpp). The committed
-//       StoredContact opaque-64-byte model is likewise KEPT (ClearNonWorldContacts copies it as a
-//       64-byte blob and only tests the +0x34 flag).
-//       >>> FLAG: the DWARF gives the REAL StoredContact members (mLocalPointOnA/mLocalPointOnB/mNormal/
-//       mfProjectedDist/mpOtherVehicle/mpOtherSensor/mbValid) and does NOT separately name
-//       mfMaxPointDisplacement / maPostPhysicsVec0 / maPostPhysicsVec1 / mu32PostPhysicsReset -- those
-//       were inferred from ClearNonWorldContacts' offset writes and physically OVERLAY the DWARF's
-//       mImpulseContact / mContactSpy / mVolInstId region (+0x118..+0x180). They are retained as a
-//       reconstructed scratch overlay (NOT promoted to the DWARF members) PRECISELY so the committed
-//       ClearNonWorldContacts keeps compiling unchanged. Promote them when ClearNonWorldContacts is
-//       re-derived against the real members.
-//   (2) BrnIKBodyPart.cpp (Wave-2) :: GetMaxSensorImpulse() -- now bodied against the real DWARF member
-//       mPointDisplacement_BiggestImpulseThisFrame (the +0x10 16-byte vector the detach test splats its
-//       w lane from), replacing the previous declared-only stub over the opaque leading run.
+// RECONCILIATION -- one Wave-2 consumer still constrains this header:
+//   * BrnIKBodyPart.cpp (Wave-2) :: GetMaxSensorImpulse() -- bodied against the real DWARF member
+//     mPointDisplacement_BiggestImpulseThisFrame (the +0x10 16-byte vector the detach test splats its
+//     w lane from), replacing the previous declared-only stub over the opaque leading run.
 //
-// X360 pointers are 32-bit; on the 64-bit host the trailing Sphere* widen, so absolute byte offsets do
-// not all hold on the host. Members are pinned BY NAME, never raw offset; sensor-array indexing uses
-// sizeof(DeformationSensor) for stride, so the exact host byte size is not load-bearing. GROW the
+// ⭐⭐⭐ STORED-CONTACT PROMOTED TO ITS REAL DWARF MEMBERS 2026-08-23 (traffic wave 4, stored-contact
+// wave). StoredContact used to be an opaque 64-byte X360 POD (maHead[0x34] + mu32NonWorldFlag +
+// maTail), with the real members reached through an anonymous-namespace `StoredContactView` that
+// declared them HOST-NATIVELY -- an 80-byte view over a 64-byte record, so its last two fields
+// (mpOtherSensor, mbValid) ran PAST THE END and aliased the next contact. See the FIXED banner in
+// BrnDeformationSensor.cpp. The record is now a real host-native struct with the seven DWARF
+// members and the mu32NonWorldFlag alias is retired: console +0x34 IS mpOtherVehicle (4-byte
+// console pointer), proven twice --
+//   ClearNonWorldContacts        @0x825C1064 `addi r6,r3,0x54` + `lwz r10,0(r6)`  (sensor+0x54 ==
+//                                contact[0]+0x34) then `addi r6,r6,0x40` per contact;
+//   AddContactsToPenetrationSolver @0x825E1EAC `addi r30,r29,0x24` (r29 == contact+0x10, so r30 ==
+//                                contact+0x34) + `lwz r11,0(r30)` -> non-zero picks the VEHICLE list.
+// Same word, same meaning: "non-world" == "has an other vehicle". ClearNonWorldContacts therefore
+// now reads `maStoredContacts[i].mpOtherVehicle != nullptr` by name.
+//
+// X360 pointers are 32-bit; on the 64-bit host every embedded pointer widens, so absolute byte
+// offsets do NOT hold on the host and are never hard-coded. Members are pinned BY NAME; sensor-array
+// indexing uses sizeof(DeformationSensor) for stride, so the exact host byte size is not
+// load-bearing (console 432 == 0x1B0; the host figure is larger and is nobody's constant). GROW the
 // reconstructed scratch overlay into the real DWARF members as further sensor TUs land -- do not fork.
 
 namespace CgsSceneManager
@@ -114,24 +117,53 @@ namespace Deformation
 		void GetInverse(StoredImpulseContact& lrInverse) const;
 	};
 
-	// One stored contact record. ClearNonWorldContacts copies it as eight 64-bit words (a 64-byte blob)
-	// and tests the "non-world" flag at byte +0x34 within the record; the committed .cpp reaches no
-	// other field, so the record is KEPT as a 64-byte POD with just that flag named so that committed
-	// body compiles unchanged.
+	// One stored contact record -- the post-physics penetration contact ValidateAndAddContact keeps
+	// (3 deepest per sensor) and AddContactsToPenetrationSolver drains. The member SEQUENCE + names +
+	// types are DWARF-authoritative (references/DecFIGS/dwarfdump/.../BrnDeformationSensor.h:42).
 	//
-	// FLAG (DWARF vs committed model): the DWARF (BrnDeformationSensor.h:42) gives the REAL members --
-	//   mLocalPointOnA (Vector3), mLocalPointOnB (Vector3), mNormal (Vector3), mfProjectedDist (f32),
-	//   mpOtherVehicle (DeformableObject*), mpOtherSensor (DeformationSensor*), mbValid (bool),
-	//   + IsVehicleContact() const.
-	// The committed mu32NonWorldFlag at +0x34 corresponds to the mbValid / world-vs-vehicle discriminator
-	// region. The opaque model is retained (rather than promoted to the DWARF members) to keep the
-	// committed ClearNonWorldContacts byte-stable; promote it together with re-deriving that body.
+	// ⭐⭐⭐ HOST-NATIVE 2026-08-23 (traffic wave 4, stored-contact wave). This was an opaque 64-byte
+	// X360 POD; the console packs mfProjectedDist +0x30 / mpOtherVehicle +0x34 / mpOtherSensor +0x38 /
+	// mbValid +0x3C into 64 bytes only because its pointers are 4 bytes. On the host the two pointers
+	// widen, so the record is 80 bytes -- and that is the CORRECT host layout, exactly as every other
+	// reconstructed record in this tree. Nothing indexes it by byte offset; the console offsets below
+	// are documentation for reading the asm, never arithmetic.
+	//   ASM WITNESS (AddContactsToPenetrationSolver @0x825E1D20, r29 == contact+0x10, stride 0x40):
+	//     0x825E1DA4 lvx128 v0,r29,-0x10          -> mLocalPointOnA  (contact +0x00)
+	//     0x825E1E28 lvx128 v0,r0,r29             -> mLocalPointOnB  (contact +0x10)
+	//     0x825E1EB4 lvx128 v0,r30,-0x14 (r30==r29+0x24) -> mNormal   (contact +0x20)
+	//     0x825E1FCC lfs    f0,0x30(r3)           -> mfProjectedDist (contact +0x30)
+	//     0x825E2270 lwz    r11,0x34(r31)         -> mpOtherVehicle  (contact +0x34)
+	//     0x825E224C lwz    r11,0x38(r31)         -> mpOtherSensor   (contact +0x38)
+	//     0x825E2224 lbz    r11,0x3C(r31)         -> mbValid  (a BYTE load: it is a bool, not a u32)
 	struct StoredContact
 	{
-		u8  maHead[0x34];        // contact +0x00 .. +0x33 (opaque; real: mLocalPointOnA/B, mNormal, mfProjectedDist)
-		u32 mu32NonWorldFlag;    // contact +0x34 (console sensor +0x54 for contact[0]); real: world/valid discriminator
-		u8  maTail[0x40 - 0x38]; // contact +0x38 .. +0x3F (opaque; real: mpOtherVehicle/mpOtherSensor/mbValid)
+		Vector3            mLocalPointOnA;   // console +0x00 -- sphere-relative point on THIS body
+		// ⭐⭐⭐ 2026-08-23 (traffic wave 4, SOLVER wave) -- THE FIELD HAS TWO SPACES, BY DESIGN, and
+		// mixing them was the +-1667 m launch. For a VEHICLE contact (mpOtherVehicle != 0) this is
+		// sphere-relative in the OTHER CAR's body space, exactly like mLocalPointOnA is in this
+		// one's -- ValidateAndAddContact @0x825E1940..0x825E19B8 builds it, and Solve()'s vehicle
+		// loop transforms it by body B. For a WORLD contact it is a RAW WORLD point, because the
+		// world has no transform and Solve()'s world loop deliberately does not transform it.
+		Vector3            mLocalPointOnB;   // console +0x10 -- see above: other-body local, or world
+		Vector3            mNormal;          // console +0x20 -- shared surface normal
+		f32                mfProjectedDist;  // console +0x30 -- swept depth along the normal (sort key)
+		DeformableObject*  mpOtherVehicle;   // console +0x34 -- null => WORLD contact, else vehicle
+		DeformationSensor* mpOtherSensor;    // console +0x38 -- the other car's sensor
+		bool               mbValid;          // console +0x3C
+
+		// DWARF :53. The world-vs-vehicle discriminator both console consumers spell as the +0x34
+		// word being non-zero (see the header banner's two asm witnesses).
+		bool IsVehicleContact() const { return mpOtherVehicle != 0; }
 	};
+
+	// HOST layout pin. Not the console's 64 -- three 16-byte Vector3 + f32 + 4 pad + two 8-byte
+	// pointers + bool, 16-aligned == 80. It exists to make the record's size a CHECKED fact rather
+	// than an assumption: the defect this replaced was an 80-byte view laid over a 64-byte record.
+	static_assert(sizeof(StoredContact) == 80, "host StoredContact is 80 bytes (two widened pointers)");
+	static_assert(alignof(StoredContact) == 16, "StoredContact is 16-aligned (its leading Vector3)");
+	static_assert(offsetof(StoredContact, mLocalPointOnB) == 16, "mLocalPointOnB @ +16");
+	static_assert(offsetof(StoredContact, mNormal) == 32, "mNormal @ +32");
+	static_assert(offsetof(StoredContact, mfProjectedDist) == 48, "mfProjectedDist @ +48");
 
 	// DWARF BrnDeformationSensor.h:97. DeformationSensor IS a CollidableBody (canonical base, vptr at
 	// console +0x0). The vptr occupies the leading word; the named DWARF members begin at console +0x4.
@@ -150,18 +182,11 @@ namespace Deformation
 		// w lane of (vspltw v0,v0,3) into its peak-impulse max-fold. GetMaxSensorImpulse() returns it.
 		Vector3Plus mPointDisplacement_BiggestImpulseThisFrame;
 
-		// console +0x20 -- stored-contacts array (64-byte stride per contact). DWARF :266.
+		// console +0x20 -- stored-contacts array. DWARF :266. Console stride 0x40 (4-byte pointers);
+		// HOST stride is sizeof(StoredContact) == 80 and is never spelled as a constant.
 		StoredContact maStoredContacts[KU_MAX_STORED_CONTACTS];
 
-		// ---- RECONSTRUCTED SCRATCH OVERLAY (kept for committed ClearNonWorldContacts) -----------
-		// FLAG: in the DWARF the bytes from the contacts array end through the count are
-		//   mImpulseContact (StoredImpulseContact, :267), mContactSpy (OutContactSpy, :268) and
-		//   mVolInstId (CgsSceneManager::VolumeInstanceId, :269). The committed ClearNonWorldContacts
-		// instead writes named scratch fields at console +0x118 / +0x120 / +0x130 / +0x180 (inferred
-		// from its stores). To keep that committed body byte-stable, the inferred scratch members are
-		// retained HERE (overlaying the DWARF mImpulseContact/mContactSpy/mVolInstId region) rather than
-		// promoting the DWARF members. The opaque spans bridge to each named scratch offset relative to
-		// the contacts-array base. PROMOTE to the DWARF members when ClearNonWorldContacts is re-derived.
+		// ---- the DWARF mImpulseContact / mContactSpy / mVolInstId region ------------------------
 		// ⭐⭐ OVERLAY PROMOTED 2026-08-14 (walls leg 4). The former named-scratch overlay
 		// (mfMaxPointDisplacement @+0x118 / mu32PostPhysicsReset @+0x180 / two reserved spans) is
 		// retired onto the REAL DWARF members, byte-witnessed by the PS3 ValidateAndAddContact
@@ -187,7 +212,10 @@ namespace Deformation
 		u64 mSpyVolumeInstanceIdB;      // console +0x178 -- latched (u64)muVolumeInstanceIdB.word << 32
 		u32 mSpyContactId;              // console +0x180 -- latched contact id (zeroed post-physics)
 
-		// Opaque span between mSpyContactId end (+0x184) and mVolInstId (+0x190).
+		// Console-only span between mSpyContactId end (+0x184) and mVolInstId (+0x190): the console's
+		// 8-byte alignment pad in front of mVolInstId. KEPT so the flat spy block still reads
+		// one-for-one against the asm offsets quoted above; it is inert padding on the host, where
+		// the compiler would insert its own. No host arithmetic depends on it.
 		u8 maReserved3[0x190 - 0x184];
 
 		// ⭐ PROMOTED out of the opaque span 2026-08-14 (deformation-mount wave): the DWARF
@@ -247,10 +275,13 @@ namespace Deformation
 
 		// DWARF BrnDeformationSensor.cpp:465. Validate a candidate contact (cull / clamp) and, if kept,
 		// store it in maStoredContacts. Returns true if a contact was added.
-		bool ValidateAndAddContact(Matrix44Affine lWorldTransform,
+		// ⭐ 2026-08-23 (traffic wave 4, SOLVER wave): parameter names taken from the DWARF
+		// (BrnPhysicsUnity2.cpp:10334). The transform is the INVERSE (world -> this car), which the
+		// old name `lWorldTransform` said the opposite of; `lpOtherCar` is the DWARF's spelling.
+		bool ValidateAndAddContact(Matrix44Affine lInverseVehicleTransform,
 		                           const CgsSceneManager::PotentialContact& lrPotential,
 		                           ContactId lContactId,
-		                           DeformableObject* lpOtherVehicle,
+		                           DeformableObject* lpOtherCar,
 		                           DeformationSensor* lpOtherSensor);
 
 		// ⭐ 2026-08-14 (walls leg 4). Read this frame's earliest-impact record: false when disarmed
@@ -261,11 +292,21 @@ namespace Deformation
 
 		// DWARF BrnDeformationSensor.cpp:718. Push this sensor's stored contacts into the shared
 		// penetration solver (as vehicle or world contacts per the body indices). const.
-		void AddContactsToPenetrationSolver(PenetrationSolver* lpSolver, DeformableObject* lpObject,
-		                                    s32 liBodyIndex, s32 liWorldIndex, bool lbWorld) const;
+		//
+		// ⭐ 2026-08-23 (traffic wave 4, SOLVER wave) -- PARAMETER NAMES WERE SWAPPED/WRONG, now the
+		// DWARF's (BrnPhysicsUnity2.cpp:6563: lpSolver, lpDefObjBase, liWorldObjectIndex,
+		// liParentObjectIndex, lbVehicleWheelsAllHaveTraction). a4 carries the WORLD pseudo-body
+		// index (the caller passes KI_MAX_DEFORMATION_MODELS == 28), a5 carries THIS car's model
+		// index -- the old `liBodyIndex`/`liWorldIndex` said the reverse. And a6 is not a "world"
+		// flag at all: it is the CALLING car's all-wheels-have-traction bit, one half of the
+		// normal-flattening gate in the vehicle arm (asm 0x825E21A4 lbz arg_3F + 0x825E22E4 lbz
+		// +0x135B). Values always reached the solver in the right slots; only the names lied.
+		void AddContactsToPenetrationSolver(PenetrationSolver* lpSolver, DeformableObject* lpDefObjBase,
+		                                    s32 liWorldObjectIndex, s32 liParentObjectIndex,
+		                                    bool lbVehicleWheelsAllHaveTraction) const;
 
 		// DeformationSensor::ClearNonWorldContacts @ 0x825C1050 (COMMITTED body in BrnDeformationSensor.cpp).
-		// Compact the stored-contacts array (remove contacts whose mu32NonWorldFlag is set) and reset the
+		// Compact the stored-contacts array (remove contacts whose mpOtherVehicle is set) and reset the
 		// post-physics scratch state. Caller (X360 xref): DeformableObject::UpdatePostPhysics.
 		void ClearNonWorldContacts();
 	};

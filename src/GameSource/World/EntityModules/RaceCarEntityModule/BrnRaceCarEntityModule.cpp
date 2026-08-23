@@ -2734,6 +2734,16 @@ void RaceCarEntityModule::UpdateOutputInterfaces(
         // of the world->director chain. Keeping both ends printed is what bisected the
         // RaceCarState::operator= empty-link-stub bug in one run -- the source read
         // (3008.17, -1.16, -1874.30) while the destination read the origin.
+        //
+        // ⚠️ mph/gas ADDED 2026-08-23 BECAUSE THE LINE WAS A LYING DIAGNOSTIC WITHOUT THEM.
+        // At 1-in-3000 publishes (~25 s) two consecutive lines carrying an unchanged pose read
+        // as "the publish is frozen" whether the publish is stale OR the car is simply PARKED.
+        // A whole verify round was spent on that reading: the car sat in car-select for 87 s of
+        // flow (gas 0, engine OFF -- correct), and the pose that "should have moved" only moved
+        // because place-on-track teleported it. mph/gas come out of the very RaceCarState this
+        // line publishes, so a parked car now says so on its own line. Same failure mode the
+        // [move-probe] banner in BrnVehicleManager_WriteOutVehicleStats.cpp records.
+        // DELETE-WHEN the [uoi] probe goes (with the rest of the bring-up instruments).
         {
             static u32 suSrcCount = 0;
             ++suSrcCount;
@@ -2741,7 +2751,8 @@ void RaceCarEntityModule::UpdateOutputInterfaces(
             {
                 if (CgsDev::Log::gpDebugPrint != 0)
                 {
-                    const Vector3& lP = lpActiveRaceCar->GetPhysicsState()->mTransform.Pos();
+                    const BrnPhysics::Vehicle::RaceCarState* lpS = lpActiveRaceCar->GetPhysicsState();
+                    const Vector3& lP = lpS->mTransform.Pos();
                     const Vector3& lR = lpActiveRaceCar->GetRenderParams()->GetBodyTransform().Pos();
                     *CgsDev::Log::gpDebugPrint
                         << "[uoi] #" << static_cast<s32>(suSrcCount) << " slot " << liSlot
@@ -2749,6 +2760,8 @@ void RaceCarEntityModule::UpdateOutputInterfaces(
                         << ") render (" << lR.x << ", " << lR.y << ", " << lR.z
                         << ") flags " << static_cast<s32>(luFlags)
                         << " engine " << static_cast<s32>(lpActiveRaceCar->GetEngineState())
+                        << " mph " << lpS->mfSpeedMPH
+                        << " gas " << lpS->mfGas
                         << " playerIdx " << static_cast<s32>(mePlayerActiveRaceCarIndex) << "\n";
                 }
             }

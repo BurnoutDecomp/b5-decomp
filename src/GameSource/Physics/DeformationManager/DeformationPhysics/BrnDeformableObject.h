@@ -379,9 +379,13 @@ namespace Deformation
         void GetDeformedBoundingBox(CgsGeometric::AxisAlignedBox* lpBoxOut);                    // :545
 
         // DWARF :553. Push this car's stored contacts into the shared penetration solver (vs the
-        // other deformable object). const. DECLARE-ONLY.
-        void AddContactsToPenetrationSolver(PenetrationSolver* lpSolver, DeformableObject* lpOther,
-                                            s32 liBodyIndex, s32 liWorldIndex) const;            // :553
+        // model-pool base). const. DECLARE-ONLY.
+        // ⭐ 2026-08-23 (traffic wave 4, SOLVER wave): parameter names are the DWARF's
+        // (BrnDeformableObject.cpp:1877) -- a3 is the WORLD pseudo-body index (the caller passes
+        // KI_MAX_DEFORMATION_MODELS), a4 is THIS car's model index. The old liBodyIndex/liWorldIndex
+        // pair named them the wrong way round.
+        void AddContactsToPenetrationSolver(PenetrationSolver* lpSolver, DeformableObject* lpDefObjBase,
+                                            s32 liWorldObjectIndex, s32 liObjectIndex) const;    // :553
 
         EAbsorptionSets GetAbsorptionSet();                                                     // :556
         void ResetEntitySphereSize();                                                           // :560

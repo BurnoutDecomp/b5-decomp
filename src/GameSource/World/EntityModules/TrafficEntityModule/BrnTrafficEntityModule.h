@@ -993,6 +993,38 @@ namespace BrnTrafficIO { class InputBuffer_PreScene; class OutputBuffer_PreScene
         // E_STATE_RUNNING arm.
         void CreateNewVehicleEntities(BrnTrafficIO::OutputBuffer_PreScene* lpOutput);
 
+        // =====================================================================================
+        // WAVE 4 -- THE COLLISION half of the scene registration, and the overlap-pair half of
+        // the promotion chain. Bodies in BrnTrafficEntityModule_wT4_01.cpp / _wT4_02.cpp.
+        // =====================================================================================
+
+        // @0x827302C8 (~1030 insns). PreSceneUpdate's E_STATE_RUNNING leg, immediately after
+        // CreateNewVehicleEntities. Prologue r3 this, r4 lpInput, r5 lpOutput; asserts
+        // "lpInput != NULL" / "lpOutput != NULL" at .cpp 4807/4808. It is the ONLY producer of
+        // mVehicleSoaData.mCollidableVehicles and the only caller of AddVolumeInstance /
+        // AddForCollision for a traffic vehicle -- without it traffic has no broad-phase
+        // presence at all.
+        void UpdateCollidableVehicles(const BrnTrafficIO::InputBuffer_PreScene* lpInput,
+                                      BrnTrafficIO::OutputBuffer_PreScene* lpOutput);
+
+        // @0x8274B378 (78 insns). PrePhysicsUpdate's E_STATE_RUNNING else-arm, first leg.
+        // Asserts .cpp 5550/5551/5552. Walks the scene's RAW overlap-pair list and promotes
+        // every traffic half that is not already physical.
+        void BuildPotentialCollisionList(const BrnTrafficIO::InputBuffer_PrePhysics* lpInput,
+                                         BrnTrafficIO::OutputBuffer_PrePhysics* lpOutput,
+                                         TotalTrafficBitArray* lpCreatedBodies);
+
+        // @0x82747F58 (~120 insns). BuildPotentialCollisionList's per-half worker.
+        // lu64HalfVolumeInstanceId is the console's r5 -- the WHOLE 64-bit OutOverlapPair id
+        // whose high dword luHalfEntityWord already is. The body never reads it (r5 is not even
+        // saved in the prologue); it is kept so the argument list matches the console's and a
+        // later reader is not left wondering which of the six arguments went missing.
+        void HandleHalfPotentialContact(u32 luHalfEntityWord,
+                                        u64 lu64HalfVolumeInstanceId,
+                                        u32 luOtherHalfEntityWord,
+                                        BrnTrafficIO::OutputBuffer_PrePhysics* lpOutput,
+                                        TotalTrafficBitArray* lpCreatedBodies);
+
         static void _AssertLayout();
 
     private:

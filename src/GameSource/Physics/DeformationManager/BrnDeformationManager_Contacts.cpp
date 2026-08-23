@@ -143,6 +143,9 @@ namespace Deformation
             // The per-object weighting is the model's weight factor (the asm splats the w-lane of
             // *(model+6476)+4176 -- the model's rigid-body weight).
             lpSolver->AddObject(liModelIndex, lTransform, lrModel.GetWeightFactor());
+            // (lpDefObjBase = the model-pool base, liWorldObjectIndex = the WORLD pseudo-body
+            // index, liObjectIndex = this car's model index -- DWARF names; see the callee's
+            // ⭐ 2026-08-23 note, the old liBodyIndex/liWorldIndex pair was the wrong way round.)
             lrModel.AddContactsToPenetrationSolver(lpSolver, mpaModels,
                                                    KI_MAX_DEFORMATION_MODELS, liModelIndex);
         }

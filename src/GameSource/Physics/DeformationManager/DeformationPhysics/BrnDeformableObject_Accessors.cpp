@@ -20,6 +20,7 @@
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnDeformableObject.h"
 
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/VehiclePhysics.h"   // VehiclePhysics (GetTransform/GetLinearVelocity/mHalfExtent)
+#include "rw/math/vpu/matrix44affine_operation.h"   // InverseOfMatrixWithOrthonormal3x3 (GetInverseTransform)
 
 namespace BrnPhysics
 {
@@ -40,6 +41,23 @@ namespace Deformation
     void DeformableObject::GetTransform(Matrix44Affine& lrOut) const
     {
         lrOut = mVehicleBody.GetVehiclePhysics()->GetTransform();
+    }
+
+    // :383 -- the world -> model affine inverse of the attached body's transform.
+    // ⭐ BODIED 2026-08-23 (traffic wave 4, SOLVER wave). Declared since the header was written but
+    // BODYLESS, because it has NO out-of-line symbol on either console: every caller inlines it.
+    // The X360 inlining that forced it is DeformationSensor::ValidateAndAddContact @0x825E1788's
+    // vehicle arm -- 0x825E1970..0x825E198C is the vmrglw/vmrghw 3x3 transpose and
+    // 0x825E199C..0x825E19A4 the negated-Pos cascade, i.e. exactly
+    // rw::math::vpu::InverseOfMatrixWithOrthonormal3x3 over vehPhys+0x10 (mTransform). The DWARF
+    // names the pair explicitly in that function's inline list (BrnPhysicsUnity2.cpp:10334:
+    // GetInverseTransform -> InverseOfMatrixWithOrthonormal3x3), so this body is that call, not a
+    // guess. The 3x3 is a pure rotation on a vehicle body, which is why the cheap orthonormal
+    // inverse (transpose + -R^T*Pos) is the one the console uses rather than the general adjugate.
+    void DeformableObject::GetInverseTransform(Matrix44Affine& lrOut)
+    {
+        lrOut = rw::math::vpu::InverseOfMatrixWithOrthonormal3x3(
+            mVehicleBody.GetVehiclePhysics()->GetTransform());
     }
 
     // :387 -- the attached body's world-space linear velocity (vehPhys+0x50), copied out.

@@ -301,11 +301,13 @@ void TrafficEntityModule::PrePhysicsUpdate( CgsModule::IOBufferStack* /*lpInputB
             TotalTrafficBitArray lCreatedBodies;
             lCreatedBodies.UnSetAll();
 
-            {
-                static bool sbLogged = false;
-                LogMissingLeg( sbLogged,
-                    "BuildPotentialCollisionList @0x8274B378 (in, out, &lCreatedBodies)" );
-            }
+            // ⭐ UN-GATED wave 4: BuildPotentialCollisionList @0x8274B378 is BODIED
+            // (_wT4_02.cpp). 0x8274C7A4, the FIRST leg of this arm -- it walks the scene's raw
+            // overlap-pair list and promotes every non-physical traffic half to a physics body
+            // BEFORE the driver inputs are generated, so a car the player is about to hit
+            // already owns a slot when contact generation runs. Mount _wT4_02.cpp in
+            // tools/build/build_game_exe.bat or this call is an LNK2019 at exe link.
+            BuildPotentialCollisionList( lpInput, lpOutput, &lCreatedBodies );
             {
                 static bool sbLogged = false;
                 LogMissingLeg( sbLogged, "UpdateJunctionFUP (no export dumped)" );

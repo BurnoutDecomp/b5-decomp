@@ -740,13 +740,14 @@ void ActiveRaceCar::ApplyRenderPoseInterpolation(f32 lfAlpha)
 // this wave (BrnVehicleEvents.h's banner). Under the old 4-byte model every one of them was
 // off by one member.
 //
-// ⛔ NO CALLER YET, and that is the honest state of this slice: the console's only caller is
-// RaceCarEntityModule::ReadUpdatedActiveRaceCarDataFromPhysics @0x822E87B8, which needs
-// VehicleOutputInterface::maRaceCarStates to be populated -- i.e. the vehicle manager's
-// ProcessCreateEvents/WriteOutVehicleStats legs, which are not landed. Until then
-// PublishRenderPoseWithoutPhysicsBringUp still owns the render pose. This function is the
-// consumer that replaces it, written against the real payload, and it is deliberately NOT
-// wired to a fabricated producer.
+// ⭐ LIVE AS OF 2026-08-23 -- the "NO CALLER YET" banner that stood here is RETIRED, MEASURED.
+// The console's only caller, RaceCarEntityModule::ReadUpdatedActiveRaceCarDataFromPhysics
+// @0x822E87B8, runs every PostPhysics frame and its mUsedRaceCars gate PASSES, so this body
+// owns mPhysicsState and the render pose. Proof on a booted drive run (flow_run -Drive
+// -MotionProbe, no teleport, 0 asserts): [motion] pos 3002.70 7.12 -1728.06 vel |v| 33.28
+// mph 73.42 gear 3 gas 1.000000 engine 2, tracking frame by frame, with [T4-player] and the
+// world->director publish carrying the same pose. maRaceCarStates IS populated (vehicle
+// manager ProcessCreateEvents + WriteOutVehicleStats are both landed and mounted).
 // ----------------------------------------------------------------------------
 void ActiveRaceCar::UpdatePhysicsState(const BrnPhysics::Vehicle::RaceCarState* lpState,
                                        CgsWorld::WorldMap2D* lpWorldMap)

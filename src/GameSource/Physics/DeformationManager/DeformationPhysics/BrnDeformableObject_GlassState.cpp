@@ -146,8 +146,15 @@ namespace Deformation
         static const u32 KU_CARSTATE_WHEEL_TAG_BASE  = 1632;   // the 4 wheel tag-point world positions
 
         // DeformationSensor stride / fields OutputState walks (console).
-        static const u32 KU_SENSOR_ARRAY_OFFSET      = 6484;   // &maDeformationSensors[0] (dword index 1621)
-        static const u32 KU_SENSOR_STRIDE            = 432;    // sizeof(DeformationSensor)
+        // ⛔ RETIRED 2026-08-23 (traffic wave 4, stored-contact wave) -- X360 VALUES ON THE HOST.
+        // `this+6484` is &maDeformationSensors[0].mpSpec and 432 is the CONSOLE
+        // sizeof(DeformationSensor); on x64 every pointer in the sensor widens, so neither the base
+        // nor the stride lands on a sensor at all. OutputState now walks maDeformationSensors[] BY
+        // NAME and reads mpSpec / mpLocalSpaceSphere / mpWorldSpaceSphere as members. Kept here only
+        // as the documented console figures for reading the asm (`v8 = result + 1621`, `v8[102]`,
+        // `v8[103]`). ⛔ DO NOT USE EITHER IN HOST POINTER ARITHMETIC.
+        static const u32 KU_SENSOR_ARRAY_OFFSET      = 6484;   // reference only -- see above
+        static const u32 KU_SENSOR_STRIDE            = 432;    // reference only -- see above
 
         // The attached vehicle physics pointer + its transform sub-blocks (console).
         static const u32 KU_VEHICLE_PHYSICS_PTR      = 6476;   // mVehicleBody.GetVehiclePhysics() (dword 1619)
@@ -503,17 +510,22 @@ namespace Deformation
         f32 lfScratchSumSq = 0.0f;   // v61 (the running vaddfp accumulator)
         if (liNumSensors)
         {
-            char*       lpcDst    = lpcCarState + KU_CARSTATE_SENSOR_ARRAY;                 // a2+32 (80-byte stride)
-            const char* lpcSensor = lpcThis + KU_SENSOR_ARRAY_OFFSET;                      // &maDeformationSensors[0]
+            char* lpcDst = lpcCarState + KU_CARSTATE_SENSOR_ARRAY;                          // a2+32 (80-byte stride)
+            s32   liSensor = 0;
             s32 liRemaining = liNumSensors;
             do
             {
-                // The asm reads three sensor sub-vectors through pointers stored in the sensor record
-                // (*v8 and v8[102]) and one scalar (*(*v8 + 40)); it forms (p2 - p1 - dst) and a
-                // (p1 - p2) squared-magnitude that it folds into the running scratch sum. The sensor
-                // interior is reached at the asm offsets within the 432-byte stride.
-                const char* lpA = *reinterpret_cast<const char* const*>(lpcSensor + 0);    // *v8
-                const char* lpB = *reinterpret_cast<const char* const*>(lpcSensor + 408);  // v8[102]
+                // ⭐ 2026-08-23: the sensor walk is BY NAME. It used to be
+                // `lpcSensor = this + 6484; ... lpcSensor += 432`, i.e. the console base + console
+                // sizeof(DeformationSensor) -- both X360 values that do not land on a sensor on the
+                // host. The three pointers the asm loads out of the sensor record (*v8, v8[102],
+                // v8[103]) are mpSpec, mpLocalSpaceSphere and mpWorldSpaceSphere; their INTERIORS
+                // (SensorSpec's leading rest vector + its +40 scalar, the spheres' leading Vector4)
+                // stay raw-offset because neither type's layout is homed in this TU.
+                const DeformationSensor& lrSensor = maDeformationSensors[liSensor];
+
+                const char* lpA = reinterpret_cast<const char*>(lrSensor.mpSpec);              // *v8
+                const char* lpB = reinterpret_cast<const char*>(lrSensor.mpLocalSpaceSphere);  // v8[102]
 
                 const Vector3 lDst   = *reinterpret_cast<const Vector3*>(lpcDst);           // current dst row
                 const Vector3 lvA    = *reinterpret_cast<const Vector3*>(lpA);
@@ -536,11 +548,11 @@ namespace Deformation
 
                 // dst-16 = the sensor scalar vector at v8[103]. The asm stores it via
                 // stvx128 v12,r8,r7 with r8 = dst+16 and r7 = -32 => (dst+16) + (-32) = dst-16.
-                const char* lpC = *reinterpret_cast<const char* const*>(lpcSensor + 412);  // v8[103]
+                const char* lpC = reinterpret_cast<const char*>(lrSensor.mpWorldSpaceSphere);  // v8[103]
                 *reinterpret_cast<Vector3*>(lpcDst - 16) = *reinterpret_cast<const Vector3*>(lpC);
 
-                lpcDst    += KU_CARSTATE_SENSOR_STRIDE;   // += 80
-                lpcSensor += KU_SENSOR_STRIDE;            // += 432
+                lpcDst += KU_CARSTATE_SENSOR_STRIDE;      // += 80
+                ++liSensor;                               // console: v8 += 108 dwords (432 bytes)
                 --liRemaining;
             }
             while (liRemaining);
