@@ -11,17 +11,14 @@
 // FixUp/FixDown rebase the leading pointer of the resource (when non-null) by the
 // delta (the rw::Resource's load base), then (re)construct/destruct the embedded
 // BaseCollisionGenerator at dword offset 2. BaseCollisionGenerator is its own TU.
-
-namespace CgsSceneManager
-{
-    namespace CgsCollision
-    {
-        struct BaseCollisionGenerator
-        {
-            BaseCollisionGenerator* Destruct();
-        };
-    }
-}
+//
+// 2026-08-24 (physics mount wave B1): this TU used to carry a DECLARE-ONLY shadow
+// `struct BaseCollisionGenerator { BaseCollisionGenerator* Destruct(); }` -- the standing
+// shadowing-redeclaration defect: it mangled the two call sites below to a pointer-returning
+// symbol NO TU can define (the real, mounted CgsCollisionGenerator.cpp defines
+// `void Destruct()`, the empty ICF-folded teardown @0x8284CB38). The link caught it
+// (LNK2019 from this TU). Fixed by including the real class header instead.
+#include "GameShared/GameClasses/SceneManager/Collision/ContactGenerator/CgsCollisionGenerator.h"
 
 namespace CgsPhysics
 {
