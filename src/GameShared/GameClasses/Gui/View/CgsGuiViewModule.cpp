@@ -357,11 +357,21 @@ namespace CgsGui
                 break;
             }
 
-            // The custom-renderer manager per-event hook (guest vtbl slot +0x10 on
-            // mpCustomRendererManager, called for every event when a manager is
-            // installed). FLAG (deferred dispatch): no manager is installed on the
-            // boot path and the manager real vtable order is un-recovered; wire the
-            // hook when the CustomRendererManager type lands.
+            // ⭐ [tut-ticker] the custom-renderer manager per-event hook -- the CONSOLE'S
+            // manager feed. Guest tail of the loop body @0x8285FCE8:
+            //     if ( *v10 ) (*(**v10 + 16))(*v10, v8, v9);   // v10 == view+57352
+            // i.e. every view event is forwarded to the installed manager's virtual
+            // RecvEvent(event, id) -- and on the console the view queue receives the WHOLE
+            // module input queue via GuiModule::BridgeFromInputToView, so this hook is where
+            // GUI event 537 (the tutorial ticker) meets the manager.
+            // ⚠️ [FLAG PC seat deviation, 2026-08-24] on THIS build the manager forward runs
+            // in BrnGui::GuiModule::DispatchInboundGuiEvents (the PC's module-input pump)
+            // instead of here. Reason: the PC feeds the view queue SELECTIVELY (direct posts
+            // of 14/18/26 at their producers; BridgeFromInputToView has no caller), so the
+            // full event stream only exists at the module pump -- and forwarding from BOTH
+            // seats would double-deliver the direct-posted 14s to the manager. Move the
+            // forward HERE (and delete it there) when BridgeFromInputToView gets its console
+            // caller and the selective posts retire.
 
             liEventId = lpEvents->CgsModule::VariableEventQueue<65536, 16>::GetNextEvent(
                 lpEvent, &lpEvent, &liSize);

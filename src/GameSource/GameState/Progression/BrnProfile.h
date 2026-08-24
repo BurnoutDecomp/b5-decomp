@@ -499,6 +499,13 @@ public:
     // the X360 a1[10720] read) and compares it >= 4. Trivial named-member getter; body in the Profile TU.
     u32 GetMedalCountFromTheStart() const;
 
+    // [tut-ticker] X360 raw read of Profile+108 (mfInCarTimePlayed): TrainingManager::Update /
+    // RequestTraining / TriggerAnyFollowOnTrainingTips all `lfs` it for the timed-tip and
+    // "seconds since last tip" gates. Trivial named-member getter; body in the Profile TU.
+    // ⚠️ FLAG: nothing on this build ACCUMULATES the member yet (its console writer is the
+    // un-reconstructed progression time tick), so it reads as the loaded/Construct value.
+    f32 GetInCarTimePlayed() const;
+
     // X360: ProgressionManager::RepairUnlockedVehicle delegates to Profile::RepairUnlockedVehicle
     // (this+0x170, lCarId) -- clears the just-repaired car's stored deform/damage. Returns the
     // updated CarData record (the X360 hands a pointer back in r3).

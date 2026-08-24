@@ -150,6 +150,19 @@ enum EGameActionType
     // X360 62) and CAR_UNLOCK_END (DWARF 58 -> X360 63).
     E_ACTION_CAR_SELECT_CHANGE_COLOUR   = 79,    // DWARF 74 (+5 X360)
 
+    // ⭐ [tut-ticker] X360-attested pair (2026-08-24):
+    //   77  -- "the player's car settled out of car-select": HandleGameActions case 77 reads the
+    //          ACTIVE player car's VehicleListEntry and refreshes the boost strategy + queues the
+    //          DRIVES_*_CAR training tip. Producer: CarSelectManager::UpdateExitState (the 32-byte
+    //          post its own KI_ enum mislabels ALLOW_BOOST_EARNING -- the console case ignores the
+    //          payload entirely).
+    //   149 -- "request a training tip": the 4-byte ETrainingType relay into the world's
+    //          per-car training ring (HandleGameActions case 149 -> AddTrainingRequest); posted by
+    //          CarSelectManager::UpdateExitState (payload 0 == LEAVES_JUNKYARD),
+    //          ModeManager::UpdateCurrentMode/StartModeIntro, ScoringSystem, StreetManager et al.
+    E_ACTION_CAR_SELECT_FINISHED        = 77,    // size 32 -- payload unread by the consumer
+    E_ACTION_REQUEST_GAME_TRAINING      = 149,   // size 4  -- the ETrainingType
+
     // Freeburn-challenge action block (ChallengeManager keystone). X360-ATTESTED values:
     // the PS3-DWARF block is 145..153, but every ChallengeManager AddEvent callsite posts
     // id == DWARF+8 with the byte size matching the DWARF struct exactly (update action

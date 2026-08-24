@@ -91,6 +91,50 @@ public:
     const GameMode* GetCurrentGameMode() const                      { return mpCurrentGameMode; }
     bool            IsWaitingForModeDataToLoad() const;
 
+    // ------------------------------------------------------------------------
+    // ⭐ [tut-ticker] THE THREE MODE CLOCKS (2026-08-24). DWARF BrnModeManager.h:1025/1026/1027
+    // (mfTimeInFreeBurn / mfTimeInMode / mfTimeInOnline); X360 ModeManager +0x951C/+0x9520/+0x9524
+    // (== GameStateModule +42300/+42304/+42308, the raw reads TrainingManager::RequestTraining /
+    // IsTipAllowedInGameMode / Update open-code). Identity PROVEN from the writers, not the DWARF
+    // order alone: ModeManager::PreWorldUpdate @0x823537B8 accumulates +0x951C ONLY while no game
+    // mode is running AND gsm->mCarSelectManager.mJunkyardId == 0 AND the TrainingManager's
+    // picture-paradise byte is clear (else resets it) == "time spent free-burning"; +0x9520
+    // accumulates whenever a mode IS running; +0x9524 accumulates only while the mode is online
+    // (else reset). All three are zeroed by ModeManager::Construct @0x82340008, and the first two
+    // by SetupGameMode @0x8234B158 / SendModeStopMessages @0x8234BEC0.
+    //
+    // ⛔ WHY THESE ARE NOT OPTIONAL FLAG-ZEROES: TrainingManager::Update's WAIT_FOR_MESSAGE arm
+    // (state 4, the LEAVES_JUNKYARD tip) only advances to PENDING when GetTimeInFreeBurn() > 3.0
+    // -- a permanently-zero stand-in silently kills the whole tutorial ticker (the placeholder-
+    // identity-element trap: 0 is not this expression's identity).
+    // ------------------------------------------------------------------------
+    f32 GetTimeInFreeBurn() const { return mfTimeInFreeBurn; }   // DWARF :657
+    f32 GetTimeInMode()     const { return mfTimeInMode; }       // DWARF :660
+
+    // The extracted CLOCK leg of ModeManager::PreWorldUpdate @0x823537B8 (the rest of that
+    // body -- scoring updates, network results, payback takedowns -- is not reconstructed).
+    // [FLAG PC bring-up] the EXTRACTION is the deviation; the accumulate/reset conditions and
+    // the "game timestep" source are the console's own (the console reads timerStatus base *
+    // multiplier off the pre-world input buffer; the caller hands the same product in).
+    void PreWorldUpdateClocksBringUp(f32 lfGameTimestep);
+
+    // The extracted five inter-mode seed stores of ModeManager::Construct @0x82340008 (sole
+    // caller: GameStateModule::Construct):
+    //     *(+0xD94) = -1  (meCurrentGameModeType = E_MODE_NONE)
+    //     *(+0xD98) = 0   (mpCurrentGameMode)
+    //     *(+0x951C) = *(+0x9520) = *(+0x9524) = 0.0f   (the three clocks)
+    // ⭐ THE FIRST STORE IS LOAD-BEARING AND WAS MISSING ON THIS BUILD: nothing ever wrote
+    // meCurrentGameModeType, so between modes it read 0 == E_MODE_OFFLINE_RACE instead of the
+    // console's -1 == E_MODE_NONE. Two measured consumers of that lie: TrainingManager::
+    // IsTipAllowedInGameMode's mode switch (0 lands in the mode-running arm and rejects the
+    // junkyard tips), and TranslateGameActionsToGuiEvents case 58 (mode 0 picks the BOOST-BAR
+    // presentation, GUI event 218, where the console's free-roam -1 takes the unsigned-compare
+    // default and posts the plain 217 -- see that arm's own banner).
+    // Also stores the owning-module back-pointer (console `*(a1 + 27992) = a2`, the leading
+    // store of the same Construct) -- the clock leg reads the junkyard/picture-paradise state
+    // through it.
+    void ConstructInterModeStateBringUp(GameStateModule* lpGameStateModule);
+
     // ADDITIVE GROW (declare-only) for the BrnMugshotManager TU. X360-inlined helper: true when the
     // current game mode is in one of its post-event states (the X360 reads the current mode pointer
     // at ModeManager+0x1DB8, then tests its state field == 3 / 5 / 4). MugshotManager gates camera/
@@ -328,6 +372,12 @@ private:
     s32                              miNetworkStuntActiveCarIndex;  // X360 +0x6CD0 (CarData active-race-car index)
     s32                              miNetworkStuntScore;           // X360 +0x6CD4 (the new score)
     s32                              miNetworkStuntPreviousScore;   // X360 +0x6CD8 (the car's prior online stunt score)
+
+    // ⭐ [tut-ticker] the three mode clocks -- see the accessor banner above for the full
+    // identity proof. X360 +0x951C / +0x9520 / +0x9524.
+    f32                              mfTimeInFreeBurn;              // DWARF h:1025 -- free-roam seconds (no mode, not junkyard, not picture-paradise)
+    f32                              mfTimeInMode;                  // DWARF h:1026 -- seconds in the running game mode
+    f32                              mfTimeInOnline;                // DWARF h:1027 -- seconds in an online mode (reset offline)
 
     // Latch flags (X360 single bytes deep in the object).
     bool                             mbOnlineFinalStandingsShown;   // X360 +0x94F8 (set by TellGuiToShowOnlineFinalStandings)

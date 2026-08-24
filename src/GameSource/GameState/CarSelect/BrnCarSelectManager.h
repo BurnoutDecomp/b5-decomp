@@ -187,6 +187,12 @@ private:
     CgsID GetNextUnlockCarID(CgsID lCurrentID);
 
 public:
+    // [tut-ticker] X360-inlined read of mJunkyardId (+0x20): ModeManager::PreWorldUpdate
+    // @0x823537B8 and GameStateModule::ShouldAllowTimedTutorialTips @0x82356DB0 both `ld` the
+    // CgsID at gsm+183744 == &mCarSelectManager + 0x20 and test it non-zero ("is a junkyard
+    // flow active"). De-inlined to this named accessor; no symbol exists in the image.
+    CgsID GetJunkyardId() const { return mJunkyardId; }
+
     void DEBUG_UnlockCarsForTesting();
 
     // Never-called layout pin (complete-class, private access). PARITY-BY-NAMED-MEMBER: pins the

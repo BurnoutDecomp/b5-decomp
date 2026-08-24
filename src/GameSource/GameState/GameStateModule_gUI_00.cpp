@@ -246,6 +246,11 @@ void GameStateModule::PreWorldUpdateStuntBringUp(f32 lfGameTimestep, bool lbIsAG
     // the local queue would be a byte-for-byte copy of the carry queue. The Clear IS the
     // console's, and it is what makes the queue a strict one-frame buffer.
     ProcessGameEventsPropHitBringUp(&mGameEventCarryQueue);
+    // ⭐ [tut-ticker] the dispatcher's CASE-113 arm, over the same merged queue in the same
+    // walk position (the console's ProcessGameEvents handles every case in one pass; this
+    // tree extracts one arm per function -- see the arm's banner in BrnGameStateModule.cpp).
+    // MUST run before the Clear below, for the same reason the prop-hit arm does.
+    ProcessGameEventsTrainingRequestBringUp(&mGameEventCarryQueue);
     mGameEventCarryQueue.Clear();
 
     // ---- 2) TriggerQueryManager: ARM the trigger set -----------------------------------------

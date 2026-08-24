@@ -448,9 +448,10 @@ void BridgeEntityModulesToOutput_PostPhysics(
 // [FLAG PC bring-up] the REPLAY GLOBAL interface has no destination: the world update-output
 // buffer has no replay-global member and the console's own leg is the three above plus the
 // game-event append (it never forwards the replay global one either).
-// [FLAG] the game-event queue append is dropped: the race-car module's game-event producers
-// (SendGameEvents @ the console's own PostPhysicsUpdate tail) are un-homed on this build, so
-// the source ring is always empty; the transfer lands with them.
+// [FLAG RETIRED 2026-08-24, tut-ticker wave] the game-event queue append used to be dropped
+// ("the race-car module's game-event producers are un-homed"). RaceCarEntityModule::
+// SendGameEvents is bodied now (the training-request drain; its event-9 arm stays parked in
+// ITS banner) and the transfer is live below.
 // [FLAG] the console's CPU monitor (worldModule + 6167720) is not modelled on this leg --
 // the sibling bridges in this file take the same disposition.
 // ----------------------------------------------------------------------------
@@ -475,6 +476,15 @@ void BridgeRaceCarEntityInfoToOutput_PostPhysics(
         lpRaceCarOutput_PostPhysics->GetReplayActiveRaceCarOutputInterface());
     lpOutputBuffer->SetRaceCarGlobalOutputInterface(
         lpRaceCarOutput_PostPhysics->GetGlobalRaceCarOutputInterface());
+
+    // ⭐ [tut-ticker] the console's fourth statement -- LANDED 2026-08-24 with its producer
+    // (RaceCarEntityModule::SendGameEvents, which now drains the training-request ring as game
+    // event 113 into the source queue):
+    //     VariableEventQueue<1536,16>::Append<1536,16>( out->GetGameEventQueue(),
+    //                                                   in->GetGameEventQueue() );
+    // (the old FLAG above -- "the transfer lands with them" -- is paid.)
+    lpOutputBuffer->GetGameEventQueue()->Append(
+        *lpRaceCarOutput_PostPhysics->GetGameEventQueue());
 }
 
 

@@ -503,6 +503,42 @@ u32 Profile::GetMedalCountFromTheStart() const
 }
 
 // ====================================================================================
+// [tut-ticker] Profile::GetInCarTimePlayed
+// Trivial named-member getter for the raw Profile+108 read the TrainingManager bodies
+// open-code (see the header FLAG: no PC writer accumulates it yet).
+// ====================================================================================
+f32 Profile::GetInCarTimePlayed() const
+{
+    return mfInCarTimePlayed;
+}
+
+// ====================================================================================
+// [tut-ticker] Profile::ClearTrainingFlags
+// DEBUG-only reset of the whole 256-bit training bit array. The X360 inlines it into
+// TrainingManager::DEBUG_ClearTrainingFlags @0x82366050 as four zero `std`s over
+// profile+117952..117983 (v8[14744..14747] = 0); no out-of-line symbol exists.
+// ====================================================================================
+void Profile::ClearTrainingFlags()
+{
+    maHasPlayerSeenTraining = CgsContainers::BitArray<256u>();
+}
+
+// ====================================================================================
+// ⭐ [tut-ticker] Profile::HasPlayerSeenTrainingType  @ 0x8231C878
+// The read twin of SetTrainingAlreadySeen below: bounds-assert the tip id (the console's
+// own :2769 assert plus the CgsBitArray Get guard, CgsBitArray.h:203), then test the tip's
+// bit in the 256-bit training bit array.
+// ====================================================================================
+bool Profile::HasPlayerSeenTrainingType(ETrainingType leTrainingType) const
+{
+    CGS_ASSERT(leTrainingType >= 0 && leTrainingType < E_TRAINING_TYPE_COUNT,
+               "leTrainingType >= 0 && leTrainingType < E_TRAINING_TYPE_COUNT");  // :2769
+    CGS_ASSERT(static_cast<u32>(leTrainingType) < 256u, "invalid index : ");      // CgsBitArray.h:203
+
+    return maHasPlayerSeenTraining.IsBitSet(static_cast<u32>(leTrainingType));
+}
+
+// ====================================================================================
 // Profile::GetLicenceIssuedDate  @ 0x8235A0B8
 // Copy out the licence-issued date (returned by value).
 // ====================================================================================
