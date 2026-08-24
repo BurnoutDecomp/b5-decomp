@@ -5,6 +5,7 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"                            // CGS_ASSERT -- the two asserts Construct fires
 #include "GameShared/GameClasses/SceneManager/CgsEntityId.h"                  // KU_INVALID_ENTITY_ID (dword_82F2A3A4)
 #include "GameShared/GameClasses/Physics/CgsRigidBody.h"                      // K_INVALID_RIGID_BODY_ID (qword_82F2A3A8)
+#include "rw/math/vpu/vector3_operation.h"                                    // vpu::Dot (T-bone side-speed gates, wave B3b)
 
 #include <cmath>    // std::fabs, std::acos
 #include <cstddef>  // offsetof (layout asserts)
@@ -33,6 +34,7 @@ namespace BrnPhysics
 {
 namespace Vehicle
 {
+    namespace vpu = rw::math::vpu;   // vpu::Dot (T-bone side-speed gates, wave B3b)
 
 
     // The minimum combined closing speed below which a contact is too gentle to be any kind of
@@ -237,13 +239,16 @@ namespace Vehicle
                 else
                     liGrindType = 8;
             }
-            if (lbPushGrind && lpManagerOutputInterface)
+            // RE-POINTED 2026-08-24 (wave B3b): the asm sink r17 (`addi r3,r17,0x65F0`
+            // @0x826437A4) is the VEHICLE output interface's game-event queue, not the manager
+            // interface's (task #110's out-of-bounds proof; the wrong-class accessor is retired).
+            if (lbPushGrind && lpVehicleOutputInterface)
             {
                 GrindIoEventRecord lGrindEvent;
                 lGrindEvent.miGrindType = liGrindType;   // asm v204 = liGrindType
                 lGrindEvent.miReservedA = -1;            // asm v205 = -1
                 lGrindEvent.miReservedB = -1;            // asm v206 = -1
-                lpManagerOutputInterface->GetEventQueue().AddEventSafe(
+                lpVehicleOutputInterface->GetGameEventQueue()->AddEventSafe(
                     reinterpret_cast<const CgsModule::Event*>(&lGrindEvent), 31, 12);
             }
         }
@@ -337,12 +342,16 @@ namespace Vehicle
                         // mPlayerWonImpact, not a taken-down set -- see the header FLAG.
                         mPlayerWonImpact.SetBit(static_cast<u32>(liOther));
 
-                        // Driver-feedback bytes (asm: *(a32+27648) |= ...; *(a32+27649) = ...).
-                        if (lpManagerOutputInterface)
-                            lpManagerOutputInterface->FlagTakedownScoredForDriver(/*lbVictimIsHighSlot=*/false);
+                        // Driver-feedback bytes (asm @0x82643B00..0x82643B20: won |= r27,
+                        // lost |= !r27 on the VEHICLE interface's mAggressiveDrivingFlags --
+                        // re-pointed + re-armed 2026-08-24, wave B3b). FLAG: r27's def is not
+                        // register-traced through this locals-failed frame; mbPlayerWonImpact is
+                        // the one flag with the asm's exact won/lost meaning on this path.
+                        if (lpVehicleOutputInterface)
+                            lpVehicleOutputInterface->FlagTakedownScoredForDriver(lInfo.mbPlayerWonImpact);
 
                         // Push the takedown event, throttled to < 32 per frame (asm: v157 < 32).
-                        if (muTakedownEventsThisFrame < 32 && lpManagerOutputInterface)
+                        if (muTakedownEventsThisFrame < 32 && lpVehicleOutputInterface)
                         {
                             // THIS LINE DID NOT COMPILE. `lfImpactValue` is used
                             // here and DECLARED NOWHERE IN THIS FILE (its only occurrence in the
@@ -370,7 +379,9 @@ namespace Vehicle
                             // correction stays to the one field the asm settles outright.
                             lTakedownEvent.miReserved        = -1;                  // ⛔ asm says var_144, see above
                             ++muTakedownEventsThisFrame;                            // asm *(v39+172612) = v157 + 1
-                            lpManagerOutputInterface->GetEventQueue().AddEvent(
+                            // RE-POINTED 2026-08-24 (wave B3b): sink r17 == the vehicle output
+                            // interface (`addi r3,r17,0x65F0` @0x82643B48); see the grind push above.
+                            lpVehicleOutputInterface->GetGameEventQueue()->AddEvent(
                                 reinterpret_cast<const CgsModule::Event*>(&lTakedownEvent), 31, 12);
                         }
                     }
@@ -691,7 +702,8 @@ namespace Vehicle
                 lEventRecord.mbFlag         = 0;                            // asm v232 = 0
                 lEventRecord.muVictimIndex  = static_cast<u32>(liVictimIndex); // asm v234 = v36
                 lEventRecord.muReservedTail  = 0.0f;                        // asm v233 = 0.0
-                lpManagerOutputInterface->GetEventQueue().AddEvent(
+                // RE-POINTED 2026-08-24 (wave B3b): same r17 sink as the takedown/grind pushes.
+                lpVehicleOutputInterface->GetGameEventQueue()->AddEvent(
                     reinterpret_cast<const CgsModule::Event*>(&lEventRecord), 63, 32);
             }
         }
@@ -807,41 +819,69 @@ namespace Vehicle
         if (lpInfo->mbRaceCarAIsCrashing || lpInfo->mbRaceCarBIsCrashing)
             return false;
 
-        // asm v4 = the point lies inside car A's side-plane pair; asm v6 = inside car B's. The
-        // takedown then fires with a fixed entity-id order (below). FLAG: which physical car is the
-        // VICTIM vs the AGGRESSOR depends on IsPointBetweenTwoParallelPlanes' plane orientation
-        // (unrecovered); we reproduce the asm's literal id-load order rather than re-deriving it.
-        bool lbInPlanesA = false;  // asm v4 (planes built from car A's record, 5216*indexA)
-        bool lbInPlanesB = false;  // asm v6 (planes built from car B's record, 5216*indexB)
+        // FLAGS RETIRED 2026-08-24 (wave B3b): IsPointBetweenTwoParallelPlanes is recovered
+        // (@0x825C5660, four vector args -- point, a point on each plane, the shared normal) and
+        // this block is rebuilt from the caller asm @0x8263D4F0..0x8263D69C. The console's actual
+        // test is NOT "contact point in a slab": each arm asks whether ONE CAR'S POSITION lies
+        // inside the OTHER car's fore/aft slab (the slab built from that car's At axis and its
+        // deformable-AABB min/max z, inset by 1.0m each end == splat @0x82FB8280), gated on the
+        // rammer's lateral speed across the victim's side (|dot(victim.right, rammer.mLastLinear-
+        // Velocity)| > mfTBoneTakedownSpeed * 0.44704 -- a SPEED threshold, not a half-width).
+        bool lbARamsB = false;  // asm r9  (A's position inside B's slab; A supplies the side speed)
+        bool lbBRamsA = false;  // asm r26 (B's position inside A's slab)
 
-        // Perpendicularity band: |angle - pi/2| < band(deg) * (pi/180).
-        const f32 lfPiOver2 = 1.5707964f;
+        // Perpendicularity band: ||angle| - pi/2| < band(deg) * (pi/180)  (flt_8208F604/8208F5F4).
+        const f32 lfPiOver2  = 1.5707964f;
         const f32 lfDegToRad = 0.017453292f;
         if (std::fabs(std::fabs(lpInfo->mfAngleBetweenCars) - lfPiOver2)
             < mfTBoneTakedownMaxAngle * lfDegToRad)
         {
-            const f32 lfHalfWidth = mfTBoneTakedownSpeed * KF_SPEED_UNIT_SCALE; // FLAG: scale rodata flt_82F31928
+            const f32 KF_SLAB_INSET     = 1.0f;   // 0x82FB8280 <- splat(flt_82001C98)
+            const f32 lfMinLateralSpeed = mfTBoneTakedownSpeed * KF_SPEED_UNIT_SCALE;   // flt_82F31928
 
-            // The X360 builds a parallel-plane pair from a car's transform basis + the half-width and
-            // tests the contact point against it (twice: once per car). The plane-construction VMX
-            // math is delegated to IsPointBetweenTwoParallelPlanes (declared-only -- not in this
-            // dossier). FLAG: the two plane vectors are approximated by the car's forward (At) axis
-            // and a half-width-scaled lane; the exact VMX plane basis is unrecovered. The asm runs
-            // the A-record test first; only if it fails does it run the B-record test.
-            const Vector3 lvPoint  = lpInfo->mpContact->mPointOnA;
-            const Vector3 lvWidth  = Vector3{ lfHalfWidth, lfHalfWidth, lfHalfWidth, 0.0f };
-            if (IsPointBetweenTwoParallelPlanes(lvPoint, lpInfo->mRaceCarATransform.At(), lvWidth))
+            RaceCarPhysics* const lpCarA =
+                &maRaceCarVehicles[static_cast<s32>(lpInfo->meActiveRaceCarIndexA)];
+            RaceCarPhysics* const lpCarB =
+                &maRaceCarVehicles[static_cast<s32>(lpInfo->meActiveRaceCarIndexB)];
+
+            // Arm 1 -- A rams B's side: A's last linear velocity across B's right axis clears the
+            // threshold AND A's position sits between B's (inset) front/rear planes.
+            if (std::fabs(vpu::Dot(lpCarB->mTransform.xAxis, lpCarA->mLastLinearVelocity))
+                    > lfMinLateralSpeed)
             {
-                lbInPlanesA = true;
+                const Vector3 lvBFront = lpCarB->mTransform.zAxis * lpCarB->GetDeformableAABB().mMax.z
+                                       + lpCarB->mTransform.wAxis - lpCarB->mTransform.zAxis * KF_SLAB_INSET;
+                const Vector3 lvBRear  = lpCarB->mTransform.zAxis * lpCarB->GetDeformableAABB().mMin.z
+                                       + lpCarB->mTransform.wAxis + lpCarB->mTransform.zAxis * KF_SLAB_INSET;
+                if (IsPointBetweenTwoParallelPlanes(lpCarA->mTransform.wAxis, lvBFront, lvBRear,
+                                                    lpCarB->mTransform.zAxis))
+                {
+                    lbARamsB = true;
+                }
             }
-            else if (IsPointBetweenTwoParallelPlanes(lvPoint, lpInfo->mRaceCarBTransform.At(), lvWidth))
+
+            // Arm 2 -- only when arm 1 did not fire: B rams A's side, the mirrored test.
+            if (!lbARamsB
+                && std::fabs(vpu::Dot(lpCarA->mTransform.xAxis, lpCarB->mLastLinearVelocity))
+                       > lfMinLateralSpeed)
             {
-                lbInPlanesB = true;
+                const Vector3 lvAFront = lpCarA->mTransform.zAxis * lpCarA->GetDeformableAABB().mMax.z
+                                       + lpCarA->mTransform.wAxis - lpCarA->mTransform.zAxis * KF_SLAB_INSET;
+                const Vector3 lvARear  = lpCarA->mTransform.zAxis * lpCarA->GetDeformableAABB().mMin.z
+                                       + lpCarA->mTransform.wAxis + lpCarA->mTransform.zAxis * KF_SLAB_INSET;
+                if (IsPointBetweenTwoParallelPlanes(lpCarB->mTransform.wAxis, lvAFront, lvARear,
+                                                    lpCarA->mTransform.zAxis))
+                {
+                    lbBRamsA = true;
+                }
             }
         }
 
-        if (!lbInPlanesA && !lbInPlanesB)
+        if (!lbARamsB && !lbBRamsA)
             return false;
+
+        const bool lbInPlanesA = lbARamsB;   // keep the downstream victim-order code readable
+        const bool lbInPlanesB = lbBRamsA;
 
         // Entity-id order, verbatim from the asm: the v4 (A-planes) path loads victim=idB,
         // aggressor=idA; the v6 (B-planes) path loads victim=idA, aggressor=idB.
@@ -1237,21 +1277,25 @@ namespace Vehicle
         EntityId lVictimId{};
         EntityId lAggressorId{};
 
-        // Candidate 1: situation test on record B. The situation helper + height test decide.
-        // asm 0x8263D840/D844: r5 = contact.mEntityIdA (aggressor), r25 = contact.mEntityIdB (victim).
-        if (CheckForVerticalTakedownSituation(lpVehB, lpVehA))
+        // FLAG RETIRED 2026-08-24 (wave B3b): CheckForVerticalTakedownSituation is recovered
+        // (@0x825C56D8 -- victim car + CONTACT POINT, the 80%-footprint test) and the two gates
+        // this caller wraps around it are decoded from @0x8263D7CC/@0x8263D80C: the AGGRESSOR
+        // must be really airborne (its air-time lane +0x1060.z > 0.2 == splat @0x82FB82A0,
+        // exactly RaceCarPhysics::IsReallyInAir) and the VICTIM's air-time lane must be ZERO
+        // (grounded). Candidate 1 tests A falling onto B (contact point on B); candidate 2, run
+        // unconditionally after it, tests B falling onto A and OVERWRITES the pair when it fires.
+        if (CheckForVerticalTakedownSituation(lpVehB, lpInfo->mpContact->mPointOnB)
+            && lpVehA->IsReallyInAir()
+            && lpVehB->mvTimeStandingStill_CoolDown_TimeWithoutTraction_TimeWithTraction.z == 0.0f)
         {
-            // FLAG: the up-axis height comparison (transform +4192 vs unk_82FB82A0, then ==0) is
-            // delegated to the situation helper result -- the in-record height lane is unmodelled.
             lbFired = true;
             lVictimId    = lpInfo->mRaceCarBEntityID; // asm r25 = *(mpContact+4) = idB -> victim (r4)
             lAggressorId = lpInfo->mRaceCarAEntityID; // asm r5  = *(mpContact+0) = idA -> aggressor
         }
 
-        // Candidate 2: situation test on record A. The asm runs BOTH situation tests unconditionally
-        // and this block OVERWRITES the victim/aggressor pair when it fires (asm 0x8263D8E0/D8E4:
-        // r5 = contact.mEntityIdB (aggressor), r25 = contact.mEntityIdA (victim)).
-        if (CheckForVerticalTakedownSituation(lpVehA, lpVehB))
+        if (CheckForVerticalTakedownSituation(lpVehA, lpInfo->mpContact->mPointOnA)
+            && lpVehB->IsReallyInAir()
+            && lpVehA->mvTimeStandingStill_CoolDown_TimeWithoutTraction_TimeWithTraction.z == 0.0f)
         {
             lbFired = true;
             lVictimId    = lpInfo->mRaceCarAEntityID; // asm r25 = *(mpContact+0) = idA -> victim (r4)

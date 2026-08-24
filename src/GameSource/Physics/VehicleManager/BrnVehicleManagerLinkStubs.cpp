@@ -93,20 +93,9 @@ namespace BrnPhysics
 {
 namespace Vehicle
 {
-    // LINK STUB -- real body in the unmounted BrnVehicleManager.cpp takedown chain (see banner).
-    void VehicleManager::SetRaceCarCrashing(
-        EntityId /*lVictimEntityId*/, EntityId /*lAggressorEntityId*/,
-        Vector3 /*lCollisionNormal*/, Vector3 /*lContactPoint*/,
-        BrnPhysics::Vehicle::VehicleOutputRequestInterface* /*lpRequestOutputInterface*/,
-        VehicleManagerOutputInterface* /*lpManagerOutputInterface*/,
-        BrnPhysics::Vehicle::VehicleOutputInterface* /*lpVehicleOutputInterface*/,
-        BrnPhysics::Deformation::DeformationInputInterface* /*lpDeformationInterface*/,
-        BrnGameState::ETakedownType /*leTakedownType*/)
-    {
-        CGS_ASSERT(false, "VehicleManager::SetRaceCarCrashing: link stub -- the real 923-insn body "
-                          "lives in the unmounted BrnVehicleManager.cpp; mount that chain and "
-                          "DELETE this stub (X360 @0x82634C90)");
-    }
+    // LINK STUB DELETED 2026-08-24 (physics mount wave B3b): BrnVehicleManager.cpp is mounted --
+    // the real 923-insn SetRaceCarCrashing @0x82634C90 owns the symbol, exactly the flip this
+    // stub's own text prescribed ("mount that chain and DELETE this stub").
 
     // LINK STUB (UpdateVehiclePhysics wave): body not reconstructed yet.
     void VehicleManager::UpdateVehicleImpacts(

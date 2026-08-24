@@ -531,5 +531,21 @@ void VehicleOutputInterface::AddTrafficState(EntityId lEntityID,
     }
 }
 
+
+// ==============================================================================================
+// FlagTakedownScoredForDriver -- MOVED HERE 2026-08-24 (physics mount wave B3b) from the
+// wrong class (VehicleManagerOutputInterface; task #110's proof). The asm is the inlined pair
+// of byte writes in HandleRaceCarRaceCarContact @0x82643B00..0x82643B20 on this interface's
+// mAggressiveDrivingFlags @0x6C00:
+//     lbz r9,0x6C00 ; or r9,r9,r27          ; stb  -> mbPlayerWonSlamThisFrame  |= playerWon
+//     lbz r8,0x6C01 ; cntlzw/extrwi(!r27)|r8 ; stb -> mbPlayerLostSlamThisFrame |= !playerWon
+// ==============================================================================================
+void VehicleOutputInterface::FlagTakedownScoredForDriver(bool lbPlayerWon)
+{
+    mAggressiveDrivingFlags.mbPlayerWonSlamThisFrame =
+        mAggressiveDrivingFlags.mbPlayerWonSlamThisFrame || lbPlayerWon;
+    mAggressiveDrivingFlags.mbPlayerLostSlamThisFrame =
+        mAggressiveDrivingFlags.mbPlayerLostSlamThisFrame || !lbPlayerWon;
+}
 }
 }
