@@ -45,7 +45,10 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h" // gpDebugPrint / gxMessageFilterFlags
 #include "GameShared/GameClasses/System/Timer/CgsFrameInterpolation.h" // ⚠️ FLAG PC QoL: BlendTransform (the render-pose interpolator)
 
+#include "GameSource/Physics/DeformationManager/SharedIO/BrnDeformationState.h" // DeformationState / CarState (UpdateDeformationState, 2026-08-24)
+
 #include <cstring>   // memset (the console's own inlined clears)
+#include <cmath>     // std::fabs (UpdateDeformationState's vandc sign-mask ABS)
 
 namespace BrnWorld
 {
@@ -1261,6 +1264,100 @@ void ActiveRaceCar::SetBraking(bool lbBraking)
     else
     {
         mRenderParams.SetBraking(lbBraking);
+    }
+}
+
+// ----------------------------------------------------------------------------
+// UpdateDeformationState @ 0x822D4A58 (107 insns; landed 2026-08-24, deform-land wave).
+// The per-car deformation readback -- see the header declaration for the field map. Body
+// decoded from the headless asm dump (scratchpad land_asm.txt):
+//   - assert IsAttached() (BrnActiveRaceCar.h:1096);
+//   - carState = lpDeformationState->GetCarStateF(mPhysicsState.mEntityId)  [`lwz r4,0x4A8`];
+//   - mRenderParams.mfDeformationSquared = carState+0x6A0 (summed displacement²);
+//   - mvfLowestPointWorldSpace = splat( pos.y - |xAxis.y*ext.x| - |yAxis.y*ext.y|
+//                                             - |zAxis.y*ext.z| )
+//     (rows/pos from mPhysicsState.mTransform @+0x2D0..0x300, extents from
+//      mPhysicsState.mHalfExtent @+0x430; the vandc-sign-mask ABS + three vsubfp);
+//   - mDeformedBBox <- the 32-byte pair at carState+0x640 (four `ld/std`);
+//   - mRenderParams.maAxlePositions[w] <- carState wheel tag point w (+0x660+16w), with the
+//     two baked index tripwires (BrnDeformationState.h:75 / BrnActiveRaceCar.h:2081).
+// ⚠️ DIVERGENCE (named, PC bring-up): the console dereferences the GetCarStateF result
+// unguarded -- its flow guarantees an attached car owns a live deformation slot. On this
+// build the deformation model add path is younger than the car create path, so a null here
+// is asserted + skipped LOUDLY rather than dereferenced.
+// ----------------------------------------------------------------------------
+void ActiveRaceCar::UpdateDeformationState(
+        const BrnPhysics::Deformation::DeformationState* lpDeformationState)
+{
+    CGS_ASSERT(IsAttached(), "IsAttached()");
+
+    const BrnPhysics::Deformation::CarState* lpCarState =
+        lpDeformationState->GetCarStateF(mPhysicsState.mEntityId.muValue);
+
+    // [FLAG PC bring-up] see the DIVERGENCE note above -- not a console branch.
+    CGS_ASSERT(lpCarState != 0, "lpCarState != NULL [PC bring-up guard]");
+    if (lpCarState == 0)
+    {
+        static bool sbReportedNoCarState = false;
+        if (!sbReportedNoCarState)
+        {
+            sbReportedNoCarState = true;
+            if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0 && CgsDev::Log::gpDebugPrint != 0)
+            {
+                *CgsDev::Log::gpDebugPrint
+                    << "[deform-readback] UpdateDeformationState: no live CarState for entity "
+                    << mPhysicsState.mEntityId.muValue
+                    << " -- deformation readback skipped for this car\n";
+            }
+        }
+        return;
+    }
+
+    // Summed squared sensor displacement -> the render damage scalar.
+    mRenderParams.SetDeformationSquared(lpCarState->GetSummedDisplacementSquared());
+
+    // [deform-readback] one-shot measurement: the first NON-ZERO summed displacement seen
+    // (the deform-land wave's acceptance metric -- prove the dents are real numbers, not a
+    // texture trick). Prints once per boot.
+    {
+        static bool sbReportedDisplacement = false;
+        if (!sbReportedDisplacement && lpCarState->GetSummedDisplacementSquared() > 0.0f
+            && (CgsDev::Message::gxMessageFilterFlags & 1) != 0 && CgsDev::Log::gpDebugPrint != 0)
+        {
+            sbReportedDisplacement = true;
+            *CgsDev::Log::gpDebugPrint
+                << "[deform-readback] first non-zero CarState: summedDispSq="
+                << lpCarState->GetSummedDisplacementSquared()
+                << " sensor0Disp=(" << lpCarState->maSensors[0].mDisplacement.x
+                << ", " << lpCarState->maSensors[0].mDisplacement.y
+                << ", " << lpCarState->maSensors[0].mDisplacement.z
+                << ") numSensors=" << static_cast<u32>(lpCarState->mu8NumSensors) << "\n";
+        }
+    }
+
+    // Oriented-box lowest world-space Y (the vandc-ABS + three vsubfp splat chain).
+    {
+        const Matrix44Affine& lrT = mPhysicsState.mTransform;
+        const Vector3&        lrE = mPhysicsState.mHalfExtent;
+        const f32 lfLowestY = lrT.wAxis.y
+                            - std::fabs(lrT.xAxis.y * lrE.x)
+                            - std::fabs(lrT.yAxis.y * lrE.y)
+                            - std::fabs(lrT.zAxis.y * lrE.z);
+        mvfLowestPointWorldSpace = VecFloat{ lfLowestY, lfLowestY, lfLowestY, lfLowestY };
+    }
+
+    // The deformed-bbox pair (carState+0x640, 32 bytes -- four ld/std on console).
+    mDeformedBBox.mMin = Vector4{ lpCarState->mDeformedBBoxMin.x, lpCarState->mDeformedBBoxMin.y,
+                                  lpCarState->mDeformedBBoxMin.z, lpCarState->mDeformedBBoxMin.w };
+    mDeformedBBox.mMax = Vector4{ lpCarState->mDeformedBBoxMax.x, lpCarState->mDeformedBBoxMax.y,
+                                  lpCarState->mDeformedBBoxMax.z, lpCarState->mDeformedBBoxMax.w };
+
+    // The four wheel tag points -> the render-side axle rows.
+    for (u32 luWheel = 0; luWheel < 4u; ++luWheel)
+    {
+        CGS_ASSERT(luWheel < 4u,
+                   "luWheelIndex < (int32_t)BrnPhysics::Vehicle::eNumDrivenWheels");
+        mRenderParams.SetAxlePosition(luWheel, lpCarState->GetWheelTagPoint(luWheel));
     }
 }
 

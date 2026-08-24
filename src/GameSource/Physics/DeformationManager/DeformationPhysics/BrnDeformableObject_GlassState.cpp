@@ -5,6 +5,7 @@
 #include "GameSource/Physics/DeformationManager/SharedIO/BrnDeformationState.h"                    // CarState
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/BrnSimpleVehiclePhysics.h"              // SimpleVehiclePhysics::GetGraphicsVehicleTransform / GetWheelsWorldTransfrom
 #include "GameShared/GameClasses/Physics/Deformation/BrnWheelPhysicalStates.h"                     // WheelPhysicalStates
+#include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnDetachedPartManager.h"       // DetachedPartManager -> PhysicalBodyPart (UpdateAndOutputJointStates)
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                                 // CGS_ASSERT
 
 #include "rw/math/vpu/vector3_operation.h"            // rw::math::vpu::{Subtract, MagnitudeSquared, ...}
@@ -175,6 +176,13 @@ namespace Deformation
         static const u32 KU_EM_WHEEL_STATE_BASE      = 240;    // &maWheelStates[0] (dword index 60; stride 400)
         static const u32 KU_EM_WHEEL_STATE_STRIDE    = 400;    // a3[100*n+60] -> 400 bytes per state
         static const u32 KU_EM_MAX_ENTRIES           = 28;     // KU_MAX_DEFORMATION_MODELS
+
+        // ⭐ RECOVERED 2026-08-24 (deform-land wave): unk_82FB8070 = splat(flt_820049E0 = 100.0),
+        // static-init writer @0x82C5D660 (headless idat xref decode). Consumed by OutputWheelData's
+        // sphere-size tripwire, UpdateAndOutputJointStates' detached-part radius clamp
+        // (@0x82609CE8/0x82609D28) and DeformableObject_Update's SetEntityRadius tripwire
+        // (@0x82649290).
+        static const f32 KVF_MAX_DEFORMABLE_OBJECT_SPHERE_SIZE = 100.0f;
     }
 
     // ===========================================================================================
@@ -316,7 +324,11 @@ namespace Deformation
         // graphics transform (GetGraphicsVehicleTransf result v71) rotates the pane normal into
         // world; the vehicle's physics transform at +16 (the asm's *(this+6476)+16) transforms the
         // live corner control-points into world.
-        const char* lpcVehicle = *reinterpret_cast<const char* const*>(lpcThis + KU_VEHICLE_PHYSICS_PTR);
+        const char* lpcVehicle = reinterpret_cast<const char*>(mVehicleBody.GetVehiclePhysics());
+        // ^ BY NAME (fixed 2026-08-24, deform-land wave): the old `*(this + 6476)` read used the
+        // CONSOLE offset on the HOST object -- every pointer above the seat widens on x64, so it
+        // dereferenced garbage. BOOT-MEASURED: first OutputData frame AV'd at OutputWheelData+0x67
+        // (fault 0x123587, event log -> map). KU_VEHICLE_PHYSICS_PTR stays as asm provenance only.
         const Vehicle::SimpleVehiclePhysics* lpSimple =
             reinterpret_cast<const Vehicle::SimpleVehiclePhysics*>(lpcVehicle);
         const Matrix44Affine lGraphicsTransform = lpSimple->GetGraphicsVehicleTransform();
@@ -419,15 +431,14 @@ namespace Deformation
         // effect-suppression bool (mbDontPlayGlassPaneEffects). UpdateGlass clears the latch at end.
         lEvent.mbDontPlaySmashEffect = mbDontPlayGlassPaneEffects;
 
-        // Queue onto BOTH glass queues (render-side @ this-relative +6896, entity-module @ +15920).
-        // The homed DeformationOutputInterface exposes the render-side queue BY NAME; the entity-
-        // module interface interior is opaque, so its queue is reached at the asm offset.
+        // Queue onto BOTH glass queues (render-side @ this-relative +6896, entity-module @ console
+        // +15920). ⭐ BY NAME on both sides as of 2026-08-24 (deform-land wave): the old raw
+        // `lpOutEM + 15920` cast was a CONSOLE offset -- on the host, maSkinData's widened
+        // pointers push the queue past +15920, so the cast pointed into maLocatorData and every
+        // AddEventSafe would have corrupted the locator table (latent while the EM interface had
+        // no consumer; the readback landed this wave). Same defect class as the EM operator= fix.
         lpOut->mGlassSmashOrCrackQueue.AddEventSafe(lEvent);
-
-        CgsModule::BaseEventQueue<GlassSmashOrCrackEvent>* lpEMQueue =
-            reinterpret_cast<CgsModule::BaseEventQueue<GlassSmashOrCrackEvent>*>(
-                reinterpret_cast<char*>(lpOutEM) + KU_OUTPUT_EM_GLASS_QUEUE);
-        lpEMQueue->AddEventSafe(lEvent);
+        lpOutEM->GetGlassSmashOrCrackQueue().AddEventSafe(lEvent);
     }
 
     // ===========================================================================================
@@ -559,7 +570,11 @@ namespace Deformation
 
         // (3) copy the four wheel handling rows from the attached vehicle (vehicle +1744) into the
         // CarState wheel block (+1600..). The asm copies four 16-byte rows.
-        const char* lpcVehicle = *reinterpret_cast<const char* const*>(lpcThis + KU_VEHICLE_PHYSICS_PTR);
+        const char* lpcVehicle = reinterpret_cast<const char*>(mVehicleBody.GetVehiclePhysics());
+        // ^ BY NAME (fixed 2026-08-24, deform-land wave): the old `*(this + 6476)` read used the
+        // CONSOLE offset on the HOST object -- every pointer above the seat widens on x64, so it
+        // dereferenced garbage. BOOT-MEASURED: first OutputData frame AV'd at OutputWheelData+0x67
+        // (fault 0x123587, event log -> map). KU_VEHICLE_PHYSICS_PTR stays as asm provenance only.
         const char* lpcHandling = lpcVehicle + KU_VEHICLE_HANDLING_ROWS;
         for (s32 liRow = 0; liRow < 4; ++liRow)
         {
@@ -625,7 +640,11 @@ namespace Deformation
         CGS_ASSERT(mpDeformationSpec != nullptr, "mpDeformationSpec");
 
         const char* lpcThis    = reinterpret_cast<const char*>(this);
-        const char* lpcVehicle = *reinterpret_cast<const char* const*>(lpcThis + KU_VEHICLE_PHYSICS_PTR);
+        const char* lpcVehicle = reinterpret_cast<const char*>(mVehicleBody.GetVehiclePhysics());
+        // ^ BY NAME (fixed 2026-08-24, deform-land wave): the old `*(this + 6476)` read used the
+        // CONSOLE offset on the HOST object -- every pointer above the seat widens on x64, so it
+        // dereferenced garbage. BOOT-MEASURED: first OutputData frame AV'd at OutputWheelData+0x67
+        // (fault 0x123587, event log -> map). KU_VEHICLE_PHYSICS_PTR stays as asm provenance only.
         const Matrix44Affine& lrVehicleTransform =
             *reinterpret_cast<const Matrix44Affine*>(lpcVehicle + KU_VEHICLE_TRANSFORM_OFFSET);
 
@@ -689,7 +708,11 @@ namespace Deformation
                                            DetachedWheelManager* lpWheelMgr)
     {
         const char* lpcThis    = reinterpret_cast<const char*>(this);
-        const char* lpcVehicle = *reinterpret_cast<const char* const*>(lpcThis + KU_VEHICLE_PHYSICS_PTR);
+        const char* lpcVehicle = reinterpret_cast<const char*>(mVehicleBody.GetVehiclePhysics());
+        // ^ BY NAME (fixed 2026-08-24, deform-land wave): the old `*(this + 6476)` read used the
+        // CONSOLE offset on the HOST object -- every pointer above the seat widens on x64, so it
+        // dereferenced garbage. BOOT-MEASURED: first OutputData frame AV'd at OutputWheelData+0x67
+        // (fault 0x123587, event log -> map). KU_VEHICLE_PHYSICS_PTR stays as asm provenance only.
         Vehicle::SimpleVehiclePhysics* lpSimple =
             reinterpret_cast<Vehicle::SimpleVehiclePhysics*>(mVehicleBody.GetVehiclePhysics());
 
@@ -697,9 +720,16 @@ namespace Deformation
         const char* lpcSpec  = reinterpret_cast<const char*>(mpDeformationSpec);
         const bool  lbApplySteer = (*reinterpret_cast<const s32*>(lpcSpec + 112) == -1);
 
-        // The running entity-sphere-size bound (v127) -- seeded from the vehicle wheel base (+6580)
-        // w lane in the asm; carried as a scalar here.
-        f32 lfEntitySphereSize = 0.0f;
+        // ⭐⭐ CORRECTED 2026-08-24 (deform-land wave; BOOT-MEASURED -- the old model fired the
+        // sphere-size tripwire 799 times in one run). The running bound v127 is NOT a scalar
+        // seeded from zero and folded with |wheel WORLD position| (a coordinate magnitude, ~3000 m
+        // in Paradise City): the asm SEEDS it from this car's OWN entity radius
+        // (this+0x66D0 == mLastLinearVelocityPlusEntityRadius, w lane), folds per-wheel
+        // DISTANCE-FROM-VEHICLE + radius exactly like UpdateAndOutputJointStates' detached-part
+        // fold (the same vaddfp/vcmpgtfp/vmaxfp/vsel cascade @0x8260914C..0x8260915C), and at the
+        // tail min-clamps + stores it BACK INTO THE MEMBER (vrlimi mask 1 @0x8260919C ->
+        // stvx this+0x66D0) before asserting THE MEMBER.
+        f32 lfEntitySphereSize = mLastLinearVelocityPlusEntityRadius.w;
 
         // The assembled per-wheel scratch state block (the local v61 the asm copies out). FLAG:
         // 0x188 bytes; its interior is the un-homed entity-module per-wheel physical state. Zeroed
@@ -732,42 +762,168 @@ namespace Deformation
                 const Matrix44Affine lWheelTransform =
                     lpSimple->GetWheelsWorldTransfrom(static_cast<Vehicle::EVehicleDrivenWheel>(liWheel), lbApplySteer);
 
-                // Fold the wheel position into the running sphere-size bound (vmaxfp/vminfp cascade);
-                // modelled as the max of the wheel translation magnitude.
-                const f32 lfWheelExtent = vpu::Magnitude(lWheelTransform.Pos());
-                if (lfWheelExtent > lfEntitySphereSize) lfEntitySphereSize = lfWheelExtent;
+                // ⭐ THE LIVE WHEEL ROW IS WRITTEN NOW (2026-08-24, deform-land wave;
+                // BOOT-MEASURED: with the block left zero-seeded, the newly-live readback L3
+                // published zero transforms + exists=0 over UpdatePhysicsState's good wheel
+                // poses and the car rendered WHEEL-LESS). The consumer contract
+                // (ActiveRaceCar::UpdateWheelPhysicsState's snapshot view) is {64-byte
+                // transform @ 96*wheel; on-ground byte @ 0x180+wheel}; those two fields are
+                // filled per live wheel. FLAG: the remaining per-wheel scalars (velocities /
+                // forces inside the 96-byte entry) stay zero-seeded until the interior is homed.
+                std::memcpy(reinterpret_cast<char*>(&lWheelStates) + 96 * liWheel,
+                            &lWheelTransform, sizeof(Matrix44Affine));
+                reinterpret_cast<char*>(&lWheelStates)[0x180 + liWheel] = 1;   // on-ground/exists
+
+                // Fold the wheel's DISTANCE FROM THE VEHICLE into the running entity radius (the
+                // dist <= kMax gate + max(size, dist + r) cascade). FLAG: the per-wheel radius
+                // term (v7) is not homed; folded as 0 -- exact for an attached wheel, an
+                // under-estimate only for the not-yet-modelled detached arm.
+                const Vector3 lToWheel = vpu::Subtract(lWheelTransform.Pos(),
+                                                       lpSimple->GetTransform().Pos());
+                const f32 lfDist = vpu::Magnitude(lToWheel);
+                if (lfDist <= KVF_MAX_DEFORMABLE_OBJECT_SPHERE_SIZE
+                    && lfDist > lfEntitySphereSize)
+                {
+                    lfEntitySphereSize = lfDist;
+                }
             }
         }
 
-        // Bounds tripwire: GetEntitySphereSize() <= (KVF_MAX_DEFORMABLE_OBJECT_SPHERE_SIZE + 1.0f).
-        // FLAG: KVF_MAX_DEFORMABLE_OBJECT_SPHERE_SIZE is un-recovered rodata; the compare is a
-        // non-gating tripwire, so the bound is left to the (placeholder-zero) sphere size + 1.0f.
-        CGS_ASSERT(lfEntitySphereSize <= (0.0f + 1.0f),
+        // Tail: min-clamp + store the member's w lane (vminfp @0x8260917C; vrlimi mask 1 +
+        // stvx this+0x66D0 @0x8260919C..0x826091A8), then the bounds tripwire ON THE MEMBER.
+        // ⭐ KVF_MAX_DEFORMABLE_OBJECT_SPHERE_SIZE (unk_82FB8070) = splat(100.0), static-init
+        // writer @0x82C5D660 -- the old "un-recovered rodata" flag is retired.
+        if (lfEntitySphereSize > KVF_MAX_DEFORMABLE_OBJECT_SPHERE_SIZE)
+        {
+            lfEntitySphereSize = KVF_MAX_DEFORMABLE_OBJECT_SPHERE_SIZE;
+        }
+        mLastLinearVelocityPlusEntityRadius.w = lfEntitySphereSize;
+        CGS_ASSERT(lfEntitySphereSize <= (KVF_MAX_DEFORMABLE_OBJECT_SPHERE_SIZE + 1.0f),
                    "GetEntitySphereSize() <= (KVF_MAX_DEFORMABLE_OBJECT_SPHERE_SIZE + 1.0f)");
 
-        // Write into the entity-module output interface entry. The interface interior is opaque, so
-        // the count / id / state writes use the asm-authoritative offsets.
-        char* lpcOutEM = reinterpret_cast<char*>(lpOutEM);
-        u32&  lruNumEntries = *reinterpret_cast<u32*>(lpcOutEM + KU_EM_NUM_ENTRIES);
+        // Write into the entity-module output interface entry BY NAME (2026-08-24: the interface
+        // interior is homed now; the console offsets the asm indexes with are recorded in the
+        // KU_EM_* constants above as provenance).
+        const u32 luEntry = lpOutEM->GetNumEntries();
 
         // muNumEntries < KU_MAX_DEFORMATION_MODELS (non-gating tripwire).
-        CGS_ASSERT(lruNumEntries < KU_EM_MAX_ENTRIES, "muNumEntries < KU_MAX_DEFORMATION_MODELS");
+        CGS_ASSERT(luEntry < KU_EM_MAX_ENTRIES, "muNumEntries < KU_MAX_DEFORMATION_MODELS");
 
-        const u32 luEntry = lruNumEntries;
-
-        // Volume id: a3[2*n+2] = the per-car volume id (the asm copies a 64-bit id from &v14-1; the
-        // id source is this car's deformable-object index region). FLAG: the exact id word is the
-        // entry's base volume id; carried from the deformable-object index.
-        *reinterpret_cast<u64*>(lpcOutEM + KU_EM_VOLUME_ID_BASE + KU_EM_VOLUME_ID_STRIDE * luEntry) =
-            static_cast<u64>(mu16DeformableObjectIndex);
+        // Volume id: maBaseIDs[n] = the handling-body VolumeInstanceId with the low 32 bits
+        // cleared -- asm 0x826091EC `ld r11, 0x6710(this)` (mHandlingBodyID) then 0x826091F4
+        // `clrrdi r31, r11, 32` (keep only the entity word in the high dword) then the stdx.
+        // ⭐ CORRECTED 2026-08-24 (deform-land wave): the old FLAG placeholder stored
+        // mu16DeformableObjectIndex here, whose entity-owner byte is 0 -- the readback's L3 leg
+        // (owner byte must be E_ENTITYTYPE_RACECAR == 1) would have silently skipped every entry.
+        lpOutEM->SetBaseId(luEntry,
+                           GetHandlingBodyVolumeInstanceId().muId
+                               & CgsSceneManager::VolumeInstanceId::KU_ENTITY_ID_MASK);
 
         // Wheel state: a3[100*n+60] = the assembled WheelPhysicalStates block (homed operator=).
-        WheelPhysicalStates* lpDst = reinterpret_cast<WheelPhysicalStates*>(
-            lpcOutEM + KU_EM_WHEEL_STATE_BASE + KU_EM_WHEEL_STATE_STRIDE * luEntry);
-        *lpDst = lWheelStates;
+        *reinterpret_cast<WheelPhysicalStates*>(lpOutEM->GetWheelStateSlot(luEntry)) = lWheelStates;
 
         // ++muNumEntries.
-        ++lruNumEntries;
+        lpOutEM->SetNumEntries(luEntry + 1u);
+    }
+
+    // ===========================================================================================
+    // RefreshEntitySphereSizeFromVehicleExtent  (console-INLINE slice of DeformationManager::
+    // OutputData @0x826225D8, pass-2 preamble 0x82622A64..0x82622AC8; landed 2026-08-24,
+    // deform-land wave -- this store was previously a SILENT DROP behind the "folded into
+    // OutputWheelData" comment, which OutputWheelData's body never actually carried.)
+    //
+    // The asm: load the attached vehicle's half-extent vector (vehicle + 1696 ==
+    // SimpleVehiclePhysics::mHalfExtent), compute its magnitude with the zero-guarded
+    // rsqrt-Newton idiom (vmsum3fp / vrsqrtefp / two refines / vsel 0), and merge ONLY the w
+    // lane into mLastLinearVelocityPlusEntityRadius (vrlimi128 v8, v0, 1, 0) -- i.e. the
+    // entity sphere-size seed is |halfExtent| and the xyz (last linear velocity) lanes are
+    // untouched.
+    // ===========================================================================================
+    void DeformableObject::RefreshEntitySphereSizeFromVehicleExtent()
+    {
+        const Vehicle::SimpleVehiclePhysics* lpVehicle = mVehicleBody.GetVehiclePhysics();
+        const f32 lfRadius = vpu::Magnitude(lpVehicle->GetHalfExtent());   // zero-guard folded (|0| == 0)
+        mLastLinearVelocityPlusEntityRadius.w = lfRadius;
+    }
+
+    // ===========================================================================================
+    // UpdateAndOutputJointStates  @ 0x82609AE8  (183 insns; landed 2026-08-24, deform-land wave)
+    //
+    // For each of this car's live PHYSICAL parts (mau8PhysicalBodyPartPoolIndex[0..
+    // mi16NumPhysicalParts), pool slots resolved through the detached-part manager):
+    //   - still JOINTED (part->IsJoinedToVehicle()): emit a JointedPartStateEvent
+    //     { vehicle entity id (the handling-body volume id's entity word, `ld 0x6710` hi-dword),
+    //       part type (ikPart->spec GetPartType, spec+476),
+    //       joint rotation proportion (GetJointRotationProportion),
+    //       hinge velocity (mLocalGraphicsPositionPlusJointVelocity.w, part+0x170 lane w) }
+    //     via AddEventSafe onto lpOut->mJointedPartStateQueue (lpOut + 0x74).
+    //   - DETACHED: grow the running entity sphere size to cover the part --
+    //     dist = |part->GetPosition() - vehiclePos| (vehicle transform row 3, vehicle+0x40);
+    //     if (dist <= KVF_MAX_DEFORMABLE_OBJECT_SPHERE_SIZE)
+    //         size = max(size, dist + part->GetSphereRadius());
+    // Tail: mLastLinearVelocityPlusEntityRadius.w = min(size, KVF_MAX) and the non-gating
+    // tripwire "GetEntitySphereSize() <= (KVF_MAX_DEFORMABLE_OBJECT_SPHERE_SIZE + 1.0f)"
+    // (BrnDeformableObject.cpp:3959). Per-part asserts as baked: "lpPart != NULL" (:3905),
+    // "lpIKPart != NULL" (:3913), "IsJoinedToVehicle()" (BrnPhysicalBodyPart.h:276).
+    // ===========================================================================================
+    void DeformableObject::UpdateAndOutputJointStates(DeformationOutputInterface* lpOut,
+                                                      DetachedPartManager* lpPartMgr)
+    {
+        f32 lfSphereSize = mLastLinearVelocityPlusEntityRadius.w;   // v127 = splat(+0x66D0 lane w)
+
+        const Vehicle::SimpleVehiclePhysics* lpVehicle = mVehicleBody.GetVehiclePhysics();
+        const Vector3 lVehiclePos = lpVehicle->GetTransform().Pos();  // v125 = vehicle+0x40
+
+        const s32 liNumParts = static_cast<s32>(mi16NumPhysicalParts);
+        for (s32 liPart = 0; liPart < liNumParts; ++liPart)
+        {
+            PhysicalBodyPart* lpPart =
+                lpPartMgr->GetPartFromIndex(static_cast<u16>(mau8PhysicalBodyPartPoolIndex[liPart]));
+            CGS_ASSERT(lpPart != 0, "lpPart != NULL");
+
+            if (lpPart->IsJoinedToVehicle())
+            {
+                const IKBodyPart* lpIKPart = lpPart->GetIKPart();
+                CGS_ASSERT(lpIKPart != 0, "lpIKPart != NULL");
+
+                JointedPartStateEvent lEvent;
+                lEvent.mVehicleId = EntityId{ static_cast<u32>(
+                    GetHandlingBodyVolumeInstanceId().muId >> 32) };            // `ld 0x6710; srdi 32`
+                lEvent.meType = lpIKPart->GetPartType();                        // *(ikPart+8) -> spec+0x1DC
+                lEvent.mfCurrentOrientation = lpPart->GetJointRotationProportion().x;
+
+                // The asm re-tests the jointed flag between the two reads (IsJoinedToVehicle(),
+                // BrnPhysicalBodyPart.h:276) -- a non-gating tripwire.
+                CGS_ASSERT(lpPart->IsJoinedToVehicle(), "IsJoinedToVehicle()");
+                lEvent.mfHingeVelocity = lpPart->GetJointVelocity().x;          // part+0x170 lane w
+
+                lpOut->mJointedPartStateQueue.AddEventSafe(lEvent);
+            }
+            else
+            {
+                // Detached: cover the part with the entity sphere (zero-guarded magnitude).
+                const f32 lfDist =
+                    vpu::Magnitude(vpu::Subtract(lpPart->GetPosition(), lVehiclePos));
+                if (lfDist <= KVF_MAX_DEFORMABLE_OBJECT_SPHERE_SIZE)            // vcmpgtfp/vsel arm
+                {
+                    const f32 lfCover = lfDist + lpPart->GetSphereRadius();
+                    if (lfCover > lfSphereSize)
+                    {
+                        lfSphereSize = lfCover;                                 // vmaxfp
+                    }
+                }
+            }
+        }
+
+        // Tail: clamp + store the w lane only (vrlimi mask 1), then the sphere-size tripwire.
+        if (lfSphereSize > KVF_MAX_DEFORMABLE_OBJECT_SPHERE_SIZE)               // vminfp
+        {
+            lfSphereSize = KVF_MAX_DEFORMABLE_OBJECT_SPHERE_SIZE;
+        }
+        mLastLinearVelocityPlusEntityRadius.w = lfSphereSize;
+
+        CGS_ASSERT(lfSphereSize <= (KVF_MAX_DEFORMABLE_OBJECT_SPHERE_SIZE + 1.0f),
+                   "GetEntitySphereSize() <= (KVF_MAX_DEFORMABLE_OBJECT_SPHERE_SIZE + 1.0f)");
     }
 }
 }

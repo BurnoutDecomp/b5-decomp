@@ -663,7 +663,16 @@ private:
     // DWARF BrnRaceCarEntityModule.h:402 -> int32_t.
     s32 miPendingRequestCount;          // +0x18394 (99220) .. +0x18398 (99224)
 
-    u8 maTailPadB1[0x187BC - 0x18398];  // +0x18398 (99224) .. +0x187BC (100284)
+    // ⭐ 2026-08-24 (deform-land wave): the pad is SPLIT to name the module-level base-deform
+    // mirror pair. HandleResetPlayerCarAction @0x82304FE8 (arm 4) stores the action's
+    // (+0x34 amount, +0x38 type) into the player ActiveRaceCar's +0x7CC/+0x7C8 AND into this
+    // pair (+99536 type / +99544 amount); AddRaceCarToStartingGridOrFreeburnLobby @0x82300B38
+    // (0x823011D0..0x823011D8) writes the same two module seats on the mode-start path.
+    u8  maTailPadB1a[0x184D0 - 0x18398];   // +0x18398 (99224) .. +0x184D0 (99536)
+    s32 miPlayerBaseDeformationTypeMirror; // +0x184D0 (99536) -- the reset-type mirror
+    u8  maTailPadB1b[4];                   // +0x184D4 (99540)
+    f32 mfPlayerBaseDeformAmountMirror;    // +0x184D8 (99544) -- the amount mirror
+    u8  maTailPadB1c[0x187BC - 0x184DC];   // +0x184DC (99548) .. +0x187BC (100284)
 
     // X360 +0x187BC (100284). Player-scoring-slot -> active-race-car-slot map. The X360
     // DWORD index is 0x61EF (25071). Indexed by EPlayerScoringIndex (0..7); each cell is

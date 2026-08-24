@@ -88,7 +88,19 @@ namespace WorldModule
         lpRaceCarInputBuffer_PostPhysics->SetVehicleManagerOutputInterface(
             lpPhysicsModuleOutputBuffer->GetVehicleManagerOutputInterface());
 
-        // Legs 3-6: parked. See this file's banner for the per-leg blocker.
+        // ⭐ Legs 3/4 LIVE 2026-08-24 (deform-land wave, P1(b)): the OutputBuffer deformation
+        // seats hold their real types now, so the console's two copies run --
+        // leg 3: GetDeformationOutputInterfaceForEntityModules @0x8279F790
+        //        -> SetDeformationOutputInterfaceForEntityModules @0x827A99B0
+        // leg 4: GetDeformationOutputInterface @0x8279F6E8
+        //        -> SetDeformationOutputInterface @0x827A9A68
+        lpRaceCarInputBuffer_PostPhysics->SetDeformationOutputInterfaceForEntityModules(
+            lpPhysicsModuleOutputBuffer->GetDeformationOutputInterfaceForEntityModules());
+        lpRaceCarInputBuffer_PostPhysics->SetDeformationOutputInterface(
+            lpPhysicsModuleOutputBuffer->GetDeformationOutputInterface());
+
+        // Legs 5-6: still parked (scene-update Append @0x827A9340; contact spy @0x8279F8E0's
+        // race-car seat). See this file's banner for the per-leg blocker.
         {
             static bool sbLoggedBridgeParks = false;
             if (!sbLoggedBridgeParks)
@@ -96,12 +108,9 @@ namespace WorldModule
                 sbLoggedBridgeParks = true;
                 *CgsDev::Log::gpDebugPrint
                     << "[FLAG PC bring-up] BridgePhysicsModuleToRaceCarModule_PostPhysics: legs "
-                       "1-2 (vehicle output + vehicle-manager output) are LIVE; legs 3-5 "
-                       "(deformation-for-entity-modules @0x8279F790, deformation @0x8279F6E8, "
-                       "scene-update Append @0x827A9340) are parked because "
-                       "PhysicsModuleIO::OutputBuffer still models those three seats as 1-byte "
-                       "opaque storage; leg 6 (contact spy @0x8279F8E0) is parked because only "
-                       "the non-const physics accessor exists in this tree.\n";
+                       "1-4 (vehicle output, vehicle-manager output, deformation-for-entity-"
+                       "modules, deformation) are LIVE; leg 5 (scene-update Append @0x827A9340) "
+                       "and leg 6 (contact spy @0x8279F8E0's race-car seat) remain parked.\n";
             }
         }
     }

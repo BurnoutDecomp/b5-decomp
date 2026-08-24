@@ -83,91 +83,66 @@ namespace Deformation
     // store-for-store from BURNOUT_X360_ARTIST.XEX. The world/traffic PostPhysics IO buffers call
     // it directly (SetDeformationOutputInterfaceForEntityModules: `*lpDest = *lpSource`).
     //
-    // The struct interior element types (WheelPhysicalStates is a MINIMAL FLAGGED home; SkinData /
-    // VehicleLocatorOutput interiors are not fully homed), so the array region is copied through the
-    // asm-authoritative BYTE OFFSETS -- the same un-homed-interior idiom the rest of this TU uses.
-    // Every store matches the asm exactly:
-    //
-    //   +0x0000  muNumEntries                       (dword)
-    //   +0x0008  maBaseIDs[28]        stride 8       (VolumeInstanceId, u64)
-    //   +0x00F0  maWheelStates[28]    stride 0x190   (WheelPhysicalStates::operator=, 400)
-    //   +0x2CB0  miNumSkinnedModels                 (dword)
-    //   +0x2CB4  maSkinData[28]       stride 8       (SkinData: EntityId + ptr word)
-    //   +0x2D94  miNumLocatorOutputs                (dword)
-    //   +0x2D98  maLocatorData[28]    stride 8       (VehicleLocatorOutput)
-    //   +0x2E80  mDetachedPartRenderQueue           (clear miLength + Append)
-    //   +0x3E30  mGlassSmashOrCrackQueue            (clear miLength + Append)
+    // ⭐⭐ REWRITTEN BY NAME 2026-08-24 (deform-land wave). The previous body copied through the
+    // CONSOLE byte offsets (+0x2CB4 skin data stride 8, +0x2D98 locators stride 8, queue length
+    // at queue+8) via reinterpret_cast on `this` -- but the HOST layout diverges from the console
+    // at exactly those seats: SkinData/VehicleLocatorOutput carry widened 8-byte pointers
+    // (16-byte host stride, different array bases) and BaseEventQueue's miLength sits at host +12
+    // (mpEvents is 8 bytes), so the old `*(queue + 8) = 0` was zeroing miMaxLength. Latent only
+    // because the bridge legs that invoke this copy were parked; they landed this wave. Console
+    // store order (asm @0x827A96D0) preserved:
+    //   muNumEntries; miNumSkinnedModels; miNumLocatorOutputs (hoisted);
+    //   per entry: maBaseIDs[i] (8B), maWheelStates[i] (WheelPhysicalStates::operator=),
+    //              maSkinData[i], maLocatorData[i];
+    //   mDetachedPartRenderQueue: clear length + Append; mGlassSmashOrCrackQueue: same.
     DeformationOutputInterfaceForEntityModules&
     DeformationOutputInterfaceForEntityModules::operator=(const DeformationOutputInterfaceForEntityModules& lkrOther)
     {
-        char*       lpDest = reinterpret_cast<char*>(this);
-        const char* lpSrc  = reinterpret_cast<const char*>(&lkrOther);
+        static const s32 KI_ENTRY_COUNT = 28;
 
-        // Byte offsets the X360 spine indexes with (asm-authoritative).
-        static const u32 KU_NUM_ENTRIES_OFFSET   = 0x0000;
-        static const u32 KU_BASE_IDS_OFFSET      = 0x0008;   // VolumeInstanceId maBaseIDs[28]
-        static const u32 KU_WHEEL_STATES_OFFSET  = 0x00F0;   // WheelPhysicalStates maWheelStates[28]
-        static const u32 KU_WHEEL_STATES_STRIDE  = 0x0190;   // 400 (WheelPhysicalStates, alignment 16)
-        static const u32 KU_NUM_SKINNED_OFFSET   = 0x2CB0;   // miNumSkinnedModels
-        static const u32 KU_SKIN_DATA_OFFSET     = 0x2CB4;   // SkinData maSkinData[28]
-        static const u32 KU_NUM_LOCATORS_OFFSET  = 0x2D94;   // miNumLocatorOutputs
-        static const u32 KU_LOCATOR_DATA_OFFSET  = 0x2D98;   // VehicleLocatorOutput maLocatorData[28]
-        static const u32 KU_DETACHED_QUEUE_OFF   = 0x2E80;   // mDetachedPartRenderQueue
-        static const u32 KU_GLASS_QUEUE_OFF      = 0x3E30;   // mGlassSmashOrCrackQueue
-        static const u32 KU_QUEUE_LENGTH_OFF     = 0x0008;   // BaseEventQueue::miLength within a queue
-        static const s32 KI_ENTRY_COUNT          = 28;
-
-        // muNumEntries; then the two array counters the asm hoists before the loop.
-        *reinterpret_cast<u32*>(lpDest + KU_NUM_ENTRIES_OFFSET) =
-            *reinterpret_cast<const u32*>(lpSrc + KU_NUM_ENTRIES_OFFSET);
-        *reinterpret_cast<u32*>(lpDest + KU_NUM_SKINNED_OFFSET) =
-            *reinterpret_cast<const u32*>(lpSrc + KU_NUM_SKINNED_OFFSET);
-        *reinterpret_cast<u32*>(lpDest + KU_NUM_LOCATORS_OFFSET) =
-            *reinterpret_cast<const u32*>(lpSrc + KU_NUM_LOCATORS_OFFSET);
+        muNumEntries        = lkrOther.muNumEntries;
+        miNumSkinnedModels  = lkrOther.miNumSkinnedModels;
+        miNumLocatorOutputs = lkrOther.miNumLocatorOutputs;
 
         for (s32 liIndex = 0; liIndex < KI_ENTRY_COUNT; ++liIndex)
         {
             // maBaseIDs[i] -- one 64-bit VolumeInstanceId (ldx/std 8 bytes).
-            *reinterpret_cast<u64*>(lpDest + KU_BASE_IDS_OFFSET + 8u * liIndex) =
-                *reinterpret_cast<const u64*>(lpSrc + KU_BASE_IDS_OFFSET + 8u * liIndex);
+            maBaseIDs[liIndex] = lkrOther.maBaseIDs[liIndex];
 
-            // maWheelStates[i] -- WheelPhysicalStates::operator= (homed by-name copy).
-            WheelPhysicalStates&       lrDestWheel =
-                *reinterpret_cast<WheelPhysicalStates*>(lpDest + KU_WHEEL_STATES_OFFSET + KU_WHEEL_STATES_STRIDE * liIndex);
-            const WheelPhysicalStates& lkrSrcWheel =
-                *reinterpret_cast<const WheelPhysicalStates*>(lpSrc + KU_WHEEL_STATES_OFFSET + KU_WHEEL_STATES_STRIDE * liIndex);
-            lrDestWheel = lkrSrcWheel;
+            // maWheelStates[i] -- the 400-byte slot viewed as the homed WheelPhysicalStates to
+            // invoke its by-name operator= (the slot idiom the member banner documents).
+            *reinterpret_cast<WheelPhysicalStates*>(&maWheelStates[liIndex]) =
+                *reinterpret_cast<const WheelPhysicalStates*>(&lkrOther.maWheelStates[liIndex]);
 
-            // maSkinData[i] -- 8 bytes (EntityId + scratch ptr word).
-            *reinterpret_cast<u64*>(lpDest + KU_SKIN_DATA_OFFSET + 8u * liIndex) =
-                *reinterpret_cast<const u64*>(lpSrc + KU_SKIN_DATA_OFFSET + 8u * liIndex);
-
-            // maLocatorData[i] -- 8 bytes.
-            *reinterpret_cast<u64*>(lpDest + KU_LOCATOR_DATA_OFFSET + 8u * liIndex) =
-                *reinterpret_cast<const u64*>(lpSrc + KU_LOCATOR_DATA_OFFSET + 8u * liIndex);
+            // maSkinData[i] / maLocatorData[i] -- one 8-byte unit each on console; member-wise
+            // struct copies here (the pointers are 8 bytes on the host).
+            maSkinData[liIndex]    = lkrOther.maSkinData[liIndex];
+            maLocatorData[liIndex] = lkrOther.maLocatorData[liIndex];
         }
 
-        // mDetachedPartRenderQueue: clear dest length, then Append all live source events.
-        {
-            auto& lrDestQueue =
-                *reinterpret_cast<CgsModule::EventQueue<DetachedPartRenderEvent, 50>*>(lpDest + KU_DETACHED_QUEUE_OFF);
-            const auto& lkrSrcQueue =
-                *reinterpret_cast<const CgsModule::EventQueue<DetachedPartRenderEvent, 50>*>(lpSrc + KU_DETACHED_QUEUE_OFF);
-            *reinterpret_cast<s32*>(lpDest + KU_DETACHED_QUEUE_OFF + KU_QUEUE_LENGTH_OFF) = 0;  // stw 0, 8(queue)
-            lrDestQueue.Append(lkrSrcQueue);
-        }
+        // Queues: clear destination length (`stw 0, 8(queue)` on console == Clear()), then Append.
+        mDetachedPartRenderQueue.Clear();
+        mDetachedPartRenderQueue.Append(lkrOther.mDetachedPartRenderQueue);
 
-        // mGlassSmashOrCrackQueue: clear dest length, then Append.
-        {
-            auto& lrDestQueue =
-                *reinterpret_cast<CgsModule::EventQueue<GlassSmashOrCrackEvent, 20>*>(lpDest + KU_GLASS_QUEUE_OFF);
-            const auto& lkrSrcQueue =
-                *reinterpret_cast<const CgsModule::EventQueue<GlassSmashOrCrackEvent, 20>*>(lpSrc + KU_GLASS_QUEUE_OFF);
-            *reinterpret_cast<s32*>(lpDest + KU_GLASS_QUEUE_OFF + KU_QUEUE_LENGTH_OFF) = 0;
-            lrDestQueue.Append(lkrSrcQueue);
-        }
+        mGlassSmashOrCrackQueue.Clear();
+        mGlassSmashOrCrackQueue.Append(lkrOther.mGlassSmashOrCrackQueue);
 
         return *this;
+    }
+
+    // DeformationOutputInterfaceForEntityModules::Construct -- the console has NO standalone
+    // symbol for it: PhysicsModuleIO::OutputBuffer::Construct @0x825ABB10 constructs this
+    // member's two queues IN LINE (EventQueue<DetachedPartRenderEvent,50>::Construct at
+    // buffer+171552 == this interface's +0x2E80 seat, EventQueue<GlassSmashOrCrackEvent,20>::
+    // Construct at buffer+175568 == +0x3E30). The three counters live in BSS-zeroed storage on
+    // console; cleared explicitly here because the host object can sit on reused heap.
+    void DeformationOutputInterfaceForEntityModules::Construct()
+    {
+        muNumEntries        = 0;
+        miNumSkinnedModels  = 0;
+        miNumLocatorOutputs = 0;
+        mDetachedPartRenderQueue.Construct();
+        mGlassSmashOrCrackQueue.Construct();
     }
 }
 }

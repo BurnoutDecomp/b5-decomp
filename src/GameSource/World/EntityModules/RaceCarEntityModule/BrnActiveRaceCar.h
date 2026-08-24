@@ -68,6 +68,9 @@
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarType.h" // ERaceCarType (IsPlayer)
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h" // EActiveRaceCarEngineState
 #include "GameShared/GameClasses/System/Timer/CgsFrameInterpolation.h" // ⚠️ FLAG PC QoL: PoseTrack (the render-pose interpolator, by value)
+#include "GameShared/GameClasses/Geometric/Primitives/CgsAxisAlignedBox.h" // CgsGeometric::AxisAlignedBox (mDeformedBBox, named 2026-08-24)
+
+namespace BrnPhysics { namespace Deformation { struct DeformationState; } }  // UpdateDeformationState's source
 
 namespace BrnPhysics { namespace Vehicle { struct VehicleInputInterface; } }
 // RenderParams' LIGHT-LOCATOR block (the corona producer's input) speaks two deformation
@@ -326,6 +329,31 @@ public:
     void UpdatePhysicsState(const BrnPhysics::Vehicle::RaceCarState* lpState,
                             CgsWorld::WorldMap2D* lpWorldMap);
 
+    // ⭐ X360 0x822D4A58 (107 insns; landed 2026-08-24, deform-land wave) -- the per-car
+    // DEFORMATION readback. Looks up this car's live CarState record
+    // (DeformationState::GetCarStateF keyed on mPhysicsState.mEntityId, the `lwz r4,
+    // 0x4A8(this)` word) and publishes:
+    //   mRenderParams.mfDeformationSquared  (+0x157C) <- carState summed displacement² (+0x6A0)
+    //   mvfLowestPointWorldSpace            (+0x6E0)  <- splat(pos.y - Σ|row_i.y * halfExtent_i|)
+    //                                                    (the oriented-box lowest-Y, from
+    //                                                    mPhysicsState.mTransform/.mHalfExtent)
+    //   mDeformedBBox                       (+0x6C0)  <- carState deformed-bbox pair (+0x640, 32B)
+    //   mRenderParams.maAxlePositions[0..3] (+0x1320) <- carState wheel tag points (+0x660)
+    // Asserts as baked: IsAttached() (BrnActiveRaceCar.h:1096), the wheel-index tripwires
+    // (:2081 / BrnDeformationState.h:75).
+    void UpdateDeformationState(const BrnPhysics::Deformation::DeformationState* lpDeformationState);
+
+    // Console-INLINE (no accessor symbol; added 2026-08-24, deform-land wave): the base-deform
+    // pair writer. RaceCarEntityModule::HandleResetPlayerCarAction @0x82304FE8 (arm 4) and
+    // AddRaceCarToStartingGridOrFreeburnLobby @0x82300B38 both emit the two bare stores
+    // (`stfs +0x7CC ; stw +0x7C8`); AddHandlingModel then forwards the pair into the physics
+    // CreateRaceCar event. Exists so those writers spell the members BY NAME.
+    void SetBaseDeformation(f32 lfAmount, BrnPhysics::Deformation::DeformationResetType leType)
+    {
+        mfBaseDeformAmount   = lfAmount;
+        meBaseDeformationType = leType;
+    }
+
     // ========================================================================
     // BrnWorld::ActiveRaceCar::RenderParams -- the per-car VISUAL snapshot the
     // renderer reads each frame to draw one race car. The physics/IO side fills it;
@@ -370,6 +398,12 @@ public:
 
         bool GetWheelExists(u32 luWheel) const { return mabWheelExists[luWheel]; }
         void SetWheelExists(u32 luWheel, bool lbExists) { mabWheelExists[luWheel] = lbExists; }
+
+        // ADDITIVE (deform-land wave 2026-08-24): the per-wheel AXLE position row. The console
+        // has no accessor symbol -- ActiveRaceCar::UpdateDeformationState @0x822D4A58 stores the
+        // CarState wheel tag points with bare `stvx128` at this+0xB40+16*wheel (0x822D4BE4).
+        // Exists so that leg writes the member BY NAME.
+        void SetAxlePosition(u32 luWheel, const Vector3& lrPos) { maAxlePositions[luWheel] = lrPos; }
 
         // ADDITIVE (wheel-render wave): the console has no accessor symbol for the
         // angular-velocity array either -- RenderRaceCar @0x822D1110 emits a bare
@@ -952,9 +986,11 @@ private:
     // X360 +0x6B0 (1712). Prepare zeroes it.
     Vector3 mLastRecordedPosition;                       // +0x6B0 (1712) .. +0x6C0 (1728)
 
-    // DWARF mDeformedBBox (CgsGeometric::AxisAlignedBox, 32) + mvfLowestPointWorldSpace
-    // (rw::math::vpu::VecFloat, 16).
-    u8 maPad06C0[48];                                    // +0x6C0 (1728) .. +0x6F0 (1776)
+    // ⭐ NAMED 2026-08-24 (deform-land wave; was `u8 maPad06C0[48]` carrying exactly these two
+    // DWARF names). Both written by UpdateDeformationState @0x822D4A58: the 32-byte copy from
+    // carState+0x640 lands at +0x6C0, the lowest-point splat at +0x6E0.
+    CgsGeometric::AxisAlignedBox mDeformedBBox;          // +0x6C0 (1728) .. +0x6E0 (1760)
+    VecFloat mvfLowestPointWorldSpace;                   // +0x6E0 (1760) .. +0x6F0 (1776)
 
     // X360 +0x6F0 (1776). The paired global slot ("mpRaceCar == NULL" assert in Attach).
     RaceCar* mpRaceCar;                                  // +0x6F0 (1776)

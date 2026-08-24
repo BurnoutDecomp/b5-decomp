@@ -272,6 +272,38 @@ namespace Deformation
     }
 
     // =========================================================================================
+    // GetJointVelocity (DWARF BrnPhysicalBodyPart.h:275; bodied 2026-08-24, deform-land wave).
+    // The packed joint angular velocity -- the w lane of mLocalGraphicsPositionPlusJointVelocity
+    // (part+0x170). The one landed consumer (DeformableObject::UpdateAndOutputJointStates
+    // @0x82609AE8) reads it as `lvx128 part+0x170 ; vspltw lane 3` for the JointedPartStateEvent's
+    // hinge-velocity field.
+    // =========================================================================================
+    VecFloat PhysicalBodyPart::GetJointVelocity() const
+    {
+        return Splat(mLocalGraphicsPositionPlusJointVelocity.GetPlus());
+    }
+
+    // =========================================================================================
+    // GetPosition (DWARF BrnPhysicalBodyPart.h:215; bodied 2026-08-24, deform-land wave).
+    // The part's world position -- the rigid-body transform's translation row (part+0x30, the
+    // `lvx128 v13, r3, r25(0x30)` UpdateAndOutputJointStates' detached arm loads).
+    // =========================================================================================
+    Vector3 PhysicalBodyPart::GetPosition() const
+    {
+        return mRwBody.GetTransform().wAxis;
+    }
+
+    // =========================================================================================
+    // GetGlobalEntityId (DWARF BrnPhysicalBodyPart.h:164; bodied 2026-08-24, deform-land wave).
+    // The owning vehicle's global entity id (part+0x1D8 = mGlobalVehicleId -- the `lwz r10,
+    // 0x1D8(r31)` both detached-part output events copy into their id field).
+    // =========================================================================================
+    EntityId PhysicalBodyPart::GetGlobalEntityId() const
+    {
+        return mGlobalVehicleId;
+    }
+
+    // =========================================================================================
     // RemoveFromScene @ 0x825E7818 -- ⭐ MOVED (deformation-mount wave) to the mounted slice TU
     // BrnPhysicalBodyPart_Remove.cpp (the authoritative body, with the four scene removals + the
     // tri-cache eviction). The stale duplicate that stood HERE was deleted 2026-08-14 (walls

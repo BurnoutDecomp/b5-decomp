@@ -225,13 +225,16 @@ struct alignas(16) ResetPlayerCarAction : public GameAction<E_ACTION_RESET_PLAYE
     CgsID   mWheelModelId;             // +0x28  0 == "derive from the car's default wheel name"
     EPlayerScoringIndex mePlayerScoringIndex; // +0x30  >= E_PLAYER_SCORING_INDEX_COUNT == none
     f32     mfDeformationAmount;       // +0x34  < 0 == "no unlock deform" (the -1.0 sentinel)
-    f32     mfDeformationAmount2;      // +0x38  FLAG: the consumer stores the PAIR (+0x34,+0x38)
-                                       //        into ActiveRaceCar[499]/[498] and into the
-                                       //        module's own two deform scalars, and only when
-                                       //        +0x34 >= 0. EnterJunkyardAtStartOfGame leaves
-                                       //        this field UNWRITTEN (its -0x50 record is not
-                                       //        memset), which is safe precisely because it
-                                       //        posts the -1.0 sentinel. Name provisional.
+    // +0x38 -- ⭐ RETYPED s32 2026-08-24 (deform-land wave; was the provisional
+    // `f32 mfDeformationAmount2`). Every writing producer stores an INTEGER here (the
+    // CarChange builders: `stw 1` / memcpy of s32 1), and the consumer
+    // (HandleResetPlayerCarAction arm 4, landed this wave) copies the word into
+    // ActiveRaceCar::meBaseDeformationType (+0x7C8, an s32 the create chain forwards as
+    // BrnPhysics::Deformation::DeformationResetType) -- the same seat
+    // AddRaceCarToStartingGridOrFreeburnLobby @0x82300B38 stores its ±1 int into.
+    // EnterJunkyardAtStartOfGame leaves this field UNWRITTEN (its -0x50 record is not
+    // memset), safe precisely because it posts the -1.0 sentinel at +0x34.
+    s32     miBaseDeformationType;     // +0x38  (1 on the car-select path)
     s32     miInCarModification;       // +0x3C  copied to the module's +0x186CC word.
                                        //        TeleportCurrentVehicle sets it on the in-car-mod
                                        //        path, UpdateUnlockState posts 2. Name provisional.

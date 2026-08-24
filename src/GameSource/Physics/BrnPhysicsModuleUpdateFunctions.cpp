@@ -669,21 +669,16 @@ namespace BrnPhysics
             mDeformationManager.VerifyPartIndices();
             mDeformationManager.VerifyPartIndices();
 
-            // FLAG (storage->real seam casts, deliberate): the output buffer's two
-            // deformation seats are still size-pinned opaque storages; OutputData's DWARF
-            // signature takes the real interface types. Same sanctioned seam as the
-            // ProcessDeformationStates cast below -- retire both when the interfaces adopt
-            // their real types in the buffer.
+            // ⭐ SEAMS RETIRED 2026-08-24 (deform-land wave, P1(b)): the output buffer's two
+            // deformation seats hold their real types, so the storage->real reinterpret_casts
+            // this block carried are gone.
             mDeformationManager.OutputData(
-                reinterpret_cast<Deformation::DeformationOutputInterfaceForEntityModules*>(
-                    lpPhysicsModuleOutputBuffer->GetDeformationOutputInterfaceForEntityModules()),
-                reinterpret_cast<Deformation::DeformationOutputInterface*>(
-                    lpPhysicsModuleOutputBuffer->GetDeformationOutputInterface()));
+                lpPhysicsModuleOutputBuffer->GetDeformationOutputInterfaceForEntityModules(),
+                lpPhysicsModuleOutputBuffer->GetDeformationOutputInterface());
             mDeformationManager.VerifyPartIndices();
 
             mVehicleManager.ProcessDeformationStates(
-                reinterpret_cast<const Deformation::DeformationOutputInterface*>(
-                    lpPhysicsModuleOutputBuffer->GetDeformationOutputInterface()));
+                lpPhysicsModuleOutputBuffer->GetDeformationOutputInterface());
             mDeformationManager.VerifyPartIndices();
 
             // FLAG: gate-bodied (image-only address 0x8263C7C0).

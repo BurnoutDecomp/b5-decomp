@@ -220,7 +220,7 @@ namespace Deformation
     class DeformableObject;
     class DeformationInputInterface;            // ProcessEvents / PostSceneUpdate input interface (SharedIO)
     class DeformationOutputInterface;           // OutputData / OutputSensorState sink (SharedIO)
-    class DeformationOutputInterfaceForEntityModules; // OutputData entity-module sink (SharedIO)
+    struct DeformationOutputInterfaceForEntityModules; // OutputData entity-module sink (SharedIO; STRUCT -- the class-key is load-bearing for the MSVC mangling)
 
     // Contact-spy debug sink (UpdatePostPhysics forwards it). Owned by the contact-spy TU.
     // FLAG: forward-declared. (Also declared by BrnPhysicalBodyPartPool.h.)
