@@ -2757,52 +2757,84 @@ namespace Vehicle
     }
 
     // @0x825B8220  VehiclePhysics::ExitDrift
-    //   Tears down the drift: clears mu8DriftState and zeroes the per-drift timer lanes across the bank
-    //   (the asm vrlimi128-clears single lanes of +0x1000/+0x1010/+0x1020/+0x1030/+0x1040/+0xEF0), then
-    //   resets mDriftFlags = KU_DRIFT_FLAG_DO_ALL and writes the slam marker -1 at +0x10F4 (the same byte
-    //   the slam path uses). asm: `*(result+4946)=0 ; ... ; *(result+4340)=-1`.
+    //   ⭐⭐ REWRITTEN LANE-EXACT 2026-08-24 (deform-land wave, drift bundle R1; blindfns audit
+    //   leg 3/7, asm 0x825B8220..0x825B82B0 decoded mask-by-mask). The previous body had FIVE
+    //   lane errors and one INVENTED store:
+    //     wrote +0x1000.x (Spare)          -- console clears +0x1000.w (DriftScale)
+    //     wrote +0x1020.w (TimeInFriction) -- console clears +0x1020.x (DesiredDriftAngleScale)
+    //     wrote +0x1030.y = 1.0 (PushTime) -- console writes +0x1030.x = 1.0 (vcfsx 1): the
+    //                                         LatDriftForceFactor LATCH (its only non-crash writer)
+    //     wrote +0x1030.x = 0.0            -- ⛔ THE INVENTED KILL: with it, LatDriftForceFactor
+    //                                         is 0 forever after the first drift ends (no other
+    //                                         writer until crash/reset), and ApplyDriftLatForce's
+    //                                         side force dies. DELETED.
+    //     wrote +0x1040.w                  -- console clears +0x1040.x (SideForceMag)
+    //     missed +0xEF0.z (CounterSteerSideMag) entirely.
+    //   Console store set, in asm order: state=0; 1000.w=0; 1010.z=0; 1020.x=0; 1030.x=1.0;
+    //   1030.w=0; 1040.x=0; EF0.z=0; flags=0xFF.
     void VehiclePhysics::ExitDrift()
     {
-        mu8DriftState = eDriftState_None;
-
-        // zero the drift timer/scale lanes the asm clears (single-lane vrlimi128 inserts of 0/1.0).
-        mvSpare_MaintainedSpeed_NeutralControlTime_DriftScale.x = 0.0f;             // +0x1000 lane1 cleared
-        mvTimeToReachTargetDriftSlipRecip_StartSlip_TimeDrifting_BrakeScale.z = 0.0f; // TimeDrifting cleared
-        mvDesiredDriftAngleScale_CappedDriftScale_DesiredDriftSlip_TimeInFrictionState.w = 0.0f; // TimeInFriction
-        mvLatDriftForceFactor_DriftPushTime_MaxSteeringAngle_CurrentDriftAngle.y = 1.0f;          // DriftPushTime=1
-        mvLatDriftForceFactor_DriftPushTime_MaxSteeringAngle_CurrentDriftAngle.x = 0.0f;
-        mvSideForceMag_TimeBoosting_TimeSinceLastBoostKick_CurrentBoostKickTime.w = 0.0f;
-
-        // reset the gate bitfield to DO_ALL and the slam marker (the -1 the asm writes at +0x10F4).
-        mDriftFlags.mu8DriftFlags = DriftFlags::KU_DRIFT_FLAG_DO_ALL;
-        // (the slam path's -1 marker shares +0x10F4; ExitDrift's vrlimi clears restore DO_ALL.)
+        mu8DriftState = eDriftState_None;                                                        // stb 0, +0x1352
+        mvSpare_MaintainedSpeed_NeutralControlTime_DriftScale.w = 0.0f;                          // +0x1000 mask1 (DriftScale)
+        mvTimeToReachTargetDriftSlipRecip_StartSlip_TimeDrifting_BrakeScale.z = 0.0f;            // +0x1010 mask2 (TimeDrifting)
+        mvDesiredDriftAngleScale_CappedDriftScale_DesiredDriftSlip_TimeInFrictionState.x = 0.0f; // +0x1020 mask8
+        mvLatDriftForceFactor_DriftPushTime_MaxSteeringAngle_CurrentDriftAngle.x = 1.0f;         // +0x1030 mask8 = vcfsx(1) -- the latch
+        mvLatDriftForceFactor_DriftPushTime_MaxSteeringAngle_CurrentDriftAngle.w = 0.0f;         // +0x1030 mask1 (CurrentDriftAngle)
+        mvSideForceMag_TimeBoosting_TimeSinceLastBoostKick_CurrentBoostKickTime.x = 0.0f;        // +0x1040 mask8
+        mvSpeedOnLastCrashMPH_TimeCrashing_CounterSteerSideMag_Spare.z = 0.0f;                   // +0xEF0 mask2
+        mDriftFlags.mu8DriftFlags = DriftFlags::KU_DRIFT_FLAG_DO_ALL;                            // stb 0xFF, +0x10F4
     }
 
     // @0x825FA268  VehiclePhysics::EnterDrift
-    //   Latches the drift direction from the sign of the entry steering input:
-    //     mu8DriftState = (mfSteering <= 0) ? eDriftState_FacingRight(2) : eDriftState_FacingLeft(1).
-    //   Then seeds the StartSlip lane (mvTime..._StartSlip), zeroes the per-drift timers, copies the
-    //   per-car drift attrib lanes into the bank, and resets mDriftFlags = KU_DRIFT_FLAG_DO_ALL.
-    //   asm: v28 = (v27 <= 0.0) ? 2 : 1; *(result+4946) = v28; ... vrlimi-stores across the bank.
-    void VehiclePhysics::EnterDrift(const BrnPlayerDriverControls* lpControls, f32 lfSlip, f32 lfSpeed)
+    //   ⭐⭐ REWRITTEN LANE-EXACT 2026-08-24 (deform-land wave, drift bundle R2; blindfns audit
+    //   leg 3/7, asm 0x825FA268..0x825FA448 decoded mask-by-mask). The previous body diverged
+    //   heavily: it stored +0x1010.y = "lfSlip" (the console NEVER writes +0x1010.y here, and
+    //   the second argument IS the entry speed -- the caller CheckForEnteringDrift passes
+    //   f1 = lfSpeedMPS, f2 = attribs DriftPushTime), invented +0x1000.z = 0 and the
+    //   mDriftFlags = DO_ALL write (only ExitDrift/SetCrashing write 0xFF), and MISSED the
+    //   +0x1020.x/.y seeds, the +0x1050.x/.y weights, +0x1030.y/.w, +0xFE0.w, +0x1040.x and
+    //   +0xEF0.z. Parameters renamed to the console roles (signature arity unchanged).
+    //   Console store set, in asm order:
+    //     state = (steer > 0) ? 1 : 2                              (+0x1352)
+    //     1020.x = 0.9 + 0.1 * |Steering reg .y|                   (flt_82005450 + flt_82004014)
+    //     1020.y = (1.0 > -min(TimeDrifting, 0)) ? 1.0 : attribs+0x120.w (CappedScale)
+    //     1000.y = lfSpeed;  1000.w = 0;  1010.z = 0
+    //     1050.x = -0.1 (unk_8208FAE4);  1050.y = 1.0 (unk_8208FAE8)
+    //     1030.y = lfPushTime;  FE0.w = 0;  1030.w = 0;  1040.x = 0;  EF0.z = 0
+    //     NO mDriftFlags write, NO 1030.x write, NO 1000.z write.
+    void VehiclePhysics::EnterDrift(const BrnPlayerDriverControls* lpControls, f32 lfSpeed, f32 lfPushTime)
     {
         const f32 lfSteer = lpControls ? lpControls->mfSteering : 0.0f;   // *(a2+16)
 
-        mu8DriftState = (lfSteer <= 0.0f) ? eDriftState_FacingRight : eDriftState_FacingLeft;
+        mu8DriftState = (lfSteer > 0.0f) ? eDriftState_FacingLeft : eDriftState_FacingRight;
 
-        // seed StartSlip + the timers (the asm stores 0.1 into a control lane, then scatters the bank).
-        mvTimeToReachTargetDriftSlipRecip_StartSlip_TimeDrifting_BrakeScale.y = lfSlip;   // StartSlip
-        mvTimeToReachTargetDriftSlipRecip_StartSlip_TimeDrifting_BrakeScale.z = 0.0f;     // TimeDrifting=0
-        mvSpare_MaintainedSpeed_NeutralControlTime_DriftScale.z = 0.0f;                   // NeutralControlTime=0
-        mvDesiredDriftAngleScale_CappedDriftScale_DesiredDriftSlip_TimeInFrictionState.w = 0.0f;
+        // +0x1020.x = 0.9 + 0.1 * |steering register .y| (the smoothed steering lane).
+        mvDesiredDriftAngleScale_CappedDriftScale_DesiredDriftSlip_TimeInFrictionState.x =
+            0.9f + 0.1f * std::fabs(mvSteeringAngle_Steering_PrevSteering_DriftGasLetOffAmount.y);
 
-        // a small seed (0.1) the asm writes into the maintained-speed/neutral lane group.
-        // the per-car drift register lanes (mpAttribs->mDriftAttribs.mvBrakingDriftScaleFactor_GasDriftScaleFactor_TimeToCapScale_CappedScale @+0x120 .w) seed the drift control scale.
-        mvSpare_MaintainedSpeed_NeutralControlTime_DriftScale.w = 0.0f;                   // DriftScale starts 0
-        (void)lfSpeed;
+        // +0x1020.y: 1.0 unless the car was ALREADY drifting (TimeDrifting > 1s pre-clear),
+        // in which case the per-car capped scale (attribs +0x120 .w).
+        {
+            const f32 lfTimeDrifting =
+                mvTimeToReachTargetDriftSlipRecip_StartSlip_TimeDrifting_BrakeScale.z;
+            const f32 lfNegMin = -std::min(lfTimeDrifting, 0.0f);
+            mvDesiredDriftAngleScale_CappedDriftScale_DesiredDriftSlip_TimeInFrictionState.y =
+                (1.0f > lfNegMin)
+                    ? 1.0f
+                    : mpAttribs->mDriftAttribs
+                          .mvBrakingDriftScaleFactor_GasDriftScaleFactor_TimeToCapScale_CappedScale.w;
+        }
 
-        // reset the gate bitfield to DO_ALL (every drift sub-force enabled at entry).
-        mDriftFlags.mu8DriftFlags = DriftFlags::KU_DRIFT_FLAG_DO_ALL;
+        mvSpare_MaintainedSpeed_NeutralControlTime_DriftScale.y = lfSpeed;                       // +0x1000 mask4 (MaintainedSpeed)
+        mvSpare_MaintainedSpeed_NeutralControlTime_DriftScale.w = 0.0f;                          // +0x1000 mask1 (DriftScale)
+        mvTimeToReachTargetDriftSlipRecip_StartSlip_TimeDrifting_BrakeScale.z = 0.0f;            // +0x1010 mask2 (TimeDrifting)
+        mvPropSpeedMaintainAlongZ_PropSpeedMaintainAlongVel_TimeSinceLastRaceCarContact_SolvePenetrationWeightFactor.x = -0.1f; // +0x1050 mask8 (unk_8208FAE4)
+        mvPropSpeedMaintainAlongZ_PropSpeedMaintainAlongVel_TimeSinceLastRaceCarContact_SolvePenetrationWeightFactor.y =  1.0f; // +0x1050 mask4 (unk_8208FAE8)
+        mvLatDriftForceFactor_DriftPushTime_MaxSteeringAngle_CurrentDriftAngle.y = lfPushTime;   // +0x1030 mask4
+        mvSteeringAngle_Steering_PrevSteering_DriftGasLetOffAmount.w = 0.0f;                     // +0xFE0 mask1 (GasLetOff)
+        mvLatDriftForceFactor_DriftPushTime_MaxSteeringAngle_CurrentDriftAngle.w = 0.0f;         // +0x1030 mask1 (CurrentDriftAngle)
+        mvSideForceMag_TimeBoosting_TimeSinceLastBoostKick_CurrentBoostKickTime.x = 0.0f;        // +0x1040 mask8
+        mvSpeedOnLastCrashMPH_TimeCrashing_CounterSteerSideMag_Spare.z = 0.0f;                   // +0xEF0 mask2
     }
 
     // @0x825CFA10  VehiclePhysics::UpdateHandBrake
@@ -2925,10 +2957,23 @@ namespace Vehicle
             return;
         }
 
-        // gate 2: MaintainedSpeed (.y) must exceed current frame speed (a2 = SpeedMPS in the asm).
+        // ⭐ R3 (deform-land wave 2026-08-24, blindfns audit leg 5) -- three divergences + a
+        // micro fixed against the asm @0x825D2270:
+        //   D1 the console BAILS when the handbrake is held (0x1358) -- the gate was missing;
+        //   D2 the impulse scale is the vehicle MASS (BASE attribs +0x70 .x -- impulse units),
+        //      not the DriftAttribs +0x160.y push-time attrib the old body used;
+        //   D3 the velocity-direction term is gated on |speedParam| > FLT_EPSILON (skipped at
+        //      standstill) -- the old unconditional Normalize was a NaN risk;
+        //   micro: the console proceeds on maintained >= speed (the old body used strict >).
+        if (mbHandBrake)
+        {
+            return;   // D1 -- the console's 0x1358 bail
+        }
+
+        // gate 2: MaintainedSpeed (.y) must be at least the current frame speed.
         const f32 lfMaintained = mvSpare_MaintainedSpeed_NeutralControlTime_DriftScale.y;
         const f32 lfSpeed      = lvfSpeed.x;
-        if (lfMaintained > lfSpeed)
+        if (lfMaintained >= lfSpeed)   // micro: >= per the asm
         {
             // gate 3: throttle >= 0.3 (*(controls+4) = mfGas) AND grounded AND not airborne AND
             //         mAboveGroundTestResult.mbValid.
@@ -2936,14 +2981,19 @@ namespace Vehicle
             if (mbAllWheelsHaveTraction && lfThrottle >= 0.30000001f && mAboveGroundTestResult.mbValid)
             {
                 // deficit-scaled impulse direction = blend of body Z (forward) and velocity, weighted by
-                // mvPropSpeedMaintainAlongZ (.x) / mvPropSpeedMaintainAlongVel (.y), pushed by the per-car
-                // push-time attrib (mpAttribs->mDriftAttribs.mvNaturalYawTorque_NaturalYawTorqueCutOffAngle_TorqueKickFromGasLetOff_DriftSidewaysDamping @+0x160 .y). The deficit = MaintainedSpeed - speed.
+                // mvPropSpeedMaintainAlongZ (.x) / mvPropSpeedMaintainAlongVel (.y). The deficit =
+                // MaintainedSpeed - speed. D2: scaled by the vehicle MASS (base attribs +0x70 .x).
                 const f32 lfDeficit  = lfMaintained - lfSpeed;
                 const f32 lfAlongZ   = mvPropSpeedMaintainAlongZ_PropSpeedMaintainAlongVel_TimeSinceLastRaceCarContact_SolvePenetrationWeightFactor.x;
                 const f32 lfAlongVel = mvPropSpeedMaintainAlongZ_PropSpeedMaintainAlongVel_TimeSinceLastRaceCarContact_SolvePenetrationWeightFactor.y;
-                const f32 lfPush     = mpAttribs->mDriftAttribs.mvNaturalYawTorque_NaturalYawTorqueCutOffAngle_TorqueKickFromGasLetOff_DriftSidewaysDamping.y;
+                const f32 lfPush     = mpAttribs->mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.x;   // D2: MASS
 
-                const Vector3 lVelDir = vpu::Normalize(mLinearVelocity);
+                // D3: the velocity-direction term only when moving (|speedParam| > eps).
+                Vector3 lVelDir{ 0.0f, 0.0f, 0.0f, 0.0f };
+                if (std::fabs(lfSpeed) > 1.1920929e-07f)   // FLT_EPSILON, the asm's gate
+                {
+                    lVelDir = vpu::Normalize(mLinearVelocity);
+                }
                 Vector3 lDir{ lvDirection.x * lfAlongZ + lVelDir.x * lfAlongVel,
                               lvDirection.y * lfAlongZ + lVelDir.y * lfAlongVel,
                               lvDirection.z * lfAlongZ + lVelDir.z * lfAlongVel,
@@ -3498,7 +3548,15 @@ namespace Vehicle
                                           lrfCounterSteerSideMag
                                           - lvfTimeStep.x * KF_COUNTER_DECAY_PER_SEC);
 
-        const f32 lfLatDriftForceFactor = lfSideForceFactor * lfSpeedRatio * lfAngle;
+        // ⭐ P7 (deform-land wave 2026-08-24; physics11 leg B + blindfns leg 2): the third
+        // multiplicand is +0x1030.x (LatDriftForceFactor -- a LATCH held at 1.0 by
+        // Reset/SetCrashing/ExitDrift; the whole-image +0x1030 write census proves NO ramp
+        // writer exists), NOT the current drift angle in DEGREES the old body multiplied in
+        // (which scaled the side force ~30-40x at typical drift angles). Lands PAIRED with the
+        // R1 ExitDrift fix -- without R1 the latch reads the invented 0.0 after the first
+        // drift ends and the side force dies.
+        const f32 lfLatDriftForceFactor = lfSideForceFactor * lfSpeedRatio
+            * mvLatDriftForceFactor_DriftPushTime_MaxSteeringAngle_CurrentDriftAngle.x;
         const f32 lfUnscaledSideForce =
             std::min(lfLatDriftForceFactor * (1.0f + lrfCounterSteerSideMag), KF_SIDE_FORCE_CAP);
         const f32 lfSideForceMag = lfUnscaledSideForce
