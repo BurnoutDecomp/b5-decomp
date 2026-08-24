@@ -1432,6 +1432,79 @@ void TrafficEntityModule::RecalculateActiveHulls(
         }
     }
 
+    // [T-anchor] junkyard-anchored-traffic probe (user report 2026-08-24: "the traffic
+    // despawn, like it is anchored to the junkyard and doesn't follow the player").
+    // Per sampled decision frame: the sim-box anchor this pass ACTUALLY used (re-read from
+    // the same interface UpdateRaceCarHulls read), against the module's own camera latch,
+    // plus the hull-set churn and the free-param level. Env-gated BRN_TRAFFIC_DIAG.
+    // NOT IN THE X360 BINARY. DELETE-WHEN the anchor bug is closed with an A/B run.
+    if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())
+    {
+        static u32 suAnchorSample = 0;
+        if ((suAnchorSample % 10u) == 0u)   // decision frames are 0.1 s -> ~1 line/s
+        {
+            const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpCars =
+                lpInput->GetActiveRaceCarOutputInterface();
+            const bool lbActive = (lpCars != 0) && lpCars->IsPlayerCarActive();
+
+            *lpDiag << "[T-anchor] d " << static_cast<s32>(suAnchorSample)
+                    << " divergent " << (mbAllowDivergentBehaviour ? 1 : 0)
+                    << " playerActive " << (lbActive ? 1 : 0);
+            if (lbActive)
+            {
+                const EActiveRaceCarIndex lePlayer = lpCars->GetPlayerActiveRaceCarIndex();
+                const Vector3 lAnchor = lpCars->GetRaceCarState(lePlayer)->mTransform.wAxis;
+                *lpDiag << " idx " << static_cast<s32>(lePlayer)
+                        << " anchor " << lAnchor.x << " " << lAnchor.y << " " << lAnchor.z;
+            }
+            const Vector3 lCamPos = mCameraLastFrame.GetPosition();
+            *lpDiag << " cam " << lCamPos.x << " " << lCamPos.y << " " << lCamPos.z
+                    << " hulls " << mActiveHulls.GetLength()
+                    << " +new " << lpOutNewHulls->GetLength()
+                    << " -old " << lpOutOldHulls->GetLength()
+                    << " freeParams " << mFreeParams.GetLength();
+
+            // The grid mapping itself, through the same public accessor the walk uses:
+            // the anchor box corners' clamped cells, the active hull ids, and (once) the
+            // grid extremes -- two far corner probes expose muNumCells_X/Z via the clamp.
+            if (lbActive && mpData->mpPvs != 0)
+            {
+                const Pvs* lpPvsDiag = mpData->mpPvs;
+                const Vector3 lAnchorDiag =
+                    lpCars->GetRaceCarState(lpCars->GetPlayerActiveRaceCarIndex())->mTransform.wAxis;
+                Vector3 lLo = lAnchorDiag;
+                Vector3 lHi = lAnchorDiag;
+                lLo.x -= mfTrafficSimRadius.x; lLo.y -= mfTrafficSimRadius.y; lLo.z -= mfTrafficSimRadius.z;
+                lHi.x += mfTrafficSimRadius.x; lHi.y += mfTrafficSimRadius.y; lHi.z += mfTrafficSimRadius.z;
+                s32 liLoX = 0, liLoZ = 0, liHiX = 0, liHiZ = 0;
+                lpPvsDiag->GetHullIndexForPoint(lLo, liLoX, liLoZ);
+                lpPvsDiag->GetHullIndexForPoint(lHi, liHiX, liHiZ);
+                *lpDiag << " simR " << mfTrafficSimRadius.x
+                        << " cells x " << liLoX << ".." << liHiX
+                        << " z " << liLoZ << ".." << liHiZ << " ids";
+                for (u32 luH = 0; luH < mActiveHulls.GetLength() && luH < 6u; ++luH)
+                {
+                    *lpDiag << " " << mActiveHulls[luH];
+                }
+                static bool sbGridPrinted = false;
+                if (!sbGridPrinted)
+                {
+                    sbGridPrinted = true;
+                    Vector3 lFarLo; lFarLo.x = -1.0e9f; lFarLo.y = 0.0f; lFarLo.z = -1.0e9f; lFarLo.w = 0.0f;
+                    Vector3 lFarHi; lFarHi.x =  1.0e9f; lFarHi.y = 0.0f; lFarHi.z =  1.0e9f; lFarHi.w = 0.0f;
+                    s32 liMinCX = 0, liMinCZ = 0, liMaxCX = 0, liMaxCZ = 0;
+                    lpPvsDiag->GetHullIndexForPoint(lFarLo, liMinCX, liMinCZ);
+                    const u32 luMaxIdx = lpPvsDiag->GetHullIndexForPoint(lFarHi, liMaxCX, liMaxCZ);
+                    *lpDiag << " GRID cellsX " << (liMaxCX + 1) << " cellsZ " << (liMaxCZ + 1)
+                            << " minClamp " << liMinCX << "," << liMinCZ
+                            << " maxIdx " << static_cast<s32>(luMaxIdx);
+                }
+            }
+            *lpDiag << " [DELETE-WHEN-STABLE]\n";
+        }
+        ++suAnchorSample;
+    }
+
     {
         // GATE: the two Array<u16,72>::AppendSet calls @0x8274?? that feed
         // mHullsToAddTriggersFor / mHullsToRemoveTriggersFor. BLOCKER: ::Array<T,N>::AppendSet

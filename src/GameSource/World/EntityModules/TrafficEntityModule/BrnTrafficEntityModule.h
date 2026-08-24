@@ -627,7 +627,15 @@ namespace BrnTrafficIO { class InputBuffer_PreScene; class OutputBuffer_PreScene
         bool  IsVehiclesParamAZombie(u32 luVehicle);                 // @ 0x82715D70 (DWARF :1323)
         void  JunctionFUP_StopOffscreenTraffic(void* lpData, bool lbFlag); // @ 0x82719868 (FLAG)
         void  JunctionFUP_TryClearupNonMovingPhysical();             // @ 0x8273F2E8 (FLAG)
-        void  KillDyingVehicleEntities();                            // @ 0x82741E40 (FLAG)
+        // @ 0x82741E40 / @ 0x8272EB40 -- the REMOVE half of the scene registration (bodies in
+        // BrnTrafficEntityModule_KillDyingVehicleEntities.cpp). The output buffer is the same
+        // PreScene one CreateNewVehicleEntities takes (assert .cpp 4410/4463); the callee takes
+        // the LIVE iterator because Vehicle::SetCollidable consumes its cached word mask.
+        void  KillDyingVehicleEntities(BrnTrafficIO::OutputBuffer_PreScene* lpOutput);
+        void  KillDyingVehicleEntity(
+                  u32 luVehicle,
+                  const CgsContainers::FastBitArray<VehicleSoaData::KU_MAX_VEHICLES>::Iterator& lrItVehicle,
+                  BrnTrafficIO::OutputBuffer_PreScene* lpOutput);
         void  PutParamInPurgatory(u32 luParam);                      // @ 0x82716510 (FLAG: Array interior)
         void  RebuildGeneratorList();                                // @ 0x82742DD0 (FLAG)
         void  UpdateSerialiser();                                    // @ 0x8272DA80 (FLAG)

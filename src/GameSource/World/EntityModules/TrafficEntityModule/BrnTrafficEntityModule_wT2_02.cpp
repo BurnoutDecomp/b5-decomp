@@ -214,8 +214,12 @@ void TrafficEntityModule::UpdateParams(const BrnTrafficIO::InputBuffer_PostPhysi
 // entity AND not collidable. The console builds the set as three inverse-and steps over
 // mVehicleSoaData; the ledger files this function under CgsFastBitArray.h (catch-all).
 //
-// GATED: PutParamInPurgatory @0x82716510 -- declared FLAG in BrnTrafficEntityModule.h, no body
-// anywhere in the tree. DELETE-WHEN that body lands.
+// The tail call PutParamInPurgatory @0x82716510 (0x827369A8's `if (*divergent)` arm, pseudocode
+// "ClearDying then if (v48) PutParamInPurgatory") was GATED here by a banner claiming the body
+// did not exist -- STALE: the body landed with the same wave in _wT2_01.cpp. The gate made every
+// offline param retirement leak its id (KillParam only purgatories in its ONLINE arm), so after
+// 400 kills mFreeParams hit 0 and traffic generation stopped for the rest of the session --
+// the user-visible "traffic is anchored to the junkyard" bug (2026-08-24).
 // ----------------------------------------------------------------------------
 void TrafficEntityModule::UpdateParams_UpdateDead()
 {
@@ -257,10 +261,7 @@ void TrafficEntityModule::UpdateParams_UpdateDead()
 
         if (mbAllowDivergentBehaviour)   // +0x717E7
         {
-            static bool sbLogged = false;
-            LogMissingLeg(sbLogged,
-                          "UpdateParams_UpdateDead -> PutParamInPurgatory @0x82716510 -- "
-                          "declared FLAG in BrnTrafficEntityModule.h, no body in the tree");
+            PutParamInPurgatory(luParam);   // @0x82716510; body in _wT2_01.cpp
         }
     }
 }

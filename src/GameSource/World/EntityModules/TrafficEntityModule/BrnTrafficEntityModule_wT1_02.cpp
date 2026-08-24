@@ -154,21 +154,13 @@ void TrafficEntityModule::PreSceneUpdate(CgsModule::IOBufferStack* lpInputBuffer
             // _wT1_06.cpp.
             UpdateTimers(lpInput);
 
-            {
-                // GATE: KillDyingVehicleEntities @0x82741E40 (and its callee
-                // KillDyingVehicleEntity @0x8272EB40), the REMOVE half of the scene
-                // registration below. Neither is bodied, so a dying traffic vehicle keeps its
-                // scene entity. Parked cars only die in TEARING_DOWN today, so nothing leaks
-                // on a normal drive. DELETE WHEN the bodies land, which KillOutOfAreaTraffic
-                // will force.
-                static bool sbLogged = false;
-                LogMissingLeg(sbLogged,
-                    "PreSceneUpdate E_STATE_RUNNING leg KillDyingVehicleEntities @0x82741E40 "
-                    "-- no body (nor its callee KillDyingVehicleEntity @0x8272EB40). It is the "
-                    "REMOVE half of CreateNewVehicleEntities; a dying vehicle would keep its "
-                    "scene entity. Unreachable on the parked path today because parked cars "
-                    "only die in TEARING_DOWN");
-            }
+            // The REMOVE half of the scene registration (bodies in
+            // BrnTrafficEntityModule_KillDyingVehicleEntities.cpp). Landing it closed the
+            // param-pool leak behind the "traffic is anchored to the junkyard" user report
+            // (2026-08-24): without it a killed driving car kept its entity/collision/physics
+            // registrations, UpdateParams_UpdateDead could never retire its param, and
+            // mFreeParams drained 400 -> 0 a few minutes into every session.
+            KillDyingVehicleEntities(lpOutput);
 
             // The scene registration; body in BrnTrafficEntityModule_wT1_05.cpp, which must
             // also be mounted in tools/build/build_game_exe.bat or this call is an LNK2019 at
@@ -254,11 +246,16 @@ void TrafficEntityModule::PreSceneUpdate(CgsModule::IOBufferStack* lpInputBuffer
     case E_STATE_TEARING_DOWN:
     {
         // GATE: leak :1218..:1250, a three-way switch on meTearingDownState whose only
-        // non-empty arm (FLUSHING) calls the bodiless KillDyingVehicleEntities @0x82741E40.
+        // non-empty arm (FLUSHING) calls KillDyingVehicleEntities @0x82741E40. The body EXISTS
+        // now (BrnTrafficEntityModule_KillDyingVehicleEntities.cpp); the remaining blocker is
+        // the TEARING_DOWN state machine itself (meTearingDownState has no reconstructed
+        // producer -- PostPhysicsUpdate's whole TEARING_DOWN arm is gated), so emitting only
+        // this switch would run FLUSHING against a state word nothing drives.
         static bool sbLogged = false;
         LogMissingLeg(sbLogged,
-            "PreSceneUpdate E_STATE_TEARING_DOWN arm -- the meTearingDownState switch whose "
-            "FLUSHING arm calls KillDyingVehicleEntities @0x82741E40 (no body in this tree)");
+            "PreSceneUpdate E_STATE_TEARING_DOWN arm -- the meTearingDownState switch. Its "
+            "FLUSHING call KillDyingVehicleEntities @0x82741E40 is bodied now; the switch "
+            "stays gated with PostPhysicsUpdate's TEARING_DOWN arm (no state producer)");
     }
     break;
 
