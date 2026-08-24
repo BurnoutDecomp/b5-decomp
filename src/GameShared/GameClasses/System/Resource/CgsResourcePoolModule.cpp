@@ -175,9 +175,9 @@ namespace CgsResource
                 if (lpType == 0)
                     continue;
                 maTypes[mNumTypes].mpType   = lpType;
-                // X360 keys on the cached id (*(type+8) == GetCachedId()); our handler singletons don't run
-                // InitCachedValues (deferred), so read the virtual GetTypeID() (the real id). [marked]
-                maTypes[mNumTypes].muTypeId = lpType->GetTypeID();
+                // X360 keys on the cached id (*(type+8) == GetCachedId()); TypeRegistry::Register
+                // runs InitCachedValues on every handler, so the cached id is live here.
+                maTypes[mNumTypes].muTypeId = lpType->GetCachedId();
                 maTypes[mNumTypes].mpcName  = lpOptions->mpGameSpecificTypes[li].mpcName;
                 ++mNumTypes;
             }

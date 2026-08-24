@@ -216,10 +216,12 @@ namespace CgsResource
         // exhausted -- the X360 asserts in GetNewNode and carries on, which here corrupts the
         // address-ordered list. Returning null makes the caller
         // (CgsResource::Pool::AllocateMemoryForResource) report OUT-OF-MEMORY for that one
-        // resource, which the bundle loader already handles. Hit today because the world
-        // streamer loads the whole 25-zone PVS set without unloading anything (the unload leg
-        // is still inert), so pool 3's 8500 heap nodes run out around the 6th TRK_UNIT.
-        // DELETE when the streamer's unload leg is live and the working set is bounded.
+        // resource, which the bundle loader already handles. 2026-08-24: the original trigger
+        // (inert unload leg) is fixed, but a long DRIVING run can still fragment a pool's heap
+        // because the console's relocating defragmenter is not reconstructed yet; the game-data
+        // pools now get 2*maxResources+1 nodes (BrnGameDataModule::CreatePools), which makes
+        // exhaustion structurally impossible there, so this gate is a belt-and-braces guard for
+        // the remaining hand-sized pools. DELETE when the defragmenter lands.
         if (mUnusedNodes.IsEmpty())
         {
             static bool sbLoggedNodeExhaustion = false;

@@ -240,6 +240,22 @@ namespace BrnResource
             lOpt.miNumDependencies = lNumDeps;
             lNumDepsWired += lNumDeps;
 
+            // [FLAG PC boot gate] Heap-node headroom. The map's node budgets assume the console's
+            // relocating defragmenter keeps each heap compact (CreatePools forces allow-defrag for
+            // pools 3/4/15); without it (still deferred here) a long DRIVING run fragments pool 3's
+            // OpenWorldGr heaps until the 8500-node pool runs dry -- the pool then REFUSES resources,
+            // the unit's bundle completes degraded with unresolved imports, and the world streamer's
+            // load-complete walks an instance with a null model (the intermittent BrnWorldEntityModule
+            // lpModel assert + DoesStateExist AV). A heap of N live allocations never needs more than
+            // 2N+1 nodes (free runs coalesce, so free blocks <= allocs+1), and live allocations per
+            // memory type are capped by miMaxResources -- so 2*maxResources+1 nodes makes exhaustion
+            // structurally impossible. Node structs are ~32 bytes on x64: the extra overhead is a few
+            // hundred KB on the biggest pool. DELETE (revert to lrDef.miMaxHeapNodes) when the
+            // defragmenter is reconstructed.
+            const u32 luDefNodes  = static_cast<u32>(lrDef.miMaxHeapNodes);
+            const u32 luSafeNodes = 2u * static_cast<u32>(lrDef.miMaxResources) + 1u;
+            const u32 luMaxNodes  = (luDefNodes > luSafeNodes) ? luDefNodes : luSafeNodes;
+
             // Per-type region = heap budget + (type 0) a margin >= the pool overhead (entry arrays / hash /
             // heap nodes Pool::InitPool Mallocs from the region), rounded up to the 64 KB block size so the
             // MemoryModule bank carve is block-exact. (Bump allocator -> the slack is harmless.)
@@ -250,7 +266,7 @@ namespace BrnResource
                 const u32 luHeapSize = lrDef.mauHeapSize[lt];
                 if (luHeapSize == 0)
                     continue;
-                lOpt.maHeapInfo[lt].muMaxNodes       = static_cast<u32>(lrDef.miMaxHeapNodes);
+                lOpt.maHeapInfo[lt].muMaxNodes       = luMaxNodes;
                 lOpt.maHeapInfo[lt].muHeapMemorySize = luHeapSize;
                 lOpt.maHeapInfo[lt].muHeapAlignment  = lrDef.mauHeapAlign[lt];
 
@@ -263,7 +279,7 @@ namespace BrnResource
                     luHashLen |= luHashLen >> 4;  luHashLen |= luHashLen >> 8;
                     luHashLen |= luHashLen >> 16; ++luHashLen;
                     luMargin = luMax * 512u + luHashLen * 16u
-                             + static_cast<u32>(lrDef.miMaxHeapNodes) * 3u * 128u + 0x10000u;
+                             + luMaxNodes * 3u * 128u + 0x10000u;
                 }
                 lauAlign[lt]  = lrDef.mauHeapAlign[lt] < 16u ? 16u : lrDef.mauHeapAlign[lt];
                 lauRegion[lt] = (luHeapSize + luMargin + (KU_BLOCK - 1u)) & ~(KU_BLOCK - 1u);

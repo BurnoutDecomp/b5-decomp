@@ -4,9 +4,9 @@
 // Default bodies for the CgsResource::Type polymorphic base. Concrete handlers (RwRaster, Font, ...)
 // override the virtuals they implement; whatever they leave alone falls through to these no-op /
 // identity defaults. The X360 caches CanDefrag()+GetTypeID() into mbCachedCanDefrag/muCachedId via a
-// (non-virtual) InitCachedValues run after each handler is constructed; that caching is deferred, so
-// the ctor leaves safe defaults (can't-defrag, id 0). The pool only reads GetCachedCanDefrag as a heap
-// placement hint, so the defaults are benign for the load path.
+// (non-virtual) InitCachedValues run after each handler is constructed (RegisterResourceTypes
+// @0x82667EA8 news each handler then calls it); TypeRegistry::Register is our equivalent seam. The
+// ctor still leaves safe defaults so an unregistered Type behaves like the old deferred state.
 
 namespace CgsResource
 {
@@ -60,9 +60,17 @@ namespace CgsResource
         if (lppValue != 0)  *lppValue = 0;
     }
 
+    // X360 ground truth (ARTIST .i64, 2026-08-24): every one of the 76 registered handler
+    // vtables points its CanDefrag slot (index 9, vtable+0x24) at the same 0x82C296C8
+    // `li r3, 1; blr` -- CanDefrag is TRUE for every resource type, no handler overrides
+    // it to false. The pool therefore allocates EVERY resource from the top of its heap
+    // (Pool::AllocateMemoryForResource 0x828FDAC8 reads the cached Type+4 flag), and the
+    // world/car/traffic pools defragment (CreatePools forces allow-defrag for ids 3/4/15).
+    // The old `return false` here silently flipped every allocation to the bottom leg and
+    // starved the (future) defragmenter of candidates.
     bool Type::CanDefrag() const
     {
-        return false;
+        return true;
     }
 
     bool Type::DebugValidate(const void* /*lpResource*/) const
@@ -73,6 +81,14 @@ namespace CgsResource
     EDebugResourceCategory Type::GetDebugResourceCategory() const
     {
         return E_DEBUGRESOURCECATEGORY_MISC;
+    }
+
+    // 0x82666178-adjacent (inlined on the X360 into RegisterResourceTypes' per-handler
+    // triple): snapshot the virtuals into the cached members the hot paths read.
+    void Type::InitCachedValues()
+    {
+        mbCachedCanDefrag = CanDefrag();
+        muCachedId        = GetTypeID();
     }
 
     bool Type::GetCachedCanDefrag() const
