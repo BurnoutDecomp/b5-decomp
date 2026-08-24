@@ -52,27 +52,31 @@ namespace
     const s32 KI_MAX_ROAD_INDEX = 66;
 
     // --- DEFINITIONS of the three animation-frame tables above ------------------
-    // *** UNRECOVERED VALUES -- CONSOLIDATOR MUST FILL ***  Only the FIRST cell of
-    // each string table is X360-attested ("invisible" / "small"); the remaining cells
-    // and the whole road-index->size-index lookup are NOT recovered from the XEX rodata
-    // in this slice. Read off_82F24D08 / off_82F24CF8 / dword_8204BDA8 and replace the
-    // placeholders. Sizes are pinned by the enums (E_ANIMATION_STATE_ADVANCED_COUNT /
-    // E_ROAD_SIGN_COUNT) and by the KI_MAX_ROAD_INDEX assert bound. (FLAG: contents
-    // unrecovered; defined here as internal-linkage placeholders so the TU compiles.)
+    // Contents RECOVERED from the image 2026-08-25 (HUD H2 leg; headless idat read of
+    // off_82F24D08 / off_82F24CF8 / dword_8204BDA8 -- scratch h2_roadrule_dump.txt).
+    // The old "*** UNRECOVERED VALUES ***" placeholders fed SetCurrentSignState empty
+    // frame names for every state past [0] -- a live placeholder hazard, retired.
     const char* const KAPC_ANIMATION_FRAMES[RoadRuleComponent::E_ANIMATION_STATE_ADVANCED_COUNT] =
     {
-        "invisible",          // [0] E_ANIMATION_STATE_INVISIBLE -- X360-attested
-        "", "", "", "", "",   // [1]..[5] TODO(consolidator) off_82F24D08
+        "invisible",        // [0] E_ANIMATION_STATE_INVISIBLE
+        "transin",          // [1]
+        "idle",             // [2]
+        "transout",         // [3]
+        "idleFailed",       // [4]
+        "transoutFailed",   // [5]
     };
     const char* const KAAC_ROADSIGN_SIZE_FRAME_LABELS[RoadRuleComponent::E_ROAD_SIGN_COUNT] =
     {
-        "small",       // [0] E_ROAD_SIGN_SMALL -- X360-attested
-        "", "", "",    // [1]..[3] TODO(consolidator) off_82F24CF8
+        "small",     // [0] E_ROAD_SIGN_SMALL
+        "medium1",   // [1]
+        "medium2",   // [2]
+        "large",     // [3]
     };
     const s32 KAI_ROAD_INDEX_TO_SIGN_SIZE[KI_MAX_ROAD_INDEX] =
     {
-        0,   // [0..65] TODO(consolidator) dword_8204BDA8 -- road-index -> ERoadSignSizes;
-             // remaining entries default-zero (E_ROAD_SIGN_SMALL) until recovered.
+        2, 0, 0, 0, 0, 3, 3, 3, 0, 0, 0, 2, 2, 3, 2, 1, 0, 2, 3, 1, 2, 3,
+        2, 1, 2, 1, 3, 1, 3, 3, 1, 1, 3, 2, 0, 0, 0, 3, 3, 2, 3, 1, 2, 3,
+        1, 3, 3, 3, 3, 3, 2, 3, 3, 3, 3, 3, 2, 1, 2, 3, 2, 3, 2, 2, 2, 2,
     };
 }
 
