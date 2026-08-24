@@ -817,8 +817,39 @@ void TriggerQueryManager::PreWorldUpdatePlayerTriggersBringUp(
                 continue;
             }
 
+            const Vector3 lHalfExtents = lpBoxRegion->GetDimensions();
+
+            // [FLAG PC bring-up] DEGENERATE AUTHORED BOXES. The RETAIL TriggerData carries
+            // exactly three generic regions whose box dimensions are ALL NEGATIVE -- verified
+            // bit-for-bit in the X360 original (D:\bp-staging\x360-retail TRIGGERS.DAT), so
+            // this is authored data, not a transcode/reader defect:
+            //     region 2793  id 425555  sub 11 ROAD_LIMIT        (3078.6, 4.6, -1922.9)
+            //     region 3879  id 609215  sub 18 PICTURE_PARADISE  ( 475.1, 33.2,  1087.2)
+            //     region 3888  id 616364  sub 18 PICTURE_PARADISE  ( 680.1, 36.6,  1049.8)
+            // The console never hands these to BrnMath::IsPointInsideBox -- its only callers
+            // are StuntManager::OnPropHit (sub-types 8/12 only) and the ChallengeManager --
+            // so its `lBoxDimensions >= 0` asserts never see them. This stand-in is the one
+            // caller that walks EVERY armed generic region (the first is 69 u off the
+            // junkyard-exit route, hence the intermittent per-frame assert triplets once it
+            // armed). A negative extent can satisfy no slab test ("never inside"), which is
+            // also these regions' effective behaviour on the console, so skip them BEFORE
+            // the assert contract instead of feeding it authored-degenerate data.
+            if (lHalfExtents.x < 0.0f || lHalfExtents.y < 0.0f || lHalfExtents.z < 0.0f)
+            {
+                static bool sbDegenerateBoxLogged = false;
+                if (!sbDegenerateBoxLogged && CgsDev::Log::gpDebugPrint != 0)
+                {
+                    sbDegenerateBoxLogged = true;
+                    *CgsDev::Log::gpDebugPrint
+                        << "[TriggerQueryManager] armed region " << luRegionIndex
+                        << " id=" << static_cast<s32>(lpArmedRegion->GetId())
+                        << " has negative box dimensions (authored; see the degenerate-box"
+                           " banner) -- skipped\n";
+                }
+                continue;
+            }
+
             const Matrix44Affine lBoxTransform = lpBoxRegion->ComputeTransform();
-            const Vector3        lHalfExtents  = lpBoxRegion->GetDimensions();
             if (BrnMath::IsPointInsideBox(lBoxTransform, lPlayerPosition, lHalfExtents))
             {
                 maLastPlayerTriggers.Append(luRegionIndex);
