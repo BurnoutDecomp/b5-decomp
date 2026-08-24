@@ -13,6 +13,8 @@
 #include "rw/math/vpu/vector3_operation.h"                  // rw::math::vpu::{Dot, Mult, Subtract, ...}
 #include "rw/math/vpu/matrix44affine_operation.h"           // rw::math::vpu::TransformVector (walls leg 9: the per-direction world axis)
 #include "GameShared/GameClasses/Geometric/Primitives/CgsSphere.h"  // CgsGeometric::Sphere (walls leg 9: the sensor radius the limit rows pad by)
+#include "GameSource/Physics/VehicleManager/VehiclePhysics/VehicleAttribs.h"  // VehicleAttribs::mCollisionAttribs (the P4 car-car impulse scale, 2026-08-24)
+#include <cmath>                                                              // std::sqrt (the P4 tangential magnitude)
 
 // =================================================================================================
 // BrnPhysics::Deformation::DeformableObject -- the per-frame UPDATE core (group "update").
@@ -138,6 +140,15 @@ namespace Deformation
         const Vector3 KVF_APPLY_FRICTION_SCALE = { 0.000150000007f, 0.000150000007f, 0.000150000007f, 0.000150000007f };  // unk_82FB8330 @82C5D688 <- flt_8209D738
         const Vector3 KVF_APPLY_FRICTION_CLAMP = { 1000.0f, 1000.0f, 1000.0f, 1000.0f };  // unk_82FB95C0 @82C5D868 <- flt_82009E10
         const Vector3 KVF_APPLY_SHOWTIME_SCALE = { 5.0f, 5.0f, 5.0f, 5.0f };  // unk_82FB9D30 @82C5D890 <- flt_8200426C
+
+        // ⭐ RECOVERED 2026-08-24 (deform-land wave, P4) -- the ApplySensorImpulse block-5 scale
+        // rows, each from its static-init writer (headless idat decode):
+        const Vector3 KVF_APPLY_WORLD_CRASH_SCALE   = { 5.0f, 5.0f, 5.0f, 5.0f };     // unk_82FB8060 @82C5D610 <- flt_8200426C
+        const Vector3 KVF_APPLY_CARCAR_CRASH_SCALE  = { 20.0f, 20.0f, 20.0f, 20.0f }; // unk_82FB8300 @82C5D638 <- flt_8208F9D4
+        const Vector3 KVF_APPLY_LOCAL_FORCE_SCALE   = { 0.899999976f, 0.899999976f, 0.899999976f, 0.899999976f }; // unk_82FB7F50 @82C5D5E8 <- flt_82005450
+        const Vector3 KVF_APPLY_MIN_TANGENTIAL_SQ   = { 9.999999747e-05f, 9.999999747e-05f, 9.999999747e-05f, 9.999999747e-05f }; // unk_82FB9720 @82C5D840 <- flt_82002540
+        // (unk_82FB9D40 -- the not-showtime bank row -- initialises to splat(0.0) @82C5D5C0;
+        //  spelled as a zero literal at the select site.)
 
         // ⭐⭐ RECOVERED 2026-08-15 (walls leg 8) -- the DRIVE-TIME DEFORMATION budget row,
         // &unk_82FB9520. Dynamic-init (zero in the image); initialiser @0x82C5D818..0x82C5D83C loads
@@ -546,10 +557,24 @@ namespace Deformation
         ImpulseParams lParams = lImpulseParams;
         lParams.mWorldImpulseDirection = lImpulseDir;
         lParams.mvfTimeStep            = lvfTimeStep;
+        lParams.mvfImpulseMagnitude    = lvfImpulseMagnitude;   // stvx128 v120 -> params+0x10 (RAW)
+
+        // ⭐⭐ CORRECTED 2026-08-24 (deform-land wave, P4): the vmaxfp at 0x82607944..54 is NOT a
+        // fold into the params magnitude against relMotion.w (the old body's invention) -- it is
+        // the SENSOR's biggest-impulse latch:
+        //     0x82607944  lvx128 v0, sensor+0x10 ; vspltw v0,3      ; the latch (.w lane)
+        //     0x8260794C  vmaxfp128 v0, v120(magnitude), v0
+        //     0x82607950  vrlimi128 v13, v0, 1, 0 ; stvx128 -> sensor+0x10
+        // i.e. mPointDisplacement_BiggestImpulseThisFrame.w = max(.w, magnitude). This is the
+        // exact value CheckSensorForcesForJointDetachment @0x825C17F8 splats to decide panel/door
+        // detach -- with the old local-copy fold no hit could ever detach a part.
+        if ( lpSensor != nullptr )
         {
-            const f32 lfRelW = lRelativeMotion.w;   // vspltw v0,3 of the relative-motion vector
-            const f32 lfMag  = lvfImpulseMagnitude.x;
-            lParams.mvfImpulseMagnitude.x = (lfMag > lfRelW) ? lfMag : lfRelW;   // vmaxfp
+            f32& lrLatch = lpSensor->mPointDisplacement_BiggestImpulseThisFrame.w;
+            if ( lvfImpulseMagnitude.x > lrLatch )
+            {
+                lrLatch = lvfImpulseMagnitude.x;
+            }
         }
 
         // ⭐ 2026-08-16 (walls leg 9) -- THE +0xB4 STORE, AND THE FLAG THAT HID IT IS RETIRED.
@@ -805,79 +830,172 @@ namespace Deformation
             lAccumulatedLocalImpulse.z += lDirVec.z * lfProjection;
         }
 
-        // (5) resolve + bank the world impulse. The asm removes the residual relative motion along the
-        // normal, clamps it into the FLAGGED friction band, scales the impulse, then asks the body for
-        // the world linear + angular impulse (GetImpulsesFromLocalImpulse) and banks them
-        // (AddWorldSpaceImpulse + AddWorldSpaceAngularImpulse). The crashed path additionally applies a
-        // local force (AddLocalForce). The friction rows are FLAGGED-0, so the residual term is inert.
+        // (5) ⭐⭐ REWRITTEN 1:1 2026-08-24 (deform-land wave, P4) from the asm
+        // 0x82607F80..0x8260835C. The previous body banked the ACCUMULATED per-direction impulse
+        // shaped by the 1.5e-4 / 1000 / 5.0 rows -- a mis-placement: those rows belong to the
+        // SENSOR SCRATCH ladder at the tail. What the console banks is a TANGENTIAL shove:
+        //   scale-row select (the second IsPlayerVehicleInShowtime consult):
+        //     not showtime                          -> impulseRow = 0.0, forceRow = 0.0
+        //     showtime && crashed && worldContact   -> impulseRow = 5.0 (unk_82FB8060),  forceRow = 0.9 (unk_82FB7F50)
+        //     showtime && crashed && other crashed  -> impulseRow = 20.0 (unk_82FB8300), forceRow = 0.9
+        //     showtime && crashed && neither        -> impulseRow = 0.0,                 forceRow = 0.9
+        //     showtime && !crashed                  -> both 0.0
+        //     (all five rows recovered from their static-init writers 0x82C5D5C0..0x82C5D650;
+        //      unk_82FB9D40 -- the not-showtime row -- initialises to 0.0 DELIBERATELY: ordinary
+        //      driving banks its wall momentum through the RecievePassedOnImpulse ->
+        //      ApplyWallContactImpulse chain instead, and this block contributes only SCRATCH.)
+        //   tangential = relMotion - normal * dot3(relMotion, normal)          (vsubfp v123)
+        //   gate: |tangential|^2 >= 1e-4 (unk_82FB9720, init 0x82C5D840) else skip to the spy;
+        //   dir = -tangential / |tangential| (zero-guarded rsqrt)              (v13)
+        //   scaledMag = magnitude * clamp(|tangential| * 1.0, 0, 1)            (v120; the 1.0s are
+        //     the lazy first-call cache pair unk_82FBA240/unk_82FBA230 == vcfsx(1) and its refined
+        //     reciprocal -- both exactly 1.0, folded here)
+        //   bankLocal = dir * scaledMag * impulseRow                           (v118)
+        //   GetImpulsesFromLocalImpulse(bankLocal * timestep, space0, mPointOnA, space0, &li, &ai)
+        //     (BOTH space tags are the asm's literal `li r4,0 ; li r5,0` -- the tangential motion
+        //      and the contact point are already world-space; the old BODY_SPACE guess is retired)
+        //   CAR-CAR ATTRIB SCALE (previously MISSING): when !mbWorldContact both outputs are
+        //     scaled by mpAttribs->mCollisionAttribs (+0x280) lane .y == CarAngularImpulseScale
+        //     (0x826081D0..0x82608208);
+        //   AddWorldSpaceImpulse + AddWorldSpaceAngularImpulse;
+        //   ADDLOCALFORCE LEG (previously MISSING, 0x82608240..0x826082C0): when mbWorldContact,
+        //     AddLocalForce( -tangentialDir * |tangential| * bodyMass(+0xE0 == body mfMass) *
+        //     forceRow );
+        //   SCRATCH LADDER (0x826082C4..0x82608358 -- where the three rows actually live):
+        //     add = |tangential| * timestep * 1.5e-4 (unk_82FB8330) * min(scaledMag, 1000
+        //           (unk_82FB95C0)) [* 5.0 (unk_82FB9D30) when crashed]
+        //     scratch = min( max(0, scratch + add), max(0.75, scratch) )       (the fsel ladder)
         if ( lpVehicle != nullptr )
         {
-            // residual motion along the normal removed (vsubfp v123 = relMotion - n*(relMotion.n)).
+            // scale-row select. The second vtable consult repeats the (2) predicate.
+            Vector3 lImpulseRow = { 0.0f, 0.0f, 0.0f, 0.0f };   // unk_82FB9D40 == splat(0.0)
+            Vector3 lForceRow   = { 0.0f, 0.0f, 0.0f, 0.0f };
+            if ( lbIgnoringPassedOn && lbCrashed )
+            {
+                lForceRow = KVF_APPLY_LOCAL_FORCE_SCALE;   // unk_82FB7F50 = splat(0.9)
+                if ( lParams.mbWorldContact )
+                {
+                    lImpulseRow = KVF_APPLY_WORLD_CRASH_SCALE;      // unk_82FB8060 = splat(5.0)
+                }
+                else if ( lContact.mpOtherVehicle != nullptr
+                          && lContact.mpOtherVehicle->GetVehiclePhysics() != nullptr
+                          && lContact.mpOtherVehicle->GetVehiclePhysics()->IsCrashing() )
+                {
+                    lImpulseRow = KVF_APPLY_CARCAR_CRASH_SCALE;     // unk_82FB8300 = splat(20.0)
+                }
+            }
+
+            // tangential relative motion (vsubfp v123).
             const f32     lfAlongNormal = vpu::Dot(lRelativeMotion, lContact.mNormal);
-            const Vector3 lResidual = vpu::Subtract(
+            const Vector3 lTangential = vpu::Subtract(
                 lRelativeMotion,
                 Vector3{ lContact.mNormal.x * lfAlongNormal, lContact.mNormal.y * lfAlongNormal,
                          lContact.mNormal.z * lfAlongNormal, 0.0f });
-            (void)lResidual;   // shape preserved; the friction scale rows below are FLAGGED-0
+            const f32 lfTangentialSq = vpu::Dot(lTangential, lTangential);
 
-            // shaped local impulse = accumulated impulse * FLAGGED friction scale, clamped into the
-            // FLAGGED friction band; showtime scales by the FLAGGED showtime row. Inert but honest.
-            Vector3 lShaped = vpu::Mult(lAccumulatedLocalImpulse, KVF_APPLY_FRICTION_SCALE);
-            lShaped.x = (lShaped.x < KVF_APPLY_FRICTION_CLAMP.x) ? lShaped.x : KVF_APPLY_FRICTION_CLAMP.x;
-            lShaped.y = (lShaped.y < KVF_APPLY_FRICTION_CLAMP.y) ? lShaped.y : KVF_APPLY_FRICTION_CLAMP.y;
-            lShaped.z = (lShaped.z < KVF_APPLY_FRICTION_CLAMP.z) ? lShaped.z : KVF_APPLY_FRICTION_CLAMP.z;
-            if ( lbCrashed )
+            Vector3 lBankLocal  = { 0.0f, 0.0f, 0.0f, 0.0f };   // v118 (0 when the gate skips)
+            Vector3 lLocalForce = { 0.0f, 0.0f, 0.0f, 0.0f };   // v125 on the skip / non-force paths
+            f32     lfScaledMag = lvfImpulseMagnitude.x;        // v120 (raw when the gate skips)
+
+            if ( lfTangentialSq >= KVF_APPLY_MIN_TANGENTIAL_SQ.x )   // unk_82FB9720 = splat(1e-4)
             {
-                lShaped = vpu::Mult(lShaped, KVF_APPLY_SHOWTIME_SCALE);
+                const f32 lfTangentialLen = std::sqrt(lfTangentialSq);   // zero-guarded by the gate
+                const Vector3 lNegDir = { -lTangential.x / lfTangentialLen,
+                                          -lTangential.y / lfTangentialLen,
+                                          -lTangential.z / lfTangentialLen, 0.0f };
+
+                // scaledMag = magnitude * clamp(|tangential|, 0, 1)  (the lazy-cache 1.0 factors fold).
+                f32 lfClamp = lfTangentialLen;
+                if ( lfClamp > 1.0f ) { lfClamp = 1.0f; }
+                if ( lfClamp < 0.0f ) { lfClamp = 0.0f; }
+                lfScaledMag = lvfImpulseMagnitude.x * lfClamp;
+
+                lBankLocal = vpu::Mult(lNegDir, lfScaledMag);
+                lBankLocal = Vector3{ lBankLocal.x * lImpulseRow.x, lBankLocal.y * lImpulseRow.y,
+                                      lBankLocal.z * lImpulseRow.z, 0.0f };
+
+                const Vector3 lBankImpulse = vpu::Mult(lBankLocal, lvfTimeStep.x);   // v1 = v118 * v117
+
+                Vector3 lWorldImpulse        = { 0.0f, 0.0f, 0.0f, 0.0f };
+                Vector3 lWorldAngularImpulse = { 0.0f, 0.0f, 0.0f, 0.0f };
+                lpVehicle->GetImpulsesFromLocalImpulse(lBankImpulse,
+                                                       static_cast<rw::physics::InputSpace>(0),
+                                                       lContact.mPointOnA,
+                                                       static_cast<rw::physics::InputSpace>(0),
+                                                       &lWorldImpulse, &lWorldAngularImpulse);
+
+                // car-car attrib scale (previously missing).
+                if ( !lParams.mbWorldContact && lpVehicle->GetAttribs() != nullptr )
+                {
+                    const f32 lfCarScale = lpVehicle->GetAttribs()->mCollisionAttribs
+                        .mvCrashSpeedMPS_CarAngularImpulseScale_Spare_Spare.y;
+                    lWorldImpulse        = vpu::Mult(lWorldImpulse, lfCarScale);
+                    lWorldAngularImpulse = vpu::Mult(lWorldAngularImpulse, lfCarScale);
+                }
+
+                ExternalPhysicsBody& lBody = GetVehicleBody();
+                lBody.AddWorldSpaceImpulse(lWorldImpulse);
+                lBody.AddWorldSpaceAngularImpulse(lWorldAngularImpulse);
+
+                // AddLocalForce leg (previously missing): world contacts shove the body along
+                // -tangential, scaled by the body mass row and the 0.9 force row. The asm's call
+                // carries the same `li r4,0 ; li r5,0` space pair + mPointOnA as the impulse
+                // resolve above (0x82608254..0x826082C0).
+                if ( lParams.mbWorldContact )
+                {
+                    const f32 lfMass = lBody.GetMass().x;   // vehicle+0xE0 row (body mfMass)
+                    lLocalForce = Vector3{
+                        lNegDir.x * lfTangentialLen * lfMass * lForceRow.x,
+                        lNegDir.y * lfTangentialLen * lfMass * lForceRow.y,
+                        lNegDir.z * lfTangentialLen * lfMass * lForceRow.z, 0.0f };
+                    lBody.AddLocalForce(lLocalForce,
+                                        static_cast<rw::physics::InputSpace>(0),
+                                        lContact.mPointOnA,
+                                        static_cast<rw::physics::InputSpace>(0));
+                }
+
+                // the sensor scratch ladder -- THE home of the 1.5e-4 / 1000 / 5.0 rows.
+                if ( lpSensor != nullptr )
+                {
+                    f32 lfMagClamped = lfScaledMag;
+                    if ( lfMagClamped > KVF_APPLY_FRICTION_CLAMP.x )   // unk_82FB95C0 = 1000
+                    {
+                        lfMagClamped = KVF_APPLY_FRICTION_CLAMP.x;
+                    }
+                    f32 lfAdd = lfTangentialLen * lvfTimeStep.x
+                              * KVF_APPLY_FRICTION_SCALE.x            // unk_82FB8330 = 1.5e-4
+                              * lfMagClamped;
+                    if ( lbCrashed )
+                    {
+                        lfAdd *= KVF_APPLY_SHOWTIME_SCALE.x;          // unk_82FB9D30 = 5.0
+                    }
+                    const f32 lfScratch = lpSensor->mfScratchAmount;
+                    f32 lfNew = lfScratch + lfAdd;
+                    if ( lfNew < 0.0f ) { lfNew = 0.0f; }                       // fsel vs -f0
+                    const f32 lfCap = (lfScratch > 0.75f) ? lfScratch : 0.75f;  // max(0.75, scratch)
+                    lpSensor->mfScratchAmount = (lfNew < lfCap) ? lfNew : lfCap;
+                }
             }
 
-            // resolve into world linear + angular impulse and bank on the vehicle body.
-            Vector3 lWorldImpulse        = { 0.0f, 0.0f, 0.0f, 0.0f };
-            Vector3 lWorldAngularImpulse = { 0.0f, 0.0f, 0.0f, 0.0f };
-            // The base kernel is the SIX-argument ExternalPhysicsBody form (@0x825A1A80): the two
-            // rw::physics::InputSpace tags gate the two rotations (r4 == 1 -> rotate the impulse
-            // into world, r5 == 0 -> the position is already world and only needs the COM
-            // subtraction). The 4-argument VehiclePhysics-scoped overload this call used to bind to
-            // never existed -- it was a shadowing redeclaration retired in physics wave 3.
-            // FLAG: this call site's own two tags are NOT recovered from asm here (this TU is
-            // unmounted and its X360 body was not re-read this wave); BODY_SPACE / WORLD_SPACE is
-            // what the shape of the surrounding code implies -- a local (body) impulse at a world
-            // contact point (lContact.mPointOnA is a world contact point) -- and matches the only
-            // asm-proven sibling (VehicleRigidBody::ApplyImpulseToVehicle @0x8260E088 `li r4,1`).
-            lpVehicle->GetImpulsesFromLocalImpulse(lShaped, rw::physics::BODY_SPACE,
-                                                   lContact.mPointOnA, rw::physics::WORLD_SPACE,
-                                                   &lWorldImpulse, &lWorldAngularImpulse);
-
-            ExternalPhysicsBody& lBody = GetVehicleBody();
-            lBody.AddWorldSpaceImpulse(lWorldImpulse);
-            lBody.AddWorldSpaceAngularImpulse(lWorldAngularImpulse);
-
-            // accumulate the per-sensor scratch (sensor +420): the fsel ladder, floored at the 0.75 band.
-            if ( lpSensor != nullptr )
+            // (6) spy accumulation (runs on the gate-skip path too, with zero bank/force --
+            // 0x82608360 falls into this block).
+            if ( lbAddToSpy && lpSensor != nullptr )
             {
-                const f32 lfNew   = -(lShaped.x + lpSensor->mfScratchAmount);
-                const f32 lfFloor = 0.75f - lpSensor->mfScratchAmount;
-                const f32 lfPick  = (lfNew >= 0.0f) ? lfNew : lfFloor;
-                lpSensor->mfScratchAmount = (lfPick >= 0.0f) ? lfPick : lpSensor->mfScratchAmount;
+                lpSensor->maPostPhysicsVec0[0] += lLocalForce.x + lBankLocal.x;   // v125 + v118
+                lpSensor->maPostPhysicsVec0[1] += lLocalForce.y + lBankLocal.y;
+                lpSensor->maPostPhysicsVec0[2] += lLocalForce.z + lBankLocal.z;
+
+                // sensor +0x130 += impulseDir * (scaled) magnitude (vmaddfp v116 * v120).
+                lpSensor->maPostPhysicsVec1[0] += lImpulseDir.x * lfScaledMag;
+                lpSensor->maPostPhysicsVec1[1] += lImpulseDir.y * lfScaledMag;
+                lpSensor->maPostPhysicsVec1[2] += lImpulseDir.z * lfScaledMag;
             }
         }
 
-        // (6) spy accumulation. When lbAddToSpy, the asm accumulates the impulse into the sensor +288
-        // vector and the (impulseDir x relMotion) term into +304. Modelled over the post-physics scratch
-        // vectors on the sensor.
-        if ( lbAddToSpy && lpSensor != nullptr )
-        {
-            lpSensor->maPostPhysicsVec0[0] += lAccumulatedLocalImpulse.x;
-            lpSensor->maPostPhysicsVec0[1] += lAccumulatedLocalImpulse.y;
-            lpSensor->maPostPhysicsVec0[2] += lAccumulatedLocalImpulse.z;
-
-            const Vector3 lTorque = vpu::Mult(lImpulseDir, lRelativeMotion);
-            lpSensor->maPostPhysicsVec1[0] += lTorque.x;
-            lpSensor->maPostPhysicsVec1[1] += lTorque.y;
-            lpSensor->maPostPhysicsVec1[2] += lTorque.z;
-        }
-
-        (void)lbUseNormalScaledFriction;   // selects the FLAGGED friction row (inert here)
+        (void)lAccumulatedLocalImpulse;    // the loop's accumulator: consumed only through the
+                                           // per-direction sensor dispatch above (the old bank
+                                           // of this sum was the P4 mis-placement)
+        (void)lbUseNormalScaledFriction;
         (void)KF_APPLY_EPSILON;
     }
 

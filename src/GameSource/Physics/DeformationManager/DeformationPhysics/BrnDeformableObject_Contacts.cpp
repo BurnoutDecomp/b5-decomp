@@ -66,12 +66,14 @@ namespace Deformation
     static const f32     KF_WORLD_RESTITUTION_NORMAL_Y_THRESHOLD = 0.5f;   // unk_82FB7FF0 @82C5D3E0 <- flt_82001DA0
     static const VecFloat KVF_WORLD_RESTITUTION_VALUE = { 1.10000002f, 1.10000002f, 1.10000002f, 1.10000002f };  // unk_82FB8260 @82C5D3B4 <- flt_82004A1C
 
-    // The global "spy/debug world-contact mode" selector byte the two Do*WorldContactGeneration methods
+    // The global "spy world-contact mode" selector byte the two Do*WorldContactGeneration methods
     // branch on (asm: DoBodyPart `*(v77 - 23737)`, DoDetachedWheel `byte_82F2A347`): when set, the
-    // generator records the contacts through AddPrimitiveListWithTriangleListT (the debug/spy path);
-    // when clear, through CollidePrimitiveListAgainstTriangles (the normal path). It is a file-static
-    // config flag in the X360 build; modelled as a FLAGGED-0 placeholder (default = normal path).
-    static const u8 KU_USE_SPY_WORLD_CONTACT_PATH = 0;   // FLAG: global byte_82F2A347 / spy-mode flag unrecovered
+    // generator records the contacts through AddPrimitiveListWithTriangleListT (the spy path);
+    // when clear, through CollidePrimitiveListAgainstTriangles.
+    // ⭐ RECOVERED 2026-08-24 (deform-land wave, P9; physics11 audit cluster C item 6): the
+    // STATIC IMAGE VALUE of byte_82F2A347 is 0x01 -- the spy world-contact path IS the console
+    // boot default, not a debug opt-in. The old FLAGGED-0 ran the other arm on every contact.
+    static const u8 KU_USE_SPY_WORLD_CONTACT_PATH = 1;   // byte_82F2A347 image value == 0x01
 
     // =================================================================================================
     // GetVehicleWorldRestitution @0x825E0C78
