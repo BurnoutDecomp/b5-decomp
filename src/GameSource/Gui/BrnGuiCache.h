@@ -606,6 +606,8 @@ namespace BrnGui
         // ADDITIVE GROW (BrnCarSelectLivery TU). Its OnLeave @0x824D6C30 clears the same far
         // member on the way out (`lis r10,1 / ori r10,r10,0x3B5E / stbx r9(0), cache, r10`),
         // so the screen that consumed the one-shot transition gate is the one that re-arms it.
+        // The SET side is BrnGui::Intro::OnLeave @0x824D1640 (`stbx 1`) -- see the member's
+        // own note for the full writer/reader roster.
         void SetCarSelectTransitionAlreadyShown(bool lbShown)
         {
             mbCarSelectTransitionAlreadyShown = lbShown;
@@ -1323,13 +1325,17 @@ namespace BrnGui
         s32 miCamStatus;                                 // +0x13B58 (80728)
         u8  mPad_13B5C[2];                               // +0x13B5C..+0x13B5D
         // +0x13B5E (80734). Carved out of the old mPad_13B5C span (2 + 1 + 53 == 56, so the
-        // layout is unchanged). BrnGui::CarSelectVehicle::SetupComponents @0x824C9978 reads
-        // it as `lis r11,1 / ori r11,r11,0x3B5E / lbzx r11, mpGuiCache, r11` and branches on
-        // it: SET means "the car-select screen has already played its transition", so it
-        // re-shows the ticker instead of running mMainAnimComponent's "transin"; CLEAR runs
-        // the transition. FLAG: the NAME is from that single recovered reader (no writer is
-        // reconstructed yet, so it stays 0 on this build and the transition always plays --
-        // which is the first-entry behaviour). Retire the FLAG when the writer lands.
+        // layout is unchanged). The one-shot "skip the car-select presentation" gate; every
+        // access image-verified 2026-08-24:
+        //   SET   by BrnGui::Intro::OnLeave @0x824D1640 (`stbx 1, mpGuiCache, 0x13B5E`) --
+        //         leaving the first-boot intro arms the skip;
+        //   READ  by CarSelectVehicle::SetupComponents @0x824C9978 (SET re-shows the ticker
+        //         instead of running mMainAnimComponent's "transin"),
+        //         CarSelectLivery::SetupComponents @0x824C8240 (SET disables the car-modify
+        //         surface) and CarSelectLivery::Update @0x824DFCD0 (SET auto-accepts the
+        //         selection on the first interactive frame, so the intro's junkyard visit
+        //         never shows the colour-select screen);
+        //   CLEAR by CarSelectLivery::OnLeave @0x824D6C30 and GuiCache::Construct.
         bool mbCarSelectTransitionAlreadyShown;          // +0x13B5E (80734)
         u8  mPad_13B5F[53];                              // +0x13B5F..+0x13B93
         f32 mfDistanceDriven;                            // +0x13B94 (80788) GetDistanceDriven (OdometerComponent::Update @0x82424160)
