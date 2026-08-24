@@ -361,20 +361,12 @@ namespace Vehicle
     }
 
     // ==========================================================================================
-    // Vehicle::DebugComponent::SetLastWallTriangle @0x825B4D60 (32) -- defined HERE because
-    // its declared home TU (B5PhysicsHandlingDebugComponent.cpp) is deliberately NOT mounted:
-    // compiling it would emit the class vtable (GetPath is its key-function override) and drag
-    // the CgsDev::DebugComponent base's unreconstructed virtual surface onto the link (the
-    // DebugUI base-layout block). This is the identical body that TU carries -- assert + the
-    // 10-qword (80-byte) AOSTriangle copy into mLastWallTriangle @console+0x350. The day
-    // B5PhysicsHandlingDebugComponent.cpp mounts, DELETE this copy (the link will say so:
-    // LNK2005).
+    // Vehicle::DebugComponent::SetLastWallTriangle @0x825B4D60: the temporary copy that lived
+    // here is DELETED 2026-08-24 (physics mount wave B3) -- its declared home TU
+    // (B5PhysicsHandlingDebugComponent.cpp) is mounted now and owns the identical body. The
+    // old banner's vtable fear (dragging the CgsDev::DebugComponent base's unreconstructed
+    // virtual surface) was RE-MEASURED this wave: ZERO LNK2019 -- that base surface has landed
+    // since; the link flagged only the predicted LNK2005, exactly as the banner said it would.
     // ==========================================================================================
-    void DebugComponent::SetLastWallTriangle(const CgsGeometric::Triangle4::AOSTriangle* lpTriangle)
-    {
-        CGS_ASSERT(lpTriangle != nullptr, "lpTriangle != NULL");
-
-        mLastWallTriangle = *lpTriangle;   // the 80-byte AOSTriangle copy (console this+0x350)
-    }
 }
 }

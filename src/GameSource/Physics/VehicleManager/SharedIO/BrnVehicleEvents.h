@@ -244,7 +244,10 @@ namespace Vehicle
         // trivially copyable, so a defaulted copy-assignment reproduces it exactly; kept
         // out-of-line in the .cpp so this ledger func has a definition site. ADDITIVE GROW
         // (flagged): an explicitly-declared-and-defaulted operator= over the same trivial copy.
-        CreatePhysicalTrafficEvent& operator=( const CreatePhysicalTrafficEvent& ) = default;   // @0x825B7AE8 is the trivial copy
+        // 2026-08-24 (wave B3a): in-class `= default` demoted to a declaration -- the home TU
+        // (SharedIO/CreatePhysicalTrafficEvent.cpp) mounts now and owns the out-of-line default
+        // (C2084 otherwise); same shape as CreateRaceCarEvent below.
+        CreatePhysicalTrafficEvent& operator=( const CreatePhysicalTrafficEvent& );   // @0x825B7AE8 is the trivial copy
         CreatePhysicalTrafficEvent() = default;
         CreatePhysicalTrafficEvent( const CreatePhysicalTrafficEvent& ) = default;
     };
