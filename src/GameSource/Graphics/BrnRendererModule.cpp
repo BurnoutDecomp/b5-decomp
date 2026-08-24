@@ -5059,18 +5059,24 @@ void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispa
         BrnGui::gpActiveMovieManager->Render(&mIm2dRenderer);
     }
 
-    // Debug HUD overlay (the on-screen perf squares) - drawn on top of the loading screen, before the
-    // present. The debug manager is the BrnGameModule-owned singleton (constructed at boot); the X360
-    // Render path issues this each frame between the foreground overlay and ShowPixelBuffer. RenderWorld
-    // (3D) is deferred, so the view/camera args are unused; the 2D buffer is the real Im2d the loading
-    // screen renders through (mIm2dRenderer).
+    // The debug-overlay FLUSH point. On the X360, BrnGameModule::DebugManagerRender @0x823BCB88
+    // (the dispatch side) queues the overlay and ends by calling DebugManager::Render, which
+    // replays the queued prims into the debug Im2dRenderBuffer; the GPU then consumes that buffer
+    // here, between the 2D foreground and the present. On PC Im2dRenderBuffer IS the immediate
+    // renderer (CgsImRenderBuffer.h's documented fold), so the replay itself must land at this
+    // point of the frame -- DebugManagerRender queues on the dispatch side, and its trailing
+    // DebugManager::Render call is issued HERE instead (its FLAG PC fold). The 2D buffer is the
+    // live Im2d the frame renders through; the 3D buffer is the published debug Im3d
+    // (mIm3dDebugRenderBuffer -- its drawing path is the Debug3D follow-on). The view/camera args
+    // feed only that deferred 3D pass (the console derives them from the dispatch camera
+    // matrices, not yet reconstructed), so identity/zero stand in.
     if (CgsDev::DebugManager* lpDebugManager = CgsDev::DebugManager::ThreadSafeAquire())
     {
         Matrix44 lViewProjection;
         lViewProjection.SetIdentity();
         Vector3 lCameraPosition;
         lCameraPosition.SetZero();
-        lpDebugManager->Render(lViewProjection, lCameraPosition, nullptr, &mIm2dRenderer);
+        lpDebugManager->Render(lViewProjection, lCameraPosition, &mIm3dDebugRenderBuffer, &mIm2dRenderer);
         CgsDev::DebugManager::ThreadSafeRelease(lpDebugManager);
     }
 

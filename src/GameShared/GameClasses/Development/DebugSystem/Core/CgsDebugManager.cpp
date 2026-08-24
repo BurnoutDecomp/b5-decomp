@@ -13,11 +13,12 @@
 #include "rw/core/debug/DebugCriticalSection.h"                                     // gDebugManagerSection (ThreadSafeAquire/Release lock)
 #include "rw/rwcore_structs.h"                                                       // rw::ResourceAllocatorRegistry / rw::core::debug::Manager / rw::BaseResourceDescriptors
 
-#include <cstdio>   // snprintf (debug text formatting; the X360 used CgsCore::SPrintf)
+#include <cstdio>    // snprintf (RenderMemory/RenderAssert formatting; the X360 used CgsCore::SPrintf)
+#include <cstring>   // strlen (the fps stack-string asserts)
 
-// High-resolution frame timer (defined in CgsTimeUtils.cpp) - forward-declared so the frame-health
-// heartbeat can measure the present-to-present delta without pulling Windows.h into this TU.
-namespace CgsSystem { u32 GetSystemTimerBaseTime(); u32 GetSystemTimerFrequency(); u32 GetAvailablePhysicalMemoryBytes(); }
+// Forward-declared so RenderMemory can read the available-memory figure without pulling
+// Windows.h into this TU (defined in CgsTimeUtils.cpp).
+namespace CgsSystem { u32 GetAvailablePhysicalMemoryBytes(); }
 
 // CgsDev::DebugManager - the in-game debug systems owner.
 //
@@ -72,9 +73,9 @@ namespace CgsDev
             return lResource.m_baseResources[0];
         }
 
-        u32  gu32LastFrameTick = 0;
-        bool gbFrameTickValid  = false;
-        f32  gfSmoothedFps     = 0.0f;
+        // X360 KU_STACK_STRING_LENGTH (the fps text stack buffers; both SPrintf results are
+        // asserted under it, CgsDebugManager.cpp:559/582).
+        const u32 KU_STACK_STRING_LENGTH = 48;
 
         // X360 CgsDev::_InterpolateColour: per-channel lerp between two packed RGBA colours (t in 0..1;
         // RGBA8 packed as 0xAABBGGRR, so each byte is one channel).
@@ -94,24 +95,6 @@ namespace CgsDev
             return luResult;
         }
 
-        // Update the smoothed frame rate for the FPS readout (the text itself is queued by
-        // RenderFrameRateColouredWithAverage). NOTE: the on-screen squares are NOT a debug-system
-        // element - they are BrnRendererModule::RenderThreeThreadMonitors (a separate per-thread monitor
-        // drawn by the renderer module), so they are no longer drawn here. Frame time = the real
-        // present-to-present delta from the high-res timer.
-        void UpdateFrameStats()
-        {
-            const u32 lu32Now  = CgsSystem::GetSystemTimerBaseTime();
-            const u32 lu32Freq = CgsSystem::GetSystemTimerFrequency();
-            f32 lfFrameMs = 0.0f;
-            if (gbFrameTickValid && lu32Freq != 0u)
-                lfFrameMs = static_cast<f32>(static_cast<double>(lu32Now - gu32LastFrameTick) * 1000.0 / static_cast<double>(lu32Freq));
-            gu32LastFrameTick = lu32Now;
-            gbFrameTickValid  = true;
-
-            const f32 lfCurFps = (lfFrameMs > 0.0f) ? (1000.0f / lfFrameMs) : 0.0f;
-            gfSmoothedFps = (gfSmoothedFps <= 0.0f) ? lfCurFps : (gfSmoothedFps * 0.9f + lfCurFps * 0.1f);
-        }
     }
 
     // X360 CgsDebugManager.cpp:113 DebugManagerConstructParameters::DEFAULT - the built-in debug
@@ -389,41 +372,61 @@ namespace CgsDev
         mp2dRender->End();
     }
 
-    // X360 0x8282D998. Queue the frame-rate readout ("%d fps") coloured by framerate (low->mid->high
-    // about the midpoint, via InterpolateColour) into the buffered renderer. The X360 reads the position
-    // off the screen-metrics member (DebugManager+320: width@+104, height@+108, lineHeight@+124); that
-    // member is the deferred Metrics follow-on, so the known render resolution is used with the X360
-    // formula - x = width*0.33, y = height-(lineHeight+10), text height 20 - the real bottom-bar spot.
-    // The averaged "%d fps %s" second line is the perfmon-average follow-on.
-    void DebugManager::RenderFrameRateColouredWithAverage(f32 lfFramerate, f32 /*lfAverageFramerate*/,
+    // Faithful port of X360 0x8282D998. Three queued text lines in the bottom debug bar
+    // (x = width*0.33, lineHeight = metrics' bottom border, text size 20):
+    //   1. the CURRENT frame rate at y = height-(lineHeight+10) - "%d fps" (or
+    //      "%d fps & simulation not real time"), coloured low->mid->high about the ramp midpoint;
+    //   2. the AVERAGE "%d fps %s" (lpcAverageText) one line below (y = height-(lineHeight-10)),
+    //      coloured on the same ramp;
+    //   3. "UPDATED" just left of it (x - textSize*5), in the average colour with alpha =
+    //      lfAverageHighlight*255 - the flash that fades as the average ages.
+    // Both SPrintf results are asserted under KU_STACK_STRING_LENGTH (:559/:582).
+    void DebugManager::RenderFrameRateColouredWithAverage(f32 lfFramerate, f32 lfAverageFramerate,
             u32 lHighColour, u32 lLowColour, u32 lMidColour,
             f32 lfHighFramerate, f32 lfLowFramerate,
-            const char* /*lpcAverageText*/, f32 /*lfAverageHighlight*/, bool lbIsRealtime)
+            const char* lpcAverageText, f32 lfAverageHighlight, bool lbIsRealtime)
     {
+        const DebugUI::Metrics& lrMetrics = mpUI->GetMetrics();
+        const f32 lfLineHeight = lrMetrics.mfScreenBorderBottom;    // X360 UI+124
+        const f32 lfX          = lrMetrics.mfScreenWidth * 0.33f;   // X360 UI+104 * 0.33
+
         CGS_ASSERT(lfLowFramerate < lfHighFramerate, "lfLowFramerate < lfHighFramerate");
 
         const f32 lfRange    = (lfHighFramerate - lfLowFramerate) * 0.5f;
         const f32 lfMidpoint = lfLowFramerate + lfRange;
-        u32 luColour;
-        if (lfRange <= 0.0f)
-            luColour = lMidColour;
-        else if (lfFramerate >= lfMidpoint)
-            luColour = InterpolateColour(lMidColour, lHighColour, (lfFramerate - lfMidpoint) / lfRange);
-        else
-            luColour = InterpolateColour(lLowColour, lMidColour, (lfFramerate - lfLowFramerate) / lfRange);
 
-        const DebugUI::Metrics& lrMetrics = mpUI->GetMetrics();
-        const f32 lfX = lrMetrics.mfScreenWidth * 0.33f;
-        const f32 lfY = lrMetrics.mfScreenHeight - (lrMetrics.mfScreenBorderBottom + 10.0f);
+        // 1. the current frame rate.
+        const u32 luColour = (lfFramerate >= lfMidpoint)
+            ? InterpolateColour(lMidColour, lHighColour, (lfFramerate - lfMidpoint) / lfRange)
+            : InterpolateColour(lLowColour, lMidColour, (lfFramerate - lfLowFramerate) / lfRange);
 
-        char lacText[48];
-        const s32 liFps = static_cast<s32>(lfFramerate + 0.5f);
-        if (lbIsRealtime)
-            std::snprintf(lacText, sizeof(lacText), "%d fps", liFps);
-        else
-            std::snprintf(lacText, sizeof(lacText), "%d fps & simulation not real time", liFps);
+        char lacFramerate[KU_STACK_STRING_LENGTH];
+        CgsCore::SPrintf(lacFramerate, KU_STACK_STRING_LENGTH,
+                         lbIsRealtime ? "%d fps" : "%d fps & simulation not real time",
+                         static_cast<s32>(lfFramerate + 0.5f));
+        CGS_ASSERT(std::strlen(lacFramerate) < KU_STACK_STRING_LENGTH,
+                   "strlen( lacFramerate ) < KU_STACK_STRING_LENGTH");
+        mBufferedRenderer.Draw2DText(lacFramerate, lfX,
+                                     lrMetrics.mfScreenHeight - (lfLineHeight + 10.0f), 20.0f, luColour);
 
-        mBufferedRenderer.Draw2DText(lacText, lfX, lfY, 20.0f, luColour);
+        // 2. the average, one line below.
+        const u32 luAverageColour = (lfAverageFramerate >= lfMidpoint)
+            ? InterpolateColour(lMidColour, lHighColour, (lfAverageFramerate - lfMidpoint) / lfRange)
+            : InterpolateColour(lLowColour, lMidColour, (lfAverageFramerate - lfLowFramerate) / lfRange);
+
+        CgsCore::SPrintf(lacFramerate, KU_STACK_STRING_LENGTH, "%d fps %s",
+                         static_cast<s32>(lfAverageFramerate + 0.5f), lpcAverageText);
+        CGS_ASSERT(std::strlen(lacFramerate) < KU_STACK_STRING_LENGTH,
+                   "strlen( lacFramerate ) < KU_STACK_STRING_LENGTH");
+        mBufferedRenderer.Draw2DText(lacFramerate, lfX,
+                                     lrMetrics.mfScreenHeight - (lfLineHeight - 10.0f), 20.0f, luAverageColour);
+
+        // 3. the "UPDATED" flash: the average colour's RGB under an alpha driven by the highlight.
+        const u32 luUpdatedColour =
+            (static_cast<u32>(static_cast<u8>(static_cast<s32>(lfAverageHighlight * 255.0f))) << 24)
+            | (luAverageColour & 0x00FFFFFFu);
+        mBufferedRenderer.Draw2DText("UPDATED", lfX - lrMetrics.mfTextSize * 5.0f,
+                                     lrMetrics.mfScreenHeight - (lfLineHeight - 10.0f), 20.0f, luUpdatedColour);
     }
 
     // X360 0x8282D8F8. Queue the build-info string (bottom-left debug readout): the macBuildDate
@@ -508,25 +511,46 @@ namespace CgsDev
         mp2dRender->End();
     }
 
-    // X360 Render 0x8282F770: point the renderers at this frame's buffers, then RenderWorld + RenderHUD.
-    // The 3D path (mp3dRender setup + RenderWorld) is the Debug3D follow-on; the 2D path drives the
-    // squares into lp2dRenderBuffer.
-    void DebugManager::Render(const Matrix44& /*lViewProjection*/, const Vector3& /*lCameraPosition*/,
-                             CgsGraphics::Im2d* /*lp3dRenderBuffer*/, CgsGraphics::Im2d* lp2dRenderBuffer)
+    // Faithful port of X360 Render @0x8282F770: assert both renderers exist, point them at this
+    // frame's debug render buffers (each buffer asserted non-null by its renderer's SetRenderBuffer
+    // inline), then RenderWorld (3D) + RenderHUD (2D). The overlay QUEUEING - build info, frame
+    // rate, memory - lives with the caller (BrnGameModule::DebugManagerRender @0x823BCB88), which
+    // also gates the whole pass on the debug font having arrived.
+    void DebugManager::Render(const Matrix44& lViewProjection, const Vector3& lCameraPosition,
+                             CgsGraphics::Im3dRenderBuffer* lp3dRenderBuffer, CgsGraphics::Im2d* lp2dRenderBuffer)
     {
+        CGS_ASSERT(mp3dRender != nullptr, "mp3dRender");
+        CGS_ASSERT(mp2dRender != nullptr, "mp2dRender");
+
+        CGS_ASSERT(lp3dRenderBuffer != nullptr, "lpRenderBuffer != NULL");   // CgsDebug3DImmediateRender.h:282
+        mp3dRender->SetRenderBuffer(lp3dRenderBuffer);
+        CGS_ASSERT(lp2dRenderBuffer != nullptr, "lpRenderBuffer != NULL");   // CgsDebug2DImmediateRender.h:253
         mp2dRender->SetRenderBuffer(lp2dRenderBuffer);
-        // Orchestrator step (X360 BrnGameModule::DebugManagerRender): update the frame health, then
-        // queue the per-frame debug overlay; RenderHUD flushes the buffered renderer (Dispatch2D).
-        UpdateFrameStats();
-        // The bottom-bar debug readouts (X360 BrnGameModule::DebugManagerRender order): build info, the
-        // frame-rate (green high / yellow mid / red low), and available memory. All queue into the
-        // buffered renderer; RenderHUD flushes them.
-        RenderBuildInfo();
-        RenderFrameRateColouredWithAverage(gfSmoothedFps, gfSmoothedFps,
-                                           0xFF00FF00u, 0xFF0000FFu, 0xFF00FFFFu,
-                                           60.0f, 30.0f, "over last minute", 0.0f, true);
-        RenderMemory();
+
+        RenderWorld(lViewProjection, lCameraPosition);
         RenderHUD();
+    }
+
+    // Faithful port of X360 RenderWorld @0x8282E030: assert the renderer bring-up ran, open the 3D
+    // batch, replay the buffered world-space prims, run each ACTIVE component's RenderWorld, close.
+    // (The 3D renderer's draw bodies are the Debug3D render follow-on; the pass shape is the
+    // console's.) lCameraPosition is carried for the components' distance culls.
+    void DebugManager::RenderWorld(const Matrix44& lViewProjection, const Vector3& /*lCameraPosition*/)
+    {
+        CGS_ASSERT(mp3dRender != nullptr, "must call ConstructRenderer");
+
+        mp3dRender->Begin(lViewProjection);
+        mBufferedRenderer.Dispatch3D(mp3dRender, true);
+
+        for (DebugComponent* lpComponent = mComponentList.GetFirst();
+             lpComponent;
+             lpComponent = mComponentList.GetNext(lpComponent))
+        {
+            if (lpComponent->IsActive())
+                lpComponent->RenderWorld(mp3dRender);
+        }
+
+        mp3dRender->End();
     }
 
     // DebugInterface::Get2dRender lived here while mBufferedRenderer was modelled as a file-static;

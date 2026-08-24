@@ -293,6 +293,13 @@ namespace BrnGame
         // with a marker so unwritten reads are caught.
         void DebugMemoryInit(BrnGameModule* lpData);  // @ BrnGameModule.cpp:3916
 
+        // The per-frame debug overlay drive (X360 @0x823BCB88, called from DoDispatch @0x823DC458):
+        // gate on the debug font + the published debug render buffers, keep the fps ring/average,
+        // queue the build-info/fps/memory readouts, then DebugManager::Render. The console signature
+        // takes the RendererIO OUTPUT buffer; on this build the dispatch IO pair does not exist yet
+        // (boot audit F-P2-4) so the method reads the same state directly - see the body's FLAG.
+        void DebugManagerRender();
+
         // IThreadClass implementation (the engine drives these on their threads).
         bool UpdateThread() override;
         void DispatchThread() override;                               // @ BrnGameModule.cpp:1221
@@ -747,7 +754,20 @@ namespace BrnGame
         bool mbSteppingFrames;                                       // h:479
         bool mbDoStep;                                               // h:480
         bool mbStopStepping;                                         // h:481
-        // [h:482-490: force-shutdown, debug-framerate stats - omitted]
+        // The debug fps-readout state DebugManagerRender @0x823BCB88 keeps (h:482-490, the
+        // "debug-framerate stats"; X360 offsets gm+0x9A0B85..0x9A0BC8). The ring holds the last
+        // three frame timestamps, so the current fps is measured over a 3-frame window; every 60
+        // seconds the accumulated per-frame fps collapses into the "over last minute" average.
+        // [FLAG] mbDebugSimulationIsRealtime's writer (the console flips it when the sim drops out
+        // of real time) is not yet recovered; Construct seeds it true, so the readout shows the
+        // plain "%d fps" line.
+        bool mbDebugSimulationIsRealtime;                            // gm+0x9A0B85
+        u8   mu8DebugFpsFrameStampIndex;                             // gm+0x9A0B9C (mod 3 cursor)
+        u32  mau32DebugFpsFrameStamps[3];                            // gm+0x9A0BA0 (u64 on X360; the PC timer is u32)
+        u32  mu32DebugFpsAverageWindowStamp;                         // gm+0x9A0BB8 (u64 on X360)
+        f32  mfDebugFpsAccumulator;                                  // gm+0x9A0BC0
+        f32  mfDebugFpsAverage;                                      // gm+0x9A0BC4
+        f32  mfDebugFpsSampleCount;                                  // gm+0x9A0BC8
         CgsGui::CgsGuiModuleIO::InputBuffer*   mpGuiInputBuffer;     // h:493
         CgsGui::ViewIO::InputBuffer*           mpGuiViewInputBuffer; // h:494
         CgsGui::ModelIO::OutputBuffer*         mpGuiModelOutputBuffer;// h:495

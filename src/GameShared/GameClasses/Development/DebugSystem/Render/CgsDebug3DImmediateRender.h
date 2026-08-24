@@ -12,6 +12,7 @@
 // SetDebugFont (0x823B1448) stores the 2-word handle at this+0x2C/+0x30.
 
 namespace rw { struct IResourceAllocator; }   // struct -- must match rwcore_structs.h's class-key (MSVC mangling)
+namespace CgsGraphics { class Im3dRenderBuffer; }   // the 3D debug render buffer (opaque on PC)
 
 namespace CgsDev
 {
@@ -29,6 +30,17 @@ namespace CgsDev
         // Debug2DImmediateRender::SetDebugFont; DebugManager::SetDebugFont drives both.
         void SetDebugFont(const CgsResource::SafeResourceHandle<CgsResource::Font>& lrFont);
         bool HasResourceFont() const { return !mpFont.IsNull(); }
+
+        // X360 SetRenderBuffer inline (DebugManager::Render @0x8282F770 stores the frame's 3D debug
+        // render buffer here after asserting it non-null, CgsDebug3DImmediateRender.h:282).
+        void SetRenderBuffer(CgsGraphics::Im3dRenderBuffer* lpRenderBuffer) { mpRenderBuffer = lpRenderBuffer; }
+
+        // X360 Begin/End - open/close the frame's 3D batch (DebugManager::RenderWorld @0x8282E030
+        // brackets the buffered-prim replay + the component RenderWorld pass with these). BOUNDED:
+        // the render-state/matrix-latch bodies land with the Debug3D render follow-on (nothing on
+        // this build emits 3D debug geometry yet).
+        void Begin(const rw::math::vpu::Matrix44& lrViewProjection);
+        void End();
 
         // World-space primitive draws (declared-only; bodies are the 3D render follow-on). Recovered
         // from callers such as TriggerEntityModuleDebugComponent::RenderWorld: an oriented box given
@@ -93,5 +105,8 @@ namespace CgsDev
         // _R31[9] = height` from the UI metrics).
         f32 mfVirtualScreenWidth;
         f32 mfVirtualScreenHeight;
+
+        // The frame's 3D debug render buffer (X360 +0x28, set by DebugManager::Render each frame).
+        CgsGraphics::Im3dRenderBuffer* mpRenderBuffer;
     };
 }
