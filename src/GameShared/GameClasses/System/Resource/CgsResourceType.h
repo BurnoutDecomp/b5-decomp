@@ -40,12 +40,19 @@ namespace CgsResource
     // needs; GetTypeID is overridden by every handler to return its registry id.
     //
     // The 12 virtuals are declared in their X360 vtable order — DO NOT REORDER.
-    // (operator new/delete and InitCachedValues exist on the real Type but are
-    // non-virtual and not needed to compile against this base, so they are omitted.)
+    // (operator delete exists on the real Type but is non-virtual and not needed
+    // to compile against this base, so it is omitted.)
     class Type
     {
     public:
         Type();
+
+        // Non-virtual, like the X360's: caches CanDefrag()/GetTypeID() into the
+        // members the hot paths read (Pool::AllocateMemoryForResource reads the
+        // cached flag at Type+4, the pool-module type table keys on the cached id
+        // at Type+8). RegisterResourceTypes @0x82667EA8 runs it once per handler
+        // right after construction; our TypeRegistry::Register is that seam.
+        void InitCachedValues();
 
         virtual uint32_t               GetTypeID() const;
         virtual ResourceDescriptor     GetSerialisedResourceDescriptor(const void* lpResource) const;

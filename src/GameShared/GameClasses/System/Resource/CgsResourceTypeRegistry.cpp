@@ -18,11 +18,16 @@ namespace CgsResource
         static ResourceTypeEntry saResourceTypes[KU_MAX_REGISTERED_RESOURCE_TYPES] = {};
         static u32 suNumResourceTypes = 0;
 
-        void Register(const Type* lpType, const char* lpcName)
+        void Register(Type* lpType, const char* lpcName)
         {
             if (lpType == 0)
                 return;
-            const u32 luId = lpType->GetTypeID();
+            // The X360 runs InitCachedValues on each handler right after construction
+            // (RegisterResourceTypes @0x82667EA8); this is our one registration seam.
+            // Pool::AllocateMemoryForResource reads the cached can-defrag flag and the
+            // pool-module type table keys on the cached id, so both must be snapshot here.
+            lpType->InitCachedValues();
+            const u32 luId = lpType->GetCachedId();
             for (u32 lu = 0; lu < suNumResourceTypes; ++lu)
             {
                 if (saResourceTypes[lu].muId == luId)

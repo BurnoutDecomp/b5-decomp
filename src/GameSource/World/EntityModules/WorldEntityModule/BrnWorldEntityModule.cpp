@@ -824,13 +824,40 @@ WorldEntityModule::OnWorldGraphicsLoadComplete( const BrnResource::GameDataIO::G
         CGS_ASSERT( lpInstance,
             "BrnWorld::WorldEntityModule::OnWorldGraphicsLoadComplete: Couldn't find instance in instance list" );
 
-        const CgsGraphics::Model* lpModel = lpInstance->mpModel;
+        const CgsGraphics::Model* lpModel = ( lpInstance != 0 ) ? lpInstance->mpModel : 0;
         CGS_ASSERT( lpModel, "lpModel" );
+
+        // [FLAG PC boot gate] The console asserts above and dereferences unguarded -- it can,
+        // because its pools never refuse an allocation. Our pool gates refuse resources when a
+        // heap runs out of nodes/space (CgsResourcePool.cpp / CgsResourceHeap.cpp [FLAG PC boot
+        // gate]); the bundle then completes DEGRADED with unresolved imports, and an instance
+        // can reach here with a null model (observed: a long DRIVING run fragmented pool 3
+        // until node exhaustion, and the next unit's load-complete crashed in DoesStateExist).
+        // Skip the instance instead of crashing -- that piece of world geometry stays invisible
+        // until the zone is re-streamed. DELETE when the relocating defragmenter lands and the
+        // pool gates are restored to plain console asserts.
+        if ( lpModel == 0 || !lpModel->DoesStateExist( CgsGraphics::Model::E_STATE_LOD_0 ) )
+        {
+            static bool sbLoggedDegradedInstance = false;
+            if ( !sbLoggedDegradedInstance )
+            {
+                sbLoggedDegradedInstance = true;
+                ( *CgsDev::Log::gpDebugPrint )
+                    << "WorldEntityModule: world instance with no bound model (resource refused"
+                       " earlier) -- skipping scene registration [FLAG PC boot gate]\n";
+            }
+            continue;
+        }
+
         CGS_ASSERT( lpModel->DoesStateExist( CgsGraphics::Model::E_STATE_LOD_0 ), "lpModel->DoesStateExist( CgsGraphics::Model::E_STATE_LOD_0 )" );
 
         const Renderable* lpRenderable =
             lpModel->GetRenderable( CgsGraphics::Model::E_STATE_LOD_0 );
         CGS_ASSERT( lpRenderable, "lpRenderable" );
+        if ( lpRenderable == 0 )
+        {
+            continue;   // same degraded-load gate as above
+        }
 
         // Sphere centre = the renderable centre through the instance transform;
         // radius scaled by the transform's maximum axis scale.

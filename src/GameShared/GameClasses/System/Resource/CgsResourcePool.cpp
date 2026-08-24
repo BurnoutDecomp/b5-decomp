@@ -302,11 +302,13 @@ namespace CgsResource
                     if (lpEntry->mResource.m_baseResources[luFreeType] != 0)
                         maHeaps[luFreeType].Free(lpEntry->mResource.m_baseResources[luFreeType]);
                 }
-                // [FLAG PC boot gate] Console-real assert, but it fires here for a PC-only
-                // reason: the world graphics streamer's UNLOAD leg is still inert, so the whole
-                // 25-zone PVS set accumulates in pool 3 instead of the console's rolling
-                // working set. Report once and hand the caller the out-of-memory result it
-                // already handles. RESTORE the plain CGS_ASSERT when the unload leg is live.
+                // [FLAG PC boot gate] Console-real assert, but it can fire here for a PC-only
+                // reason: without the (deferred) relocating defragmenter a long streaming run
+                // can fragment a heap until an allocation fails. Report once and hand the
+                // caller the out-of-memory result it already handles; downstream consumers of
+                // a degraded bundle must tolerate refused resources (see the null-model gate in
+                // BrnWorldEntityModule::OnWorldGraphicsLoadComplete). RESTORE the plain
+                // CGS_ASSERT when the defragmenter lands.
                 {
                     static bool sbLoggedPoolFull = false;
                     if (!sbLoggedPoolFull && (CgsDev::Message::gxMessageFilterFlags & 1))
