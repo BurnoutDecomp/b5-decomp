@@ -814,7 +814,7 @@ namespace Deformation
         // `clrrdi r31, r11, 32` (keep only the entity word in the high dword) then the stdx.
         // ⭐ CORRECTED 2026-08-24 (deform-land wave): the old FLAG placeholder stored
         // mu16DeformableObjectIndex here, whose entity-owner byte is 0 -- the readback's L3 leg
-        // (owner byte must be E_ENTITYTYPE_RACECAR == 1) would have silently skipped every entry.
+        // (owner byte must be E_ENTITYTYPE_RACECAR == 1) would have rejected every entry.
         lpOutEM->SetBaseId(luEntry,
                            GetHandlingBodyVolumeInstanceId().muId
                                & CgsSceneManager::VolumeInstanceId::KU_ENTITY_ID_MASK);
