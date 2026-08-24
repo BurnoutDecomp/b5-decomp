@@ -321,12 +321,6 @@ namespace BrnGui
         // FLAG PC-platform leaf: PC has no Xbox sign-in; the local player is always present.
         bool CacheIsUserSignedIn(const GuiCache* lpCache) { return lpCache != 0; }
 
-        // GuiCache +0x13B5E, set to 1 by Intro::OnLeave and also written by
-        // CarSelect{Livery,Vehicle}::SetupComponents / CarSelectLivery::OnLeave+Update and
-        // GuiCache::Construct. Its role is NOT settled -- do not guess it.
-        // FLAG PC-platform leaf: no-op boundary until the GuiCache TU names the byte.
-        void CacheSetIntroLeftFlag(GuiCache* /*lpCache*/) {}
-
     }
 
     // Intro-state transition log -- the [BootLegal] / [BootProfile] / [FBurnMainHud]-style
@@ -426,7 +420,15 @@ namespace BrnGui
     // ================================================================================
     void Intro::OnLeave()
     {
-        CacheSetIntroLeftFlag(mpGuiCache);   // X360: stb 1, mpGuiCache+0x13B5E
+        // X360: `stbx 1, mpGuiCache, 0x13B5E` (unconditional, cache is live whenever this
+        // state can be left). Arms the one-shot GuiCache gate the junkyard car-select pair
+        // consumes: CarSelectVehicle::SetupComponents skips its "transin" transition and
+        // CarSelectLivery::Update auto-accepts the selection on its first interactive frame,
+        // which is why the intro's junkyard visit never shows the colour-select screen.
+        // CarSelectLivery::OnLeave clears it again. (This used to be a no-op leaf while the
+        // byte's role was unsettled -- root-caused 2026-08-24 when the colour-select screen
+        // appeared in the intro flow.)
+        mpGuiCache->SetCarSelectTransitionAlreadyShown(true);
 
         // X360: the inlined GuiEventPlayAptMovie record {8, 18, 12, "", 3} on channel 41,
         // 20 bytes -- unmount the intro apt movie at level 3.
