@@ -28,7 +28,7 @@ namespace CgsGui { namespace ModelIO { struct InputBuffer; } }
 namespace BrnResource { class ChallengeList; } // GetFreeburnChallengeList return (pointer only)
 namespace BrnGui { struct WorldDataController; }  // GetWorldDataController return (pointer only)
 namespace BrnProgression { struct ProfileEvent; } // GetProfileEvent return (pointer only)
-namespace BrnProgression { struct Profile; }      // DetermineCarUnlockPending arg (pointer only)
+namespace BrnProgression { class Profile; }       // DetermineCarUnlockPending arg (pointer only; class per BrnProfile.h:208)
 namespace BrnGameState { class LandmarkIndex; }    // GetLandmarkInfoFromIndex arg (by value)
 // GetRequiredScoreForMedal arg (by value). Opaque-enum forward declaration with the
 // committed underlying type -- the SAME idiom (and the same underlying type) as
@@ -845,6 +845,17 @@ namespace BrnGui
         // can be pinned to this X360 offset.
         CgsID GetLocalPlayerCarId() const                        { return mLocalPlayerCarId; }
 
+        // The ORIGINAL car id twin (see the +0x4AF8 carve note; FBurnMainHudState case 311's
+        // `ld r5, 0x4AF8(cache)` is the attested whole-CgsID read this accessor names).
+        CgsID GetLocalPlayerOriginalCarId() const                { return mLocalPlayerOriginalCarId; }
+
+        // The district-marker source words (the +0x4FA0 carve): the X360 state reads the
+        // three words raw off the cache (@0x8247B660 post-loop); these are the named PC
+        // faces of those reads. The write-back goes through RecEvent(169).
+        s32  GetChangeDistrictCounty() const                     { return meChangeDistrictCounty; }
+        s32  GetChangeDistrictDistrict() const                   { return meChangeDistrictDistrict; }
+        bool IsChangeDistrictConsumed() const                    { return mu8ChangeDistrictConsumed != 0; }
+
         // ADDITIVE GROW (BrnCrashNavMap wave J): the gate byte for the friend-selected
         // road-rule score prompts. X360-INLINED as a BYTE load (`lbz r11, 0x4B50(cache)` at
         // BOTH read sites, @0x824B6A50 and @0x824B6B3C, in CrashNavMap::UpdateButtonPrompts);
@@ -978,7 +989,18 @@ namespace BrnGui
         // the screen's mHoveringRivalId slot. No member is shifted (8 + 8 == 16).
         // FLAG: consumer-named -- no DWARF member row can be pinned to this X360 offset.
         CgsID mLocalPlayerCarId;                         // +0x4AF0 (19184)
-        u8  mPad_4AF8[8];                                // +0x4AF8..+0x4AFF
+        // ADDITIVE CARVE (HUD H1 wave, 2026-08-25): the trailing 8 bytes of the same former
+        // 16-byte pad -- the local player's ORIGINAL car id (the pre-conversion id
+        // GetOriginalCarId maps the live id back to). X360-attested as a PAIR at both ends:
+        // GuiCache::RecEvent @0x8250DDF0 case 415 writes both back to back
+        // (`*(+19184) = event CgsID; *(+19192) = GetOriginalCarId(it)`), and
+        // FBurnMainHudState::UpdateRunning case 311 @0x8247C270 reads it WHOLE
+        // (`ld r5, 0x4AF8(cache)`) as JunctionInfoComponent::HandleJunctionChange's
+        // lCurrentCarId (the burning-route "is this the player's route car" compare).
+        // FLAG: consumer-named; no PC producer yet (case 415 needs GetOriginalCarId,
+        // unreconstructed) -- reads kCGSID_NULL(0) on this build, so the mode-5 compare
+        // simply never matches. No member is shifted (8 + 8 == 16).
+        CgsID mLocalPlayerOriginalCarId;                 // +0x4AF8 (19192)
         s32 mePlayerActiveRaceCarIndex;                  // +0x4B00 (19200) EActiveRaceCarIndex (DWARF h; HudMessageAnalyzer::HandleLiveRevengeUpdate @0x8251E2xx)
         // [gateui r3] ADDITIVE CARVE from the head of the former mPad_4B04[0x2C] -- the local
         // player's GLOBAL race-car index, the twin of the ACTIVE index at +0x4B00. Pinned as a
@@ -1073,7 +1095,22 @@ namespace BrnGui
         // pending flag bytes (Hex-Rays field_4B75 / field_4B76). FLAG: consumer-named.
         bool mbCarUnlockPending;                         // +0x4B75 (19317) set 1 when an un-shown unlocked car remains
         bool mbCarUnlockDetermined;                      // +0x4B76 (19318) set 1 on entry (determination has run)
-        u8   mPad_4B77[1081];                            // +0x4B77..+0x4FAF
+        u8   mPad_4B77[0x4FA0 - 0x4B77];                 // +0x4B77..+0x4F9F
+        // ADDITIVE CARVE (HUD H1 wave, 2026-08-25): the district-marker source words -- the
+        // latest GUI-event-169 (GuiEventChangeDistrict) record, stored verbatim. Pinned as a
+        // TRIO at three ends: GuiCache::Construct @0x82505860 seeds
+        // `district := 18 (E_DISTRICT_INVALID); county := WorldRegion::DistrictToCounty(18);
+        // consumed byte := 0`; GuiCache::RecEvent @0x8250DDF0 case 169 copies the record's
+        // three words here; and FBurnMainHudState::UpdateRunning @0x8247B660's post-loop
+        // reads all three, drives DistrictMarkerComponent::SetCounty/SetDistrict when the
+        // consumed byte is clear (or the state's own refresh is armed and the district is
+        // valid), then hands the record BACK through RecEvent(169) with the consumed byte
+        // set. The console flag word's tested byte is its FIRST byte (BE `lbz` at +20392);
+        // modelled as a leading u8 so the LE host tests the same authored byte.
+        s32  meChangeDistrictCounty;                     // +0x4FA0 (20384) BrnWorld::ECounty
+        s32  meChangeDistrictDistrict;                   // +0x4FA4 (20388) BrnWorld::EDistrict
+        u8   mu8ChangeDistrictConsumed;                  // +0x4FA8 (20392) 0 == fresh, 1 == consumed
+        u8   maPad_4FA9[7];                              // +0x4FA9..+0x4FAF
         u8   maPresetRacesStorage[6 * 120];              // +0x4FB0 (20400) PresetRace maPresetRaces[6] (stride 120; GetPresetRace @0x824B2FE8 -> 120*(idx+170)+this; element un-homed)
         s32 miNumPresetRaces;                            // +0x5280 (21120) count of maPresetRaces (GetPresetRace bound)
         u8  mPad_5284[2];                                // +0x5284..+0x5285

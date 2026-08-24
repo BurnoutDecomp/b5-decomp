@@ -186,6 +186,16 @@ namespace CgsLanguage
                                ParameterFormatType leType, s32 liValue,
                                ParameterFormatType leValueType);
 
+        // X360 0x82865878 (HUD H1 wave, 2026-08-25) -- FormatTextFromInt's float sibling:
+        // resolve lpcSourceText through leType, render lfValue through the FLOAT dispatcher
+        // (a 64-byte value slot), print into %1. Caller: TextFieldRef::SetLocalisedText
+        // (id, type, f32, valueFormat) @0x8246D398 -- the odometer's mileage readout path.
+        // Carries the SAME 1024-source-cap-as-target-cap console defect as FormatTextFromInt
+        // (see that body's note); body in this TU's cpp.
+        bool FormatTextFromFloat(char* lpacBuffer, u32 luBufferSize, const char* lpcSourceText,
+                                 ParameterFormatType leType, f32 lfValue,
+                                 ParameterFormatType leValueType);
+
         // X360 0x82862650 (DWARF CgsLanguageManager.h:264) -- render liValue into the
         // caller's buffer under one of the four integer formats (integer / no-separator
         // / percentage / money); anything else is the "with int" parameter assert. The

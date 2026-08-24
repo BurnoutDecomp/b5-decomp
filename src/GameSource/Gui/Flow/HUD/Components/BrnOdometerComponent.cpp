@@ -29,13 +29,28 @@ namespace BrnGui
     const f32 KF_SHOW_NEWDRIVETHRUFOUND_TIME = 5.0f;
 
     // @0x82F27868 -- per-gamemode "plural" event-name localisation string-id table, indexed
-    // by GuiEventJunctionInfo::meGameModeType. Entry 0 (E_MODE_OFFLINE_RACE) is X360-attested
-    // "GAMEMODE_RACE_PLURAL"; the remaining entries are serialised label data not present in
-    // this function export, so the table is declaration-only here (defined by this class's
-    // data TU once every gamemode label is recovered). Not a DWARF class member -- it is the
-    // .cpp's file-scope name table (mirrors the sibling JunctionInfoComponent's
-    // gGameModeNameStringIds).
-    extern const char* const gGameModeNamePluralStringIds[];
+    // by GuiEventJunctionInfo::meGameModeType (asserted 0..E_MODE_OFFLINE_COUNT==10 by
+    // SetupAptVariables). Contents RECOVERED from the image 2026-08-25 (headless idat read of
+    // the 12 contiguous pointers at 0x82F27868; scratch h1_dump.txt): 10 per-gamemode plurals
+    // followed by the two EVENT_* plurals the sibling junction/drive-thru tallies use. The
+    // old "declaration-only, defined by the data TU" banner was recoverable-after-all (the
+    // eleventh stale banner class) -- the table IS the data, defined here at file scope in
+    // BrnGui (mirrors the sibling JunctionInfoComponent's gGameModeNameStringIds).
+    const char* const gGameModeNamePluralStringIds[12] =
+    {
+        "GAMEMODE_RACE_PLURAL",            // 0  E_MODE_OFFLINE_RACE (X360-attested by export)
+        "GAMEMODE_FACEOFF_PLURAL",         // 1
+        "GAMEMODE_CRASH_PLURAL",           // 2  (showtime)
+        "GAMEMODE_ROADRAGE_PLURAL",        // 3
+        "GAMEMODE_PURSUIT_PLURAL",         // 4
+        "GAMEMODE_BURNINGROUTE_PLURAL",    // 5
+        "GAMEMODE_ELIMINATOR_PLURAL",      // 6
+        "GAMEMODE_STUNTATTACK_PLURAL",     // 7
+        "GAMEMODE_SURVIVAL_PLURAL",        // 8
+        "GAMEMODE_TRAFFICATTACK_PLURAL",   // 9
+        "EVENT_JUNCTIONS_PLURAL",          // 10 (image-contiguous tail; console table bound
+        "EVENT_DRIVETHRUS_PLURAL",         // 11  not independently attested beyond [11])
+    };
 
     // @0x82415088 -- adopt the state interface (base Construct: the h:113 lpStateInterface
     // tripwire, store the channel, invalidate the clip), construct the three animator children

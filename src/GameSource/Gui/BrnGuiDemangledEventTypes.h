@@ -91,7 +91,10 @@ namespace BrnGui
     struct GuiEventCanSkipCrash { u8 maData[1]; s32 GetEventType() const { return 547; } };  // id 547 size 1 (raw; size not GuiEvent-shaped)
     struct GuiEventCantPaintCar { u8 maData[1]; s32 GetEventType() const { return 551; } };  // id 551 size 1 (raw; size not GuiEvent-shaped)
     struct GuiEventChallengedEventDataResponse : public CgsGui::GuiEvent<332> { u8 maPayload[20]; };  // id 332 size 32 (12B GuiEvent header + opaque payload)
-    struct GuiEventChangeDistrict : public CgsGui::GuiEvent<169> {};  // id 169 size 12
+    // [H1 wave 2026-08-25] GuiEventChangeDistrict (id 169) has been RECOVERED and now lives
+    // in BrnGuiEventTypeDefs.h with its real flat wire shape (the demangled `GuiEvent<169> {}`
+    // placeholder here did not match the wire -- the record is three words at offset +0 with
+    // no GuiEvent header). The opaque placeholder was DELETED rather than left to shadow it.
     struct GuiEventCurrentStatus : public CgsGui::GuiEvent<492> { u8 maPayload[108]; };  // id 492 size 120 (12B GuiEvent header + opaque payload)
     struct GuiEventDirectorSettings { u8 maData[4]; s32 GetEventType() const { return 475; } };  // id 475 size 4 (raw; size not GuiEvent-shaped)
     // id 314 size 12. X360 BrnGui::OdometerComponent::HandleDriveThruDiscovered (@0x8242C000)

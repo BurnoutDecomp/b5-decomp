@@ -326,6 +326,34 @@ namespace
                 break;
             }
 
+            // ---- 112  the DISTRICT CHANGE (8 bytes: {county, district}) -------------------
+            // ⭐ [H1 district wave 2026-08-25] X360 case 112 @0x823EA-range (h1_dump2.txt),
+            // verbatim: copy the action's 8-byte {county, district} pair, zero the third
+            // word (the consumed flag), AddGuiEvent<GuiEventChangeDistrict> (id 169, 12B).
+            // Producer: GameStateModule's case-115 arm; consumer: GuiCache::RecEvent case
+            // 169 -> FBurnMainHudState's marker refresh (the HUD "you have entered
+            // <district>" panel).
+            case 112:
+            {
+                const s32* lpiRegion = reinterpret_cast<const s32*>(lpAction);
+
+                BrnGui::GuiEventChangeDistrict lEvent;
+                lEvent.meCounty    = lpiRegion[0];
+                lEvent.meDistrict  = lpiRegion[1];
+                lEvent.mu8Consumed = 0;
+                lEvent.maPad[0] = lEvent.maPad[1] = lEvent.maPad[2] = 0;
+                PushGuiEvent(lEvent, lpGuiInput);
+
+                // [DIAG] NOT IN THE X360 BINARY -- the district chain's bridge rung.
+                if (CgsDev::Log::gpDebugPrint != 0)
+                {
+                    *CgsDev::Log::gpDebugPrint
+                        << "[district] action 112 -> gui 169 (county " << lpiRegion[0]
+                        << " district " << lpiRegion[1] << ")\n";
+                }
+                break;
+            }
+
             // ---- 148  the TRAINING TICKER (4 bytes: the BrnProgression::ETrainingType) ----
             // ⭐⭐ [tut-ticker] @0x823EA8C4..0x823EA930, instruction for instruction:
             //   lwz r3, 0(r31); cmpwi cr6, r3, 0x4D; bge default    -- type >= 77 -> drop

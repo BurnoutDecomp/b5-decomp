@@ -3,9 +3,10 @@
 // Reconstructed store-for-store from BURNOUT_X360_ARTIST.XEX:
 //   Construct @0x82412550, Prepare @0x82420FB8,
 //   ProcessCountyTransitionComplete @0x82412A20, ProcessDistrictTransitionComplete @0x82412AB0,
-//   SetCounty @0x82412658, SetDistrict @0x82412858.
-// (The two static Transition*CompleteCallback thunks @0x82412B40/@0x82412BA0 are SKIPPED --
-//  declared-only; Prepare takes their address to install them.)
+//   SetCounty @0x82412658, SetDistrict @0x82412858,
+//   CountyTransitionCompleteCallback @0x82412B40, DistrictTransitionCompleteCallback @0x82412BA0,
+//   SetHideCountyIcon @0x824733B8 (re-homed from the retired Gui/View ODR-fork slice),
+//   Update (ICF-folded empty; see the body's fold note).
 // ===================================================================================
 
 #include "GameSource/Gui/Flow/hud/Components/BrnDistrictMarker.h"
@@ -16,10 +17,44 @@
 
 namespace BrnGui
 {
-    // County / district icon-label tables (X360 off_82F2C90C / off_820A7600). Values not
-    // recovered in this slice -> empty-string placeholders sized to the region-id counts.
-    const char* const KAPC_COUNTY_ICON_NAMES[BrnWorld::E_COUNTY_COUNT]     = {};
-    const char* const KAPC_DISTRICT_ICON_NAMES[BrnWorld::E_DISTRICT_COUNT] = {};
+    // County / district icon-label tables -- contents RECOVERED from the image 2026-08-25
+    // (headless idat read @0x82F2C90C x6 / @0x820A7600 x19; scratch h1_dump.txt). The old
+    // "values not recovered -> empty placeholders" note hid a real hazard: `= {}` fills the
+    // arrays with NULL, and every SetState(KAPC_...[id]) call would have handed the hasher a
+    // null name. Both INVALID sentinels are real authored frames ("Anywhere" /
+    // "DistrictInvalid"), which is what lets the boot-seed refresh (district 18) run the
+    // marker without a special case.
+    const char* const KAPC_COUNTY_ICON_NAMES[BrnWorld::E_COUNTY_COUNT] =
+    {
+        "PalmBayHeights",     // 0
+        "SilverLake",         // 1
+        "HarborTown",         // 2
+        "WhiteMountain",      // 3
+        "DowntownParadise",   // 4
+        "Anywhere",           // 5 E_COUNTY_INVALID
+    };
+    const char* const KAPC_DISTRICT_ICON_NAMES[BrnWorld::E_DISTRICT_COUNT] =
+    {
+        "OceanView",          // 0
+        "WestAcres",          // 1
+        "TwinBridges",        // 2
+        "BigSurfBeach",       // 3
+        "EasternShore",       // 4
+        "HillsidePass",       // 5
+        "HeartbreakHills",    // 6
+        "RockridgeCliffs",    // 7
+        "SouthBay",           // 8
+        "ParkVale",           // 9
+        "ParadiseWharf",      // 10
+        "CristalSummit",      // 11
+        "LonePeaks",          // 12
+        "SunsetValley",       // 13
+        "Downtown",           // 14
+        "RiverCity",          // 15
+        "MotorCity",          // 16
+        "Waterfront",         // 17
+        "DistrictInvalid",    // 18 E_DISTRICT_INVALID
+    };
 
     // Temp-string capacity for the composite icon-clip names (X360 hard-NULs [63]).
     static const s32 KI_TEMP_STRING_LENGTH = 64;
@@ -219,6 +254,43 @@ namespace BrnGui
 
         default:
             break;
+        }
+    }
+
+    // The per-frame member handler. ICF-FOLDED EMPTY on the X360: both call sites
+    // (FBurnMainHudState::ProcessAptEvents @0x82475048 type-1 and UpdateRunning
+    // @0x8247B660's post-loop) show the literal folded symbol
+    // `CgsSceneManager::CgsCollision::BaseCollisionGenerator::Destruct()` called with NO
+    // arguments -- the linker collapsed this body onto that empty destructor because the
+    // machine code is identical, i.e. the body is empty. (The
+    // debug-component-and-framework-blocks fold precedent; re-verified from the image
+    // 2026-08-25, scratch h1_dump.txt.) Kept as a real named method so the state's two
+    // call sites read as the console's control flow.
+    void DistrictMarkerComponent::Update()
+    {
+    }
+
+    // @ 0x824733B8 -- drive the county icon hide/show transition. RE-HOMED 2026-08-25 from
+    // Gui/View/BrnDistrictMarkerComponent.cpp (now retired): that pre-DWARF slice modelled
+    // this SAME class as an opaque 0x60-byte shape whose "+0xC apt target with a no-op
+    // SetViewState stub" was, in this class's real layout, mCountyContainerMovie and its
+    // FlaptIconComponent::SetState vtable slot 3 -- i.e. the two files were an ODR fork and
+    // the stub was a silent-drop. Its icon-state codes decode as EMarkerState:
+    // "hidden" == 5 == E_MARKERSTATE_HIDING, "visible" == 2 == E_MARKERSTATE_SHOWING.
+    //   hide  & not already HIDING -> county container "transout", state := HIDING
+    //   show  & currently HIDING   -> county container "transin",  state := SHOWING
+    void DistrictMarkerComponent::SetHideCountyIcon(bool lbHide)
+    {
+        if (lbHide && meCurrentCountyState != E_MARKERSTATE_HIDING)
+        {
+            mCountyContainerMovie.SetState("transout");
+            meCurrentCountyState = E_MARKERSTATE_HIDING;
+            return;
+        }
+        if (!lbHide && meCurrentCountyState == E_MARKERSTATE_HIDING)
+        {
+            mCountyContainerMovie.SetState("transin");
+            meCurrentCountyState = E_MARKERSTATE_SHOWING;
         }
     }
 

@@ -7,7 +7,9 @@
 #include "GameSource/Gui/Flow/HUD/Components/BrnFriendsList.h"               // BrnGui::FriendsListComponent
 #include "GameSource/Gui/Flow/HUD/Components/BrnFriendsListChangeIcon.h"     // BrnGui::FriendsListChangeIconComponent
 #include "GameSource/Gui/Flow/HUD/Components/BrnInGameMessagesComponent.h"   // BrnGui::InGameMessagesComponent
-#include "GameSource/Gui/View/BrnDistrictMarkerComponent.h"                  // BrnGui::DistrictMarkerComponent
+#include "GameSource/Gui/Flow/hud/Components/BrnDistrictMarker.h"            // BrnGui::DistrictMarkerComponent (the full class; the View ODR-fork slice is retired)
+#include "GameSource/Gui/Flow/HUD/Components/BrnJunctionInfoComponent.h"     // BrnGui::JunctionInfoComponent
+#include "GameSource/Gui/Flow/HUD/Components/BrnOdometerComponent.h"         // BrnGui::OdometerComponent
 #include "GameSource/Gui/Flow/Shared/FlaptComponents/BrnGuiFlaptIconComponent.h" // BrnGui::FlaptAnimatorComponent
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiComponent.h"          // CgsGui::GuiComponent (the apt-side animator half)
 
@@ -27,9 +29,10 @@ namespace BrnGui
     // sub-object vtables); the X360 byte offsets recorded on each member below are the
     // ASM displacements. Per the x64 gate the host layout is semantic-parity-by-named-
     // members: components with complete recon headers are embedded by value; components
-    // whose TUs are not yet reconstructed (the SatNav body, Odometer, JunctionInfo,
-    // BoostMessageManager) are documented absentees -- their calls are FLAG'd deferrals
-    // in the .cpp and their storage is not fabricated here.
+    // whose TUs are not yet reconstructed (the SatNav body, BoostMessageManager) are
+    // documented absentees -- their calls are FLAG'd deferrals in the .cpp and their
+    // storage is not fabricated here. (H1 wave 2026-08-25: Odometer, JunctionInfo and the
+    // full DistrictMarker are REAL embedded members now.)
     struct FBurnMainHudState : public CgsGui::State
     {
         // The internal phase word (X360 this+0x38; OnEnter stores 0, OnLeave stores 4).
@@ -110,7 +113,10 @@ namespace BrnGui
         s32 miSatNavEventsFilter;                  // +0x3E4 (cache+32824 mirror)
 
         InGameMessagesComponent mInGameMessages;   // +0x3E8 (setters real; ctor deferred)
-        DistrictMarkerComponent mDistrictMarker;   // +0x834 (SetHideCountyIcon real)
+        DistrictMarkerComponent mDistrictMarker;   // +0x834 (the FULL marker class since the
+                                                   //         H1 wave -- Construct/Prepare/
+                                                   //         SetCounty/SetDistrict/
+                                                   //         SetHideCountyIcon all real)
         bool mbDistrictRefreshArmed;               // +0x8AC (OnEnter stores 1; the +0x8AC
                                                    //         word also guards the county
                                                    //         refresh in UpdateRunning)
@@ -137,8 +143,10 @@ namespace BrnGui
 
         FriendsListChangeIconComponent mFriendsListChangeIcon; // +0x5160
 
-        // FLAG absent members: JunctionInfoComponent (+0x5178) and OdometerComponent
-        // (+0x52A8) -- TUs not reconstructed; calls deferred behind their enable bytes.
+        // The junction-info panel and the odometer readout (H1 wave 2026-08-25: both TUs
+        // complete, the old absent-member FLAGs retired).
+        JunctionInfoComponent mJunctionInfoComponent;  // +0x5178
+        OdometerComponent     mOdometer;               // +0x52A8
 
         FlaptAnimatorComponent mIdentAnimator;     // +0x5390 ("Ident_Animator")
 

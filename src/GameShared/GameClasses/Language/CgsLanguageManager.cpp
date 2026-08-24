@@ -725,6 +725,88 @@ namespace CgsLanguage
         return true;
     }
 
+    // [H1 wave 2026-08-25] @ 0x82865878 (asserts cpp:1221/1222) -- FormatTextFromInt's float
+    // sibling, store-for-store: resolve the source id into a 1024 scratch, render the float
+    // value into a 64-byte slot through the FLOAT dispatcher, print into %1.
+    // ⚠ The SAME console defect as FormatTextFromInt above, reproduced verbatim: _Print's
+    // target cap is the literal 1024 source-scratch size; luBufferSize is dropped.
+    bool LanguageManager::FormatTextFromFloat(char* lpacBuffer, u32 luBufferSize,
+                                              const char* lpcSourceText, ParameterFormatType leType,
+                                              f32 lfValue, ParameterFormatType leValueType)
+    {
+        CGS_ASSERT(lpacBuffer != 0, "Target field is invalid in LanguageManager::FormatText");  // cpp:1221
+        CGS_ASSERT(lpcSourceText != 0, "Text field is invalid in TextField::SetLocalisedText"); // cpp:1222
+
+        (void)luBufferSize;   // see the CONSOLE DEFECT note on FormatTextFromInt
+
+        char lacSourceBuffer[1024];
+        FormatText(lacSourceBuffer, 1024, lpcSourceText, leType);
+
+        char lacValueBuffer[64];
+        FormatText(lacValueBuffer, 64, lfValue, leValueType);
+
+        const CgsUnicode::CgsUtf8* lapUtf8Params[1];
+        lapUtf8Params[0] = reinterpret_cast<const CgsUnicode::CgsUtf8*>(lacValueBuffer);
+
+        CgsUnicode::_Print(reinterpret_cast<CgsUnicode::CgsUtf8*>(lpacBuffer),
+                           reinterpret_cast<const CgsUnicode::CgsUtf8*>(lacSourceBuffer),
+                           1024, lapUtf8Params, 1);
+        return true;
+    }
+
+    // [H1 wave 2026-08-25] @ 0x82861D88 (asserts cpp:2166..2170) -- the LARGE-distance leaf
+    // (format 19; the odometer's STAT_LABEL_DIST_OFFLINE readout rides it). Scale by
+    // mrLargeDistanceConversion (the metric/imperial factor), render with ONE decimal place
+    // through FloatToString with the locale separators (the two <=1-length tripwires are the
+    // inlined UnicodeBuffer::SetThousandsSeparator/SetDecimalPointCharacter, exactly as
+    // FormatIntegerString above), stage through a UnicodeBuffer and print into
+    // mpDistanceFormatLong's %1. Unlike the FromInt/FromFloat wrappers, the REAL target size
+    // is forwarded to _Print here (per the asm -- no 1024 defect in this leaf).
+    void LanguageManager::FormatLargeDistanceString(char* lpcTarget, f32 lfValue,
+                                                    s32 liTargetSize) const
+    {
+        CGS_ASSERT(lpcTarget != 0, "lpTargetString != NULL");                          // cpp:2166
+        CGS_ASSERT(liTargetSize > 0, "lnTargetStringSize > 0");                        // cpp:2167
+        CGS_ASSERT(mpDistanceFormatLong != 0, "mpDistanceFormatLong");                 // cpp:2168
+        CGS_ASSERT(mpGeneralThousandsSeparator != 0, "mpGeneralThousandsSeparator");   // cpp:2169
+        CGS_ASSERT(mpGeneralDecimalSeparator != 0, "mpGeneralDecimalSeparator");       // cpp:2170
+
+        const f32 lfScaledValue = mrLargeDistanceConversion * lfValue;
+
+        CgsUnicode::CgsUtf8 lacValue[256];
+        CgsUnicode::CgsUtf8 lacThousandsSeparator[4];
+        CgsUnicode::CgsUtf8 lacDecimalPointCharacter[4];
+        lacValue[0] = 0;
+        for (s32 liByte = 0; liByte < 4; ++liByte)
+        {
+            lacThousandsSeparator[liByte]    = 0;
+            lacDecimalPointCharacter[liByte] = 0;
+        }
+
+        // UnicodeBuffer::SetThousandsSeparator, inlined (CgsUnicode.h:598).
+        CGS_ASSERT(CgsUnicode::StringLength(mpGeneralThousandsSeparator) <= 1,
+                   "StringLength(lUtf8ThousandsSeparator) <= 1");
+        CgsUnicode::Copy(lacThousandsSeparator, mpGeneralThousandsSeparator);
+
+        // UnicodeBuffer::SetDecimalPointCharacter, inlined (CgsUnicode.h:617).
+        CGS_ASSERT(CgsUnicode::StringLength(mpGeneralDecimalSeparator) <= 1,
+                   "StringLength(lUtf8DecimalPointCharacter) <= 1");
+        CgsUnicode::Copy(lacDecimalPointCharacter, mpGeneralDecimalSeparator);
+
+        CgsUnicode::FloatToString(lacValue, lfScaledValue, 0, 1,
+                                  lacThousandsSeparator, lacDecimalPointCharacter);
+
+        CgsUnicode::UnicodeBuffer lValueBuffer;
+        lValueBuffer.Convert(lacValue);
+
+        const CgsUnicode::CgsUtf8* lapUtf8Params[1];
+        lapUtf8Params[0] = lValueBuffer.GetBuffer();
+
+        CgsUnicode::_Print(reinterpret_cast<CgsUnicode::CgsUtf8*>(lpcTarget),
+                           mpDistanceFormatLong,
+                           liTargetSize, lapUtf8Params, 1);
+    }
+
     // ------------------------------------------------------------------------
     // FLAG trap-stub bodies (link scaffold, 2026-07-01): the Format*String members
     // below are declared (DWARF) and referenced by the debug component's
@@ -751,7 +833,8 @@ namespace CgsLanguage
     void LanguageManager::FormatSecondsAndHundredsString(char*, f32, s32) const           { __debugbreak(); }   // FLAG trap-stub
     void LanguageManager::FormatSecondsString(char*, f32, s32) const                      { __debugbreak(); }   // FLAG trap-stub
     void LanguageManager::FormatSmallDistanceString(char*, f32, s32) const                { __debugbreak(); }   // FLAG trap-stub
-    void LanguageManager::FormatLargeDistanceString(char*, f32, s32) const                { __debugbreak(); }   // FLAG trap-stub
+    // (FormatLargeDistanceString is no longer a trap-stub -- its faithful body is above
+    //  this block, landed with the H1 odometer wave.)
     f32  LanguageManager::GetDistanceDisplayScale() const                                 { __debugbreak(); return 1.0f; }   // FLAG trap-stub
     // FLAG trap-stubs for the float-dispatch leaves 0x828641F0 references beyond the
     // block above (declared additions; decompiles land with the value-format slice).

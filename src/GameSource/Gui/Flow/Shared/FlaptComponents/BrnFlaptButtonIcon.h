@@ -95,6 +95,11 @@ namespace BrnGui
 
     private:
         friend class FlaptHelpItem;
+        // JunctionInfoComponent::SetupAptVariables @0x824398A0 pokes the two start-hint
+        // buttons the same inline way FlaptHelpItem::SetItem does (meButton := LTRIGGER/
+        // RTRIGGER, then GotoAndStopLabel on the glyph clip) -- the X360 has no standalone
+        // SetButton to call. Same friend idiom, same justification.
+        friend class JunctionInfoComponent;
 
         EPadButton             meButton;        // +0x0C
         BrnFlapt::MovieClipRef mAptButtonRef;   // +0x10

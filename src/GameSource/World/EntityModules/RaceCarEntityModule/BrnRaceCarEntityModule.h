@@ -42,6 +42,8 @@
 #include "GameSource/Graphics/BrnCoronaManager.h"   // BrnCoronaManager::BrnSubmissionInterface (SubmitCoronasForRaceCar's 1st arg)
 #include "GameSource/World/BrnPlaceOnTrackManager.h"                              // BrnWorld::PlaceOnTrackManager (by value, +0x17850)
 #include "GameShared/GameClasses/World/CgsWorldMap2D.h"                           // CgsWorld::WorldMap2D (by value, +0x18300)
+#include "GameShared/GameClasses/System/Resource/CgsResourceHandle.h"             // CgsResource::ResourceHandle (mDistrictMapResourceHandle, +0x23C)
+#include "SharedClasses/World/BrnWorldRegion.h"                                   // BrnWorld::WorldRegion (mCurrentWorldRegion, +0x244)
 #include "GameSource/World/EntityModules/RaceCarEntityModule/Boost/BrnBoostManager.h"                 // BrnWorld::BoostManager (by value, +0x17890)
 #include "GameSource/World/EntityModules/RaceCarEntityModule/CrashPlay/BrnCrashPlayDebugComponent.h"  // BrnWorld::CrashPlayManager (by value, +0x180F0)
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnPlayerVehicleControls.h"     // BrnWorld::PlayerVehicleControls (by value, +0x183A8)
@@ -596,6 +598,13 @@ private:
     // Compiled-never-called offsetof layout lock (see definition below).
     void LockLayout_();
 
+    // [H1 district wave 2026-08-25] X360 0x822F5718 -- sample the local player car's
+    // position against the module's district map each post-physics tick; when the district
+    // changes, latch the new WorldRegion into mCurrentWorldRegion and post the 8-byte
+    // {county, district} pair as game event 115 into the caller's queue. The console
+    // caller (PostPhysicsUpdate @0x8230769C) passes lpOutput->GetGameEventQueue().
+    void UpdateCurrentWorldRegion(RaceCarEntityModuleIO::GameEventQueue* lpGameEventQueue);
+
     // FLAG: opaque leading state. In the full class this span is the
     // ModuleSingleBuffered base plus the early stage/handle/region members; here
     // it exists only to land maRaceCars at the X360-proven +0x250 offset.
@@ -949,6 +958,23 @@ private:
     // blocks above -- the console offset is recorded, the x64 offset is not load-bearing.
     // ========================================================================
 
+    // ========================================================================
+    // MODELLED members (HUD H1 district wave, 2026-08-25). Console offsets recorded, x64
+    // offsets not load-bearing (named-member parity; both used to sit inside
+    // maPrecedingState as anonymous filler).
+    // ========================================================================
+
+    // X360 +0x23C (572). The Districts.dat resource handle Prepare stage 0 stores
+    // (`*(a1+572) = lrDistrictMapHandle` @0x82303F70-ish; WorldModule::Prepare passes it).
+    // UpdateCurrentWorldRegion @0x822F5718 re-fires its two readiness asserts (:3075/:3076)
+    // every call.
+    CgsResource::ResourceHandle mDistrictMapResourceHandle;
+
+    // X360 +0x244 (580). The local player's current world region. UpdateCurrentWorldRegion
+    // compares each frame's sampled district against its meDistrict (the +584 word load)
+    // and, on change, stores the whole pair here before posting game event 115.
+    BrnWorld::WorldRegion mCurrentWorldRegion;
+
     // X360 +0x18300 (99072). The module's own district map. Every console call site reaches
     // it as a bare `this + 0x18300`: ReadUpdatedActiveRaceCarDataFromPhysics @0x822E87B8
     // computes it into r25 (`lis r11,1 ; ori r28,r11,0x8300 ; add r25,r26,r28`) and passes
@@ -958,9 +984,10 @@ private:
     // output interfaces. It used to fall inside maTailPadA1b as anonymous filler, which is
     // exactly why UpdateOutputInterfaces' step 1 is recorded there as "nothing to copy FROM".
     //
-    // ⚠️ IT IS NEVER Construct()ed ON THIS BUILD. Prepare stage 0 -- the console's only
-    // WorldMap2D::Construct call site -- is not reproduced (see Prepare's banner), so this
-    // member holds the module's zeroed storage. That is SAFE and it is checked, not assumed:
+    // ⚠️ [H1 district wave 2026-08-25] Prepare stage 0's WorldMap2D::Construct against the
+    // district-map resource IS now reproduced (the readiness-guarded bind in Prepare case 0);
+    // on the give-up arm this member still holds the module's zeroed storage. That is SAFE
+    // and it is checked, not assumed:
     // WorldMap2D::GetValue bounds-tests `liX >= muWidth` BEFORE it dereferences mpValues, so
     // a zero-width map returns KU_INVALID_WORLD_MAP_VALUE and UpdatePositioningData maps that
     // to E_DISTRICT_INVALID without touching the null grid pointer. The consequence is real
