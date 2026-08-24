@@ -5038,6 +5038,12 @@ namespace Vehicle
                            lvContactPosition.y - mTransform.Pos().y,
                            lvContactPosition.z - mTransform.Pos().z,
                            0.0f };
+    // .w lane: the console's vperm control (unk_82CDA350 = 00010203 14151617 00010203 00010203,
+    // image-read by the physics11 audit) makes the body position {R.d, U.d, At.d, R.d} -- its .w
+    // is a DUPLICATE of lane x. Verified consumed-nowhere (2026-08-24, showtime wave):
+    // GetImpulsesFromLocalImpulse receives this with the literal BODY_SPACE tag below, and the
+    // BODY_SPACE arm is RotateToWorld = xAxis*p.x + yAxis*p.y + zAxis*p.z -- the .w lane never
+    // enters the arithmetic. The 0.0 here is observably identical to the console's R.d.
     Vector3 lvBodyContactPosition{ vpu::Dot(mTransform.Right(), lvDelta),
                                    vpu::Dot(mTransform.Up(), lvDelta),
                                    vpu::Dot(mTransform.At(), lvDelta),
@@ -5138,7 +5144,7 @@ namespace Vehicle
     AddWorldSpaceAngularImpulse(lvAngularJ);
     }
 
-// [clean] AddSlam  @ FLAGS: rodata: flt_82F2A294 (the air-time taper denominator) is un-homed -> flagged-0 placeholder; with it 0 the taper divide is guarded so the base scale stays 0.0 (faithful-but-inert taper, since clamp01(ratio) at ratio==0 -> 0.0). The rate-limit 0.5, base 4.0, fsel clamps and all member stores are exact
+// [clean] AddSlam  @ FLAGS: none -- flt_82F2A294 (the air-time taper denominator) is image-read = 150.0 and landed (KF_SLAM_TAPER_DENOM below); the rate-limit 0.5, base 4.0, fsel clamps and all member stores are exact. (Banner refreshed 2026-08-24, showtime wave: it still said "flagged-0 placeholder" after the value landed.)
     // @0x825D4870  BrnPhysics::Vehicle::VehiclePhysics::AddSlam
     //   Rate-limit: only (re)arm when mSlamEffect.mfSlamLife <= 0 OR (mSlamEffect.mfTotalSlamTime - mSlamEffect.mfSlamLife) >= 0.5
     //   (>= 0.5 s since the current slam started).
@@ -5279,7 +5285,7 @@ namespace Vehicle
     return 0; // 0x825FC73C
     }
 
-// [clean] UpdateSlam  @ FLAGS: rodata: flt_82F2A500 (the mode==1 steering clamp, ~1.0-ish) and flt_82F2A4FC (the mode==1 steering scale) are un-homed -> flagged-0 placeholders in the mode==1 branch; the parabolic envelope env=r-r^2, the -10.0 floor, the 2.0 amplitude and the 0.95/0.9 else-branch clamps are INLINE literals used exactly
+// [clean] UpdateSlam  @ FLAGS: none -- flt_82F2A500 (0.0025, the mode==1 steering suppression clamp) and flt_82F2A4FC (0.005, the mode==1 steering scale) are image-read and landed (KF_MODE1_STEER_* below); the parabolic envelope env=r-r^2, the -10.0 floor, the 2.0 amplitude and the 0.95/0.9 else-branch clamps are INLINE literals used exactly. (Banner refreshed 2026-08-24, showtime wave.)
     // @0x825D4950  BrnPhysics::Vehicle::VehiclePhysics::UpdateSlam
     //   mSlamEffect.mfSlamLife = max(mSlamEffect.mfSlamLife - dt, -10.0)   [fsel floor at -10.0]
     //   if ( mSlamEffect.mfSlamLife <= 0 ): if ( mSlamEffect.mfSlamLife < -mSlamEffect.mfRecoveryTime ) -> clear the slam:
@@ -5350,7 +5356,7 @@ namespace Vehicle
 
     if (leDriverType == E_DRIVER_TYPE_AI)
     {
-        // mode==1 slam-steer-ADD. (clamps use the un-homed flt_82F2A500/4FC -> flagged-0)
+        // mode==1 slam-steer-ADD (flt_82F2A500/4FC image-read; see the release note above).
         f32 lfBase = lrSteer;
         if (lfBase < -KF_MODE1_STEER_CLAMP) lfBase = -KF_MODE1_STEER_CLAMP;
         if (lfBase >  KF_MODE1_STEER_CLAMP) lfBase =  KF_MODE1_STEER_CLAMP;
