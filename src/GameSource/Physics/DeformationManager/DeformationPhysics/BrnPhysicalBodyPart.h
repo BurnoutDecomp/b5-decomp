@@ -170,6 +170,25 @@ namespace Deformation
         // BrnPhysicalBodyPart.h:145. The raw rigid-body (physics) transform.
         Matrix44Affine GetRigidBodyTransform() const { return mRwBody.GetTransform(); }   // (inlined walls leg 4)
 
+        // Console-INLINE (PhysicalBodyPartPool::OutputEvents @0x8260DBE8, block
+        // 0x8260DCF0..0x8260DD64; added 2026-08-24, deform-land wave): the transform both
+        // detached-part OUTPUT EVENTS carry -- the rigid transform with the offset
+        // (localGraphicsPos - localInitialComPos) rotated into world and ADDED to the
+        // translation (asm: vsubfp of part+0x170 and part+0x180 xyz, three splat-madd rows,
+        // vaddfp onto row 3). NOTE this is NOT GetRenderTransform above: the event
+        // composition subtracts the initial-COM offset, the walls-leg-4 composition does not.
+        Matrix44Affine GetEventRenderTransform() const
+        {
+            Matrix44Affine lT = mRwBody.GetTransform();
+            const f32 lfOffX = mLocalGraphicsPositionPlusJointVelocity.x - mLocalInitialComPositionPlusMaxJointAngle.x;
+            const f32 lfOffY = mLocalGraphicsPositionPlusJointVelocity.y - mLocalInitialComPositionPlusMaxJointAngle.y;
+            const f32 lfOffZ = mLocalGraphicsPositionPlusJointVelocity.z - mLocalInitialComPositionPlusMaxJointAngle.z;
+            lT.wAxis.x += lT.xAxis.x * lfOffX + lT.yAxis.x * lfOffY + lT.zAxis.x * lfOffZ;
+            lT.wAxis.y += lT.xAxis.y * lfOffX + lT.yAxis.y * lfOffY + lT.zAxis.y * lfOffZ;
+            lT.wAxis.z += lT.xAxis.z * lfOffX + lT.yAxis.z * lfOffY + lT.zAxis.z * lfOffZ;
+            return lT;
+        }
+
         // ----- per-frame update ----------------------------------------------------------
 
         // BrnPhysicalBodyPart.h:150. Apply a post-physics rigid-body update event, pushing the

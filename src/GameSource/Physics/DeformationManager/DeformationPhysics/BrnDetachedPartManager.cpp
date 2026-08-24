@@ -323,5 +323,18 @@ namespace Deformation
         mPartPool.AddPartsToScene(lpSceneInterface);
     }
 
+    // =============================================================================================
+    // OutputEvents (BrnDetachedPartManager.h:86; landed 2026-08-24, deform-land wave). The console
+    // FOLDS this wrapper: DeformationManager::OutputData @0x826225D8 calls PhysicalBodyPartPool::
+    // OutputEvents @0x8260DBE8 directly on the MANAGER's address (mPartPool is this manager's one
+    // member, at +0). The wrapper exists so the caller spells the member by name.
+    // =============================================================================================
+    void DetachedPartManager::OutputEvents(
+        DeformationOutputInterfaceForEntityModules* lpOutputForEntityModules,
+        DeformationOutputInterface* lpOutput) const
+    {
+        mPartPool.OutputEvents(lpOutputForEntityModules, lpOutput);
+    }
+
 }
 }

@@ -424,6 +424,11 @@ private:
     // AreRoadRulesAvailable's medal read) goes through this named member.
     Profile mProfile;                                  // X360 +0x170
 
+    // [FLAG PC bring-up, 2026-08-24 deform-land wave] once-latch for the Profile::Construct
+    // boot seam in Prepare2 (the console's outer Construct/Prepare pair own that call; neither
+    // outer is reconstructed yet -- see the Prepare2 banner). Not a console member.
+    bool mbProfileConstructed = false;
+
     // The player's road-rules-ruled tallies (X360 +133456 / +133460 / +133464).
     // *** FLAG -- COMMITTED-NAME CORRECTION (StreetManager keystone, wave B) ***
     // Previously committed as mi32RoadRulesAvailableFlagA/B ("availability flags");

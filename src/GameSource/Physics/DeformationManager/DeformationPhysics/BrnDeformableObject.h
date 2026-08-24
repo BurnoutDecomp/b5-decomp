@@ -313,8 +313,12 @@ namespace Deformation
         s32 GetNumSensors() { return static_cast<s32>(mpDeformationSpec->mu8NumDeformationSensors) + 4; }   // :410
         DeformationSensor& GetDeformationSensorFromVolumeInstance(CgsSceneManager::VolumeInstanceId lId); // :415
         CgsGeometric::Sphere GetDeformationSphereFromVolumeInstance(CgsSceneManager::VolumeInstanceId lId); // :419
-        const rw::math::vpu::Vector3Plus* GetOffset_ScratchArray();                             // :422
-        const VehicleLocatorData* GetLocatorData();                                            // :426
+        // :422 / :426 -- HEADER-INLINE as of 2026-08-24 (deform-land wave; they were
+        // DECLARE-ONLY with no body anywhere): no out-of-line X360 emission -- OutputData
+        // @0x826225D8's pass-1 pushes read both as bare member addresses (model+4320 ==
+        // &maVerletOffsets_Scratch[0], model+1152 == &mLocatorData).
+        const rw::math::vpu::Vector3Plus* GetOffset_ScratchArray() { return maVerletOffsets_Scratch; } // :422
+        const VehicleLocatorData* GetLocatorData() { return &mLocatorData; }                   // :426
         const IKBodyPart* GetIKPart(s32 liIndex);                                               // :430
         // :434. ⭐ HEADER-INLINE (2026-08-14, walls leg 1): no export on X360 -- the console
         // inlines it into DeformationManager::GetSpheresForCar @0x825C2260 (an export hole,
@@ -338,6 +342,15 @@ namespace Deformation
                              DetachedWheelManager* lpWheelMgr);                                  // :465
         void UpdateAndOutputJointStates(DeformationOutputInterface* lpOut,
                                         DetachedPartManager* lpPartMgr);                         // :470
+
+        // Console-INLINE (no standalone X360 symbol): DeformationManager::OutputData
+        // @0x826225D8 emits this in line immediately before each model's OutputWheelData call
+        // (0x82622A64..0x82622AC8): re-seed the entity sphere size --
+        //   mLastLinearVelocityPlusEntityRadius.w = |vehicle->GetHalfExtent()|  (zero-guarded
+        //   rsqrt normalize-magnitude idiom, vrlimi mask 1 == w lane only).
+        // Exists so OutputData can spell the private members BY NAME. Bodied beside the other
+        // output-family members in BrnDeformableObject_GlassState.cpp.
+        void RefreshEntitySphereSizeFromVehicleExtent();                                        // (OutputData inline slice)
         void OutputState(CarState* lpCarState);                                                 // :473
         s16 GetNumPhysicalParts() const { return mi16NumPhysicalParts; }                        // :476 (inlined walls leg 4)
         s16 GetNumHingedParts() const { return mi16NumHingedParts; }                            // :480 (inlined walls leg 4)

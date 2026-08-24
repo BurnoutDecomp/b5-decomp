@@ -2139,15 +2139,35 @@ void RaceCarEntityModule::HandleResetPlayerCarAction(
     }
 
     // ---- 4. the unlock deformation ------------------------------------------------------
+    // ⭐ LANDED 2026-08-24 (deform-land wave; was a `(void)` park). The console stores the
+    // action's (+0x34 amount, +0x38 type) pair into the player ActiveRaceCar's
+    // mfBaseDeformAmount (+0x7CC == dword [499]) / meBaseDeformationType (+0x7C8 == [498]) --
+    // the exact pair AddHandlingModel forwards into the physics CreateRaceCar event -- and
+    // into the module's own mirror pair (+99544 / +99536). The old park note placed [499]
+    // "inside mRenderParams": WRONG, mRenderParams starts at +0x7E0 (dword 504); both seats
+    // are the named ActiveRaceCar members. This is the JUNKYARD preset-damage writer: the
+    // car-select confirm posts the profile's 0.85 unlock-deform here (the start-of-game
+    // record's -1.0 sentinel keeps skipping the arm, faithfully).
     if( lpAction->mfDeformationAmount >= 0.0f )
     {
         ActiveRaceCar* lpActiveRaceCar = GetActiveRaceCar( mePlayerActiveRaceCarIndex );
         CGS_ASSERT( lpActiveRaceCar != 0, "lpActiveRaceCar" );                 // X360 :7595
-        // [FLAG] the console stores the (+0x34,+0x38) pair into ActiveRaceCar[499]/[498]
-        // (inside mRenderParams, unnamed here) and into the module's own +99544/+99536 pair
-        // (inside maTailPadB1). The start-of-game record posts the -1.0 sentinel, so this
-        // arm is not taken on the path this build drives. DELETE-WHEN those members land.
-        (void)lpActiveRaceCar;
+
+        lpActiveRaceCar->SetBaseDeformation(
+            lpAction->mfDeformationAmount,
+            static_cast<BrnPhysics::Deformation::DeformationResetType>(
+                lpAction->miBaseDeformationType ) );
+
+        mfPlayerBaseDeformAmountMirror     = lpAction->mfDeformationAmount;
+        miPlayerBaseDeformationTypeMirror  = lpAction->miBaseDeformationType;
+
+        if( CgsDev::Log::gpDebugPrint != 0 )
+        {
+            *CgsDev::Log::gpDebugPrint
+                << "[deform-preset] HandleResetPlayerCarAction: base deform amount "
+                << lpAction->mfDeformationAmount << " type "
+                << lpAction->miBaseDeformationType << " stored for player car\n";
+        }
     }
 
     // ---- 5. the player scoring slot -----------------------------------------------------
@@ -3159,11 +3179,20 @@ void RaceCarEntityModule::ReadUpdatedActiveRaceCarDataFromPhysics(
                     lpVehicleOutput->GetRaceCar( static_cast<u32>( liCar ) ),
                     &mWorldMap2D );
 
-                // ⛔ PARKED: UpdateRaceCarCollisionTagging(liCar, GetRaceCar(liCar))
-                //            @0x822D2280 and UpdateDeformationState(lpDeformationState)
-                //            @0x822D4A58 run here on the console. Both are absent from the
-                //            tree; see the banner for why each is parked rather than
-                //            guessed. Reported once per boot, never per frame.
+                // ⭐ UpdateDeformationState @0x822D4A58 LANDED 2026-08-24 (deform-land wave):
+                // the per-car deformation readback runs at the console's own position. The
+                // null guard is a PC bring-up divergence (the console's publish always ran
+                // before this point; on PC the pointer is null only if the physics update
+                // was skipped this frame).
+                if( lpDeformationState != 0 )
+                {
+                    lpActiveRaceCar->UpdateDeformationState( lpDeformationState );
+                }
+
+                // ⛔ STILL PARKED: UpdateRaceCarCollisionTagging(liCar, GetRaceCar(liCar))
+                //            @0x822D2280 (159 insns) runs here on the console, BEFORE the
+                //            deformation leg; it reaches the un-homed collision-group
+                //            interior. Reported once per boot, never per frame.
                 static bool sbReportedParkedPerCarLegs = false;
                 if( !sbReportedParkedPerCarLegs )
                 {
@@ -3172,11 +3201,11 @@ void RaceCarEntityModule::ReadUpdatedActiveRaceCarDataFromPhysics(
                         && CgsDev::Log::gpDebugPrint != 0 )
                     {
                         *CgsDev::Log::gpDebugPrint
-                            << "[physics-readback] PARKED per-car legs: "
+                            << "[physics-readback] PARKED per-car leg: "
                                "RaceCarEntityModule::UpdateRaceCarCollisionTagging "
-                               "(X360 0x822D2280) and ActiveRaceCar::UpdateDeformationState "
-                               "(X360 0x822D4A58) are NOT reconstructed -- collision tagging "
-                               "and deformation state will not update. DeformationState ptr "
+                               "(X360 0x822D2280) is NOT reconstructed -- collision tagging "
+                               "will not update. UpdateDeformationState is LIVE; "
+                               "DeformationState ptr "
                             << ( lpDeformationState != 0 ? "present" : "NULL" ) << "\n";
                     }
                 }
@@ -3230,21 +3259,217 @@ void RaceCarEntityModule::ReadUpdatedActiveRaceCarDataFromPhysics(
     }
 
     // ---- L2 / L3 / L4 / L5 / L6 : the deformation-output half ----------------
-    // ⛔ PARKED as a block -- see the banner. Loud once, never a silent no-op.
-    static bool sbReportedParkedDeformationLegs = false;
-    if( !sbReportedParkedDeformationLegs )
+    // ⭐⭐ LANDED 2026-08-24 (deform-land wave): the producer (DeformationManager::OutputData
+    // publish + bridge legs 3/4) went live this wave and all five legs run at the console's
+    // own positions (asm 0x822E888C..0x822E9164, headless dump). Per-leg notes at each block.
+
+    // ---- L2 : the GLASS SMASH/CRACK drain (0x822E888C..0x822E8D64) -----------
     {
-        sbReportedParkedDeformationLegs = true;
-        if( ( CgsDev::Message::gxMessageFilterFlags & 1 ) != 0
-            && CgsDev::Log::gpDebugPrint != 0 )
+        const BrnPhysics::Deformation::DeformationOutputInterface::GlassSmashOrCrackQueue&
+            lrGlassQueue = lpDeformationOutput->mGlassSmashOrCrackQueue;
+
+        const s32 liNumGlassEvents = lrGlassQueue.GetLength();
+        for( s32 liEvent = 0; liEvent < liNumGlassEvents; ++liEvent )
         {
-            *CgsDev::Log::gpDebugPrint
-                << "[physics-readback] PARKED deformation legs of "
-                   "ReadUpdatedActiveRaceCarDataFromPhysics (X360 0x822E87B8): glass "
-                   "smash/crack drain, wheel-state publish (UpdateWheelPhysicsState), "
-                   "skinned-model verlet copy, locator-output copy and detached-part render "
-                   "events. Their producer (the deformation manager publish) is absent on "
-                   "this build; the wheel POSE is still published by UpdatePhysicsState.\n";
+            const BrnPhysics::Deformation::GlassSmashOrCrackEvent& lrEvent =
+                lrGlassQueue.GetEvent( liEvent );
+
+            // Owner byte must be a race car (`srwi r10, id, 24; cmplwi 1`).
+            const u32 luEntityWord = lrEvent.mVehicleEntityId.muValue;
+            if( ( luEntityWord >> 24 ) != BrnWorld::E_ENTITYTYPE_RACECAR )
+            {
+                continue;
+            }
+            const u32 luCarIndex = ( luEntityWord >> 10 ) & 0x3FFFu;   // extrwi 14,8
+            CGS_ASSERT( luCarIndex < 8u, "invalid index" );            // CgsBitArray.h:203 shape
+            if( luCarIndex >= 8u )
+            {
+                continue;
+            }
+
+            ActiveRaceCar* lpCar =
+                GetActiveRaceCar( static_cast<EActiveRaceCarIndex>( luCarIndex ) );
+            if( lpCar == 0 || !lpCar->IsActive() )
+            {
+                continue;
+            }
+
+            // The module's reset-this-frame bit SKIPS the glass update for that car
+            // (0x822E8AA0..0x822E8AD8 -- the bit test on module+0x100E0).
+            if( mabResetThisFrame.IsBitSet( luCarIndex ) )
+            {
+                continue;
+            }
+
+            ActiveRaceCar::RenderParams* lpRenderParams = lpCar->GetRenderParams();
+            const s32 liPane = static_cast<s32>( lrEvent.meGlassPart ) - 16;   // r31 = part - 0x10
+
+            // Pane geometry: width = |corner2 - corner1|; equalisation = |corner1 - corner0|
+            // / width (the two zero-guarded rsqrt magnitudes + the vrefp reciprocal).
+            const Vector3 lEdgeA = rw::math::vpu::Subtract( lrEvent.maCorners[2],
+                                                            lrEvent.maCorners[1] );
+            const Vector3 lEdgeB = rw::math::vpu::Subtract( lrEvent.maCorners[1],
+                                                            lrEvent.maCorners[0] );
+            const f32 lfWidth        = rw::math::vpu::Magnitude( lEdgeA );
+            const f32 lfEqualisation = rw::math::vpu::Magnitude( lEdgeB ) / lfWidth;
+
+            if( lrEvent.meNewState == BrnPhysics::Deformation::E_GLASS_STATE_CRACKED )
+            {
+                // fracture = min( max(old, crackAmount), 1.0 )  (the two fsel folds).
+                const f32 lfOld = lpRenderParams->GetCrackedGlassFractureAmountN(
+                    static_cast<u32>( liPane ) );
+                f32 lfFracture = ( lrEvent.mfCrackAmount > lfOld ) ? lrEvent.mfCrackAmount : lfOld;
+                if( lfFracture > 1.0f )
+                {
+                    lfFracture = 1.0f;
+                }
+                lpRenderParams->SetCrackedGlassFractureAmountN( static_cast<u32>( liPane ),
+                                                                lfFracture );
+                lpRenderParams->SetCrackedGlassEqualisationFactorN( static_cast<u32>( liPane ),
+                                                                    lfEqualisation );
+
+                // The cracked arm stores the scale pair INLINE (`stfs f0` twice at
+                // rp + 8*(pane+0x28B)); spelled through the same accessor the smashed arm calls.
+                CGS_ASSERT( liPane >= 0 && liPane < 8,
+                            "( 0 <= n ) && ( KI_MAX_ACTIVE_RACE_CARS > n )" );   // :372, baked shape
+                lpRenderParams->SetCrackedGlassScaleFactorsN(
+                    static_cast<u32>( liPane ), Vector2{ lfWidth, lfWidth, 0.0f, 0.0f } );
+            }
+            else if( lrEvent.meNewState == BrnPhysics::Deformation::E_GLASS_STATE_SMASHED )
+            {
+                lpRenderParams->SetCrackedGlassFractureAmountN( static_cast<u32>( liPane ),
+                                                                2.0f );   // flt_82014984
+                lpRenderParams->SetCrackedGlassEqualisationFactorN( static_cast<u32>( liPane ),
+                                                                    lfEqualisation );
+                lpRenderParams->SetCrackedGlassScaleFactorsN(
+                    static_cast<u32>( liPane ), Vector2{ lfWidth, lfWidth, 0.0f, 0.0f } );
+            }
+            else
+            {
+                continue;   // state 0 (intact): the asm falls through to the next event
+            }
+
+            // Render damage flag: car byte +0x1BF6 |= (1 << pane) -- a read-modify-write of
+            // mRenderParams.mu8RenderDamageFlags (the same byte through both addresses).
+            lpRenderParams->SetRenderDamageFlag( static_cast<u8>(
+                lpRenderParams->GetRenderDamageFlag() | ( 1u << liPane ) ) );
+        }
+    }
+
+    // The entity-module deformation interface feeds legs L3..L6.
+    const BrnPhysics::Deformation::DeformationOutputInterfaceForEntityModules* lpDeformationEM =
+        lpInput->GetDeformationOutputInterfaceForEntityModules();
+
+    // ---- L3 : the WHEEL-STATE publish (0x822E8D68..0x822E8E50) ---------------
+    {
+        const u32 luNumEntries = lpDeformationEM->GetNumEntries();
+        for( u32 luEntry = 0; luEntry < luNumEntries; ++luEntry )
+        {
+            const u32 luEntityWord =
+                static_cast<u32>( lpDeformationEM->GetBaseId( luEntry ) >> 32 );
+            if( ( luEntityWord >> 24 ) != BrnWorld::E_ENTITYTYPE_RACECAR )
+            {
+                continue;
+            }
+            const u32 luCarIndex = ( luEntityWord >> 10 ) & 0x3FFFu;
+            CGS_ASSERT( luCarIndex < 8u, "Entity index out of range" );   // :5697
+            if( luCarIndex >= 8u )
+            {
+                continue;
+            }
+            GetActiveRaceCar( static_cast<EActiveRaceCarIndex>( luCarIndex ) )
+                ->UpdateWheelPhysicsState( lpDeformationEM->GetWheelStateSlot( luEntry ) );
+        }
+    }
+
+    // ---- L4 : the SKINNED-MODEL verlet copy (0x822E8E54..0x822E8F88) ---------
+    {
+        const s32 liNumSkinned = lpDeformationEM->GetNumSkinnedModels();
+        for( s32 liModel = 0; liModel < liNumSkinned; ++liModel )
+        {
+            const BrnPhysics::Deformation::SkinData& lrSkin =
+                lpDeformationEM->GetSkinData( liModel );   // carries the :276 assert
+
+            const u32 luEntityWord = lrSkin.mEntityId.muValue;
+            if( ( luEntityWord >> 24 ) != BrnWorld::E_ENTITYTYPE_RACECAR )
+            {
+                continue;
+            }
+            const u32 luCarIndex = ( luEntityWord >> 10 ) & 0x3FFFu;
+            CGS_ASSERT( luCarIndex < 8u, "Entity index out of range" );   // :5712
+            if( luCarIndex >= 8u )
+            {
+                continue;
+            }
+
+            Vector3Plus* lpDst =
+                GetActiveRaceCar( static_cast<EActiveRaceCarIndex>( luCarIndex ) )
+                    ->GetRenderParams()->GetVerletOffsets();
+            const Vector3Plus* lpSrc =
+                static_cast<const Vector3Plus*>( lrSkin.mpSkinOffsets_Scratch );
+
+            // 128 x 16-byte rows (the lvx128/stvx128 loop, per-row tripwire
+            // "luPartIndex < (uint32_t)KI_MAX_RACE_CAR_VERLET_POINTS", BrnActiveRaceCar.h:1866).
+            for( u32 luPoint = 0; luPoint < 128u; ++luPoint )
+            {
+                CGS_ASSERT( luPoint < 128u,
+                            "luPartIndex < (uint32_t)KI_MAX_RACE_CAR_VERLET_POINTS" );
+                lpDst[luPoint] = lpSrc[luPoint];
+            }
+        }
+    }
+
+    // ---- L5 : the LOCATOR-OUTPUT copy (0x822E8F8C..0x822E90C0) ---------------
+    {
+        const s32 liNumLocators = lpDeformationEM->GetNumLocatorOutputs();
+        for( s32 liLocator = 0; liLocator < liNumLocators; ++liLocator )
+        {
+            const BrnPhysics::Deformation::VehicleLocatorOutput& lrLocator =
+                lpDeformationEM->GetLocatorOutput( liLocator );   // carries the :292 assert
+
+            const u32 luEntityWord = lrLocator.mEntityId.muValue;
+            if( ( luEntityWord >> 24 ) != BrnWorld::E_ENTITYTYPE_RACECAR )
+            {
+                continue;
+            }
+            const u32 luCarIndex = ( luEntityWord >> 10 ) & 0x3FFFu;
+            CGS_ASSERT( luCarIndex < 8u, "Entity index out of range" );   // :5731
+            if( luCarIndex >= 8u )
+            {
+                continue;
+            }
+            GetActiveRaceCar( static_cast<EActiveRaceCarIndex>( luCarIndex ) )
+                ->GetRenderParams()->SetLightLocators( lrLocator.mpLocatorData );
+        }
+    }
+
+    // ---- L6 : the DETACHED-PART render events (0x822E90C4..0x822E9164) -------
+    {
+        const BrnPhysics::Deformation::DeformationOutputInterfaceForEntityModules::
+            DetachedPartRenderQueue& lrPartQueue =
+                lpDeformationEM->GetDetachedPartRenderQueue();
+
+        const s32 liNumParts = lrPartQueue.GetLength();
+        for( s32 liPart = 0; liPart < liNumParts; ++liPart )
+        {
+            const BrnPhysics::Deformation::DetachedPartRenderEvent& lrEvent =
+                lrPartQueue.GetEvent( liPart );
+
+            const u32 luEntityWord = lrEvent.mVehicleEntityId.muValue;
+            if( ( luEntityWord >> 24 ) != BrnWorld::E_ENTITYTYPE_RACECAR )
+            {
+                continue;
+            }
+            const u32 luCarIndex = ( luEntityWord >> 10 ) & 0x3FFFu;
+
+            // Repack the physics-side event into the race car's own (id-less) render event.
+            BrnWorld::DetachedPartRenderEvent lWorldEvent;
+            lWorldEvent.mTransform    = lrEvent.mTransform;
+            lWorldEvent.miPartIndex   = lrEvent.miPartIndex;
+            lWorldEvent.mbIsAttached  = lrEvent.mbIsAttached;
+
+            GetActiveRaceCar( static_cast<EActiveRaceCarIndex>( luCarIndex ) )
+                ->GetRenderParams()->GetDetachedPartQueue().AddEventSafe( lWorldEvent );
         }
     }
 }

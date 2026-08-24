@@ -1,6 +1,8 @@
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnPhysicalBodyPartPool.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // gpDebugPrint (walls leg 4 gates)
 #include "GameSource/Physics/BrnPhysicsModuleIO_PotentialContactInterface.h"   // the REAL interface (walls leg 4: model accessor views)
+#include "GameSource/Physics/DeformationManager/SharedIO/BrnDeformationOutputInterface.h"  // the two OutputEvents sinks (landed 2026-08-24)
+#include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnIKBodyPart.h"        // IKBodyPart::GetMeshId / GetPartType (OutputEvents' trailer fields)
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 
@@ -367,7 +369,53 @@ namespace Deformation
                 *CgsDev::Log::gpDebugPrint << "conductor gate: PhysicalBodyPartPool::UpdatePart reached but not "
                                               "reconstructed [FLAG PC boot gate]\n";
         }
-        
+
+    }
+
+    // =========================================================================================
+    // OutputEvents @ 0x8260DBE8  (948 bytes; landed 2026-08-24, deform-land wave)
+    //
+    // Emit the two per-frame detached-part event streams for every USED pool slot:
+    //   1. clear the entity-module render queue FIRST (`stw 0, 0x2E88(r4)` == Clear());
+    //   2. per used part (mUsedParts bit walk, capacity 50):
+    //      - DetachedPartRenderEvent  { GetEventRenderTransform() (the rigid transform with the
+    //        rotated (graphicsPos - initialComPos) offset added to row 3),
+    //        mVehicleEntityId = mGlobalVehicleId (part+0x1D8),
+    //        miPartIndex = ikPart->spec mesh id (spec+0x1C8),
+    //        mbIsAttached = mbJoinedToVehicle (part+0x1E4) }
+    //        -> AddEvent onto lpOutputForEntityModules->mDetachedPartRenderQueue (+0x2E80);
+    //      - DetachedPartCurrentPositionEvent { same transform, same id,
+    //        meType = ikPart->spec part type (spec+0x1DC) }
+    //        -> AddEvent onto lpOutput->mDetachedPartCurrentPositionQueue (+0xB40).
+    // Both adds are the UNCONDITIONAL AddEvent (assert-tripwire bounds), not AddEventSafe.
+    // =========================================================================================
+    void PhysicalBodyPartPool::OutputEvents(
+        Deformation::DeformationOutputInterfaceForEntityModules* lpOutputForEntityModules,
+        Deformation::DeformationOutputInterface* lpOutput) const
+    {
+        lpOutputForEntityModules->GetDetachedPartRenderQueue().Clear();
+
+        for (s32 liSlot = mUsedParts.GetFirstNonZeroBit();
+             liSlot != -1;
+             liSlot = mUsedParts.GetNextNonZeroBit(liSlot))
+        {
+            const PhysicalBodyPart& lrPart = maParts[liSlot];
+            const Matrix44Affine lTransform = lrPart.GetEventRenderTransform();
+            const IKBodyPart* lpIKPart = lrPart.GetIKPart();
+
+            Deformation::DetachedPartRenderEvent lRenderEvent;
+            lRenderEvent.mTransform       = lTransform;
+            lRenderEvent.mVehicleEntityId = lrPart.GetGlobalEntityId();
+            lRenderEvent.miPartIndex      = lpIKPart->GetMeshId();          // spec+0x1C8
+            lRenderEvent.mbIsAttached     = lrPart.IsJoinedToVehicle();
+            lpOutputForEntityModules->GetDetachedPartRenderQueue().AddEvent(lRenderEvent);
+
+            Deformation::DetachedPartCurrentPositionEvent lPositionEvent;
+            lPositionEvent.mTransform       = lTransform;
+            lPositionEvent.mVehicleEntityId = lrPart.GetGlobalEntityId();
+            lPositionEvent.meType           = lpIKPart->GetPartType();      // spec+0x1DC
+            lpOutput->mDetachedPartCurrentPositionQueue.AddEvent(lPositionEvent);
+        }
     }
 }
 }

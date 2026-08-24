@@ -5,6 +5,7 @@
 // Reconstructed from the DecFIGS DWARF (member names/types) + the X360 spine. The
 // event structs are 16-byte aligned to match the queues' inline-buffer alignment.
 #include "GameSource/Physics/DeformationManager/SharedIO/BrnDeformationEvents.h"  // BrnCommonTypes, EBodyParts, the deformation events (+ DetachedPartRenderEvent)
+#include "GameSource/Physics/DeformationManager/SharedIO/BrnVehicleLocatorData.h" // VehicleLocatorData + VehicleLocatorOutput (both interfaces' maLocatorData, 2026-08-24)
 #include "GameShared/GameClasses/Module/CgsEventQueue.h"                          // CgsModule::EventQueue
 
 namespace BrnPhysics
@@ -48,12 +49,20 @@ namespace BrnPhysics
 
         // One skinned-model scratch record (DWARF BrnDeformationOutputInterface.h:49). 8 bytes on
         // console: an EntityId dword + a Vector3Plus* scratch pointer. The ForEntityModules copy
-        // moves it as one 8-byte unit per the asm.
+        // moves it as one 8-byte unit per the asm. (16 bytes on the host -- the pointer widens;
+        // every access is by name.)
         struct SkinData
         {
             EntityId    mEntityId;                // +0x00
             const void* mpSkinOffsets_Scratch;    // +0x04 (const rw::math::vpu::Vector3Plus* on console)
         };
+
+        // VehicleLocatorOutput (DWARF :117: EntityId + const VehicleLocatorData*) is HOMED in
+        // SharedIO/BrnVehicleLocatorData.h (included above as of 2026-08-24, deform-land wave).
+        // Both interfaces' maLocatorData arrays adopt it, replacing the old opaque
+        // `LocatorOutputSlot { u64 }` -- the producer (OutputData @0x826225D8 pass 1) and the
+        // consumer (readback leg L5 @0x822E9044) read/write the two fields separately, and an
+        // opaque u64 cannot carry a widened host pointer.
 
         // -------------------------------------------------------------------------
         // DeformationOutputInterface  (DWARF BrnDeformationOutputInterface.h:132)
@@ -99,11 +108,20 @@ namespace BrnPhysics
             DetachedPartCurrentPositionQueue mDetachedPartCurrentPositionQueue; // +0x0B40
             GlassSmashOrCrackQueue           mGlassSmashOrCrackQueue;           // +0x1AF0
             s32                              miNumLocatorOutputs;               // +0x2A00
-            // VehicleLocatorOutput (DWARF :117: EntityId + const VehicleLocatorData*) is 8 bytes on
-            // console and the copy-assignment moves it as one 8-byte unit; an 8-byte opaque slot
-            // preserves the stride/layout until VehicleLocatorOutput is homed.
-            struct LocatorOutputSlot { u64 mOpaque; };
-            LocatorOutputSlot                maLocatorData[28];                 // +0x2A04
+            VehicleLocatorOutput             maLocatorData[28];                 // +0x2A04 (VehicleLocatorOutput, promoted 2026-08-24)
+
+            // Console-INLINE locator push (no standalone X360 symbol -- the producer,
+            // DeformationManager::OutputData @0x826225D8, emits the assert + two stores + count
+            // bump in line at 0x8260xxxx; the baked assert cite is THIS header's own line 500 on
+            // console). Non-gating tripwire, exactly as baked.
+            void AddLocatorOutput(EntityId lEntityId, const VehicleLocatorData* lpLocatorData)
+            {
+                CGS_ASSERT(miNumLocatorOutputs < 28,
+                           "miNumLocatorOutputs < (int32_t)KU_MAX_DEFORMATION_MODELS");
+                maLocatorData[miNumLocatorOutputs].mEntityId     = lEntityId;
+                maLocatorData[miNumLocatorOutputs].mpLocatorData = lpLocatorData;
+                ++miNumLocatorOutputs;
+            }
         };
 
         // -------------------------------------------------------------------------
@@ -140,21 +158,73 @@ namespace BrnPhysics
             void Construct();
             DeformationOutputInterfaceForEntityModules& operator=(const DeformationOutputInterfaceForEntityModules& lkrOther);  // X360 @0x827A96D0
 
+            // ---- console-inline accessors (2026-08-24, deform-land wave) ----------------
+            // None has a standalone X360 symbol: the producer (DeformationManager::OutputData
+            // @0x826225D8) and the consumer (RaceCarEntityModule::ReadUpdatedActiveRaceCar-
+            // DataFromPhysics @0x822E87B8 legs L3/L4/L5/L6) emit the asserts + loads/stores in
+            // line; the baked assert cites are THIS header's console lines (:622 skinned push,
+            // :634 locator push, :276 skinned read, :292 locator read). All tripwires non-gating,
+            // exactly as baked.
+
+            // Producer side (OutputData pass 1).
+            void AddSkinnedModel(EntityId lEntityId, const void* lpSkinOffsets_Scratch)
+            {
+                CGS_ASSERT(miNumSkinnedModels < 28,
+                           "miNumSkinnedModels < (int32_t)KU_MAX_DEFORMATION_MODELS");
+                maSkinData[miNumSkinnedModels].mEntityId             = lEntityId;
+                maSkinData[miNumSkinnedModels].mpSkinOffsets_Scratch = lpSkinOffsets_Scratch;
+                ++miNumSkinnedModels;
+            }
+            void AddLocatorOutput(EntityId lEntityId, const VehicleLocatorData* lpLocatorData)
+            {
+                CGS_ASSERT(miNumLocatorOutputs < 28,
+                           "miNumLocatorOutputs < (int32_t)KU_MAX_DEFORMATION_MODELS");
+                maLocatorData[miNumLocatorOutputs].mEntityId     = lEntityId;
+                maLocatorData[miNumLocatorOutputs].mpLocatorData = lpLocatorData;
+                ++miNumLocatorOutputs;
+            }
+
+            // Wheel-state entry writers (OutputWheelData @0x82608E28 -- count/id/state block).
+            u32  GetNumEntries() const { return muNumEntries; }
+            void SetNumEntries(u32 luNumEntries) { muNumEntries = luNumEntries; }
+            void SetBaseId(u32 luEntry, u64 luVolumeInstanceId) { maBaseIDs[luEntry] = luVolumeInstanceId; }
+            // The 400-byte slot viewed as the homed WheelPhysicalStates (the operator='s own idiom).
+            void* GetWheelStateSlot(u32 luEntry) { return &maWheelStates[luEntry]; }
+
+            // Consumer side (readback legs L3/L4/L5/L6).
+            u64 GetBaseId(u32 luEntry) const { return maBaseIDs[luEntry]; }
+            const void* GetWheelStateSlot(u32 luEntry) const { return &maWheelStates[luEntry]; }
+            s32 GetNumSkinnedModels() const { return miNumSkinnedModels; }
+            const SkinData& GetSkinData(s32 liIndex) const
+            {
+                CGS_ASSERT(liIndex < miNumSkinnedModels, "liIndex < miNumSkinnedModels");
+                return maSkinData[liIndex];
+            }
+            s32 GetNumLocatorOutputs() const { return miNumLocatorOutputs; }
+            const VehicleLocatorOutput& GetLocatorOutput(s32 liIndex) const
+            {
+                CGS_ASSERT(liIndex < miNumLocatorOutputs, "liIndex < miNumLocatorOutputs");
+                return maLocatorData[liIndex];
+            }
+            const DetachedPartRenderQueue& GetDetachedPartRenderQueue() const { return mDetachedPartRenderQueue; }
+            DetachedPartRenderQueue&       GetDetachedPartRenderQueue()       { return mDetachedPartRenderQueue; }
+            const DeformationOutputInterface::GlassSmashOrCrackQueue& GetGlassSmashOrCrackQueue() const { return mGlassSmashOrCrackQueue; }
+            DeformationOutputInterface::GlassSmashOrCrackQueue&       GetGlassSmashOrCrackQueue()       { return mGlassSmashOrCrackQueue; }
+
         private:
             // 400-byte slot per wheel-state entry (asm stride 0x190); the operator= reinterprets each
             // slot as WheelPhysicalStates& to invoke the homed by-name copy.
             struct alignas(16) WheelStateSlot { u8 mOpaque[0x190]; };  // 400 bytes
-            struct LocatorOutputSlot { u64 mOpaque; };
 
             u32                     muNumEntries;                 // +0x0000
             u64                     maBaseIDs[28];                // +0x0008 (VolumeInstanceId)
             WheelStateSlot          maWheelStates[28];            // +0x00F0 (stride 0x190 = 400)
             s32                     miNumSkinnedModels;           // +0x2CB0
-            SkinData                maSkinData[28];               // +0x2CB4
-            s32                     miNumLocatorOutputs;          // +0x2D94
-            LocatorOutputSlot       maLocatorData[28];            // +0x2D98
-            DetachedPartRenderQueue mDetachedPartRenderQueue;     // +0x2E80
-            DeformationOutputInterface::GlassSmashOrCrackQueue mGlassSmashOrCrackQueue; // +0x3E30
+            SkinData                maSkinData[28];               // +0x2CB4 console (host: pointers widen; by-name)
+            s32                     miNumLocatorOutputs;          // +0x2D94 console
+            VehicleLocatorOutput    maLocatorData[28];            // +0x2D98 console (promoted 2026-08-24)
+            DetachedPartRenderQueue mDetachedPartRenderQueue;     // +0x2E80 console
+            DeformationOutputInterface::GlassSmashOrCrackQueue mGlassSmashOrCrackQueue; // +0x3E30 console
         };
     }
 }

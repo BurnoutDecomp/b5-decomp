@@ -1029,6 +1029,23 @@ InputBuffer_PostPhysics::Construct()
     CgsModule::IOBuffer::Construct();
     mVehicleOutputInterface.Construct();
     mVehicleManagerOutputInterface.Construct();
+    // ⭐ GROWN 2026-08-24 (deform-land wave, P1(b)) exactly per the DELETE-WHEN above: bridge
+    // legs 3/4 are LIVE, so both deformation interfaces are now written every frame -- their
+    // queues must be Constructed or the first copy overflows (the same family this banner
+    // documents).
+    mDeformationOutputInterfaceForEntityModules.Construct();
+    mDeformationOutputInterface.Construct();
+}
+
+// X360 0x827A99B0 (W, :523) -- DeformationOutputInterfaceForEntityModules::operator= on
+// this+0xCF3B0 (mDeformationOutputInterfaceForEntityModules). ADDED 2026-08-24 (deform-land
+// wave, P1(b)) -- it was declaration-only while bridge leg 3 was parked.
+void
+InputBuffer_PostPhysics::SetDeformationOutputInterfaceForEntityModules(
+        const DeformationOutputInterfaceForEntityModules* lpDeformationOutputInterfaceForEntityModules)
+{
+    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+    mDeformationOutputInterfaceForEntityModules = *lpDeformationOutputInterfaceForEntityModules;
 }
 
 // ---- InputBuffer_GenerateDispatchLists --------------------------------------

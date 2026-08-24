@@ -135,7 +135,10 @@ namespace Deformation
     // current-position events). Homed under DeformationManager/SharedIO. FLAG: forward-declared
     // (referenced by pointer only).
     class DeformationOutputInterface;
-    class DeformationOutputInterfaceForEntityModules;
+    // ⚠️ class-key matters to the MSVC mangling: the real type is a STRUCT
+    // (BrnDeformationOutputInterface.h) -- a `class` fwd here made OutputEvents' definition and
+    // its callers mangle to two different symbols (found by the link, 2026-08-24).
+    struct DeformationOutputInterfaceForEntityModules;
 
     class PhysicalBodyPartPool
     {

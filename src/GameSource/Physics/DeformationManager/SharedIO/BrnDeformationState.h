@@ -24,6 +24,7 @@
 // element carries no host-widening members (pure byte storage), so its 80-byte stride holds.
 
 #include "types.hpp"
+#include "BrnCommonTypes.h"                                  // Vector3 (the CarState named tail)
 #include "GameShared/GameClasses/Core/CgsAssert.h"          // CGS_ASSERT
 #include "GameShared/GameClasses/Containers/CgsBitArray.h"   // CgsContainers::BitArray
 
@@ -31,35 +32,73 @@ namespace BrnPhysics
 {
 namespace Deformation
 {
-    // One per-sensor runtime record. FLAG (opaque element): 80-byte (0x50) stride is
-    // asm-attested (CarState::GetSensor index math); its interior is not recovered in this
-    // pass. GROW into real members when a sensor-record TU lands.
-    struct CarSensorState
+    // One per-sensor runtime record. 80-byte (0x50) stride is asm-attested (CarState::
+    // GetSensor index math). Interior recovered 2026-08-24 (deform-land wave) from the
+    // writer DeformableObject::OutputState @0x825C1EA8 (the only producer): five 16-byte
+    // rows per sensor, written at dst-32/dst-16/dst+0/dst+16/dst+32 around the +32 array
+    // cursor (see BrnDeformableObject_GlassState.cpp's OutputState banner):
+    //   +0x00  rest position          (sensor spec lead vector, "A")
+    //   +0x10  world scalar vector    (sensor's mpWorldSpaceSphere lead row, "C")
+    //   +0x20  displacement           (B - A: current minus rest)
+    //   +0x30  displacement delta     ((B - A) minus the row's previous +0x20 value)
+    //   +0x40  spec scalar (f32 at spec+40) + 12 bytes the writer leaves untouched
+    // Names are role-derived from that writer (FLAG: no DWARF for the interior).
+    struct alignas(16) CarSensorState
     {
-        u8 maOpaque[0x50];   // 80 bytes (asm-attested per-sensor stride)
+        Vector3 mRestPosition;        // +0x00
+        Vector3 mWorldScalarVector;   // +0x10
+        Vector3 mDisplacement;        // +0x20 (current - rest)
+        Vector3 mDisplacementDelta;   // +0x30 (change since last output)
+        f32     mfSpecScalar;         // +0x40 (sensor spec +40)
+        u8      maReserved[12];       // +0x44 .. +0x50 (writer leaves untouched)
     };
 
-    struct CarState
+    struct alignas(16) CarState
     {
-        // FLAG (best-effort capacity): the sensor array base is this+0 and the next field
-        // reached by asm (mu8NumSensors) is console +0x6A4 (1700). At an 80-byte stride that
-        // bounds the array at floor(1700/80) == 21 records plus a trailing opaque span; no
-        // asm/DWARF pins the exact maximum, so the bounding capacity is used and the count
-        // byte is held at its console offset by a trailing reserved span. mu8NumSensors is
-        // the authoritative live count.
-        static const u32 KU_MAX_SENSORS = 21;
+        // ⭐ CAPACITY SETTLED 2026-08-24 (deform-land wave): the old "bounding capacity 21"
+        // guess is RETIRED. The producer (DeformableObject) owns maDeformationSensors[20]
+        // and OutputState copies one 80-byte record per live sensor from +0; the named tail
+        // below starts at exactly 20*80 == 1600 (the deformed-bbox copy source in
+        // ActiveRaceCar::UpdateDeformationState @0x822D4A58 reads carState+0x640). So the
+        // array is 20 records, 0..1600, with NO reserved gap.
+        static const u32 KU_MAX_SENSORS = 20;
 
         // console +0x00 -- per-sensor record array (80-byte stride per sensor).
         CarSensorState maSensors[KU_MAX_SENSORS];
 
-        // Opaque span between the sensor array end (+0x690) and the count (+0x6A4).
-        u8 maReserved0[0x6A4 - KU_MAX_SENSORS * 0x50];
-
-        u8 mu8NumSensors;   // console +0x6A4 (1700) -- live sensor count
+        // The named tail, offsets attested by BOTH sides of the seam (writer
+        // DeformableObject::OutputState @0x825C1EA8; reader ActiveRaceCar::
+        // UpdateDeformationState @0x822D4A58):
+        //   +0x640 (1600)  deformed-bbox pair (32 bytes; OutputState fills it from
+        //                  vehicle+1744, UpdateDeformationState copies it whole into
+        //                  ActiveRaceCar::mDeformedBBox)
+        //   +0x660 (1632)  the 4 wheel tag-point rows (16-byte stride; OutputState's
+        //                  tag loop, UpdateDeformationState -> RenderParams axle rows)
+        //   +0x6A0 (1696)  summed squared sensor displacement (OutputState's vaddfp
+        //                  accumulator; UpdateDeformationState -> mfDeformationSquared)
+        //   +0x6A4 (1700)  live sensor count (GetSensor @0x825B3678 lbz's this byte)
+        Vector3 mDeformedBBoxMin;         // +0x640 (1600)
+        Vector3 mDeformedBBoxMax;         // +0x650 (1616)
+        Vector3 maWheelTagPoints[4];      // +0x660 (1632) .. +0x6A0 (1696)
+        f32     mfSummedDisplacementSquared; // +0x6A0 (1696)
+        u8      mu8NumSensors;            // +0x6A4 (1700) -- live sensor count
+        u8      maTailPad[11];            // +0x6A5 .. +0x6B0 (sizeof == 1712 == the
+                                          //  DeformationState per-record stride)
 
         // 0x825B3678 -- checked sensor accessor. Asserts luSensorIndex < mu8NumSensors,
         // then returns the sensor record at maSensors[luSensorIndex].
         CarSensorState& GetSensor(u8 luSensorIndex);
+
+        // Console-inline reader accessors (no standalone X360 emission -- the one reader,
+        // ActiveRaceCar::UpdateDeformationState @0x822D4A58, emits bare offset loads; the
+        // wheel-tag read carries the baked assert "luWheel < BrnPhysics::Vehicle::
+        // eNumDrivenWheels", BrnDeformationState.h:75 -- THIS header's own line on console).
+        f32 GetSummedDisplacementSquared() const { return mfSummedDisplacementSquared; }
+        const Vector3& GetWheelTagPoint(u32 luWheel) const
+        {
+            CGS_ASSERT(luWheel < 4u, "luWheel < BrnPhysics::Vehicle::eNumDrivenWheels");
+            return maWheelTagPoints[luWheel];
+        }
     };
 
     // ========================================================================
@@ -89,18 +128,16 @@ namespace Deformation
     //   +47936  u32            maCarIds[28]      (the car id owning each live slot)  (112 bytes)
     //   +48048  BitArray<28>   mxLiveSlots       (which slots are live)             (8 bytes)
     //
-    // FLAG (opaque element): the 1712-byte CarStateRecord interior is not recovered by this
-    // slice (no DWARF; GetCarStateF only takes a record's address). It is modelled as an
-    // honestly-FLAGGED opaque 1712-byte POD so the per-record stride and the derived table
-    // offsets are exact; GROW it into named members when a record-producing/consuming TU lands.
+    // ⭐ PROMOTED 2026-08-24 (deform-land wave): the per-car record IS CarState -- the
+    // record-producing TU (DeformationManager::OutputSensorState @0x82605618 hands
+    // &maCarStates[i] to DeformableObject::OutputState @0x825C1EA8, which fills a CarState)
+    // landed, closing the old "opaque 1712-byte POD" deferral. sizeof(CarState) == 1712 is
+    // static_asserted in BrnDeformationState_DeformationState.cpp, so every derived table
+    // offset below is unchanged. CarStateRecord survives as a typedef for the existing
+    // consumers (GetCarStateF's return spelling, BrnVehicleManager_PerFrameLeaves.cpp).
     static const u32 KU_MAX_DEFORMATION_MODELS = 28;
 
-    // One per-car deformation record. FLAG (opaque element): 1712-byte (0x6B0) stride is
-    // asm-attested (GetCarStateF return math); its interior is not recovered in this pass.
-    struct CarStateRecord
-    {
-        u8 maOpaque[0x6B0];   // 1712 bytes (asm-attested per-record stride)
-    };
+    typedef CarState CarStateRecord;
 
     struct DeformationState
     {
@@ -119,6 +156,15 @@ namespace Deformation
         static void _AssertLayout();
 
     private:
+        // ⭐ The one WRITER (DeformationManager::OutputSensorState @0x82605618, landed
+        // 2026-08-24) fills all three members in place each frame: the live-slot mask is a
+        // raw word copy of the manager's mModelsAdded (0x82605644 `ld/std`), then per live
+        // slot maCarIds[i] and the &maCarStates[i] handed to DeformableObject::OutputState.
+        // The manager owns this object BY VALUE (mStateOutput) and the console emits the
+        // writes as bare stores, so the owning manager is a friend rather than growing a
+        // public mutator surface no console symbol attests.
+        friend class DeformationManager;
+
         CarStateRecord                      maCarStates[KU_MAX_DEFORMATION_MODELS]; // +0      (1712 stride)
         u32                                 maCarIds[KU_MAX_DEFORMATION_MODELS];    // +47936
         CgsContainers::BitArray<KU_MAX_DEFORMATION_MODELS> mxLiveSlots;             // +48048

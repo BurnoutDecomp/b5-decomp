@@ -49,12 +49,17 @@ namespace PhysicsModuleIO
         static_assert(offsetof(OutputBuffer, mDeformationOutputInterface)
                     - offsetof(OutputBuffer, mPropManagerOutputInterface)    >= 148656 - 71792,
                       "prop -> deformation console delta (>=: measured host == console, 76864)");
+        // 2026-08-24 (deform-land wave): the two deformation seats hold their REAL types, so
+        // both relations flip from pad-held `==` to type-held `>=` -- host sizeof exceeds each
+        // console span (16-vs-12-byte queue headers; SkinData/VehicleLocatorOutput pointers
+        // widen). A shrink below the console span fails here instead of silently re-seating
+        // the following member.
         static_assert(offsetof(OutputBuffer, mDeformationOutputInterfaceForEntityModules)
-                    - offsetof(OutputBuffer, mDeformationOutputInterface)    == 159648 - 148656,
-                      "deformation -> entity-modules console delta");
+                    - offsetof(OutputBuffer, mDeformationOutputInterface)    >= 159648 - 148656,
+                      "deformation -> entity-modules console delta (>=: host queues/pointers widen)");
         static_assert(offsetof(OutputBuffer, mSceneInputInterface)
-                    - offsetof(OutputBuffer, mDeformationOutputInterfaceForEntityModules) == 179424 - 159648,
-                      "entity-modules -> scene console delta");
+                    - offsetof(OutputBuffer, mDeformationOutputInterfaceForEntityModules) >= 179424 - 159648,
+                      "entity-modules -> scene console delta (>=: host queues/pointers widen)");
         // this relation is no longer held by a pad -- it is held by
         // sizeof(InSceneUpdateInterface) itself, now that mSceneInputInterface IS that type.
         // Console delta 818,768; measured host 818,944 (the 16-vs-12-byte queue headers). The
@@ -134,12 +139,12 @@ namespace PhysicsModuleIO
     // would fire "mpEvents != NULL" on its first AppendUpdatedProps -- the never-Constructed
     // EventQueue family that has broken every previous producer bring-up.
     //
-    // TWO legs still CANNOT be emitted and are NOT faked: mDeformationOutputInterface
-    // (+148656) and mDeformationOutputInterfaceForEntityModules (+159648) are 1-byte opaque
-    // *Storage spans (each size-pinned by the pad that follows it) with no members to construct.
-    // Their seats and exact console call lists are transcribed above. Any consumer reaching one
-    // of those will fire the same loud "Not Constructed" this buffer did before it had a
-    // Construct at all, by design.
+    // ⭐ THE LAST TWO BLOCKED LEGS ARE LIVE (2026-08-24, deform-land wave, P1(b)). Both
+    // deformation seats hold their real types now, so the console's own two legs are emitted:
+    // DeformationOutputInterface::Construct (+148656, the console's `bl` @0x825ABB2x) and the
+    // ForEntityModules Construct (the console emits it INLINE here -- the two queue Constructs
+    // at +171552/+175568 plus the counter zero stores at +159648/+171088/+171316; the host
+    // spells them through the member's own Construct()).
     void OutputBuffer::Construct()
     {
         CgsModule::IOBuffer::Construct();               // status = 1
@@ -147,6 +152,8 @@ namespace PhysicsModuleIO
         mVehicleOutputRequestInterface.Construct();     // +16      (the six sim-request queues)
         mVehicleOutputInterface.Construct();            // +44128   (X360-inline @0x825ABB58)
         mVehicleManagerOutputInterface.Construct();     // +41952   (X360 0x822E6790)
+        mDeformationOutputInterface.Construct();        // +148656  (X360 @0x825ABB10's leading leg)
+        mDeformationOutputInterfaceForEntityModules.Construct(); // +159648 (X360-inline queue pair @+171552/+175568)
         mSceneInputInterface.Construct();               // +179424  (X360 0x825ABBEC)
         mPropManagerOutputInterface.Construct();        // +71792   (X360 0x825ABBF8)
         mContactSpyInterface.Construct();               // +998192  (the console's trailing stwx 0)
@@ -258,6 +265,16 @@ namespace PhysicsModuleIO
     {
         CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
         return &mDeformationOutputInterface;
+    }
+
+    // X360 0x8279F790 (DWARF :363): read-lock; return this + 159648. ADDITIVE 2026-08-24
+    // (deform-land wave, P1(b)) -- the const twin the two post-physics bridges' deformation-
+    // for-entity-modules legs call.
+    const OutputBuffer::DeformationOutputInterfaceForEntityModulesStorage*
+    OutputBuffer::GetDeformationOutputInterfaceForEntityModules() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        return &mDeformationOutputInterfaceForEntityModules;
     }
 
     // X360 0x8279F838 (DWARF :366): read-lock; return this + 179424.

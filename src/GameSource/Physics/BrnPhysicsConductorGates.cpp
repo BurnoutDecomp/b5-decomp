@@ -440,19 +440,10 @@ namespace Deformation
     // are DELETED -- both are REAL in BrnDeformationManager.cpp (the per-step conductor + the
     // post-physics solve/read-back pass). LNK2005 if they ever come back.
 
-    // OutputData @0x826225D8 (339). ⭐ 2026-08-14 (deformation-mount wave): the walls-wave mount
-    // plan EXECUTED -- the home TU's lifecycle+drain half is MOUNTED and OutputData's real body
-    // was split into the (still unmounted) BrnDeformationManager_Output.cpp. This gate carries
-    // the runtime seam until that slice's closure lands (OutputSensorState @0x82605618
-    // X360-export-HOLE/PS3 0x6F3E10, UpdateAndOutputJointStates @0x82609AE8, OutputWheelData
-    // @0x82608E28, DetachedPartManager::OutputEvents -> pool OutputEvents @0x8260DBE8); mounting
-    // the slice DELETES this gate (LNK2005 says so loudly).
-    void DeformationManager::OutputData(DeformationOutputInterfaceForEntityModules*,
-                                        DeformationOutputInterface*)
-    {
-        BRN_CONDUCTOR_GATE("DeformationManager::OutputData @0x826225D8 (339; real body in the "
-                           "unmounted BrnDeformationManager_Output.cpp)");
-    }
+    // OutputData @0x826225D8: gate RETIRED 2026-08-24 (deform-land wave) -- the real body's TU
+    // BrnDeformationManager_Output.cpp is MOUNTED with its full closure (OutputSensorState
+    // @0x82605618, UpdateAndOutputJointStates @0x82609AE8, pool OutputEvents @0x8260DBE8,
+    // DetachedPartManager::OutputEvents wrapper).
 }
 
 namespace Props

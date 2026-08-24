@@ -62,6 +62,7 @@
 #include "GameSource/Physics/PropManager/SharedIO/BrnPropInputInterface.h" // Props::PropInputInterface (mPropManagerInputInterface, retyped 2026-08-10)
 #include "GameSource/Physics/PropManager/SharedIO/BrnPropOutputInterface.h" // Props::PropOutputInterface (mPropManagerOutputInterface, retyped 2026-08-19)
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_SceneUpdate.h" // SceneManagerIO::InSceneUpdateInterface (mSceneInputInterface, retyped 2026-08-19)
+#include "GameSource/Physics/DeformationManager/SharedIO/BrnDeformationOutputInterface.h" // Deformation::DeformationOutputInterface(+ForEntityModules) (both seats retyped 2026-08-24)
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h" // BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface (mRCEntityOutputInterface, retyped 2026-08-10)
 
 namespace BrnPhysics
@@ -110,8 +111,21 @@ namespace PhysicsModuleIO
         // /d1reportSingleClassLayout: mDeformationOutputInterface stays at host +148672 and
         // sizeof(OutputBuffer) stays 998,400).
         typedef Props::PropOutputInterface PropOutputInterfaceStorage;                        // :381
-        struct DeformationOutputInterfaceStorage    { unsigned char maBytes[1]; };
-        struct DeformationOutputInterfaceForEntityModulesStorage { unsigned char maBytes[1]; }; // :384 (unfolded 2026-08-09)
+        // PROMOTED 2026-08-24 (deform-land wave, P1(b)): the LAST two 1-byte opaque seats adopt
+        // their real types. The types are NOT inferred -- X360 OutputBuffer::Construct
+        // @0x825ABB10 calls DeformationOutputInterface::Construct(this+148656) and constructs
+        // the ForEntityModules member's two queues in line (DetachedPartRenderEvent<50> at
+        // +171552 == seat+0x2E80, GlassSmashOrCrackEvent<20> at +175568 == seat+0x3E30), and
+        // the DWARF spells both members' types (:383/:384). The console spans close
+        // arithmetically: [+148656..+159648) == 10992 == the DeformationOutputInterface span,
+        // [+159648..+179424) == 19776 == the ForEntityModules span. Host sizeof EXCEEDS both
+        // (queue headers 16 vs 12; SkinData/VehicleLocatorOutput pointers widen), so the two
+        // pads that pinned the old 1-byte placeholders are GONE, not shrunk (the
+        // mSceneInputInterface precedent), and _AssertLayout gates the surviving `>=` deltas.
+        // This retires the "storage->real seam casts" at OutputData / ProcessDeformationStates /
+        // the race-car + traffic post-physics bridges' legs 3/4.
+        typedef Deformation::DeformationOutputInterface                DeformationOutputInterfaceStorage;                 // :383
+        typedef Deformation::DeformationOutputInterfaceForEntityModules DeformationOutputInterfaceForEntityModulesStorage; // :384
         // PROMOTED 2026-08-19 (wave Q5 cluster F2 -- the physics->scene seam). This was a
         // 1-byte opaque placeholder with an 818,767-byte pad behind it, which is why
         // WorldModule::BridgePhysicsSceneUpdateToScene @0x827ABA40 could not be mounted and why
@@ -180,6 +194,11 @@ namespace PhysicsModuleIO
         Vehicle::VehicleManagerOutputInterface*       GetVehicleManagerOutputInterface();       // +41952, write (0x8259FFD8)
         DeformationOutputInterfaceForEntityModulesStorage*
                                                       GetDeformationOutputInterfaceForEntityModules(); // +159648, write (0x825A01D0, DWARF :364)
+        // ADDITIVE 2026-08-24 (deform-land wave, P1(b)): the READ-LOCK const twin the two
+        // post-physics bridges call (X360 @0x8279F790 -- the race-car bridge's leg 3 and the
+        // traffic bridge's leg 3 both hold a `const OutputBuffer*`).
+        const DeformationOutputInterfaceForEntityModulesStorage*
+                                                      GetDeformationOutputInterfaceForEntityModules() const; // +159648, read (0x8279F790, DWARF :363)
 
         // This buffer had NO Construct at all, while the
         // console emits one (X360 0x825ABB10, 64 instructions) that the CreateIOBuffer<T> stack
@@ -213,17 +232,14 @@ namespace PhysicsModuleIO
         // replacement width is ZERO, and a zero-length array is not legal here, so the pad is
         // deleted outright (the same disposition mSceneInputInterface's pad took on 2026-08-19).
         // _AssertLayout gates the surviving relation (`>=` the console delta).
-        DeformationOutputInterfaceStorage    mDeformationOutputInterface;      // +148656 :383
-        // gap to mDeformationOutputInterfaceForEntityModules: +148657 .. +159647.
-        unsigned char                        maDeformOutPad[159648 - 148657];  //
-        // unfolded -- its own accessor @0x825A01D0 returns
-        // `addis 2; addi 28576` == +159648 (148656 + the 10992-byte deformation output span,
-        // zero slack).
+        // NO PADS HERE ANY MORE (2026-08-24, deform-land wave): both deformation seats hold
+        // their REAL types now (console spans 10992 / 19776; host sizeof exceeds each, so the
+        // old `maDeformOutPad` / `maEntityModulesPad` are deleted outright -- the
+        // mSceneInputInterface disposition). _AssertLayout gates the surviving `>=` deltas.
+        DeformationOutputInterfaceStorage    mDeformationOutputInterface;      // console +148656 :383
         DeformationOutputInterfaceForEntityModulesStorage
-                                             mDeformationOutputInterfaceForEntityModules; // +159648 :384
-        // gap to mSceneInputInterface: +159649 .. +179423.
-        unsigned char                        maEntityModulesPad[179424 - 159649];     // ...
-        SceneInputInterfaceStorage           mSceneInputInterface;             // +179424 :385 (0x8279F838)
+                                             mDeformationOutputInterfaceForEntityModules; // console +159648 :384 (0x825A01D0)
+        SceneInputInterfaceStorage           mSceneInputInterface;             // console +179424 :385 (0x8279F838)
         // NO PAD HERE ANY MORE (2026-08-19, wave Q5/F2): the seat holds the REAL
         // InSceneUpdateInterface now, whose host sizeof (818,944 -- measured) already EXCEEDS
         // the 818,768-byte console span [+179424 .. +998192], exactly like

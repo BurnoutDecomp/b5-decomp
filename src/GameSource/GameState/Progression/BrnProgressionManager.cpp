@@ -257,6 +257,20 @@ bool ProgressionManager::Prepare2(BrnGameState::GameStateModuleIO::OutputBuffer*
     CGS_ASSERT(lpOutput != nullptr, "lpOutput");            // X360 BrnProgressionManager.cpp:249
     CGS_ASSERT(lpReceiverQueue != nullptr, "lpReceiverQueue");  // X360 :250
 
+    // ⭐ THE PROFILE BOOT SEAM (landed 2026-08-24, deform-land wave). Profile::Construct
+    // @0x823708A8 was bodied but had NO caller anywhere in the tree, so the embedded
+    // mProfile booted as raw storage -- BOOT-MEASURED: mbIsNewProfile read 0 at junkyard
+    // entry ([deform-preset] probe newProfile=0), which silently disabled the start-of-game
+    // 0.85 junkyard deform. The console constructs the profile on this manager's own
+    // construct/prepare path (idat xrefs: ProgressionManager::Construct @0x8237A74C and the
+    // outer Prepare's call @0x8239DC78, immediately before this Prepare2 body); neither outer
+    // is reconstructed, so the call lands here at the same boot position, guarded to run once.
+    if (!mbProfileConstructed)
+    {
+        mbProfileConstructed = true;
+        mProfile.Construct();
+    }
+
     // X360: if ( LoadProgressionData(this, lpOutput, lpReceiverQueue) ) { ... } else return false;
     if (!LoadProgressionData(lpOutput, lpReceiverQueue))
     {

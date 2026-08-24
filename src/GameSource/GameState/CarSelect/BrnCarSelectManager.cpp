@@ -1395,6 +1395,18 @@ void CarSelectManager::ReallyEnterJunkyardAtStartOfGame(GameStateModuleIO::GameA
     // +0x170 (368), so that byte is Profile +118033 == mbIsNewProfile -- the start-of-game deform
     // is gated on the profile being BRAND NEW. (The old comment here said "Profile + 118401",
     // which is 368 bytes past the real member; see the body in BrnProfile.cpp.)
+    // [deform-preset probe 2026-08-24] one line that settles WHICH gate the start-of-game
+    // deform takes on this build (new-profile byte + record presence + stored amount).
+    if (CgsDev::Log::gpDebugPrint != 0)
+    {
+        BrnProgression::CarData* lpProbeCar = lpProfile->FindCar(mStartCarId);
+        *CgsDev::Log::gpDebugPrint
+            << "[deform-preset] ReallyEnterJunkyard: newProfile="
+            << (lpProfile->IsStartOfGameDeformActive() ? 1 : 0)
+            << " carRecord=" << (lpProbeCar != 0 ? 1 : 0)
+            << " amountBefore=" << (lpProbeCar != 0 ? lpProbeCar->GetUnlockDeformationAmount() : -1.0f)
+            << "\n";
+    }
     if (lpProfile->IsStartOfGameDeformActive())
     {
         BrnProgression::CarData* lpCarData = lpProfile->FindCar(mStartCarId);
