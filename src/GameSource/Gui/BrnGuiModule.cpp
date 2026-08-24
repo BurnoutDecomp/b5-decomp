@@ -993,6 +993,8 @@ namespace BrnGui
         mpGuiEventInputBuffer = 0;
         mpOutputBuffer = 0;
         mpTextureAllocator = 0;   // filled by Prepare (X360 GuiModule::Prepare @0x82518DE0)
+        mpGuiHeapAllocator = 0;   // [licence-icon] filled by Prepare (mGuiConfig row +311924, bank 31)
+        mbCustomRenderersPrepared = false;   // [licence-icon] the manager staged-prepare latch
 
         // The flow-controller chain (the X360 Construct's flow set): the cache Construct
         // (the watcher reset @0x82505860 -> 0x824FD978), then the profile manager (X360
@@ -1122,6 +1124,7 @@ namespace BrnGui
         // an inner Unlock would clear the caller's lock and its own UnlockForRead would then assert
         // "Not locked for read". GetAllocatorList's read assert is satisfied by the caller's bracket.
         mpTextureAllocator = 0;
+        mpGuiHeapAllocator = 0;
         {
             BrnResource::GameDataIO::OutputBuffer* lpGameDataOutput =
                 BrnGameMainFlowController::GetScriptedLoadGameDataOutput();
@@ -1132,7 +1135,17 @@ namespace BrnGui
                 const BrnResource::GameDataIO::AllocatorList* lpAllocators =
                     lpGameDataOutput->GetAllocatorList();
                 if (lpAllocators != 0)
+                {
                     mpTextureAllocator = lpAllocators->GetRWLinearResourceAllocator(42);
+                    // [licence-icon] the console's sibling stage-1 row:
+                    //   *(gm + 311924) = AllocatorList::GetRWGeneralResourceAllocator(list, 31)
+                    // -- the heap allocator the custom-renderer manager Prepare receives.
+                    // (reinterpret: rw::core::GeneralResourceAllocator is forward-declared
+                    // opaque in this TU; on the rwcore ABI it IS an IResourceAllocator -- the
+                    // console stores the same pointer in the IResourceAllocator config row.)
+                    mpGuiHeapAllocator = reinterpret_cast<rw::IResourceAllocator*>(
+                        lpAllocators->GetRWGeneralResourceAllocator(31));
+                }
             }
         }
 
@@ -1183,17 +1196,15 @@ namespace BrnGui
         // ViewModule::SetCustomRendererManager mirrors the pointer into
         // mAptAux.mRenderHandler and AptAux::Construct clears that same slot to 0.
         //
-        // FLAG (allocators): the console passes the GUI module's rw general-resource and
-        // rw-linear-resource allocators (AllocatorList slots 31 / 42). The scripted-load
-        // GameData OUTPUT's AllocatorList IS reachable now (stage 1 above reads slot 42 out
-        // of it into mpTextureAllocator, post-fx step 11); this call still passes the null
-        // the other GUI Prepare calls above pass -- widening it to slots 31/42 is the
-        // custom-renderer layer's own follow-up, not this wave's. The one component currently embedded (NetworkPlayerImageRenderer) uses them
-        // to create its triple-buffered avatar textures, so with nulls its Prepare cannot
-        // complete -- see the FLAG in BrnCustomRendererManager.h. It is wired, reachable and
-        // honest about not being fed; it is NOT faked into reporting success.
+        // ⭐ [licence-icon] 2026-08-24: the allocator FLAG that stood here is PAID -- the call
+        // now passes the console's own pair (stage 1 above fills both mGuiConfig rows: slot 31
+        // general -> mpGuiHeapAllocator, slot 42 linear -> mpTextureAllocator; the X360 stage-7
+        // call is `Prepare(*(gm+311924), *(gm+311932))` @0x82518D68). One call advances the
+        // staged prepare as far as it can this frame; the console re-enters Prepare until every
+        // stage passes, so Update owns the PC pump (see the [licence-icon] block there).
         const bool lbCustomRenderersPrepared =
-            mCustomRendererManager.Prepare(/*lpHeapAllocator*/ 0, /*lpTextureAllocator*/ 0);
+            mCustomRendererManager.Prepare(mpGuiHeapAllocator, mpTextureAllocator);
+        mbCustomRenderersPrepared = lbCustomRenderersPrepared;
         mViewModule.SetCustomRendererManager(&mCustomRendererManager, 10,
                                              /*lpReplaySerialiser*/ 0);
         (void)lbCustomRenderersPrepared;   // the console's `if (!v27) return 0;` -- see FLAG
@@ -2250,6 +2261,48 @@ namespace BrnGui
             // Prepare state machine waits on) -- rides the one subscription filter.
             RouteEventToFlow(reinterpret_cast<const CgsModule::Event*>(&lCacheEvent), 64,
                              static_cast<s32>(sizeof(lCacheEvent)));
+
+            // ⭐ [licence-icon] the CUSTOM-RENDERER manager is the event's other console
+            // consumer (its RecvEvent case 64 fans the GuiCache to every component --
+            // NetworkPlayerImageRenderer latches mpGuiCache off it, the pointer its staged
+            // Prepare's resource wait needs). This synthesized post never transits the
+            // module-input queue, so the DispatchInboundGuiEvents feed cannot carry it.
+            mCustomRendererManager.RecvEvent(
+                reinterpret_cast<const CgsModule::Event*>(&lCacheEvent), 64);
+
+            // ⭐ [licence-icon] THE PREPARE PUMP (PC seat of the console's staged-Prepare
+            // re-entry -- see the mbCustomRenderersPrepared note in the header). Advances the
+            // manager's staged prepare each frame until the PlayerImage component reaches
+            // E_PREPARESTAGE_DONE (its GuiCache wait needs the cache bind above first, which
+            // is why the pump sits after it). One-shot log on completion.
+            if (!mbCustomRenderersPrepared)
+            {
+                mbCustomRenderersPrepared =
+                    mCustomRendererManager.Prepare(mpGuiHeapAllocator, mpTextureAllocator);
+                if (mbCustomRenderersPrepared)
+                {
+                    CgsDev::Log::WriteToLog("[custrend] manager prepare DONE (pump)\n");
+
+                    // ⭐ [licence-icon] THE OFFLINE DEFAULT-IMAGE ARM (PC stand-in, FLAG).
+                    // ASM-RECOVERED ANSWER to "what selects the default photo when none
+                    // exists": the console has exactly ONE writer of the renderer's
+                    // mbUseDefaultTexture -- GUI event 571, posted ONLY by
+                    // TranslateNetworkEventsToGuiEvents @0x823E0900 case 73 (the network
+                    // module's "no mugshot for this player" report; even an offline console
+                    // boot runs that module). There is NO non-571 default path in the image.
+                    // This build has no network module, so the report's one observable --
+                    // one 571 into the manager once the component is prepared -- is
+                    // synthesized here, at the same exactly-once seat as the prepare latch.
+                    // A real transmitted image (event 258 with a texture) still clears the
+                    // flag, exactly as on console. DELETE-WHEN the network module +
+                    // TranslateNetworkEventsToGuiEvents land.
+                    const u8 lacUseDefault[4] = { 0, 0, 0, 0 };   // CgsGui::GuiEvent<571>: payload unread
+                    mCustomRendererManager.RecvEvent(
+                        reinterpret_cast<const CgsModule::Event*>(lacUseDefault), 571);
+                    CgsDev::Log::WriteToLog(
+                        "[licence-icon] default player image armed (571 stand-in)\n");
+                }
+            }
         }
 
         // ---- 2b. boot-resources-ready feedback (event 567; bring-up FLAG) -------------

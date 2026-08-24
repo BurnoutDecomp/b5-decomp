@@ -18,7 +18,10 @@
 #include "SDKs/EATech/include/Apt/AptRenderItemCustomControl.h"
 #include "SDKs/EATech/include/Apt/AptRenderHooks.h"        // custom-control host hooks
 #include "SDKs/EATech/include/Apt/AptDefine.h"             // gpNonGCPoolManager
+#include "SDKs/EATech/include/Apt/Apt.h"                   // [licence-icon] gAptFuncs custom-control draw slots
 #include "SDKs/EATech/Apt/DogmaAllocator.h"                // DOGMA_PoolManager
+
+extern int gnCurrRenderTickConsumed;   // dword_8324E524 (AptGlobals.cpp; the Render-side tick)
 
 #include <intrin.h>   // _InterlockedExchange (the render-tree spin lock)
 #include <new>        // placement new
@@ -151,18 +154,69 @@ AptRenderItem* AptRenderItemCustomControl::CopyFromSprite(AptRenderItem* pSource
 // strings, or by the resolved Z-id when custom rendering is enabled and the control
 // has no type string), bracketed by this item's + its content node's transforms.
 // ---------------------------------------------------------------------------
+// ⭐ [licence-icon] LANDED 2026-08-24 -- the old park here claimed the payload slot
+// "needs the custom-control character record's serialized 1:7:8 layout". It does not:
+// the console reads the CHILD (rect shape) character's word at +0x20, which is the
+// SAME host render-unit slot AptHook_DrawShape already reads on this build's repacked
+// data (KU_SHAPE_GEOMETRY_OFFSET == 0x20). Transcribed from the 64-instruction asm:
+//     rev   = mpManagerFirstChild->Manager_GetRenderRevision(gnCurrRenderTickConsumed);
+//     Manager_UpdateFirstChild(rev);
+//     child = mpManagerFirstChild;  childChar = child->mpCharacter;
+//     PushMatrices(ctx, this); PushMatrices(ctx, child);
+//     if (gbAptCustomControlRenderEnabled && mTypeStr is the empty sentinel)
+//         pfnCustomControlRenderWithZid(mZId, childChar+0x20, eOp, nTick);   // dword_8324E89C == gAptFuncs+0x84
+//     else
+//         pfnCustomControlRender(mTypeStr buf, mTargetStr buf, childChar+0x20,
+//                                mCustomPropertiesStr buf, eOp, nTick);      // dword_8324E88C == gAptFuncs+0x74
+//     PopMatrices(ctx, child); PopMatrices(ctx, this);
+// (The two dword_8324E88C/89C dispatch slots ARE gAptFuncs +0x74/+0x84 -- the asm forms
+// both addresses off the gAptFuncs base 0x8324E818 -- so this calls the installed
+// gAptFuncs slots directly; the never-defined gpfnAptDrawCustomControl externs in
+// AptRenderHooks.h were parallel aliases nothing installs.)
+// The console dereferences the first child unconditionally; the null guard below only
+// skips a draw the console would have crashed on.
 void AptRenderItemCustomControl::Render(AptRenderingContext* pCtx, AptMaskRenderOperation eOp, int nTick) const
 {
-    // FLAG (parked -- payload slot only): the console (@0x82AEF8F8) refreshes the
-    // first-child link (Manager_GetRenderRevision @0x82ADAC58 + Manager_UpdateFirstChild,
-    // both now HOMED in AptRenderItem.cpp), double-pushes the matrices (this, then
-    // the content node), and hands the content character's host payload -- the
-    // console word at character+0x20, PAST the 0x10-byte base -- to
-    // gpfnAptDrawCustomControl (type/target/properties buffers) or ...ById (mZId)
-    // under the byte_82F733F6 + empty-type gate, then double-pops. Still deferred:
-    // the payload's x64 offset needs the custom-control character record's
-    // serialized 1:7:8 layout (.apt parse follow-on); everything else is ready.
-    (void)pCtx; (void)eOp; (void)nTick;
+    AptRenderItemCustomControl* pThis = const_cast<AptRenderItemCustomControl*>(this);
+
+    if (pThis->mpManagerFirstChild != nullptr)
+    {
+        AptRenderItem* pRevision =
+            pThis->mpManagerFirstChild->Manager_GetRenderRevision(gnCurrRenderTickConsumed);
+        pThis->Manager_UpdateFirstChild(pRevision);
+    }
+
+    AptRenderItem* pChild = pThis->mpManagerFirstChild;
+    if (pChild == nullptr || pChild->mpCharacter == nullptr)
+        return;
+
+    // The child rect shape's host render unit -- the same +0x20 slot AptHook_DrawShape reads.
+    void* pRenderingUnit = *reinterpret_cast<void**>(
+        reinterpret_cast<char*>(pChild->mpCharacter) + 0x20);
+
+    PushMatrices(pCtx, this);
+    PushMatrices(pCtx, pChild);
+
+    if (gbAptCustomControlRenderEnabled && mTypeStr.IsEmpty())
+    {
+        if (gAptFuncs.pfnCustomControlRenderWithZid != nullptr)
+        {
+            gAptFuncs.pfnCustomControlRenderWithZid(
+                static_cast<AptAssetCustomControlZId>(mZId), pRenderingUnit, eOp, nTick);
+        }
+    }
+    else if (gAptFuncs.pfnCustomControlRender != nullptr)
+    {
+        gAptFuncs.pfnCustomControlRender(
+            const_cast<char*>(mTypeStr.GetBuffer()),
+            const_cast<char*>(mTargetStr.GetBuffer()),
+            pRenderingUnit,
+            mCustomPropertiesStr.GetBuffer(),
+            eOp, nTick);
+    }
+
+    PopMatrices(pCtx, pChild);
+    PopMatrices(pCtx, this);
 }
 
 // ---------------------------------------------------------------------------
@@ -181,6 +235,23 @@ void AptRenderItemCustomControl::PopRenderData(AptRenderingContext*, AptMaskRend
 // control).
 // ---------------------------------------------------------------------------
 void AptRenderItemCustomControl::PushRenderDataAbsolute(AptRenderingContext*) const
+{
+    if (!mInstanceName.IsEmpty() && gpfnAptCustomControlPushRenderData)
+        gpfnAptCustomControlPushRenderData(mInstanceName.GetBuffer());
+}
+
+// ---------------------------------------------------------------------------
+// ⭐⭐ [licence-icon] PushRenderData -- THE MISSING OVERRIDE (2026-08-24), and it was a
+// measured 16-frame time bomb. The console vtable @0x82145944 (read from the image) has
+// BOTH push slots (+0x04 PushRenderData AND +0x08 PushRenderDataAbsolute) pointing at the
+// SAME non-pushing body 0x82ADB4F8 -- a custom control never pushes the matrix bracket
+// (its Render owns the push/pop pair) and PopRenderData @0x82ADB538 never pops. Without
+// this override the class inherited AptRenderItemSprite::PushRenderData (hook + PushMatrices)
+// while keeping the non-popping PopRenderData: +1 colour/vertex stack level per frame, and
+// the 16-deep AptRenderingContext stacks walked off their arrays ~16 frames after the
+// licence card appeared (AV in popColourTransform, measured 2026-08-24 run 4).
+// ---------------------------------------------------------------------------
+void AptRenderItemCustomControl::PushRenderData(AptRenderingContext*, AptMaskRenderOperation, int) const
 {
     if (!mInstanceName.IsEmpty() && gpfnAptCustomControlPushRenderData)
         gpfnAptCustomControlPushRenderData(mInstanceName.GetBuffer());
