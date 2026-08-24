@@ -2103,22 +2103,12 @@ void WorldModule::BridgeTriggerModuleToSceneModule_PostScene(void *,struct CgsSc
 // -------------------------------------------------------------------------
 // struct BrnPhysics::Deformation::WheelPhysicalStates & __ptr64 BrnPhysics::Deformation::WheelPhysicalStates::operator=(struct BrnPhysics::Deformation
 // -------------------------------------------------------------------------
-// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
-// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
-// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
-// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
-// not this gate.
-struct BrnPhysics::Deformation::WheelPhysicalStates & BrnPhysics::Deformation::WheelPhysicalStates::operator=(struct BrnPhysics::Deformation::WheelPhysicalStates const &)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "BrnPhysics::Deformation::WheelPhysicalStates::operator=: inert (body not reconstructed) [FLAG PC boot gate]\n";
-    }
-    return *this;
-}
+// RETIRED 2026-08-24 (physics mount wave B1): the real store-order-faithful body
+// @0x825C0A00 now mounts in GameShared/GameClasses/Physics/Deformation/
+// BrnWheelPhysicalStates.cpp (the link flagged the duplicate, exactly as this gate's
+// banner predicted: "the fix is the real X360 body in its own TU, not this gate").
+// NB the gate was a SILENT-DROP stub reached every frame -- wheel physical states
+// now actually copy for the first time; boot-measured after the mount.
 
 // RETIRED 2026-08-01 (camera wave): RCEntityActiveRaceCarOutputInterface::operator= now has
 // its real member-wise body in
