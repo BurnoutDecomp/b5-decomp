@@ -217,6 +217,24 @@ namespace CgsDev
         EmitQuad(lfX, lfY, lfX + lfWidth, lfY + lfHeight, lColour);
     }
 
+    // X360 @0x8281C960 (the bordered frame around (x0,y0)-(x1,y1)): four DrawBox strips - the
+    // top and bottom span the full frame width INCLUDING the corners (x0-border .. x1+border,
+    // border tall), the left and right fill between them (border wide, y0 .. y1). The VPU
+    // pseudocode is register soup, but each of the four DrawBox(x, y, width, height) argument
+    // sets reads off it: box 1 = {x0-b, y0-b, (x1+b)-(x0-b), b}, box 2 = the same strip at y1,
+    // boxes 3/4 = the side fills.
+    void Debug2DImmediateRender::DrawFrame(f32 lfX0, f32 lfY0, f32 lfX1, f32 lfY1,
+                                           RGBA lColour, f32 lfBorderSize)
+    {
+        const f32 lfOuterX0    = lfX0 - lfBorderSize;
+        const f32 lfOuterWidth = (lfX1 + lfBorderSize) - lfOuterX0;
+
+        DrawBox(lfOuterX0, lfY0 - lfBorderSize, lfOuterWidth, lfBorderSize, lColour);   // top
+        DrawBox(lfOuterX0, lfY1,               lfOuterWidth, lfBorderSize, lColour);   // bottom
+        DrawBox(lfOuterX0, lfY0,               lfBorderSize, lfY1 - lfY0,  lColour);   // left
+        DrawBox(lfX1,      lfY0,               lfBorderSize, lfY1 - lfY0,  lColour);   // right
+    }
+
     // A line is drawn as a thin (1px) quad so it survives the triangle-strip-only Im2d path.
     void Debug2DImmediateRender::DrawLine(Vector2 lv2Start, Vector2 lv2End, RGBA lColour)
     {

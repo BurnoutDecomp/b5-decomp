@@ -3,23 +3,29 @@
 #include "types.hpp"
 #include "BrnCommonTypes.h"
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"                              // VariableEventQueue<16384,16> (the event buffer)
-#include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug2DImmediateRender.h"  // Debug2DImmediateRender, RGBA, Vector2
-#include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebugRenderCommon.h"        // CgsDev::Internal::CInEventDraw* records (canonical home)
+#include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebugRenderCommon.h"        // CgsDev::Internal::CInEventDraw* records + RGBA (via CgsTypes.h)
 
-// CgsDev::DebugRender - the BUFFERED debug renderer (the DebugManager's mBufferedRenderer). Debug draws
-// are QUEUED here as byte-image events in a VariableEventQueue and replayed once per frame by Dispatch2D
-// into the immediate-mode Debug2DImmediateRender. DebugManager::RenderHUD flushes it (Dispatch2D) before
-// the per-component HUD pass. Recovered from the X360 ARTIST build (Draw2DText 0x8282B1D0 / Draw2DBox
-// 0x8282B2D8 / Dispatch2D 0x8282A4B8): each Draw2DX queues a CInEventDrawX2D under a type ID; Dispatch2D
-// walks the queue (GetFirstEvent/GetNextEvent) and replays each into the renderer, then clears.
+// CgsDev::DebugRender - the BUFFERED debug renderer (the DebugManager's mBufferedRenderer, X360
+// DebugManager+0x14C). Debug draws are QUEUED here as byte-image events in a VariableEventQueue and
+// replayed once per frame by Dispatch2D into the immediate-mode Debug2DImmediateRender.
+// DebugManager::RenderHUD flushes it (Dispatch2D) before the per-component HUD pass. Recovered from
+// the X360 ARTIST build (Draw2DText 0x8282B1D0 / Draw2DBox 0x8282B2D8 / Dispatch2D 0x8282A4B8): each
+// Draw2DX queues a CInEventDrawX2D under a type ID; Dispatch2D walks the queue
+// (GetFirstEvent/GetNextEvent) and replays each into the renderer, then clears.
 //
-// INCREMENTAL: the 2D path (text/line/box - what the frame-stats overlay needs) is reconstructed; the
-// X360 also owns a second (3D) queue + Dispatch3D + richer 2D prims (frame/circle/poly/text-with-bg),
-// which are the follow-on. Modelled with the single 2D queue (semantic parity, not the byte-exact 2x
-// queue layout).
+// LAYOUT (X360 DebugManager::Construct @0x828332C0 + the ctor @0x82822370): the object is exactly
+// TWO VariableEventQueue<16384,16> back to back - the 3D (world-space) queue at +0, the 2D queue at
+// +0x4010 (DebugManager reaches them at +0x14C and +0x415C). Both queues are real members now; the
+// 3D DISPATCH path (Dispatch3D + the world-space replay) is still the Debug3D render follow-on -
+// only the 2D replay is bodied.
+//
+// This header is pulled by value into CgsDebugManager.h, so it stays light: the immediate renderer
+// is forward-declared (Dispatch2D takes it by pointer); CgsDebugRender.cpp includes the real type.
 
 namespace CgsDev
 {
+    struct Debug2DImmediateRender;   // the immediate 2D renderer Dispatch2D replays into
+
     namespace Internal
     {
         // 2D event type IDs (the queue type tag = the Dispatch2D switch case). A text event (TEXT) is
@@ -109,7 +115,9 @@ namespace CgsDev
         void Dispatch2D(Debug2DImmediateRender* lpRenderer, bool lbClear);
 
     private:
-        // X360 owns a 2D + a 3D queue (2D at +16400); only the 2D queue is modelled (3D path deferred).
-        CgsModule::VariableEventQueue<16384, 16> m2DQueue;
+        // X360 queue pair (Construct @0x828332C0 constructs +0x4010 [2D] then +0 [3D]; the ctor
+        // zeroes each queue's flag byte). The 3D queue's dispatch path is the Debug3D follow-on.
+        CgsModule::VariableEventQueue<16384, 16> m3DQueue;   // +0x0000 - world-space (3D) events
+        CgsModule::VariableEventQueue<16384, 16> m2DQueue;   // +0x4010 - screen-space (2D) events
     };
 }

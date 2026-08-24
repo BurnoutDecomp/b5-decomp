@@ -14,6 +14,22 @@ namespace Assert
 {
     static rw::core::debug::detail::DebugCriticalSection gAssertMutex = { 0 };
 
+    // @ 0x82820758 - the once-guarded assert-system bring-up (byte_83019200 latch), called first
+    // by DebugManager::Construct: Create gAssertMutex, then initialise the assert-screen state.
+    // In this tree the screen-state/vector-font members the X360 body seeds ({-1,0,0} + the
+    // {14,14}*0.125 font-size vector at Manager+480) are initialised by Manager's ctor and
+    // SetRenderer; Manager::RenderThreadAsserts (the per-thread assert render kick) is the
+    // threading follow-on.
+    void Construct()
+    {
+        static bool sbConstructed = false;   // X360 byte_83019200
+        if (sbConstructed)
+            return;
+        sbConstructed = true;
+
+        gAssertMutex.Create();
+    }
+
     // @ 0x82817548 - enter the assert mutex.
     int BeginAssert()
     {

@@ -63,9 +63,9 @@ namespace CgsDev
         void DrawBox(f32 lfX, f32 lfY, f32 lfWidth, f32 lfHeight, RGBA lColour);
         void DrawLine(Vector2 lv2Start, Vector2 lv2End, RGBA lColour);
         void DrawFrame(Vector2 lv2Min, Vector2 lv2Max, RGBA lColour);
-        // 6-arg frame overload (X360 sub_8281C960): draw a bordered frame around the rect
-        // (x0,y0)-(x1,y1) with the given border thickness. Declared-only; body is the
-        // frame/border follow-on (used by ErrorWindow::Render).
+        // 6-arg frame overload (X360 @0x8281C960): draw a bordered frame around the rect
+        // (x0,y0)-(x1,y1) with the given border thickness (four DrawBox strips; bodied in
+        // this TU). Used by ErrorWindow::Render + the GPU perfmon graph frame.
         void DrawFrame(f32 lfX0, f32 lfY0, f32 lfX1, f32 lfY1, RGBA lColour, f32 lfBorderSize);
         // Wrapped, size + aligned text drawn into the rect (x0,y0)-(x1,y1). Declared-only;
         // body is the text follow-on (used by ErrorWindow::Render). lfAlign in [0,1] centres.

@@ -5,17 +5,10 @@
 //
 // DebugInternal is an empty mixin (see header); its accessors expose the process-wide debug
 // singletons - the debug manager, the debug UI, and the debug resource allocator - to every
-// debug class that derives from it. The singletons are wired up by the debug system at
-// construction (CgsDebugManager's TU). The X360 GetUI read the UI pointer out of the debug-
-// system singleton (a raw singleton+0x50 fetch); it is modelled here as the cached UI singleton
-// so the access is by name rather than by offset.
-
-namespace
-{
-    CgsDev::DebugManager*     gpDebugManager   = nullptr;
-    CgsDev::DebugUI::DebugUI* gpDebugUI        = nullptr;
-    rw::IResourceAllocator*   gpDebugAllocator = nullptr;
-}
+// debug class that derives from it. On the X360 each accessor reads straight through
+// DebugManager::mpInstance (GetUI is `lwz mpInstance; lwz r3, 0x140(r11)` - the singleton's mpUI
+// member), so no separate wiring step exists; the same raw reads are modelled here by name
+// (DebugInternal is a friend of DebugManager).
 
 namespace CgsDev
 {
@@ -23,24 +16,19 @@ namespace CgsDev
     {
         CgsDev::DebugManager& DebugInternal::GetDebugManager()
         {
-            return *gpDebugManager;
+            return *DebugManager::mpInstance;
         }
 
+        // X360 @0x82815F08: mpInstance->mpUI (+0x140).
         CgsDev::DebugUI::DebugUI& DebugInternal::GetUI()
         {
-            return *gpDebugUI;
+            return *DebugManager::mpInstance->mpUI;
         }
 
+        // mpInstance->mpAllocator (+0x8170) - the allocator DebugManager::Construct latched.
         rw::IResourceAllocator* DebugInternal::GetAllocator()
         {
-            return gpDebugAllocator;
-        }
-
-        void SetDebugSingletons(CgsDev::DebugManager* lpManager, CgsDev::DebugUI::DebugUI* lpUI, rw::IResourceAllocator* lpAllocator)
-        {
-            gpDebugManager   = lpManager;
-            gpDebugUI        = lpUI;
-            gpDebugAllocator = lpAllocator;
+            return DebugManager::mpInstance->mpAllocator;
         }
     }
 }

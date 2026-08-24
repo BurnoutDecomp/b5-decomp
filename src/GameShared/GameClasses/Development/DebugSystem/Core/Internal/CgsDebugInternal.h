@@ -25,16 +25,14 @@ namespace CgsDev
         struct DebugInternal
         {
         protected:
-            // Accessors to the process-wide debug singletons (wired up by the debug system at
-            // construction; see CgsDebugInternal.cpp). GetUI is the X360 0x82815F08 accessor.
+            // Accessors to the process-wide debug singletons. Each reads straight through
+            // DebugManager::mpInstance, exactly as the X360 does (GetUI @0x82815F08 is
+            // `mpInstance->mpUI`, a raw singleton+0x140 load; the manager and allocator accessors
+            // are the same idiom over mpInstance itself and mpInstance->mpAllocator). Bodies in
+            // CgsDebugInternal.cpp (DebugInternal is a friend of DebugManager).
             CgsDev::DebugManager&     GetDebugManager();
             CgsDev::DebugUI::DebugUI& GetUI();
             rw::IResourceAllocator*   GetAllocator();
         };
-
-        // Wire the process-wide debug singletons the accessors above hand out. Called once by
-        // DebugManager::Construct, before any RegisterVariable/RegisterFunction (X360: the accessors
-        // read these out of the debug-system singleton; modelled here as cached pointers).
-        void SetDebugSingletons(CgsDev::DebugManager* lpManager, CgsDev::DebugUI::DebugUI* lpUI, rw::IResourceAllocator* lpAllocator);
     }
 }

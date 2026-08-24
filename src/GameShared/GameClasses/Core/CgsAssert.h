@@ -23,6 +23,14 @@ namespace Assert
     // CgsAssertManager.h:43 (DWARF) — assert message buffer size.
     const s32 KI_MESSAGEBUFFERSIZE = 256;
 
+    // X360 @0x82820758 — the once-guarded assert-system bring-up (the FIRST call
+    // DebugManager::Construct @0x828332C0 makes): Create gAssertMutex + initialise the
+    // assert-screen state. (The X360 body also sets the assert overlay's vector-font size
+    // — {14,14} at glyph-cell scale 0.125 — and starts Manager::RenderThreadAsserts; in
+    // this tree the font sizing lives with Manager::SetRenderer and the per-thread assert
+    // render is the threading follow-on.)
+    void  Construct();
+
     int   BeginAssert();
     int   FireAssert(const char* lpcExpression, const char* lpcFile, int liLine);
     void* EndAssert();

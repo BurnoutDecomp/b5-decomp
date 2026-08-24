@@ -6,13 +6,12 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug2DImmediateRender.h"  // mp2dRender Begin/End/SetRenderBuffer/Construct/SetDebugFont
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug3DImmediateRender.h"  // mp3dRender SetDebugFont (font handoff)
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebugRender.h"             // mBufferedRenderer (buffered debug prims)
-#include "GameShared/GameClasses/Development/DebugSystem/Core/Internal/CgsDebugInternal.h"     // Internal::SetDebugSingletons
-#include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h"        // DebugInterface::Get2dRender (bodied here -- see its note at the bottom)
-#include "GameShared/GameClasses/Development/PerfMon/DebugComponent/CgsDebugComponentPerfMonCpu.h"  // the CPU perfmon overlay component
-#include "GameShared/GameClasses/Core/CgsAssert.h"                                  // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssert.h"                                  // CGS_ASSERT + Assert::Construct (the bring-up's first call)
+#include "GameShared/GameClasses/Core/CgsStringUtils.h"                             // CgsCore::SPrintf (CalculateBuildDate)
 #include "GameShared/GameClasses/Development/AssertSystem/CgsAssertManager.h"       // Assert::gAssertManager / AssertData (on-screen assert overlay)
 #include "GameShared/GameClasses/Development/MapFile/Reader/CgsMapFileReader.h"     // MapFile::Reader::GetStackEntryName (call-stack names)
 #include "rw/core/debug/DebugCriticalSection.h"                                     // gDebugManagerSection (ThreadSafeAquire/Release lock)
+#include "rw/rwcore_structs.h"                                                       // rw::ResourceAllocatorRegistry / rw::core::debug::Manager / rw::BaseResourceDescriptors
 
 #include <cstdio>   // snprintf (debug text formatting; the X360 used CgsCore::SPrintf)
 
@@ -31,36 +30,48 @@ namespace CgsSystem { u32 GetSystemTimerBaseTime(); u32 GetSystemTimerFrequency(
 // as an mbActive bool toggle (X360 0x8282E1E0), the full form as a section callback row
 // (X360 0x82832008). Both clear mbActive and fire the component's OnRegister.
 //
-// The debug critical section is the same single-threaded-boot no-op as the assert mutex; the real
-// lock is deferred to the threading wiring. mpUI is wired by DebugManager::Construct (the
-// manager-construction follow-on); GetUI hands it back.
+// The debug critical section and the assert mutex are both Created by the bring-up now
+// (Construct @0x828332C0 / Assert::Construct @0x82820758), exactly as on the console. mpUI is
+// wired by DebugManager::Construct; GetUI hands it back.
 
 namespace CgsDev
 {
     // The debug system's process-wide instances (X360 CgsDebugManager.cpp:85/90): the UI and the
-    // renderers are single global objects the manager wires itself to - not heap-allocated. (The 3D
-    // renderer g3dInternalDebugRender + the perfmon globals are the render/perfmon follow-on.)
+    // renderers are single global objects the manager wires itself to - not heap-allocated
+    // (X360 gInternalDebugUI / unk_830199C0 / unk_83029060).
     DebugUI::DebugUI       gInternalDebugUI;
+    Debug3DImmediateRender g3dInternalDebugRender;
     Debug2DImmediateRender g2dInternalDebugRender;
-
-    // The CPU perfmon overlay component (the on-screen bars). X360 keeps it as a DebugManager member
-    // (mDebugComponentPerfMonCpu); modelled as a file-static here so the manager header stays light.
-    // DebugManager::Construct constructs + registers + activates it.
-    static DebugComponentPerfMonCpu gDebugComponentPerfMonCpu;
-
-    // The buffered debug renderer (X360 DebugManager::mBufferedRenderer). Per-frame debug prims are
-    // QUEUED here and flushed by RenderHUD's Dispatch2D. File-static (X360 has it as a by-value member;
-    // kept out of the widely-included manager header to avoid pulling the event-queue in everywhere).
-    static DebugRender gBufferedRenderer;
 
     // The per-DebugManager lock the thread-safe accessors bracket (X360 dword_83019264 - a file-static
     // rw DebugCriticalSection passed by &address to Enter/Leave). ThreadSafeAquire enters it, Release
-    // leaves it. It stays un-Created (so Enter/Leave are no-ops, matching the X360 "if (*result)" guard)
-    // on the single-threaded boot; DebugManager::Construct Creates it when the threading core wires up.
+    // leaves it. DebugManager::Construct @0x828332C0 Creates it (the console's own bring-up order).
     static rw::core::debug::detail::DebugCriticalSection gDebugManagerSection = { 0 };
 
     namespace
     {
+        // The console's `rw::IResourceAllocator::AllocateMemoryResource` @0x823FF7D0 is an INLINE
+        // that builds a five-entry serialised descriptor and tail-calls the allocator's DoAllocate
+        // slot; the PC rwcore models DoAllocate with the narrower <4> alias, so the descriptor is
+        // built as <5> and reinterpret_cast down at the call - the same idiom
+        // CgsPhysicsSimulationModule.cpp and rwgpfxtint.cpp already use. Carves the perfmon
+        // CPU-trace log buffer in DebugManager::Construct.
+        void* AllocateMemoryResource(rw::IResourceAllocator* lpAllocator, u32 luSize, u32 luAlignment)
+        {
+            rw::BaseResourceDescriptors<5> lDescriptor;
+            for (u32 luEntry = 0u; luEntry < 5u; ++luEntry)
+            {
+                lDescriptor.m_baseResourceDescriptors[luEntry].m_size      = 0u;
+                lDescriptor.m_baseResourceDescriptors[luEntry].m_alignment = 1u;
+            }
+            lDescriptor.m_baseResourceDescriptors[0].m_size      = luSize;
+            lDescriptor.m_baseResourceDescriptors[0].m_alignment = luAlignment;
+
+            rw::Resource lResource = lpAllocator->DoAllocate(
+                reinterpret_cast<const rw::ResourceDescriptor&>(lDescriptor), 0);
+            return lResource.m_baseResources[0];
+        }
+
         u32  gu32LastFrameTick = 0;
         bool gbFrameTickValid  = false;
         f32  gfSmoothedFps     = 0.0f;
@@ -104,99 +115,161 @@ namespace CgsDev
     }
 
     // X360 CgsDebugManager.cpp:113 DebugManagerConstructParameters::DEFAULT - the built-in debug
-    // configuration the engine boots with. The pool sizes are reconstructed generously (the exact
-    // X360 data-section values are TBD; they affect only capacity, not behaviour - the bounded
-    // loading build registers only the perfmon). mpRwAllocator is null: the debug pools' backing
-    // currently comes from the global heap (CgsDebugCollections.cpp), which ignores the allocator;
-    // the real GetDefaultAllocator wiring is the allocator follow-on.
+    // configuration the engine boots with. ⭐ THE REAL X360 VALUES (rodata @0x820DC120, big-endian,
+    // read from the decrypted XEX): {100, 0x200000, 25, 200, 50, 50, 50, 10, NULL}. The game module's
+    // Construct copies this block onto the stack and overrides six fields before calling Construct
+    // (see BrnGameModule.cpp) - the two menu pool sizes are the only fields the game keeps at DEFAULT.
     const DebugManagerConstructParameters DebugManagerConstructParameters::DEFAULT =
     {
-        /* miPerfMonCpuCount          */ 256,   // raised 64 -> 256 (world-module mount 2026-07-26):
-                                                // the wired WorldModule::Construct + the real
-                                                // SceneManagerModule::Construct register ~60 more
-                                                // monitors on top of the game module's ~40, and 64
-                                                // overflowed (AddMonitor -1 -> the WorldModule
-                                                // handle asserts fired). Capacity-only, per the
-                                                // note above.
-        /* miPerfMonLogBufferSize     */ 8192,
-        /* miMenuWindowPoolSize       */ 16,
-        /* miMenuPoolSize             */ 64,
-        /* miFunctionPoolSize         */ 128,
-        /* miVariablePoolSize         */ 256,
-        /* miVariableMetadataPoolSize */ 256,
-        /* miConsoleLineCount         */ 64,
+        /* miPerfMonCpuCount          */ 100,       // 0x64
+        /* miPerfMonLogBufferSize     */ 2097152,   // 0x200000 (2MB CPU-trace log buffer)
+        /* miMenuWindowPoolSize       */ 25,
+        /* miMenuPoolSize             */ 200,
+        /* miFunctionPoolSize         */ 50,
+        /* miVariablePoolSize         */ 50,
+        /* miVariableMetadataPoolSize */ 50,
+        /* miConsoleLineCount         */ 10,
         /* mpRwAllocator              */ nullptr,
     };
 
     DebugManager* DebugManager::mpInstance = nullptr;
 
+    // X360 @0x82822370: the three by-value components construct (their vtable stores are the inlined
+    // component ctors; the two buffered-renderer queue flag bytes zero via the queues' own ctors),
+    // then the singleton slot is asserted free and CLAIMED - by the ctor, not Construct.
+    // FLAG (static-message assert): the X360 fires "mpInstance == NULL" at CgsDebugManager.cpp:107;
+    // the CGS_ASSERT macro supplies THIS file/line instead.
     DebugManager::DebugManager()
-        : mpUI(nullptr)
-        , mp2dRender(nullptr)
-        , mp3dRender(nullptr)
     {
-        mComponentList.Clear();
+        CGS_ASSERT(mpInstance == nullptr, "mpInstance == NULL");
+        mpInstance = this;
     }
 
     DebugManager::~DebugManager() {}
 
-    // X360 Construct 0x828332C0 (bounded). Claim the singleton, wire the debug-internal accessors,
-    // reset the component list + renderer pointers, then construct the UI (-> the three managers ->
-    // their pools). The full X360 bring-up also creates the rw debug Manager instance + default
-    // allocator, the debug critical section, the two VariableEventQueues, and the perfmon log buffer;
-    // those are the bring-up follow-on (none is needed to construct + render the perfmon HUD - the
-    // pools take their backing from the global heap, so the allocator is threaded through but unused).
+    // Faithful port of X360 Construct @0x828332C0, in the console's own order:
+    //   1. CgsDev::Assert::Construct()                       - assert-system bring-up
+    //   2. rw::core::debug::Manager::CreateInstance(default) - the rw debug subsystem
+    //   3. mpAllocator = params->mpRwAllocator, defaulted to rw's default allocator
+    //   4. mComponentList = 0; DebugCriticalSection::Create(gDebugManagerSection)
+    //   5. mp3dRender = mp2dRender = 0; the two buffered-renderer queues Construct
+    //   6. mpUI = &gInternalDebugUI; UI Construct(params)
+    //   7. carve the optional CPU-trace log buffer (params->miPerfMonLogBufferSize, align 16,
+    //      through params->mpRwAllocator - asserted non-null on a failed carve)
+    //   8. CPU perfmon component Construct(count, buffer, size) + Register
+    //   9. GPU perfmon component Construct + Register (the X360 inlines its Construct)
+    //  10. message-filter component Construct + Register
+    //  11. CalculateBuildDate; ConstructRenderer
     void DebugManager::Construct(const DebugManagerConstructParameters* lpParameters)
     {
-        mpInstance = this;
-        mp2dRender = nullptr;
-        mp3dRender = nullptr;
+        Assert::Construct();
+        rw::core::debug::Manager::CreateInstance(rw::ResourceAllocatorRegistry::GetDefaultAllocator());
+
+        mpAllocator = lpParameters->mpRwAllocator;
+        if (mpAllocator == nullptr)
+            mpAllocator = rw::ResourceAllocatorRegistry::GetDefaultAllocator();
+
         mComponentList.Clear();
-        gBufferedRenderer.Construct();   // the buffered debug-prim queue (X360: 2x VariableEventQueue)
+        gDebugManagerSection.Create();
+
+        mp3dRender = nullptr;
+        mp2dRender = nullptr;
+        mBufferedRenderer.Construct();   // the two VariableEventQueue<16384,16>s (X360 inlines the pair)
 
         mpUI = &gInternalDebugUI;
-
-        // Wire the singletons every DebugInternal-derived class reaches through GetUI()/
-        // GetDebugManager()/GetAllocator(); must precede the manager Constructs + any registration.
-        Internal::SetDebugSingletons(this, mpUI, lpParameters->mpRwAllocator);
-
         mpUI->Construct(lpParameters);
 
-        // Build the CPU perfmon REGISTRY itself (X360 PerfMonCpu::Construct(maxCount, allocator) --
-        // this is what miPerfMonCpuCount exists for). Missing until the world-module mount
-        // (2026-07-26): with the registry unbuilt every AddMonitor returned -1, which the game
-        // module's monitor block silently tolerated but the wired WorldModule::Construct ASSERTS on
-        // (its X360 body checks each returned handle >= 0).
-        CgsDev::PerfMonCpu::Construct(lpParameters->miPerfMonCpuCount, lpParameters->mpRwAllocator);
+        // The optional CPU-trace log buffer (X360 @0x8283334C-B0): carved through the PARAMETER
+        // allocator (not the defaulted member - the console reads params+0x14 again), align 16.
+        // The game module passes size 0, so the carve is skipped on the boot path.
+        void* lpBuffer = nullptr;
+        s32 liLogBufferSize = 0;
+        if (lpParameters->miPerfMonLogBufferSize > 0)
+        {
+            lpBuffer = AllocateMemoryResource(lpParameters->mpRwAllocator,
+                                              static_cast<u32>(lpParameters->miPerfMonLogBufferSize), 16u);
+            CGS_ASSERT(lpBuffer != nullptr, "lpBuffer != NULL");
+            liLogBufferSize = lpParameters->miPerfMonLogBufferSize;
+        }
 
-        // Bring up + register the full CPU perfmon overlay component (the detailed per-monitor bar
-        // table). Construct inits its state; Register threads it onto mComponentList + the debug menu
-        // (exercising the function/menu pools). It is left INACTIVE - the detailed table is a
-        // menu-toggled view; the always-on indicator is the 3-square frame-health heartbeat drawn in
-        // RenderHUD. (Activate it via ActivateComponent to show the full bar table.)
-        gDebugComponentPerfMonCpu.Construct(static_cast<s16>(lpParameters->miPerfMonCpuCount), nullptr, 0);
-        gDebugComponentPerfMonCpu.Register();
+        mDebugComponentPerfMonCpu.Construct(lpParameters->miPerfMonCpuCount, lpBuffer,
+                                            static_cast<u32>(liLogBufferSize));
+        mDebugComponentPerfMonCpu.Register();
+
+        mDebugComponentPerfMonGpu.Construct();
+        mDebugComponentPerfMonGpu.Register();
+
+        mDebugComponentMessageFilter.Construct();
+        mDebugComponentMessageFilter.Register();
+
+        CalculateBuildDate();
+        ConstructRenderer();
     }
 
-    // X360 ConstructRenderer (CgsDebugManager.cpp:248, bounded). Construct the 2D debug renderer at
-    // the screen's virtual resolution and hand it to the UI. The X360 reads that size from the UI
-    // Metrics (a deferred heavy member), so the bounded path uses the loading screen's render
-    // resolution directly - the Im2d space the squares are drawn in (pixel coords, 1280x720). The 3D
-    // renderer + the assert-overlay renderer hookup (Assert::Manager::SetRenderer) are the render
-    // follow-on. The renderer's backing/allocator is unused (the box path batches into a fixed array).
+    // Faithful port of X360 ConstructRenderer @0x8281ADD0: read the virtual screen size out of the
+    // UI Metrics (mpUI+0x68/+0x6C = mfScreenWidth/mfScreenHeight - DebugUI::Construct has already
+    // copied Metrics::DEFAULT in), wire + construct the 3D then the 2D immediate renderer (each gets
+    // the manager's allocator + the screen size), hand the 2D renderer to the UI (mpUI+0x14), and
+    // publish it to the assert system (X360: the dword_83018F1C global the Assert::Manager draw
+    // path reads; modelled as Assert::Manager::SetRenderer).
     void DebugManager::ConstructRenderer()
     {
-        const f32 lfVirtualScreenWidth  = 1280.0f;
-        const f32 lfVirtualScreenHeight = 720.0f;
+        const DebugUI::Metrics& lrMetrics = mpUI->GetMetrics();
+
+        mp3dRender = &g3dInternalDebugRender;
+        mp3dRender->Construct(mpAllocator, lrMetrics.mfScreenWidth, lrMetrics.mfScreenHeight);
 
         mp2dRender = &g2dInternalDebugRender;
-        mp2dRender->Construct(nullptr, lfVirtualScreenWidth, lfVirtualScreenHeight);
+        mp2dRender->Construct(mpAllocator, lrMetrics.mfScreenWidth, lrMetrics.mfScreenHeight);
 
         mpUI->Set2DRenderer(mp2dRender);
-
-        // Hand the same 2D renderer to the assert manager (X360 ConstructRenderer also calls
-        // Assert::Manager::SetRenderer) so a failed assert can draw its on-screen overlay.
         Assert::gAssertManager.SetRenderer(mp2dRender);
+    }
+
+    // Faithful port of X360 CalculateBuildDate @0x828224B8: derive the running executable's path
+    // from the command line ("D:\%s", quotes stripped - the console's disc root), read its file
+    // timestamp, and SPrintf "Build Date: hh:mm:ss dd/mm/yyyy" into macBuildDate (0x24 bytes). When
+    // the file can't be opened the fallback is the compile date/time - the X360 image carries its
+    // own baked "Jan 30 2008" / "18:46:29" literals here, i.e. __DATE__/__TIME__. (On PC the
+    // "D:\<command line>" path never resolves, so the fallback branch is the live one - same code,
+    // console-identical behaviour up to the CreateFileA result.)
+    void DebugManager::CalculateBuildDate()
+    {
+        const char* lpcCommandLine = GetCommandLineA();
+        if (*lpcCommandLine == '"')
+            ++lpcCommandLine;
+
+        char lacFileName[0x104];
+        CgsCore::SPrintf(lacFileName, 0x104, "D:\\%s", lpcCommandLine);
+
+        // Strip a trailing quote (the closing half of a quoted module path).
+        u32 luLength = 0;
+        while (lacFileName[luLength] != '\0')
+            ++luLength;
+        if (luLength > 0 && lacFileName[luLength - 1] == '"')
+            lacFileName[luLength - 1] = '\0';
+
+        HANDLE lhFile = CreateFileA(lacFileName, GENERIC_READ, FILE_SHARE_READ, nullptr,
+                                    OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+        if (lhFile == INVALID_HANDLE_VALUE)
+        {
+            CgsCore::SPrintf(macBuildDate, 0x24, "Build Date: %s %s", __DATE__, __TIME__);
+            return;
+        }
+
+        FILETIME lLastWriteTime;
+        const bool lbGetTimeSuccess = GetFileTime(lhFile, nullptr, nullptr, &lLastWriteTime) != 0;
+        CGS_ASSERT(lbGetTimeSuccess, "lbGetTimeSuccess");
+        CloseHandle(lhFile);
+
+        FILETIME   lLocalFileTime;
+        SYSTEMTIME lSystemTime;
+        FileTimeToLocalFileTime(&lLastWriteTime, &lLocalFileTime);
+        FileTimeToSystemTime(&lLocalFileTime, &lSystemTime);
+
+        CgsCore::SPrintf(macBuildDate, 0x24, "Build Date: %02d:%02d:%02d %02d/%02d/%02d",
+                         lSystemTime.wHour, lSystemTime.wMinute, lSystemTime.wSecond,
+                         lSystemTime.wDay, lSystemTime.wMonth, lSystemTime.wYear);
     }
 
     void DebugManager::Update(f32) {}
@@ -303,7 +376,7 @@ namespace CgsDev
 
         // X360 RenderHUD step: flush the buffered debug prims first (the frame-stats overlay queued in
         // Render via QueueFrameStats), then the active components' HUDs.
-        gBufferedRenderer.Dispatch2D(mp2dRender, true);
+        mBufferedRenderer.Dispatch2D(mp2dRender, true);
 
         for (DebugComponent* lpComponent = mComponentList.GetFirst();
              lpComponent;
@@ -350,22 +423,19 @@ namespace CgsDev
         else
             std::snprintf(lacText, sizeof(lacText), "%d fps & simulation not real time", liFps);
 
-        gBufferedRenderer.Draw2DText(lacText, lfX, lfY, 20.0f, luColour);
+        mBufferedRenderer.Draw2DText(lacText, lfX, lfY, 20.0f, luColour);
     }
 
-    // X360 0x8282D8F8. Queue the build-info string (bottom-left debug readout). The X360 string is a
-    // member (field_8174) filled by CalculateBuildDate; reconstructed here as the PC compile date/time
-    // (the real CalculateBuildDate is the build-stamp follow-on). Scale 12; x = metrics+112 (a left
-    // value - estimated, Metrics member deferred), y = height - lineHeight.
+    // X360 0x8282D8F8. Queue the build-info string (bottom-left debug readout): the macBuildDate
+    // member CalculateBuildDate filled during Construct. Scale 12; x = metrics+112 (a left value -
+    // estimated), y = height - lineHeight.
     void DebugManager::RenderBuildInfo()
     {
-        static const char* const KPC_BUILD = "Build Date: " __TIME__ " " __DATE__ ;
-
         const DebugUI::Metrics& lrMetrics = mpUI->GetMetrics();
         const f32 lfX = lrMetrics.mfScreenBorderLeft;
         const f32 lfY = lrMetrics.mfScreenHeight - lrMetrics.mfScreenBorderBottom;
 
-        gBufferedRenderer.Draw2DText(KPC_BUILD, lfX, lfY, 12.0f, 0xFFFFFFFFu);
+        mBufferedRenderer.Draw2DText(macBuildDate, lfX, lfY, 12.0f, 0xFFFFFFFFu);
     }
 
     // X360 0x8282DD28. Queue the available-memory readout "%uMB %uKB %uB" (bottom centre-right). Memory
@@ -384,7 +454,7 @@ namespace CgsDev
 
         char lacText[64];
         std::snprintf(lacText, sizeof(lacText), "%uMB %uKB %uB", luMB, luKB, luB);
-        gBufferedRenderer.Draw2DText(lacText, lfX, lfY, 16.0f, 0xFFFFFFFFu);
+        mBufferedRenderer.Draw2DText(lacText, lfX, lfY, 16.0f, 0xFFFFFFFFu);
     }
 
     // X360 0x8282DE28 DebugManager::RenderAssert - the on-screen assert OVERLAY (what the real ARTIST
@@ -402,9 +472,9 @@ namespace CgsDev
 
         std::snprintf(lacBuffer, sizeof(lacBuffer), "%d:%s",
                       lpData->miLine, lpData->mpcFile ? lpData->mpcFile : "?");
-        gBufferedRenderer.Draw2DText(lacBuffer, 50.0f, 50.0f, 16.0f, luColour);
+        mBufferedRenderer.Draw2DText(lacBuffer, 50.0f, 50.0f, 16.0f, luColour);
 
-        gBufferedRenderer.Draw2DText(lpData->macAssertMessage, 50.0f, 68.0f, 16.0f, luColour);
+        mBufferedRenderer.Draw2DText(lpData->macAssertMessage, 50.0f, 68.0f, 16.0f, luColour);
 
         f32 lfY = 93.0f;
         const s32 liCount = lpData->mStack.GetNumStackAddresses();
@@ -418,7 +488,7 @@ namespace CgsDev
                               static_cast<u32>(lpData->mStack.GetStackAddress(liIndex)));
                 lpcName = lacAddr;
             }
-            gBufferedRenderer.Draw2DText(lpcName, 50.0f, lfY, 16.0f, luColour);
+            mBufferedRenderer.Draw2DText(lpcName, 50.0f, lfY, 16.0f, luColour);
             lfY += 18.0f;
         }
     }
@@ -434,7 +504,7 @@ namespace CgsDev
 
         mp2dRender->Begin();
         RenderAssert(&Assert::gAssertManager.GetAssertData());   // queue line:file + message + call-stack
-        gBufferedRenderer.Dispatch2D(mp2dRender, true);          // flush them
+        mBufferedRenderer.Dispatch2D(mp2dRender, true);          // flush them
         mp2dRender->End();
     }
 
@@ -459,32 +529,7 @@ namespace CgsDev
         RenderHUD();
     }
 
-    // ------------------------------------------------------------------------
-    // DebugInterface::Get2dRender -- X360 @0x82822750.
-    //
-    // [marked deviation -- HOME, not behaviour] This is a DebugInterface method and its own assert
-    // names GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.cpp:190 as
-    // its console home. It is bodied HERE instead, for one reason: the console reaches the buffered
-    // renderer as `mpDebugManager + 0x14C` -- a DebugManager MEMBER (mBufferedRenderer) -- and this
-    // tree deliberately models that member as the file-static gBufferedRenderer above, "kept out of
-    // the widely-included manager header to avoid pulling the event-queue in everywhere" (its own
-    // comment). gBufferedRenderer has internal linkage, so only this TU can name it. The
-    // alternatives were both worse: growing CgsDebugManager.h by a ~16 KB by-value DebugRender
-    // member (and the CgsVariableEventQueue include behind it) into every consumer of that header,
-    // or adding a second accessor to the manager purely as a trampoline.
-    // MOVE-WHEN: mBufferedRenderer becomes a real named member of DebugManager -- then this body
-    // goes back to CgsDebugInterface.cpp and reads it through the manager reference.
-    //
-    // Behaviour is the console's, unchanged: assert the manager pointer, then return its buffered
-    // renderer by reference. (X360: `lwz r11,0(r30); cmplwi; <assert "mpDebugManager">;
-    // lwz r11,0(r30); addi r3,r11,0x14C`.)
-    //
-    // This is what BrnDirector::DebugPrinter::ActualPrint @0x821F71D8 and Camera::Utils::Tweaker's
-    // on-screen readout both draw through.
-    // ------------------------------------------------------------------------
-    DebugRender& DebugInterface::Get2dRender()
-    {
-        CGS_ASSERT(mpDebugManager, "mpDebugManager");
-        return gBufferedRenderer;
-    }
+    // DebugInterface::Get2dRender lived here while mBufferedRenderer was modelled as a file-static;
+    // it is now a real DebugManager member, so the body is back at its console home
+    // (CgsDebugInterface.cpp, X360 @0x82822750).
 }
