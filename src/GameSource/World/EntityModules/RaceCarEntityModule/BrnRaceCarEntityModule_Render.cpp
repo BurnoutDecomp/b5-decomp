@@ -757,6 +757,33 @@ RaceCarEntityModule::RenderRaceCar( CgsGraphics::DispatchFrame* lpDispatchFrame,
             }
         }
 
+        // [DIAG wheel-blank regression, 2026-08-25] NOT IN THE X360 BINARY. Env-gated
+        // (BRN_WHEEL_DIAG=1) periodic witness of the wheel data ACTUALLY SUBMITTED: one
+        // line per wheel every 60th render frame. The one-shot [carrender] block below
+        // fires only on the FIRST rendered frames (junkyard, stand-in-pose era), which is
+        // how a driving-state wheel blank hid behind a green boot snapshot.
+        // DELETE-WHEN the wheel regression is pinned and fixed.
+        {
+            static const bool sbWheelDiag = ( getenv( "BRN_WHEEL_DIAG" ) != 0 );
+            static s32 siWheelDiagFrame = 0;
+            if ( sbWheelDiag && ( ( siWheelDiagFrame++ % 60 ) == 0 ) )
+            {
+                for ( u32 luW = 0; luW < 4u; ++luW )
+                {
+                    const Matrix44Affine& lrT = lpRenderParams->GetWheelTransform( luW );
+                    const Matrix44Affine& lrS = lpRenderParams->GetWheelScaleMatrix( luW );
+                    *CgsDev::Log::gpDebugPrint
+                        << "[wheel-diag] f" << siWheelDiagFrame - 1
+                        << " w" << luW
+                        << " exists " << ( lpRenderParams->GetWheelExists( luW ) ? 1 : 0 )
+                        << " T (" << lrT.wAxis.x << ", " << lrT.wAxis.y << ", " << lrT.wAxis.z
+                        << ") row0 (" << lrT.xAxis.x << ", " << lrT.xAxis.y << ", " << lrT.xAxis.z
+                        << ") scale (" << lrS.xAxis.x << ", " << lrS.yAxis.y << ", " << lrS.zAxis.z
+                        << ")\n";
+                }
+            }
+        }
+
         static s32 siLastFarParts   = -1;
         static s32 siLastQueueLen   = -1;
         if ( liFarParts != siLastFarParts || lrDiagQueue.GetLength() != siLastQueueLen )

@@ -707,12 +707,11 @@ namespace Deformation
                                            DeformationOutputInterfaceForEntityModules* lpOutEM,
                                            DetachedWheelManager* lpWheelMgr)
     {
-        const char* lpcThis    = reinterpret_cast<const char*>(this);
-        const char* lpcVehicle = reinterpret_cast<const char*>(mVehicleBody.GetVehiclePhysics());
-        // ^ BY NAME (fixed 2026-08-24, deform-land wave): the old `*(this + 6476)` read used the
+        // BY NAME (fixed 2026-08-24, deform-land wave): the old `*(this + 6476)` read used the
         // CONSOLE offset on the HOST object -- every pointer above the seat widens on x64, so it
         // dereferenced garbage. BOOT-MEASURED: first OutputData frame AV'd at OutputWheelData+0x67
         // (fault 0x123587, event log -> map). KU_VEHICLE_PHYSICS_PTR stays as asm provenance only.
+        // (2026-08-25: the raw lpcThis/lpcVehicle views are gone with the by-name wheel walk.)
         Vehicle::SimpleVehiclePhysics* lpSimple =
             reinterpret_cast<Vehicle::SimpleVehiclePhysics*>(mVehicleBody.GetVehiclePhysics());
 
@@ -737,15 +736,29 @@ namespace Deformation
         WheelPhysicalStates lWheelStates;
         std::memset(&lWheelStates, 0, sizeof(lWheelStates));
 
-        // Per-wheel transform assembly (the do/while over the four wheels; v15 += 224, ++v14). The
-        // per-wheel state base is vehicle + 304 + 224*wheel (asm: _R28 = a1[1619] + v15 + 304); the
-        // detached discriminator is at +519 from the vehicle (== +215 from the per-wheel base).
-        const char* lpcWheelBase = lpcVehicle + 304;
+        // Per-wheel transform assembly (the do/while over the four wheels; the asm walks
+        // `vehicle + 304 + 224*wheel` and tests the detached discriminator at +215 from the
+        // per-wheel base -- i.e. maWheels[wheel].mu8State: SimpleVehiclePhysics' console
+        // wheel array is at +0x130 stride 0xE0 and the state byte is Wheel+0xD7, all three
+        // pinned in BrnSimpleVehiclePhysics.h's X360Layout table).
+        //
+        // ⭐⭐ BY NAME (wheel-blank regression fix, 2026-08-25). The old transcription kept
+        // the RAW CONSOLE walk on the HOST object -- the same defect class this function's
+        // own vehicle-pointer read was fixed for on 08-24, one paragraph up: the host Wheel
+        // carries a widened pointer at +0xD0, so BOTH the stride (224 -> host sizeof(Wheel))
+        // AND the state byte's offset moved, and `vehicle+304+224*w+215` read GARBAGE. A
+        // garbage byte that happens to read 2 classifies the wheel DETACHED, skips the live
+        // arm, and publishes an all-zero row -- which the L3 readback then copies over the
+        // real wheel pose: the car renders WHEEL-LESS. This is exactly how the user-visible
+        // "no tyres while driving" regression escaped the 08-24 wave's own fix -- that wave
+        // fixed the zero-SEEDED block but left the discriminator read raw, so whether a
+        // wheel published depended on uninitialised host bytes that flip once the car is
+        // driving. (The boot [carrender] snapshot passes because the stand-in pose owns the
+        // wheels before the deformation entries exist.)
         for (s32 liWheel = 0; liWheel < 4; ++liWheel)
         {
-            // The per-wheel "detached" discriminator byte the asm tests (*(vehicle + v15 + 519) == 2).
-            const char* lpcWheelState = lpcWheelBase + 224 * liWheel;
-            const u8 lu8WheelPhysState = *reinterpret_cast<const u8*>(lpcWheelState + 215);
+            const u8 lu8WheelPhysState =
+                lpSimple->GetWheel(static_cast<Vehicle::EVehicleDrivenWheel>(liWheel))->mu8State;
 
             if (lu8WheelPhysState == 2)
             {
