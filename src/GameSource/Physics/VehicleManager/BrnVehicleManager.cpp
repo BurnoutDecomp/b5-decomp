@@ -37,10 +37,10 @@ namespace Vehicle
 
     // The minimum combined closing speed below which a contact is too gentle to be any kind of
     // takedown/shunt (X360 reads the rodata float at flt_82FB8290 for the `>=` gate).
-    // FLAG: the rodata value is not in the per-function exports -- shipped as a flagged 0.0f
-    // placeholder (with which the gate is a pass-through). Resolve the real threshold from the
-    // XEX .rdata @0x82FB8290 before relying on the gate magnitude.
-    static const f32 KF_MIN_IMPACT_SPEED_SUM = 0.0f;   // FLAG: rodata flt_82FB8290 value unrecovered
+    // ⭐ RECOVERED 2026-08-24 (deform-land wave, P5/P9; physics11 audit, static-init writer
+    // 0x82C5BB18 decoded via headless idat): flt_82FB8290 = flt_82F31928 * flt_820138DC
+    // = 0.44704 * 50.0 == 50 MPH in m/s. The old 0.0 made the gate a pass-through.
+    static const f32 KF_MIN_IMPACT_SPEED_SUM = 0.44704f * 50.0f;   // flt_82FB8290 <- init 0x82C5BB18 (22.352 m/s)
 
     // The packed crash record SetRaceCarCrashing pushes onto the IO VariableEventQueue<1536,16> at
     // sink+26096 (asm AddEvent(..., 63, 32) -- a 32-byte event). The X360 writes the entity id at
@@ -765,16 +765,23 @@ namespace Vehicle
     //  - the SIMD plane-geometry helpers and the recency throttle are declared-only callees.
     // ===========================================================================================
 
-    // ---- shared rodata-value placeholders (FLAG: values not in the per-function exports) -------
+    // ---- shared rodata values -- ⭐ ALL RECOVERED 2026-08-24 (deform-land wave, P5) ----------
+    // physics11 audit cluster A: every writer decoded from the static-init region via headless
+    // idat (0x82C5B950 / 0x82C5B970 / 0x82C5B990 / 0x82C5BA78), each consumer asm-witnessed
+    // (stationary classifier 0x8263D9E0..0x8263DA50; paint-alignment vcmpgtfp 0x82619FC4..).
+    // ⚠️ The old flags called 1.0/0.0 "identity" placeholders -- neither was: with 1.0 every
+    // speed threshold in this file ran 2.237x hot (MPH taken as m/s), and the three 0.0 gates
+    // never fired. flt_82F31928 == 0.44704 was already triple-witnessed in-tree
+    // (TrafficPhysics.h:177, BrnSimpleVehiclePhysics.h:422, RaceCarPhysics.cpp:489).
     // The global speed-unit scale that multiplies every tuning speed threshold (flt_82F31928).
-    static const f32 KF_SPEED_UNIT_SCALE       = 1.0f;   // FLAG: rodata flt_82F31928 value unrecovered (1.0 = identity)
+    static const f32 KF_SPEED_UNIT_SCALE       = 0.44704f;   // flt_82F31928 (image-read): MPH -> m/s
     // Stationary-target speed thresholds (flt_82FB8298 asymmetry gate, 829C slow cap, 7F18 fast floor).
-    static const f32 KF_STATIONARY_MIN_SPEED_DIFF = 0.0f; // FLAG: rodata flt_82FB8298 value unrecovered
-    static const f32 KF_STATIONARY_SLOW_CAP        = 0.0f; // FLAG: rodata flt_82FB829C value unrecovered
-    static const f32 KF_STATIONARY_FAST_FLOOR      = 0.0f; // FLAG: rodata flt_82FB7F18 value unrecovered
+    static const f32 KF_STATIONARY_MIN_SPEED_DIFF = 0.44704f * 40.0f; // flt_82FB8298 <- init 0x82C5B950 (17.8816 m/s)
+    static const f32 KF_STATIONARY_SLOW_CAP        = 0.44704f * 20.0f; // flt_82FB829C <- init 0x82C5B970 (8.9408 m/s)
+    static const f32 KF_STATIONARY_FAST_FLOOR      = 0.44704f * 60.0f; // flt_82FB7F18 <- init 0x82C5B990 (26.8224 m/s)
     // Trading-paint alignment-dot gate (unk_82FB8310). A dot >= this means the cars are aligned
     // enough to be side-by-side rather than a true crossing impact.
-    static const f32 KF_PAINT_ALIGNMENT_GATE   = 0.0f;   // FLAG: rodata unk_82FB8310 value unrecovered
+    static const f32 KF_PAINT_ALIGNMENT_GATE   = 0.75f;   // unk_82FB8310 <- init 0x82C5BA78 splat(flt_82004018 = 0.75)
 
     // EntityId packing helper: re-encode an active-race-car index into the EntityId word the
     // commit routines decode. The X360 spells this `(luEntityIndex << 10) | 0x1000000` (the
