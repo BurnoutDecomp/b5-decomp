@@ -141,5 +141,55 @@ namespace Vehicle
 
         return *this;
     }
+
+// ==============================================================================================
+// AddRemappedEntityIdEvent -- the type-2 (traffic-owned id) sub-event SetRaceCarCrashing's
+// remap path fires: push the remapped entity index onto mTrafficTypeRequestQueue @+0x750
+// (the asm: EventQueue<u16,32>::AddEvent(sink+1872, &packed)). IN BOUNDS AND ON THIS CLASS
+// (the header's 2026-08-03 audit). Bodied 2026-08-24 (physics mount wave B3b).
+// ==============================================================================================
+void VehicleManagerOutputInterface::AddRemappedEntityIdEvent(u32 luRemappedActiveRaceCarIndex)
+{
+    const u16 lu16Packed = static_cast<u16>(luRemappedActiveRaceCarIndex);
+    mTrafficTypeRequestQueue.AddEvent(lu16Packed);
+}
+
+// ==============================================================================================
+// AddRaceCarCrashEvent @0x825E6F60 (528B) -- bodied 2026-08-24 (physics mount wave B3b)
+// against the header's MODELLED 5-arg surface (the FLAG there stands: the console passes
+// more registers -- a second vector v2==v126 and three extra flag bytes -- deliberately
+// simplified). The asm truth kept here:
+//   * two range tripwires on the id's entity index (message-buffer streaming lowered to the
+//     static prefix per the standing rule; BrnVehicleManagerOutputInterface.h:0x204/0x205),
+//   * build one RaceCarCrashEvent and AddEvent it onto mRaceCarCrashEventQueue @+0x3A0,
+//   * the console RETURNS miLength-1 (the event's slot); the modelled surface is void and no
+//     PC call site consumes it -- recorded, not invented.
+// ==============================================================================================
+void VehicleManagerOutputInterface::AddRaceCarCrashEvent(EntityId lVictimEntityId,
+                                                         bool lbLocalPhysicalCrash,
+                                                         Vector3 lvCrashNormal,
+                                                         bool lbWasInCrashState1,
+                                                         f32 lfCrashSpeedMPH)
+{
+    const u32 luEntityIndex = (lVictimEntityId.muValue >> 10) & 0x3FFFu;
+    CGS_ASSERT(static_cast<s32>(luEntityIndex) >= 0,
+               "Invalid race car index in AddRaceCarCrashEvent");   // :0x204
+    CGS_ASSERT(luEntityIndex < 8u,
+               "Invalid race car index in AddRaceCarCrashEvent");   // :0x205
+
+    RaceCarCrashEvent lEvent;
+    lEvent.mRaceCarVolumeInstanceID.muId = static_cast<u64>(lVictimEntityId.muValue) << 32;  // std r31 (the 64-bit id word, entity in the high dword)
+    lEvent.mCrasherEntityID.muValue      = 0;                       // stw r17 -- the modelled surface passes no crasher id
+    lEvent.mCollisionNormal              = lvCrashNormal;           // stvx v127
+    lEvent.mContactPoint.SetZero();                                 // v126 not modelled (see FLAG)
+    lEvent.meInstantTakedownType         = BrnGameState::E_TAKEDOWN_NONE;
+    lEvent.mfSpeedMPH                    = lfCrashSpeedMPH;         // stfs f31
+    lEvent.mbIsPrimaryCrash              = lbLocalPhysicalCrash;    // stb r16
+    lEvent.mbRemoveHandlingVolumeFromScene = lbWasInCrashState1;    // stb r15
+    lEvent.mbCarIsAI                     = false;                   // stb r14 -- not modelled
+    lEvent.mbCarIsNetwork                = false;                   // stb arg byte -- not modelled
+
+    mRaceCarCrashEventQueue.AddEvent(lEvent);
+}
 }
 }

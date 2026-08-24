@@ -1208,8 +1208,37 @@ namespace Vehicle
 
         // The shunt/slam force-physics appliers (X360 ApplyShunt @0x8261A5B0, ApplySlam @0x8261A738).
         // DWARF/asm shape is (VehicleManager* this, RaceCarResponseInfo* lpInfo).
+        // BODIED 2026-08-24 (physics mount wave B3b) in BrnVehicleManager_ImpactHelpers.cpp,
+        // together with their calculate/report callees below.
         void ApplyShunt(RaceCarResponseInfo* lpInfo);
         void ApplySlam(RaceCarResponseInfo* lpInfo);
+
+        // The slam/shunt data derivations + the network impact report (X360 CalculateSlamData
+        // @0x825C7568, CalculateShuntData @0x825C7880, SendImpactMessage @0x825EACF0). Signatures
+        // are asm-authoritative: the out-parameters are the stack slots the X360 callers pass in
+        // r5..r10 (+ one stack arg for CalculateSlamData's vulnerable-time out). Bodied in
+        // BrnVehicleManager_ImpactHelpers.cpp (wave B3b).
+        void CalculateShuntData(RaceCarResponseInfo* lpInfo,
+                                Vector3* lpvWorldDirection,
+                                VecFloat* lpvfMagnitude,
+                                f32* lpfVulnerableTime,
+                                f32* lpfSteeringDirection);
+        void CalculateSlamData(RaceCarResponseInfo* lpInfo,
+                               f32* lpfDuration,
+                               f32* lpfCounterDuration,
+                               f32* lpfSteeringDirection,
+                               f32* lpfRecoveryTime,
+                               Vector3* lpvDirection,
+                               u8* lpu8Score,
+                               f32* lpfVulnerableTime);
+        void SendImpactMessage(VehicleOutputInterface::ImpactEventQueue* lpImpactEventQueue,
+                               EImpactType leImpactType,
+                               EActiveRaceCarIndex leAggressorActiveRaceCarIndex,
+                               EActiveRaceCarIndex leVictimActiveRaceCarIndex,
+                               Vector3 lvDirection,
+                               f32 lfMagnitude, f32 lfDuration,
+                               f32 lfSteeringDirection, f32 lfRecoveryTime,
+                               u8 lu8Score);
 
         // Per-victim "does this impact qualify to crash the car" predicate (consumed by #1/#2).
         // No standalone export in this dossier -- declare-only; FLAG: signature inferred from the
@@ -1218,18 +1247,23 @@ namespace Vehicle
                                            RaceCarPhysics* lpVictim,
                                            RaceCarPhysics* lpOther);
 
-        // The vertical-takedown geometric sub-test (#3 helper). Not in this dossier -- declare-only.
-        // FLAG: signature inferred (this, victim RaceCarPhysics*, aggressor RaceCarPhysics*).
-        bool CheckForVerticalTakedownSituation(RaceCarPhysics* lpVictim, RaceCarPhysics* lpOther);
+        // The vertical-takedown geometric sub-test (X360 @0x825C56D8). SIGNATURE CORRECTED
+        // 2026-08-24 (wave B3b): the old FLAGGED guess (lpVictim, lpOther) was wrong -- the asm's
+        // second argument is the CONTACT POINT in v1, and the test asks whether it falls inside
+        // 80% of the victim's deformable-AABB footprint. Bodied in
+        // BrnVehicleManager_ImpactHelpers.cpp.
+        bool CheckForVerticalTakedownSituation(RaceCarPhysics* lpVictim, Vector3 lvContactPoint);
 
-        // The T-bone side-plane containment test (#4 helper). Not in this dossier -- declare-only.
-        // The X360 builds two parallel planes from the victim transform + half-width and tests the
-        // contact point against them. FLAG: signature inferred (point + the two plane vectors); the
-        // VMX plane math is delegated to this (unrecovered) helper rather than reconstructed inline.
-        bool IsPointBetweenTwoParallelPlanes(Vector3 lPoint, Vector3 lPlaneA, Vector3 lPlaneB);
+        // The parallel-plane containment test (X360 @0x825C5660). SIGNATURE CORRECTED 2026-08-24
+        // (wave B3b): the asm takes FOUR vector args -- the point, one point on each plane, and
+        // the shared plane NORMAL in v4 (the old 3-arg guess was FLAGGED inferred and wrong).
+        // True when the two plane-side dot signs differ. `this` is unread. Bodied in
+        // BrnVehicleManager_ImpactHelpers.cpp.
+        bool IsPointBetweenTwoParallelPlanes(Vector3 lvPoint, Vector3 lvPlaneA, Vector3 lvPlaneB,
+                                             Vector3 lvPlaneNormal);
 
-        // The recency throttle (X360 @0x825B4EB8). Its body is NOT in this dossier -- declare-only.
-        // FLAG: body unrecovered; signature inferred (this, victim active-index).
+        // The recency throttle (X360 @0x825B4EB8): mafNoImpactTimeSeconds[index] > 0. BODIED
+        // 2026-08-24 (wave B3b) in BrnVehicleManager_ImpactHelpers.cpp.
         bool HasRaceCarHadRecentImpact(s32 liActiveRaceCarIndex);
 
         // The grind/rubbing pre-pass detector (X360 CheckForGrindingAndRubbing @0x825B5450). Returns

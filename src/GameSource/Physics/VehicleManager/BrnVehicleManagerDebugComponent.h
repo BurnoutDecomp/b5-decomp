@@ -71,6 +71,12 @@ namespace Vehicle
 
     class VehicleManagerDebugComponent : public CgsDev::DebugComponent
     {
+        // 2026-08-24 (physics mount wave B3b): VehicleManager::CalculateSlamData @0x825C782C and
+        // CalculateShuntData @0x825C7B78 stamp the last-slam/last-shunt display fields below by
+        // raw offset (this+161968+0x420..0x43C) -- friend/same-TU context on the console. The
+        // friend grant is the write seam; nothing else about the class changes.
+        friend class VehicleManager;
+
     public:
         // ------------------------------------------------------------------------------------
         // @0x825B5A78 (DWARF BrnVehicleManagerDebugComponent.cpp:87). Bind the component to its

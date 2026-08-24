@@ -140,6 +140,12 @@ namespace Vehicle
         // honest seam; no field is reordered or retyped.
         CgsContainers::BitArray<8u>& GetUsedCarsBitArray() { return mUsedRaceCars; }
 
+        // ADDITIVE GROW, flagged -- the same smallest-honest-seam pattern as GetUsedCarsBitArray
+        // above: VehicleManager::ApplyShunt/ApplySlam @0x8261A5F4/@0x8261A79C reach this queue by
+        // raw offset (`lwz r11,8(r31) ; addi r4,r11,0x2310`) from what is friend/same-TU context
+        // on the console. No field reordered or retyped.
+        ImpactEventQueue& GetImpactEventQueue() { return mImpactEventQueue; }
+
         // @0x823C89C8: hand-written copy assignment (ADDITIVE GROW: a real ledger func not in the
         // DWARF member set; no field reordered/retyped).
         VehicleOutputInterface& operator=(const VehicleOutputInterface& lOther);
@@ -156,6 +162,14 @@ namespace Vehicle
             return reinterpret_cast<CgsModule::VariableEventQueue<1536, 16>*>(
                 &mGameEventQueueStorage[0]);
         }
+
+        // MOVED HERE 2026-08-24 (physics mount wave B3b) from VehicleManagerOutputInterface,
+        // where task #110 proved it was minted on the wrong class: the two driver-feedback
+        // bytes the takedown-scored path writes are THIS interface's mAggressiveDrivingFlags
+        // @0x6C00. Parameter meaning is asm-true (HandleRaceCarRaceCarContact
+        // @0x82643B00..0x82643B20: won |= playerWon via `or r9,r9,r27`; lost |= !playerWon via
+        // the cntlzw/extrwi of the same flag). Bodied in BrnVehicleOutputInterface.cpp.
+        void FlagTakedownScoredForDriver(bool lbPlayerWon);
 
     private:
         CgsContainers::BitArray<8u> mUsedRaceCars;            // @0x0000  (DWARF :382)
@@ -217,10 +231,10 @@ namespace Vehicle
         // AddRemappedEntityIdEvent is the one that DOES belong here: its +1872 == 0x750 is
         // mTrafficTypeRequestQueue, in bounds and on this class.
 
-        // sink+26096: the IO event queue the crash record + takedown/grind events push onto.
-        // Returned by reference so the bodies can call .AddEvent / .AddEventSafe by name.
-        // WRONG CLASS -- see the block above. 0x65F0 is VehicleOutputInterface's.
-        CgsModule::VariableEventQueue<1536, 16>& GetEventQueue();
+        // RETIRED 2026-08-24 (physics mount wave B3b): `GetEventQueue()` -- the WRONG-CLASS
+        // accessor the block above proved (0x65F0 is VehicleOutputInterface's game-event queue)
+        // -- is deleted; the monolith call sites now go through the sink they were always aimed
+        // at, VehicleOutputInterface::GetGameEventQueue().
 
         // The cross-module "a race car crashed" event (X360 AddRaceCarCrashEvent). FLAG: the X360
         // call passes nine positional args (a leading 0, the victim entity id, a byte-offset/flag, a
@@ -249,12 +263,10 @@ namespace Vehicle
         // IN BOUNDS AND ON THE RIGHT CLASS: 1872 == 0x750 == mTrafficTypeRequestQueue below.
         void AddRemappedEntityIdEvent(u32 luRemappedActiveRaceCarIndex);
 
-        // sink+27648 / sink+27649: the two driver-feedback bytes HandleRaceCarRaceCarContact OR-sets
-        // when a takedown is scored (the asm `*(a32+27648) |= ...; *(a32+27649) = ...`). Declare-only.
-        // WRONG CLASS -- see the block above. 27648 == 0x6C00 is VehicleOutputInterface::
-        // mAggressiveDrivingFlags, whose first two bools are mbPlayerWonSlamThisFrame (+0) and
-        // mbPlayerLostSlamThisFrame (+1) -- which is what "takedown scored, for which slot" means.
-        void FlagTakedownScoredForDriver(bool lbVictimIsHighSlot);
+        // RETIRED 2026-08-24 (physics mount wave B3b): `FlagTakedownScoredForDriver(bool)` --
+        // the other WRONG-CLASS accessor -- moved onto VehicleOutputInterface (whose
+        // mAggressiveDrivingFlags @0x6C00 the asm actually writes), with the asm-true parameter
+        // meaning (lbPlayerWon: won |= x, lost |= !x per @0x82643B00..0x82643B20).
     
 
         typedef CgsModule::EventQueue<TrafficCrashedEvent, 20> TrafficCrashedEventQueue;      // :55
