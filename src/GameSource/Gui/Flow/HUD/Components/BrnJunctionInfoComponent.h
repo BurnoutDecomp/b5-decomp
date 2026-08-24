@@ -82,8 +82,7 @@ namespace BrnGui
         const char* GetMedalFrameNameFromMedal(s8 li8Medal);                       // @0x82414DA0
         void TransitionInMainClip();                                               // @0x82414FD8 (this slice)
         void TransitionOutMainClip();                                              // @0x82415030 (this slice)
-        // Declared-only in this slice (data-table-driven; see SLICE note).
-        void SetupAptVariables();                                                  // @0x824398A0
+        void SetupAptVariables();                                                  // @0x824398A0 (bodied 2026-08-25; tables recovered from the image)
         void SetEventNameText();                                                   // @0x82414E60
 
         // ---- member layout (DWARF :124-:155 order; offsets above) -----------
@@ -101,10 +100,11 @@ namespace BrnGui
         bool                            mbGameComplete;              // +0x123
         CgsID                           mCurrentCarId;               // +0x128
 
-        // DWARF statics (:125-:146) -- per-gamemode apt frame-name tables. OWNED+DEFINED
-        // by this class's data TU (serialised label data not in the function export; only
-        // entries 0/5 attested by wave58). Declaration-only here.
-        static const char* const KAPC_GAMEMODE_ICON_FRAMENAMES[];
+        // DWARF statics (:125-:146) -- per-gamemode apt frame-name tables. DEFINED in
+        // BrnJunctionInfoComponent.cpp since 2026-08-25: the wave58 "serialised label data
+        // not in the function export" park was recoverable-after-all -- the 11 pointers at
+        // 0x82F24ECC read cleanly off the image (headless idat; scratch h1_dump2.txt).
+        static const char* const KAPC_GAMEMODE_ICON_FRAMENAMES[11];
         static const char* const KAC_CURRENT_BURNING_ROUTE_ICON_FRAMENAME;
     };
 }

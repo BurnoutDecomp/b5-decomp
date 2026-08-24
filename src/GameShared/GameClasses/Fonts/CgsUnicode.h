@@ -147,6 +147,19 @@ namespace CgsUnicode
     //   * the scratch is copied out in reverse and NUL-terminated.
     // Returns the terminator position. Used by the LanguageManager Format*String family
     // (FormatDateString / FormatIntegerString / ...) and UnicodeBuffer::Convert(s32).
+    // X360 ARTIST 0x82834930 (HUD H1 wave, 2026-08-25) -- render lfValue as UTF-8 decimal
+    // text: the integer part through IntToString (with the thousands separator), then, when
+    // lu8DecimalPlaces > 0, the decimal-point character followed by the fraction scaled by
+    // 10^lu8DecimalPlaces and rendered through IntToString with NO minimum digits (so a
+    // fraction shorter than the requested places prints unpadded -- the console's own
+    // behaviour, reproduced). Asserts lu8DecimalPlaces < 10 (CgsUnicode.cpp:606) and the
+    // decimal character's UTF-8 lead byte (cpp:620). lu8MinimumDigits is accepted but the
+    // console body hands IntToString a literal 0 for both halves; kept in the signature
+    // because the call sites pass it.
+    CgsUtf8* FloatToString(CgsUtf8* lpUtf8TargetString, f32 lfValue, u8 lu8MinimumDigits,
+                           u8 lu8DecimalPlaces, const CgsUtf8* lpUtf8ThousandsSeparator,
+                           const CgsUtf8* lpUtf8DecimalPointCharacter);
+
     CgsUtf8* IntToString(CgsUtf8* lpUtf8TargetString, s32 liValue, u8 lu8MinimumDigits,
                          const CgsUtf8* lpUtf8ThousandsSeparator);
 

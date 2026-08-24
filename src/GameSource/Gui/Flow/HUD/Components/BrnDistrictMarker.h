@@ -54,7 +54,7 @@ namespace BrnGui
         // --- ledger methods (declaration-only unless bodied in this TU) ---
         void Construct(const char* lacName, CgsGui::StateInterface* lpStateInterface, const char* lacParentName); // @0x82412550
         void Prepare(const char* lacName, const BrnFlapt::FileRef& lFile);                                        // @0x82420FB8
-        void Update();
+        void Update();                                                    // ICF-folded EMPTY on X360 (bodied; see .cpp)
         void SetCounty(BrnWorld::ECounty leCountyID);                                                             // @0x82412658
         void SetDistrict(BrnWorld::EDistrict leDistrictID);                                                       // @0x82412858
         void ProcessCountyTransitionComplete(const char* lpcComponentName);                                       // @0x82412A20
@@ -64,9 +64,14 @@ namespace BrnGui
         void SetOnline(bool lbOnline);
         void TransIn();
         void TransOut();
-        void SetHideCountyIcon(bool lbHide);
+        void SetHideCountyIcon(bool lbHide);                              // @0x824733B8 (bodied; re-homed from the retired View slice)
 
     private:
+        // FBurnMainHudState::OnLeave @0x82480B88 pokes the two container movies inline
+        // (`this+0x840 / this+0x854` vcall slot 3 == FlaptIconComponent::SetState
+        // "transout") -- the X360 state reaches the embedded members directly, with no
+        // accessor in the ledger. Friend-granted rather than fabricating one.
+        friend struct FBurnMainHudState;
         // Static frame-trigger callbacks (registered in Prepare); forward to the matching
         // Process*TransitionComplete on the user-data'd instance.
         static void CountyTransitionCompleteCallback(void* lpUserData, u16 luArg);   // @0x82412B40

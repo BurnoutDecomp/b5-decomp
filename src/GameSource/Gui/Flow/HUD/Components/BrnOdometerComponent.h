@@ -47,7 +47,7 @@
 
 namespace CgsGui { struct StateInterface; }
 namespace BrnGui { class GuiCache; }
-namespace BrnProgression { struct Profile; }
+namespace BrnProgression { class Profile; }   // class, matching BrnProfile.h:208 (a struct fwd-decl mis-mangles the GetProfile link)
 
 namespace BrnGui
 {

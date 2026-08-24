@@ -60,7 +60,7 @@ namespace BrnFlapt
 
         // ClearText @ 0x8246CBD8 -- blank the field's displayed text. Real X360
         // symbol (PlayerPositionSingleComponent::RenderValue's empty-value paths);
-        // declaration-only (bodied in its own sibling TU).
+        // bodied in this TU's cpp (H1 wave).
         void ClearText();
 
         // SetAutoSize(bool) @ 0x8246D488 -- enable/disable the field's auto-size flag
@@ -112,7 +112,7 @@ namespace BrnFlapt
         // leValueFormatType (raw ParameterFormatType integers per this home's house
         // style). X360 call sites (PlayerPositionSingle::RenderValue): r5=9 id-lookup,
         // fp1=the value, r7=11 E_FORMAT_INTEGER. DWARF shape (const char*, PFT,
-        // float32_t, PFT). Declaration-only (bodied in its own sibling TU).
+        // float32_t, PFT). Bodied in this TU's cpp (H1 wave).
         bool SetLocalisedText(const char* lpcStringId, s32 liStringIdType,
                               f32 lfValue, s32 liValueFormatType);
 
@@ -120,7 +120,7 @@ namespace BrnFlapt
         // positional-parameter form (pairs of value, ParameterFormatType). DWARF shape
         // (const char*, PFT, int32_t, ...). X360 call sites pass one (const char*,
         // format) pair (e.g. "STAT_SECONDS" + a preformatted buffer with format 0).
-        // Declaration-only (bodied in its own sibling TU).
+        // Bodied in this TU's cpp (H1 wave).
         bool SetLocalisedText(const char* lpcStringId, s32 liStringIdType,
                               s32 liNumParams, ...);
 

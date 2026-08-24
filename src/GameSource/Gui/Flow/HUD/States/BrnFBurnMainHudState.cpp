@@ -6,6 +6,8 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"                        // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                // CgsDev::Log (deferral gap log)
 #include "GameSource/Gui/BrnGuiCache.h"                                   // BrnGui::GuiCache
+#include "GameSource/Gui/BrnGuiDemangledEventTypes.h"                     // GuiEventDriveThruDiscovered / GuiEventChangeDistrict
+#include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptCommunicator.h" // CgsGui::GuiEventAptTriggerPayload (event 21, typed)
 #include "GameSource/Gui/Flapt/BrnFlaptManager.h"                         // BrnFlapt::FlaptManager
 #include "GameSource/Gui/Flapt/BrnFlaptFileRef.h"                         // BrnFlapt::FileRef
 #include "GameSource/Gui/Flapt/BrnFlaptMovieClipInstance.h"               // BrnFlapt::MovieClipInstance::ResetTimeline
@@ -20,14 +22,12 @@
 // "B5RaceHud" apt movie on the view channel, then runs the per-frame HUD event dispatch.
 //
 // COMPONENT DEFERRALS. The X360 state is a ~0x5350-byte aggregate of HUD components.
-// The components whose TUs are reconstructed are driven for real (RoadRule,
-// FriendsList + change icon, the Flapt animators, the DistrictMarker/InGameMessages
-// slices). The components whose TUs are NOT yet reconstructed -- the SatNav body,
-// OdometerComponent, JunctionInfoComponent, BoostMessageManager, and the
-// DistrictMarker/InGameMessages Construct/Prepare halves -- are deferred: each call
-// site keeps the X360 control flow (the gate bytes, the event routing) and logs the
-// gap once instead of inventing a body. Reconstructing those TUs (Slice B in
-// scratch/hud_fburn_plan.md) drops straight into these call sites.
+// The components whose TUs are reconstructed are driven for real: InGameMessages, the
+// FULL DistrictMarker, JunctionInfo and Odometer (all three landed by the H1 wave,
+// 2026-08-25), FriendsList + change icon, and the Flapt animators. The components whose
+// TUs are NOT yet reconstructed -- the SatNav body, BoostMessageManager, and the
+// RoadRule lifecycle -- are deferred: each call site keeps the X360 control flow (the
+// gate bytes, the event routing) and logs the gap once instead of inventing a body.
 namespace BrnGui
 {
     namespace
@@ -344,9 +344,10 @@ namespace BrnGui
 
         mInGameMessages.Prepare("hudMessages_mc", lFile);
 
-        // FLAG deferred (Slice B): DistrictMarkerComponent::Construct/Prepare
-        // ("marker_mc") -- only the SetHideCountyIcon slice is reconstructed.
-        LogDeferredComponent("DistrictMarkerComponent");
+        // [H1] X360 OnEnter @0x8247B0E8: the full marker lifecycle (the old "only the
+        // SetHideCountyIcon slice" deferral retired with the View ODR-fork).
+        mDistrictMarker.Construct("marker_mc", mpStateInterface, 0);
+        mDistrictMarker.Prepare("marker_mc", lFile);
 
         mbDistrictRefreshArmed = true;   // X360 +0x8AC := 1
 
@@ -373,11 +374,14 @@ namespace BrnGui
 
         PostCommand16<94>(mpStateInterface, KI_CHANNEL_GUI_OUT, 0);
 
-        // FLAG deferred (Slice B): JunctionInfoComponent::Construct/Prepare
-        // ("JunctionInfo_mc", -1) and OdometerComponent::Construct/Prepare
-        // ("Odometer_mc", -1) -- TUs not reconstructed.
-        LogDeferredComponent("JunctionInfoComponent");
-        LogDeferredComponent("OdometerComponent");
+        // [H1] X360 OnEnter @0x8247B0E8 (asm h1_dump.txt): JunctionInfo then Odometer,
+        // between the {1,94} post and the Ident animator. The X360 Odometer call carries
+        // (name, iface, 0, -1); JunctionInfo's Hex-Rays view shows three args (its body
+        // ignores the parent-name/layer pair) -- the same (0, -1) tail is passed.
+        mJunctionInfoComponent.Construct("JunctionInfo_mc", mpStateInterface, 0, -1);
+        mJunctionInfoComponent.Prepare("JunctionInfo_mc", lFile);
+        mOdometer.Construct("Odometer_mc", mpStateInterface, 0, -1);
+        mOdometer.Prepare("Odometer_mc", lFile);
 
         mIdentAnimator.Construct("Ident_Animator", mpStateInterface, 0);
         mIdentAnimator.Prepare("Ident_Animator", lFile, 0);
@@ -421,11 +425,16 @@ namespace BrnGui
 
         mRaceMainHudClip.SetVisible(false);
 
-        // "transout" across the animator set. The two DistrictMarker sub-animators
-        // (X360 +0x840/+0x854 vtbl slot +12) ride the deferred marker TU.
+        // [H1] "transout" across the animator set, in the console's own order (OnLeave
+        // @0x82480B88): the marker's two container movies (the X360 vcalls slot 3 ==
+        // FlaptIconComponent::SetState on this+0x840/+0x854 -- the direct member pokes the
+        // marker header friend-grants), the junction panel, the EventHud animator, then the
+        // odometer's active text.
+        mDistrictMarker.mCountyContainerMovie.SetState("transout");
+        mDistrictMarker.mDistrictContainerMovie.SetState("transout");
+        mJunctionInfoComponent.Run("transout");
         mEventHudAnimator.Run("transout");
-        // FLAG deferred (Slice B): JunctionInfoComponent::Run("transout") +
-        // OdometerComponent::TransOutActiveText -- TUs not reconstructed.
+        mOdometer.TransOutActiveText();
 
         PostShowHide24(mpStateInterface, KI_CHANNEL_VIEW_STATE, 1, 0.0f, 0);   // {12,213,flag0}
 
@@ -712,7 +721,7 @@ namespace BrnGui
 
         if (mbOdometerEnabled)
         {
-            // FLAG deferred (Slice B): OdometerComponent::TransIn.
+            mOdometer.TransIn();   // [H1] X360 UpdateWFInit tail
         }
 
         return true;
@@ -869,19 +878,26 @@ namespace BrnGui
             case 311:
                 if (mbJunctionInfoEnabled)
                 {
-                    // FLAG deferred (Slice B): JunctionInfo HandleJunctionChange
-                    // (cache words +19192/+19196) + DistrictMarker SetHideCountyIcon.
+                    // [H1] X360 @0x8247C258 (asm h1_dump2.txt): r4 = the queue payload
+                    // (Hex-Rays DROPS this argument -- the documented trap), r5 = the whole
+                    // CgsID `ld cache+0x4AF8` (the ORIGINAL car id, RecEvent case 415's
+                    // twin store).
+                    mJunctionInfoComponent.HandleJunctionChange(
+                        reinterpret_cast<const GuiEventJunctionInfo*>(lpEvent),
+                        mpGuiCache->GetLocalPlayerOriginalCarId());
                     mDistrictMarker.SetHideCountyIcon(mbCountyIconHidden);
                 }
                 if (mbOdometerEnabled)
                 {
-                    // FLAG deferred (Slice B): Odometer HandleJunctionChange.
+                    mOdometer.HandleJunctionChange(
+                        reinterpret_cast<const GuiEventJunctionInfo*>(lpEvent));
                 }
                 break;
             case 314:
                 if (mbOdometerEnabled)
                 {
-                    // FLAG deferred (Slice B): Odometer HandleDriveThruDiscovered.
+                    mOdometer.HandleDriveThruDiscovered(
+                        reinterpret_cast<const GuiEventDriveThruDiscovered*>(lpEvent));
                 }
                 break;
             case 333:
@@ -951,10 +967,29 @@ namespace BrnGui
         // ---- the per-frame component ticks --------------------------------------
         if (mbDistrictMarkerEnabled)
         {
-            // FLAG deferred (Slice B): the marker frame handler + the county/district
-            // refresh from cache words +20384/+20388/+20392 (SetCounty/SetDistrict +
-            // GuiCache::RecEvent(169)) -- the marker TU carries only the
-            // SetHideCountyIcon slice.
+            // [H1] X360 @0x8247B660 post-loop (h1_dump.txt): the marker's per-frame member
+            // handler (ICF-folded EMPTY on the console -- see DistrictMarker.cpp's Update
+            // note), then the county/district refresh off the cache's latest
+            // GuiEventChangeDistrict record: consume it when it is fresh, OR re-run it when
+            // this state's own refresh is armed (the OnEnter +0x8AC latch) and the district
+            // is valid; hand the record back through RecEvent(169) with the consumed byte
+            // set, and disarm.
+            mDistrictMarker.Update();
+
+            GuiEventChangeDistrict lRecord;
+            lRecord.meCounty     = mpGuiCache->GetChangeDistrictCounty();
+            lRecord.meDistrict   = mpGuiCache->GetChangeDistrictDistrict();
+            lRecord.mu8Consumed  = mpGuiCache->IsChangeDistrictConsumed() ? 1 : 0;
+            lRecord.maPad[0] = lRecord.maPad[1] = lRecord.maPad[2] = 0;
+            if (!lRecord.mu8Consumed ||
+                (mbDistrictRefreshArmed && lRecord.meDistrict != BrnWorld::E_DISTRICT_INVALID))
+            {
+                mDistrictMarker.SetCounty(static_cast<BrnWorld::ECounty>(lRecord.meCounty));
+                mDistrictMarker.SetDistrict(static_cast<BrnWorld::EDistrict>(lRecord.meDistrict));
+                lRecord.mu8Consumed = 1;
+                mpGuiCache->RecEvent(reinterpret_cast<const CgsModule::Event*>(&lRecord), 169);
+                mbDistrictRefreshArmed = false;
+            }
         }
         if (mbSatNavEnabled)
         {
@@ -989,7 +1024,7 @@ namespace BrnGui
         }
         if (mbOdometerEnabled)
         {
-            // FLAG deferred (Slice B): OdometerComponent::Update.
+            mOdometer.Update();   // [H1] the per-frame mileage/flash tick
         }
         if (mbPpToggleEnabled && mbPpToggleActive)
         {
@@ -1089,39 +1124,46 @@ namespace BrnGui
             }
             if (mbDistrictMarkerEnabled)
             {
-                // FLAG deferred (Slice B): the marker per-frame member handler (the
-                // ICF-folded "BaseCollisionGenerator::Destruct" body).
+                mDistrictMarker.Update();   // [H1] ICF-folded empty on X360 (see the TU)
             }
             if (mbJunctionInfoEnabled)
             {
-                // FLAG deferred (Slice B): JunctionInfo Refresh(name).
+                // [H1] X360 type-1 arm: Refresh(the payload's component-name pointer).
+                mJunctionInfoComponent.Refresh(
+                    reinterpret_cast<const CgsGui::GuiEventAptTriggerPayload*>(lpEvent)
+                        ->mpacComponentName);
             }
         }
         else if (lpEvent[0] == 4)
         {
-            const char* lpacClipName = reinterpret_cast<const char*>(
-                static_cast<uintptr_t>(static_cast<u32>(lpEvent[2])));
-            // The X360 payload carries the transition-complete clip-name pointer at
-            // word 2; on the host the record layout widens, so resolve it through the
-            // same-slot read the queue delivered.
-            lpacClipName = reinterpret_cast<const char* const*>(lpEvent)[2] != 0
-                               ? reinterpret_cast<const char* const*>(lpEvent)[2]
-                               : lpacClipName;
+            // [H1] The event-21 record on this host IS the native-width
+            // CgsGui::GuiEventAptTriggerPayload (CgsAptCommunicator.h -- the same typed
+            // read GuiCache::RecEvent case 21 already does). The X360 reads the name as
+            // "payload word 2" because that is where the 32-bit record's pointer lands;
+            // this TU's old same-slot arithmetic read ([2] of 8-byte slots == +16) landed
+            // on muComponentNameHash on x64 -- a garbage pointer had any type-4 trigger
+            // ever fired. By-name is both the house rule and the fix.
+            const CgsGui::GuiEventAptTriggerPayload* lpTrigger =
+                reinterpret_cast<const CgsGui::GuiEventAptTriggerPayload*>(lpEvent);
+            const char* lpacClipName = lpTrigger->mpacComponentName;
 
             if (mbRoadRulesEnabled && lpacClipName != 0 &&
                 std::strcmp(lpacClipName, "RoadRule_mc") == 0)
             {
-                // FLAG deferred (Slice B): RoadRule TransitionComplete(word1).
+                // FLAG deferred (H2): RoadRule TransitionComplete(lpTrigger->miUniqueId).
             }
             else if (mbInGameMessagesEnabled && lpacClipName != 0 &&
                      std::strcmp(lpacClipName, "hudMessages_mc") == 0)
             {
-                // FLAG deferred (Slice B): InGameMessages EndTransition.
+                // [H1] The round-3 InGameMessages TU carries EndTransition -- the old
+                // "Slice B" deferral here was stale.
+                mInGameMessages.EndTransition();
             }
             else if (mbDistrictMarkerEnabled)
             {
-                // FLAG deferred (Slice B): DistrictMarker ProcessCountyTransitionComplete
-                // + ProcessDistrictTransitionComplete(name).
+                // [H1] X360 else-arm: county first (no name), then district (name).
+                mDistrictMarker.ProcessCountyTransitionComplete(0);
+                mDistrictMarker.ProcessDistrictTransitionComplete(lpacClipName);
             }
         }
 

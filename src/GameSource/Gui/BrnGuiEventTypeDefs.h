@@ -1053,6 +1053,25 @@ struct GuiEventRoadRuleEnd;
 // X360 AddGuiEvent<GuiEventJunctionInfo> @0x823D1AE0 bakes id 311 (was PS3-DWARF 309);
 // corrected to the X360 event id. (The record SIZE the producer copies is 32 bytes -- see
 // GuiModule::AddGuiEvent; the base is layout-neutral so only GetEventType() changes.)
+// id 169 size 12 -- the change-district record (HUD H1 wave, 2026-08-25; UPGRADED here from
+// BrnGuiDemangledEventTypes.h's opaque `GuiEvent<169> {}` placeholder, which did not match
+// the wire). The record is FLAT: three words at offset +0, no GuiEvent header. Pinned on the
+// consumer side by GuiCache::RecEvent @0x8250DDF0 case 169 (three word copies from +0/+4/+8
+// into cache+20384/20388/20392), on the producer side by TranslateGameActionsToGuiEvents
+// @0x823E9CE0 case 112 (the game action's 8-byte {county,district} pair + a zeroed third
+// word), and re-posted by FBurnMainHudState::UpdateRunning's marker refresh with the
+// consumed byte set. The flag word's tested byte is its FIRST byte (BE `lbz` @+8 in the
+// state's post-loop); modelled as a leading u8 so the LE host tests the authored byte.
+// Raw-record form (no GuiEvent base), the committed HudMessageAnalyzer-family recipe.
+struct GuiEventChangeDistrict
+{
+    s32 meCounty;               // +0x00 BrnWorld::ECounty
+    s32 meDistrict;             // +0x04 BrnWorld::EDistrict
+    u8  mu8Consumed;            // +0x08 0 == fresh, 1 == consumed by the HUD marker
+    u8  maPad[3];               // +0x09..+0x0B
+    s32 GetEventType() const { return 169; }
+};
+
 struct GuiEventJunctionInfo : public CgsGui::GuiEvent<311>
 {
     CgsID  mSpecialEventCarId;                                        // +0x00

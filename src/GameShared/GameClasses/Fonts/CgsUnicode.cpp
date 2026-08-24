@@ -194,6 +194,67 @@ namespace CgsUnicode
         return lpOut;
     }
 
+    // [H1 wave 2026-08-25] Faithful port of X360 ARTIST 0x82834930: render lfValue as UTF-8
+    // decimal text -- the integer part through IntToString (sign handled there; the console
+    // truncates toward zero), then, when lu8DecimalPlaces > 0, the decimal-point character
+    // (lead byte validated through the trailing-bytes table, its continuation bytes copied)
+    // followed by the fraction |value - (s32)value| scaled by 10^lu8DecimalPlaces, rendered
+    // through IntToString with a NULL separator and NO minimum digits -- so a fraction with
+    // leading zeroes prints unpadded, exactly as the console does. The console's power table
+    // (flt_820DE4E8[10]) is the plain powers-of-ten run reproduced below. Asserts
+    // CgsUnicode.cpp:606 (luDecimalPlaces < 10) and :620 (the lead-byte tripwire, streamed
+    // on the console, folded static per convention). lu8MinimumDigits is never forwarded
+    // (the console passes literal 0 to both IntToString calls); see the header note.
+    CgsUtf8* FloatToString(CgsUtf8* lpUtf8TargetString, f32 lfValue, u8 lu8MinimumDigits,
+                           u8 lu8DecimalPlaces, const CgsUtf8* lpUtf8ThousandsSeparator,
+                           const CgsUtf8* lpUtf8DecimalPointCharacter)
+    {
+        (void)lu8MinimumDigits;
+
+        // flt_820DE4E8 -- 10^n for the fraction scale, indexed by lu8DecimalPlaces.
+        static const f32 KAF_DECIMAL_SCALE[10] =
+        {
+            1.0f, 10.0f, 100.0f, 1000.0f, 10000.0f,
+            100000.0f, 1000000.0f, 10000000.0f, 100000000.0f, 1000000000.0f,
+        };
+
+        f32       lfAbsValue    = lfValue;
+        s32       liIntegerPart = static_cast<s32>(lfValue);
+        CgsUtf8*  lpOut         = lpUtf8TargetString;
+
+        IntToString(lpUtf8TargetString, liIntegerPart, 0, lpUtf8ThousandsSeparator);
+
+        if (lfAbsValue < 0.0f)
+        {
+            liIntegerPart = -liIntegerPart;
+            lfAbsValue    = -lfAbsValue;
+        }
+
+        CGS_ASSERT(lu8DecimalPlaces < 10u, "luDecimalPlaces < 10");   // cpp:606
+
+        const s32 liFraction = static_cast<s32>(
+            (lfAbsValue - static_cast<f32>(liIntegerPart)) * KAF_DECIMAL_SCALE[lu8DecimalPlaces]);
+
+        if (lu8DecimalPlaces != 0u)
+        {
+            while (*lpOut != 0)
+                ++lpOut;
+
+            const u32 luTrailing = lUtf8TrailingBytes(*lpUtf8DecimalPointCharacter);
+            // (The console streams "Character supplied is not a valid start UTF8 character
+            // (<byte>)" at CgsUnicode.cpp:620 when the table answers 255.)
+            CGS_ASSERT(luTrailing != 255u,
+                       "Character supplied is not a valid start UTF8 character");
+
+            for (u32 luByte = 0; luByte <= luTrailing; ++luByte)
+                *lpOut++ = lpUtf8DecimalPointCharacter[luByte];
+
+            lpOut = IntToString(lpOut, liFraction, 0, 0);
+        }
+
+        return lpOut;
+    }
+
     // Faithful port of X360 ARTIST 0x82834EA0: a string is valid when it is empty or every
     // character in it is a valid UTF-8 character.
     bool IsValidUtf8String(const u8* lpUtf8String)

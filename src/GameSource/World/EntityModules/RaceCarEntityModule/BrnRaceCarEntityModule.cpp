@@ -55,6 +55,7 @@
 #include "SharedClasses/DataLists/VehicleListEntry.h"                                    // BrnResource::VehicleListEntry
 #include "SharedClasses/DataLists/WheelList.h"                                           // BrnResource::WheelList / WheelListEntry
 #include "GameSource/GameState/BrnGameActions.h"                                         // GameStateModuleIO::ResetPlayerCarAction (game action 0)
+#include "GameSource/GameState/BrnGameEvents.h"                                          // E_EVENT_CHANGE_WORLD_REGION (115, the district producer)
 #include "GameSource/World/AI/SharedIO/BrnRaceCarAIInterfaces.h"                         // BrnAI::AIModuleIO::RaceCarAIInterface / AttachAIControlEvent
 #include "GameSource/Math/BrnMathUtils.h"                                                // BrnMath::BuildTransform / IsNormal
 #include "rw/math/vpu/vector3_operation.h"                                               // rw::math::vpu::IsValid(Vector3)
@@ -503,6 +504,60 @@ bool RaceCarEntityModule::Prepare( RaceCarEntityModuleIO::OutputBuffer_Prepare* 
         // at slot 0 last wave. Without it the manager's mpRaceCarEntityModule is whatever the
         // module memory held and PrePhysicsUpdate dereferences it. DELETE when Construct lands.
         mPlaceOnTrackManager.Construct( this );
+
+        // ⭐ [H1 district wave 2026-08-25] THE STAGE-0 DISTRICT-MAP BIND, landed (the
+        // member's old "Prepare stage 0 is not reproduced" note is retired for this leg).
+        // X360 Prepare @0x82303E78 case 0, store-for-store (h1_dump5.txt):
+        //     assert lDistrictMapResourceHandle.GetResource()          (:671)
+        //     assert ...->GetMemoryResource()                          (:672)
+        //     *(this+572) = the 8-byte handle
+        //     WorldMap2D::Construct(this+99072, base + *(u32*)(base+4),
+        //                           unk_82FAD520, unk_82FAD8E0)
+        // The two static vectors are the SAME world rect as StuntManager's (their MSVC
+        // dyn-init thunks @0x82C4B3D8/0x82C4B418 build them from the same four floats --
+        // read from the image, h1_dump7.txt): origin {-4208, -3846}, size {8270, 6101}.
+        // The blob pointer is the same serialised-header walk StuntManager::Prepare does
+        // (base + the u32 offset at base+4; AGENTS.md's documented exception).
+        // [FLAG PC bring-up] readiness-GUARDED instead of console-asserted: on PC the pool
+        // can answer the acquire with a null/half-null handle (the StuntManager give-up
+        // precedent). A not-ready handle skips the bind with a one-shot log; the zero-width
+        // map makes GetValue answer KU_INVALID_WORLD_MAP_VALUE and the region tracker stays
+        // inert -- never a crash. DELETE-WHEN the handle is proven always-ready here.
+        {
+            const bool lbDistrictMapReady =
+                ( lrDistrictMapHandle.mpResourceMemory != 0 ) &&
+                ( *reinterpret_cast<void* const*>( lrDistrictMapHandle.mpResourceMemory ) != 0 );
+            if( lbDistrictMapReady )
+            {
+                mDistrictMapResourceHandle = lrDistrictMapHandle;
+
+                const Vector2 KV_DISTRICT_MAP_WORLD_ORIGIN = { -4208.0f, -3846.0f, 0.0f, 0.0f }; // unk_82FAD520
+                const Vector2 KV_DISTRICT_MAP_WORLD_SIZE   = {  8270.0f,  6101.0f, 0.0f, 0.0f }; // unk_82FAD8E0
+
+                const u8* lpResourceMemoryBase =
+                    *reinterpret_cast<u8* const*>( mDistrictMapResourceHandle.mpResourceMemory );
+                const void* lpMapBlob =
+                    lpResourceMemoryBase + *reinterpret_cast<const u32*>( lpResourceMemoryBase + 4 );
+                mWorldMap2D.Construct( lpMapBlob,
+                                       KV_DISTRICT_MAP_WORLD_ORIGIN, KV_DISTRICT_MAP_WORLD_SIZE );
+
+                // The console seeds the region tracker from the module ctor's zeroed
+                // storage; make the "no region yet" state explicit so the first sampled
+                // district always reads as a change (Construct is declaration-only on
+                // this build -- the mePlayerActiveRaceCarIndex seam).
+                mCurrentWorldRegion.Construct( BrnWorld::E_DISTRICT_INVALID );
+
+                if( CgsDev::Log::gpDebugPrint != 0 )
+                    *CgsDev::Log::gpDebugPrint << "[RaceCar] district map bound (stage 0)\n";
+            }
+            else if( CgsDev::Log::gpDebugPrint != 0 )
+            {
+                *CgsDev::Log::gpDebugPrint
+                    << "[RaceCar] FLAG district map handle not ready at stage 0 -- "
+                       "region tracking inert this session\n";
+            }
+        }
+
         // Breaker RaceCarEntityModule::Prepare @0x82303FB0..0x82303FB8. This
         // establishes the selected B5 strategy before the first physics frame.
         mBoostManager.Prepare();
@@ -3924,6 +3979,86 @@ void RaceCarEntityModule::SetPaddingForResetRaceCars(
 // console takes it at 0x823075BC -- BEFORE the first leg -- and holds it to 0x82307980, and
 // ProcessCreateVehicleEvents' own input accessors carry "Not locked for reading" tripwires,
 // so calling that leg at its console slot required the console's lock scope.
+// ============================================================================
+// UpdateCurrentWorldRegion  @ 0x822F5718  (H1 district wave, 2026-08-25)
+//
+// ⭐ THE DISTRICT-MARKER PRODUCER -- the head of the chain that ends at the HUD's
+// "you have entered <district>" marker: sample the local player car's position against
+// the module's district map every post-physics tick; on a district CHANGE, latch the new
+// {county, district} pair into mCurrentWorldRegion and post it as game event 115 into the
+// output game-event queue (the same queue the training-ticker event 113 rides, so the
+// world -> GameState transport is already proven live). Downstream:
+// GameStateModule::ProcessGameEvents case 115 -> game action 112 ->
+// TranslateGameActionsToGuiEvents -> GUI event 169 -> GuiCache -> FBurnMainHudState.
+//
+// Store-for-store with the X360 asm/decompile (h1_dump4.txt/h1_dump5.txt):
+//   * GetActiveRaceCar(mePlayerActiveRaceCarIndex) -> IsActive gate;
+//   * GetPosition -> the map sample (the X360's vperm builds the w=0 lane the Vector3
+//     GetValue overload models -- the GetTriggerWorldRegion precedent);
+//   * the two handle asserts (:3075/:3076) ride the console's always-bound map;
+//   * value != 255 (KU_INVALID_WORLD_MAP_VALUE) -> WorldRegion::Construct(value);
+//   * district != mCurrentWorldRegion's -> latch + AddEvent({county,district}, 115, 8).
+// [FLAG PC bring-up] the whole body is GATED on the stage-0 bind having succeeded
+// (mDistrictMapResourceHandle non-null) instead of asserting: the give-up arm in Prepare
+// leaves the map unbound on a bad acquire, and the console's asserts here would then
+// BLOCK the sim every frame. The console shape is unreachable on a bound map.
+// ============================================================================
+void RaceCarEntityModule::UpdateCurrentWorldRegion(
+        RaceCarEntityModuleIO::GameEventQueue* lpGameEventQueue )
+{
+    if( lpGameEventQueue == 0 )
+    {
+        return;
+    }
+    if( mDistrictMapResourceHandle.mpResourceMemory == 0 )
+    {
+        return;   // [FLAG PC bring-up] stage-0 give-up arm taken -- see the banner.
+    }
+
+    ActiveRaceCar* lpActiveRaceCar = GetActiveRaceCar( mePlayerActiveRaceCarIndex );
+    if( lpActiveRaceCar == 0 || !lpActiveRaceCar->IsActive() )
+    {
+        return;
+    }
+
+    CGS_ASSERT( mDistrictMapResourceHandle.mpResourceMemory != 0,
+                "mDistrictMapResourceHandle.GetResource() != NULL" );                        // :3075
+    CGS_ASSERT( *reinterpret_cast<void* const*>( mDistrictMapResourceHandle.mpResourceMemory ) != 0,
+                "mDistrictMapResourceHandle.GetResource()->GetMemoryResource() != NULL" );   // :3076
+
+    // The X360 samples the position with a zeroed w lane (the lvx128/vperm staging).
+    Vector3 lSamplePosition = lpActiveRaceCar->GetPosition();
+    lSamplePosition.w = 0.0f;
+
+    const u8 luValue = mWorldMap2D.GetValue( lSamplePosition );
+    if( luValue == CgsWorld::KU_INVALID_WORLD_MAP_VALUE )
+    {
+        return;
+    }
+
+    BrnWorld::WorldRegion lRegion;
+    lRegion.Construct( static_cast<BrnWorld::EDistrict>( luValue ) );
+
+    if( lRegion.GetDistrict() != mCurrentWorldRegion.GetDistrict() )
+    {
+        mCurrentWorldRegion = lRegion;
+        lpGameEventQueue->AddEvent(
+            reinterpret_cast<const CgsModule::Event*>( &lRegion ),
+            BrnGameState::GameStateModuleIO::E_EVENT_CHANGE_WORLD_REGION,
+            static_cast<s32>( sizeof( lRegion ) ) );
+
+        if( CgsDev::Log::gpDebugPrint != 0 )
+        {
+            // [DIAG] NOT IN THE X360 BINARY -- the district chain's producer rung (the
+            // [UI-gate] ladder idiom; unconditional, fires only on a region CHANGE).
+            *CgsDev::Log::gpDebugPrint
+                << "[district] region change -> county " << static_cast<s32>( lRegion.GetCounty() )
+                << " district " << static_cast<s32>( lRegion.GetDistrict() )
+                << " (event 115)\n";
+        }
+    }
+}
+
 void RaceCarEntityModule::PostPhysicsUpdate(
         RaceCarEntityModuleIO::InputBuffer_PostPhysics* lpInput,
         RaceCarEntityModuleIO::OutputBuffer_PostPhysics* lpOutput,
@@ -4079,6 +4214,17 @@ void RaceCarEntityModule::PostPhysicsUpdate(
     if( !lbSimPaused )
     {
         GenerateSceneUpdateEvents( lpOutput );
+    }
+
+    // ⭐ [H1 district wave 2026-08-25] THE WORLD-REGION SAMPLE, at the console's own
+    // position and on the console's own queue: the `bl` at 0x8230769C, i.e. after
+    // UpdateActiveRaceCarTransforms (0x82307688, not reproduced) and before
+    // UpdateHidingEvents/StorePlayerRoutePortalPositions (both not reproduced), INSIDE the
+    // sim-paused skip (its target 0x823076C0 lands past this call), with a2 =
+    // lpOutput->GetGameEventQueue() (the sub_822B67D0 accessor call at 0x82307690).
+    if( !lbSimPaused )
+    {
+        UpdateCurrentWorldRegion( lpOutput->GetGameEventQueue() );
     }
 
     // ⭐ THE PAINT PUBLISH, at the console's own position. VERIFIED from the asm of
@@ -4896,7 +5042,10 @@ void RaceCarEntityModule::ProcessPlayerVehicleInput(
 //   Release-adjacent state writes aside, this covers: DetachActiveRaceCar,
 //   ProcessTakedownEvents, ProcessPropContactQueue, ProcessLeapedAndStompedCars,
 //   ProcessPowerParking, ProcessRaceCarCrashEvents_PostPhysics, UpdatePowerParking,
-//   UpdateCrashingPlayerContacts, UpdateCurrentWorldRegion, UpdateHidingEvents,
+//   UpdateCrashingPlayerContacts, UpdateHidingEvents,
+//   (UpdateCurrentWorldRegion RETIRED from this list 2026-08-25, H1 district wave -- bodied
+//    above with the stage-0 map bind; its "un-homed interior" needs were GetActiveRaceCar/
+//    IsActive/GetPosition, all long since real.)
 //   UpdateRaceCars_PreScene, UpdatePropBoundingBoxes_PreScene, UpdateRaceCarContacts,
 //   UpdateActiveCars, UpdateDisconnectedPlayers, UpdateTrafficAndRaceCarNearMisses,
 //   SendGameEvents, SendStreamerEvents, SendAddedForCollisionStateToPhysics,

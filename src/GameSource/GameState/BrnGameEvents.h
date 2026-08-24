@@ -35,6 +35,10 @@ enum EGameEventType
     E_EVENT_START_NETWORK_ROUND     = 18,    // DWARF BrnGameEvents.h
     E_EVENT_REMOTE_PLAYER_DISCONNECTED = 131, // value unconfirmed (template tag only)
     E_EVENT_RECORD_PROP_HIT         = 111,   // DWARF BrnGameEvents.h:121
+    E_EVENT_CHANGE_WORLD_REGION     = 115,   // X360-attested: RaceCarEntityModule::
+                                             // UpdateCurrentWorldRegion @0x822F5824 posts it
+                                             // (8B {county,district}); GameStateModule::
+                                             // ProcessGameEvents case 115 consumes it (H1 wave)
     // [gateui] DWARF BrnGameEvents.h:122 -- the immediate neighbour of RECORD_PROP_HIT, and the
     // one the world->GameState bridge's prop leg needs as its second event type. Game EVENT ids
     // are NOT subject to the +5 shift the ACTION ids carry in this range (see the long note in

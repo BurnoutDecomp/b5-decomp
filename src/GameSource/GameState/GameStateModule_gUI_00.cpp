@@ -30,7 +30,8 @@
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"        // VariableEventQueue<1536,16>
 
 #include "GameSource/GameState/BrnGameStateModuleIO.h"                  // OutputBuffer (lock + GetGameActionQueue)
-#include "GameSource/GameState/BrnGameEvents.h"                         // RecordPropHitEvent / E_EVENT_RECORD_PROP_HIT
+#include "GameSource/GameState/BrnGameEvents.h"                         // RecordPropHitEvent / E_EVENT_RECORD_PROP_HIT / E_EVENT_CHANGE_WORLD_REGION
+#include "GameSource/GameState/ImageManager/BrnGameStateImageManagerBase.h" // WorldRegionChangeEvent (the case-115 payload)
 #include "GameSource/GameState/Offences/BrnStuntManager.h"              // StuntManager::OnPropHit / Update
 #include "GameSource/GameState/TriggerQueryManager/BrnTriggerQueryManager.h" // UpdateTriggers / GetActiveTrigger*
 #include "GameSource/GameState/DeveloperChallengeManager/BrnDeveloperChallengeManager.h" // the accessor's return type
@@ -216,6 +217,63 @@ void GameStateModule::ProcessGameEventsPropHitBringUp(
 }
 
 // ============================================================================
+// ⭐ [H1 district wave 2026-08-25] ProcessGameEventsWorldRegionBringUp -- the extracted
+// CASE-115 arm of GameStateModule::ProcessGameEvents @0x823A0A18 (banner + the console
+// arm's three statements in the header). The queue walk is the dispatcher's own; the
+// payload is read BY MEMBER through GameStateImageManagerBase.h's WorldRegionChangeEvent
+// ({ meCounty @+0x00, meDistrict @+0x04 } -- the exact 8-byte pair the world's
+// UpdateCurrentWorldRegion posts).
+// ============================================================================
+void GameStateModule::ProcessGameEventsWorldRegionBringUp(
+        const CgsModule::VariableEventQueue<1536, 16>* lpGameEventQueue,
+        GameStateModuleIO::GameActionQueue* lpActionQueue)
+{
+    if (lpGameEventQueue == 0 || lpActionQueue == 0)
+    {
+        return;
+    }
+
+    const CgsModule::Event* lpEvent = 0;
+    s32                     liSize  = 0;
+    s32                     liType  = lpGameEventQueue->GetFirstEvent(&lpEvent, &liSize);
+
+    while (lpEvent != 0)
+    {
+        if (liType == GameStateModuleIO::E_EVENT_CHANGE_WORLD_REGION)
+        {
+            const WorldRegionChangeEvent* lpChange =
+                reinterpret_cast<const WorldRegionChangeEvent*>(lpEvent);
+
+            // FLAG deferred: GameStateImageManagerBase::HandleWorldRegionChangeEvent
+            // (this+185520 on the console) -- the image-manager sub-object is not a PC
+            // member yet (its Prepare is the stage-24 deferral in BrnGameStateModule.cpp).
+            // FLAG deferred: the console's `*(this+181512) = meDistrict` store -- the
+            // member is un-homed; not fabricated.
+
+            // The load-bearing hop: game ACTION 112 {county, district}, 8 bytes -- the
+            // console's own AddEvent literal (@0x823A3470's arm). The bridge's case 112
+            // turns it into GUI event 169 for the HUD district marker.
+            lpActionQueue->AddEvent(
+                reinterpret_cast<const CgsModule::Event*>(lpChange), 112,
+                static_cast<s32>(sizeof(WorldRegionChangeEvent)));
+
+            // [DIAG] NOT IN THE X360 BINARY -- the district chain's GameState rung (the
+            // [UI-gate] ladder idiom; region changes are rare, no first-N cap needed).
+            if (CgsDev::Log::gpDebugPrint != 0)
+            {
+                *CgsDev::Log::gpDebugPrint
+                    << "[district] event 115 -> action 112 (county "
+                    << static_cast<s32>(lpChange->meCounty) << " district "
+                    << static_cast<s32>(lpChange->meDistrict) << ")\n";
+            }
+        }
+
+        const CgsModule::Event* lpCurrent = lpEvent;
+        liType = lpGameEventQueue->GetNextEvent(lpCurrent, &lpEvent, &liSize);
+    }
+}
+
+// ============================================================================
 // ⭐⭐ [gateui] PreWorldUpdateStuntBringUp -- the three stunt-chain legs of the console's
 // PreWorldUpdate @0x823A5328, IN THE CONSOLE'S OWN ORDER. The header carries the line-by-line map
 // of the source function and both named reductions; the body annotates each leg again.
@@ -251,6 +309,10 @@ void GameStateModule::PreWorldUpdateStuntBringUp(f32 lfGameTimestep, bool lbIsAG
     // tree extracts one arm per function -- see the arm's banner in BrnGameStateModule.cpp).
     // MUST run before the Clear below, for the same reason the prop-hit arm does.
     ProcessGameEventsTrainingRequestBringUp(&mGameEventCarryQueue);
+    // ⭐ [H1 district wave] the dispatcher's CASE-115 arm (the HUD district marker's feed),
+    // same walk, same must-run-before-the-Clear constraint; it posts onto the action queue
+    // this function already holds the write lock for.
+    ProcessGameEventsWorldRegionBringUp(&mGameEventCarryQueue, lpActionQueue);
     mGameEventCarryQueue.Clear();
 
     // ---- 2) TriggerQueryManager: ARM the trigger set -----------------------------------------

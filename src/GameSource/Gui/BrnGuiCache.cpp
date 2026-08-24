@@ -12,6 +12,8 @@
 #include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptObjectController.h"
 #include "GameShared/GameClasses/Gui/Model/CgsModelModuleIO.h"
 #include "GameShared/GameClasses/Gui/CgsGuiEventTypeDefs.h"   // CgsGui::GuiEventTimeInfo (the per-frame time latch)
+// (GuiEventChangeDistrict now lives in BrnGuiEventTypeDefs.h, already included via BrnGuiCache.h)
+#include "SharedClasses/World/BrnWorldRegion.h"        // BrnWorld::WorldRegion::DistrictToCounty (Construct's marker seed)
 
 #include <cstring>   // std::memset (the ctor's zero-init of the unmodelled interior) / std::strlen
 
@@ -218,6 +220,16 @@ namespace BrnGui
         // GuiEventActivateCarSelect. Replace this seed with the real event when the
         // GameState->Gui bridge lands (RecEvent's case 77 already consumes it).
         meCarSelectType = 1;   // BrnGameState::GameStateModuleIO::E_CAR_SELECT_TYPE_JUNKYARD
+
+        // X360 0x82505860 mid-body (h1_dump2.txt): seed the district-marker source words --
+        // district INVALID, county derived from it (== E_COUNTY_INVALID -> the "Anywhere"
+        // icon), consumed byte clear. The clear consumed byte is what makes
+        // FBurnMainHudState's first RUNNING frame run the marker refresh even before the
+        // world posts its first region change.
+        meChangeDistrictDistrict  = BrnWorld::E_DISTRICT_INVALID;
+        meChangeDistrictCounty    =
+            BrnWorld::WorldRegion::DistrictToCounty(BrnWorld::E_DISTRICT_INVALID);
+        mu8ChangeDistrictConsumed = 0;
     }
 
     // @0x8250DC30 -- publish the queue selected on the previous frame, clear it,
@@ -862,6 +874,42 @@ namespace BrnGui
                 mStateLoadingHelper.MarkAptComponentInitialised(lpTrigger);
             break;
         }
+        case 350:
+            // ADDITIVE (HUD H1 wave, 2026-08-25 -- landed as the fix for the odometer's
+            // mpProfile assert storm: the odometer TU reads the cache profile every frame,
+            // and the PC cache never consumed the event that carries it). X360 case 350
+            // @0x8250DDF0 (h1_dump.txt), the load-bearing store:
+            //     assert lpProfileEvent (cpp:2977)
+            //     mpProfile = payload->mpProfile;               // +16476 <- *(payload+0)
+            //     *(byte*)(this+80794) = payload->flag;         // the road-rules byte
+            //     [gated] DetermineCarUnlockPending(mpProfile);
+            //     [gated] word@44096 refinement off Profile+42517
+            // Reproduced: the profile store. FLAG'd deferrals: the +80794 byte (un-homed
+            // member; not fabricated), the DetermineCarUnlockPending call (bodied in
+            // BrnGuiCache_wB_10.cpp but its two gate bytes +19318/+19316 are un-homed
+            // here), and the +44096 refinement (un-homed). The PC producer is the
+            // event-350 stand-in in BrnGameModule.cpp, which posts a REAL Profile*.
+            {
+                const BrnGui::GuiEventProgressionProfileData* lpProfileEvent =
+                    reinterpret_cast<const BrnGui::GuiEventProgressionProfileData*>(lpEvent);
+                CGS_ASSERT(lpProfileEvent != 0, "lpProfileEvent");   // cpp:2977
+                mpProfile = lpProfileEvent->mpProfile;
+            }
+            break;
+        case 169:
+            // ADDITIVE (HUD H1 wave, 2026-08-25). X360 case 169 @0x8250DDF0 (h1_dump.txt):
+            // three word copies of the GuiEventChangeDistrict record into the marker source
+            // words. BOTH producers route here -- the game bridge's fresh region change
+            // (consumed byte 0) and FBurnMainHudState's own consumed-marking write-back
+            // (the state calls RecEvent directly with the byte set).
+            {
+                const BrnGui::GuiEventChangeDistrict* lpChangeDistrict =
+                    reinterpret_cast<const BrnGui::GuiEventChangeDistrict*>(lpEvent);
+                meChangeDistrictCounty    = lpChangeDistrict->meCounty;
+                meChangeDistrictDistrict  = lpChangeDistrict->meDistrict;
+                mu8ChangeDistrictConsumed = lpChangeDistrict->mu8Consumed;
+            }
+            break;
         case 77:
             // ADDITIVE (car-select wave 2026-08-02). The X360 switch (rebased by -4) reaches
             // `jumptable 8250DE3C case 77` at 0x8250EE20 and does exactly this: one
@@ -1157,6 +1205,16 @@ namespace BrnGui
     const BrnProgression::Profile* GuiCache::GetProfile() const
     {
         return mpProfile;
+    }
+
+    // [H1] @ (far member +0x13B94 / 80788) -- the odometer's offline-distance readout
+    // source (OdometerComponent::Update @0x82424160 is the attested reader; the header
+    // member note carries the same cite). Same no-out-of-line-accessor situation as
+    // GetProfile above: the header has declared it since the odometer wave, the body was
+    // never landed, which left the odometer TU unlinkable the moment it was mounted.
+    f32 GuiCache::GetDistanceDriven() const
+    {
+        return mfDistanceDriven;
     }
 
     // ---- the player-name string ids -------------------------------------------------

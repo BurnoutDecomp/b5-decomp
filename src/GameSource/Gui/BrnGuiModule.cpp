@@ -1774,6 +1774,19 @@ namespace BrnGui
                     mMovieManager.RecvEvent(lpEvent, liId);
                     break;
 
+                case 350:   // GuiEventProgressionProfileData -- the live-profile handoff
+                case 169:   // GuiEventChangeDistrict -- the district-marker source words
+                    // [H1 wave 2026-08-25] On the console EVERY module-input event reaches
+                    // GuiCache::RecEvent (its ~180-case switch consumes what it wants);
+                    // this build's pump routes selectively, so the two cache-consumed ids
+                    // this wave landed handlers for are forwarded here explicitly. 350 is
+                    // what fills GuiCache::mpProfile (the odometer asserts it per frame);
+                    // 169 is what fills the district-marker words. ⚠️ Do NOT blanket-route
+                    // the whole stream: 14/16 are already re-consumed off the notification
+                    // queue below and would double-deliver.
+                    mGuiCache.RecEvent(lpEvent, liId);
+                    break;
+
                 default:
                     // The other module-level consumers (profile/skills/overlays/keyboard/
                     // language...) are subsystem follow-ons; their events pass through to

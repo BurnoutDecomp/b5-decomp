@@ -266,6 +266,21 @@ public:
     void ProcessGameEventsTrainingRequestBringUp(
         const CgsModule::VariableEventQueue<1536, 16>* lpGameEventQueue);
 
+    // ⭐ [H1 district wave 2026-08-25] X360 ProcessGameEvents @0x823A0A18, THE CASE-115 ARM --
+    // "the player crossed into a new district". Same extraction precedent as the case-111/113
+    // arms above. The console arm is three statements (h1_dump3.txt):
+    //     GameStateImageManagerBase::HandleWorldRegionChangeEvent(this+185520, payload);
+    //     AddEvent(actionQueue, {county,district}, /*action*/112, 8);
+    //     *(this+181512) = payload->meDistrict;
+    // Reproduced: the ACTION POST (the load-bearing hop -- the bridge turns action 112 into
+    // GUI event 169, the HUD district marker's feed). FLAG'd deferrals: the image-manager
+    // handler (the GameStateImageManagerBase sub-object is not a PC member yet -- its Prepare
+    // is the stage-24 deferral) and the +181512 store (member un-homed; not fabricated).
+    // Producer: RaceCarEntityModule::UpdateCurrentWorldRegion (event 115, world side).
+    void ProcessGameEventsWorldRegionBringUp(
+        const CgsModule::VariableEventQueue<1536, 16>* lpGameEventQueue,
+        GameStateModuleIO::GameActionQueue* lpActionQueue);
+
     // ⭐⭐ [tut-ticker] X360 PreWorldUpdate @0x823A5328, THE TRAINING LEG (@0x823A57A4..0x823A57C8):
     //     bl ShouldAllowTimedTutorialTips     ; r3 = this
     //     mr r8, r3                           ; -> Update's trailing bool
