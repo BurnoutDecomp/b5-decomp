@@ -1223,7 +1223,10 @@ namespace Vehicle
         // @0x825FA268: latches mu8DriftState from the sign of the entry steering input
         //   (mfSteering <= 0 -> FacingRight(2), else FacingLeft(1)), seeds the drift timers/scale and
         //   the StartSlip lane, and resets mDriftFlags.mu8DriftFlags = KU_DRIFT_FLAG_DO_ALL.
-        void EnterDrift(const BrnPlayerDriverControls* lpControls, f32 lfSlip, f32 lfSpeed);
+        // ⭐ PARAMETER ROLES CORRECTED 2026-08-24 (deform-land wave, drift bundle R2): the two
+        // f32s are (entry speed, drift push time) -- CheckForEnteringDrift @0x825FA604 passes
+        // f1 = lfSpeedMPS, f2 = attribs+0x170.w -- not the old (slip, speed) guess.
+        void EnterDrift(const BrnPlayerDriverControls* lpControls, f32 lfSpeed, f32 lfPushTime);
 
         // @0x825B8220: tears down the drift -- clears mu8DriftState, zeroes the drift-bank timer
         //   lanes (NeutralControlTime / TimeDrifting / TimeInFrictionState / ...), and resets
