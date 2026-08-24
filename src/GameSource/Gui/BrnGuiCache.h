@@ -550,6 +550,8 @@ namespace BrnGui
         }
 
         s32 GetActiveRoadRule() const                            { return meActiveRoadRule; }
+        // [tut-ticker] the in-game ticker's controller-present read (see the member carve).
+        s32 GetActiveControllerIndex() const                     { return miActiveControllerIndex; }
 
         // ADDITIVE GROW (BrnCarSelectMain wave G). The car-select flow surface. All three were
         // header-inlines on the X360 (no out-of-line bodies exist in the image); their bodies
@@ -991,7 +993,15 @@ namespace BrnGui
         // only when it holds 1 or 3, treat -1 as invalid). FLAG: consumer-named -- the
         // enum home is unrecovered (values observed: -1 / 1 / 3).
         s32  miGameFlowState;                             // +0x4B30 (19248)
-        u8   mPad_4B34[0xC];                              // +0x4B34..+0x4B3F
+        u8   mPad_4B34[0x4];                              // +0x4B34..+0x4B37
+        // ADDITIVE CARVE ([tut-ticker] wave, 2026-08-24): the active-controller index the
+        // in-game ticker reads. X360-attested at BOTH InGameMessageRenderer read sites
+        // (Update @0x82446F30 and RecvEvent case 505: `mbGamePausedForDisconnect =
+        // (*(cache + 19256) == -1)`) -- -1 == no active controller == "reconnect controller"
+        // ticker mode. FLAG: consumer-named (producer side unrecovered; reads 0 on this
+        // build, i.e. controller present).
+        s32  miActiveControllerIndex;                     // +0x4B38 (19256)
+        u8   mPad_4B3C[0x4];                              // +0x4B3C..+0x4B3F
         // ADDITIVE CARVE (BrnCarSelectMain wave G): the last server-interface error word the
         // disconnect popup shows. DWARF h:1657 `CgsNetwork::EServerInterfaceError
         // meLastDisconnectedError` (order fit: right after miConsecutiveLosses in the DWARF

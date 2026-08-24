@@ -298,6 +298,21 @@ namespace CgsGui
                 // The load notification routes through the virtual (guest vtbl slot
                 // +0x50), so the BrnGui::ViewModule override handles a FLAPT load.
                 ProcessIncomingLoadNotification(lpEvent);
+                // [PC bring-up seat] The custom-renderer components adopt resources off
+                // the same notification (InGameMessageRenderer::RecvEvent case 14 takes
+                // the ticker font). On the X360 the manager hears every view-side event
+                // through the view hop (CustomRendererManager::RecvEvent has no static
+                // caller -- vtable dispatch); on PC the module pump feeds the manager
+                // the INBOUND queue only, and the RESOURCE-module notifications (fonts,
+                // textures) ride this separate view queue -- so forward them here. No
+                // double delivery: the two streams are disjoint (the module inbound
+                // queue's case-14s are the FSM bundle loads, which never transit this
+                // view queue -- proven by the 13:37 boot, where the module feed alone
+                // left the ticker font unadopted).
+                if (mpCustomRendererManager != 0)
+                {
+                    mpCustomRendererManager->RecvEvent(lpEvent, liEventId);
+                }
                 break;
 
             case 15:
@@ -576,17 +591,22 @@ namespace CgsGui
     {
         CGS_ASSERT(lpInput != 0, "lpViewInput");
 
-        // Custom-renderer-manager phase-1 notify (mgr->vtbl[+0x18](mgr, &mImRenderers, 1)).
-        // No manager is installed on the PC boot path and the manager's real vtable order
-        // is un-recovered (the same deferred hook as ProcessIncomingViewEvents'); the PC
-        // consumption of the filled buffers is the dispatch the render drive runs after
-        // this returns. FLAG (deferred dispatch): wire both notifies when the
-        // CustomRendererManager type lands.
-
         const s32 liDeltaMs = static_cast<s32>(mfRenderTimeDelta * 1000.0f);
 
         CgsGraphics::ImRenderBuffer<CgsGraphics::Basic2dColouredTexturedVertex>& lrBuffer =
             mImRenderers.mpIm2dRenderBuffer->mCommandBuffer;
+
+        // ⭐ [tut-ticker] the custom-renderer-manager LAYER-1 render, LIVE (2026-08-24).
+        // Guest @0x82858AF8: `(*(**(view+57352) + 24))(mgr, view+592, 1)` -- vtbl +0x18 IS
+        // the manager base's Render(set, layer) slot (CgsCustomRenderer.h's order), so the
+        // "phase notify" reading of the old FLAG was the same call by another name: draw
+        // every layer-1 component BEFORE the movie, layer-2 after. The set handed over is
+        // the view's own (slot 0 = the Apt Im2d command buffer the components submit into).
+        if (mpCustomRendererManager != 0)
+        {
+            mpCustomRendererManager->Render(
+                reinterpret_cast<ImRendererSet*>(&mImRenderers), E_CUSTOMRENDERLAYER_1);
+        }
 
         lrBuffer.BeginRendering();
         // The MenusAndHud Im3d buffer bracket (guest +0x260: BeginRendering here, its
@@ -604,10 +624,17 @@ namespace CgsGui
 
         mAptAux.Render(liDeltaMs);
 
-        lrBuffer.EndRendering();
+        // ⭐ [tut-ticker] the LAYER-2 render (guest: the same +0x18 dispatch with layer 2,
+        // AFTER AptAux::Render, before the buffer close) -- the ticker draws HERE, over
+        // the movie. Its submissions ride the same open command buffer the Apt walk just
+        // filled, so they dispatch in this frame's EndRendering.
+        if (mpCustomRendererManager != 0)
+        {
+            mpCustomRendererManager->Render(
+                reinterpret_cast<ImRendererSet*>(&mImRenderers), E_CUSTOMRENDERLAYER_2);
+        }
 
-        // Custom-renderer-manager phase-2 notify (mgr->vtbl[+0x18](mgr, &mImRenderers, 2))
-        // -- deferred with phase 1 above.
+        lrBuffer.EndRendering();
     }
 
     // Render @0x82858810 -- the public per-frame render entry (CgsGui::GuiModule::Render

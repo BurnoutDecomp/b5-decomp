@@ -288,6 +288,13 @@ namespace CgsGraphics
             }
 
             Im2dVertex* const lpVtxBase = RenderBufferRenderStart(6u * luGlyphCount, leType);
+            if (lpVtxBase == 0)
+            {
+                // [PC guard] the buffered stream is full (RenderStart's graceful-fail
+                // path) -- writing the glyph run through the null base would AV. The
+                // line is dropped, exactly like the buffer's own rewind semantics.
+                break;
+            }
             Im2dVertex* lpVtx = lpVtxBase;
             mauVertexCount[leType] = 0;
             RenderBufferSetTextureState(lpFont->mpTextureState, leType);
@@ -470,6 +477,12 @@ namespace CgsGraphics
             }
 
             Im2dVertex* const lpVtxBase = RenderBufferRenderStart(6u * luGlyphCount, EImRenderingType_Buffered);
+            if (lpVtxBase == 0)
+            {
+                // [PC guard] full buffered stream -- same drop semantics as
+                // RenderStringInternal's guard above.
+                break;
+            }
             Im2dVertex* lpVtx = lpVtxBase;
             mauVertexCount[EImRenderingType_Buffered] = 0;
             RenderBufferSetTextureState(lpFont->mpTextureState, EImRenderingType_Buffered);

@@ -149,7 +149,9 @@ void CustomRendererManager::Construct()
     mapCustomRenderComponents[E_ABOVECAR]             = 0;
     mapCustomRenderComponents[E_PROGRESSBAR]          = 0;
     mapCustomRenderComponents[E_BLACKBAR]             = 0;
-    mapCustomRenderComponents[E_INGAME_MESSAGE]       = 0;
+    // ⭐ [tut-ticker] slot 8 is LIVE (2026-08-24): the reconstructed InGameMessageRenderer
+    // subobject (guest this+0x1E0F0), the bottom-of-screen ticker.
+    mapCustomRenderComponents[E_INGAME_MESSAGE]       = &mInGameMessageRenderer;
     mapCustomRenderComponents[E_CREDITS_TEXT]         = 0;
 
     // guest `stbx 0 -> +0x1F498`
@@ -720,6 +722,12 @@ CustomRendererManager* CustomRendererManager::SetFlaptRenderer(BrnFlapt::FlaptRe
 void CustomRendererManager::SetTextRenderer(CgsGraphics::TextRenderer* lpTextRenderer)
 {
     mpTextRenderer = lpTextRenderer;
+
+    // ⭐ [tut-ticker] the guest's `a1[32029] = a2` -- +0x1F474 IS the embedded
+    // InGameMessageRenderer's mpTextRenderer (renderer base 0x1E0F0 + its +4996), so the
+    // "mirrored store into a renderer subobject this build does not embed" note above is
+    // paid for this one: the subobject is embedded now and the store is the real member.
+    mInGameMessageRenderer.SetTextRenderer(lpTextRenderer);
 }
 
 // ================= SetLanguageManager @ 0x824455A8 =================
@@ -737,6 +745,11 @@ void CustomRendererManager::SetLanguageManager(CgsLanguage::LanguageManager* lpL
     mpLanguageManager = lpLanguageManager;
 
     CGS_ASSERT(lpLanguageManager != 0, "lpLanguageManager");
+
+    // ⭐ [tut-ticker] the guest's tail call -- `return InGameMessageRenderer::
+    // SetLanguageManager(a1 + 30780, a2)` targets the slot-8 subobject (+123120), embedded
+    // and real as of 2026-08-24.
+    mInGameMessageRenderer.SetLanguageManager(lpLanguageManager);
 }
 
 // ================= SetReplaySerialiser @ 0x82445648 =================

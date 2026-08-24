@@ -91,6 +91,12 @@ namespace CgsResource
         // Burnout '^N' colour codes; scaled by mScaleUV.x. CgsFont.cpp / X360 0x82834F20.
         float GetStringWidth(const CgsUtf8* lpUtf8String) const;
 
+        // [tut-ticker] X360 0x828350F8 -- GetStringWidth's whole-string sibling: identical
+        // walk (same colour-code machine), but a '\n' contributes the SPACE glyph's advance
+        // instead of ending the line. InGameMessageRenderer::AddNewMessage measures each
+        // queued ticker line with it. Body in CgsFont.cpp.
+        float GetStringWidthIgnoringNewlines(const CgsUtf8* lpUtf8String) const;
+
         // Build the font's runtime texture state from atlas page 0 (mpapTextures[0]) so the text
         // renderer can bind it. Called once after the font bundle loads (see GamePrepare handoff).
         // CgsFont.cpp / X360 0x82835658. [PC: the allocator is unused -- the texture state is backed

@@ -5,7 +5,8 @@
 
 #include "GameShared/GameClasses/Gui/View/CustomRenderer/CgsCustomRenderer.h" // CgsGui::CustomRenderComponentInterface, eCustomRenderLayer, ImRendererSet
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"                           // CgsGui::GuiEventQueueSmall (the base's mEventQueue)
-#include "GameSource/Gui/CustomRenderer/Renderers/BrnNetworkPlayerImageRenderer.h" // the one live component (slot 0)
+#include "GameSource/Gui/CustomRenderer/Renderers/BrnNetworkPlayerImageRenderer.h" // the live slot-0 component
+#include "GameSource/Gui/CustomRenderer/Renderers/BrnInGameMessageRenderer.h"      // [tut-ticker] the live slot-8 component
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX.
 //   BrnGui::CustomRendererManager  @ 0x82444040 .. 0x82450908  (16 functions)
@@ -145,6 +146,11 @@ private:
 
     // The by-value subobject for slot 0 (guest this+0x1B660).
     NetworkPlayerImageRenderer mNetworkPlayerImageRenderer;
+
+    // ⭐ [tut-ticker] the by-value subobject for slot 8 (guest this+0x1E0F0) -- the
+    // bottom-of-screen ticker, reconstructed whole 2026-08-24. The hollow-shell caveat in
+    // the array banner above no longer applies to it.
+    InGameMessageRenderer mInGameMessageRenderer;
 
     // Guest +0x1F498: the master rendering-enable flag SetAllRenderingState() stores.
     bool mbRenderingEnable;
