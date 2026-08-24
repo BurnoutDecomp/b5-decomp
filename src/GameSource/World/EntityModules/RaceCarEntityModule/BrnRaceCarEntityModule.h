@@ -564,6 +564,22 @@ public:
     // capacity asserted), bumping miPendingRequestCount. No-op if the ring is full.
     void AddTrainingRequest(BrnProgression::ETrainingType leTrainingType);
 
+    // ⭐ [tut-ticker] X360 0x822F6BE8 -- drain this module's pending game events into the
+    // post-physics output buffer's game-event queue. Console call site: the tail of
+    // PostPhysicsUpdate @0x82307938, immediately before SendStreamerEvents. PARTIAL: the
+    // training-request drain (game event 113 per ring entry, LIFO) is whole; the leading
+    // "player car changed" arm (event 9) reaches three un-homed tail members inside
+    // maTailPadB0 and is named, not faked -- see the body.
+    void SendGameEvents(RaceCarEntityModuleIO::OutputBuffer_PostPhysics* lpOutput);
+
+    // ⭐ [tut-ticker] X360 0x822BE020 -- map the player car's BrnResource::ECarType to its
+    // DRIVES_*_CAR training tip and queue it (the "this text explains the car" tutorial):
+    // dword_82CDB4A4 = { 6, 7, 5 } == DANGER->TRAINING_DRIVES_DANGER_CAR,
+    // AGGRESSION->TRAINING_DRIVES_AGGRESSION_CAR, STUNTS->TRAINING_DRIVES_STUNT_CAR
+    // (table READ FROM THE IMAGE 2026-08-24; anchored against the recovered training
+    // string table at 0x82CDBF40 -- see the wave log). Caller: HandleGameActions case 77.
+    void HandleCarTypeTrainingMessage(u32 luCarType);
+
     // X360 0x822CE508 -- if the player car is tailgating any other race car, accumulate
     // lfDeltaTime into mfCurrentTailgateDuration; otherwise reset it to 0. Returns the
     // tailgating predicate. (Calls IsPlayerCarTailgatingOtherRaceCars, declared below.)

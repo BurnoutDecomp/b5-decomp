@@ -105,6 +105,57 @@ void RaceCarEntityModule::AddTrainingRequest(BrnProgression::ETrainingType leTra
     }
 }
 
+// ⭐ [tut-ticker] X360 0x822BE020. The car-type -> training-tip map. The console bounds-asserts
+// the car type then queues dword_82CDB4A4[type]:
+//     { 6, 7, 5 } == DANGER -> TRAINING_DRIVES_DANGER_CAR (6),
+//                    AGGRESSION -> TRAINING_DRIVES_AGGRESSION_CAR (7),
+//                    STUNTS -> TRAINING_DRIVES_STUNT_CAR (5).
+// Table READ FROM THE IMAGE (2026-08-24 id1 reader; the 12-byte BE pattern is unique in the
+// whole mapped image and sits at exactly 0x82CDB4A4 under the range-12 calibration anchored on
+// the recovered 77-entry training string table at 0x82CDBF40).
+void RaceCarEntityModule::HandleCarTypeTrainingMessage(u32 luCarType)
+{
+    static const s32 KAI_CARTYPE_TRAINING_TIP[3] = { 6, 7, 5 };   // dword_82CDB4A4
+
+    CGS_ASSERT(luCarType <= 2u,
+               "leCarType >= BrnResource::E_CARTYPE_DANGER && leCarType < BrnResource::E_CARTYPE_COUNT"); // :8430
+    if (luCarType > 2u)
+    {
+        return;   // the console falls through into the table read; bail instead of faulting
+    }
+
+    AddTrainingRequest(
+        static_cast<BrnProgression::ETrainingType>(KAI_CARTYPE_TRAINING_TIP[luCarType]));
+}
+
+// ⭐ [tut-ticker] X360 0x822F6BE8 -- SendGameEvents. PARTIAL, and named as such:
+//   * the leading "player car changed" arm (game event 9, 16 bytes: a re-compressed CgsID
+//     pair) is DROPPED: its gate byte (+0x18371), its flag word (+0x11104 region) and the id
+//     it re-compresses (+0x123EC region) all live in this module's un-homed pads with no
+//     recovered member name. Nothing on this build sets the gate, so the arm is inert on the
+//     console flow being reproduced; it lands when those members are homed.
+//   * the TRAINING drain is whole and console-exact: pop the ring LIFO
+//     (`v7 = --count; v9 = ring[v7];`) and post each as game event 113, size 4, into the
+//     output buffer's game-event queue.
+void RaceCarEntityModule::SendGameEvents(RaceCarEntityModuleIO::OutputBuffer_PostPhysics* lpOutput)
+{
+    CGS_ASSERT(lpOutput != 0, "lpOutput != NULL");   // :5114
+    if (lpOutput == 0)
+    {
+        return;
+    }
+
+    while (miPendingRequestCount > 0)
+    {
+        --miPendingRequestCount;
+        const s32 liTrainingType =
+            static_cast<s32>(mePendingTrainingRequestQueue[miPendingRequestCount]);
+        lpOutput->GetGameEventQueue()->AddEvent(
+            reinterpret_cast<const CgsModule::Event*>(&liTrainingType),
+            113 /* E_EVENT_REQUEST_GAME_TRAINING */, 4);
+    }
+}
+
 // X360 0x822CE508. Advance the player's continuous-tailgating timer.
 //
 // The X360 calls IsPlayerCarTailgatingOtherRaceCars (passing the player active-car
@@ -2256,6 +2307,67 @@ void RaceCarEntityModule::HandleGameActions(
             break;
         }
 
+        // ⭐ [tut-ticker] ARTIST case 77 (0x8230BE08's low jump table). The payload is IGNORED
+        // by the console arm; it re-reads the ACTIVE player car's VehicleListEntry and
+        // refreshes the boost strategy + queues the car-type training tip:
+        //     idx   = mePlayerActiveRaceCarIndex               (`lwz` this+0x182F8)
+        //     [three tail byte stores +0x186C9/+0x186CA/+0x186D0 = 0 -- see the FLAG below]
+        //     car   = GetActiveRaceCar(idx);                    assert :6699
+        //     rc    = car->GetGlobalRaceCar();                  assert :6702
+        //     vIdx  = mpVehicleList->GetVehicleIndex(rc->GetModelId());  assert :6705
+        //     entry = mpVehicleList->GetVehicleData(vIdx);      asserts :6709/:6712
+        //     HandleCarStatsUpdate(entry byte 0xE8 /*GetCarType()*/,
+        //                          entry byte 0x98, entry byte 0x9A);
+        //     HandleCarTypeTrainingMessage(entry byte 0xE8);
+        // The two stats bytes sit in VehicleListEntry's opaque gameplay header -- read raw
+        // with the SAME offsets GameStateModule::ApplyCarStats already documents (its payload
+        // +0x0C <- entry+0x98, +0x08 <- entry+0x9A pair).
+        // ⚠️ FLAG (documented, not emulated): the three zeroed tail bytes live in this
+        // module's un-homed maTailPadB1 region (no member name recovered); their reset is
+        // dropped and named rather than poked through the pad.
+        case BrnGameState::GameStateModuleIO::E_ACTION_CAR_SELECT_FINISHED: // 77
+        {
+            const EActiveRaceCarIndex lePlayerIndex = mePlayerActiveRaceCarIndex;
+            ActiveRaceCar* lpActiveRaceCar = GetActiveRaceCar(lePlayerIndex);
+            CGS_ASSERT(lpActiveRaceCar != 0, "lpActiveCar");                       // :6699
+            if (lpActiveRaceCar == 0)
+            {
+                break;
+            }
+            RaceCar* lpRaceCar = lpActiveRaceCar->GetGlobalRaceCar();
+            CGS_ASSERT(lpRaceCar != 0, "lpRaceCar");                               // :6702
+            if (lpRaceCar == 0)
+            {
+                break;
+            }
+            const s32 liVehicleIndex = mpVehicleList->GetVehicleIndex(lpRaceCar->GetModelId());
+            CGS_ASSERT(liVehicleIndex >= 0, "liVehicleIndex >= 0");                // :6705
+            const BrnResource::VehicleListEntry* lpEntry =
+                (liVehicleIndex < 0) ? 0 : mpVehicleList->GetVehicleData(liVehicleIndex);
+            CGS_ASSERT(lpEntry != 0, "lpVehicleListEntry");                        // :6709/:6712
+            if (lpEntry == 0)
+            {
+                break;
+            }
+
+            const u8* lpcEntryBytes = reinterpret_cast<const u8*>(lpEntry);
+            const u32 luCarType = lpcEntryBytes[0xE8];   // == VehicleListEntry::GetCarType()
+            HandleCarStatsUpdate(static_cast<BrnResource::ECarType>(luCarType),
+                                 static_cast<s32>(lpcEntryBytes[0x98]),
+                                 static_cast<s32>(lpcEntryBytes[0x9A]));
+            HandleCarTypeTrainingMessage(luCarType);
+            break;
+        }
+
+        // ⭐ [tut-ticker] ARTIST case 149: `AddTrainingRequest(this, *payload)` -- the 4-byte
+        // ETrainingType relay (the junkyard exit posts payload 0 == LEAVES_JUNKYARD).
+        case BrnGameState::GameStateModuleIO::E_ACTION_REQUEST_GAME_TRAINING: // 149
+        {
+            const s32 liTrainingType = *reinterpret_cast<const s32*>(lpEvent);
+            AddTrainingRequest(static_cast<BrnProgression::ETrainingType>(liTrainingType));
+            break;
+        }
+
         // ARTIST case 198 reads +0x14/+0x0C/+0x08 in that order and calls
         // HandleCarStatsUpdate @0x822A4700.
         case BrnGameState::GameStateModuleIO::E_ACTION_UPDATE_CAR_STATS: // 198
@@ -3825,6 +3937,11 @@ void RaceCarEntityModule::PostPhysicsUpdate(
     // TransmitCarsInRaceToQueryManager (0x82307730), and OUTSIDE the sim-paused skip (the
     // second skip only starts at 0x82307744, one instruction later). Landed 2026-08-18.
     SendRaceCarSceneUpdates( lpOutput );
+
+    // ⭐ [tut-ticker] the console's own tail order @0x82307938: SendGameEvents runs here,
+    // immediately before SendStreamerEvents (both OUTSIDE the second paused skip -- the skip's
+    // target 0x82307930 lands before this call).
+    SendGameEvents( lpOutput );
 
     SendStreamerEvents( lpOutput );
 

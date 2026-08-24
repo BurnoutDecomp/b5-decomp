@@ -42,6 +42,11 @@ enum EGsmGameAction
     KI_ACTION_PLAYER_CAR_CHANGED   = 1,     // size 8   -- OnSpecialEventPlayerCarChange (the new car id)
     KI_ACTION_CAR_OPPONENT_SET     = 4,     // size 64  -- OnPlayerCarChange (Array<CgsID,7> of opponents)
     KI_ACTION_UNPAUSE              = 87,    // size 1   -- RequestUnpause
+    // [tut-ticker] RequestPause @0x82382010: `li r5,0x56` (86) on the strict IsSimPaused
+    // transition, `li r5,0x58` (88) on the raw-flags transition. Both 1-byte, both posted
+    // from an uninitialised stack byte, exactly like KI_ACTION_UNPAUSE.
+    KI_ACTION_PAUSE_STRICT         = 86,    // size 1   -- RequestPause (checked-pause transition)
+    KI_ACTION_PAUSE_RAW            = 88,    // size 1   -- RequestPause (raw-flags transition)
     KI_ACTION_APPLY_CAR_STATS      = 198,   // size 24  -- ApplyCarStats
     // ProcessGameEvents case 78 (`li r6,0x40; li r5,0x40` @0x823A45E0). Same id + size as the
     // CarSelectManager-side KI_ACTION_CAR_SELECTION_CHANGED; consumed by
@@ -109,24 +114,25 @@ void GameStateModule::Construct()
     // mpTrainingManager's FLAG in the header for the include cycle that forces it. It is
     // allocated FIRST so the pointer StuntManager stores is final and non-null: passing 0 would
     // fire the console's own `mpTrainingManager` assert (BrnStuntManager.cpp:71) EVERY BOOT.
-    // ⓘ TrainingManager::Construct is deliberately NOT called: the console's GameStateModule::
-    // Construct does not call it either (it is absent from the 0x82380388 Construct list -- the
-    // manager is wired by the four Constructs that take `a1 + 46640` as an owner pointer, and
-    // initialised elsewhere).
-    // ⛔ [gateui] AND NOTHING IN THIS TREE DEREFERENCES IT. `new T()` VALUE-initialises (the class
-    // has no user-provided default ctor and no vptr), so every member -- including the
-    // mpProgressionManager back-pointer that only TrainingManager::Construct ever writes -- is
-    // ZERO, not indeterminate. The one body that used to reach through it,
-    // StuntManager::ProcessStuntElement's training-tip arm, is PARKED this round precisely
-    // because TrainingManager::GetProfile() would have null-dereffed that unwritten back-pointer
-    // (and because its six symbols have no body anywhere). So this object exists ONLY to satisfy
-    // the console's non-null assert; it is stored, never used.
-    // DELETE-WHEN TrainingManager::Construct gets a caller, at which point it must run HERE,
-    // before mStuntManager.Construct, and the tip arm can be un-parked.
+    // (the old "TrainingManager::Construct is deliberately NOT called / nothing dereferences
+    //  it" block is RETIRED -- its own DELETE-WHEN is paid below. The console's Construct is
+    //  indeed absent from the 0x82380388 list; its PS3 twin 0x241DE0 shows what it seeds and
+    //  the X360 inlines those stores at the manager's real initialisation site.)
     if (mpTrainingManager == 0)
     {
         mpTrainingManager = new TrainingManager();
     }
+    // ⭐ [tut-ticker] 2026-08-24: TrainingManager::Construct HAS a caller now (the DELETE-WHEN
+    // above is paid): the manager is Constructed here, before mStuntManager.Construct, so the
+    // pointer StuntManager stores refers to a fully-seeded object. Body is the PS3-attested
+    // TrainingManager::Construct (DecFIGS 0x241DE0; the X360 inlines it -- no export exists).
+    mpTrainingManager->Construct(&mProgressionManager, this);
+
+    // ⭐ [tut-ticker] the console's ModeManager::Construct runs from this Construct
+    // (@0x82340008's sole caller); its inter-mode seed stores are extracted --
+    // meCurrentGameModeType = E_MODE_NONE (-1) is load-bearing, see the ModeManager banner.
+    mModeManager.ConstructInterModeStateBringUp(this);
+
     mStuntManager.Construct(&mProgressionManager, &mTriggerQueryManager, &mModeManager,
                             mpTrainingManager, this);
 
@@ -1126,6 +1132,186 @@ void GameStateModule::RequestUnpause(s32 leUnpauseModule, GameStateModuleIO::Gam
 
     u8 lacUnpause[1] = { 0 };   // X360 posts the uninitialised 1-byte local verbatim
     lpQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(lacUnpause), KI_ACTION_UNPAUSE, 1);
+}
+
+// --------------------------------------------------------------------------------------------
+// ⭐ [tut-ticker] RequestPause (X360 0x82382010) -- the pause twin of RequestUnpause above.
+// Samples the CHECKED pause answer before and after ORing the reason bit in; a change there
+// broadcasts action 86, else a change in the RAW flags-nonzero answer broadcasts action 88.
+// The two asserts guard the "we asked to pause and ended up unpaused" inversions. The trailing
+// two s32s are the second bools of the two IsSimPaused probes (both 0 at the TrainingManager
+// call site).
+// ⓘ NAMED PC DEVIATION, pre-existing: nothing in the PC world tick consumes miSimPauseFlags or
+// the pause actions yet, so a training-driven pause latches the flag and broadcasts but freezes
+// nothing. The console pauses the world while a training voiceover plays.
+// --------------------------------------------------------------------------------------------
+void GameStateModule::RequestPause(s32 liPauseReasonFlags,
+                                   GameStateModuleIO::GameActionQueue* lpGameActionQueue,
+                                   s32 liArg3, s32 liArg4)
+{
+    if (liPauseReasonFlags == 0)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("lePauseModule != E_PAUSE_NONE", KAC_GSM_FILE, 6115);
+        CgsDev::Assert::EndAssert();
+    }
+
+    const bool lbCheckedPausedBefore = IsSimPaused(true, liArg4 != 0);
+
+    const s32 liPreviousFlags = miSimPauseFlags;
+    miSimPauseFlags = liPreviousFlags | liPauseReasonFlags;
+
+    const bool lbRawPausedBefore  = (liPreviousFlags != 0);
+    const bool lbCheckedPausedAfter = IsSimPaused(true, liArg3 != 0);
+    const bool lbRawPausedAfter   = (miSimPauseFlags != 0);
+
+    if (lbCheckedPausedAfter != lbCheckedPausedBefore)
+    {
+        if (!lbCheckedPausedAfter)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("Sim unpaused from RequestPause...?", KAC_GSM_FILE, 6138);
+            CgsDev::Assert::EndAssert();
+        }
+        u8 lacPause[1] = { 0 };   // X360 posts the uninitialised 1-byte local verbatim
+        lpGameActionQueue->AddEvent(
+            reinterpret_cast<const CgsModule::Event*>(lacPause), KI_ACTION_PAUSE_STRICT, 1);
+        return;
+    }
+
+    if (lbRawPausedAfter != lbRawPausedBefore)
+    {
+        if (!lbRawPausedAfter)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("Unpaused from RequestPause...?", KAC_GSM_FILE, 6143);
+            CgsDev::Assert::EndAssert();
+        }
+        u8 lacPause[1] = { 0 };
+        lpGameActionQueue->AddEvent(
+            reinterpret_cast<const CgsModule::Event*>(lacPause), KI_ACTION_PAUSE_RAW, 1);
+    }
+}
+
+// --------------------------------------------------------------------------------------------
+// ⭐ [tut-ticker] ShouldAllowTimedTutorialTips (X360 0x82356DB0). True only when the ambient
+// timed-tip machinery may run this frame. The console's five reads, in its own order (any
+// failure returns false):
+//   1. the embedded interface's player car is live -- `(iface.mePlayerActiveRaceCarIndex != -1)
+//      ? iface.mbIsPlayerCarActive : 0`, with the interface's own bounds assert. That expression
+//      IS RCEntityActiveRaceCarOutputInterface::IsPlayerCarActive() (same assert file:line), so
+//      it is reached by name.
+//   2. the byte at this+245952 must be 0. ⚠️ FLAG: that byte has NO writer anywhere in the
+//      30,084-function export set (measured 2026-08-24: the only pseudocode references are the
+//      two readers, this function and RequestTraining's boost arm) and no DWARF name in the
+//      committed slices; a zero-initialised member the console never sets would read 0 for the
+//      whole session, which is what this build's absence of the member also yields. Named as a
+//      gap, not modelled.
+//   3. miSimPauseFlags == 0        (this+232288)
+//   4. mCarSelectManager.mJunkyardId low word == 0 (the console `lwz`s this+183748, the LOW half
+//      of the big-endian CgsID at +183744 -- reproduced as the low-32 test, not a full-ID test)
+//   5. mModeManager.mpCurrentGameMode == 0 (this+7608) -- no game mode running.
+// --------------------------------------------------------------------------------------------
+bool GameStateModule::ShouldAllowTimedTutorialTips()
+{
+    if (!mLastActiveRaceCarInterface.IsPlayerCarActive())
+    {
+        return false;
+    }
+
+    // (read 2 -- the un-homed always-zero byte -- see the banner FLAG.)
+
+    if (miSimPauseFlags != 0)
+    {
+        return false;
+    }
+
+    if ((static_cast<u64>(mCarSelectManager.GetJunkyardId()) & 0xFFFFFFFFull) != 0)
+    {
+        return false;
+    }
+
+    if (mModeManager.GetCurrentGameMode() != nullptr)
+    {
+        return false;
+    }
+
+    return true;
+}
+
+// [tut-ticker] the declare-only ModeManager accessor, bodied (the X360 inlines the embedded
+// member's address; MugshotManager/TrainingManager reach it by name here).
+ModeManager* GameStateModule::GetModeManager()
+{
+    return &mModeManager;
+}
+
+// --------------------------------------------------------------------------------------------
+// ⭐⭐ [tut-ticker] PreWorldUpdateTrainingBringUp -- the extracted TRAINING leg of PreWorldUpdate
+// @0x823A5328 (see the header banner for the console asm). Runs the ModeManager clock leg first
+// (the console ticks the clocks earlier in the same PreWorldUpdate body, @0x823537B8 via
+// ModeManager::PreWorldUpdate), then the console's own pair:
+//     r8 = ShouldAllowTimedTutorialTips();
+//     TrainingManager::Update(mpTrainingManager, <preWorldInput>, actionQueue,
+//                             &mLastActiveRaceCarInterface, lfGameTimestep, r8);
+// The output buffer's action queue is taken under the module's own write bracket, exactly as
+// the sibling PreWorldUpdate legs do.
+// --------------------------------------------------------------------------------------------
+void GameStateModule::PreWorldUpdateTrainingBringUp(f32 lfGameTimestep)
+{
+    if (mpOutputBuffer == 0 || mpTrainingManager == 0)
+    {
+        return;
+    }
+
+    // The console's ModeManager::PreWorldUpdate clock tick (the part of it this build models).
+    mModeManager.PreWorldUpdateClocksBringUp(lfGameTimestep);
+
+    mpOutputBuffer->LockForWrite();
+    GameStateModuleIO::GameActionQueue* lpActionQueue = mpOutputBuffer->GetGameActionQueue();
+    CGS_ASSERT(lpActionQueue != 0, "lpActionQueue != NULL");
+
+    mbIsUpdating = true;   // the module's own accessors assert this (IsOnlineGameMode et al.)
+    const bool lbAllowTimedTips = ShouldAllowTimedTutorialTips();
+    mpTrainingManager->Update(lpActionQueue, &mLastActiveRaceCarInterface,
+                              lfGameTimestep, lbAllowTimedTips);
+    mbIsUpdating = false;
+
+    mpOutputBuffer->UnlockForWrite();
+}
+
+// --------------------------------------------------------------------------------------------
+// ⭐⭐ [tut-ticker] ProcessGameEventsTrainingRequestBringUp -- the extracted CASE-113 arm of
+// ProcessGameEvents @0x823A0A18 (same extraction precedent as the case-111 PropHit arm):
+//     case 113: BrnGameState::TrainingManager::RequestTraining(this + 46640, *payload);
+// The payload's leading s32 is the BrnProgression::ETrainingType the world queued.
+// --------------------------------------------------------------------------------------------
+void GameStateModule::ProcessGameEventsTrainingRequestBringUp(
+        const CgsModule::VariableEventQueue<1536, 16>* lpGameEventQueue)
+{
+    if (lpGameEventQueue == 0 || mpTrainingManager == 0)
+    {
+        return;
+    }
+
+    const CgsModule::Event* lpEvent = 0;
+    s32 liSize = 0;
+    s32 liType = lpGameEventQueue->GetFirstEvent(&lpEvent, &liSize);
+    while (lpEvent != 0)
+    {
+        if (liType == 113)   // E_EVENT_REQUEST_GAME_TRAINING
+        {
+            // (the caller -- PreWorldUpdateStuntBringUp's dispatcher walk -- already holds the
+            //  module's mbIsUpdating bracket, exactly as the console's ProcessGameEvents does.)
+            const s32 liTrainingType = *reinterpret_cast<const s32*>(lpEvent);
+            mpTrainingManager->RequestTraining(
+                static_cast<BrnProgression::ETrainingType>(liTrainingType));
+        }
+
+        const CgsModule::Event* lpNext = 0;
+        liType = lpGameEventQueue->GetNextEvent(lpEvent, &lpNext, &liSize);
+        lpEvent = lpNext;
+    }
 }
 
 // --------------------------------------------------------------------------------------------

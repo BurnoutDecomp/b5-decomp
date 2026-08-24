@@ -3185,6 +3185,17 @@ namespace BrnGame
                     mGameStateModule.PreWorldUpdateStuntBringUp(
                         mGameTimer.GetRate() * mGameTimer.GetScaleCurrent(),
                         false);
+
+                    // ⭐⭐ [tut-ticker] THE TRAINING LEG (X360 PreWorldUpdate @0x823A57C8:
+                    // ShouldAllowTimedTutorialTips -> TrainingManager::Update, near the END of
+                    // the body, after the stunt legs -- the console's own order). Ticks the
+                    // ModeManager free-burn clock first (the console does that earlier in the
+                    // same PreWorldUpdate, via ModeManager::PreWorldUpdate @0x823537B8). Same
+                    // game-timer timestep as the two legs above, same E_MGS_IN_GAME gate.
+                    // This is the arm that turns a queued LEAVES_JUNKYARD request into
+                    // GameAction 148 -> GUI event 537 -> the bottom-of-screen tutorial ticker.
+                    mGameStateModule.PreWorldUpdateTrainingBringUp(
+                        mGameTimer.GetRate() * mGameTimer.GetScaleCurrent());
                 }
 
                 if (leState != BrnGameMainFlowController::E_MGS_INVALID)

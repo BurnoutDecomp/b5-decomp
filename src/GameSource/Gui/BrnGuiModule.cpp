@@ -1763,6 +1763,16 @@ namespace BrnGui
                     break;
             }
 
+            // ⭐ [tut-ticker] THE CUSTOM-RENDERER MANAGER FEED (2026-08-24). On the console
+            // every module-input GUI event reaches BrnGui::CustomRendererManager::RecvEvent
+            // through the view hop (BridgeFromInputToView -> ViewModule::
+            // ProcessIncomingViewEvents' per-event hook @0x8285FCE8 tail). This build feeds
+            // the view queue selectively, so the manager forward sits HERE, on the full
+            // module-input stream -- exactly-once for everything that transits this queue
+            // (537 the tutorial ticker, 64 the GuiCache bind, 258/571 the player image...).
+            // The seat deviation is flagged at the console hook in CgsGuiViewModule.cpp.
+            mCustomRendererManager.RecvEvent(lpEvent, liId);
+
             // The observer-subscription fan-out (EventInterpreterModule::ProcessInEvents).
             RouteEventToFlow(lpEvent, liId, liSize);
 

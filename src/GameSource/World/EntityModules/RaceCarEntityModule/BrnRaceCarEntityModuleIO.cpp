@@ -501,6 +501,26 @@ OutputBuffer_PostPhysics::GetDirectorVehicleInputInterface() const
     return &mDirectorVehicleInputInterface;
 }
 
+// [tut-ticker] X360 0x8279E268 (R, :482, +149312) / 0x822B5CA8 (W, :483) -- the game-event
+// queue accessors. Bodied 2026-08-24: the pair had stayed declaration-only because nothing
+// produced or consumed the queue; RaceCarEntityModule::SendGameEvents (the producer, the
+// training-request drain) and WorldModule::BridgeRaceCarEntityInfoToOutput_PostPhysics (the
+// consumer append into the world game-event queue) now do. Same shape as every sibling:
+// lock tripwire then &member.
+const RaceCarEntityModuleIO::GameEventQueue*
+OutputBuffer_PostPhysics::GetGameEventQueue() const
+{
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+    return &mGameEventQueue;
+}
+
+RaceCarEntityModuleIO::GameEventQueue*
+OutputBuffer_PostPhysics::GetGameEventQueue()
+{
+    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+    return &mGameEventQueue;
+}
+
 OutputBuffer_PostPhysics::DirectorVehicleInputInterface*
 OutputBuffer_PostPhysics::GetDirectorVehicleInputInterface()
 {

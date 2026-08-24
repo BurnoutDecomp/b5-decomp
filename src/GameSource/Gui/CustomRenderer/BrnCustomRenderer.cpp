@@ -50,6 +50,7 @@
 #include "GameSource/Gui/BrnCustomRendererManager.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h" // CGS_ASSERT
+#include "GameShared/GameClasses/Development/Log/CgsLog.h" // CgsDev::Log::gpDebugPrint (the [tut-ticker] diag)
 
 // CgsGui::SetGuiCamera @0x82847658 -- selects the active GUI camera (0 = full-screen-map,
 // 1 = normal HUD). It used to be re-declared locally here as an "uncommitted, out of scope"
@@ -331,6 +332,21 @@ void CustomRendererManager::RecvEvent(const CgsModule::Event* lpEvent, s32 liEve
         case E_EVT_535:
         case E_EVT_536:
         case E_EVT_537:
+            // [DIAG] NOT IN THE X360 BINARY -- the [tut-ticker] RECEPTION rung: proves the
+            // tutorial-ticker event crossed the whole producer->bridge->GUI chain and reached
+            // this dispatch (event payload +0x810 is the string count). First-N latched.
+            {
+                static s32 siTickerDiagLeft = 8;
+                if (liEventType == E_EVT_537 &&
+                    siTickerDiagLeft > 0 && CgsDev::Log::gpDebugPrint != 0)
+                {
+                    --siTickerDiagLeft;
+                    *CgsDev::Log::gpDebugPrint
+                        << "[tut-ticker] RecvEvent 537 reached CustomRendererManager"
+                        << " (blackBar=" << (lpBlackBar != 0)
+                        << " inGameMsg=" << (lpInGameMessage != 0) << ")\n";
+                }
+            }
             RouteEvent(lpBlackBar,      lpEvent, liEventType);   // v4[28674]
             RouteEvent(lpInGameMessage, lpEvent, liEventType);   // v4[30780]
             break;

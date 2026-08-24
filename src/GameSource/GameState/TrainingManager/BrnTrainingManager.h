@@ -60,17 +60,36 @@ enum ETrainingState
 class TrainingManager
 {
 public:
-    // ---- Lifecycle / wiring (declared here; bodied with the full TU's other functions) ----
-    // X360 Construct stores the two manager back-pointers and calls ResetStateTimer.
+    // ---- Lifecycle / wiring ---------------------------------------------------------------
+    // ⭐ [tut-ticker] BODIED 2026-08-24 from the PS3 DecFIGS export (0x241DE0; the X360 inlines
+    // it into GameStateModule::Construct's neighbourhood -- no X360 export exists). Seeds every
+    // member: state INACTIVE, type -1, tips ENABLED, boost-clock -600, everything else 0/false.
     void Construct(BrnProgression::ProgressionManager* lpProgressionManager,
                    GameStateModule* lpGameStateModule);
 
-    // ---- The 9 functions reconstructed by this TU ----------------------------------------
+    // ⭐⭐ [tut-ticker] X360 0x823937D0 -- the training FSM tick. Sole console caller:
+    // GameStateModule::PreWorldUpdate @0x823A57C8. Console signature (PS3 DWARF):
+    //     Update(const GameStateModuleIO::PreWorldInputBuffer*, BaseGameActionQueue<13312>*,
+    //            RCEntityActiveRaceCarOutputInterface*, f32, bool)
+    // [FLAG PC signature deviation] the PreWorldInputBuffer parameter is DROPPED on PC: no PC
+    // code creates that buffer, and the console's only use of it here is
+    // GetControllerToGameStateInterface(..)->user index -> XUserGetSigninState, feeding
+    // mbIsOnlinePossible. The PC body calls the stubbed XUserGetSigninState(0) (returns 0 ==
+    // signed out) with the deviation named at the read.
+    void Update(GameStateModuleIO::GameActionQueue* lpGameActionQueue,
+                const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface*
+                    lpcActiveRaceCarInterface,
+                f32 lfGameTimestep, bool lbAllowTimedTips);
+
+    // ---- The reconstructed function set ---------------------------------------------------
 
     // X360 0x82365B20. Asks for training tip leTrainingType to be played; runs the eligibility
     // gauntlet (already-active?, picture-paradise?, timed-played threshold, IsTipAllowedInGameMode,
     // per-type "already seen" / "boost full" / "got air before" gates) and, if it passes, latches
-    // meCurrentTrainingType + meTrainingState.
+    // meCurrentTrainingType + meTrainingState. ⭐ [tut-ticker] BODIED 2026-08-24 -- the two deep
+    // reads that used to park it are IDENTIFIED (gsm+42300/42304 == the ModeManager clocks,
+    // profile+117948 == meCurrentCarType, iface+10328/10332/10336 == the interface's named
+    // trio); see the body.
     void RequestTraining(BrnProgression::ETrainingType leTrainingType);
 
     // X360 0x82359010. Latches the "in Picture Paradise" flag (suppresses tips while paused there).
@@ -117,12 +136,22 @@ public:
     // Latch a pending tip request (X360 sets *(this+0)=1, *(this+4)=type).
     void RequestTip(BrnProgression::ETrainingType leType);
 
+    // [tut-ticker] X360-inlined read of mbInPictureParadise (+0x14): ModeManager::PreWorldUpdate
+    // @0x823537B8 reads gsm+46660 (== TrainingManager+20) to freeze the free-burn clock while
+    // Picture Paradise is up. De-inlined; no symbol exists in the image.
+    bool IsInPictureParadise() const { return mbInPictureParadise; }
+
     // X360 0x823590A0. True when a tip of this type is allowed in the current game mode. PRE-EXISTING
     // (was private); surfaced public additively so the DriveThruManager TU's TryPlayTrainingTip guard
     // can call it cross-class. Access-only change -- no layout/behaviour effect.
+    // ⭐ [tut-ticker] BODIED 2026-08-24 (see the body: mode-type switch + engine-running gates).
     bool IsTipAllowedInGameMode(BrnProgression::ETrainingType leTrainingType) const;
 
 private:
+    // X360 0x82365FC8. Pick the next unseen Atomika free-burn VO tip (ids 128+miNext..); called
+    // by Update's idle arm once the player has free-burned long enough. [tut-ticker] bodied.
+    void PlayNewAtomikaFreeburnVO();
+
     // X360 0x823593C0. True when this training type should pause the world (never in online modes;
     // otherwise a fixed set of "intro / mode-explanation" tip types pause, the rest do not).
     bool DoesTrainingPauseGame(BrnProgression::ETrainingType leTrainingType);

@@ -37,9 +37,50 @@
 #include "GameShared/GameClasses/Gui/CgsGuiModuleIO.h"             // InputBuffer::GetGuiEvents()
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"         // CgsDev::Log::gpDebugPrint
 #include <stdlib.h>                                                // getenv (the [UI-gate] diag guard)
+#include <cstring>                                                 // memset/strncpy (the 537 ticker record)
 
 namespace BrnGame
 {
+namespace
+{
+    // =========================================================================
+    // ⭐⭐ [tut-ticker] the on-queue record of GUI event 537, TU-LOCAL (the exact precedent:
+    // BrnCarSelectLivery_Components.cpp's GuiTickerCustomMessagePayload -- the canonical
+    // BrnGui::GuiEventTickerCustomMessage home is in BrnGuiDemangledEventTypes.h, whose
+    // opaque 12B-header shape does NOT match the wire: the X360
+    // AddGuiEvent<GuiEventTickerCustomMessage> @0x823D1D08 posts `AddEvent(q, a2, 537, 2072)`
+    // with a2 = the PAYLOAD BASE (case 148 hands it `addi r4, r1, var_2680`), i.e. the queued
+    // 2072 bytes open with maiStringTypes, not with a GuiEvent header).
+    // Layout recovered from GuiEventTickerCustomMessage::AddString @0x823A6940 (count at
+    // +0x810 == a1+2064, types stride 4 at +0, strings stride 512 at +0x10; its three asserts
+    // bake BrnGuiEventTypeDefs.h:390/391/392).
+    // =========================================================================
+    struct TickerCustomMessageWire537
+    {
+        s32  maiStringTypes[4];                 // +0x000
+        char maacStrings[4][512];               // +0x010
+        s8   mi8NumStrings;                     // +0x810
+        u8   maFlags[4];                        // +0x811
+        u8   maPad815[3];                       // +0x815
+
+        s32 GetEventType() const { return 537; }
+
+        // X360 0x823A6940, transcribed (the console's own bounds asserts, then
+        // strncpy(base + 0x10 + count*512, str, 512); types[count] = type; ++count).
+        void AddString(const char* lpString, s32 liType)
+        {
+            CGS_ASSERT(mi8NumStrings >= 0, "mi8NumStrings >= 0");                        // h:390
+            CGS_ASSERT(mi8NumStrings < 4, "mi8NumStrings < KI_MAX_NUM_STRINGS");         // h:391
+            CGS_ASSERT(lpString != 0, "lpString");                                       // h:392
+            std::strncpy(maacStrings[mi8NumStrings], lpString, 512);
+            maiStringTypes[mi8NumStrings] = liType;
+            ++mi8NumStrings;
+        }
+    };
+    static_assert(sizeof(TickerCustomMessageWire537) == 2072,
+                  "X360 AddGuiEvent<GuiEventTickerCustomMessage> posts 2072 bytes (id 537)");
+}
+
     // =========================================================================
     // ⭐ [gateui] BrnGameModule::MapStuntEnumsFromGameplayToGui  @ X360 0x823AA4A8
     //
@@ -86,8 +127,9 @@ namespace BrnGame
     // Sole caller: BridgeGameStateToGui @0x823EE880 (call site @0x823EF22C).
     //
     // ⚠️⚠️ PARTIAL RECONSTRUCTION, AND IT IS NAMED, NOT HIDDEN. The console body is a
-    // ~700-case jump table (`jpt_823EA1F0`) over every game action in the build. THREE arms are
-    // reproduced here -- 58 / 59 / 60, the stunt-collectible family this wave needs -- and
+    // ~700-case jump table (`jpt_823EA1F0`) over every game action in the build. FOUR arms are
+    // reproduced here -- 58 / 59 / 60, the stunt-collectible family, plus 148, the training
+    // ticker ([tut-ticker] 2026-08-24) -- and
     // every other action falls through the default with NO event posted. That is a real
     // behavioural gap for the other ~700 actions, not a silent one: each of them is currently
     // unreachable anyway (this TU has never been mounted, and BridgeGameStateToGui @0x823EE880,
@@ -280,6 +322,48 @@ namespace BrnGame
                     *CgsDev::Log::gpDebugPrint
                         << "[UI-gate] gui-event id=" << lEvent.GetEventType()
                         << " type=" << static_cast<s32>(lEvent.meStuntElementType) << "\n";
+                }
+                break;
+            }
+
+            // ---- 148  the TRAINING TICKER (4 bytes: the BrnProgression::ETrainingType) ----
+            // ⭐⭐ [tut-ticker] @0x823EA8C4..0x823EA930, instruction for instruction:
+            //   lwz r3, 0(r31); cmpwi cr6, r3, 0x4D; bge default    -- type >= 77 -> drop
+            //   bl ConvertTrainingTypeToStringId (r3 = the type -- Hex-Rays DROPPED this arg)
+            //   beq default on NULL                                 -- no ticker string -> drop
+            //   build the 2072-byte record: memset(strings, 0, 0x800); std 0 -> types[0..3];
+            //     count(+0x810) = 0; flags(+0x811..814) = {0, 1, 1, 0}   (r19 == 0, r14 == 1)
+            //   AddString(record, id, 2); AddGuiEvent<GuiEventTickerCustomMessage> -> id 537
+            // Producer: TrainingManager::SendTrainingTickerMessage (GameAction 148); consumer:
+            // CustomRendererManager::RecvEvent case 537 -> BlackBar + InGameMessage renderers.
+            case 148:
+            {
+                const s32 liTrainingType = *reinterpret_cast<const s32*>(lpAction);
+                if (liTrainingType < 77)
+                {
+                    const char* lpcStringId = ConvertTrainingTypeToStringId(
+                        static_cast<BrnProgression::ETrainingType>(liTrainingType));
+                    if (lpcStringId != 0)
+                    {
+                        TickerCustomMessageWire537 lEvent;
+                        std::memset(&lEvent, 0, sizeof(lEvent));
+                        lEvent.maFlags[1] = 1;   // +0x812 <- r14
+                        lEvent.maFlags[2] = 1;   // +0x813 <- r14
+                        lEvent.AddString(lpcStringId, 2);
+                        PushGuiEvent(lEvent, lpGuiInput);
+
+                        // [DIAG] NOT IN THE X360 BINARY -- the [tut-ticker] bridge rung
+                        // (same first-N latch idiom as the [UI-gate] ladder, unconditional
+                        // because this fires a handful of times per session at most).
+                        static s32 siTickerDiagLeft = 8;
+                        if (siTickerDiagLeft > 0 && CgsDev::Log::gpDebugPrint != 0)
+                        {
+                            --siTickerDiagLeft;
+                            *CgsDev::Log::gpDebugPrint
+                                << "[tut-ticker] action 148 type=" << liTrainingType
+                                << " -> gui 537 id='" << lpcStringId << "'\n";
+                        }
+                    }
                 }
                 break;
             }

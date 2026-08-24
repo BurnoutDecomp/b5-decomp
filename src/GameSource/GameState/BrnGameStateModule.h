@@ -255,6 +255,46 @@ public:
     // table exactly.
     void ProcessGameEventsPropHitBringUp(const CgsModule::VariableEventQueue<1536, 16>* lpGameEventQueue);
 
+    // ⭐⭐ [tut-ticker] X360 ProcessGameEvents @0x823A0A18, THE CASE-113 ARM -- "a world system
+    // asks for a training tip". Same extraction precedent as the case-111 arm above. The console
+    // arm is one call: `BrnGameState::TrainingManager::RequestTraining(this + 46640, *payload)`
+    // with the payload's leading s32 being the BrnProgression::ETrainingType. Producers of game
+    // event 113 (all world-side, each drains through RaceCarEntityModule::SendGameEvents or its
+    // siblings): the junkyard-exit request (action 149 -> HandleGameActions case 149), the
+    // car-type tip (action 77 -> HandleCarTypeTrainingMessage), AI buzz-by (16), roll/spin (49),
+    // boost-strategy (50).
+    void ProcessGameEventsTrainingRequestBringUp(
+        const CgsModule::VariableEventQueue<1536, 16>* lpGameEventQueue);
+
+    // ⭐⭐ [tut-ticker] X360 PreWorldUpdate @0x823A5328, THE TRAINING LEG (@0x823A57A4..0x823A57C8):
+    //     bl ShouldAllowTimedTutorialTips     ; r3 = this
+    //     mr r8, r3                           ; -> Update's trailing bool
+    //     TrainingManager::Update(this+46640 /*r3*/, lpPreWorldInput /*r4*/,
+    //                             actionQueue /*r5 == r16*/, this+235488 /*r6, the embedded
+    //                             mLastActiveRaceCarInterface*/, f1 = the game timestep, r8)
+    // [FLAG PC bring-up] the PreWorldInputBuffer argument has no PC producer (same deviation the
+    // sibling legs carry); Update's one console read of it (the controller interface's user index
+    // for XUserGetSigninState) is taken with user 0 against the PC stub, which reports signed-out
+    // either way. The extraction is the deviation; the call, its arguments and its position after
+    // the stunt leg are the console's.
+    void PreWorldUpdateTrainingBringUp(f32 lfGameTimestep);
+
+    // ⭐ [tut-ticker] X360 0x82356DB0 -- ShouldAllowTimedTutorialTips. True only when the player
+    // car is live and nothing suppresses ambient tips. Console reads, in order:
+    //   * the embedded interface (this+235488): mePlayerActiveRaceCarIndex != -1 (with the
+    //     interface's own bounds assert) and mbIsPlayerCarActive,
+    //   * a byte at this+245952 -- see the body FLAG (no writer exists in the export set),
+    //   * miSimPauseFlags (this+232288) == 0,
+    //   * mCarSelectManager.mJunkyardId low word (lwz at this+183748) == 0,
+    //   * mModeManager.mpCurrentGameMode (this+7608) == 0.
+    bool ShouldAllowTimedTutorialTips();
+
+    // [tut-ticker] the heap TrainingManager (see mpTrainingManager's FLAG at the member). The
+    // console embeds it by value at this+46640; ModeManager::PreWorldUpdateClocksBringUp and the
+    // two extracted arms above reach it through this named accessor.
+    TrainingManager*       GetTrainingManager()       { return mpTrainingManager; }
+    const TrainingManager* GetTrainingManager() const { return mpTrainingManager; }
+
     // ⭐ X360 0x8236BAC8. The nearest junkyard's CgsID to lPosition -- the single input that turns
     // the loaded TriggerData into "which junkyard do I enter". Both start-of-game entries need it:
     // OnProfileLoaded @0x82397310 feeds it the Profile's saved position, SendSetupPlayerCarEvent
@@ -509,8 +549,11 @@ public:
     // (0x823889C8) calls it as RequestPause(this, 64, lpGameActionQueue, 0, 0) to pause the world while a
     // training voiceover plays. The leading s32 is the pause-reason bitflag (the X360 immediate 0x40 ==
     // "training" reason); the GameActionQueue* is the OutputBuffer's action queue the pause request is
-    // broadcast through; the trailing two s32s are 0 at this call site. Body + the real pause-stack
-    // wiring land with the GameStateModule TU. FLAG: declare-only additive grow on the minimal slice.
+    // broadcast through; the trailing two s32s are 0 at this call site.
+    // ⭐ [tut-ticker] BODIED 2026-08-24 (X360 0x82382010) -- see the .cpp: OR the reason bit into
+    // miSimPauseFlags and, when the strict/loose IsSimPaused answer actually changed, broadcast
+    // the 1-byte pause action (86 on the strict transition, 88 on the loose one). The two trailing
+    // s32s are the bools forwarded to the two IsSimPaused probes.
     void RequestPause(s32 liPauseReasonFlags,
                       GameStateModuleIO::GameActionQueue* lpGameActionQueue,
                       s32 liArg3, s32 liArg4);
@@ -537,12 +580,13 @@ public:
     const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface*
         GetLastActiveRaceCarInterface() const;
 
-    // ADDITIVE GROW (declare-only) for the BrnTrainingManager TU. FLAG: the X360 reads an f32 at
-    // this+42300 (0xA53C) in TrainingManager::RequestTraining / IsTipAllowedInGameMode and compares it
-    // against fixed thresholds (5.0 == KF_MAX_TIMED_PLAYED_FOR_NOOB_TRAINING_TIPS, 30.0 for the
-    // DISCOVERS_EVENT / boost gates). Semantically the elapsed time the player has spent in the current
-    // timed game mode. Body + real member land with the GameStateModule TU.
-    f32 GetTimePlayedInTimedMode() const;
+    // ⭐ [tut-ticker] RETIRED 2026-08-24: `GetTimePlayedInTimedMode` (declare-only, no callers).
+    // The f32 the X360 reads at this+42300 (0xA53C) is IDENTIFIED: it is
+    // mModeManager.mfTimeInFreeBurn (ModeManager +0x951C; DWARF BrnModeManager.h:1025), and the
+    // sibling read at +42304 is mfTimeInMode (+0x9520, DWARF :1026) -- proven from the writers
+    // (ModeManager::PreWorldUpdate @0x823537B8 accumulate/reset conditions; see the accessor
+    // banner in BrnModeManager.h). Callers reach them as
+    // GetModeManager()->GetTimeInFreeBurn() / GetTimeInMode().
 
     // ADDITIVE GROW (declare-only) for the BrnDriveThruManager TU (X360 0x82382460).
     // UnlockCarChallengeForCar calls it after flipping a newly-found event so the module can check
