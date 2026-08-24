@@ -43,6 +43,7 @@
 #include "GameSource/World/BrnEntityTypes.h"              // BrnWorld::E_ENTITYTYPE_RACECAR (the Attach seed)
 #include "SharedClasses/World/BrnCollisionTag.h"          // BrnWorld::KU_COLLISION_FLAG_FATAL (IsWrecked)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h" // gpDebugPrint / gxMessageFilterFlags
+#include <stdlib.h>   // getenv (the [wheel-diag] gate)
 #include "GameShared/GameClasses/System/Timer/CgsFrameInterpolation.h" // ⚠️ FLAG PC QoL: BlendTransform (the render-pose interpolator)
 
 #include "GameSource/Physics/DeformationManager/SharedIO/BrnDeformationState.h" // DeformationState / CarState (UpdateDeformationState, 2026-08-24)
@@ -1391,6 +1392,28 @@ void ActiveRaceCar::UpdateWheelPhysicsState(const void* lpPhysicsWheelData)
 
     const PhysicsWheelSnapshot* lpSnapshot =
         static_cast<const PhysicsWheelSnapshot*>(lpPhysicsWheelData);
+
+    // [DIAG wheel-blank regression, 2026-08-25] NOT IN THE X360 BINARY. Env-gated
+    // (BRN_WHEEL_DIAG=1) witness of what the deformation L3 slot DELIVERS before it
+    // overwrites the vehicle-stats wheel pose: one line per call every 60th call.
+    // DELETE-WHEN the wheel regression is pinned and fixed.
+    {
+        static const bool sbWheelDiag = (getenv("BRN_WHEEL_DIAG") != 0);
+        static s32 siL3Frame = 0;
+        if (sbWheelDiag && ((siL3Frame++ % 60) == 0) && CgsDev::Log::gpDebugPrint != 0)
+        {
+            *CgsDev::Log::gpDebugPrint
+                << "[wheel-diag] L3 f" << siL3Frame - 1
+                << " w0 T (" << lpSnapshot->maWheels[0].mTransform.wAxis.x
+                << ", " << lpSnapshot->maWheels[0].mTransform.wAxis.y
+                << ", " << lpSnapshot->maWheels[0].mTransform.wAxis.z
+                << ") row0x " << lpSnapshot->maWheels[0].mTransform.xAxis.x
+                << " onGround (" << static_cast<s32>(lpSnapshot->mau8OnGround[0])
+                << "," << static_cast<s32>(lpSnapshot->mau8OnGround[1])
+                << "," << static_cast<s32>(lpSnapshot->mau8OnGround[2])
+                << "," << static_cast<s32>(lpSnapshot->mau8OnGround[3]) << ")\n";
+        }
+    }
 
     const u32 KU_ROAD_WHEEL_COUNT = 4;
     for (u32 luWheel = 0; luWheel < KU_ROAD_WHEEL_COUNT; ++luWheel)
