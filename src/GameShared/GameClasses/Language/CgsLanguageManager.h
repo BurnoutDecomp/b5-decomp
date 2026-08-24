@@ -329,6 +329,14 @@ namespace CgsLanguage
         // still returns the null pointer, matching the X360 body exactly).
         const char* GetDefaultFont() const;
 
+        // [PC bring-up accessor, not an X360 symbol] Non-asserting probe for whether
+        // Construct()/PrepareDefaultFont() has loaded a default font name yet.
+        // PrepareDefaultFont is still unreconstructed on PC, so callers that would
+        // consult GetDefaultFont() opportunistically (the InGameMessageRenderer's
+        // load-notification arm) gate on this instead of firing the :443 assert on
+        // every early font load. Becomes always-true once PrepareDefaultFont lands.
+        bool HasDefaultFont() const { return mpcDefaultFontName != 0; }
+
         // X360 0x828608D0. Stashes the language allocator (mpLanguageAllocator, used by every
         // Add/RemoveString* body's Malloc/Free) and registers the embedded debug component with
         // the debug menu. Body links from this TU.

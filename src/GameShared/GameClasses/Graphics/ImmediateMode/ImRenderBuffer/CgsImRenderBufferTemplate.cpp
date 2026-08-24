@@ -658,6 +658,24 @@ namespace CgsGraphics
     template <typename V>
     void ImRenderBuffer<V>::SetBufferFullRewindToLastEndRender()
     {
+        // [diag] NOT IN THE X360 BINARY -- the [tut-ticker] OVERFLOW rung (first 8):
+        // a graceful rewind is a SILENT drop of every later append in the frame (the
+        // classic invisible-ticker mechanism), so make the first few loudly visible.
+        {
+            static int siOverflowDiagLeft = 8;
+            if (siOverflowDiagLeft > 0)
+            {
+                --siOverflowDiagLeft;
+                char lacDiag[160];
+                std::snprintf(lacDiag, sizeof(lacDiag),
+                              "[tut-ticker] ImRenderBuffer FULL: rewind cmdPos %u -> %u "
+                              "(cmdCap=%u vtxCap=%u vtxPos=%u)\n",
+                              mpWriteBuffer->muCommandBufferWritePos, muLastEndRenderPos,
+                              muCommandBufferSize, muVertexBufferSize,
+                              mpWriteBuffer->muVertexBufferWritePos);
+                CgsDev::Log::WriteToLog(lacDiag);
+            }
+        }
         const u32 luRewindTo = muLastEndRenderPos;                            // this+60
         mbBufferIsFull = true;                                                // this+64
         mpWriteBuffer->muCommandBufferWritePos = luRewindTo;                  // (*this+32)+8
@@ -1273,6 +1291,41 @@ namespace CgsGraphics
                     {
                         saBatch[luIndex].u2 = 0.0f;
                         saBatch[luIndex].v2 = 0.0f;
+                    }
+                }
+
+                // [diag] NOT IN THE X360 BINARY -- the [tut-ticker] DISPATCH rung (first 12):
+                // any batch whose folded top edge lands in the ticker band (logical y 600..680
+                // scaled to the back buffer) proves the ticker's commands reach this walk and
+                // reports the folded pixel geometry + colour they arrive with.
+                {
+                    // Gate on the SCREEN-SPACE IDENTITY transform -- only the ticker's
+                    // RenderComponent publishes it, so the rung cannot be eaten by the
+                    // boot-time Apt batches that share the band. Two latches so the
+                    // per-frame n=4 background quad cannot starve the glyph strips,
+                    // and the RAW first-vertex colour word is printed next to the
+                    // folded one (lane-order truth).
+                    static int siTickerQuadLeft  = 8;
+                    static int siTickerGlyphLeft = 8;
+                    const bool lbIdentity =
+                        lbHaveTransform && lfRightX == 1.0f && lfUpY == 1.0f &&
+                        lfOriginX == 0.0f && lfOriginY == 0.0f;
+                    int* lpiLeft = 0;
+                    if (lbIdentity && luCount >= 3u)
+                        lpiLeft = (luCount <= 6u) ? &siTickerQuadLeft : &siTickerGlyphLeft;
+                    if (lpiLeft != 0 && *lpiLeft > 0)
+                    {
+                        --*lpiLeft;
+                        const u32 luRaw = *reinterpret_cast<const u32*>(
+                            &reinterpret_cast<const Basic2dColouredTexturedVertex*>(
+                                lpVertices)[0].mv4Colour);
+                        char lacDiag[200];
+                        std::snprintf(lacDiag, sizeof(lacDiag),
+                                      "[tut-ticker] dispatch batch n=%u xy0=(%.1f,%.1f) "
+                                      "raw=%08X folded=%08X tex=%p\n",
+                                      luCount, saBatch[0].x, saBatch[0].y,
+                                      luRaw, saBatch[0].color, lpTraceBoundTexture);
+                        CgsDev::Log::WriteToLog(lacDiag);
                     }
                 }
 

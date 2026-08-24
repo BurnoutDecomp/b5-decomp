@@ -377,7 +377,10 @@ namespace
     // storage). This does NOT touch the ImRenderBuffer/Im2d/D3D9 leaf -- it only supplies the
     // buffer's backing memory (the host owns the render-buffer's storage, exactly as the console
     // does through its own render-heap). 2 MB covers the 4 streams with headroom.
-    const u32 KU_APT_RB_POOL_BYTES = 2u * 1024u * 1024u;
+    // 4 MB (was 2 MB): the 128 KB carves were sized for the boot/title movies; the
+    // IN-GAME HUD walk plus the layer-2 custom renderers (the tutorial ticker's glyph
+    // strips) need larger streams -- see the Prepare call's sizing note.
+    const u32 KU_APT_RB_POOL_BYTES = 4u * 1024u * 1024u;
     u8  s_aAptRenderBufferPool[KU_APT_RB_POOL_BYTES];
 
     struct AptRenderBufferAllocator : public rw::IResourceAllocator
@@ -648,17 +651,21 @@ namespace BrnGui
 
             // Back the render buffer with the dedicated static bump pool (the RW DEFAULT
             // allocator's DoAllocate returns null at this bring-up point -- see the allocator
-            // note above). 128 KB command stream + 128 KB vertex stream per buffer (x2 = 4
-            // carves) -- generous for a single boot/title movie's per-frame geometry, well
-            // within the 2 MB pool. failGracefully=true so an overflow rewinds instead of
-            // asserting.
+            // note above). 512 KB command stream + 512 KB vertex stream per buffer (x2 = 4
+            // carves, 2 MB of the 4 MB pool). GROWN 2026-08-24 from 128 KB: that sizing was
+            // "generous for a single boot/title movie", but the IN-GAME HUD walk plus the
+            // layer-2 custom renderers (the tutorial ticker's glyph strips) overflowed it,
+            // and failGracefully's rewind DROPS every later append in the frame -- an
+            // invisible ticker with every diagnostic green (see the [tut-ticker] OVERFLOW
+            // rung in CgsImRenderBufferTemplate.cpp). failGracefully=true so an overflow
+            // still rewinds instead of asserting.
             rw::IResourceAllocator* lpAllocator = &s_AptRenderBufferAllocator;
             const bool lbOk = s_AptRenderBuffer.mCommandBuffer.Prepare(
-                128u * 1024u, 128u * 1024u, lpAllocator, /*failGracefully*/ true);
+                512u * 1024u, 512u * 1024u, lpAllocator, /*failGracefully*/ true);
             s_bRenderBufferReady = lbOk;
             char lacp[160];
             std::snprintf(lacp, sizeof(lacp),
-                "[AptRT] step3 renderbuffer: Construct+Prepare %s (static pool, 128KB cmd / 128KB vtx, used=%u).\n",
+                "[AptRT] step3 renderbuffer: Construct+Prepare %s (static pool, 512KB cmd / 512KB vtx, used=%u).\n",
                 lbOk ? "ok" : "FAILED", s_AptRenderBufferAllocator.muUsed);
             CgsDev::Log::WriteToLog(lacp);
         }

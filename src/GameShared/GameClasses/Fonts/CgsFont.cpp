@@ -124,6 +124,64 @@ namespace CgsResource
         return (lpFontChar->mStart.mX + lpFontChar->mDimensionsUV.mX + lfWidth) * mScaleUV.mX;
     }
 
+    // [tut-ticker] Faithful port of X360 0x828350F8 -- GetStringWidth's whole-string sibling:
+    // the same walk and '^' colour-code machine, but '\n' does not end the line -- it
+    // contributes the SPACE glyph's advance (the console's `GetFontChar(" ")->mfAdvance` arm)
+    // and the glyph cursor is left unchanged. Used by the in-game ticker to measure each
+    // queued line (newlines render as gaps in the scrolling ribbon).
+    float Font::GetStringWidthIgnoringNewlines(const CgsUtf8* lpUtf8String) const
+    {
+        CGS_ASSERT(lpUtf8String != 0, "Invalid string pointer");   // CgsFont.cpp:128
+        if (lpUtf8String == 0 || *lpUtf8String == 0)
+            return 0.0f;
+
+        const FontChar* lpFontChar = GetFontChar(lpUtf8String);
+        const CgsUtf8*  lpCursor   = CgsUnicode::IncrementUtf8Pointer(lpUtf8String);
+        float           lfWidth    = lpFontChar->mStart.mX;
+        bool            lbColourActive = false;
+
+        while (*lpCursor != 0)
+        {
+            const u8 lu8Char = *lpCursor;
+
+            if (lu8Char == '^')
+            {
+                if (lpCursor[1] == '^' && lbColourActive)
+                {
+                    lbColourActive = false;
+                    lpCursor = CgsUnicode::IncrementUtf8Pointer(lpCursor);
+                    lpCursor = CgsUnicode::IncrementUtf8Pointer(lpCursor);
+                    continue;
+                }
+                const u8 lu8Next = lpCursor[1];
+                if (lu8Next >= '0' && lu8Next <= '9')
+                {
+                    const CgsUtf8* lpScan = CgsUnicode::IncrementUtf8Pointer(lpCursor);
+                    while (*lpScan != 0 && *lpScan != '^')
+                        lpScan = CgsUnicode::IncrementUtf8Pointer(lpScan);
+                    lpCursor = CgsUnicode::IncrementUtf8Pointer(lpScan);
+                    lbColourActive = true;
+                    continue;
+                }
+                // a literal '^' -- treated as a normal glyph below.
+            }
+
+            if (lu8Char == '\n')
+            {
+                // Newline: add a space's advance; the last-glyph cursor is unchanged.
+                lfWidth += GetFontChar(reinterpret_cast<const CgsUtf8*>(" "))->mfAdvance;
+            }
+            else if (lu8Char != '\r')
+            {
+                lfWidth += lpFontChar->mfAdvance;
+                lpFontChar = GetFontChar(lpCursor);
+            }
+            lpCursor = CgsUnicode::IncrementUtf8Pointer(lpCursor);
+        }
+
+        return (lpFontChar->mStart.mX + lpFontChar->mDimensionsUV.mX + lfWidth) * mScaleUV.mX;
+    }
+
     // Faithful port of X360 0x828352F0. Finds the [start,end) of the next line of lpString that fits
     // lfMaxWidthInEm and returns that line's rendered width (in em). Skips leading whitespace, ends a
     // line on '\n'/'\r', and -- when lbWordWrap -- wraps at the last space (or hard-breaks an over-long
