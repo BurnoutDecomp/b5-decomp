@@ -47,13 +47,12 @@
 //   * PotentialContact (CgsSceneManager) is forward-declared; ValidateAndAddContact reads its two
 //     contact points + normal from its leading Vector4 lanes (offsets +0 / +16 / +32) through a view.
 //
-// FLAGGED-0 PLACEHOLDERS (rodata NOT in the per-function exports -- NEVER fabricated):
-//   * the per-direction HIT-direction table (&unk_82FB9680, the DWARF KV_POS_X_HIT_DIRECTION /
-//     KV_NEG_X_HIT_DIRECTION pair, indexed 16*direction) and
-//   * the absorption-scale row table (&unk_82FB9560, indexed 16*absorptionSet)
-//   are carried as correctly-shaped honest zeros. The indexing shape/stride is exact; the numeric
-//   output stays inert until the real XEX rodata is recovered. KVF_60_HTZ / KVF_VELOCITY_FACTOR
-//   (the DWARF file-static VecFloats) are likewise FLAGGED placeholders.
+// RODATA STATUS (updated 2026-08-24, deform-land wave): the impulse-direction table reads
+// KA_IMPULSE_DIRECTIONS (BrnCollidableBody.cpp, recovered walls leg 4); the compression-limit
+// factor table (&unk_82FB9560) and the two Prepare hit-direction rows (KV_POS_X/NEG_X) carry
+// their recovered static-init values below; KVF_60_HTZ is real (60.0). The old
+// KsaHitDirection / KVF_VELOCITY_FACTOR placeholders are DELETED (the latter was an invention
+// of the pre-2026-08-24 RecievePassedOnImpulse paraphrase).
 //
 // ASSERTS are non-gating tripwires (BeginAssert/FireAssert/EndAssert == one CGS_ASSERT): in the asm
 // execution continues past a failed assert, so the C++ falls through identically.
@@ -82,15 +81,12 @@ namespace Deformation
 		// 16*direction => one 16-byte vec4 per ENextSensorDirection (the DWARF KV_*_HIT_DIRECTION
 		// pair). Six signed body axes. Honest zeros (NEVER fabricated); the indexing shape is exact.
 		// ⚠️⚠️ 2026-08-15 (walls leg 8): THIS TABLE IS ALREADY REAL IN THE TREE UNDER ANOTHER NAME.
-		// &unk_82FB9680 is `KA_IMPULSE_DIRECTIONS` (BrnCollidableBody.cpp, recovered walls leg 4) --
-		// ApplyLocalImpulse below reads that table directly, exactly as the X360 does (its
-		// `lvx128 v122, [&unk_82FB9680 + 16*dir]` is CollidableBody::GetDirectionVector inlined).
-		// This duplicate is left zeroed ONLY because promoting it would silently change
-		// RecievePassedOnImpulse, whose other factor (KVF_VELOCITY_FACTOR) is still unrecovered --
-		// i.e. that function stays a silent zero and it is NOT this leg's to un-silence. ⭐ NEXT LEG:
-		// recover KVF_VELOCITY_FACTOR, then retire this placeholder onto KA_IMPULSE_DIRECTIONS and
-		// KsaAbsorptionScale in one measured step. Do not promote one factor without the other.
-		static const VecFloat KsaHitDirection[6] = {};
+		// ⭐ RETIRED 2026-08-24 (deform-land wave, P3): the zeroed KsaHitDirection duplicate is
+		// GONE -- RecievePassedOnImpulse reads the recovered KA_IMPULSE_DIRECTIONS table
+		// (unk_82FB9680, BrnCollidableBody.cpp) directly, exactly as the X360 does. The "other
+		// factor KVF_VELOCITY_FACTOR" that the old note said must land with it turned out to be
+		// an INVENTION of the previous paraphrase: the asm's factors are the params' own
+		// mvfInverseInertia (+0x60) and mvfTimeStep (+0x70). Both placeholders are deleted.
 
 		// FLAGGED-0 PLACEHOLDERS for the two rows DeformationSensor::Prepare selects between on the
 		// sign of lDamagePoint.x (X360 &unk_82FB82C0 / &unk_82FB9F20; the PS3 relocations NAME them
@@ -105,8 +101,16 @@ namespace Deformation
 		// zero (GetInitialCompressionScalesAndLimits emits lPosLimits >= 0 >= lNegLimits). The BASE
 		// this displacement is added to is spec->mInitialOffset and is NOT flagged -- dropping that
 		// was walls leg 11's bug.
-		static const VecFloat KV_POS_X_HIT_DIRECTION = {};   // &unk_82FB82C0
-		static const VecFloat KV_NEG_X_HIT_DIRECTION = {};   // &unk_82FB9F20
+		// ⭐ RECOVERED 2026-08-24 (deform-land wave, headless idat static-init decode):
+		//   unk_82FB82C0 <- writer 0x82C5DAD0: { flt_8200D5FC = -0.7, flt_82001CC0 = 0,
+		//                                        flt_820037C8 = -1.0, 0 }
+		//   unk_82FB9F20 <- writer 0x82C5DB10: { flt_82004C68 = +0.7, 0, -1.0, 0 }
+		// i.e. the preset-damage "hit" comes from ahead-and-inward on the struck side, angled
+		// down (-1 z lane in the sensor's damage frame). The old zeros muted the whole preset
+		// (junkyard 0.85) damage displacement -- the term multiplies lDamageScale, which is
+		// NON-zero on the unlock/junkyard spawn path landed this wave.
+		static const VecFloat KV_POS_X_HIT_DIRECTION = { -0.7f, 0.0f, -1.0f, 0.0f };   // &unk_82FB82C0 (init 0x82C5DAD0)
+		static const VecFloat KV_NEG_X_HIT_DIRECTION = { +0.7f, 0.0f, -1.0f, 0.0f };   // &unk_82FB9F20 (init 0x82C5DB10)
 
 		// ⭐ REAL 2026-08-15 (walls leg 8). &unk_82FB9560, indexed 16*absorptionSet -- the PS3 exports
 		// name it `AbsorptionTable::savfCompressionLimitFactor` (that is what it scales: the
@@ -138,10 +142,9 @@ namespace Deformation
 		// is exactly the table value. ⭐ That matters here specifically because this build is
 		// deliberately DECOUPLED from the console's 60 fps lock.
 		static const VecFloat KVF_60_HTZ        = { 60.0f, 60.0f, 60.0f, 60.0f };
-		// ⚠️ STILL FLAGGED: KVF_VELOCITY_FACTOR's initialiser has not been located, so it stays an
-		// honest zero (NEVER fabricated). It is read ONLY by RecievePassedOnImpulse, whose
-		// displacement term is therefore still identically zero -- see the note on KsaHitDirection.
-		static const VecFloat KVF_VELOCITY_FACTOR = { 0.0f, 0.0f, 0.0f, 0.0f };
+		// ⭐ KVF_VELOCITY_FACTOR DELETED 2026-08-24 (deform-land wave, P3): it was an invention
+		// of the old RecievePassedOnImpulse paraphrase, not an unrecovered constant -- the asm's
+		// factors at that site are the params' own mvfInverseInertia and mvfTimeStep.
 
 		// The 0.01f tolerance the normal-magnitude assert + the final accept gates compare against
 		// (v21 / v89 == 0.0099999998 in the asm).
@@ -272,11 +275,11 @@ namespace Deformation
 	//   X360 0x8260A4F8 vrlimi128 v13, v0(zero), 1, 0 | PS3 0x6C1C5C vperm<0,1,2,7> -- (this+0x10).w = 0
 	// `BrnSensorSpec.h` attests mInitialOffset @console+0 and mfRadius @console+40 (0x28), so both
 	// loads land on those two members by NAME, not by offset arithmetic.
-	// ⚠️ The two hit-direction rows stay FLAGGED-0 (see KsaHitDirection's banner -- same family,
-	// &unk_82FB9680's siblings; all three read zero in the image because they are dynamic-init).
-	// That keeps the DAMAGE displacement inert, which is honest and is also what the shipped console
-	// computes at a fresh spawn: GetInitialCompressionScalesAndLimits multiplies the ratio by the
-	// initial-damage scalar, and lPosLimits/lNegLimits straddle zero, so clamp(0, neg, pos) == 0.
+	// ⭐ The two hit-direction rows are RECOVERED as of 2026-08-24 (deform-land wave, P2):
+	// KV_POS_X_HIT_DIRECTION = {-0.7, 0, -1, 0} / KV_NEG_X_HIT_DIRECTION = {+0.7, 0, -1, 0}
+	// (static-init writers 0x82C5DAD0 / 0x82C5DB10). On a PRESET-damage spawn (junkyard 0.85)
+	// the damage displacement is now real; at a fresh zero-damage spawn the initial-damage
+	// scalar still zeroes it, exactly as the shipped console computes.
 	// ⛔ The BASE is a different matter and was the bug: `existing + 0` is not `mInitialOffset + 0`.
 	// =============================================================================================
 	bool DeformationSensor::Prepare(const SensorSpec* lpSpec, Sphere* lpLocalSphere, Sphere* lpWorldSphere,
@@ -396,67 +399,79 @@ namespace Deformation
 	// =============================================================================================
 	// RecievePassedOnImpulse @ 0x825E11F8 -- CollidableBody override.
 	//
-	// An impulse passed down the chain is scaled through the AbsorptionTable (keyed by the sensor
-	// spec's absorption level) into the sensor's stored displacement, then forwarded to the next
-	// body via ImpulsePasser::PassOnImpulse. Observable flow (this == v0/r30, lpImpulseParams == r4):
-	//   lDir          = lpImpulseParams->meImpulseDirection                  (*v1)
-	//   lToCentre     = mpLocalSpaceSphere.centre - mpSpec.mInitialOffset    (vsubfp v12)
-	//   lCompLimit    = max(spec.maDirectionParams[lDir], 0.01)              (vmaxfp v13,v9,v13)
-	//   lScaleRow     = KsaAbsorptionScale[absorptionSet] (16*v1[45])        (FLAGGED rodata)
-	//   lHitDir       = KsaHitDirection[lDir] (16*lDir)                      (FLAGGED rodata)
-	//   v125          = lCompLimit * lScaleRow * <impulse-params row @+144>
-	//   v124          = max( dot3(lHitDir, lToCentre), 0 )
-	//   GetAbsorption(...)                                                   (call order preserved)
-	//   stored displacement (this+412 sphere) += lHitDir * clamp(...)        (vmaddfp -> stvx128)
-	//   PassOnImpulse(params.mpImpulsePasser, spec.maNextSensor[lDir], params)  (UNCONDITIONAL chain forward)
-	// The displacement-into-sphere update is modelled over the local sphere's leading Vector4; the
-	// GetAbsorption + PassOnImpulse calls are reproduced in order. With FLAGGED-0 rodata the scale
-	// term is inert (honest), but the AbsorptionTable consult + chain forward still fire identically.
+	// An impulse passed down the chain deposits displacement into this sensor -- clamped to the
+	// sensor's REMAINING per-direction compression room -- then forwards the (unreduced) magnitude
+	// to the next body via ImpulsePasser::PassOnImpulse. See the 1:1 note below for the field map;
+	// the old observable-flow sketch here described the pre-2026-08-24 paraphrase and was wrong on
+	// three factors (consumed-room dot, inverse-inertia/timestep, hit-direction table).
 	// =============================================================================================
+	// ⭐⭐ REWRITTEN 1:1 2026-08-24 (deform-land wave, P3) from the full asm
+	// 0x825E11F8..0x825E131C (headless dump, scratchpad land_asm.txt). The previous body was a
+	// paraphrase that (a) projected the hit direction against `sphereCentre - initialOffset` and
+	// called it a SPEED -- the asm's dot is the compression CONSUMED SO FAR along this direction,
+	// used SUBTRACTIVELY against the room limit; (b) multiplied by an invented KVF_VELOCITY_FACTOR
+	// where the asm uses the params' own mvfInverseInertia (+0x60) and mvfTimeStep (+0x70);
+	// (c) read the FLAGGED-zero KsaHitDirection duplicate where the asm reads the RECOVERED
+	// KA_IMPULSE_DIRECTIONS table (unk_82FB9680). Every factor below is a homed ImpulseParams
+	// field or a recovered table row; nothing is silently zero any more.
 	void DeformationSensor::RecievePassedOnImpulse(const ImpulseParams* lpImpulseParams, VecFloat lvfPassedMagnitude)
 	{
-		const ENextSensorDirection leDir = lpImpulseParams->meImpulseDirection;   // v6 = *v1
+		const ENextSensorDirection leDir = lpImpulseParams->meImpulseDirection;   // params +0x00
 		const s32  liDir = static_cast<s32>(leDir);
 
-		// max(spec per-direction compression limit, 0.01) -- vmaxfp v13,v9,splat(0.01).
+		// The per-direction unit axis (lvx128 &unk_82FB9680 + 16*dir == KA_IMPULSE_DIRECTIONS[dir]).
+		const Vector3& lrAxis = KA_IMPULSE_DIRECTIONS[liDir];
+
+		// Room limit: max(spec per-direction compression limit, 0.01)      (vmaxfp vs splat 0.01)
+		//           * savfCompressionLimitFactor[absorption set]           (unk_82FB9560[set])
+		//           * params->mvfAllowedCompressionFactor                  (params +0x90).
 		const f32 lfCompLimit = mpSpec ? mpSpec->maDirectionParams[liDir].mCompressionLimits : 0.0f;
 		const f32 lfClampedLimit = lfCompLimit > KF_NORMAL_TOLERANCE ? lfCompLimit : KF_NORMAL_TOLERANCE;
+		const f32 lfRoom = lfClampedLimit
+		                 * KsaAbsorptionScale[lpImpulseParams->meAbsorptionSet].x
+		                 * lpImpulseParams->mvfAllowedCompressionFactor.x;
 
-		// FLAGGED rodata rows (honest zeros): absorption-scale row (keyed by the absorption set) and
-		// the per-direction hit-direction vector.
-		const VecFloat lScaleRow = KsaAbsorptionScale[lpImpulseParams->meAbsorptionSet];
-		const VecFloat lHitDir   = KsaHitDirection[liDir];
-
-		// toCentre = local sphere centre - spec offset (vsubfp v12).
-		Vector3 lToCentre = { 0.0f, 0.0f, 0.0f, 0.0f };
+		// Compression consumed so far: max( dot3(axis, currentDisplacement), 0 ) where
+		// currentDisplacement = local sphere lead - spec rest offset (vsubfp v12; vmsum3fp; vmaxfp 0).
+		f32 lfConsumed = 0.0f;
 		if ( mpLocalSpaceSphere && mpSpec )
 		{
 			const Vector4& lCentre = SphereVec(mpLocalSpaceSphere);
-			lToCentre = Sub3(Vector3{ lCentre.x, lCentre.y, lCentre.z, 0.0f }, mpSpec->mInitialOffset);
+			const Vector3 lDisp = Sub3(Vector3{ lCentre.x, lCentre.y, lCentre.z, 0.0f },
+			                           mpSpec->mInitialOffset);
+			const f32 lfDot = Dot3(Vector3{ lrAxis.x, lrAxis.y, lrAxis.z, 0.0f }, lDisp);
+			lfConsumed = lfDot > 0.0f ? lfDot : 0.0f;
 		}
 
-		// v124 = max( dot3(hitDir, toCentre), 0 ) -- vmsum3fp128 then vmaxfp against zero.
-		const f32 lfProjectedSpeed = Dot3(Vector3{ lHitDir.x, lHitDir.y, lHitDir.z, 0.0f }, lToCentre);
-		const f32 lfClampedSpeed = lfProjectedSpeed > 0.0f ? lfProjectedSpeed : 0.0f;
-
-		// AbsorptionTable consult (keyed by the spec's absorption level). Call order preserved; the
-		// returned curve scales the displacement below. With FLAGGED-0 rodata it returns zero.
+		// AbsorptionTable consult (params set +0xB4, spec absorption level +0x33).
 		const u8 lu8AbsorptionLevel = mpSpec ? mpSpec->GetAbsorptionLevel() : 0;
 		const VecFloat lvfAbsorption =
 			AbsorptionTable::GetAbsorption(lpImpulseParams->meAbsorptionSet, lu8AbsorptionLevel);
 
-		// stored displacement = lScaleRow * lClampedLimit (per-lane) folded against the absorption /
-		// velocity factors, clamped, and accumulated into the local sphere's displacement lane
-		// (vmaddfp v9 = hitDir * scaled + sphere; vrlimi128 keeps the w lane). FLAGGED-0 rodata makes
-		// the increment zero -- inert + honest. The store target is the local sphere vector.
-		const f32 lfDisplacement =
-			lfClampedSpeed * lScaleRow.x * lfClampedLimit * lvfAbsorption.x * KVF_VELOCITY_FACTOR.x;
+		// Applied displacement = magnitude
+		//                      * min(params->mvfMaximumAllowedAbsorption, absorption)  (vminfp)
+		//                      * params->mvfInverseInertia * params->mvfTimeStep,
+		// clamped to the REMAINING room (vminfp against room - consumed) -- the remaining-room
+		// clamp is what lets a dent SPREAD: once this sensor is full the amount goes to zero here
+		// while the full magnitude still passes on below.
+		f32 lfAbsorb = lvfAbsorption.x < lpImpulseParams->mvfMaximumAllowedAbsorption.x
+		             ? lvfAbsorption.x : lpImpulseParams->mvfMaximumAllowedAbsorption.x;
+		f32 lfAmount = lvfPassedMagnitude.x * lfAbsorb
+		             * lpImpulseParams->mvfInverseInertia.x
+		             * lpImpulseParams->mvfTimeStep.x;
+		const f32 lfRemaining = lfRoom - lfConsumed;
+		if ( lfAmount > lfRemaining )
+		{
+			lfAmount = lfRemaining;
+		}
+
+		// Accumulate: local sphere lead += axis * amount (vmaddfp; vrlimi keeps the w/radius lane).
 		if ( mpLocalSpaceSphere )
 		{
 			Vector4& lCentre = SphereVec(mpLocalSpaceSphere);
-			lCentre.x += lHitDir.x * lfDisplacement;
-			lCentre.y += lHitDir.y * lfDisplacement;
-			lCentre.z += lHitDir.z * lfDisplacement;
+			lCentre.x += lrAxis.x * lfAmount;
+			lCentre.y += lrAxis.y * lfAmount;
+			lCentre.z += lrAxis.z * lfAmount;
 			// w (radius) lane preserved.
 		}
 
