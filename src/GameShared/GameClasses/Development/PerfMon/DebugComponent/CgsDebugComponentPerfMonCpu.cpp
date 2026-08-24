@@ -1,6 +1,7 @@
 #include "GameShared/GameClasses/Development/PerfMon/DebugComponent/CgsDebugComponentPerfMonCpu.h"
 
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug2DImmediateRender.h"  // DrawBox
+#include "GameShared/GameClasses/Core/CgsAssert.h"                                            // CGS_ASSERT (LogBufferEnable)
 
 // CgsDev::DebugComponentPerfMonCpu - the CPU performance overlay bodies. RenderHUD draws one row per
 // registered CPU monitor (the on-screen "debug squares"): a dark track the full bar width, with a
@@ -9,9 +10,11 @@
 // GetMonitorData / IsMonitorOverBudget). Drawn in the loading-screen Im2d pixel space (1280x720).
 //
 // BOUNDED: the graph mode, page navigation, the per-monitor text labels (the deferred font path), and
-// the reset/dump/tracing callbacks + CPU-trace log buffer are the perfmon follow-on; the bar overlay
-// needs none of them. Construct initialises the overlay state; the registry itself is brought up
-// separately (BrnCpuMonitors::Construct -> PerfMonCpu::Construct + AddMonitor).
+// the reset/dump/tracing callbacks are the perfmon follow-on; the bar overlay needs none of them.
+// Construct is the faithful bring-up (PS3 DecFIGS @0xB21C44; the X360 body @0x8282CC98 is not in the
+// export set, but its caller/wrapper shape is identical): it initialises the full overlay state AND
+// brings up the PerfMonCpu registry itself (PerfMonCpu::Construct(count, GetAllocator())) - the
+// registry construction lives HERE on the console, not in DebugManager::Construct.
 
 namespace CgsDev
 {
@@ -33,21 +36,67 @@ namespace CgsDev
         const RGBA KC_OVER  = 0xFF0000FFu;   // over budget      (red)
     }
 
-    // X360 CgsDebugComponentPerfMonCpu.cpp:57 (bounded). Initialise the overlay state. The log buffer
-    // + the page/trace string lists + the menu RegisterVariable/RegisterFunction wiring are the perfmon
-    // follow-on; mfMaxCpu is the bar full-scale (a 30fps frame budget).
-    void DebugComponentPerfMonCpu::Construct( s16 /*liMaxMonitors*/, void* lpLogBuffer, u32 /*luLogBufferSize*/ )
+    // Faithful port of PS3 DecFIGS Construct @0xB21C44 (X360 wrapper @0x8282CC98, called by
+    // DebugManager::Construct with (count, logBuffer, logBufferSize)):
+    //   - page list: maStringList[0] = {-1, "None"}, then [i+1] = {i, "Unused"} for the 24 pages
+    //     (SetPageName renames the live ones later);
+    //   - overlay state cleared (mfMaxCpu starts at 0 - the bar scale is grown by Update);
+    //   - trace-mode option list {0,"Trace"} / {1,"XBPerf"} / terminator;
+    //   - the PerfMonCpu REGISTRY constructed here, over the debug allocator
+    //     (Internal::DebugInternal::GetAllocator());
+    //   - the optional CPU-trace log buffer wired via LogBufferEnable (else mpLogBuffer = NULL;
+    //     mpLogBufferEnd is only ever set by LogBufferEnable, as on the console).
+    void DebugComponentPerfMonCpu::Construct( s16 liMaxMonitors, void* lpLogBuffer, u32 luLogBufferSize )
     {
-        mbDisplayAsGraph      = false;
-        mfMaxCpu              = 33.3f;
+        miCurrentPage = -1;
+        maStringList[0].miValue = -1;
+        maStringList[0].mpcName = "None";
+        for (s32 liPage = 0; liPage < E_PMP_MAX; ++liPage)
+        {
+            maStringList[liPage + 1].miValue = liPage;
+            maStringList[liPage + 1].mpcName = "Unused";
+        }
+
+        mfMaxCpu              = 0.0f;
         mbResetMonitors       = false;
+        mbDisplayAsGraph      = false;
         mbEnableTracing       = false;
         miTraceMode           = 0;
-        miCurrentPage         = 0;
-        mpLogBuffer           = lpLogBuffer;
-        mpLogBufferEnd        = nullptr;
-        mbLogBufferOverflow   = false;
+        maTraceModeList[0].miValue = 0;
+        maTraceModeList[0].mpcName = "Trace";
+        maTraceModeList[1].miValue = 1;
+        maTraceModeList[1].mpcName = "XBPerf";
+        maTraceModeList[2].miValue = 0;
+        maTraceModeList[2].mpcName = nullptr;
+        mbLogBufferOverflow     = false;
         mpau16LogBufferWritePtr = nullptr;
+
+        PerfMonCpu::Construct(liMaxMonitors, GetAllocator());
+
+        if (lpLogBuffer)
+            LogBufferEnable(lpLogBuffer, static_cast<s32>(luLogBufferSize));
+        else
+            mpLogBuffer = nullptr;
+    }
+
+    // Faithful port of X360 LogBufferEnable @0x82826C20: wire the CPU-trace log region. The usable
+    // size is the supplied size minus the registry's max monitor count (asserted positive); the
+    // write cursor starts at the buffer base.
+    void DebugComponentPerfMonCpu::LogBufferEnable( void* lpBuffer, s32 liSize )
+    {
+        if (!lpBuffer)
+        {
+            mpLogBuffer = nullptr;
+            return;
+        }
+
+        const s32 liLogBufferSize = liSize - PerfMonCpu::GetMaxMonitorCount();
+        CGS_ASSERT(liLogBufferSize > 0, "liLogBufferSize > 0");
+
+        mpLogBuffer             = lpBuffer;
+        mpLogBufferEnd          = static_cast<u8*>(lpBuffer) + liLogBufferSize;
+        mpau16LogBufferWritePtr = static_cast<u16*>(lpBuffer);
+        mbLogBufferOverflow     = false;
     }
 
     void DebugComponentPerfMonCpu::Destruct() {}

@@ -31,6 +31,17 @@ namespace CgsDev
         CGS_ASSERT(mpDebugManager, "mpDebugManager");
         return *mpDebugManager;
     }
+
+    // Faithful port of X360 Get2dRender @0x82822750 (console home CgsDebugInterface.cpp:190):
+    // assert the manager pointer, then return its buffered renderer by reference (the console's
+    // `mpDebugManager + 0x14C`; DebugInterface is a friend of the manager). This is what
+    // BrnDirector::DebugPrinter::ActualPrint @0x821F71D8 and Camera::Utils::Tweaker's on-screen
+    // readout both draw through.
+    DebugRender& DebugInterface::Get2dRender()
+    {
+        CGS_ASSERT(mpDebugManager, "mpDebugManager");
+        return mpDebugManager->mBufferedRenderer;
+    }
 }
 
 // ⭐ 2026-08-17 (boot audit F-P1-14). The forwarder behind DebugInterface::RegisterFunction.

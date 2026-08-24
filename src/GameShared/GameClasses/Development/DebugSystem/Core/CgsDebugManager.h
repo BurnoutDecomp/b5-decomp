@@ -4,6 +4,10 @@
 #include "BrnCommonTypes.h"                                                            // Matrix44, Vector3 (render entry)
 #include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugCollections.h"  // DebugLinkedList<DebugComponent>
 #include "GameShared/GameClasses/Fonts/CgsFont.h"                                      // SafeResourceHandle<Font> (SetDebugFont)
+#include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebugRender.h"     // mBufferedRenderer (by value, X360 +0x14C)
+#include "GameShared/GameClasses/Development/PerfMon/DebugComponent/CgsDebugComponentPerfMonCpu.h"     // mDebugComponentPerfMonCpu (+0x000)
+#include "GameShared/GameClasses/Development/PerfMon/DebugComponent/CgsDebugComponentPerfMonGpu.h"     // mDebugComponentPerfMonGpu (+0x118)
+#include "GameShared/GameClasses/Development/MessageSystem/DebugComponent/CgsDebugComponentMessageFilter.h" // mDebugComponentMessageFilter (+0x12C)
 
 // CgsDev::DebugManager - the process-wide owner of the in-game debug systems (perfmon overlays,
 // debug menus, console, on-screen variables): it holds the DebugUI, the resource allocator, and
@@ -11,13 +15,12 @@
 // critical section. Recovered from the DecFIGS DWARF
 // (Development/DebugSystem/Core/CgsDebugManager.h).
 //
-// INCREMENTAL LAYOUT: the full manager is large (the X360 reaches the registered-component list
-// head at this+33132, with the DebugUI / render / allocator members alongside it). Only the
-// per-frame Update entry point (the game module's update spine calls it) and the singleton pointer
-// the thread-safe accessors hand out are modelled; the rest of the layout + the method bodies are
-// the manager-reconstruction follow-on. This header is the interface both the game-module update
-// spine and the DebugComponent registration path (Register -> RegisterComponent[Simple]) compile
-// against.
+// LAYOUT (X360 ctor @0x82822370 + Construct @0x828332C0): the manager OWNS its three built-in
+// debug components by value at the front of the object (CPU perfmon @+0x000, GPU perfmon @+0x118,
+// message filter @+0x12C), then the UI/renderer pointers (+0x140/+0x144/+0x148), the by-value
+// buffered renderer (two VariableEventQueue<16384,16>, +0x14C), the registered-component list head
+// (+0x816C), the debug resource allocator (+0x8170) and the build-date string CalculateBuildDate
+// fills (+0x8174, 0x24 bytes). All access is by member name (x64 offsets differ).
 
 namespace CgsDev
 {
@@ -56,6 +59,9 @@ namespace CgsDev
     class DebugManager
     {
     public:
+        // X360 @0x82822370: run the three by-value component ctors, assert the singleton slot is
+        // free ("mpInstance == NULL", CgsDebugManager.cpp:107), then CLAIM it (the ctor, not
+        // Construct, publishes mpInstance).
         DebugManager();
         ~DebugManager();
 
@@ -73,9 +79,22 @@ namespace CgsDev
         // the critical section via ThreadSafeAquire (which asserts + locks).
         static DebugManager* GetInstance() { return mpInstance; }
 
+        // X360 Construct @0x828332C0 -- the debug-system bring-up. In the console's order: assert
+        // front-end Construct, rw debug Manager instance (over the default allocator), latch the
+        // debug allocator (parameter, defaulted to rw's), clear the component list, Create the
+        // debug critical section, null the renderers, construct the buffered renderer's queues,
+        // wire + construct the UI, carve the optional perfmon log buffer, construct + Register the
+        // three built-in components, CalculateBuildDate, ConstructRenderer. Note ConstructRenderer
+        // is called BY Construct (the game module does not call it separately).
         void Construct(const DebugManagerConstructParameters* lpParameters);
+        // X360 @0x8281ADD0: wire + construct BOTH immediate renderers (3D then 2D) at the UI
+        // metrics' screen size, hand the 2D renderer to the UI and to the assert system.
         void ConstructRenderer();
         void Destruct();
+
+        // X360 @0x828224B8: fill macBuildDate ("Build Date: ...") from the running executable's
+        // file timestamp, falling back to the compile date/time when the file can't be opened.
+        void CalculateBuildDate();
 
         bool IsComponentRegistered(DebugComponent* lpComponent);
         void ActivateComponent(DebugComponent* lpComponent);
@@ -135,18 +154,25 @@ namespace CgsDev
         // accessor-less) registered-component list inline (X360 SaveState 0x82832660 reads the head
         // at this+0x816C). dwarfdump does not surface friend declarations; attested by that asm.
         friend struct DebugUI::ScriptInterface;
+        // DebugInterface::Get2dRender (X360 @0x82822750) returns mBufferedRenderer (this+0x14C)
+        // directly, and the DebugInternal accessors (e.g. GetUI @0x82815F08) read the singleton's
+        // members raw -- both reach private members by offset on the console, modelled as friends.
+        friend struct DebugInterface;
+        friend struct Internal::DebugInternal;
 
     private:
-        // INCREMENTAL: the registered-component list (X360 this+33132) + the UI the manager owns
-        // (reached at a fixed offset on X360; modelled as a pointer here) are the members the
-        // registration path touches; the rest of the ~33KB layout is the manager follow-on.
-        DebugUI::DebugUI*                          mpUI;
-        Internal::DebugLinkedList<DebugComponent>  mComponentList;
-
-        // The debug renderers the render spine drives (set up by ConstructRenderer; the renderer
-        // types themselves are the next brick - Debug2DImmediateRender draws the HUD squares).
-        Debug2DImmediateRender*                    mp2dRender;
-        Debug3DImmediateRender*                    mp3dRender;
+        // X360 member layout (ctor @0x82822370 / Construct @0x828332C0); offsets in comments are
+        // the console's -- access is by name.
+        DebugComponentPerfMonCpu     mDebugComponentPerfMonCpu;     // +0x0000 the CPU perfmon overlay
+        DebugComponentPerfMonGpu     mDebugComponentPerfMonGpu;     // +0x0118 the GPU perfmon overlay
+        DebugComponentMessageFilter  mDebugComponentMessageFilter;  // +0x012C the message-filter page
+        DebugUI::DebugUI*            mpUI;                          // +0x0140 -> gInternalDebugUI
+        Debug3DImmediateRender*      mp3dRender;                    // +0x0144 -> g3dInternalDebugRender
+        Debug2DImmediateRender*      mp2dRender;                    // +0x0148 -> g2dInternalDebugRender
+        DebugRender                  mBufferedRenderer;             // +0x014C the buffered debug prims
+        Internal::DebugLinkedList<DebugComponent> mComponentList;   // +0x816C registered components
+        rw::IResourceAllocator*      mpAllocator;                   // +0x8170 the debug allocator
+        char                         macBuildDate[36];              // +0x8174 CalculateBuildDate's string (0x24 bytes)
 
         static DebugManager* mpInstance;
     };

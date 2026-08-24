@@ -46,6 +46,17 @@ namespace CgsDev
         const RGBA KC_GRAPHSCALEBAR = 0x80252525u;   // translucent reference bar
     }
 
+    // PS3 DecFIGS @0xB213B0; the X360 inlines the identical body into DebugManager::Construct
+    // (@0x828333C8-E4: +0x10 <- 0.0 [flt_82001CC0], +0xD <- 0, +0xC <- 1, then
+    // PerfMonGpu::Construct). Reset the overlay state and bring up the GPU perfmon registry.
+    void DebugComponentPerfMonGpu::Construct()
+    {
+        mfMaxGpu         = 0.0f;
+        mbVisible        = true;
+        mbDisplayAsGraph = false;
+        PerfMonGpu::Construct();
+    }
+
     // X360 CgsDev::DebugComponentPerfMonGpu::OnActivate @ 0x8282F488.
     // Register the two overlay toggles with the debug menu under this component's own path.
     // The asm inlines DebugComponent::RegisterVariable(bool*, name) twice: each builds a Variant

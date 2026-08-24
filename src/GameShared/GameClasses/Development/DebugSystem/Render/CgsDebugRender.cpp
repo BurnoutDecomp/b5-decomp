@@ -1,5 +1,7 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebugRender.h"
 
+#include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug2DImmediateRender.h"  // the immediate renderer Dispatch2D replays into
+
 // CgsDev::DebugRender - buffered 2D debug-render bodies. Draw2DX queues a byte-image event under its
 // type ID; Dispatch2D walks the queue and replays each into the immediate-mode renderer, then clears.
 // Reconstructed from the X360 ARTIST build (see CgsDebugRender.h for addresses). The events are POD and
@@ -7,9 +9,12 @@
 
 namespace CgsDev
 {
+    // X360 DebugManager::Construct @0x828332C0 constructs the pair inline, 2D queue (+0x4010)
+    // first, then the 3D queue (+0).
     void DebugRender::Construct()
     {
         m2DQueue.Construct();
+        m3DQueue.Construct();
     }
 
     void DebugRender::Clear()

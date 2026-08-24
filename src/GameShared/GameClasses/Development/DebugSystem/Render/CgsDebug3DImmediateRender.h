@@ -11,10 +11,20 @@
 // does; the 3D drawing path (world-space DrawLine/DrawBox/DrawText) is the render follow-on. X360
 // SetDebugFont (0x823B1448) stores the 2-word handle at this+0x2C/+0x30.
 
+namespace rw { struct IResourceAllocator; }   // struct -- must match rwcore_structs.h's class-key (MSVC mangling)
+
 namespace CgsDev
 {
     struct Debug3DImmediateRender
     {
+        // X360 Construct @0x8281A488, called by DebugManager::ConstructRenderer @0x8281ADD0 with
+        // (this, the manager's allocator, UI-metrics width, UI-metrics height). The X360 body also
+        // constructs the renderer's vector font + text renderer, creates the debug render states
+        // (CreateDebugRenderStates) and builds the sphere index table (BuildSphereIndices); those
+        // members/paths are the Debug3D render follow-on -- the slice modelled here initialises the
+        // members this type carries (the font handle + the virtual screen size).
+        void Construct(rw::IResourceAllocator* lpAllocator, f32 lfVirtualScreenWidth, f32 lfVirtualScreenHeight);
+
         // The debug-font handoff (X360 0x823B1448): store the loaded bitmap Font's handle. Mirrors
         // Debug2DImmediateRender::SetDebugFont; DebugManager::SetDebugFont drives both.
         void SetDebugFont(const CgsResource::SafeResourceHandle<CgsResource::Font>& lrFont);
@@ -77,6 +87,11 @@ namespace CgsDev
         // RenderTrafficLights as the first lane group of the renderer's view state (+0x7DB0).
         const rw::math::vpu::Vector3& GetCameraPosition() const;
 
-        CgsResource::SafeResourceHandle<CgsResource::Font> mpFont;
+        CgsResource::SafeResourceHandle<CgsResource::Font> mpFont;   // X360 +0x2C/+0x30
+
+        // The virtual screen size Construct latches (X360 +0x20/+0x24: `_R31[8] = width;
+        // _R31[9] = height` from the UI metrics).
+        f32 mfVirtualScreenWidth;
+        f32 mfVirtualScreenHeight;
     };
 }

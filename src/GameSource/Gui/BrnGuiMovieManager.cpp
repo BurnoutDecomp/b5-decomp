@@ -177,9 +177,9 @@ namespace BrnGui
         meState = E_MOVIEMANAGERSTATE_CONSTRUCTED;
     }
 
-    // [PC IO] Load VIDEOS\VIDEOLIST.BUNDLE synchronously into mMoviePool -- the same CgsResource::BundleLoader
-    // + Pool path LoadAndSetDebugFont uses (the X360 streams it asynchronously via the GameDataModule). Pool
-    // sizing mirrors the debug-font pool (over-reserving is safe; the VideoData metadata is small).
+    // [PC IO] Load VIDEOS\VIDEOLIST.BUNDLE synchronously into mMoviePool via CgsResource::BundleLoader
+    // + Pool (the X360 streams it asynchronously via the GameDataModule). Pool sizing over-reserves
+    // (safe; the VideoData metadata is small).
     bool MovieManager::LoadVideoListBundle()
     {
         if (mbBundleLoaded)

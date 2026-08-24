@@ -200,11 +200,14 @@ namespace BrnGame
         miContrast                          = 50;
         mbEnableCalibrationUnfriendlyPostFx = true;
 
-        // X360 step 4: the debug manager (params block seeded from unk_820DC120 + overrides +
-        // Allocators::mpInternalDebugAllocator as the RW allocator; the PC slice passes DEFAULT).
-        // ConstructRenderer is the PC bring-up of the 2D debug renderer so the overlay draws over
-        // the loading screen. [gated] the "Force Quit to Start Menu" debug toggle + the FOPEN
-        // "%sMAP_ARTIST.BIN" memory-map name globals that follow on the X360.
+        // X360 step 4: the debug manager (params block seeded from unk_820DC120 = the real
+        // DebugManagerConstructParameters::DEFAULT + the six overrides below +
+        // Allocators::mpInternalDebugAllocator as the RW allocator). Construct runs the console's
+        // full bring-up itself - assert system, rw debug manager, critical section, buffered
+        // renderer, UI, the three built-in components, CalculateBuildDate and ConstructRenderer -
+        // so no separate ConstructRenderer call exists here, exactly as @0x823C9F44-90.
+        // [gated] the "Force Quit to Start Menu" debug toggle + the FOPEN "%sMAP_ARTIST.BIN"
+        // memory-map name globals that follow on the X360.
         // ⭐ THE REAL CONSTRUCT PARAMS, RECOVERED 2026-08-17 (boot audit F-P1-7). We passed
         // DebugManagerConstructParameters::DEFAULT straight through. The console does NOT:
         // @0x823C9F44-84 it copies DEFAULT onto the stack (the bdnz word loop) and then
@@ -240,7 +243,6 @@ namespace BrnGame
             // the global heap, which ignores it.
             mDebugManager.Construct(&lParams);
         }
-        mDebugManager.ConstructRenderer();
 
         // X360 step 5: sentinel-fill the CPU monitor handle block (BrnCpuMonitors::Construct
         // 0x823A90A8), then register all 40 monitors. Rows are (name, page, minimum, budget-ms,
@@ -430,10 +432,9 @@ namespace BrnGame
         // replay serialisers (DirectorBridgeSerialiser/GameModuleSerialiser::Construct) -- their
         // members/subsystems are not in this layout yet.
 
-        // NOTE: the bitmap debug font is NOT brought up here -- the D3D device does not exist yet at
-        // Construct time (Device::Start's create lands later), so the atlas raster's FixUp would get a
-        // null device and produce a textureless font. It is brought up from DispatchThread instead,
-        // once the render path has the device live (see below).
+        // NOTE: the bitmap debug font is NOT brought up here -- it arrives through GamePrepare's
+        // id-5 AcquireResource reply (the console's own path: Font::CreateTextureState +
+        // DebugManager::SetDebugFont once "Language\Fonts\Default.font" resolves out of pool 0).
 
         // ---- X360 step 9 (the part that matters to every timed subsystem) -----------------
         // Construct @0x823C9EA8, verbatim:

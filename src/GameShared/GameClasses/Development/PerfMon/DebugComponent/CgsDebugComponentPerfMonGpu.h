@@ -30,6 +30,10 @@ namespace CgsDev
     class DebugComponentPerfMonGpu : public DebugComponent
     {
     public:
+        // PS3 DecFIGS @0xB213B0 (the X360 inlines the identical body into DebugManager::Construct
+        // @0x828333C8-E4: mbVisible=1, mbDisplayAsGraph=0, mfMaxGpu=0.0, then PerfMonGpu::Construct).
+        void Construct();
+
         virtual void RenderHUD( Debug2DImmediateRender* lpDebug2DRender );   // @0x8282F520
 
     protected:

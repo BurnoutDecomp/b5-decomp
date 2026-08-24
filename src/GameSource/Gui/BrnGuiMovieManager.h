@@ -18,9 +18,9 @@
 //
 // [PC IO LAYER] The X360 loads the bundle + acquires resources ASYNCHRONOUSLY (GameDataModule +
 // EVENT_ACQUIRERESOURCE). The PC port already has a SYNCHRONOUS bundle path -- CgsResource::BundleLoader +
-// Pool, the same one LoadAndSetDebugFont uses -- so Prepare loads VIDEOS\VIDEOLIST.BUNDLE in one shot into
-// mMoviePool, and the per-video "acquire" is a synchronous Pool::FindResource(id). This is faithful to the
-// bundle FORMAT + per-resource fixup/import; only the IO is PC-shaped (marked), exactly like the font.
+// Pool -- so Prepare loads VIDEOS\VIDEOLIST.BUNDLE in one shot into mMoviePool, and the per-video
+// "acquire" is a synchronous Pool::FindResource(id). This is faithful to the bundle FORMAT +
+// per-resource fixup/import; only the IO is PC-shaped (marked).
 //
 // [STILL STUBBED -- marked per-call in the .cpp] collision-world + car-pool memory reclaim, the MovieAllocator
 // (Heap+Linear over a reserved block), and XMP/sound. Reconstructed as marked stubs so the state machine is
