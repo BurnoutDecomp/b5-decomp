@@ -33,6 +33,13 @@
 
 namespace BrnPhysics
 {
+// Forward declaration: the deformation shared-IO per-car record (canonical definition in
+// GameSource/Physics/DeformationManager/SharedIO/BrnDeformationState.h). Only a pointer is
+// carried at this layer -- UpdateShowtimeBounceModifiers' body includes the real header.
+namespace Deformation
+{
+    struct CarState;
+}
 namespace Vehicle
 {
     class RaceCarPhysics : public VehiclePhysics
@@ -350,20 +357,25 @@ namespace Vehicle
         void UpdatePostSimulation(VecFloat lvfTimeStep);
 
         // @0x825FFBD8: the showtime bounce-boost state machine, run each frame from UpdateAftertouch
-        // while in showtime. Decides if the car is airborne/slow enough to bounce, runs the latch
-        // (latch armed externally by SetJustBounced; chain counter muBounceChainCount), on a valid
-        // bounce applies a spin AddWorldSpaceAngularImpulse + an AddAirRam boost along
-        // normalize(mAimDirection + worldUp); when mfTimeUntilPush expires fires a launch pop + spin
-        // and sets mbBounceBoosting; finally CapShowtimeVelocities. lfTimeStep is the frame dt
-        // (passed in a VMX lane), lvAimSpin / lvLaunchSpin the spin-impulse vectors.
-        void UpdateShowtimePhysics(const Vector3& lvLaunchSpin, const Vector3& lvAimSpin,
-                                   f32 lfTimeStep);
+        // while in showtime. RE-SIGNATURED 2026-08-24 (showtime wave) to the DWARF form
+        // (RaceCarPhysics.h:268: controls, Vector3, Vector3, VecFloat, VecFloat, bool); the old
+        // (launchSpin, aimSpin, f32) form was a slice artefact and its caller passed the ENABLE
+        // input where the asm consumes the TIMESTEP. Register map @0x825FFBF4-0x825FFC08:
+        // r4 = lpControls (only byte +0x3F, mbBoostBounce, is read), r5 = the bool (saved, never
+        // read), v1 = normalized camera X (the spin axis), v2 = normalized camera Z (the bounce
+        // AirRam direction seed), v3 = the sim timestep (decrements mfTimeUntilPush), v4 = the
+        // splatted aftertouch-enable (its release is one arm of the "bouncing" disable).
+        void UpdateShowtimePhysics(const BrnPlayerDriverControls* lpControls,
+                                   const Vector3& lvCameraX, const Vector3& lvCameraZ,
+                                   VecFloat lvfTimeStep, VecFloat lvfEnable, bool lbUnused);
 
         // @0x825D7940: derive the per-frame bounce deformation modifiers from the live deformation
         // state (per-sensor crush magnitudes -> a clamped bounce-strength array), and the global
-        // deformation scale flt_82FB84B4 = sqrt(totalCrush) / numSensors. lpDeformationState is a
-        // BrnDeformationState*.
-        void UpdateShowtimeBounceModifiers(const void* lpDeformationState);
+        // deformation scale flt_82FB84B4 = sqrt(totalCrush) / numSensors. RE-TYPED 2026-08-24
+        // (showtime wave) to the DWARF parameter type (const CarState*, RaceCarPhysics.h:307) --
+        // the type is fully modelled now (BrnDeformationState.h), so the "opaque +1700/+1696"
+        // void* form and its elided loop are retired.
+        void UpdateShowtimeBounceModifiers(const Deformation::CarState* lpDeformationState);
 
         // @0x825D7600: clamp the showtime velocity each frame -- speed to one of two caps (boosting
         // vs not) and the vertical component separately, UNLESS IsPlayerVehicleWithUncappedShowtimeSpeed
@@ -393,10 +405,14 @@ namespace Vehicle
 
         // @0x8262EBE8: camera-relative air-steer. Normalizes the camera matrix's X and Z axes, reads
         // stick deflection via GetAftertouchValues (yaw/pitch/scalar, + optional SIXAXIS tilt), and
-        // applies (1) a world-space lateral force along camera-X, (2) a world-space roll angular
-        // impulse, (3) local pitch impulses. Magnitudes differ for showtime vs normal flight, with an
-        // extra IsBounceBoosting multiplier. From showtime it chains UpdateTargetAssist +
-        // UpdateShowtimePhysics. Gated on the car being airborne (mbIsCrashing here means in-air-ish).
+        // applies (1) ONE combined world-space force (camera-X * yaw + camera-Z * pitch channels),
+        // (2) a world-yaw angular impulse driven by the aftertouch scalar, (3) two world-up local
+        // impulses at +/-4 m lever arms (roll from yaw, wheelie/pitch from pitch). Magnitudes differ
+        // for showtime vs normal flight, with an extra x2.5 IsBounceBoosting multiplier
+        // (unk_82FB8830 <- flt_82005548). From showtime it chains UpdateTargetAssist +
+        // UpdateShowtimePhysics. ENTRY GATES (asm 0x8262EC1C-EC4C): IsCrashing() (+0x710),
+        // !controls->mbIsOnStartLine (+0x40), and the vtbl +0x14 virtual
+        // (IsPlayerVehicleActuallyInShowtime on this class) -- all three bail the whole body.
         // WIDENED 2026-08-09 (crash/shunt wave) to the 5-arg DWARF virtual form so it
         // OVERRIDES VehiclePhysics's image-attested slot +0x28 (the RaceCarPhysics vtable
         // @0x820D1034 carries this @0x8262EBE8 there). The old 4-arg form dropped the VecFloat
@@ -410,17 +426,30 @@ namespace Vehicle
         // @0x825B8C88: trivial getter -- true while aftertouch air-steer is active this frame.
         bool IsUsingAftertouch() const { return mbUsingAftertouch; }
 
-        // @0x8261FF50: showtime auto-aim. Argmin over a GLOBAL candidate target list
-        // (msTargetPositions / msNumTargets), score weight = (2 - alignmentDot) * (1/distance) with a
-        // stickiness bonus for last frame's target, only while moving upward; lerps an aim direction
-        // and, when aligned, pulls velocity toward a ballistic intercept (ComputeIdealVelocity).
-        void UpdateTargetAssist(const BrnPlayerDriverControls* lpControls);
+        // @0x8261FF50: showtime auto-aim. RE-SIGNATURED + REWRITTEN 2026-08-24 (showtime wave) to
+        // the DWARF form (RaceCarPhysics.h:271: controls, VecFloat, VecFloat, Vector3). Register
+        // map: r4 = lpControls (never read in the body), v1 = the sim timestep (drives the
+        // mAssistStrength envelope decay), v2 = the splatted enable (never read), v3 = the
+        // stick-derived aim direction (built by UpdateAftertouch @0x8262F26C-F2C8 as
+        // normalize(-(cameraX*yaw + cameraZ*pitch)), zero when degenerate). Gated on time-in-air
+        // (+0x1060.z) > 0.5; candidates scored w = (2 - dot(aimDir, unitToTarget)) * distance
+        // (argmin) behind an ALIGNMENT gate dot > 0.766, with a x0.5 stickiness for last frame's
+        // target; maintains the mAssistStrength envelope; past 2.0 m it pulls velocity toward the
+        // ComputeIdealVelocity intercept and clears the queued air rams.
+        void UpdateTargetAssist(const BrnPlayerDriverControls* lpControls,
+                                VecFloat lvfTimeStep, VecFloat lvfEnable, Vector3 lvAimDirection);
 
-        // @0x82600558: solve a projectile arc to a target. Flattens the target-relative vector; if
-        // horizontal distance >= 1.0, horizontal = dir/(2t), vertical = t^2 * 9.81, with
-        // t = horizDist / (KF_IDEAL_T_BASE - lfInputSpeed); else returns the target's own velocity.
-        // Writes the result to *lpResult (return is lpResult). lfInputSpeed = the car's 2D speed.
-        Vector3* ComputeIdealVelocity(Vector3* lpResult, f32 lfInputSpeed) const;
+        // @0x82600558: solve a projectile arc to a target position. RE-SIGNATURED + REWRITTEN
+        // 2026-08-24 (showtime wave): the DWARF form is (Vector3, float32_t) + hidden sret -- the
+        // caller passes the chosen TARGET POSITION in v1 (`vmr128 v1, v127` @0x82620274), and the
+        // old "target body pointer" reading was wrong: a2/r4 is `this` (the car itself), whose
+        // +0x40 position seeds the delta and whose +0x50 velocity is the < 1.0 m fallback arm.
+        //   t = dist2D / clamp(lfSpeed2D, 5.0, 20.0)      (flt_82F2A330 / flt_82F2A334 fsel pair)
+        //   horizontal = unit2D(delta) * clamp(lfSpeed2D, 5.0, 20.0)
+        //   vertical   = (2*delta.y + 9.81*t^2) / (2t)    (exact ballistic intercept; 9.81 =
+        //                                                  flt_8208F83C, image-read)
+        Vector3* ComputeIdealVelocity(Vector3* lpResult, Vector3 lvTargetPosition,
+                                      f32 lfSpeed2D) const;
 
         // @0x825B8B08: copy out the recent-bounce report (chain count / over-min-stress / car-bounce /
         // good-impact flags, the other entity id, and the bounce direction vector) and consume the
@@ -708,11 +737,18 @@ namespace Vehicle
         bool  mbGoodImpactReport;      // +0x0B  byte_82FB848B (GetRecentBounce flag 5)
         s32   miOtherEntityId;         // +0x0C  dword_82FB848C (SetJustBounced a4)
 
-        // ---- +0x10 : bounce / aim direction (one VMX register) ----
-        Vector3 mBounceDirection;      // +0x10  (SetJustBounced/SetShowtimeAimDirection VMX @ +0x10)
+        // ---- +0x10 : bounce direction (one VMX register) ----
+        Vector3 mBounceDirection;      // +0x10  (SetJustBounced stvx128 v127 @ +0x10)
 
-        // ---- +0x20..+0x30 : unread interior (a 16B VMX scratch the asm does not read by name) ----
-        u8    maReserved20[0x30 - 0x20];
+        // ---- +0x20 : the showtime AIM direction (NAMED 2026-08-24, showtime wave). ----
+        // This was carried as `maReserved20` ("a 16B VMX scratch the asm does not read by name")
+        // and SetShowtimeAimDirection stored into +0x10 instead -- clobbering mBounceDirection
+        // while the real aim slot never received a write. Both halves are asm-attested:
+        //   * writer: SetShowtimeAimDirection @0x825B8AF0 `li r10,0x20 ; stvx128 v1,r11,r10`
+        //     (re-read independently by two audit agents + this wave);
+        //   * reader: UpdateShowtimePhysics @0x82600030 launch pop `li r11,0x20 ;
+        //     lvx128 v13,r31,r11` -- the pop AirRam direction is normalize(worldUp + THIS slot).
+        Vector3 mAimDirection;         // +0x20  (SetShowtimeAimDirection store / launch-pop read)
 
         // ---- +0x30..+0x4C : showtime launch/timer block (Reset zeroes / seeds these) ----
         bool  mbDisableShowtime;       // +0x30  byte_82FB84B0 (IsPlayerVehicleInShowtime gate)
@@ -750,10 +786,40 @@ namespace Vehicle
         EntityId maTargetIds[8];       // +0xD0  dword_82FB8550 (per-candidate id, 8 slots)
         s32   miNumTargets;            // +0xF0  dword_82FB8570
         s32   miCurrentTargetId;       // +0xF4  dword_82FB8574 (Reset -> -1)
-        u8    maReservedF8[0x110 - 0xF8];  // +0xF8..+0x110
+        u8    maReservedF8[0x100 - 0xF8];  // +0xF8..+0x100
+
+        // ---- +0x100 : the target-assist strength envelope (NAMED 2026-08-24, showtime wave). ----
+        // unk_82FB8580. Reset @0x825B89B8 seeds it splat(flt_82002138 = 0.01) -- the store the
+        // committed Reset dropped ("no known reader" was WRONG: UpdateTargetAssist @0x82620144-198
+        // is the reader/maintainer). Per frame in target assist: re-seeded splat(0.015)
+        // (unk_82FB92B0 <- flt_82004C74, init @0x82C5CFB8) when mbJustBounced, else decayed
+        // max(env - dt * splat(0.01) [unk_82FB9320 <- flt_82002138, init @0x82C5D008],
+        //     splat(0.001) [unk_82FB8AF0 <- flt_82013F90, init @0x82C5CFE0]).
+        // Its .y lane scales the vertical intercept correction of the assist force.
+        Vector3 mAssistStrength;       // +0x100 unk_82FB8580
 
         // ---- +0x110.. : bounce-sensor count ----
         u8    mu8NumBounceSensors;     // +0x110 byte_82FB8590 (Reset -> 0)
+        u8    maReserved111[0x120 - 0x111];  // +0x111..+0x120 (alignment pad to the sensor array)
+
+        // ---- +0x120 : the per-sensor bounce scratch UpdateShowtimeBounceModifiers fills ----
+        // (NAMED 2026-08-24, showtime wave -- these were the three bare globals unk_82FB85A0 /
+        // flt_82FB85B0 / flt_82FB85B4 the old stub note called "the per-sensor scratch the C10
+        // group does not own"). 32-byte stride, asm-attested @0x825D7A20 (`slwi r30, r31, 5`):
+        //   +0x00  the sensor's world scalar vector (CarSensorState +0x10)
+        //   +0x10  the sensor's spec scalar         (CarSensorState +0x40)
+        //   +0x14  the crush factor: clamp(1 - 2*|displacement|^2, 0.4, 1.0)
+        //          (flt_82F2A2B8 / flt_82F2A2BC band, both image-read)
+        // Capacity matches CarState's sensor pool (KU_MAX_SENSORS == 20):
+        // 0x120 + 20*0x20 == 0x3A0, closing before the next known global (unk_82FB8830 @ +0x3B0).
+        struct alignas(16) BounceSensor
+        {
+            Vector3 mWorldScalarVector;   // +0x00  (unk_82FB85A0 + 32*i)
+            f32     mfSpecScalar;         // +0x10  (flt_82FB85B0 + 32*i)
+            f32     mfCrushFactor;        // +0x14  (flt_82FB85B4 + 32*i)
+            u8      maReserved18[8];      // +0x18..+0x20
+        };
+        BounceSensor maBounceSensors[20];  // +0x120..+0x3A0
 
         // @0x825B89B8: zero/seed the singleton on showtime entry. Bodied in RaceCarPhysics.cpp.
         void Reset();

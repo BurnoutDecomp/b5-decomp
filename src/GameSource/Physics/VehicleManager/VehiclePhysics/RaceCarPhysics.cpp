@@ -1,6 +1,9 @@
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/RaceCarPhysics.h"
 #include "rw/math/vpu/vector3_operation.h"   // rw::math::vpu::{Dot, Add, Subtract, Mult, Normalize, MagnitudeSquared}
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameSource/Math/BrnMathUtils.h"    // BrnMath::Magnitude2D / MagnitudeSquared2D (XZ plane)
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"  // [showtime-probe] CgsDev::Log::gpDebugPrint
+#include <cstdlib>   // [showtime-probe] getenv
 #include <algorithm> // std::clamp
 #include <cmath>     // std::sqrt, std::fabs
 #include <cstddef>   // offsetof
@@ -196,11 +199,11 @@ namespace Vehicle
     // C10 group: showtime / aftertouch / target-assist / bounce-boost.
     //
     // The module-static showtime singleton (X360 msPlayerParams; base symbol lbBounceBoosting). One
-    // car at a time.
-    // the DEFINITION moved to the mounted slice
-    // RaceCarPhysics_ShowtimeBounce.cpp (along with UpdateShowtimeBounceModifiers) -- this TU is
-    // still unmounted, and the leaves slice links against the singleton. The extern declaration in
-    // RaceCarPhysics.h is unchanged; fold the definition back here when this TU mounts.
+    // car at a time. The DEFINITION lives in the slice TU RaceCarPhysics_ShowtimeBounce.cpp (along
+    // with UpdateShowtimeBounceModifiers) since the PhysicsModule::Update leaves wave. STALE-BANNER
+    // FIX 2026-08-24: this TU is MOUNTED (build_game_exe.bat mounts both it and the slice); the
+    // "fold the definition back here when this TU mounts" note aged out -- the split stands because
+    // both TUs link today and folding would be churn, not because of any mount gap.
     namespace { PlayerParameters& MS = msPlayerParams; }   // short alias for the bodies below
     // -----------------------------------------------------------------------------------------
     // THE SEED CONSTANTS ARE READ (2026-08-03, constants wave). The banner that used to sit
@@ -242,18 +245,64 @@ namespace Vehicle
     static const f32 KF_CAP_LINEAR               = 8.0f;         // flt_82F2A2E0 (was KF_CAP_VERT)
     static const f32 KF_CAP_LINEAR_BOOST         = 20.0f;        // flt_82F2A2E4 (was KF_CAP_VERT_BOOST)
     static const f32 KF_CAP_VERTICAL_SPEED       = 9.0f;         // flt_82F2A2E8 (was KF_CAP_VERT_UNCAPPED)
-    static const f32 KF_IDEAL_T_BASE             = 5.0f;         // flt_82F2A330 (ComputeIdealVelocity t base)
-    static const f32 KF_AFTERTOUCH_LAT           = -2000.0f;     // flt_82F2A304 (lateral force scale)
-    static const f32 KF_AFTERTOUCH_ROLL          = 1400.0f;      // flt_82F2A2FC (roll impulse scale)
-    static const f32 KF_AFTERTOUCH_PITCH         = 1400.0f;      // flt_82F2A300 (pitch impulse scale)
-    static const f32 KF_TARGET_SCORE_GATE        = 0.765999973f; // flt_82F2A328 (UpdateTargetAssist gate)
-    static const f32 KF_GRAVITY                  = 9.8100004f;   // resolved inline literal (ballistic arc)
+    // ---- showtime/aftertouch constants, ALL image-attested (2026-08-24 showtime wave: every
+    // value below was either already in rodata_bulk from the physics11 audit or freshly read
+    // with idat off the ARTIST i64 copy; the .data splats cite their static-init writer). ----
+    static const f32 KF_BOUNCE_SPIN_SCALE        = 10000.0f;     // flt_82F2A2CC (good-bounce camX spin)
+    static const f32 KF_BOUNCE_AIRRAM_DECAY      = 0.2f;         // flt_82FB9140 <- flt_82F2A298 (init
+                                                                 // @0x82C5CFA0; the static image byte
+                                                                 // reads 0.0 -- literal-scan trap)
+    static const f32 KF_BOUNCE_AIRRAM_FACTOR_DEV = 0.0f;         // flt_82FB7E2C: NO static-init writer
+                                                                 // (dev-watch block, ships 0) -- the
+                                                                 // not-boosting bounce AirRam factor
+    static const f32 KF_IDEAL_SPEED_MIN          = 5.0f;         // flt_82F2A330 (was KF_IDEAL_T_BASE --
+                                                                 // it is a SPEED CLAMP low bound, not a
+                                                                 // "t base"; old name kept greppable)
+    static const f32 KF_IDEAL_SPEED_MAX          = 20.0f;        // flt_82F2A334 (speed clamp high bound)
+    static const f32 KF_AT_FORCE_YAW             = 12000.0f;     // flt_82F2A308 (negated at use)
+    static const f32 KF_AT_FORCE_PITCH_UP        = 8000.0f;      // flt_82F2A30C (pitch >= 0; negated)
+    static const f32 KF_AT_FORCE_PITCH_DOWN      = 20000.0f;     // flt_82F2A310 (pitch < 0; negated)
+    static const f32 KF_AT_NONSHOWTIME_SCALE     = 1.5f;         // flt_82F2A2B4
+    static const f32 KF_AT_ROLL_SCALAR           = -2000.0f;     // flt_82F2A304. RENAMED: this was
+                                                                 // KF_AFTERTOUCH_LAT "lateral force
+                                                                 // scale" -- MISBOUND. The asm consumes
+                                                                 // it @0x8262F2E4 in the ANGULAR yaw-
+                                                                 // impulse channel (x the aftertouch
+                                                                 // scalar), never the lateral force.
+    static const f32 KF_AT_LEVER_IMPULSE_YAW     = 1400.0f;      // flt_82F2A2FC (|yaw| lever impulse)
+    static const f32 KF_AT_LEVER_IMPULSE_PITCH   = 1400.0f;      // flt_82F2A300 (|pitch| lever impulse)
+    static const f32 KF_AT_LEVER_ARM             = 4.0f;         // flt_8208FA0C (+/-4 m lever offset)
+    static const f32 KF_AT_BOOST_MULTIPLIER      = 2.5f;         // unk_82FB8830 <- flt_82005548 (init
+                                                                 // @0x82C5CF78; bounce-boost force x)
+    static const f32 KF_AT_ENABLE_AIR_FACTOR     = 0.4f;         // flt_82F2A2D0 (time-in-air > gate)
+    static const f32 KF_AT_ENABLE_GROUND_FACTOR  = 0.1f;         // flt_82F2A2D4
+    static const f32 KF_AT_TILT_GATE             = 0.2f;         // flt_82F2A314 (|SIXAXIS tilt| >=)
+    static const f32 KF_AT_TILT_GAIN             = 0.2f;         // flt_82F2A318 (yaw += sign * gain)
+    static const f32 KF_AIRTIME_GATE             = 0.5f;         // flt_82F2A2F8 (+0x1060.z compare, the
+                                                                 // aftertouch/assist "really airborne")
+    static const f32 KF_TARGET_SCORE_GATE        = 0.765999973f; // flt_82F2A328 (dot(aim,toTarget) >)
+    static const f32 KF_TARGET_STICKINESS        = 0.5f;         // flt_82F2A32C (x weight when same id)
+    static const f32 KF_TARGET_MIN_DISTANCE      = 2.0f;         // flt_82F2A324 (assist-force gate)
+    static const f32 KF_ASSIST_FORCE_PER_METRE   = 4000.0f;      // flt_82F2A31C
+    static const f32 KF_ASSIST_FORCE_CAP         = 14000.0f;     // flt_82F2A320 (fsel min clamp)
+    static const f32 KF_ASSIST_SEED              = 0.015f;       // unk_82FB92B0 <- flt_82004C74 (@0x82C5CFB8)
+    static const f32 KF_ASSIST_DECAY_PER_S       = 0.01f;        // unk_82FB9320 <- flt_82002138 (@0x82C5D008)
+    static const f32 KF_ASSIST_FLOOR             = 0.001f;       // unk_82FB8AF0 <- flt_82013F90 (@0x82C5CFE0)
+    static const f32 KF_FORCESET_HEIGHT          = 2.5f;         // flt_82005548 (force-set bounce height gate)
+    static const f32 KF_PITCH_NEAR_GROUND        = 2.0f;         // flt_82001D9C (pitch-up impulse height gate)
+    static const f32 KF_LAUNCH_MIN_SPEED2D       = 0.0099999998f;// inline 0.01 (launch direction fallback)
+    static const f32 KF_GRAVITY                  = 9.8100004f;   // flt_8208F83C (ballistic arc)
+    // The world up vector both showtime spin/AirRam sites read. TWO console homes, one value:
+    // unk_82181510 (.rdata, {0,1,0,0} raw-byte read) and unk_82FB9050 (.data, init @0x82C5C4B0
+    // building {0.0, 1.0, 0.0, 0} from flt_82001CC0/flt_82001C98).
+    static const Vector3 KV_WORLD_UP             = { 0.0f, 1.0f, 0.0f, 0.0f };
 
     // ---------------------------------------------------------------------------------------
     // PlayerParameters::Reset  @0x825B89B8 -- store-for-store from the asm (offsets confirmed).
-    //   Zeroes the bounce report + latch block, the +0x10 direction vector, the +0x30 launch block,
-    //   the +0x100 vector and the +0x110 sensor count; seeds mfDamageBudget(+0x38)=flt_82F2A2C8,
-    //   sets mbBounceBoostPending(+0x09)=1 and miCurrentTargetId(+0xF4)=-1.
+    //   Zeroes the bounce report + latch block, the +0x10 direction vector, the +0x30 launch block
+    //   and the +0x110 sensor count; SEEDS the +0x100 assist envelope = splat(flt_82002138 = 0.01)
+    //   and mfDamageBudget(+0x38)=flt_82F2A2C8; sets mbBounceBoostPending(+0x09)=1 and
+    //   miCurrentTargetId(+0xF4)=-1.
     // ---------------------------------------------------------------------------------------
     void PlayerParameters::Reset()
     {
@@ -282,7 +331,14 @@ namespace Vehicle
 
         miCurrentTargetId    = -1;      // +0xF4 = -1  (stw r8=-1)
         mu8NumBounceSensors  = 0;       // +0x110 = 0
-        // (the +0x100 vector store is part of the target/sensor scratch -- left zero by the {} init).
+
+        // THE DROPPED +0x100 STORE, RESTORED (2026-08-24 showtime wave). The console splats
+        // flt_82002138 = 0.01 into the assist envelope; the committed body left it to the {}
+        // zero-init with a comment calling it "target/sensor scratch". It is neither scratch nor
+        // reader-less: UpdateTargetAssist maintains it every frame and multiplies its .y into
+        // the assist force's vertical correction. A 0.0 seed is NOT the identity here -- it
+        // kills the vertical intercept pull until the first bounce re-seeds the envelope.
+        mAssistStrength = Vector3{ 0.01f, 0.01f, 0.01f, 0.01f };   // +0x100 splat(flt_82002138)
     }
 
     // ---------------------------------------------------------------------------------------
@@ -334,12 +390,107 @@ namespace Vehicle
     //   stores v127 (== v1) -- not v126 (== v2) -- into the scratch it adds at 0x826418CC
     //   (mfUncappedSpeedTimer), 0x826418E4 (mfTimeSinceTookDownPlayer) and 0x826419CC (+0x1408).
     // ---------------------------------------------------------------------------------------
+    // =======================================================================================
+    // [showtime-probe] RunShowtimeBringUpProbe -- NOT an X360 function, and DELIBERATELY
+    // PERMANENT (the BRN_CAR_TELEPORT precedent: a TRIGGER, not a mechanism). Inert unless
+    // BRN_SHOWTIME_TEST is set (one getenv on the first Update, one bool test per frame after).
+    //
+    // WHY IT EXISTS. The showtime/aftertouch cluster landed 2026-08-24 is 1:1 against the asm,
+    // but NOTHING in this build can reach it through gameplay: the sole console caller of
+    // VehicleManager::SetPlayerCarToShowtimeMode (the game-mode/action chain) is not
+    // reconstructed, so meCurrentGameModeType never becomes a showtime mode and every landed
+    // body stays cold on a boot-drive run. A "verified" that never executed is exactly the
+    // reverse-control trap; this probe exists so the branch can be WITNESSED.
+    //
+    // WHAT IT DOES, all through real console entries on this car:
+    //   * once the car is driving above the trigger speed (default 25 mph;
+    //     BRN_SHOWTIME_TEST="mph" overrides), it calls SetPlayerVehicleInShowtime(true, 5.0,
+    //     50.0) -- the exact physics-side entry SetPlayerCarToShowtimeMode forwards to (the two
+    //     scalars stand in for the manager's cached player stats; both satisfy the console's own
+    //     range assert) -- then SetCrashing(true), the Breaker's showtime/crash entry, so
+    //     UpdateCrashing dispatches the aftertouch/showtime chain exactly as the console mode
+    //     manager would.
+    //   * for the next ~6 s it prints one [showtime-probe] state line every 30 frames: the
+    //     gates (in-showtime / crashing / has-air), the singleton latches (disable / launch /
+    //     boosting / push timer) and the speeds the caps act on.
+    // ⛔ DELETE-WHEN: the game-mode chain lands and a real showtime run replaces this witness.
+    // =======================================================================================
     void RaceCarPhysics::Update(VecFloat lvfSimTimeStep, VecFloat lvfRealTimeStep,
                                 const rw::math::vpu::Matrix44Affine* lpCameraMatrix,
                                 const BrnPlayerDriverControls* lpControls, bool lbImpactTime,
                                 bool lbPlayerAftertouchForceAdditive, bool lbShowtimeAllowed,
                                 CgsNumeric::Random& lrRandom)
     {
+        {
+            enum EProbeStage { E_PROBE_UNREAD = 0, E_PROBE_OFF, E_PROBE_ARMED, E_PROBE_RUNNING, E_PROBE_DONE };
+            static EProbeStage seStage = E_PROBE_UNREAD;
+            static f32 sfTriggerMPH = 25.0f;
+            static s32 siFramesLeft = 0;
+            static s32 siFrameMod = 0;
+            if (seStage == E_PROBE_UNREAD)
+            {
+                seStage = E_PROBE_OFF;
+                const char* lpcSpec = std::getenv("BRN_SHOWTIME_TEST");
+                if (lpcSpec != 0 && lpcSpec[0] != '\0')
+                {
+                    const f32 lfParsed = static_cast<f32>(std::atof(lpcSpec));
+                    if (lfParsed > 0.0f)
+                        sfTriggerMPH = lfParsed;
+                    seStage = E_PROBE_ARMED;
+                    if (CgsDev::Log::gpDebugPrint != 0)
+                        *CgsDev::Log::gpDebugPrint
+                            << "[showtime-probe] armed: fires once a race car passes "
+                            << sfTriggerMPH << " mph\n";
+                }
+            }
+            if (seStage == E_PROBE_ARMED && GetSpeedMPH().x > sfTriggerMPH)
+            {
+                seStage = E_PROBE_RUNNING;
+                siFramesLeft = 360;   // ~6 s of witness at 60 Hz
+                if (CgsDev::Log::gpDebugPrint != 0)
+                    *CgsDev::Log::gpDebugPrint
+                        << "[showtime-probe] FIRING at " << GetSpeedMPH().x
+                        << " mph: SetPlayerVehicleInShowtime(true, 5.0, 50.0) + SetCrashing(true)\n";
+                SetPlayerVehicleInShowtime(true, 5.0f, 50.0f);   // the real physics-side entry
+                SetCrashing(true);                               // the Breaker's crash entry
+            }
+            if (seStage == E_PROBE_RUNNING)
+            {
+                // Drive the aftertouch/showtime chain the way UpdateCrashing would if the
+                // manager's mbAftertouchIsForceAdditive flag had a reconstructed setter (it
+                // defaults false and its console writer -- the game-side aftertouch mode
+                // chain -- is not in the tree yet). One real virtual invocation per frame with
+                // the LIVE camera/controls/dt; the normal dispatch stays cold (flag false), so
+                // this never double-invokes.
+                UpdateAftertouch(lpControls, lpCameraMatrix, lvfSimTimeStep,
+                                 /*additive*/ true, /*sixaxis*/ false);
+
+                if ((siFrameMod++ % 30) == 0 && CgsDev::Log::gpDebugPrint != 0)
+                {
+                    const Vector3 lvVel = GetLinearVelocity();
+                    const Vector3 lvAng = GetAngularVelocity();
+                    *CgsDev::Log::gpDebugPrint
+                        << "[showtime-probe] inShowtime=" << (mbPlayerCarInShowtime ? 1 : 0)
+                        << " crashing=" << (IsCrashing() ? 1 : 0)
+                        << " hasAir=" << (mbHasAir ? 1 : 0)
+                        << " usingAftertouch=" << (mbUsingAftertouch ? 1 : 0)
+                        << " | disable=" << (msPlayerParams.mbDisableShowtime ? 1 : 0)
+                        << " launch=" << (msPlayerParams.mbLaunchActive ? 1 : 0)
+                        << " boosting=" << (msPlayerParams.mbBounceBoosting ? 1 : 0)
+                        << " pushT=" << msPlayerParams.mfTimeUntilPush
+                        << " | speed=" << std::sqrt(vpu::MagnitudeSquared(lvVel))
+                        << " velY=" << lvVel.y
+                        << " angMag=" << std::sqrt(vpu::MagnitudeSquared(lvAng))
+                        << " active=" << (IsPlayerVehicleInShowtime() ? 1 : 0) << "\n";
+                }
+                if (--siFramesLeft <= 0)
+                {
+                    seStage = E_PROBE_DONE;
+                    if (CgsDev::Log::gpDebugPrint != 0)
+                        *CgsDev::Log::gpDebugPrint << "[showtime-probe] window closed\n";
+                }
+            }
+        }
         // THE ZERO TIMESTEP IS GONE (2026-08-01, physics wave 1). This used to read
         //     static const f32 KF_DT = 0.0f;   // FLAG: frame dt ... un-homed here
         // -- a committed zero that made EVERY timer in this function a no-op, and a `0.0f`
@@ -567,11 +718,16 @@ namespace Vehicle
 
     // ---------------------------------------------------------------------------------------
     // RaceCarPhysics::SetShowtimeAimDirection  @0x825B8AF0
-    //   Stash the aim direction (one VMX register) into the singleton @ +0x10.
+    //   Stash the aim direction (one VMX register) into the singleton @ +0x20.
+    // FIXED 2026-08-24 (showtime wave): the committed store went to +0x10 (mBounceDirection),
+    //   clobbering SetJustBounced's report vector while the real aim slot never received a
+    //   write. The asm is unambiguous: `li r10, 0x20 ; stvx128 v1, r11, r10` -- re-read by two
+    //   audit agents and again this wave. The +0x20 slot is now the named mAimDirection, and
+    //   its console reader (the UpdateShowtimePhysics launch pop @0x82600030) reads it below.
     // ---------------------------------------------------------------------------------------
     void RaceCarPhysics::SetShowtimeAimDirection(const Vector3& lvAimDirection)
     {
-        MS.mBounceDirection = lvAimDirection;   // stvx128 v1, (lbBounceBoosting + 0x10)
+        MS.mAimDirection = lvAimDirection;   // stvx128 v1, (lbBounceBoosting + 0x20)
     }
 
     // ---------------------------------------------------------------------------------------
@@ -719,64 +875,89 @@ namespace Vehicle
 
     // ---------------------------------------------------------------------------------------
     // RaceCarPhysics::ComputeIdealVelocity  @0x82600558
-    //   Solve a projectile arc to the target. dir = Flatten(target - bodyPos@+0x40); if its 2D
-    //   distance >= 1.0, t = dist / (KF_IDEAL_T_BASE - lfInputSpeed); horizontal = unit2D * dist/(2t),
-    //   vertical = t^2 * 9.81; combined into the result. Else return the target's own velocity
-    //   (bodyPos@+0x50). lfInputSpeed is the car's 2D speed.
-    //   FLAG: KF_IDEAL_T_BASE (flt_82F2A330) is un-homed; the arc math is exact (9.81 is an inline
-    //   literal). a2 is the target body (read at +0x40 position, +0x50 velocity).
+    // REWRITTEN 2026-08-24 (showtime wave) from the full raw asm (0x82600558..0x8260077C).
+    //   The committed form was wrong in all three terms and in the signature:
+    //     * a2/r4 is THIS (the caller passes `mr r4, r28` = the car), not a "target body";
+    //       v1 is the chosen TARGET POSITION -- the old body read MS.mBounceDirection instead;
+    //     * the divisor is clamp(speed2D, 5.0, 20.0) (two scalar fsels @0x826005C0/0x826005E0:
+    //       max(speed, 5.0) then min(., 20.0)) -- not "5.0 - speed";
+    //     * horizontal = unit2D * clampedSpeed (`vmulfp128 v0, v0, v9` @0x82600750, v9 =
+    //       splat(the CLAMPED SPEED stored to var_40 @0x82600660)) -- not dist/(2t);
+    //     * vertical = (2*delta.y + 9.81*t^2) * (1/(2t)) (@0x82600744/54: vmaddfp
+    //       v13 = delta.y * splat(2.0) + splat(t^2 * 9.81), then * splat(1/(2t))) -- the exact
+    //       ballistic solution vy = h/t + g*t/2 with the ORIGINAL vertical offset, which the old
+    //       body dropped entirely.
+    //   The < 1.0 m arm returns [a2+0x50] -- and since a2 == this, that is the car's own
+    //   velocity: the previous FLAG on that arm is retired as accidentally-correct.
     // ---------------------------------------------------------------------------------------
-    Vector3* RaceCarPhysics::ComputeIdealVelocity(Vector3* lpResult, f32 lfInputSpeed) const
+    Vector3* RaceCarPhysics::ComputeIdealVelocity(Vector3* lpResult, Vector3 lvTargetPosition,
+                                                  f32 lfSpeed2D) const
     {
-        // The target body's position/velocity are read at +0x40 / +0x50 of a2 in the asm. In this
-        // minimal slice the "target body" is the singleton's recorded aim/intercept; faithful read is
-        // mBounceDirection as the relative direction. FLAG: target-body pointer un-modelled.
-        const Vector3 lvTargetRel = MS.mBounceDirection;   // (target - bodyPos) before Flatten
+        // delta = targetPos - position (+0x40), kept unflattened for the vertical term.
+        const Vector3 lvDelta = vpu::Subtract(lvTargetPosition, mTransform.Pos());
 
-        // Flatten: drop the vertical (y) component -> a ground-plane direction (BrnMath::Flatten).
-        Vector3 lvFlat = lvTargetRel;
-        lvFlat.y = 0.0f;
+        // 2D (XZ) distance -- the asm calls BrnMath::Flatten then sums the two packed lanes'
+        // squares; MagnitudeSquared2D is that same x*x + z*z.
+        const f32 lfDistSq = BrnMath::MagnitudeSquared2D(lvDelta);
+        const f32 lfDist   = (lfDistSq > 0.0f) ? std::sqrt(lfDistSq) : 0.0f;   // vrsqrte + guard
 
-        const f32 lfDistSq = lvFlat.x * lvFlat.x + lvFlat.z * lvFlat.z;   // vmsum of the 2 lanes
-        const f32 lfDist   = (lfDistSq > 0.0f) ? std::sqrt(lfDistSq) : 0.0f;
+        // clamp(speed2D, 5.0, 20.0) -- the two fsels (flt_82F2A330 / flt_82F2A334).
+        f32 lfClampedSpeed = lfSpeed2D;
+        if (lfClampedSpeed < KF_IDEAL_SPEED_MIN) lfClampedSpeed = KF_IDEAL_SPEED_MIN;
+        if (lfClampedSpeed > KF_IDEAL_SPEED_MAX) lfClampedSpeed = KF_IDEAL_SPEED_MAX;
 
-        if (lfDist >= 1.0f)
+        if (lfDist >= 1.0f)   // flt_82001C98 compare @0x8260061C
         {
-            const f32 lfDenom = KF_IDEAL_T_BASE - lfInputSpeed;   // flt_82F2A330 - a3 (FLAGGED base)
-            const f32 lfT     = (lfDenom != 0.0f) ? (lfDist / lfDenom) : 0.0f;
+            const f32 lfT = lfDist / lfClampedSpeed;   // fdivs @0x82600650
 
-            // horizontal component: unit2D * (1 / (t * 2)) ; then scaled by the original dir
-            const f32 lfHorizScale = (lfT != 0.0f) ? (1.0f / (lfT * 2.0f)) : 0.0f;
-            Vector3 lvHoriz = vpu::Mult(vpu::Normalize(lvFlat), lfDist * lfHorizScale);
+            // horizontal: unit2D(delta) * clampedSpeed. The asm zeroes the y lane (vrlimi mask 4
+            // of splat(0)) and normalizes the 3-lane vector -- identical to a 2D normalize.
+            Vector3 lvFlat = lvDelta;
+            lvFlat.y = 0.0f;
+            const f32 lfFlatMagSq = vpu::MagnitudeSquared(lvFlat);
+            Vector3 lvUnit2D = (lfFlatMagSq > 0.0f)
+                             ? vpu::Mult(lvFlat, 1.0f / std::sqrt(lfFlatMagSq))
+                             : Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };
 
-            // vertical component: t^2 * gravity
-            const f32 lfVert = (lfT * lfT) * KF_GRAVITY;
-            lvHoriz.y = lfVert;
+            Vector3 lvIdeal = vpu::Mult(lvUnit2D, lfClampedSpeed);
 
-            *lpResult = lvHoriz;
+            // vertical: (delta.y * 2.0 + 9.81 * t^2) / (2t)  == h/t + g*t/2.
+            lvIdeal.y = (lvDelta.y * 2.0f + KF_GRAVITY * lfT * lfT) / (lfT * 2.0f);
+
+            *lpResult = lvIdeal;
         }
         else
         {
-            // horizontal distance below 1.0 -> just take the target's own velocity (a2 + 0x50).
-            *lpResult = GetLinearVelocity();   // FLAG: target-body velocity; here the car's own
+            // under 1.0 m of horizontal distance: the body's own velocity (a2 == this, +0x50).
+            *lpResult = GetLinearVelocity();
         }
         return lpResult;
     }
 
     // ---------------------------------------------------------------------------------------
-    // RaceCarPhysics::UpdateShowtimeBounceModifiers @0x825D7940 -- MOVED 2026-08-06 (PhysicsModule
-    // ::Update leaves wave) to the mounted slice RaceCarPhysics_ShowtimeBounce.cpp, together with
-    // the msPlayerParams definition above: VehicleManager::ProcessDeformationStates (mounted this
-    // wave) calls it, and this TU must stay unmounted while its un-read rodata stands. The body's
-    // own FLAG (the elided per-sensor scatter) moved with it, unchanged. Fold back on mount.
+    // RaceCarPhysics::UpdateShowtimeBounceModifiers @0x825D7940 -- lives in the slice TU
+    // RaceCarPhysics_ShowtimeBounce.cpp (moved 2026-08-06, PhysicsModule::Update leaves wave;
+    // the "fold back on mount" note aged out -- both TUs are mounted). REWRITTEN there
+    // 2026-08-24 (showtime wave): the elided per-sensor scatter is a real loop now.
     // ---------------------------------------------------------------------------------------
     // RaceCarPhysics::SetPlayerVehicleInShowtime  @0x826000F8
     //   On entry (lbInShowtime): reset the singleton; if the car is not already in showtime and not
-    //   on the downforce/crash path, give it a DOUBLE-IMPULSE launch -- overwrite mLinearVelocity with
-    //   a scaled push (KF_LAUNCH_PUSH_SPEED * unit-velocity) AND fire an AddAirRam (input-space 5130
-    //   if rising / 3082 if falling) -- then seed mfTimeUntilPush + mark mbLaunchActive. Always store
-    //   the strength + scale the damage budget. (Asserts on velocity validity + damage-limit range.)
-    //   FLAG: the push speed / airram factors / budget scale are un-homed rodata (placeholders).
+    //   airborne/crashing, give it a DOUBLE-IMPULSE launch -- overwrite mLinearVelocity with a
+    //   20 m/s push along the FLATTENED heading AND fire an AddAirRam (input-space 5130/3082) --
+    //   then seed mfTimeUntilPush + mark mbLaunchActive. Always store the strength + scale the
+    //   damage budget.
+    // REWRITTEN 2026-08-24 (showtime wave) against the full asm (dossier @0x826000F8):
+    //   * the launch-skip gate is (mbHasAir || IsCrashing()) -- `_R30[4944]` == +0x1350 mbHasAir,
+    //     `_R30[1808]` == +0x710 mbIsCrashing (audit F2). The committed body read mbUsingAftertouch
+    //     (+0x140D), a different member this class only writes at the bottom of Update.
+    //   * the push direction is the velocity FLATTENED (y forced 0, vrlimi mask 4 splat(0)); when
+    //     its 2D magnitude is <= 0.01 the direction source falls back to the transform's z row
+    //     (`lvx128 v0, r30, 0x30` = mTransform.At(), the car's forward). After the normalize the
+    //     .y lane is overwritten with flt_82FB7E28 -- a dev-watch slot with NO static-init writer,
+    //     shipping 0.0 (a faithful 0, per the cluster-D read).
+    //   * the rising/falling test for the AirRam input-space bits reads the ANGULAR velocity's .y
+    //     (`lvx128 v0, r30, 0x60 ; vspltw v0,v0,1` -- +0x60 is mAngularVelocity), not the linear.
+    //   All four IsValid asserts + the damage-limit range assert are the console's own.
     // ---------------------------------------------------------------------------------------
     void RaceCarPhysics::SetPlayerVehicleInShowtime(bool lbInShowtime, f32 lfPlayerCarStrength,
                                                     f32 lfPlayerCarDamageLimit)
@@ -788,29 +969,55 @@ namespace Vehicle
             if (!mbPlayerCarInShowtime)   // !_R30[5132]
             {
                 f32 lfTimeUntilPush;
-                if (mbUsingAftertouch /* _R30[4944] (downforce) || _R30[1808] (crashing) */)
+                if (mbHasAir || IsCrashing())   // +0x1350 || +0x710 (asm; audit F2)
                 {
                     lfTimeUntilPush = 0.001f;   // already airborne/crashing -> tiny delay, no relaunch
+                    // [showtime] one-shot mode-entry diagnostic (branch witness; entry is a
+                    // once-per-mode-change event, so this cannot spam).
+                    if (CgsDev::Log::gpDebugPrint != 0)
+                        *CgsDev::Log::gpDebugPrint
+                            << "[showtime] enter: airborne/crash arm (hasAir=" << (mbHasAir ? 1 : 0)
+                            << " crashing=" << (IsCrashing() ? 1 : 0) << ") pushT=0.001\n";
                 }
                 else
                 {
-                    // assert(IsValid(GetLinearVelocity())) -- elided.
-                    // launch impulse: overwrite velocity with KF_LAUNCH_PUSH_SPEED along the (guarded)
-                    // unit velocity direction. The asm normalises mLinearVelocity (+0x50) with a small
-                    // floor (flt_82FB7E28) then scales by flt_82F2A2A0.
-                    Vector3 lvUnitVel = vpu::Normalize(GetLinearVelocity());
-                    Vector3 lvPush    = vpu::Mult(lvUnitVel, KF_LAUNCH_PUSH_SPEED);   // FLAGGED speed
-                    SetLinearVelocity(lvPush);   // stvx128 v0 -> +0x50 (overwrite, the "double impulse")
+                    CGS_ASSERT(vpu::IsValid(GetLinearVelocity()),
+                               "IsValid(GetLinearVelocity())");             // :1298
 
-                    // AddAirRam: input-space 5130 if the vertical velocity (vel.y) is rising, else 3082
-                    // (the input-space dir bits the asm passes). 6-arg DWARF form (C08-reconciled):
-                    // flags, factor, decay, customImpulse, customPosition, timerTillFire.
-                    const bool lbRising = !(GetLinearVelocity().y < 0.0f);   // vcmpgefp vel.y >= 0
+                    // launch direction: the flattened heading, transform-forward fallback at a
+                    // standstill, unit .y forced to flt_82FB7E28 (== 0.0, dev-watch slot).
+                    Vector3 lvDir = GetLinearVelocity();
+                    lvDir.y = 0.0f;                                    // vrlimi mask 4, splat(0)
+                    const f32 lfMag2DSq = vpu::MagnitudeSquared(lvDir);
+                    const f32 lfMag2D   = (lfMag2DSq > 0.0f) ? std::sqrt(lfMag2DSq) : 0.0f;
+                    if (KF_LAUNCH_MIN_SPEED2D >= lfMag2D)              // vcmpgefp. 0.01 >= |v2D|
+                        lvDir = mTransform.At();                       // lvx128 [this+0x30]
+
+                    Vector3 lvPush = vpu::Normalize(lvDir);            // vrsqrte + 2 NR steps
+                    lvPush.y = KF_BOUNCE_AIRRAM_FACTOR_DEV /* flt_82FB7E28 == 0.0 */;
+                    CGS_ASSERT(vpu::IsValid(lvPush), "IsValid(lPush)"); // :1310
+
+                    lvPush = vpu::Mult(lvPush, KF_LAUNCH_PUSH_SPEED);  // * flt_82F2A2A0 (20.0)
+                    SetLinearVelocity(lvPush);   // stvx128 -> +0x50 (overwrite: the "double impulse")
+                    CGS_ASSERT(vpu::IsValid(GetLinearVelocity()),
+                               "IsValid(GetLinearVelocity())");         // :1314
+
+                    // AddAirRam: input-space 5130 when the ANGULAR velocity's .y is >= 0, 3082
+                    // otherwise. 6-arg DWARF form: flags, factor, decay, customImpulse,
+                    // customPosition, timerTillFire.
+                    const bool lbRising = !(GetAngularVelocity().y < 0.0f);   // +0x60 lane .y
                     AddAirRam(lbRising ? 5130u : 3082u, KF_LAUNCH_AIRRAM_FACTOR, KF_LAUNCH_AIRRAM_ARG,
                               Vector3{ 0.0f, 0.0f, 0.0f, 0.0f }, Vector3{ 0.0f, 0.0f, 0.0f, 0.0f }, 0.0f);
 
-                    lfTimeUntilPush = KF_TIMEUNTILPUSH_DELAY;   // flt_82F2A2A4 (FLAGGED)
+                    lfTimeUntilPush = KF_TIMEUNTILPUSH_DELAY;   // flt_82F2A2A4 (0.4, image-read)
                     MS.mbLaunchActive = true;                   // byte_82FB84B2 = 1
+
+                    // [showtime] one-shot mode-entry diagnostic (branch witness).
+                    if (CgsDev::Log::gpDebugPrint != 0)
+                        *CgsDev::Log::gpDebugPrint
+                            << "[showtime] enter: LAUNCH arm, push vel=(" << lvPush.x << ", "
+                            << lvPush.y << ", " << lvPush.z << ") rising=" << (lbRising ? 1 : 0)
+                            << " pushT=" << KF_TIMEUNTILPUSH_DELAY << "\n";
                 }
                 MS.mfTimeUntilPush = lfTimeUntilPush;   // flt_82FB84C4 = v68
             }
@@ -820,7 +1027,8 @@ namespace Vehicle
         MS.mbDisableShowtime  = false;               // byte_82FB84B0 = 0
         MS.mfPlayerCarStrength = lfPlayerCarStrength; // lfShowtimePlayerCarStrength = param_1
 
-        // assert(0 < lfPlayerCarDamageLimit < 100) -- elided.
+        CGS_ASSERT(lfPlayerCarDamageLimit > 0.0f && lfPlayerCarDamageLimit < 100.0f,
+                   "lfPlayerCarDamageLimit > 0.0f && lfPlayerCarDamageLimit < 100.0f");   // :1356
         MS.mfDamageBudget = KF_DAMAGE_BUDGET_SCALE * lfPlayerCarDamageLimit;   // flt_82F2A2C8 * limit
     }
 
@@ -906,32 +1114,50 @@ namespace Vehicle
 
     // ---------------------------------------------------------------------------------------
     // RaceCarPhysics::UpdateShowtimePhysics  @0x825FFBD8  (asserts IsPlayerVehicleActuallyInShowtime)
-    //   The bounce-boost state machine. Determine "bouncing" (airborne OR slow enough: speed below a
-    //   threshold). Run the latch: when mbJustBounced is armed, settle mbBounceBoosting from the
-    //   pending flag + the launch-push timer, raise the bounced-this-frame + boost flags, and bump the
-    //   chain counter when chaining. A separate condition (button-63 + airborne/contact) force-sets
-    //   bounce-boost. If bouncing this frame and in showtime: when boosting, apply a yaw/spin
-    //   AddWorldSpaceAngularImpulse along (mBounceDirection + worldUp) + an AddAirRam boost; else a
-    //   weaker AddAirRam. When mfTimeUntilPush expires, fire the launch pop (AddAirRam + extra spin)
-    //   and set mbBounceBoosting. Finally CapShowtimeVelocities.
-    //   FLAG: every flt_82F2A2xx magnitude here is un-homed rodata (placeholder).
+    // REWRITTEN 2026-08-24 (showtime wave) from the full raw asm. What moved (audit F3, all
+    // re-verified instruction-by-instruction this wave):
+    //   * SIGNATURE: the DWARF 6-arg form. The old 3-arg body received the ENABLE input in its
+    //     "lfTimeStep" seat and tested `dt >= 0` as "bouncing" -- always true, so
+    //     mbDisableShowtime latched every frame and showtime self-disabled. The console's
+    //     "bouncing" is (0 >= enable) || (3.0 > |velocity|): input released, or too slow.
+    //   * the push timer decrements by the TIMESTEP (v3/v124 @0x8260000C), not by the input.
+    //   * the pending latch was a self-assignment no-op; the console reads controls+0x3F
+    //     (mbBoostBounce): mbShouldBounceBoost |= !button (cntlzw bit trick @0x8262FE7C-90),
+    //     mbBounceBoostPending = button.
+    //   * the force-set block was `&& false`; the console gate (0x825FFE00-58) is
+    //     !mbHasAir && button && !didBounce && ((aboveGroundValid && verticalDistance < 2.5)
+    //     || miNumCollisions > mi8NumWorldCollisions).
+    //   * the good-bounce arm ALSO floors the velocity's .y at (3.0 + 1.0) -- the fsel max
+    //     @0x825FFF70 + vrlimi/stvx write-back to +0x50 the old body dropped entirely -- and the
+    //     spin impulse is cameraX * splat(flt_82F2A2CC = 10000), not "dir * 1.0".
+    //   * the bounce AirRam direction is normalize(cameraZ + worldUp) when boosting-and-good
+    //     (v127 default = unk_82181510 = worldUp otherwise), its decay arg is flt_82FB9140 --
+    //     which the STATIC image reads as 0.0 but the init writer @0x82C5CFA0 sets to 0.2 -- and
+    //     the not-boosting factor is flt_82FB7E2C (dev-watch, ships 0.0 => no ram), NOT the
+    //     0.001 the old body used (0.001/0.004 are the boosting-not-good / boosting-good pair).
+    //   * the launch pop reads the +0x20 AIM slot (`li r11,0x20 ; lvx128 v13,r31,r11`
+    //     @0x82600030-54): dir = normalize(worldUp + mAimDirection); its spin is
+    //     cameraX * splat(500).
     // ---------------------------------------------------------------------------------------
-    void RaceCarPhysics::UpdateShowtimePhysics(const Vector3& lvLaunchSpin, const Vector3& lvAimSpin,
-                                               f32 lfTimeStep)
+    void RaceCarPhysics::UpdateShowtimePhysics(const BrnPlayerDriverControls* lpControls,
+                                               const Vector3& lvCameraX, const Vector3& lvCameraZ,
+                                               VecFloat lvfTimeStep, VecFloat lvfEnable,
+                                               bool lbUnused)
     {
-        // assert(IsPlayerVehicleActuallyInShowtime()) -- elided.
+        (void)lbUnused;   // r5: saved by the prologue, never read (register census @0x825FFBD8)
+        CGS_ASSERT(IsPlayerVehicleActuallyInShowtime(),
+                   "IsPlayerVehicleActuallyInShowtime()");   // :754 (vcall vtbl+0x14)
 
-        // "bouncing" = airborne (timeStep >= speed guard) OR current speed below KF_BOUNCE_VELOCITY_SCALE.
+        // "bouncing" = the aftertouch enable released (0 >= enable) OR speed below 3.0 m/s.
         bool lbBouncing = false;
-        if (lfTimeStep >= 0.0f /* the v37=0 >= v127 guard: airborne lane test */)
+        if (0.0f >= lvfEnable.x)   // vcmpgefp128. splat(0) >= v4 @0x825FFC7C
         {
             lbBouncing = true;
         }
         else
         {
             const f32 lfSpeed = std::sqrt(vpu::MagnitudeSquared(GetLinearVelocity()));   // +0x50 |v|
-            // flt_82F2A2EC is the bounce speed threshold (FLAGGED); the asm adds nothing here.
-            if (KF_BOUNCE_VELOCITY_SCALE > lfSpeed)
+            if (KF_BOUNCE_VELOCITY_SCALE > lfSpeed)   // flt_82F2A2EC (3.0) > |v|
                 lbBouncing = true;
         }
 
@@ -964,11 +1190,14 @@ namespace Vehicle
             }
         }
 
-        // force-set bounce-boost when the bounce button is held while airborne/near-ground.
-        if (!mbUsingAftertouch /* !gap711[3135] */
-            && /* *(v2+63): the button-63 request */ true
+        // force-set bounce-boost: bounce button held, not airborne-latched, no bounce yet this
+        // frame, and either close to the ground or in fresh car-car contact (asm 0x825FFE00-74).
+        if (!mbHasAir                                      // lbz +0x1350 == 0
+            && lpControls->GetButton63()                   // lbz controls+0x3F (mbBoostBounce)
             && !lbDidBounce
-            && /* airborne (gap0[1432] && height<2.5) OR per-frame crash count gate */ false)
+            && ((mAboveGroundTestResult.mbValid            // lbz +0x598
+                 && mAboveGroundTestResult.mfVerticalDistance < KF_FORCESET_HEIGHT)  // +0x590 < 2.5
+                || miNumCollisions > static_cast<s32>(mi8NumWorldCollisions)))       // +0x1354 > sext(+0x1353)
         {
             MS.mbBounceBoosting = true;
             lbDidBounce = true;
@@ -977,44 +1206,70 @@ namespace Vehicle
             MS.mbBouncedThisFrame = true;
             MS.mbShouldBounceBoost = false;
         }
-        // mbShouldBounceBoost |= (button-63 == 0); mbBounceBoostPending = button-63.
-        // (the button source is the per-frame control byte; kept as the pending-latch update.)
-        MS.mbBounceBoostPending = MS.mbBounceBoostPending;   // byte_82FB8489 = *(v2+63)
+
+        // the pending latch (asm 0x825FFE74-98): should-boost sticks while the button is UP;
+        // pending mirrors the button.
+        MS.mbShouldBounceBoost = MS.mbShouldBounceBoost || !lpControls->GetButton63();
+        MS.mbBounceBoostPending = lpControls->GetButton63();   // byte_82FB8489 = *(controls+0x3F)
 
         if (lbDidBounce)
         {
-            // assert(mbPlayerCarInShowtime) -- elided.
-            f32 lfAirRamFactor = KF_BOUNCE_AIRRAM_FACTOR_NB;   // flt_82F2A2F0 (non-boosted default)
-            if (MS.mbBounceBoosting)
+            Vector3 lvAirRamDir = KV_WORLD_UP;   // v127 default = unk_82181510
+            f32 lfAirRamFactor  = KF_BOUNCE_AIRRAM_FACTOR_DEV;   // flt_82FB7E2C (0.0 -> no ram)
+            CGS_ASSERT(mbPlayerCarInShowtime, "mbPlayerCarInShowtime");   // :1499
+
+            if (MS.mbBounceBoosting)   // lbBounceBoosting
             {
-                if (MS.mbBounceWasGood)   // byte_82FB84B1
+                if (MS.mbBounceWasGood)   // byte_82FB84B1 (set only by the force-set arm)
                 {
-                    // spin impulse along normalize(mBounceDirection + worldUp), scaled by lvAimSpin.
-                    Vector3 lvDir = vpu::Normalize(vpu::Add(MS.mBounceDirection, GetWorldUpRow()));
-                    AddWorldSpaceAngularImpulse(vpu::Mult(lvDir, 1.0f /* lvAimSpin lane */));
-                    (void)lvAimSpin;
-                    lfAirRamFactor = KF_BOUNCE_AIRRAM_FACTOR;   // flt_82F2A2F4
+                    lfAirRamFactor = KF_BOUNCE_AIRRAM_FACTOR;   // flt_82F2A2F4 (0.004)
+
+                    // floor the vertical speed at 3.0 + 1.0 (fsel max @0x825FFF70, write-back
+                    // to +0x50 with vrlimi mask 4).
+                    Vector3 lvVel = GetLinearVelocity();
+                    const f32 lfFloor = KF_BOUNCE_VELOCITY_SCALE + 1.0f;   // flt_82F2A2EC + flt_82001C98
+                    if (lvVel.y < lfFloor)
+                        lvVel.y = lfFloor;
+                    SetLinearVelocity(lvVel);
+
+                    // spin impulse: cameraX * splat(flt_82F2A2CC = 10000).
+                    AddWorldSpaceAngularImpulse(vpu::Mult(lvCameraX, KF_BOUNCE_SPIN_SCALE));
+
+                    // the boost AirRam fires along normalize(cameraZ + worldUp).
+                    lvAirRamDir = vpu::Normalize(vpu::Add(lvCameraZ, KV_WORLD_UP));
+                }
+                else
+                {
+                    lfAirRamFactor = KF_BOUNCE_AIRRAM_FACTOR_NB;   // flt_82F2A2F0 (0.001)
                 }
             }
             if (lfAirRamFactor > 0.0f)
-                AddAirRam(1u, lfAirRamFactor, /*flt_82FB9140*/ 0.0f,
-                          Vector3{ 0.0f, 0.0f, 0.0f, 0.0f }, Vector3{ 0.0f, 0.0f, 0.0f, 0.0f }, 0.0f);
+                AddAirRam(1u, lfAirRamFactor, KF_BOUNCE_AIRRAM_DECAY /* flt_82FB9140 = 0.2 */,
+                          lvAirRamDir, Vector3{ 0.0f, 0.0f, 0.0f, 0.0f }, 0.0f);
         }
 
         // launch-push timer expiry: fire the launch pop + extra spin, then set bounce-boost.
         if (MS.mfTimeUntilPush > 0.0f)
         {
-            MS.mfTimeUntilPush -= lfTimeStep;
+            MS.mfTimeUntilPush -= lvfTimeStep.x;   // v3/v124 -- the TIMESTEP (asm 0x8260000C-18)
             if (MS.mfTimeUntilPush <= 0.0f)
             {
                 if (MS.mbLaunchActive)   // byte_82FB84B2
                 {
-                    // pop: AddAirRam along normalize(mBounceDirection + worldUp@+0x20-region) + a spin.
-                    Vector3 lvDir = vpu::Normalize(vpu::Add(MS.mBounceDirection, GetWorldUpRow()));
-                    (void)lvDir;
+                    // pop: AddAirRam along normalize(worldUp + mAimDirection) -- the +0x20 slot
+                    // SetShowtimeAimDirection stores (asm 0x82600030-94).
+                    Vector3 lvDir = vpu::Normalize(vpu::Add(KV_WORLD_UP, MS.mAimDirection));
                     AddAirRam(1u, KF_PUSH_AIRRAM_FACTOR, KF_PUSH_AIRRAM_ARG,
-                              Vector3{ 0.0f, 0.0f, 0.0f, 0.0f }, Vector3{ 0.0f, 0.0f, 0.0f, 0.0f }, 0.0f);
-                    AddWorldSpaceAngularImpulse(vpu::Mult(lvLaunchSpin, KF_PUSH_SPIN_SCALE));   // flt_82F2A2A8
+                              lvDir, Vector3{ 0.0f, 0.0f, 0.0f, 0.0f }, 0.0f);
+                    // pop spin: cameraX * splat(flt_82F2A2A8 = 500).
+                    AddWorldSpaceAngularImpulse(vpu::Mult(lvCameraX, KF_PUSH_SPIN_SCALE));
+
+                    // [showtime] one-shot launch-pop diagnostic (fires once per launch window).
+                    if (CgsDev::Log::gpDebugPrint != 0)
+                        *CgsDev::Log::gpDebugPrint
+                            << "[showtime] launch pop: airram dir=(" << lvDir.x << ", " << lvDir.y
+                            << ", " << lvDir.z << ") aim=(" << MS.mAimDirection.x << ", "
+                            << MS.mAimDirection.y << ", " << MS.mAimDirection.z << ")\n";
                 }
                 MS.mbBounceBoosting = true;   // lbBounceBoosting = 1
                 MS.mbShouldBounceBoost = false;
@@ -1025,131 +1280,199 @@ namespace Vehicle
     }
 
     // ---------------------------------------------------------------------------------------
-    // RaceCarPhysics::UpdateTargetAssist  @0x8261FF50  (asserts showtime; Hex-Rays degenerate ->
-    //   reconstructed from the legible argmin loop in the pseudocode)
-    //   Showtime auto-aim. Only while moving upward (vel.y > KF_..). Over the global candidate list
-    //   (msNumTargets / target positions at +0x50 stride 16, ids at maTargetIds): score each candidate
-    //   weight = (2 - alignmentDot) * (1/distance) with a x KF_TARGET_SCORE_GATE stickiness bonus when
-    //   it is last frame's target (miCurrentTargetId). Pick the argmin; record it; lerp the aim
-    //   direction toward it (different blend if mbJustBounced); when aligned (score gate passed),
-    //   ComputeIdealVelocity and AddWorldSpaceForce toward the intercept.
-    //   FLAG: the score gate / blend rodata are un-homed; the argmin + (2-dot)/dist scoring is exact.
+    // RaceCarPhysics::UpdateTargetAssist  @0x8261FF50
+    // REWRITTEN 2026-08-24 (showtime wave) from the full raw asm (audit F4 confirmed, and the
+    // old body's shape was wrong well beyond the flagged constants):
+    //   * signature: the DWARF 4-arg form (controls, dt, enable, aimDirection). The candidate
+    //     loop scores dot(AIM DIRECTION, unit(targetPos - carPos)) -- the old body subtracted
+    //     mBounceDirection from the VELOCITY for every candidate.
+    //   * the entry gate is time-in-air (+0x1060.z, `vspltw v0,v0,2` @0x8261FFxx) > 0.5
+    //     (flt_82F2A2F8) -- not "vel.y > 0".
+    //   * flt_82F2A328 (0.766) gates the DOT, not the distance; the weight is
+    //     (2 - dot) * DISTANCE (argmin prefers aligned-and-CLOSE; the old 1/dist inverted it);
+    //     the stickiness for last frame's target MULTIPLIES by 0.5 (flt_82F2A32C), halving w.
+    //   * the mAssistStrength envelope (+0x100) is maintained here (seed 0.015 on a fresh
+    //     bounce, else decay 0.01/s to a 0.001 floor -- all three splats' init writers decoded)
+    //     and its .y scales the vertical intercept correction.
+    //   * the assist force: direction = unit(toTarget) with .y replaced by
+    //     mAssistStrength.y * (ideal.y - vel.y); magnitude = min(dist * 4000, 14000)
+    //     (flt_82F2A31C / flt_82F2A320, the fsel @0x826202C4); fired only past 2.0 m
+    //     (flt_82F2A324 -- the constant the old comment called an "alignment" gate); then the
+    //     queued air rams are cleared (`std r31(0), 0x1158` @0x826202F0 == mUsedAirRams).
+    //   * the debug arm (mbDebugShowTargetAssist +0x1454 -> DebugRender::DrawCross per candidate,
+    //     10.0/red for the chosen target, 8.0/green otherwise) is dev-render-only and stays
+    //     elided; the byte is modelled (RaceCarPhysics.h:+0x1454).
     // ---------------------------------------------------------------------------------------
-    void RaceCarPhysics::UpdateTargetAssist(const BrnPlayerDriverControls* lpControls)
+    void RaceCarPhysics::UpdateTargetAssist(const BrnPlayerDriverControls* lpControls,
+                                            VecFloat lvfTimeStep, VecFloat lvfEnable,
+                                            Vector3 lvAimDirection)
     {
-        (void)lpControls;
-        // assert(mbPlayerCarInShowtime) -- elided.
+        (void)lpControls;   // r4: in the DWARF signature, never read by the body
+        (void)lvfEnable;    // v2: in the DWARF signature, never read by the body
+        CGS_ASSERT(mbPlayerCarInShowtime, "mbPlayerCarInShowtime");   // :1036
+
         s32 liBest = -1;
         f32 lfBestWeight = 3.4028235e38f;   // FLT_MAX seed
 
-        if (MS.miNumTargets <= 0)
+        if (MS.miNumTargets <= 0)   // dword_82FB8570
             return;
 
-        // only while moving upward: the asm gates on vel.y (this+2383 region) > KF_.. (flt_82F2A2F8).
-        const Vector3 lvVel = GetLinearVelocity();
-        if (!(lvVel.y > 0.0f))   // FLAG: the upward gate constant (flt_82F2A2F8) is un-homed -> use >0
+        // gate: really airborne -- time-without-traction (+0x1060.z) above 0.5 s.
+        if (!(mvTimeStandingStill_CoolDown_TimeWithoutTraction_TimeWithTraction.z > KF_AIRTIME_GATE))
             return;
+
+        const Vector3 lvPosition = mTransform.Pos();   // lvx128 [this+0x40]
 
         for (s32 liT = 0; liT < MS.miNumTargets; ++liT)
         {
-            // target position lives in the +0x50 scratch (unk_82FB84D0) at stride 16, parallel to
-            // maTargetIds[liT]. With that parallel array inside maReserved4C and not separately named,
-            // the per-candidate position read is taken from the recorded aim slot. FLAG: the position
-            // array is un-modelled by name; the scoring math below is faithful.
-            const Vector3 lvToTarget = vpu::Subtract(MS.mBounceDirection, GetLinearVelocity());
+            const Vector3 lvToTarget = vpu::Subtract(MS.maTargetPositions[liT], lvPosition);
             const f32 lfDistSq = vpu::MagnitudeSquared(lvToTarget);
             const f32 lfDist   = (lfDistSq > 0.0f) ? std::sqrt(lfDistSq) : 0.0f;
-            if (lfDist <= KF_TARGET_SCORE_GATE)   // flt_82F2A328 gate (FLAGGED)
-                continue;
+            const Vector3 lvUnit = (lfDist > 0.0f)
+                                 ? vpu::Mult(lvToTarget, 1.0f / lfDist)
+                                 : Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };   // vsel zero guard
 
-            // weight = (2 - alignmentDot) * (1/dist)  -- here alignmentDot folded into the (2 - dist)
-            // form the asm uses: v24 = (2.0 - v62) * dir.x ; with a stickiness x flt_82F2A32C when the
-            // candidate id matches the current target.
-            const f32 lfAlign = vpu::Dot(vpu::Normalize(lvToTarget), vpu::Normalize(lvVel));
-            f32 lfWeight = (2.0f - lfAlign) * ((lfDist > 0.0f) ? (1.0f / lfDist) : 0.0f);
-            // maTargetIds re-typed s32 -> EntityId (the type
-            // GetTargetAssistParams writes into it); the console compares the raw dwords.
-            if (static_cast<s32>(MS.maTargetIds[liT].muValue) == MS.miCurrentTargetId)
-                lfWeight *= 1.0f;   // FLAG: stickiness bonus flt_82F2A32C (un-homed) -> identity
-
-            if (lfWeight <= lfBestWeight)
+            const f32 lfDot = vpu::Dot(lvAimDirection, lvUnit);   // vmsum3fp128 v127, v11
+            if (lfDot > KF_TARGET_SCORE_GATE)   // flt_82F2A328 (0.766) -- the DOT gate
             {
-                lfBestWeight = lfWeight;
-                liBest = liT;
+                f32 lfWeight = (2.0f - lfDot) * lfDist;   // aligned-and-close argmin
+                // the console compares the raw dwords (maTargetIds is EntityId-typed here).
+                if (static_cast<s32>(MS.maTargetIds[liT].muValue) == MS.miCurrentTargetId)
+                    lfWeight *= KF_TARGET_STICKINESS;     // x 0.5 (flt_82F2A32C)
+
+                if (lfWeight <= lfBestWeight)
+                {
+                    lfBestWeight = lfWeight;
+                    liBest = liT;
+                }
             }
         }
 
         MS.miCurrentTargetId =
             (liBest >= 0) ? static_cast<s32>(MS.maTargetIds[liBest].muValue) : 0;  // dword_82FB8574
 
+        // maintain the assist-strength envelope (+0x100): fresh seed on a bounce, else decay
+        // toward the floor (asm 0x82620144-98; all three vectors' static-init writers decoded).
+        if (MS.mbJustBounced)   // byte_82FB8481
+        {
+            MS.mAssistStrength =
+                Vector3{ KF_ASSIST_SEED, KF_ASSIST_SEED, KF_ASSIST_SEED, KF_ASSIST_SEED };
+        }
+        else
+        {
+            const f32 lfDecay = lvfTimeStep.x * KF_ASSIST_DECAY_PER_S;
+            Vector3 lvEnv = MS.mAssistStrength;
+            lvEnv.x = std::max(lvEnv.x - lfDecay, KF_ASSIST_FLOOR);   // vmaxfp lane-wise
+            lvEnv.y = std::max(lvEnv.y - lfDecay, KF_ASSIST_FLOOR);
+            lvEnv.z = std::max(lvEnv.z - lfDecay, KF_ASSIST_FLOOR);
+            lvEnv.w = std::max(lvEnv.w - lfDecay, KF_ASSIST_FLOOR);
+            MS.mAssistStrength = lvEnv;
+        }
+
         if (liBest >= 0)
         {
-            // when aligned, pull velocity toward the ballistic intercept.
-            const f32 lfInputSpeed = std::sqrt(vpu::MagnitudeSquared(GetLinearVelocity()));   // 2D speed
-            Vector3 lvIdeal;
-            ComputeIdealVelocity(&lvIdeal, lfInputSpeed);
-            // force toward (idealVel - currentVel.y component) scaled by an alignment term; the asm
-            // gates the AddWorldSpaceForce on the alignment passing flt_82F2A324.
-            const Vector3 lvDelta = vpu::Subtract(lvIdeal, GetLinearVelocity());
-            AddWorldSpaceForce(vpu::Mult(lvDelta, KF_AFTERTOUCH_LAT));   // FLAG scale (flt_82F2A31C/320)
+            const Vector3 lvToTarget = vpu::Subtract(MS.maTargetPositions[liBest], lvPosition);
+            const f32 lfDistSq = vpu::MagnitudeSquared(lvToTarget);
+            const f32 lfDist   = (lfDistSq > 0.0f) ? std::sqrt(lfDistSq) : 0.0f;
+
+            if (lfDist > KF_TARGET_MIN_DISTANCE)   // flt_82F2A324 (2.0)
+            {
+                Vector3 lvUnit = (lfDist > 0.0f)
+                               ? vpu::Mult(lvToTarget, 1.0f / lfDist)
+                               : Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };
+
+                // the intercept: 2D speed via BrnMath::Magnitude2D(mLinearVelocity).
+                const f32 lfSpeed2D = BrnMath::Magnitude2D(GetLinearVelocity());
+                Vector3 lvIdeal;
+                ComputeIdealVelocity(&lvIdeal, MS.maTargetPositions[liBest], lfSpeed2D);
+
+                // vertical correction: envelope.y * (ideal.y - vel.y) into the direction's .y
+                // (vrlimi128 v126, v0, 4, 3 @0x826202DC).
+                lvUnit.y = MS.mAssistStrength.y * (lvIdeal.y - GetLinearVelocity().y);
+
+                // magnitude: min(dist * 4000, 14000) (the fsel pair @0x826202BC-C4).
+                f32 lfForce = lfDist * KF_ASSIST_FORCE_PER_METRE;
+                if (lfForce > KF_ASSIST_FORCE_CAP)
+                    lfForce = KF_ASSIST_FORCE_CAP;
+
+                AddWorldSpaceForce(vpu::Mult(lvUnit, lfForce));
+
+                mUsedAirRams.UnSetAll();   // std r31(0), 0x1158(r28) -- drop the queued air rams
+            }
         }
     }
 
     // ---------------------------------------------------------------------------------------
     // RaceCarPhysics::UpdateAftertouch  @0x8262EBE8
-    //   Camera-relative air-steer. Gated on the car being airborne (this+1808 in-air/crash) and the
-    //   aftertouch-enable input. Normalises the camera matrix X and Z axes (asserting each has
-    //   |.|^2 > 0), reads the stick deflection via GetAftertouchValues (+ optional SIXAXIS pitch when
-    //   the downforce flag is set and |tilt| >= a threshold), then applies three force channels:
-    //     (1) lateral world-space force along camera-X scaled by yaw (KF_AFTERTOUCH_LAT)
-    //     (2) world-space roll angular impulse from camera axes (KF_AFTERTOUCH_ROLL)
-    //     (3) local pitch impulses (KF_AFTERTOUCH_PITCH), with a +/-2.0 wheelie split by pitch sign.
-    //   Showtime magnitudes differ from normal flight, with an extra IsBounceBoosting multiplier
-    //   (unk_82FB8830). From showtime it chains UpdateTargetAssist (post lateral channel) then
-    //   UpdateShowtimePhysics. FLAG: all magnitude rodata are un-homed placeholders; the camera-axis
-    //   normalisation, the yaw/pitch channels and the showtime chaining are faithful.
-    // ---------------------------------------------------------------------------------------
+    // REWRITTEN 2026-08-24 (showtime wave) from a fresh full disassembly (show_asm.txt in the
+    // wave scratchpad; 2616 bytes read end to end). The committed body's channel structure was
+    // a slice sketch; the console's is:
+    //   * ENTRY GATES (0x8262EC1C-EC4C): IsCrashing() (+0x710 -- the old body read the
+    //     mbUsingAftertouch latch, whose own comment already admitted "this+1808" = 0x710),
+    //     !mbIsOnStartLine, and the vtbl+0x14 virtual (IsPlayerVehicleActuallyInShowtime here);
+    //     each one bails the WHOLE body.
+    //   * camera X / Z normalize with the console's own MagnitudeSquared asserts (:0x207/:0x20F).
+    //   * enable scale (0x8262ED98-EE4C): while IN showtime and NOT bounce-boosting,
+    //     enable *= (time-in-air (+0x1060.z) > 0.5 ? 0.4 : 0.1) (flt_82F2A2D0 / flt_82F2A2D4).
+    //     The old body put this arm on the NOT-showtime branch.
+    //   * SIXAXIS tilt (0x8262EE7C-EEDC): gated on mbHasAir (+0x1350) -- not "the downforce
+    //     flag" -- with |tilt| >= 0.2 (flt_82F2A314); yaw += sign(tilt) * 0.2 (flt_82F2A318),
+    //     sign via fsel (0 when tilt == 0). The tilt channel was DEAD (both constants 0).
+    //   * ONE combined world force (0x8262EEE4-F1FC): cameraX * yaw * -12000 (flt_82F2A308)
+    //     * enable + cameraZ * pitch * -(pitch >= 0 ? 8000 : 20000) (flt_82F2A30C/310) * enable;
+    //     x2.5 (unk_82FB8830) when showtime-and-boosting; NOT showtime: x1.5 (flt_82F2A2B4) and
+    //     faded by (1 - dot(unit(force), unit(velocity))) when the dot is positive.
+    //   * showtime chain: UpdateTargetAssist(controls, dt, splat(enable),
+    //     normalize(-(cameraX*yaw + cameraZ*pitch))) -- the stick-derived aim direction.
+    //   * yaw ANGULAR impulse (0x8262F2D0-F38C): worldUp * aftertouchScalar * -2000
+    //     (flt_82F2A304 -- the constant the old body spent on its "lateral force") * dt * enable.
+    //   * two world-up LEVER impulses (0x8262F394-F5D0), both AddLocalImpulse WORLD/WORLD:
+    //     roll:    worldUp * |yaw| * 1400 (flt_82F2A2FC) * dt * enable at position
+    //              carPos +/- cameraX * 4.0 (sign of yaw) -- the "live difference of two
+    //              vectors" the old FLAG said must be recovered before mounting: recovered.
+    //     wheelie: worldUp * |pitch| * 1400 (flt_82F2A300) * dt * enable at position
+    //              carPos +/- cameraZ * 4.0 (sign of pitch), gated on
+    //              ((aboveGroundValid && verticalDistance < 2.0) || pitch <= 0).
+    //   * tail (0x8262F5D4-F604): in showtime, UpdateShowtimePhysics(controls, cameraX, cameraZ,
+    //     dt, splat(enable), lbUseSixaxis).
     // WIDENED 2026-08-09 (crash/shunt wave) to the 5-arg DWARF virtual form
     // (VehiclePhysics.h:1514) so it OVERRIDES the base slot +0x28 that UpdateCrashing
-    // dispatches -- the committed 4-arg form was the dropped-VecFloat trap (the @0x8262EBE8
-    // prologue saves v1, `vmr128 v121, v1` @0x8262EC08, and restores it before the showtime
-    // chain calls). The dt lane is consumed only as that pass-through on this build; the
-    // magnitudes this minimal slice models do not read it -> carried, documented, unused here.
+    // dispatches -- v1 (`vmr128 v121, v1` @0x8262EC08) is the dt, now consumed for real by the
+    // impulse channels and the showtime chain.
     void RaceCarPhysics::UpdateAftertouch(const BrnPlayerDriverControls* lpControls,
                                           const Matrix44Affine* lpCameraMatrix,
                                           VecFloat lvfTimeStep,
                                           bool lbDoForceAdditiveAftertouch, bool lbUseSixaxis)
     {
-        (void)lbUseSixaxis;
-        (void)lvfTimeStep;   // v1 pass-through (see the widening banner)
-        // gate: airborne/crash (this+1808). The minimal slice models this via the aftertouch latch.
-        if (!mbUsingAftertouch /* *(this+1808): in-air/crash */)
+        if (!IsCrashing())                        // lbz +0x710 @0x8262EC1C, beq -> bail
             return;
         // RE-NAMED 2026-08-03. `lbz r11, 0x40(r25)` @0x8262EC28, must be ZERO to proceed --
-        // decimal 64 IS 0x40, and 0x40 is mbIsOnStartLine, not the +0x44 driver type the invented
-        // GetMode() accessor read. Aftertouch is disabled while the car sits on the start line.
+        // 0x40 is mbIsOnStartLine. Aftertouch is disabled while the car sits on the start line.
         if (lpControls->mbIsOnStartLine)          // asm lbz +0x40, bne -> bail
             return;
-
-        // virtual "can use aftertouch" query (vtbl+20). On this path: IsPlayerVehicleActuallyInShowtime.
+        // the vtbl+0x14 virtual (image-attested slot; IsPlayerVehicleActuallyInShowtime on the
+        // RaceCarPhysics vtable @0x820D1034). FALSE bails the whole body @0x8262EC4C.
         if (!IsPlayerVehicleActuallyInShowtime())
-        {
-            // (the non-showtime aftertouch path still runs; the asm only branches the magnitudes.)
-        }
+            return;
 
-        // normalise the camera X and Z axes (assert |.|^2 > 0 -- elided).
+        // normalise the camera X and Z axes (the console's own asserts, :0x207 / :0x20F).
+        CGS_ASSERT(vpu::MagnitudeSquared(lpCameraMatrix->xAxis) > 0.0f,
+                   "RwMath::MagnitudeSquared(lCameraX) > 0.0f");
         const Vector3 lvCameraX = vpu::Normalize(lpCameraMatrix->xAxis);
+        CGS_ASSERT(vpu::MagnitudeSquared(lpCameraMatrix->zAxis) > 0.0f,
+                   "RwMath::MagnitudeSquared(lCameraZ) > 0.0f");
         const Vector3 lvCameraZ = vpu::Normalize(lpCameraMatrix->zAxis);
 
-        f32 lfEnable = lpControls->GetAftertouchEnable();   // v29 = *(v8+32)
-        const bool lbShowtime = mbPlayerCarInShowtime;      // *(v6+5132)
+        f32 lfEnable = lpControls->GetAftertouchEnable();   // f29 = *(controls+0x20)
+        const bool lbShowtime = mbPlayerCarInShowtime;      // lbz +0x140C
 
-        if (!lbShowtime)
+        // showtime-and-not-boosting: scale the enable by the air-time factor (0x8262EDDC-EE4C).
+        if (lbShowtime && !IsBounceBoosting())
         {
-            // normal flight: scale the enable by a boost-dependent factor (flt_82F2A2D0 / D4) gated on
-            // the vehicle's vertical speed (+4192). FLAGGED scalars -> identity here.
-            if (!IsBounceBoosting())
-                lfEnable = /* flt_82F2A2D0 or D4 */ lfEnable;   // FLAG: un-homed factor
+            lfEnable *= (mvTimeStandingStill_CoolDown_TimeWithoutTraction_TimeWithTraction.z
+                             > KF_AIRTIME_GATE)             // +0x1060.z > 0.5 (flt_82F2A2F8)
+                            ? KF_AT_ENABLE_AIR_FACTOR       // flt_82F2A2D0 (0.4)
+                            : KF_AT_ENABLE_GROUND_FACTOR;   // flt_82F2A2D4 (0.1)
         }
 
         if (lbDoForceAdditiveAftertouch && lfEnable > 0.0f)
@@ -1158,65 +1481,116 @@ namespace Vehicle
             // FORK RESOLVED 2026-08-06 (UpdateVehiclePhysics wave): the console leaf
             // @0x825B2E88 is the 4-arg reference form; THIS call site passes the bool as a
             // literal FALSE (`li r7, 0` @0x8262EE64, bl @0x8262EE78 -- raw image bytes).
-            // The 3-pointer declaration is deleted (BrnVehicleDriverControls.h).
             lpControls->GetAftertouchValues(lfYaw, lfPitch, lfScalar, false);
 
-            // optional SIXAXIS pitch contribution when the downforce flag is set and |tilt| >= thresh.
-            if (mbUsingAftertouch /* *(v6+4944) downforce flag */)
+            // SIXAXIS tilt contribution, gated on the car being airborne (0x8262EE7C-EEDC).
+            if (mbHasAir)   // lbz +0x1350
             {
-                const f32 lfTilt = lpControls->GetSixaxisTilt();   // *(v8+24)
-                if (std::fabs(lfTilt) >= /*flt_82F2A314*/ 0.0f)
+                const f32 lfTilt = lpControls->GetSixaxisTilt();   // lfs +0x18
+                if (std::fabs(lfTilt) >= KF_AT_TILT_GATE)          // flt_82F2A314 (0.2)
                 {
-                    const f32 lfSign = (lfTilt > 0.0f) ? 1.0f : ((lfTilt < 0.0f) ? -1.0f : 0.0f);
-                    lfYaw += lfSign * /*flt_82F2A318*/ 0.0f;   // FLAG tilt gain
-                    MS.mbSixaxisTiltApplied = true;            // byte_82FB848A = 1
+                    // fsel sign: exactly 0 for a zero tilt, else +/-1 (0x8262EEA4-BC).
+                    const f32 lfSign = (lfTilt == 0.0f) ? 0.0f : ((lfTilt >= 0.0f) ? 1.0f : -1.0f);
+                    lfYaw += lfSign * KF_AT_TILT_GAIN;             // flt_82F2A318 (0.2)
+                    MS.mbSixaxisTiltApplied = true;                // byte_82FB848A = 1
                 }
             }
 
-            // (1) lateral world-space force along camera-X scaled by yaw * enable.
-            Vector3 lvLateral = vpu::Mult(lvCameraX, lfYaw * lfEnable);
-            if (lbShowtime && IsBounceBoosting())
-                lvLateral = vpu::Mult(lvLateral, 1.0f);   // FLAG x unk_82FB8830 bounce-boost multiplier
-            // (2) roll: a world-space angular impulse from the camera Z axis scaled by pitch * enable.
-            Vector3 lvRoll = vpu::Mult(lvCameraZ, lfPitch * lfEnable);
-            if (lbShowtime && IsBounceBoosting())
-                lvRoll = vpu::Mult(lvRoll, 1.0f);   // FLAG x unk_82FB8830
-
-            if (vpu::MagnitudeSquared(lvLateral) != 0.0f)
-                AddWorldSpaceForce(vpu::Mult(lvLateral, KF_AFTERTOUCH_LAT));   // flt_82F2A304
+            // ONE combined world-space force: the camera-X yaw channel + the camera-Z pitch
+            // channel (0x8262EEE4-F010). Both scales enter NEGATED (fneg @0x8262EEF4/EF9C/EFB8).
+            const f32 lfPitchScale = (lfPitch >= 0.0f) ? KF_AT_FORCE_PITCH_UP     // 8000
+                                                       : KF_AT_FORCE_PITCH_DOWN;  // 20000
+            Vector3 lvForce = vpu::Add(
+                vpu::Mult(lvCameraX, lfYaw * -KF_AT_FORCE_YAW * lfEnable),
+                vpu::Mult(lvCameraZ, lfPitch * -lfPitchScale * lfEnable));
 
             if (lbShowtime)
-                UpdateTargetAssist(lpControls);
-
-            // roll angular impulse (flt_82F2A2FC) -- gated on a small alignment test in the asm.
-            if (vpu::MagnitudeSquared(lvRoll) != 0.0f)
-                AddWorldSpaceAngularImpulse(vpu::Mult(lvRoll, KF_AFTERTOUCH_ROLL));
-
-            // (3) local pitch impulses: a +/-2.0 wheelie split by pitch sign, scaled by KF_AFTERTOUCH_PITCH.
-            const f32 lfWheelie = 4.0f;   // resolved inline literal (v74 = 4.0)
-            Vector3 lvPitchImpulse = vpu::Mult(lvCameraX, lfYaw * lfEnable);
-            if (lfYaw <= 0.0f)
-                lvPitchImpulse = vpu::Subtract(Vector3{ 0.0f, lfWheelie, 0.0f, 0.0f }, lvPitchImpulse);
+            {
+                if (IsBounceBoosting())
+                    lvForce = vpu::Mult(lvForce, KF_AT_BOOST_MULTIPLIER);   // x unk_82FB8830 (2.5)
+            }
             else
-                lvPitchImpulse = vpu::Add(Vector3{ 0.0f, lfWheelie, 0.0f, 0.0f }, lvPitchImpulse);
-            // InputSpace tags recovered from UpdateAftertouch's own asm. The X360 issues this call
-            // TWICE (@0x8262F49C and @0x8262F5D0) and both sites set `li r5,0 ; li r4,0` -- BOTH
-            // vectors WORLD_SPACE. This is the only one of the five AddLocal* call sites in the
-            // vehicle tree whose POSITION is world-space rather than body-space.
-            // FLAG (position argument, pre-existing): the zero vector below is a STAND-IN and the
-            // asm contradicts it -- v2 at the call is `vsubfp v2, v0, v12` (@0x8262F458), a live
-            // difference of two vectors, not a literal zero. With a WORLD_SPACE tag a zero position
-            // means "the world origin", so AddLocalImpulse would use r = -mTransform.wAxis (the car's
-            // whole world position) as the lever arm. The tags here are console-exact; the position
-            // is NOT, and must be recovered before this TU is mounted. (This TU is unmounted and also
-            // still carries KF_DT = 0.0f, so nothing runs today.)
-            AddLocalImpulse(vpu::Mult(lvPitchImpulse, KF_AFTERTOUCH_PITCH), rw::physics::WORLD_SPACE,
-                            Vector3{ 0.0f, 0.0f, 0.0f, 0.0f }, rw::physics::WORLD_SPACE);
+            {
+                // not showtime: x1.5, then fade by alignment with the velocity (0x8262F048-F1A4).
+                lvForce = vpu::Mult(lvForce, KF_AT_NONSHOWTIME_SCALE);      // flt_82F2A2B4
+                const f32 lfForceMagSq = vpu::MagnitudeSquared(lvForce);
+                if (lfForceMagSq > 1.1920929e-07f)   // FLT_EPSILON (stru_8208F620 lvlx)
+                {
+                    const Vector3 lvVel = GetLinearVelocity();
+                    const f32 lfVelMagSq = vpu::MagnitudeSquared(lvVel);
+                    const f32 lfDot = (lfVelMagSq > 0.0f)
+                                    ? vpu::Dot(vpu::Mult(lvForce, 1.0f / std::sqrt(lfForceMagSq)),
+                                               vpu::Mult(lvVel, 1.0f / std::sqrt(lfVelMagSq)))
+                                    : 0.0f;
+                    // fsel @0x8262F174: scale 1.0 when the dot is negative, else (1 - dot).
+                    lvForce = vpu::Mult(lvForce, (lfDot < 0.0f) ? 1.0f : (1.0f - lfDot));
+                }
+            }
+
+            if (vpu::MagnitudeSquared(lvForce) > 1.1920929e-07f)   // the FLT_EPSILON lane test
+                AddWorldSpaceForce(lvForce);                       // bl @0x8262F1FC
+
+            if (lbShowtime)
+            {
+                // the stick-derived aim direction (0x8262F26C-F2C8):
+                // normalize(-(cameraX*yaw + cameraZ*pitch)), zero when degenerate.
+                Vector3 lvAim = vpu::Add(vpu::Mult(lvCameraX, lfYaw),
+                                         vpu::Mult(lvCameraZ, lfPitch));
+                lvAim = Vector3{ -lvAim.x, -lvAim.y, -lvAim.z, -lvAim.w };   // vxor sign flip
+                const f32 lfAimMagSq = vpu::MagnitudeSquared(lvAim);
+                lvAim = (lfAimMagSq > 0.0f)
+                      ? vpu::Mult(lvAim, 1.0f / std::sqrt(lfAimMagSq))
+                      : Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };   // vsel zero guard
+
+                UpdateTargetAssist(lpControls, lvfTimeStep,
+                                   VecFloat{ lfEnable, lfEnable, lfEnable, lfEnable }, lvAim);
+            }
+
+            // yaw ANGULAR impulse from the aftertouch scalar (0x8262F2D0-F38C):
+            // worldUp * scalar * -2000 * dt * enable.
+            Vector3 lvYawImpulse = vpu::Mult(
+                KV_WORLD_UP, lfScalar * KF_AT_ROLL_SCALAR * lvfTimeStep.x * lfEnable);
+            if (vpu::MagnitudeSquared(lvYawImpulse) > 1.1920929e-07f)
+                AddWorldSpaceAngularImpulse(lvYawImpulse);
+
+            // lever impulse 1 -- roll from yaw (0x8262F394-F49C): worldUp * |yaw| * 1400 * dt *
+            // enable, applied at carPos +/- cameraX * 4.0 (sign of yaw). WORLD/WORLD tags
+            // (`li r5,0 ; li r4,0` at both call sites -- console-exact).
+            {
+                Vector3 lvImpulse = vpu::Mult(
+                    KV_WORLD_UP, std::fabs(lfYaw) * KF_AT_LEVER_IMPULSE_YAW
+                                     * lvfTimeStep.x * lfEnable);
+                const Vector3 lvArm = vpu::Mult(lvCameraX, KF_AT_LEVER_ARM);
+                const Vector3 lvAt  = (lfYaw > 0.0f) ? vpu::Add(mTransform.Pos(), lvArm)
+                                                     : vpu::Subtract(mTransform.Pos(), lvArm);
+                if (vpu::MagnitudeSquared(lvImpulse) > 1.1920929e-07f)
+                    AddLocalImpulse(lvImpulse, rw::physics::WORLD_SPACE,
+                                    lvAt, rw::physics::WORLD_SPACE);
+            }
+
+            // lever impulse 2 -- wheelie/pitch (0x8262F4A8-F5D0): worldUp * |pitch| * 1400 * dt
+            // * enable at carPos +/- cameraZ * 4.0 (sign of pitch); pitch-UP only near the
+            // ground: ((valid && verticalDistance < 2.0) || pitch <= 0).
+            if ((mAboveGroundTestResult.mbValid                                  // lbz +0x598
+                 && mAboveGroundTestResult.mfVerticalDistance < KF_PITCH_NEAR_GROUND)  // +0x590 < 2.0
+                || !(lfPitch > 0.0f))
+            {
+                Vector3 lvImpulse = vpu::Mult(
+                    KV_WORLD_UP, std::fabs(lfPitch) * KF_AT_LEVER_IMPULSE_PITCH
+                                     * lvfTimeStep.x * lfEnable);
+                const Vector3 lvArm = vpu::Mult(lvCameraZ, KF_AT_LEVER_ARM);
+                const Vector3 lvAt  = (lfPitch > 0.0f) ? vpu::Add(mTransform.Pos(), lvArm)
+                                                       : vpu::Subtract(mTransform.Pos(), lvArm);
+                if (vpu::MagnitudeSquared(lvImpulse) > 1.1920929e-07f)
+                    AddLocalImpulse(lvImpulse, rw::physics::WORLD_SPACE,
+                                    lvAt, rw::physics::WORLD_SPACE);
+            }
         }
 
-        if (lbShowtime)
-            UpdateShowtimePhysics(Vector3{ 0.0f, 0.0f, 0.0f, 0.0f },
-                                  Vector3{ 0.0f, 0.0f, 0.0f, 0.0f }, lfEnable);
+        if (lbShowtime)   // lbz +0x140C @0x8262F5D4
+            UpdateShowtimePhysics(lpControls, lvCameraX, lvCameraZ, lvfTimeStep,
+                                  VecFloat{ lfEnable, lfEnable, lfEnable, lfEnable },
+                                  lbUseSixaxis);
     }
 
     // never-called layout pin: makes the per-TU compile gate enforce the PlayerParameters singleton
@@ -1230,6 +1604,7 @@ namespace Vehicle
         static_assert(offsetof(PlayerParameters, mbBounceBoostPending) == 0x09, "byte_82FB8489");
         static_assert(offsetof(PlayerParameters, miOtherEntityId)      == 0x0C, "dword_82FB848C");
         static_assert(offsetof(PlayerParameters, mBounceDirection)     == 0x10, "+0x10 vector");
+        static_assert(offsetof(PlayerParameters, mAimDirection)        == 0x20, "+0x20 aim (SetShowtimeAimDirection stvx128)");
         static_assert(offsetof(PlayerParameters, mbDisableShowtime)    == 0x30, "byte_82FB84B0");
         static_assert(offsetof(PlayerParameters, mbLaunchActive)       == 0x32, "byte_82FB84B2");
         static_assert(offsetof(PlayerParameters, mfDeformationScale)   == 0x34, "flt_82FB84B4");
@@ -1241,7 +1616,12 @@ namespace Vehicle
         static_assert(offsetof(PlayerParameters, maTargetIds)          == 0xD0, "dword_82FB8550");
         static_assert(offsetof(PlayerParameters, miNumTargets)         == 0xF0, "dword_82FB8570");
         static_assert(offsetof(PlayerParameters, miCurrentTargetId)    == 0xF4, "dword_82FB8574");
+        static_assert(offsetof(PlayerParameters, mAssistStrength)      == 0x100, "unk_82FB8580 (assist envelope)");
         static_assert(offsetof(PlayerParameters, mu8NumBounceSensors)  == 0x110, "byte_82FB8590");
+        static_assert(offsetof(PlayerParameters, maBounceSensors)      == 0x120, "unk_82FB85A0 (32B-stride sensor scratch)");
+        static_assert(sizeof(PlayerParameters::BounceSensor)           == 0x20, "slwi r31, 5 -- 32-byte stride");
+        static_assert(offsetof(PlayerParameters::BounceSensor, mfSpecScalar)  == 0x10, "flt_82FB85B0 - unk_82FB85A0");
+        static_assert(offsetof(PlayerParameters::BounceSensor, mfCrushFactor) == 0x14, "flt_82FB85B4 - unk_82FB85A0");
     }
 }
 }
