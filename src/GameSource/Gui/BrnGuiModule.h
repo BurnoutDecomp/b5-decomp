@@ -266,6 +266,18 @@ namespace BrnGui
         // modelled; the rest of the config block is the (unreconstructed) base-module
         // prepare's business.
         rw::IResourceAllocator* mpTextureAllocator;   // X360 +311932 (mGuiConfig.mpTextureAllocator)
+
+        // ⭐ [licence-icon] X360 +311924 -- the sibling mGuiConfig row: Prepare stage 1 fills it
+        // with GetAllocatorList(gameDataOut)->GetRWGeneralResourceAllocator(31) and the console
+        // hands it to CustomRendererManager::Prepare as the heap allocator (`v26 = *(gm+311924)`
+        // at the stage-7 call @0x82518D68). Modelled for the same one consumer.
+        rw::IResourceAllocator* mpGuiHeapAllocator;   // X360 +311924 (mGuiConfig heap row, bank 31)
+
+        // [licence-icon] the manager's staged-prepare latch. The console pumps the manager's
+        // Prepare through GuiModule::Prepare's stage re-entry (`if (!v27) goto fail` + the module
+        // scheduler re-calls Prepare until every stage passes); this build's Prepare runs once,
+        // so Update owns the pump (see the seat note at the call).
+        bool mbCustomRenderersPrepared;
         // (AptRuntimeHost RETIRED: the Apt bring-up + PC render buffer live in
         // BrnGuiModule.cpp's transplanted block -- the console GuiModule ownership.)
         AlwaysAvailableComponentsManager mAlwaysAvailableComponentsManager;

@@ -673,6 +673,26 @@ namespace CgsGui
                             lResponse.mResourceHandle.mpSourceEntry = lpEntry;
                         }
                     }
+                    else if (lpRequest->miPoolId == miTexturesBundlePoolId && s_bGuiTexturesBankLive)
+                    {
+                        // ⭐ [licence-icon] the GUI-TEXTURES bank arm (2026-08-24) -- same shared
+                        // console responder shape. A type-11 member request (e.g. "Headtif" ==
+                        // resource id HashString("headtif") inside the resident GUITEXTURES.BIN)
+                        // resolves HERE, on the acquire-first pass, exactly as the console's
+                        // PoolModule does -- WITHOUT this arm the acquire missed, the module
+                        // fell back to LoadBundleForMissingResources, and the boot died trying
+                        // to open a file named 'Headtif.bundle' every frame until the
+                        // bundle-queue overflow assert (measured, 2026-08-24 run 3).
+                        s32 liIndex = -1;
+                        CgsResource::Entry* lpEntry = s_GuiTexturesBankPool.FindResource(
+                            lpRequest->mResourceId, lpRequest->mbCheckRefCount, 2, &liIndex);
+                        if (lpEntry != 0)
+                        {
+                            lResponse.mResourceHandle.mpResourceMemory =
+                                &lpEntry->mResource.m_baseResources[CgsResource::E_MEMTYPE_MAINMEMORY];
+                            lResponse.mResourceHandle.mpSourceEntry = lpEntry;
+                        }
+                    }
                     else if (lpRequest->miPoolId == miAptStreamedBundleBank && s_bAptStreamedBankLive)
                     {
                         // Resolve the acquire against the REQUESTED bundle's lead, keyed by the

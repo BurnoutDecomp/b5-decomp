@@ -40,9 +40,18 @@ namespace BrnGui
         // asset lives: gGuiResourceIdentifier[236] == "Headtif", and
         // CgsResource::ID::HashString("headtif") == 0x2E0CA9B3 is resource [04] of the
         // shipped, already-ported (bnd2 platform 4) GUITEXTURES.BIN.
+        // ⚠️⚠️ [licence-icon] TYPE VALUE CORRECTED AGAIN 2026-08-24 -- the 2026-08-16 pass READ
+        // 11 from the image (three lines up!) and then spelled it with the committed enumerator
+        // E_GUI_RESOURCETYPE_TEXTURE, whose value in CgsGuiResourceModuleIO.h is 10 -- the PS3
+        // enum, one BELOW the ARTIST value (the +1 apt-family drift the KAAC_RESOURCE_TEMPLATES
+        // banner documents). Value 10 is ARTIST's FLAPT-PERSISTENT: the request routed to the
+        // flapt template ("%s.BUNDLE", apt persistent bank) and the boot died trying to load a
+        // bundle named 'Headtif.BUNDLE' and registering an empty-named FLApt file (measured:
+        // three-assert cascade @BrnFlaptManager.cpp:176). The ARTIST literal-with-cast is the
+        // same idiom the working font tuples use (BrnGuiModule.cpp kaFontResources, type 16).
         const CgsGui::sResourceTuple maResourcesToLoad[1] =
         {
-            { 236u, CgsGui::E_GUI_RESOURCETYPE_TEXTURE },
+            { 236u, static_cast<CgsGui::ResourceRequestTypes>(11) },   // ARTIST type 11 == texture
         };
         const u32 muNumResourcesToLoad = 1u;
 

@@ -370,7 +370,10 @@
     // render item to a custom control (AptRenderItemCustomControl::CopyFromSprite +
     // AptCharacterInst::SetRenderItem), so a wrong classification breaks the whole GUI,
     // not just custom controls. Reconstruct it with a control, not by eye.
-    bool AptCIH::ProcessCustomControls() { return false; }
+    // ⭐ RETIRED 2026-08-24 ([licence-icon] wave): the real body is homed in
+    // AptCIHBehaviour.cpp, transcribed from @0x82B07788 with the XB1 x64 build as the
+    // bit-layout oracle and the leaked Apt 3.02 SDK as the naming source. The notes
+    // above were the reconstruction's map and are kept for the record.
 
     // AptGC::CleanUnreachable -- the partial sweep AptUpdate runs on the
     // zombies-dirty flag (raised by AptPartialGarbageCollection). No per-address

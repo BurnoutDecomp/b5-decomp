@@ -28,6 +28,11 @@
 #include "SDKs/EATech/include/Apt/AptRenderItemDynamicText.h"     // dyn-text leaf bounds (GetBoundsConst)
 #include "SDKs/EATech/include/Apt/AptStd/AptRect.h"               // AptRect (bounds accumulator)
 #include "SDKs/EATech/include/Apt/AptDefine.h"                   // gpNonGCPoolManager
+#include "SDKs/EATech/include/Apt/AptActionInterpreter.h"        // [licence-icon] getVariable (ProcessCustomControls)
+#include "SDKs/EATech/include/Apt/Apt.h"                         // [licence-icon] gAptFuncs custom-control hooks
+#include "SDKs/EATech/include/Apt/AptRenderItemCustomControl.h"  // [licence-icon] CopyFromSprite / descriptor setters
+#include "SDKs/EATech/include/Apt/AptRenderHooks.h"              // [licence-icon] gbAptCustomControlRenderEnabled
+#include "SDKs/EATech/include/Apt/AptValue/AptString.h"          // [licence-icon] AptString::GetInternalString
 #include "SDKs/EATech/Apt/DogmaAllocator.h"                      // DOGMA_PoolManager
 #include "SDKs/EATech/Apt/AptValueGCPoolManager.h"               // gpGCPoolManager Allocate/Deallocate
 #include "SDKs/EATech/Apt/AptValueGCAllocator.h"                 // AptValueGC_MemItem::SetIsAllocated
@@ -2210,3 +2215,178 @@ AptCIH* AptDisplayListState::AddToDelayReleaseList(AptCIH* pItem, bool bDelay)
 // AptApt_CancelLoad inlined at its call site (AptCIH::Remove).
 
 // AptApt_RemoveActionFor inlined at its call site (AptCIH::Remove).
+
+// ===========================================================================
+// [licence-icon] AptCIH::ProcessCustomControls @0x82B07788 -- the per-frame
+// custom-control classification/refresh pass. AptUpdate installs it into the
+// second generalised-process slot (AptCIH_sCIHProcessCb1), so it runs on EVERY
+// display-list node EVERY frame; it caches its verdict in the sprite base's
+// mnClipActionFlags custom-control bits and, for a classified control, keeps the
+// render item's descriptor strings fresh -- the strings AptRenderItemCustomControl::
+// Render hands to the host (gAptFuncs.pfnCustomControlRender -> CgsGui::
+// AptCallbackCustom::ControlRender -> BrnGui::CustomRendererManager). This body
+// was the ONE remaining stub in that chain ("return false" -- measured zero
+// ControlRender calls); everything downstream was already live.
+//
+// Sources, in trust order:
+//   * the X360 body @0x82B07788 (207 asm lines, transcribed arm for arm),
+//   * the RETAIL x64 build (XB1 sub_14083D290) as the width/bit-layout oracle --
+//     the classification bits live in AptCharacterSpriteInstBase::mnClipActionFlags
+//     bits 26-27 on the 64-bit ABI (X360 packs them at inst+20 bits 4-5), exactly
+//     the bits this tree's header already documents ("bits 26-27 = nIsCustomControl"),
+//   * the leaked Apt 3.02 SDK source (AptCIH.cpp :: ProcessCustomControls) for the
+//     original names/semantics -- structure matches the X360 arm for arm.
+// Classification values (bits 26-27): 0 = unclassified, 1 = string-style custom
+// control, 2 = NOT a custom control, 3 = zid-style.
+//
+// PROMOTION SAFETY: on a classified control whose INSTANCE is not tagged custom
+// (tag != 0x10) the pass promotes a live sprite render item via CopyFromSprite +
+// SetRenderItem and notifies the render tree (ItemMoved) -- the console does this
+// unconditionally on that path; the guards below (null child / non-string _target)
+// only skip work the console would have crashed on.
+// ===========================================================================
+extern AptActionInterpreter gAptActionInterpreter;   // dword_8324E760 (the VM singleton)
+
+bool AptCIH::ProcessCustomControls()
+{
+    AptCharacterInst* pInst = mpCharacterInst;
+
+    // X360 `v3 = *(v2+8) >> 26; if (v3 != 5 && v3 != 9) return 0` == IsSpriteInstBase
+    // (sprite / animation instance) -- the x64 form is the low-6-bit tag.
+    const uint32_t uTypeTag = pInst->GetTypeTag();
+    if (uTypeTag != 5u && uTypeTag != 9u)
+        return false;
+
+    AptCharacterSpriteInstBase* pSprite = static_cast<AptCharacterSpriteInstBase*>(pInst);
+
+    // ---- classify once (bits 26-27 == 0 -> derive from the clip's variables) ----
+    if ((pSprite->mnClipActionFlags & 0x0C000000u) == 0)
+    {
+        // X360: EAStringC::InitFromBuffer(&v26, "_CustomControlType"); the `_type`
+        // key is the pooled constant (unk_8324E5C8 == StringPool "_type").
+        EAStringC strCustomControlTypeKey("_CustomControlType");
+
+        AptValue* pTypeVar = (pInst->mpProperties != nullptr)
+            ? pInst->mpProperties->Lookup(StringPool::saConstant[18])   // "_type"
+            : nullptr;
+        AptValue* pZidVar = (pInst->mpProperties != nullptr)
+            ? pInst->mpProperties->Lookup(strCustomControlTypeKey)
+            : nullptr;
+
+        const uint32_t uFlags = pSprite->mnClipActionFlags;
+        if (pTypeVar != nullptr)
+        {
+            pSprite->mnClipActionFlags = (uFlags & ~0x0C000000u) | 0x04000000u;  // string-style
+        }
+        else if (pZidVar != nullptr)
+        {
+            pSprite->mnClipActionFlags = uFlags | 0x0C000000u;                   // zid-style
+        }
+        else
+        {
+            pSprite->mnClipActionFlags = (uFlags & ~0x0C000000u) | 0x08000000u;  // NOT a control
+            SetGeneralizedProcessDirtyState(false);
+        }
+    }
+
+    // `if ((flags & 0x30) == 0x20) return 0` (console bits) -- a known non-control node.
+    if ((pSprite->mnClipActionFlags & 0x0C000000u) == 0x08000000u)
+        return false;
+
+    SetGeneralizedProcessDirtyState(true);
+
+    // ---- promote the render item once (the INSTANCE tag stays sprite) -----------
+    // `if ((*(v2+8) & 0xFC000000) != 0x40000000)` -- instance tag != 16 (custom).
+    if (pInst->GetTypeTag() != 0x10u)
+    {
+        AptRenderItem* pOriginal = pInst->mpRenderItem;
+        // `(*(*(v2+4)+24) & 0xFC0000) == 0x140000` -- render-type SPRITE (x64
+        // mFlags bits 8-13 == 5, the same test AptRenderWalk uses).
+        if (pOriginal != nullptr && (pOriginal->mFlags & 0x3F00u) == 0x0500u)
+        {
+            AptRenderItem* pPromoted =
+                AptRenderItemCustomControl::CopyFromSprite(pOriginal, gnCurrUpdateTick,
+                                                           /*bCopyExtended*/ true);
+            pInst->SetRenderItem(pPromoted);
+        }
+        // RenderTreeManager::Update_ItemMoved(mgr, this, tick) -- the PC static wraps it.
+        AptCharacterInst::ItemMoved(this);
+    }
+
+    // ---- refresh the descriptor strings ------------------------------------------
+    // `v12 = **(v2+28)` -- the control's single child, the rectangle shape whose host
+    // render unit the update/create hooks receive.
+    AptCIH* pRectObject = (pSprite->mDisplayList.mpHead != nullptr)
+        ? pSprite->mDisplayList.mpHead->mpFirst
+        : nullptr;
+
+    // getVariable(&gAptActionInterpreter, this, 0, "_target", 1, 1, 0).
+    AptValue* pTargetVar =
+        gAptActionInterpreter.getVariable(this, nullptr, &StringPool::saConstant[16], 1, 1, 0);
+
+    AptRenderItemCustomControl* pItem =
+        static_cast<AptRenderItemCustomControl*>(pInst->GetRenderItemWritable());
+
+    // The child rect shape's host render unit (character +0x20 -- the same slot
+    // AptHook_DrawShape reads; see KU_SHAPE_GEOMETRY_OFFSET there). The console
+    // dereferences unconditionally; the SDK asserts the child is a single shape.
+    void* pRenderingUnit = nullptr;
+    if (pRectObject != nullptr &&
+        pRectObject->GetCharacterInst() != nullptr &&
+        pRectObject->GetCharacterInst()->mpRenderItem != nullptr &&
+        pRectObject->GetCharacterInst()->mpRenderItem->mpCharacter != nullptr)
+    {
+        pRenderingUnit = *reinterpret_cast<void**>(
+            reinterpret_cast<char*>(pRectObject->GetCharacterInst()->mpRenderItem->mpCharacter)
+            + 0x20 /* == AptRenderHooks.cpp's KU_SHAPE_GEOMETRY_OFFSET */);
+    }
+
+    const uint32_t uMode = (pSprite->mnClipActionFlags >> 26) & 3u;
+    if (uMode == 1u)   // the string-descriptor control
+    {
+        AptValue* pModeTypeVar = (pInst->mpProperties != nullptr)
+            ? pInst->mpProperties->Lookup(StringPool::saConstant[18])   // "_type"
+            : nullptr;
+
+        // `if (!pfnCustomControlUpdate || pfnCustomControlUpdate(unit) == 1)` --
+        // a null slot means "always refresh the properties blob".
+        if (gAptFuncs.pfnCustomControlUpdate == nullptr ||
+            gAptFuncs.pfnCustomControlUpdate(pRenderingUnit))
+        {
+            pItem->SetCustomPropertiesStr(urlEncodeCustomRender());
+        }
+
+        // `(*(v18+4) & 0x7F) != 1 -> v18 = *(v18+32)` is the string/boxed-string
+        // resolve == c_string(); the console then copies the AptString's embedded
+        // EAStringC (record +8). A non-string value would have crashed the console;
+        // skipped by the null guard here.
+        AptString* pTargetStr = (pTargetVar != nullptr) ? pTargetVar->c_string() : nullptr;
+        if (pTargetStr != nullptr)
+            pItem->SetTargetStr(*pTargetStr->GetInternalString());
+
+        AptString* pTypeStr = (pModeTypeVar != nullptr) ? pModeTypeVar->c_string() : nullptr;
+        if (pTypeStr != nullptr)
+            pItem->SetTypeStr(*pTypeStr->GetInternalString());
+    }
+    else if (gbAptCustomControlRenderEnabled && uMode == 3u)   // the zid-style control
+    {
+        // Inert on this build (the gate boots false and nothing sets it); transcribed
+        // whole. bForce: created this tick, or the writable-revision bit (x64 mFlags
+        // bit 6; console bit 25 -- the flags relayout the render-item header records).
+        const bool bForce = (pItem->mCreatedOnTick == gnCurrUpdateTick) ||
+                            ((pItem->mFlags & 0x40u) != 0);
+
+        AptString* pTargetStr = (pTargetVar != nullptr) ? pTargetVar->c_string() : nullptr;
+        if (gAptFuncs.pfnCreateCustomControlZid != nullptr && pTargetStr != nullptr)
+        {
+            const AptAssetCustomControlZId nZId = gAptFuncs.pfnCreateCustomControlZid(
+                pRenderingUnit, pTargetStr->GetInternalString()->GetBuffer(),
+                static_cast<AptValue*>(this),
+                static_cast<AptAssetCustomControlZId>(pItem->GetZId()), bForce);
+            if (nZId != 0)
+                pItem->SetZId(static_cast<intptr_t>(nZId));
+        }
+    }
+
+    return true;
+}

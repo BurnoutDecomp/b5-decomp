@@ -73,6 +73,11 @@ struct AptRenderItemCustomControl : public AptRenderItemSprite
     // control). The pCtx/eOp/nTick params are part of the inherited signature.
     virtual void PopRenderData(AptRenderingContext* pCtx, AptMaskRenderOperation eOp, int nTick) const override;   // @0x82ADB538
     virtual void PushRenderDataAbsolute(AptRenderingContext* pCtx) const override;   // @0x82ADB4F8
+    // ⭐ [licence-icon] the console vtable's +0x04 slot ALSO points at 0x82ADB4F8 (both push
+    // slots share the non-pushing hook body -- vtable @0x82145944 read from the image). The
+    // missing override inherited the sprite's MATRIX-PUSHING form against the non-popping
+    // PopRenderData above: +1 context-stack level per frame. See the .cpp banner.
+    virtual void PushRenderData(AptRenderingContext* pCtx, AptMaskRenderOperation eOp, int nTick) const override;   // @0x82ADB4F8 (shared body)
 
     // ---- descriptor accessors --------------------------------------------
     const EAStringC& GetTypeStr() const   { return mTypeStr; }     // @0x82AD5038
@@ -81,6 +86,7 @@ struct AptRenderItemCustomControl : public AptRenderItemSprite
     // x64 ?SetTypeStr@ @0x140843470 / ?SetCustomPropertiesStr@ @0x140841250:
     // both QEAAXAEBVEAStringC@@@Z -- void returns.
     void SetTypeStr(const EAStringC& strType)             { mTypeStr = strType; }              // @0x82AE5A90
+    void SetTargetStr(const EAStringC& strTarget)         { mTargetStr = strTarget; }          // x64 ?SetTargetStr@ @0x140843060 (same QEAAXAEBVEAStringC@@@Z shape)
     void SetCustomPropertiesStr(const EAStringC& strProp) { mCustomPropertiesStr = strProp; }  // @0x82AE5A88
 
     // ---- render-data handle (Z-id) ---------------------------------------
