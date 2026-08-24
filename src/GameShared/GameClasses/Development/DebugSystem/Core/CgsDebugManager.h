@@ -52,7 +52,7 @@ namespace CgsDev
         static const DebugManagerConstructParameters DEFAULT;
     };
 }
-namespace CgsGraphics { struct Im2d; }
+namespace CgsGraphics { struct Im2d; class Im3dRenderBuffer; }
 namespace CgsDev
 {
 
@@ -122,11 +122,13 @@ namespace CgsDev
         // declares the HUD pass the loading-screen render path will drive into mIm2dDebugRenderBuffer.
         void RenderHUD();
 
-        // X360 Render 0x8282F770: point the renderers at this frame's buffers, then RenderWorld (3D)
-        // + RenderHUD (2D). The 3D path (RenderWorld + mp3dRender setup) is the Debug3D follow-on;
-        // the 2D path drives the squares.
+        // X360 Render @0x8282F770: assert both renderers exist, point them at this frame's debug
+        // render buffers, then RenderWorld (3D) + RenderHUD (2D). Nothing else - the overlay
+        // QUEUEING (build info / fps / memory) is BrnGameModule::DebugManagerRender's job.
         void Render(const Matrix44& lViewProjection, const Vector3& lCameraPosition,
-                    CgsGraphics::Im2d* lp3dRenderBuffer, CgsGraphics::Im2d* lp2dRenderBuffer);
+                    CgsGraphics::Im3dRenderBuffer* lp3dRenderBuffer, CgsGraphics::Im2d* lp2dRenderBuffer);
+        // X360 @0x8282E030: 3D Begin -> Dispatch3D the buffered world-space prims -> each active
+        // component's RenderWorld -> End. (The 3D draw bodies are the Debug3D render follow-on.)
         void RenderWorld(const Matrix44& lViewProjection, const Vector3& lCameraPosition);
 
         // X360 0x8282D998. Queue the on-screen frame-rate readout ("%d fps") into the buffered renderer,

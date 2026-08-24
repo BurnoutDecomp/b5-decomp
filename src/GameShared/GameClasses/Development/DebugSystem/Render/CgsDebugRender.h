@@ -25,6 +25,7 @@
 namespace CgsDev
 {
     struct Debug2DImmediateRender;   // the immediate 2D renderer Dispatch2D replays into
+    struct Debug3DImmediateRender;   // the immediate 3D renderer Dispatch3D replays into
 
     namespace Internal
     {
@@ -113,6 +114,13 @@ namespace CgsDev
 
         // X360 Dispatch2D: replay the queued 2D events into lpRenderer; clear the queue if lbClear.
         void Dispatch2D(Debug2DImmediateRender* lpRenderer, bool lbClear);
+
+        // X360 Dispatch3D: replay the queued WORLD-space events into the 3D renderer; clear the
+        // queue if lbClear (DebugManager::RenderWorld @0x8282E030 calls it inside the 3D Begin/End
+        // bracket). BOUNDED: the replay switch is the Debug3D render follow-on - no 3D events are
+        // queued on this build (the 3D Draw* publishers are declaration-only), so the body only
+        // honours the clear.
+        void Dispatch3D(Debug3DImmediateRender* lpRenderer, bool lbClear);
 
     private:
         // X360 queue pair (Construct @0x828332C0 constructs +0x4010 [2D] then +0 [3D]; the ctor

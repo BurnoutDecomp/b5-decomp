@@ -39,6 +39,10 @@ namespace BrnGameMainFlowController { extern bool gBrnInGameStateActive; }
 // "dirty disc" error UI for the given signed-in user. ------------------------------------
 extern "C" unsigned long XShowDirtyDiscErrorUI(unsigned long dwUserIndex);
 
+// The high-resolution frame timer DebugManagerRender's fps ring reads (defined in
+// CgsTimeUtils.cpp; declared locally by convention -- see that TU's note).
+namespace CgsSystem { u32 GetSystemTimerBaseTime(); u32 GetSystemTimerFrequency(); }
+
 namespace BrnGame
 {
     // File-scope globals the X360 GameMain references:
@@ -495,6 +499,21 @@ namespace BrnGame
             mSimTimer.Prepare(lfTimerRate);
             mGameTimer.SetRunning(true);
             mSimTimer.SetRunning(true);
+
+            // The debug fps-readout state DebugManagerRender keeps (gm+0x9A0B85..0x9A0BC8; on
+            // the console these sit at the static game module's zero-init, which DebugMemoryInit
+            // re-zeroes). Seeded explicitly here because this build's module is not zero-cleared.
+            // [FLAG] mbDebugSimulationIsRealtime's console writer is unrecovered (see the header);
+            // seeded true so the readout shows the plain "%d fps" line.
+            mbDebugSimulationIsRealtime    = true;
+            mu8DebugFpsFrameStampIndex     = 0;
+            mau32DebugFpsFrameStamps[0]    = 0;
+            mau32DebugFpsFrameStamps[1]    = 0;
+            mau32DebugFpsFrameStamps[2]    = 0;
+            mu32DebugFpsAverageWindowStamp = 0;
+            mfDebugFpsAccumulator          = 0.0f;
+            mfDebugFpsAverage              = 0.0f;
+            mfDebugFpsSampleCount          = 0.0f;
 
             // ⭐ THE FRAME-RATE MANAGER IS CONSTRUCTED, 2026-08-17. It never was on this
             // build -- the call was listed among the "[gated] rest of steps 7-9" items -- so
@@ -2973,19 +2992,103 @@ namespace BrnGame
     // module.
     void BrnGameModule::DispatchThread()
     {
+        // X360 DoDispatch @0x823DC458 runs DebugManagerRender between the module dispatch-list
+        // generation and the ExternallyV copy -- i.e. the overlay QUEUEING happens on the
+        // dispatch side, before the renderer consumes the frame. Same order here: queue first,
+        // then render. (The queued text is flushed by DebugManager::Render at the renderer's
+        // overlay point -- see the note at the end of DebugManagerRender.)
+        DebugManagerRender();
+
         // The console dispatch thread hands the renderer the manager's READ buffer (the
         // frame the update side just published via OnEndOfUpdateFrame's swap).
         mRenderModule.Render(mDispatchThreadInputBufferManager.GetReadBuffer());
+    }
 
-        // ⭐ RETIRED 2026-08-16 (boot audit F-P2-3). This used to call
-        // CgsDev::LoadAndSetDebugFont here every render frame -- a PC-invented second font
-        // path that stood up its OWN 3x4MB malloc'd resource pool and loaded
-        // "Language/Fonts/Default.font" a second time, purely because GamePrepare's id-5
-        // acquire had been dropped. GamePrepare now issues that acquire against the pool-0
-        // bundle it already loads, and lands the font through the console's own
-        // Font::CreateTextureState + DebugManager::SetDebugFont pair, so the render thread
-        // has no font work to do -- exactly as on the X360, whose DispatchThread is only the
-        // renderer call above.
+    // Faithful port of X360 DebugManagerRender @0x823BCB88 (called from DoDispatch each dispatch
+    // pass). The console body, in order:
+    //   1. PerfMonCpu::AddPIXCounters();
+    //   2. read the two DEBUG render buffers off the RendererIO OUTPUT buffer parameter
+    //      (GetIm3d/Im2dDebugRenderBuffer);
+    //   3. GATE: bail unless the debug font handle (gm+0x99F150) differs from the NULL handle
+    //      pair (qword_82FAE900) AND both buffers are non-null -- this is why the console shows
+    //      NO build date / fps / memory until GamePrepare's font acquire lands (world prepare);
+    //   4. the fps state: current fps measured over the 3-frame stamp ring
+    //      (1 / (elapsed/freq * 1/3)), accumulated into the 60-second average window
+    //      (flt_82004C6C = 60.0) -> mfDebugFpsAverage;
+    //   5. under the debug critical section: RenderBuildInfo, RenderFrameRateColouredWithAverage
+    //      (current, average, green/red/yellow = 0xFF00FF00/0xFF0000FF/0xFF00FFFF, ramp 60..30
+    //      [flt_82004C6C/flt_82004F5C], "over last minute", highlight = 1 - t/30 clamped
+    //      [flt_82037210], gm+0x9A0B85), RenderMemory, then DebugManager::Render with the
+    //      view-projection at gm+0x6E9520 and the camera position recovered by inverting the
+    //      dispatch view matrix at gm+0x6E94A0.
+    //
+    // FLAG PC-platform leaf (parameter): the dispatch IO pair the console reads the buffers from
+    // is not created on this build (boot audit F-P2-4), so the gate's buffer half folds onto the
+    // renderer module's by-value members (the exact objects RendererModule::Update publishes into
+    // that pair -- never null once the module exists). The parameter returns when the pair lands.
+    // FLAG (deferred with the Debug3D path): the dispatch camera matrices (gm+0x6E94A0/0x6E9520)
+    // are not reconstructed; they feed only the 3D debug pass (RenderWorld), whose draw bodies are
+    // the Debug3D follow-on, so identity/zero stand in and the fold is inert.
+    // FLAG PC fold (the flush point): the console's trailing DebugManager::Render replays the
+    // queued prims into the debug Im2d BUFFER, which the GPU consumes later in the frame; on PC
+    // Im2dRenderBuffer IS the immediate renderer (CgsImRenderBuffer.h), so the replay must land
+    // between the scene and the present -- BrnRendererModule::Render's debug seam issues it there.
+    void BrnGameModule::DebugManagerRender()
+    {
+        CgsDev::PerfMonCpu::AddPIXCounters();
+
+        // 3. the gate (@0x823BCBCC-C20): the debug font must have arrived (GamePrepare's id-5
+        // acquire writes the pair; both words NULL = not yet).
+        if (mDebugFont.mpResourceMemory == 0 && mDebugFont.mpSourceEntry == 0)
+            return;
+
+        // 4. the fps state (@0x823BCC24-D44).
+        const u32 lu32Now  = CgsSystem::GetSystemTimerBaseTime();
+        const u32 lu32Freq = CgsSystem::GetSystemTimerFrequency();
+
+        const f32 lfThreeFrameSeconds =
+            static_cast<f32>(lu32Now - mau32DebugFpsFrameStamps[mu8DebugFpsFrameStampIndex]) /
+            static_cast<f32>(lu32Freq);
+        const f32 lfCurrentFps = 1.0f / (lfThreeFrameSeconds * 0.33333334f);   // flt_820065E0
+
+        mfDebugFpsSampleCount = mfDebugFpsSampleCount + 1.0f;
+        mfDebugFpsAccumulator = mfDebugFpsAccumulator + lfCurrentFps;
+        mau32DebugFpsFrameStamps[mu8DebugFpsFrameStampIndex] = lu32Now;
+        mu8DebugFpsFrameStampIndex = static_cast<u8>((mu8DebugFpsFrameStampIndex + 1) % 3);
+
+        const f32 lfWindowSeconds =
+            static_cast<f32>(lu32Now - mu32DebugFpsAverageWindowStamp) / static_cast<f32>(lu32Freq);
+        if (lfWindowSeconds > 60.0f)   // flt_82004C6C
+        {
+            mu32DebugFpsAverageWindowStamp = lu32Now;
+            mfDebugFpsAverage     = mfDebugFpsAccumulator / mfDebugFpsSampleCount;
+            mfDebugFpsAccumulator = 0.0f;
+            mfDebugFpsSampleCount = 0.0f;
+        }
+
+        // 5. queue the overlay under the debug lock (@0x823BCD48: Enter(dword_83019264) -- the
+        // same per-manager section ThreadSafeAquire brackets).
+        CgsDev::DebugManager* lpDebugManager = CgsDev::DebugManager::ThreadSafeAquire();
+
+        lpDebugManager->RenderBuildInfo();
+
+        // highlight = clamp(1 - secondsSinceAverage/30, 0, 1) (@0x823BCE7C-EE8, flt_82037210).
+        f32 lfAverageHighlight = 1.0f - lfWindowSeconds * 0.033333335f;
+        if (lfAverageHighlight < 0.0f) lfAverageHighlight = 0.0f;
+        if (lfAverageHighlight > 1.0f) lfAverageHighlight = 1.0f;
+
+        lpDebugManager->RenderFrameRateColouredWithAverage(
+            lfCurrentFps, mfDebugFpsAverage,
+            0xFF00FF00u /*high: green*/, 0xFF0000FFu /*low: red*/, 0xFF00FFFFu /*mid: yellow*/,
+            60.0f, 30.0f,   // flt_82004C6C / flt_82004F5C
+            "over last minute", lfAverageHighlight, mbDebugSimulationIsRealtime);
+
+        lpDebugManager->RenderMemory();
+
+        // (the console's trailing DebugManager::Render is issued at the renderer's overlay point
+        // on this build -- see the FLAG PC fold above.)
+
+        CgsDev::DebugManager::ThreadSafeRelease(lpDebugManager);
     }
 
     // @ BrnGameModule.cpp:3916 - clear the whole game-module object, then stamp each owned

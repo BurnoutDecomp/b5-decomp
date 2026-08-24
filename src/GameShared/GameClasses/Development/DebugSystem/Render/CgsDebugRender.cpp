@@ -22,6 +22,15 @@ namespace CgsDev
         m2DQueue.Clear();
     }
 
+    // X360 Dispatch3D (see the header note): BOUNDED to the clear - nothing on this build queues
+    // 3D events (the world-space Draw* publishers are declaration-only), so the replay walk is the
+    // Debug3D render follow-on.
+    void DebugRender::Dispatch3D(Debug3DImmediateRender* /*lpRenderer*/, bool lbClear)
+    {
+        if (lbClear)
+            m3DQueue.Clear();
+    }
+
     // X360 Draw2DText 0x8282B1D0: queue the string (STRING event) then the text record (TEXT event).
     void DebugRender::Draw2DText(const char* lpcText, f32 lfX, f32 lfY, f32 lfScale, RGBA lColour)
     {
