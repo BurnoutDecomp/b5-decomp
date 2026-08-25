@@ -19,15 +19,8 @@ namespace CgsGui
 {
 namespace
 {
-    // ---------------------------------------------------------------------------------------------
-    // X360 module data-segment globals the draw binds, owned by the immediate-mode / GUI render
-    // setup (NOT this TU): dword_83010F54 is the shared depth-stencil state pointer the billboard
-    // strip is drawn with; unk_83011090 is the default screen-space Im2dTransform stamped ahead of
-    // the draw (it sits alongside CgsIm2dTransform's statics in the data segment). They are
-    // referenced read-only here; their definitions live in the (un-recovered) owning module.
-    // FLAG: un-homed data-segment collaborators -- declared extern so no value is fabricated.
-    // ---------------------------------------------------------------------------------------------
-    // (declared at namespace scope below)
+    // (The X360 data-segment globals the draw binds -- dword_83010F54 and unk_83011090 -- are
+    // defined at namespace scope below as their PC folds; see the block comment there.)
 
     // Repack a billboard's stored RGBA colour word into the vertex colour word. The X360 swaps the
     // outermost bytes and keeps the middle two -- verbatim the pseudocode expression
@@ -39,9 +32,44 @@ namespace
     }
 }
 
-// The two X360 data-segment globals (see the FLAG above), reached read-only by Render.
-extern const renderengine::DepthStencilState* gpBillboardDepthStencilState;  // dword_83010F54
-extern const CgsGraphics::Im2dTransform       gBillboardScreenTransform;     // unk_83011090
+// ---------------------------------------------------------------------------------------------
+// The X360 data-segment globals the GUI billboard/boost-bar draws bind (the dword_83010F20..F54
+// state-library block + the shared unk_83011090 screen transform), DEFINED here as their PC
+// folds (declared in CgsBillboardRenderer.h for the other GUI-renderer TUs):
+//
+//  * gpGuiBlendStateStandard / gpGuiBlendStateAdditive (dword_83010F20 / dword_83010F24) and
+//    gpBillboardDepthStencilState (dword_83010F54) are entries of the console's GUI render-state
+//    table, populated at boot by the state library. [FLAG PC-platform leaf] the PC Im2d dispatch
+//    folds every SET_STATE_BLEND to the standard alpha-over blend and runs depth-off (its
+//    case 3/4 handlers never read the pointer), so the table entries fold to nulls -- the
+//    command stream they ride through is unchanged.
+//  * gBillboardScreenTransform (unk_83011090) is the shared 2D screen transform the console
+//    stamps ahead of every GUI billboard/quad draw (its producers record positions in 0..1
+//    screen proportions). [FLAG PC-platform leaf] the console object maps proportions to the
+//    GPU's NDC; the PC dispatch consumes logical-screen-pixel transforms, so the fold is the
+//    proportion -> 1280x720 logical-pixel scale with the colour-identity scale (255) the
+//    dispatch's CXForm fold expects. Same observable mapping, PC-shaped target space.
+// ---------------------------------------------------------------------------------------------
+const renderengine::BlendState*        gpGuiBlendStateStandard       = 0;  // dword_83010F20
+const renderengine::BlendState*        gpGuiBlendStateAdditive       = 0;  // dword_83010F24
+const renderengine::DepthStencilState* gpBillboardDepthStencilState  = 0;  // dword_83010F54
+const renderengine::RasterizerState*   gpGuiRasterizerStateCullNone  = 0;  // (same PC fold: the dispatch runs cull-none unconditionally)
+
+namespace
+{
+    CgsGraphics::Im2dTransform MakeBillboardScreenTransform()
+    {
+        CgsGraphics::Im2dTransform lTransform = {};
+        lTransform.mRightUp.x     = 1280.0f;  // right basis: x' = 1280 * x
+        lTransform.mRightUp.w     = 720.0f;   // up basis:    y' =  720 * y
+        lTransform.mColourScale.x = 255.0f;
+        lTransform.mColourScale.y = 255.0f;
+        lTransform.mColourScale.z = 255.0f;
+        lTransform.mColourScale.w = 255.0f;
+        return lTransform;
+    }
+}
+const CgsGraphics::Im2dTransform gBillboardScreenTransform = MakeBillboardScreenTransform();  // unk_83011090
 
 // The shared full-texture default UV set (guest &unk_820E08B8): the four corners of the whole
 // texture, in the same [u,v, u,v2, u2,v, u2,v2] corner order SetUVTable's grid generator emits.

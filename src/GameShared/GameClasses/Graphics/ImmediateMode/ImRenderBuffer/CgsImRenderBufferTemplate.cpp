@@ -560,6 +560,83 @@ namespace CgsGraphics
     }
 
     // -------------------------------------------------------------------------
+    // The three typed SetState overloads the buffered GUI renderers append -- X360
+    // <Basic2dColouredTexturedVertex> bodies driven by CgsGui::BillboardRenderer::Render
+    // @0x828577E0 and the BoostBarRenderer render family:
+    //   SetState(TextureState*)      -- opcode  9 (byte-identical to SetTextureState above,
+    //                                   a distinct X360 symbol at its own address)
+    //   SetState(BlendState*)        @0x82458EC0 -- opcode 3
+    //   SetState(DepthStencilState*) @0x82458DC8 -- opcode 4
+    // Each is the standard 16-byte overflow-checked append; the X360 null-state /
+    // outside-render-block / buffer-full asserts are diagnostic-only and dropped per the
+    // file-header convention (same as SetTexture/SetProgram), and the dcbz128 pre-warm is
+    // dropped likewise.
+    // -------------------------------------------------------------------------
+    template <typename V>
+    void ImRenderBuffer<V>::SetState(const renderengine::TextureState* lpTextureState)
+    {
+        const u32 luRecord = ImCommandRecord<ImCommandSetStateTexture>::KU_BYTES;  // 16
+
+        const u32 luPos = mpWriteBuffer->muCommandBufferWritePos;
+        if (muCommandBufferSize >= luPos + luRecord)
+        {
+            ImCommandSetStateTexture* lpCommand = reinterpret_cast<ImCommandSetStateTexture*>(
+                mpWriteBuffer->mpu8CommandBuffer + luPos);
+            lpCommand->muType         = IM_CMD_SET_STATE_TEXTURE;            // 9
+            lpCommand->muSize         = luRecord;
+            mpWriteBuffer->muCommandBufferWritePos = luPos + luRecord;
+            lpCommand->mpTextureState = reinterpret_cast<const TextureState*>(lpTextureState);
+        }
+        else
+        {
+            SetBufferFullRewindToLastEndRender();
+        }
+    }
+
+    template <typename V>
+    void ImRenderBuffer<V>::SetState(const renderengine::BlendState* lpBlendState)
+    {
+        const u32 luRecord = ImCommandRecord<ImCommandSetStateBlend>::KU_BYTES;  // 16
+
+        const u32 luPos = mpWriteBuffer->muCommandBufferWritePos;
+        if (muCommandBufferSize >= luPos + luRecord)
+        {
+            ImCommandSetStateBlend* lpCommand = reinterpret_cast<ImCommandSetStateBlend*>(
+                mpWriteBuffer->mpu8CommandBuffer + luPos);
+            lpCommand->muType       = IM_CMD_SET_STATE_BLEND;                // 3
+            lpCommand->muSize       = luRecord;
+            mpWriteBuffer->muCommandBufferWritePos = luPos + luRecord;
+            lpCommand->mpBlendState = lpBlendState;
+        }
+        else
+        {
+            SetBufferFullRewindToLastEndRender();
+        }
+    }
+
+    template <typename V>
+    void ImRenderBuffer<V>::SetState(const renderengine::DepthStencilState* lpDepthStencilState)
+    {
+        const u32 luRecord = ImCommandRecord<ImCommandSetStateDepthStencil>::KU_BYTES;  // 16
+
+        const u32 luPos = mpWriteBuffer->muCommandBufferWritePos;
+        if (muCommandBufferSize >= luPos + luRecord)
+        {
+            ImCommandSetStateDepthStencil* lpCommand =
+                reinterpret_cast<ImCommandSetStateDepthStencil*>(
+                    mpWriteBuffer->mpu8CommandBuffer + luPos);
+            lpCommand->muType              = IM_CMD_SET_STATE_DEPTH;         // 4
+            lpCommand->muSize              = luRecord;
+            mpWriteBuffer->muCommandBufferWritePos = luPos + luRecord;
+            lpCommand->mpDepthStencilState = lpDepthStencilState;
+        }
+        else
+        {
+            SetBufferFullRewindToLastEndRender();
+        }
+    }
+
+    // -------------------------------------------------------------------------
     // SetTransform - append an 80-byte {type:IM_CMD_SET_TRANSFORM} command carrying
     // the batch transform. Decompiled from the inline writer at the head of
     // AptRenderHandler::Render @0x5CB230: it stores muType=16, muSize=80, advances
@@ -1202,14 +1279,36 @@ namespace CgsGraphics
                 lpDevice->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
                 break;
 
+            case IM_CMD_PUSH_MASK:          // case 17 - Im2dRenderBuffer::PushMask (TextureState-bound)
             case IM_CMD_PUSH_MASK_GEOMETRY: // case 18 - begin/refresh the pixel mask (PS3 case 0x12)
             {
-                const ImCommandPushMaskTexture<V>* lpPush =
-                    static_cast<const ImCommandPushMaskTexture<V>*>(lpCommand);
+                // The two push opcodes carry the same {state, corner-run} record shape but a
+                // different +8 binding: 18 (the Apt DrawRenderingUnit Add op) stores a raw
+                // renderengine::Texture*, 17 (Im2dRenderBuffer::PushMask, the GUI/boost-bar
+                // SetMaskRect path) stores a resolved renderengine::TextureState* (the DWARF
+                // :191 record) that unwraps to its raster here -- exactly as the SET_STATE_
+                // TEXTURE case above unwraps the same state type.
                 ++liMaskDepth;
-                const Basic2dColouredTexturedVertex* lpCorners =
-                    reinterpret_cast<const Basic2dColouredTexturedVertex*>(lpPush->mpVertices);
-                renderengine::Texture* lpMaskTexture = lpPush->mpTexture;
+                const Basic2dColouredTexturedVertex* lpCorners;
+                renderengine::Texture* lpMaskTexture;
+                if (lpCommand->muType == IM_CMD_PUSH_MASK)
+                {
+                    const ImCommandPushMaskTextureState<V>* lpPush =
+                        static_cast<const ImCommandPushMaskTextureState<V>*>(lpCommand);
+                    lpCorners = reinterpret_cast<const Basic2dColouredTexturedVertex*>(
+                        lpPush->mpVertices);
+                    const renderengine::TextureState* lpState =
+                        reinterpret_cast<const renderengine::TextureState*>(lpPush->mpTextureState);
+                    lpMaskTexture = (lpState != nullptr) ? lpState->mpRaster : nullptr;
+                }
+                else
+                {
+                    const ImCommandPushMaskTexture<V>* lpPush =
+                        static_cast<const ImCommandPushMaskTexture<V>*>(lpCommand);
+                    lpCorners = reinterpret_cast<const Basic2dColouredTexturedVertex*>(
+                        lpPush->mpVertices);
+                    lpMaskTexture = lpPush->mpTexture;
+                }
                 if (lpCorners != nullptr && lpMaskTexture != nullptr &&
                     lpMaskTexture->mpD3DTexture != nullptr)
                 {

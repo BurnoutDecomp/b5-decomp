@@ -7,6 +7,7 @@
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"                           // CgsGui::GuiEventQueueSmall (the base's mEventQueue)
 #include "GameSource/Gui/CustomRenderer/Renderers/BrnNetworkPlayerImageRenderer.h" // the live slot-0 component
 #include "GameSource/Gui/CustomRenderer/Renderers/BrnInGameMessageRenderer.h"      // [tut-ticker] the live slot-8 component
+#include "GameSource/Gui/CustomRenderer/Renderers/BrnBoostBarRenderer.h"           // [boost-bar] the live slot-4 component
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX.
 //   BrnGui::CustomRendererManager  @ 0x82444040 .. 0x82450908  (16 functions)
@@ -44,6 +45,14 @@ namespace rw          { struct IResourceAllocator; }
 namespace CgsGraphics { struct TextRenderer; }
 namespace CgsLanguage { class  LanguageManager; }
 namespace BrnFlapt    { struct FlaptRenderer; }
+// SetMaskRect (below) touches its collaborators pointer/reference-only.
+namespace rw { namespace math { namespace vpu { struct Vector4; } } }
+namespace renderengine { class TextureState; }
+namespace CgsGraphics
+{
+    struct Basic2dColouredTexturedVertex;
+    template <typename V> struct ImRenderBuffer;
+}
 
 // ⭐ The shared base CgsGui::CustomRendererManager USED TO BE DECLARED HERE, FLAG'd
 // "no committed home exists". It does have one -- GameShared/GameClasses/Gui/View/
@@ -152,6 +161,11 @@ private:
     // the array banner above no longer applies to it.
     InGameMessageRenderer mInGameMessageRenderer;
 
+    // ⭐ [boost-bar] the by-value subobject for slot 4 (guest this+0xE520) -- the in-game
+    // boost gauge, reconstructed whole 2026-08-24/25 (lifecycle + state machine + the full
+    // render family). The hollow-shell caveat above no longer applies to it either.
+    BoostBarRenderer mBoostBarRenderer;
+
     // Guest +0x1F498: the master rendering-enable flag SetAllRenderingState() stores.
     bool mbRenderingEnable;
 
@@ -180,6 +194,20 @@ private:
     CgsLanguage::LanguageManager* mpLanguageManager;   // guest +0x1BEC8
     void*                         mpReplaySerialiser;  // guest +0x1BED0
 };
+
+// ---------------------------------------------------------------------------------------------
+// BrnGui::SetMaskRect @0x82450BE0 (home: BrnCustomRenderer.cpp, per its own baked assert path,
+// :889) -- the shared GUI clip-mask helper the boost-bar render paths use: transform the
+// 0..1-proportion rect {x0,y0,x1,y1} into the mask's screen space, order the two corners
+// min/max, and push an Im2dRenderBuffer clip mask (opcode 17) bound to lpTextureState with the
+// corner UVs taken from lv4MaskUVs {u0,v0, u1,v1}. Body + PC-fold notes in BrnCustomRenderer.cpp.
+// (The PS3 export also names the paired pop as BrnGui::UnsetMaskRect -- a plain PopMask wrapper
+// the X360 build ICF-folds onto Im2dRenderBuffer::PopMask itself, so no separate symbol here.)
+// ---------------------------------------------------------------------------------------------
+void SetMaskRect(CgsGraphics::ImRenderBuffer<CgsGraphics::Basic2dColouredTexturedVertex>* lpRenderBuffer,
+                 const renderengine::TextureState* lpTextureState,
+                 const rw::math::vpu::Vector4& lrv4Rect,
+                 const rw::math::vpu::Vector4& lrv4MaskUVs);
 
 } // namespace BrnGui
 

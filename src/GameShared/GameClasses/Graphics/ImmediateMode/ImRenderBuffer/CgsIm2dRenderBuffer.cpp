@@ -44,26 +44,30 @@ namespace CgsGraphics
 {
     // -------------------------------------------------------------------------
     // PushMask @0x82450030 - push a clip mask built from a 2-vertex screen-space
-    // corner run bound to lpTexture. The X360 body appends the 16-byte {muType=17}
-    // command FIRST (or rewinds on command-buffer overflow, leaving the command slot
-    // null), then carves the 2-vertex (40-byte) corner run from the vertex stream
-    // (the inline equivalent of AllocVertices(2); a vertex overflow leaves the run
-    // null), and only when BOTH the command slot and the run are valid stamps the
-    // texture @ +8, the run pointer @ +12, and copies the two corners into the run.
+    // corner run bound to lpTextureState. The X360 body appends the 16-byte
+    // {muType=17} command FIRST (or rewinds on command-buffer overflow, leaving the
+    // command slot null), then carves the 2-vertex (40-byte) corner run from the
+    // vertex stream (the inline equivalent of AllocVertices(2); a vertex overflow
+    // leaves the run null), and only when BOTH the command slot and the run are
+    // valid stamps the state @ +8, the run pointer @ +12, and copies the two
+    // corners into the run. The +8 slot is the DWARF :191 TextureState binding --
+    // the one X360 caller, BrnGui::SetMaskRect @0x82450BE0, passes a resolved
+    // renderengine::TextureState* (see the header note).
     // -------------------------------------------------------------------------
     template <typename V>
-    void ImRenderBuffer<V>::PushMask(renderengine::Texture* lpTexture, const V* lpaMaskVertices)
+    void ImRenderBuffer<V>::PushMask(const renderengine::TextureState* lpTextureState,
+                                     const V* lpaMaskVertices)
     {
         // RECORD SIZE: console literal 16 (two 4-byte payload words); both payload members
         // are POINTERS, so the x64 record is 24 and the reserved stride 32. Same widening
         // trap as PushMaskGeometry - see ImCommandRecord in CgsImRenderBufferTemplate.h.
-        const u32 luRecord = ImCommandRecord<ImCommandPushMaskTexture<V> >::KU_BYTES;
+        const u32 luRecord = ImCommandRecord<ImCommandPushMaskTextureState<V> >::KU_BYTES;
 
         const u32 luPos = mpWriteBuffer->muCommandBufferWritePos;
-        ImCommandPushMaskTexture<V>* lpCommand = nullptr;
+        ImCommandPushMaskTextureState<V>* lpCommand = nullptr;
         if (muCommandBufferSize >= luPos + luRecord)
         {
-            lpCommand = reinterpret_cast<ImCommandPushMaskTexture<V>*>(
+            lpCommand = reinterpret_cast<ImCommandPushMaskTextureState<V>*>(
                 mpWriteBuffer->mpu8CommandBuffer + luPos);
             lpCommand->muSize = luRecord;
             lpCommand->muType = IM_CMD_PUSH_MASK;                             // 17
@@ -82,8 +86,8 @@ namespace CgsGraphics
         // carved successfully (the guest's `if (v9 && v10)` guard).
         if (lpCommand != nullptr && lpRun != nullptr)
         {
-            lpCommand->mpTexture  = lpTexture;
-            lpCommand->mpVertices = lpRun;
+            lpCommand->mpTextureState = reinterpret_cast<const TextureState*>(lpTextureState);
+            lpCommand->mpVertices     = lpRun;
             lpRun[0] = lpaMaskVertices[0];   // min corner {pos, colour, uv}
             lpRun[1] = lpaMaskVertices[1];   // max corner {pos, colour, uv}
         }
@@ -202,7 +206,7 @@ namespace CgsGraphics
     // lives in CgsImRenderBufferTemplate.cpp and does not cover these new members).
     // -------------------------------------------------------------------------
     template void ImRenderBuffer<Basic2dColouredTexturedVertex>::PushMask(
-        renderengine::Texture*, const Basic2dColouredTexturedVertex*);
+        const renderengine::TextureState*, const Basic2dColouredTexturedVertex*);
     template void ImRenderBuffer<Basic2dColouredTexturedVertex>::PopMask();
     template void ImRenderBuffer<Basic2dColouredTexturedVertex>::PushBoostBarColours(
         const rw::math::vpu::Vector4&, const rw::math::vpu::Vector4&);

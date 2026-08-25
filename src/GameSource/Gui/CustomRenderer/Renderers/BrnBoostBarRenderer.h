@@ -56,12 +56,11 @@
 #include "rw/rwcore_structs.h"                                                     // rw::Resource / rw::IResourceAllocator
 
 namespace renderengine { class TextureState; class BlendState; }
-namespace CgsGraphics  { struct Im2d; }
+namespace CgsGraphics  { struct Im2d; template <typename V> struct ImRenderBuffer; }
 // The shard transform is FPU-side on the console (RenderShatteredBar's DWARF); the affine
 // matrix template is referenced by reference only here.
 namespace rw { namespace math { namespace fpu {
 template <typename T> class Vector4Template;
-template <typename T> class Matrix44AffineTemplate;
 } } }
 
 namespace BrnGui
@@ -157,13 +156,23 @@ namespace BrnGui
         virtual void RenderComponent(CgsGui::ImRendererSet* lpRendererSet);         // 0x82466638
 
     private:
+        // The 2D command buffer every render path records into -- the ImRendererSet's slot-0
+        // buffer (the console reaches it as **(this+1468); the PS3 signatures spell it
+        // CgsGraphics::Im2dRenderBuffer*, whose command stream on this build is the
+        // ImRenderBuffer<Basic2dColouredTexturedVertex> the Apt/GUI dispatch consumes).
+        typedef CgsGraphics::ImRenderBuffer<CgsGraphics::Basic2dColouredTexturedVertex> Im2dCommandBuffer;
+
         void InitResources();                                                       // 0x8244A508
-        void RenderFire(const Vector4& lv4Rect, const Vector4& lv4MaskRect,
-                        f32 lfTime);                                                // 0x82452AD8
-        void RenderQuad(const Vector4& lv4Rect, const Vector4& lv4UV,
+        // PS3 export: RenderFire(Vector4 const& rect, Vector4 const& colour, float timeNow).
+        void RenderFire(const Vector4& lv4Rect, const Vector4& lv4Colour,
+                        f32 lfTimeNow);                                             // 0x82452AD8
+        // PS3 export: RenderQuad(Vector4 const& rect, Vector4 const& colour,
+        // TextureState const*, BlendState const*, Vector4 uvRect BY VALUE) -- the UV window
+        // {u0,v0,u1,v1} rides the vector-register argument, the colour is the r5 reference.
+        void RenderQuad(const Vector4& lv4Rect, const Vector4& lv4Colour,
                         const renderengine::TextureState* lpTextureState,
                         const renderengine::BlendState* lpBlendState,
-                        Vector4 lv4Colour);                                         // 0x8245AE30
+                        Vector4 lv4UVRect);                                         // 0x8245AE30
         void RenderBillboardBar(const Vector4& lv4Rect, f32 lfProportion,
                                 const Vector4& lv4Colour,
                                 CgsGui::BillboardRenderer* lpBillboardRenderer,
@@ -171,24 +180,32 @@ namespace BrnGui
         void RenderShatteredBar(const rw::math::fpu::Vector4Template<f32>& lv4Rect,
                                 f32 lfTime, const Vector4& lv4Colour);              // 0x82460630
         void CalculateShardVertices();                                              // 0x8244B248
-        void CalculateBoostShardTransformation(s32 liShard, f32 lfLifetime,
-                                               rw::math::fpu::Matrix44AffineTemplate<f32>& lrTransform); // PS3 0x401668
+        // (CalculateBoostShardTransformation, PS3 0x401668, is NOT declared here: the X360
+        // target has no standalone -- RenderShatteredBar open-codes its own per-triangle
+        // transform (centroid-relative rotate + velocity offset, transcribed below), and the
+        // PS3 standalone is an uncalled sibling whose column derivation even divides by 48
+        // where the open-coded path divides by 4. Decode preserved in the .cpp note.)
         f32  CalculateBoostShardLifetime(s32 liShard, f32 lfTime);                  // PS3 0x3FA070
         u8   CalculateBoostShardAlpha(f32 lfLifetime, f32 lfAlpha);                 // 0x8244B3B0
-        void SetChainedInactiveMask(CgsGraphics::Im2d* lpRenderBuffer,
+        void SetChainedInactiveMask(Im2dCommandBuffer* lpRenderBuffer,
                                     Vector4 lv4Rect);                               // 0x824536A8
-        void SetBackground(CgsGraphics::Im2d* lpRenderBuffer, Vector4 lv4Rect,
-                           f32 lfXOffset, f32 lfAlpha);                             // 0x8245B040
+        // PS3 export: SetBackground(Im2dRenderBuffer*, Vector4 rect, float alpha, float timeNow).
+        void SetBackground(Im2dCommandBuffer* lpRenderBuffer, Vector4 lv4Rect,
+                           f32 lfAlpha, f32 lfTimeNow);                             // 0x8245B040
         void DetermineBoostBarMultiplier();                                         // PS3 0x3FA100
         void HandleFirstEvent(const GuiEventBoostInfo* lpBoostBarInfo);             // 0x824468D8
         void ShowDebugScreen();                                                     // 0x82461250
-        void RenderDebugFireBody(const Vector4& lv4Rect, const Vector4& lv4MaskRect,
-                                 f32 lfTime);                                       // 0x82453758
-        void RenderDebugFireOverlay(const Vector4& lv4Rect, const Vector4& lv4MaskRect,
-                                    f32 lfTime);                                    // 0x82453B60
-        void RenderDebugFireEndCap(const Vector4& lv4Rect, const Vector4& lv4MaskRect,
-                                   f32 lfTime);                                     // 0x82454060
-        void RenderDebugFireGlow(const Vector4& lv4Rect, const Vector4& lv4MaskRect);// 0x8245B2C0
+        // The four debug-screen fire tiles (PS3 manglings: (rect, colour, time) for the first
+        // three; Glow takes (rect, colour) only -- and its colour parameter is dead on both
+        // consoles).
+        void RenderDebugFireBody(const Vector4& lv4FireRect, const Vector4& lv4FireColour,
+                                 f32 lfTimeNow);                                    // 0x82453758
+        void RenderDebugFireOverlay(const Vector4& lv4FireRect, const Vector4& lv4FireColour,
+                                    f32 lfTimeNow);                                 // 0x82453B60
+        void RenderDebugFireEndCap(const Vector4& lv4FireRect, const Vector4& lv4FireColour,
+                                   f32 lfTimeNow);                                  // 0x82454060
+        void RenderDebugFireGlow(const Vector4& lv4FireRect,
+                                 const Vector4& lv4FireColour);                     // 0x8245B2C0
 
         // DWARF h:273-275 -- the chunk-loss shard grid.
         static const s8  KI_CHUNK_LOSS_NUM_OF_SHARD_ROWS    = 4;
@@ -196,6 +213,54 @@ namespace BrnGui
         static const s32 KI_CHUNK_LOSS_MAX_NUM_SHARDS       = 48;
         // DWARF h:593 -- the billboard collect array capacity.
         static const s32 KI_NUM_BILLBOARDS = 32;
+
+        // ---- the render-half class constants (DWARF class statics; the consoles initialise
+        // them dynamically -- every VALUE below is the PS3 unity static-init literal, with the
+        // four multiplier UV windows additionally verified against the X360 BSS-initialiser
+        // emulation; definitions at the top of the .cpp) --------------------------------------
+        static const f32 KF_BOOSTING_FLAME_X_SCALE;       // 0.1
+        static const f32 KF_BOOSTING_FLAME_Y_SCALE;       // 3.0
+        static const f32 KF_BOOSTING_FLAME_X_OFFSET;      // 0.04
+        static const f32 KF_BOOSTING_FLAME_Y_OFFSET;      // -0.03
+        static const f32 KF_FIRE_MASK_WIDTH;              // 1.0
+        static const f32 KF_GROW_FIREBALL_X_SIZE;         // 0.12
+        static const f32 KF_GROW_FIREBALL_Y_SCALE;        // 3.5
+        static const f32 KF_GROW_FIREBALL_X_OFFSET;       // 0.0
+        static const f32 KF_BLACK_SMOKE_X_SIZE;           // 0.12
+        static const f32 KF_BLACK_SMOKE_Y_SCALE;          // 2.8
+        static const f32 KF_BLACK_SMOKE_X_OFFSET;         // 0.12
+        static const f32 KF_BLACK_SMOKE_Y_OFFSET;         // -0.01
+        static const f32 KF_EARN_FLAME_WIDTH;             // 0.2
+        static const f32 KF_EARN_FLAME_X_OFFSET;          // -0.015
+        static const f32 KF_EARN_FLAME_Y_SCALE;           // 2.5
+        static const f32 KF_EARN_FLAME_FLICKER_PROP;      // 0.5
+        static const f32 KF_BACKGROUND_ENDCAP_WIDTH;      // 0.02
+        static const f32 KF_BACKGROUND_ENDCAP_YSCALE;     // 1.1
+        static const f32 KF_BACKGROUND_ENDCAP_XOFFSET;    // -0.013
+        static const f32 KF_FIRE_BODY_X_SIZE;             // 0.12
+        static const f32 KF_FIRE_BODY_X_OFFSET;           // -0.01
+        static const f32 KF_FIRE_BODY_Y_SCALE;            // 3.1
+        static const f32 KF_FIRE_BODY_Y_OFFSET;           // -0.008
+        static const f32 KF_FIRE_BODY_MASK_WIDTH;         // 1.0
+        static const f32 KF_FIRE_BODY_ENDCAP_X_SIZE;      // 0.07
+        static const f32 KF_FIRE_BODY_ENDCAP_OFFSET;      // -0.015
+        static const f32 KF_FIRE_BODY_ENDCAP_FEATHER;     // 0.02
+        static const f32 KF_DANGER_END_GLOW_WIDTH;        // 0.1
+        static const f32 KF_AGRESSION_BOOST_TRANSPARENCY; // 0.75 (DWARF's own spelling)
+        static const f32 KF_BOOSTING_GLOW_INTENSITY;      // 0.3 (X360 rodata 0x82054EE4)
+        static const f32 KF_SHAKE_X;                      // 0.003 (RenderComponent's boosting jitter)
+        static const f32 KF_SHAKE_Y;                      // 0.005
+        static const f32 KF_BACKGROUND_TILE_WIDTH;        // 0.05 (the background cell / multiplier strip width)
+        static const Vector4 KV4_GLOW_COLOUR;             // {0.2, 0.2, 0.2, 1}
+        static const Vector4 KV4_OVERLAY_COLOUR;          // {1, 1, 1, 1}
+        static const Vector4 KV4_FIREBALL_COLOUR;         // {1, 1, 1, 1}
+        // The multiplier texture is a 2x2 atlas: image frames on the top row, mask frames on
+        // the bottom; "x2" left column, "x3" right (X360 BSS 0x82FB3210/0x82FB3460/
+        // 0x82FB34D0/0x82FB2FE0).
+        static const Vector4 KV4_MULTIPLIER_2X_IMAGE_UV;  // {0,   0,   0.5, 0.5}
+        static const Vector4 KV4_MULTIPLIER_3X_IMAGE_UV;  // {0.5, 0,   1,   0.5}
+        static const Vector4 KV4_MULTIPLIER_2X_MASK_UV;   // {0,   0.5, 0.5, 1}
+        static const Vector4 KV4_MULTIPLIER_3X_MASK_UV;   // {0.5, 0.5, 1,   1}
 
         // ---- members (DWARF order; guest byte offsets from the ctor/Construct maps) -----
         EPrepareStage        mePrepareStage;                 // guest +8
