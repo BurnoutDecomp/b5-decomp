@@ -1204,10 +1204,27 @@ namespace BrnGui
                 }
                 break;
             case 377:
+                // [crash-hud] delivery witness. NOT X360. One-shot; proves the producer's event
+                // actually REACHES this consumer and which arm it takes.
+                {
+                    static bool sbSeen377 = false;
+                    if (!sbSeen377 && CgsDev::Log::gpDebugPrint != 0)
+                    {
+                        sbSeen377 = true;
+                        *CgsDev::Log::gpDebugPrint
+                            << "[crash-hud] FBurnMainHudState received GUI 377, payload="
+                            << lpiPayload[0] << "\n";
+                    }
+                }
                 if (lpiPayload[0] == 0 || lpiPayload[0] == 2)
                 {
                     if (mbFriendsListEnabled)
                         /* FLAG deferred (Slice B): FriendsList SaveCurrentState */;
+                    if (CgsDev::Log::gpDebugPrint != 0)
+                    {
+                        *CgsDev::Log::gpDebugPrint
+                            << "[crash-hud] SendStateEvent(\"START_CRASH\")\n";
+                    }
                     SendStateEvent("START_CRASH");
                 }
                 break;

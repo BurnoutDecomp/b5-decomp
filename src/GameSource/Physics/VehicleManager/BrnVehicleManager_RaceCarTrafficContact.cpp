@@ -604,13 +604,33 @@ void VehicleManager::HandleRaceCarTrafficCarPotentialContact(
             lAggressorID.muValue = static_cast<u32>(maRaceCarHandlingBodyIDs[li8CheckOwner] >> 32);
             ::EntityId lVictimID;
             lVictimID.muValue = luRaceCarGlobalWord;
-            (void)lAggressorID; (void)lVictimID;
 
-            // GATE: VehicleManager::InstantTakedown @0x82636108 (called at 0x82640464).
-            // Blocker: it is REAL and mounted, but its own commit calls SetRaceCarCrashing
-            // @0x82634C90, which is the LOUD TRAP in BrnVehicleManagerLinkStubs.cpp:97 (the
-            // 923-insn body is in the unmounted BrnVehicleManager.cpp). This round is the TRAFFIC
-            // car's reaction, not race-car takedowns. DELETE-WHEN the crash-commit chain mounts.
+            // GATE DELETED 2026-08-25 (crash-entry wave S1). The gate's own DELETE-WHEN ("the
+            // crash-commit chain mounts") was DISCHARGED on 2026-08-24 by wave B3b: the 923-insn
+            // SetRaceCarCrashing @0x82634C90 is mounted in BrnVehicleManager.cpp and
+            // BrnVehicleManagerLinkStubs.cpp:97 now reads "LINK STUB DELETED 2026-08-24". The
+            // gate text was simply stale (verified: bat line 1211 mounts BrnVehicleManager.cpp).
+            //
+            // Argument order read from the image at 0x82640420..0x82640464 (this function is an
+            // ARTIST export HOLE, so it was disassembled from the .i64 directly):
+            //   addi r11,r11,0x155C ; rlwinm r5,r11,3 ; ldx r11,r5,r18 ; rldicl 32,32
+            //     -> aggressor = maRaceCarHandlingBodyIDs[checkOwner] >> 32  (already built above)
+            //   lwz  r4, 172(r1)                 -> victim  = the race car's global entity word
+            //   lfs  f1, 0x2138(r11=0x82000000)  -> stress  = flt_82002138 == 0.01f
+            //   li   r6, 4                       -> type    = E_TAKEDOWN_TRAFFIC_CHECK
+            //   vmr128 v1, v126 / vmr128 v2, v125 -> normal = lContactNormal, point = lPointOnRaceCar
+            //     (v126/v125 are the register annotations this file already carries at :409/:411)
+            // The four interface pointers land in r7/r8/r9/r10 because the f32 argument consumes a
+            // GPR slot -- cross-checked against the SetRaceCarCrashing call below, which has no
+            // f32 and therefore places the same four one register lower (r6/r7/r8/r9).
+            InstantTakedown(lVictimID, lAggressorID,
+                            lContactNormal, lPointOnRaceCar,
+                            KF_UNIT_NORMAL_TOLERANCE,          // flt_82002138, shared with the unit test
+                            lpRequestOutputInterface,
+                            lpManagerOutputInterface,
+                            lpVehicleOutputInterface,
+                            lpDeformationInterface,
+                            BrnGameState::E_TAKEDOWN_TRAFFIC_CHECK);
             lbTakenDown = true;
         }
     }
@@ -619,10 +639,37 @@ void VehicleManager::HandleRaceCarTrafficCarPotentialContact(
     {
         // 0x826404A8: the plain crash commit -- the normal NEGATED for the victim
         // (`vspltisw v0,-1 ; vslw ; vxor128 v1, v126, v0`), takedown type -1 (NONE).
-        // GATE: VehicleManager::SetRaceCarCrashing @0x82634C90 (923). Blocker: the only body is in
-        // the unmounted BrnVehicleManager.cpp; the mounted symbol is the CGS_ASSERT(false) trap at
-        // BrnVehicleManagerLinkStubs.cpp:97. DELETE-WHEN that chain mounts.
-        (void)lpRequestOutputInterface;
+        //
+        // GATE DELETED 2026-08-25 (crash-entry wave S1), same stale DELETE-WHEN as the takedown
+        // arm above: SetRaceCarCrashing @0x82634C90 has been mounted and real since 2026-08-24.
+        // ⭐ THIS IS THE LINE THAT MAKES HITTING A TRAFFIC CAR ACTUALLY CRASH THE PLAYER.
+        //
+        // Operands read from the image at 0x82640478..0x826404A8:
+        //   mr r4, r20 <- lwz r20,172(r1)  -> victim    = the race car's global entity word
+        //   mr r5, r17 <- lwz r17,168(r1)  -> aggressor = the traffic car's global entity word
+        //   vspltisw v0,-1 ; vslw v0,v0,v0 ; vxor128 v1, v126, v0  -> v1 = -lContactNormal
+        //     (vslw of an all-ones splat by itself == 0x80000000 per lane: a SIGN flip, not a
+        //      negate-and-clobber -- so this is the normal pointed at the victim, nothing else)
+        //   v2 = v125 = lPointOnRaceCar (carried in the register from the arm above)
+        //   li r10, -1                     -> type      = E_TAKEDOWN_NONE
+        ::EntityId lCrashVictimID;
+        lCrashVictimID.muValue = luRaceCarGlobalWord;
+        ::EntityId lCrashAggressorID;
+        lCrashAggressorID.muValue = luTrafficGlobalWord;
+
+        Vector3 lvVictimNormal;
+        lvVictimNormal.x = -lContactNormal.x;
+        lvVictimNormal.y = -lContactNormal.y;
+        lvVictimNormal.z = -lContactNormal.z;
+        lvVictimNormal.w = -lContactNormal.w;
+
+        SetRaceCarCrashing(lCrashVictimID, lCrashAggressorID,
+                           lvVictimNormal, lPointOnRaceCar,
+                           lpRequestOutputInterface,
+                           lpManagerOutputInterface,
+                           lpVehicleOutputInterface,
+                           lpDeformationInterface,
+                           BrnGameState::E_TAKEDOWN_NONE);
     }
 
     // 0x826404AC: PLAYER ONLY. Both contact points must lie OUTSIDE the other car's deformable

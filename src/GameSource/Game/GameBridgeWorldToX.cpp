@@ -177,6 +177,26 @@ namespace BrnGame
         mbPlayerCarCrashing = lpActiveRaceCars->IsPlayerCarActive()
                            && lpActiveRaceCars->IsPlayerCarCrashing();
 
+        // [crash-probe] witness. NOT X360. Inert unless BRN_CRASH_PLAYER is set. Latches the
+        // 0 -> 1 EDGE only, so it proves the crash state reached the WORLD->DIRECTOR bridge --
+        // i.e. that the commit is not physics-local the way the [showtime-probe] path is.
+        {
+            static const char* const kspW = getenv("BRN_CRASH_PLAYER");
+            static bool sbSeen = false;
+            if (kspW != 0 && mbPlayerCarCrashing && !sbSeen)
+            {
+                sbSeen = true;
+                if (CgsDev::Log::gpDebugPrint != 0)
+                {
+                    *CgsDev::Log::gpDebugPrint
+                        << "[crash-probe] BridgeWorldToDirector: mbPlayerCarCrashing=1"
+                        << " (IsPlayerCarActive=" << (lpActiveRaceCars->IsPlayerCarActive() ? 1 : 0)
+                        << " IsPlayerCarCrashing=" << (lpActiveRaceCars->IsPlayerCarCrashing() ? 1 : 0)
+                        << ")\n";
+                }
+            }
+        }
+
         if (!lpActiveRaceCars->IsPlayerCarActive())
         {
             // X360: assert the write lock, then `li r11,-1; stw r11, 0x7AA8(r26)`.

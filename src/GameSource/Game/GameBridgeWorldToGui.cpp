@@ -66,11 +66,75 @@ void BrnGameModule::BridgeWorldVehicleDataToGui(
         return;   // the console's null interface would crash on the next read; honest early-out
     }
 
-    // FLAG deferred (console order, before the player gate): the player-crashing
-    // state-change event (a function-local lbWasPlayerCarCrashing edge latch posting
-    // GuiPlayerCrashingStateChangeEvent, with the showtime-mode suppression) and the
-    // engine-state change event (374, off a lseLastEngineState edge latch). Their
-    // consumers are not on this build's reconstructed path yet.
+    // ---- THE PLAYER-CRASHING STATE-CHANGE POST (GUI event 377) -----------------------
+    // LANDED 2026-08-25 (crash wave S2). Console order: BEFORE the player gate, because the
+    // console's own crashing read is the interface's -1-guarded accessor and is safe while the
+    // player car is inactive. Decoded instruction-for-instruction from @0x823E583C..0x823E58CC
+    // (the function's single AddGuiEvent<GuiPlayerCrashingStateChangeEvent> call site):
+    //   lwz  r11,0x2858(iface) ; cmpwi -1 ; mulli 0x460 ; lbz r10,0x77A(r11)
+    //        -> crashing = (playerIndex == -1) ? false : maRaceCarStates[playerIndex].mbCrashing
+    //        -- stride 0x460 == 1120 and +0x77A == 1914 are EXACTLY the two constants
+    //           RCEntityActiveRaceCarOutputInterface::IsPlayerCarCrashing() already encodes,
+    //           so that accessor is the de-inlined console read, not an approximation.
+    //   lwz  r11,0(modeType) ; cmpwi 2 / cmpwi 0x10 ; cntlzw ; extrwi 1,26 ; and r31,r11,r10
+    //        -> state = !(mode == E_MODE_OFFLINE_SHOWTIME || mode == E_MODE_ONLINE_SHOWTIME)
+    //                   && crashing
+    //   lbz  r8,byte_82FAEB91 ; cmplw ; beq  -> POST ONLY ON A CHANGE (the edge latch; the
+    //        console's "function-local" latch is a file-scope static byte, hence static here)
+    //   cntlzw ; extrwi 1,26 ; stw  -> the payload is the NEGATED state:
+    //        crashing -> 0 == E_CRASHBARSTATE_START_CRASHED
+    //        cleared  -> 1 == E_CRASHBARSTATE_LEAVE_CRASHED
+    //   stb  r31,byte_82FAEB91  -> latch := state, AFTER the post
+    //
+    // ⚠ FLAG (the one term not modelled): the showtime suppression. The console reads the
+    // current game-mode type inline off the module blob; BridgeWorldVehicleDataToGui is a
+    // BrnGameModule method and this tree gives it no GameStateModule reach (it receives only the
+    // GUI input buffer and the world output buffer). The term is pinned to "not in showtime"
+    // -- which is the && identity AND is provably this build's actual state: nothing here can
+    // set meCurrentGameModeType to 2 or 16, because SetPlayerCarToShowtimeMode's only console
+    // caller (PhysicsModule::HandleGameActions @0x825A72F0) is still a boot gate in
+    // BrnPhysicsConductorGates.cpp:153. DELETE-WHEN that gate opens: replace the constant with
+    // GameStateModule::IsShowtimeGameMode() (@0x823567A8, already bodied, same 2||16 test).
+    //
+    // ⚠ AND NOTE, DO NOT "FIX": the console posts LEAVE_CRASHED (1) on the falling edge and this
+    // reproduction does too -- but BrnFBurnMainHudState::ProcessGameEvents maps only payload
+    // 0|2 -> SendStateEvent("START_CRASH") and has NO END_CRASH arm anywhere in the tree. The
+    // producer is complete; the missing half is the CONSUMER, and inventing it here would be
+    // fabricating a console behaviour rather than reconstructing one.
+    {
+        const bool lbPlayerCarCrashing = lpActiveInterface->IsPlayerCarCrashing();
+        const bool lbInShowtimeMode    = false;   // FLAG: see above -- the && identity, and true here
+        const bool lbCrashState        = !lbInShowtimeMode && lbPlayerCarCrashing;
+
+        static bool lbWasPlayerCarCrashing = false;   // console byte_82FAEB91
+        if (lbCrashState != lbWasPlayerCarCrashing)
+        {
+            BrnGui::GuiPlayerCrashingStateChangeEvent lCrashEvent;
+            lCrashEvent.meCurrentState =
+                lbCrashState ? BrnGui::GuiPlayerCrashingStateChangeEvent::E_CRASHBARSTATE_START_CRASHED
+                             : BrnGui::GuiPlayerCrashingStateChangeEvent::E_CRASHBARSTATE_LEAVE_CRASHED;
+
+            CGS_ASSERT(lpGuiInputBuffer != 0, "Input hasn't been locked for write");
+            lpGuiInputBuffer->GetGuiEvents()->AddEvent(
+                reinterpret_cast<const CgsModule::Event*>(&lCrashEvent),
+                lCrashEvent.GetEventType(),
+                static_cast<s32>(sizeof(lCrashEvent)));
+
+            lbWasPlayerCarCrashing = lbCrashState;
+
+            if (CgsDev::Log::gpDebugPrint != 0)
+            {
+                *CgsDev::Log::gpDebugPrint
+                    << "[crash-hud] posting GUI 377 GuiPlayerCrashingStateChangeEvent state="
+                    << static_cast<s32>(lCrashEvent.meCurrentState)
+                    << (lbCrashState ? " (START_CRASHED)" : " (LEAVE_CRASHED)") << "\n";
+            }
+        }
+    }
+
+    // FLAG deferred (console order, before the player gate): the engine-state change event
+    // (374, off a lseLastEngineState edge latch). Its consumer is not on this build's
+    // reconstructed path yet.
 
     if (!lpActiveInterface->IsPlayerCarActive())
         return;

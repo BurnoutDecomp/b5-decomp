@@ -1241,11 +1241,14 @@ namespace Vehicle
                                u8 lu8Score);
 
         // Per-victim "does this impact qualify to crash the car" predicate (consumed by #1/#2).
-        // No standalone export in this dossier -- declare-only; FLAG: signature inferred from the
-        // call sites (this, victim active-index, victim RaceCarPhysics*, other RaceCarPhysics*).
-        bool ShouldRaceCarCrashOnCarImpact(s32 liVictimActiveRaceCarIndex,
-                                           RaceCarPhysics* lpVictim,
-                                           RaceCarPhysics* lpOther);
+        // ⭐ THE 3-ARGUMENT INFERRED SPELLING THAT USED TO SIT HERE IS DELETED (2026-08-25). It was
+        // an ODR FORK of the real console entry, whose one true declaration is the 5-argument
+        // DWARF/ARTIST shape further down this class (@0x825C6FF8) -- already bodied in
+        // BrnVehicleManager_RaceCarTrafficContact.cpp:157. All four call sites in
+        // BrnVehicleManager.cpp (CheckForHittingAlreadyCrashingCar x2,
+        // CheckForPlayerSlammingAIIntoAI x2) now build the two vector arguments from asm and call
+        // that one. The stop-gap CGS_ASSERT(false) trap in BrnVehicleManager_ImpactHelpers.cpp is
+        // deleted with it. See the 5-arg declaration below for the decode.
 
         // The vertical-takedown geometric sub-test (X360 @0x825C56D8). SIGNATURE CORRECTED
         // 2026-08-24 (wave B3b): the old FLAGGED guess (lpVictim, lpOther) was wrong -- the asm's
@@ -1476,16 +1479,35 @@ namespace Vehicle
                                                   VecFloat* lpTrafficSlamMagnitude,
                                                   u32* lpxOutResponseFlags);
 
-        // @0x825C6FF8 (42). The impact-severity predicate, DWARF shape (:1194).
+        // @0x825C6FF8 (42). The impact-severity predicate, DWARF shape (:1194). THE ONLY
+        // DECLARATION -- the ODR fork that used to shadow it is gone (see the note above).
+        // The DWARF and the ARTIST prologue BOTH give five parameters -- r4 = victim index,
+        // r5 = victim RaceCarPhysics, r6 = the OTHER body (a SimpleVehiclePhysics, which is what a
+        // traffic car is), v1 = the impact speed, v2 = a per-arm scale.
         //
-        // THIS IS **NOT** THE 3-ARGUMENT `ShouldRaceCarCrashOnCarImpact` DECLARED ABOVE. That one
-        // is a FLAGged, signature-INFERRED declaration with no definition anywhere in the tree, kept
-        // only because BrnVehicleManager.cpp's classifier ladder (which this round does not own and
-        // is not mounted) calls it. The DWARF and the ARTIST prologue BOTH give five parameters --
-        // r4 = victim index, r5 = victim RaceCarPhysics, r6 = the OTHER body (a SimpleVehiclePhysics,
-        // which is what a traffic car is), v1 = the impact speed, v2 = a per-arm scale.
-        // DELETE-WHEN BrnVehicleManager.cpp's HandleRaceCarRaceCarContact family is next opened and
-        // its three call sites are re-decoded onto this spelling.
+        // ⭐ THE DELETE-WHEN IS DISCHARGED (2026-08-25). All four car-vs-car call sites are
+        // re-decoded onto this spelling; the two vector builds, read from asm, are:
+        //   CheckForHittingAlreadyCrashingCar @0x8263DC30 / @0x8263DE40 (both arms symmetric):
+        //     v1 = |dot3( mNormal - victimUp*dot3(mNormal, victimUp), mClosingVelocityAtoB )|
+        //     v2 = splat(1.0f)                     [vspltisw v124,1 ; vcsxwfp128 v127,v124,0]
+        //     -- the SAME flat-normal closing-speed the traffic arm builds
+        //        (BrnVehicleManager_RaceCarTrafficContact.cpp:306-312), with the VICTIM's Up axis.
+        //   CheckForPlayerSlammingAIIntoAI @0x8263E1B4 / @0x8263E2CC:
+        //     v1 = splat(lpInfo->mfClosingSpeed)   [lfs f0,0x58(r31) ; stfs ; lvx ; vspltw lane 0]
+        //     v2 = <player is this car's recorded attacker> ? 2.0f : 0.75f
+        // BOTH scale constants are READ FROM THE IMAGE, not guessed: 2.0f is materialised inline
+        // (vspltisw v13,2 ; vcfsx v0,v13,0) and unk_82FB8320 = splat(flt_82004018) = 0.75f via its
+        // static-init thunk @0x82C5BB60..BB84 (lis 0x8200 ; lfs 0x4018 ; lis 0x82FC ; addi 0x8320 ;
+        // vspltw ; stvx) -- the same scalar the tree already reads for unk_82FB8310.
+        // The selector is the shared 16-byte-PAIR vsel mask table at 0x8327F240, indexed
+        // `cntlzw; rlwinm ..,31,27,27; xori 0x10`, whose polarity ([0]=false, [0x10]=all-ones=true)
+        // is proven in BrnDeformationSensor.cpp:977 / BrnCrashTriangleCache.cpp:219.
+        // ⚠ FLAG (the ONE thing still unmodelled): the attacker predicate itself reads three
+        // RaceCarPhysics fields this tree does not declare -- +0x13E0 and +0x1150 (both compared
+        // against mePlayerActiveRaceCarIndex) and lane .z of the vector at +0x1050 (gated
+        // 0.25f > it, unk_82FB7F80 = splat(flt_8208F834)). Until those are homed, the slamming
+        // call sites pass the flag-FALSE arm 0.75f; see BrnVehicleManager.cpp for why that is the
+        // faithful majority arm and not an invented value.
         bool ShouldRaceCarCrashOnCarImpact(EActiveRaceCarIndex leVictimActiveRaceCarIndex,
                                            const RaceCarPhysics* lpVictim,
                                            const SimpleVehiclePhysics* lpOtherBody,

@@ -8056,6 +8056,37 @@ namespace Vehicle
                 UpdateCrashing(lvfTimeStep.x, lpCameraMatrix, lpControls, lbImpactTime,
                                lbPlayerAftertouchForceAdditive, lbShowtimeAllowed);
                 CgsDev::PerfMonCpu::StopMonitor(gs_iVPhysUpdateCrashingPM);
+
+                // [crash-probe] witness. NOT X360. Inert unless BRN_CRASH_PLAYER is set. Proves
+                // UpdateCrashing @0x82638810 is EXECUTING and that the TimeCrashing lane rises.
+                // ⚠ READ **AFTER** THE CALL, DELIBERATELY: the lane's `+= dt` lives in the OTHER
+                // arm of this if/else (the non-crashing branch at the top of this block), so a
+                // pre-call read reports the previous frame's value and shows 0.0 forever on the
+                // first sample. That is exactly the class of diagnostic that lies.
+                // Dense early (first 5 frames) then every 60, so both the RISE and the DURATION
+                // are visible rather than inferred.
+                {
+                    static const char* const kspW = getenv("BRN_CRASH_PLAYER");
+                    if (kspW != 0)
+                    {
+                        static u32 sluW = 0;
+                        ++sluW;
+                        if ((sluW <= 5u || (sluW % 60u) == 0u) && CgsDev::Log::gpDebugPrint != 0)
+                        {
+                            *CgsDev::Log::gpDebugPrint
+                                // Identity is the body's POSITION, not a pointer: it can be
+                                // cross-checked against the player position that
+                                // [world->director] publish and [T4-player] print, so this
+                                // cannot silently report a different car.
+                                << "[crash-probe] UpdateCrashing @0x82638810 ran: at ("
+                                << mTransform.wAxis.x << ", " << mTransform.wAxis.z << ")"
+                                << " mbCrashing=" << (mbCrashing ? 1 : 0)
+                                << " mfTimeCrashing="
+                                << mvSpeedOnLastCrashMPH_TimeCrashing_CounterSteerSideMag_Spare.y
+                                << " frame=" << sluW << "\n";
+                        }
+                    }
+                }
             }
             else
             {
