@@ -225,7 +225,16 @@ void RaceCarEntityModule::PostSceneUpdate(
                    " no body anywhere in this tree (UpdateTrafficAndRaceCarNearMisses,"
                    " ProcessLeapedAndStompedCars, ProcessPowerParking,"
                    " PlaceOnTrackManager::PostSceneUpdate, SendResetOnTrackRequests,"
-                   " CheckForResetOnTrackConditions) [FLAG]\n";
+                   " CheckForResetOnTrackConditions) [FLAG]\n"
+                   "[crash-exit] ... and SendResetOnTrackRequests @0x822CE178 (57) is the ONLY"
+                   " reader of RaceCar::mbToBeResetOnTrack, which the crash exit sets. Its"
+                   " downstream (AIModule::Update -> UpdateResetOnTrackManager ->"
+                   " ResetOnTrackManager, 37 fns / 5307 insns) is blocked on the AI MODULE"
+                   " LIFECYCLE, not on the manager: AIModule::Prepare is an inert boot gate, so"
+                   " AI.dat/WorldMapData never loads and ResetOnTrackManager is never"
+                   " Constructed. Until that lands a heavy crash pins the car, which is why"
+                   " crash ENTRY is disabled on the public path (BRN_ENABLE_CRASH_ENTRY)."
+                   " See BrnRaceCar.cpp::RequestResetOnTrack [FLAG]\n";
         }
     }
 

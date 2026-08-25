@@ -250,6 +250,25 @@ void BrnAI::AIModule::Destruct()
 }
 
 // LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+//
+// ⛔⛔ THIS STUB IS THE REASON A CRASHED CAR CANNOT BE PUT BACK ON THE ROAD (measured
+// 2026-08-25). The real body @0x82798070 (224 insns) is a 5-stage machine, and stages 2 and 3
+// are load-bearing for the whole reset-on-track subsystem:
+//   stage 2  AIModule::LoadMapData @0x82795340 (167) -- LoadBundle("AI.dat") then a request for
+//            CgsResource::ID::HashString("WorldMapData") type 5. THE AI ROAD NETWORK. Never
+//            loaded on this build. (The data is fine and already ported: build/game/AI.DAT,
+//            bnd2 platform byte @+8 == 4, 3.27 MB. The hole is code, not assets.)
+//   stage 3  ResetOnTrackManager::Construct(module+286128, GetAISectionsData(), module+560) --
+//            the ONLY construction of BrnAI::ResetOnTrackManager anywhere in the image.
+//   stage 4  AIDriver::Prepare @0x82792CA8 over the 8 active race cars.
+// So today ResetOnTrackManager is an unconstructed embedded object with a null section-data
+// pointer, and RaceCar::mbToBeResetOnTrack (set by the crash exit) has no consumer at all.
+// See the measured chain in BrnRaceCar.cpp::RequestResetOnTrack and the bring-up flag in
+// BrnVehicleManager.cpp::SetRaceCarCrashing that keeps crash entry off the public path until
+// this lands. ⚠️ BrnAIModule.h models this module as 250 KB of opaque padding with no named
+// member for the stage machine (+294764), the route-map ready flag (+295896), the manager
+// (+286128), the AI-car array (+560) or the resource receiver queue (+73708): the named-member
+// surgery is part of the slice, not a follow-up. Reference: scratchpad resetontrack_log.md.
 bool BrnAI::AIModule::Prepare(class BrnResource::GameDataIO::AllocatorList *,struct BrnAI::AIModuleIO::OutputBuffer *)
 {
     // BOOT-GATE (attribsys wave 2026-07-26): REACHED by the world Prepare stage

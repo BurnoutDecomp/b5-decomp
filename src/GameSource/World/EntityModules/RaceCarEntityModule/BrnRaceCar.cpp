@@ -247,6 +247,60 @@ void RaceCar::RemoveFromWorld()
 // ----------------------------------------------------------------------------
 // RequestResetOnTrack @ 0x822BEB28. Queues a reset-on-track request, unless one is
 // already pending or the attached active car is already due to be placed on track.
+//
+// ⛔⛔ NOTHING IN THIS TREE READS mbToBeResetOnTrack. MEASURED 2026-08-25, and the number
+// the crash waves have been carrying ("~25 functions, ~2500 instructions") IS TOO SMALL BY
+// MORE THAN HALF, and names the wrong blocker. The real chain and its real cost:
+//
+//   RCEM::SendResetOnTrackRequests @0x822CE178 (57)   -- the only reader of this flag. Walks
+//       all 35 global race cars and, for each with muType != 3 && mbToBeResetOnTrack, pushes
+//       an AIModuleIO::ResetOnTrackRequest onto RaceCarEntityModuleIO::OutputBuffer_PostScene.
+//       Called ONLY from RCEM::PostSceneUpdate @0x822FE3F0. ABSENT.
+//   -> WorldModule::BridgeRaceCarModuleToAIModule_PostScene            -- INERT boot gate
+//   -> BrnAI::AIModule::Update @0x8279B478 (319)                       -- INERT boot gate
+//      -> AIModule::UpdateResetOnTrackManager @0x8279ABB0 (192)        -- ABSENT
+//         -> ResetOnTrackManager::Update @0x8279A890 (199) and 32 siblings
+//            (ProcessResetOnTrackRequest 279, ComputeResetOnTrack 134, ScanBackwards/Forwards
+//             AlongExtrapolatedRoute 284/230, UpdateResetOnTrackSectionUsingCurrentSection 299,
+//             AvoidObstacles 263, ComputeAISectionWidth 209, ConvertNodesToPositionAndDirection
+//             201, ComputeInitialCoordinatesStandard 219, ResetNearRoutelessPlayer 189,
+//             InterpolatePositionFromAngle 186, ...) -- 4,750 insns, ONE bodied (GetAICar).
+//   -> RCEM::ProcessResetOnTrackResultQueue @0x822F4580 (192), from PrePhysicsUpdate -- ABSENT
+//   -> ActiveRaceCar::RequestPlaceOnTrack -> PlaceOnTrackManager -> RCEM::ResetActiveRaceCar
+//      -> VehicleInputInterface::ResetRaceCar -> the ResetVehicleEvent drain. ALL REAL, ALL LIVE.
+//   Direct closure, counted from the ARTIST export set: 37 functions / 5,307 instructions.
+//
+// ⭐⭐ AND THE MANAGER IS NOT THE BLOCKER -- THE AI MODULE IS, BECAUSE IT DOES NOT RUN AT ALL.
+//   ResetOnTrackManager is an EMBEDDED MEMBER of AIModule at +286128, and its only constructor
+//   call site is AIModule::Prepare @0x82798070 stage 3:
+//       ResetOnTrackManager::Construct(module+286128, GetAISectionsData(), module+560)
+//   In this build AIModule::{Construct,Prepare,Update,PostPhysicsUpdate,Release,Destruct} are
+//   ALL quiet boot-gate stubs in WorldLinkStubs.cpp, and the live log says so every run
+//   ("AIModule::Prepare: inert", "AIModule::Update: inert"). So today the manager is never
+//   constructed, mpAISectionData is null, mpaAICars is garbage, and AIModule::Prepare's stage 2
+//   -- AIModule::LoadMapData @0x82795340 (167), which LoadBundle()s "AI.dat" and requests
+//   CgsResource::ID::HashString("WorldMapData") type 5 -- never runs, so the AI ROAD NETWORK
+//   THE WHOLE SUBSYSTEM QUERIES IS NEVER LOADED. (The DATA is fine: build/game/AI.DAT is present
+//   and already ported -- bnd2 platform byte @+8 == 4, 3.27 MB. The hole is entirely code.)
+//   ⚠️ [[hollow-shell-classes]] one level up, exactly like the CrashModule lifecycle defect of
+//   this same day: BrnAIModule.h models the module as 250 KB of opaque padding with NO named
+//   member for the stage machine (+294764), the route-map ready flag (+295896), the manager
+//   (+286128), the AI-car array (+560), the player index (+322044) or the resource receiver
+//   queue (+73708). Bodying the manager on top of that would be ~4,750 instructions that run
+//   against an unconstructed object -- [[valid-pointer-invalid-object]], and no assert can see
+//   it. THE MODULE LIFECYCLE + THE AIModuleIO BUFFER LAYOUTS COME FIRST.
+//   ⚠️ AIModuleIO::OutputBuffer is a 1-byte PLACEHOLDER on the host today; that is already why
+//   BridgeAIToEntityModules_PrePhysics is PARKED, and it is where the ResetOnTrackResult ring
+//   has to live. [[silent-drop-stubs]] + the un-gate-a-producer AV class apply in full.
+//
+// ⛔ THE SHORTCUT IS STILL REFUTED, RE-VERIFIED: ActiveRaceCar::GetResetCoords @0x822BF2D0
+//   reads mPrevTransforms, which this tree Constructs, Clear()s and NEVER WRITES
+//   (BrnPlaceOnTrackManager.cpp:325 flags it). Do not invent a reset position.
+//
+// DELETE-WHEN the AI module runs its own lifecycle, AI.dat/WorldMapData loads, and a heavy
+// crash recovers. Until then crash ENTRY is disabled on the public path -- see the bring-up
+// flag banner in BrnVehicleManager.cpp::SetRaceCarCrashing.
+// Reference: scratchpad resetontrack_log.md.
 // ----------------------------------------------------------------------------
 void RaceCar::RequestResetOnTrack(f32 lfSpeed, BrnAI::EResetType leType, f32 lfDistance)
 {

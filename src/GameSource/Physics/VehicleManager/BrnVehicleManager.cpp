@@ -591,7 +591,8 @@ namespace Vehicle
         // ⛔⛔ BRING-UP FLAG -- NOT IN THE X360 BINARY -- CRASH ENTRY IS OFF ON THE PUBLIC PATH.
         //
         //   crash ENTRY is reconstructed and correct; crash RECOVERY needs
-        //   BrnAI::ResetOnTrackManager (~2500 insns, absent). Until that lands, a heavy crash
+        //   BrnAI::ResetOnTrackManager (37 fns / 5,307 insns -- and the AI MODULE ITSELF, which
+        //   does not run at all on this build). Until that lands, a heavy crash
         //   pins the car, so the public path keeps crash entry disabled.
         //   DELETE-WHEN ResetOnTrackManager lands and a heavy crash recovers.
         //
@@ -605,9 +606,14 @@ namespace Vehicle
         //   BELOW the exit: ProcessRaceCarCrashCompleteEvents receives the event with
         //   mbCrashing == 1, so RaceCar::RequestResetOnTrack sets mbToBeResetOnTrack -- and the
         //   consumer of that flag (RCEM::SendResetOnTrackRequests -> the AI ResetOnTrackRequest
-        //   queue -> BrnAI::ResetOnTrackManager, ~25 functions / ~2500 instructions, NONE on disk
-        //   -> ProcessResetOnTrackResultQueue -> RequestPlaceOnTrack) does not exist yet. So a
-        //   HEAVY crash ends logically and the car is never placed back on the road: it pins.
+        //   queue -> BrnAI::ResetOnTrackManager -> ProcessResetOnTrackResultQueue ->
+        //   RequestPlaceOnTrack) does not exist yet. MEASURED 2026-08-25: the direct closure is
+        //   37 functions / 5,307 instructions, and the real blocker sits ONE LEVEL HIGHER --
+        //   ResetOnTrackManager is an embedded member of AIModule (+286128) constructed only by
+        //   AIModule::Prepare, and every AIModule lifecycle entry point is an inert boot gate in
+        //   WorldLinkStubs.cpp, so AI.dat / "WorldMapData" never loads and the manager is never
+        //   Constructed. Full working-out in BrnRaceCar.cpp::RequestResetOnTrack. So a HEAVY
+        //   crash ends logically and the car is never placed back on the road: it pins.
         //   (Measured, with the control that could falsify it: run cx_flow3 pinned at
         //   (2932,-10.8,~209) for 80 s on the identical build that "recovered" in cx_flow6 --
         //   and cx_flow6's re-acceleration began BEFORE the complete event, i.e. it was physics
@@ -641,9 +647,10 @@ namespace Vehicle
                         *CgsDev::Log::gpDebugPrint
                             << "[bringup] CRASH ENTRY DISABLED (BRN_ENABLE_CRASH_ENTRY is not set)."
                             << " Crash entry is reconstructed and correct; crash RECOVERY needs"
-                            << " BrnAI::ResetOnTrackManager (~2500 insns, absent), so a heavy crash"
-                            << " would pin the car. Set BRN_ENABLE_CRASH_ENTRY=1 to exercise the"
-                            << " full chain.\n";
+                            << " BrnAI::ResetOnTrackManager (37 fns / 5307 insns) AND the AI"
+                            << " module lifecycle it hangs off, which is an inert boot gate on"
+                            << " this build, so a heavy crash would pin the car. Set"
+                            << " BRN_ENABLE_CRASH_ENTRY=1 to exercise the full chain.\n";
                     }
                     ++sliSuppressed;
                     *CgsDev::Log::gpDebugPrint
