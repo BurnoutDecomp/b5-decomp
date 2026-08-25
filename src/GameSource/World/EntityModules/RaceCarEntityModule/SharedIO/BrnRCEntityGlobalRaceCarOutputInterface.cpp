@@ -215,6 +215,14 @@ BrnWorld::WorldRegion RCEntityGlobalRaceCarOutputInterface::GetWorldRegion(
     return maRaceCarWorldRegions[leGlobalRaceCarIndex];     // 8*(idx+140) @+0x460
 }
 
+CgsID RCEntityGlobalRaceCarOutputInterface::GetRivalId(
+        EGlobalRaceCarIndex leGlobalRaceCarIndex) const
+{
+    CGS_ASSERT(leGlobalRaceCarIndex >= E_GLOBAL_RACE_CAR_INDEX_0,     "leGlobalRaceCarIndex >= E_GLOBAL_RACE_CAR_INDEX_0");
+    CGS_ASSERT(leGlobalRaceCarIndex <  E_GLOBAL_RACE_CAR_INDEX_COUNT, "leGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT");
+    return maRivalIds[leGlobalRaceCarIndex];                // 8*(idx+175) @+0x578
+}
+
 CgsID RCEntityGlobalRaceCarOutputInterface::GetCarModelId(
         EGlobalRaceCarIndex leGlobalRaceCarIndex) const
 {

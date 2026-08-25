@@ -1278,15 +1278,36 @@ namespace CgsGraphics
                     lfMaskDU   = lpCorners[1].mv2Tex0UV.x - lpCorners[0].mv2Tex0UV.x;
                     lfMaskDV   = lpCorners[1].mv2Tex0UV.y - lpCorners[0].mv2Tex0UV.y;
 
-                    // Stage 1 = the mask sample: colour passes through, alpha modulates by the
-                    // mask texture's alpha (the masked-program observable). Border-clamp so
-                    // pixels OUTSIDE the mask rect sample transparent (clipped away).
+                    // Stage 1 = the mask sample. The two opcodes carry DIFFERENT mask-asset
+                    // conventions, verified against the shipped textures (hud H3b 2026-08-25):
+                    //   * 18 (Apt PushMaskGeometry): the Apt mask rasters carry the shape in
+                    //     ALPHA -- colour passes through, alpha modulates by the mask alpha
+                    //     (the PS3 masked-program observable, unchanged).
+                    //   * 17 (Im2dRenderBuffer::PushMask -- the GUI SetMaskRect states): the
+                    //     GUI mask assets (SatNavMask, boostbarmask..., all DXT5 in
+                    //     GUITEXTURES) carry the shape in the COLOUR channel (white keep /
+                    //     dark cut: SatNavMask interior RGB 255 with its corner notch dark;
+                    //     the boost strip masks' ALPHA is identically ZERO, so an alpha
+                    //     modulate erases every masked draw -- the drive-5 vanishing-map
+                    //     A/B). The console draws these masked passes opaque and folds the
+                    //     mask texel into the COLOUR; alpha passes through.
                     lpDevice->SetTexture(1, lpMaskTexture->mpD3DTexture);
-                    lpDevice->SetTextureStageState(1, D3DTSS_COLOROP,   D3DTOP_SELECTARG2);
-                    lpDevice->SetTextureStageState(1, D3DTSS_COLORARG2, D3DTA_CURRENT);
-                    lpDevice->SetTextureStageState(1, D3DTSS_ALPHAOP,   D3DTOP_MODULATE);
-                    lpDevice->SetTextureStageState(1, D3DTSS_ALPHAARG1, D3DTA_TEXTURE);
-                    lpDevice->SetTextureStageState(1, D3DTSS_ALPHAARG2, D3DTA_CURRENT);
+                    if (lpCommand->muType == IM_CMD_PUSH_MASK)
+                    {
+                        lpDevice->SetTextureStageState(1, D3DTSS_COLOROP,   D3DTOP_MODULATE);
+                        lpDevice->SetTextureStageState(1, D3DTSS_COLORARG1, D3DTA_TEXTURE);
+                        lpDevice->SetTextureStageState(1, D3DTSS_COLORARG2, D3DTA_CURRENT);
+                        lpDevice->SetTextureStageState(1, D3DTSS_ALPHAOP,   D3DTOP_SELECTARG2);
+                        lpDevice->SetTextureStageState(1, D3DTSS_ALPHAARG2, D3DTA_CURRENT);
+                    }
+                    else
+                    {
+                        lpDevice->SetTextureStageState(1, D3DTSS_COLOROP,   D3DTOP_SELECTARG2);
+                        lpDevice->SetTextureStageState(1, D3DTSS_COLORARG2, D3DTA_CURRENT);
+                        lpDevice->SetTextureStageState(1, D3DTSS_ALPHAOP,   D3DTOP_MODULATE);
+                        lpDevice->SetTextureStageState(1, D3DTSS_ALPHAARG1, D3DTA_TEXTURE);
+                        lpDevice->SetTextureStageState(1, D3DTSS_ALPHAARG2, D3DTA_CURRENT);
+                    }
                     lpDevice->SetSamplerState(1, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
                     lpDevice->SetSamplerState(1, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
                     lpDevice->SetSamplerState(1, D3DSAMP_MIPFILTER, D3DTEXF_NONE);
