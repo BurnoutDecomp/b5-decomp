@@ -6,6 +6,9 @@
 #include "GameShared/GameClasses/Sound/Playback/CgsContent.h"                 // Content / Factory / ContentSpec
 #include "GameShared/GameClasses/Sound/Playback/RWAC/CgsGenericRwacContent.h" // ContentLoader<T> + CgsResource::BinaryFileResource
 #include "GameShared/GameClasses/Sound/Playback/Splicer/CgsSpliceBankStatistics.h" // SpliceBankStatistics
+#include "GameShared/GameClasses/Sound/Playback/CgsVoice.h"                   // Slot / Voice / PlayerVoice / ISlotImplementation / System (real homes)
+#include "GameShared/GameClasses/Sound/Playback/Splicer/internal/SpliceObjects.h" // Splice (real home, :101)
+#include "GameShared/GameClasses/Sound/Playback/Splicer/CgsSplicerPlayerVoice.h"  // SplicerPlayerVoice (the +0x88 mpSplice owner)
 
 // ============================================================================
 // CgsSound::Playback::SplicerContent  (DWARF home CgsSplicerContent.h:154).
@@ -53,54 +56,15 @@ private:
 //   SplicerContentSlot::DoStop      @ 0x826FA7E8
 //   SplicerContentSlot::DoPreDetach @ 0x826FA840
 //
-// FLAG (collaborators are MINIMAL, un-homed elsewhere -- same treatment as the AEMS
-// slot in CgsAemsContent.h): Slot / Voice / PlayerVoice / System / ISlotImplementation
-// are large engine types with their own DWARF homes (CgsVoice.h etc.). Here only the
-// polymorphic-base shape and the one collaborator field the teardown touches -- the
-// Splice pointer at voice +0x88 (the same SplicerPlayerVoice::mpSplice modelled in
-// CgsSplicerPlayerVoice.h) -- are modelled BY NAME; the exact voice layout slot is
-// DEFERRED to the Voice keystone TU and is intentionally NOT offset-asserted.
+// (2026-08-25, audio-faithfulness wave 6: the local rival Slot / Voice /
+// PlayerVoice / ISlotImplementation / Splice minimal models are FOLDED onto their
+// real homes -- CgsVoice.h + Splicer/internal/SpliceObjects.h, included above.
+// The old local rival ALSO collided with CgsContent.h's fwd-decls of the same
+// names in the same namespace: a live compile tripwire, now gone. The +0x88
+// splice pointer belongs to SplicerPlayerVoice, so the teardown reaches it via a
+// static_cast down the real PlayerVoice base -- the console DoStop/DoPreDetach
+// read voice+0x88 directly, which IS that member on the console layout.)
 // =============================================================================
-
-// Forward-declared engine collaborator (full home CgsSystem.h).
-struct System;
-
-// The per-voice splice object. Full home elsewhere; only its destructor + class
-// operator delete are exercised here (the teardown does `delete splice`).
-struct Splice
-{
-    ~Splice();                              // own TU -- declared only
-    static void operator delete(void* apMem); // own TU -- declared only
-};
-
-// CgsVoice.h:195 (DWARF). One slot on a voice. MINIMAL: the overrides receive it by
-// const-ref but read nothing from it, so only the type identity is load-bearing.
-class Slot {};
-
-// CgsVoice.h (DWARF). The base voice. MINIMAL: only the Splice pointer the teardown
-// nulls is modelled. FLAG: exact layout slot (+0x88) DEFERRED to the Voice keystone.
-class Voice
-{
-public:
-    Splice* mpSplice;   // X360 voice +0x88 (== SplicerPlayerVoice::mpSplice)
-};
-
-// The player voice the slot drives; derives from Voice so both the PlayerVoice&
-// (DoStop) and Voice& (DoPreDetach) references reach mpSplice by name.
-class PlayerVoice : public Voice {};
-
-// CgsVoice.h:676 (DWARF). The slot-implementation interface. The splicer slot
-// overrides all four hooks; only stop/pre-detach are bodied in this TU.
-struct ISlotImplementation
-{
-    virtual ~ISlotImplementation() {}
-
-    virtual bool DoPlay(const Slot& aSlot, PlayerVoice& aVoice, Content& aContent, u32 au32Param) = 0;
-    virtual bool DoStop(const Slot& aSlot, PlayerVoice& aVoice, Content& aContent) = 0;
-    virtual bool DoUpdatePlaying(System* apSystem, const Slot& aSlot, PlayerVoice& aVoice,
-                                 Content& aContent, f32 af32Dt) = 0;
-    virtual void DoPreDetach(const Slot& aSlot, Voice& aVoice, Content& aContent) = 0;
-};
 
 struct SplicerContentSlot : public ISlotImplementation
 {
