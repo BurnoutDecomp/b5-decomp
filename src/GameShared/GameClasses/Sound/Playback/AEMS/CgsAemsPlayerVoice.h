@@ -108,8 +108,19 @@ public:
     Environment&    GetEnvironment();
 };
 
+// The CSIS command ring the Stop slice posts into (real struct home:
+// CgsCommandQueue.h:107; fwd-declared so this header stays out of the
+// CsisCommandQueue dual-home tangle its banners document).
+struct CsisCommandQueue;
+
 // ---------------------------------------------------------------------------
-// CgsAemsPlayerVoice.h. The AEMS player voice (allocation surface only).
+// CgsAemsPlayerVoice.h. The AEMS player voice (allocation surface + the Stop
+// slice). 2026-08-25 wave 5: this is now the SINGLE AemsPlayerVoice definition --
+// CgsCommandQueue.cpp's rival TU-local class (2 data members, no virtual; a hard
+// ODR conflict with this one) is retired and its Stop @0x826DAF10 merged here.
+// The Voice/GenericRwacVoice base chain stays the DEFERRED keystone; the two
+// Stop-slice members below sit at the head of the un-modeled span per the
+// by-name rule (console offsets in comments only).
 // ---------------------------------------------------------------------------
 struct AemsPlayerVoice
 {
@@ -123,6 +134,23 @@ struct AemsPlayerVoice
 
     // @ 0x826DAA50. Empty out-of-line class dtor (base dtors run implicitly).
     virtual ~AemsPlayerVoice();
+
+    // @ 0x826DAF10. If no CSIS request is outstanding report false; else post a
+    // release command for it, clear the handle, report true. Bodied in
+    // CgsCommandQueue.cpp (where the queue/command types are complete).
+    bool Stop();
+
+    // Console +0x98: the live CSIS request handle (0 == none). The intervening
+    // Voice/GenericRwacVoice base span is un-modeled (keystone-DEFERRED).
+    uintptr_t mhRequestHandle;
+
+    // FLAG (by-name ROUTE stand-in): the X360 Stop reaches the queue via
+    // `*(this+8)` (Voice::mFactory) -4 (the MI base adjust) +0x68 == the owning
+    // AemsFactory's embedded CsisCommandQueue. That walk is un-wirable until the
+    // Voice base chain + the AemsFactory queue member land, so the queue is held
+    // as a direct pointer; the real route replaces it with mFactory-derived
+    // access when the keystone lands.
+    CsisCommandQueue* mpCommandQueue;
 };
 
 } // namespace Playback

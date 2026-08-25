@@ -64,8 +64,7 @@ namespace core
 static void* skSendVTableSlot = 0;
 static void* const skpSendVTable = &skSendVTableSlot;             // off_8217F534
 
-static void* skSendBaseVTableSlot = 0;
-static void* const skpSendBaseVTable = &skSendBaseVTableSlot;     // off_820AA810
+static void* const skpSendBaseVTable = gpBasePlugInVTableSentinel;  // off_820AA810 (SHARED sentinel, PlugIn.h -- wave 5)
 
 static char* const skpSendDescName = const_cast<char*>("Send");   // off_82F8FF60 (label "Send")
 

@@ -133,6 +133,19 @@ int PlugIn::SetAttributeHandler(void *cmd)
     return static_cast<int>(sizeof(PlugInSetAttributeCommand)); // X360: li r3,0x10
 }
 
+
+// -------------------------------------------------------------------------------------
+// off_820AA810 -- the base PlugIn vtable every plug-in's teardown reverts its +0x00
+// slot to. ONE shared host sentinel (2026-08-25, audio-faithfulness wave 5): Route.cpp
+// and Send.cpp used to each hold their own file-static slot for this SAME console
+// object, so the "same vtable" had two distinct host addresses -- any cross-TU vptr
+// compare would diverge. The sentinel is store-only today (no committed consumer
+// dispatches or compares through it); the null-valued K*_BasePlugInVTable constants in
+// the other plug-in TUs are the sibling modelling of the same word.
+// -------------------------------------------------------------------------------------
+static void* sBasePlugInVTableSlot = 0;
+void* const gpBasePlugInVTableSentinel = &sBasePlugInVTableSlot;   // off_820AA810
+
 } // namespace core
 } // namespace audio
 } // namespace rw

@@ -46,6 +46,10 @@ namespace core
 class PlugIn;
 class PlugInDescRunTime;  // rwaudio PDB name (the header's former "PlugInInfo") -- registry RTTI record
 class PlugInRegistry;
+
+// off_820AA810 -- the SHARED base-PlugIn-vtable host sentinel (defined once in
+// PlugIn.cpp; see its note). Store-only.
+extern void* const gpBasePlugInVTableSentinel;
 class System;
 class Voice;              // rwaudio PDB: PlugIn::mpVoice (+0x08)
 struct VoiceListLink;     // intrusive expelled-voice list node (defined in Voice.h)

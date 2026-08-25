@@ -24,6 +24,8 @@
 #include "rw/audio/core/EaXmaDec.h"        // EaXmaDec::DeallocateResources (nullary; the XMA contexts)
 #include "SDKs/EATech/eathread/eathread_mutex.h" // EA::Thread::Mutex
 #include "SDKs/EATech/eathread/BrnEAThreadX360.h" // EA::Thread::ThreadSleep(const u32 *)
+#include "SDKs/Csis/CsisSystem.h"       // Csis::System::Lock/Unlock (the CsisMutex thunk targets)
+#include <intrin.h>                     // __rdtsc (GetCpuCycle PC leaf)
 
 #include <cstddef> // offsetof
 #include <cstdint> // uintptr_t (the allocation-tail carve)
@@ -52,18 +54,22 @@ namespace core
 extern "C" System *off_83271928 = 0;
 
 // The Csis integration's mutex primitives, installed into the System lock hooks by
-// VectorToCsisMutex. Their bodies live in the Csis glue TU (each is a `b` thunk onto the
-// nullary Csis::System::Lock/Unlock @0x82B0F248/@0x82B0F278, which wait on a GLOBAL
-// mutex handle and ignore r3); here they are referenced only by address, so a forward
-// declaration is sufficient (and faithful -- the asm stores the function addresses).
-void CsisMutexLock();
-void CsisMutexUnlock();
+// VectorToCsisMutex. Each is a `b` thunk onto the nullary Csis::System::Lock/Unlock
+// @0x82B0F248/@0x82B0F278 (which wait on a GLOBAL mutex handle and ignore r3).
+// BODIED 2026-08-25 wave 5 (they were undefined declarations -- link blockers):
+// the Csis primitives ARE committed (SDKs/Csis/CsisSystem.cpp), so the thunks
+// forward to them; their int result is dropped exactly as the void hook
+// signature drops r3.
+void CsisMutexLock()   { Csis::System::Lock(); }
+void CsisMutexUnlock() { Csis::System::Unlock(); }
 
-// Free-running CPU cycle counter (rw::audio::core::GetCpuCycle). Its body lives in a
-// platform timing TU that is not yet reconstructed; only the declaration is needed for the
-// per-TU compile gate. Same file-local namespace-scope declaration precedent as
-// TimerManager.cpp:31 / Profiler.cpp:28 / CpuLoadBalancer.cpp:29.
-u32 GetCpuCycle();
+// Free-running CPU cycle counter (rw::audio::core::GetCpuCycle). BODIED 2026-08-25
+// wave 5 (was an undefined declaration, duplicated in TimerManager.cpp:31 /
+// Profiler.cpp:28 / CpuLoadBalancer.cpp:29 -- those keep their local declarations,
+// which link-merge onto this one definition).
+// FLAG PC-platform leaf: the console body is the PPC free-running timebase read
+// (mftb); the host fold is the x86 TSC low word.
+u32 GetCpuCycle() { return static_cast<u32>(__rdtsc()); }
 
 // The shared 4-word table the constructor points mpObjectTable at (dword_83271930..0x3C).
 // rwaudio PDB: this is the static StackAllocator {System* mpSystem, u32 mpUpperLimit,
