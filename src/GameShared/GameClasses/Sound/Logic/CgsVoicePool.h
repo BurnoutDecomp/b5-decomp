@@ -29,11 +29,9 @@
 //
 //   PooledVoice (stride 0x5C == 92 bytes, from the +0x5C loop increment in all six
 //   bodies):
-//     +0x00  mVoice                      VoiceWrapper  (opaque here -- DEFERRED)
-//              within mVoice the bodies reach these X360-attested sub-offsets:
-//                +0x34  the logic Voice sub-object (Voice::SetGain / SetParameter)
-//                +0x38  the wrapped voice handle ptr (non-null == live)
-//                +0x48  state word (0==free, 6==playing, 7==stopped)
+//     +0x00  mWrapper                    VoiceWrapper (console 0x50; REAL layout by
+//              name in CgsVoiceWrapper.h -- the logic Voice @+0x34, live-handle test
+//              @+0x38, state word @+0x48 the bodies use are its named members now)
 //     +0x50  mfSecondaryGain             f32   (Prepare sets 1.0; SetGain multiplier)
 //     +0x54  muAge                       u32   (bumped by Update, reset on retire)
 //     +0x58  mbInUse                     bool
@@ -41,12 +39,10 @@
 // LAYOUT NOTE (X360 32-bit vs host 64-bit): pointers widen on the 64-bit host, so
 // members are pinned BY NAME + SEQUENCE; the X360 offsets are recorded in comments.
 //
-// FLAG: PooledVoice's internal VoiceWrapper (mVoice) layout is DEFERRED (home:
-// CgsVoiceWrapper.*). The pool bodies reach the state/handle/Voice sub-object fields
-// at raw byte offsets exactly as the X360 does. VoiceWrapper::Release()/Update() are
-// invoked as members on the mVoice sub-object -- their decls live additively in
-// CgsVoiceWrapper.h. Voice::SetParameter lives additively in CgsVoice.h. Nothing here
-// is fabricated beyond those attested method calls.
+// (2026-08-25 wave 4: the former `u8 mVoice[0x50]` opaque byte model + the
+// KU_POOLED_VOICE_*_OFFSET raw-reach constants are RETIRED -- VoiceWrapper's real
+// 0x50 layout is modelled by name in CgsVoiceWrapper.h and the pool bodies go
+// through its named members/accessors.)
 // =============================================================================
 
 #ifndef CGS_SOUND_LOGIC_CGSVOICEPOOL_H
@@ -66,29 +62,18 @@ namespace Logic
 class Module;
 
 // -----------------------------------------------------------------------------
-// PooledVoice -- one slot in the pool. mVoice's internal layout is DEFERRED, so it is
-// materialised here as a correctly-sized (X360-attested) opaque byte span up to +0x50
-// so the trailing scalar members land at their true offsets and the struct is 0x5C.
+// PooledVoice -- one slot in the pool: the real VoiceWrapper (console 0x50, modelled
+// by name in CgsVoiceWrapper.h) plus the pool bookkeeping scalars. Console stride
+// 0x5C == 0x50 + 4 + 4 + 1(+pad3), matching the +0x5C loop increment in all six
+// pool bodies.
 // -----------------------------------------------------------------------------
 struct PooledVoice
 {
-    u8  mVoice[0x50];       // [0x00] VoiceWrapper (opaque; state @+0x48, Voice @+0x34, handle @+0x38)
-    f32 mfSecondaryGain;    // [0x50] per-voice gain multiplier (Prepare sets 1.0f)
-    u32 muAge;              // [0x54] frames since last (re)use; ++ per Update
-    u8  mbInUse;            // [0x58] slot currently allocated
-    u8  mPad[3];            // [0x59] pad to the attested 0x5C stride
+    VoiceWrapper mWrapper;          // [0x00] the per-slot voice wrapper (0x50 console)
+    f32          mfSecondaryGain;   // [0x50] per-voice gain multiplier (Prepare sets 1.0f)
+    u32          muAge;             // [0x54] frames since last (re)use; ++ per Update
+    u8           mbInUse;           // [0x58] slot currently allocated (pad to the 0x5C stride)
 };
-
-// -----------------------------------------------------------------------------
-// PooledVoice raw sub-offsets the pool bodies reach through mVoice. X360-attested
-// byte offsets into the DEFERRED VoiceWrapper; NOT named members.
-// -----------------------------------------------------------------------------
-static const u32 KU_POOLED_VOICE_STRIDE        = 0x5C;  // 92 bytes / slot
-static const u32 KU_POOLED_VOICE_VOICE_OFFSET  = 0x34;  // logic Voice sub-object
-static const u32 KU_POOLED_VOICE_HANDLE_OFFSET = 0x38;  // wrapped-voice handle ptr (live == non-null)
-static const u32 KU_POOLED_VOICE_STATE_OFFSET  = 0x48;  // VoiceWrapper state word
-static const u32 KU_POOLED_VOICE_AGE_OFFSET    = 0x54;  // muAge
-static const u32 KU_POOLED_VOICE_INUSE_OFFSET  = 0x58;  // mbInUse
 
 // VoiceWrapper state values the pool tests.
 static const s32 KI_VOICE_STATE_FREE    = 0;
