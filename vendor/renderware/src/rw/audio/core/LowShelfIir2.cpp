@@ -13,6 +13,7 @@
 // =====================================================================================
 
 #include "rw/audio/core/Iir2Filters.h"
+#include "rw/audio/core/Voice.h"   // the owning Voice (mfFadeStart decay accumulator)
 
 #include <cmath>
 
@@ -74,7 +75,7 @@ void LowShelfIir2::CalculateFilterCoefficients(f64 omega, f64 gain)
 // CreateInstance @0x82BA3198
 // Initialize<LowShelfIir2>(self, 0x28) clears the 6 state slots and bases attributes at
 // self+0x28; then clears the active flag, seeds cutoff 0 / gain 1 (live + cached),
-// re-bases the upstream input's +0x28 attribute by (700 - oldAttr) and parks the live
+// folds (700 - oldAttr) into the owning voice's decay accumulator (mfFadeStart), parks the live
 // attribute at 700. (Initialize<T> reproduced inline; FLAGGED.)
 // -------------------------------------------------------------------------------------
 LowShelfIir2 *LowShelfIir2::CreateInstance(LowShelfIir2 *self)
@@ -82,7 +83,7 @@ LowShelfIir2 *LowShelfIir2::CreateInstance(LowShelfIir2 *self)
     for (int i = 0; i < KI_IIR2_MAX_CHANNELS; ++i)
         Iir2::ClearBuffer(&self->mState[i]);
 
-    const f32 oldAttr = self->mBase.mfAttrib1;       // lfs 0x18
+    const f32 oldAttr = self->mBase.mDecaySamples;       // lfs 0x18
 
     self->mbActive = 0;                               // stw 0 -> 0x98
     self->mfCutoffFreq = 0.0f;                        // stfs flt_82001CC0 -> 0x28
@@ -90,11 +91,12 @@ LowShelfIir2 *LowShelfIir2::CreateInstance(LowShelfIir2 *self)
     self->mfGain = 1.0f;                              // stfs flt_82001C98 -> 0x30
     self->mfLastGain = 1.0f;                          // stfs -> 0xB4
 
-    f32 *inputAttr = reinterpret_cast<f32 *>(
-        reinterpret_cast<char *>(self->mBase.mpInput) + 0x28);
-    *inputAttr = (700.0f - oldAttr) + *inputAttr;
+    // Fold this shape's decay-tail delta into the owning voice's accumulator:
+    // voice+0x28 == Voice::mfFadeStart, BY NAME (2026-08-25 wave 4; was a raw
+    // reinterpret over the old void* mpInput misreading).
+    self->mBase.mpVoice->mfFadeStart = (700.0f - oldAttr) + self->mBase.mpVoice->mfFadeStart;
 
-    self->mBase.mfAttrib1 = 700.0f;                   // stfs flt_8205820C -> 0x18
+    self->mBase.mDecaySamples = 700.0f;                   // stfs flt_8205820C -> 0x18
     return self;
 }
 

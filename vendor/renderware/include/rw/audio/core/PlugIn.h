@@ -81,22 +81,12 @@ typedef void (*PhysicalFreeHook)(void *block);
 // -------------------------------------------------------------------------------------
 // PlugIn -- base class for a node in the audio processing graph.
 //
-// Layout grounded in PlugIn::CreateInstance @0x82B6A818 (the placement-construct path):
-//   +0x00  vtable pointer            (virtual dispatch; vt[0]=dtor-ish, vt[3]=Destroy,
-//                                      vt[1]=Event handler reached via PlugIn::Event)
-//   +0x04  mpInfoVTable              (off_83271928: the PlugInDescRunTime's secondary v-table /
-//                                      run-time-type record installed at construct time)
-//   +0x08  mpInput                   (a2: upstream PlugIn / input handle)
-//   +0x0C  mpAttributes              (float[2]-stride attribute table; set up elsewhere,
-//                                      read by GetAttribute/SetAttribute as 8-byte stride)
-//   +0x10  mpFactory                 (a3: the owning factory/feature whose +8 is a
-//                                      "begin/validate" virtual returning a bool)
-//   +0x14  mfAttrib0                 (float, init 0.0)
-//   +0x18  mfAttrib1                 (float, init 0.0)
-//   +0x1C  mState                    (int, init 0)
-//   +0x20  mbFlag20                  (char a5, init flag)
-//   +0x21  mbFlag21                  (char, copied from a4+8)
-// (the IDA "char a5" arg and the "*(a4+8)" byte are the only sub-byte members)
+// Layout grounded in PlugIn::CreateInstance @0x82B6A818 (the placement-construct path).
+// (The old pre-reconcile per-slot table that stood here -- naming +0x08 "mpInput
+// (upstream PlugIn / input handle)" etc. -- is RETIRED 2026-08-25 wave 4: it
+// contradicted the PDB reconcile below in the same header. The a2 argument at +0x08
+// is the OWNING VOICE: CreateInstance's only caller is Voice::CreateInstance
+// @0x82B6EC50 passing the fresh Voice in r4. See the reconciled member list below.)
 // -------------------------------------------------------------------------------------
 class PlugIn
 {

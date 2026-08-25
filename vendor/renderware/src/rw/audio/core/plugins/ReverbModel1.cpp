@@ -38,6 +38,7 @@
 // =====================================================================================
 
 #include "rw/audio/core/plugins/ReverbModel1.h"
+#include "rw/audio/core/Voice.h"   // the owning Voice (mfFadeStart decay accumulator)
 #include "rw/audio/core/PlugIn.h"        // rw::audio::core::System (mTimerManager @+0x60)
 #include "rw/audio/core/TimerManager.h"  // rw::audio::core::TimerManager::AddTimer
 #include "rw/audio/core/IFilter.h"       // rw::audio::core::IFilter (filter apply/reset install)
@@ -744,16 +745,15 @@ void ReverbModel1::UpdateLatencyAndDecay(ReverbModel1 *self)
             maxApDelay = self->miAllPassDelaySamples[i];
 
     const f32 apDelay = static_cast<f32>(maxApDelay);
-    const f32 newLatency = (apDelay - static_cast<f32>(
+    const f32 newDecay = (apDelay - static_cast<f32>(
         (apDelay * 10.0f) / static_cast<f32>(log10(maxGain)))) + combLatency;
 
-    // Fold the change in reported latency into the upstream voice's accumulator (+0x28), then
-    // latch it. (Raw +0x28 access into the voice mirrors the LowPassIir2::CreateInstance
-    // idiom -- mBase.mpInput is the upstream input handle, its +0x28 the latency word.)
-    f32 *pVoiceLatency = reinterpret_cast<f32 *>(
-        reinterpret_cast<char *>(self->mBase.mpInput) + 0x28);
-    *pVoiceLatency += (newLatency - self->mBase.mfAttrib1);
-    self->mBase.mfAttrib1 = newLatency;
+    // Fold the decay-tail change into the owning voice's accumulator
+    // (voice+0x28 == Voice::mfFadeStart, by name -- the expel-after-decay deadline;
+    // 2026-08-25 wave 4: the former "+0x28 latency word" raw reinterpret is retired),
+    // then latch it.
+    self->mBase.mpVoice->mfFadeStart += (newDecay - self->mBase.mDecaySamples);
+    self->mBase.mDecaySamples = newDecay;
 }
 
 // -------------------------------------------------------------------------------------

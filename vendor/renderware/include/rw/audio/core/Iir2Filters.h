@@ -27,10 +27,13 @@
 // cannot be used as a C++ polymorphic base here without the compiler inserting a second
 // hidden vptr and shifting every data field by a word. To keep the data offsets exact
 // the shapes embed the PlugIn base fields directly (composition, not inheritance) as a
-// PlugInBaseView at +0x00..+0x21; +0x00 is the same vtable word the game installs, the
-// live "cutoff" graph attribute lives at mfAttrib1 (+0x18), and the active channel
-// count (the per-channel state-loop bound) lives at mbChannelCount (+0x21). Six
-// Iir2State slots are reserved per shape (Initialize<T> clears slots 0..5).
+// PlugInBaseView at +0x00..+0x21; +0x00 is the same vtable word the game installs, and
+// the active channel count (the per-channel state-loop bound) lives at mbChannelCount
+// (+0x21). Six Iir2State slots are reserved per shape (Initialize<T> clears slots 0..5).
+// (2026-08-25 wave 4 CORRECTION: +0x18 is NOT "the live cutoff graph attribute" -- it
+// is the PDB's mDecaySamples, touched ONLY by the CreateInstance decay-rebase idiom;
+// each filter's cutoff lives at self+0x28, the shape's own attribute table that
+// Initialize<T> points mpAttributes at.)
 // =====================================================================================
 
 #include "types.hpp" // f32, s32, u8, u16
@@ -54,29 +57,55 @@ enum { KI_IIR2_MAX_CHANNELS = 6 };
 // since PlugIn is polymorphic with an explicit +0x00 vtable word.)
 // -------------------------------------------------------------------------------------
 // rwaudio PDB authoritative names (IDA Files/ProStreet08Milestone.pdb,
-// rw::audio::core::PlugIn) for each base slot -- this filter-local view keeps the
-// filter-semantic field names (the .cpp bodies use them; the generic base slots are
-// repurposed by the filter, e.g. +0x18 holds the cutoff), with the canonical mapping:
-//   mpSystem(+0x04)=mpSystemUseGetSystemAccessor  mpInput(+0x08)=mpVoice
-//   mpAttributes(+0x0C)=mpAttribute  mpFactory(+0x10)=mpPlugInDescRunTime
-//   mfAttrib0(+0x14)=mLatencyInSamples  mfAttrib1(+0x18)=mDecaySamples
-//   mState(+0x1C)=mCpuTicks  mbFlag20(+0x20)=mInputChannels
+// rw::audio::core::PlugIn). 2026-08-25 wave 4: the three fields the family bodies
+// actually touch now carry their PDB-TRUE names/types --
+//   * mpVoice (+0x08, Voice*): the OWNING VOICE. Proven, not guessed:
+//     PlugIn::CreateInstance @0x82B6A818's only caller is Voice::CreateInstance
+//     @0x82B6EC50, which passes the freshly-allocated Voice in r4 and it lands at
+//     +0x08. (The old `void* mpInput` "upstream input handle" reading was wrong and
+//     enabled the `+0x28` offset-hack family this rename retires.)
+//   * mLatencyInSamples (+0x14, was mfAttrib0): written only by Delay.
+//   * mDecaySamples (+0x18, was mfAttrib1): each shape's decay-tail length; the
+//     CreateInstance idiom folds its delta into mpVoice->mfFadeStart (Voice.h:170,
+//     the per-voice decay-tail SUM System::UpdateExpellingVoices rings out on).
+// Remaining slots keep the older view names with the canonical mapping:
+//   mpSystem(+0x04)=mpSystemUseGetSystemAccessor  mpAttributes(+0x0C)=mpAttribute
+//   mpFactory(+0x10)=mpPlugInDescRunTime  mState(+0x1C)=mCpuTicks
+//   mbFlag20(+0x20)=mInputChannels
 //   mbChannelCount(+0x21)=mOutputChannels  (+0x22/+0x23 = PDB tail padding)
 // See PlugIn.h for the canonical reconciled type.
+class Voice;   // the owning voice (Voice.h)
+
 struct PlugInBaseView
 {
-    void *mpVTable;     // +0x00 -- the installed v-table pointer
-    void *mpSystem;     // +0x04
-    void *mpInput;      // +0x08
-    void *mpAttributes; // +0x0C
-    void *mpFactory;    // +0x10
-    f32   mfAttrib0;    // +0x14
-    f32   mfAttrib1;    // +0x18 -- the live "cutoff" graph attribute
-    s32   mState;       // +0x1C
-    u8    mbFlag20;     // +0x20
-    u8    mbChannelCount;// +0x21 -- active channel count (per-channel state-loop bound)
-    u8    mbPad22;      // +0x22
-    u8    mbPad23;      // +0x23
+    // FLAG (pre-init slot reuse, 2026-08-25 wave 4): BEFORE CreateInstance installs the
+    // owning Voice, the factory parks the requested channel/section COUNT BYTE in the
+    // +0x08 slot (HighPassButterworth::GetSize @0x82B9DF88 reads it as `lbz r3,8(this)`
+    // -- a byte store/load on the not-yet-voice word). On the LE 64-bit host the raw
+    // "first byte of the pointer field" read is endian/width-broken, so the parked
+    // count is encoded as the pointer VALUE (mpVoice == (Voice*)(uintptr_t)count) and
+    // recovered through these helpers; a future host factory must park it the same way.
+    void SetPreInitOrderByte(u8 au8Order)
+    {
+        mpVoice = reinterpret_cast<Voice*>(static_cast<uintptr_t>(au8Order));
+    }
+    u8 GetPreInitOrderByte() const
+    {
+        return static_cast<u8>(reinterpret_cast<uintptr_t>(mpVoice));
+    }
+
+    void  *mpVTable;           // +0x00 -- the installed v-table pointer
+    void  *mpSystem;           // +0x04
+    Voice *mpVoice;            // +0x08 -- the owning Voice (PDB name; see above)
+    void  *mpAttributes;       // +0x0C
+    void  *mpFactory;          // +0x10
+    f32    mLatencyInSamples;  // +0x14 (PDB name; was mfAttrib0)
+    f32    mDecaySamples;      // +0x18 (PDB name; was mfAttrib1 -- NOT the cutoff)
+    s32    mState;             // +0x1C
+    u8     mbFlag20;           // +0x20
+    u8     mbChannelCount;     // +0x21 -- active channel count (per-channel state-loop bound)
+    u8     mbPad22;            // +0x22
+    u8     mbPad23;            // +0x23
 };
 
 // -------------------------------------------------------------------------------------

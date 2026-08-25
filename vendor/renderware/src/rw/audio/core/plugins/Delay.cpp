@@ -22,6 +22,7 @@
 // =====================================================================================
 
 #include "rw/audio/core/plugins/Delay.h"
+#include "rw/audio/core/Voice.h"   // the owning Voice (mfFadeStart decay accumulator)
 #include "rw/audio/core/PlugIn.h"       // rw::audio::core::System (mTimerManager @+0x60)
 #include "rw/audio/core/TimerManager.h" // rw::audio::core::TimerManager::AddTimer
 #include "rw/audio/core/IFilter.h"      // rw::audio::core::IFilter (filter apply/reset install)
@@ -273,43 +274,43 @@ int Delay::Process(Delay *self, AudioProcessContext *ctx)
 }
 
 // -------------------------------------------------------------------------------------
-// UpdateLatencyAndDecay @0x82B9DE50 -- recompute the delay's reported latency (the samples
-// the mixer must pre-roll) from the current delay length and feedback gain via the Schroeder
-// RT60 form  d - d*5/log10(|g|), and fold the change into the upstream voice's latency
-// accumulator (voice +0x28). When the delay is not running (state != 1) the latency collapses
-// to zero.
+// UpdateLatencyAndDecay @0x82B9DE50 -- recompute the delay's latency (mLatencyInSamples,
+// +0x14: the raw delay length the mixer must pre-roll) and its DECAY-TAIL length
+// (mDecaySamples, +0x18: the Schroeder RT60 form  d - d*5/log10(|g|) -- how long the
+// feedback tail rings), folding the decay CHANGE into the owning voice's decay
+// accumulator (voice+0x28 == Voice::mfFadeStart, the expel-after-decay deadline).
+// When the delay is not running (state != 1) both collapse to zero.
+// (2026-08-25 wave 4: the "+0x28 latency word" naming here was WRONG -- the
+// accumulator is the fade/decay deadline System::UpdateExpellingVoices consumes.)
 // -------------------------------------------------------------------------------------
 void Delay::UpdateLatencyAndDecay(Delay *self)
 {
-    f32 newLatency;   // v5
-    f32 latencyDelta; // v7
+    f32 newDecay;   // v5
+    f32 decayDelta; // v7
 
     if (self->mState == 1)
     {
         const f32 delaySamples = static_cast<f32>(self->mDelayLine.miReadPosition); // v4
         const f32 feedback     = self->mFilter.mfFeedback;                          // v3
-        newLatency = delaySamples;                                                  // v5 = v4
+        newDecay = delaySamples;                                                    // v5 = v4
         if (feedback != KF_ZERO)
-            newLatency = delaySamples - static_cast<f32>(
+            newDecay = delaySamples - static_cast<f32>(
                 (delaySamples * KF_LATENCY_SCALE)
                 / static_cast<f32>(log10(std::fabs(feedback))));
-        latencyDelta = newLatency - self->mBase.mfAttrib1; // v5 - v6 (old +0x18)
-        self->mBase.mfAttrib0 = delaySamples;              // *(this+0x14) = v4
+        decayDelta = newDecay - self->mBase.mDecaySamples; // v5 - v6 (old +0x18)
+        self->mBase.mLatencyInSamples = delaySamples;      // *(this+0x14) = v4
     }
     else
     {
-        latencyDelta = -self->mBase.mfAttrib1; // v7 = -*(this+0x18)
-        newLatency = KF_ZERO;                  // v5 = 0
-        self->mBase.mfAttrib0 = KF_ZERO;       // *(this+0x14) = 0
+        decayDelta = -self->mBase.mDecaySamples;       // v7 = -*(this+0x18)
+        newDecay = KF_ZERO;                            // v5 = 0
+        self->mBase.mLatencyInSamples = KF_ZERO;       // *(this+0x14) = 0
     }
 
-    // Fold the change in reported latency into the upstream voice's accumulator (+0x28), then
-    // latch it. (Raw +0x28 access into the voice mirrors the ReverbModel1::UpdateLatencyAndDecay
-    // idiom -- mBase.mpInput is the upstream input handle, its +0x28 the latency word.)
-    f32 *pVoiceLatency = reinterpret_cast<f32 *>(
-        reinterpret_cast<char *>(self->mBase.mpInput) + 0x28);
-    *pVoiceLatency += latencyDelta;
-    self->mBase.mfAttrib1 = newLatency; // *(this+0x18) = v5
+    // Fold the decay change into the owning voice's decay accumulator
+    // (voice+0x28 == Voice::mfFadeStart, by name), then latch it.
+    self->mBase.mpVoice->mfFadeStart += decayDelta;
+    self->mBase.mDecaySamples = newDecay; // *(this+0x18) = v5
 }
 
 // -------------------------------------------------------------------------------------
