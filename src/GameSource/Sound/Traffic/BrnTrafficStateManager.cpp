@@ -151,7 +151,8 @@ CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager>* TrafficStateManag
 // ObjectID RESOLVED (PS3 DecFIGS static-init 0x85FA1C): TrafficStateManager::sTypeInfo
 // .ObjectID = 3. The descriptor comes from GetStaticTypeInfo() (seeded with that id and
 // baseTypeInfo = StateManager::GetStaticTypeInfo()), so this registration lands the real
-// id. This TU is OUT of the build, so dormant until the conductor adds it.
+// id. NOTE (2026-08-25): this TU IS in the game build -- the registration runs at
+// static-init and CreateStateManagers constructs this manager at boot.
 // ---------------------------------------------------------------------------
 static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager>* const
     gpTrafficStateManagerReg =

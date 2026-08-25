@@ -109,10 +109,15 @@ void IDynamicMixer::CreateInstance(const MAP_CREATE_PARAMS* lpParams)
     g_pMixerAllocator = lpParams->MixerAllocator;
 
     // --- NFSMixMaster (0x80 == 128 bytes) ---
+    // The asm GUARDS the construction (`Allocate ? new(block) NFSMixMaster : 0`) --
+    // an earlier revision dropped the ternary and placement-new'd unconditionally
+    // (UB on a null block); restored 2026-08-25 (wave 1). The mNumStates store is
+    // unconditional in the asm (a null master would crash there on console too);
+    // kept under the same guard as the sane host equivalent of that crash path.
     void* lpMasterMem = g_pMixerAllocator->Allocate(128, 16, "NFSMixMaster");
-    mMixMaster = static_cast<NFSMixMaster*>(lpMasterMem);
-    new (lpMasterMem) NFSMixMaster();
-    mMixMaster->mNumStates = lpParams->NumMixStates; // *(v4+8) = *(a2+4) -- unconditional in asm
+    mMixMaster = lpMasterMem ? new (lpMasterMem) NFSMixMaster() : 0;
+    if (mMixMaster)
+        mMixMaster->mNumStates = lpParams->NumMixStates; // *(v4+8) = *(a2+4)
 
     // --- SnapshotMixer (0x20 == 32 bytes; the asm zero-fills 8 words before Construct) ---
     void* lpSnapMem = g_pMixerAllocator->Allocate(32, 16, "SnapshotMixer");

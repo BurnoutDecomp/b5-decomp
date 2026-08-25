@@ -317,9 +317,15 @@ void SnapshotMixer::AttachToMixMap(NFSMixMap* lpMixMap)
 // ---------------------------------------------------------------------------
 void SnapshotMixer::UpdateMixerTargets()
 {
-    int laActive[66];
+    // FLAG (capacity unanchored, 2026-08-25 wave 1): the 66-slot stack array has no
+    // recovered X360 anchor (the console body's fixed stack frame implies SOME cap;
+    // 66 was carried over unannotated). Guarded against overrun until the real
+    // capacity is read from the asm frame -- a snapshot blob with more than 66
+    // active snapshots would otherwise smash the stack.
+    const int KI_MAX_ACTIVE_SNAPSHOTS = 66;
+    int laActive[KI_MAX_ACTIVE_SNAPSHOTS];
     int liNumActive = 0;
-    for (int s = 0; s < miNumSnapshots; ++s)
+    for (int s = 0; s < miNumSnapshots && liNumActive < KI_MAX_ACTIVE_SNAPSHOTS; ++s)
     {
         if (mpSnapshots[s].mFlags & 1)
             laActive[liNumActive++] = s;

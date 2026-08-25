@@ -67,8 +67,8 @@ MicrophoneSystem::Microphone* MicrophoneSystem::GetMicrophone(EMicPositions aePo
 //   rw::math::IsValid( lMicrophoneMatrix ) (DWARF cites CgsMicrophone.h:146). Then
 //   PUSH the matrix into the two-frame buffer: the asm loads the OLD current rows
 //   (this+0x00..0x3F) and writes them to the previous half (this+0x40..0x7F) FIRST,
-//   then writes the source into the current half -- i.e. mMicrophoneMatrix.Set(lrMatrix)
-//   (previous <- old current, current <- source), NOT Reset (which seeds both halves).
+//   then writes the source into the current half -- i.e. mMicrophoneMatrix.Update(lrMatrix)
+//   (previous <- old current, current <- source), NOT Flush (which seeds both halves).
 // ---------------------------------------------------------------------------
 void MicrophoneSystem::Microphone::SetMicrophoneMatrix(const rw::math::vpu::Matrix44Affine& lrMatrix)
 {
@@ -81,7 +81,7 @@ void MicrophoneSystem::Microphone::SetMicrophoneMatrix(const rw::math::vpu::Matr
     // Double-buffer push, NOT Reset: the asm stores the OLD current rows into the
     // previous half (this+0x40..0x7F) before overwriting the current half with the
     // source (this+0x00..0x3F).
-    mMicrophoneMatrix.Set(lrMatrix);
+    mMicrophoneMatrix.Update(lrMatrix);   // shift current->previous, store new current (canonical DataPoint::Update)
 }
 
 // ---------------------------------------------------------------------------

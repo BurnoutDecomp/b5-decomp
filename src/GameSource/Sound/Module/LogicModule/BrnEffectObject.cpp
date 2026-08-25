@@ -1,4 +1,5 @@
 #include "GameSource/Sound/Module/LogicModule/BrnEffectObject.h"
+#include "GameSource/Sound/Module/LogicModule/BrnSoundLogicModule.h"  // the concrete module (GetResourceRegistrar dispatch)
 
 // =============================================================================
 // BrnSound::Logic::BrnEffectObject — out-of-line bodies.
@@ -43,17 +44,19 @@ const char* BrnEffectObject::GetTypeName() const
 // which returns the module's registrar. We reproduce that semantically by routing
 // through the module's IResourceRequester interface.
 //
-// FLAG: mpLogicModule is reconstructed as an opaque void* (the SoundLogicModule
-// home is not yet reconstructed). The +0x4C90 sub-object index into the module is
-// the embedded registrar's requester interface; here we reinterpret the module
-// pointer as that IResourceRequester* and dispatch the same virtual. The absolute
-// +0x4C90 offset is X360 32-bit and is NOT reproduced as a host pointer-cast.
+// HOST FORM (fixed 2026-08-25, audio-faithfulness wave 1): mpLogicModule is an
+// opaque void* pointing at the PRIMARY SoundLogicModule object. The previous
+// `static_cast<IResourceRequester*>(mpLogicModule)` did NO this-adjustment (the
+// X360's `addi r3, r11, 0x4C90` IS that adjustment) and so dispatched through the
+// module's primary vptr -- the wrong vtable. Correct host equivalent: recover the
+// concrete module type; the virtual call's derived->interface conversion then
+// performs the same sub-object walk the console's addi did.
 // ---------------------------------------------------------------------------
 ResourceRegistrar& BrnEffectObject::GetResourceRegistrar()
 {
-    IResourceRequester* pModuleRequester =
-        static_cast<IResourceRequester*>(mpLogicModule);
-    return pModuleRequester->GetResourceRegistrar();
+    BrnSound::Module::SoundLogicModule* lpModule =
+        static_cast<BrnSound::Module::SoundLogicModule*>(mpLogicModule);
+    return lpModule->GetResourceRegistrar();
 }
 
 // ---------------------------------------------------------------------------

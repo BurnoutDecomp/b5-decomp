@@ -103,7 +103,7 @@ void SoundLogicModule::Construct()
 // base Module::Prepare / Voices / partial ResourceBridging) are still guarded grow-in stubs;
 // stages 4 (CreateStateManagers) and 5 (PrepareStateManagersOnBoot(4)) are now REAL -- stage 5
 // retries (returns false WITHOUT advancing) until the boot managers report ready, exactly like
-// the X360. With the 8 manager TUs out of the build the state-manager registry is empty, so
+// the X360. NOTE (2026-08-25): the 8 manager TUs ARE in the build -- the registry is populated, so
 // stage 4 creates nothing and stage 5 returns true immediately (safe no-op) -- the machine
 // still completes and reports prepared so the RootSoundModule LOGIC stage drives it.
 bool SoundLogicModule::Prepare(void* lpParentModule, void* lpInputBuffer, void* lpOutputBuffer)
@@ -154,7 +154,7 @@ bool SoundLogicModule::Prepare(void* lpParentModule, void* lpInputBuffer, void* 
     case E_PREPSTAGE_STATEMANAGERS:
         // X360 case 4: SoundLogicModule::CreateStateManagers -- create the 9 managers from
         //   the RTTI registry + register them in lEnvironment, then advance. Safe no-op when
-        //   the manager TUs are out of the build (the registry is empty -> all slots null).
+        //   (STALE premise retired 2026-08-25: the manager TUs ARE in the build -- the registry is populated.)
         CreateStateManagers();
         mePrepareStage = E_PREPSTAGE_BOOTPREPARE;
         // fall through
@@ -219,7 +219,7 @@ void SoundLogicModule::ResourceBridging()
 // Reproduced BY NAME: the loop fills mapStateManagers[i] from the factory (which scans
 // the RTTI registry by id), and every non-null manager is registered in lEnvironment.
 // The X360 guards the AddStateManager call with `if (result)` -- a null slot (no leaf
-// registered for that id) is skipped. So with the 8 manager TUs OUT of the build the
+// registered for that id) is skipped. NOTE (2026-08-25): the 8 manager TUs ARE in the build, so the
 // registry is empty, every CreateStateMan returns null, every slot is set null, and
 // AddStateManager is never called -> a safe no-op exactly as the X360 degrades.
 //
@@ -265,7 +265,7 @@ void SoundLogicModule::CreateStateManagers()
 // aborts (returns false so the boot stage stays and retries). Then the
 // mapStateManagers[0] child special-case: fetch its child via GetChildStateManager(0)
 // and, if present, Prepare() the child. The null-guard `*v5 != 0` means empty slots
-// (no registered leaf) are skipped -> with the managers out of the build this returns
+// (no registered leaf) are skipped -> (2026-08-25: managers ARE in the build now; only truly-empty ids return)
 // true immediately (safe no-op), matching the X360's degenerate behaviour.
 //
 // NOTE (skip-mask sense): the X360 SKIPS Prepare when `((1<<i) & mask) != 0`; mask 4 ==

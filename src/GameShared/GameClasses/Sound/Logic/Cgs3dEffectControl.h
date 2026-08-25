@@ -98,12 +98,12 @@ protected:
                         MicrophoneSystem::EMicPositions aePosition);
 
     // --- members (DWARF order; X360 offsets, not asserted on host) -------------
-    Utils::DataPoint<f32> mfDistanceToMic[2];   // Cgs3dEffectControl.h:141
-    Utils::DataPoint<f32> mfVelocityToMic[2];   // Cgs3dEffectControl.h:142
+    CgsSound::Utils::DataPoint<f32> mfDistanceToMic[2];   // Cgs3dEffectControl.h:141
+    CgsSound::Utils::DataPoint<f32> mfVelocityToMic[2];   // Cgs3dEffectControl.h:142
     const rw::math::vpu::Vector3* mpEmitterPosition;  // Cgs3dEffectControl.h:144  (+0x54 X360)
     const rw::math::vpu::Vector3* mpEmitterDirection; // Cgs3dEffectControl.h:145
-    Utils::DataPoint<rw::math::vpu::Vector3> mEmitterPosition;   // Cgs3dEffectControl.h:147
-    Utils::DataPoint<rw::math::vpu::Vector3> mEmitterDirection;  // Cgs3dEffectControl.h:148
+    CgsSound::Utils::DataPoint<rw::math::vpu::Vector3> mEmitterPosition;   // Cgs3dEffectControl.h:147
+    CgsSound::Utils::DataPoint<rw::math::vpu::Vector3> mEmitterDirection;  // Cgs3dEffectControl.h:148
     DebugRendererMessage mDebugRenderingMessageData;            // Cgs3dEffectControl.h:170
 };
 

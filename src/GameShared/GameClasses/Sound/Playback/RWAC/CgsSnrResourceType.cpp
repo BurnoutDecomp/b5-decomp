@@ -7,7 +7,13 @@
 //   CgsResource::SnrResourceType::GetTypeID @ 0x82689E10
 //
 // FixUp rebases a single leading pointer field (offset 0) by the relocation delta
-// (the rw::Resource's load base).
+// (the rw::Resource's load base). The X360 rebases a 32-bit slot with the 32-bit
+// base; on the platform-4 (x64) serialised form the slot is pointer-width and the
+// rebase must use the FULL-WIDTH load base (GetLoadBase64) -- the earlier
+// `static_cast<int>(GetLoadBase(...))` truncated the 64-bit heap base through
+// int (sign-extended), corrupting the rebased pointer for bases above 2GB
+// (fixed 2026-08-25 audio-faithfulness wave 1; mirrors the sibling
+// StaticSoundMapResourceType::FixUp @0x826775C8 convention).
 
 namespace CgsResource
 {
@@ -20,6 +26,6 @@ namespace CgsResource
 
     void SnrResourceType::FixUp(void* lpResource, const rw::Resource& lrResource) const
     {
-        *reinterpret_cast<uintptr_t*>(lpResource) += static_cast<int>(CgsResource::GetLoadBase(lrResource));
+        *reinterpret_cast<uintptr_t*>(lpResource) += CgsResource::GetLoadBase64(lrResource);
     }
 }

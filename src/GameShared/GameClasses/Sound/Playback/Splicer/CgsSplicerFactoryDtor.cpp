@@ -4,11 +4,10 @@
 // Reconstructed from BURNOUT_X360_ARTIST.XEX @ 0x826DB0E0
 //   (CgsSound::Playback::SplicerFactory::`scalar deleting destructor')
 //
-// NOTE (consolidator): the committed CgsSplicerFactory.cpp homes SplicerFactory::
-// SplicerAssertFunc @ 0x8268ABA0 using a self-contained LOCAL ad-hoc `struct
-// SplicerFactory` (NOT the coherent CgsSplicerFactory.h). To avoid two conflicting
-// definitions of SplicerFactory in one TU, this destructor is emitted in a SEPARATE
-// sibling TU that includes the coherent header.
+// NOTE (updated 2026-08-25, audio-faithfulness wave 1): CgsSplicerFactory.cpp's
+// old TU-local ad-hoc `struct SplicerFactory` is RETIRED -- SplicerAssertFunc
+// @ 0x8268ABA0 is now a member declared in the coherent CgsSplicerFactory.h, which
+// both TUs include. The split into two TUs is retained (harmless).
 //
 // The compiler synthesis runs:
 //   SplicerFactory::~SplicerFactory(this);  // base dtor (Factory)

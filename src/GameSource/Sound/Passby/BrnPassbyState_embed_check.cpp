@@ -21,7 +21,7 @@ void ExercisePassbyState()
     // whose typeName is the recovered class name.
     CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State>* lpInfo =
         BrnSound::Logic::Passby::PassbyState::GetStaticTypeInfo();
-    if (lpInfo == nullptr || std::strcmp(lpInfo->mpcTypeName, "PassbyState") != 0)
+    if (lpInfo == nullptr || std::strcmp(lpInfo->typeName, "PassbyState") != 0)
     {
         volatile int liFail = 1;
         (void)liFail;
