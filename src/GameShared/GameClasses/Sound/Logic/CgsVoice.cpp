@@ -20,40 +20,26 @@
 //   Voice::Play    @ 0x826C5068   Voice::Stop   @ 0x826C5148
 //   Voice::GetGain @ 0x826AD808   Voice::SetGain @ 0x826942C0
 //
-// LAYOUT / OFFSET NOTE: the methods read THROUGH mVoiceHandle.GetObject() into the
-// Playback::Voice at FIXED BYTE OFFSETS (ref @+4, ident @+0xC, playback-state @+0x10,
-// state byte @+0x11). Playback::Voice is incomplete here (its real layout lives in
-// the unreconstructed Sound/Playback/CgsVoice.h), so those reads are done as raw
-// byte arithmetic exactly as the X360 does (`*(obj+12)` etc.) and are FLAGGED. They
-// are PLAYBACK-LAYER offsets; when Playback::Voice is reconstructed these should be
-// replaced by named field access on a complete type.
+// LAYOUT NOTE (updated 2026-08-25, audio-faithfulness wave 1): the methods read
+// THROUGH mVoiceHandle.GetObject() into the Playback::Voice. The X360 inlines the
+// member access (`*(obj+4)` refcount, `*(obj+12)` ident, `*(obj+0x10)` playback
+// state, `*(obj+0x11)` remove state); the real Playback::Voice layout is NOW
+// reconstructed (Sound/Playback/CgsVoice.h: Object::mu32RefCount @+0x04, mIdent
+// @+0x0C, mu8PlaybackState @+0x10, mu8RemoveState @+0x11), so those reaches are
+// done BY NAME here (Acquire / GetIdent / GetPlaybackState / SetRemoveState) --
+// the former raw-byte-offset helpers are retired.
 // ============================================================================
 
 #include "GameShared/GameClasses/Sound/Logic/CgsVoice.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Sound/Playback/CgsCommon.h"  // Playback::Name::MakeHash (reused)
+#include "GameShared/GameClasses/Sound/Playback/CgsVoice.h"   // the REAL Playback::Voice layout
 
 namespace CgsSound
 {
 namespace Logic
 {
-
-// ----------------------------------------------------------------------------
-// Raw helpers for reaching into the (incomplete) Playback::Voice at the byte
-// offsets the X360 bodies use. FLAG: PLAYBACK-LAYER LAYOUT REACH -- these encode
-// Playback::Voice field offsets that belong to the unreconstructed Playback layer.
-// Replace with named field access once Sound/Playback/CgsVoice.h is reconstructed.
-// ----------------------------------------------------------------------------
-namespace
-{
-    // Playback::Voice+0x10: the playback-state word. Low 7 bits are the state enum
-    // (E_PLAYBACK_STATE_PLAYING == 2). Read by IsPlaying / IsReady / Destruct.
-    inline u8 GetPlaybackStateByte(const Playback::Voice* lpVoice)
-    {
-        return *(reinterpret_cast<const u8*>(lpVoice) + 0x10);
-    }
-}
 
 // ----------------------------------------------------------------------------
 // Voice::Construct(lpOwnerModule, liIndex, lpGlobalSpecTable, luNameHash)
@@ -112,13 +98,13 @@ void Voice::Destruct()
 
     Playback::Voice* lpVoice = mVoiceHandle.GetObject();
 
-    // E_PLAYBACK_STATE_PLAYING (==2) must not be the current state.
-    CGS_ASSERT((GetPlaybackStateByte(lpVoice) & 0x7F) != 2,
+    // E_PLAYBACK_STATE_PLAYING must not be the current state.
+    CGS_ASSERT(Playback::E_PLAYBACK_STATE_PLAYING != lpVoice->GetPlaybackState(),
                "E_PLAYBACK_STATE_PLAYING != GetPlaybackState()");
 
-    // FLAG: PLAYBACK-LAYER LAYOUT REACH -- write the Playback::Voice state byte at
-    // +0x11 (the X360 `*(v2+17) = 2`). Belongs to the unreconstructed Playback::Voice.
-    *(reinterpret_cast<u8*>(lpVoice) + 0x11) = 2;
+    // Mark the playback voice REMOVING (the X360 `*(v2+17) = 2` -- mu8RemoveState
+    // by name).
+    lpVoice->SetRemoveState(Playback::E_VOICE_REMOVE_REMOVING);
 
     // FLAG: STUB -- the X360 calls CgsSound::Playback::Object::Release() to drop the
     // ref count and (at zero) dispose the playback voice.
@@ -145,11 +131,10 @@ s32 Voice::Connect(Ident luSendNameHash, s32 liSend)
 
     Playback::Voice* lpVoice = mVoiceHandle.GetObject();
 
-    // Take a temporary reference for the duration of the connect (X360 ++*(v7+4)).
-    // FLAG: PLAYBACK-LAYER LAYOUT REACH -- the Playback::Voice/Object ref count lives
-    // at +0x04. Bumped here exactly as the X360 does (`++*(v7+4)`).
+    // Take a temporary reference for the duration of the connect -- the X360
+    // `++*(v7+4)` is Playback::Object::Acquire inlined (mu32RefCount by name).
     if (lpVoice)
-        ++(*(reinterpret_cast<u32*>(reinterpret_cast<u8*>(lpVoice) + 0x04)));
+        lpVoice->Acquire();
 
     // FLAG: STUB -- the actual connect is a Playback-layer call.
     //   BLOCKS ON: CgsSound::Playback::Module::Module::ConnectVoice
@@ -172,10 +157,9 @@ s32 Voice::GetIdent() const
     CGS_ASSERT(mVoiceHandle.GetObject(), "Content not yet created!");
     CGS_ASSERT(mVoiceHandle.GetObject(), "mpObject");
 
-    // FLAG: PLAYBACK-LAYER LAYOUT REACH -- ident at Playback::Voice+0x0C (X360
-    // `*(obj+12)`). Belongs to the unreconstructed Playback::Voice.
+    // The X360 `*(obj+12)` == Playback::Voice::mIdent, read by name.
     const Playback::Voice* lpVoice = mVoiceHandle.GetObject();
-    return *(reinterpret_cast<const s32*>(reinterpret_cast<const u8*>(lpVoice) + 0x0C));
+    return static_cast<s32>(lpVoice->GetIdent());
 }
 
 // ----------------------------------------------------------------------------
@@ -189,7 +173,7 @@ bool Voice::IsPlaying() const
     if (!lpVoice)
         return false;
 
-    return (GetPlaybackStateByte(lpVoice) & 0x7F) == 2;
+    return lpVoice->GetPlaybackState() == Playback::E_PLAYBACK_STATE_PLAYING;
 }
 
 // ----------------------------------------------------------------------------
@@ -206,7 +190,7 @@ bool Voice::IsReady() const
     if (!lpVoice)
         return false;
 
-    return (GetPlaybackStateByte(lpVoice) & 0x7F) != 0;
+    return lpVoice->GetPlaybackState() != Playback::E_PLAYBACK_STATE_INVALID;
 }
 
 // ----------------------------------------------------------------------------

@@ -10,8 +10,9 @@
 //   GetHeader                  @0x82B8F3F0
 //   ProcessHeader              @0x82B8F128
 //   `vector deleting destructor'@0x82B94FB0
-//   PolySynth                  @0x82B8EE50 -- BLOCKED, NOT reconstructed here (see below);
-//                                only declared in CMpegBase.h.
+//   PolySynth                  @0x82B8EE50 -- reconstructed in MpegBase_wM_01.cpp:338
+//                                (NOT here; this TU only declares it. The old BLOCKED
+//                                claim below is historical -- retired 2026-08-25).
 //
 // PolySynth needs the un-recovered poly-phase synthesis-window coefficient rodata
 // (unk_82159D70 / unk_82159DB0) and the un-homed matrixing helper sub_82B8E258, and its

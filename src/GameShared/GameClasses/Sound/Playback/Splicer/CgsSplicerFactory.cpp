@@ -1,6 +1,7 @@
 #include "types.hpp"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Sound/Playback/Splicer/CgsSplicerFactory.h"  // the REAL SplicerFactory : public Factory
 
 // ============================================================================
 // GameShared/GameClasses/Sound/Playback/Splicer/CgsSplicerFactory.cpp
@@ -45,19 +46,10 @@ namespace CgsSound
 namespace Playback
 {
 
-// CgsSplicerFactory.h:58 (DWARF). The splice-voice factory. Modelled here only far
-// enough to home its assertion sink; the full SplicerFactory (ctor/Create/
-// DoCreateVoice/DoCreateContent/DoUpdate/AddRegistry/accessors over mpRegistry,
-// mhRwacFactory, mpManager) is DEFERRED to its own TU -- those are engine-gated
-// (Registry / GenericRwacFactory / SpliceManager) and outside this slice.
-struct SplicerFactory
-{
-    // Fire the splice factory's assertion with the given
-    // expression text. @ 0x8268ABA0. Returns the assert front-end's leave result
-    // (the X360 EndAssert pointer), modelled as void* by NAME.
-    void* SplicerAssertFunc(const char* lpcExpression);
-};
-
+// SplicerAssertFunc is a member of the REAL SplicerFactory (: public Factory,
+// Splicer/CgsSplicerFactory.h) -- the TU-local rival struct an earlier revision
+// defined here (base-less, member-less) was an ODR violation against that header
+// and was retired 2026-08-25 (audio-faithfulness wave 1).
 void* SplicerFactory::SplicerAssertFunc(const char* lpcExpression)
 {
     // Null-argument fallback, reproduced exactly from the X360 (`<NULLSTRING>`).

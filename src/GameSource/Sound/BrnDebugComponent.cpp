@@ -21,11 +21,15 @@ DebugComponent::DebugComponent()
     : CgsDev::DebugComponent()   // installs the base, then this type's vtable (the +0x00 store)
 {
     // Two embedded event-queue accumulators: install a vtable slot and zero the count (the X360's
-    // folded BasePriorityQueue::Clear). The vtable addresses (off_820CDEF0 / off_820CDEF8) are guest
-    // data-segment pointers; held as named constants so the observable store is reproduced.
-    mEventQueueA.mpVtable     = reinterpret_cast<void*>(0x820CDEF0ull);
+    // folded BasePriorityQueue::Clear). The X360 writes the guest vtable addresses off_820CDEF0 /
+    // off_820CDEF8 here; those are guest data-segment pointers with NO host mapping, so storing
+    // their raw values into a host pointer field would arm a wild indirect jump. Until the
+    // accumulators' real class (and thus a real host vtable) is reconstructed, the slot is nulled
+    // -- the observable "a vtable pointer is installed + count is zeroed" is modelled with the
+    // guest values kept HERE in the comment only (fixed 2026-08-25, audio-faithfulness wave 1).
+    mEventQueueA.mpVtable     = nullptr;   // X360: off_820CDEF0
     mEventQueueA.muNumEntries = 0;
-    mEventQueueB.mpVtable     = reinterpret_cast<void*>(0x820CDEF8ull);
+    mEventQueueB.mpVtable     = nullptr;   // X360: off_820CDEF8
     mEventQueueB.muNumEntries = 0;
 
     // mLogWindow and mStatistics construct via their member default constructors (the X360's

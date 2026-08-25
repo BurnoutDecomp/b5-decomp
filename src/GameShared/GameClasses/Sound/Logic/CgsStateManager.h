@@ -4,6 +4,7 @@
 #include "types.hpp"
 
 #include "GameShared/GameClasses/Sound/CgsMemBase.h"            // CgsSound::MemBase
+#include "GameShared/GameClasses/Sound/Logic/CgsClassTypeInfo.h" // ClassTypeInfo<T> (canonical)
 #include "GameShared/GameClasses/Containers/CgsObjectPool.h"     // CgsContainers::ObjectPool
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Sound/Playback/CgsObject.h"     // CgsSound::Playback::Object
@@ -94,31 +95,11 @@ namespace CgsSound
 namespace Logic
 {
 
-// CgsStateManager.h:313 (DWARF). Per-class RTTI descriptor for the StateManager
-// family, templated on the leaf class. Same shape as the EffectBase/State-family
-// descriptor; declared here too because CgsStateManager.h is never co-included with
-// the other RTTI homes in a single TU, so there is no ODR clash. StateManager's
-// RTTI-registration (AddToClassTypeInfoArray @ 0x8268DFE8) registers
-// ClassTypeInfo<StateManager> descriptors into a separate static array.
-template <typename T>
-struct ClassTypeInfo
-{
-    ClassTypeInfo(s32 aiObjectID,
-                  const char* apcTypeName,
-                  ClassTypeInfo<T>* apBaseTypeInfo,
-                  T* (*apfnCreateObject)(u32))
-        : ObjectID(aiObjectID)
-        , typeName(apcTypeName)
-        , baseTypeInfo(apBaseTypeInfo)
-        , createObject(apfnCreateObject)
-    {
-    }
-
-    s32               ObjectID;     // CgsStateManager.h:316
-    const char*       typeName;     // CgsStateManager.h:317
-    ClassTypeInfo<T>* baseTypeInfo; // CgsStateManager.h:318
-    T* (*createObject)(u32);        // CgsStateManager.h:319
-};
+// CgsStateManager.h:313 (DWARF). Per-class RTTI descriptor -- CANONICAL definition
+// folded into CgsClassTypeInfo.h (2026-08-25; the per-header copies were an ODR
+// violation). StateManager's RTTI-registration (AddToClassTypeInfoArray
+// @ 0x8268DFE8) registers ClassTypeInfo<StateManager> descriptors into a separate
+// static array.
 
 class StateManager : public CgsSound::MemBase
 {

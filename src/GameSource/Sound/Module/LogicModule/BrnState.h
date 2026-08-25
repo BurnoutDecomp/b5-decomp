@@ -2,6 +2,7 @@
 #define BRN_SOUND_LOGIC_BRN_STATE_H
 
 #include "types.hpp"
+#include "GameShared/GameClasses/Sound/Logic/CgsClassTypeInfo.h"  // ClassTypeInfo<T> (canonical)
 
 // =============================================================================
 // BrnSound::Logic::BrnState
@@ -53,20 +54,10 @@ namespace CgsSound
 namespace Logic
 {
 
-// Per-class RTTI descriptor. CgsState.h (DWARF). Templated on the leaf class;
-// only the shape (id/name/base/factory) is load-bearing here. Field names match
-// the aggregate-init usage in the already-committed BrnPassbyState.cpp
-// (GetStaticTypeInfo @ 0x82688FC8).
-// FLAG: minimal — the owning CgsState/CgsEffectBase RTTI home is not yet
-// reconstructed; this is the shape needed to declare BrnState-derived RTTI hooks.
-template <typename T>
-struct ClassTypeInfo
-{
-    s32               ObjectID;
-    const char*       mpcTypeName;
-    ClassTypeInfo<T>* mpBaseTypeInfo;
-    T* (*mpfnCreateObject)(u32);
-};
+// Per-class RTTI descriptor. CgsState.h (DWARF). CANONICAL definition folded into
+// GameShared/.../Sound/Logic/CgsClassTypeInfo.h (2026-08-25, audio-faithfulness
+// wave 1 -- the per-header aggregate copies were an ODR violation; canonical member
+// names: typeName / baseTypeInfo / createObject).
 
 // CgsState.h:75 (DWARF): CgsSound::Logic::State : public CgsSound::MemBase.
 // Engine sound-logic state base. Only the RTTI virtuals overridden by BrnState's

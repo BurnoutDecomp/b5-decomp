@@ -2,6 +2,7 @@
 #define CGS_SOUND_LOGIC_CGSMICROPHONE_H
 
 #include "types.hpp"
+#include "GameShared/GameClasses/Sound/CgsSoundUtils.h"  // CgsSound::Utils::DataPoint (canonical)
 
 // rw::math::vpu Vector3/Matrix44Affine TYPES and the canonical Vector3 operation
 // vocabulary (operator- / operator/(scalar) / Normalize / IsValid) live in the
@@ -36,43 +37,13 @@
 // 64-bit host and are static_asserted below.
 // =============================================================================
 
-namespace Utils
-{
-// Generic two-frame value holder (current + previous). The microphone matrix is a
-// DataPoint<Matrix44Affine>; Reset seeds both halves, Update copies current->previous.
-template <typename T>
-struct DataPoint
-{
-    T mCurrent;
-    T mPrevious;
-
-    void Reset(const T& lValue)
-    {
-        mCurrent = lValue;
-        mPrevious = lValue;
-    }
-
-    // Push a new current value, shifting the old current into previous. Matches the
-    // X360 SetMicrophoneMatrix store sequence: it loads the OLD current rows
-    // (this+0x00..0x3F) into the previous half (this+0x40..0x7F) FIRST, then stores
-    // the new value into the current half -- NOT Reset (which would seed both halves).
-    void Set(const T& lValue)
-    {
-        mPrevious = mCurrent;
-        mCurrent  = lValue;
-    }
-
-    const T& GetCurrent() const
-    {
-        return mCurrent;
-    }
-
-    const T& GetPrevious() const
-    {
-        return mPrevious;
-    }
-};
-}
+// The microphone matrix is a two-frame value holder (current + previous):
+// CgsSound::Utils::DataPoint<Matrix44Affine> -- the DWARF-homed generic
+// (CgsSoundUtils.h:31; Flush seeds both halves, Update shifts current->previous
+// exactly as the X360 SetMicrophoneMatrix store sequence does). An earlier
+// revision fabricated a rival global-namespace `::Utils::DataPoint` here
+// (mCurrent/mPrevious, Set/Reset API) shadowing that home -- retired 2026-08-25
+// (audio-faithfulness wave 1).
 
 namespace CgsSound
 {
@@ -107,7 +78,7 @@ public:
         {
             rw::math::vpu::Matrix44Affine lIdentity;
             lIdentity.SetIdentity();
-            mMicrophoneMatrix.Reset(lIdentity);
+            mMicrophoneMatrix.Flush(lIdentity);   // seed both halves (canonical DataPoint::Flush)
             mDirection = rw::math::vpu::Vector3();
             mVelocity = rw::math::vpu::Vector3();
         }
@@ -125,8 +96,10 @@ public:
             mVelocity = (lCurrent.wAxis - lPrevious.wAxis) / lfFrameTime;
         }
 
-        // @ 0x826AB8A8. Validate the incoming microphone matrix is finite, then seed
-        // BOTH the current and the previous halves of the two-frame matrix with it.
+        // @ 0x826AB8A8. Validate the incoming microphone matrix is finite, then PUSH
+        // it into the two-frame buffer (previous <- old current, current <- source;
+        // the asm copies the old current rows into the previous half FIRST -- i.e.
+        // DataPoint::Update, NOT Flush).
         void SetMicrophoneMatrix(const rw::math::vpu::Matrix44Affine& lrMatrix);
 
         // @ 0x826ABAE8. Read accessor for the current microphone matrix. Validates that
@@ -138,7 +111,7 @@ public:
         const rw::math::vpu::Matrix44Affine& GetMicrophoneMatrix() const;
 
     private:
-        Utils::DataPoint<rw::math::vpu::Matrix44Affine> mMicrophoneMatrix;
+        CgsSound::Utils::DataPoint<rw::math::vpu::Matrix44Affine> mMicrophoneMatrix;
         rw::math::vpu::Vector3 mDirection;
         rw::math::vpu::Vector3 mVelocity;
     };
@@ -157,7 +130,7 @@ private:
 
 static_assert(sizeof(rw::math::vpu::Vector3) == 16, "Vector3 layout drift");
 static_assert(sizeof(rw::math::vpu::Matrix44Affine) == 64, "Matrix44Affine layout drift");
-static_assert(sizeof(Utils::DataPoint<rw::math::vpu::Matrix44Affine>) == 128, "DataPoint<Matrix44Affine> layout drift");
+static_assert(sizeof(CgsSound::Utils::DataPoint<rw::math::vpu::Matrix44Affine>) == 128, "DataPoint<Matrix44Affine> layout drift");
 static_assert(sizeof(MicrophoneSystem::Microphone) == 0xA0, "Microphone layout drift");
 static_assert(sizeof(MicrophoneSystem) == 0x290, "MicrophoneSystem layout drift");
 

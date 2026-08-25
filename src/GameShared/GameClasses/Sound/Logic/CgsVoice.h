@@ -59,8 +59,8 @@ namespace CgsSound
 namespace Playback
 {
 // Forward-declared: the reference-counted PLAYBACK voice this logic Voice wraps via
-// mVoiceHandle. Its full definition lives in the (not-yet-reconstructed) Playback
-// layer (Sound/Playback/CgsVoice.h). We only ever hold a Handle to it here.
+// mVoiceHandle. Its full definition lives in Sound/Playback/CgsVoice.h (RECONSTRUCTED
+// -- the .cpp includes it and reaches the fields by name). Only a Handle is held here.
 class Voice;
 }
 

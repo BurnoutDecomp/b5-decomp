@@ -95,6 +95,17 @@ namespace Playback
         virtual ~Object() {}
         virtual void DoDispose() {}
 
+        // CgsObject.h:108 (DWARF home; mirrored from the canonical Playback/CgsObject.h
+        // copy per its CONDUCTOR fold note). Take a reference -- the X360 inlines this
+        // as `++*(obj+4)` at the call sites (e.g. Logic::Voice::Connect @0x826C4F18).
+        // FLAG: shape-only ++ (no recon'd standalone asm); no fabricated guard assert.
+        void Acquire() { ++mu32RefCount; }
+
+        // CgsObject.h:115 (DWARF home; mirrored -- see Acquire). Drop a reference.
+        // FLAG: shape-only (the dispose-at-zero leg lives with Playback::Object::Release
+        // proper, not this inline).
+        void Release() { --mu32RefCount; }
+
     protected:
         u32 mu32RefCount;
     };

@@ -44,27 +44,14 @@
 //
 // The stored "pointers" are byte offsets pre-relocation, so the rebase is pointer
 // arithmetic on a byte delta -- modelled BY NAME on byte-addressed members. The
-// Resource is reached only for its base-address word; it is forward-modelled with
-// a single base accessor (the `*a2` first-word read) rather than pulling in the full
-// rw::Resource surface (deferred to its own TU).
+// Resource parameter is the REAL vendor rw::Resource (rw/rwcore_structs.h:73,
+// : public BaseResources<4>); the X360/PS3 first-word load (`lwz r11,0(r4)`) is
+// its m_baseResources[0] slot, read by name below. (An earlier revision of this TU
+// fabricated a local single-word rw::Resource -- an ODR violation against the
+// vendor type, retired 2026-08-25 audio-faithfulness wave 1.)
 // ============================================================================
 
-namespace rw
-{
-    // The owning resource. FixUp reads only its first word -- the address of the
-    // deserialised blob's base, against which the node's stored byte offsets are
-    // rebased into live pointers. Forward-modelled BY NAME (the PS3 `lwz r11,0(r4)`
-    // is exactly this load); the full rw::Resource is another TU.
-    struct Resource
-    {
-        // The blob base address. Stored as the resource's first word; FixUp loads it
-        // as `*a2`.
-        uintptr_t muBaseAddress;
-
-        // Read the relocation base. Named replacement for the raw first-word load.
-        uintptr_t GetBaseAddress() const { return muBaseAddress; }
-    };
-}
+#include "rw/rwcore_structs.h"   // the REAL rw::Resource (BaseResources<4>)
 
 namespace CgsSound
 {
@@ -119,8 +106,9 @@ private:
 
 void VoiceHierarchyNode::FixUp(const rw::Resource& lrResource)
 {
-    // delta = base address of the deserialised blob (the PS3 `*a2`).
-    const uintptr_t luDelta = lrResource.GetBaseAddress();
+    // delta = base address of the deserialised blob -- the resource's first word
+    // (the PS3 `*a2` == rw::BaseResources<4>::m_baseResources[0], read by name).
+    const uintptr_t luDelta = reinterpret_cast<uintptr_t>(lrResource.m_baseResources[0]);
 
     // Relocate the debug-name offset into a live pointer (only if present).
     if (mpcDebugName != 0)

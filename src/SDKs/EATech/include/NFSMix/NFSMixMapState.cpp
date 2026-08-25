@@ -59,40 +59,65 @@ int NFSMixMapState::GetStateRefCount()
 // ---------------------------------------------------------------------------
 stMixCtlProc* NFSMixMapState::GetMixCtlProc(unsigned char procIdx, int copyIdx)
 {
+    // X360 null test is on the COMPUTED &base[copyIdx] (base null + idx 0 -> 0); on the
+    // host that indexing is UB-on-null and the compiler deletes a post-index !st check --
+    // so the guard is hoisted onto the base pointer itself (fixed 2026-08-25, wave 1).
+    if (m_pFirstInstance == 0)
+        return 0;
     NFSMixMapState* st = &m_pFirstInstance[copyIdx];
-    if (!st || static_cast<int>(procIdx) >= st->m_MixCtlsAdded)
+    if (static_cast<int>(procIdx) >= st->m_MixCtlsAdded)
         return 0;
     return &st->m_MixStateParams.pMixCtlProcs[procIdx];
 }
 
 st3DMixCtlProc* NFSMixMapState::Get3DMixCtlProc(unsigned char procIdx, int copyIdx)
 {
+    // X360 null test is on the COMPUTED &base[copyIdx] (base null + idx 0 -> 0); on the
+    // host that indexing is UB-on-null and the compiler deletes a post-index !st check --
+    // so the guard is hoisted onto the base pointer itself (fixed 2026-08-25, wave 1).
+    if (m_pFirstInstance == 0)
+        return 0;
     NFSMixMapState* st = &m_pFirstInstance[copyIdx];
-    if (!st || static_cast<int>(procIdx) >= st->m_3DMixCtlsAdded)
+    if (static_cast<int>(procIdx) >= st->m_3DMixCtlsAdded)
         return 0;
     return &st->m_MixStateParams.p3DMixCtlProc[procIdx];
 }
 
 stEvtMixCtlProc* NFSMixMapState::GetEvtMixCtlProc(unsigned char procIdx, int copyIdx)
 {
+    // X360 null test is on the COMPUTED &base[copyIdx] (base null + idx 0 -> 0); on the
+    // host that indexing is UB-on-null and the compiler deletes a post-index !st check --
+    // so the guard is hoisted onto the base pointer itself (fixed 2026-08-25, wave 1).
+    if (m_pFirstInstance == 0)
+        return 0;
     NFSMixMapState* st = &m_pFirstInstance[copyIdx];
-    if (!st || static_cast<int>(procIdx) >= st->m_EvtMixCtlsAdded)
+    if (static_cast<int>(procIdx) >= st->m_EvtMixCtlsAdded)
         return 0;
     return &st->m_MixStateParams.pEvtMixCtlProc[procIdx];
 }
 
 stSubMixChProc* NFSMixMapState::GetSubMixChProc(unsigned char procIdx, int copyIdx)
 {
+    // X360 null test is on the COMPUTED &base[copyIdx] (base null + idx 0 -> 0); on the
+    // host that indexing is UB-on-null and the compiler deletes a post-index !st check --
+    // so the guard is hoisted onto the base pointer itself (fixed 2026-08-25, wave 1).
+    if (m_pFirstInstance == 0)
+        return 0;
     NFSMixMapState* st = &m_pFirstInstance[copyIdx];
-    if (!st || static_cast<int>(procIdx) >= st->m_SubMixChannelsAdded)
+    if (static_cast<int>(procIdx) >= st->m_SubMixChannelsAdded)
         return 0;
     return &st->m_MixStateParams.pSubMixChProcs[procIdx];
 }
 
 stMasterMixChProc* NFSMixMapState::GetMasterMixChProc(unsigned char procIdx, int copyIdx)
 {
+    // X360 null test is on the COMPUTED &base[copyIdx] (base null + idx 0 -> 0); on the
+    // host that indexing is UB-on-null and the compiler deletes a post-index !st check --
+    // so the guard is hoisted onto the base pointer itself (fixed 2026-08-25, wave 1).
+    if (m_pFirstInstance == 0)
+        return 0;
     NFSMixMapState* st = &m_pFirstInstance[copyIdx];
-    if (!st || static_cast<int>(procIdx) >= st->m_MasterChannelsAdded)
+    if (static_cast<int>(procIdx) >= st->m_MasterChannelsAdded)
         return 0;
     return &st->m_MixStateParams.pMasterMixChProcs[procIdx];
 }
@@ -186,6 +211,15 @@ void NFSMixMapState::CreateMixCtls()
 
         // AssignMixCtlDataPtrs links the freshly-allocated shared+unique records into lpProc.
         lpMap->AssignMixCtlDataPtrs(lpProc, lpEntry, m_ObjectIndex, liChannel);
+
+        // FLAG (stub interaction guard, 2026-08-25 wave 1): AssignMixCtlDataPtrs is
+        // currently an empty link-stub (NFSMixMapLinkStubs.cpp @0x82B4A1D8 pending),
+        // so lpProc->psdata stays null and the stores below would null-deref the
+        // moment CreateMixCtls first runs. Bail out until the real body lands (the
+        // X360 has no such branch -- remove the guard with the stub; `break`, not
+        // `continue`, because the entry-stride advance sits at the loop bottom).
+        if (lpProc == 0 || lpProc->psdata == 0)
+            break;
 
         stMixCtlSharedData* lpShared = lpProc->psdata;
         lpShared->MIXCTLOBJID    = (lpMap->m_MapType << 8)

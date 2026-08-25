@@ -147,7 +147,7 @@ CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager>* EmitterStateManag
     static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager> sTypeInfo(
         7,                       // ObjectID (PS3 DecFIGS __static_init 0x85FA1C: EmitterStateManager::sTypeInfo.ObjectID = 7)
         "EmitterStateManager",   // typeName
-        0,                       // baseTypeInfo     -- StateManager base descriptor (deferred)
+        CgsSound::Logic::StateManager::GetStaticTypeInfo(), // baseTypeInfo (PS3 0x85FA1C: =StateManager::GetStaticTypeInfo(); was 0 -- reconciled to the 7 siblings 2026-08-25)
         &EmitterStateManager::CreateObject // createObject
     );
     return &sTypeInfo;
@@ -165,8 +165,8 @@ CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager>* EmitterStateManag
 // (0x85FA1C) sets EmitterStateManager::sTypeInfo.ObjectID = 7 and appends &sTypeInfo to
 // CgsSound::Logic::StateManager::ClassTypeInfoArray -- exactly the registration this
 // static-init reproduces (the descriptor is seeded 7 by GetStaticTypeInfo, then inserted
-// here). This TU is OUT of the build, so the registration is dormant until the conductor
-// adds it.
+// here). NOTE (2026-08-25): this TU IS in the game build (build_game_exe.bat) -- the
+// registration runs at static-init and CreateStateManagers constructs this manager at boot.
 // ---------------------------------------------------------------------------
 static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager>* const
     gpEmitterStateManagerReg =

@@ -3,6 +3,7 @@
 
 #include "types.hpp"
 #include "GameShared/GameClasses/Sound/CgsMemBase.h"
+#include "GameShared/GameClasses/Sound/Logic/CgsClassTypeInfo.h"  // ClassTypeInfo<T> (canonical)
 #include "SDKs/EATech/include/Nicotine/DMixIO.hpp" // Nicotine::DMixIO (mpDynamicMixIo)
 
 // =============================================================================
@@ -51,29 +52,9 @@ struct Module;
 
 const s32 KI_MAX_IO_CONNECTIONS = 16; // CgsEffectBase.h:57 (DWARF)
 
-// CgsEffectBase.h:313 (DWARF). Per-class RTTI descriptor. Templated on the leaf
-// class; holds the object id, type name, base descriptor and a factory hook.
-template <typename T>
-struct ClassTypeInfo
-{
-    ClassTypeInfo(s32 aiObjectID,
-                  const char* apcTypeName,
-                  ClassTypeInfo<T>* apBaseTypeInfo,
-                  T* (*apfnCreateObject)(u32))
-        : ObjectID(aiObjectID)
-        , typeName(apcTypeName)
-        , baseTypeInfo(apBaseTypeInfo)
-        , createObject(apfnCreateObject)
-    {
-    }
-
-    T* CreateObject(u32 au32Param) { return createObject ? createObject(au32Param) : nullptr; }
-
-    s32               ObjectID;     // CgsEffectBase.h:316
-    const char*       typeName;     // CgsEffectBase.h:317
-    ClassTypeInfo<T>* baseTypeInfo; // CgsEffectBase.h:318
-    T* (*createObject)(u32);        // CgsEffectBase.h:319
-};
+// CgsEffectBase.h:313 (DWARF). Per-class RTTI descriptor -- CANONICAL definition
+// folded into CgsClassTypeInfo.h (2026-08-25; the per-header copies were an ODR
+// violation). Included ABOVE the family surface it describes.
 
 // CgsEffectBase.h:379 (DWARF): CgsSound::Logic::EffectBase : public CgsSound::MemBase.
 // Engine effect base: owns the attach/detach state machine, the per-effect timing,

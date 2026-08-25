@@ -2,6 +2,7 @@
 #define CGS_SOUND_LOGIC_CGSSTATE_H
 
 #include "types.hpp"
+#include "GameShared/GameClasses/Sound/Logic/CgsClassTypeInfo.h"  // ClassTypeInfo<T> (canonical)
 
 #include "GameShared/GameClasses/Sound/CgsMemBase.h" // CgsSound::MemBase (the base)
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleEvents.h" // BrnPhysics::Vehicle::RaceCarState (committed)
@@ -48,31 +49,10 @@ struct Module;
 // CgsState.h:57 (DWARF).
 const s32 MAX_NUM_SFXOBJS_PER_STATE = 32;
 
-// CgsState.h:313 (DWARF). Per-class RTTI descriptor, templated on the leaf class;
-// holds the object id, type name, base descriptor and a factory hook. Same shape as
-// the EffectBase-family descriptor (CgsEffectBase.h:313); declared here too because
-// CgsState.h is never co-included with CgsEffectBase.h in the same TU (each home is
-// included only by its own .cpp), so there is no ODR clash. State's RTTI-registration
-// (AddToClassTypeInfoArray @ 0x8268DF08) registers ClassTypeInfo<State> descriptors.
-template <typename T>
-struct ClassTypeInfo
-{
-    ClassTypeInfo(s32 aiObjectID,
-                  const char* apcTypeName,
-                  ClassTypeInfo<T>* apBaseTypeInfo,
-                  T* (*apfnCreateObject)(u32))
-        : ObjectID(aiObjectID)
-        , typeName(apcTypeName)
-        , baseTypeInfo(apBaseTypeInfo)
-        , createObject(apfnCreateObject)
-    {
-    }
-
-    s32               ObjectID;     // CgsState.h:316
-    const char*       typeName;     // CgsState.h:317
-    ClassTypeInfo<T>* baseTypeInfo; // CgsState.h:318
-    T* (*createObject)(u32);        // CgsState.h:319
-};
+// CgsState.h:313 (DWARF). Per-class RTTI descriptor -- CANONICAL definition folded
+// into CgsClassTypeInfo.h (2026-08-25; the per-header copies were an ODR violation).
+// State's RTTI-registration (AddToClassTypeInfoArray @ 0x8268DF08) registers
+// ClassTypeInfo<State> descriptors.
 
 // CgsState.h:132 (DWARF). The sound-logic state base.
 struct State : public CgsSound::MemBase

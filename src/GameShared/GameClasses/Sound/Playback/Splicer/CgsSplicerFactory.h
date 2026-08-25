@@ -36,6 +36,10 @@ struct SplicerFactory : public Factory
     // @ 0x826DB0E0. Empty out-of-line dtor (Factory base dtor runs implicitly).
     virtual ~SplicerFactory();
 
+    // @ 0x8268ABA0. The splice factory's assertion sink (always fires; returns the
+    // assert front-end's leave result). Bodied in CgsSplicerFactory.cpp.
+    void* SplicerAssertFunc(const char* lpcExpression);
+
 private:
     Registry*                  mpRegistry;     // CgsSplicerFactory.h:128
     Handle<GenericRwacFactory> mhRwacFactory;  // CgsSplicerFactory.h:129

@@ -228,6 +228,31 @@ public:
     // @ 0x82680E18. Set low-7-bit playback state, raising 0x80 CHANGED iff it moves.
     void SetPlaybackState(EPlaybackState aeState);
 
+    // Masked playback-state read. INLINE in the original (every Logic::Voice caller
+    // reads `*(obj+0x10) & 0x7F`, and the Destruct assert string names it verbatim:
+    // "E_PLAYBACK_STATE_PLAYING != GetPlaybackState()" @0x826C4E38) -- so the method
+    // existed and this is its recovered shape, not an invention.
+    EPlaybackState GetPlaybackState() const
+    {
+        return static_cast<EPlaybackState>(mu8PlaybackState & 0x7F);
+    }
+
+    // Ident read. INLINE in the original (Logic::Voice::GetIdent @0x826AD988 returns
+    // `*(obj+12)` -- this member by name).
+    u32 GetIdent() const { return mIdent; }
+
+    // Removal-lifecycle byte access. INLINE in the original (Logic::Voice::Destruct
+    // @0x826C4E38 stores `*(obj+0x11) = 2` == E_VOICE_REMOVE_REMOVING; Play/Stop
+    // @0x826C5068/0x826C5148 test `*(obj+0x11) == 1` == E_VOICE_REMOVE_ALIVE).
+    EVoiceRemoveState GetRemoveState() const
+    {
+        return static_cast<EVoiceRemoveState>(mu8RemoveState);
+    }
+    void SetRemoveState(EVoiceRemoveState aeState)
+    {
+        mu8RemoveState = static_cast<u8>(aeState);
+    }
+
     // @ 0x826A24F0. Per-frame tick (updates slots + DoUpdate, or drives removal).
     void Update(System* apSystem, f32 af32DeltaTime);
 

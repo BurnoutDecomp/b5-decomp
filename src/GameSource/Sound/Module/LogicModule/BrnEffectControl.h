@@ -2,6 +2,7 @@
 #define BRN_SOUND_LOGIC_BRN_EFFECT_CONTROL_H
 
 #include "types.hpp"
+#include "GameShared/GameClasses/Sound/Logic/CgsClassTypeInfo.h"  // ClassTypeInfo<T> (canonical)
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameSource/Sound/BrnResourceRegistrar.h"   // BrnSound::Logic::IResourceRequester + ResourceRegistrar (canonical home)
 
@@ -58,18 +59,10 @@ namespace Logic
 #ifndef CGS_SOUND_LOGIC_EFFECT_ENGINE_TYPES_DEFINED
 #define CGS_SOUND_LOGIC_EFFECT_ENGINE_TYPES_DEFINED
 
-// Per-class RTTI descriptor. CgsEffectBase.h:313 (DWARF). Templated on the leaf
-// class; only the shape (id/name/base/factory) is load-bearing here.
-// FLAG: minimal — the owning CgsEffectBase home is not yet reconstructed; this is
-// the shape needed to declare BrnEffectControl's RTTI hooks.
-template <typename T>
-struct ClassTypeInfo
-{
-    s32               ObjectID;
-    const char*       mpcTypeName;
-    ClassTypeInfo<T>* mpBaseTypeInfo;
-    T* (*mpfnCreateObject)(u32);
-};
+// Per-class RTTI descriptor. CgsEffectBase.h:313 (DWARF). CANONICAL definition
+// folded into GameShared/.../Sound/Logic/CgsClassTypeInfo.h (2026-08-25,
+// audio-faithfulness wave 1 -- the per-header aggregate copies were an ODR
+// violation; canonical member names: typeName / baseTypeInfo / createObject).
 
 // CgsEffectBase.h:379 (DWARF). Engine effect base: owns the attach/detach state
 // machine. Only the members this TU's destructor tears down are reconstructed (by

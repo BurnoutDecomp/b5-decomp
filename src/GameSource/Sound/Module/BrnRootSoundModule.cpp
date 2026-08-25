@@ -201,6 +201,8 @@ namespace Module
             // several seconds and a whole flow transition later, and inside the very frame
             // that wanted to start playing. StreamHeadersPC::Preload does that read now.
             // The full stage stays [gated] on the rw::audio engine; this is its data half.
+            // FLAG (PC leaf): host-only call, no @0x82 anchor of its own -- the console
+            // equivalent is the RegistryLoad + StreamingStateManager::Prepare pair above.
             CgsSystem::StreamHeadersPC::Preload();
             meReleaseStage = E_RELEASESTAGE_REGISTRY_LOAD;
             // fall through
