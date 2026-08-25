@@ -1,11 +1,11 @@
 #include "GameShared/GameClasses/Containers/CgsObjectPool.h"
-#include "GameShared/GameClasses/Sound/Logic/CgsStateManagerRegisteredContent.h"
+#include "GameShared/GameClasses/Sound/Logic/CgsStateManager.h"  // canonical StateManager (RegisteredContent host view retired 2026-08-25, wave 4)
 
 // Explicit instantiation of the ObjectPool<RegisteredContent, 4, int> methods that
 // make up this TU's ledger (all three are inline-generic in CgsObjectPool.h / are
 // the implicit pool destructor). The element type is
 // CgsSound::Logic::StateManager::RegisteredContent (homed in
-// CgsStateManagerRegisteredContent.h); the pool capacity is 4 and the slot index
+// CgsStateManager.h); the pool capacity is 4 and the slot index
 // type is int.
 //
 //   AllocateObject     @ 0x826A70D8  -> generic ObjectPool::AllocateObject()

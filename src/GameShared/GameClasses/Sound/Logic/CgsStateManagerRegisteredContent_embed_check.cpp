@@ -1,11 +1,11 @@
 // Tiny embed/ODR + linkage check for this group's homes:
 //   - CgsSound::MemBase                                     (CgsMemBase.h)
-//   - CgsSound::Logic::StateManager::RegisteredContent      (CgsStateManagerRegisteredContent.h)
+//   - CgsSound::Logic::StateManager::RegisteredContent      (CgsStateManager.h, canonical)
 //   - ObjectPool<RegisteredContent, 4, int>                 (instantiation TU)
 // Exercises each owned surface from a TU other than the home/.cpp so the layouts
 // and signatures compile and link.
 #include "GameShared/GameClasses/Containers/CgsObjectPool.h"
-#include "GameShared/GameClasses/Sound/Logic/CgsStateManagerRegisteredContent.h"
+#include "GameShared/GameClasses/Sound/Logic/CgsStateManager.h"  // canonical StateManager (RegisteredContent host view retired 2026-08-25, wave 4)
 #include "GameShared/GameClasses/Sound/CgsMemBase.h"
 
 namespace CgsSound
