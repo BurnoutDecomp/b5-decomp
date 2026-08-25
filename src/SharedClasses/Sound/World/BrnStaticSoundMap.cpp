@@ -80,18 +80,16 @@ const SubRegionDescriptor* StaticSoundMap::GetSubRegionDescrip(const Vector3& lr
 //   return &mpEntities[liEntityIndex];   // 16-byte stride (asm: 16 * index + mpEntities)
 //
 // The X360 asm reads mpEntities @ +0x30, miNumEntities @ +0x34, and forms the result
-// as `16 * liEntityIndex + mpEntities` (`slwi r11, r29, 4; add`). StaticSoundEntity is a
-// forward-declared element type, so the 16-byte stride (its only X360-attested size) is
-// applied by byte arithmetic rather than a complete-type subscript.
+// as `16 * liEntityIndex + mpEntities` (`slwi r11, r29, 4; add`). StaticSoundEntity is
+// now a COMPLETE 16-byte type (DWARF Vector3Plus record, size static_asserted at the
+// definition), so the walk is a real subscript — the former hardcoded byte stride is
+// retired (2026-08-25, audio-faithfulness wave 2).
 const StaticSoundEntity& StaticSoundMap::GetEntity(s32 liEntityIndex) const
 {
     CGS_ASSERT(mpEntities != 0, "mpEntities");
     CGS_ASSERT(liEntityIndex < miNumEntities, "liEntityIndex < miNumEntities");
 
-    static const s32 KI_ENTITY_STRIDE = 16;   // asm `slwi …, 4`
-    const u8* lpEntity =
-        reinterpret_cast<const u8*>(mpEntities) + (KI_ENTITY_STRIDE * liEntityIndex);
-    return *reinterpret_cast<const StaticSoundEntity*>(lpEntity);
+    return mpEntities[liEntityIndex];
 }
 
 // IsInRange @ 0x82677570

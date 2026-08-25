@@ -665,3 +665,49 @@ int NFSMixMap::AllocateMixerMemory()
         lpAlloc->Allocate(sizeof(stEvtMixCtlProc) * m_EventCtlsAdded, 16, "EvtMixCtl Proc Data Block"));
     return 0;
 }
+
+// ---- RELOCATED HOME (2026-08-25, audio-faithfulness wave 2; from AptRenderLinkStubs.cpp,
+// a 2026-08-07 targeted-export placement artifact) ----
+// NFSMixMap::CreateMainMapState @0x82B49680 (targeted export 2026-08-07) -- build /
+// extend the per-state NFSMixMapState and wire its serialized state header, then run
+// the builder passes on the state copy for this object index:
+//   * first touch of liState: carve the next NFSMixMapState from the state object
+//     block (m_pStateProcMemBlock + the m_CurrentStateProcBlockOffset byte cursor;
+//     console step 0x60 == X360 sizeof) and virtual-Initialize it (vtbl+4).
+//   * AddMixState(liObjIdx, state) @0x82B4D660 (registers/creates the copy).
+//   * the copy's m_pMMStateHdr = blob + stateOffsetTable[liState].
+//   * CreateMixCtls @0x82B4C890 / [Create3DMixCtls -- FLAG below] / CreateEvtMixCtls
+//     @0x82B4CE00 on the copy.
+void NFSMixMap::CreateMainMapState(int liState, int liCopy, int liObjIdx)
+{
+    if (!m_pStateProcs[liState])                                  // +0x98 (lwzx)
+    {
+        // x64 carve stride = sizeof(NFSMixMapState) (the console's raw +0x60 step on
+        // the x64 host is the recurring console-stride corruption class).
+        const int liOffset = m_CurrentStateProcBlockOffset;       // +0x20C (byte cursor)
+        NFSMixMapState* const lpFresh = reinterpret_cast<NFSMixMapState*>(
+            reinterpret_cast<char*>(m_pStateProcMemBlock) + liOffset);   // +0x9C
+        m_CurrentStateProcBlockOffset = liOffset + static_cast<int>(sizeof(NFSMixMapState));
+        m_pStateProcs[liState] = lpFresh;
+        m_pStateProcs[liState]->Initialize(this, liState, liCopy, liObjIdx);   // vtbl+4
+    }
+
+    NFSMixMapState* const lpState = m_pStateProcs[liState];
+    lpState->AddMixState(liObjIdx, lpState);                      // @0x82B4D660
+
+    // The per-state header record inside the loaded MixMap blob: the state-offset
+    // table sits at blob + StateTableOffset (blob word 2); entry liState is the
+    // record's own blob offset.
+    char* const lpBlob = reinterpret_cast<char*>(m_pMMHdr);       // +0x74 (the serialized MixMap blob)
+    const int liStateOffset =
+        reinterpret_cast<const int*>(lpBlob + m_pMMHdr->StateTableOffset)[liState];   // serialized blob state table
+    NFSMixMapState* const lpProc = lpState->GetMixMapProc(liObjIdx);   // @0x82B4D648
+    lpProc->m_pMMStateHdr =
+        reinterpret_cast<stMixMapStateHdr*>(lpBlob + liStateOffset);   // +0x1C (serialized blob record)
+
+    lpProc->CreateMixCtls();      // @0x82B4C890
+    // FLAG (deferred): the console calls NFSMixMapState::Create3DMixCtls @0x82B4D100
+    // here -- un-reconstructed AND undeclared in NFSMixMapState.hpp (out of this
+    // TU's file set); the state's 3D mix-ctl procs are not built until it lands.
+    lpProc->CreateEvtMixCtls();   // @0x82B4CE00
+}

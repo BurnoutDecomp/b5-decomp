@@ -107,3 +107,47 @@ void NFSMixMaster::ProcessMixMap(float lfDeltaTime, int liCamState)
         return;
     m_pMainMixMap->ProcessMixMap(lfDeltaTime, liCamState); // vtable[2]
 }
+
+// ---- RELOCATED HOME (2026-08-25, audio-faithfulness wave 2; from AptRenderLinkStubs.cpp,
+// a 2026-08-07 targeted-export placement artifact) ----
+// NFSMixMaster::InitMixMap @0x82B45920 -- the asm is exported and decoded, and its
+// callee NFSMixMap::CreateMainMapState @0x82B49680 is now homed (below), but the
+// body still needs NFSMixMap::AllocateInputArrays @0x82B4A120 and InitMainMapStates
+// @0x82B4ABD0 (declared-only in NFSMixMap.hpp; bodies deferred in the NFSMix
+// cluster -- both now have per-address dossiers in the export dir), so a faithful
+// body here would still trade the stub for unresolved externals.
+void NFSMixMaster::InitMixMap()                  {}   // FLAG link-stub (blocked on AllocateInputArrays/InitMainMapStates)
+
+// NFSMixMaster::DestroyMainMainMap @0x82B457E0 (targeted export 2026-08-07) -- tear
+// down the owned main map + the load bookkeeping. The console: DestroyMainMixMap on
+// the map, then (*vt[0])(map, 1) == the NFSMixMap scalar-deleting dtor, null the
+// slot; m_bMapReady = 0 (unconditional stb 0x70); null m_pMainMixMapData if set.
+// The virtual delete is expressed as the explicit dtor + mixer-allocator Free -- the
+// committed ~NFSMixMaster idiom (NFSMixMaster.cpp). The console reloads
+// m_pMainMixMap between the two calls; it is the same pointer either way
+// (DestroyMainMixMap does not clear it).
+// FLAG (deferred): the console FIRST calls NFSMixMap::DestroyMainMixMap @0x82B47E78
+// (the AllocateMixerMemory block-free inverse) -- un-exported in this dossier set
+// AND undeclared in NFSMixMap.hpp (out of this TU's file set); until it lands the
+// mixer-memory blocks are not freed here (the PC boot path never tears the map
+// down mid-run).
+void NFSMixMaster::DestroyMainMainMap()
+{
+    if (m_pMainMixMap)                    // +0x00
+    {
+        // FLAG deferred (see above): m_pMainMixMap->DestroyMainMixMap() @0x82B47E78.
+        m_pMainMixMap->~NFSMixMap();                   // (*vt[0])(map, 1) ...
+        g_pMixerAllocator->Free(m_pMainMixMap, 0);     // ... == dtor + mixer-heap free
+        m_pMainMixMap = 0;                             // stw 0 -> +0x00
+    }
+    m_bMapReady = false;                  // stb 0x70 (unconditional)
+    if (m_pMainMixMapData)                // +0x04 (the lwz/beq store guard, reproduced)
+        m_pMainMixMapData = 0;
+}
+// NFSMixMaster::AssignSFXCallbacks @0x82B45A80 -- forward the SFX-callback owner into
+// the main map (tail-call NFSMixMap::AssignSFXCallbacks @0x82B481B8, homed; the
+// console derefs m_pMainMixMap unguarded -- reproduced).
+void NFSMixMaster::AssignSFXCallbacks(void* lpOwner)
+{
+    m_pMainMixMap->AssignSFXCallbacks(lpOwner);
+}
