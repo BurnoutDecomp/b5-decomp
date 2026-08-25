@@ -69,16 +69,21 @@ void SpliceBankStatistics::DumpAllToTty()
 
 // ---------------------------------------------------------------------------
 // SplicerContentSlot::DoStop  @ 0x826FA7E8
-//   if (voice.mpSplice) delete voice.mpSplice;
+//   if (voice.mpSplice) delete voice.mpSplice;   // the SplicerPlayerVoice member
 //   voice.mpSplice = 0;   // unconditional
 //   return true;
+// The console reads voice+0x88 directly == SplicerPlayerVoice::mpSplice; the
+// splicer slot only ever drives splicer player voices, so the down-cast is the
+// source-level spelling of that access.
 // ---------------------------------------------------------------------------
 bool SplicerContentSlot::DoStop(const Slot& /*arSlot*/, PlayerVoice& arVoice, Content& /*arContent*/)
 {
-    if (arVoice.mpSplice)
-        delete arVoice.mpSplice;   // ~Splice + Splice::operator delete
+    SplicerPlayerVoice& lrVoice = static_cast<SplicerPlayerVoice&>(arVoice);
 
-    arVoice.mpSplice = 0;          // stored whether or not a splice was present
+    if (lrVoice.mpSplice)
+        delete lrVoice.mpSplice;   // ~Splice + Splice::operator delete
+
+    lrVoice.mpSplice = 0;          // stored whether or not a splice was present
     return true;
 }
 
@@ -89,10 +94,12 @@ bool SplicerContentSlot::DoStop(const Slot& /*arSlot*/, PlayerVoice& arVoice, Co
 // ---------------------------------------------------------------------------
 void SplicerContentSlot::DoPreDetach(const Slot& /*arSlot*/, Voice& arVoice, Content& /*arContent*/)
 {
-    if (arVoice.mpSplice)
+    SplicerPlayerVoice& lrVoice = static_cast<SplicerPlayerVoice&>(arVoice);
+
+    if (lrVoice.mpSplice)
     {
-        delete arVoice.mpSplice;   // ~Splice + Splice::operator delete
-        arVoice.mpSplice = 0;
+        delete lrVoice.mpSplice;   // ~Splice + Splice::operator delete
+        lrVoice.mpSplice = 0;
     }
 }
 

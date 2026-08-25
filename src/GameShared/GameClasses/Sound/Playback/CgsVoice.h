@@ -123,20 +123,28 @@ struct OutputParameter
 
 // ---------------------------------------------------------------------------
 // The type-specific slot behaviour, dispatched by the Slot control surface.
-// DWARF (CgsVoice.h): DoPlay/DoStop are slots 0/1, DoPostAttach/DoPreDetach are
-// slots 3/4 (byte 0xC/0x10). Declared-only -- concrete implementations own their TU.
+// DWARF (CgsVoice.h:94, full hook list :101/:110/:121/:130/:136): DoPlay/DoStop
+// are slots 0/1, DoUpdatePlaying is slot 2, DoPostAttach/DoPreDetach are slots
+// 3/4 (byte 0xC/0x10). (2026-08-25 audio-faithfulness wave 6: reconciled to the
+// DWARF -- the Slot params are CONST refs, and slot 2 is DoUpdatePlaying, not a
+// reserved hole; the three content-slot implementers -- GenericRwacContentSlot /
+// AemsContentSlot / SplicerContentSlot -- all override slots 0-2, and only the
+// splicer overrides DoPreDetach, so DoPostAttach/DoPreDetach are NON-pure on the
+// console base. FLAG: their base default bodies are un-attested; modelled as
+// no-ops, the only behaviour consistent with implementers not overriding them.)
 // ---------------------------------------------------------------------------
 class ISlotImplementation
 {
 public:
     virtual ~ISlotImplementation() {}
 
-    virtual bool DoPlay(Slot& arSlot, PlayerVoice& arVoice, Content& arContent,
-                        u32 au32Param) = 0;                     // slot 0
-    virtual bool DoStop(Slot& arSlot, PlayerVoice& arVoice, Content& arContent) = 0; // slot 1
-    virtual void DoReserved2() = 0;                             // slot 2 (unused here)
-    virtual void DoPostAttach(Slot& arSlot, Voice& arVoice, Content& arContent) = 0; // slot 3
-    virtual void DoPreDetach(Slot& arSlot, Voice& arVoice, Content& arContent) = 0;  // slot 4
+    virtual bool DoPlay(const Slot& arSlot, PlayerVoice& arVoice, Content& arContent,
+                        u32 au32Param) = 0;                     // slot 0 (DWARF :101)
+    virtual bool DoStop(const Slot& arSlot, PlayerVoice& arVoice, Content& arContent) = 0; // slot 1 (:110)
+    virtual bool DoUpdatePlaying(System* apSystem, const Slot& arSlot, PlayerVoice& arVoice,
+                                 Content& arContent, f32 af32Dt) = 0; // slot 2 (:121)
+    virtual void DoPostAttach(const Slot& arSlot, Voice& arVoice, Content& arContent) {} // slot 3 (:130)
+    virtual void DoPreDetach(const Slot& arSlot, Voice& arVoice, Content& arContent) {}  // slot 4 (:136)
 };
 
 // ---------------------------------------------------------------------------
