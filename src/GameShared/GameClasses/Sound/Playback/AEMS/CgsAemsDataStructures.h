@@ -48,9 +48,15 @@ namespace Playback
 // minimally for the two fix-hook TUs: it carries the interned SK_TYPE_NAME the
 // hooks validate the fixed entity against. FLAG: MINIMAL home -- the EntityFixer<T>
 // base, the registration ctor/dtor and the remaining Do* overrides are DEFERRED.
-struct AemsVoiceCsisClass
+// (2026-08-25, audio-faithfulness wave 6): grown from the fixer-only slice to the
+// DWARF DATA ENTITY (CgsAemsDataStructures.h:40, `: public Entity`) with the full
+// member list (:140-144). NOTE (DWARF structure): the fix hooks actually belong to
+// `EntityFixer<AemsVoiceCsisClass> sAemsVoiceCsisClassFixer` (the .cpp:6 static),
+// not to the entity class itself -- they stay HERE until the EntityFixer<T>
+// template home lands (the committed bodies @0x8268AAC0/0x8268AB10 are unchanged).
+struct AemsVoiceCsisClass : public Entity
 {
-    // CgsAemsDataStructures.h. This fixer's interned type Name -- the X360 global
+    // CgsAemsDataStructures.h:42. The interned type Name -- the X360 global
     // dword_82FFBD90 the fix hooks compare the entity's mTypeName against. DECLARED
     // here; its DEFINITION (the interned-Name initializer seeded from the type-name
     // string) is bodied in the .cpp.
@@ -63,6 +69,20 @@ struct AemsVoiceCsisClass
     // @ 0x8268AB10. Fix-down hook: assert the entity's type-name matches SK_TYPE_NAME
     // (CgsAemsDataStructures.h:172). No field walk in this build.
     void DoFixDown(const Entity& arEntity) const;
+
+    // DWARF :58 / :71 -- the two accessors AemsPlayerVoice::GetClientAllocationSize
+    // touches (the `lhz +0xC` there is mu16UserParameterStart, NOT the parameter
+    // count -- an earlier caller comment misnamed it).
+    u32 GetParameterCount() const     { return mu32ParameterCount; }
+    u32 GetUserParameterStart() const { return mu16UserParameterStart; }
+
+private:
+    // DWARF :140-144 (console offsets past the 8-byte Entity base in comments).
+    u32 mu32ParameterCount;      // +0x08
+    u16 mu16UserParameterStart;  // +0x0C (the GetClientAllocationSize lhz)
+    u16 mu16ClassNameLength;     // +0x0E
+    u32 mSystemCrc;              // +0x10
+    u32 mClassCrc;               // +0x14
 };
 
 } // namespace Playback

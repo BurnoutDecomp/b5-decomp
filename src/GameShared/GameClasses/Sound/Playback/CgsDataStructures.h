@@ -175,6 +175,11 @@ struct VoiceSchema : public Entity
     // CgsDataStructures.h:1271.
     u32 GetFeatureSchemaCount() const { return mu32FeatureSchemaCount; }
 
+    // DWARF :322 (real out-of-line symbol -- AemsPlayerVoice::GetClientAllocationSize
+    // @0x826A2B58 `bl VoiceSchema::GetFeatureSchema`). The resolved feature at
+    // au32Index. FLAG (DEFER): declared-only -- bodied with the schema slices.
+    const FeatureSchema& GetFeatureSchema(u32 au32Index) const;
+
     // CgsDataStructures.h:1342 / :1348 / :1354.
     u32 GetSlotCount() const        { return mu32SlotCount; }
     u32 GetParameterCount() const   { return mu32ParameterCount; }
@@ -311,8 +316,17 @@ struct VoiceSpec : public Entity
     // The trailing send/tail-unit count byte the operator-new size math and the
     // fixer send loops read (lbz 0xC(spec)). Two names for the same byte (send count
     // for the RWAC voice, tail-unit count for the AEMS voice) -- both forward it.
+    // (Confirmed 2026-08-25 wave 6: AemsPlayerVoice::operator new @0x826C2270 reads
+    // this same +0xC byte -- the AEMS-side rival's separate mu8TailUnitCount member
+    // was an invention.)
     u32 GetSendCount() const     { return mu8SendCount; }
     u32 GetTailUnitCount() const { return mu8SendCount; }
+
+    // DWARF :380 (real out-of-line symbol -- `bl VoiceSpec::GetVoiceSchema` in
+    // AemsPlayerVoice::GetClientAllocationSize @0x826A2B58 / operator new).
+    // FLAG (DEFER): declared-only -- bodied with the spec slices (asserts the
+    // schema present + resolved, like the count forwarders above).
+    const VoiceSchema& GetVoiceSchema() const;
 
     // CgsDataStructures.h (+0x8). The resolved voice schema. Low tag bit set while
     // still a serialized index; a live VoiceSchema* once resolved.

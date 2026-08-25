@@ -4,6 +4,12 @@
 #include "types.hpp"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Sound/Playback/CgsCommon.h"          // Name (real home)
+#include "GameShared/GameClasses/Sound/Playback/CgsRegistry.h"        // Registry / Entity (real homes)
+#include "GameShared/GameClasses/Sound/Playback/CgsDataStructures.h"  // VoiceSpec / VoiceSchema / FeatureSchema (real homes)
+#include "GameShared/GameClasses/Sound/Playback/CgsEnvironment.h"     // Environment (real home)
+#include "GameShared/GameClasses/Sound/Playback/CgsFactory.h"         // Factory (real home)
+#include "GameShared/GameClasses/Sound/Playback/AEMS/CgsAemsDataStructures.h" // AemsVoiceCsisClass (real home)
 
 #include <cstddef> // size_t
 
@@ -17,20 +23,26 @@ namespace rw
 // ============================================================================
 // CgsAemsPlayerVoice.h  (MINIMAL home for the AEMS player-voice allocation TUs).
 //
-// The three reconstructed functions:
+// The reconstructed functions:
 //   AemsPlayerVoice::GetClientAllocationSize(Factory&, const VoiceSpec&) @ 0x826A2B58
 //   AemsPlayerVoice::operator new(size_t, Factory&, const VoiceSpec&)    @ 0x826C2270
 //   AemsPlayerVoice::~AemsPlayerVoice()  (scalar-deleting dtor)          @ 0x826DAA50
+//   AemsPlayerVoice::Stop                                                @ 0x826DAF10
 //
-// AemsPlayerVoice derives (like every playback voice) from Playback::Voice + a
-// GenericRwacVoice subobject; those bases are un-homed keystones, so this MINIMAL
-// home models only the allocation surface the three TUs touch. Every collaborator
-// (Factory, Environment, VoiceSpec, VoiceSchema, FeatureSchema, Registry,
-// AemsVoiceCsisClass) is a self-contained minimal slice carrying ONLY the methods
-// these TUs call BY NAME. These TUs include ONLY this header (plus rwcore/resource
-// for operator new), so there is no ODR clash with the committed CgsDataStructures /
-// CgsFactory homes -- no single TU sees both. Host-width FLAG: pointer members
-// widen; pinned BY NAME only.
+// (2026-08-25, audio-faithfulness wave 6): the 7 local collaborator DEFER slices
+// (Name / AemsVoiceCsisClass / Registry / FeatureSchema / VoiceSchema / VoiceSpec /
+// Environment) are FOLDED onto their real homes, included above -- the asm calls
+// the real symbols (`bl VoiceSpec::GetVoiceSchema`, `bl VoiceSchema::
+// GetFeatureSchema`, `bl Registry::GetEntity<AemsVoiceCsisClass>`), the +0xC spec
+// byte is the real mu8SendCount (GetTailUnitCount -- the rival's separate
+// mu8TailUnitCount member was an invention), and the CSIS `lhz +0xC` is the real
+// AemsVoiceCsisClass::mu16UserParameterStart (NOT a parameter count).
+//
+// STILL keystone-blocked (FLAG): the concrete AemsFactory does not derive Factory
+// yet and its registry member is untyped, so the AEMS-registry recovery stays the
+// free-accessor shim below (the X360 walk: Factory* -4 == the AemsFactory MI base
+// adjust, then +0x60 == mpRegistry); the Voice/GenericRwacVoice base chain of
+// AemsPlayerVoice itself stays un-modeled.
 // ============================================================================
 
 namespace CgsSound
@@ -38,75 +50,11 @@ namespace CgsSound
 namespace Playback
 {
 
-class Factory;
-struct VoiceSpec;
-
-// The interned name key GetClientAllocationSize hashes to look up the CSIS class.
-struct Name
-{
-    uintptr_t muValue;
-    uintptr_t GetValue() const { return muValue; }
-};
-
-// The CSIS voice class entity (looked up out of the AEMS registry by voice-schema
-// name). GetClientAllocationSize reads its parameter count (lhz *(csis+0xC)).
-struct AemsVoiceCsisClass
-{
-    u32 GetParameterCount() const { return mu32ParameterCount; }
-    u32 mu32ParameterCount;
-};
-
-// Type-checked registry lookup (Registry::GetEntity<AemsVoiceCsisClass>).
-struct Registry
-{
-    template <typename T>
-    const T* GetEntity(const Name& akrName) const;
-};
-
-// One feature sub-schema; GetClientAllocationSize reads its parameter-schema count.
-struct FeatureSchema
-{
-    u32 GetParameterSchemaCount() const { return mu32ParameterSchemaCount; }
-    u32 mu32ParameterSchemaCount;
-};
-
-// The resolved voice schema. GetClientAllocationSize reads its interned Name and its
-// feature sub-schemas.
-struct VoiceSchema
-{
-    Name GetName() const { return mName; }
-    const FeatureSchema& GetFeatureSchema(u32 au32Index) const;
-    Name mName;
-};
-
-// The serialised voice spec. Its resolved-schema count forwarders + the send/tail
-// unit count byte drive the allocation-size math.
-struct VoiceSpec
-{
-    const VoiceSchema* GetVoiceSchema() const { return mpVoiceSchema; }
-    u32 GetSlotCount() const;
-    u32 GetParameterCount() const;
-    u32 GetOutputParameterCount() const;
-    u32 GetTailUnitCount() const { return mu8TailUnitCount; }
-
-    const VoiceSchema* mpVoiceSchema;
-    u8                 mu8TailUnitCount;
-};
-
-// The AEMS environment slice -- only the RenderWare allocator it holds is read.
-struct Environment
-{
-    rw::IResourceAllocator* GetAllocator() const;
-};
-
-// The AEMS factory slice -- exposes its registry and owning environment BY NAME
-// (X360 Factory-4/+0x60 registry recovery and +0xC environment read).
-class Factory
-{
-public:
-    const Registry* GetAemsRegistry() const;
-    Environment&    GetEnvironment();
-};
+// FLAG (DEFER, the AEMS keystone): the concrete AemsFactory's registry, recovered
+// off the generic Factory pointer (X360: factory - 4 -> +0x60). SAME entity as the
+// declaration in Module/CgsSoundPlaybackModule.h; bodied in the AemsFactory TU
+// when the base chain lands.
+Registry* GetAemsFactoryRegistry(Factory* lpAemsFactory);
 
 // The CSIS command ring the Stop slice posts into (real struct home:
 // CgsCommandQueue.h:107; fwd-declared so this header stays out of the
