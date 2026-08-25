@@ -165,12 +165,15 @@ namespace BrnGui
     struct GuiEventRoadRuleBegin { u8 maData[4]; s32 GetEventType() const { return 335; } };  // id 335 size 4 (raw; size not GuiEvent-shaped)
     struct GuiEventRoadRuleChangeMode { u8 maData[4]; s32 GetEventType() const { return 343; } };  // id 343 size 4 (raw; size not GuiEvent-shaped)
     struct GuiEventRoadRuleData : public CgsGui::GuiEvent<334> { u8 maPayload[76]; };  // id 334 size 88 (12B GuiEvent header + opaque payload)
-    struct GuiEventRoadRuleEnd : public CgsGui::GuiEvent<336> { u8 maPayload[12]; };  // id 336 size 24 (12B GuiEvent header + opaque payload)
+    // GuiEventRoadRuleEnd (id 336): NO placeholder here -- UPGRADED to the real
+    // hand-reconstructed home in BrnGuiEventTypeDefs.h (HUD H2 2026-08-25; named
+    // fields, X360-attested). A placeholder must never shadow a real home (C2011).
     struct GuiEventRoadRuleLeave : public CgsGui::GuiEvent<340> { u8 maPayload[4]; };  // id 340 size 16 (12B GuiEvent header + opaque payload)
     struct GuiEventRoadRuleNewRulers { u8 maData[8]; s32 GetEventType() const { return 346; } };  // id 346 size 8 (raw; size not GuiEvent-shaped)
     struct GuiEventRoadRuleTickerScoreResponse : public CgsGui::GuiEvent<345> { u8 maPayload[36]; };  // id 345 size 48 (12B GuiEvent header + opaque payload)
     struct GuiEventRoadRuleUpdate : public CgsGui::GuiEvent<338> { u8 maPayload[8]; };  // id 338 size 20 (12B GuiEvent header + opaque payload)
-    struct GuiEventRoadRuleUpdateTargetScores : public CgsGui::GuiEvent<339> { u8 maPayload[44]; };  // id 339 size 56 (12B GuiEvent header + opaque payload)
+    // GuiEventRoadRuleUpdateTargetScores (id 339): NO placeholder here -- UPGRADED to
+    // the real hand-reconstructed home in BrnGuiEventTypeDefs.h (HUD H2 2026-08-25).
     // GuiEventRunFsm: NO placeholder here -- the real hand-reconstructed home is
     // BrnGuiEventTypeDefs.h (named fields, derives from CgsModule::Event). A placeholder
     // must never shadow a real home; defining both made every TU that includes both
@@ -482,7 +485,13 @@ namespace BrnGui
     struct GuiEventPostEventRankUpSequenceStart { u8 maData[8]; s32 GetEventType() const { return 303; } };  // id 303 size 8
     struct GuiEventRequestCompressedCamPic : public CgsGui::GuiEvent<568> {};  // id 568 size 12
     struct GuiEventRequestSpecificPreSetRaces { u8 maData[4]; s32 GetEventType() const { return 193; } };  // id 193 size 4
-    struct GuiEventRequestTraining { u8 maData[4]; s32 GetEventType() const { return 572; } };  // id 572 size 4
+    // id 572 size 4 -- UPGRADED from the opaque u8[4] 2026-08-25 (HUD H2): DWARF home
+    // BrnGuiEventTypeDefs.h:6556 `GuiEventRequestTraining : GuiEvent<557>` with the one
+    // member meTrainingType (BrnProgression::ETrainingType; PS3 id 557 -> X360 572, the
+    // same +15 drift the sibling GuiChallengeEndEvent 563 -> 578 carries). Producer
+    // witness: RoadRuleComponent::SetUpcomingRoadAnimation @0x82438650 stack-builds
+    // { 4, 572, 12, 9 } -- the suggested-road transin fires training message 9.
+    struct GuiEventRequestTraining { s32 meTrainingType; s32 GetEventType() const { return 572; } };  // id 572 size 4
     struct alignas(8) GuiEventRoadRuleDataRequest { u8 maData[8]; s32 GetEventType() const { return 327; } };  // id 327 size 8 [8-aligned: OGE off16]
     struct GuiEventRoadRuleModeRequest { u8 maData[8]; s32 GetEventType() const { return 326; } };  // id 326 size 8
     // X360 instantiation @0x82493F88: record { 36, 121, 12, score, category, index,

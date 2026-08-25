@@ -829,7 +829,56 @@ namespace CgsLanguage
     //  bodies are above this block.)
     void LanguageManager::FormatHoursMinutesAndSecondsString(char*, f32, s32) const       { __debugbreak(); }   // FLAG trap-stub
     void LanguageManager::FormatMinutesAndSecondsString(char*, f32, s32) const            { __debugbreak(); }   // FLAG trap-stub
-    void LanguageManager::FormatMinutesAndSecondsAndHundredsString(char*, f32, s32) const { __debugbreak(); }   // FLAG trap-stub
+
+    // @ 0x828629A8 (asserts cpp:1701/1702/1704/1706) -- [H2 wave 2026-08-25] the
+    // M:SS.hh timer leaf (format 2; the road-rule panel's running/best time readouts
+    // ride it through the float dispatcher, which made this trap-stub a BOOT KILL the
+    // moment the RoadRule TU mounted -- 0x80000003 @RVA 0x207ea0, caught by the H2
+    // verification run). Round to hundredths, split M / SS / hh, render each through
+    // IntToString with NO separator (min digits 1/2/2), and print into
+    // mpTimeFormatMinsSecsHnds's three positional parameters. The REAL target size is
+    // forwarded to _Print (per the asm -- no 1024 defect in this leaf).
+    void LanguageManager::FormatMinutesAndSecondsAndHundredsString(char* lpcTarget, f32 lfTimeInSeconds,
+                                                                   s32 liTargetSize) const
+    {
+        CGS_ASSERT(lpcTarget != 0, "lpTargetString != NULL");                // cpp:1701
+        CGS_ASSERT(liTargetSize > 0, "lnTargetStringSize > 0");              // cpp:1702
+        CGS_ASSERT(lfTimeInSeconds >= 0.0f, "lfTimeInSeconds >= 0.0f");      // cpp:1704
+        CGS_ASSERT(mpTimeFormatMinsSecsHnds != 0, "mpTimeFormatMinsSecsHnds"); // cpp:1706
+
+        // The X360 fsel chain is round-to-nearest of seconds*100.
+        const s32 liTotalHundredths = static_cast<s32>(lfTimeInSeconds * 100.0f + 0.5f);
+        const s32 liMinutes    = liTotalHundredths / 6000;
+        const s32 liSeconds    = (liTotalHundredths % 6000) / 100;
+        const s32 liHundredths = (liTotalHundredths % 6000) % 100;
+
+        CgsUnicode::CgsUtf8 lacMinutes[256];
+        CgsUnicode::CgsUtf8 lacSeconds[256];
+        CgsUnicode::CgsUtf8 lacHundredths[256];
+        CgsUnicode::CgsUtf8 lacNoSeparator[4];
+        lacMinutes[0] = lacSeconds[0] = lacHundredths[0] = 0;
+        for (s32 liByte = 0; liByte < 4; ++liByte)
+            lacNoSeparator[liByte] = 0;
+
+        CgsUnicode::IntToString(lacMinutes,    liMinutes,    1, lacNoSeparator);
+        CgsUnicode::IntToString(lacSeconds,    liSeconds,    2, lacNoSeparator);
+        CgsUnicode::IntToString(lacHundredths, liHundredths, 2, lacNoSeparator);
+
+        CgsUnicode::UnicodeBuffer lMinutesBuffer;
+        CgsUnicode::UnicodeBuffer lSecondsBuffer;
+        CgsUnicode::UnicodeBuffer lHundredthsBuffer;
+        lMinutesBuffer.Convert(lacMinutes);
+        lSecondsBuffer.Convert(lacSeconds);
+        lHundredthsBuffer.Convert(lacHundredths);
+
+        const CgsUnicode::CgsUtf8* lapUtf8Params[3];
+        lapUtf8Params[0] = lMinutesBuffer.GetBuffer();
+        lapUtf8Params[1] = lSecondsBuffer.GetBuffer();
+        lapUtf8Params[2] = lHundredthsBuffer.GetBuffer();
+
+        CgsUnicode::_Print(reinterpret_cast<CgsUnicode::CgsUtf8*>(lpcTarget),
+                           mpTimeFormatMinsSecsHnds, liTargetSize, lapUtf8Params, 3);
+    }
     void LanguageManager::FormatSecondsAndHundredsString(char*, f32, s32) const           { __debugbreak(); }   // FLAG trap-stub
     void LanguageManager::FormatSecondsString(char*, f32, s32) const                      { __debugbreak(); }   // FLAG trap-stub
     void LanguageManager::FormatSmallDistanceString(char*, f32, s32) const                { __debugbreak(); }   // FLAG trap-stub

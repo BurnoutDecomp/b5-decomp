@@ -494,6 +494,11 @@ namespace BrnGui
         // BrnInGame.cpp's tracker boundary records the same +0x4054 identification.
         GuiTracker* GetGuiTracker() const                        { return mpGuiTracker; }
 
+        // The sat-nav zoom level (miSatNavZoomLevel @0x803C; every X360 reader inlines
+        // the raw word load -- e.g. SatNavComponent::Update `lwzx cache+0x803C`).
+        // ADDITIVE GROW (H3a), same pattern as GetGuiTracker above.
+        s32 GetSatNavZoomLevel() const                           { return miSatNavZoomLevel; }
+
         // ADDITIVE GROW (PlayerPositionSingle::RenderValue @0x82421F78, which inlines all
         // three): the game-mode word, the active road rule, and the skills-manager pointer
         // (DWARF accessors h:981 GetGameMode / h:1290 GetActiveRoadRule / h:1362

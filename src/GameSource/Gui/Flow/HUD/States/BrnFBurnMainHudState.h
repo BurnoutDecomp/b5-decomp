@@ -10,6 +10,7 @@
 #include "GameSource/Gui/Flow/hud/Components/BrnDistrictMarker.h"            // BrnGui::DistrictMarkerComponent (the full class; the View ODR-fork slice is retired)
 #include "GameSource/Gui/Flow/HUD/Components/BrnJunctionInfoComponent.h"     // BrnGui::JunctionInfoComponent
 #include "GameSource/Gui/Flow/HUD/Components/BrnOdometerComponent.h"         // BrnGui::OdometerComponent
+#include "GameSource/Gui/Flow/HUD/Components/BrnRoadRuleComponent.h"         // BrnGui::RoadRuleComponent (H2 wave)
 #include "GameSource/Gui/Flow/Shared/FlaptComponents/BrnGuiFlaptIconComponent.h" // BrnGui::FlaptAnimatorComponent
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiComponent.h"          // CgsGui::GuiComponent (the apt-side animator half)
 
@@ -132,11 +133,12 @@ namespace BrnGui
         CgsGui::GuiComponent   mEventHudAnimatorIcon; // +0xA40 ("EventHud_Animator" pair, 1st)
         FlaptAnimatorComponent mEventHudAnimator;     // +0xACC (the Run(...) target)
 
-        // FLAG absent member: RoadRuleComponent (+0xB10..~+0x103F, with the event-338
-        // mirrors at +0x102C/+0x1034) -- the committed road-rule TU is a narrow slice
-        // whose embedded FlaptRoadSignIconComponent needs un-reconstructed .rdata
-        // tables (gapcRoadIconNames / KAV4_SIGN_TEXT_COLOURS); the whole component is
-        // deferred behind mbRoadRulesEnabled.
+        // The road-rules HUD panel (H2 wave 2026-08-25: the full lifecycle/handler TU
+        // landed; the old absent-member FLAG is retired). The X360 event-338 "mirrors"
+        // at +0x102C/+0x1034 are the component's OWN mfTargetCrashScore /
+        // miCrashMultiplier (this+0xB10 + 0x51C/0x524) -- UpdateRunning pokes them
+        // directly through the friend grant in the component header.
+        RoadRuleComponent mRoadRuleComponent;      // +0xB10
 
         FriendsListComponent mFriendsList;         // +0x1040
         bool mbFriendsListOffline;                 // +0x18D9 (mode == -1 mirror)

@@ -27,6 +27,24 @@
 
 namespace BrnGui
 {
+    // off_82F27C98 .. off_82F27D98 (X360) -- the road-icon name table declared in
+    // BrnGuiShared.h. H2 (2026-08-25): the 64 strings READ OFF THE IMAGE
+    // (h2_dump2.txt) -- each is exactly the ERoadIcon enum value's numeric suffix
+    // (the apt timeline-label code for that road's sign artwork). Defined here, the
+    // FindRoadFromName consumer's TU (amends the header's "BrnGuiShared's own data
+    // TU" note -- no such TU exists; this is the single definition).
+    const char* const gapcRoadIconNames[E_ROADICON_COUNT] =
+    {
+        "397134", "394306", "535195", "505312", "393062", "396133", "394474", "386215",
+        "394965", "385737", "392688", "393166", "397409", "396228", "385860", "392532",
+        "392323", "396706", "393198", "395917", "392997", "393860", "396988", "396188",
+        "397165", "395490", "387153", "393756", "392684", "394853", "506394", "394273",
+        "396114", "395952", "396456", "393760", "397201", "396742", "390723", "397455",
+        "561416", "396460", "383595", "396718", "561415", "387198", "397601", "395656",
+        "386734", "397702", "395197", "506519", "395600", "392589", "393911", "394487",
+        "397348", "393900", "393120", "387078", "393762", "535196", "561121", "561413",
+    };
+
     // off_82F253DC (X360) -- the per-colour "bg" timeline-label names, indexed by
     // ESignColour (the asm tags index 0 == "Green"); SetColour goto-and-plays the
     // "bg" child clip on this label. Recovered from the ESignColour names + the X360
@@ -41,12 +59,18 @@ namespace BrnGui
 
     // unk_82FB29A0 (X360) -- the per-colour road-text tint, indexed by ESignColour;
     // SetColour pushes KAV4_SIGN_TEXT_COLOURS[meSignColour] into the "RoadText" clip's
-    // MovieClipRef::SetColour. The four Vector4 RGBA rows are serialised .rodata that is
-    // NOT present in the function export (it lives in the X360 data segment, which we
-    // cannot dump here), so the table is declared extern and OWNED by this TU's data
-    // home; its float values are filled in when that segment is recovered. Declared (not
-    // guessed) so the compile gate resolves the reference without inventing colour data.
-    extern const Vector4 KAV4_SIGN_TEXT_COLOURS[FlaptRoadSignIconComponent::E_SIGN_COLOUR_COUNT];
+    // MovieClipRef::SetColour. H2 (2026-08-25): VALUES RECOVERED -- the in-image data
+    // is zero because the X360 fills the table at static-init time; the initializer
+    // thunk @0x82C50BC8 (h2_dump6.txt) writes the four RGBA rows below. The old
+    // "cannot dump here" extern is retired. Green/red signs carry near-white text;
+    // silver/gold carry dark text.
+    static const f32 KAF_SIGN_TEXT_COLOURS[FlaptRoadSignIconComponent::E_SIGN_COLOUR_COUNT][4] =
+    {
+        { 0.8984375f,  0.8984375f, 0.8984375f,  1.0f },   // E_SIGN_COLOUR_GREEN  (0x3F660000 x3)
+        { 0.8984375f,  0.8984375f, 0.8984375f,  1.0f },   // E_SIGN_COLOUR_RED
+        { 0.0859375f,  0.09375f,   0.10546875f, 1.0f },   // E_SIGN_COLOUR_SILVER (0x3DB0/3DC0/3DD8)
+        { 0.11328125f, 0.1015625f, 0.0625f,     1.0f },   // E_SIGN_COLOUR_GOLD   (0x3DE8/3DD0/3D80)
+    };
 
     // off_82F253F0[0] (X360) == "RD_" -- the road-sign label prefix DisplayRoadFromCgsID
     // prepends to the special "EXIT" road name (DWARF mpRoadPrefix, .cpp:48).
@@ -172,8 +196,29 @@ namespace BrnGui
 
             BrnFlapt::MovieClipRef lRoadTextClip;
             mAptRef.FindChildMovieClipOnFrame(&lRoadTextClip, "RoadText");
-            lRoadTextClip.SetColour(KAV4_SIGN_TEXT_COLOURS[meSignColour]);
+            Vector4 lv4TextColour;
+            lv4TextColour.x = KAF_SIGN_TEXT_COLOURS[meSignColour][0];
+            lv4TextColour.y = KAF_SIGN_TEXT_COLOURS[meSignColour][1];
+            lv4TextColour.z = KAF_SIGN_TEXT_COLOURS[meSignColour][2];
+            lv4TextColour.w = KAF_SIGN_TEXT_COLOURS[meSignColour][3];
+            lRoadTextClip.SetColour(lv4TextColour);
         }
+    }
+
+    // @ 0x8242DAE8 -- [H2 wave 2026-08-25] the icon-id DisplayRoad overload
+    // DisplayRoadFromCgsID routes to: range-check the icon (the "Unable to find a
+    // valid icon name" assert, cpp:177), compose "RD_<code>" from the shared prefix +
+    // the icon's name-table entry, and forward to the label overload.
+    void FlaptRoadSignIconComponent::DisplayRoad(ERoadIcon leRoadIcon, bool lbVisible)
+    {
+        CGS_ASSERT(static_cast<s32>(leRoadIcon) >= 0
+                       && static_cast<s32>(leRoadIcon) < E_ROADICON_COUNT,
+                   "Unable to find a valid icon name");   // cpp:177 (non-gating)
+
+        char lacRoadName[KU_ROAD_NAME_BUFFER_LEN];
+        CgsCore::SPrintf(lacRoadName, KU_ROAD_NAME_BUFFER_LEN, "%s%s",
+                         KPC_ROAD_PREFIX, gapcRoadIconNames[leRoadIcon]);
+        DisplayRoad(lacRoadName, lbVisible);
     }
 
     // @ 0x8241CD08 -- find the ERoadIcon whose name matches lpIconName (linear search of

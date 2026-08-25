@@ -70,6 +70,11 @@ namespace BrnFlapt
         // off the instance pointer (the instance and its apt string share address +0x00).
         const CgsGraphics::TextObject& GetTextObject() const { return mAptString.mTextObject; }
 
+        // Mutable twin (ADDITIVE GROW, H2 2026-08-25): TextFieldRef::SetColour
+        // @0x8246E120 writes the field's packed text colour in place -- byte stores
+        // into instance+0x14..0x17 == mAptString.mTextObject.mTextColour.
+        CgsGraphics::TextObject& GetTextObject() { return mAptString.mTextObject; }
+
     private:
         // SetUpAptStringParams @ 0x8246DF58 : populate lpOutAptStringParams from a
         // TextField + FontStyle + the initial text. The X360 calling convention takes

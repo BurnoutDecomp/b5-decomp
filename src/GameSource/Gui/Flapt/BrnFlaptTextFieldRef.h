@@ -73,8 +73,17 @@ namespace BrnFlapt
         // enum (CgsLanguage::LanguageManager::ParameterFormatType) is passed as the
         // raw integer the X360 uses (2 == the timer/decimal format) to avoid pulling
         // the language-manager header into this widely-included declaration home;
-        // documented external-API integer per the conventions.
+        // documented external-API integer per the conventions. Bodied in this TU's
+        // cpp (H2 wave: asserts format < 21, LanguageManager::FormatText(f32) into a
+        // 64-cap stack buffer, SetText(buf, true)).
         bool SetLocalisedText(f32 lfValue, s32 liFormatType);
+
+        // SetLocalisedText(int, ParameterFormatType) @ 0x8246CF18 -- the s32 sibling
+        // of the float form above (same assert, LanguageManager::FormatText(s32),
+        // SetText(buf, true)). X360 call site: RoadRuleComponent::RefreshBestData's
+        // best-crash readout (value, 14 == the money format). Bodied in this TU's
+        // cpp (H2 wave).
+        bool SetLocalisedText(s32 liValue, s32 liFormatType);
 
         // SetInvalid -- clear all three handles. ADDITIVE GROW (the DWARF declares it,
         // BrnFlaptTextFieldRef.h:18/99; the X360 always inlines it -- e.g. the three

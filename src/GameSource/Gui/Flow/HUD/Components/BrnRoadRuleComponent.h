@@ -44,6 +44,11 @@ namespace BrnGui
     // DWARF BrnRoadRuleComponent.h:86.
     struct RoadRuleComponent : public BaseRoadRulesComponent
     {
+        // The freeburn HUD state's event-338 arm pokes the crash-target pair directly
+        // (X360 FBurnMainHudState::UpdateRunning @0x8247C0EC..: stfs +0x102C /
+        // stw +0x1034 on the embedded component == mfTargetCrashScore /
+        // miCrashMultiplier) -- same friend-grant pattern as the marker header.
+        friend struct FBurnMainHudState;
         // DWARF :69.
         typedef BrnFlapt::TextFieldRef RoadRulesTextfield;
 
@@ -225,7 +230,12 @@ namespace BrnGui
         bool IsRoadRuleCrash(BrnGameState::EActiveRoadRule leRule) const;            // :570
         bool IsRoadRuleTime(BrnGameState::EActiveRoadRule leRule) const;             // :574
         void RepositionUpcomingSign(GuiEventRoadRuleUpcomingRoads::ERoadSide leSide); // :581
-        void TransitionCompleteCallback(void* lpUserData, u16 lu16Label);            // :587
+
+        // @0x82441778 (DWARF :587) -- the frame-trigger trampoline Prepare installs via
+        // MovieClipRef::SetFrameTriggerCallback (the X360 passes the bare function
+        // address + `this` as user data, so the method is STATIC; the DWARF's
+        // declaration row carries no `this` use either).
+        static void TransitionCompleteCallback(void* lpUserData, u16 lu16Label);     // :587
 
         // ---- member layout (DWARF :363-:456 order; X360 pins in the file header) --
         BrnFlapt::MovieClipRef mRoadSignAnimationsMC;      // :363 (X360 +0x10)

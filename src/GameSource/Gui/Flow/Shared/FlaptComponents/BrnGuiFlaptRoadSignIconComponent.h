@@ -119,10 +119,16 @@ namespace BrnGui
         // the sign's colour word @this+0x3C): X360 header-inline.
         ESignColour GetSignColour() const { return meSignColour; }
 
-        // ---- X360-attested siblings, bodied in their own TUs --------------------
+        // ADDITIVE GROW (RoadRuleComponent::UpdateRoadSignDistance @0x8242B128 reaches
+        // the sign's clip handle -- lwz +0x14 gate + MovieClipRef::SetPosition on
+        // &sign->mAptRef): the same accessor pattern BrnFlaptComponent exposes.
+        BrnFlapt::MovieClipRef&       GetMovieClipRef()       { return mAptRef; }
+        const BrnFlapt::MovieClipRef& GetMovieClipRef() const { return mAptRef; }
+
         // DisplayRoad(ERoadIcon, bool) @ 0x8242DAE8 -- the icon-id overload that
-        // DisplayRoadFromCgsID routes to once it has resolved the icon id; declared
-        // here so the call resolves against this single home.
+        // DisplayRoadFromCgsID routes to once it has resolved the icon id: composes
+        // "RD_<name-table entry>" and forwards to the label overload. Bodied in this
+        // TU's cpp (H2 wave, 2026-08-25 -- the old "own TU" park is retired).
         void DisplayRoad(ERoadIcon leRoadIcon, bool lbVisible);
 
     private:

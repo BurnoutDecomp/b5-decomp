@@ -360,10 +360,11 @@ namespace BrnGui
         mEventHudAnimator.Construct(0, mpStateInterface, 0);
         mEventHudAnimator.Prepare("EventHud_Animator", lFile, 0);
 
-        // FLAG deferred (Slice B): RoadRuleComponent::Construct/Prepare
-        // ("RoadRule_mc") -- the committed road-rule TU carries the sign-state/
-        // selection slice only (no lifecycle bodies yet).
-        LogDeferredComponent("RoadRuleComponent");
+        // [H2] X360 OnEnter @0x8247B0E8: Construct("RoadRule_mc", iface, 0, 1) --
+        // apt layer index 1 (the B5RaceHud mount level; the component's sound events
+        // carry it) -- then Prepare against the loaded file.
+        mRoadRuleComponent.Construct("RoadRule_mc", mpStateInterface, 0, 1);
+        mRoadRuleComponent.Prepare("RoadRule_mc", lFile);
 
         // FLAG deferred (Slice B): FriendsListComponent::Construct/Prepare
         // ("friendList") -- the committed FriendsList TU is the SetGuiCachePointer/
@@ -444,7 +445,7 @@ namespace BrnGui
         }
         if (mbRoadRulesEnabled)
         {
-            /* FLAG deferred (Slice B): RoadRule EndTimers */;
+            mRoadRuleComponent.EndTimers();   // [H2] X360 OnLeave @0x82480B88
         }
 
         PostCommand16<214>(mpStateInterface, KI_CHANNEL_VIEW_STATE, 0);
@@ -605,9 +606,10 @@ namespace BrnGui
 
         if (mbRoadRulesEnabled)
         {
-            // FLAG deferred (Slice B): RoadRuleComponent::SetCachePointer +
-            // InitialiseMode -- the component member itself is deferred (see the
-            // header's absent-member note).
+            // [H2] X360 UpdateSetupState @0x82480EA0 tail: adopt the cache, then
+            // adopt its active road rule.
+            mRoadRuleComponent.SetCachePointer(mpGuiCache);
+            mRoadRuleComponent.InitialiseMode();
         }
 
         return true;
@@ -671,10 +673,15 @@ namespace BrnGui
             mpStateInterface->GetOutputEventQueue()->AddEvent(
                 reinterpret_cast<const CgsModule::Event*>(&lEvent), KI_CHANNEL_GUI_OUT, 24);
 
+            // [H2] X360 UpdateWFInit @0x8247C710: replay any rule already live in the
+            // cache (the by-type flags @cache+0xAC44) into the fresh panel.
             for (s32 leEnumIndex = 0; leEnumIndex < 2; ++leEnumIndex)
             {
-                // FLAG deferred (Slice B): GuiCache::IsRoadRuleActive(index) +
-                // RoadRuleComponent::HandleRoadRuleBegin -- neither surfaced yet.
+                if (mpGuiCache->IsRoadRuleActive(leEnumIndex))
+                {
+                    mRoadRuleComponent.HandleRoadRuleBegin(
+                        static_cast<BrnStreetData::ScoreType>(leEnumIndex));
+                }
             }
         }
 
@@ -900,24 +907,62 @@ namespace BrnGui
                         reinterpret_cast<const GuiEventDriveThruDiscovered*>(lpEvent));
                 }
                 break;
-            case 333:
-            case 335:
-            case 336:
-            case 338:
-            case 339:
-            case 340:
-            case 341:
-            case 343:
+            // [H2] the road-rule event family (X360 UpdateRunning @0x8247C058..0x8247C164,
+            // decomp+asm in scratch h2_dump7.txt). Every arm is gated on the enable byte.
+            case 333:   // GuiEventRoadRuleEnter
+                if (mbRoadRulesEnabled)
+                    mRoadRuleComponent.HandleEnterRoadEvent(
+                        reinterpret_cast<const GuiEventRoadRuleEnter*>(lpEvent));
+                break;
+            case 335:   // road-rule begin { ScoreType }
+                if (mbRoadRulesEnabled)
+                    mRoadRuleComponent.HandleRoadRuleBegin(
+                        static_cast<BrnStreetData::ScoreType>(lpiPayload[0]));
+                break;
+            case 336:   // GuiEventRoadRuleEnd
+                if (mbRoadRulesEnabled)
+                    mRoadRuleComponent.HandleRoadRuleEnd(
+                        reinterpret_cast<const GuiEventRoadRuleEnd*>(lpEvent));
+                break;
+            case 338:   // rule-time update { f32 time, .., f32 crashTarget, s32 multiplier }
                 if (mbRoadRulesEnabled)
                 {
-                    // FLAG deferred (Slice B): the RoadRule event handlers
-                    // (HandleEnterRoadEvent / HandleRoadRuleBegin / HandleRoadRuleEnd /
-                    // UpdateCurrentTime / HandleRoadRuleTargetUpdate /
-                    // HandleLeaveRoadEvent / HandleUpcomingRoadEvent / SwitchModes) --
-                    // not in the committed road-rule slice yet; the lap words
-                    // (+0x102C/+0x1034) ride with UpdateCurrentTime.
-                    LogDeferredComponent("RoadRuleComponent-handlers");
+                    const f32* lpfPayload = reinterpret_cast<const f32*>(lpEvent);
+                    mRoadRuleComponent.UpdateCurrentTime(lpfPayload[0]);
+                    // X360 @0x8247C0F0..: the crash-target pair rides the same record
+                    // (payload f32[3] / s32[4]); a changed multiplier nudges the target
+                    // by +0.01 so the eased readout re-renders (friend-granted pokes).
+                    const s32 liNewMultiplier = lpiPayload[4];
+                    mRoadRuleComponent.mfTargetCrashScore = lpfPayload[3];
+                    if (mRoadRuleComponent.miCrashMultiplier != liNewMultiplier)
+                    {
+                        mRoadRuleComponent.miCrashMultiplier  = liNewMultiplier;
+                        mRoadRuleComponent.mfTargetCrashScore = lpfPayload[3] + 0.0099999998f;
+                    }
                 }
+                break;
+            case 339:   // GuiEventRoadRuleUpdateTargetScores
+                if (mbRoadRulesEnabled)
+                {
+                    CGS_ASSERT(lpEvent != 0, "lpRRTargetUpdate");   // cpp:669 (non-gating)
+                    mRoadRuleComponent.HandleRoadRuleTargetUpdate(
+                        reinterpret_cast<const GuiEventRoadRuleUpdateTargetScores*>(lpEvent));
+                }
+                break;
+            case 340:   // road-rule leave { CgsID }
+                if (mbRoadRulesEnabled)
+                    mRoadRuleComponent.HandleLeaveRoadEvent(
+                        *reinterpret_cast<const CgsID*>(lpEvent));
+                break;
+            case 341:   // GuiEventRoadRuleUpcomingRoads
+                if (mbRoadRulesEnabled)
+                    mRoadRuleComponent.HandleUpcomingRoadEvent(
+                        reinterpret_cast<const GuiEventRoadRuleUpcomingRoads*>(lpEvent));
+                break;
+            case 343:   // road-rule mode change { EActiveRoadRule }
+                if (mbRoadRulesEnabled)
+                    mRoadRuleComponent.SwitchModes(
+                        static_cast<BrnGameState::EActiveRoadRule>(lpiPayload[0]));
                 break;
             case 350:   // progression loaded { Profile*, ProgressionData* }
                 // FLAG deferred (Slice B): the trophy-unlock scan
@@ -1020,7 +1065,7 @@ namespace BrnGui
         {
             const f32 lfTimeNow = mpGuiCache->GetTime();
             CGS_ASSERT(lfTimeNow != -3.4028235e38f, "mfTimeNow!=-FLT_MAX");   // CgsGuiEventTypeDefs.h:250
-            (void)lfTimeNow;   /* FLAG deferred (Slice B): RoadRule Update(timeNow) */
+            mRoadRuleComponent.Update(lfTimeNow);   // [H2] the per-frame crash-score / leader tick
         }
         if (mbOdometerEnabled)
         {
@@ -1098,9 +1143,16 @@ namespace BrnGui
 
         if (mbRoadRulesEnabled && mpGuiCache != 0)
         {
-            // FLAG deferred (Slice B): RoadRule UpdateRoadSignDistances with the
-            // player-position vector (X360 lvx128 from cache+19168 -- the pseudocode
-            // drops the operand; take it from the asm when the handler TU lands).
+            // [H2] X360 @0x82481248: `lvx128 v1, cache, 0x4AE0` -- the world-camera
+            // vector (the operand Hex-Rays drops; taken from the asm) into
+            // UpdateRoadSignDistances.
+            const Vector4& lv4Camera = mpGuiCache->GetWorldCameraPosition();
+            Vector3 lv3Camera;
+            lv3Camera.x = lv4Camera.x;
+            lv3Camera.y = lv4Camera.y;
+            lv3Camera.z = lv4Camera.z;
+            lv3Camera.w = lv4Camera.w;
+            mRoadRuleComponent.UpdateRoadSignDistances(lv3Camera);
         }
         if (mbFriendsListEnabled && mpGuiCache != 0)
         {
@@ -1150,7 +1202,9 @@ namespace BrnGui
             if (mbRoadRulesEnabled && lpacClipName != 0 &&
                 std::strcmp(lpacClipName, "RoadRule_mc") == 0)
             {
-                // FLAG deferred (H2): RoadRule TransitionComplete(lpTrigger->miUniqueId).
+                // [H2] X360 @0x82475048 type-4 RoadRule arm: TransitionComplete(payload
+                // word 1 == miUniqueId -- the frame-trigger label id).
+                mRoadRuleComponent.TransitionComplete(lpTrigger->miUniqueId);
             }
             else if (mbInGameMessagesEnabled && lpacClipName != 0 &&
                      std::strcmp(lpacClipName, "hudMessages_mc") == 0)
