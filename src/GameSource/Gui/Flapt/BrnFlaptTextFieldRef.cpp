@@ -176,4 +176,65 @@ bool TextFieldRef::SetLocalisedText(const char* lpcStringId, s32 liStringIdType,
     return true;
 }
 
+// ---- SetLocalisedText(f32 value, format) @ 0x8246CE38 -----------------------
+// [H2 wave 2026-08-25] The bare-value float form (the timer field's readout path,
+// format 2 == the timer format; RoadRuleComponent::RefreshBestData's best-time
+// readout): range-check the format (cpp:114), render the value through the language
+// manager's f32 formatter into a 64-cap stack buffer, set the resolved text
+// (already localised), return 1 unconditionally.
+bool TextFieldRef::SetLocalisedText(f32 lfValue, s32 liFormatType)
+{
+    CGS_ASSERT(liFormatType < 21,
+               "Invalid Localisation Format supplied to TextField::SetLocalisedText");   // cpp:114 (non-gating)
+
+    CgsLanguage::LanguageManager* lpLanguageManager = GetLanguageManager();
+
+    char lacBuffer[64];
+    lpLanguageManager->FormatText(
+        lacBuffer, 64, lfValue,
+        static_cast<CgsLanguage::LanguageManager::ParameterFormatType>(liFormatType));
+
+    SetText(lacBuffer, true);
+    return true;
+}
+
+// ---- SetLocalisedText(s32 value, format) @ 0x8246CF18 -----------------------
+// [H2 wave 2026-08-25] The bare-value integer sibling (RoadRuleComponent::
+// RefreshBestData's best-crash readout, format 14 == the money format): same shape
+// as the float form over the s32 formatter (cpp:137 assert).
+bool TextFieldRef::SetLocalisedText(s32 liValue, s32 liFormatType)
+{
+    CGS_ASSERT(liFormatType < 21,
+               "Invalid Localisation Format supplied to TextField::SetLocalisedText");   // cpp:137 (non-gating)
+
+    CgsLanguage::LanguageManager* lpLanguageManager = GetLanguageManager();
+
+    char lacBuffer[64];
+    lpLanguageManager->FormatText(
+        lacBuffer, 64, liValue,
+        static_cast<CgsLanguage::LanguageManager::ParameterFormatType>(liFormatType));
+
+    SetText(lacBuffer, true);
+    return true;
+}
+
+// ---- SetColour(Vector4) @ 0x8246E120 ----------------------------------------
+// [H2 wave 2026-08-25] Repack the colour's RGB lanes (each lane * 255, truncated --
+// the X360 fctidz chain) into the field instance's packed text colour
+// (mAptString.mTextObject.mTextColour @ instance+0x14), leaving the ALPHA byte as it
+// stands (the X360 never touches the top byte). The w lane is ignored.
+void TextFieldRef::SetColour(Vector4 lv4Colour)
+{
+    CGS_ASSERT(mpTextFieldInstance != 0, "mpTextFieldInst");   // cpp:423 (non-gating)
+
+    const u32 luRed   = static_cast<u32>(static_cast<s64>(lv4Colour.x * 255.0f)) & 0xFFu;
+    const u32 luGreen = static_cast<u32>(static_cast<s64>(lv4Colour.y * 255.0f)) & 0xFFu;
+    const u32 luBlue  = static_cast<u32>(static_cast<s64>(lv4Colour.z * 255.0f)) & 0xFFu;
+
+    CgsGraphics::TextObject& lrTextObject =
+        static_cast<TextFieldInstance*>(mpTextFieldInstance)->GetTextObject();
+    lrTextObject.mTextColour = (lrTextObject.mTextColour & 0xFF000000u)
+                             | (luBlue << 16) | (luGreen << 8) | luRed;
+}
+
 }

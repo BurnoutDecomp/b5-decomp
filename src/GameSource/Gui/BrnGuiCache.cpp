@@ -1132,6 +1132,22 @@ namespace BrnGui
         return meRoadRuleScoreMode;
     }
 
+    // @ 0x82472E78 -- the per-score-type road-rule live flags (@0xAC44). [H2 wave
+    // 2026-08-25: body landed with the FBurnMainHudState WFInit sweep -- the H2 link
+    // round caught the declaration-only state.]
+    bool GuiCache::IsRoadRuleActive(s32 liRoadRuleType) const
+    {
+        return maRoadRuleActiveByType[liRoadRuleType];
+    }
+
+    // The sat-nav renderer's world-camera lane (@0x4AE0; header note). [H2 wave
+    // 2026-08-25: same link round -- the header promised "body links from the GuiCache
+    // TU" but none had landed.]
+    const Vector4& GuiCache::GetWorldCameraPosition() const
+    {
+        return mv4WorldCameraPosition;
+    }
+
     // @ 0x8240F168
     const FreeburnChallengeManager* GuiCache::GetFreeburnChallengeManager() const
     {

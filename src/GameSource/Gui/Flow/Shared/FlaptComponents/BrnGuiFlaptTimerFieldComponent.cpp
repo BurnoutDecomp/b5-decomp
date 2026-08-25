@@ -219,4 +219,58 @@ namespace BrnGui
                    "Danger colour boundry isn't greater than the safe colour boundary\n");
         return mfCurrentTime > mfDangerColourBoundary;
     }
+
+    // @ 0x8240FED0 -- [H2 wave 2026-08-25] install the safe/danger boundaries and
+    // recompute 1/(difference) for the active mode. Counting DOWN requires
+    // danger < safe (1/(safe-danger)); counting UP requires danger > safe
+    // (1/(danger-safe)); NOT_COUNTING zeroes the reciprocal. The order asserts
+    // (BrnGuiFlaptTimerFieldComponent.h:177/:182) are non-gating -- the X360 divides
+    // regardless.
+    void FlaptTimerFieldComponent::SetBoundaries(f32 lfSafeColourBoundary, f32 lfDangerColourBoundary)
+    {
+        mfSafeColourBoundary   = lfSafeColourBoundary;
+        mfDangerColourBoundary = lfDangerColourBoundary;
+
+        if (meCountingMode == E_TIMER_MODE_COUNTING_DOWN)
+        {
+            CGS_ASSERT(lfDangerColourBoundary < lfSafeColourBoundary,
+                       "Danger colour boundry (  ) isn't less than the safe colour boundary (  )\n");   // h:177 (non-gating)
+            mfOneOverBoundaryDifference = 1.0f / (mfSafeColourBoundary - mfDangerColourBoundary);
+        }
+        else if (meCountingMode == E_TIMER_MODE_COUNTING_UP)
+        {
+            CGS_ASSERT(lfDangerColourBoundary > lfSafeColourBoundary,
+                       "Danger colour boundry (  ) isn't greater than the safe colour boundary (  )\n");   // h:182 (non-gating)
+            mfOneOverBoundaryDifference = 1.0f / (mfDangerColourBoundary - mfSafeColourBoundary);
+        }
+        else
+        {
+            mfOneOverBoundaryDifference = 0.0f;
+        }
+    }
+
+    // X360-INLINED setters (H2 2026-08-25; the DWARF declares all three -- each
+    // inline is attested at a RoadRuleComponent site). SetSafeColours/SetDangerColours:
+    // RoadRuleComponent::Construct @0x8242AE78.. pokes the two colour vectors' xyz
+    // lanes with (255,204,0)/255 and (153,16,16)/255, leaving the w lanes untouched.
+    // SetCountingMode: RefreshBestData @0x82422734/@0x8242274C stores the mode word
+    // directly.
+    void FlaptTimerFieldComponent::SetSafeColours(u8 luRed, u8 luGreen, u8 luBlue)
+    {
+        mv4SafeColour.x = static_cast<f32>(luRed)   * (1.0f / 255.0f);
+        mv4SafeColour.y = static_cast<f32>(luGreen) * (1.0f / 255.0f);
+        mv4SafeColour.z = static_cast<f32>(luBlue)  * (1.0f / 255.0f);
+    }
+
+    void FlaptTimerFieldComponent::SetDangerColours(u8 luRed, u8 luGreen, u8 luBlue)
+    {
+        mv4DangerColour.x = static_cast<f32>(luRed)   * (1.0f / 255.0f);
+        mv4DangerColour.y = static_cast<f32>(luGreen) * (1.0f / 255.0f);
+        mv4DangerColour.z = static_cast<f32>(luBlue)  * (1.0f / 255.0f);
+    }
+
+    void FlaptTimerFieldComponent::SetCountingMode(ETimerMode leCountingMode)
+    {
+        meCountingMode = leCountingMode;
+    }
 }
