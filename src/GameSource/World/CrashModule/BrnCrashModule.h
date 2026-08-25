@@ -123,14 +123,36 @@ namespace BrnWorld
                                 CrashIO::OutputBuffer_PostPhysics* lpOutput,
                                 BrnUpdateSet lUpdateSet );
 
+        // ---- LIFECYCLE, landed 2026-08-25 (crash exit). Bodies in BrnCrashModule_Lifecycle.cpp.
+        // Until this wave `mCrashModule.Construct()` in WorldModule::WorldModule resolved to the
+        // BASE CgsModule::ModuleSingleBuffered::Construct, because CrashModule::Construct was not
+        // declared here. That is why every tunable below read ZERO -- including mbClearUpEnabled,
+        // which gates TickCrashes -- and why landing the crash bodies alone could never have made
+        // a crash end. See the .cpp banner.
+        void Construct() override;   // 0x827CAA28
+        bool Prepare() override;     // 0x827B16D8
+        bool Release() override;     // 0x827B1780
+        void Reset();                // 0x827BF318
+
         // NOTE: the DWARF declares the full ModuleSingleBuffered override set
         // (Construct/Prepare/Release/Destruct), the PreSceneUpdate/PostPhysicsUpdate entry points
-        // and the ~25 private crash-handling helpers. They are intentionally NOT declared in this
-        // behavioural slice: their signatures reference crash-module IO buffer / update-set types
-        // whose headers are owned by their own ledger TUs. Those TUs additively grow this class
-        // with their own declarations; this slice declares only the three methods it defines.
+        // and the ~25 private crash-handling helpers. The TRAFFIC and NETWORK halves are still
+        // intentionally NOT declared in this behavioural slice: their signatures reference
+        // crash-module IO buffer types whose headers are owned by their own ledger TUs. Those TUs
+        // additively grow this class with their own declarations.
 
     private:
+        // ---- the RACE-CAR crash half, landed 2026-08-25. Bodies in
+        //      BrnCrashModule_RaceCarCrashes.cpp. (The traffic/network helpers PreSceneUpdate and
+        //      PostPhysicsUpdate also call are PARKED there, with a loud one-shot each.)
+        void ProcessCrashedRaceCarEvents( const CrashIO::InputBuffer_PostPhysics* lpInput,
+                                          CrashIO::OutputBuffer_PostPhysics* lpOutput );   // 0x827CAAB8
+        void TickCrashes( const CrashIO::InputBuffer_PreScene* lpInput );                  // 0x827C6490
+        void ClearupCrashes( const CrashIO::InputBuffer_PreScene* lpInput,
+                             CrashIO::OutputBuffer_PreScene* lpOutput );                   // 0x827CDE98
+        void ResetRaceCarFromCrashIndex( CrashIO::OutputBuffer_PreScene* lpOutput,
+                                         u32 luCrashIndex, bool lbRemoveRaceCar );         // 0x827C6C40
+
         // X360 0x827C6AD8. Linear search of mRaceCarCrashes for the crash record owned by the
         // given active-race-car slot; returns its index, or KU_INVALID_CRASH (-1) if none.
         u32 FindCrashForRaceCar(EActiveRaceCarIndex leActiveRaceCarIndex) const;

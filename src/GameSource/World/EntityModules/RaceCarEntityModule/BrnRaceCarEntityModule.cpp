@@ -923,19 +923,45 @@ void RaceCarEntityModule::ResetActiveRaceCar(
         // ⛔ PARK 3 -- the reset BitArray + ResetAfterCrash, unchanged from the banner above.
         //    Neither is on the transform path: the bit is read by the deformation legs and
         //    ResetAfterCrash re-seats crash bookkeeping.
+        // ⭐ PARK 1 RETIRED 2026-08-25 (crash exit). The banner above said
+        // "ActiveRaceCar::IsDriveableAfterCrash and ::IsDeformationFixedAfterCrash have no
+        // declaration or body anywhere in this tree; guessing either would decide whether a
+        // wrecked car's transform is reset at all. A crashing car is therefore left alone,
+        // LOUDLY." Both are now reconstructed (BrnActiveRaceCar.cpp, from X360 0x822D48F8 /
+        // 0x822BFED8), so nothing is guessed -- this is the console's own classification:
+        //   0x822F4990  lbz r11, 0x52A(car)              -- mPhysicsState.mbCrashing
+        //     driveable            -> resetTransform = 0, resetDeformation = 0   (leave it be)
+        //     deformation fixed    -> resetTransform = 1, resetDeformation = 1,
+        //                             resettingAfterWreck = IsPlayer()
+        //     otherwise            -> resetTransform = 1, resetDeformation = 0
+        // ⚠️ THIS ARM IS NOW REACHABLE FOR REAL: the crash module lands in this wave, so a car
+        // whose crash has just completed can be re-requested while still flagged crashing.
+        bool lbCrashResetTransform      = true;
+        bool lbCrashResetDeformation    = false;
+        bool lbCrashResettingAfterWreck = false;
+        bool lbIsCrashingReset          = false;
+
         if( lpActiveRaceCar->IsCrashing() )
         {
-            static bool sbLoggedCrashingReset = false;
-            if( !sbLoggedCrashingReset && CgsDev::Log::gpDebugPrint != 0 )
+            lbIsCrashingReset = true;
+
+            if( lpActiveRaceCar->IsDriveableAfterCrash() )
             {
-                sbLoggedCrashingReset = true;
-                *CgsDev::Log::gpDebugPrint
-                    << "[teleport] ResetActiveRaceCar PARK: a CRASHING active car was re-requested;"
-                       " the console's classification needs ActiveRaceCar::IsDriveableAfterCrash /"
-                       " ::IsDeformationFixedAfterCrash, neither of which exists in this tree --"
-                       " the car is left where it is\n";
+                // The car can simply drive away -- do not move it and do not touch its damage.
+                lbCrashResetTransform   = false;
+                lbCrashResetDeformation = false;
             }
-            return;
+            else if( lpActiveRaceCar->IsDeformationFixedAfterCrash() )
+            {
+                lbCrashResetTransform      = true;
+                lbCrashResetDeformation    = true;
+                lbCrashResettingAfterWreck = lpActiveRaceCar->IsPlayer();
+            }
+            else
+            {
+                lbCrashResetTransform   = true;
+                lbCrashResetDeformation = false;
+            }
         }
 
         RaceCar* lpGlobalRaceCar = lpActiveRaceCar->GetGlobalRaceCar();
@@ -949,9 +975,13 @@ void RaceCarEntityModule::ResetActiveRaceCar(
         const s32 liResetModelIndex =
             mpVehicleList->GetVehicleIndex( lpGlobalRaceCar->GetModelId() );
 
-        const bool lbResetTransform      = true;                             // r26
-        const bool lbResetDeformation    = lpActiveRaceCar->IsWrecked();     // r24
-        const bool lbResettingAfterWreck = false;                            // r22
+        // 0x822F4990 / 0x822F4A00 -- the crashing arm above wins when the car IS crashing;
+        // otherwise the console's not-crashing defaults apply (r26 = 1, r24 = IsWrecked(),
+        // r22 = 0). [crash exit 2026-08-25] PARK 1 retired -- see the block above.
+        const bool lbResetTransform      = lbIsCrashingReset ? lbCrashResetTransform : true;
+        const bool lbResetDeformation    = lbIsCrashingReset ? lbCrashResetDeformation
+                                                             : lpActiveRaceCar->IsWrecked();
+        const bool lbResettingAfterWreck = lbIsCrashingReset ? lbCrashResettingAfterWreck : false;
         const f32  lfHowCloseToTotalled  = 0.0f;                             // f31, flt_82001CC0
         const BrnPhysics::Deformation::DeformationResetType leDeformationResetType =
             static_cast<BrnPhysics::Deformation::DeformationResetType>( -1 );   // r29

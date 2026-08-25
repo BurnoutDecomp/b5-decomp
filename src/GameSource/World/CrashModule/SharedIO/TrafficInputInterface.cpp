@@ -56,5 +56,27 @@ TrafficInputInterface& TrafficInputInterface::operator=(const TrafficInputInterf
     return *this;
 }
 
+
+// ====================================================================================
+// TrafficOutputInterface::Construct   [crash exit 2026-08-25]
+//
+// Declared alongside its sibling since this group landed and never defined -- nothing had
+// ever constructed a CrashIO::OutputBuffer_PreScene, because that buffer had no Construct
+// either (see BrnCrashModuleIO_OutputBuffer_PreScene.cpp).
+//
+// ⚠️ THERE IS NO OUT-OF-LINE X360 SYMBOL FOR THIS ONE. The console emits it INLINED into
+// CrashIO::OutputBuffer_PreScene::Construct @0x827CE9E8, as two queue Constructs over the
+// interface's own seats:
+//   0x827CE9F8  CleanupTrafficEvent_160_::Construct(buffer + 8)         -> +0x000
+//   0x827CEA04  NetworkTrafficCrashingEvent_160_::Construct(buffer+332) -> +0x510 - 8 + 8
+// which is exactly "construct both member queues", the same shape TrafficInputInterface::
+// Construct @0x827609F0 has for its three. Homed here beside that sibling.
+// ====================================================================================
+void TrafficOutputInterface::Construct()
+{
+    mCleanupTrafficEventQueue.Construct();
+    mStartCrashingNetworkTrafficQueue.Construct();
+}
+
 }
 }

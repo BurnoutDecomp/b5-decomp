@@ -1027,21 +1027,12 @@ bool BrnWorld::RaceCarEntityModule::IsPlayerCarTailgatingOtherRaceCars(enum EAct
     return false;
 }
 
-// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
-// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
-// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
-// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
-// not this gate.
-void BrnWorld::RaceCarEntityModule::PostSceneUpdate(struct BrnWorld::RaceCarEntityModuleIO::InputBuffer_PostScene *,struct BrnWorld::RaceCarEntityModuleIO::OutputBuffer_PostScene *,unsigned short)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "BrnWorld::RaceCarEntityModule::PostSceneUpdate: inert (body not reconstructed) [FLAG PC boot gate]\n";
-    }
-}
+// GATE RETIRED 2026-08-25 (crash exit): BrnWorld::RaceCarEntityModule::PostSceneUpdate @0x822FE3F0
+// is REAL in GameSource/World/EntityModules/RaceCarEntityModule/BrnRaceCarEntityModule_CrashExit.cpp
+// -- as a MINIMAL-COMPLETE SLICE. THIS WAS THE NINTH GATE, and it was on the CONSUMER side: six of
+// its eight console helpers have no body anywhere in this tree, so no wave had tried it, and while
+// it stayed a stub the crash module's RaceCarCrashCompleteEvent ring was read by nobody.
+// The slice runs the lock pair + ProcessRaceCarCrashCompleteEvents and logs the six absentees once.
 
 // RETIRED (drivable wave 2026-08-01): RaceCarEntityModule::PrePhysicsUpdate is the real
 // X360 0x82307160 slice in BrnRaceCarEntityModule.cpp now. It was a SILENT-DROP stub of
@@ -2219,21 +2210,9 @@ RealmcIface::MemcardInterface::~MemcardInterface()
 // WorldModule::Update @0x827D63E8 once the drive is wired. Per-frame world bridge.
 // GATE RETIRED 2026-08-18 (wave Q4 bridges): WorldModule::BridgePhysicsModuleToPropModule_PostPhysics @0x827AB998 is REAL in GameSource/World/Bridges/WorldBridgePropModule.cpp.
 
-// BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
-// WorldModule::Update @0x827D63E8 once the drive is wired. Per-frame world bridge.
-// X360 0x827AB8B0 -- reconstruct and DELETE this gate.
-// One-shot log + inert: the module/interface it would feed is itself gated
-// inert, so dropping the transfer is the consistent observable.
-void WorldModule::BridgePhysicsModuleToCrashModule_PostPhysics(void *,struct BrnWorld::CrashIO::InputBuffer_PostPhysics *,class BrnPhysics::PhysicsModuleIO::OutputBuffer const *)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "WorldModule::BridgePhysicsModuleToCrashModule_PostPhysics: inert [FLAG PC boot gate]\n";
-    }
-}
+// GATE RETIRED 2026-08-25 (crash exit): WorldModule::BridgePhysicsModuleToCrashModule_PostPhysics
+// @0x827AB8B0 is REAL in GameSource/World/Bridges/WorldBridgeCrashInputs.cpp. 17 instructions --
+// and they are the ONLY route by which a RaceCarCrashEvent reaches the crash module.
 
 // BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
 // WorldModule::Update @0x827D63E8 once the drive is wired. Per-frame world bridge.
@@ -2251,21 +2230,8 @@ void WorldModule::BridgePhysicsModuleToAIModule_PostPhysics(void *,struct BrnAI:
     }
 }
 
-// BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
-// WorldModule::Update @0x827D63E8 once the drive is wired. Per-frame world bridge.
-// X360 0x827AD708 -- reconstruct and DELETE this gate.
-// One-shot log + inert: the module/interface it would feed is itself gated
-// inert, so dropping the transfer is the consistent observable.
-void WorldModule::BridgeTrafficToCrashModule_PostPhysics(void *,struct BrnWorld::CrashIO::InputBuffer_PostPhysics *,struct BrnTraffic::BrnTrafficIO::OutputBuffer_PostPhysics const *)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "WorldModule::BridgeTrafficToCrashModule_PostPhysics: inert [FLAG PC boot gate]\n";
-    }
-}
+// GATE RETIRED 2026-08-25 (crash exit): WorldModule::BridgeTrafficToCrashModule_PostPhysics
+// @0x827AD708 is REAL in GameSource/World/Bridges/WorldBridgeCrashInputs.cpp.
 
 // RETIRED 2026-08-09 (feed wave): WorldModule::BridgeInputToPhysicsModule is REAL in
 // GameSource/World/Bridges/WorldBridgeInputToPhysicsModule.cpp. Its X360 address --
@@ -2274,21 +2240,9 @@ void WorldModule::BridgeTrafficToCrashModule_PostPhysics(void *,struct BrnWorld:
 // that used to sit here said "X360 the Update input fan-out" precisely because no wave
 // had been able to name an address for it.
 
-// BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
-// WorldModule::Update @0x827D63E8 once the drive is wired. Per-frame world bridge.
-// X360 0x827ADEE8 -- reconstruct and DELETE this gate.
-// One-shot log + inert: the module/interface it would feed is itself gated
-// inert, so dropping the transfer is the consistent observable.
-void WorldModule::BridgeInputToCrashModule(void *,struct BrnWorld::CrashIO::InputBuffer_PreScene *,struct BrnWorldIO::UpdateInputBuffer const *)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "WorldModule::BridgeInputToCrashModule: inert [FLAG PC boot gate]\n";
-    }
-}
+// GATE RETIRED 2026-08-25 (crash exit): WorldModule::BridgeInputToCrashModule @0x827ADEE8 is
+// REAL in GameSource/World/Bridges/WorldBridgeCrashInputs.cpp. Its TIMER leg is what makes the
+// crash countdown advance at all; three blob legs stay parked INSIDE the real body.
 
 // RETIRED 2026-08-01 (reset-player-car wave): WorldModule::BridgeActionsToRaceCarModule
 // @0x827ABF40 is REAL in
@@ -2566,37 +2520,13 @@ void BrnWorld::TriggerEntityModule::PreSceneUpdate(struct CgsModule::IOBufferSta
     }
 }
 
-// BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
-// WorldModule::Update @0x827D63E8 once the drive is wired. the crash pre-scene tick.
-// Reconstruct from X360 and DELETE this gate.
-// One-shot log + inert: the module/interface it would feed is itself gated
-// inert, so dropping the transfer is the consistent observable.
-void BrnWorld::CrashModule::PreSceneUpdate(struct CgsModule::IOBufferStack *,struct CgsModule::IOBufferStack *,struct BrnWorld::CrashIO::InputBuffer_PreScene const *,struct BrnWorld::CrashIO::OutputBuffer_PreScene *,unsigned short)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "CrashModule::PreSceneUpdate: inert [FLAG PC boot gate]\n";
-    }
-}
+// GATE RETIRED 2026-08-25 (crash exit): BrnWorld::CrashModule::PreSceneUpdate @0x827D3A60 is REAL
+// in GameSource/World/CrashModule/BrnCrashModule_RaceCarCrashes.cpp -- it runs TickCrashes and
+// ClearupCrashes, i.e. the crash countdown and the crash EXIT.
 
-// BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
-// WorldModule::Update @0x827D63E8 once the drive is wired. the crash post-physics tick.
-// Reconstruct from X360 and DELETE this gate.
-// One-shot log + inert: the module/interface it would feed is itself gated
-// inert, so dropping the transfer is the consistent observable.
-void BrnWorld::CrashModule::PostPhysicsUpdate(struct CgsModule::IOBufferStack *,struct CgsModule::IOBufferStack *,struct BrnWorld::CrashIO::InputBuffer_PostPhysics const *,struct BrnWorld::CrashIO::OutputBuffer_PostPhysics *,unsigned short)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "CrashModule::PostPhysicsUpdate: inert [FLAG PC boot gate]\n";
-    }
-}
+// GATE RETIRED 2026-08-25 (crash exit): BrnWorld::CrashModule::PostPhysicsUpdate @0x827D3BB8 is
+// REAL in GameSource/World/CrashModule/BrnCrashModule_RaceCarCrashes.cpp -- it runs
+// ProcessCrashedRaceCarEvents, i.e. the crash ENTRY into the module.
 
 // BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
 // WorldModule::Update @0x827D63E8 once the drive is wired. the AI update (X360 vtbl+68).
@@ -2778,13 +2708,17 @@ void BrnTraffic::BrnTrafficIO::OutputBuffer_PostScene::Construct()
 //  through a null mpEvents inside memcpy, on the first boot run. Same family as the
 //  PhysicsModuleIO::OutputBuffer::Construct root cause. Leaving both = LNK2005.)
 
-// BOOT GATE: base bring-up only (see the block note above).
-// X360 CreateIOBuffer<InputBuffer_PostScene> @0x827B8C20 (Alloc 736).
-void BrnWorld::RaceCarEntityModuleIO::InputBuffer_PostScene::Construct()
-{
-    memset(this, 0, sizeof(*this));   // FLAG PC: stands in for the unrecovered body
-    CgsModule::IOBuffer::Construct();
-}
+// GATE RETIRED 2026-08-25 (crash exit): BrnWorld::RaceCarEntityModuleIO::InputBuffer_PostScene::
+// Construct @0x822EA5E8 is REAL in BrnRaceCarEntityModuleIO.cpp.
+// ⭐⭐ THE STUB IT REPLACES WAS `memset(this, 0, sizeof(*this))`, and the block note directly
+// above already described this exact failure for the PostPhysics sibling -- "the base-only gate
+// left ... un-Constructed, and the moment [the bridge] went live their operator= Appended into
+// never-Constructed queues -- a 'Base event queue overflow' assert followed by an AV writing
+// through a null mpEvents inside memcpy". It happened again here, verbatim, the first frame the
+// crash module posted a real RaceCarCrashCompleteEvent, because a memset leaves an EventQueue's
+// mpEvents NULL: zeroing a queue is not constructing it.
+// ⚠️ A memset stub is WORSE than no stub for this: it looks like initialisation and it silences
+// nothing, so the defect waits for the day a producer lands.
 
 // (BrnWorld::RaceCarEntityModuleIO::InputBuffer_PrePhysics::Construct gate RETIRED
 //  2026-07-27: the real partial slice now lives in BrnRaceCarEntityModuleIO.h from
@@ -2939,29 +2873,12 @@ void WorldModule::BridgeRaceCarModuleToAIModule_PreScene(void *,struct BrnAI::AI
     }
 }
 
-// BOOT GATE -- real body @0x827A5060 in its own home TU (not mounted: IO accessor closure).
-void WorldModule::BridgeEntityModulesToCrashModule_PreScene(void *,struct BrnWorld::CrashIO::InputBuffer_PreScene *,struct BrnWorld::RaceCarEntityModuleIO::OutputBuffer_PreScene const *)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "WorldModule::BridgeEntityModulesToCrashModule_PreScene: inert [FLAG PC boot gate]\n";
-    }
-}
+// GATE RETIRED 2026-08-25 (crash exit): WorldModule::BridgeEntityModulesToCrashModule_PreScene
+// @0x827A5060 is REAL in GameSource/World/Bridges/WorldBridgeCrashInputs.cpp.
 
-// BOOT GATE -- real body @0x827AAC70 in its own home TU (not mounted: IO accessor closure).
-void WorldModule::BridgeCrashModuleToPhysicsModule(void *,class BrnPhysics::PhysicsModuleIO::InputBuffer *,struct BrnWorld::CrashIO::OutputBuffer_PreScene const *)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "WorldModule::BridgeCrashModuleToPhysicsModule: inert [FLAG PC boot gate]\n";
-    }
-}
+// GATE RETIRED 2026-08-25 (crash exit): WorldModule::BridgeCrashModuleToPhysicsModule @0x827AAC70
+// is REAL in GameSource/World/Bridges/WorldBridgeCrashInputs.cpp (a documented one-shot park
+// inside a real body -- its source member is still a 1-byte placeholder).
 
 // ---------------------------------------------------------------------------
 // CgsResource::ShaderTechniqueResourceType -- the one member its own TU still

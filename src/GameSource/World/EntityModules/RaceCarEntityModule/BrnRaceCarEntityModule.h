@@ -150,6 +150,12 @@ public:
                               RaceCarEntityModuleIO::OutputBuffer_PostScene* lpOutput,
                               BrnUpdateSet lUpdateSet );
 
+        // ---- THE CRASH EXIT, consumer side (2026-08-25). Body in
+        //      BrnRaceCarEntityModule_CrashExit.cpp, alongside the PostSceneUpdate slice that
+        //      calls it. X360 0x822F3FE0 (359 insns).
+        void ProcessRaceCarCrashCompleteEvents(
+            const RaceCarEntityModuleIO::InputBuffer_PostScene* lpInput );
+
         // ---- ADDITIVE (WorldModule::EntityModulePreSceneUpdate @0x827BD1F0) ----
         // Declaration-only; body gated in WorldLinkStubs.cpp until this module's
         // own TU lands.

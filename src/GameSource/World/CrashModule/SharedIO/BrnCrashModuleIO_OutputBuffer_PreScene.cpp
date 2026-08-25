@@ -84,5 +84,38 @@ namespace CrashIO
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
         return &mRaceCarOutputInterface;
     }
+
+    // ====================================================================================
+    // OutputBuffer_PreScene::Construct   X360 0x827CE9E8
+    //
+    //   *this = 1                                                -- IOBuffer::Construct
+    //   CleanupTrafficEvent_160_::Construct(this + 8)         \__ == TrafficOutputInterface
+    //   NetworkTrafficCrashingEvent_160_::Construct(this + 332) /   ::Construct over +0x8
+    //   VehicleInputInterface::Construct(this + 1648)            -- mVehicleInputInterface
+    //   RaceCarCrashCompleteEvent_10_::Construct(this + 143824)  -- mRaceCarOutputInterface's
+    //                                                               queue; 143824 == 0x231D0
+    //   *(this + 143826) = 0                                     -- a trailing byte in the same
+    //                                                               interface (2 past the queue
+    //                                                               base; not modelled)
+    //
+    // ⭐ THE +0x231D0 CONSTRUCT IS THE ONE THAT MATTERS: it is the crash-complete ring that
+    // ResetRaceCarFromCrashIndex AddEvent()s into and that
+    // RaceCarEntityModule::ProcessRaceCarCrashCompleteEvents drains. 143824 is also, exactly, the
+    // number the previous wave's "OUT OF BOUNDS @143824" measurement was reporting against the
+    // phantom OutputBuffer_PostScene -- it was this member's own offset all along.
+    //
+    // ⛔ mVehicleInputInterface IS NOT CONSTRUCTED HERE, and that is not an omission: this tree
+    // still models it as `VehicleInputInterfaceStorage { unsigned char maBytes[1] }` (see the type
+    // banner). There is nothing to construct until it is promoted to the real type, and nothing
+    // in the reconstructed crash module writes it. [FLAG] DELETE-WHEN it is promoted.
+    // ====================================================================================
+    void OutputBuffer_PreScene::Construct()
+    {
+        CgsModule::IOBuffer::Construct();
+
+        mTrafficOutputInterface.Construct();
+        mRaceCarOutputInterface.GetRaceCarCrashCompleteEventQueue()->Construct();
+    }
+
 }
 }

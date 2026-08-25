@@ -1693,4 +1693,190 @@ void ActiveRaceCar::Update(f32 lfTimeStep,
     }
 }
 
+
+// =================================================================================================
+// THE CRASH-EXIT SET   (crash exit wave, 2026-08-25)
+//
+// These four are the consumer end of the crash module's RaceCarCrashCompleteEvent: once the crash
+// module says a wreck is finished, RaceCarEntityModule::ProcessRaceCarCrashCompleteEvents lands
+// here (or on RaceCar::RequestResetOnTrack) and the car becomes drivable again.
+// =================================================================================================
+
+// -------------------------------------------------------------------------------------------------
+// IsDriveableAfterCrash @ 0x822D48F8   (88 insns)
+//
+//   0x822D4910  CGS_ASSERT(IsAttached())                       BrnActiveRaceCar.h:1089
+//   0x822D4930  lwz r, 0x6F0(this) ; lbz 0xA4(raceCar)         mpRaceCar->GetType(), asserted < 4
+//   0x822D4954  if (type != 0 /*E_RACE_CAR_TYPE_PLAYER*/) return false
+//   0x822D4960  if (IsWrecked()) return false
+//   0x822D4978  the VMX block: build the unit Y axis (0,1,0,0) on the stack, take
+//               GetTransform()'s row at +0x10 (the car's own UP axis), vmsum3fp128 the two -- a
+//               3-component DOT -- and compare it against a splat of the scalar at v14[0], which
+//               the code has just set to 0.0f.  ⇒ `if (0.0f > dot(carUp, worldUp)) return false`
+//               i.e. the car is upside down (or past 90 degrees).
+//   0x822D49E0  if (!mPhysicsState.mbIsFrontRayOccluded) return true
+//   0x822D49F0  if (!mbIsInGameMode) return true
+//               return false
+//
+// ⭐ THE LAST TWO LINES ARE THE WHOLE POINT OF THE PREDICATE and they are easy to misread as one
+// test. They are two separate early-outs: a car whose front ray is CLEAR is always driveable, and
+// even a blocked car is driveable when we are NOT in a game mode -- which is free burn, i.e. this
+// build. So on the free-burn path this reduces to "an upright, unwrecked PLAYER car can always
+// drive away from its own crash", which is exactly the behaviour the game is famous for.
+// -------------------------------------------------------------------------------------------------
+bool ActiveRaceCar::IsDriveableAfterCrash() const
+{
+    CGS_ASSERT( IsAttached(), "IsAttached()" );   // BrnActiveRaceCar.h:1089
+
+    CGS_ASSERT( mpRaceCar->GetType() < E_RACE_CAR_TYPE_COUNT, "muType < E_RACE_CAR_TYPE_COUNT" );
+    if( mpRaceCar->GetType() != E_RACE_CAR_TYPE_PLAYER )
+    {
+        return false;
+    }
+
+    if( IsWrecked() )
+    {
+        return false;
+    }
+
+    // 0x822D4978..0x822D49DC -- dot(the car's up axis, world up) must not be below zero.
+    // The console builds the world-up constant on the stack as (0,1,0,0) and splats the 0.0f
+    // comparand from the adjacent stack slot; both are read from the image, not assumed.
+    const Matrix44Affine lTransform = GetTransform();
+    const Vector3 lWorldUp = { 0.0f, 1.0f, 0.0f, 0.0f };
+    if( 0.0f > rw::math::vpu::Dot( lTransform.Up(), lWorldUp ) )
+    {
+        return false;
+    }
+
+    // 0x822D49E0 / 0x822D49F0 -- two independent early-outs. See the banner.
+    if( !mPhysicsState.mbIsFrontRayOccluded )
+    {
+        return true;
+    }
+    if( !mbIsInGameMode )
+    {
+        return true;
+    }
+    return false;
+}
+
+// -------------------------------------------------------------------------------------------------
+// IsDeformationFixedAfterCrash @ 0x822BFED8   (52 insns)
+//
+// The same family as IsDriveableAfterCrash MINUS the orientation test, and with every arm's
+// polarity flipped: a non-player type, a wrecked car, a clear front ray and "not in a game mode"
+// all return TRUE, and only "front ray occluded AND in a game mode" returns false.
+// -------------------------------------------------------------------------------------------------
+bool ActiveRaceCar::IsDeformationFixedAfterCrash() const
+{
+    CGS_ASSERT( IsAttached(), "IsAttached()" );   // BrnActiveRaceCar.h:1089
+
+    CGS_ASSERT( mpRaceCar->GetType() < E_RACE_CAR_TYPE_COUNT, "muType < E_RACE_CAR_TYPE_COUNT" );
+    if( mpRaceCar->GetType() != E_RACE_CAR_TYPE_PLAYER )
+    {
+        return true;
+    }
+
+    if( IsWrecked() )
+    {
+        return true;
+    }
+
+    if( !mPhysicsState.mbIsFrontRayOccluded )
+    {
+        return true;
+    }
+    if( !mbIsInGameMode )
+    {
+        return true;
+    }
+    return false;
+}
+
+// -------------------------------------------------------------------------------------------------
+// ResetVerletOffsets @ 0x822A4E90   (48 insns)
+//
+//   0x822A4EB4  CGS_ASSERT(!IsInactive())   BrnActiveRaceCar.cpp:1128
+//   the loop stores a zero VMX register into 128 consecutive 16-byte slots at this+0x820, which is
+//   mRenderParams (+0x7E0) + 0x40 == RenderParams::maVerletOffsets, carrying the
+//   "luPartIndex < KI_MAX_RACE_CAR_VERLET_POINTS" tripwire (BrnActiveRaceCar.h:1866) from the
+//   inlined element accessor.
+// -------------------------------------------------------------------------------------------------
+void ActiveRaceCar::ResetVerletOffsets()
+{
+    CGS_ASSERT( !IsInactive(), "!IsInactive()" );   // BrnActiveRaceCar.cpp:1128
+
+    Vector3Plus* lpVerletOffsets = mRenderParams.GetVerletOffsets();
+    const Vector3Plus lZero = { 0.0f, 0.0f, 0.0f, 0.0f };
+    for( u32 luPartIndex = 0; luPartIndex < KU_MAX_RACE_CAR_VERLET_POINTS; ++luPartIndex )
+    {
+        CGS_ASSERT( luPartIndex < KU_MAX_RACE_CAR_VERLET_POINTS,
+                    "luPartIndex < (uint32_t)KI_MAX_RACE_CAR_VERLET_POINTS" );   // h:1866
+        lpVerletOffsets[luPartIndex] = lZero;
+    }
+}
+
+// -------------------------------------------------------------------------------------------------
+// ResetAfterCrash @ 0x822BF3A0   (77 insns)
+//
+//   0x822BF3B8  CGS_ASSERT(IsAttached())   BrnActiveRaceCar.cpp:1048
+//   0x822BF3DC  if (IsActive()) {
+//     0x822BF3E8    if (!lbKeepVerletOffsets) ResetVerletOffsets();
+//     0x822BF444    mRenderParams.SetDamaged(mpRaceCar->ToBeRenderedDamaged());   (stb 0x1BE4)
+//     0x822BF480    if (mPhysicsState.mbCrashing) mbUncrashedThisFrame = true;    (0x52A -> 0x77A)
+//     0x822BF494    mfInvulnerablityTime = 2.0f      (flt_82014984, READ FROM THE IMAGE)
+//     0x822BF4A4    std -1, 0x1580 ; std -1, 0x1588  -- BOTH u64 fields of
+//                   mRenderParams.mBodyPartVisibility  ⇒ EVERY BODY PART VISIBLE AGAIN
+//   }
+//   ...and unconditionally (outside the IsActive arm):
+//     0x822BF4B8    mfTimeInWater          = 0.0f    (flt_82001CC0)
+//     0x822BF4BC    mbIsWrecked            = false
+//     0x822BF4C0    mfTimeDriveableInCrash = 0.0f
+//                   mbCrashedIntoWater     = false
+//                   mbIsInShowtime         = false
+//
+// ⭐ THE BODY-PART RESTORE IS THE VISIBLE HALF OF "THE CRASH IS OVER": mBodyPartVisibility is the
+// mask the deformation renderer uses to hide parts that flew off. RenderParams::Reset seeds it
+// with the literal 0xB80FFFFFFFF per field; this path stores ~0 into both, which is BitArray's
+// own SetAll(). Written by name -- the console's `std -1` pair is a whole-word idiom, not a
+// per-bit one, and BitArray already spells that exact shape.
+//
+// ⚠️ mbUncrashedThisFrame is set only when the car was STILL FLAGGED CRASHING at the moment the
+// reset landed. That is the one-frame edge the rest of the entity module keys "the player just
+// stopped crashing" off, so it must not be hoisted out of the IsActive() arm.
+// -------------------------------------------------------------------------------------------------
+void ActiveRaceCar::ResetAfterCrash( bool lbKeepVerletOffsets )
+{
+    CGS_ASSERT( IsAttached(), "IsAttached()" );   // BrnActiveRaceCar.cpp:1048
+
+    if( IsActive() )
+    {
+        if( !lbKeepVerletOffsets )
+        {
+            ResetVerletOffsets();
+        }
+
+        CGS_ASSERT( IsAttached(), "IsAttached()" );   // h:1089
+        mRenderParams.SetDamaged( mpRaceCar->ToBeRenderedDamaged() );
+
+        CGS_ASSERT( IsAttached(), "IsAttached()" );   // h:1418
+        if( mPhysicsState.mbCrashing )
+        {
+            mbUncrashedThisFrame = true;
+        }
+
+        mfInvulnerablityTime = 2.0f;                    // flt_82014984
+        // std -1 x2 @0x1580/0x1588 -- both mBodyPartVisibility words to all-ones. Spelled with
+        // the same accessor ActiveRaceCar::Attach already uses for the identical console idiom.
+        mRenderParams.MakeAllPartsVisible();
+    }
+
+    mfTimeInWater          = 0.0f;   // flt_82001CC0
+    mbIsWrecked            = false;
+    mfTimeDriveableInCrash = 0.0f;
+    mbCrashedIntoWater     = false;
+    mbIsInShowtime         = false;
+}
+
 }

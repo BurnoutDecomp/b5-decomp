@@ -1164,23 +1164,16 @@ WorldModule::Prepare( CgsModule::IOBufferStack* lpInputBufferStack,
         {
             mePrepareStage = eWorldPrepareCrashModule;
 
-            // [FLAG PC boot gate 2026-07-26] CrashModule's own staged Prepare override is
-            // not committed (the behavioural slice defers the lifecycle set to its own TU),
-            // so the call resolves to the BASE ModuleSingleBuffered::Prepare, which asserts
-            // "new module type" on the data-structure path. Skip (one-shot log) until the
-            // crash lifecycle TU lands; the module stays inert.
-            {
-                static bool s_bLoggedCrashGate = false;
-                if ( !s_bLoggedCrashGate )
-                {
-                    s_bLoggedCrashGate = true;
-                    if ( CgsDev::Message::gxMessageFilterFlags & 1 )
-                        *CgsDev::Log::gpDebugPrint
-                            << "WorldModule::Prepare: CrashModule::Prepare skipped "
-                               "(lifecycle TU deferred) [FLAG PC boot gate]\n";
-                }
-            }
-            if ( false && !mCrashModule.Prepare() )
+            // ⭐ GATE RETIRED 2026-08-25 (crash exit). The gate's own text named the defect and it
+            // was read as a reason to skip: "the call resolves to the BASE
+            // ModuleSingleBuffered::Prepare". It did -- because BrnCrashModule.h declared NO
+            // lifecycle at all, so `mCrashModule.Construct()` at line 505 also bound to the base
+            // and the module's tunables never left zero (mbClearUpEnabled == 0 alone made the
+            // crash countdown unreachable). BrnCrashModule_Lifecycle.cpp lands the real
+            // Construct/Prepare/Release/Reset; Construct sets Module::mbIsNewModule, which is what
+            // makes every data-structure arm of the base Prepare skip itself. Skipping Prepare was
+            // never the fix -- landing Construct is.
+            if ( !mCrashModule.Prepare() )
             {
                 return false;
             }

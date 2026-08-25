@@ -64,6 +64,18 @@ namespace CrashIO
         return &mVehicleDriverInterface;
     }
 
+    // 0x827BB480 (DWARF :84) -- read-lock tripwire; returns &mActiveRaceCarInterface
+    // (X360 this+0x5180). Callers: CrashModule::PreSceneUpdate @0x827D3A90/@0x827D3AEC,
+    // ::TickCrashes @0x827C6648/@0x827C66EC, ::ClearupCrashes.
+    // [crash exit 2026-08-25] the return type is the real interface, not the ex-blob: see the
+    // member's banner in BrnCrashModuleIO.h.
+    const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface*
+    InputBuffer_PreScene::GetActiveRaceCarInterface() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        return &mActiveRaceCarInterface;
+    }
+
     // 0x827A20A8 (DWARF :76) -- write-lock tripwire; memberwise-copy the 48-byte timer-status view
     // into mTimerStatusInterface (X360 this+0x4). The X360 inlines the two-record field-by-field
     // copy; reproduced via the authoritative CgsSystem::TimerStatusInterface::operator= (same
@@ -100,7 +112,11 @@ namespace CrashIO
         const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpInterface)
     {
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
-        memcpy(&mActiveRaceCarInterface, lpInterface, sizeof(mActiveRaceCarInterface));
+        // [crash exit 2026-08-25] was `memcpy(&member, lpInterface, sizeof(member))` over a
+        // 10480-byte console-sized blob. The member is the real type now, so the copy is the
+        // interface's own operator= -- which is what the X360 inlines here (the same field-by-field
+        // walk BrnRCEntityActiveRaceCarOutputInterface.cpp:105 reconstructs).
+        mActiveRaceCarInterface = *lpInterface;
     }
 
     // 0x827A2328 (DWARF :88) -- write-lock tripwire; blind-copy the 0x3410-byte game-action queue
@@ -174,6 +190,32 @@ namespace CrashIO
     {
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
         mVehicleManagerOutputInterface = *lpVehicleManagerOutputInterface;
+    }
+
+    // ====================================================================================
+    // InputBuffer_PostPhysics::Construct   X360 0x827CEA58
+    //
+    //   *this = 1                                    -- IOBuffer::Construct (the status bit)
+    //   TrafficInputInterface::Construct(this + 8)                       -- mTrafficInputInterface
+    //   PhysicalTrafficState_20_::Construct(this + 13248)   \
+    //   ImpactEvent_16_::Construct(this + 12464)             |  all four inside
+    //   VariableEventQueue<1536,16>::Construct(this + 29584) |  mVehicleOutputInterface (+0xDA0),
+    //   the +3488 qword zero and the five +31136..+31140 bytes /  == its own Construct
+    //   VehicleManagerOutputInterface::Construct(this + 31152)  -- mVehicleManagerOutputInterface
+    //
+    // Reproduced BY NAME: both embedded interfaces already own a Construct() that does exactly
+    // the console's inlined work over their own members (VehicleOutputInterface::Construct is
+    // itself X360-attested as the inlined body of PhysicsModuleIO::OutputBuffer::Construct over
+    // the same seat, and VehicleManagerOutputInterface::Construct is the out-of-line 0x822E6790).
+    // See the header banner for why this being absent was fatal rather than merely incomplete.
+    // ====================================================================================
+    void InputBuffer_PostPhysics::Construct()
+    {
+        CgsModule::IOBuffer::Construct();
+
+        mTrafficInputInterface.Construct();
+        mVehicleOutputInterface.Construct();
+        mVehicleManagerOutputInterface.Construct();
     }
 
     // ====================================================================================
