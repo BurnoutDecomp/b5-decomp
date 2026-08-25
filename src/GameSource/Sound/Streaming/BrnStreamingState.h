@@ -2,23 +2,43 @@
 #define BRN_SOUND_LOGIC_STREAMING_STREAMING_STATE_H
 
 #include "types.hpp"
+#include "GameSource/Sound/Module/LogicModule/BrnState.h"          // BrnSound::Logic::BrnState (the DWARF base)
+#include "GameSource/Sound/Streaming/BrnStreamingStateManager.h"   // StreamRequest (DWARF home BrnStreamingStateManager.h:49)
 
 // =============================================================================
-// BrnSound::Logic::Streaming::StreamingState (+ the Request payload it owns)
-//   GameSource/Sound/Streaming/BrnStreamingState.h (DWARF home)
+// BrnSound::Logic::Streaming::StreamingState
+//   GameSource/Sound/Streaming/BrnStreamingState.h (DWARF home) +
+//   GameSource/Sound/Streaming/BrnStreamingState.cpp
 //
-// Reconstructed from BURNOUT_X360_ARTIST.XEX (semantic parity, not byte match).
-// StreamingState is the per-stream state record owned by a StreamingEffect. The
-// effect's GetRequest() accessor (this TU @ 0x82683B40) asserts the state is
-// attached (StreamingState::IsAttached(), BrnStreamingState.h:168 -- a bool at
-// +0x48 read as a byte) and returns a reference to the state's embedded Request
-// at +0x54.
+// Reconstructed from BURNOUT_X360_ARTIST.XEX + the DecFIGS DWARF. StreamingState
+// is the per-stream state record owned by a StreamingEffect.
 //
-// This is a MINIMAL FLAGGED HOME: only the two members the GetRequest accessor
-// touches (the IsAttached flag at +0x48 and the Request payload at +0x54) are
-// materialised, plus the leading span up to them so the offsets are honest. The
-// full StreamingState surface (voice/content/load bookkeeping) is DEFERRED to its
-// own TUs, which grow this header ADDITIVELY.
+// (2026-08-25, audio-faithfulness wave 5 RECONCILIATION): this header used to be a
+// base-less minimal model (opaque maLeading[0x48] + mbAttached@0x48 + gap + a
+// local rival `StreamingRequest`), and the same class had a SECOND rival inside
+// GameShared CgsState.h (ctor-derived numeric names mi84..mu104). The DWARF
+// (BrnStreamingState.h:36) is unambiguous:
+//   struct StreamingState : public BrnSound::Logic::BrnState
+//   { StreamRequest mRequest; float mfFadeOut; }      (:105/:106)
+// and every prior numeric decodes onto it exactly (console offsets):
+//   +0x48 (72)  "mbAttached"        == State::mbIsAttached (the base member --
+//               IsAttached() now comes from the canonical State base)
+//   +0x54 (84)  mRequest            == the mi84..mu104 ctor span, field-for-field
+//               the manager's StreamRequest: mpAttachment@84, mu32Priority@88,
+//               mfLagTolerance@92, mfTimeStamp@96, mu32UniqueId@100, mbDirty@104
+//   +0x6C (108) mfFadeOut           (not stored by the ctor)
+// The old local `StreamingRequest` was the SAME type as the manager-ring
+// StreamRequest (DWARF types mRequest as StreamRequest; the effect's re-issue
+// path block-copies it into the manager's re-post ring), so it is retired in
+// favour of the real DWARF home included above.
+//
+// DEFER (DWARF-listed surfaces not reconstructed here -- each its own slice):
+// the RTTI set (sTypeInfo/GetTypeInfo/GetTypeName/GetStaticTypeInfo/CreateObject
+// @0x826C9AA8, descriptor rodata @0x82F2E83C), virtual Attach/Detach/UpdateParams,
+// GetStreamingStateManager, SetFadeOut/GetFadeOut, private SetRequest.
+//
+// LAYOUT NOTE (X360 32-bit vs host 64-bit): members are pinned BY NAME + SEQUENCE;
+// the console offsets above are comments, not asserted.
 // =============================================================================
 
 namespace BrnSound
@@ -28,47 +48,36 @@ namespace Logic
 namespace Streaming
 {
 
-// BrnStreamingState.h. The pending stream request carried by a StreamingState.
-// GetRequest() callers read `.mpAttachment` first (asserted "GetRequest().mpAttachment",
-// BrnStreamingEffect.cpp), so mpAttachment is the leading member. ProcessUpdate
-// block-copies the whole Request as six 4-byte words (24 bytes) when re-issuing it,
-// so the payload is 24 bytes wide.
-//
-// FLAG (un-DWARF'd field names beyond mpAttachment): only mpAttachment (the +0
-// member the asm/callers prove) is named from evidence; the remaining payload is
-// modelled as an honest 20-byte span at the asm-observed width (the 6-word copy),
-// NOT as guessed concrete members. Grow additively when the Request TUs land.
-struct StreamingRequest
+// DWARF BrnStreamingState.h:36. The per-stream sound-logic state.
+struct StreamingState : public BrnSound::Logic::BrnState
 {
-    void* mpAttachment;          // +0x00 (asserted "GetRequest().mpAttachment")
-    u8    maPayload[20];         // +0x04..0x17 (rest of the 6-word / 24-byte copy)
-};
+    // @ 0x826B0CB0 (was homed in the GameShared CgsState.cpp rival). Zeroes the
+    // embedded request field-for-field (5 words + the mbDirty byte). Bodied in
+    // BrnStreamingState.cpp.
+    StreamingState();
 
-// BrnStreamingState.h. Per-stream state record.
-//
-// FLAG: MINIMAL FLAGGED HOME. Only the attached-flag (+0x48) and the embedded
-// Request (+0x54) are materialised; the leading span is an honest opaque region
-// at the asm-observed offsets so IsAttached()/GetRequest reach their members at
-// the right place by NAME. Field types in the leading span are UNVERIFIED and
-// DEFERRED.
-struct StreamingState
-{
-    // BrnStreamingState.h:168 (DWARF assert site). True once the stream has been
-    // attached to a voice. Read as a byte at +0x48 by GetRequest's IsAttached()
-    // guard (`lbz r11, 0x48(state)`).
-    bool IsAttached() const { return mbAttached; }
+    // @ 0x826C9B28 -- scalar deleting destructor. Installs StreamingState's own
+    // vtable (off_820AE1F4), calls State::DestroyEffects() to tear down attached
+    // effects, re-installs the MemBase base vtable (off_820AA820), and (deleting
+    // flavour) routes the storage back through the sound allocator. Observable
+    // body = the DestroyEffects() call; the vtable installs + conditional
+    // allocator free are the compiler-synthesised deleting-destructor parts.
+    // Bodied in BrnStreamingState.cpp.
+    virtual ~StreamingState();
 
-    // StreamingState::Get  @ 0x82683A00 (asm/DWARF: "Get", called by
-    // StreamingStateManager::GetFreeState). Asserts IsAttached() (non-gating
-    // CGS_ASSERT tripwire) then returns the embedded Request at +0x54.
-    // Out-of-line body: BrnStreamingState.cpp.
-    StreamingRequest& GetRequest();
+    // @ 0x82683A00 (DWARF h:166: `const StreamRequest& GetRequest() const`).
+    // Asserts IsAttached() (the State-base flag at +0x48, `lbz r11, 0x48(state)`;
+    // assert cite BrnStreamingState.h:168 -- a non-gating tripwire) and returns
+    // the embedded request at +0x54. Bodied in BrnStreamingState.cpp.
+    const StreamRequest& GetRequest() const;
 
-    // -- FLAGGED layout (offsets are X360 facts; leading-span types DEFERRED) --
-    u8               maLeading[0x48];   // +0x00..0x47 (opaque: voice/content/load state)
-    bool             mbAttached;        // +0x48 (IsAttached flag)
-    u8               maGap0x49[0x0B];   // +0x49..0x53 (padding/other flags)
-    StreamingRequest mRequest;          // +0x54 (returned by GetRequest)
+private:
+    // DWARF :105. The stream request this state is servicing (the manager-ring
+    // StreamRequest type, assigned in via the deferred SetRequest).
+    StreamRequest mRequest;                 // +0x54 (84)
+
+    // DWARF :106. Stop fade-out seconds (paired with StreamStopRequest::mfFadeOut).
+    f32 mfFadeOut;                          // +0x6C (108)
 };
 
 } // namespace Streaming

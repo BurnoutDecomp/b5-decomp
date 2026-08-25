@@ -72,8 +72,10 @@ struct StreamingEffect : public BrnSound::Logic::BrnEffectObject
 
     // BrnStreamingEffect.cpp (DWARF assert site, "lpState") + BrnStreamingState.h
     // ("IsAttached()"). Asserts the owned state exists and is attached, then returns
-    // a reference to the state's embedded Request. @ 0x82683B40.
-    StreamingRequest& GetRequest();
+    // a reference to the state's embedded request (the manager-ring StreamRequest
+    // type -- see the wave-5 reconciliation note in BrnStreamingState.h).
+    // @ 0x82683B40.
+    const StreamRequest& GetRequest() const;
 
     // +0x0C. The owned StreamingState (asserted "lpState" by GetRequest; nulled by
     // the ctor). Reached BY NAME; the intervening un-homed leaf-scalar gap between
