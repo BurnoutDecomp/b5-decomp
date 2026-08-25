@@ -32,6 +32,11 @@
 // be correlated against the BRN_FRAME_DUMP image of the SAME frame.
 namespace CgsDev { namespace Log { void WriteToLog(const char*); } }
 namespace renderengine { extern u32 guPresentCount; u32 FrameDumpEvery(); }
+// [boost-bar 2026-08-25] The GUI additive-blend IDENTITY (CgsBillboardRenderer.cpp's
+// dword_83010F24 sentinel). Declared locally instead of including the Gui header -- this
+// graphics-layer TU must not depend on the Gui tree; the dispatch's SET_STATE_BLEND case
+// compares the command's pointer against it (never dereferences).
+namespace CgsGui { extern const renderengine::BlendState* gpGuiBlendStateAdditive; }
 
 namespace CgsGraphics
 {
@@ -1104,6 +1109,20 @@ namespace CgsGraphics
         // through -- the same observable pixel result as the console's masked program.
         int liMaskDepth = 0;
         bool lbMaskStageBound = false;
+        // ---- the boost-bar gradient program (SET_SHADER_PROGRAM 20 / PUSH_BOOST_BAR_COLOURS 21)
+        // The console's program 3 is the boost-bar gradient pixel shader: it shades the fire
+        // building blocks between an OUTER and an INNER colour (BoostBarRenderer pushes the
+        // meCurrentBoostType pair via opcode 21; ShowDebugScreen's 4x5 grid visualises it).
+        // [FLAG PC-platform leaf] this fixed-function backend has no programmable 2D pipeline,
+        // so the gradient is approximated per-VERTEX: while program 3 is latched, every draw's
+        // vertex RGB is additionally modulated by the clamped 50/50 mix of the latched pair
+        // (the mix keeps the type's hue -- gold / red-orange / green -- where either colour
+        // alone drifts; the pair's components are HDR-range, so the mix is clamped to 1).
+        // DELETE-WHEN the real program-3 formula is recovered (the shipped TUB PC build carries
+        // it as D3D9 shader bytecode) and a shader path lands in this dispatch.
+        s8   li8LatchedProgram = 0;
+        bool lbBoostPairLatched = false;
+        f32  lfBoostTintR = 255.0f, lfBoostTintG = 255.0f, lfBoostTintB = 255.0f;
         // [diag] BRN_CXFORM_TRACE: the texture currently bound on stage 0, so a traced batch
         // records whether it was MODULATEd by a texel or took its diffuse straight through.
         const void* lpTraceBoundTexture = nullptr;
@@ -1226,11 +1245,54 @@ namespace CgsGraphics
                 break;
             }
 
-            case IM_CMD_SET_STATE_BLEND:   // case 3 - install the standard alpha-blend-over state
+            case IM_CMD_SET_STATE_BLEND:   // case 3 - install the commanded blend state
+            {
+                // [boost-bar 2026-08-25] This case used to be value-independent (always the
+                // standard alpha-over), which flattened the GUI's ADDITIVE passes -- the boost
+                // bar's fire overlay / glow / grow-fireball draws (gpGuiBlendStateAdditive ==
+                // the console's dword_83010F24 slot) blended like ordinary translucency, so
+                // "the alpha is all wrong". The GUI blend identities are opaque sentinels
+                // (CgsBillboardRenderer.cpp); identity-compare only, never dereference. Every
+                // non-additive state (the standard sentinel, the null default folds) keeps the
+                // standard src-alpha/inv-src-alpha.
+                const ImCommandSetStateBlend* lpSet =
+                    static_cast<const ImCommandSetStateBlend*>(lpCommand);
+                const bool lbAdditive =
+                    (lpSet->mpBlendState != nullptr &&
+                     lpSet->mpBlendState == CgsGui::gpGuiBlendStateAdditive);
                 lpDevice->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
                 lpDevice->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
-                lpDevice->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
+                lpDevice->SetRenderState(D3DRS_DESTBLEND,
+                                         lbAdditive ? D3DBLEND_ONE : D3DBLEND_INVSRCALPHA);
                 break;
+            }
+
+            case IM_CMD_SET_SHADER_PROGRAM:         // case 20 - latch the 2D program id
+            {
+                const ImCommandSetShaderProgram* lpSet =
+                    static_cast<const ImCommandSetShaderProgram*>(lpCommand);
+                li8LatchedProgram = lpSet->mi8ShaderProgram;
+                if (li8LatchedProgram != 3)
+                    lbBoostPairLatched = false;   // leaving the gradient program drops the pair
+                break;
+            }
+
+            case IM_CMD_PUSH_BOOST_BAR_COLOURS:     // case 21 - latch the gradient colour pair
+            {
+                const ImCommandPushBoostBarColours* lpSet =
+                    static_cast<const ImCommandPushBoostBarColours*>(lpCommand);
+                // maColours[0] == the OUTER colour, [1] == the INNER (the RenderComponent /
+                // ShowDebugScreen push order). Clamped 50/50 mix in the 0..255 scale space
+                // DispatchColourScaleOnly consumes (identity == 255).
+                const f32 lfMixR = (lpSet->maColours[0].x + lpSet->maColours[1].x) * 0.5f;
+                const f32 lfMixG = (lpSet->maColours[0].y + lpSet->maColours[1].y) * 0.5f;
+                const f32 lfMixB = (lpSet->maColours[0].z + lpSet->maColours[1].z) * 0.5f;
+                lfBoostTintR = (lfMixR > 1.0f ? 1.0f : (lfMixR < 0.0f ? 0.0f : lfMixR)) * 255.0f;
+                lfBoostTintG = (lfMixG > 1.0f ? 1.0f : (lfMixG < 0.0f ? 0.0f : lfMixG)) * 255.0f;
+                lfBoostTintB = (lfMixB > 1.0f ? 1.0f : (lfMixB < 0.0f ? 0.0f : lfMixB)) * 255.0f;
+                lbBoostPairLatched = true;
+                break;
+            }
 
             case IM_CMD_PUSH_MASK:          // case 17 - Im2dRenderBuffer::PushMask (TextureState-bound)
             case IM_CMD_PUSH_MASK_GEOMETRY: // case 18 - begin/refresh the pixel mask (PS3 case 0x12)
@@ -1392,6 +1454,17 @@ namespace CgsGraphics
                         lu8G = DispatchColourScaleOnly(lu8G, lfColScaleG);
                         lu8B = DispatchColourScaleOnly(lu8B, lfColScaleB);
                         lu8A = DispatchColourScaleOnly(lu8A, lfColScaleA);
+                    }
+                    // [boost-bar 2026-08-25] the program-3 gradient fold: while the boost-bar
+                    // gradient program is latched, modulate the vertex RGB by the latched
+                    // colour-pair mix (see the latch note above). Alpha is untouched (the
+                    // pair's w lanes are authored 0 -- the console shader takes alpha from
+                    // the texture/vertex, not the pair).
+                    if (li8LatchedProgram == 3 && lbBoostPairLatched)
+                    {
+                        lu8R = DispatchColourScaleOnly(lu8R, lfBoostTintR);
+                        lu8G = DispatchColourScaleOnly(lu8G, lfBoostTintG);
+                        lu8B = DispatchColourScaleOnly(lu8B, lfBoostTintB);
                     }
                     saBatch[luIndex].color =
                         static_cast<u32>(D3DCOLOR_ARGB(lu8A, lu8R, lu8G, lu8B));
