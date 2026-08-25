@@ -40,10 +40,13 @@ namespace
 //
 //  * gpGuiBlendStateStandard / gpGuiBlendStateAdditive (dword_83010F20 / dword_83010F24) and
 //    gpBillboardDepthStencilState (dword_83010F54) are entries of the console's GUI render-state
-//    table, populated at boot by the state library. [FLAG PC-platform leaf] the PC Im2d dispatch
-//    folds every SET_STATE_BLEND to the standard alpha-over blend and runs depth-off (its
-//    case 3/4 handlers never read the pointer), so the table entries fold to nulls -- the
-//    command stream they ride through is unchanged.
+//    table, populated at boot by the state library. [FLAG PC-platform leaf] renderengine::
+//    BlendState is forward-declared only on this host (the state library is out of scope), so
+//    the two blend entries are opaque SENTINEL identities over static storage: nothing may
+//    dereference them (the command writers store the pointer verbatim; the dispatch's case 3
+//    compares identity against gpGuiBlendStateAdditive to pick additive src-alpha/one over the
+//    standard src-alpha/inv-src-alpha -- the boost-bar fire-overlay/glow fix, 2026-08-25).
+//    The depth-stencil entry stays a null fold (the dispatch runs depth-off).
 //  * gBillboardScreenTransform (unk_83011090) is the shared 2D screen transform the console
 //    stamps ahead of every GUI billboard/quad draw (its producers record positions in 0..1
 //    screen proportions). [FLAG PC-platform leaf] the console object maps proportions to the
@@ -51,8 +54,17 @@ namespace
 //    proportion -> 1280x720 logical-pixel scale with the colour-identity scale (255) the
 //    dispatch's CXForm fold expects. Same observable mapping, PC-shaped target space.
 // ---------------------------------------------------------------------------------------------
-const renderengine::BlendState*        gpGuiBlendStateStandard       = 0;  // dword_83010F20
-const renderengine::BlendState*        gpGuiBlendStateAdditive       = 0;  // dword_83010F24
+namespace
+{
+    // Opaque sentinel storage for the two GUI blend identities (see the block comment above --
+    // the pointers are compared, never dereferenced).
+    const u32 sauGuiBlendStandardSentinel[4] = { 0u, 0u, 0u, 0u };
+    const u32 sauGuiBlendAdditiveSentinel[4] = { 1u, 0u, 0u, 0u };
+}
+const renderengine::BlendState*        gpGuiBlendStateStandard       =    // dword_83010F20
+    reinterpret_cast<const renderengine::BlendState*>(sauGuiBlendStandardSentinel);
+const renderengine::BlendState*        gpGuiBlendStateAdditive       =    // dword_83010F24
+    reinterpret_cast<const renderengine::BlendState*>(sauGuiBlendAdditiveSentinel);
 const renderengine::DepthStencilState* gpBillboardDepthStencilState  = 0;  // dword_83010F54
 const renderengine::RasterizerState*   gpGuiRasterizerStateCullNone  = 0;  // (same PC fold: the dispatch runs cull-none unconditionally)
 
