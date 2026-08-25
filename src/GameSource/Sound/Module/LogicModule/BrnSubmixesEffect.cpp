@@ -45,21 +45,23 @@ SubmixesEffect::~SubmixesEffect()
 // ---------------------------------------------------------------------------
 // SubmixesEffect::Notify  @ 0x82687EE8   (overrides EffectBase::Notify)
 //
-//   if (message type field @ +0x08 == 15)         ; lhz 8; cmplwi 0xF; bnelr
+//   if (message event id @ +0x08 == 15)           ; lhz 8; cmplwi 0xF; bnelr
 //       mbHoldVolumes = <payload byte @ +0x10>;    ; lbz 0x10; stb 0x39
 //
-// Type-15 messages carry a single-byte hold-volumes flag in their body at +0x10, past the
-// committed 16-byte MessageHeader; read BY OFFSET off the base header (the concrete type-15
-// message struct is un-homed and NOT fabricated).
+// BY NAME (2026-08-25 wave 5): the +0x08 halfword is MessageHeader's DWARF
+// mi16EventId (read via the new GetEventId accessor) and the +0x10 payload byte is
+// Message<bool>::mData -- an event-15 message is the 16-byte header + one bool,
+// exactly the committed CgsMessage.h Message<T> shape. The former raw
+// reinterpret-index reads are retired.
 // ---------------------------------------------------------------------------
 void SubmixesEffect::Notify(const CgsSound::Io::MessageHeader* apMessageHeader)
 {
-    // lhz r11,8(r4); cmplwi 0xF; bnelr -- only type-15 messages are handled.
-    if (reinterpret_cast<const u16*>(apMessageHeader)[4] == 15)
+    // lhz r11,8(r4); cmplwi 0xF; bnelr -- only event-15 messages are handled.
+    if (apMessageHeader->GetEventId() == 15)
     {
-        // lbz r11,0x10(r4); stb r11,0x39(r3) -- latch the hold-volumes flag byte from the
-        // (un-homed) message body into mbHoldVolumes.
-        mbHoldVolumes = (reinterpret_cast<const u8*>(apMessageHeader)[0x10] != 0);
+        // lbz r11,0x10(r4); stb r11,0x39(r3) -- latch the hold-volumes payload bool.
+        mbHoldVolumes =
+            static_cast<const CgsSound::Io::Message<bool>*>(apMessageHeader)->mData;
     }
 }
 

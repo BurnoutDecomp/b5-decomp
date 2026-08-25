@@ -12,19 +12,11 @@
 // 64-byte stride is sizeof(the queue element). Non-const GetEvent(int) overload (baked lines
 // 272/274/275 == the ImpactEvent GetEvent sibling).
 //
-// FLAG (LOW CONFIDENCE -- element TYPE NOT ATTESTED): the DWARF for the caller
-// PassbyStateManager::UpdateDynamicPropBys (BrnPassbyStateManager.cpp:265) opens `using namespace
-// BrnPhysics::Props;` but does NOT expose which queue this indexes. The manager's own
-// DynamicPropByCache::Item is only 12 bytes (bool+float+EntityId) and is a plain array, NOT this
-// 64-byte BaseEventQueue element -- so the element is a DISTINCT type, most plausibly a
-// BrnPhysics::Props event (BrnPropEvents.h family) but NONE is confirmed at a 64-byte stride.
-// A minimal placeholder is defined locally so this thin instantiation is a well-formed compilable
-// unit. Consolidator: replace `PassbyPropByEvent` with the real DWARF-named 64-byte type (and drop
-// this placeholder) once it is disassembled from UpdateDynamicPropBys.
-namespace BrnSound { namespace Logic { namespace Passby {
-    // PLACEHOLDER -- 64-byte opaque payload (X360-attested stride only; field layout unattested).
-    struct alignas(16) PassbyPropByEvent { u8 macOpaquePayload[64]; };
-}}}
+// The element type PassbyPropByEvent is HOMED in BrnPassbyPropByEvent.h
+// (2026-08-25 wave 5; it used to be a namespace-scope class defined inside this
+// .cpp -- an ODR hazard). It stays a FLAG'd 64-byte opaque placeholder there: the
+// stride is X360-attested, the field layout is not (see the header's note).
+#include "GameSource/Sound/Passby/BrnPassbyPropByEvent.h"
 
 template BrnSound::Logic::Passby::PassbyPropByEvent&
 CgsModule::BaseEventQueue<BrnSound::Logic::Passby::PassbyPropByEvent>::GetEvent(s32);

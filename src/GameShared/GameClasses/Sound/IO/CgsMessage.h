@@ -55,6 +55,11 @@ public:
         return this;
     }
 
+    // FLAG (additive accessor exposure, 2026-08-25 wave 5): named access for the
+    // +0x08 event-id read (DWARF mi16EventId) message consumers dispatch on --
+    // e.g. SubmixesEffect::Notify @0x82687EE8 (`lhz r11, 8(r4)`).
+    u16 GetEventId() const { return mu16Field08; }
+
 private:
     // +0x00: leading block untouched by Destruct (opaque, not fabricated).
     // Modelled as two 4-byte words (not a u64) to keep 4-byte alignment so the

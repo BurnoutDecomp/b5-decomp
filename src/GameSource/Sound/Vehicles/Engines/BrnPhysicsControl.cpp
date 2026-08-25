@@ -99,11 +99,17 @@ Attribute::Key PhysicsControl::GetEngineComponentKey(
 {
     const u8* lpVehicleState = static_cast<const u8*>(mpVehicleState);
     CGS_ASSERT(lpVehicleState != nullptr, "lpVehicleState");
-    CGS_ASSERT(lpVehicleState + 0x510 != nullptr, "mEngineComponentKey != 0");
 
     // VehicleState->mEngineComponentKey[type] : element at +0x510, 8-byte stride.
     const u8* lpKeyElem = lpVehicleState + (static_cast<u32>(aeComponentType) + 0xA2) * 8u;
-    return *reinterpret_cast<const Attribute::Key*>(lpKeyElem);
+    const Attribute::Key lKey = *reinterpret_cast<const Attribute::Key*>(lpKeyElem);
+
+    // The console asserts the LOOKED-UP KEY is non-zero (the assert string names the
+    // member value). An earlier revision mistranslated this into `pointer + 0x510 !=
+    // nullptr` -- a tautology the compiler deletes -- losing the real guard
+    // (fixed 2026-08-25, audio-faithfulness wave 5).
+    CGS_ASSERT(lKey != 0, "mEngineComponentKey != 0");
+    return lKey;
 }
 
 // ---------------------------------------------------------------------------
