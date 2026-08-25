@@ -574,6 +574,15 @@ namespace BrnGui
         bool IsOnlineStartPending() const     { return mbOnlineStartPending; }      // +0x4B53 (19283) CrashNavEnterOnlineBase Handle{Disconnected,OverlayComplete}Event lbz
         s32 GetPlayerActiveRaceCarIndex() const                  { return mePlayerActiveRaceCarIndex; }  // DWARF h:924
 
+        // [hud reveal gate 2026-08-25] The console spells this accessor out by name in its own
+        // assert text -- "( GuiPlayerEngineEvent::E_ENGINE_OFF == mpCache->GetPlayerEngineState( ))
+        // || ( GuiPlayerEngineEvent::E_ENGINE_ON == mpCache->GetPlayerEngineState( ))"
+        // (BrnFBurnMainHudState.cpp:1536) -- so the name is the console's, not invented. No
+        // standalone X360 symbol: both HUD-state call sites inline the load
+        // (`lwz r11,0x4B20(r11)`), exactly like the two index accessors above, so this is a
+        // header inline too.
+        s32 GetPlayerEngineState() const                         { return mePlayerEngineState; }
+
         // [gateui r3] ADDITIVE GROW -- the twin of the accessor above over the GLOBAL index
         // carved at +0x4B04 (see the member for the Construct/RecEvent pairing that pins it).
         // Consumer: HudMessageAnalyzer::HandleRaceCheckpointReached @0x8251B350. No standalone
@@ -1086,7 +1095,25 @@ namespace BrnGui
         f32  mfPlayerOrientation;                         // +0x4B14 (19220) case 199 (icon mfRotation)
         s32  mePlayerCounty;                              // +0x4B18 (19224) case 199 GetCounty
         s32  mePlayerDistrict;                            // +0x4B1C (19228) case 199 GetDistrict
-        u8   mPad_4B20[6];                                // +0x4B20..+0x4B25
+        // [hud reveal gate 2026-08-25] THE PLAYER ENGINE STATE. Carved out of the head of
+        // the former mPad_4B20[6]. TRIPLE-WITNESSED IN THE IMAGE at +0x4B20 (19232):
+        //   producer  GuiCache::RecEvent @0x8250DDF0 -- the ONLY store to this word in the
+        //             whole ~180-case switch: `stw r11, 0x4B20(r31)` @0x8251017C
+        //             (pseudocode `else if (a3 == 379) *(a1 + 19232) = *a2;`)
+        //   consumer  FBurnMainHudState::UpdateWFInit  @0x8247C7EC/@0x8247C820
+        //             `lwz r11,0x140(r31) ; lwz r11,0x4B20(r11)`  (r31+0x140 == mpGuiCache)
+        //   consumer  FBurnMainHudState::UpdateRunning @0x8247BD14 (the case-215 boost arm)
+        // ⚠️ OFFSET CORRECTION, DO NOT REVERT: every source comment in this tree that called
+        // this word "X360 cache word +19220" was reading Hex-Rays' `mpGuiCache->gapC[19220]`
+        // as an object-relative index. It is gapC-RELATIVE -- IDA's gapC starts at +12, and
+        // 12 + 19220 == 19232 == the 0x4B20 the asm actually encodes. +0x4B14 (19220) is
+        // mfPlayerOrientation, declared six lines above and already named by the H3b wave.
+        // Values are BrnGui::GuiPlayerEngineEvent's own pair: 0 == E_ENGINE_OFF,
+        // 1 == E_ENGINE_ON (UpdateWFInit asserts `< 2` on it, BrnFBurnMainHudState.cpp:1536).
+        // Construct @0x82505860 seeds it 0 -- so the HUD composes on its INVISIBLE frame and
+        // stays there until the world posts the ignition. That is the console's reveal gate.
+        s32  mePlayerEngineState;                         // +0x4B20 (19232) case 379
+        u8   mPad_4B24[2];                                // +0x4B24..+0x4B25
         // ADDITIVE CARVE (H3c MapIconManager::UpdateWorldIcons @0x82511C88): the byte gating
         // the "show the nearest body shop on the sat-nav" pass (`lbz mpGuiCache+0x4B26`; the
         // pass runs when this byte is set AND the mode is freeburn (-1/15), or unconditionally

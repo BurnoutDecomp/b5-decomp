@@ -1021,6 +1021,24 @@ namespace BrnGui
             }
             break;
 
+        case 379:
+            // [hud reveal gate 2026-08-25] X360 case 379 -- the IGNITION latch, and the
+            // whole free-burn HUD reveal gate. The console arm is one store, and it is the
+            // ONLY store to +0x4B20 in this entire ~180-case switch:
+            //     0x8251017C  stw  r11, 0x4B20(r31)
+            //     (Hex-Rays: `else if ( a3 == 379 ) *(a1 + 19232) = *a2;`)
+            // The payload is GuiPlayerEngineEvent's single word -- 0 == E_ENGINE_OFF,
+            // 1 == E_ENGINE_ON (BrnGuiDemangledEventTypes.h:267, id 379 size 4). The three
+            // readers of the word are FBurnMainHudState::UpdateWFInit (compose visible vs
+            // stay on the invisible transition frame), FBurnMainHudState::UpdateRunning
+            // (the case-215 boost-bar arm) and RaceMainHudState::RevealHud.
+            //
+            // Note the console does NOT range-assert here -- it asserts at the CONSUMER
+            // (UpdateWFInit's `< 2`, BrnFBurnMainHudState.cpp:1536). Reproduced as-is: adding
+            // a producer-side assert would be an invented arm.
+            mePlayerEngineState = *reinterpret_cast<const s32*>(lpEvent);              // +19232
+            break;
+
         case 350:
             // ADDITIVE (HUD H1 wave, 2026-08-25 -- landed as the fix for the odometer's
             // mpProfile assert storm: the odometer TU reads the cache profile every frame,

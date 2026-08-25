@@ -133,16 +133,20 @@ namespace BrnGui
             return false;
         }
 
-        // FLAG PC-platform leaf: the player engine state (X360 cache word +19220;
-        // 0 == E_ENGINE_OFF, 1 == E_ENGINE_ON). Un-named in the cache recon. In free
-        // drive the player is in a car with the engine running, and it is that ENGINE_ON
-        // state that makes UpdateWFInit take the "visible" arm (the HUD transitions
-        // itself out under ENGINE_OFF). With no live vehicle telemetry on the PC boot
-        // path yet, report ENGINE_ON so the free-drive HUD is shown rather than
-        // immediately hidden.
-        s32 GuiCache_GetPlayerEngineState(const GuiCache* /*lpGuiCache*/)
+        // [hud reveal gate 2026-08-25] THE FIX. This leaf used to `return 1;` -- hardcoding
+        // E_ENGINE_ON -- on the premise that "with no live vehicle telemetry on the PC boot
+        // path yet" the HUD should be shown rather than hidden. Both halves of that premise
+        // are now false: the vehicle telemetry IS live (the world publishes
+        // mePlayerEngineState every frame), and forcing ENGINE_ON is exactly the
+        // user-reported defect -- the free-burn HUD stayed visible in the Junkyard and
+        // through car select, because UpdateWFInit could never take the ENGINE_OFF arm that
+        // parks the movie on its invisible transition frame.
+        // ⚠️ The old comment's "X360 cache word +19220" was ALSO wrong: the asm at
+        // @0x8247C7EC is `lwz r11, 0x4B20(r11)` == +19232. See BrnGuiCache.h's member note
+        // for why Hex-Rays prints it as gapC[19220].
+        s32 GuiCache_GetPlayerEngineState(const GuiCache* lpGuiCache)
         {
-            return 1;
+            return lpGuiCache->GetPlayerEngineState();
         }
 
         // FLAG PC-platform leaf: the hud-ready byte (X360 cache+16496 := 1); un-named.
@@ -171,11 +175,22 @@ namespace BrnGui
             return false;
         }
 
-        // FLAG PC-platform leaf: the boost-bar config word (X360 cache+19232; 1 ==
-        // boost bar enabled); un-named. Report enabled -- the free-drive default.
-        s32 GuiCache_GetBoostBarConfig(const GuiCache* /*lpGuiCache*/)
+        // [hud reveal gate 2026-08-25] ⭐ THIS IS THE SAME WORD AS GuiCache_GetPlayerEngineState
+        // ABOVE, and the old "boost-bar config word" name was a mislabel. UpdateRunning
+        // @0x8247B660 contains exactly ONE +0x4B20 read in its whole ~220-case switch --
+        //     0x8247BD10  lwz  r11, 0x140(r31)      ; r31+0x140 == mpGuiCache
+        //     0x8247BD14  lwz  r11, 0x4B20(r11)
+        //     0x8247BD18  cmpwi cr6, r11, 1
+        // -- and it sits inside jumptable CASE 215 (the boost-amount event), on the
+        // boost-below-0.01 arm, gating the "visible" AddOutputAptViewState + the
+        // OutputViewState<GuiEventShowHideBoostBar> at 0x8247BD4C. So the console is not
+        // consulting a boost-bar *config* at all: it is asking "is the player's engine
+        // running?" before it reveals the emptied boost bar -- the same reveal gate the
+        // compose path uses. Kept as a separate named leaf only because the console reads it
+        // at a separate seat; both now resolve to the one real member.
+        s32 GuiCache_GetBoostBarConfig(const GuiCache* lpGuiCache)
         {
-            return 1;
+            return lpGuiCache->GetPlayerEngineState();
         }
 
         // FLAG PC-platform leaf: the game-mode-type word (X360 cache+40536; -1 ==
@@ -710,8 +725,16 @@ namespace BrnGui
             }
         }
 
-        // The player engine state (X360 cache word +19220; assert < 2).
+        // The player engine state (X360 cache word +0x4B20 == 19232; assert < 2). THE REVEAL
+        // GATE: ENGINE_ON composes the HUD visible, ENGINE_OFF parks the master
+        // "EventHud_Animator" on its invisible transition frame and leaves it there.
         const s32 liEngineState = GuiCache_GetPlayerEngineState(mpGuiCache);
+        if (CgsDev::Log::gpDebugPrint != 0)
+        {
+            *CgsDev::Log::gpDebugPrint
+                << "[hud-reveal] UpdateWFInit engineState=" << liEngineState
+                << (liEngineState == 1 ? " -> compose VISIBLE\n" : " -> compose INVISIBLE\n");
+        }
         CGS_ASSERT(liEngineState < 2,
                    "( GuiPlayerEngineEvent::E_ENGINE_OFF == mpCache->GetPlayerEngineState( )) || ( GuiPlayerEngineEvent::E_ENGINE_ON == mpCache->GetPlayerEngineState( ))");   // cpp:1536
 
@@ -737,12 +760,23 @@ namespace BrnGui
         }
 
         // [H3b] X360 UpdateWFInit: mirror the show record into the component.
+        // ⭐ [hud reveal gate 2026-08-25] FIXED: mu8Show was HARDCODED to 1 here, so the
+        // sat-nav icon set was told "visible" even on the ENGINE_OFF arm -- which is why the
+        // yellow player chevron kept drawing over the junkyard with no minimap under it.
+        // The console does NOT pass a constant. Its single RecvEvent(213) call site
+        // @0x8247CA28 takes `addi r4, r1, var_60` -- the SAME 24-byte stack record each arm
+        // has just filled -- and the two arms write DIFFERENT show bytes into it:
+        //     ENGINE_OFF arm @0x8247C898  stb r27, var_5C+4      with `li r27, 0` @0x8247C720
+        //     ENGINE_ON  arm @0x8247C934  stb r28, var_5C+4      with `li r28, 1` @0x8247C920
+        // (two distinct registers for the one field is itself the tell -- a shared constant
+        // would have reused one). So the mirror carries THE ARM'S OWN FLAG, exactly like the
+        // {12,213,flag} pair each arm posts on channels 0x29/0x2A just above.
         if (mbSatNavEnabled)
         {
             SatNavShowHidePayload lShow;
             lShow.miOne   = 1;
             lShow.mfDelay = 0.0f;
-            lShow.mu8Show = 1;
+            lShow.mu8Show = static_cast<u8>(liEngineState == 1 ? 1 : 0);
             mSatNavComponent.RecvEvent(
                 reinterpret_cast<const CgsModule::Event*>(&lShow), 213);
         }

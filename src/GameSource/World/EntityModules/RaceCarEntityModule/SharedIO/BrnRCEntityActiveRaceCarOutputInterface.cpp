@@ -249,6 +249,21 @@ EActiveRaceCarIndex RCEntityActiveRaceCarOutputInterface::GetPlayerActiveRaceCar
     return mePlayerActiveRaceCarIndex;
 }
 
+// DWARF :323 -- GetPlayerEngineState (mePlayerEngineState @+0x285C). NO out-of-line X360
+// symbol: an image-wide name search finds none, and every console reader inlines the load --
+// e.g. BrnGameModule::BridgeWorldVehicleDataToGui's engine-event leg @0x823E592C/@0x823E595C
+// emits `lwz r10, 0x285C(r22)` straight, exactly as its two -1-guarded siblings
+// IsRaceCarEngineOn / IsRaceCarEngineStarting do (see the header's note at :327/:331).
+// Bodied out-of-line here (2026-08-25, hud reveal gate) because the declaration at :323 was
+// the only thing keeping the 379 producer from linking. No assert: the console's own inlined
+// reads are -1-guarded at the CALL SITE (`cmpwi -1` before the load), not in the accessor, so
+// adding one here would be an invented arm that fires on the inactive-player path the callers
+// deliberately take.
+EActiveRaceCarEngineState RCEntityActiveRaceCarOutputInterface::GetPlayerEngineState() const
+{
+    return mePlayerEngineState;
+}
+
 // X360 0x8230FFD8 -- GetRaceCarAISection (mau16ActiveRaceCarAISections[idx], u16 stride 2).
 u16 RCEntityActiveRaceCarOutputInterface::GetRaceCarAISection(EActiveRaceCarIndex leActiveRaceCarIndex) const
 {

@@ -7,9 +7,9 @@
 //   BrnGameModule::BridgeWorldVehicleDataToGui @0x823E5768  (PS3 named 0x318A18)
 //
 // PARTIAL SLICE (boost-bar 206 wave, 2026-08-25). The console's per-frame
-// vehicle-data bridge posts, in order: the player-crashing state-change event, the
-// engine-state change event (374), then -- gated on IsPlayerCarActive() -- the
-// player-index pair (373), the BOOST INFO record (206), the race-car-state derived
+// vehicle-data bridge posts, in order: the player-crashing state-change event (377), the
+// engine-state change event (379), then -- gated on IsPlayerCarActive() -- the
+// player-index pair (376), the BOOST INFO record (206), the race-car-state derived
 // speed/heat/scrape family, and further route/traffic/impact legs in the sibling
 // sub-bridges. THIS slice reproduces the whole gate + the boost-info post (the HUD
 // boost bar's ONLY producer); every other post is FLAG-deferred below at its exact
@@ -31,6 +31,11 @@
 #include "GameSource/World/BrnWorldModuleIO.h"               // BrnWorldIO::UpdateOutputBuffer
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h" // the active-car interface + BoostOutputInfo
 #include "GameSource/Gui/BrnGuiRaceCarInfoEvent.h"           // GuiRaceCarInfoEvent (207, the mRaceCarInfo SoA feed)
+// (GuiPlayerEngineEvent, 379 -- the ignition latch -- comes in with BrnGuiEventTypeDefs.h,
+//  pulled in above via BrnGuiRaceCarInfoEvent.h/BrnGuiEventTypeDefs.h. ⛔ Do NOT include
+//  GameSource/Gui/BrnGuiDemangledEventTypes.h here: it collides with
+//  BrnNetworkPlayerImageRenderer.h over a PRE-EXISTING duplicate definition of
+//  BrnGui::GuiEventNetworkPlayerImage -- see the note in the wave log.)
 #include <cmath>                                             // sqrtf/acosf (the icon heading derivation)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [DIAG] the satnav-diag one-shots
 
@@ -132,9 +137,79 @@ void BrnGameModule::BridgeWorldVehicleDataToGui(
         }
     }
 
-    // FLAG deferred (console order, before the player gate): the engine-state change event
-    // (374, off a lseLastEngineState edge latch). Its consumer is not on this build's
-    // reconstructed path yet.
+    // ---- THE ENGINE-STATE CHANGE POST (GUI event 379 -> GuiCache +0x4B20) -------------
+    // LANDED 2026-08-25 (hud reveal gate). This replaces a FLAG that deferred the leg AND
+    // mis-numbered it "374": GuiPlayerEngineEvent's own GetEventType() is 379
+    // (BrnGuiDemangledEventTypes.h:267, size 4), and 379 is the id GuiCache::RecEvent's
+    // +0x4B20 store keys on. The old note's "its consumer is not on this build's
+    // reconstructed path yet" was ALSO stale: all three console consumers are in the tree
+    // (FBurnMainHudState::UpdateWFInit and ::UpdateRunning both read +0x4B20 today).
+    //
+    // Console order: AFTER the crashing post above and the DrivableFromCrash post, and
+    // BEFORE the IsPlayerCarActive gate -- because, like the crashing read, the engine read
+    // is -1-guarded and is safe while the player car is inactive. Decoded
+    // instruction-for-instruction from @0x823E591C..0x823E59AC:
+    //   lwz r9,0x2858(iface) ; li r10,4 ; cmpwi -1 ; [ne] lwz r10,0x285C(iface)
+    //        -> leState = (playerIndex == -1) ? E_..._ENGINE_STATE_COUNT(4)
+    //                                        : iface->mePlayerEngineState
+    //           (+0x2858 == 10328 and +0x285C == 10332 are the two words this tree already
+    //            names mePlayerActiveRaceCarIndex / mePlayerEngineState on the interface,
+    //            and `li r10,4` / `li r17,2` are literally E_..._COUNT and E_..._RUNNING)
+    //   lwz r11,dword_82F241F8 ; cmpw ; beq -> the whole leg is skipped unless the RAW
+    //        state word changed. The latch is a file-scope static: image bytes at
+    //        0x82F241F8 read 00 00 00 04 (x360rd) == E_..._ENGINE_STATE_COUNT, so the very
+    //        first publish (OFF, 0) moves the latch but posts NOTHING -- both sides of the
+    //        on/off test are false. That is the console's own no-spurious-post behaviour.
+    //   subf r11,r17,r11 ; cntlzw ; extrwi 1,26   (twice: once on the latch, once on the
+    //        fresh state) -> lbWasOn = (latch == RUNNING), lbIsOn = (leState == RUNNING)
+    //   cmplw ; beq -> POST ONLY WHEN THE BOOLEAN FLIPS (a STARTING->STOPPING move changes
+    //        the raw word but not the bool, and the console stays quiet for it)
+    //   cntlzw ; extrwi 1,26 ; xori 1 ; stw -> the payload word is the bool itself
+    //        (the cntlzw/xori pair is just the compiler round-tripping it): 1 == E_ENGINE_ON.
+    //   stw r11,dword_82F241F8 -> latch := the RAW state word (recomputed, -1-guarded),
+    //        AFTER the post and OUTSIDE the bool test -- so it tracks every raw move.
+    {
+        // (EActiveRaceCarEngineState lives at BrnWorld::RaceCarEntityModuleIO namespace scope,
+        //  not inside the interface class.)
+        const s32 KI_ENGINE_STATE_COUNT =
+            static_cast<s32>(BrnWorld::RaceCarEntityModuleIO::E_ACTIVE_RACE_CAR_ENGINE_STATE_COUNT);
+        const s32 KI_ENGINE_STATE_RUNNING =
+            static_cast<s32>(BrnWorld::RaceCarEntityModuleIO::E_ACTIVE_RACE_CAR_ENGINE_STATE_RUNNING);
+
+        const s32 liEngineState =
+            (lpActiveInterface->GetPlayerActiveRaceCarIndex() == E_ACTIVE_RACE_CAR_INDEX_INVALID)
+                ? KI_ENGINE_STATE_COUNT
+                : static_cast<s32>(lpActiveInterface->GetPlayerEngineState());
+
+        static s32 lseLastEngineState = KI_ENGINE_STATE_COUNT;   // console dword_82F241F8 == 4
+        if (liEngineState != lseLastEngineState)
+        {
+            const bool lbIsOn  = (liEngineState      == KI_ENGINE_STATE_RUNNING);
+            const bool lbWasOn = (lseLastEngineState == KI_ENGINE_STATE_RUNNING);
+            if (lbIsOn != lbWasOn)
+            {
+                BrnGui::GuiPlayerEngineEvent lEngineEvent;
+                *reinterpret_cast<s32*>(lEngineEvent.maData) =
+                    lbIsOn ? BrnGui::GuiPlayerEngineEvent::E_ENGINE_ON
+                           : BrnGui::GuiPlayerEngineEvent::E_ENGINE_OFF;
+
+                CGS_ASSERT(lpGuiInputBuffer != 0, "Input hasn't been locked for write");
+                lpGuiInputBuffer->GetGuiEvents()->AddEvent(
+                    reinterpret_cast<const CgsModule::Event*>(&lEngineEvent),
+                    lEngineEvent.GetEventType(),
+                    static_cast<s32>(sizeof(lEngineEvent)));
+
+                if (CgsDev::Log::gpDebugPrint != 0)
+                {
+                    *CgsDev::Log::gpDebugPrint
+                        << "[hud-reveal] posting GUI 379 GuiPlayerEngineEvent engineOn="
+                        << (lbIsOn ? 1 : 0) << " (raw state " << lseLastEngineState
+                        << " -> " << liEngineState << ")\n";
+                }
+            }
+            lseLastEngineState = liEngineState;
+        }
+    }
 
     if (!lpActiveInterface->IsPlayerCarActive())
         return;

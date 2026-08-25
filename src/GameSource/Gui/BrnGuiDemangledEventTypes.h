@@ -264,7 +264,12 @@ namespace BrnGui
     struct GuiPlayerCarColourResponse { u8 maData[8]; s32 GetEventType() const { return 414; } };  // id 414 size 8 (raw; size not GuiEvent-shaped)
     struct GuiPlayerDrivableFromCrash { u8 maData[1]; s32 GetEventType() const { return 378; } };  // id 378 size 1 (raw; size not GuiEvent-shaped)
     struct GuiPlayerEliminatedEvent { u8 maData[4]; s32 GetEventType() const { return 450; } };  // id 450 size 4 (raw; size not GuiEvent-shaped)
-    struct GuiPlayerEngineEvent { u8 maData[4]; s32 GetEventType() const { return 379; } };  // id 379 size 4 (raw; size not GuiEvent-shaped)
+    // GuiPlayerEngineEvent (id 379 size 4) MOVED OUT 2026-08-25 (hud reveal gate) to
+    // GameSource/Gui/BrnGuiEventTypeDefs.h, per this header's own migration rule at the top:
+    // it now carries a recovered ENUM (the console's own E_ENGINE_OFF/E_ENGINE_ON, lifted from
+    // a baked assert string) rather than an opaque byte blob, and it sits there beside
+    // GuiPlayerCrashingStateChangeEvent -- which is literally its neighbour in the producer,
+    // BridgeWorldVehicleDataToGui. Do not re-add it here.
     struct GuiPlayerInShortcutEvent { u8 maData[1]; s32 GetEventType() const { return 380; } };  // id 380 size 1 (raw; size not GuiEvent-shaped)
     // id 406 size 64 (12B GuiEvent header + payload). PARTIAL LAYOUT RECOVERY
     // (BrnCarSelectMain wave G): the CarSelectMain event-406 consumer @0x824D7A24 reads the
