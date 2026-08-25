@@ -1,98 +1,293 @@
 #ifndef BRN_BOOST_BAR_RENDERER_H
 #define BRN_BOOST_BAR_RENDERER_H
 
+// ============================================================================
+// b5-decomp/src/GameSource/Gui/CustomRenderer/Renderers/BrnBoostBarRenderer.h
+//
+// ⭐⭐ BrnGui::BoostBarRenderer -- THE BOOST BAR (manager slot 4, E_BOOSTBAR): the
+// in-game HUD gauge with the tiled background, the fire-body fill, the boosting
+// flame/fireball/black-smoke billboard effects, the chained-boost ("x2"/"x3")
+// multiplier flame, the earn-flame flicker, the danger-boost end glow, and the
+// chunk-loss shatter (the bar tearing into 4x6 shards). Reconstructed WHOLE
+// 2026-08-24, replacing the boot-trace minimal slice (ctor + the two debug colour
+// getters), from:
+//   - the DecFIGS DWARF layout + method set (references/DecFIGS/dwarfdump/
+//     GameSource/Gui/CustomRenderer/Renderers/BrnBoostBarRenderer.h) -- every
+//     member name below is the DWARF's;
+//   - the X360 ARTIST bodies (addresses below) -- the behavioural spine;
+//   - the PS3 DecFIGS bodies (every method is a named standalone export there,
+//     including the six the X360 set lacks: Destruct, GetRenderLayer,
+//     DetermineBoostBarMultiplier, CalculateBoostShardLifetime/Transformation,
+//     ForceSetBoostBarColours(EBoostType)) -- shape/naming, X360-gated;
+//   - the class constants' VALUES, recovered from the X360 dynamic-initialiser
+//     region (0x82C48F70..0x82C5A44C) by emulating its straight-line stores into
+//     the 0x82FBxxxx constant block, cross-validated against the PS3
+//     __static_initialization_and_destruction_0 literals.
+//
+// The X360 function set (ledger names):
+//   ctor 0x827DF4F0            Construct 0x8245A9A0      Prepare 0x82451B28
+//   Release 0x82446818         InitResources 0x8244A508  Update 0x82451C78
+//   RecvEvent 0x8244A218       HandleFirstEvent 0x824468D8
+//   ForceSetBoostBarColours(Vector3,Vector3) 0x82446970
+//   ForceSetBoostBarColours(EBoostType) 0x8244B450 (unnamed sub_ in the export)
+//   GetID 0x824468C0           GetInner/GetOuterBoostBarColour 0x824EC750/0x824EC7D0
+//   RenderComponent 0x82466638 RenderQuad 0x8245AE30     RenderFire 0x82452AD8
+//   RenderBillboardBar 0x82453318                        RenderShatteredBar 0x82460630
+//   CalculateShardVertices 0x8244B248                    CalculateBoostShardAlpha 0x8244B3B0
+//   SetChainedInactiveMask 0x824536A8                    SetBackground 0x8245B040
+//   ShowDebugScreen 0x82461250 RenderDebugFireBody/Overlay/EndCap/Glow
+//   0x82453758 / 0x82453B60 / 0x82454060 / 0x8245B2C0
+//
+// LAYOUT: the X360 object spans ~53 KB (the ctor/Construct byte map is annotated
+// per member below as "guest +N"); all access here is by name, x64 offsets differ.
+// ============================================================================
+
 #include "types.hpp"
-#include "BrnCommonTypes.h"                                                       // Vector3 (rw::math::vpu::Vector3)
+#include "BrnCommonTypes.h"                                                        // Vector3/Vector4 (rw::math::vpu), Matrix44Affine
+#include "GameShared/GameClasses/Gui/View/CustomRenderer/CgsCustomRenderer.h"      // CustomRenderComponentInterface base, ImRendererSet, eCustomRenderLayer
+#include "GameShared/GameClasses/Gui/View/ParticleSystem2d/CgsBillboardRenderer.h" // BillboardRenderer (six by-value members)
+#include "GameShared/GameClasses/Gui/View/CustomRenderer/CgsGuiBillboardInfo.h"    // BillboardInfo (the 32-slot collect array)
+#include "GameShared/GameClasses/Containers/CgsArray.h"                            // Array<BillboardInfo,32> (global-namespace template)
+#include "GameShared/GameClasses/Graphics/VertexDescriptors/CgsBasic2dColouredTexturedVertex.h" // CgsGraphics::Vector2 (the shard lattice)
+#include "GameShared/GameClasses/Numeric/CgsRandom.h"                              // CgsNumeric::Random (shard velocity/rotation rolls)
+#include "GameSource/Gui/BrnGuiEventTypeDefs.h"                                    // GuiEventBoostInfo (two by-value members)
+#include "GameSource/Gui/CustomRenderer/Renderers/BrnInterpolator.h"               // Interpolator<f32> / DeltaInterpolator
 #include "GameSource/World/EntityModules/RaceCarEntityModule/Boost/BrnBoostType.h" // BrnWorld::EBoostType
+#include "rw/rwcore_structs.h"                                                     // rw::Resource / rw::IResourceAllocator
+
+namespace renderengine { class TextureState; class BlendState; }
+namespace CgsGraphics  { struct Im2d; }
+// The shard transform is FPU-side on the console (RenderShatteredBar's DWARF); the affine
+// matrix template is referenced by reference only here.
+namespace rw { namespace math { namespace fpu {
+template <typename T> class Vector4Template;
+template <typename T> class Matrix44AffineTemplate;
+} } }
 
 namespace BrnGui
 {
-// Reconstructed from BURNOUT_X360_ARTIST.XEX.
-//   BoostBarRenderer        @ 0x827DF4F0  (constructor; EXECUTED in the boot trace)
-//   GetInnerBoostBarColour  @ 0x824EC750  (debug colour getter)
-//   GetOuterBoostBarColour  @ 0x824EC7D0  (debug colour getter)
-//
-// The real guest object is very large (~53 KB) and is only PARTIALLY recovered here:
-// these three functions are the entire in-scope slice, so this class models ONLY the
-// members they touch. Every other DWARF member (DeltaInterpolator, Interpolator<f32>,
-// ImRendererSet*, the ~12 TextureState pairs, the GuiCache pointer, the real base
-// CgsGui::CustomRenderComponentInterface, etc.) is uncommitted and intentionally OMITTED
-// — nothing in scope references it.  FLAG: minimal-slice class (see .cpp header comment).
-//
-// CrashNavIcon-style reconstruction: standalone class (NO base class, NO raw offset
-// casts), members declared BY NAME, repeated stride writes grouped into arrays cleared
-// by loops, data-segment pointers held as named constants. Exact byte offsets are NOT
-// reproduced because the gate compiles for a 64-bit host (pointers widen 4 -> 8 bytes),
-// so the offsets in the X360 pseudocode are not load-bearing here.
+    class GuiCache;
 
-// One entry of the constructor's billboard-renderer array (DWARF h:788
-// `BillboardRenderer mBillboardRenderer[6]`).  FLAG: minimal-slice billboard — only the
-// ten leading dwords the ctor zeroes per element are modelled; the full BillboardRenderer
-// type is uncommitted (the guest stride was 2067 dwords / element).
-struct BillboardRenderer
-{
-    // Per element the ctor clears two 5-dword runs (guest v2-6..v2-2 and v2..v2+4), each
-    // with a duplicate-first-write; 10 distinct dwords total.
-    u32 maClearedFields[10];
-};
+    class BoostBarRenderer : public CgsGui::CustomRenderComponentInterface
+    {
+    public:
+        // DWARF h:178 / h:186 -- the prepare/release stage machines.
+        enum EPrepareStage
+        {
+            E_PREPARESTAGE_START = 0,
+            E_PREPARESTAGE_LOAD  = 1,
+            E_PREPARESTAGE_INIT  = 2,
+            E_PREPARESTAGE_DONE  = 3,
+        };
+        enum EReleaseStage
+        {
+            E_RELEASESTAGE_START = 0,
+            E_RELEASESTAGE_DONE  = 1,
+        };
 
-class BoostBarRenderer
-{
-public:
-    BoostBarRenderer();
+        // DWARF h:357 -- the show/hide fade state HandleFirstEvent seeds and Update drives.
+        enum EVisibilityStatus
+        {
+            E_VISIBILITY_NONE       = 0,
+            E_VISIBILITY_FADING_OUT = 1,
+            E_VISIBILITY_FADING_IN  = 2,
+            E_VISIBILITY_FULL       = 3,
+            E_VISIBILITY_COUNT      = 4,
+        };
 
-    // Debug-only colour getters. Return the boost-type-indexed colour by value; assert
-    // that meCurrentBoostType is a real boost type (not COUNT / NONE) first. Non-const to
-    // match the DWARF signatures (h:843/846) — the bodies only read, so const would be
-    // semantically fine, but DWARF is the shape authority for the attested signature.
-    Vector3 GetInnerBoostBarColour();
-    Vector3 GetOuterBoostBarColour();
+        // DWARF h:367 -- which bar look the current boost type/state selects.
+        enum EBoostBarStatus
+        {
+            E_STATUS_INVALID               = 0,
+            E_STATUS_DANGER_BOOST_INACTIVE = 1,
+            E_STATUS_DANGER_BOOST_ACTIVE   = 2,
+            E_STATUS_AGGRESSION_BOOST      = 3,
+            E_STATUS_STUNT_BOOST           = 4,
+        };
 
-private:
-    // Leading vtable slot (ctor writes &off_820CF8A0 to *this).  FLAG: vtable pointer
-    // modelled as an opaque slot set to a named data-segment constant.
-    void* mpVtable;
+        // DWARF h:376 -- the chained-boost multiplier flame (x1 none / x2 / x3).
+        enum EBoostBarMultiplier
+        {
+            E_MULTIPLIER_1X    = 0,
+            E_MULTIPLIER_2X    = 1,
+            E_MULTIPLIER_3X    = 2,
+            E_MULTIPLIER_COUNT = 3,
+        };
 
-    // ---- members read by the two getters (DWARF h:617/620/623) ----
-    // NOTE: the constructor does NOT initialise these three (the pseudocode begins writing
-    // at guest +212, past where the colour arrays / boost type live), so they are declared
-    // for the getters but deliberately left out of the ctor body — faithful to the asm.
-    Vector3              mav3BoostOuterColours[3]; // DWARF h:617
-    Vector3              mav3BoostInnerColours[3]; // DWARF h:620
-    BrnWorld::EBoostType meCurrentBoostType;       // DWARF h:623
+        // X360 ctor @0x827DF4F0: the interpolators construct (sentinel time keys), the thirteen
+        // texture Resource slots seed the shared empty-resource sentinel / zero, the six billboard
+        // renderers clear their bookkeeping tails, and miBoostBarPM = -1.
+        BoostBarRenderer();
 
-    // ---- ctor-only state (CrashNavIcon-style grouped/named members) ----
-    // Bounding-box / extent accumulators the ctor primes with FLT_MAX sentinels and zero.
-    // Grouped by the sentinel each field receives (see the .cpp for the exact write order).
-    f32 mfExtentNegA;          // guest +212  (-FLT_MAX)
-    f32 mfExtentNegB;          // guest +216  (-FLT_MAX)
-    f32 mav3ExtentMinZero[3];  // guest +1376/+1380/+1384  (0.0f)
-    f32 mfExtentNegC;          // guest +1388 (-FLT_MAX)
-    f32 mfExtentPos;           // guest +1392 (+FLT_MAX)
-    f32 maExtentNegGroup[8];   // guest +1404/+1408/+1420/+1424/+1436/+1440/+1452/+1456 (-FLT_MAX)
+        // ---- the CustomRenderComponentInterface virtuals -------------------------------
+        virtual void  Construct();                                                  // 0x8245A9A0
+        virtual bool  Prepare(CgsGui::GuiEventQueueSmall* lpEventQueue,
+                              rw::IResourceAllocator* lpHeapAllocator,
+                              rw::IResourceAllocator* lpTextureAllocator);          // 0x82451B28
+        virtual bool  Release();                                                    // 0x82446818
+        virtual void  Destruct();                                                   // PS3 0x3F9F84 (base Destruct only)
+        virtual void  RecvEvent(const CgsModule::Event* lpEvent, s32 liEventType);  // 0x8244A218
+        virtual void  Update();                                                     // 0x82451C78
+        virtual CgsID GetID() const;                                                // 0x824468C0
+        // The bar draws in LAYER 2, over the movie (PS3 0x43F138; the X360 body is the ICF'd
+        // `return 2` the component vtable's +0x20 slot points at).
+        virtual CgsGui::eCustomRenderLayer GetRenderLayer() const { return CgsGui::E_CUSTOMRENDERLAYER_2; }
 
-    // Pointer slots the ctor fills with a shared default element pointer: guest +1480..+1568
-    // written as FOUR groups of five dwords (heads +1480/+1504/+1528/+1552, each with the
-    // compiler's duplicate-first-write unroll artifact). The groups are on a 24-byte stride,
-    // so the 6th dword of each group (+1500/+1524/+1548) is a GAP the guest ctor never writes
-    // — modelled here the same gap-aware way as maZeroGroups (only the 5 real slots/group).
-    // One real slot, guest +1560 (group 3, slot 2), is an uninitialised-stack-slot artifact
-    // (back_chain) modelled as 0. FLAG: default-pointer groups + gap dwords + stack artifact.
-    void* mapDefaultElement[4][5];
+        // ---- the colour override API (the GuiCustRendererDebugComponent drives these) ---
+        // 0x8244B450 -- select the per-type constant pair and set ALL THREE slots of each array.
+        void ForceSetBoostBarColours(BrnWorld::EBoostType leType);
+        // 0x82446970 -- set all three outer slots to lv3OuterColour and all three inner slots to
+        // lv3InnerColour (the X360 stores arg2 to +32/48/64 [outer] and arg1 to +80/96/112
+        // [inner]; PS3 passes (outer, inner) -- so arg order is (inner, outer)? No: the X360
+        // vector args are v1=first,v2=second and it stores v1->inner, v2->outer, while the PS3
+        // EBoostType wrapper loads OUTER into the first slot. The X360 asm arbitrates: the FIRST
+        // vector parameter lands in the INNER slots).
+        void ForceSetBoostBarColours(Vector3 lv3InnerColour, Vector3 lv3OuterColour);
 
-    // Zero-initialised state arrays (guest +1576..+1784): nine groups of five dwords, each
-    // group written by the compiler as 5 stores + a duplicate-first-write (stride-5 clear).
-    // FLAG: grouped zero-init slice (the per-group +24-byte stride leaves a gap dword that
-    // is not modelled).
-    u32 maZeroGroups[9][5];
+        // 0x824EC750 / 0x824EC7D0 -- the boost-type-indexed colour, by value; both assert
+        // meCurrentBoostType is a real type first. Non-const per the DWARF (h:639/h:656).
+        Vector3 GetInnerBoostBarColour();
+        Vector3 GetOuterBoostBarColour();
 
-    // DWARF h:788 — six billboard renderers, each cleared by the ctor's 6-iteration loop.
-    BillboardRenderer mBillboardRenderer[6];
+        // h:670 -- flip the debug screen (the GuiCustRendererDebugComponent's menu toggle).
+        void ToggleDebugScreen() { mbShowDebugScreen = !mbShowDebugScreen; }
 
-    // Trailing index/handle the ctor sets to -1 (guest +53456).  FLAG: named s32 sentinel
-    // standing in for a far-trailing guest field.
-    s32 miTrailingSentinel;
-};
+    protected:
+        // ---- the render spine (all driven from RenderComponent) -------------------------
+        virtual void RenderComponent(CgsGui::ImRendererSet* lpRendererSet);         // 0x82466638
+
+    private:
+        void InitResources();                                                       // 0x8244A508
+        void RenderFire(const Vector4& lv4Rect, const Vector4& lv4MaskRect,
+                        f32 lfTime);                                                // 0x82452AD8
+        void RenderQuad(const Vector4& lv4Rect, const Vector4& lv4UV,
+                        const renderengine::TextureState* lpTextureState,
+                        const renderengine::BlendState* lpBlendState,
+                        Vector4 lv4Colour);                                         // 0x8245AE30
+        void RenderBillboardBar(const Vector4& lv4Rect, f32 lfProportion,
+                                const Vector4& lv4Colour,
+                                CgsGui::BillboardRenderer* lpBillboardRenderer,
+                                f32 lfTime);                                        // 0x82453318
+        void RenderShatteredBar(const rw::math::fpu::Vector4Template<f32>& lv4Rect,
+                                f32 lfTime, const Vector4& lv4Colour);              // 0x82460630
+        void CalculateShardVertices();                                              // 0x8244B248
+        void CalculateBoostShardTransformation(s32 liShard, f32 lfLifetime,
+                                               rw::math::fpu::Matrix44AffineTemplate<f32>& lrTransform); // PS3 0x401668
+        f32  CalculateBoostShardLifetime(s32 liShard, f32 lfTime);                  // PS3 0x3FA070
+        u8   CalculateBoostShardAlpha(f32 lfLifetime, f32 lfAlpha);                 // 0x8244B3B0
+        void SetChainedInactiveMask(CgsGraphics::Im2d* lpRenderBuffer,
+                                    Vector4 lv4Rect);                               // 0x824536A8
+        void SetBackground(CgsGraphics::Im2d* lpRenderBuffer, Vector4 lv4Rect,
+                           f32 lfXOffset, f32 lfAlpha);                             // 0x8245B040
+        void DetermineBoostBarMultiplier();                                         // PS3 0x3FA100
+        void HandleFirstEvent(const GuiEventBoostInfo* lpBoostBarInfo);             // 0x824468D8
+        void ShowDebugScreen();                                                     // 0x82461250
+        void RenderDebugFireBody(const Vector4& lv4Rect, const Vector4& lv4MaskRect,
+                                 f32 lfTime);                                       // 0x82453758
+        void RenderDebugFireOverlay(const Vector4& lv4Rect, const Vector4& lv4MaskRect,
+                                    f32 lfTime);                                    // 0x82453B60
+        void RenderDebugFireEndCap(const Vector4& lv4Rect, const Vector4& lv4MaskRect,
+                                   f32 lfTime);                                     // 0x82454060
+        void RenderDebugFireGlow(const Vector4& lv4Rect, const Vector4& lv4MaskRect);// 0x8245B2C0
+
+        // DWARF h:273-275 -- the chunk-loss shard grid.
+        static const s8  KI_CHUNK_LOSS_NUM_OF_SHARD_ROWS    = 4;
+        static const s8  KI_CHUNK_LOSS_NUM_OF_SHARD_COLUMNS = 6;
+        static const s32 KI_CHUNK_LOSS_MAX_NUM_SHARDS       = 48;
+        // DWARF h:593 -- the billboard collect array capacity.
+        static const s32 KI_NUM_BILLBOARDS = 32;
+
+        // ---- members (DWARF order; guest byte offsets from the ctor/Construct maps) -----
+        EPrepareStage        mePrepareStage;                 // guest +8
+        EReleaseStage        meReleaseStage;                 // guest +12
+        EBoostBarStatus      meBoostBarStatus;               // guest +16
+        EBoostBarMultiplier  meBoostBarMultiplier;           // guest +20
+        f32                  mfLastTime;                     // guest +24
+
+        Vector3              mav3BoostOuterColours[3];       // guest +32  (danger/aggression/stunt)
+        Vector3              mav3BoostInnerColours[3];       // guest +80
+        BrnWorld::EBoostType meCurrentBoostType;             // guest +128 (Construct seeds AGGRESSION)
+
+        GuiEventBoostInfo    mGuiEventBoostInfo;             // guest +132 (the live event-206 payload)
+        GuiEventBoostInfo    mPreviousGuiEventBoostInfo;     // guest +160 (last frame's payload)
+        f32                  mfIsEarningBoostStartTime;      // guest +188
+        f32                  mfIsBoostingProp;               // guest +192
+        f32                  mfSlamGainStartTime;            // guest +196
+        f32                  mfSlamLossStartTime;            // guest +200
+
+        Interpolator<f32>    mChunkGainInterpolator;         // guest +204
+        f32                  mfChunkGainPreviousMaxBoost;    // guest +220
+        f32                  mfChunkGainShakeStartTime;      // guest +224
+
+        f32                  mfChunkLossStartTime;           // guest +228
+        f32                  mfChunkLossEndTime;             // guest +232
+        f32                  mfChunkLossPreviousMaxBoost;    // guest +236
+        // The shatter grid: 5x7 vertex lattice (4x6 shards) positions/UVs + per-shard motion.
+        // (DWARF spells the element "Basic2dColouredVertex::Vector2" == the CgsGraphics::Vector2
+        // the 2D coloured vertex embeds.)
+        CgsGraphics::Vector2 mv2VertexPos[5][7];              // guest +240
+        CgsGraphics::Vector2 mv2VertexTex[5][7];              // guest +520
+        CgsGraphics::Vector2 mav2ChunkLossShardVelocities[48];// guest +800
+        f32                  mafChunkLossShardRotations[48]; // guest +1184
+
+        DeltaInterpolator    mBoostFlameInterpolator;        // guest +1376 (Construct SetRange(0,1))
+        Interpolator<f32>    mBoostAmountInterpolator;       // guest +1396
+        Interpolator<f32>    mBoostGainInterpolator;         // guest +1412
+        Interpolator<f32>    mChainedBoostInterpolator;      // guest +1428
+        Interpolator<f32>    mVisibilityInterpolator;        // guest +1444
+        EVisibilityStatus    meVisibilityFadeState;          // guest +1460
+
+        rw::IResourceAllocator* mpHeapAllocator;             // guest +1464
+        CgsGui::ImRendererSet*  mpImRenderers;               // guest +1468
+        bool                 mbFirstFrame;                   // guest +1472
+        bool                 mbCameraTransitionInProgress;   // guest +1473
+        f32                  mfCameraTransitionStopTime;     // guest +1476
+
+        // The thirteen texture states InitResources builds (guest 24-byte {Resource, ptr} pairs
+        // from +1480; the ctor seeds the first four Resources with the shared empty-resource
+        // sentinel and zero-fills the other nine).
+        rw::Resource               mWhiteTextureStateResource;          // guest +1480
+        renderengine::TextureState* mpWhiteTextureState;                // guest +1500
+        rw::Resource               mMaskTextureStateResource;           // guest +1504
+        renderengine::TextureState* mpMaskTextureState;                 // guest +1524
+        rw::Resource               mBackgroundTextureStateResource;     // guest +1528
+        renderengine::TextureState* mpBackgroundTextureState;           // guest +1548
+        rw::Resource               mBackgroundEndCapTextureStateResource; // guest +1552
+        renderengine::TextureState* mpBackgroundEndCapTextureState;     // guest +1572
+        rw::Resource               mFireBodyTextureStateResource;       // guest +1576
+        renderengine::TextureState* mpFireBodyTextureState;             // guest +1596
+        rw::Resource               mFireOverTextureStateResource;       // guest +1600
+        renderengine::TextureState* mpFireOverTextureState;             // guest +1620
+        rw::Resource               mEndCapTextureStateResource;         // guest +1624
+        renderengine::TextureState* mpEndCapTextureState;               // guest +1644
+        rw::Resource               mEarnFlameTextureStateResource;      // guest +1648
+        renderengine::TextureState* mpEarnFlameTextureState;            // guest +1668
+        rw::Resource               mEndGlowTextureStateResource;        // guest +1672
+        renderengine::TextureState* mpEndGlowTextureState;              // guest +1692
+        rw::Resource               mBoostingFlameTextureStateResource;  // guest +1696
+        renderengine::TextureState* mpBoostingFlameTextureState;        // guest +1716
+        rw::Resource               mGrowFireballTextureStateResource;   // guest +1720
+        renderengine::TextureState* mpGrowFireballTextureState;         // guest +1740
+        rw::Resource               mMultiplierTextureStateResource;     // guest +1744
+        renderengine::TextureState* mpMultiplierTextureState;           // guest +1764
+        rw::Resource               mGlowTextureStateResource;           // guest +1768
+        renderengine::TextureState* mpGlowTextureState;                 // guest +1788
+
+        // DWARF h:594 -- the six billboard effect renderers (boosting flame, grow fireball,
+        // black smoke, earn flame, multiplier flame, end glow -- bound by InitResources).
+        CgsGui::BillboardRenderer mBillboardRenderer[6];     // guest +1808 (stride 8268)
+
+        // DWARF h:595 -- the per-pass billboard collect array (global-namespace Array<T,N>;
+        // the explicit instantiation lives in Array_BillboardInfo_32.cpp).
+        Array<CgsGui::BillboardInfo, 32> maBillboards;       // guest +51416
+
+        // DWARF h:597 -- the shard velocity/rotation roll source (Construct seeds it).
+        CgsNumeric::Random   mRandom;                        // guest +53456
+
+        GuiCache*            mpGuiCache;                     // guest +53520 (event 64 publishes it)
+        bool                 mbShowDebugScreen;              // guest +53524
+        s32                  miBoostBarPM;                   // guest +53528 ("BoostBar" perfmon handle)
+    };
 
 // BrnGui::GuiCustRendererDebugComponent -- the debug-menu component that lets a developer override
 // the boost-bar colours at runtime. It edits the colours of the live BoostBarRenderer and mirrors
@@ -128,4 +323,4 @@ private:
 };
 }
 
-#endif
+#endif // BRN_BOOST_BAR_RENDERER_H

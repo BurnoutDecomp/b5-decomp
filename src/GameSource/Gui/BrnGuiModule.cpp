@@ -2274,6 +2274,16 @@ namespace BrnGui
         //          pointer into the event queue each frame; the states read it as their
         //          "cache ready" feed (BootPreload/BootVideos/BootProfile all key on it).
         {
+            // The per-frame "gameplay HUD data ready" trio the gameplay HUD components gate on
+            // (BoostBarRenderer::Update @0x82451CA4 reads cache+0x4B54/0x4B56/0x4B58 as one
+            // gate). The console publishes +0x4B54 from the frame's update set
+            // (`(lUpdateSet & 8) != 0`, PS3 GuiModule::Update); the other two bytes' producers
+            // are unrecovered. [FLAG PC stand-in] the update set is not threaded into this
+            // PC-shaped Update and the two producers are unknown, so all three follow the
+            // gameplay-HUD flag the cache already maintains -- the same "in gameplay" condition
+            // the update-set bit models. DELETE-WHEN the update-set threading + the two
+            // producers are recovered.
+            mGuiCache.SetGameplayHudReady(mGuiCache.IsGameplayHudActive());
             GuiEventCache lCacheEvent;
             lCacheEvent.mpGuiCache = &mGuiCache;
             // Delivery to every subscriber -- the three flows AND the always-available

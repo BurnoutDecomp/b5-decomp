@@ -511,6 +511,24 @@ namespace BrnGui
         // links from the GuiCache TU. The invite/start flag accessors read/write the +0x4B4C..
         // +0x4B53 cluster carved into the layout below. FLAG: consumer-named.
         bool IsMultiplayerAllowed() const;                                       // X360 far member (decl-only)
+        // The gameplay-HUD ready trio (+0x4B54/+0x4B56/+0x4B58 -- see the members' carve note).
+        // The console inlines both sides (no standalone symbols); header inlines per the
+        // cluster's precedent. GetGameplayHudReady is the exact three-byte AND the
+        // BoostBarRenderer::Update / FriendsListComponent gates read.
+        bool GetGameplayHudReady() const
+        {
+            return mbGameplayUpdateActive && mbGameplayHudReadyB && mbGameplayHudReadyC;
+        }
+        // The +0x407C gameplay-HUD gate byte (console-inlined read; the ready-trio publisher
+        // in GuiModule::Update mirrors it).
+        bool IsGameplayHudActive() const { return mbGameplayHudActive; }
+        void SetGameplayHudReady(bool lbReady)
+        {
+            mbGameplayUpdateActive = lbReady;
+            mbGameplayHudReadyB    = lbReady;
+            mbGameplayHudReadyC    = lbReady;
+        }
+
         bool IsOnlineStartInProgress() const  { return mbOnlineStartInProgress; }  // +0x4B4C
         bool IsInviteInProgress() const       { return mbInviteInProgress; }       // +0x4B4D
         bool IsPerformingInvite() const       { return mbPerformingInvite; }       // +0x4B4F
@@ -1068,12 +1086,21 @@ namespace BrnGui
         bool mbOnlineMatchRanked;                        // +0x4B51 (19281) SelectOnlineMenuOption
         bool mbOnlineMatchUnranked;                      // +0x4B52 (19282) SelectOnlineMenuOption
         bool mbOnlineStartPending;                       // +0x4B53 (19283) SelectOnlineMenuOption (cleared)
-        u8   mPad_4B54[3];                               // +0x4B54..+0x4B56
+        // ADDITIVE CARVE (boost-bar wave): the three per-frame "gameplay HUD data ready" bytes
+        // the BoostBarRenderer::Update gate reads as a trio (X360 @0x82451CA4: lbz 0x4B54 &&
+        // 0x4B56 && 0x4B58; FriendsListComponent::HandleControllerInput reads the same three).
+        // PRODUCERS: +0x4B54 is published each frame by the console GuiModule::Update as
+        // `(lUpdateSet & 8) != 0` (PS3 0x5A7C6C stores the equivalent cache+0x4AE6); the other
+        // two bytes' producers are not yet recovered (FLAG: consumer-named). GuiCache::Construct
+        // @0x82505AB8-D8 zeroes all three.
+        bool mbGameplayUpdateActive;                     // +0x4B54 (19284) update-set bit 8
+        u8   mPad_4B55[1];                               // +0x4B55 (set by PostTitleScreenLoad::Update)
+        bool mbGameplayHudReadyB;                        // +0x4B56 (19286) FLAG consumer-named
         // ADDITIVE CARVE (OnlineGameRoomPlayerInfo keystone, wave H): the free-burn
         // input gate bytes the game-room screen reads (lbz, X360-attested widths).
         // FLAG: consumer-named -- producer-side semantics unrecovered.
         bool mbFreeBurnMenuLocked;                       // +0x4B57 (19287) blocks pause/map entry from freeburn (HandleControllerInputFreeBurnSubState)
-        u8   mPad_4B58[1];                               // +0x4B58
+        bool mbGameplayHudReadyC;                        // +0x4B58 (19288) FLAG consumer-named (see +0x4B54)
         bool mbFreeBurnInputDisabled;                    // +0x4B59 (19289) gates ALL freeburn controller handling
         bool mbOnlineEventCompleted;                     // +0x4B5A (19290) set when the online event ends; HandleGuiCacheEvent consumes it (ClearTracker + "TO_ST_POST" when meGameModeType==16), then clears it
         u8   mPad_4B5B[0x15];                            // +0x4B5B..+0x4B6F
