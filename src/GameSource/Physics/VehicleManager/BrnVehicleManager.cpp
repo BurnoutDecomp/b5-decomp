@@ -36,6 +36,59 @@ namespace Vehicle
 {
     namespace vpu = rw::math::vpu;   // vpu::Dot (T-bone side-speed gates, wave B3b)
 
+    namespace
+    {
+        // VecFloat is Vector4 here and has no scalar constructor; the console's `vspltw` splat.
+        // (Same helper the traffic TU keeps file-locally -- neither is exported.)
+        inline VecFloat SplatVecFloat_VM(f32 lfValue)
+        {
+            VecFloat lvfResult;
+            lvfResult.x = lfValue; lvfResult.y = lfValue;
+            lvfResult.z = lfValue; lvfResult.w = lfValue;
+            return lvfResult;
+        }
+
+        // The car-vs-car impact speed CheckForHittingAlreadyCrashingCar builds for each of its two
+        // arms, read from asm @0x8263DC30..DC68 and @0x8263DE40..DE78 (identical but for which car
+        // is the victim):
+        //     lvx128 v13, mpContact, 0x30        ; the contact normal
+        //     lvx128 v125/126, victimPhys, 0x20  ; victimPhys+0x20 == mTransform.yAxis (Up)
+        //     vmsum3fp128 / vmulfp128 / vsubfp   ; flat = normal - up*dot3(up, normal)
+        //     lvx128 v12, lpInfo, 0x30           ; lpInfo+0x30 == mClosingVelocityAtoB
+        //     vmsum3fp128 v13, v13, v12          ; dot3(flat, closingVelocity)
+        //     vandc v1, v13, sign-mask           ; fabs
+        // This is the SAME construction the race-car-vs-TRAFFIC arm uses
+        // (BrnVehicleManager_RaceCarTrafficContact.cpp:306-312), except that arm projects out the
+        // RACE CAR's Up while this one projects out the VICTIM's -- which is what the two distinct
+        // lvx bases (r30 vs r29, swapped between the arms) say.
+        inline f32 CarCarImpactSpeed(const Vector3& lrContactNormal,
+                                     const Vector3& lrVictimUp,
+                                     const Vector3& lrClosingVelocity)
+        {
+            const f32 lfAlongUp = lrContactNormal.x * lrVictimUp.x
+                                + lrContactNormal.y * lrVictimUp.y
+                                + lrContactNormal.z * lrVictimUp.z;
+            const f32 lfFlatX = lrContactNormal.x - lrVictimUp.x * lfAlongUp;
+            const f32 lfFlatY = lrContactNormal.y - lrVictimUp.y * lfAlongUp;
+            const f32 lfFlatZ = lrContactNormal.z - lrVictimUp.z * lfAlongUp;
+            return std::fabs(lfFlatX * lrClosingVelocity.x
+                           + lfFlatY * lrClosingVelocity.y
+                           + lfFlatZ * lrClosingVelocity.z);
+        }
+
+        // CheckForHittingAlreadyCrashingCar passes a flat 1.0 scale on both arms
+        // (vspltisw v124,1 ; vcsxwfp128 v127,v124,0 ; vmr128 v2,v127 at both call sites).
+        const f32 KF_PILEON_CRASH_THRESHOLD_SCALE = 1.0f;
+
+        // CheckForPlayerSlammingAIIntoAI selects its scale per victim through the shared vsel mask
+        // pair at 0x8327F240: TRUE -> 2.0f (materialised inline), FALSE -> unk_82FB8320, which its
+        // static-init thunk @0x82C5BB60..BB84 fills with splat(flt_82004018) == 0.75f. BOTH values
+        // are read from the image; neither is a guess. See BrnVehicleManager.h for the full decode
+        // and for the three unmodelled RaceCarPhysics fields the selector predicate needs.
+        const f32 KF_SLAM_REVENGE_CRASH_THRESHOLD_SCALE = 2.0f;   // inline vspltisw/vcfsx
+        const f32 KF_SLAM_DEFAULT_CRASH_THRESHOLD_SCALE = 0.75f;  // unk_82FB8320 <- flt_82004018
+    }
+
 
     // The minimum combined closing speed below which a contact is too gentle to be any kind of
     // takedown/shunt (X360 reads the rodata float at flt_82FB8290 for the `>=` gate).
@@ -1345,13 +1398,35 @@ namespace Vehicle
         RaceCarPhysics* const lpVehA = &maRaceCarVehicles[liA];
         RaceCarPhysics* const lpVehB = &maRaceCarVehicles[liB];
 
-        // FLAG: the "is the player the slammer of this car" confirmation (asm reads the in-record
-        // attacker fields +6944/+6288/+6032 == mePlayerActiveRaceCarIndex) is delegated to
-        // ShouldRaceCarCrashOnCarImpact -- the standalone attacker-field reads are unmodelled.
+        // The impact speed BOTH arms pass is the record's own closing speed, splatted
+        // (asm 0x8263E078..0x8263E0AC: lfs f0,0x58(r31) ; stfs -16(r1) ; lvx ; vspltw v126,v0,0 --
+        // and v126 is passed as v1 unchanged at both call sites).
+        const VecFloat lvfImpactSpeed = SplatVecFloat_VM(lpInfo->mfClosingSpeed);
+
+        // ⚠ FLAG (unchanged in substance from the previous round, now stated precisely): the
+        // per-victim "is the player this car's recorded attacker" predicate reads three
+        // RaceCarPhysics fields this tree does not declare -- +0x13E0 and +0x1150 (both compared
+        // against mePlayerActiveRaceCarIndex) and lane .z of the vector at +0x1050 (gated
+        // 0.25f > it). It also forms this function's real entry gate (the console only reaches the
+        // two calls when the predicate holds for at least ONE of the cars, asm 0x8263E1A0..E1B0).
+        // Both are omitted here exactly as before.
+        //
+        // ⭐ WHY 0.75 AND NOT AN INVENTED CONSTANT: the predicate selects between two arms that are
+        // now BOTH read from the image -- true -> 2.0f, false -> 0.75f. With the predicate
+        // unmodelled we ship the FALSE arm, which is the console's behaviour for every contact in
+        // which the player is not the recorded attacker (the common case, and the only case this
+        // build can produce today since it has one race car). It is a documented degradation of a
+        // known predicate, not a placeholder: when the three fields are homed, replace the constant
+        // with the select and delete this note. Shipping the TRUE arm instead would double the
+        // crash threshold for every car-vs-car contact, which is the wrong majority.
         bool lbAny = false;
 
-        // Victim candidate A (asm: ShouldRaceCarCrashOnCarImpact(this, v8, vehA, normal-rodata)).
-        if (ShouldRaceCarCrashOnCarImpact(liA, lpVehA, lpVehB))
+        // Victim candidate A (asm 0x8263E1B4..0x8263E214:
+        //   r4 = a2[7] = indexA, r5 = vehA (victim), r6 = vehB, v1 = splat(mfClosingSpeed),
+        //   v2 = vsel(unk_82FB8320, 2.0f, mask[flagA])).
+        if (ShouldRaceCarCrashOnCarImpact(static_cast<EActiveRaceCarIndex>(liA), lpVehA, lpVehB,
+                                          lvfImpactSpeed,
+                                          SplatVecFloat_VM(KF_SLAM_DEFAULT_CRASH_THRESHOLD_SCALE)))
         {
             lpInfo->mbCrashRaceCarA = true; // asm *(a2+256)=1
             // aggressor = the player slot; victim = A. The asm re-encodes the player index and a2[7].
@@ -1369,8 +1444,11 @@ namespace Vehicle
             lbAny = true;
         }
 
-        // Victim candidate B (asm: ShouldRaceCarCrashOnCarImpact(this, a2[8], vehB, vehA-negnormal)).
-        if (ShouldRaceCarCrashOnCarImpact(liB, lpVehB, lpVehA))
+        // Victim candidate B (asm 0x8263E2CC..0x8263E2E4: the mirror -- r4 = a2[8] = indexB,
+        // r5 = vehB (victim), r6 = vehA, the SAME v1, and v2 = the flagB select).
+        if (ShouldRaceCarCrashOnCarImpact(static_cast<EActiveRaceCarIndex>(liB), lpVehB, lpVehA,
+                                          lvfImpactSpeed,
+                                          SplatVecFloat_VM(KF_SLAM_DEFAULT_CRASH_THRESHOLD_SCALE)))
         {
             lpInfo->mbCrashRaceCarB = true; // asm *(a2+257)=1
             const EntityId lAggressor = MakeRaceCarEntityId(static_cast<u32>(mePlayerActiveRaceCarIndex));
@@ -1425,8 +1503,14 @@ namespace Vehicle
         {
             // A is crashing (asm v26-else branch, 0x8263DBExx). The live car B is the Should subject,
             // and -- per the asm -- ALSO the victim and the car whose crash flag is set.
-            // asm: ShouldRaceCarCrashOnCarImpact(this, a2[8]=indexB, vehB, vehA).
-            if (!ShouldRaceCarCrashOnCarImpact(liB, lpVehB, lpVehA))
+            // asm 0x8263DC30..0x8263DC6C: r4 = a2[8] = indexB, r5 = vehB (victim), r6 = vehA,
+            // v1 = the flat-normal closing speed against the VICTIM's Up, v2 = splat(1.0f).
+            if (!ShouldRaceCarCrashOnCarImpact(
+                    static_cast<EActiveRaceCarIndex>(liB), lpVehB, lpVehA,
+                    SplatVecFloat_VM(CarCarImpactSpeed(lpInfo->mpContact->mNormal,
+                                                       lpVehB->GetTransform().yAxis,
+                                                       lpInfo->mClosingVelocityAtoB)),
+                    SplatVecFloat_VM(KF_PILEON_CRASH_THRESHOLD_SCALE)))
                 return false;
             // Guard is the LIVE car's NETWORK flag (asm 0x8263DE5C: if(!*(_R31+85))), not the crash flag.
             if (!lpInfo->mbRaceCarBIsNetworkCar)
@@ -1458,8 +1542,14 @@ namespace Vehicle
 
         // B is crashing (asm v26 branch, 0x8263DB2C). The live car A is the Should subject, the victim,
         // and the car whose crash flag is set.
-        // asm: ShouldRaceCarCrashOnCarImpact(this, a2[7]=indexA, vehA, vehB).
-        if (!ShouldRaceCarCrashOnCarImpact(liA, lpVehA, lpVehB))
+        // asm 0x8263DE40..0x8263DE7C: r4 = a2[7] = indexA, r5 = vehA (victim), r6 = vehB, and the
+        // same two vector builds with vehA's Up (the arms differ only in which car is the victim).
+        if (!ShouldRaceCarCrashOnCarImpact(
+                static_cast<EActiveRaceCarIndex>(liA), lpVehA, lpVehB,
+                SplatVecFloat_VM(CarCarImpactSpeed(lpInfo->mpContact->mNormal,
+                                                   lpVehA->GetTransform().yAxis,
+                                                   lpInfo->mClosingVelocityAtoB)),
+                SplatVecFloat_VM(KF_PILEON_CRASH_THRESHOLD_SCALE)))
             return false;
         // Guard is the live car's NETWORK flag (asm 0x8263DBFC: if(!*(_R31+84))), not the crash flag.
         if (!lpInfo->mbRaceCarAIsNetworkCar)

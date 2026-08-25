@@ -52,6 +52,8 @@
 #include "rw/math/vpu/vector3_operation.h"                                        // vpu::{Magnitude, Normalize, Dot, Abs, Add, Mult}
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/B5PhysicsHandlingDebugComponent.h" // BrnPhysics::Vehicle::DebugComponent (per-car tick)
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/AttributeKey.h" // Attrib::StringToKey
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"                        // gpDebugPrint ([crash-probe] witness)
+#include <cstdlib>                                                                // getenv / atoi ([crash-probe] trigger)
 
 namespace BrnPhysics
 {
@@ -361,6 +363,51 @@ namespace Vehicle
             mfMaxSlamClosingXSpeed   = 16.0f;  // flt_82004000
         }
 
+        // =======================================================================================
+        // [crash-probe] NOT AN X360 MECHANISM -- a TRIGGER, exactly like the BRN_CAR_TELEPORT and
+        // [showtime-probe] precedents. Inert unless BRN_CRASH_PLAYER is set (one getenv on the
+        // first update, one counter test per frame after).
+        //
+        // WHY IT EXISTS. mbCrashPlayerNextUpdate (+172309) is a DEBUG-MENU bool: an image-wide
+        // census over all 30,084 ARTIST exports finds exactly two touches -- Construct writes
+        // false, and the block below reads-and-clears it. NOTHING in the image sets it, because
+        // the thing that set it was the dev menu, which this build has no route to. So the whole
+        // player-crash commit chain below (ForceRaceCarCrash 5-arg -> SetRaceCarCrashing ->
+        // AddRaceCarCrashEvent + RaceCarPhysics::SetCrashing) is real, mounted, bodied -- and
+        // COLD. Setting the flag invents no path: it is the one input the console's own debug
+        // build supplied, and every line after it is the console's.
+        //
+        // ⚠ DELIBERATELY NOT RaceCarPhysics::SetCrashing(true). The existing [showtime-probe]
+        // calls that directly, which is PHYSICS-LOCAL: no crash record is allocated, no
+        // RaceCarCrashEvent is posted, and ActiveRaceCar / the GUI / CrashPlayManager never learn.
+        // That probe is not evidence for this chain. This one drives the real commit.
+        //
+        // BRN_CRASH_PLAYER = the number of UpdateVehiclePhysics calls to wait before firing ONCE
+        // (default 900 ~= 15 s at 60 Hz, i.e. after the drive is under way). Fires once per boot.
+        {
+            static const char* const kspCrashProbe = getenv("BRN_CRASH_PLAYER");
+            if (kspCrashProbe != 0)
+            {
+                static u32 sluProbeFrames = 0;
+                static bool sbProbeFired  = false;
+                const u32 kluProbeAt = (atoi(kspCrashProbe) > 0)
+                                     ? static_cast<u32>(atoi(kspCrashProbe)) : 900u;
+                ++sluProbeFrames;
+                if (!sbProbeFired && sluProbeFrames >= kluProbeAt)
+                {
+                    sbProbeFired = true;
+                    mbCrashPlayerNextUpdate = true;
+                    if (CgsDev::Log::gpDebugPrint != 0)
+                    {
+                        *CgsDev::Log::gpDebugPrint
+                            << "[crash-probe] frame " << sluProbeFrames
+                            << ": setting mbCrashPlayerNextUpdate (player slot "
+                            << static_cast<s32>(mePlayerActiveRaceCarIndex) << ")\n";
+                    }
+                }
+            }
+        }
+
         // Deferred "crash the player next update" request (asm 0x82645224..0x82645298).
         if (mbCrashPlayerNextUpdate)
         {
@@ -371,6 +418,15 @@ namespace Vehicle
             CGS_ASSERT(IsRaceCarCrashing(mePlayerActiveRaceCarIndex),
                        "Couldn't force player car to crash - this could have nasty consequences.");  // :2499
             mbCrashPlayerNextUpdate = false;
+
+            // [crash-probe] witness. NOT X360. Prints the console's own post-condition so the
+            // chain is proven to have RUN, not merely to have been called.
+            if (CgsDev::Log::gpDebugPrint != 0)
+            {
+                *CgsDev::Log::gpDebugPrint
+                    << "[crash-probe] ForceRaceCarCrash returned; IsRaceCarCrashing(player)="
+                    << (IsRaceCarCrashing(mePlayerActiveRaceCarIndex) ? 1 : 0) << "\n";
+            }
         }
 
         UpdateVehicleImpacts(lpInputInterface->GetImpactEventQueue(),   // input+141376

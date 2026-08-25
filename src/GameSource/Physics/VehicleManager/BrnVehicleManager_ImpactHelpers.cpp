@@ -227,29 +227,21 @@ namespace Vehicle
     // TENTH stale banner this campaign).
 
     // ==============================================================================================
-    // ShouldRaceCarCrashOnCarImpact @0x825C6FF8 (168B) -- FOUND during this wave (the header's
-    // "no standalone export in this dossier" was an EXPORT-SET HOLE, not a missing body), but
-    // NOT reconstructed here: the asm takes TWO ADDITIONAL VECTOR ARGS (v1/v2) the PC signature
-    // never modelled, and the real predicate is
-    //     v1 * min(otherCar.mfMass, splat@0x82FB8350) / victimCar.mfMass
-    //        * mafVulnerabilityFactor[victim]                        >  victim.mpAttribs[+0x280] * v2
-    // where BOTH caller sites (@0x8263E1B4.., @0x8263DC30..) build v1/v2 through a boost-flag
-    // vsel over the BSS pair @0x8327F240 whose writers are not yet traced. Reconstructing the
-    // 3-arg PC shape would silently drop the boost scaling; a quiet default would silently
-    // decide crashes. So this is a LOUD trap, per the standing pattern for unreachable-today
-    // code: NOTHING on this build can reach it (it needs TWO live race cars in contact), and
-    // the moment that changes this assert names exactly what must be reconstructed.
+    // ShouldRaceCarCrashOnCarImpact @0x825C6FF8 IS NOT HERE, AND MUST NOT BE RE-ADDED.
+    //
+    // The CGS_ASSERT(false) trap this file carried from 2026-08-24 until 2026-08-25 was a stop-gap
+    // for a 3-argument, signature-INFERRED declaration that turned out to be an ODR FORK of a
+    // function this tree already had: the real 5-argument console shape is fully bodied in
+    // BrnVehicleManager_RaceCarTrafficContact.cpp:157 and was landed by the traffic wave the day
+    // before. The trap's premise ("the real body takes two extra vector args the PC signature never
+    // modelled") was correct; its conclusion ("so nothing can call it") was not -- the 5-arg body
+    // already modelled them, and HandleRaceCarRaceCarContact was MOUNTED and calling the trap, so
+    // it would have fired the instant a second race car touched the player.
+    //
+    // Both call-site vector builds are now decoded from asm and all four sites in
+    // BrnVehicleManager.cpp call the real body. The 3-arg declaration is deleted from
+    // BrnVehicleManager.h. The decode lives beside the surviving declaration there.
     // ==============================================================================================
-    bool VehicleManager::ShouldRaceCarCrashOnCarImpact(s32 /*liVictimActiveRaceCarIndex*/,
-                                                       RaceCarPhysics* /*lpVictim*/,
-                                                       RaceCarPhysics* /*lpOther*/)
-    {
-        CGS_ASSERT(false, "VehicleManager::ShouldRaceCarCrashOnCarImpact: FLAG trap -- the real "
-                          "body @0x825C6FF8 takes two extra VECTOR args (boost-scaled by the "
-                          "0x8327F240 vsel pair); reconstruct it + both call-site vector builds "
-                          "before two race cars can trade paint");
-        return false;
-    }
 
     // ==============================================================================================
     // SendImpactMessage @0x825EACF0. Builds one ImpactEvent on the stack in field order and
