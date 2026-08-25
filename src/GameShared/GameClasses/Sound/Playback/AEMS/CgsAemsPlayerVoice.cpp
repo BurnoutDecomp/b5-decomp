@@ -11,12 +11,14 @@
 //   - recover the concrete AemsFactory registry (Factory-4 -> +0x60 == mpRegistry).
 //   - key = *VoiceSchema (the schema's first word == its interned Name).
 //   - lpCsis = Registry::GetEntity<AemsVoiceCsisClass>(mpRegistry, &key), asserted != 0.
-//   - csisCount = lhz *(lpCsis + 0xC)  (u16 parameter count).
+//   - csisStart = lhz *(lpCsis + 0xC)  == AemsVoiceCsisClass::mu16UserParameterStart
+//     (2026-08-25 wave 6: an earlier comment misnamed this the "parameter count" --
+//     the DWARF member at +0xC is mu16UserParameterStart; mu32ParameterCount is the
+//     u32 at +0x8).
 //   - fs = VoiceSchema::GetFeatureSchema(GetVoiceSchema(spec), 0) (GetVoiceSchema re-called).
-//   - return 4 * ( *(fs + 8) + csisCount + 0x2A )   (paramSchemaCount + csisCount + 42).
+//   - return 4 * ( *(fs + 8) + csisStart + 0x2A )   (paramSchemaCount + csisStart + 42).
 //
-// The -4/+0x60 AemsFactory recovery and the +0xC/+0x8 field reads are X360 32-bit
-// offsets, modelled here BY NAME. FLAG: absolute offsets not asserted (host widths differ).
+// All fields reached BY NAME via the real homes (2026-08-25 wave 6 fold).
 
 namespace CgsSound
 {
@@ -24,20 +26,20 @@ namespace Playback
 {
     size_t AemsPlayerVoice::GetClientAllocationSize(Factory& arFactory, const VoiceSpec& arVoiceSpec)
     {
-        const Registry* lpRegistry = arFactory.GetAemsRegistry();
+        Registry* lpRegistry = GetAemsFactoryRegistry(&arFactory);
         CGS_ASSERT(lpRegistry, "mpRegistry");
 
-        const VoiceSchema* lpSchema = arVoiceSpec.GetVoiceSchema();
-        const Name lSchemaName = lpSchema->GetName();
+        const VoiceSchema& lrSchema = arVoiceSpec.GetVoiceSchema();
+        Name lSchemaName = lrSchema.GetName();
         const AemsVoiceCsisClass* lpCsis = lpRegistry->GetEntity<AemsVoiceCsisClass>(lSchemaName);
         CGS_ASSERT(lpCsis, "lpCsis");
 
-        const u32 lu32CsisParameterCount = lpCsis->GetParameterCount();
+        const u32 lu32CsisUserParameterStart = lpCsis->GetUserParameterStart();
 
         // GetVoiceSchema is re-called (matching the X360 second bl) before GetFeatureSchema(0).
-        const FeatureSchema& lrFeatureSchema = arVoiceSpec.GetVoiceSchema()->GetFeatureSchema(0);
+        const FeatureSchema& lrFeatureSchema = arVoiceSpec.GetVoiceSchema().GetFeatureSchema(0);
 
-        return 4u * (lrFeatureSchema.GetParameterSchemaCount() + lu32CsisParameterCount + 42u);
+        return 4u * (lrFeatureSchema.GetParameterSchemaCount() + lu32CsisUserParameterStart + 42u);
     }
 }
 }
