@@ -1264,6 +1264,40 @@ struct GuiPlayerCrashingStateChangeEvent
 };
 static_assert(sizeof(GuiPlayerCrashingStateChangeEvent) == 4, "X360 record size 4 (id 377)");
 
+// [hud reveal gate 2026-08-25] X360 id 379, record 4 bytes -- THE IGNITION LATCH, and the
+// free-burn HUD's reveal gate. Moved here from BrnGuiDemangledEventTypes.h (where it was an
+// opaque `u8 maData[4]`) now that its enum is recovered. It is GuiPlayerCrashingStateChangeEvent's
+// literal neighbour: BridgeWorldVehicleDataToGui @0x823E5768 posts the crashing 377 first, then
+// GuiPlayerDrivableFromCrash 378, then this, all before the IsPlayerCarActive gate.
+//
+// The enumerator NAMES are the console's own, lifted verbatim from the assert string baked at
+// BrnFBurnMainHudState.cpp:1536 --
+//   "( GuiPlayerEngineEvent::E_ENGINE_OFF == mpCache->GetPlayerEngineState( )) ||
+//    ( GuiPlayerEngineEvent::E_ENGINE_ON  == mpCache->GetPlayerEngineState( ))"
+// -- and their VALUES are pinned by that same assert's companion code: UpdateWFInit
+// @0x8247C710 range-asserts the word `< 2` and then branches on `== 1`, so OFF is 0, ON is 1.
+//
+// ⚠️ These are NOT the world-side EActiveRaceCarEngineState values (OFF/STARTING/RUNNING/
+// STOPPING/COUNT == 0..4). The producer narrows RUNNING(2) to this ON(1) bool, which is
+// exactly why a raw STARTING->STOPPING move changes the world word but posts nothing here.
+//
+// The record is kept as the attested opaque word rather than a typed member: the console's
+// AddGuiEvent<T> takes sizeof(T) and the payload's field breakdown beyond "one word" is not
+// recovered, so naming it would be inventing structure.
+struct GuiPlayerEngineEvent
+{
+    enum EEngineState : s32
+    {
+        E_ENGINE_OFF = 0,
+        E_ENGINE_ON  = 1
+    };
+
+    u8 maData[4];
+
+    s32 GetEventType() const { return 379; }
+};
+static_assert(sizeof(GuiPlayerEngineEvent) == 4, "X360 record size 4 (id 379)");
+
 // DWARF BrnGuiEventTypeDefs.h:3565 area (GuiEvent<358>; X360 id 363, record 40 bytes).
 // X360 FIELD ORDER (binary authoritative, differs from the PS3-DWARF member listing):
 // the car-id qwords lead and the race-car indices follow -- pinned on BOTH sides:

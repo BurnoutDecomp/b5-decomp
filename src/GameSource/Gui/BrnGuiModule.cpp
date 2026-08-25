@@ -1793,6 +1793,7 @@ namespace BrnGui
                 case 204:   // [H3b] the sat-nav event-filter pair (the ch40 mirror)
                 case 207:   // [H3b] GuiRaceCarInfoEvent -- the mRaceCarInfo SoA feed
                 case 376:   // [H3b] GuiPlayerRaceCarIdEvent -- the player index pair (case-199 gate)
+                case 379:   // [reveal gate] GuiPlayerEngineEvent -- the ignition latch (+0x4B20)
                     // [H1 wave 2026-08-25] On the console EVERY module-input event reaches
                     // GuiCache::RecEvent (its ~180-case switch consumes what it wants);
                     // this build's pump routes selectively, so the two cache-consumed ids
@@ -2802,32 +2803,19 @@ namespace BrnGui
                     s_iPrevLevel1State = liLevel1State;
                 }
 
-                // FLAG world-load stand-in (the ignition event): on the console the
-                // GameState side posts GuiPlayerEngineEvent 379 when the player's car
-                // engine starts, and FBURN_MAIN's 379 arm drives the HUD's
-                // "apt_Transition" pair visible. With no vehicle side on PC, feed the
-                // one-shot ignition ONCE the in-game HUD movie has composed (its AS
-                // components must be registered before the apt-view writes can land --
-                // an earlier write is discarded by AptCommunicator::
-                // UpdateComponent's unknown-component early return). The real GameState
-                // producer replaces this when the vehicle/world side lands.
-                {
-                    static bool s_bEngineOnFed = false;
-                    if (!BrnGameMainFlowController::gBrnInGameStateActive)
-                    {
-                        s_bEngineOnFed = false;
-                    }
-                    else if (!s_bEngineOnFed && (liLevel1State & 2) != 0)
-                    {
-                        const s32 laiEngineOn[2] = { 1, 0 };
-                        RouteEventToFlow(reinterpret_cast<const CgsModule::Event*>(laiEngineOn),
-                                         379, static_cast<s32>(sizeof(laiEngineOn)));
-                        CgsDev::Log::WriteToLog(
-                            "[GuiModule] in-game HUD movie composed -> engine-on 379 fed "
-                            "(world-load stand-in).\n");
-                        s_bEngineOnFed = true;
-                    }
-                }
+                // [hud reveal gate 2026-08-25] DELETED: the "world-load stand-in" that fed a
+                // fabricated engine-on 379 the frame the in-game HUD movie composed. It had
+                // no console counterpart at all -- GuiModule::Update @0x828602C8 posts no GUI
+                // event of its own -- and it was the direct cause of the user-reported "the
+                // HUD is always visible, even in the Junkyard": it fired the ignition latch
+                // ~3800 log lines before the player's engine actually started, so the HUD's
+                // master "EventHud_Animator" ran 'transin' during car select.
+                // The REAL producer is the console's own edge latch inside
+                // BrnGameModule::BridgeWorldVehicleDataToGui @0x823E5930..0x823E59AC, landed
+                // this wave in GameBridgeWorldToGui.cpp -- it reads the world's published
+                // EActiveRaceCarEngineState and posts 379 only on a genuine off/on flip.
+                // ⛔ DO NOT RE-ADD a stand-in here: with the world side live, a second
+                // producer would double-post and re-open exactly this bug.
             }
 
             // The view consumed this frame's bridged events; reset the queue for the

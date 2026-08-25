@@ -904,7 +904,21 @@ namespace CgsGui
                  siLicenseGetLogs < 400);
             if (lbLicenseProbe)
                 ++siLicenseGetLogs;
-            if (siGetLogs < 60 || lbLicenseProbe)
+            // ⚠️⚠️ [hud reveal gate 2026-08-25] WHY THIS SECOND BUDGET EXISTS. The generic
+            // probe above stops at 60 lines -- which it reaches by ~line 2500 of BrnGame.log,
+            // during the title/licence flow. Every AS query after that is INVISIBLE. A whole
+            // verification pass was nearly scored on "'transin' never appears in the log",
+            // which was true and meant NOTHING: the HUD reveal fires around line 5200, three
+            // thousand lines after this probe went silent. The absence of a capped
+            // diagnostic is not evidence of absence. ([[diagnostics-that-lie]])
+            // So the HUD's master animator gets its own budget, the same way "License" does.
+            static s32 siEventHudGetLogs = 0;
+            const bool lbEventHudProbe =
+                (lpacCompName != 0 && std::strncmp(lpacCompName, "EventHud", 8) == 0 &&
+                 siEventHudGetLogs < 200);
+            if (lbEventHudProbe)
+                ++siEventHudGetLogs;
+            if (siGetLogs < 60 || lbLicenseProbe || lbEventHudProbe)
             {
                 ++siGetLogs;
                 char lacProbe[224];
