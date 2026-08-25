@@ -89,6 +89,32 @@ struct Average
         mfAverage   = lValue;
     }
 
+    // Record a new sample and refresh the cached window mean. ARTIST-anchored
+    // (folded here 2026-08-25 from the retired rival CgsSoundAverage.h home):
+    // @0x826A8138 (<3,f32>) / 0x826A8580 (<4>) / 0x826A80A8 (<5>) / 0x826A8348
+    // (<9>) / 0x826A8218 (<10>) / 0x826A83D8 (<25>).
+    //   - samples[cursor] = sample (stfsx f1, index*4, this);
+    //   - cursor = (u8)(cursor + 1) % N (the X360 emits %N as reciprocal-multiply);
+    //   - mfAverage seeded 0 then every slot summed INTO it (the asm re-stores the
+    //     accumulator to the member each pass -- kept store-for-store);
+    //   - mean = sum * (1/N) (the X360 uses per-N rounded literals, e.g.
+    //     0.33333334f / 0.039999999f; 1/N here keeps the generic correct while each
+    //     instantiation's codegen reproduces its own constant).
+    void Record(T aSample)
+    {
+        maPoints[muNextPoint] = aSample;
+        muNextPoint = static_cast<u8>(static_cast<u8>(muNextPoint + 1) % tuNumPoints);
+
+        mfAverage = static_cast<T>(0);
+        T lSum = static_cast<T>(0);
+        for (u32 lu = 0; lu < tuNumPoints; ++lu)
+        {
+            lSum += maPoints[lu];
+            mfAverage = lSum;   // faithful in-loop member store (see note above)
+        }
+        mfAverage = lSum * (static_cast<T>(1) / static_cast<T>(tuNumPoints));
+    }
+
     // ORDER mirrors the DWARF (maPoints @ +0, muNextPoint @ +tuNumPoints*sizeof(T),
     // mfAverage next).
     T   maPoints[tuNumPoints];  // CgsSoundUtils.h:643

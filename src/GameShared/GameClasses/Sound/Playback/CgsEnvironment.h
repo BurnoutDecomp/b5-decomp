@@ -4,6 +4,7 @@
 #include "GameShared/GameClasses/Sound/Playback/CgsObject.h"     // Playback::Object (base, with Acquire/Release)
 #include "GameShared/GameClasses/Sound/Playback/CgsHandle.h"     // Handle<T>
 #include "GameShared/GameClasses/Sound/Playback/CgsRegistry.h"   // RegistrySpec / Registry
+#include "GameShared/GameClasses/Sound/Playback/CgsVoice.h"      // the REAL Voice (+ Content via CgsContent.h)
 
 // CgsSound::Playback::Environment - the sound-playback world: it owns the
 // factory/voice/content handle tables, the registry and the DAC plug-in, and is
@@ -42,24 +43,20 @@ namespace CgsSound
 namespace Playback
 {
     class Factory;
-    struct Content;   // pointer-only surface here (static AddContent / Handle<Content>)
 
-    // FLAG (DEFER): minimal Playback::Voice slice for GetR. GetR walks the voice
-    // table and calls Voice::FindNamedSlot on each candidate; only that one static
-    // entry (Voice*, u32*) is load-bearing here. The full Voice home is CgsVoice.h;
-    // this minimal decl-only slice avoids pulling CgsVoice.h (which drags in the
-    // CgsContent.h Object and its competing definition) into this TU, mirroring the
-    // module-header minimal-slice pattern. No single TU sees both this and CgsVoice.h.
-    class Voice
-    {
-    public:
-        static int FindNamedSlot(Voice* apVoice, u32* apSpec);  // X360 Voice::FindNamedSlot
-    };
-
-    // GetR rodata globals (X360 dword_83008650 / dword_830080A8). Bodied in their
-    // owning data TUs.
-    extern const u32 gu32VoiceTypeTag;        // X360 dword_83008650
-    extern const u32 gu32NamedSlotSentinel;   // X360 dword_830080A8
+    // (2026-08-25, audio-faithfulness wave 3): the former minimal decl-only
+    // `class Voice { static FindNamedSlot }` slice is RETIRED -- the CgsContent.h
+    // Object fold removed the clash that forced it, so the REAL Voice home is
+    // included (CgsVoice.h also completes Content, which the handle tables and the
+    // static AddContent use).
+    //
+    // GetR interned-name globals (X360 dword_83008650 / dword_830080A8): the words
+    // GetR compares/passes are interned Name hashes -- dword_83008650 is the
+    // TARGET FACTORY's name (the asm reads voice->mFactory.mName and compares) and
+    // dword_830080A8 is the named-slot Name handed to Voice::FindNamedSlot.
+    // Bodied in their owning data TUs.
+    extern const u32 gu32VoiceTypeTag;        // X360 dword_83008650 (a factory Name hash)
+    extern const u32 gu32NamedSlotSentinel;   // X360 dword_830080A8 (a slot Name hash)
 
     // DWARF CgsEnvironment.h:69 -- the per-stage CPU perf-monitor ids the
     // environment update registers. Construct (h:77) is its own ledger function.
@@ -123,8 +120,14 @@ namespace Playback
 
         bool RemoveFactory(Factory& lrFactory);
 
-        // @0x82680EF8 / EA0. Accessors (assert the member is present).
-        rw::IResourceAllocator* GetAllocator();   // @0x82680EF8
+        // @0x82680EF8 / EA0. Accessors (assert the member is present). GetAllocator
+        // is header-inline (2026-08-25 wave 3): the mounted Content::DoDispose
+        // (CgsObject.cpp) links it while the rest of this TU stays gate-only.
+        rw::IResourceAllocator* GetAllocator()    // @0x82680EF8
+        {
+            CGS_ASSERT(mpAllocator, "mpAllocator");
+            return mpAllocator;
+        }
         Registry*               GetRegistry();    // @0x82680EA0
 
         // @0x826BFAF0 / FE50. Look a voice up by ident / a content up by plugin key.

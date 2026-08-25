@@ -1,4 +1,5 @@
 #include "GameShared/GameClasses/Sound/Playback/RWAC/CgsGenericRwacContent.h"
+#include "GameShared/GameClasses/Sound/Playback/CgsFactory.h"   // complete Factory + Environment (the by-name allocator walk)
 #include "GameShared/GameClasses/System/Resource/CgsResourceType.h"
 #include "GameShared/GameClasses/System/Resource/CgsResourceHandle.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
@@ -98,18 +99,19 @@ namespace Playback
     // StartResourceModuleLoading @ 0x826C6998. Allocate an 8-byte ResourceModuleLoadData block
     // through the factory's RenderWare IResourceAllocator, initialise it (state=request, current
     // request=1, not cancelled), mark the Content loading. Returns false only on allocation
-    // failure. Allocator via Content.mFactory(+0x08) -> load service(+0x0C) -> allocator(+0x30).
-    // Baked assert CgsContentLoader.cpp:243.
+    // failure. Allocator via Content::mFactory(+0x08) -> Factory::mEnvironment(+0x0C) ->
+    // Environment::mpAllocator(+0x30), all by name. Baked assert CgsContentLoader.cpp:243.
     template <class ResType>
     bool ContentLoader<ResType>::StartResourceModuleLoading(Content& arContent,
                                                             const ContentSpec& /*arSpec*/)
     {
         CGS_ASSERT(mpLoadData == 0, "0 == mpLoadData");
 
-        u8* lpFactory      = reinterpret_cast<u8*>(&arContent.mFactory);
-        u8* lpLoadService  = *reinterpret_cast<u8**>(lpFactory + 0x0C);
+        // The X360 walk factory+0x0C -> +0x30 is Factory::mEnvironment ->
+        // Environment::mpAllocator -- by name (2026-08-25 wave 3; the "+0x0C load
+        // service" reading was a misnomer for the environment).
         rw::IResourceAllocator* lpAllocator =
-            *reinterpret_cast<rw::IResourceAllocator**>(lpLoadService + 0x30);
+            arContent.GetFactory().GetEnvironment().GetAllocator();
 
         // X360 stack build: a FIVE-entry serialised descriptor (40B). slot0 =
         // { sizeof(ResourceModuleLoadData)==8, 4 }, slots1..4 = { 0, 1 }.
@@ -184,10 +186,10 @@ namespace Playback
 
         CGS_ASSERT(arSpec.mu8LoadMethod == 1, "Invalid Content load method");
 
-        u8* lpFactory      = reinterpret_cast<u8*>(&arContent.mFactory);
-        u8* lpLoadService  = *reinterpret_cast<u8**>(lpFactory + 0x0C);
+        // Factory::mEnvironment -> Environment::mpAllocator, by name (see
+        // StartResourceModuleLoading above).
         rw::IResourceAllocator* lpAllocator =
-            *reinterpret_cast<rw::IResourceAllocator**>(lpLoadService + 0x30);
+            arContent.GetFactory().GetEnvironment().GetAllocator();
 
         // X360 free descriptor: slot0 = block to free (mpLoadData), rest zero.
         lpAllocator->Free(mpLoadData);
@@ -278,11 +280,9 @@ namespace Playback
 
         case E_RMLS_POST_LOAD: // 2
         {
-            // (*arContent.vtbl[+0x10])(&arContent) -- the type-specific post-load hook.
-            typedef bool (*PostLoadFn)(Content*);
-            PostLoadFn lpfnPostLoad =
-                reinterpret_cast<PostLoadFn*>(*reinterpret_cast<void**>(&arContent))[4];
-            if (!lpfnPostLoad(&arContent))
+            // The X360 vtbl[+0x10] dispatch is Content vtable slot 4 ==
+            // DoOnPostLoad (DWARF CgsContent.h:271) -- by name (2026-08-25 wave 3).
+            if (!arContent.DoOnPostLoad())
                 break;
             lpLoadData->meState = E_RMLS_FINISHED; // 3
         }
@@ -318,11 +318,10 @@ namespace Playback
             bool lbReady = (mpLoadData != 0);
             if (!lbReady)
             {
-                // (*arContent.vtbl[+0x14])(&arContent) -- release/quiesce the pending load.
-                typedef bool (*ReleaseFn)(Content*);
-                ReleaseFn lpfnRelease =
-                    reinterpret_cast<ReleaseFn*>(*reinterpret_cast<void**>(&arContent))[5];
-                lbReady = lpfnRelease(&arContent);
+                // The X360 vtbl[+0x14] dispatch is Content vtable slot 5 ==
+                // DoOnPreUnload (DWARF CgsContent.h:274) -- by name (2026-08-25
+                // wave 3).
+                lbReady = arContent.DoOnPreUnload();
             }
             if (lbReady)
                 meUnloadState = E_US_UNLOADING; // 2

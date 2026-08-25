@@ -9,10 +9,9 @@
 #include "GameShared/GameClasses/Sound/Playback/CgsCommon.h"    // Name
 #include "GameShared/GameClasses/Sound/Playback/CgsDataStructures.h" // ContentType, ContentClass
 
-// NOTE: Voice derives from the CgsContent.h `Object` (vptr + mu32RefCount), NOT the
-// CgsObject.h one -- including both in one TU is an ODR clash (two definitions of
-// CgsSound::Playback::Object). The two share the identical X360 layout; CONDUCTOR
-// note in CgsObject.h tracks the eventual fold of the two Object copies into one.
+// NOTE (fold DONE 2026-08-25, audio-faithfulness wave 3): there is now ONE
+// CgsSound::Playback::Object -- the canonical CgsObject.h home, which CgsContent.h
+// includes (its old private copy is deleted). Voice derives from that single Object.
 
 // ============================================================================
 // CgsVoice.h  (HOME for CgsSound::Playback::Slot + the minimal Voice/PlayerVoice
@@ -240,6 +239,10 @@ public:
     // Ident read. INLINE in the original (Logic::Voice::GetIdent @0x826AD988 returns
     // `*(obj+12)` -- this member by name).
     u32 GetIdent() const { return mIdent; }
+
+    // Owning-factory read. INLINE in the original (Environment::GetR @0x826BFE50
+    // reads `*(voice+8)` then the factory's name word -- this member by name).
+    const Factory& GetFactory() const { return mFactory; }
 
     // Removal-lifecycle byte access. INLINE in the original (Logic::Voice::Destruct
     // @0x826C4E38 stores `*(obj+0x11) = 2` == E_VOICE_REMOVE_REMOVING; Play/Stop
