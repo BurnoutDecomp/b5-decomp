@@ -274,6 +274,80 @@ void GameStateModule::ProcessGameEventsWorldRegionBringUp(
 }
 
 // ============================================================================
+// ⭐ [P1 sim-pause] PostWorldInput -- the free-function accessor BridgeGuiToGameState posts
+// through (X360: returns the module's post-world input GameEventQueue). PC body: the CARRY
+// QUEUE, the named reduction spelled out at the declaration (BrnGameStateModule.h).
+// ============================================================================
+namespace GameStateModuleIO
+{
+    CgsModule::VariableEventQueue<1536, 16>* PostWorldInput(GameStateModule* lpModule)
+    {
+        return &lpModule->mGameEventCarryQueue;
+    }
+}
+
+// ============================================================================
+// ⭐ [P1 sim-pause] ProcessGameEventsPauseBringUp -- the extracted pause-family arms of
+// GameStateModule::ProcessGameEvents @0x823A0A18 (cases 33 / 35 / 36 / 93; the console
+// bodies are quoted at the declaration). Same queue walk, same must-run-before-the-Clear
+// position as the case-111/113/115 arms.
+// ============================================================================
+void GameStateModule::ProcessGameEventsPauseBringUp(
+        const CgsModule::VariableEventQueue<1536, 16>* lpGameEventQueue,
+        GameStateModuleIO::GameActionQueue* lpActionQueue)
+{
+    if (lpGameEventQueue == 0 || lpActionQueue == 0)
+    {
+        return;
+    }
+
+    const CgsModule::Event* lpEvent = 0;
+    s32                     liSize  = 0;
+    s32                     liType  = lpGameEventQueue->GetFirstEvent(&lpEvent, &liSize);
+
+    while (lpEvent != 0)
+    {
+        const u8* lpuPayload = reinterpret_cast<const u8*>(lpEvent);
+        switch (liType)
+        {
+        case GameStateModuleIO::E_EVENT_PLAYER_PAUSE_STATE_CHANGED:   // 33
+            if (lpuPayload[0] != 0)
+                RequestPause(2, lpActionQueue, lpuPayload[1], lpuPayload[2]);
+            else
+                RequestUnpause(2, lpActionQueue);
+            break;
+
+        case GameStateModuleIO::E_EVENT_ENTER_REPLAY:                 // 35
+            RequestPause(16, lpActionQueue, 0, 0);
+            break;
+
+        case GameStateModuleIO::E_EVENT_LEAVE_REPLAY:                 // 36
+            RequestUnpause(16, lpActionQueue);
+            break;
+
+        case GameStateModuleIO::E_EVENT_CRASHNAV_STATE_CHANGED:       // 93
+            // ⚠️ inverted by design: payload 1 == the crash-nav map DEACTIVATED -> pause.
+            // [DIAG] NOT IN THE X360 BINARY -- the pause spine's middle rung.
+            if (CgsDev::Log::gpDebugPrint != 0)
+                *CgsDev::Log::gpDebugPrint
+                    << "[sim-pause] game event 93 payload " << static_cast<s32>(lpuPayload[0])
+                    << (lpuPayload[0] ? " -> RequestPause(4)" : " -> RequestUnpause(4)") << "\n";
+            if (lpuPayload[0] != 0)
+                RequestPause(4, lpActionQueue, 0, 0);
+            else
+                RequestUnpause(4, lpActionQueue);
+            break;
+
+        default:
+            break;
+        }
+
+        const CgsModule::Event* lpCurrent = lpEvent;
+        liType = lpGameEventQueue->GetNextEvent(lpCurrent, &lpEvent, &liSize);
+    }
+}
+
+// ============================================================================
 // ⭐⭐ [gateui] PreWorldUpdateStuntBringUp -- the three stunt-chain legs of the console's
 // PreWorldUpdate @0x823A5328, IN THE CONSOLE'S OWN ORDER. The header carries the line-by-line map
 // of the source function and both named reductions; the body annotates each leg again.
@@ -313,6 +387,12 @@ void GameStateModule::PreWorldUpdateStuntBringUp(f32 lfGameTimestep, bool lbIsAG
     // same walk, same must-run-before-the-Clear constraint; it posts onto the action queue
     // this function already holds the write lock for.
     ProcessGameEventsWorldRegionBringUp(&mGameEventCarryQueue, lpActionQueue);
+    // ⭐ [P1 sim-pause] the dispatcher's pause-family arms (cases 33/35/36/93), same walk,
+    // same must-run-before-the-Clear constraint; RequestPause/RequestUnpause post actions
+    // 86/87/88 onto the action queue this function already holds the write lock for --
+    // CheckGameActions (BrnGameModule, the console's DoUpdate_GameStatePreWorld tail) reads
+    // them back this same sub-step and stops/starts the sim timer.
+    ProcessGameEventsPauseBringUp(&mGameEventCarryQueue, lpActionQueue);
     mGameEventCarryQueue.Clear();
 
     // ---- 2) TriggerQueryManager: ARM the trigger set -----------------------------------------

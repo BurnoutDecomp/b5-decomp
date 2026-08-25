@@ -61,6 +61,20 @@ namespace BrnResource    { namespace GameDataIO { class AllocatorList; } }
 
 namespace BrnGameState
 {
+class GameStateModule;
+namespace GameStateModuleIO
+{
+    // [P1 sim-pause] X360 free function: returns the module's post-world input GameEventQueue
+    // (VariableEventQueue<1536,16>) that BridgeGuiToGameState AddEvent's translated events
+    // into. GameBridgeGUIToX.cpp already declares it (the FLAG'd un-homed collaborator); this
+    // is now its single canonical declaration and the PC body (GameStateModule_gUI_00.cpp)
+    // returns the CARRY QUEUE -- the named reduction: the console's PostWorldUpdate merges its
+    // post-world input queue into the carry queue for the next PreWorldUpdate's ProcessGameEvents,
+    // and on this build (no PostWorldInputBuffer exists) the carry queue IS that seam, with the
+    // identical consume point (the pre-world pump) and lifetime (Cleared after the pump).
+    CgsModule::VariableEventQueue<1536, 16>* PostWorldInput(GameStateModule* lpModule);
+}
+
 // Minimal slice (BrnPursuitMode.h GetName-only precedent): the full GameStateModule layout (~290KB,
 // ~190 methods) is owned by the BrnGameStateModule.cpp TU. Only the members touched by the three
 // reconstructed functions of this TU are declared here; exact member offsets are NOT modelled (the
@@ -278,6 +292,22 @@ public:
     // is the stage-24 deferral) and the +181512 store (member un-homed; not fabricated).
     // Producer: RaceCarEntityModule::UpdateCurrentWorldRegion (event 115, world side).
     void ProcessGameEventsWorldRegionBringUp(
+        const CgsModule::VariableEventQueue<1536, 16>* lpGameEventQueue,
+        GameStateModuleIO::GameActionQueue* lpActionQueue);
+
+    // ⭐ [P1 sim-pause] X360 ProcessGameEvents @0x823A0A18, THE PAUSE FAMILY -- the four
+    // arms that route pause-state events into RequestPause/RequestUnpause (same extraction
+    // precedent as the case-111/113/115 arms above). Console arms, verbatim (p1_dump.txt):
+    //   case 33 (PLAYER_PAUSE_STATE_CHANGED): payload {b0 pause?, b1, b2};
+    //       b0 ? RequestPause(2, q, b1, b2) : RequestUnpause(2, q)
+    //   case 35 (ENTER_REPLAY):  RequestPause(16, q, 0, 0)
+    //   case 36 (LEAVE_REPLAY):  RequestUnpause(16, q)
+    //   case 93 (CRASHNAV_STATE_CHANGED): payload {b0};
+    //       b0 ? RequestPause(4, q, 0, 0) : RequestUnpause(4, q)
+    // ⚠️ THE INVERTED SEMANTIC IS CONSOLE TRUTH: BridgeGuiToGameState's GUI-191 arm posts
+    // 93 payload 1 when the crash-nav DEACTIVATES (payload = (guiWord0==0)), so ACTIVATING
+    // the map UNpauses and the deactivate pauses. Do not "fix" it.
+    void ProcessGameEventsPauseBringUp(
         const CgsModule::VariableEventQueue<1536, 16>* lpGameEventQueue,
         GameStateModuleIO::GameActionQueue* lpActionQueue);
 
@@ -692,6 +722,11 @@ public:
     bool IsModeChangeInProgress() const;
 
 private:
+    // [P1 sim-pause] the PostWorldInput free function returns the private carry queue (see its
+    // declaration above the class) -- friendship, not a fabricated public accessor, per the
+    // GuiCache exposure rule.
+    friend CgsModule::VariableEventQueue<1536, 16>* GameStateModuleIO::PostWorldInput(GameStateModule*);
+
     // ------------------------------------------------------------------------
     // Private helpers the CarSelect hooks above call. Both are real X360 symbols with exactly one
     // caller each inside this class, so they stay private here.
