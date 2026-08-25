@@ -9,6 +9,10 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Sound/Playback/CgsObject.h"     // CgsSound::Playback::Object
 
+// The IO message header the Notify hook receives (full home CgsMessage.h;
+// pointer-only here).
+namespace CgsSound { namespace Io { struct MessageHeader; } }
+
 // CgsSound::Logic::StateManager - the sound-logic state manager keystone base
 // (StateManager : public CgsSound::MemBase). This is a large polymorphic class
 // (~50 member functions across CgsStateManager.cpp). This header now models the
@@ -196,6 +200,28 @@ public:
     // emitted; leaves override Prepare. X360 addrs above.
     virtual bool          Prepare();                       // vtable +0x0C
     virtual StateManager* GetChildStateManager(s32 liIndex); // vtable +0x14
+
+    // DWARF :181 / :184 -- the per-frame drive pair Environment::Update @0x826C3F78
+    // dispatches on every registered manager (console vtable +0x18/+0x1C):
+    // UpdateParams(gameDt) between the time-field seeding and the mixer pass, then
+    // the ProcessUpdate() pass after ProcessMixMap. (Added 2026-08-25, phase B2.)
+    // The concrete managers own the overrides; the base slots are NON-pure on the
+    // console (managers exist that leave them un-overridden -- the same
+    // implementer-shape argument as the ISlotImplementation reconcile), so the
+    // base bodies are the empty defaults that shape implies.
+    virtual void UpdateParams(f32 /*af32GameDt*/) {}       // DWARF :181 (base default; leaves override)
+    virtual void ProcessUpdate() {}                        // DWARF :184 (base default; leaves override)
+
+    // DWARF :188 -- the message hook Environment::Notify routes through; the DWARF
+    // renders the base body EMPTY inline, so this IS the attested base body.
+    virtual void Notify(const CgsSound::Io::MessageHeader* /*apkMessage*/) {} // DWARF :188 empty inline base body
+
+    // DWARF :223 / :226 / :232 -- the time-field setters Environment::Update seeds
+    // before the UpdateParams pass (header-inline trivial setters; the Update asm
+    // inlines them as the +0x0C/+0x10/+0x04 stores). Added 2026-08-25, phase B2.
+    void SetTimeStepGame(f32 af32TimeStep)       { mfTimeStepGame = af32TimeStep; }
+    void SetTimeStepSimulation(f32 af32TimeStep) { mfTimeStepSimulation = af32TimeStep; }
+    void SetCurrentTime(f32 af32Time)            { mfCurrentTime = af32Time; }
 
     // CgsStateManager.h (PrepareStates @ 0x826EAD30). The shared helper every leaf
     // Prepare() calls to advance its owned States. NOT in this view's reconstructed
