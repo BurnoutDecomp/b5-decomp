@@ -1901,32 +1901,19 @@ void CgsSceneManager::SceneManagerModule::ExternalSceneQueriesUpdate()
 // @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
 // body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
 // not this gate.
-void WorldModule::BridgeCrashModuleToRaceCarModule_PostScene(void *,struct BrnWorld::RaceCarEntityModuleIO::InputBuffer_PostScene *,class BrnWorld::CrashModuleIO::OutputBuffer_PostScene const *)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "WorldModule::BridgeCrashModuleToRaceCarModule_PostScene: inert (body not reconstructed) [FLAG PC boot gate]\n";
-    }
-}
+// GATE RETIRED 2026-08-25 (crash exit): WorldModule::BridgeCrashModuleToRaceCarModule_PostScene
+// @0x827AD5A0 is REAL in GameSource/World/Bridges/WorldBridgeCrashPostScene.cpp. The phantom
+// CrashModuleIO::OutputBuffer_PostScene it was declared against is deleted; the real parameter
+// type is BrnWorld::CrashIO::OutputBuffer_PreScene (the crash module's ONE output buffer).
 
 // BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
 // one-shot log. This symbol is REACHED every frame now that WorldModule::Update
 // @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
 // body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
 // not this gate.
-void WorldModule::BridgeCrashModuleToTrafficModule_PostScene(void *,class BrnTraffic::BrnTrafficIO::InputBuffer_PostScene *,class BrnWorld::CrashModuleIO::OutputBuffer_PostScene const *)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "WorldModule::BridgeCrashModuleToTrafficModule_PostScene: inert (body not reconstructed) [FLAG PC boot gate]\n";
-    }
-}
+// GATE RETIRED 2026-08-25 (crash exit): WorldModule::BridgeCrashModuleToTrafficModule_PostScene
+// @0x827AD5E0 is REAL in GameSource/World/Bridges/WorldBridgeCrashPostScene.cpp (same TU, same
+// phantom-type retirement as its race-car sibling above).
 
 // GATE RETIRED 2026-08-18 (wave Q4 bridges): WorldModule::BridgePropModuleToTrafficModule_PrePhysics @0x827AEA70 is REAL in GameSource/World/Bridges/WorldBridgePropModule.cpp.
 

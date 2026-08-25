@@ -24,7 +24,8 @@
 #include "GameShared/GameClasses/Module/CgsIOBuffer.h"                          // CgsModule::IOBuffer
 #include "GameShared/GameClasses/Core/CgsAssert.h"                              // CGS_ASSERT
 #include "GameSource/World/CrashModule/SharedIO/BrnCrashModuleNetworkIOInterfaces.h" // NetworkOutputInterface + NetworkInputInterface
-#include "GameSource/World/CrashModule/SharedIO/BrnCrashModuleTrafficIOInterfaces.h" // TrafficInputInterface
+#include "GameSource/World/CrashModule/SharedIO/BrnCrashModuleTrafficIOInterfaces.h" // TrafficInputInterface + TrafficOutputInterface
+#include "GameSource/World/CrashModule/SharedIO/BrnCrashModuleRaceCarIOInterfaces.h" // RaceCarOutputInterface (the crash-complete ring)
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleOutputInterface.h"    // BrnPhysics::Vehicle::VehicleOutputInterface + VehicleManagerOutputInterface
 #include "GameShared/GameClasses/System/Timer/CgsTimerStatusInterface.h"             // CgsSystem::TimerStatusInterface
 
@@ -204,33 +205,62 @@ namespace CrashIO
     // interface members have their own owning homes elsewhere and are NOT reconstructed here;
     // the regions between member starts are modelled as correctly-sized opaque storage so the
     // three X360-pinned return offsets are exact.
+    // ⭐⭐ [crash exit 2026-08-25] THIS BUFFER IS ALSO THE "POST-SCENE" CRASH OUTPUT BUFFER.
+    // BrnWorld::CrashModuleIO::OutputBuffer_PostScene DOES NOT EXIST. It was a phantom type
+    // invented from the mangled signatures of the three post-scene crash bridges, and it stood
+    // for weeks as "the single structural blocker for the whole crash-exit path".
+    // PROVEN AT THE CALLER, not inferred:
+    //   * WorldModule::Update @0x827D63E8 creates exactly FOUR crash IO buffers --
+    //     CrashIO::{InputBuffer_PreScene, OutputBuffer_PreScene, InputBuffer_PostPhysics,
+    //     OutputBuffer_PostPhysics}. There is no CreateIOBuffer<...OutputBuffer_PostScene>
+    //     anywhere in the image. (Contrast TriggerEntityModuleIO::OutputBuffer_PostScene, which
+    //     EntityModulePostSceneUpdate really does CreateIOBuffer/DestroyIOBuffer locally -- when
+    //     the console genuinely has a distinct post-scene buffer, it makes one.)
+    //   * CrashModule::PreSceneUpdate is called with `v202` (the OutputBuffer_PreScene) as its
+    //     output, and EntityModulePostSceneUpdate is then called with `v202` in ARGUMENT SLOT 38
+    //     -- the same local -- which is exactly the argument all three post-scene crash bridges
+    //     receive. One buffer, written pre-scene, read post-scene. The crash module is a
+    //     ModuleSingleBuffered: it has ONE output buffer by construction.
+    //   * Consistently, the bridges call THIS type's own accessors by address:
+    //     BridgeCrashModuleToRaceCarModule_PostScene @0x827AD5A0 -> 0x827A2530
+    //     (GetRaceCarOutputInterface, +0x231D0); BridgeCrashModuleToTrafficModule_PostScene
+    //     @0x827AD5E0 -> 0x827A23E0 (GetTrafficOutputInterface, +0x8);
+    //     BridgeCrashModuleToPropModule_PostScene @0x827AAD78 -> 0x827A2530.
+    // ⛔ DO NOT RE-INTRODUCE the phantom. The previous wave saw the same symbols and explained
+    // them away as "two byte-identical getters that ICF folded, IDA kept one name". That theory
+    // is refuted by the caller: there is no second buffer to have a second getter. Its companion
+    // measurement ("CrashModuleIO::OutputBuffer_PostScene 16 bytes, racecar iface @143824 OUT OF
+    // BOUNDS") was measuring the phantom's sizeof -- 143824 == 0x231D0 is precisely THIS type's
+    // attested member offset, i.e. the evidence for the identity was already in the tree, read
+    // as evidence against it.
+    //
+    // MEMBERS: real committed types in DWARF order, X360 offsets as comments and no artificial
+    // padding -- the same shape InputBuffer_PostPhysics above already uses, and for the same
+    // reason (these interfaces are align-16 and WIDEN on the host, so console offsets cannot be
+    // reproduced and must not be static_asserted; only the ORDER is load-bearing).
     struct OutputBuffer_PreScene : public CgsModule::IOBuffer
     {
-        struct TrafficOutputInterfaceStorage { unsigned char maBytes[1]; };
+        // The crash side's vehicle input interface has no committed home yet and nothing in the
+        // tree reads it; kept opaque so the member ORDER around it stays right.
         struct VehicleInputInterfaceStorage  { unsigned char maBytes[1]; };
-        struct RaceCarOutputInterfaceStorage { unsigned char maBytes[1]; };
 
-        // +0x8 (line 130/131).
-        const TrafficOutputInterfaceStorage* GetTrafficOutputInterface() const;   // 0x827A23E0 read-lock
-        TrafficOutputInterfaceStorage*       GetTrafficOutputInterface();         // 0x827BB5D0 write-lock
+        // +0x8 (line 130/131) -- the cleanup-traffic + network-crashing-traffic rings.
+        const TrafficOutputInterface* GetTrafficOutputInterface() const;   // 0x827A23E0 read-lock
+        TrafficOutputInterface*       GetTrafficOutputInterface();         // 0x827BB5D0 write-lock
         // +0x670 (line 133/134).
         const VehicleInputInterfaceStorage*  GetVehicleInputInterface() const;    // 0x827A2488 read-lock
         VehicleInputInterfaceStorage*        GetVehicleInputInterface();          // 0x827BB678 write-lock
-        // +0x231D0 (line 136/137).
-        const RaceCarOutputInterfaceStorage* GetRaceCarOutputInterface() const;   // 0x827A2530 read-lock
-        RaceCarOutputInterfaceStorage*       GetRaceCarOutputInterface();         // 0x827BB720 write-lock
+        // +0x231D0 (line 136/137) -- holds the EventQueue<RaceCarCrashCompleteEvent,10> that
+        // carries "this race car has finished crashing" to the race-car and prop modules.
+        const RaceCarOutputInterface* GetRaceCarOutputInterface() const;   // 0x827A2530 read-lock
+        RaceCarOutputInterface*       GetRaceCarOutputInterface();         // 0x827BB720 write-lock
 
         static void _AssertLayout();
 
     private:
-        // The IOBuffer base is a single status byte; the X360 places mTrafficOutputInterface at
-        // this+0x8, so pad bytes +1..+7 explicitly.
-        u8                            maStatusPad[7];                      // +1..+7 (force +0x8)
-        TrafficOutputInterfaceStorage mTrafficOutputInterface;            // +0x8
-        unsigned char                 maTrafficPad[0x670 - 0x8 - 1];      // +0x9..+0x66F
-        VehicleInputInterfaceStorage  mVehicleInputInterface;            // +0x670
-        unsigned char                 maVehiclePad[0x231D0 - 0x670 - 1];  // ...
-        RaceCarOutputInterfaceStorage mRaceCarOutputInterface;           // +0x231D0
+        TrafficOutputInterface       mTrafficOutputInterface;   // X360 +0x8     (widens on host)
+        VehicleInputInterfaceStorage mVehicleInputInterface;    // X360 +0x670   (opaque, see above)
+        RaceCarOutputInterface       mRaceCarOutputInterface;   // X360 +0x231D0 (widens on host)
     };
 }
 }

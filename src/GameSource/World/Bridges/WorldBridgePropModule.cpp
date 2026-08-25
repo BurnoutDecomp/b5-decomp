@@ -410,25 +410,24 @@ void BridgeSceneContactsToPropModule_PrePhysics(
 void BridgeCrashModuleToPropModule_PostScene(
     void* lpWorldModule,
     BrnWorld::PropEntityIO::InputBuffer_PostScene* lpPropInputBuffer_PostScene,
-    const BrnWorld::CrashModuleIO::OutputBuffer_PostScene* lpCrashOutputBuffer_PostScene)
+    const BrnWorld::CrashIO::OutputBuffer_PreScene* lpCrashOutputBuffer)
 {
-    (void)lpWorldModule;                  // X360 r3 -- overwritten at 0x827AAD88, never read
-    (void)lpPropInputBuffer_PostScene;    // consumed by the parked Append
-    (void)lpCrashOutputBuffer_PostScene;  // source seat unrecovered -- see the banner
+    (void)lpWorldModule;   // X360 r3 -- overwritten at 0x827AAD88, never read
 
-    {
-        static bool sbLoggedCrashPark = false;
-        if (!sbLoggedCrashPark && CgsDev::Log::gpDebugPrint != 0)
-        {
-            sbLoggedCrashPark = true;
-            *CgsDev::Log::gpDebugPrint
-                << "[FLAG PC bring-up] BridgeCrashModuleToPropModule_PostScene: PARKED. "
-                   "BrnWorld::CrashModuleIO::OutputBuffer_PostScene is still a 16-byte "
-                   "placeholder, so the crash module's race-car output interface (console "
-                   "+0x231D0) and its RaceCarCrashCompleteEvent ring cannot be reached by "
-                   "name. The prop-side destination queue is ready.\n";
-        }
-    }
+    // ⭐ UNPARKED 2026-08-25 (crash exit). The park's premise is retired: the source type is not
+    // a 16-byte placeholder, it is CrashIO::OutputBuffer_PreScene -- the crash module's ONE
+    // output buffer -- and its +0x231D0 RaceCarOutputInterface now names the real
+    // EventQueue<RaceCarCrashCompleteEvent,10>. Full derivation in
+    // Bridges/WorldBridgeCrashPostScene.cpp; the short version is that WorldModule::Update
+    // creates no post-scene crash buffer and hands PreSceneUpdate's own output buffer straight
+    // to EntityModulePostSceneUpdate.
+    //
+    // The console's Append source argument is the INTERFACE pointer, unadjusted (no `addi`
+    // between the two calls at 0x827AAD90/0x827AAD9C), which is what pins the queue to offset 0
+    // of the interface; the DESTINATION does carry `addi r3,r31,8` -- the inlined
+    // AppendRaceCarCrashQueue onto the prop buffer's own +8 queue.
+    lpPropInputBuffer_PostScene->AppendRaceCarCrashQueue(
+        lpCrashOutputBuffer->GetRaceCarOutputInterface()->GetRaceCarCrashCompleteEventQueue());
 }
 
 // =================================================================================================

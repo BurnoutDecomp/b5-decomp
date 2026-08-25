@@ -23,23 +23,32 @@ namespace CrashIO
 {
     void OutputBuffer_PreScene::_AssertLayout()
     {
-        static_assert(offsetof(OutputBuffer_PreScene, mTrafficOutputInterface) == 0x8,
-                      "mTrafficOutputInterface @0x8");
-        static_assert(offsetof(OutputBuffer_PreScene, mVehicleInputInterface) == 0x670,
-                      "mVehicleInputInterface @0x670");
-        static_assert(offsetof(OutputBuffer_PreScene, mRaceCarOutputInterface) == 0x231D0,
-                      "mRaceCarOutputInterface @0x231D0");
+        // ⚠️ [crash exit 2026-08-25] The three console OFFSET asserts that stood here are gone,
+        // and deliberately. They only held while all three members were 1-byte opaque storage
+        // padded into position; the two committed interfaces are align-16 aggregates full of
+        // EventQueues that WIDEN on the host, so 0x8 / 0x670 / 0x231D0 are console facts a
+        // 64-bit host cannot reproduce. Asserting them would force the fake padding back in --
+        // and that padding is exactly what kept this buffer opaque and the crash-exit path
+        // blocked. The ORDER is what is load-bearing: the bridges take member ADDRESSES from the
+        // accessors below, never a literal offset. Same trade InputBuffer_PostPhysics already
+        // makes; its members carry the same "align-16, widens on host" note.
+        static_assert(offsetof(OutputBuffer_PreScene, mTrafficOutputInterface)
+                        < offsetof(OutputBuffer_PreScene, mVehicleInputInterface),
+                      "DWARF order: traffic (X360 +0x8) precedes vehicle (X360 +0x670)");
+        static_assert(offsetof(OutputBuffer_PreScene, mVehicleInputInterface)
+                        < offsetof(OutputBuffer_PreScene, mRaceCarOutputInterface),
+                      "DWARF order: vehicle (X360 +0x670) precedes race car (X360 +0x231D0)");
     }
 
     // +0x8 -- traffic interface.
-    const OutputBuffer_PreScene::TrafficOutputInterfaceStorage*
+    const TrafficOutputInterface*
     OutputBuffer_PreScene::GetTrafficOutputInterface() const   // 0x827A23E0 read-lock
     {
         CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
         return &mTrafficOutputInterface;
     }
 
-    OutputBuffer_PreScene::TrafficOutputInterfaceStorage*
+    TrafficOutputInterface*
     OutputBuffer_PreScene::GetTrafficOutputInterface()         // 0x827BB5D0 write-lock
     {
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
@@ -62,14 +71,14 @@ namespace CrashIO
     }
 
     // +0x231D0 -- race-car interface.
-    const OutputBuffer_PreScene::RaceCarOutputInterfaceStorage*
+    const RaceCarOutputInterface*
     OutputBuffer_PreScene::GetRaceCarOutputInterface() const   // 0x827A2530 read-lock
     {
         CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
         return &mRaceCarOutputInterface;
     }
 
-    OutputBuffer_PreScene::RaceCarOutputInterfaceStorage*
+    RaceCarOutputInterface*
     OutputBuffer_PreScene::GetRaceCarOutputInterface()         // 0x827BB720 write-lock
     {
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");

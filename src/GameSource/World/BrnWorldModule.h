@@ -427,7 +427,7 @@ namespace BrnWorld
             RaceCarEntityModuleIO::InputBuffer_PostScene* lpRaceCarInputBuffer_PostScene,
             RaceCarEntityModuleIO::OutputBuffer_PostScene* lpRaceCarOutputBuffer_PostScene,
             RaceCarEntityModuleIO::InputBuffer_PrePhysics* lpRaceCarInputBuffer_PrePhysics,
-            const CrashModuleIO::OutputBuffer_PostScene* lpCrashOutputBuffer_PostScene,
+            const CrashIO::OutputBuffer_PreScene* lpCrashOutputBuffer_PostScene,   // [crash exit] was the phantom PostScene type
             PropEntityIO::InputBuffer_PostScene* lpPropInputBuffer_PostScene,
             PropEntityIO::OutputBuffer_PostScene* lpPropOutputBuffer_PostScene,
             BrnUpdateSet lUpdateSet );
