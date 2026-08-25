@@ -167,29 +167,14 @@ public:
     f32 GetMixerOutputValue(int aiSlot, int aiPreset);
 };
 
-// CgsEffectBase.h:736 (DWARF): the controlling State carries a back-link to its
-// owning Module. EffectBase::Prepare reads it; modelled minimally here so the
-// canonical home is self-contained. State's full surface is reconstructed in its
-// own home (CgsState.{h,cpp}); this is the shape Prepare touches BY NAME.
-// FLAG: minimal — only the owner/module back-link Prepare reads is modelled.
-struct State
-{
-    State() : mpOwner(nullptr) {}
-    virtual ~State() {}
-
-    // The X360 Prepare reads State+0x24 then +0x2C off it for the Module*. Modelled
-    // as an owner object that exposes its logic module.
-    struct Owner
-    {
-        Owner() : mpLogicModule(nullptr) {}
-        Module* mpLogicModule; // +0x2C off the owner
-    };
-
-    Owner* GetOwner() const { return mpOwner; } // +0x24 off the State
-
-protected:
-    Owner* mpOwner;
-};
+// State: the controlling sound-logic state. (2026-08-25, audio-faithfulness wave 4:
+// the former TU-local rival `struct State` -- and its WHOLLY INVENTED nested `Owner`
+// type standing in for the real chain -- is RETIRED. The X360 Prepare @0x8268CEC8
+// walk `State+0x24 -> +0x2C` is `State::mpStateManager -> StateManager::mpLogicModule`,
+// both real DWARF members; CgsEffectBase.cpp includes the real CgsState.h /
+// CgsStateManager.h homes and goes by name. This header keeps only the fwd-decl
+// above -- including CgsState.h here would drag its embedded Brn state family + a
+// GameSource physics header into every EffectBase consumer.)
 
 // CgsEffectBase.h:763 (DWARF): EffectControl : public EffectBase.
 struct EffectControl : public EffectBase

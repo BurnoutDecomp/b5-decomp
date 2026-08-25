@@ -72,24 +72,17 @@
 // CgsContainers::ObjectPool constructor that seeds the free queue (N-1..0), sets
 // miNumObjectsFree = N and clears the BitArray -- exactly what every X360 owner's
 // inlined construction does -- but that belongs in the containers group. NOTE: the
-// existing sibling views (CgsStateManagerDtor.cpp, BrnEmitterStateManager.cpp) ALSO
-// default-construct this pool member without seeding, so this view is consistent with
-// the committed tree; the gap is pre-existing and shared, not introduced here.
+// other pool owners (e.g. BrnEmitterStateManager.cpp) ALSO default-construct this
+// pool member without seeding, so this view is consistent with the committed tree;
+// the gap is pre-existing and shared, not introduced here.
 //
-// FLAG (committed-home coexistence -- conductor please note): three sibling partial
-// views of CgsSound::Logic::StateManager already exist and are each included by
-// exactly ONE TU (never co-included), so they compile independently and are NOT
-// layout-restatements of one another:
-//   * CgsStateManagerRegisteredContent.h -- hosts ONLY the nested RegisteredContent
-//     type for the pool-instantiation TU + the concrete managers (BrnEmitterStateManager
-//     etc.) that derive StateManager and need the element type.
-//   * CgsStateManagerDtor.cpp            -- the polymorphic view owning the +0x30
-//     content pool whose virtual destructor that TU homes.
-//   * CgsEnvironment.h                   -- a tiny by-name view exposing only
-//     GetStateType() for Environment::AddStateManager.
-// This header is the IsStateAlias + RTTI + ctor + content-pool view. The four views
-// will fold into a single owning header when StateManager is fully unified; until
-// then, do NOT include this header from a TU that already includes one of the others.
+// UNIFIED (2026-08-25, audio-faithfulness wave 4): this header is now the SINGLE
+// owning CgsSound::Logic::StateManager definition. The former sibling partial views
+// are retired: CgsStateManagerRegisteredContent.h (base-less RegisteredContent host)
+// and CgsStateManagerDtor.cpp (TU-local polymorphic rival + a duplicate empty
+// ~StateManager) are DELETED -- their consumers include this header; Logic/
+// CgsEnvironment.h's old minimal view was already folded onto this header 2026-06-25.
+// (~StateManager @0x826FAAB8 is bodied once, in CgsStateManager.cpp.)
 namespace CgsSound
 {
 namespace Logic
@@ -100,6 +93,10 @@ namespace Logic
 // violation). StateManager's RTTI-registration (AddToClassTypeInfoArray
 // @ 0x8268DFE8) registers ClassTypeInfo<StateManager> descriptors into a separate
 // static array.
+
+// The owning sound-logic module (CgsSound::Logic::Module; full home is its own
+// keystone slice). Named here only for the GetLogicModule accessor's return type.
+class Module;
 
 class StateManager : public CgsSound::MemBase
 {
@@ -155,10 +152,8 @@ public:
     // Virtual destructor. The X360 `vector deleting destructor` at 0x826FAAB8
     // destructs mContentPool (its ~ObjectPool @ 0x826EAC90) then re-installs the
     // MemBase vtable and routes the storage back to the sound allocator (the latter
-    // two are the compiler's deleting-destructor thunk). Bodied in CgsStateManager.cpp.
-    // (The standalone CgsStateManagerDtor.cpp models this same destructor over its own
-    // single-view of the class; this owning view homes it here too -- the two are
-    // never in the same TU.)
+    // two are the compiler's deleting-destructor thunk). Bodied ONCE, in
+    // CgsStateManager.cpp (the old duplicate in CgsStateManagerDtor.cpp is deleted).
     virtual ~StateManager();
 
     // Returns true when this manager's map-state equals liState. Recovered from the
@@ -171,6 +166,13 @@ public:
     // The map-state / state-type accessor Environment::AddStateManager reads at +0x14
     // (CgsEnvironment.cpp). Same member IsStateAlias compares against. Modelled by name.
     s32 GetStateType() const { return meMapState; }
+
+    // FLAG (additive accessor exposure, 2026-08-25 wave 4): named access for the
+    // attested +0x2C read -- EffectBase::Prepare @0x8268CEC8 walks state->mpStateManager
+    // (+0x24) then this member (+0x2C) for the owning logic Module. mpLogicModule is
+    // stored opaquely (void*, stamped by CreateStateMan); the cast recovers the
+    // concrete type the X360 reads it as.
+    Module* GetLogicModule() const { return static_cast<Module*>(mpLogicModule); }
 
     // --- the two virtuals the boot orchestration dispatches -------------------
     //

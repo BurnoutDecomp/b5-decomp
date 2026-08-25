@@ -1,6 +1,7 @@
 // Embed check for CgsEffectBase.{h,cpp}: exercises every bodied ledger function
 // and pins the member SEQUENCE the X360 functions touch.
 #include "GameShared/GameClasses/Sound/Logic/CgsEffectBase.h"
+#include "GameShared/GameClasses/Sound/Logic/CgsState.h"   // the REAL State (the rival + invented Owner are retired)
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 
 #include <cstring>
@@ -14,11 +15,9 @@ struct TestEffect : public EffectBase
 
 static void exercise()
 {
-    State::Owner lOwner;
-    State        lState;
-    // seed the owner chain Prepare walks (state->GetOwner()->mpLogicModule)
-    // (GetOwner returns mpOwner which defaults null; we just exercise the call path)
-    (void)lOwner;
+    // The REAL State (CgsState.h); Prepare's chain is state->mpStateManager->
+    // GetLogicModule() (the old invented State::Owner is retired, wave 4).
+    State lState;
 
     TestEffect lEffect;
 

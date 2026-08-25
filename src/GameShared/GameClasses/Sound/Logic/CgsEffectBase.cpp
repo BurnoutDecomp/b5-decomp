@@ -21,6 +21,8 @@
 
 #include "GameShared/GameClasses/Sound/Logic/CgsEffectBase.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Sound/Logic/CgsState.h"        // the REAL State (mpStateManager @ X360 +0x24)
+#include "GameShared/GameClasses/Sound/Logic/CgsStateManager.h" // the REAL StateManager (GetLogicModule / +0x2C)
 
 namespace CgsSound
 {
@@ -79,15 +81,18 @@ bool EffectBase::Attach()
 // ---------------------------------------------------------------------------
 // EffectBase::Prepare(State* apState)  @ 0x8268CEC8
 //   mpState = apState;
-//   mpLogicModule = *(*(apState + 0x24) + 0x2C);  // owner->mpLogicModule
+//   mpLogicModule = *(*(apState + 0x24) + 0x2C);
 //   return 1;
 // (asm: stw r4,8 ; lwz r10,0x24(r4) ; lwz r10,0x2C(r10) ; stw r10,0x28 ; li r3,1)
+// The +0x24 -> +0x2C chain is State::mpStateManager -> StateManager::mpLogicModule
+// (both real DWARF members) -- by name, 2026-08-25 wave 4; the former invented
+// State::Owner intermediate is retired.
 // ---------------------------------------------------------------------------
 bool EffectBase::Prepare(State* apState)
 {
-    mpState       = apState;                          // stw r4, 8(this)
-    mpLogicModule = apState->GetOwner()->mpLogicModule; // 0x24 then 0x2C deref
-    return true;                                      // li r3, 1
+    mpState       = apState;                                    // stw r4, 8(this)
+    mpLogicModule = apState->mpStateManager->GetLogicModule();  // 0x24 then 0x2C, by name
+    return true;                                                // li r3, 1
 }
 
 // ---------------------------------------------------------------------------
