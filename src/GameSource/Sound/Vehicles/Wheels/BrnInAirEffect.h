@@ -28,18 +28,13 @@
 // absolute offsets are NOT static_asserted across pointer members on the 64-bit host.
 // =============================================================================
 
-// BrnReplays::SoundSerialiser::GetTrafficEnt -- the un-homed replay sound-serialiser
-// helper TrafficInAir::ProcessUpdate calls to fetch (mode-keyed) the per-traffic-car
-// record it stamps. Its real home/signature is un-attested; declared here as an extern
-// shim over opaque byte records so the (real-symbol) call resolves at link time. FLAG:
-// un-homed -- its own recon TU is [todo]; NOT fabricated here (declaration only).
-namespace BrnReplays
-{
-namespace SoundSerialiser
-{
-    void* GetTrafficEnt( void* lpModeBase, void* lpArg );
-}
-}
+// (2026-08-25, audio-faithfulness wave 5): the former `namespace BrnReplays {
+// namespace SoundSerialiser { GetTrafficEnt(void*, void*) } }` shim is RETIRED --
+// it declared a NAMESPACE with the same qualified name as the real `class
+// BrnReplays::SoundSerialiser` (BrnReplaySoundSerialiser.h, fully homed since
+// wave 4), an outright ill-formed collision if ever co-included. The .cpp now
+// calls the real member GetTrafficEnt(u32) on the serialiser object embedded in
+// the sound logic module.
 
 namespace BrnSound
 {
