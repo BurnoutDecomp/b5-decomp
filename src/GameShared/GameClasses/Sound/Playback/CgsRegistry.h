@@ -124,6 +124,14 @@ public:
     // Name& per DWARF. Returns 0 when the name is not present.
     template <typename T>
     const T* GetEntity(Name& arName) const;
+
+    // FLAG (additive accessor exposure, 2026-08-25 wave 4): named access for the
+    // three serialised-size words RegistryResourceType::GetSerialisedResourceDescriptor
+    // @0x82667DE8 reads (the X360 a3[1]/a3[2]/a3[4] word reads -- wrong on the host
+    // where the pointer members widen, hence by name).
+    u32    GetEntityCapacity() const  { return mu32EntityCapacity; }
+    size_t GetDataSize() const        { return muDataSize; }
+    size_t GetStringTableSize() const { return muStringTableSize; }
 };
 
 // =============================================================================
