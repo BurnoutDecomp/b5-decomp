@@ -35,6 +35,12 @@ namespace Vehicles
 namespace Engines
 {
 
+// The control siblings the back-pointers reference (DWARF BrnShiftControl.h:199-201;
+// full homes in their own headers -- pointers only, so fwd-decls suffice).
+struct PhysicsControl;
+struct EngineControl;
+struct HybridExhaustControl;
+
 struct ShiftControl : public BrnSound::Logic::BrnEffectControl
 {
     // DWARF BrnShiftControl.h:25. The shift stage the sound state machine tracks.
@@ -56,9 +62,11 @@ struct ShiftControl : public BrnSound::Logic::BrnEffectControl
     virtual ~ShiftControl();    // anchor for the scalar deleting destructor @ 0x826AF200
 
     // ---- members in DWARF order (offsets are X360 facts, not asserted on host) ----
-    void*         mpPhysicsControl;         // +0x38
-    void*         mpEngineControl;
-    void*         mpHybridControl;
+    // The control back-pointers, typed per the DWARF (BrnShiftControl.h:62-64;
+    // 2026-08-25 wave 6 -- were untyped void*). Held as fwd-declared pointers only.
+    PhysicsControl*       mpPhysicsControl;   // +0x38
+    EngineControl*        mpEngineControl;
+    HybridExhaustControl* mpHybridControl;
     bool          mbNeed_ShiftGearSnd;      // +0x44
     bool          mbNeed_DisengageSnd;      // +0x45
     bool          mbNeed_EngageSnd;         // +0x46

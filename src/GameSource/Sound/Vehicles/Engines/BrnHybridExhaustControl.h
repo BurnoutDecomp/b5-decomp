@@ -36,6 +36,13 @@ namespace Vehicles
 namespace Engines
 {
 
+// The controller siblings the back-pointers reference (pointers only; full homes in
+// their own headers).
+struct PhysicsControl;
+struct EngineControl;
+struct ShiftControl;
+struct ClutchControl;
+
 struct HybridExhaustControl : public BrnSound::Logic::BrnEffectControl
 {
     // DWARF BrnHybridEngineControl.h:52. The per-source engine mix weights.
@@ -52,13 +59,23 @@ struct HybridExhaustControl : public BrnSound::Logic::BrnEffectControl
     virtual ~HybridExhaustControl();    // anchor for the vector deleting destructor @ 0x826AFA60
 
     // @ 0x826B34E0 -- RTTI factory hook. Returns the +4 IResourceRequester base view.
+    // NOTE: Create allocates 0x130 == sizeof(HybridExhaustControl) -- the fact that
+    // pins +0x130 as the FIRST derived-class member slot (see HybridEngineControl).
     static BrnSound::Logic::IResourceRequester* Create( bool abFlavour );
 
+    // DWARF BrnHybridEngineControl.h:177 (public accessor). The current Ginsu RPM
+    // sample -- the `lfs 0x8C(control)` read the paired HybridEngineControl's
+    // UpdateGinsuRPM @0x82699B98 inlines.
+    f32 GetGinsuRPM() const { return mGinsuRpm.mCurrentValue; }
+
     // ---- members in DWARF order (offsets are X360 facts, not asserted on host) ----
-    void*                    mpPhysicsControl;
-    void*                    mpEngineControl;
-    void*                    mpShiftControl;
-    void*                    mpClutchControl;
+    // The controller back-pointers, typed per the DWARF (BrnHybridEngineControl.h:
+    // 123-126; 2026-08-25 wave 6 -- were untyped void*). X360 slots +0x34/+0x38/
+    // +0x3C/+0x40, wired by AttachController (cases 0/4/2/3 @0x82684B20).
+    PhysicsControl*          mpPhysicsControl;
+    EngineControl*           mpEngineControl;
+    ShiftControl*            mpShiftControl;
+    ClutchControl*           mpClutchControl;
     Attrib::Gen::vehicleengine mVehicleEngineAttributes;                 // h:99 (this+0x48,0,0)
     Attrib::Gen::vehicleengine mMasterVehicleEngineComponentAttributes;  // h:102 (this+0x58,0,0)
     CgsSound::Utils::Average<3u, f32> mAverageDeltaRPM;                  // h:105

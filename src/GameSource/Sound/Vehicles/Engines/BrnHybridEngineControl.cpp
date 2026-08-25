@@ -18,26 +18,26 @@ namespace Engines
 
 // ---------------------------------------------------------------------------
 // HybridEngineControl::UpdateGinsuRPM  @ 0x82699B98  (single-step Ginsu RPM shift)
-//   lwz  r11, 0x130(this)   ; mpEngineControl (the sampled control)
+//   lwz  r11, 0x130(this)   ; mpHybridExhaustControl (the OWN derived member --
+//                             sizeof(HybridExhaustControl) == 0x130 per its Create
+//                             @0x826B34E0, so +0x130 is this leaf's first slot;
+//                             DWARF BrnHybridEngineControl.h:208 names it)
 //   lfs  f13, 0x8C(this)    ; mGinsuRpm.mCurrentValue (old current)
-//   lfs  f0,  0x8C(r11)     ; mpEngineControl->mGinsuRpm.mCurrentValue (new sample)
+//   lfs  f0,  0x8C(r11)     ; the paired exhaust control's mGinsuRpm.mCurrentValue
+//                             (== HybridExhaustControl::GetGinsuRPM(), DWARF h:177)
 //   stfs f13, 0x90(this)    ; mGinsuRpm.mPreviousValue = old current
 //   stfs f0,  0x8C(this)    ; mGinsuRpm.mCurrentValue  = new sample
 //
-// mGinsuRpm is the base HybridExhaustControl's committed DataPoint<f32> (mCurrentValue
-// @ +0x8C, mPreviousValue @ +0x90). The sampled control (mpEngineControl, base member
-// @ +0x130) is an opaque void*; its own mGinsuRpm.mCurrentValue lives at the same +0x8C
-// offset -- read via a FLAGGED raw byte view (rule 4: un-homed base sub-state) rather
-// than a fabricated typed EngineControl member.
+// (2026-08-25, audio-faithfulness wave 6 evidence pass: an earlier revision misbound
+// the +0x130 load to the BASE's mpEngineControl and byte-viewed the pointee -- the
+// base ends at +0x130, so the slot is this class's own paired-exhaust back-pointer,
+// and the pointee's +0x8C is the exhaust control's own mGinsuRpm current, proven by
+// the HybridExhaustControl ctor @0x826AF938 DataPoint block at +0x7C/+0x84/+0x8C.)
 // ---------------------------------------------------------------------------
 void HybridEngineControl::UpdateGinsuRPM()
 {
-    // mpEngineControl->mGinsuRpm.mCurrentValue @ +0x8C (opaque control; byte-viewed).
-    const f32 lfNewSample =
-        *reinterpret_cast<const f32*>(static_cast<const u8*>(mpEngineControl) + 0x8C);
-
-    mGinsuRpm.mPreviousValue = mGinsuRpm.mCurrentValue; // previous = old current
-    mGinsuRpm.mCurrentValue  = lfNewSample;             // current  = new sample
+    mGinsuRpm.mPreviousValue = mGinsuRpm.mCurrentValue;               // previous = old current
+    mGinsuRpm.mCurrentValue  = mpHybridExhaustControl->GetGinsuRPM(); // current  = the paired exhaust's sample
 }
 
 // ---------------------------------------------------------------------------
