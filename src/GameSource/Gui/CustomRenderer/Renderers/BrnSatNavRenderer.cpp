@@ -1094,7 +1094,12 @@ void SatNavRenderer::RenderComponent(CgsGui::ImRendererSet* lpRendererSet)
     // world-rect-unit (inverse world space). The X360 folds both into one inline
     // matrix (cornerSpace o inv(worldSpace), then Transform's own inverse); composing
     // the two named steps below is the same product applied in the same order.
-    const Matrix33 lm33Corners = MapTransform::MakeCoordSpaceFromPoints(lv2C0, lv2C1, lv2C2);
+    // ⭐ [satnav rotation 2026-08-25] CORNER ORDER FIXED (was (C0, C1, C2) -- the map
+    // quad's UV space must share the icon space's axes: xAxis = corners[2]-corners[0]
+    // (screen right), yAxis = corners[1]-corners[0] (screen down), exactly the
+    // SetZoomedWorldRect call above. The old order transposed the map texture under
+    // correctly-placed icons. Pinning derivation: BrnMapUtils.cpp SetZoomedWorldRect.
+    const Matrix33 lm33Corners = MapTransform::MakeCoordSpaceFromPoints(lv2C0, lv2C2, lv2C1);
     Vector2 lav2Uv[4];
     {
         static const f32 KAF_UNIT[4][2] = { {0.0f, 0.0f}, {0.0f, 1.0f}, {1.0f, 0.0f}, {1.0f, 1.0f} };

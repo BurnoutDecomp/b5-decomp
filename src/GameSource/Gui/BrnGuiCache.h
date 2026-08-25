@@ -558,6 +558,17 @@ namespace BrnGui
         // The +0x407C gameplay-HUD gate byte (console-inlined read; the ready-trio publisher
         // in GuiModule::Update mirrors it).
         bool IsGameplayHudActive() const { return mbGameplayHudActive; }
+        // ⭐ [boost-bar gate 2026-08-25] The +0x407C PRODUCERS (all console-inlined stb):
+        // the gameplay-HUD flow states' bring-up stores 1 -- FBurnMainHudState::UpdateWFInit
+        // @0x8247C710 (stb r28 @0x8247CA58, r28 == 1 on BOTH engine arms),
+        // RaceMainHudState::UpdateWFInit @0x82480200, CrashedHudState::UpdateSetupState
+        // @0x8247CF60, CrashedStuntHudState::UpdateSetupState @0x8247D9E0 -- and
+        // GuiCache::RecEvent case 132 stores 0 (@0x8250F59C). Until this landed NOTHING
+        // wrote the byte, so GetGameplayHudReady() stayed false forever and
+        // BoostBarRenderer::Update never ran (visibility machine frozen at FULL -> the
+        // "Visibility is full but we are not allowed to boost" assert, and the bar never
+        // re-keyed toward the live boost amount).
+        void SetGameplayHudActive(bool lbActive) { mbGameplayHudActive = lbActive; }
         void SetGameplayHudReady(bool lbReady)
         {
             mbGameplayUpdateActive = lbReady;
@@ -1126,7 +1137,11 @@ namespace BrnGui
         // only when it holds 1 or 3, treat -1 as invalid). FLAG: consumer-named -- the
         // enum home is unrecovered (values observed: -1 / 1 / 3).
         s32  miGameFlowState;                             // +0x4B30 (19248)
-        u8   mPad_4B34[0x4];                              // +0x4B34..+0x4B37
+        // ADDITIVE CARVE (RecEvent case 132, @0x8250F5B0): the byte the game-flow-state
+        // change clears when the NEW state is 1 or 3 (stb r10==0 +0x4B34, gated on the
+        // cmpwi 1/3 pair). FLAG: producer-named -- the consumer side is unrecovered.
+        u8   mu8GameFlowByte_4B34;                        // +0x4B34 (19252)
+        u8   mPad_4B35[0x3];                              // +0x4B35..+0x4B37
         // ADDITIVE CARVE ([tut-ticker] wave, 2026-08-24): the active-controller index the
         // in-game ticker reads. X360-attested at BOTH InGameMessageRenderer read sites
         // (Update @0x82446F30 and RecvEvent case 505: `mbGamePausedForDisconnect =
@@ -1329,7 +1344,13 @@ namespace BrnGui
         // does NOT fit the 12-byte gap to mPursuedCarID @0x9FE0, so only this first
         // member is carved; the rest stays padding.
         s32 miLastStuntScore;                            // +0x9FD4 (40916)
-        u8  mPad_9FD8[8];                                // +0x9FD8..+0x9FDF
+        // ADDITIVE CARVE (RecEvent case 132, @0x8250F5C8/CC): the -1 reset pair -- the
+        // flow-state change stores -1 into BOTH +0x9FD4 (miLastStuntScore above) and this
+        // word (stwx r29==-1 via the 0x9FD4/0x9FD8 ori pair). FLAG: producer-named -- the
+        // consumer side is unrecovered (plausibly the DWARF miLastStuntMultiplier, but the
+        // 12-byte-gap note above keeps that name uncommitted).
+        s32 miGameFlowResetWord_9FD8;                    // +0x9FD8 (40920)
+        u8  mPad_9FDC[4];                                // +0x9FDC..+0x9FDF
         CgsID mPursuedCarID;                             // +0x9FE0 (40928)
         u8  mPad_9FE8[8];                                // +0x9FE8..+0x9FEF
         CgsID mShutdownCarID;                            // +0x9FF0 (40944)

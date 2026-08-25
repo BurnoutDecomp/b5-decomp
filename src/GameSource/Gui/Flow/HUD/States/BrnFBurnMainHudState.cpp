@@ -149,9 +149,19 @@ namespace BrnGui
             return lpGuiCache->GetPlayerEngineState();
         }
 
-        // FLAG PC-platform leaf: the hud-ready byte (X360 cache+16496 := 1); un-named.
-        void GuiCache_SetHudReady(GuiCache* /*lpGuiCache*/)
+        // ⭐ [boost-bar gate 2026-08-25] THE FIX. This leaf used to be an EMPTY shim
+        // labelled "the hud-ready byte (X360 cache+16496)". Both halves were wrong:
+        // +16496 (0x4070) is mpHudMessageController (a pointer), and the store the asm
+        // actually makes here is `stb r28, 0x407C(r11)` @0x8247CA58 -- cache+16508 ==
+        // mbGameplayHudActive, with r28 == 1 on BOTH engine arms (`li r28,1` @0x8247C868 /
+        // @0x8247C920). That byte heads the GetGameplayHudReady() trio the gameplay-HUD
+        // components gate on, so the empty shim froze BoostBarRenderer::Update forever.
+        // The console asserts the cache pointer first (@0x8247CA2C..CA50, "mpCache",
+        // cpp:1584) and stores through it regardless.
+        void GuiCache_SetHudReady(GuiCache* lpGuiCache)
         {
+            CGS_ASSERT(lpGuiCache != 0, "mpCache");   // cpp:1584 (non-gating; the store follows)
+            lpGuiCache->SetGameplayHudActive(true);   // stb 1 @cache+0x407C
         }
 
         // FLAG PC-platform leaf: the friends-list overlay-active word (X360
@@ -781,7 +791,7 @@ namespace BrnGui
                 reinterpret_cast<const CgsModule::Event*>(&lShow), 213);
         }
 
-        GuiCache_SetHudReady(mpGuiCache);   // X360 cache byte +16496 := 1
+        GuiCache_SetHudReady(mpGuiCache);   // X360 stb 1 @cache+0x407C (mbGameplayHudActive; @0x8247CA58)
 
         if (mbFriendsListEnabled)
         {

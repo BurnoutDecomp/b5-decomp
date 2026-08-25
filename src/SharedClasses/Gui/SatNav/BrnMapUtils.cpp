@@ -163,14 +163,31 @@ Matrix33 MapTransform::MakeTransform( Matrix33 lm33From, Matrix33 lm33To )
 // (SatNavComponent::SetViewParamsFromPlayerCar / SatNavRenderer::RenderComponent pass
 // corners[0], corners[2], corners[1] of GetZoomedCarWorldRect in that order). Stores
 //   smv4ZoomedWorldRect       = {C.x, C.y, B.x, B.y}   (the two adjacent corners)
-//   smm33ZoomedWorldTransform = INVERSE(coordSpaceFromPoints(A, C-A axisX, B-A axisY))
+//   smm33ZoomedWorldTransform = INVERSE(coordSpaceFromPoints(A, B-A axisX, C-A axisY))
 // i.e. the world -> zoomed-unit transform (the asm's full adjugate + vrefp/N-R
 // reciprocal-determinant 3x3 inverse).
+//
+// ⭐ [satnav rotation 2026-08-25] AXIS ORDER FIXED (was (A, C, B) -- a TRANSPOSED map:
+// the whole minimap rendered reflected about its diagonal, i.e. "the wrong rotation").
+// The asm's VMX adjugate lane order is opaque, but the (A, B, C) assignment is pinned
+// three independent ways by the surrounding X360 code:
+//   1. rotate-map mode must put the car's forward vector screen-UP. The heading basis is
+//      RotationY(theta).(0,0,1) == {sin, 0, cos} (attested in-tree by the rival FOV cone,
+//      MapIconManager::GetSatNavIconStateForRival @0x824FA320), and screen-down == the
+//      unit-y axis: only yAxis = C-A == corners[1]-corners[0] == -2*Tz == -(sin,cos)*2d
+//      satisfies it. xAxis = B-A follows.
+//   2. the north indicator is driven with the map's effective rotation (theta in rotate
+//      mode, the constant pi for the fixed map -- SatNavComponent::Update). The fixed
+//      map's screen-up under (A, B, C) is exactly {sin pi, cos pi}; under (A, C, B) it
+//      is 90 degrees off the angle the indicator is told.
+//   3. the fixed map then shows the map texture in its authored orientation (screen
+//      right == world +X == texture U, screen down == world +Z == texture V, per the
+//      asm-pinned smm33WorldSpace rect above); (A, C, B) drew it transposed.
 void MapTransform::SetZoomedWorldRect( Vector2 lv2CornerA, Vector2 lv2CornerB, Vector2 lv2CornerC )
 {
     smv4ZoomedWorldRect = { lv2CornerC.x, lv2CornerC.y, lv2CornerB.x, lv2CornerB.y };
     smm33ZoomedWorldTransform =
-        Invert33( MakeCoordSpaceFromPoints( lv2CornerA, lv2CornerC, lv2CornerB ) );
+        Invert33( MakeCoordSpaceFromPoints( lv2CornerA, lv2CornerB, lv2CornerC ) );
 }
 
 // @ 0x82450608 — install the zoomed viewport from the on-screen rect: the viewport
