@@ -3300,6 +3300,21 @@ namespace BrnGame
                     // GameAction 148 -> GUI event 537 -> the bottom-of-screen tutorial ticker.
                     mGameStateModule.PreWorldUpdateTrainingBringUp(
                         mGameTimer.GetRate() * mGameTimer.GetScaleCurrent());
+
+                    // ⭐ [P1 sim-pause] THE PAUSE CONSUMER (X360 DoUpdate_GameStatePreWorld
+                    // @0x823EE0E8 tail: `CheckGameActions(gm, gameStateOutputBuffer)` runs
+                    // right after GameStateModule::PreWorldUpdate, in the same not-video
+                    // branch). The pre-world pump above (ProcessGameEventsPauseBringUp inside
+                    // PreWorldUpdateStuntBringUp) posts actions 86/87 via RequestPause/
+                    // RequestUnpause; this drains them and stops/starts the sim timer.
+                    // Narrowed to E_MGS_IN_GAME with the rest of the leg (the producers all
+                    // stand behind the same predicate -- the r3 overflow rule).
+                    {
+                        BrnGameState::GameStateModuleIO::OutputBuffer* lpGameStateOutput =
+                            mGameStateModule.GetOutputBuffer();
+                        if (lpGameStateOutput != 0)
+                            CheckGameActions(lpGameStateOutput);
+                    }
                 }
 
                 if (leState != BrnGameMainFlowController::E_MGS_INVALID)
@@ -3388,6 +3403,20 @@ namespace BrnGame
                     !mMainFlowStateMachine.IsVideoState()               // update-set bit 0x20
                     && !mbDiskError                                    // update-set bit 0x200
                     && (leState == BrnGameMainFlowController::E_MGS_IN_GAME);  // PC drain narrowing
+
+                // ⭐ [P1 sim-pause] THE GUI -> GAME-STATE EVENT BRIDGE (X360
+                // DoUpdate_GameStatePostWorld @0x823E92A8 runs BridgeGuiToGameState FIRST,
+                // before BridgeWorldToGameState and PostWorldUpdate -- the console calls it
+                // UNCONDITIONALLY, but on this build its output lands in the carry queue,
+                // whose drain is narrowed to E_MGS_IN_GAME, so the producer stands behind
+                // the same predicate (the r3 overflow rule spelled out below). This is the
+                // caller the tree's "DELETE-WHEN BridgeGuiToGameState has a caller" flags
+                // waited on: GUI event 191 (crash-nav shown/hidden) now becomes game event
+                // 93 and reaches the pause spine.
+                if (lbGameStateWorldLegRuns)
+                {
+                    BridgeGuiToGameState(&mGameStateModule, mGuiModule.GetGuiOutQueue());
+                }
 
                 if (lbGameStateWorldLegRuns && mpWorldUpdateOutputBuffer != 0)
                 {
@@ -3887,6 +3916,51 @@ namespace BrnGame
                 mbStopStepping = true;
             mbRequestDoPlayFrame = false;
         }
+    }
+
+    // @ 0x823C54D8 [P1 sim-pause] -- the pause spine's consumer end: drain the game-action
+    // queue under the output buffer's read lock; action 86 (KI_ACTION_PAUSE_STRICT) raises
+    // mbSimPaused and STOPS the sim timer, action 87 (KI_ACTION_UNPAUSE) clears it and
+    // restarts the timer. Console stores, verbatim (p1_dump.txt):
+    //     case 86: *(gm+0x9A0621) = 1; *(gm+0x9A0B08) = 0;   // mbSimPaused / simTimer.mbRunning
+    //     case 87: *(gm+0x9A0621) = 0; *(gm+0x9A0B08) = 1;
+    // (0x9A0B08 == the sim Timer @0x9A0AF4 +0x18 mbRunning -- the byte Construct's step 9
+    // seeds to 1; see the step-9 note above.) Both stores by name here. The stopped sim
+    // timer is what freezes the world: every sim sub-step's timestep derives from it, and
+    // ConstructUpdateSetFromFsm additionally raises update-set bit 0 off mbSimPaused.
+    void BrnGameModule::CheckGameActions(
+        BrnGameState::GameStateModuleIO::OutputBuffer* lpGameStateOutput)
+    {
+        lpGameStateOutput->LockForRead();
+        const BrnGameState::GameStateModuleIO::GameActionQueue* lpActionQueue =
+            static_cast<const BrnGameState::GameStateModuleIO::OutputBuffer*>(lpGameStateOutput)
+                ->GetGameActionQueue();
+
+        const CgsModule::Event* lpEvent = 0;
+        s32 liSize = 0;
+        s32 liAction = lpActionQueue->GetFirstEvent(&lpEvent, &liSize);
+        while (lpEvent != 0)
+        {
+            if (liAction == 86)
+            {
+                mbSimPaused = true;
+                mSimTimer.SetRunning(false);
+                // [DIAG] NOT IN THE X360 BINARY -- the pause spine's consumer rung.
+                if (CgsDev::Log::gpDebugPrint != 0)
+                    *CgsDev::Log::gpDebugPrint << "[sim-pause] action 86 -> PAUSED (sim timer stopped)\n";
+            }
+            else if (liAction == 87)
+            {
+                mbSimPaused = false;
+                mSimTimer.SetRunning(true);
+                // [DIAG] NOT IN THE X360 BINARY -- the resume rung.
+                if (CgsDev::Log::gpDebugPrint != 0)
+                    *CgsDev::Log::gpDebugPrint << "[sim-pause] action 87 -> RESUMED (sim timer running)\n";
+            }
+            const CgsModule::Event* lpCurrent = lpEvent;
+            liAction = lpActionQueue->GetNextEvent(lpCurrent, &lpEvent, &liSize);
+        }
+        lpGameStateOutput->UnlockForRead();
     }
 
     // @ BrnGameModule.cpp:3542 - build this frame's simulation update-set bitmask from the

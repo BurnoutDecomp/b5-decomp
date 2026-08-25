@@ -46,6 +46,16 @@ enum EGameEventType
     // exactly, so its DWARF-contiguous neighbour 112 is trustworthy as-is.
     E_EVENT_REQUEST_PROP_PROGRESSION = 112,  // DWARF BrnGameEvents.h:122
     E_EVENT_OVERHEAD_SIGN_HIT       = 118,   // DWARF BrnGameEvents.h:76
+    // [P1 sim-pause] the four pause-family events the ProcessGameEvents pause arm consumes.
+    // ⚠️ X360 VALUES, not the PS3 DWARF's: in this region the PS3 ids sit ONE HIGHER
+    // (PS3 34/36/37/94 for these four names) -- the X360 jump table @0x823A0A18 is the
+    // authority (case 33 reads the 3-byte pause payload and calls RequestPause(2,...);
+    // cases 35/36 are the replay pause pair (reason 16); case 93 is the crash-nav pair
+    // (reason 4), fed by BridgeGuiToGameState's GUI-191 translation).
+    E_EVENT_PLAYER_PAUSE_STATE_CHANGED = 33, // X360 (PS3 DWARF 34)
+    E_EVENT_ENTER_REPLAY            = 35,    // X360 (PS3 DWARF 36)
+    E_EVENT_LEAVE_REPLAY            = 36,    // X360 (PS3 DWARF 37)
+    E_EVENT_CRASHNAV_STATE_CHANGED  = 93,    // X360 (PS3 DWARF 94)
     // Freeburn-challenge events (PS3-DWARF values; used as template tags -- the X360
     // discriminants ChallengeManager::ProcessEvent actually switches on are the raw
     // jump-table case values in that body, which drift from these).

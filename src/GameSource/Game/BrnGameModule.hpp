@@ -613,8 +613,20 @@ namespace BrnGame
         // game-state module's post-world input GameEventQueue (VariableEventQueue<1536,16>). A handful of
         // events also drive the training manager (RequestTraining / OnEnableTrainingTips). Returns the
         // final queue-walk status. Called by DoUpdate_GameStatePostWorld / LoadingScriptedState::Update.
+        // [P1 sim-pause] SIGNATURE ADAPTED to take the out-event queue directly (the
+        // BridgeGuiToDirector precedent: the PC GuiModule owns the queue, not a console
+        // CgsGuiModuleIO::OutputBuffer), and the walk carries the same channel-40 PC-ABI
+        // adapter that bridge documents.
         int BridgeGuiToGameState(BrnGameState::GameStateModule* lpGameStateInput,
-                                 const CgsGui::CgsGuiModuleIO::OutputBuffer* lpGuiOutputBuffer);
+                                 const CgsModule::VariableEventQueue<18432, 16>* lpGuiEventQueue);
+
+        // X360 0x823C54D8 [P1 sim-pause] -- walk the game-state output buffer's game-action
+        // queue under its read lock: action 86 sets mbSimPaused and STOPS the sim timer
+        // (the console's `*(gm+0x9A0621)=1; *(gm+0x9A0B08)=0` pair -- 0x9A0B08 is
+        // simTimer.mbRunning); action 87 clears mbSimPaused and restarts it. The frozen
+        // world IS the stopped sim timer: every sim timestep derives from it. Called by
+        // DoUpdate_GameStatePreWorld after the game-state pre-world leg.
+        void CheckGameActions(BrnGameState::GameStateModuleIO::OutputBuffer* lpGameStateOutput);
 
         // X360 0x823DEEB8 -- drain a GUI event queue (VariableEventQueue<18432,16>) and translate each
         // network-bound GUI event into the matching network IN-event, AddEvent'd into the network module's
