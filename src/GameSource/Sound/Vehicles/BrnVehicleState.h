@@ -2,32 +2,40 @@
 #define BRN_SOUND_VEHICLES_VEHICLE_STATE_H
 
 #include "types.hpp"
+#include "GameSource/Sound/Module/LogicModule/BrnState.h"                 // BrnState (the DWARF base)
+#include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleEvents.h"  // BrnPhysics::Vehicle::RaceCarState
+#include "GameShared/GameClasses/Sound/CgsSoundUtils.h"                   // CgsSound::Utils::DataPoint<bool>
+#include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/AttributeKey.h" // Attribute::Key
 
 // =============================================================================
-// BrnSound::Vehicles::VehicleState::AttachInfo
-//   GameSource/Sound/Vehicles/BrnVehicleState.h (assert-cited home) +
+// BrnSound::Vehicles::VehicleState
+//   GameSource/Sound/Vehicles/BrnVehicleState.h (DWARF home) +
 //   GameSource/Sound/Vehicles/BrnVehicleState.cpp
 //
-// Reconstructed from BURNOUT_X360_ARTIST.XEX (semantic parity, not byte match).
-// AttachInfo is the small record VehicleState hands the engine-sound attach path:
-// it pairs a vehicle asset with the active-race-car index it is being attached to,
-// plus a 64-bit attach token. Construct validates the index and asset, then fills
-// the three fields.
+// Reconstructed from BURNOUT_X360_ARTIST.XEX + the DecFIGS DWARF.
 //
-// This TU bodies exactly ONE ledger function:
-//   AttachInfo::Construct  @ 0x82681FC8  (BrnVehicleState.h:275/276 assert sites)
+// (2026-08-25, audio-faithfulness wave 5 RECONCILIATION): this header used to model
+// VehicleState as a NAMESPACE hosting AttachInfo -- but the DWARF
+// (BrnVehicleState.h:41) is unambiguous:
+//   struct BrnSound::Vehicles::VehicleState : public BrnSound::Logic::BrnState
+// with EEngineComponentType (:48) and AttachInfo (:137) NESTED, and
+// GetEngineComponentName/GetEngineComponentKey as CONST MEMBERS (:191/:200). The
+// same class also had a SECOND rival definition inside GameShared CgsState.h
+// (struct : State direct, ctor-derived numeric member names). Both are folded
+// here; the ctor-derived tail decodes EXACTLY onto the DWARF names:
+//   +96    mVehiclePhysicsData   (ctor: RaceCarState::Clear @0x8229FFC8)
+//   +1216  mAttachInfo           (the old mi1216/mi1220/mu1224 = asset/index/token)
+//   +1232  mVehicleBoostInfo     (BoostOutputInfo, 36B -- untouched by the ctor)
+//   +1268  mcaEngineComponentName[2][13] (ctor zeroes byte 1268 + 1281 = the two
+//          strings' first chars)
+//   +1296  mEngineComponentKey[2] (8-byte elements -- the old mu1296/mu1304; the
+//          PhysicsControl (type+0xA2)*8 walk lands exactly here: 0xA2*8 == 0x510)
+//   +1312  mfMaxRpm              (the old mf1312)
+//   +1316  mbCollisionOccuredFlag
+//   +1317  bIsRaceCarActive      (DataPoint<bool>, the old mu1317/mu1318 pair)
 //
-// STORE MAP (from @0x82681FC8, store widths authoritative):
-//   stw  r28, 0x00  -> mpVehicleAsset   (lpVehicleAsset; asserted non-null @:276)
-//   stw  r30, 0x04  -> muVehicleIndex   (liVehicleIndex; asserted [0,8) @:275)
-//   std  r27, 0x08  -> mAttachToken     (a 64-bit word; std = full 8 bytes)
-//
-// LAYOUT NOTE (X360 32-bit vs host 64-bit): mpVehicleAsset is a 4-byte pointer on
-// X360. Members are pinned BY NAME + ORDER mirroring the X360 store sequence; the
-// absolute X360 offsets are NOT asserted across the 32/64 pointer-width boundary.
-// The 64-bit attach word is modelled as `u64` (the std store width is authoritative;
-// the value is sourced from a 32-bit register argument zero/sign-extended into the
-// 64-bit GPR on X360, so its high half is the register's extension).
+// LAYOUT NOTE (X360 32-bit vs host 64-bit): members are pinned BY NAME + SEQUENCE;
+// the console offsets above are comments, not asserted.
 // =============================================================================
 
 namespace BrnSound
@@ -35,57 +43,106 @@ namespace BrnSound
 namespace Vehicles
 {
 
-// ADDITIVE GROW (Wave 5: Engines::PhysicsControl accessors). The raw per-car physics
-// data blob PhysicsControl caches (mpVehiclePhysicsData) and hands back via
-// GetRawPhysicsData(). Opaque here (only pointed-to), so a forward declaration is
-// sufficient; its full layout is a separate recon slice. FLAG: opaque forward.
+// The raw per-car physics data blob. FLAG (DWARF type stand-in): the DWARF member
+// mVehiclePhysicsData is typed `VehicleData` (:169), whose own layout is un-homed;
+// the ctor clears it via RaceCarState::Clear @0x8229FFC8 and every attested access
+// goes through its leading RaceCarState, so it is modelled AS that leading
+// RaceCarState until the VehicleData slice lands. PhysicsControl vends it as an
+// opaque VehicleData*.
 struct VehicleData;
 
-namespace VehicleState
+// DWARF BrnVehicleState.h:41. The per-vehicle engine-sound state.
+struct VehicleState : public BrnSound::Logic::BrnState
 {
+    // DWARF BrnVehicleState.h:48 (nested). The engine-component selector.
+    enum EEngineComponentType
+    {
+        E_ENGINE    = 0,
+        E_EXHAUST   = 1,
+        E_MAX_TYPES = 2,
+    };
 
-// ADDITIVE GROW (Wave 5: Engines::PhysicsControl). DWARF BrnVehicleState.h:43 -- the
-// engine-component selector the PhysicsControl key/name accessors take.
-enum EEngineComponentType
-{
-    E_ENGINE   = 0,
-    E_EXHAUST  = 1,
-    E_MAX_TYPES = 2,
+    // BrnVehicleState.h (assert-cited region). Upper bound for the active-race-car
+    // index the attach path validates against (cmpwi r30, 8). The assert text is
+    // "liVehicleIndex >= 0 && liVehicleIndex < static_cast<int32_t>(BrnWorld::KI_MAX_ACTIVE_RACE_CARS)".
+    static const s32 KI_MAX_ACTIVE_RACE_CARS = 8;
+
+    // DWARF BrnVehicleState.h:137 (NESTED -- the old namespace-hosted copy folded
+    // in; :275/:276 assert sites). The per-attach record.
+    struct AttachInfo
+    {
+        // BY NAME. The vehicle asset being attached (asserted non-null @:276;
+        // DWARF :149 `const VehicleListEntry*`, held opaque). 4-byte pointer on
+        // X360; widened on host.
+        void* mpVehicleAsset;
+
+        // The active-race-car index (asserted [0, KI_MAX_ACTIVE_RACE_CARS) @:275).
+        u32 muVehicleIndex;
+
+        // The 64-bit attach token (std-store; full 8 bytes on X360; DWARF :151 CgsID).
+        u64 mAttachToken;
+
+        // @ 0x82681FC8 -- validate the index and asset, then store all three fields.
+        // Signature mirrors the X360 fastcall register order: r4=token, r5=asset,
+        // r6=vehicleIndex. Returns `this`.
+        AttachInfo* Construct( u64 aAttachToken, void* apVehicleAsset, u32 auVehicleIndex );
+    };
+
+    // @ 0x826C9E70 (was homed in the GameShared CgsState.cpp rival). Clears the
+    // physics blob via RaceCarState::Clear and seeds the tail fields. Bodied in
+    // BrnVehicleState.cpp.
+    VehicleState();
+    virtual ~VehicleState() {}
+
+    // DWARF :191. Resolve the human-readable component name for a component type.
+    // FLAG (DEFER): declared-only -- its body is a separate recon slice.
+    const char* GetEngineComponentName( EEngineComponentType aeComponentType ) const;
+
+    // DWARF :200. The component attribute key (the (type+0xA2)*8 walk == this
+    // member array, by name) with the console's non-zero guard. Bodied in
+    // BrnVehicleState.cpp (the PhysicsControl forwarder inlines it on X360).
+    Attribute::Key GetEngineComponentKey( EEngineComponentType aeComponentType ) const;
+
+    // ---- members (DWARF order/names; console offsets in the banner) ----
+protected:
+    // DWARF :169 `VehicleData mVehiclePhysicsData` -- modelled as its leading
+    // RaceCarState (see the VehicleData FLAG above).
+    BrnPhysics::Vehicle::RaceCarState mVehiclePhysicsData;   // +96
+
+    // DWARF :171.
+    AttachInfo mAttachInfo;                                  // +1216
+
+    // DWARF :173 `BoostInfo mVehicleBoostInfo` (BoostInfo = BoostOutputInfo,
+    // BrnSoundLogicSharedIO.h:49). FLAG: held as its attested 36-byte span until
+    // the BrnSound-side BoostOutputInfo home is includable here.
+    u8 mauVehicleBoostInfo[36];                              // +1232
+
+    // DWARF :175. The two component-name strings (engine / exhaust).
+    char mcaEngineComponentName[2][13];                      // +1268
+
+    // DWARF :176 `Attribute::Key[2]` -- the console elements stride 8 (keys at
+    // +1296/+1304, the mu1296/mu1304 pair of the old rival model; the attested
+    // PhysicsControl walk reads the LEADING 4-byte Key of each 8-byte element,
+    // and the committed Attribute::Key is u32). Modelled as the 8-byte element
+    // with the leading key named. FLAG: the trailing word is un-attested.
+    struct EngineComponentKeyElem
+    {
+        Attribute::Key mKey;   // +0x00 -- the component attribute key
+        u32            muPad;  // +0x04 -- un-attested trailing word
+    };
+    EngineComponentKeyElem mEngineComponentKey[2];           // +1296
+
+    // DWARF :177.
+    f32 mfMaxRpm;                                            // +1312
+
+private:
+    // DWARF :181.
+    bool mbCollisionOccuredFlag;                             // +1316
+
+    // DWARF :183.
+    CgsSound::Utils::DataPoint<bool> bIsRaceCarActive;       // +1317
 };
 
-// DWARF BrnVehicleState.h:175. Free function (VehicleState is a namespace): resolve
-// the human-readable component name for a given VehicleState + component type.
-// Declared BY NAME so PhysicsControl::GetEngineComponentName can forward to it; its
-// own body is a separate un-homed recon slice (the VehicleState pointer is opaque).
-// FLAG: declaration-only forward -- not bodied here.
-const char* GetEngineComponentName( const void* lpVehicleState, EEngineComponentType aeComponentType );
-
-// BrnVehicleState.h (assert-cited region). Upper bound for the active-race-car
-// index the attach path validates against (cmpwi r30, 8). The assert text is
-// "liVehicleIndex >= 0 && liVehicleIndex < static_cast<int32_t>(BrnWorld::KI_MAX_ACTIVE_RACE_CARS)".
-const s32 KI_MAX_ACTIVE_RACE_CARS = 8;
-
-// BrnVehicleState.h:275/276 (assert sites). The per-attach record: which vehicle
-// asset is being attached, to which active-race-car index, with a 64-bit token.
-struct AttachInfo
-{
-    // BY NAME. The vehicle asset being attached (asserted non-null @:276). 4-byte
-    // pointer on X360; widened on host, offset not asserted across the boundary.
-    void* mpVehicleAsset;
-
-    // The active-race-car index (asserted [0, KI_MAX_ACTIVE_RACE_CARS) @:275).
-    u32 muVehicleIndex;
-
-    // The 64-bit attach token (std-store; full 8 bytes on X360).
-    u64 mAttachToken;
-
-    // @ 0x82681FC8 — validate the index and asset, then store all three fields.
-    // Signature mirrors the X360 fastcall register order: r4=token, r5=asset,
-    // r6=vehicleIndex. Returns `this`.
-    AttachInfo* Construct( u64 aAttachToken, void* apVehicleAsset, u32 auVehicleIndex );
-};
-
-} // namespace VehicleState
 } // namespace Vehicles
 } // namespace BrnSound
 

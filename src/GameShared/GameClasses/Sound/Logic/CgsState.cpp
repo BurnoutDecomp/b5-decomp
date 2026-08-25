@@ -1,25 +1,23 @@
 // ============================================================================
 // CgsState.cpp
 //
-// Definition home for the CgsSound::Logic::State base + three concrete state
-// subclasses, reconstructed from BURNOUT_X360_ARTIST.XEX:
+// Definition home for the CgsSound::Logic::State base, reconstructed from
+// BURNOUT_X360_ARTIST.XEX:
 //   State::IsAttachedToThis                                 @ 0x826916D8
-//   BrnSound::Logic::Passby::PassbyState::PassbyState       @ 0x826BF5E0
-//   BrnSound::Logic::Streaming::StreamingState::StreamingState @ 0x826B0CB0
-//   BrnSound::Vehicles::VehicleState::VehicleState          @ 0x826C9E70
 //
-// The State default ctor reproduces the base-member zero/seed sequence the three
-// derived ctors inline (offsets +4..+80); each derived ctor then zeros/seeds its
-// own members by name. Member access is BY NAME (no raw-offset writes); the X360
-// absolute offsets in CgsState.h are documentation only.
+// The State default ctor reproduces the base-member zero/seed sequence the
+// derived state ctors inline (offsets +4..+80). Member access is BY NAME (no
+// raw-offset writes); the X360 absolute offsets in CgsState.h are documentation
+// only. (2026-08-25, audio-faithfulness wave 5: the three concrete Brn state
+// leaves this TU used to body -- PassbyState @0x826BF5E0, StreamingState
+// @0x826B0CB0 (+ ~ @0x826C9B28), VehicleState @0x826C9E70 -- moved to their
+// DWARF homes under GameSource/Sound/{Passby,Streaming,Vehicles}/.)
 //
 // Cited by X360 address only -- no leaked-source provenance.
 // ============================================================================
 
 #include "GameShared/GameClasses/Sound/Logic/CgsState.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
-
-#include <cstring> // std::memset
 
 namespace CgsSound
 {
@@ -143,96 +141,3 @@ void* State::G()
 
 } // namespace Logic
 } // namespace CgsSound
-
-// --- derived ctors ----------------------------------------------------------
-
-namespace BrnSound
-{
-namespace Logic
-{
-namespace Passby
-{
-    // 0x826BF5E0. Zero the +96 region, seed mi120=3 and mf124=1.0 (the X360 loads
-    // 1.0 from flt_82001C98 into +124 and 3 into +120); everything else is 0/0.0.
-    PassbyState::PassbyState()
-        : CgsSound::Logic::State()
-        , mi112(0)
-        , mf116(0.0f)
-        , mi120(3)
-        , mf124(1.0f)
-        , mu128(0)
-    {
-        std::memset(mau8Region, 0, sizeof(mau8Region));
-    }
-} // namespace Passby
-
-namespace Streaming
-{
-    // 0x826B0CB0. Seed the small trailing block to 0 / 0.0.
-    StreamingState::StreamingState()
-        : CgsSound::Logic::State()
-        , mi84(0)
-        , mi88(0)
-        , mf92(0.0f)
-        , mf96(0.0f)
-        , mi100(0)
-        , mu104(0)
-    {
-    }
-
-    // ---------------------------------------------------------------------------
-    // StreamingState::~StreamingState  @ 0x826C9B28  (scalar deleting destructor)
-    //
-    //   stw  off_820AE1F4, 0(this)                 ; install StreamingState's own vtable
-    //   bl   CgsSound::Logic::State::DestroyEffects ; (this in r3) tear down attached effects
-    //   stw  off_820AA820, 0(this)                  ; re-install the MemBase base vtable
-    //   if (flags & 1)                              ; deleting flavour
-    //       <sound allocator>.Free(this)            ; via off_82FFB954, vtable slot +0x14
-    //   return this
-    //
-    // Mirrors the committed sibling BrnSound::Logic::GlobalState scalar deleting
-    // destructor (BrnGlobalState.cpp @ 0x826D2250): the two vtable installs and the
-    // conditional allocator-routed free (off_82FFB954, vtable slot +0x14) are MSVC's
-    // compiler-synthesised deleting-destructor thunk, re-emitted from this virtual
-    // destructor + operator delete -- NOT hand-written. The single observable
-    // source-level side effect is the DestroyEffects() call on the State base, reused
-    // BY NAME. State::DestroyEffects() body is un-homed (a separate sound-logic recon
-    // slice, recovered call target CgsSound::Logic::State::DestroyEffects @ the
-    // 0x826C9B50 bl); declaration-only in CgsState.h -- no body is fabricated here.
-    // ---------------------------------------------------------------------------
-    StreamingState::~StreamingState()
-    {
-        DestroyEffects();
-    }
-} // namespace Streaming
-} // namespace Logic
-
-namespace Vehicles
-{
-    // 0x826C9E70. Clear the embedded RaceCarState, then seed the tail fields to
-    // 0 / 0.0 (the X360 zeros each, with mf1312 loaded from the 0.0 constant).
-    //
-    // PS3-RECONCILE NO-ACTION (branch divergence): the PS3 DecFIGS (B5_FIGS branch)
-    // VehicleState is restructured -- it derives BrnSound::Logic::BrnState and holds a
-    // VehicleData mVehiclePhysicsData (cleared via VehicleData::Clear), with NO embedded
-    // RaceCarState. The X360 TARGET (b5_main) instead embeds BrnPhysics::Vehicle::RaceCarState
-    // at +96 and clears it directly: the ctor asm calls RaceCarState::Clear(a1+96), not a
-    // VehicleState::Clear(this). The X360 target wins -> mRaceCarState.Clear() is kept.
-    VehicleState::VehicleState()
-        : CgsSound::Logic::State()
-        , mi1216(0)
-        , mi1220(0)
-        , mu1224(0u)
-        , mu1268(0)
-        , mu1281(0)
-        , mu1296(0u)
-        , mu1304(0u)
-        , mf1312(0.0f)
-        , mu1317(0)
-        , mu1318(0)
-    {
-        // Clear the embedded RaceCarState BY NAME (X360 RaceCarState::Clear(this+0x60)).
-        mRaceCarState.Clear();
-    }
-} // namespace Vehicles
-} // namespace BrnSound

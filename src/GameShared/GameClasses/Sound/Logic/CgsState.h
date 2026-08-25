@@ -5,34 +5,26 @@
 #include "GameShared/GameClasses/Sound/Logic/CgsClassTypeInfo.h"  // ClassTypeInfo<T> (canonical)
 
 #include "GameShared/GameClasses/Sound/CgsMemBase.h" // CgsSound::MemBase (the base)
-#include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleEvents.h" // BrnPhysics::Vehicle::RaceCarState (committed)
 
 // =============================================================================
 // GameShared/GameClasses/Sound/Logic/CgsState.h  (DWARF home)
 //
 // CgsSound::Logic::State: the base of the sound-logic state hierarchy
 // (State : CgsSound::MemBase). Reconstructed from BURNOUT_X360_ARTIST.XEX with the
-// member layout from the CgsState.h DWARF hints. This home also models the three
-// concrete state classes whose constructors this TU bodies:
-//   BrnSound::Logic::Passby::PassbyState::PassbyState       @ 0x826BF5E0
-//   BrnSound::Logic::Streaming::StreamingState::StreamingState @ 0x826B0CB0
-//   BrnSound::Vehicles::VehicleState::VehicleState          @ 0x826C9E70
-// plus the base accessor
+// member layout from the CgsState.h DWARF hints. Bodies in the sibling
+// CgsState.cpp:
 //   CgsSound::Logic::State::IsAttachedToThis                @ 0x826916D8
-// (all defined in the sibling CgsState.cpp).
+//   State::State / ~State (@ 0x826ABCD8) / G / AddToClassTypeInfoArray
 //
-// FLAG (derived members are partly opaque): the three derived classes append
-// engine state whose field meanings are not recoverable from the constructors
-// alone (the ctors only zero/seed them). Those regions are modelled as named byte
-// spans / typed-by-name fields at the observed X360 offsets; the few seeded fields
-// (floats, flags, the embedded RaceCarState) are named. Absolute X360 offsets are
-// documented in comments; because the engine bases (and the 32/64 pointer-width
-// boundary) are not fully modelled, the absolute offsets are NOT static_asserted --
-// only the member names + the ctor's observable zero/seed sequence are load-bearing.
-//
-// VehicleState embeds the committed BrnPhysics::Vehicle::RaceCarState (sizeof 1120,
-// BrnVehicleEvents.h) at +96 and clears it via RaceCarState::Clear @ 0x8229FFC8.
-// The committed type is reused BY NAME and cleared via mRaceCarState.Clear().
+// (2026-08-25, audio-faithfulness wave 5 RECONCILIATION): this header used to ALSO
+// embed the three concrete Brn state leaves (Passby::PassbyState,
+// Streaming::StreamingState, Vehicles::VehicleState) as ctor-derived numeric-name
+// models -- rival definitions of classes whose DWARF homes are
+// GameSource/Sound/{Passby/BrnPassbyState.h, Streaming/BrnStreamingState.h,
+// Vehicles/BrnVehicleState.h} (each `: public BrnSound::Logic::BrnState`, DWARF-
+// proven). The leaves now live ONLY in those homes (ctors moved with them), and
+// BrnState.h derives its BrnState from THIS canonical State -- the ODR knot the
+// "RE-HOME ATTEMPTED AND REVERTED" note there recorded is retired.
 // =============================================================================
 
 namespace CgsSound
@@ -93,6 +85,13 @@ struct State : public CgsSound::MemBase
     // CgsState.h:245 @ 0x826916D8. True when apv is this state's attachment.
     virtual bool IsAttachedToThis(void* apvAttachment);
 
+    // Per-class RTTI hooks the derived leaves override (declared on the base for
+    // the virtual dispatch shape; the DWARF leaves each list both as virtual
+    // overrides). FLAG: declaration-only un-homed base virtuals (each leaf's
+    // override is that leaf's own recon slice; no base body is attested).
+    virtual ClassTypeInfo<State>* GetTypeInfo() const;
+    virtual const char*           GetTypeName() const;
+
     // CgsSound::Logic::State::DestroyEffects -- tears down the state's attached
     // effect objects. Called by the State-derived scalar deleting destructors
     // (X360 `bl ...DestroyEffects`, e.g. StreamingState @ 0x826C9B50,
@@ -100,6 +99,19 @@ struct State : public CgsSound::MemBase
     // slice); declaration-only here so the destructors can call it BY NAME. Do NOT
     // body here.
     void DestroyEffects();
+
+    // CgsSound::Logic::State::Attach(void*) -- records the attachment on the state
+    // and wires it into the sound-logic state machine. Called BY NAME from the
+    // derived TrafficState::Attach (X360 `bl ...State::Attach` @0x826CB270) and
+    // EmitterState::Attach; the body is a separate un-homed sound-logic recon slice.
+    // FLAG: declaration-only un-homed base member (do not body here).
+    void Attach(void* apvAttachment);
+
+    // True once the state is bound to an attachment -- the mbIsAttached flag at
+    // +72 (0x48), i.e. the `lbz 0x48(state)` byte the derived accessors test
+    // (StreamingState::GetRequest @0x82683A00, EmitterState::IsAttachedToThis
+    // @0x826BADA0 via its inlined GetSoundEntity()/IsAttached() assert).
+    bool IsAttached() const { return mbIsAttached; }
 
     // @ 0x8268D410. Returns the class rodata sentinel unk_82F2FA90 (reconstructed as
     // the empty string literal per the &unk_XXXX convention). Semantics (likely a
@@ -139,86 +151,5 @@ struct State : public CgsSound::MemBase
 
 } // namespace Logic
 } // namespace CgsSound
-
-// --- derived state classes (each its own namespace) -------------------------
-
-namespace BrnSound
-{
-namespace Logic
-{
-namespace Passby
-{
-    // BrnPassbyState. State subclass for drive-by sound logic. The ctor zeros a
-    // 16-byte region at +96, seeds three scalar fields and two floats.
-    struct PassbyState : public CgsSound::Logic::State
-    {
-        PassbyState();
-        virtual ~PassbyState() {}
-
-        // Derived members at the observed X360 offsets (+96..). Meanings beyond the
-        // seeded values are not recoverable from the ctor; modelled by name.
-        u8  mau8Region[16]; // +96   zeroed as a unit (X360 stvx128)
-        s32 mi112;          // +112  seeded 0
-        f32 mf116;          // +116  seeded 0.0
-        s32 mi120;          // +120  seeded 3
-        f32 mf124;          // +124  seeded 1.0
-        u8  mu128;          // +128  seeded 0 (byte)
-    };
-} // namespace Passby
-
-namespace Streaming
-{
-    // BrnStreamingState. State subclass for streamed sound logic. The ctor seeds a
-    // small block of scalars/floats past the State base.
-    struct StreamingState : public CgsSound::Logic::State
-    {
-        StreamingState();
-
-        // @ 0x826C9B28 -- scalar deleting destructor. Installs StreamingState's own
-        // vtable (off_820AE1F4), calls State::DestroyEffects() to tear down attached
-        // effects, re-installs the MemBase base vtable (off_820AA820), and (deleting
-        // flavour) routes the storage back through the sound allocator. Observable
-        // body = the DestroyEffects() call; the vtable installs + conditional
-        // allocator free are the compiler-synthesised deleting-destructor parts.
-        // Bodied out-of-line in CgsState.cpp (was an inline no-op).
-        virtual ~StreamingState();
-
-        // Derived members at the observed X360 offsets (+84..). Modelled by name.
-        s32 mi84;   // +84   seeded 0
-        s32 mi88;   // +88   seeded 0
-        f32 mf92;   // +92   seeded 0.0
-        f32 mf96;   // +96   seeded 0.0
-        s32 mi100;  // +100  seeded 0
-        u8  mu104;  // +104  seeded 0 (byte)
-    };
-} // namespace Streaming
-} // namespace Logic
-
-namespace Vehicles
-{
-    // BrnVehicleState. State subclass for per-vehicle engine-sound logic. Embeds a
-    // RaceCarState at +96 (cleared via RaceCarState::Clear) and seeds a block of
-    // tail fields. Its full member meanings are not recoverable from the ctor.
-    struct VehicleState : public CgsSound::Logic::State
-    {
-        VehicleState();
-        virtual ~VehicleState() {}
-
-        // The committed RaceCarState (sizeof 1120) embedded at +96, cleared in the
-        // ctor via mRaceCarState.Clear() (X360 RaceCarState::Clear @ 0x8229FFC8).
-        BrnPhysics::Vehicle::RaceCarState mRaceCarState; // +96
-        s32 mi1216;                 // +1216  seeded 0
-        s32 mi1220;                 // +1220  seeded 0
-        u64 mu1224;                 // +1224  seeded 0 (8 bytes)
-        u8  mu1268;                 // +1268  seeded 0 (byte)
-        u8  mu1281;                 // +1281  seeded 0 (byte)
-        u64 mu1296;                 // +1296  seeded 0 (8 bytes)
-        u64 mu1304;                 // +1304  seeded 0 (8 bytes)
-        f32 mf1312;                 // +1312  seeded 0.0
-        u8  mu1317;                 // +1317  seeded 0 (byte)
-        u8  mu1318;                 // +1318  seeded 0 (byte)
-    };
-} // namespace Vehicles
-} // namespace BrnSound
 
 #endif // CGS_SOUND_LOGIC_CGSSTATE_H

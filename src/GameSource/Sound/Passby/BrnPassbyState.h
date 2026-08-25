@@ -3,6 +3,7 @@
 
 #include "types.hpp"
 #include "GameSource/Sound/Module/LogicModule/BrnState.h"
+#include "GameSource/Sound/Passby/BrnPassbyStateManager.h"   // PassbyStateManager::Passby (mPassbyData)
 
 // =============================================================================
 // BrnSound::Logic::Passby::PassbyState
@@ -18,8 +19,12 @@
 // GameSource/Sound/Module/LogicModule/BrnState.h, and overrides the per-class RTTI
 // hooks (GetTypeInfo / GetTypeName / GetStaticTypeInfo / CreateObject).
 //
-// This TU's recon'd function set is exactly ONE entry:
+// This TU's recon'd function set:
 //   GetStaticTypeInfo()  @ 0x82688FC8
+//   PassbyState()        @ 0x826BF5E0  (moved from the GameShared CgsState.cpp
+//                        rival, 2026-08-25 audio-faithfulness wave 5 -- with the
+//                        DWARF members mPassbyData/mfTimeOutTimer, onto which the
+//                        rival's ctor-derived numeric tail decodes exactly)
 // whose X360 body is a single static-rodata load:
 //   lis  r11, unk_82F2F95C@ha
 //   addi r3,  r11, unk_82F2F95C@l   ; r3 = &sTypeInfo  (the static descriptor)
@@ -66,7 +71,10 @@ namespace Passby
 // DEFERRED (outside this TU's recon'd function set).
 struct PassbyState : public BrnSound::Logic::BrnState
 {
-    PassbyState() {}
+    // @ 0x826BF5E0 (was homed in the GameShared CgsState.cpp rival; moved here
+    // 2026-08-25, audio-faithfulness wave 5). Zeroes/seeds the embedded passby
+    // record + the timeout timer. Bodied in BrnPassbyState.cpp.
+    PassbyState();
     virtual ~PassbyState() {}
 
     // — per-class RTTI. DEFERRED bodies (declared for the state vtable shape;
@@ -77,6 +85,19 @@ struct PassbyState : public BrnSound::Logic::BrnState
     // @ 0x82688FC8 — returns &sTypeInfo (the static per-class RTTI descriptor).
     // Bodied here. STATIC (the X360 body takes no `this`).
     static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State>* GetStaticTypeInfo();
+
+private:
+    // DWARF BrnPassbyState.h:73 `PassbyStateManager::Passby mPassbyData`. The
+    // passby record this state is servicing. Console offset +96 (16-aligned); the
+    // ctor's zero/seed stores decode onto its fields exactly (the old CgsState.h
+    // rival's numeric tail): mStaticPos@96 (stvx128 zero), mp3dControl@112=0,
+    // mfRelativeVelocityMagnitude@116=0, meType@120=3, mfVolumeModifier@124=1.0,
+    // mbSuppressBoostBys@128=0.
+    PassbyStateManager::Passby mPassbyData;              // +96
+
+    // DWARF BrnPassbyState.h:74. Passby time-out countdown (console +144, after
+    // the record's align-16 pad; not stored by the ctor @0x826BF5E0).
+    f32 mfTimeOutTimer;                                  // +144
 };
 
 } // namespace Passby

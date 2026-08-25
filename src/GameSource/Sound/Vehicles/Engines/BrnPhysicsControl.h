@@ -63,7 +63,10 @@ struct PhysicsControl : public BrnSound::Logic::BrnEffectControl
     // ---- named scalar members (BY NAME) + opaque spans (X360 sizes) ----
     // Base BrnEffectControl occupies +0x00..~+0x34.
     u8    mau8BaseGap[4];                 // +0x08..+0x0B: base-region scratch (inlined base zero-init)
-    void* mpVehicleState;                 // +0x0C: the owning VehicleState (opaque; GetEngineComponentKey byte-views it)
+    // +0x0C: the owning VehicleState. Typed BY NAME since the wave-5 (2026-08-25)
+    // VehicleState reconciliation (was `void*` + a byte-view walk in
+    // GetEngineComponentKey while VehicleState was un-homed).
+    BrnSound::Vehicles::VehicleState* mpVehicleState;
     u8    mau8Gap0x10[12];                // +0x10..+0x1B: base-region scratch
     f32   mfOscillator;                   // +0x1C
     f32   mfAngularVelocityAccumulator;   // +0x20

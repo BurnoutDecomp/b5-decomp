@@ -47,8 +47,11 @@ namespace Streaming
 class IStreamUser;
 
 // BrnStreamingStateManager.h:49 (DWARF) -- 24 bytes / 6 dwords (== X360 slot stride).
-// The maPlayRequests / maRePostRequests ring element. DISTINCT from the unrelated
-// BrnStreamingState.h StreamingRequest (StreamingState's embedded per-state request).
+// The maPlayRequests / maRePostRequests ring element. ALSO the type of
+// StreamingState::mRequest (DWARF BrnStreamingState.h:105 types it StreamRequest;
+// the state ctor @0x826B0CB0 zeroes it field-for-field) -- an earlier note here
+// called the state's embedded request a distinct type; the wave-5 reconciliation
+// (2026-08-25) proved them the same and retired the state-side rival.
 struct StreamRequest
 {
     IStreamUser* mpAttachment;   // +0x00

@@ -5,8 +5,9 @@
 // Reconstructed from BURNOUT_X360_ARTIST.XEX. See BrnPassbyState.h for the
 // inheritance rationale and the un-recoverable-descriptor-fields FLAG.
 //
-// This TU's recon'd function set is exactly ONE entry:
+// This TU's recon'd function set:
 //   GetStaticTypeInfo()  @ 0x82688FC8
+//   PassbyState()        @ 0x826BF5E0
 // =============================================================================
 
 namespace BrnSound
@@ -15,6 +16,34 @@ namespace Logic
 {
 namespace Passby
 {
+
+// ---------------------------------------------------------------------------
+// PassbyState::PassbyState  @ 0x826BF5E0  (moved from the GameShared CgsState.cpp
+// rival, 2026-08-25 audio-faithfulness wave 5)
+//
+// Zeroes/seeds the embedded passby record field-for-field (the rival's numeric
+// tail decoded onto the DWARF Passby members):
+//   stvx128 vZero, +96   -> mPassbyData.mStaticPos            (16-byte vector zero)
+//   stw 0,  +112         -> mPassbyData.mp3dControl
+//   stfs 0, +116         -> mPassbyData.mfRelativeVelocityMagnitude
+//   stw 3,  +120         -> mPassbyData.meType = 3
+//   stfs 1.0, +124       -> mPassbyData.mfVolumeModifier      (flt_82001C98)
+//   stb 0,  +128         -> mPassbyData.mbSuppressBoostBys
+// mfTimeOutTimer (+144) is NOT stored by the X360 ctor; value-defined here on the
+// host (0.0f) so the member is never read uninitialised -- no behavioural
+// reliance on the pre-seed value is attested.
+// ---------------------------------------------------------------------------
+PassbyState::PassbyState()
+    : BrnSound::Logic::BrnState()
+    , mfTimeOutTimer(0.0f)
+{
+    mPassbyData.mStaticPos.SetZero();                       // stvx128 zero, +96
+    mPassbyData.mp3dControl                 = 0;            // stw 0, +112
+    mPassbyData.mfRelativeVelocityMagnitude = 0.0f;         // stfs 0, +116
+    mPassbyData.meType = AttribSys::Enums::ePassbyTypes::TrafficSmall; // stw 3, +120
+    mPassbyData.mfVolumeModifier            = 1.0f;         // stfs flt_82001C98, +124
+    mPassbyData.mbSuppressBoostBys          = false;        // stb 0, +128
+}
 
 // ---------------------------------------------------------------------------
 // GetStaticTypeInfo  @ 0x82688FC8

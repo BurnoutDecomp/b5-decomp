@@ -95,7 +95,7 @@ StreamingEffect::StreamingEffect()
 // +0x54), after asserting the state exists and is attached. Both asserts are the
 // CGS_ASSERT-vacuous tripwires (non-gating). Members reached BY NAME.
 // ---------------------------------------------------------------------------
-StreamingRequest& StreamingEffect::GetRequest()
+const StreamRequest& StreamingEffect::GetRequest() const
 {
     CGS_ASSERT( mpState != nullptr, "lpState" );
     CGS_ASSERT( mpState->IsAttached(), "IsAttached()" );

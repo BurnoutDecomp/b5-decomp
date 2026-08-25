@@ -73,43 +73,37 @@ PhysicsControl::~PhysicsControl()
 //   const char* GetEngineComponentName(VehicleState::EEngineComponentType)
 //
 //   assert mpVehicleState != 0
-//   return VehicleState::GetEngineComponentName(mpVehicleState, type)
+//   return mpVehicleState->GetEngineComponentName(type)
+// (VehicleState::GetEngineComponentName is declared on the reconciled DWARF
+// VehicleState -- body DEFERRED to its own slice, see BrnVehicleState.h.)
 // ---------------------------------------------------------------------------
 const char* PhysicsControl::GetEngineComponentName(
     BrnSound::Vehicles::VehicleState::EEngineComponentType aeComponentType )
 {
     CGS_ASSERT(mpVehicleState != nullptr, "lpVehicleState");
 
-    return BrnSound::Vehicles::VehicleState::GetEngineComponentName(
-        mpVehicleState, aeComponentType );
+    return mpVehicleState->GetEngineComponentName( aeComponentType );
 }
 
 // ---------------------------------------------------------------------------
 // PhysicsControl::GetEngineComponentKey  @ 0x82682D10
 //   Attribute::Key GetEngineComponentKey(VehicleState::EEngineComponentType)
 //
-// mEngineComponentKey is VehicleState's key array at byte +0x510 with an 8-byte
-// element STRIDE (0xA2*8 = 0x510). Attribute::Key itself is a 4-byte u32; the 8-byte
-// stride is VehicleState's internal layout, so we index by explicit byte stride and
-// return the low word as the key. FLAG: +0x510 is an X360 byte offset into the opaque
-// (un-homed) VehicleState; reproduced by value, not static_asserted.
+//   assert mpVehicleState != 0
+//   return mpVehicleState->GetEngineComponentKey(type)
+// The console body inlines VehicleState::GetEngineComponentKey: the key array is
+// VehicleState's mEngineComponentKey at byte +0x510 with 8-byte element stride
+// ((type + 0xA2) * 8 == +0x510 + type*8) and the looked-up key is asserted
+// non-zero. Since the wave-5 (2026-08-25) VehicleState reconciliation the walk is
+// BY NAME inside VehicleState::GetEngineComponentKey (BrnVehicleState.cpp),
+// including the non-zero guard; this forwarder keeps only its own null assert.
 // ---------------------------------------------------------------------------
 Attribute::Key PhysicsControl::GetEngineComponentKey(
     BrnSound::Vehicles::VehicleState::EEngineComponentType aeComponentType )
 {
-    const u8* lpVehicleState = static_cast<const u8*>(mpVehicleState);
-    CGS_ASSERT(lpVehicleState != nullptr, "lpVehicleState");
+    CGS_ASSERT(mpVehicleState != nullptr, "lpVehicleState");
 
-    // VehicleState->mEngineComponentKey[type] : element at +0x510, 8-byte stride.
-    const u8* lpKeyElem = lpVehicleState + (static_cast<u32>(aeComponentType) + 0xA2) * 8u;
-    const Attribute::Key lKey = *reinterpret_cast<const Attribute::Key*>(lpKeyElem);
-
-    // The console asserts the LOOKED-UP KEY is non-zero (the assert string names the
-    // member value). An earlier revision mistranslated this into `pointer + 0x510 !=
-    // nullptr` -- a tautology the compiler deletes -- losing the real guard
-    // (fixed 2026-08-25, audio-faithfulness wave 5).
-    CGS_ASSERT(lKey != 0, "mEngineComponentKey != 0");
-    return lKey;
+    return mpVehicleState->GetEngineComponentKey( aeComponentType );
 }
 
 // ---------------------------------------------------------------------------
