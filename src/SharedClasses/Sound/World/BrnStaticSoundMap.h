@@ -8,11 +8,31 @@ namespace BrnSound
 {
 namespace World
 {
-// StaticSoundEntity stays pointer-only here; its full layout (and its own FixUp)
-// is deferred to its own TU. Forward-declaration is the correct choice — the map
-// holds it only via a const pointer.
-// FLAG: StaticSoundEntity element type is DEFERRED.
-struct StaticSoundEntity;
+// StaticSoundEntity — one static sound-map entity. DWARF (DecFIGS
+// BrnStaticSoundMap.h:59): a single `Vector3Plus mPosPlus` — the position xyz with
+// the radius/type payload packed into the w lane (the :136 UFloatHelper union is
+// the pack/unpack view; Construct(Vector3, f32, u16) packs both). 16 bytes,
+// pointer-free — the platform-4 serialised element `{f32 x,y,z, u16, u16}` (see
+// the porter contract note below) is this record verbatim. COMPLETED 2026-08-25
+// (audio-faithfulness wave 2; was a forward-decl that forced GetEntity into a
+// hardcoded byte-stride walk). The accessor/FixUp bodies (GetPos @h:89, GetRadius
+// @h:103, GetType @h:110, FixUp @h:117, Construct @h:74) stay DEFERRED to the
+// entity's own TU — only the layout is load-bearing here.
+struct StaticSoundEntity
+{
+    // BrnStaticSoundMap.h:136 (DWARF) — the w-lane pack/unpack view.
+    union UFloatHelper
+    {
+        f32 mfPlusComponent;   // :137
+        u32 mu32Bits;          // :138
+    };
+
+protected:
+    // BrnStaticSoundMap.h:152 (DWARF). Position + packed w payload.
+    Vector3Plus mPosPlus;
+};
+static_assert(sizeof(StaticSoundEntity) == 16,
+              "StaticSoundEntity is one 16-byte Vector3Plus (porter contract)");
 
 // SubRegionDescriptor — the per-cell descriptor of the XZ sub-region grid.
 // ADDITIVE GROW (was a deferred forward-decl): GetSubRegionDescrip @ 0x8267AF10
@@ -61,10 +81,8 @@ struct StaticSoundMap
 
     // GetEntity @ 0x82675578 — returns the entity at liEntityIndex. The X360 asm
     // asserts mpEntities != 0 and liEntityIndex < miNumEntities, then returns
-    // &mpEntities[liEntityIndex] with a 16-byte element stride (`16 * index`).
-    // FLAG: StaticSoundEntity stays a forward-decl element type; the 16-byte stride
-    // is the only X360-attested size, so the body indexes by that stride (declared-
-    // only opaque-element stride precedent) rather than by a complete-type subscript.
+    // &mpEntities[liEntityIndex] (16-byte stride == sizeof(StaticSoundEntity),
+    // now a complete type — the size is static_asserted at its definition above).
     const StaticSoundEntity& GetEntity(s32 liEntityIndex) const;
 
     // IsInRange @ 0x82677570 — half-open XZ overlap test between a radius-inflated

@@ -357,17 +357,21 @@ int CollisionStateManager::PlayCollision( OutputCollision* /*lpCollision*/ )
 // and a3/a4/a5 are DEAD in this leaf (the asm forwards ONLY a2 to MakeHash and never
 // dereferences `this`); kept in the signature for ABI documentation.
 //
-// FLAG (dword_83005F24 table UNRESOLVED): the interned crash-bin name-hash list this
-// indexes is NOT homed in this slice; modelled as a single attested slot (index 0, the
-// only load the asm performs) with a placeholder-zero sentinel rather than fabricating
-// the rest of the table.
+// dword_83005F24 RESOLVED (2026-08-25, audio-faithfulness wave 2): the interning
+// writer is X360 sub_82C63340 --
+//   dword_83005F24 = CgsSound::Playback::Name::MakeHash("CollisionSpliceBank");
+// i.e. the single table slot holds the interned hash of the "CollisionSpliceBank"
+// content name. Interned here identically at static-init (dynamic initializer over
+// the same MakeHash), so a real crash-bin hit on that name returns bin 0 and any
+// other name returns fallback bin 1 -- exactly the console behaviour. (The earlier
+// placeholder-zero sentinel made EVERY name miss to bin 1.)
 // ---------------------------------------------------------------------------
 namespace
 {
-    // Single attested table slot (dword_83005F24): the interned hash of the default /
-    // first crash-bin content name. Real value depends on the (unresolved) crash-bin
-    // name string table; 0 is a placeholder sentinel.
-    uintptr_t gauCollisionBinNameHashes[1] = { 0 };
+    // Single attested table slot (dword_83005F24), interned exactly as the X360's
+    // sub_82C63340 does.
+    uintptr_t gauCollisionBinNameHashes[1] =
+        { CgsSound::Playback::Name::MakeHash("CollisionSpliceBank") };
 }
 
 int SelectBin( int /*a1*/, const char* lkpacName, int /*a3*/, int /*a4*/, int /*a5*/ )
