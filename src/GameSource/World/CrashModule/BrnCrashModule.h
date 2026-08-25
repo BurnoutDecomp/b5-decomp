@@ -62,21 +62,20 @@ namespace BrnWorld
 
     // BrnCrashModule.h:182 -- the world's crash module (single-buffered).
     // ------------------------------------------------------------------------
-    // BrnWorld::CrashModuleIO::OutputBuffer_PostScene -- the crash module's
-    // post-scene output the entity-module spines bridge from
-    // (WorldModule::EntityModulePostSceneUpdate @0x827C3C58).
-    //
-    // FLAG (minimal-complete slice, size NOT X360-attested): the real aggregate is
-    // the crash event queues (CrashIO::* element homes are committed); that layout
-    // belongs to the crash IO TU and is NOT recovered here. GROW when that TU lands.
+    // ⛔ BrnWorld::CrashModuleIO::OutputBuffer_PostScene IS DELETED (2026-08-25, crash exit).
+    // IT NEVER EXISTED. It was a phantom type invented from the mangled signatures of the three
+    // post-scene crash bridges, modelled here as `u8 maDeferredPayload[16]`, and that placeholder
+    // was recorded across the campaign as "the single structural blocker for the whole crash-exit
+    // path". There was nothing to recover: the crash module is a ModuleSingleBuffered and has ONE
+    // output buffer. The bridges' real parameter type is BrnWorld::CrashIO::OutputBuffer_PreScene,
+    // which is already fully modelled with the exact accessors they call.
+    // The proof is at the caller (WorldModule::Update @0x827D63E8): it creates exactly four crash
+    // IO buffers and no post-scene one, hands `v202` (the OutputBuffer_PreScene) to
+    // CrashModule::PreSceneUpdate as its OUTPUT, and then passes that same `v202` in argument
+    // slot 38 of EntityModulePostSceneUpdate -- which is the argument the three bridges receive.
+    // See the full write-up on OutputBuffer_PreScene in SharedIO/BrnCrashModuleIO.h.
+    // ⛔ DO NOT RE-ADD. Anything that "needs" this type is reading the mangled name, not the code.
     // ------------------------------------------------------------------------
-    namespace CrashModuleIO
-    {
-        struct OutputBuffer_PostScene : public CgsModule::IOBuffer
-        {
-            u8 maDeferredPayload[16];   // deferred interior (see FLAG)
-        };
-    }
 
     struct CrashModule : public CgsModule::ModuleSingleBuffered
     {

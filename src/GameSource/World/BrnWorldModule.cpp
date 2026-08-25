@@ -1763,7 +1763,10 @@ WorldModule::EntityModulePostSceneUpdate(
     RaceCarEntityModuleIO::InputBuffer_PostScene* lpRaceCarInputBuffer_PostScene,
     RaceCarEntityModuleIO::OutputBuffer_PostScene* lpRaceCarOutputBuffer_PostScene,
     RaceCarEntityModuleIO::InputBuffer_PrePhysics* lpRaceCarInputBuffer_PrePhysics,
-    const CrashModuleIO::OutputBuffer_PostScene* lpCrashOutputBuffer_PostScene,
+    // [crash exit 2026-08-25] was `const CrashModuleIO::OutputBuffer_PostScene*` -- a phantom
+    // type. This is the crash module's ONE output buffer; the caller below used to
+    // reinterpret_cast the real thing into the phantom to satisfy this signature.
+    const CrashIO::OutputBuffer_PreScene* lpCrashOutputBuffer_PostScene,
     PropEntityIO::InputBuffer_PostScene* lpPropInputBuffer_PostScene,
     PropEntityIO::OutputBuffer_PostScene* lpPropOutputBuffer_PostScene,
     BrnUpdateSet lUpdateSet )
@@ -2673,7 +2676,13 @@ WorldModule::Update( BrnUpdateSet lUpdateSet,
             &lTrafficToRaceCar_PreScene ),
         lpTrafficOutput_PostScene, lpTrafficInput_PostPhysics, lpTrafficInput_PrePhysics,
         lpRaceCarInput_PostScene, lpRaceCarOutput_PostScene, lpRaceCarInput_PrePhysics,
-        reinterpret_cast<const CrashModuleIO::OutputBuffer_PostScene*>( lpCrashOutput_PreScene ),
+        // ⭐ [crash exit 2026-08-25] THE CAST IS GONE. It used to launder the real
+        // CrashIO::OutputBuffer_PreScene into the phantom CrashModuleIO::OutputBuffer_PostScene
+        // -- i.e. this build had ALREADY worked out that the post-scene crash bridges read the
+        // pre-scene output buffer (the console passes this same local in argument slot 38), and
+        // then hid that fact behind a reinterpret_cast. The cast is exactly what made the
+        // buffer's RaceCarCrashCompleteEvent ring "unreachable by name".
+        lpCrashOutput_PreScene,
         lpPropInput_PostScene, lpPropOutput_PostScene,
         lUpdateSet );
     lpInputBufferStack->DestroyIOBuffer( &lpPropInput_PostScene );

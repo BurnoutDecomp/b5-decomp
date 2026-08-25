@@ -66,5 +66,20 @@ namespace PropEntityIO
 
         mRaceCarCrashCompleteEventQueue.Clear();
     }
+
+    // DWARF :513. ⭐ BODIED 2026-08-25 (crash exit) -- it was declaration-only because its one
+    // producer, WorldModule::BridgeCrashModuleToPropModule_PostScene, was still a parked gate.
+    // That park is retired, so the body is no longer invention: the console INLINES this call
+    // inside the bridge @0x827AAD78, which is exactly why it has no out-of-line X360 symbol --
+    //     0x827AAD98  addi r3, r31, 8    -- r31 == this; +8 == mRaceCarCrashCompleteEventQueue
+    //     0x827AAD9C  bl   0x827A7D70    -- EventQueue<RaceCarCrashCompleteEvent,10>::Append
+    // -- i.e. one Append of the source queue onto this buffer's own queue, and nothing else.
+    // ⚠️ NO Clear() first: the console appends. The queue is drained by PropEntityModule::
+    // PostSceneUpdate @0x822C4718 (which reads it via GetCrashEventQueue at 0x822C476C), so
+    // clearing here would drop crash-completes that arrived in the same frame.
+    void InputBuffer_PostScene::AppendRaceCarCrashQueue(const RaceCarCrashCompleteEventQueue* lpQueue)
+    {
+        mRaceCarCrashCompleteEventQueue.Append(*lpQueue);
+    }
 }
 }
