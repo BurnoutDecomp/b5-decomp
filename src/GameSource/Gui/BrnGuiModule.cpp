@@ -2787,6 +2787,22 @@ namespace BrnGui
 
             mViewModule.Update(0, 0, &mViewInputBuffer, &mViewOutputBuffer);
 
+            // ⭐ [boost-bar gate 2026-08-25] THE PER-FRAME COMPONENT PUMP. The console
+            // drives CustomRendererManager::Update @0x82450908 once per frame from the
+            // view chain (the call is virtual, so the exact console seat is not name-
+            // recoverable; this PC seat follows the manager's Prepare-pump precedent
+            // above). It must run AFTER the view dispatch just above (so this frame's
+            // RecvEvent payloads -- the 206 boost info, 212 sat-nav render, 213/214
+            // show-hides -- are already latched) and BEFORE GuiModule::Render (so
+            // BoostBarRenderer::Update's visibility machine processes the allowed-to-
+            // boost edge before RenderComponent's state-consistency asserts read it).
+            // Without this call NO custom-render component ever ticked: the boost bar's
+            // interpolators never re-keyed toward the live boost amount and its fade
+            // machine froze at the Construct-seeded FULL -- the user-reported "asserts
+            // when there is no boost" ("Visibility is full but we are not allowed to
+            // boost", :1080) and "bar doesn't update with the correct values".
+            mCustomRendererManager.Update();
+
             // [PC diagnostic] log the level-1 flow-movie state on CHANGE only (live /
             // composed flips) -- the mount/unmount/remount observability line.
             {

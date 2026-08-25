@@ -876,6 +876,22 @@ namespace BrnGui
                 mStateLoadingHelper.MarkAptComponentInitialised(lpTrigger);
             break;
         }
+        case 132:
+            // ⭐ [boost-bar gate 2026-08-25] X360 case 132 @0x8250F58C: the game-flow-state
+            // change. Latch the new state word (+0x4B30), DROP the gameplay-HUD-active gate
+            // (+0x407C -- the flow states' UpdateWFInit/UpdateSetupState re-raise it, see the
+            // header's SetGameplayHudActive note), clear the +0x4B34 byte when the new state
+            // is 1 or 3, and reset the +0x9FD4/+0x9FD8 last-score pair to -1.
+            {
+                const s32 liNewFlowState = *reinterpret_cast<const s32*>(lpEvent);
+                miGameFlowState     = liNewFlowState;             // stw +0x4B30
+                mbGameplayHudActive = false;                      // stb 0 +0x407C
+                if (liNewFlowState == 1 || liNewFlowState == 3)
+                    mu8GameFlowByte_4B34 = 0;                     // stb 0 +0x4B34
+                miLastStuntScore          = -1;                   // stwx -1 +0x9FD4
+                miGameFlowResetWord_9FD8  = -1;                   // stwx -1 +0x9FD8
+            }
+            break;
         case 147:
             // [hud H3b tracking slice 2026-08-25] X360 case 147 @0x8250DDF0 (h1_dump.txt):
             // the three HUD words {speed, rpm, gear} -> +19208/+19212/+19216. The producer
