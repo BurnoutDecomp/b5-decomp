@@ -57,9 +57,9 @@ namespace core
 // buffers start at +0x60 and extend past sizeof into the GetSize()-byte over-allocation):
 //   +0x00  mBase (PlugInBaseView)  -- installed vtable (+0x00), mpSystem (+0x04, passed to
 //                                     Butterworth::CreateInstance but unused there),
-//                                     mpInput (+0x08, upstream node; latency accumulator at
-//                                     input+0x28), mpAttributes (+0x0C -> &mfCutoffFreq),
-//                                     mfAttrib1 (+0x18, this node's registered latency),
+//                                     mpVoice (+0x08, the owning Voice; decay accumulator at
+//                                     voice+0x28), mpAttributes (+0x0C -> &mfCutoffFreq),
+//                                     mDecaySamples (+0x18, this node's registered decay tail),
 //                                     mbChannelCount (+0x21, the Butterworth channel/section
 //                                     count -> buffer sizing).
 //   +0x28  mfCutoffFreq            -- live cutoff graph attribute (init 0.0; mpAttributes

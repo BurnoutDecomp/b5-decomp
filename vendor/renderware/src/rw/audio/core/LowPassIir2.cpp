@@ -14,6 +14,7 @@
 // =====================================================================================
 
 #include "rw/audio/core/Iir2Filters.h"
+#include "rw/audio/core/Voice.h"   // the owning Voice (mfFadeStart decay accumulator)
 
 #include <cmath>
 
@@ -68,8 +69,8 @@ void LowPassIir2::CalculateFilterCoefficients(f64 omega)
 // -------------------------------------------------------------------------------------
 // CreateInstance @0x82BA3130
 // Initialize<LowPassIir2>(self, 0x28) clears the 6 state slots and points mpAttributes
-// at self+0x28; then this seeds the cutoff fields and re-bases the upstream input's
-// attribute (+0x28) by (450 - oldAttr), and parks the live cutoff attribute at 450.
+// at self+0x28; then this seeds the cutoff fields, folds (450 - oldDecay) into the owning
+// voice's decay accumulator (mfFadeStart), and parks mDecaySamples at 450.
 // Initialize<T> is the templated PlugIn helper defined in another TU; its observable
 // effect (clear states, set attribute base) is reproduced inline. FLAGGED: the real
 // Initialize<T> body lives in the PlugIn allocator TU.
@@ -79,17 +80,17 @@ LowPassIir2 *LowPassIir2::CreateInstance(LowPassIir2 *self)
     for (int i = 0; i < KI_IIR2_MAX_CHANNELS; ++i)
         Iir2::ClearBuffer(&self->mState[i]);
 
-    const f32 oldAttr = self->mBase.mfAttrib1;       // lfs 0x18
+    const f32 oldAttr = self->mBase.mDecaySamples;       // lfs 0x18
 
     self->mfCutoffFreq = 1000000.0f;                  // stfs flt_820068C0 -> 0x28
     self->mfLastCutoffOmega = 1000000.0f;             // stfs -> 0xA4
 
-    // Re-base the upstream input's +0x28 attribute by the cutoff delta.
-    f32 *inputAttr = reinterpret_cast<f32 *>(
-        reinterpret_cast<char *>(self->mBase.mpInput) + 0x28); // *(*(self+8)+0x28)
-    *inputAttr = (450.0f - oldAttr) + *inputAttr;
+    // Fold this shape's decay-tail delta into the owning voice's accumulator:
+    // voice+0x28 == Voice::mfFadeStart, BY NAME (2026-08-25 wave 4; was a raw
+    // reinterpret over the old void* mpInput misreading).  // *(*(self+8)+0x28)
+    self->mBase.mpVoice->mfFadeStart = (450.0f - oldAttr) + self->mBase.mpVoice->mfFadeStart;
 
-    self->mBase.mfAttrib1 = 450.0f;                   // stfs flt_8203869C -> 0x18
+    self->mBase.mDecaySamples = 450.0f;                   // stfs flt_8203869C -> 0x18
     return self;
 }
 

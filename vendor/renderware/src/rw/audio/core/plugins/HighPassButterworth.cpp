@@ -23,6 +23,7 @@
 // =====================================================================================
 
 #include "rw/audio/core/plugins/HighPassButterworth.h"
+#include "rw/audio/core/Voice.h"   // the owning Voice (mfFadeStart decay accumulator)
 
 namespace rw
 {
@@ -68,15 +69,17 @@ char **HighPassButterworth::GetPlugInDescRunTime()
 // -------------------------------------------------------------------------------------
 // GetSize @0x82B9DF88
 //   return Butterworth::GetSize(*(u8 *)(desc + 8)) + 96;
-// The size is queried before CreateInstance repurposes the +0x08 PlugIn-base slot (mpInput)
-// as the upstream-input pointer: at query time the factory has stashed the requested
-// channel/section count (a byte) in that slot. Read faithfully as the byte at +0x08. The
-// +96 is the X360 header size (0x60); the embedded Butterworth follows.
+// The size is queried BEFORE CreateInstance installs the owning Voice into the +0x08
+// slot: at query time the factory has parked the requested channel/section count (a
+// byte) there. On the host that park is encoded as the pointer value (see the
+// PlugInBaseView pre-init helpers -- the old "first byte of the pointer field" read
+// was endian/width-broken on x64 LE). The +96 is the X360 header size (0x60); the
+// embedded Butterworth follows.
 // -------------------------------------------------------------------------------------
 int HighPassButterworth::GetSize(HighPassButterworth *desc)
 {
-    // asm: lbz r3, 8(this) -- the low-order count byte the factory stored in the +0x08 slot.
-    const u8 order = reinterpret_cast<const u8 *>(&desc->mBase.mpInput)[0];
+    // asm: lbz r3, 8(this) -- the parked count byte in the pre-init +0x08 slot.
+    const u8 order = desc->mBase.GetPreInitOrderByte();
     return static_cast<int>(Butterworth::GetSize(order) + 96u);
 }
 
@@ -101,10 +104,10 @@ void *HighPassButterworth::VectorDeletingDestructor(HighPassButterworth *self, c
 //
 // Installs the concrete v-table (only when self != null), seeds the three design attributes
 // and the cutoff-history init value, lays out the embedded Butterworth kernel over
-// mButterworth (recording its relative offset), then registers this node's group-delay
-// latency into the upstream input's accumulator (+0x28) and parks its own latency attribute
-// at 450 -- the same latency re-base idiom the Iir2* shapes use. Returns 1 (the asm loads
-// r3 = 1 for the return).
+// mButterworth (recording its relative offset), then folds this node's decay-tail delta
+// into the owning voice's accumulator (voice+0x28 == Voice::mfFadeStart) and parks its
+// own mDecaySamples at 450 -- the same decay-rebase idiom the Iir2* shapes use.
+// Returns 1 (the asm loads r3 = 1 for the return).
 // -------------------------------------------------------------------------------------
 HighPassButterworth *HighPassButterworth::CreateInstance(HighPassButterworth *self)
 {
@@ -130,13 +133,12 @@ HighPassButterworth *HighPassButterworth::CreateInstance(HighPassButterworth *se
     self->muButterworthOffset = static_cast<u16>(
         reinterpret_cast<char *>(&self->mButterworth) - reinterpret_cast<char *>(self));
 
-    // Re-base the upstream input's +0x28 latency accumulator by this node's latency delta,
-    // then park this node's latency attribute at 450 (same idiom as the Iir2* shapes).
-    const f32 oldLatency = self->mBase.mfAttrib1; // lfs 0x18
-    f32 *inputLatency = reinterpret_cast<f32 *>(
-        reinterpret_cast<char *>(self->mBase.mpInput) + 0x28); // *(*(self+8)+0x28)
-    *inputLatency = (KF_LATENCY - oldLatency) + *inputLatency;
-    self->mBase.mfAttrib1 = KF_LATENCY; // stfs +0x18 (450.0)
+    // Fold this node's decay-tail delta into the owning voice's accumulator
+    // (voice+0x28 == Voice::mfFadeStart, by name), then park mDecaySamples at 450
+    // (same idiom as the Iir2* shapes).           // *(*(self+8)+0x28)
+    const f32 oldDecay = self->mBase.mDecaySamples; // lfs 0x18
+    self->mBase.mpVoice->mfFadeStart = (KF_LATENCY - oldDecay) + self->mBase.mpVoice->mfFadeStart;
+    self->mBase.mDecaySamples = KF_LATENCY; // stfs +0x18 (450.0)
     return self;
 }
 

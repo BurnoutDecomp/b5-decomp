@@ -35,7 +35,7 @@
 // offsets are not shifted by a compiler-inserted vptr. +0x00 is the installed v-table word;
 // mBase.mpAttributes (+0x0C) is pointed at the first input attribute (mfDelayTime @+0x28) so
 // the base SetAttribute writes land there; the input-channel count lives in mBase.mbFlag20
-// (+0x20). mBase.mfAttrib0/mfAttrib1 (+0x14/+0x18) cache the reported latency (see
+// (+0x20). mBase.mLatencyInSamples/mDecaySamples (+0x14/+0x18) cache the latency + decay tail (see
 // UpdateLatencyAndDecay).
 //
 // The embedded DelayFilter / DelayLine / TimerHandle widen on the x64 PC target (they carry
