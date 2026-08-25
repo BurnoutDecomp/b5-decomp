@@ -94,26 +94,22 @@ PresentationEffect::~PresentationEffect()
 // ---------------------------------------------------------------------------
 // PresentationEffect::FindFreeVoice()  @ 0x82687D68
 //   Return the first FREE maVoices[] slot, else null. A slot's per-VoiceWrapper
-//   state word (slot+0x4C) reads 0 (unused) or 7 (idle) when available.
+//   state word (console slot+0x4C == the wrapper's +0x48 miState) reads 0 (unused)
+//   or 7 (idle) when available.
 //   asm: v1=0; for(cur=this+0x8C;;cur+=0x80){ if(*cur==7||*cur==0) return
 //        this+0x40+(v1<<7); if(++v1>=4) return 0; }
-// FLAG (raw slot+0x4C state word): the availability word lives inside the slot's
-// embedded VoiceWrapper and is read store-for-store through a u8* cursor at its
-// attested byte offset (rule #4), NOT via a fabricated field name.
+//   (2026-08-25 wave 4: the raw this+0x8C/stride-0x80 cursor is retired -- the walk
+//   subscripts maVoices[] and reads the state via VoiceWrapper::GetState by name.)
 // ---------------------------------------------------------------------------
 PresentationEffect::AgingVoice* PresentationEffect::FindFreeVoice()
 {
-    u8* lpThis = reinterpret_cast<u8*>(this);
-
-    s32 liSlot = 0;                                       // r10
-    for (u8* lpState = lpThis + 0x8C; ; lpState += 0x80)  // r9: slot+0x4C, stride 0x80
+    for (s32 liSlot = 0; liSlot < 4; ++liSlot)            // r10
     {
-        const u32 luState = *reinterpret_cast<const u32*>(lpState);
-        if (luState == 7 || luState == 0)
-            return reinterpret_cast<AgingVoice*>(lpThis + 0x40 + (liSlot << 7));
-        if (++liSlot >= 4)
-            return 0;
+        const s32 liState = maVoices[liSlot].mVoice.GetState();   // console slot+0x4C
+        if (liState == 7 || liState == 0)
+            return &maVoices[liSlot];
     }
+    return 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -129,92 +125,78 @@ PresentationEffect::AgingVoice* PresentationEffect::FindFreeVoice()
 //        tracked steal candidate (Release its voice first); else 0.
 //
 //   X360 walks cur=this+0x8C (maVoices[0] slot+0x4C) in 0x80 strides. The stored
-//   PresentationEntry sits at slot+0x58; its compared fields line up with the query
-//   entry at +0x10 (mContentSpec leading word), +0x14 (mu16Splice), +0x16
-//   (mu8ChokeGroup), +0x17 (mu8Valid), +0x18 (mu8Behaviour), +0x19 (mu8MixerOutput).
-//   mu16Age is slot+0x00; the embedded VoiceWrapper (Release target) is slot+0x04.
-//   The steal branch keys off the STORED entry's mu8ChokeGroup at slot+0x6E.
+//   PresentationEntry sits at slot+0x58 (AgingVoice::mDataEntry); its compared
+//   fields mirror the query entry 1:1 (+0x10 mContentSpec leading word, +0x14
+//   mu16Splice, +0x16 mu8ChokeGroup, +0x17 mu8Valid, +0x18 mu8Behaviour, +0x19
+//   mu8MixerOutput). mu16Age is slot+0x00; the wrapper (Release target) slot+0x04.
 //
-// FLAG (raw byte offsets): the per-slot state word (slot+0x4C) and the stored
-// PresentationEntry live inside the embedded AgingVoice/VoiceWrapper span, so they
-// are read store-for-store through a u8* cursor at their attested byte offsets
-// (rule #4); the DWARF field names are recorded in comments, nothing is fabricated.
+//   (2026-08-25 wave 4: the raw u8* cursor walk is retired -- AgingVoice now
+//   materialises mDataEntry, so both sides of every compare are named members; the
+//   console byte offsets stay in the comments as the asm anchors.)
 // ---------------------------------------------------------------------------
 PresentationEffect::AgingVoice* PresentationEffect::FindOrStealAVoice(const PresentationEntry& rEntry)
 {
-    typedef CgsSound::Logic::VoiceWrapper VoiceWrapper;
-
-    u8*       lpThis  = reinterpret_cast<u8*>(this);
-    const u8* lpQuery = reinterpret_cast<const u8*>(&rEntry);
-
     AgingVoice* lpFree = FindFreeVoice();                 // r25
 
     s32 liCandidate = -1;                                 // r28: best steal-slot index
     u32 luBestAge   = 0;                                  // r27: oldest mu16Age (choke 0)
-    u32 luSlot      = 0;                                  // r29: current slot index
-    u8* lpState     = lpThis + 0x8C;                      // r31: maVoices[luSlot] slot+0x4C
 
-    while (true)
+    for (u32 luSlot = 0; luSlot < 4; ++luSlot)            // r29 / r31 cursor
     {
-        const u32  luState = *reinterpret_cast<const u32*>(lpState);   // slot+0x4C
-        const bool lbBusy  = !(luState == 7 || luState == 0);
+        AgingVoice&              lrSlot   = maVoices[luSlot];
+        const PresentationEntry& lrStored = lrSlot.mDataEntry;          // slot+0x58
+
+        const s32  liState = lrSlot.mVoice.GetState();    // slot+0x4C
+        const bool lbBusy  = !(liState == 7 || liState == 0);
 
         // A busy STREAM request whose stored entry content-matches rEntry means the
         // exact stream is already playing -> the X360 breaks the walk and returns 0.
-        if (lbBusy && lpQuery[0x18] == 2)                 // query mu8Behaviour == E_PRESENTATION_CONTENT_STREAM
+        if (lbBusy && rEntry.mu8Behaviour == 2)           // E_PRESENTATION_CONTENT_STREAM
         {
             const bool lbMatch =
-                   *reinterpret_cast<const u32*>(lpQuery + 0x10) == *reinterpret_cast<const u32*>(lpState + 0x1C)   // mContentSpec  (slot+0x68)
-                && *reinterpret_cast<const u16*>(lpQuery + 0x14) == *reinterpret_cast<const u16*>(lpState + 0x20)   // mu16Splice    (slot+0x6C)
-                && lpQuery[0x16] == lpState[0x22]         // mu8ChokeGroup (slot+0x6E)
-                && lpQuery[0x17] == lpState[0x23]         // mu8Valid      (slot+0x6F)
-                && lpState[0x24] == 2                     // stored mu8Behaviour (slot+0x70)
-                && lpQuery[0x19] == lpState[0x25];        // mu8MixerOutput(slot+0x71)
+                   rEntry.mu32ContentSpec == lrStored.mu32ContentSpec   // slot+0x68
+                && rEntry.mu16Splice      == lrStored.mu16Splice        // slot+0x6C
+                && rEntry.mu8ChokeGroup   == lrStored.mu8ChokeGroup     // slot+0x6E
+                && rEntry.mu8Valid        == lrStored.mu8Valid          // slot+0x6F
+                && lrStored.mu8Behaviour  == 2                          // slot+0x70
+                && rEntry.mu8MixerOutput  == lrStored.mu8MixerOutput;   // slot+0x71
             if (lbMatch)
                 return 0;                                 // asm: break -> result = 0
         }
 
         // Steal-candidate selection, keyed on the STORED entry's choke group.
-        const u8 lu8ChokeGroup = lpState[0x22];           // stored mu8ChokeGroup (slot+0x6E)
-        if (lu8ChokeGroup != 0)
+        if (lrStored.mu8ChokeGroup != 0)
         {
-            const u8 lu8QueryChoke = lpQuery[0x16];       // query mu8ChokeGroup
-            if (lu8ChokeGroup == lu8QueryChoke)
+            if (lrStored.mu8ChokeGroup == rEntry.mu8ChokeGroup)
             {
-                reinterpret_cast<VoiceWrapper*>(lpState - 0x48)->Release();   // maVoices[i].mVoice (slot+0x04)
+                lrSlot.mVoice.Release();                  // maVoices[i].mVoice (slot+0x04)
                 liCandidate = static_cast<s32>(luSlot);
             }
-            else if (lu8ChokeGroup < lu8QueryChoke)
+            else if (lrStored.mu8ChokeGroup < rEntry.mu8ChokeGroup)
             {
                 liCandidate = static_cast<s32>(luSlot);
             }
         }
         else
         {
-            const u16 lu16Age = *reinterpret_cast<const u16*>(lpState - 0x4C);   // mu16Age (slot+0x00)
-            if (lu16Age > luBestAge)
+            if (lrSlot.mu16Age > luBestAge)               // mu16Age (slot+0x00)
             {
-                luBestAge   = lu16Age;
+                luBestAge   = lrSlot.mu16Age;
                 liCandidate = static_cast<s32>(luSlot);
             }
         }
-
-        ++luSlot;
-        lpState += 0x80;
-        if (luSlot >= 4)
-        {
-            if (lpFree != 0)
-                return lpFree;
-            if (liCandidate >= 0)
-            {
-                CGS_ASSERT(liCandidate < 4, "liCandidate < E_POLYPHONY");
-                u8* lpSlot = lpThis + (liCandidate << 7) + 0x40;   // &maVoices[liCandidate]
-                reinterpret_cast<VoiceWrapper*>(lpSlot + 0x04)->Release();
-                return reinterpret_cast<AgingVoice*>(lpSlot);
-            }
-            return 0;
-        }
     }
+
+    if (lpFree != 0)
+        return lpFree;
+    if (liCandidate >= 0)
+    {
+        CGS_ASSERT(liCandidate < 4, "liCandidate < E_POLYPHONY");
+        AgingVoice& lrSteal = maVoices[liCandidate];
+        lrSteal.mVoice.Release();
+        return &lrSteal;
+    }
+    return 0;
 }
 
 } // namespace Logic

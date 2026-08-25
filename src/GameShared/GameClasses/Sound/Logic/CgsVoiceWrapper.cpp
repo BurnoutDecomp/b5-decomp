@@ -19,6 +19,7 @@
 #include "GameShared/GameClasses/Sound/Logic/CgsVoiceWrapper.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Sound/Playback/CgsVoice.h"   // complete Playback::Voice (: public Object since the wave-3 fold)
 
 namespace CgsSound
 {
@@ -83,12 +84,12 @@ VoiceWrapper::~VoiceWrapper()
 
     // The embedded logic Voice (+0x34) tears down last: its +0x38 handle drops its
     // playback object the same way. The X360 inlines the identical assert-decrement-
-    // dispose sequence on *(this+0x38). The embedded Voice's owned object is a
-    // Playback::Voice* (incomplete here); its reference is dropped through the shared
-    // ref-counted Playback::Object base (the {vptr, mu32RefCount} layout both share).
+    // dispose sequence on *(this+0x38). Playback::Voice derives from the ONE
+    // Playback::Object since the wave-3 fold, so this is a real derived->base
+    // conversion now (was a reinterpret pun over an incomplete type).
     if (Playback::Voice* lpVoice = mVoice.GetVoiceObject())
     {
-        Playback::Object* lpVoiceObj = reinterpret_cast<Playback::Object*>(lpVoice);
+        Playback::Object* lpVoiceObj = static_cast<Playback::Object*>(lpVoice);
         CGS_ASSERT(lpVoiceObj->GetRefCount() > 0, "mu32RefCount > 0");
         lpVoiceObj->Release();
         if (lpVoiceObj->GetRefCount() == 0)

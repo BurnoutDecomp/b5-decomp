@@ -29,10 +29,10 @@
 //   FindOrStealAVoice(const PresentationEntry&) @ 0x826D2AD8  (DWARF cpp:485)
 //   `vector deleting destructor'                @ 0x826E78A8  (compiler-synthesised)
 //   `vector deleting destructor'`adjustor{4}'   @ 0x826E7728  (compiler-synthesised)
-// The two Find* helpers read the per-slot state word (slot+0x4C, inside the embedded
-// VoiceWrapper) and the stored PresentationEntry (slot+0x58) store-for-store through a
-// u8* cursor at their X360-attested byte offsets (rule #4) -- no manager-subtree header
-// is pulled, so no ODR collision -- and call CgsSound::Logic::VoiceWrapper::Release.
+// The two Find* helpers read the per-slot state word (console slot+0x4C == the
+// wrapper's named miState) and the stored PresentationEntry (slot+0x58 ==
+// AgingVoice::mDataEntry) BY NAME (2026-08-25 wave 4; the u8*-cursor walk is
+// retired) and call CgsSound::Logic::VoiceWrapper::Release.
 //
 // FLAG (shape vs full surface): the full DWARF member set (mau8DataOffsets[14],
 // mau8DataEnds[14], mStreamParams (VoiceWrapper::CreateParams), mActions
@@ -78,18 +78,21 @@ struct PresentationEffect : public BrnEffectObject,
         u8  mu8MixerOutput;  // +0x19 (:195)
     };
 
-    // DWARF BrnPresentationEffect.h:208. One aging voice slot (X360 stride 0x80). MINIMAL:
-    // only the two per-slot ctor effects the asm attests (mu16Age=0 @slot+0x00; embedded
-    // VoiceWrapper ctor @slot+0x04) are materialised BY NAME. The DWARF-listed mDataEntry
-    // (PresentationEntry) + mfTimeSinceLastTick are DEFERRED (un-homed types); the 0x80
-    // stride is an X360 fact NOT reproduced as padding here (offsets not static_asserted).
-    // The Find* loop reaches mDataEntry through the slot at the attested byte offset.
+    // DWARF BrnPresentationEffect.h:208. One aging voice slot (X360 stride 0x80 ==
+    // mu16Age @+0x00 + VoiceWrapper @+0x04 (console 0x50, ends +0x54) + the stored
+    // PresentationEntry @+0x58 (u64-aligned) + mfTimeSinceLastTick -- COMPLETED
+    // 2026-08-25 wave 4 (the two formerly-DEFERRED members are placeable now that
+    // VoiceWrapper's real span is settled; the Find* bodies read them BY NAME).
     struct AgingVoice
     {
-        AgingVoice() : mu16Age(0), mVoice() {}   // asm: sth 0,slot+0 ; bl VoiceWrapper(slot+4)
-        u16                           mu16Age;    // slot+0x00 (attested)
-        CgsSound::Logic::VoiceWrapper mVoice;     // slot+0x04 (attested; ctor tail-called)
-        // FLAG: PresentationEntry mDataEntry + f32 mfTimeSinceLastTick DEFERRED (un-homed).
+        AgingVoice() : mu16Age(0), mVoice(), mDataEntry(), mfTimeSinceLastTick(0.0f) {}
+                                // asm: sth 0,slot+0 ; bl VoiceWrapper(slot+4); the entry/
+                                // timer zero-seed is the enclosing ctor's leaf zero region.
+        u16                           mu16Age;             // slot+0x00 (attested)
+        CgsSound::Logic::VoiceWrapper mVoice;              // slot+0x04 (attested; ctor tail-called)
+        PresentationEntry             mDataEntry;          // slot+0x58 (DWARF :208 member; the
+                                                           //  Find* stored-entry compare target)
+        f32                           mfTimeSinceLastTick; // (DWARF :208 member)
     };
 
     PresentationEffect();          // @ 0x826E7628
