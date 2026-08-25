@@ -35,7 +35,7 @@
 
 #include "rw/audio/core/EaXmaDec.h"
 
-#include "SDKs/EATech/eathread/eathread_mutex.h" // EA::Thread::Mutex (Lock / Unlock)
+#include <eathread/eathread_mutex.h> // vendor EA::Thread::Mutex (see the System.cpp vendor-mutex note)
 
 #include <cstddef> // offsetof
 #include <cstring> // memset

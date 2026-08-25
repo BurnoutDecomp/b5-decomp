@@ -3,6 +3,13 @@
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h" // AddMonitor (START stage)
 #include "GameShared/GameClasses/Sound/CgsTestBedAllocator.h"            // CgsSound::TestBed::Allocator (the four carve globals)
 #include "GameShared/GameClasses/System/PC/CgsStreamHeadersPC.h"         // StreamHeadersPC::Preload (the REGISTRY_LOAD stage's data half)
+#include "GameSource/Resource/SharedIO/BrnGameDataAllocatorList.h"       // AllocatorList (the bank carves)
+#include "rw/rwcore_general_alloc.h"                                     // rw::core::GeneralResourceAllocator (bank 0x18/0x19)
+#include "rw/audio/core/PlugIn.h"                                        // rw::audio::core::System (CreateInstance/Lock/...)
+#include "SDKs/Csis/CsisSystem.h"                                        // Csis::System::SetAllocator / Init
+#include "GameShared/GameClasses/Sound/Playback/Plugins/Streaming/internal/sndplayer1shared.h" // spPathPrefix
+#include "coreallocator/icoreallocator_interface.h"                      // EA::Allocator::ICoreAllocator (the bridge base)
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"               // gpDebugPrint (bring-up trace)
 
 // BrnSound::Module::RootSoundModule -- see the header. Reconstructed from BURNOUT_X360_ARTIST.XEX
 // (ctor 0x827E4808, Construct 0x826AF350, Prepare 0x826FABF8), cross-checked against the DecFIGS
@@ -32,7 +39,62 @@ namespace
     CgsSound::TestBed::Allocator gCsisTestBedAlloc("Csis", 0);
     CgsSound::TestBed::Allocator gPlaybackTestBedAlloc("Playback", 0);
     CgsSound::TestBed::Allocator gLogicTestBedAlloc("Logic", 0);
+
+    // -----------------------------------------------------------------------------------------
+    // FLAG [host interface seam, 2026-08-25 faithful-audio-engine phase A4]: on the console
+    // rw::IResourceAllocator's vtable HEAD is ICoreAllocator-shaped (rwcore.pdb
+    // IResourceAllocator_vtbl: {dtor, Alloc, Alloc, Free, ...}) -- i.e. the ONE testbed object
+    // serves both the rw DoAllocate face and the ICoreAllocator face System::CreateInstance
+    // consumes. The host rwcore_structs.h models the interfaces separately, so this adapter
+    // presents the testbed through the ICoreAllocator face; every allocation still flows
+    // through the testbed's tracked DoAllocate (guards/history intact). Free is the
+    // IResourceAllocator::Free default (a no-op on the host testbed) -- the engine frees only
+    // on teardown/failure paths, FLAG'd as a host leak-on-teardown until the testbed models it.
+    // -----------------------------------------------------------------------------------------
+    struct RwacCoreAllocatorBridge : public EA::Allocator::ICoreAllocator
+    {
+        explicit RwacCoreAllocatorBridge(CgsSound::TestBed::Allocator* lpTestBed)
+            : mpTestBed(lpTestBed) {}
+
+        virtual void* Alloc(size_t nSize, const char* pName, unsigned int nFlags)
+        {
+            return Alloc(nSize, pName, nFlags, 16, 0);
+        }
+
+        virtual void* Alloc(size_t nSize, const char* pName, unsigned int /*nFlags*/,
+                            unsigned int nAlignment, unsigned int /*nAlignmentOffset*/)
+        {
+            rw::ResourceDescriptor lDescriptor;
+            for (u32 lu = 0; lu < 4; ++lu)
+            {
+                lDescriptor.m_baseResourceDescriptors[lu].m_size      = 0;
+                lDescriptor.m_baseResourceDescriptors[lu].m_alignment = 1;
+            }
+            lDescriptor.m_baseResourceDescriptors[0].m_size      = static_cast<u32>(nSize);
+            lDescriptor.m_baseResourceDescriptors[0].m_alignment = nAlignment ? nAlignment : 16;
+
+            rw::IResourceAllocator* lpBase = mpTestBed;   // the tracked DoAllocate path
+            rw::Resource lResource = lpBase->DoAllocate(lDescriptor, pName ? pName : "Rwac");
+            return lResource.m_baseResources[0];
+        }
+
+        virtual void Free(void* lpBlock, size_t /*nSize*/)
+        {
+            rw::IResourceAllocator* lpBase = mpTestBed;
+            lpBase->Free(lpBlock, 0);   // host default no-op (see the FLAG above)
+        }
+
+        CgsSound::TestBed::Allocator* mpTestBed;
+    };
+
+    RwacCoreAllocatorBridge gRwacCoreBridge(&gRwacTestBedAlloc);
 }
+
+// The Csis mutex thunks the hooks below forward to (rw::audio::core, System.cpp).
+namespace rw { namespace audio { namespace core {
+    void CsisMutexLock();
+    void CsisMutexUnlock();
+} } }
 
 namespace BrnSound
 {
@@ -40,6 +102,27 @@ namespace Module
 {
     // DWARF BrnRootSoundModule.cpp:133 (X360 dword_82FFB818).
     s32 RootSoundModule::msiMutexLockCount = 0;
+
+    // The Csis mutex callbacks the RWAC stage installs into mpSystem's lock hooks
+    // (+0x40/+0x44/+0x3C). Bodied 2026-08-25, faithful-audio-engine phase A4:
+    //   MutexLockFn @0x82682A20:     bl CsisMutexLock ; ++dword_82FFB818
+    //   MutexUnlockFn (ICF-folded on X360; PS3 0x8D0570 installs it @ +0x44):
+    //                                bl CsisMutexUnlock ; --dword_82FFB818
+    //   MutexIsLockedFn @0x82682A68: return dword_82FFB818 > 0
+    void RootSoundModule::MutexLockFn()
+    {
+        rw::audio::core::CsisMutexLock();
+        ++msiMutexLockCount;
+    }
+    void RootSoundModule::MutexUnlockFn()
+    {
+        rw::audio::core::CsisMutexUnlock();
+        --msiMutexLockCount;
+    }
+    bool RootSoundModule::MutexIsLockedFn()
+    {
+        return msiMutexLockCount > 0;
+    }
 
     // 0x827E4808. The full X360 body:
     //   *this = &off_820CE500;            base ModuleSingleBuffered subobject ctor -> installs the
@@ -149,28 +232,74 @@ namespace Module
             meReleaseStage = E_RELEASESTAGE_SELF;
             // fall through
         case E_PREPARESTAGE_RWAC:
+        {
             mePrepareStage = E_PREPARESTAGE_RWAC;
-            // [gated] the RWAC + Csis bring-up. X360 body (PS3 names in brackets):
-            //   * carve bank 0x18 from lpAllocatorList (GetRWGeneralResource 0x823F3F98), put the
-            //     linear heap in no-coalesce mode (rw::LinearResourceAllocator::GetLinearHeapBase
-            //     + EA::Allocator::GeneralAllocator::SetOption(1,0)), SetAllocator(gRwacTestBed-
-            //     Alloc); rw::audio::core::System::CreateInstance(&gRwacTestBedAlloc, 196608) ->
-            //     mpSystem (assert "mpSystem", cpp:336); gRwacTestBedAlloc.mbTestRwac = 1.
-            //   * carve bank 9, build the "CsisPrivateHeap" sub-allocator (GetResourceDescriptor
-            //     0x2000/4 + the allocator's virtual CreateAllocator + Initialize), SetAllocator
-            //     (gCsisTestBedAlloc), Csis::System::SetAllocator + Csis::System::Init.
-            //   * rw::audio::core::System::VectorToCsisMutex(mpSystem); install MutexLockFn/
-            //     MutexUnlockFn/MutexIsLockedFn at mpSystem+0x40/+0x44/+0x3C; Lock(); the DAC
-            //     watermark *(mpSystem+0x10CC) = 100.0; SetThreadProcessor(4); Unlock().
-            //   * rw::audio::core::SndPlayer1_CgsStreamMod::spPathPrefix = "SOUND\\STREAMS\\".
-            // Blocked on: the rw::audio::core System/runtime reconstruction (no vendor System.h;
-            // bodies are console-only middleware, no PC lib) + Csis::System::SetAllocator + a
-            // populated AllocatorList (the game-data CreateAllocators is still the allocator
-            // gate). Until then this stage completes without creating the audio system
-            // (mpSystem stays null -- the boot's audio output runs through the PC movie/XAudio2
-            // path instead).
+            // The RWAC + Csis bring-up, REAL since 2026-08-25 (faithful-audio-engine phase
+            // A4 -- the vendor System.cpp + Csis::System::SetAllocator + the mounted
+            // rw/audio subset retired the old "console-only middleware" gate). X360 order
+            // preserved; two asm-verified corrections vs the old comment recipe:
+            // Init(SetAllocator(...)) is ONE expression, and VectorToCsisMutex runs BEFORE
+            // the three hook stores (the stores overwrite what it vectored).
+
+            // * carve bank 0x18 (GetRWGeneralResource 0x823F3F98) -> gRwacTestBedAlloc.
+            //   [deferred slice] the console also puts the carve's linear heap in
+            //   no-coalesce mode first (rw::LinearResourceAllocator::GetLinearHeapBase
+            //   @0x82BBC488 + EA::Allocator::GeneralAllocator::SetOption(1,0) @0x82B4DF60)
+            //   -- a heap-tuning step whose EA-GeneralAllocator plumbing is not homed on
+            //   the host GeneralResourceAllocator yet; behaviourally inert for bring-up.
+            rw::core::GeneralResourceAllocator* lpRwacBank =
+                lpAllocatorList->GetRWGeneralResourceAllocator(0x18);
+            // field_0x0 = the +0 IResourceAllocator interface subobject (the host
+            // composition stand-in for the console IS-A base; established pattern).
+            gRwacTestBedAlloc.SetAllocator(&lpRwacBank->field_0x0);
+            gRwacTestBedAlloc.SetVerbose(KB_TESTBED_ALLOCATORS_VERBOSE);
+            gRwacTestBedAlloc.SetSanityCheck(KB_TESTBED_ALLOCATORS_SANITY);
+
+            // * rw::audio::core::System::CreateInstance(&gRwacTestBedAlloc, 0x30000) ->
+            //   mpSystem (assert "mpSystem", cpp:336). The bridge presents the testbed
+            //   through the ICoreAllocator face (see RwacCoreAllocatorBridge above);
+            //   byte_82FFBF89 = 1 == the testbed's rwac-locked test toggle.
+            mpSystem = rw::audio::core::System::CreateInstance(&gRwacCoreBridge, 196608);
+            CGS_ASSERT(mpSystem != 0, "mpSystem");
+            gRwacTestBedAlloc.EnableRwacLockedTest(true);
+
+            // Bring-up trace (host log line; the console has no equivalent print).
+            *CgsDev::Log::gpDebugPrint << "[rwac] System::CreateInstance -> "
+                                       << (mpSystem ? "LIVE" : "NULL")
+                                       << " (bank 0x18 carve "
+                                       << (lpRwacBank ? "present" : "MISSING") << ")\n";
+
+            // * the Csis side: Init(SetAllocator(&gCsisTestBedAlloc)) -- one expression.
+            //   [deferred slice] the console first carves bank 9 into a dedicated
+            //   "CsisPrivateHeap" sub-allocator (GetResourceDescriptor 0x2000/4 + the
+            //   bank allocator's virtual CreateAllocator + Initialize) and backs
+            //   gCsisTestBedAlloc with it; the host GeneralResourceAllocator does not
+            //   model the sub-allocator factory yet, and the committed Csis slice never
+            //   allocates (Subscribe/Lock only), so gCsisTestBedAlloc stays un-backed
+            //   here -- the wiring shape (SetAllocator's return feeding Init) is the
+            //   X360's.
+            gCsisTestBedAlloc.SetVerbose(KB_TESTBED_ALLOCATORS_VERBOSE);
+            gCsisTestBedAlloc.SetSanityCheck(KB_TESTBED_ALLOCATORS_SANITY);
+            Csis::System::SetAllocator(&gCsisTestBedAlloc);   // X360: Init(SetAllocator(&g)) --
+            Csis::System::Init();                             // SetAllocator's return feeds Init
+
+            // * VectorToCsisMutex FIRST, then the three hook installs overwrite what it
+            //   vectored (the X360 store order); then the locked tuning pair.
+            rw::audio::core::System::VectorToCsisMutex(mpSystem);
+            mpSystem->mpfnLock     = &RootSoundModule::MutexLockFn;
+            mpSystem->mpfnUnlock   = &RootSoundModule::MutexUnlockFn;
+            mpSystem->mpfnIsLocked = &RootSoundModule::MutexIsLockedFn;
+            rw::audio::core::System::Lock(mpSystem);
+            mpSystem->mfCpuLoadPercent = 100.0f;   // *(mpSystem+0x10CC), the DAC watermark
+            rw::audio::core::System::SetThreadProcessor(mpSystem, 4);
+            rw::audio::core::System::Unlock(mpSystem);
+
+            // * the stream-file path prefix (X360 dword_82FFBA08).
+            rw::audio::core::SndPlayer1_CgsStreamMod::spPathPrefix = "SOUND\\STREAMS\\";
+
             meReleaseStage = E_RELEASESTAGE_RWAC;
             // fall through
+        }
         case E_PREPARESTAGE_PLAYBACK_MODULE:
             mePrepareStage = E_PREPARESTAGE_PLAYBACK_MODULE;
             // [gated] X360: carve bank 9 -> gPlaybackTestBedAlloc; rw::audio::core::System::Lock
@@ -209,12 +338,13 @@ namespace Module
         case E_PREPARESTAGE_LOGIC_MODULE:
         {
             mePrepareStage = E_PREPARESTAGE_LOGIC_MODULE;
-            // [gated] the allocator carve: X360 carves bank 0x19 from lpAllocatorList, puts the
-            // linear heap in no-coalesce mode and points gLogicTestBedAlloc at it
-            // (SetAllocator). Blocked on a populated AllocatorList (allocator gate);
-            // gLogicTestBedAlloc is still handed to the logic module below so the wiring shape
-            // is the X360's.
-            (void)lpAllocatorList;
+            // The allocator carve, REAL since 2026-08-25 (phase A4): bank 0x19 ->
+            // gLogicTestBedAlloc. [deferred slice] the console's no-coalesce heap tuning
+            // is elided here for the same reason as the RWAC stage's (see above).
+            gLogicTestBedAlloc.SetAllocator(
+                &lpAllocatorList->GetRWGeneralResourceAllocator(0x19)->field_0x0);
+            gLogicTestBedAlloc.SetVerbose(KB_TESTBED_ALLOCATORS_VERBOSE);
+            gLogicTestBedAlloc.SetSanityCheck(KB_TESTBED_ALLOCATORS_SANITY);
 
             // The logic module's own prepare (X360: virtual, this+0x280 vtable +0x58 =
             // SoundLogicModule::Prepare 0x82703C18) with the logic allocator, the ROOT input

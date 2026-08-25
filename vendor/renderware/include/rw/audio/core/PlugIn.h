@@ -293,13 +293,15 @@ public:
     // (the asm dispatches through it directly), not a flag word -- every call site passes 0.
     static void Free(System *self, void *mem, EA::Allocator::ICoreAllocator *allocatorOverride);
 
-    // Allocate `size` bytes through the System's ICoreAllocator (slot +0x14), tagged with
-    // the `name` debug string and aligned to `align`. `flags` is the allocator flag word.
-    // Additive counterpart to Free; the body lives in the System allocator TU (mangled
-    // ?Alloc@System@core@audio@rw@@). Grounded in CMpegBase::AllocateSynth @0x82B8BFF0,
-    // which calls rw::audio::core::System::Alloc(off_83271928, size, "PolySynthHistoryF",
-    // 16, 0) with the argument order (self=r3, size=r4, name=r5, align=r6, flags=r7).
-    static void *Alloc(System *self, u32 size, const char *name, u32 align, s32 flags);
+    // Allocate `size` bytes through `allocatorOverride`, or the System's ICoreAllocator
+    // (slot +0x14) when null -- the exact allocate counterpart of Free. Bodied in
+    // System.cpp from the XEX-decoded @0x82B6BE18 (2026-08-25; the r7 argument the old
+    // declaration guessed to be "flags" is the allocator override, tested for null just
+    // like Free's -- the real flag word is the constant 1, alignment offset 0). Callers:
+    // CMpegBase::AllocateSynth @0x82B8BFF0, EaXmaDec::AllocateResources @0x82B8F580
+    // (both pass 0 -> the System's own allocator).
+    static void *Alloc(System *self, u32 size, const char *name, u32 align,
+                       EA::Allocator::ICoreAllocator *allocatorOverride);
 
     // Unlink `voice` from the System's expulsion-candidate bookkeeping. The body lives in
     // the System TU (mangled ?RemoveVoiceFromExpulsionCandidateList@System@core@audio@rw@@);

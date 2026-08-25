@@ -101,14 +101,17 @@ namespace TestBed
         void SetDebugAllocString(const char* lpcString);
         void ClearDebugAllocString();
 
-        // CgsTestBedAllocator.h:229 / :236
-        void SetSanityCheck(bool lbEnable);
-        void SetVerbose(bool lbEnable);
+        // CgsTestBedAllocator.h:229 / :236 -- header-inline flag setters (the X360
+        // RootSoundModule::Prepare RWAC stage INLINES them as direct stb stores into
+        // the debug-toggle bytes: +0x0C sanity / +0x0D verbose / +0x11 rwac-locked,
+        // proving the inline-accessor shape; bodied 2026-08-25 phase A4).
+        void SetSanityCheck(bool lbEnable) { mbSanityCheck = lbEnable; }
+        void SetVerbose(bool lbEnable)     { mbVerbose = lbEnable; }
         // CgsTestBedAllocator.h:243 - install the backing allocator (asserts if already set).
         void SetAllocator(rw::IResourceAllocator* lpAllocator);
-        // CgsTestBedAllocator.h:254 / :262
-        void EnableThreadSafety(bool lbEnable);
-        void EnableRwacLockedTest(bool lbEnable);
+        // CgsTestBedAllocator.h:254 / :262 -- same header-inline setter shape.
+        void EnableThreadSafety(bool lbEnable)  { mbEnableThreadSafety = lbEnable; }
+        void EnableRwacLockedTest(bool lbEnable) { mbTestRwac = lbEnable; }
         // CgsTestBedAllocator.h:269 / :272 - break when a specific block is allocated/freed.
         void TrapOnAllocate(uintptr_t luAddress);
         void TrapOnFree(uintptr_t luAddress);

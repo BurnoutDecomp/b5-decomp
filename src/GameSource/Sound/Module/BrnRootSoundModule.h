@@ -16,10 +16,10 @@
 // header here would pull the resource-IO cascade into every sound include.
 namespace BrnResource { namespace GameDataIO { class AllocatorList; } }
 
-// Forward declaration: the RWAudio core runtime system (rw::audio::core::System). The
-// vendor rwaudiocore headers do not model System yet (no System.h under
-// vendor/renderware/include/rw/audio/core/), so the member stays pointer-only until the
-// RWAC bring-up stage lands (see EPrepareStage::E_PREPARESTAGE_RWAC below).
+// Forward declaration: the RWAudio core runtime system (rw::audio::core::System; its
+// vendor home is PlugIn.h -- the .cpp includes it for the RWAC bring-up, which is REAL
+// since 2026-08-25, faithful-audio-engine phase A4; this header stays pointer-only to
+// keep the vendor cascade out of every sound include).
 namespace rw { namespace audio { namespace core { class System; } } }
 
 // BrnSound::Module::RootSoundModule : public CgsModule::ModuleSingleBuffered -- the root sound
@@ -55,9 +55,9 @@ namespace Module
         {
             E_PREPARESTAGE_START           = 0,  // AddMonitor("Sound Logic")            [real]
             E_PREPARESTAGE_SELF            = 1,  // ModuleSingleBuffered::Prepare        [real]
-            E_PREPARESTAGE_RWAC            = 2,  // rw::audio::core::System + Csis       [gated]
+            E_PREPARESTAGE_RWAC            = 2,  // rw::audio::core::System + Csis       (REAL, phase A4)
             E_PREPARESTAGE_PLAYBACK_MODULE = 3,  // CgsSound::Playback::Module::Prepare  [gated]
-            E_PREPARESTAGE_LOGIC_MODULE    = 4,  // SoundLogicModule::Prepare + bridges  [real, carve gated]
+            E_PREPARESTAGE_LOGIC_MODULE    = 4,  // SoundLogicModule::Prepare + bridges  [real; carve REAL phase A4]
             E_PREPARESTAGE_RESOURCES       = 5,  // (PrepareOnEnteringGameplay only)
             E_PREPARESTAGE_REGISTRY_LOAD   = 6,  // RootSoundModule::RegistryLoad        [gated]
             E_PREPARESTAGE_DONE            = 7,

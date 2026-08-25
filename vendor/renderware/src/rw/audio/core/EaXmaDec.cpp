@@ -38,9 +38,10 @@
 // =====================================================================================
 
 #include "rw/audio/core/EaXmaDec.h"
+#include "rw/audio/core/DecoderRegistry.h" // complete DecoderDesc (the descriptor is DEFINED in this TU)
 
 #include "rw/audio/core/PlugIn.h"                 // rw::audio::core::System (Alloc/PhysicalAlloc/Free)
-#include "SDKs/EATech/eathread/eathread_mutex.h"  // EA::Thread::Mutex / MutexParameters
+#include <eathread/eathread_mutex.h> // vendor EA::Thread::Mutex (see the System.cpp vendor-mutex note)
 #include "SDKs/XAudio/XmaHardware.h"              // XMACreateContext / XMADisableContext / XMAReleaseContext
 
 #include <cstdint> // uintptr_t
@@ -75,12 +76,19 @@ u32 EaXmaDec::suFreeCount = 0;                            // dword_8327A320
 // System TU; the pool allocates and frees through it (Decoder.cpp/CMpegBase.cpp precedent).
 extern "C" System *off_83271928;
 
-// This codec's static registration descriptor (off_82F89394, .data). Recovered contents
-// (scratchpad/waveG/eaxma_dump.txt): { +0x00 GetSize, +0x04 CreateInstanceEvent,
-// +0x08 ReleaseEvent, +0x0C DecodeEvent, +0x10 mpNext = 0, +0x14 muId = 0x45586D30 'EXm0' }.
-// GetDecoderDesc only returns its address and DecoderDesc is an incomplete type here, so no
-// contents are defined (nor fabricated) -- same pattern as Xas1Dec.cpp's off_82F8A544.
-extern "C" DecoderDesc off_82F89394;
+// This codec's static registration descriptor (off_82F89394, .data). DEFINED here
+// (2026-08-25, faithful-audio-engine phase A2 -- the mounted build links it). XEX
+// recovery (big-endian .data @0x82F89394):
+//   +0x00 0x82B93C78 EaXmaDec::GetSize            +0x04 0x82B93C98 CreateInstanceEvent
+//   +0x08 0x82B8F7C0 ReleaseEvent                 +0x0C 0x82B96380 DecodeEvent
+//   +0x10 mpNext = 0                              +0x14 muId = 0x45586D30 'EXm0'
+// FLAG (host callback slots deferred): the four header words are GUEST function
+// addresses; the host must not store guest addresses in pointer slots, and NO
+// reconstructed code dispatches through the descriptor header yet (registration
+// touches only mpNext/muId). The header stays the opaque zeroed span until the
+// descriptor-dispatch consumer is reconstructed and types the slots to the host
+// functions named above.
+extern "C" DecoderDesc off_82F89394 = { {0}, 0, 0x45586D30u /* 'EXm0' */ };
 
 // -------------------------------------------------------------------------------------
 // The shared XMA hardware buffer geometry, in bytes. Unlike a C++ record stride these are

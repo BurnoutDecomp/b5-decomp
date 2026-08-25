@@ -22,8 +22,16 @@
 #include "rw/audio/core/Profiler.h"     // rw::audio::core::Profiler / KPF_ProfilerVTable
 #include "rw/audio/core/DecoderRegistry.h" // DecoderRegistry (Release frees it via its +0x0C back-pointer)
 #include "rw/audio/core/EaXmaDec.h"        // EaXmaDec::DeallocateResources (nullary; the XMA contexts)
-#include "SDKs/EATech/eathread/eathread_mutex.h" // EA::Thread::Mutex
-#include "SDKs/EATech/eathread/BrnEAThreadX360.h" // EA::Thread::ThreadSleep(const u32 *)
+// (2026-08-25, faithful-audio-engine phase A: the SDKs/EATech X360-aligned
+// eathread_mutex.h is DECLARATION-ONLY -- its Mutex bodies have no TU -- while the
+// forked VENDOR EAThread is the project's one real EA::Thread::Mutex [user decision
+// 2026-06-24: fork the vendor and edit toward X360, never two mutex sets in one
+// link]. This TU therefore uses the vendor header; the API surface used here --
+// Mutex(params, bool) / Init / Lock(kTimeoutNone default) / Unlock -- is identical.
+// BrnEAThreadX360.h is NOT includable beside the vendor headers (rival
+// MutexParameters/ThreadId definitions), so the one X360-aligned overload this TU
+// calls is declared locally below.)
+#include <eathread/eathread_mutex.h>    // EA::Thread::Mutex / MutexParameters (vendor)
 #include "SDKs/Csis/CsisSystem.h"       // Csis::System::Lock/Unlock (the CsisMutex thunk targets)
 #include <intrin.h>                     // __rdtsc (GetCpuCycle PC leaf)
 
@@ -39,6 +47,10 @@
 extern "C" void *XPhysicalAlloc(unsigned long dwSize, unsigned long ulPhysicalAddress,
                                 unsigned long dwAlignment, unsigned long flProtect);
 extern "C" void XPhysicalFree(void *lpAddress);
+
+// The X360-aligned sleep overload (home: SDKs/EATech/eathread/BrnEAThreadX360.{h,cpp});
+// declared locally -- see the vendor-mutex include note above.
+namespace EA { namespace Thread { u32 ThreadSleep(const u32 *lpuMilliseconds); } }
 
 namespace rw
 {
@@ -280,6 +292,24 @@ void *System::PhysicalAlloc(System *self, u32 size, u32 align, u32 protect,
 void System::PhysicalFree(System *self, void *block)
 {
     self->mpfnPhysicalFree(block);
+}
+
+// -------------------------------------------------------------------------------------
+// Alloc @0x82B6BE18 (decoded straight from the XEX, 2026-08-25 -- the per-function
+// export is missing for it):
+//   mr r11, r7 ; cmplwi r11,0 ; bne +8 ; lwz r11, 0x14(r3)   ; override or mpAllocator
+//   lwz r10, 0(r11) ; mr r7, r6 ; li r8, 0 ; li r6, 1        ; args: flags=1, alignOffset=0
+//   mr r3, r11 ; lwz r10, 4(r10) ; mtctr ; bctr              ; tail-call vtbl Alloc slot
+// i.e. the exact allocate counterpart of Free below: the 5th parameter is an
+// ALLOCATOR OVERRIDE (the PlugIn.h declaration used to guess "flags"); the real
+// flag word is the constant 1, the alignment offset the constant 0.
+// -------------------------------------------------------------------------------------
+void *System::Alloc(System *self, u32 size, const char *name, u32 align,
+                    EA::Allocator::ICoreAllocator *allocatorOverride)
+{
+    EA::Allocator::ICoreAllocator *lpAllocator =
+        allocatorOverride ? allocatorOverride : self->mpAllocator;
+    return lpAllocator->Alloc(size, name, 1, align, 0);
 }
 
 // -------------------------------------------------------------------------------------

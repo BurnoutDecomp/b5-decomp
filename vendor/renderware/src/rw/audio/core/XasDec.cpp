@@ -17,6 +17,7 @@
 // =====================================================================================
 
 #include "rw/audio/core/XasDec.h"
+#include "rw/audio/core/DecoderRegistry.h" // complete DecoderDesc (the descriptor is DEFINED in this TU)
 
 namespace rw
 {
@@ -25,11 +26,14 @@ namespace audio
 namespace core
 {
 
-// This codec's static registration descriptor (off_82F8A528 in the X360 rodata). Its
-// bytes (name / GUID / factory callbacks) are not recovered here; GetDecoderDesc only
-// returns its address, and DecoderDesc is an incomplete type, so no contents are needed
-// (nor fabricated). Same pattern as the foreign statics reached from Xas1Dec.cpp.
-extern "C" DecoderDesc off_82F8A528;
+// This codec's static registration descriptor (off_82F8A528, .data). DEFINED here
+// (2026-08-25, faithful-audio-engine phase A2). XEX recovery (big-endian):
+//   +0x00 0x82B91E70 XasDec::GetSize      +0x04 0x82B91EA0 XasDec::CreateInstanceEvent
+//   +0x08 0 (no ReleaseEvent)             +0x0C 0x82B94118 XasDec::DecodeEvent
+//   +0x10 mpNext = 0                      +0x14 muId = 0x58617330 'Xas0'
+// FLAG (host callback slots deferred): see the EaXmaDec.cpp descriptor note --
+// the header stays the opaque zeroed span until the dispatch consumer lands.
+extern "C" DecoderDesc off_82F8A528 = { {0}, 0, 0x58617330u /* 'Xas0' */ };
 
 // -------------------------------------------------------------------------------------
 // CreateInstanceEvent @0x82B91EA0
