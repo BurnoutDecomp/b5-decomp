@@ -778,6 +778,44 @@ InputBuffer_PreScene::SetActivePaybackAggressor(EActiveRaceCarIndex leAggressor)
 
 // ---- InputBuffer_PostScene --------------------------------------------------
 
+// ====================================================================================
+// InputBuffer_PostScene::Construct   X360 0x822EA5E8   [crash exit 2026-08-25]
+//
+//   *this = 1                                       -- IOBuffer::Construct (the status bit)
+//   RaceCarCrashCompleteEvent_10_::Construct(this+8) -- mCrashInterface's event queue
+//   then the inlined TrafficToRaceCarInterface_PreScene init over this+192..this+732
+//   (the 7 `std 0x700000000` bit-array words, the two Array counts, the stompee count, the
+//    static-vehicle count and the four 0.0f distances) -- i.e. that interface's own Construct,
+//   which this tree already de-inlines by name in BrnTrafficToRaceCarInterface.h.
+//
+// ⭐⭐ THIS WAS MISSING, AND IT WAS THE SECOND HALF OF THE SAME DEFECT AS THE CRASH IO BUFFERS'.
+// The buffer's Construct() call from CgsIOBufferStack::CreateIOBuffer<T> bound to the BASE
+// CgsModule::IOBuffer::Construct, so mCrashInterface's EventQueue had mpEvents == nullptr.
+// It was harmless for as long as SetCrashInterface's SOURCE was always empty -- which it was,
+// because the crash module was inert. The FIRST frame this wave posted a real
+// RaceCarCrashCompleteEvent, SetCrashInterface's Clear()+Append() wrote through the null and the
+// process took an access violation inside memcpy.
+// ⚠️ MEASURED: "access violation WRITING 0x0" at
+//   memcpy +0x131 <- InputBuffer_PostScene::SetCrashInterface +0xEE
+//                 <- WorldModule::EntityModulePostSceneUpdate
+// immediately after the log line "[crash-exit] CRASH COMPLETE posted for active race car 0".
+// ⭐ The general shape, twice in one wave: AN UNCONSTRUCTED BUFFER IS INVISIBLE UNTIL SOMETHING
+// FINALLY PUTS DATA IN IT. Un-gating a producer is what creates the fault, not what reveals it.
+void
+InputBuffer_PostScene::Construct()
+{
+    CgsModule::IOBuffer::Construct();
+
+    // The crash interface's first (and only) member is the crash-complete ring; the console
+    // reaches it as `this + 8`, which is &mCrashInterface, and SetCrashInterface above already
+    // documents that aliasing.
+    typedef CgsModule::EventQueue<BrnWorld::CrashIO::RaceCarCrashCompleteEvent, 10>
+        RaceCarCrashCompleteEventQueue;
+    reinterpret_cast<RaceCarCrashCompleteEventQueue*>(&mCrashInterface)->Construct();
+
+    mTrafficToRaceCarInterface_PreScene.Construct();
+}
+
 // X360 0x827ACA40 (W, :344) -- publishes the crash module's race-car crash-complete
 // events into this buffer's CrashInterface. The X360 body write-asserts, INLINES
 // RaceCarOutputInterface::Clear() (miLength = 0 on the first-member event queue) and
@@ -800,6 +838,20 @@ InputBuffer_PostScene::SetCrashInterface(const CrashInterface* lpCrashInterface)
 
     lrDestQueue.Clear();                 // inlined RaceCarOutputInterface::Clear() -> miLength = 0
     lrDestQueue.Append(lrSourceQueue);   // 0x827A7D70 BaseEventQueue<...>::Append
+}
+
+// (DWARF :343) -- the READ side of the pair above. [crash exit 2026-08-25] declared since this
+// buffer landed and never defined, because until this wave NOTHING READ IT: the crash module's
+// RaceCarCrashCompleteEvent ring arrived here every frame and was dropped on the floor.
+// Its first consumer is RaceCarEntityModule::ProcessRaceCarCrashCompleteEvents.
+// The console folds it into that caller (`bl InputBuffer_Po` @0x822F3FFC returns the interface
+// address directly), so there is no separate out-of-line symbol to cite -- it is a read-lock
+// tripwire plus &mCrashInterface, the exact mirror of SetCrashInterface's write side.
+const InputBuffer_PostScene::CrashInterface*
+InputBuffer_PostScene::GetCrashInterface() const
+{
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+    return &mCrashInterface;
 }
 
 // X360 0x827BAF30 (W, :347) -- publishes the pre-scene traffic->racecar interface into

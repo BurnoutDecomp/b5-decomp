@@ -28,10 +28,14 @@
 #include "GameSource/World/CrashModule/SharedIO/BrnCrashModuleRaceCarIOInterfaces.h" // RaceCarOutputInterface (the crash-complete ring)
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleOutputInterface.h"    // BrnPhysics::Vehicle::VehicleOutputInterface + VehicleManagerOutputInterface
 #include "GameShared/GameClasses/System/Timer/CgsTimerStatusInterface.h"             // CgsSystem::TimerStatusInterface
+// [crash exit 2026-08-25] InputBuffer_PreScene now holds the REAL RCEntityActiveRaceCarOutputInterface
+// by value (it used to be a console-sized opaque blob), so its home header is a hard dependency.
+#include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h"
 
 namespace BrnWorld
 {
-    namespace RaceCarEntityModuleIO { struct RCEntityActiveRaceCarOutputInterface; }   // BrnRaceCarEntityModuleOutputInterface.h
+    // (RCEntityActiveRaceCarOutputInterface is now held BY VALUE by InputBuffer_PreScene, so its
+//  real header is included below rather than forward-declared.)
 
 namespace CrashIO
 {
@@ -105,13 +109,22 @@ namespace CrashIO
     {
         // Blind-copied foreign types (own homes elsewhere); correctly-sized opaque storage.
         struct VehicleDriverInterfaceStorage { unsigned char maBytes[0x14B0]; };   // 5296
-        struct ActiveRaceCarInterfaceStorage { unsigned char maBytes[0x28F0]; };   // 10480
         struct GameActionQueueStorage        { unsigned char maBytes[0x3410]; };   // 13328
 
         // ---- read-side getters (read-lock tripwire "Not locked for reading") ----
         const CgsSystem::TimerStatusInterface* GetTimerStatusInterface() const;    // 0x827BB288 -> +0x4
         const NetworkInputInterface*           GetNetworkInputInterface() const;   // 0x827BB330 -> +0x40
         const VehicleDriverInterfaceStorage*   GetVehicleDriverInterface() const;  // 0x827BB3D8 -> +0x3CD0 (ex-GetReadInterface)
+        // 0x827BB480 -> +0x5180. THE crash module's window onto the race cars: TickCrashes,
+        // ClearupCrashes and PreSceneUpdate all reach the player index, the per-car RaceCarState
+        // and the per-car flags word through this one getter.
+        const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface*
+            GetActiveRaceCarInterface() const;                                     // 0x827BB480 -> +0x5180
+        // +0xAE80. A header inline on the console: TickCrashes folds it to a bare
+        // `lbzx r11, lpInput, 0xAE80` (@0x827C66A8) with no call, and
+        // BridgeInputToCrashModule writes it with a bare store (@0x827ADEF8).
+        bool GetPlayerPressingBoost() const { return mbPlayerPressingBoost; }
+        void SetPlayerPressingBoost(bool lbPressing) { mbPlayerPressingBoost = lbPressing; }
 
         // ---- write-side setters (write-lock tripwire "Not locked for writing") ----
         void SetTimerStatusInterface(const CgsSystem::TimerStatusInterface* lpInterface);   // 0x827A20A8
@@ -122,6 +135,16 @@ namespace CrashIO
         // the interface type (home: BrnRaceCarEntityModuleOutputInterface.h).
         void SetActiveRaceCarInterface(
             const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpInterface); // 0x827A2270
+        // ⭐⭐ [crash exit 2026-08-25] mActiveRaceCarInterface WAS `ActiveRaceCarInterfaceStorage`
+        // -- a 10480-byte OPAQUE BLOB copied in with a raw memcpy of the CONSOLE's size. That is
+        // exactly the [[silent-drop-stubs]] shape and it is worse than inert: it is a WRONG-SIZE
+        // copy of a host object. RCEntityActiveRaceCarOutputInterface holds pointers and
+        // ResourceHandles, so its host sizeof is NOT 0x28F0; the memcpy read past (or short of)
+        // the source, and every field the crash module wants -- mePlayerActiveRaceCarIndex,
+        // maRaceCarStates[i], maxRaceCarFlags[i] -- sits at a HOST offset the blob cannot express.
+        // The member is now the real committed type, the copy goes through the interface's own
+        // operator= (already bodied in BrnRCEntityActiveRaceCarOutputInterface.cpp:105, and it is
+        // what the console inlines here), and the crash module reads it BY NAME.
         void SetGameActionQueue(const GameActionQueueStorage* lpQueue);                     // 0x827A2328
 
         static void _AssertLayout();
@@ -130,7 +153,8 @@ namespace CrashIO
         CgsSystem::TimerStatusInterface mTimerStatusInterface;    // X360 +0x4    (48B POD)
         NetworkInputInterface           mNetworkInputInterface;   // X360 +0x40   (align-16; widens on host)
         VehicleDriverInterfaceStorage   mVehicleDriverInterface;  // X360 +0x3CD0
-        ActiveRaceCarInterfaceStorage   mActiveRaceCarInterface;  // X360 +0x5180
+        BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface
+                                        mActiveRaceCarInterface;  // X360 +0x5180 (widens on host)
         GameActionQueueStorage          mGameActionQueue;         // X360 +0x7A70
         bool                            mbPlayerPressingBoost;    // X360 +0xAE80
     };
@@ -174,6 +198,23 @@ namespace CrashIO
         void SetTrafficInputInterface(const TrafficInputInterface* lpTrafficInputInterface);                       // 0x827AD038
         void SetVehicleOutputInterface(const VehicleOutputInterface* lpVehicleOutputInterface);                    // 0x827AA388
         void SetVehicleManagerOutputInterface(const VehicleManagerOutputInterface* lpVehicleManagerOutputInterface); // 0x827AA438
+
+        // ⭐⭐ [crash exit 2026-08-25] Construct @0x827CEA58. THIS WAS MISSING AND IT WAS FATAL THE
+        // MOMENT THE MODULE WENT LIVE. CgsIOBufferStack::CreateIOBuffer<T> calls T::Construct()
+        // right after placement-new; with no override here that bound to the BASE
+        // CgsModule::IOBuffer::Construct, which only sets the "constructed" status bit. The
+        // embedded VehicleManagerOutputInterface / VehicleOutputInterface / TrafficInputInterface
+        // therefore had UNCONSTRUCTED EventQueues -- mpEvents == nullptr -- and the first frame
+        // the crash bridge ran, VehicleManagerOutputInterface::operator= took its Clear()+Append()
+        // path over a null mpEvents and the process took an access violation inside memcpy.
+        // ⚠️ MEASURED, not theorised: the AV report named
+        //   memcpy +0x131 <- VehicleManagerOutputInterface::operator= +0x397
+        //                 <- WorldModule::EntityModulePostPhysicsUpdate
+        // with "access violation WRITING 0x0000000000000000", preceded by the queue's own two
+        // asserts ("mpEvents != NULL", CgsBaseEventQueue.h:189, and "Base event queue overflow").
+        // ⭐ THE GENERAL LESSON: a buffer whose consumers are ALL gated can carry a missing
+        // Construct indefinitely with nothing to notice -- the defect is created by un-gating.
+        void Construct();
 
         static void _AssertLayout();
 
@@ -254,6 +295,14 @@ namespace CrashIO
         // carries "this race car has finished crashing" to the race-car and prop modules.
         const RaceCarOutputInterface* GetRaceCarOutputInterface() const;   // 0x827A2530 read-lock
         RaceCarOutputInterface*       GetRaceCarOutputInterface();         // 0x827BB720 write-lock
+
+        // ⭐ [crash exit 2026-08-25] Construct @0x827CE9E8, the twin of the InputBuffer_PostPhysics
+        // one above and just as load-bearing: it is what constructs the
+        // EventQueue<RaceCarCrashCompleteEvent,10> that CrashModule::ResetRaceCarFromCrashIndex
+        // AddEvent()s into. Without it that AddEvent hits the queue's own "mpEvents != NULL"
+        // tripwire and the crash-complete event is never posted -- i.e. the crash never ends,
+        // which is the exact symptom this wave exists to remove.
+        void Construct();
 
         static void _AssertLayout();
 

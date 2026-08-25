@@ -249,6 +249,33 @@ public:
     // X360 0x822B8540: the paired global slot's type is E_RACE_CAR_TYPE_PLAYER.
     bool IsPlayer() const;
 
+    // ---- THE CRASH-EXIT SET, landed 2026-08-25 (crash exit wave). Bodies in BrnActiveRaceCar.cpp.
+    // ⚠️ COORDINATION: this header is Nathan's (last touch a545ebc9, 2026-08-24). These four
+    // declarations are purely additive -- no member, no offset, no existing signature is touched.
+    //
+    // ⛔ TWO STALE BANNERS RETIRED BY THESE. BrnRaceCarEntityModule.cpp:915 (PARK 1) said
+    // "ActiveRaceCar::IsDriveableAfterCrash / ::IsDeformationFixedAfterCrash have no declaration
+    // or body anywhere in this tree", and BrnRaceCarEntityModule.cpp:866 said ResetAfterCrash
+    // "the ledger says `reviewed`, the tree has no body". All three are named X360 exports with
+    // full pseudocode + asm and are reconstructed now.
+
+    // X360 0x822D48F8 (88 insns). "After this crash, can the car simply drive away?" False for any
+    // non-PLAYER race-car type, for a wrecked car, for a car whose UP axis has tipped past the
+    // threshold, and for a car whose front ray is occluded while in a game mode.
+    bool IsDriveableAfterCrash() const;
+
+    // X360 0x822BFED8 (52 insns). The same predicate family, inverted and without the orientation
+    // test: "is the deformation considered fixed once this crash ends?"
+    bool IsDeformationFixedAfterCrash() const;
+
+    // X360 0x822BF3A0 (77 insns). Re-seat every piece of crash bookkeeping once a crash is over:
+    // restore body-part visibility, re-arm the invulnerability window, and clear the wreck flags.
+    void ResetAfterCrash(bool lbKeepVerletOffsets);
+
+    // X360 0x822A4E90 (48 insns). Zero all KU_MAX_RACE_CAR_VERLET_POINTS render verlet offsets
+    // (the per-body-part wobble the deformation renderer accumulates).
+    void ResetVerletOffsets();
+
     // X360 0x822A2150: assert IsAttached(), then return mPhysicsState.mbCrashing.
     bool IsCrashing() const;
 

@@ -296,6 +296,31 @@ bool RCEntityActiveRaceCarOutputInterface::IsRaceCarNetwork(EActiveRaceCarIndex 
     return ((maxRaceCarFlags[leActiveRaceCarIndex] >> 3) & 1) != 0;
 }
 
+// ---------------------------------------------------------------------------------------------
+// IsCarInShowtime (DWARF BrnRaceCarEntityModuleOutputInterface.h:276)  [2026-08-25, crash exit]
+//
+// Declared here since the interface landed, never defined -- and CrashModule::TickCrashes is its
+// first consumer: a wreck that is in showtime must NOT have its cleanup countdown ticked.
+//
+// The console has no out-of-line symbol for it; TickCrashes folds it to
+//   0x827C6690  addi r11, owner, 0x13C0 ; slwi r11, r11, 1 ; lbzx r11, r11, iface ; clrlwi r11,31
+// i.e. a BYTE load of the EVEN (big-endian HIGH) half of maxRaceCarFlags[owner] -- 2*(idx+0x13C0)
+// is exactly this member's seat, the same displacement SetRaceCarState's `sthx` writes -- masked
+// with 1. Bit 0 of the high byte of a big-endian u16 is BIT 8 of the word, and bit 8 is
+// E_RACE_CAR_OUTPUT_FLAG_IN_SHOWTIME, whose producer arm in
+// RaceCarEntityModule::UpdateOutputInterfaces is `mbIsInShowtime`.
+// ⚠️ Written against the FLAG WORD by name; the console's high-byte trick is a big-endian
+// micro-optimisation that does not survive a byte-order change and must not be transcribed
+// literally.
+bool RCEntityActiveRaceCarOutputInterface::IsCarInShowtime(EActiveRaceCarIndex leActiveRaceCarIndex) const
+{
+    CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
+               "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
+    CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+               "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+    return (maxRaceCarFlags[leActiveRaceCarIndex] & E_RACE_CAR_OUTPUT_FLAG_IN_SHOWTIME) != 0;
+}
+
 // X360 0x82705690 -- IsRaceCarRival: bit 2 of the per-car flags word (maxRaceCarFlags[idx]).
 bool RCEntityActiveRaceCarOutputInterface::IsRaceCarRival(EActiveRaceCarIndex leActiveRaceCarIndex) const
 {
