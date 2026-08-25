@@ -18,6 +18,8 @@
 
 #include "GameShared/GameClasses/Sound/Playback/Module/CgsSoundPlaybackModule.h"
 
+#include "rw/rwcore_structs.h"   // rw::Resource / rw::IResourceAllocator (the Release-machine DoFree wraps)
+
 #include <cstring>  // memcpy
 
 namespace CgsSound
@@ -30,24 +32,21 @@ namespace Module
 // ---------------------------------------------------------------------------
 // Module::Module  @ 0x827DFA98
 //
-// The X360 ctor installs an intermediate vtable set (off_820CE500 / off_820CE350 /
-// off_820CE358) -- the base-subobject ctors -- then overwrites the primary and the
-// two secondary vtable slots with the final derived set (off_820CFA30 /
-// off_820CFA24 / off_820CFA20). The RWMutex / Mutex sub-objects are default-
-// constructed (RWMutex(NULL, true) / Mutex(NULL, true)); the asm passes (r4=0,
-// r5=1) which is (params=NULL, bDefaultParameters=true). The environment + factory
-// handles, the reserved handle and the reserved flag are all zeroed.
+// The X360 ctor runs the ModuleSingleBuffered base ctor (the intermediate vtable
+// off_820CE500 + the two RWMutex(NULL, true) builds @+0x10/+0x118 -- since phase
+// B1 that IS the inherited base ctor here), installs the two interface-base
+// vptrs (off_820CE350/58, overwritten with the final off_820CFA24/20 by the
+// derived hand-off), zeroes the environment + factory handles, builds the
+// stream mutex (Mutex(NULL, true) -- asm r4=0, r5=1), zeroes the deferred
+// queue's leading count byte (+0x2298; the queue's Construct() re-establishes
+// it), and nulls the string-table head.
 //
-// FLAG (unrecovered rodata): the three vtable symbol addresses (off_820CFA30 /
-// off_820CFA24 / off_820CFA20 and the intermediate off_820CE5xx) are this object's
-// vtables; their concrete contents are not recovered by this TU, so the raw vtable
-// slots are left null here rather than fabricating a table. The mutex construction,
-// handle zeroing and flag zeroing -- the observable ctor side effects -- are exact.
+// FLAG (interface bases): the +0x228/+0x22C vptr slots' concrete interfaces are
+// not typed yet (the +0x22C one is the DWARF IContentLoadService), so the raw
+// slots are left null rather than fabricating tables.
 // ---------------------------------------------------------------------------
 Module::Module()
-    : mpVtbl(0)              // X360: off_820CE500 then off_820CFA30 (see FLAG)
-    , mInputLock(0, true)    // X360 +0x10: RWMutex(NULL, true)
-    , mOutputLock(0, true)   // X360 +0x118: RWMutex(NULL, true)
+    : CgsModule::ModuleSingleBuffered()
     , mpSecondaryVtbl(0)     // X360: off_820CE350 then off_820CFA24 (see FLAG)
     , mpTertiaryVtbl(0)      // X360: off_820CE358 then off_820CFA20 (see FLAG)
     , mhEnvironment()        // X360 +0x2258 = 0
@@ -55,9 +54,157 @@ Module::Module()
     , mhAemsFactory()        // X360 +0x2260 = 0
     , mhSplicerFactory()     // X360 +0x2264 = 0 (DWARF h:374)
     , mStreamMutex(0, true)  // X360 +0x2268: Mutex(NULL, true) (DWARF h:379)
-    , mbReserved(false)      // X360 +0x2298 = 0
     , mpStringTable(0)       // X360 +0x26FC (DWARF h:489)
 {
+}
+
+// ---------------------------------------------------------------------------
+// Module::Construct(int)  @ 0x826C0EC0  (vtable +0x40; RootSoundModule::Construct
+// step [3] calls it with module-id 6)
+//
+// Store map (console offsets; every store lands on a named member):
+//   +0x2700 mf32TimeStep = 0.0    +0x2708 mi32PoolId = a2   +0x2704 mf32TotalTime = 0.0
+//   +0x26F0/F4/F8 sizes + flag = 0
+//   ModuleSingleBuffered::Construct(this)
+//   +0x230 mePrepareStage = 0     +0x234 meReleaseStage = 6 (DONE)
+//   receiver queue: cap 0x2000 @+0x248, align 16 @+0x24C, storage this+0x250
+//     @+0x238, then Clear  == EventReceiverQueue<0x2000,16>::Construct()
+//   +0x26FC mpStringTable = 0     +0x2250/+0x2254 in/out buffers = 0
+//   VariableEventQueue<1024,16>::Construct(+0x2298)
+//   the 3 StreamBuffer records: {0, 4, 0, 0, 0, 0.0} each
+//   +4 mbIsNewModule = 1 (base)
+// ---------------------------------------------------------------------------
+void Module::Construct(s32 li32PoolId)
+{
+    mf32TimeStep  = 0.0f;
+    mi32PoolId    = li32PoolId;
+    mf32TotalTime = 0.0f;
+
+    muStreamBufferSize          = 0;
+    muStreamNumBlocks           = 0;
+    mbStreamsUsingMainAllocator = false;
+
+    CgsModule::ModuleSingleBuffered::Construct();
+
+    mePrepareStage = E_PREPARESTAGE_0;
+    meReleaseStage = E_RELEASESTAGE_DONE;
+
+    mResourceReceiverQueue.Construct();
+
+    mpStringTable  = 0;
+    mpInputBuffer  = 0;
+    mpOutputBuffer = 0;
+
+    mDeferredResourceRequestQueue.Construct();
+
+    for (u32 lu = 0; lu < 3; ++lu)
+    {
+        maStreamBuffers[lu].mpBuffer       = 0;
+        maStreamBuffers[lu].mu32Reserved04 = 4;
+        maStreamBuffers[lu].mu32Reserved08 = 0;
+        maStreamBuffers[lu].mu32Reserved0C = 0;
+        maStreamBuffers[lu].mu32Reserved10 = 0;
+        maStreamBuffers[lu].mf32Reserved14 = 0.0f;
+    }
+
+    mbIsNewModule = true;
+}
+
+// ---------------------------------------------------------------------------
+// Module::Release  @ 0x826C0FB8  (the release COUNTDOWN machine, run forward
+// from meReleaseStage; each rung bumps the cursor via the @0x82681CD0 operator)
+// ---------------------------------------------------------------------------
+bool Module::Release()
+{
+    rw::IResourceAllocator* lpMainAllocator = 0;
+
+    switch (meReleaseStage)
+    {
+    case 0:
+        meReleaseStage++;
+        // fall through
+    case 1:
+        // Free the string-table chain through the environment allocator's DoFree
+        // (each chunk wrapped as a {ptr, 0 x4} resource -- the wave-3 dispose idiom).
+        while (mpStringTable)
+        {
+            StringTable* lpNext = mpStringTable->mpNext;
+            Environment* lpEnvironment = GetEnvironment();
+            rw::Resource lResource;
+            lResource.m_baseResources[0] = mpStringTable;
+            for (u32 lu = 1; lu < 4; ++lu)
+                lResource.m_baseResources[lu] = 0;
+            lpEnvironment->GetAllocator()->DoFree(lResource);
+            mpStringTable = lpNext;
+        }
+        meReleaseStage++;
+        // fall through
+    case 2:
+        // Null-assign the three factory handles (the console's Handle null-assign
+        // helpers @0x826A76A8 family: drop the owned reference, then store null).
+        if (mhRwacFactory.GetObject())
+            mhRwacFactory.GetObject()->Release();
+        mhRwacFactory.SetObject(0);
+        if (mhAemsFactory.GetObject())
+            mhAemsFactory.GetObject()->Release();
+        mhAemsFactory.SetObject(0);
+        if (mhSplicerFactory.GetObject())
+            mhSplicerFactory.GetObject()->Release();
+        mhSplicerFactory.SetObject(0);
+        meReleaseStage++;
+        // fall through
+    case 3:
+        // Snapshot the main allocator BEFORE dropping the environment handle (the
+        // stream-buffer frees below need it once the environment is gone).
+        lpMainAllocator = GetEnvironment()->GetAllocator();
+        if (mhEnvironment.GetObject())
+            mhEnvironment.GetObject()->Release();
+        mhEnvironment.SetObject(0);
+        meReleaseStage++;
+        // fall through
+    case 4:
+        for (u32 lu = 0; lu < 3; ++lu)
+        {
+            void* lpBuffer = maStreamBuffers[lu].mpBuffer;
+            maStreamBuffers[lu].mu32Reserved08 = 0;
+            maStreamBuffers[lu].mpBuffer       = 0;
+            if (mbStreamsUsingMainAllocator)
+            {
+                CGS_ASSERT(lpMainAllocator != 0, "lpMainAllocator");
+                rw::Resource lResource;
+                lResource.m_baseResources[0] = lpBuffer;
+                for (u32 luI = 1; luI < 4; ++luI)
+                    lResource.m_baseResources[luI] = 0;
+                lpMainAllocator->DoFree(lResource);
+            }
+        }
+        meReleaseStage++;   // the inlined @0x82681CD0 bump (bound assert inside)
+        // fall through
+    case 5:
+        if (!mDeferredResourceRequestQueue.Release())
+            return false;
+        mResourceReceiverQueue.Clear();
+        if (!CgsModule::ModuleSingleBuffered::Release())
+            return false;
+        meReleaseStage++;
+        // fall through
+    case E_RELEASESTAGE_DONE:
+        mePrepareStage = E_PREPARESTAGE_0;
+        return true;
+    default:
+        CGS_ASSERT(false, "Invalid Release Stage");
+        return false;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Module::Destruct  @ 0x826C1268
+// ---------------------------------------------------------------------------
+void Module::Destruct()
+{
+    mDeferredResourceRequestQueue.Destruct();
+    mResourceReceiverQueue.Clear();
+    CgsModule::ModuleSingleBuffered::Destruct();
 }
 
 // ---------------------------------------------------------------------------
@@ -407,13 +554,31 @@ Content** Module::CreateContent(Content** lppContentOut, u32 lu32Ident,
 //   assert(new <= E_PREPARESTAGE_DONE); return old. The increment applies even on the
 //   assert path; the return is always the saved OLD stage.
 // ---------------------------------------------------------------------------
-EPrepareStage operator++(EPrepareStage& leEnumIndex, int)
+Module::EPrepareStage operator++(Module::EPrepareStage& leEnumIndex, int)
 {
-    const EPrepareStage leOldEnumIndex = leEnumIndex;
-    leEnumIndex = static_cast<EPrepareStage>(static_cast<s32>(leEnumIndex) + 1);
+    const Module::EPrepareStage leOldEnumIndex = leEnumIndex;
+    leEnumIndex = static_cast<Module::EPrepareStage>(static_cast<s32>(leEnumIndex) + 1);
 
-    CGS_ASSERT(leEnumIndex <= E_PREPARESTAGE_DONE,
+    CGS_ASSERT(leEnumIndex <= Module::E_PREPARESTAGE_DONE,
                "leEnumIndex <= Module::E_PREPARESTAGE_DONE");
+
+    return leOldEnumIndex;
+}
+
+// ---------------------------------------------------------------------------
+// operator++(Module::EReleaseStage&, int)  @ 0x82681CD0
+//   Same shape as the prepare sibling: store the incremented cursor
+//   UNCONDITIONALLY, assert the bound (CgsSoundPlaybackModule.h:501,
+//   "leEnumIndex <= Module::E_RELEASESTAGE_DONE" == 6), return the saved OLD
+//   value. Release's case-4 rung inlines this exact sequence.
+// ---------------------------------------------------------------------------
+Module::EReleaseStage operator++(Module::EReleaseStage& leEnumIndex, int)
+{
+    const Module::EReleaseStage leOldEnumIndex = leEnumIndex;
+    leEnumIndex = static_cast<Module::EReleaseStage>(static_cast<s32>(leEnumIndex) + 1);
+
+    CGS_ASSERT(leEnumIndex <= Module::E_RELEASESTAGE_DONE,
+               "leEnumIndex <= Module::E_RELEASESTAGE_DONE");
 
     return leOldEnumIndex;
 }

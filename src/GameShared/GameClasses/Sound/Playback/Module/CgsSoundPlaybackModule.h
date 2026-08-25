@@ -10,9 +10,15 @@
 #include "GameShared/GameClasses/Sound/Playback/CgsEnvironment.h"  // the REAL Environment (+ Registry/Voice/Content via its includes)
 #include "GameShared/GameClasses/Sound/Playback/CgsFactory.h"      // the REAL Factory (CreateVoice<T>/CreateContent)
 #include "GameShared/GameClasses/Sound/Playback/CgsSubmixVoice.h"  // SubmixVoice (ConnectVoice's real Connect target)
+#include "GameShared/GameClasses/Module/CgsModuleSingleBuffered.h" // the REAL ModuleSingleBuffered base (phase B1)
+#include "GameShared/GameClasses/Module/CgsBaseEventReceiverQueue.h" // EventReceiverQueue<0x2000,16> (mResourceReceiverQueue)
+#include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"   // VariableEventQueue<1024,16> (mDeferredResourceRequestQueue)
 
 #include "eathread/eathread_rwmutex.h"
 #include "eathread/eathread_mutex.h"
+
+// Pointer-only members (the phase-B4 Io pair retypes them).
+namespace CgsModule { struct IOBuffer; }
 
 // =============================================================================
 // CgsSoundPlaybackModule.h  (HOME for CgsSound::Playback::Module::Module)
@@ -37,18 +43,14 @@
 // the pointer-sized handle members are host-width-variant). The X360 offsets, kept
 // in comments, are the load-bearing facts the asm reads:
 //
-//   +0x0000  primary   vptr   (off_820CFA30)
-//   +0x0010  mInputLock        EA::Thread::RWMutex   RWMutex(NULL, true)
-//   +0x0118  mOutputLock       EA::Thread::RWMutex   RWMutex(NULL, true)
-//   +0x0228  secondary vptr   (off_820CFA24)
-//   +0x022C  tertiary  vptr   (off_820CFA20)
-//   +0x2258  mhEnvironment     Handle<Environment>   (the only handle read as +8792)
-//   +0x225C  mhRwacFactory     Handle<Factory>       (read as +8796 / a1[2199])
-//   +0x2260  mhAemsFactory     Handle<Factory>       (read as +8800 / a1[2200])
-//   +0x2264  mhSplicerFactory  Handle<Factory>       (a1[2201], zeroed by ctor)
-//   +0x2268  mStreamMutex      EA::Thread::Mutex     Mutex(NULL, true)
-//   +0x2298  mbReserved        bool                  (zeroed by ctor)
-//   +0x26FC  mpStringTable     Module::StringTable*  (ImportStringTable list head)
+//   +0x0000..0x0227  the ModuleSingleBuffered BASE (primary vptr off_820CFA30 +
+//                    the two RWMutexes @+0x10/+0x118 + the DataBuffer pair) --
+//                    a REAL base class since phase B1
+//   +0x0228  secondary vptr   (off_820CFA24; un-identified interface base)
+//   +0x022C  tertiary  vptr   (off_820CFA20; the DWARF IContentLoadService base)
+//   +0x0230.. the full DWARF member list -- see the class below (the layout
+//             closes with zero gaps against the Construct/Prepare/Update/Release
+//             asm; the ctor's +0x2298 byte-zero is the deferred queue's count)
 //
 // FLAG: this class has THREE distinct vtables installed by the ctor (a multiple-
 // inheritance object: primary base at +0, two secondary interface bases at +0x228 /
@@ -113,9 +115,58 @@ namespace Module
 {
 
 // CgsSoundPlaybackModule.h. The low-level sound-playback module.
-class Module
+//
+// (2026-08-25, faithful-audio-engine phase B1: the class now derives the REAL
+// CgsModule::ModuleSingleBuffered -- the +0 vtable + the two RWMutexes at console
+// +0x10/+0x118 the old raw-slot model hand-carried ARE that base (Construct
+// @0x826C0EC0 chains ModuleSingleBuffered::Construct; the base's console extent is
+// exactly 0x228, where the first interface vptr sits) -- and carries the FULL
+// DWARF member list. The layout closes with ZERO gaps against the Construct/
+// Prepare/Update/Release asm: receiver storage 0x250+0x2000 == mpInputBuffer
+// 0x2250; mStreamMutex 0x2268+0x30 == the deferred queue 0x2298; queue+pad ==
+// maStreamBuffers 0x26A8; +0x48 == the size words 0x26F0. Host layout is by-name;
+// console offsets are comments.)
+class Module : public CgsModule::ModuleSingleBuffered
 {
 public:
+    // DWARF CgsSoundPlaybackModule.h (nested). The content-preparation stage
+    // counter (bound E_PREPARESTAGE_DONE == 4; the operator++ below walks it).
+    enum EPrepareStage
+    {
+        E_PREPARESTAGE_0    = 0,
+        E_PREPARESTAGE_1    = 1,
+        E_PREPARESTAGE_2    = 2,
+        E_PREPARESTAGE_3    = 3,
+        E_PREPARESTAGE_DONE = 4
+    };
+
+    // DWARF CgsSoundPlaybackModule.h:355 (nested EReleaseStage). The release
+    // COUNTDOWN cursor: Construct seeds DONE(6) = nothing to release; each Prepare
+    // stage lowers it to its own unwind rung (5/3/2/0), and Release runs FORWARD
+    // from it (@0x826C0FB8), bumping with the same +1/bound-6 idiom the .h:501
+    // assert names ("leEnumIndex <= Module::E_RELEASESTAGE_DONE"). Enumerator
+    // names beyond DONE are unrecovered; the raw rungs are stamped with comments.
+    enum EReleaseStage
+    {
+        E_RELEASESTAGE_DONE = 6
+    };
+
+    // DWARF CgsSoundPlaybackModule.h:465 (nested, StreamBuffer[3] @ console
+    // +0x26A8, 24-byte records). One SndPlayer1 stream-buffer record. FLAG: only
+    // the fields Construct/Prepare touch are named from evidence (mpBuffer +
+    // the constant-4 word both seed; Prepare stage 3 re-stores them); the three
+    // middle words + the trailing float are zero-seeded, meanings owned by the
+    // UpdateStreamBuffers/FindStreamBuffer slice (phase B4).
+    struct StreamBuffer
+    {
+        void* mpBuffer;        // +0x00  the carved stream buffer (Prepare stage 3)
+        u32   mu32Reserved04;  // +0x04  seeded 4 by Construct AND Prepare
+        u32   mu32Reserved08;  // +0x08
+        u32   mu32Reserved0C;  // +0x0C
+        u32   mu32Reserved10;  // +0x10
+        f32   mf32Reserved14;  // +0x14
+    };
+
     // DWARF CgsSoundPlaybackModule.h:489 names the member `StringTable*
     // mpStringTable` -- the chunks ImportStringTable allocates and chains. Each
     // chunk is `mpNext` followed by the copied string bytes. FLAG: interior shape
@@ -127,10 +178,35 @@ public:
         char         macData[1];  // +0x04  copied string-table bytes (flexible)
     };
 
-    // Module::Module @ 0x827DFA98. Installs the three vtables, default-constructs
-    // the read/write/command locks, and zeroes the environment + factory handles,
-    // the reserved handle, and the reserved flag. EXECUTED in the boot trace.
+    // Module::Module @ 0x827DFA98. The base sub-object ctor (vtable + the two
+    // RWMutexes = ModuleSingleBuffered), the two interface-base vptr installs
+    // (X360 off_820CE350/58 then the final off_820CFA24/20), the zeroed handles,
+    // the stream mutex, and the nulled string-table head. EXECUTED in the boot
+    // trace. (Phase B1: the base half is now the REAL inherited ctor.)
     Module();
+
+    // Module::Construct(int) @ 0x826C0EC0 (vtable +0x40 -- RootSoundModule::
+    // Construct step [3] calls it with module-id 6). Seeds every own member:
+    // stages (prepare 0 / release DONE), binds+clears the receiver queue,
+    // constructs the deferred-request queue, zeroes the stream-buffer records
+    // (mu32Reserved04 = 4), the buffers/sizes/string-table head, the time fields,
+    // stores the pool id, and sets the base's mbIsNewModule.
+    // (a NEW virtual -- the console vtable slot +0x40; the base's no-arg
+    // Construct() keeps its own slot and is hidden by name, as on the X360.)
+    virtual void Construct(s32 li32PoolId);
+    using CgsModule::ModuleSingleBuffered::Construct;   // keep the base overload visible
+
+    // Module::Release @ 0x826C0FB8 (virtual). The release COUNTDOWN machine run
+    // forward from meReleaseStage: free the string-table chain through the
+    // environment allocator's DoFree; null the three factory handles; snapshot
+    // the environment allocator + null the environment handle; free the stream
+    // buffers (only when mbStreamsUsingMainAllocator); release the deferred
+    // queue + receiver + base. Returns false while still releasing.
+    bool Release() override;
+
+    // Module::Destruct @ 0x826C1268 (virtual). Queue destruct + receiver clear +
+    // base destruct.
+    void Destruct() override;
 
     // Module::GetEnvironment @ 0x82694130. Returns the owned environment (asserts
     // the handle is non-null first -- fires CgsHandle.h:305).
@@ -181,46 +257,55 @@ public:
                             const Name& lContentSpecName);
 
 private:
-    // (2026-08-25 wave 6: member names reconciled to the DWARF -- the tertiary
-    // interface base at +0x22C is the `protected IContentLoadService` base the
-    // DWARF declares (h:165), which is exactly the +0x22C sub-object pointer
-    // CreateContent wires into each new content's mpLoadService. The rival names
-    // mhReserved/mCommandLock/mpStringTableHead were the DWARF's mhSplicerFactory
-    // (h:374, Handle<SplicerFactory>) / mStreamMutex (h:379) / mpStringTable
-    // (h:489). The DWARF handle types are per-factory subclasses (GenericRwac/
-    // Aems/Splicer); held as Handle<Factory> until those subclass homes are
-    // includable here -- the ledgered AEMS keystone.)
-    void*                mpVtbl;            // X360 +0x0000  primary vptr
-    EA::Thread::RWMutex  mInputLock;        // X360 +0x0010
-    EA::Thread::RWMutex  mOutputLock;       // X360 +0x0118
-    void*                mpSecondaryVtbl;   // X360 +0x0228
-    void*                mpTertiaryVtbl;    // X360 +0x022C (the IContentLoadService base)
+    // Full DWARF member list (phase B1; the base ModuleSingleBuffered owns the
+    // console +0x00..+0x227 span -- vtable + the two RWMutexes + the DataBuffer
+    // pair -- so the raw mpVtbl/mInputLock/mOutputLock slots the old model
+    // hand-carried are GONE). The tertiary interface base at +0x22C is the
+    // `protected IContentLoadService` base the DWARF declares (h:165) -- the
+    // exact sub-object pointer CreateContent wires into each new content's
+    // mpLoadService; the +0x228 base is un-identified. Both stay raw vptr slots
+    // until those interfaces are typed. The DWARF handle types are per-factory
+    // subclasses (GenericRwac/Aems/Splicer); held as Handle<Factory> until those
+    // subclass homes are includable here -- the ledgered AEMS keystone.
+    void*                mpSecondaryVtbl;   // X360 +0x0228  (interface base 1, un-identified)
+    void*                mpTertiaryVtbl;    // X360 +0x022C  (the IContentLoadService base)
+    EPrepareStage        mePrepareStage;    // X360 +0x0230  (DWARF h:354)
+    EReleaseStage        meReleaseStage;    // X360 +0x0234  (DWARF h:355; the countdown cursor)
+    CgsModule::EventReceiverQueue<0x2000, 16>
+                         mResourceReceiverQueue; // X360 +0x0238 hdr + 0x0250 storage (DWARF h:357,
+                                            //  EventReceiverQueue<8192,16>; Construct binds cap
+                                            //  0x2000 / align 16 / storage this+0x250 + Clear)
+    CgsModule::IOBuffer* mpInputBuffer;     // X360 +0x2250 (DWARF h:359, InputBuffer* -- retyped
+                                            //  to the Io type with the phase-B4 IO pair)
+    CgsModule::IOBuffer* mpOutputBuffer;    // X360 +0x2254 (DWARF h:360, OutputBuffer* -- ditto)
     Handle<Environment>  mhEnvironment;     // X360 +0x2258 (DWARF h:362)
     Handle<Factory>      mhRwacFactory;     // X360 +0x225C (DWARF h:367, Handle<GenericRwacFactory>)
     Handle<Factory>      mhAemsFactory;     // X360 +0x2260 (DWARF h:370, Handle<AemsFactory>)
     Handle<Factory>      mhSplicerFactory;  // X360 +0x2264 (DWARF h:374, Handle<SplicerFactory>)
     EA::Thread::Mutex    mStreamMutex;      // X360 +0x2268 (DWARF h:379)
-    bool                 mbReserved;        // X360 +0x2298 (un-named: inside the DWARF
-                                            //  mDeferredResourceRequestQueue span)
+    CgsModule::VariableEventQueue<1024, 16>
+                         mDeferredResourceRequestQueue; // X360 +0x2298 (DWARF h:380, the
+                                            //  ResourceRequestQueue<1024> typedef; Update drains
+                                            //  it into the output buffer's 4096 queue)
+    StreamBuffer         maStreamBuffers[3]; // X360 +0x26A8 (DWARF h:465, 24B records)
+    u32                  muStreamBufferSize; // X360 +0x26F0 (DWARF h:466)
+    u32                  muStreamNumBlocks;  // X360 +0x26F4 (DWARF h:467)
+    bool                 mbStreamsUsingMainAllocator; // X360 +0x26F8 (DWARF h:468; word-stored)
     StringTable*         mpStringTable;     // X360 +0x26FC (DWARF h:489)
-};
-
-// CgsSoundPlaybackModule.h. The Module's content-preparation pipeline stage counter.
-// operator++ @ 0x82681C70 post-increments it (unconditionally, before the bound
-// assert) and returns the old stage. E_PREPARESTAGE_DONE == 4 (distinct from the
-// CgsSound::Logic operator++ bound of 6).
-enum EPrepareStage
-{
-    E_PREPARESTAGE_0    = 0,
-    E_PREPARESTAGE_1    = 1,
-    E_PREPARESTAGE_2    = 2,
-    E_PREPARESTAGE_3    = 3,
-    E_PREPARESTAGE_DONE = 4
+    f32                  mf32TimeStep;      // X360 +0x2700 (DWARF h:491; Environment::Update's dt)
+    f32                  mf32TotalTime;     // X360 +0x2704 (DWARF h:492)
+    s32                  mi32PoolId;        // X360 +0x2708 (DWARF h:494; Construct's module id)
 };
 
 // @ 0x82681C70. Post-increment the prepare-stage enum (stored unconditionally,
-// before the bound assert); returns the saved OLD stage.
-EPrepareStage operator++(EPrepareStage& leEnumIndex, int);
+// before the bound assert -- E_PREPARESTAGE_DONE == 4, distinct from the
+// CgsSound::Logic operator++ bound of 6); returns the saved OLD stage.
+Module::EPrepareStage operator++(Module::EPrepareStage& leEnumIndex, int);
+
+// @ 0x82681CD0 (the Release-machine sibling; the case-4 rung of Release inlines
+// it with the .h:501 assert "leEnumIndex <= Module::E_RELEASESTAGE_DONE", bound
+// 6). Post-increment the release-stage cursor; returns the saved OLD stage.
+Module::EReleaseStage operator++(Module::EReleaseStage& leEnumIndex, int);
 
 } // namespace Module
 } // namespace Playback
