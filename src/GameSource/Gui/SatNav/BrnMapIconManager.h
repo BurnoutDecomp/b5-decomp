@@ -44,6 +44,7 @@
 // pulling the whole state-interface header in. `struct` is the canonical tag
 // (CgsGuiStateInterface.h:99); a class/struct split silently breaks the mangled names.
 namespace CgsGui { struct StateInterface; }
+namespace CgsModule { struct Event; }   // UpdateSatNavParams payload (pointer-only)
 
 namespace BrnGui
 {
@@ -51,6 +52,7 @@ namespace BrnGui
     struct OnlineGameRoomPlayerInfo; // friend (writes meIconSizeMode; see the friend note below)
     struct CrashNavMap;              // friend (wave J; BrnCrashNavMap.h declares it as a struct)
     struct PreRaceFlyByState;        // friend (wave J; BrnPreRaceFlyBy.h declares it as a struct)
+    struct SatNavComponent;          // friend (H3a; the owner-change pokes + the Construct icon-count reset)
 
     class MapIconManager
     {
@@ -157,6 +159,12 @@ namespace BrnGui
         // incoming sat-nav GUI event.
         void UpdateSatNavInfo(const GuiEventUpdateSatNav* lpSatNavEvent);
 
+        // @0x824F4458 -- adopt the sat-nav parameter record (event id 200; the rotate /
+        // trajectory / rival-visibility flags). ADDITIVE GROW (H3a 2026-08-25:
+        // SatNavComponent::RecvEvent case 200 calls it); declaration-only this slice --
+        // the body lands with the manager TU's remainder.
+        void UpdateSatNavParams(const CgsModule::Event* lpParamsEvent);
+
         // DWARF h:143, @0x82525EF8 -- the per-frame icon update: tail-calls
         // UpdateSatNavIcons when mOwnerId == E_SATNAV_MAP, UpdateCrashNavIcons otherwise.
         void Update();
@@ -234,7 +242,9 @@ namespace BrnGui
                                            // meIconFilterMode, meIconSizeMode, mbRotateSatNav,
                                            // miSelectedCheckpoint, muSelectedJunctionID,
                                            // mbShowingCrashNavRoute, miNumUsedIcons
-        friend struct PreRaceFlyByState;   // meIconFilterMode, mbIsDisplayingEventInfo,
+        friend struct PreRaceFlyByState;
+        friend struct SatNavComponent;   // H3a: Update's owner-change pokes (mbIsDisplayingEventInfo /
+                                         // mbRotateSatNav / meIconSizeMode) + Construct's miNumUsedIcons reset   // meIconFilterMode, mbIsDisplayingEventInfo,
                                            // miSelectedCheckpoint, muSelectedJunctionID,
                                            // mbRotateSatNav, meIconSizeMode,
                                            // mbShowingPreRaceRoute, miNumUsedIcons
