@@ -4,7 +4,7 @@
 // Reconstructed from BURNOUT_X360_ARTIST.XEX (wave 11):
 //   Environment::AddFactory   @ 0x826AD130   Environment::AddVoice   @ 0x826AD1E0
 //   Environment::AddContent   @ 0x826AD290   Environment::GetAllocator @ 0x82680EF8
-//   Environment::GetRegistry  @ 0x82680EA0   Environment::GetV       @ 0x826BFAF0
+//   Environment::GetRegistry  @ 0x82680EA0   Environment::GetVoice   @ 0x826BFAF0  (was GetV)
 //   Environment::GetR         @ 0x826BFE50   Environment::StartDac   @ 0x82680F50
 //   Environment::StopDac      @ 0x82680FE8   Environment::~Environment @ 0x826E9020
 //   Environment::operator new @ 0x826ACF98   Environment::operator delete @ 0x826BFD60
@@ -151,7 +151,7 @@ Registry* Environment::GetRegistry()
 // is walked through the real Handle<Voice> slots (one owned pointer each), not a
 // reinterpreted Object** (2026-08-25 wave 3). Returns an acquired handle to the
 // match, or an empty handle.
-Handle<Voice> Environment::GetV(u32 au32Id)
+Handle<Voice> Environment::GetVoice(u32 au32Id)
 {
     Handle<Voice> lhResult(static_cast<Voice*>(0));
     if (mu32VoiceCount)

@@ -53,10 +53,10 @@ Module::Module()
     , mhEnvironment()        // X360 +0x2258 = 0
     , mhRwacFactory()        // X360 +0x225C = 0
     , mhAemsFactory()        // X360 +0x2260 = 0
-    , mhReserved()           // X360 +0x2264 = 0
-    , mCommandLock(0, true)  // X360 +0x2268: Mutex(NULL, true)
+    , mhSplicerFactory()     // X360 +0x2264 = 0 (DWARF h:374)
+    , mStreamMutex(0, true)  // X360 +0x2268: Mutex(NULL, true) (DWARF h:379)
     , mbReserved(false)      // X360 +0x2298 = 0
-    , mpStringTableHead(0)
+    , mpStringTable(0)       // X360 +0x26FC (DWARF h:489)
 {
 }
 
@@ -85,15 +85,17 @@ void Module::DumpRegistries()
 {
     Environment* lpEnvironment = mhEnvironment.GetObject();
     CGS_ASSERT(lpEnvironment, "mpObject");
-    RegistryDump(lpEnvironment->GetRegistry());
+    Registry* lpRegistry = lpEnvironment->GetRegistry();
+    CGS_ASSERT(lpRegistry, "mpRegistry");
+    lpRegistry->Dump();
 
     Factory* lpRwacFactory = mhRwacFactory.GetObject();
     CGS_ASSERT(lpRwacFactory, "mpObject");
-    RegistryDump(GetRwacFactoryRegistry(lpRwacFactory));
+    GetRwacFactoryRegistry(lpRwacFactory)->Dump();
 
     Factory* lpAemsFactory = mhAemsFactory.GetObject();
     CGS_ASSERT(lpAemsFactory, "mpObject");
-    RegistryDump(GetAemsFactoryRegistry(lpAemsFactory));
+    GetAemsFactoryRegistry(lpAemsFactory)->Dump();
 }
 
 // ---------------------------------------------------------------------------
@@ -131,14 +133,14 @@ void Module::ImportStringTable(const u32* lpStringTableResource)
     Environment* lpEnvironment = mhEnvironment.GetObject();
     CGS_ASSERT(lpEnvironment, "mpObject");
 
-    StringTableChunk* lpChunk = static_cast<StringTableChunk*>(
-        Environment::Allocate(lpEnvironment, lu32StringTableSize + 4, 4, "StringTable"));
+    Module::StringTable* lpChunk = static_cast<Module::StringTable*>(
+        lpEnvironment->Allocate(lu32StringTableSize + 4, 4, "StringTable"));
     if (!lpChunk)
         return;
 
     // Push the new chunk onto the head of the module's string-table list.
-    lpChunk->mpNext   = mpStringTableHead;
-    mpStringTableHead = lpChunk;
+    lpChunk->mpNext = mpStringTable;
+    mpStringTable   = lpChunk;
 
     // Re-derive the source start (the X360 recomputes it under the same a2[4] guard).
     const char* lkpcSource = reinterpret_cast<const char*>(
@@ -162,21 +164,23 @@ void Module::ImportStringTable(const u32* lpStringTableResource)
 }
 
 // ---------------------------------------------------------------------------
-// Module::AttachVoice  @ 0x826D7D80
-// Attaches lphContent to slot lu32SlotName on lphVoice, then releases the transient
+// Module::AttachVoice  @ 0x826D7D80  (DWARF h:345)
+// Attaches lphContent to the named slot lu32SlotName on lphVoice (the real
+// Voice::Attach(Name, Handle<Content>&) -- the u32 the asm builds on the stack and
+// passes by reference IS the interned slot Name), then releases the transient
 // references held by both handles (the X360 drops a ref on each owned object).
 // ---------------------------------------------------------------------------
-void Module::AttachVoice(Handle<Voice>* lphVoice, Handle<Voice>* lphContent,
+void Module::AttachVoice(Handle<Voice>* lphVoice, Handle<Content>* lphContent,
                          u32 lu32SlotName)
 {
     CGS_ASSERT(lphVoice->GetObject(), "lhVoice");
     CGS_ASSERT(lphContent->GetObject(), "lhContent");
 
-    u32 lu32SlotNameLocal = lu32SlotName;
     CGS_ASSERT(lphVoice->GetObject(), "mpObject");
 
     bool lbAttached =
-        lphVoice->GetObject()->Attach(&lu32SlotNameLocal, lphContent);
+        lphVoice->GetObject()->Attach(Name(static_cast<uintptr_t>(lu32SlotName)),
+                                      *lphContent);
     CGS_ASSERT(lbAttached, "lhVoice->Attach(lSlotName, lhContent)");
 
     if (lphVoice->GetObject())
@@ -196,13 +200,11 @@ void Module::ConnectVoice(Handle<Voice>* lphVoice, u32 lu32SendName, u32 lu32Sub
     Environment* lpEnvironment = mhEnvironment.GetObject();
     CGS_ASSERT(lpEnvironment, "mpObject");
 
-    // GetSubmixVoice fills a transient handle (var_80) and returns &owned-pointer;
-    // the X360 reads `*result` (the owned Voice*), takes a ref on it, then releases
+    // GetVoice (the IDA-truncated `GetV`, DWARF h:289) fills a transient handle
+    // (var_80); the X360 reads the owned Voice*, takes a ref on it, then releases
     // the transient handle's reference.
-    Handle<Voice> lhSubmixLookup;
-    Object** lppSubmix = Environment::GetSubmixVoice(&lhSubmixLookup, lpEnvironment,
-                                                     lu32SubmixId);
-    Object* lpSubmixVoice = *lppSubmix;
+    Handle<Voice> lhSubmixLookup = lpEnvironment->GetVoice(lu32SubmixId);
+    Voice* lpSubmixVoice = lhSubmixLookup.GetObject();
     if (lpSubmixVoice)
         lpSubmixVoice->Acquire();
     if (lhSubmixLookup.GetObject())
@@ -211,12 +213,15 @@ void Module::ConnectVoice(Handle<Voice>* lphVoice, u32 lu32SendName, u32 lu32Sub
     CGS_ASSERT(lphVoice->GetObject(), "lhVoice");
     CGS_ASSERT(lpSubmixVoice, "lhVoice");  // X360 streams "Submix ID: <id>" here
 
-    u32 lu32SendNameLocal = lu32SendName;
     CGS_ASSERT(lphVoice->GetObject(), "mpObject");
 
-    Handle<Voice> lhSubmix(static_cast<Voice*>(lpSubmixVoice));
+    // The real Voice::Connect(Name, Handle<SubmixVoice>&) @0x826ACC90 -- the u32
+    // built on the stack is the interned send Name, and the submix voice is the
+    // SubmixVoice subclass (CgsSubmixVoice.h).
+    Handle<SubmixVoice> lhSubmix(static_cast<SubmixVoice*>(lpSubmixVoice));
     bool lbConnected =
-        lphVoice->GetObject()->Connect(&lu32SendNameLocal, &lhSubmix);
+        lphVoice->GetObject()->Connect(Name(static_cast<uintptr_t>(lu32SendName)),
+                                       lhSubmix);
     CGS_ASSERT(lbConnected, "lhVoice->Connect(lSendName, lhSubmixVoice)");
 
     if (lpSubmixVoice)
@@ -226,28 +231,31 @@ void Module::ConnectVoice(Handle<Voice>* lphVoice, u32 lu32SendName, u32 lu32Sub
 }
 
 // ---------------------------------------------------------------------------
-// Module::C  (CreateVoice)  @ 0x826D7B00
+// Module::CreateVoice  @ 0x826D7B00  (the IDA-truncated "Module::C"; DWARF h:318
+// `Handle<Voice> CreateVoice(u32,u32,u32)` -- the by-value Handle return is the
+// sret out-pointer this signature spells)
 //
-// Resolves the owning factory (by lFactoryName) and the voice spec (by
-// lu32SubmixName, looked up in the environment registry) out of the environment,
-// asks the factory to CreateVoice for the requested slot, runs the init-submix hack
-// on the reserved slot name, and stores the new voice into lphVoiceOut. On any
-// failure path it clears lphVoiceOut and releases the resolved factory handle.
+// Resolves the owning factory (by lFactoryName, the real Environment::GetFactory
+// -- IDA's `Environment::Ge`) and the voice spec (by lu32SubmixName, looked up in
+// the environment registry via the real Registry::GetEntity<VoiceSpec>) out of the
+// environment, asks the factory to CreateVoice for the requested ident, runs the
+// init-submix hack on the reserved ident, and stores the new voice into
+// lphVoiceOut. On any failure path it clears lphVoiceOut and releases the
+// resolved factory handle.
 //
 // FLAG: the X360 emits a streamed assert message
 // ("E_COMMAND_VOICE_CREATE failed: VoiceSpec\n") on the failure path; reconstructed
 // here as a plain CGS_ASSERT(false, ...) with the message text, matching the
 // fire-assert effect (the StrStream machinery is style-only).
 // ---------------------------------------------------------------------------
-void Module::C(Handle<Voice>* lphVoiceOut, u32 lu32SlotName, const Name& lFactoryName,
-               u32 lu32SubmixName)
+void Module::CreateVoice(Handle<Voice>* lphVoiceOut, u32 lu32SlotName,
+                         const Name& lFactoryName, u32 lu32SubmixName)
 {
     Environment* lpEnvironment = mhEnvironment.GetObject();
     CGS_ASSERT(lpEnvironment, "mpObject");
 
-    // Resolve the owning factory handle by name.
-    Handle<Factory> lhFactory;
-    Environment::GetFactoryHandle(&lhFactory, lpEnvironment, &lFactoryName);
+    // Resolve the owning factory handle by name (Environment::GetFactory, DWARF h:280).
+    Handle<Factory> lhFactory = lpEnvironment->GetFactory(lFactoryName);
     Factory* lpFactory = lhFactory.GetObject();
 
     const VoiceSpec* lpSpec = 0;
@@ -257,7 +265,8 @@ void Module::C(Handle<Voice>* lphVoiceOut, u32 lu32SlotName, const Name& lFactor
         CGS_ASSERT(lpEnv2, "mpObject");
         Registry* lpRegistry = lpEnv2->GetRegistry();
         CGS_ASSERT(lpRegistry, "mpRegistry");
-        lpSpec = RegistryGetEntity<VoiceSpec>(lpRegistry, Name(lu32SubmixName));
+        Name lSpecName(static_cast<uintptr_t>(lu32SubmixName));
+        lpSpec = lpRegistry->GetEntity<VoiceSpec>(lSpecName);
     }
 
     if (!lpFactory || !lpSpec)
@@ -270,7 +279,8 @@ void Module::C(Handle<Voice>* lphVoiceOut, u32 lu32SlotName, const Name& lFactor
     }
 
     Handle<Voice> lhNewVoice;
-    if (lpFactory->CreateVoice<Voice>(lpSpec, &lhNewVoice, lu32SlotName) == -1)
+    if (lpFactory->CreateVoice<Voice>(*lpSpec, lhNewVoice, lu32SlotName) ==
+        static_cast<u32>(-1))
     {
         if (lhNewVoice.GetObject())
             lhNewVoice.GetObject()->Release();
@@ -281,7 +291,9 @@ void Module::C(Handle<Voice>* lphVoiceOut, u32 lu32SlotName, const Name& lFactor
         return;
     }
 
-    lhNewVoice.GetObject()->SetSlotName(lu32SlotName);
+    // The `*(voice+12) = ident` store: the real Voice::SetIdent (DWARF CgsVoice.h:567
+    // -- the old rival named it SetSlotName; the +0xC word is Voice::mIdent).
+    lhNewVoice.GetObject()->SetIdent(lu32SlotName);
 
     if (lu32SlotName == KU_INIT_SND9_SUBMIX_IDENT)
     {
@@ -328,9 +340,8 @@ Content** Module::CreateContent(Content** lppContentOut, u32 lu32Ident,
     Environment* lpEnvironment = mhEnvironment.GetObject();
     CGS_ASSERT(lpEnvironment, "mpObject");
 
-    // Resolve the owning content factory handle by class name.
-    Handle<Factory> lhFactory;
-    Environment::GetFactoryHandle(&lhFactory, lpEnvironment, &lContentClassName);
+    // Resolve the owning content factory handle by class name (Environment::GetFactory).
+    Handle<Factory> lhFactory = lpEnvironment->GetFactory(lContentClassName);
     Factory* lpFactory = lhFactory.GetObject();
 
     const ContentSpec* lpContentSpec = 0;
@@ -340,7 +351,8 @@ Content** Module::CreateContent(Content** lppContentOut, u32 lu32Ident,
         CGS_ASSERT(lpEnv2, "mpObject");
         Registry* lpRegistry = lpEnv2->GetRegistry();
         CGS_ASSERT(lpRegistry, "mpRegistry");
-        lpContentSpec = RegistryGetEntity<ContentSpec>(lpRegistry, Name(lContentSpecName));
+        Name lSpecName(lContentSpecName);
+        lpContentSpec = lpRegistry->GetEntity<ContentSpec>(lSpecName);
     }
 
     if (!lpFactory || !lpContentSpec)
@@ -353,7 +365,8 @@ Content** Module::CreateContent(Content** lppContentOut, u32 lu32Ident,
     }
 
     Handle<Content> lhContent;
-    if ((*lhFactory).CreateContent(lpContentSpec, &lhContent) == -1)
+    if (lpFactory->CreateContent(*lpContentSpec, lhContent, lu32Ident) ==
+        static_cast<u32>(-1))
     {
         if (lhContent.GetObject())
             lhContent.GetObject()->Release();
@@ -364,10 +377,14 @@ Content** Module::CreateContent(Content** lppContentOut, u32 lu32Ident,
         return lppContentOut;
     }
 
-    // Wire the freshly created content's owner fields.
-    (*lhContent).SetIdent(lu32Ident);                                   // Content +0x10
+    // Wire the freshly created content's owner fields BY NAME (the module's own
+    // `stw +0x10 / stw +0x14` stores after the factory call): mIdent, and the
+    // IContentLoadService base sub-object pointer (this+0x22C -- the DWARF-declared
+    // `: protected IContentLoadService` base this class models as the tertiary
+    // vptr slot until the MI shape is recovered).
+    (*lhContent).mIdent = lu32Ident;                                    // Content +0x10
     void* lpOwner = this ? reinterpret_cast<char*>(this) + 0x22C : 0;
-    (*lhContent).SetOwner(lpOwner);                                     // Content +0x14
+    (*lhContent).mpLoadService = lpOwner;                               // Content +0x14
 
     Content* lpContent = lhContent.GetObject();
     *lppContentOut = lpContent;

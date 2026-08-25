@@ -72,6 +72,13 @@ public:
     // out-handle on registration rejection).
     u32 CreateContent(const ContentSpec& akrSpec, Handle<Content>& arHandleOut, u32 au32Ident);
 
+    // DWARF CgsFactory.h:91 (template; u32 return). The voice mirror of
+    // CreateContent: dispatch the subclass DoCreateVoice, register the produced
+    // voice with the environment; (u32)-1 on failure. Caller: Module::CreateVoice
+    // @0x826D7B00. FLAG (DEFER): declared-only -- bodied with the factory slices.
+    template <typename T>
+    u32 CreateVoice(const VoiceSpec& akrSpec, Handle<T>& arHandleOut, u32 au32Ident);
+
     // DWARF h:255 / h:310. FLAG (DEFER): declared-only -- their own ledger slices.
     // GetName is const (a pure accessor; Environment::GetR reads the name through a
     // const Factory&).
