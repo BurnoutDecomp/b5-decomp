@@ -481,6 +481,56 @@ namespace CgsGraphics
     }
 
     // -------------------------------------------------------------------------
+    // SetState(TextureState*) @0x82458C.. / SetState(BlendState*) @0x82458EC0 --
+    // the typed overload pair the header already documents (the BillboardRenderer
+    // witness): each appends the same 16-byte one-pointer command as the
+    // rasterizer/texture writers above, with its own command type. [H2 link round
+    // 2026-08-25: the boost-bar TU's RenderQuad became the first mounted caller;
+    // both overloads were declaration-only and the link caught it.]
+    // -------------------------------------------------------------------------
+    template <typename V>
+    void ImRenderBuffer<V>::SetState(const renderengine::TextureState* lpTextureState)
+    {
+        const u32 luRecord = ImCommandRecord<ImCommandSetStateTexture>::KU_BYTES;  // 16
+
+        const u32 luPos = mpWriteBuffer->muCommandBufferWritePos;
+        if (muCommandBufferSize >= luPos + luRecord)
+        {
+            ImCommandSetStateTexture* lpCommand = reinterpret_cast<ImCommandSetStateTexture*>(
+                mpWriteBuffer->mpu8CommandBuffer + luPos);
+            lpCommand->muType         = IM_CMD_SET_STATE_TEXTURE;            // 9
+            lpCommand->muSize         = luRecord;
+            mpWriteBuffer->muCommandBufferWritePos = luPos + luRecord;
+            lpCommand->mpTextureState = reinterpret_cast<const TextureState*>(lpTextureState);
+        }
+        else
+        {
+            SetBufferFullRewindToLastEndRender();
+        }
+    }
+
+    template <typename V>
+    void ImRenderBuffer<V>::SetState(const renderengine::BlendState* lpBlendState)
+    {
+        const u32 luRecord = ImCommandRecord<ImCommandSetStateBlend>::KU_BYTES;  // 16
+
+        const u32 luPos = mpWriteBuffer->muCommandBufferWritePos;
+        if (muCommandBufferSize >= luPos + luRecord)
+        {
+            ImCommandSetStateBlend* lpCommand = reinterpret_cast<ImCommandSetStateBlend*>(
+                mpWriteBuffer->mpu8CommandBuffer + luPos);
+            lpCommand->muType        = IM_CMD_SET_STATE_BLEND;               // 3
+            lpCommand->muSize        = luRecord;
+            mpWriteBuffer->muCommandBufferWritePos = luPos + luRecord;
+            lpCommand->mpBlendState  = lpBlendState;
+        }
+        else
+        {
+            SetBufferFullRewindToLastEndRender();
+        }
+    }
+
+    // -------------------------------------------------------------------------
     // SetTextureState - append a 16-byte {type:IM_CMD_SET_STATE_TEXTURE} command
     // binding a resolved renderengine::TextureState. Decompiled from the inline
     // writer in AptRenderHandler::Render @0x5CB230 (LABEL_19): it stores muType=9,
