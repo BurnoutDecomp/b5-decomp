@@ -110,7 +110,7 @@ namespace CgsGui
     //   EA::Thread::Mutex::Init(a1+109672, ...);              -- the data-handler mutex
     //   AptAux::ConstructApt(a1);                              -- install the host callback table
     // -------------------------------------------------------------------------
-    void AptAux::Construct(CgsGuiModuleIO::ImRendererSet* lpImRenderers,
+    void AptAux::Construct(::CgsGuiModuleIO::ImRendererSet* lpImRenderers,
                            CgsGraphics::TextRenderer* lpTextRenderer,
                            CgsLanguage::LanguageManager* lpLanguageManager,
                            const FontCollection* lpFonts,

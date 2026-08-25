@@ -835,6 +835,14 @@ namespace BrnGui
         void ZoomSatNavOut();                                     // X360 @0x82472FD0 (miSatNavZoomLevel @0x803C)
         void DetermineCarUnlockPending(BrnProgression::Profile* lpProfile); // X360 @0x824EC678 (sets mbCarUnlockPending/mbCarUnlockDetermined @0x4B75/0x4B76; reads Profile far members -- BrnProfile.h boundary)
 
+        // [H3c] ADDITIVE GROW (MapIconManager::UpdateWorldIcons @0x82511C88, which inlines
+        // both byte loads): the nearest-junkyard pass gate (+0x4B75, `lbz` -- an un-shown
+        // unlocked car volunteers the junkyard icon) and the nearest-body-shop pass gate
+        // (+0x4B26; see the member's carve note). Console-inlined reads; named faces per
+        // the cluster precedent above.
+        bool IsCarUnlockPending() const       { return mbCarUnlockPending; }      // +0x4B75
+        bool GetShowNearestBodyShop() const   { return mbShowNearestBodyShop; }   // +0x4B26
+
         // ====================================================================
         //  ADDITIVE GROW (wave J: PreRaceFlyByState + CrashNavMap). The pre-race
         //  fly-by / crash-nav map surface. Split by how the X360 built each face:
@@ -1078,7 +1086,14 @@ namespace BrnGui
         f32  mfPlayerOrientation;                         // +0x4B14 (19220) case 199 (icon mfRotation)
         s32  mePlayerCounty;                              // +0x4B18 (19224) case 199 GetCounty
         s32  mePlayerDistrict;                            // +0x4B1C (19228) case 199 GetDistrict
-        u8   mPad_4B20[0x10];                             // +0x4B20..+0x4B2F
+        u8   mPad_4B20[6];                                // +0x4B20..+0x4B25
+        // ADDITIVE CARVE (H3c MapIconManager::UpdateWorldIcons @0x82511C88): the byte gating
+        // the "show the nearest body shop on the sat-nav" pass (`lbz mpGuiCache+0x4B26`; the
+        // pass runs when this byte is set AND the mode is freeburn (-1/15), or unconditionally
+        // in road-rage / marked-man). FLAG: consumer-named -- the producer side is unrecovered
+        // (reads 0 on this build: no nearest-body-shop icon is volunteered outside road rage).
+        bool mbShowNearestBodyShop;                       // +0x4B26 (19238)
+        u8   mPad_4B27[9];                                // +0x4B27..+0x4B2F
         // ADDITIVE CARVE (HudMessageAnalyzer keystone): the game-flow state word the
         // analyzer's Update gates its trigger passes on (lwz mpGuiCache+0x4B30; fire
         // only when it holds 1 or 3, treat -1 as invalid). FLAG: consumer-named -- the

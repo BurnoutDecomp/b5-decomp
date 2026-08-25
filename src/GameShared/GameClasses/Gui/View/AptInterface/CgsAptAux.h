@@ -18,7 +18,14 @@
 namespace CgsGraphics    { struct TextRenderer; }
 namespace CgsLanguage    { class LanguageManager; }
 namespace CgsGui         { struct FontCollection; }
-namespace CgsGuiModuleIO { struct ImRendererSet; }   // the active 2D/3D renderer set
+// ⚠️ SHADOWING-REDECLARATION HAZARD (fixed 2026-08-25, H3c): this is a GLOBAL-scope
+// `::CgsGuiModuleIO` opaque handle namespace, deliberately NOT CgsGui::CgsGuiModuleIO --
+// the only caller (CgsGuiViewModule::Construct) reinterpret_casts its own
+// CgsGui::ImRendererSet to `::CgsGuiModuleIO::ImRendererSet*`. But CgsSku.h ALSO declares
+// `CgsGui::CgsGuiModuleIO` (holding only OutputBuffer), and unqualified lookup from inside
+// `namespace CgsGui` finds THAT first whenever both are visible -- which any TU reaching
+// CgsSku.h does. Every use below is therefore spelled `::CgsGuiModuleIO::` explicitly.
+namespace CgsGuiModuleIO { struct ImRendererSet; }   // the active 2D/3D renderer set (GLOBAL scope -- see above)
 
 // =============================================================================
 // CgsGui::AptAux / CgsGui::AptAuxPointer
@@ -72,7 +79,7 @@ namespace CgsGui
         //   lfAspectRatio         the display aspect ratio folded into the stage resolution
         //   lpAlternateTextColours the alt-text-colour table the AptString pool is built with
         //   liNumAlternateColours  its entry count
-        void Construct(CgsGuiModuleIO::ImRendererSet* lpImRenderers,
+        void Construct(::CgsGuiModuleIO::ImRendererSet* lpImRenderers,
                        CgsGraphics::TextRenderer* lpTextRenderer,
                        CgsLanguage::LanguageManager* lpLanguageManager,
                        const FontCollection* lpFonts,

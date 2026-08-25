@@ -46,6 +46,9 @@ namespace CgsGraphics
 
 namespace CgsLanguage    { class LanguageManager; }       // held by Construct (mpLanguageManager)
 namespace CgsGui         { struct FontCollection; class CustomRendererManager; }   // text-layout fonts + the custom-renderer wiring mirror
+// ⚠️ GLOBAL-scope opaque handle namespace, NOT CgsGui::CgsGuiModuleIO (which CgsSku.h also
+// declares and which unqualified lookup from inside `namespace CgsGui` would win). Uses
+// below are spelled `::CgsGuiModuleIO::` -- see the long note in CgsAptAux.h.
 namespace CgsGuiModuleIO { struct ImRendererSet; }         // the active 2D/3D renderer set (a2)
 
 
@@ -107,7 +110,7 @@ namespace CgsGui
         //   * mpWhiteTexture is seeded from the Im-renderer state library (guest _R27[32]); that
         //     state-library global is not modelled in this slice, so the white texture is supplied
         //     separately by SetWhiteTexture during boot (FLAG'd below).
-        void Construct(CgsGuiModuleIO::ImRendererSet* lpImRenderers,
+        void Construct(::CgsGuiModuleIO::ImRendererSet* lpImRenderers,
                        CgsGraphics::TextRenderer* lpTextRenderer,
                        CgsLanguage::LanguageManager* lpLanguageManager,
                        const FontCollection* lpFonts,

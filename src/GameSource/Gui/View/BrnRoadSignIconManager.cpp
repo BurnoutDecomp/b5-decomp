@@ -51,4 +51,20 @@ namespace BrnGui
         }
     }
 
+    // @ 0x824F5??? [H3c NAMED GATE] -- the per-frame road-sign pass UpdateSatNavIcons
+    // calls when mbUseRoadSigns is set. The body drives the parked 64-sign pool
+    // (unreconstructed); the sat-nav HUD owner claims the icon set with road signs OFF,
+    // so this leg is only reachable from the big-map screens. One-shot-logged park.
+    void RoadSignIconManager::Update()
+    {
+        static bool sbLogged = false;
+        if (!sbLogged && CgsDev::Log::gpDebugPrint != 0)
+        {
+            sbLogged = true;
+            *CgsDev::Log::gpDebugPrint
+                << "[UI-gate] PARK: RoadSignIconManager::Update (the 64-sign pool pass) "
+                   "is unreconstructed\n";
+        }
+    }
+
 }

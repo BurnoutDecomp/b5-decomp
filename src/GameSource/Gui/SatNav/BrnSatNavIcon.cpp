@@ -9,7 +9,11 @@
 // reconstructed TU; the adjustor here only adjusts `this` and forwards to it.
 
 #include "GameSource/Gui/SatNav/BrnSatNavIcon.h"
+#include "GameShared/GameClasses/Core/CgsAssert.h"           // [H3c] CGS_ASSERT (the Construct/Prepare asserts)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [H3b] the Construct park print
+#include "GameSource/Gui/Flapt/BrnFlaptFileRef.h"            // [H3c] BrnFlapt::FileRef (Prepare)
+
+#include <limits>    // [H3c] FLT_MAX poison (Construct @0x82448340 stores 3.4028235e38)
 
 namespace BrnGui
 {
@@ -136,6 +140,48 @@ CrashNavMapIcon* CrashNavMapIcon::Construct(s32 liA, s32 liB, s32 liC)
                "icon-pool component ctor) is unreconstructed\n";
     }
     return this;
+}
+
+// ======================= H3c: the sat-nav icon-pool bind surface =======================
+
+// @ 0x82448340 -- the pool-bind constructor (this = the icon; the X360 constructs the
+// HOSTING FlaptIconComponent at `this - 32`, then poisons the icon's cached transform
+// state so the first real Set* always pushes through to the clip).
+void SatNavMapIcon::Construct(const char* lpcName, CgsGui::StateInterface* lpStateInterface,
+                              const char* lpcParentName)
+{
+    CGS_ASSERT(lpcName != 0,
+               "Invalid name passed to SatNavMapIcon::Construct()");            // :291 (non-gating)
+    CGS_ASSERT(lpStateInterface != 0,
+               "Invalid StateInterface passed to SatNavMapIcon::Construct()");  // :292 (non-gating)
+
+    SatNavIconComponent* lpComponent = reinterpret_cast<SatNavIconComponent*>(
+        reinterpret_cast<char*>(this) - offsetof(SatNavIconComponent, mIcon));
+    lpComponent->FlaptIconComponent::Construct(lpcName, lpStateInterface, lpcParentName);
+
+    mIconText.SetInvalid();                       // X360 stw 0 @+0x30/+0x34/+0x38
+    mfRotationInRadians = 3.4028235e38f;          // X360 stfs FLT_MAX @+0x20 (flt_8204F664)
+    mfAlpha             = -1.0f;                  // X360 stfs -1.0 @+0x24 (flt_820037C8)
+    meState             = E_ICONSTATE_COUNT;      // X360 stw 53 @+0x28
+}
+
+// @ 0x82448488 -- the pool-bind Prepare (this = the ELEMENT; IDA labels it
+// "SatNavMapIcon::Prepare" but the X360 call site passes icon-32). Bind the named clip,
+// then reset the embedded icon through its own virtuals: the direct state=COUNT store
+// forces SetState(INVISIBLE) to fire the "Invisible" label jump; SetRotation(0) and
+// SetPosition(zero) push the reset transform to the freshly-bound clip.
+void SatNavIconComponent::Prepare(const char* lacName, const BrnFlapt::FileRef& lFile)
+{
+    FlaptIconComponent::Prepare(lacName, lFile, 0);
+
+    // X360 order: stw 53 -> icon state, then the four virtual resets.
+    mIcon.MapIconBrnBase::SetState(MapIconBrnBase::E_ICONSTATE_COUNT);   // the raw store (no label jump)
+    mIcon.SetRotation(0.0f);
+    mIcon.SetAlpha(0.0f);
+    mIcon.SetState(MapIconBrnBase::E_ICONSTATE_INVISIBLE);
+    Vector2 lv2Zero;
+    lv2Zero.x = 0.0f; lv2Zero.y = 0.0f; lv2Zero.z = 0.0f; lv2Zero.w = 0.0f;
+    mIcon.SetPosition(lv2Zero);
 }
 
 } // namespace BrnGui

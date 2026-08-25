@@ -63,6 +63,13 @@ namespace BrnGui
         // here so the manager TU links against the real declaration.
         void SetRoadRuleBatchData(const GuiEventRoadRuleBatchDataResponse* lpRoadRules);
 
+        // [H3c] MapIconManager::UpdateSatNavIcons @0x82522588 calls the per-frame sign
+        // pass (X360 BrnGui__RoadSignIconManager__Update on this+0x7090) when road signs
+        // are enabled. The body drives the parked 64-sign pool -- one-shot-logged park in
+        // the cpp; only reachable with mbUseRoadSigns set (the big-map screens -- the
+        // sat-nav HUD owner claims the set with road signs OFF).
+        void Update();
+
     private:
         // @this+0x0 : inline pool of road-sign icon components (stride 0xC0). The
         // per-icon visible flag of element 0 lands @this+0xBC, matching the asm.

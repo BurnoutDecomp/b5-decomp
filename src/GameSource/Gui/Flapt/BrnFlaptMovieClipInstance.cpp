@@ -405,6 +405,16 @@ void MovieClipInstance::GotoAndStopLabel(u32 luLabelHash,
     CGS_ASSERT(mpMovieClip != 0, "mpMovieClip");
     const u32 luFrame = static_cast<u32>(
         mpMovieClip->FindLabelledFrameIndex(luLabelHash, lpcLabel));
+    // [DIAG] NOT IN THE X360 BINARY -- a label that does not exist in the bound clip
+    // resolves to an out-of-range frame and the CGS_ASSERT below is a NO-OP in this
+    // build, so the goto silently does nothing and the component never appears. Say so.
+    if (luFrame >= mpMovieClip->muNumFramesInTimeline && CgsDev::Log::gpDebugPrint != 0)
+    {
+        *CgsDev::Log::gpDebugPrint
+            << "[flapt] GotoAndStopLabel: label '" << (lpcLabel != 0 ? lpcLabel : "?")
+            << "' NOT FOUND in clip (frames=" << mpMovieClip->muNumFramesInTimeline
+            << ")\n";
+    }
     CGS_ASSERT(luFrame < mpMovieClip->muNumFramesInTimeline,
                "luFrame < mpMovieClip->muNumFramesInTimeline");
     muLastKeyFrameApplied = static_cast<u16>(-1);
