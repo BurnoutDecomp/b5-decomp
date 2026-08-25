@@ -43,12 +43,13 @@ static const f32 KF_DECLICK_STEP = 0.015625f;   // flt_820ADC00 (1 / GAIN_DECLIC
 enum { KI_MIXER_FRAME_SIZE = 256 };
 
 // flt_82F8EEC8 / flt_82F8EECC -- the default speaker azimuth / rear-spread angles (degrees)
-// used by SpeakerConfig when no explicit config was supplied. These are un-recovered rodata
-// float constants (their bytes are not in the dossier); declared as the real external data
-// symbols they are -- their value lives in the XEX rodata, not reconstructed here -- so the
-// default path stays structurally faithful without fabricating a numeric value.
-extern const f32 KF_PAN2D_DEFAULT_AZIMUTH; // flt_82F8EEC8
-extern const f32 KF_PAN2D_DEFAULT_SPREAD;  // flt_82F8EECC
+// used by SpeakerConfig when no explicit config was supplied. RECOVERED 2026-08-25
+// (audio-faithfulness wave 4) from the decrypted XEX rodata (file_off 0x3000 + vaddr -
+// 0x82000000 -> 0xF91EC8/0xF91ECC; BE bytes 42 34 00 00 / 43 07 00 00): 45 and 135
+// degrees -- the classic front-pair / rear-pair speaker azimuths. (Formerly declared-only
+// unresolved externals, an honest refusal that also made the TU unlinkable.)
+static const f32 KF_PAN2D_DEFAULT_AZIMUTH = 45.0f;  // flt_82F8EEC8
+static const f32 KF_PAN2D_DEFAULT_SPREAD  = 135.0f; // flt_82F8EECC
 
 // -------------------------------------------------------------------------------------
 // GetSize @0x82B982C0 -- the plug-in's instance size in bytes.

@@ -14,34 +14,20 @@ namespace rw { namespace audio { namespace core { class PlugIn; } } }
 // runs the Voice base dtor, then (on flag&1) frees. mpSubmix is a trivially-
 // destructible raw PlugIn pointer, so the source ~SubmixVoice() body is empty.
 //
-// This MINIMAL home models the base chain (Object -> Voice -> SubmixVoice) with only
-// the members/dtors the teardown needs: the full Voice/Object hierarchy is DEFERRED
-// to the keystone TU. Modelled BY NAME from DWARF CgsSubmixVoice.h:44/59/78 (host-
-// width FLAG: pointer/refcount members widen; no absolute-offset static_assert).
+// (2026-08-25, audio-faithfulness wave 4): the former TU-local minimal Object +
+// Voice rivals are RETIRED -- the base chain comes from the REAL homes (the wave-3
+// Object fold made CgsVoice.h's Content/Object graph the single definition), so
+// SubmixVoice derives the real Voice below. Modelled BY NAME from DWARF
+// CgsSubmixVoice.h:44/59/78 (host-width FLAG: pointer/refcount members widen; no
+// absolute-offset static_assert).
 // ============================================================================
+
+#include "GameShared/GameClasses/Sound/Playback/CgsVoice.h"   // the REAL Voice (: public Object)
 
 namespace CgsSound
 {
 namespace Playback
 {
-
-// Minimal per-TU Object base (vptr + refcount + virtual dtor).
-class Object
-{
-public:
-    Object() : mu32RefCount(0) {}
-    virtual ~Object() {}
-protected:
-    u32 mu32RefCount;
-};
-
-// Minimal per-TU Voice base. ~Voice is DECLARED (the SubmixVoice dtor chains through
-// it); its body is DEFERRED to the Voice keystone TU.
-class Voice : public Object
-{
-public:
-    virtual ~Voice();
-};
 
 // CgsSubmixVoice.h:44/59/78 (DWARF). SubmixVoice : public Voice, adding a submix
 // PlugIn pointer.

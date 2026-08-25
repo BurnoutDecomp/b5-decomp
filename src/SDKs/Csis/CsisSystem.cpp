@@ -113,6 +113,16 @@ int System::Subscribe(SystemContent* pContent)
 {
     // The content base address is what the asm adds to each record's relative
     // target word (`add r8,r8,r3`); reproduced as an integer add by name.
+    //
+    // ⚠️ FLAG (host-width TRUNCATION -- latent, 2026-08-25 wave 4 audit note): the
+    // relocated word lives INSIDE the serialised 12/16-byte content records
+    // (SystemClient12/16::miTargetOrOffset, an s32 on-disk slot), so a 64-bit host
+    // pointer CANNOT fit it -- this add truncates. Nothing in the tree reads
+    // miTargetOrOffset back yet (the console dispatch consumer that would bctrl
+    // through it is unbodied), so the defect cannot fire today. The real fix is a
+    // SIDE TABLE mapping record -> host pointer, to be built together with that
+    // dispatch consumer -- do NOT widen the field (it would break the on-disk
+    // blob layout).
     const s32 iContentBase =
         static_cast<s32>(reinterpret_cast<std::uintptr_t>(pContent));
 

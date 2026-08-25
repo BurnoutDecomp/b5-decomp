@@ -54,7 +54,7 @@ namespace Csis
 struct SystemClient12
 {
     u8  maHeader[4];   // +0x00  (record header; not read by Subscribe/Unsubscribe)
-    s32 miTargetOrOffset; // +0x04  content-relative offset on disk -> absolute pointer in Subscribe
+    s32 miTargetOrOffset; // +0x04  content-relative offset on disk -> absolute pointer in Subscribe ⚠️ FLAG: 32-bit serialised slot; a 64-bit host pointer TRUNCATES here (see Subscribe)
     s32 miStatus;      // +0x08  set to -1 by Unsubscribe
     s16 miSerial;      // +0x0A  rolling serial id stamped by Subscribe
 };  // sizeof == 0x0C (12)
@@ -67,7 +67,7 @@ struct SystemClient12
 struct SystemClient16
 {
     u8  maHeader[8];   // +0x00  (record header; not read by Subscribe/Unsubscribe)
-    s32 miTargetOrOffset; // +0x08  content-relative offset -> absolute pointer in Subscribe
+    s32 miTargetOrOffset; // +0x08  content-relative offset -> absolute pointer in Subscribe ⚠️ FLAG: 32-bit serialised slot; a 64-bit host pointer TRUNCATES here (see Subscribe)
     s32 miStatus;      // +0x0C  set to -1 by Unsubscribe
     s16 miSerial;      // +0x0E  rolling serial id stamped by Subscribe
 };  // sizeof == 0x10 (16)
