@@ -1065,7 +1065,20 @@ namespace BrnGui
         // against `lwz 0x4B04(cache)`) -- which is why the event carries BOTH indices.
         // No member is shifted (4 + 0x28 == 0x2C). FLAG: consumer-named.
         s32  mePlayerGlobalRaceCarIndex;                  // +0x4B04 (19204) EGlobalRaceCarIndex
-        u8   mPad_4B08[0x28];                             // +0x4B08..+0x4B2F
+        // [hud H3b tracking slice 2026-08-25] the GuiPlayerInfo tail carved from the
+        // head of the former mPad_4B08[0x28]. Producers: GuiCache::RecEvent case 147
+        // (`{+19208,+19212,+19216} = the {speed,rpm,gear} words`) and case 199's
+        // player-icon arm (`+19220 = icon mfRotation; +19224/+19228 = county/district`).
+        // Consumers: SatNavComponent's GuiPlayerInfo view over +0x4AE0 (miSpeedMph
+        // @+0x28 == +0x4B08, mfOrientation @+0x34 == +0x4B14). No member is shifted
+        // (0x18 + 0x10 == 0x28).
+        s32  miPlayerSpeedMph;                            // +0x4B08 (19208) case 147 word 0
+        s32  miPlayerRPM;                                 // +0x4B0C (19212) case 147 word 1
+        s32  miPlayerGear;                                // +0x4B10 (19216) case 147 word 2
+        f32  mfPlayerOrientation;                         // +0x4B14 (19220) case 199 (icon mfRotation)
+        s32  mePlayerCounty;                              // +0x4B18 (19224) case 199 GetCounty
+        s32  mePlayerDistrict;                            // +0x4B1C (19228) case 199 GetDistrict
+        u8   mPad_4B20[0x10];                             // +0x4B20..+0x4B2F
         // ADDITIVE CARVE (HudMessageAnalyzer keystone): the game-flow state word the
         // analyzer's Update gates its trigger passes on (lwz mpGuiCache+0x4B30; fire
         // only when it holds 1 or 3, treat -1 as invalid). FLAG: consumer-named -- the
@@ -1291,7 +1304,13 @@ namespace BrnGui
         bool mbIsPreRaceFlyByActive;                     // +0xA015 (40981)
         u8  mPad_A016[10];                               // +0xA016..+0xA01F
         Vector4 maRaceCarPositions[8];                   // +0xA020 (40992) GetRaceCarPosition @0x82443750 (16*(idx+2562)+this)
-        u8  mPad_A0A0[68];                               // +0xA0A0..+0xA0E3
+        // [hud H3b tracking slice 2026-08-25] the middle of the SoA block carved from
+        // the former mPad_A0A0[68]: the identity qwords + entry count the case-207 copy
+        // lands (`memcpy(cache+0xA020, GuiRaceCarInfoEvent, 240)` on the console --
+        // record maIdentity @0x80 -> +0xA0A0, miNumEntries @0xC0 -> +0xA0E0). No member
+        // is shifted (64 + 4 == 68).
+        u64  maRaceCarIdentities[8];                     // +0xA0A0 (41120) case-207 identity qwords
+        s32  miNumRaceCarsInInfo;                        // +0xA0E0 (41184) case-207 entry count
         bool maRaceCarUsed[8];                           // +0xA0E4 (41188) IsActiveRaceCarIndexUsed @0x82443A00 / GetRaceCarPosition used-gate
         bool maRaceCarConnecting[8];                     // +0xA0EC (41196) IsActiveRaceCarConnecting @0x82443B28
         // [gateui r3] ADDITIVE CARVE from the head of the former mPad_A0F4[16] -- the
@@ -1302,7 +1321,8 @@ namespace BrnGui
         // @0x824F2FB0 also walks all eight bytes (+0xA0F4..+0xA0FB) for its debug dump.
         // No member is shifted (8 + 8 == 16).
         bool maRaceCarDisconnected[8];                   // +0xA0F4 (41204) IsActiveRaceCarDisconnected @0x82443C50
-        u8  mPad_A0FC[8];                                // +0xA0FC..+0xA103
+        // [hud H3b] case-207 flag-D lane (GuiRaceCarInfoEvent maFlagD @0xDC == in-range).
+        bool maRaceCarInRange[8];                        // +0xA0FC (41212) case-207 in-range bytes
         bool maRaceCarCrashing[8];                       // +0xA104 (41220) IsRaceCarCrashing @0x824438A8
         u8  mPad_A10C[36];                               // +0xA10C..+0xA12F
         s8  maEventPositionOfRaceCar[8];                 // +0xA130 (41264) GetEventPositionOfRaceCar @0x82443D78 (place; gated on @0xA140)

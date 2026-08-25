@@ -164,6 +164,32 @@ struct OverheadSignScore
 static_assert(sizeof(OverheadSignScore) == 0x20,
               "OverheadSignScore stride 0x20 (Array<OverheadSignScore,32> `slwi ...,5`)");
 
+// [hud H3b tracking slice 2026-08-25] the two raw player-telemetry records the world->GUI
+// bridge posts and GuiCache::RecEvent consumes (relocated here from the demangled-shell
+// header, which would otherwise ODR-clash for TUs that include both).
+//   GuiEventUpdateHud (147): BridgeWorldVehicleDataToGui @0x823E5768 builds a RAW 12-byte
+//   {(s32)RaceCarState::mfSpeedMPH @972, (s32)mfRPM @984, mi8Gear @1092} local (BE stores
+//   +0/+4/+8, no GuiEvent header); AddGuiEvent<GuiEventUpdateHud> @0x823DA5C8 ==
+//   AddEvent(&event, 147, 12). Cache case 147 -> +19208/+19212/+19216.
+struct GuiEventUpdateHud
+{
+    s32 miSpeedMph;   // @0
+    s32 miRPM;        // @4
+    s8  mi8Gear;      // @8
+    u8  mau8Pad[3];   // @9..@11 (the console posts 12 bytes)
+    s32 GetEventType() const { return 147; }
+};
+
+//   GuiPlayerRaceCarIdEvent (376): the raw {active, global} index pair
+//   (@0x823DA458 == AddEvent(&event, 376, 8)); GuiCache case 376 asserts both ranges as
+//   "lpRaceCarIdEvent->mePlayer*" -- the member names are the cache's own assert strings.
+struct GuiPlayerRaceCarIdEvent
+{
+    s32 mePlayerActiveRaceCarIndex;  // @0 (BrnGuiCache.cpp:1904/1905)
+    s32 mePlayerGlobalRaceCarIndex;  // @4 (:1906/1907)
+    s32 GetEventType() const { return 376; }
+};
+
 // Declaration mirror of the DWARF parent. Only the nested SatNavIconInfo is modelled.
 struct GuiEventUpdateSatNav
 {
@@ -195,12 +221,41 @@ struct GuiEventUpdateSatNav
         EActiveRaceCarIndex GetActiveRaceCarIndex() const;  // @ 0x824B2EF8  reads mi8ActiveRaceCarIndex @0x26
         EPlayerTeam         GetPlayerTeam() const;          // @ 0x824EB190  reads mi8PlayerTeam @0x27
 
-        // ---- declared-only setters/getters (DWARF :1710-1731), out of scope ----
-        void          SetCounty(BrnWorld::ECounty leCounty);
-        void          SetDistrict(BrnWorld::EDistrict leDistrict);
-        void          SetActiveRaceCarIndex(EActiveRaceCarIndex leIndex);
-        void          SetIconType(SatNavIconType leType);
-        SatNavIconType GetIconType() const;
+        // ---- setters (DWARF :1710-1731) -- bodied 2026-08-25 (hud H3b tracking slice):
+        // the 199 producer fills each icon through them; the county/district range
+        // asserts are the console's own (inlined at the bridge's fill sites,
+        // BrnGuiEventTypeDefs.h:1857/:1873).
+        void SetCounty(BrnWorld::ECounty leCounty)
+        {
+            CGS_ASSERT(static_cast<s32>(leCounty) >= 0, "leCounty >= 0");        // :1857
+            mu8County = static_cast<u8>(leCounty);
+        }
+        void SetDistrict(BrnWorld::EDistrict leDistrict)
+        {
+            CGS_ASSERT(static_cast<s32>(leDistrict) >= 0, "leDistrict >= 0");    // :1873
+            mu8District = static_cast<u8>(leDistrict);
+        }
+        void SetActiveRaceCarIndex(EActiveRaceCarIndex leIndex)
+        {
+            mi8ActiveRaceCarIndex = static_cast<s8>(leIndex);
+        }
+        void SetIconType(SatNavIconType leType)
+        {
+            mi8IconType = static_cast<s8>(leType);
+        }
+        SatNavIconType GetIconType() const
+        {
+            return static_cast<SatNavIconType>(mi8IconType);
+        }
+
+        // [H3b FLAG consumer-named faces] the PS3 DWARF exposes these head members
+        // public with no setter pair; the 199 producer writes them through named faces
+        // (the GetCgsId/SetPositionLane idiom above).
+        void SetCgsId(CgsID lId)              { mCgsId = lId; }          // @0x10
+        void SetRotation(f32 lfRotation)      { mfRotation = lfRotation; }   // @0x18
+        void SetSpeedMph(f32 lfSpeedMph)      { mfSpeedMph = lfSpeedMph; }   // @0x1C
+        void SetHiddenDriveThru(bool lbHidden){ mbIsHiddenDriveThru = lbHidden; } // @0x23
+        f32  GetRotation() const              { return mfRotation; }
 
         // FLAGGED ADDITIVE GROW (Scene-Gui-Realmc group): the X360 DoWorstCase
         // @0x823B1980 reads/writes the position vector at icon-relative +0x00
@@ -230,7 +285,7 @@ struct GuiEventUpdateSatNav
         const Vector4& GetPositionLane() const { return mv4Position; }      // @0x00
         s16  GetLandmarkIndexHalf() const                                   // @0x20 (within the head)
         {
-            return *reinterpret_cast<const s16*>(&maHeadReserved[0x20 - 0x18]);
+            return miLandmarkIndex;   // [H3b] the head carve named it; same bytes.
         }
 
         // ADDITIVE GROW (wave-J CrashNavMap + PreRaceFlyBy TUs). Two named faces over head
@@ -267,8 +322,16 @@ struct GuiEventUpdateSatNav
         Vector4 mv4Position;          // @0x00 .. 0x0F  (X360-pinned; DoWorstCase lvx128)
         CgsID   mCgsId;               // @0x10 .. 0x17  (DWARF head order, X360-pinned by
                                       //   the SetEventIconResource `ld info+0x10`)
-        u8      maHeadReserved[0x0B]; // @0x18 .. 0x22  (mfRotation / mfSpeedMph / the
-                                      //   landmark-index half remain reserved)
+        // ⭐ [hud H3b tracking slice 2026-08-25] the reserved mid block is carved to its
+        // DWARF names: the 199 producer (BridgeWorldVehicleDataToGui @0x823E5768) writes
+        // mfRotation (`stfs +0x18`, the heading angle vs north) and mfSpeedMph
+        // (`stfs +0x1C`, speeds[idx] * flt_830180B0) per icon; the cache's case-199
+        // player store reads mfRotation back (`lfs 24(r30)` -> cache +0x4AF4). The
+        // landmark half at @0x20 keeps its accessor below; mu8DesignIndex fills @0x22.
+        f32     mfRotation;           // @0x18  (DWARF :1702; heading, radians 0..2pi)
+        f32     mfSpeedMph;           // @0x1C  (DWARF :1703)
+        s16     miLandmarkIndex;      // @0x20  (DWARF :1704; GetLandmarkIndexHalf)
+        u8      mu8DesignIndex;       // @0x22  (DWARF :1705)
         bool    mbIsHiddenDriveThru;  // @0x23  (DWARF head tail; MapIconManager drive-thru skip)
 
         // ---- trailing bytes, X360-pinned (offsets proven by the four accessors) ----

@@ -65,6 +65,35 @@ namespace BrnGui
         // AddGuiEvent<GuiRaceCarInfoEvent> @0x823DA738 -> AddEvent(&event, 207, 240).
         s32 GetEventType() const { return 207; }
 
+        // [hud H3b tracking slice 2026-08-25 -- FLAG consumer-named faces] the X360
+        // producer (BridgeWorldVehicleDataToGui @0x823E64E8..) fills the entries with raw
+        // stores and the cache's case 207 copies the whole record over its mRaceCarInfo
+        // SoA (memcpy(cache+0xA020, payload, 240)). On this build both ends go through
+        // named faces: the byte copy is not portable (the serialized-slots rule does not
+        // apply -- this is a runtime record -- but member-wise is the safe x64 form).
+        void SetEntry(s32 liActiveIndex, const Vector4& lv4Position, u64 luIdentity,
+                      bool lbUsed, bool lbConnecting, bool lbDisconnected,
+                      bool lbInRange, bool lbCrashing)
+        {
+            maPosition[liActiveIndex] = lv4Position;
+            maIdentity[liActiveIndex] = luIdentity;
+            maFlagA[liActiveIndex]    = lbUsed ? 1 : 0;         // -> cache maRaceCarUsed
+            maFlagB[liActiveIndex]    = lbConnecting ? 1 : 0;   // -> maRaceCarConnecting
+            maFlagC[liActiveIndex]    = lbDisconnected ? 1 : 0; // -> maRaceCarDisconnected
+            maFlagD[liActiveIndex]    = lbInRange ? 1 : 0;      // -> maRaceCarInRange
+            maFlagE[liActiveIndex]    = lbCrashing ? 1 : 0;     // -> maRaceCarCrashing
+        }
+        void SetNumEntries(s32 liNum) { miNumEntries = liNum; }
+
+        const Vector4& GetPosition(s32 liIndex) const { return maPosition[liIndex]; }
+        u64  GetIdentity(s32 liIndex) const           { return maIdentity[liIndex]; }
+        s32  GetNumEntries() const                    { return miNumEntries; }
+        bool GetUsedFlag(s32 liIndex) const           { return maFlagA[liIndex] != 0; }
+        bool GetConnectingFlag(s32 liIndex) const     { return maFlagB[liIndex] != 0; }
+        bool GetDisconnectedFlag(s32 liIndex) const   { return maFlagC[liIndex] != 0; }
+        bool GetInRangeFlag(s32 liIndex) const        { return maFlagD[liIndex] != 0; }
+        bool GetCrashingFlag(s32 liIndex) const       { return maFlagE[liIndex] != 0; }
+
     private:
         Vector4 maPosition[KI_NUM_ENTRIES];  // @0x00 -- per-entry screen-space position
         u64     maIdentity[KI_NUM_ENTRIES];  // @0x80 -- per-entry identity qword

@@ -521,6 +521,26 @@ bool RCEntityActiveRaceCarOutputInterface::IsRaceCarActive(EActiveRaceCarIndex l
 }
 
 // ============================================================================
+// [hud H3b tracking slice 2026-08-25] the two flag predicates the 207 producer reads
+// (declared :264/:272). Same shape as IsRaceCarActive above; the bit senses are the
+// producer's own (UpdateOutputInterfaces): 0x20 == E_RACE_CAR_OUTPUT_FLAG_CONNECTING,
+// 0x80 == E_RACE_CAR_OUTPUT_FLAG_DISCONNECTED.
+// ============================================================================
+bool RCEntityActiveRaceCarOutputInterface::IsCarConnecting(EActiveRaceCarIndex leActiveRaceCarIndex) const
+{
+    CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,     "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
+    CGS_ASSERT(leActiveRaceCarIndex <  E_ACTIVE_RACE_CAR_INDEX_COUNT, "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+    return (maxRaceCarFlags[leActiveRaceCarIndex] & E_RACE_CAR_OUTPUT_FLAG_CONNECTING) != 0;
+}
+
+bool RCEntityActiveRaceCarOutputInterface::IsCarDisconnected(EActiveRaceCarIndex leActiveRaceCarIndex) const
+{
+    CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,     "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
+    CGS_ASSERT(leActiveRaceCarIndex <  E_ACTIVE_RACE_CAR_INDEX_COUNT, "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+    return (maxRaceCarFlags[leActiveRaceCarIndex] & E_RACE_CAR_OUTPUT_FLAG_DISCONNECTED) != 0;
+}
+
+// ============================================================================
 // DWARF :220 -- the const per-index race-car state accessor (the sibling of the
 // committed non-const GetRaceCarStateMutable @0x8227D690, which returns
 // &maRaceCarStates[idx] after the same two range asserts; the const form was
