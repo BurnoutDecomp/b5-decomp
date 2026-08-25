@@ -35,7 +35,15 @@ namespace CgsGui
 
         // DWARF CgsGuiResourceModule.h:129-131.
         static const s32 KI_RESOURCE_RECEIVER_QUEUE       = 8192;
-        static const s32 KI_MAX_BUNDLES_TO_LOAD           = 64;
+        // [FLAG PC-platform widening] the console value is 64 (X360 AddBundleToQueue
+        // @0x82848090: `cmpwi r11, 0x40`). This build's HUD-flow stand-in (the inline
+        // BrnHudFlow hack that replaces the Lua FSM -- see the Lua-system note) issues the
+        // whole component-resource roster in ONE frame where the console's scripted flow
+        // staggers it, so with the boost bar's twelve texture requests live the single-frame
+        // peak measured 65 (the [gui-queue] diag, 2026-08-25: 50+ type-7 component records +
+        // the boost textures). Widened -- capacity only, the queue mechanics and the assert
+        // are unchanged -- until the faithful Lua flow retires the stand-in.
+        static const s32 KI_MAX_BUNDLES_TO_LOAD           = 128;
         static const s32 KI_MAX_RESOURCES_WITHOUT_WAITING = 5;
 
         // DWARF CgsGuiResourceModule.h:51.

@@ -79,7 +79,10 @@ template <typename Type>
 class Vector4Template
 {
 public:
-    Vector4Template(Type lX, Type lY, Type lZ, Type lW);
+    // DWARF vector4.h:58 -- the four-lane constructor (defined here: the boost-bar TU's
+    // KV4_FPU_BOOSTBAR_RECT static is built through it, and a declaration-only template
+    // member has no other TU to live in).
+    Vector4Template(Type lX, Type lY, Type lZ, Type lW) : mX(lX), mY(lY), mZ(lZ), mW(lW) {}
 
     // Additive grow (post-fx reprojection wave). The DecFIGS DWARF for this type
     // (dwarfdump/SDKs/EATech/include/rw/math/fpu/vector4.h) declares a default constructor

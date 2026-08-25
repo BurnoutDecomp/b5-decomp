@@ -59,6 +59,11 @@
 // named by its own baked assert string -- and it is included from there now.
 #include "GameShared/GameClasses/Gui/CgsGuiShared.h"
 
+// SetMaskRect (bottom of this TU) writes the 2-vertex clip-mask corner run and pushes it
+// through the Im2d command buffer (opcode 17).
+#include "BrnCommonTypes.h"  // rw::math::vpu::Vector4
+#include "GameShared/GameClasses/Graphics/ImmediateMode/ImRenderBuffer/CgsImRenderBufferTemplate.h"
+
 namespace BrnGui
 {
 
@@ -145,7 +150,9 @@ void CustomRendererManager::Construct()
     mapCustomRenderComponents[E_SATNAV]               = 0;
     mapCustomRenderComponents[E_MAINMAP]              = 0;
     mapCustomRenderComponents[E_CRASHNAVICONS]        = 0;
-    mapCustomRenderComponents[E_BOOSTBAR]             = 0;
+    // ⭐ [boost-bar] slot 4 is LIVE (2026-08-25): the reconstructed BoostBarRenderer
+    // subobject (guest this+0xE520), the in-game boost gauge.
+    mapCustomRenderComponents[E_BOOSTBAR]             = &mBoostBarRenderer;
     mapCustomRenderComponents[E_ABOVECAR]             = 0;
     mapCustomRenderComponents[E_PROGRESSBAR]          = 0;
     mapCustomRenderComponents[E_BLACKBAR]             = 0;
@@ -755,5 +762,61 @@ void CustomRendererManager::SetLanguageManager(CgsLanguage::LanguageManager* lpL
 // ================= SetReplaySerialiser @ 0x82445648 =================
 // Defined in the sibling TU GameSource/Gui/BrnCustomRendererManager.cpp (the original
 // minimal-slice ledger function); not redefined here.
+
+// ================= BrnGui::SetMaskRect @ 0x82450BE0 =================
+// The shared GUI clip-mask helper (this TU is its home -- the assert below bakes
+// BrnCustomRenderer.cpp:889). The X360 body:
+//   1. asserts the "Mask Aspect Correction Matrix" (BSS 0x82FB3220, written at runtime by the
+//      map manager's construct) is initialised ("Mask Aspect Correction Matrix not
+//      initialised.", :889);
+//   2. vperm-extracts the rect's two corners ({x,y} and {z,w}) and pushes each through
+//      BrnGui::MapTransform::Transform(point, &0x82FB2FA0, &0x82FB3010) -- the runtime-built
+//      proportion-space -> aspect-corrected-device-space pair;
+//   3. orders the two transformed corners min/max per axis (the vcmpgtfp swap pair);
+//   4. builds a 2-vertex corner run -- positions from the ordered corners, UVs from the caller's
+//      mask-UV vector ({u0,v0} on the min corner, {u1,v1} on the max), the colour lane left as
+//      filler (the console stores a NaN pattern; nothing reads it) -- and pushes it with
+//      Im2dRenderBuffer::PushMask(lpTextureState, run) (opcode 17).
+//
+// [FLAG PC fold] step 1+2: the console's matrix pair maps 0..1 screen proportions into its
+// aspect-corrected device space and exists only once the map manager has built it (hence the
+// assert). The PC Im2d dispatch consumes mask corners in logical screen pixels, so the fold is
+// the constant proportion -> 1280x720 logical-pixel scale -- always defined, so the
+// not-initialised assert has no PC condition to fire on and is dropped with this note. The
+// corner ordering, UV wiring and the opcode-17 push are transcribed as-is.
+void SetMaskRect(CgsGraphics::ImRenderBuffer<CgsGraphics::Basic2dColouredTexturedVertex>* lpRenderBuffer,
+                 const renderengine::TextureState* lpTextureState,
+                 const rw::math::vpu::Vector4& lrv4Rect,
+                 const rw::math::vpu::Vector4& lrv4MaskUVs)
+{
+    if (lpRenderBuffer == 0)
+        return;
+
+    // Corner A = {x,y}, corner B = {z,w}, proportion space -> logical pixels (the fold above).
+    f32 lfAX = lrv4Rect.x * 1280.0f;
+    f32 lfAY = lrv4Rect.y * 720.0f;
+    f32 lfBX = lrv4Rect.z * 1280.0f;
+    f32 lfBY = lrv4Rect.w * 720.0f;
+
+    // Order min/max per axis (the console's two vcmpgtfp corner swaps).
+    if (lfAX > lfBX) { const f32 lfSwap = lfAX; lfAX = lfBX; lfBX = lfSwap; }
+    if (lfAY > lfBY) { const f32 lfSwap = lfAY; lfAY = lfBY; lfBY = lfSwap; }
+
+    CgsGraphics::Basic2dColouredTexturedVertex laCorners[2];
+    laCorners[0].mv2Pos.x    = lfAX;
+    laCorners[0].mv2Pos.y    = lfAY;
+    laCorners[0].mv2Tex0UV.x = lrv4MaskUVs.x;
+    laCorners[0].mv2Tex0UV.y = lrv4MaskUVs.y;
+    laCorners[1].mv2Pos.x    = lfBX;
+    laCorners[1].mv2Pos.y    = lfBY;
+    laCorners[1].mv2Tex0UV.x = lrv4MaskUVs.z;
+    laCorners[1].mv2Tex0UV.y = lrv4MaskUVs.w;
+    // The colour lane is filler on the console (a NaN bit pattern the dispatcher never reads);
+    // stamped opaque here so the record carries no uninitialised bytes.
+    *reinterpret_cast<u32*>(&laCorners[0].mv4Colour) = 0xFFFFFFFFu;
+    *reinterpret_cast<u32*>(&laCorners[1].mv4Colour) = 0xFFFFFFFFu;
+
+    lpRenderBuffer->PushMask(lpTextureState, laCorners);
+}
 
 } // namespace BrnGui

@@ -10,25 +10,27 @@
 #include "GameShared/GameClasses/Graphics/ImmediateMode/ImRenderBuffer/CgsImRenderBufferTemplate.h" // the 2D command buffer (SetState/SetTransform/Render/PushMask)
 #include "GameShared/GameClasses/Gui/CgsGuiModuleIO.h"    // CgsGuiModuleIO::ImRendererSet (complete type for the render handler)
 #include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptRenderHandler.h"  // CgsGui::AptIm2dRenderBuffer (the set's slot-0 buffer)
+#include "GameSource/Gui/BrnCustomRendererManager.h"      // BrnGui::SetMaskRect (the shared clip-mask helper this TU's render paths push through)
 
 #include <cstring>   // memset (the shatter-lattice clears)
+#include <cmath>     // sin/cos (the shatter shards' centroid rotation)
 
 // BrnGui::BoostBarRenderer -- the in-game boost gauge (see the header banner for the source
 // map). This TU replaces the boot-trace minimal slice wholesale: the DWARF class landed in the
 // header, and every body below is reconstructed from the X360 ARTIST asm with the PS3 DecFIGS
 // export (which carries all the methods the X360 set lacks) as the shape/naming source.
 //
-// TODO(boost-render-half) -- CAMPAIGN IN FLIGHT (2026-08-24): the lifecycle/state half below
-// (ctor..Update, InitResources, RenderQuad, the shard math helpers) is reconstructed and
-// gate-clean; the RENDER half (RenderComponent @0x82466638, RenderFire @0x82452AD8,
-// RenderBillboardBar @0x82453318, RenderShatteredBar @0x82460630, SetBackground @0x8245B040,
-// SetChainedInactiveMask @0x824536A8, CalculateShardVertices @0x8244B248,
-// CalculateBoostShardTransformation, ShowDebugScreen @0x82461250 + the four RenderDebugFire
-// bodies) is still to land, together with the ImRenderBuffer SetState(TextureState/BlendState)
-// instantiations and the fpu Vector4Template<float> ctor instantiation. Until then the TU is
-// UNMOUNTED from the exe build (see build_game_exe.bat) and the manager's slot 4 stays null.
-// The full ground-truth workpack (X360+PS3 pseudocode/asm per function, the TOC value dump,
-// the X360 BSS constant map) lives in the session scratchpad's boostbar/ directory.
+// CAMPAIGN COMPLETE (2026-08-25): the whole class is reconstructed -- the lifecycle/state half
+// (ctor..Update, InitResources, the shard math helpers) AND the render half (RenderComponent
+// @0x82466638, RenderFire @0x82452AD8, RenderBillboardBar @0x82453318, RenderShatteredBar
+// @0x82460630, SetBackground @0x8245B040, SetChainedInactiveMask @0x824536A8,
+// CalculateShardVertices @0x8244B248, RenderQuad @0x8245AE30, ShowDebugScreen @0x82461250 +
+// the four RenderDebugFire bodies). The TU is mounted in the exe build and the manager's
+// slot 4 (E_BOOSTBAR) holds the live by-value subobject. The shared collaborators landed with
+// it: BrnGui::SetMaskRect (BrnCustomRenderer.cpp, its X360 home), the ImRenderBuffer typed
+// SetState bodies + the opcode-17 PushMask retype/dispatch (CgsImRenderBufferTemplate/
+// CgsIm2dRenderBuffer), and the CgsGui::BillboardRenderer mount with the GUI state-table
+// globals' PC folds (CgsBillboardRenderer.cpp).
 //
 // CONSTANT VALUES: the class constants are dynamically initialised on both consoles (Vector3/
 // Vector4/VecFloat have constructors). The values below were recovered by emulating the X360
@@ -85,6 +87,56 @@ static const CgsGui::sResourceTuple maResourcesToLoad[12] =
     { 12, static_cast<CgsGui::ResourceRequestTypes>(11) },
 };
 static const u32 muNumResourceToLoad = 12;
+
+// ---------------------------------------------------------------------------------------------
+// The render-half class statics (declared in the header; the consoles initialise every one of
+// these dynamically -- the values are the PS3 unity static-init literals, and the four
+// multiplier UV windows are additionally X360-BSS-verified at 0x82FB3210/0x82FB3460/
+// 0x82FB34D0/0x82FB2FE0). All sizes/offsets are 0..1 screen proportions.
+// ---------------------------------------------------------------------------------------------
+const f32 BoostBarRenderer::KF_BOOSTING_FLAME_X_SCALE       = 0.1f;
+const f32 BoostBarRenderer::KF_BOOSTING_FLAME_Y_SCALE       = 3.0f;
+const f32 BoostBarRenderer::KF_BOOSTING_FLAME_X_OFFSET      = 0.039999999f;
+const f32 BoostBarRenderer::KF_BOOSTING_FLAME_Y_OFFSET      = -0.029999999f;
+const f32 BoostBarRenderer::KF_FIRE_MASK_WIDTH              = 1.0f;
+const f32 BoostBarRenderer::KF_GROW_FIREBALL_X_SIZE         = 0.12f;
+const f32 BoostBarRenderer::KF_GROW_FIREBALL_Y_SCALE        = 3.5f;
+const f32 BoostBarRenderer::KF_GROW_FIREBALL_X_OFFSET       = 0.0f;
+const f32 BoostBarRenderer::KF_BLACK_SMOKE_X_SIZE           = 0.12f;
+const f32 BoostBarRenderer::KF_BLACK_SMOKE_Y_SCALE          = 2.8f;
+// The PS3 initialiser materialises X_OFFSET as `vmaddfp(v7, zero-splat, 0.12-splat)` == 0.12
+// (a compiler move-through-madd); flagged here because it is the one value read through that
+// idiom rather than a direct literal store.
+const f32 BoostBarRenderer::KF_BLACK_SMOKE_X_OFFSET         = 0.12f;
+const f32 BoostBarRenderer::KF_BLACK_SMOKE_Y_OFFSET         = -0.0099999998f;
+const f32 BoostBarRenderer::KF_EARN_FLAME_WIDTH             = 0.2f;
+const f32 BoostBarRenderer::KF_EARN_FLAME_X_OFFSET          = -0.015f;
+const f32 BoostBarRenderer::KF_EARN_FLAME_Y_SCALE           = 2.5f;
+const f32 BoostBarRenderer::KF_EARN_FLAME_FLICKER_PROP      = 0.5f;
+const f32 BoostBarRenderer::KF_BACKGROUND_ENDCAP_WIDTH      = 0.02f;
+const f32 BoostBarRenderer::KF_BACKGROUND_ENDCAP_YSCALE     = 1.1f;
+const f32 BoostBarRenderer::KF_BACKGROUND_ENDCAP_XOFFSET    = -0.013f;
+const f32 BoostBarRenderer::KF_FIRE_BODY_X_SIZE             = 0.12f;
+const f32 BoostBarRenderer::KF_FIRE_BODY_X_OFFSET           = -0.0099999998f;
+const f32 BoostBarRenderer::KF_FIRE_BODY_Y_SCALE            = 3.0999999f;
+const f32 BoostBarRenderer::KF_FIRE_BODY_Y_OFFSET           = -0.0080000004f;
+const f32 BoostBarRenderer::KF_FIRE_BODY_MASK_WIDTH         = 1.0f;
+const f32 BoostBarRenderer::KF_FIRE_BODY_ENDCAP_X_SIZE      = 0.07f;
+const f32 BoostBarRenderer::KF_FIRE_BODY_ENDCAP_OFFSET      = -0.015f;
+const f32 BoostBarRenderer::KF_FIRE_BODY_ENDCAP_FEATHER     = 0.02f;
+const f32 BoostBarRenderer::KF_DANGER_END_GLOW_WIDTH        = 0.1f;
+const f32 BoostBarRenderer::KF_AGRESSION_BOOST_TRANSPARENCY = 0.75f;
+const f32 BoostBarRenderer::KF_BOOSTING_GLOW_INTENSITY      = 0.30000001f;   // X360 rodata 0x82054EE4
+const f32 BoostBarRenderer::KF_SHAKE_X                      = 0.003f;
+const f32 BoostBarRenderer::KF_SHAKE_Y                      = 0.005f;
+const f32 BoostBarRenderer::KF_BACKGROUND_TILE_WIDTH        = 0.050000001f;
+const Vector4 BoostBarRenderer::KV4_GLOW_COLOUR             = { 0.2f, 0.2f, 0.2f, 1.0f };
+const Vector4 BoostBarRenderer::KV4_OVERLAY_COLOUR          = { 1.0f, 1.0f, 1.0f, 1.0f };
+const Vector4 BoostBarRenderer::KV4_FIREBALL_COLOUR         = { 1.0f, 1.0f, 1.0f, 1.0f };
+const Vector4 BoostBarRenderer::KV4_MULTIPLIER_2X_IMAGE_UV  = { 0.0f, 0.0f, 0.5f, 0.5f };
+const Vector4 BoostBarRenderer::KV4_MULTIPLIER_3X_IMAGE_UV  = { 0.5f, 0.0f, 1.0f, 0.5f };
+const Vector4 BoostBarRenderer::KV4_MULTIPLIER_2X_MASK_UV   = { 0.0f, 0.5f, 0.5f, 1.0f };
+const Vector4 BoostBarRenderer::KV4_MULTIPLIER_3X_MASK_UV   = { 0.5f, 0.5f, 1.0f, 1.0f };
 
 // The per-type constant pairs, boost-type indexed (the ForceSet(EBoostType) switch).
 static const Vector3* const KAPV3_INNER_BY_TYPE[3] =
@@ -596,6 +648,28 @@ void BoostBarRenderer::InitResources()
         *lrBuild.lppState = BuildBoostBarTextureState(mpHeapAllocator, *lrBuild.lpResource,
                                                       lpTexture, lrBuild.luAddressU);
     }
+
+    // The six billboard-effect renderers, each Constructed over its texture state as soon as
+    // that state exists on the console (interleaved with the builds above; gathered here after
+    // the loop -- same states, same configs, no observable difference). Configs verbatim from
+    // the six X360 Construct calls (max 32 billboards each; atlas framesX x framesY; the blend
+    // pointers are the state-table entries dword_83010F20/dword_83010F24 -- the additive slot
+    // goes to the fire-overlay and grow-fireball effects):
+    //   [0] background    1x1   standard      [1] fire body     4x8   standard
+    //   [2] fire overlay  4x5   ADDITIVE      [3] end cap       4x8   standard
+    //   [4] boosting flame 4x4  standard      [5] grow fireball 12x7  ADDITIVE
+    mBillboardRenderer[0].Construct(mpHeapAllocator, 32, mpBackgroundTextureState,
+                                    CgsGui::gpGuiBlendStateStandard, 1, 1, 0);
+    mBillboardRenderer[1].Construct(mpHeapAllocator, 32, mpFireBodyTextureState,
+                                    CgsGui::gpGuiBlendStateStandard, 4, 8, 0);
+    mBillboardRenderer[2].Construct(mpHeapAllocator, 32, mpFireOverTextureState,
+                                    CgsGui::gpGuiBlendStateAdditive, 4, 5, 0);
+    mBillboardRenderer[3].Construct(mpHeapAllocator, 32, mpEndCapTextureState,
+                                    CgsGui::gpGuiBlendStateStandard, 4, 8, 0);
+    mBillboardRenderer[4].Construct(mpHeapAllocator, 32, mpBoostingFlameTextureState,
+                                    CgsGui::gpGuiBlendStateStandard, 4, 4, 0);
+    mBillboardRenderer[5].Construct(mpHeapAllocator, 32, mpGrowFireballTextureState,
+                                    CgsGui::gpGuiBlendStateAdditive, 12, 7, 0);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -857,16 +931,15 @@ void BoostBarRenderer::DetermineBoostBarMultiplier()
 }
 
 // ---------------------------------------------------------------------------------------------
-// RenderQuad -- faithful port of X360 @0x8245AE30 (PS3 0x425988). One textured quad into the
-// set's 2D command buffer: clamp the colour to [0,1], scale to bytes and pack it, build the
-// four tristrip corners from the rect {x0,y0,x1,y1} and the UV set {u0,v0,u1,v1}, bind the
-// texture + blend states, publish the shared screen transform, submit as a 4-vertex strip
-// (primitive 6).
-// [FLAG PC fold] the console's shared transform (&unk_83011090) is the screen->NDC block its
-// GPU consumed; the PC Apt dispatch consumes logical-screen-pixel transforms instead, so the
-// screen-space identity (colour scale 255) is published -- the same fold the ticker's
-// RenderComponent documents. The rect/UVs are 0..1 screen proportions on the console; the PC
-// dispatch expects logical pixels, so the quad corners scale by the 1280x720 logical screen.
+// RenderQuad -- faithful port of X360 @0x8245AE30 (PS3 export: RenderQuad(Vector4 const& rect,
+// Vector4 const& colour, TextureState const*, BlendState const*, Vector4 uvRect)). One textured
+// quad into the set's 2D command buffer: clamp the colour to [0,1], scale to bytes (the
+// 255-splat at &unk_8305A950) and pack it, build the four tristrip corners from the rect
+// {x0,y0,x1,y1} and the by-value UV window {u0,v0,u1,v1}, bind the texture + blend states,
+// publish the shared screen transform (&unk_83011090 == gBillboardScreenTransform's console
+// original), submit as a 4-vertex strip (primitive 6). The corner positions stay in the
+// console's 0..1 screen proportions -- the shared transform carries the screen mapping, exactly
+// as on the console (see gBillboardScreenTransform's PC-fold note in CgsBillboardRenderer.cpp).
 // ---------------------------------------------------------------------------------------------
 namespace
 {
@@ -878,12 +951,48 @@ namespace
         if (lfLane > 1.0f) lfLane = 1.0f;
         return static_cast<u8>(lfLane * 255.0f);
     }
+
+    // The packed RGBA vertex-colour word from the clamped 0..1 lanes (shared by the quad and
+    // billboard writers below).
+    u32 PackBoostColour(const rw::math::vpu::Vector4& lrv4Colour)
+    {
+        return (static_cast<u32>(BoostColourLaneToByte(lrv4Colour.w)) << 24) |
+               (static_cast<u32>(BoostColourLaneToByte(lrv4Colour.z)) << 16) |
+               (static_cast<u32>(BoostColourLaneToByte(lrv4Colour.y)) << 8)  |
+               (static_cast<u32>(BoostColourLaneToByte(lrv4Colour.x)));
+    }
+
+    // Resolve the set's slot-0 2D command buffer (the console's **(this+1468); the same double
+    // deref RenderQuad below spells inline).
+    CgsGraphics::ImRenderBuffer<CgsGraphics::Basic2dColouredTexturedVertex>*
+    ResolveBoostBarBuffer(CgsGui::ImRendererSet* lpImRenderers)
+    {
+        if (lpImRenderers == 0)
+            return 0;
+        CgsGui::AptIm2dRenderBuffer* lpAptBuffer =
+            *reinterpret_cast<CgsGui::AptIm2dRenderBuffer* const*>(lpImRenderers);
+        return (lpAptBuffer != 0) ? &lpAptBuffer->mCommandBuffer : 0;
+    }
+
+    // Pack a 0..1 colour into the BillboardInfo::muDiffuse word. The billboard draw
+    // (CgsGui::BillboardRenderer::Render) runs every stored word through its own X360-verbatim
+    // PackVertexColour byte shuffle ([A B C D] -> [D B C A]) before it lands in the vertex, so
+    // the stored word here is that shuffle's PREIMAGE: the shuffled result must be the
+    // dispatch's little-endian [r,g,b,a] vertex word (the same convention RenderQuad packs
+    // directly). Solving: store (r<<24)|(b<<16)|(g<<8)|a.
+    u32 PackBillboardDiffuse(const rw::math::vpu::Vector4& lrv4Colour)
+    {
+        return (static_cast<u32>(BoostColourLaneToByte(lrv4Colour.x)) << 24) |
+               (static_cast<u32>(BoostColourLaneToByte(lrv4Colour.z)) << 16) |
+               (static_cast<u32>(BoostColourLaneToByte(lrv4Colour.y)) << 8)  |
+               (static_cast<u32>(BoostColourLaneToByte(lrv4Colour.w)));
+    }
 }
 
-void BoostBarRenderer::RenderQuad(const Vector4& lv4Rect, const Vector4& lv4UV,
+void BoostBarRenderer::RenderQuad(const Vector4& lv4Rect, const Vector4& lv4Colour,
                                   const renderengine::TextureState* lpTextureState,
                                   const renderengine::BlendState* lpBlendState,
-                                  Vector4 lv4Colour)
+                                  Vector4 lv4UVRect)
 {
     if (mpImRenderers == 0)
         return;
@@ -894,25 +1003,19 @@ void BoostBarRenderer::RenderQuad(const Vector4& lv4Rect, const Vector4& lv4UV,
     CgsGraphics::ImRenderBuffer<CgsGraphics::Basic2dColouredTexturedVertex>& lrCmd =
         lpAptBuffer->mCommandBuffer;
 
-    // The packed vertex colour (RGBA bytes from the clamped 0..1 lanes).
-    const u32 luColour =
-        (static_cast<u32>(BoostColourLaneToByte(lv4Colour.w)) << 24) |
-        (static_cast<u32>(BoostColourLaneToByte(lv4Colour.z)) << 16) |
-        (static_cast<u32>(BoostColourLaneToByte(lv4Colour.y)) << 8)  |
-        (static_cast<u32>(BoostColourLaneToByte(lv4Colour.x)));
+    const u32 luColour = PackBoostColour(lv4Colour);
 
     // The four tristrip corners: (x0,y0)(x0,y1)(x1,y0)(x1,y1) with the matching UV corners
-    // (the console's vertex build order). Console rect/UVs are screen proportions; scale to
-    // the PC dispatch's logical-screen pixels (see the FLAG above).
+    // (the console's vertex build order), positions in 0..1 screen proportions.
     CgsGraphics::Basic2dColouredTexturedVertex laVerts[4];
-    const f32 lafX[4] = { lv4Rect.x, lv4Rect.x, lv4Rect.z, lv4Rect.z };
-    const f32 lafY[4] = { lv4Rect.y, lv4Rect.w, lv4Rect.y, lv4Rect.w };
-    const f32 lafU[4] = { lv4UV.x,   lv4UV.x,   lv4UV.z,   lv4UV.z   };
-    const f32 lafV[4] = { lv4UV.y,   lv4UV.w,   lv4UV.y,   lv4UV.w   };
+    const f32 lafX[4] = { lv4Rect.x,   lv4Rect.x,   lv4Rect.z,   lv4Rect.z   };
+    const f32 lafY[4] = { lv4Rect.y,   lv4Rect.w,   lv4Rect.y,   lv4Rect.w   };
+    const f32 lafU[4] = { lv4UVRect.x, lv4UVRect.x, lv4UVRect.z, lv4UVRect.z };
+    const f32 lafV[4] = { lv4UVRect.y, lv4UVRect.w, lv4UVRect.y, lv4UVRect.w };
     for (s32 liVert = 0; liVert < 4; ++liVert)
     {
-        laVerts[liVert].mv2Pos.x    = lafX[liVert] * 1280.0f;
-        laVerts[liVert].mv2Pos.y    = lafY[liVert] * 720.0f;
+        laVerts[liVert].mv2Pos.x    = lafX[liVert];
+        laVerts[liVert].mv2Pos.y    = lafY[liVert];
         laVerts[liVert].mv2Tex0UV.x = lafU[liVert];
         laVerts[liVert].mv2Tex0UV.y = lafV[liVert];
         *reinterpret_cast<u32*>(&laVerts[liVert].mv4Colour) = luColour;
@@ -920,21 +1023,237 @@ void BoostBarRenderer::RenderQuad(const Vector4& lv4Rect, const Vector4& lv4UV,
 
     lrCmd.SetState(lpTextureState);
     lrCmd.SetState(lpBlendState);
+    lrCmd.SetTransform(CgsGui::gBillboardScreenTransform);   // console &unk_83011090
+    lrCmd.Render(static_cast<renderengine::PrimitiveType>(6), laVerts, 4);
+}
 
-    // The shared screen transform (console &unk_83011090 -> the PC screen-space identity fold,
-    // colour scale 255 -- the ticker's documented convention).
+// =============================================================================================
+// The DEBUG SCREEN (GuiCustRendererDebugComponent's menu toggle): a 4x5 grid of the four fire
+// building blocks, each column a different inner/outer gradient-colour pairing, so a developer
+// can eyeball every combination against the live boost type's colours.
+// =============================================================================================
+
+// Faithful port of X360 RenderDebugFireBody @0x82453758 (PS3 0x41FB40): one debug tile of the
+// tiled fire BODY -- the same billboard build the real fire pass uses (cell width
+// KF_FIRE_BODY_X_SIZE at 0.8 packing, height x KF_FIRE_BODY_Y_SCALE, frame seed time*30
+// advancing +7 per cell), clipped by the MASK texture over the full-height strip ending at
+// rect.z + sfEndCapOffset + KF_FIRE_BODY_ENDCAP_FEATHER, drawn by renderer [1].
+void BoostBarRenderer::RenderDebugFireBody(const Vector4& lv4FireRect,
+                                           const Vector4& lv4FireColour, f32 lfTimeNow)
+{
+    Im2dCommandBuffer* lpRenderBuffer = ResolveBoostBarBuffer(mpImRenderers);
+    if (lpRenderBuffer == 0)
+        return;
+
+    // The function-local static the X360 keeps at flt_82F25C3C (each debug tile owns one).
+    static const f32 sfEndCapOffset = -0.015f;
+
+    const f32 lfWidth   = lv4FireRect.z - lv4FireRect.x;
+    const f32 lfHeight  = lv4FireRect.w - lv4FireRect.y;
+    const f32 lfCentreY = (lv4FireRect.y + lv4FireRect.w) * 0.5f - 0.0080000004f;
+    const f32 lfX0      = lv4FireRect.x + KF_FIRE_BODY_X_SIZE * 0.5f - 0.0099999998f;
+
+    maBillboards.Clear();
+    const s32 liCount = static_cast<s32>(lfWidth / (KF_FIRE_BODY_X_SIZE * 0.80000001f)) + 2;
+    if (liCount > 0)
     {
-        CgsGraphics::Im2dTransform lTransform = {};
-        lTransform.mRightUp.x     = 1.0f;
-        lTransform.mRightUp.w     = 1.0f;
-        lTransform.mColourScale.x = 255.0f;
-        lTransform.mColourScale.y = 255.0f;
-        lTransform.mColourScale.z = 255.0f;
-        lTransform.mColourScale.w = 255.0f;
-        lrCmd.SetTransform(lTransform);
+        s32 liFrame = static_cast<s32>(lfTimeNow * 30.0f);
+        for (s32 liCell = 0; liCell < liCount; ++liCell)
+        {
+            CgsGui::BillboardInfo lInfo = {};
+            lInfo.mfPosX         = lfX0 + static_cast<f32>(liCell) *
+                                          (KF_FIRE_BODY_X_SIZE * 0.80000001f);
+            lInfo.mfPosY         = lfCentreY;
+            lInfo.mfRotation     = 0.0f;
+            lInfo.mfSizeX        = KF_FIRE_BODY_X_SIZE;
+            lInfo.mfSizeY        = lfHeight * KF_FIRE_BODY_Y_SCALE;
+            lInfo.muDiffuse      = PackBillboardDiffuse(lv4FireColour);
+            lInfo.miTextureFrame = liFrame;
+            maBillboards.Append(lInfo);
+            liFrame += 7;   // the fire body's per-cell animation stagger
+        }
     }
 
-    lrCmd.Render(static_cast<renderengine::PrimitiveType>(6), laVerts, 4);
+    const f32 lfMaskX1 = lv4FireRect.z + sfEndCapOffset + KF_FIRE_BODY_ENDCAP_FEATHER;
+    const Vector4 lv4MaskRect = { lfMaskX1 - KF_FIRE_BODY_MASK_WIDTH, 0.0f, lfMaskX1, 1.0f };
+    const Vector4 lv4MaskUVs  = { 0.0f, 0.0f, 1.0f, 1.0f };
+
+    if (maBillboards.GetLength() > 0u)
+    {
+        BrnGui::SetMaskRect(lpRenderBuffer, mpMaskTextureState, lv4MaskRect, lv4MaskUVs);
+        mBillboardRenderer[1].Render(lpRenderBuffer, &maBillboards.GetItem(0u),
+                                      static_cast<s32>(maBillboards.GetLength()));
+        lpRenderBuffer->PopMask();
+    }
+}
+
+// Faithful port of X360 RenderDebugFireOverlay @0x82453B60 (PS3 0x41F05C): the additive fire
+// OVERLAY tile. Differences from the body tile, kept exactly: cell step 0.1 with NO 0.8
+// packing (the COUNT still uses the body's 0.12*0.8 formula), height x0.7, centre y biased
+// +0.005, one shared animation frame (no +7 stagger), renderer [2].
+void BoostBarRenderer::RenderDebugFireOverlay(const Vector4& lv4FireRect,
+                                              const Vector4& lv4FireColour, f32 lfTimeNow)
+{
+    Im2dCommandBuffer* lpRenderBuffer = ResolveBoostBarBuffer(mpImRenderers);
+    if (lpRenderBuffer == 0)
+        return;
+
+    static const f32 sfEndCapOffset = -0.015f;   // X360 flt_82F25C40
+
+    const f32 lfWidth   = lv4FireRect.z - lv4FireRect.x;
+    const f32 lfHeight  = lv4FireRect.w - lv4FireRect.y;
+    const f32 lfCentreY = (lv4FireRect.y + lv4FireRect.w) * 0.5f - 0.0080000004f;
+
+    const f32 lfMaskX1 = lv4FireRect.z + sfEndCapOffset + KF_FIRE_BODY_ENDCAP_FEATHER;
+    const Vector4 lv4MaskRect = { lfMaskX1 - KF_FIRE_BODY_MASK_WIDTH, 0.0f, lfMaskX1, 1.0f };
+
+    maBillboards.Clear();
+    const s32 liCount = static_cast<s32>(lfWidth / (KF_FIRE_BODY_X_SIZE * 0.80000001f)) + 2;
+    if (liCount > 0)
+    {
+        const u32 luDiffuse = PackBillboardDiffuse(lv4FireColour);
+        const s32 liFrame   = static_cast<s32>(lfTimeNow * 30.0f);
+        for (s32 liCell = 0; liCell < liCount; ++liCell)
+        {
+            CgsGui::BillboardInfo lInfo = {};
+            lInfo.mfPosX         = 0.1f * 0.5f + lv4FireRect.x + static_cast<f32>(liCell) * 0.1f;
+            lInfo.mfPosY         = lfCentreY + 0.004999999888f;
+            lInfo.mfRotation     = 0.0f;
+            lInfo.mfSizeX        = 0.1f;
+            lInfo.mfSizeY        = lfHeight * 0.69999999f;
+            lInfo.muDiffuse      = luDiffuse;
+            lInfo.miTextureFrame = liFrame;
+            maBillboards.Append(lInfo);
+        }
+    }
+
+    if (maBillboards.GetLength() > 0u)
+    {
+        const Vector4 lv4MaskUVs = { 0.0f, 0.0f, 1.0f, 1.0f };
+        BrnGui::SetMaskRect(lpRenderBuffer, mpMaskTextureState, lv4MaskRect, lv4MaskUVs);
+        mBillboardRenderer[2].Render(lpRenderBuffer, &maBillboards.GetItem(0u),
+                                      static_cast<s32>(maBillboards.GetLength()));
+        lpRenderBuffer->PopMask();
+    }
+}
+
+// Faithful port of X360 RenderDebugFireEndCap @0x82454060 (PS3 0x41E7C8): ONE end-cap
+// billboard at the fire end (rect.z + sfEndCapOffset), width KF_FIRE_BODY_ENDCAP_X_SIZE,
+// height x KF_FIRE_BODY_Y_SCALE, clipped by the WHITE texture over {rect.x, 0, 1, 1} and
+// drawn by renderer [3]. (Unlike the body/overlay tiles, no count guard: the single-billboard
+// path always masks/renders/pops.)
+void BoostBarRenderer::RenderDebugFireEndCap(const Vector4& lv4FireRect,
+                                             const Vector4& lv4FireColour, f32 lfTimeNow)
+{
+    Im2dCommandBuffer* lpRenderBuffer = ResolveBoostBarBuffer(mpImRenderers);
+    if (lpRenderBuffer == 0)
+        return;
+
+    static const f32 sfEndCapOffset = -0.015f;   // X360 flt_82F25C44
+
+    maBillboards.Clear();
+
+    const f32 lfHeight  = lv4FireRect.w - lv4FireRect.y;
+    const f32 lfCentreY = (lv4FireRect.y + lv4FireRect.w) * 0.5f - 0.0080000004f;
+
+    CgsGui::BillboardInfo lInfo = {};
+    lInfo.mfPosX         = lv4FireRect.z + sfEndCapOffset;
+    lInfo.mfPosY         = lfCentreY;
+    lInfo.mfRotation     = 0.0f;
+    lInfo.mfSizeX        = KF_FIRE_BODY_ENDCAP_X_SIZE;
+    lInfo.mfSizeY        = lfHeight * KF_FIRE_BODY_Y_SCALE;
+    lInfo.muDiffuse      = PackBillboardDiffuse(lv4FireColour);
+    lInfo.miTextureFrame = static_cast<s32>(lfTimeNow * 30.0f);
+    maBillboards.Append(lInfo);
+
+    const Vector4 lv4MaskRect = { lv4FireRect.x, 0.0f, 1.0f, 1.0f };
+    const Vector4 lv4MaskUVs  = { 0.0f, 0.0f, 1.0f, 1.0f };
+    BrnGui::SetMaskRect(lpRenderBuffer, mpWhiteTextureState, lv4MaskRect, lv4MaskUVs);
+    mBillboardRenderer[3].Render(lpRenderBuffer, &maBillboards.GetItem(0u),
+                                  static_cast<s32>(maBillboards.GetLength()));
+    lpRenderBuffer->PopMask();
+}
+
+// Faithful port of X360 RenderDebugFireGlow @0x8245B2C0 (PS3 0x425FC0; the mangling confirms
+// the two-parameter form, and the colour parameter is DEAD on both consoles -- the tile's
+// colour is derived locally). One additive glow quad: intensity = the KF_BOOSTING_GLOW_-
+// INTENSITY lerp deliberately over-driven by 100 (RenderQuad's clamp saturates it to full),
+// alpha 1, the glow texture over the whole tile, the additive blend slot (dword_83010F24).
+void BoostBarRenderer::RenderDebugFireGlow(const Vector4& lv4FireRect,
+                                           const Vector4& /*lv4FireColour -- dead, see above*/)
+{
+    const f32 lfGlow = (KF_BOOSTING_GLOW_INTENSITY - 0.0f) * 100.0f;
+    const Vector4 lv4Colour = { lfGlow, lfGlow, lfGlow, 1.0f };
+    const Vector4 lv4UVs    = { 0.0f, 0.0f, 1.0f, 1.0f };
+    RenderQuad(lv4FireRect, lv4Colour, mpGlowTextureState,
+               CgsGui::gpGuiBlendStateAdditive,   // X360 dword_83010F24
+               lv4UVs);
+}
+
+// Faithful port of X360 ShowDebugScreen @0x82461250 (PS3 0x4260A8): the 4x5 debug grid.
+// Program 3 (the boost-bar gradient shader) is bound for the whole grid; each cell pushes its
+// gradient colour pair (opcode 21) then draws one fire building block -- rows are the four
+// blocks (body / overlay / end cap / glow), columns the five colour pairings:
+//   0: {0,0,0,0} / {1,1,1,0}          1: {1,1,1,0} / {0,0,0,0}
+//   2: {0,0,0,0} / inner[type]        3: outer[type] / {0,0,0,0}
+//   4: outer[type] / inner[type]           (type = meCurrentBoostType)
+// [FLAG PC-platform leaf] the PC Im2d dispatch has no programmable 2D pipeline: SetProgram
+// records ride the stream but select nothing (the fixed-function fold shades every batch the
+// same way), and the opcode-21 colour pairs are recorded but not yet consumed. The grid still
+// draws -- the textures/masks/billboards are all live -- without the gradient tinting.
+void BoostBarRenderer::ShowDebugScreen()
+{
+    Im2dCommandBuffer* lpRenderBuffer = ResolveBoostBarBuffer(mpImRenderers);
+    if (lpRenderBuffer == 0)
+        return;
+
+    const f32 lfWidth   = KV4_BOOSTBAR_RECT.z - KV4_BOOSTBAR_RECT.x;
+    const f32 lfHeight  = KV4_BOOSTBAR_RECT.w - KV4_BOOSTBAR_RECT.y;
+    const f32 lfColumnW = 0.33333334f * lfWidth;
+    const f32 lfStep    = lfColumnW + 0.015f;
+
+    lpRenderBuffer->SetProgram(3);
+
+    const Vector4 lv4Zero  = { 0.0f, 0.0f, 0.0f, 0.0f };
+    const Vector4 lv4Unit  = { 1.0f, 1.0f, 1.0f, 0.0f };
+    const Vector4 lv4White = { 1.0f, 1.0f, 1.0f, 1.0f };
+
+    // The live boost type's gradient pair, widened to Vector4 (the guest indexes the two
+    // 16-byte-stride Vector3 arrays directly).
+    const s32 liType = static_cast<s32>(meCurrentBoostType);
+    const Vector4 lv4Inner = { mav3BoostInnerColours[liType].x, mav3BoostInnerColours[liType].y,
+                               mav3BoostInnerColours[liType].z, 0.0f };
+    const Vector4 lv4Outer = { mav3BoostOuterColours[liType].x, mav3BoostOuterColours[liType].y,
+                               mav3BoostOuterColours[liType].z, 0.0f };
+
+    const Vector4* lapv4ColourA[5] = { &lv4Zero, &lv4Unit, &lv4Zero,  &lv4Outer, &lv4Outer };
+    const Vector4* lapv4ColourB[5] = { &lv4Unit, &lv4Zero, &lv4Inner, &lv4Zero,  &lv4Inner };
+    const f32      lafRowY[4]      = { 0.1f, 0.2f, 0.30000001f, 0.40000001f };
+
+    for (s32 liRow = 0; liRow < 4; ++liRow)
+    {
+        for (s32 liColumn = 0; liColumn < 5; ++liColumn)
+        {
+            lpRenderBuffer->PushBoostBarColours(*lapv4ColourA[liColumn],
+                                                *lapv4ColourB[liColumn]);
+
+            Vector4 lv4CellRect;
+            lv4CellRect.x = lfStep * static_cast<f32>(liColumn) + 0.015f;
+            lv4CellRect.y = lafRowY[liRow];
+            lv4CellRect.z = lv4CellRect.x + lfColumnW;
+            lv4CellRect.w = lv4CellRect.y + lfHeight;
+
+            switch (liRow)
+            {
+            case 0: RenderDebugFireBody(lv4CellRect, lv4White, mpGuiCache->GetTime());    break;
+            case 1: RenderDebugFireOverlay(lv4CellRect, lv4White, mpGuiCache->GetTime()); break;
+            case 2: RenderDebugFireEndCap(lv4CellRect, lv4White, mpGuiCache->GetTime());  break;
+            case 3: RenderDebugFireGlow(lv4CellRect, lv4White);                           break;
+            }
+        }
+    }
+
+    lpRenderBuffer->SetProgram(0);
 }
 
 // Faithful port of PS3 0x3FA070 (the X360 inlines it): each shard's tear-off is staggered by
@@ -965,5 +1284,873 @@ u8 BoostBarRenderer::CalculateBoostShardAlpha(f32 lfLifetime, f32 lfAlpha)
     if (lfScaled < 0.0f)   lfScaled = 0.0f;
     if (lfScaled > 255.0f) lfScaled = 255.0f;
     return static_cast<u8>(lfScaled);
+}
+
+// =============================================================================================
+// The RENDER half.
+// =============================================================================================
+
+// Faithful port of X360 SetChainedInactiveMask @0x824536A8 (PS3 0x40FA3C): push the
+// chained-inactive clip mask -- the BACKGROUND texture over the given rect, its U window
+// tiling 20 repeats per unit of bar width (the same 20.0 the shatter lattice's U scale uses),
+// V spanning once.
+void BoostBarRenderer::SetChainedInactiveMask(Im2dCommandBuffer* lpRenderBuffer, Vector4 lv4Rect)
+{
+    const Vector4 lv4MaskUVs = { 0.0f, 0.0f, 20.0f * (lv4Rect.z - lv4Rect.x), 1.0f };
+    BrnGui::SetMaskRect(lpRenderBuffer, mpBackgroundTextureState, lv4Rect, lv4MaskUVs);
+}
+
+// Faithful port of X360 CalculateShardVertices @0x8244B248 (PS3 0x3F9FA8): rebuild the 5x7
+// shatter lattice over the chunk being lost. The lattice spans the bar rect's X range between
+// the CURRENT max boost and the max boost before the loss (both as 0..100 percentages of the
+// bar width), split into 6 columns; Y spans the bar rect in 4 rows. The texture U runs at 20
+// repeats per unit width across the lost extent (matching the background tiling), V spans the
+// bar once in quarters. (The X360 reads the rect from its rodata copy of KV4_BOOSTBAR_RECT
+// @0x82F25B40 -- byte-identical to the class constant.)
+void BoostBarRenderer::CalculateShardVertices()
+{
+    const f32 lfBarWidth = KV4_BOOSTBAR_RECT.z - KV4_BOOSTBAR_RECT.x;
+    const f32 lfRowStep  = (KV4_BOOSTBAR_RECT.w - KV4_BOOSTBAR_RECT.y) * 0.25f;
+    const f32 lfXStart   = KV4_BOOSTBAR_RECT.x +
+                           mGuiEventBoostInfo.mfMaxBoost * lfBarWidth * 0.0099999998f;
+    const f32 lfXEnd     = KV4_BOOSTBAR_RECT.x +
+                           mfChunkLossPreviousMaxBoost * lfBarWidth * 0.0099999998f;
+    const f32 lfColStep  = (lfXEnd - lfXStart) * 0.16666667f;
+    const f32 lfUScale   = (lfXEnd - lfXStart) * 20.0f;
+
+    for (s32 liColumn = 0; liColumn < KI_CHUNK_LOSS_NUM_OF_SHARD_COLUMNS + 1; ++liColumn)
+    {
+        const f32 lfColumn = static_cast<f32>(liColumn);
+        const f32 lfX = lfColumn * lfColStep + lfXStart;
+        const f32 lfU = (lfUScale * lfColumn) * 0.16666667f;
+        for (s32 liRow = 0; liRow < KI_CHUNK_LOSS_NUM_OF_SHARD_ROWS + 1; ++liRow)
+        {
+            mv2VertexPos[liRow][liColumn].x = lfX;
+            mv2VertexPos[liRow][liColumn].y =
+                KV4_BOOSTBAR_RECT.y + static_cast<f32>(liRow) * lfRowStep;
+            mv2VertexTex[liRow][liColumn].x = lfU;
+            mv2VertexTex[liRow][liColumn].y = static_cast<f32>(liRow) * 0.25f;
+        }
+    }
+}
+
+// Faithful port of X360 RenderBillboardBar @0x82453318 (PS3 export: RenderBillboardBar(Vector4
+// const& rect, float proportion, Vector4 const& colour, BillboardRenderer*, float time)): tile
+// the bar rect with one billboard per lfProportion-wide cell -- each cell-centred, full bar
+// height, animation frame time*30 -- clip the run to the rect with the WHITE texture ({0,0,1,1}
+// mask UVs == an opaque rectangular clip), submit through the given billboard renderer, pop.
+void BoostBarRenderer::RenderBillboardBar(const Vector4& lv4Rect, f32 lfProportion,
+                                          const Vector4& lv4Colour,
+                                          CgsGui::BillboardRenderer* lpBillboardRenderer,
+                                          f32 lfTime)
+{
+    Im2dCommandBuffer* lpRenderBuffer = ResolveBoostBarBuffer(mpImRenderers);
+    if (lpRenderBuffer == 0)
+        return;
+
+    maBillboards.Clear();   // the guest's direct count=0 store
+
+    const f32 lfHeight = lv4Rect.w - lv4Rect.y;
+
+    CgsGui::BillboardInfo lSeed = {};
+    lSeed.mfPosX         = lv4Rect.x + lfProportion * 0.5f;
+    lSeed.mfPosY         = lv4Rect.y + lfHeight * 0.5f;
+    lSeed.mfRotation     = 0.0f;
+    lSeed.mfSizeX        = lfProportion;
+    lSeed.mfSizeY        = lfHeight;
+    lSeed.muDiffuse      = PackBillboardDiffuse(lv4Colour);
+    lSeed.miTextureFrame = static_cast<s32>(lfTime * 30.0f);
+    maBillboards.Append(lSeed);
+
+    // One more cell per whole lfProportion of bar width, each a copy of the previous shifted
+    // one cell right (the guest's GetItem(i)/Append copy loop).
+    const s32 liCells = static_cast<s32>((lv4Rect.z - lv4Rect.x) / lfProportion);
+    for (s32 liCell = 0; liCell < liCells; ++liCell)
+    {
+        CgsGui::BillboardInfo lNext = maBillboards.GetItem(static_cast<u32>(liCell));
+        lNext.mfPosX += lfProportion;
+        maBillboards.Append(lNext);
+    }
+
+    const Vector4 lv4MaskUVs = { 0.0f, 0.0f, 1.0f, 1.0f };
+    BrnGui::SetMaskRect(lpRenderBuffer, mpWhiteTextureState, lv4Rect, lv4MaskUVs);
+
+    lpBillboardRenderer->Render(lpRenderBuffer, &maBillboards.GetItem(0u),
+                                static_cast<s32>(maBillboards.GetLength()));
+    lpRenderBuffer->PopMask();
+}
+
+// ---------------------------------------------------------------------------------------------
+// RenderFire -- faithful port of X360 @0x82452AD8 (PS3 export: RenderFire(Vector4 const& rect,
+// Vector4 const& colour, float timeNow)). The fire itself, three billboard passes over the fire
+// rect, in this exact order:
+//   1. FIRE BODY (renderer [1]): one billboard per KF_FIRE_BODY_X_SIZE*0.8 pitch across the
+//      bar (count = width/pitch + 2), size {X_SIZE, height*Y_SCALE}, centred at
+//      {rect.x + X_SIZE/2 + X_OFFSET, (rect.y+rect.w)/2 + Y_OFFSET}, animation frame
+//      int(t*30) + 7 per cell, the caller's colour. Masked by the MASK texture over the
+//      full-height strip {maskX - MASK_WIDTH, 0, maskX, 1} where maskX = rect.z +
+//      ENDCAP_OFFSET + ENDCAP_FEATHER (the soft cut at the boost amount's end).
+//   2. END CAP (renderer [3]): ONE billboard at {rect.z + ENDCAP_OFFSET, bodyCentreY}, size
+//      {ENDCAP_X_SIZE, height*Y_SCALE}, frame int(t*30); masked by the WHITE texture over
+//      {rect.x, 0, 1, 1} (everything right of the fire's start). Unconditional on both
+//      consoles (the single-billboard path has no count guard).
+//   3. FIRE OVERLAY (renderer [2], the additive pass): same count as pass 1 but pitch 0.1
+//      (== its own billboard width, no 0.8 packing), size {0.1, height*0.7} (the function-
+//      local static smv2OverlaySize, one-time-initialised from the first call's rect), origin
+//      {rect.x + 0.05, bodyCentreY + 0.005}, ONE shared frame of int(t*45) while
+//      mGuiEventBoostInfo.mbIsBoosting else int(t*30), colour = KV4_OVERLAY_COLOUR with the
+//      caller colour's ALPHA spliced in (the gSwizzleStoreConstants[15] vperm == "copy b.w
+//      into a.w": {1,1,1,fireColour.w}). Same mask strip as pass 1.
+// ---------------------------------------------------------------------------------------------
+void BoostBarRenderer::RenderFire(const Vector4& lv4Rect, const Vector4& lv4Colour,
+                                  f32 lfTimeNow)
+{
+    Im2dCommandBuffer* lpRenderBuffer = ResolveBoostBarBuffer(mpImRenderers);
+    if (lpRenderBuffer == 0)
+        return;
+
+    const f32 lfBarHeight = lv4Rect.w - lv4Rect.y;
+    const f32 lfBarWidth  = lv4Rect.z - lv4Rect.x;
+
+    const f32 lfBodySizeY  = lfBarHeight * KF_FIRE_BODY_Y_SCALE;
+    const f32 lfBodyX0     = lv4Rect.x + KF_FIRE_BODY_X_SIZE * 0.5f + KF_FIRE_BODY_X_OFFSET;
+    const f32 lfBodyY      = (lv4Rect.y + lv4Rect.w) * 0.5f + KF_FIRE_BODY_Y_OFFSET;
+    const f32 lfPitch      = KF_FIRE_BODY_X_SIZE * 0.80000001f;
+    const s32 liNumBillboards = static_cast<s32>(lfBarWidth / lfPitch) + 2;
+
+    // The pass-1/pass-3 mask strip: full height, ending at the fire's soft end.
+    const f32 lfMaskX = lv4Rect.z + KF_FIRE_BODY_ENDCAP_OFFSET + KF_FIRE_BODY_ENDCAP_FEATHER;
+    const Vector4 lv4BodyMaskRect = { lfMaskX - KF_FIRE_BODY_MASK_WIDTH, 0.0f, lfMaskX, 1.0f };
+    const Vector4 lv4FullUVs      = { 0.0f, 0.0f, 1.0f, 1.0f };
+
+    // ---- pass 1: the tiled fire body ---------------------------------------------------
+    maBillboards.Clear();
+    if (liNumBillboards > 0)
+    {
+        s32 liFrame = static_cast<s32>(lfTimeNow * 30.0f);
+        for (s32 liCell = 0; liCell < liNumBillboards; ++liCell)
+        {
+            CgsGui::BillboardInfo lInfo = {};
+            lInfo.mfPosX         = lfBodyX0 + static_cast<f32>(liCell) * lfPitch;
+            lInfo.mfPosY         = lfBodyY;
+            lInfo.mfRotation     = 0.0f;
+            lInfo.mfSizeX        = KF_FIRE_BODY_X_SIZE;
+            lInfo.mfSizeY        = lfBodySizeY;
+            lInfo.muDiffuse      = PackBillboardDiffuse(lv4Colour);
+            lInfo.miTextureFrame = liFrame;
+            maBillboards.Append(lInfo);
+            liFrame += 7;
+        }
+    }
+    if (maBillboards.GetLength() != 0u)
+    {
+        BrnGui::SetMaskRect(lpRenderBuffer, mpMaskTextureState, lv4BodyMaskRect, lv4FullUVs);
+        mBillboardRenderer[1].Render(lpRenderBuffer, &maBillboards.GetItem(0u),
+                                     static_cast<s32>(maBillboards.GetLength()));
+        lpRenderBuffer->PopMask();   // the PS3 spells this BrnGui::UnsetMaskRect (a PopMask wrapper)
+    }
+
+    // ---- pass 2: the end cap (unconditional) -------------------------------------------
+    maBillboards.Clear();
+    {
+        CgsGui::BillboardInfo lInfo = {};
+        lInfo.mfPosX         = lv4Rect.z + KF_FIRE_BODY_ENDCAP_OFFSET;
+        lInfo.mfPosY         = lfBodyY;
+        lInfo.mfRotation     = 0.0f;
+        lInfo.mfSizeX        = KF_FIRE_BODY_ENDCAP_X_SIZE;
+        lInfo.mfSizeY        = lfBodySizeY;
+        lInfo.muDiffuse      = PackBillboardDiffuse(lv4Colour);
+        lInfo.miTextureFrame = static_cast<s32>(lfTimeNow * 30.0f);
+        maBillboards.Append(lInfo);
+    }
+    {
+        const Vector4 lv4EndCapMaskRect = { lv4Rect.x, 0.0f, 1.0f, 1.0f };
+        BrnGui::SetMaskRect(lpRenderBuffer, mpWhiteTextureState, lv4EndCapMaskRect, lv4FullUVs);
+        mBillboardRenderer[3].Render(lpRenderBuffer, &maBillboards.GetItem(0u),
+                                     static_cast<s32>(maBillboards.GetLength()));
+        lpRenderBuffer->PopMask();
+    }
+
+    // ---- pass 3: the additive fire overlay ---------------------------------------------
+    // {1, 1, 1, fireColour.w} -- the overlay colour with the caller's alpha spliced in.
+    Vector4 lv4OverlayColour = KV4_OVERLAY_COLOUR;
+    lv4OverlayColour.w = lv4Colour.w;
+
+    const f32 lfOverlayFps = (mGuiEventBoostInfo.mbIsBoosting) ? 45.0f : 30.0f;
+
+    // The console's function-local static (X360 0x82FB3750 + its 0x82FB3760 guard):
+    // one-time-initialised from the FIRST call's rect height.
+    struct OverlaySize { f32 x; f32 y; };
+    static const OverlaySize smv2OverlaySize = { 0.1f, (lv4Rect.w - lv4Rect.y) * 0.69999999f };
+
+    maBillboards.Clear();
+    if (liNumBillboards > 0)
+    {
+        const u32 luDiffuse       = PackBillboardDiffuse(lv4OverlayColour);
+        const s32 liOverlayFrame  = static_cast<s32>(lfOverlayFps * lfTimeNow);
+        const f32 lfOverlayX0     = lv4Rect.x + smv2OverlaySize.x * 0.5f;
+        const f32 lfOverlayY      = lfBodyY + 0.004999999888f;
+        for (s32 liCell = 0; liCell < liNumBillboards; ++liCell)
+        {
+            CgsGui::BillboardInfo lInfo = {};
+            lInfo.mfPosX         = lfOverlayX0 + static_cast<f32>(liCell) * smv2OverlaySize.x;
+            lInfo.mfPosY         = lfOverlayY;
+            lInfo.mfRotation     = 0.0f;
+            lInfo.mfSizeX        = smv2OverlaySize.x;
+            lInfo.mfSizeY        = smv2OverlaySize.y;
+            lInfo.muDiffuse      = luDiffuse;
+            lInfo.miTextureFrame = liOverlayFrame;
+            maBillboards.Append(lInfo);
+        }
+    }
+    if (maBillboards.GetLength() != 0u)
+    {
+        BrnGui::SetMaskRect(lpRenderBuffer, mpMaskTextureState, lv4BodyMaskRect, lv4FullUVs);
+        mBillboardRenderer[2].Render(lpRenderBuffer, &maBillboards.GetItem(0u),
+                                     static_cast<s32>(maBillboards.GetLength()));
+        lpRenderBuffer->PopMask();
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// RenderShatteredBar -- faithful port of X360 @0x82460630 (PS3 0x424634; the DWARF keeps this
+// one FPU-side, hence the scalar rect parameter). The chunk-loss shatter: the 4x6 lattice cells
+// split into two triangles each (48 shards, 144 vertices, one triangle list). Per shard:
+//   * lifetime from CalculateBoostShardLifetime (the reverse-index stagger);
+//   * a positional offset {life*vel.x, life*(life*0.98 + vel.y)} while life is in [0,1] (the
+//     0.98 gravity term is X360 rodata flt_82054EA4 = -0.98 through an fnmsubs -- the SAME
+//     +0.98*life^2 the PS3 computes directly);
+//   * a rotation of life*mafChunkLossShardRotations[i] about the triangle's own centroid
+//     (pos[row][col] + {w/3,h/3} for the upper-left triangle, {2w/3,2h/3} for the lower-right;
+//     w/h = the CALLER rect's cell extents). The console composes this as
+//     T(-centroid) * M(quatZ(angle), centroid+offset) -- affine identities that reduce exactly
+//     to p' = R(angle)*(p - centroid) + centroid + offset for the z=0 lattice points, which is
+//     how the scalar body below spells it;
+//   * vertex positions = the stored lattice points shifted by (rect.xy - lattice[0][0]) (the
+//     lattice was built in KV4_BOOSTBAR_RECT space at loss time; the render rect may differ);
+//   * vertex colours: the FIRST vertex of each triangle carries the caller's colour, the other
+//     two carry white -- attested identically on BOTH consoles -- and every vertex's alpha
+//     byte is replaced by CalculateBoostShardAlpha(life, colour.w);
+//   * UVs straight from the stored lattice.
+// Submit: SetState(mpBackgroundTextureState), SetState(standard blend dword_83010F20),
+// SetTransform(&unk_83011090 == gBillboardScreenTransform), Render(TRIANGLES(4), verts, 144).
+//
+// (The PS3-only standalone CalculateBoostShardTransformation @0x401668 -- an uncalled sibling
+// of the open-coded transform here, using a 0.3 edge-lerp centroid and a /48 column derivation
+// where this body uses /4 -- is deliberately not reconstructed; the X360 target never emits it.)
+// ---------------------------------------------------------------------------------------------
+void BoostBarRenderer::RenderShatteredBar(const rw::math::fpu::Vector4Template<f32>& lv4Rect,
+                                          f32 lfTime, const Vector4& lv4Colour)
+{
+    Im2dCommandBuffer* lpRenderBuffer = ResolveBoostBarBuffer(mpImRenderers);
+    if (lpRenderBuffer == 0)
+        return;
+
+    static const s32 KI_CHUNK_LOSS_NUM_VERTS = 144;   // 48 shards x 3 (the :1749 assert bound)
+
+    const f32 lfShardWidth  = (lv4Rect.Z() - lv4Rect.X()) * 0.16666667f;
+    const f32 lfShardHeight = (lv4Rect.W() - lv4Rect.Y()) * 0.25f;
+    const f32 lfThirdW      = lfShardWidth  * 0.33333334f;
+    const f32 lfThirdH      = lfShardHeight * 0.33333334f;
+    const f32 lfTwoThirdW   = (lfShardWidth  * 2.0f) * 0.33333334f;
+    const f32 lfTwoThirdH   = (lfShardHeight * 2.0f) * 0.33333334f;
+    const f32 lfBaseX       = lv4Rect.X() - mv2VertexPos[0][0].x;
+    const f32 lfBaseY       = lv4Rect.Y() - mv2VertexPos[0][0].y;
+
+    // The base RGB of the caller's colour and of the two white corners, packed once (clamped
+    // x255, the console's KF_COLOURSCALE fold); the per-shard alpha byte replaces .a below.
+    const u32 luShardColourRGB = PackBoostColour(lv4Colour) & 0x00FFFFFFu;
+    const u32 luWhiteRGB       = 0x00FFFFFFu;
+
+    CgsGraphics::Basic2dColouredTexturedVertex laVerts[144];
+    s32 liCurrentVertex = 0;
+
+    for (s32 liShardIndex = 0; liShardIndex != KI_CHUNK_LOSS_MAX_NUM_SHARDS; liShardIndex += 2)
+    {
+        CGS_ASSERT(liCurrentVertex + 5 < KI_CHUNK_LOSS_NUM_VERTS,
+                   "liCurrentVertex + 5 < KI_CHUNK_LOSS_NUM_VERTS");   // :1749
+
+        const s32 liSquare = liShardIndex / 2;   // 0..23
+        const s32 liRow    = liSquare % KI_CHUNK_LOSS_NUM_OF_SHARD_ROWS;
+        const s32 liColumn = liSquare / KI_CHUNK_LOSS_NUM_OF_SHARD_ROWS;
+
+        // The two triangles of this lattice cell: shard 2n = (R,C)(R,C+1)(R+1,C) about the
+        // {w/3,h/3} centroid, shard 2n+1 = (R+1,C)(R+1,C+1)(R,C+1) about {2w/3,2h/3}.
+        for (s32 liHalf = 0; liHalf < 2; ++liHalf)
+        {
+            const s32 liShard = liShardIndex + liHalf;
+            const f32 lfLife  = CalculateBoostShardLifetime(liShard, lfTime);
+
+            f32 lfOffsetX = 0.0f;
+            f32 lfOffsetY = 0.0f;
+            if (lfLife >= 0.0f && lfLife <= 1.0f)
+            {
+                lfOffsetX = lfLife * mav2ChunkLossShardVelocities[liShard].x;
+                lfOffsetY = lfLife * (lfLife * 0.98000002f +
+                                      mav2ChunkLossShardVelocities[liShard].y);
+            }
+
+            const u8  lu8Alpha  = CalculateBoostShardAlpha(lfLife, lv4Colour.w);
+            const u32 luAlphaHi = static_cast<u32>(lu8Alpha) << 24;
+
+            const f32 lfCentroidX = mv2VertexPos[liRow][liColumn].x +
+                                    ((liHalf == 0) ? lfThirdW : lfTwoThirdW);
+            const f32 lfCentroidY = mv2VertexPos[liRow][liColumn].y +
+                                    ((liHalf == 0) ? lfThirdH : lfTwoThirdH);
+
+            const f32 lfAngle = lfLife * mafChunkLossShardRotations[liShard];
+            const f32 lfSin   = static_cast<f32>(std::sin(static_cast<double>(lfAngle)));
+            const f32 lfCos   = static_cast<f32>(std::cos(static_cast<double>(lfAngle)));
+
+            const s32 laiRows[2][3] = { { liRow,     liRow,     liRow + 1 },
+                                        { liRow + 1, liRow + 1, liRow     } };
+            const s32 laiCols[2][3] = { { liColumn,  liColumn + 1, liColumn     },
+                                        { liColumn,  liColumn + 1, liColumn + 1 } };
+            for (s32 liCorner = 0; liCorner < 3; ++liCorner)
+            {
+                const s32 liR = laiRows[liHalf][liCorner];
+                const s32 liC = laiCols[liHalf][liCorner];
+
+                const f32 lfInX = mv2VertexPos[liR][liC].x + lfBaseX;
+                const f32 lfInY = mv2VertexPos[liR][liC].y + lfBaseY;
+
+                // p' = R(angle)*(p - centroid) + centroid + offset (the console's
+                // T(-c) * M(quatZ, c+off) affine pair, reduced -- see the banner).
+                const f32 lfRelX = lfInX - lfCentroidX;
+                const f32 lfRelY = lfInY - lfCentroidY;
+
+                CgsGraphics::Basic2dColouredTexturedVertex& lrVert = laVerts[liCurrentVertex++];
+                lrVert.mv2Pos.x = lfRelX * lfCos - lfRelY * lfSin + lfCentroidX + lfOffsetX;
+                lrVert.mv2Pos.y = lfRelX * lfSin + lfRelY * lfCos + lfCentroidY + lfOffsetY;
+                *reinterpret_cast<u32*>(&lrVert.mv4Colour) =
+                    ((liCorner == 0) ? luShardColourRGB : luWhiteRGB) | luAlphaHi;
+                lrVert.mv2Tex0UV.x = mv2VertexTex[liR][liC].x;
+                lrVert.mv2Tex0UV.y = mv2VertexTex[liR][liC].y;
+            }
+        }
+    }
+
+    lpRenderBuffer->SetState(mpBackgroundTextureState);
+    lpRenderBuffer->SetState(CgsGui::gpGuiBlendStateStandard);   // X360 dword_83010F20
+    lpRenderBuffer->SetTransform(CgsGui::gBillboardScreenTransform);   // console &unk_83011090
+    lpRenderBuffer->Render(static_cast<renderengine::PrimitiveType>(4),   // TRIANGLES
+                           laVerts, static_cast<u32>(KI_CHUNK_LOSS_NUM_VERTS));
+}
+
+// Faithful port of X360 SetBackground @0x8245B040 (PS3 export: SetBackground(Im2dRenderBuffer*,
+// Vector4 rect, float alpha, float timeNow)): re-derive the chained-boost multiplier (the X360
+// inlines DetermineBoostBarMultiplier here -- the member it keys on is mfMaxBoost, `lfs +140`),
+// then draw the tiled background. With a multiplier flame active the background rect gives up
+// its rightmost 0.05 to the flame strip (and the tiling clip is the strip's own multiplier-mask
+// push); without one the whole rect draws under the MASK texture stretched once. Ends with the
+// balancing PopMask either way.
+void BoostBarRenderer::SetBackground(Im2dCommandBuffer* lpRenderBuffer, Vector4 lv4Rect,
+                                     f32 lfAlpha, f32 lfTimeNow)
+{
+    DetermineBoostBarMultiplier();   // X360-inlined; keys on status==AGGRESSION + mfMaxBoost 40/70
+
+    Vector4 lv4BackgroundRect = lv4Rect;
+    const bool lbMultiplierFlame = (meBoostBarStatus == E_STATUS_AGGRESSION_BOOST &&
+                                    meBoostBarMultiplier != E_MULTIPLIER_1X);
+    if (lbMultiplierFlame)
+    {
+        // Shrink the background's right edge by the multiplier flame strip's width.
+        lv4BackgroundRect.z = lv4Rect.z - KF_BACKGROUND_TILE_WIDTH;
+    }
+    else
+    {
+        const Vector4 lv4MaskUVs = { 0.0f, 0.0f, 1.0f, 1.0f };
+        BrnGui::SetMaskRect(lpRenderBuffer, mpMaskTextureState, lv4Rect, lv4MaskUVs);
+    }
+
+    const Vector4 lv4Colour = { 1.0f, 1.0f, 1.0f, lfAlpha };
+    RenderBillboardBar(lv4BackgroundRect, KF_BACKGROUND_TILE_WIDTH, lv4Colour,
+                       &mBillboardRenderer[0], lfTimeNow);
+
+    if (lbMultiplierFlame)
+    {
+        // The multiplier flame strip: the 0.05 between the shrunk background edge and the bar's
+        // right edge, masked by the multiplier texture's own mask frame (2x = left column of
+        // the 2x2 atlas's bottom row, 3x = right), tiled by the background renderer, then the
+        // numeral quad from the atlas's image row with the {0,0,0,alpha} colour the guest
+        // splices out of the background colour vector.
+        const bool lb2X = (meBoostBarMultiplier == E_MULTIPLIER_2X);
+        const Vector4 lv4MultiplierRect = { lv4BackgroundRect.z, lv4Rect.y, lv4Rect.z, lv4Rect.w };
+        BrnGui::SetMaskRect(lpRenderBuffer, mpMultiplierTextureState, lv4MultiplierRect,
+                            lb2X ? KV4_MULTIPLIER_2X_MASK_UV : KV4_MULTIPLIER_3X_MASK_UV);
+        RenderBillboardBar(lv4MultiplierRect, KF_BACKGROUND_TILE_WIDTH, lv4Colour,
+                           &mBillboardRenderer[0], lfTimeNow);
+
+        const Vector4 lv4QuadColour = { 0.0f, 0.0f, 0.0f, lfAlpha };
+        RenderQuad(lv4MultiplierRect, lv4QuadColour, mpMultiplierTextureState,
+                   CgsGui::gpGuiBlendStateStandard,   // X360 dword_83010F20
+                   lb2X ? KV4_MULTIPLIER_2X_IMAGE_UV : KV4_MULTIPLIER_3X_IMAGE_UV);
+    }
+
+    lpRenderBuffer->PopMask();
+}
+
+// ---------------------------------------------------------------------------------------------
+// RenderComponent -- faithful port of X360 @0x82466638 (PS3 0x433C34, the shape/naming source;
+// both builds inline nearly every callee, so the body below re-expresses the SAME sequence
+// through the named methods). The per-frame draw orchestrator:
+//   resource assert -> perfmon start -> buffer begin + cull-none rasterizer + the shared screen
+//   transform -> the shaken bar rect -> the visibility fade gate -> background (SetBackground)
+//   -> the chunk-gain flying bar -> the chunk-loss shatter -> program 3 + the gradient colour
+//   pair -> the eased boost fill's fire (with the chained-boost transition / danger-inactive
+//   dimming) -> the boosting flame billboard -> the grow fireball (slam gain) -> the earn-flame
+//   flicker quad -> the multiplier flame window -> program 0 -> the danger end glow -> the
+//   background end cap -> (debug screen) -> standard blend + end.
+// ---------------------------------------------------------------------------------------------
+void BoostBarRenderer::RenderComponent(CgsGui::ImRendererSet* lpImRenderers)
+{
+    // :961 -- every texture state must exist before the first draw.
+    CGS_ASSERT(mpWhiteTextureState != 0 && mpMaskTextureState != 0 &&
+               mpBackgroundTextureState != 0 && mpBackgroundEndCapTextureState != 0 &&
+               mpFireBodyTextureState != 0 && mpFireOverTextureState != 0 &&
+               mpEndCapTextureState != 0 && mpEndGlowTextureState != 0 &&
+               mpEarnFlameTextureState != 0 && mpBoostingFlameTextureState != 0 &&
+               mpGrowFireballTextureState != 0 && mpMultiplierTextureState != 0 &&
+               mpGlowTextureState != 0,
+               "BoostBarRenderer: RenderComponent() called when resources not loaded");
+
+    if (miBoostBarPM >= 0)
+        CgsDev::PerfMonCpu::StartMonitor(miBoostBarPM);
+
+    CGS_ASSERT(lpImRenderers != 0, "lpImRenderers");                          // :967
+    mpImRenderers = lpImRenderers;
+    Im2dCommandBuffer* lpRenderBuffer = ResolveBoostBarBuffer(mpImRenderers);
+    CGS_ASSERT(lpRenderBuffer != 0, "NULL != lpIm2dRenderBuffer");            // :972
+    CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");                                // :975
+    if (lpRenderBuffer == 0 || mpGuiCache == 0)
+    {
+        if (miBoostBarPM >= 0)
+            CgsDev::PerfMonCpu::StopMonitor(miBoostBarPM);
+        return;
+    }
+
+    const f32 lfTimeNow = mpGuiCache->GetTime();   // carries the :250 -FLT_MAX assert
+
+    // The X360-only first-frame seed (absent from the PS3 build): an unset last-time backfills
+    // one frame behind before the latch.
+    if (mfLastTime == -3.4028235e38f)
+        mfLastTime = lfTimeNow - mpGuiCache->GetTimeStep();
+    mfLastTime = lfTimeNow;
+
+    lpRenderBuffer->BeginRendering();
+    lpRenderBuffer->SetState(CgsGui::gpGuiRasterizerStateCullNone);
+    // The shared 2D screen transform the console stamps once for the whole bar stream
+    // (Im2dTransform::mgAspectCorrected == the &unk_83011090 block; the PC fold is the
+    // proportion -> logical-pixel scale).
+    lpRenderBuffer->SetTransform(CgsGui::gBillboardScreenTransform);
+
+    // ---- the shaken bar rect ------------------------------------------------------------
+    Vector4 lv4Rect = KV4_BOOSTBAR_RECT;
+
+    // (a) boosting jitter: +-half the shake extents on both corners.
+    if (mGuiEventBoostInfo.mbIsBoosting)
+    {
+        const f32 lfShakeX = mRandom.RandomFloat(KF_SHAKE_X * -0.5f, KF_SHAKE_X * 0.5f);
+        const f32 lfShakeY = mRandom.RandomFloat(KF_SHAKE_Y * -0.5f, KF_SHAKE_Y * 0.5f);
+        lv4Rect.x += lfShakeX;  lv4Rect.z += lfShakeX;
+        lv4Rect.y += lfShakeY;  lv4Rect.w += lfShakeY;
+    }
+
+    // (b) the chunk-gain impact: a damped 7 Hz X sine for 0.75s after the gain bar lands.
+    const f32 lfChunkGainShakeElapsed = lfTimeNow - mfChunkGainShakeStartTime;
+    if (lfChunkGainShakeElapsed < 0.75f)
+    {
+        const f32 lfSine = static_cast<f32>(std::sin(
+            static_cast<double>(lfChunkGainShakeElapsed * 43.9823f)));   // 2*pi*7
+        const f32 lfShift = (1.0f - lfChunkGainShakeElapsed / 0.75f) * -0.012f * lfSine;
+        lv4Rect.x += lfShift;  lv4Rect.z += lfShift;
+    }
+
+    // (c) the chunk-loss pre-shake: ramps in over the 0.25s before the shards tear off.
+    if (lfTimeNow < mfChunkLossStartTime)
+    {
+        f32 lfRamp = (mfChunkLossStartTime - lfTimeNow) * 4.0f;
+        if (lfRamp > 1.0f) lfRamp = 1.0f;
+        lfRamp = 1.0f - lfRamp;
+        const f32 lfShakeX = mRandom.RandomFloat(lfRamp * -KF_SHAKE_X, lfRamp * KF_SHAKE_X);
+        const f32 lfShakeY = mRandom.RandomFloat(lfRamp * -KF_SHAKE_Y, lfRamp * KF_SHAKE_Y);
+        lv4Rect.x += lfShakeX;  lv4Rect.z += lfShakeX;
+        lv4Rect.y += lfShakeY;  lv4Rect.w += lfShakeY;
+    }
+
+    // ---- the visibility fade gate -------------------------------------------------------
+    if (mVisibilityInterpolator.IsFinished(lfTimeNow))
+    {
+        if (meVisibilityFadeState == E_VISIBILITY_FADING_IN)
+            meVisibilityFadeState = E_VISIBILITY_FULL;
+        else if (meVisibilityFadeState == E_VISIBILITY_FADING_OUT)
+            meVisibilityFadeState = E_VISIBILITY_NONE;
+        mVisibilityInterpolator.Invalidate();
+    }
+
+    f32  lfBaseAlpha  = 1.0f;
+    bool lbRenderBody = true;
+    switch (meVisibilityFadeState)
+    {
+    case E_VISIBILITY_NONE:
+        if (mGuiEventBoostInfo.mbAllowedToBoost)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("Visibility is none but we are allowed to boost",
+                                       KPC_ASSERT_FILE, 1073);
+            CgsDev::Assert::EndAssert();
+        }
+        lbRenderBody = false;
+        break;
+
+    case E_VISIBILITY_FADING_OUT:
+    case E_VISIBILITY_FADING_IN:
+        if (!((meVisibilityFadeState == E_VISIBILITY_FADING_IN &&
+               mGuiEventBoostInfo.mbAllowedToBoost) ||
+              (meVisibilityFadeState == E_VISIBILITY_FADING_OUT &&
+               !mGuiEventBoostInfo.mbAllowedToBoost)))
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(
+                "Visibility is fading in the wrong direction for what we expect",
+                KPC_ASSERT_FILE, 1065);
+            CgsDev::Assert::EndAssert();
+        }
+        lfBaseAlpha = mVisibilityInterpolator.GetCurrentValue(lfTimeNow);
+        if (!(lfBaseAlpha > 0.0f))
+            lbRenderBody = false;
+        break;
+
+    case E_VISIBILITY_FULL:
+        if (!mGuiEventBoostInfo.mbAllowedToBoost)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("Visibility is full but we are not allowed to boost",
+                                       KPC_ASSERT_FILE, 1080);
+            CgsDev::Assert::EndAssert();
+        }
+        break;
+
+    default:
+        {
+            CgsDev::Assert::BeginAssert();
+            char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
+            lacMessage[0] = '\0';
+            CgsDev::StrStream lStream(lacMessage, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
+            lStream << "Unexpected visibility state in boost bar render cpt ( "
+                    << static_cast<s32>(meVisibilityFadeState) << " ) \n";
+            CgsDev::Assert::FireAssert(lacMessage, KPC_ASSERT_FILE, 1087);
+            CgsDev::Assert::EndAssert();
+        }
+        break;
+    }
+
+    if (lbRenderBody)
+    {
+        // ---- base colour (the aggression bar runs at 0.75 alpha) ------------------------
+        Vector4 lv4Colour = { 1.0f, 1.0f, 1.0f, lfBaseAlpha };
+        if (meBoostBarStatus == E_STATUS_AGGRESSION_BOOST)
+            lv4Colour.w *= KF_AGRESSION_BOOST_TRANSPARENCY;
+
+        // ---- background ------------------------------------------------------------------
+        // While a chunk gain is flying in, the background holds the PRE-GAIN max.
+        const f32 lfMaxBoost = mChunkGainInterpolator.IsActive(lfTimeNow)
+                             ? mfChunkGainPreviousMaxBoost
+                             : mGuiEventBoostInfo.mfMaxBoost;
+        const f32 lfBarWidth = lv4Rect.z - lv4Rect.x;
+
+        Vector4 lv4BackgroundRect = lv4Rect;
+        lv4BackgroundRect.z = lv4Rect.x + 0.0099999998f * lfBarWidth * lfMaxBoost;
+        SetBackground(lpRenderBuffer, lv4BackgroundRect, lfBaseAlpha, lfTimeNow);
+
+        const f32 lfBarHeight  = lv4Rect.w - lv4Rect.y;
+        const f32 lfBarCentreY = (lv4Rect.w + lv4Rect.y) * 0.5f;
+
+        // ---- the chunk-gain flying bar ---------------------------------------------------
+        if (mChunkGainInterpolator.IsActive(lfTimeNow))
+        {
+            const f32 lfChunkWidth = 0.0099999998f * lfBarWidth * mfChunkGainPreviousMaxBoost;
+            const f32 lfChunkX     = 1.0f + (lv4BackgroundRect.z - 1.0f) *
+                                     mChunkGainInterpolator.GetCurrentValue(lfTimeNow);
+            const Vector4 lv4ChunkRect =
+                { lfChunkX, lv4Rect.y, lfChunkX + lfChunkWidth, lv4Rect.w };
+            RenderBillboardBar(lv4ChunkRect, KF_BACKGROUND_TILE_WIDTH, lv4Colour,
+                               &mBillboardRenderer[0], lfTimeNow);
+        }
+        if (mChunkGainInterpolator.IsFinished(lfTimeNow))
+        {
+            mfChunkGainShakeStartTime = lfTimeNow;
+            mChunkGainInterpolator.Invalidate();
+        }
+
+        // ---- the chunk-loss shatter ------------------------------------------------------
+        if (lfTimeNow < mfChunkLossEndTime)
+        {
+            const rw::math::fpu::Vector4Template<f32> lv4ShatterRect(
+                lv4BackgroundRect.z,
+                lv4Rect.y,
+                lv4BackgroundRect.z + 0.0099999998f * lfBarWidth *
+                    (mfChunkLossPreviousMaxBoost - mGuiEventBoostInfo.mfMaxBoost),
+                lv4Rect.w);
+            RenderShatteredBar(lv4ShatterRect, lfTimeNow, lv4Colour);
+        }
+
+        // ---- program 3 + the gradient colour pair ----------------------------------------
+        lpRenderBuffer->SetProgram(3);
+        {
+            const s32 liType = static_cast<s32>(meCurrentBoostType);
+            const rw::math::vpu::Vector4 lv4Outer =
+                { mav3BoostOuterColours[liType].x, mav3BoostOuterColours[liType].y,
+                  mav3BoostOuterColours[liType].z, 0.0f };
+            const rw::math::vpu::Vector4 lv4Inner =
+                { mav3BoostInnerColours[liType].x, mav3BoostInnerColours[liType].y,
+                  mav3BoostInnerColours[liType].z, 0.0f };
+            lpRenderBuffer->PushBoostBarColours(lv4Outer, lv4Inner);
+        }
+
+        // ---- the eased boost fill --------------------------------------------------------
+        const f32 lfBoostProp = mBoostAmountInterpolator.GetCurrentValue(lfTimeNow);
+        Vector4 lv4BoostRect = lv4Rect;
+        lv4BoostRect.z = lv4Rect.x + 0.0099999998f * lfBarWidth * lfBoostProp;
+
+        // The boost-flame ramp: +6/s while boosting, -1/s otherwise, clamped 0..1
+        // (the console's Update / set-rate / Update triplet == SetDelta + read).
+        mBoostFlameInterpolator.SetDelta(mGuiEventBoostInfo.mbIsBoosting ? 6.0f : -1.0f,
+                                         lfTimeNow);
+        mfIsBoostingProp = mBoostFlameInterpolator.GetCurrentValue(lfTimeNow);
+
+        const f32 lfFlameSizeX = KF_BOOSTING_FLAME_X_SCALE;
+        const f32 lfFlameSizeY = KF_BOOSTING_FLAME_Y_SCALE * lfBarHeight +
+                                 KF_BOOSTING_FLAME_Y_OFFSET;
+
+        // ---- the boosting flame billboard ------------------------------------------------
+        if (mfIsBoostingProp > 0.0f)
+        {
+            maBillboards.Clear();
+
+            f32 lfFlameAlpha = mfIsBoostingProp * 2.0f - 0.5f;
+            if (lfFlameAlpha < 0.0f) lfFlameAlpha = 0.0f;
+            if (lfFlameAlpha > 1.0f) lfFlameAlpha = 1.0f;
+
+            CgsGui::BillboardInfo lInfo = {};
+            lInfo.mfPosX     = lv4BoostRect.z - KF_BOOSTING_FLAME_X_SCALE +
+                               0.5f * mfIsBoostingProp * KF_BOOSTING_FLAME_X_SCALE +
+                               KF_BOOSTING_FLAME_X_OFFSET;
+            lInfo.mfPosY     = lfBarCentreY + KF_BOOSTING_FLAME_Y_OFFSET;
+            lInfo.mfRotation = 0.0f;
+            lInfo.mfSizeX    = mfIsBoostingProp * lfFlameSizeX;
+            lInfo.mfSizeY    = mfIsBoostingProp * lfFlameSizeY;
+            Vector4 lv4FlameColour = lv4Colour;
+            lv4FlameColour.w *= lfFlameAlpha;
+            lInfo.muDiffuse      = PackBillboardDiffuse(lv4FlameColour);
+            lInfo.miTextureFrame = static_cast<s32>(lfTimeNow * 30.0f);
+            maBillboards.Append(lInfo);
+
+            CGS_ASSERT(mpWhiteTextureState != 0, "mpWhiteTextureState");   // :1220
+            const Vector4 lv4FlameMaskRect = { lv4BoostRect.x, 0.0f, 1.0f, 1.0f };
+            const Vector4 lv4FullUVs       = { 0.0f, 0.0f, 1.0f, 1.0f };
+            BrnGui::SetMaskRect(lpRenderBuffer, mpWhiteTextureState,
+                                lv4FlameMaskRect, lv4FullUVs);
+            mBillboardRenderer[4].Render(lpRenderBuffer, &maBillboards.GetItem(0u),
+                                         static_cast<s32>(maBillboards.GetLength()));
+            lpRenderBuffer->PopMask();
+        }
+
+        // ---- the fire (chained-boost transition / danger-inactive dimming) ---------------
+        const Vector4 lv4FullUVs = { 0.0f, 0.0f, 1.0f, 1.0f };
+        if (mChainedBoostInterpolator.IsValid())
+        {
+            if (mChainedBoostInterpolator.IsActive(lfTimeNow))
+            {
+                // The chained-boost earn transition: dimmed red fire + glow under the
+                // chained-inactive tiling mask, then the real fire sweeping in behind the
+                // travelling mask edge.
+                const f32 lfChained = mChainedBoostInterpolator.GetCurrentValue(lfTimeNow);
+                const f32 lfChainX  = lv4BoostRect.x +
+                                      (lv4BoostRect.z - lv4BoostRect.x) * lfChained;
+
+                SetChainedInactiveMask(lpRenderBuffer, lv4BackgroundRect);
+                Vector4 lv4FireColour = { 1.0f, lv4Colour.y * 0.4f, lv4Colour.z * 0.4f, 1.0f };
+                RenderFire(lv4BoostRect, lv4FireColour, lfTimeNow);
+                Vector4 lv4GlowColour = KV4_GLOW_COLOUR;
+                lv4GlowColour.w = lfBaseAlpha;
+                RenderQuad(lv4BoostRect, lv4GlowColour, mpGlowTextureState,
+                           CgsGui::gpGuiBlendStateAdditive, lv4FullUVs);
+                lpRenderBuffer->PopMask();
+
+                // The function-local static the console keeps at RenderComponent::
+                // sfTransitionMaskXoffset -- a plain zero-initialised POD nothing writes.
+                static const f32 sfTransitionMaskXoffset = 0.0f;
+                const f32 lfMaskX = lfChainX + sfTransitionMaskXoffset;
+                const Vector4 lv4TransitionMaskRect =
+                    { lfMaskX - KF_FIRE_MASK_WIDTH, 0.0f, lfMaskX, 1.0f };
+                BrnGui::SetMaskRect(lpRenderBuffer, mpMaskTextureState,
+                                    lv4TransitionMaskRect, lv4FullUVs);
+                RenderFire(lv4BoostRect, lv4Colour, lfTimeNow);
+                lpRenderBuffer->PopMask();
+            }
+            else
+            {
+                RenderFire(lv4BoostRect, lv4Colour, lfTimeNow);
+            }
+        }
+        else
+        {
+            const bool lbDangerInactive = (meBoostBarStatus == E_STATUS_DANGER_BOOST_INACTIVE);
+            if (lbDangerInactive)
+            {
+                SetChainedInactiveMask(lpRenderBuffer, lv4BackgroundRect);
+                // Dim IN PLACE -- the later fireball/multiplier draws see the dimmed colour,
+                // exactly as the console's register reuse does.
+                lv4Colour.y *= 0.4f;
+                lv4Colour.z *= 0.4f;
+                lv4Colour.x = 1.0f;
+                lv4Colour.w = 1.0f;
+            }
+            RenderFire(lv4BoostRect, lv4Colour, lfTimeNow);
+            if (lbDangerInactive)
+                lpRenderBuffer->PopMask();
+
+            if (mfIsBoostingProp > 0.0f)
+            {
+                const f32 lfGlow = KF_BOOSTING_GLOW_INTENSITY * mfIsBoostingProp;
+                const Vector4 lv4GlowColour = { lfGlow, lfGlow, lfGlow, lfBaseAlpha };
+                RenderQuad(lv4BoostRect, lv4GlowColour, mpGlowTextureState,
+                           CgsGui::gpGuiBlendStateAdditive, lv4FullUVs);
+            }
+        }
+
+        // ---- the grow fireball (slam gain) -----------------------------------------------
+        const f32 lfSlamGainElapsed = lfTimeNow - mfSlamGainStartTime;
+        if (lfSlamGainElapsed <
+            static_cast<f32>(mBillboardRenderer[5].GetNumFrames()) * (1.0f / 60.0f))
+        {
+            maBillboards.Clear();
+
+            const f32 lfTargetX = lv4BoostRect.z - 0.5f * KF_GROW_FIREBALL_X_SIZE +
+                                  KF_GROW_FIREBALL_X_OFFSET;
+            const f32 lfX = lv4BoostRect.x + (lfTargetX - lv4BoostRect.x) *
+                            mBoostGainInterpolator.GetCurrentValue(lfTimeNow);
+
+            CgsGui::BillboardInfo lInfo = {};
+            lInfo.mfPosX         = lfX;
+            lInfo.mfPosY         = lfBarCentreY;
+            lInfo.mfRotation     = 0.0f;
+            lInfo.mfSizeX        = KF_GROW_FIREBALL_X_SIZE;
+            lInfo.mfSizeY        = KF_GROW_FIREBALL_Y_SCALE * lfBarHeight;
+            lInfo.muDiffuse      = PackBillboardDiffuse(lv4Colour);
+            lInfo.miTextureFrame = static_cast<s32>(lfSlamGainElapsed * 60.0f);
+            maBillboards.Append(lInfo);
+
+            const Vector4 lv4FireballMaskRect = { lv4Rect.x, 0.0f, 1.0f, 1.0f };
+            BrnGui::SetMaskRect(lpRenderBuffer, mpWhiteTextureState,
+                                lv4FireballMaskRect, lv4FullUVs);
+            mBillboardRenderer[5].Render(lpRenderBuffer, &maBillboards.GetItem(0u),
+                                         static_cast<s32>(maBillboards.GetLength()));
+            lpRenderBuffer->PopMask();
+        }
+
+        // ---- the earn-flame flicker quad -------------------------------------------------
+        {
+            f32 lfElapsed = lfTimeNow - mfIsEarningBoostStartTime;
+            if (lfElapsed > 0.5f)
+                lfElapsed = 1.0f - lfElapsed;
+            f32 lfEarnFlameProp = lfElapsed * 4.0f;
+            if (lfEarnFlameProp < 0.0f) lfEarnFlameProp = 0.0f;
+            if (lfEarnFlameProp > 1.0f) lfEarnFlameProp = 1.0f;
+
+            if (lfEarnFlameProp > 0.0f &&
+                meBoostBarStatus != E_STATUS_DANGER_BOOST_INACTIVE &&
+                meBoostBarStatus != E_STATUS_DANGER_BOOST_ACTIVE)
+            {
+                const f32 lfHalfHeight = 0.5f * lfBarHeight * KF_EARN_FLAME_Y_SCALE;
+                const f32 lfX0 = lv4Rect.x + KF_EARN_FLAME_X_OFFSET;
+                const f32 lfX1 = lfX0 + KF_EARN_FLAME_WIDTH;
+                const f32 lfY0 = lfBarCentreY - lfHalfHeight;
+                const f32 lfY1 = lfBarCentreY + lfHalfHeight;
+
+                Vector4 lv4EarnColour = { 1.0f, 1.0f, 1.0f, lfBaseAlpha * lfEarnFlameProp };
+                if (mRandom.RandomFloat() > 0.80000001f)
+                    lv4EarnColour.w *= KF_EARN_FLAME_FLICKER_PROP;
+                const u32 luColour = PackBoostColour(lv4EarnColour);
+
+                CgsGraphics::Basic2dColouredTexturedVertex laVerts[4];
+                const f32 lafX[4] = { lfX0, lfX0, lfX1, lfX1 };
+                const f32 lafY[4] = { lfY0, lfY1, lfY0, lfY1 };
+                const f32 lafU[4] = { 0.0f, 0.0f, 1.0f, 1.0f };
+                const f32 lafV[4] = { 0.0f, 1.0f, 0.0f, 1.0f };
+                for (s32 liVert = 0; liVert < 4; ++liVert)
+                {
+                    laVerts[liVert].mv2Pos.x    = lafX[liVert];
+                    laVerts[liVert].mv2Pos.y    = lafY[liVert];
+                    laVerts[liVert].mv2Tex0UV.x = lafU[liVert];
+                    laVerts[liVert].mv2Tex0UV.y = lafV[liVert];
+                    *reinterpret_cast<u32*>(&laVerts[liVert].mv4Colour) = luColour;
+                }
+                lpRenderBuffer->SetState(CgsGui::gpGuiBlendStateAdditive);
+                lpRenderBuffer->SetState(mpEarnFlameTextureState);
+                lpRenderBuffer->Render(static_cast<renderengine::PrimitiveType>(6),
+                                       laVerts, 4);
+            }
+        }
+
+        // ---- the multiplier flame window -------------------------------------------------
+        if (meBoostBarStatus == E_STATUS_AGGRESSION_BOOST &&
+            meBoostBarMultiplier != E_MULTIPLIER_1X)
+        {
+            const Vector4& lrv4UV = (meBoostBarMultiplier == E_MULTIPLIER_2X)
+                                  ? KV4_MULTIPLIER_2X_IMAGE_UV
+                                  : KV4_MULTIPLIER_3X_IMAGE_UV;
+            const Vector4 lv4MultiplierRect =
+                { lv4BackgroundRect.z - KF_BACKGROUND_TILE_WIDTH, lv4BackgroundRect.y,
+                  lv4BackgroundRect.z, lv4BackgroundRect.w };
+            BrnGui::SetMaskRect(lpRenderBuffer, mpMultiplierTextureState,
+                                lv4MultiplierRect, lrv4UV);
+            const Vector4 lv4MultiplierFireColour =
+                { lv4Colour.x * 0.4f, lv4Colour.y * 0.4f,
+                  lv4Colour.z * 0.4f, lv4Colour.w * 0.4f };
+            RenderFire(lv4MultiplierRect, lv4MultiplierFireColour, lfTimeNow);
+            lpRenderBuffer->PopMask();
+        }
+
+        lpRenderBuffer->SetProgram(0);
+
+        // ---- the danger end glow ---------------------------------------------------------
+        if (meBoostBarStatus == E_STATUS_DANGER_BOOST_INACTIVE)
+        {
+            SetChainedInactiveMask(lpRenderBuffer, lv4BackgroundRect);
+            // The X-mirrored glow rect (x0 > x1 flips the sample) is the console's own build.
+            const Vector4 lv4EndGlowRect =
+                { lv4BoostRect.z, lv4BoostRect.y,
+                  lv4BoostRect.z - KF_DANGER_END_GLOW_WIDTH, lv4BoostRect.w };
+            const Vector4 lv4EndGlowColour =
+                { 1.0f, 1.0f, 1.0f, mGuiEventBoostInfo.mfBoostAmount / lfMaxBoost };
+            RenderQuad(lv4EndGlowRect, lv4EndGlowColour, mpEndGlowTextureState,
+                       CgsGui::gpGuiBlendStateAdditive, lv4FullUVs);
+            lpRenderBuffer->PopMask();
+        }
+
+        // ---- the background end cap ------------------------------------------------------
+        {
+            const f32 lfHalfHeight = 0.5f * KF_BACKGROUND_ENDCAP_YSCALE * lfBarHeight;
+            const Vector4 lv4CapRect =
+                { lv4Rect.x + KF_BACKGROUND_ENDCAP_XOFFSET,
+                  lfBarCentreY - lfHalfHeight,
+                  lv4Rect.x + KF_BACKGROUND_ENDCAP_XOFFSET + KF_BACKGROUND_ENDCAP_WIDTH,
+                  lfBarCentreY + lfHalfHeight };
+            const Vector4 lv4CapColour = { 1.0f, 1.0f, 1.0f, lfBaseAlpha };
+            RenderQuad(lv4CapRect, lv4CapColour, mpBackgroundEndCapTextureState,
+                       CgsGui::gpGuiBlendStateStandard, lv4FullUVs);
+        }
+    }
+
+    // ---- epilogue -----------------------------------------------------------------------
+    if (mbShowDebugScreen)
+        ShowDebugScreen();
+    lpRenderBuffer->SetState(CgsGui::gpGuiBlendStateStandard);
+    lpRenderBuffer->EndRendering();
+
+    if (miBoostBarPM >= 0)
+        CgsDev::PerfMonCpu::StopMonitor(miBoostBarPM);
 }
 }

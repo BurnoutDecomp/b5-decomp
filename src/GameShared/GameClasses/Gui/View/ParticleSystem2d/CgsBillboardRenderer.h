@@ -24,14 +24,23 @@
 // record). The X360 guest object is ~0x204C bytes (mafUVTab dominates); the x64 sizeof differs and
 // is deliberately not pinned.
 
-namespace renderengine { class TextureState; class BlendState; }
+namespace renderengine { class TextureState; class BlendState; class DepthStencilState; class RasterizerState; }
 
 // The immediate-mode render buffer the draw submits through is used pointer-only in this header
 // (the full template lives in ImRenderBuffer/CgsImRenderBufferTemplate.h, pulled in by the .cpp).
-namespace CgsGraphics { template <typename V> struct ImRenderBuffer; }
+namespace CgsGraphics { template <typename V> struct ImRenderBuffer; struct Im2dTransform; }
 
 namespace CgsGui
 {
+    // The X360 GUI render-state-table entries + the shared 2D screen transform the billboard/
+    // boost-bar draws bind (dword_83010F20 / dword_83010F24 / dword_83010F54 / unk_83011090).
+    // Defined in CgsBillboardRenderer.cpp as their PC folds -- see the block comment there.
+    extern const renderengine::BlendState*        gpGuiBlendStateStandard;       // dword_83010F20
+    extern const renderengine::BlendState*        gpGuiBlendStateAdditive;       // dword_83010F24
+    extern const renderengine::DepthStencilState* gpBillboardDepthStencilState;  // dword_83010F54
+    extern const renderengine::RasterizerState*   gpGuiRasterizerStateCullNone;  // the state table's cull-none entry
+    extern const CgsGraphics::Im2dTransform       gBillboardScreenTransform;     // unk_83011090
+
     struct BillboardInfo;  // real home: CustomRenderer/CgsGuiBillboardInfo.h (pointer-only here)
 
     class BillboardRenderer
@@ -65,6 +74,11 @@ namespace CgsGui
         // render-buffer argument.
         void Render(CgsGraphics::ImRenderBuffer<CgsGraphics::Basic2dColouredTexturedVertex>* lpRenderBuffer,
                     const BillboardInfo* laBillboards, s32 liNumBillboards) const;
+
+        // The valid animation-frame count. The X360 BoostBarRenderer::RenderComponent reads the
+        // field straight off the grow-fireball renderer subobject to bound the slam-gain window
+        // (frames / 60s); an accessor here in place of the raw member read.
+        s32 GetNumFrames() const { return miNumFrames; }
 
     private:
         // 0x8284F478. Precompute the per-frame UV atlas: for a framesX x framesY grid, frame i lands

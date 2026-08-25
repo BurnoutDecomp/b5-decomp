@@ -263,8 +263,8 @@ namespace CgsGraphics
     template <typename V>
     struct ImCommandPushMaskTextureState : public ImCommand          // DWARF :191
     {
-        TextureState* mpTextureState;  // [c:0x08]
-        V*            mpVertices;      // [c:0x0C console]
+        const TextureState* mpTextureState;  // [c:0x08]
+        V*                  mpVertices;      // [c:0x0C console]
     };
 
     template <typename V>
@@ -425,10 +425,14 @@ namespace CgsGraphics
         // already defined above -- byte-identical opcode-16/80-byte append -- so it is not re-declared.)
 
         // Push a clip mask built from a 2-vertex (min-corner, max-corner) screen-space run bound to
-        // lpTexture (X360 Im2dRenderBuffer::PushMask @0x82450030): a 16-byte {muType=17} record with
-        // the texture @ +8 and the corner-run pointer @ +12, plus a 40-byte AllocVertices(2) run the
-        // two corners are copied into. Distinct opcode from the Apt PushMaskGeometry (18).
-        void PushMask(renderengine::Texture* lpTexture, const V* lpaMaskVertices);
+        // lpTextureState (X360 Im2dRenderBuffer::PushMask @0x82450030): a 16-byte {muType=17} record
+        // with the state @ +8 and the corner-run pointer @ +12, plus a 40-byte AllocVertices(2) run
+        // the two corners are copied into. Distinct opcode from the Apt PushMaskGeometry (18), and a
+        // different +8 binding: this record is the DWARF :191 TextureState variant -- its one X360
+        // caller, BrnGui::SetMaskRect @0x82450BE0, passes a resolved renderengine::TextureState*
+        // (the boost bar's mask/white/multiplier states), which the dispatcher unwraps to its
+        // raster exactly like SET_STATE_TEXTURE.
+        void PushMask(const renderengine::TextureState* lpTextureState, const V* lpaMaskVertices);
 
         // Pop/clear the current clip mask (X360 Im2dRenderBuffer::PopMask @0x824501C8): a 16-byte
         // header-only {muType=19} record. Same opcode/record as EndMask (a different X360 call site).
