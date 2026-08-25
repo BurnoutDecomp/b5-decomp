@@ -6,7 +6,11 @@
 #include "GameShared/GameClasses/Gui/View/CustomRenderer/CgsCustomRenderer.h" // base
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"                // GuiEventEnableSatNavIcons::EIconDisplayType
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsImRenderBuffer.h"  // CgsGraphics::Im2dRenderBuffer (== Im2d), Im2dTransform
+#include "GameShared/GameClasses/Graphics/ImmediateMode/ImRenderBuffer/CgsImRenderBufferTemplate.h" // CgsGraphics::ImRenderBuffer<V> (the draw-target type)
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsIm2dTransform.h"   // CgsGraphics::Im2dTransform (mTransform)
+#include "GameShared/GameClasses/Core/CgsID.h"                                // CgsID (GetID)
+#include "rw/rwcore_structs.h"                                                // rw::Resource (texture-state backing)
+#include "GameSource/Gui/SatNav/BrnSatNavComponent.h"                         // BrnGui::GuiEventRenderSatNav (the 212 payload)
 
 // BrnGui::SatNavRenderer -- the GUI custom-render component that draws the sat-nav /
 // mini-map event icons and the player's route highlight on the live map.
@@ -121,12 +125,22 @@ namespace BrnGui
         SatNavRenderer();
 
         // ---- virtual overrides driven by the GUI CustomRendererManager ----
+        // ⭐ H3b: Prepare/RecvEvent/GetID previously re-declared with LOCAL signatures
+        // (void* args / a u32 "GetComponentID") -- shadowing redeclarations, NOT
+        // overrides: the manager's virtual dispatch would have hit the base defaults
+        // and the renderer would never prepare or receive an event (the
+        // shadowing-redeclaration defect class; only a link/mount surfaces it).
         virtual void   Construct();
-        virtual bool   Prepare(void* lpResourceAllocator, void* lpA, void* lpB);
+        virtual bool   Prepare(CgsGui::GuiEventQueueSmall* lpEventQueue,
+                               rw::IResourceAllocator* lpHeapAllocator,
+                               rw::IResourceAllocator* lpTextureAllocator);
         virtual bool   Release();
         virtual void   Destruct();
-        virtual void   RecvEvent(const void* lpEvent, s32 liEventType);
-        virtual u32    GetComponentID() const;   // GetID() -- returns the component CgsID
+        virtual void   RecvEvent(const CgsModule::Event* lpEvent, s32 liEventType);
+        virtual CgsID  GetID() const;   // @0x82445888 -- the component CgsID
+        // RenderComponent @0x82465EC0 -- the per-frame sat-nav draw (map quad + mask +
+        // icons), dispatched by the base's non-virtual Render(set).
+        virtual void   RenderComponent(CgsGui::ImRendererSet* lpRendererSet);
 
         // ---- private helpers (this TU's non-virtual leaves) ----
     private:
@@ -136,7 +150,10 @@ namespace BrnGui
         void RefreshSatNavIconInfo(s32 liEventId);
         u32  GetNumIcons() const;
         void GetIconInformation(u32 luIndex, IconRendererSatNavIconInfo* lpInfo) const;
-        void RenderIconsForSatNav(CgsGraphics::Im2dRenderBuffer* lpRenderBuffer);
+        // PC fold: the draw target is the Apt 2D COMMAND buffer (the ticker precedent;
+        // the console's v6+4 subobject) -- the buffered ImRenderBuffer, not the direct Im2d.
+        void RenderIconsForSatNav(
+            CgsGraphics::ImRenderBuffer<CgsGraphics::Basic2dColouredTexturedVertex>* lpRenderBuffer);
 
         // Build the screen-space mTransform from the viewport descriptor + aspect ratio
         // (X360 @0x8245F4D8; bodied in this TU). Called by Construct() and the debug component.
@@ -147,7 +164,7 @@ namespace BrnGui
         // f2/f4 = the zoom-scaled per-icon half-extents (see @0x8245FD00/0x82460108).
         void RenderSatNavIcon(f32 lfX, f32 lfHalfWidth, f32 lfY, f32 lfHalfHeight,
                               ESatNavIconType leIconType, u32 luEventTypeIndex,
-                              CgsGraphics::Im2dRenderBuffer* lpRenderBuffer);
+                              CgsGraphics::ImRenderBuffer<CgsGraphics::Basic2dColouredTexturedVertex>* lpRenderBuffer);
 
         // ---- member state (DWARF h:238-306; declared by name, opaque where uncommitted) ----
         // NOTE: mbRenderEnabled lives in the base (CgsGui::CustomRenderComponentInterface).
@@ -158,7 +175,11 @@ namespace BrnGui
                                               // 4 x Vector4; X360 @0x8245F6Bx writes lanes 0/16/32/48).
         EPrepareStage mePrepareStage;        // h:242
         EReleaseStage meReleaseStage;        // h:243
-        u8   mRenderSatNavEvent[48];         // h:245 GuiEventRenderSatNav (opaque; memcpy'd in RecvEvent 0xD4)
+        // h:245 -- the latched GuiEventRenderSatNav payload (RecvEvent 212). ⭐ H3b: was
+        // an opaque u8[48] copied with the X360's 48-byte memcpy -- on this host the
+        // record is native-width (three 8-byte texture pointers), so the fixed-size copy
+        // TRUNCATED it (the PlayAptMovie precedent). Typed + copied by assignment now.
+        GuiEventRenderSatNav mRenderSatNavEvent;
         GuiCache* mpGuiCache;                // h:246
         void* mpHeapAllocator;               // h:248 rw::IResourceAllocator*
 
@@ -180,6 +201,13 @@ namespace BrnGui
 
         u32  maIconResources[2][5];          // h:271 Resource[2]  (InitResources fills these)
         renderengine::TextureState* mapIconTextureStates[2];   // h:272
+
+        // PC fold: backing storage for the runtime-created texture states (the font-path
+        // precedent -- renderengine::TextureState::Initialize(rw::Resource*, Parameters*)).
+        // The console's u32[5] descriptor slots above stay as the documented X360 shape.
+        rw::Resource mMapTextureStateBacking;
+        rw::Resource mMaskTextureStateBacking;
+        rw::Resource maIconTextureStateBacking[2];
 
         GuiEventEnableSatNavIcons::EIconDisplayType meIconDisplayType; // h:275 (Construct=COUNT)
         s32  meGameModeFilter;               // h:278 BrnProgression::RaceEventData::EModeType

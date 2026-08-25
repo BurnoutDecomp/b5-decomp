@@ -48,6 +48,9 @@
 //   +0x34 RenderComponent
 
 #include "GameSource/Gui/BrnCustomRendererManager.h"
+#include "GameShared/GameClasses/Graphics/VertexDescriptors/CgsBasic2dColouredTexturedVertex.h" // mask corner vertices (SetMaskRect)
+#include "pc/gcm/renderengine/renderstates.h"   // renderengine::TextureState::mpRaster (SetMaskRect)
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [DIAG] the satnav-diag prints
 
 #include "GameShared/GameClasses/Core/CgsAssert.h" // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h" // CgsDev::Log::gpDebugPrint (the [tut-ticker] diag)
@@ -147,7 +150,9 @@ void CustomRendererManager::Construct()
     // Slot 0 is the embedded renderer; the rest have no reconstructed component to point
     // at and stay NULL (see the header for why they are not stubbed).
     mapCustomRenderComponents[E_NETWORK_PLAYER_IMAGE] = &mNetworkPlayerImageRenderer;
-    mapCustomRenderComponents[E_SATNAV]               = 0;
+    // ⭐ [H3b] slot 1 is LIVE (2026-08-25): the reconstructed SatNavRenderer subobject
+    // (guest this+0x1050), the minimap.
+    mapCustomRenderComponents[E_SATNAV]               = &mSatNavRenderer;
     mapCustomRenderComponents[E_MAINMAP]              = 0;
     mapCustomRenderComponents[E_CRASHNAVICONS]        = 0;
     // ⭐ [boost-bar] slot 4 is LIVE (2026-08-25): the reconstructed BoostBarRenderer
@@ -482,6 +487,23 @@ void CustomRendererManager::RecvEvent_Event213(const CgsModule::Event* lpEvent)
     const bool lbEnableFlag  = (lpu8[8] != 0);
     const f32  lfFadeSeconds = lpf32[1];        // `lfs f1, 4(r30)`
 
+    // [DIAG] NOT IN THE X360 BINARY -- [satnav-diag] the map-toggle records as the
+    // manager sees them (first 12), plus the resulting SatNav enable.
+    {
+        static s32 siLeft = 12;
+        if (siLeft > 0 && CgsDev::Log::gpDebugPrint != 0)
+        {
+            --siLeft;
+            *CgsDev::Log::gpDebugPrint
+                << "[satnav-diag] mgr 213: submode=" << static_cast<s32>(lpu8[0])
+                << " flag=" << static_cast<s32>(lpu8[8])
+                << " fade=" << lfFadeSeconds
+                << " satnavEnabledBefore="
+                << static_cast<s32>((lpSatNav != 0) ? lpSatNav->GetRenderEnabled() : -1)
+                << "\n";
+        }
+    }
+
     if (lpu8[0] != 0)
     {
         // Sub-mode 1: full-map toggle on the SatNav slot (guest v4[1032] == array slot 1),
@@ -763,6 +785,10 @@ void CustomRendererManager::SetLanguageManager(CgsLanguage::LanguageManager* lpL
 // Defined in the sibling TU GameSource/Gui/BrnCustomRendererManager.cpp (the original
 // minimal-slice ledger function); not redefined here.
 
+// ⭐ [H3b x boost-bar reconcile 2026-08-25] TWO SetMaskRect bodies follow -- a REAL X360
+// overload pair: @0x82450BE0 (pointer buffer; the boost-bar callers) and @0x82450D28
+// (reference buffer; the sat-nav caller). Distinct functions in the image, both named
+// BrnGui::SetMaskRect, both homed here.
 // ================= BrnGui::SetMaskRect @ 0x82450BE0 =================
 // The shared GUI clip-mask helper (this TU is its home -- the assert below bakes
 // BrnCustomRenderer.cpp:889). The X360 body:
@@ -817,6 +843,56 @@ void SetMaskRect(CgsGraphics::ImRenderBuffer<CgsGraphics::Basic2dColouredTexture
     *reinterpret_cast<u32*>(&laCorners[1].mv4Colour) = 0xFFFFFFFFu;
 
     lpRenderBuffer->PushMask(lpTextureState, laCorners);
+
+// ================= SetMaskRect @ 0x82450D28 =================
+// Push a clip mask over a normalised screen rect. The X360 asserts the mask aspect
+// matrix (@0x82FB3220) is initialised, transforms the rect's two corners through the
+// normalised->mask-NDC product (@0x82FB3010), min/max-orders them, then hands
+// Im2dRenderBuffer::PushMask two {pos, colour 0xFFFFFFFF, uv} corner vertices.
+// [H3b PC fold]: the dispatch's mask consumes LOGICAL 1280x720 pixel corners (the
+// scissor + stage-1 alpha fold in CgsImRenderBufferTemplate.cpp), so the corner
+// transform collapses to the logical-screen scale and the matrix dependency drops out.
+void SetMaskRect(CgsGraphics::ImRenderBuffer<CgsGraphics::Basic2dColouredTexturedVertex>& lrCmd,
+                 const renderengine::TextureState* lpMaskTextureState,
+                 const Vector4& lv4Rect, const Vector4& lv4MaskUv)
+{
+    const f32 KF_LOGICAL_W = 1280.0f;
+    const f32 KF_LOGICAL_H = 720.0f;
+
+    // Corner ordering (the X360's two vcmpgtfp min/max picks).
+    const f32 lfX0 = (lv4Rect.x < lv4Rect.z) ? lv4Rect.x : lv4Rect.z;
+    const f32 lfX1 = (lv4Rect.x < lv4Rect.z) ? lv4Rect.z : lv4Rect.x;
+    const f32 lfY0 = (lv4Rect.y < lv4Rect.w) ? lv4Rect.y : lv4Rect.w;
+    const f32 lfY1 = (lv4Rect.y < lv4Rect.w) ? lv4Rect.w : lv4Rect.y;
+
+    CgsGraphics::Basic2dColouredTexturedVertex laCorners[2];
+    laCorners[0].mv2Pos.x    = lfX0 * KF_LOGICAL_W;
+    laCorners[0].mv2Pos.y    = lfY0 * KF_LOGICAL_H;
+    laCorners[0].mv4Colour.r = 0xFF; laCorners[0].mv4Colour.g = 0xFF;
+    laCorners[0].mv4Colour.b = 0xFF; laCorners[0].mv4Colour.a = 0xFF;
+    laCorners[0].mv2Tex0UV.x = lv4MaskUv.x;
+    laCorners[0].mv2Tex0UV.y = lv4MaskUv.y;
+    laCorners[1].mv2Pos.x    = lfX1 * KF_LOGICAL_W;
+    laCorners[1].mv2Pos.y    = lfY1 * KF_LOGICAL_H;
+    laCorners[1].mv4Colour.r = 0xFF; laCorners[1].mv4Colour.g = 0xFF;
+    laCorners[1].mv4Colour.b = 0xFF; laCorners[1].mv4Colour.a = 0xFF;
+    laCorners[1].mv2Tex0UV.x = lv4MaskUv.z;
+    laCorners[1].mv2Tex0UV.y = lv4MaskUv.w;
+
+    // PushMask binds the mask TEXTURE STATE directly (the DWARF :191 record variant;
+    // the dispatcher unwraps it to its raster exactly like SET_STATE_TEXTURE).
+    lrCmd.PushMask(lpMaskTextureState, laCorners);
+}
+
+// ================= SetMaskAspectCorrectionMatrix @ 0x82450A70 =================
+// The X360 builds the mask NDC coord space ({-1,-1,1,1} + the display aspect fold,
+// stored @0x82FB3220) and its composition with the normalised space (@0x82FB3010) --
+// the matrices the console SetMaskRect corner transform consumes. On the PC fold
+// SetMaskRect builds logical-pixel corners directly, so there is no matrix to store;
+// the function remains as the (empty) call-order peer of GuiModule::Construct.
+void SetMaskAspectCorrectionMatrix(GuiCache* lpGuiCache)
+{
+    (void)lpGuiCache;
 }
 
 } // namespace BrnGui

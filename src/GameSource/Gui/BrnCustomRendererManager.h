@@ -8,6 +8,8 @@
 #include "GameSource/Gui/CustomRenderer/Renderers/BrnNetworkPlayerImageRenderer.h" // the live slot-0 component
 #include "GameSource/Gui/CustomRenderer/Renderers/BrnInGameMessageRenderer.h"      // [tut-ticker] the live slot-8 component
 #include "GameSource/Gui/CustomRenderer/Renderers/BrnBoostBarRenderer.h"           // [boost-bar] the live slot-4 component
+#include "GameSource/Gui/CustomRenderer/Renderers/BrnSatNavRenderer.h"             // [H3b] the live slot-1 component (the minimap)
+#include "GameShared/GameClasses/Graphics/ImmediateMode/ImRenderBuffer/CgsImRenderBufferTemplate.h" // ImRenderBuffer<V> (SetMaskRect)
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX.
 //   BrnGui::CustomRendererManager  @ 0x82444040 .. 0x82450908  (16 functions)
@@ -156,6 +158,11 @@ private:
     // The by-value subobject for slot 0 (guest this+0x1B660).
     NetworkPlayerImageRenderer mNetworkPlayerImageRenderer;
 
+    // ⭐ [H3b] the by-value subobject for slot 1 (guest this+0x1050) -- the sat-nav
+    // minimap renderer, reconstructed whole 2026-08-25 (RenderComponent + the zoomed
+    // view chain landed; the hollow-shell caveat in the array banner no longer applies).
+    SatNavRenderer mSatNavRenderer;
+
     // ⭐ [tut-ticker] the by-value subobject for slot 8 (guest this+0x1E0F0) -- the
     // bottom-of-screen ticker, reconstructed whole 2026-08-24. The hollow-shell caveat in
     // the array banner above no longer applies to it.
@@ -195,6 +202,10 @@ private:
     void*                         mpReplaySerialiser;  // guest +0x1BED0
 };
 
+// ⭐ [H3b x boost-bar reconcile 2026-08-25] BrnGui::SetMaskRect is an X360 OVERLOAD PAIR:
+// @0x82450BE0 (pointer buffer; the boost-bar callers) and @0x82450D28 (reference buffer;
+// the sat-nav caller -- a distinct function in the image, IDA-named BrnGui::SetMaskRect).
+// Both are homed in BrnCustomRenderer.cpp; neither shadows the other.
 // ---------------------------------------------------------------------------------------------
 // BrnGui::SetMaskRect @0x82450BE0 (home: BrnCustomRenderer.cpp, per its own baked assert path,
 // :889) -- the shared GUI clip-mask helper the boost-bar render paths use: transform the
@@ -208,6 +219,23 @@ void SetMaskRect(CgsGraphics::ImRenderBuffer<CgsGraphics::Basic2dColouredTexture
                  const renderengine::TextureState* lpTextureState,
                  const rw::math::vpu::Vector4& lrv4Rect,
                  const rw::math::vpu::Vector4& lrv4MaskUVs);
+
+// ---------------------------------------------------------------------------------
+// Free mask helpers homed in BrnCustomRenderer.cpp (their X360 assert strings name
+// that file).
+//   SetMaskRect @0x82450D28 -- push a stencil/clip mask over a normalised screen rect
+//     with the given mask texture state + mask-UV range (two corner vertices ->
+//     Im2dRenderBuffer::PushMask). [H3b PC fold: corners are built in the engine's
+//     1280x720 logical pixels; the console's normalised->NDC mask matrix hop
+//     (SetMaskAspectCorrectionMatrix's product) collapses into that scale.]
+//   SetMaskAspectCorrectionMatrix @0x82450A70 -- build the console's mask NDC/aspect
+//     matrices (@0x82FB3220/@0x82FB3010). On the PC fold the pixel-space corners above
+//     need no matrix; the call remains for the GuiModule::Construct call-order parity.
+// ---------------------------------------------------------------------------------
+void SetMaskRect(CgsGraphics::ImRenderBuffer<CgsGraphics::Basic2dColouredTexturedVertex>& lrCmd,
+                 const renderengine::TextureState* lpMaskTextureState,
+                 const Vector4& lv4Rect, const Vector4& lv4MaskUv);
+void SetMaskAspectCorrectionMatrix(class GuiCache* lpGuiCache);
 
 } // namespace BrnGui
 

@@ -10,13 +10,10 @@
 //   GetViewDistance    @ 0x82447C00    SetEventType    @ 0x82447D30
 //   SetCachePointer    @ 0x82473638
 //
-// PARKED BY NAME (H3b) -- the zoomed-view math cluster: GetZoomedCarWorldRect
-// @0x8244EEC8 (XMMatrixRotationY VMX rect builder) and SetViewParamsFromPlayerCar
-// @0x82457C10 (feeds it + MapTransform::SetZoomedWorldRect @0x824504E8 /
-// SetZoomedViewportRect @0x82450608; the zoomed-viewport vector is the unrecovered
-// runtime-init chain 82FB36A0 <- 82FB30A0). Both banked in h3_dump.txt; both are
-// declaration-only here, so THIS TU STAYS UNMOUNTED until that cluster (plus the
-// MapIconManager / NorthIndicator / SatNavStatic / GuiTracker TU mounts) closes.
+// H3b (2026-08-25): the parked zoomed-view cluster is CLOSED -- GetZoomedCarWorldRect
+// @0x8244EEC8 and SetViewParamsFromPlayerCar @0x82457C10 are bodied below; the
+// MapTransform statics (incl. the 82FB36A0 <- 82FB30A0 viewport chain) are recovered
+// in BrnMapUtils.cpp. The TU is MOUNTED.
 // ===================================================================================
 #include "GameSource/Gui/SatNav/BrnSatNavComponent.h"
 
@@ -28,6 +25,9 @@
 #include "GameSource/Gui/BrnGuiCache.h"                                 // GuiCache (icon manager / tracker / zoom / resources)
 #include "GameSource/Gui/SatNav/BrnGuiTracker.h"                        // GuiTracker::GetTrackerInformation
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"                      // CgsGui::GuiEvent<212> (the render record head)
+#include "SharedClasses/Gui/SatNav/BrnMapUtils.h"                        // BrnGui::MapTransform (the zoomed view install)
+
+#include <cmath>     // sinf/cosf (the XMMatrixRotationY fold)
 
 #include <cstring>   // strncmp / memset
 
@@ -155,6 +155,18 @@ void SatNavComponent::LoadResources()
     CGS_ASSERT(mRenderSatNavEvent.mpMapTexture != 0, "mRenderSatNavEvent.mpMapTexture!=NULL");   // :574 (non-gating)
 
     const void* lpMaskTexture = mpGuiCache->GetLoadedResource(201u);
+
+    // [DIAG] NOT IN THE X360 BINARY -- [satnav-diag] the two adopted textures.
+    {
+        static bool sbLogged = false;
+        if (!sbLogged && CgsDev::Log::gpDebugPrint != 0)
+        {
+            sbLogged = true;
+            *CgsDev::Log::gpDebugPrint
+                << "[satnav-diag] LoadResources: map(199)nn=" << static_cast<s32>(lpMapTexture != 0)
+                << " mask(201)nn=" << static_cast<s32>(lpMaskTexture != 0) << "\n";
+        }
+    }
     CGS_ASSERT(mRenderSatNavEvent.mpMaskTexture == 0
                    || lpMaskTexture == mRenderSatNavEvent.mpMaskTexture,
                "mRenderSatNavEvent.mpMaskTexture==NULL || lpNewTexture==mRenderSatNavEvent.mpMaskTexture");   // :579 (non-gating)
@@ -387,6 +399,22 @@ void SatNavComponent::Update()
     CGS_ASSERT(mpPlayerInfo != 0, "mpPlayerInfo");   // :292 (non-gating)
     SetViewParamsFromPlayerCar(mpPlayerInfo);
 
+    // [DIAG] NOT IN THE X360 BINARY -- [satnav-diag] first Update tick.
+    {
+        static bool sbLogged = false;
+        if (!sbLogged && CgsDev::Log::gpDebugPrint != 0)
+        {
+            sbLogged = true;
+            *CgsDev::Log::gpDebugPrint
+                << "[satnav-diag] component Update: pos=(" << mpPlayerInfo->mv4Position.x
+                << "," << mpPlayerInfo->mv4Position.z << ") mph=" << mpPlayerInfo->miSpeedMph
+                << " orient=" << mpPlayerInfo->mfOrientation
+                << " mgrId=" << static_cast<s32>(mIconManagerId)
+                << " mapnn=" << static_cast<s32>(mRenderSatNavEvent.mpMapTexture != 0)
+                << " masknn=" << static_cast<s32>(mRenderSatNavEvent.mpMaskTexture != 0) << "\n";
+        }
+    }
+
     if (mpIconManager != 0)
         mpIconManager->Update();
 
@@ -427,6 +455,128 @@ void SatNavComponent::Update()
         mpStateInterface->GetOutputEventQueue()->AddEvent(
             reinterpret_cast<const CgsModule::Event*>(&lRecord),
             41 /* KI_CHANNEL_VIEW_STATE */, sizeof(lRecord));
+    }
+}
+
+// @ 0x8244EEC8 -- build the four corners of the zoomed world window around the car.
+// STATIC (the X360 body never reads `this`; r3 is the out pointer). Decoded from the
+// banked asm (h3_dump.txt); the VMX128 matrix work (XMMatrixRotationY + the vmaddfp128
+// row transforms) is reconstructed per-lane per the semantic-SIMD policy.
+void SatNavComponent::GetZoomedCarWorldRect(Vector3* lpOutCorners, Vector3 lv3CarPosition,
+                                            f32 lfSpeedMph, f32 lfOrientation,
+                                            bool lbRotateMap, bool lbUseTrajectory,
+                                            s32 liZoomLevel)
+{
+    CGS_ASSERT(liZoomLevel >= 0, "leCurrentZoomLevel >= E_SAT_NAV_ZOOM_IN_MAX");   // :729 (non-gating)
+    CGS_ASSERT(liZoomLevel <= 1, "leCurrentZoomLevel <= E_SAT_NAV_ZOOM_OUT_MAX");  // :730 (non-gating)
+
+    const f32 lfViewDistance = GetViewDistance(lfSpeedMph, liZoomLevel);
+
+    // The speed band (function-local statics 0.5 / 0.75 on the X360 -- guard bits
+    // collapse to the constants): t = clamp(0.5 + 0.25*clamp01(mph/120), 0.5, 0.75);
+    // back = (1 - t) * 2d (the trajectory arm's rear offset).
+    f32 lfRatio = lfSpeedMph * 0.0083333338f;   // flt_82056EDC == 1/120
+    if (lfRatio < 0.0f) lfRatio = 0.0f;
+    if (lfRatio > 1.0f) lfRatio = 1.0f;
+    f32 lfT = 0.5f + 0.25f * lfRatio;
+    if (lfT < 0.5f)  lfT = 0.5f;
+    if (lfT > 0.75f) lfT = 0.75f;
+    const f32 lfBack = (1.0f - lfT) * (lfViewDistance * 2.0f);
+
+    // The orientation matrix M1 (computed unconditionally): RotationY(orientation),
+    // guarded to the IDENTITY when the orientation is NaN (the asm's vcmpeqfp
+    // self-equality test on the splatted lane -- gIVector/82181510/82181520 rows).
+    f32 lfCos1 = 1.0f, lfSin1 = 0.0f;
+    if (lfOrientation == lfOrientation)
+    {
+        lfCos1 = cosf(lfOrientation);
+        lfSin1 = sinf(lfOrientation);
+    }
+
+    // The four base points: (0,0,+d), (+d,0,0), (-d,0,0), (0,0,-d).
+    // RotationY rows: row0 = {cos, 0, -sin}, row2 = {sin, 0, cos};
+    // T(x,0,z) = {x*cos + z*sin, 0, z*cos - x*sin}.
+    f32 lfTzX, lfTzZ;   // T(0,0,+d)
+    f32 lfTxX, lfTxZ;   // T(+d,0,0)
+
+    if (lbRotateMap)
+    {
+        // Rotate-map: transform by M1 directly (identity when NaN-guarded).
+        lfTzX = lfViewDistance * lfSin1;
+        lfTzZ = lfViewDistance * lfCos1;
+        lfTxX = lfViewDistance * lfCos1;
+        lfTxZ = -lfViewDistance * lfSin1;
+    }
+    else
+    {
+        // Fixed map: RotationY(pi) (flt_82054BDC), with the optional trajectory shift:
+        // every base point is first moved back by S = M1 . (0, 0, (d-back)*0.5) --
+        // the M1 rows, NOT the pi matrix (the asm reuses v127/v126/v125 here).
+        const f32 KF_PI = 3.1415927f;
+        const f32 lfCos2 = cosf(KF_PI);
+        const f32 lfSin2 = sinf(KF_PI);
+
+        f32 lfShiftX = 0.0f, lfShiftZ = 0.0f;
+        if (lbUseTrajectory)
+        {
+            const f32 lfHalf = (lfViewDistance - lfBack) * 0.5f;
+            lfShiftX = lfHalf * lfSin1;
+            lfShiftZ = lfHalf * lfCos1;
+        }
+
+        // T2 of the shifted points. The shift subtracts from EVERY base point and each
+        // corner sums TWO transformed points, so the folded centre offset is -2*T2(S)
+        // (corner = pos + T2(pz - S) + T2(px - S) = pos + T2(pz) + T2(px) - 2*T2(S)).
+        lfTzX = lfViewDistance * lfSin2;
+        lfTzZ = lfViewDistance * lfCos2;
+        lfTxX = lfViewDistance * lfCos2;
+        lfTxZ = -lfViewDistance * lfSin2;
+
+        lv3CarPosition.x += -2.0f * (lfShiftX * lfCos2 + lfShiftZ * lfSin2);
+        lv3CarPosition.z += -2.0f * (lfShiftZ * lfCos2 - lfShiftX * lfSin2);
+    }
+
+    // corners = centre +/- T(z-axis) +/- T(x-axis) (X360 vaddfp tail, stores at
+    // out+0x00/0x10/0x20/0x30).
+    for (u32 lu = 0; lu < 4; ++lu)
+    {
+        const f32 lfSz = (lu == 0 || lu == 2) ? 1.0f : -1.0f;   // +Tz on [0]/[2]
+        const f32 lfSx = (lu == 0 || lu == 1) ? 1.0f : -1.0f;   // +Tx on [0]/[1]
+        lpOutCorners[lu].x = lv3CarPosition.x + lfSz * lfTzX + lfSx * lfTxX;
+        lpOutCorners[lu].y = lv3CarPosition.y;
+        lpOutCorners[lu].z = lv3CarPosition.z + lfSz * lfTzZ + lfSx * lfTxZ;
+        lpOutCorners[lu].w = 0.0f;
+    }
+}
+
+// @ 0x82457C10 -- refresh the zoomed view from the player-info block: build the
+// corners (speed word -> float via the fcfid pair), then -- only with a bound icon
+// manager -- install the zoomed world space (corners 0/2/1 as (x,z) pairs) and the
+// zoomed viewport (the live sat-nav view rect @82FB36A0 == GetSatNavViewRect()).
+void SatNavComponent::SetViewParamsFromPlayerCar(const GuiPlayerInfo* lpPlayerInfo)
+{
+    CGS_ASSERT(lpPlayerInfo != 0, "lpPlayerCar");   // BrnSatNav.cpp:188 (non-gating)
+
+    Vector3 lv3Position;
+    lv3Position.x = lpPlayerInfo->mv4Position.x;
+    lv3Position.y = lpPlayerInfo->mv4Position.y;
+    lv3Position.z = lpPlayerInfo->mv4Position.z;
+    lv3Position.w = lpPlayerInfo->mv4Position.w;
+
+    Vector3 lav3Corners[4];
+    GetZoomedCarWorldRect(lav3Corners, lv3Position,
+                          static_cast<f32>(lpPlayerInfo->miSpeedMph),
+                          lpPlayerInfo->mfOrientation,
+                          mbRotateMap, mbUseTrajectory,
+                          mpGuiCache->GetSatNavZoomLevel());
+
+    if (mpIconManager != 0)
+    {
+        Vector2 lv2C0; lv2C0.x = lav3Corners[0].x; lv2C0.y = lav3Corners[0].z; lv2C0.z = 0.0f; lv2C0.w = 0.0f;
+        Vector2 lv2C1; lv2C1.x = lav3Corners[1].x; lv2C1.y = lav3Corners[1].z; lv2C1.z = 0.0f; lv2C1.w = 0.0f;
+        Vector2 lv2C2; lv2C2.x = lav3Corners[2].x; lv2C2.y = lav3Corners[2].z; lv2C2.z = 0.0f; lv2C2.w = 0.0f;
+        MapTransform::SetZoomedWorldRect(lv2C0, lv2C2, lv2C1);
+        MapTransform::SetZoomedViewportRect(MapTransform::GetSatNavViewRect());
     }
 }
 

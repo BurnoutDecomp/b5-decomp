@@ -1,8 +1,10 @@
 #pragma once
 
+#include <cstddef>            // offsetof (SatNavMapIcon::SetState container_of)
 #include "types.hpp"
 #include "BrnCommonTypes.h"        // Vector2 (rw::math::vpu::Vector2 - alignas(16) {x,y,z,w})
 #include "GameSource/Gui/BrnGuiTextField.h"   // BrnGui::TextField (CrashNavMapIcon::mIconText, copied by operator=)
+#include "GameSource/Gui/Flow/Shared/FlaptComponents/BrnGuiFlaptIconComponent.h" // the REAL BrnGui::FlaptIconComponent (SetState reach-back)
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX. Layout from the DecFIGS dwarfdump
 // (GameSource/Gui/SatNav/BrnSatNavIcon.h): both icon classes derive from BrnGui::MapIconBrnBase,
@@ -21,16 +23,18 @@
 
 namespace BrnGui
 {
-    // The Flapt animation component that hosts a SatNavMapIcon. The icon is embedded at +32
-    // within this component, so SatNavMapIcon::SetState reaches back to it (container_of) to
-    // drive the animation. Defined in another TU; declared here for that reach.
-    struct FlaptIconComponent
-    {
-        void* GotoAndStopLabel(const void* lpLabel);
-    };
+    // ⭐ ODR FORK RETIRED (H3b, 2026-08-25): this header used to declare a LOCAL
+    // `struct FlaptIconComponent { void* GotoAndStopLabel(const void*); }` stub for the
+    // reach-back below. The REAL class (BrnGuiFlaptIconComponent.h, included above) has
+    // GotoAndStopLabel as a *virtual* taking `const char*` -- the local fork mangled the
+    // SetState call site to a symbol no TU defines AND bypassed the vtable dispatch. The
+    // custom-renderer precedent (one bad header = N hollow shells) applies; the real
+    // header is now the single definition.
 
-    // Per-state Flapt animation-label table (X360 off_82F25A00), owned by another TU.
-    extern void* const gaSatNavStateLabels[];
+    // Per-state Flapt animation-label table (X360 off_82F25A00, 53 entries -- one per
+    // MapIconBrnBase::IconState). Values read off the image (h3b_dump.txt); defined in
+    // BrnSatNavIcon.cpp.
+    extern const char* const gaSatNavStateLabels[];
 
     // Common base of the map-icon classes (DWARF: BrnGui::MapIconBrnBase). Polymorphic in the
     // real game; the base setters write the shared fields, derived classes refine them (dirty
@@ -205,20 +209,36 @@ namespace BrnGui
         IconState GetState() const override { return meState; }
 
         // @ 0x827DD790 - on a state change, drive the hosting Flapt component to the new state's
-        // animation label. The icon is embedded at +32 inside that component, so this reaches the
-        // *containing* object (container_of) - not an own-field access.
-        void SetState(IconState leState) override
-        {
-            if (leState != meState)
-            {
-                meState = leState;
-                FlaptIconComponent* lpComponent =
-                    reinterpret_cast<FlaptIconComponent*>(reinterpret_cast<char*>(this) - 32);
-                lpComponent->GotoAndStopLabel(gaSatNavStateLabels[leState]);
-            }
-        }
+        // animation label. The icon is embedded inside a SatNavIconComponent (X360 at +32), so
+        // this reaches the *containing* object (container_of) - not an own-field access. Body
+        // below the host type (it needs SatNavIconComponent complete). ⭐ H3b: the console's
+        // literal `this - 32` is replaced by the HOST layout's own offset -- a raw console
+        // offset applied to a host object is exactly the wheel-blanking defect class.
+        void SetState(IconState leState) override;
 
     private:
         // [TextFieldRef mIconText: real member; type not yet reconstructed - omitted]
     };
+
+    // The Flapt animation component that hosts one SatNavMapIcon (the MapIconManager's
+    // 16-element sat-nav icon pool, X360 element stride 0x60 with the icon at +32:
+    // SetOwnerParameters @0x82520CE8 constructs the FlaptIconComponent base, then
+    // SatNavMapIcon::Prepare on element+32's container). Only the members this reach-back
+    // needs are modelled; the pool itself stays with the (parked) UpdateSatNavIcons slice.
+    struct SatNavIconComponent : public FlaptIconComponent
+    {
+        SatNavMapIcon mIcon;   // X360 +32 (host offset differs -- pointers widen; reached by name)
+    };
+
+    // @ 0x827DD790 (see the in-class comment).
+    inline void SatNavMapIcon::SetState(IconState leState)
+    {
+        if (leState != meState)
+        {
+            meState = leState;
+            SatNavIconComponent* lpComponent = reinterpret_cast<SatNavIconComponent*>(
+                reinterpret_cast<char*>(this) - offsetof(SatNavIconComponent, mIcon));
+            lpComponent->GotoAndStopLabel(gaSatNavStateLabels[leState]);
+        }
+    }
 }

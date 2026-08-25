@@ -32,6 +32,19 @@ namespace BrnGui
 {
     namespace
     {
+        // [H3b] the 12-byte id-213 show/hide PAYLOAD (the record body PostShowHide24
+        // posts and SatNavComponent::RecvEvent(213) reads: word 1, f32 delay, show byte).
+        struct SatNavShowHidePayload
+        {
+            s32 miOne;
+            f32 mfDelay;
+            u8  mu8Show;
+            u8  mau8Pad[3];
+        };
+    }
+
+    namespace
+    {
         const s32 KI_CHANNEL_GUI_OUT        = 40;  // GuiEventOut
         const s32 KI_CHANNEL_VIEW_STATE     = 41;  // GuiOutViewState
         const s32 KI_CHANNEL_INTERNAL_STATE = 42;  // the internal-state mirror channel
@@ -305,9 +318,10 @@ namespace BrnGui
         // yet surface GetStaticLayout/EndMessage; the layout stream is host-side inert.
 
         // ---- component construction against the FLAPT file ----------------------
-        // FLAG deferred (Slice B): SatNavComponent::Construct(+0x160, iface, 0, 0) --
-        // the SatNav body TU is not reconstructed.
-        LogDeferredComponent("SatNavComponent");
+        // [H3b] X360 OnEnter @0x8247B0E8: SatNavComponent::Construct(&this->+0x160,
+        // this->+0x1C iface, 0, mode 0) -- track-player mode, no parent name.
+        mSatNavComponent.Construct(mpStateInterface, 0,
+                                   SatNavComponent::E_SAT_NAV_MODE_TRACK_PLAYER);
 
         // [gateui r3] THE LAST RUNG OF THE gateui LADDER, landed. X360 OnEnter @0x8247B0E8:
         //     InGameMessagesComponent::Construct(&this->field_3E8, "hudMessages_mc",
@@ -441,7 +455,14 @@ namespace BrnGui
 
         if (mbSatNavEnabled)
         {
-            // FLAG deferred (Slice B): SatNav RecvEvent(213) + Destruct.
+            // [H3b] X360 OnLeave: the hide mirror ({1, 0.0f, 0} payload) then Destruct.
+            SatNavShowHidePayload lHide;
+            lHide.miOne   = 1;
+            lHide.mfDelay = 0.0f;
+            lHide.mu8Show = 0;
+            mSatNavComponent.RecvEvent(
+                reinterpret_cast<const CgsModule::Event*>(&lHide), 213);
+            mSatNavComponent.Destruct();
         }
         if (mbRoadRulesEnabled)
         {
@@ -574,11 +595,15 @@ namespace BrnGui
         mbDistrictMarkerEnabled = true;   // +341
         mbSatNavEnabled         = true;   // +332
 
-        // FLAG deferred (Slice B): SatNavComponent::SetCachePointer + the satnav
-        // show/filter words from cache+32820/+32824 and the Enable/Disable events
-        // filter swap -- the SatNav body TU is not reconstructed.
-        miSatNavShowState    = 0;
-        miSatNavEventsFilter = 0;
+        // [H3b] X360 UpdateSetupState @0x82480EA0: bind the cache into the component,
+        // mirror the cache's sat-nav filter pair, and arm/disarm the events filter.
+        mSatNavComponent.SetCachePointer(mpGuiCache);
+        meSatNavEventFilter  = mpGuiCache->GetSatNavEventFilter();          // cache+0x8034
+        mbEventFilterEnabled = mpGuiCache->GetSatNavEventFilterEnabled();   // cache+0x8038
+        if (mbEventFilterEnabled)
+            EnableSatNavEventsFilter();
+        else
+            DisableSatNavEventsFilter();
 
         PostCommand16<555>(mpStateInterface, KI_CHANNEL_GUI_OUT, 0);
 
@@ -626,7 +651,7 @@ namespace BrnGui
 
         if (mbSatNavEnabled)
         {
-            // FLAG deferred (Slice B): SatNavComponent::LoadResources.
+            mSatNavComponent.LoadResources();   // [H3b] X360 UpdateLoading @0x8247C640
         }
 
         // Mount the HUD apt movie at level 1 (X360 off_82F27BE0[0] == "B5RaceHud"). Use
@@ -711,7 +736,16 @@ namespace BrnGui
             PostShowHide24(mpStateInterface, KI_CHANNEL_INTERNAL_STATE, 1, 0.0f, 0);
         }
 
-        // FLAG deferred (Slice B): SatNav RecvEvent(213) mirror of the show record.
+        // [H3b] X360 UpdateWFInit: mirror the show record into the component.
+        if (mbSatNavEnabled)
+        {
+            SatNavShowHidePayload lShow;
+            lShow.miOne   = 1;
+            lShow.mfDelay = 0.0f;
+            lShow.mu8Show = 1;
+            mSatNavComponent.RecvEvent(
+                reinterpret_cast<const CgsModule::Event*>(&lShow), 213);
+        }
 
         GuiCache_SetHudReady(mpGuiCache);   // X360 cache byte +16496 := 1
 
@@ -745,8 +779,13 @@ namespace BrnGui
 
         if (mbSatNavEnabled)
         {
-            // FLAG deferred (Slice B): the per-frame satnav pre-pass (word +656 := 0 +
-            // the satnav sub-object's +2448 clear).
+            // [H3b] X360 UpdateRunning @0x8247B660 head: the per-frame pre-pass. The
+            // "+656/+948" words are INSIDE the component -- its player-info binding
+            // (+0x130) and its icon manager's used count (through +0x254) -- reset
+            // before the event pump repopulates them (friend grants on both classes).
+            mSatNavComponent.mpPlayerInfo = 0;
+            if (mSatNavComponent.mpIconManager != 0)
+                mSatNavComponent.mpIconManager->miNumUsedIcons = 0;
         }
 
         const CgsModule::Event* lpEvent = 0;
@@ -824,7 +863,15 @@ namespace BrnGui
                 // Show/hide satnav passthrough: view record + the satnav mirror.
                 PostShowHide24(mpStateInterface, KI_CHANNEL_VIEW_STATE, 1, 0.0f,
                                static_cast<u8>(lpiPayload[0] != 0));
-                // FLAG deferred (Slice B): SatNav RecvEvent(213).
+                if (mbSatNavEnabled)   // [H3b] the X360 mirror of the same payload
+                {
+                    SatNavShowHidePayload lMirror;
+                    lMirror.miOne   = 1;
+                    lMirror.mfDelay = 0.0f;
+                    lMirror.mu8Show = static_cast<u8>(lpiPayload[0] != 0);
+                    mSatNavComponent.RecvEvent(
+                        reinterpret_cast<const CgsModule::Event*>(&lMirror), 213);
+                }
                 break;
             case 206:
                 ProcessBoostInfo(lpEvent);
@@ -841,7 +888,15 @@ namespace BrnGui
                         PostCommand16<214>(mpStateInterface, KI_CHANNEL_VIEW_STATE, 0);
                         PostShowHide24(mpStateInterface, KI_CHANNEL_VIEW_STATE, 1, 0.0f, 0);
                         PostShowHide24(mpStateInterface, KI_CHANNEL_INTERNAL_STATE, 1, 0.0f, 0);
-                        // FLAG deferred (Slice B): SatNav RecvEvent(213).
+                        if (mbSatNavEnabled)   // [H3b] the X360 LABEL_46 mirror
+                        {
+                            SatNavShowHidePayload lMirror;
+                            lMirror.miOne   = 1;
+                            lMirror.mfDelay = 0.0f;
+                            lMirror.mu8Show = 0;
+                            mSatNavComponent.RecvEvent(
+                                reinterpret_cast<const CgsModule::Event*>(&lMirror), 213);
+                        }
                     }
                     else if (GuiCache_GetBoostBarConfig(mpGuiCache) == 1)
                     {
@@ -850,7 +905,15 @@ namespace BrnGui
                         PostCommand16<214>(mpStateInterface, KI_CHANNEL_VIEW_STATE, 1);
                         PostShowHide24(mpStateInterface, KI_CHANNEL_VIEW_STATE, 1, 0.0f, 1);
                         PostShowHide24(mpStateInterface, KI_CHANNEL_INTERNAL_STATE, 1, 0.0f, 1);
-                        // FLAG deferred (Slice B): SatNav RecvEvent(213).
+                        if (mbSatNavEnabled)   // [H3b] the X360 LABEL_46 mirror
+                        {
+                            SatNavShowHidePayload lMirror;
+                            lMirror.miOne   = 1;
+                            lMirror.mfDelay = 0.0f;
+                            lMirror.mu8Show = 1;
+                            mSatNavComponent.RecvEvent(
+                                reinterpret_cast<const CgsModule::Event*>(&lMirror), 213);
+                        }
                     }
                     mfBoostAmountPrev = lfBoost;
                 }
@@ -1002,7 +1065,15 @@ namespace BrnGui
                                static_cast<u8>(lpiPayload[0] == 1));
                 PostShowHide24(mpStateInterface, KI_CHANNEL_INTERNAL_STATE, 1, 0.0f,
                                static_cast<u8>(lpiPayload[0] == 1));
-                // FLAG deferred (Slice B): SatNav RecvEvent(213).
+                if (mbSatNavEnabled)   // [H3b] the X360 mirror
+                {
+                    SatNavShowHidePayload lMirror;
+                    lMirror.miOne   = 1;
+                    lMirror.mfDelay = 0.0f;
+                    lMirror.mu8Show = static_cast<u8>(lpiPayload[0] == 1);
+                    mSatNavComponent.RecvEvent(
+                        reinterpret_cast<const CgsModule::Event*>(&lMirror), 213);
+                }
                 break;
             default:
                 break;
@@ -1038,7 +1109,7 @@ namespace BrnGui
         }
         if (mbSatNavEnabled)
         {
-            // FLAG deferred (Slice B): SatNavComponent::Update.
+            mSatNavComponent.Update();   // [H3b] X360 UpdateRunning tail
         }
         if (mbBoostMessagesEnabled)
         {
@@ -1117,8 +1188,12 @@ namespace BrnGui
             case 148:
                 if (lpiPayload[0] != 0)
                 {
-                    // FLAG deferred (Slice B): the satnav events-filter re-arm
-                    // (Enable/DisableSatNavEventsFilter per word +996).
+                    // [H3b] the sat-nav events-filter re-arm (X360: pick by the
+                    // mirrored enable byte).
+                    if (mbEventFilterEnabled)
+                        EnableSatNavEventsFilter();
+                    else
+                        DisableSatNavEventsFilter();
                 }
                 else
                 {
@@ -1172,7 +1247,9 @@ namespace BrnGui
         {
             if (mbSatNavEnabled)
             {
-                // FLAG deferred (Slice B): SatNav RecvEvent(21).
+                // [H3b] X360: forward the apt trigger record itself (id 21).
+                mSatNavComponent.RecvEvent(
+                    reinterpret_cast<const CgsModule::Event*>(lpEvent), 21);
             }
             if (mbDistrictMarkerEnabled)
             {
@@ -1244,12 +1321,69 @@ namespace BrnGui
     // =======================================================================
     //  UpdateSatNav  @ 0x82475268
     // =======================================================================
-    void FBurnMainHudState::UpdateSatNav(const void* lpEvent, s32 /*liEventId*/)
+    void FBurnMainHudState::UpdateSatNav(const void* lpEvent, s32 liEventId)
     {
         CGS_ASSERT(lpEvent != 0, " invalid event passed ");   // cpp:1828
         if (mbSatNavEnabled)
         {
-            // FLAG deferred (Slice B): SatNav RecvEvent(id).
+            mSatNavComponent.RecvEvent(
+                reinterpret_cast<const CgsModule::Event*>(lpEvent), liEventId);
         }
+    }
+
+    // =======================================================================
+    //  EnableSatNavEventsFilter  @ 0x8247CAE8 / DisableSatNavEventsFilter @ 0x8247CB80
+    // =======================================================================
+    // The id-204 GuiEventEnableSatNavIcons records: enable posts {displayType 0,
+    // modeFilter = meSatNavEventFilter, show 1} on the view-state AND internal-state
+    // channels (41 + 40); disable posts {displayType 5 (COUNT == none), modeFilter 6,
+    // show 0} on the view-state channel only. 24-byte records: {12, 204, 12} head +
+    // the 12-byte payload.
+    void FBurnMainHudState::EnableSatNavEventsFilter()
+    {
+        struct GuiEvent204 : public CgsGui::GuiEvent<204>
+        {
+            s32 miDisplayType;
+            s32 miModeFilter;
+            u8  mu8Show;
+            u8  mau8Pad[3];
+            GuiEvent204(s32 liDisplayType, s32 liModeFilter, u8 lu8Show)
+                : CgsGui::GuiEvent<204>(12, 12)
+                , miDisplayType(liDisplayType)
+                , miModeFilter(liModeFilter)
+                , mu8Show(lu8Show)
+            {
+                mau8Pad[0] = mau8Pad[1] = mau8Pad[2] = 0;
+            }
+        };
+
+        GuiEvent204 lRecord(0, meSatNavEventFilter, 1);
+        mpStateInterface->GetOutputEventQueue()->AddEvent(
+            reinterpret_cast<const CgsModule::Event*>(&lRecord), KI_CHANNEL_VIEW_STATE, 24);
+        mpStateInterface->GetOutputEventQueue()->AddEvent(
+            reinterpret_cast<const CgsModule::Event*>(&lRecord), KI_CHANNEL_INTERNAL_STATE, 24);
+    }
+
+    void FBurnMainHudState::DisableSatNavEventsFilter()
+    {
+        struct GuiEvent204 : public CgsGui::GuiEvent<204>
+        {
+            s32 miDisplayType;
+            s32 miModeFilter;
+            u8  mu8Show;
+            u8  mau8Pad[3];
+            GuiEvent204(s32 liDisplayType, s32 liModeFilter, u8 lu8Show)
+                : CgsGui::GuiEvent<204>(12, 12)
+                , miDisplayType(liDisplayType)
+                , miModeFilter(liModeFilter)
+                , mu8Show(lu8Show)
+            {
+                mau8Pad[0] = mau8Pad[1] = mau8Pad[2] = 0;
+            }
+        };
+
+        GuiEvent204 lRecord(5, 6, 0);
+        mpStateInterface->GetOutputEventQueue()->AddEvent(
+            reinterpret_cast<const CgsModule::Event*>(&lRecord), KI_CHANNEL_VIEW_STATE, 24);
     }
 }

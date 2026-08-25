@@ -256,6 +256,8 @@ struct RaceEventData
     // Declare-only: the backing fields live past this minimal slice (a future TU grows the
     // single owner with the proven offsets). Returned by accessor so the renderer stays off
     // raw +0xEC/+0xED/+0x10 casts.
+    // [H3b] bodies in BrnRaceEventData.cpp now (the sat-nav renderer links against the
+    // first two); the backing bytes are carved at their proven offsets below.
     u8    GetEventTypeByte() const;
     u8    GetIconFrameBase() const;
     u64   GetEventInstanceId() const;
@@ -265,13 +267,17 @@ private:
     // ProgressionData::FixUp/FixDown rebase it in place (`*(event + 24) -= delta` @0x8267F220), and
     // the whole record is 248 bytes with miCheckpointCount at +0x1C; a host pointer here would move
     // the count to +0x20 and grow the record to 256, desynchronising it from the shipped data.
-    u8  maPad_00[0x18];                 // 0x00..0x17 (id / car id / leading scalars -- not in this slice)
+    u8  maPad_00[0x10];                 // 0x00..0x0F (id / car id / leading scalars -- not in this slice)
+    u64 muEventInstanceId;              // 0x10  event-instance id (GetEventInstanceId; X360 doubleword +0x10)
     u32 muaCheckpointsOffset;           // 0x18  checkpoint table base (FixUp-rebased 32-bit slot)
     s32 miCheckpointCount;              // 0x1C  live checkpoint count
     u8  maPad_20[0x08];                 // 0x20..0x27 (not in this slice)
     s32 maiRankScores[KU_NUM_RANKS];    // 0x28  rank target scores (6 * 4 == 0x18 -> 0x40)
     f32 mafRankTimes[KU_NUM_RANKS];     // 0x40  rank target times  (6 * 4 == 0x18 -> 0x58)
-    u8  maPad_58[0xA0];                 // 0x58..0xF7 (remaining record -- not in this slice; sizeof == 0xF8)
+    u8  maPad_58[0x94];                 // 0x58..0xEB (remaining record -- not in this slice)
+    u8  mu8EventType;                   // 0xEC  sat-nav icon row selector (GetEventTypeByte)
+    u8  mu8IconFrameBase;               // 0xED  icon animation base frame (GetIconFrameBase)
+    u8  maPad_EE[0x0A];                 // 0xEE..0xF7 (sizeof == 0xF8)
 
     // ProgressionData's relocation walks the event table and rebases muaCheckpointsOffset.
     friend struct ProgressionData;

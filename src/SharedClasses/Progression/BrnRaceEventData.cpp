@@ -55,4 +55,23 @@ f32 RaceEventData::GetRankTime(u32 luRank) const
     return mafRankTimes[luRank];
 }
 
+
+// [H3b] The three sat-nav renderer reads (X360 inlines all three at the call sites;
+// byte +0xEC / byte +0xED / doubleword +0x10 -- offsets proven by the renderer's
+// GetIconInformation asm). The backing fields are the named pad carves in the header.
+u8 RaceEventData::GetEventTypeByte() const
+{
+    return mu8EventType;
+}
+
+u8 RaceEventData::GetIconFrameBase() const
+{
+    return mu8IconFrameBase;
+}
+
+u64 RaceEventData::GetEventInstanceId() const
+{
+    return muEventInstanceId;
+}
+
 }

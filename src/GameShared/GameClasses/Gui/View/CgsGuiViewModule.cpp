@@ -368,6 +368,8 @@ namespace CgsGui
                 // Reproduce them when those AptAux members gain named homes.
                 break;
 
+            case 204:   // [H3b] SatNav event-starts display command (the icon filter)
+            case 212:   // [H3b] the per-frame RenderSatNav payload (alignas(16) record)
             case 213:   // SatNav/MainMap show-hide  {s32 mode, f32 fade, u8 enable}
             case 214:   // BoostBar render enable    {u8 flag}
             case 215:   // AboveCar render enable    {u8 flag}

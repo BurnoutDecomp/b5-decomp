@@ -10,7 +10,8 @@
 #include "GameSource/Gui/Flow/hud/Components/BrnDistrictMarker.h"            // BrnGui::DistrictMarkerComponent (the full class; the View ODR-fork slice is retired)
 #include "GameSource/Gui/Flow/HUD/Components/BrnJunctionInfoComponent.h"     // BrnGui::JunctionInfoComponent
 #include "GameSource/Gui/Flow/HUD/Components/BrnOdometerComponent.h"         // BrnGui::OdometerComponent
-#include "GameSource/Gui/Flow/HUD/Components/BrnRoadRuleComponent.h"         // BrnGui::RoadRuleComponent (H2 wave)
+#include "GameSource/Gui/Flow/HUD/Components/BrnRoadRuleComponent.h"        // BrnGui::RoadRuleComponent (H2 wave)
+#include "GameSource/Gui/SatNav/BrnSatNavComponent.h"                        // [H3b] BrnGui::SatNavComponent (+0x160)
 #include "GameSource/Gui/Flow/Shared/FlaptComponents/BrnGuiFlaptIconComponent.h" // BrnGui::FlaptAnimatorComponent
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiComponent.h"          // CgsGui::GuiComponent (the apt-side animator half)
 
@@ -75,6 +76,11 @@ namespace BrnGui
         void UpdateSatNav(const void* lpEvent, s32 liEventId);
         void SetExpectedAptComponentList();
 
+        // [H3b] the sat-nav events-filter posts (X360 @0x8247CAE8 / @0x8247CB80 --
+        // the id-204 GuiEventEnableSatNavIcons records on the view channels).
+        void EnableSatNavEventsFilter();
+        void DisableSatNavEventsFilter();
+
         // The 42-entry static resource list (X360 .rdata @0x82F26230 / count
         // @0x82F2622C -- values read from the XEX image; the .cpp table names each id).
         static const CgsGui::sResourceTuple maResourcesToLoad[];
@@ -104,14 +110,16 @@ namespace BrnGui
         bool mbPpToggleEnabled;                    // +0x154
         bool mbDistrictMarkerEnabled;              // +0x155
 
-        // FLAG absent member (recon debt, not fabricated): the SatNavComponent
-        // aggregate lives at X360 +0x160..~+0x3E7 (sub-object pointer at +0x3B4). Its
-        // type is not reconstructed (SatNav/BrnSatNavComponent.h is the
-        // SetCachePointer-only slice), so no storage is modelled; every SatNav call in
-        // the .cpp is a FLAG'd deferral gated behind mbSatNavEnabled. Only the two
-        // config words the state itself owns are kept:
-        s32 miSatNavShowState;                     // +0x3E0 (cache+32820 mirror)
-        s32 miSatNavEventsFilter;                  // +0x3E4 (cache+32824 mirror)
+        // ⭐ [H3b] the SatNavComponent aggregate (X360 +0x160..+0x3D0; the old "absent
+        // member" FLAG is retired -- the full class landed in H3a and the H3b slice
+        // mounts it). The X360 per-frame pre-pass reaches this component's
+        // mpPlayerInfo/+0x130 and its manager's count through +0x254 (friend grants on
+        // both classes). The two config members that FOLLOW it carry their DWARF names
+        // (BrnFBurnMainHudState.h:176/:177) -- the old miSatNavShowState /
+        // miSatNavEventsFilter stand-in names had the pair's roles swapped.
+        SatNavComponent mSatNavComponent;          // +0x160
+        s32  meSatNavEventFilter;                  // +0x3E0 (cache+0x8034 mirror; EModeType spelled s32)
+        bool mbEventFilterEnabled;                 // +0x3E4 (cache+0x8038 mirror)
 
         InGameMessagesComponent mInGameMessages;   // +0x3E8 (setters real; ctor deferred)
         DistrictMarkerComponent mDistrictMarker;   // +0x834 (the FULL marker class since the

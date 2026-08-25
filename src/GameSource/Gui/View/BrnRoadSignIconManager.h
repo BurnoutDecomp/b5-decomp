@@ -49,6 +49,12 @@ namespace BrnGui
         // @ 0x824F5778 : broadcast the visible flag across every road-sign icon.
         void SetSignsVisible(u8 lbVisible);
 
+        // [H3b] Feed the map's zoom-derived icon scale (DWARF BrnRoadSignIconManager.h:273
+        // mfZoomFactor @this+0x3108 == manager+0xA198 -- the store MapIconManager's
+        // SetZoomFactor note pins). X360-inlined at every call site; the setter is the
+        // committed exposure over the named member.
+        void SetZoomFactor(f32 lfZoomFactor) { mfZoomFactor = lfZoomFactor; }
+
         // ADDITIVE GROW (BrnGui::MapIconManager TU): MapIconManager::SetRoadRuleBatchData
         // (@0x824B2F80) forwards the road-rule batch response straight into the embedded
         // RoadSignIconManager (X360 call BrnGui__RoadSignIconManager__SetRoadRuleBatchData
@@ -66,5 +72,9 @@ namespace BrnGui
         u8           maReservedManagerState[0x3105 - (0xC0 * KU_NUM_SIGN_ICONS)];
         // @this+0x3105 : master "signs visible" flag (last broadcast value).
         u8           mbSignsVisible;
+        // [H3b additive tail] @this+0x3106..0x3107 stride pad, then the zoom scale the
+        // map screens feed (DWARF h:273; MapIconManager::Construct seeds it to 1.0).
+        u8           mauPad3106[2];
+        f32          mfZoomFactor;   // @this+0x3108 (== manager+0xA198)
     };
 }
