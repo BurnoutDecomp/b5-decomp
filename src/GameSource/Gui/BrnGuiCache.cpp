@@ -1,8 +1,10 @@
 #include "GameSource/Gui/BrnGuiCache.h"
+#include "GameSource/Gui/BrnGuiRaceCarInfoEvent.h"      // [H3b] GuiRaceCarInfoEvent (207)
 #include "GameSource/Gui/BrnGuiShared.h"               // BrnGui::EGuiResourceId + gGuiResourceIdentifier (this TU defines the table)
 #include "GameSource/Gui/BrnGuiOptionsDataProfile.h"   // BrnGui::OptionsDataProfile (types the opaque +0xB878 reservation)
 #include "GameShared/GameClasses/Containers/CgsHash.h" // CgsContainers::CgsHash::CalculateHash (AppendExpectedAptComponent name entry)
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [DIAG] the satnav-diag one-shots
 // (BrnGameStateSharedIO.h must NOT be included here: its real BrnGameState /
 // BrnNetwork types clash with BrnGuiOptionsDataProfile.h's compile-only slices.
 // GetNumEventStarts, which needs the real SetUpAllEventStartsInterface, lives in
@@ -874,6 +876,151 @@ namespace BrnGui
                 mStateLoadingHelper.MarkAptComponentInitialised(lpTrigger);
             break;
         }
+        case 147:
+            // [hud H3b tracking slice 2026-08-25] X360 case 147 @0x8250DDF0 (h1_dump.txt):
+            // the three HUD words {speed, rpm, gear} -> +19208/+19212/+19216. The producer
+            // is the bridge's GuiEventUpdateHud post; the satnav component's GuiPlayerInfo
+            // view reads miPlayerSpeedMph (@+0x4B08) for its view-distance/zoom math.
+            {
+                const BrnGui::GuiEventUpdateHud* lpHudEvent =
+                    reinterpret_cast<const BrnGui::GuiEventUpdateHud*>(lpEvent);
+                miPlayerSpeedMph = lpHudEvent->miSpeedMph;   // +19208
+                miPlayerRPM      = lpHudEvent->miRPM;        // +19212
+                miPlayerGear     = lpHudEvent->mi8Gear;      // +19216 (word store of the byte)
+            }
+            break;
+
+        case 199:
+            // [hud H3b tracking slice 2026-08-25] X360 case 199 @0x8250DDF0: the per-frame
+            // GuiEventUpdateSatNav icon array (count @+0x900, clamped to 48). The PLAYER
+            // arm (icon type 0) is THE producer of the mv4WorldCameraPosition block the
+            // whole sat-nav view chain reads -- gated on the case-376 pair being live and
+            // the case-207 used byte (IsActiveRaceCarIndexUsed).
+            // [FLAG deferred] the DRIVE-THRU arm (icon types 7/9/10/11/12: the dedupe-by-id
+            // append into maDriveThroughInfo + the 15-entry canned-position override table
+            // @0x8206F868) -- no producer on this build emits those icon types (the world
+            // route-information bridge that does is itself FLAG-deferred in
+            // GameBridgeWorldToGui.cpp); the arm lands with that producer.
+            {
+                const BrnGui::GuiEventUpdateSatNav* lpSatNavEvent =
+                    reinterpret_cast<const BrnGui::GuiEventUpdateSatNav*>(lpEvent);
+                s32 liNumIcons = lpSatNavEvent->miNumIcons;              // @+0x900
+                if (liNumIcons >= BrnGui::GuiEventUpdateSatNav::KI_MAX_SAT_NAV_ICONS)
+                    liNumIcons = BrnGui::GuiEventUpdateSatNav::KI_MAX_SAT_NAV_ICONS;
+
+                for (s32 liIcon = 0; liIcon < liNumIcons; ++liIcon)
+                {
+                    const BrnGui::GuiEventUpdateSatNav::SatNavIconInfo& lrIcon =
+                        lpSatNavEvent->maIconInfo[liIcon];
+
+                    switch (lrIcon.GetIconTypeByte())
+                    {
+                    case BrnGui::GuiEventUpdateSatNav::SatNavIconInfo::E_SATNAVICON_PLAYER_CAR:
+                        // [DIAG] NOT IN THE X360 BINARY -- [satnav-diag] the gate, once.
+                        {
+                            static bool sbGateLogged = false;
+                            if (!sbGateLogged && CgsDev::Log::gpDebugPrint != 0)
+                            {
+                                sbGateLogged = true;
+                                *CgsDev::Log::gpDebugPrint
+                                    << "[satnav-diag] cache 199 gate: activeIdx="
+                                    << mePlayerActiveRaceCarIndex << " used="
+                                    << static_cast<s32>(
+                                           mePlayerActiveRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID
+                                               ? (IsActiveRaceCarIndexUsed(static_cast<EActiveRaceCarIndex>(
+                                                     mePlayerActiveRaceCarIndex)) ? 1 : 0)
+                                               : -1) << "\n";
+                            }
+                        }
+                        if (mePlayerActiveRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID &&
+                            IsActiveRaceCarIndexUsed(static_cast<EActiveRaceCarIndex>(
+                                mePlayerActiveRaceCarIndex)))
+                        {
+                            // [DIAG] NOT IN THE X360 BINARY -- [satnav-diag] first store.
+                            {
+                                static bool sbLogged = false;
+                                if (!sbLogged && CgsDev::Log::gpDebugPrint != 0)
+                                {
+                                    sbLogged = true;
+                                    *CgsDev::Log::gpDebugPrint
+                                        << "[satnav-diag] cache 199 player store: pos=("
+                                        << lrIcon.GetPositionLane().x << ","
+                                        << lrIcon.GetPositionLane().z << ") rot="
+                                        << lrIcon.GetRotation() << "\n";
+                                }
+                            }
+                            mv4WorldCameraPosition = lrIcon.GetPositionLane();   // stvx +19168
+                            mfPlayerOrientation    = lrIcon.GetRotation();       // +19220 (lfs icon+24)
+                            mePlayerCounty         = static_cast<s32>(lrIcon.GetCounty());   // +19224
+                            mePlayerDistrict       = static_cast<s32>(lrIcon.GetDistrict()); // +19228
+                        }
+                        break;
+                    default:
+                        // (rival/network icons are read straight off the record by the
+                        // renderer's icon pass; the cache stores nothing for them here.)
+                        break;
+                    }
+                }
+            }
+            break;
+
+        case 207:
+            // [hud H3b tracking slice 2026-08-25] X360 case 207: memcpy(this+0xA020,
+            // payload, 240) -- the whole GuiRaceCarInfoEvent over the mRaceCarInfo SoA.
+            // Reproduced MEMBER-WISE (the x64 layouts match field for field; a raw byte
+            // copy would silently couple the two layouts). This is THE producer of
+            // maRaceCarUsed/maRaceCarPositions -- IsActiveRaceCarIndexUsed's backing.
+            {
+                const BrnGui::GuiRaceCarInfoEvent* lpInfoEvent =
+                    reinterpret_cast<const BrnGui::GuiRaceCarInfoEvent*>(lpEvent);
+                for (s32 liSlot = 0; liSlot < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liSlot)
+                {
+                    maRaceCarPositions[liSlot]    = lpInfoEvent->GetPosition(liSlot);     // +0xA020
+                    maRaceCarIdentities[liSlot]   = lpInfoEvent->GetIdentity(liSlot);     // +0xA0A0
+                    maRaceCarUsed[liSlot]         = lpInfoEvent->GetUsedFlag(liSlot);     // +0xA0E4
+                    maRaceCarConnecting[liSlot]   = lpInfoEvent->GetConnectingFlag(liSlot);   // +0xA0EC
+                    maRaceCarDisconnected[liSlot] = lpInfoEvent->GetDisconnectedFlag(liSlot); // +0xA0F4
+                    maRaceCarInRange[liSlot]      = lpInfoEvent->GetInRangeFlag(liSlot);  // +0xA0FC
+                    maRaceCarCrashing[liSlot]     = lpInfoEvent->GetCrashingFlag(liSlot); // +0xA104
+                }
+                miNumRaceCarsInInfo = lpInfoEvent->GetNumEntries();                        // +0xA0E0
+            }
+            break;
+
+        case 204:
+            // [hud H3b tracking slice 2026-08-25] X360 case 204: the sat-nav event-filter
+            // pair -- `+32824 (mbSatNavEventFilterEnabled) = payload[8];
+            // +32820 (meSatNavEventFilter) = payload word @+4`. The producer is the FBurn
+            // HUD state's Enable/DisableSatNavEventsFilter (the record rides channel 40
+            // into the module input; its channel-41 twin feeds the custom-renderer path).
+            {
+                const u8* lpu8Payload = reinterpret_cast<const u8*>(lpEvent);
+                mbSatNavEventFilterEnabled = lpu8Payload[8] != 0;                          // +32824
+                meSatNavEventFilter =
+                    *reinterpret_cast<const s32*>(lpu8Payload + 4);                        // +32820
+            }
+            break;
+
+        case 376:
+            // [hud H3b tracking slice 2026-08-25] X360 case 376: the player race-car index
+            // pair, with the console's four range asserts (BrnGuiCache.cpp:1904-1907).
+            // This pair GATES the case-199 player store above.
+            {
+                const BrnGui::GuiPlayerRaceCarIdEvent* lpRaceCarIdEvent =
+                    reinterpret_cast<const BrnGui::GuiPlayerRaceCarIdEvent*>(lpEvent);
+                CGS_ASSERT(lpRaceCarIdEvent->mePlayerActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID,
+                           "lpRaceCarIdEvent->mePlayerActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID"); // :1904
+                CGS_ASSERT(lpRaceCarIdEvent->mePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                           "lpRaceCarIdEvent->mePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");   // :1905
+                CGS_ASSERT(lpRaceCarIdEvent->mePlayerGlobalRaceCarIndex > E_GLOBAL_RACE_CAR_INDEX_INVALID,
+                           "lpRaceCarIdEvent->mePlayerGlobalRaceCarIndex > E_GLOBAL_RACE_CAR_INDEX_INVALID"); // :1906
+                CGS_ASSERT(lpRaceCarIdEvent->mePlayerGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT,
+                           "lpRaceCarIdEvent->mePlayerGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT");   // :1907
+                mePlayerActiveRaceCarIndex = lpRaceCarIdEvent->mePlayerActiveRaceCarIndex; // +19200
+                mePlayerGlobalRaceCarIndex = lpRaceCarIdEvent->mePlayerGlobalRaceCarIndex; // +19204
+            }
+            break;
+
         case 350:
             // ADDITIVE (HUD H1 wave, 2026-08-25 -- landed as the fix for the odometer's
             // mpProfile assert storm: the odometer TU reads the cache profile every frame,

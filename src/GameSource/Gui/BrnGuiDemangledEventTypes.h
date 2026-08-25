@@ -210,7 +210,10 @@ namespace BrnGui
     struct GuiEventTriggerOnlinePostEvent { u8 maData[1]; s32 GetEventType() const { return 320; } };  // id 320 size 1 (raw; size not GuiEvent-shaped)
     struct GuiEventUpdateEventCountdown { u8 maData[4]; s32 GetEventType() const { return 234; } };  // id 234 size 4 (raw; size not GuiEvent-shaped)
     struct GuiEventUpdateEventStarts : public CgsGui::GuiEvent<203> { u8 maPayload[8404]; };  // id 203 size 8416 (12B GuiEvent header + opaque payload)
-    struct GuiEventUpdateHud : public CgsGui::GuiEvent<147> {};  // id 147 size 12
+    // [hud H3b tracking slice 2026-08-25] GuiEventUpdateHud (147) has been RECOVERED and
+    // now lives in BrnGuiEventTypeDefs.h with its real X360 record shape (the raw
+    // {speed, rpm, gear} words). The opaque GuiEvent<147> shell that stood here was
+    // DELETED rather than left to shadow it (the GuiPowerParkResult precedent below).
     struct GuiFinishRaceEvent { u8 maData[8]; s32 GetEventType() const { return 372; } };  // id 372 size 8 (raw; size not GuiEvent-shaped)
     struct GuiGameModeStarted : public CgsGui::GuiEvent<237> { u8 maPayload[4]; };  // id 237 size 16 (12B GuiEvent header + opaque payload)
     struct GuiGamePausedEvent { u8 maData[8]; s32 GetEventType() const { return 505; } };  // id 505 size 8 (raw; size not GuiEvent-shaped)
@@ -274,7 +277,9 @@ namespace BrnGui
         CgsID mCarId;           // +0x20 (the player's current car id)
         u8    maPayload1[24];   // +0x28..+0x3F (opaque)
     };
-    struct GuiPlayerRaceCarIdEvent { u8 maData[8]; s32 GetEventType() const { return 376; } };  // id 376 size 8 (raw; size not GuiEvent-shaped)
+    // [hud H3b tracking slice 2026-08-25] GuiPlayerRaceCarIdEvent (376) has been
+    // RECOVERED and now lives in BrnGuiEventTypeDefs.h with its real X360 field pair.
+    // The opaque shell that stood here was DELETED rather than left to shadow it.
     // [gateui r3] GuiPowerParkResult (id 404) has been RECOVERED and now lives in
     // BrnGuiEventTypeDefs.h with its real DWARF field set (DWARF :5467, sizeof 8).
     // The opaque placeholder that stood here was DELETED rather than left to shadow it.

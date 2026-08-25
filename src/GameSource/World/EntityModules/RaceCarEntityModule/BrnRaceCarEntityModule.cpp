@@ -2773,7 +2773,7 @@ void RaceCarEntityModule::ChangePlayerCarColour( u32 luPaletteIndex, u32 luColou
 //   5. the per-GLOBAL-slot loop (0..34) -> RaceCar::FillInOutputInterface
 //   6/7. the replay read/write legs against RaceCarEntitySerialiser::GetStaticLayout.
 //
-// REPRODUCED HERE: 2, 3, 4 (minus the deformation-ptr publish -- see below).
+// REPRODUCED HERE: 2, 3, 4 (minus the deformation-ptr publish -- see below), 5.
 //
 // [FLAG PC bring-up] NOT reproduced, and dropped rather than paraphrased:
 //   * step 1 -- the module's own CgsWorld::WorldMap2D member is inside this header's
@@ -2784,10 +2784,9 @@ void RaceCarEntityModule::ChangePlayerCarColour( u32 luPaletteIndex, u32 luColou
 //     32-byte ResourcePtr pair at the end of ActiveRaceCar. Homing it would drag
 //     StreamedDeformationSpec into every consumer of that header; the published handle
 //     has no reader on this build.
-//   * step 5 -- RaceCar::FillInOutputInterface @0x822BED20 is not reconstructed, so the
-//     GLOBAL interface stays as Clear() left it. Its only reconstructed-path consumer is
-//     BridgeWorldToDirector's 2416-byte copy into the director input's global block,
-//     which is itself an honest-opaque span there.
+//   * step 5 -- ⭐ RETIRED (hud H3b tracking slice 2026-08-25): RaceCar::
+//     FillInOutputInterface @0x822BED20 is reconstructed and the per-global-slot loop
+//     below publishes through it; the satnav 199 producer consumes the result.
 //   * steps 6/7 -- replay. The PC has no replay path and RaceCarEntitySerialiser has no
 //     static layout; the console gates both legs on its replay state word anyway.
 // DELETE-WHEN: each named blocker lands.
@@ -2972,6 +2971,64 @@ void RaceCarEntityModule::UpdateOutputInterfaces(
 
         CGS_ASSERT( liSlot + 1 <= E_ACTIVE_RACE_CAR_INDEX_COUNT,
                     "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT" );
+    }
+
+    // ---- step 5: the per-GLOBAL-slot publish (0..34) -------------------------------
+    // ⭐ [hud H3b tracking slice 2026-08-25] this retires the step-5 FLAG above:
+    // RaceCar::FillInOutputInterface @0x822BED20 is now reconstructed, so the GLOBAL
+    // interface carries real per-car data (positions/ats/regions/speeds/flags). The
+    // publish gate is the console's: every non-INACTIVE car publishes when the module
+    // is outside a game mode; inside one, only cars whose own mbIsInGameMode is set.
+    // Speed rides in M/S (active mph * 0.44704 -- flt_82F31928; the GUI bridge
+    // multiplies back by flt_830180B0 == 2.2369363). AI section defaults to 0x7FFF.
+    {
+        const f32 KF_MPH_TO_MPS = 0.44704f;   // flt_82F31928 (attested MPH -> m/s)
+
+        for( s32 liGlobal = 0; liGlobal < E_GLOBAL_RACE_CAR_INDEX_COUNT; ++liGlobal )
+        {
+            RaceCar* lpRaceCar =
+                GetGlobalRaceCar( static_cast<EGlobalRaceCarIndex>( liGlobal ) );
+
+            CGS_ASSERT( lpRaceCar->GetType() < E_RACE_CAR_TYPE_COUNT,
+                        "muType < E_RACE_CAR_TYPE_COUNT" );                  // :547
+
+            if( lpRaceCar->GetType() != E_RACE_CAR_TYPE_INACTIVE )
+            {
+                bool lbPublish = true;
+                if( mbIsInGameMode )
+                {
+                    CGS_ASSERT( lpRaceCar->GetType() < E_RACE_CAR_TYPE_COUNT,
+                                "muType < E_RACE_CAR_TYPE_COUNT" );          // :547
+                    CGS_ASSERT( lpRaceCar->IsInWorld(), "IsInWorld()" );     // :668
+                    lbPublish = lpRaceCar->IsInCurrentGameMode();
+                }
+
+                if( lbPublish )
+                {
+                    f32 lfSpeed       = 0.0f;
+                    u16 lu16AISection = 0x7FFF;
+
+                    CGS_ASSERT( lpRaceCar->GetType() < E_RACE_CAR_TYPE_COUNT,
+                                "muType < E_RACE_CAR_TYPE_COUNT" );          // :547
+                    CGS_ASSERT( lpRaceCar->IsInWorld(), "IsInWorld()" );     // :401
+
+                    ActiveRaceCar* lpActive = lpRaceCar->GetActiveRaceCar();
+                    if( lpActive != 0 )
+                    {
+                        CGS_ASSERT( lpActive->IsAttached(), "IsAttached()" ); // :1096
+                        lfSpeed = lpActive->GetPhysicsState()->mfSpeedMPH * KF_MPH_TO_MPS;
+                        CGS_ASSERT( lpActive->IsAttached(), "IsAttached()" ); // :1118
+                        lu16AISection = lpActive->GetCurrentAISection();
+                    }
+
+                    lpRaceCar->FillInOutputInterface(
+                        lpGlobalCarInterface, lfSpeed, lu16AISection );
+                }
+            }
+
+            CGS_ASSERT( liGlobal + 1 <= E_GLOBAL_RACE_CAR_INDEX_COUNT,
+                        "leEnumIndex <= E_GLOBAL_RACE_CAR_INDEX_COUNT" );    // BurnoutConstants.h:84
+        }
     }
 }
 

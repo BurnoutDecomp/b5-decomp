@@ -186,6 +186,57 @@ bool RCEntityGlobalRaceCarOutputInterface::IsNetwork(EGlobalRaceCarIndex leGloba
     return mIsNetworkFlags.IsBitSet(static_cast<u32>(leGlobalRaceCarIndex));
 }
 
+// ⭐ [hud H3b tracking slice 2026-08-25] the five per-index READ accessors the satnav 199
+// producer (GameBridgeWorldToGui.cpp) walks. Same declared-only ledger entries as their
+// siblings above (:516/:520/:524/:532/:536); each is the interface's bounds-checked array
+// read, the inlined asm shape the bridge's X360 caller carries at its call sites
+// (lvx128 16*idx / stdx 8*idx / lfsx 4*idx with the paired range asserts).
+Vector3 RCEntityGlobalRaceCarOutputInterface::GetRaceCarPosition(
+        EGlobalRaceCarIndex leGlobalRaceCarIndex) const
+{
+    CGS_ASSERT(leGlobalRaceCarIndex >= E_GLOBAL_RACE_CAR_INDEX_0,     "leGlobalRaceCarIndex >= E_GLOBAL_RACE_CAR_INDEX_0");
+    CGS_ASSERT(leGlobalRaceCarIndex <  E_GLOBAL_RACE_CAR_INDEX_COUNT, "leGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT");
+    return maRaceCarPositions[leGlobalRaceCarIndex];        // 16*idx @+0
+}
+
+Vector3 RCEntityGlobalRaceCarOutputInterface::GetRaceCarAt(
+        EGlobalRaceCarIndex leGlobalRaceCarIndex) const
+{
+    CGS_ASSERT(leGlobalRaceCarIndex >= E_GLOBAL_RACE_CAR_INDEX_0,     "leGlobalRaceCarIndex >= E_GLOBAL_RACE_CAR_INDEX_0");
+    CGS_ASSERT(leGlobalRaceCarIndex <  E_GLOBAL_RACE_CAR_INDEX_COUNT, "leGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT");
+    return maRaceCarAts[leGlobalRaceCarIndex];              // 16*(idx+35) @+0x230
+}
+
+BrnWorld::WorldRegion RCEntityGlobalRaceCarOutputInterface::GetWorldRegion(
+        EGlobalRaceCarIndex leGlobalRaceCarIndex) const
+{
+    CGS_ASSERT(leGlobalRaceCarIndex >= E_GLOBAL_RACE_CAR_INDEX_0,     "leGlobalRaceCarIndex >= E_GLOBAL_RACE_CAR_INDEX_0");
+    CGS_ASSERT(leGlobalRaceCarIndex <  E_GLOBAL_RACE_CAR_INDEX_COUNT, "leGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT");
+    return maRaceCarWorldRegions[leGlobalRaceCarIndex];     // 8*(idx+140) @+0x460
+}
+
+CgsID RCEntityGlobalRaceCarOutputInterface::GetCarModelId(
+        EGlobalRaceCarIndex leGlobalRaceCarIndex) const
+{
+    CGS_ASSERT(leGlobalRaceCarIndex >= E_GLOBAL_RACE_CAR_INDEX_0,     "leGlobalRaceCarIndex >= E_GLOBAL_RACE_CAR_INDEX_0");
+    CGS_ASSERT(leGlobalRaceCarIndex <  E_GLOBAL_RACE_CAR_INDEX_COUNT, "leGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT");
+    return maCarModelIds[leGlobalRaceCarIndex];             // 8*(idx+210) @+0x690
+}
+
+f32 RCEntityGlobalRaceCarOutputInterface::GetRaceCarSpeed(
+        EGlobalRaceCarIndex leGlobalRaceCarIndex) const
+{
+    CGS_ASSERT(leGlobalRaceCarIndex >= E_GLOBAL_RACE_CAR_INDEX_0,     "leGlobalRaceCarIndex >= E_GLOBAL_RACE_CAR_INDEX_0");
+    CGS_ASSERT(leGlobalRaceCarIndex <  E_GLOBAL_RACE_CAR_INDEX_COUNT, "leGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT");
+    return mafRaceCarSpeeds[leGlobalRaceCarIndex];          // 4*(idx+490) @+0x7A8
+}
+
+// The bit-array copy accessor (:579): the 199 producer's set-bit walk reads through it.
+CgsContainers::BitArray<35u> RCEntityGlobalRaceCarOutputInterface::GetGlobalRaceCarBitArray() const
+{
+    return mGlobalRaceCarIndices;                           // @+0x930
+}
+
 // X360 0x8231CAF8 -- IsInRange(EGlobalRaceCarIndex): per-car bit of mIsInRangeFlags (@+0x960).
 bool RCEntityGlobalRaceCarOutputInterface::IsInRange(EGlobalRaceCarIndex leGlobalRaceCarIndex) const
 {

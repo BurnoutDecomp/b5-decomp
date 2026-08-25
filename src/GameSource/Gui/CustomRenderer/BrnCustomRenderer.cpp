@@ -843,6 +843,7 @@ void SetMaskRect(CgsGraphics::ImRenderBuffer<CgsGraphics::Basic2dColouredTexture
     *reinterpret_cast<u32*>(&laCorners[1].mv4Colour) = 0xFFFFFFFFu;
 
     lpRenderBuffer->PushMask(lpTextureState, laCorners);
+}
 
 // ================= SetMaskRect @ 0x82450D28 =================
 // Push a clip mask over a normalised screen rect. The X360 asserts the mask aspect

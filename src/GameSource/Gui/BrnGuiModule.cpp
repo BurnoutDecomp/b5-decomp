@@ -1788,6 +1788,11 @@ namespace BrnGui
 
                 case 350:   // GuiEventProgressionProfileData -- the live-profile handoff
                 case 169:   // GuiEventChangeDistrict -- the district-marker source words
+                case 147:   // [H3b] GuiEventUpdateHud -- the player {speed,rpm,gear} words
+                case 199:   // [H3b] GuiEventUpdateSatNav -- the icon array (player position arm)
+                case 204:   // [H3b] the sat-nav event-filter pair (the ch40 mirror)
+                case 207:   // [H3b] GuiRaceCarInfoEvent -- the mRaceCarInfo SoA feed
+                case 376:   // [H3b] GuiPlayerRaceCarIdEvent -- the player index pair (case-199 gate)
                     // [H1 wave 2026-08-25] On the console EVERY module-input event reaches
                     // GuiCache::RecEvent (its ~180-case switch consumes what it wants);
                     // this build's pump routes selectively, so the two cache-consumed ids

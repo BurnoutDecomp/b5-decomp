@@ -37,6 +37,8 @@ namespace CgsWorld { struct WorldMap2D; }
 
 namespace BrnWorld
 {
+namespace RaceCarEntityModuleIO { struct RCEntityGlobalRaceCarOutputInterface; }
+
 class ActiveRaceCar;
 
 class RaceCar
@@ -118,6 +120,14 @@ public:
     bool IsActive() const { return muType != E_RACE_CAR_TYPE_INACTIVE; }
     bool IsInWorld() const { return muType != E_RACE_CAR_TYPE_INACTIVE; }
     bool HasActiveRaceCar() const;                             // 0x822A0CD8
+
+    // X360 0x822BED20 -- publish this car's global snapshot (hud H3b tracking slice).
+    // Body in BrnRaceCar.cpp; the caller (UpdateOutputInterfaces step 5) computes the
+    // speed/AI-section pair off the attached active car.
+    void FillInOutputInterface(
+        RaceCarEntityModuleIO::RCEntityGlobalRaceCarOutputInterface* lpGlobalCarInterface,
+        f32 lfSpeed,
+        u16 lu16AISection);
     bool IsPlayerDriven() const { return muType == E_RACE_CAR_TYPE_PLAYER; }
     bool IsNetworkDriven() const { return muType == E_RACE_CAR_TYPE_NETWORK; }
     bool IsAIDriven() const { return muType == E_RACE_CAR_TYPE_AI; }

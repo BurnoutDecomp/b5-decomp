@@ -27,6 +27,7 @@
 
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnRaceCar.h"
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnActiveRaceCar.h"
+#include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h" // RCEntityGlobalRaceCarOutputInterface (FillInOutputInterface)
 #include "GameShared/GameClasses/Core/CgsAssert.h"            // CGS_ASSERT + Begin/Fire/End
 #include "GameShared/GameClasses/Development/CgsStrStream.h"  // CgsDev::StrStream (streamed asserts)
 #include "GameShared/GameClasses/World/CgsWorldMap2D.h"       // CgsWorld::WorldMap2D::GetValue
@@ -434,6 +435,58 @@ bool RaceCar::ToBeRenderedDamaged() const
     }
 
     return false;
+}
+
+// ============================================================================
+// X360 0x822BED20 -- FillInOutputInterface. The per-GLOBAL-car publish: gather this
+// car's snapshot and hand it to RCEntityGlobalRaceCarOutputInterface::SetRaceCarData.
+// Called from RaceCarEntityModule::UpdateOutputInterfaces step 5 (the 0..34 loop),
+// which supplies the speed (active car mph * KF_MPH_TO_MPS when attached, else 0)
+// and the AI section (active muCurrAISection when attached, else 0x7FFF).
+//
+// The console's four muType range asserts (:577/:590/:603 x2) come from its inlined
+// type-flag reads; reproduced once up front (the PC getters carry no asserts of
+// their own for the flag tests). GetPosition/GetDirection carry their own :  pair.
+// [hud H3b tracking slice 2026-08-25 -- this body retires the UpdateOutputInterfaces
+// step-5 FLAG; its consumer is the satnav 199 producer in GameBridgeWorldToGui.cpp.]
+// ============================================================================
+void RaceCar::FillInOutputInterface(
+        RaceCarEntityModuleIO::RCEntityGlobalRaceCarOutputInterface* lpGlobalCarInterface,
+        f32 lfSpeed,
+        u16 lu16AISection)
+{
+    CGS_ASSERT(GetType() < E_RACE_CAR_TYPE_COUNT, "muType < E_RACE_CAR_TYPE_COUNT"); // :603
+    CGS_ASSERT(GetType() < E_RACE_CAR_TYPE_COUNT, "muType < E_RACE_CAR_TYPE_COUNT"); // :590
+    CGS_ASSERT(GetType() < E_RACE_CAR_TYPE_COUNT, "muType < E_RACE_CAR_TYPE_COUNT"); // :603
+    CGS_ASSERT(GetType() < E_RACE_CAR_TYPE_COUNT, "muType < E_RACE_CAR_TYPE_COUNT"); // :577
+
+    // r19: the rival index rides only on AI cars (the console `if (muType == 1)` arm).
+    s8 li8RivalIndex = -1;
+    if (GetType() == E_RACE_CAR_TYPE_AI)
+    {
+        li8RivalIndex = GetRivalIndex();
+    }
+
+    const Vector3 lDirection = GetDirection();   // v2 (GetDirection @0x822B3610)
+    const Vector3 lPosition  = GetPosition();    // v1 (GetPosition @0x822B3588)
+
+    lpGlobalCarInterface->SetRaceCarData(
+        lPosition,
+        lDirection,
+        GetWorldRegion(),                                   // QWORD @+0x7C
+        GetRivalId(),
+        GetModelId(),
+        lfSpeed,                                            // f1 (caller-computed)
+        lu16AISection,                                      // r6 (caller-computed)
+        GetGlobalRaceCarIndex(),
+        li8RivalIndex,
+        GetActiveRaceCarIndex(),                            // s8 @+0xAC
+        GetType() == E_RACE_CAR_TYPE_PLAYER,                // r28: muType == 0
+        GetType() == E_RACE_CAR_TYPE_AI,                    // r21: muType == 1
+        GetType() == E_RACE_CAR_TYPE_NETWORK,               // r20: muType == 2
+        IsInCurrentGameMode(),                              // r24
+        IsDispersing(),                                     // r18: byte @+0xAB
+        HasActiveRaceCar());                                // r25 (in-range flag)
 }
 
 }

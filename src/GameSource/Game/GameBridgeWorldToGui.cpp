@@ -30,6 +30,9 @@
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"              // BrnGui::GuiEventBoostInfo (event 206)
 #include "GameSource/World/BrnWorldModuleIO.h"               // BrnWorldIO::UpdateOutputBuffer
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h" // the active-car interface + BoostOutputInfo
+#include "GameSource/Gui/BrnGuiRaceCarInfoEvent.h"           // GuiRaceCarInfoEvent (207, the mRaceCarInfo SoA feed)
+#include <cmath>                                             // sqrtf/acosf (the icon heading derivation)
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [DIAG] the satnav-diag one-shots
 
 namespace BrnGame
 {
@@ -77,9 +80,32 @@ void BrnGameModule::BridgeWorldVehicleDataToGui(
     CGS_ASSERT(lePlayerIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
                "lePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");   // :304
 
-    // FLAG deferred (console seat: between the index assert and the boost post): the
-    // player-index pair event (373 -- {active, global}; the global index read carries the
-    // "Player car index hasn't been set" / "< E_GLOBAL_RACE_CAR_INDEX_COUNT" asserts).
+    // ---- THE PLAYER RACE-CAR-ID POST (GUI event 376 -> GuiCache case 376) ------------
+    // [hud H3b tracking slice 2026-08-25] the console seat between the index assert and
+    // the boost post: {active, global} with the :316/:319 range asserts. The global index
+    // read (UpdateOutputBuffer::GetPlayerGlobalRaceCarIndex) carries the "Player car index
+    // hasn't been set" assert inside its own body. The cache's case-376 store is the
+    // +19200/+19204 pair that GATES the case-199 player-icon store -- without this post
+    // the satnav player position never lands in the cache.
+    {
+        CGS_ASSERT(lePlayerIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                   "lePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");   // :316
+        const EGlobalRaceCarIndex lePlayerGlobalIndex =
+            lpWorldOutputBuffer->GetPlayerGlobalRaceCarIndex();
+        CGS_ASSERT(lePlayerGlobalIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT,
+                   "lePlayerGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT");   // :319
+
+        BrnGui::GuiPlayerRaceCarIdEvent lIdEvent;
+        lIdEvent.mePlayerActiveRaceCarIndex = static_cast<s32>(lePlayerIndex);
+        lIdEvent.mePlayerGlobalRaceCarIndex = static_cast<s32>(lePlayerGlobalIndex);
+        // (direct queue push -- the member AddGuiEvent<T> @0x823DA458 folds to
+        // AddEvent(&event, 376, 8); the 206 post above documents the convention)
+        CGS_ASSERT(lpGuiInputBuffer != 0, "Input hasn't been locked for write");   // CgsGuiModule.h:286
+        lpGuiInputBuffer->GetGuiEvents()->AddEvent(
+            reinterpret_cast<const CgsModule::Event*>(&lIdEvent),
+            lIdEvent.GetEventType(),
+            static_cast<s32>(sizeof(lIdEvent)));
+    }
 
     // ---- THE BOOST INFO POST (GUI event 206 -> BrnGui::BoostBarRenderer) -------------
     const BrnWorld::RaceCarEntityModuleIO::BoostOutputInfo* lpBoostInfo =
@@ -130,10 +156,291 @@ void BrnGameModule::BridgeWorldVehicleDataToGui(
         lBoostEvent.GetEventType(),
         static_cast<s32>(sizeof(lBoostEvent)));
 
-    // FLAG deferred (console order, after the boost post): the race-car-state derived
-    // family -- the speed/heat record off GetRaceCarState (the "Invalid race car state in
-    // BrnGameModule::BridgeWorldToGui" :347 read), the stunt-info post (377) and the rest
-    // of the per-frame vehicle telemetry. Each lands with its consumer.
+    // ---- THE HUD UPDATE POST (GUI event 147 -> GuiCache case 147) --------------------
+    // [hud H3b tracking slice 2026-08-25] the console seat after the boost post: the
+    // player RaceCarState's {(s32)mfSpeedMPH, (s32)mfRPM, mi8Gear} (BE stores +0/+4/+8).
+    // The cache's case-147 store (+19208) is the GuiPlayerInfo miSpeedMph the satnav
+    // component's view-distance/zoom math reads.
+    {
+        const BrnPhysics::Vehicle::RaceCarState* lpRaceCarState =
+            lpActiveInterface->GetRaceCarState(lePlayerIndex);
+        if (lpRaceCarState == 0)
+        {
+            CgsDev::Assert::BeginAssert();
+            char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
+            lacMessage[0] = 0;
+            CgsDev::StrStream lStream(lacMessage, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
+            lStream << "Invalid race car state in BrnGameModule::BridgeWorldToGui";
+            CgsDev::Assert::FireAssert(lacMessage, KPC_ASSERT_FILE, 359);
+            CgsDev::Assert::EndAssert();
+        }
+        else
+        {
+            BrnGui::GuiEventUpdateHud lHudEvent;
+            lHudEvent.miSpeedMph = static_cast<s32>(lpRaceCarState->mfSpeedMPH);  // @972
+            lHudEvent.miRPM      = static_cast<s32>(lpRaceCarState->mfRPM);       // @984
+            lHudEvent.mi8Gear    = lpRaceCarState->mi8Gear;                       // @1092
+            lHudEvent.mau8Pad[0] = 0; lHudEvent.mau8Pad[1] = 0; lHudEvent.mau8Pad[2] = 0;
+            // (direct queue push -- AddGuiEvent<GuiEventUpdateHud> @0x823DA5C8 ==
+            // AddEvent(&event, 147, 12))
+            lpGuiInputBuffer->GetGuiEvents()->AddEvent(
+                reinterpret_cast<const CgsModule::Event*>(&lHudEvent),
+                lHudEvent.GetEventType(),
+                static_cast<s32>(sizeof(lHudEvent)));
+        }
+    }
+
+    // FLAG deferred (console order, between the HUD post and the satnav post): the
+    // GuiEventPlayerWrecked edge (off the module's player-wrecked byte) -- its consumer
+    // is not on this build's reconstructed path yet.
+
+    // ---- THE SATNAV ICON POST (GUI event 199 -> GuiCache case 199) -------------------
+    // [hud H3b tracking slice 2026-08-25] the console's per-frame icon publish
+    // (@0x823E5F30..0x823E64E8): walk the GLOBAL interface's occupied-slot bit array
+    // (capped at 48 icons), fill one SatNavIconInfo per car -- position lane, speed in
+    // MPH (the global speeds ride in m/s; flt_830180B0 == 2.2369363 scales back),
+    // county/district, the heading angle vs north off the car's At vector, the active
+    // index byte and the type arm (player 0 / rival-AI 3 + model id / network 2 + model
+    // id / else the "Unknown car type" assert) -- then post the whole record.
+    // The console's DoWorstCase pre-pass is gated on the GuiDebugComponent's worst-case
+    // HUD toggle (BSS byte @0x82FB508A, default 0, written only by UpdateWorstCaseHUD
+    // @0x8250CBC8); the debug component is not on this build, so the gate is constant
+    // false and the call is FLAG-omitted with it, not paraphrased.
+    {
+        using BrnWorld::RaceCarEntityModuleIO::RCEntityGlobalRaceCarOutputInterface;
+
+        const RCEntityGlobalRaceCarOutputInterface* lpGlobalInterface =
+            lpWorldOutputBuffer->GetRaceCarGlobalOutputInterface();
+        CGS_ASSERT(lpGlobalInterface != 0, "lpGlobalRaceCarOutput");            // :410
+
+        if (lpGlobalInterface != 0)
+        {
+            const f32 KF_MPS_TO_MPH = 2.2369363f;   // flt_830180B0 (the cinit-stored 1/0.44704)
+
+            static BrnGui::GuiEventUpdateSatNav lSatNavEvent;   // 2320B record; static, not
+            // stack -- the single-threaded build's oversized-event-local convention.
+            s32 liNumIcons = 0;
+
+            const CgsContainers::BitArray<35u> lOccupied =
+                lpGlobalInterface->GetGlobalRaceCarBitArray();
+
+            for (s32 liGlobal = 0;
+                 liGlobal < E_GLOBAL_RACE_CAR_INDEX_COUNT &&
+                 liNumIcons < BrnGui::GuiEventUpdateSatNav::KI_MAX_SAT_NAV_ICONS;
+                 ++liGlobal)
+            {
+                if (!lOccupied.IsBitSet(static_cast<u32>(liGlobal)))
+                    continue;
+
+                const EGlobalRaceCarIndex leGlobal =
+                    static_cast<EGlobalRaceCarIndex>(liGlobal);
+                BrnGui::GuiEventUpdateSatNav::SatNavIconInfo& lrIcon =
+                    lSatNavEvent.maIconInfo[liNumIcons];
+
+                // Default type first (the console's `stb 3, +0x28` before the arms).
+                lrIcon.SetIconType(
+                    BrnGui::GuiEventUpdateSatNav::SatNavIconInfo::E_SATNAVICON_RIVAL);
+
+                // Position lane (lvx128 16*idx / stvx128 into the icon head).
+                const Vector3 lPosition = lpGlobalInterface->GetRaceCarPosition(leGlobal);
+                Vector4 lv4Lane;
+                lv4Lane.x = lPosition.x; lv4Lane.y = lPosition.y;
+                lv4Lane.z = lPosition.z; lv4Lane.w = 0.0f;
+                lrIcon.SetPositionLane(lv4Lane);
+
+                // Speed (m/s -> MPH; `lfs speeds[idx]` * flt_830180B0).
+                lrIcon.SetSpeedMph(
+                    lpGlobalInterface->GetRaceCarSpeed(leGlobal) * KF_MPS_TO_MPH);
+
+                // County / district off the world-region pair (@+0x460 stride 8).
+                const BrnWorld::WorldRegion lRegion =
+                    lpGlobalInterface->GetWorldRegion(leGlobal);
+                lrIcon.SetCounty(lRegion.GetCounty());     // asserts leCounty >= 0 (:1857)
+                lrIcon.SetDistrict(lRegion.GetDistrict()); // asserts leDistrict >= 0 (:1873)
+
+                // Heading: normalise the At vector; NaN lanes -> 0.0 (the console's three
+                // vcmpeqfp self-tests). Otherwise the angle vs NORTH (0,0,1) via
+                // acos(clamp(dot,-1,1)) (XMVectorACos), sign-resolved against UP (0,1,0)
+                // through the cross product: below the plane -> 2pi - angle. Constants:
+                // unk_82181520 = (0,0,1), unk_82181510 = (0,1,0), 0x82034E30 = 2pi.
+                {
+                    const Vector3 lAt = lpGlobalInterface->GetRaceCarAt(leGlobal);
+                    const bool lbNaN = (lAt.x != lAt.x) || (lAt.y != lAt.y) ||
+                                       (lAt.z != lAt.z);
+                    if (lbNaN)
+                    {
+                        lrIcon.SetRotation(0.0f);
+                    }
+                    else
+                    {
+                        const f32 lfLenSq = lAt.x * lAt.x + lAt.y * lAt.y + lAt.z * lAt.z;
+                        f32 lfRotation = 0.0f;
+                        if (lfLenSq > 0.0f)
+                        {
+                            const f32 lfInvLen = 1.0f / sqrtf(lfLenSq);
+                            // dot(normalised At, north(0,0,1)) == At.z / |At|
+                            f32 lfDot = lAt.z * lfInvLen;
+                            if (lfDot > 1.0f)  lfDot = 1.0f;
+                            if (lfDot < -1.0f) lfDot = -1.0f;
+                            lfRotation = acosf(lfDot);
+                            // cross(dHat, north) . up == -dHat.x ; below the plane flips.
+                            const f32 lfSide = -lAt.x * lfInvLen;
+                            if (lfSide < 0.0f)
+                            {
+                                const f32 KF_TWO_PI = 6.2831855f;  // 0x82034E30 lane 0
+                                lfRotation = KF_TWO_PI - lfRotation;
+                            }
+                        }
+                        lrIcon.SetRotation(lfRotation);
+                    }
+                }
+
+                lrIcon.SetHiddenDriveThru(false);          // `stb 0, +0x23`
+
+                // Active index byte (`stb activeIdx[idx], +0x26`).
+                lrIcon.SetActiveRaceCarIndex(
+                    lpGlobalInterface->GetActiveRaceCarIndex(leGlobal));
+
+                // The type arms (IsPlayer / IsRivalAI+modelId / IsNetwork+modelId).
+                if (lpGlobalInterface->IsPlayer(leGlobal))
+                {
+                    lrIcon.SetIconType(
+                        BrnGui::GuiEventUpdateSatNav::SatNavIconInfo::E_SATNAVICON_PLAYER_CAR);
+                }
+                else if (lpGlobalInterface->IsRivalAI(leGlobal))
+                {
+                    lrIcon.SetIconType(
+                        BrnGui::GuiEventUpdateSatNav::SatNavIconInfo::E_SATNAVICON_RIVAL);
+                    lrIcon.SetCgsId(lpGlobalInterface->GetCarModelId(leGlobal));
+                }
+                else if (lpGlobalInterface->IsNetwork(leGlobal))
+                {
+                    lrIcon.SetIconType(
+                        BrnGui::GuiEventUpdateSatNav::SatNavIconInfo::E_SATNAVICON_NETWORKRIVAL);
+                    lrIcon.SetCgsId(lpGlobalInterface->GetCarModelId(leGlobal));
+                }
+                else
+                {
+                    CgsDev::Assert::BeginAssert();
+                    CgsDev::Assert::FireAssert("Unknown car type", KPC_ASSERT_FILE, 466);
+                    CgsDev::Assert::EndAssert();
+                }
+
+                CGS_ASSERT(lrIcon.GetRotation() == lrIcon.GetRotation(),
+                           "!RwMath::IsNaN( lpIcon->mfRotation )");             // :469
+
+                ++liNumIcons;
+            }
+
+            lSatNavEvent.miNumIcons = liNumIcons;          // @+0x900 (the case-199 count)
+
+            // [FLAG] `if (byte_82FB508A) DoWorstCase()` omitted -- see the banner above.
+
+            // (direct queue push -- AddGuiEvent<GuiEventUpdateSatNav> @0x823D93A0 ==
+            // AddEvent(&event, 199, 2320))
+            lpGuiInputBuffer->GetGuiEvents()->AddEvent(
+                reinterpret_cast<const CgsModule::Event*>(&lSatNavEvent),
+                lSatNavEvent.GetEventType(),
+                static_cast<s32>(sizeof(lSatNavEvent)));
+
+            // [DIAG] NOT IN THE X360 BINARY -- [satnav-diag] the first two 199 posts.
+            {
+                static s32 siLeft = 2;
+                if (siLeft > 0 && CgsDev::Log::gpDebugPrint != 0 && liNumIcons > 0)
+                {
+                    --siLeft;
+                    const BrnGui::GuiEventUpdateSatNav::SatNavIconInfo& lrFirst =
+                        lSatNavEvent.maIconInfo[0];
+                    *CgsDev::Log::gpDebugPrint
+                        << "[satnav-diag] bridge 199: icons=" << liNumIcons
+                        << " first type=" << static_cast<s32>(lrFirst.GetIconTypeByte())
+                        << " pos=(" << lrFirst.GetPositionLane().x
+                        << "," << lrFirst.GetPositionLane().z
+                        << ") rot=" << lrFirst.GetRotation()
+                        << "\n";
+                }
+            }
+        }
+    }
+
+    // ---- THE RACE-CAR-INFO POST (GUI event 207 -> GuiCache case 207) -----------------
+    // [hud H3b tracking slice 2026-08-25] the console's closing leg (@0x823E64E8..): a
+    // Construct'ed GuiRaceCarInfoEvent filled per occupied GLOBAL slot that carries a
+    // valid ACTIVE index -- position lane by ACTIVE index, the rival-id identity qword,
+    // and the five flag bytes {used=1, connecting(flags&0x20), disconnected(flags&0x80),
+    // inRange, crashing(active state mbCrashing when flags&1)}. The cache's case-207
+    // consumption of this record IS the mRaceCarInfo SoA (maRaceCarUsed and friends) --
+    // the IsActiveRaceCarIndexUsed gate on the case-199 player store reads it, and the
+    // sat-nav renderer's rival icons read GetRaceCarPosition off it.
+    {
+        using BrnWorld::RaceCarEntityModuleIO::RCEntityGlobalRaceCarOutputInterface;
+
+        const RCEntityGlobalRaceCarOutputInterface* lpGlobalInterface =
+            lpWorldOutputBuffer->GetRaceCarGlobalOutputInterface();
+        if (lpGlobalInterface != 0)
+        {
+            static BrnGui::GuiRaceCarInfoEvent lInfoEvent;   // 240B; the oversized-local convention
+            lInfoEvent.Construct();
+            s32 liNumEntries = 0;
+
+            const CgsContainers::BitArray<35u> lOccupied =
+                lpGlobalInterface->GetGlobalRaceCarBitArray();
+
+            for (s32 liGlobal = 0; liGlobal < E_GLOBAL_RACE_CAR_INDEX_COUNT; ++liGlobal)
+            {
+                if (!lOccupied.IsBitSet(static_cast<u32>(liGlobal)))
+                    continue;
+
+                const EGlobalRaceCarIndex leGlobal =
+                    static_cast<EGlobalRaceCarIndex>(liGlobal);
+                const EActiveRaceCarIndex leActive =
+                    lpGlobalInterface->GetActiveRaceCarIndex(leGlobal);
+                CGS_ASSERT(leActive < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                           "leCurrentActiveCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT"); // :499
+                if (leActive == E_ACTIVE_RACE_CAR_INDEX_INVALID ||
+                    leActive >= E_ACTIVE_RACE_CAR_INDEX_COUNT)
+                    continue;
+
+                const Vector3 lPosition = lpGlobalInterface->GetRaceCarPosition(leGlobal);
+                Vector4 lv4Lane;
+                lv4Lane.x = lPosition.x; lv4Lane.y = lPosition.y;
+                lv4Lane.z = lPosition.z; lv4Lane.w = 0.0f;
+
+                // The crashing byte rides only on active (flags bit 0) cars; the console
+                // reads GetRaceCarState(active)->mbCrashing (@1098) under that gate.
+                bool lbCrashing = false;
+                if (lpActiveInterface->IsRaceCarActive(leActive))
+                {
+                    const BrnPhysics::Vehicle::RaceCarState* lpState =
+                        lpActiveInterface->GetRaceCarState(leActive);
+                    lbCrashing = (lpState != 0) && lpState->mbCrashing;
+                }
+
+                lInfoEvent.SetEntry(
+                    static_cast<s32>(leActive),
+                    lv4Lane,
+                    lpGlobalInterface->GetRivalId(leGlobal),          // the identity qword
+                    true,                                             // used
+                    lpActiveInterface->IsCarConnecting(leActive),     // flags & 0x20
+                    lpActiveInterface->IsCarDisconnected(leActive),   // flags & 0x80
+                    lpGlobalInterface->IsInRange(leGlobal),
+                    lbCrashing);
+                ++liNumEntries;
+            }
+
+            lInfoEvent.SetNumEntries(liNumEntries);
+
+            // (direct queue push -- AddGuiEvent<GuiRaceCarInfoEvent> @0x823DA738 ==
+            // AddEvent(&event, 207, 240))
+            lpGuiInputBuffer->GetGuiEvents()->AddEvent(
+                reinterpret_cast<const CgsModule::Event*>(&lInfoEvent),
+                lInfoEvent.GetEventType(),
+                static_cast<s32>(sizeof(lInfoEvent)));
+        }
+    }
+
+    // FLAG deferred (console order, after the race-car-info post): the stunt-info post
+    // (377) and the remaining per-frame vehicle telemetry. Each lands with its consumer.
 }
 
 // ============================================================================
