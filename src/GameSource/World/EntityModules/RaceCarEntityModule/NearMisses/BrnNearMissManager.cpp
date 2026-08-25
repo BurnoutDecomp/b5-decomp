@@ -90,7 +90,7 @@ void BrnWorld::NearMissManager::NearMissEvent(ENearMissType leNearMissType, u32 
 
     // Notify the boost manager (the X360 inlines this into a dispatch through the owning entity
     // held at BoostManager+0x450, entity vtable slot +0x18).
-    lpBoostManager->OnNearMiss();
+    lpBoostManager->OnNearMiss(leNearMissType);
 
     NearMissChainEvent loEvent;
     loEvent.miCount        = miNearMissCount;

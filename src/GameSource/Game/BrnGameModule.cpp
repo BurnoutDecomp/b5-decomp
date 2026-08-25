@@ -3532,6 +3532,18 @@ namespace BrnGame
                     // any pending GuiEventRunFsm stage the main flow requested.
                     BridgeGameToGui(mpGuiInputBuffer);
 
+                    // ⭐ [boost-bar 206 wave] the world->GUI vehicle bridge (the console's
+                    // DoUpdate_GUI @0x823F0758 calls BridgeWorldToGui under its own GUI-input
+                    // write bracket) -- the read bracket mirrors the BridgeWorldToDirector
+                    // leg's. Publishes the per-frame boost-info record (206) the HUD boost
+                    // bar keys on.
+                    if (mpWorldUpdateOutputBuffer != 0)
+                    {
+                        mpWorldUpdateOutputBuffer->LockForRead();
+                        BridgeWorldToGui(mpGuiInputBuffer, mpWorldUpdateOutputBuffer);
+                        mpWorldUpdateOutputBuffer->UnlockForRead();
+                    }
+
                     // ⭐ THE GUI FRAME TIMESTEP. X360 BridgeGameStateToGui @0x823EE880 closes
                     // with AddGuiEvent<CgsGui::GuiEventTimeInfo> @0x823EF300, whose 8-byte
                     // payload the asm builds as

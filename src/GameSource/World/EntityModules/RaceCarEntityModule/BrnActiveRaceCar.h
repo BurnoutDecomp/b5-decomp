@@ -265,6 +265,11 @@ public:
     // X360 0x822A20D8: meRaceStartState is one of the two race-start phases.
     bool IsInAnyRaceStartState() const;
 
+    // DWARF BrnActiveRaceCar.h:796 (a header inline the X360 folds into its callers --
+    // UpdateOutputBoostInfo @0x822D1BD0 reads the byte behind the same IsAttached assert
+    // its sibling inlines carry). The start-line launch-boost latch.
+    bool IsDoingStartLineBoost() const { return mbIsDoingStartLineBoost; }
+
     // ⭐⭐ X360 0x822A4F50 (163 insns) -- THE IGNITION. The ONLY function in the XEX that
     // ever moves meEngineState away from E_ACTIVE_RACE_CAR_ENGINE_STATE_OFF, and
     // ProcessPlayerVehicleInput @0x822FFE30 publishes a ZERO-FILLED driver record until it

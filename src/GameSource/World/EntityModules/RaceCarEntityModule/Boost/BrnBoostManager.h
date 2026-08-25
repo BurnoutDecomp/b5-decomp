@@ -52,6 +52,10 @@ public:
     void SetBoostEarningEnabled(bool lbEnabled);            // 0x822A33B0
     void SetWrecking(bool lbWrecking, bool lbIsInOnlineGameMode);  // 0x822B8E40
 
+    // The near-miss notification (the X360 inlines the manager hop into a dispatch through
+    // the selected strategy's vtable slot 6 -- see NearMissManager::NearMissEvent).
+    void OnNearMiss(ENearMissType leNearMissType) { mpBoostStrategy->OnNearMiss(leNearMissType); }
+
     void SetCrashing(bool lbCrashing) { mpBoostStrategy->SetCrashing(lbCrashing); }
     void SetForceBoost(bool lbForceBoost) { mpBoostStrategy->SetForceBoost(lbForceBoost); }
     void SetInfiniteBoost(bool lbInfiniteBoost) { mpBoostStrategy->SetInfiniteBoost(lbInfiniteBoost); }

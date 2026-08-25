@@ -2975,6 +2975,130 @@ void RaceCarEntityModule::UpdateOutputInterfaces(
     }
 }
 
+// ============================================================================
+// UpdateOutputBoostInfo  @0x822D1BD0  (PS3 named export 0x17F30C -- the readable body;
+// the X360's failed register allocation was cross-checked against it branch for branch)
+//
+// THE per-frame boost publish: one BoostOutputInfo per active-car slot into the output
+// interface. The PLAYER's record reads the live BoostStrategy through the manager's
+// selected-strategy pointer (vtable-dispatched, exactly the accessors the console calls,
+// in the console's order), the near-miss tracker, the latched controls' boost button, the
+// strategy id (BURNOUT2/3/5 -> DANGER/AGGRESSION/STUNT) and the game mode (both SHOWTIME
+// modes force the boosting bit off). Every OTHER attached car publishes only its
+// mbIsBoosting: during the race-start phases (meRaceStartState != 0) it is "the physics
+// boosting timer is running", on the start line it is the start-line launch-boost latch.
+// Zeroed records for inactive slots. The per-iteration index assert is the console's
+// (BurnoutConstants.h:39).
+// ============================================================================
+void RaceCarEntityModule::UpdateOutputBoostInfo(
+        RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpActiveCarInterface )
+{
+    for ( s32 liSlot = 0; liSlot < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liSlot )
+    {
+        const EActiveRaceCarIndex leSlot = static_cast<EActiveRaceCarIndex>( liSlot );
+        RaceCarEntityModuleIO::BoostOutputInfo lInfo = {};
+
+        if ( mePlayerActiveRaceCarIndex == leSlot )
+        {
+            BoostStrategy* lpStrategy = mBoostManager.GetBoostStrategy();
+
+            // FLAG GameState stand-in (boost-bar 206 wave): on the console the GameState
+            // module's car hand-off actions (E_ACTION_UPDATE_CAR_STATS / the car-select
+            // arms) have applied the car's boost stats by the time the player car reports
+            // active, so the strategy's max boost is never 0 here. This build's GameState
+            // module is a placeholder, and at the junkyard boot the player car attaches
+            // before the first real stats action (E_ACTION_CAR_SELECT_FINISHED) -- the
+            // bridge would then post maxBoost == 0, the exact "Crazy value from bridge?"
+            // the HUD asserts on. Until the GameState producer lands, self-heal with the
+            // SAME recipe the case-77 handler runs: the vehicle-list entry's car type +
+            // stats bytes -> HandleCarStatsUpdate. One lookup per frame until it takes.
+            if ( !(lpStrategy->GetMaxBoost() > 0.0f) && mpVehicleList != 0 )
+            {
+                ActiveRaceCar* lpPlayerCar = GetActiveRaceCar( leSlot );
+                RaceCar* lpRaceCar =
+                    (lpPlayerCar != 0 && lpPlayerCar->IsAttached())
+                        ? lpPlayerCar->GetGlobalRaceCar() : 0;
+                const s32 liVehicleIndex =
+                    (lpRaceCar != 0) ? mpVehicleList->GetVehicleIndex(lpRaceCar->GetModelId())
+                                     : -1;
+                const BrnResource::VehicleListEntry* lpEntry =
+                    (liVehicleIndex >= 0) ? mpVehicleList->GetVehicleData(liVehicleIndex) : 0;
+                if ( lpEntry != 0 )
+                {
+                    const u8* lpcEntryBytes = reinterpret_cast<const u8*>(lpEntry);
+                    HandleCarStatsUpdate(
+                        static_cast<BrnResource::ECarType>(lpcEntryBytes[0xE8]),
+                        static_cast<s32>(lpcEntryBytes[0x98]),
+                        static_cast<s32>(lpcEntryBytes[0x9A]) );
+                    lpStrategy = mBoostManager.GetBoostStrategy();   // may have switched
+                }
+            }
+
+            // The boost-lock payback holds the flame on regardless of the strategy.
+            lInfo.mbIsBoosting =
+                lpStrategy->IsBoosting() ||
+                meActivePaybackType == BrnNetwork::E_PAYBACK_TYPE_BOOST_LOCK;
+            lInfo.mbIsTailgating          = lpStrategy->IsTailgating();
+            lInfo.mbIsInAir               = lpStrategy->IsInAir();
+            lInfo.mbIsOncoming            = lpStrategy->IsOncoming();
+            lInfo.mbIsDrifting            = lpStrategy->IsDrifting();
+            lInfo.mbIsBlueMode            = lpStrategy->IsBlueMode();
+            lInfo.mbNearMiss              = mNearMissManager.HasThereBeenARecentNearMiss();
+            lInfo.mbTrafficCheck          = lpStrategy->IsATrafficCheckPending();
+            lInfo.mfBoostAmount           = lpStrategy->GetBoostAmount();
+            lInfo.mfMaxBoost              = lpStrategy->GetMaxBoost();
+            lInfo.mbWasChainJustCompleted =
+                lpStrategy->GetIsChainNotifyPending( &lInfo.muNumChained );
+            lInfo.mfCurrentBoostingTime   = lpStrategy->GetCurrentBoostingTime();
+            lInfo.mbHoldingBoostButton    = mPlayerVehicleControls.mbBoost;
+            lInfo.mbAllowedToBoost        = lpStrategy->AreWeAllowedToBoost();
+
+            // The strategy id -> HUD boost type (the console's compare ladder: 2 -> danger,
+            // 3 -> aggression, 5 -> stunt, anything else danger).
+            const BoostManager::BoostStrategyId leStrategyId = mBoostManager.GetBoostStrategyId();
+            if ( leStrategyId == BoostManager::E_BOOSTSTRATEGY_BURNOUT3 )
+                lInfo.meBoostType = BrnWorld::E_BOOST_TYPE_AGGRESSION;
+            else if ( leStrategyId == BoostManager::E_BOOSTSTRATEGY_BURNOUT5 )
+                lInfo.meBoostType = BrnWorld::E_BOOST_TYPE_STUNT;
+            else
+                lInfo.meBoostType = BrnWorld::E_BOOST_TYPE_DANGER;
+
+            lInfo.mbJustLostBoostChunk = lpStrategy->HasJustLostBoostChunk();
+            lInfo.mbBoostIsFull        = lpStrategy->IsBoostFull();
+
+            // Both showtime modes hide the boosting flame.
+            if ( meGameModeType == BrnGameState::GameStateModuleIO::E_MODE_OFFLINE_SHOWTIME ||
+                 meGameModeType == BrnGameState::GameStateModuleIO::E_MODE_ONLINE_SHOWTIME )
+            {
+                lInfo.mbIsBoosting = false;
+            }
+        }
+        else
+        {
+            ActiveRaceCar* lpActiveRaceCar = GetActiveRaceCar( leSlot );
+            if ( lpActiveRaceCar->IsActive() )
+            {
+                CGS_ASSERT( lpActiveRaceCar->IsAttached(), "IsAttached()" );  // h:1355
+                if ( !lpActiveRaceCar->IsOnRaceStartState( 0 ) )
+                {
+                    // In a race-start phase: the flame shows while the physics boosting
+                    // timer runs (the launch rev-up).
+                    lInfo.mbIsBoosting =
+                        lpActiveRaceCar->GetPhysicsState()->mfTimeBoosting > 0.0f;  // h:1096 inline
+                }
+                else
+                {
+                    lInfo.mbIsBoosting = lpActiveRaceCar->IsDoingStartLineBoost();
+                }
+            }
+        }
+
+        lpActiveCarInterface->SetBoostOutputInfoN( leSlot, lInfo );
+        CGS_ASSERT( liSlot + 1 <= E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                    "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT" );   // BurnoutConstants.h:39
+    }
+}
+
 // X360 0x8230D928 -- PARTIAL SLICE.
 //
 // The console body is a 15-step per-frame spine (replay enter/leave edge, the camera-vector
@@ -4294,6 +4418,11 @@ void RaceCarEntityModule::PostPhysicsUpdate(
     }
 
     UpdateActiveRaceCarColours();
+
+    // ⭐ [boost-bar 206 wave] the per-frame boost publish -- the console's 0x823076D8 `bl`,
+    // between UpdateActiveRaceCarColours (0x823076C4) and UpdateOutputInterfaces
+    // (0x8230771C), outside the sim-paused skip.
+    UpdateOutputBoostInfo( lpOutput->GetActiveRaceCarOutputInterface() );
 
     // The console reads the four interfaces off the output buffer in this order
     // (replayGlobal, replayActive, global, active) and passes them

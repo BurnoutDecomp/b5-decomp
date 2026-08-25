@@ -368,6 +368,21 @@ namespace CgsGui
                 // Reproduce them when those AptAux members gain named homes.
                 break;
 
+            case 213:   // SatNav/MainMap show-hide  {s32 mode, f32 fade, u8 enable}
+            case 214:   // BoostBar render enable    {u8 flag}
+            case 215:   // AboveCar render enable    {u8 flag}
+                // ⭐ [boost-bar] the custom-renderer view-state commands, bridged body-only
+                // from channel 41 by GuiModule (see its case-41 note). On the console these
+                // reach the manager through the loop-tail forward below every view event
+                // rides; on this build the tail forward is seated at the module pump (the
+                // FLAG note below), so the view-queue-only records are forwarded here --
+                // no double delivery, the module inbound stream never carries them.
+                if (mpCustomRendererManager != 0)
+                {
+                    mpCustomRendererManager->RecvEvent(lpEvent, liEventId);
+                }
+                break;
+
             default:
                 break;
             }
