@@ -5,6 +5,10 @@
 #include "BrnCommonTypes.h"        // Vector2 (rw::math::vpu::Vector2 - alignas(16) {x,y,z,w})
 #include "GameSource/Gui/BrnGuiTextField.h"   // BrnGui::TextField (CrashNavMapIcon::mIconText, copied by operator=)
 #include "GameSource/Gui/Flow/Shared/FlaptComponents/BrnGuiFlaptIconComponent.h" // the REAL BrnGui::FlaptIconComponent (SetState reach-back)
+#include "GameSource/Gui/Flapt/BrnFlaptTextFieldRef.h"   // BrnFlapt::TextFieldRef (SatNavMapIcon::mIconText; Construct zeroes it)
+
+namespace CgsGui { struct StateInterface; }   // Construct parameter (pointer-only)
+namespace BrnFlapt { struct FileRef; }        // Prepare parameter (const-ref only)
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX. Layout from the DecFIGS dwarfdump
 // (GameSource/Gui/SatNav/BrnSatNavIcon.h): both icon classes derive from BrnGui::MapIconBrnBase,
@@ -102,12 +106,23 @@ namespace BrnGui
 
         virtual ~MapIconBrnBase() = default;
 
+        // [H3c] the X360 vtable (image @0x820CEB40 crash-nav / @0x820CEB68 sat-nav) pins the
+        // FULL base virtual set + order: Construct, SetPosition, SetRotation, SetAlpha,
+        // SetState, SetIconText, GetPosition, GetState, Update (the DWARF's declaration
+        // order, verbatim). The three rows added here (Construct/SetIconText/Update) carry
+        // empty defaults: the sat-nav vtable's SetIconText and Update slots both hold the
+        // ICF-folded empty function @0x8284CB38 (a bare blr), so an empty default IS the
+        // X360 behaviour for the derived class that doesn't refine them.
+        virtual void      Construct(const char* lpcName, CgsGui::StateInterface* lpStateInterface,
+                                    const char* lpcParentName) { (void)lpcName; (void)lpStateInterface; (void)lpcParentName; }
         virtual void      SetPosition(Vector2 lv2Position) { mv2Position = lv2Position; }
         virtual void      SetRotation(f32 lfRotationInRadians) { mfRotationInRadians = lfRotationInRadians; }
         virtual void      SetAlpha(f32 lfAlpha) { mfAlpha = lfAlpha; }
         virtual void      SetState(IconState leState) { meState = leState; }
+        virtual void      SetIconText(const char* lpcText, bool lbAlreadyLocalised) { (void)lpcText; (void)lbAlreadyLocalised; }
         virtual Vector2   GetPosition() const { return mv2Position; }
         virtual IconState GetState() const { return meState; }
+        virtual void      Update() {}
 
     protected:
         Vector2   mv2Position;          // X360 +16 (16-byte VMX vector)
@@ -198,10 +213,41 @@ namespace BrnGui
         bool mbDirtyIconState;   // X360 +0x1ED (copied by operator=)
     };
 
-    // Sat-nav map icon. State changes drive the hosting Flapt component's animation.
+    // Sat-nav map icon. Set* changes push straight through the hosting Flapt component's
+    // MovieClipRef (the X360 reaches it at `this - 0x18` == component +0x08 == mAptRef;
+    // here via container_of + the public GetMovieClipRef accessor -- a raw console offset
+    // applied to a host object is exactly the wheel-blanking defect class).
     class SatNavMapIcon : public MapIconBrnBase
     {
     public:
+        // @ 0x82448340 [H3c] -- the pool bind: assert the name/interface, construct the
+        // HOSTING FlaptIconComponent (the X360 calls FlaptIconComponent::Construct on
+        // `this - 32`), zero the text-field ref and poison the cached transform state
+        // (rotation FLT_MAX / alpha -1 / state E_ICONSTATE_COUNT) so the first real Set*
+        // always pushes through to the clip. Body in BrnSatNavIcon.cpp (needs the
+        // component type complete).
+        void Construct(const char* lpcName, CgsGui::StateInterface* lpStateInterface,
+                       const char* lpcParentName) override;
+
+        // @ 0x827DD7C8 - push a changed position through to the apt clip (the X360
+        // compares the {x,y} lanes -- the vrlimi merge replicates them across the
+        // vector -- and on a change stores the full lane + MovieClipRef::SetPosition).
+        void SetPosition(Vector2 lv2Position) override;
+
+        // @ 0x827DD748 - push a changed rotation through to the apt clip.
+        void SetRotation(f32 lfRotationInRadians) override;
+
+        // @ 0x827DD768 - store a changed alpha. The X360 tail re-dispatches through its
+        // OWN vtable slot (+0xC == SetAlpha itself); the second pass compares equal and
+        // returns, so the net behaviour is the store -- the alpha never reaches the clip.
+        void SetAlpha(f32 lfAlpha) override;
+
+        // @ 0x8284CB38 (both) [H3c] -- the sat-nav vtable's SetIconText and Update slots
+        // hold the same ICF-folded empty function (bare blr): both are no-ops. The
+        // declarations exist in the DWARF (BrnSatNavIcon.cpp:395 / :350) but this build's
+        // bodies are empty -- the inherited empty base defaults ARE the X360 behaviour,
+        // so no override is declared here.
+
         // @ 0x8280FFC0
         Vector2 GetPosition() const override { return mv2Position; }
 
@@ -217,17 +263,25 @@ namespace BrnGui
         void SetState(IconState leState) override;
 
     private:
-        // [TextFieldRef mIconText: real member; type not yet reconstructed - omitted]
+        // [H3c] DWARF BrnSatNavIcon.h:378 -- the icon's text-field handle (X360 icon
+        // +0x30..+0x3B; Construct @0x82448340 zeroes its three pointer words).
+        BrnFlapt::TextFieldRef mIconText;
     };
 
     // The Flapt animation component that hosts one SatNavMapIcon (the MapIconManager's
     // 16-element sat-nav icon pool, X360 element stride 0x60 with the icon at +32:
     // SetOwnerParameters @0x82520CE8 constructs the FlaptIconComponent base, then
-    // SatNavMapIcon::Prepare on element+32's container). Only the members this reach-back
-    // needs are modelled; the pool itself stays with the (parked) UpdateSatNavIcons slice.
+    // SatNavMapIcon::Prepare on element+32's container).
     struct SatNavIconComponent : public FlaptIconComponent
     {
         SatNavMapIcon mIcon;   // X360 +32 (host offset differs -- pointers widen; reached by name)
+
+        // @ 0x82448488 [H3c] (IDA "SatNavMapIcon::Prepare"; the X360 `this` is the
+        // ELEMENT base -- SetOwnerParameters calls it on icon-32). Bind the named clip
+        // through FlaptIconComponent::Prepare (no parent), then reset the embedded icon:
+        // state COUNT (a direct store, forcing the SetState(INVISIBLE) below to fire the
+        // label jump), rotation 0, alpha 0, state INVISIBLE, position zero.
+        void Prepare(const char* lacName, const BrnFlapt::FileRef& lFile);
     };
 
     // @ 0x827DD790 (see the in-class comment).
@@ -239,6 +293,40 @@ namespace BrnGui
             SatNavIconComponent* lpComponent = reinterpret_cast<SatNavIconComponent*>(
                 reinterpret_cast<char*>(this) - offsetof(SatNavIconComponent, mIcon));
             lpComponent->GotoAndStopLabel(gaSatNavStateLabels[leState]);
+        }
+    }
+
+    // @ 0x827DD7C8 (see the in-class comment). The X360 vrlimi-merge compare reduces to
+    // the {x,y} lane pair (lanes 2/3 are replaced by rotated copies of 0/1 on BOTH sides).
+    inline void SatNavMapIcon::SetPosition(Vector2 lv2Position)
+    {
+        if (lv2Position.x != mv2Position.x || lv2Position.y != mv2Position.y)
+        {
+            mv2Position = lv2Position;
+            SatNavIconComponent* lpComponent = reinterpret_cast<SatNavIconComponent*>(
+                reinterpret_cast<char*>(this) - offsetof(SatNavIconComponent, mIcon));
+            lpComponent->GetMovieClipRef().SetPosition(lv2Position);
+        }
+    }
+
+    // @ 0x827DD748 (see the in-class comment).
+    inline void SatNavMapIcon::SetRotation(f32 lfRotationInRadians)
+    {
+        if (lfRotationInRadians != mfRotationInRadians)
+        {
+            mfRotationInRadians = lfRotationInRadians;
+            SatNavIconComponent* lpComponent = reinterpret_cast<SatNavIconComponent*>(
+                reinterpret_cast<char*>(this) - offsetof(SatNavIconComponent, mIcon));
+            lpComponent->GetMovieClipRef().SetRotation(lfRotationInRadians);
+        }
+    }
+
+    // @ 0x827DD768 (see the in-class comment -- the store IS the whole net behaviour).
+    inline void SatNavMapIcon::SetAlpha(f32 lfAlpha)
+    {
+        if (lfAlpha != mfAlpha)
+        {
+            mfAlpha = lfAlpha;
         }
     }
 }

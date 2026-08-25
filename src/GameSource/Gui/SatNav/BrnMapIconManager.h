@@ -39,6 +39,8 @@
 #include "BrnCommonTypes.h"                              // Vector2 (GetSatNavIconPositions)
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"          // GuiEventUpdateSatNav::SatNavIconInfo, GuiEventDrawEventIcons::EIconDisplayType
 #include "GameSource/Gui/View/BrnRoadSignIconManager.h"  // BrnGui::RoadSignIconManager (embedded) + GuiEventRoadRuleBatchDataResponse fwd
+#include "GameSource/Gui/SatNav/BrnSatNavIcon.h"         // [H3c] SatNavIconComponent (the 16-element sat-nav icon pool)
+#include "GameSource/Gui/SatNav/BrnEventIconManager.h"   // [H3c] BrnGui::EventIconManager (embedded @+0xA1B4)
 
 // Pointer-only use in SetOwnerParameters/ReleaseResources -- forward-declared rather than
 // pulling the whole state-interface header in. `struct` is the canonical tag
@@ -273,10 +275,36 @@ namespace BrnGui
         bool IsActiveRival(const GuiEventUpdateSatNav::SatNavIconInfo* lpIcon) const;
 
         // The two per-owner icon passes Update dispatches to (X360 @0x82522588 /
-        // @0x825212C0). [H3b NAMED GATE -- see the bodies: the apt icon pools +
-        // road-sign / event-icon / world-icon passes they drive are not reconstructed.]
+        // @0x825212C0). [H3c]: UpdateSatNavIcons is LANDED (the 16-element apt icon pool
+        // drive); UpdateCrashNavIcons stays a NAMED GATE (the 50-element crash-nav pool
+        // is unreconstructed).
         void UpdateSatNavIcons();
         void UpdateCrashNavIcons();
+
+        // ---- [H3c] the UpdateSatNavIcons support surface (all X360-attested) ----
+
+        // @ 0x82511C88 -- refresh the world-derived icons into the used set: the landmark /
+        // checkpoint passes (in-event / crash-nav / online contexts; parked -- see the body)
+        // and the drive-through pass (in-view appends + the nearest-junkyard /
+        // nearest-body-shop volunteers).
+        void UpdateWorldIcons();
+
+        // @ 0x82502738 -- append the current freeburn-challenge target icon (online
+        // free-burn lobby only; asserts the mode).
+        void UpdateFreeburnChallengeIcons();
+
+        // @ 0x824FA320 -- the icon state for a rival/network-rival record: mode filters,
+        // then (with the rival-FOV flag up) the >100m 90-degree forward-cone cull against
+        // the latched player record.
+        s32 GetSatNavIconStateForRival(const GuiEventUpdateSatNav::SatNavIconInfo* lpIcon);
+
+        // @ 0x82502940 -- the small-mode icon alpha by x/z distance from the camera
+        // lane: <850 -> 100, <=2150 -> 100 - 50*(d-850)/2150, else 50.
+        static f32 CalculateAlpha(const Vector4& lv4IconPosition, const Vector4& lv4CameraPosition);
+
+        // @ 0x824F4508 -- the qsort comparator over the 48-byte icon records: descending
+        // icon type; equal NETWORKRIVAL records order by the player-team byte (team 2 last).
+        static int IconDisplaySort(const void* lpA, const void* lpB);
 
         // -------------------------------------------------------------------------------
         // Modelled members (DWARF order + types; X360 byte offsets are references, see the
@@ -296,7 +324,15 @@ namespace BrnGui
         s32                                  miMaxNumberIcons;                      // X360 +0x0994
         s8                                   mi8CurrentEventIndex;                  // X360 +0x0998
 
-        // [icon pools + event-icon manager + the bulk of the flag tail: not modelled here]
+        // [the 50-element crash-nav icon pool (DWARF h:435 mCrashNavIcons, X360 +0x9A0,
+        //  stride 0x1F0): not modelled here -- its component half is unreconstructed and
+        //  its bind/update passes stay parked]
+
+        // [H3c] DWARF h:438 `mSatNavMapIcons[16]` -- the sat-nav apt icon pool (X360
+        // +0x6A80, stride 0x60: FlaptIconComponent @element+0, the icon @element+0x20).
+        // The host element is the SatNavIconComponent pair model from BrnSatNavIcon.h;
+        // every access is by name.
+        SatNavIconComponent mSatNavMapIcons[KI_MAX_SATNAV_MAP_ICONS];   // X360 +0x6A80
 
         bool                mbAllowDriveThruSelection; // X360 +0x7080 (DWARF order; SetOwnerParameters ANDs it with the show flag)
         bool                mbAllowRivalSelection;     // X360 +0x7081 (rivals occupy the front of the selection list)
@@ -304,8 +340,11 @@ namespace BrnGui
         bool                mbUseRoadSigns;            // X360 +0xA1B0 (DWARF order after the embedded manager; SetOwnerParameters stbx @0x82521154)
         bool                mbAllowPlayerSelection;    // X360 +0xA1B1 (SetOwnerParameters stores ownerId != E_CRASHNAV_MAP_ONLINE_SELECT_ROUTE)
 
-        // [mEventIconManager (X360 +0xA1B4..+0xA9EF): not modelled here -- its Prepare/
-        //  Release passes ride the parked icon slice]
+        // [H3c] the embedded 2D event-icon bank (X360 +0xA1B4..+0xA9EF; the type is the
+        // committed BrnEventIconManager model, 175*12 + count + cache pointer). Its
+        // Prepare/Release passes stay parked (declaration-only in its TU); the LARGE-mode
+        // player-proximity pass reads it through the bodied GetEventIconPositions.
+        EventIconManager    mEventIconManager;         // X360 +0xA1B4
 
         GuiEventDrawEventIcons::EIconDisplayType meEventIconDisplayType; // X360 +0xA9F0 (DWARF h:453)
         bool                mbShowingDriveThrus;       // X360 +0xA9F4 (DWARF h:454; SetOwnerParameters stbx @0x825210B0)

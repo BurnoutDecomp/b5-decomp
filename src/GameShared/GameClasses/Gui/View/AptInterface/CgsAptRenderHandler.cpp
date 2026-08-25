@@ -136,7 +136,7 @@ namespace CgsGui
     // the {1280,720} base + the display aspect (height lane 720 exact; width lane == height*aspect);
     // the bit-exact VMX reciprocal-estimate sequence that produces the width is the platform leaf.
     // -------------------------------------------------------------------------
-    void AptRenderHandler::Construct(CgsGuiModuleIO::ImRendererSet* lpImRenderers,
+    void AptRenderHandler::Construct(::CgsGuiModuleIO::ImRendererSet* lpImRenderers,
                                      CgsGraphics::TextRenderer* lpTextRenderer,
                                      CgsLanguage::LanguageManager* lpLanguageManager,
                                      const FontCollection* lpFonts,
