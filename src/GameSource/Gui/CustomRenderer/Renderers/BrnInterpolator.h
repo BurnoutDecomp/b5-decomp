@@ -4,80 +4,167 @@
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h" // CGS_ASSERT
 
-// BrnGui::Interpolator<T> - a small GUI helper that maps an input value onto a
-// saturated [0,1] fraction between two keys, then offsets a value pair by that
-// fraction. The custom HUD renderers (e.g. BoostBarRenderer) embed Interpolator<f32>
-// members to ease bar values.
+// BrnGui::Interpolator<T> / BrnGui::DeltaInterpolator - the small GUI easing helpers the custom
+// HUD renderers (chiefly BoostBarRenderer) embed. DWARF home: BrnBoostBarRenderer.h:45 (the
+// Interpolator template, h:45-112) and :117 (DeltaInterpolator, h:117-160); they live in this
+// sibling header so the other renderers can reach them without pulling the whole boost-bar class.
 //
-// Reconstructed from BURNOUT_X360_ARTIST.XEX:
+// Reconstructed from BURNOUT_X360_ARTIST.XEX + the DecFIGS DWARF:
 //   BrnGui::Interpolator<float>::GetCurrentValue @ 0x82448898
+//   (the other methods are header inlines the X360 folds into every caller; shapes are the
+//    DWARF's, bodies are the inlined forms the BoostBarRenderer ctor/Construct/Update attest)
 //
-// LAYOUT (four floats, from the @0x82448898 asm offsets):
-//   mtValue0 @+0, mtValue1 @+4, mtKey0 @+8, mtKey1 @+0xC.
-// An unset key holds the -FLT_MAX sentinel (-3.4028235e38f). IsValid() is true only
-// when BOTH KEYS are set (neither key is the sentinel) -- the X360 IsValid() reads the
-// KEY pair @+8/+0xC (lfs 8 / lfs 0xC vs -FLT_MAX), NOT the value pair.
+// LAYOUT (DWARF member names; the @0x82448898 asm offsets):
+//   Interpolator<f32>:  mStartValue @+0, mEndValue @+4, mfStartTime @+8, mfEndTime @+0xC.
+//   DeltaInterpolator:  mfCurrentValue @+0, mfCurrentTime @+4, mfDeltaPerSec @+8,
+//                       mfMinValue @+0xC, mfMaxValue @+0x10.
+// An unset TIME key holds the -FLT_MAX sentinel; IsValid() is true only when BOTH time keys are
+// set (the X360 GetCurrentValue reads the +8/+0xC pair against the sentinel).
 //
-// The asm's lvlx/vspltw/vsubfp/vmaddfp block is a single-lane VMX expression (one float
-// broadcast across a vector register, lane0 read back), self-contained with no external
-// types or callees -- it lowers cleanly to the scalar form below. It is NOT the textbook
-// lerp value0 + t*(value1-value0); the guest computes a non-standard
-//   (value1 - value0)*value0 + clamp((lInput - key0)/(key1 - key0), 0, 1).
+// ⭐ FORMULA CORRECTED 2026-08-24 (boost-bar campaign). The previous recon read the tail
+// `vmaddfp v0, v12, v0, v13` in the 4-operand order and produced the nonsense
+// `(end-start)*start + t`. It is the VMX128 3-operand form (vD = vA*vB + vD -- the same
+// operand-order trap the camera-blend campaign hit): v0(old) = mStartValue, v12 = end-start,
+// v13 = the clamped t, so the result is the TEXTBOOK clamped lerp
+//   mStartValue + clamp((t - startTime)/(endTime - startTime), 0, 1) * (mEndValue - mStartValue).
 
 namespace BrnGui
 {
+// DWARF BrnBoostBarRenderer.h:45. Times ease a value pair: SetStart/SetEnd key the segment,
+// GetCurrentValue maps a query time onto the saturated [0,1] fraction between the two time keys
+// and lerps the value pair by it.
 template <typename T>
 class Interpolator
 {
 public:
-    // Sentinel value an unset key holds (-FLT_MAX). A key equal to this is "not set".
+    // The -FLT_MAX sentinel an unset time key holds.
     static const f32 KF_UnsetSentinel; // = -3.4028235e38f
 
-    // True only when BOTH keys have been set (neither key is the -FLT_MAX sentinel).
-    // The X360 GetCurrentValue @0x82448898 reads the KEY pair @+8/+0xC and compares each
-    // to the sentinel (the caller asserts IsValid() via the inlined BrnBoostBarRenderer.h:102
-    // site).
-    bool IsValid() const
+    // h:47 -- both time keys unset (the BoostBarRenderer ctor stores the sentinel pair).
+    Interpolator()
+        : mStartValue(T())
+        , mEndValue(T())
+        , mfStartTime(KF_UnsetSentinel)
+        , mfEndTime(KF_UnsetSentinel)
     {
-        return mtKey0 != static_cast<T>(KF_UnsetSentinel) &&
-               mtKey1 != static_cast<T>(KF_UnsetSentinel);
     }
 
-    // @0x82448898 -- map lInput onto a saturated [0,1] fraction between the two keys, then
-    // return the non-standard (value1 - value0)*value0 + that fraction. See the definition
-    // below for the exact faithful lowering of the VMX block.
-    T GetCurrentValue(T lInput) const;
+    // h:54 -- forget the segment (both time keys back to the sentinel).
+    void Invalidate()
+    {
+        mfStartTime = KF_UnsetSentinel;
+        mfEndTime   = KF_UnsetSentinel;
+    }
 
-    // Four-float guest layout (from the @0x82448898 asm offsets).
-    T mtValue0; // @+0
-    T mtValue1; // @+4
-    T mtKey0;   // @+8
-    T mtKey1;   // @+0xC
+    // h:60 -- true only when BOTH time keys are set (the X360 @0x82448898 head reads the
+    // +8/+0xC TIME pair against the sentinel).
+    bool IsValid() const
+    {
+        return mfStartTime != KF_UnsetSentinel && mfEndTime != KF_UnsetSentinel;
+    }
+
+    // h:65 -- a keyed segment that has not finished at lfTime.
+    bool IsActive(f32 lfTime) const
+    {
+        return IsValid() && lfTime < mfEndTime;
+    }
+
+    // h:72 -- a keyed segment whose end has passed at lfTime.
+    bool IsFinished(f32 lfTime) const
+    {
+        return IsValid() && lfTime >= mfEndTime;
+    }
+
+    // h:77 / h:83 -- key one end of the segment.
+    void SetStart(T lStartValue, f32 lfStartTime)
+    {
+        mStartValue = lStartValue;
+        mfStartTime = lfStartTime;
+    }
+    void SetEnd(T lEndValue, f32 lfEndTime)
+    {
+        mEndValue = lEndValue;
+        mfEndTime = lfEndTime;
+    }
+
+    // h:100 / X360 @0x82448898 -- assert the segment is keyed, then the clamped lerp.
+    T GetCurrentValue(f32 lfTime) const
+    {
+        CGS_ASSERT(IsValid(), "IsValid()");
+
+        f32 lfFraction = (lfTime - mfStartTime) / (mfEndTime - mfStartTime);
+        if (lfFraction < 0.0f) lfFraction = 0.0f;
+        if (lfFraction > 1.0f) lfFraction = 1.0f;
+        return mStartValue + (mEndValue - mStartValue) * lfFraction;
+    }
+
+    // DWARF member order (the @0x82448898 asm offsets).
+    T   mStartValue;  // @+0x0
+    T   mEndValue;    // @+0x4
+    f32 mfStartTime;  // @+0x8
+    f32 mfEndTime;    // @+0xC
 };
 
 template <typename T>
 const f32 Interpolator<T>::KF_UnsetSentinel = -3.4028235e38f;
 
-template <typename T>
-T Interpolator<T>::GetCurrentValue(T lInput) const
+// DWARF BrnBoostBarRenderer.h:117. A rate-driven value: SetDelta keys a per-second rate at a
+// time, GetCurrentValue advances the value by rate * elapsed and clamps it into [min, max].
+// All methods are X360 header inlines; the member seed values are the BoostBarRenderer ctor's
+// stores (cur/curTime/delta = 0, min = -FLT_MAX, max = +FLT_MAX) and Construct's SetRange(0, 1).
+class DeltaInterpolator
 {
-    // Caller-side assert (inlined IsValid() check at BrnBoostBarRenderer.h:102 in the X360).
-    CGS_ASSERT(IsValid(), "IsValid()");
+public:
+    // h:119 -- the ctor the BoostBarRenderer ctor inlines (zeros + the open range).
+    DeltaInterpolator()
+        : mfCurrentValue(0.0f)
+        , mfCurrentTime(0.0f)
+        , mfDeltaPerSec(0.0f)
+        , mfMinValue(-3.4028235e38f)
+        , mfMaxValue(3.4028235e38f)
+    {
+    }
 
-    // t = (lInput - key0) / (key1 - key0)   (fsubs f31,f0 / fsubs f13,f0 / fdivs).
-    T t = (lInput - mtKey0) / (mtKey1 - mtKey0);
+    // h:128 -- clamp bounds for the advancing value.
+    void SetRange(f32 lfMinValue, f32 lfMaxValue)
+    {
+        mfMinValue = lfMinValue;
+        mfMaxValue = lfMaxValue;
+    }
 
-    // Saturate to [0,1] with the guest's two fsel clamps:
-    //   fneg f12,t ; fsel f0, f12, 0.0, t   -> t = (-t >= 0) ? 0.0 : t   (lower clamp)
-    if (-t >= static_cast<T>(0))
-        t = static_cast<T>(0);
-    //   fsubs f12, 1.0, t ; fsel f0, f12, t, 1.0 -> t = (1.0 - t >= 0) ? t : 1.0 (upper clamp)
-    if (static_cast<T>(1) - t < static_cast<T>(0))
-        t = static_cast<T>(1);
+    // h:134 -- jump the value (and rebase the advance time).
+    void SetCurrentValue(f32 lfValue, f32 lfTime)
+    {
+        mfCurrentValue = lfValue;
+        mfCurrentTime  = lfTime;
+    }
 
-    // vmaddfp v0 = splat(value1 - value0) * splat(value0) + splat(t), lane0 returned.
-    return (mtValue1 - mtValue0) * mtValue0 + t;
+    // h:140 -- key a new per-second rate from lfTime (advancing to lfTime first so the old
+    // rate applies up to the switch point -- the inlined X360 form GetCurrentValue then
+    // continues from).
+    void SetDelta(f32 lfDeltaPerSec, f32 lfTime)
+    {
+        GetCurrentValue(lfTime);
+        mfDeltaPerSec = lfDeltaPerSec;
+    }
+
+    // h:146 -- advance the value by rate * elapsed, clamped into [min, max]; latch the time.
+    f32 GetCurrentValue(f32 lfTime)
+    {
+        mfCurrentValue += mfDeltaPerSec * (lfTime - mfCurrentTime);
+        if (mfCurrentValue < mfMinValue) mfCurrentValue = mfMinValue;
+        if (mfCurrentValue > mfMaxValue) mfCurrentValue = mfMaxValue;
+        mfCurrentTime = lfTime;
+        return mfCurrentValue;
+    }
+
+    // DWARF member order (h:156-160).
+    f32 mfCurrentValue; // @+0x00
+    f32 mfCurrentTime;  // @+0x04
+    f32 mfDeltaPerSec;  // @+0x08
+    f32 mfMinValue;     // @+0x0C
+    f32 mfMaxValue;     // @+0x10
+};
 }
-}
 
-#endif
+#endif // BRN_INTERPOLATOR_H
