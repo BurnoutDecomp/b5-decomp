@@ -30,6 +30,7 @@
 // ===================================================================================
 
 #include "types.hpp"
+#include "BrnCommonTypes.h"   // Vector3 (TrackerInformation::mv3Position)
 
 namespace BrnGui
 {
@@ -44,16 +45,25 @@ namespace BrnGui
         // 0x21AC exactly), not a claimed game constant.
         static const s32 KI_TRACKER_RECORD_CAPACITY = 0x21AC;   // (0x65050 - 0x10) / 0x30
 
-        // One tracker-information record. Stride 0x30 (48); GetTrackerInformation returns
-        // a pointer to the whole record, so its interior is held opaque.
+        // One tracker-information record. Stride 0x30 (48). H3a (2026-08-25): the
+        // position lane @+0x10 is now named -- SatNavComponent::UpdateFreeRoaming
+        // reads it (`lvx128 v0, info, 0x10` @0x8244774C/@0x82447874/@0x8244798C);
+        // the rest of the interior stays opaque.
         struct TrackerInformation
         {
-            u8  maStorage[0x30];   // +0x00..+0x2F  unrecovered record interior
+            u8      maHeadStorage[0x10];   // +0x00..+0x0F  unrecovered record head
+            Vector3 mv3Position;           // +0x10         the tracked world position
+            u8      maTailStorage[0x10];   // +0x20..+0x2F  unrecovered record tail
         };
 
         // @ 0x82443EC0 - return the pointer to tracker record `liIndex`
         // (&maTrackerRecords[liIndex]). Asserts 0 <= liIndex < miTrackerCount.
         TrackerInformation* GetTrackerInformation(s32 liIndex);
+
+        // The live record count (X360 inlined `lwz tracker+4` at every caller; the
+        // DWARF/assert name). ADDITIVE GROW (H3a: SatNavComponent::UpdateFreeRoaming's
+        // last-record lookups).
+        s32 GetNumTracked() const { return miTrackerCount; }
 
         // @ 0x82488ED0 - true when a route of >= 2 points is loaded. Returns false when
         // the "has route" flag (mbHasRoute) is clear; otherwise asserts the route-info
