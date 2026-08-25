@@ -62,7 +62,9 @@ namespace BrnGui
     struct OptionsDataProfile;     // GetOptionsDataProfile return (pointer only; home BrnCrashNavOptions.h family)
     struct HudMessageAnalyzer;     // friend of GuiCache (reads the analyzer-carved snapshot members by name)
     struct HudMessageDirector;
-    struct MapIconManager;
+    class  MapIconManager;         // [H3b] `class` is the canonical tag (BrnMapIconManager.h);
+                                   // the old `struct` fwd MANGLED SetMapIconManager differently
+                                   // in TUs that never saw the definition (link round 2's one miss)
     class  GuiTracker;             // GetGuiTracker return (pointer only; home GameSource/Gui/SatNav/BrnGuiTracker.h)
     struct OnlineGameRoomPlayerInfo; // friend of GuiCache (reads its wave-H-carved members by name)
     struct OnlineGameOptions;        // friend of GuiCache (reads its wave-I-carved members by name)
@@ -220,6 +222,30 @@ namespace BrnGui
         u32                        muControlledComponentCount;
         u32                        muPendingUnloadCount;
     };
+
+    // Boundary record returned by the two event-display helpers (GetProfileEventDisplayInfo /
+    // GetPresetEventDisplayInfo). [H3b] Now ALSO the ELEMENT of the cache's embedded
+    // maEventStarts array (mSetUpAllEventStartsInterface @0x5690): the X360 accessors walk
+    // interface + 0x30*i with the count at interface+0x20D0 (GetAt @0x824F7688 -> the
+    // stride-48 indexer @0x824F65E0 `return 48*i + base`), so the record stride is 0x30 and
+    // the type moved ABOVE the class to serve as the member element type.
+    //   +0x10 muLightTriggerId -- the preset matcher (@0x824F8838 compares element+0x10;
+    //          its assert names it "light trigger id", masked &0xFFFFFF in the print).
+    //   +0x14 muJunctionId -- MEASURED: CrashNavMap::UpdateEvent @0x824CC594 `lwz r9,0x14(r3)`
+    //          straight after `bl sub_824F8AF0`, stored into muSelectedJunctionID.
+    //   +0x18 muEventInstanceId -- the profile matcher (@0x824F8AF0 compares element+0x18)
+    //          and the preset path's WDC lookup id.
+    // FLAG: consumer-named -- no DWARF row exists for this record.
+    struct SatNavEventDisplayInfo
+    {
+        Vector3 mv3Position;       // +0x00 (16-byte VMX lane copied to the cached icon)
+        u32     muLightTriggerId;  // +0x10 (preset display-info matcher)
+        u32     muJunctionId;      // +0x14
+        u32     muEventInstanceId; // +0x18 (profile matcher + preset WDC lookup id)
+        u8      mPad_1C[0x14];     // +0x1C..+0x2F (array stride pad)
+    };
+    static_assert(sizeof(SatNavEventDisplayInfo) == 0x30,
+                  "maEventStarts element stride (X360 indexer @0x824F65E0: 48*i)");
 
     class GuiCache
     {
@@ -498,6 +524,11 @@ namespace BrnGui
         // the raw word load -- e.g. SatNavComponent::Update `lwzx cache+0x803C`).
         // ADDITIVE GROW (H3a), same pattern as GetGuiTracker above.
         s32 GetSatNavZoomLevel() const                           { return miSatNavZoomLevel; }
+
+        // ADDITIVE GROW (H3b), DWARF BrnGuiCache.h:1521/:1524 -- the sat-nav event
+        // filter pair (X360-inlined at the FBurn UpdateSetupState read site).
+        s32  GetSatNavEventFilter() const                        { return meSatNavEventFilter; }
+        bool GetSatNavEventFilterEnabled() const                 { return mbSatNavEventFilterEnabled; }
 
         // ADDITIVE GROW (PlayerPositionSingle::RenderValue @0x82421F78, which inlines all
         // three): the game-mode word, the active road rule, and the skills-manager pointer
@@ -1157,14 +1188,30 @@ namespace BrnGui
         // @0x8240F1C0) -- two different "checkpoint" counts on this class.
         // No member is shifted (2 + 1 + 9433 == 9436); the u16 array at +0x5288 stays padded.
         u8  muNumActiveLandmarks;                        // +0x5286 (21126)
-        u8  mPad_5287[9433];                             // +0x5287..+0x775F  (holds mSetUpAllEventStartsInterface @0x5690/22160 -- embedded; GetNumEventStarts forwards to it)
+        u8  mPad_5287[0x409];                            // +0x5287..+0x568F
+        // [H3b ADDITIVE CARVE] the embedded mSetUpAllEventStartsInterface's event-start
+        // array (X360 @0x5690, 175 x 0x30 == 0x20D0 bytes -- ends EXACTLY at the count
+        // word miEventStartsCount @0x7760 the accessors read at interface+0x20D0).
+        SatNavEventDisplayInfo maEventStarts[175];       // +0x5690..+0x775F
         s32 miEventStartsCount;                          // +0x7760 (30560) mSetUpAllEventStartsInterface CgsArray count (ctor -1; GetNumEventStarts sentinel/count @+0x20D0 of the interface)
         u8  mPad_7764[12];                               // +0x7764..+0x776F
         // 256-bit online finish-point bitmask (4 doublewords). GetNumOnlineFinishPoints
         // @0x8241E7D8 loads each 64-bit word (ld @0x7770/0x7778/0x7780/0x7788), 64-bit
         // SWAR-popcounts it, and sums the four counts. Carved from the former mPad_7764.
         u64 maOnlineFinishPointsMask[4];                 // +0x7770 (30576)
-        u8  mPad_7790[2220];                             // +0x7790..+0x803B
+        // [H3b ADDITIVE CARVE] the drive-through / junkyard sat-nav icon list + its count
+        // (X360 GetDriveThroughOrJunkyardAtIndex @0x824FAC10: entries at cache+0x7790,
+        // stride 0x30, count word at cache+0x8030 -- 46*0x30 + 4 == the old 2212-byte pad
+        // EXACTLY; DWARF rows mDriveThroughInfo[46] / the count).
+        GuiEventUpdateSatNav::SatNavIconInfo maDriveThroughInfo[46]; // +0x7790..+0x802F
+        s32 miNumDriveThroughs;                          // +0x8030 (32816)
+        // ADDITIVE CARVE (H3b): the sat-nav event filter pair the freeburn HUD's
+        // UpdateSetupState reads (X360 @0x82480EA0: lwz cache+0x8034 / lbz cache+0x8038
+        // -> FBurn +992/+996 and the Enable/DisableSatNavEventsFilter pick). DWARF
+        // BrnGuiCache.h:455/:458 names them; the run ends exactly at miSatNavZoomLevel.
+        s32 meSatNavEventFilter;                         // +0x8034 (32820) BrnProgression::RaceEventData::EModeType (spelled s32 -- the BrnGameEvents.h precedent)
+        bool mbSatNavEventFilterEnabled;                 // +0x8038 (32824)
+        u8  mPad_8039[3];                                // +0x8039..+0x803B
         s32 miSatNavZoomLevel;                           // +0x803C (32828) ZoomSatNavOut @0x82472FD0 (result[8207]); clamp [0,1], assert <= E_SAT_NAV_ZOOM_COUNT
         u8  maEventsStorage[7700];                       // +0x8040 (32832) mEvents preset-event CgsArray storage (GetPresetEvent @0x8241E520 forwards 32832; count is mEventsCtorSentinel @+7700)
         s32 mEventsCtorSentinel;                         // +0x9E54 (40532) mEvents array ctor marker / GetNumPresetEvents count (-1 = not constructed)
@@ -1430,23 +1477,6 @@ namespace BrnGui
     // the offset authority.
     inline void GuiCache::_AssertLayout() {}
 
-    // Boundary record returned by the two inlined event-display helpers above. Only the two
-    // fields the sat-nav renderer reads are named (X360-proven offsets); the rest of the record
-    // is opaque. FLAG: minimal-slice display record.
-    struct SatNavEventDisplayInfo
-    {
-        Vector3 mv3Position;     // +0x00 (16-byte VMX lane copied to the cached icon)
-        u8      mPad_10[0x04];   // +0x10..+0x13
-        // +0x14. ADDITIVE CARVE out of the old mPad_10[8] (4 + 4 == 8, so the layout is
-        // unchanged). MEASURED: CrashNavMap::UpdateEvent @0x824CC594 does
-        // `lwz r9, 0x14(r3)` on this record straight after `bl sub_824F8AF0`
-        // (== GetProfileEventDisplayInfo) and stores the word into the icon manager's
-        // muSelectedJunctionID (`stwx r9, mpIconManager, 0xAA10` @0x824CC59C).
-        // FLAG: consumer-named -- there is no DWARF row for this record at all, so the
-        // name comes from the one recovered reader and the field it feeds.
-        u32     muJunctionId;
-        u32     muEventInstanceId; // +0x18 (preset path WDC lookup id)
-    };
 
     // Minimal slice of the preset/online event record the cache hands back from GetPresetEvent.
     // The sat-nav renderer only reads two ids off it (X360 GetIconInformation preset branch):
@@ -1460,5 +1490,16 @@ namespace BrnGui
     {
         u32 GetPositionLookupId() const;  // +0x20
         u32 GetEventId() const;           // +0x28
+
+    private:
+        // [H3b] named storage over the documented offsets so the accessor bodies
+        // (BrnGuiCache_wH3b.cpp) read by name. Stride 0x2C: the mEvents CgsArray's
+        // 7700-byte storage / its 175-entry landmark cap == 44, consistent with the
+        // +0x28 id being the record's last word.
+        u8  mauHead[0x20];        // +0x00..+0x1F (not in this slice)
+        u32 muPositionLookupId;   // +0x20
+        u8  mauPad24[4];          // +0x24..+0x27
+        u32 muEventId;            // +0x28
     };
+    static_assert(sizeof(PresetEvent) == 0x2C, "preset-event record stride (7700/175)");
 }

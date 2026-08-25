@@ -30,6 +30,10 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"      // BeginAssert/FireAssert/EndAssert
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsImRenderBuffer.h" // Im2dRenderBuffer (SetState/Render)
+#include "GameShared/GameClasses/Graphics/ImmediateMode/ImRenderBuffer/CgsImRenderBufferTemplate.h" // ImRenderBuffer<V> (the Apt 2D command buffer)
+#include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptRenderHandler.h"  // CgsGui::AptIm2dRenderBuffer (set slot 0)
+#include "GameSource/Gui/BrnCustomRendererManager.h"    // BrnGui::SetMaskRect (the mask push helper)
+#include "pc/gcm/renderengine/renderstates.h"           // renderengine::TextureState (+Parameters) / Texture
 #include "GameShared/GameClasses/Graphics/VertexDescriptors/CgsBasic2dColouredTexturedVertex.h" // vertex
 
 #include <cstring> // memcpy
@@ -39,20 +43,16 @@ namespace BrnGui
 namespace
 {
 // ---------------------------------------------------------------------------
-// File-local data tables (X360 .rdata). The exact float contents are NOT
-// recoverable from the symbol export (the build's data segment is not dumped),
-// so the DWARF-named tables are declared here with the recovered SHAPE and the
-// UV/clamp algorithm that consumes them is reconstructed faithfully. FLAG: the
-// numeric table values below are inferred placeholders for the unrecovered
-// .rdata constants -- the GENERATED UVs depend on them, so a reviewer should
-// treat the produced UV numbers (not the algorithm) as unverified.
+// File-local data tables (X360 .rdata / cinit). ⭐ H3b (2026-08-25): every value
+// below is now READ OFF THE IMAGE (scratch h3b_dump6/7.txt) -- the old "data
+// segment not dumped" placeholder FLAG is retired.
 // ---------------------------------------------------------------------------
 
 // Per-texture-resolution atlas dimensions (index 0 = SD, 1 = HD). DWARF h:213-216.
-const f32 KAF_TEXTURE_WIDTH[2]  = { 1024.0f, 1024.0f }; // flt_82054E10
-const f32 KAF_TEXTURE_HEIGHT[2] = { 1024.0f, 1024.0f }; // flt_82054E18
-const f32 KAF_ICON_WIDTH[2]     = {   64.0f,   64.0f }; // flt_82054E20
-const f32 KAF_ICON_HEIGHT[2]    = {   64.0f,   64.0f }; // flt_82054E28
+const f32 KAF_TEXTURE_WIDTH[2]  = { 256.0f, 256.0f };   // flt_82054E10
+const f32 KAF_TEXTURE_HEIGHT[2] = { 256.0f, 256.0f };   // flt_82054E18
+const f32 KAF_ICON_WIDTH[2]     = {  64.0f,  64.0f };   // flt_82054E20
+const f32 KAF_ICON_HEIGHT[2]    = {  64.0f,  64.0f };   // flt_82054E28
 const f32 KAF_MINI_ICON_WIDTH[2]  = { 32.0f, 32.0f };   // flt_82054E38 (DWARF h:229)
 const f32 KAF_MINI_ICON_HEIGHT[2] = { 32.0f, 32.0f };   // flt_82054E40 (DWARF h:230)
 
@@ -76,26 +76,26 @@ const f32 KF_VISIBLE_MAX    = 1.0f;          // flt_82001C98
 // KAF_ICON_HALFHEIGHT_SCREENSPACE = flt_82FB3720). FLAG: the .rdata float contents are NOT in the
 // symbol export (data segment not dumped); modelled as placeholders -- the produced half-extents
 // (not the indexing/zoom algorithm, which is X360-proven) are unverified.
-const f32 KAF_ICON_HALFWIDTH_WORLDSIZE[SatNavRenderer::E_SATNAVICON_NUM]   = { 0.0f, 0.0f }; // flt_82FB36F0
-const f32 KAF_ICON_HALFWIDTH_SCREENSPACE[SatNavRenderer::E_SATNAVICON_NUM] = { 0.0f, 0.0f }; // flt_82FB3708
-const f32 KAF_ICON_HALFHEIGHT_SCREENSPACE[SatNavRenderer::E_SATNAVICON_NUM]= { 0.0f, 0.0f }; // flt_82FB3720
-const f32 KAF_ICON_HALFHEIGHT_WORLDSIZE[SatNavRenderer::E_SATNAVICON_NUM]  = { 0.0f, 0.0f }; // flt_82FB3728
+// ⭐ H3b values from their cinit thunks (0x82C51224..0x82C512F0): each lane is a
+// stored ratio x a world-size scale (0.0125*3000, 0.044444446*2500, 0.025*3000,
+// 0.022222223*2500). Both lanes of each pair are identical on the image.
+const f32 KAF_ICON_HALFWIDTH_WORLDSIZE[SatNavRenderer::E_SATNAVICON_NUM]   = { 37.5f, 37.5f };             // flt_82FB36F0
+const f32 KAF_ICON_HALFWIDTH_SCREENSPACE[SatNavRenderer::E_SATNAVICON_NUM] = { 111.11112f, 111.11112f };   // flt_82FB3708
+const f32 KAF_ICON_HALFHEIGHT_SCREENSPACE[SatNavRenderer::E_SATNAVICON_NUM]= { 75.0f, 75.0f };             // flt_82FB3720
+const f32 KAF_ICON_HALFHEIGHT_WORLDSIZE[SatNavRenderer::E_SATNAVICON_NUM]  = { 55.555557f, 55.555557f };   // flt_82FB3728
 
-// Event-type-byte -> sat-nav-icon UV row map (dword_82054E48), indexed by
-// RaceEventData::GetEventTypeByte(). Produces the icon's "row" value (0/1/2); a value of 2 is
-// special-cased against the active event (the row-2 -> 0 override in GetIconInformation /
-// RefreshSatNavIconInfo). FLAG: contents unrecovered -- 0x82054E48 is not in the symbol export
-// (data segment not dumped). Modelled as all-zero, sized for a byte index; with the map all-zero
-// the row-2 special cases never trigger, so the dependent override stays dormant (data-fidelity
-// gap, reported in still_open). The CONSUMING logic is X360-faithful regardless of the contents.
-const u32 KAU_EVENTTYPE_TO_ICONROW[256] = { 0 };
+// Event-type-byte -> sat-nav mini-icon index map (dword_82054E48, 6 entries read off
+// the image: {3,1,5,4,2,4} = RACE/ROADRAGE/STUNT/MARKEDMAN/BURNINGROUTE/MARKEDMAN per
+// ESatNavEventTypeMiniIconIndex). ⭐ H3b: values recovered (h3b_dump6.txt); the old
+// all-zero placeholder FLAG is retired. Entries past the 6 authored event types stay 0.
+const u32 KAU_EVENTTYPE_TO_ICONROW[256] = { 3, 1, 5, 4, 2, 4 };
 
 // maResourcesToLoad / muNumResourcesToLoad (DWARF h:147/154). The InitResources loop walks a
 // 2-entry resource-tuple table (id + flags pairs, 8-byte stride) up to muNumResourcesToLoad.
-// FLAG: tuple ids unrecovered (data segment not dumped); shape (2 entries) is X360-proven by
-// the loop bound `v2 < &dword_82F25718`.
+// ⭐ H3b: tuple values read off the image @0x82F25708 = {204, 11}, {205, 11} -- the two
+// sat-nav icon-atlas textures (ids 204/205, resource type 11); placeholder FLAG retired.
 struct SatNavResourceTuple { u32 muResourceId; u32 muFlags; };
-const SatNavResourceTuple KA_RESOURCES_TO_LOAD[2] = { { 0, 0 }, { 0, 0 } };
+const SatNavResourceTuple KA_RESOURCES_TO_LOAD[2] = { { 204u, 11u }, { 205u, 11u } };
 const u32 KU_NUM_RESOURCES_TO_LOAD = 2; // == E_SATNAVICON_NUM
 
 const char* const KPC_FILE =
@@ -108,6 +108,37 @@ void FireSatNavAssert(const char* lpcExpression, s32 liLine)
     CgsDev::Assert::BeginAssert();
     CgsDev::Assert::FireAssert(lpcExpression, KPC_FILE, liLine);
     CgsDev::Assert::EndAssert();
+}
+
+// PC fold of the X360's lazy texture-state creation in RenderComponent (@0x82466288 /
+// @0x8246645C): descriptor {2,2,0,1,1,2,0,0,13,0,1, lod 0.0, flags 0,0,0,1,1} + the
+// payload texture, through renderengine::TextureState::Initialize (font precedent).
+renderengine::TextureState* CreatePayloadTextureState(rw::Resource* lpBacking, void* lpTexture)
+{
+    renderengine::TextureState::Parameters lParams;
+    lParams.muAddressU      = 2u;
+    lParams.muAddressV      = 2u;
+    lParams.muAddressW      = 0u;
+    lParams.muMagFilter     = 1u;
+    lParams.muMinFilter     = 1u;
+    lParams.muMipFilter     = 2u;
+    lParams.muField6        = 0u;
+    lParams.muField7        = 0u;
+    lParams.muMaxAnisotropy = 13u;
+    lParams.muField9        = 0u;
+    lParams.muField10       = 1u;
+    lParams.mfMipLodBias    = 0.0f;
+    lParams.mfField12       = 0.0f;
+    lParams.muField13       = 0u;
+    lParams.muField14       = 0u;
+    lParams.muField15       = 0u;
+    lParams.mu8Field40      = 0u;
+    lParams.mu8Field41      = 0u;
+    lParams.mu8Field42      = 0u;
+    lParams.mu8Field43      = 1u;
+    lParams.mu8Field44      = 1u;
+    lParams.mpTexture       = reinterpret_cast<renderengine::Texture*>(lpTexture);
+    return renderengine::TextureState::Initialize(lpBacking, &lParams);
 }
 
 // ---------------------------------------------------------------------------
@@ -244,27 +275,29 @@ void SatNavRenderer::Destruct()
 }
 
 // 0x82445888 -- the component's CgsID (64-bit content hash). Constant-folded in the asm to
-// 0xB6744D9D6FE80000.
-u32 SatNavRenderer::GetComponentID() const
+// 0xB6744D9D6FE80000. ⭐ H3b: was a `u32 GetComponentID()` shadow (not the base's GetID
+// slot, and truncated); the real override returns the full CgsID.
+CgsID SatNavRenderer::GetID() const
 {
-    // The X360 returns the full 64-bit CgsID 0xB6744D9D6FE80000 in r3. The base virtual is
-    // declared returning a u32 component id; return the distinguishing low word the manager
-    // keys on. FLAG: the base widens CgsID(64) -> u32 here.
-    return 0x6FE80000u;
+    return 0xB6744D9D6FE80000ull;
 }
 
 // 0x8245F828
-bool SatNavRenderer::Prepare(void* lpResourceAllocator, void* lpA, void* lpB)
+// ⭐ H3b: the old local signature `Prepare(void*, void*, void*)` SHADOWED the base
+// virtual (GuiEventQueueSmall*, IResourceAllocator*, IResourceAllocator*) -- the
+// manager's dispatch would have hit the base default AND the old body latched the
+// EVENT QUEUE as the heap allocator. Real override + the real a1[1] latch now.
+bool SatNavRenderer::Prepare(CgsGui::GuiEventQueueSmall* lpEventQueue,
+                             rw::IResourceAllocator* lpHeapAllocator,
+                             rw::IResourceAllocator* lpTextureAllocator)
 {
-    // X360 signature: Prepare(GuiEventQueueSmall*, IResourceAllocator*, IResourceAllocator*).
-    // Only the first allocator arg (latched on stage START) and the staged GuiCache load matter.
-    (void)lpA;
-    (void)lpB;
+    (void)lpEventQueue;
+    (void)lpTextureAllocator;
 
     switch (mePrepareStage)
     {
     case E_PREPARESTAGE_START:
-        mpHeapAllocator = lpResourceAllocator;   // +0x94
+        mpHeapAllocator = lpHeapAllocator;   // +0x94 (the X360 latches a1[1])
         mePrepareStage  = E_PREPARESTAGE_LOAD;
         return false;
 
@@ -324,8 +357,8 @@ bool SatNavRenderer::Release()
     return true;
 }
 
-// 0x82449940
-void SatNavRenderer::RecvEvent(const void* lpEvent, s32 liEventType)
+// 0x82449940 (⭐ H3b: base-signature override -- the old `const void*` shadowed it)
+void SatNavRenderer::RecvEvent(const CgsModule::Event* lpEvent, s32 liEventType)
 {
     if (lpEvent == 0)
         FireSatNavAssert(" null event passed ", 416);
@@ -357,10 +390,17 @@ void SatNavRenderer::RecvEvent(const void* lpEvent, s32 liEventType)
         break;
 
     case KI_EVENT_SET_CACHE:
-        if (lpuEventWords[0] == 0)
+    {
+        // ⭐ H3b BOOT-AV FIX: the payload carries a NATIVE-WIDTH cache pointer on this
+        // host; the old word-0 read TRUNCATED it to 32 bits (a non-null garbage pointer
+        // that sailed through the null check -- valid-pointer-invalid-object -- and AV'd
+        // in EnsureResourcesAreLoaded at +0x26). Typed read, the ticker's case-64 shape.
+        GuiCache* const* lppCache = reinterpret_cast<GuiCache* const*>(lpEvent);
+        if (*lppCache == 0)
             FireSatNavAssert("lpCacheEvent->mpCachePointer", 430);
-        mpGuiCache = reinterpret_cast<GuiCache*>(static_cast<uintptr_t>(lpuEventWords[0])); // +0x90
+        mpGuiCache = *lppCache; // +0x90
         break;
+    }
 
     case KI_EVENT_ENABLE_ICONS:
         // event[+8] (byte) -> +0x5A0 mbRenderEventStarts; event[0] -> +0x158 meIconDisplayType;
@@ -372,7 +412,25 @@ void SatNavRenderer::RecvEvent(const void* lpEvent, s32 liEventType)
         break;
 
     case KI_EVENT_RENDER_SATNAV:
-        std::memcpy(mRenderSatNavEvent, lpEvent, 48); // +0x60 <- 48-byte payload
+        // The X360 memcpy's the 48-byte record; the record is native-width on this host
+        // (three 8-byte texture pointers), so a fixed 48-byte copy would truncate it --
+        // typed assignment instead (the PlayAptMovie width precedent).
+        mRenderSatNavEvent =
+            *reinterpret_cast<const GuiEventRenderSatNav*>(lpEvent); // +0x60
+        // [DIAG] NOT IN THE X360 BINARY -- [satnav-diag] the first two 212 payloads.
+        {
+            static s32 siLeft = 2;
+            if (siLeft > 0 && CgsDev::Log::gpDebugPrint != 0)
+            {
+                --siLeft;
+                *CgsDev::Log::gpDebugPrint
+                    << "[satnav-diag] renderer 212: mapnn=" << static_cast<s32>(mRenderSatNavEvent.mpMapTexture != 0)
+                    << " masknn=" << static_cast<s32>(mRenderSatNavEvent.mpMaskTexture != 0)
+                    << " pos=(" << mRenderSatNavEvent.mv3CarPosition.x
+                    << "," << mRenderSatNavEvent.mv3CarPosition.z
+                    << ") zoom=" << mRenderSatNavEvent.miZoomLevel << "\n";
+            }
+        }
         break;
 
     default:
@@ -501,14 +559,41 @@ void SatNavRenderer::InitResources()
         if (lpTexture == 0)
             FireSatNavAssert("lpTexture!=NULL", 662);
 
-        // Build the texture-state init descriptor from the loaded texture + a fixed resource
-        // descriptor, then create the icon texture state through the resource allocator. The X360
-        // copies a 5-dword descriptor block from the allocator-built state into maIconResources;
-        // modelled here as the named creation of mapIconTextureStates[luTextureIndex] (the
-        // allocator dispatch + descriptor copy use uncommitted renderengine types -> reduced to
-        // the named result store). FLAG: texture-state creation reduced to a named pointer store.
-        mapIconTextureStates[luTextureIndex] =
-            reinterpret_cast<renderengine::TextureState*>(const_cast<void*>(lpTexture));
+        // Build the texture-state init parameters from the loaded texture and create the
+        // icon texture state. ⭐ H3b: the old "reduced to a named pointer store" FLAG body
+        // stored the raw texture AS the state -- the PC dispatch reads TextureState::
+        // mpRaster, so that bound garbage. Real renderengine::TextureState::Initialize
+        // now (the CgsFont::CreateTextureState precedent), with the X360's own sampler
+        // words (the @0x82466304-style descriptor: clamp/clamp, linear, aniso 13).
+        {
+            renderengine::TextureState::Parameters lParams;
+            lParams.muAddressU      = 2u;
+            lParams.muAddressV      = 2u;
+            lParams.muAddressW      = 0u;
+            lParams.muMagFilter     = 1u;
+            lParams.muMinFilter     = 1u;
+            lParams.muMipFilter     = 2u;
+            lParams.muField6        = 0u;
+            lParams.muField7        = 0u;
+            lParams.muMaxAnisotropy = 13u;
+            lParams.muField9        = 0u;
+            lParams.muField10       = 1u;
+            lParams.mfMipLodBias    = 0.0f;
+            lParams.mfField12       = 0.0f;
+            lParams.muField13       = 0u;
+            lParams.muField14       = 0u;
+            lParams.muField15       = 0u;
+            lParams.mu8Field40      = 0u;
+            lParams.mu8Field41      = 0u;
+            lParams.mu8Field42      = 0u;
+            lParams.mu8Field43     = 1u;
+            lParams.mu8Field44     = 1u;
+            lParams.mpTexture       = reinterpret_cast<renderengine::Texture*>(
+                                          const_cast<void*>(lpTexture));
+            maIconResources[luTextureIndex][0] = 0;   // the console's 5-dword descriptor slot (documented shape)
+            mapIconTextureStates[luTextureIndex] = renderengine::TextureState::Initialize(
+                &maIconTextureStateBacking[luTextureIndex], &lParams);
+        }
 
         if (mapIconTextureStates[luTextureIndex] == 0)
             FireSatNavAssert("mapIconTextureStates[liTextureIndex]", 673);
@@ -645,7 +730,8 @@ void SatNavRenderer::RefreshSatNavIconInfo(s32 liEventId)
 // 0x8245F978 -- draw the visible sat-nav icons (those inside the map viewport) plus the closest
 // off-screen icon clamped to the viewport edge. Heavily VMX-vectorised on X360; the per-icon
 // world->device transform + viewport clamp is reconstructed at the semantic level via MapTransform.
-void SatNavRenderer::RenderIconsForSatNav(CgsGraphics::Im2dRenderBuffer* lpRenderBuffer)
+void SatNavRenderer::RenderIconsForSatNav(
+    CgsGraphics::ImRenderBuffer<CgsGraphics::Basic2dColouredTexturedVertex>* lpRenderBuffer)
 {
     if (mpGuiCache == 0)
         FireSatNavAssert("mpGuiCache", 1013);
@@ -717,12 +803,21 @@ void SatNavRenderer::RenderIconsForSatNav(CgsGraphics::Im2dRenderBuffer* lpRende
         if (luIcon >= KU_MAX_SATNAV_ICONS)
             FireSatNavAssert("luIconIndex < KU_MAX_SATNAV_ICONS", 1080);
 
-        // World -> device, then the world->device MakeTransform chain. The transformed 2D result
-        // (X360 var_1A0 = v87/v88) is what every gate and the draw call below read; the raw
-        // WorldToDevice result feeds only the transform input.
-        const Vector2 lv2Device      = MapTransform::WorldToDevice(lIcon.mv3Position, false);
-        const Vector2 lv2Transformed = MapTransform::Transform(
-            lv2Device, MapTransform::GetWorldSpace(), MapTransform::GetDeviceSpace());
+        // World -> device, then device -> screen-normalised, then MINIMAP-LOCAL. ⭐ H3b
+        // (asm @0x8245FB94..0x8245FC7C, h3b_dump3.txt): the real chain is
+        //   s = Transform(WorldToDevice(pos, false), DEVICE space, NORMALISED space)
+        //   u = (s - viewRect.origin) / viewRect.size
+        // The old transcription used (WorldSpace, DeviceSpace) AND dropped the view-rect
+        // renormalisation entirely -- every gate below compares against the 0..1
+        // minimap-local band, so icons would have been placed/clipped in the wrong space.
+        const Vector4& lv4ViewRect = MapTransform::GetSatNavViewRect();
+        const f32 lfViewW = lv4ViewRect.z - lv4ViewRect.x;
+        const f32 lfViewH = lv4ViewRect.w - lv4ViewRect.y;
+        const Vector2 lv2Device = MapTransform::WorldToDevice(lIcon.mv3Position, false);
+        Vector2 lv2Transformed  = MapTransform::Transform(
+            lv2Device, MapTransform::GetDeviceSpace(), MapTransform::GetNormalisedSpace());
+        lv2Transformed.x = (lv2Transformed.x - lv4ViewRect.x) / lfViewW;   // the asm's vrefp(w) product
+        lv2Transformed.y = (lv2Transformed.y - lv4ViewRect.y) / lfViewH;
 
         if (lbEmptySlot)
             continue;
@@ -794,9 +889,14 @@ void SatNavRenderer::RenderIconsForSatNav(CgsGraphics::Im2dRenderBuffer* lpRende
         FireSatNavAssert("luClosestIconIndex < KU_MAX_SATNAV_ICONS", 1172);
 
     IconRendererSatNavIconInfo& lClosest = maCachedSatNavIcons[luClosestIconIndex];
-    const Vector2 lv2Device      = MapTransform::WorldToDevice(lClosest.mv3Position, true);
-    const Vector2 lv2Transformed = MapTransform::Transform(
-        lv2Device, MapTransform::GetWorldSpace(), MapTransform::GetDeviceSpace());
+    // Same corrected chain as the in-loop transform (see the H3b note above), with the
+    // clamped WorldToDevice (@0x8245FE0C passes true).
+    const Vector4& lv4ViewRect = MapTransform::GetSatNavViewRect();
+    const Vector2 lv2Device = MapTransform::WorldToDevice(lClosest.mv3Position, true);
+    Vector2 lv2Transformed  = MapTransform::Transform(
+        lv2Device, MapTransform::GetDeviceSpace(), MapTransform::GetNormalisedSpace());
+    lv2Transformed.x = (lv2Transformed.x - lv4ViewRect.x) / (lv4ViewRect.z - lv4ViewRect.x);
+    lv2Transformed.y = (lv2Transformed.y - lv4ViewRect.y) / (lv4ViewRect.w - lv4ViewRect.y);
 
     // Clamp the marker into the visible band [0.025, 0.975] (X360 @0x8245FEBC-FF00).
     f32 lfEventStartX = lv2Transformed.x;
@@ -823,10 +923,15 @@ void SatNavRenderer::RenderIconsForSatNav(CgsGraphics::Im2dRenderBuffer* lpRende
                      lClosest.meSatNavIconType, lClosest.muEventTypeIndex, lpRenderBuffer);
 }
 
-// The immediate-mode renderer's default blend state every sat-nav icon quad binds (X360 reads
-// the pointer-valued global dword_83010F20; the same default-blend singleton BrnFlaptRenderer
-// binds). No reconstructed C++ home yet; declared extern as the data reference the draw reads.
-extern const CgsGraphics::BlendState* const gpDefaultImBlendState; // dword_83010F20
+// The immediate-mode layer's default blend / texture state singletons (X360 pointer-valued
+// globals dword_83010F20 / dword_83010F3C -- the ImRendererBase state library's standard
+// blend + untextured texture states). ⭐ H3b PC fold: the command dispatch's
+// IM_CMD_SET_STATE_BLEND case is value-independent (it installs the standard alpha-over
+// state) and a null TextureState resets stage 0 to the no-texture path, so both
+// singletons fold to null -- the calls stay (they are the state RESET brackets the
+// console emits), the pointers carry no payload on this host.
+const renderengine::BlendState* const   gpDefaultImBlendState   = 0; // dword_83010F20
+const renderengine::TextureState* const gpDefaultImTextureState = 0; // dword_83010F3C
 
 // 0x8245A3A0 -- build the four-vertex quad (top-left, bottom-left, top-right, bottom-right) for
 // one sat-nav icon and submit it through the immediate-mode render buffer. The quad colour is the
@@ -835,7 +940,7 @@ extern const CgsGraphics::BlendState* const gpDefaultImBlendState; // dword_8301
 // display modes, the mini-icon tables for the profile (display-type-0) mode.
 void SatNavRenderer::RenderSatNavIcon(f32 lfX, f32 lfHalfWidth, f32 lfY, f32 lfHalfHeight,
                                       ESatNavIconType leIconType, u32 luEventTypeIndex,
-                                      CgsGraphics::Im2dRenderBuffer* lpRenderBuffer)
+                                      CgsGraphics::ImRenderBuffer<CgsGraphics::Basic2dColouredTexturedVertex>* lpRenderBuffer)
 {
     if (leIconType >= E_SATNAVICON_NUM)
         FireSatNavAssert("leIconType < E_SATNAVICON_NUM", 1350);
@@ -914,43 +1019,224 @@ void SatNavRenderer::RenderSatNavIcon(f32 lfX, f32 lfHalfWidth, f32 lfY, f32 lfH
     lpRenderBuffer->Render(static_cast<renderengine::PrimitiveType>(6), laVertices, 4);
 }
 
-// 0x8245F4D8 -- rebuild the screen-space mTransform from the on-screen viewport rectangle and the
-// display aspect ratio, in place. The X360 body is hand-vectorised (VMX128 lvx128/vspltw/vsubfp/
-// vmaddfp/vperm/vsldoi): it loads the viewport descriptor (unk_82FB36A0, a Vector4 of the
-// rectangle's left/top/right/bottom screen params), computes the (right-left) / (bottom-top)
-// extents and a {2.0, -2.0} normalised-device scale, and permutes them (with the control vectors
-// unk_82CDA350 / unk_82CDA3C0) into the transform's origin + right/up basis Vector4 lanes, then
-// folds in the aspect ratio.
+// 0x82465EC0 -- the per-frame sat-nav draw: install the zoomed view, build the map quad
+// (unit square, per-corner map-texture UVs), push the circular mask, draw the quad and
+// the icons. Decoded end-to-end from the X360 asm (scratch h3b_dump.txt); the VMX inline
+// matrix work is reconstructed through the named MapTransform helpers (same math -- see
+// each step's note).
+void SatNavRenderer::RenderComponent(CgsGui::ImRendererSet* lpRendererSet)
+{
+    // The 2D command buffer (set slot 0 -- the console v6 = *a2, drawing through the
+    // buffer subobject at +4; the [tut-ticker] precedent on this host).
+    CgsGui::AptIm2dRenderBuffer* lpAptBuffer =
+        *reinterpret_cast<CgsGui::AptIm2dRenderBuffer* const*>(lpRendererSet);
+    if (lpAptBuffer == 0)
+        return;
+    CgsGraphics::ImRenderBuffer<CgsGraphics::Basic2dColouredTexturedVertex>& lrCmd =
+        lpAptBuffer->mCommandBuffer;
+
+    // Gate: both the map and the mask texture must have arrived in the render payload
+    // (X360 lwz +0x7C / +0x80). Without them the console clears its output surface
+    // (SetClear on the lazily-zeroed clear colour) inside an empty Begin/End bracket;
+    // the PC dispatch draws straight to the back buffer, so the bracket alone is the
+    // faithful no-op.
+    if (mRenderSatNavEvent.mpMapTexture == 0 || mRenderSatNavEvent.mpMaskTexture == 0)
+    {
+        // [DIAG] NOT IN THE X360 BINARY -- [satnav-diag] the no-texture bracket.
+        static bool sbLoggedEmpty = false;
+        if (!sbLoggedEmpty && CgsDev::Log::gpDebugPrint != 0)
+        {
+            sbLoggedEmpty = true;
+            *CgsDev::Log::gpDebugPrint
+                << "[satnav-diag] RenderComponent EMPTY bracket: mapnn="
+                << static_cast<s32>(mRenderSatNavEvent.mpMapTexture != 0) << " masknn="
+                << static_cast<s32>(mRenderSatNavEvent.mpMaskTexture != 0) << "\n";
+        }
+        lrCmd.BeginRendering();
+        lrCmd.EndRendering();
+        return;
+    }
+
+    if (miSatNavRendererPM >= 0)
+        CgsDev::PerfMonCpu::StartMonitor(miSatNavRendererPM);
+
+    // The icon zoom scale: (clamp01(mph/120) + 1) * 700 (X360 @0x82465F30-F68,
+    // flt_82056EDC == 1/120, flt_8205820C == 700).
+    {
+        f32 lfRatio = mRenderSatNavEvent.mfCarSpeedMph * 0.0083333338f;
+        if (lfRatio < 0.0f) lfRatio = 0.0f;
+        if (lfRatio > 1.0f) lfRatio = 1.0f;
+        mfZoomLevel = (lfRatio + 1.0f) * 700.0f;
+    }
+
+    // The zoomed world window for this frame's payload (the component's own static rect
+    // builder -- the renderer calls it with the PAYLOAD values, not the component's).
+    Vector3 lav3Corners[4];
+    SatNavComponent::GetZoomedCarWorldRect(
+        lav3Corners,
+        mRenderSatNavEvent.mv3CarPosition,
+        mRenderSatNavEvent.mfCarSpeedMph,
+        mRenderSatNavEvent.mfCarOrientation,
+        mRenderSatNavEvent.mbRotateMap,
+        mRenderSatNavEvent.mbUseTrajectory,
+        mRenderSatNavEvent.miZoomLevel);
+
+    // Corners flattened to the (x, z) map plane (the vperm ctrl 0x82CDA450 lane pick).
+    Vector2 lv2C0; lv2C0.x = lav3Corners[0].x; lv2C0.y = lav3Corners[0].z; lv2C0.z = 0.0f; lv2C0.w = 0.0f;
+    Vector2 lv2C1; lv2C1.x = lav3Corners[1].x; lv2C1.y = lav3Corners[1].z; lv2C1.z = 0.0f; lv2C1.w = 0.0f;
+    Vector2 lv2C2; lv2C2.x = lav3Corners[2].x; lv2C2.y = lav3Corners[2].z; lv2C2.z = 0.0f; lv2C2.w = 0.0f;
+
+    // Install the zoomed spaces (X360 passes corners[0], corners[2], corners[1]).
+    MapTransform::SetZoomedWorldRect(lv2C0, lv2C2, lv2C1);
+    MapTransform::SetZoomedViewportRect(MapTransform::GetSatNavViewRect());
+
+    // Per-corner map-texture UVs: unit corner -> world (the corner coord space) ->
+    // world-rect-unit (inverse world space). The X360 folds both into one inline
+    // matrix (cornerSpace o inv(worldSpace), then Transform's own inverse); composing
+    // the two named steps below is the same product applied in the same order.
+    const Matrix33 lm33Corners = MapTransform::MakeCoordSpaceFromPoints(lv2C0, lv2C1, lv2C2);
+    Vector2 lav2Uv[4];
+    {
+        static const f32 KAF_UNIT[4][2] = { {0.0f, 0.0f}, {0.0f, 1.0f}, {1.0f, 0.0f}, {1.0f, 1.0f} };
+        for (u32 lu = 0; lu < 4; ++lu)
+        {
+            Vector2 lv2Unit;
+            lv2Unit.x = KAF_UNIT[lu][0];
+            lv2Unit.y = KAF_UNIT[lu][1];
+            lv2Unit.z = 0.0f;
+            lv2Unit.w = 0.0f;
+            const Vector2 lv2World = MapTransform::Transform(lv2Unit, lm33Corners);
+            lav2Uv[lu] = MapTransform::Transform(
+                lv2World, MapTransform::GetWorldSpace(), MapTransform::GetNormalisedSpace());
+        }
+    }
+
+    // The map-quad colour: mMapQuadColour byte-reversed into the vertex RGBA8 (the same
+    // swap RenderSatNavIcon documents; 0xE5FFFFFF -> translucent white).
+    CgsGraphics::RGBA8 lColour;
+    lColour.r = static_cast<u8>(mMapQuadColour);
+    lColour.g = static_cast<u8>(mMapQuadColour >> 8);
+    lColour.b = static_cast<u8>(mMapQuadColour >> 16);
+    lColour.a = static_cast<u8>(mMapQuadColour >> 24);
+
+    // The map quad: the unit square in the renderer's transform space (mTransform maps
+    // it onto the on-screen minimap rect), one map-window UV per corner. Strip order
+    // TL, BL, TR, BR (X360 vertex build @0x824661A4-0x82466250).
+    CgsGraphics::Basic2dColouredTexturedVertex laVerts[4];
+    static const f32 KAF_POS[4][2] = { {0.0f, 0.0f}, {0.0f, 1.0f}, {1.0f, 0.0f}, {1.0f, 1.0f} };
+    for (u32 lu = 0; lu < 4; ++lu)
+    {
+        laVerts[lu].mv2Pos.x    = KAF_POS[lu][0];
+        laVerts[lu].mv2Pos.y    = KAF_POS[lu][1];
+        laVerts[lu].mv4Colour   = lColour;
+        laVerts[lu].mv2Tex0UV.x = lav2Uv[lu].x;
+        laVerts[lu].mv2Tex0UV.y = lav2Uv[lu].y;
+    }
+
+    // [DIAG] NOT IN THE X360 BINARY -- [satnav-diag] the live draw path (once).
+    {
+        static bool sbLoggedDraw = false;
+        if (!sbLoggedDraw && CgsDev::Log::gpDebugPrint != 0)
+        {
+            sbLoggedDraw = true;
+            *CgsDev::Log::gpDebugPrint
+                << "[satnav-diag] RenderComponent DRAW: origin=(" << mTransform.mOriginXYZ.x
+                << "," << mTransform.mOriginXYZ.y << ") rightup=(" << mTransform.mRightUp.x
+                << "," << mTransform.mRightUp.w << ") uv0=(" << lav2Uv[0].x
+                << "," << lav2Uv[0].y << ") uv3=(" << lav2Uv[3].x << "," << lav2Uv[3].y
+                << ") colour=" << mMapQuadColour << "\n";
+        }
+    }
+
+    // ---- the draw bracket (X360 @0x82466254-0x82466280) ----
+    lrCmd.BeginRendering();
+    lrCmd.SetState(gpDefaultImBlendState);
+    lrCmd.SetState(gpDefaultImTextureState);
+    lrCmd.SetTransform(mTransform);
+
+    // Lazy map / mask texture states from the payload textures (X360 @0x82466288 /
+    // @0x8246645C; the same real-TextureState fold as InitResources -- see its H3b note).
+    if (mpMapTextureState == 0)
+        mpMapTextureState = CreatePayloadTextureState(
+            &mMapTextureStateBacking, mRenderSatNavEvent.mpMapTexture);
+    lrCmd.SetState(mpMapTextureState);
+
+    // The map BLEND state is created here on console (@0x824663A4) but never bound in
+    // this pass (the default blend stays active) -- on the PC fold the dispatch's blend
+    // case is value-independent, so the unused creation folds away entirely.
+
+    if (mpMaskTextureState == 0)
+        mpMaskTextureState = CreatePayloadTextureState(
+            &mMaskTextureStateBacking, mRenderSatNavEvent.mpMaskTexture);
+
+    // Push the minimap mask over the viewport rect, full mask-texture UV range
+    // (X360 builds the {0,0,1,1} uv vector @0x82466524-0x8246654C, then SetMaskRect).
+    {
+        Vector4 lv4MaskUv;
+        lv4MaskUv.x = 0.0f; lv4MaskUv.y = 0.0f; lv4MaskUv.z = 1.0f; lv4MaskUv.w = 1.0f;
+        SetMaskRect(lrCmd, mpMaskTextureState, MapTransform::GetSatNavViewRect(), lv4MaskUv);
+    }
+
+    // The map quad (prim type 6 == triangle strip, 4 vertices), then the icons, then
+    // pop the mask and restore the default states (X360 @0x82466554-0x82466598).
+    lrCmd.Render(static_cast<renderengine::PrimitiveType>(6), laVerts, 4);
+    RenderIconsForSatNav(&lrCmd);
+    lrCmd.PopMask();
+    lrCmd.SetState(gpDefaultImBlendState);
+    lrCmd.SetState(gpDefaultImTextureState);
+    lrCmd.EndRendering();
+
+    if (miSatNavRendererPM >= 0)
+        CgsDev::PerfMonCpu::StopMonitor(miSatNavRendererPM);
+}
+
+// 0x8245F4D8 -- rebuild the screen-space mTransform from the on-screen viewport
+// rectangle, in place. ⭐ H3b: the viewport rect is RECOVERED now (the live
+// MapTransform::GetSatNavViewRect() static @0x82FB36A0, HD default {0.778125,
+// 0.66527778, 0.93125, 0.86666667}) -- the old "unrecovered input, normalised-device
+// default" FLAG body is retired.
 //
-// SEMANTIC-LEVEL SIMD: per the BrnSatNavRenderer.h policy (and matching CgsIm2d.cpp's note on
-// Im2dTransform::TransformByAspectRatio), the VMX128 permute math has no portable PC equivalent and
-// the input rectangle (unk_82FB36A0) + permute-control vectors (unk_82CDA350/3C0) are NOT in the
-// symbol export (data segment not dumped). The reconstruction reproduces the faithful STRUCTURE --
-// zero the transform, set the normalised-device scale lanes, and call TransformByAspectRatio() --
-// and FLAGS the produced basis as data-fidelity-limited (the unrecovered viewport rect would set
-// the origin + extents). The X360 store targets (mOriginXYZ/mRightUp/mColourShift/mColourScale at
-// +0/+16/+32/+48) and the trailing TransformByAspectRatio() call are reproduced exactly.
+// The X360 builds the CONSOLE NDC block from the rect:
+//   origin = (2*x0 - 1, 1 - 2*y0), right = (2*w, 0), up = (0, -2*h)
+// then folds the display aspect ratio (TransformByAspectRatio) because its GPU consumed
+// NDC. The PC dispatch walk (CgsImRenderBufferTemplate.cpp RENDER_PRIMITIVES) consumes
+// batch transforms in the Apt SetVertexMatrix convention instead -- local -> LOGICAL
+// 1280x720 SCREEN pixels, which the dispatch then scales to the back buffer itself --
+// and its colour lanes ride the CXForm fold whose identity scale is 255 (both are the
+// [tut-ticker] InGameMessageRenderer::RenderComponent precedent, including the boot
+// that collapsed every vertex to a sub-pixel when the console NDC block was published
+// verbatim). So the PC-correct block maps the renderer's unit-square drawing space to
+// the viewport's logical-pixel rectangle:
+//   origin = (x0*1280, y0*720), right = (w*1280, 0), up = (0, h*720), colourScale = 255.
 void SatNavRenderer::UpdateRendererTransform()
 {
-    // The X360 {2.0, -2.0} normalised-device scale literals (flt_82001C98 == 1.0,
-    // flt_82006D70 == -2.0, flt_82001D9C, flt_82001CC0 == 0.0) recovered from the asm immediates.
-    const f32 KF_NDC_SCALE_X =  2.0f; // 1.0 * 2.0 (@0x8245F5FC-F604)
-    const f32 KF_NDC_SCALE_Y = -2.0f; // 2.0 * -2.0 (@0x8245F610-F618)
+    const Vector4& lv4Rect = MapTransform::GetSatNavViewRect();   // {x0, y0, x1, y1}
+    const f32 lfWidth  = lv4Rect.z - lv4Rect.x;
+    const f32 lfHeight = lv4Rect.w - lv4Rect.y;
 
-    // FLAG: the viewport rectangle (unk_82FB36A0) and the two vperm control vectors
-    // (unk_82CDA350 / unk_82CDA3C0) are not in the symbol export; the origin + per-axis extents
-    // they would feed are left at the normalised-device default below. The structure and the
-    // aspect-ratio fold are X360-faithful; the produced origin/extent numbers are unverified.
+    // The engine's fixed logical screen (the dispatch's KF_DISPATCH_LOGICAL_W/H).
+    const f32 KF_LOGICAL_W = 1280.0f;
+    const f32 KF_LOGICAL_H = 720.0f;
+
     mTransform.mOriginXYZ.SetZero();
     mTransform.mRightUp.SetZero();
     mTransform.mColourShift.SetZero();
     mTransform.mColourScale.SetZero();
 
-    mTransform.mRightUp.x = KF_NDC_SCALE_X;
-    mTransform.mRightUp.y = KF_NDC_SCALE_Y;
+    mTransform.mOriginXYZ.x = lv4Rect.x * KF_LOGICAL_W;
+    mTransform.mOriginXYZ.y = lv4Rect.y * KF_LOGICAL_H;
+    mTransform.mRightUp.x   = lfWidth  * KF_LOGICAL_W;   // right = (w_px, 0)
+    mTransform.mRightUp.w   = lfHeight * KF_LOGICAL_H;   // up    = (0, h_px)
 
-    // Fold the current display aspect ratio into the transform basis in place (X360 @0x8245F6B4).
-    mTransform.TransformByAspectRatio();
+    // CXForm identity on the PC dispatch is 255 (the ticker's folded=01010101 lesson).
+    mTransform.mColourScale.x = 255.0f;
+    mTransform.mColourScale.y = 255.0f;
+    mTransform.mColourScale.z = 255.0f;
+    mTransform.mColourScale.w = 255.0f;
+
+    // The console's trailing TransformByAspectRatio() folds the display aspect into the
+    // NDC basis; the PC logical-pixel dispatch performs its own back-buffer scale, so
+    // folding it here would double-apply (the ticker precedent publishes without it).
 }
 
 } // namespace BrnGui

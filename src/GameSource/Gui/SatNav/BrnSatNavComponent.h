@@ -112,20 +112,24 @@ namespace BrnGui
         void RecvEvent(const CgsModule::Event* lpEvent, s32 liEventId);   // @0x82457D00 (DWARF :133)
         void LoadResources();                                             // @0x82447A90 (DWARF :150)
         void SetEventType(BrnGameState::GameStateModuleIO::EGameModeType leGameMode); // @0x82447D30 (DWARF :197)
-        f32  GetViewDistance(f32 lfSpeedMph, s32 liCurrentZoomLevel);     // @0x82447C00 (DWARF :169)
+        static f32 GetViewDistance(f32 lfSpeedMph, s32 liCurrentZoomLevel); // @0x82447C00 (DWARF :169; no `this` use -- static so the rect builder can call it)
         void SetCachePointer(GuiCache* lpGuiCache);                       // @0x82473638 (DWARF :335)
 
-        // ---- PARKED BY NAME (H3b): the zoomed-view math cluster -----------------
-        // GetZoomedCarWorldRect @0x8244EEC8 (DWARF :179) -- the XMMatrixRotationY VMX
-        // rect builder; SetViewParamsFromPlayerCar @0x82457C10 (DWARF :223) -- feeds
-        // it + MapTransform::SetZoomedWorldRect @0x824504E8 / SetZoomedViewportRect
-        // @0x82450608 (viewport vector = the runtime-init chain 82FB36A0 <- 82FB30A0,
-        // unrecovered). Both banked in scratch h3_dump.txt; declared so the bodied
-        // callers compile against the single home.
-        void GetZoomedCarWorldRect(Vector3* lpOutCorners, Vector3 lv3CarPosition,
-                                   f32 lfSpeedMph, f32 lfOrientation,
-                                   bool lbRotateMap, bool lbUseTrajectory,
-                                   s32 liZoomLevel);
+        // ---- the zoomed-view math cluster (H3b: bodied) -------------------------
+        // GetZoomedCarWorldRect @0x8244EEC8 (DWARF :179) -- build the four corners of
+        // the (rotated) zoomed world window around the car. ⭐ STATIC: the X360 body
+        // never touches `this` (r3 is the OUT pointer); the SatNavRenderer calls it
+        // with its own payload values. Writes FOUR Vector3 corners:
+        //   [0] pos+T(+z)+T(+x)  [1] pos+T(-z)+T(+x)  [2] pos+T(+z)+T(-x)  [3] pos+T(-z)+T(-x)
+        // where T = RotationY(orientation) in rotate-map mode, RotationY(pi) otherwise
+        // (identity when the orientation is NaN -- the asm's vcmpeqfp self-test).
+        static void GetZoomedCarWorldRect(Vector3* lpOutCorners, Vector3 lv3CarPosition,
+                                          f32 lfSpeedMph, f32 lfOrientation,
+                                          bool lbRotateMap, bool lbUseTrajectory,
+                                          s32 liZoomLevel);
+        // SetViewParamsFromPlayerCar @0x82457C10 (DWARF :223) -- corners from the
+        // player-info block, then (icon manager bound) install the zoomed world +
+        // viewport spaces on MapTransform.
         void SetViewParamsFromPlayerCar(const GuiPlayerInfo* lpPlayerInfo);
 
         // ---- declaration-only (their own ledger functions; not in the H3a set) --
@@ -138,6 +142,13 @@ namespace BrnGui
         void ClearIconInfo();                                             // DWARF :303
 
     private:
+        // [H3b] The freeburn HUD state's per-frame pre-pass writes this component's
+        // mpPlayerInfo / mpIconManager directly (X360 UpdateRunning @0x8247B660 head:
+        // stw 0 -> this+0x130; the icon manager's count clear through +0x254). The
+        // stores are real and inline on console; friendship is the honest exposure
+        // (the OnlineGameRoomPlayerInfo / GuiCache consumer-friend rule).
+        friend struct FBurnMainHudState;
+
         void UpdateFreeRoaming();                                         // @0x82447638 (DWARF :231)
 
         // The 16 per-icon component-name hashes ("<parent>_SatNavIcon<i>"), computed

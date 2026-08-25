@@ -98,6 +98,10 @@ namespace BrnGui
         // write across the three pools; in C++ it is the members' own construction.
         MapIconManager();
 
+        // @ 0x824FA0F0 (DWARF h:110) -- bind the cache and reset the selection/flag
+        // surface (GuiModule::Construct calls it right after GuiCache::Construct).
+        void Construct(GuiCache* lpGuiCache);
+
         // @ 0x824B2F80 -- forward the road-rule batch response into the embedded road-sign
         // icon manager (the X360 asserts the pointer is non-null first).
         void SetRoadRuleBatchData(const GuiEventRoadRuleBatchDataResponse* lpRoadRules);
@@ -244,7 +248,10 @@ namespace BrnGui
                                            // mbShowingCrashNavRoute, miNumUsedIcons
         friend struct PreRaceFlyByState;
         friend struct SatNavComponent;   // H3a: Update's owner-change pokes (mbIsDisplayingEventInfo /
-                                         // mbRotateSatNav / meIconSizeMode) + Construct's miNumUsedIcons reset   // meIconFilterMode, mbIsDisplayingEventInfo,
+                                         // mbRotateSatNav / meIconSizeMode) + Construct's miNumUsedIcons reset
+        friend struct FBurnMainHudState; // H3b: the freeburn HUD's per-frame pre-pass clears
+                                         // miNumUsedIcons through the component's manager pointer
+                                         // (X360 UpdateRunning @0x8247B660 head)   // meIconFilterMode, mbIsDisplayingEventInfo,
                                            // miSelectedCheckpoint, muSelectedJunctionID,
                                            // mbRotateSatNav, meIconSizeMode,
                                            // mbShowingPreRaceRoute, miNumUsedIcons
@@ -260,6 +267,16 @@ namespace BrnGui
 
         // @ 0x824EBF98 -- reset the owner id back to E_OWNERID_INVALID (with a debug trace).
         void ResetOwnerParameter();
+
+        // @ 0x824FAE60 -- is this rival-type icon currently active (game mode not
+        // road-rage, filter not PLAYER_ONLY/NO_RIVALS)? Asserts the icon IS a rival type.
+        bool IsActiveRival(const GuiEventUpdateSatNav::SatNavIconInfo* lpIcon) const;
+
+        // The two per-owner icon passes Update dispatches to (X360 @0x82522588 /
+        // @0x825212C0). [H3b NAMED GATE -- see the bodies: the apt icon pools +
+        // road-sign / event-icon / world-icon passes they drive are not reconstructed.]
+        void UpdateSatNavIcons();
+        void UpdateCrashNavIcons();
 
         // -------------------------------------------------------------------------------
         // Modelled members (DWARF order + types; X360 byte offsets are references, see the
@@ -281,12 +298,19 @@ namespace BrnGui
 
         // [icon pools + event-icon manager + the bulk of the flag tail: not modelled here]
 
+        bool                mbAllowDriveThruSelection; // X360 +0x7080 (DWARF order; SetOwnerParameters ANDs it with the show flag)
         bool                mbAllowRivalSelection;     // X360 +0x7081 (rivals occupy the front of the selection list)
         RoadSignIconManager mRoadSignIconManager;      // X360 +0x7090 (SetRoadRuleBatchData target)
+        bool                mbUseRoadSigns;            // X360 +0xA1B0 (DWARF order after the embedded manager; SetOwnerParameters stbx @0x82521154)
+        bool                mbAllowPlayerSelection;    // X360 +0xA1B1 (SetOwnerParameters stores ownerId != E_CRASHNAV_MAP_ONLINE_SELECT_ROUTE)
 
-        // [further selection/flag state: not modelled here]
+        // [mEventIconManager (X360 +0xA1B4..+0xA9EF): not modelled here -- its Prepare/
+        //  Release passes ride the parked icon slice]
 
+        GuiEventDrawEventIcons::EIconDisplayType meEventIconDisplayType; // X360 +0xA9F0 (DWARF h:453)
+        bool                mbShowingDriveThrus;       // X360 +0xA9F4 (DWARF h:454; SetOwnerParameters stbx @0x825210B0)
         GuiCache*           mpGuiCache;                // X360 +0xA9F8 (drive-through list + player team lookups)
+        CgsGui::StateInterface* mpStateInterface;      // X360 +0xA9FC (DWARF h:456; SetOwnerParameters stw @0x82520D..)
         OwnerId             mOwnerId;                  // X360 +0xAA00 (reset to invalid on release)
         // ADDITIVE GROW (OnlineGameRoomPlayerInfo keystone, wave H): the icon size mode
         // (DWARF h:458, the member right after mOwnerId). X360 +0xAA04 -- the game-room
@@ -329,9 +353,7 @@ namespace BrnGui
         bool                mbShowingOnlineRoute;          // X360 +0xAA1F (DWARF h:473)
         bool                mbShowingPreRaceRoute;         // X360 +0xAA20 (DWARF h:474)
         bool                mbShowingCrashNavRoute;        // X360 +0xAA21 (DWARF h:475)
-
-        // [mbIsActive (DWARF h:477, X360 +0xAA22 -- ReleaseResources `stbx 1` @0x82520CD8)
-        //  and the rest of the class land with the remainder of the TU.]
+        bool                mbIsActive;                    // X360 +0xAA22 (DWARF h:477; ReleaseResources `stbx 1` @0x82520CD8, Construct/SetOwnerParameters store 1)
 
         // Never called; the compiler evaluates the assertions. Only RELATIVE deltas inside
         // pointer-free scalar runs are pinned -- absolute console offsets are meaningless

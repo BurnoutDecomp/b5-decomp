@@ -1,5 +1,5 @@
 // BrnMapUtils.cpp
-// Reconstructed from BURNOUT_X360_ARTIST.XEX. BrnGui::MapTransform's six out-of-line
+// Reconstructed from BURNOUT_X360_ARTIST.XEX. BrnGui::MapTransform's out-of-line
 // 2D map-space functions. The X360 implements these as hand-vectorised VMX128 (dot
 // products via vmsum3fp128, matrix-inverse reciprocals via vrefp + two Newton-Raphson
 // refinement steps vnmsubfp/vmaddfp, lane shuffles via vperm/vpermwi128). Those
@@ -8,29 +8,25 @@
 // the policy stated in rw/math/vpu/types.h. The 3x3 transforms are row-major affine:
 // a 2D point p is transformed as (p.x, p.y, 1) . M, i.e.
 //   out = p.x * M.xAxis + p.y * M.yAxis + M.zAxis.
+//
+// ⭐ H3b (2026-08-25): the static map-space VALUES are now the image's own (read off
+// the cinit thunks 0x82C51F90..0x82C52480 -- scratch h3b_dump.txt); the old
+// "numeric contents owned by an out-of-scope init" boundary is retired. Two committed
+// bodies are also FIXED against their asm:
+//   * SetZoomedWorldRect @0x824504E8 -- the old body built a rect coord space and
+//     biased its translation by a "centre" argument. The real function receives THREE
+//     CORNERS of the (possibly rotated) zoomed rect, stores {C.xy, B.xy} as the
+//     zoomed world rect, and stores the INVERSE of the corner coord space (a full
+//     adjugate/determinant 3x3 inverse in the asm) as the world -> zoomed-unit
+//     transform. The old body could not represent rotation at all.
+//   * SetZoomedViewportRect @0x82450608 -- the old body composed with MakeTransform
+//     (an inverse). The real function stores the viewport coord space AND its
+//     composition WITH the device space (plain row product, no inverse).
 
 #include "SharedClasses/Gui/SatNav/BrnMapUtils.h"
 
 namespace BrnGui
 {
-
-// ---- static map-space state -------------------------------------------------
-// These mirror the X360 static-const map rects/spaces (the `unk_82FB....` / `unk_82CDA...`
-// constant pools the functions load). Concrete numeric contents are owned by the (out of
-// scope) MapTransform::MapTransform() one-time init; declared here as zero-initialised
-// definitions so the reconstructed functions link against named storage rather than raw
-// pool addresses. HONEST BOUNDARY: the numeric rect/space values are set elsewhere.
-const Vector4  MapTransform::smv4WorldRect      = { 0.0f, 0.0f, 0.0f, 0.0f };
-const Vector4  MapTransform::smv4NormalizedRect = { 0.0f, 0.0f, 1.0f, 1.0f };
-const Vector4  MapTransform::smv4DeviceRect     = { 0.0f, 0.0f, 0.0f, 0.0f };
-const Matrix33 MapTransform::smm33WorldSpace      = { { 1.0f, 0.0f, 0.0f, 0.0f }, { 0.0f, 1.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 1.0f, 0.0f } };
-const Matrix33 MapTransform::smm33NormalisedSpace = { { 1.0f, 0.0f, 0.0f, 0.0f }, { 0.0f, 1.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 1.0f, 0.0f } };
-const Matrix33 MapTransform::smm33DeviceSpace     = { { 1.0f, 0.0f, 0.0f, 0.0f }, { 0.0f, 1.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 1.0f, 0.0f } };
-
-Vector4  MapTransform::smv4ZoomedWorldRect                = { 0.0f, 0.0f, 0.0f, 0.0f };
-Matrix33 MapTransform::smm33ZoomedWorldTransform          = { { 1.0f, 0.0f, 0.0f, 0.0f }, { 0.0f, 1.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 1.0f, 0.0f } };
-Matrix33 MapTransform::smm33ZoomedViewportTransform       = { { 1.0f, 0.0f, 0.0f, 0.0f }, { 0.0f, 1.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 1.0f, 0.0f } };
-Matrix33 MapTransform::smm33ZoomedViewportScreenTransform = { { 1.0f, 0.0f, 0.0f, 0.0f }, { 0.0f, 1.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 1.0f, 0.0f } };
 
 namespace
 {
@@ -80,6 +76,28 @@ namespace
     }
 }
 
+// ---- static map-space state -------------------------------------------------
+// Values are the image's own (cinit thunk region 0x82C51F90..0x82C52480; exact f32
+// bit patterns quoted). The coord-space matrices are built from their rects exactly
+// as the thunks do (MakeCoordSpaceFromRect); within this TU the definition order
+// guarantees the rects initialise first.
+const Vector4  MapTransform::smv4WorldRect      = { -4375.419921875f, -5842.419921875f, 5363.14990234375f, 3904.739990234375f }; // 0xC588BB5C/0xC5B6935C/0x45A79933/0x45740BD7
+const Vector4  MapTransform::smv4NormalizedRect = { 0.0f, 0.0f, 1.0f, 1.0f };
+const Vector4  MapTransform::smv4DeviceRect     = { 0.0f, 0.0f, 1280.0f, 720.0f };
+const Matrix33 MapTransform::smm33WorldSpace      = MapTransform::MakeCoordSpaceFromRect( MapTransform::smv4WorldRect );
+const Matrix33 MapTransform::smm33NormalisedSpace = MapTransform::MakeCoordSpaceFromRect( MapTransform::smv4NormalizedRect );
+const Matrix33 MapTransform::smm33DeviceSpace     = MapTransform::MakeCoordSpaceFromRect( MapTransform::smv4DeviceRect );
+
+// The live sat-nav viewport rect (@0x82FB36A0). Default = the HD rect @0x82FB30A0
+// (the cinit copy thunk @0x82C52340); GuiModule::Construct re-installs the HD/SD pick
+// through SetSatNavRect. (SD alt @0x82FB3130 = {0.750781238079071, y0, 0.9039062261581421, y1}.)
+Vector4  MapTransform::smv4SatNavViewRect = { 0.778124988079071f, 0.6652777791023254f, 0.9312499761581421f, 0.8666666746139526f };
+
+Vector4  MapTransform::smv4ZoomedWorldRect                = { 0.0f, 0.0f, 0.0f, 0.0f };
+Matrix33 MapTransform::smm33ZoomedWorldTransform          = { { 1.0f, 0.0f, 0.0f, 0.0f }, { 0.0f, 1.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 1.0f, 0.0f } };
+Matrix33 MapTransform::smm33ZoomedViewportTransform       = { { 1.0f, 0.0f, 0.0f, 0.0f }, { 0.0f, 1.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 1.0f, 0.0f } };
+Matrix33 MapTransform::smm33ZoomedViewportScreenTransform = { { 1.0f, 0.0f, 0.0f, 0.0f }, { 0.0f, 1.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 1.0f, 0.0f } };
+
 // @ 0x82450460 — build the coord-space matrix that maps the unit square onto lv4Rect
 // (lv4Rect = minX, minY, maxX, maxY). Scale = (maxX-minX, maxY-minY), translate = (minX, minY).
 Matrix33 MapTransform::MakeCoordSpaceFromRect( Vector4 lv4Rect )
@@ -94,9 +112,21 @@ Matrix33 MapTransform::MakeCoordSpaceFromRect( Vector4 lv4Rect )
     return lm33Out;
 }
 
-// @ 0x824503C0 — apply a row-major affine 3x3 to a 2D point:
-// out = p.x * xAxis + p.y * yAxis + zAxis (the X360 builds the matrix via MakeTransform
-// for the two-matrix overload; this single-matrix overload just applies the given one).
+// (X360 inlines this; the layout is attested by SetZoomedWorldRect @0x824504E8 and
+// SatNavRenderer::RenderComponent @0x82465EC0, which both assemble exactly these rows.)
+// The coord space with origin lv2Origin whose unit X lands on lv2XPoint and unit Y on
+// lv2YPoint: xAxis = X - origin, yAxis = Y - origin.
+Matrix33 MapTransform::MakeCoordSpaceFromPoints( Vector2 lv2Origin, Vector2 lv2XPoint, Vector2 lv2YPoint )
+{
+    Matrix33 lm33Out;
+    lm33Out.xAxis = { lv2XPoint.x - lv2Origin.x, lv2XPoint.y - lv2Origin.y, 0.0f, 0.0f };
+    lm33Out.yAxis = { lv2YPoint.x - lv2Origin.x, lv2YPoint.y - lv2Origin.y, 0.0f, 0.0f };
+    lm33Out.zAxis = { lv2Origin.x,               lv2Origin.y,               1.0f, 0.0f };
+    return lm33Out;
+}
+
+// (X360 inlines the one-matrix apply at every call site.) Apply a row-major affine 3x3
+// to a 2D point: out = p.x * xAxis + p.y * yAxis + zAxis.
 Vector2 MapTransform::Transform( Vector2 lv2Point, Matrix33 lm33Transform )
 {
     Vector2 lv2Out;
@@ -111,6 +141,16 @@ Vector2 MapTransform::Transform( Vector2 lv2Point, Matrix33 lm33Transform )
     return lv2Out;
 }
 
+// @ 0x824503C0 — the two-matrix overload: take the point out of `lm33From` space into
+// `lm33To` space (MakeTransform then apply -- the X360 body is exactly that pair:
+// `bl MakeTransform` on the two matrix pointers in r3/r4, then the inline apply on v1).
+// ⭐ H3b: this address was previously attributed to the one-matrix overload; the asm's
+// two pointer args pin it here.
+Vector2 MapTransform::Transform( Vector2 lv2Point, Matrix33 lm33From, Matrix33 lm33To )
+{
+    return Transform( lv2Point, MakeTransform( lm33From, lm33To ) );
+}
+
 // @ 0x824435C8 — the transform that takes a point out of `lm33From` space into
 // `lm33To` space: inverse(from) composed with to.
 Matrix33 MapTransform::MakeTransform( Matrix33 lm33From, Matrix33 lm33To )
@@ -118,34 +158,105 @@ Matrix33 MapTransform::MakeTransform( Matrix33 lm33From, Matrix33 lm33To )
     return Multiply33( Invert33( lm33From ), lm33To );
 }
 
-// @ 0x824504E8 — store the world-space coord transform for the current zoom level.
-// lv2Min/lv2Max are the zoomed world-rect corners; lv2Centre carries the focus point.
-void MapTransform::SetZoomedWorldRect( Vector2 lv2Min, Vector2 lv2Max, Vector2 lv2Centre )
+// @ 0x824504E8 — install the zoomed world window from THREE CORNERS of the (possibly
+// rotated) rect: A is the shared origin corner, B and C its two adjacent corners
+// (SatNavComponent::SetViewParamsFromPlayerCar / SatNavRenderer::RenderComponent pass
+// corners[0], corners[2], corners[1] of GetZoomedCarWorldRect in that order). Stores
+//   smv4ZoomedWorldRect       = {C.x, C.y, B.x, B.y}   (the two adjacent corners)
+//   smm33ZoomedWorldTransform = INVERSE(coordSpaceFromPoints(A, C-A axisX, B-A axisY))
+// i.e. the world -> zoomed-unit transform (the asm's full adjugate + vrefp/N-R
+// reciprocal-determinant 3x3 inverse).
+void MapTransform::SetZoomedWorldRect( Vector2 lv2CornerA, Vector2 lv2CornerB, Vector2 lv2CornerC )
 {
-    smv4ZoomedWorldRect = { lv2Min.x, lv2Min.y, lv2Max.x, lv2Max.y };
-    smm33ZoomedWorldTransform = MakeCoordSpaceFromRect( smv4ZoomedWorldRect );
-    // Bias the translation row toward the focus centre (the X360 folds lv2Centre into
-    // the stored transform's translation lane).
-    smm33ZoomedWorldTransform.zAxis.x = lv2Centre.x;
-    smm33ZoomedWorldTransform.zAxis.y = lv2Centre.y;
+    smv4ZoomedWorldRect = { lv2CornerC.x, lv2CornerC.y, lv2CornerB.x, lv2CornerB.y };
+    smm33ZoomedWorldTransform =
+        Invert33( MakeCoordSpaceFromPoints( lv2CornerA, lv2CornerC, lv2CornerB ) );
 }
 
-// @ 0x82450608 — store the viewport (and derived screen) coord transforms from a rect.
-// FLAG (VMX128 semantic-reconstruction floor): the X360 composes the screen transform with a
-// plain vmaddfp multiply chain here (NO vrefp/vmsum inverse), whereas this uses MakeTransform
-// (which inverts). It composes differently from the binary; acceptable only because the static
-// map-spaces (smm33DeviceSpace etc.) are themselves placeholders set by the out-of-scope
-// MapTransform() init. Re-derive the exact VMX op-for-op composition when that init is homed.
+// @ 0x82450608 — install the zoomed viewport from the on-screen rect: the viewport
+// coord space itself, and its composition with the DEVICE space (a plain row product,
+// no inverse -- zoomed-unit -> viewport-normalised -> device).
 void MapTransform::SetZoomedViewportRect( Vector4 lv4Rect )
 {
     smm33ZoomedViewportTransform = MakeCoordSpaceFromRect( lv4Rect );
-    // The screen transform composes the viewport space onto the device space.
+
+    // The asm composes each viewport row through the device-space rows directly
+    // (out_row = r.x*D0 + r.y*D1 + r.z*D2) == Multiply33(viewport, device).
     smm33ZoomedViewportScreenTransform =
-        MakeTransform( smm33ZoomedViewportTransform, smm33DeviceSpace );
+        Multiply33( smm33ZoomedViewportTransform, smm33DeviceSpace );
 }
 
-// @ 0x824BAB78 — map a device-space (screen) point back into world space. Builds the
-// device->world transform and applies it; the result is a Vector3 on the map plane (z=0).
+// @ 0x82428878 — map a world point onto the device through the zoomed window:
+//   u = (world.x, world.z, 1) . smm33ZoomedWorldTransform        (zoomed-unit 0..1)
+//   [lbClamp] direction-preserving clamp of u toward the window centre (0.5, 0.5):
+//     walk the line from (0.5,0.5) through u back until it enters the unit square
+//     (slope/intercept in the asm, with a 1-x mirror for negative overshoot), then a
+//     plain clamp01 of both lanes.
+//   out = (u.x, u.y, 1) . smm33ZoomedViewportScreenTransform     (device space)
+Vector2 MapTransform::WorldToDevice( Vector3 lv3World, bool lbClamp )
+{
+    // The map plane is world (x, z) (the asm perms lanes 0/2 of the input vector).
+    Vector2 lv2World;
+    lv2World.x = lv3World.x;
+    lv2World.y = lv3World.z;
+    lv2World.z = 0.0f;
+    lv2World.w = 0.0f;
+
+    Vector2 lv2Unit = Transform( lv2World, smm33ZoomedWorldTransform );
+
+    if ( lbClamp )
+    {
+        f32 lfX = lv2Unit.x;
+        f32 lfY = lv2Unit.y;
+
+        // The asm guards the slope on x == 0.5 exactly (vcmpeqfp against the 0.5 splat).
+        if ( lfX != 0.5f )
+        {
+            const f32 lfSlope     = ( lfY - 0.5f ) / ( lfX - 0.5f );
+            const f32 lfIntercept = lfY - lfSlope * lfX;
+
+            // Overshoot measure per axis: the raw value, mirrored (1 - v) when negative.
+            const f32 lfOverX = ( lfX < 0.0f ) ? ( 1.0f - lfX ) : lfX;
+            const f32 lfOverY = ( lfY < 0.0f ) ? ( 1.0f - lfY ) : lfY;
+
+            if ( lfOverX > 1.0f && lfOverX > lfOverY )
+            {
+                // x dominates: clamp x, keep the point on the centre line.
+                lfX = ( lfX < 0.0f ) ? 0.0f : ( lfX > 1.0f ? 1.0f : lfX );
+                lfY = lfSlope * lfX + lfIntercept;
+            }
+            else if ( lfOverY > 1.0f && lfOverY > lfOverX )
+            {
+                // y dominates: clamp y, solve the line for x (the asm's vrefp(slope)).
+                lfY = ( lfY < 0.0f ) ? 0.0f : ( lfY > 1.0f ? 1.0f : lfY );
+                lfX = ( lfY - lfIntercept ) * ( 1.0f / lfSlope );
+            }
+        }
+
+        // Final plain clamp01 of both lanes (always applied on the clamp path).
+        lv2Unit.x = ( lfX < 0.0f ) ? 0.0f : ( lfX > 1.0f ? 1.0f : lfX );
+        lv2Unit.y = ( lfY < 0.0f ) ? 0.0f : ( lfY > 1.0f ? 1.0f : lfY );
+    }
+
+    Vector2 lv2Out = Transform( lv2Unit, smm33ZoomedViewportScreenTransform );
+    lv2Out.z = 0.0f;
+    lv2Out.w = 0.0f;
+    return lv2Out;
+}
+
+// (X360 inlines the 16-byte store to @0x82FB36A0 -- GuiModule::Construct's HD/SD pick
+// and the debug component's sliders.) Install the live sat-nav viewport rect.
+void MapTransform::SetSatNavRect( Vector4 lv4Rect )
+{
+    smv4SatNavViewRect = lv4Rect;
+}
+
+// @ 0x824BAB78 — map a device-space (screen) point back into world space.
+// FLAG (pre-existing semantic reconstruction, unchanged this slice): the X360 body
+// reads the ZOOMED matrices (@0x82FB3140 + @0x82FB32E0 per the image xrefs), i.e. it
+// undoes the zoomed chain; this body still routes through the static device/world
+// spaces. No mounted TU calls it yet -- re-derive against the asm when the crash-nav
+// cursor slice (its real consumer) lands.
 Vector3 MapTransform::DeviceToWorld( Vector2 lv2Device )
 {
     const Matrix33 lm33DeviceToWorld = MakeTransform( smm33DeviceSpace, smm33WorldSpace );

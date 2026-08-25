@@ -20,6 +20,7 @@
 #include "GameSource/Gui/BrnGuiProfile.h"                               // BrnGui::ProfileManager (module-owned; REAL)
 #include "GameShared/GameClasses/Gui/CgsGuideIntegration.h"             // CgsGui::SystemUserProfile (module-owned; X360 +949152)
 #include "GameSource/Gui/BrnGuiCache.h"                                 // BrnGui::GuiCache (the flow states' cache)
+#include "GameSource/Gui/SatNav/BrnMapIconManager.h"   // [H3b] BrnGui::MapIconManager (by-value member)
 #include "GameSource/Gui/BrnGuiHudMessageDirector.h"                    // BrnGui::HudMessageDirector (module-owned; X360 +639264)
 #include "GameSource/Gui/BrnGuiHudMessageAnalyzer.h"                    // BrnGui::HudMessageAnalyzer (module-owned; X360 +660992)
 #include "GameSource/Gui/BrnGuiWorldDataController.h"                   // BrnGui::WorldDataController (module-owned; X360 +307836)
@@ -288,6 +289,9 @@ namespace BrnGui
         // runs its acquire machine. It MUST outlive every flow state that resolves a car.
         WorldDataController mWorldDataController;   // X360 +307836
         GuiCache          mGuiCache;        // X360 +1005376 (the flow states' cache; event-64 payload)
+        // [H3b] the shared map-icon manager (X360 +1088304; ctor from GuiModule::GuiModule
+        // @0x827E5D7C, Construct + GuiCache::SetMapIconManager from GuiModule::Construct).
+        MapIconManager    mMapIconManager;
         BrnScreenFlow     mScreenFlow;      // X360 mScreenFlow (SCREEN = E_GUIFLOW_SCREEN, the front-end)
         BrnHudFlow        mHudFlow;         // X360 +638904-adjacent flow set (HUD = E_GUIFLOW_HUD)
         BrnOverlayFlow    mOverlayFlow;     // X360 mOverlayFlow (OVERLAY = E_GUIFLOW_OVERLAY)

@@ -1,4 +1,5 @@
 #include "GameSource/Gui/BrnGuiModule.h"
+#include "SharedClasses/Gui/SatNav/BrnMapUtils.h"   // [H3b] MapTransform (the sat-nav view-rect install)
 
 #include <cstdio>                                                         // std::snprintf (log formatting)
 #include <chrono>   // the PC frame clock for the view time-step event (FLAG: wall clock)
@@ -1018,6 +1019,17 @@ namespace BrnGui
         // a car / landmark / event through GuiCache::GetWorldDataController reaches.
         mWorldDataController.Construct();
         mGuiCache.SetWorldDataController(&mWorldDataController);
+
+        // [H3b] X360 GuiModule::Construct: MapIconManager::Construct(gm+1088304, cache)
+        // right after the cache/world-data wiring, then the cache binding + the sat-nav
+        // view-rect pick + the mask matrix build (the @0x82518A2C..@0x82518A64 run).
+        mMapIconManager.Construct(&mGuiCache);
+        mGuiCache.SetMapIconManager(&mMapIconManager);
+        // isHighDef == true on this host (the HD apt path) -> the HD rect @0x82FB30A0.
+        // MapUtils' static default IS that rect; the explicit install keeps the console's
+        // HD/SD pick visible (the SD alt {0.750781238079071, y0, 0.9039062261581421, y1}).
+        MapTransform::SetSatNavRect(MapTransform::GetSatNavViewRect());
+        SetMaskAspectCorrectionMatrix(&mGuiCache);
 
         // X360 GuiModule::Construct wires the shared state-access bundle here, before
         // any flow is allowed to run: ViewModule::GetAptAux/GetLanguageManager,
@@ -2230,29 +2242,43 @@ namespace BrnGui
                                 reinterpret_cast<const CgsModule::Event*>(&lBody), 25,
                                 static_cast<s32>(sizeof(lBody)));
                     }
-                    // ⭐ [boost-bar] the custom-renderer view-state commands -- 213 (the
-                    // SatNav/MainMap show/hide, 24-byte {s32 mode, f32 fade, u8 enable})
-                    // and 214/215 (the BoostBar/AboveCar enables, 16-byte {u8 flag}) --
-                    // bridged BODY-ONLY (record + 12, the GuiEvent<N> header stripped)
-                    // into the view-state queue, exactly as the case-18/25 bridges above
-                    // strip theirs. The console routes the WHOLE channel onto the view
-                    // queue; this build still bridges selectively, one record type at a
-                    // time, as each consumer lands. Their consumer is the view module's
-                    // custom-renderer manager forward (ViewModule::ProcessIncomingViewEvents
-                    // cases 213/214/215 -> CustomRendererManager::RecvEvent).
-                    else if (lpPlay->muEventType == 213 ||
+                    // ⭐ [boost-bar + H3b reconcile 2026-08-25] the custom-renderer record
+                    // family -- 213 (SatNav/MainMap show/hide, {s32 mode, f32 fade, u8
+                    // enable}), 214/215 (the BoostBar/AboveCar enables), 204 (the sat-nav
+                    // event-starts display command) and 212 (the per-frame RenderSatNav
+                    // payload) -- bridged BODY-ONLY into the view-state queue, exactly as
+                    // the case-18/25 bridges above strip theirs. ONE delivery path: the
+                    // view module's custom-renderer manager forward
+                    // (ViewModule::ProcessIncomingViewEvents cases 204/212/213/214/215 ->
+                    // CustomRendererManager::RecvEvent), the console's loop-tail seat. The
+                    // console routes the WHOLE channel onto the view queue; this build
+                    // still bridges selectively, one record type at a time, as each
+                    // consumer lands. The header size comes from the record's own head[2]
+                    // ({payloadSize, type, headerSize}) rather than a hardcoded 12: the
+                    // alignas(16) 212 record carries a 16-byte head, its siblings 12.
+                    else if (lpPlay->muEventType == 204 ||
+                             lpPlay->muEventType == 212 ||
+                             lpPlay->muEventType == 213 ||
                              lpPlay->muEventType == 214 ||
                              lpPlay->muEventType == 215)
                     {
-                        const u8* lpu8Body = reinterpret_cast<const u8*>(lpEvent) + 12;
-                        mViewInputBuffer.GetViewStateQueue()
-                            .CgsModule::VariableEventQueue<65536, 16>::AddEvent(
-                                reinterpret_cast<const CgsModule::Event*>(lpu8Body),
-                                static_cast<s32>(lpPlay->muEventType), liSize - 12);
+                        const u32 luPayloadOffset =
+                            reinterpret_cast<const u32*>(lpEvent)[2];
+                        if (luPayloadOffset >= 12u &&
+                            static_cast<s32>(luPayloadOffset) <= liSize)
+                        {
+                            const u8* lpu8Body =
+                                reinterpret_cast<const u8*>(lpEvent) + luPayloadOffset;
+                            mViewInputBuffer.GetViewStateQueue()
+                                .CgsModule::VariableEventQueue<65536, 16>::AddEvent(
+                                    reinterpret_cast<const CgsModule::Event*>(lpu8Body),
+                                    static_cast<s32>(lpPlay->muEventType),
+                                    liSize - static_cast<s32>(luPayloadOffset));
+                        }
                     }
-                    // The remaining view-state records ride the AptCommunicator component
-                    // path on PC. [FLAG: the raw channel-41 bridge for them lands with the
-                    // full view IO chain.]
+                    // The remaining view-state records (311/415/556 and the rest) ride the
+                    // AptCommunicator component path on PC. [FLAG: the raw channel-41
+                    // bridge for them lands with the full view IO chain.]
                     break;
                 }
 
