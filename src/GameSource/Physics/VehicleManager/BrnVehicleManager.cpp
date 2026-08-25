@@ -7,8 +7,11 @@
 #include "GameShared/GameClasses/Physics/CgsRigidBody.h"                      // K_INVALID_RIGID_BODY_ID (qword_82F2A3A8)
 #include "rw/math/vpu/vector3_operation.h"                                    // vpu::Dot (T-bone side-speed gates, wave B3b)
 
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"                     // gpDebugPrint ([bringup] crash-entry banner)
+
 #include <cmath>    // std::fabs, std::acos
 #include <cstddef>  // offsetof (layout asserts)
+#include <cstdlib>  // std::getenv -- the BRN_ENABLE_CRASH_ENTRY bring-up flag ONLY (see below)
 
 // BrnPhysics::Vehicle::VehicleManager -- the car-vs-car takedown chain.
 // This TU bodies the contact entry point HandleRaceCarRaceCarContact (STAGE 1), the classifier
@@ -583,6 +586,76 @@ namespace Vehicle
         (void)lpRequestOutputInterface;
         (void)lpVehicleOutputInterface;
         (void)lpDeformationInterface;
+
+        // ===========================================================================================
+        // ⛔⛔ BRING-UP FLAG -- NOT IN THE X360 BINARY -- CRASH ENTRY IS OFF ON THE PUBLIC PATH.
+        //
+        //   crash ENTRY is reconstructed and correct; crash RECOVERY needs
+        //   BrnAI::ResetOnTrackManager (~2500 insns, absent). Until that lands, a heavy crash
+        //   pins the car, so the public path keeps crash entry disabled.
+        //   DELETE-WHEN ResetOnTrackManager lands and a heavy crash recovers.
+        //
+        // ⭐ THIS IS NOT ONE OF THE NINE STALE GATES THAT WERE CORRECTLY DELETED on 2026-08-25.
+        //   Those claimed a function was unmounted or had no body anywhere in the tree, and every
+        //   one of those claims was FALSE. This flag claims nothing about the code below it: that
+        //   code is bodied, mounted, measured end to end, and it RUNS -- with the flag set, a
+        //   player crash still opens a RaceCarCrash record, ticks its cleanup timer, posts
+        //   RaceCarCrashCompleteEvent and delivers it to RaceCarEntityModule, exactly as it does
+        //   today (scratchpad crash_exit_log.md §03, run cx_flow6). What is missing is one rung
+        //   BELOW the exit: ProcessRaceCarCrashCompleteEvents receives the event with
+        //   mbCrashing == 1, so RaceCar::RequestResetOnTrack sets mbToBeResetOnTrack -- and the
+        //   consumer of that flag (RCEM::SendResetOnTrackRequests -> the AI ResetOnTrackRequest
+        //   queue -> BrnAI::ResetOnTrackManager, ~25 functions / ~2500 instructions, NONE on disk
+        //   -> ProcessResetOnTrackResultQueue -> RequestPlaceOnTrack) does not exist yet. So a
+        //   HEAVY crash ends logically and the car is never placed back on the road: it pins.
+        //   (Measured, with the control that could falsify it: run cx_flow3 pinned at
+        //   (2932,-10.8,~209) for 80 s on the identical build that "recovered" in cx_flow6 --
+        //   and cx_flow6's re-acceleration began BEFORE the complete event, i.e. it was physics
+        //   rolling away from a light knock, not recovery.)
+        //
+        // ⚠️ IT IS A CAPABILITY SWITCH, NOT A BEHAVIOUR CHANGE. When the flag is set the console
+        //   path below is entered unmodified; when it is clear this returns at exactly the point
+        //   the console's OWN suppression gates return (the two invulnerability latches /
+        //   mbStopPlayerCrashing / mbStopAICrashing, four lines below), so no half-committed
+        //   crash state can exist either way. Nothing downstream is stubbed, faked or reordered.
+        //
+        // ⭐ OPT IN with the environment variable  BRN_ENABLE_CRASH_ENTRY=1  (the BRN_* precedent:
+        //   BRN_PROP_DIAG / BRN_TRICACHE_PROBE / BRN_INPUT_ALLOW_BACKGROUND). Waves working the
+        //   crash chain set it and get today's full behaviour, bit for bit. flow_run.ps1 clears
+        //   it on every default run and exposes it as -CrashEntry, so a leftover shell variable
+        //   cannot ride into a run that calls itself default.
+        //
+        //   Reference: scratchpad resetontrack_log.md (JOB 1), crash_exit_log.md §03.
+        // ===========================================================================================
+        {
+            static const bool sbCrashEntryEnabled = (std::getenv("BRN_ENABLE_CRASH_ENTRY") != 0);
+            if (!sbCrashEntryEnabled)
+            {
+                // Budgeted witness: the banner once, then one short line per suppressed crash up
+                // to 16, so scoring an ABSENCE downstream is not scoring a silent diagnostic.
+                static s32 sliSuppressed = 0;
+                if (CgsDev::Log::gpDebugPrint != 0 && sliSuppressed < 16)
+                {
+                    if (sliSuppressed == 0)
+                    {
+                        *CgsDev::Log::gpDebugPrint
+                            << "[bringup] CRASH ENTRY DISABLED (BRN_ENABLE_CRASH_ENTRY is not set)."
+                            << " Crash entry is reconstructed and correct; crash RECOVERY needs"
+                            << " BrnAI::ResetOnTrackManager (~2500 insns, absent), so a heavy crash"
+                            << " would pin the car. Set BRN_ENABLE_CRASH_ENTRY=1 to exercise the"
+                            << " full chain.\n";
+                    }
+                    ++sliSuppressed;
+                    *CgsDev::Log::gpDebugPrint
+                        << "[bringup] crash entry suppressed #" << sliSuppressed
+                        << " victim index "
+                        << static_cast<s32>((lVictimEntityId.muValue >> 10) & 0x3FFF)
+                        << " cause sub-code "
+                        << static_cast<s32>((lAggressorEntityId.muValue >> 24) & 0xFF) << "\n";
+                }
+                return;
+            }
+        }
 
         // ---- Step 1: index + early-out suppression gates (asm v36/v38/v43/v44/v45) ----
         const s32 liVictimIndex = static_cast<s32>((lVictimEntityId.muValue >> 10) & 0x3FFF);
