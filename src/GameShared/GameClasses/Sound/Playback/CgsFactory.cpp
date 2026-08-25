@@ -10,7 +10,7 @@
 
 #include "GameShared/GameClasses/Sound/Playback/CgsFactory.h"
 
-#include <cstring>
+#include "rw/rwcore_structs.h"   // rw::Resource / rw::IResourceAllocator (the DoDispose carve return)
 
 namespace CgsSound
 {
@@ -36,18 +36,21 @@ Factory::~Factory()
     CGS_ASSERT(mu32RefCount == 0, "0 == mu32RefCount");
 }
 
-// @ 0x826AD4D0. Gate on a leading no-arg bool virtual (vtable slot 3 / byte 0xC); if
-// false, return (u32)-1. Otherwise assert the out-handle owns a Content, register it
-// with the environment, and on rejection clear the out-handle before returning -1.
-u32 Factory::CreateContent(const ContentSpec& /*akrSpec*/, Handle<Content>& arHandleOut, u32 /*au32Ident*/)
+// @ 0x826AD4D0. The Hex-Rays view shows an "arg-less bool virtual at vtable slot 3";
+// the DWARF vtable order ([0] dtor, [1] DoDispose, [2] DoCreateVoice,
+// [3] DoCreateContent, [4] DoUpdate) names slot 3: this is the subclass hook
+// DoCreateContent(spec, handle, ident) with the incoming args passed straight
+// through (Hex-Rays dropped the untouched pass-through registers). By name:
+// dispatch the hook; on success assert the out-handle owns the produced Content,
+// register it with the environment, and on rejection clear the out-handle.
+u32 Factory::CreateContent(const ContentSpec& akrSpec, Handle<Content>& arHandleOut, u32 au32Ident)
 {
-    void** lpapVtbl = *reinterpret_cast<void***>(this);
-    if (!reinterpret_cast<bool (*)(void*)>(lpapVtbl[3])(this))
+    if (!DoCreateContent(akrSpec, arHandleOut, au32Ident))
     {
         return static_cast<u32>(-1);
     }
 
-    // The out-handle must already own a Content (CgsHandle.h:305).
+    // The out-handle must own the produced Content (CgsHandle.h:305).
     CGS_ASSERT(arHandleOut.GetObject() != 0, "mpObject");
 
     u32 luResult = Environment::AddContent(mEnvironment, arHandleOut.GetObject());
@@ -61,31 +64,45 @@ u32 Factory::CreateContent(const ContentSpec& /*akrSpec*/, Handle<Content>& arHa
     return luResult;
 }
 
-// @ 0x826AD450. Dispose a factory-produced instance via two virtual dispatches.
-//   manager = *(this + 12);
-//   (*this->vtable[0])(this, 0);              // self virtual call, slot 0
-//   disposer = *(manager + 48);
-//   params[0] = this; params[1..4] = 0;
-//   (*disposer->vtable[5])(disposer, params); // disposer virtual, byte offset 20
-// The two callees dispatch through raw vtables (their concrete types are DEFERRED),
-// so the calls are issued through function-pointer casts, faithful to the pseudocode.
+// @ 0x826AD450. The Hex-Rays view:
+//   manager = *(this + 12);                   // mEnvironment (by name)
+//   (*this->vtable[0])(this, 0);              // scalar-deleting dtor, flag 0
+//                                             //   == non-deleting virtual destroy
+//   disposer = *(manager + 48);               // Environment + 0x30 == mpAllocator
+//                                             //   (the SAME word Environment::
+//                                             //    DoDispose @0x826BFDF8 snapshots)
+//   params = { this, 0, 0, 0, 0 };            // 20 bytes == the CONSOLE rw::Resource
+//                                             //   (BaseResources<5>; first base =
+//                                             //    this factory's carve)
+//   (*disposer->vtable[5])(disposer, params); // the allocator's resource-free entry
+//
+// i.e. DoDispose destroys the (most-derived) factory in place, then hands the
+// carve back to the owning environment's rw allocator as a Resource -- the exact
+// counterpart of `operator new(size_t, Environment&)` (DWARF h:224) carving it.
+// FLAG (vtable-slot inference): slot 5 is read as the console IResourceAllocator's
+// DoFree(const Resource&) (the retail console vtable has no AllocDebug pair; the
+// x64 rwcore.pdb vtable puts DoFree at slot 7 behind two AllocDebug entries). The
+// host body calls DoFree by name with the host 4-slot Resource; if the console
+// slot is ever attested otherwise, revisit here.
 void Factory::DoDispose()
 {
-    char* lpThis = reinterpret_cast<char*>(this);
+    // Snapshot the owning environment BEFORE destroying ourselves (the X360 loads
+    // *(this+12) first; the environment outlives its factories).
+    Environment& lrEnvironment = mEnvironment;
 
-    void** lpapVtbl = *reinterpret_cast<void***>(lpThis);
-    reinterpret_cast<void (*)(void*, int)>(lpapVtbl[0])(this, 0);
+    // Non-deleting virtual destroy (the vtbl[0](this, 0) dispatch): C++'s explicit
+    // virtual destructor call runs the most-derived chain without freeing.
+    this->~Factory();
 
-    // owning manager (X360 +12 == mEnvironment slot) and its disposer sub-object (+48)
-    char* lpManager  = *reinterpret_cast<char**>(lpThis + 12);
-    void* lpDisposer = *reinterpret_cast<void**>(lpManager + 48);
+    // Hand the carve back through the environment's allocator.
+    rw::IResourceAllocator* lpAllocator = lrEnvironment.GetAllocator();
 
-    void* lapParams[6];
-    lapParams[0] = this;
-    std::memset(&lapParams[1], 0, 16);
-
-    void** lpapDisposerVtbl = *reinterpret_cast<void***>(lpDisposer);
-    reinterpret_cast<int (*)(void*, void*)>(lpapDisposerVtbl[5])(lpDisposer, lapParams);
+    rw::Resource lResource;
+    lResource.m_baseResources[0] = this;
+    lResource.m_baseResources[1] = 0;
+    lResource.m_baseResources[2] = 0;
+    lResource.m_baseResources[3] = 0;
+    lpAllocator->DoFree(lResource);
 }
 
 } // namespace Playback

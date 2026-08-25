@@ -5,6 +5,7 @@
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Sound/Playback/CgsRegistry.h" // Entity (ContentSpec base)
+#include "GameShared/GameClasses/Sound/Playback/CgsObject.h"   // Object (canonical DWARF home -- fold done, see the note below)
 
 #include <cstddef> // size_t
 
@@ -37,23 +38,15 @@ namespace Playback
 
     struct Content;
 
-    struct ContentDisposeRequest
-    {
-        Content* mpContent;
-        u32 mauReserved[4];
-    };
-
-    class ContentDisposer
-    {
-    public:
-        virtual int DisposeContent(ContentDisposeRequest* lpRequest);
-    };
-
-    class Factory
-    {
-    public:
-        ContentDisposer* GetContentDisposer();
-    };
+    // (2026-08-25, audio-faithfulness wave 3): the former TU-local rival
+    // `class Factory { GetContentDisposer(); }` + ContentDisposer +
+    // ContentDisposeRequest trio is RETIRED -- it was an invented model of
+    // Content::DoDispose's tail, which (like Factory::DoDispose @0x826AD450) is the
+    // owning environment's rw ALLOCATOR taking the carve back. The real Factory
+    // (CgsFactory.h) is forward-declared here (`Factory& mFactory` is held by
+    // reference only); DoDispose is bodied out-of-line in CgsObject.cpp where the
+    // full Factory/Environment/rw surface is includable without a header cycle.
+    class Factory;
 
     // CgsDataStructures.h:425 (DWARF). ContentSpec : public Entity. The serialised
     // content specification: a resolved ContentType* (+8), the packed load
@@ -88,27 +81,11 @@ namespace Playback
         char               macFullPath[1];   // (+0x10) inline '|'-joined path buffer
     };
 
-    class Object
-    {
-    public:
-        Object() : mu32RefCount(0) {}
-        virtual ~Object() {}
-        virtual void DoDispose() {}
-
-        // CgsObject.h:108 (DWARF home; mirrored from the canonical Playback/CgsObject.h
-        // copy per its CONDUCTOR fold note). Take a reference -- the X360 inlines this
-        // as `++*(obj+4)` at the call sites (e.g. Logic::Voice::Connect @0x826C4F18).
-        // FLAG: shape-only ++ (no recon'd standalone asm); no fabricated guard assert.
-        void Acquire() { ++mu32RefCount; }
-
-        // CgsObject.h:115 (DWARF home; mirrored -- see Acquire). Drop a reference.
-        // FLAG: shape-only (the dispose-at-zero leg lives with Playback::Object::Release
-        // proper, not this inline).
-        void Release() { --mu32RefCount; }
-
-    protected:
-        u32 mu32RefCount;
-    };
+    // Object: the CONDUCTOR fold from CgsObject.h's note is DONE (2026-08-25,
+    // audio-faithfulness wave 3) -- this header's private simplified copy is deleted
+    // and the single canonical CgsSound::Playback::Object (CgsObject.h, DWARF home,
+    // with Acquire/Release/GetRefCount and the out-of-line asserting ~Object
+    // @0x826916F0 bodied in CgsObject.cpp) is included at the top of this file.
 
     class Voice;   // fwd -- Content attach/detach hooks take a Voice + Slot.
     class Slot;
@@ -127,11 +104,13 @@ namespace Playback
         // Slot::HandleDetach. Bodied in CgsObject.cpp.
         void OnDetach(Voice& arVoice, Slot& arSlot);
 
-        // Attach/unload hooks the detach path uses. FLAG (DEFER): declared-only --
-        // bodied in their own Content TUs. OnAttach takes a load reference; DoUnload
-        // performs the type-specific unload and returns success.
+        // Attach hook the detach path uses. FLAG (DEFER): declared-only -- bodied in
+        // its own Content TU. OnAttach takes a load reference.
         void OnAttach(Voice& arVoice, Slot& arSlot);
-        bool DoUnload();
+
+        // DWARF CgsContent.h:492. The owning factory, by name (the X360 reads
+        // Content+0x08; ContentLoader's allocator walk goes through here).
+        Factory& GetFactory() { return mFactory; }
 
         // Publish a resolved content state (E_CONTENT_STATE_*), setting the CHANGED
         // flag as required. FLAG (DEFER): declared-only -- bodied in its own Content TU
@@ -149,7 +128,22 @@ namespace Playback
         // layout/offset/sizeof and adds no member, so it is safe under the
         // grow-additively rule. Not a semantic change -- the X360 method is void.
         virtual void DoDispose();
-        virtual bool DoOnPostLoad();
+
+        // The full DWARF virtual set in DECLARATION ORDER == vtable order
+        // ([0] ~Content, [1] DoDispose :141, [2] DoLoad :259, [3] DoUnload :267,
+        //  [4] DoOnPostLoad :271, [5] DoOnPreUnload :274, [6] DoUpdate :278,
+        //  [7] DoGetData :281) -- completed 2026-08-25 (audio-faithfulness wave 3;
+        // DoUnload was previously declared NON-virtual here, breaking the
+        // GenericRwac/Splicer/AEMS subclass overrides, and the missing slots forced
+        // ContentLoader into raw vtable-index dispatch). DoOnPostLoad keeps its
+        // inline base default (return true); the others are FLAG (DEFER)
+        // declared-only base slices bodied in their own TUs.
+        virtual bool  DoLoad();
+        virtual bool  DoUnload();
+        virtual bool  DoOnPostLoad();
+        virtual bool  DoOnPreUnload();
+        virtual void  DoUpdate(f32 af32DeltaTime);
+        virtual void* DoGetData();
 
         Factory& mFactory;
         const ContentSpec& mContentSpec;
@@ -179,17 +173,10 @@ namespace Playback
     // (@0x82692A70) and the subclass dtors call. (Was inline; moved for Wave-6 item
     // 76 -- the load-count / ref-count asserts move with it. No layout change.)
 
-    inline void Content::DoDispose()
-    {
-        Factory& lFactory = mFactory;
-        this->~Content();
-
-        ContentDisposeRequest lRequest = {};
-        lRequest.mpContent = this;
-        // DWARF: Content::DoDispose() is void; the disposer call's result is not
-        // propagated out of the override (return type corrected above).
-        lFactory.GetContentDisposer()->DisposeContent(&lRequest);
-    }
+    // Content::DoDispose is bodied OUT-OF-LINE in CgsObject.cpp (2026-08-25 wave 3;
+    // was header-inline against the invented disposer trio above): snapshot the
+    // owning factory, run the non-deleting virtual destructor, then hand the carve
+    // back through the factory's environment allocator.
 
     inline bool Content::DoOnPostLoad()
     {

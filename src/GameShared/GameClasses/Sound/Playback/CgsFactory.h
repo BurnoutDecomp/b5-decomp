@@ -4,9 +4,10 @@
 #include "types.hpp"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
-#include "GameShared/GameClasses/Sound/Playback/CgsObject.h"   // Object (Factory base)
-#include "GameShared/GameClasses/Sound/Playback/CgsHandle.h"   // Handle<Content>
-#include "GameShared/GameClasses/Sound/Playback/CgsCommon.h"   // Name
+#include "GameShared/GameClasses/Sound/Playback/CgsObject.h"      // Object (Factory base)
+#include "GameShared/GameClasses/Sound/Playback/CgsHandle.h"      // Handle<Content>
+#include "GameShared/GameClasses/Sound/Playback/CgsCommon.h"      // Name
+#include "GameShared/GameClasses/Sound/Playback/CgsEnvironment.h" // the REAL Environment (AddFactory/AddContent/GetAllocator)
 
 // ============================================================================
 // CgsFactory.h  (HOME for CgsSound::Playback::Factory).
@@ -36,66 +37,72 @@ namespace Playback
 
 struct ContentSpec;   // CgsContent.h (Factory::CreateContent takes it by const ref).
 struct Content;       // CgsContent.h.
-class  Environment;
-class  Factory;       // fwd -- Environment::AddFactory takes a Factory*.
+class  VoiceSpec;     // DWARF CgsFactory.h:157 (DoCreateVoice) -- own TU.
+class  Voice;         // Handle<Voice> in DoCreateVoice.
 
-// The dispose request/disposer the factory hands a torn-down instance to. Modelled
-// minimally (only the members DoDispose builds/reads). Bodied elsewhere.
-struct FactoryDisposeRequest
-{
-    void* mpInstance;         // +0x00
-    u32   mau32Reserved[4];   // +0x04..0x13 (zeroed)
-};
-
-class ContentDisposer
-{
-public:
-    virtual ~ContentDisposer() {}
-    virtual int DisposeContent(FactoryDisposeRequest* apRequest) = 0;
-};
-
+// (2026-08-25, audio-faithfulness wave 3): the former TU-local minimal `class
+// Environment { two statics }` rival is RETIRED for the real DWARF home -- the
+// AddFactory/AddContent statics live on the real struct (CgsEnvironment.h:120/122)
+// with identical signatures. The former `ContentDisposer`/`FactoryDisposeRequest`/
+// `GetContentDisposer()` trio is DELETED outright: the DWARF Factory surface has no
+// such members -- they were an invented model of DoDispose's tail, which is really
+// the environment ALLOCATOR handing the carve back (see CgsFactory.cpp).
 // ---------------------------------------------------------------------------
-// FLAG (DEFER): minimal Playback::Environment slice. Factory registers itself and
-// its produced content with the environment; only these statics are load-bearing.
-// Full Environment is its own TU.
-// ---------------------------------------------------------------------------
-class Environment
-{
-public:
-    static bool AddFactory(Environment& arEnvironment, Factory* apFactory);
-    static u32  AddContent(Environment& arEnvironment, Content* apContent);
-};
-
-// ---------------------------------------------------------------------------
-// CgsSound::Playback::Factory.
+// CgsSound::Playback::Factory. DWARF CgsFactory.h:54 -- surface below mirrors the
+// DecFIGS declaration order; vtable = [0] dtor, [1] DoDispose (Object slot,
+// overridden), [2] DoCreateVoice, [3] DoCreateContent, [4] DoUpdate.
 // ---------------------------------------------------------------------------
 class Factory : public Object
 {
 public:
-    // @ 0x826AD340. Install the vtable, zero the refcount, store name + environment,
-    // and register with the environment (assert registration succeeds).
+    // @ 0x826AD340 (DWARF h:243). Install the vtable, zero the refcount, store
+    // name + environment, and register with the environment (assert success).
     Factory(Name aName, Environment& arEnvironment);
 
-    // @ 0x826AD3C8. Assert a zero refcount at teardown (Object base parity).
+    // @ 0x826AD3C8 (DWARF h:85). Assert a zero refcount at teardown.
     virtual ~Factory();
 
-    // @ 0x826AD450. Dispose a factory-produced instance via the owning manager's
-    // content disposer. FLAG: the manager/disposer walk is DEFERRED -- DoDispose is
-    // bodied in CgsFactory.cpp through the raw dispatch it performs. Void per DWARF.
+    // @ 0x826AD450 (DWARF h:317). Tear the factory down and hand its carve back
+    // through the owning environment's allocator. Bodied in CgsFactory.cpp.
     virtual void DoDispose();
 
-    // @ 0x826AD4D0. Create content from a spec into the out-handle. Gated on a leading
-    // no-arg bool virtual (vtable slot 3); returns the environment content index or
-    // (u32)-1 (clearing the out-handle on rejection).
+    // @ 0x826AD4D0 (DWARF h:290). Create content from a spec into the out-handle:
+    // dispatch the subclass DoCreateContent (vtable slot 3), then register the
+    // produced content with the environment; (u32)-1 on failure (clearing the
+    // out-handle on registration rejection).
     u32 CreateContent(const ContentSpec& akrSpec, Handle<Content>& arHandleOut, u32 au32Ident);
 
-    // The owning content disposer (reached through the factory's manager). FLAG
-    // (DEFER): declared-only; bodied in the Factory/Environment TU.
-    ContentDisposer* GetContentDisposer();
+    // DWARF h:255 / h:310. FLAG (DEFER): declared-only -- their own ledger slices.
+    // GetName is const (a pure accessor; Environment::GetR reads the name through a
+    // const Factory&).
+    Name GetName() const;
+    void Update(f32 af32DeltaTime);
+
+    // DWARF h:334. The owning environment, by name (the X360 reads Factory+0x0C;
+    // ContentLoader's allocator walk and Content::DoDispose go through here).
+    Environment& GetEnvironment() { return mEnvironment; }
 
 protected:
-    Name              mName;         // X360 +0x8   one interned Name word
-    Environment&      mEnvironment;  // X360 +0xC   owning environment
+    // DWARF h:139/147. FLAG (DEFER): declared-only.
+    bool Install(Factory* apFactory);
+    void Uninstall(Factory* apFactory);
+
+    // DWARF h:157/168/172 -- the subclass factory hooks (vtable slots 2/3/4).
+    // FLAG (DEFER): declared-only base implementations; each concrete factory
+    // (AEMS / Splicer / GenericRwac) overrides them in its own TU. NOTE: any TU
+    // that emits this vtable (defines a Factory virtual out-of-line) makes the
+    // linker want these three symbols -- body them with the base slices when a
+    // Factory-deriving TU is first mounted.
+    virtual bool DoCreateVoice(const VoiceSpec& akrSpec, Handle<Voice>& arHandleOut, u32 au32Ident);
+    virtual bool DoCreateContent(const ContentSpec& akrSpec, Handle<Content>& arHandleOut, u32 au32Ident);
+    virtual void DoUpdate(f32 af32DeltaTime);
+
+    Name              mName;         // X360 +0x8   (DWARF h:201)
+    Environment&      mEnvironment;  // X360 +0xC   (DWARF h:202 spells `const
+                                     // Environment&`; kept non-const here because the
+                                     // attested AddFactory/AddContent/GetAllocator
+                                     // call paths mutate through it -- revisit with
+                                     // the Environment const-surface slice)
 };
 
 } // namespace Playback

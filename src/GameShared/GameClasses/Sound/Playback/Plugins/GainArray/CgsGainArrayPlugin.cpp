@@ -18,6 +18,13 @@
 //
 // Offsets are in 32-bit words from the instance base, matching the Hex-Rays
 // `_DWORD*` view.
+//
+// FLAG (TU-local minimal shapes, wave-3 audit note): the `GainArray` instance
+// layout below and the forward-modelled `rw::audio::core::MixBuffer` slice are
+// X360-offset reconstructions local to this TU (no DWARF/PDB home yet), and
+// Process reaches the splicer content's two MixBuffer slots by raw byte offsets
+// (+0x3000C/+0x30010) into an opaque content blob. When the splicer content /
+// RenderWare mix-buffer homes land, fold these onto them by name.
 
 namespace rw { namespace audio { namespace core {
 
@@ -45,7 +52,11 @@ namespace CgsSound { namespace Playback { namespace Plugins {
     extern void* const gpGainArrayDtorVTable;
 
     // Fixed per-block ramp-step scale (flt_820ADC00, f31 in Process).
-    static const f32 KF_GAIN_RAMP_STEP = 0.0f; // value = flt_820ADC00 rodata
+    // RECOVERED 2026-08-25 (audio-faithfulness wave 3) from the decrypted XEX rodata
+    // (file_off 0x3000 + 0xADC00: BE bytes 3C 80 00 00) = 0.015625f == 1/64 -- the
+    // per-sample ramp fraction. (An earlier revision silently stubbed this to 0.0f,
+    // which made every gain ramp a no-op.)
+    static const f32 KF_GAIN_RAMP_STEP = 0.015625f; // flt_820ADC00 (1/64)
 
     struct GainArray
     {

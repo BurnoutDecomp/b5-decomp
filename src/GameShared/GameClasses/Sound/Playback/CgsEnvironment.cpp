@@ -22,7 +22,9 @@
 
 #include "GameShared/GameClasses/Sound/Playback/CgsEnvironment.h"
 #include "GameShared/GameClasses/Sound/Playback/CgsObject.h"
+#include "GameShared/GameClasses/Sound/Playback/CgsFactory.h"     // complete Factory (GetR's name compare)
 #include "GameShared/GameClasses/Sound/Playback/RWAC/CgsGenericRwacFactory.h"
+#include "rw/rwcore_structs.h"                                     // rw::Resource / ResourceDescriptor / IResourceAllocator
 
 #include <cstring>
 
@@ -134,12 +136,8 @@ u32 Environment::AddContent(Environment& arEnvironment, Content* apContent)
     return lu32Index;
 }
 
-// @ 0x82680EF8. Return the owning rw allocator (asserted present).
-rw::IResourceAllocator* Environment::GetAllocator()
-{
-    CGS_ASSERT(mpAllocator, "mpAllocator");
-    return mpAllocator;
-}
+// (GetAllocator @0x82680EF8 moved header-inline 2026-08-25 wave 3 -- the mounted
+//  Content::DoDispose links it.)
 
 // @ 0x82680EA0. Return the owned entity registry (asserted present).
 Registry* Environment::GetRegistry()
@@ -148,25 +146,26 @@ Registry* Environment::GetRegistry()
     return mpRegistry;
 }
 
-// @ 0x826BFAF0. Look a voice up by ident (the u32 word at voice +0x0C). Returns an
-// acquired handle to the match, or an empty handle.
+// @ 0x826BFAF0. Look a voice up by ident. The X360 `*(voice + 0x0C)` is
+// Voice::mIdent, read by name via the wave-1 GetIdent accessor; the handle table
+// is walked through the real Handle<Voice> slots (one owned pointer each), not a
+// reinterpreted Object** (2026-08-25 wave 3). Returns an acquired handle to the
+// match, or an empty handle.
 Handle<Voice> Environment::GetV(u32 au32Id)
 {
     Handle<Voice> lhResult(static_cast<Voice*>(0));
     if (mu32VoiceCount)
     {
-        Object** lppVoices = reinterpret_cast<Object**>(mphVoice);
         for (u32 lu32I = 0; lu32I < mu32VoiceCount; ++lu32I)
         {
-            Object* lpVoice = lppVoices[lu32I];
+            Voice* lpVoice = mphVoice[lu32I].GetObject();
             if (lpVoice)
             {
                 CGS_ASSERT(lpVoice, "mpObject");
-                if (au32Id == *reinterpret_cast<u32*>(reinterpret_cast<u8*>(lpVoice) + 0x0C))
+                if (au32Id == lpVoice->GetIdent())
                 {
-                    Object* lpFound = lppVoices[lu32I];
-                    lhResult.SetObject(reinterpret_cast<Voice*>(lpFound));
-                    if (lpFound) { lpFound->Acquire(); }
+                    lhResult.SetObject(lpVoice);
+                    lpVoice->Acquire();
                     return lhResult;
                 }
             }
@@ -176,9 +175,16 @@ Handle<Voice> Environment::GetV(u32 au32Id)
     return lhResult;
 }
 
-// @ 0x826BFE50. Walk the voice table for a voice of the tagged type whose named-slot
-// spec resolves and whose plug-in table contains au32Plugin. Returns an acquired
-// handle to the first match, or an empty handle.
+// @ 0x826BFE50. Walk the voice table for the tagged factory's voice whose named
+// slot resolves and whose plug-in table contains au32Plugin. Decoded by name
+// (2026-08-25 wave 3):
+//   * the "type tag" check is `voice->mFactory.mName == dword_83008650` (the asm
+//     loads voice+8 -> factory, factory+8 -> mName) -- i.e. the voice belongs to a
+//     SPECIFIC factory, matched by interned name;
+//   * FindNamedSlot receives the interned Name at dword_830080A8 (one word built
+//     on the stack and passed by the non-trivial-class reference ABI) -- the real
+//     Voice::FindNamedSlot(Name) member.
+// Returns an acquired handle to the first match, or an empty handle.
 Handle<Content> Environment::GetR(u32 au32Plugin)
 {
     Handle<Content> lhResult(static_cast<Content*>(0));
@@ -188,25 +194,32 @@ Handle<Content> Environment::GetR(u32 au32Plugin)
         return lhResult;
     }
 
-    Object** lppVoices = reinterpret_cast<Object**>(mphVoice);
     for (u32 lu32I = 0; lu32I < mu32VoiceCount; ++lu32I)
     {
-        Object* lpVoice = lppVoices[lu32I];
+        Voice* lpVoice = mphVoice[lu32I].GetObject();
         if (!lpVoice) { continue; }
-        u8* lpu8Voice = reinterpret_cast<u8*>(lpVoice);
-        void* lpTypeObj = *reinterpret_cast<void**>(lpu8Voice + 8);
-        if (*reinterpret_cast<u32*>(reinterpret_cast<u8*>(lpTypeObj) + 8) != gu32VoiceTypeTag) { continue; }
 
-        u32 lau32NamedSlot[40];
-        lau32NamedSlot[0] = gu32NamedSlotSentinel;
-        CGS_ASSERT(lppVoices[lu32I], "mpObject");
-        if (!Voice::FindNamedSlot(reinterpret_cast<Voice*>(lppVoices[lu32I]), lau32NamedSlot)) { continue; }
+        // Factory-name match (asm: voice+8 -> factory, +8 -> mName vs dword_83008650).
+        if (lpVoice->GetFactory().GetName() !=
+            Name(static_cast<uintptr_t>(gu32VoiceTypeTag))) { continue; }
 
-        Object* lpNamed = lppVoices[lu32I];
-        CGS_ASSERT(lpNamed, "mpObject");
-        lpNamed->Acquire();
+        CGS_ASSERT(lpVoice, "mpObject");
+        if (lpVoice->FindNamedSlot(Name(static_cast<uintptr_t>(gu32NamedSlotSentinel))) == 0)
+        {
+            continue;
+        }
 
-        u8* lpu8Named = reinterpret_cast<u8*>(lpNamed);
+        CGS_ASSERT(lpVoice, "mpObject");
+        lpVoice->Acquire();
+
+        // FLAG (offset reach into the voice's un-homed tail region): the matched
+        // voice's plug-in table -- a sub-object at console voice+0x2C with the
+        // plug-in array at +0x08 and its u16 count at +0x0C -- lies past the homed
+        // Voice members (mOffsets ends the named layout at +0x2C; DWARF SubmixVoice
+        // adds only mpSubmix there). Which concrete voice subclass owns this table
+        // is not yet attested, so the walk stays byte-addressed until that home
+        // lands. The assert strings are verbatim.
+        u8* lpu8Named = reinterpret_cast<u8*>(lpVoice);
         u16 lu16PluginCount = *reinterpret_cast<u16*>(lpu8Named + 0x38);
         u8* lpPluginTable = lpu8Named + 0x2C;
         bool lbMatched = false;
@@ -220,13 +233,12 @@ Handle<Content> Environment::GetR(u32 au32Plugin)
 
         if (lbMatched)
         {
-            Object* lpFound = lppVoices[lu32I];
-            lhResult.SetObject(reinterpret_cast<Content*>(lpFound));
-            if (lpFound) { lpFound->Acquire(); }
-            lpNamed->Release();
+            lhResult.SetObject(reinterpret_cast<Content*>(lpVoice));
+            lpVoice->Acquire();
+            lpVoice->Release();
             return lhResult;
         }
-        lpNamed->Release();
+        lpVoice->Release();
     }
 
     lhResult.SetObject(0);
@@ -264,41 +276,76 @@ Environment::~Environment()
 {
 }
 
-// @ 0x826BFD60. Allocator-keyed placement delete: build the free request and dispatch
-// it through the allocator vtable (slot 5).
+// @ 0x826BFD60. Allocator-keyed placement delete: hand the carve back to the rw
+// allocator. The X360 builds the 20-byte {memory, 0,0,0,0} block -- the CONSOLE
+// rw::Resource (BaseResources<5>, first base = the carve) -- and dispatches the
+// allocator's console vtable slot 5 == DoFree(const Resource&) (slot 4 right
+// beside it is DoAllocate, proven by operator new below passing a
+// BaseResourceDescriptor and receiving a Resource; the retail console vtable has
+// no AllocDebug pair -- the x64 rwcore.pdb puts DoAllocate/DoFree at 6/7 behind
+// them). By name on the host 4-slot Resource. (2026-08-25 wave 3: the raw
+// vtable-index dispatch is retired.)
 void Environment::operator delete(void* lpMemory, rw::IResourceAllocator* lpAllocator)
 {
     CGS_ASSERT(lpAllocator, "lpAllocator");
 
-    void* lapRequest[6];
-    lapRequest[0] = lpMemory;
-    std::memset(&lapRequest[1], 0, 16);
-
-    void** lppVtbl = *reinterpret_cast<void***>(lpAllocator);
-    reinterpret_cast<int (*)(void*, void*)>(lppVtbl[5])(lpAllocator, lapRequest);
+    rw::Resource lResource;
+    lResource.m_baseResources[0] = lpMemory;
+    lResource.m_baseResources[1] = 0;
+    lResource.m_baseResources[2] = 0;
+    lResource.m_baseResources[3] = 0;
+    lpAllocator->DoFree(lResource);
 }
 
-// @ 0x826ACF98. Placement new from an EnvironmentSpec: size the carve (handle tables
-// + registry data + string table) and allocate it through the spec allocator vtable
-// (slot 4). spec[4]/[5]/[6] are the RegistrySpec size fields read positionally.
+// @ 0x826ACF98. Placement new from an EnvironmentSpec: size the carve (the object +
+// the factory/voice/content handle tables + the registry entity table, data blob and
+// string table) and allocate it through the spec allocator.
+//
+// The X360 packs ONE {size, align=4} pair (a BaseResourceDescriptor) and calls the
+// allocator's console vtable slot 4 == DoAllocate(descriptor, "Environment"),
+// which returns a Resource by hidden-buffer; the carve base is its first word. The
+// former reconstruction read the RegistrySpec fields POSITIONALLY (spec[4]/[5]/[6])
+// -- wrong on the host where muDataSize/muStringTableSize are size_t -- and
+// dispatched the raw vtable index; both retired 2026-08-25 (wave 3), by name below.
+//
+// Console size formula (@0x826ACF98): 4*(handleCount + entityCount + 35) +
+// stringTableSize + dataSize -- the `35` covers the console 112-byte Environment
+// (28 words) plus the registry header (7 words, CgsRegistry.h). HOST NOTE: the
+// formula's word-scale is the console's 4-byte pointer width; the host carve is
+// sized with the host sizeofs where the console used its own (Environment 112 ->
+// sizeof(Environment); handle/entity slots 4 -> sizeof(void*)), keeping the carve
+// big enough for the widened tables the constructor lays out.
 void* Environment::operator new(size_t luSize, const EnvironmentSpec& lrSpec)
 {
-    CGS_ASSERT(luSize == 112, "sizeof(Environment) == luSize");
+    CGS_ASSERT(luSize == sizeof(Environment), "sizeof(Environment) == luSize");
     CGS_ASSERT(lrSpec.mpAllocator, "lEnvironmentSpec.mpAllocator");
 
-    const u32* lpu32Spec = reinterpret_cast<const u32*>(&lrSpec);
     rw::IResourceAllocator* lpAllocator = lrSpec.mpAllocator;
 
-    u32 lu32Handles = lrSpec.mu32FactoryCount + lrSpec.mu32VoiceCount + lrSpec.mu32ContentCount;
-    u32 lu32Total = 4u * (lu32Handles + lpu32Spec[4] + 35u) + lpu32Spec[6] + lpu32Spec[5];
+    const size_t luHandles = static_cast<size_t>(lrSpec.mu32FactoryCount)
+                           + lrSpec.mu32VoiceCount
+                           + lrSpec.mu32ContentCount;
 
-    u64 lu64Request = (static_cast<u64>(lu32Total) << 32) | 4u;
+    // Console: 4 * (handles + entityCount + 35) + stringTable + data. Host: the
+    // pointer-width slots widen (sizeof(void*)), the fixed 35-word head becomes the
+    // host Environment + registry-header sizes.
+    const size_t luTotal = sizeof(void*) * (luHandles + lrSpec.mRegistrySpec.mu32EntityCount)
+                         + luSize
+                         + 7u * sizeof(void*)                    // registry header words
+                         + lrSpec.mRegistrySpec.muStringTableSize
+                         + lrSpec.mRegistrySpec.muDataSize;
 
-    u8 lau8RetBuf[32];
-    void** lppVtbl = *reinterpret_cast<void***>(lpAllocator);
-    void* lpResult = reinterpret_cast<void* (*)(void*, void*, void*, const char*)>(lppVtbl[4])(
-        lau8RetBuf, lpAllocator, &lu64Request, "Environment");
-    return *reinterpret_cast<void**>(lpResult);
+    rw::ResourceDescriptor lDescriptor;
+    lDescriptor.m_baseResourceDescriptors[0].m_size      = static_cast<u32>(luTotal);
+    lDescriptor.m_baseResourceDescriptors[0].m_alignment = 4u;   // console align word
+    for (u32 lu = 1; lu < 4u; ++lu)
+    {
+        lDescriptor.m_baseResourceDescriptors[lu].m_size      = 0u;
+        lDescriptor.m_baseResourceDescriptors[lu].m_alignment = 1u;
+    }
+
+    rw::Resource lResource = lpAllocator->DoAllocate(lDescriptor, "Environment");
+    return lResource.m_baseResources[0];
 }
 
 } // namespace Playback

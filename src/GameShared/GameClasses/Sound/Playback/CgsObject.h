@@ -8,17 +8,12 @@
 // CgsSound::Playback::Object - the reference-counted base for sound-playback
 // objects (the canonical DWARF home is CgsObject.h:42).
 //
-// FLAG (committed-type duplication): a SIMPLIFIED copy of this same class already
-// lives in CgsSound/Playback/CgsContent.h (struct Object { vptr; u32 mu32RefCount;
-// virtual ~Object(); virtual DoDispose(); }) where it is the base of
-// CgsContent.h's `Content`. That copy was committed before this real home existed.
-// The two share an IDENTICAL X360 layout (vptr @ +0, mu32RefCount @ +4) and an
-// identical destructor assert ("0 == mu32RefCount"), so they are ODR-compatible
-// member-for-member. This file is the DWARF-correct home and ADDS Acquire/Release
-// (CgsObject.h:108/115) which the CgsContent.h copy omits. CONDUCTOR: fold
-// CgsContent.h's local Object onto this header (have CgsContent.h #include this
-// and drop its private copy) so there is one Object. Not done here -- CgsContent.h
-// is another group's surface and no single TU in this group includes both.
+// FOLD DONE (2026-08-25, audio-faithfulness wave 3): CgsContent.h's old simplified
+// private copy of this class is DELETED -- CgsContent.h now #includes this header,
+// so there is exactly ONE CgsSound::Playback::Object program-wide (this DWARF
+// home). NOTE: the out-of-line asserting ~Object @0x826916F0 lives in
+// CgsObject.cpp -- any link that pulls a CgsContent.h consumer needs that TU
+// mounted.
 namespace CgsSound
 {
 namespace Playback
