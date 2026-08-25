@@ -94,6 +94,15 @@ namespace BrnReplays
         s32  WriteUpdateFrame(s32 liIndex, u8* lpCurrent, u8* lpPrevious);
 
     private:
+        // this+0x5C (the FIRST derived member -- BaseSerialiser's tail bools end at +0x5B).
+        // The sound channel's accumulated frame time: Read/Write do `+= <staticLayout
+        // +0xC5C frame delta>` on it every non-key frame (asm lfs/stfs 0x5C(r31)), and
+        // ReadUpdateFrame @0x826536C0 scales the position extrapolation by it.
+        // (2026-08-25 wave 4: an earlier revision MISBOUND these accesses to the base's
+        // mfTime @+0x54, which the asm never touches in this class. FLAG: the member
+        // NAME is neutral/un-attested; the accumulate/consume behaviour is asm-pinned.)
+        f32 mfAccumulatedFrameTime;
+
         // X360-extension bool at this+0x60 (past the DWARF BaseSerialiser layout): the
         // active-delta-chain flag (set on a key frame; cleared by the skip-mode path).
         bool mbExtraFlag;

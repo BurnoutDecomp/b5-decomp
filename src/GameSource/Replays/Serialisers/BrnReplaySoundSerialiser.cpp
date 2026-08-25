@@ -10,6 +10,7 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"
 #include "GameSource/Replays/BrnReplayQuantisedQuatPos.h"
+#include "vendor/renderware/physics/JointFrames.hpp"   // rw::math::vpu::QuaternionFromMatrix33 (WriteAsQuatPos)
 
 #include <cstring>
 
@@ -126,24 +127,90 @@ namespace BrnReplays
              + SoundSerialiserStaticLayout::KU_TRAFFIC_ENT_STRIDE * liIndex;
     }
 
-    // @ 0x826534E0 -- read a 12-byte quantised quat+pos record off the stream, unpack it and
-    // VMX-expand it into the 64-byte destination transform. The VMX rotation-matrix build is
-    // grounded (like the committed TrafficEntitySerialiser sibling) as the read+unpack primitive
-    // plus a copy of the unpacked working set.
+    // @ 0x826534E0 -- read a 12-byte quantised quat+pos record off the stream, unpack it
+    // (working set: quat x/y/z/w @[0..3], position @[4..6]) and expand it into the 64-byte
+    // destination transform: three rotation rows @+0/+0x10/+0x20 + the position row @+0x30
+    // (the asm stores pos.w = 0 explicitly: `stw r10=0, var_34`).
+    //
+    // RECONSTRUCTED 2026-08-25 wave 4 (was "grounded as copy" -- half the destination was
+    // never written and the rotation build was absent). The 29-instruction VMX body is the
+    // SAME quat->matrix idiom as the committed rw::physics::Quaternion::UnitQuaternionToMatrix
+    // (vendor Quaternion.cpp) and PropSerialiserFrame::GetPropTransform @0x822BB920: Q = q *
+    // gSqrt2s, diagonals via vnmsubfp (0.5 - Q^2) + the .yzxx fold, cross terms Q*Q.yzxx +/-
+    // Qw*Q.zxyx, rows routed through the SAME perm constants unk_82CDA3D0/450/410 + vrlimi128
+    // mask=2 rotates 0/3/2 (dumped + decoded; the nine terms below are verbatim the committed
+    // vendor body's). No normalise -- the console assumes the stored quaternion is unit and
+    // never writes back (same as GetPropTransform).
+    //
+    // ROW-W NOTE (the PropSerialiserFrame precedent, applied identically): the console's three
+    // full stvx128 row stores leave each basis row's w lane holding a permute LEFTOVER
+    // (decoded: row0.w=m22, row1.w=Dx, row2.w=Sx). No consumer reads those lanes; reproducing
+    // indeterminate-looking junk hides bugs, so they are written as a determinate 0.0f --
+    // deliberately not byte-identical in the three pad lanes, identical in every consumed lane.
     void SoundSerialiser::ReadAsQuatPos(void* lpTransform)
     {
         float lafUnpacked[8];
         QuantisedQuatPos::Read(this, lafUnpacked);
-        std::memcpy(lpTransform, lafUnpacked, sizeof(lafUnpacked));
+
+        const f32 lfX = lafUnpacked[0], lfY = lafUnpacked[1];
+        const f32 lfZ = lafUnpacked[2], lfW = lafUnpacked[3];
+
+        const f32 lfXY = 2.0f * lfX * lfY, lfYZ = 2.0f * lfY * lfZ, lfZX = 2.0f * lfZ * lfX;
+        const f32 lfWX = 2.0f * lfW * lfX, lfWY = 2.0f * lfW * lfY, lfWZ = 2.0f * lfW * lfZ;
+        const f32 lfXX = 2.0f * lfX * lfX, lfYY = 2.0f * lfY * lfY, lfZZ = 2.0f * lfZ * lfZ;
+
+        f32* lpDst = static_cast<f32*>(lpTransform);
+        lpDst[0]  = 1.0f - lfYY - lfZZ;   // row0 (stvx128 -> dst+0x00)
+        lpDst[1]  = lfXY + lfWZ;
+        lpDst[2]  = lfZX - lfWY;
+        lpDst[3]  = 0.0f;                 // ROW-W note above
+        lpDst[4]  = lfXY - lfWZ;          // row1 (-> dst+0x10)
+        lpDst[5]  = 1.0f - lfXX - lfZZ;
+        lpDst[6]  = lfYZ + lfWX;
+        lpDst[7]  = 0.0f;
+        lpDst[8]  = lfZX + lfWY;          // row2 (-> dst+0x20)
+        lpDst[9]  = lfYZ - lfWX;
+        lpDst[10] = 1.0f - lfXX - lfYY;
+        lpDst[11] = 0.0f;
+        lpDst[12] = lafUnpacked[4];       // position row (-> dst+0x30)
+        lpDst[13] = lafUnpacked[5];
+        lpDst[14] = lafUnpacked[6];
+        lpDst[15] = 0.0f;                 // the asm's explicit zero store
     }
 
-    // @ 0x82658EC8 -- pack the 64-byte source transform into a 12-byte quantised record and
-    // write it. The VMX quaternion-from-basis derivation is grounded as the working-set copy
-    // plus the pack+write primitive.
+    // @ 0x82658EC8 -- derive the quaternion from the 64-byte source transform's three basis
+    // rows and pack {quat, position} into the 12-byte quantised record.
+    //
+    // RECONSTRUCTED 2026-08-25 wave 4 (was "grounded as copy" -- the derivation was absent and
+    // the first two ROWS were passed where the quat belongs). The console's matrix->quaternion
+    // block (diagonal splats vxor'd with the gQuatFromMat_{x,y,z}Signs masks
+    // unk_8327F120/F100/F0F0, all-four-candidates + vrsqrtefp + 2 Newton-Raphson + vsel
+    // cascade) IS rw::math::vpu::QuaternionFromMatrix33 -- the committed helper recovered from
+    // the ORIGINAL Feb-2007 rwmath source (JointFrames.hpp; see the PropSerialiserFrame
+    // wQ2_owner banner for the full instruction-level identification, done once for the
+    // identical Write{Prop,Part} inline). Called here exactly as WriteProp does; epsilon 0.0f
+    // (lane 0 of unk_8201444C). The sqrt de-optimisation is the SDK's own scalar twin.
     void SoundSerialiser::WriteAsQuatPos(const void* lpTransform)
     {
+        const f32* lpSrc = static_cast<const f32*>(lpTransform);
+
+        rw::math::vpu::Matrix33 lBasis;
+        lBasis.xAxis.x = lpSrc[0];  lBasis.xAxis.y = lpSrc[1];  lBasis.xAxis.z = lpSrc[2];
+        lBasis.yAxis.x = lpSrc[4];  lBasis.yAxis.y = lpSrc[5];  lBasis.yAxis.z = lpSrc[6];
+        lBasis.zAxis.x = lpSrc[8];  lBasis.zAxis.y = lpSrc[9];  lBasis.zAxis.z = lpSrc[10];
+
+        const rw::math::vpu::Quaternion lQuat =
+            rw::math::vpu::QuaternionFromMatrix33(lBasis, 0.0f);
+
         float lafScratch[8];
-        std::memcpy(lafScratch, lpTransform, sizeof(lafScratch));
+        lafScratch[0] = lQuat.x;
+        lafScratch[1] = lQuat.y;
+        lafScratch[2] = lQuat.z;
+        lafScratch[3] = lQuat.w;
+        lafScratch[4] = lpSrc[12];   // position (src+0x30)
+        lafScratch[5] = lpSrc[13];
+        lafScratch[6] = lpSrc[14];
+        lafScratch[7] = 0.0f;        // unused tail lane of the working set
         QuantisedQuatPos::Write(this, lafScratch);
     }
 
@@ -216,8 +283,15 @@ namespace BrnReplays
         }
         else
         {
-            // Reconstruct from the previous frame's record (transform rows verbatim + scalar
-            // tail carried across; the X360 vmaddfp position-extrapolation is grounded as copy).
+            // Reconstruct from the previous frame's record: the four transform rows copied
+            // verbatim (stvx128 x4), the scalar tail carried across, and then -- RECONSTRUCTED
+            // 2026-08-25 wave 4 (was "grounded as copy") -- the position row OVERWRITTEN with
+            // the extrapolation the asm computes @0x82653858-0x82653860:
+            //     destRow3 = prevRow3 + prevRow2 * splat(prev.mfField44)
+            //                                   * splat(this->mfAccumulatedFrameTime)
+            // (vmulfp v0 = prevRow2 * splat(prev+0x44); vmaddfp v0,v0,prevRow3,splat(this+0x5C)
+            //  in RAW FIELD ORDER vD,vA,vB,vC == vA*vC + vB -- the calibration pinned by the
+            //  PropSerialiserFrame wQ2 banner. Physically: position += direction * speed * dt.)
             std::memcpy(lpDest, lpPrev, 0x40);
             *reinterpret_cast<u32*>(lpDest + 0x40) = *reinterpret_cast<const u32*>(lpPrev + 0x40);
             *reinterpret_cast<f32*>(lpDest + 0x44)  = *reinterpret_cast<const f32*>(lpPrev + 0x44);
@@ -228,6 +302,14 @@ namespace BrnReplays
             lpDest[0x4D] = lpPrev[0x4D];
             lpDest[0x4E] = lpPrev[0x4E];
             lpDest[0x4F] = lpPrev[0x4F];
+
+            const f32  lfScale   = *reinterpret_cast<const f32*>(lpPrev + 0x44)   // serialised record +0x44 (mfField44)
+                                 * mfAccumulatedFrameTime;
+            const f32* lpfRow2   = reinterpret_cast<const f32*>(lpPrev + 0x20);
+            const f32* lpfRow3   = reinterpret_cast<const f32*>(lpPrev + 0x30);
+            f32*       lpfDstPos = reinterpret_cast<f32*>(lpDest + 0x30);
+            for (int liLane = 0; liLane < 4; ++liLane)   // all four stvx128 lanes
+                lpfDstPos[liLane] = lpfRow2[liLane] * lfScale + lpfRow3[liLane];
         }
 
         // Always overwrite the four bool lanes from the flag byte.
@@ -330,7 +412,7 @@ namespace BrnReplays
         {
             *reinterpret_cast<f32*>(lpBase + 0xC5C) = *reinterpret_cast<f32*>(lpBase + 0xE8C);
         }
-        mfTime = mfTime + *reinterpret_cast<f32*>(lpBase + 0xC5C);
+        mfAccumulatedFrameTime = mfAccumulatedFrameTime + *reinterpret_cast<f32*>(lpBase + 0xC5C);   // += the serialised blob frame delta (this+0x5C, NOT mfTime@+0x54)
 
         ReadVariableQueue(reinterpret_cast<CgsModule::VariableEventQueue<512, 16>*>(lpBase + 0x814));
         ReadFloat(lpBase + 0xA24);
@@ -437,7 +519,7 @@ namespace BrnReplays
         {
             *reinterpret_cast<SoundSerialiserFrame*>(lpBase + 0xC60) =
                 *reinterpret_cast<SoundSerialiserFrame*>(lpBase + 0xA30);
-            mfTime = 0.0f;
+            mfAccumulatedFrameTime = 0.0f;   // stfs 0x5C (key-frame reset)
         }
 
         return Unlock() ? 1 : 0;
@@ -460,7 +542,7 @@ namespace BrnReplays
                 {
                     BaseSerialiser::WriteFloat(lpBase + 0xC5C);
                 }
-                mfTime += *reinterpret_cast<const f32*>(lpBase + 0xC5C);
+                mfAccumulatedFrameTime += *reinterpret_cast<const f32*>(lpBase + 0xC5C);   // += the serialised blob frame delta (this+0x5C, NOT mfTime@+0x54)
                 WriteVariableQueue(reinterpret_cast<CgsModule::VariableEventQueue<512, 16>*>(lpBase + 0x814));
                 BaseSerialiser::WriteFloat(lpBase + 0xA24);
 
@@ -555,7 +637,7 @@ namespace BrnReplays
                 {
                     *reinterpret_cast<SoundSerialiserFrame*>(lpBase + 0xC60) =
                         *reinterpret_cast<const SoundSerialiserFrame*>(lpBase + 0xA30);
-                    mfTime = 0.0f;
+                    mfAccumulatedFrameTime = 0.0f;   // stfs 0x5C (key-frame reset)
                 }
             }
         }
