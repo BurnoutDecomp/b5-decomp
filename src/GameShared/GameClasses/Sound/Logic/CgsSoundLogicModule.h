@@ -42,12 +42,17 @@ namespace Logic
 //
 // SKELETON NOTE: the full ~0x2C75-byte layout is dominated by the embedded
 // Playback::Module (~0x2768 bytes) and the IDynamicMixer-derived mixer, neither of which
-// is modelled here as a named member (Playback::Module is its own TU; the X360 32-bit
-// member sizes of the EAThread/mix primitives do not map cleanly to host widths). Like the
-// sibling subsystem-module ctors (CgsGui::GuiModule, BrnDirector::DirectorModule), the
-// ctor addresses every written location by its authoritative X360 byte offset over a
-// raw view of `this`, constructing each owned sub-object in place. Only the locations the
-// ctor actually writes are reproduced. Module therefore stays a declaration-only skeleton.
+// is modelled here as a named member. Like the sibling subsystem-module ctors
+// (CgsGui::GuiModule -- whose `u8 maHead[0x1B400]` footprint idiom this follows --
+// BrnDirector::DirectorModule), the ctor addresses every written location by its
+// authoritative X360 byte offset over a raw view of `this`, constructing each owned
+// sub-object in place. (2026-08-25 wave 5: the class now RESERVES its console-extent
+// footprint -- it used to be sizeof==1, so any `new Module()`/embed would have taken
+// ~11KB of out-of-bounds writes from the ctor. FLAG, inherent to this pattern: host
+// sub-objects are constructed at CONSOLE offsets; each must fit its console gap --
+// MicrophoneSystem does exactly (0x290 == its static_asserted sizeof), the RWMutexes
+// fit their 0x108/0x120 gaps, and the embedded Playback::Module's HOST sizeof must
+// stay <= its 0x2768 console span, to be re-checked when that keystone grows.)
 // =============================================================================
 class Module
 {
@@ -71,6 +76,12 @@ public:
     // read/write locks, construct the embedded Playback::Module / MicrophoneSystem /
     // mixer sub-objects, override the mixer vtable, and clear the trailing flags.
     Module();
+
+private:
+    // The console-extent opaque footprint (0x2C75 written extent, padded to 8).
+    // Every ctor write lands inside this span; grow into named members as the
+    // keystone slices land (GuiModule maHead precedent).
+    u8 mauModuleImage[0x2C78];
 };
 
 // Post-increment over the Module prepare stages. X360 @0x82681D30 (DWARF cites the

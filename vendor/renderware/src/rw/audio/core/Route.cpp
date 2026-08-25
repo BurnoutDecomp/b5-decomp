@@ -24,8 +24,10 @@ static void* const skpRouteVTable = &skRouteVTableSlot;
 
 // off_820AA810 -- the PlugIn base vtable the scalar-deleting destructor reverts to during
 // teardown. Modelled as a separate file-static sentinel slot.
-static void* skRouteBaseVTableSlot = 0;
-static void* const skpRouteBaseVTable = &skRouteBaseVTableSlot;
+// off_820AA810 is the SHARED gpBasePlugInVTableSentinel (PlugIn.h; wave 5 --
+// the file-local slot this TU used to hold gave the same console object a
+// second host address vs Send.cpp).
+static void* const skpRouteBaseVTable = gpBasePlugInVTableSentinel;
 
 // off_82F8FBC8 -- the static "Route" plug-in run-time descriptor: a pointer to the
 // type-name string. GetPlugInDescRunTime returns &off_82F8FBC8 (a char**).

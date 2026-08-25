@@ -25,6 +25,7 @@
 // ============================================================================
 
 #include "GameShared/GameClasses/Sound/Playback/CgsCommandQueue.h"
+#include "GameShared/GameClasses/Sound/Playback/AEMS/CgsAemsPlayerVoice.h"  // the SINGLE AemsPlayerVoice (Stop bodied below)
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 
@@ -128,20 +129,12 @@ bool CommandQueue<QUEUE_LENGTH, T>::PostCommand(unsigned int auCount, const T* a
 // out-of-line GetCommand / PostCommand bodies above.
 template struct CommandQueue<255u, std::uintptr_t>;
 
-// Minimal modelled view of AemsPlayerVoice for the fields Stop touches BY NAME.
-// (The full type -- AemsPlayerVoice : GenericRwacVoice -- and its absolute layout
-// are reconstructed in CgsAemsPlayerVoice.h's own TU. Here only the request handle
-// and the by-name route to the command queue are modelled. The X360 reaches the
-// queue from the voice's RWAC base via `*(this+8) - 4 + 104`; that raw-offset
-// downcast is replaced by a named queue pointer per the project's by-name rule.)
-struct AemsPlayerVoice
-{
-    std::uintptr_t mhRequestHandle; // +152 (X360 +0x98): live CSIS request, or 0
-    CsisCommandQueue* mpCommandQueue; // by-name route to the factory's queue
-
-    // 0x826DAF10.
-    bool Stop();
-};
+// AemsPlayerVoice is the SINGLE merged definition in AEMS/CgsAemsPlayerVoice.h
+// (2026-08-25 wave 5; the rival 2-member TU-local class that used to live here --
+// a hard ODR conflict with the AEMS home -- is retired). Stop stays BODIED here,
+// where the queue/command types are complete. The X360 queue route
+// (`*(this+8) - 4 + 0x68` == the owning AemsFactory's embedded CsisCommandQueue)
+// is documented on the class's mpCommandQueue stand-in.
 
 // 0x826DAF10. If no request is outstanding, report "nothing stopped". Otherwise
 // build a release command from the handle, post it to the command queue, clear the
