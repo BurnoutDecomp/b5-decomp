@@ -4,7 +4,8 @@
 
 #include "GameShared/GameClasses/Gui/View/CustomRenderer/CgsGuiBillboardInfo.h"                 // CgsGui::BillboardInfo
 #include "GameShared/GameClasses/Graphics/ImmediateMode/ImRenderBuffer/CgsImRenderBufferTemplate.h" // CgsGraphics::ImRenderBuffer<V> / Im2dTransform
-#include "GameShared/GameClasses/Core/CgsAssert.h"                                                // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [DIAG] bring-up probes                                                // CGS_ASSERT
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX. The three in-scope bodies of the billboard batcher:
 //   Construct  @ 0x82852C38
@@ -164,6 +165,7 @@ void BillboardRenderer::Construct(rw::IResourceAllocator* lpAllocator, s32 liMax
     rw::Resource lResource = lpAllocator->DoAllocate(lDescriptor, "BillboardRenderer");
     maVertexList = reinterpret_cast<CgsGraphics::Basic2dColouredTexturedVertex*>(lResource.m_baseResources[0]);
 
+
     SetUVTable(liFramesX, liFramesY, liNumFrames);
 }
 
@@ -184,6 +186,20 @@ void BillboardRenderer::Render(
     // Nothing to draw, or no bound texture state -> skip entirely.
     if (liNumBillboards <= 0 || mpTextureState == nullptr)
         return;
+
+    // [DIAG] NOT IN THE X360 BINARY -- boost-bar bring-up guard: a renderer whose vertex
+    // carve failed (or that was never Constructed) must report, not fault on the fill below.
+    if (maVertexList == nullptr)
+    {
+        static s32 siNullDiagLeft = 4;
+        if (siNullDiagLeft > 0 && CgsDev::Log::gpDebugPrint != 0)
+        {
+            --siNullDiagLeft;
+            *CgsDev::Log::gpDebugPrint << "[billboard] Render SKIPPED: null maVertexList (n="
+                                       << liNumBillboards << ")\n";
+        }
+        return;
+    }
 
     CGS_ASSERT(liNumBillboards <= miMaxBillboards, "liNumBillboards<=miMaxBillboards"); // :173
 

@@ -461,6 +461,17 @@ namespace BrnGame
         //   4 -> BrnBFProFsm (HUD)      5 -> BrnScreenFsm@LOADING (SCREEN) + BrnFBFsm (HUD)
         void BridgeGameToGui(CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInputBuffer);
 
+        // ---- the world -> GUI vehicle-data bridge family (home GameBridgeWorldToGui.cpp) --
+        // X360 BridgeWorldToGui @0x823EDD50 (called from DoUpdate_GUI @0x823F0758): the four
+        // sub-bridges (VehicleData @0x823E5768, RouteInformation, TrafficAndPropData,
+        // ImpactInformation) + the collision-world request event. PARTIAL SLICE on this
+        // build: the VEHICLE-DATA leg's boost-info post (GUI event 206 -> the HUD boost bar)
+        // is live; the rest is FLAG-deferred in the TU.
+        void BridgeWorldToGui(CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInputBuffer,
+                              const BrnWorldIO::UpdateOutputBuffer* lpWorldOutputBuffer);
+        void BridgeWorldVehicleDataToGui(CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInputBuffer,
+                                         const BrnWorldIO::UpdateOutputBuffer* lpWorldOutputBuffer);
+
         // [FLAG PC stand-in] Publish the car-select screen's car list to the GUI as events
         // 406 + 412 -- the two records BridgeGameStateToGui's action-182/184 cases carry on the
         // console. Full provenance + the DELETE-WHEN condition are on the body in

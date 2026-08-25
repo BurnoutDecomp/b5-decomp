@@ -2230,9 +2230,29 @@ namespace BrnGui
                                 reinterpret_cast<const CgsModule::Event*>(&lBody), 25,
                                 static_cast<s32>(sizeof(lBody)));
                     }
-                    // The other view-state records (transins 214, ...) ride the
-                    // AptCommunicator component path on PC. [FLAG: the raw channel-41
-                    // bridge for them lands with the full view IO chain.]
+                    // ⭐ [boost-bar] the custom-renderer view-state commands -- 213 (the
+                    // SatNav/MainMap show/hide, 24-byte {s32 mode, f32 fade, u8 enable})
+                    // and 214/215 (the BoostBar/AboveCar enables, 16-byte {u8 flag}) --
+                    // bridged BODY-ONLY (record + 12, the GuiEvent<N> header stripped)
+                    // into the view-state queue, exactly as the case-18/25 bridges above
+                    // strip theirs. The console routes the WHOLE channel onto the view
+                    // queue; this build still bridges selectively, one record type at a
+                    // time, as each consumer lands. Their consumer is the view module's
+                    // custom-renderer manager forward (ViewModule::ProcessIncomingViewEvents
+                    // cases 213/214/215 -> CustomRendererManager::RecvEvent).
+                    else if (lpPlay->muEventType == 213 ||
+                             lpPlay->muEventType == 214 ||
+                             lpPlay->muEventType == 215)
+                    {
+                        const u8* lpu8Body = reinterpret_cast<const u8*>(lpEvent) + 12;
+                        mViewInputBuffer.GetViewStateQueue()
+                            .CgsModule::VariableEventQueue<65536, 16>::AddEvent(
+                                reinterpret_cast<const CgsModule::Event*>(lpu8Body),
+                                static_cast<s32>(lpPlay->muEventType), liSize - 12);
+                    }
+                    // The remaining view-state records ride the AptCommunicator component
+                    // path on PC. [FLAG: the raw channel-41 bridge for them lands with the
+                    // full view IO chain.]
                     break;
                 }
 

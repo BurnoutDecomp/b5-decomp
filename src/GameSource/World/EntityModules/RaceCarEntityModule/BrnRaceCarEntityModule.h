@@ -45,6 +45,7 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourceHandle.h"             // CgsResource::ResourceHandle (mDistrictMapResourceHandle, +0x23C)
 #include "SharedClasses/World/BrnWorldRegion.h"                                   // BrnWorld::WorldRegion (mCurrentWorldRegion, +0x244)
 #include "GameSource/World/EntityModules/RaceCarEntityModule/Boost/BrnBoostManager.h"                 // BrnWorld::BoostManager (by value, +0x17890)
+#include "GameSource/World/EntityModules/RaceCarEntityModule/NearMisses/BrnNearMissManager.h"         // BrnWorld::NearMissManager (by value, +0x17E68)
 #include "GameSource/World/EntityModules/RaceCarEntityModule/CrashPlay/BrnCrashPlayDebugComponent.h"  // BrnWorld::CrashPlayManager (by value, +0x180F0)
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnPlayerVehicleControls.h"     // BrnWorld::PlayerVehicleControls (by value, +0x183A8)
 #include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h"                       // BrnNetwork::EPaybackType (meActivePaybackType)
@@ -343,6 +344,17 @@ public:
                 RaceCarEntityModuleIO::RCEntityGlobalRaceCarOutputInterface* lpGlobalCarInterface,
                 RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpReplayActiveCarInterface,
                 RaceCarEntityModuleIO::RCEntityGlobalRaceCarOutputInterface* lpReplayGlobalCarInterface );
+
+        // X360 0x822D1BD0 (PS3 named export 0x17F30C). THE per-frame BOOST publish: fill
+        // one BoostOutputInfo per active-car slot -- the player's from the live
+        // BoostStrategy + near-miss tracker + controls, every other attached car's
+        // mbIsBoosting from its physics boosting timer / start-line boost -- and store the
+        // eight records with SetBoostOutputInfoN. Called from PostPhysicsUpdate between
+        // UpdateActiveRaceCarColours and UpdateOutputInterfaces (the console's own order).
+        // The head of the chain that ends at the HUD boost bar (BridgeWorldVehicleDataToGui
+        // -> GUI event 206 -> BoostBarRenderer).
+        void UpdateOutputBoostInfo(
+                RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpActiveCarInterface );
 
         // X360 0x822F4DB0. Bind lpRaceCar to an active-race-car slot and start its asset
         // load. leActiveRaceCarIndex may be E_ACTIVE_RACE_CAR_INDEX_INVALID (-1), in which
@@ -1044,6 +1056,14 @@ private:
     // also owns the BoostStrategy* at +0x450 (module+97504) that the same body virtual-dispatches
     // IsBoosting() through.
     BoostManager mBoostManager;
+
+    // X360 +0x17E68 (97896). DWARF :348 (the run between mBoostManager :347 and
+    // mCrashPlayManager :355). ADDITIVE CARVE (boost-bar 206 wave): the near-miss chain
+    // tracker UpdateOutputBoostInfo @0x822D1BD0 reads (`NearMissManager::
+    // HasThereBeenARecentNearMiss(module + 97896)`) for the player's BoostOutputInfo
+    // near-miss bit. Its producers (Update/AddNear*) have no reconstructed caller yet, so
+    // the lists stay empty and the bit reads false -- honest state, not a stub.
+    NearMissManager mNearMissManager;
 
     // X360 +0x180F0 (98544). DWARF :355. Asm-literal base:
     // HandlePrepareForModeAction @0x823092F0 calls `CrashPlayManager::Activate(module + 98544,

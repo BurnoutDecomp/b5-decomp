@@ -60,19 +60,31 @@ namespace core
         void* Alloc(uint32_t luType, uint32_t luSize, uint32_t luAlignment);
         void  Free(void* lpBlock);
 
-        // NOT RECONSTRUCTED (DoAllocate @0x82BC0C08): the X360 body carves all FIVE entries of a
-        // serialised rw::BaseResourceDescriptors<5> into a matching 5-slot output array (skipping
-        // index 2, which routes through m_physicalAllocator separately), i.e. its out-param is a
-        // 5-wide resource-region array with no committed PC counterpart (rw::Resource is the
-        // narrowed <4> typedef here, same drift already flagged blocking `class:rw::LinearResourceAllocator`
-        // in progress/status.json: retyping to the X360 5-pool virtual form would ODR-fork the
-        // committed 4-pool rw::Resource/ResourceDescriptor). Alloc()/Free() above are the PC-leaf
-        // per-block engine callers actually route through instead; do not fabricate the 5-wide
-        // out-param shape here.
+        // DoAllocate @0x82BC0C08 -- the virtual carve consumers reach through the +0 interface
+        // subobject (the GUI modules store &GeneralResourceAllocator as an IResourceAllocator*
+        // and dispatch DoAllocate: the boost-bar/billboard vertex carves, the texture-state
+        // resource carves...). The X360 body walks all FIVE serialised descriptor entries,
+        // carving each non-empty pool from the matching heap (index 2 through
+        // m_physicalAllocator, the rest through m_mainAllocator). On the PC's narrowed 4-pool
+        // rw::Resource form the same walk runs over the four pools through Alloc() (which
+        // already routes graphics pools to the physical heap) -- see ResourceAllocatorBridge
+        // below. (The old note here left the slot on the DEFAULT IResourceAllocator::DoAllocate
+        // -- an EMPTY-Resource stub -- which made every virtual carve through this allocator
+        // silently return null bases; the boost-bar mount was the first caller to notice.)
 
         EA::Allocator::GeneralAllocator& GetPhysicalGeneralAllocator() { return m_physicalAllocator; }
 
-        ::rw::IResourceAllocator        field_0x0;            // X360 +0    vptr (IS-A IResourceAllocator)
+        // The +0 interface subobject, now the REAL virtual bridge: it sits at offset 0, so the
+        // owning GeneralResourceAllocator is `this` reinterpreted -- exactly the X360 layout,
+        // where the class IS-A IResourceAllocator and DoAllocate is its override. sizeof is
+        // unchanged (one vptr).
+        struct ResourceAllocatorBridge : ::rw::IResourceAllocator
+        {
+            ::rw::Resource DoAllocate(const ::rw::ResourceDescriptor& lrDescriptor,
+                                      const char* lpcName) override;
+        };
+
+        ResourceAllocatorBridge         field_0x0;            // X360 +0    vptr (IS-A IResourceAllocator)
         EA::Allocator::GeneralAllocator m_mainAllocator;       // X360 +4    main resource heap
         EA::Allocator::GeneralAllocator m_physicalAllocator;   // X360 +1308 physical/graphics heap
         bool                            m_hasPhysical;         // X360 +2612

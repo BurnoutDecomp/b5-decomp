@@ -193,5 +193,35 @@ namespace core
         else
             m_mainAllocator.Free(lpBlock);
     }
+
+    // The virtual carve (X360 GeneralResourceAllocator::DoAllocate @0x82BC0C08, reached
+    // through the +0 interface subobject): walk the descriptor's pools and carve each
+    // non-empty one from the matching heap. The X360 walks the serialised FIVE-entry form
+    // (index 2 through the physical heap); the PC's narrowed 4-pool walk routes through
+    // Alloc(), which applies the same physical-heap routing. A pool the heap cannot serve
+    // stays null in the result -- the same "empty base" the X360 hands back on exhaustion.
+    ::rw::Resource GeneralResourceAllocator::ResourceAllocatorBridge::DoAllocate(
+        const ::rw::ResourceDescriptor& lrDescriptor, const char* /*lpcName*/)
+    {
+        // The bridge sits at offset 0 of the owning GeneralResourceAllocator (X360: the class
+        // IS the interface); recover the owner from `this`.
+        GeneralResourceAllocator* lpOwner = reinterpret_cast<GeneralResourceAllocator*>(this);
+
+        ::rw::Resource lResult;
+        for (uint32_t luPool = 0; luPool < 4; ++luPool)
+            lResult.m_baseResources[luPool] = 0;
+
+        for (uint32_t luPool = 0; luPool < 4; ++luPool)
+        {
+            const uint32_t luSize = lrDescriptor.m_baseResourceDescriptors[luPool].m_size;
+            if (luSize == 0)
+                continue;
+            uint32_t luAlignment = lrDescriptor.m_baseResourceDescriptors[luPool].m_alignment;
+            if (luAlignment < 1)
+                luAlignment = 1;
+            lResult.m_baseResources[luPool] = lpOwner->Alloc(luPool, luSize, luAlignment);
+        }
+        return lResult;
+    }
 }
 }

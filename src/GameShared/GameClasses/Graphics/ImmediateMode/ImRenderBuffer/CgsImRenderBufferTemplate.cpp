@@ -560,60 +560,13 @@ namespace CgsGraphics
     }
 
     // -------------------------------------------------------------------------
-    // The three typed SetState overloads the buffered GUI renderers append -- X360
-    // <Basic2dColouredTexturedVertex> bodies driven by CgsGui::BillboardRenderer::Render
-    // @0x828577E0 and the BoostBarRenderer render family:
-    //   SetState(TextureState*)      -- opcode  9 (byte-identical to SetTextureState above,
-    //                                   a distinct X360 symbol at its own address)
-    //   SetState(BlendState*)        @0x82458EC0 -- opcode 3
-    //   SetState(DepthStencilState*) @0x82458DC8 -- opcode 4
-    // Each is the standard 16-byte overflow-checked append; the X360 null-state /
-    // outside-render-block / buffer-full asserts are diagnostic-only and dropped per the
-    // file-header convention (same as SetTexture/SetProgram), and the dcbz128 pre-warm is
-    // dropped likewise.
+    // SetState(DepthStencilState*) @0x82458DC8 -- opcode 4: the third typed SetState
+    // overload (its siblings, the TextureState/BlendState pair, live above -- the
+    // 2026-08-25 upstream landing). Same 16-byte overflow-checked append; the X360
+    // null-state / outside-render-block / buffer-full asserts are diagnostic-only and
+    // dropped per the file-header convention, the dcbz128 pre-warm likewise. First
+    // mounted caller: CgsGui::BillboardRenderer::Render's depth-state bind.
     // -------------------------------------------------------------------------
-    template <typename V>
-    void ImRenderBuffer<V>::SetState(const renderengine::TextureState* lpTextureState)
-    {
-        const u32 luRecord = ImCommandRecord<ImCommandSetStateTexture>::KU_BYTES;  // 16
-
-        const u32 luPos = mpWriteBuffer->muCommandBufferWritePos;
-        if (muCommandBufferSize >= luPos + luRecord)
-        {
-            ImCommandSetStateTexture* lpCommand = reinterpret_cast<ImCommandSetStateTexture*>(
-                mpWriteBuffer->mpu8CommandBuffer + luPos);
-            lpCommand->muType         = IM_CMD_SET_STATE_TEXTURE;            // 9
-            lpCommand->muSize         = luRecord;
-            mpWriteBuffer->muCommandBufferWritePos = luPos + luRecord;
-            lpCommand->mpTextureState = reinterpret_cast<const TextureState*>(lpTextureState);
-        }
-        else
-        {
-            SetBufferFullRewindToLastEndRender();
-        }
-    }
-
-    template <typename V>
-    void ImRenderBuffer<V>::SetState(const renderengine::BlendState* lpBlendState)
-    {
-        const u32 luRecord = ImCommandRecord<ImCommandSetStateBlend>::KU_BYTES;  // 16
-
-        const u32 luPos = mpWriteBuffer->muCommandBufferWritePos;
-        if (muCommandBufferSize >= luPos + luRecord)
-        {
-            ImCommandSetStateBlend* lpCommand = reinterpret_cast<ImCommandSetStateBlend*>(
-                mpWriteBuffer->mpu8CommandBuffer + luPos);
-            lpCommand->muType       = IM_CMD_SET_STATE_BLEND;                // 3
-            lpCommand->muSize       = luRecord;
-            mpWriteBuffer->muCommandBufferWritePos = luPos + luRecord;
-            lpCommand->mpBlendState = lpBlendState;
-        }
-        else
-        {
-            SetBufferFullRewindToLastEndRender();
-        }
-    }
-
     template <typename V>
     void ImRenderBuffer<V>::SetState(const renderengine::DepthStencilState* lpDepthStencilState)
     {

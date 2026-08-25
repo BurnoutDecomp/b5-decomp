@@ -401,6 +401,7 @@ void BoostBarRenderer::RecvEvent(const CgsModule::Event* lpEvent, s32 liEventTyp
             // The 28-byte payload copied whole (the console's 7-dword loop into +132).
             mGuiEventBoostInfo = *reinterpret_cast<const GuiEventBoostInfo*>(lpEvent);
 
+
             if (mGuiEventBoostInfo.mfMaxBoost <= 0.0f)
             {
                 CgsDev::Assert::BeginAssert();
