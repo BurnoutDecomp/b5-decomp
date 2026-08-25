@@ -3,7 +3,34 @@
 // BrnAI::ResetOnTrackManager -- owner of the AI "reset a stranded/off-track race car back
 // onto the route" subsystem. In this batch ONLY GetAICar (@0x82765878) is bodied; the
 // remaining ~50 DWARF methods (including Construct @0x82791A48) are declared-only for shape
-// coherence. OFFSET AUTHORITY = the X360 asm of GetAICar; member NAMES/TYPES/ORDER = DWARF
+// coherence.
+//
+// ⭐⭐ WHY THIS MATTERS NOW, AND WHAT IT ACTUALLY COSTS (MEASURED 2026-08-25, crash-recovery
+// wave). This class is the ONLY thing standing between a crashed car and a drivable one: the
+// crash exit lands mbToBeResetOnTrack on the RaceCar, and everything below
+// ActiveRaceCar::RequestPlaceOnTrack is already real and live. Counted from the ARTIST export
+// set, the direct closure is 37 functions / 5,307 instructions (33 of them this class,
+// ~4,750 insns) -- more than double the "~2500" the crash briefs have been carrying.
+//
+// ⛔⛔ BUT THE MANAGER IS NOT THE BLOCKER. It is an EMBEDDED MEMBER of AIModule at +286128 and
+// its ONLY constructor call site is AIModule::Prepare @0x82798070 stage 3:
+//     ResetOnTrackManager::Construct(module+286128, GetAISectionsData(), module+560)
+// AIModule::{Construct,Prepare,Update,PostPhysicsUpdate,Release,Destruct} are ALL quiet boot-gate
+// stubs in WorldLinkStubs.cpp today, and the live log says so on every run ("AIModule::Prepare:
+// inert", "AIModule::Update: inert"). Consequences, all three measured:
+//   * this object is NEVER Constructed -- mpAISectionData is null, mpaAICars is garbage.
+//     Bodying methods on it is [[valid-pointer-invalid-object]]: no assert can see it.
+//   * AIModule::Prepare stage 2 (LoadMapData @0x82795340, 167 insns) LoadBundle()s "AI.dat" and
+//     requests HashString("WorldMapData") type 5 -- so THE AI ROAD NETWORK IS NEVER LOADED.
+//     The DATA is fine: build/game/AI.DAT is present and already ported (bnd2 platform byte
+//     @+8 == 4, 3.27 MB). The hole is entirely code.
+//   * AIModuleIO::OutputBuffer is a 1-byte placeholder on the host, which is already why
+//     WorldModule::BridgeAIToEntityModules_PrePhysics is PARKED -- and it is where the
+//     ResetOnTrackResult ring has to live.
+// ⇒ ORDER OF WORK: AIModule named members + lifecycle + the AIModuleIO buffer layouts (with
+//   real Construct overrides -- un-gating a producer into an unconstructed queue is how the
+//   crash-exit wave earned two access violations on the same day), THEN this class.
+// Reference: scratchpad resetontrack_log.md. OFFSET AUTHORITY = the X360 asm of GetAICar; member NAMES/TYPES/ORDER = DWARF
 // (references/DecFIGS/.../BrnResetOnTrackManager.h). Pinned layout:
 //   mResetOnTrackRequestQueue @0x000  Array<ResetOnTrackRequest,35u>  (35*16 + s32 miCount
 //                                     == 0x230 + 4 == 0x234)
