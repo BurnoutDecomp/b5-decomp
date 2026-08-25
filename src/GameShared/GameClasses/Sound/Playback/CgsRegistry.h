@@ -132,6 +132,11 @@ public:
     u32    GetEntityCapacity() const  { return mu32EntityCapacity; }
     size_t GetDataSize() const        { return muDataSize; }
     size_t GetStringTableSize() const { return muStringTableSize; }
+
+    // DWARF CgsRegistry.h:137 (header-inline on console). Debug-TTY dump of the
+    // table. FLAG (DEFER): declared-only -- bodied with the Registry slices
+    // (caller: Module::DumpRegistries @0x82694188).
+    void Dump();
 };
 
 // =============================================================================

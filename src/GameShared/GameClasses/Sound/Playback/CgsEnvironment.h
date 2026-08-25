@@ -130,9 +130,20 @@ namespace Playback
         }
         Registry*               GetRegistry();    // @0x82680EA0
 
+        // DWARF h:280. Look the owning factory handle up by interned name (the X360
+        // symbol IDA truncates to `Environment::Ge`; callers: Module::CreateVoice
+        // @0x826D7B00 / Module::CreateContent @0x826C12A8). FLAG (DEFER):
+        // declared-only -- bodied with the Environment slices.
+        Handle<Factory> GetFactory(Name aName);
+
         // @0x826BFAF0 / FE50. Look a voice up by ident / a content up by plugin key.
-        Handle<Voice>   GetV(u32 au32Id);         // @0x826BFAF0
-        Handle<Content> GetR(u32 au32Plugin);     // @0x826BFE50
+        // (2026-08-25 wave 6: GetV renamed to its DWARF name GetVoice, h:289 --
+        // the param is the StreamBuffer::Ident u32. GetR keeps its truncated name
+        // for now: the DWARF candidate is GetRwacVoiceByPlugin (h:362) which
+        // returns Handle<Voice>, but the committed body builds a Handle<Content>
+        // from the matched voice's tail -- reconcile with the Environment slice.)
+        Handle<Voice>   GetVoice(u32 au32Id);     // @0x826BFAF0 (DWARF h:289)
+        Handle<Content> GetR(u32 au32Plugin);     // @0x826BFE50 (see the note above)
 
         // @0x82680F50 / FE8. Start/stop the DAC plug-in through the RWAC engine.
         void StartDac();                          // @0x82680F50

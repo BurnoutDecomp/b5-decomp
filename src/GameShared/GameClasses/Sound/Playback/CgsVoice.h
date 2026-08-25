@@ -248,6 +248,16 @@ public:
     // `*(obj+12)` -- this member by name).
     u32 GetIdent() const { return mIdent; }
 
+    // Ident write (DWARF CgsVoice.h:567, SetIdent(StreamBuffer::Ident)). INLINE in
+    // the original -- Module::CreateVoice @0x826D7B00 stores `*(voice+12)` after a
+    // successful factory CreateVoice; this member by name.
+    void SetIdent(u32 au32Ident) { mIdent = au32Ident; }
+
+    // @ (DWARF CgsVoice.h:501). Resolve akName to a Slot, then Slot::Attach the
+    // content handle. FLAG (DEFER): declared-only -- bodied with the Voice slices
+    // (caller: Module::AttachVoice @0x826D7D80).
+    bool Attach(Name akName, Handle<Content>& arhContent);
+
     // Owning-factory read. INLINE in the original (Environment::GetR @0x826BFE50
     // reads `*(voice+8)` then the factory's name word -- this member by name).
     const Factory& GetFactory() const { return mFactory; }
