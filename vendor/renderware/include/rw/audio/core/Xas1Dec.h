@@ -58,9 +58,10 @@ public:
 
     // @0x82B91EB8 -- FLAGGED / BLOCKED: decode one channel's 128-sample XAS block from
     // `pEncoded` into `pOutput`. Its body indexes the un-recovered XAS ADPCM coefficient
-    // rodata tables (flt_8215A844 / flt_8215A848 -- interleaved filter-coefficient pairs;
-    // flt_8215A864 -- per-exponent scale) whose bytes are not in the dossier, so the body
-    // is left to its own TU rather than fabricated. Declared here so DecodeEvent compiles.
+    // @0x82B91EB8 -- decode one 76-byte / 128-sample XAS1 channel block (four parallel
+    // 32-sample sub-streams). Bodied in Xas1Dec.cpp (2026-08-25: was declared-only
+    // pending the coefficient rodata, since recovered -- the XasDec.cpp tables'
+    // byte-identical per-TU duplicates at flt_8215A844/flt_8215A864).
     u8 *DecodeChannel(u8 *pEncoded, f32 *pOutput);
 
 private:

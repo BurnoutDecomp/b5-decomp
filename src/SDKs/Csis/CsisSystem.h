@@ -118,6 +118,14 @@ struct SystemContent
 class System
 {
 public:
+    // @ 0x82B0F1C0 (no dossier exported; behaviour attested from the ONLY caller,
+    // RootSoundModule::Prepare @0x826FAF0C: r3 = &gCsisTestBedAlloc in, r3 flows
+    // straight into Csis::System::Init). Install the Csis-wide allocator. FLAG:
+    // the store target global + any validation are un-attested -- modelled as the
+    // minimal store-and-return; the allocator is held as the opaque interface
+    // pointer the caller passes (the CgsSound::TestBed::Allocator).
+    static void* SetAllocator(void* apAllocator);
+
     // @ 0x82B0F1F8 -- create the global registry mutex (CreateMutexA(0,0,0)), clear
     // the subscribed-content list head, set the inited flag. Returns 0.
     static int Init();

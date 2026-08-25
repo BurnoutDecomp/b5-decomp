@@ -162,23 +162,32 @@ namespace CgsSound
 {
 namespace TestBed
 {
-    // Link stubs for the testbed-allocator tail. BrnRootSoundModule.cpp now instantiates the
-    // four carve globals (gRwac/gCsis/gPlayback/gLogicTestBedAlloc), which pulls the Allocator
-    // vtable + the SanityCheck/SafeDump paths into the link, but the DoAllocate/DoFree bodies
-    // (the actual carve/track/free algorithms) and the per-block Header::SanityCheck body are
-    // not reconstructed yet. NOT exercised on the boot path: nothing allocates through these
-    // wrappers until the RWAC/PLAYBACK/LOGIC carve stages of RootSoundModule::Prepare go real
-    // (they are gated on the same missing layers). Replace with the real bodies when the
-    // testbed-allocator TU tail is reconstructed.
+    // Testbed-allocator tail. (2026-08-25, faithful-audio-engine phase A4: the RWAC/LOGIC
+    // carve stages of RootSoundModule::Prepare went REAL, so DoAllocate is now LIVE on the
+    // boot path -- rw::audio::core::System::CreateInstance carves through it. The old inert
+    // empty-Resource stub made CreateInstance fail and left mpSystem null.)
+    //
+    // FLAG [interim pass-through]: the real DoAllocate @0x826AE420 is the full 441-line
+    // TRACKED carve (per-block Header + guard words + history ring + verbose log) -- its own
+    // recon slice, ledgered. This interim body forwards the carve straight to the backing
+    // allocator: behaviour-transparent to every consumer (they only see the returned
+    // Resource); the debug surfaces (SanityCheck/SafeDump/IsValidMemoryAddress) see an empty
+    // tracking list until the real body lands. DoFree mirrors it.
     //   NOTE: Header::Dump is NOT stubbed here -- its real body now lives in
     //   CgsTestBedAllocator.cpp (wired into the exe source list). A prior stub collided
     //   (LNK2005) with that body and was removed.
-    rw::Resource Allocator::DoAllocate(const rw::ResourceDescriptor& /*lrDescriptor*/,
-                                       const char* /*lpcName*/)
+    rw::Resource Allocator::DoAllocate(const rw::ResourceDescriptor& lrDescriptor,
+                                       const char* lpcName)
     {
-        return rw::Resource();   // empty resource = "no allocation" until the real body lands
+        if (mpAllocator == 0)
+            return rw::Resource();   // un-backed wrapper (e.g. gCsisTestBedAlloc): no carve
+        return mpAllocator->DoAllocate(lrDescriptor, lpcName);
     }
-    void Allocator::DoFree(const rw::Resource& /*lrResource*/) {}
+    void Allocator::DoFree(const rw::Resource& lrResource)
+    {
+        if (mpAllocator != 0)
+            mpAllocator->DoFree(lrResource);
+    }
     void Allocator::Header::SanityCheck(History& /*lrHistory*/, const char* /*lpcAllocatorName*/) {}
 }
 }

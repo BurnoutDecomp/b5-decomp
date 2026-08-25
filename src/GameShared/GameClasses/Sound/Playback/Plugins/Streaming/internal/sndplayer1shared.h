@@ -53,6 +53,13 @@ class Decoder;
 class SndPlayer1_CgsStreamMod : public PlugIn
 {
 public:
+    // X360 dword_82FFBA08 -- the stream-file path prefix the RWAC init stage seeds
+    // ("SOUND\\STREAMS\\", RootSoundModule::Prepare @0x826FAF44 region; the PS3
+    // DecFIGS names the store target spPathPrefix). Defined in sndplayer1shared.cpp
+    // (null until the RWAC stage runs). Added 2026-08-25, faithful-audio-engine
+    // phase A4.
+    static const char* spPathPrefix;
+
     // PDB rw::audio::core::SndPlayer1::SndPlayer1FeedDesc [16 console bytes].
     // FLAG (erased pointee types): pChunkInfo / pRwCoreStream are
     // rw::core::filesys::Stream::ChunkInfo* / Stream* in the PDB; held as void*

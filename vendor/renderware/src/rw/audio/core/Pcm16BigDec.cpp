@@ -16,6 +16,7 @@
 // =====================================================================================
 
 #include "rw/audio/core/Pcm16BigDec.h"
+#include "rw/audio/core/DecoderRegistry.h" // complete DecoderDesc (the descriptor is DEFINED in this TU)
 
 namespace rw
 {
@@ -29,11 +30,16 @@ namespace core
 // multiplies each fcfid/frsp-converted sample by it).
 static const f32 KF_PCM16_SCALE = 1.0f / 32768.0f;
 
-// This codec's static registration descriptor (off_82F893CC in the X360 rodata). Its bytes
-// (name / GUID / factory callbacks) are not recovered here; GetDecoderDesc only returns its
-// address, and DecoderDesc is an incomplete type, so no contents are needed (nor
-// fabricated). Same pattern as the foreign statics reached from Xas1Dec.cpp / XasDec.cpp.
-extern "C" DecoderDesc off_82F893CC;
+// This codec's static registration descriptor (off_82F893CC, .data). DEFINED here
+// (2026-08-25, faithful-audio-engine phase A2). XEX recovery (big-endian):
+//   +0x00 0x82B91E48 Pcm16BigDec::GetSize   +0x04 0x82B91E58 CreateInstanceEvent
+//         (0x82B91E58 hand-decoded from the XEX: mr r11,r3; li r10,0; li r3,1;
+//          stw r10,0x34(r11); stw r10,0x38(r11); blr -- zero self+0x34/+0x38, return 1)
+//   +0x08 0 (no ReleaseEvent)               +0x0C 0x82B951B8 DecodeEvent
+//   +0x10 mpNext = 0                        +0x14 muId = 0x50364230 'P6B0'
+// FLAG (host callback slots deferred): see the EaXmaDec.cpp descriptor note --
+// the header stays the opaque zeroed span until the dispatch consumer lands.
+extern "C" DecoderDesc off_82F893CC = { {0}, 0, 0x50364230u /* 'P6B0' */ };
 
 // -------------------------------------------------------------------------------------
 // GetDecoderDesc @0x82B91E38

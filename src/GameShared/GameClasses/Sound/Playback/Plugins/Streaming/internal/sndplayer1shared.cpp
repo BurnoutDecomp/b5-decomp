@@ -28,6 +28,10 @@
 
 namespace rw { namespace audio { namespace core {
 
+    // X360 dword_82FFBA08 (see the header note). Null until the RWAC init stage
+    // seeds "SOUND\\STREAMS\\".
+    const char* SndPlayer1_CgsStreamMod::spPathPrefix = 0;
+
     SndPlayer1_CgsStreamMod* SndPlayer1_CgsStreamMod::AdvanceCurrentRequest()
     {
         // Bump + wrap the current-request cursor.

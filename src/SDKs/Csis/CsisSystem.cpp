@@ -20,10 +20,29 @@ namespace
     unsigned char              gbCsisInited   = 0;  // byte_8324E901
     Csis::SystemContentNode*   gpCsisListHead = 0;  // off_8324E90C
     short                      gwCsisSerial   = 0;  // word_8324E908
+
+    // The Csis-wide allocator installed by System::SetAllocator (2026-08-25,
+    // faithful-audio-engine phase A). FLAG: the X360 store-target global is
+    // un-attested (no dossier for @0x82B0F1C0); held opaque.
+    void*                      gpCsisAllocator = 0;
 }
 
 namespace Csis
 {
+
+// ---------------------------------------------------------------------------
+// System::SetAllocator @ 0x82B0F1C0  (no dossier exported)
+//
+// Behaviour attested from the only caller (RootSoundModule::Prepare @0x826FAF0C):
+// receives &gCsisTestBedAlloc in r3 and its return flows directly into
+// Csis::System::Init. Modelled as the minimal install-and-return; the allocator
+// interface shape is owned by the (un-reconstructed) Csis allocation paths.
+// ---------------------------------------------------------------------------
+void* System::SetAllocator(void* apAllocator)
+{
+    gpCsisAllocator = apAllocator;
+    return apAllocator;
+}
 
 // ---------------------------------------------------------------------------
 // System::Init @ 0x82B0F1F8
