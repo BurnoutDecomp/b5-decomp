@@ -10,6 +10,11 @@
 #include "GameSource/Gui/Flow/HUD/Components/BrnFriendsList.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"
+#include "SharedClasses/DataLists/ChallengeList.h"
+#include "SharedClasses/DataLists/ChallengeListEntry.h"
+#include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"  // StateInterface full type
+#include "GameSource/Gui/BrnGuiWorldDataController.h"                  // WorldDataController::GetFreeburnChallengeList
+#include "GameShared/GameClasses/System/CgsHardwareInit.h"      // CgsSystem::HardwareInit::IsHardDiskAvailable
 #include "GameSource/Gui/BrnGuiFreeburnChallengeManager.h" // IsRunning/IsShowingResults tier reads
 #include "GameSource/Gui/Flow/HUD/Components/BrnFriendsListEntry.h" // LobbyNameCmp   // CGS_ASSERT
 
@@ -400,5 +405,202 @@ void FriendsListComponent::SetEntryData(s32 liRow, const char* lpcText, s32 leSt
 
 
 
+
+
+// ===================================================================================
+// [friends wave -- BODY TRANCH 3] data producers, not-connected arms, specific-show.
+// ===================================================================================
+
+// @0x82439248 RequestRefreshedData -----------------------------------------------------
+void FriendsListComponent::RequestRefreshedData()
+{
+    if (mePanelState == 0 || meListType != 1)                    // @0x82439258..6C
+        return;
+
+    meDataState = 0;                                             // @0x82439288
+
+    struct RefreshRequest                                        // wrapper {1,97,12} + pad byte
+    {
+        s32 miOutEventSize;
+        s32 miOutEventType;
+        s32 miOutEventOffset;
+        s32 miPayload;
+    } lRequest;
+    lRequest.miOutEventSize   = 1;                               // payload width
+    lRequest.miOutEventType   = 97;                              // 0x61
+    lRequest.miOutEventOffset = 12;
+    lRequest.miPayload        = 0;
+    mpStateInterface->GetOutputEventQueue()->AddEvent(
+        reinterpret_cast<const CgsModule::Event*>(&lRequest), 40, 16);          // @0x824392A4
+}
+
+// @0x824392B8 SetTotalFriends -----------------------------------------------------------
+void FriendsListComponent::SetTotalFriends(s32 liCount)
+{
+    if (liCount >= static_cast<s32>(muNumEntries))
+    {
+        memset(&maRecords[liCount], 0,
+               (muNumEntries - liCount) * sizeof(SFriendRecord));                // @0x824392F8
+    }
+    muNumEntries = static_cast<u32>(liCount);                    // @0x82439308
+    meDataState = 1;                                             // @0x8243931C
+
+    struct TallyRequest                                          // wrapper {1,98,12}
+    {
+        s32 miOutEventSize;
+        s32 miOutEventType;
+        s32 miOutEventOffset;
+        s32 miPayload;
+    } lRequest;
+    lRequest.miOutEventSize   = 1;
+    lRequest.miOutEventType   = 98;                              // 0x62
+    lRequest.miOutEventOffset = 12;
+    lRequest.miPayload        = 0;
+    mpStateInterface->GetOutputEventQueue()->AddEvent(
+        reinterpret_cast<const CgsModule::Event*>(&lRequest), 40, 16);          // @0x82439330
+}
+
+// @0x8242B830 BuildChallengeList ----------------------------------------------------------
+void FriendsListComponent::BuildChallengeList()
+{
+    CGS_ASSERT(mpGuiCache->mpWorldDataController != 0, "mpWorldDataController");   // cpp:0x914
+    const BrnResource::ChallengeList* lpList =
+        mpGuiCache->mpWorldDataController->GetFreeburnChallengeList();
+
+    const s32 leSlot = static_cast<s32>(mpGuiCache->muChallengeSlotMirror);           // +0xAC78 consumer-carved member
+    muNumEntries = 0;                                            // @0x8242B890
+
+    const s32 liCount = lpList->GetChallengeCount();             // +0x32E0 @0x8242B894
+    for (s32 i = 0; i < liCount; ++i)                            // @0x8242B8B0
+    {
+        const BrnResource::ChallengeListEntry* lpEntry = lpList->GetChallengeData(i);
+        if ((static_cast<u8>(lpEntry->GetNumPlayers()) & 0xF) != leSlot)             // +0xD3 low nibble @0x8242B8C0
+            continue;
+        if (!lpList->IsChallengeContentBought(i))                // @0x8242B8D8
+            continue;
+        CGS_ASSERT(muNumEntries < 256,
+                   "KI_MAX_CHALLENGES_FOR_EACH_PLAYER_COUNT");   // cpp:0xBE5
+        mau64ChallengeIds[muNumEntries++] = lpEntry->GetChallengeID();   // +0xC0 qword @0x8242B910
+    }
+}
+
+// @0x8242B948 HandleNotConnected -------------------------------------------------------------
+void FriendsListComponent::HandleNotConnected()
+{
+    mi8SelectedRowIndex = 0;                                     // @0x8242B970
+    mi8FirstVisibleIndex = 1;                                    // @0x8242B978
+    mi8SelectedIndex = 0;                                        // @0x8242B97C
+    meBranchState = 0;                                           // @0x8242B980
+    SetEntryData(0, "FRIENDSLIST_NOT_CONNECTED",
+                 FriendsListEntry::E_FRIENDLISTENTRYSTATE_NOFRIENDS,
+                 true);                                          // status 1 @0x8242B984
+    Highlight(mi8SelectedRowIndex);
+
+    for (s32 liRow = mi8FirstVisibleIndex; liRow < KI_VISIBLE_ROWS; ++liRow)
+        maEntries[liRow].Invalidate();                           // @0x8242B9B4
+
+    mbDirty = 1;                                                 // snapshot tail @0x8242B9CC
+    muSnapshotA = mePanelState;
+    muSnapshotB = static_cast<u32>(meBranchState);
+    muSnapshotC = static_cast<u32>(meListType);
+    mbSnapshotFlagA = static_cast<u8>(mi8FirstVisibleIndex);
+    mbSnapshotFlagB = static_cast<u8>(mi8SelectedRowIndex);
+    u32 luIndicator = 0;
+    if (mi8SelectedIndex > 0)
+        luIndicator = 2;
+    if (mi8SelectedIndex <= static_cast<s32>(muNumEntries) - 1)
+        ++luIndicator;
+    muScrollIndicator = luIndicator;
+}
+
+// @0x8242BA40 HandleNoFriends -------------------------------------------------------------------
+void FriendsListComponent::HandleNoFriends()
+{
+    const bool lbBlocked = mpGuiCache->IsOnlineStartInProgress() ||
+                           !mpGuiCache->IsMultiplayerAllowed() ||
+                           !CgsSystem::HardwareInit::IsHardDiskAvailable();
+
+    if (!lbBlocked)
+    {
+        // multiplayer-capable arm: NO_FRIENDS row + INSTANT_FREEBURN row
+        mi8SelectedRowIndex = 1;                                 // @0x8242BAB8..AC8
+        mi8FirstVisibleIndex = 2;
+        mi8SelectedIndex = 1;
+        meBranchState = 0;
+        SetEntryData(0, "FRIENDSLIST_NO_FRIENDS",
+                     FriendsListEntry::E_FRIENDLISTENTRYSTATE_NOFRIENDS,
+                     true);
+        SetEntryData(1, "FRIENDSLIST_INSTANT_FREEBURN",
+                     FriendsListEntry::E_FRIENDLISTENTRYSTATE_FRIENDJOINABLE,
+                     true);                                      // status 6 @0x82442BAFC
+        Highlight(mi8SelectedRowIndex);
+    }
+    else
+    {
+        mi8SelectedRowIndex = 0;                                 // @0x8242BB28
+        mi8FirstVisibleIndex = 1;
+        mi8SelectedIndex = 0;
+        meBranchState = 0;
+        SetEntryData(0, "FRIENDSLIST_NO_FRIENDS",
+                     FriendsListEntry::E_FRIENDLISTENTRYSTATE_NOFRIENDS,
+                     true);                                      // @0x8242BB40
+        Highlight(mi8SelectedRowIndex);
+    }
+
+    for (s32 liRow = mi8FirstVisibleIndex; liRow < KI_VISIBLE_ROWS; ++liRow)
+        maEntries[liRow].Invalidate();                           // @0x8242BB64
+
+    mbDirty = 1;                                                 // @0x8242BB9C
+    muSnapshotA = mePanelState;
+    muSnapshotB = static_cast<u32>(meBranchState);
+    muSnapshotC = static_cast<u32>(meListType);
+    mbSnapshotFlagA = static_cast<u8>(mi8FirstVisibleIndex);
+    mbSnapshotFlagB = static_cast<u8>(mi8SelectedRowIndex);
+    u32 luIndicator = 0;
+    if (mi8SelectedIndex > 0)
+        luIndicator = 2;
+    if (mi8SelectedIndex <= static_cast<s32>(muNumEntries) - 1)
+        ++luIndicator;
+    muScrollIndicator = luIndicator;
+}
+
+// @0x8242BBE8 ShowSpecificFriend ------------------------------------------------------------------
+void FriendsListComponent::ShowSpecificFriend(const char* lpcName)
+{
+    const s32 leMode = mpGuiCache->GetGameMode();
+    if (leMode != -1 && leMode != 15)                            // @0x8242BC10
+        return;
+
+    u32 luIdx = 0;
+    while (luIdx < muNumEntries &&
+           LobbyNameCmp(maRecords[luIdx].macName, lpcName) != 0)
+        ++luIdx;                                                 // @0x8242BC34
+
+    if (luIdx == muNumEntries)                                   // @0x8242BCA4
+    {
+        mi8SelectedIndex = 0;
+        mi8SelectedRowIndex = 0;
+        UpdateAllFriendsEntryData();
+        return;
+    }
+
+    mi8SelectedIndex = static_cast<s8>(luIdx);                   // @0x8242BC6C
+    if (muNumEntries <= KI_VISIBLE_ROWS)
+    {
+        mi8SelectedRowIndex = static_cast<s8>(luIdx);            // @0x82442BC90
+    }
+    else
+    {
+        const s32 liFromBottom = static_cast<s32>(luIdx)
+                              - static_cast<s32>(muNumEntries) - 1;
+        if (liFromBottom >= KI_VISIBLE_ROWS)                     // @0x82442BC88
+        {
+            UpdateAllFriendsEntryData();
+            return;
+        }
+        mi8SelectedRowIndex = static_cast<s8>(4 - liFromBottom); // subfic @0x82442BC8C
+    }
+    UpdateAllFriendsEntryData();
+}
 
 } // namespace BrnGui

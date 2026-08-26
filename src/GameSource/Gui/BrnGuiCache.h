@@ -1460,7 +1460,11 @@ namespace BrnGui
         u8  mPad_AC5B[1];                                // +0xAC5B
         StuntToDisplayInfo maStuntToDisplay[3];          // +0xAC5C (44124) GetStuntToDisplay @0x8240F770 (stride 8; -1-terminated)
         u32 muNumActivePlayers;                          // +0xAC74 (44148) GetFriendsListCachedField / GetNumActivePlayers
-        u8  mPad_AC78[8];                                // +0xAC78..+0xAC7F
+        // ADDITIVE CARVE (friends wave): slot id BuildChallengeList matches each
+        // freeburn challenge player-nibble against (read @0x8242B8AC, cache+0xAC78).
+        // Consumer-named; no DWARF accessor row.
+        u32 muChallengeSlotMirror;                       // +0xAC78 (44152)
+        u8  mPad_AC7C[4];                                // +0xAC7C..+0xAC7F
         // One online-player record per player. Byte storage for the fwd-declared 312-byte
         // BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData (GetOnlinePlayerInfo @0x8240F890
         // -> 312*idx+44160). ctor field-inits each lane's +0x60(int)/+0x64(float).
