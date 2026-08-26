@@ -1589,7 +1589,35 @@ MainGameFlowStateInGame::MainGameFlowStateInGame() {}
 // ---------------------------------------------------------------------------
 void DriveInGameWorldUpdate()
 {
-    if (BrnGame::GetMainGameModule() == 0)
+    BrnGame::BrnGameModule* lpGameModule = BrnGame::GetMainGameModule();
+    if (lpGameModule == 0)
         return;
-    DriveWorldUpdateFrame(&s_GameDataInput, KU_INGAME_UPDATE_SET);
+
+    // Console: BrnGameModule::DoUpdate @0x823F0AF8 (pseudocode line 302) and
+    // ConstructUpdateSet @0x823DCB40 both derive the world's update set from the flow state
+    // machine per frame; ConstructUpdateSetFromFsm @0x823BD420 is one call away from each.
+    // This used to pass the frozen KU_INGAME_UPDATE_SET (0x88) -- see the deleted constant's
+    // obituary in the header for why that made the sim-pause bit unreachable in game.
+    //
+    // ORDERING (checked, no extra plumbing needed): MainGameFlowInGameState.cpp:82-89 runs
+    // DoUpdate() -- which runs the game-state pre-world leg and therefore CheckGameActions,
+    // the writer of mbSimPaused -- BEFORE DriveInGameWorldUpdate() in the same frame. So the
+    // set built here is already this frame's value.
+    const BrnUpdateSet lUpdateSet = lpGameModule->ConstructUpdateSetFromFsm();
+
+    // Change-only dev trace, mirroring UpdateWorldModule's at :327-338. Unpaused reads 0x88;
+    // the pause adds bit 0x1 and it reads 0x89.
+    {
+        static u32 s_uLastInGameUpdateSet = 0xFFFFFFFFu;
+        if ((u32)lUpdateSet != s_uLastInGameUpdateSet)
+        {
+            s_uLastInGameUpdateSet = (u32)lUpdateSet;
+            if (CgsDev::Log::gpDebugPrint != 0)
+                *CgsDev::Log::gpDebugPrint << "[flow] in-game update set -> "
+                                           << CgsDev::E_PRINTMODE_HEXONCE
+                                           << (u32)lUpdateSet << "\n";
+        }
+    }
+
+    DriveWorldUpdateFrame(&s_GameDataInput, lUpdateSet);
 }
