@@ -64,10 +64,20 @@ enum EGlobalRaceCarIndex : s32
 };
 
 // DWARF BurnoutConstants.h:84 -- post-increment used to walk the global race-car slots.
+// [stuntrace waveB fix round, 2026-08-26] THE RANGE GUARD WAS MISSING HERE while its
+// EActiveRaceCarIndex twin below carried it, even though this operator's own comment already cited
+// DWARF :84 for it. The X360 emits it: ModeManager::ResetNextLandmarks @0x82328460 loads the string
+// "leEnumIndex <= E_GLOBAL_RACE_CAR_INDEX_COUNT" (`addi r25, r11, aLeenumindexEGl@l` @0x823284A4)
+// and fires it with `li r5, 0x54` == BurnoutConstants.h:84 @0x82328550 -- the exact DWARF line this
+// comment names. ModeManager::CheckForOutOfRangeCarsReachingFinish, RCEntityGlobalRaceCarOutput
+// Interface::GetGlobalRaceCarIndex and ~15 RaceCarEntityModule / AIModule loops emit the same one.
+// Non-fatal, same shape as the active twin: the old value is still returned on a failed guard.
 inline EGlobalRaceCarIndex operator++(EGlobalRaceCarIndex &leIndex, int)
 {
     const EGlobalRaceCarIndex lePrev = leIndex;
     leIndex = static_cast<EGlobalRaceCarIndex>(static_cast<s32>(leIndex) + 1);
+    CGS_ASSERT( leIndex <= E_GLOBAL_RACE_CAR_INDEX_COUNT,
+                "leEnumIndex <= E_GLOBAL_RACE_CAR_INDEX_COUNT" );
     return lePrev;
 }
 

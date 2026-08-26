@@ -22,7 +22,13 @@
 #include "GameSource/Gui/Flow/HUD/States/BrnCrashedHudState.h"
 #include "GameSource/Gui/Flow/HUD/States/BrnCrashedStuntHudState.h"
 #include "GameSource/Gui/Flow/HUD/States/BrnIdleHudState.h"
-#include "GameSource/Gui/Flow/HUD/States/BrnPreRaceFlyBy.h"
+// PRE_FLY_BY is DWARF-homed under Flow/PreEvent, not Flow/HUD: the HUD-side
+// GameSource/Gui/Flow/HUD/States/BrnPreRaceFlyBy.{h,cpp} pre-wave fork (an empty-shell
+// class + a ctor that memset spans the shell never declared) is RETIRED -- its three
+// bodies moved to BrnPreRaceFlyBy_wJ_01.cpp. This header is the real 4160-byte console
+// object (BrnHudFlow::Prepare's size-4160 slot), so NewPoolState<PreRaceFlyByState> now
+// carves and constructs the full class rather than a State-sized shell.
+#include "GameSource/Gui/Flow/PreEvent/States/BrnPreRaceFlyBy.h"
 
 // ===========================================================================
 //  BrnGui::BrnHudFlow -- reconstructed from BURNOUT_X360_ARTIST.XEX. The HUD flow owns the

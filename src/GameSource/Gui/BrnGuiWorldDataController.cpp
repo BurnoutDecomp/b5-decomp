@@ -373,6 +373,17 @@ WorldDataController::GetEventInfoFromEventId(u32 luEventId) const
     CGS_ASSERT(meState >= E_WORLDDATACONTROLLERSTATE_WFPLAYERCARCOLOURS,
         "E_WORLDDATACONTROLLERSTATE_READY <= meState");
 
+    // [FLAG PC bring-up guard, 2026-08-26] The GUI lane's own progression binding
+    // (mpProgressionData, bound by this controller's state machine on the console) is not yet
+    // staged on this build, so the first live mode-start GUI event (SatNavRenderer::RecvEvent
+    // on GuiEventPrepareForModeStart) reached here with NULL -- boot-proven AV. The null
+    // answer is "no event info", which every caller already handles (this function returns
+    // NULL on no-match anyway). DELETE-WHEN the WorldDataController data binding lands.
+    if (!mpProgressionData.HasMemoryResource())
+    {
+        return NULL;
+    }
+
     const u32 luJunctionCount = mpProgressionData->GetEventJunctionCount();
     for (u32 luIndex = 0; luIndex < luJunctionCount; ++luIndex)
     {
@@ -391,6 +402,13 @@ WorldDataController::GetOnlineEventInfoFromEventId(u32 luEventId) const
 {
     CGS_ASSERT(meState >= E_WORLDDATACONTROLLERSTATE_WFPLAYERCARCOLOURS,
         "E_WORLDDATACONTROLLERSTATE_READY <= meState");
+
+    // [FLAG PC bring-up guard, 2026-08-26] Same unbound-mpProgressionData guard as the
+    // offline twin above; DELETE-WHEN the data binding lands.
+    if (!mpProgressionData.HasMemoryResource())
+    {
+        return NULL;
+    }
 
     const u32 luJunctionCount = mpProgressionData->GetEventJunctionCount();
     for (u32 luIndex = 0; luIndex < luJunctionCount; ++luIndex)

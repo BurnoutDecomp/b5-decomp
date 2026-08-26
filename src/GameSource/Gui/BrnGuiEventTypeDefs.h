@@ -2130,4 +2130,153 @@ static_assert(__builtin_offsetof(GuiEventBoostInfo, mbIsBoosting)            == 
 static_assert(__builtin_offsetof(GuiEventBoostInfo, mbWasChainJustCompleted) == 0x17, "X360 mbWasChainJustCompleted @0x17");
 static_assert(__builtin_offsetof(GuiEventBoostInfo, mbIsTailgating)          == 0x19, "X360 mbIsTailgating @0x19");
 
+
+// =========================================================================================
+// [E1 event-status wave 2026-08-26] THE EVENT SCORE / TIMER FEED PAYLOADS.
+//
+// The three records BrnGameModule::BridgeGameStateToGui @0x823EE880 posts to carry an
+// event's clock and score. All three used to be opaque `GuiEvent<N> + u8[]` shells in
+// BrnGuiDemangledEventTypes.h, i.e. modelled as "12-byte GuiEvent header + payload"; the
+// asm proves every one of them is RAW -- each AddGuiEvent<T> instantiation hands AddEvent
+// the object AS PASSED, so the queued bytes open at field +0x00. Their (id,size) pairs are
+// unchanged, so the explicit instantiations in CgsGuiModule_AddGuiEvent_Inst.cpp still
+// match the console constants.
+//
+// They live HERE rather than in the demangled catalogue because their consumer,
+// GuiCache::RecEvent, cannot include that header: BrnGuiOptionsDataProfile.h (which
+// BrnGuiCache.cpp needs for the +0xB878 options block) defines its own compile-only
+// `BrnGui::GuiEventAudioTraxUpdate` slice, and the two definitions are a hard C2011. This
+// is the same migration the header's own top-of-file rule prescribes and that
+// GuiEventBoostInfo / GuiEventChangeDistrict / GuiEventBoostBarStuntInfo already took.
+// =========================================================================================
+// [E1 event-status wave 2026-08-26] RECOVERED (was the opaque `GuiEvent<492> + u8[108]`
+// shell). THE RECORD IS RAW: AddGuiEvent<GuiEventCurrentStatus> @0x823D0DF0 ends
+//     li r6, 0x78 ; li r5, 0x1EC ; mr r4, r27 ; bl ...AddEvent
+// with r27 == the object as passed, so the 120 queued bytes open at +0x00. Size 120 and
+// id 492 are unchanged, so the AddGuiEvent<T> instantiation is unaffected.
+//
+// Producer BrnGameModule::BridgeGameStateToGui @0x823EEB48..0x823EEC20 builds it at
+// sp+0x1B0 (var_2450) -- the SAME stack slot the id-239 GuiEventRaceDistanceRemaining
+// record was posted from four instructions earlier, which is why only +0x00..+0x37 are
+// rewritten here; +0x38.. is the checkpoint-index OUT buffer
+// (`addi r4, r1, var_2418` == payload+0x38) that CarCheckpointData::
+// GetAllRemainingCheckpointIndexes @0x823C4D50 fills, and its 16-entry bound is that
+// function's own `cmpwi r10, 0x10` guard -- 16*4 == 64 == 0x78-0x38 exactly.
+//   +0x00/+0x04  <- mTimerStatusInterface.GetGameTimerStatus()->GetTime()
+//                   (lwz/lfs 0(r22)/4(r22), r22 == gm+10095388 == that status +0x10)
+//   +0x08        <- GetGameTimerStatus()->GetCurrentTimeStep()  (lfs 8(r21) * lfs 4(r21))
+//   +0x0C        <- ScoringOutputInterface::maCarScoreData[player].mfDistanceToFinishLive
+//                   (`mulli 0x128` + `lfs 0x18`)
+//   +0x10        <- ScoringOutputInterface::mfDistanceDrivenInCurrentCar (lfs 0xAA4)
+//   +0x14..+0x33 <- OnlineScoringOutputInterface::maePlayerTeam[8] (the 8-word ctr loop
+//                   from r7 == onlineScoring+0x60)
+//   +0x34        <- the remaining-checkpoint COUNT (0 on every path but the
+//                   E_MODE_ONLINE_BURNING_HOME_RUN runner search)
+// Consumer GuiCache::RecEvent @0x82510540..0x82510600 (jpt_825101AC case 112 == id 492)
+// reads +0x34 -> cache 0x4F9C, +0x38.. as the landmark-tracker source, +0x10 (lfs) ->
+// cache 0x13B94 (mfDistanceDriven) and +0x14..+0x33 -> cache 0xB808 (maCurrentPlayerTeam).
+// FLAG: the four leading time/distance words have no recovered consumer yet (RecEvent
+// does not read them); they are producer-named.
+struct GuiEventCurrentStatus
+{
+    s32 miGameTimeSeconds;                   // +0x00  <- TimerStatus::GetTime().GetSeconds()
+    f32 mfGameTimeFraction;                  // +0x04  <- TimerStatus::GetTime().GetFraction()
+    f32 mfGameTimeStep;                      // +0x08  <- TimerStatus::GetCurrentTimeStep()
+    f32 mfDistanceToFinishLive;              // +0x0C  <- maCarScoreData[player].mfDistanceToFinishLive
+    f32 mfDistanceDrivenInCurrentCar;        // +0x10  -> GuiCache::mfDistanceDriven (+0x13B94)
+    s32 maePlayerTeam[8];                    // +0x14  -> GuiCache::maCurrentPlayerTeam (+0xB808)
+    s32 miNumRemainingCheckpoints;           // +0x34  -> GuiCache +0x4F9C
+    s32 maiRemainingCheckpointIndexes[16];   // +0x38  (GetAllRemainingCheckpointIndexes OUT)
+
+    s32 GetEventType() const { return 492; }
+};
+static_assert(sizeof(GuiEventCurrentStatus) == 120, "X360 AddGuiEvent size 120 (id 492) @0x823D0DF0");
+static_assert(__builtin_offsetof(GuiEventCurrentStatus, mfDistanceDrivenInCurrentCar) == 0x10 &&
+              __builtin_offsetof(GuiEventCurrentStatus, maePlayerTeam)                == 0x14 &&
+              __builtin_offsetof(GuiEventCurrentStatus, miNumRemainingCheckpoints)    == 0x34 &&
+              __builtin_offsetof(GuiEventCurrentStatus, maiRemainingCheckpointIndexes) == 0x38,
+              "GuiEventCurrentStatus wire drift (RecEvent case 112 @0x82510540/0x825105A0/0x825105B0)");
+
+// [E1 event-status wave 2026-08-26] RECOVERED (was the opaque `GuiEvent<424> + u8[8]`
+// shell). THE RECORD IS RAW: AddGuiEvent<GuiEventScoreUpdate> @0x823D0EA8 ends
+//     li r6, 0x14 ; li r5, 0x1A8 ; mr r4, r27 ; bl ...AddEvent
+// with r27 == the object as passed. Size 20 / id 424 unchanged.
+//
+// Producer BrnGameModule::BridgeGameStateToGui @0x823EEC54..0x823EED6C, built at
+// sp+0x50 (var_25B0):
+//   +0x00 <- ScoringOutputInterface::meCurrentMedalTarget      (lwz 0xA9C -> stw +0x00)
+//   +0x04 <- ::mfModeTimeElapsed                               (lfs 0xA90 -> stfs +0x04)
+//            ...OVERWRITTEN in the mode-{3,7,12,14,17} arm (jpt_823EEC98 cases
+//            0,4,9,11,14 of `mode - 3`) by ::mfModeTimeRemaining CLAMPED AT ZERO --
+//            `lfs f0, 0xA94 ; fsel f0, f0, f0, f31` with f31 == flt_82001CC0, and
+//            image.bin @0x82001CC0 == 00 00 00 00 == 0.0f, i.e. (x >= 0) ? x : 0.
+//   +0x08 <- ::mfCurrentTargetModeTime                         (lfs 0xA98 -> stfs +0x08)
+//   +0x0C <- maCarScoreData[player].mfDistanceToNextCheckpointLive (`mulli 0x128`+`lfs 0x20`)
+//   +0x10 <- ::mbTimerActive                                   (lbz 0xAA8 -> stb +0x10)
+// Consumer GuiCache::RecEvent @0x825107F4..0x82510878 (jpt_825101AC case 44 == id 424):
+//   cache 0x9F28 <- +0x00; and ONLY IF +0x10 != 0, cache 0x9F2C (mfEventTime) <- +0x04
+//   and cache 0x9F30 (mfTargetTime) <- +0x08; then +0x0C drives mfDistanceInEvent
+//   (0x9F48) unless it equals the sentinel flt_82F27EFC (image.bin: 7F 7F FF FF == FLT_MAX),
+//   in which case the cached distance is only raised to 0.0f when it had gone negative.
+struct GuiEventScoreUpdate
+{
+    s32  meCurrentMedalTarget;            // +0x00 <- ScoringOutputInterface::meCurrentMedalTarget
+    f32  mfModeTime;                      // +0x04 <- ::mfModeTimeElapsed, or max(::mfModeTimeRemaining, 0)
+    f32  mfCurrentTargetModeTime;         // +0x08 <- ::mfCurrentTargetModeTime
+    f32  mfDistanceToNextCheckpoint;      // +0x0C <- maCarScoreData[player].mfDistanceToNextCheckpointLive
+    bool mbTimerActive;                   // +0x10 <- ::mbTimerActive (gates the two time words)
+    u8   maPad11[3];                      // +0x11..+0x13 (the console posts 20 bytes)
+
+    s32 GetEventType() const { return 424; }
+};
+static_assert(sizeof(GuiEventScoreUpdate) == 20, "X360 AddGuiEvent size 20 (id 424) @0x823D0EA8");
+static_assert(__builtin_offsetof(GuiEventScoreUpdate, mfModeTime)               == 0x04 &&
+              __builtin_offsetof(GuiEventScoreUpdate, mfDistanceToNextCheckpoint) == 0x0C &&
+              __builtin_offsetof(GuiEventScoreUpdate, mbTimerActive)            == 0x10,
+              "GuiEventScoreUpdate wire drift (RecEvent case 44 @0x82510814/0x82510834/0x82510804)");
+
+// [E1 event-status wave 2026-08-26] RECOVERED (was the opaque `GuiEvent<428> + u8[28]`
+// shell, which mis-modelled the wire as a 12-byte GuiEvent header plus 28 payload bytes).
+// THE RECORD IS RAW: AddGuiEvent<GuiAttackScoreUpdate> @0x823D1188 ends
+//     li r6, 0x28 ; li r5, 0x1AC ; mr r4, r27 ; bl VariableEventQueue<32768,16>::AddEvent
+// with r27 == the object AS PASSED (no +12), so the 40 queued bytes OPEN with the first
+// score word. Size 40 and id 428 are unchanged, so the instantiation is unaffected.
+//
+// Pinned at BOTH ends, field for field:
+//   producer  BrnGameModule::BridgeGameStateToGui @0x823EEE4C..0x823EEEA8 (the
+//             mode-{7,9,12,14,17} arm of jpt_823EED94) copies ScoringOutputInterface
+//             +0xA64/+0xA68/+0xA6C/+0xA70/+0xA74/+0xA78 -> payload +0x00..+0x14,
+//             +0xA84 (lfs) -> +0x18, +0xA7C (ld, the merged maStunts[0] pair) -> +0x1C/+0x20,
+//             +0xA88/+0xA89 (lbz) -> +0x24/+0x25.
+//   consumer  GuiCache::RecEvent @0x82510960..0x82510A08 (jpt_825101AC case 48 == id 428)
+//             reads +0x00/+0x04/+0x08/+0x0C -> cache 0x9FC4/0x9FC8/0x9FCC/0x9FD0,
+//             +0x10/+0x14 -> 0xAC64/0xAC68, +0x18 (lfs) -> 0xAC6C,
+//             +0x1C/+0x20 -> 0xAC5C/0xAC60, +0x24/+0x25 (lbz) -> 0xAC70/0xAC71.
+// The NAMES are the producer's own member names (BrnGameStateSharedIO.h
+// ScoringOutputInterface :559-:568) -- every payload word is a straight copy of the
+// like-named scoring-output member, and the consumer stores each into the cache slot
+// BrnGuiCache.h already carries under that name.
+struct GuiAttackScoreUpdate
+{
+    s32  miCurrentScore;             // +0x00  <- ScoringOutputInterface::miCurrentScore
+    s32  miTargetScore;              // +0x04  <- ::miTargetScore
+    s32  miComboScore;               // +0x08  <- ::miComboScore
+    s32  miComboMultiplier;          // +0x0C  <- ::miComboMultiplier
+    u32  muCurrentStunts;            // +0x10  <- ::muCurrentStunts
+    u32  muAllStunts;                // +0x14  <- ::muAllStunts
+    f32  mfComboWarningTimeActive;   // +0x18  <- ::mfComboWarningTimeActive
+    s32  meStuntToDisplayType;       // +0x1C  <- ::maStunts[0].meStuntType
+    s32  miStuntToDisplayScore;      // +0x20  <- ::maStunts[0].miStuntScore
+    bool mbComboWarningActive;       // +0x24  <- ::mbComboWarningActive
+    bool mbComboInProgress;          // +0x25  <- ::mbComboInProgress
+    u8   maPad26[2];                 // +0x26..+0x27 (the console posts 40 bytes)
+
+    s32 GetEventType() const { return 428; }
+};
+static_assert(sizeof(GuiAttackScoreUpdate) == 40, "X360 AddGuiEvent size 40 (id 428) @0x823D1188");
+static_assert(__builtin_offsetof(GuiAttackScoreUpdate, mfComboWarningTimeActive) == 0x18 &&
+              __builtin_offsetof(GuiAttackScoreUpdate, meStuntToDisplayType)     == 0x1C &&
+              __builtin_offsetof(GuiAttackScoreUpdate, mbComboWarningActive)     == 0x24,
+              "GuiAttackScoreUpdate wire drift (RecEvent case 48 @0x825109E4/0x825109FC/0x825109EC)");
+
 } // namespace BrnGui

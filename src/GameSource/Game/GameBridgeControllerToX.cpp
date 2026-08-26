@@ -19,9 +19,16 @@
 //
 // HONEST PLACEHOLDERS (FLAGGED): CgsGui::GuiModule + its GuiEvent payloads, the
 // debug-controller / director-controller-info images, the global action-index tables, and
-// the GameState bind/unbind result-queue buffer are not yet homed -- see GameBridgeControllerToX.h
-// and the inline FLAG comments. Each is modelled by-name so the bodies compile and encode the
+// the GameState bind/unbind result QUEUE SEATS (buffer +0x2BE8 / +0x2C54 / +0x2CC0 -- addresses
+// now measured, see the inline block) are not yet homed -- see GameBridgeControllerToX.h and the
+// inline FLAG comments. Each is modelled by-name so the bodies compile and encode the
 // real control flow + store-for-store data flow.
+//
+// ⭐ [D2 gesture-sink, 2026-08-26] BridgeControllerToGameState's PreWorldInputBuffer is NO LONGER
+// a placeholder: it is the module-owned buffer GameStateModule::GetPreWorldInputBuffer() hands
+// back, and its ControllerInput +0x45 gesture byte is readable by consumers for the first time.
+// The banner on GetGameStatePreWorldInputBuffer below carries the console attestation and
+// refutes the "gameStateModule + 0x2BE8" reading this file used to state.
 // ============================================================================
 
 #include "GameSource/Game/BrnGameModule.hpp"
@@ -69,17 +76,55 @@ namespace BrnGame
     // The four language ids the cycle steps through (X360 v49 = 0x7,0xA,0xB,0xF,0x16 packed block).
     static const s32 gaiLanguageCycleIds[5] = { 7, 10, 11, 15, 22 };
 
-    // Reach the game-state pre-world input buffer from the (un-homed) GameStateModule. X360
-    // sub_823B8EC0 write-locks the buffer at gameStateModule + 0x2BE8 and returns it. FLAG: the
-    // GameStateModule placeholder has no members yet, so the buffer cannot be addressed inside it by
-    // name; modelled as a file-static by-name sink so SetButtonPressed has a valid PreWorldInputBuffer
-    // target. Promote to `&gameStateModule->mPreWorldControllerBuffer` when the module is homed.
+    // ========================================================================================
+    // ⭐⭐ [D2 gesture-sink] THE SINK IS REAL NOW -- AND THE COMMENT THAT USED TO SIT HERE WAS
+    // WRONG ABOUT THE CONSOLE, WHICH IS WHY IT PRESCRIBED AN IMPOSSIBLE FIX.
+    //
+    // What it said: "X360 sub_823B8EC0 write-locks the buffer at gameStateModule + 0x2BE8 and
+    // returns it ... promote to &gameStateModule->mPreWorldControllerBuffer when the module is
+    // homed", and until then it handed back a FILE-STATIC throwaway. The throwaway is the whole
+    // defect: SetButtonPressed ran every frame and wrote the offline event-start gesture byte
+    // (+0x45, ControllerInput::mbRaceModePressed) into an object no consumer can name, so
+    // ShouldStartSnapRaceMode could never see the player hold accelerator + brake. (It also
+    // LockForWrite()d a static and never unlocked it -- the second call would have asserted
+    // "Already locked for write". Nothing ever called this bridge on PC, so that never fired.)
+    //
+    // ⛔ MEASURED, sub_823B8EC0 IS A METHOD OF THE BUFFER, NOT OF THE MODULE. Its body tests
+    // `(*a1 >> 3) & 1` -- the IOBuffer write-lock bit at a1+0 -- fires "Not locked for writing"
+    // at BrnGameStateModuleIO.h:144, and returns `a1 + 11240`. So +0x2BE8 is an offset INSIDE
+    // PreWorldInputBuffer (its input BIND-result queue), and `a2` in
+    // BridgeControllerToGameState @0x823CD738 is the BUFFER ITSELF -- which the SetButtonPressed
+    // call site proves outright: `SetButtonPressed(a2, result + 24, ...)` passes a2 straight in
+    // as `this` to a PreWorldInputBuffer method.
+    //
+    // Where the console's buffer comes from: BrnGameModule::DoUpdate_GameStatePreWorld
+    // @0x823EE0E8 stages it per frame out of the update IOBufferStack
+    // (`CreateIOBuffer<GameStateModuleIO::PreWorldInputBuffer>(stack, &buf, "GameStatePreWorld")`),
+    // runs BridgeNetworkToGameState + BridgeControllerToGameState against it, hands it to
+    // GameStateModule::PreWorldUpdate, and DestroyIOBuffer()s it at the tail.
+    //
+    // ⚠️ FLAG (PC bring-up seam) -- THE PC SHAPE, STATED RATHER THAN HIDDEN. Nothing on PC runs
+    // DoUpdate_GameStatePreWorld, so no per-frame buffer exists. GameStateModule now owns one
+    // (GameStateModule::GetPreWorldInputBuffer -- same TYPE, same Construct, same accessors, same
+    // write-lock contract; only the allocation SITE and the lifetime move), and this bridge keeps
+    // its `GameStateModule*` parameter and reaches the module's buffer BY NAME. That is the ONE
+    // deviation from the console's `(PreWorldInputBuffer*)` parameter, and it is the honest one
+    // while the module is the buffer's owner. DELETE-WHEN DoUpdate_GameStatePreWorld lands: the
+    // parameter then becomes the staged buffer, exactly as the console's is, and this helper goes.
+    //
+    // ⓘ NO LOCK IS TAKEN HERE, deliberately -- the console does not take one either. The write
+    // lock is the CALLER's (X360 sub_823B7620 == LockBuffersForIO takes it for the whole
+    // pre-world staging pass; the PC call site in BrnGameModule::GameMain brackets this bridge
+    // with LockForWrite/UnlockForWrite the same way DoUpdate_World brackets its sibling). If a
+    // caller forgets, SetButtonPressed's own console assert ("Not locked for writing\n",
+    // BrnGameStateModuleIO.h:393) names it.
+    // ========================================================================================
     static BrnGameState::GameStateModuleIO::PreWorldInputBuffer*
-    GetGameStatePreWorldInputBuffer(BrnGameState::GameStateModule* /*lpGameStateModule*/)
+    GetGameStatePreWorldInputBuffer(BrnGameState::GameStateModule* lpGameStateModule)
     {
-        static BrnGameState::GameStateModuleIO::PreWorldInputBuffer skBuffer;
-        skBuffer.LockForWrite();   // X360 sub_823B8EC0 asserts the write lock before returning it
-        return &skBuffer;
+        if (lpGameStateModule == 0)
+            return 0;
+        return lpGameStateModule->GetPreWorldInputBuffer();
     }
 
     // =========================================================================
@@ -319,23 +364,38 @@ namespace BrnGame
         s32 liActionContext)
     {
         // Merge the input module's bind / unbind result queues into the game-state pre-world buffer's
-        // own bind / unbind result queues. FLAG: the input-side queues are returned by name
-        // (GetBindResultQueue / GetUnbindResultQueue const); the GameState-side queues live in the
-        // game-state pre-world input buffer (X360 sub_823B8EC0 = gameStateModule + 0x2BE8, write-locked),
-        // which is NOT yet homed. Modelled by-name via GetPreWorldControllerBuffer() placeholder below;
-        // the merge + the trailing v13 store are preserved.
+        // own bind / unbind result queues. The input-side queues are returned by name
+        // (GetBindResultQueue / GetUnbindResultQueue const).
         const CgsInput::InputIO::OutputBuffer::BindResultQueue*   lpInBind   = lpInputOutputBuffer->GetBindResultQueue();
         const CgsInput::InputIO::OutputBuffer::UnBindResultQueue* lpInUnbind = lpInputOutputBuffer->GetUnbindResultQueue();
         CGS_ASSERT(lpInBind   != 0, "lpInputBindResultQueue");
         CGS_ASSERT(lpInUnbind != 0, "lpInputUnbindResultQueue");
 
-        // The game-state pre-world controller buffer (the write-locked sub-buffer at
-        // gameStateModule + 0x2BE8). Reached by name through the game-state module. FLAG: placeholder
-        // accessor (the buffer's full layout is un-homed); see GetPreWorldControllerBuffer().
-        // PreWorldControllerBuffer* lpGsBuffer = GetPreWorldControllerBuffer(lpGameStateModule);
-        // lpGsBuffer->GetBindResultQueue()->Append(*lpInBind);
-        // lpGsBuffer->GetUnBindResultQueue()->Append(*lpInUnbind);
-        (void)lpGameStateModule;
+        BrnGameState::GameStateModuleIO::PreWorldInputBuffer* lpPreWorld =
+            GetGameStatePreWorldInputBuffer(lpGameStateModule);
+        if (lpPreWorld == 0)
+            return;   // module not Construct()ed yet -- nothing to publish into
+
+        // ---- THE BIND / UNBIND MERGE: STILL PARKED, BUT ITS OFFSETS ARE NO LONGER A MYSTERY ----
+        // ⭐ [D2] The three console addresses, READ OFF 0x823CD738 + sub_823B8EC0 rather than
+        // guessed. sub_823B8EC0 is a write-locked PreWorldInputBuffer accessor returning
+        // `this + 11240`; the bridge derives the other two from it:
+        //     v10 = sub_823B8EC0(buffer)             -> buffer + 0x2BE8  == the BIND result queue
+        //     v11 = sub_823B8EC0(buffer) + 108       -> buffer + 0x2C54  == the UNBIND result queue
+        //     *(sub_823B8EC0(buffer) + 216) = port   -> buffer + 0x2CC0  == the resolved player-0 port
+        // All three land inside PreWorldInputBuffer's still-opaque +0x7B0..+0x2CC8 span (the
+        // maPadToPlayerStatus seat in BrnGameStateModuleIO.h) -- and +0x2CC0 sitting exactly 8
+        // bytes below the ASSERTED mPlayerStatusInterface @ +0x2CC8 is the independent check that
+        // these are in the right span, not merely in the right ballpark.
+        // ⚠️ NOT WIRED, deliberately: homing them means splitting that padding seat into three
+        // typed members -- a BrnGameStateModuleIO.h layout change with its own _AssertLayout work,
+        // out of scope for this sink, and the gesture leg reads none of them. The console's two
+        // Appends and the port store are preserved verbatim:
+        //     BindResultQueue::Append  (buffer + 0x2BE8, lpInBind);
+        //     UnBindResultQueue::Append(buffer + 0x2C54, lpInUnbind);
+        //     *(buffer + 0x2CC0) = liPort;
+        (void)lpInBind;
+        (void)lpInUnbind;
 
         // Resolve player-0 and publish the button-pressed block into the PreWorld input buffer.
         s32 liPort = 0;
@@ -343,21 +403,31 @@ namespace BrnGame
             GetPadInfoForPlayer0(lpInputOutputBuffer, &liPort);
         if (lpPad)
         {
-            // X360 calls SetButtonPressed(this=PreWorldInputBuffer, actionSource = pad+0x18, r5/r6 dead).
-            // FLAG: the call site sets up r5 (=liActionContext) and r6 (a derived pressed bit) but the
-            // committed SetButtonPressed(const ControllerActionSource*) reads only (this, actionSource)
-            // -- the extra registers are stale Hex-Rays args. The action source IS the pad's action
-            // table reinterpreted as the GameState ControllerActionSource (same +0x18 base, same words).
-            BrnGameState::GameStateModuleIO::PreWorldInputBuffer* lpPreWorld =
-                GetGameStatePreWorldInputBuffer(lpGameStateModule);
+            // ⭐⭐ THE GESTURE SINK. X360 call site:
+            //     SetButtonPressed(a2, result + 24, a4, *(result + 924) == 2)
+            // `a2` is the PreWorldInputBuffer (see GetGameStatePreWorldInputBuffer's banner);
+            // `result + 24` is pad + 0x18 == &PadOutputInformation::maActionInfo[0]; the trailing
+            // two are STALE HEX-RAYS ARGS -- the CALLEE at 0x823BA240 is a two-parameter function
+            // (`SetButtonPressed(_DWORD *result, int a2)`) whose body touches nothing but the
+            // write-lock bit, the null check on a2, and its 21 stores. Verified by reading the
+            // callee, not inferred from the call site.
+            //
+            // The last of those 21 stores is the one this whole leg exists for:
+            //     v2[69] = *a2 > 0.25 && *(a2 + 8) > 0.25;        (0x823BA454..0x823BA480)
+            // i.e. buffer +0x45 == ControllerInput::mbRaceModePressed == "accelerator AND brake
+            // analogue both past quarter travel" -- the offline event-start gesture that
+            // GameStateModule::ShouldStartSnapRaceMode @0x82363700 holds for 0.35 s at speed <= 30
+            // before StartModeAtLights @0x82396CF8 runs. Source bytes 0 and 8 are action slots 0
+            // and 1, which are ACCELERATE and BRAKE: CgsInputPadsPC.cpp's binding table binds
+            // exactly those two ids to the triggers, and BridgeControllerToWorld reads
+            // maActionInfo[0].mfValue -> mfAcceleration and [1].mfValue -> mfBraking.
             lpPreWorld->SetButtonPressed(
                 reinterpret_cast<const BrnGameState::GameStateModuleIO::ControllerActionSource*>(lpPad->maActionInfo));
             (void)liActionContext;
 
-            // Store the resolved player-0 port into the controller buffer (X360 *(buffer+0xD8) = v13,
-            // where v13 was the OUT port from GetPadInfoForPlayer0). FLAG: modelled into the PreWorld
-            // buffer's controller-port field by name when homed; preserved as the resolved port here.
-            // lpGsBuffer->SetPlayer0Port(liPort);
+            // The resolved player-0 port store (X360 `*(sub_823B8EC0(buffer) + 216) = v13`, i.e.
+            // buffer + 0x2CC0). Parked with the two queue Appends above -- same un-homed seat.
+            (void)liPort;
         }
     }
 

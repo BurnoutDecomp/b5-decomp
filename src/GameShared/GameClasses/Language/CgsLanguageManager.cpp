@@ -7,6 +7,7 @@
 
 #include <cstring>   // std::strlen / std::strncpy (the FormatText resolver)
 #include <cstdlib>   // std::atof / std::atoi (the FormatText value branches)
+#include <cmath>     // std::floor (the PPC fsel round-then-correct idiom in the time leaves)
 
 namespace CgsLanguage
 {
@@ -819,16 +820,42 @@ namespace CgsLanguage
     // it covered are on the live HUD-message path (RefreshString -> SetLocalisedText ->
     // Obsolete_FormatTextByArray -> FormatText -> here) and their traps killed the process on
     // the first smashed gate; they now have faithful bodies above the float dispatcher.
-    // The FLOAT leaves still below are one HUD parameter type away from the same fate:
-    // RefreshString maps E_HUDMESSAGEPARAMTYPES_TIME -> format 6 -> FormatSecondsString
-    // (@0x82863328) through the float dispatcher, so a HUD message carrying a TIME parameter
-    // WILL trap here. Treat the remaining trap bodies as live hazards, not debug-only.
+    // [E1 wave 2026-08-26] THE SIX TIME LEAVES BELOW ARE GONE TOO. RefreshString maps
+    // CgsGui::E_HUDMESSAGEPARAMTYPES_TIME -> format 6 -> FormatSecondsString (@0x82863328)
+    // through the float dispatcher, so every HUD message carrying a TIME parameter was an
+    // int3 kill; formats 3/4/5/6/7/8 now have faithful bodies below the format-2 timer.
+    // What is LEFT here is the DISTANCE family (15..18, 20) + FormatXoverYString +
+    // FormatHoursMinutesAndSecondsString / FormatHoursAndMinutesAndSecondsString +
+    // GetDistanceDisplayScale. Treat the remaining trap bodies as live hazards, not debug-only.
+    //
+    // SHARED SHAPE OF THE TIME LEAVES (all six + the landed format 2), decoded from the X360:
+    //   ROUNDING -- there is no rounding-mode trick and no fctiwz-rounds-for-me shortcut. Each
+    //   body computes `fadds/fmadds f0` (the scaled time + flt_82001DA0 = 0.5f), then runs the
+    //   compiler's inline FLOOR: `fsel f13, f0, dbl_82001CB8, dbl_82001CB0` picks -2^52 /
+    //   +2^52 (image: 0x82001CB8 = c330000000000000 = -4503599627370496.0, 0x82001CB0 =
+    //   4330000000000000 = +4503599627370496.0) by the sign of f0; `fsub`+`fadd` of that magic
+    //   forces the value into the [2^52,2^53) binade where the ULP is 1.0, i.e. round-to-
+    //   nearest-even; then `fsub f11, f0, f13` takes the residue and
+    //   `fsel f0, f11, dbl_82001CA8, dbl_82001CA0` subtracts 1.0 (0x82001CA0 = 3ff0000000000000)
+    //   when the round went UP and 0.0 (0x82001CA8 = 0000000000000000) when it went down.
+    //   Net: floor(). The trailing frsp/fctiwz then truncate an already-integral value.
+    //   So every leaf is floor(scaledTime + 0.5f) == round-half-up over the asserted
+    //   lfTimeInSeconds >= 0.0f domain (flt_82001CC0 = 0.0f is the compare constant).
+    //   SPLITTING -- the divisors are read off the asm, not assumed: 0x3C/60 (mulhw magic
+    //   0x88888889, add, srawi 5) for the minute leaves, 0x64/100 (mulhw magic 0x51EB851F,
+    //   srawi 5 -- NO add) for the hundredths leaves, and NO divisor at all in formats 6/7.
+    //   BUFFERS -- each console stack block is a CgsUnicode::UnicodeBuffer with Reset() and the
+    //   Set* separator setters inlined: maBuffer[256], maUtf8ThousandsSeparator[4],
+    //   maUtf8DecimalPointCharacter[4], muDecimalPlaces, muMinimumDigits. The bodies zero
+    //   [256..264] one stb at a time and then store muMinimumDigits ([265]) explicitly, so the
+    //   separator IntToString sees is always EMPTY -- no grouping in a clock readout. Modelled
+    //   with explicit locals for the same reason the integer leaves are (Reset / the Set*
+    //   setters have no reconstructed bodies in the tree).
     // ------------------------------------------------------------------------
     void LanguageManager::FormatXoverYString(char*, s32, s32, s32) const                  { __debugbreak(); }   // FLAG trap-stub
     // (FormatDateString + the four INTEGER leaves are no longer trap-stubs -- their faithful
     //  bodies are above this block.)
     void LanguageManager::FormatHoursMinutesAndSecondsString(char*, f32, s32) const       { __debugbreak(); }   // FLAG trap-stub
-    void LanguageManager::FormatMinutesAndSecondsString(char*, f32, s32) const            { __debugbreak(); }   // FLAG trap-stub
 
     // @ 0x828629A8 (asserts cpp:1701/1702/1704/1706) -- [H2 wave 2026-08-25] the
     // M:SS.hh timer leaf (format 2; the road-rule panel's running/best time readouts
@@ -846,7 +873,11 @@ namespace CgsLanguage
         CGS_ASSERT(lfTimeInSeconds >= 0.0f, "lfTimeInSeconds >= 0.0f");      // cpp:1704
         CGS_ASSERT(mpTimeFormatMinsSecsHnds != 0, "mpTimeFormatMinsSecsHnds"); // cpp:1706
 
-        // The X360 fsel chain is round-to-nearest of seconds*100.
+        // [E1 2026-08-26 comment correction] The H2 banner called the fsel chain
+        // "round-to-nearest of seconds*100". It is not: the chain is the compiler's inline
+        // FLOOR (see the decode in the shared-shape note below), applied to seconds*100 + 0.5f
+        // -- i.e. round-HALF-UP. The CODE below is unchanged and stays correct, because
+        // truncation and floor agree over the lfTimeInSeconds >= 0.0f domain this leaf asserts.
         const s32 liTotalHundredths = static_cast<s32>(lfTimeInSeconds * 100.0f + 0.5f);
         const s32 liMinutes    = liTotalHundredths / 6000;
         const s32 liSeconds    = (liTotalHundredths % 6000) / 100;
@@ -879,17 +910,304 @@ namespace CgsLanguage
         CgsUnicode::_Print(reinterpret_cast<CgsUnicode::CgsUtf8*>(lpcTarget),
                            mpTimeFormatMinsSecsHnds, liTargetSize, lapUtf8Params, 3);
     }
-    void LanguageManager::FormatSecondsAndHundredsString(char*, f32, s32) const           { __debugbreak(); }   // FLAG trap-stub
-    void LanguageManager::FormatSecondsString(char*, f32, s32) const                      { __debugbreak(); }   // FLAG trap-stub
+
+    // @ 0x82862C60 (asserts cpp:1764/:1765/:1767/:1769) -- the M:SS leaf (format 3). Round to
+    // whole seconds, split M / SS, render both through IntToString with the EMPTY separator,
+    // and print into mpTimeFormatMinsSecs ("%1:%2"). The real target size is forwarded to
+    // _Print (no 1024 defect in this leaf).
+    //
+    // ONE LOCALE QUIRK, PINNED FROM THE ASM, NOT ASSUMED: the MINUTES field's minimum-digit
+    // count is not a constant.
+    //   0x82862D4C  lwz    r11, 0(r29)       ; meLanguage (+0x00)
+    //   0x82862D54  addi   r11, r11, -0xF    ; - 15
+    //   0x82862D60  cntlzw r11, r11
+    //   0x82862D6C  extrwi r11, r11, 1,26    ; bit 26 == (cntlzw >> 5) & 1 == (operand == 0)
+    //   0x82862D78  addi   r5,  r11, 1       ; -> 2 when meLanguage == 15, else 1
+    // and 15 == CgsLanguage::E_LANGUAGE_ITALIAN (CgsSku.h). So Italian renders "01:07" and
+    // every other language renders "1:07". The SECONDS field is a literal 2 (li r5, 2 @
+    // 0x82862E34, and the matching muMinimumDigits store `li r11, 2` @ 0x82862E28).
+    void LanguageManager::FormatMinutesAndSecondsString(char* lpcTarget, f32 lfTimeInSeconds,
+                                                        s32 liTargetSize) const
+    {
+        CGS_ASSERT(lpcTarget != 0, "lpTargetString != NULL");                // cpp:1764
+        CGS_ASSERT(liTargetSize > 0, "lnTargetStringSize > 0");              // cpp:1765
+        CGS_ASSERT(lfTimeInSeconds >= 0.0f, "lfTimeInSeconds >= 0.0f");      // cpp:1767
+        CGS_ASSERT(mpTimeFormatMinsSecs != 0, "mpTimeFormatMinsSecs");       // cpp:1769
+
+        // fadds flt_82001DA0 (0.5f) + the inline floor -- see the shared-shape note above.
+        const s32 liTotalSeconds = static_cast<s32>(std::floor(lfTimeInSeconds + 0.5f));
+        const s32 liSeconds = liTotalSeconds % 60;                  // mulli 0x3C / subf
+        const s32 liMinutes = (liTotalSeconds - liSeconds) / 60;    // subf / divw r8 == 0x3C
+
+        const u8 lu8MinuteDigits =
+            (meLanguage == E_LANGUAGE_ITALIAN) ? static_cast<u8>(2) : static_cast<u8>(1);
+
+        CgsUnicode::CgsUtf8 lacMinutes[256];
+        CgsUnicode::CgsUtf8 lacSeconds[256];
+        CgsUnicode::CgsUtf8 lacNoSeparator[4];
+        lacMinutes[0] = 0;
+        lacSeconds[0] = 0;
+        for (s32 liByte = 0; liByte < 4; ++liByte)
+            lacNoSeparator[liByte] = 0;
+
+        CgsUnicode::IntToString(lacMinutes, liMinutes, lu8MinuteDigits, lacNoSeparator);
+        CgsUnicode::IntToString(lacSeconds, liSeconds, 2, lacNoSeparator);
+
+        CgsUnicode::UnicodeBuffer lMinutesBuffer;
+        CgsUnicode::UnicodeBuffer lSecondsBuffer;
+        lMinutesBuffer.Convert(lacMinutes);
+        lSecondsBuffer.Convert(lacSeconds);
+
+        const CgsUnicode::CgsUtf8* lapUtf8Params[2];
+        lapUtf8Params[0] = lMinutesBuffer.GetBuffer();
+        lapUtf8Params[1] = lSecondsBuffer.GetBuffer();
+
+        CgsUnicode::_Print(reinterpret_cast<CgsUnicode::CgsUtf8*>(lpcTarget),
+                           mpTimeFormatMinsSecs, liTargetSize, lapUtf8Params, 2);
+    }
+
+    // @ 0x82862E98 (asserts cpp:1826/:1827/:1829/:1831) -- the LONG seconds-and-hundredths leaf
+    // (format 5). TWO _Prints, not one: it first renders "S.hh" into a SIXTY-FOUR byte stack
+    // scratch through mpTimeFormatSecsHnds ("%1.%2") -- `li r5, 0x40` @ 0x8286309C, and the
+    // next local starts exactly 0x40 bytes further up the frame -- then feeds that whole string
+    // as the single %1 of mpTimeFormatSecsLong ("%1 Seconds") into the caller's buffer.
+    //
+    // CONSOLE ASSERT SET REPRODUCED VERBATIM: only mpTimeFormatSecsHnds is null-checked
+    // (cpp:1831). mpTimeFormatSecsLong is dereferenced at 0x828630C0 with NO tripwire -- do not
+    // "helpfully" add one.
+    //
+    // The multiplier is flt_820049E0, read from the image at file offset 0x49E0 =
+    // 42c80000 = 100.0f (fmadds f0, f31, f0, f13 @ 0x82862FA8 -- one fused rounding), and the
+    // /100 is the mulhw 0x51EB851F + srawi 5 magic, NOT an assumed "hundredths" divisor.
+    void LanguageManager::FormatSecondsAndHundredsStringLong(char* lpcTarget, f32 lfTimeInSeconds,
+                                                             s32 liTargetSize) const
+    {
+        CGS_ASSERT(lpcTarget != 0, "lpTargetString != NULL");                // cpp:1826
+        CGS_ASSERT(liTargetSize > 0, "lnTargetStringSize > 0");              // cpp:1827
+        CGS_ASSERT(lfTimeInSeconds >= 0.0f, "lfTimeInSeconds >= 0.0f");      // cpp:1829
+        CGS_ASSERT(mpTimeFormatSecsHnds != 0, "mpTimeFormatSecsHnds");       // cpp:1831
+
+        const s32 liTotalHundredths =
+            static_cast<s32>(std::floor(lfTimeInSeconds * 100.0f + 0.5f));
+        const s32 liHundredths = liTotalHundredths % 100;                       // mulli 0x64
+        const s32 liSeconds    = (liTotalHundredths - liHundredths) / 100;      // divw r8 == 0x64
+
+        CgsUnicode::CgsUtf8 lacSeconds[256];
+        CgsUnicode::CgsUtf8 lacHundredths[256];
+        CgsUnicode::CgsUtf8 lacNoSeparator[4];
+        lacSeconds[0]    = 0;
+        lacHundredths[0] = 0;
+        for (s32 liByte = 0; liByte < 4; ++liByte)
+            lacNoSeparator[liByte] = 0;
+
+        CgsUnicode::IntToString(lacSeconds,    liSeconds,    1, lacNoSeparator);
+        CgsUnicode::IntToString(lacHundredths, liHundredths, 2, lacNoSeparator);
+
+        CgsUnicode::UnicodeBuffer lSecondsBuffer;
+        CgsUnicode::UnicodeBuffer lHundredthsBuffer;
+        lSecondsBuffer.Convert(lacSeconds);
+        lHundredthsBuffer.Convert(lacHundredths);
+
+        const CgsUnicode::CgsUtf8* lapUtf8Params[2];
+        lapUtf8Params[0] = lSecondsBuffer.GetBuffer();
+        lapUtf8Params[1] = lHundredthsBuffer.GetBuffer();
+
+        // The 64-byte intermediate is the console's own frame slot, not a chosen size.
+        CgsUnicode::CgsUtf8 lacSecondsAndHundredths[64];
+        CgsUnicode::_Print(lacSecondsAndHundredths, mpTimeFormatSecsHnds, 64,
+                           lapUtf8Params, 2);
+
+        CgsUnicode::UnicodeBuffer lCombinedBuffer;
+        lCombinedBuffer.Convert(lacSecondsAndHundredths);
+        lapUtf8Params[0] = lCombinedBuffer.GetBuffer();
+
+        CgsUnicode::_Print(reinterpret_cast<CgsUnicode::CgsUtf8*>(lpcTarget),
+                           mpTimeFormatSecsLong, liTargetSize, lapUtf8Params, 1);
+    }
+
+    // @ 0x828630F8 (asserts cpp:1882/:1883/:1885/:1887) -- the S.hh leaf (format 4): the same
+    // *100 round and /100 split as the Long variant above, printed straight into the caller's
+    // buffer through mpTimeFormatSecsHnds ("%1.%2") with no intermediate. Seconds carry
+    // minimum-digits 1 (li r5, 1 @ 0x828631D8 with the matching muMinimumDigits store
+    // `li r11, 1` @ 0x82863204), hundredths carry 2 (@ 0x828632B8 / 0x828632C4).
+    void LanguageManager::FormatSecondsAndHundredsString(char* lpcTarget, f32 lfTimeInSeconds,
+                                                         s32 liTargetSize) const
+    {
+        CGS_ASSERT(lpcTarget != 0, "lpTargetString != NULL");                // cpp:1882
+        CGS_ASSERT(liTargetSize > 0, "lnTargetStringSize > 0");              // cpp:1883
+        CGS_ASSERT(lfTimeInSeconds >= 0.0f, "lfTimeInSeconds >= 0.0f");      // cpp:1885
+        CGS_ASSERT(mpTimeFormatSecsHnds != 0, "mpTimeFormatSecsHnds");       // cpp:1887
+
+        const s32 liTotalHundredths =
+            static_cast<s32>(std::floor(lfTimeInSeconds * 100.0f + 0.5f));
+        const s32 liHundredths = liTotalHundredths % 100;
+        const s32 liSeconds    = (liTotalHundredths - liHundredths) / 100;
+
+        CgsUnicode::CgsUtf8 lacSeconds[256];
+        CgsUnicode::CgsUtf8 lacHundredths[256];
+        CgsUnicode::CgsUtf8 lacNoSeparator[4];
+        lacSeconds[0]    = 0;
+        lacHundredths[0] = 0;
+        for (s32 liByte = 0; liByte < 4; ++liByte)
+            lacNoSeparator[liByte] = 0;
+
+        CgsUnicode::IntToString(lacSeconds,    liSeconds,    1, lacNoSeparator);
+        CgsUnicode::IntToString(lacHundredths, liHundredths, 2, lacNoSeparator);
+
+        CgsUnicode::UnicodeBuffer lSecondsBuffer;
+        CgsUnicode::UnicodeBuffer lHundredthsBuffer;
+        lSecondsBuffer.Convert(lacSeconds);
+        lHundredthsBuffer.Convert(lacHundredths);
+
+        const CgsUnicode::CgsUtf8* lapUtf8Params[2];
+        lapUtf8Params[0] = lSecondsBuffer.GetBuffer();
+        lapUtf8Params[1] = lHundredthsBuffer.GetBuffer();
+
+        CgsUnicode::_Print(reinterpret_cast<CgsUnicode::CgsUtf8*>(lpcTarget),
+                           mpTimeFormatSecsHnds, liTargetSize, lapUtf8Params, 2);
+    }
+
+    // @ 0x82863328 (asserts cpp:1935/:1936/:1938/:1940) -- the bare-seconds leaf (format 6).
+    // THE ONE THE HUD ACTUALLY HITS: InGameMessagesComponent::RefreshString maps
+    // CgsGui::E_HUDMESSAGEPARAMTYPES_TIME onto format 6, so every parameterised HUD message
+    // carrying a time landed on this function's __debugbreak().
+    //
+    // FAMOUS-VALUE TRAP AVOIDED: there is NO /60 and NO %60 anywhere in this body -- no
+    // mulhw/mulli/divw at all between the fctiwz and the IntToString. The rounded value goes
+    // to the formatter WHOLE, so 3661 seconds renders "3661s", not "1:01". minimum-digits is a
+    // literal 1 (li r5, 1 @ 0x828633F8; muMinimumDigits store `li r11, 1` @ 0x82863434).
+    void LanguageManager::FormatSecondsString(char* lpcTarget, f32 lfTimeInSeconds,
+                                              s32 liTargetSize) const
+    {
+        CGS_ASSERT(lpcTarget != 0, "lpTargetString != NULL");                // cpp:1935
+        CGS_ASSERT(liTargetSize > 0, "lnTargetStringSize > 0");              // cpp:1936
+        CGS_ASSERT(lfTimeInSeconds >= 0.0f, "lfTimeInSeconds >= 0.0f");      // cpp:1938
+        CGS_ASSERT(mpTimeFormatSecs != 0, "mpTimeFormatSecs");               // cpp:1940
+
+        const s32 liTotalSeconds = static_cast<s32>(std::floor(lfTimeInSeconds + 0.5f));
+
+        CgsUnicode::CgsUtf8 lacSeconds[256];
+        CgsUnicode::CgsUtf8 lacNoSeparator[4];
+        lacSeconds[0] = 0;
+        for (s32 liByte = 0; liByte < 4; ++liByte)
+            lacNoSeparator[liByte] = 0;
+
+        CgsUnicode::IntToString(lacSeconds, liTotalSeconds, 1, lacNoSeparator);
+
+        CgsUnicode::UnicodeBuffer lSecondsBuffer;
+        lSecondsBuffer.Convert(lacSeconds);
+
+        const CgsUnicode::CgsUtf8* lapUtf8Params[1];
+        lapUtf8Params[0] = lSecondsBuffer.GetBuffer();
+
+        CgsUnicode::_Print(reinterpret_cast<CgsUnicode::CgsUtf8*>(lpcTarget),
+                           mpTimeFormatSecs, liTargetSize, lapUtf8Params, 1);
+    }
+
+    // @ 0x828634C8 (asserts cpp:1974/:1975/:1977/:1979) -- format 7. Instruction-for-instruction
+    // the same body as format 6 above (same 0.5f, same floor chain, same minimum-digits 1, same
+    // absence of any 60/100 divisor); the ONLY differences are the assert line numbers, the
+    // tripwire string, and the template pointer: mpTimeFormatSecsLong (+0x6134, "%1 Seconds")
+    // instead of mpTimeFormatSecs (+0x6130, "%1s").
+    void LanguageManager::FormatSecondsStringLong(char* lpcTarget, f32 lfTimeInSeconds,
+                                                  s32 liTargetSize) const
+    {
+        CGS_ASSERT(lpcTarget != 0, "lpTargetString != NULL");                // cpp:1974
+        CGS_ASSERT(liTargetSize > 0, "lnTargetStringSize > 0");              // cpp:1975
+        CGS_ASSERT(lfTimeInSeconds >= 0.0f, "lfTimeInSeconds >= 0.0f");      // cpp:1977
+        CGS_ASSERT(mpTimeFormatSecsLong != 0, "mpTimeFormatSecsLong");       // cpp:1979
+
+        const s32 liTotalSeconds = static_cast<s32>(std::floor(lfTimeInSeconds + 0.5f));
+
+        CgsUnicode::CgsUtf8 lacSeconds[256];
+        CgsUnicode::CgsUtf8 lacNoSeparator[4];
+        lacSeconds[0] = 0;
+        for (s32 liByte = 0; liByte < 4; ++liByte)
+            lacNoSeparator[liByte] = 0;
+
+        CgsUnicode::IntToString(lacSeconds, liTotalSeconds, 1, lacNoSeparator);
+
+        CgsUnicode::UnicodeBuffer lSecondsBuffer;
+        lSecondsBuffer.Convert(lacSeconds);
+
+        const CgsUnicode::CgsUtf8* lapUtf8Params[1];
+        lapUtf8Params[0] = lSecondsBuffer.GetBuffer();
+
+        CgsUnicode::_Print(reinterpret_cast<CgsUnicode::CgsUtf8*>(lpcTarget),
+                           mpTimeFormatSecsLong, liTargetSize, lapUtf8Params, 1);
+    }
+
+    // @ 0x82863668 (asserts cpp:2013/:2014/:2016/:2018/:2019) -- format 8, the prose leaf. FIVE
+    // tripwires, not four: BOTH mid-text templates are null-checked, in this order --
+    // mpTimeFormatMinsSecsMidText (+0x613C, cpp:2018) then mpTimeFormatMinSecsMidText
+    // (+0x6138, cpp:2019) -- even though only one of them is used per call.
+    //
+    // THE SHAPE IS A SINGULAR/PLURAL FORK, not a formatting choice: `cmpwi cr6, r4, 1` /
+    // `bne cr6, loc_82863850` @ 0x828637E0 tests the MINUTES count against 1.
+    //   minutes == 1 -> ONE parameter (the seconds, minimum-digits 2) through
+    //                   mpTimeFormatMinSecsMidText, whose default text is "1 Min %1 Secs" --
+    //                   the "1" is baked into the template, which is exactly why the minutes
+    //                   value is not passed on this arm.
+    //   otherwise    -> TWO parameters (minutes minimum-digits 1, seconds minimum-digits 2)
+    //                   through mpTimeFormatMinsSecsMidText ("%1 Mins %2 Secs").
+    // Same 0.5f floor and the same 0x3C/60 split as format 3.
+    void LanguageManager::FormatMinutesSecondsStringMediumText(char* lpcTarget, f32 lfTimeInSeconds,
+                                                               s32 liTargetSize) const
+    {
+        CGS_ASSERT(lpcTarget != 0, "lpTargetString != NULL");                            // cpp:2013
+        CGS_ASSERT(liTargetSize > 0, "lnTargetStringSize > 0");                          // cpp:2014
+        CGS_ASSERT(lfTimeInSeconds >= 0.0f, "lfTimeInSeconds >= 0.0f");                  // cpp:2016
+        CGS_ASSERT(mpTimeFormatMinsSecsMidText != 0, "mpTimeFormatMinsSecsMidText");     // cpp:2018
+        CGS_ASSERT(mpTimeFormatMinSecsMidText != 0, "mpTimeFormatMinSecsMidText");       // cpp:2019
+
+        const s32 liTotalSeconds = static_cast<s32>(std::floor(lfTimeInSeconds + 0.5f));
+        const s32 liSeconds = liTotalSeconds % 60;
+        const s32 liMinutes = (liTotalSeconds - liSeconds) / 60;
+
+        CgsUnicode::CgsUtf8 lacMinutes[256];
+        CgsUnicode::CgsUtf8 lacSeconds[256];
+        CgsUnicode::CgsUtf8 lacNoSeparator[4];
+        lacMinutes[0] = 0;
+        lacSeconds[0] = 0;
+        for (s32 liByte = 0; liByte < 4; ++liByte)
+            lacNoSeparator[liByte] = 0;
+
+        const CgsUnicode::CgsUtf8* lapUtf8Params[2];
+
+        if (liMinutes == 1)
+        {
+            CgsUnicode::IntToString(lacSeconds, liSeconds, 2, lacNoSeparator);
+
+            CgsUnicode::UnicodeBuffer lSecondsBuffer;
+            lSecondsBuffer.Convert(lacSeconds);
+            lapUtf8Params[0] = lSecondsBuffer.GetBuffer();
+
+            CgsUnicode::_Print(reinterpret_cast<CgsUnicode::CgsUtf8*>(lpcTarget),
+                               mpTimeFormatMinSecsMidText, liTargetSize, lapUtf8Params, 1);
+            return;
+        }
+
+        CgsUnicode::IntToString(lacMinutes, liMinutes, 1, lacNoSeparator);
+        CgsUnicode::IntToString(lacSeconds, liSeconds, 2, lacNoSeparator);
+
+        CgsUnicode::UnicodeBuffer lMinutesBuffer;
+        CgsUnicode::UnicodeBuffer lSecondsBuffer;
+        lMinutesBuffer.Convert(lacMinutes);
+        lSecondsBuffer.Convert(lacSeconds);
+
+        lapUtf8Params[0] = lMinutesBuffer.GetBuffer();
+        lapUtf8Params[1] = lSecondsBuffer.GetBuffer();
+
+        CgsUnicode::_Print(reinterpret_cast<CgsUnicode::CgsUtf8*>(lpcTarget),
+                           mpTimeFormatMinsSecsMidText, liTargetSize, lapUtf8Params, 2);
+    }
+
     void LanguageManager::FormatSmallDistanceString(char*, f32, s32) const                { __debugbreak(); }   // FLAG trap-stub
     // (FormatLargeDistanceString is no longer a trap-stub -- its faithful body is above
     //  this block, landed with the H1 odometer wave.)
     f32  LanguageManager::GetDistanceDisplayScale() const                                 { __debugbreak(); return 1.0f; }   // FLAG trap-stub
     // FLAG trap-stubs for the float-dispatch leaves 0x828641F0 references beyond the
     // block above (declared additions; decompiles land with the value-format slice).
-    void LanguageManager::FormatSecondsAndHundredsStringLong(char*, f32, s32) const       { __debugbreak(); }   // FLAG trap-stub
-    void LanguageManager::FormatSecondsStringLong(char*, f32, s32) const                  { __debugbreak(); }   // FLAG trap-stub
-    void LanguageManager::FormatMinutesSecondsStringMediumText(char*, f32, s32) const     { __debugbreak(); }   // FLAG trap-stub
     void LanguageManager::FormatAutoDistanceString(char*, f32, s32) const                 { __debugbreak(); }   // FLAG trap-stub
     void LanguageManager::FormatAutoDistanceStringLong(char*, f32, s32) const             { __debugbreak(); }   // FLAG trap-stub
     void LanguageManager::FormatSmallDistanceStringLong(char*, f32, s32) const            { __debugbreak(); }   // FLAG trap-stub

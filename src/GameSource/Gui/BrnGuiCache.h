@@ -1237,7 +1237,18 @@ namespace BrnGui
         // pending flag bytes (Hex-Rays field_4B75 / field_4B76). FLAG: consumer-named.
         bool mbCarUnlockPending;                         // +0x4B75 (19317) set 1 when an un-shown unlocked car remains
         bool mbCarUnlockDetermined;                      // +0x4B76 (19318) set 1 on entry (determination has run)
-        u8   mPad_4B77[0x4FA0 - 0x4B77];                 // +0x4B77..+0x4F9F
+        u8   mPad_4B77[0x4F9C - 0x4B77];                 // +0x4B77..+0x4F9B
+        // ADDITIVE CARVE (E1 event-status wave 2026-08-26) from the TAIL of the former
+        // mPad_4B77 -- the count of remaining checkpoints the id-492 GuiEventCurrentStatus
+        // record carries. X360 GuiCache::RecEvent case 112 @0x82510540/0x82510558:
+        // `lwz r11, 0x34(r30) ; ... ; stw r11, 0x4F9C(r31)`, then the SAME word is reloaded
+        // as the bound of the landmark-tracker fill loop (@0x82510590) and passed as the
+        // third argument to GuiCache::UpdateTrackerInfo (@0x825105F8). The store is
+        // UNCONDITIONAL; the loop and the UpdateTrackerInfo call that read it back are gated
+        // on meGameModeType == E_MODE_ONLINE_BURNING_HOME_RUN (13) and are FLAG-deferred in
+        // BrnGuiCache.cpp -- see the case-492 banner there.
+        // No member is shifted (the pad simply loses its last 4 bytes).
+        s32  miNumRemainingCheckpoints;                  // +0x4F9C (20380)
         // ADDITIVE CARVE (HUD H1 wave, 2026-08-25): the district-marker source words -- the
         // latest GUI-event-169 (GuiEventChangeDistrict) record, stored verbatim. Pinned as a
         // TRIO at three ends: GuiCache::Construct @0x82505860 seeds
@@ -1306,7 +1317,18 @@ namespace BrnGui
         s32 miCtorSentinel_9ED8;                         // +0x9ED8 (40664) ctor writes -1 (CgsArray sentinel; sub-array un-homed)
         u8  mPad_9EDC[36];                               // +0x9EDC..+0x9EFF
         s32 miCtorSentinel_9F00;                         // +0x9F00 (40704) ctor writes -1 (CgsArray sentinel; sub-array un-homed)
-        u8  mPad_9F04[40];                               // +0x9F04..+0x9F2B
+        u8  mPad_9F04[36];                               // +0x9F04..+0x9F27
+        // ADDITIVE CARVE (E1 event-status wave 2026-08-26) from the TAIL of the former
+        // mPad_9F04[40] -- the medal-target word that leads the event medal/time block.
+        // X360-attested by GuiCache::RecEvent case 44 (GUI event 424, GuiEventScoreUpdate):
+        // `lwz r11, 0(r30) ; ori r10, 0x9F28 ; stwx r11, r31, r10` @0x825107F8..0x82510800,
+        // where the payload's +0x00 word is ScoringOutputInterface::meCurrentMedalTarget
+        // (the producer's `lwz r9, 0xA9C(r27)` @0x823EEC5C). NAME is producer-derived; the
+        // value home is BrnGameState::ECurrentMedalTargetTime, spelled s32 here per this
+        // boundary header's enum convention (same as meSatNavEventFilter/meCarSelectType).
+        // No member is shifted (36 + 4 == 40); the pair it leads (mfEventTime/mfTargetTime)
+        // is written by the SAME RecEvent arm, gated on the payload's mbTimerActive byte.
+        s32 meCurrentMedalTarget;                        // +0x9F28 (40744)
         f32 mfEventTime;                                 // +0x9F2C (40748)
         f32 mfTargetTime;                                // +0x9F30 (40752)
         // ADDITIVE CARVE (wave J): the per-medal score targets the pad comment already
@@ -1458,7 +1480,25 @@ namespace BrnGui
         u8  mPad_AC4C[14];                               // +0xAC4C..+0xAC59
         bool mbRoadRuleShotCapturedLineGate;             // +0xAC5A (44122) GetRoadRuleShotCapturedLineGate ("CAPTURED_FOR" line gate)
         u8  mPad_AC5B[1];                                // +0xAC5B
-        StuntToDisplayInfo maStuntToDisplay[3];          // +0xAC5C (44124) GetStuntToDisplay @0x8240F770 (stride 8; -1-terminated)
+        // ⚠️ CORRECTED BOUND (E1 event-status wave 2026-08-26). This member used to read
+        // `maStuntToDisplay[3]`, an unattested space-filler chosen to reach +0xAC74. The
+        // console DISAGREES about everything past the first entry: GuiCache::RecEvent
+        // case 48 (GUI event 428, GuiAttackScoreUpdate) @0x825109C0..0x825109F8 writes
+        // +0xAC5C/+0xAC60 as the stunt pair, but +0xAC64/+0xAC68 as two more score WORDS,
+        // +0xAC6C with an `lfs`/`stfsx` FLOAT and +0xAC70/+0xAC71 with two `lbz`/`stbx`
+        // BYTES -- which no stride-8 {s32,s32} array can be. GetStuntToDisplay
+        // @0x8240F770's own terminator walk is bounded at ONE iteration (`cmpwi r11, 1 ;
+        // blt`), so a single entry is what the accessor can ever hand out. The five members
+        // below are the rest of the id-428 record, named after the producer's own
+        // ScoringOutputInterface fields (:563-:568) whose values they receive. Total is
+        // unchanged (8 + 4 + 4 + 4 + 1 + 1 + 2 == 24, +0xAC5C..+0xAC74).
+        StuntToDisplayInfo maStuntToDisplay[1];          // +0xAC5C (44124) GetStuntToDisplay @0x8240F770 (-1-terminated; miStuntId receives maStunts[0].meStuntType, miField_04 the score)
+        u32 muCurrentStunts;                             // +0xAC64 (44132) RecEvent 428 (stwx, payload +0x10)
+        u32 muAllStunts;                                 // +0xAC68 (44136) RecEvent 428 (stwx, payload +0x14)
+        f32 mfComboWarningTimeActive;                    // +0xAC6C (44140) RecEvent 428 (stfsx, payload +0x18)
+        bool mbComboWarningActive;                       // +0xAC70 (44144) RecEvent 428 (stbx, payload +0x24)
+        bool mbComboInProgress;                          // +0xAC71 (44145) RecEvent 428 (stbx, payload +0x25)
+        u8  mPad_AC72[2];                                // +0xAC72..+0xAC73
         u32 muNumActivePlayers;                          // +0xAC74 (44148) GetFriendsListCachedField / GetNumActivePlayers
         // ADDITIVE CARVE (friends wave): slot id BuildChallengeList matches each
         // freeburn challenge player-nibble against (read @0x8242B8AC, cache+0xAC78).
