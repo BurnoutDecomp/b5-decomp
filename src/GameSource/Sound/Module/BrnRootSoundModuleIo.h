@@ -63,12 +63,12 @@ namespace Module
 namespace Io
 {
     // The prop-update notification queue handed out (by pointer) from
-    // RootInputBuffer::GetPropUpdateNotificationQueue. Promoted from a forward `class`
-    // decl to a complete opaque struct so it can be an inline by-value RootInputBuffer
-    // member (the caller PropUpdateNotification_::Append supplies the queue operations in
-    // its own TU). FLAG: 0x40-byte width is nominal (only the +0x10520 offset is X360-
-    // attested; the following member's offset is absorbed by an explicit pad).
-    struct PropUpdateNotificationQueue { u8 mData[0x40]; };
+    // RootInputBuffer::GetPropUpdateNotificationQueue. Opaque storage viewed by the
+    // appenders through the world's typed EventQueue<PropUpdateNotification,200>.
+    // (phase C3b: WIDTH ATTESTED -- the +0x10520..+0x13730 span == 0x3210 == 12816
+    // == the world UpdateOutputBuffer's own PropUpdateNotificationQueue width; the
+    // old nominal 0x40 under-sized the append target.)
+    struct PropUpdateNotificationQueue { u8 mData[0x3210]; };
 
     // The prop-became-physical event queue handed out (by pointer) from
     // RootInputBuffer::GetPropBecamePhysicalEventQueue @ +0x103D0. Opaque, correctly
@@ -146,27 +146,14 @@ namespace Io
         }
     };
 
-    // BrnSound::Module::Io::LogicInputBuffer -- the per-frame logic input payload the
-    // sound logic module reads. Derives from CgsModule::IOBuffer.
-    struct LogicInputBuffer : public CgsModule::IOBuffer
-    {
-        // X360 0x82694D30 (read-lock; "Not locked for reading", BrnRootSoundModuleIo.h:405)
-        // -- the embedded vehicle (active-race-car output) interface at this+0x620.
-        const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface*
-            GetVehicleInterface() const;
-
-    private:
-        u8 maPadToVehicleInterface[0x620 - sizeof(CgsModule::IOBuffer)]; // base end -> +0x0620
-        // RCEntityActiveRaceCarOutputInterface @ +0x620; named opaque storage (full
-        // layout lives in its own TU). GetVehicleInterface returns &this member.
-        u8 mVehicleInterfaceStorage[0x40];                               // @ +0x0620
-
-        static void _AssertLayout()
-        {
-            static_assert(offsetof(LogicInputBuffer, mVehicleInterfaceStorage) == 0x620,
-                          "RCEntityActiveRaceCarOutputInterface @ +0x620");
-        }
-    };
+    // (2026-08-25, faithful-audio-engine phase C3b): the former separate
+    // `struct LogicInputBuffer` (with its 0x40-byte vehicle-interface storage --
+    // an under-sized reinterpret hazard) is RETIRED. The DWARF proves the
+    // identity: `typedef RootInputBuffer LogicInputBuffer;`
+    // (BrnCollisionStateManager.h:402) -- the logic module's input IS the root
+    // input buffer, which is exactly what RootSoundModule::Update passes the
+    // engine. GetVehicleInterface lives on RootInputBuffer now (the real
+    // by-value mVehicleData member); the typedef follows the struct below.
 
     // =========================================================================
     // BrnSound::Module::Io::RootInputBuffer -- the root sound module input payload
@@ -277,10 +264,35 @@ namespace Io
         void SetUpdateInfo(const UpdateInfo* lpInfo);                                       // X360 0x823B7F70 @ +0xEBBC
         void SetAICarOutputInterface(const AICarOutputInterface* lpInterface);              // X360 0x823B8310 @ +0xEEE0
 
+        // ---- phase C3b (BridgeWorldToSound's remaining surface) ---------------------
+        // X360 0x823B87C0 (write-lock; h:466): copy the 10480-byte active-race-car
+        // output interface into mVehicleData, then publish the buffer's own
+        // mePlayerActiveRaceCarIndex from the copied interface's player index
+        // (guarded by its mbIsPlayerCarActive flag + the h:967/:980 asserts).
+        void SetVehicleData(const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpVehicleData);
+
+        // X360 0x82694D30 (read-lock; h:405; was on the retired separate
+        // LogicInputBuffer): the embedded vehicle interface, for the logic side.
+        const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* GetVehicleInterface() const;
+
+        // X360 0x823B80F8 (write-lock; h:186; the IDA-truncated "BrnSou"): the
+        // root input's own audio-car-loaded queue @ +0xED50 -- BridgeWorldToSound's
+        // append target.
+        AudioCarLoadedDataQueue* GetAudioCarDataLoadedQueue();
+
     private:
         u8 maPad0[0x004 - sizeof(CgsModule::IOBuffer)];                               // base end -> +0x00004
         ReplayStatusInterface         mReplayStatusInterface;      // @ +0x00004
-        u8 maPad1[0x2F10 - (0x004 + sizeof(ReplayStatusInterface))];
+        u8 maPad1[0x620 - (0x004 + sizeof(ReplayStatusInterface))];               // -> +0x00620
+        // The vehicle (active-race-car output) data, REAL and by value (phase C3b):
+        // SetVehicleData @0x823B87C0 XMemCpy's the console 10480-byte interface in
+        // here (+0x620 .. +0x2F10 -- the copy width abuts the next member exactly),
+        // and GetVehicleInterface @0x82694D30 hands it out to the logic side.
+        // HOST-WIDTH NOTE: the interface widens on x64 (handles/queues), so every
+        // member BELOW this line is pinned by NAME + SEQUENCE with the console
+        // inter-member gaps as pads; the absolute-offset static_asserts past here
+        // are retired (the same precedent as PreUpdateOutput's queue note).
+        BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface mVehicleData; // @ +0x00620 (console; 10480 wide)
         EActiveRaceCarIndex           mePlayerActiveRaceCarIndex;  // @ +0x02F10
         u8 maPad2[0x2F20 - (0x2F10 + sizeof(EActiveRaceCarIndex))];
         DirectorCamera                mDirectorCamera;             // @ +0x02F20
@@ -305,34 +317,34 @@ namespace Io
         const GuiEventQueue*          mpGuiEventQueue;             // @ +0x0EBA8 (host-widens past here)
         GameModeOutputInterface       mGameModeInterface;          // @ +0x0EBAC
         UpdateInfo                    mUpdateInfo;                 // @ +0x0EBBC
-        u8 maPad12[0xEEE0 - (0xEBBC + sizeof(UpdateInfo))];
+        u8 maPad12[0xED50 - (0xEBBC + sizeof(UpdateInfo))];                       // -> +0xED50
+        // The root input's OWN audio-car-loaded queue (phase C3b): the write
+        // accessor @0x823B80F8 (h:186) returns +0xED50, and BridgeWorldToSound
+        // @0x823CD580 appends the world's loaded-car events into it each frame;
+        // 0xED50 + 0x190 == 0xEEE0 abuts mAICarOutputInterface exactly.
+        AudioCarLoadedDataQueue       mAudioCarDataLoadedQueue;    // @ +0x0ED50 (console; 0x190 wide)
         AICarOutputInterface          mAICarOutputInterface;       // @ +0x0EEE0
         u8 maPad13[0x103D0 - (0xEEE0 + sizeof(AICarOutputInterface))];
         PropBecamePhysicalEventQueue  mPropBecamePhysicalEventQueue; // @ +0x103D0 (0x150)
-        PropUpdateNotificationQueue   mPropUpdateNotificationQueue;// @ +0x10520
-        u8 maPad14[0x13730 - (0x10520 + sizeof(PropUpdateNotificationQueue))];
+        PropUpdateNotificationQueue   mPropUpdateNotificationQueue;// @ +0x10520 (0x3210 -- fills to +0x13730 exactly; phase C3b)
         GuiAudioEventResults          mGuiAudioEventResults;       // @ +0x13730
 
         static void _AssertLayout()
         {
-            // Byte-faithful up to mpGuiEventQueue: only the 1-byte IOBuffer base + POD
-            // opaque storage precede these members (no host-wider pointers), so offsetof
-            // matches the X360 offsets exactly. Members past the host-widening
-            // mpGuiEventQueue pointer are pinned by DWARF name + sequence only.
+            // Byte-faithful up to mVehicleData (+0x620): only the 1-byte IOBuffer base
+            // + POD opaque storage precede it. mVehicleData is the real host-width
+            // interface (phase C3b), so every member after it is pinned by DWARF name
+            // + SEQUENCE with the console inter-member gaps as pads; the old absolute
+            // offsetof asserts past +0x620 are retired (console offsets stay in the
+            // member comments).
             static_assert(offsetof(RootInputBuffer, mReplayStatusInterface)  == 0x00004, "mReplayStatusInterface @ +0x004");
-            static_assert(offsetof(RootInputBuffer, mePlayerActiveRaceCarIndex) == 0x02F10, "mePlayerActiveRaceCarIndex @ +0x2F10");
-            static_assert(offsetof(RootInputBuffer, mDirectorCamera)         == 0x02F20, "mDirectorCamera @ +0x2F20");
-            static_assert(offsetof(RootInputBuffer, mContactSpyQueueInterface) == 0x03080, "mContactSpyQueueInterface @ +0x3080");
-            static_assert(offsetof(RootInputBuffer, mGameActionQueue)        == 0x03084, "mGameActionQueue @ +0x3084");
-            static_assert(offsetof(RootInputBuffer, mGameEventQueue)         == 0x06494, "mGameEventQueue @ +0x6494");
-            static_assert(offsetof(RootInputBuffer, mTrafficOutputInterface) == 0x06AB0, "mTrafficOutputInterface @ +0x6AB0");
-            static_assert(offsetof(RootInputBuffer, mPhysicalTrafficStates)  == 0x074C0, "mPhysicalTrafficStates @ +0x74C0");
-            static_assert(offsetof(RootInputBuffer, mDeformationInterface)   == 0x0B490, "mDeformationInterface @ +0xB490");
-            static_assert(offsetof(RootInputBuffer, mScoringInterface)       == 0x0DF80, "mScoringInterface @ +0xDF80");
-            static_assert(offsetof(RootInputBuffer, mOnlineScoringInterface) == 0x0EA30, "mOnlineScoringInterface @ +0xEA30");
-            static_assert(offsetof(RootInputBuffer, mWorldLoadInterface)     == 0x0EAD4, "mWorldLoadInterface @ +0xEAD4");
+            static_assert(offsetof(RootInputBuffer, mVehicleData)            == 0x00620, "mVehicleData @ +0x620");
         }
     };
+
+    // The DWARF identity (BrnCollisionStateManager.h:402): the logic module's input
+    // buffer IS the root input buffer (phase C3b -- see the note above).
+    typedef RootInputBuffer LogicInputBuffer;
 
     // BrnSound::Module::Io::RootPreUpdateOutputBuffer (DWARF BrnRootSoundModuleIo.h:322)
     // -- the root sound module's pre-update output payload. Derives from CgsModule::
@@ -354,6 +366,14 @@ namespace Io
         CgsModule::IOBuffer::Construct();
         mGameActionQueue.Construct();
         mGameActionQueue.Clear();
+        // phase C3b: the new real members' own bring-up -- the audio-car queue
+        // and the vehicle interface's live-count arrays (so a reader before the
+        // first SetVehicleData copy sees empty, not the -1 sentinel).
+        mAudioCarDataLoadedQueue.Construct();
+        mVehicleData.maCarsInTheRace.Clear();   // the interface's one live-count array
+        // (the rest of mVehicleData stays as-carved: SetVehicleData overwrites it
+        // wholesale before any consumer reads, per the per-frame bridge order)
+        mePlayerActiveRaceCarIndex = E_ACTIVE_RACE_CAR_INDEX_INVALID;
     }
 
     struct RootPreUpdateOutputBuffer : public CgsModule::IOBuffer

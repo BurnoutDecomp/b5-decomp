@@ -124,6 +124,7 @@
 #include "GameSource/Director/DirectorModule/BrnDirectorModuleIO.h"           // DirectorIO::InputBuffer
 #include "GameSource/Director/Camera/SharedIO/BrnPlayerInfo.h"                // Camera::VehicleInfo
 #include "GameSource/World/BrnWorldModuleIO.h"                                // BrnWorldIO::UpdateOutputBuffer
+#include "GameSource/Sound/Module/BrnRootSoundModuleIo.h"                     // Io::RootInputBuffer (BridgeWorldToSound; phase C3b)
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h"
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleEvents.h"      // RaceCarState
 
@@ -559,5 +560,73 @@ namespace BrnGame
                     << "[UI-gate] world->gamestate events n=" << liQueued << "\n";
             }
         }
+    }
+    // @ 0x823CD580 (bodied 2026-08-25, faithful-audio-engine phase C3b). The
+    // world -> sound input bridge, console step-for-step (the caller holds the
+    // world output's read lock + the sound input's write lock):
+    //   [1] SetVehicleData from the ACTIVE race-car output interface -- or the
+    //       REPLAY one when the update set carries bit 0x100 (replay playback).
+    //   [2] the seven interface installs (contact spy / traffic / the physical-
+    //       traffic block at vehicle-output +9760 / deformation / world-load /
+    //       AI car).
+    //   [3] the four queue appends (audio-car-loaded, the 1536 game events, the
+    //       prop-became-physical events, the prop-update notifications).
+    // The cross-namespace casts view each opaque record through its twin: both
+    // sides model the SAME console record (the spans match member-for-member);
+    // the typed side wins where one exists.
+    void BrnGameModule::BridgeWorldToSound(BrnSound::Module::Io::RootInputBuffer* lpSoundInputBuffer,
+                                           const BrnWorldIO::UpdateOutputBuffer* lpWorldOutputBuffer,
+                                           BrnUpdateSet leUpdateSet)
+    {
+        typedef BrnSound::Module::Io::RootInputBuffer RootIn;
+
+        // [1] the vehicle data (bit 0x100 == the replay-source select).
+        const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpVehicleData =
+            ((leUpdateSet & 0x100) != 0)
+                ? lpWorldOutputBuffer->GetReplayActiveRaceCarOutputInterface()
+                : lpWorldOutputBuffer->GetActiveRaceCarOutputInterface();
+        lpSoundInputBuffer->SetVehicleData(lpVehicleData);
+
+        // [2] the interface installs (each opaque view cast onto its twin).
+        lpSoundInputBuffer->SetContactSpyQueueInterface(
+            reinterpret_cast<const RootIn::InputContactSpyQueueInterface*>(
+                lpWorldOutputBuffer->GetContactSpyInterface()));
+        lpSoundInputBuffer->SetTrafficOutputInterface(
+            reinterpret_cast<const RootIn::TrafficSoundOutputInterface*>(
+                lpWorldOutputBuffer->GetTrafficSoundOutputInterface()));
+        // The physical-traffic block rides INSIDE the vehicle output interface at
+        // console +9760 (the X360 bridge computes the reach inline; kept as the
+        // same byte reach over the opaque record -- FLAG: interior un-homed).
+        lpSoundInputBuffer->SetPhysicalTrafficStates(
+            reinterpret_cast<const RootIn::PhysicalTrafficStateQueue*>(
+                reinterpret_cast<const u8*>(lpWorldOutputBuffer->GetVehicleOutputInterface()) + 9760));
+        lpSoundInputBuffer->SetDeformationInterface(
+            reinterpret_cast<const RootIn::DeformationInterface*>(
+                lpWorldOutputBuffer->GetDeformationOutputInterface()));
+        lpSoundInputBuffer->SetWorldLoadInterface(
+            reinterpret_cast<const RootIn::SoundWorldLoadInterface*>(
+                lpWorldOutputBuffer->GetSoundWorldLoadInterface()));
+        lpSoundInputBuffer->SetAICarOutputInterface(
+            reinterpret_cast<const RootIn::AICarOutputInterface*>(
+                lpWorldOutputBuffer->GetAICarOutputInterface()));
+
+        // [3] the queue appends.
+        lpSoundInputBuffer->GetAudioCarDataLoadedQueue()->Append(
+            *lpWorldOutputBuffer->GetAudioCarLoadedDataQueue());
+        // Both game-event ends are VariableEventQueue<1536,16> (the console append
+        // symbol pins both); the root side's nominal 4-byte tag is viewed through
+        // the real queue type over its attested +0x6494..+0x6AB0 span.
+        reinterpret_cast<CgsModule::VariableEventQueue<1536, 16>*>(
+            lpSoundInputBuffer->GetGameEventQueue())->Append(
+                *reinterpret_cast<const CgsModule::VariableEventQueue<1536, 16>*>(
+                    lpWorldOutputBuffer->GetGameEventQueue()));
+        // The prop pairs: the world side owns the typed queues; the root side's
+        // attested-width storage is viewed through the same types.
+        reinterpret_cast<BrnWorldIO::UpdateOutputBuffer::PropBecamePhysicalEventQueue*>(
+            lpSoundInputBuffer->GetPropBecamePhysicalEventQueue())->Append(
+                *lpWorldOutputBuffer->GetPropBecamePhysicalEventQueue());
+        reinterpret_cast<BrnWorldIO::UpdateOutputBuffer::PropUpdateNotificationQueue*>(
+            lpSoundInputBuffer->GetPropUpdateNotificationQueue())->Append(
+                *lpWorldOutputBuffer->GetPropUpdateNotificationQueue());
     }
 }

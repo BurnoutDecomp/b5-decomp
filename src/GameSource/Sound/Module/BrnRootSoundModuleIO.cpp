@@ -21,13 +21,55 @@ namespace Io
 {
 
 // X360 0x82694D30 (IDA-truncated "BrnSound::Module::I"). Read-lock accessor for the
-// embedded vehicle (active-race-car output) interface at this+0x620.
+// embedded vehicle (active-race-car output) interface at this+0x620. (Phase C3b:
+// moved onto RootInputBuffer -- the DWARF typedef identity -- and now returns the
+// REAL by-value member, retiring the under-sized reinterpret storage.)
 const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface*
-LogicInputBuffer::GetVehicleInterface() const
+RootInputBuffer::GetVehicleInterface() const
 {
     CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
-    return reinterpret_cast<const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface*>(
-        &mVehicleInterfaceStorage);
+    return &mVehicleData;
+}
+
+// X360 0x823B87C0 (write-lock; h:466; bodied 2026-08-25, faithful-audio-engine
+// phase C3b). Copy the active-race-car output interface in (the console
+// XMemCpy(this+0x620, src, 10480) == the host by-value assign), re-check the
+// copied player index (the h:967 range tripwire), then publish the buffer's own
+// mePlayerActiveRaceCarIndex: the index when the interface says the player car
+// is set AND active (the h:980 "Player car index hasn't been set" guard is the
+// console's vacuous-but-faithful re-test), else INVALID.
+void RootInputBuffer::SetVehicleData(
+    const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpVehicleData)
+{
+    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+
+    mVehicleData = *lpVehicleData;
+
+    CGS_ASSERT(mVehicleData.GetPlayerActiveRaceCarIndex() < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+               "mePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+
+    bool lbPlayerCarLive = false;
+    if (mVehicleData.GetPlayerActiveRaceCarIndex() != E_ACTIVE_RACE_CAR_INDEX_INVALID)
+        lbPlayerCarLive = mVehicleData.IsPlayerCarActive();
+
+    if (lbPlayerCarLive)
+    {
+        CGS_ASSERT(mVehicleData.GetPlayerActiveRaceCarIndex() != E_ACTIVE_RACE_CAR_INDEX_INVALID,
+                   "Player car index hasn't been set");
+        mePlayerActiveRaceCarIndex = mVehicleData.GetPlayerActiveRaceCarIndex();
+    }
+    else
+    {
+        mePlayerActiveRaceCarIndex = E_ACTIVE_RACE_CAR_INDEX_INVALID;
+    }
+}
+
+// X360 0x823B80F8 (write-lock; h:186; the IDA-truncated "BrnSou"; phase C3b).
+// The root input's own audio-car-loaded queue @ +0xED50.
+AudioCarLoadedDataQueue* RootInputBuffer::GetAudioCarDataLoadedQueue()
+{
+    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    return &mAudioCarDataLoadedQueue;
 }
 
 // X360 0x823B8518 (IDA-truncated "BrnSound::Module::Io"). Write-lock accessor for the
