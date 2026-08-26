@@ -3,6 +3,7 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (attached-buffer guard)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"  // CgsDev::Log / Message filter
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"  // the "Resource Registrar" monitor (Prepare case 0)
+#include "GameSource/Sound/Module/LogicModule/BrnSoundLogicModuleIo.h"  // Io::LogicPreUpdateOutputBuffer (PreUpdate; phase C1)
 
 // BrnSound::Module::SoundLogicModule -- accessor bodies recovered from
 // BURNOUT_X360_ARTIST.XEX. See BrnSoundLogicModule.h for the layout/slice notes.
@@ -82,6 +83,13 @@ void SoundLogicModule::Construct()
 
     // The streaming-resource broker: bring up its request queues + requested/queued pools.
     mResourceRegistrar.Construct();
+
+    // The pre-update output block's three queues (phase C1; the same trio the
+    // RootPreUpdateOutputBuffer carve constructs).
+    reinterpret_cast<CgsModule::VariableEventQueue<256, 16>*>(
+        mPreUpdateOutput.maGuiOutEventQueueStorage)->Construct();
+    mPreUpdateOutput.mAudioCarDataLoadedQueue.Construct();
+    mPreUpdateOutput.mAudioEffectsMessageQueue.Construct();
 
     // The 9 state-manager slots start empty; CreateStateManagers (stage 4) fills them via
     // StateManager::CreateStateMan (null where no leaf is registered). Nulling here keeps
@@ -337,6 +345,18 @@ Io::LogicInputBuffer* SoundLogicModule::GetBrnInputStructure()
 {
     CGS_ASSERT(mpBrnLogicInputBuffer, "mpBrnLogicInputBuffer");
     return mpBrnLogicInputBuffer;
+}
+
+// X360 0x826E1F10 (DWARF :152; bodied 2026-08-25, faithful-audio-engine phase C1).
+// Publish the module's accumulated pre-update output block into the caller's
+// scratch buffer: assert (cpp:495), write-lock, the SetPreUpdateOutput copy
+// (@0x826E0C10 -- the two memcpy spans + the car-data Clear+Append), unlock.
+void SoundLogicModule::PreUpdate(Io::LogicPreUpdateOutputBuffer* apLogicPreUpdateOutput)
+{
+    CGS_ASSERT(apLogicPreUpdateOutput != 0, "lpLogicPreUpdateOutput");
+    apLogicPreUpdateOutput->LockForWrite();
+    apLogicPreUpdateOutput->SetPreUpdateOutput(mPreUpdateOutput);
+    apLogicPreUpdateOutput->UnlockForWrite();
 }
 
 } // namespace Module

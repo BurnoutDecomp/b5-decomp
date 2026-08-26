@@ -301,6 +301,16 @@ public:
     // the handle is non-null first -- fires CgsHandle.h:305).
     Environment* GetEnvironment();
 
+    // The per-frame time pair (phase C2): the RootSoundModule::Update @0x826FB238
+    // paired store at +0x2700/+0x2704 -- mf32TimeStep = dt (the dt this module's
+    // Update hands Environment::Update) and mf32TotalTime += dt (read-before-store
+    // on the console). Additive by-name access over the DWARF h:491/:492 fields.
+    void AdvanceTime(f32 af32TimeStep)
+    {
+        mf32TimeStep   = af32TimeStep;
+        mf32TotalTime += af32TimeStep;
+    }
+
     // Module::DumpRegistries @ 0x82694188. Dumps the environment, RWAC-factory and
     // AEMS-factory registries (each asserted non-null along the way).
     void DumpRegistries();

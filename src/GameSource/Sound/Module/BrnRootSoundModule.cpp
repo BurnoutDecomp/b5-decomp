@@ -426,5 +426,146 @@ namespace Module
         lpOutputBufferStack->DestroyIOBuffer<Io::LogicOutputBuffer>(&lpLogicOutputBuffer);
         return lbPrepared;
     }
+
+    // X360 0x826EB928 (bodied 2026-08-25, faithful-audio-engine phase C1). The
+    // per-frame PRE-update chain: scratch LogicPreUpdateOutputBuffer -> the logic
+    // module publishes its block -> the (locked) bridge copy into the caller's
+    // root pre-update output -> destroy the scratch.
+    void RootSoundModule::PreUpdate(CgsModule::IOBufferStack* lpOutputBufferStack,
+                                    Io::RootPreUpdateOutputBuffer* lpRootPreUpdateOutput)
+    {
+        CGS_ASSERT(lpOutputBufferStack != 0, "0 != lpOutputBufferStack");
+        CGS_ASSERT(lpRootPreUpdateOutput != 0, "0 != lpRootPreUpdateOutput");
+
+        Io::LogicPreUpdateOutputBuffer* lpLogicPreUpdateOutput = 0;
+        lpOutputBufferStack->CreateIOBuffer<Io::LogicPreUpdateOutputBuffer>(
+            &lpLogicPreUpdateOutput, "SoundLogicPreUpdateOutput");
+
+        mLogicModule.PreUpdate(lpLogicPreUpdateOutput);
+
+        lpLogicPreUpdateOutput->LockForRead();
+        lpRootPreUpdateOutput->LockForWrite();
+        BridgeLogicToRootPreUpdate(lpLogicPreUpdateOutput, lpRootPreUpdateOutput);
+        lpRootPreUpdateOutput->UnlockForWrite();
+        lpLogicPreUpdateOutput->UnlockForRead();
+
+        lpOutputBufferStack->DestroyIOBuffer<Io::LogicPreUpdateOutputBuffer>(&lpLogicPreUpdateOutput);
+    }
+
+    // DWARF BrnRootSoundModule.h:163 (phase C1) -- the copy step the console
+    // inlines in PreUpdate: the (ICF-folded Root) GetPreUpdateOutput read + the
+    // SetPreUpdateOutput @0x826E0C10 copy.
+    void RootSoundModule::BridgeLogicToRootPreUpdate(
+        const Io::LogicPreUpdateOutputBuffer* lpLogicPreUpdateOutput,
+        Io::RootPreUpdateOutputBuffer* lpRootPreUpdateOutput) const
+    {
+        lpRootPreUpdateOutput->SetPreUpdateOutput(lpLogicPreUpdateOutput->GetPreUpdateOutput());
+    }
+
+    // X360 0x826FB238 (bodied 2026-08-25, faithful-audio-engine phase C2). The
+    // per-frame pump, console step-for-step:
+    //   [1] asserts cpp:880-883; the three per-call scratch buffers (logic output
+    //       "SoundLogic"; playback in/out "SoundPlayback").
+    //   [2] miLogicUpdate monitor bracket around the LOGIC module Update (the
+    //       engine virtual vtbl+0x5C: game/sim dts + the ROOT input buffer as its
+    //       input and the logic-output scratch as its output).
+    //   [3] BridgeLogicToRoot under the console's lock set -- logic-out READ,
+    //       root-out WRITE, playback-in WRITE (the console brackets the playback
+    //       input for the frame even though this build's bridge writes none of
+    //       it), unlocked in the console's exact order.
+    //   [4] the playback time-pair store (AdvanceTime: mf32TimeStep = gameDt,
+    //       mf32TotalTime += gameDt) then the playback Module::Update virtual
+    //       (vtbl+0x48) with the playback scratch pair.
+    //   [5] root-out WRITE + playback-out READ: append the playback output's
+    //       resource-request queue into the root output's 4096 interface and its
+    //       freed-stream-buffer ids into the logic module's freed-id list
+    //       (Array<u32,3>::AppendArray, X360 root+0x5460).
+    //   [6] the command-ring high-water assert ("Command buffer high water mark.
+    //       Possibly SPU crashed." cpp:977; muDeferredRingHighWater >= 157286 of
+    //       the 0x30000 ring).
+    //   [7] the debug tail -- Debug::Statistics::Update, the three TestBed
+    //       SanityChecks (logic/playback banks + the RWAC bank under the system
+    //       lock), and the one-shot registry/memory dump flag. [gated] the
+    //       TestBed SanityCheck body and the Statistics::Update surface are their
+    //       own recon slices (the interim TestBed pass-through tracks nothing to
+    //       check), and the dump one-shot (X360 dword_82FFB814 +
+    //       DebugAudioMemoryDump) is debug-page surface; documented, not run.
+    //   [8] destroy the scratches (playback in, playback out, logic out).
+    // The trailing BrnUpdateSet is carried but unread, exactly as the console
+    // body never touches its copy.
+    void RootSoundModule::Update(f32 af32GameTimeStep, f32 af32SimTimeStep,
+                                 CgsModule::IOBufferStack* lpInputBufferStack,
+                                 CgsModule::IOBufferStack* lpOutputBufferStack,
+                                 Io::RootInputBuffer* lpSoundModuleInputBuffer,
+                                 Io::RootOutputBuffer* lpSoundModuleOutputBuffer,
+                                 BrnUpdateSet /*leUpdateSet*/)
+    {
+        CGS_ASSERT(lpInputBufferStack != 0, "lpInputBufferStack != NULL");
+        CGS_ASSERT(lpOutputBufferStack != 0, "lpOutputBufferStack != NULL");
+        CGS_ASSERT(lpSoundModuleInputBuffer != 0, "lpSoundModuleInputBuffer != NULL");
+        CGS_ASSERT(lpSoundModuleOutputBuffer != 0, "lpSoundModuleOutputBuffer != NULL");
+
+        Io::LogicOutputBuffer* lpLogicOutputBuffer = 0;
+        CgsSound::Playback::Module::Io::InputBuffer* lpPlaybackInputBuffer = 0;
+        CgsSound::Playback::Module::Io::OutputBuffer* lpPlaybackOutputBuffer = 0;
+        lpOutputBufferStack->CreateIOBuffer<Io::LogicOutputBuffer>(&lpLogicOutputBuffer, "SoundLogic");
+        lpInputBufferStack->CreateIOBuffer<CgsSound::Playback::Module::Io::InputBuffer>(
+            &lpPlaybackInputBuffer, "SoundPlayback");
+        lpOutputBufferStack->CreateIOBuffer<CgsSound::Playback::Module::Io::OutputBuffer>(
+            &lpPlaybackOutputBuffer, "SoundPlayback");
+
+        CgsDev::PerfMonCpu::StartMonitor(miLogicUpdate);
+        mLogicModule.Update(af32GameTimeStep, af32SimTimeStep,
+                            lpSoundModuleInputBuffer, lpLogicOutputBuffer);
+        CgsDev::PerfMonCpu::StopMonitor(miLogicUpdate);
+
+        lpLogicOutputBuffer->LockForRead();
+        lpSoundModuleOutputBuffer->LockForWrite();
+        lpPlaybackInputBuffer->LockForWrite();
+        BridgeLogicToRoot(lpLogicOutputBuffer, lpSoundModuleOutputBuffer);
+        lpLogicOutputBuffer->UnlockForRead();
+        lpSoundModuleOutputBuffer->UnlockForWrite();
+        lpPlaybackInputBuffer->UnlockForWrite();
+
+        mLogicModule.GetPlaybackModule().AdvanceTime(af32GameTimeStep);
+        mLogicModule.GetPlaybackModule().Update(lpPlaybackInputBuffer, lpPlaybackOutputBuffer);
+
+        lpSoundModuleOutputBuffer->LockForWrite();
+        lpPlaybackOutputBuffer->LockForRead();
+        lpSoundModuleOutputBuffer->GetResourceRequestInterface()->mRequestQueue.Append(
+            lpPlaybackOutputBuffer->GetResourceRequestQueue());
+        mLogicModule.GetFreedStreamBufferIds().AppendArray(
+            lpPlaybackOutputBuffer->GetStreamBuffersFreed());
+        lpPlaybackOutputBuffer->UnlockForRead();
+        lpSoundModuleOutputBuffer->UnlockForWrite();
+
+        CGS_ASSERT(mpSystem == 0 || mpSystem->muDeferredRingHighWater < 157286u,
+                   "Command buffer high water mark. Possibly SPU crashed.");
+
+        // [7] the debug tail -- see the banner (gated recon slices; not run).
+
+        lpInputBufferStack->DestroyIOBuffer<CgsSound::Playback::Module::Io::InputBuffer>(
+            &lpPlaybackInputBuffer);
+        lpOutputBufferStack->DestroyIOBuffer<CgsSound::Playback::Module::Io::OutputBuffer>(
+            &lpPlaybackOutputBuffer);
+        lpOutputBufferStack->DestroyIOBuffer<Io::LogicOutputBuffer>(&lpLogicOutputBuffer);
+    }
+
+    // X360 0x826EBF18 (bodied phase C1). The logic -> root output bridge: the two
+    // request-queue appends (4096 resource / 2048 AttribSys -- the same pairs
+    // SoundLogicModule::ResourceBridging fills) + the replay request-interface
+    // merge (BrnReplays::ReplayIO::RequestInterface::Append @0x823A6868).
+    void RootSoundModule::BridgeLogicToRoot(const Io::LogicOutputBuffer* lpLogicOutputBuffer,
+                                            Io::RootOutputBuffer* lpRootOutputBuffer)
+    {
+        lpRootOutputBuffer->GetResourceRequestInterface()->mRequestQueue.Append(
+            lpLogicOutputBuffer->GetResourceRequestInterface()->mRequestQueue);
+
+        lpRootOutputBuffer->GetAttribSysRequestInterface()->mRequestQueue.Append(
+            lpLogicOutputBuffer->GetAttribSysRequestInterface()->mRequestQueue);
+
+        lpRootOutputBuffer->GetReplayRequestInterface()->Append(
+            lpLogicOutputBuffer->GetReplayRequestInterface());
+    }
 }
 }

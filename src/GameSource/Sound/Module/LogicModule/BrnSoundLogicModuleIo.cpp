@@ -44,6 +44,35 @@ RootOutputBuffer::AttribSysRequestInterface* LogicOutputBuffer::GetAttribSysRequ
     return reinterpret_cast<RootOutputBuffer::AttribSysRequestInterface*>(&mAttribSysRequestInterfaceStorage);
 }
 
+// The resource-interface pair (DWARF :65/:73; the IDA-truncated
+// "BrnSound::Module::Io::LogicOutputBuffer::" read the BridgeLogicToRoot
+// @0x826EBF18 caller dispatches) -- &mResourceRequestInterface at +0x814, the
+// sibling lock discipline. Bodied 2026-08-25, faithful-audio-engine phase C1.
+const RootOutputBuffer::SoundResourceRequestInterface* LogicOutputBuffer::GetResourceRequestInterface() const
+{
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+    return reinterpret_cast<const RootOutputBuffer::SoundResourceRequestInterface*>(&mResourceRequestInterfaceStorage);
+}
+RootOutputBuffer::SoundResourceRequestInterface* LogicOutputBuffer::GetResourceRequestInterface()
+{
+    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    return reinterpret_cast<RootOutputBuffer::SoundResourceRequestInterface*>(&mResourceRequestInterfaceStorage);
+}
+
+// The replay-interface pair (the IDA-truncated "LogicOutputBuffer::GetReplay"
+// BridgeLogicToRoot reads) -- &mReplayRequestInterface at +0x1824 (phase C1:
+// the identified 11-slot BrnReplays::ReplayIO::RequestInterface).
+const RootOutputBuffer::ReplayRequestInterface* LogicOutputBuffer::GetReplayRequestInterface() const
+{
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+    return reinterpret_cast<const RootOutputBuffer::ReplayRequestInterface*>(&mReplayRequestInterfaceStorage);
+}
+RootOutputBuffer::ReplayRequestInterface* LogicOutputBuffer::GetReplayRequestInterface()
+{
+    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    return reinterpret_cast<RootOutputBuffer::ReplayRequestInterface*>(&mReplayRequestInterfaceStorage);
+}
+
 } // namespace Io
 } // namespace Module
 } // namespace BrnSound

@@ -10,6 +10,7 @@
 #include <cstring>                                      // memset (RootOutputBuffer::Construct trailing-state clear)
 #include "GameSource/Sound/Module/SharedIO/BrnPreUpdateSharedIo.h" // AudioEffectsMessageQueue (adopted real type)
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h" // AudioCarDataLoadedEvent (queue element)
+#include "GameSource/Replays/BrnReplayRequestInterface.h" // BrnReplays::ReplayIO::RequestInterface (the replay request member; phase C1)
 
 // =============================================================================
 // BrnSound::Module::Io buffer accessors
@@ -357,8 +358,22 @@ namespace Io
 
     struct RootPreUpdateOutputBuffer : public CgsModule::IOBuffer
     {
-        // BrnRootSoundModuleIo.h:331 (DWARF; own TU, declared-only here).
-        void Construct();
+        // BrnRootSoundModuleIo.h:331 (DWARF). Bodied 2026-08-25 (faithful-audio-engine
+        // phase C1) from the CreateIOBuffer<LogicPreUpdateOutputBuffer> inline
+        // (Alloc 824 == 8 + the 816-byte PreUpdateOutput): base Construct, then the
+        // three queue Constructs -- the GuiOut storage IS VariableEventQueue<256,16>
+        // (256+16 == 0x110, now attested by the console's Construct call), the
+        // car-data EventQueue, and the effects queue (VariableEventQueue<128,16>
+        // base). Homed inline (the sibling pattern) so every CreateIOBuffer<T>
+        // instantiation resolves it regardless of build-list state.
+        void Construct()
+        {
+            CgsModule::IOBuffer::Construct();
+            reinterpret_cast<CgsModule::VariableEventQueue<256, 16>*>(
+                mPreUpdateOutput.maGuiOutEventQueueStorage)->Construct();
+            mPreUpdateOutput.mAudioCarDataLoadedQueue.Construct();
+            mPreUpdateOutput.mAudioEffectsMessageQueue.Construct();
+        }
 
         // BrnRootSoundModuleIo.h:338 (DWARF). X360 0x823B8BB8.
         const PreUpdateOutput& GetPreUpdateOutput() const;
@@ -444,7 +459,11 @@ namespace Io
     {
         typedef RequestInterface<4096>          SoundResourceRequestInterface; // BrnSoundCommonSharedIO.h:37
         typedef AttribSysRequestInterface<2048> AttribSysRequestInterface;     // BrnSoundLogicSharedIO.h:47
-        typedef RequestInterface<4096>          ReplayRequestInterface;        // BrnRootSoundModuleIo.h:56 (RequestInterface, default cap)
+        // (2026-08-25, faithful-audio-engine phase C1: the provisional RequestInterface<4096>
+        // guess is RETIRED -- BridgeLogicToRoot @0x826EBF18 appends this member through
+        // BrnReplays::ReplayIO::RequestInterface::Append @0x823A6868, and the 11-word
+        // (44-byte == sizeof) trailing clear at +0x1824 IS the 11 serialiser slots.)
+        typedef BrnReplays::ReplayIO::RequestInterface ReplayRequestInterface;  // BrnRootSoundModuleIo.h:56
 
         // BrnRootSoundModuleIo.h:284 (DWARF). X360 body @0x826AF448, reached from the
         // CreateIOBuffer<RootOutputBuffer> instantiation @0x823AD458 (Alloc size 6224):
@@ -460,11 +479,9 @@ namespace Io
         // FLAG PC: homed inline here rather than in BrnRootSoundModuleIO.cpp (the console emits
         // it out-of-line) because that TU is not on the exe build list yet and the template now
         // REFERENCES this symbol from every CreateIOBuffer<RootOutputBuffer> site.
-        // FLAG(medium), pre-existing and unchanged by this edit: the console object is 6224
-        // bytes and the 11-word (44-byte) run at +0x1824 is all the trailing state it has, so
-        // mReplayRequestInterfaceStorage's provisional 0x1010 width over-states sizeof by 4068
-        // bytes. Only the attested 44 bytes are cleared here; the width is left alone (a layout
-        // change is out of this change's scope -- see the report).
+        // (phase C1: the +0x1824 trailing state is ATTESTED as the 44-byte
+        // BrnReplays::ReplayIO::RequestInterface -- the 11-word clear zeroes exactly its
+        // 11 serialiser slots; the old provisional 0x1010 width is retired.)
         void Construct()
         {
             CgsModule::IOBuffer::Construct();
@@ -504,7 +521,7 @@ namespace Io
         // Byte widths of each opaque interface span (derived from the attested X360 offsets).
         static const int KI_ResourceInterfaceBytes  = 0x1010; // +0x0004 .. +0x1014 (RequestInterface<4096>)
         static const int KI_AttribSysInterfaceBytes = 0x0810; // +0x1014 .. +0x1824 (AttribSysRequestInterface<2048>)
-        static const int KI_ReplayInterfaceBytes    = 0x1010; // +0x1824 ..        (width provisional; start attested)
+        static const int KI_ReplayInterfaceBytes    = 0x002C; // +0x1824 .. (sizeof BrnReplays::ReplayIO::RequestInterface -- the 11 slots; phase C1, width now attested)
 
         // X360 @0x826AF448 zeroes exactly 11 words (44 bytes) from +0x1824 -- `v5 = 11; do
         // *v4++ = 0; while (--v5);`. That run, not KI_ReplayInterfaceBytes, is the console's

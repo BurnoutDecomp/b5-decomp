@@ -9,6 +9,7 @@
 #include "GameSource/Sound/Module/BrnRootSoundModuleIo.h"               // Io::RootInputBuffer / Io::RootOutputBuffer (Prepare args)
 #include "GameSource/Sound/Module/LogicModule/BrnSoundLogicModuleIo.h"  // Io::LogicOutputBuffer (Prepare scratch + bridge source)
 #include "GameSource/Sound/BrnDebugComponent.h"                         // BrnSound::Debug::DebugComponent (mDebugComponent)
+#include "SharedClasses/BrnSharedConstants.h"                           // BrnUpdateSet (Update arg; phase C2)
 
 // Forward declaration: the game-data allocator list Prepare carves the sound heaps from
 // (BrnResource::GameDataIO::AllocatorList, home GameSource/Resource/SharedIO/
@@ -114,6 +115,38 @@ namespace Module
                              Io::RootInputBuffer* lpSoundModuleInputBuffer,
                              Io::RootOutputBuffer* lpSoundModuleOutputBuffer);
 
+        // @ 0x826EB928 (DWARF BrnRootSoundModule.cpp:827; phase C1). The per-frame
+        // PRE-update: create the "SoundLogicPreUpdateOutput" scratch on the output
+        // stack, have the logic module publish its pre-update block into it, then
+        // (read/write-locked) bridge the block into the caller's root pre-update
+        // output and destroy the scratch. Asserts cpp:829/:830.
+        void PreUpdate(CgsModule::IOBufferStack* lpOutputBufferStack,
+                       Io::RootPreUpdateOutputBuffer* lpRootPreUpdateOutput);
+
+        // @ 0x826FB238 (DWARF BrnRootSoundModule.cpp:872; phase C2). The per-frame
+        // pump: three scratch IO buffers, the logic module Update (monitored),
+        // BridgeLogicToRoot under the console's lock set, the playback time-pair
+        // store + playback Module::Update, the playback-output appends into the
+        // root output + the logic module's freed-id list, the command-ring
+        // high-water assert, and the debug tail. Asserts cpp:880-883.
+        void Update(f32 af32GameTimeStep, f32 af32SimTimeStep,
+                    CgsModule::IOBufferStack* lpInputBufferStack,
+                    CgsModule::IOBufferStack* lpOutputBufferStack,
+                    Io::RootInputBuffer* lpSoundModuleInputBuffer,
+                    Io::RootOutputBuffer* lpSoundModuleOutputBuffer,
+                    BrnUpdateSet leUpdateSet);
+
+        // DWARF BrnRootSoundModule.h:163 (phase C1) -- the pre-update copy step the
+        // console inlines inside PreUpdate (the Ge + SetPreUpdateOutput pair).
+        void BridgeLogicToRootPreUpdate(const Io::LogicPreUpdateOutputBuffer* lpLogicPreUpdateOutput,
+                                        Io::RootPreUpdateOutputBuffer* lpRootPreUpdateOutput) const;
+
+        // @ 0x826EBF18 (phase C1). Bridge the logic module's per-frame output into
+        // the root output: the resource (4096) + AttribSys (2048) queue appends and
+        // the replay request-interface merge (RequestInterface::Append @0x823A6868).
+        void BridgeLogicToRoot(const Io::LogicOutputBuffer* lpLogicOutputBuffer,
+                               Io::RootOutputBuffer* lpRootOutputBuffer);
+
     private:
         // --- private helpers (DWARF BrnRootSoundModule.cpp / BrnRootSoundModuleBridges.cpp) ---
 
@@ -125,13 +158,8 @@ namespace Module
         // REGISTRY_LOAD stage is gated.]
         bool RegistryLoad(Io::LogicOutputBuffer* lpLogicOutputBuffer);
 
-        // X360 0x826EBF18 (DWARF BrnRootSoundModuleBridges.cpp:88). Appends the logic output's
-        // results queue (VariableEventQueue<4096,16>), its AttribSys queue (<2048,16>) and its
-        // replay request block into the RootOutputBuffer's interfaces. [gated: RootOutputBuffer
-        // is still the minimal slice without its request-interface members/getters; declared for
-        // shape, no body yet -- only the gated REGISTRY_LOAD/LOGIC retry paths call it.]
-        void BridgeLogicToRoot(const Io::LogicOutputBuffer* lpLogicOutputBuffer,
-                               Io::RootOutputBuffer* lpRootOutputBuffer);
+        // (BridgeLogicToRoot @0x826EBF18 -- DWARF BrnRootSoundModuleBridges.cpp:88 --
+        // is REAL since phase C1; declared in the public section above.)
 
         // The Csis mutex callbacks the RWAC stage installs into mpSystem (+0x3C/+0x40/+0x44):
         //   MutexLockFn     0x82682A20  { rw::audio::core::CsisMutexLock();   ++msiMutexLockCount; }

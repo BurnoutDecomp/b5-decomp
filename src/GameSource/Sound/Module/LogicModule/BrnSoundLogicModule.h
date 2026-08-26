@@ -14,6 +14,7 @@
 #include "GameSource/Sound/BrnResourceRegistrar.h"               // BrnSound::Logic::IResourceRequester (base) + ResourceRegistrar (member)
 #include "GameShared/GameClasses/Sound/Logic/CgsEnvironment.h"   // CgsSound::Logic::Environment + canonical CgsSound::Logic::StateManager (the 9-slot map + the CreateStateMan factory)
 #include "GameShared/GameClasses/Sound/Logic/CgsSoundLogicModule.h" // CgsSound::Logic::Module -- the REAL engine base (phase B5)
+#include "GameSource/Sound/Module/BrnRootSoundModuleIo.h"           // Io::PreUpdateOutput (the by-value pre-update block; phase C1)
 
 // =============================================================================
 // BrnSound::Module::SoundLogicModule
@@ -62,6 +63,7 @@ namespace Io
 {
     class LogicInputBuffer;
     class LogicOutputBuffer;
+    struct LogicPreUpdateOutputBuffer;   // the PreUpdate scratch (BrnSoundLogicModuleIo.h)
 }
 
 // (2026-08-25, faithful-audio-engine phase B5): the class now derives the REAL
@@ -136,6 +138,15 @@ struct SoundLogicModule : public CgsSound::Logic::Module,
     // AddStateManager registrations in CreateStateManagers demand exactly the 9.
     virtual s32 GetNumberOfStates() override { return KI_NUM_STATE_MANAGERS; }
 
+    // @ 0x826E1F10 (DWARF :152; phase C1). Publish the module's accumulated
+    // pre-update output block into the caller's scratch buffer (write-locked
+    // SetPreUpdateOutput copy; assert cpp:495).
+    void PreUpdate(Io::LogicPreUpdateOutputBuffer* apLogicPreUpdateOutput);
+
+    // DWARF :194 -- the pre-update output block, by reference (the state
+    // managers/effects accumulate into it each frame).
+    BrnSound::Module::Io::PreUpdateOutput& GetPreUpdateOutput() { return mPreUpdateOutput; }
+
     // X360 0x82702E80. Per-frame resource bridge: drive the embedded ResourceRegistrar's Update
     // (drain its request queues, resolve handles, GC unreferenced files), then bridge its two
     // request-interface queues into the logic output buffer. Called from Prepare stage 3 + the
@@ -175,6 +186,12 @@ struct SoundLogicModule : public CgsSound::Logic::Module,
     // the un-modeled CgsSound::Logic::Module base (this slice inherits only IResourceRequester).
     // The broker does not drive it on the minimal path; grown with the Voice/LoadAsset path.
     virtual void ResourcesAreReady() {}
+
+    // The freed-ids list, by reference (the root Update's append target).
+    CgsSound::Playback::Module::Io::OutputBuffer::FreedBuffersArray& GetFreedStreamBufferIds()
+    {
+        return mFreedStreamBufferIds;
+    }
 
     // BrnSoundLogicModule.h:423 (DWARF). Hand out the sound logic input buffer the
     // module reads each frame, asserting it has been attached. X360 0x82682518:
@@ -220,6 +237,19 @@ private:
     // The "Resource Registrar" CPU monitor handle (X360 word a1[19826] == byte
     // +0x4D48; Prepare case 0 registers it).
     s32  miResourceRegistrarMonitor;
+
+    // DWARF (the dump's PreUpdateOutput member; X360 this+20144 == +0x4EB0 -- the
+    // block SoundLogicModule::PreUpdate @0x826E1F10 publishes). By-value embed;
+    // pinned by name (host widths differ -- see the header LAYOUT NOTE).
+    BrnSound::Module::Io::PreUpdateOutput mPreUpdateOutput;
+
+    // The freed-stream-buffer voice-id list (X360 root+0x5460 == this+0x51E0,
+    // directly after mPreUpdateOutput): RootSoundModule::Update @0x826FB238
+    // AppendArray's the playback output buffer's freed list into it each frame
+    // (the ids of stream voices whose buffers completed their grace scrub).
+    // DWARF member name un-dumped; held by usage. Same element type as the
+    // playback FreedBuffersArray so AppendArray matches instantiations.
+    CgsSound::Playback::Module::Io::OutputBuffer::FreedBuffersArray mFreedStreamBufferIds;
 };
 
 } // namespace Module
