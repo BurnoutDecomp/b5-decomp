@@ -91,12 +91,20 @@ namespace BrnAI
     // so the element address is computed by the X360-attested byte stride rather than by
     // pointer subscript on the incomplete type -- the result is the same &mpaAICars[index].
     //
-    // ⛔⛔ THE CONSOLE STRIDE IS ONLY CORRECT AGAINST A CONSOLE-LAID-OUT AICar ARRAY. Nothing in
-    // this build supplies one yet (AIModule::Prepare passes a null array -- see the FLAG there),
-    // so every caller of this helper is still parked. When the AI-car array lands as a real host
-    // member, this MUST become `&mpaAICars[index]` on the host type: an x64 AICar is not 0x1560
-    // bytes, and keeping the console constant would walk the array at the wrong pitch --
-    // silently, since every address it produces is still inside the allocation.
+    // ⚠️ CORRECTION 2026-08-26 (aimodule wave) -- THE PREVIOUS NOTE HERE WAS WRONG, AND IT WAS
+    // WRONG IN THE EXPENSIVE DIRECTION: it asserted "an x64 AICar is not 0x1560 bytes" and told
+    // the next wave to rewrite this as `&mpaAICars[index]`. MEASURED, not reasoned:
+    //     sizeof(BrnAI::AICar) == 5472 == 0x1560 on this host, exactly the console stride.
+    // The committed BrnAICar.h is an explicitly-padded reproduction of the 32-bit layout whose
+    // last member ends at 0x1551, and Vector3's 16-byte alignment rounds the object to 0x1560.
+    // So the console constant below is byte-correct here and must NOT be "fixed".
+    // ⛔ It is correct BY ACCIDENT OF THAT PAD MODEL, not by construction -- carve a pointer out
+    // of one of BrnAICar.h's pads and it stops being true, silently, because every address the
+    // wrong pitch produces is still inside the allocation. That is why BrnAICar.h now carries a
+    // `static_assert(sizeof(AICar) == 0x1560)`: the compile gate is the tripwire, and if it ever
+    // fires THEN this becomes `&mpaAICars[index]`.
+    // ⚠️ Still parked regardless: AIModule::Prepare passes this manager a NULL array today (see
+    // the FLAG there), so every caller of this helper is unreachable until the array lands.
     AICar* ResetOnTrackManager::GetAICar(EGlobalRaceCarIndex leGlobalRaceCarIndex)
     {
         CGS_ASSERT(leGlobalRaceCarIndex >= E_GLOBAL_RACE_CAR_INDEX_0,
