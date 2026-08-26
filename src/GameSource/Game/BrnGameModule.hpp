@@ -677,6 +677,11 @@ namespace BrnGame
         // each finished voiceover. The family's other bridges (BridgeSoundToResource :41 /
         // BridgeSoundToGuiPreUpdate :134 / ...) are grown here when reconstructed.
         void BridgeSoundToTraining(BrnSound::Module::Io::RootPreUpdateOutputBuffer* lpSoundOutputBuffer);
+        // @ 0x823CDC98 (GameBridgeSoundToX.cpp:81; phase C3). The sound -> world
+        // pre-update bridge: ONE append -- the world input's audio-car-loaded
+        // queue takes the sound pre-update block's queue (asserts cpp:83/:84).
+        void BridgeSoundToWorld(BrnWorldIO::UpdateInputBuffer* lpWorldInputBuffer,
+                                BrnSound::Module::Io::RootPreUpdateOutputBuffer* lpSoundOutputBuffer);
 
         // ---- X360 hardware / boot-legal query helpers (BrnGameModule.cpp) ----------------
         // X360 0x823A8B38 -- disk-error worker thread body: raise the system dirty-disc
