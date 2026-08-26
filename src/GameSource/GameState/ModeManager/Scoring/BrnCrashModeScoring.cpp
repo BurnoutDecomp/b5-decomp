@@ -357,7 +357,7 @@ namespace BrnGameState
         s32 liChainBonus = 0;
         s32 liBaseValue  = 0;
         s32 liMultiplier = 0;
-        BrnTraffic::VehicleScoreCategory leCategory = BrnTraffic::E_VEHICLESCORECATEGORY_CAR;
+        BrnTraffic::VehicleScoreCategory leCategory = BrnTraffic::E_VEHICLESCORE_CAR;
         GetVehicleScoreData(leVehicleClass, lVehicleTypeID, &liBaseValue, &liMultiplier, &leCategory);
 
         const RecentCrash* lpRecentCrash = GetRecentCrash(luTrafficEntityIndex);
@@ -393,15 +393,11 @@ namespace BrnGameState
     // and emits a debug "Unknown traffic vehicle in Showtime scoring" line. The three
     // out-pointers are asserted non-null first.
     //
-    // FLAG: K_VEHICLE_SCORE_LOOKUP_TABLE's per-row score / multiplier / category COLUMNS are
-    // not recoverable from this dossier -- the table lives in X360 rodata (unk_82020FA8),
-    // which is not exported as a dossier. The 24 vehicle-type CgsID keys ARE attested (DWARF
-    // BrnCrashModeScoring.cpp:53-76 K_ID_*); the table below is seeded with those keys and
-    // ZERO score/mult/category placeholders, clearly flagged. The lookup-loop control flow,
-    // the row field offsets, and the full VehicleClass fallback (the only part with attested
-    // values: car 0/750/0, van 1/2000/0, bus 3/5000/0, bigrig 4/10000/0) are reconstructed
-    // store-for-store. Fill the table columns when the rodata is exported.
-    // ------------------------------------------------------------------------
+    // [boost-msg wave 2026-08-26] The former "columns not recoverable" FLAG is RETIRED --
+    // the full 24-row table was read out of X360 rodata (@unk_82020FA8) and fills the
+    // K_VEHICLE_SCORE_LOOKUP_TABLE below verbatim. The lookup-loop control flow,
+    // the row field offsets, and the VehicleClass fallback (car 0/750/0, van 1/2000/0,
+    // bus 3/5000/0, bigrig 4/10000/0) remain reconstructed store-for-store.
     void CrashModeScoring::GetVehicleScoreData(
             BrnTraffic::VehicleClass leVehicleClass,
             CgsID lVehicleTypeID,
@@ -422,34 +418,39 @@ namespace BrnGameState
             s16                              miMultiplier;
         };
 
-        // The 24 attested vehicle-type keys (DWARF K_ID_* constants). FLAG: score/mult/category
-        // columns are placeholders pending the rodata table export (see header note above).
+        // [boost-msg wave 2026-08-26] The FLAG above is RETIRED: the real table was read
+        // straight out of X360 rodata (@unk_82020FA8, 24 rows x 16 bytes: CgsID midType,
+        // s32 category, s16 score, s16 multiplier -- big-endian bytes, host-swapped here).
+        // The previous placeholder rows carried HALF of each key's bits and guessed the
+        // category column (the taxi/limo rows were E_VEHICLESCORE_CAR); both are gone.
+        // The bus/bigrig classes stay on the VehicleClass fallback below -- they have no
+        // rows in the shipped table.
         static const VehicleScoreLookup K_VEHICLE_SCORE_LOOKUP_TABLE[24] =
         {
-            { 0x0000000070360000ULL, BrnTraffic::E_VEHICLESCORECATEGORY_CAR, 0, 0 }, // K_ID_COMPACT      (FLAG cols)
-            { 0x0000000098700000ULL, BrnTraffic::E_VEHICLESCORECATEGORY_CAR, 0, 0 }, // K_ID_ASIAN_SALOON
-            { 0x00000000D2D60000ULL, BrnTraffic::E_VEHICLESCORECATEGORY_CAR, 0, 0 }, // K_ID_US_SALOON
-            { 0x00000000FE33C000ULL, BrnTraffic::E_VEHICLESCORECATEGORY_CAR, 0, 0 }, // K_ID_MPV
-            { 0x000000000A360000ULL, BrnTraffic::E_VEHICLESCORECATEGORY_CAR, 0, 0 }, // K_ID_PICKUP
-            { 0x0000000070B60000ULL, BrnTraffic::E_VEHICLESCORECATEGORY_CAR, 0, 0 }, // K_ID_STATION_WAGON
-            { 0x00000000B07AD000ULL, BrnTraffic::E_VEHICLESCORECATEGORY_CAR, 0, 0 }, // K_ID_SUBURBAN_SUV
-            { 0x00000000B053C000ULL, BrnTraffic::E_VEHICLESCORECATEGORY_CAR, 0, 0 }, // K_ID_RURAL_SUV
-            { 0x00000000736BC000ULL, BrnTraffic::E_VEHICLESCORECATEGORY_CAR, 0, 0 }, // K_ID_TAXI
-            { 0x00000000D1760000ULL, BrnTraffic::E_VEHICLESCORECATEGORY_CAR, 0, 0 }, // K_ID_LIMO
-            { 0x00000000A7700000ULL, BrnTraffic::E_VEHICLESCORECATEGORY_BUS, 0, 0 }, // K_ID_CITY_BUS
-            { 0x000000009B940000ULL, BrnTraffic::E_VEHICLESCORECATEGORY_BUS, 0, 0 }, // K_ID_TOUR_BUS
-            { 0x0000000070308000ULL, BrnTraffic::E_VEHICLESCORECATEGORY_VAN, 0, 0 }, // K_ID_SMALL_RV
-            { 0x000000009B0BC000ULL, BrnTraffic::E_VEHICLESCORECATEGORY_VAN, 0, 0 }, // K_ID_COUNTRY_WAGON
-            { 0x000000009B32D000ULL, BrnTraffic::E_VEHICLESCORECATEGORY_VAN, 0, 0 }, // K_ID_CHERRY_PICKER
-            { 0x000000009B59E000ULL, BrnTraffic::E_VEHICLESCORECATEGORY_VAN, 0, 0 }, // K_ID_SMALL_BOX_TRUCK
-            { 0x000000009B80F000ULL, BrnTraffic::E_VEHICLESCORECATEGORY_VAN, 0, 0 }, // K_ID_SMALL_TOW_TRUCK
-            { 0x000000002F940000ULL, BrnTraffic::E_VEHICLESCORECATEGORY_VAN, 0, 0 }, // K_ID_VAN
-            { 0x0000000085070000ULL, BrnTraffic::E_VEHICLESCORECATEGORY_VAN, 0, 0 }, // K_ID_24_RESCUE_VAN
-            { 0x0000000090E30000ULL, BrnTraffic::E_VEHICLESCORECATEGORY_VAN, 0, 0 }, // K_ID_CHANNEL_5_VAN
-            { 0x000000003B700000ULL, BrnTraffic::E_VEHICLESCORECATEGORY_VAN, 0, 0 }, // K_ID_REPAIR_VAN
-            { 0x000000004B160000ULL, BrnTraffic::E_VEHICLESCORECATEGORY_VAN, 0, 0 }, // K_ID_MAIL_VAN
-            { 0x00000000C6280000ULL, BrnTraffic::E_VEHICLESCORECATEGORY_BIGRIG, 0, 0 }, // K_ID_GILLETTE
-            { 0x0000000056400000ULL, BrnTraffic::E_VEHICLESCORECATEGORY_BIGRIG, 0, 0 }, // K_ID_DIESEL
+            { 0xBC45991F98700000ULL, BrnTraffic::E_VEHICLESCORE_CAR,           1150, 0 },
+            { 0xBF2E4A6770360000ULL, BrnTraffic::E_VEHICLESCORE_CAR,           1000, 0 },
+            { 0xBF2EAB1CD2D60000ULL, BrnTraffic::E_VEHICLESCORE_CAR,           1200, 0 },
+            { 0xBCDC5901FE33C000ULL, BrnTraffic::E_VEHICLESCORE_CAR,           1300, 0 },
+            { 0xBF2E99150A360000ULL, BrnTraffic::E_VEHICLESCORE_CAR,           1400, 0 },
+            { 0xBF2EACC070B60000ULL, BrnTraffic::E_VEHICLESCORE_CAR,           1250, 0 },
+            { 0xBF2EAC91B07AD000ULL, BrnTraffic::E_VEHICLESCORE_CAR,           1450, 0 },
+            { 0xBF2EAC91B053C000ULL, BrnTraffic::E_VEHICLESCORE_CAR,           1500, 0 },
+            { 0xBF2EB9DF2F940000ULL, BrnTraffic::E_VEHICLESCORE_VAN,           1800, 0 },
+            { 0xBF2EB9DF85070000ULL, BrnTraffic::E_VEHICLESCORE_VAN,           2200, 0 },
+            { 0xBF2EB9DE90E30000ULL, BrnTraffic::E_VEHICLESCORE_VAN,           2600, 0 },
+            { 0xBF2E64BEC6280000ULL, BrnTraffic::E_VEHICLESCORE_VAN,           2650, 0 },
+            { 0xBF2EAC9756400000ULL, BrnTraffic::E_VEHICLESCORE_VAN,           2700, 0 },
+            { 0xBF2EB9DE3B700000ULL, BrnTraffic::E_VEHICLESCORE_VAN,           2450, 0 },
+            { 0xBF2EAC9A4B160000ULL, BrnTraffic::E_VEHICLESCORE_VAN,           3350, 0 },
+            { 0xBF2EA6A470308000ULL, BrnTraffic::E_VEHICLESCORE_VAN,           1850, 0 },
+            { 0xBF2EAB5E9B59E000ULL, BrnTraffic::E_VEHICLESCORE_TRUCK,         3400, 0 },
+            { 0xBF2EAB5E9B80F000ULL, BrnTraffic::E_VEHICLESCORE_TRUCK,         3150, 0 },
+            { 0xBF2EAB5E9B0BC000ULL, BrnTraffic::E_VEHICLESCORE_TRUCK,         3000, 0 },
+            { 0xBF2EAB5E9B32D000ULL, BrnTraffic::E_VEHICLESCORE_TRUCK,         3200, 0 },
+            { 0xBF2E5301736BC000ULL, BrnTraffic::E_VEHICLESCORE_TAXI,          1250, 0 },
+            { 0xBF2E8189D1760000ULL, BrnTraffic::E_VEHICLESCORE_LIMO,          5000, 0 },
+            { 0xBF2E42A8A7700000ULL, BrnTraffic::E_VEHICLESCORE_TARGETVEHICLE, 6000, 1 },
+            { 0xBF2E42A99B940000ULL, BrnTraffic::E_VEHICLESCORE_TARGETVEHICLE, 6500, 1 },
         };
         const s32 ciNumVehicleScores = 24;
 
@@ -477,16 +478,16 @@ namespace BrnGameState
         switch (leVehicleClass)
         {
         case BrnTraffic::E_VEHICLECLASS_CAR:
-            *lpeCategory = BrnTraffic::E_VEHICLESCORECATEGORY_CAR;    *lpiScore = 750;   *lpiMultiplier = 0;
+            *lpeCategory = BrnTraffic::E_VEHICLESCORE_CAR;    *lpiScore = 750;   *lpiMultiplier = 0;
             break;
         case BrnTraffic::E_VEHICLECLASS_VAN:
-            *lpeCategory = BrnTraffic::E_VEHICLESCORECATEGORY_VAN;    *lpiScore = 2000;  *lpiMultiplier = 0;
+            *lpeCategory = BrnTraffic::E_VEHICLESCORE_VAN;    *lpiScore = 2000;  *lpiMultiplier = 0;
             break;
         case BrnTraffic::E_VEHICLECLASS_BUS:
-            *lpeCategory = BrnTraffic::E_VEHICLESCORECATEGORY_BUS;    *lpiScore = 5000;  *lpiMultiplier = 0;
+            *lpeCategory = BrnTraffic::E_VEHICLESCORE_BUS;    *lpiScore = 5000;  *lpiMultiplier = 0;
             break;
         case BrnTraffic::E_VEHICLECLASS_BIGRIG:
-            *lpeCategory = BrnTraffic::E_VEHICLESCORECATEGORY_BIGRIG; *lpiScore = 10000; *lpiMultiplier = 0;
+            *lpeCategory = BrnTraffic::E_VEHICLESCORE_BIGRIG; *lpiScore = 10000; *lpiMultiplier = 0;
             break;
         default:
             CGS_ASSERT(false, "Unknown vehicle class in CrashModeScoring.");

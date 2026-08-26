@@ -26,14 +26,28 @@ namespace BrnTraffic
         E_VEHICLECLASS_COUNT  = 4
     };
 
-    // PARK -- BrnTraffic::VehicleScoreCategory (DWARF BrnTrafficVehicleType.h:78)
-    // belongs in this file, but a fork holds the name at
-    // GameSource/GameState/ModeManager/Scoring/BrnCrashModeScoringRecentCrash.h:28, so
-    // defining the canonical version here is a C2011 redefinition for every TU that sees
-    // both. The fork also diverges: it spells five E_VEHICLESCORECATEGORY_* enumerators
-    // and stops at BIGRIG, while the DWARF names eight, E_VEHICLESCORE_CAR / VAN / TRUCK
-    // / BUS / BIGRIG / LIMO / TAXI / TARGETVEHICLE (_COUNT = 8).
-    // DELETE WHEN the scoring header and its consumers are moved onto the DWARF enum.
+    // BrnTrafficVehicleType.h:78 (DWARF) -- the showtime/crash-scoring vehicle category.
+    // [boost-msg wave 2026-08-26] The fork that blocked this home is GONE: the five-value
+    // E_VEHICLESCORECATEGORY_* enum in GameSource/GameState/ModeManager/Scoring/
+    // BrnCrashModeScoringRecentCrash.h was deleted and its one consumer moved onto THIS
+    // spelling. The eight values are DWARF-named; X360 attestation for the count:
+    // BoostMessageManager::UpdateShowtime @0x8242FAE0 range-asserts
+    // `(uint32_t) meHitVehicleCategory < sizeof(KA_VEHICLE_SCORE_CATEGORY_TO_MESSAGE_TYPE)`
+    // against an EIGHT-entry table (@dword_82F24A6C = {11..18}) and indexes
+    // mpacMessageTypeStrings with it, so categories run 0..7.
+    enum VehicleScoreCategory : s32
+    {
+        E_VEHICLESCORE_CAR           = 0,
+        E_VEHICLESCORE_VAN           = 1,
+        E_VEHICLESCORE_TRUCK         = 2,
+        E_VEHICLESCORE_BUS           = 3,
+        E_VEHICLESCORE_BIGRIG        = 4,
+        E_VEHICLESCORE_LIMO          = 5,
+        E_VEHICLESCORE_TAXI          = 6,
+        E_VEHICLESCORE_TARGETVEHICLE = 7,
+
+        E_VEHICLESCORE_COUNT         = 8,
+    };
 
     // BrnTrafficVehicleType.h:107 (DWARF) -- the per-type constants the vehicle update
     // reads every frame. sizeof == 20 (five f32, no padding). The shipped block is

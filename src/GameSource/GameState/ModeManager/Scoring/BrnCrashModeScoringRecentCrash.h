@@ -19,22 +19,6 @@ struct VehicleLeaptEvent;
 namespace BrnWorld { namespace RaceCarEntityModuleIO { class RCEntityActiveRaceCarOutputInterface; } }
 namespace VehicleOutputInterface { class PhysicalTrafficStateQueue; }
 
-namespace BrnTraffic
-{
-    // VehicleScoreLookup's score-category tag (DWARF BrnCrashModeScoring.cpp:82). The four explicit
-    // category values are the ones the X360 GetVehicleScoreData fallback writes by VehicleClass
-    // (0x82312AB0: car->0, van->1, bus->3, bigrig->4); the lookup table publishes one per row.
-    // Minimal home grown for this TU (un-homed elsewhere); plain enum keeps the parameter passable.
-    enum VehicleScoreCategory : s32
-    {
-        E_VEHICLESCORECATEGORY_CAR     = 0,
-        E_VEHICLESCORECATEGORY_VAN     = 1,
-        E_VEHICLESCORECATEGORY_TRUCK   = 2,
-        E_VEHICLESCORECATEGORY_BUS     = 3,
-        E_VEHICLESCORECATEGORY_BIGRIG  = 4
-    };
-}
-
 // Minimal element-type home for the fixed-capacity
 // Array<BrnGameState::CrashModeScoring::RecentCrash, 64> leaf instantiation (the IsFull/
 // Append/Erase explicit instantiations of CrashModeScoring's recent-hit-cars set).
