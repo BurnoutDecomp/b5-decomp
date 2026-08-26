@@ -30,10 +30,25 @@
 // ===================================================================================
 
 #include "types.hpp"
+#include "GameSource/Gui/Flapt/BrnFlaptTextFieldRef.h"   // [friends wave] branch labels/title
+#include "GameSource/Gui/Flapt/BrnFlaptMovieClipRef.h"  // [friends wave] arrow clips
+#include "GameSource/Gui/Flapt/BrnFlaptFileRef.h"      // Prepare(const FileRef&)
+#include "GameSource/GameState/BrnCgsPlayerName.h"     // [friends wave] mHighlightedName
 #include "GameSource/Gui/BrnGuiCache.h"   // BrnGui::GuiCache (the cache pointer + far field)
 
 namespace BrnGui
 {
+    const s32 KI_MAX_FRIEND_RECORDS = 100;   // maeDisplayTypes capacity (SortFullList bound)
+    const s32 KI_VISIBLE_ROWS       = 5;
+
+    // Consumer-carved shortcut-option vocabulary (assert strings spell
+    // E_SHORTCUT_OPTION_COUNT / maeAvailableShortcutOptions).
+    enum EShortCutOption
+    {
+        E_SHORTCUT_OPTION_NONE  = -1,
+        E_SHORTCUTOPTION_COUNT  = 21,
+    };
+
     class FriendsListComponent
     {
     public:
@@ -64,6 +79,57 @@ namespace BrnGui
         // @ 0x8241F120 -- snapshot the current selection into the dirty region, raise the
         // dirty flag, and store the scroll-arrow indicator. Returns `this`.
         FriendsListComponent* SetDirty();
+        // ---- [friends wave] remaining reconstructed surface ----
+        void Construct(const char* lacName, CgsGui::StateInterface* lpStateInterface,
+                       const char* lpacParentName);                                     // 0x82422B20
+        void Prepare(const char* lacName, const BrnFlapt::FileRef& lFile);              // 0x8242B188
+        void Invalidate();                                                              // 0x8242B440
+        void Update();                                                                  // 0x82442C78
+        void Close();                                                                   // 0x824397E8
+        void EndWait();                                                                 // 0x82442FF0
+        bool SelectPrevious();                                                          // 0x82441988
+        bool SelectNext();                                                              // 0x82441A80
+        void HandleControllerInput(const s32* lpiInput);                                // 0x82443280
+        void ProcessNewEntryData(const void* lpFriendInfo);                             // 0x824430D0
+        void RequestRefreshedData();                                                    // 0x82439248
+        void SetTotalFriends(s32 liCount);                                              // 0x824392B8
+        void AttemptStateRestore();                                                     // 0x82441D78
+        void ReshowShortcuts();                                                         // 0x82441E78
+        void ShowFriendsList();                                                         // 0x8243FF68
+        void ShowShortcutList();                                                        // 0x824417E0
+        void ShowChallengesList();                                                      // 0x824418D0
+        void ShowSpecificFriend(const char* lpcName);                                   // 0x8242BBE8
+        void ShowSpecificShortcut(s32 leOption);                                        // 0x82441C90
+        void ShowSpecificChallenge(CgsID lu64Uid);                                      // 0x82441B78
+        void UpdateAllEntryData();                                                      // 0x82440020
+        void UpdateAllFriendsEntryData();                                               // 0x8242B498
+        void UpdateAllShortcutsEntryData();                                             // 0x8242B628
+        void UpdateAllChallengesEntryData();                                            // 0x82439350
+        void BuildChallengeList();                                                      // 0x8242B830
+        void BuildShortcutOptions();                                                    // 0x82414288
+        void SortFullList();                                                            // 0x82423708
+        void RemoveUnneededFriends();                                                   // 0x824146C0
+        void MoveHighlightDueToBranchOpen();                                            // 0x82414868
+        void SaveCurrentState();                                                        // 0x824149E8
+        void UpdateAptVariables();                                                      // 0x82423558
+        void WithdrawBranches();                                                        // 0x824234B8
+        void ShowFriendsListBranch();                                                   // 0x82422E18
+        void ShowShortcutsBranch();                                                     // 0x82423120
+        void Highlight(s32 liRow);                                                      // 0x82414960
+        void SetEntryData(s32 liRow, const char* lpcText, s32 leStatus, bool lbLocalise); // 0x82422CB0
+        void HandleNotConnected();                                                      // 0x8242B948
+        void HandleNoFriends();                                                         // 0x8242BA40
+        void HandleDPadLeft();                                                          // 0x82442868
+        void HandleDPadRight();                                                         // 0x82442D98
+        void HandleDPadRightFriends();                                                  // 0x824386B0
+        void HandleDPadRightChallenges();                                               // 0x82438760
+        void HandleDPadRightShortcuts();                                                // 0x82438DC0
+        void HandleBranchDPadRightFriends();                                            // 0x82438938
+        void HandleBranchDPadRightShortcuts();                                          // 0x82438DC0 sibling @0x82438938 pair -- see cpp map
+        void HandleBranchInteraction(s32 liAction);                                     // 0x82439040
+        void HandleTableInteraction(s32 liAction);                                      // 0x82442E50
+        static void TransitionCompleteCallback(void* lpUserData);                       // 0x82414AA0
+        static int  BuddySortFunction(const void* lpA, const void* lpB);                // 0x824147A8
 
     private:
         // ---- current selection cursor (X360 +0x870..+0x894) ----
@@ -87,6 +153,45 @@ namespace BrnGui
         u8  mbDirty;              // +0x4118 -- raised to 1 by SetDirty
         u8  mbSnapshotFlagA;      // +0x4119 = mbSelectionFlagA
         u8  mbSnapshotFlagB;      // +0x411A = mbSelectionFlagB
+        // ---- one online-friend record [friends wave]: stride 0x84, base +0xBEC ----
+        struct SFriendRecord
+        {
+            u32  muType;                     // +0x00 presence/class code (BuddySort 1/2 arms)
+            u32  muPad04;
+            u32  muPad08;
+            char macName[16];                // +0x0C (LobbyNameCmp target)
+            u8   mubClassA;                  // +0x1C (zero => "you" row -> state 5)
+            u8   mubClassB;                  // +0x1D (secondary sort class)
+            u8   mubMatchedLobbyName;        // +0x1E (set by SortFullList lobby scan)
+            u8   mubJoinable;                // +0x1F (joinable/not-joinable state pairs)
+            u8   maRest[0x64];               // +0x20..+0x83 (unwitnessed interior)
+        };
+    
+        static_assert(sizeof(SFriendRecord) == 0x84, "record stride");
+        static_assert(__builtin_offsetof(SFriendRecord, macName) == 0x0C &&
+                      __builtin_offsetof(SFriendRecord, mubClassA) == 0x1C,
+                      "SortFullList/BuddySort field witnesses");
+
+    private:
+        // ---- [friends wave] asm-pinned additions (offsets in comments) ----
+        s32  maeAvailableShortcutOptions[E_SHORTCUTOPTION_COUNT];   // +0x00C, sentinel NONE(21)
+        s32  mauNumBranches[3];                                     // +0x060 (Construct seeds 15)
+        CgsID mau64ChallengeIds[KI_MAX_FRIEND_RECORDS];             // +0x070 ((idx+14)*8 addressing)
+        BrnFlapt::TextFieldRef  maBranchLabelFields[3];             // +0xB98 ("branchOptionOne_txt" chain)
+        BrnFlapt::TextFieldRef  mListTitleField;                    // +0xBBC ("listTitle_mc"/"listTitle_txt")
+        BrnFlapt::MovieClipRef  mUpArrowClip;                       // +0xBC8 ("upArrow_mc"/"arrow")
+        BrnFlapt::MovieClipRef  mDownArrowClip;                     // +0xBD0 ("downArrow_mc")
+        BrnFlapt::MovieClipRef  mThirdClip;                         // +0xBD8 (chain tail)
+        SFriendRecord maRecords[KI_MAX_FRIEND_RECORDS];             // +0xBEC (memset span 0x3390)
+        s32  maeDisplayTypes[KI_MAX_FRIEND_RECORDS];                // +0x3F70 (EFriendListEntryState)
+        s8   mi8FirstVisibleIndex;                                  // +0x880 (scroll window top)
+        s8   mi8SelectedRowIndex;                                   // +0x881
+        s8   mi8CurrentlyHighlightedBranch;                         // +0x883
+        CgsNetwork::PlayerName mHighlightedName;                    // +0x884
+        u8   mabEntryFlags[2];                                      // +0x898
+        s32  meDataState;                                           // +0x89C (0 none/1 requested/2 ready)
+        u8   mabRecordTailFlags[KI_MAX_FRIEND_RECORDS][2];          // +0xB78 (parallel pairs, stride 0x84)
+        bool mbReopenAfterClose;                                    // +0x4104 (TransitionCompleteCallback)
     };
 
     // Free post-increment / post-decrement over the friends-list branch enum
