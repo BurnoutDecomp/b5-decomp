@@ -230,5 +230,88 @@ namespace AIModuleIO
 
         return mPlayerContactBits.IsBitSet(leActiveRaceCarIndex);
     }
+
+    // File-scope helper: the console emits each of the eight state bits as its own
+    // `flag ? SetBit(index) : UnSetBit(index)` pair behind the same CgsBitArray.h:203
+    // tripwire. Written once here rather than eight times.
+    static inline void SetOrClearBit(RaceCarAIInterface::ActiveRaceCarBitArray& lrBits,
+                                     u32 luIndex, bool lbValue)
+    {
+        if (lbValue)
+        {
+            lrBits.SetBit(luIndex);
+        }
+        else
+        {
+            lrBits.UnSetBit(luIndex);
+        }
+    }
+
+    // =============================================================================================
+    // @0x822B23E8  UpdateActiveRaceCarData -- the per-frame active-car snapshot.
+    //
+    // Console order (r15 == this, r31 == leActiveRaceCarIndex):
+    //   0x822B2434  assert(index >= E_ACTIVE_RACE_CAR_INDEX_0)               (:592)
+    //   0x822B2458  assert(index <  E_ACTIVE_RACE_CAR_INDEX_COUNT)           (:593)
+    //   0x822B252C  assert(!mSetActiveRaceCars.IsBitSet(index))              (:594)
+    //               "Active Race Car AI data getting set twice"
+    //   0x822B265C  mSetActiveRaceCars.SetBit(index)          (stdx at this+0x2E8)
+    //   0x822B2664  maMatrices[index]        (index << 6,  four stvx128 at +0/+0x10/+0x20/+0x30)
+    //   0x822B2690  maVelocities[index]      ((index + 0x20) << 4  == 0x200 + index*16)
+    //   0x822B2694  mafSpeeds[index]         ((index + 0xA0) << 2  == 0x280 + index*4)
+    //   0x822B269C  mauSectionIndices[index] ((index + 0x150) << 1 == 0x2A0 + index*2)
+    //   then the EIGHT bit arms, each `flag ? SetBit : UnSetBit` behind the same
+    //   CgsBitArray.h:203 index tripwire, at the seats listed in the header's banner.
+    //
+    // Reproduced by NAME. The index arithmetic above is quoted only as the proof of WHICH
+    // member each console displacement names; nothing here is written by offset.
+    // =============================================================================================
+    void RaceCarAIInterface::UpdateActiveRaceCarData(EActiveRaceCarIndex leActiveRaceCarIndex,
+                                                     Matrix44Affine lTransform,
+                                                     Vector3 lVelocity,
+                                                     f32 lfSpeed,
+                                                     u16 luSectionIndex,
+                                                     bool lbIsInAir,
+                                                     bool lbIsCrashing,
+                                                     bool lbIsInShowtime,
+                                                     bool lbIsOnStartLine,
+                                                     bool lbIsDrifting,
+                                                     bool lbIsFrontRayOccluded,
+                                                     bool lbIsTouchingAnotherRaceCar,
+                                                     bool lbIsTouchingPlayer)
+    {
+        CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
+                   "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
+        CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                   "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+        CGS_ASSERT(!mSetActiveRaceCars.IsBitSet(static_cast<u32>(leActiveRaceCarIndex)),
+                   "Active Race Car AI data getting set twice");
+
+        if (static_cast<u32>(leActiveRaceCarIndex) >= E_ACTIVE_RACE_CAR_INDEX_COUNT)
+        {
+            // [FLAG PC bring-up] the console's index tripwires are NON-gating (it fires the
+            // assert and then indexes anyway). On the host an out-of-range index would scribble
+            // past nine 8-byte bit arrays into the management queue, so the bail is kept.
+            return;
+        }
+
+        const u32 luIndex = static_cast<u32>(leActiveRaceCarIndex);
+
+        mSetActiveRaceCars.SetBit(luIndex);
+
+        maMatrices[luIndex]         = lTransform;
+        maVelocities[luIndex]       = lVelocity;
+        mafSpeeds[luIndex]          = lfSpeed;
+        mauSectionIndices[luIndex]  = luSectionIndex;
+
+        SetOrClearBit(mInAirBits,          luIndex, lbIsInAir);                   // 0x2B0
+        SetOrClearBit(mCrashingBits,       luIndex, lbIsCrashing);                // 0x2B8
+        SetOrClearBit(mShowtimeBits,       luIndex, lbIsInShowtime);              // 0x2C0
+        SetOrClearBit(mOnStartLineBits,    luIndex, lbIsOnStartLine);             // 0x2C8
+        SetOrClearBit(mDriftingBits,       luIndex, lbIsDrifting);                // 0x2D0
+        SetOrClearBit(mFrontRayOccluded,   luIndex, lbIsFrontRayOccluded);        // 0x2F0
+        SetOrClearBit(mRaceCarContactBits, luIndex, lbIsTouchingAnotherRaceCar);  // 0x2D8
+        SetOrClearBit(mPlayerContactBits,  luIndex, lbIsTouchingPlayer);          // 0x2E0
+    }
 }
 }

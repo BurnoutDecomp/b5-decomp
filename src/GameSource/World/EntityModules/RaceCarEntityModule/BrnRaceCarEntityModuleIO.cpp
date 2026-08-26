@@ -219,11 +219,81 @@ InputBuffer_PostScene::GetTrafficToRaceCarInterface_PreScene() const
 
 // ---- OutputBuffer_PostScene -------------------------------------------------
 
+// =================================================================================================
+// OutputBuffer_PostScene::Construct   X360 0x822EA678   -- RETIRES A memset BOOT GATE, AND THE
+// GATE WAS A LIVE DEFECT (resetpump wave 2026-08-26). MEASURED, run rp_crash1:
+//
+//     [ASSERT 1] mpEvents != NULL (CgsBaseEventQueue.h:35)
+//       CgsDev::Assert::FireAssert
+//       BrnWorld::RaceCarEntityModule::SendResetOnTrackRequests      <- THE FIRST PRODUCER, EVER
+//       BrnWorld::RaceCarEntityModule::PostSceneUpdate
+//
+// i.e. the crash exit raised mbToBeResetOnTrack, SendResetOnTrackRequests read it and tried to
+// AddEvent a ResetOnTrackRequest -- into a queue whose mpEvents had never been pointed at its
+// inline storage, because WorldLinkStubs.cpp answered this buffer's Construct with
+// `memset(this, 0, sizeof(*this))`.
+// ⭐⭐ SEVENTH sighting of this exact shape in this buffer family, and the crash-exit wave's own
+// note was already written for it: A memset IS WORSE THAN NO STUB -- zeroing a queue is not
+// constructing it, and it LOOKS like initialisation. ⭐ AN UNCONSTRUCTED BUFFER IS INVISIBLE
+// UNTIL SOMETHING PUTS DATA IN IT: un-gating a producer CREATES the fault, it does not reveal it.
+//
+// Console body (r31 == this; the pseudocode types it float*, so the displacements below are the
+// float indices x4):
+//   0x822EA678  *this = 1                                    IOBuffer::Construct
+//   +4          VariableEventQueue<16384,16>::Construct       mSceneCoarseQueryQueue
+//   +16416      InEventLineTestFine<256>::Construct          mSceneFineLineTestQueue
+//   +32816      ResetOnTrackRequest<128>::Construct          mAIModuleRequestInterface  ⭐
+//   +34880      CreateRivalInTrafficSystemEvent<34>::Construct  \ both inside
+//   +36528      RemoveRivalFromTrafficSystemEvent<34>::Construct/ mRaceCarToTrafficInterface
+//   +36576      muFlags = 0 ; +36580 mfShowtimeTrafficDensityScale = 1.0f
+// The offsets close exactly on the committed member sizes (4 + 16400 -> 16416;
+// + 16400 -> 32816; + 16 + 128*16 -> 34880), which is what identifies each leg.
+//
+// PARTIAL SLICE, and every leg it does not run is NAMED here rather than left unmentioned:
+//   [FLAG] mSceneCoarseQueryQueue / mSceneFineLineTestQueue are 16400-byte `maReserved` blobs in
+//     this tree (CgsSceneManagerIO_CoarseQuery.h / CgsSceneManagerModuleIO.h) with no Construct
+//     to call. They keep the zero the memset below gives them -- EXACTLY what they had before
+//     this change, so nothing regresses; they gain a real Construct with their own layout.
+//   [FLAG] mRaceCarToTrafficInterface's two queues + muFlags/mfShowtimeTrafficDensityScale:
+//     RaceCarToTrafficInterface::Construct (DWARF :130) is declaration-only in this tree and its
+//     members are private with const-only accessors, so there is no by-name route to them.
+//     Same disposition, same zero, same debt.
+//   ⚠️ mfShowtimeTrafficDensityScale therefore reads 0.0f here where the console reads 1.0f.
+//     That is UNCHANGED from the retired gate (which zeroed it too) and its only consumer is the
+//     showtime traffic-density publish, itself a parked leg of PostSceneUpdate.
+// DELETE-WHEN those three types get real Constructs; then the memset goes too.
+// =================================================================================================
+void
+OutputBuffer_PostScene::Construct()
+{
+    // [FLAG PC] the retired gate's zero-fill, kept for the three members above.
+    std::memset(this, 0, sizeof(*this));
+
+    CgsModule::IOBuffer::Construct();                                   // X360 *this = 1
+
+    // ⭐ X360 +32816 -- the ONLY leg with a reachable, real Construct today, and the one the
+    // reset-on-track pump posts into every time a crashed car asks to be put back.
+    mAIModuleRequestInterface.GetResetOnTrackRequestQueue()->Construct();
+}
+
+
 // X360 0x822B5608 (W, :380) -- mutable AI module-request accessor.
 OutputBuffer_PostScene::AIModuleRequestInterface*
 OutputBuffer_PostScene::GetAIModuleRequestInterface()
 {
     CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+    return &mAIModuleRequestInterface;
+}
+
+// X360 0x8279DA48 (R, :379) -- the const read-lock twin of the accessor above. LANDED
+// 2026-08-26 (resetpump wave): WorldModule::BridgeRaceCarModuleToAIModule_PostScene @0x827AD688
+// calls exactly this (`mr r3, r29 ; bl sub_8279DA48`) and hands the result to
+// AIModuleIO::InputBuffer::AppendAIModuleRequestInterface. It had no body; the bridge was the
+// first caller in the tree.
+const OutputBuffer_PostScene::AIModuleRequestInterface*
+OutputBuffer_PostScene::GetAIModuleRequestInterface() const
+{
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
     return &mAIModuleRequestInterface;
 }
 
@@ -236,6 +306,21 @@ OutputBuffer_PostScene::GetRaceCarToTrafficInterface()
 }
 
 // ---- InputBuffer_PrePhysics -------------------------------------------------
+
+// X360 0x822B5800 (R, :418) -- const AI-module result accessor (this + 196656 ==
+// &mAIModuleResultInterface; 196656 is mSceneResultQueue's end rounded to 16). LANDED
+// 2026-08-26 (resetpump wave). It was declaration-only, and its first caller is
+// RaceCarEntityModule::ProcessResetOnTrackResultQueue @0x822F4580, which reaches BOTH of the
+// interface's rings through it -- the reset-on-track results at +0 and the place-on-track
+// requests at +0x1810 (== 0x10 + 128*48, i.e. the second member).
+// This is the address that used to be cited on GetOnlineScoringInterface (corrected
+// 2026-08-11); the header's member annotation still carried the stale citation until this wave.
+const InputBuffer_PrePhysics::AIModuleResultInterface*
+InputBuffer_PrePhysics::GetAIModuleResultInterface() const
+{
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+    return &mAIModuleResultInterface;
+}
 
 // X360 0x822B59F8 (R, DWARF :427 / X360 baked line 436) -- const online-scoring accessor
 // (X360 tail `return this + 212048` == &mOnlineScoringInterface, the same 164-byte block
@@ -367,6 +452,18 @@ OutputBuffer_PrePhysics::GetVehicleDriverInterface()
 {
     CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
     return &mVehicleDriverInterface;
+}
+
+// X360 sub_822B5DF8 (W, :480) -- the mutable player-reset accessor (write-lock bit 3; tail
+// `addis r3, r28, 2 ; addi r3, r3, 0x4720` == this + 149280 == &mPlayerResetInterface).
+// LANDED 2026-08-26 (resetpump wave): RaceCarEntityModule::ProcessResetOnTrackResultQueue calls
+// it (`bl sub_822B5DF8` at 0x822F4718) and then stores the placed car's position and raises
+// mbPlayerResetThisFrame -- i.e. SetPlayerResetPos, which the console inlines there.
+RCEntityPlayerResetInterface*
+OutputBuffer_PrePhysics::GetPlayerResetInterface()
+{
+    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+    return &mPlayerResetInterface;
 }
 
 // X360 address NOT ATTRIBUTED (W). The write-lock accessor that returns +149312. It is NOT

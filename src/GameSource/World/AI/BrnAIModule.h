@@ -73,6 +73,20 @@ public:
                      BrnUpdateSet lUpdateSet );
         void PostPhysicsUpdate( const AIModuleIO::InputBuffer_PostPhysics* lpInputBuffer );
 
+        // ---- THE RESET-ON-TRACK PUMP, AI half (resetpump wave 2026-08-26). Bodies in
+        //      BrnAIModule_ResetPump.cpp, alongside the Update slice that calls them. ----
+
+        // X360 @0x8278A7A8 (185 insns). Drain the input buffer's ResetOnTrackRequest queue into
+        // the manager's own 35-deep pending array.
+        void ProcessRequestInterface( const AIModuleIO::InputBuffer* lpInputBuffer,
+                                      AIModuleIO::OutputBuffer* lpOutputBuffer,
+                                      BrnUpdateSet lUpdateSet );
+
+        // X360 @0x8279ABB0 (192 insns). Run ResetOnTrackManager::Update for this frame and
+        // apply its results to the AI cars.
+        void UpdateResetOnTrackManager( AIModuleIO::AIModuleResultInterface* lpResults,
+                                        f32 lfTime );
+
     AIModule();
 
     // The AI road network, once LoadMapData + RouteMapModule::Prepare have resolved it.
@@ -241,6 +255,29 @@ private:
     // attested AICar::Reset @0x82792800. Everything else is the console's own pre-Construct .bss
     // zero. Flagged there, loudly.
     AICar maAICars[35];
+
+    // X360 +322040 (0x4EB78) / +322044 (0x4EB7C) -- the two player-car cursors AIModule::Update
+    // latches at the top of its body and every later leg reads back.
+    //
+    //   mePlayerActiveRaceCarIndex  <- lpInputBuffer->GetRaceCarAIInterface()
+    //                                    ->GetPlayerActiveRaceCarIndex()  (asm 0x8279B5F8)
+    //   mePlayerGlobalRaceCarIndex  <- the AI DRIVER chain: only written when the player's slot
+    //                                  HAS an AIDriver whose +7529 flag is set, as
+    //                                  `driver->mpAICar ? driver->mpAICar->miRaceCarIndex : -1`
+    //                                  (asm 0x8279B640..0x8279B6A0).
+    //
+    // ⛔ [FLAG PC bring-up] NOTHING ON THIS BUILD WRITES THE SECOND ONE. AIModule::GetAIDriver
+    // and the eight AIDriver objects are absent (AIDriver::Prepare is Prepare stage 4's parked
+    // leg), so the console's writer arm cannot run. Its resting value here is the CONSOLE'S OWN
+    // resting value: the module lives in .bss and the console never stores anything else into
+    // +322044 on a free-burn drive, so E_GLOBAL_RACE_CAR_INDEX_0 (== 0) is what the console
+    // reads too. It feeds only ResetOnTrackManager::Update's two range asserts and its
+    // "player sent a non-STANDARD request" tripwire, both of which pass at 0.
+    // ⚠️ It is NOT "the player's global race-car index" today, and no code here treats it as
+    // one -- the request itself carries the real index (RCEM::SendResetOnTrackRequests writes
+    // it), which is what ProcessResetOnTrackRequest actually resolves against.
+    EActiveRaceCarIndex mePlayerActiveRaceCarIndex;   // X360 +322040
+    EGlobalRaceCarIndex mePlayerGlobalRaceCarIndex;   // X360 +322044
 };
 
 // Free post-increment over the AI prepare-stage enum (DWARF BrnAIModule.h:417). X360 0x82765A10.

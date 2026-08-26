@@ -248,37 +248,33 @@ void RaceCarEntityModule::PostSceneUpdate(
 
     ProcessRaceCarCrashCompleteEvents( lpInput );
 
+    // ⭐⭐⭐ THE PRODUCER END OF THE RESET-ON-TRACK PUMP (resetpump wave 2026-08-26), at the
+    // console's own slot -- SendResetOnTrackRequests is the fifth of PostSceneUpdate's eight
+    // callees and it is the ONLY reader of RaceCar::mbToBeResetOnTrack, which
+    // ProcessRaceCarCrashCompleteEvents (two lines up) is what SETS.
+    SendResetOnTrackRequests( lpOutput );
+
     {
         static bool sbLoggedPostScenePark = false;
         if( !sbLoggedPostScenePark && CgsDev::Log::gpDebugPrint != 0 )
         {
             sbLoggedPostScenePark = true;
             *CgsDev::Log::gpDebugPrint
-                << "[crash-exit] RaceCarEntityModule::PostSceneUpdate SLICE: only"
-                   " ProcessRaceCarCrashCompleteEvents is reconstructed. Six console helpers have"
-                   " no body anywhere in this tree (UpdateTrafficAndRaceCarNearMisses,"
+                << "[crash-exit] RaceCarEntityModule::PostSceneUpdate SLICE: two of the eight"
+                   " console callees are reconstructed -- ProcessRaceCarCrashCompleteEvents and"
+                   " (resetpump wave 2026-08-26) SendResetOnTrackRequests. FIVE still have no"
+                   " body anywhere in this tree (UpdateTrafficAndRaceCarNearMisses,"
                    " ProcessLeapedAndStompedCars, ProcessPowerParking,"
-                   " PlaceOnTrackManager::PostSceneUpdate, SendResetOnTrackRequests,"
-                   " CheckForResetOnTrackConditions) [FLAG]\n"
-                   "[crash-exit] ... and SendResetOnTrackRequests @0x822CE178 (57) is the ONLY"
-                   " reader of RaceCar::mbToBeResetOnTrack, which the crash exit sets."
-                   " BOUNDARY UPDATED 2026-08-26 (aimodule slice 1): the AI MODULE LIFECYCLE IS"
-                   " NO LONGER THE BLOCKER -- AIModule::Construct/Prepare/LoadMapData are real,"
-                   " AI.dat loads, WorldMapData resolves (version 12, 7639 sections) and"
-                   " BrnAI::ResetOnTrackManager IS Constructed with a bound road network."
-                   " What is still missing is the REQUEST/RESULT PUMP above it. UPDATED"
-                   " 2026-08-26 (aicar_reset): the 35-entry AI-car array and"
-                   " ResetOnTrackManager::{Update, ProcessResetOnTrackRequest,"
-                   " ComputeResetOnTrack} are now BODIED -- the manager can resolve a request."
-                   " What remains is the PLUMBING that would call it: (1) this"
-                   " SendResetOnTrackRequests, (2) the two AI bridges, (3) AIModule::Update,"
-                   " (4) ProcessResetOnTrackResultQueue -- plus two MEASURED blockers under"
-                   " them: VehicleManager::GenerateAboveGroundLineTests is absent (no car ever"
-                   " enters the AI section system) and RCEM::WriteUpdatedAIData is absent"
-                   " (RaceCarAIInterface::mbPlayerDataSet never set, so AIModule::Update would"
-                   " skip its whole body). So a heavy crash STILL pins the car and"
-                   " crash ENTRY stays off the public path (BRN_ENABLE_CRASH_ENTRY)."
-                   " See BrnRaceCar.cpp::RequestResetOnTrack [FLAG]\n";
+                   " PlaceOnTrackManager::PostSceneUpdate, CheckForResetOnTrackConditions)"
+                   " [FLAG]\n"
+                   "[crash-exit] ... and the RESET-ON-TRACK PUMP IS NOW PLUMBED END TO END:"
+                   " WriteUpdatedAIData (PreScene) -> the two AI bridges -> AIModule::Update"
+                   " slice -> ResetOnTrackManager -> BridgeAIToEntityModules_PrePhysics ->"
+                   " ProcessResetOnTrackResultQueue (PrePhysics) ->"
+                   " ActiveRaceCar::RequestPlaceOnTrack. The one console producer still absent"
+                   " on this path is CheckForResetOnTrackConditions @0x822CE9E0 (the stuck /"
+                   " off-road watchdog), which costs nothing on the CRASH path."
+                   " See BrnRaceCarEntityModule_ResetPump.cpp for the whole round trip [FLAG]\n";
         }
     }
 

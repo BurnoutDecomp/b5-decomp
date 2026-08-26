@@ -1089,4 +1089,42 @@ namespace BrnPhysics
         mVehicleManager.CheckState();
         CgsDev::PerfMonCpu::StopMonitor(miPhysicsPreSceneUpdatePM);
     }
+
+    // =============================================================================================
+    // GenerateSceneQueries @0x825A1428 (19 insns) -- the whole body, resetpump wave 2026-08-26.
+    // This retires a one-shot "inert" boot gate in WorldLinkStubs.cpp.
+    //
+    //   0x825A1438  StartMonitor(*(this + 433124))          == miGenerateSceneQueriesPM  [PARKED]
+    //   0x825A1448  assert(lpOutputBuffer != NULL)  "lpPhysicsModuleOutputBuffer != NULL"  (:195)
+    //   0x825A1468  IOBuffer::LockForWrite(lpOutputBuffer)
+    //   0x825A1470  v5 = lpOutputBuffer->GetVehicleOutputRequestInterface()   (@0x8259FF30, +16)
+    //   0x825A1478  VehicleManager::GenerateAboveGroundLineTests(this + 19104, v5)
+    //   0x825A1480  IOBuffer::UnlockForWrite(lpOutputBuffer)
+    //   0x825A1488  StopMonitor                                                            [PARKED]
+    //
+    // ⚠️ Hex-Rays prints this as `GenerateSceneQueries(int a1, int a2)` and DROPS the BrnUpdateSet
+    // third argument, which the declaration (and WorldModule::Update's call site) carries. The
+    // body genuinely does not read it -- there is no `clrlwi` on r5 anywhere in the 19 instructions
+    // -- so it is accepted and consumed here, not quietly removed from the signature.
+    // [FLAG] the two PerfMonCpu calls: miGenerateSceneQueriesPM IS registered on this build
+    // (BrnPhysicsModule.cpp:114), and WorldModule::Update already brackets this call with its own
+    // miPhysicsModuleGenerateSceneQueriesPM monitor, so the inner pair would double-count one
+    // region. Left out for the same reason the sibling stages leave theirs out.
+    // =============================================================================================
+    void PhysicsModule::GenerateSceneQueries(PhysicsModuleIO::OutputBuffer* lpOutputBuffer,
+                                             BrnUpdateSet lUpdateSet)
+    {
+        (void)lUpdateSet;   // the console's r5; the body never reads it
+
+        CGS_ASSERT(lpOutputBuffer != 0, "lpPhysicsModuleOutputBuffer != NULL");   // :195
+        if (lpOutputBuffer == 0)
+        {
+            return;
+        }
+
+        lpOutputBuffer->LockForWrite();
+        mVehicleManager.GenerateAboveGroundLineTests(
+            lpOutputBuffer->GetVehicleOutputRequestInterface());
+        lpOutputBuffer->UnlockForWrite();
+    }
 }

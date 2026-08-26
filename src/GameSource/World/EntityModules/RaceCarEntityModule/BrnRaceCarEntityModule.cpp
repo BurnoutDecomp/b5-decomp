@@ -3292,6 +3292,18 @@ void RaceCarEntityModule::PreSceneUpdate(
     // real but this call missing, the bridge's one-shot "player active race-car index published"
     // diag never printed, while the PostPhysics publish was reporting `playerIdx 1` in the same
     // run. Two layers, both silent.
+    // ---- step 14 (console order): PUBLISH THE AI'S VIEW OF EVERY ACTIVE CAR ---------------
+    // ⭐⭐⭐ ADDED 2026-08-26 (resetpump wave). The console runs WriteUpdatedAIData here, at
+    // 0x8230E3FC -- immediately before UpdatePropBoundingBoxes_PreScene (0x8230E408) and the
+    // four output-interface fetches that feed the UpdateOutputInterfaces call below.
+    //
+    // ⛔ WITHOUT IT the AI module does NOTHING AT ALL: AIModule::Update @0x8279B478 wraps its
+    // entire body in `if (GetRaceCarAIInterface()->mbPlayerDataSet == 1)`, and this function is
+    // the only thing in the image that sets that flag (through
+    // RaceCarAIInterface::SetPlayerActiveRaceCarData). MEASURED as the blocker by the
+    // aicar_reset wave; landed here.
+    WriteUpdatedAIData( lpOutput );
+
     UpdateOutputInterfaces( lpOutput->GetActiveRaceCarOutputInterface(),
                             lpOutput->GetGlobalRaceCarOutputInterface(),
                             lpOutput->GetReplayActiveRaceCarOutputInterface(),
@@ -4639,6 +4651,13 @@ void RaceCarEntityModule::PrePhysicsUpdate(
 
         ProcessPlayerVehicleInput( mfTimeStep, lpInput, lpOutput );
     }
+
+    // ⭐⭐⭐ THE CONSUMER END OF THE RESET-ON-TRACK PUMP (resetpump wave 2026-08-26), at the
+    // console's own slot: `bl ProcessResetOnTrackResultQueue` immediately precedes
+    // `bl PlaceOnTrackManager::PrePhysicsUpdate` in PrePhysicsUpdate @0x82307160. That ORDER
+    // is load-bearing -- the manager consumes mbToBePlacedOnTrack in the SAME frame this sets
+    // it, so swapping the two costs a frame of latency on every recovery.
+    ProcessResetOnTrackResultQueue( lpInput, lpOutput );
 
     mPlaceOnTrackManager.PrePhysicsUpdate( lpInput, lpOutput );
 

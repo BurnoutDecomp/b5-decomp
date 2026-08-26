@@ -376,7 +376,17 @@ namespace RaceCarEntityModuleIO
             mRestPos.w = 0.0f;
             mbPlayerResetThisFrame = false;
         }
-        void SetPlayerResetPos(Vector3);                    // :619
+        // :619 -- BODIED 2026-08-26 (resetpump wave). The console has no out-of-line symbol
+        // for it either; RCEM::ProcessResetOnTrackResultQueue inlines exactly this pair at
+        // 0x822F471C/0x822F4720 (`stvx128 v127, r0, r3` then `stb 1, 0x10(r3)`) right after
+        // fetching this interface off the pre-physics output buffer. Both stores, not just the
+        // position: the flag IS the signal, and writing the vector alone would leave the
+        // consumer reading last frame's answer.
+        void SetPlayerResetPos(Vector3 lPos)                // :619
+        {
+            mRestPos               = lPos;
+            mbPlayerResetThisFrame = true;
+        }
         bool PlayerHasRestThisFrame() const;                // :622
         Vector3 GetPlayerResetPos() const;                  // :625
 

@@ -588,37 +588,35 @@ void BridgePropModuleToTrafficModule_PrePhysics(
 // takes for the same monitor id. The caller already brackets this call with its own
 // miUT_World monitor (BrnWorldModule.cpp:2735/2745), so no timing region is lost outright.
 //
-// ⛔⛔ PARKED -- AND THIS ONE IS A PARK THAT PREVENTED A LIVE CORRUPTION. Both halves were
-//    WRITTEN AND COMPILING in this wave before the source buffer was measured. THE MEASUREMENT:
+// ⭐⭐⭐ TOMBSTONE + UNPARK, 2026-08-26 (resetpump wave). THE PARK THAT STOOD HERE FOR
+//    EIGHT DAYS IS RETIRED, AND ITS REASON IS RECORDED RATHER THAN DELETED BECAUSE IT WAS RIGHT:
 //
-//        static_assert(sizeof(BrnAI::AIModuleIO::OutputBuffer) == 1)   -- PASSES.
+//        "static_assert(sizeof(BrnAI::AIModuleIO::OutputBuffer) == 1)   -- PASSES."
 //
-//    BrnAI::AIModuleIO::OutputBuffer is a documented MINIMAL SLICE with NO NAMED MEMBERS: its
-//    eleven accessors are all `reinterpret_cast<u8*>(this) + <console offset>`, and its host
-//    sizeof is therefore ONE BYTE (the IOBuffer status byte). But CgsIOBufferStack::
-//    CreateIOBuffer<T> allocates `Alloc(sizeof(T))` -- BrnWorldModule.cpp:1132 creates this
-//    buffer -- so the live object IS one byte, while GetAIModuleResultInterface() hands back
-//    `this + 98128`.
+//    That buffer USED to declare no data members at all while its eleven accessors returned
+//    `reinterpret_cast<u8*>(this) + <console offset>`, up to this+110448 -- and
+//    CgsIOBufferStack::CreateIOBuffer<T> allocates exactly sizeof(T). Landing this bridge then
+//    would have made SetAIModuleResultInterface Clear() the race-car module's two REAL AI rings
+//    and then Append() up to 128 ResetOnTrackResult and 128 PlaceOnTrackRequest events read out
+//    of whatever sat 98 KB past a ONE-BYTE allocation, with the ring's own miLength taken from
+//    that same foreign memory -- invisible to the compile gate, to the faithfulness lint, and to
+//    any boot smoke test that does not reset a car.
 //
-//    Landing this bridge would therefore have made SetAIModuleResultInterface Clear() the
-//    race-car module's two REAL AI rings and then Append() up to 128 ResetOnTrackResult and
-//    128 PlaceOnTrackRequest events read out of whatever sits 98 KB past a one-byte
-//    allocation -- with the ring's own miLength taken from that same foreign memory. That is a
-//    guaranteed corruption of the race-car reset path (and a probable AV), and it would have
-//    been invisible to the compile gate, to the faithfulness lint, and to a boot smoke test
-//    that does not reset a car.
+//    ⭐ THE PARK'S OWN DELETE-WHEN CONDITION -- "BrnAI::AIModuleIO::OutputBuffer gets a real
+//    member layout" -- WAS MET by the aimodule wave on 2026-08-25. VERIFIED BEFORE UNPARKING,
+//    not assumed: BrnAIModuleIO_OutputBuffer.h's private block now declares seven REAL typed
+//    members in the X360's attested order (mAIModuleResultInterface among them, a real
+//    AIModuleResultInterface), every accessor returns `&member`, and that buffer's own
+//    Construct() constructs BOTH of the result interface's rings.
 //
-//    ⚠️ THE DEFECT IS NOT THIS BRIDGE'S -- it is the AI output buffer's, and it predates this
-//    wave. Every one of that buffer's eleven accessors is an out-of-bounds walk today. Nothing
-//    reads them yet only because every consumer is still gated; this bridge would have been the
-//    first. REPORTED, not worked around: see bridges.owner.md.
-//    DELETE-WHEN: BrnAI::AIModuleIO::OutputBuffer gets a real member layout (or at minimum a
-//    correctly-sized payload) so that sizeof(OutputBuffer) covers +98128. The DESTINATIONS are
-//    both ready and real today (PropEntityIO::InputBuffer_PrePhysics::
-//    AppendResetOnTrackResultQueue and RaceCarEntityModuleIO::InputBuffer_PrePhysics::
-//    SetAIModuleResultInterface are bodied), so this becomes a four-line unpark.
-//    COST OF THE PARK: the AI's reset-on-track / place-on-track results reach neither the prop
-//    module nor the race-car module. It does not block the break.
+//    ⚠️ THE SOURCE-SIDE GUARANTEE IS ONLY HALF THE JOB. The DESTINATION -- the race-car
+//    module's InputBuffer_PrePhysics -- had the mirror-image defect: its Construct never
+//    constructed mAIModuleResultInterface's two rings either, and SetAIModuleResultInterface
+//    Clear()s + Append()s them. Fixed in the same commit (BrnRaceCarEntityModuleIO.h). Un-gating
+//    a producer CREATES that fault; it does not reveal it.
+//
+// [FLAG] the console's CPU monitor (worldModule + 6167720) is still NOT modelled -- see the
+// note above.
 // =================================================================================================
 void BridgeAIToEntityModules_PrePhysics(
     void* lpWorldModule,
@@ -626,24 +624,26 @@ void BridgeAIToEntityModules_PrePhysics(
     BrnWorld::PropEntityIO::InputBuffer_PrePhysics* lpPropInputBuffer_PrePhysics,
     const BrnAI::AIModuleIO::OutputBuffer* lpAIOutputBuffer)
 {
-    (void)lpWorldModule;                   // X360 r3 -- the perf-monitor id only; see the [FLAG]
-    (void)lpRaceCarInputBuffer_PrePhysics; // destination ready; source seat is out of bounds
-    (void)lpPropInputBuffer_PrePhysics;    // destination ready; source seat is out of bounds
-    (void)lpAIOutputBuffer;                // ⛔ a ONE-BYTE object -- see the banner
+    (void)lpWorldModule;   // X360 r3 -- the perf-monitor id only; see the [FLAG]
 
+    if (lpAIOutputBuffer == 0)
     {
-        static bool sbLoggedAIPark = false;
-        if (!sbLoggedAIPark && CgsDev::Log::gpDebugPrint != 0)
-        {
-            sbLoggedAIPark = true;
-            *CgsDev::Log::gpDebugPrint
-                << "[FLAG PC bring-up] BridgeAIToEntityModules_PrePhysics: PARKED. "
-                   "sizeof(BrnAI::AIModuleIO::OutputBuffer) == 1 on the host while its "
-                   "result-interface accessor returns this+98128, so reading the AI result "
-                   "rings would Append foreign memory into the prop AND race-car pre-physics "
-                   "inputs. Both destinations are real and ready; the AI output buffer needs a "
-                   "layout.\n";
-        }
+        return;
+    }
+
+    // The console calls the SAME getter twice rather than caching it in a register
+    // (`bl 0x8279CD48` at both 0x827AD56C and 0x827AD580). Reproduced: each call is also the
+    // read-lock tripwire, so collapsing them would drop one of the two checks.
+    if (lpPropInputBuffer_PrePhysics != 0)
+    {
+        lpPropInputBuffer_PrePhysics->AppendResetOnTrackResultQueue(
+            lpAIOutputBuffer->GetAIModuleResultInterfaceConst()->GetResetOnTrackResultQueue());
+    }
+
+    if (lpRaceCarInputBuffer_PrePhysics != 0)
+    {
+        lpRaceCarInputBuffer_PrePhysics->SetAIModuleResultInterface(
+            lpAIOutputBuffer->GetAIModuleResultInterfaceConst());
     }
 }
 

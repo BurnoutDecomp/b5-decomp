@@ -643,6 +643,31 @@ namespace Vehicle
         //   is the request/result pump listed at the top of this banner. Full working-out in
         //   BrnRaceCar.cpp::RequestResetOnTrack. So a HEAVY
         //   crash ends logically and the car is never placed back on the road: it pins.
+        //
+        // ⭐⭐⭐ BOUNDARY MOVED AGAIN 2026-08-26 (resetpump wave), AND THE PARAGRAPH ABOVE IS
+        //   NOW HISTORY, NOT STATUS. THE PUMP IS PLUMBED AND A REQUEST HAS TRAVERSED IT.
+        //   RCEM::{WriteUpdatedAIData, SendResetOnTrackRequests, ProcessResetOnTrackResultQueue},
+        //   the two AI bridges, AIModule::{Update slice, ProcessRequestInterface,
+        //   UpdateResetOnTrackManager} and VehicleManager::GenerateAboveGroundLineTests are all
+        //   REAL. MEASURED (runs rp_crash2 / rp_crash3, asserts=0, no AV): a forced heavy crash
+        //   ends, the request leaves the race-car module, the AI module receives and resolves it,
+        //   the result comes back, and ActiveRaceCar::RequestPlaceOnTrack PUTS THE CAR BACK ON
+        //   THE ROAD -- after which it drives about a kilometre.
+        //
+        // ⛔⛔ THE FLAG STAYS ANYWAY, FOR A DIFFERENT AND SMALLER REASON, AND SAYING SO IS THE
+        //   WHOLE POINT OF KEEPING IT: NOTHING CLEARS THE CRASH STATE. After the recovery
+        //   mbCrashing is STILL 1, mfTimeCrashing restarts and climbs (74 s while the car was
+        //   driving normally), and no LEAVE_CRASHED is ever posted. A player would be recovered
+        //   and then drive for ever with the crash bar up and every reader of
+        //   IsPlayerCarCrashing lying.
+        //   ⭐ THE NEXT RUNG IS ONE DISPATCH, and it is not in this file:
+        //   VehicleManager::ProcessResetEvents @0x82617820 ends its per-car work with
+        //       if (mbResetTransform) VehiclePhysics::Reset(transform);   // 0x82617DF8
+        //       else                  (*(vtbl(car) + 4))(car);            // 0x82617E00  <- LIVE
+        //   Every reset this build issues carries resetTransform == 0, so the ELSE arm is the one
+        //   that runs -- and that RaceCarPhysics vtable slot is PARKED (its occupant is not
+        //   settled in this tree), so NOTHING IS DISPATCHED. ⭐ Probe that slot, do not reason
+        //   about it (see the vtable slot-0 Create precedent).
         //   (Measured, with the control that could falsify it: run cx_flow3 pinned at
         //   (2932,-10.8,~209) for 80 s on the identical build that "recovered" in cx_flow6 --
         //   and cx_flow6's re-acceleration began BEFORE the complete event, i.e. it was physics
@@ -675,24 +700,27 @@ namespace Vehicle
                     {
                         *CgsDev::Log::gpDebugPrint
                             << "[bringup] CRASH ENTRY DISABLED (BRN_ENABLE_CRASH_ENTRY is not set)."
-                            << " Crash entry is reconstructed and correct; crash RECOVERY needs"
-                            << " the BrnAI::ResetOnTrackManager REQUEST/RESULT PUMP. The module"
-                            << " lifecycle under it is real as of 2026-08-26 (AI.dat loads,"
-                            << " WorldMapData resolves, the manager is Constructed with its"
-                            << " 35-entry AI-car array -- see the [ai] lines above), and"
-                            << " ResetOnTrackManager::{Update, ProcessResetOnTrackRequest,"
-                            << " ComputeResetOnTrack} are bodied. What is still missing is the"
-                            << " PLUMBING that would call them: RCEM::SendResetOnTrackRequests,"
-                            << " the two AI bridges, AIModule::Update, and"
-                            << " ProcessResetOnTrackResultQueue. Two MEASURED blockers sit under"
-                            << " those (2026-08-26): VehicleManager::GenerateAboveGroundLine"
-                            << "Tests is absent, so no car ever enters the AI section system"
-                            << " ([collision-tag] aboveGroundValid=0); and"
-                            << " RCEM::WriteUpdatedAIData is absent, so"
-                            << " RaceCarAIInterface::mbPlayerDataSet is never set and"
-                            << " AIModule::Update would skip its whole body. So a heavy crash"
-                            << " would still pin the car. Set BRN_ENABLE_CRASH_ENTRY=1 to"
-                            << " exercise the full chain.\n";
+                            << " BOUNDARY MOVED 2026-08-26 (resetpump wave), and the REASON THIS LINE"
+                            << " USED TO PRINT IS RETIRED: the reset-on-track REQUEST/RESULT PUMP IS"
+                            << " PLUMBED END TO END AND A REQUEST HAS TRAVERSED IT. Measured, runs"
+                            << " rp_crash2 / rp_crash3: crash -> CRASH COMPLETE -> [resetpump] request"
+                            << " SENT -> RECEIVED by the AI module -> [rot] request resolved -> RESULT"
+                            << " applied -> ActiveRaceCar::RequestPlaceOnTrack, and the car IS put back"
+                            << " on the road (ResetActiveRaceCar RE-RESET + a seated pose) and drives"
+                            << " ~1 km afterwards, asserts=0, no AV.\n"
+                            << "[bringup] ...AND THE FLAG STAYS FOR ONE REMAINING, MEASURED REASON:"
+                            << " NOTHING CLEARS THE CRASH STATE. mbCrashing is still 1 and"
+                            << " mfTimeCrashing was still climbing (74 s) with the car driving normally,"
+                            << " and no LEAVE_CRASHED is ever posted -- so a player would be recovered"
+                            << " but PERMANENTLY FLAGGED CRASHING (crash bar on, and every consumer of"
+                            << " IsPlayerCarCrashing wrong). THE NEXT RUNG IS ONE DISPATCH:"
+                            << " VehicleManager::ProcessResetEvents @0x82617820 branches"
+                            << " `if (mbResetTransform) VehiclePhysics::Reset(t) else (*(vtbl(car)+4))(car)`"
+                            << " (asm 0x82617DF0 / 0x82617E00). EVERY reset on this build carries"
+                            << " resetTransform=0, so the ELSE arm is the live one -- and that"
+                            << " RaceCarPhysics vtable slot is PARKED here, so nothing is dispatched."
+                            << " Settle that slot and the crash state clears with it."
+                            << " Set BRN_ENABLE_CRASH_ENTRY=1 to exercise the full chain.\n";
                     }
                     ++sliSuppressed;
                     *CgsDev::Log::gpDebugPrint

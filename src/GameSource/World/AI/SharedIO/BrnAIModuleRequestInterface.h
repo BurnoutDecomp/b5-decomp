@@ -70,6 +70,16 @@ namespace BrnAI
             {
                 return &mResetOnTrackRequestQueue;
             }
+            // ADDITIVE 2026-08-26 (resetpump wave). The console's producer --
+            // RCEM::SendResetOnTrackRequests @0x822CE178 -- hands the INTERFACE POINTER
+            // straight to EventQueue<ResetOnTrackRequest,128>::AddEvent (`mr r3, r24` where
+            // r24 is the interface), which works only because this queue is the interface's
+            // first and only member. The same address reached by name, per the tree's
+            // "parity by named members" rule.
+            ResetOnTrackRequestQueue* GetResetOnTrackRequestQueue()
+            {
+                return &mResetOnTrackRequestQueue;
+            }
 
         private:
             ResetOnTrackRequestQueue mResetOnTrackRequestQueue;   // DWARF :109

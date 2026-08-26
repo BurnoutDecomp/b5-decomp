@@ -143,6 +143,12 @@ namespace AIModuleIO
         // X360 0x8276DD10 (W, :472) / 0x8279CD48 (R, :479).
         u8* GetAIModuleResultInterfaceForWrite();
         u8* GetAIModuleResultInterface();
+        // ADDITIVE 2026-08-26 (resetpump wave), same precedent as GetAICarOutputInterfaceConst
+        // above: the SAME read-locked seat (X360 0x8279CD48, this+0x17F50), typed and const, so
+        // WorldModule::BridgeAIToEntityModules_PrePhysics -- which takes the buffer by const
+        // pointer exactly as the console does -- can reach the interface BY NAME. The untyped
+        // u8* twin stays for the callers that hand the raw seat on.
+        const AIModuleResultInterface* GetAIModuleResultInterfaceConst() const;
 
     private:
         // @X360 +0x0004. Exact-size confirmed: 4096 + 16 == 0x1010 == 0x1014 - 0x4.

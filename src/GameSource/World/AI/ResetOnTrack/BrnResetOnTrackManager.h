@@ -21,14 +21,28 @@
 // (AISectionsData::muVersion reads 12 over 7639 sections / 3273824 B). AIModuleIO::OutputBuffer
 // has a real member layout and a real Construct. AIModule::Construct now also builds the
 // 35-entry AI-car array this manager indexes (2026-08-26, aicar_reset).
-// ⭐ WHAT IS ACTUALLY LEFT, MEASURED THIS WAVE rather than inferred:
-//     * RaceCarEntityModule::WriteUpdatedAIData @0x822D1FC8 is ABSENT, so
-//       AIModuleIO::RaceCarAIInterface::mbPlayerDataSet is never set -- and AIModule::Update
-//       @0x8279B478 skips its WHOLE body on that flag. Nothing calls this class's Update yet.
-//     * VehicleManager::GenerateAboveGroundLineTests @0x82633990 is ABSENT, so no car is ever
-//       inside the AI section system ([collision-tag] aboveGroundValid=0 on every sample).
+// ⭐⭐⭐ UPDATED 2026-08-26 (resetpump wave): THE FIRST TWO ITEMS BELOW ARE DONE AND THIS
+// CLASS'S Update NOW HAS A CALLER. WriteUpdatedAIData and GenerateAboveGroundLineTests are
+// both landed, AIModule::Update runs (a minimal-complete slice), and a real reset-on-track
+// request has been resolved by ProcessResetOnTrackRequest on a booted run --
+// `[rot] request resolved: car 0 type 1 -> FAILURE (consumer uses GetResetCoords) resetCount 1`
+// -- after which RCEM::ProcessResetOnTrackResultQueue put the car back on the road.
+// ⚠️ AND THE ANSWER IS STILL E_STATE_FAILURE ON EVERY REQUEST, exactly as this file's own
+// pump banner predicts: every AICar is INACTIVE, so ComputeInitialCoordinatesStandard refuses at
+// the console's own gate and the consumer falls back to the car's own ring. That is the console's
+// designed fallback, and it is what recovers the car today.
+// ⭐ WHAT IS ACTUALLY LEFT (2026-08-26, measured):
+//     * [DONE] RaceCarEntityModule::WriteUpdatedAIData @0x822D1FC8 -- landed; mbPlayerDataSet is
+//       set every frame and AIModule::Update's body runs.
+//     * [LANDED, AND MEASURED TO CHANGE NOTHING YET] VehicleManager::GenerateAboveGroundLine-
+//       Tests @0x82633990. The producer runs and posts the query; [collision-tag]
+//       aboveGroundValid is STILL 0 on every sample, because the SceneManager fine-query
+//       pipeline that would ANSWER it is stubbed in five places. So no car is in the AI section
+//       system yet and this manager's ring stays empty -- see that function's own banner.
 //     * the 28 geometry siblings (Scan*/Avoid*/Convert*/Test*HNG/...) are still absent; they are
-//       parked at their own sites in the .cpp, each behind the console's own gate.
+//       parked at their own sites in the .cpp, each behind the console's own gate. They are what
+//       would turn the FAILURE answers into SUCCESS answers (a road pose instead of the car's
+//       own last pose) -- an improvement, not a blocker.
 //
 // ---- 2026-08-25, superseded: ----------------------------------------------------------------
 // ⛔⛔ BUT THE MANAGER IS NOT THE BLOCKER. It is an EMBEDDED MEMBER of AIModule at +286128 and

@@ -387,6 +387,43 @@ namespace Vehicle
             BrnPhysics::Deformation::DeformationInputInterface* lpDeformationInterface,
             EActiveRaceCarIndex leRaceCarIndex);
 
+        // ⭐⭐ X360 @0x82633990 -- THE PRODUCER HALF of the above-ground down-ray whose RESULT
+        // half (ProcessAboveGroundLineTestsResults, below) has been live all along. Its ONLY
+        // caller is PhysicsModule::GenerateSceneQueries @0x825A1428.
+        //
+        // ⛔ WHAT ITS ABSENCE COST, MEASURED (aicar_reset wave, 2026-08-26): with no producer,
+        // RaceCarState::mAboveGroundTestResult.mbValid was FALSE on every frame of every drive
+        // ([collision-tag] aboveGroundValid=0, tag 0xFFFF8000 == AboveGroundTestResult::Reset's
+        // clear value), so RCEM::UpdateRaceCarCollisionTagging early-returned, muCurrAISection
+        // stayed KI_INVALID_SECTION_INDEX (0x7FFF) for every car, NO CAR EVER ENTERED THE AI
+        // SECTION SYSTEM, and ActiveRaceCar::UpdateResetTransform never pushed a single entry
+        // into the four-deep mPrevTransforms reset ring.
+        // ⭐ It is NOT a blocker for crash recovery -- GetResetCoords' empty-ring arm hands out
+        // the car's live transform -- but it is the difference between "put the car back where
+        // it crashed" and "put it back on the last road pose it held".
+        //
+        // ⛔⛔ LANDED 2026-08-26 AND IT CHANGED NOTHING YET -- MEASURED, SAY IT PLAINLY. On the
+        // very run that proved the reset pump (rp_crash3) the witness still reads
+        //     [collision-tag] car 0 aboveGroundValid=0 tag=0xFFFF8000 section=32767
+        // on every sample. The producer runs and posts the query; THE ANSWER NEVER COMES BACK.
+        // ⭐⭐ AND THE PREVIOUS WAVE'S NOTE IS WHY THAT WAS A SURPRISE: it recorded "the RESULT
+        // half of that round trip is already fully live", which was true of the VEHICLE-MANAGER
+        // side (WorldBridgeSceneToPhysics case 2 -> AddLineTestResult ->
+        // ProcessAboveGroundLineTestsResults -> SetAboveGroundTestResult, all bodied) and says
+        // NOTHING about whether anything ANSWERS a fine query. Nothing does: the SceneManager
+        // query pipeline is severed in five places (SceneManagerModule::ProcessSceneQueries is a
+        // WorldLinkStubs stub, ProcessFineQueries / ProcessLineTestFine are absent, and
+        // FineIntersectionTestModule::ComputeLineTestFine is an EMPTY body with no callers) --
+        // the same five severances BrnPlaceOnTrackManager.cpp's own bring-up leg was written for.
+        // ⭐ THE LESSON, because it is the third time this campaign: "THE CONSUMER IS BODIED" IS
+        // NOT "THE QUESTION GETS ANSWERED". A round trip has three parts, and the middle one here
+        // is a different subsystem.
+        // DELETE-WHEN the SceneManager fine-query pipeline answers a query; this producer is then
+        // already in place and the AI section system starts filling on its own.
+        // BODIED in the slice TU.
+        void GenerateAboveGroundLineTests(
+            BrnPhysics::Vehicle::VehicleOutputRequestInterface* lpRequestInterface);
+
         // DWARF h:866; X360 @0x826183F8. BODIED in the slice TU. (Raw EventQueue
         // instantiation spelling == VehicleInputInterface::InLineTestResultQueue; the
         // typedef does not change the type -- same precedent as ValidateSimulationContacts.)

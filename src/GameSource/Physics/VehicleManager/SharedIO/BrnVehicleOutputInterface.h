@@ -510,6 +510,13 @@ namespace Vehicle
         // accessors, now X360-ATTESTED by BridgeVehicleManagerToSimulation_PostPhysics
         // @0x825ADF60, which reads exactly these three seats (+9616 / +0 / +23888) off the
         // request interface and feeds them to the sim Append*Queue drains.
+        // ADDITIVE 2026-08-26 (resetpump wave): the FOURTH of the DWARF's five Get*Queue
+        // accessors, now X360-ATTESTED. VehicleManager::GenerateAboveGroundLineTests @0x82633990
+        // forms `addi r15, r4, 0x28C0` on this very interface and then calls
+        // VariableEventQueue<13440,16>::AddEvent<InEventLineTestNearest> on it -- i.e. the
+        // console inlined this accessor at that call site, and +0x28C0 is mRequestFineLineQueue.
+        OutFineQueryQueue*             GetRequestFineLineQueue()        { return &mRequestFineLineQueue; }
+
         InRemoveRigidBodyQueue*        GetRemoveRigidBodyQueue()        { return &mRemoveRigidBodyQueue; }
         InAddRigidBodyQueue*           GetRequiredRigidBodiesQueue()    { return &mRequiredRigidBodiesQueue; }
         InChangeRigidBodyInertiaQueue* GetChangeRigidBodyInertiaQueue() { return &mChangeRigidBodyInertiaQueue; }
