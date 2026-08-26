@@ -675,6 +675,11 @@ namespace BrnGui
         // DECLARATION-ONLY per the far-member convention (body links from the GuiCache TU).
         s32 GetCamStatus() const;                            // X360 far member @0x13B58
 
+        // ADDITIVE GROW (BrnGui::FriendsListComponent TU). BuildShortcutOptions
+        // @0x824145B0 gates the offline shortcut list's option-1 entry on this far byte
+        // (`lbzx r10, cache, 0x13B9A`). DECLARATION-ONLY per the far-member convention.
+        bool GetOfflineShortcutProgressGate() const;          // X360 far member @0x13B9A
+
         // ADDITIVE GROW (BrnCarSelectVehicle TU). The car-select "transition already shown"
         // gate at X360 far member @0x13B5E -- see the member's own note. Header-inline (a
         // single byte read; the X360 reader inlines the raw far-member load too).

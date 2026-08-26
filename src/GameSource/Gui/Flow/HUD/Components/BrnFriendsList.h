@@ -47,8 +47,11 @@ namespace BrnGui
     // E_SHORTCUT_OPTION_COUNT / maeAvailableShortcutOptions).
     enum EShortCutOption
     {
-        E_SHORTCUT_OPTION_NONE  = -1,
-        E_SHORTCUTOPTION_COUNT  = 21,
+        E_SHORTCUT_OPTION_NONE     = -1,
+        E_SHORTCUTOPTION_FRIENDS   = 0,
+        // ids 2..20 are posted verbatim from BuildShortcutOptions' rodata-driven
+        // order; display spellings are not DWARF-attested so no names are invented.
+        E_SHORTCUTOPTION_COUNT     = 21,
     };
 
     // [friends wave] base corrected: the X360 Construct stores the interface at +0x00
