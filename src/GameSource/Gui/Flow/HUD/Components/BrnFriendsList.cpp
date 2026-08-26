@@ -10,6 +10,7 @@
 #include "GameSource/Gui/Flow/HUD/Components/BrnFriendsList.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"
+#include "GameSource/Gui/BrnGuiFreeburnChallengeManager.h" // IsRunning/IsShowingResults tier reads
 #include "GameSource/Gui/Flow/HUD/Components/BrnFriendsListEntry.h" // LobbyNameCmp   // CGS_ASSERT
 
 // ===================================================================================
@@ -284,5 +285,120 @@ bool FriendsListComponent::MoveHighlightDueToBranchOpen()
         mi8SelectedRowIndex = mi8SelectedIndex;
     return false;
 }
+
+
+// ===================================================================================
+// [friends wave -- BODY TRANCH 2] data producers + not-connected/no-friends arms.
+// ===================================================================================
+
+// @0x82414288 BuildShortcutOptions ---------------------------------------------------
+void FriendsListComponent::BuildShortcutOptions()
+{
+    muNumEntries = 0;
+    maeAvailableShortcutOptions[0] = E_SHORTCUTOPTION_FRIENDS;      // always first @0x824142A0
+    ++muNumEntries;
+
+    if (!mpGuiCache->IsOnlineStartInProgress())                     // offline arm @0x82414588
+    {
+        maeAvailableShortcutOptions[muNumEntries++] = 2;            // @0x82414594
+        if (mpGuiCache->GetOfflineShortcutProgressGate())           // far byte +0x13B9A @0x824145B0
+            maeAvailableShortcutOptions[muNumEntries++] = 1;        // @0x824145C0
+        maeAvailableShortcutOptions[muNumEntries++] = 3;            // @0x824145DC block
+        maeAvailableShortcutOptions[muNumEntries++] = 4;
+        maeAvailableShortcutOptions[muNumEntries++] = 5;
+        maeAvailableShortcutOptions[muNumEntries++] = 6;
+        maeAvailableShortcutOptions[muNumEntries++] = 7;
+        maeAvailableShortcutOptions[muNumEntries++] = 8;
+    }
+    else                                                            // online arm @0x824142C0
+    {
+        const FreeburnChallengeManager* lpMgr = mpGuiCache->GetFreeburnChallengeManager();
+        const bool lbRunning  = lpMgr->IsRunning();                 // tier==3 @0x8241435C
+        const bool lbResults  = lpMgr->IsShowingResults();          // tier==4 @0x8241437C
+
+        if (!mpGuiCache->mbIsOnlineHost)                            // +0xB864 == 0 @0x8241444C
+        {
+            if (!(lbRunning || lbResults))
+                maeAvailableShortcutOptions[muNumEntries++] = 1;    // @0x82414480
+            if (!(mpGuiCache->meOnlineGameMode == 15 ||
+                  mpGuiCache->meOnlineGameMode == 16))
+                maeAvailableShortcutOptions[muNumEntries++] = 16;   // @0x824144CC..D0
+        }
+        else                                                        // host arm @0x82414304
+        {
+            const bool lbInLobby = (mpGuiCache->meOnlineGameMode == 15 ||
+                                    mpGuiCache->meOnlineGameMode == 16);
+            if (lbInLobby)                                          // @0x82414304..54
+            {
+                maeAvailableShortcutOptions[muNumEntries++] = 9;
+                maeAvailableShortcutOptions[muNumEntries++] = 16;
+                maeAvailableShortcutOptions[muNumEntries++] = 17;
+            }
+            if (lbRunning)
+                maeAvailableShortcutOptions[muNumEntries++] = 14;   // @0x8241436C
+            else if (!lbResults)
+            {
+                if (static_cast<s32>(mpGuiCache->muNumActivePlayers) > 1)   // +0xAC74
+                    maeAvailableShortcutOptions[muNumEntries++] = 15;
+                maeAvailableShortcutOptions[muNumEntries++] = 1;    // @0x824143D0
+            }
+            if (lbInLobby)
+                maeAvailableShortcutOptions[muNumEntries++] = 10;   // @0x82414414
+        }
+        if (!mpGuiCache->mbOnlineRanked)                            // +0xA9DF @0x82414438
+            maeAvailableShortcutOptions[muNumEntries++] = 19;       // @0x824144D0
+        if (mpGuiCache->meOnlineGameMode == 11)                     // @0x824144EC..F8
+            maeAvailableShortcutOptions[muNumEntries++] = 11;
+        maeAvailableShortcutOptions[muNumEntries++] = 12;           // always @0x8241451C..
+        maeAvailableShortcutOptions[muNumEntries++] = 18;           // ..58 block
+        maeAvailableShortcutOptions[muNumEntries++] = 20;
+        maeAvailableShortcutOptions[muNumEntries++] = 13;
+    }
+
+    ++muNumEntries;                                                 // @0x82414674
+    for (s32 i = muNumEntries; i < E_SHORTCUTOPTION_COUNT; ++i)     // sentinel pad @0x82414684
+        maeAvailableShortcutOptions[i] = E_SHORTCUTOPTION_COUNT;
+}
+
+// @0x824234B8 WithdrawBranches ---------------------------------------------------------
+void FriendsListComponent::WithdrawBranches()
+{
+    s32 leTarget;
+    switch (meBranchState)                                          // switch(me-7) @0x824234DC
+    {
+        case E_FRIENDLISTBRANCH_FIRST_OF_ONE:    leTarget = E_FRIENDLISTBRANCH_ONE_OUT;   break;
+        case E_FRIENDLISTBRANCH_FIRST_OF_TWO:
+        case E_FRIENDLISTBRANCH_SECOND_OF_TWO:   leTarget = E_FRIENDLISTBRANCH_TWO_OUT;   break;
+        case E_FRIENDLISTBRANCH_FIRST_OF_THREE:
+        case E_FRIENDLISTBRANCH_SECOND_OF_THREE:
+        case E_FRIENDLISTBRANCH_THIRD_OF_THREE:  leTarget = E_FRIENDLISTBRANCH_THREE_OUT; break;
+        default: return;
+    }
+    meBranchState = leTarget;                                       // @0x8242352C
+    SetDirty();
+    meBranchState = E_FRIENDLISTBRANCH_INVISIBLE;                   // @0x82423534
+    mi8CurrentlyHighlightedBranch = 0;                              // @0x82423538
+}
+
+// @0x82422CB0 SetEntryData ---------------------------------------------------------------
+void FriendsListComponent::SetEntryData(s32 liRow, const char* lpcText, s32 leStatus,
+                                        bool lbLocalise)
+{
+    CGS_ASSERT(liRow >= 0 && liRow < KI_VISIBLE_ROWS, "Invalid index: \n");   // cpp:0x339
+    CGS_ASSERT(lpcText != 0, "lpcPlayerName != NULL");                        // cpp:0x33A
+
+    FriendsListEntry& lrEntry = maEntries[liRow];                   // +0x8A0 + row*0x98
+    lrEntry.Invalidate();                                           // entry vtable+4 @0x82422DB8
+    if (lbLocalise)
+        lrEntry.GetNameField().SetLocalisedText(lpcText, 9);  // ID_LOOKUP @0x82422DE0
+    else
+        lrEntry.GetNameField().SetText(lpcText, false);       // @0x82422DFC
+    lrEntry.SetEntryStatus(static_cast<FriendsListEntry::EFriendListEntryState>(leStatus));   // @0x82422E08
+}
+
+
+
+
+
 
 } // namespace BrnGui

@@ -137,6 +137,12 @@ namespace BrnGui
         EFriendListEntryState GetEntryStatus() const;
         void SetText(const char* lpacText, bool lbLocalise);
         void SetEntryStatus(EFriendListEntryState leStatus);
+
+        // GROWN [friends wave]: BoostMessageManager-style additive accessors -- the
+        // manager's SetEntryData writes the row name field directly on console
+        // (@0x82422DDC SetLocalisedText / @0x82422DFC SetText on +0x80).
+        BrnFlapt::TextFieldRef&       GetNameField()       { return mPlayerNameTextField; }
+        const BrnFlapt::TextFieldRef& GetNameField() const { return mPlayerNameTextField; }
         virtual void Select();
         void SetIndexText(s32 liIndex);
 
