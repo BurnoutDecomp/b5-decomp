@@ -12,6 +12,25 @@
 // set, the direct closure is 37 functions / 5,307 instructions (33 of them this class,
 // ~4,750 insns) -- more than double the "~2500" the crash briefs have been carrying.
 //
+// ⚠️⚠️ THE PARAGRAPH BELOW IS 2026-08-25 HISTORY AND ITS HEADLINE IS NOW FALSE -- READ THIS
+// FIRST. It said "THE MANAGER IS NOT THE BLOCKER -- the AI module does not run at all", and it
+// was true on the day it was written. It stopped being true on 2026-08-26 (aimodule slice 1):
+// AIModule::{Construct, Prepare, LoadMapData} are real bodies in GameSource/World/AI/
+// BrnAIModule.cpp, AI.dat loads, "WorldMapData" resolves, and THIS OBJECT IS CONSTRUCTED against
+// a bound road network -- measured on the boot log with a falsifying control
+// (AISectionsData::muVersion reads 12 over 7639 sections / 3273824 B). AIModuleIO::OutputBuffer
+// has a real member layout and a real Construct. AIModule::Construct now also builds the
+// 35-entry AI-car array this manager indexes (2026-08-26, aicar_reset).
+// ⭐ WHAT IS ACTUALLY LEFT, MEASURED THIS WAVE rather than inferred:
+//     * RaceCarEntityModule::WriteUpdatedAIData @0x822D1FC8 is ABSENT, so
+//       AIModuleIO::RaceCarAIInterface::mbPlayerDataSet is never set -- and AIModule::Update
+//       @0x8279B478 skips its WHOLE body on that flag. Nothing calls this class's Update yet.
+//     * VehicleManager::GenerateAboveGroundLineTests @0x82633990 is ABSENT, so no car is ever
+//       inside the AI section system ([collision-tag] aboveGroundValid=0 on every sample).
+//     * the 28 geometry siblings (Scan*/Avoid*/Convert*/Test*HNG/...) are still absent; they are
+//       parked at their own sites in the .cpp, each behind the console's own gate.
+//
+// ---- 2026-08-25, superseded: ----------------------------------------------------------------
 // ⛔⛔ BUT THE MANAGER IS NOT THE BLOCKER. It is an EMBEDDED MEMBER of AIModule at +286128 and
 // its ONLY constructor call site is AIModule::Prepare @0x82798070 stage 3:
 //     ResetOnTrackManager::Construct(module+286128, GetAISectionsData(), module+560)
@@ -30,6 +49,7 @@
 // ⇒ ORDER OF WORK: AIModule named members + lifecycle + the AIModuleIO buffer layouts (with
 //   real Construct overrides -- un-gating a producer into an unconstructed queue is how the
 //   crash-exit wave earned two access violations on the same day), THEN this class.
+// ---- end 2026-08-25 -------------------------------------------------------------------------
 // Reference: scratchpad resetontrack_log.md. OFFSET AUTHORITY = the X360 asm of GetAICar; member NAMES/TYPES/ORDER = DWARF
 // (references/DecFIGS/.../BrnResetOnTrackManager.h). Pinned layout:
 //   mResetOnTrackRequestQueue @0x000  Array<ResetOnTrackRequest,35u>  (35*16 + s32 miCount
@@ -83,7 +103,14 @@ namespace BrnAI
 {
     struct AICar;                 // pointer-only here (opaque, sizeof == 0x1560 == 5472)
     struct AISectionsData;        // resource type held by ResourcePtr
-    struct AIModuleResultInterface;
+    // ⚠️ CORRECTED 2026-08-26 (aicar_reset wave). This was `struct AIModuleResultInterface;` at
+    // BrnAI scope -- a DIFFERENT, never-defined type from the real one, which lives in the nested
+    // AIModuleIO namespace (BrnAIModuleResultInterface.h). Nothing had noticed because Update was
+    // declaration-only: the moment a body dereferenced the parameter it would have been an
+    // incomplete-type error at best, and had a BrnAI::AIModuleResultInterface ever been defined,
+    // an ODR fork at worst. [[shadowing redeclarations]] / [[ODR forks link silently]].
+    namespace AIModuleIO { struct AIModuleResultInterface; }
+    using AIModuleIO::AIModuleResultInterface;
 
     struct ResetOnTrackManager
     {
@@ -96,6 +123,21 @@ namespace BrnAI
             f32     mfTime;    // +0x10
         };
 
+        // The 48-byte out-parameter every Compute*/Reset* placement strategy fills.
+        // ComputeInitialCoordinatesStandard @0x82783DD8 writes it as
+        //     `*out = lpAISection`                      (stw  r26)
+        //     `stvx128 v126, r26, 16`  -> the position
+        //     `stvx128 v127, r26, 32`  -> the direction
+        // and ComputeResetOnTrack passes the same 48-byte stack block to every strategy, so the
+        // shape is the strategies' shared contract rather than one function's local. The section
+        // pointer is opaque here (AISection's own home is the AI section-data TU, unmounted).
+        struct alignas(16) ResetOnTrackCoords
+        {
+            const void* mpAISection;   // +0x00  (AISection*, opaque on this build)
+            Vector3     mPosition;     // +0x10
+            Vector3     mDirection;    // +0x20
+        };
+
         // ---- public API -------------------------------------------------------------------
         // X360 0x82791A48. Called from EXACTLY ONE site in the whole image: AIModule::Prepare
         // @0x82798070 stage 3.
@@ -104,7 +146,39 @@ namespace BrnAI
         // Has Construct bound a road network? (Raw test, no assert.)
         bool HasAISectionData() const { return mpAISectionData.HasMemoryResource(); }
         const AICar* GetAICarArray() const { return mpaAICars; }
+
+        // ⭐⭐⭐ @0x8279A890. THE PUMP (aicar_reset wave 2026-08-26). Age the recent-reset ring,
+        // drain the pending request queue into ProcessResetOnTrackRequest, then refresh every
+        // ACTIVE car's reset-on-track section.
+        //
+        // ⚠️ THE CONSOLE PASSES A FOURTH ARGUMENT AND IT IS DROPPED HERE, DELIBERATELY.
+        // AIModule::UpdateResetOnTrackManager @0x8279AC20 copy-constructs a stack Camera from
+        // `module + 322048` and passes it in r7; the callee's first act is
+        // `Camera::operator=(this + 0x38C, r7)` -- i.e. it fills mCamera, this class's SCRATCH
+        // camera. r6 is never set at the call site: that is not a dropped argument, it is the GPR
+        // slot the f1 float parameter burns on this ABI (the same trap
+        // BrnRaceCarEntityModule_CrashExit.cpp:78 documents for RequestResetOnTrack).
+        // mCamera is `u8[0x164]` here -- an opaque blob with no named interior -- and its ONLY
+        // readers are the parked geometry arms (ComputeInitialCoordinates* / the debug component).
+        // Copying a Camera into an untyped 356-byte hole to satisfy a parameter nothing live reads
+        // is exactly the offset-poke this tree keeps paying for. Restore the parameter WITH the
+        // Camera member's real type.
         void Update(AIModuleResultInterface* lpResults, EGlobalRaceCarIndex lePlayer, f32 lfTime);
+
+        // @0x82799D38. Resolve ONE request: compute a reset pose, publish a ResetOnTrackResult
+        // (SUCCESS with the pose, or FAILURE so the consumer falls back to the car's own
+        // reset-coords ring), and remember it in mRecentResets.
+        void ProcessResetOnTrackRequest(const AIModuleIO::ResetOnTrackRequest* lpRequest,
+                                        AIModuleResultInterface* lpResults, f32 lfTime);
+
+        // @0x82797D78. Dispatch on the request's reset type to one of seven placement
+        // strategies, then run AvoidObstacles. Returns false when no pose could be found.
+        bool ComputeResetOnTrack(ResetOnTrackCoords* lpOutCoords,
+                                 const AIModuleIO::ResetOnTrackRequest* lpRequest);
+
+        // @0x82783DD8. Reset type 1 (E_RESET_TYPE_STANDARD) -- the type the CRASH EXIT uses.
+        bool ComputeInitialCoordinatesStandard(ResetOnTrackCoords* lpOutCoords,
+                                               EGlobalRaceCarIndex leGlobalRaceCarIndex);
 
         // @0x82769E88. Append a reset-on-track request to mResetOnTrackRequestQueue
         // (forwards to Array<ResetOnTrackRequest,35>::Append). Declared-only here; the body

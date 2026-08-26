@@ -947,6 +947,48 @@ public:
     CgsSceneManager::VolumeInstanceId GetHandlingBodyVolumeId() const
     { return mHandlingBodyVolumeId; }                                                         // +0x0D0
 
+    // ================================================================================
+    // ⭐⭐⭐ THE RESET-ON-TRACK RING (aicar_reset wave 2026-08-26). THE THREE FUNCTIONS
+    // THAT MAKE "WHERE DO I PUT A CRASHED CAR BACK" ANSWERABLE ON THIS BUILD.
+    //
+    // ⚠️⚠️ AND THEY RETIRE A FOUR-BANNER CLAIM THAT WAS HALF WRONG -- in the expensive
+    // direction. Every crash brief in this tree carries some form of
+    //     "GetResetCoords reads mPrevTransforms, which this tree Constructs, Clear()s and
+    //      NEVER WRITES -- it would place the car at the origin. Do not take this shortcut."
+    // The first clause is (was) true. THE SECOND IS NOT, and the asm says so outright:
+    //     0x822BF318  lwz  r11, 0x5A0(r31)          <- mPrevTransforms.miLength
+    //     0x822BF320  bgt  cr6, loc_822BF33C        <- length > 0 : read the ring
+    //     0x822BF37C  li   r11, 0x300 ; li r10, 0x2F0
+    //     0x822BF384  lvx128 v0, r31, r11           <- length == 0 : mPhysicsState.mTransform
+    // An EMPTY ring falls back to the car's LIVE transform ({wAxis, zAxis} of
+    // mPhysicsState.mTransform), not to the origin. The "origin" reading came from
+    // BrnPlaceOnTrackManager's own arm, where the car is FRESHLY ATTACHED and its
+    // mPhysicsState is itself unseeded -- true there, and it does not generalise.
+    // ================================================================================
+
+    // X360 0x822BF2D0. Where should this car be put back? Reads the OLDEST live entry of
+    // mPrevTransforms (mpData[miReadPos], i.e. operator[](0)) and hands out its
+    // {wAxis -> position, zAxis -> direction}; with an empty ring it hands out the same two
+    // rows of mPhysicsState.mTransform instead. Asserts IsAttached() (BrnActiveRaceCar.cpp:1022).
+    void GetResetCoords(Vector3* lpOutPosition, Vector3* lpOutDirection) const;
+
+    // X360 0x822BF8D0. THE ONLY WRITER of mPrevTransforms in the whole image (it is the sole
+    // caller of FixedRingBuffer<Matrix44Affine,4>::Push @0x822AD1A0). Per-frame, from
+    // RaceCarEntityModule::UpdateActiveRaceCarTransforms: when the car is sitting flat on
+    // drivable road, not crashing, not airborne and inside the AI section system, record its
+    // transform -- but only once every 15 m so the four-deep ring spans real distance.
+    void UpdateResetTransform();
+
+    // X360 0x822A51F0. Store the AI section index the collision tagging just read out from
+    // under the car (0x7FFF == "no section": remember the previous one and leave the system).
+    // Asserts IsActive() (BrnActiveRaceCar.cpp:1911).
+    void SetAISection(u16 lu16AISectionIndex);
+
+    // mbInsideAISectionSystem @+0x771 -- SetAISection's own latch, exposed for diagnostics.
+    bool IsInsideAISectionSystem() const              { return mbInsideAISectionSystem; }     // +0x771
+    // mPrevTransforms live depth, exposed for diagnostics (the ring itself stays private).
+    s32  GetResetTransformCount() const               { return mPrevTransforms.GetLength(); } // +0x5A0
+
 private:
     // ========================================================================
     // Layout (completed by the pose wave 2026-07-31).

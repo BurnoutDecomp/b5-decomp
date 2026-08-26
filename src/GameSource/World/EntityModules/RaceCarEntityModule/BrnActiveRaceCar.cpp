@@ -1879,4 +1879,230 @@ void ActiveRaceCar::ResetAfterCrash( bool lbKeepVerletOffsets )
     mbIsInShowtime         = false;
 }
 
+// =================================================================================================
+// THE RESET-ON-TRACK RING  (aicar_reset wave 2026-08-26)
+// =================================================================================================
+// Three console functions -- SetAISection, UpdateResetTransform, GetResetCoords -- that between
+// them answer "where does a crashed car go back". See the block banner on their declarations in
+// BrnActiveRaceCar.h for the four-banner claim they retire.
+//
+// ⭐ THE SURFACE COLLISION TAG IS THE AI SECTION INDEX. Nothing here queries the AI road network:
+// BrnWorld::CollisionTag is {u16 mu16GroupTag; u16 mu16MaterialTag} and GetAISectionIndex() is
+// `mu16GroupTag & KU_MAX_AI_SECTION_INDEX`. The section index is baked into the world's own
+// collision surfaces and arrives with every above-ground ray hit.
+//
+// ⚠️ TYPE FORK, PRE-EXISTING AND FLAGGED WHERE IT LIVES (BrnVehicleManager_TractionLineTests.cpp
+// :317): Wheel::RoadContact::mCollisionTag and AboveGroundTestResult::mCollisionTag are the
+// ONE-FIELD PLACEHOLDER `::CollisionTag { u32 muValue; }` (BrnCommonTypes.h:29), not
+// BrnWorld::CollisionTag, so the two field reads below are spelled as shifts on muValue -- the
+// same idiom VehiclePhysics::GetSurfaceLinearDrag and the traction-line harvest already use, and
+// the same halves: Wheel::AddTractionPoint packs the console's +0x26 halfword (the MATERIAL tag,
+// which carries the DRIVEABLE flag) into the LOW 16 bits and the +0x24 halfword (the GROUP tag,
+// which carries the section index) into the HIGH 16.
+// =================================================================================================
+
+namespace
+{
+    // BrnWorld::CollisionTag::IsDrivable() on the placeholder tag type. The console tests
+    // `lhz rN, 0x26(contact) ; srwi rN, rN, 13 ; clrlwi rN, rN, 31` -- bit 13 of the material
+    // halfword, which is BrnWorld::KU_COLLISION_FLAG_DRIVEABLE (8192).
+    // ⚠️ `::CollisionTag`, EXPLICITLY GLOBAL. Unqualified `CollisionTag` inside namespace
+    // BrnWorld binds to BrnWorld::CollisionTag (the REAL two-halfword type), which is NOT what
+    // RoadContact carries -- and the mistake would compile if the two ever gained a converting
+    // constructor. [[shadowing redeclarations]] in miniature.
+    inline bool TagIsDrivable( const ::CollisionTag& lrTag )
+    {
+        return ( lrTag.muValue & BrnWorld::KU_COLLISION_FLAG_DRIVEABLE ) != 0;
+    }
+
+    // The console's own 15 m gate, as the SQUARED literal it bakes (flt_82018E3C == 225.0f).
+    const f32 KF_RESET_TRANSFORM_MIN_DISTANCE_SQUARED = 225.0f;
+}
+
+// -------------------------------------------------------------------------------------------------
+// SetAISection @0x822A51F0
+//
+//   0x822A51F0  bl IsActive ; assert "IsActive()"                    (BrnActiveRaceCar.cpp:1911)
+//   if (index == 0x7FFF) { muPrevAISection = muCurrAISection;        (sth 0x73E -> 0x73C)
+//                          mbInsideAISectionSystem = false;          (stb 0, 0x771)
+//                          muCurrAISection = 0x7FFF; return; }
+//   if (!mbInsideAISectionSystem)      { muCurrAISection = index; muPrevAISection = 0x7FFF; }
+//   else if (index != muCurrAISection) { muPrevAISection = muCurrAISection; muCurrAISection = index; }
+//   mbInsideAISectionSystem = true;
+//
+// ⭐ THE ENTER/LEAVE ASYMMETRY IS THE CONSOLE'S, NOT A SIMPLIFICATION. Entering the system from
+// outside stamps muPrevAISection with the INVALID sentinel rather than with whatever stale section
+// the car left the system at -- so "which section did I come from" is only ever answered from a
+// contiguous run inside the system. Reproduced verbatim.
+// -------------------------------------------------------------------------------------------------
+void ActiveRaceCar::SetAISection( u16 lu16AISectionIndex )
+{
+    CGS_ASSERT( IsActive(), "IsActive()" );   // BrnActiveRaceCar.cpp:1911
+
+    if( lu16AISectionIndex == BrnWorld::KI_INVALID_SECTION_INDEX )
+    {
+        muPrevAISection         = muCurrAISection;
+        mbInsideAISectionSystem = false;
+        muCurrAISection         = BrnWorld::KI_INVALID_SECTION_INDEX;
+        return;
+    }
+
+    if( !mbInsideAISectionSystem )
+    {
+        muCurrAISection = lu16AISectionIndex;
+        muPrevAISection = BrnWorld::KI_INVALID_SECTION_INDEX;
+    }
+    else if( lu16AISectionIndex != muCurrAISection )
+    {
+        muPrevAISection = muCurrAISection;
+        muCurrAISection = lu16AISectionIndex;
+    }
+
+    mbInsideAISectionSystem = true;
+}
+
+// -------------------------------------------------------------------------------------------------
+// UpdateResetTransform @0x822BF8D0   (the ONLY writer of mPrevTransforms in the image)
+//
+//   0x822BF8E4  bl IsActive ; if (!active) return                    (no assert on this one)
+//   0x822BF900  r11 = this + 0x106 == &mPhysicsState.maWheels[0].mRoadContact.mCollisionTag + 2
+//   0x822BF904  loop x4, stride 0x70 == sizeof(WheelLite):
+//                 lbz  2(r11)   -> mRoadContact.mbIsOnGround      ; 0 -> break, flag = false
+//                 lhz  0(r11)   -> mRoadContact.mCollisionTag lo  ; bit 13 clear -> break, false
+//   0x822BF948  if (flag && !mPhysicsState.mbCrashing(0x52A))  -> record
+//   0x822BF954  else if (mbIsInShowtime(0x788)
+//                        && mPhysicsState.mAboveGroundTestResult.mbValid(0x2C8)
+//                        && that result's tag(0x2C6) is drivable) -> record
+//               else return
+//   0x822BF984  record: if (mPhysicsState.mfTimeInAir(0x4E4) != 0.0f) return
+//   0x822BF994          if (muCurrAISection(0x73E) == 0x7FFF)     return
+//   0x822BF9A0          if (mPrevTransforms.miLength(0x5A0) != 0
+//                           && MagnitudeSquared(mLastRecordedPosition(0x6B0)
+//                                               - mPhysicsState.mTransform.wAxis(0x300)) <= 225.0f)
+//                        return
+//   0x822BFA04          mLastRecordedPosition = mPhysicsState.mTransform.wAxis
+//   0x822BFA14          mPrevTransforms.Push(mPhysicsState.mTransform)     (this+0x2D0)
+//
+// ⭐ THE 15 m GATE IS WHAT MAKES A FOUR-DEEP RING USEFUL. GetResetCoords reads the OLDEST live
+// entry, so the ring is a "roughly 45-60 m back along the road I actually drove" memory, not the
+// last four frames. Recording every frame would make the reset a no-op teleport.
+// ⭐ `mfTimeInAir == 0.0f` is an exact float compare in the asm (`fcmpu` against flt_82001CC0 ==
+// 0.0f), not a tolerance. Kept exact.
+// ⚠️ The second arm (SHOWTIME) uses the single above-ground ray instead of the four wheels,
+// because a car in showtime is tumbling and its wheels are not on anything.
+//
+// ⛔⛔ MEASURED THE DAY IT LANDED: THIS FUNCTION RECORDS NOTHING YET, AND THE REASON IS ONE RUNG
+// UP, NOT HERE. `muCurrAISection` is written by exactly one thing -- RaceCarEntityModule::
+// UpdateRaceCarCollisionTagging, landed alongside this function -- and that reads
+// mPhysicsState.mAboveGroundTestResult, whose PRODUCER (VehicleManager::
+// GenerateAboveGroundLineTests @0x82633990, the only thing in the image that posts an
+// InEventLineTestNearest for a race car) is ABSENT from this tree. A booted drive run says so
+// outright:
+//     [collision-tag] car 0 aboveGroundValid=0 tag=0x-32768 ...   (0xFFFF8000, the CLEAR value)
+//     [rot-ring] player depth=0 aiSection=32767 inSystem=0
+// so this function's `muCurrAISection == KI_INVALID_SECTION_INDEX` gate refuses every frame.
+// ⭐ THAT IS NOT A REASON TO WITHHOLD IT. The wheel contacts ARE real on the same run
+// (wheel0OnGround=1, wheel0Tag drivable), the function sits at the console's own call site, and
+// its consumer GetResetCoords has a SECOND arm that works today. The moment the above-ground
+// round trip lands, the ring fills with no further change here.
+// DELETE-WHEN [rot-ring] reports a non-zero depth on a drive run.
+// -------------------------------------------------------------------------------------------------
+void ActiveRaceCar::UpdateResetTransform()
+{
+    if( !IsActive() )
+    {
+        return;
+    }
+
+    bool lbAllWheelsOnDrivableRoad = true;
+    for( s32 liWheel = 0; liWheel < 4; ++liWheel )
+    {
+        const BrnPhysics::Vehicle::Wheel::RoadContact& lrContact =
+            mPhysicsState.maWheels[liWheel].mRoadContact;
+
+        if( !lrContact.mbIsOnGround || !TagIsDrivable( lrContact.mCollisionTag ) )
+        {
+            lbAllWheelsOnDrivableRoad = false;
+            break;
+        }
+    }
+
+    const bool lbOnRoad = ( lbAllWheelsOnDrivableRoad && !mPhysicsState.mbCrashing );
+    const bool lbShowtimeOnRoad =
+        ( mbIsInShowtime
+          && mPhysicsState.mAboveGroundTestResult.mbValid
+          && TagIsDrivable( mPhysicsState.mAboveGroundTestResult.mCollisionTag ) );
+
+    if( !lbOnRoad && !lbShowtimeOnRoad )
+    {
+        return;
+    }
+
+    if( mPhysicsState.mfTimeInAir != 0.0f )
+    {
+        return;
+    }
+
+    if( muCurrAISection == BrnWorld::KI_INVALID_SECTION_INDEX )
+    {
+        return;
+    }
+
+    const Vector3 lPosition = mPhysicsState.mTransform.wAxis;
+
+    if( mPrevTransforms.GetLength() != 0 )
+    {
+        const Vector3 lDelta = { mLastRecordedPosition.x - lPosition.x,
+                                 mLastRecordedPosition.y - lPosition.y,
+                                 mLastRecordedPosition.z - lPosition.z,
+                                 0.0f };
+        // `vmsum3fp128 v0, v0, v0` -- the THREE-lane squared magnitude (not the XZ one).
+        const f32 lfDistanceSquared =
+            lDelta.x * lDelta.x + lDelta.y * lDelta.y + lDelta.z * lDelta.z;
+
+        if( lfDistanceSquared <= KF_RESET_TRANSFORM_MIN_DISTANCE_SQUARED )
+        {
+            return;
+        }
+    }
+
+    mLastRecordedPosition = lPosition;
+    mPrevTransforms.Push( &mPhysicsState.mTransform );
+}
+
+// -------------------------------------------------------------------------------------------------
+// GetResetCoords @0x822BF2D0
+//
+//   0x822BF2E8  bl IsAttached ; assert "IsAttached()"                 (BrnActiveRaceCar.cpp:1022)
+//   0x822BF318  if (mPrevTransforms.miLength(0x5A0) > 0)
+//   0x822BF33C     r11 = mpData(0x590) + miReadPos(0x598) * 64        == mPrevTransforms[0]
+//   0x822BF358     position  = r11 + 0x30   (wAxis)   direction = r11 + 0x20  (zAxis)
+//   0x822BF37C  else
+//   0x822BF384     position  = this + 0x300 (mPhysicsState.mTransform.wAxis)
+//   0x822BF38C     direction = this + 0x2F0 (mPhysicsState.mTransform.zAxis)
+//
+// ⚠️ THE TWO ARMS SWAP THE OUT REGISTERS AND IT IS NOT A BUG. In the ring arm the console loads
+// wAxis into v13 and zAxis into v0, then stores `v13 -> r30` and `v0 -> r29`; in the fallback arm
+// it loads +0x300 and stores it straight to r30, +0x2F0 to r29. Both arms therefore put the
+// POSITION in the first out-parameter and the DIRECTION in the second. Read the register dance,
+// not the register names.
+// ⭐ `mPrevTransforms[0]` is mpData[miReadPos] -- the OLDEST live entry, i.e. the furthest-back
+// recorded transform, not the most recent one.
+// -------------------------------------------------------------------------------------------------
+void ActiveRaceCar::GetResetCoords( Vector3* lpOutPosition, Vector3* lpOutDirection ) const
+{
+    CGS_ASSERT( IsAttached(), "IsAttached()" );   // BrnActiveRaceCar.cpp:1022
+
+    if( mPrevTransforms.GetLength() > 0 )
+    {
+        const Matrix44Affine& lrTransform = mPrevTransforms[0u];
+        *lpOutPosition  = lrTransform.wAxis;
+        *lpOutDirection = lrTransform.zAxis;
+        return;
+    }
+
+    *lpOutPosition  = mPhysicsState.mTransform.wAxis;
+    *lpOutDirection = mPhysicsState.mTransform.zAxis;
+}
+
 }

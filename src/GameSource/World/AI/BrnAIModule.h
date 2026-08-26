@@ -3,6 +3,7 @@
 #include "types.hpp"
 #include "SharedClasses/BrnSharedConstants.h"   // BrnUpdateSet
 #include "GameSource/World/AI/Route/BrnRouteMapModule.h"
+#include "GameSource/World/AI/BrnAICar.h"                              // AICar (maAICars[35], BY VALUE)
 #include "GameSource/World/AI/ResetOnTrack/BrnResetOnTrackManager.h"   // ResetOnTrackManager
 #include "GameShared/GameClasses/Module/CgsModuleSingleBuffered.h"     // the module base
 #include "GameShared/GameClasses/Module/CgsBaseEventReceiverQueue.h"   // EventReceiverQueue<1024,16>
@@ -220,6 +221,26 @@ private:
     // X360 +286128 (0x45DB0). The reset-on-track manager. EMBEDDED BY VALUE, and its ONLY
     // construction site in the whole image is this module's Prepare stage 3.
     ResetOnTrackManager mResetOnTrackManager;
+
+    // ⭐⭐⭐ X360 +560 (0x230). THE 35-ENTRY AI-CAR ARRAY (aicar_reset wave 2026-08-26).
+    //
+    // This is the member AIModule::Prepare stage 3 hands the reset-on-track manager as its
+    // `lpaAICars`, and until this wave it handed it a NULL. It is not polish:
+    // ResetOnTrackManager::Update walks all 35 entries EVERY frame (`for (i = 0; i < 191520;
+    // i += 5472)` -- the console bakes the array's byte extent and the 5472 stride straight into
+    // the loop) and ComputeInitialCoordinatesStandard dereferences GetAICar's result on the
+    // FIRST request. A null array is an access violation the moment the pump runs.
+    //
+    // ⭐ THE STRIDE MATCHES BY MEASUREMENT, NOT BY HOPE: sizeof(AICar) == 5472 == 0x1560 on this
+    // host, pinned by a static_assert in BrnAICar.h. 35 * 5472 == 191520, the console's own loop
+    // bound. If that assert ever fires, GetAICar's console constant must become &maAICars[index].
+    //
+    // ⛔ IT IS NOT FULLY CONSTRUCTED -- SEE AIModule::Construct. AICar::Construct @0x82792620 is
+    // an ARTIST export HOLE (no JSON; it is named only through AIModule::Construct's xrefs_from),
+    // so Construct reproduces ONLY the one initialisation the reset-on-track path reads, from the
+    // attested AICar::Reset @0x82792800. Everything else is the console's own pre-Construct .bss
+    // zero. Flagged there, loudly.
+    AICar maAICars[35];
 };
 
 // Free post-increment over the AI prepare-stage enum (DWARF BrnAIModule.h:417). X360 0x82765A10.

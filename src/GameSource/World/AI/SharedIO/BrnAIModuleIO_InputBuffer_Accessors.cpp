@@ -20,6 +20,53 @@ namespace BrnAI
 {
 namespace AIModuleIO
 {
+    // ---------------------------------------------------------------------------------------------
+    // InputBuffer::Construct @0x8278AB80   -- A MINIMAL-COMPLETE SLICE, and it closes a latent AV.
+    //
+    // The console body, in its own order (offsets are this-relative; see the declaration's banner
+    // in BrnAIModuleIO.h for why most of it is not reproduced):
+    //   *this = 1                                              -- IOBuffer::Construct's status byte
+    //   *(this + 17376) = 0
+    //   BrnTrafficIO::RivalInTrafficUpdateEvent_34_::Construct(this + 62448)
+    //   *(this + 64232) = 0 ; *(this + 64372) = 0
+    //   CgsSystem::TimerStatusInterface::Clear(this + 64384)
+    //   nine 8-byte zero stores at this + 704 .. + 768
+    //   CgsModule::VariableEventQueue<16384,16>::Construct(this + 776)
+    //   *(this + 17220) = 0
+    //   ⭐ BrnAI::AIModuleIO::ResetOnTrackRequest_128_::Construct(this + 64432)   == +0xFBB0
+    //   RaceCarRaceDistanceInterface::Clear(this + 79968)
+    //   VariableEventQueue<13312,16>::Construct(this + 66492)
+    //   VariableEventQueue<32768,16>::Construct(this + 80008)
+    //   BrnGameState::TakedownEvent_8_::Construct(this + 112792)
+    //   twenty-two zero stores at this + 113128 .. + 113186
+    //   RouteMapModuleIO::RaceRouteRequest_1_::Construct(this + 79824)
+    //
+    // ⭐ 64432 == 0xFBB0 == KU_AI_MODULE_REQUEST_INTERFACE_OFFSET, and the interface's ONLY member
+    // is that queue (DWARF BrnAIModuleRequestInterface.h:109) -- which is why the console's
+    // Construct call takes the interface's own base address. Constructed here BY NAME through the
+    // same typed reinterpret the Append accessor below already uses, so the two can never disagree
+    // about where the queue is.
+    //
+    // ⛔ [FLAG PC bring-up] EVERY OTHER LEG IS ABSENT. Each one lands inside this type's
+    // attested-offset image blob, which has NO named members (see the header's MINIMAL SLICE
+    // note), so constructing them would mean writing through raw offsets into an opaque payload --
+    // and getting one wrong is a silent 100 KB scribble, not a compile error. They land WITH the
+    // named layout. Nothing on the reset-on-track path reads any of them.
+    // ⚠️ Consequence, stated plainly: the OTHER queues in this buffer are still unconstructed, so
+    // the same latent AV remains for THEM. This function fixes the one member with a live
+    // producer, and the header banner says so. DELETE-WHEN this type gets a named layout.
+    // ---------------------------------------------------------------------------------------------
+    void InputBuffer::Construct()
+    {
+        CgsModule::IOBuffer::Construct();
+
+        typedef AIModuleRequestInterface::ResetOnTrackRequestQueue ResetOnTrackRequestQueue;
+        reinterpret_cast<ResetOnTrackRequestQueue*>(
+            MemberImage() + KU_AI_MODULE_REQUEST_INTERFACE_OFFSET)->Construct();
+
+        // [FLAG PC bring-up] the fourteen other legs of the console's Construct -- see the banner.
+    }
+
     // ---- getters (read-lock bit 4) ----------------------------------------------
 
     // X360 0x8276D728 (R) -- the pre-scene race-car AI view (this+0x10).

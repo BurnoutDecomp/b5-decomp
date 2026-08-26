@@ -3445,6 +3445,16 @@ void RaceCarEntityModule::ReadUpdatedActiveRaceCarDataFromPhysics(
                     lpVehicleOutput->GetRaceCar( static_cast<u32>( liCar ) ),
                     &mWorldMap2D );
 
+                // ⭐⭐ UpdateRaceCarCollisionTagging @0x822D2280 LANDED 2026-08-26 (aicar_reset
+                // wave), at the CONSOLE'S OWN POSITION -- before the deformation leg, not after.
+                // ⚠️ THE GATE THAT USED TO SIT HERE SAID "it reaches the un-homed collision-group
+                // interior". That is true of the PLAYER-ONLY wrong-way / oncoming arm, which is
+                // still parked -- and false of the AI-SECTION store, which is the whole reason the
+                // reset-on-track ring can hold anything and which needs none of it. Body + park
+                // inventory in BrnRaceCarEntityModule_ResetOnTrack.cpp.
+                UpdateRaceCarCollisionTagging(
+                    liCar, lpVehicleOutput->GetRaceCar( static_cast<u32>( liCar ) ) );
+
                 // ⭐ UpdateDeformationState @0x822D4A58 LANDED 2026-08-24 (deform-land wave):
                 // the per-car deformation readback runs at the console's own position. The
                 // null guard is a PC bring-up divergence (the console's publish always ran
@@ -3453,27 +3463,6 @@ void RaceCarEntityModule::ReadUpdatedActiveRaceCarDataFromPhysics(
                 if( lpDeformationState != 0 )
                 {
                     lpActiveRaceCar->UpdateDeformationState( lpDeformationState );
-                }
-
-                // ⛔ STILL PARKED: UpdateRaceCarCollisionTagging(liCar, GetRaceCar(liCar))
-                //            @0x822D2280 (159 insns) runs here on the console, BEFORE the
-                //            deformation leg; it reaches the un-homed collision-group
-                //            interior. Reported once per boot, never per frame.
-                static bool sbReportedParkedPerCarLegs = false;
-                if( !sbReportedParkedPerCarLegs )
-                {
-                    sbReportedParkedPerCarLegs = true;
-                    if( ( CgsDev::Message::gxMessageFilterFlags & 1 ) != 0
-                        && CgsDev::Log::gpDebugPrint != 0 )
-                    {
-                        *CgsDev::Log::gpDebugPrint
-                            << "[physics-readback] PARKED per-car leg: "
-                               "RaceCarEntityModule::UpdateRaceCarCollisionTagging "
-                               "(X360 0x822D2280) is NOT reconstructed -- collision tagging "
-                               "will not update. UpdateDeformationState is LIVE; "
-                               "DeformationState ptr "
-                            << ( lpDeformationState != 0 ? "present" : "NULL" ) << "\n";
-                    }
                 }
             }
             else
@@ -4427,9 +4416,19 @@ void RaceCarEntityModule::PostPhysicsUpdate(
         GenerateSceneUpdateEvents( lpOutput );
     }
 
+    // ⭐⭐ [aicar_reset wave 2026-08-26] THE RESET-TRANSFORM RING, at the console's own
+    // position: the `bl` at 0x82307688, inside the sim-paused skip, immediately BEFORE the
+    // world-region sample at 0x8230769C. This is the ONLY thing in the whole image that writes
+    // ActiveRaceCar::mPrevTransforms, i.e. the only source of a "where was I last genuinely on
+    // the road" answer for a crashed car. See BrnRaceCarEntityModule_ResetOnTrack.cpp.
+    if( !lbSimPaused )
+    {
+        UpdateActiveRaceCarTransforms();
+    }
+
     // ⭐ [H1 district wave 2026-08-25] THE WORLD-REGION SAMPLE, at the console's own
     // position and on the console's own queue: the `bl` at 0x8230769C, i.e. after
-    // UpdateActiveRaceCarTransforms (0x82307688, not reproduced) and before
+    // UpdateActiveRaceCarTransforms (0x82307688, LANDED 2026-08-26, immediately above) and before
     // UpdateHidingEvents/StorePlayerRoutePortalPositions (both not reproduced), INSIDE the
     // sim-paused skip (its target 0x823076C0 lands past this call), with a2 =
     // lpOutput->GetGameEventQueue() (the sub_822B67D0 accessor call at 0x82307690).

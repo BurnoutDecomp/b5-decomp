@@ -171,9 +171,47 @@ void AIModule::Construct()
     // flag is what makes every data-structure arm of the base Prepare skip itself.
     mRouteMapModule.MarkAsNewModule();
 
+    // ⭐⭐⭐ THE 35 AI CARS (aicar_reset wave 2026-08-26). PARTIAL, AND THE PART MATTERS.
+    //
+    // The console runs `AICar::Construct` 35 times here. That function (@0x82792620) is an ARTIST
+    // export HOLE -- it has no JSON in the export set and is named only through this function's
+    // own xrefs_from -- so its body is not available to reproduce. What IS available is
+    // AICar::Reset @0x82792800, the console's own re-initialiser, and it settles the ONE field
+    // every consumer on the reset-on-track path reads first:
+    //     0x82792800 ... `*(this + 5320) = 2`   ==  meCarState = E_AI_CAR_STATE_INACTIVE
+    // (5320 == 0x14C8 == the static_asserted offset of meCarState in BrnAICar.h.)
+    //
+    // ⭐ WHY THAT ONE STORE IS THE WHOLE JOB HERE, AND WHY LEAVING IT OUT WOULD HAVE BEEN A
+    // SILENT WRONG ANSWER. E_AI_CAR_STATE_IN_RANGE == 0. A zeroed AICar therefore reads as an
+    // ACTIVE, AI-DRIVEN car -- and both reset-on-track consumers gate on exactly that:
+    //     ResetOnTrackManager::Update            `if (meCarState == 0 || meCarState == 1)` ...
+    //     ComputeInitialCoordinatesStandard      same test, then GetAISection(muResetOnTrackSection)
+    // With zeros they would walk the road network for 35 phantom cars and hand the crash exit a
+    // plausible-looking garbage position. With INACTIVE they do what the console does for a car
+    // the AI is not driving: decline, and let the reset fall through to the ring-buffer arm.
+    // On this build NOTHING activates an AI car (StoreDrivenCarData / SortTrafficIntoAICars /
+    // AICar::Update are all absent), so INACTIVE is not a stand-in -- it is the correct steady
+    // state, and it is the value the console's own Reset writes.
+    //
+    // ⛔ [FLAG PC boot gate] EVERY OTHER STORE OF AICar::Construct/Reset IS ABSENT. Reset alone
+    // writes ~30 more fields (SetDirection/SetRight, the Aggressiveness seeds, mfRouteTimer,
+    // muResetOnTrackSectionIndex/muBestSectionIndex/muDefaultSectionIndex/muDestination-
+    // SectionIndex = 0x7FFF, meResetOnTrackType = 20, ...) and MOST OF THEM LAND IN BrnAICar.h's
+    // EXPLICIT PADS -- the header is a minimal slice and those members have no names yet. Poking
+    // them by raw offset into a pad is the live-corruption class this project keeps paying for,
+    // so they are named here instead of faked. The zero the pads keep is the console's own
+    // pre-Construct .bss value, and the four section indices reading 0 rather than 0x7FFF is
+    // UNREACHABLE while meCarState is INACTIVE (both readers test the state first).
+    // DELETE-WHEN BrnAICar.h grows the members Reset writes and AICar::Reset lands.
+    for( s32 liCar = 0; liCar < 35; ++liCar )
+    {
+        maAICars[liCar].meCarState = E_AI_CAR_STATE_INACTIVE;
+    }
+
     // [FLAG PC boot gate] RouteMapDebugComponent::Construct, the +294784 Random prime, the six
-    // perf monitors, AIDebugComponent::Construct, 35x AICar::Construct, 8x AIDriver::Construct,
-    // the +322400 flag block and ContactSpyInterface::Construct -- see the banner.
+    // perf monitors, AIDebugComponent::Construct, the REST of 35x AICar::Construct (see above),
+    // 8x AIDriver::Construct, the +322400 flag block and ContactSpyInterface::Construct -- see
+    // the banner.
 
     // 0x82795... `stw r11(1), 4(r3)` -- the base Construct above cleared it. LOAD-BEARING.
     mbIsNewModule = true;
@@ -260,12 +298,12 @@ bool AIModule::Prepare( BrnResource::GameDataIO::AllocatorList* lpAllocatorList,
             // out. Same construction here.
             mResetOnTrackManager.Construct(
                 CgsResource::ResourcePtr<AISectionsData>( mMapDataHandle ),
-                // ⛔ [FLAG PC boot gate] the X360 passes `this + 560` == the module's embedded
-                // 35-entry AICar array. Construct never builds those cars in this build (see the
-                // file banner), and handing the manager 35 default-initialised AICars would give
-                // it garbage that reads as data. A null array fails loudly instead. THE AI-CAR
-                // ARRAY IS THE FIRST THING THE NEXT SLICE MUST LAND.
-                0 );
+                // ⭐⭐ THE ARRAY, at last (aicar_reset wave 2026-08-26). The X360 passes
+                // `this + 560` == this module's embedded 35-entry AICar array; the previous wave
+                // deliberately passed NULL because Construct built no cars and 35 zeroed AICars
+                // would have read as ACTIVE (E_AI_CAR_STATE_IN_RANGE == 0). Construct now runs the
+                // one attested initialisation that fixes exactly that -- see the FLAG there.
+                maAICars );
 
             // ⭐⭐ [FLAG PC diagnostic] THE CONTROL THAT COULD FALSIFY "THE ROAD NETWORK
             // LOADED". A non-null resource pointer proves nothing on this build --
@@ -284,7 +322,9 @@ bool AIModule::Prepare( BrnResource::GameDataIO::AllocatorList* lpAllocatorList,
                 *CgsDev::Log::gpDebugPrint
                     << "[ai] ResetOnTrackManager Constructed: AISectionsData="
                     << ( mResetOnTrackManager.HasAISectionData() ? "BOUND" : "NULL" )
-                    << " aiCars=PARKED(null)\n";
+                    << " aiCars=" << ( mResetOnTrackManager.GetAICarArray() != 0 ? "BOUND" : "NULL" )
+                    << " aiCar0State=" << static_cast<s32>( maAICars[0].meCarState )
+                    << " (expect 2 == INACTIVE)\n";
                 if ( lpSections != 0 )
                 {
                     *CgsDev::Log::gpDebugPrint
