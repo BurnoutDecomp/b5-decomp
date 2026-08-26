@@ -183,28 +183,9 @@ bool TextFieldRef::SetLocalisedText(const char* lpcStringId, s32 liStringIdType,
     return true;
 }
 
-// ---- SetLocalisedText(id, type, s32 value, valueFormat) @ 0x8246D2B0 --------
-// The single-integer-parameter form (BoostMessageItem::SetText's boost-amount
-// path): assert the id (cpp:254), resolve + format through
-// LanguageManager::FormatTextFromInt, set the resolved text (already localised),
-// return 1 unconditionally. The exact integer mirror of the f32 form above.
-bool TextFieldRef::SetLocalisedText(const char* lpcStringId, s32 liStringIdType,
-                                    s32 liValue, s32 liValueFormatType)
-{
-    CGS_ASSERT(lpcStringId != 0, "Text field is invalid in TextField::SetLocalisedText");
-
-    CgsLanguage::LanguageManager* lpLanguageManager = GetLanguageManager();
-
-    char lacBuffer[1024];
-    lpLanguageManager->FormatTextFromInt(
-        lacBuffer, 1024, lpcStringId,
-        static_cast<CgsLanguage::LanguageManager::ParameterFormatType>(liStringIdType),
-        liValue,
-        static_cast<CgsLanguage::LanguageManager::ParameterFormatType>(liValueFormatType));
-
-    SetText(lacBuffer, true);
-    return true;
-}
+// (The s32 SetLocalisedText overload @0x8246D2B0 was independently reconstructed by two
+// sessions on 2026-08-26; the rebase kept the aimodule-wave copy above -- identical body,
+// its banner carries the export-hole identification.)
 
 // ---- SetLocalisedText(id, type, n, params, formats) @ 0x8246D158 ------------
 // The positional-parameter array form: resolve + format the id with liNumParams
