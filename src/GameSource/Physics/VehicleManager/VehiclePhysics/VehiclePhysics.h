@@ -345,6 +345,14 @@ namespace Vehicle
         // virtual override with a body in this TU. -----
         void SetCrashing() override;
 
+        // ----- @0x825D5450: the crash-state CLEAR, the twin of SetCrashing above and the occupant
+        //       of RaceCarPhysics VTABLE SLOT 1 (0x820D1038). It is an override of the virtual
+        //       SimpleVehiclePhysics::ClearCrashing, so it introduces no slot of its own. The
+        //       identity was PROBED off the image, not reasoned about -- the full working-out lives
+        //       on the body in VehiclePhysics.cpp. Its one live caller is the `!mbResetTransform`
+        //       arm of VehicleManager::ProcessResetEvents @0x82617E00. -----
+        void ClearCrashing() override;
+
         // @0x825D3720 -- the per-frame steering model (577 X360 insns, standalone; also called by
         // UpdateDriving @0x82638354 and UpdateCrashing @0x82638F6C, and by RaceCarPhysics::Update
         // @0x826418A4 on the frozen/engine-only path).

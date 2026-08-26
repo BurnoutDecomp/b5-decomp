@@ -665,9 +665,26 @@ namespace Vehicle
         //       if (mbResetTransform) VehiclePhysics::Reset(transform);   // 0x82617DF8
         //       else                  (*(vtbl(car) + 4))(car);            // 0x82617E00  <- LIVE
         //   Every reset this build issues carries resetTransform == 0, so the ELSE arm is the one
-        //   that runs -- and that RaceCarPhysics vtable slot is PARKED (its occupant is not
-        //   settled in this tree), so NOTHING IS DISPATCHED. ⭐ Probe that slot, do not reason
-        //   about it (see the vtable slot-0 Create precedent).
+        //   that runs. ⭐⭐ THE SLOT IS SETTLED -- PROBED, NOT REASONED ABOUT:
+        //   vtable 0x820D1034[1] == 0x825D5450 == VehiclePhysics::ClearCrashing, an ARTIST
+        //   export HOLE recovered from CgsDev::Assert::BeginAssert's xrefs_to and disassembled
+        //   out of the image. It clears mbCrashing (+0x710) and mbStartedFatallyCrashing
+        //   (+0x711) plus the partial slam/shunt bank. Working-out at (P3) in
+        //   BrnVehicleManager_WriteOutVehicleStats.cpp and on the body in VehiclePhysics.cpp.
+        //   ⭐⭐⭐ AND IT IS NOW DISPATCHED (crashclear wave, 2026-08-26). The intermediate note
+        //   here -- "ClearCrashing opens with CGS_ASSERT(IsCrashing()) and this arm runs for
+        //   EVERY reset, so un-parking it HANGS THE BOOT on the junkyard hand-off" -- was FALSE
+        //   TWICE OVER, and the correction is kept because the error is reusable:
+        //     (a) MEASURED: rp_default is a full flow to DRIVING WITH the junkyard hand-off and
+        //         a 2.1 km drive, and contains ZERO [teleport] lines. The hand-off is
+        //         PlaceOnTrackManager's INITIAL PLACEMENT and never enqueues a reset event.
+        //     (b) STRUCTURAL: ResetActiveRaceCar @0x822F4990 hardcodes resetTransform = 1 for
+        //         every NON-crash reset (`li r26,1` @0x822F4960, never overwritten); zero is
+        //         reachable only from IsCrashing() && IsDriveableAfterCrash(). The assert is a
+        //         TAUTOLOGY of the producer's own classification, not a trap.
+        //   The earlier note generalised "resetTransform==0 on every reset that ARRIVES" into
+        //   "every reset takes this arm". A condition's truth over the events that arrive says
+        //   nothing about WHICH events arrive.
         //   (Measured, with the control that could falsify it: run cx_flow3 pinned at
         //   (2932,-10.8,~209) for 80 s on the identical build that "recovered" in cx_flow6 --
         //   and cx_flow6's re-acceleration began BEFORE the complete event, i.e. it was physics
@@ -708,18 +725,31 @@ namespace Vehicle
                             << " applied -> ActiveRaceCar::RequestPlaceOnTrack, and the car IS put back"
                             << " on the road (ResetActiveRaceCar RE-RESET + a seated pose) and drives"
                             << " ~1 km afterwards, asserts=0, no AV.\n"
-                            << "[bringup] ...AND THE FLAG STAYS FOR ONE REMAINING, MEASURED REASON:"
-                            << " NOTHING CLEARS THE CRASH STATE. mbCrashing is still 1 and"
-                            << " mfTimeCrashing was still climbing (74 s) with the car driving normally,"
-                            << " and no LEAVE_CRASHED is ever posted -- so a player would be recovered"
-                            << " but PERMANENTLY FLAGGED CRASHING (crash bar on, and every consumer of"
-                            << " IsPlayerCarCrashing wrong). THE NEXT RUNG IS ONE DISPATCH:"
-                            << " VehicleManager::ProcessResetEvents @0x82617820 branches"
-                            << " `if (mbResetTransform) VehiclePhysics::Reset(t) else (*(vtbl(car)+4))(car)`"
-                            << " (asm 0x82617DF0 / 0x82617E00). EVERY reset on this build carries"
-                            << " resetTransform=0, so the ELSE arm is the live one -- and that"
-                            << " RaceCarPhysics vtable slot is PARKED here, so nothing is dispatched."
-                            << " Settle that slot and the crash state clears with it."
+                            << "[bringup] ...AND THE PHYSICS-SIDE REASON THIS LINE USED TO GIVE IS"
+                            << " ALSO RETIRED (crashclear wave, 2026-08-26). It said 'NOTHING CLEARS"
+                            << " THE CRASH STATE'. It does now: the !mbResetTransform arm of"
+                            << " VehicleManager::ProcessResetEvents @0x82617E00 is RaceCarPhysics"
+                            << " vtable slot 1 == VehiclePhysics::ClearCrashing @0x825D5450 (probed"
+                            << " off the image; vtable base 0x820D1034 pinned by the VehicleManager"
+                            << " ctor), and it is now dispatched BY NAME. MEASURED, run cc_crash1,"
+                            << " asserts=0: crash -> recover -> `[crash-clear] ... crashing 1 -> 0`"
+                            << " -> `[crash-hud] posting GUI 377 ... state=1 (LEAVE_CRASHED)`, TWICE"
+                            << " in one run, and mfTimeCrashing stops climbing instead of reaching"
+                            << " 74 s. Every consumer of IsPlayerCarCrashing is now correct.\n"
+                            << "[bringup] ...SO THE FLAG NOW STAYS FOR A DIFFERENT AND SMALLER"
+                            << " REASON, ONE RUNG FURTHER DOWNSTREAM AND IN THE GUI, NOT THE"
+                            << " PHYSICS: THE HUD NEVER COMES BACK. BrnFBurnMainHudState maps GUI"
+                            << " 377 payload 0|2 -> SendStateEvent(\"START_CRASH\") but has NO"
+                            << " END_CRASH arm anywhere in the tree, so the HUD FSM enters the"
+                            << " crashed state and cannot leave. MEASURED with the control that"
+                            << " could falsify it: in cc_crash1 the whole HUD (minimap, district"
+                            << " panel, miles-driven) disappears at the second crash and is still"
+                            << " gone 5000 presents later at the end of the run, while the DEFAULT"
+                            << " run cc_default -- same drive, same wall, no crash entry -- ends"
+                            << " with the full HUD on screen. Ship this on today and one crash"
+                            << " costs the player their HUD for the session."
+                            << " THE NEXT RUNG IS THE END_CRASH CONSUMER in"
+                            << " BrnFBurnMainHudState::ProcessGameEvents (payload 1|3)."
                             << " Set BRN_ENABLE_CRASH_ENTRY=1 to exercise the full chain.\n";
                     }
                     ++sliSuppressed;
