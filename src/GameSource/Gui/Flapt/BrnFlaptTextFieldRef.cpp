@@ -15,6 +15,7 @@
 //   SetLocalisedText(id, type, n, params, fmts) @ 0x8246D158
 //   SetLocalisedText(id, type, n, ...)          @ 0x8246CFF0   [H1 wave]
 //   SetLocalisedText(id, type, f32, valueFmt)   @ 0x8246D398   [H1 wave]
+//   SetLocalisedText(id, type, s32, valueFmt)   @ 0x8246D2B0   [baseline 2026-08-26]
 //
 // (GetLanguageManager @0x8246CB40 belongs to this TU too, but is bodied in
 // CgsAptAux.cpp: it walks the AptAux singleton -> render handler, whose header
@@ -176,6 +177,29 @@ bool TextFieldRef::SetLocalisedText(const char* lpcStringId, s32 liStringIdType,
         lacBuffer, 1024, lpcStringId,
         static_cast<CgsLanguage::LanguageManager::ParameterFormatType>(liStringIdType),
         lfValue,
+        static_cast<CgsLanguage::LanguageManager::ParameterFormatType>(liValueFormatType));
+
+    SetText(lacBuffer, true);
+    return true;
+}
+
+// ---- SetLocalisedText(id, type, s32 value, valueFormat) @ 0x8246D2B0 --------
+// The single-integer-parameter form (BoostMessageItem::SetText's boost-amount
+// path): assert the id (cpp:254), resolve + format through
+// LanguageManager::FormatTextFromInt, set the resolved text (already localised),
+// return 1 unconditionally. The exact integer mirror of the f32 form above.
+bool TextFieldRef::SetLocalisedText(const char* lpcStringId, s32 liStringIdType,
+                                    s32 liValue, s32 liValueFormatType)
+{
+    CGS_ASSERT(lpcStringId != 0, "Text field is invalid in TextField::SetLocalisedText");
+
+    CgsLanguage::LanguageManager* lpLanguageManager = GetLanguageManager();
+
+    char lacBuffer[1024];
+    lpLanguageManager->FormatTextFromInt(
+        lacBuffer, 1024, lpcStringId,
+        static_cast<CgsLanguage::LanguageManager::ParameterFormatType>(liStringIdType),
+        liValue,
         static_cast<CgsLanguage::LanguageManager::ParameterFormatType>(liValueFormatType));
 
     SetText(lacBuffer, true);

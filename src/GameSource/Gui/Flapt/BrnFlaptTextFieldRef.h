@@ -112,7 +112,7 @@ namespace BrnFlapt
         // SetLocalisedText(id, type, value, valueFormat) @ 0x8246D2B0 -- the
         // INTEGER-parameter variant (BoostMessageItem::SetText's boost-amount path:
         // r5 == 9 id-lookup, r6 == the integer value, r7 == 11 E_FORMAT_INTEGER).
-        // ADDITIVE GROW; bodied in its own sibling TU.
+        // ADDITIVE GROW; bodied in this TU's cpp (baseline-repair 2026-08-26).
         bool SetLocalisedText(const char* lpcStringId, s32 liStringIdType,
                               s32 liValue, s32 liValueFormatType);
 
