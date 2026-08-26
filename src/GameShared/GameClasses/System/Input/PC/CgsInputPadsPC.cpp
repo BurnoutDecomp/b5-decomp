@@ -513,22 +513,59 @@ namespace CgsInput
         // remaining ~2900 presents. (⭐ That control is the whole reason this was not published
         // as "the pause works": a frozen 3D frame alone cannot tell a pause from a hang.)
         //
-        // ⭐⭐ THE CAUSE IS NAMED AND IT IS NOT IN THIS FILE: update-set BIT 0x1 IS READ UNDER TWO
-        // DIFFERENT MEANINGS. BrnGameModule::ConstructUpdateSetFromFsm sets it for
-        // `mbSimPaused || IsSaveLoadState()`, and BrnRaceCarEntityModule reads it as sim-paused --
-        // but BrnPhysicsModuleUpdateFunctions.cpp:231 names the SAME bit
-        //     const bool lbNetworkCatchup = (lUpdateSet & 1) != 0;
-        // and passes it to PropManager::ProcessInputsPreScene at :947. Turning bit 0x1 on in game
-        // -- which was IMPOSSIBLE before this wave, because the frozen KU_INGAME_UPDATE_SET made
-        // it unreachable -- sends the physics module down a path that never binds the output
-        // buffer's contact-spy interface, so PropEntityModule::ProcessContacts finds mpData null.
-        // Classic "un-gating a producer CREATES the fault": no code that reads this bit in game
-        // has ever executed before.
-        // ⛔ SETTLE THE BIT'S MEANING IN PhysicsModule::Update FROM THE X360 ASM before removing
-        // this gate. Do NOT "fix" it by silencing the assert or by null-checking mpData -- the
-        // assert is the console's and it is reporting a real unbound interface.
+        // ⛔⛔ RETRACTED 2026-08-27 (pausebit wave). The note that stood here said: "THE CAUSE
+        // IS NAMED -- update-set BIT 0x1 IS READ UNDER TWO DIFFERENT MEANINGS. ConstructUpdateSetFromFsm
+        // sets it for `mbSimPaused || IsSaveLoadState()` and BrnRaceCarEntityModule reads it as
+        // sim-paused, but BrnPhysicsModuleUpdateFunctions.cpp:231 names the SAME bit
+        // `lbNetworkCatchup` and passes it to PropManager::ProcessInputsPreScene at :947 -- a path
+        // that never binds the output buffer's contact-spy interface."
+        // **THAT IS FALSE.** Settled from the X360 asm exactly as the note asked, at three
+        // independent sites, and the bit turns out to have ONE meaning everywhere:
+        //   * PhysicsModule::Update @0x825B0640 -- `clrlwi r30, r18, 31` @0x825B0688 is the ONLY
+        //     mask ever applied to the update-set argument. The bit is stashed (var_1B8) and tested
+        //     THREE times: 0x825B0910 (skip contact generation + UpdateVehiclePhysics), 0x825B216C
+        //     (skip the prop read-back / OutputUpdatedProps), and 0x825B2270 -- which skips
+        //     **BridgeSimulationToOutput @0x825B2304, the SOLE binder of the contact-spy interface**.
+        //   * PhysicsModule::PostSceneUpdate @0x825ABC10 -- `clrlwi r23, r28, 31` @0x825ABCE4,
+        //     handed to PropManager::ProcessInputsPreScene as arg 3 (`mr r6, r23` @0x825ABE80).
+        //     (:947 and :231 are DIFFERENT FUNCTIONS in the same TU; reading them as one call chain
+        //     is what produced the "two meanings" story.)
+        //   * PropEntityModule::PostPhysicsUpdate @0x823031D8 -- `clrlwi r29, r8, 31` @0x823031F4,
+        //     `bne` @0x82303238 **skips ProcessContacts + UpdateProps**.
+        // ⭐⭐ So the console's design is SYMMETRIC and deliberate: when bit 0 is set the physics
+        // module leaves the contact-spy interface at its Construct-time NULL, and every consumer of
+        // that interface is gated on the same bit. `lbNetworkCatchup` and "sim paused" are the same
+        // thing -- "this frame carries no physics result". THE ASSERT IS THE GUARD ON THAT
+        // INVARIANT, and this tree already reproduces BOTH gates faithfully
+        // (BrnPhysicsModuleUpdateFunctions.cpp :714/:748, PropEntityModule_wQ2_02.cpp :256).
         //
-        // ⭐ OPT IN with  BRN_ENABLE_PAUSE=1  (the BRN_ENABLE_CRASH_ENTRY precedent). Everything
+        // ⭐⭐⭐ THE REAL CAUSE, MEASURED (run ec_pause3, the [pausebit] transition probes):
+        //        4020  PhysicsModule::Update updateSet=0x89 bit0=1   (the pause)
+        //        4021  PropEntityModule::PostPhysicsUpdate 0x89 bit0=1 -> ProcessContacts skipped
+        //        4022  PC sim-timer guard: running=0 -> EARLY RETURN, BridgeSimulationToOutput
+        //              NOT reached, the contact-spy interface stays NULL
+        //        4072  in-game update set -> 0x88            (the resume)
+        //        4073  PhysicsModule::Update 0x88 bit0=0
+        //        4074  PropEntityModule::PostPhysicsUpdate 0x88 bit0=0 -> ProcessContacts RUNS
+        //        4075  [ASSERT] mpData != NULL
+        // and there is NO `running=1` transition between 4022 and 4075. On the resume frame the
+        // update set has already gone back to 0x88 while THE SIM TIMER IS STILL STOPPED, so
+        // PhysicsModule::Update takes the **PC-BUILD GUARD's early return**
+        // (BrnPhysicsModuleUpdateFunctions.cpp, "sim timer not running -- inert this frame
+        // [FLAG PC boot guard]") and never reaches the bind.
+        // ⛔⛔ THAT GUARD IS OURS, NOT THE CONSOLE'S. It creates a THIRD state the console never
+        // has -- *bit 0 clear but physics inert* -- and the console's invariant
+        // "bit0 == 0 => the contact-spy interface is bound" is exactly what it breaks. This is the
+        // INVENTED-ARM class again (defensive code WE ADDED that the console lacks), and it has now
+        // been paid for three times.
+        // ⭐ NEXT RUNG, and it is NOT "gate the prop module too" (that would be a second invented
+        // arm): make the sim timer's running state and update-set bit 0 agree across the resume, or
+        // retire the PC guard per its own DELETE-WHEN ("when the boot flow stops driving world
+        // updates through dead timers"). ⛔ Do NOT silence the assert or null-check mpData -- it is
+        // the console's and it is correctly reporting a genuinely unbound interface.
+        //
+        // ⭐ OPT IN with  BRN_ENABLE_PAUSE=1  (the pattern BRN_ENABLE_CRASH_ENTRY used until that
+        // flag was deleted on 2026-08-27, its last reason retired). Everything
         // above this line ships unchanged; only the KEY is unreachable.
         static const bool sbPauseEnabled = (std::getenv("BRN_ENABLE_PAUSE") != 0);
 

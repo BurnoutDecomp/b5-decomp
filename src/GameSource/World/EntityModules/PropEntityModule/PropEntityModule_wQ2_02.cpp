@@ -250,6 +250,23 @@ namespace BrnWorld
             meStreamingMode = E_WAITING_FOR_PROFILE_DATA;
         }
 
+        // [pausebit] witness. NOT X360. Prints ONLY when the value CHANGES, so a whole run costs
+        // a handful of lines. Pairs with the identical probe in PhysicsModule::Update: the two
+        // read the SAME bit of the SAME set and must agree on every frame.
+        {
+            static u32 suLastSet = 0xFFFFFFFFu;
+            const u32 luSet = static_cast<u32>( lUpdateSet );
+            if ( luSet != suLastSet && CgsDev::Log::gpDebugPrint != 0 )
+            {
+                suLastSet = luSet;
+                *CgsDev::Log::gpDebugPrint
+                    << "[pausebit] PropEntityModule::PostPhysicsUpdate updateSet="
+                    << CgsDev::E_PRINTMODE_HEXONCE << luSet
+                    << " bit0=" << static_cast<s32>( luSet & 1 )
+                    << " -> ProcessContacts " << ( ( luSet & 1 ) == 0 ? "RUNS" : "skipped" ) << "\n";
+            }
+        }
+
         // MEASURED: bit 0 of the update set, not bit 8 (`clrlwi r29, r8, 31` at 0x823031F4,
         // then `bne -> skip` at 0x82303238). The heavy half of the tick is skipped on the
         // update sets that do not carry a physics result.
