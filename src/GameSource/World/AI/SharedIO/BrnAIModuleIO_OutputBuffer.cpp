@@ -123,6 +123,13 @@ namespace AIModuleIO
         return reinterpret_cast<u8*>(&mAIModuleResultInterface);
     }
 
+    // X360 0x8279CD48 (R, :479) -- the TYPED const twin of the accessor above; same seat.
+    const AIModuleResultInterface* OutputBuffer::GetAIModuleResultInterfaceConst() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        return &mAIModuleResultInterface;
+    }
+
     // X360 0x8279C658 (R, :232) -- read-lock handle at this+0x1AF30.
     u8* OutputBuffer::GetGameEventQueueForRead()
     {

@@ -929,6 +929,20 @@ public:
     //   `lbz r11, 0x788(r27)`                            -> mbIsInShowtime (IsInShowtime above)
     //   `lfs f0,  0x724(r27)`                            -> mfInvulnerablityTime
     // Exposed so the producer reads them BY NAME instead of re-deriving offsets.
+    // ADDITIVE 2026-08-26 (resetpump wave), same rule as the block above: four members
+    // RaceCarEntityModule::WriteUpdatedAIData @0x822D1FC8 reads DIRECTLY off the slot, each
+    // behind its own inlined IsAttached() assert, with no console accessor symbol --
+    //   `lbz r27, 0x773(r30)`  -> mbIsTouchingPlayer          (BrnActiveRaceCar.h:1355)
+    //   `lbz r26, 0x772(r30)`  -> mbIsTouchingAnotherRaceCar
+    //   `lwz r11, 0x77C(r30)` + cntlzw/extrwi 1,26 == (x == 0) -> meRaceStartState ==
+    //                             E_RACE_START_STATE_ON_START_LINE  (BrnActiveRaceCar.h:1118)
+    // (ProcessResetOnTrackResultQueue's own `lvx128 v127, r31, r26` with r26 == 0x7A0 reads
+    //  mPlaceOnTrackPosition, which ALREADY has a named reader at :194.)
+    bool IsTouchingPlayer() const                    { return mbIsTouchingPlayer; }            // +0x773
+    bool IsTouchingAnotherRaceCar() const            { return mbIsTouchingAnotherRaceCar; }    // +0x772
+    bool IsOnStartLine() const
+    { return meRaceStartState == E_RACE_START_STATE_ON_START_LINE; }                           // +0x77C
+
     bool IsTakenDown() const                         { return mbTakenDown; }                   // +0x789
     void SetTakenDown(bool lbTakenDown)              { mbTakenDown = lbTakenDown; }            // +0x789
     f32  GetInvulnerabilityTime() const              { return mfInvulnerablityTime; }          // +0x724

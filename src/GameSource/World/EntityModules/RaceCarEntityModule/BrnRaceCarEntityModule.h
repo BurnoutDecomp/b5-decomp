@@ -156,6 +156,32 @@ public:
         void ProcessRaceCarCrashCompleteEvents(
             const RaceCarEntityModuleIO::InputBuffer_PostScene* lpInput );
 
+        // ---- THE RESET-ON-TRACK PUMP (resetpump wave 2026-08-26). All three bodies live in
+        //      BrnRaceCarEntityModule_ResetPump.cpp. Together they are the round trip that was
+        //      missing between "a heavy crash ends" and "the car is put back on the road":
+        //        PreScene   WriteUpdatedAIData            -> the AI's per-frame car snapshot
+        //                                                   (and mbPlayerDataSet, which gates
+        //                                                   AIModule::Update's ENTIRE body)
+        //        PostScene  SendResetOnTrackRequests      -> the ONLY reader of
+        //                                                   RaceCar::mbToBeResetOnTrack
+        //        PrePhysics ProcessResetOnTrackResultQueue-> ActiveRaceCar::RequestPlaceOnTrack
+
+        // X360 @0x822D1FC8 (172 insns). Publish the player-car block and every ACTIVE car's
+        // per-frame state into the pre-scene output buffer's RaceCarAIInterface.
+        void WriteUpdatedAIData( RaceCarEntityModuleIO::OutputBuffer_PreScene* lpOutput );
+
+        // X360 @0x822CE178 (57 insns). Turn every global race car flagged mbToBeResetOnTrack
+        // into a queued BrnAI::AIModuleIO::ResetOnTrackRequest on the post-scene output.
+        void SendResetOnTrackRequests( RaceCarEntityModuleIO::OutputBuffer_PostScene* lpOutput );
+
+        // X360 @0x822F4580 (192 insns). Drain the AI module's two result rings: the
+        // reset-on-track RESULTS (success -> the AI's pose; failure -> the car's own
+        // GetResetCoords) and the place-on-track REQUESTS, both into
+        // ActiveRaceCar::RequestPlaceOnTrack.
+        void ProcessResetOnTrackResultQueue(
+            const RaceCarEntityModuleIO::InputBuffer_PrePhysics* lpInput,
+            RaceCarEntityModuleIO::OutputBuffer_PrePhysics* lpOutput );
+
         // ---- ADDITIVE (WorldModule::EntityModulePreSceneUpdate @0x827BD1F0) ----
         // Declaration-only; body gated in WorldLinkStubs.cpp until this module's
         // own TU lands.
@@ -662,7 +688,23 @@ private:
     // members at their X360-asm-proven byte offsets. The bodied tail functions
     // (scoring map, GetGameModeFlag, AddTrainingRequest, UpdateTailgateTimer) are the
     // only ones in this TU that touch the tail.
-    u8 maTailPadA0[0x182F0 - 0x100E0];  // +0x100E0 (65760) .. +0x182F0 (99056)
+    u8 maTailPadA0a[0x1823D - 0x100E0];  // +0x100E0 (65760) .. +0x1823D (98877)
+
+    // X360 +0x1823D (98877). ⭐ NAMED 2026-08-26 (resetpump wave), carved out of the pad above
+    // with the pad's total byte count unchanged, so no named offset below it moves.
+    // WRITER/READER SET, all from the image (nine sites):
+    //   HandlePrepareForModeAction @0x823092F0 sets it to 1 in the SAME arm that sets the
+    //     player ActiveRaceCar's mbIsWrecked (+0x782) -- i.e. the game-mode flag 0x200 arm,
+    //     which is Showtime; HandleStopModeAction @0x82307A30 clears it.
+    //   Read by WriteUpdatedAIData (the "is in showtime" bit it publishes for the PLAYER slot),
+    //     UpdateBoost, ProcessPlayerVehicleInput, ProcessLeapedAndStompedCars,
+    //     CheckForResetOnTrackConditions, UpdateCrashingPlayerContacts, PostSceneUpdate.
+    // ⚠️ NEITHER WRITER EXISTS IN THIS TREE, so it is false for the whole free-burn drive --
+    // which is CORRECT for free burn, and is why the showtime bit WriteUpdatedAIData publishes
+    // is always clear here.
+    bool mbIsInShowtimeMode;             // +0x1823D (98877)
+
+    u8 maTailPadA0b[0x182F0 - 0x1823E];  // +0x1823E (98878) .. +0x182F0 (99056)
 
     // X360 +0x182F0 (99056). Seconds the player has been continuously tailgating another
     // race car; UpdateTailgateTimer accumulates dt into it while tailgating, else zeroes

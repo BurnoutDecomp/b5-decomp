@@ -786,9 +786,15 @@ namespace
 // by round-tripping a fine line test through the scene manager. On PC that round trip is
 // severed in FIVE independent places, every one of them a stub or an absent body:
 //   1. PlaceOnTrackManager::PostSceneUpdate @0x822D3168 -- absent (this wave leaves it so)
-//   2. RaceCarEntityModule::PostSceneUpdate @0x822FE3F0 -- WorldLinkStubs.cpp:1358 stub
+//   2. RaceCarEntityModule::PostSceneUpdate @0x822FE3F0 -- ⚠️ THIS RUNG IS STALE AND IS
+//      CORRECTED 2026-08-26 (resetpump): it has NOT been a WorldLinkStubs stub since the
+//      crash-exit wave (2026-08-25) -- it is a real minimal-complete SLICE in
+//      BrnRaceCarEntityModule_CrashExit.cpp. What is still absent is the leg of it that would
+//      post here: PlaceOnTrackManager::PostSceneUpdate, i.e. rung 1. The SEVERANCE IS REAL,
+//      the reason given for it was out of date.
 //   3. OutputBuffer_PostScene::GetSceneFineLineTestQueue -- declaration-only; the member is
-//      a 16400-byte opaque blob with no AddEvent
+//      a 16400-byte opaque blob with no AddEvent (its Construct now runs -- resetpump wave --
+//      but the member type itself is still a `maReserved` slice)
 //   4. WorldModule::BridgeRaceCarModuleToSceneModule_PostScene -- WorldLinkStubs.cpp:2488 stub
 //   5. SceneManagerModule::ProcessSceneQueries -- WorldLinkStubs.cpp:2287 stub;
 //      ProcessFineQueries/ProcessLineTestFine absent; FineIntersectionTestModule::

@@ -206,12 +206,35 @@ void AIModule::Construct()
     for( s32 liCar = 0; liCar < 35; ++liCar )
     {
         maAICars[liCar].meCarState = E_AI_CAR_STATE_INACTIVE;
+
+        // ⛔⛔ ADDED 2026-08-26 (resetpump wave) AND IT IS NOT COSMETIC.
+        // AIModule::UpdateResetOnTrackManager @0x8279ABB0 reads
+        // `GetAICar(mePlayerGlobalRaceCarIndex)->miRaceCarIndex` (AICar +0x14C4) and hands the
+        // result to ResetOnTrackManager::Update as its lePlayer -- which opens with TWO RANGE
+        // ASSERTS (0 <= index < 35) inside its own GetAICar. On the console that member is .bss
+        // and reads 0 before AICar::Construct (an ARTIST export hole) runs. ON THE HOST IT IS
+        // INDETERMINATE: AICar has no constructor, and this array's storage is whatever the
+        // allocation held. An indeterminate s32 there is a HALTING dev assert on the first
+        // frame the pump runs -- i.e. exactly the frame this wave was built to reach.
+        // ⭐ [[deterministic-does-not-mean-data]] in reverse: the value would have been
+        // repeatable per boot and still meaningless, which is the worst kind to debug.
+        // Zero is the console's own pre-Construct value, not a stand-in.
+        maAICars[liCar].miRaceCarIndex = 0;
     }
 
     // [FLAG PC boot gate] RouteMapDebugComponent::Construct, the +294784 Random prime, the six
     // perf monitors, AIDebugComponent::Construct, the REST of 35x AICar::Construct (see above),
     // 8x AIDriver::Construct, the +322400 flag block and ContactSpyInterface::Construct -- see
     // the banner.
+
+    // ⭐ The two player cursors (resetpump wave 2026-08-26). The console does NOT store them in
+    // Construct -- it relies on the module's .bss being zero and on Update overwriting the first
+    // one every frame. On the host the module is not zero-initialised, so both are seeded here
+    // to the values the console's .bss holds: INVALID for the active index (which Update always
+    // overwrites before anything reads it) and 0 for the global index, whose only writer arm
+    // (the AI driver chain) does not exist on this build. See the members' banner.
+    mePlayerActiveRaceCarIndex = E_ACTIVE_RACE_CAR_INDEX_INVALID;
+    mePlayerGlobalRaceCarIndex = E_GLOBAL_RACE_CAR_INDEX_0;
 
     // 0x82795... `stw r11(1), 4(r3)` -- the base Construct above cleared it. LOAD-BEARING.
     mbIsNewModule = true;

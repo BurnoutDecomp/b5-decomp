@@ -46,6 +46,7 @@
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleOutputInterface.h" // VehicleOutputInterface / VehicleManagerOutputInterface / VehicleOutputRequestInterface
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"         // CgsDev::PerfMonCpu::Start/StopMonitor
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                // CGS_ASSERT
+#include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_EventLineTestNearest.h" // InEventLineTestNearest (GenerateAboveGroundLineTests)
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"                  // CgsModule::VariableEventQueue<1536,16> (the GameEventQueue)
 #include "GameShared/GameClasses/System/Timer/CgsTime.h"                          // CgsSystem::Time (mCurrentTime = lrCurrentTime)
 #include "SharedClasses/BrnSharedConstants.h"                                     // BrnUpdateSet
@@ -167,6 +168,84 @@ namespace Vehicle
                 lpVehicleOutputInterface,
                 lpDeformationInterface,
                 static_cast<BrnGameState::ETakedownType>(-1));               // li r10, -1
+        }
+    }
+
+    // ------------------------------------------------------------------------------------
+    // GenerateAboveGroundLineTests  @0x82633990  (109 insns)   -- THE PRODUCER
+    //
+    // For every LIVE race car, post one downward 10 m "nearest" line test into the physics
+    // module's outgoing fine-query queue. The result comes back next frame through
+    // WorldBridgeSceneToPhysics -> VehicleInputInterface::AddLineTestResult ->
+    // ProcessAboveGroundLineTestsResults (immediately below), which stamps the car's
+    // AboveGroundTestResult -- the thing RCEM::UpdateRaceCarCollisionTagging needs before a car
+    // can be given an AI section index.
+    //
+    // Console body (r3 == this, r4 == lpRequestInterface):
+    //   0x826339A0  the bit-array base: `addis r14,r3,1 ; addi r14,r14,-0x5340` == this+44224
+    //               == &mUsedRaceCars, then the standard CgsBitArray GetFirstNonZeroBit /
+    //               GetNextNonZeroBit walk (its own CgsBitArray.h:203 index tripwire inline).
+    //   0x82633A24  the queue seat: `addi r15, r4, 0x28C0` == &mRequestFineLineQueue
+    //   0x82633A74  `mulli r10, r31, 0x1460 ; add r10,r10,r3 ; lvx128 v0, r10, 0x780`
+    //               == maRaceCarVehicles[i] (base +1856, stride 5216) + 0x40 == GetPosition()
+    //   0x82633AD8  `vsubfp v0,v0,v13 ; vrlimi128 v12,v0,4,0` -- v13 is a splat of
+    //               flt_82004A20 (READ FROM THE IMAGE: 10.0f) and vrlimi mask 4 selects WORD 1,
+    //               so ONLY Y is lowered: the end point is the start point 10 m straight down.
+    //   0x82633ABC  `clrlslwi r10,r9,24,8 ; oris r10,r10,2` -> mQueryId == 0x20000 | (i << 8).
+    //               ⭐ THAT ENCODING IS THE CONTRACT WITH THE RESULT HALF: the consumer below
+    //               reads request type as (id >> 16) & 0xFF (must be 2) and the car index as
+    //               (id >> 8) & 0xFF. Producer and consumer are 130 KB apart in the image and
+    //               nothing but this pair of shifts ties them together.
+    //   0x82633A80  mx32EntityTypeFlags = 2 ; 0x82633AC0 mExcludeEntityId = dword_82F2A3A4
+    //               (READ FROM THE IMAGE: 0xFFFFFFFF == EntityId::SetInvalid) ;
+    //               0x82633A88 meExclusionMode = 0 ; 0x82633A84 mxVolumeTypeFlags = 2
+    //   0x82633AEC  AddEvent<InEventLineTestNearest>(&event, 6)
+    // ------------------------------------------------------------------------------------
+    void VehicleManager::GenerateAboveGroundLineTests(
+        VehicleOutputRequestInterface* lpRequestInterface)
+    {
+        CGS_ASSERT(lpRequestInterface != 0, "lpRequestInterface != NULL");
+        if (lpRequestInterface == 0)
+        {
+            return;
+        }
+
+        // flt_82004A20, read out of the decrypted ARTIST image (0x41200000).
+        static const f32 KF_ABOVE_GROUND_RAY_LENGTH = 10.0f;
+        // The (id >> 16) & 0xFF value ProcessAboveGroundLineTestsResults tests for.
+        static const u32 KU_REQUEST_TYPE_RACE_CAR_ABOVE_GROUND = 2u;
+        // The console's `li r5, 6` -- the scene-query event TYPE id the variable queue tags the
+        // record with. (3 is the traffic traction line test the physical-traffic manager posts;
+        // the SceneManager's query dispatcher switches on this.)
+        static const s32 KI_SCENE_QUERY_EVENT_LINE_TEST_NEAREST = 6;
+
+        for (s32 liCar = mUsedRaceCars.GetFirstNonZeroBit();
+             liCar >= 0;
+             liCar = mUsedRaceCars.GetNextNonZeroBit(liCar))
+        {
+            // [FLAG PC hardening] value-initialised. The console builds this record on the
+            // stack and leaves the 15 pad bytes after mxVolumeTypeFlags as whatever was there;
+            // AddEvent block-copies all 64. Nothing reads the pad, so zeroing it is invisible
+            // -- and it keeps an uninitialised read off a shared queue.
+            CgsSceneManager::SceneManagerIO::InEventLineTestNearest lEvent = {};
+
+            const Vector3 lStart = maRaceCarVehicles[liCar].GetPosition();
+            Vector3 lEnd = lStart;
+            lEnd.y -= KF_ABOVE_GROUND_RAY_LENGTH;
+
+            lEvent.mLineStart          = lStart;
+            lEvent.mLineEnd            = lEnd;
+            lEvent.mQueryId.mId        = (KU_REQUEST_TYPE_RACE_CAR_ABOVE_GROUND << 16) |
+                                         (static_cast<u32>(liCar) << 8);
+            lEvent.mx32EntityTypeFlags = 2u;
+            lEvent.mExcludeEntityId.SetInvalid();
+            lEvent.meExclusionMode     =
+                CgsSceneManager::SceneManagerIO::E_NEAREST_EXCLUDE_ENTITY_ONLY;
+            lEvent.mxVolumeTypeFlags   = 2u;
+
+            lpRequestInterface->GetRequestFineLineQueue()
+                ->AddEvent<CgsSceneManager::SceneManagerIO::InEventLineTestNearest>(
+                    &lEvent, KI_SCENE_QUERY_EVENT_LINE_TEST_NEAREST);
         }
     }
 

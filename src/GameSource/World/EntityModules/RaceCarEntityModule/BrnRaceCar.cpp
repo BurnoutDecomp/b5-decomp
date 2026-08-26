@@ -248,8 +248,25 @@ void RaceCar::RemoveFromWorld()
 // RequestResetOnTrack @ 0x822BEB28. Queues a reset-on-track request, unless one is
 // already pending or the attached active car is already due to be placed on track.
 //
-// ⛔⛔ NOTHING IN THIS TREE READS mbToBeResetOnTrack. MEASURED 2026-08-25, and the number
-// the crash waves have been carrying ("~25 functions, ~2500 instructions") IS TOO SMALL BY
+// ⭐⭐⭐ READ THIS FIRST -- 2026-08-26 (resetpump wave). EVERY "ABSENT" / "INERT boot gate" /
+// "still pins" CLAIM IN THE FOUR PARAGRAPHS BELOW IS HISTORY. THE WHOLE CHAIN IS LANDED AND A
+// REQUEST HAS TRAVERSED IT, MEASURED (runs rp_crash2 / rp_crash3, asserts=0, no AV):
+//     [resetpump] request SENT: global car 0 type 1        <- RCEM::SendResetOnTrackRequests
+//     [resetpump] request RECEIVED by the AI module        <- the two AI bridges
+//     [rot] request resolved: ... -> FAILURE (consumer uses GetResetCoords)
+//     [resetpump] RESULT applied: ... -> (3003.20, 2.51, -1653.75)
+//     [teleport] ResetActiveRaceCar RE-RESET car 0 -> road (...)   <- the car IS put back
+// and the car then drove about a kilometre. The FAILURE arm is the console's designed fallback,
+// not a hole: it is what routes the reset through THIS car's own GetResetCoords.
+// ⛔ WHAT STILL FAILS is one rung further down and is NOT in this chain at all: nothing clears
+// the crash STATE (mbCrashing stays 1, mfTimeCrashing climbs, no LEAVE_CRASHED). See
+// BrnVehicleManager.cpp::SetRaceCarCrashing's banner -- it names the single parked vtable
+// dispatch in VehicleManager::ProcessResetEvents that would do it.
+// The paragraphs below are kept because their SHAPE of the chain, their instruction counts and
+// their working-out are still the best map of it; only their status verbs have expired.
+//
+// ⛔⛔ [HISTORY, 2026-08-25] NOTHING IN THIS TREE READS mbToBeResetOnTrack. MEASURED, and the
+// number the crash waves have been carrying ("~25 functions, ~2500 instructions") IS TOO SMALL BY
 // MORE THAN HALF, and names the wrong blocker. The real chain and its real cost:
 //
 //   RCEM::SendResetOnTrackRequests @0x822CE178 (57)   -- the only reader of this flag. Walks

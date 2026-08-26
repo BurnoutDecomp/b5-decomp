@@ -418,9 +418,30 @@ namespace RaceCarEntityModuleIO
             mGlobalRaceCarOutputInterface.Clear();            // X360 +971440
             mReplayActiveRaceCarOutputInterface.Clear();      // X360 +973856
             mReplayGlobalRaceCarOutputInterface.Clear();      // X360 +984336
-            // The console's nine-slot zero fill at +987440..+987504 lands inside
-            // mRaceCarAIInterface, ahead of its management queue; those words belong to that
-            // interface's own bring-up [FLAG, unchanged from the previous body].
+            // ⭐⭐⭐ 2026-08-26 (resetpump wave) -- THE NINE-SLOT ZERO FILL IS NO LONGER A FLAG,
+            // AND THE TENTH STORE THIS BANNER NEVER TRANSCRIBED IS HERE TOO.
+            // The console's `*(a1 + 987440 .. 987504) = 0` is NINE 8-byte stores, and
+            // mRaceCarAIInterface starts at 987512 - 0x2F8 == 986752, so 987440 == interface
+            // + 0x2B0: it is exactly the nine BitArray<8> state sets, mInAirBits through
+            // mFrontRayOccluded. Not "words belonging to a bring-up" -- named members.
+            // ⛔ AND THREE INSTRUCTIONS FURTHER DOWN THE CONSOLE DOES `*(a1 + 1003956) = 0`.
+            // 986752 + 17204 == 1003956, and interface + 17204 == 0x4334 == mbPlayerDataSet.
+            // A PREVIOUS WAVE READ THIS FUNCTION, STOPPED AT THE NINE STORES, AND RECORDED THAT
+            // "SetPlayerActiveRaceCarData's CGS_ASSERT(!mbPlayerDataSet) has no per-frame clear,
+            // so landing WriteUpdatedAIData is a per-frame HALTING assert". IT IS NOT: the clear
+            // is right here, and it was simply missing from this body. RETRACTED.
+            // ⭐ The lesson, because it has now cost this one function three separate waves (the
+            // four Clears, the management queue, and this pair): THE TRANSCRIBED CONSOLE LIST IN
+            // A BANNER IS NOT THE CONSOLE BODY. Re-read the asm before trusting the list.
+            mRaceCarAIInterface.mInAirBits.UnSetAll();           // X360 +987440
+            mRaceCarAIInterface.mCrashingBits.UnSetAll();        // X360 +987448
+            mRaceCarAIInterface.mShowtimeBits.UnSetAll();        // X360 +987456
+            mRaceCarAIInterface.mOnStartLineBits.UnSetAll();     // X360 +987464
+            mRaceCarAIInterface.mDriftingBits.UnSetAll();        // X360 +987472
+            mRaceCarAIInterface.mRaceCarContactBits.UnSetAll();  // X360 +987480
+            mRaceCarAIInterface.mPlayerContactBits.UnSetAll();   // X360 +987488
+            mRaceCarAIInterface.mSetActiveRaceCars.UnSetAll();   // X360 +987496
+            mRaceCarAIInterface.mFrontRayOccluded.UnSetAll();    // X360 +987504
             // The console's VariableEventQueue<16384,16>::Construct(+987512). REAL as of the
             // reset-player-car wave: that offset is mRaceCarAIInterface.mManagementQueue (the
             // interface's own +0x2F8), and RaceCarEntityModule::SpawnRaceCar AddEvents an
@@ -428,6 +449,10 @@ namespace RaceCarEntityModuleIO
             // list above named this call and the body never made it -- the first spawn would
             // have fired the "Not Constructed" pair (CgsVariableEventQueue.h:454 / :728).
             mRaceCarAIInterface.mManagementQueue.Construct(); // X360 +987512
+            // X360 +1003956 == mRaceCarAIInterface + 0x4334 -- see the banner above. WITHOUT
+            // THIS LINE the second frame's SetPlayerActiveRaceCarData fires
+            // "!mbPlayerDataSet" and the PC assert manager blocks the game until END.
+            mRaceCarAIInterface.mbPlayerDataSet = false;      // X360 +1003956
             mAudioCarLoadedDataQueue.Construct();             // X360 +1004120
             mbRequestingRivalUpdate = false;                  // X360 +1004112
             // [FLAG] the console's trailing eight-slot per-car clear at +1004520 (with the
@@ -546,6 +571,17 @@ namespace RaceCarEntityModuleIO
             // then walks a NULL mpEvents if Construct never ran. Same defect class as the
             // mVehicleDriverInterface line in the OutputBuffer_PrePhysics twin below.
             mTakedownEventQueue.Construct();
+            // ⭐⭐ 2026-08-26 (resetpump wave) -- ADDED, AND IT HAD BECOME MANDATORY, for the
+            // fifth time in this buffer family. The X360 Construct's own list above names
+            // "ResetOnTrackResult<128>/PlaceOnTrackRequest<128> (inside the AI result
+            // interface)"; the PC slice skipped both while nothing wrote them. This wave's
+            // WorldModule::BridgeAIToEntityModules_PrePhysics now drives
+            // SetAIModuleResultInterface every frame, and that body Clear()s + Append()s BOTH
+            // member rings -- which asserts "Not Constructed" and then walks a NULL mpEvents if
+            // Construct never ran. [[unconstructed-buffer]]: un-gating the producer CREATES the
+            // fault, it does not reveal it.
+            mAIModuleResultInterface.GetResetOnTrackResultQueue()->Construct();
+            mAIModuleResultInterface.GetPlaceOnTrackRequestQueue()->Construct();
             mbControllerActive  = false;
             mbInHardStopCamera  = false;
         }
@@ -578,7 +614,13 @@ namespace RaceCarEntityModuleIO
         AIModuleResultInterface             mAIModuleResultInterface;                      // :443
         TakedownEventQueue                  mTakedownEventQueue;                          // :444
         ScoringInterface                    mScoringInterface;                            // :445
-        OnlineScoringInterface              mOnlineScoringInterface;                       // :446  (0x822B5800)
+        // ⚠️ ADDRESS CORRECTED 2026-08-26 (resetpump wave): this member's accessor is
+        // 0x822B59F8, not 0x822B5800. 0x822B5800 is the const GetAIModuleResultInterface
+        // (it returns this+196656 == &mAIModuleResultInterface, which is exactly
+        // mSceneResultQueue's end rounded up, and RCEM::ProcessResetOnTrackResultQueue calls
+        // it for the reset-result ring). The .cpp corrected this on 2026-08-11 and this
+        // annotation was left behind -- a stale banner is a measurement the next wave believes.
+        OnlineScoringInterface              mOnlineScoringInterface;                       // :446  (0x822B59F8)
         TrafficToRaceCarInterface_PostScene mTrafficToRaceCarInterface_PostScene;         // :447  (0x822B5950)
         bool                                mbControllerActive;                           // :448
         bool                                mbInHardStopCamera;                           // :449

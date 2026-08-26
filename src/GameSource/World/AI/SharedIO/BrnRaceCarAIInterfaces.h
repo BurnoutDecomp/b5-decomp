@@ -182,6 +182,37 @@ namespace BrnAI
             void DeactivateRaceCar(EGlobalRaceCarIndex leGlobalRaceCarIndex, bool lbIsInAMode);                          // :85
             void DetachAIControl(EGlobalRaceCarIndex leGlobalRaceCarIndex);                                              // :90
             void SetPlayerActiveRaceCarData(Vector3 lPosition, Vector3 lDirection, EActiveRaceCarIndex leActiveRaceCarIndex); // :101
+
+            // DWARF :147, X360 @0x822B23E8. The per-frame snapshot of ONE active race car:
+            // its transform/velocity/speed/AI-section plus the eight state bits.
+            //
+            // ⚠️ THE EIGHT BOOLS ARE **NOT** IN MEMBER ORDER, and nothing but the asm says so.
+            // Each of the callee's eight arms carries its own `addi rN, r15, 0x2XX` bit-array
+            // seat, and read in ARGUMENT order (r8, r9, r10, then the five stack slots at
+            // +0x6F/+0x77/+0x7F/+0x87/+0x8F) they are:
+            //     0x2B0 mInAirBits · 0x2B8 mCrashingBits · 0x2C0 mShowtimeBits ·
+            //     0x2C8 mOnStartLineBits · 0x2D0 mDriftingBits · 0x2F0 mFrontRayOccluded ·
+            //     0x2D8 mRaceCarContactBits · 0x2E0 mPlayerContactBits
+            // i.e. mFrontRayOccluded comes SIXTH, ahead of the two contact sets. The DWARF
+            // spells eight anonymous `bool`s and cannot distinguish them; the parameter names
+            // below are this tree's, pinned by that seat map AND cross-checked against what the
+            // one caller (RCEM::WriteUpdatedAIData) feeds each slot -- mbIsTouchingPlayer lands
+            // in the slot that seats 0x2E0, mbIsTouchingAnotherRaceCar in 0x2D8, and
+            // meRaceStartState == 0 in 0x2C8. Read the caller's stack displacements backwards
+            // and "touching player" silently becomes "on start line".
+            void UpdateActiveRaceCarData(EActiveRaceCarIndex leActiveRaceCarIndex,
+                                         Matrix44Affine lTransform,
+                                         Vector3 lVelocity,
+                                         f32 lfSpeed,
+                                         u16 luSectionIndex,
+                                         bool lbIsInAir,
+                                         bool lbIsCrashing,
+                                         bool lbIsInShowtime,
+                                         bool lbIsOnStartLine,
+                                         bool lbIsDrifting,
+                                         bool lbIsFrontRayOccluded,
+                                         bool lbIsTouchingAnotherRaceCar,
+                                         bool lbIsTouchingPlayer);
             void SetUpOutOfRangeRaceCar(EGlobalRaceCarIndex leGlobalRaceCarIndex, Vector3 lPosition, Vector3 lAt,
                                         u16 luSection, BrnWorld::EDistrict leDistrict, u8 luNumberOfMedalsToUnlock);     // :130
 
