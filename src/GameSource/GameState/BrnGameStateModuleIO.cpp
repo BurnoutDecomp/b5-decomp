@@ -496,6 +496,16 @@ const OnlineScoringOutputInterface* OutputBuffer::GetOnlineScoringOutputInterfac
     return reinterpret_cast<const OnlineScoringOutputInterface*>(&mOnlineScoringOutputInterfaceStorage);
 }
 
+// INLINED on the X360 -- BridgeGameStateToSound @0x823CDE50 computes `outputBuffer + 176344`
+// itself and hands the address straight to RootInputBuffer::SetGameModeInterface (the same
+// idiom as the two scoring accessors above; the bridge holds the read lock). 16-byte record
+// (the root setter's 4-word copy). Phase C3b.
+const GameModeOutputInterface* OutputBuffer::GetGameModeOutputInterface() const
+{
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+    return reinterpret_cast<const GameModeOutputInterface*>(&mGameModeOutputInterfaceStorage);
+}
+
 // =====================  OutputBuffer (OutputBuffer TU)  =====================
 
 // X360 0x8231D560 - write-lock accessor for the resource-request interface (this+0x3414).

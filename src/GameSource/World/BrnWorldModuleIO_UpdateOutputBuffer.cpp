@@ -550,6 +550,22 @@ void UpdateOutputBuffer::SetPropVFXLocatorQueue(const PropVFXLocatorQueue* lpQue
 
 // X360 0x827AA938 (:614 W) -- merge a source prop-became-physical queue into ours (+202960;
 // dispatches the committed BaseEventQueue<PropBecamePhysicalEvent>::Append).
+// X360 0x823B67E8 (read-lock; h:604; exported unnamed) -- the audio-car-loaded queue @ +142632.
+// BridgeWorldToSound @0x823CD580 appends it into the root sound input each frame (phase C3b).
+const UpdateOutputBuffer::AudioCarLoadedDataQueue* UpdateOutputBuffer::GetAudioCarLoadedDataQueue() const
+{
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+    return &mAudioCarLoadedDataQueue;
+}
+
+// X360 0x823B69E0 (read-lock; h:612; the IDA-truncated "BrnWorldI") -- the prop-became-
+// physical event queue @ +202960; same BridgeWorldToSound consumer (phase C3b).
+const UpdateOutputBuffer::PropBecamePhysicalEventQueue* UpdateOutputBuffer::GetPropBecamePhysicalEventQueue() const
+{
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+    return &mPropBecamePhysicalEventQueue;
+}
+
 void UpdateOutputBuffer::AppendPropBecamePhysicalEventQueue(const PropBecamePhysicalEventQueue* lpQueue)
 {
     CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");

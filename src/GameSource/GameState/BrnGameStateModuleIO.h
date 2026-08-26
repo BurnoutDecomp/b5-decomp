@@ -214,6 +214,7 @@ namespace GameStateModuleIO
     // pointer only, so incomplete declarations keep this widely-included header off that chain.
     struct ScoringOutputInterface;         // OutputBuffer +173240 (console span 2736)
     struct OnlineScoringOutputInterface;   // OutputBuffer +175976 (console span 164)
+    struct GameModeOutputInterface;        // OutputBuffer +176344 (console span 16; phase C3b)
 
     // OutputBuffer +169068. The console's OutputBuffer::Construct runs
     // `VariableEventQueue<4096,16>::Construct(this + 169068)` on it and BridgeGameStateToWorld
@@ -565,6 +566,8 @@ namespace GameStateModuleIO
         const ScoringOutputInterface*          GetScoringOutputInterface() const;
         // INLINED on X360 (bridge computes this+175976).
         const OnlineScoringOutputInterface*    GetOnlineScoringOutputInterface() const;
+        // INLINED on X360 (BridgeGameStateToSound @0x823CDE50 computes this+176344; phase C3b).
+        const GameModeOutputInterface*         GetGameModeOutputInterface() const;
 
         // ---- OutputBuffer TU accessors ----
         // X360 0x8231D560 (write-lock; line 269) -- non-const twin of GetResourceRequestInterface()
@@ -658,7 +661,9 @@ namespace GameStateModuleIO
         u8  mRaceCarRaceDistanceInterfaceStorage[173240 - 173196];        // console +173196 (44)
         u8  mScoringOutputInterfaceStorage[175976 - 173240];              // console +173240 (2736)
         u8  mOnlineScoringOutputInterfaceStorage[176140 - 175976];        // console +175976 (164)
-        u8  maUnmodelledTailStorage[192488 - 176140];                     // console +176140 .. +192488
+        u8  maPadToGameMode[176344 - 176140];                             // console +176140 .. +176344
+        u8  mGameModeOutputInterfaceStorage[176360 - 176344];             // console +176344 (16; phase C3b)
+        u8  maUnmodelledTailStorage[192488 - 176360];                     // console +176360 .. +192488
         bool mbSetUpAllEventStartsInterfaceIsValid;                       // console +192488
         bool mbSpecificGameModeEventInterfaceIsValid;                     // console +192489
         bool mbControllerActive;                                          // console +192490

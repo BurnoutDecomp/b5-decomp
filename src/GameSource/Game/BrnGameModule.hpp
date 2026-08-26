@@ -683,6 +683,20 @@ namespace BrnGame
         void BridgeSoundToWorld(BrnWorldIO::UpdateInputBuffer* lpWorldInputBuffer,
                                 BrnSound::Module::Io::RootPreUpdateOutputBuffer* lpSoundOutputBuffer);
 
+        // @ 0x823CD580 (phase C3b). The world -> sound input bridge: the vehicle-data
+        // copy (the update-set bit 0x100 picks the REPLAY active-race-car source), the
+        // seven interface installs, and the three queue appends (audio-car-loaded /
+        // game events / prop-became-physical / prop-update notifications).
+        void BridgeWorldToSound(BrnSound::Module::Io::RootInputBuffer* lpSoundInputBuffer,
+                                const BrnWorldIO::UpdateOutputBuffer* lpWorldOutputBuffer,
+                                BrnUpdateSet leUpdateSet);
+
+        // @ 0x823CDE50 (phase C3b). The game-state -> sound input bridge: the 13312
+        // game-action queue append, the game-mode/scoring/online-scoring interface
+        // installs, and the UpdateInfo byte (the two +1009411x flags OR'd).
+        void BridgeGameStateToSound(BrnSound::Module::Io::RootInputBuffer* lpSoundInputBuffer,
+                                    const BrnGameState::GameStateModuleIO::OutputBuffer* lpGameStateOutputBuffer);
+
         // ---- X360 hardware / boot-legal query helpers (BrnGameModule.cpp) ----------------
         // X360 0x823A8B38 -- disk-error worker thread body: raise the system dirty-disc
         // error UI for dwUserIndex; never returns. Static (a thread proc; no `this`).
@@ -905,6 +919,13 @@ namespace BrnGame
         // post-world input buffer.
         bool mbCarSelectActivatePending;
         s32  maiPendingCarSelectActivate[2];
+
+        // The two per-frame flags BridgeGameStateToSound @0x823CDE50 ORs into the
+        // sound UpdateInfo byte (X360 +10094119 / +10094120; writers un-decoded --
+        // they stay false, publishing 0, the boot-state value). Named by offset
+        // pending a richer caller signature (phase C3b).
+        bool mbField10094119;
+        bool mbField10094120;
 
         s32  miInputModuleState;        // @ +10094136 (==4 means input module ready / player-0 assigned)
         s32  miPlayer0ControllerPort;   // @ +10094140 (asserted <= CgsInput::KU_NUMBER_OF_PADS)

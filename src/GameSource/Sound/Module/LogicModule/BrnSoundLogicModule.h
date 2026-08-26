@@ -61,7 +61,9 @@ namespace Module
 // only the pointer is stored here.
 namespace Io
 {
-    class LogicInputBuffer;
+    // (phase C3b: LogicInputBuffer is no longer forward-declarable -- it is the
+    // DWARF typedef of RootInputBuffer, provided by the BrnRootSoundModuleIo.h
+    // include above.)
     class LogicOutputBuffer;
     struct LogicPreUpdateOutputBuffer;   // the PreUpdate scratch (BrnSoundLogicModuleIo.h)
 }

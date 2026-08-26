@@ -169,8 +169,8 @@ namespace RaceCarEntityModuleIO
         bool IsCarInShowtime(EActiveRaceCarIndex) const;                                     // :276 (own TU)
         u32  GetActiveRaceCarColourIndex(EActiveRaceCarIndex) const;                         // :280 (own TU)
         s32  GetActiveRaceCarPaintFinishIndex(EActiveRaceCarIndex) const;                    // :284 (own TU)
-        bool IsPlayerCarActive() const;                                                      // :287 (own TU)
-        EActiveRaceCarIndex GetPlayerActiveRaceCarIndex() const;                             // :290 (own TU)
+        bool IsPlayerCarActive() const;                                                      // :287 (bodied @0x8259B9xx family in BrnRCEntityActiveRaceCarOutputInterface.cpp)
+        EActiveRaceCarIndex GetPlayerActiveRaceCarIndex() const;                             // :290 (bodied @0x82277BF8 in BrnRCEntityActiveRaceCarOutputInterface.cpp)
         EntityId GetPlayerRaceCarEntityId() const;                                           // :293 (own TU)
         // X360 0x8259BB58 -- returns the player car's current speed (mfSpeedMPH @968 inside the
         // player's RaceCarState). Asserts the player index has been set, like GetPlayerRaceCarState.
