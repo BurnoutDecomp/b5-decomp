@@ -27,7 +27,6 @@
 // two ChallengeList/ChallengeListEntry accessors) and the DirtySock lobby TUs mount.
 // =================================================================================================
 
-#include <cstring>   // std::strcmp -- the LobbyNameCmp stand-in ONLY
 
 #include "GameSource/Gui/Flow/HUD/Components/BrnFriendsList.h"
 #include "GameSource/Gui/Flow/HUD/Components/BrnFriendsListEntry.h"
@@ -122,25 +121,9 @@ namespace BrnResource
     }
 }
 
-// EA DirtySock lobby vendor extern (declared in the extern "C" block of
-// CgsServerInterfaceGames.cpp:47). None of the three DirtySock component TUs that declare it
-// are mounted, and no definition exists in the tree.
-//
-// ⚠️⚠️ THIS ONE IS NOT A ZERO, AND THE DIFFERENCE MATTERS. Its callers all test
-// `LobbyNameCmp(a, b) != 0` meaning "a different player". A gate returning 0 would answer
-// "every name is the same name" -- an [[invented arm]] that is actively wrong rather than
-// merely absent, and it would collapse the friends-list sort and the highlight tracking onto
-// record 0. std::strcmp gives the right ANSWER for the != 0 tests and a usable ordering for
-// the three sort comparators. It is still a STAND-IN: EA's real LobbyNameCmp is
-// case-insensitive and ignores leading platform decoration, so it will disagree on case.
-// DELETE-WHEN a DirtySock lobby TU mounts.
-extern "C" s32 LobbyNameCmp(const char* lpacNameA, const char* lpacNameB)
-{
-    static bool sbLogged = false;
-    LogGateOnce(sbLogged, "LobbyNameCmp (EA DirtySock vendor extern)");
-    if (lpacNameA == 0 || lpacNameB == 0)
-    {
-        return (lpacNameA == lpacNameB) ? 0 : 1;
-    }
-    return static_cast<s32>(std::strcmp(lpacNameA, lpacNameB));
-}
+// RETIRED 2026-08-26 (same day, other session): the std::strcmp LobbyNameCmp STAND-IN that
+// lived here is gone -- the REAL EA DirtySock body landed in its canonical vendor home,
+// vendor/dirtysdk/src/lobbyname.cpp (@0x82B10050, the 128-byte translation table dumped from
+// the image @0x82146038: case-insensitive, skips controls/space/DEL -- exactly the semantics
+// this banner predicted strcmp would disagree on). Two definitions would be LNK2005; the
+// vendor TU is mounted, so the stand-in dies per its own DELETE-WHEN.

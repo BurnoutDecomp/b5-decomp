@@ -38,7 +38,6 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/CgsTypes.h"                  // Palette / Variant
 #include "SDKs/Realmc/RealmcLoadEntryInfo.h"                                                  // LoadEntryInfo (3-arg ctor stub)
 #include "SDKs/Realmc/RealmcIfaceSaveCheckParams.h"                                           // SaveCheckParams (ctor/dtor stubs)
-#include "GameSource/Gui/Flow/HUD/Components/BrnFriendsListEntry.h"                           // FriendsListEntry::Select link gate (see the block at the end)
 
 namespace CgsResource
 {
@@ -751,15 +750,6 @@ namespace Playback
 }
 }
 
-namespace BrnGui
-{
-    // FriendsListEntry::Select -- FLAG (link gate for the in-flight friends-list
-    // tranche; the vtable emitted by FriendsListComponent::Construct needs every
-    // virtual defined). Declared virtual at BrnFriendsListEntry.h:140 with no PS3
-    // DWARF body and no X360 export: the retail body is almost certainly an empty
-    // header inline (the ICF-folded-blr class). Inert here; DELETE-WHEN the
-    // friends-list tranche lands the real Select.
-    void FriendsListEntry::Select()
-    {
-    }
-}
+// (The FriendsListEntry::Select link gate that lived here died 2026-08-26: the friends-list
+// tranche landed its own gates TU, BrnFriendsListLinkGates.cpp, which carries Select --
+// the DELETE-WHEN fired; two definitions would be LNK2005.)
