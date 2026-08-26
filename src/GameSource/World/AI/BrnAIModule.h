@@ -3,10 +3,21 @@
 #include "types.hpp"
 #include "SharedClasses/BrnSharedConstants.h"   // BrnUpdateSet
 #include "GameSource/World/AI/Route/BrnRouteMapModule.h"
+#include "GameSource/World/AI/ResetOnTrack/BrnResetOnTrackManager.h"   // ResetOnTrackManager
+#include "GameShared/GameClasses/Module/CgsModuleSingleBuffered.h"     // the module base
+#include "GameShared/GameClasses/Module/CgsBaseEventReceiverQueue.h"   // EventReceiverQueue<1024,16>
+#include "GameShared/GameClasses/System/Resource/CgsResourceHandle.h"  // CgsResource::ResourceHandle
 
 #include <eathread/eathread_rwmutex.h>
 
-namespace BrnResource { namespace GameDataIO { template <int N> struct AllocatorListT; struct AllocatorList; } }
+// ⚠️ CLASS-KEY CORRECTED 2026-08-25 (aimodule wave): AllocatorList was forward-declared here
+// as a `struct`, but BrnGameDataAllocatorList.h defines it as a `class`. MSVC mangles the class
+// key into the parameter type (V vs U), so BrnAIModule.cpp emitted
+// ?Prepare@...PEAUAllocatorList... while every caller (compiled against the real header) asked
+// for ...PEAVAllocatorList... -- an LNK2019 the moment the body left WorldLinkStubs.cpp, where it
+// had always been compiled against the real header. A silent trap for any TU that only ever saw
+// this line.
+namespace BrnResource { namespace GameDataIO { template <int N> class AllocatorListT; class AllocatorList; } }
 
 namespace CgsModule { struct IOBufferStack; }
 
@@ -18,22 +29,36 @@ struct Route;
 struct AICar;
 struct AISectionsData;
 
-class AIModule
+// ⭐⭐ 2026-08-25 (aimodule wave): AIModule NOW DERIVES FROM
+// CgsModule::ModuleSingleBuffered, which is what the X360 has done all along --
+// AIModule::Construct @0x82794D08 opens with
+// `bl CgsModule::ModuleSingleBuffered::Construct(this)`, Prepare stage 1 is
+// `ModuleSingleBuffered::Prepare(this)`, Release stage 1 is its Release and Destruct opens with
+// its Destruct. The previous model stood a bare `u32 muBaseVTable = 0x820D0D98` in for the base
+// and could not call any of them. This is the SAME defect class the crash-exit wave found one
+// level up (a MODULE THAT DECLARES NONE OF ITS LIFECYCLE, so every lifecycle call lands on a
+// base default that does nothing for it) -- here it was worse, because there was no base to
+// bind to at all.
+//
+// The base's vtable slot order is this tree's (a virtual dtor at slot 0 -- see the banner in
+// CgsModule.h). Nothing here indexes a module vtable numerically; the three console indirect
+// calls this class reproduces (RouteMapModule slot 16 == its own Prepare(handle), slots 2/3 ==
+// its Release/Destruct) are written BY NAME.
+class AIModule : public CgsModule::ModuleSingleBuffered
 {
 public:
-        // ---- ADDITIVE (attested by WorldModule::Construct @0x827CF540, which
-        //      virtual-dispatches the fleet lifecycle) ----
-        // Declaration-only; the body lands with this module's own TU.
-        void Construct();
+        // X360 0x82794D08. Reached by the wired WorldModule::Construct @0x827CF540 fleet cascade.
+        void Construct() override;
         // ---- ADDITIVE (attested by WorldModule::DestructWorld @0x827BD0F0) ----
-        // Declaration-only; the body lands with this module's own TU.
-        void Destruct();
+        // Still a boot gate in WorldLinkStubs.cpp -- see the note there.
+        void Destruct() override;
         // ---- ADDITIVE (attested by WorldModule::ReleaseWorld @0x827BCE58) ----
-        // Declaration-only; the body lands with this module's own TU.
-        bool Release();
+        // Still a boot gate in WorldLinkStubs.cpp -- see the note there.
+        bool Release() override;
 
-        // ---- ADDITIVE (attested by WorldModule::Prepare @0x827D53B0 stage 11) ----
-        // Declaration-only; the body lands with this module's own TU.
+        // X360 0x82798070 -- the 6-stage prepare machine. NOT the base's virtual Prepare()
+        // (different signature): the console calls this one directly from WorldModule::Prepare
+        // stage 11 and it calls the base's inside its own stage 1.
         bool Prepare( BrnResource::GameDataIO::AllocatorList* lpAllocatorList,
                       AIModuleIO::OutputBuffer* lpOutputBuffer );
 
@@ -49,6 +74,15 @@ public:
 
     AIModule();
 
+    // The AI road network, once LoadMapData + RouteMapModule::Prepare have resolved it.
+    // Non-null only from prepare stage 4 onward. (The X360's own GetAISectionsData
+    // @0x8277BC00 builds a temporary ResourcePtr from mMapDataHandle and returns its
+    // memory resource; this is that read, without the temporary's list churn.)
+    const AISectionsData* GetLoadedAISectionsData() const;
+
+    // Has the module finished its own prepare machine (stage 5)?
+    bool IsPrepared() const { return mePrepareStage == E_PREPARESTAGE_DONE; }
+
     // DWARF-authoritative nested enum (BrnAIModule.h:83): the multi-frame prepare state
     // machine AIModule::Prepare steps through (advanced by the free post-increment operator++).
     enum EPrepareStage
@@ -59,6 +93,29 @@ public:
         E_PREPARESTAGE_ROUTEMAP  = 3,
         E_PREPARESTAGE_AICARS    = 4,
         E_PREPARESTAGE_DONE      = 5,
+    };
+
+    // The AI module's OWN release stage machine (X360 +294768, four states, read by
+    // AIModule::Release @0x8276E270 and seeded to DONE by Construct exactly as
+    // CrashModule::Construct seeds its own). Distinct from -- and shadowing nothing of --
+    // the base's private EManagerReleaseStage.
+    enum EReleaseStage
+    {
+        E_RELEASESTAGE_START    = 0,
+        E_RELEASESTAGE_BASE     = 1,
+        E_RELEASESTAGE_ROUTEMAP = 2,
+        E_RELEASESTAGE_DONE     = 3,
+    };
+
+    // LoadMapData's own sub-state machine (X360 +294772, five states; the default arm's
+    // baked text is "AIModule::LoadMapData in a weird state", BrnAIModule.cpp:491).
+    enum ELoadMapDataStage
+    {
+        E_LOADMAPDATA_REQUEST_BUNDLE  = 0,
+        E_LOADMAPDATA_AWAIT_BUNDLE    = 1,
+        E_LOADMAPDATA_REQUEST_MAPDATA = 2,
+        E_LOADMAPDATA_AWAIT_MAPDATA   = 3,
+        E_LOADMAPDATA_DONE            = 4,
     };
 
     // Declared-only accessors needed by RouteMapDebugComponent::RenderHUD (its own TU). Bodies live
@@ -82,13 +139,16 @@ public:
     f32             GetDifficulty() const;                // *(this + 0x4EBA4)
 
 private:
+    // X360 0x82795340 (167 insns) -- stage 2 of Prepare. LoadBundle("AI.dat") then acquire
+    // "WorldMapData"; drains the reply into mMapDataHandle.
+    bool LoadMapData( AIModuleIO::OutputBuffer* lpOutputBuffer );
+
     struct RouteRequestSlot
     {
         s32 miRouteId;
         u8  mPad0[32];
     };
 
-    u32                 muBaseVTable;
     EA::Thread::RWMutex mInputMutex;
     EA::Thread::RWMutex mOutputMutex;
     u8                  mPad0[252520];
@@ -120,6 +180,46 @@ private:
     u8                  mPad10[8420];
     RouteMapModule      mRouteMapModule;
     s32                 miWorldRouteRequest;
+
+    // ================================================================================
+    // ---- NAMED MEMBERS (aimodule wave 2026-08-25) ----------------------------------
+    // ================================================================================
+    // HOST LAYOUT IS NOT OFFSET-FAITHFUL AND NEVER WAS. The pad spine above was derived
+    // from console WORD indices; on this LLP64 host EA::Thread::RWMutex, every pointer and
+    // every embedded object is a different size, so no member of this class sits at its
+    // X360 byte offset. The X360 offset recorded against each member below is therefore the
+    // IDENTITY authority (it is what proves WHICH field a console body is touching), not a
+    // placement instruction. Nothing outside this class addresses the module by offset --
+    // verified by grep for `mAIModule` before the change.
+    //
+    // These are appended rather than carved out of the pads on purpose: carving would move
+    // every existing pad-relative neighbour for no gain, since the offsets are already not
+    // reproducible. The pads stay exactly as committed.
+
+    // X360 +294764 (0x47F6C). The 6-stage prepare machine cursor.
+    EPrepareStage       mePrepareStage;
+    // X360 +294768 (0x47F70). The module's own release machine cursor; Construct seeds it
+    // to DONE(3), Prepare's success arm resets it to START(0).
+    EReleaseStage       meReleaseStage;
+    // X360 +294772 (0x47F74). LoadMapData's sub-stage.
+    ELoadMapDataStage   meLoadMapDataStage;
+
+    // X360 +294832 (0x47FB0), backing buffer at +294856 with capacity 1024 / alignment 16
+    // (Construct stores `*(this+294848) = 1024`, `*(this+294852) = 16`,
+    // `*(this+294832) = this+294856` -- i.e. exactly EventReceiverQueue<1024,16>::Construct,
+    // whose base Construct writes {buffer, capacity, alignment} then Clear()s. The three
+    // console stores land at base+16 / base+20 / base+0, which is that layout exactly).
+    CgsModule::EventReceiverQueue<1024, 16> mResourceReceiverQueue;
+
+    // X360 +295880 (0x483C8). The 8-byte resource handle LoadMapData copies out of the
+    // "WorldMapData" acquire reply and Prepare stage 3 hands to RouteMapModule::Prepare
+    // (`ld r4, 0(this+295880)` -- ONE 64-bit load of the console's two 32-bit pointers,
+    // i.e. the whole ResourceHandle passed by value in a single GPR).
+    CgsResource::ResourceHandle mMapDataHandle;
+
+    // X360 +286128 (0x45DB0). The reset-on-track manager. EMBEDDED BY VALUE, and its ONLY
+    // construction site in the whole image is this module's Prepare stage 3.
+    ResetOnTrackManager mResetOnTrackManager;
 };
 
 // Free post-increment over the AI prepare-stage enum (DWARF BrnAIModule.h:417). X360 0x82765A10.

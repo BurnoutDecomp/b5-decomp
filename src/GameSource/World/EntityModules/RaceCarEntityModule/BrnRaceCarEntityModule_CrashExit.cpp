@@ -34,6 +34,21 @@
 // flagged mPhysicsState.mbCrashing at the moment the complete event lands. The other branch --
 // ActiveRaceCar::ResetAfterCrash -- is fully live, and it is the one that clears the wreck state.
 // Both are reproduced; which one fires is decided by the console's own test, not by this slice.
+//
+// ⭐ BOUNDARY MOVED 2026-08-26 (aimodule slice 1). The paragraph above still stands, but the
+// REASON it stands has changed and the old reason -- "the AI module lifecycle is an inert boot
+// gate" -- IS NOW FALSE. AI.dat loads, WorldMapData resolves and BrnAI::ResetOnTrackManager IS
+// Constructed against a real bound road network (measured on the boot log: version 12, 7639
+// sections, 136 reset pairs, 3273824 B). The remaining hole is the PUMP, in dependency order:
+//   (1) SendResetOnTrackRequests @0x822CE178 (57) -- this file's own park, still absent
+//   (2) the 35-entry AI-car array AIModule::Construct still parks. THIS IS THE REAL GATE ON
+//       THE WHOLE PUMP, not a later polish: ResetOnTrackManager::Update @0x8279A890
+//       dereferences GetAICar(mePlayerGlobalRaceCarIndex) at +2714 on its FIRST request, and
+//       AIModule::Prepare passes the manager a NULL array today (flagged at that site).
+//   (3) AIModule::Update @0x8279B478 + UpdateResetOnTrackManager @0x8279ABB0 -- still boot
+//       gates in WorldLinkStubs.cpp
+//   (4) ResetOnTrackManager::Update and its 32 siblings (~4,750 insns, one bodied)
+//   (5) ProcessResetOnTrackResultQueue @0x822F4580 (192)
 // =================================================================================================
 
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnRaceCarEntityModule.h"
@@ -227,13 +242,17 @@ void RaceCarEntityModule::PostSceneUpdate(
                    " PlaceOnTrackManager::PostSceneUpdate, SendResetOnTrackRequests,"
                    " CheckForResetOnTrackConditions) [FLAG]\n"
                    "[crash-exit] ... and SendResetOnTrackRequests @0x822CE178 (57) is the ONLY"
-                   " reader of RaceCar::mbToBeResetOnTrack, which the crash exit sets. Its"
-                   " downstream (AIModule::Update -> UpdateResetOnTrackManager ->"
-                   " ResetOnTrackManager, 37 fns / 5307 insns) is blocked on the AI MODULE"
-                   " LIFECYCLE, not on the manager: AIModule::Prepare is an inert boot gate, so"
-                   " AI.dat/WorldMapData never loads and ResetOnTrackManager is never"
-                   " Constructed. Until that lands a heavy crash pins the car, which is why"
-                   " crash ENTRY is disabled on the public path (BRN_ENABLE_CRASH_ENTRY)."
+                   " reader of RaceCar::mbToBeResetOnTrack, which the crash exit sets."
+                   " BOUNDARY UPDATED 2026-08-26 (aimodule slice 1): the AI MODULE LIFECYCLE IS"
+                   " NO LONGER THE BLOCKER -- AIModule::Construct/Prepare/LoadMapData are real,"
+                   " AI.dat loads, WorldMapData resolves (version 12, 7639 sections) and"
+                   " BrnAI::ResetOnTrackManager IS Constructed with a bound road network."
+                   " What is still missing is the REQUEST/RESULT PUMP above it, in this order:"
+                   " (1) this SendResetOnTrackRequests, (2) the AI-car array AIModule::Construct"
+                   " still parks, (3) AIModule::Update + UpdateResetOnTrackManager (still boot"
+                   " gates), (4) ResetOnTrackManager::Update and its 32 siblings, (5)"
+                   " ProcessResetOnTrackResultQueue. So a heavy crash STILL pins the car and"
+                   " crash ENTRY stays off the public path (BRN_ENABLE_CRASH_ENTRY)."
                    " See BrnRaceCar.cpp::RequestResetOnTrack [FLAG]\n";
         }
     }

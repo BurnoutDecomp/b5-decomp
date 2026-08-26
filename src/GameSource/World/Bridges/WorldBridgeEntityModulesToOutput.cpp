@@ -540,35 +540,20 @@ void BridgeAIModuleToOutput(
     CGS_ASSERT( lpWorldOutput != 0, "lpWorldOutput != NULL" );
     CGS_ASSERT( lpAIOutputBuffer != 0, "lpAIOutputBuffer != NULL" );
 
-    // [FLAG PC boot gate] BrnAI::AIModuleIO::OutputBuffer is still an opaque image on
-    // this build and its four const getters are documented inert gates that return NULL;
-    // every one of the four world-side Append/Set entry points below dereferences its
-    // argument unguarded. Skip each transfer while its source getter is gated -- delete
-    // the guards when the AI output buffer's members land.
-    const BrnResource::GameDataIO::RequestInterface<4096>* lpAIRequests =
-        lpAIOutputBuffer->GetAIResourceRequestInterface();
-    if ( lpAIRequests != 0 )
-    {
-        lpWorldOutput->AppendResourceRequestInterface( lpAIRequests );
-    }
-    const BrnWorldIO::UpdateOutputBuffer::RouteResponseQueue* lpRouteResponses =
-        lpAIOutputBuffer->GetRouteResponseQueue();
-    if ( lpRouteResponses != 0 )
-    {
-        lpWorldOutput->AppendRouteResponseQueue( lpRouteResponses );
-    }
-    const BrnAI::AIModuleIO::AICarOutputInterface* lpAICarOutput =
-        lpAIOutputBuffer->GetAICarOutputInterfaceConst();
-    if ( lpAICarOutput != 0 )
-    {
-        lpWorldOutput->SetAICarOutputInterface( lpAICarOutput );
-    }
-    const BrnWorldIO::UpdateOutputBuffer::GameEventQueue* lpAIGameEvents =
-        lpAIOutputBuffer->GetGameEventQueueConst();
-    if ( lpAIGameEvents != 0 )
-    {
-        lpWorldOutput->AppendGameEventQueue( lpAIGameEvents );
-    }
+    // ⭐ GUARDS DELETED 2026-08-25 (aimodule wave), exactly as the note they replaced asked
+    // ("delete the guards when the AI output buffer's members land"). The four const getters
+    // were inert gates returning NULL; they now return the addresses of real typed members of
+    // BrnAI::AIModuleIO::OutputBuffer, so all four transfers run unconditionally as the X360's
+    // do. ⭐ THE FIRST ONE IS THE WHOLE POINT OF THIS WAVE: it is how AIModule::LoadMapData's
+    // LoadBundle("AI.dat") and AcquireResource("WorldMapData") requests leave the AI module and
+    // reach the resource module. WorldModule::Prepare's stage-11 NOT-DONE arm calls this bridge
+    // on every re-entry, which is the pump that carries the request out and lets the reply come
+    // back on the AI module's own receiver queue.
+    lpWorldOutput->AppendResourceRequestInterface(
+        lpAIOutputBuffer->GetAIResourceRequestInterface() );
+    lpWorldOutput->AppendRouteResponseQueue( lpAIOutputBuffer->GetRouteResponseQueue() );
+    lpWorldOutput->SetAICarOutputInterface( lpAIOutputBuffer->GetAICarOutputInterfaceConst() );
+    lpWorldOutput->AppendGameEventQueue( lpAIOutputBuffer->GetGameEventQueueConst() );
 }
 
 // ----------------------------------------------------------------------------

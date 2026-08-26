@@ -130,6 +130,12 @@ namespace CgsResource
         void  Free(u16 luNodeIndex);
 
         int  GetAmountFree() const;
+        // [FLAG PC diagnostic] inline reads of the two size words, for the pool-FULL report in
+        // CgsResourcePool::AllocateMemoryForResource. The out-of-line GetAmountFree/GetTotalSize
+        // above are DECLARED-ONLY in this tree (no body anywhere -- measured as 2 x LNK2019), so
+        // a diagnostic must not call them.
+        u32  GetAmountFreeBytes() const { return muAmountFree; }
+        u32  GetTotalSizeBytes()  const { return muTotalSize; }
         int  GetLargestFreeBlock();
         u32  GetPoolChecksum();
         bool IsUpdated();

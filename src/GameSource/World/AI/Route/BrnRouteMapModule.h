@@ -2,6 +2,9 @@
 #define BRN_ROUTE_MAP_MODULE_H
 
 #include "types.hpp"
+#include "GameShared/GameClasses/Module/CgsModuleSingleBuffered.h"     // the module base
+#include "GameShared/GameClasses/System/Resource/CgsResourcePtr.h"     // ResourcePtr<AISectionsData>
+#include "GameSource/World/AI/Route/BrnAStar.h"                        // BrnAI::AStar (embedded)
 #include <eathread/eathread_rwmutex.h>
 
 namespace BrnAI
@@ -12,7 +15,7 @@ struct AISectionsData;
 // the element type of the RacingLineGenerator's ExtrapolatedIndexArray
 // (CgsContainers::Array<BrnAI::SectionAndPortalIndices,16u>, typedef ExtrapolatedIndexArray).
 // Two u32 words -> stride 8, matching the X360 Array<...,16>::operator[] `index*8 + base`
-// accessor @0x8276AA08 (slwi r11,r28,3; add r3,r11,r29) and the live-count word at byte +0x80
+// accessor @0x8276AA08 (slwi r11,r28,3; add r3,r29) and the live-count word at byte +0x80
 // (== 16*8).
 struct SectionAndPortalIndices
 {
@@ -25,20 +28,55 @@ struct SectionAndPortalIndices
 // read/write mutexes and the trailing intrusive-list anchor; the unknown
 // span is preserved with an explicit padding buffer so every recovered
 // member is accessed by name (no raw offset casts).
-class RouteMapModule
+//
+// ⭐ 2026-08-25 (aimodule wave): this IS a CgsModule module. AIModule::Construct
+// @0x82794D08 calls `ModuleSingleBuffered::Construct(this + 295896)` on it, AIModule::Release
+// calls its vtable slot 2 and AIModule::Destruct its slot 3, and AIModule::Prepare stage 3
+// calls SLOT 16 -- which is one past ModuleSingleBuffered's last virtual (0..9 public, 10..13
+// the four protected DataStructure hooks, 14/15 CreateInput/CreateOutputDataStructure), i.e.
+// RouteMapModule's OWN first virtual. That slot is RouteMapModule::Prepare @0x8277FDE8. The
+// arithmetic landing exactly on 16 is what pins the whole module-vtable model.
+class RouteMapModule : public CgsModule::ModuleSingleBuffered
 {
 public:
     RouteMapModule();
 
-    // Declared-only (bodied in the RouteMapModule TU). The route map owns a CgsResourcePtr to the
-    // loaded AISectionsData; RouteMapDebugComponent::OnActivate (@0x8277FE50) resolves it via
-    // AISectionsData_::GetMemoryResource(this + 0x65A0). Exposed as a named accessor so callers need
-    // no raw offset into the working-set span. X360 offset 0x65A0 (26016).
+    // X360 0x8277FDE8 (its own virtual, slot 16 -- see the banner). FIVE lines:
+    //   ResourcePtr<AISectionsData>::CreateFromHandle(this + 26016, &lHandle)
+    //   CgsDev::DebugComponent::Register(this + 26052)
+    //   AStar::Construct(this + 552, ResourcePtr<AISectionsData>::GetMemoryResource())
+    //   return ModuleSingleBuffered::Prepare(this)
+    // The console takes the handle BY VALUE in one 64-bit GPR (`ld r4, 0(...)` at the call
+    // site) -- two 32-bit pointers packed; kept by value here for the same reason.
+    bool Prepare(CgsResource::ResourceHandle lHandle);
+
+    // The route map owns a CgsResourcePtr to the loaded AISectionsData;
+    // RouteMapDebugComponent::OnActivate (@0x8277FE50) resolves it via
+    // ResourcePtr<AISectionsData>::GetMemoryResource(this + 0x65A0). X360 offset 0x65A0 (26016).
     AISectionsData* GetAISectionsData() const;
+
+    // Has Prepare bound a road network yet? (Raw test, no assert -- the same
+    // load-and-branch idiom the X360 uses wherever an unloaded resource is legal.)
+    bool HasAISectionsData() const { return mAISectionsData.HasMemoryResource(); }
+
+    // X360 AIModule::Construct's `*(this + 295900) = 1` -- 295900 == this module's base + 4 ==
+    // Module::mbIsNewModule, stored right after the ModuleSingleBuffered::Construct(this+295896)
+    // that cleared it. mbIsNewModule is `protected` on CgsModule::Module, so the owner needs this
+    // one-line hatch to set it from outside. (Measured cost of omitting it: the base Prepare takes
+    // its CreateInputDataStructure arm and asserts "This is a new module type" every frame,
+    // for ever.)
+    void MarkAsNewModule() { mbIsNewModule = true; }
 
 private:
     EA::Thread::RWMutex mReadWriteMutexA;   // guest index 4
     EA::Thread::RWMutex mReadWriteMutexB;   // guest index 70
+
+    // X360 +552 (0x228). The route pathfinder AStar::Construct binds the section graph into.
+    AStar               mAStar;
+
+    // X360 +26016 (0x65A0). The loaded AI road network.
+    CgsResource::ResourcePtr<AISectionsData> mAISectionsData;
+
     u8                  mWorkingSetPad[25472]; // unknown embedded span up to the anchor
 
     // Trailing intrusive-list anchor (circular list head: the three node

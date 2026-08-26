@@ -7,17 +7,66 @@
 // "..\\..\\..\\GameSource\\World/AI/BrnAIModuleIO.h" and
 // "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\ai\\BrnAIModuleIO.h")
 // of BrnAI::AIModuleIO::OutputBuffer -- the per-frame buffer the AI module
-// publishes and the world bridges consume. It is a large CgsModule::IOBuffer
-// payload (>110KB) holding, at attested byte offsets, several sub-interfaces and
-// a trailing game-event queue.
+// publishes and the world bridges consume.
 //
-// MINIMAL SLICE. Only the eleven lock-checked byte-offset accessors the X360
-// ARTIST build emitted out-of-line are reconstructed. The interior member sizes
-// and the gaps between them are NOT attested, so no named members are declared
-// (declaring them would require inventing padding sizes). Each accessor returns a
-// raw u8* to `this + <attested byte offset>`, exactly as the X360 signature
-// (`unsigned __int8*`) does. Replace this slice with a fully named layout (without
-// moving the pinned offsets) when the owning-buffer DWARF lands.
+// ============================================================================
+// ⛔⛔ 2026-08-25 (aimodule wave) -- THIS BUFFER WAS A LATENT ~108 KB HEAP OVERWRITE
+// ============================================================================
+// Until this wave the struct declared NO data members at all and its eleven accessors
+// returned `reinterpret_cast<u8*>(this) + <X360 byte offset>`, the highest of them
+// this + 0x1AF30 (110448). That is only valid on the CONSOLE, where the buffer really is
+// >110 KB of contiguous payload and CgsModule::IOBuffer is one byte. On this host
+// `sizeof(CgsModule::IOBuffer) == 1` (a single FlagSet8) and OutputBuffer added nothing,
+// so `sizeof(OutputBuffer) == 1` -- and IOBufferStack::CreateIOBuffer<T> allocates
+// exactly sizeof(T). Every accessor therefore handed out a pointer up to ~108 KB PAST a
+// ONE-BYTE allocation, into the middle of whatever the frame stack allocated next.
+//
+// Nothing had fired yet only because every consumer of those accessors is still a boot
+// gate. That is precisely the shape the crash-exit wave paid for twice in one day:
+// ⭐⭐ AN UNCONSTRUCTED / UNBACKED BUFFER IS INVISIBLE UNTIL SOMETHING PUTS DATA IN IT --
+// un-gating a producer CREATES the fault, it does not reveal it. AIModule::LoadMapData
+// (this wave) is exactly such a producer: it takes GetAIResourceRequestInterface() and
+// LoadBundle()s through it.
+//
+// FIX: the buffer now carries REAL, TYPED members in the X360's attested member ORDER,
+// and every accessor returns the address of the member it names. The X360 byte offsets
+// are kept below as the ORDER/IDENTITY authority (they are what proves which member each
+// accessor names); they are NOT reproduced as host offsets, because they cannot be --
+// pointer-width and alignment differ throughout. Nothing outside this header pins them:
+// every consumer goes through an accessor or takes `&member`.
+//
+// Attested accessor -> offset -> member map (base = this):
+//   GetAIResourceRequestInterface  @0x8276DA70 W -> this + 0x4      (4)      :~409
+//   GetAIResourceRequestInterface  @0x8279CAA8 R -> this + 0x4      (4)      :423
+//        size check: RequestInterface<4096> == 4096 + 16 == 0x1010 == 0x1014 - 0x4  ✓ EXACT
+//        (the W twin is an ARTIST export HOLE -- no JSON -- but LoadMapData's xrefs_from
+//         names it `BrnAI::AIModuleIO::OutputBuffer::GetAIResourceR...` @0x8276DA70, and it
+//         sits directly after GetVehicleDri @0x8276D9C8 in the WRITE-side accessor group,
+//         whose members every one test the write bit. LoadMapData LockForWrite()s the buffer
+//         before calling it, which is what makes it the write twin and not the read one.)
+//   GetRouteResponseQueueForWrite  @0x8276DB18 W -> this + 0x1014   (4116)   :430
+//   GetRouteResponseQueue          @0x8279CB50 R -> this + 0x1014   (4116)   :437
+//   GetVehicleDriverInterface      @0x8276D9C8 W -> this + 0x15120  (86304)  :402
+//   GetVehicleInterface            @0x8279CA00 R -> this + 0x15120  (86304)  :409
+//   GetAIRaceCarInterface          @0x8276DBC0 W -> this + 0x165D0  (91600)  :444
+//   GetAICarOutputInterface        @0x8276DC68 W -> this + 0x16A60  (92768)  :458
+//   GetAICarOutputInterfaceForRead @0x8279CCA0 R -> this + 0x16A60  (92768)  :465
+//   GetAIModuleResultInterface(W)  @0x8276DD10 W -> this + 0x17F50  (98128)  :472
+//   GetAIModuleResultInterface(R)  @0x8279CD48 R -> this + 0x17F50  (98128)  :479
+//   GetGameEventQueueForRead       @0x8279C658 R -> this + 0x1AF30  (110448) :232
+//   GetGameEventQueue              @0x8276D680 W -> this + 0x1AF30  (110448) :233
+//
+// ⭐ TWO ACCESSOR NAMES WERE WRONG, AND THE OFFSETS SAY SO
+//   * the old `GetAIResultInterface` returned this+0x4, which the exact 0x1010 size match
+//     above proves is the AI RESOURCE REQUEST interface -- the same thing the (declared-
+//     only) GetAIResourceRequestInterface names. They were the same accessor under two
+//     names, one of which pointed at the wrong concept. Unified.
+//   * the old `GetAIOutputBufferHeader` returned this+0x1014, and the ARTIST body at
+//     0x8279CB50 (unnamed, `sub_8279CB50`) returns the SAME this+0x1014 under a read lock
+//     at BrnAIModuleIO.h:437 -- the read twin of the write-side :430. The tree's
+//     declared-only `GetRouteResponseQueue()` is that read twin, so +0x1014 IS the route
+//     response queue, not an untyped "header". Renamed; the old spelling is gone (it had
+//     no caller outside this group -- verified by grep before the rename).
 //
 // Lock-bit guard per the recurring IOBuffer prologue:
 //   read-lock  (status>>4 & 1) => IsBufferLockedForReading()  ("Not locked for reading")
@@ -25,22 +74,10 @@
 // The X360 tests WHICHEVER bit the asm names -- some read-suffixed getters check
 // the read bit, some the write bit; reproduced verbatim (not "fixed"). The
 // X360-baked file path + line-number assert args are dropped per project policy.
-//
-// Attested return offsets (base = this):
-//   GetAIOutputBufferHeader  @0x8276DB18 W  -> this + 0x1014   (4116)    :430
-//   GetAIRes                 @0x8279CAA8 R  -> this + 0x4      (4)       :423
-//   GetVehicleDri            @0x8276D9C8 W  -> this + 0x15120  (86304)   :402
-//   GetVehi                  @0x8279CA00 R  -> this + 0x15120  (86304)   :409
-//   GetAIRaceCarInterface    @0x8276DBC0 W  -> this + 0x165D0  (91600)   :444
-//   GetAICarOutputInterfac   @0x8276DC68 W  -> this + 0x16A60  (92768)   :458
-//   GetAICarOutputIn         @0x8279CCA0 R  -> this + 0x16A60  (92768)   :465
-//   GetAIModuleResultIn      @0x8276DD10 W  -> this + 0x17F50  (98128)   :472
-//   GetAIModuleRe            @0x8279CD48 R  -> this + 0x17F50  (98128)   :479
-//   GetGameE                 @0x8279C658 R  -> this + 0x1AF30  (110448)  :232
-//   GetGameEventQu           @0x8276D680 W  -> this + 0x1AF30  (110448)  :233
 
 #include "GameSource/World/AI/Route/BrnRouteMapModuleIO.h"            // RouteResponseQueue
 #include "GameSource/World/AI/SharedIO/BrnAICarOutputInterface.h"     // AICarOutputInterface
+#include "GameSource/World/AI/SharedIO/BrnAIModuleResultInterface.h"  // AIModuleResultInterface
 #include "GameSource/Resource/SharedIO/BrnGameDataRequestQueue.h"      // RequestInterface<N>
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"       // VariableEventQueue<N,A>
 #include "types.hpp"                                     // u8
@@ -52,11 +89,12 @@ namespace AIModuleIO
 {
     struct OutputBuffer : public CgsModule::IOBuffer
     {
-        // Attested member start offsets into the buffer payload (bytes from this).
+        // Attested X360 member start offsets (bytes from this). ORDER/IDENTITY authority
+        // only -- see the banner: the host layout cannot and does not reproduce them.
         enum EMemberOffset
         {
-            KU_AI_OUTPUT_BUFFER_HEADER_OFFSET = 0x1014,   // X360 0x8276DB18 (W, :430)
-            KU_AI_RESULT_OFFSET               = 0x4,
+            KU_AI_RESOURCE_REQUEST_OFFSET     = 0x4,
+            KU_ROUTE_RESPONSE_QUEUE_OFFSET    = 0x1014,
             KU_VEHICLE_DRIVER_OFFSET          = 0x15120,
             KU_AI_RACE_CAR_INTERFACE_OFFSET   = 0x165D0,
             KU_AI_CAR_OUTPUT_INTERFACE_OFFSET = 0x16A60,
@@ -64,48 +102,69 @@ namespace AIModuleIO
             KU_GAME_EVENT_QUEUE_OFFSET        = 0x1AF30,
         };
 
-        // X360 0x8276DB18 (W, :430) -- write-lock handle at this+0x1014. Name is a
-        // placeholder pending OutputBuffer DWARF; offset/return/lock-bit are attested.
-        u8* GetAIOutputBufferHeader();
+        // ---- ADDITIVE (aimodule wave 2026-08-25) -------------------------------------
+        // The buffer's own Construct. CgsIOBufferStack::CreateIOBuffer<T> calls T::Construct()
+        // statically bound to T; with no override here it bound to the BASE
+        // CgsModule::IOBuffer::Construct and every embedded queue kept its unconstructed
+        // state (mpEvents == nullptr for the event queues). The crash-exit wave measured two
+        // access violations from exactly that omission on three sibling buffers the same day
+        // ("memcpy+0x131 <- ...::SetCrashInterface"), so this override lands WITH the first
+        // producer that writes into the buffer rather than after it.
+        void Construct();
 
-        // X360 0x8279CAA8 (R, :423) -- read-lock handle at this+0x4.
-        // ---- ADDITIVE typed read accessors (attested by WorldModule::
-        //      BridgeAIModuleToOutput @0x827AD480, which forwards each into the
-        //      world update-output appenders). Declaration-only; bodies land with
-        //      this buffer's own TU. X360: GetAIRes @0x8279CAA8 (this+4), the
-        //      route-response getter @0x8279CB50, GetAICarOutputIn @0x8279CCA0,
-        //      GetGameE (read twin of GetGameEventQu @0x8276D680). ----
-        // (N spelled as the world append target takes it; the AI-side true N is
-        //  pinned when this buffer's own TU lands -- FLAG.)
+        // The AI module's resource request interface. Written by AIModule::LoadMapData
+        // (LoadBundle "AI.dat" + AcquireResource "WorldMapData") through the WRITE twin
+        // @0x8276DA70; read by WorldModule::BridgeAIModuleToOutput through the READ twin
+        // @0x8279CAA8. Each tests the lock bit its own console body tests.
+        BrnResource::GameDataIO::RequestInterface<4096>*       GetAIResourceRequestInterface();
         const BrnResource::GameDataIO::RequestInterface<4096>* GetAIResourceRequestInterface() const;
+
+        // X360 0x8279CB50 (R, :437) / 0x8276DB18 (W, :430) -- the route response queue.
         const RouteMapModuleIO::RouteResponseQueue* GetRouteResponseQueue() const;
+        u8*                                         GetRouteResponseQueueForWrite();
+
+        // X360 0x8276DC68 (W, :458) / 0x8279CCA0 (R, :465).
         const AICarOutputInterface* GetAICarOutputInterfaceConst() const;
+        u8*                         GetAICarOutputInterface();
+        u8*                         GetAICarOutputInterfaceForRead();
+
+        // X360 0x8279C658 (R, :232) / 0x8276D680 (W, :233).
         const CgsModule::VariableEventQueue<1536, 16>* GetGameEventQueueConst() const;
+        u8*                                            GetGameEventQueueForRead();
+        u8*                                            GetGameEventQueue();
 
-        u8* GetAIResultInterface();
-
-        // X360 0x8276D9C8 (W, :402) -- write-lock handle at this+0x15120.
+        // X360 0x8276D9C8 (W, :402) / 0x8279CA00 (R, :409).
         u8* GetVehicleDriverInterface();
-        // X360 0x8279CA00 (R, :409) -- read-lock handle at this+0x15120.
         u8* GetVehicleInterface();
 
-        // X360 0x8276DBC0 (W, :444) -- write-lock handle at this+0x165D0.
+        // X360 0x8276DBC0 (W, :444).
         u8* GetAIRaceCarInterface();
 
-        // X360 0x8276DC68 (W, :458) -- write-lock handle at this+0x16A60.
-        u8* GetAICarOutputInterface();
-        // X360 0x8279CCA0 (R, :465) -- read-lock handle at this+0x16A60.
-        u8* GetAICarOutputInterfaceForRead();
-
-        // X360 0x8276DD10 (W, :472) -- write-lock handle at this+0x17F50.
+        // X360 0x8276DD10 (W, :472) / 0x8279CD48 (R, :479).
         u8* GetAIModuleResultInterfaceForWrite();
-        // X360 0x8279CD48 (R, :479) -- read-lock handle at this+0x17F50.
         u8* GetAIModuleResultInterface();
 
-        // X360 0x8279C658 (R, :232) -- read-lock handle at this+0x1AF30.
-        u8* GetGameEventQueueForRead();
-        // X360 0x8276D680 (W, :233) -- write-lock handle at this+0x1AF30.
-        u8* GetGameEventQueue();
+    private:
+        // @X360 +0x0004. Exact-size confirmed: 4096 + 16 == 0x1010 == 0x1014 - 0x4.
+        BrnResource::GameDataIO::RequestInterface<4096> mAIResourceRequestInterface;
+
+        // @X360 +0x1014.
+        RouteMapModuleIO::RouteResponseQueue mRouteResponseQueue;
+
+        // @X360 +0x15120 / +0x165D0. NOMINAL SIZE, FLAGGED: these two interiors have no
+        // reconstructed type yet, so each is sized by the difference between its own attested
+        // start offset and its successor's (0x165D0 - 0x15120 == 0x14B0; 0x16A60 - 0x165D0 ==
+        // 0x490). Those differences are console-word-sized, so the byte counts are a FLOOR for
+        // the host, not a match -- they exist so the accessors hand out storage this object
+        // actually owns instead of pointing past its end. Replace with the real types
+        // (VehicleDriverInterface / AIRaceCarInterface) when their own TUs land.
+        u8 maVehicleDriverInterface[0x14B0];
+        u8 maAIRaceCarInterface[0x490];
+
+        // @X360 +0x16A60 / +0x17F50 / +0x1AF30 -- all three have real reconstructed types.
+        AICarOutputInterface                   mAICarOutputInterface;
+        AIModuleResultInterface                mAIModuleResultInterface;
+        CgsModule::VariableEventQueue<1536, 16> mGameEventQueue;
     };
 }
 }
