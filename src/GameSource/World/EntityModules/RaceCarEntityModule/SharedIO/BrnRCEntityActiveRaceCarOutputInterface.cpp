@@ -763,5 +763,160 @@ Vector3 RCEntityActiveRaceCarOutputInterface::GetPlayerLinearVelocity() const
     return maRaceCarStates[mePlayerActiveRaceCarIndex].mLinearVelocity;
 }
 
+// ============================================================================
+// ---- ACCESSOR CLOSURE 2026-08-26 (stunt-races pre-wave) --------------------
+// The last three declared-only accessors on this interface that MOUNTED callers name with
+// no definition anywhere in the tree (they are in the measured link residue,
+// scratch/stuntrace_scout/datafeed/objs/undef_demangled.txt). All three are read by the
+// offline stunt-run scoring slice: BrnStuntModeScoring_StuntTypes.cpp calls IsPlayerInAir
+// and GetCurrentInAirRotations from UpdateAirStunts and IsPlayerInReverseGear from
+// UpdateDrivingStunts.
+//
+// GetCurrentInAirRotations IS a real out-of-line X360 function (IDA leaves it unnamed, so
+// it is invisible to any name-keyed search): sub_823104E8, identified by its two baked
+// assert strings, which name THIS header at lines 1314/1315.
+//
+// The two predicates are genuinely console-INLINED -- no symbol exists for either -- so each
+// is transcribed from the call site that inlines it. Both sites are in this wave's scope and
+// both emit the identical two-part shape (`-1 sentinel first, then one element read`), the
+// same shape as the committed IsPlayerCarCrashing() header inline:
+//   IsPlayerInAir        <- StuntModeScoring::UpdateAirStunts     0x8232C674..0x8232C6A0
+//   IsPlayerInReverseGear<- StuntModeScoring::UpdateDrivingStunts 0x8232CD8C..0x8232CDB8
+// NEITHER bounds-asserts: only the -1 sentinel is tested, and the -1 arm yields false. That
+// is why they are written without the CGS_ASSERT pair the player-scoped GETTERS above carry.
+// ============================================================================
+
+// ----------------------------------------------------------------------------
+// IsPlayerInAir (DWARF :308). X360 (inlined in UpdateAirStunts):
+//     lwz   r11, 0x2858(itf)          ; mePlayerActiveRaceCarIndex
+//     cmpwi r11, -1 ; beq -> r11 = 0  ; no player car -> false
+//     mulli r11, r11, 0x460           ; * sizeof(RaceCarState) == 1120
+//     add   r11, r11, itf
+//     lfs   f0,  0x734(r11)           ; 1844 == maRaceCarStates(816) + element 1028
+//     fcmpu cr6, f0, f28(flt_82001CC0 == 0.0f)   ; > 0 -> true
+// Element +1028 is RaceCarState::mfTimeInAir (BrnVehicleEvents.h @1028) -- the SAME field the
+// caller then re-reads through GetPlayerRaceCarState() for its air-time gate, which is why
+// UpdateAirStunts' `IsPlayerInAir() && lpPlayerRC->mfTimeInAir > 0.0f` reads as a double test:
+// the source really does call the predicate and then look at the timer again.
+// ----------------------------------------------------------------------------
+bool RCEntityActiveRaceCarOutputInterface::IsPlayerInAir() const
+{
+    if (mePlayerActiveRaceCarIndex == E_ACTIVE_RACE_CAR_INDEX_INVALID)
+    {
+        return false;
+    }
+    return maRaceCarStates[mePlayerActiveRaceCarIndex].mfTimeInAir > 0.0f;   // element +1028
+}
+
+// ----------------------------------------------------------------------------
+// IsPlayerInReverseGear (DWARF :314). X360 (inlined in UpdateDrivingStunts):
+//     lwz    r11, 0x2858(itf)         ; mePlayerActiveRaceCarIndex
+//     cmpwi  r11, -1 ; beq -> r11 = 0 ; no player car -> false
+//     mulli  r11, r11, 0x460 ; add r11, r11, itf
+//     lbz    r11, 0x774(r11)          ; 1908 == maRaceCarStates(816) + element 1092
+//     extsb  r11, r11                 ; sign-extend the s8
+//     cntlzw r11, r11                 ; \ the compiler's branch-free `== 0` idiom:
+//     extrwi r11, r11, 1, 26          ; / cntlzw(0) == 32, whose bit 26 is the only set bit
+// Element +1092 is RaceCarState::mi8Gear (BrnVehicleEvents.h @1092, the DWARF's own name;
+// its own comment records the console derivation "physics+0xFC0, the same word used as the
+// GEAR index"). So REVERSE is gear index 0 -- the entry below mafGearRatios' forward run.
+// FLAG: gear 0 == reverse is read off this predicate's name plus the `== 0` test; nothing in
+// the asm labels the enumerator. If a later TU recovers a named gear enum, re-express it.
+// ----------------------------------------------------------------------------
+bool RCEntityActiveRaceCarOutputInterface::IsPlayerInReverseGear() const
+{
+    if (mePlayerActiveRaceCarIndex == E_ACTIVE_RACE_CAR_INDEX_INVALID)
+    {
+        return false;
+    }
+    return maRaceCarStates[mePlayerActiveRaceCarIndex].mi8Gear == 0;   // element +1092
+}
+
+// ----------------------------------------------------------------------------
+// GetCurrentInAirRotations (DWARF :435) -- X360 sub_823104E8. The accumulated per-axis
+// rotation the indexed car has racked up during its current jump (the spin / barrel-roll
+// counters StuntModeScoring rates on landing). Body:
+//     <assert idx >= E_ACTIVE_RACE_CAR_INDEX_0>        this header :1314
+//     <assert idx <  E_ACTIVE_RACE_CAR_INDEX_COUNT>    this header :1315
+//     addi   r11, idx, 0x279 ; slwi r11, r11, 4        ; 16 * (idx + 633) == 0x2790 + 16*idx
+//     lvx128 v0, r11, itf ; stvx128 v0, r0, sret       ; one 16-byte vector move
+// 0x2790 is maCurrentInAirRotations' base in this committed layout: the array runs
+// 0x2790..0x280F, then mbHasCrashedIntoWater[8] @0x2810, maGlobalRaceCarIndices[8] @0x2818,
+// maeActiveRaceCarIndex[8] @0x2838 and mePlayerActiveRaceCarIndex @0x2858 -- the last of which
+// is the offset every caller in this TU already pins, so the base is corroborated, not assumed.
+// Both asserts are non-gating tripwires (the console reads the element regardless).
+// ----------------------------------------------------------------------------
+Vector3 RCEntityActiveRaceCarOutputInterface::GetCurrentInAirRotations(EActiveRaceCarIndex leActiveRaceCarIndex) const
+{
+    CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,     "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
+    CGS_ASSERT(leActiveRaceCarIndex <  E_ACTIVE_RACE_CAR_INDEX_COUNT, "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+    return maCurrentInAirRotations[leActiveRaceCarIndex];
+}
+
+// ----------------------------------------------------------------------------
+// TimePlayerInAir (DWARF :311).  [stuntrace wave B, MOUNT-CLOSURE round]
+//
+// Sits between IsPlayerInAir (:308) and IsPlayerInReverseGear (:314) in the DWARF, and it reads
+// the SAME field IsPlayerInAir tests -- which is what makes this one derivable without an
+// out-of-line symbol of its own. Two independent citations, from two different call sites:
+//   * IsPlayerInAir's committed banner above transcribes the console inline as
+//     lfs f0, 0x734(r11) with r11 == itf + 1120*playerIdx, i.e. maRaceCarStates(816) + element
+//     +1028 == RaceCarState::mfTimeInAir, then fcmpu against 0.0f.
+//   * The committed consumer BrnStuntModeScoringOnline.cpp:524 annotates its own call as
+//     "X360 player air-time *(state + 0x404) > 0" -- and 0x404 == 1028, the same element.
+// So IsPlayerInAir is literally "TimePlayerInAir() > 0.0f", which is also why
+// UpdateCarsAroundPlayerAtTakeoff reads as a double test when it calls both.
+//
+// SHAPE: the -1 sentinel, no bounds assert -- the established form for every PLAYER-scoped
+// predicate/getter in this file (the banner above IsPlayerInAir spells out why: these console
+// inlines test only mePlayerActiveRaceCarIndex == -1 and yield the zero/false answer on that arm,
+// unlike the index-taking getters, which carry the CGS_ASSERT pair). 0.0f is the natural zero
+// here and is the value the two committed callers already substitute on their own null arm.
+// ----------------------------------------------------------------------------
+f32 RCEntityActiveRaceCarOutputInterface::TimePlayerInAir() const
+{
+    if (mePlayerActiveRaceCarIndex == E_ACTIVE_RACE_CAR_INDEX_INVALID)
+    {
+        return 0.0f;
+    }
+    return maRaceCarStates[mePlayerActiveRaceCarIndex].mfTimeInAir;   // element +1028
+}
+
+// ----------------------------------------------------------------------------
+// GetActiveRaceCarIndex (DWARF :424) -- which active-race-car slot a given PLAYER SCORING slot
+// is driving.  [stuntrace wave B, MOUNT-CLOSURE round]
+//
+// This is the read twin of SetActiveRaceCarIndex (DWARF :420), bodied above; the DWARF declares
+// the two adjacent, four lines apart, over the same member. THREE independent pins on that member,
+// which is why this is not the one-slot accessor guess that cost the medal-run wave:
+//   1. The committed SetActiveRaceCarIndex body writes maeActiveRaceCarIndex[lePlayerScoringIndex].
+//   2. GetCurrentInAirRotations' banner above enumerates the tail run of this layout --
+//      maCurrentInAirRotations @0x2790, mbHasCrashedIntoWater[8] @0x2810,
+//      maGlobalRaceCarIndices[8] @0x2818, maeActiveRaceCarIndex[8] @0x2838,
+//      mePlayerActiveRaceCarIndex @0x2858 -- anchored on the +0x2858 offset every caller in this
+//      TU already pins.
+//   3. The mounted caller's own asm citation: BrnModeManager_WorldTick.cpp:566 records that "the
+//      console reads the interface's slot table inline at iface + 0x2838", which is (2)'s
+//      maeActiveRaceCarIndex, reached here through the named accessor per hazards H9.
+//
+// No out-of-line X360 symbol (inlined at that call site, like its setter). Asserts mirror the
+// setter's, minus the one that guards the value being stored; the bound is spelled as the array
+// extent because this TU sees EPlayerScoringIndex only as a forward-declared enum -- the same
+// note the setter carries, and the same 8.
+//
+// CALLER CONTRACT WORTH KEEPING IN VIEW: the mounted sweep treats E_ACTIVE_RACE_CAR_INDEX_COUNT
+// (8), NOT _INVALID (-1), as this table's "empty slot" value (BrnModeManager_WorldTick.cpp:577,
+// console cmpwi r28, 8). This getter returns the stored cell either way; it does not translate.
+// ----------------------------------------------------------------------------
+EActiveRaceCarIndex RCEntityActiveRaceCarOutputInterface::GetActiveRaceCarIndex(
+        BrnGameState::GameStateModuleIO::EPlayerScoringIndex lePlayerScoringIndex) const
+{
+    CGS_ASSERT(static_cast<s32>(lePlayerScoringIndex) >= 0,
+               "lePlayerScoringIndex >= E_PLAYER_SCORING_INDEX_0");
+    CGS_ASSERT(static_cast<s32>(lePlayerScoringIndex)
+                   < static_cast<s32>(sizeof(maeActiveRaceCarIndex) / sizeof(maeActiveRaceCarIndex[0])),
+               "lePlayerScoringIndex < E_PLAYER_SCORING_INDEX_COUNT");
+    return maeActiveRaceCarIndex[lePlayerScoringIndex];
+}
 }
 }

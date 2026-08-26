@@ -101,8 +101,12 @@ void OnlineShowtimeMode::Start(const StartGameModeParams* /*lpStartGameModeParam
     const GameStateModuleIO::StartNetworkGameEvent* lpStartNetworkGameEvent =
         GetModeManager()->GetNetworkRoundManager()->GetNetworkGameEvent();
 
-    // *(this+172)=1 -> GameMode base mbConstructed (offset 172, named in BrnGameMode.cpp::Construct).
-    mbConstructed = true;
+    // `li r28,1` @0x82322288 / `stb r28, 0xAC(r29)` @0x823222A0 -> *(this+172) = 1.
+    // [!] NAME CORRECTED 2026-08-26 (wave-B fix round): +0xAC is mbIsOnline, not `mbConstructed`.
+    // OfflineGameMode::Construct @0x8232FE78 stores 0 into the same byte and OnlineGameMode::
+    // Construct @0x8232FEB4 stores 1; no OFFLINE mode's Start touches +0xAC, while all three
+    // ONLINE Start bodies re-assert it. See the +160..+179 table in BrnGameMode.h.
+    mbIsOnline = true;
 
     lpGameModeParams->Construct(GameStateModuleIO::E_MODE_ONLINE_SHOWTIME);
 
@@ -144,5 +148,22 @@ void OnlineShowtimeMode::Start(const StartGameModeParams* /*lpStartGameModeParam
 
     // Place the online race cars on the grid from the start event (DWARF-attested 2-arg const).
     GetModeManager()->SetOnlineRaceCars(lpGameModeParams, lpStartNetworkGameEvent);
+}
+
+// X360 vtable slot 13 (vtbl+52), folded leaf 0x827E2F38 == `li r3,0; blr` at slot 13 of vtable
+// 0x820D0AE8 (the GameMode base carries GameMode::ShouldExit 0x82315B80 there). Showtime is a
+// stationary mode by design, so the shared "player has not moved / has not touched the controls"
+// idle-exit test must never fire.
+bool OnlineShowtimeMode::ShouldExit(const ScoringSystem* lpScoringSystem) const
+{
+    (void)lpScoringSystem;
+    return false;
+}
+
+// X360 vtable slot 23 (vtbl+92), folded leaf 0x827E2F38 == `li r3,0; blr`; the GameMode base is
+// 0x82C296C8 == `li r3,1`.
+bool OnlineShowtimeMode::RequiresStreaming() const
+{
+    return false;
 }
 }

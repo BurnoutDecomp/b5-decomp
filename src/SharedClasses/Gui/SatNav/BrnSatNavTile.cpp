@@ -19,6 +19,28 @@ namespace BrnGui
     {
     }
 
+    // sRect::GetArea -- NO standalone X360 symbol; the compiler inlined it into its only caller,
+    // QSortCallback @0x82447F78, where the two folded copies are visible verbatim
+    // (0x82448008..0x82448050, sTexture::mBBWorld base +0x14):
+    //     lfs   f13, 0x18(r30)   ; mfTop        lfs   f13, 0x14(r30)   ; mfLeft
+    //     lfs   f0,  0x20(r30)   ; mfBottom     lfs   f12, 0x1C(r30)   ; mfRight
+    //     fsubs f0,  f0,  f13    ; bottom-top   fsubs f13, f12, f13    ; right-left
+    //     fabs  f0,  f0          fabs  f13, f13
+    //     fmuls f0,  f0,  f13    ; |bottom-top| * |right-left|
+    // which is exactly the formula BrnSatNavTile.h:53 already documents for this declaration.
+    // Both operands are absolute-valued, so the rect need not be normalised.
+    //
+    // Landed 2026-08-26 (stuntrace waveB mount closure): this was the single unresolved external
+    // standing between the exe and BrnMapManager.cpp, whose MapManager::MapManager() ctor the
+    // grown BrnRaceMainHudState.h by-value members demand. See the mount request.
+    float SatNavTile::sRect::GetArea() const
+    {
+        const float lfWidth  = mfRight  - mfLeft;
+        const float lfHeight = mfBottom - mfTop;
+        return ((lfWidth < 0.0f) ? -lfWidth : lfWidth) *
+               ((lfHeight < 0.0f) ? -lfHeight : lfHeight);
+    }
+
     // @0x82447F78 -- qsort comparator: largest world bounding-box area first (descending).
     int32_t SatNavTile::sTexture::QSortCallback(const void* lpA, const void* lpB)
     {

@@ -15,7 +15,16 @@ namespace BrnGameState
 class IntroState : public GameModeState
 {
 public:
-    IntroState();
+    // [!] CONSTRUCTOR DECLARATION REMOVED 2026-08-26 (states-blob unpark round). `IntroState();` was
+    // declared here and defined NOWHERE in the tree -- harmless only for as long as nothing
+    // instantiated an IntroState. GameMode now embeds one BY VALUE (console +0x40, GameMode::Construct
+    // 0x8232F9D8), so GameMode::GameMode() odr-uses it and the declaration alone would be an
+    // unresolved external at link time. The console has no IntroState constructor either: the DecFIGS
+    // DWARF (BrnIntroState.h:45) lists it in the same implicit/compiler-generated form it lists
+    // ResultsState / QuitState / InProgressState / OnlineLoadingState in -- and NONE of those four
+    // committed headers declares one. mfCountdownSeconds / mbUseCountdown are seeded by OnEnter, which
+    // is where the console seeds them too. The implicit default constructor is therefore both correct
+    // and console-faithful; declaring it bought nothing.
 
     virtual void OnEnter();
     virtual void Update();

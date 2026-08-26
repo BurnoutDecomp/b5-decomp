@@ -56,22 +56,82 @@ f32 RaceEventData::GetRankTime(u32 luRank) const
 }
 
 
-// [H3b] The three sat-nav renderer reads (X360 inlines all three at the call sites;
-// byte +0xEC / byte +0xED / doubleword +0x10 -- offsets proven by the renderer's
+// [H3b] The three record reads the sat-nav renderer needs (X360 inlines all three at the call
+// sites; byte +0xEC / byte +0xED / doubleword +0x10 -- offsets proven by the renderer's
 // GetIconInformation asm). The backing fields are the named pad carves in the header.
+//
+// The first two are the event's MODE and ONLINE MODE, not sat-nav presentation fields -- see the
+// name-correction banner in BrnRaceEventData.h (DWARF mu8Mode/mu8OnlineMode + GetMode/GetOnlineMode,
+// corroborated by tools/assets/bundles/progression_transcode.py's EVENT_MODE = 0xEC and its
+// "EModeType tops out at 5" bundle check). The renderer only indexes an icon table with the mode.
+u8 RaceEventData::GetMode() const
+{
+    return mu8Mode;
+}
+
+u8 RaceEventData::GetOnlineMode() const
+{
+    return mu8OnlineMode;
+}
+
+// Legacy-name aliases so the mounted sat-nav renderer keeps linking; new code calls GetMode /
+// GetOnlineMode.
 u8 RaceEventData::GetEventTypeByte() const
 {
-    return mu8EventType;
+    return GetMode();
 }
 
 u8 RaceEventData::GetIconFrameBase() const
 {
-    return mu8IconFrameBase;
+    return GetOnlineMode();
 }
 
+// ⛔ [stuntrace wave D, D3] MEMBER RENAMED, ACCESSOR KEPT. The doubleword at +0x10 is the DWARF's
+// `CgsID mSpecialEventCarId` (:592), not an "event instance id" -- see the correction banner on the
+// member in BrnRaceEventData.h and StartModeAtLights @0x82396F64's 8-byte `cmpld` of it against
+// GameStateModule::GetOriginalCarId. This accessor keeps its name and its u64 return so the three
+// committed callers (BrnSatNavRenderer, BrnPreRaceFlyBy_wJ_06, BrnProgressionManager_EventFinish)
+// are untouched; new code calls GetSpecialEventCarId().
 u64 RaceEventData::GetEventInstanceId() const
 {
-    return muEventInstanceId;
+    return mSpecialEventCarId;
+}
+
+// [stuntrace wave D, D3] GetUnlockCarId -- was DECLARE-ONLY with a live caller
+// (BrnDriveThruManager.cpp:827 `lpRaceEventData->GetUnlockCarId() == lRepairedCarID`) and no body
+// anywhere, which BrnProgressionManager_EventFinish.cpp:352 had to work around by calling
+// GetEventInstanceId() and casting. Both names mean the same DWARF member; bodied here as the
+// straight read so the workaround can retire.
+CgsID RaceEventData::GetUnlockCarId() const
+{
+    return mSpecialEventCarId;
+}
+
+// ---------------------------------------------------------------------------------------------
+// [stuntrace waveB MOUNT-CLOSURE round, 2026-08-26] The two start-grid rival counts. Both were
+// declare-only ("their backing fields are not in this minimal slice"); the fields are carved now,
+// so these are plain named reads of bytes +0xEE / +0xEF -- see the accessor banner in the header
+// for the DWARF lines, the transcoder run and, decisively, RaceMode::Start @0x82330018's own
+// `lbz r11, 0xEE(r23)` / `lbz r11, 0xEF(r23)`.
+//
+// Bodied here rather than inline for the same reason GetMode / GetOnlineMode above are: the X360
+// inlines them at every call site (no standalone symbol in the ledger), and this file is where
+// this record's inlined-on-console reads already live. No assert on either -- the console has
+// none, and neither byte is indexed.
+// ---------------------------------------------------------------------------------------------
+
+// The rivals placed on the grid at the lights. RaceMode::Start clamps this against the per-rank
+// ProgressionRankData::GetRaceRivalsNumber (rank+0x5C) before writing the grid.
+u8 RaceEventData::GetStartRivalCount() const
+{
+    return mu8StartRivalCount;
+}
+
+// The rivals joined mid-event. RaceMode::Start adds it to the start count to get the mode's total
+// opponent count (`add r11,r11,r10` @0x82330420, stored at params+0xBC).
+u8 RaceEventData::GetAddRivalCount() const
+{
+    return mu8AddRivalCount;
 }
 
 }

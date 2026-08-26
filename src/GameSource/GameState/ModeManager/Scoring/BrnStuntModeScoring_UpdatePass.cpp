@@ -68,34 +68,57 @@ namespace BrnGameState
 {
     // ------------------------------------------------------------------------
     // X360-tunable score constants (file-scope; the original keeps them in .rodata as the
-    // flt_82CDBxxx / flt_8200xxxx pool). The MAGNITUDES are UNRECOVERED in the IDA export
-    // (the float pool is not in the dumped data segments) -- modelled as named 0.0f best-effort
-    // per the established sibling-draft pattern (cf. BrnStuntModeScoring_StuntTypes.cpp's
-    // KF_STUNT_ATTACK_* block). The X360 .rodata address is in each comment so the value can be
-    // patched in when the float pool lands. FLAG: confirm every magnitude against the float pool.
+    // flt_82CDBxxx / flt_8200xxxx pool). The MAGNITUDES are RECOVERED: each is a direct
+    // big-endian f32 read of its named flt_ address out of the decrypted X360 ARTIST basefile
+    // (image VA - 0x82000000 == file offset), and every address below was cross-checked against
+    // the referencing method's own asm export (UpdateScore 0x823212D8 references exactly
+    // flt_82CDB794/798/79C; UpdateBufferedScore 0x8232C118 flt_82CDB744/748/780/784/788 (plus the shared KF_ZERO/KF_ONE)
+    // plus flt_82001DA0 / flt_8202616C / flt_82004920). Each comment carries the source VA.
+    //
+    // KF_PENDING_SCORE_TIMER_NOT_STARTED is deliberately OUTSIDE the anonymous namespace: the
+    // sibling BrnStuntModeScoring_Lifecycle.cpp declares it `extern` (ClearData parks
+    // mfPendingScoreTimer at it) and that declaration had NO definition anywhere in the tree --
+    // a latent LNK2001 that only an anonymous-namespace shadow copy in THIS file was hiding.
+    // This is its single definition; the extern declaration there now resolves to it.
     namespace
     {
         const f32 KF_ZERO                                  = 0.0f;  // flt_82001CC0 (the fsel/compare 0.0 sentinel)
         const f32 KF_ONE                                   = 1.0f;  // flt_82001C98 (the [0,1] clamp ceiling)
 
         // UpdateScore repetition-falloff scale (applied to score for stunt types in mask 0x20308).
-        const f32 KF_SCORE_FALLOFF_RATE_DEFAULT            = 0.0f;  // flt_82CDB794 : falloff rate (types != 8)
-        const f32 KF_SCORE_FALLOFF_RATE_TYPE8              = 0.0f;  // flt_82CDB798 : falloff rate (stunt type 8)
-        const f32 KF_SCORE_FALLOFF_FLOOR                   = 0.0f;  // flt_82CDB79C : falloff scale floor (fsel min)
+        const f32 KF_SCORE_FALLOFF_RATE_DEFAULT            = 0.25f; // flt_82CDB794 : falloff rate (types != 8)
+        const f32 KF_SCORE_FALLOFF_RATE_TYPE8              = 0.15f; // flt_82CDB798 : falloff rate (stunt type 8)
+        const f32 KF_SCORE_FALLOFF_FLOOR                   = 0.01f; // flt_82CDB79C : falloff scale floor (fsel min)
 
         // UpdateBufferedScore flat-spin / barrel-roll banking constants.
-        const f32 KF_FLAT_SPIN_SCORE_PER_DEGREE            = 0.0f;  // flt_82CDB744 : per-spin-degree score rate
-        const f32 KF_BARREL_ROLL_SCORE_PER_DEGREE          = 0.0f;  // flt_82CDB748 : per-roll-degree score rate
+        const f32 KF_FLAT_SPIN_SCORE_PER_DEGREE            = 15.0f; // flt_82CDB744 : per-spin-degree score rate
+        const f32 KF_BARREL_ROLL_SCORE_PER_DEGREE          = 20.0f; // flt_82CDB748 : per-roll-degree score rate
         const f32 KF_STUNT_ATTACK_REVERSE_TAKEOFF_SCORE_MULTIPLIER
-                                                           = 0.0f;  // flt_82CDB780 : reverse-takeoff bonus mult
-        const f32 KF_SPIN_COUNT_ROUNDING_BIAS              = 0.0f;  // flt_82001DA0 : floor-rounding bias (vmaddfp addend)
+                                                           = 2.0f;  // flt_82CDB780 : reverse-takeoff bonus mult
+        const f32 KF_SPIN_COUNT_ROUNDING_BIAS              = 0.5f;  // flt_82001DA0 : floor-rounding bias (vmaddfp addend)
         const f32 KF_FLAT_SPIN_DEGREES_PER_SPIN            = 0.0055555557f; // flt_8202616C == 1/180 : spins = degrees/180
-        const f32 KF_BARREL_ROLL_DEGREES_PER_ROLL          = 0.5f;          // flt_82004920 == 1/2   : rolls = (half-revs)/2
+        // flt_82004920 is 0x3B360B61 == 1/360, NOT 1/2. A prior draft asserted "== 1/2" and set
+        // 0.5f, which would have counted six barrel rolls where the console counts one. The
+        // divisor pair is asymmetric on purpose: the spin lane counts one flat spin per HALF
+        // revolution (1/180) while the roll lane counts one barrel roll per FULL revolution
+        // (1/360). Both loads are lane-pinned in the asm -- 0x8232C2EC feeds flt_8202616C to the
+        // Y/spin lane (vspltw v0,v0,1) and 0x8232C41C feeds flt_82004920 to the Z/roll lane
+        // (vspltw v0,v0,2) -- so the two are not interchangeable.
+        const f32 KF_BARREL_ROLL_DEGREES_PER_ROLL          = 0.0027777778f; // flt_82004920 == 1/360 : rolls = degrees/360
 
-        // UpdateBufferedScore pending-score-timer constants.
-        const f32 KF_PENDING_SCORE_TIMER_NOT_STARTED       = 0.0f;  // flt_82CDB784 : "no pending timer" sentinel
-        const f32 KF_PENDING_SCORE_PENDING_TIME            = 0.0f;  // flt_82CDB788 : armed pending-score window
+        // UpdateBufferedScore armed pending-score window.
+        const f32 KF_PENDING_SCORE_PENDING_TIME            = 0.5f;  // flt_82CDB788 : armed pending-score window
     }
+
+    // The "pending-score timer is not running" sentinel (X360 flt_82CDB784,
+    // BrnStuntModeScoring.cpp:57). External linkage -- this is the ONE definition in the tree;
+    // BrnStuntModeScoring_Lifecycle.cpp declares it extern. The value is a SENTINEL, not a
+    // duration: the consumer guard is `if (mfPendingScoreTimer >= NOT_STARTED)` (asm 0x8232C19C
+    // `fcmpu f0, flt_82CDB784` + `blt` skipping the arm), so it must sit far above any real
+    // timer value for the "not yet armed" test to work -- hence 1000.0, not 0.0.
+    // (`extern` on the definition is load-bearing: a bare namespace-scope `const` would take
+    // internal linkage and leave the sibling's extern unresolved all over again.)
+    extern const f32 KF_PENDING_SCORE_TIMER_NOT_STARTED = 1000.0f;  // flt_82CDB784
 
     // ------------------------------------------------------------------------
     // StuntModeScoring::Update  (X360 0x82340B40)
@@ -317,12 +340,13 @@ namespace BrnGameState
     // The reverse-takeoff multiplier is gated on muStuntTypesInProgress bit 14 ((v>>14)&1).
     //
     // The float MAGNITUDES (KF_FLAT_SPIN_*, KF_BARREL_ROLL_*, the spin/roll degree divisors and the
-    // floor-rounding bias) are UNRECOVERED in the IDA export and modelled best-effort (see the
-    // file-scope constant block). The CalculateMultiplier call dispatches through the X360 vtable
-    // slot +0x24; here it is called BY NAME (it is declared virtual in the committed home, so the
-    // C++ call binds polymorphically without the vtable ORDER being reconstructed).
-    // FLAG: confirm all banking constant magnitudes + the exact VMX lane->degree mapping when the
-    // float pool lands.
+    // floor-rounding bias) are RECOVERED from the X360 rodata -- see the file-scope constant block
+    // for the per-constant VAs. The VMX lane->degree mapping is pinned by the two divisor loads:
+    // 0x8232C2EC (flt_8202616C, 1/180) follows `vspltw v0,v0,1` == the Y/spin lane, and 0x8232C41C
+    // (flt_82004920, 1/360) follows `vspltw v0,v0,2` == the Z/roll lane. The CalculateMultiplier
+    // call dispatches through the X360 vtable slot +0x24; here it is called BY NAME (it is declared
+    // virtual in the committed home, so the C++ call binds polymorphically without the vtable ORDER
+    // being reconstructed).
     void StuntModeScoring::UpdateBufferedScore(f32 lfDelta)
     {
         CGS_ASSERT(!mbRecentStunt, "!mbRecentStunt");

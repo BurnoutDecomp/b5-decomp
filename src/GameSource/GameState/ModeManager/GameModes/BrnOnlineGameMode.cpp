@@ -10,10 +10,22 @@ namespace BrnGameState
 // virtual void Construct(ModeManager*)); the Hex-Rays pseudocode renders the forwarded
 // call with no visible argument and a leftover `int result`, both artifacts of a void
 // function -- the reconstructed body forwards the argument and returns nothing.
+//
+// [!] NAME CORRECTED 2026-08-26 (wave-B fix round): the `*(this+172) = 1` store was transcribed
+// as `mbConstructed`. It is mbIsOnline -- OfflineGameMode::Construct @0x8232FE78 stores 0 into the
+// same byte, and ModeManager::ProcessEvent @0x82340AF4 reads it (`lbz r11,0xAC(r11)`) to choose
+// the ONLINE stunt scorer over the OFFLINE one. Asm: `li r11,1; stb r11,0xAC(r31)` @0x8232FEB0.
 void OnlineGameMode::Construct(ModeManager* lpModeManager)
 {
     GameMode::Construct(lpModeManager);
-    mbConstructed = true;
+    mbIsOnline = true;
+}
+
+// X360 vtable slot 7 (vtbl+28), folded leaf 0x827DF718 == `li r3,2; blr`, identical in all seven
+// online mode vtables. See the restoration note in BrnOnlineGameMode.h.
+CgsSystem::EFrameRateManagerType OnlineGameMode::GetFrameRateType() const
+{
+    return CgsSystem::E_FRAMERATEMANAGER_MULTIPLE_UNCAPPED;
 }
 
 // X360: BrnGameState::OnlineGameMode::SendEvent (0x8232FED0). Drives the online mode's
@@ -58,7 +70,14 @@ void OnlineGameMode::SendEvent(EGameModeEvent leEvent)
             if (leEvent == E_GME_NEXT)
             {
                 SetCurrentState(3);
-                mbFinalStandingsShown = true;
+                // [!] NAME CORRECTED 2026-08-26 (wave-B fix round): this store was transcribed as
+                // `mbFinalStandingsShown`. The asm is `li r11,1; stb r11,0xAF(r31)` @0x8232FFA0,
+                // i.e. *(this+175) -- and +175 is mbShowResultsRequested (GameMode::Construct
+                // zeroes 0xAF, GameMode::Initialise clears it with the rest of the 173..178 latch
+                // run). Every byte of 172..179 is claimed by a proven reader/writer, so there is
+                // no console home for a separate `mbFinalStandingsShown`; the name is retired.
+                // See the +160..+179 table in BrnGameMode.h.
+                mbShowResultsRequested = true;
             }
             break;
         case 3:

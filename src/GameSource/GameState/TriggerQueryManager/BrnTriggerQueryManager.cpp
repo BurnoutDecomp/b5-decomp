@@ -18,6 +18,16 @@
 #include "SharedClasses/Trigger/BrnKillzone.h"           // BrnTrigger::Killzone (trigger/region-id tables)
 #include "SharedClasses/Trigger/BrnRegion.h"             // BrnTrigger::BoxRegion (GetDimensions/GetPosition2D/ComputeDirection)
 
+// [stuntrace waveD D1] the light-region detection stand-in's data path: the loaded lane graph ->
+// its hulls -> their light-trigger boxes. Section must precede Hull (Hull embeds Section* arrays
+// whose element type it needs complete), the same include order BrnTrafficData.cpp uses.
+#include "SharedClasses/Traffic/BrnTrafficDataResourceType.h" // BrnTraffic::TrafficData (muNumHulls, GetHull)
+#include "SharedClasses/Traffic/BrnTrafficSection.h"          // Section / LaneRung (must precede BrnTrafficHull.h)
+#include "SharedClasses/Traffic/BrnTrafficHull.h"             // BrnTraffic::Hull (mpaLightTriggers, muNumLightTriggers)
+#include "SharedClasses/Traffic/BrnTrafficLightTrigger.h"     // BrnTraffic::LightTrigger + KU_LIGHT_TRIGGER_ID_OWNER_TAG
+#include "SharedClasses/Traffic/BrnTrafficSharedConstants.h"  // BrnTraffic::KU_MAX_HULLS (the :211 assert bound)
+#include <cmath>                                             // std::fabs (per-lane abs of the box dimensions)
+
 #include "GameSource/GameState/RoadRules/BrnRoadRulesManager.h"          // BrnGameState::RoadRulesManager (OnRoadLimit/IsRoadLimitRegionValid)
 #include "GameSource/GameState/Offences/BrnDriveThruManager.h"           // BrnGameState::DriveThruManager (HandleDriveThru)
 #include "GameSource/GameState/Offences/BrnStuntManager.h"               // BrnGameState::StuntManager (LatchJumpElement)
@@ -672,6 +682,138 @@ void TriggerQueryManager::ProcessPlayerTriggers(
 }
 
 // ============================================================================
+// [FLAG PC bring-up] NOT IN THE X360 BINARY -- the light-region box scan.
+//
+// [stuntrace waveD, agent D1] THIS STANDS IN FOR TriggerQueryManager::PostWorldUpdate
+// @0x82386BD8's OWNER-57 ARM, and for nothing else. What the console does there, verbatim:
+//
+//   0x82386CDC  stb  r18(0), 0x711(r27)   ; mbPlayerInTrafficLightRegion = false   \ EVERY frame,
+//   0x82386CE0  stw  r10(-1), 0x714(r27)  ; mPlayerCurrentTrafficLightId = -1      / before the walk
+//   ... then, for each 32-bit result word in the world's trigger LINE-TEST result queue
+//       (CgsModule::VariableEventQueue<1024,16>, filled by the TriggerEntityModule):
+//   0x82386F54  cmplwi r28, 0x39          ; owner byte == 57 -> a TRAFFIC-LIGHT trigger
+//                                         ;   (56 == a TriggerData region -> the OTHER arm)
+//   0x82386F5C  clrlwi r11, r25, 24 / beq ; ONLY when the result belongs to the PLAYER's car
+//   0x82386F68  stb  r23(1), 0x711(r27)   ; mbPlayerInTrafficLightRegion = true
+//   0x82386F74  insrwi r11, 0x39, 8,0     ; \ the TriggerId base-class pair, SetOwner then SetId:
+//   0x82386F80  insrwi r11, r29,  24,8    ; / mPlayerCurrentTrafficLightId = 0x39000000 | (id & 0xFFFFFF)
+//
+// So the console DERIVES BOTH MEMBERS FROM SCRATCH EVERY FRAME -- there is no latch to clear and
+// no "leave" event; "not in a region this frame" is just the top-of-function reset surviving.
+// This stand-in reproduces that shape exactly, and the only thing it replaces is WHERE the hit
+// comes from: instead of a line-test result queue it tests the player's position against the
+// loaded lane graph's light-trigger boxes directly.
+//
+// WHY A STAND-IN AT ALL: every stage of the console's producer chain is inert on this build (the
+// five "[FLAG PC boot gate] ... inert" lines the sibling banner below lists verbatim), and
+// TriggerQueryManager::SubmitTriggerQueries @0x82392680 -- the request half -- has no body here
+// either. Nothing on PC has ever written mbPlayerInTrafficLightRegion, so
+// GetPlayerCurrentTrafficLightId's own CGS_ASSERT(IsPlayerInTrafficLightRegion()) fires the
+// moment anything asks, and the whole offline event-start chain behind it is unreachable.
+//
+// THE BOXES. BrnTraffic::TrafficEntityModule::ManageTriggers @0x82747518 is the console's sole
+// producer of owner-57 triggers: it walks every streamed-in hull, then every entry of that hull's
+// mpaLightTriggers (Hull +0x34, stride 32, count at Hull +0x0E), and registers each one with the
+// world as a box trigger whose id is `(hull << 8) | 0x39000000 | lightTriggerIndex`
+// (0x827477EC/F8/FC). This scan walks the SAME arrays and packs the SAME id, so the value it
+// latches is bit-identical to the one the console's queue would have carried.
+//
+// ⚠️ FULL EXTENTS, HALVED HERE. ManageTriggers passes abs(mDimensions) through unchanged and the
+// WORLD halves them -- TriggerEntityModule::ProcessAddTriggerEvents @0x822D9520..0x822D9554:
+// `vspltisw128 v126,1 ; vcsxwfp128 v127,v126,1` (== 0.5), `vmulfp128 v1,v0,v127`, then
+// rw::collision::BoxVolume::Initialize. BrnMath::IsPointInsideBox takes HALF extents, so the
+// `* 0.5f` below is what makes this box the same size as the console's. Dropping it would make
+// every junction twice as wide in each axis and fire the banner from the next street over.
+//
+// ⚠️ POINT TEST vs SWEPT LINE. The console line-tests the car's travel this frame; this is a point
+// test at the car's origin. A box thinner than one frame of travel could be tunnelled through --
+// but the shipped light triggers are 6..56 m by 12 m by 48..104 m (measured over all 443 records
+// in B5TRAFFIC.BNDL), so nothing here is close to that. Stated rather than hidden, exactly as the
+// sibling region stand-in below states it.
+//
+// ⚠️ FIRST HIT WINS. Overlapping approach boxes of the SAME junction all resolve through
+// Hull::mpaLightTriggerJunctionLookup to the SAME JunctionLogicBox, so which one is latched does
+// not change the junction that comes out; the console's own answer is "whichever result the queue
+// happened to hold last", which is no more principled. Documented so nobody reads the `break` as
+// a considered priority rule.
+//
+// COST: 443 boxes on this track, each one Y-rotation-only transform + a squared-distance reject,
+// with BrnMath::IsPointInsideBox reached only by survivors. Measured need is 443; there is no cap
+// and no cache, deliberately -- a cache would need invalidating on every track load and this is
+// code that exists to be deleted.
+//
+// DELETE-WHEN the real trigger line-test pipeline lands (TriggerEntityModule::PreSceneUpdate /
+// PostSceneUpdate / PrePhysicsUpdate + TriggerQueryManager::SubmitTriggerQueries) and
+// TriggerQueryManager::PostWorldUpdate @0x82386BD8 is mounted as the real producer: then delete
+// this function AND its call site in stage (0b) below, and the owner-57 arm is the console's
+// verbatim.
+// ============================================================================
+static bool FindLightTriggerContainingPoint(const BrnTraffic::TrafficData* lpTrafficData,
+                                            const Vector3&                 lrPoint,
+                                            u32&                           lruOutTriggerId)
+{
+    for (u32 luHull = 0; luHull < lpTrafficData->muNumHulls; ++luHull)
+    {
+        const BrnTraffic::Hull* lpHull = lpTrafficData->GetHull(luHull);
+        if (lpHull == 0 || lpHull->mpaLightTriggers == 0)
+        {
+            continue;
+        }
+
+        // ManageTriggers' own loop bound (`lbz r11, 0xE(r26)` @0x8274787C).
+        const u32 luTriggerCount = lpHull->muNumLightTriggers;
+        for (u32 luTrigger = 0; luTrigger < luTriggerCount; ++luTrigger)
+        {
+            const BrnTraffic::LightTrigger& lrTrigger = lpHull->mpaLightTriggers[luTrigger];
+
+            // `vandc128 v0, v127, <0x80000000 splat>` @0x82747834 -- per-lane fabs, then the
+            // world's own 0.5 (see the banner) to reach the half extents IsPointInsideBox wants.
+            const Vector3 lDimensions = lrTrigger.GetDimensions();
+            const Vector3 lHalfExtents = { std::fabs(lDimensions.x) * 0.5f,
+                                           std::fabs(lDimensions.y) * 0.5f,
+                                           std::fabs(lDimensions.z) * 0.5f,
+                                           0.0f };
+
+            // ExpandPosPlusYRotToTransform(mPosPlusYRot) -- the console's own
+            // `bl BrnTraffic::ExpandPosPlusYRotToTransform` @0x82747800. Its translation row IS
+            // the packed lane, so Pos() is the box centre with no extra accessor.
+            const Matrix44Affine lTransform = lrTrigger.GetTransform();
+
+            // Conservative broadphase (NOT the console's -- it has none, the scene manager's
+            // spatial partition does this job). The sum of the three HALF extents is >= the box's
+            // bounding-sphere radius, so this can only over-accept; it exists to keep the
+            // seven-assert IsPointInsideBox off the other 442 boxes.
+            const Vector3 lCentre  = lTransform.Pos();
+            const f32 lfDeltaX = lCentre.x - lrPoint.x;
+            const f32 lfDeltaY = lCentre.y - lrPoint.y;
+            const f32 lfDeltaZ = lCentre.z - lrPoint.z;
+            const f32 lfDistSq = lfDeltaX * lfDeltaX + lfDeltaY * lfDeltaY + lfDeltaZ * lfDeltaZ;
+            const f32 lfRadius = lHalfExtents.x + lHalfExtents.y + lHalfExtents.z;
+            if (lfDistSq > (lfRadius * lfRadius))
+            {
+                continue;
+            }
+
+            if (BrnMath::IsPointInsideBox(lTransform, lrPoint, lHalfExtents))
+            {
+                // BrnTraffic::LightTriggerId::Set(luHull, luTrigger), inlined by the console at
+                // 0x827477EC..0x827477FC. Its two bounds asserts are baked at
+                // BrnTrafficLightTrigger.h:211/212 and are reproduced here because this code is
+                // the one that PACKS the handle -- the shipped data satisfies both (315 hulls,
+                // <= 16 triggers per hull), so a fire means the lane graph changed shape.
+                CGS_ASSERT(luHull < BrnTraffic::KU_MAX_HULLS, "luHull < KU_MAX_HULLS");
+                CGS_ASSERT(luTrigger < 256u, "luLightTriggerIndex < 256");
+
+                lruOutTriggerId = (luHull << 8) | BrnTraffic::KU_LIGHT_TRIGGER_ID_OWNER_TAG | luTrigger;
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
+// ============================================================================
 // X360 0x8239F5C8 - BrnGameState::TriggerQueryManager::PreWorldUpdate, ITS PLAYER-TRIGGER
 // FAN-OUT LEG.  [bugwave 2026-08-23 -- THE SUPER-JUMP ROOT CAUSE]
 //
@@ -850,10 +992,117 @@ void TriggerQueryManager::PreWorldUpdatePlayerTriggersBringUp(
             }
 
             const Matrix44Affine lBoxTransform = lpBoxRegion->ComputeTransform();
+            // ⛔ CONDUCTOR / FLAG, found by the waveD D1 light-region pass and NOT acted on here
+            // because it changes boot-verified jump behaviour: `lHalfExtents` above is
+            // BoxRegion::GetDimensions() UNSCALED, and the console's box dimensions are FULL
+            // extents. TriggerEntityModule::ProcessAddTriggerEvents @0x822D9520..0x822D9554
+            // multiplies InAddBoxTriggerEvent::mDimensions by 0.5 (`vspltisw128 v126,1 ;
+            // vcsxwfp128 v127,v126,1 ; vmulfp128 v1,v0,v127`) before
+            // rw::collision::BoxVolume::Initialize, and BrnMath::IsPointInsideBox takes HALF
+            // extents -- so this test currently arms every generic region at TWICE its authored
+            // size in each axis. ChallengeManager::IsPointInTriggerRegion's reconstruction
+            // (BrnChallengeManager_wC_04.cpp:148) already passes `GetDimensions() * 0.5f`, i.e.
+            // the two in-tree callers of the same predicate disagree. The new light-region stage
+            // (0b) below uses the halved form. Decide and unify in one pass, with a jump-ladder
+            // re-verify -- do not "fix" it as a drive-by.
             if (BrnMath::IsPointInsideBox(lBoxTransform, lPlayerPosition, lHalfExtents))
             {
                 maLastPlayerTriggers.Append(luRegionIndex);
             }
+        }
+    }
+
+    // ------------------------------------------------------------------------------------
+    // (0b) [FLAG PC bring-up] THE LIGHT-REGION STAND-IN -- NOT IN THE X360 BINARY.
+    //      Replaces TriggerQueryManager::PostWorldUpdate @0x82386BD8's OWNER-57 ARM (and only
+    //      that arm; the owner-56 arm's job is stage (0) above). Read the
+    //      FindLightTriggerContainingPoint banner before touching anything here.
+    //
+    //      Both members are RE-DERIVED FROM SCRATCH, exactly as the console re-derives them:
+    //      the reset pair is PostWorldUpdate's own `stb 0, 0x711` / `stw -1, 0x714`
+    //      (0x82386CDC/CE0), and "the player left the region" is nothing more than that reset
+    //      surviving the scan. There is no leave event to miss and no latch to age out.
+    //
+    //      PLAYER CAR ONLY. The console writes the pair only inside `if (v20)`, v20 being
+    //      "this line-test result's owner car index == the player's active race car index"
+    //      (@0x82386F5C) -- AI and traffic cars generate the same owner-57 results and must not
+    //      move the player's junction. IsPlayerCarActive() + GetPlayerPosition() is that gate.
+    //
+    //      DELETE-WHEN PostWorldUpdate @0x82386BD8 is mounted (see the helper's DELETE-WHEN).
+    // ------------------------------------------------------------------------------------
+    mbPlayerInTrafficLightRegion = false;                             // stb 0, 0x711(r27)
+    mPlayerCurrentTrafficLightId = static_cast<LightTriggerId>(-1);   // stw -1, 0x714(r27)
+
+    // The traffic-lane resource is bound by Prepare's LAST stage (BrnTriggerQueryManager_Prepare
+    // .cpp:253, the "[TriggerQueryManager] LOADED -- trigger=1 traffic=1" line) -- but the stage
+    // word is NOT a boundness proxy: Prepare assigns mpTrafficData and sets E_TRIGGER_LOAD_DONE
+    // UNCONDITIONALLY (its own diagnostic prints traffic= as HasMemoryResource() ? 1 : 0), and
+    // ResourcePtr::GetMemoryResource ASSERTS then RETURNS NULL on an unbound handle
+    // (CgsResourcePtr.h:246-251) -- the assert-is-not-a-guard class. So the pointer is
+    // null-tested too; a failed B5TRAFFIC resolve leaves the top-of-frame reset pair standing,
+    // which IS the console's "not in a region" state. (2026-08-26 verify catch.)
+    if (meTriggerLoadStage == E_TRIGGER_LOAD_DONE && lpActiveRaceCarInterface->IsPlayerCarActive())
+    {
+        const BrnTraffic::TrafficData* lpTrafficData = GetTrafficData();
+        const Vector3 lPlayerPosition = lpActiveRaceCarInterface->GetPlayerPosition();
+
+        u32 luTriggerId = 0;
+        if (lpTrafficData != 0 &&
+            FindLightTriggerContainingPoint(lpTrafficData, lPlayerPosition, luTriggerId))
+        {
+            mbPlayerInTrafficLightRegion = true;                      // stb 1, 0x711(r27)
+            // `insrwi r11, 0x39, 8,0` then `insrwi r11, r29, 24,8` -- SetOwner(57) then SetId(id24).
+            // The helper already returns the handle in exactly that shape; the mask/or pair is kept
+            // so the console's two stores stay legible at the site that performs them.
+            mPlayerCurrentTrafficLightId = static_cast<LightTriggerId>(
+                (luTriggerId & 0x00FFFFFFu) | BrnTraffic::KU_LIGHT_TRIGGER_ID_OWNER_TAG);
+        }
+    }
+
+    // [DIAG] NOT IN THE X360 BINARY. Edge-triggered enter/leave for the light region, with the
+    // packed handle. This is THE rung that separates "the car is not standing in a junction box"
+    // from "it is, and the chain above CheckIfPlayerIsAtJunctionWithAnEvent dropped it": the id
+    // printed here is what TrafficData::GetJunctionLogicBoxForTrafficLight decodes as
+    // hull = (id >> 8) & 0xFFFF, trigger = id & 0xFF -- cross-check it against
+    // scratch/stuntrace_scout/eventdata/dump_lighttriggers.py's `lightTriggerId=` column (the
+    // stunt-run test target is 0x7a08 == hull 122, trigger 8, junction 480897 / event 558269).
+    // Capped so a car parked on a box boundary cannot spam the log.
+    {
+        static const bool sbJunctionDiag = (getenv("BRN_JUNCTION_DIAG") != 0);
+        if (sbJunctionDiag)
+        {
+            static bool sbWasInRegion   = false;
+            static u32  suLastTriggerId = static_cast<u32>(-1);
+            static s32  siJunctionLines = 0;
+            const s32   KI_JUNCTION_DIAG_MAX_LINES = 64;
+
+            const u32 luCurrentId = static_cast<u32>(mPlayerCurrentTrafficLightId);
+            if ((mbPlayerInTrafficLightRegion != sbWasInRegion || luCurrentId != suLastTriggerId)
+                && siJunctionLines < KI_JUNCTION_DIAG_MAX_LINES
+                && CgsDev::Log::gpDebugPrint != 0)
+            {
+                ++siJunctionLines;
+                // The log stream has no hex manipulator, so the handle is printed as its two
+                // decoded halves (which is what dump_lighttriggers.py's hex column means) plus
+                // the raw packed word in decimal. hull 122 / trigger 8 == 0x7a08 == the target.
+                if (mbPlayerInTrafficLightRegion)
+                {
+                    *CgsDev::Log::gpDebugPrint
+                        << "[FLAG PC bring-up] [junction] ENTER light region: hull="
+                        << static_cast<s32>((luCurrentId >> 8) & 0xFFFFu)
+                        << " trigger=" << static_cast<s32>(luCurrentId & 0xFFu)
+                        << " packedId(dec)=" << static_cast<s32>(luCurrentId) << "\n";
+                }
+                else
+                {
+                    *CgsDev::Log::gpDebugPrint
+                        << "[FLAG PC bring-up] [junction] LEAVE light region (was hull="
+                        << static_cast<s32>((suLastTriggerId >> 8) & 0xFFFFu)
+                        << " trigger=" << static_cast<s32>(suLastTriggerId & 0xFFu) << ")\n";
+                }
+            }
+            sbWasInRegion   = mbPlayerInTrafficLightRegion;
+            suLastTriggerId = luCurrentId;
         }
     }
 

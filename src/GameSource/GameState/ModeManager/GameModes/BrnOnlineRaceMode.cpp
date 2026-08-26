@@ -51,20 +51,32 @@ const char* OnlineRaceMode::GetName() const
 // winner has crossed the line, the remaining racers are given the winner's finish time
 // plus a fixed grace window to complete.
 //
-// SHAPE NOTE (kept committed base shape): the committed GameMode::PreWorldUpdate is no-arg
-// (BrnGameMode.h); the X360 build receives the per-frame world-IO buffers and the live
-// ScoringSystem* as arguments (r9 == the ScoringSystem the winner-time scan reads, the same
-// object SetTimeLimitSeconds is called on). To honour the kept no-arg shape, the ScoringSystem
-// is reached through the owning ModeManager (ModeManager::GetScoringSystem -- the X360 reaches
-// it as *(mpModeManager+0xDB0), the same embedded object), rather than threading a dropped arg.
+// SIGNATURE WIDENED 2026-08-26 (wave-B fix round): this overrides GameMode vtable slot 2, which
+// the console dispatches with SIX arguments (UpdateCurrentMode @0x82350EC8:
+// `(*(**(a1+3480)+8))(mode, a2, a3, a8, a28, a30, a1+3504)`). The previous declaration was no-arg,
+// matching the then-committed base; once the base was corrected to the console shape, a no-arg
+// override would have silently minted a NEW vtable slot instead of binding to slot 2.
+//
+// The body is unchanged: the ScoringSystem it needs is still reached through the owning
+// ModeManager (ModeManager::GetScoringSystem -- the X360 reaches the SAME embedded object as
+// *(mpModeManager+0xDB0)), because the base's 6th parameter is `const ScoringSystem*` while the
+// winner-time leg calls the non-const SetTimeLimitSeconds. That is the console's own object, not
+// a stand-in.
 //
 // The X360 pseudocode renders this as `float* PreWorldUpdate(...)`; that return value is the
 // inherited sret/this artifact of the chained calls and carries no result -- the override is void.
 // ===========================================================================
-void OnlineRaceMode::PreWorldUpdate()
+void OnlineRaceMode::PreWorldUpdate(GameStateModuleIO::OutputBuffer* lpOutput,
+                                    const GameStateModuleIO::PreWorldInputBuffer* lpInput,
+                                    const BrnWorld::RaceCarEntityModuleIO::RCEntityGlobalRaceCarOutputInterface* lpGlobalRaceCars,
+                                    const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpActiveRaceCars,
+                                    bool lbPaused,
+                                    const ScoringSystem* lpScoringSystem)
 {
-    // Base per-frame tick (rival-visibility scan + drive the current state's Update()).
-    GameMode::PreWorldUpdate();
+    // Base per-frame tick (rival-visibility scan + drive the current state's Update()) -- the
+    // console forwards its own arguments straight through.
+    GameMode::PreWorldUpdate(lpOutput, lpInput, lpGlobalRaceCars, lpActiveRaceCars,
+                             lbPaused, lpScoringSystem);
 
     // Only recompute the time limit while the race is actually in progress. The X360 reads the
     // current mode's state off the ModeManager's current game mode (*(mpModeManager+0xD98), its
@@ -73,7 +85,10 @@ void OnlineRaceMode::PreWorldUpdate()
     if (lpCurrentGameMode != NULL &&
         lpCurrentGameMode->GetCurrentState() == GameStateModuleIO::E_GMS_IN_PROGRESS)
     {
-        ScoringSystem* lpScoringSystem = GetModeManager()->GetScoringSystem();
+        // Named apart from the (const) 6th parameter above so nothing shadows: the base signature
+        // hands us `const ScoringSystem*`, and the winner-time leg needs the mutable object.
+        // Console reaches the same embedded ScoringSystem either way (*(mpModeManager+0xDB0)).
+        ScoringSystem* lpMutableScoringSystem = GetModeManager()->GetScoringSystem();
 
         // Find the earliest (smallest positive) finish time across all active-race-car slots: the
         // race winner's time. Slots that have not finished report a zero finish time and are skipped.
@@ -84,7 +99,7 @@ void OnlineRaceMode::PreWorldUpdate()
              ++leEnumIndex)
         {
             const f32 lfFinishTime =
-                lpScoringSystem->GetFinishTime(static_cast<EActiveRaceCarIndex>(leEnumIndex)).GetFloatVal();
+                lpMutableScoringSystem->GetFinishTime(static_cast<EActiveRaceCarIndex>(leEnumIndex)).GetFloatVal();
             if (lfFinishTime > 0.0f && lfFinishTime < lfWinnersTime)
             {
                 lfWinnersTime = lfFinishTime;
@@ -97,7 +112,7 @@ void OnlineRaceMode::PreWorldUpdate()
         // A winner exists -> cap the remaining racers' clock at the winner's time + the grace window.
         if (lfWinnersTime < KF_NO_WINNER_TIME_SECONDS)
         {
-            lpScoringSystem->SetTimeLimitSeconds(lfWinnersTime + KF_OUTRO_GRACE_SECONDS);
+            lpMutableScoringSystem->SetTimeLimitSeconds(lfWinnersTime + KF_OUTRO_GRACE_SECONDS);
         }
     }
 }
@@ -190,5 +205,14 @@ f32 OnlineRaceMode::GetOutroTimeout() const
     }
 
     return KF_OUTRO_NOT_FINISHED_SECONDS;
+}
+
+// X360 vtable slot 24 (vtbl+96): 0x82C296C8 == `li r3,1; blr` at slot 24 of vtable 0x820D07F0,
+// against the GameMode base's 0x827E2F38 == `li r3,0; blr`. SetupGameMode @0x8234B158 reads it
+// twice and HandleLoadingScreenLoaded @0x8234B8A8 once -- an online race DOES put up a loading
+// screen, which is what separates it from every offline mode.
+bool OnlineRaceMode::HasLoadingScreen() const
+{
+    return true;
 }
 }

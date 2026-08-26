@@ -29,8 +29,12 @@ void OnlineFreeBurnLobbyMode::Start(const StartGameModeParams* /*lpStartGameMode
     const GameStateModuleIO::StartNetworkGameEvent* lpStartNetworkGameEvent =
         GetModeManager()->GetNetworkRoundManager()->GetNetworkGameEvent();
 
-    // *(this+172)=1 -> GameMode base mbConstructed.
-    mbConstructed = true;
+    // `li r28,1` @0x82322348 / `stb r28, 0xAC(r29)` @0x82322360 -> *(this+172) = 1.
+    // [!] NAME CORRECTED 2026-08-26 (wave-B fix round): +0xAC is mbIsOnline, not `mbConstructed`.
+    // OfflineGameMode::Construct @0x8232FE78 stores 0 into the same byte and OnlineGameMode::
+    // Construct @0x8232FEB4 stores 1; no OFFLINE mode's Start touches +0xAC, while all three
+    // ONLINE Start bodies re-assert it. See the +160..+179 table in BrnGameMode.h.
+    mbIsOnline = true;
 
     lpGameModeParams->Construct(GameStateModuleIO::E_MODE_ONLINE_FREE_BURN_LOBBY);
 
@@ -66,5 +70,12 @@ void OnlineFreeBurnLobbyMode::Start(const StartGameModeParams* /*lpStartGameMode
     }
 
     GetModeManager()->SetOnlineRaceCars(lpGameModeParams, lpStartNetworkGameEvent);
+}
+
+// X360 vtable slot 23 (vtbl+92), folded leaf 0x827E2F38 == `li r3,0; blr` at slot 23 of vtable
+// 0x820D0A68; the GameMode base is 0x82C296C8 == `li r3,1`.
+bool OnlineFreeBurnLobbyMode::RequiresStreaming() const
+{
+    return false;
 }
 }

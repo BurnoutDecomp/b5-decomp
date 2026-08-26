@@ -22,19 +22,33 @@ const f32 KF_HACK_MIN_LANDMARK_HEIGHT = -150.0f;
 static const f32 KF_DEBUG_FORCE_MIN_DISTANCE_SQUARED = 10000.0f;
 
 // X360 0x8232FE58, BrnOfflineGameMode.cpp:50. Forwards to the GameMode base (which stores
-// the ModeManager* and zero-inits the shared mode flags), then clears this mode's own
-// construction flag and seeds the debug "always race to a single landmark" overrides
-// (disabled, design index 41). The Hex-Rays `int result`/`return result` are register-reuse
-// artifacts of a void function and are dropped; the X360 body writes:
-//   *(this+172) = 0   -> mbConstructed (GameMode base)              = false
-//   *(this+180) = 0   -> mbDebugAlwaysRaceToSingleLocation          = false
-//   *(this+184) = 41  -> miDebugDesignIndexOfLandmarkToAlwaysRaceTo = 41
+// the ModeManager* and zero-inits the shared mode flags), then marks this mode OFFLINE and
+// seeds the debug "always race to a single landmark" overrides (disabled, design index 41).
+// The Hex-Rays `int result`/`return result` are register-reuse artifacts of a void function and
+// are dropped; the X360 body is four instructions after the base call:
+//   li  r11, 0    / li  r10, 0x29
+//   stb r11, 0xAC(r31)  -> *(this+172) = 0  -> mbIsOnline                        = false
+//   stb r11, 0xB4(r31)  -> *(this+180) = 0  -> mbDebugAlwaysRaceToSingleLocation = false
+//   stw r10, 0xB8(r31)  -> *(this+184) = 41 -> miDebugDesignIndexOfLandmarkToAlwaysRaceTo
+//
+// [!] NAME CORRECTED 2026-08-26 (wave-B fix round): +0xAC was transcribed as `mbConstructed`.
+// It is mbIsOnline -- the SAME byte OnlineGameMode::Construct @0x8232FEB4 stores 1 into, and the
+// one ModeManager::ProcessEvent @0x82340AF4 reads to choose the online vs offline stunt scorer.
+// While it was misnamed, GameMode::IsOnline() returned a member nothing ever wrote.
 void OfflineGameMode::Construct(ModeManager* lpModeManager)
 {
     GameMode::Construct(lpModeManager);
-    mbConstructed = false;
+    mbIsOnline = false;
     mbDebugAlwaysRaceToSingleLocation = false;
     miDebugDesignIndexOfLandmarkToAlwaysRaceTo = 41;
+}
+
+// X360 vtable slot 7 (vtbl+28), folded leaf 0x82C296C8 == `li r3,1; blr`, identical in all eight
+// offline mode vtables. ModeManager::StartGameMode @0x8234FCE8 calls it directly and hands the
+// result to the frame-rate manager. See the restoration note in BrnOfflineGameMode.h.
+CgsSystem::EFrameRateManagerType OfflineGameMode::GetFrameRateType() const
+{
+    return CgsSystem::E_FRAMERATEMANAGER_MULTIPLE_CAPPED;
 }
 
 // X360 0x82321E38, BrnOfflineGameMode.cpp:98. Walks every landmark in the supplied

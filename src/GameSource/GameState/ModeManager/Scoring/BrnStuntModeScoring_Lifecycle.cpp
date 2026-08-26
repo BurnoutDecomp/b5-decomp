@@ -30,9 +30,13 @@
 // (0x823132D0). The fabricated claim has been removed.
 //
 // mfPendingScoreTimer is reset to KF_PENDING_SCORE_TIMER_NOT_STARTED (X360 flt_82CDB784,
-// BrnStuntModeScoring.cpp:57). That file-scope constant is defined+initialised in this
-// type's own TU (not yet reconstructed); it is DECLARE-ONLY here (extern) -- gate is cl /c,
-// no link. FLAG: confirm the spelling/home when BrnStuntModeScoring.cpp lands.
+// BrnStuntModeScoring.cpp:57). That file-scope constant is DECLARE-ONLY here (extern); its
+// single definition now lives in the sibling BrnStuntModeScoring_UpdatePass.cpp, whose
+// UpdateBufferedScore is the constant's other consumer. Until that definition landed the extern
+// resolved to nothing anywhere in the tree (a latent LNK2001 that the cl /c gate cannot catch),
+// while _UpdatePass.cpp carried an unrelated anonymous-namespace copy of the same name -- two
+// spellings of one constant with two different values. When the full BrnStuntModeScoring.cpp is
+// reconstructed it takes ownership of the definition and this extern re-points at it.
 //
 // Construct's X360 body issues a vtable call (slot +0x10) on `this` which is the virtual
 // dispatch to ClearData (the derived StuntModeScoringOnline overrides ClearData). The full
@@ -42,9 +46,13 @@
 
 namespace BrnGameState
 {
-    // DECLARE-ONLY: file-scope tunable defined in BrnStuntModeScoring.cpp (X360 flt_82CDB784).
-    // The "pending-score timer not running" sentinel ClearData parks mfPendingScoreTimer at.
-    extern f32 KF_PENDING_SCORE_TIMER_NOT_STARTED;
+    // DECLARE-ONLY: file-scope tunable DEFINED in BrnStuntModeScoring_UpdatePass.cpp as
+    // 1000.0f (X360 flt_82CDB784, VA 0x82CDB784, read big-endian from the decrypted image).
+    // The "pending-score timer not running" sentinel ClearData parks mfPendingScoreTimer at --
+    // a sentinel, not a duration: the consumer guard is `mfPendingScoreTimer >= NOT_STARTED`
+    // (asm 0x8232C19C), so it has to sit above every real timer value. `const` here matches the
+    // definition's linkage; a non-const extern would not bind to it.
+    extern const f32 KF_PENDING_SCORE_TIMER_NOT_STARTED;
 
     namespace
     {

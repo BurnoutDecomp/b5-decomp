@@ -103,6 +103,25 @@ struct Hull
     // this indexes by name.
     inline const StopLine* GetStopLine(u32 luIndex) const;
 
+    // ===========================================================================================
+    // [stuntrace waveB CLOSURE round, 2026-08-26] THE START-GRID LEAF PAIR. Both are REAL
+    // standalone X360 exports (not inlines) and both are bodied in BrnTrafficHull.cpp; together
+    // they are everything TrafficData::GetStartDataForTrafficLight @0x8231CC48 does after its own
+    // bounds checks, and therefore everything ModeManager::SetStartingGrid needs to seat a car.
+    // Shapes are DWARF-exact (BrnTrafficHull.h:121 and :124); the console's asserts for both live
+    // in SharedClasses/Traffic/BrnTrafficHull.cpp (path string @0x820C1BA8), which is why the
+    // bodies are in this directory's .cpp rather than inline here.
+    //
+    //   GetJunctionForLightTrigger          @ 0x82752870  (asserts BrnTrafficHull.cpp:274 / :276)
+    //   GetLightTriggerStartDataForJunction @ 0x82752900  (asserts :293 / :301 / :309 / :319)
+    //
+    // The second one returns NULL for a junction that has no start grid of the requested flavour;
+    // that is an AUTHORED outcome, not a failure -- see the .cpp banner.
+    const JunctionLogicBox*      GetJunctionForLightTrigger(u32 luIndex) const;
+    const LightTriggerStartData* GetLightTriggerStartDataForJunction(const JunctionLogicBox* lpJunction,
+                                                                    bool lbUseAlternateStartData) const;
+    // ===========================================================================================
+
     // X360 @0x827620A0 / @0x827622E0 (DWARF :135 / :140). Rebases the twelve
     // consecutive pointer slots (console +0x10..+0x3C) against the resource block
     // base, then asserts the junction count and the two 16-byte alignment guards.

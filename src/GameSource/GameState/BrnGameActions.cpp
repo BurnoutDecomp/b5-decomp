@@ -422,5 +422,153 @@ OnlineGameResults& OnlineGameResults::operator=(const OnlineGameResults& lOther)
     }
     return *this;
 }
+
+// =============================================================================
+// PrepareForModeAction - the six declared-only SETTERS the mounted event core calls.
+//   [stuntrace wave B, MOUNT-CLOSURE round]
+//
+// None of the six has an out-of-line X360 symbol: the console inlines every one of them into
+// ModeManager::PrepareForMode @0x82342930, which builds the action record on its own stack
+// (IDA local var_980) and then memcpy's 0x8E0 == 2272 bytes of it into the manager's cache
+// (@0x82342E40 addi r4,r1,var_980 ; li r5,0x8E0 ; bl memcpy). That record size is itself the
+// confirmation that this is the type BrnGameActions.h models -- 2272 is the console
+// PrepareForModeAction, and the header's own note already records the host/console width
+// divergence (seam_audit S3b arm 23: symmetric across producer and consumer, so it costs console
+// byte-compat and nothing else).
+//
+// EVERY member below is read out of ONE asm window, at a fixed distance from that var_980 record
+// base: record offset == 0x980 - (the var_XX number IDA prints). All six land on members the
+// committed header had already named and offset-pinned from the DWARF, so this round CONFIRMS
+// that layout rather than proposing it:
+//     var_980 -> record +0x000   mePrepareForModeStage             (stw,  enum)
+//     (walk)  -> record +0x004   maePlayerScoringIndex[8]          (stw,  enum, see below)
+//     var_B8  -> record +0x8C8   mfPlayerBoostEarning              (stfs, f32)
+//     var_B4  -> record +0x8CC   miShotGroup                       (stw,  s32)
+//     var_AF  -> record +0x8D1   mbFinishedOnlineEvent             (stb,  bool)
+//     var_AE  -> record +0x8D2   mbStartingFreeburnDueToPlayerJoin (stb,  bool)
+// The two neighbours at +0x8C8 and +0x8CC are disambiguated by INSTRUCTION KIND, not by order:
+// PrepareForMode loads their sources as lfs 0x31C(startParams) and lwz 0x320(startParams) on
+// consecutive instructions (@0x82342A94 / @0x82342A90) and stores them back as stfs / stw -- a
+// swap would have to survive four mismatched types.
+//
+// The producer call sites for all six are in the mounted BrnModeManager_Prepare.cpp
+// (:575, :576, :577, :591, :686, :714, :726, :727), and seam_audit S3b already checked the
+// mounted consumer arm (case 23) against them. These bodies are the missing middle of that chain.
+//
+// Only the six SETTERS are landed. Their declared-only read twins (GetPlayerScoringIndex,
+// GetPlayerBoostEarning, GetShotGroup) have no mounted caller, and a body with no live consumer
+// is a body whose member mapping nothing can check -- they stay declared-only on purpose.
+// =============================================================================
+
+// -----------------------------------------------------------------------------
+// SetPlayerScoringIndex (record +0x004, maePlayerScoringIndex[liIndex]).
+//
+// Recovered from the loop tail of ModeManager::PrepareForMode @0x82342D90..0x82342DEC, where the
+// console walks the grid positions and stores each player's scoring slot into the record:
+//     cmpwi cr6, r20, 0 ; blt -> assert          ; r20 == liIndex (the grid position)
+//     cmpwi cr6, r20, 8 ; blt -> ok, else assert
+//         FireAssert("(liIndex>=0) && (liIndex<E_ACTIVE_RACE_CAR_INDEX_COUNT)",
+//                    "..\\..\\..\\GameSource\\GameState/BrnGameActions.h", 0x4D6 == 1238)
+//     cmpwi cr6, r28, 0 ; blt -> assert          ; r28 == leScoringIndex
+//     cmpwi cr6, r28, 8 ; blt -> ok, else assert
+//         FireAssert("(leScoringIndex>=E_PLAYER_SCORING_INDEX_0) && "
+//                    "(leScoringIndex<E_PLAYER_SCORING_INDEX_COUNT)", same file, 0x4D7 == 1239)
+//     stw r28, 0(r11) ; addi r11, r11, 4         ; maePlayerScoringIndex[liIndex] = leScoringIndex
+// The file string is THIS header's (BrnGameActions.h) and the two line numbers are consecutive --
+// both marks of an inlined member's own assert pair rather than the caller's. The walk uses a
+// running pointer bumped by 4 per iteration, seeded from var_97C == record +0x004, which is
+// exactly where the header already places maePlayerScoringIndex[0].
+//
+// The bound the FIRST assert spells is E_ACTIVE_RACE_CAR_INDEX_COUNT, not KI_MAX_PLAYERS -- the
+// console really does mix the two names for the same 8 here (the header's own note records
+// KI_MAX_PLAYERS == BrnWorld::KI_MAX_ACTIVE_RACE_CARS == 8). The assert STRINGS are reproduced
+// verbatim per the standing rule; the C++ bound is the array's own extent constant, so the check
+// and the array can never drift apart silently even though the string says something else.
+// Both asserts are non-gating tripwires: the console stores regardless.
+// -----------------------------------------------------------------------------
+void PrepareForModeAction::SetPlayerScoringIndex(s32 liIndex, EPlayerScoringIndex leIndex)
+{
+    CGS_ASSERT(liIndex >= 0 && liIndex < KI_MAX_PLAYERS,
+               "(liIndex>=0) && (liIndex<E_ACTIVE_RACE_CAR_INDEX_COUNT)");
+    CGS_ASSERT(leIndex >= E_PLAYER_SCORING_INDEX_0 && leIndex < E_PLAYER_SCORING_INDEX_COUNT,
+               "(leScoringIndex>=E_PLAYER_SCORING_INDEX_0) && (leScoringIndex<E_PLAYER_SCORING_INDEX_COUNT)");
+    maePlayerScoringIndex[liIndex] = leIndex;
+}
+
+// -----------------------------------------------------------------------------
+// SetPlayerBoostEarning (record +0x8C8, mfPlayerBoostEarning).
+// ModeManager::PrepareForMode @0x82342A94 lfs f0, 0x31C(r31) -> @0x82342A9C stfs f0, var_B8(r1),
+// i.e. record +0x8C8. The source is StartGameModeParams::GetBoostEarning(), bodied this same
+// round in BrnGameModeParams.cpp, and the committed producer line already carries the matching
+// note: BrnModeManager_Prepare.cpp:575 "// action +0x8C8". No assert on the console path.
+// -----------------------------------------------------------------------------
+void PrepareForModeAction::SetPlayerBoostEarning(f32 lfBoostEarning)
+{
+    mfPlayerBoostEarning = lfBoostEarning;
+}
+
+// -----------------------------------------------------------------------------
+// SetShotGroup (record +0x8CC, miShotGroup).
+// The paired instruction: @0x82342A90 lwz r9, 0x320(r31) -> @0x82342AAC stw r9, var_B4(r1) ==
+// record +0x8CC. Source is StartGameModeParams::GetShotGroup(); producer note at
+// BrnModeManager_Prepare.cpp:576 ("// action +0x8CC"). A WORD store next to the float store
+// above -- that difference in kind is what keeps these two adjacent slots apart. No assert.
+// -----------------------------------------------------------------------------
+void PrepareForModeAction::SetShotGroup(s32 liShotGroup)
+{
+    miShotGroup = liShotGroup;
+}
+
+// -----------------------------------------------------------------------------
+// SetFinishedOnlineEvent (record +0x8D1, mbFinishedOnlineEvent).
+// @0x82342ABC stb r11, var_AF(r1) == record +0x8D1, sourced from the manager's own
+// mbFinishedOnlineEvent byte (r27 == this + 0x9507, built by the addis/addi pair at
+// @0x82342A88 / @0x82342A98). Producer: BrnModeManager_Prepare.cpp:591 ("// action +0x8D1").
+// CROSS-CHECKED FROM THE OTHER END: the read twin GetFinishedOnlineEvent() is already a header
+// inline from the [evt-flow E1] round, and it was derived from the CONSUMER side
+// (TranslateGameActionsToGuiEvents' case-23 arm @0x823EAD80 loads 0x8D1(r31)). Two independent
+// derivations, one byte.
+// -----------------------------------------------------------------------------
+void PrepareForModeAction::SetFinishedOnlineEvent(bool lbFinished)
+{
+    mbFinishedOnlineEvent = lbFinished;
+}
+
+// -----------------------------------------------------------------------------
+// SetStartingFreeburnLobbyDueToPlayerJoin (record +0x8D2, mbStartingFreeburnDueToPlayerJoin).
+// @0x82342AB8 stb r10, var_AE(r1) == record +0x8D2, the byte immediately after
+// mbFinishedOnlineEvent, sourced at @0x82342AA4 from lbz r10, 0x130(r10) off the module pointer
+// at this+0x6D64. Producer: BrnModeManager_Prepare.cpp:577. Same producer/consumer cross-check as
+// above -- the case-23 arm reads 0x8D2(r31), which is what the committed header inline
+// GetStartingFreeburnLobbyDueToPlayerJoin() was built from.
+// -----------------------------------------------------------------------------
+void PrepareForModeAction::SetStartingFreeburnLobbyDueToPlayerJoin(bool lbStarting)
+{
+    mbStartingFreeburnDueToPlayerJoin = lbStarting;
+}
+
+// -----------------------------------------------------------------------------
+// SetPrepareStage (record +0x000, mePrepareForModeStage).
+//
+// The split-prepare tail of ModeManager::PrepareForMode @0x82342E34..0x82342E6C is the whole
+// derivation, and it is unusually explicit:
+//     li   r28, 1
+//     stw  r28, var_980(r1)                     ; the OUTGOING record's stage = 1
+//     bl   memcpy(this + 0x8C10, &var_980, 0x8E0)  ; snapshot it into the manager's cache
+//     stw  r28, var_980(r1)                     ; (re-stamped; the compiler reloaded it)
+//     li   r11, 2
+//     stw  r11, 0(r31)                          ; the CACHED copy's stage = 2
+// var_980 IS the record base, so the member written is at record +0x000 == mePrepareForModeStage,
+// and the two values are E_PFM_STAGE_FIRST_OF_TWO(1) and E_PFM_STAGE_SECOND_OF_TWO(2). That is
+// exactly the committed producer pair at BrnModeManager_Prepare.cpp:726/:727 (fresh post stamped
+// stage 1, cache stamped stage 2), and it is what makes the mounted consumer's
+// IsFirstPrepareForMode() gate drop the repost the way the console drops it -- the seam audit's
+// S3b arm-23 finding, which until now was resting on an unresolved symbol.
+// No assert on the console path (the stage is compiler-generated, never a caller's argument).
+// -----------------------------------------------------------------------------
+void PrepareForModeAction::SetPrepareStage(EPrepareForModeStage leStage)
+{
+    mePrepareForModeStage = leStage;
+}
 }
 }

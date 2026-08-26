@@ -1,8 +1,9 @@
 #include "GameSource/GameState/ModeManager/Scoring/BrnScoringSystem.h"
 
 // OnModeStart dereferences GameModeParams (the keystone only forward-declares it): the
-// road-rage / marked-man case reads the per-mode crash target through GetAStarDistanceFunctionRaw()
-// (the +0x858 word) and the online block reads the network-player count (miNumNetworkPlayers).
+// road-rage / marked-man case reads the per-mode crash target through GetPlayerWreckCount()
+// (the +0x858 word; GetAStarDistanceFunctionRaw was retired with the +0x850/854/858 run fix)
+// and the online block reads the network-player count (miNumNetworkPlayers).
 #include "GameSource/GameState/ModeManager/GameModes/BrnGameModeParams.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
@@ -276,16 +277,16 @@ void ScoringSystem::RemovePlayer(BrnNetwork::NetworkPlayerID lID)
 //
 // SCOPE / RESIDUAL FLAGS:
 //   * Road-rage / marked-man case (X360 jumptable cases 0,5 == game modes E_MODE_ROAD_RAGE(3) /
-//     E_MODE_MARKED_MAN(8)): copies GameModeParams +0x858 VERBATIM into miMaximumPlayerCrashedNumber via
-//     the committed GetAStarDistanceFunctionRaw() accessor (the GameModeParamsField prereq) -- the task's
-//     headline deliverable, fully grounded.
+//     E_MODE_MARKED_MAN(8)): copies GameModeParams +0x858 (miPlayerWreckCount, via GetPlayerWreckCount())
+//     VERBATIM into miMaximumPlayerCrashedNumber -- see the RE-POINTED note at the case arm.
 //   * Stunt-attack / online-stunt-run cases (game modes 7 and 12/14/17): Activate the offline
 //     (mStuntModeScoring) resp. the online (mOnlineStuntModeScoring) stunt scorer with the target score
-//     read from GameModeParams +0x68 (ASM `lfs f0, 0x68(r29); fctiwz` -- a float narrowed to s32). +0x68
-//     resolves to mfNeedForSilver by member-offset reconstruction (the DWARF dwarfdump carries no byte
-//     offsets, so this is an alignment-derived identity, MEDIUM confidence -- FLAGGED; if it proves to be
-//     an adjacent threshold the named member swaps but the shape is unchanged). StuntModeScoring::Activate
-//     is declare-only on the slice (fine for `cl /c`).
+//     read from GameModeParams +0x68 (ASM `lfs f0, 0x68(r29); fctiwz` -- a float narrowed to s32).
+//     +0x68 is mfNeedForGold, SETTLED 2026-08-26 (closure verify): the medal run is
+//     +0x60 bronze / +0x64 silver / +0x68 gold / +0x6C mfModeTimeLimit -- UpdateCurrentMode
+//     @0x823512AC-B8 loads f3/f2/f1 from 0x60/0x64/0x68 into SetMedalModeTimer, whose own assert
+//     @0x82310958 names f1 "lfGoldTimeLimitSeconds". The stunt target rides the GOLD slot
+//     (StuntAttackMode::Start writes it there).
 //   * Online block (game mode >= 10): miEventType <- leGameMode and miReserved0x30 <- (network-player
 //     count + 1) are reconstructed against named mOnlineGameResults members (the same fields
 //     SaveNetworkRoundData reads back). miNumberOfRounds (ASM `stw r28, 0x4DF8` <- r7) is FLAGGED: r7 is
@@ -303,20 +304,28 @@ void ScoringSystem::OnModeStart(GameStateModuleIO::EGameModeType leGameMode,
         case GameStateModuleIO::E_MODE_ROAD_RAGE:
         case GameStateModuleIO::E_MODE_MARKED_MAN:
             // X360 jumptable cases 0,5: lwz r11,0x858(params) / stw r11,0x4B58(this). Verbatim copy.
-            miMaximumPlayerCrashedNumber = lpParams->GetAStarDistanceFunctionRaw();
+            // [!!] RE-POINTED 2026-08-26 (wave-B fix round). This used to read
+            // GetAStarDistanceFunctionRaw(), i.e. it fed the road-rage crash allowance the A*
+            // DISTANCE FUNCTION. BrnGameModeParams.h's offset run was one slot low; params+0x858 is
+            // miPlayerWreckCount, not meAStarDistanceFunction (the A* type is +0x854 -- proven by
+            // ModeManager::SetupPathfinding's integer `stw r11, 0x854(params)` @0x82329250 -- and
+            // mfOnlineModeTimeLimit is +0x850, proven by UpdateCurrentMode's `lfs f0, 0x850`
+            // @0x823512FC under the "GetOnlineTimeLimit() > 0.0f" assert). The full evidence block
+            // is at the accessor in BrnGameModeParams.h; GetAStarDistanceFunctionRaw is retired.
+            miMaximumPlayerCrashedNumber = lpParams->GetPlayerWreckCount();
             break;
 
         case GameStateModuleIO::E_MODE_STUNT_ATTACK:
             // X360 case 4: Activate(this+0x350, (s32)*(params+0x68)). Offline stunt scorer.
-            // FLAG: +0x68 == mfNeedForSilver by offset reconstruction (medium confidence).
-            mStuntModeScoring.Activate(static_cast<s32>(lpParams->mfNeedForSilver));
+            // +0x68 == mfNeedForGold (the medal-run pin in the banner above).
+            mStuntModeScoring.Activate(static_cast<s32>(lpParams->mfNeedForGold));
             break;
 
         case GameStateModuleIO::E_MODE_ONLINE_FUGITIVE:
         case GameStateModuleIO::E_MODE_ONLINE_FREE_BURN:
         case GameStateModuleIO::E_MODE_ONLINE_MODE_END:
             // X360 cases 9,11,14: Activate(this+0x2620, (s32)*(params+0x68)). Online stunt scorer.
-            mOnlineStuntModeScoring.Activate(static_cast<s32>(lpParams->mfNeedForSilver));
+            mOnlineStuntModeScoring.Activate(static_cast<s32>(lpParams->mfNeedForGold));
             break;
 
         default:

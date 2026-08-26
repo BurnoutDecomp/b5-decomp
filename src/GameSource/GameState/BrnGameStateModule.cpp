@@ -79,6 +79,39 @@ void GameStateModule::Construct()
         mpOutputBuffer->Construct();
     }
 
+    // ⭐⭐ [D2 gesture-sink] THE PRE-WORLD CONTROLLER SINK. Allocated here for exactly the
+    // reason mpOutputBuffer is, and with the same shape of FLAG -- the console stages this
+    // buffer per frame out of the update IOBufferStack
+    // (BrnGameModule::DoUpdate_GameStatePreWorld @0x823EE0E8:
+    //  `CreateIOBuffer<GameStateModuleIO::PreWorldInputBuffer>(stack, &buf, "GameStatePreWorld")`
+    //  ... `DestroyIOBuffer(stack, &buf)`), and nothing on PC runs that entry point. The full
+    // attestation, the refuted "module + 0x2BE8" premise and the DELETE-WHEN live on
+    // GameStateModule::GetPreWorldInputBuffer() in the header.
+    //
+    // ⚠️ `new T()` -- the parenthesised form is load-bearing, not decoration. PreWorldInputBuffer
+    // has no user-provided constructor, so value-initialisation ZERO-INITIALISES the whole object
+    // before the implicit default ctor runs. Without it ControllerInput::mbRaceModePressed (and
+    // its twenty siblings) would be indeterminate for every read taken before the first
+    // BridgeControllerToGameState of the session -- a "the gesture fired on boot" bug that would
+    // reproduce about half the time.
+    if (mpPreWorldInputBuffer == 0)
+    {
+        mpPreWorldInputBuffer = new GameStateModuleIO::PreWorldInputBuffer();
+        mpPreWorldInputBuffer->Construct();   // CgsModule::IOBuffer::Construct -- raises eStatusConstructed
+
+        // ⓘ THE never-Constructed-queue TRAP, PAID UP FRONT. The console's CreateIOBuffer path
+        // Constructs the buffer's embedded VariableEventQueue<1536,16> at +0x4C; a queue that is
+        // only zero-filled has miFirstEventOffset == 0 and mbIsConstructed == false, and the first
+        // AddEvent on it asserts "Not Constructed" (or, worse for a queue that has been Clear()ed
+        // instead, writes at an unaligned head). DoUpdate_GameStatePreWorld posts onto exactly
+        // this queue -- events 33 (the stream-stall pair) and 8 -- so it WILL have a producer the
+        // moment that entry point lands. Constructed through the committed write-locked accessor
+        // rather than by poking the member, so the lock contract is honoured here too.
+        mpPreWorldInputBuffer->LockForWrite();
+        mpPreWorldInputBuffer->GetGameEventQueue()->Construct();
+        mpPreWorldInputBuffer->UnlockForWrite();
+    }
+
     // ⭐ X360 0x82380388 (this function) is the console's ONLY caller of
     // CarSelectManager::Construct @0x823564D0:
     //     BrnGameState::CarSelectManager::Construct(a1 + 183712, a1 + 42320, a1, a1 + 47920)
@@ -156,6 +189,18 @@ void GameStateModule::Construct()
     // Clear() is the interface's OWN X360 body (0x8227D550) and lands exactly the state the
     // readers expect: index -1, engine state COUNT, mbIsPlayerCarActive false.
     mLastActiveRaceCarInterface.Clear();
+
+    // ⭐ [stuntrace waveB agent 9] SAME INSURANCE FOR THE GLOBAL SNAPSHOT, and for the same reason.
+    // The console pairs the two Clears back to back in GameStateModule::ClearData @0x8236B3A8
+    // (`RCEntityActiveRaceCarOutputInterface::Clear(a1 + 235488);
+    //   RCEntityGlobalRaceCarOutputInterface::Clear(a1 + 245968);`), and ClearData is not
+    // reconstructed here either. Without this, ModeManager::GlobalToActiveRaceCarIndex (which is
+    // the interface's own maeActiveRaceCarIndices lookup) would read indeterminate slot indices and
+    // hand a garbage active index to the checkpoint and results paths. Clear() lands the console's
+    // own "no data" state: every active-index slot E_ACTIVE_RACE_CAR_INDEX_INVALID, so the readers
+    // fire the console's own range asserts instead of indexing on garbage.
+    // DELETE-WHEN PostWorldUpdate's snapshot leg lands (it XMemCpy's both interfaces).
+    mLastGlobalRaceCarInterface.Clear();
 
     // [FLAG PC bring-up] `DeveloperChallengeManager::Construct(a1 + 185712, a1 + 47920,
     // a1 + 284520, a1 + 7632, a1)` -- i.e. (&mDeveloperChallengeManager, &mProgressionManager,
@@ -243,6 +288,15 @@ void GameStateModule::Destruct()
     {
         delete mpOutputBuffer;
         mpOutputBuffer = 0;
+    }
+
+    // [D2 gesture-sink] the partner of Construct()'s allocation -- the console's partner is
+    // DoUpdate_GameStatePreWorld's DestroyIOBuffer tail.
+    if (mpPreWorldInputBuffer != 0)
+    {
+        mpPreWorldInputBuffer->Destruct();
+        delete mpPreWorldInputBuffer;
+        mpPreWorldInputBuffer = 0;
     }
 
     // [gateui] the partner of Construct()'s allocation -- see mpTrainingManager's FLAG.
@@ -1077,6 +1131,49 @@ const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface*
     return &mLastActiveRaceCarInterface;
 }
 
+// ⭐ [stuntrace waveB mount closure] GetDistrictMap -- X360 read at this+245904 (0x3C090).
+// The world district map the checkpoint-district labeller and ProcessGameEvents' region lookup
+// sample. NOT a member of its own: 245904 lands INSIDE mLastActiveRaceCarInterface (base +235488,
+// span 10480) at interface+10416, which is that interface's embedded mWorldMap2D -- the member
+// immediately before mbPlayerWrecked, whose own console store pins it at interface+0x28E0, 48
+// bytes (sizeof(WorldMap2D) at Vector2 alignment) later. So the console's adjust is exactly
+// &mLastActiveRaceCarInterface.mWorldMap2D, reached here through that interface's own accessor.
+//
+// Console attestations of the adjust (both dumped 2026-08-26):
+//     ProcessGameEvents @0x823A3700       addis r3, r31, 4 / addi r3, r3, -0x3F70 -> WorldMap2D::GetValue
+//     SetupCheckpointDistricts @0x82329740  the identical pair -> WorldMap2D::GetValue @0x82329830
+//
+// The declaration is non-const and hands back a mutable pointer (the ResetPlayerDebugComponent
+// grow shape, BrnGameStateModule.h:773); the interface only publishes the const accessor, so the
+// const is cast off here rather than adding a second accessor to that header. The DWARF's own
+// name for this surface is GetWorldMap2D() const (BrnGameStateModule.h:1331) -- worth renaming to
+// one day, but the tree's callers (BrnResetPlayerDebugComponent.cpp:365,
+// BrnModeManager_CheckpointSetup.cpp:568) are all on GetDistrictMap, so the rename is a separate
+// mechanical change, not this one.
+CgsWorld::WorldMap2D* GameStateModule::GetDistrictMap()
+{
+    return const_cast<CgsWorld::WorldMap2D*>(mLastActiveRaceCarInterface.GetWorldMap2D());
+}
+
+// ⭐ [stuntrace waveB agent 9] The module's cached GLOBAL race-car snapshot (X360 embedded
+// interface at this+0x3C0D0 == 245968, flush against the active one above). The console reaches it
+// by that raw adjust at every site -- PostWorldUpdate's 2416-byte XMemCpy, ClearData's Clear, and
+// the four ModeManager readers -- so this accessor is this repo's de-inlining of the adjust and is
+// exactly the adjust and nothing more. See the header banner for the offset proof.
+const BrnWorld::RaceCarEntityModuleIO::RCEntityGlobalRaceCarOutputInterface*
+    GameStateModule::GetLastGlobalRaceCarInterface() const
+{
+    return &mLastGlobalRaceCarInterface;
+}
+
+// ⭐ [stuntrace waveB agent 9] X360 this+208300 (0x32DAC). Written by ProcessGameEvents from the
+// StartNetworkGameEvent, cleared to -1 by ClearData, read by
+// ModeManager::TellGuiToShowOnlineFinalStandings @0x82329B68.
+u32 GameStateModule::GetNetworkRandomSeed() const
+{
+    return muNetworkGameRandomSeed;
+}
+
 // ⭐ The raw `*(this + 232288)` nonzero test three console call sites open-code. That word IS
 // miSimPauseFlags (see the header note), so this is exactly IsSimPaused(false, false).
 bool GameStateModule::IsTrainingPauseSuppressed() const
@@ -1264,8 +1361,23 @@ void GameStateModule::PreWorldUpdateTrainingBringUp(f32 lfGameTimestep)
         return;
     }
 
-    // The console's ModeManager::PreWorldUpdate clock tick (the part of it this build models).
-    mModeManager.PreWorldUpdateClocksBringUp(lfGameTimestep);
+    // ⭐⭐ [D4 stuntrace WAVE D] THE CLOCK BRING-UP LEG IS RETIRED HERE -- DO NOT PUT IT BACK.
+    // This call used to read:
+    //     mModeManager.PreWorldUpdateClocksBringUp(lfGameTimestep);
+    // and it was the ONLY thing accumulating mfTimeInFreeBurn / mfTimeInMode / mfTimeInOnline while
+    // the full ModeManager::PreWorldUpdate had no caller. It has one now:
+    // GameStateModule::PreWorldUpdateStuntBringUp stages ModeManager::PreWorldUpdate @0x823537B8
+    // at the console's own position (#86, via the EmmPreWorldUpdate hop), and that function
+    // CONTAINS the whole of PreWorldUpdateClocksBringUp -- the identical mode/online/free-burn
+    // if/else, over the identical members.
+    // ⛔ THE TWO MUST NEVER BE ARMED TOGETHER (the supersession rule stated in
+    // ModeManager_gUI_00.cpp's own banner and in BrnModeManager_WorldTick.cpp:40): with both
+    // running, every clock would advance at DOUBLE rate, which is silent -- no assert, no link
+    // error, just a free-burn timer that runs 2x and a mode timer that expires at half the
+    // authored limit.
+    // The method itself is left in place (it is still the documented bring-up seam and it is
+    // referenced by both banners); only this CALL is removed. Delete the method with its
+    // declaration when the supersession is consolidated.
 
     mpOutputBuffer->LockForWrite();
     GameStateModuleIO::GameActionQueue* lpActionQueue = mpOutputBuffer->GetGameActionQueue();

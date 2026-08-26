@@ -18,6 +18,14 @@ namespace BrnTraffic
 struct Hull;
 class  Pvs;
 struct FlowType;
+// [stuntrace waveB fix round] returned by GetStartDataForTrafficLight below; real layout is
+// SharedClasses/Traffic/BrnTrafficLightTrigger.h:32.
+struct LightTriggerStartData;
+// [stuntrace waveD D1] returned by GetJunctionLogicBoxForTrafficLight below; real layout is
+// SharedClasses/Traffic/Junctions/BrnJunctionLogicBox.h (0x120, DWARF BrnJunctionLogicBox.h:77).
+// Pointer-only here, exactly like the four above -- the .cpp that dereferences it includes that
+// header. Spelled `class` because that is what its owning header declares it as.
+class JunctionLogicBox;
 
 // =============================================================================
 // BrnTraffic::TrafficData -- the serialised lane graph ("BaseTraffic", resource type
@@ -94,6 +102,60 @@ struct TrafficData
     // `mpapHulls[luHull]` (e.g. OnlineStuntRunMode::GetBestStartGridID @0x82331708);
     // de-inlined here and bodied in BrnTrafficData.cpp.
     const Hull* GetHull(u32 luHull) const;
+
+    // [stuntrace waveB fix round, 2026-08-26] X360 0x8231CC48 -- a REAL standalone export, not an
+    // inline. Resolves a packed LightTriggerId ({ hull index = bits 8..23, light-trigger index =
+    // bits 0..7 }) to that junction's start-grid block. Callers: ModeManager::
+    // GetStartDataForTrafficLight @0x82327310 (passes lbUseAlternateStartData = FALSE, `li r5,0`
+    // @0x82327360) and GameStateModule::SendSetUpAllEventStartsMessage.
+    // Console body, walked instruction for instruction this pass (asserts verbatim, all baked
+    // against "..\\..\\..\\SharedClasses\\Traffic/BrnTrafficData.h"):
+    //   :265 "lTriggerId.IsValid()"                        -- (id>>8) != 0xFFFF && (id&0xFF) != 0xFF
+    //   :268 "luHull < muNumHulls"                         -- muNumHulls read at +0x02
+    //   :271 "lpHull"                                      -- mpapHulls[luHull]
+    //   :274 "luLightTrigger < lpHull->muNumLightTriggers" -- Hull+0x0E
+    //   :278 "lpJunction"                                  -- Hull::GetJunctionForLightTrigger
+    //   tail: return Hull::GetLightTriggerStartDataForJunction(lpHull, lpJunction, lbAlternate)
+    // [x] BODIED 2026-08-26 (wave-B CLOSURE round) in BrnTrafficData.cpp -- this banner used to
+    // read "DECLARE-ONLY: the body needs BrnTraffic::JunctionLogicBox (288-byte stride, fields at
+    // +60/+64), which is UN-HOMED in this tree". That was accurate and is now stale: the type has
+    // a real header home at SharedClasses/Traffic/Junctions/BrnJunctionLogicBox.h (promoted out of
+    // GameSource/.../BrnTrafficHullRuntime.cpp, where it had been declared under its own
+    // "RETIRE THIS BLOCK when BrnJunctionLogicBox.h lands" note). Both callees landed with it:
+    // Hull::GetJunctionForLightTrigger @0x82752870 and
+    // Hull::GetLightTriggerStartDataForJunction @0x82752900, in BrnTrafficHull.cpp.
+    // [!] The validity test is an ASSERT, not a guard -- see the body's banner before adding any
+    // early return; SetStartingGrid @0x82328678 is the caller that tests the handle itself.
+    const LightTriggerStartData* GetStartDataForTrafficLight(u32 luLightTriggerId,
+                                                             bool lbUseAlternateStartData) const;
+
+    // [stuntrace waveD, agent D1] X360 0x82207F90 (DWARF BrnTrafficData.h:99) -- a REAL standalone
+    // export. THE ONLY LightTriggerId -> JunctionLogicBox MAP IN THE IMAGE, and therefore the only
+    // way anything reaches JunctionLogicBox::muEventJunctionID, the key into PROGRESSION.DAT's
+    // EventJunction table. Its two console callers are the two halves of the offline event-start
+    // chain: GameStateModule::CheckIfPlayerIsAtJunctionWithAnEvent @0x82390418 (the junction
+    // prompt) and GameStateModule::StartModeAtLights @0x82396CF8 (the actual start).
+    //
+    // Same packed handle as GetStartDataForTrafficLight above and the SAME four bounds checks in
+    // the same order, only with a different tail -- the console really does write the pair out
+    // twice rather than share a helper. Walked instruction for instruction (assert strings and
+    // lines verbatim, all baked against "..\\..\\..\\SharedClasses\\Traffic/BrnTrafficData.h"):
+    //   0x82207FA4  extrwi r30, r28, 16,8    ; luHull = (id >> 8) & 0xFFFF -- the 0x39 owner tag
+    //                                        ;   sits in bits 24..31 and this mask drops it
+    //   0x82207FB0  clrlwi r11, r28, 24      ; luLightTrigger = id & 0xFF
+    //   0x82207FE0  li r5, 0x12C             ; :300 "lTriggerId.IsValid()"
+    //   0x82207FF4  lhz  r11, 2(r29)         ; muNumHulls (+0x02)
+    //   0x82208008  li r5, 0x12F             ; :303 "luHull < muNumHulls"
+    //   0x8220801C  lwz  r11, 0xC(r29)       ; mpapHulls (console +0x0C)
+    //   0x82208024  lwzx r29, r10, r11       ; lpHull = mpapHulls[luHull]
+    //   0x82208038  li r5, 0x132             ; :306 "lpHull"
+    //   0x8220804C  lbz  r11, 0xE(r29)       ; lpHull->muNumLightTriggers (+0x0E)
+    //   0x82208064  li r5, 0x135             ; :309 "luLightTrigger < lpHull->muNumLightTriggers"
+    //   0x82208080  bl   Hull::GetJunctionForLightTrigger   ; TAIL CALL -- no null check on the
+    //                                        ;   result here (its caller does that itself)
+    // [!] LIKE ITS SIBLING, THE VALIDITY TEST IS AN ASSERT, NOT A GUARD -- read the
+    // GetStartDataForTrafficLight banner above before adding any early return.
+    const JunctionLogicBox* GetJunctionLogicBoxForTrafficLight(u32 luLightTriggerId) const;
 };
 
 // ---- host layout contract with tools/assets/bundles/lane_transcode.py ---------------

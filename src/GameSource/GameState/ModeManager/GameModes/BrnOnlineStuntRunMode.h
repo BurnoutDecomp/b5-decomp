@@ -31,9 +31,26 @@ public:
     // GameMode::GetOutroTimeout. Returns the fixed outro hold (flt_82021230 == 15.0).
     virtual f32 GetOutroTimeout() const;
 
-    // X360: BrnGameState::OnlineStuntRunMode::PreWorldUpdate (0x82331A30). Overrides
-    // GameMode::PreWorldUpdate.
-    virtual void PreWorldUpdate();
+    // X360: BrnGameState::OnlineStuntRunMode::PreWorldUpdate (0x82331A30). Overrides GameMode
+    // vtable slot 2 (vtbl+8).
+    //
+    // SIGNATURE WIDENED 2026-08-26 (wave-B fix round). It was declared no-arg, matching the
+    // then-committed base; the console base takes SIX arguments (UpdateCurrentMode @0x82350EC8
+    // dispatches `(*(**(a1+3480)+8))(mode, a2, a3, a8, a28, a30, a1+3504)`), so once the base was
+    // corrected the no-arg form would have MINTED A NEW SLOT instead of binding to slot 2.
+    virtual void PreWorldUpdate(GameStateModuleIO::OutputBuffer* lpOutput,
+                                const GameStateModuleIO::PreWorldInputBuffer* lpInput,
+                                const BrnWorld::RaceCarEntityModuleIO::RCEntityGlobalRaceCarOutputInterface* lpGlobalRaceCars,
+                                const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpActiveRaceCars,
+                                bool lbPaused,
+                                const ScoringSystem* lpScoringSystem);
+
+    // Slot 24 (vtbl+96). 0x82C296C8 (`li r3,1; blr`) at slot 24 of vtable 0x820D08E0, against the
+    // GameMode base's 0x827E2F38 (`li r3,0`). SetupGameMode @0x8234B158 reads it twice and
+    // HandleLoadingScreenLoaded @0x8234B8A8 once. ADDED 2026-08-26 with the 26-slot base.
+    // NOTE: this is the ONLINE stunt run. The OFFLINE StuntAttackMode ("Stunt Race", the campaign's
+    // target) inherits the base FALSE -- the two must not be conflated.
+    virtual bool HasLoadingScreen() const;
 
     // X360: BrnGameState::OnlineStuntRunMode::ShouldFinish (0x8233A3F0). Overrides
     // GameMode::ShouldFinish. True once the stunt-run countdown has run out.
@@ -60,4 +77,23 @@ private:
     f32                mfTimeRemaining;     // X360 this+0xF0 -- stunt-run countdown (armed by Start)
     bool               mbHasCheckedFinish;  // X360 this+0xF4 -- ShouldFinish has run at least once
 };
+
+// ---- VTABLE-BINDING TRIPWIRE (see the explanation in BrnOfflineGameMode.h) ----------------------
+static_assert(sizeof(static_cast<const char* (OnlineStuntRunMode::*)() const>(&OnlineStuntRunMode::GetName)) != 0,
+              "OnlineStuntRunMode::GetName must bind GameMode vtable slot 6");
+static_assert(sizeof(static_cast<f32 (OnlineStuntRunMode::*)() const>(&OnlineStuntRunMode::GetOutroTimeout)) != 0,
+              "OnlineStuntRunMode::GetOutroTimeout must bind GameMode vtable slot 16");
+static_assert(sizeof(static_cast<void (OnlineStuntRunMode::*)(GameStateModuleIO::OutputBuffer*,
+                                                              const GameStateModuleIO::PreWorldInputBuffer*,
+                                                              const BrnWorld::RaceCarEntityModuleIO::RCEntityGlobalRaceCarOutputInterface*,
+                                                              const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface*,
+                                                              bool,
+                                                              const ScoringSystem*)>(&OnlineStuntRunMode::PreWorldUpdate)) != 0,
+              "OnlineStuntRunMode::PreWorldUpdate must bind GameMode vtable slot 2");
+static_assert(sizeof(static_cast<bool (OnlineStuntRunMode::*)(ScoringSystem*)>(&OnlineStuntRunMode::ShouldFinish)) != 0,
+              "OnlineStuntRunMode::ShouldFinish must bind GameMode vtable slot 14");
+static_assert(sizeof(static_cast<void (OnlineStuntRunMode::*)(const StartGameModeParams*, GameModeParams*, ScoringSystem*)>(&OnlineStuntRunMode::Start)) != 0,
+              "OnlineStuntRunMode::Start must bind GameMode vtable slot 5");
+static_assert(sizeof(static_cast<bool (OnlineStuntRunMode::*)() const>(&OnlineStuntRunMode::HasLoadingScreen)) != 0,
+              "OnlineStuntRunMode::HasLoadingScreen must bind GameMode vtable slot 24");
 }

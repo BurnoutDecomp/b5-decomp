@@ -21,10 +21,16 @@ namespace BrnGameState
 // supplies names; the X360 ledger decides what exists" in AGENTS.md). They self-add if/when
 // the X360 build is later shown to attest them.
 //
-// Virtual / const / return-type / vtable order are taken from the DWARF declaration shape,
-// not from the Hex-Rays pseudocode (which renders the virtuals as plain functions and drops
-// const). DWARF source order is GetName, Start, GetOutroTimeout, so they are declared in that
-// order to keep the override slots aligned with the base GameMode vtable.
+// Virtual / const / return-type are taken from the DWARF declaration shape, not from the Hex-Rays
+// pseudocode (which renders the virtuals as plain functions and drops const).
+//
+// SLOT NOTE (2026-08-26): declaration ORDER in a derived class does not choose a slot -- the
+// SIGNATURE does, by matching a base declaration. RaceMode's vtable is 0x820D0498 and it overrides
+// exactly three of GameMode's 26 slots: 6 GetName (0x827E2488 -> "Race"), 5 Start (0x82330018) and
+// 16 GetOutroTimeout (0x827E2498 -> [0x820211EC] == 0.0f). Everything else it inherits, including
+// slot 9 HasTimedIntro -- the DWARF declares that override but it folded onto the same
+// `li r3,1; blr` leaf (0x82C296C8) as the base, so it is invisible in the image and is not
+// re-declared here. The tripwire block after the class is what proves the three DO bind.
 class RaceMode : public OfflineGameMode
 {
 public:
@@ -49,4 +55,12 @@ private:
     // GetOutroTimeout body returns 0.0, i.e. this constant is 0.0f for the X360 build.
     static const f32 KF_OUTRO_TIME_SECONDS;
 };
+
+// ---- VTABLE-BINDING TRIPWIRE (see the explanation in BrnOfflineGameMode.h) ----------------------
+static_assert(sizeof(static_cast<const char* (RaceMode::*)() const>(&RaceMode::GetName)) != 0,
+              "RaceMode::GetName must bind GameMode vtable slot 6");
+static_assert(sizeof(static_cast<void (RaceMode::*)(const StartGameModeParams*, GameModeParams*, ScoringSystem*)>(&RaceMode::Start)) != 0,
+              "RaceMode::Start must bind GameMode vtable slot 5");
+static_assert(sizeof(static_cast<f32 (RaceMode::*)() const>(&RaceMode::GetOutroTimeout)) != 0,
+              "RaceMode::GetOutroTimeout must bind GameMode vtable slot 16");
 }

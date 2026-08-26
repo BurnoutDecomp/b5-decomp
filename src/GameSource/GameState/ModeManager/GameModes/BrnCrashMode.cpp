@@ -103,4 +103,21 @@ void CrashMode::Start(const StartGameModeParams* /*lpStartGameModeParams*/,
       | GameModeParams::KU_FLAG_EASY_SMASH_PROPS                    // 0x010000000
       | GameModeParams::KU_FLAG_DISABLE_PROP_PROGRESSION);          // 0x100000000
 }
+
+// X360 vtable slot 13 (vtbl+52), folded leaf 0x827E2F38 == `li r3,0; blr` at slot 13 of CrashMode's
+// vtable 0x820D0570 (the offline base carries GameMode::ShouldExit 0x82315B80 there instead).
+// Crash/Showtime is a stationary mode by design, so the base's "player has not moved or touched the
+// controls" idle-exit test must never fire.
+bool CrashMode::ShouldExit(const ScoringSystem* lpScoringSystem) const
+{
+    (void)lpScoringSystem;
+    return false;
+}
+
+// X360 vtable slot 23 (vtbl+92), folded leaf 0x827E2F38 == `li r3,0; blr` (the base is
+// 0x82C296C8 == `li r3,1`). SetupGameMode @0x8234B158 gates the streaming wait on this.
+bool CrashMode::RequiresStreaming() const
+{
+    return false;
+}
 }

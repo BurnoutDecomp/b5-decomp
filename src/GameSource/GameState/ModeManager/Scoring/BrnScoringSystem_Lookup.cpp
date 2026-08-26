@@ -557,4 +557,53 @@ void ScoringSystem::ClearData(bool lbResetCarData)
     maEliminatedActiveRaceCarIndexs.Construct();
 }
 
+// ============================================================================================
+// ScoringSystem::HasBeatenRoadRageTarget -- DWARF BrnScoringSystem.h:1180
+// ============================================================================================
+// [stuntrace waveB CLOSURE round, 2026-08-26] Bodied. It was DECLARE-ONLY tree-wide, and the
+// cross-seam audit found FOUR live call sites across TWO partfiles, not the two the fix-round
+// sheet listed: BrnModeManager_Finish.cpp:290 (GetPlayersFinishPosition's road-rage arm) and
+// :492 (FinishCurrentMode's road-rage arm), plus BrnModeManager_UpdateMode.cpp:540 and :581.
+// One missing body blocked both partfiles.
+//
+// [!] NOT the same symbol as RoadRageModeScoring::HasBeatenRoadRageTarget
+// (BrnRoadRageModeScoring.h:108, bodied in BrnRoadRageModeScoringLinkStubs.cpp:175). That one is
+// on the SUB-SCORER; this one is on ScoringSystem and forwards to it. The audit flags the mix-up
+// explicitly because the stub file's presence makes the ScoringSystem symbol look bodied.
+//
+// X360: INLINED at every call site, so there is no standalone export to transcribe -- but the
+// inlining is unambiguous. ModeManager::FinishCurrentMode @0x8234B978, jumptable case 3
+// (E_MODE_ROAD_RAGE):
+//
+//   0x8234BBB4  lwz  r11, 0x58F0(r31)     ; r31 == the ModeManager
+//   0x8234BBB8  lwz  r10, 0x58FC(r31)
+//   0x8234BBBC  cmpw cr6, r11, r10
+//   0x8234BBC4  bge  cr6, loc_8234BBCC    ; TRUE  <=>  takedowns >= target   (SIGNED, >=)
+//
+// mScoringSystem sits at ModeManager+0xDB0 -- independently attested by
+// SendModeStopMessages @0x8234C6B0's `addi r3, r28, 0xDB0` (== &mScoringSystem, quoted in
+// BrnScoringSystem.h's ClearData banner) -- so 0x58F0 == ss+0x4B40 and 0x58FC == ss+0x4B4C.
+//
+// OFFSET -> NAME, both ends, so no raw offset survives into the body:
+//   * mRoadRageModeScoring is the embedded sub-scorer at ss+0x4B40. Pinned by its NEIGHBOURS in
+//     BrnScoringSystem.h:727-729: miMaximumPlayerCrashedNumber is X360 ss+0x4B58 and
+//     miCurrentPlayerCrashedNumber ss+0x4B5C, and the struct that ends just before them starts
+//     at 0x4B40.
+//   * Inside it, BrnRoadRageModeScoring.h's DWARF-authoritative member run puts
+//     miNumTakedownsAchieved at +0x00 and miTargetNumTakedowns at +0x0C
+//     (miNumTakedownsAchievedForNextExtention +0x04, muRoadRageTriggerExtension +0x08,
+//     muRoadRageExtensionTime +0x0A). 0x4B40 + 0x00 == 0x4B40 and 0x4B40 + 0x0C == 0x4B4C --
+//     the two words the asm reads, exactly.
+// So the console's inlined pair IS RoadRageModeScoring::HasBeatenRoadRageTarget()'s own body
+// (`miNumTakedownsAchieved >= miTargetNumTakedowns`), reached through the sub-scorer. Written as
+// the named forward rather than re-deriving the compare here, so the two symbols cannot drift.
+//
+// Non-const because the DWARF declares it non-const (:1180); GetRoadRageScoring() has both
+// overloads, so the non-const one binds.
+// ============================================================================================
+bool ScoringSystem::HasBeatenRoadRageTarget()
+{
+    return GetRoadRageScoring()->HasBeatenRoadRageTarget();
+}
+
 }

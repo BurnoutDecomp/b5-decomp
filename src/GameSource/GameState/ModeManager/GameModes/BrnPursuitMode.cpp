@@ -72,4 +72,13 @@ void PursuitMode::Start(const StartGameModeParams* lpStartGameModeParams,
     lpGameModeParams->mPursuedCarID           = lpStartGameModeParams->GetPursuedCarID();
     lpGameModeParams->miRoadRageThreshold     = lpStartGameModeParams->GetTakedownTarget();
 }
+
+// X360 vtable slot 13 (vtbl+52), folded leaf 0x827E2F38 == `li r3,0; blr` at slot 13 of
+// PursuitMode's vtable 0x820D0650 (the offline base carries GameMode::ShouldExit 0x82315B80 there
+// instead). The pursuit mode never ends itself on the shared idle-exit test.
+bool PursuitMode::ShouldExit(const ScoringSystem* lpScoringSystem) const
+{
+    (void)lpScoringSystem;
+    return false;
+}
 }

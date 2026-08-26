@@ -2,7 +2,12 @@
 
 #include "types.hpp"
 #include "DebugSystem/Core/CgsDebugComponent.h"               // CgsDev::DebugComponent (real base)
-#include "GameSource/GameState/ModeManager/BrnModeManager.h"  // BrnGameState::ModeManager
+// [stuntrace waveB fix round, 2026-08-26] INCLUDE -> FORWARD DECLARATION, to break a cycle.
+// BrnModeManager.h must embed ModeManagerDebugComponent BY VALUE (console ModeManager+28112)
+// and cannot while this header includes it back. Nothing below needs the definition: the class
+// only stores and calls through a ModeManager*, and BrnModeManagerDebugComponent.cpp now
+// includes the owning header itself.
+namespace BrnGameState { class ModeManager; }
 
 // BrnGameState::ModeManagerDebugComponent - the in-game debug menu for the mode manager. Derives
 // from the real CgsDev::DebugComponent and registers the mode-manager tunables + an "end current

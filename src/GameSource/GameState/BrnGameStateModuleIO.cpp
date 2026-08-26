@@ -56,8 +56,15 @@ void PreWorldInputBuffer::SetTimerStatusInterface(const TimerStatusInterface* lp
 }
 
 // X360 0x823BA240 - write-lock setter deriving the controller button-state block (this+0x34) from
-// the per-player pad action-info source. Each bool is the corresponding action-record status bit
-// (bit1 == pressed this frame, bit0 == held). Two asserts: the write lock and a non-null source.
+// the per-player pad action TABLE (the caller passes &maActionInfo[0] == padRecord+0x18). Each bool
+// is the corresponding action slot's status bit (bit1 == pressed this frame, bit0 == held). Two
+// asserts: the write lock and a non-null source.
+//
+// Member names are the DecFIGS DWARF names (BrnGameStateSharedIO.h:912); the store ORDER below is
+// the X360 order, and the mapping between the two is argued in the ControllerInput banner in
+// BrnGameStateModuleIO.h. Note mbRaceModePressed (formerly the misnamed "mbBothSticksDeflected"):
+// it is the accelerator+brake analogue gesture, not a stick test -- SetButtonPressed is handed the
+// action table, which begins AFTER the pad record's four stick floats.
 void PreWorldInputBuffer::SetButtonPressed(const ControllerActionSource* lpActionInfo)
 {
     CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
@@ -66,29 +73,33 @@ void PreWorldInputBuffer::SetButtonPressed(const ControllerActionSource* lpActio
     const u32 KU_PRESSED_BIT = 2;
     const u32 KU_HELD_BIT    = 1;
 
-    mControllerInput.mbDrivingActive       = (lpActionInfo->mStatus18C & KU_PRESSED_BIT) != 0;
-    mControllerInput.mbReverseHeld         = (lpActionInfo->mStatus16C & KU_PRESSED_BIT) != 0;
-    mControllerInput.mbHandbrakeHeld       = (lpActionInfo->mStatus174 & KU_PRESSED_BIT) != 0;
-    mControllerInput.mbBoostHeld           = (lpActionInfo->mStatus1AC & KU_PRESSED_BIT) != 0;
-    mControllerInput.mbAction14C           = (lpActionInfo->mStatus14C & KU_PRESSED_BIT) != 0;
-    mControllerInput.mbAction154           = (lpActionInfo->mStatus154 & KU_PRESSED_BIT) != 0;
-    mControllerInput.mbAction15C           = (lpActionInfo->mStatus15C & KU_PRESSED_BIT) != 0;
-    mControllerInput.mbAction164           = (lpActionInfo->mStatus164 & KU_PRESSED_BIT) != 0;
-    mControllerInput.mbAction1B4Pressed    = (lpActionInfo->mStatus1B4 & KU_PRESSED_BIT) != 0;
-    mControllerInput.mbAction1B4Held       = (lpActionInfo->mStatus1B4 & KU_HELD_BIT) != 0;
-    mControllerInput.mbAction1BCPressed    = (lpActionInfo->mStatus1BC & KU_PRESSED_BIT) != 0;
-    mControllerInput.mbAction1BCHeld       = (lpActionInfo->mStatus1BC & KU_HELD_BIT) != 0;
-    mControllerInput.mbAction05CPressed    = (lpActionInfo->mStatus05C & KU_PRESSED_BIT) != 0;
-    mControllerInput.mbAction1BCHeldDup    = (lpActionInfo->mStatus1BC & KU_HELD_BIT) != 0;
-    mControllerInput.mbAction1B4And1BCHeld =
+    mControllerInput.mbAcceptPressed            = (lpActionInfo->mStatus18C & KU_PRESSED_BIT) != 0;
+    mControllerInput.mbStartPressed             = (lpActionInfo->mStatus16C & KU_PRESSED_BIT) != 0;
+    mControllerInput.mbSelectBackPressed        = (lpActionInfo->mStatus174 & KU_PRESSED_BIT) != 0;
+    mControllerInput.mbCancelPressed            = (lpActionInfo->mStatus1AC & KU_PRESSED_BIT) != 0;
+    mControllerInput.mbUpPressed                = (lpActionInfo->mStatus14C & KU_PRESSED_BIT) != 0;
+    mControllerInput.mbDownPressed              = (lpActionInfo->mStatus154 & KU_PRESSED_BIT) != 0;
+    mControllerInput.mbLeftPressed              = (lpActionInfo->mStatus15C & KU_PRESSED_BIT) != 0;
+    mControllerInput.mbRightPressed             = (lpActionInfo->mStatus164 & KU_PRESSED_BIT) != 0;
+    mControllerInput.mbLeftShoulderPressed      = (lpActionInfo->mStatus1B4 & KU_PRESSED_BIT) != 0;
+    mControllerInput.mbLeftShoulderDown         = (lpActionInfo->mStatus1B4 & KU_HELD_BIT) != 0;
+    mControllerInput.mbRightShoulderPressed     = (lpActionInfo->mStatus1BC & KU_PRESSED_BIT) != 0;
+    mControllerInput.mbRightShoulderDown        = (lpActionInfo->mStatus1BC & KU_HELD_BIT) != 0;
+    mControllerInput.mbDirtyTrickPressed        = (lpActionInfo->mStatus05C & KU_PRESSED_BIT) != 0;
+    // Impact time is the hold-right-bumper slow-mo, so the X360 stores slot 55's held bit twice.
+    mControllerInput.mbImpactTimeDown           = (lpActionInfo->mStatus1BC & KU_HELD_BIT) != 0;
+    // Showtime/crash mode is entered by holding BOTH bumpers.
+    mControllerInput.mbCrashModePressed         =
         ((lpActionInfo->mStatus1B4 & KU_HELD_BIT) != 0) && ((lpActionInfo->mStatus1BC & KU_HELD_BIT) != 0);
-    mControllerInput.mbAction024Pressed    = (lpActionInfo->mStatus024 & KU_PRESSED_BIT) != 0;
-    mControllerInput.mbAction1D4Pressed    = (lpActionInfo->mStatus1D4 & KU_PRESSED_BIT) != 0;
-    mControllerInput.mbAction004Held       = (lpActionInfo->mStatus004 & KU_HELD_BIT) != 0;
-    mControllerInput.mbAction1E4Pressed    = (lpActionInfo->mStatus1E4 & KU_PRESSED_BIT) != 0;
-    mControllerInput.mbAction13CPressed    = (lpActionInfo->mStatus13C & KU_PRESSED_BIT) != 0;
-    mControllerInput.mbBothSticksDeflected =
-        (lpActionInfo->mfStickX > 0.25f) && (lpActionInfo->mfStickY > 0.25f);
+    mControllerInput.mbCrashbreakerPressed      = (lpActionInfo->mStatus024 & KU_PRESSED_BIT) != 0;
+    mControllerInput.mbStartEventPressed        = (lpActionInfo->mStatus1D4 & KU_PRESSED_BIT) != 0;
+    mControllerInput.mbAcceleratePressed        = (lpActionInfo->mStatus004 & KU_HELD_BIT) != 0;
+    mControllerInput.mbMaxPlayerStatsCheatActivate = (lpActionInfo->mStatus1E4 & KU_PRESSED_BIT) != 0;
+    mControllerInput.mbDPadLeftPressed          = (lpActionInfo->mStatus13C & KU_PRESSED_BIT) != 0;
+    // 0x823BA454..0x823BA480: both analogue travels compared against flt_82003F40 (0.25f), the AND
+    // stored to +0x45. Accelerator AND brake held == the offline event-start gesture.
+    mControllerInput.mbRaceModePressed          =
+        (lpActionInfo->mfAccelerateValue > 0.25f) && (lpActionInfo->mfBrakeValue > 0.25f);
 }
 
 // X360 0x823C9550 - write-lock setter copying an InGamePlayerStatusInterface into this+0x2CC8.
@@ -144,6 +155,23 @@ const NetworkToGameStateInterface* PreWorldInputBuffer::GetNetworkToGameStateInt
     return &mNetworkToGameStateInterface;
 }
 
+// X360 0x8231CF78 - read-lock accessor for the embedded in-game player-status interface
+// (this+0x2CC8). The console body is the plain read-locked &member shape, decompiled whole:
+//     if ( ((*a1 >> 4) & 1) == 0 )                       // the read-lock bit every getter here tests
+//         ... FireAssert("Not locked for reading\n",
+//                        "..\\..\\..\\GameSource\\GameState/BrnGameStateModuleIO.h", 146);
+//     return a1 + 11464;                                 // 11464 == 0x2CC8
+// 0x2CC8 is exactly where this header seats mPlayerStatusInterface, and that offset is pinned
+// independently by the _AssertLayout() static_assert below it -- so the return is &member, not a
+// reinterpret_cast over a byte seat. Assert line 146 matches the declaration's recorded line.
+// Consumers: BrnMugshotManager.cpp:218 and BrnModeManager_WorldTick.cpp:165.
+const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusInterface*
+PreWorldInputBuffer::GetPlayerStatusInterface() const
+{
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+    return &mPlayerStatusInterface;
+}
+
 // =====================  PostWorldInputBuffer  =====================
 
 // X360 0x8231D218 - read-lock accessor for the vehicle output interface (this+0x220).
@@ -176,6 +204,26 @@ GameEventQueue* PostWorldInputBuffer::GetGameEventQueue()
 {
     CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
     return &mGameEventQueue;
+}
+
+// X360 0x8231D2C0 - read-lock accessor for the active-race-car output interface (this+0x7250).
+// Same decompiled shape as its siblings, and the offset falls out of the body directly:
+//     if ( ((*a1 >> 4) & 1) == 0 )
+//         ... FireAssert("Not locked for reading\n",
+//                        "..\\..\\..\\GameSource\\GameState/BrnGameStateModuleIO.h", 210);
+//     return a1 + 29264;                                 // 29264 == 0x7250
+// 0x7250 is where this header seats mActiveRaceCarOutputInterfaceStorage, pinned by the
+// _AssertLayout() static_assert ("RCEntityActiveRaceCarOutputInterface @ +0x7250"), and assert
+// line 210 matches the declaration's recorded line. The seat is still byte storage (the interface's
+// full layout lives in its own TU), so this one keeps the sibling reinterpret_cast form rather
+// than &member -- exactly like GetVehicleOutputInterface above it.
+// The mounted consumers are the wave-B ModeManager legs plus GameBridgeWorldToX / BurnoutSkillzManager.
+const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface*
+PostWorldInputBuffer::GetActiveRaceCarOutputInterface() const
+{
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+    return reinterpret_cast<const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface*>(
+               &mActiveRaceCarOutputInterfaceStorage);
 }
 
 // X360 0x8231D410 - read-lock accessor for the AI-car output interface (this+0xAAC0).

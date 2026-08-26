@@ -52,6 +52,15 @@ enum EGameEventType
     // authority (case 33 reads the 3-byte pause payload and calls RequestPause(2,...);
     // cases 35/36 are the replay pause pair (reason 16); case 93 is the crash-nav pair
     // (reason 4), fed by BridgeGuiToGameState's GUI-191 translation).
+    // [!!] [stuntrace waveB CLOSURE round, 2026-08-26] X360-PINNED, not inferred. The PS3 DWARF
+    // says 33, which is already taken here by E_EVENT_PLAYER_PAUSE_STATE_CHANGED (the pause
+    // family sits one LOWER on X360, see the note below), so the wave-B partfile that needed
+    // this record refused to write a value at all. It is now read straight off the dispatcher:
+    // BrnGameState::GameStateModule::ProcessGameEvents @0x823A0A18, `jumptable 823A107C case 32`
+    // @0x823A27F4 -> `mr r4, r25` (the event) / `addi r3, r31, 0x1020` (&mModeManager) /
+    // `bl BrnGameState::ModeManager::PlayerFinishedMode` @0x823A27FC. The one function that
+    // consumes a PlayerFinishedModeEvent is reached from case 32, so 32 is the discriminant.
+    E_EVENT_PLAYER_FINISHED_MODE    = 32,    // X360 case 32 @0x823A27F4 (PS3 DWARF 33)
     E_EVENT_PLAYER_PAUSE_STATE_CHANGED = 33, // X360 (PS3 DWARF 34)
     E_EVENT_ENTER_REPLAY            = 35,    // X360 (PS3 DWARF 36)
     E_EVENT_LEAVE_REPLAY            = 36,    // X360 (PS3 DWARF 37)
@@ -498,7 +507,41 @@ struct InProgressStuntEvent : public GameEvent<E_EVENT_INPROGRESS_STUNT>
     bool mbInReverse;                  // 0x90 (:535; selects the _REVERSE twin skill)
 };
 
+// ============================================================================================
+// [!!] [stuntrace waveB CLOSURE round, 2026-08-26] PlayerFinishedModeEvent -- RE-HOMED HERE.
+//
+// This record was DEFINED IN A .cpp (BrnModeManager_UpdateMode.cpp, at real
+// BrnGameState::GameStateModuleIO scope, i.e. with external linkage) because BrnGameEvents.h had
+// no owning definition and that partfile could not edit this header. That copy is DELETED in the
+// same change as this one: two external-linkage definitions of one class is an ODR violation the
+// compiler cannot see across TUs, and the moment this header became reachable from that TU it
+// would have been a hard redefinition. Do not re-add it there.
+//
+// DWARF home: GameSource/GameState/BrnGameEvents.h:1342
+// (`struct PlayerFinishedModeEvent : public GameEvent<E_EVENT_PLAYER_FINISHED_MODE>`), which IS
+// this file -- so this is the true owning home, not a re-home of convenience. The GameEvent<T>
+// base is the empty template tag (no instance data, no vtable -- :98 above), so mbTimedOut is at
+// +0x00, which is what the consumer's byte offsets require.
+//
+// LAYOUT IS ASM-PINNED. BrnGameState::ModeManager::PlayerFinishedMode @0x823280D8 reads exactly
+// three bytes off the record (r30 == the event, r31 == the ModeManager):
+//     0x82328118  lbz r11, 0(r30)  -> if set, `stbx r28(1), r31, 0x94FD`
+//     0x82328134  lbz r11, 1(r30)  -> if set, `stbx r28(1), r31, 0x94FE`
+//     0x8232814C  lbz r11, 2(r30)  -> if set, ScoringSystem::RegisterFinishForCar(1, player, simTime)
+// The PS3 DWARF declares only the first TWO (:1344 mbTimedOut, :1345 mbCarDestroyed); byte 2 is
+// an X360 addition and its name is taken from its ONLY consumer (it is what registers a finish
+// for the player car), so it is FLAGGED.
+struct PlayerFinishedModeEvent : public GameEvent<E_EVENT_PLAYER_FINISHED_MODE>
+{
+    bool mbTimedOut;             // +0x00  DWARF BrnGameEvents.h:1344
+    bool mbCarDestroyed;         // +0x01  DWARF BrnGameEvents.h:1345
+    bool mbCrossedFinishLine;    // +0x02  X360-only; FLAG: named from its sole consumer
+};
+
 // Pin the attested offsets (both structs are pointer-free -> absolute on the x64 gate).
+static_assert(offsetof(PlayerFinishedModeEvent, mbTimedOut) == 0x00, "PlayerFinishedModeEvent timed-out byte at +0 (lbz 0(r30) @0x82328118)");
+static_assert(offsetof(PlayerFinishedModeEvent, mbCarDestroyed) == 0x01, "PlayerFinishedModeEvent car-destroyed byte at +1 (lbz 1(r30) @0x82328134)");
+static_assert(offsetof(PlayerFinishedModeEvent, mbCrossedFinishLine) == 0x02, "PlayerFinishedModeEvent crossed-finish byte at +2 (lbz 2(r30) @0x8232814C)");
 static_assert(offsetof(CompletedStuntEvent, mabStuntRunScored) == 0x44, "CompletedStuntEvent stunt-run flags at +0x44");
 static_assert(offsetof(CompletedStuntEvent, miCompletedBarrelRolls) == 0x50, "CompletedStuntEvent barrel rolls at +0x50");
 static_assert(offsetof(CompletedStuntEvent, mfCompletedAirSpinAngle) == 0x5C, "CompletedStuntEvent air-spin angle at +0x5C");

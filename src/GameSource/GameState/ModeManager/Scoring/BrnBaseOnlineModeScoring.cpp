@@ -1,6 +1,11 @@
 #include "GameSource/GameState/ModeManager/Scoring/BrnBaseOnlineModeScoring.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+// UpdatePlayerTeams (below) reads the scoring system's per-car team through
+// ScoringSystem::GetPlayerTeam. The class header only forward-declares ScoringSystem
+// (deliberately -- BrnScoringSystem.h embeds the online scorers BY VALUE, so the
+// HEADERS may not include each other); this .cpp can and must complete the type.
+#include "GameSource/GameState/ModeManager/Scoring/BrnScoringSystem.h"
 
 namespace BrnGameState
 {
@@ -190,6 +195,52 @@ void BaseOnlineModeScoring::CompareTimeAsRunner(CgsSystem::Time lTime1, CgsSyste
         {
             *lpiResult = (lTime1 < lTime2) ? 1 : 0;
         }
+    }
+}
+
+// ----------------------------------------------------------------------------------------------
+// UpdatePlayerTeams -- X360 @ 0x823219B8 (DWARF BrnBaseOnlineModeScoring.h:207 / .cpp:205).
+// Refresh the whole per-slot team table from the scoring system. PUBLIC and NON-virtual: the
+// race-mode Update (BrnOnlineRaceModeScoring.cpp:18) and the road-rage-teams Update
+// (BrnOnlineRoadRageModeScoring.cpp:568) both forward to it verbatim.
+//
+// ⚠️ DELIBERATE DEVIATION FROM THE ROUND BRIEF, WITH EVIDENCE. The brief listed this symbol as
+// "a bodiless base virtual -- add it to the BrnBaselineLinkStubs.cpp bodiless list". Both halves
+// of that premise are refuted by the tree + the image: it is declared NON-virtual (the header's
+// own vtable map runs slots 0..9 and this is not one of them, BrnBaseOnlineModeScoring.h:69), and
+// it HAS a full standalone X360 export whose body is cheap and provable. An inert stub would have
+// left maePlayerTeams[] frozen at whatever ClearData seeded for every online team mode -- the
+// silent-zero failure mode this campaign has paid for repeatedly -- so the faithful body is
+// landed here, in the class's own declared home TU, instead.
+//
+// EVIDENCE (0x823219B8, dumped this session):
+//   * the entry assert is "lpScoringSystem" @ BrnBaseOnlineModeScoring.cpp:212;
+//   * the loop is a fixed 0..KI_MAX_ACTIVE_RACE_CARS walk whose write target is `a1 + 68` with a
+//     4-byte post-increment -- and +0x44 == 68 is maePlayerTeams (header :195, DWARF h:195);
+//   * the per-slot READ is ScoringSystem::GetPlayerTeam INLINED, not a raw poke: the inlined
+//     fragment carries GetPlayerTeam's OWN baked assert -- the index message at
+//     BrnScoringSystem.cpp line 1549, byte-identical to the one the standalone
+//     ScoringSystem::GetPlayerTeam @0x8231FDB8 fires -- then calls GetCarData and reads
+//     `*(result + 316)`. +316 == 0x13C is CarData::mePlayerTeam, cross-attested by
+//     SetPlayerTeam @0x8231FE38 writing `result[79]` (79*4 == 0x13C) to the same field.
+//     De-inlined here to the real GetPlayerTeam call, so its assert is not duplicated.
+//   * the trailing "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT" assert (BurnoutConstants.h:39)
+//     is the enum-iterator operator++'s own, i.e. the console's loop variable is an
+//     EActiveRaceCarIndex. Written as the plain s32 walk + cast, the convention every sibling
+//     body in this TU and in BrnScoringSystem_Standings.cpp already uses.
+//
+// NOTE liNumberOfCars is UNUSED, exactly as on the console: the export never touches r5 and the
+// walk is unconditionally the full 8 slots. Parameter kept for the DWARF signature.
+// ----------------------------------------------------------------------------------------------
+void BaseOnlineModeScoring::UpdatePlayerTeams(const ScoringSystem* lpScoringSystem,
+                                              s32 /*liNumberOfCars*/)
+{
+    CGS_ASSERT(lpScoringSystem != NULL, "lpScoringSystem");
+
+    for (s32 liSlot = 0; liSlot < KI_MAX_ACTIVE_RACE_CARS; ++liSlot)
+    {
+        maePlayerTeams[liSlot] =
+            lpScoringSystem->GetPlayerTeam(static_cast<EActiveRaceCarIndex>(liSlot));
     }
 }
 }

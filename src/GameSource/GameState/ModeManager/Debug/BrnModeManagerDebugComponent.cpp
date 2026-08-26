@@ -1,4 +1,7 @@
 #include "GameSource/GameState/ModeManager/Debug/BrnModeManagerDebugComponent.h"
+#include "GameSource/GameState/ModeManager/BrnModeManager.h"   // [stuntrace waveB] moved here out
+                                                               // of the component header to break the
+                                                               // embed cycle; this TU needs the real type.
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX. The mode-manager debug menu registers a handful of
 // mode tunables (its own + the mode manager's + some global marked-man tweaks) and an "end event"

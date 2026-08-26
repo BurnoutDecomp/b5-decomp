@@ -73,9 +73,10 @@ bool StuntModeScoring::RegisterStunt()
 
         if (HasAnyPendingScore())
         {
-            // FLAG: flt_82CDB788 magnitude unrecovered -- the "pending time" the timer is armed
-            // with (best-effort KF_PENDING_SCORE_PENDING_TIME); stored into mfPendingScoreTimer.
-            const f32 KF_PENDING_SCORE_PENDING_TIME = 0.0f;   // FLAG: flt_82CDB788 value unrecovered
+            // RECOVERED: flt_82CDB788 (VA 0x82CDB788) == 0.5f -- the "pending time" window the
+            // timer is armed with; stored into mfPendingScoreTimer. Same constant (and same value)
+            // that UpdateBufferedScore re-arms the timer with in the sibling _UpdatePass.cpp.
+            const f32 KF_PENDING_SCORE_PENDING_TIME = 0.5f;   // flt_82CDB788
             mfPendingScoreTimer = KF_PENDING_SCORE_PENDING_TIME;
         }
         else
@@ -131,12 +132,12 @@ void StuntModeScoring::DealWithStunt(const GameStateModuleIO::WorldStuntAction* 
 
     if (mRecentStuntElementSet.Find(lElementId) == StuntElementSet::KU_INVALID)
     {
-        // FLAG: flt_82CDB718 / flt_82CDB71C / flt_82CDB720 magnitudes unrecovered -- the base score
-        // each world-stunt element awards (best-effort 0.0f). Re-confirm against the asm when this
-        // TU's full BrnStuntModeScoring.cpp lands.
-        const f32 KF_SUPER_JUMP_STUNT_SCORE = 0.0f;   // FLAG: flt_82CDB718 value unrecovered
-        const f32 KF_SUPER_SMASH_STUNT_SCORE = 0.0f;  // FLAG: flt_82CDB71C value unrecovered
-        const f32 KF_BILLBOARD_STUNT_SCORE = 0.0f;    // FLAG: flt_82CDB720 value unrecovered
+        // RECOVERED -- the base score each world-stunt element awards, read big-endian from the
+        // decrypted X360 image at each flt_ VA. DealWithStunt's asm export (0x8232CEB0) references
+        // exactly these three addresses and no other tuning float, which pins the mapping.
+        const f32 KF_SUPER_JUMP_STUNT_SCORE = 2000.0f;  // flt_82CDB718
+        const f32 KF_SUPER_SMASH_STUNT_SCORE = 100.0f;  // flt_82CDB71C
+        const f32 KF_BILLBOARD_STUNT_SCORE = 1000.0f;   // flt_82CDB720
 
         bool       lbScored = false;
         EStuntType leStuntType = E_STUNT_TYPE_INVALID;
@@ -229,9 +230,10 @@ void StuntModeScoring::DealWithPowerPark(const GameStateModuleIO::PowerParkResul
     {
         if (RegisterStunt())
         {
-            // FLAG: flt_82CDB728 magnitude unrecovered -- the per-rating-point score the power-park
-            // award scales by (best-effort 0.0f). X360: score = (f32)miOverallRating * flt_82CDB728.
-            const f32 KF_POWER_PARK_SCORE_PER_RATING = 0.0f;   // FLAG: flt_82CDB728 value unrecovered
+            // RECOVERED: flt_82CDB728 (VA 0x82CDB728) == 100.0f -- the per-rating-point score the
+            // power-park award scales by. X360: score = (f32)miOverallRating * flt_82CDB728, and
+            // flt_82CDB728 is the ONLY tuning float DealWithPowerPark's asm (0x82321530) references.
+            const f32 KF_POWER_PARK_SCORE_PER_RATING = 100.0f;   // flt_82CDB728
             const f32 lfScore = static_cast<f32>(lpAction->miOverallRating) * KF_POWER_PARK_SCORE_PER_RATING;
 
             UpdateScore(lfScore, E_STUNT_TYPE_POWER_PARK, true);
@@ -262,9 +264,10 @@ void StuntModeScoring::DealWithPowerPark(const GameStateModuleIO::PowerParkResul
 // ----------------------------------------------------------------------------
 void StuntModeScoring::UpdateStuntRepetition(f32 lfDelta)
 {
-    // FLAG: flt_82CDB7A0 magnitude unrecovered -- the repetition-decay timeout the "since last"
-    // timer must cross (best-effort KF_STUNT_TYPE_REPETITION_TIMEOUT).
-    const f32 KF_STUNT_TYPE_REPETITION_TIMEOUT = 0.0f;   // FLAG: flt_82CDB7A0 value unrecovered
+    // RECOVERED: flt_82CDB7A0 (VA 0x82CDB7A0) == 10.0f -- the repetition-decay timeout the "since
+    // last" timer must cross before a stunt type's repetition penalty resets. It is the only
+    // tuning float UpdateStuntRepetition's asm (0x82312F38) references.
+    const f32 KF_STUNT_TYPE_REPETITION_TIMEOUT = 10.0f;   // flt_82CDB7A0
 
     for (s32 liStuntTypeIndex = 0; liStuntTypeIndex < 18; ++liStuntTypeIndex)
     {
@@ -344,18 +347,18 @@ void StuntModeScoring::UpdateStuntRating(EStuntType leStuntType, f32 lfA, f32 lf
 // awesome flag from r6/a4, the IDA pseudocode's `v9`/r4 is the dropped uninitialised slot). No
 // divergence -- the committed sig matches the asm.
 //
-// FLAG: flt_82CDB778 (per-leg qualifying-distance threshold) and flt_82CDB73C (per-convoy-slot score
-// multiplier) magnitudes are UNRECOVERED -- not present in any .ida-exports data dump (same gap as the
-// sibling flt_82CDB718/71C/720/728 scores in this file). Named constants are defined at their X360
-// addresses with a best-effort value (0.0f); re-confirm against the asm when this TU's full
-// BrnStuntModeScoring.cpp lands.
+// RECOVERED: flt_82CDB778 (the per-leg qualifying-distance threshold) == 1.0f and flt_82CDB73C (the
+// per-convoy-slot score multiplier) == 100.0f, read big-endian from the decrypted X360 image. The
+// .ida-exports data dumps do not carry the float pool, but the image does; these two are the only
+// tuning floats DealWithInProgressStunt's asm (0x82321710) references, matching the two use sites
+// mapped above.
 // ----------------------------------------------------------------------------
 void StuntModeScoring::DealWithInProgressStunt(const GameStateModuleIO::OnStuntElementCompleteAction* lpAction,
                                                f32 lfDelta, s32 liPlayerActiveRaceCarIndex)
 {
-    // FLAG: rodata magnitudes unrecovered (see header note).
-    const f32 KF_CONVOY_LEG_DISTANCE_THRESHOLD = 0.0f;   // FLAG: flt_82CDB778 value unrecovered
-    const f32 KF_CONVOY_SLOT_SCORE_MULTIPLIER  = 0.0f;   // FLAG: flt_82CDB73C value unrecovered
+    // Rodata magnitudes recovered from the X360 image (see header note).
+    const f32 KF_CONVOY_LEG_DISTANCE_THRESHOLD = 1.0f;     // flt_82CDB778
+    const f32 KF_CONVOY_SLOT_SCORE_MULTIPLIER  = 100.0f;   // flt_82CDB73C
 
     // 0x28(this) gate: only score while the stunt mode is active.
     if (!mbStuntModeActive)

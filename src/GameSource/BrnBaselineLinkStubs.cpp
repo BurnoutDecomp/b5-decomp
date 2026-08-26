@@ -38,6 +38,7 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/CgsTypes.h"                  // Palette / Variant
 #include "SDKs/Realmc/RealmcLoadEntryInfo.h"                                                  // LoadEntryInfo (3-arg ctor stub)
 #include "SDKs/Realmc/RealmcIfaceSaveCheckParams.h"                                           // SaveCheckParams (ctor/dtor stubs)
+#include "GameSource/Gui/Flow/HUD/Components/BrnFriendsListEntry.h"                           // FriendsListEntry::Select link gate (see the block at the end)
 
 namespace CgsResource
 {
@@ -85,17 +86,20 @@ namespace BrnNetworkModuleIO
 
 namespace BrnGameState
 {
-    // Link stub: ModeManager embeds a ScoringSystem by value (X360 ModeManager+0xDB0), so its
-    // ctor is referenced by ModeManager::ModeManager(). The real ctor (BrnScoringSystem_
-    // Lifecycle.cpp) + the online-mode-scoring subsystem it constructs are OFF the loading-screen
-    // boot path and would pull the whole online/network/world closure into the link. Stub the ctor
-    // here; constructing the embedded online-mode-scoring members needs their vtables, so the vtable
-    // virtuals are stubbed below too. All inert (scoring is not exercised during loading).
-    // Signatures MIRROR the class headers exactly so each lands in the right vtable slot.
-    // Replace this whole block with the real scoring TUs when that subsystem is wired in.
-    ScoringSystem::ScoringSystem() {}
+    // [stuntrace wave B mount, 2026-08-26] PARTIAL RETIREMENT of the old scoring stub block.
+    // The scoring subsystem is mounted now (BrnScoringSystem_*.cpp + the offline StuntModeScoring
+    // set + the four Online*ModeScoring TUs), so every stub with a real body DIED here -- retired:
+    // ScoringSystem::ScoringSystem, BaseOnlineModeScoring::GetCurrentPlayerTeam,
+    // OnlineRaceModeScoring::{ClearData,Update,UpdatePlayerPoints},
+    // OnlineRoadRageModeScoring::{Construct,Prepare,ClearData,UpdatePlayerPoints,WriteDataToOutput},
+    // OnlineStuntRunModeScoring::UpdatePlayerPoints,
+    // OnlineBurningHomeRunModeScoring::{UpdatePlayerPoints,WriteDataToOutput},
+    // StuntModeScoring::{HasStuntModeEnded,CalculateMultiplier} (the return-true HasStuntModeEnded
+    // stub would have ended every stunt run on frame 1).
+    // The stubs BELOW have NO body anywhere in src (measured, seam audit S7 2026-08-26): deleting
+    // any one is an LNK2019. Each dies only when its real body lands in its own TU.
 
-    // --- BaseOnlineModeScoring: slots 0..8 + the two non-slot virtuals ---
+    // --- BaseOnlineModeScoring: the 9 bodiless virtuals ---
     void BaseOnlineModeScoring::Construct() {}
     bool BaseOnlineModeScoring::Prepare()  { return false; }
     bool BaseOnlineModeScoring::Release()  { return false; }
@@ -105,27 +109,35 @@ namespace BrnGameState
     void BaseOnlineModeScoring::UpdatePlayerPoints(ScoringSystem*, s32) {}
     void BaseOnlineModeScoring::AwardNetworkRatings(const ScoringSystem*, u32) {}
     void BaseOnlineModeScoring::WriteDataToOutput(OnlineScoringOutputInterface*) {}
-    GameStateModuleIO::EPlayerTeam BaseOnlineModeScoring::GetCurrentPlayerTeam(s32) { return static_cast<GameStateModuleIO::EPlayerTeam>(0); }
 
-    // --- the four concrete online modes: identical override set (see each header) ---
-#define BRN_STUB_ONLINE_MODE(CLS)                                                          \
-    void CLS::Construct() {}                                                                \
-    bool CLS::Prepare()  { return false; }                                                  \
-    bool CLS::Release()  { return false; }                                                  \
-    void CLS::Destruct() {}                                                                  \
-    void CLS::ClearData() {}                                                                 \
-    void CLS::Update(const ScoringSystem*, s32) {}                                           \
-    void CLS::UpdatePlayerPoints(ScoringSystem*, s32) {}                                     \
-    void CLS::WriteDataToOutput(GameStateModuleIO::OnlineScoringOutputInterface*) {}
-    BRN_STUB_ONLINE_MODE(OnlineRaceModeScoring)
-    BRN_STUB_ONLINE_MODE(OnlineRoadRageModeScoring)
-    BRN_STUB_ONLINE_MODE(OnlineStuntRunModeScoring)
-    BRN_STUB_ONLINE_MODE(OnlineBurningHomeRunModeScoring)
-#undef BRN_STUB_ONLINE_MODE
+    // --- OnlineRaceModeScoring: 5 bodiless ---
+    void OnlineRaceModeScoring::Construct() {}
+    bool OnlineRaceModeScoring::Prepare()  { return false; }
+    bool OnlineRaceModeScoring::Release()  { return false; }
+    void OnlineRaceModeScoring::Destruct() {}
+    void OnlineRaceModeScoring::WriteDataToOutput(GameStateModuleIO::OnlineScoringOutputInterface*) {}
 
-    // --- StuntModeScoring extra virtuals the vtable references ---
-    bool StuntModeScoring::HasStuntModeEnded(bool) { return true; }
-    s32  StuntModeScoring::CalculateMultiplier(const StuntInfo*, StuntModeScoring::MultiplierOutInfo*) { return 0; }
+    // --- OnlineRoadRageModeScoring: 3 bodiless ---
+    bool OnlineRoadRageModeScoring::Release()  { return false; }
+    void OnlineRoadRageModeScoring::Destruct() {}
+    void OnlineRoadRageModeScoring::Update(const ScoringSystem*, s32) {}
+
+    // --- OnlineStuntRunModeScoring: 7 bodiless ---
+    void OnlineStuntRunModeScoring::Construct() {}
+    bool OnlineStuntRunModeScoring::Prepare()  { return false; }
+    bool OnlineStuntRunModeScoring::Release()  { return false; }
+    void OnlineStuntRunModeScoring::Destruct() {}
+    void OnlineStuntRunModeScoring::ClearData() {}
+    void OnlineStuntRunModeScoring::Update(const ScoringSystem*, s32) {}
+    void OnlineStuntRunModeScoring::WriteDataToOutput(GameStateModuleIO::OnlineScoringOutputInterface*) {}
+
+    // --- OnlineBurningHomeRunModeScoring: 6 bodiless ---
+    void OnlineBurningHomeRunModeScoring::Construct() {}
+    bool OnlineBurningHomeRunModeScoring::Prepare()  { return false; }
+    bool OnlineBurningHomeRunModeScoring::Release()  { return false; }
+    void OnlineBurningHomeRunModeScoring::Destruct() {}
+    void OnlineBurningHomeRunModeScoring::ClearData() {}
+    void OnlineBurningHomeRunModeScoring::Update(const ScoringSystem*, s32) {}
 
     // --- CarScoreData ctor: RETIRED 2026-08-01 (BridgeGameStateToWorld wave) ---
     // The real body (X360 0x822A45A8, zero-inits the whole 296-byte record) has been sitting
@@ -332,6 +344,79 @@ namespace BrnGameState
     {
         *CgsDev::Log::gpDebugPrint
             << "StreetManagerDebugComponent::OnActivate: inert [FLAG PC boot gate]\n";
+    }
+}
+
+// ---- ScoringSystemDebugComponent vtable gate (stuntrace waveB mount closure, 2026-08-26) ----
+// EXACTLY the StreetManagerDebugComponent case above, one class over. ModeManager now embeds
+// ScoringSystemDebugComponent BY VALUE (BrnModeManager.h:614, X360 ModeManager+28136), and
+// GameStateModule embeds ModeManager by value, so the ctor chain emits this component's vtable
+// and its two out-of-line virtuals must link.
+//
+// The component's REAL TU EXISTS AND COMPILES (BrnScoringSystemDebugComponent.cpp, 256 lines --
+// GetName / OnActivate / GetChainableTableEntry / DebugRenderChainableStunts, X360 0x82312470 /
+// 0x82312490 / 0x82329D60 / 0x82337C38). It stays UNMOUNTED on purpose: its two table bodies
+// carry self-declared UNRECOVERED PLACEHOLDERS whose rodata is not in the exports -- the per-row
+// stunt-multiplier bit table (dword_82020F54[]) and the three cell colours (dword_82CDB878 /
+// _87C / _880). Mounting it would put invented constants on a live vtable for no gain: the debug
+// UI never constructs on this build (same reason the CgsDev::DebugUI block further down exists).
+//
+//   GetName    IS THE REAL BODY. @0x82312470 is a two-instruction leaf returning the literal
+//              "Scoring System" (lis/addi aScoringSystem; blr), dumped this session. No state.
+//   OnActivate is an INERT GATE. The console body @0x82312490 is a single tail call,
+//              sub_8282D800(this, this + 0x10, "Show chainable stunts") -- the debug-menu bool
+//              tweakable registration pointing at mbShowChainableStunts (+0x10). Registering a
+//              tweakable against a component whose render half is not mounted would only park a
+//              live pointer; the log makes the gap visible instead.
+//
+// DELETE-WHEN BrnScoringSystemDebugComponent.cpp joins the exe source list (i.e. when its
+// placeholder rodata is recovered). Both definitions in one build is an LNK2005.
+#include "GameSource/GameState/ModeManager/Debug/BrnScoringSystemDebugComponent.h"
+namespace BrnGameState
+{
+    const char* ScoringSystemDebugComponent::GetName() const { return "Scoring System"; }
+    void ScoringSystemDebugComponent::OnActivate()
+    {
+        *CgsDev::Log::gpDebugPrint
+            << "ScoringSystemDebugComponent::OnActivate: inert [FLAG PC boot gate]\n";
+    }
+}
+
+// ---- DeveloperChallengeManager::OnEventEnd (stuntrace waveB mount closure, 2026-08-26) ----
+// FLAG link gate -- NOT a reconstruction.
+//
+// The wave's ModeManager::ShowModeResults path calls it (BrnModeManager_Finish.cpp:62 includes
+// BrnDeveloperChallengeManager.h for exactly this), so the mount needs the symbol.
+//
+// A REAL BODY EXISTS IN THE TREE -- BrnDeveloperChallengeManager.cpp:394 (the full 14-body TU) --
+// and it COMPILES STANDALONE (selfcheck pass). It is not mounted because MOUNTING IT WAS MEASURED
+// WORSE: cl /c of that TU + dumpbin /SYMBOLS of its obj, diffed against the defined-symbol set of
+// every obj in build\game\obj, leaves SEVEN unresolved externals -- it would close one hole and
+// open seven:
+//     BrnGameState::StuntModeScoring::GetBestStuntScore() const
+//     BrnGameState::ScoringSystem::GetCarCount() const
+//     BrnGameState::CarData::GetFinishScore() const
+//     BrnGameState::CarData::IsFlawless() const
+//     BrnGameState::GameStateModuleIO::OutputBuffer::GetGuiOutputQueue()
+//     BrnGameState::GameStateModule::IsActiveRaceCarStillPresent(EActiveRaceCarIndex) const
+//     BrnProgression::Profile::IsDeveloperChallengeComplete(int) const
+// (GetFinishScore / IsFlawless are the two BrnScoringSystem.h itself flags as an "ADDITIVE GROW
+// (declare-only) for the BrnGameState::DeveloperChallengeManager TU", offsets still FLAG'd.)
+//
+// WHY INERT IS SAFE TODAY: the developer-challenge subsystem is not merely off the offline path,
+// it is NOT CONSTRUCTED AT ALL. BrnGameStateModule.h marks mDeveloperChallengeManager
+// "NOT Construct()ed yet -- see the named deferral in GameStateModule::Construct", so every
+// member the real body reads (its progression manager / street manager / challenge tables) is
+// null. The real OnEventEnd opens with a progression-profile lookup; running it against an
+// unconstructed manager is strictly worse than not running it.
+//
+// DELETE-WHEN BrnDeveloperChallengeManager.cpp joins the exe source list -- which needs the seven
+// symbols above first. LNK2005 otherwise.
+#include "GameSource/GameState/DeveloperChallengeManager/BrnDeveloperChallengeManager.h"
+namespace BrnGameState
+{
+    void DeveloperChallengeManager::OnEventEnd(s32 /*liGameModeType*/, bool /*lbWon*/)
+    {
     }
 }
 
@@ -664,4 +749,17 @@ namespace Playback
         return *mpContentClass;
     }
 }
+}
+
+namespace BrnGui
+{
+    // FriendsListEntry::Select -- FLAG (link gate for the in-flight friends-list
+    // tranche; the vtable emitted by FriendsListComponent::Construct needs every
+    // virtual defined). Declared virtual at BrnFriendsListEntry.h:140 with no PS3
+    // DWARF body and no X360 export: the retail body is almost certainly an empty
+    // header inline (the ICF-folded-blr class). Inert here; DELETE-WHEN the
+    // friends-list tranche lands the real Select.
+    void FriendsListEntry::Select()
+    {
+    }
 }

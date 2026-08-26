@@ -51,10 +51,14 @@
 //       (no committed home), to push road-rage crash events.
 //
 // DEFERRED (no standalone X360 export -- inlined away on X360, so no authoritative body):
-//   StartModeTimer, SetCheckPointsForCarsWithinRace, UpdateTimerForEliminator, HasCrashModeEnded.
+//   SetCheckPointsForCarsWithinRace, UpdateTimerForEliminator, HasCrashModeEnded.
 //   None has an exported body and none is confidently inferable from named fields + callers:
-//     * StartModeTimer / SetCheckPointsForCarsWithinRace / UpdateTimerForEliminator: no export, no
+//     * SetCheckPointsForCarsWithinRace / UpdateTimerForEliminator: no export, no
 //       inlined fragment recovered.
+//   [x] StartModeTimer LEFT THIS LIST 2026-08-26 (waveB MOUNT-CLOSURE round): its inlined
+//       fragment IS recovered now (ModeManager::UpdateCurrentMode @0x823511C8) and its body is
+//       landed below, next to ClearModeTimer. ReducePlayerDurability (never on this list, but
+//       equally export-less) landed the same way from ModeManager::StartGameMode @0x8234FF80.
 //     * HasCrashModeEnded: no ScoringSystem export. The only HasCrashModeEnded export is the
 //       SUB-SCORER BrnGameState::CrashModeScoring::HasCrashModeEnded (0x823129A0), whose signature
 //       takes a `double` time-delta; ScoringSystem::HasCrashModeEnded is declared `() const` (no
@@ -159,6 +163,34 @@ void ScoringSystem::IncreaseTimeLimit(f32 lfSeconds)
     mEndTime += CgsSystem::Time(lfSeconds);
 }
 
+// ----------------------------------------------------------------------------
+// StartModeTimer -- X360: NO standalone export; RECOVERED FROM ITS ONE INLINED CALL SITE.
+// (This retires the "DEFERRED -- no export, no inlined fragment recovered" entry in this
+// file's header banner: the fragment IS recovered now, and the wave-B mount made the symbol
+// a hard LNK2019 -- BrnModeManager_UpdateMode.cpp:400 is the timer-start latch that begins
+// every mode's clock.)
+//
+// EVIDENCE (dumped this session from ModeManager::UpdateCurrentMode @0x82350EC8, the
+// timer-start-latch arm at 0x823511C8..0x823511DC):
+//     0x823511AC  lwz   r24, 0x10(r27)     ; lSimTimerStatus time: seconds
+//     0x823511B0  lfs   f29, 0x14(r27)     ;                       fraction
+//     ...
+//     0x823511C8  stfs  f29, 4(r25)        ; r25 == &mScoringSystem
+//     0x823511CC  stw   r24, 0(r25)
+//     0x823511D0  lwz   r11, 0xD98(r31)    ; -> SetTimerStartRequest(false)
+//     0x823511E0  bl    ModeManager::StartPlayingMode
+// The two stores land on the ScoringSystem's FIRST member (BrnScoringSystem.h:1199,
+// mStartTime) at its two fields -- CgsTime.h pins miSeconds@+0 / mfFraction@+4 -- and there
+// is no third store, no mEndTime touch and no assert between the load and the next call.
+// So the whole inlined function is one assignment. (Contrast ClearModeTimer, which the same
+// arm inlines eight instructions later as the single `li r11,-1; stw r11, 0(r25)` at
+// 0x823511F0 -- already committed at :163. Two different one-store bodies, same member.)
+// ----------------------------------------------------------------------------
+void ScoringSystem::StartModeTimer(const CgsSystem::Time& lTime)
+{
+    mStartTime = lTime;
+}
+
 // Drive the timer / time-limit back to the inactive (negative second count) state.
 void ScoringSystem::ClearModeTimer()
 {
@@ -257,6 +289,35 @@ s32 ScoringSystem::GetRoadRagePlayerCrashes()
 s32 ScoringSystem::GetPlayerCrashesRemaining()
 {
     return miMaximumPlayerCrashedNumber - miCurrentPlayerCrashedNumber;
+}
+
+// ----------------------------------------------------------------------------
+// ReducePlayerDurability -- X360: NO standalone export; RECOVERED FROM ITS ONE INLINED CALL
+// SITE (DWARF BrnScoringSystem.h:1192 names it; the console emitted no call).
+//
+// EVIDENCE (dumped this session from ModeManager::StartGameMode @0x8234FCE8, the
+// unlock-deformation arm at 0x8234FF80..0x8234FFAC):
+//     0x8234FF80  lwz    r11, 0x4B58(r26)   ; r26 == &mScoringSystem
+//     0x8234FF84  addic. r11, r11, -1
+//     0x8234FF88  stw    r11, 0x4B58(r26)
+//     0x8234FF8C  bgt    loc_8234FFB0
+//     0x8234FF90  bl     CgsDev::Assert::BeginAssert
+//     0x8234FF98  li     r5, 0xDE9                       ; BrnScoringSystem.h line 3561
+//     0x8234FFA4  addi   r3, r11, aMimaximumplaye@l      ; "miMaximumPlayerCrashedNumber > 0"
+// ss+0x4B58 is miMaximumPlayerCrashedNumber (pinned at BrnScoringSystem.h:1213). The
+// decrement is the STORED one and the assert tests the POST-decrement value (`addic.` sets
+// cr0 from the result, and the `bgt` that skips the assert reads that same cr0) -- so the
+// assert fires when the allowance has been spent down to 0, not before. Reproduced exactly:
+// store first, then assert on the new value.
+//
+// Semantics: "durability" is the road-rage crash ALLOWANCE. A car whose progression record
+// carries an unlock-deformation amount starts its event one crash short.
+// ----------------------------------------------------------------------------
+void ScoringSystem::ReducePlayerDurability()
+{
+    --miMaximumPlayerCrashedNumber;
+
+    CGS_ASSERT(miMaximumPlayerCrashedNumber > 0, "miMaximumPlayerCrashedNumber > 0");
 }
 
 // ----------------------------------------------------------------------------

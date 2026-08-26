@@ -237,4 +237,135 @@ namespace BrnTraffic
     {
         return mpapHulls[luHull];
     }
+
+    // =========================================================================================
+    // TrafficData::GetStartDataForTrafficLight -- X360 0x8231CC48 (DWARF BrnTrafficData.h:95)
+    // =========================================================================================
+    // [stuntrace waveB CLOSURE round, 2026-08-26] Bodied. This was the last link hole on the
+    // seat-the-cars path: ModeManager::SetStartingGrid @0x82328608 -> ModeManager::
+    // GetStartDataForTrafficLight @0x82327310 -> HERE -> Hull::GetJunctionForLightTrigger ->
+    // Hull::GetLightTriggerStartDataForJunction. Its two callees landed in BrnTrafficHull.cpp
+    // this pass, and BrnTraffic::JunctionLogicBox got a real header home
+    // (SharedClasses/Traffic/Junctions/BrnJunctionLogicBox.h), which is what had blocked it.
+    //
+    // A LightTriggerId packs { hull index = bits 8..23, light-trigger index = bits 0..7 } and
+    // BOTH halves carry an all-ones "none" sentinel. Every step is asserted; assert lines are
+    // baked against "..\\..\\..\\SharedClasses\\Traffic/BrnTrafficData.h" (path string
+    // @0x820063??; the asserts are 265 / 268 / 271 / 274 / 278).
+    //
+    //   0x8231CC5C  extrwi r30, r28, 16,8    ; luHull        = (id >> 8) & 0xFFFF
+    //   0x8231CC64  cmplwi r30, 0xFFFF       ; \ IsValid()
+    //   0x8231CC6C  clrlwi r11, r28, 24      ;  |  luLightTrigger = id & 0xFF
+    //   0x8231CC70  cmplwi r11, 0xFF         ; /
+    //   0x8231CC9C  li r5, 0x109             ; assert 265 "lTriggerId.IsValid()"
+    //   0x8231CCB0  lhz  r11, 2(r29)         ; muNumHulls (+0x02)
+    //   0x8231CCC4  li r5, 0x10C             ; assert 268 "luHull < muNumHulls"
+    //   0x8231CCD8  lwz  r11, 0xC(r29)       ; mpapHulls  (console +0x0C)
+    //   0x8231CCE0  lwzx r29, r10, r11       ; lpHull = mpapHulls[luHull]
+    //   0x8231CCF4  li r5, 0x10F             ; assert 271 "lpHull"
+    //   0x8231CD08  lbz  r11, 0xE(r29)       ; lpHull->muNumLightTriggers (+0x0E)
+    //   0x8231CD20  li r5, 0x112             ; assert 274 "luLightTrigger < lpHull->muNumLightTriggers"
+    //   0x8231CD3C  bl   Hull::GetJunctionForLightTrigger
+    //   0x8231CD54  li r5, 0x116             ; assert 278 "lpJunction"
+    //   0x8231CD74  b/bl Hull::GetLightTriggerStartDataForJunction(lpHull, lpJunction, a3)
+    //
+    // [!] THE VALIDITY TEST IS AN ASSERT, NOT A GUARD. The console asserts and then carries on
+    // into the hull lookup with the sentinel index; it never returns early. Callers that can
+    // legitimately hold an invalid handle test it THEMSELVES first -- SetStartingGrid @0x82328678
+    // does exactly that and skips the whole grid loop, which is the authored path for a mode
+    // started away from lights. Do not "harden" this by returning NULL: that would silently
+    // change which of the two behaviours a caller gets.
+    //
+    // [!] `lbUseAlternateStartData` selects the junction's ONLINE start-data index; see the
+    // GetLightTriggerStartDataForJunction banner in BrnTrafficHull.cpp for the two different
+    // -1 sentinel tests and the NULL return. ModeManager passes FALSE (`li r5,0` @0x82327360).
+    // =========================================================================================
+    const LightTriggerStartData* TrafficData::GetStartDataForTrafficLight(u32 luLightTriggerId,
+                                                                         bool lbUseAlternateStartData) const
+    {
+        const u32 luHull         = (luLightTriggerId >> 8) & 0xFFFFu;
+        const u32 luLightTrigger = luLightTriggerId & 0xFFu;
+
+        // LightTriggerId::IsValid(), inlined by the console exactly as it is at the SetStartingGrid
+        // site (BrnModeManager_IntroPlay.cpp's file-local IsLightTriggerIdValid is the same two
+        // tests). This assert is what NAMES that predicate.
+        const bool lbIsValid = (luHull != 0xFFFFu) && (luLightTrigger != 0xFFu);
+        CGS_ASSERT(lbIsValid, "lTriggerId.IsValid()");                        // :265
+
+        CGS_ASSERT(luHull < muNumHulls, "luHull < muNumHulls");               // :268
+
+        const Hull* lpHull = mpapHulls[luHull];
+        CGS_ASSERT(lpHull != nullptr, "lpHull");                              // :271
+
+        CGS_ASSERT(luLightTrigger < lpHull->muNumLightTriggers,
+                   "luLightTrigger < lpHull->muNumLightTriggers");            // :274
+
+        const JunctionLogicBox* lpJunction = lpHull->GetJunctionForLightTrigger(luLightTrigger);
+        CGS_ASSERT(lpJunction != nullptr, "lpJunction");                      // :278
+
+        return lpHull->GetLightTriggerStartDataForJunction(lpJunction, lbUseAlternateStartData);
+    }
+
+    // =========================================================================================
+    // TrafficData::GetJunctionLogicBoxForTrafficLight -- X360 0x82207F90 (DWARF BrnTrafficData.h:99)
+    // =========================================================================================
+    // [stuntrace waveD, agent D1] THE LightTriggerId -> JunctionLogicBox MAP. Nothing else in the
+    // image performs it, and every consumer of an "event junction" goes through it:
+    //   GameStateModule::CheckIfPlayerIsAtJunctionWithAnEvent @0x82390418 and
+    //   GameStateModule::StartModeAtLights @0x82396CF8
+    // both call it, read JunctionLogicBox::muEventJunctionID (+0x38) off the result, and use that
+    // id to linear-search ProgressionData's EventJunction table for the offline RaceEventData.
+    //
+    // It is the STRUCTURAL TWIN of GetStartDataForTrafficLight above -- the same handle decode and
+    // the same four bounds checks, in the same order, against the same members, with four DIFFERENT
+    // baked assert lines (300 / 303 / 306 / 309 instead of 265 / 268 / 271 / 274). That is not a
+    // shared helper the compiler duplicated: the two source statements are 35 lines apart in
+    // BrnTrafficData.h, so both are written out here rather than folded into one.
+    //
+    //   0x82207FA4  extrwi r30, r28, 16,8    ; luHull         = (id >> 8) & 0xFFFF
+    //   0x82207FB0  clrlwi r11, r28, 24      ; luLightTrigger = id & 0xFF
+    //   0x82207FA8  cmplwi r30, 0xFFFF       ; \ IsValid(): NEITHER half may be all-ones
+    //   0x82207FB4  cmplwi r11, 0xFF         ; /
+    //   0x82207FE0  li r5, 0x12C             ; assert 300 "lTriggerId.IsValid()"
+    //   0x82207FF4  lhz  r11, 2(r29)         ; muNumHulls (+0x02)
+    //   0x82208008  li r5, 0x12F             ; assert 303 "luHull < muNumHulls"
+    //   0x8220801C  lwz  r11, 0xC(r29)       ; mpapHulls (console +0x0C)
+    //   0x82208024  lwzx r29, r10, r11       ; lpHull = mpapHulls[luHull]
+    //   0x82208038  li r5, 0x132             ; assert 306 "lpHull"
+    //   0x8220804C  lbz  r11, 0xE(r29)       ; lpHull->muNumLightTriggers (+0x0E)
+    //   0x82208064  li r5, 0x135             ; assert 309 "luLightTrigger < lpHull->muNumLightTriggers"
+    //   0x82208080  bl   Hull::GetJunctionForLightTrigger  (tail call, result returned unchecked)
+    //
+    // [!] THE 0x39 OWNER TAG DOES NOT NEED MASKING OFF FIRST, and code that "helpfully" strips it
+    // is wrong twice over. `extrwi r30, r28, 16, 8` extracts bits 8..23 only, so the tag in bits
+    // 24..31 is already dropped by the hull decode; and the SENTINEL test is against the extracted
+    // 16-bit hull (0xFFFF), which a pre-masked id would still satisfy. Keep the packed handle
+    // exactly as TrafficEntityModule::ManageTriggers @0x827477EC..0x827477FC built it --
+    // `(hull << 8) | 0x39000000 | lightTriggerIndex`.
+    //
+    // [!] NO NULL CHECK ON THE RESULT HERE. GetStartDataForTrafficLight's sibling body asserts
+    // "lpJunction" before using it; this one tail-calls and hands the pointer straight back. Its
+    // callers do their own test. Reproduced as shipped.
+    // =========================================================================================
+    const JunctionLogicBox* TrafficData::GetJunctionLogicBoxForTrafficLight(u32 luLightTriggerId) const
+    {
+        const u32 luHull         = (luLightTriggerId >> 8) & 0xFFFFu;
+        const u32 luLightTrigger = luLightTriggerId & 0xFFu;
+
+        // LightTriggerId::IsValid() (DWARF BrnTrafficLightTrigger.h:70), inlined by the console as
+        // the two all-ones tests above. Same predicate BrnModeManager_IntroPlay.cpp's file-local
+        // IsLightTriggerIdValid spells out.
+        const bool lbIsValid = (luHull != 0xFFFFu) && (luLightTrigger != 0xFFu);
+        CGS_ASSERT(lbIsValid, "lTriggerId.IsValid()");                        // :300
+
+        CGS_ASSERT(luHull < muNumHulls, "luHull < muNumHulls");               // :303
+
+        const Hull* lpHull = mpapHulls[luHull];
+        CGS_ASSERT(lpHull != nullptr, "lpHull");                              // :306
+
+        CGS_ASSERT(luLightTrigger < lpHull->muNumLightTriggers,
+                   "luLightTrigger < lpHull->muNumLightTriggers");            // :309
+
+        return lpHull->GetJunctionForLightTrigger(luLightTrigger);
+    }
 }
