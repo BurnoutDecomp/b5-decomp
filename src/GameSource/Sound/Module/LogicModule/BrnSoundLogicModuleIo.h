@@ -95,7 +95,7 @@ namespace Io
             lpAttribSysQueue->Construct();
             lpAttribSysQueue->Clear();
 
-            memset(mau8TrailingState, 0, sizeof(mau8TrailingState));
+            memset(mReplayRequestInterfaceStorage, 0, sizeof(mReplayRequestInterfaceStorage));   // the 11 serialiser slots
         }
 
         // BrnSoundLogicModuleIo.h:65 / :73 (DWARF; own TU, declared-only here) --
@@ -107,6 +107,14 @@ namespace Io
         // &mAttribSysRequestInterface at this+0x04 (this wave).
         const RootOutputBuffer::AttribSysRequestInterface* GetAttribSysRequestInterface() const;
         RootOutputBuffer::AttribSysRequestInterface*       GetAttribSysRequestInterface();
+
+        // The replay request interface at +0x1824 (phase C1: the trailing state is
+        // ATTESTED as the 44-byte BrnReplays::ReplayIO::RequestInterface -- see the
+        // member note below). The IDA-truncated "LogicOutputBuffer::GetReplay" the
+        // BridgeLogicToRoot @0x826EBF18 caller reads; same lock discipline as the
+        // sibling accessors.
+        const RootOutputBuffer::ReplayRequestInterface* GetReplayRequestInterface() const;
+        RootOutputBuffer::ReplayRequestInterface*       GetReplayRequestInterface();
 
     private:
         // Byte widths mirror RootOutputBuffer's attested request-interface spans
@@ -121,23 +129,34 @@ namespace Io
         u8 mAttribSysRequestInterfaceStorage[KI_AttribSysInterfaceBytes]; // @ +0x04 FIRST (DWARF :81)
         u8 mResourceRequestInterfaceStorage[KI_ResourceInterfaceBytes];  // @ +0x814     (DWARF :82; start not independently attested)
 
-        // X360-attested trailing state: Construct @0x826C9A28 ends with `v5 = 11; do *v4++ = 0;
-        // while (--v5);` over 11 words starting at +0x1824, and the CreateIOBuffer
-        // instantiation @0x826DCD30 allocates 6224 == 0x1824 + 44. The member set behind those
-        // 44 bytes is not recovered (the DWARF slice stops at the two request interfaces), so it
-        // is modelled as named opaque storage -- WITHOUT it sizeof(LogicOutputBuffer) would be
-        // 6180 and the buffer would be under-allocated by 44 bytes relative to the console.
-        u8 mau8TrailingState[44];                                        // @ +0x1824
+        // (phase C1): the +0x1824 trailing state is IDENTIFIED -- the 11-word clear
+        // zeroes the 11 serialiser slots of the replay request interface (44 ==
+        // sizeof(BrnReplays::ReplayIO::RequestInterface); 6224 == 0x1824 + 0x2C, the
+        // total-size closure), which BridgeLogicToRoot @0x826EBF18 appends into the
+        // root's own +0x1824 twin via RequestInterface::Append @0x823A6868. Kept as
+        // sized storage (the sibling discipline); the getters cast.
+        u8 mReplayRequestInterfaceStorage[44];                           // @ +0x1824
 
         static void _AssertLayout()
         {
             static_assert(offsetof(LogicOutputBuffer, mAttribSysRequestInterfaceStorage) == 0x04,
                           "LogicOutputBuffer.mAttribSysRequestInterface @ +0x04");
-            static_assert(offsetof(LogicOutputBuffer, mau8TrailingState) == 0x1824,
-                          "LogicOutputBuffer trailing state @ +0x1824 (X360 Construct @0x826C9A28)");
+            static_assert(offsetof(LogicOutputBuffer, mReplayRequestInterfaceStorage) == 0x1824,
+                          "LogicOutputBuffer.mReplayRequestInterface @ +0x1824 (X360 Construct @0x826C9A28)");
             static_assert(sizeof(LogicOutputBuffer) == 6224,
                           "LogicOutputBuffer == 6224 (the X360 CreateIOBuffer Alloc literal @0x826DCD30)");
         }
+    };
+
+    // DWARF BrnSoundLogicModuleIo.h:28 (phase C1): the logic module's pre-update
+    // OUTPUT scratch -- an empty-derived RootPreUpdateOutputBuffer (same 824-byte
+    // {IOBuffer, PreUpdateOutput} carve; the console's PreUpdate chain runs the
+    // ICF-folded Root accessors on it). RootSoundModule::PreUpdate @0x826EB928
+    // creates one per call ("SoundLogicPreUpdateOutput"), the logic module copies
+    // its PreUpdateOutput block in, and the root copies it back out into the
+    // caller's RootPreUpdateOutputBuffer.
+    struct LogicPreUpdateOutputBuffer : public RootPreUpdateOutputBuffer
+    {
     };
 
 } // namespace Io
