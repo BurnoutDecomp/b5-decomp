@@ -26,6 +26,8 @@
 #include "GameShared/GameClasses/Sound/Playback/RWAC/CgsGenericRwacFactory.h"
 #include "rw/rwcore_structs.h"                                     // rw::Resource / ResourceDescriptor / IResourceAllocator
 
+#include <new>                                                     // placement new (the co-located carve)
+
 #include <cstring>
 
 namespace CgsSound
@@ -331,7 +333,9 @@ void* Environment::operator new(size_t luSize, const EnvironmentSpec& lrSpec)
     // host Environment + registry-header sizes.
     const size_t luTotal = sizeof(void*) * (luHandles + lrSpec.mRegistrySpec.mu32EntityCount)
                          + luSize
-                         + 7u * sizeof(void*)                    // registry header words
+                         + sizeof(Registry)                      // the registry header (host; the
+                                                                 //  console's 7 words -- its trailing
+                                                                 //  first slot slightly over-covers)
                          + lrSpec.mRegistrySpec.muStringTableSize
                          + lrSpec.mRegistrySpec.muDataSize;
 
@@ -346,6 +350,104 @@ void* Environment::operator new(size_t luSize, const EnvironmentSpec& lrSpec)
 
     rw::Resource lResource = lpAllocator->DoAllocate(lDescriptor, "Environment");
     return lResource.m_baseResources[0];
+}
+
+// =============================================================================
+// Environment::Environment(const EnvironmentSpec&)  @ 0x826BFBC8  (private;
+// bodied 2026-08-25, faithful-audio-engine phase B3)
+//
+// Lays the co-located carve out (console word map in brackets): adopt the
+// allocator [w12] + the three counts [w13..15]; point the three handle tables at
+// the carve tail (mphFactory = this+1 [w16 = this+28 words], voice after factory
+// [w17], content after voice [w18]) and null every slot; placement-construct the
+// Registry just past the content table [w19] over the remaining blob; zero the
+// CpuMonitors [w2..11], mpDacPlugin [w20], muActiveVoices/Content [w26/27]. The
+// mafVoiceTypeTickTotals [w21..25] are UNTOUCHED by the console ctor and stay so.
+// The Object base ctor supplies the vptr [w0] + zero refcount [w1].
+// =============================================================================
+Environment::Environment(const EnvironmentSpec& lrSpec)
+    : Object()
+{
+    mpAllocator       = lrSpec.mpAllocator;
+    mu32FactoryCount  = lrSpec.mu32FactoryCount;
+    mu32VoiceCount    = lrSpec.mu32VoiceCount;
+    mu32ContentCount  = lrSpec.mu32ContentCount;
+
+    u8* lpTail = reinterpret_cast<u8*>(this + 1);
+
+    mphFactory = reinterpret_cast<Handle<Factory>*>(lpTail);
+    lpTail += sizeof(Handle<Factory>) * mu32FactoryCount;
+    mphVoice = reinterpret_cast<Handle<Voice>*>(lpTail);
+    lpTail += sizeof(Handle<Voice>) * mu32VoiceCount;
+    mphContent = reinterpret_cast<Handle<Content>*>(lpTail);
+    lpTail += sizeof(Handle<Content>) * mu32ContentCount;
+
+    for (u32 lu = 0; lu < mu32FactoryCount; ++lu)
+        new (&mphFactory[lu]) Handle<Factory>();
+    for (u32 lu = 0; lu < mu32VoiceCount; ++lu)
+        new (&mphVoice[lu]) Handle<Voice>();
+    for (u32 lu = 0; lu < mu32ContentCount; ++lu)
+        new (&mphContent[lu]) Handle<Content>();
+
+    // The in-place Registry over the rest of the blob (its own ctor carves the
+    // slot array / data / string-table pointers with host-safe arithmetic).
+    mpRegistry = new (lpTail) Registry(lrSpec.mRegistrySpec);
+
+    mCpuMonitors.miModule              = 0;
+    mCpuMonitors.miProcessCommands     = 0;
+    mCpuMonitors.miEnvironmentUpdate   = 0;
+    mCpuMonitors.miRwacFactoryUpdate   = 0;
+    mCpuMonitors.miAemsFactoryUpdate   = 0;
+    mCpuMonitors.miAemsFactoryUpdate2  = 0;
+    mCpuMonitors.miSplicerFactoryUpdate = 0;
+    mCpuMonitors.miContentUpdate       = 0;
+    mCpuMonitors.miVoiceUpdate         = 0;
+    mCpuMonitors.miVoiceUpdateOutput   = 0;
+
+    mpDacPlugin     = 0;
+    muActiveVoices  = 0;
+    muActiveContent = 0;
+}
+
+// =============================================================================
+// Environment::Create(const EnvironmentSpec&)  @ 0x826C7948  (bodied phase B3;
+// the IDA-truncated "CgsSound::Playback::Envi")
+//   env = new (spec) Environment(spec);   // the co-located carve above
+//   assert(env, "lpNewEnvironment", CgsEnvironment.h:528)
+//   handle = env (+ Acquire)
+// =============================================================================
+Handle<Environment> Environment::Create(const EnvironmentSpec& lrSpec)
+{
+    void* lpMemory = operator new(sizeof(Environment), lrSpec);
+    Environment* lpEnvironment = 0;
+    if (lpMemory)
+        lpEnvironment = ::new (lpMemory) Environment(lrSpec);   // global placement form (the class-scope carve operator would otherwise hide it)
+
+    CGS_ASSERT(lpEnvironment != 0, "lpNewEnvironment");
+
+    Handle<Environment> lhResult;
+    lhResult.SetObject(lpEnvironment);
+    if (lpEnvironment)
+        lpEnvironment->Acquire();
+    return lhResult;
+}
+
+// =============================================================================
+// Environment::GetAllocatedSize  (the debug-size read Module::Prepare's
+// gxMessageFilterFlags print inlines @0x826E90C0: console 4*(fc+vc+cc +
+// registry capacity + 35) + registry string/data sizes; host strides mirror
+// operator new's carve math)
+// =============================================================================
+size_t Environment::GetAllocatedSize()
+{
+    CGS_ASSERT(mpRegistry, "mpRegistry");
+    return sizeof(Environment)
+         + sizeof(void*) * (static_cast<size_t>(mu32FactoryCount)
+                            + mu32VoiceCount + mu32ContentCount
+                            + mpRegistry->GetEntityCapacity())
+         + sizeof(Registry)
+         + mpRegistry->GetStringTableSize()
+         + mpRegistry->GetDataSize();
 }
 
 } // namespace Playback

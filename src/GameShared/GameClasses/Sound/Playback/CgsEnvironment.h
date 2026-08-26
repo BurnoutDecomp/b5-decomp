@@ -97,10 +97,20 @@ namespace Playback
 
         static const u32 KU32_INVALID_INDEX = 0xFFFFFFFFu;   // DWARF h:365
 
-        // ---- DWARF surface (their own ledger functions; declaration-only) ----
+        // ---- DWARF surface ----
         virtual ~Environment();
         static size_t GetAllocationSize(const EnvironmentSpec& lrSpec);
+
+        // @ (the debug-size read Prepare's gxMessageFilterFlags print inlines:
+        // 4*(fc+vc+cc + registry capacity + 35) + registry string/data sizes on
+        // the console -- the 35 == the 28-word Environment + the 7-word Registry
+        // header). Bodied in CgsEnvironment.cpp (phase B3) with host strides.
         size_t GetAllocatedSize();
+
+        // @ 0x826ACF98 (bodied phase B3). Asserts sizeof + the spec allocator,
+        // then carves ONE block holding the Environment + the three handle
+        // tables + the in-place Registry (header/slots/data/strings), through
+        // the spec allocator's DoAllocate ("Environment", align 4).
         void* operator new(size_t luSize, const EnvironmentSpec& lrSpec);
         void operator delete(void* lpMemory, rw::IResourceAllocator* lpAllocator);   // h:495
         void operator delete(void* lpMemory, const EnvironmentSpec& lrSpec);         // h:163
@@ -129,6 +139,12 @@ namespace Playback
             return mpAllocator;
         }
         Registry*               GetRegistry();    // @0x82680EA0
+
+        // Host accessor for the CpuMonitors sub-object (console env+0x08): the
+        // Playback::Module::Prepare @0x826E90C0 stage-3 monitor registrations
+        // store STRAIGHT into these words on the X360 (the class is a struct
+        // there); the host keeps the member private and exposes it by name.
+        CpuMonitors& GetCpuMonitors() { return mCpuMonitors; }
 
         // DWARF h:280. Look the owning factory handle up by interned name (the X360
         // symbol IDA truncates to `Environment::Ge`; callers: Module::CreateVoice
@@ -161,6 +177,11 @@ namespace Playback
         }
 
     private:
+        // @ 0x826BFBC8 (DWARF h:378, private; bodied phase B3 -- Create's only
+        // path). Adopts the spec, wires the three handle tables + the Registry
+        // into the co-located carve tail, zeroes the tables/monitors/counters.
+        explicit Environment(const EnvironmentSpec& lrSpec);
+
         CpuMonitors             mCpuMonitors;             // h:404 (X360 +0x08)
         rw::IResourceAllocator* mpAllocator;              // h:405 (X360 +0x30 -- the DoDispose snapshot)
         u32                     mu32FactoryCount;         // h:406
