@@ -20,6 +20,48 @@
 #include "GameShared/GameClasses/Sound/Playback/RWAC/CgsGenericRwacFactory.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "rw/audio/core/PlugIn.h"   // the complete System (Lock/Unlock members; phase B5)
+
+// The process-wide System singleton the vendor System.cpp publishes from
+// CreateInstance (extern "C" System *off_83271928).
+extern "C" rw::audio::core::System* off_83271928;
+
+namespace rw
+{
+namespace audio
+{
+namespace core
+{
+    // The two host-side engine-entry shims the sound Playback callers dispatch
+    // through BY NAME (bodied 2026-08-25, faithful-audio-engine phase B5): each
+    // is the corresponding System method, exactly what the console `bl
+    // rw::audio::core::System::Lock/Unlock` sites do.
+    void RwacSystemLock(System* apSystem)
+    {
+        System::Lock(apSystem);
+    }
+    void RwacSystemUnlock(System* apSystem)
+    {
+        System::Unlock(apSystem);
+    }
+} // namespace core
+} // namespace audio
+} // namespace rw
+
+namespace CgsSound
+{
+namespace Playback
+{
+    // The process-wide default RWAC System accessor (bodied phase B5): the console
+    // inlines the off_83271928 read + the "mpSystem" assert (CgsGenericRwacFactory.h:59)
+    // at every consumer.
+    rw::audio::core::System* GetDefaultRwacSystem()
+    {
+        CGS_ASSERT(off_83271928 != 0, "mpSystem");
+        return off_83271928;
+    }
+} // namespace Playback
+} // namespace CgsSound
 
 namespace CgsSound
 {

@@ -291,6 +291,36 @@ OutputParameter& Voice::GetOutputParameter(u32 au32Index) const
     return reinterpret_cast<OutputParameter*>(lpu8Table)[au32Index];
 }
 
+// The three sibling tail-table accessors (bodied 2026-08-25, faithful-audio-
+// engine phase B5): the identical GetOffsetObject pattern over the Offsets
+// words the header pins (muSlotOffset/muSendOffset/muInputParameterOffset --
+// Voice +0x24/+0x26/+0x28), each against its own count word, exactly as
+// GetOutputParameter above.
+Slot& Voice::GetSlot(u32 au32Index) const
+{
+    CGS_ASSERT(au32Index < mu32SlotCount, "lu32Index < mu32SlotCount");
+    u8* lpu8Table = const_cast<u8*>(reinterpret_cast<const u8*>(this))
+                    + mOffsets.muSlotOffset;
+    return reinterpret_cast<Slot*>(lpu8Table)[au32Index];
+}
+
+Send& Voice::GetSend(u32 au32Index) const
+{
+    CGS_ASSERT(au32Index < mu32SendCount, "lu32Index < mu32SendCount");
+    u8* lpu8Table = const_cast<u8*>(reinterpret_cast<const u8*>(this))
+                    + mOffsets.muSendOffset;
+    return reinterpret_cast<Send*>(lpu8Table)[au32Index];
+}
+
+InputParameter& Voice::GetInputParameter(u32 au32Index) const
+{
+    CGS_ASSERT(au32Index < mu32InputParameterCount,
+               "lu32Index < mu32InputParameterCount");
+    u8* lpu8Table = const_cast<u8*>(reinterpret_cast<const u8*>(this))
+                    + mOffsets.muInputParameterOffset;
+    return reinterpret_cast<InputParameter*>(lpu8Table)[au32Index];
+}
+
 // @ 0x826ACDC8. Read a parameter's current value by name. Input parameters return their
 // value clamped to [Min,Max]; output parameters return their raw value. If neither table
 // has the name, the rodata default flt_82F93D88 (== 1.0f, unity-gain default; corroborated

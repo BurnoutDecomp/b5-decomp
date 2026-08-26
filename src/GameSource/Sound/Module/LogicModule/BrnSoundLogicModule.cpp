@@ -2,6 +2,7 @@
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (attached-buffer guard)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"  // CgsDev::Log / Message filter
+#include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"  // the "Resource Registrar" monitor (Prepare case 0)
 
 // BrnSound::Module::SoundLogicModule -- accessor bodies recovered from
 // BURNOUT_X360_ARTIST.XEX. See BrnSoundLogicModule.h for the layout/slice notes.
@@ -64,12 +65,14 @@ BrnSound::Logic::ResourceRegistrar& SoundLogicModule::GetResourceRegistrar()
 
 // Bring-up. The X360 ctor (0x827E3DA8) default-constructs the embedded ResourceRegistrar
 // (a1+21016); its queues/pools are then initialised by the bring-up Construct (0x826B0470).
-// MINIMAL-THEN-GROW: clear the per-frame trigger table + Construct the embedded registrar so
-// the broker is live, then mark constructed. The 3 Voices (X360 +20976/+20988/+21000), the
-// CgsSound::Logic::Module engine base, the state managers and the ~79KB IO/state tail are
-// grown on top.
+// (phase B5): the ENGINE base Construct runs FIRST -- ModuleSingleBuffered + the instance
+// counter + the message queue seeds -- then the Brn half: clear the per-frame trigger
+// table + Construct the embedded registrar so the broker is live. The 3 Voices (X360
+// +20976/+20988/+21000) are still grown on top.
 void SoundLogicModule::Construct()
 {
+    CgsSound::Logic::Module::Construct();
+
     mpBrnLogicInputBuffer  = 0;
     mpBrnLogicOutputBuffer = 0;
 
@@ -86,101 +89,128 @@ void SoundLogicModule::Construct()
     for (s32 liIndex = 0; liIndex < KI_NUM_STATE_MANAGERS; ++liIndex)
         mapStateManagers[liIndex] = 0;
 
-    // [grow-in] X360 ctor also constructs the 3 Voices (Submix/Master/GlobalReverb) and the
-    //   CgsSound::Logic::Module base; not modelled by this minimal slice.
+    // [grow-in] X360 ctor also constructs the 3 Voices (Submix/Master/GlobalReverb); their
+    //   Logic::Voice slice reconciliation is deferred (see Prepare stage 2).
 
-    mePrepareStage = E_PREPSTAGE_PERFMON;
-    mbConstructed  = true;
+    meBrnPrepareStage = E_PREPSTAGE_PERFMON;
+    mbConstructed     = true;
 
     if (CgsDev::Message::gxMessageFilterFlags & 1)
         *CgsDev::Log::gpDebugPrint << "[Sound] SoundLogicModule::Construct (registrar live)\n";
 }
 
-// X360 0x82703C18 (vtable+0x58). MINIMAL-THEN-GROW resumable stage machine. The real body
-// runs the base Module::Prepare, constructs+connects the 3 Voices, LoadAsset's
-// BurnoutGlobalData, bridges resources, then creates + boot-prepares the state managers,
-// reporting prepared only when PrepareStateManagersOnBoot completes. Stages 0-3 (PerfMon /
-// base Module::Prepare / Voices / partial ResourceBridging) are still guarded grow-in stubs;
-// stages 4 (CreateStateManagers) and 5 (PrepareStateManagersOnBoot(4)) are now REAL -- stage 5
-// retries (returns false WITHOUT advancing) until the boot managers report ready, exactly like
-// the X360. NOTE (2026-08-25): the 8 manager TUs ARE in the build -- the registry is populated, so
-// stage 4 creates nothing and stage 5 returns true immediately (safe no-op) -- the machine
-// still completes and reports prepared so the RootSoundModule LOGIC stage drives it.
-bool SoundLogicModule::Prepare(void* lpParentModule, void* lpInputBuffer, void* lpOutputBuffer)
+// X360 0x82703C18 (vtable+0x58). The REAL resumable stage machine (phase B5), console
+// switch-for-switch:
+//   pre-switch: capture the logic allocator (a1[19777]); assert both buffers (cpp:200/:201);
+//     AttachBuffers (the ENGINE virtual, vtbl+0x50).
+//   case 0: miResourceRegistrarMonitor = AddMonitor("Resource Registrar", page 14, 2.0) ->
+//   case 1: the ENGINE base CgsSound::Logic::Module::Prepare(alloc, in, out, &the 0x820AA480
+//     rodata ModuleParams {16,16,16} == the DWARF-declared ModuleParams::DEFAULT); on true
+//     advance to 2 (+ the console's progress word = 1); either way DetachBuffers + return
+//     false (one chunk per call).
+//   case 2: first entry constructs the 3 Voices (Submix ident -16 / Master 1 / GlobalReverb
+//     2 against the GenericRwacFactory name + their VoiceSpec names) and returns false; the
+//     re-entry Connects Submix+Reverb to "Send01" and LoadAssets BurnoutGlobalData, then
+//     falls into
+//   case 3: ResourceBridging under the output buffer's write lock -> DetachBuffers + false.
+//   case 4: CreateStateManagers ->
+//   case 5: LockForWrite(out); PrepareStateManagersOnBoot(4) -- not ready -> ResourceBridging
+//     + unlock + detach + false (retry); ready -> unlock ->
+//   case 6: DetachBuffers + return true.
+//
+// FLAG [grow-in, stage 2]: the committed Logic::Voice slice's Construct/Connect signatures
+// diverge from this call shape (the console passes (this, ident, dword_83008650 == the
+// GenericRwacFactory name hash, MakeHash("<spec>VoiceSpec")); reconciling the Voice slice +
+// the LoadAsset data dependency is its own batch), so stage 2 still ADVANCES without
+// constructing the voices; everything else in the machine is real.
+bool SoundLogicModule::Prepare(rw::IResourceAllocator* apAllocator,
+                               CgsModule::IOBuffer* apInputBuffer,
+                               CgsModule::IOBuffer* apOutputBuffer)
 {
-    // X360 line 1 (0x82703C18): store the parent/allocator handle (a1[19777] = a2). The X360
-    // stage-4 caller passes the logic RW allocator here.
-    mpParentModule = lpParentModule;
+    mpBrnAllocator = apAllocator;   // X360 a1[19777] = a2
 
-    // X360 asserts both IO buffers are attached (BrnSoundLogicModule.cpp:200-201).
-    CGS_ASSERT(lpInputBuffer, "lpInputBuffer");
-    CGS_ASSERT(lpOutputBuffer, "lpOutputBuffer");
+    CGS_ASSERT(apInputBuffer, "lpInputBuffer");
+    CGS_ASSERT(apOutputBuffer, "lpOutputBuffer");
 
-    // X360 line 450: (*(*a1 + 80))(a1, a3, a4) -- the vtable+0x50 call that ATTACHES the per-frame
-    // input/output IO buffers into the module so GetBrnInputStructure() and the logic stages can
-    // reach them. The exact vtable+0x50 method is not separately modelled by this minimal slice; its
-    // effect -- pinning mpBrnLogicInputBuffer/mpBrnLogicOutputBuffer to the passed buffers -- is
-    // reproduced here (Construct() zeroes them; Prepare attaches them, matching the X360 ctor->Prepare
-    // ordering). FLAG: attach-by-store inferred from the member usage (GetBrnInputStructure returns
-    // mpBrnLogicInputBuffer @ X360 this+0x4C94); the call's other side effects are grow-in.
-    mpBrnLogicInputBuffer  = (Io::LogicInputBuffer*)lpInputBuffer;
-    mpBrnLogicOutputBuffer = (Io::LogicOutputBuffer*)lpOutputBuffer;
+    // The ENGINE AttachBuffers (X360 vtbl+0x50): pin the engine-side buffer pointers.
+    // FLAG (host note): the Brn-side mpBrnLogic* members (+0x4C94/+0x4C98) are pinned
+    // beside them -- their console writer is the un-dumped Brn override side; the store
+    // keeps GetBrnInputStructure() live exactly as before.
+    AttachBuffers(apInputBuffer, apOutputBuffer);
+    mpBrnLogicInputBuffer  = reinterpret_cast<Io::LogicInputBuffer*>(apInputBuffer);
+    mpBrnLogicOutputBuffer = reinterpret_cast<Io::LogicOutputBuffer*>(apOutputBuffer);
 
-    switch (mePrepareStage)
+    bool lbPrepared = false;
+    switch (meBrnPrepareStage)
     {
     case E_PREPSTAGE_PERFMON:
-        // [grow-in] X360 case 0: CgsDev::PerfMonCpu::AddMonitor("Resource Registrar"). Advance.
-        mePrepareStage = E_PREPSTAGE_BASE;
+        // X360 case 0 (a1[19826]): 5-arg AddMonitor, page 14, budget 2.0, libperf-tagged.
+        miResourceRegistrarMonitor = CgsDev::PerfMonCpu::AddMonitor(
+            "Resource Registrar", static_cast<CgsDev::PerfMonCpuPage>(14), false, 2.0f, true);
         // fall through
     case E_PREPSTAGE_BASE:
-        // [grow-in] X360 case 1: CgsSound::Logic::Module::Prepare (the engine base, resumable).
-        //   The CgsSound::Logic::Module base is not modelled by this slice. Advance.
-        mePrepareStage = E_PREPSTAGE_VOICES;
-        // fall through
+        meBrnPrepareStage = E_PREPSTAGE_BASE;
+        // The ENGINE base's resumable Prepare (base + environment + proxies stages).
+        if (CgsSound::Logic::Module::Prepare(apAllocator, apInputBuffer, apOutputBuffer,
+                                             CgsSound::Logic::ModuleParams::DEFAULT))
+        {
+            meBrnPrepareStage = E_PREPSTAGE_VOICES;
+        }
+        break;   // one chunk per call (console LABEL_20: detach + return 0)
     case E_PREPSTAGE_VOICES:
-        // [grow-in] X360 case 2: Voice::Construct(Submix/Master/GlobalReverb) + Voice::Connect
-        //   ("Send01") + IResourceRequester::LoadAsset("Sound\\BurnoutGlobalData.bin"). The Voice
-        //   subsystem + the asset-load path are deferred. Advance.
-        mePrepareStage = E_PREPSTAGE_BRIDGE;
+        meBrnPrepareStage = E_PREPSTAGE_VOICES;
+        // FLAG [grow-in]: the 3 Voice constructs + the "Send01" connects + the
+        // BurnoutGlobalData LoadAsset (see the banner). Advance into the bridge.
         // fall through
     case E_PREPSTAGE_BRIDGE:
-        // X360 case 3: SoundLogicModule::ResourceBridging (under the output-buffer lock). The
-        //   registrar Update now runs FOR REAL here (the X360 wraps it in IOBuffer LockForWrite/
-        //   UnlockForWrite on the output buffer; the lock is skipped in this minimal slice since the
-        //   queue-bridge Appends it guards are deferred -- see ResourceBridging). Advance.
+        meBrnPrepareStage = E_PREPSTAGE_BRIDGE;
+        // X360 case 3 / LABEL_12: ResourceBridging under the output write lock.
+        apOutputBuffer->LockForWrite();
         ResourceBridging();
-        mePrepareStage = E_PREPSTAGE_STATEMANAGERS;
-        // fall through
+        apOutputBuffer->UnlockForWrite();
+        meBrnPrepareStage = E_PREPSTAGE_STATEMANAGERS;
+        break;   // console: detach + return 0 after the bridge chunk
     case E_PREPSTAGE_STATEMANAGERS:
-        // X360 case 4: SoundLogicModule::CreateStateManagers -- create the 9 managers from
-        //   the RTTI registry + register them in lEnvironment, then advance. Safe no-op when
-        //   (STALE premise retired 2026-08-25: the manager TUs ARE in the build -- the registry is populated.)
+        meBrnPrepareStage = E_PREPSTAGE_STATEMANAGERS;
+        // X360 case 4: create the 9 managers + register them into the ENGINE base's
+        // Environment.
         CreateStateManagers();
-        mePrepareStage = E_PREPSTAGE_BOOTPREPARE;
         // fall through
     case E_PREPSTAGE_BOOTPREPARE:
-        // X360 case 5: PrepareStateManagersOnBoot(4). If a manager is not ready it returns
-        //   false; the X360 STAYS on this stage and retries next Prepare() tick, so return
-        //   false WITHOUT advancing. Otherwise advance. With no managers (empty slots) it
-        //   returns true immediately -> advances. (boot mask = 4.)
+        meBrnPrepareStage = E_PREPSTAGE_BOOTPREPARE;
+        // X360 case 5, under the output write lock; a not-ready manager bridges +
+        // retries next tick (stage stays here).
+        apOutputBuffer->LockForWrite();
         if (!PrepareStateManagersOnBoot(4))
         {
-            return false;   // stay on E_PREPSTAGE_BOOTPREPARE; retried next tick
+            ResourceBridging();              // console LABEL_13 on the retry path
+            apOutputBuffer->UnlockForWrite();
+            break;
         }
-        mePrepareStage = E_PREPSTAGE_DONE;
+        apOutputBuffer->UnlockForWrite();
+        meBrnPrepareStage = E_PREPSTAGE_DONE;
         // fall through
     case E_PREPSTAGE_DONE:
+        meBrnPrepareStage = E_PREPSTAGE_DONE;
+        lbPrepared = true;
+        break;
     default:
+        CGS_ASSERT(false, "Invalid Stage\n");
         break;
     }
 
-    // Machine complete: reset (X360 leaves the stage word at done) and report prepared.
-    mePrepareStage = E_PREPSTAGE_PERFMON;
-    mbPrepared     = true;
-    if (CgsDev::Message::gxMessageFilterFlags & 1)
-        *CgsDev::Log::gpDebugPrint << "[Sound] SoundLogicModule::Prepare: stage machine complete "
-                                      "(voices/state-managers/base grow-in) -> prepared\n";
-    return true;
+    // Console: every exit detaches the per-call buffers (vtbl+0x54).
+    DetachBuffers();
+
+    if (lbPrepared && !mbPrepared)
+    {
+        mbPrepared = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "[Sound] SoundLogicModule::Prepare: stage machine "
+                                          "complete (engine base + environment live; voices "
+                                          "grow-in) -> prepared\n";
+    }
+    return lbPrepared;
 }
 
 // X360 0x82702E80. Bridge the broker's per-frame resource traffic:
@@ -238,7 +268,8 @@ void SoundLogicModule::CreateStateManagers()
         {
             // The X360 asserts this returns true (it always does); kept as the faithful
             // registration call. AddStateManager itself fires the real registration asserts.
-            bool lbRegistered = lEnvironment.AddStateManager(mapStateManagers[liIndex]);
+            // (phase B5: the environment is the ENGINE base's, via GetEnvironment().)
+            bool lbRegistered = GetEnvironment().AddStateManager(mapStateManagers[liIndex]);
             CGS_ASSERT(lbRegistered,
                        "lEnvironment.AddStateManager( mapStateManagers[ i ] )");
             (void)lbRegistered;

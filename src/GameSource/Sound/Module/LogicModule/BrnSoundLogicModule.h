@@ -12,7 +12,8 @@
 // BrnSoundLogicModule only needs IResourceRequester/ResourceRegistrar, so it takes the
 // canonical home directly and avoids the ODR-split template entirely.
 #include "GameSource/Sound/BrnResourceRegistrar.h"               // BrnSound::Logic::IResourceRequester (base) + ResourceRegistrar (member)
-#include "GameShared/GameClasses/Sound/Logic/CgsEnvironment.h"   // CgsSound::Logic::Environment (embedded by value) + canonical CgsSound::Logic::StateManager (the 9-slot map + the CreateStateMan factory)
+#include "GameShared/GameClasses/Sound/Logic/CgsEnvironment.h"   // CgsSound::Logic::Environment + canonical CgsSound::Logic::StateManager (the 9-slot map + the CreateStateMan factory)
+#include "GameShared/GameClasses/Sound/Logic/CgsSoundLogicModule.h" // CgsSound::Logic::Module -- the REAL engine base (phase B5)
 
 // =============================================================================
 // BrnSound::Module::SoundLogicModule
@@ -63,7 +64,17 @@ namespace Io
     class LogicOutputBuffer;
 }
 
-struct SoundLogicModule : public BrnSound::Logic::IResourceRequester
+// (2026-08-25, faithful-audio-engine phase B5): the class now derives the REAL
+// CgsSound::Logic::Module engine base as its PRIMARY base (console +0x00..0x4C8F
+// -- the base's mPlaybackModule at +0x238 is exactly the playback module the
+// RootSoundModule reaches at root+0x4B8 == +0x280 + 0x238), with
+// IResourceRequester as the SECOND base at console +0x4C90 (the wave-1
+// "GetResourceRegistrar +0x4C90 sub-object walk" -- its @0x826838C0 `addi r3,
+// 0x588` is relative to THAT sub-object: 0x4C90 + 0x588 == mResourceRegistrar
+// @+0x5218). The former by-value lEnvironment member is RETIRED: the LOGIC
+// Environment lives in the engine base (+0x2950), reached via GetEnvironment().
+struct SoundLogicModule : public CgsSound::Logic::Module,
+                          public BrnSound::Logic::IResourceRequester
 {
     // BrnSoundLogicModule.h:58 (DWARF).
     static const s32 KI_MAX_SOUND_TRIGGER_ACTIONS = 16;
@@ -89,27 +100,41 @@ struct SoundLogicModule : public BrnSound::Logic::IResourceRequester
     };
 
     SoundLogicModule()
-        : mpBrnLogicInputBuffer(0)
+        : CgsSound::Logic::Module()
+        , mpBrnLogicInputBuffer(0)
         , mpBrnLogicOutputBuffer(0)
-        , mpParentModule(0)
-        , mePrepareStage(E_PREPSTAGE_PERFMON)
+        , mpBrnAllocator(0)
+        , meBrnPrepareStage(E_PREPSTAGE_PERFMON)
         , mbConstructed(false)
         , mbPrepared(false)
     {
     }
     virtual ~SoundLogicModule() {}
 
-    // Bring-up (X360 ctor 0x827E3DA8 + the registrar bring-up 0x826B0470). MINIMAL-THEN-GROW:
-    // clear the trigger table + Construct the embedded ResourceRegistrar so the broker's
-    // queues/pools are live; the 3 Voices, the CgsSound::Logic::Module base, the state
-    // managers and the ~79KB IO/state tail are grown on top. Mark constructed.
-    void Construct();
+    // Bring-up (X360 ctor 0x827E3DA8 + the registrar bring-up 0x826B0470): the engine
+    // base Construct (chains ModuleSingleBuffered + the message queue + the embedded
+    // playback module's seeds), then clear the trigger table + Construct the embedded
+    // ResourceRegistrar so the broker's queues/pools are live. The 3 Voices are still
+    // grown on top. (Overrides the engine base's virtual Construct -- the root
+    // dispatches vtable slot 0 on this+0x280.)
+    void Construct() override;
 
-    // Prepare (X360 0x82703C18, via vtable+0x58). MINIMAL-THEN-GROW resumable stage machine:
-    // runs forward from mePrepareStage; every stage is a clearly-FLAGged grow-in stub that
-    // advances (Voice / CreateStateManagers / PrepareStateManagersOnBoot / ResourceBridging /
-    // base Module::Prepare all deferred), reporting prepared when the machine completes.
-    bool Prepare(void* lpParentModule, void* lpInputBuffer, void* lpOutputBuffer);
+    // Prepare (X360 0x82703C18, via vtable+0x58). The REAL resumable stage machine
+    // (phase B5): capture the logic RW allocator; AttachBuffers; then per the console
+    // switch -- perfmon (0), the ENGINE base Module::Prepare with the 0x820AA480
+    // rodata ModuleParams {16,16,16} (1), the 3 Voices + LoadAsset (2 -- still a
+    // FLAG'd grow-in), ResourceBridging under the output-buffer write lock (3),
+    // CreateStateManagers (4), PrepareStateManagersOnBoot(4) (5). The console
+    // advances ONE chunk per call in the early stages (returns false after 0+1 and
+    // after the voice constructs), detaching the buffers at every exit.
+    bool Prepare(rw::IResourceAllocator* apAllocator,
+                 CgsModule::IOBuffer* apInputBuffer,
+                 CgsModule::IOBuffer* apOutputBuffer);
+
+    // The engine base sizes the LOGIC Environment's state-manager map from this
+    // (Prepare's CreateEnvironment stage: {allocator, GetNumberOfStates()}); the 9
+    // AddStateManager registrations in CreateStateManagers demand exactly the 9.
+    virtual s32 GetNumberOfStates() override { return KI_NUM_STATE_MANAGERS; }
 
     // X360 0x82702E80. Per-frame resource bridge: drive the embedded ResourceRegistrar's Update
     // (drain its request queues, resolve handles, GC unreferenced files), then bridge its two
@@ -162,35 +187,39 @@ private:
     // Members in DWARF source order (BrnSoundLogicModule.h:365-383). Only the two
     // touched members are real typed members; the rest of the class tail is omitted
     // from this slice (see header note).
-    Io::LogicInputBuffer*  mpBrnLogicInputBuffer;   // BrnSoundLogicModule.h:365
-    Io::LogicOutputBuffer* mpBrnLogicOutputBuffer;  // BrnSoundLogicModule.h:366
+    Io::LogicInputBuffer*  mpBrnLogicInputBuffer;   // BrnSoundLogicModule.h:365 (X360 this+0x4C94)
+    Io::LogicOutputBuffer* mpBrnLogicOutputBuffer;  // BrnSoundLogicModule.h:366 (X360 this+0x4C98)
 
-    // The parent/allocator handle Prepare captures first (X360 a1[19777] = a2 -- the logic RW
-    // allocator the stage-4 caller passes). Pinned by name; not byte-offset-asserted.
-    void* mpParentModule;                           // X360 this+19777
+    // The logic RW allocator Prepare captures first (X360 word a1[19777] = a2 -- the
+    // &gLogicTestBedAlloc the root's LOGIC stage passes; DWARF member name pending, held
+    // by usage). Distinct from the ENGINE base's mpAllocator (which the base Prepare
+    // adopts from the same argument).
+    rw::IResourceAllocator* mpBrnAllocator;         // X360 word 19777 (byte +0x4D04)
 
     Array<BrnGameState::GameStateModuleIO::SoundTriggerAction, 16> maTriggerActions; // h:372 (X360 this+0x4CA0)
 
-    BrnSound::Logic::ResourceRegistrar mResourceRegistrar; // h:383 (X360 this+0x588)
+    BrnSound::Logic::ResourceRegistrar mResourceRegistrar; // h:383 (+0x588 from the IResourceRequester sub-object == X360 this+0x5218)
 
-    // The sound-logic Environment, embedded BY VALUE (X360 this+10576). CreateStateManagers
-    // registers each created manager into it (lEnvironment.AddStateManager). By-value embed
-    // matches the X360 (it lives inline in the module, not behind a pointer) and the existing
-    // mResourceRegistrar by-value pattern. Pinned by name; offset NOT asserted (host vs X360
-    // pointer widths differ -- see header LAYOUT NOTE).
-    CgsSound::Logic::Environment lEnvironment;             // X360 this+10576
+    // (phase B5: the by-value lEnvironment member is RETIRED -- the LOGIC Environment is
+    // the ENGINE base's mEnvironment @+0x2950, reached via GetEnvironment().)
 
     // The fixed bank of 9 sound-logic state managers (X360 this+79064). Each slot is filled
     // by CreateStateManagers via StateManager::CreateStateMan(i, this) (null when no leaf is
     // registered for that id). Pinned by name; offset NOT asserted.
     CgsSound::Logic::StateManager* mapStateManagers[KI_NUM_STATE_MANAGERS]; // X360 this+79064
 
-    // Prepare-machine bookkeeping (X360 stage word @ this+19775 + the constructed/prepared
-    // flags near it). Pinned by name; the omitted ~79KB of Voice/state-manager/IO members
-    // sit between maTriggerActions and these in the real layout (grow-in).
-    s32  mePrepareStage;
+    // Prepare-machine bookkeeping (the BRN machine's stage word, X360 word a1[19775] ==
+    // byte +0x4CFC, DISTINCT from the engine base's mePrepareStage @+0x4C84; +0x4D00 ==
+    // word a1[19776], the voices/base progress word the console stamps 1/2 -- folded into
+    // the stage machine here). Pinned by name; the omitted ~79KB of Voice/state-manager/IO
+    // members sit between maTriggerActions and these in the real layout (grow-in).
+    s32  meBrnPrepareStage;
     bool mbConstructed;
     bool mbPrepared;
+
+    // The "Resource Registrar" CPU monitor handle (X360 word a1[19826] == byte
+    // +0x4D48; Prepare case 0 registers it).
+    s32  miResourceRegistrarMonitor;
 };
 
 } // namespace Module

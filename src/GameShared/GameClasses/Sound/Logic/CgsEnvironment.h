@@ -7,7 +7,7 @@
 #include "SDKs/EATech/include/Nicotine/IDynamicMixer.hpp"        // Nicotine::IDynamicMixer (DynamicMixer base)
 
 namespace rw { struct IResourceAllocator; }
-namespace CgsSound { namespace Io { struct MessageHeader; } }
+namespace CgsSound { namespace Io { class MessageHeader; } }
 
 // =============================================================================
 // CgsSound::Logic::Environment (+ EnvironmentSpec / ModuleParams / DynamicMixer)

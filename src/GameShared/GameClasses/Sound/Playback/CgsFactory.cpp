@@ -105,5 +105,54 @@ void Factory::DoDispose()
     lpAllocator->DoFree(lResource);
 }
 
+// DWARF CgsFactory.h:91 (template; bodied phase B5). The voice mirror of
+// CreateContent above -- the wave-6 asm reconciliation attests the shape (the
+// same dispatch-register-clear-on-reject walk, u32 return compared against
+// (u32)-1 at the Module::CreateVoice caller): dispatch the subclass
+// DoCreateVoice (vtable slot 2), assert the out-handle owns the produced voice,
+// register it with the environment (Environment::AddVoice), clearing the handle
+// when registration rejects. The X360 emits one instantiation per T.
+template <typename T>
+u32 Factory::CreateVoice(const VoiceSpec& akrSpec, Handle<T>& arHandleOut, u32 au32Ident)
+{
+    if (!DoCreateVoice(akrSpec, reinterpret_cast<Handle<Voice>&>(arHandleOut), au32Ident))
+    {
+        return static_cast<u32>(-1);
+    }
+
+    CGS_ASSERT(arHandleOut.GetObject() != 0, "mpObject");
+
+    u32 luResult = Environment::AddVoice(mEnvironment, arHandleOut.GetObject());
+    if (luResult == static_cast<u32>(-1))
+    {
+        arHandleOut = Handle<T>(0);
+        return static_cast<u32>(-1);
+    }
+    return luResult;
+}
+
+// The one in-build instantiation (Module::CreateVoice @0x826D7B00's T = Voice).
+template u32 Factory::CreateVoice<Voice>(const VoiceSpec&, Handle<Voice>&, u32);
+
+// The base subclass-hook defaults (phase B5 -- this TU now emits the Factory
+// vtable, which demands the three symbols exactly as the header's mount note
+// predicted). No standalone X360 dump exists for the base slots (every live
+// vtable carries a concrete factory's override); the bases decline to create
+// and tick nothing, so an un-overridden slot behaves as "this factory offers
+// none" -- the only reachable behaviour until the concrete factory slices land.
+bool Factory::DoCreateVoice(const VoiceSpec& /*akrSpec*/, Handle<Voice>& /*arHandleOut*/,
+                            u32 /*au32Ident*/)
+{
+    return false;
+}
+bool Factory::DoCreateContent(const ContentSpec& /*akrSpec*/, Handle<Content>& /*arHandleOut*/,
+                              u32 /*au32Ident*/)
+{
+    return false;
+}
+void Factory::DoUpdate(f32 /*af32DeltaTime*/)
+{
+}
+
 } // namespace Playback
 } // namespace CgsSound

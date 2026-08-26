@@ -453,3 +453,215 @@ namespace RealmcIface
     {
     }
 }
+
+// ===========================================================================
+// Faithful-audio-engine phase B5 mount-closure (2026-08-25).
+//
+// The playback/logic engine TU group entered the exe source list (CgsSoundLogic-
+// Module / CgsSoundPlaybackModule(+IO) / Playback CgsEnvironment / CgsVoice /
+// CgsFactory / CgsGenericRwacFactory), which makes the linker want the symbols
+// below. Each is a declared-only surface whose real body lands with its own
+// ledgered slice; every one is INERT on the boot path today -- the paths that
+// reach them (voice attach, content lookup by factory name, registry dumps, the
+// DAC plug-in events) only run once item-3 content / the phase-D DAC land.
+// ===========================================================================
+
+#include "GameShared/GameClasses/Sound/Playback/Module/CgsSoundPlaybackModule.h"  // the factory-shim decls + Playback surface
+#include "GameShared/GameClasses/Sound/Logic/CgsEnvironment.h"                    // Logic Environment (Notify)
+
+namespace CgsSound
+{
+namespace Playback
+{
+    // Voice::Attach (DWARF CgsVoice.h:501; real body = the slot-resolve +
+    // Slot::Attach walk, its own slice). Reached only from Module::AttachVoice
+    // (voice-attach traffic -- none until content). False = "did not attach".
+    bool Voice::Attach(Name /*akName*/, Handle<Content>& /*arhContent*/)
+    {
+        return false;
+    }
+
+    // Environment::GetFactory (DWARF CgsEnvironment.h:280; the by-name factory
+    // lookup, its own slice). Reached from Module::CreateVoice/CreateContent.
+    // Empty handle = "no factory registered under that name".
+    Handle<Factory> Environment::GetFactory(Name /*aName*/)
+    {
+        return Handle<Factory>(0);
+    }
+
+    // Environment::Allocate (DWARF CgsEnvironment.h; the environment's carve
+    // helper). Same allocator route the dispose walk attests (the env's rw
+    // allocator), expressed through the committed <5>-descriptor idiom.
+    void* Environment::Allocate(u32 lu32Size, u32 lu32Alignment, const char* lpcName)
+    {
+        rw::BaseResourceDescriptors<5> lDescriptor;
+        for (u32 luEntry = 0u; luEntry < 5u; ++luEntry)
+        {
+            lDescriptor.m_baseResourceDescriptors[luEntry].m_size      = 0u;
+            lDescriptor.m_baseResourceDescriptors[luEntry].m_alignment = 1u;
+        }
+        lDescriptor.m_baseResourceDescriptors[0].m_size      = lu32Size;
+        lDescriptor.m_baseResourceDescriptors[0].m_alignment = lu32Alignment;
+        rw::Resource lResource = GetAllocator()->DoAllocate(
+            reinterpret_cast<const rw::ResourceDescriptor&>(lDescriptor), lpcName);
+        return lResource.m_baseResources[0];
+    }
+
+    // Environment::operator delete(void*) (DWARF h:167): demanded by the
+    // compiler-emitted scalar deleting destructor; the console never scalar-
+    // deletes an Environment (disposal is DoDispose -> the allocator-keyed
+    // operator delete), so this plain form has no carve to hand back.
+    void Environment::operator delete(void* /*lpMemory*/)
+    {
+    }
+
+    // Registry::Dump (DWARF CgsRegistry.h:137; the debug registry printer, its
+    // own slice). Reached from Module::DumpRegistries (a debug-page action).
+    void Registry::Dump()
+    {
+    }
+
+    // The per-factory registry accessors + the reserved-name/init-submix hooks
+    // (declared in CgsSoundPlaybackModule.h, each FLAG'd DEFER there -- the
+    // AEMS-keystone surface). Null/empty until the factory slices land.
+    Registry* GetRwacFactoryRegistry(Factory* /*lpRwacFactory*/)
+    {
+        return 0;
+    }
+    Registry* GetAemsFactoryRegistry(Factory* /*lpAemsFactory*/)
+    {
+        return 0;
+    }
+    const Name& GenericRwacFactorySkName()
+    {
+        // The interned source of the console dword_83008650 is not decoded yet
+        // (the writer is the RWAC factory bring-up); an uninterned Name cannot
+        // match any real request name, so the init-submix assert path stays cold.
+        static const Name SK_NAME;
+        return SK_NAME;
+    }
+    void HACK_SetSnd9InitSubmix(Handle<Voice>* /*lphVoice*/)
+    {
+    }
+
+    // The two interned-name globals Environment::GetR keys on (X360
+    // dword_83008650 / dword_830080A8 -- both written by the un-decoded RWAC
+    // bring-up interns; zero matches nothing, so GetR returns empty until then).
+    const u32 gu32VoiceTypeTag      = 0;
+    const u32 gu32NamedSlotSentinel = 0;
+
+    // The serialised-entity type names Registry::GetEntity<T> compares slots
+    // against -- interned from the type-name literals, the convention the
+    // committed VoiceSchema::SK_TYPE_NAME("VoiceSchema") definition attests.
+    const Name ContentSpec::SK_TYPE_NAME("ContentSpec");
+    const Name VoiceSpec::SK_TYPE_NAME("VoiceSpec");
+}
+}
+
+namespace CgsSound
+{
+namespace Logic
+{
+    // Logic Environment::Notify (DWARF CgsEnvironment.h; the per-message state-
+    // manager dispatch, its own phase-C slice). Reached from the engine
+    // Module::ProcessMessageQueue -- which only runs once the per-frame pump
+    // (phase C) drives Module::Update.
+    void Environment::Notify(const CgsSound::Io::MessageHeader* /*apkMessage*/) const
+    {
+    }
+}
+}
+
+namespace rw
+{
+namespace audio
+{
+namespace core
+{
+    // The 3-arg engine event entry Environment::StartDac/StopDac dispatch
+    // (events 3/4 at the DAC plug-in). The vendor PlugIn TU models the 1-arg
+    // command-ring Event only; the 3-arg form lands with the phase-D Dac slice,
+    // and mpDacPlugin is null until then (StartDac asserts it first).
+    void RwacPlugInEvent(PlugIn* /*apPlugIn*/, int /*aiEvent*/, int /*aiArg*/)
+    {
+    }
+}
+}
+}
+
+namespace CgsSound
+{
+namespace Playback
+{
+    // ---- the Voice base-virtual surface (phase B5 mount closure) ----
+    // playback_voice.obj emits the Voice vtable; the base slots below have no
+    // standalone X360 dumps (every live vtable carries a subclass override).
+    // Each base declines/idles -- the only reachable behaviour until the
+    // concrete voice slices land (no Voice object exists before item-3 content).
+    f32 Voice::GetCpuTicks()
+    {
+        return 0.0f;
+    }
+    void Voice::DisplayVoiceCpu(f32* /*lpfX*/, f32* /*lpfY*/, f32 /*lfScale*/, bool /*lbDetail*/)
+    {
+    }
+    Voice::EProfileVoiceType Voice::GetProfileVoiceType()
+    {
+        return static_cast<EProfileVoiceType>(0);
+    }
+    void Voice::DoDispose()
+    {
+        // The real disposer is the environment-allocator carve return (the
+        // wave-3 dispose pattern); lands with the Voice keystone slice.
+    }
+    void Voice::DoUpdate(System* /*apSystem*/, f32 /*af32DeltaTime*/)
+    {
+    }
+    bool Voice::DoConnectSend(u32 /*au32Index*/, SubmixVoice* /*apSubmix*/)
+    {
+        return false;
+    }
+    bool Voice::DoRemove()
+    {
+        // "Removal work complete" -- lets Voice::Update advance REMOVING ->
+        // REMOVED immediately, the degenerate base behaviour.
+        return true;
+    }
+
+    // ---- the Slot per-frame surface (Voice::Update's callees; their own
+    //      ledgered slices -- CgsVoice.h:344 marks them DEFER) ----
+    void Slot::Update(System* /*apSystem*/, Voice& /*arVoice*/,
+                      PlayerVoice& /*arPlayerVoice*/, f32 /*af32DeltaTime*/)
+    {
+    }
+    void Slot::Detach(Voice& /*arVoice*/)
+    {
+    }
+
+    // Content::OnAttach (CgsContent.h marks it DEFER; the attach-side load
+    // reference). Inert until voice-attach traffic exists.
+    void Content::OnAttach(Voice& /*arVoice*/, Slot& /*arSlot*/)
+    {
+    }
+}
+}
+
+namespace CgsSound
+{
+namespace Playback
+{
+    // ContentType::GetContentClass @ 0x82691778 -- an exact copy of the
+    // canonical body in CgsDataStructures.cpp, carried here because that TU is
+    // NOT in the exe source list yet (its EntityFixer fix hooks need the
+    // declared-only Entity member-pointer fixup templates -- their own slice);
+    // the resolved-pointer accessor is all the mounted playback module needs.
+    // Remove this copy when CgsDataStructures.cpp mounts.
+    const ContentClass& ContentType::GetContentClass() const
+    {
+        CGS_ASSERT(mpContentClass != 0, "mpContentClass");
+        CGS_ASSERT((reinterpret_cast<uintptr_t>(mpContentClass) & 1) == 0,
+                   "This Data Structure is not resolved. (Name ");
+        return *mpContentClass;
+    }
+}
+}

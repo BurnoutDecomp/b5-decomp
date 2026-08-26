@@ -71,27 +71,57 @@ public:
     // never emits a distinct Handle() out-of-line -- it is the inlined zero store).
     Handle() : mpObject(0) {}
 
-    // CgsHandle.h:199 / 209 / 217 / 226 -- ctor/copy/dtor/assign do the
-    // Acquire/Release ref-counting. Declared-only (other-TU surface).
-    explicit Handle(T* lpObject);
-    Handle(const Handle& lkrOther);
-    // dtor: the real body drops the owned ref (ReleaseObject -> Release). That ref-count is
-    // a FLAG'd, not-yet-reconstructed surface, and no out-of-line body exists for any
-    // instantiation, so define it inline as the empty no-op the current design already
-    // implies -- otherwise every Handle<T>::~Handle use (e.g. Logic::Voice's mVoiceHandle)
-    // is an unresolved external. Replace with the out-of-line Release body when it lands.
-    ~Handle() {}
-    Handle& operator=(const Handle& lkrOther);
+    // CgsHandle.h:199 -- adopt a raw pointer. Inline plain store (phase B5): every
+    // committed call site either passes null (the GetVoice/GetR/CreateContent empty
+    // handles) or takes its reference explicitly beside the store (the Acquire the
+    // :199 ctor's ref-counting implies is applied manually in those bodies) --
+    // consistent with the empty inline dtor below. Revisit with the handle slice.
+    explicit Handle(T* lpObject) : mpObject(lpObject) {}
 
-    // CgsHandle.h:251 / 259 / 268 / 277. Validity / equality. Declared-only.
-    bool operator!() const;
-    operator bool() const;
+    // CgsHandle.h:209 / 217 / 226 -- copy/assign do the Acquire/Release
+    // ref-counting. Declared-only (other-TU surface).
+    Handle(const Handle& lkrOther);
+    // dtor: the real body drops the owned ref (ReleaseObject -> Release). That
+    // ref-count surface is not reconstructed yet and no out-of-line body exists for
+    // any instantiation, so the inline empty body is what the current interim
+    // ref-model implies (the committed call sites pair Acquire/Release explicitly
+    // beside their stores) -- otherwise every Handle<T>::~Handle use (e.g.
+    // Logic::Voice's mVoiceHandle) is an unresolved external. Replace with the
+    // out-of-line Release body when the handle slice lands.
+    ~Handle() {}
+
+    // CgsHandle.h:226 -- assign. Inline plain store (phase B5, same interim
+    // ref-model caveat as the adopt ctor above: the committed call sites manage
+    // the Acquire/Release pair explicitly; the only in-build assign is
+    // Factory::CreateContent's null-handle clear). Revisit with the handle slice.
+    Handle& operator=(const Handle& lkrOther)
+    {
+        mpObject = lkrOther.mpObject;
+        return *this;
+    }
+
+    // CgsHandle.h:251 / 259. Validity -- the owned-pointer test (the X360
+    // inlines the null compare at every site). Made header-inline phase B5.
+    bool operator!() const     { return mpObject == 0; }
+    operator bool() const      { return mpObject != 0; }
+
+    // CgsHandle.h:268 / 277. Equality. Declared-only.
     bool operator==(const Handle& lkrOther) const;
     bool operator!=(const Handle& lkrOther) const;
 
-    // CgsHandle.h:285 / 294. Member-access. Declared-only.
-    T*       operator->();
-    const T* operator->() const;
+    // CgsHandle.h:285 / 294. Member-access -- the same guarded deref as
+    // operator* (the CgsHandle.h:305 "mpObject" assert). Made header-inline
+    // phase B5.
+    T* operator->()
+    {
+        CGS_ASSERT(mpObject, "mpObject");
+        return mpObject;
+    }
+    const T* operator->() const
+    {
+        CGS_ASSERT(mpObject, "mpObject");
+        return mpObject;
+    }
 
     // CgsHandle.h:303. Dereference. @ 0x8268E178 for T = Factory. Asserts that
     // mpObject is non-null (fires CgsHandle.h:287) then returns *mpObject.

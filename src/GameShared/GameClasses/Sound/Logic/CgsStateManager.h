@@ -11,7 +11,7 @@
 
 // The IO message header the Notify hook receives (full home CgsMessage.h;
 // pointer-only here).
-namespace CgsSound { namespace Io { struct MessageHeader; } }
+namespace CgsSound { namespace Io { class MessageHeader; } }
 
 // CgsSound::Logic::StateManager - the sound-logic state manager keystone base
 // (StateManager : public CgsSound::MemBase). This is a large polymorphic class

@@ -49,7 +49,7 @@
 
 namespace CgsSound
 {
-namespace Io { struct MessageHeader; }   // Cgs3dEffectControl.h DWARF: Notify(const CgsSound::Io::MessageHeader*)
+namespace Io { class MessageHeader; }   // Cgs3dEffectControl.h DWARF: Notify(const CgsSound::Io::MessageHeader*)
 
 namespace Logic
 {

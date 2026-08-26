@@ -235,6 +235,16 @@ void Module::DetachBuffers()
 }
 
 // ---------------------------------------------------------------------------
+// Module::GetUniqueId  (DWARF decl; bodied phase B5 -- the trivial member read
+// of the id Construct seeds and the owner stamps; the vtable emission of this
+// TU demands the symbol.)
+// ---------------------------------------------------------------------------
+u32 Module::GetUniqueId()
+{
+    return muUniqueId;
+}
+
+// ---------------------------------------------------------------------------
 // operator++(Module::EModulePrepareStage&, int)  @ 0x82681D30
 //   v1 = *a1; *a1 = v1 + 1; if (v1 + 1 > 6) <assert>; return v1;
 // The store of the incremented value happens before the guard, so the increment
