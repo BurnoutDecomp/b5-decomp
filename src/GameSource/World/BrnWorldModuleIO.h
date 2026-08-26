@@ -371,6 +371,7 @@ namespace BrnWorldIO
         // asserting THIS header's read lock). Second half of
         // WorldModule::BridgeActionsToRaceCarModule @0x827ABF40.
         const AudioCarLoadedDataQueue*          GetAudioCarDataLoadedQueue() const;          // R (IDA sub_827A4040)
+        AudioCarLoadedDataQueue*                GetAudioCarDataLoadedQueue();                // W (the IDA-truncated sub_823B4EA8 -- BridgeSoundToWorld @0x823CDC98's write-side twin; phase C3)
 
         // (b) Per-active-race-car getters -- X360 HEADER-INLINES (the bridge's asm has
         //     no bl for them, only the range-assert pairs citing THIS header's X360

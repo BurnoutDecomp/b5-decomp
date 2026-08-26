@@ -16,6 +16,7 @@
 #include "GameSource/Sound/Module/BrnRootSoundModuleIo.h"               // RootPreUpdateOutputBuffer / PreUpdateOutput
 #include "GameSource/Sound/Module/SharedIO/BrnPreUpdateSharedIo.h"      // AudioEffectsMessageQueue
 #include "GameSource/GameState/TrainingManager/BrnTrainingManager.h"    // BrnGameState::TrainingManager
+#include "GameSource/World/BrnWorldModuleIO.h"                          // BrnWorldIO::UpdateInputBuffer (BridgeSoundToWorld; phase C3)
 
 namespace BrnGame
 {
@@ -51,4 +52,22 @@ namespace BrnGame
             lQueue.GetNextEvent(lpEvent, &lpEvent, &liEventSize);
         }
     }
+
+    // @ 0x823CDC98 (GameBridgeSoundToX.cpp:81; bodied 2026-08-25, faithful-audio-
+    // engine phase C3). The sound -> world pre-update bridge: the world input's
+    // audio-car-loaded queue takes the sound pre-update block's queue (+0x110 --
+    // the loaded-car notifications the world raised last frame, echoed back
+    // through the sound side's pre-update output). Caller holds the world input's
+    // write lock + the sound output's read lock (the spine's bracket).
+    void BrnGameModule::BridgeSoundToWorld(
+        BrnWorldIO::UpdateInputBuffer* lpWorldInputBuffer,
+        BrnSound::Module::Io::RootPreUpdateOutputBuffer* lpSoundOutputBuffer)
+    {
+        CGS_ASSERT(lpWorldInputBuffer != 0, "lpWorldInput");
+        CGS_ASSERT(lpSoundOutputBuffer != 0, "lpSoundOutputBuffer");
+
+        lpWorldInputBuffer->GetAudioCarDataLoadedQueue()->Append(
+            lpSoundOutputBuffer->GetPreUpdateOutput().GetCarDataLoadedQueue());
+    }
+
 }

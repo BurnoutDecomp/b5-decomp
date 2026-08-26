@@ -484,6 +484,15 @@ UpdateInputBuffer::GetAudioCarDataLoadedQueue() const
     return &mAudioCarDataLoadedQueue;
 }
 
+// X360 sub_823B4EA8 (the IDA-truncated write twin; phase C3) -- the write-lock
+// accessor BrnGameModule::BridgeSoundToWorld @0x823CDC98 appends through.
+UpdateInputBuffer::AudioCarLoadedDataQueue*
+UpdateInputBuffer::GetAudioCarDataLoadedQueue()
+{
+    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+    return &mAudioCarDataLoadedQueue;
+}
+
 // X360 0x827A3858 (:272 R, IDA "UpdateInputBuffer_") -- const takedown-event queue accessor (+160952).
 const TakedownEventQueue* UpdateInputBuffer::GetTakedownEventQueue() const
 {
