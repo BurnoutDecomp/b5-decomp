@@ -352,9 +352,12 @@ void VehicleManager::WriteOutVehicleStats(VehicleOutputInterface* lpOutputInterf
 //          0x825D54B4  mbIsFatalyCrashing    = false      (+0x711)
 //          0x825D54BC  four f32 lanes at +0x1114/+0x1118/+0x111C/+0x1120 = flt_82001CC0 (0.0f)
 //          0x825D54C0  a byte at +0x1128 = -1, and a VMX block zeroed from +0x1130
-//      ⭐⭐⭐ THIS IS THE ONE THING KEEPING BRN_ENABLE_CRASH_ENTRY OFF. The reset-on-track pump
-//      now puts a crashed car back on the road (resetpump wave), but nothing clears mbCrashing,
-//      so the recovered car drives on flagged crashing for ever. This dispatch is what clears it.
+//      ✅ THIS USED TO READ "THIS IS THE ONE THING KEEPING BRN_ENABLE_CRASH_ENTRY OFF".
+//      It was true when written and it is history now: the dispatch landed (crashclear wave,
+//      2026-08-26) and clears mbCrashing, and the LAST reason the flag survived -- the HUD not
+//      coming back -- fell on 2026-08-27 when BrnGui::CrashedHudState got the OnEnter/Update/
+//      UpdatePermenant it never had and started sending END_CRASH. **BRN_ENABLE_CRASH_ENTRY IS
+//      DELETED**; crash entry is on for every run, default ones included.
 //
 //      ⭐⭐ THE ENTRY ASSERT WAS FEARED AS A TRAP. IT IS NOT ONE -- IT IS A TAUTOLOGY, and
 //      settling that is what let this land (crashclear wave, 2026-08-26). The note that stood

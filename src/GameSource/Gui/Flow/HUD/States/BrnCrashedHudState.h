@@ -45,6 +45,18 @@ namespace BrnGui
         // Max expected apt-init components (DWARF KU_MAX_INIT_COMPONENTS_NUM = 8).
         static const u32 KU_MAX_INIT_COMPONENTS_NUM = 8;
 
+        // ---- X360 vtable overrides (CgsGui::State virtuals) -------------------------
+        // These reuse existing base vtable slots and add no data, so sizeof and every
+        // guest offset recorded below are unchanged.
+        virtual void OnEnter();   // @0x82475DD0 - PARTIAL, see the .cpp banner
+        virtual void OnLeave();   // @0x8247D308 - PARTIAL, see the .cpp banner
+        virtual void Update();    // @0x82481B88 - PARTIAL, see the .cpp banner
+
+        // ---- Drain the state in-queue (UpdatePermenant @ 0x824812A0). ----
+        // Non-virtual on X360 too; Update calls it every frame in every phase. PARTIAL:
+        // the .cpp enumerates all ten console arms and which of them are live here.
+        void UpdatePermenant();
+
         // ---- Store an expected apt-component id (SetExpectedComponent @ 0x82473780). ----
         void SetExpectedComponent(const char* lpacComponentName);
 
@@ -63,6 +75,14 @@ namespace BrnGui
         {
             return *reinterpret_cast<ButtonIconComponent*>(maImpactTimeButton);
         }
+
+        // The 21 GUI event ids OnEnter registers. The table is .rdata @0x8205B070; the IDA
+        // export set carries no data symbols, so the address was decoded from OnEnter's own
+        // `lis r11, ...@ha` / `addi r4, r11, ...@l` pair at 0x82475E6C/0x82475E78 and the 21
+        // words were read out of the image. (The `li r5, 0x15` between them is the count.)
+        // Statics: no effect on sizeof or on any guest offset below.
+        static const s32 maiEventToObserve[21];
+        static const s32 miNumEventsObserved;
 
         // --- members (DWARF order; base CgsGui::State occupies guest +0x00..+0x38) ---
 

@@ -101,11 +101,23 @@ void BrnGameModule::BridgeWorldVehicleDataToGui(
     // BrnPhysicsConductorGates.cpp:153. DELETE-WHEN that gate opens: replace the constant with
     // GameStateModule::IsShowtimeGameMode() (@0x823567A8, already bodied, same 2||16 test).
     //
-    // ⚠ AND NOTE, DO NOT "FIX": the console posts LEAVE_CRASHED (1) on the falling edge and this
-    // reproduction does too -- but BrnFBurnMainHudState::ProcessGameEvents maps only payload
-    // 0|2 -> SendStateEvent("START_CRASH") and has NO END_CRASH arm anywhere in the tree. The
-    // producer is complete; the missing half is the CONSUMER, and inventing it here would be
-    // fabricating a console behaviour rather than reconstructing one.
+    // ⚠️ RETRACTED 2026-08-27 (endcrash wave). This note used to read: "the console posts
+    // LEAVE_CRASHED (1) on the falling edge and this reproduction does too -- but
+    // BrnFBurnMainHudState::ProcessGameEvents maps only payload 0|2 -> SendStateEvent("START_CRASH")
+    // and has NO END_CRASH arm anywhere in the tree. The producer is complete; the missing half is
+    // the CONSUMER, and inventing it here would be fabricating a console behaviour."
+    // It was wrong three times over, and the correction matters because the note was steering the
+    // fix into the wrong file:
+    //   (1) the FBurnMain consumer is UpdatePermenant @0x824810F0, not ProcessGameEvents;
+    //   (2) "no END_CRASH arm ANYWHERE in the tree" was a claim about a name search. The console's
+    //       arm is BrnGui::CrashedHudState::UpdatePermenant @0x824812A0
+    //       (`mEvent == 377 && (*p == 1 || *p == 3)` -> SendStateEvent("END_CRASH")), plus
+    //       BrnPausedHudState::Update @0x8247CC58 for the paused-while-crashed case. Both are in
+    //       the tree now;
+    //   (3) so writing the consumer was never "fabricating a console behaviour" -- it was
+    //       reconstructing an unrecovered one. What WOULD have been a fabrication is mirroring the
+    //       arm into FBurnMainHudState, where the console has no such arm. The producer below is
+    //       unchanged and stays as written; only this note was false.
     {
         const bool lbPlayerCarCrashing = lpActiveInterface->IsPlayerCarCrashing();
         const bool lbInShowtimeMode    = false;   // FLAG: see above -- the && identity, and true here

@@ -472,59 +472,27 @@ namespace Vehicle
                 const u32 kluProbeAt = (atoi(kspCrashProbe) > 0)
                                      ? static_cast<u32>(atoi(kspCrashProbe)) : 900u;
                 ++sluProbeFrames;
-                // ⭐ TWO ARMS SINCE THE 2026-08-25 BRING-UP FLAG (BrnVehicleManager.cpp::
-                // SetRaceCarCrashing). They differ ONLY in how the sink is reached, and that
-                // difference exists for one reason: the console's deferred-request block two
-                // blocks below ends in CGS_ASSERT(IsRaceCarCrashing(player)). With crash entry
-                // disabled that assert would fire -- CORRECTLY, the sink did return early -- and a
-                // dev assert PAUSES the game waiting for END, hanging a run whose author simply
-                // forgot BRN_ENABLE_CRASH_ENTRY.
-                //   * enabled  -> set mbCrashPlayerNextUpdate, i.e. the console's own path, assert
-                //                 and all. Nothing about it changes.
-                //   * disabled -> call ForceRaceCarCrash straight from this (already non-X360)
-                //                 probe block, so the sink is GENUINELY REACHED and prints its own
-                //                 "[bringup] crash entry suppressed" line, and skip the console
-                //                 request that carries the assert.
-                // ⭐ THAT IS THE POINT: the same stimulus, deterministically, on both sides of the
-                // flag -- so the flag can be shown to be load-bearing at the sink instead of being
-                // taken on trust from a stochastic traffic collision that may not happen at all.
-                static const bool sbCrashEntryEnabled = (getenv("BRN_ENABLE_CRASH_ENTRY") != 0);
+                // ⭐ ONE ARM AGAIN (endcrash wave, 2026-08-27). This block used to carry TWO, split
+                // on BRN_ENABLE_CRASH_ENTRY, for one reason: the console's deferred-request block two
+                // blocks below ends in CGS_ASSERT(IsRaceCarCrashing(player)), and with the sink gated
+                // off that assert would fire -- CORRECTLY, the sink really did return early -- and a
+                // dev assert PAUSES the game waiting for END, hanging a run whose author had simply
+                // forgotten to set the flag. The "disabled" arm existed to reach the sink anyway and
+                // witness its suppression, so the flag could be shown to be load-bearing rather than
+                // taken on trust from a stochastic traffic collision that might never happen.
+                // THE FLAG IS GONE, so the sink is always live and the console's own path is the only
+                // one left: set mbCrashPlayerNextUpdate and let the deferred block do the rest,
+                // assert and all.
                 if (!sbProbeFired && sluProbeFrames >= kluProbeAt)
                 {
                     sbProbeFired = true;
-                    if (sbCrashEntryEnabled)
+                    mbCrashPlayerNextUpdate = true;
+                    if (CgsDev::Log::gpDebugPrint != 0)
                     {
-                        mbCrashPlayerNextUpdate = true;
-                        if (CgsDev::Log::gpDebugPrint != 0)
-                        {
-                            *CgsDev::Log::gpDebugPrint
-                                << "[crash-probe] frame " << sluProbeFrames
-                                << ": setting mbCrashPlayerNextUpdate (player slot "
-                                << static_cast<s32>(mePlayerActiveRaceCarIndex) << ")\n";
-                        }
-                    }
-                    else
-                    {
-                        if (CgsDev::Log::gpDebugPrint != 0)
-                        {
-                            *CgsDev::Log::gpDebugPrint
-                                << "[crash-probe] frame " << sluProbeFrames
-                                << ": crash entry is DISABLED (BRN_ENABLE_CRASH_ENTRY unset) --"
-                                << " driving the sink anyway to witness the suppression, and"
-                                << " skipping the console's post-condition assert (player slot "
-                                << static_cast<s32>(mePlayerActiveRaceCarIndex) << ")\n";
-                        }
-                        ForceRaceCarCrash(lpRequestOutputInterface, lpVehicleManagerOutputInterface,
-                                          lpVehicleOutputInterface, lpDeformationInterface,
-                                          mePlayerActiveRaceCarIndex);
-                        if (CgsDev::Log::gpDebugPrint != 0)
-                        {
-                            *CgsDev::Log::gpDebugPrint
-                                << "[crash-probe] ForceRaceCarCrash returned into a DISABLED sink;"
-                                << " IsRaceCarCrashing(player)="
-                                << (IsRaceCarCrashing(mePlayerActiveRaceCarIndex) ? 1 : 0)
-                                << " (expected 0)\n";
-                        }
+                        *CgsDev::Log::gpDebugPrint
+                            << "[crash-probe] frame " << sluProbeFrames
+                            << ": setting mbCrashPlayerNextUpdate (player slot "
+                            << static_cast<s32>(mePlayerActiveRaceCarIndex) << ")\n";
                     }
                 }
             }
