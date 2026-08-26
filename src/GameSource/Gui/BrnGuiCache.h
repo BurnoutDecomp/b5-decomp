@@ -19,6 +19,9 @@
 // them (transitively) includes BrnGuiCache.h.
 #include "GameSource/Gui/Flow/HUD/Components/BrnInGameMessagesComponent.h" // BrnGui::InGameMessagesQueue (by value)
 
+// [friends wave] forward declaration for the +0xB868 branch-mirror friendship
+namespace BrnGui { class FriendsListComponent; }
+
 // BrnGui::GuiCache subsystem (DecFIGS DWARF: BrnGuiCache.h). StateLoadingHelper is the
 // resource/component watcher embedded in the cache; GuiCache is the cache itself. Only
 // the methods reached by the in-scope GUI code are declared on GuiCache (its full data
@@ -981,6 +984,7 @@ namespace BrnGui
         // SetOnlineStartPending / IsOnlineStartInProgress uses go through the public
         // accessors above.)
         friend struct OnlineCustomMatch;
+        friend class BrnGui::FriendsListComponent;   // [friends wave]
 
         // [gateui] Same exposure rule for the HUD-message DIRECTOR: its
         // CheckMessageIsAvailable @0x824F2B28 inlines exactly two raw loads off the cache --
@@ -1486,7 +1490,14 @@ namespace BrnGui
         // question / host pause options / kick option / change-options entry). FLAG:
         // consumer-named (no standalone DWARF for this byte).
         bool mbIsOnlineHost;                             // +0xB864 (47204)
-        u8 mPad_B865[19];                                // +0xB865..+0xB877
+        // ADDITIVE CARVE (friends wave 2026-08-26): the EasyDrive friends panel's
+        // branch-state mirror. The X360 inlines dword reads/writes here from
+        // ShowFriendsListBranch (@0x82422E34 switch), HandleDPadRightFriends
+        // (@0x824386F0 test / @0x82438728 store 4), HandleBranchDPadRightFriends
+        // (stores 1/2/3), EndWait (@0x82443018 clear) -- no DWARF accessor row;
+        // consumer-named. Exposed by friendship below.
+        u32 muFriendsPanelBranchMirror;                  // +0xB868 (47208)
+        u8 mPad_B86C[12];                                // +0xB86C..+0xB877
         u8 mOptionsDataProfileStorage[0x8000];           // +0xB878 (X360 object: 0x7370 bytes)
         // +0x12BE8 (76776) -- the live DLC-pack-1 options block, which the X360 lays
         // immediately after the options profile (47224 + 0x7370 == 76776). Unlike the block

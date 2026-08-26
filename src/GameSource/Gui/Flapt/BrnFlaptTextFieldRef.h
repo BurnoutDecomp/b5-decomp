@@ -141,6 +141,12 @@ namespace BrnFlapt
         // supplied track text is a localisation id rather than a literal.
         void SetLocalisedText(const char* lpcStringId, s32 liStringIdType);
 
+        // GetText -- ADDITIVE GROW [friends wave 2026-08-26]: read back the field's
+        // current text. X360 attested by BrnGui::FriendsListComponent's branch handlers,
+        // which feed it straight into CgsNetwork::PlayerName::Construct
+        // (@0x82438AF8/@0x82438B40/@0x82438BBC/@0x82438BFC/@0x82438C44). Declaration-only.
+        const char* GetText() const;
+
         void* mpTextFieldInstance;   // +0x00
         void* mpParentMovie;         // +0x04
         void* mpTransform;           // +0x08
