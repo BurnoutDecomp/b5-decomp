@@ -79,10 +79,10 @@ public:
     template <typename T>
     u32 CreateVoice(const VoiceSpec& akrSpec, Handle<T>& arHandleOut, u32 au32Ident);
 
-    // DWARF h:255 / h:310. FLAG (DEFER): declared-only -- their own ledger slices.
-    // GetName is const (a pure accessor; Environment::GetR reads the name through a
-    // const Factory&).
-    Name GetName() const;
+    // DWARF h:255 -- the interned factory name, by name (the pure accessor
+    // Environment::GetR reads through a const Factory&; the X360 inlines the
+    // +0x8 word load at every site). Made header-inline phase B5.
+    Name GetName() const { return mName; }
 
     // DWARF h:310 -- the public per-frame front the environment's
     // UpdateFactories @0x826A2200 drives; on the console it is inlined to the

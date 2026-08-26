@@ -8,6 +8,7 @@
 #include "rw/audio/core/PlugIn.h"                                        // rw::audio::core::System (CreateInstance/Lock/...)
 #include "SDKs/Csis/CsisSystem.h"                                        // Csis::System::SetAllocator / Init
 #include "GameShared/GameClasses/Sound/Playback/Plugins/Streaming/internal/sndplayer1shared.h" // spPathPrefix
+#include "GameShared/GameClasses/Memory/CgsLinearMalloc.h"   // the audio-stream LinearMalloc (PLAYBACK stage)
 #include "coreallocator/icoreallocator_interface.h"                      // EA::Allocator::ICoreAllocator (the bridge base)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"               // gpDebugPrint (bring-up trace)
 
@@ -152,9 +153,9 @@ namespace Module
         CgsModule::ModuleSingleBuffered::Construct();
 
         // [3] (*(vtbl(this+0x4B8) + 0x40))(this+0x4B8, 6) -- virtual-init the PLAYBACK module
-        //     (mLogicModule's CgsSound::Logic::Module engine base embeds it at +0x238) with
-        //     module-id 6. [gated] the SoundLogicModule slice does not model that engine base
-        //     yet, so there is no playback member to reach; lands with the playback-module TU.
+        //     (mLogicModule's CgsSound::Logic::Module engine base embeds it at +0x238 --
+        //     REAL since phase B5) with module-id 6.
+        mLogicModule.GetPlaybackModule().Construct(6);
 
         // [4] (*(vtbl(this+0x280)))(this+0x280) -- the logic module's Construct (vtable slot 0).
         mLogicModule.Construct();
@@ -162,9 +163,8 @@ namespace Module
         // [5]+[6] BrnSound::Debug::DebugComponent::Construct(&mDebugComponent, this+0x4B8,
         //     this+0x280) + CgsDev::DebugComponent::Register(&mDebugComponent) -- wire the sound
         //     debug pages to the playback + logic modules and register the component. [gated]
-        //     Construct(playback, logic) is not in the DebugComponent slice (no export was
-        //     dumped for it) and its playback arg does not exist yet (step [3]); both land
-        //     together.
+        //     the @0x826A1230 Construct dossier is NOT in the export set (re-export needed --
+        //     the playback arg EXISTS since phase B5); lands with the sound debug-page slice.
 
         // [7] the event-receiver queue @ this+0x13900: capacity 5120, align 16, bind + Clear.
         mReceiverQueue.Construct();
@@ -202,15 +202,21 @@ namespace Module
         CGS_ASSERT(lpSoundModuleInputBuffer != 0, "lpSoundModuleInputBuffer != NULL");
         CGS_ASSERT(lpSoundModuleOutputBuffer != 0, "lpSoundModuleOutputBuffer != NULL");
 
-        // Per-call scratch IO buffers. The X360 creates three:
-        //   Io::LogicOutputBuffer                       on the OUTPUT stack ("SoundLogic")
+        // Per-call scratch IO buffers -- all three REAL since phase B5:
+        //   Io::LogicOutputBuffer                        on the OUTPUT stack ("SoundLogic")
         //   CgsSound::Playback::Module::Io::InputBuffer  on the INPUT stack  ("SoundPlayback")
         //   CgsSound::Playback::Module::Io::OutputBuffer on the OUTPUT stack ("SoundPlayback"),
-        //     then Clear()s it (VariableEventQueue<4096,16>::Clear on its queue + zero its count).
-        // [gated] the playback Io pair's types are not reconstructed (they land with the
-        // playback-module TU); only the logic output scratch is created here.
+        //     then Clear()ed (its queue Clear + freed-array count zero).
         Io::LogicOutputBuffer* lpLogicOutputBuffer = 0;
         lpOutputBufferStack->CreateIOBuffer<Io::LogicOutputBuffer>(&lpLogicOutputBuffer, "SoundLogic");
+        CgsSound::Playback::Module::Io::InputBuffer* lpPlaybackInputBuffer = 0;
+        lpInputBufferStack->CreateIOBuffer<CgsSound::Playback::Module::Io::InputBuffer>(
+            &lpPlaybackInputBuffer, "SoundPlayback");
+        CgsSound::Playback::Module::Io::OutputBuffer* lpPlaybackOutputBuffer = 0;
+        lpOutputBufferStack->CreateIOBuffer<CgsSound::Playback::Module::Io::OutputBuffer>(
+            &lpPlaybackOutputBuffer, "SoundPlayback");
+        if (lpPlaybackOutputBuffer)
+            lpPlaybackOutputBuffer->Clear();
 
         bool lbPrepared = false;
         switch (mePrepareStage)
@@ -301,16 +307,39 @@ namespace Module
             // fall through
         }
         case E_PREPARESTAGE_PLAYBACK_MODULE:
+        {
             mePrepareStage = E_PREPARESTAGE_PLAYBACK_MODULE;
-            // [gated] X360: carve bank 9 -> gPlaybackTestBedAlloc; rw::audio::core::System::Lock
-            //   (mpSystem); virtual Prepare on the playback module (this+0x4B8, vtable +0x44 =
-            //   CgsSound::Playback::Module::Prepare 0x826E90C0) with (&gPlaybackTestBedAlloc,
-            //   lpAllocatorList->mpPlaybackParams @ +660); Unlock. A false return unwinds to the
-            //   common exit (still preparing). Blocked on: the playback module's Prepare/vtable
-            //   (the CgsSoundPlaybackModule slice has neither) + the logic module's engine base
-            //   that embeds it. Until then this stage completes without preparing playback.
+            // REAL since phase B5. X360: carve bank 9 ("Playback") -> gPlaybackTestBedAlloc;
+            // System::Lock(mpSystem); virtual Prepare on the playback module (this+0x4B8,
+            // vtable +0x44 = CgsSound::Playback::Module::Prepare 0x826E90C0) with
+            // (&gPlaybackTestBedAlloc, the audio-stream LinearMalloc @ AllocatorList +660);
+            // Unlock. A false return unwinds to the common exit (still preparing).
+            // [deferred slice] the console's no-coalesce heap tuning on the bank-9 carve is
+            // elided here for the same reason as the RWAC stage's (see above).
+            gPlaybackTestBedAlloc.SetAllocator(
+                &lpAllocatorList->GetRWGeneralResourceAllocator(9)->field_0x0);
+            gPlaybackTestBedAlloc.SetVerbose(KB_TESTBED_ALLOCATORS_VERBOSE);
+            gPlaybackTestBedAlloc.SetSanityCheck(KB_TESTBED_ALLOCATORS_SANITY);
+
+            // FLAG (PC seam): the host CreateAllocators Construct()s the audio-stream
+            // linear region but does not Create() it with a backing carve yet, so its
+            // GetSize() is 0 -- hand Prepare a null LinearMalloc so it takes its own
+            // REAL no-linear-region stream path (0x20000 x 4 blocks through the main
+            // allocator) until that region carve lands.
+            CgsMemory::LinearMalloc* lpStreamMalloc = lpAllocatorList->GetAudioStreamAllocator();
+            if (lpStreamMalloc != 0 && lpStreamMalloc->GetSize() == 0)
+                lpStreamMalloc = 0;
+
+            rw::audio::core::System::Lock(mpSystem);
+            const bool lbPlaybackPrepared = mLogicModule.GetPlaybackModule().Prepare(
+                &gPlaybackTestBedAlloc, lpStreamMalloc);
+            rw::audio::core::System::Unlock(mpSystem);
+            if (!lbPlaybackPrepared)
+                break;
+
             meReleaseStage = E_RELEASESTAGE_PLAYBACK_MODULE;
             // fall through
+        }
         case E_PREPARESTAGE_REGISTRY_LOAD:
             mePrepareStage = E_PREPARESTAGE_REGISTRY_LOAD;
             // [gated] X360: if (!RegistryLoad(this, lpLogicOutputBuffer)) { LockForWrite(
@@ -388,8 +417,12 @@ namespace Module
         }
 
         // Common exit (X360 LABEL_24/LABEL_26): destroy this call's scratch IO buffers -- the
-        // playback output, the playback input, then the logic output ([gated] only the logic
-        // output exists here) -- and report the machine's verdict.
+        // playback output, the playback input, then the logic output (LIFO, all three real
+        // since phase B5) -- and report the machine's verdict.
+        lpOutputBufferStack->DestroyIOBuffer<CgsSound::Playback::Module::Io::OutputBuffer>(
+            &lpPlaybackOutputBuffer);
+        lpInputBufferStack->DestroyIOBuffer<CgsSound::Playback::Module::Io::InputBuffer>(
+            &lpPlaybackInputBuffer);
         lpOutputBufferStack->DestroyIOBuffer<Io::LogicOutputBuffer>(&lpLogicOutputBuffer);
         return lbPrepared;
     }

@@ -57,8 +57,8 @@ class PlayerVoice;
 // REAL alias -- the per-frame Update context IS the engine System, and the
 // environment's UpdateVoices hands the same pointer to both.)
 typedef rw::audio::core::System System;
-class SubmixVoice;     // Connect target (Voice subclass, own TU)
-class VoiceSpec;       // referenced by ctor/GetAllocationSize (own TU)
+struct SubmixVoice;    // Connect target (Voice subclass, own TU; struct-keyed to match its CgsSubmixVoice.h definition -- a class-keyed fwd mangles divergent symbols)
+struct VoiceSpec;      // referenced by ctor/GetAllocationSize (own TU; struct-keyed to match CgsDataStructures.h)
 class Factory;         // owning module factory (own TU)
 
 // DWARF CgsVoice.h:43 / :60. Voice playback / removal lifecycle enums.

@@ -208,5 +208,11 @@ void Environment::Update(f32 af32GameDt, f32 af32SimDt)
     CgsDev::PerfMonCpu::StopMonitor(mCpuMonitors.miEnvironmentUpdate);
 }
 
+// The one rodata ModuleParams record (X360 unk_820AA480, XEX-recovered big-endian
+// {0x0010, 0x0010, 0x0010}): 16 voice proxies / 16 content proxies / 16 state
+// managers -- the constant BrnSound SoundLogicModule::Prepare @0x82703C18 hands the
+// engine base Prepare. Modeled as the DWARF-declared ModuleParams::DEFAULT (h:153).
+const ModuleParams ModuleParams::DEFAULT = { 16, 16, 16 };
+
 } // namespace Logic
 } // namespace CgsSound
