@@ -39,13 +39,14 @@ namespace BrnGui { enum ECompassPoints : s32; }
 // the HOST layout is name-based -- pointers and by-value components widen, so only
 // RELATIVE deltas inside pointer-free scalar runs are asserted (_AssertLayout).
 //
-// NOTE (conductor): GameSource/Gui/Flow/HUD/States/BrnPreRaceFlyBy.{h,cpp} carries a
-// pre-wave SHELL fork of this same class (ctor @0x82514E58 + IsMapApplicableToGameMode
-// @0x824B3120 + IsMapPanApplicableToGameMode @0x824B3190). Measured 2026-08-03: that
-// .cpp does NOT compile against its own empty-shell header (memsets members the shell
-// never declares, uses an undeclared GSM namespace). THIS header is the DWARF-canonical
-// home; the HUD TU should be re-pointed at it and its ctor rebuilt against the real
-// members (see the wave-J spec, scratchpad/waveJ/PreRaceFlyBy.spec.md).
+// FORK RETIRED 2026-08-26 (wave E1). GameSource/Gui/Flow/HUD/States/BrnPreRaceFlyBy.{h,cpp}
+// used to carry a pre-wave SHELL fork of this same class (an empty-shell header plus the
+// only definitions of the ctor @0x82514E58, IsMapApplicableToGameMode @0x824B3120 and
+// IsMapPanApplicableToGameMode @0x824B3190). That .cpp could not compile against its own
+// header -- it memset member spans the shell never declared -- so the pair was deleted, the
+// three bodies were rebuilt against the real members in BrnPreRaceFlyBy_wJ_01.cpp, and
+// BrnHudFlow.cpp now includes THIS header. There is one PreRaceFlyByState in the tree again,
+// and its NewPoolState slot in BrnHudFlow::Prepare gets the full 4160-byte console object.
 namespace BrnGui
 {
     struct PreRaceFlyByState : public CgsGui::State
@@ -66,8 +67,9 @@ namespace BrnGui
             E_PRERACE_COUNT                  = 9,
         };
 
-        // @ 0x82514E58 -- constructs the component set + the embedded map manager (the
-        // body currently lives with the class-keyed TU; see the conductor note above).
+        // @ 0x82514E58 -- constructs the component set + the embedded map manager.
+        // Body: BrnPreRaceFlyBy_wJ_01.cpp (vtable stores only on console, so default
+        // member construction is the whole of it).
         PreRaceFlyByState();
 
         // The three flow virtuals (override the CgsFsm::ScriptedState surface through
@@ -94,9 +96,10 @@ namespace BrnGui
         f32  CalculateZoomFactor();                   // @0x824BE8F0 (cpp:1763)
         void UpdateIconManager();                     // @0x824C7B70 (cpp:1874)
 
-        // DWARF BrnPreRaceFlyBy.h:331/:396. Bodied with the class-keyed TU
-        // (currently GameSource/Gui/Flow/HUD/States/BrnPreRaceFlyBy.cpp -- X360
-        // @0x824B3120 / @0x824B3190); this TU calls both from OnEnter/OnLeave/Update.
+        // DWARF BrnPreRaceFlyBy.h:331/:396. X360 @0x824B3120 / @0x824B3190; bodies in
+        // BrnPreRaceFlyBy_wJ_01.cpp, called from OnEnter/OnLeave/Update.
+        // CONSOLE SEMANTICS: IsMapApplicableToGameMode is FALSE for E_MODE_STUNT_ATTACK (7),
+        // so a Stunt Run's fly-by shows no minimap by design (titles + description only).
         bool IsMapApplicableToGameMode(BrnGameState::GameStateModuleIO::EGameModeType leGameMode);
         bool IsMapPanApplicableToGameMode(BrnGameState::GameStateModuleIO::EGameModeType leGameMode);
 

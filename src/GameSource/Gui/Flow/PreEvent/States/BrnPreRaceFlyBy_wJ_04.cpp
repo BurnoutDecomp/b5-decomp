@@ -24,11 +24,11 @@
 //       HandleIncomingEvents / HandleAptEvents (wJ_03); CalculateZoomFactor /
 //       FindEventDirection (wJ_05); the five Set*Description workers (wJ_06 / wJ_07).
 //
-//   (b) DEFINED, BUT IN THE NON-COMPILING HUD FORK:
-//       IsMapApplicableToGameMode / IsMapPanApplicableToGameMode --
-//       GameSource/Gui/Flow/HUD/States/BrnPreRaceFlyBy.cpp:40 / :59. That TU still needs
-//       the re-point at THIS class header that BrnPreRaceFlyBy.h's conductor note
-//       describes before those two definitions can be built.
+//   (b) RESOLVED 2026-08-26 (wave E1) -- was 'defined, but in the non-compiling HUD
+//       fork'. IsMapApplicableToGameMode / IsMapPanApplicableToGameMode (and the ctor)
+//       moved into BrnPreRaceFlyBy_wJ_01.cpp when
+//       GameSource/Gui/Flow/HUD/States/BrnPreRaceFlyBy.{h,cpp} was deleted and
+//       BrnHudFlow.cpp was re-pointed at this class's real header. Now (a).
 //
 //   (c) STILL UNDEFINED -- the three callees of THESE two bodies that are
 //       declaration-only in the tree (checked for both an out-of-line body and a

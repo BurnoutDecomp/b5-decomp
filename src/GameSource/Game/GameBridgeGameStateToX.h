@@ -69,11 +69,37 @@ namespace BrnGameState
 //                              .cpp; the asm proves the record has NO 12-byte GuiEvent header).
 // One type, one home. Do not re-fork either.
 
+namespace CgsSystem { class TimerStatusInterface; }
+namespace CgsModule { struct Event; }
+namespace BrnGameState { namespace GameStateModuleIO { struct OutputBuffer; } }
+namespace CgsGui { namespace CgsGuiModuleIO { struct InputBuffer; } }
+
 namespace BrnGame
 {
     // @0x823AA3B8 -- map a training-tip enum to its GUI string-ID.
     // Returns "ERROR - UNKNOWN TRAINING TYPE" for the unused/gap indices.
     const char* ConvertTrainingTypeToStringId(BrnProgression::ETrainingType leTrainingType);
+
+    // [stuntrace wave E1, 2026-08-26] The event-flow slice of TranslateGameActionsToGuiEvents
+    // @0x823E9CE0 (actions 23/37/38/39/44/47/200/201). Called from the drain walk's default arm
+    // in GameBridgeGameStateToX_StuntGuiEvents.cpp; returns true when it consumed the action.
+    // Body: GameBridgeGameStateToX_EventFlowGuiEvents.cpp.
+    bool TranslateEventFlowGameActionToGuiEvent(
+        s32 liActionType,
+        const CgsModule::Event* lpAction,
+        CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInput,
+        const BrnGameState::GameStateModuleIO::OutputBuffer* lpGameStateOutput);
+
+    // [stuntrace wave E1, 2026-08-26] The event score/timer slice of BridgeGameStateToGui
+    // @0x823EE880 (GuiEventCurrentStatus 492 / GuiEventScoreUpdate 424 / GuiAttackScoreUpdate
+    // 428). Called in BrnGameModule's GUI leg inside the read/write-locked bracket, BEFORE
+    // TranslateGameActionsToGuiEvents (the console's own order: the status builds run after the
+    // queue Append @0x823EE9C4 and before the translate call @0x823EF22C).
+    // Body: GameBridgeGameStateToX_EventStatusGuiEvents.cpp.
+    void BridgeGameStateToGui_EventStatus(
+        const CgsSystem::TimerStatusInterface*               lpTimerStatusInterface,
+        const BrnGameState::GameStateModuleIO::OutputBuffer* lpGameStateOutput,
+        CgsGui::CgsGuiModuleIO::InputBuffer*                 lpGuiInput);
 
 } // namespace BrnGame
 

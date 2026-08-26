@@ -483,6 +483,18 @@ void SatNavRenderer::GetIconInformation(u32 luIndex, IconRendererSatNavIconInfo*
         lpInfo->mv3Position = lpDisplay->mv3Position;
         lpInfo->miEventId   = static_cast<s32>(luEventId);
 
+        // [FLAG PC bring-up guard, 2026-08-26] The WDC's mpProgressionData binding is not yet
+        // staged on this build, so GetEventInfoFromEventId can legitimately answer NULL here
+        // (its own no-match contract). The console never sees that (the controller is READY
+        // with data before icons draw). Default icon row + not-attempted; boot-proven AV in
+        // the first live event start otherwise. DELETE-WHEN the WDC data binding lands.
+        if (lpEventInfo == 0)
+        {
+            lpInfo->muEventTypeIndex = 0;
+            lpInfo->meSatNavIconType = E_SATNAVICON_EVENT_NOTATTEMPTED;
+            return;
+        }
+
         const u32 luIconRow = KAU_EVENTTYPE_TO_ICONROW[lpEventInfo->GetEventTypeByte()];
         lpInfo->muEventTypeIndex = luIconRow;
 
@@ -518,7 +530,11 @@ void SatNavRenderer::GetIconInformation(u32 luIndex, IconRendererSatNavIconInfo*
 
         lpInfo->mv3Position      = lpDisplay->mv3Position;
         lpInfo->miEventId        = static_cast<s32>(lpPresetEvent->GetEventId());     // presetEvent[+0x28]
-        lpInfo->muEventTypeIndex = static_cast<u32>(lpEventInfo->GetIconFrameBase()) + 6;
+        // [FLAG PC bring-up guard, 2026-08-26] same unstaged-WDC-binding null as the offline
+        // arm above; default row on null. DELETE-WHEN the WDC data binding lands.
+        lpInfo->muEventTypeIndex = (lpEventInfo != 0)
+            ? static_cast<u32>(lpEventInfo->GetIconFrameBase()) + 6
+            : 6u;
         lpInfo->meSatNavIconType = E_SATNAVICON_EVENT_NOTATTEMPTED;
         break;
     }
@@ -711,6 +727,16 @@ void SatNavRenderer::RefreshSatNavIconInfo(s32 liEventId)
         FireSatNavAssert("lpRaceEventData", 1307);
     if (luIconIndex >= KU_MAX_SATNAV_ICONS)
         FireSatNavAssert("luIconIndex < KU_MAX_SATNAV_ICONS", 1308);
+
+    // [FLAG PC bring-up guard, 2026-08-26] The console fires the asserts above and then
+    // dereferences anyway (its WDC is always bound + display info always resolves before this
+    // runs). On this build the WDC progression binding is unstaged, so both can be null on the
+    // first live event start -- the asserts have already named the gap; bail instead of
+    // crashing. DELETE-WHEN the WDC data binding lands.
+    if (lpDisplay == 0 || lpRaceEventData == 0 || luIconIndex >= KU_MAX_SATNAV_ICONS)
+    {
+        return;
+    }
 
     IconRendererSatNavIconInfo& lIcon = maCachedSatNavIcons[luIconIndex];
     lIcon.miEventId        = liEventId;

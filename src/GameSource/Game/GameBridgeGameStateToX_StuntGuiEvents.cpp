@@ -397,7 +397,12 @@ namespace
             }
 
             default:
-                // [FLAG] the other ~700 console arms are not reproduced -- see the banner.
+                // [stuntrace wave E1, 2026-08-26] the EVENT-FLOW arms (23/37/38/39/44/47/200/201)
+                // live in the sibling GameBridgeGameStateToX_EventFlowGuiEvents.cpp -- one drain
+                // walk, split across sibling TUs exactly like this one.
+                // [FLAG] the remaining ~690 console arms are not reproduced -- see the banner.
+                BrnGame::TranslateEventFlowGameActionToGuiEvent(
+                    liActionType, lpAction, lpGuiInput, lpGameStateOutput);
                 break;
             }
 

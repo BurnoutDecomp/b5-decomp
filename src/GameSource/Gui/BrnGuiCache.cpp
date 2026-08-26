@@ -14,6 +14,10 @@
 #include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptObjectController.h"
 #include "GameShared/GameClasses/Gui/Model/CgsModelModuleIO.h"
 #include "GameShared/GameClasses/Gui/CgsGuiEventTypeDefs.h"   // CgsGui::GuiEventTimeInfo (the per-frame time latch)
+// ([E1] GuiEventCurrentStatus(492) / GuiEventScoreUpdate(424) / GuiAttackScoreUpdate(428)
+// live in BrnGuiEventTypeDefs.h, already reachable through BrnGuiCache.h. They were MOVED
+// there out of BrnGuiDemangledEventTypes.h precisely because this TU cannot include that
+// header: it and BrnGuiOptionsDataProfile.h both define BrnGui::GuiEventAudioTraxUpdate.)
 // (GuiEventChangeDistrict now lives in BrnGuiEventTypeDefs.h, already included via BrnGuiCache.h)
 #include "SharedClasses/World/BrnWorldRegion.h"        // BrnWorld::WorldRegion::DistrictToCounty (Construct's marker seed)
 
@@ -1091,6 +1095,143 @@ namespace BrnGui
                 mu8ChangeDistrictConsumed = lpChangeDistrict->mu8Consumed;
             }
             break;
+        // ================================================================================
+        // ⭐⭐ [E1 event-status wave 2026-08-26] THE EVENT SCORE / TIMER FEED, consumer half.
+        // Three arms of the console's third RecEvent sub-switch (`addi r11, r5, -0x17C` +
+        // jpt_825101AC @0x8251018C, so jump-table case N == GUI event id 380 + N). Producer
+        // for all three: BrnGameModule::BridgeGameStateToGui @0x823EE880, landed as the
+        // stunt slice in GameSource/Game/GameBridgeGameStateToX_EventStatusGuiEvents.cpp.
+        // Until this wave NOTHING wrote mfEventTime / miScoreCurrent / miScoreTarget /
+        // miScoreCombo / miComboMultiplier, so every event readout rendered 0 / x1 / 0m00s.
+        // ================================================================================
+
+        case 492:
+            // X360 jpt_825101AC case 112 @0x82510540..0x8251060C -- GuiEventCurrentStatus.
+            // Store-for-store: latch the remaining-checkpoint count (+0x4F9C), then the
+            // distance-driven float (+0x13B94) and the 8-lane player-team table (+0xB808).
+            //
+            // ⛔ FLAG DEFERRED -- the landmark-TRACKER tail (@0x82510568..0x825105A0 and
+            // @0x825105D4..0x82510600). The console, when the count is > 0, maps each
+            // checkpoint index through the active-landmark u16 table at cache+0x5288 into a
+            // u16 scratch list at cache+0x4B9C, and then -- ONLY when meGameModeType ==
+            // E_MODE_ONLINE_BURNING_HOME_RUN (13) AND the count actually changed -- calls
+            // GuiCache::UpdateTrackerInfo(this, cache+0x4B9C, count). THREE things are
+            // missing here: cache+0x4B9C (unmodelled, inside mPad_4B77), the +0x5288 u16
+            // array (unmodelled, inside mPad_5287) and UpdateTrackerInfo itself (no body
+            // anywhere in src). All of it is dead outside mode 13, which is the ONLINE
+            // Burning Home Run -- unreachable from this wave's offline stunt-run target --
+            // so it is named rather than faked. Landing it is a header carve plus one
+            // function, and the arm below is where it plugs in.
+            {
+                const BrnGui::GuiEventCurrentStatus* lpStatus =
+                    reinterpret_cast<const BrnGui::GuiEventCurrentStatus*>(lpEvent);
+
+                miNumRemainingCheckpoints = lpStatus->miNumRemainingCheckpoints;   // stw +0x4F9C
+                // (the +0x4B9C landmark mapping loop would run here -- see the FLAG above)
+                mfDistanceDriven = lpStatus->mfDistanceDrivenInCurrentCar;         // stfsx +0x13B94
+                for (s32 liCar = 0; liCar < 8; ++liCar)                            // the 8-word ctr loop
+                    maCurrentPlayerTeam[liCar] = lpStatus->maePlayerTeam[liCar];   // -> +0xB808
+                // (the meGameModeType == 13 UpdateTrackerInfo call would run here)
+            }
+            break;
+
+        case 424:
+            // X360 jpt_825101AC case 44 @0x82510780..0x82510884 -- GuiEventScoreUpdate.
+            // THE EVENT TIMER. The two time words are gated on the record's mbTimerActive
+            // byte (`lbz r11, 0x10(r30) ; cmplwi 0 ; beq` @0x82510804), so a stopped event
+            // timer FREEZES the displayed value rather than zeroing it -- console behaviour,
+            // not an oversight. The distance word carries a sentinel: FLT_MAX means "no
+            // checkpoint distance this frame", and the console then only lifts a NEGATIVE
+            // cached distance back to zero.
+            {
+                const BrnGui::GuiEventScoreUpdate* lpScoreUpdate =
+                    reinterpret_cast<const BrnGui::GuiEventScoreUpdate*>(lpEvent);
+
+                // @0x8251078C `cmpwi r11, 0x12 ; blt` -- the console streams
+                // "Mode is " << meGameModeType << "\n" into the message before firing.
+                // ⚠️ The literal is the ASM's (< 18). BrnGameStateSharedIO.h's committed
+                // EGameModeType spells E_MODE_COUNT == 17 (aliased onto
+                // E_MODE_ONLINE_MODE_END); the console's is 18, or this assert would fire
+                // on its own last mode. Written as the asm's bound, not the enum's.
+                CGS_ASSERT(meGameModeType < 18,
+                           "BrnGameState::GameStateModuleIO::E_MODE_COUNT > meGameModeType"); // cpp:2227
+
+                meCurrentMedalTarget = lpScoreUpdate->meCurrentMedalTarget;        // stwx +0x9F28
+                if (lpScoreUpdate->mbTimerActive)
+                {
+                    mfEventTime   = lpScoreUpdate->mfModeTime;                     // stfsx +0x9F2C
+                    mfTargetTime  = lpScoreUpdate->mfCurrentTargetModeTime;        // stfsx +0x9F30
+                }
+
+                // flt_82F27EFC, read from the image rodata at VA 0x82F27EFC: 7F 7F FF FF
+                // == FLT_MAX. The console compares the payload float against it for EQUALITY
+                // (`fcmpu ; beq`), so it is a sentinel, not a clamp.
+                const f32 KF_NO_CHECKPOINT_DISTANCE = 3.4028234663852886e+38f;
+                const f32 lfDistance = lpScoreUpdate->mfDistanceToNextCheckpoint;
+                if (lfDistance != KF_NO_CHECKPOINT_DISTANCE)
+                {
+                    mfDistanceInEvent = lfDistance;                                // stfsx +0x9F48
+                }
+                else if (mfDistanceInEvent < 0.0f)   // flt_82001CC0 == 0.0f (image.bin @0x82001CC0)
+                {
+                    mfDistanceInEvent = 0.0f;
+                }
+            }
+            break;
+
+        case 428:
+            // X360 jpt_825101AC case 48 @0x825108E8..0x82510A3C -- GuiAttackScoreUpdate.
+            // THE STUNT-RUN SCORE READOUT: current / target / banked combo / multiplier,
+            // the stunt-count pair, the combo-warning timer and its two flag bytes, plus
+            // the single "stunt to display" record. The tail latch (@0x82510A0C) mirrors the
+            // live combo pair into the last-stunt pair ONLY while a combo is banked -- the
+            // same +0x9FD4/+0x9FD8 words the case-132 flow-state change resets to -1.
+            {
+                const BrnGui::GuiAttackScoreUpdate* lpAttack =
+                    reinterpret_cast<const BrnGui::GuiAttackScoreUpdate*>(lpEvent);
+
+                // @0x825108F4..0x8251093C -- the console accepts E_MODE_TRAFFIC_ATTACK (9),
+                // E_MODE_STUNT_ATTACK (7), the three IsOnlineStuntRun modes
+                // E_MODE_ONLINE_FUGITIVE (12) / E_MODE_ONLINE_FREE_BURN (14) /
+                // E_MODE_ONLINE_MODE_END (17), E_MODE_ONLINE_FREE_BURN_LOBBY (15) and
+                // E_MODE_NONE (-1); anything else fires. Values are spelled as literals
+                // because this TU cannot include BrnGameStateSharedIO.h (see the header
+                // note at the top of this file) -- each one is read off the asm's `cmpwi`.
+                CGS_ASSERT(meGameModeType == 9  || meGameModeType == 7  ||
+                           meGameModeType == 12 || meGameModeType == 14 ||
+                           meGameModeType == 17 || meGameModeType == 15 ||
+                           meGameModeType == -1,
+                           "BrnGameState::GameStateModuleIO::E_MODE_TRAFFIC_ATTACK == meGameModeType"
+                           " || BrnGameState::GameStateModuleIO::E_MODE_STUNT_ATTACK == meGameModeType"
+                           " || GsmIO::IsOnlineStuntRun( meGameModeType )"
+                           " || BrnGameState::GameStateModuleIO::E_MODE_ONLINE_FREE_BURN_LOBBY == meGameModeType"
+                           " || BrnGameState::GameStateModuleIO::E_MODE_NONE == meGameModeType"); // cpp:2271
+
+                miScoreCurrent    = lpAttack->miCurrentScore;             // stwx +0x9FC4
+                miScoreTarget     = lpAttack->miTargetScore;              // stwx +0x9FC8
+                miScoreCombo      = lpAttack->miComboScore;               // stw  +0x9FCC
+                miComboMultiplier = lpAttack->miComboMultiplier;          // stw  +0x9FD0
+
+                muCurrentStunts          = lpAttack->muCurrentStunts;          // stwx  +0xAC64
+                muAllStunts              = lpAttack->muAllStunts;              // stwx  +0xAC68
+                mfComboWarningTimeActive = lpAttack->mfComboWarningTimeActive; // stfsx +0xAC6C
+                mbComboWarningActive     = lpAttack->mbComboWarningActive;     // stbx  +0xAC70
+                mbComboInProgress        = lpAttack->mbComboInProgress;        // stbx  +0xAC71
+
+                // the merged 8-byte ScoringOutputInterface::maStunts[0] pair
+                maStuntToDisplay[0].miStuntId  = lpAttack->meStuntToDisplayType;   // stw +0xAC5C
+                maStuntToDisplay[0].miField_04 = lpAttack->miStuntToDisplayScore;  // stw +0xAC60
+
+                // @0x82510A0C: both words are RELOADED from the cache, not reused from the
+                // payload -- reproduced as written.
+                if (miScoreCombo != 0)
+                {
+                    miLastStuntScore         = miScoreCombo;        // stwx +0x9FD4
+                    miGameFlowResetWord_9FD8 = miComboMultiplier;   // stwx +0x9FD8
+                }
+            }
+            break;
+
         case 77:
             // ADDITIVE (car-select wave 2026-08-02). The X360 switch (rebased by -4) reaches
             // `jumptable 8250DE3C case 77` at 0x8250EE20 and does exactly this: one

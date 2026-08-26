@@ -1,8 +1,16 @@
 // ===================================================================================
 // BrnGui::PreRaceFlyByState -- wave-J partfile 01: the small leaves + the TU's statics.
-//   TriggerExitState         @0x824C6BD0  (cpp:722)
-//   AppendExpectedComponents @0x824B4DB0  (cpp:742)
-//   UpdateIconManager        @0x824C7B70  (cpp:1874)
+//   PreRaceFlyByState (ctor)     @0x82514E58
+//   IsMapApplicableToGameMode    @0x824B3120  (h:331)
+//   IsMapPanApplicableToGameMode @0x824B3190  (h:396)
+//   TriggerExitState             @0x824C6BD0  (cpp:722)
+//   AppendExpectedComponents     @0x824B4DB0  (cpp:742)
+//   UpdateIconManager            @0x824C7B70  (cpp:1874)
+//
+// The first three landed here 2026-08-26 (wave E1) when the pre-wave fork
+// GameSource/Gui/Flow/HUD/States/BrnPreRaceFlyBy.{h,cpp} was retired -- that .cpp held the
+// only definitions of all three and could never be built, because it compiled against an
+// empty-shell copy of this class. See each body's own note.
 //
 // Reconstructed from BURNOUT_X360_ARTIST.XEX; the raw `assembly` listing of each address
 // arbitrates over the Hex-Rays pseudocode throughout.
@@ -141,6 +149,112 @@ namespace BrnGui
     // ===============================================================================
     // Bodies
     // ===============================================================================
+
+    // Local alias for the game-mode enum the two IsMap* predicates switch on. TU-local
+    // (declared inside namespace BrnGui), so it cannot collide with the file-scope
+    // `namespace GSM` aliases the sibling partfiles declare.
+    namespace GSM = BrnGameState::GameStateModuleIO;
+
+//
+// PreRaceFlyByState::PreRaceFlyByState @0x82514E58
+// (.ida-exports/BURNOUT_X360_ARTIST.XEX/0x82514E58.json)
+//
+// MOVED HERE 2026-08-26 (wave E1) from the retired pre-wave fork
+// GameSource/Gui/Flow/HUD/States/BrnPreRaceFlyBy.cpp, which was written against an
+// empty-shell copy of this class and memset member spans the shell never declared.
+// Rebuilt against the real members named by BrnPreRaceFlyBy.h.
+//
+// The console ctor is vtable stores + one real member ctor, nothing else:
+//     stw r9,  0(r31)        <- the most-derived PreRaceFlyByState vtable (off_82077020)
+//     stw r11, 0x38 / 0x160 / 0x288 / 0x3B0 / 0x4D8 / 0x600 / 0x728(r31)
+//                            <- TextField's vtable (off_82072F8C) into mEventName, mModeType
+//                               and maEventDescriptionText[0..4] (base 0x288, stride 0x128)
+//     stw r9,  0x850(r31)    <- IconComponent's vtable (off_82072F90) into mLargeEventIcon
+//     stw r8,  0x8E4(r31)    <- AnimationComponent's vtable (off_82072F68) into mStateAnimator
+//     stw r7,  0(r10), r10 = r31 + 0x9A0
+//                            <- MainMapComponent's vtable (off_82076608) into mMainMapComponent
+//     bl  BrnGui::MapManager::MapManager   with r3 = r31 + 0x9A0 + 0x8C  (== +0xA2C)
+//                            <- MainMapComponent's own MapManager member (BrnMainMap.h:181,
+//                               "X360 comp+0x8C"); on console it is a tail store-and-call
+//                               emitted as part of constructing the embedded component.
+// Every one of those stores belongs to an embedded sub-object whose OWN ctor lays it down,
+// so the modelled effect is exactly "construct the CgsGui::State base + the embedded GUI
+// sub-objects", which default member construction reproduces on the host. (Same shape and
+// same treatment as ImageGalleryState::ImageGalleryState @0x82500328,
+// GameSource/Gui/Flow/Screen/States/BrnImageGallery.cpp:39.)
+//
+// NOTE, deliberate: the console ctor sets NO member payload -- meCurrentState,
+// mfTimeRemaining, mbEndRequestSent, mbDoMapPan, mfIconAnimationStartTime, mpGuiCache,
+// mpIconManager, mIconManagerOwnerId, mv2WorldCenterPoint, mbHiddenDueToPause and
+// miPreviousIconCount are all left indeterminate here and seeded by OnEnter
+// (BrnPreRaceFlyBy_wJ_02.cpp). Adding initialisers would be inventing console behaviour.
+    PreRaceFlyByState::PreRaceFlyByState()
+        : CgsGui::State()
+    {
+    }
+
+//
+// IsMapApplicableToGameMode @0x824B3120 (DWARF BrnPreRaceFlyBy.h:331)
+// (.ida-exports/BURNOUT_X360_ARTIST.XEX/0x824B3120.json)
+//
+// MOVED HERE 2026-08-26 (wave E1) from the retired HUD fork; body unchanged -- the fork's
+// two predicates were already asm-exact, they were only unbuildable in that TU.
+//
+// The X360 is a jump table biased by -2 (`addi r11, r4, -2` / `cmplwi cr6, r11, 0xE`), so
+// modes 0 and 1 fall straight through to the default. Its own comments give the arms:
+//   loc_824B3180 `li r3, 0`  -- "jumptable cases 0-2,5,7,13,14" (biased) == modes 2,3,4,7,9,15,16
+//   loc_824B3188 `li r3, 1`  -- "default case, cases 3,4,6,8-12" (biased) == every other mode
+//
+// CONSOLE SEMANTICS, NOT A BUG: E_MODE_STUNT_ATTACK (7) is in the FALSE set, so the stunt-run
+// fly-by legitimately shows NO minimap -- titles and description only. OnEnter/OnLeave/Update
+// gate the whole MainMapComponent + MapIconManager arm on this predicate, so for a Stunt Run
+// the map never loads, never fades in and never pans. Do not "fix" a missing stunt minimap.
+    bool PreRaceFlyByState::IsMapApplicableToGameMode(GSM::EGameModeType leGameMode)
+    {
+        switch (leGameMode)
+        {
+            case GSM::E_MODE_OFFLINE_SHOWTIME:       // 2
+            case GSM::E_MODE_ROAD_RAGE:              // 3
+            case GSM::E_MODE_PURSUIT:                // 4
+            case GSM::E_MODE_STUNT_ATTACK:           // 7
+            case GSM::E_MODE_TRAFFIC_ATTACK:         // 9
+            case GSM::E_MODE_ONLINE_FREE_BURN_LOBBY: // 15
+            case GSM::E_MODE_ONLINE_SHOWTIME:        // 16
+                return false;
+            default:
+                return true;
+        }
+    }
+
+//
+// IsMapPanApplicableToGameMode @0x824B3190 (DWARF BrnPreRaceFlyBy.h:396)
+// (.ida-exports/BURNOUT_X360_ARTIST.XEX/0x824B3190.json)
+//
+// MOVED HERE 2026-08-26 (wave E1) from the retired HUD fork; body unchanged.
+//
+// Unbiased jump table (`cmplwi cr6, r4, 8`), so only modes 0..8 index it:
+//   loc_824B31D4 `li r3, 1`  -- "jumptable cases 0,5,6,8"     == RACE / BURNING_ROUTE /
+//                                                                ELIMINATOR / MARKED_MAN
+//   loc_824B31DC `li r3, 0`  -- "default case, cases 1-4,7"   == everything else, and every
+//                                                                mode > 8 by the bgt above
+//
+// These are exactly the point-to-point / route modes: the pan sweeps the map from the start
+// to the destination landmark. Stunt attack (7) is FALSE here too -- doubly so, since
+// IsMapApplicableToGameMode already suppressed the map for it. mbDoMapPan latches this in
+// OnEnter.
+    bool PreRaceFlyByState::IsMapPanApplicableToGameMode(GSM::EGameModeType leGameMode)
+    {
+        switch (leGameMode)
+        {
+            case GSM::E_MODE_OFFLINE_RACE:   // 0
+            case GSM::E_MODE_BURNING_ROUTE:  // 5
+            case GSM::E_MODE_ELIMINATOR:     // 6
+            case GSM::E_MODE_MARKED_MAN:     // 8
+                return true;
+            default:
+                return false;
+        }
+    }
 
 //
 // Reconstructed store-for-store from BURNOUT_X360_ARTIST.XEX

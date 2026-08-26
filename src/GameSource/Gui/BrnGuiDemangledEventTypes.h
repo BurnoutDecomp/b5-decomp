@@ -45,7 +45,14 @@ namespace BrnGui
     // definition per type; same X360 (id,size) pairs, asserted there). Do not re-add them
     // here.
     struct GuiAftertouchEvent : public CgsGui::GuiEvent<403> { u8 maPayload[20]; };  // id 403 size 32 (12B GuiEvent header + opaque payload)
-    struct GuiAttackScoreUpdate : public CgsGui::GuiEvent<428> { u8 maPayload[28]; };  // id 428 size 40 (12B GuiEvent header + opaque payload)
+    // [E1 event-status wave 2026-08-26] GuiAttackScoreUpdate (id 428) has been RECOVERED and
+    // now lives in BrnGuiEventTypeDefs.h with its real flat wire shape (the opaque
+    // `GuiEvent<428> + u8[28]` shell that stood here read the 40-byte record as "12-byte
+    // GuiEvent header + 28 payload"; the 40 bytes ARE the payload). Moved rather than kept
+    // here because GuiCache::RecEvent -- its only consumer -- cannot include THIS header:
+    // BrnGuiOptionsDataProfile.h, which BrnGuiCache.cpp needs, carries its own compile-only
+    // `BrnGui::GuiEventAudioTraxUpdate` slice and the pair is a hard C2011. Deleted rather
+    // than left to shadow the real home.
     struct GuiAutosaveRequestEvent { u8 maData[1]; s32 GetEventType() const { return 356; } };  // id 356 size 1 (raw; size not GuiEvent-shaped)
     // [gateui r3] GuiBHRCheckpointReachedEvent (id 454) has been RECOVERED and now lives in
     // BrnGuiEventTypeDefs.h with its real DWARF field set (DWARF :6153, sizeof 8).
@@ -126,7 +133,10 @@ namespace BrnGui
     // in BrnGuiEventTypeDefs.h with its real flat wire shape (the demangled `GuiEvent<169> {}`
     // placeholder here did not match the wire -- the record is three words at offset +0 with
     // no GuiEvent header). The opaque placeholder was DELETED rather than left to shadow it.
-    struct GuiEventCurrentStatus : public CgsGui::GuiEvent<492> { u8 maPayload[108]; };  // id 492 size 120 (12B GuiEvent header + opaque payload)
+    // [E1 event-status wave 2026-08-26] GuiEventCurrentStatus (id 492) has been RECOVERED and
+    // now lives in BrnGuiEventTypeDefs.h with its real flat wire shape. Same reason for the
+    // move as GuiAttackScoreUpdate above (the GuiEventAudioTraxUpdate C2011 pair keeps
+    // BrnGuiCache.cpp from including this header). Deleted rather than left to shadow it.
     struct GuiEventDirectorSettings { u8 maData[4]; s32 GetEventType() const { return 475; } };  // id 475 size 4 (raw; size not GuiEvent-shaped)
     // id 314 size 12. X360 BrnGui::OdometerComponent::HandleDriveThruDiscovered (@0x8242C000)
     // proves the 12-byte record is three s32 words: the drive-thru type (switch selector, 5
@@ -213,7 +223,9 @@ namespace BrnGui
     // spine, which does NOT match the real home. One of the two is misnamed -- unresolved,
     // needs asm arbitration, deliberately not guessed here.
     struct GuiEventSaveImageFileAndAutosave : public CgsGui::GuiEvent<358> { u8 maPayload[4]; };  // id 358 size 16 (12B GuiEvent header + opaque payload)
-    struct GuiEventScoreUpdate : public CgsGui::GuiEvent<424> { u8 maPayload[8]; };  // id 424 size 20 (12B GuiEvent header + opaque payload)
+    // [E1 event-status wave 2026-08-26] GuiEventScoreUpdate (id 424) has been RECOVERED and
+    // now lives in BrnGuiEventTypeDefs.h with its real flat wire shape. Same reason for the
+    // move as GuiAttackScoreUpdate above. Deleted rather than left to shadow it.
     struct GuiEventScoreboardDownloadedChallengeable : public CgsGui::GuiEvent<123> { u8 maPayload[4]; };  // id 123 size 16 (12B GuiEvent header + opaque payload)
     struct GuiEventScoreboardResponseCategoryEvent : public CgsGui::GuiEvent<116> { u8 maPayload[460]; };  // id 116 size 472 (12B GuiEvent header + opaque payload)
     struct GuiEventScoreboardResponseEvScoreTarget { u8 maData[17]; s32 GetEventType() const { return 122; } };  // id 122 size 17 (raw; size not GuiEvent-shaped)

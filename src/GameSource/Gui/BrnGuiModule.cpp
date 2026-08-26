@@ -1794,6 +1794,9 @@ namespace BrnGui
                 case 207:   // [H3b] GuiRaceCarInfoEvent -- the mRaceCarInfo SoA feed
                 case 376:   // [H3b] GuiPlayerRaceCarIdEvent -- the player index pair (case-199 gate)
                 case 379:   // [reveal gate] GuiPlayerEngineEvent -- the ignition latch (+0x4B20)
+                case 492:   // [E1] GuiEventCurrentStatus  -- distance driven + player-team table
+                case 424:   // [E1] GuiEventScoreUpdate    -- THE EVENT TIMER (mfEventTime/mfTargetTime)
+                case 428:   // [E1] GuiAttackScoreUpdate   -- THE STUNT SCORE (current/target/combo/multiplier)
                     // [H1 wave 2026-08-25] On the console EVERY module-input event reaches
                     // GuiCache::RecEvent (its ~180-case switch consumes what it wants);
                     // this build's pump routes selectively, so the two cache-consumed ids
@@ -1802,6 +1805,10 @@ namespace BrnGui
                     // 169 is what fills the district-marker words. ⚠️ Do NOT blanket-route
                     // the whole stream: 14/16 are already re-consumed off the notification
                     // queue below and would double-deliver.
+                    // [E1 event-status wave 2026-08-26] 492/424/428 join the list on the same
+                    // terms: BridgeGameStateToGui's stunt slice posts them and GuiCache::RecEvent
+                    // now has the matching three arms. None of the three is re-consumed off the
+                    // notification queue, so forwarding them here delivers exactly once.
                     mGuiCache.RecEvent(lpEvent, liId);
                     break;
 
