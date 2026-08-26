@@ -23,6 +23,25 @@
 //   IsActiveCrash                 0x82312A30
 //   Update                        0x82320808
 //
+// ACCESSOR CLOSURE (2026-08-26). The six live-score getters below join them. NONE has its
+// own out-of-line X360 symbol -- the free build inlined every one of them -- so all six are
+// recovered from the SAME call site, ScoringSystem::WriteDataToOutput (X360 0x8232AE98),
+// whose DecFIGS dwarfdump (BrnScoringSystem.cpp:799) states the source reads the embedded
+// crash scorer through exactly these getters. In that body the scorer is embedded at
+// ScoringSystem+0x20, so each `*(a1 + N)` resolves to member offset N - 0x20, and every one
+// of the six lands on a member this home already carves at that proven offset:
+//   *(a1+788)+*(a1+784)+*(a1+780)+*(a1+776) -> +0x2F4/+0x2F0/+0x2EC/+0x2E8 maiNumCarsCrashed[3..0]
+//   *(a1+772)                               -> +0x2E4 miScoreMultiplier
+//   *(a1+768)                               -> +0x2E0 miCurrentComboCount
+//   *(a1+808)                               -> +0x308 mfDistanceTravelled
+// GetNumCarsLeapt / GetBestAirTime have no site in that body; they are read by the crash-score
+// debug overlay (BrnCrashScoreDebugComponent.cpp, already committed and already calling them
+// by name) and map to the two remaining declared members at the offsets the home records --
+// +0x2F8 miNumCarsLeaped and +0x31C mfLongestJumpAirTime, which the home's own declaration
+// comments already pin ("BrnCrashModeScoring.h:180" / ":183 (reads mfLongestJumpAirTime,
+// +0x31C)"). Those two are therefore DERIVED (declaration-to-member, single candidate each),
+// not asm-transcribed; the other four are asm-transcribed.
+//
 // OFFSET -> NAMED-MEMBER MAP (the X360 store offsets across these methods pin every named
 // member; the committed home's declared member ORDER is authoritative for naming):
 //   this+0x40 mfTimeSincePlayerCarMoved   this+0x44 mfTimeSinceLastEvent
@@ -657,5 +676,66 @@ namespace BrnGameState
         // RCEntityActiveRaceCarOutputInterface / PhysicalTrafficStateQueue accessors and the
         // rw::math::vpu intrinsics, neither homed in this scope; they land when those types
         // are homed. The clock advance above is the interface-independent core.
+    }
+
+    // ========================================================================
+    // Live-score getters (see the ACCESSOR CLOSURE note in the banner for how each
+    // was recovered). All are plain member reads -- the X360 has no assert in any of
+    // them (the inlined sites are bare loads).
+    // ========================================================================
+
+    // GetNumCarsCrashed -- the TOTAL cars wrecked this crash, summed across the four
+    // BrnTraffic::VehicleClass buckets. X360 (inlined @0x8232AE98):
+    //   *(a2+2644) = *(a1+788) + *(a1+784) + *(a1+780) + *(a1+776)
+    // i.e. maiNumCarsCrashed[3] + [2] + [1] + [0]. The asm adds them highest-index-first;
+    // integer addition is associative so the ascending loop below is equivalent.
+    s32 CrashModeScoring::GetNumCarsCrashed() const
+    {
+        s32 liTotal = 0;
+        for (s32 liClass = 0; liClass < 4; ++liClass)   // +0x2E8 .. +0x2F4
+        {
+            liTotal += maiNumCarsCrashed[liClass];
+        }
+        return liTotal;
+    }
+
+    // GetScoreMultiplier -- the accumulated crash multiplier (ClearData seeds it to 1).
+    // X360 (inlined): *(a2+2648) = *(a1+772) == this+0x2E4.
+    s32 CrashModeScoring::GetScoreMultiplier() const
+    {
+        return miScoreMultiplier;        // +0x2E4
+    }
+
+    // GetCurrentComboCount -- cars in the chain currently running.
+    // X360 (inlined): *(a2+2652) = *(a1+768) == this+0x2E0.
+    s32 CrashModeScoring::GetCurrentComboCount() const
+    {
+        return miCurrentComboCount;      // +0x2E0
+    }
+
+    // GetDistanceTravelled -- metres covered since the crash started.
+    // X360 (inlined): *(a2+2656) = *(a1+808) == this+0x308.
+    f32 CrashModeScoring::GetDistanceTravelled() const
+    {
+        return mfDistanceTravelled;      // +0x308
+    }
+
+    // GetNumCarsLeapt -- how many traffic cars the player jumped over this crash.
+    // DERIVED (see the banner note): the declaration at BrnCrashModeScoring.h:180 has exactly
+    // one candidate member in the carved layout, miNumCarsLeaped @+0x2F8 -- which is also the
+    // member DealWithVehicleLeaping increments. Consumed by the crash-score debug overlay.
+    s32 CrashModeScoring::GetNumCarsLeapt() const
+    {
+        return miNumCarsLeaped;          // +0x2F8
+    }
+
+    // GetBestAirTime -- the longest single jump of this crash, in seconds.
+    // DERIVED (see the banner note): the home's own declaration comment already pins it to
+    // mfLongestJumpAirTime @+0x31C (BrnCrashModeScoring.h:183). Note this is the LONGEST
+    // single jump, NOT mfTotalAirTime @+0x314 and NOT the in-progress mfCurrentJumpAirTime
+    // @+0x318 -- the three are adjacent and easy to confuse.
+    f32 CrashModeScoring::GetBestAirTime() const
+    {
+        return mfLongestJumpAirTime;     // +0x31C
     }
 }

@@ -33,19 +33,24 @@
 //   sub_823104E8(out,itf,idx) -> itf->GetCurrentInAirRotations(idx)  (DWARF :408)
 //   RCEntit(itf, idx) -> itf->GetBoostOutputInfoN(idx)       (DWARF :490/:491/:492/:494)
 //
-// FLAG -- K-constants (the X360 flt_82CDB7xx rodata, the BrnStuntModeScoring.cpp
-// anonymous-namespace tuning block, BrnStuntModeScoring.cpp:40-71). They have NO committed
-// home yet (the full TU owns the canonical anonymous-namespace block) and their concrete
-// rodata magnitudes are UNRECOVERED in the dossier. They are defined file-local below with
-// their names + PLACEHOLDER values, mapped from the flt_ addresses by the per-method semantics.
-// The names are now recovered VERBATIM from the PS3 DecFIGS DWARF (BrnGameState:: globals;
+// K-constants (the X360 flt_82CDB7xx rodata, the BrnStuntModeScoring.cpp anonymous-namespace
+// tuning block, BrnStuntModeScoring.cpp:40-71). They have NO committed home yet (the full TU
+// owns the canonical anonymous-namespace block), so they are defined file-local below.
+// The names are recovered VERBATIM from the PS3 DecFIGS DWARF (BrnGameState:: globals;
 // 0x1E15F0/0x1E1F60/0x1E2140/0x1E24E4) -- e.g. KF_STUNT_ATTACK_SCORE_PER_SECOND_OF_AIR,
-// _DRIFTING, _OF_BOOST, _PER_BURNOUT_CHAINED, _OF_REVERSING, _PER_HANDBRAKE_TURN. This is the established sibling pattern (cf. KF_INVALID_RACE_DISTANCE
-// in BrnScoringSystem_UpdateA.cpp): the names + their positions in the store-for-store body
-// are faithful; the magnitudes are placeholders for the gate ONLY. When the full
-// BrnStuntModeScoring.cpp is reconstructed it owns the real block -- delete these and let the
-// shared anonymous-namespace constants resolve, OR (if this partial is kept) reconcile the
-// magnitudes against the X360 rodata. Do NOT treat the placeholder magnitudes as load-bearing.
+// _DRIFTING, _OF_BOOST, _PER_BURNOUT_CHAINED, _OF_REVERSING, _PER_HANDBRAKE_TURN.
+//
+// The MAGNITUDES are now RECOVERED. Each is a direct big-endian f32 read of its flt_ address
+// out of the decrypted X360 ARTIST basefile (image VA - 0x82000000 == file offset), and each
+// constant's flt_ address was independently cross-checked against the referencing method's own
+// asm export (0x8232C640 / 0x8232CAE0 / 0x8232CC18 / 0x8232CD70 each reference the
+// flt_ set attributed to it below). The per-constant comments carry the VA each value came
+// from. When the full BrnStuntModeScoring.cpp is reconstructed it owns the canonical block --
+// delete these and let the shared anonymous-namespace constants resolve.
+//
+// STILL UNRECOVERED (and still FLAGged below): the two KVF_REVERSE_TAKEOFF_* gates. They are
+// VecFloat vectors built by dynamic initialisation (the asm loads them as unk_82FADAF0 /
+// unk_82FADC30, both all-zero in the static image), so no static rodata read can recover them.
 // ----------------------------------------------------------------------------
 
 #include "GameSource/GameState/ModeManager/Scoring/BrnStuntModeScoring.h"
@@ -79,52 +84,64 @@ namespace BrnGameState
     namespace
     {
         // --- StuntModeScoring tuning constants (BrnStuntModeScoring.cpp:40-71 anon ns) -------
-        // FLAG (see file header): names are DWARF-attested; magnitudes are PLACEHOLDERS mapped
-        // from the X360 flt_ rodata addresses by per-method semantics. Not load-bearing.
+        // Names are DWARF-attested; magnitudes are RECOVERED from the X360 rodata (see the file
+        // header for the read method). Each trailing comment names the VA the value was read at.
 
         // Air / spin / barrel-roll rating thresholds (UpdateAirStunts).
         // NB: names recovered VERBATIM from the PS3 DecFIGS DWARF (BrnGameState:: globals;
         // 0x1E15F0 UpdateAirStunts) -- they replace the round-1 role-guessed spellings.
-        const f32 KF_STUNT_ATTACK_MIN_AIR_TIME            = 0.0f;  // flt_82CDB76C : air gate + AIR-rating input
-        const f32 KF_STUNT_ATTACK_GOOD_SECONDS_OF_AIR     = 0.0f;  // flt_82CDB74C : AIR "good" target
-        const f32 KF_STUNT_ATTACK_AWESOME_SECONDS_OF_AIR  = 0.0f;  // flt_82CDB758 : AIR "awesome" target
-        const f32 KF_STUNT_ATTACK_MIN_SPIN_DEGREES        = 0.0f;  // flt_82CDB764 : spin gate
-        const f32 KF_STUNT_ATTACK_GOOD_DEGREES_SPUN       = 0.0f;  // flt_82CDB750 : spin "good" target
-        const f32 KF_STUNT_ATTACK_AWESOME_DEGREES_SPUN    = 0.0f;  // flt_82CDB75C : spin "awesome" target
-        const f32 KF_STUNT_ATTACK_MIN_ROLL_DEGREES        = 0.0f;  // flt_82CDB768 : roll gate
-        const f32 KF_STUNT_ATTACK_GOOD_DEGREES_ROLLED     = 0.0f;  // flt_82CDB754 : roll "good" target
-        const f32 KF_STUNT_ATTACK_AWESOME_DEGREES_ROLLED  = 0.0f;  // flt_82CDB760 : roll "awesome" target
-        const f32 KF_STUNT_ATTACK_JUMP_REPETITION_RADIUS  = 0.0f;  // flt_82CDB77C : jump-repeat radius
-        const f32 KF_STUNT_ATTACK_SCORE_PER_SECOND_OF_AIR = 0.0f;  // flt_82CDB730 : air score rate (PS3 DWARF name)
-        const f32 KF_STUNT_ATTACK_REVERSE_TAKEOFF_SCORE_MULTIPLIER = 0.0f; // flt_82CDB780 : reverse-takeoff bonus mult
+        const f32 KF_STUNT_ATTACK_MIN_AIR_TIME            = 0.4f;   // flt_82CDB76C : air gate + AIR-rating input
+        const f32 KF_STUNT_ATTACK_GOOD_SECONDS_OF_AIR     = 0.7f;   // flt_82CDB74C : AIR "good" target
+        const f32 KF_STUNT_ATTACK_AWESOME_SECONDS_OF_AIR  = 1.0f;   // flt_82CDB758 : AIR "awesome" target
+        const f32 KF_STUNT_ATTACK_MIN_SPIN_DEGREES        = 45.0f;  // flt_82CDB764 : spin gate
+        const f32 KF_STUNT_ATTACK_GOOD_DEGREES_SPUN       = 80.0f;  // flt_82CDB750 : spin "good" target
+        const f32 KF_STUNT_ATTACK_AWESOME_DEGREES_SPUN    = 160.0f; // flt_82CDB75C : spin "awesome" target
+        const f32 KF_STUNT_ATTACK_MIN_ROLL_DEGREES        = 180.0f; // flt_82CDB768 : roll gate
+        const f32 KF_STUNT_ATTACK_GOOD_DEGREES_ROLLED     = 160.0f; // flt_82CDB754 : roll "good" target
+        const f32 KF_STUNT_ATTACK_AWESOME_DEGREES_ROLLED  = 320.0f; // flt_82CDB760 : roll "awesome" target
+        // NB (not a transcription slip): the roll GATE (180) is above the roll "good" target
+        // (160), so any roll that clears the gate is already at least "good" -- barrel rolls are
+        // rated GOOD at one half-revolution past the gate and AWESOME at 320 degrees. Both values
+        // re-read from the image; the spin triple (45/80/160) is ordered the way you would expect.
+        const f32 KF_STUNT_ATTACK_JUMP_REPETITION_RADIUS  = 4.0f;   // flt_82CDB77C : jump-repeat radius (metres)
+        const f32 KF_STUNT_ATTACK_SCORE_PER_SECOND_OF_AIR = 1000.0f;// flt_82CDB730 : air score rate (PS3 DWARF name)
+        const f32 KF_STUNT_ATTACK_REVERSE_TAKEOFF_SCORE_MULTIPLIER = 2.0f; // flt_82CDB780 : reverse-takeoff bonus mult
         // (X360 0x8232C640 uses this inline flt_82CDB780 multiplier; the PS3 branch refactored
         //  it into a GetTakeOffMultiplier() method -- we keep the X360-faithful inline form.)
 
         // Drift (UpdateDriftStunts).
-        const f32 KF_STUNT_ATTACK_MIN_DRIFT_TIME              = 0.0f;  // flt_82CDB770 : drift gate
-        const f32 KF_STUNT_ATTACK_SCORE_PER_SECOND_DRIFTING  = 0.0f;  // flt_82CDB734 : drift score rate (PS3 DWARF name)
+        const f32 KF_STUNT_ATTACK_MIN_DRIFT_TIME              = 1.0f;   // flt_82CDB770 : drift gate
+        const f32 KF_STUNT_ATTACK_SCORE_PER_SECOND_DRIFTING  = 300.0f;  // flt_82CDB734 : drift score rate (PS3 DWARF name)
 
         // Boost / burnout (UpdateBoostStunts).
-        const f32 KF_STUNT_ATTACK_MIN_BOOST_TIME             = 0.0f;  // flt_82CDB774 : boost-time gate
-        const f32 KF_STUNT_ATTACK_SCORE_PER_BURNOUT_CHAINED  = 0.0f;  // flt_82CDB724 : burnout (chain) score rate (PS3 DWARF name)
-        const f32 KF_STUNT_ATTACK_SCORE_PER_SECOND_OF_BOOST  = 0.0f;  // flt_82CDB738 : boost score rate (PS3 DWARF name)
+        const f32 KF_STUNT_ATTACK_MIN_BOOST_TIME             = 0.01f;   // flt_82CDB774 : boost-time gate
+        const f32 KF_STUNT_ATTACK_SCORE_PER_BURNOUT_CHAINED  = 1000.0f; // flt_82CDB724 : burnout (chain) score rate (PS3 DWARF name)
+        const f32 KF_STUNT_ATTACK_SCORE_PER_SECOND_OF_BOOST  = 120.0f;  // flt_82CDB738 : boost score rate (PS3 DWARF name)
 
         // Driving / reverse / handbrake (UpdateDrivingStunts).
-        const f32 KF_MIN_SPEED_FOR_REVERSING_STUNT             = 0.0f;  // flt_82CDB7A4 : reverse-gear speed cap
-        const f32 KF_HANDBRAKE_TURN_MIN_ANGLE                  = 0.0f;  // flt_82CDB7A8 : handbrake-turn angle gate
-        const f32 KF_STUNT_ATTACK_SCORE_PER_SECOND_OF_REVERSING = 0.0f; // flt_82CDB740 : reverse-driving score rate (PS3 DWARF name)
-        const f32 KF_STUNT_ATTACK_SCORE_PER_HANDBRAKE_TURN     = 0.0f;  // flt_82CDB72C : handbrake-turn flat award (PS3 DWARF name)
+        // The reverse-gear cap is NEGATIVE (-25): the gate is `mfMaxSpeedMPH < -25.0f`, i.e. the
+        // car must be travelling backwards faster than 25 mph, which is why the signed speed is
+        // compared with `<` rather than a magnitude with `>`.
+        const f32 KF_MIN_SPEED_FOR_REVERSING_STUNT             = -25.0f; // flt_82CDB7A4 : reverse-gear speed cap
+        const f32 KF_HANDBRAKE_TURN_MIN_ANGLE                  = 160.0f; // flt_82CDB7A8 : handbrake-turn angle gate
+        const f32 KF_STUNT_ATTACK_SCORE_PER_SECOND_OF_REVERSING = 200.0f;// flt_82CDB740 : reverse-driving score rate (PS3 DWARF name)
+        const f32 KF_STUNT_ATTACK_SCORE_PER_HANDBRAKE_TURN     = 200.0f; // flt_82CDB72C : handbrake-turn flat award (PS3 DWARF name)
 
         // Reverse-takeoff direction test (UpdateAirStunts; the X360 VMX block normalises the
         // player velocity, then dots it with the car forward direction and compares vs a cos
         // threshold). The DWARF spells these as the VecFloat KVF_REVERSE_TAKEOFF_* constants.
-        const f32 KVF_REVERSE_TAKEOFF_MIN_VELOCITY        = 0.0f;  // KVF_REVERSE_TAKEOFF_MIN_VELOCITY (min |v|)
-        const f32 KVF_REVERSE_TAKEOFF_COS_MAX_ANGLE       = 0.0f;  // KVF_REVERSE_TAKEOFF_COS_MAX_ANGLE (cos gate)
+        // FLAG -- magnitudes UNRECOVERABLE by a static read, and these two ALONE still hold
+        // placeholders in this file. The X360 loads them as whole vectors from unk_82FADAF0
+        // (the |v| gate, 0x8232C738) and unk_82FADC30 (the cos gate, 0x8232C7C4); both are
+        // all-zero in the static image, so they are written by a dynamic initialiser that has
+        // no IDA export. Recover them with a dyn-init scan, not another rodata read.
+        const f32 KVF_REVERSE_TAKEOFF_MIN_VELOCITY        = 0.0f;  // FLAG: unk_82FADAF0, dyn-init (min |v|)
+        const f32 KVF_REVERSE_TAKEOFF_COS_MAX_ANGLE       = 0.0f;  // FLAG: unk_82FADC30, dyn-init (cos gate)
 
         // Landing-pass "still rotating" gate (X360 flt_82020B30 splat fed to vcmpgtfp on the
-        // X lane of GetCurrentInAirRotations). NOT a KF tuning constant -- a small near-zero
-        // rotation-rate threshold. FLAG: magnitude unrecovered; placeholder for the gate only.
-        const f32 KF_STILL_ROTATING_RATE_THRESHOLD       = 0.0f;  // flt_82020B30
+        // X lane of GetCurrentInAirRotations). NOT a KF tuning constant -- it is FLT_EPSILON
+        // (1.1920929e-07), the same near-zero dead-band the sibling RwMathFPU::IsZero checks use.
+        const f32 KF_STILL_ROTATING_RATE_THRESHOLD       = 1.1920929e-07f;  // flt_82020B30
     }
 
     typedef BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface

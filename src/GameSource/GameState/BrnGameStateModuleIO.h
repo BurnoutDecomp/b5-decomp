@@ -90,44 +90,86 @@ namespace GameStateModuleIO
 
     // Controller-input button-state block embedded at PreWorldInputBuffer +0x34 (0x18 bytes).
     // SetButtonPressed (X360 0x823BA240) fills the 21 leading bool flags from the per-player pad
-    // action-info record; GetControllerInput returns it read-locked. Field semantics are mostly
-    // unknown (no DWARF/leak shape), so each bool is named by the controller action whose status
-    // bit drives it where the bit position makes it clear, else by its source action-record offset.
+    // action table; GetControllerInput returns it read-locked.
+    //
+    // ⭐ THE DWARF NAMES ARE NOW KNOWN (2026-08-26) and they replace the invented ones that used
+    // to sit here. references/DecFIGS/dwarfdump/GameSource/GameState/BrnGameStateSharedIO.h:912
+    // declares `struct BrnGameState::GameStateModuleIO::ControllerInput` with exactly these 21
+    // bools in exactly this declaration order (source lines 752..772) -- for a POD struct that IS
+    // the memory order, so DWARF index N == byte +N here. The struct simply lives in the SharedIO
+    // header in the DecFIGS build, which is why the previous comment here wrongly claimed there was
+    // "no DWARF/leak shape". The old names (mbDrivingActive / mbReverseHeld / mbHandbrakeHeld /
+    // mbBoostHeld / mbAction<hex>...) guessed DRIVING semantics for what is actually the FRONT-END
+    // button block, and all four guesses were wrong -- "mbBoostHeld" is UI Cancel, for instance.
+    //
+    // Three independent cross-checks pin the DWARF order onto the 0x823BA240 stores, so this is
+    // not a bare name transplant:
+    //   * +0x08..+0x0B are (slot54 bit1, slot54 bit0, slot55 bit1, slot55 bit0) -- a pressed/held
+    //     pair for each of two ADJACENT action slots, matching DWARF's LeftShoulderPressed /
+    //     LeftShoulderDown / RightShoulderPressed / RightShoulderDown quartet.
+    //   * +0x0D re-stores slot55 bit0 (right shoulder HELD) and DWARF calls it mbImpactTimeDown --
+    //     impact time is the hold-right-bumper slow-mo.
+    //   * +0x0E is (slot54 held && slot55 held) and DWARF calls it mbCrashModePressed -- Showtime
+    //     is entered by holding BOTH bumpers.
+    //
+    // +0x11 mbRaceModePressed is the only analogue-derived flag, and it is the one this block used
+    // to call "mbBothSticksDeflected". 0x823BA240 does `lfs f13,0(r30)` / `lfs f13,8(r30)` against
+    // flt_82003F40 (0.25f) and stores the AND to `0x45(r31)` (0x823BA454..0x823BA480). Source byte
+    // 0 is action slot 0's analogue value and source byte 8 is slot 1's, because the pointer the
+    // caller passes IS &PadOutputInformation::maActionInfo[0] == padRecord+0x18 (see
+    // GameSource/Game/GameBridgeControllerToX.cpp:353 and the 8-byte {value,status} ActionInfo
+    // stride in GameShared/GameClasses/System/Input/CgsInputModuleIO.h). Slot 0 is ACCELERATE --
+    // its own held bit is what +0x12 mbAcceleratePressed stores -- so the flag means "accelerator
+    // AND brake analogue both past quarter travel", the offline hold-gas-and-brake event-start
+    // gesture. It is NOT "both sticks deflected": the sticks sit at padRecord+0x00..+0x0C, ahead
+    // of the action table this function is handed, so SetButtonPressed never sees them.
+    //
+    // Each comment below names the action-table slot the X360 reads (slot k = source byte 8*k,
+    // status word at 8*k+4; bit1 == pressed this frame, bit0 == held).
     struct ControllerInput
     {
-        bool mbDrivingActive;        // +0x00 (src+0x18C bit1) -- ControllerInput +0x34
-        bool mbReverseHeld;          // +0x01 (src+0x16C bit1) -- +0x35
-        bool mbHandbrakeHeld;        // +0x02 (src+0x174 bit1) -- +0x36
-        bool mbBoostHeld;            // +0x03 (src+0x1AC bit1) -- +0x37
-        bool mbAction14C;            // +0x04 (src+0x14C bit1) -- +0x38
-        bool mbAction154;            // +0x05 (src+0x154 bit1) -- +0x39
-        bool mbAction15C;            // +0x06 (src+0x15C bit1) -- +0x3A
-        bool mbAction164;            // +0x07 (src+0x164 bit1) -- +0x3B
-        bool mbAction1B4Pressed;     // +0x08 (src+0x1B4 bit1) -- +0x3C
-        bool mbAction1B4Held;        // +0x09 (src+0x1B4 bit0) -- +0x3D
-        bool mbAction1BCPressed;     // +0x0A (src+0x1BC bit1) -- +0x3E
-        bool mbAction1BCHeld;        // +0x0B (src+0x1BC bit0) -- +0x3F
-        bool mbAction05CPressed;     // +0x0C (src+0x05C bit1) -- +0x40
-        bool mbAction1BCHeldDup;     // +0x0D (src+0x1BC bit0) -- +0x41
-        bool mbAction1B4And1BCHeld;  // +0x0E ((src+0x1B4 bit0) && (src+0x1BC bit0)) -- +0x42
-        bool mbAction024Pressed;     // +0x0F (src+0x024 bit1) -- +0x43
-        bool mbAction1D4Pressed;     // +0x10 (src+0x1D4 bit1) -- +0x44
-        bool mbBothSticksDeflected;  // +0x11 ((src+0x00 > 0.25) && (src+0x08 > 0.25)) -- +0x45
-        bool mbAction004Held;        // +0x12 (src+0x004 bit0) -- +0x46
-        bool mbAction1E4Pressed;     // +0x13 (src+0x1E4 bit1) -- +0x47
-        bool mbAction13CPressed;     // +0x14 (src+0x13C bit1) -- +0x48
-        u8   maPad0x15[0x03];        // +0x15..+0x18 trailing pad to close the 0x18-byte block
+        bool mbAcceptPressed;               // +0x00 (slot 49 / src+0x18C bit1) -- ControllerInput +0x34
+        bool mbStartPressed;                // +0x01 (slot 45 / src+0x16C bit1) -- +0x35
+        bool mbSelectBackPressed;           // +0x02 (slot 46 / src+0x174 bit1) -- +0x36
+        bool mbCancelPressed;               // +0x03 (slot 53 / src+0x1AC bit1) -- +0x37
+        bool mbUpPressed;                   // +0x04 (slot 41 / src+0x14C bit1) -- +0x38
+        bool mbDownPressed;                 // +0x05 (slot 42 / src+0x154 bit1) -- +0x39
+        bool mbLeftPressed;                 // +0x06 (slot 43 / src+0x15C bit1) -- +0x3A
+        bool mbRightPressed;                // +0x07 (slot 44 / src+0x164 bit1) -- +0x3B
+        bool mbLeftShoulderPressed;         // +0x08 (slot 54 / src+0x1B4 bit1) -- +0x3C
+        bool mbLeftShoulderDown;            // +0x09 (slot 54 / src+0x1B4 bit0) -- +0x3D
+        bool mbRightShoulderPressed;        // +0x0A (slot 55 / src+0x1BC bit1) -- +0x3E
+        bool mbRightShoulderDown;           // +0x0B (slot 55 / src+0x1BC bit0) -- +0x3F
+        bool mbDirtyTrickPressed;           // +0x0C (slot 11 / src+0x05C bit1) -- +0x40
+        bool mbImpactTimeDown;              // +0x0D (slot 55 / src+0x1BC bit0 -- same bit as +0x0B) -- +0x41
+        bool mbCrashModePressed;            // +0x0E ((slot 54 bit0) && (slot 55 bit0) -- both bumpers) -- +0x42
+        bool mbCrashbreakerPressed;         // +0x0F (slot  4 / src+0x024 bit1) -- +0x43
+        bool mbStartEventPressed;           // +0x10 (slot 58 / src+0x1D4 bit1) -- +0x44
+        bool mbRaceModePressed;             // +0x11 (slot0.value > 0.25 && slot1.value > 0.25 == accelerator+brake) -- +0x45
+        bool mbAcceleratePressed;           // +0x12 (slot  0 / src+0x004 bit0 -- accelerate HELD) -- +0x46
+        bool mbMaxPlayerStatsCheatActivate; // +0x13 (slot 60 / src+0x1E4 bit1) -- +0x47
+        bool mbDPadLeftPressed;             // +0x14 (slot 39 / src+0x13C bit1) -- +0x48
+        u8   maPad0x15[0x03];               // +0x15..+0x18 trailing pad to close the 0x18-byte block
     };
 
-    // Per-player pad action-info source record fed to SetButtonPressed (the caller passes
-    // PadInfo+0x18, X360 BrnGameModule::BridgeControllerToGameState 0x823CD738). Only the words
-    // SetButtonPressed reads are named (each is an action-mapping status word: bit1 == pressed this
-    // frame, bit0 == held); the two leading f32 are analogue stick deflections. Gaps are storage.
+    // The per-player pad ACTION TABLE fed to SetButtonPressed. The caller passes
+    // &PadOutputInformation::maActionInfo[0] == PadInfo+0x18 (X360
+    // BrnGameModule::BridgeControllerToGameState 0x823CD738; the committed call site is
+    // GameSource/Game/GameBridgeControllerToX.cpp:353), so byte 0 here is action SLOT 0, not the
+    // pad record's head. Every slot is an 8-byte {f32 analogue value; u32 status} ActionInfo pair
+    // (GameShared/GameClasses/System/Input/CgsInputModuleIO.h): status bit1 == pressed this frame,
+    // bit0 == held. Only the words SetButtonPressed reads are named; gaps are storage.
+    //
+    // CORRECTION (2026-08-26): the two leading f32 are NOT analogue stick deflections, as this
+    // comment used to say. The sticks live at padRecord+0x00..+0x0C, ahead of the table this
+    // pointer addresses. They are the analogue travel of action slots 0 and 1 -- accelerator and
+    // brake -- slot 0 being proven to be accelerate by its status bit landing in
+    // ControllerInput::mbAcceleratePressed (see the ControllerInput banner above).
     struct ControllerActionSource
     {
-        f32 mfStickX;                 // +0x000 (> 0.25 test)
-        u32 mStatus004;               // +0x004 (bit0 held)
-        f32 mfStickY;                 // +0x008 (> 0.25 test)
+        f32 mfAccelerateValue;        // +0x000 slot 0 analogue travel (> 0.25 test)
+        u32 mStatus004;               // +0x004 slot 0 status (bit0 held == accelerate held)
+        f32 mfBrakeValue;             // +0x008 slot 1 analogue travel (> 0.25 test)
         u8  maPad0x00C[0x024 - 0x00C];
         u32 mStatus024;               // +0x024
         u8  maPad0x028[0x05C - 0x028];

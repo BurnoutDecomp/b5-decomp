@@ -9,13 +9,18 @@
 //
 // Owning header: GameSource/GameState/ModeManager/BrnModeManager.h (grown additively by this TU).
 //
-// FLAG (cross-object reads blocked on the GameStateModule minimal slice): the X360 reaches a
-// handful of GameStateModule internals by raw offset that the minimal GameStateModule slice does
-// not expose as named accessors (the global/active race-car output interfaces and the online round
-// counters). Those are de-inlined to the ModeManager private helpers GetGlobalRaceCarOutputInterface
-// / GetActiveRaceCarOutputInterface / GetOnlineRoundIndex / GetOnlineActiveCarCount, declared-only
-// in the header; their bodies (which read through mpGameStateModule) land when GameStateModule grows
-// the matching accessors. We do NOT fabricate those offsets here.
+// [stuntrace waveB fix round, 2026-08-26] THE OLD FLAG HERE IS RESOLVED AND HAS BEEN REWRITTEN.
+// The X360 reaches a handful of GameStateModule internals by raw offset; those are de-inlined to
+// the ModeManager helpers declared in the header and BODIED in BrnModeManager_Accessors.cpp:
+//   GetGlobalRaceCarOutputInterface()  -> GameStateModule::GetLastGlobalRaceCarInterface()  (+245968)
+//   GetLastActiveRaceCarOutputInterface() -> ::GetLastActiveRaceCarInterface()              (+235488)
+//   GetNetworkGameRandomSeed()         -> ::GetNetworkRandomSeed()                          (+208300)
+//   GetOnlineCurrentRound()            -> NetworkRoundManager::GetCurrentRound()
+// The former `GetActiveRaceCarOutputInterface` helper is GONE: its "gsm+0x245968" was the decimal
+// 245968 written as hex, i.e. the SAME seat as the global one, and no ModeManager export reads a
+// live-active interface off the module at all. The former GetOnlineRoundIndex /
+// GetOnlineActiveCarCount names described the wrong quantities and were renamed. No offset is
+// fabricated in this TU.
 
 #include "GameSource/GameState/ModeManager/BrnModeManager.h"
 
@@ -120,7 +125,7 @@ bool ModeManager::HasRaceCarHitValidCheckpoint(s16 luLandmarkId, EGlobalRaceCarI
     const u32 luNumLandmarks = muNumLandmarks;
     while (luCheckpoint < luNumLandmarks)
     {
-        if (static_cast<s16>(maLandmarkRegionIndexes[luCheckpoint]) == luLandmarkId)
+        if (static_cast<s16>(maLandmarkIndices[luCheckpoint]) == luLandmarkId)
         {
             break;
         }
@@ -161,7 +166,7 @@ bool ModeManager::HasRaceCarHitValidCheckpoint(s16 luLandmarkId, EGlobalRaceCarI
     }
 
     // Record the next landmark + mark this checkpoint hit.
-    maNextLandmarkIndex[leGlobalRaceCarIndex] = static_cast<u8>(GetNextLandmarkIndex(leGlobalRaceCarIndex));
+    mauNextLandmark[leGlobalRaceCarIndex] = static_cast<u8>(GetNextLandmarkIndex(leGlobalRaceCarIndex));
     MarkCarHittingCheckpoint(luCheckpoint, leGlobalRaceCarIndex);
 
     // Online burning-home-run: bump the car's cumulative + current checkpoint counters.
@@ -265,7 +270,7 @@ Vector3 ModeManager::GetCheckpointPosition(u32 luCheckpointId) const
 
     // The X360 loads the region-table index for this checkpoint, then resolves the owning landmark
     // through the trigger data and reads its box-region position.
-    const s32 liRegionIndex = static_cast<s16>(maLandmarkRegionIndexes[luCheckpointId]);
+    const s32 liRegionIndex = static_cast<s16>(maLandmarkIndices[luCheckpointId]);
     const BrnTrigger::TriggerData* lpTriggerData = GetCheckpointTriggerData();
     const BrnTrigger::Landmark* lpLandmark = lpTriggerData->GetLandmarkFromRegionIndex(liRegionIndex);
     return lpLandmark->GetBoxRegion()->GetPosition();
@@ -367,12 +372,12 @@ void ModeManager::SendModeResults(CgsModule::VariableEventQueue<13312, 16>* lpOu
     const EActiveRaceCarIndex leEliminator = mScoringSystem.GetRaceCarEliminatorIndex(lePlayer);
     const s32             liEliminations   = mScoringSystem.GetNumberOfEliminations(lePlayer);
 
-    // Race position: the explicit override (mbResultsPositionValid + a positive miResultsOverridePosition)
+    // Race position: the explicit override (mbFinishCurrentModeNextUpdate + a positive miDebugFinishPosition)
     // wins; otherwise the live scoring position.
     s32 liRacePosition;
-    if (mbResultsPositionValid && (miResultsOverridePosition > 0))
+    if (mbFinishCurrentModeNextUpdate && (miDebugFinishPosition > 0))
     {
-        liRacePosition = miResultsOverridePosition;
+        liRacePosition = miDebugFinishPosition;
     }
     else
     {
@@ -397,8 +402,12 @@ void ModeManager::SendModeResults(CgsModule::VariableEventQueue<13312, 16>* lpOu
     (void)liRacePosition;
     (void)lbEliminated;
     (void)lpOutputQueue;
-    (void)mbResultsTeamWon;
-    (void)mbResultsEliminatorValid;
+    (void)mbPlayerFinishedTimedOut;
+    // ([wave B 2026-08-26] the `(void)mbResultsEliminatorValid;` line that used to sit here is gone
+    //  with the member: its claimed X360 seat +0x9519 is byte 1 of miDebugFinishPosition's four, and
+    //  THIS body -- its only claimed reader -- makes exactly three loads in that region
+    //  (`lbzx 0x94F7`, `lbzx 0x94FD`, `lwzx 0x9518`) and none at 0x9519. The eliminator this record
+    //  reports is leEliminator above, straight out of ScoringSystem::GetRaceCarEliminatorIndex.)
     (void)IsOnlineGameMode();
 }
 
@@ -409,11 +418,16 @@ void ModeManager::TellGuiToShowOnlineFinalStandings()
 
     const bool lbOnline = (mpCurrentGameMode != nullptr) ? mpCurrentGameMode->IsOnline() : false;
 
-    // X360: ScoringSystem::UpdateCumulativeResults(round, numCars, final). The round + active-car count
-    // come from mpGameStateModule by raw offset; de-inlined to the declared-only helpers (header FLAG).
-    const s32 liRound   = GetOnlineRoundIndex();
-    const s32 liNumCars = GetOnlineActiveCarCount();
-    mScoringSystem.UpdateCumulativeResults(static_cast<u32>(liRound), liNumCars, lbOnline);
+    // X360 @0x82329BD0..0x82329BE8: ScoringSystem::UpdateCumulativeResults(seed, round, final).
+    // [stuntrace waveB fix round, 2026-08-26] RENAMED, ORDER UNCHANGED. The first argument is
+    // *(gsm+0x32DAC) == GameStateModule::muNetworkGameRandomSeed, NOT a round index; the second is
+    // `*(nrm+0x12C) - *(nrm+0x128) - 1` == the 0-based CURRENT ROUND off the NetworkRoundManager,
+    // NOT an active-car count. Both accessors were renamed in the header to say so; the argument
+    // ORDER here is the console's and must not be swapped (it decides what
+    // CarData::miRoundDisconnectedIn gets stamped with).
+    const s32 liNetworkSeed  = GetNetworkGameRandomSeed();
+    const s32 liCurrentRound = GetOnlineCurrentRound();
+    mScoringSystem.UpdateCumulativeResults(static_cast<u32>(liNetworkSeed), liCurrentRound, lbOnline);
 
     mbOnlineFinalStandingsShown = true;   // X360 +0x94F8 = 1
 }

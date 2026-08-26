@@ -397,12 +397,18 @@ void StuntModeScoringOnline::UpdateCarLeapStunts(const ActiveRaceCarOutputInterf
     for (s32 liCar = 0; liCar < KI_ACTIVE_RACE_CAR_COUNT; ++liCar)
     {
         const EActiveRaceCarIndex leCar = static_cast<EActiveRaceCarIndex>(liCar);
+        // Two same-valued `enum EActiveRaceCarIndex : s32` exist in this tree (see the note on
+        // BrnGameStateModuleIO.h:588): the BrnGameState one from BrnTakedownManagerTypes.h that
+        // `leCar` binds to inside this namespace, and the GLOBAL one in BurnoutConstants.h that
+        // the race-car output interface takes. Both are load-bearing elsewhere, so the slot index
+        // is converted at each interface call rather than by re-scoping either enum.
         // Gate on the per-car "this car is active" flag the interface exposes (X360 *v8>>3 & 1).
-        if (!lpRaceCar->IsRaceCarActive(leCar))
+        if (!lpRaceCar->IsRaceCarActive(static_cast< ::EActiveRaceCarIndex>(leCar)))
         {
             continue;
         }
-        const RaceCarState* lpOtherState = lpRaceCar->GetRaceCarState(leCar);   // RCEntityActiveRaceCarO
+        const RaceCarState* lpOtherState =
+            lpRaceCar->GetRaceCarState(static_cast< ::EActiveRaceCarIndex>(leCar));   // RCEntityActiveRaceCarO
         CGS_ASSERT(lpOtherState != NULL, "lpRaceCarState");
         if (lpOtherState == NULL)
         {
@@ -520,11 +526,15 @@ void StuntModeScoringOnline::UpdateCarsAroundPlayerAtTakeoff(const ActiveRaceCar
     {
         mCarsAroundPlayerAtTakeoff = 0;        // std 0 @+0x22D0 (begin a fresh snapshot)
 
-        const EActiveRaceCarIndex lePlayerIdx = lpRaceCar->GetPlayerActiveRaceCarIndex();
+        // The interface speaks the GLOBAL ::EActiveRaceCarIndex (BurnoutConstants.h); the locals
+        // here are the same-valued BrnGameState one (BrnTakedownManagerTypes.h). Both enums are
+        // load-bearing elsewhere, so convert at each interface boundary. See UpdateCarLeapStunts.
+        const EActiveRaceCarIndex lePlayerIdx =
+            static_cast<EActiveRaceCarIndex>(lpRaceCar->GetPlayerActiveRaceCarIndex());
         for (s32 liCar = 0; liCar < KI_ACTIVE_RACE_CAR_COUNT; ++liCar)
         {
             const EActiveRaceCarIndex leCar = static_cast<EActiveRaceCarIndex>(liCar);
-            if (!lpRaceCar->IsRaceCarActive(leCar))
+            if (!lpRaceCar->IsRaceCarActive(static_cast< ::EActiveRaceCarIndex>(leCar)))
             {
                 continue;
             }
@@ -534,7 +544,8 @@ void StuntModeScoringOnline::UpdateCarsAroundPlayerAtTakeoff(const ActiveRaceCar
             {
                 continue;
             }
-            const RaceCarState* lpOtherState = lpRaceCar->GetRaceCarState(leCar);
+            const RaceCarState* lpOtherState =
+                lpRaceCar->GetRaceCarState(static_cast< ::EActiveRaceCarIndex>(leCar));
             if (lpOtherState == NULL)
             {
                 continue;

@@ -22,12 +22,26 @@ namespace BrnGameState { namespace GameStateModuleIO { struct OutputBuffer; } }
 // to avoid a struct/class mismatch (C4099).
 namespace BrnProgression  { struct CarData; struct ProgressionData; }
 namespace BrnGameState    { class AchievementManagerBase; }
+// [stuntrace waveB / agent 10] the event-finish progression writer's two foreign types.
+// Both are POINTER-ONLY here (BrnTrainingManager.h itself includes THIS header, so pulling it
+// in from here would be a cycle); BrnProgressionManager_EventFinish.cpp includes the real homes.
+namespace BrnGameState    { class TrainingManager; }
+// [stuntrace waveB CLOSURE round] pointer-only parameters of GetStuntRunScoreTarget (declared
+// below). Their real home is GameSource/GameState/ModeManager/GameModes/BrnGameModeParams.h,
+// which this header must NOT pull in (it would drag the whole GameModeParams closure into every
+// progression TU); the console body never dereferences the GameModeParams* at all.
+namespace BrnGameState    { class GameModeParams; class StartGameModeParams; }
+namespace BrnGameState    { namespace GameStateModuleIO { struct ShowModeResultsAction; } }
 // mpVehicleList is a pointer member only (the bodies that walk it include the owning header).
 namespace BrnResource     { struct VehicleList; struct VehicleListEntry; }
 // BrnStreetData::ChallengeHighScoreEntry / ChallengePlayerScoreEntry come in via BrnProfile.h.
 
 namespace BrnProgression
 {
+// [stuntrace waveB / agent 10] pointer-only in this header (SharedClasses/Progression/
+// BrnRaceEventData.h is the owner; BrnProgressionManager_EventFinish.cpp includes it).
+struct RaceEventData;
+
 // MINIMAL OWNING HEADER for BrnProgression::ProgressionManager.
 //
 // SCOPE: this is a deliberately *thin* slice. The full ProgressionManager is a large,
@@ -62,13 +76,16 @@ public:
     // returns uint16_t.
     //
     // Maps a landmark's CgsID to the AI-section index the progression layer has cached for
-    // it (the body walks the LandmarkAISectionIndexPair table that the full TU owns). The
+    // it (the body walks the LandmarkAISectionIndexPair table declared below). The
     // ONLY member OfflineGameMode::SelectRandomDestinations uses: for each accepted landmark
     // it stores the returned u16 into the lpaAISectionIndicesOut parallel output array.
     //
-    // DECLARATION ONLY (no body): the definition lives with the ProgressionManager TU. A
-    // declaration is sufficient for the cl /c compile gate on the OfflineGameMode TU, which
-    // only needs the method's signature to type-check the call site.
+    // [stuntrace waveB MOUNT-CLOSURE round, 2026-08-26] BODIED (BrnProgressionManager.cpp). It
+    // was one of the wave-B mount's 63 unresolved externals and had FIVE console callers
+    // (OfflineGameMode::SelectRandomDestinations, ModeManager::SetOnlineLandmarks,
+    // ModeManager::SetUpCheckPointsForGameMode, HACK_SetupRaceWithLandMarks,
+    // GameStateModule::SendRouteRequestAction). The banner on the body states the one
+    // bring-up caveat: its PRODUCER (ComputeLandmarkAISectionIndices) is not mounted yet.
     u16 FindLandmarkAISectionIndex(CgsID lLandmarkId) const;
 
     // ------------------------------------------------------------------------
@@ -275,6 +292,96 @@ public:
     // GameStateModule::OnPlayerCarChange.
     s32 GetProgressionRank() const;
 
+    // ------------------------------------------------------------------------
+    // [stuntrace waveB fix round, 2026-08-26] ADDITIVE GROW -- the two per-mode rank queries the
+    // road-rage takedown target hangs on (verify batch 5 MF5). Shapes are DWARF-attested
+    // (dwarfdump .../BrnProgressionManager.h:282 and :285) and the argument registers were re-read
+    // from the asm, not taken from the implementer report.
+    // [x] NO LONGER DECLARE-ONLY -- BOTH ARE BODIED as of the 2026-08-26 CLOSURE round, in
+    // BrnProgressionManager.cpp, together with GetStuntRunScoreTarget below. The one type they
+    // needed, BrnProgression::ProgressionRankData, grew the four DWARF-named rank-up threshold
+    // bytes (BrnGameModeParams.h) to make it possible.
+    // ------------------------------------------------------------------------
+
+    // X360 0x8237B4E8. The player's progression rank scoped to ONE offline game mode. DWARF
+    // returns int8_t, which is why every X360 caller `extsb`s r3 -- e.g.
+    // ModeManager::GetRoadRageTakedownTarget @0x82327518 calls it three times, always as
+    // `li r4,3 / lwz r3,0x6D5C(this) / bl ... / extsb`, and ModeManager::SetupGameMode
+    // @0x8234B158 does the same at 0x8234B544..0x8234B558.
+    s8  GetProgressionRankForGameMode(BrnGameState::GameStateModuleIO::EGameModeType leGameModeType) const;
+
+    // ------------------------------------------------------------------------
+    // ⭐⭐ [stuntrace wave D, D3] THE THREE RANK-AS-RATIO QUERIES StartGameModeParams::
+    // SetProgressionRankAsRatio is fed from. GameStateModule::StartModeAtLights @0x82396CF8 forks
+    // between the first two on the mode (@0x823970E0..0x82397134: modes 0, 3, 7 and 8 take the
+    // per-mode pair, everything else takes the global one), and the value it publishes scales the
+    // event's difficulty -- StuntAttackMode::Start and RaceMode::Start both read it back.
+    // All three are BODIED in BrnProgressionManager.cpp; each is walked instruction for
+    // instruction from its own export (the Hex-Rays pseudocode of all three is float/int-union
+    // garbage -- the returns live in f1 and IDA drops them -- so the asm is the only source).
+    // ------------------------------------------------------------------------
+
+    // X360 0x82370340. `clamp(lfRank / (rankCount - 1), 0, 1)`, with the console's own
+    // "Max Rank set to <n>" assert (BrnProgressionManager.cpp:3995) when the denominator is not
+    // positive and its "Normalised rank is ..." debug line. The two clamps are the asm's fsel
+    // pair @0x8237044C/0x82370458 against 0.0f (flt_82001CC0) and 1.0f (flt_82001C98).
+    f32 GetProgressionRankNormalised(f32 lfRank) const;
+
+    // X360 0x8237B610 (exported unnamed; called by StartModeAtLights @0x82397134 as the
+    // GLOBAL arm of the rank fork). Feeds GetProgressionRankNormalised the player's rank --
+    // the last authored rank when the cached rank byte has reached the rank COUNT, otherwise
+    // GetProgressionRank(). NAME is descriptive: no symbol survives for it.
+    f32 GetProgressionRankNormalisedForCurrentRank() const;
+
+    // X360 0x8237BE10. The PER-MODE rank ratio: the mode's own rank, plus the player's fractional
+    // progress between that rank's win threshold and the next one, expressed as a PERCENTAGE and
+    // then scaled by 0.01 -- the console literally computes `100.0f / maxRank` (flt_820049E0 ==
+    // 100.0f @0x8237BF10) and multiplies the sum by flt_82029F24 == 0.01f @0x8237BF6C.
+    // Returns flt_82001C98 == 1.0f when the mode is already at (or past) the last rank.
+    f32 GetProgressionRankForGameModeNormalised(
+            BrnGameState::GameStateModuleIO::EGameModeType leGameModeType) const;
+
+    // ------------------------------------------------------------------------
+    // [stuntrace waveB CLOSURE round, 2026-08-26] ADDITIVE GROW (declare-only). X360 0x8237B6B0.
+    // The stunt-race target score when the profile carries no per-event target: interpolate the
+    // event's per-rank stunt scores across the player's position BETWEEN two progression ranks,
+    // then round to 2 significant figures. Its ONE caller is StuntAttackMode::Start @0x82332150
+    // (`lwz r3, 0x6D5C(modeMgr) / mr r4, r31 (lpGameModeParams) / mr r5, r29
+    // (lpStartGameModeParams) / bl`), so the argument shape below is register-attested, not
+    // inferred; the body reads the event record off the START params (`lwz r19, 0x32C(r5)` ==
+    // StartGameModeParams::mpEventData) and never dereferences the GameModeParams* at all -- the
+    // second parameter is carried for the console's signature, exactly as it is passed.
+    // Return type is the s32 the caller `extsw`s at 0x82332154 before converting it to f32.
+    //
+    // [x] BODIED 2026-08-26 (CLOSURE round), BrnProgressionManager.cpp. The banner that stood here
+    // listed FOUR blockers; three were already false when it was written and the fourth closed in
+    // the same round, so the frontier is gone rather than deferred:
+    //   (a) "a real ProgressionRankData LAYOUT" -- it needs exactly ONE byte, rank+0x61, which is
+    //       now ProgressionRankData::GetNumWinsToRankUpStunt (DWARF BrnProgressionRankData.h:311)
+    //       and is reached through GetRankThresholdForEvent, so no offset arithmetic enters the
+    //       body. [2026-08-26 MOUNT-CLOSURE round: the real layout now exists in full --
+    //       SharedClasses/Progression/BrnProgressionRankData.h, 112 bytes with a sizeof pin -- and
+    //       the BrnGameModeParams.h stand-in this line used to name is retired.]
+    //   (b) RaceEventData::GetRankScore @0x823543D0 -- was already bodied (BrnRaceEventData.cpp:42);
+    //   (c) BrnMath::RoundWithNumSignificantFigures -- was already bodied (BrnMathUtils.cpp:123);
+    //   (d) GetRankThresholdForEvent -- bodied this round, just below.
+    // The de-inlined shape the old banner recorded proved correct against the asm, with two
+    // corrections worth keeping: the top-rank test is against `(s8)(rankCount - 1)` (the console's
+    // own liLastRankForGameMode, `extsb` of count-1), and the console's tail carries TWO
+    // RoundWithNumSignificantFigures calls -- one inside the dropped debug-print block whose result
+    // is discarded, and the real one at 0x8237BDFC. Rounding twice would be the naive transcription.
+    // Assert: "lpStuntRunEventData != NULL" (line 3891).
+    s32 GetStuntRunScoreTarget(const BrnGameState::GameModeParams* lpGameModeParams,
+                               const BrnGameState::StartGameModeParams* lpStartGameModeParams) const;
+
+    // X360 0x82370260. The event-count threshold at which a given rank is reached for a given
+    // mode. DWARF :285 `int32_t GetRankThresholdForEvent(int32_t, EGameModeType)`; the argument
+    // order is fixed by the two out-of-line calls in ModeManager::GetRoadRageTakedownTarget --
+    // 0x82327774..0x82327780 (`li r5,3` == the mode, `mr r4,r28` == the rank) and
+    // 0x82327788..0x823277A8 (`addi r4,r28,1`, same `li r5,3`).
+    s32 GetRankThresholdForEvent(s32 liProgressionRank,
+                                 BrnGameState::GameStateModuleIO::EGameModeType leGameModeType) const;
+
     // X360 0x8237A970. Add lCarId to the player's owned-car list with unlock-type leUnlockType and
     // return the new CarData record (asserts the result non-null internally). ⚠️ ARG SHAPE: the X360
     // call from ProgressionManager::OnPlayerCarChange @0x8237AC38 passes (this, carId, 0) -- the
@@ -301,6 +408,40 @@ public:
     // read it). ⚠️ FLAG (PC bring-up): nothing installs it yet -- Prepare2's caller does on the
     // console; every body that uses it null-checks first.
     void SetVehicleList(const BrnResource::VehicleList* lpVehicleList);
+
+    // ========================================================================
+    // [stuntrace waveB / agent 10 -- THE EVENT-FINISH PROGRESSION WRITERS]
+    // Bodies in BrnProgressionManager_EventFinish.cpp (a per-function partfile of this TU,
+    // the house Scoring/BrnScoringSystem_*.cpp precedent). Shapes are the DecFIGS DWARF's
+    // (references/DecFIGS/dwarfdump/GameSource/GameState/Progression/BrnProgressionManager.h
+    // :330 / :564 / :270) with the X360 asm as the tiebreaker on argument roles.
+    // ========================================================================
+
+    // X360 0x823A0040. THE offline progression payoff: called from ModeManager::ShowModeResults
+    // @0x823436D0 for offline modes {0,3,5,7,8} once a mode has finished. Marks the profile's
+    // ProfileEvent finished/won, tallies the game-mode completion + win, arms the "all win types"
+    // deferred check, unlocks the event's car, and posts the autosave / traffic-scale actions.
+    // DWARF :330 `void OnEventFinishUpdateProfile(InputBuffer::GameActionQueue*, uint32_t,
+    // ShowModeResultsAction*, BrnGameState::GameStateModuleIO::EGameModeType);`
+    void OnEventFinishUpdateProfile(BrnGameState::GameStateModuleIO::GameActionQueue* lpGameActionQueue,
+                                    u32 luEventId,
+                                    BrnGameState::GameStateModuleIO::ShowModeResultsAction* lpAction,
+                                    BrnGameState::GameStateModuleIO::EGameModeType leGameModeType);
+
+    // X360 0x82366B30. True when the profile's ProfileEvent for luEventId already carries
+    // E_FLAG_RANK_WIN (the asm's `(flags >> 2) & 1`). ModeManager::ShowModeResults negates it to
+    // fill the results action's "first win" byte. DWARF :564 `bool HasEventBeenWonPreviously(uint32_t);`
+    bool HasEventBeenWonPreviously(u32 luEventId);
+
+    // X360 0x82370180. True when the cached progression-rank byte has reached the loaded
+    // ProgressionData's rank COUNT (i.e. the player is past the last authored rank). Note this
+    // reads the RAW sign-extended byte, not the clamped GetProgressionRank(). DWARF :270
+    // `bool PlayerHasFinishedLastRank() const;`
+    bool PlayerHasFinishedLastRank() const;
+
+    // Installer for the mpTrainingManager back-pointer below (X360 +133440). Same shape/precedent
+    // as SetVehicleList. ⚠️ FLAG (PC bring-up): nothing calls it yet -- see the member's banner.
+    void SetTrainingManager(BrnGameState::TrainingManager* lpTrainingManager);
 
     // ========================================================================
     // BODIED in this TU (BrnProgressionManager.cpp). All nine X360-asm-attested. Each reaches
@@ -397,6 +538,14 @@ public:
     }
 
 private:
+    // [stuntrace waveB / agent 10] The "player is on the LAST authored rank" arm the console
+    // emits TWICE inside OnEventFinishUpdateProfile (loc_823A02C4 and loc_823A034C, byte
+    // identical): compare (s8)(rankCount - 1) against the cached rank byte and, on a match,
+    // arm the deferred all-win-types check with the finished event's mode. Factored to one
+    // private helper rather than duplicated; no console symbol of its own (it is inlined at
+    // both sites). Body in BrnProgressionManager_EventFinish.cpp.
+    void ArmAllWinTypesCheckIfAtLastRank(const RaceEventData* lpcRaceEventData);
+
     // ========================================================================
     // MINIMAL MEMBER LAYOUT (field ORDER X360-attested; exact byte offsets are X360-only -- the
     // PC build is 64-bit so the embedded Profile / pointer members are naturally wider, and every
@@ -449,6 +598,38 @@ private:
     void*                                  mpTriggerData;        // X360 +0x20924 (a5)
     void*                                  mpGameStateModule;    // X360 +0x2093C (a3)
     BrnGameState::AchievementManagerBase*  mpAchievementManager; // X360 +0x20938 (a6)
+
+    // ---- [stuntrace waveB MOUNT-CLOSURE round, 2026-08-26] the landmark -> AI-section cache ----
+    // DWARF BrnProgressionManager.h:809/:810 give the record verbatim:
+    //     struct LandmarkAISectionIndexPair { uint32_t mId; uint16_t muAISectionIndex; };
+    // and BrnProgressionManager.h:826 gives the member:
+    //     LandmarkAISectionIndexPair[512] maLandmarkAISectionIndices;
+    //
+    // THE X360 CONFIRMS BOTH INDEPENDENTLY, and the confirmation is exact rather than
+    // circumstantial:
+    //   * FindLandmarkAISectionIndex @0x82359AE0 walks the table from `this + 128904` (0x1F788)
+    //     with `addi r11, r11, 8` -- an 8-byte stride, i.e. {u32, u16} padded to 8 -- reading
+    //     `lwz r8, 0(r11)` for the id and returning `lhz r3, 4(r11)` for the section index.
+    //   * ComputeLandmarkAISectionIndices @0x82370008, the table's PRODUCER, writes the same
+    //     two slots at the same stride (`*v12 = landmark[+36]`, the section index into +4,
+    //     `v12 += 2` over an int*), and its assert names the record's first field: the message
+    //     is literally "lpEntry->mId != BrnWorld::KI_INVALID_SECTION_INDEX".
+    //   * THE ARITHMETIC CLOSES. 512 * 8 == 4096 == 0x1000, so the table spans +0x1F788..+0x20788
+    //     -- and +0x20788 is 133000, which is exactly the offset this header's own
+    //     mDebugComponent comment (immediately below, and the very next DWARF member at :827)
+    //     already records for the debug component. The array size, the stride and the two
+    //     neighbours all agree; nothing here is inferred from a single witness.
+    //
+    // The LIVE length is NOT stored here -- both the reader and the producer take it from the
+    // trigger data (`*(*(this + 0x20924) + 0x34)` == TriggerData::miLandmarkCount, reached
+    // through mpTriggerData below). 512 is the authored capacity only.
+    struct LandmarkAISectionIndexPair
+    {
+        u32 mId;                 // +0x00 (DWARF :809) the landmark's own id (Landmark +0x24)
+        u16 muAISectionIndex;    // +0x04 (DWARF :810) the nearest AI section to that landmark
+    };
+    static const s32 KI_LANDMARK_AI_SECTION_INDEX_COUNT = 512;   // DWARF :826 array bound
+    LandmarkAISectionIndexPair maLandmarkAISectionIndices[KI_LANDMARK_AI_SECTION_INDEX_COUNT];
 
     // The progression debug component the ctor installs (vtable off_820CDE4C) and Prepare2 constructs +
     // registers (X360 +133000 region, this+0x788 in the +0x20000 page). FLAG: full DebugComponent
@@ -516,12 +697,49 @@ private:
     bool      mbUpdateRivalsRequested = false;
     bool      mbDriveThrusDirty = false;
 
+    // ---- [stuntrace waveB / agent 10] the deferred "all win types for this mode" check -------
+    // X360 +133440 (0x20940). The training manager the progression layer queues its
+    // E_TRAINING_TYPE_WON_EVENT tip through. OnEventFinishUpdateProfile @0x823A0040 reads it as
+    // `lwzx r31, r30, 0x20940` and then open-codes TrainingManager::RequestTraining's gauntlet.
+    // ⚠️ FLAG (PC bring-up, NOT introduced by this wave): nothing in the mounted set calls
+    // SetTrainingManager, so this reads NULL today and the tip leg no-ops with a one-shot log.
+    // The console installer is the un-reconstructed outer ProgressionManager::Prepare/Construct
+    // pair (the same hole mpVehicleList / mpAchievementManager already sit in).
+    BrnGameState::TrainingManager* mpTrainingManager = 0;      // X360 +133440 (0x20940)
+
+    // X360 +133493 (0x20975) / +133494 (0x20976). The gate pair ProgressionManager::PreWorldUpdate
+    // @0x823A4F68 polls (`if (+133493) if (+133494)`) before running a 2 s timer at +133500 and
+    // then calling CheckForAllModeTypeCompletion(queue, meModeToCheckForAllWinTypes); it clears
+    // both afterwards. Construct @0x8237A5F8 seeds both 0. OnEventFinishUpdateProfile stores
+    // 0 into the first and 1 into the second on the "player is at the last authored rank" arm.
+    // ⚠️ FLAG (NAMES PROVISIONAL): the assert string only names the MODE member below, so which
+    // of the two bytes is the "pending" one and which the "armed" one is an inference from the
+    // writer/reader pair. Do not rename without a third witness.
+    bool      mbCheckAllWinTypesPending = false;               // X360 +133493 (0x20975)
+    bool      mbCheckAllWinTypesArmed   = false;               // X360 +133494 (0x20976)
+
+    // X360 +133496 (0x20978). PINNED BY THE ASSERT STRING: PreWorldUpdate @0x823A4F68 fires
+    // "meModeToCheckForAllWinTypes != RaceEventData::E_MODE_INVALID"
+    // (BrnProgressionManager.cpp:382) against this very word before handing it to
+    // CheckForAllModeTypeCompletion. Logical type BrnProgression::RaceEventData::EModeType;
+    // stored as the s32 the X360 writes (`stwx` of the event record's +0xEC mode BYTE, so the
+    // stored value is a zero-extended byte). Construct seeds -1 (E_MODE_INVALID).
+    s32       meModeToCheckForAllWinTypes = -1;                // X360 +133496 (0x20978)
+
     // Pointer-INVARIANT layout facts only (host is the LLP64 gate target). The X360 byte offsets are
     // NOT asserted: they do not survive the 32->64-bit pointer widening of the embedded Profile.
     static void _AssertLayout()
     {
         static_assert(KI_HANDLE_SLOT_COUNT == 18, "X360 ctor resets exactly 18 head handle slots");
         static_assert(sizeof(HandleSlot) == 20,   "X360 head record stride is 0x14 (20) bytes");
+        // The landmark cache IS pointer-free, so its console shape does survive to the host and
+        // is worth pinning: FindLandmarkAISectionIndex @0x82359AE0 strides it by 8
+        // (`addi r11, r11, 8`) and returns the halfword at +4 (`lhz r3, 4(r11)`), and the 512 *
+        // 8 == 0x1000 span is what puts mDebugComponent at the +133000 this header records.
+        static_assert(sizeof(LandmarkAISectionIndexPair) == 8,
+                      "X360 landmark->AI-section record stride is 8 bytes");
+        static_assert(KI_LANDMARK_AI_SECTION_INDEX_COUNT == 512,
+                      "DWARF BrnProgressionManager.h:826 sizes the table at 512 entries");
     }
 };
 }

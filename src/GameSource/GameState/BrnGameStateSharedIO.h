@@ -255,6 +255,15 @@ namespace BrnGameState
         // Per-event assert ceiling on landmarks (DWARF BrnGameStateSharedIO.h:1850).
         const s32 KI_MAX_LANDMARKS_IN_MODE = 16;
 
+        // [stuntrace waveB fix round, 2026-08-26] Per-event assert ceiling on ONLINE ROUNDS. The
+        // console assert string names this constant verbatim; ModeManager::SetupGameMode @0x8234B158
+        // fires it off `cmplwi r26, 0xA` @0x8234B254, i.e. the bound is 10. It had no home in this
+        // tree (BrnGuiCache.h:1428 mentions it only in a comment), so the ModeManager setup partfile
+        // carried a TU-local copy; that copy's own banner says to delete it the moment this lands.
+        // [!] Deleting it is the setup partfile's edit, not this header's -- the two do NOT collide
+        // meanwhile (the local is at BrnGameState scope, this one is inside GameStateModuleIO).
+        const u32 KU_MAX_ONLINE_ROUNDS_IN_MODE = 10;
+
         // X360-only stunt-score scratch record. No DWARF/leak shape exists; the layout is
         // recovered purely from StuntScoreInfo::Clear (0x82356EA0), which zeroes a fixed set of
         // u32 words and leaves the muReservedNN gaps intact. Field semantics are unknown -- words

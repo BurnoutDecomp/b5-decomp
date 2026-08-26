@@ -141,6 +141,18 @@ public:
     // Picture Paradise is up. De-inlined; no symbol exists in the image.
     bool IsInPictureParadise() const { return mbInPictureParadise; }
 
+    // ⭐ [stuntrace wave D, D3] X360-INLINED read of meCurrentTrainingType (+0x04). No symbol
+    // exists in the image -- every consumer renders as a bare `lbz`/`lwz` at the owner's offset.
+    // THREE sites in this wave's chain read it through the GameStateModule, all as gsm+46644
+    // (== mpTrainingManager + 0x04, since the console embeds the manager at gsm+46640):
+    //   ShouldStartSnapRaceMode              @0x82363700  `if (!*(a1+46640) || *(a1+46644) >= 77)`
+    //   CheckIfPlayerIsAtJunctionWithAnEvent @0x82390418  twice -- the mbCanEnterEvent gate and
+    //                                                     the action's own mbCanEnterEvent field
+    // and each compares it against 77 == BrnProgression::E_TRAINING_TYPE_NOT_TIMED_COUNT, i.e.
+    // "a BLOCKING (non-timed) tip is latched right now, so do not offer / do not start an event".
+    // De-inlined to this named accessor so no reconstructed body pokes the byte offset.
+    BrnProgression::ETrainingType GetCurrentTrainingType() const { return meCurrentTrainingType; }
+
     // X360 0x823590A0. True when a tip of this type is allowed in the current game mode. PRE-EXISTING
     // (was private); surfaced public additively so the DriveThruManager TU's TryPlayTrainingTip guard
     // can call it cross-class. Access-only change -- no layout/behaviour effect.

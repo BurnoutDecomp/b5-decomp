@@ -257,7 +257,22 @@ namespace RaceCarEntityModuleIO
              GetDeformationModelResourcePtr(EActiveRaceCarIndex) const;                      // :378 (own TU)
         void SetDeformationModelResourcePtr(EActiveRaceCarIndex,
              const CgsResource::ResourcePtr<BrnPhysics::Deformation::StreamedDeformationSpec>&); // :383 (own TU)
-        const CgsWorld::WorldMap2D* GetWorldMap2D() const;                                   // :386 (own TU)
+        // :386 -- HEADER INLINE, not an own-TU function (the SetPlayerWrecked precedent 14 lines
+        // down, same header, same reason): the image has NO out-of-line GetWorldMap2D symbol at
+        // all -- the compiler folded every read into a bare adjust. Two independent folds, both
+        // dumped 2026-08-26, land on the SAME byte and pin the member:
+        //   GameStateModule::ProcessGameEvents @0x823A3700  addis r3, this, 4 / addi r3, r3, -0x3F70
+        //   ModeManager::SetupCheckpointDistricts @0x82329740  the identical pair
+        // == GameStateModule + 245904 (0x3C090), handed straight to CgsWorld::WorldMap2D::GetValue
+        // as `this` (0x823A3718 / 0x82329830). GameStateModule embeds mLastActiveRaceCarInterface
+        // at +235488 spanning 10480 bytes (BrnGameStateModule.h / .cpp:1085), so 245904 is
+        // interface+10416 == 0x28B0 -- and mbPlayerWrecked below is pinned at interface+0x28E0 by
+        // its own console store, exactly 48 bytes later, which is sizeof(WorldMap2D) rounded to
+        // its Vector2 alignment (40 -> 48). mWorldMap2D is the member immediately before it, so
+        // the fold is &mWorldMap2D and nothing else.
+        // (Landed for GameStateModule::GetDistrictMap; it also un-blocks
+        // BrnChallengeManager_wC_04.cpp:178, the only other caller in the tree.)
+        const CgsWorld::WorldMap2D* GetWorldMap2D() const { return &mWorldMap2D; }
         void SetWorldMap2D(const CgsWorld::WorldMap2D*);                                     // :390 (own TU)
         const RaceCarState* GetPlayerRaceCarState() const;                                   // :393 (own TU)
         Vector3 GetPlayerPosition() const;                                                   // :396 (own TU)

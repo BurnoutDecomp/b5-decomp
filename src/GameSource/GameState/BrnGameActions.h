@@ -11,6 +11,7 @@
 #include "GameShared/GameClasses/System/Timer/CgsTime.h"     // CgsSystem::Time (OnlineGameResults::mSecondsInEvent / maRoundTimes)
 #include "GameSource/GameState/BrnGameStateTypes.h"           // BrnGameState::StuntElementType (WorldStuntAction / OnStuntElementCompleteAction)
 #include "SharedClasses/World/BrnWorldRegion.h"               // [gateui] BrnWorld::ECounty (OnStuntElementCompleteForCountyAction)
+#include "SharedClasses/Progression/BrnTrainingTypes.h"       // [stuntrace] BrnProgression::ETrainingType (RequestGameTrainingAction)
 
 namespace BrnResource
 {
@@ -74,15 +75,75 @@ enum EGameActionType
     E_ACTION_ONLINE_PLAYER_ADDED        = 211,   // DWARF BrnGameActions.h (was placeholder 220)
     E_ACTION_SETUP_NETWORK_CAR          = 5,     // DWARF BrnGameActions.h (was placeholder 221)
     E_ACTION_ONLINE_PLAYER_REMOVED      = 212,   // DWARF BrnGameActions.h (was placeholder 222)
-    E_ACTION_ONLINE_GAME_RESULT         = 221,   // DWARF BrnGameActions.h
-    E_ACTION_ONLINE_ROUND_RESULT        = 222,   // DWARF BrnGameActions.h
+    // [!!] VALUE CORRECTION 2026-08-26 (stuntrace waveB CLOSURE round) -- 221 -> 229, and this is
+    // the FIFTH id of the same species as the four the closure round was chartered to settle. It
+    // was found because THIS FILE ALREADY CONTRADICTED ITSELF: the band table further down (the
+    // "DWARF 135..226 -> +8" line) lists "ONLINE_GAME_RESULT 221->229" as one of its witnesses,
+    // while the enumerator here still carried the raw PS3-DWARF 221 (dwarfdump
+    // .../BrnGameActions.h:231 `E_ACTION_ONLINE_GAME_RESULT = 221`).
+    // The X360 value is PRODUCER-PINNED, re-derived this pass rather than inferred from the shift:
+    //     BrnGameState::ModeManager::SendGameResultsToNetwork @0x82343E88
+    //       0x82343F08  bl  BrnGameState__GameStateModuleIO__OnlineGameResults__...  ; fills var_120
+    //       0x82343F0C  li  r6, 0x108      (264)
+    //       0x82343F10  li  r5, 0xE5       (229)
+    //       0x82343F14  addi r4, r1, 0x170+var_120                                   ; that record
+    //       0x82343F1C  bl  CgsModule__VariableEventQueue_13312_16___AddEvent
+    // The record handed to AddEvent is the OnlineGameResults buffer the preceding call just wrote,
+    // so id and record identity are attested at one site -- the same class of proof that pinned
+    // E_ACTION_ONLINE_ROUND_RESULT (230) and E_ACTION_SET_UP_ALL_DRIVE_THRUS (45). DWARF 221 + 8,
+    // exactly the shift its neighbour ONLINE_ROUND_RESULT (222 -> 230) carries.
+    // [!] SIZE MISMATCH NOTED, NOT PAPERED OVER: the console posts 264 (0x108) while
+    // `struct OnlineGameResults` below documents sizeof == 260 (65 u32 words, +0xDC + 40 == 0x104).
+    // That 4-byte delta is a TAIL-PAD question for the record's owner (the same shape as
+    // StartModeIntroAction's 603 -> 604), not evidence against the id: 260 is not any other
+    // record's size either. Left as a flagged residue.
+    // 229 was unoccupied in this enum (checked: no duplicate values remain) and NO consumer
+    // anywhere in src/ dispatches on this enumerator -- grep-verified, its only uses are the
+    // record's own GameAction<> tag and BrnGameStateSharedIO.h's re-home note -- so the move is a
+    // pure value correction with no call-site churn.
+    E_ACTION_ONLINE_GAME_RESULT         = 229,   // DWARF :231 gives 221 (+8 X360); producer-pinned, size 264
+    // ⛔ VALUE CORRECTION 2026-08-26 (stuntrace waveB fix round) -- was the PS3-DWARF 222.
+    // X360-attested at BOTH ends: ModeManager::SendModeStopMessages @0x8234BEC0 posts
+    // `li r6,0x44` (68) + `li r5,0xE6` (230) @0x8234C3EC/0x8234C3F0, and 68 is exactly
+    // sizeof(OnlineRoundResults) below -- the size match is what makes this a proof rather
+    // than a shift inference. DWARF 222 + 8, the same shift this enum already records for the
+    // freeburn-challenge block and REQUEST_GAME_TRAINING (141 -> 149).
+    E_ACTION_ONLINE_ROUND_RESULT        = 230,   // DWARF 222 (+8 X360); size 68
     E_ACTION_RANK_INFO_RESPONSE         = 173,   // DWARF BrnGameActions.h:183
     E_ACTION_TROPHY_UNLOCK              = 196,   // DWARF BrnGameActions.h:206
-    E_ACTION_FINISHED_MODE              = 31,    // DWARF BrnGameActions.h:41
+    // ⛔ VALUE CORRECTION 2026-08-26 (stuntrace waveB fix round) -- this carried the raw PS3-DWARF
+    // value (31), which matches NEITHER X360 action. The X360 SPLITS the DWARF's single
+    // E_ACTION_FINISHED_MODE into two, and both were re-dumped from the exports this pass:
+    //   35 (0x23) size 1  -- ModeManager::SendFinishedModeAction @0x82343628
+    //                        (`li r6,1` @0x823436A0 + `li r5,0x23` @0x823436A4): a payload-free
+    //                        "the mode finished" notification. Its enumerator NAME is UNRECOVERED,
+    //                        so it is spelled with a FLAG rather than given a guessed DWARF name.
+    //   36 (0x24) size 48 -- ModeManager::SendModeResults @0x82343438
+    //                        (`li r6,0x30` + `li r5,0x24`; the IDA pseudocode renders the call as
+    //                        `AddEvent(a2, &v19, 36, 48)`): the 48-byte results record.
+    // `struct FinishedModeAction` below IS the 48-byte one (its consumer,
+    // BrnNetworkStandingsManager.cpp:233, reads mFinishTime / mfDistanceFromFinish /
+    // meEliminatorIndex), so E_ACTION_FINISHED_MODE takes 36. Inert today -- the tag is a template
+    // parameter and nothing dispatches on 31 -- but at 31 no consumer case could ever match.
+    E_ACTION_FINISHED_MODE              = 36,    // DWARF :41 gives 31 (+5 X360); size 48
+    E_ACTION_FINISHED_MODE_NOTIFY       = 35,    // FLAG: name unrecovered; X360 size 1
     // The DecFIGS values are 30/65/66.  ARTIST's HandleGameActions jump table
     // pins the merged-X360 ids at 34/70/71 respectively (0x8230C7A0,
     // 0x8230C3D8 and 0x8230C40C).
     E_ACTION_START_PLAYING_MODE         = 34,
+    // [stuntrace waveB fix round, 2026-08-26] The mode-INTRO pair. Both re-derived from the
+    // exports this pass, not taken from the implementer report:
+    //   29 (0x1D) size 604 (0x25C) -- ModeManager::StartModeIntro @0x82343018:
+    //      `li r6,0x25C` @0x823432D4 + `li r5,0x1D` @0x823432D8 into
+    //      VariableEventQueue<13312,16>::AddEvent @0x823432E4.  DWARF :35 == 25  (+4 X360)
+    //   30 (0x1E) size 8        -- ModeManager::StopModeIntro  @0x82343F38:
+    //      `li r6,8` @0x82343FC4 + `li r5,0x1E` @0x82343FCC into AddEvent @0x82343FD8.
+    //      DWARF :36 == 26  (+4 X360)
+    // +4 is the SAME window this enum already records for PREPARE_FOR_MODE (DWARF 19 -> 23) and
+    // START_PLAYING_MODE (DWARF 30 -> 34, `li r5,0x22` @0x82343400), which bracket it. Do NOT
+    // extrapolate +4 past this window -- the mode-lifecycle names above it are +5.
+    E_ACTION_START_MODE_INTRO           = 29,    // DWARF 25  (+4 X360)
+    E_ACTION_STOP_MODE_INTRO            = 30,    // DWARF 26  (+4 X360)
     E_ACTION_ALLOW_BOOST_EARNING        = 70,
     E_ACTION_STOP_BOOSTING              = 71,
     // ⛔ VALUE CORRECTION 2026-08-20 -- this carried the PS3-DWARF value (19). The X360 ARTIST
@@ -101,7 +162,26 @@ enum EGameActionType
     // (nothing posts through the tag yet) but it is the id the whole gameplay-arming chain
     // turns on: at a wrong value no consumer's case would ever match.
     E_ACTION_PREPARE_FOR_MODE           = 23,    // DWARF :29 gives 19 -- PS3 value (X360-attested 23)
-    E_ACTION_SET_UP_ALL_DRIVE_THRUS     = 40,    // DWARF BrnGameActions.h:40
+    // [!!] VALUE CORRECTION 2026-08-26 (stuntrace waveB CLOSURE round) -- 40 -> 45, and THE
+    // PRODUCER IS NOW LOCATED, so this is a PIN and no longer the "shift is an inference" park
+    // the previous pass left here. Method: an exhaustive sweep of every `AddEvent` call site in
+    // the 30,095-export dump, filtered to the GameState queue
+    // (CgsModule::VariableEventQueue<13312,16>), reading the live `li r5` / `li r6` immediates.
+    // Exactly ONE site in the whole image posts the drive-thru table:
+    //   BrnGameState::GameStateModule::SendSetUpAllDriveThrusMessage
+    //     `li r6, 0x458` (1112) + `li r5, 0x2D` (45) -> AddEvent @0x82381CC0.
+    // The PRODUCER SYMBOL NAME IS THE ENUMERATOR NAME -- the same class of proof that pinned
+    // E_ACTION_UPDATE_PLAYER_MEDALS (200) and E_ACTION_ONLINE_ROUND_RESULT (230) -- and 1112 is
+    // 46 * sizeof(DriveThruInfo) (24) + the Array<> count word and its tail pad, i.e. exactly
+    // SetUpAllDriveThrusAction. DWARF 40 + 5, the same shift the mode-lifecycle block below
+    // records (QUIT_MODE_OFFLINE 35 -> 40, QUIT_MODE_ONLINE 36 -> 41, IMPACT_TIME_END 38 -> 43).
+    // The seat this vacates at 40 is the ONE-BYTE offline quit ModeManager::SendModeStopMessages
+    // @0x8234BEC0 posts (`li r6,1` @0x8234C654 + `li r5,0x28` @0x8234C664, the byte sourced from
+    // NetworkRoundManager+0x130) -- enumerated below as E_ACTION_QUIT_MODE_OFFLINE.
+    // No consumer anywhere in src/ dispatches on this enumerator (grep-verified this pass: the
+    // only references are the record type and its Array<> leaf instantiation), so the move is a
+    // pure value correction.
+    E_ACTION_SET_UP_ALL_DRIVE_THRUS     = 45,    // DWARF :40 (+5 X360); size 1112, producer-pinned
     // ⛔⛔ [gateui] VALUE CORRECTION 2026-08-20 -- THE WHOLE STUNT BLOCK WAS CARRYING DWARF (PS3)
     // VALUES, and the X360 ARTIST build shifts this range by EXACTLY +5. Both ends measured:
     //   producer StuntManager::ProcessStuntElement @0x8239CDB0 posts, in body order,
@@ -177,12 +257,237 @@ enum EGameActionType
     E_ACTION_FREEBURN_CHALLENGE_EVERY_PLAYER_COMPLETION_STATUS = 157, // DWARF 149 (+8 X360)
     E_ACTION_FREEBURN_CHALLENGE_SUCCESS_UPDATE           = 158,  // DWARF 150 (+8 X360)
     E_ACTION_FREEBURN_CHALLENGE_SUCCESS                  = 159,  // DWARF 151 (+8 X360)
-    // StreetManager keystone (wave B). PS3-DWARF value (BrnGameActions.h enum: 262);
-    // the X360 discriminant is owned by the GameStateModule dispatcher that posts the
-    // query -- template tag only here (the filler, FillInRoadRulesQuery, never reads it).
-    E_ACTION_ROAD_RULES_BATCH_QUERY                      = 262,  // value unconfirmed on X360 (template tag only)
+    // [!!] VALUE CORRECTION 2026-08-26 (stuntrace waveB CLOSURE round) -- 262 -> 275, PINNED.
+    // The previous comment said "the X360 discriminant is owned by the GameStateModule dispatcher
+    // that posts the query". That dispatcher has now been read:
+    //   BrnGameState::GameStateModule::ProcessGameEvents @0x823A0A18, jumptable case 98 ->
+    //     0x823A4970  bl StreetManager::FillInRoadRulesQuery   ; fills the record at r1+var_990
+    //     0x823A4974  li r6, 0x308      (776)
+    //     0x823A4978  li r5, 0x113      (275)
+    //     0x823A4984  bl VariableEventQueue<13312,16>::AddEvent
+    // 776 IS sizeof(RoadRulesBatchQueryAction) below (64*8 ids + 4 + 4*64 bools + 1, padded to 8),
+    // and the record handed to AddEvent is the very buffer FillInRoadRulesQuery just wrote -- so
+    // the id, the size and the record identity are all attested at one site.
+    // The +13 shift is not extrapolated either: the WHOLE road-rules band is producer-symbol
+    // matched at +13 in the same sweep -- RoadRulesManager::OnEnterRoad 273 (DWARF 260),
+    // OnLeaveRoad 274 (261), StreetManager::SendUpcomingRoadMessage 276 (263),
+    // RoadRulesManager::OnStartRule 277 (264), OnEndRule 278 (265),
+    // OnUpdateActiveRoadScores 279 (266), SendActiveRuleState 282 (269),
+    // UpdateTimeRule 283 (270). Nine independent witnesses, this one included.
+    // [!] The X360's 262 belongs to something else entirely -- ModeManager::UpdateCurrentMode
+    // posts a ONE-BYTE payload there (@0x823515E0); it is enumerated below with a FLAGGED name.
+    // No consumer dispatches on this enumerator today (the filler takes the record by pointer),
+    // so the move is a pure value correction.
+    E_ACTION_ROAD_RULES_BATCH_QUERY                      = 275,  // DWARF 262 (+13 X360); size 776
+    // ⭐ [stuntrace wave D, D3] "you are in the wrong car for this challenge". Producer
+    // GameStateModule::StartModeAtLights @0x82396CF8: when the junction's RaceEventData carries a
+    // mSpecialEventCarId (+0x10) that does not match GetOriginalCarId(mActivePlayerCarId), it posts
+    // the 8-byte record and RETURNS WITHOUT STARTING ANYTHING --
+    //     0x82396F74  std   r11, 0x430+var_3E0(r1)   ; the event's mSpecialEventCarId
+    //     0x82396F80  li    r6, 8                    ; size
+    //     0x82396F7C  li    r5, 0x110                ; == 272
+    //     0x82396F88  bl    VariableEventQueue<13312,16>::AddEvent
+    // VALUE is asm-attested; the NAME is the DWARF's own (BrnGameActions.h:269
+    // E_ACTION_WRONG_CAR_FOR_CHALLENGE == 259) carried across the +13 road-rules band this enum
+    // already records at nine independent witnesses -- 259 + 13 == 272 exactly, and the semantics
+    // of the producer and of the DWARF name are the same event.
+    E_ACTION_WRONG_CAR_FOR_CHALLENGE                     = 272,  // DWARF 259 (+13 X360); size 8
     E_ACTION_FREEBURN_CHALLENGE_SHOW_SELECTOR            = 160,  // DWARF 152 (+8 X360)
     E_ACTION_ACTIVE_FREEBURN_CHALLENGE                   = 161,  // DWARF 153 (+8 X360)
+
+    // ⭐⭐ [evt-flow wave E1, 2026-08-26] THE EVENT-FLOW ACTION BLOCK. Every value below is
+    // X360-attested at BOTH ends -- a producer that posts the literal id with the literal size,
+    // and the TranslateGameActionsToGuiEvents @0x823E9CE0 jump-table case that consumes it
+    // (jpt_823EA1F0; the arms live in GameBridgeGameStateToX_EventFlowGuiEvents.cpp).
+    //
+    // ⓘ THE SHIFT IS NOT ONE CONSTANT ACROSS THE ENUM. This enum already records +5 for the
+    // stunt block, +8 for the freeburn-challenge block and +4 for PREPARE_FOR_MODE. Measured
+    // again here: the mode-lifecycle names (DWARF 32/33/34/39/42) are at DWARF+5, and the
+    // progression names (DWARF 192/193) are at DWARF+8. Do NOT extrapolate a shift -- pin
+    // each value from the asm, which is what the per-line citations below do.
+    //
+    //   37  producer BrnGameState::ModeManager::ShowModeResults      @0x823436D0 (id 37, size 232)
+    //       consumer @0x823EA984 -> GuiEventOfflinePostEvent(289) / GuiEventTriggerOnlinePostEvent(320)
+    //       name from the producer symbol; DWARF :42 E_ACTION_SHOW_MODE_RESULTS == 32 (+5).
+    //   38  producer BrnGameState::ModeManager::PreWorldUpdate       @0x823537B8 (id 38, size 1)
+    //       consumer @0x823EAD20 -> GuiEventFinishedModeResults(321). ⭐ THE NAME IS IMAGE-CITED:
+    //       the consumer's own debug line is the string literal
+    //       "***** GameBridgeGameStateToX found E_ACTION_FINISHED_MODE_RESULTS *****\n"
+    //       (loaded into var_33A4 @0x823EA130), i.e. the binary spells this enumerator out.
+    //       DWARF :43 E_ACTION_FINISHED_MODE_RESULTS == 33 (+5).
+    //   39  producer BrnGameState::ModeManager::SendModeStopMessages @0x8234BEC0 (id 39, size 24)
+    //       consumer @0x823EABCC -> GuiEventStopMode(322). DWARF :44 E_ACTION_STOP_MODE == 34 (+5).
+    //   44  producer BrnGameState::ModeManager::StartModeIntro       @0x82343018 (id 44, size 4)
+    //       (also GameStateModule::ProcessGameEvents @0x823A0A18, same id/size)
+    //       consumer @0x823EA948 -> GuiEventEnterEventStartLocation(166).
+    //       DWARF :49 E_ACTION_SET_IN_MODE_START_REGION == 39 (+5).
+    //   47  producer BrnGameState::ModeManager::CheckCountdownDisplay@0x82342898 (id 47, size 4)
+    //       consumer @0x823EAD50 -> GuiEventUpdateEventCountdown(234).
+    //       DWARF :52 E_ACTION_SET_COUNTDOWN == 42 (+5).
+    //  200  producer BrnProgression::ProgressionManager::UpdatePlayerMedals @0x8239FE50 (id 200, size 8)
+    //       consumer @0x823EA784 -> GuiEventMedalUpdate(307).
+    //       DWARF :192 E_ACTION_UPDATE_PLAYER_MEDALS == 192 (+8) -- the producer symbol name IS
+    //       the enumerator name.
+    //  201  producers BrnGameState::GameStateModule::CheckIfPlayerIsAtJunctionWithAnEvent
+    //       @0x82390418 and BrnGameState::DriveThruManager::UnlockCarChallengeForCar @0x82386840
+    //       (both id 201, size 40); consumer @0x823EA810 -> GuiEventJunctionInfo(311).
+    //       DWARF :203 E_ACTION_EVENT_AT_JUNCTION_AVAILABLE == 193 (+8).
+    E_ACTION_SHOW_MODE_RESULTS                           = 37,   // DWARF 32  (+5 X360)
+    E_ACTION_FINISHED_MODE_RESULTS                       = 38,   // DWARF 33  (+5 X360); name image-cited
+    E_ACTION_STOP_MODE                                   = 39,   // DWARF 34  (+5 X360)
+    E_ACTION_SET_IN_MODE_START_REGION                    = 44,   // DWARF 39  (+5 X360)
+    E_ACTION_SET_COUNTDOWN                               = 47,   // DWARF 42  (+5 X360)
+    E_ACTION_UPDATE_PLAYER_MEDALS                        = 200,  // DWARF 192 (+8 X360)
+    E_ACTION_EVENT_AT_JUNCTION_AVAILABLE                 = 201,  // DWARF 193 (+8 X360)
+
+    // =========================================================================================
+    // [!!] [stuntrace waveB CLOSURE round, 2026-08-26] THE MODE-LIFECYCLE / TRANSMIT BLOCK.
+    //
+    // Twenty-one ids the wave-B ModeManager + ProgressionManager bodies post that had NO
+    // enumerator here, so nine partfiles were each carrying their own `KI_ACTION_*` mirror --
+    // three of them already duplicated across two files. Every VALUE below is the live
+    // `li r5, <id>` immediate at a named AddEvent call site and every SIZE is the live
+    // `li r6, <n>` on the same path; both were re-dumped THIS pass by an exhaustive sweep of
+    // all 30,095 exports, filtered to the GameState queue VariableEventQueue<13312,16>
+    // (2,547 AddEvent sites image-wide, 402 of them on this queue).
+    //
+    // NAMES. Three tiers, and each line says which tier it is:
+    //   PINNED      the producer's own SYMBOL NAME is the enumerator name (7, 31, 45, 275).
+    //   BAND        the DWARF name at the measured X360 shift, AND the producer's branch
+    //               condition matches that name's semantics. The shift is not extrapolated: it
+    //               is monotone and witnessed at both ends of each band --
+    //                 DWARF   0..15  -> +0   (RESET_PLAYER_CAR 0, SETUP_NETWORK_CAR 5,
+    //                                         REMOTE_PLAYER_DISCONNECTED 11, COMPLETED_STUNT 15)
+    //                 DWARF  18..30  -> +4   (PREPARE_FOR_MODE 19->23, MARKED_MAN_LOADED 27->31
+    //                                         [producer-pinned], START_PLAYING_MODE 30->34)
+    //                 DWARF  31..122 -> +5   (SHOW_MODE_RESULTS 32->37, STOP_MODE 34->39,
+    //                                         SET_COUNTDOWN 42->47, REQUEST_ROUTE_INFO 45->50
+    //                                         [producer-pinned SendRouteRequestAction],
+    //                                         SET_LANDMARK_RACES 46->51 [producer-pinned
+    //                                         SendSetLandmarkRacesAction], WORLD_STUNT 122->127)
+    //                 DWARF 135..226 -> +8   (SHOWTIME_MODE_SWITCH 135->143, GAME_TRAINING
+    //                                         140->148 [TrainingManager::SendTrainingTickerMessage],
+    //                                         GAME_TRAINING_REQUEST 141->149, GAME_TRAINING_PAUSE
+    //                                         142->150, GAME_TRAINING_UNPAUSE 143->151
+    //                                         [TrainingManager::ForceUnpause], the freeburn block,
+    //                                         ONLINE_GAME_RESULT 221->229, ONLINE_ROUND_RESULT
+    //                                         222->230, ROAD_RULES_CHALLENGE_SCORES 224->232)
+    //                 DWARF 260..    -> +13  (the nine road-rules witnesses listed above)
+    //   FLAG        the value is pinned but NO DWARF enumerator fits the payload; the name is
+    //               descriptive, taken from what the producer builds, and must not be "tidied".
+    //
+    // Deleting the TU-local mirrors is part of this change; do not re-add them.
+    // =========================================================================================
+
+    // ---- ShowModeResults / SendModeStopMessages tail -----------------------------------------
+    // PINNED. BrnGameState::DriveThruManager::SetPlayerCarDriver posts id 7 size 48
+    // (`li r5,7` @0x82386824 + `li r6,0x30` @0x8238681C -> AddEvent @0x82386830) -- the producer
+    // symbol IS the DWARF name (:7, sub-16 region, unshifted). ModeManager posts the same record
+    // from ShowModeResults (@0x82343E4C) and SendModeStopMessages (@0x8234C710), and
+    // CarSelectManager posts it on junkyard exit; the leading word selects who is driving.
+    E_ACTION_SET_PLAYER_CAR_DRIVER                       = 7,    // DWARF :7 (+0); size 48
+    // FLAG -- NAME UNRECOVERED. ModeManager::ShowModeResults @0x82343BC8 posts id 18 size 16
+    // (`li r5,0x12` @0x82343BBC + `li r6,0x10` @0x82343BB8) with payload
+    // {+0x00 CgsID event id, +0x08 s32 EGameModeType, +0x0C s32 score}, and the very next console
+    // call is Profile::SetEventScoreToUpload with those same three values -- which is where the
+    // descriptive name comes from. NO DWARF enumerator fits: DWARF 18 is
+    // E_ACTION_CHECK_FOR_LOADING_SCREEN (whose X360 seat is 22, below) and neither DWARF 13 (+5)
+    // nor DWARF 14 (+4) is a score upload. Value pinned, name provisional.
+    E_ACTION_EVENT_SCORE_TO_UPLOAD                       = 18,   // FLAG name; X360 size 16
+    // BAND (+4). ModeManager::SetupGameMode posts id 22 size 1 at BOTH of its exits
+    // (`li r5,0x16` @0x8234B4B8 and @0x8234B86C, `li r6,1` @0x8234B4B4/@0x8234B868) and the
+    // payload stack slot is NEVER WRITTEN -- a bare tag action. SetupGameMode is exactly the
+    // console function that then waits for ModeManager::HandleLoadingScreenLoaded, so the DWARF
+    // name at this band's shift describes this producer. No other site in the image posts 22.
+    E_ACTION_CHECK_FOR_LOADING_SCREEN                    = 22,   // DWARF 18 (+4 X360); size 1  BAND
+    // BAND (+4). ModeManager::PrepareForMode posts id 24 size 48 (`li r5,0x18` @0x82342F60 +
+    // `li r6,0x30` @0x82342F5C): 36 bytes copied verbatim off a Landmark's TriggerRegion base
+    // (the `li r9,9` dword loop @0x82342F3C..0x82342F54) then the landmark CgsID sign-extended
+    // into +0x28. A per-landmark trigger box + id broadcast is what the DWARF name describes.
+    // (The record itself stays TU-local in BrnModeManager_Prepare.cpp as ModeLandmarkAction --
+    // it is a 9-dword copy of a type this header does not include.)
+    E_ACTION_BROADCAST_MODE_FINISH_LINES                 = 24,   // DWARF 20 (+4 X360); size 48 BAND
+    // ---- the SendModeStopMessages exit fan-out (all from @0x8234BEC0) ------------------------
+    // Five ids share the merged AddEvent call site @0x8234C698; each arm sets its own `li r5`
+    // and `li r6` before branching to loc_8234C694, so the pairing below is a HAND-TRACE of the
+    // branch structure, not an automated backward scan (an automated scan mis-attributes size 4
+    // to id 25 -- the `li r6,4` at 0x8234C67C is on the action-149 path only).
+    //   BAND (+4), offline and not timed out: `li r5,0x19` @0x8234C690, size 1 from
+    //   `li r6,1` @0x8234C654, payload = the var_130 byte.
+    E_ACTION_STOP_MODE_OFFLINE                           = 25,   // DWARF 21 (+4 X360); size 1  BAND
+    //   BAND (+4), online, not the last round: `li r5,0x1A` @0x8234C63C + `li r6,8` @0x8234C638.
+    E_ACTION_FINISH_MODE_ONLINE                          = 26,   // DWARF 22 (+4 X360); size 8  BAND
+    //   BAND (+4), online, last round: `li r5,0x1B` @0x8234C628 + `li r6,4` @0x8234C620.
+    E_ACTION_FINISH_MODE_FINAL_ONLINE                    = 27,   // DWARF 23 (+4 X360); size 4  BAND
+    //   BAND (+5), offline and timed out: `li r5,0x28` @0x8234C664 + `li r6,1` @0x8234C654,
+    //   payload = NetworkRoundManager+0x130. THIS is the seat E_ACTION_SET_UP_ALL_DRIVE_THRUS
+    //   used to occupy (see its banner above).
+    E_ACTION_QUIT_MODE_OFFLINE                           = 40,   // DWARF 35 (+5 X360); size 1  BAND
+    //   BAND (+5), online quit: `li r5,0x29` @0x8234C584 and @0x8234C5CC + `li r6,8`.
+    E_ACTION_QUIT_MODE_ONLINE                            = 41,   // DWARF 36 (+5 X360); size 8  BAND
+    //   BAND (+5), posted unconditionally last by SendModeStopMessages (`li r5,0x2B`
+    //   @0x8234C718 + `li r6,1` @0x8234C714) AND by ModeManager::FinishCurrentMode
+    //   (`li r5,0x2B` @0x8234BB5C + `li r6,1` @0x8234BB58, the showtime pair). One
+    //   uninitialised byte both times. FinishCurrentMode's very next statement restores the sim
+    //   timestep multiplier to 1.0 for OFFLINE_SHOWTIME -- i.e. the end of crash-mode impact
+    //   time, which is what the DWARF name says.
+    E_ACTION_IMPACT_TIME_END                             = 43,   // DWARF 38 (+5 X360); size 1  BAND
+    // ---- ProgressionManager::OnEventFinishUpdateProfile @0x823A0040 --------------------------
+    // BAND (+4). `li r5,0x1C` @0x823A0608 + `li r6,4` @0x823A0604. Independently corroborated:
+    // BrnGameState::GameStateModule::OnProfileLoaded posts the same id at the same size -- a
+    // rank-derived traffic scale is exactly what both a profile load and an event finish would
+    // republish.
+    E_ACTION_SET_TRAFFIC_SCALE_BASED_ON_RANK             = 28,   // DWARF 24 (+4 X360); size 4  BAND
+    // BAND (+5). `li r5,0x37` @0x823A05DC + `li r6,1` @0x823A05D8. Corroborated by three more
+    // producers posting the same id/size for the same reason: DriveThruManager::ProcessDriveThru
+    // (twice), DriveThruManager::UnlockCarChallengeForCar and StreetManager::ProcessNewRoadScore
+    // -- every one of them a "the profile just changed, save it" moment. The tree's
+    // BrnCarSelectManager.cpp already carries 55 under this name as a TU-local.
+    E_ACTION_REQUEST_AUTOSAVE                            = 55,   // DWARF 50 (+5 X360); size 1  BAND
+    // ---- the mode-lifecycle latches ----------------------------------------------------------
+    // PINNED. BrnGameState::ModeManager::MarkedManLoaded posts id 31 size 8; the producer symbol
+    // IS the DWARF name (:27) and it is what proves 31 is NOT E_ACTION_FINISHED_MODE (see that
+    // enumerator's correction banner above). Enumerated here so nothing re-claims the seat.
+    E_ACTION_MARKED_MAN_LOADED                           = 31,   // DWARF 27 (+4 X360); size 8
+    // BAND (+4). ModeManager::UpdateCurrentMode posts it when the mode's
+    // countdown-just-finished latch fires (`li r5,0x21` @0x82351134 + `li r6,1` @0x82351130).
+    E_ACTION_STOP_MODE_COUNTDOWN                         = 33,   // DWARF 29 (+4 X360); size 1  BAND
+    // BAND (+8). The delayed showtime mode-switch broadcast, posted by
+    // ModeManager::SendModeStopMessages (`li r5,0x8F` @0x8234C000 + `li r6,0x10` @0x8234BFF8)
+    // and by ModeManager::UpdateCurrentMode (@0x82350F70/@0x82350F6C) when
+    // miFramesUntilModeSwitchSend hits exactly 0. PrepareForMode arms that counter for modes 2
+    // and 16 ONLY -- the offline/online showtime pair -- which is the corroboration.
+    E_ACTION_SHOWTIME_MODE_SWITCH                        = 143,  // DWARF 135 (+8 X360); size 16 BAND
+    // FLAG -- NAME UNRECOVERED. ModeManager::UpdateCurrentMode @0x82351824 (`li r5,0x98`
+    // @0x82351808 + `li r6,8` @0x82351804), mode 13 (E_MODE_ONLINE_BURNING_HOME_RUN) only, and
+    // the payload is a live CgsSystem::Time copied straight out of
+    // ScoringSystem::GetModeTimeRemaining {+0x00 s32 seconds, +0x04 f32 fraction}. The DWARF
+    // entry at this band's shift is E_ACTION_MODE_TIME_TIMEOUT (144), but a running clock is not
+    // a timeout notification, so the name is NOT taken. Value pinned, name descriptive.
+    E_ACTION_MODE_TIME_REMAINING                         = 152,  // FLAG name; X360 size 8
+    // FLAG -- NAME UNRECOVERED, and this is the seat E_ACTION_ROAD_RULES_BATCH_QUERY used to
+    // occupy (see its correction banner above). ModeManager::UpdateCurrentMode @0x823515E0
+    // (`li r5,0x106` @0x823515D4 + `li r6,1` @0x823515D0) posts ONE BOOL:
+    // `(*(this+0x58F0) >= *(this+0x58FC)) ? 1 : 0` @0x823515A0..0x823515CC (r21==1, r22==0 from
+    // the prologue @0x82350F2C/0x82350F34). No DWARF enumerator fits -- the nearest by meaning,
+    // E_ACTION_HUD_MESSAGE_TIME_UP (255), would need a shift of +7 between the +5 and +8 bands,
+    // and the measured shift is monotone. Value pinned, name descriptive.
+    E_ACTION_MODE_TIME_UP                                = 262,  // FLAG name; X360 size 1
+    // ---- ModeManager's checkpoint/finish transmit trio (all BAND, +5) -------------------------
+    // TransmitAndIncrementCheckPointsReached @0x82342098:
+    //   `li r5,0x71` @0x823422B0 + `li r6,0x10` @0x823422AC   -> id 113 size 16
+    //   `li r5,0x73` @0x823422E4 + `li r6,1`    @0x823422E0   -> id 115 size 1
+    // TransmitAndIncrementFinishReached @0x823424D0:
+    //   `li r5,0x72` @0x823426AC + `li r6,8`    @0x823426A4   -> id 114 size 8
+    // TransmitCheckPointDistancesToFinishLine @0x82341FF8:
+    //   `li r5,0x76` @0x82342078 + `li r6,0x44` @0x82342074   -> id 118 size 68
+    // The +5 band is pinned on both sides of this run (WORLD_STUNT_PERFORMED 122 -> 127 above,
+    // REQUEST_ROUTE_INFO 45 -> 50 below it), and all four DWARF names describe exactly what
+    // these three producers do.
+    E_ACTION_RACE_CAR_REACHED_CHECKPOINT                 = 113,  // DWARF 108 (+5 X360); size 16 BAND
+    E_ACTION_RACE_CAR_REACHED_FINISH                     = 114,  // DWARF 109 (+5 X360); size 8  BAND
+    E_ACTION_PLAYER_REACHED_PENULTIMATE_CHECKPOINT       = 115,  // DWARF 110 (+5 X360); size 1  BAND
+    E_ACTION_SET_WAYPOINT_DISTANCES_TO_FINISH            = 118,  // DWARF 113 (+5 X360); size 68 BAND
 };
 
 template <EGameActionType T>
@@ -427,8 +732,18 @@ struct PrepareForModeAction : public GameAction<E_ACTION_PREPARE_FOR_MODE>
     void                  Construct(const GameModeParams* lpGameModeParams, s32 liCurrentRound,
                                     bool lbComingFromOnlineLobbyMode);   // X360 0x8230FDF0 (defined)
     const GameModeParams* GetGameModeParams() const;                     // [gateui] DEFINED in BrnGameActions.cpp (round 8)
-    s32                   GetCurrentRound() const;                       // declared-only
-    bool                  IsMovingBetweenOnlineLobbyModes() const;       // declared-only
+    // ⭐ [evt-flow E1] THE FOUR TRIVIAL GETTERS BELOW WERE DECLARED-ONLY AND ARE NOW INLINE.
+    // TranslateGameActionsToGuiEvents' case-23 arm (@0x823EAD80, the PrepareForModeStart /
+    // RunFsm arm) reads exactly these four fields off the action record, and the X360 compiler
+    // inlined every one of them at that call site (the arm loads `0(r31)`, `0x8A0(r31)`,
+    // `0x8D0(r31)`, `0x8D1(r31)`, `0x8D2(r31)` directly -- there is no `bl` to any accessor).
+    // Leaving them declared-only made the arm an LNK2019 against a body that exists nowhere in
+    // b5-decomp/src. Same treatment, same reason, as GameModeParams::GetFlag in
+    // BrnGameModeParams.h -- inline body per the console semantics, fold back into the full
+    // BrnGameActions TU if it ever defines them out-of-line (it does not today: BrnGameActions.cpp
+    // defines only Construct / GetGameModeParams / Get+SetPlayerDisconnected).
+    s32                   GetCurrentRound() const { return miCurrentRound; }
+    bool                  IsMovingBetweenOnlineLobbyModes() const { return mbComingFromOnlineLobbyMode; }
     void                  SetPlayerScoringIndex(s32 liIndex, EPlayerScoringIndex leIndex); // declared-only
     EPlayerScoringIndex   GetPlayerScoringIndex(s32 liIndex) const;      // declared-only
     bool                  GetPlayerDisconnected(BrnNetwork::NetworkPlayerID lNetworkPlayerID) const; // X360 0x822A0198 (defined)
@@ -437,12 +752,20 @@ struct PrepareForModeAction : public GameAction<E_ACTION_PREPARE_FOR_MODE>
     void                  SetPlayerBoostEarning(f32 lfBoostEarning);     // declared-only
     s32                   GetShotGroup() const;                          // declared-only
     void                  SetShotGroup(s32 liShotGroup);                 // declared-only
-    bool                  GetFinishedOnlineEvent() const;                // declared-only
+    bool                  GetFinishedOnlineEvent() const { return mbFinishedOnlineEvent; }   // [evt-flow E1] inline (see above)
     void                  SetFinishedOnlineEvent(bool lbFinished);       // declared-only
-    bool                  IsFirstPrepareForMode() const;                 // declared-only
+    // The console tests `stage == E_PFM_STAGE_ALL_IN_ONE || stage == E_PFM_STAGE_FIRST_OF_TWO`
+    // inline at the head of the case-23 arm (@0x823EAD80: `lwz r11,0(r31); cmpwi 0; beq; cmpwi 1`),
+    // which IS this predicate -- an all-in-one prepare and the first of a split pair are both
+    // "first"; the second of two is not.
+    bool                  IsFirstPrepareForMode() const
+    {
+        return mePrepareForModeStage == E_PFM_STAGE_ALL_IN_ONE ||
+               mePrepareForModeStage == E_PFM_STAGE_FIRST_OF_TWO;
+    }
     void                  SetPrepareStage(EPrepareForModeStage leStage); // declared-only
     void                  SetStartingFreeburnLobbyDueToPlayerJoin(bool lbStarting); // declared-only
-    bool                  GetStartingFreeburnLobbyDueToPlayerJoin() const;          // declared-only
+    bool                  GetStartingFreeburnLobbyDueToPlayerJoin() const { return mbStartingFreeburnDueToPlayerJoin; }  // [evt-flow E1] inline
 
 private:
     // Data members in DWARF source order (BrnGameActions.h:936-949).
@@ -838,6 +1161,17 @@ struct RoadRulesBatchQueryAction : public GameAction<E_ACTION_ROAD_RULES_BATCH_Q
     bool    mabPlayerBestOnlineCrash[64];  // +708  (:4812) HasPlayerBeatenFriendScore(i, CRASH) == BEATEN
     bool    mbPlayerOwnsAllRoadsOffline;   // +772  (:4814) ProgressionManager complete-roads tally >= 64
 };
+// WIRE-FORMAT PIN (added with the 262 -> 275 value correction, 2026-08-26). The record is
+// pointer-free, so the X360 offsets are absolute on the x64 gate too, and the console hands
+// AddEvent the literal `li r6, 0x308` == 776 at 0x823A4974 -- immediately after
+// StreetManager::FillInRoadRulesQuery filled this very buffer. Nothing was checking that the host
+// layout still matched that size.
+static_assert(sizeof(RoadRulesBatchQueryAction) == 776,
+              "X360 ProcessGameEvents posts action 275 with size 0x308 (776)");
+static_assert(offsetof(RoadRulesBatchQueryAction, miNumRoads) == 512,
+              "RoadRulesBatchQueryAction::miNumRoads at +512 (FillInRoadRulesQuery @0x823365A8)");
+static_assert(offsetof(RoadRulesBatchQueryAction, mbPlayerOwnsAllRoadsOffline) == 772,
+              "RoadRulesBatchQueryAction::mbPlayerOwnsAllRoadsOffline at +772");
 
 // ===== Completed-stunt action (id 15) =====
 // The one-shot "the player just finished a stunt" record. DWARF home BrnGameActions.h:782
@@ -940,5 +1274,324 @@ static_assert(offsetof(SendCarStatsAction, miCarBoost) == 0x0C,
               "HandleGameActions case 198 loads boost level from +0x0C");
 static_assert(offsetof(SendCarStatsAction, meCarType) == 0x14,
               "HandleGameActions case 198 loads ECarType from +0x14");
+
+// ===========================================================================================
+// ⭐⭐ [evt-flow wave E1, 2026-08-26] THE EVENT-FLOW ACTION RECORDS.
+//
+// The seven payloads TranslateGameActionsToGuiEvents @0x823E9CE0 repacks into the event-flow GUI
+// events (arms in GameSource/Game/GameBridgeGameStateToX_EventFlowGuiEvents.cpp). Every offset
+// below is a STORE the producer emits or a LOAD the consumer emits -- both cited per field. The
+// GameAction<T> base is the empty tag, so member offsets are measured from the action base, and
+// each record's sizeof is pinned to the producer's AddEvent size literal.
+//
+// ⚠️ NAMING HONESTY. Where the producer's own local/symbol names the field, the member carries
+// that name. Where the console only proves a width and an offset, the member is `miFieldNN` /
+// `mu8FieldNN` and is FLAGGED in its comment. Do not "tidy" a FieldNN name into a guess.
+// ===========================================================================================
+
+// ---- 201 ---------------------------------------------------------------------------------
+// The junction/event-availability record: what the player is standing at, and whether they may
+// start it. Producer CheckIfPlayerIsAtJunctionWithAnEvent @0x82390418
+// (`li r6,0x28 / li r5,0xC9` @0x82390DCC -> AddEvent(q, &var_C0, 201, 40)); the store map is the
+// var_C0-based frame at 0x82390954..0x823909B8 (the "at a junction with an event" post) and
+// 0x82390E6C..0x82390EA8 (the "left the junction" post). Consumer @0x823EA810 copies ten of the
+// twelve fields into GuiEventJunctionInfo (id 311) -- the mapping is 1:1 by name, which is what
+// pins the SEMANTICS of every field the GUI reads (BrnGuiEventTypeDefs.h GuiEventJunctionInfo).
+struct JunctionInfoAction : public GameAction<E_ACTION_EVENT_AT_JUNCTION_AVAILABLE>
+{
+    u32   muJunctionLogicBoxId;    // +0x00 JunctionLogicBox+0x00, cached at gsm+284364. NOT read
+                                   //       by the GUI arm. FLAG: field name from its source, not
+                                   //       from an attested member name.
+    u32   muEventJunctionID;       // +0x04 JunctionLogicBox+0x38 -> GuiEventJunctionInfo::miEventID
+    u32   muLightTriggerId;        // +0x08 the packed traffic-light trigger id (tag 0x39|hull<<8|light);
+                                   //       NOT read by the GUI arm.
+    u8    maPad0C[4];              // +0x0C never stored (the CgsID below forces 8-alignment)
+    CgsID mSpecialEventCarId;      // +0x10 RaceEventData+0x10 -> GuiEventJunctionInfo::mSpecialEventCarId
+    EGameModeType meGameModeType;  // +0x18 ProgressionManager::GetEvent(...) -- the RUNTIME mode enum,
+                                   //       10 (E_MODE_OFFLINE_COUNT) on the "no event here" post
+    s8    mi8Difficulty;           // +0x1C -1 on the "no event here" post
+    s8    mi8MedalAchieved;        // +0x1D Profile::GetMedalAchievedForEventWithID, -1 when none
+    bool  mbOnEntry;               // +0x1E 1 on the arrival post, 0 on the departure post
+    bool  mbCanEnterEvent;         // +0x1F gsm+284369 (the "may start" gate)
+    bool  mbEventUnlocked;         // +0x20
+    bool  mbSpecificCarEventValid; // +0x21
+    bool  mbIsNewlyDiscovered;     // +0x22 gsm+284368
+    bool  mbIsAutoUnlockedChallenge;// +0x23
+    u8    maPad24[4];              // +0x24 tail padding to the attested 40
+};
+static_assert(sizeof(JunctionInfoAction) == 40,
+              "X360 CheckIfPlayerIsAtJunctionWithAnEvent posts action 201 with size 40");
+// ---- 272 ---------------------------------------------------------------------------------
+// [stuntrace wave D, D3] The wrong-car abort. One CgsID: the car the junction's event demands.
+// Producer StartModeAtLights @0x82396CF8 (the `std r11, var_3E0` / `li r6,8` pair cited on the
+// enumerator). No consumer arm exists in the tree yet -- the console's is inside
+// TranslateGameActionsToGuiEvents @0x823E9CE0, which is a partial here; the record is landed
+// with the producer so the post is typed rather than a bare stack blob.
+struct WrongCarForChallengeAction : public GameAction<E_ACTION_WRONG_CAR_FOR_CHALLENGE>
+{
+    CgsID mSpecialEventCarId;      // +0x00 RaceEventData+0x10
+};
+static_assert(sizeof(WrongCarForChallengeAction) == 8,
+              "X360 StartModeAtLights posts action 272 with size 8");
+
+static_assert(offsetof(JunctionInfoAction, mSpecialEventCarId) == 0x10 &&
+              offsetof(JunctionInfoAction, meGameModeType) == 0x18 &&
+              offsetof(JunctionInfoAction, mbIsAutoUnlockedChallenge) == 0x23,
+              "action-201 field offsets are the @0x823EA810 consumer loads");
+
+// ---- 200 ---------------------------------------------------------------------------------
+// Producer ProgressionManager::UpdatePlayerMedals @0x8239FE50 (AddEvent(q, &v29, 200, 8)); the
+// consumer @0x823EA784 loads four halfwords at +0/+2/+4/+6 and copies them straight into
+// GuiEventMedalUpdate (id 307, size 8), after streaming the first three into the
+// "Medals update: " debug line.
+struct UpdatePlayerMedalsAction : public GameAction<E_ACTION_UPDATE_PLAYER_MEDALS>
+{
+    s16 mi16TotalWins;        // +0x00 Profile::GetTotalWinCount's first out-param
+    s16 mi16Field02;          // +0x02 FLAG: GetTotalWinCount's per-medal array element [0];
+                              //       which medal tier it counts is not attested.
+    s16 mi16Field04;          // +0x04 FLAG: GetTotalWinCount's third out-param
+    s16 mi16WinsToNextRank;   // +0x06 GetTotalWinsForNextRank() - total, clamped at 0;
+                              //       -1 when the player is already at the top rank
+};
+static_assert(sizeof(UpdatePlayerMedalsAction) == 8,
+              "X360 UpdatePlayerMedals posts action 200 with size 8");
+
+// ============================================================================================
+// [stuntrace waveB fix round, 2026-08-26] THE FOUR MODE-INTRO / PLAY RECORDS.
+// Filed as header_requests R1-R4 by the intro/play partfile and applied here after re-deriving
+// every id, every size and every field from the exports + the DecFIGS DWARF:
+//   * field NAMES and ORDER are DWARF-exact (dwarfdump .../BrnGameActions.h:1170-1179,
+//     :1191-1194, :1330-1333, :3523) -- reproduced member-for-member, nothing invented;
+//   * every sizeof is the console's own `li r6,<size>` immediate at the AddEvent site.
+// ============================================================================================
+
+// ---- 29 ----------------------------------------------------------------------------------
+// Producer ModeManager::StartModeIntro @0x82343018 (`li r6,0x25C` / `li r5,0x1D` @0x823432D4/D8).
+// The console builds it on the stack from var_2B0 (the f32 at the record base) through var_56 and
+// posts &var_2B0 with size 604. The 592-byte FlybyData sits immediately after the f32, which is
+// what makes the record 4 + 592 + 4 + 3 == 603 -> 604 with one byte of tail padding.
+struct StartModeIntroAction : public GameAction<E_ACTION_START_MODE_INTRO>
+{
+    f32           mfDurationSeconds;         // +0x000  mode vtbl+32 GetIntroDurationSeconds()
+    FlybyData     mFlybyData;                // +0x004  592 B, filled by FlybyData::Prepare/AddCar
+    EGameModeType meGameMode;                // +0x254  ModeManager+3476 (0xD94)
+    bool          mbFinishedOnlineEvent;     // +0x258  ModeManager+38151 (0x9507)
+    bool          mbFinishedOnlineLobbyMode; // +0x259  ModeManager+38152 (0x9508)
+    bool          mbDoIntro;                 // +0x25A  mfDurationSeconds > 0.0f
+    u8            maPad25B[1];               // +0x25B  tail padding to the attested 604
+};
+static_assert(sizeof(StartModeIntroAction) == 604,
+              "X360 StartModeIntro posts action 29 with size 0x25C");
+static_assert(offsetof(StartModeIntroAction, meGameMode) == 0x254,
+              "action-29 FlybyData must be the console's 592-byte block at +0x004");
+
+// ---- 30 ----------------------------------------------------------------------------------
+// Producer ModeManager::StopModeIntro @0x82343F38 (`li r6,8` / `li r5,0x1E` @0x82343FC4/CC).
+struct StopModeIntroAction : public GameAction<E_ACTION_STOP_MODE_INTRO>
+{
+    EGameModeType meGameMode;               // +0x00  ModeManager+3476 (`lwz r11,0xD94` @0x82343F7C)
+    bool          mbMovingBetweenLobbyModes;// +0x04  IsOnlineModeWithInstantIntro()
+    u8            maPad05[3];               // +0x05  tail padding to the attested 8
+};
+static_assert(sizeof(StopModeIntroAction) == 8,
+              "X360 StopModeIntro posts action 30 with size 8");
+
+// ---- 34 ----------------------------------------------------------------------------------
+// Producer ModeManager::StartPlayingMode @0x82343340 (`li r6,0x10` / `li r5,0x22`
+// @0x823433FC/0x82343400). The CgsID is 8-byte aligned, so it lands at +0x08 and the record is 16.
+struct StartPlayingModeAction : public GameAction<E_ACTION_START_PLAYING_MODE>
+{
+    EGameModeType meGameMode;               // +0x00  `lwz r10,0xD94` -> var_40
+    u8            maPad04[4];               // +0x04  alignment ahead of the 8-byte id
+    CgsID         mDestinationLandmarkID;   // +0x08  zeroed first (`std r27`), then maLandmarkCgsIDs[next]
+};
+static_assert(sizeof(StartPlayingModeAction) == 16,
+              "X360 StartPlayingMode posts action 34 with size 0x10");
+static_assert(offsetof(StartPlayingModeAction, mDestinationLandmarkID) == 8,
+              "action-34 landmark id is the second qword of the 16-byte record");
+
+// ---- 149 ---------------------------------------------------------------------------------
+// Producer ModeManager::StartModeIntro @0x82343018's online-stunt training tip (`li r6,4` /
+// `li r5,0x95` @0x8234331C/0x82343320); ModeManager::UpdateCurrentMode, CarSelectManager and
+// StreetManager post the same 4-byte record. The consumer (BrnRaceCarEntityModule.cpp:2469,
+// HandleGameActions case 149 -> AddTrainingRequest) reads the payload as a bare s32, so the wire
+// format was already pinned at both ends -- only the producer-side record was missing.
+struct RequestGameTrainingAction : public GameAction<E_ACTION_REQUEST_GAME_TRAINING>
+{
+    BrnProgression::ETrainingType meTrainingType;   // +0x00  DWARF BrnGameActions.h:3525
+};
+static_assert(sizeof(RequestGameTrainingAction) == 4,
+              "X360 posts action 149 with size 4");
+
+// ---- 47 ----------------------------------------------------------------------------------
+// Producer ModeManager::CheckCountdownDisplay @0x82342898: the single out-param of
+// GameMode::HasCountdownDisplayChanged, posted only when that returns true.
+// Consumer @0x823EAD50 copies the word into GuiEventUpdateEventCountdown (id 234, size 4).
+struct SetCountdownAction : public GameAction<E_ACTION_SET_COUNTDOWN>
+{
+    s32 miCountdownDisplay;   // +0x00
+};
+static_assert(sizeof(SetCountdownAction) == 4,
+              "X360 CheckCountdownDisplay posts action 47 with size 4");
+
+// ---- 44 ----------------------------------------------------------------------------------
+// Producer ModeManager::StartModeIntro @0x82343018 (`li r6,4 / li r5,0x2C` @0x82343060): stores
+// the halfword at +0x00 from the file-scope word_82CDB7D4 and ZERO into the byte at +0x02.
+// Consumer @0x823EA948 branches on +0x02 and emits GuiEventEnterEventStartLocation (id 166, size 8).
+struct SetInModeStartRegionAction : public GameAction<E_ACTION_SET_IN_MODE_START_REGION>
+{
+    u16 mu16StartLocationId;  // +0x00 FLAG: name from the consumer's use (it becomes the GUI
+                              //       record's id word); the producer sources it from word_82CDB7D4.
+    u8  mbInStartRegion;      // +0x02 0 == not in a start region (StartModeIntro always posts 0)
+    u8  maPad03[1];           // +0x03
+};
+static_assert(sizeof(SetInModeStartRegionAction) == 4,
+              "X360 StartModeIntro posts action 44 with size 4");
+
+// ---- 38 ----------------------------------------------------------------------------------
+// Producer ModeManager::PreWorldUpdate @0x823537B8 posts one byte. The consumer @0x823EAD20 reads
+// NOTHING off it -- it logs the (image-cited) banner and posts a payload-free
+// GuiEventFinishedModeResults (id 321, size 1).
+struct FinishedModeResultsAction : public GameAction<E_ACTION_FINISHED_MODE_RESULTS>
+{
+    u8 mu8Unused;             // +0x00 posted uninitialised on the console; never read
+};
+static_assert(sizeof(FinishedModeResultsAction) == 1,
+              "X360 ModeManager::PreWorldUpdate posts action 38 with size 1");
+
+// ---- 39 ----------------------------------------------------------------------------------
+// Producer ModeManager::SendModeStopMessages @0x8234BEC0 (AddEvent(q, v80, 39, 24)). Consumer
+// @0x823EABCC reads +0x00, +0x0C, +0x11, +0x12, +0x13 into GuiEventStopMode (id 322, size 12).
+// [stuntrace waveB fix round, 2026-08-26] FIVE OF THE SIX FLAGs CLEARED. Every identity below was
+// re-derived from SendModeStopMessages' own record build this pass (record base == var_110; the post
+// is `addi r4, r1, 0x180+var_110 / li r6,0x18 / li r5,0x27` @0x8234C0C4..0x8234C0C0), not taken from
+// the implementer report. The FIELD NAMES are left alone on purpose -- renaming them would touch a
+// partfile this fix round does not own -- so only the comments change.
+struct StopModeAction : public GameAction<E_ACTION_STOP_MODE>
+{
+    EGameModeType meGameModeType;  // +0x00 ModeManager+3476 (the mode being stopped)
+                                   //       `lwz r11, 0xD94(r28) / stw r11, var_110` @0x8234BF0C/24
+    s32  miField04;                // +0x04 SendModeStopMessages' `a4` == leNextGameModeType
+                                   //       (`stw r14, var_10C` @0x8234BF14; r14 is the 3rd argument,
+                                   //       and it is what the +0x14 showtime test below compares)
+    s32  miField08;                // +0x08 IDENTITY CLEARED: the 0-based NETWORK ROUND INDEX, or 0
+                                   //       when the exiting mode is offline. Console @0x8234BF68-90:
+                                   //         if (mpCurrentGameMode && mode->+0xAC)   // IsOnline
+                                   //             var_108 = *(nrm+0x12C) - *(nrm+0x128) - 1;
+                                   //         else var_108 = 0;
+                                   //       i.e. NetworkRoundManager::GetCurrentRound() under the
+                                   //       round-accessor ruling (BrnNetworkRoundManager.cpp).
+    s32  miField0C;                // +0x0C ModeManager+3496; copied to GuiEventStopMode+0x04
+                                   //       (`lwz r9, 0xDA8(r28) / stw r9, var_104` @0x8234BF10/28)
+    u8   mu8Field10;               // +0x10 IDENTITY CLEARED: mpCurrentGameMode ? mode->IsOnline() : 0
+                                   //       (`lwz r11,0xD98 / lbz r11,0xAC(r11)` @0x8234BF3C-4C, then
+                                   //       `stb r16(1), var_100` / `stb r20(0), var_100`).
+                                   //       [x] SETTLED 2026-08-26 (closure round): that +0xAC byte
+                                   //       had been transcribed as mbConstructed; it is mbIsOnline
+                                   //       (GameModes/BrnGameMode.h:353, +172), and both derived
+                                   //       Construct bodies now write it by that name. The producer
+                                   //       (BrnModeManager_Start.cpp:621/:626) posts the real
+                                   //       IsOnline() -- this field no longer posts a forced 0.
+    u8   mu8Field11;               // +0x11 SendModeStopMessages' `a3`; -> GuiEventStopMode+0x08
+                                   //       (`stb r15, var_FF` @0x8234BF1C)
+    u8   mu8Field12;               // +0x12 IDENTITY CLEARED: (NetworkRoundManager::miRoundsRemaining
+                                   //       == 0), i.e. "this was the last round".
+                                   //       `lwz r11, 0x128(nrm) / subf r11,r20(0),r11 / cntlzw /
+                                   //        extrwi 1,26 / stb r11, var_FE` @0x8234C0CC..0x8234C0DC.
+                                   //       -> GuiEventStopMode+0x09
+    u8   mu8Field13;               // +0x13 ModeManager+38144 (forced true for a <2-player mode)
+                                   //       -> GuiEventStopMode+0x0A  FLAG (name still unrecovered)
+    u8   mu8Field14;               // +0x14 IDENTITY CLEARED: (leNextGameModeType == 2 ||
+                                   //       leNextGameModeType == 16), the showtime pair, tested on
+                                   //       r14 at 0x8234BF90..0x8234BFA4 -> `stb r10, var_FC`.
+    u8   mu8Field15;               // +0x15 IDENTITY CLEARED: NetworkRoundManager+0x130 ==
+                                   //       mbStartingGameDueToPlayerJoin
+                                   //       (`lbz r10, 0x130(r10) / stb r10, var_FB` @0x8234BF20/2C).
+    u8   maPad16[2];               // +0x16 tail padding to the attested 24
+};
+static_assert(sizeof(StopModeAction) == 24,
+              "X360 SendModeStopMessages posts action 39 with size 24");
+static_assert(offsetof(StopModeAction, miField0C) == 0x0C &&
+              offsetof(StopModeAction, mu8Field11) == 0x11,
+              "action-39 offsets are the @0x823EABCC consumer loads");
+
+// ---- 37 ----------------------------------------------------------------------------------
+// Producer ModeManager::ShowModeResults @0x823436D0 (`memset(v42, 0, 232)` then AddEvent(q, v42,
+// 37, 232)). The record is the whole offline post-event results block. ONLY the fields the
+// @0x823EA984 consumer arm loads are named here; the rest is explicit padding, so the struct is
+// byte-exact at 232 without inventing members. FLAG: this is a SLICE, not the full DWARF record.
+struct ShowModeResultsAction : public GameAction<E_ACTION_SHOW_MODE_RESULTS>
+{
+    EGameModeType meGameModeType; // +0x00 ModeManager+3476 (0xD94): producer stw @0x823437AC into the
+                              //       record BASE; the @0x823EA984 consumer gates on +0x00 against the
+                              //       showtime pair {2,16}, and the producer itself re-reads +0x00
+                              //       (`cmpwi r11,2` @0x823E08). Order verified 2026-08-26 verify wave.
+    s32  miFinishPosition;    // +0x04 ModeManager::GetPlayersFinishPosition (`stw r3, base+4`
+                              //       @0x823439EC); the consumer copies its LOW BYTE to the GUI record
+    // [!!] +0x0C AND +0x18 WERE DESCRIBED THE WRONG WAY ROUND (corrected 2026-08-26, stuntrace
+    // waveB CLOSURE round). Both identities below were re-derived from ShowModeResults
+    // @0x823436D0 this pass, with the record base pinned first: the AddEvent payload pointer is
+    // `addi r4, r1, 0x1E0+var_180` @0x82343DF0, so var_180 IS record+0x00 and every stack name
+    // below is (0x180 - var_NNN) bytes into the record.
+    s32  miField08;           // +0x08 IDENTITY CLEARED: the SCORE. Showtime arm (mode 2 or 16),
+                              //       @0x82343864..0x82343888:
+                              //         v = (s32)(*(f32*)(this+0x10D8) * flt_820DB5A8)
+                              //             (flt_820DB5A8 == 1.0936133, metres -> yards; image-dumped)
+                              //         var_178 = (v * 100 + *(s32*)(this+0x10AC)) * *(s32*)(this+0x10B4)
+                              //       Every other mode, @0x823438C0..0x823438D8: the word at +0x10
+                              //       of the selected scorer (mScoringSystem + 0x350 offline /
+                              //       + 0x2620 online). FLAG: the scorer field's own name is
+                              //       unrecovered; the ROLE (the posted score) is not.
+    f32  mfField0C;           // +0x0C IDENTITY CLEARED: THE FINISH TIME, not a distance.
+                              //       mode 3: `stfs f31, var_174` @0x82343A18 with f31 loaded from
+                              //       flt_82001CC0 == 0.0f (image-dumped) -- an AUTHORED ZERO.
+                              //       otherwise: ScoringSystem::GetFinishTime @0x82343A2C, then
+                              //         f13 = time.mfFraction(+4) + (f32)(s64)time.miSeconds(+0)
+                              //         f0  = *(f32*)(this+0x8024)
+                              //         fsel f0, f13 - f0, f0, f13      @0x82343A5C..0x82343A60
+                              //       i.e. the finish time CLAMPED at that member; and on the
+                              //       "did not finish" arm (@0x82343A68) it is the literal
+                              //       flt_820282B4 == 1.0e8f sentinel. Read back at 0x82343B70 and
+                              //       multiplied by flt_820DB5C8 == 1000.0f for mode 5, which is
+                              //       seconds -> milliseconds and is the second, independent proof
+                              //       that this word is a TIME.
+    s32  miField10;           // +0x10 FLAG: *(s32*)(this+0x10AC) on the showtime arm
+                              //       (@0x82343858), 0 on every other arm (@0x823438D0)
+    s32  miField14;           // +0x14 FLAG: *(s32*)(this+0x10B4) on the showtime arm
+                              //       (@0x82343860), 1 on every other arm (@0x823438D4)
+    f32  mfField18;           // +0x18 IDENTITY CLEARED: the SHOWTIME DISTANCE, not a finish-time
+                              //       delta. Showtime arm: `lfs f0, 0x10D8(this)` @0x82343840 ->
+                              //       `stfs f0, var_168` @0x82343848 -- the raw metres value that
+                              //       the +0x08 score above converts to yards. Every other mode:
+                              //       `stfs f31, var_168` @0x823438C4 == 0.0f (flt_82001CC0).
+    u8   maPad1C[0x24];       // +0x1C..+0x3F never read by the arm
+    u64  mu64Field40;         // +0x40 FLAG: copied to the GUI record only when mbField DE is set
+    s32  miField48;           // +0x48 FLAG
+    s32  miField4C;           // +0x4C FLAG
+    u8   maPad50[8];          // +0x50..+0x57
+    u8   maBlock58[0x70];     // +0x58..+0xC7 memcpy'd wholesale into the GUI record when mbFieldDF
+                              //       is set (0x70 bytes; ShowModeResults' per-player results table)
+    u64  mu64FieldC8;         // +0xC8 FLAG
+    u8   maPadD0[0x0A];       // +0xD0..+0xD9
+    u8   mu8FieldDA;          // +0xDA FLAG
+    u8   mu8FieldDB;          // +0xDB FLAG
+    u8   mu8FieldDC;          // +0xDC FLAG
+    u8   maPadDD[1];          // +0xDD
+    u8   mbHasField40;        // +0xDE gate for the +0x40 qword copy  FLAG (name from its use)
+    u8   mbHasBlock58;        // +0xDF gate for the +0x58 block copy  FLAG (name from its use)
+    u8   mu8FieldE0;          // +0xE0 FLAG
+    u8   mu8FieldE1;          // +0xE1 also the whole payload of GuiEventTriggerOnlinePostEvent(320)
+    u8   mu8FieldE2;          // +0xE2 FLAG
+    u8   mu8FieldE3;          // +0xE3 FLAG
+    u8   mbIsOnlinePostEvent; // +0xE4 picks the online (320) vs offline (GuiEvent<291>) post-event
+                              //       request, and gates the autosave request at the arm's tail
+    u8   maPadE5[3];          // +0xE5..+0xE7 tail padding to the attested 232
+};
+static_assert(sizeof(ShowModeResultsAction) == 232,
+              "X360 ModeManager::ShowModeResults posts action 37 with size 232");
+static_assert(offsetof(ShowModeResultsAction, maBlock58) == 0x58 &&
+              offsetof(ShowModeResultsAction, mu64FieldC8) == 0xC8 &&
+              offsetof(ShowModeResultsAction, mbIsOnlinePostEvent) == 0xE4,
+              "action-37 offsets are the @0x823EA984 consumer loads");
 }
 }

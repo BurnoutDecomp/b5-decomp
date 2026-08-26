@@ -499,6 +499,32 @@ public:
     // the X360 a1[10720] read) and compares it >= 4. Trivial named-member getter; body in the Profile TU.
     u32 GetMedalCountFromTheStart() const;
 
+    // ADDITIVE GROW [stuntrace waveB / agent 10] -- the SETTER half of the pair above.
+    // ProgressionManager::OnEventFinishUpdateProfile @0x823A0040 open-codes the increment
+    // (`addis r11, profile, 1 / addi r11, r11, -0x59F0` == Profile+0xA610 == +42512, then
+    // lwz / addi 1 / stw, asm 0x823A0450..0x823A0460) -- every event won for the first time
+    // bumps this tally, and ProgressionManager::AreRoadRulesAvailable's `>= 4` test is its
+    // reader. The X360 emits no standalone symbol for either half (both are header-inline),
+    // so this is defined inline here, exactly as the GetIsNewProfile / GetNumWinsForGameMode
+    // pairs above.
+    void SetMedalCountFromTheStart(u32 luCount) { muMedalCountFromTheStart = luCount; }
+
+    // ===========================================================================================
+    // [stuntrace waveB fix round, 2026-08-26] THE TWO POST-EVENT HIGH-WATER MARKS. Both members
+    // already sit below `private:` at their console-proven offsets (miBestStuntRunScore +616 ==
+    // Profile+0x268, miHighestNumberOfTakeDownsInRoadRage +118020), and both are read-modify-write
+    // "if (new > stored) stored = new" legs the wave had to DROP for want of an accessor:
+    //   * ModeManager::ShowModeResults @0x823436D0 raises the best stunt-run score;
+    //   * ModeManager::FinishCurrentMode @0x8234B978 raises the road-rage takedown record
+    //     (offset re-derived: progMgr+0x170 + 0x20000 - 0x32FC == Profile+118020).
+    // X360-INLINED on both halves (no standalone symbols), so inline bodies are the faithful form --
+    // same precedent as GetIsNewProfile / GetNumWinsForGameMode / SetMedalCountFromTheStart above.
+    // ===========================================================================================
+    s32  GetBestStuntRunScore() const                        { return miBestStuntRunScore; }
+    void SetBestStuntRunScore(s32 liScore)                   { miBestStuntRunScore = liScore; }
+    s32  GetHighestNumberOfTakeDownsInRoadRage() const       { return miHighestNumberOfTakeDownsInRoadRage; }
+    void SetHighestNumberOfTakeDownsInRoadRage(s32 liTakedowns) { miHighestNumberOfTakeDownsInRoadRage = liTakedowns; }
+
     // [tut-ticker] X360 raw read of Profile+108 (mfInCarTimePlayed): TrainingManager::Update /
     // RequestTraining / TriggerAnyFollowOnTrainingTips all `lfs` it for the timed-tip and
     // "seconds since last tip" gates. Trivial named-member getter; body in the Profile TU.

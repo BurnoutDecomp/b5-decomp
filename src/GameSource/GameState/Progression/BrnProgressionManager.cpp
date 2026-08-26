@@ -21,6 +21,17 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"            // CgsDev::Log::gpDebugPrint (the two FLAG lines)
 #include "BrnProgressionCarData.h"                                    // BrnProgression::CarData (colour/palette/unlock type)
 #include "SharedClasses/Progression/BrnProgressionData.h"             // BrnProgression::ProgressionData (rank count)
+// [stuntrace waveB MOUNT-CLOSURE round, 2026-08-26] RE-POINTED, exactly as the note that stood
+// here asked. GetRankThresholdForEvent dereferences the per-rank record, so it needs
+// BrnProgression::ProgressionRankData COMPLETE -- BrnProgressionData.h only forward-declares it
+// (:41). The canonical home now exists and carries the full 112-byte layout plus every accessor
+// body, so the rank record comes from IT rather than from the retired BrnGameModeParams.h
+// stand-in. BrnGameModeParams.h is still included below, but only for StartGameModeParams
+// (GetStuntRunScoreTarget's `lpStartGameModeParams->GetEventData()`).
+#include "SharedClasses/Progression/BrnProgressionRankData.h"             // BrnProgression::ProgressionRankData (real, single owner)
+#include "GameSource/GameState/ModeManager/GameModes/BrnGameModeParams.h" // BrnGameState::StartGameModeParams (+ RaceEventData via its own include)
+#include "SharedClasses/Trigger/BrnTriggerData.h"                         // BrnTrigger::TriggerData (FindLandmarkAISectionIndex's landmark count)
+#include "GameSource/Math/BrnMathUtils.h"                             // BrnMath::RoundWithNumSignificantFigures (GetStuntRunScoreTarget)
 #include "SharedClasses/DataLists/VehicleList.h"                      // BrnResource::VehicleList (GetVehicleIndex / GetVehicleData)
 #include "SharedClasses/DataLists/VehicleListEntry.h"                 // BrnResource::VehicleListEntry (livery type / parent id)
 #include "GameSource/GameState/BrnGameStateModuleIO.h"                // OutputBuffer::GetResourceRequestInterface
@@ -36,6 +47,13 @@ namespace BrnProgression
 // The verbatim X360-baked source path this TU's asserts reference.
 static const char* const KAC_PROGMGR_FILE =
     "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/Progression/BrnProgressionManager.cpp";
+
+// [stuntrace waveB CLOSURE round] GetStuntRunScoreTarget's rounding precision. X360 @0x8237BDF4
+// `lfs f31, flt_82001D9C` feeds it as the second argument to
+// BrnMath::RoundWithNumSignificantFigures. IMAGE-CITED: image.bin (VA - 0x82000000, big-endian)
+// offset 0x1D9C reads 40 00 00 00 == 2.0f exactly -- i.e. round the interpolated stunt target to
+// TWO significant figures, which is why shipped stunt-race targets are values like 34,000.
+static const f32 KF_STUNT_TARGET_SIGNIFICANT_FIGURES = 2.0f;
 
 
 // ------------------------------------------------------------------------------------
@@ -78,6 +96,22 @@ ProgressionManager::ProgressionManager()
     mpTriggerData        = nullptr;
     mpGameStateModule    = nullptr;
     mpAchievementManager = nullptr;
+
+    // [stuntrace waveB MOUNT-CLOSURE round] The landmark -> AI-section cache starts blank.
+    // ⚠️ FLAG (HOST-ONLY INITIALISATION, same precedent as the five zero-initialised pointer
+    // members in the header): the X360 does NOT clear this table in the ctor, because the console
+    // ProgressionManager is BSS-resident and therefore already zero, and because Prepare2's
+    // ComputeLandmarkAISectionIndices overwrites every live entry before anything reads one. On
+    // the host this class is a by-value sub-object of GameStateModule inside BrnGameModule, so the
+    // 4 KB would otherwise start as stack/heap garbage -- and FindLandmarkAISectionIndex COMPARES
+    // against mId, so garbage there is not inert: it could hand a caller a fabricated AI-section
+    // index instead of the console's "not found" answer. Clearing reproduces the console's
+    // starting state exactly; it is an initialisation-site difference, not a behavioural one.
+    for (s32 liEntry = 0; liEntry < KI_LANDMARK_AI_SECTION_INDEX_COUNT; ++liEntry)
+    {
+        maLandmarkAISectionIndices[liEntry].mId              = 0;
+        maLandmarkAISectionIndices[liEntry].muAISectionIndex = 0;
+    }
 
     // (3b) the two resource pointers (mpProgressionData / mpAISectionData) reach the
     // X360 ctor's self-referential sentinel state (count-0/self-link/zero pattern)
@@ -509,6 +543,95 @@ BrnGameState::AchievementManagerBase* ProgressionManager::GetAchievementManager(
 }
 
 // ============================================================================================
+// FindLandmarkAISectionIndex (X360 0x82359AE0) -- DWARF BrnProgressionManager.h:385
+// ============================================================================================
+// [stuntrace waveB MOUNT-CLOSURE round, 2026-08-26] Bodied. It was declare-only since the header
+// was first carved ("the definition lives with the ProgressionManager TU"), and it is one of the
+// 63 unresolved externals the wave-B event-core mount measured -- with five console callers:
+// OfflineGameMode::SelectRandomDestinations @0x82321E38, ModeManager::SetOnlineLandmarks
+// @0x82328800, ModeManager::SetUpCheckPointsForGameMode @0x82328BC8, HACK_SetupRaceWithLandMarks
+// @0x82359B78 and GameStateModule::SendRouteRequestAction @0x82381DC8.
+//
+// WHAT IT IS: a linear scan of the landmark -> AI-section cache the progression layer builds at
+// Prepare2 time. Given a landmark's id it answers which AI section that landmark sits in, so a
+// route/checkpoint consumer can hand the AI a section index instead of a world position.
+//
+// THE ASM, INSTRUCTION BY INSTRUCTION (nothing below is inferred):
+//   0x82359AEC  lis r11,2 / ori r11,r11,0x924 / lwzx r11,r3,r11
+//                                 -- r11 = *(this + 0x20924) == mpTriggerData.
+//   0x82359AFC  lwz r9, 0x34(r11) -- the LIVE bound is TriggerData::miLandmarkCount (+0x34), NOT
+//                                    a count member of this manager. The committed
+//                                    SharedClasses/Trigger/BrnTriggerData.h names that word and
+//                                    exposes it as GetNumLandmarks(), which is what is called
+//                                    here -- no raw-offset reach-around.
+//   0x82359B00  cmpwi r9,0 / ble  -- count <= 0 goes STRAIGHT to the not-found arm. An empty
+//                                    table is a failure, not a quiet zero.
+//   0x82359B08  addis r11,r3,2 / addi r11,r11,-0x878
+//                                 -- 0x20000 - 0x878 == 0x1F788 == &maLandmarkAISectionIndices[0].
+//   0x82359B10  lwz r8, 0(r11)    -- entry.mId, loaded as a WORD (so it zero-extends)...
+//   0x82359B14  cmpld cr6, r8, r4 -- ...and compared 64-BIT against the CgsID argument. That is
+//                                    the compiler's own widening of a u32 member against a u64
+//                                    parameter, which is why `lpEntry->mId == lLandmarkId` below
+//                                    is the faithful spelling: C++ promotes mId identically.
+//   0x82359B1C  addi r10,r10,1 / addi r11,r11,8 / cmpw r10,r9 / blt   -- the 8-byte stride loop.
+//   0x82359B60  lhz r3, 4(r11)    -- the hit returns entry.muAISectionIndex (halfword at +4).
+//   0x82359B2C  the miss fires the assert below and `li r3, 0x7FFF` -- KI_INVALID_SECTION_INDEX,
+//                                    the same sentinel BrnGameStateStreetManager_wB_09.cpp:202
+//                                    and GameBridgeGUIToX_GameState.cpp:226 already spell.
+// Assert message VERBATIM from the export, INCLUDING ITS TRAILING SPACE; file/line are the
+// console's own (BrnProgressionManager.cpp:3259) and are kept here because this TU already bakes
+// KAC_PROGMGR_FILE for its other explicit asserts.
+//
+// [!] The console does NOT null-test mpTriggerData before dereferencing it, and neither does this
+// body -- GameStateModule::Prepare2 installs it (BrnGameStateModule.cpp, the
+// mTriggerQueryManager.GetTriggerData() argument) on the same boot path that reaches every caller.
+// mpTriggerData is typed void* by the header (it is a Prepare2 back-pointer the manager treats as
+// opaque, and retyping it would ripple through Prepare2's signature and its call site in another
+// agent's file this round), so the cast to the real type is made here, in the only body that
+// dereferences it. Re-point the member's type when that signature is next touched.
+//
+// ⚠️⚠️ FLAG -- THE PRODUCER IS NOT MOUNTED, SO THE TABLE IS EMPTY TODAY. The cache is filled by
+// ProgressionManager::ComputeLandmarkAISectionIndices (X360 0x82370008), which the console's
+// Prepare2 calls immediately after installing the back-pointers -- and which this tree's Prepare2
+// only lists in its "X360 then calls, in order:" comment. Until that lands, every lookup walks a
+// zeroed table, misses, fires the console's own "landmark not found " assert and returns
+// KI_INVALID_SECTION_INDEX. That is the console's genuine miss behaviour rather than an invented
+// one, and the callers all carry the answer as a plain u16, so nothing dereferences it -- but no
+// caller gets a REAL section index yet. This is a one-function frontier, not a research problem:
+// ComputeLandmarkAISectionIndices' two heavy legs, AISectionsData::BuildAISectionPointMap
+// @0x8267A688 and AISectionsData::FindNearestAISection @0x82676CC0, are BOTH already bodied and
+// mounted (SharedClasses/AI/AISectionsData.cpp:76 / :277); what it still needs is a bound
+// mpAISectionData and the CgsMemory::LinearMalloc scratch arena. Reported as this slice's
+// follow-up -- do not quote this function as "working" until that call is wired.
+// ============================================================================================
+u16 ProgressionManager::FindLandmarkAISectionIndex(CgsID lLandmarkId) const
+{
+    const BrnTrigger::TriggerData* lpTriggerData =
+        static_cast<const BrnTrigger::TriggerData*>(mpTriggerData);
+
+    // `lwz r9, 0x34(mpTriggerData)` -- the live landmark count is the trigger data's, and the
+    // table is indexed in step with it.
+    const s32 liLandmarkCount = lpTriggerData->GetNumLandmarks();
+
+    for (s32 liLandmarkIndex = 0; liLandmarkIndex < liLandmarkCount; ++liLandmarkIndex)
+    {
+        const LandmarkAISectionIndexPair* lpEntry = &maLandmarkAISectionIndices[liLandmarkIndex];
+
+        // `cmpld` -- the u32 member widens to the u64 id, exactly as the console compares them.
+        if (lpEntry->mId == lLandmarkId)
+        {
+            return lpEntry->muAISectionIndex;   // `lhz r3, 4(r11)`
+        }
+    }
+
+    CgsDev::Assert::BeginAssert();
+    CgsDev::Assert::FireAssert("ProgressionManager::FindLandmarkAISectionIndex, landmark not found ",
+                               KAC_PROGMGR_FILE, 3259);
+    CgsDev::Assert::EndAssert();
+    return 0x7FFF;   // BrnWorld::KI_INVALID_SECTION_INDEX
+}
+
+// ============================================================================================
 // THE JUNKYARD / CAR-SELECT PRODUCER SURFACE (2026-08-01).
 // Everything below is what CarSelectManager and GameStateModule reach for through the
 // progression layer. Bodies recovered from the X360 ASM (the Hex-Rays prototypes for AddCar /
@@ -561,6 +684,398 @@ s32 ProgressionManager::GetProgressionRank() const
         return liRank;
     }
     return liRankCount - 1;
+}
+
+// ============================================================================================
+// GetRankThresholdForEvent (X360 0x82370260) -- DWARF BrnProgressionManager.h:285
+// ============================================================================================
+// [stuntrace waveB CLOSURE round, 2026-08-26] Bodied. It was declare-only, and it is the sole
+// blocker under GetProgressionRankForGameMode below -- which StuntAttackMode::Start @0x82332088
+// calls directly, and which ModeManager::GetRoadRageTakedownTarget is parked on.
+//
+// "How many wins at this mode does the player need in order to have reached progression rank
+// liProgressionRank?" Four of the ten offline modes carry their own per-rank threshold byte; the
+// other six have no separate difficulty ladder and answer 0.
+//
+//   0x8237026C..0x8237027C  addis r3,r3,2 / addi r3,r3,0x8E4 / bl sub_82369020
+//                           -- ResourcePtr<ProgressionData>::GetMemory() on this+0x208E4, i.e.
+//                              GetProgressionData(). sub_82369020 IS that template body: it fires
+//                              "Can not instance resource pointer - it ..." (GameShared/
+//                              GameClasses/Sy..., line 0x233) and returns *(ptr+0).
+//   0x82370284..0x8237028C  lwz r11,0x14(data) / cmplw r31,r11 / blt
+//                           -- luIndex < muProgressionRankCount (assert line 0x14A == 330, file
+//                              "..\..\..\SharedClasses\Progression/...")
+//   0x823702B0..0x823702B8  lwz r10,0x10(data) / mulli r11,r31,0x70 / add
+//                           -- the 112-byte per-rank record, i.e. GetProgressionRankData(luIndex)
+//   0x823702BC..0x82370338  a 9-case switch on the mode -> one of four bytes, else 0
+//
+// [!] THE INDEX ASSERT IS NOT RESTATED HERE. Its baked file/line is BrnProgressionData.h:330 --
+// it belongs to ProgressionData::GetProgressionRankData, which this tree already bodies WITH that
+// assert. The console carries it at this site only because it inlined that accessor; calling the
+// accessor reproduces it exactly once. Restating it would double the assert and poison the H10
+// assert storm, whose whole value is one line per missing wire.
+//
+// [!] The console does NOT null-test GetProgressionData() here -- it goes through the ResourcePtr,
+// whose own "Can not instance resource pointer" assert is the guard. Reproduced: no invented
+// early return.
+// ============================================================================================
+s32 ProgressionManager::GetRankThresholdForEvent(s32 liProgressionRank,
+                                                 BrnGameState::GameStateModuleIO::EGameModeType leGameModeType) const
+{
+    const ProgressionRankData* lpRankData =
+        mpProgressionData->GetProgressionRankData(static_cast<u32>(liProgressionRank));
+
+    switch (leGameModeType)
+    {
+        case BrnGameState::GameStateModuleIO::E_MODE_OFFLINE_RACE:   // case 0 -> rank+0x60
+            return lpRankData->GetNumWinsToRankUpRace();
+        case BrnGameState::GameStateModuleIO::E_MODE_STUNT_ATTACK:   // case 7 -> rank+0x61
+            return lpRankData->GetNumWinsToRankUpStunt();
+        case BrnGameState::GameStateModuleIO::E_MODE_ROAD_RAGE:      // case 3 -> rank+0x62
+            return lpRankData->GetNumWinsToRankUpRoadRage();
+        case BrnGameState::GameStateModuleIO::E_MODE_MARKED_MAN:     // case 8 -> rank+0x63
+            return lpRankData->GetNumWinsToRankUpMarkedMan();
+        default:                                                     // cases 1,2,4,5,6 + out of range
+            return 0;
+    }
+}
+
+// ============================================================================================
+// ⭐⭐ [stuntrace wave D, D3] THE THREE RANK-AS-RATIO QUERIES.
+//
+// GameStateModule::StartModeAtLights @0x82396CF8 forks between them on the runtime mode
+// (@0x823970E0..0x82397134) and publishes the answer through
+// StartGameModeParams::SetProgressionRankAsRatio -- the number StuntAttackMode::Start and
+// RaceMode::Start scale event difficulty by. Every one of the three is walked from its own
+// EXPORT ASSEMBLY: Hex-Rays renders all three as int/float-union noise and drops the f1 return
+// in each, so the pseudocode is unusable and is not the source for anything below.
+// ============================================================================================
+
+// --------------------------------------------------------------------------------------------
+// ProgressionManager::GetProgressionRankNormalised  @ 0x82370340
+// --------------------------------------------------------------------------------------------
+// `clamp(lfRank / (rankCount - 1), 0, 1)`, instruction for instruction:
+//   0x82370358..0x82370364  addis r3,r3,2 / addi r3,r3,0x8E4 / bl sub_82369020
+//                           -- ResourcePtr<ProgressionData>::GetMemory() on this+0x208E4
+//   0x82370368..0x82370388  lwz r11,0x14(data) / addi r11,r11,-1 / extsb / fcfid / frsp
+//                           -- f31 = (f32)(s8)(muProgressionRankCount - 1)
+//   0x8237037C              lfs f30, flt_82001CC0   ; == 0.0f (image-read)
+//   0x8237038C/0x82370390   fcmpu f31, f30 / bgt    -- SKIP the assert when maxRank > 0
+//   0x82370394..0x8237042C  the "Max Rank set to <n>\n" assert, BrnProgressionManager.cpp:3995
+//   0x82370430              fdivs f0, f29(lfRank), f31
+//   0x82370444/0x8237044C   fneg f13, f0 / fsel f0, f13, f30(0.0f), f0   -- lower clamp at 0
+//   0x82370450/54/58        lfs f13, flt_82001C98 (== 1.0f) / fsubs f12, f13, f0 /
+//                           fsel f30, f12, f0, f13                       -- upper clamp at 1
+//   tail                    the `(gxMessageFilterFlags & 1)` "Normalised rank is X (a of b)" line
+// --------------------------------------------------------------------------------------------
+f32 ProgressionManager::GetProgressionRankNormalised(f32 lfRank) const
+{
+    const s32 liRankCount = static_cast<s32>(mpProgressionData->GetProgressionRankCount());
+    const f32 lfMaxRank   = static_cast<f32>(static_cast<s8>(liRankCount - 1));
+
+    // The console's own assert text streams the value; CGS_ASSERT takes a literal, so the number
+    // is dropped and the condition + the message stem are kept verbatim.
+    CGS_ASSERT(lfMaxRank > 0.0f, "Max Rank set to ");                 // :3995
+
+    f32 lfNormalised = lfRank / lfMaxRank;
+    if (lfNormalised < 0.0f)                                          // fsel @0x8237044C
+    {
+        lfNormalised = 0.0f;
+    }
+    if (lfNormalised > 1.0f)                                          // fsel @0x82370458
+    {
+        lfNormalised = 1.0f;
+    }
+
+    if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0 && CgsDev::Log::gpDebugPrint != 0)
+    {
+        *CgsDev::Log::gpDebugPrint << "Normalised rank is " << lfNormalised
+                                   << " (" << lfRank << " of " << lfMaxRank << ")\n";
+    }
+    return lfNormalised;
+}
+
+// --------------------------------------------------------------------------------------------
+// ProgressionManager::GetProgressionRankNormalisedForCurrentRank  @ 0x8237B610
+// --------------------------------------------------------------------------------------------
+// Exported unnamed; the GLOBAL arm of StartModeAtLights' rank fork (`bl sub_8237B610`
+// @0x82397134). The name is descriptive -- no symbol survives. Body, from the asm:
+//   0x8237B634..0x8237B64C  lwz r10,0x14(data) / lbzx r11,this,0x2096C / extsb / cmpw
+//                           -- (s8)mi8ProgressionRank == (s32)muProgressionRankCount ?
+//   0x8237B654..0x8237B670  yes: f0 = (f32)(s8)(muProgressionRankCount - 1)
+//   0x8237B674..0x8237B684  no : f0 = (f32)(s8)GetProgressionRank()
+//   0x8237B694              bl GetProgressionRankNormalised(f1 == that value)
+// ⓘ The `==` is the console's, and it is NOT the same test as PlayerHasFinishedLastRank()
+// (which this tree spells `>=`). Reproduced as shipped; do not "unify" them.
+// --------------------------------------------------------------------------------------------
+f32 ProgressionManager::GetProgressionRankNormalisedForCurrentRank() const
+{
+    const s32 liRankCount = static_cast<s32>(mpProgressionData->GetProgressionRankCount());
+
+    f32 lfRank;
+    if (static_cast<s32>(mi8ProgressionRank) == liRankCount)
+    {
+        lfRank = static_cast<f32>(static_cast<s8>(liRankCount - 1));
+    }
+    else
+    {
+        lfRank = static_cast<f32>(static_cast<s8>(GetProgressionRank()));
+    }
+    return GetProgressionRankNormalised(lfRank);
+}
+
+// --------------------------------------------------------------------------------------------
+// ProgressionManager::GetProgressionRankForGameModeNormalised  @ 0x8237BE10
+// --------------------------------------------------------------------------------------------
+// The PER-MODE arm of the same fork (modes 0/3/7/8). Body, from the asm:
+//   0x8237BE38..0x8237BE4C  f30 = (f32)(s8)(muProgressionRankCount - 1)          [maxRank]
+//   0x8237BE50..0x8237BE78  f28 = (f32)(s8)GetProgressionRankForGameMode(mode)   [modeRank]
+//   0x8237BE7C/0x8237BE80   fcmpu f28, f30 / bge -> 0x8237BF80: return flt_82001C98 (== 1.0f)
+//   0x8237BE88..0x8237BEA4  lwz r10,0x14(data) / lbzx r11,this,0x2096C / extsb / cmpw / beq
+//                           -- also return 1.0f when the cached rank byte has reached the count
+//   0x8237BEB0..0x8237BEE0  f31 = (f32)GetRankThresholdForEvent(modeRank,     mode)   [low]
+//   0x8237BF08/0x8237BF10   lfs f0, flt_820049E0 (== 100.0f) / fdivs f30, f0, f30
+//                           -- f30 is REUSED: it becomes 100.0f / maxRank, a PERCENT PER RANK
+//   0x8237BEFC..0x8237BF24  f29 = (f32)GetRankThresholdForEvent(modeRank + 1, mode)   [high]
+//   0x8237BF28..0x8237BF4C  f12 = (f32)Profile::GetNumRankWinsForGameMode(mode)       [wins]
+//                           (`addi r3, r31, 0x170` == the embedded mProfile)
+//   0x8237BF30/34/40/50/54  f0  = f29 - f31              ; (high - low)
+//                           f13 = f30 * f28              ; percentPerRank * modeRank
+//                           f0  = f30 / f0               ; percentPerRank / (high - low)
+//                           f12 = f12 - f31              ; (wins - low)
+//                           f1  = f12 * f0 + f13         ; fmadds -- the result, in PERCENT
+//   0x8237BF58..0x8237BF6C  lfs f0, flt_82001CC0 (== 0.0f) / fcmpu / ble ->
+//                           lfs f0, flt_82029F24 (== 0.01f) / fmuls f1, f1, f0
+//                           -- percent -> 0..1, ONLY when the sum is strictly positive
+// The four image constants above were read out of the ARTIST image, not guessed
+// (flt_82001C98 = 1.0f, flt_82001CC0 = 0.0f, flt_820049E0 = 100.0f, flt_82029F24 = 0.01f).
+// ⓘ The console calls GetProgressionRankForGameMode FOUR times (once for the compare and once
+// per threshold lookup); kept, because the calls are the console's and one of them could in
+// principle observe a changed rank.
+// --------------------------------------------------------------------------------------------
+f32 ProgressionManager::GetProgressionRankForGameModeNormalised(
+        BrnGameState::GameStateModuleIO::EGameModeType leGameModeType) const
+{
+    const s32 liRankCount = static_cast<s32>(mpProgressionData->GetProgressionRankCount());
+    const f32 lfMaxRank   = static_cast<f32>(static_cast<s8>(liRankCount - 1));
+    const f32 lfModeRank  = static_cast<f32>(GetProgressionRankForGameMode(leGameModeType));
+
+    if (lfModeRank >= lfMaxRank)                                       // @0x8237BE80
+    {
+        return 1.0f;                                                   // flt_82001C98
+    }
+    if (static_cast<s32>(mi8ProgressionRank) == liRankCount)            // @0x8237BEA4
+    {
+        return 1.0f;
+    }
+
+    const f32 lfLowThreshold = static_cast<f32>(
+        GetRankThresholdForEvent(GetProgressionRankForGameMode(leGameModeType), leGameModeType));
+    const f32 lfPercentPerRank = 100.0f / lfMaxRank;                   // @0x8237BF10
+    const f32 lfHighThreshold = static_cast<f32>(
+        GetRankThresholdForEvent(GetProgressionRankForGameMode(leGameModeType) + 1, leGameModeType));
+    const f32 lfWins = static_cast<f32>(mProfile.GetNumRankWinsForGameMode(leGameModeType));
+
+    f32 lfPercent = (lfWins - lfLowThreshold) *
+                        (lfPercentPerRank / (lfHighThreshold - lfLowThreshold)) +
+                    (lfPercentPerRank * lfModeRank);
+    if (lfPercent > 0.0f)                                              // @0x8237BF60
+    {
+        lfPercent *= 0.01f;                                            // flt_82029F24
+    }
+    return lfPercent;
+}
+
+// ============================================================================================
+// GetStuntRunScoreTarget (X360 0x8237B6B0) -- DWARF BrnProgressionManager.h:270
+// ============================================================================================
+// [stuntrace waveB CLOSURE round, 2026-08-26] Bodied. THIS IS THE STUNT RACE'S SCORE TARGET.
+// StuntAttackMode::Start @0x82332150 calls it on the path the campaign actually takes -- when the
+// profile carries no per-event TargetEventScore record -- and writes the answer into
+// GameModeParams::mfNeedForGold, which ScoringSystem::OnModeStart @0x823382A8 then hands to
+// StuntModeScoring::Activate as the mode's target. With no body, a stunt race has no target.
+//
+// The header's declare-only banner listed FOUR blockers. Three were already false and the fourth
+// is closed by this same round, which is why it can land now:
+//   (a) "a real ProgressionRankData LAYOUT"  -- narrowed to ONE byte, rank+0x61, which is now the
+//       DWARF-named ProgressionRankData::GetNumWinsToRankUpStunt and is reached here through
+//       GetRankThresholdForEvent, not by offset. (2026-08-26 MOUNT-CLOSURE round: the blocker is
+//       gone outright rather than narrowed -- the real LAYOUT landed as
+//       SharedClasses/Progression/BrnProgressionRankData.h, and the BrnGameModeParams.h stand-in
+//       this line used to name is retired.)
+//   (b) RaceEventData::GetRankScore @0x823543D0 -- bodied, SharedClasses/Progression/BrnRaceEventData.cpp:42;
+//   (c) BrnMath::RoundWithNumSignificantFigures -- bodied, GameSource/Math/BrnMathUtils.cpp:123;
+//   (d) GetRankThresholdForEvent's own body -- landed above this pass.
+//
+// WHAT IT COMPUTES: the player sits somewhere BETWEEN two progression ranks, measured in stunt-mode
+// wins; the target score is the event's per-rank score linearly interpolated by that same fraction,
+// rounded to 2 significant figures. At the last rank there is nothing to interpolate towards, so
+// the rank's own score is returned outright.
+//
+// FIVE INLINE COPIES, ONE VALUE. The console inlines GetProgressionRankForGameMode
+// (E_MODE_STUNT_ATTACK) FIVE times -- at 0x8237B744, 0x8237B818, 0x8237B910, 0x8237BA2C and
+// 0x8237BAF4 -- each an identical rank-count / threshold-ladder loop over the 112-byte per-rank
+// stride reading `lbz r11, 0x61(r11)`, each followed by the same
+// "liProgressionRank >= 0 && liProgressionRank < liNumRanks" assert (line 0xEDA). Nothing between
+// them mutates the profile or the resource, so all five yield the same rank; called ONCE here.
+// That is rematerialisation, not five different quantities -- the same compiler behaviour
+// StuntAttackMode::Start's double GetRankTime call already documents.
+//
+// REGISTER / OFFSET MAP, re-derived this pass:
+//   0x8237B6C4  lwz r19, 0x32C(r5)        -- a3 == lpStartGameModeParams; +0x32C == mpEventData.
+//                                            a2 (lpGameModeParams) is NEVER dereferenced -- it is
+//                                            carried for the console's signature and nothing else.
+//   0x8237B6E4  li r5, 0xF33              -- assert 3891 "lpStuntRunEventData != NULL"
+//   0x8237B710  lwz r27, 0x388(r24)       -- this+0x388. mProfile is at this+0x170 and
+//                                            maiRankWinsPerOfflineGameMode at Profile+0x1FC, so
+//                                            0x388 == +0x1FC + 7*4 == the STUNT slot, i.e. the
+//                                            inlined Profile::GetNumRankWinsForGameMode
+//                                            (E_MODE_STUNT_ATTACK). Re-read at 0x8237B804 /
+//                                            0x8237B8E4 / 0x8237B9E0 / 0x8237BACC -- same word.
+//   0x8237B714  lwz r11,0x14 / addi -1 / extsb r25
+//                                         -- liLastRankForGameMode == (s8)(rankCount - 1)
+//   0x8237B7DC  cmpw r20, r25 ; blt       -- liCurrentRank >= liLastRankForGameMode -> early return
+//   0x8237B7EC  bl GetRankScore(lpEventData, liCurrentRank)   (the early-return value)
+//   0x8237B8EC  lbz 0x61 -> fcfid/frsp    -- f29 lfTotalNumberOfWinsForThisRank
+//   0x8237B9E8  lbz 0x61 (rank+1) -> f27  -- lfTotalNumberOfWinsForNextRank
+//   0x8237BA0C  f25                       -- lfCurrentEventWins (the +0x388 word as f32)
+//   0x8237BA18  fdivs f30, (f25-f29), (f27-f29)   -- lfCurrentRelativeEventRatio
+//   0x8237BAC0  GetRankScore(rank)   -> f31 lfCurrentRankStuntRunScore
+//   0x8237BB8C  GetRankScore(rank+1) -> f28 lfNextRankStuntRunScore
+//   0x8237BBC4  fmadds f26, (f28-f31), f30, f31   -- lfCurrentStuntRunTarget
+//   0x8237BDFC  BrnMath::RoundWithNumSignificantFigures(f26, flt_82001D9C)
+//               IMAGE-CITED: image.bin @0x1D9C == 40 00 00 00 == 2.0f exactly.
+//
+// The local names above are the CONSOLE'S OWN -- they are the literal strings its debug-print
+// block streams (aLilastrankforg / aLicurrentrank / aLftotalnumbero / aLfcurrentevent_0 /
+// aLfcurrentrelat_0 / aLfcurrentranks / aLfnextrankstun / aLfcurrentstunt), so the variable
+// naming below is recovered, not invented.
+//
+// DROPPED, deliberately (the same ruling StuntAttackMode::Start's banner records for its own
+// `gxMessageFilterFlags & 1` print): the eight-line debug dump at 0x8237BB94..0x8237BDF0, plus its
+// EXTRA RoundWithNumSignificantFigures call at 0x8237BDB0 -- which exists only to print the result
+// and is discarded. That duplicate call is why a naive transcription would round twice. The
+// surviving call is the tail one at 0x8237BDFC. No state depends on any of it.
+// ============================================================================================
+s32 ProgressionManager::GetStuntRunScoreTarget(const BrnGameState::GameModeParams* /*lpGameModeParams*/,
+                                               const BrnGameState::StartGameModeParams* lpStartGameModeParams) const
+{
+    const RaceEventData* lpStuntRunEventData = lpStartGameModeParams->GetEventData();
+    CGS_ASSERT(lpStuntRunEventData != NULL, "lpStuntRunEventData != NULL");
+
+    // `lwz r11,0x14 / addi r11,r11,-1 / extsb r25` -- narrowed to a signed byte, like every other
+    // rank count in this file.
+    const s32 liLastRankForGameMode =
+        static_cast<s8>(static_cast<u8>(mpProgressionData->GetProgressionRankCount() - 1u));
+
+    const s32 liCurrentRank =
+        GetProgressionRankForGameMode(BrnGameState::GameStateModuleIO::E_MODE_STUNT_ATTACK);
+
+    // Top rank: nothing above to interpolate towards, so the rank's own score IS the target.
+    if (liCurrentRank >= liLastRankForGameMode)
+    {
+        return lpStuntRunEventData->GetRankScore(static_cast<u32>(liCurrentRank));
+    }
+
+    // How far the player is between this rank's win requirement and the next one's.
+    const f32 lfTotalNumberOfWinsForThisRank = static_cast<f32>(
+        GetRankThresholdForEvent(liCurrentRank,
+                                 BrnGameState::GameStateModuleIO::E_MODE_STUNT_ATTACK));
+    const f32 lfTotalNumberOfWinsForNextRank = static_cast<f32>(
+        GetRankThresholdForEvent(liCurrentRank + 1,
+                                 BrnGameState::GameStateModuleIO::E_MODE_STUNT_ATTACK));
+    const f32 lfCurrentEventWins = static_cast<f32>(
+        mProfile.GetNumRankWinsForGameMode(BrnGameState::GameStateModuleIO::E_MODE_STUNT_ATTACK));
+
+    const f32 lfCurrentRelativeEventRatio =
+        (lfCurrentEventWins - lfTotalNumberOfWinsForThisRank) /
+        (lfTotalNumberOfWinsForNextRank - lfTotalNumberOfWinsForThisRank);
+
+    // The same fraction applied to the event's two neighbouring rank scores.
+    const f32 lfCurrentRankStuntRunScore =
+        static_cast<f32>(lpStuntRunEventData->GetRankScore(static_cast<u32>(liCurrentRank)));
+    const f32 lfNextRankStuntRunScore =
+        static_cast<f32>(lpStuntRunEventData->GetRankScore(static_cast<u32>(liCurrentRank + 1)));
+
+    // `fmadds f26, (f28 - f31), f30, f31` -- one fused multiply-add, written in that order.
+    const f32 lfCurrentStuntRunTarget =
+        (lfNextRankStuntRunScore - lfCurrentRankStuntRunScore) * lfCurrentRelativeEventRatio +
+        lfCurrentRankStuntRunScore;
+
+    return BrnMath::RoundWithNumSignificantFigures(lfCurrentStuntRunTarget,
+                                                   KF_STUNT_TARGET_SIGNIFICANT_FIGURES);
+}
+
+// ============================================================================================
+// GetProgressionRankForGameMode (X360 0x8237B4E8) -- DWARF BrnProgressionManager.h:282
+// ============================================================================================
+// [stuntrace waveB CLOSURE round, 2026-08-26] Bodied. This is StuntAttackMode::Start's rank
+// source (`li r4,7 / lwz r3,0x6D5C(modeMgr) / bl` @0x82332084) -- the value that then indexes
+// RaceEventData::GetRankTime for the stunt race's time limit -- and one of the two bodies
+// ModeManager::GetRoadRageTakedownTarget is parked on.
+//
+// Walks the player's WINS AT THIS MODE up the per-rank threshold ladder and answers the highest
+// rank whose threshold the player has met. Instruction map:
+//
+//   0x8237B4FC..0x8237B518  mode == 0 || 3 || 7 || 8, else assert
+//                           "This game mode doesn't have separate difficulty scaling"
+//                           (line 0xEC3 == 3779). It is an ASSERT, not a guard: the console falls
+//                           straight through and reads the array anyway.
+//   0x8237B554..0x8237B580  the SECOND assert, "( leGameModeType < GsmIO::E_MODE_OFFLINE_COUNT )
+//                           && ( leGameModeType > GsmIO::E_MODE_NONE )" -- baked against a
+//                           DIFFERENT file ("..\..\..\GameSource\GameState/Progr...", line 0x893)
+//                           because it belongs to the INLINED Profile::GetNumRankWinsForGameMode.
+//                           NOT restated here: that accessor is bodied with it (BrnProfile.cpp:853).
+//   0x8237B584..0x8237B594  addi r11,r28,0xDB / slwi 2 / lwzx r30,r11,r27
+//                           -- this + (mode + 0xDB)*4 == this + 0x36C + mode*4. mProfile sits at
+//                              this+0x170 (the same anchor StuntAttackMode::Start's
+//                              `addi r3, r11, 0x170` uses), so +0x36C == Profile+0x1FC ==
+//                              maiRankWinsPerOfflineGameMode[mode] (BrnProfile.h:617, +508) --
+//                              exactly what Profile::GetNumRankWinsForGameMode @0x8230FA40 reads.
+//                              Reached through that accessor, so no raw offset survives here.
+//   0x8237B598..0x8237B5A4  bl <ResourcePtr GetMemory> / lwz r11,0x14 / extsb r29
+//                           -- the rank count, SIGN-EXTENDED FROM A BYTE (`extsb`), not a word.
+//   0x8237B5A8..0x8237B5D0  liProgressionRank starts at 1 and climbs while
+//                           rankWins >= GetRankThresholdForEvent(liProgressionRank, mode) and
+//                           liProgressionRank < liNumRanks; the loop is skipped when
+//                           liNumRanks <= 1 (`cmpwi r29,1 / ble`).
+//   0x8237B5D4..0x82370604  liProgressionRank -= 1; assert
+//                           "liProgressionRank >= 0 && liProgressionRank < liNumRanks"
+//                           (line 0xEDA == 3802); return extsb(liProgressionRank).
+//
+// Return type is s8 per the DWARF, which is why every caller `extsb`s r3 -- the final
+// `extsb r3, r31` IS that narrowing, and the s8 return preserves it.
+// ============================================================================================
+s8 ProgressionManager::GetProgressionRankForGameMode(BrnGameState::GameStateModuleIO::EGameModeType leGameModeType) const
+{
+    CGS_ASSERT(leGameModeType == BrnGameState::GameStateModuleIO::E_MODE_OFFLINE_RACE ||
+               leGameModeType == BrnGameState::GameStateModuleIO::E_MODE_ROAD_RAGE    ||
+               leGameModeType == BrnGameState::GameStateModuleIO::E_MODE_STUNT_ATTACK ||
+               leGameModeType == BrnGameState::GameStateModuleIO::E_MODE_MARKED_MAN,
+               "This game mode doesn't have separate difficulty scaling");
+
+    // Profile::GetNumRankWinsForGameMode owns the range assert the console fires here.
+    const s32 liRankWins = mProfile.GetNumRankWinsForGameMode(leGameModeType);
+
+    // `extsb r29, r11` -- the rank count is loaded as a word and then narrowed to a signed byte.
+    const s32 liNumRanks =
+        static_cast<s8>(static_cast<u8>(mpProgressionData->GetProgressionRankCount()));
+
+    s32 liProgressionRank = 1;
+    while (liProgressionRank < liNumRanks)
+    {
+        if (liRankWins < GetRankThresholdForEvent(liProgressionRank, leGameModeType))
+        {
+            break;
+        }
+        ++liProgressionRank;
+    }
+    --liProgressionRank;
+
+    CGS_ASSERT(liProgressionRank >= 0 && liProgressionRank < liNumRanks,
+               "liProgressionRank >= 0 && liProgressionRank < liNumRanks");
+
+    return static_cast<s8>(liProgressionRank);
 }
 
 // --------------------------------------------------------------------------------------------

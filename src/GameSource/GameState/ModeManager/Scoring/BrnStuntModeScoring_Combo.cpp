@@ -71,21 +71,21 @@ namespace BrnGameState
         }
 
         // --- StuntModeScoring combo tuning constants (BrnStuntModeScoring.cpp anon-ns block) -----
-        // FLAG: names are role-attested from the per-method semantics; the concrete rodata
-        // magnitudes are UNRECOVERED in the dossier, so they are file-local PLACEHOLDERS here
-        // (the established sibling pattern, cf. BrnStuntModeScoring_StuntTypes.cpp). The names +
-        // their positions in the store-for-store bodies are faithful; the magnitudes are for the
-        // cl /c gate ONLY -- not load-bearing. When the full BrnStuntModeScoring.cpp is
-        // reconstructed it owns the canonical anonymous-namespace block; delete these and let the
-        // shared constants resolve (or reconcile the magnitudes against the X360 rodata).
+        // Names are role-attested from the per-method semantics; the magnitudes are RECOVERED as
+        // direct big-endian f32 reads of the named flt_ addresses out of the decrypted X360 ARTIST
+        // basefile (image VA - 0x82000000 == file offset). Each address was cross-checked against
+        // the referencing method's own asm export: UpdateCombo (0x82320FF0) references flt_82CDB790
+        // and EndCombo (0x823215D8) references flt_82CDB7B0, and neither references the other's.
+        // These stay file-local: when the full BrnStuntModeScoring.cpp is reconstructed it owns the
+        // canonical anonymous-namespace block; delete these and let the shared constants resolve.
 
-        // X360 flt_82CDB790 -- UpdateCombo's "seconds without a scoring stunt before the combo is
-        // lost" threshold (mfTimeSinceLastStunt crossing it auto-ends the combo).
-        const f32 KF_TIME_WITHOUT_STUNT_TO_LOSE_COMBO = 0.0f;
+        // X360 flt_82CDB790 (VA 0x82CDB790) -- UpdateCombo's "seconds without a scoring stunt
+        // before the combo is lost" threshold (mfTimeSinceLastStunt crossing it auto-ends the combo).
+        const f32 KF_TIME_WITHOUT_STUNT_TO_LOSE_COMBO = 5.0f;
 
-        // X360 flt_82CDB7B0 -- the delay EndCombo parks mfTimeDelayBeforeModeEnd at when the combo
-        // ends with the time limit already expired (and the run is not endless).
-        const f32 KF_TIME_DELAY_BEFORE_MODE_END = 0.0f;
+        // X360 flt_82CDB7B0 (VA 0x82CDB7B0) -- the delay EndCombo parks mfTimeDelayBeforeModeEnd at
+        // when the combo ends with the time limit already expired (and the run is not endless).
+        const f32 KF_TIME_DELAY_BEFORE_MODE_END = 3.0f;
     }
 
 // ----------------------------------------------------------------------------

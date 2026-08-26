@@ -16,6 +16,26 @@
 //   WasTimeRecentlyUp           0x82313330
 //   OutputStuntsToDisplay       0x823211E8
 //
+// ACCESSOR CLOSURE (2026-08-26). Five more members of the same read-only surface, all of
+// which were declared-only and were REAL LINK RESIDUE of the scoring mount (they appear in
+// scratch/stuntrace_scout/datafeed/objs/undef_demangled.txt). None of the five has its own
+// out-of-line X360 symbol; each is recovered from a site that DOES:
+//   Prepare                             vtable slot 1 of StuntModeScoring's vtable
+//                                       (@0x820CEF50) == 0x82C296C8, the ICF-folded body
+//                                       `li r3, 1 ; blr` -- i.e. `return true;`
+//   GetComboScore                       X360 0x8232B180 (inlined in WriteDataToOutput)
+//   GetAllStuntTypesForInProgressStunt  X360 0x8232B1A0 (same caller)
+//   IsComboWarningActive                X360 0x8232B1A8..0x8232B1F0 (same caller)
+//   GetTimeSinceComboWarningActivated   X360 0x8232B21C..0x8232B258 (same caller)
+// The recovery site is ScoringSystem::WriteDataToOutput (X360 0x8232AE98), whose DecFIGS
+// dwarfdump (BrnScoringSystem.cpp:799) states the SOURCE reaches the embedded scorer through
+// these getters; the free build inlined them to raw offsets, so the offsets below are the
+// getters' own bodies read back out of that caller.
+//
+// IsComboInProgress is NOT bodied here: X360 0x82313510 is `lbz r3, 0x2A(r3) ; blr` and the
+// committed home already carries exactly that as a header inline (BrnStuntModeScoring.h:219),
+// so an out-of-line definition here would be a second definition of the same function.
+//
 // Each body is a clean (de-optimized) translation of its X360 pseudocode/asm.
 // Members are accessed BY NAME against the committed layout in BrnStuntModeScoring.h;
 // every `*(a1+offset)` in the asm was reconciled to a named member by offset+role
@@ -59,6 +79,21 @@ namespace BrnGameState
         // score / display-score sign tests treat |x| <= this as zero (flt_82020B30 is
         // +eps, flt_82002514 is -eps).
         const f32 KF_SCORE_EPSILON = 1.1920929e-7f;
+
+        // ---- combo-warning tuning pair (the X360 .data float block at 0x82CDB7xx) --------
+        // Both are direct big-endian f32 reads of the decrypted ARTIST basefile at the two
+        // VAs the asm names (image VA - 0x82000000 == file offset), the same recovery route
+        // this TU family already used for flt_82CDB7D0 (== FLT_MAX, cross-checked against the
+        // PS3 export in BrnScoringSystem_Lookup.cpp).
+        //
+        // The warning fires once the combo has gone this long without a scoring stunt. The
+        // threshold is deliberately tiny -- one frame of no stunt arms the HUD warning.
+        const f32 KF_COMBO_WARNING_TIME_THRESHOLD = 0.01f;   // flt_82CDB78C (0x3C23D70A)
+        // ...and the warning's own display span: GetTimeSinceComboWarningActivated saturates
+        // at this value. CROSS-CHECKED: it is the SAME constant UpdateCombo (X360 0x82320FF0)
+        // compares mfTimeSinceLastStunt against to END the combo (`if (v5 > flt_82CDB790)`),
+        // so the HUD warning bar runs 0 -> 5 s and the combo drops exactly when it fills.
+        const f32 KF_COMBO_WARNING_DISPLAY_SPAN   = 5.0f;    // flt_82CDB790 (0x40A00000)
     }
 
     // ------------------------------------------------------------------------
@@ -289,5 +324,114 @@ namespace BrnGameState
             lfCeiling = lfBestThisPass;   // next pass must be strictly smaller (v7 = v6)
             lfBestThisPass = 0.0f;        // reset the running best (v6 = v5 == 0.0)
         }
+    }
+
+    // ------------------------------------------------------------------------
+    // Prepare  (X360: StuntModeScoring vtable slot 1 @0x820CEF54 -> 0x82C296C8)
+    // Per-event prep for the OFFLINE stunt scorer: nothing to do, report success.
+    //
+    // DERIVATION (no own symbol -- this is a virtual whose base implementation the linker
+    // ICF-folded): ScoringSystem::Prepare (X360 0x8232A430) reaches it as
+    //     lwz r11, 0x350(this) ; addi r3, this, 0x350 ; lwz r11, 4(r11) ; bctrl
+    // i.e. a vtable dispatch at slot +4 on the embedded scorer (ScoringSystem+0x350 ==
+    // mStuntModeScoring). Reading StuntModeScoring's vtable out of the image at 0x820CEF50
+    // gives slot 1 == 0x82C296C8, whose whole body is `li r3, 1 ; blr`. That address is
+    // COMDAT-FOLDED with several other trivial `return 1` leaves in the image (IDA names it
+    // after one of them, CgsSound::Playback::Content::DoOnPostLoad) -- the fold is the proof
+    // that StuntModeScoring::Prepare's own body is exactly `return true;` and nothing else.
+    //
+    // The whole vtable is pinned by three independently known slots, so the slot-1 read is a
+    // transcription rather than a guess: slot 5 == 0x82313518 HasStuntModeEnded (the committed
+    // header's documented vtable+0x14), slot 10 == 0x82312DE8 CalculateMultiplier (documented
+    // vtable+0x28), and slot 4 == 0x82321108 ClearData (the target StuntModeScoring::Construct
+    // 0x8232C080 dispatches through vtable+0x10).
+    //
+    // NOTE: the DERIVED online scorer overrides this with real work
+    // (StuntModeScoringOnline::Prepare 0x82338B50, vtable slot 1 of ITS vtable @0x820CF9EC);
+    // that override does NOT chain to this base, which is consistent with the base being inert.
+    // ------------------------------------------------------------------------
+    bool StuntModeScoring::Prepare()
+    {
+        return true;
+    }
+
+    // ------------------------------------------------------------------------
+    // GetComboScore  (X360 0x8232B180, inlined in ScoringSystem::WriteDataToOutput)
+    // The live combo score as a whole number. The X360 emits
+    //     lfs    f0, 0x20(scorer)   ; mfComboScore
+    //     fctiwz f0, f0             ; float -> int, ROUND TOWARD ZERO
+    //     stfiwx f0, 0, r11
+    // fctiwz is the truncating convert, which is exactly C++'s float->int conversion.
+    // ------------------------------------------------------------------------
+    s32 StuntModeScoring::GetComboScore() const
+    {
+        return static_cast<s32>(mfComboScore);   // +0x20, fctiwz == truncation
+    }
+
+    // ------------------------------------------------------------------------
+    // GetAllStuntTypesForInProgressStunt  (X360 0x8232B1A0, same caller)
+    // The bit-mask of every EStuntType the CURRENT (still-running) stunt has accumulated --
+    // distinct from GetCurrentStunts(), which rebuilds a mask from the per-category
+    // mStuntTypeInfo[].mbActive flags. The X360 is a single `lwz r11, 0x50(scorer)`, and
+    // +0x50 is the committed muStuntTypesInProgress (the same member ShouldBankScore above
+    // masks with KU_BANKABLE_STUNT_TYPE_MASK).
+    // ------------------------------------------------------------------------
+    u32 StuntModeScoring::GetAllStuntTypesForInProgressStunt() const
+    {
+        return muStuntTypesInProgress;   // +0x50
+    }
+
+    // ------------------------------------------------------------------------
+    // IsComboWarningActive  (X360 0x8232B1A8..0x8232B1F0, inlined in WriteDataToOutput)
+    // "The combo is about to be lost" HUD gate. Three conditions, short-circuited in this
+    // order by the asm:
+    //     lbz    r11, 0x2A(scorer)              ; mbComboInProgress -- else false
+    //     lfs    f13, 0x20(scorer) ; fctiwz     ; (s32)mfComboScore  -- must be > 0
+    //     lfs    f13, 0x58(scorer)              ; mfTimeSinceLastStunt
+    //     fcmpu  cr6, f13, f0(flt_82CDB78C) ; bge -> true
+    // (+0x58 is the committed mfTimeSinceLastStunt, whose asm-proven runtime role as the
+    // "seconds since the last scoring stunt" combo timer is recorded in the home header.)
+    // The score test goes through the INTEGER form -- the asm converts before comparing, so a
+    // combo score in (0, 1) reads as 0 and suppresses the warning.
+    // ------------------------------------------------------------------------
+    bool StuntModeScoring::IsComboWarningActive() const
+    {
+        if (!mbComboInProgress)                                 // +0x2A
+        {
+            return false;
+        }
+        if (GetComboScore() <= 0)                               // (s32)+0x20
+        {
+            return false;
+        }
+        return mfTimeSinceLastStunt >= KF_COMBO_WARNING_TIME_THRESHOLD;   // +0x58
+    }
+
+    // ------------------------------------------------------------------------
+    // GetTimeSinceComboWarningActivated  (X360 0x8232B21C..0x8232B258, same caller)
+    // How far the combo-loss warning has progressed, in seconds, saturating at the warning's
+    // full span. Zero while the warning is not active (the asm's `fmr f0, f31` arm, where f31
+    // was loaded from flt_82001CC0 == 0.0f).
+    //
+    // The active arm is:
+    //     lfs   f13, 0x58(scorer)                  ; mfTimeSinceLastStunt
+    //     fsubs f0,  f13, f0(flt_82CDB78C)         ; elapsed past the warning threshold
+    //     lfs   f13, flt_82CDB790                  ; the display span
+    //     fsubs f12, f0, f13                       ; elapsed - span
+    //     fsel  f0,  f12, f13, f0                  ; (elapsed - span) >= 0 ? span : elapsed
+    // i.e. min(elapsed, span) -- fsel picks the span once the elapsed time has run past it.
+    // The gate re-evaluates the SAME predicate IsComboWarningActive computes (the X360 emits
+    // it twice, once per consumer); written here as the single named call.
+    // ------------------------------------------------------------------------
+    f32 StuntModeScoring::GetTimeSinceComboWarningActivated() const
+    {
+        if (!IsComboWarningActive())
+        {
+            return 0.0f;                                        // flt_82001CC0
+        }
+
+        const f32 lfElapsed = mfTimeSinceLastStunt - KF_COMBO_WARNING_TIME_THRESHOLD;
+        return (lfElapsed >= KF_COMBO_WARNING_DISPLAY_SPAN) ? KF_COMBO_WARNING_DISPLAY_SPAN
+                                                            : lfElapsed;   // fsel == min()
     }
 }

@@ -2,29 +2,7 @@
 
 #include "GameSource/GameState/ModeManager/BrnModeManager.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
-
-// Debug-print plumbing for the X360 message-filter logging block (see the guarded
-// CGS_MESSAGE spew in Start below). Modelled exactly as the established reconstruction in
-// GameSource/Gui/BrnGuiModule.cpp: gxMessageFilterFlags is the global filter word and
-// gpDebugPrint is the global line-writer whose vtable slot 1 is a printf-style writer.
-namespace CgsDev
-{
-    namespace Message
-    {
-        extern u32 gxMessageFilterFlags;
-    }
-
-    namespace Log
-    {
-        struct DebugPrint;
-        typedef int (*DebugPrintFn)(DebugPrint*, const char*);
-        struct DebugPrint
-        {
-            DebugPrintFn* mpVTable;
-        };
-        extern DebugPrint* gpDebugPrint;
-    }
-}
+#include "GameShared/GameClasses/Development/Log/CgsLog.h" // CgsDev::Log::gpDebugPrint / CgsDev::Message::gxMessageFilterFlags
 
 namespace BrnGameState
 {
@@ -77,26 +55,28 @@ void RaceMode::Start(const StartGameModeParams* lpStartGameModeParams,
     // mechanism / traffic-light trigger straight from the immutable start params.
     lpGameModeParams->Construct(lpStartGameModeParams->GetGameModeType());
 
-    // Debug spew of the rank/start tuning values, gated on the global message filter. Faithful
-    // to the X360 block: each line is written through vtable slot 1 of the global debug-print
-    // object, followed by a newline. (The pseudocode formats the float/int value into the
-    // first call and emits "\n" via a second; the value-formatting helper is the debug-print
-    // front-end, reconstructed in its own TU -- here the lines are emitted verbatim.)
+    // Debug spew of the rank/start tuning values, gated on the global message filter. The X360
+    // emits six CGS_MESSAGE lines, each its own `if (gxMessageFilterFlags & 1)` (the macro
+    // re-reads the filter word per line); the filter cannot change inside the block, so the six
+    // gates are folded into one here. Each line streams the label through vtable slot 1
+    // (StrStreamBase::operator<<(const char*)), then the value through the f32 formatter
+    // sub_821F0F40 (the rival count through the s32 formatter sub_821F0EC8), then "\n".
     if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
     {
-        CgsDev::Log::DebugPrint* lpPrint = CgsDev::Log::gpDebugPrint;
-        lpPrint->mpVTable[1](lpPrint, "lpProgressionRankData->GetTrafficDensityRace() : ");
-        lpPrint->mpVTable[1](lpPrint, "\n");
-        lpPrint->mpVTable[1](lpPrint, "lpProgressionRankData->GetLargeVehicleProbability() : ");
-        lpPrint->mpVTable[1](lpPrint, "\n");
-        lpPrint->mpVTable[1](lpPrint, "lpStartGameModeParams->GetTrafficDensity() : ");
-        lpPrint->mpVTable[1](lpPrint, "\n");
-        lpPrint->mpVTable[1](lpPrint, "lpProgressionRankData->GetRaceRivalsNumber() : ");
-        lpPrint->mpVTable[1](lpPrint, "\n");
-        lpPrint->mpVTable[1](lpPrint, "lpStartGameModeParams->GetProgressionRankAsRatio() : ");
-        lpPrint->mpVTable[1](lpPrint, "\n");
-        lpPrint->mpVTable[1](lpPrint,
-            "**********************************************************************************************\n");
+        CgsDev::Log::DebugPrint& lrPrint = *CgsDev::Log::gpDebugPrint;
+        lrPrint << "lpProgressionRankData->GetTrafficDensityRace() : "
+                << lpProgressionRankData->GetTrafficDensityRace() << "\n";
+        lrPrint << "lpProgressionRankData->GetLargeVehicleProbability() : "
+                << lpProgressionRankData->GetLargeVehicleProbability() << "\n";
+        lrPrint << "lpStartGameModeParams->GetTrafficDensity() : "
+                << lpStartGameModeParams->GetTrafficDensity() << "\n";
+        // The X360 renders the rival count through the SIGNED formatter even though the accessor
+        // returns u32, so the cast keeps the same overload.
+        lrPrint << "lpProgressionRankData->GetRaceRivalsNumber() : "
+                << static_cast<s32>(lpProgressionRankData->GetRaceRivalsNumber()) << "\n";
+        lrPrint << "lpStartGameModeParams->GetProgressionRankAsRatio() : "
+                << lpStartGameModeParams->GetProgressionRankAsRatio() << "\n";
+        lrPrint << "**********************************************************************************************\n";
     }
 
     // Traffic density for the race = the start params' base density scaled by the rank's

@@ -18,113 +18,22 @@
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficConstants.h"  // KU_INVALID_PARAM
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "SharedClasses/Traffic/BrnTrafficHull.h"
+// [stuntrace waveB CLOSURE round, 2026-08-26] BrnTraffic::JunctionLogicBox + TrafficLightController
+// now have a real header home and are INCLUDED, not re-declared. Until this round both types were
+// declared in this .cpp under a banner reading "RETIRE THIS BLOCK when BrnJunctionLogicBox.h lands:
+// delete both types and include that header instead"; that block is now gone and this include is
+// the instruction carried out. The reconstruction (stride 0x120, muNumStates +0x34, the two
+// start-data indices at +0x3C/+0x40) moved VERBATIM, along with its layout pins -- which are now
+// namespace-scope static_asserts that fire in every including TU rather than one never-called
+// JunctionLogicBox::_AssertLayout member. The move was forced by
+// Hull::GetLightTriggerStartDataForJunction @0x82752900 (SharedClasses/Traffic/BrnTrafficHull.cpp),
+// which reads this record and could not be written while the type lived in a GameSource .cpp.
+#include "SharedClasses/Traffic/Junctions/BrnJunctionLogicBox.h"
 
-#include <cstddef>   // offsetof, for the never-called _AssertLayout pin below
+#include <cstddef>   // offsetof, for the never-called HullRuntime::_AssertLayout pin below
 
 namespace BrnTraffic
 {
-// ---------------------------------------------------------------------------
-// FLAG -- UN-HOMED DEPENDENCY. Prepare's junction loop indexes lpHull->mpaJunctions[] and
-// needs BrnTraffic::JunctionLogicBox::GetNumStates(). That type's canonical home is
-// SharedClasses/Traffic/Junctions/BrnJunctionLogicBox.h, which has NOT been reconstructed,
-// so BrnTrafficHull.h can only forward-declare `class JunctionLogicBox;`.
-//
-// The record is reproduced in full below, not padding-forked, because the stride and the
-// member offset both come straight off ARTIST in Prepare's junction loop @0x82751438:
-//     0x82751528  lwz  r8, 0x2C(r31)   ; lpHull->mpaJunctions (8th ptr after the 16-byte
-//                                      ;   scalar header: 0x10 + 7*4)
-//     0x82751534  addi r9, r9, 0x120   ; ELEMENT STRIDE = 288
-//     0x82751538  lbz  r8, 0x34(r8)    ; muNumStates at +0x34
-//     0x8275153C  addi r8, r8, 0xFF    ; - 1
-//     0x82751540  stbx r8, r7, r11     ; -> mauJunctionCurrentStates[i]  (r7 = this+0x40)
-// The DWARF member list (BrnJunctionLogicBox.h :128..:141) sums to exactly 0x120 with
-// muNumStates at 0x34, so ARTIST and the DWARF agree.
-//
-// A member-less stand-in is NOT safe here: it completes the forward declaration at sizeof
-// == 1, so mpaJunctions[] advances one byte per junction instead of 288 and every hull with
-// more than one junction reads a plausible wrong value, silently, on the parked-car path.
-//
-// Absolute offsets are legitimate: the record holds NO POINTERS (integer scalars and arrays,
-// eight 24-byte pointer-free TrafficLightControllers, one Vector3 lane), so console offsets
-// are host offsets. The two holes below are natural alignment holes, and _AssertLayout
-// proves it.
-//
-// RETIRE THIS BLOCK when BrnJunctionLogicBox.h lands: delete both types and include that
-// header instead. It should carry the declarations below plus the remaining DWARF accessors
-// (GetID/:83, GetTimeInState/:85, GetNumLights/:86, GetLight/:87, IsLightRed/:88,
-// GetEventJunctionID/:90, GetOfflineStartDataIndex/:91, GetOnlineStartDataIndex/:92,
-// GetPosition/:94, FixUp/:119, FixDown/:124), which no caller in this TU needs.
-// ---------------------------------------------------------------------------
-
-// BrnJunctionLogicBox.h:51 -- the signal group driving one approach of a junction.
-// 24-byte pointer-free record; eight of them sit inline in JunctionLogicBox.
-struct TrafficLightController
-{
-    u16 mauTrafficLightIds[2];   // +0x00  (:53)
-    u8  mauStopLineIds[6];       // +0x04  (:54)
-    u16 mauStopLineHulls[6];     // +0x0A  (:55)
-    u8  muNumStopLines;          // +0x16  (:56)
-    u8  muNumTrafficLights;      // +0x17  (:57)
-                                 //  sizeof == 0x18
-
-    // :61 -- streamed-data byte swap; its own (not-yet-reconstructed) TU. Declaration
-    // only, matching how this directory already handles LaneRung::EndianSwap.
-    void EndianSwap();
-};
-
-class JunctionLogicBox
-{
-public:
-    // BrnJunctionLogicBox.h:84 -- the only accessor ARTIST's Prepare needs.
-    u8 GetNumStates() const { return muNumStates; }
-
-    // Layout pin. NEVER CALLED. Sources: the Prepare junction loop above (stride 0x120,
-    // muNumStates +0x34) and the DWARF member list :128..:141.
-    static void _AssertLayout();
-
-private:
-    u32 muID;                                             // +0x000  (:128)
-    u16 mauStateTimings[16];                              // +0x004  (:129)
-    u8  mauStoppedLightStates[16];                        // +0x024  (:130)
-    u8  muNumStates;                                      // +0x034  (:131)
-    u8  muNumLights;                                      // +0x035  (:132)
-    u8  maPad0x36[2];                                     // +0x036  natural hole
-    u32 muEventJunctionID;                                // +0x038  (:135)
-    s32 miOfflineStartDataIndex;                          // +0x03C  (:136)
-    s32 miOnlineStartDataIndex;                           // +0x040  (:137)
-    TrafficLightController maTrafficLightControllers[8];  // +0x044  (:139)  8 * 0x18
-    u8  maPad0x104[12];                                   // +0x104  natural hole: the
-                                                          //         Vector3 lane is
-                                                          //         16-byte aligned
-    Vector3 mPosition;                                    // +0x110  (:141)
-};                                                        //  sizeof == 0x120
-
-void JunctionLogicBox::_AssertLayout()
-{
-    static_assert(sizeof(TrafficLightController) == 0x18, "sizeof(TrafficLightController)");
-    static_assert(offsetof(TrafficLightController, mauStopLineIds) == 0x04, "mauStopLineIds");
-    static_assert(offsetof(TrafficLightController, mauStopLineHulls) == 0x0A, "mauStopLineHulls");
-    static_assert(offsetof(TrafficLightController, muNumStopLines) == 0x16, "muNumStopLines");
-
-    static_assert(offsetof(JunctionLogicBox, muID) == 0x000, "muID");
-    static_assert(offsetof(JunctionLogicBox, mauStateTimings) == 0x004, "mauStateTimings");
-    static_assert(offsetof(JunctionLogicBox, mauStoppedLightStates) == 0x024,
-                  "mauStoppedLightStates");
-    // The one offset ARTIST states outright: `lbz r8, 0x34(r8)` @ 0x82751538.
-    static_assert(offsetof(JunctionLogicBox, muNumStates) == 0x034, "muNumStates");
-    static_assert(offsetof(JunctionLogicBox, muNumLights) == 0x035, "muNumLights");
-    static_assert(offsetof(JunctionLogicBox, muEventJunctionID) == 0x038, "muEventJunctionID");
-    static_assert(offsetof(JunctionLogicBox, miOfflineStartDataIndex) == 0x03C,
-                  "miOfflineStartDataIndex");
-    static_assert(offsetof(JunctionLogicBox, miOnlineStartDataIndex) == 0x040,
-                  "miOnlineStartDataIndex");
-    static_assert(offsetof(JunctionLogicBox, maTrafficLightControllers) == 0x044,
-                  "maTrafficLightControllers");
-    static_assert(offsetof(JunctionLogicBox, mPosition) == 0x110, "mPosition");
-    // The one size ARTIST states outright: `addi r9, r9, 0x120` @ 0x82751534.
-    static_assert(sizeof(JunctionLogicBox) == 0x120, "sizeof(JunctionLogicBox)");
-}
-
 // @ 0x82751428
 void HullRuntime::Construct()
 {

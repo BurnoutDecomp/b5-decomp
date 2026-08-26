@@ -104,6 +104,77 @@ namespace Assert
     // run the handlers, then halt on-screen. An assert before the renderer has a frame buffer can't draw,
     // so it logs + continues; the re-entrancy guard stops an assert raised while the dialog is up from
     // starting a nested halt.
+    // ============================================================================================
+    // [PC bring-up] REPEAT SUPPRESSION -- NOT CONSOLE BEHAVIOUR, AND IT CANNOT BE.
+    // ============================================================================================
+    // The X360 halts FOREVER on the FIRST assert (DoAssert 0x82820338 loops in DisplayAssertScreen),
+    // so the console never reaches a second occurrence of anything and has no repeat policy to be
+    // faithful to. This build's resume-on-END halt is already a documented PC divergence; what was
+    // NOT documented is its cost when an assert fires EVERY FRAME.
+    //
+    // MEASURED (run scratch/flow_run/20260826_194302): once an event starts at a junction the
+    // player is parked in, GameStateModule::CheckIfPlayerIsAtJunctionWithAnEvent posts action 201
+    // every frame (console-faithful -- the mbAtJunctionWithEvent latch keeps it posting while the
+    // car stands in the region), the bridge turns it into GUI 311, and SatNavRenderer::RecvEvent
+    // fires FOUR asserts per frame because the event-start table was never published
+    // (GameStateModule::SendSetUpAllEventStartsMessage is unreconstructed -- the FLAG at
+    // BrnGameStateModule.cpp:1916). Each one resolved the whole .cgsmap and then BLOCKED the update
+    // thread in the loop below until the harness pulsed Local\BurnoutPC_Assert_Release, which
+    // boot_test.ps1's Settle() does every 200 ms. Cost: 559 asserts / 4 == 139 game frames in the
+    // 191 s after the start, i.e. the simulation ran at 0.73 Hz. Everything downstream then looks
+    // broken while being merely starved -- the started stunt mode sat in E_GMS_INTRO because the
+    // offline-intro self-trigger integrates the fixed 1/60 s step and needs 360 of them for
+    // StuntAttackMode::GetIntroDurationSeconds() == 6.0f, and got 139.
+    //
+    // POLICY, chosen so the assert-storm ORACLE is preserved exactly: the FIRST occurrence of each
+    // distinct (file, line) keeps ALL of the old behaviour -- latched, logged, call-stack resolved,
+    // halted. Every LATER occurrence of that same site is still counted and still gets its own
+    // `[ASSERT n]` line (so `asserts=N` and every grep for a message still work), but skips the map
+    // resolve and the blocking halt. No assert is hidden; only the repeat of one already reported in
+    // full is made cheap. BRN_ASSERT_NO_SUPPRESS=1 restores the old halt-every-time behaviour, and
+    // the table falling full also falls back to it rather than silently suppressing.
+    // ============================================================================================
+    namespace
+    {
+        struct AssertSite
+        {
+            const char* mpcFile;
+            s32         miLine;
+            s32         miCount;
+        };
+
+        const s32   KI_MAX_ASSERT_SITES = 256;
+        AssertSite  gaAssertSites[KI_MAX_ASSERT_SITES];
+        s32         giNumAssertSites = 0;
+
+        // 0 == first time this (file,line) has been seen (or the table is full / suppression is
+        // switched off, both of which take the full path); >0 == this is repeat number N.
+        s32 NoteAssertSite(const char* lpcFile, s32 liLine)
+        {
+            static const bool sbSuppress = (std::getenv("BRN_ASSERT_NO_SUPPRESS") == nullptr);
+            if (!sbSuppress)
+                return 0;
+
+            for (s32 liIndex = 0; liIndex < giNumAssertSites; ++liIndex)
+            {
+                if (gaAssertSites[liIndex].miLine == liLine &&
+                    std::strcmp(gaAssertSites[liIndex].mpcFile, lpcFile) == 0)
+                {
+                    return ++gaAssertSites[liIndex].miCount;
+                }
+            }
+
+            if (giNumAssertSites >= KI_MAX_ASSERT_SITES)
+                return 0;   // table full -- fall back to the old full-report-every-time behaviour
+
+            gaAssertSites[giNumAssertSites].mpcFile = lpcFile;
+            gaAssertSites[giNumAssertSites].miLine  = liLine;
+            gaAssertSites[giNumAssertSites].miCount = 0;
+            ++giNumAssertSites;
+            return 0;
+        }
+    }
+
     void Manager::HandleAssert(const char* lpcMessage, const char* lpcFile, s32 liLine)
     {
         if (!lpcMessage)
@@ -111,6 +182,16 @@ namespace Assert
         if (!lpcFile)
             lpcFile = "<no file>";
         ++miAssertCount;
+
+        // See the banner above. Counted and logged, but not re-resolved and not re-halted.
+        const s32 liRepeat = NoteAssertSite(lpcFile, liLine);
+        if (liRepeat > 0)
+        {
+            *Log::gpDebugPrint << "[ASSERT " << miAssertCount << "] " << lpcMessage
+                               << " (" << lpcFile << ":" << liLine << ") [repeat " << liRepeat
+                               << " -- first occurrence carries the callstack]\n";
+            return;
+        }
 
         StackUnpick lStack;
         lStack.Prepare();

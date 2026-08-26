@@ -146,6 +146,52 @@ namespace BrnGameState
     }
 
     // ------------------------------------------------------------------------
+    // GetPlayerDisconnected(EActiveRaceCarIndex) -- the SECOND overload. The X360 compiler
+    // folded this header-inline into the standalone leaf sub_82326878 (it is not a named
+    // export; the keystone header already cites it at :907 as "folded @0x82326878"). Dumped
+    // and reproduced instruction-for-instruction this session:
+    //
+    //     0x82326894  cmpwi  cr6, r31, -1        ; assert if index <= E_..._INVALID
+    //     0x8232689C  cmpwi  cr6, r31, 8         ; ...or >= E_ACTIVE_RACE_CAR_INDEX_COUNT
+    //     0x823268B0  li     r5, 0x76C           ; BrnScoringSystem.h line 1900
+    //     0x823268B8  ...    "(leActiveRaceCarIndex>E_ACTIVE_RACE_CAR_INDEX_INVALID) && "
+    //                        "(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT)"
+    //     0x823268CC  bl     ScoringSystem::GetCarData
+    //     0x823268D4  beq    loc_823268E8        ; NULL car -> return r3 (== 0 == false)
+    //     0x823268E0  bl     ScoringSystem::GetCarData   ; console calls it TWICE
+    //     0x823268E4  lbz    r3, 0x69(r3)
+    //
+    // +0x69 is CarScoreData::mbDisconnected, which is pinned by a static_assert in its home
+    // (BrnGameStateSharedIO.h:932, offsetof == 0x69) and reached here by NAME; CarData embeds
+    // CarScoreData at offset 0 (BrnScoringSystem.h:268), which is why the console's byte load
+    // comes straight off the CarData*. The same byte is what the sibling
+    // GetPlayerDisconnected(NetworkPlayerID) above reads through GetScoreData().
+    //
+    // The console's double GetCarData call is a not-CSE'd re-evaluation of the same pure
+    // lookup; kept as one call (identical result, no side effects -- GetCarData's own asserts
+    // are index asserts on an index that already passed the check above).
+    //
+    // NOTE the asymmetry with the NetworkPlayerID overload, and keep it: THIS one returns
+    // FALSE for an unknown slot (the console's `beq` falls through with r3 still zero, and
+    // fires no assert), where the by-id overload asserts and returns TRUE. Two different
+    // failure conventions in the retail build; neither is a typo to "fix".
+    // ------------------------------------------------------------------------
+    bool ScoringSystem::GetPlayerDisconnected(EActiveRaceCarIndex leRaceCarIndex) const
+    {
+        CGS_ASSERT((leRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID) &&
+                   (leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT),
+                   "(leActiveRaceCarIndex>E_ACTIVE_RACE_CAR_INDEX_INVALID) && "
+                   "(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT)");
+
+        const CarData* lpCarData = GetCarData(leRaceCarIndex);
+        if (lpCarData == NULL)
+        {
+            return false;
+        }
+        return lpCarData->GetScoreData()->GetDisconnected();
+    }
+
+    // ------------------------------------------------------------------------
     // ClearDisconnectedPlayers -- X360 0x8231DBB0
     // Reset every car's disconnected flag.
     // ------------------------------------------------------------------------

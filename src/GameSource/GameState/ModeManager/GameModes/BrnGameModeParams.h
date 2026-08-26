@@ -7,6 +7,7 @@
 #include "GameSource/GameState/BrnCheckpointData.h"           // BrnGameState::CheckpointData (real, single owner)
 #include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h"   // BrnNetwork::NetworkPlayerID
 #include "SharedClasses/Progression/BrnRaceEventData.h"       // BrnProgression::RaceEventData (real, single owner)
+#include "SharedClasses/Progression/BrnProgressionRankData.h" // BrnProgression::ProgressionRankData (real, single owner)
 
 // =============================================================================
 // BrnGameModeParams.h  (MERGED OWNING HEADER)
@@ -41,27 +42,26 @@
 // RaceMode::Start never dereferences it, so an incomplete type is sufficient. Real home: the
 // scoring-system TU. Declared at BrnGameState scope below.
 
-namespace BrnProgression
-{
-// Per-rank tuning record. RaceMode::Start reads three values out of it. Real home:
-// SharedClasses/Progression/BrnProgressionRankData.{h,cpp}. Only the accessors Start uses are
-// declared; bodies + layout land with that TU.
-class ProgressionRankData
-{
-public:
-    f32 GetTrafficDensityRace() const;
-    f32 GetLargeVehicleProbability() const;
-    u32 GetRaceRivalsNumber() const;
-    f32  GetTrafficDensityPursuit() const;            // DWARF BrnProgressionRankData.h:124 (reads mfTrafficDensityPursuit, byte +20)
-    void GetOvertakingDifficulty(f32* lpafOut) const; // DWARF BrnProgressionRankData.h:192 (copies maOvertakingDifficulty[8], byte +44)
-};
-
+// ---------------------------------------------------------------------------------------------
+// BrnProgression::ProgressionRankData -- THE STAND-IN IS RETIRED (stuntrace waveB MOUNT-CLOSURE
+// round, 2026-08-26). What stood here was a member-less, body-less class with eleven declared
+// accessors and no layout; eleven of the 63 unresolved externals the wave-B event-core mount
+// measured were exactly those accessors, and nothing in the tree could ever have defined them
+// because no TU knew where a single one of its fields lived.
+//
+// The record now has ONE real owner: SharedClasses/Progression/BrnProgressionRankData.h
+// (#included above). It carries the full DWARF-faithful 112-byte layout with a sizeof pin, and
+// every one of the eleven accessors is an INLINE body over its named member -- which is the
+// faithful shape, because the X360 ledger attests no standalone symbol for any of them (they
+// were header-inline on the console; RaceMode::Start reads rank+0x00 / +0x24 / +0x5C with bare
+// `lfs` / `lbz` and no call). The owning header states all four layout witnesses.
+//
 // Per-event progression record. RaceMode::Start reads the start/add rival counts out of it.
-// The former 2-method stub here is RETIRED: BrnProgression::RaceEventData now has a single
-// complete owner (SharedClasses/Progression/BrnRaceEventData.h, included above), which declares
-// GetStartRivalCount/GetAddRivalCount among its attested API. (ODR -- one owner; same pattern as
-// the retired CheckpointData stub above.)
-}
+// The former 2-method RaceEventData stub here is RETIRED for the same reason: BrnProgression::
+// RaceEventData has a single complete owner (SharedClasses/Progression/BrnRaceEventData.h,
+// included above), which declares GetStartRivalCount/GetAddRivalCount among its attested API.
+// (ODR -- one owner; same pattern as the retired CheckpointData stub above.)
+// ---------------------------------------------------------------------------------------------
 
 // Forward decl for StartGameModeParams::mpPlayerCarVehicleListEntry / SetPlayerVehicleGamePlayData.
 // Real home: BrnResource vehicle-list TU. Used only by-pointer here.
@@ -184,6 +184,31 @@ public:
     void    Construct(GameStateModuleIO::EGameModeType leGameModeType);
 
     s32     GetCheckpointCount() const;                        // # checkpoints registered
+
+    // ===========================================================================================
+    // [stuntrace waveB fix round, 2026-08-26] THE CHECKPOINT PAIR. This class published only
+    // GetCheckpointCount() while its SIBLING StartGameModeParams published AddCheckpoint (:369) and
+    // GetCheckpointData (:392) over the identical Array<CheckpointData,16>. That asymmetry is what
+    // parked SetUpCheckPointsForGameMode's publish leg AND SetupPathfinding's block-section copy AND
+    // all of SetupCheckpointDistricts -- so a RACE / MARKED_MAN / BURNING_ROUTE event starts with an
+    // EMPTY checkpoint array today. Both are DWARF-attested for GameModeParams itself (dwarfdump
+    // .../BrnGameModeParams.h:388 and :395/:399) and X360-INLINED at every call site, hence
+    // declare-only here like the rest of this class:
+    //   * AddCheckpoint -- ModeManager::SetUpCheckPointsForGameMode @0x82328BC8 emits it as
+    //     CheckpointData::Construct + Array<CheckpointData,16>::Append @0x82317B30 on params+0x260.
+    //   * GetCheckpointData -- Array<CheckpointData,16>::GetIt @0x8231A7D8 on params+0x260; that
+    //     Array helper OWNS the CgsArray.h:336/:338 constructed/bounds asserts, so call sites must
+    //     NOT restate them. Also asm-pinned from ModeManager::Construct's
+    //     `Array<CheckpointData,16>::GetItem(this+34272, 0)` @0x82340858 (mCurrentGameModeParams+608
+    //     == +0x260, bounds-checked against the count word at base+704 == 16*44).
+    // [!] GetCheckpoints() (the whole-array form, StartGameModeParams' :393 twin) is deliberately
+    // NOT added: CheckpointDataArray is a PRIVATE typedef on this class, so a public accessor
+    // returning it would be unusable by name at any call site. Promote the typedef first if a
+    // consumer really needs the array rather than an element.
+    void                  AddCheckpoint(LandmarkIndex luLandmarkIndex, u16 luAISectionIndex);
+    const CheckpointData* GetCheckpointData(s32 liIndex) const;
+    CheckpointData*       GetCheckpointData(s32 liIndex);
+    // ===========================================================================================
     // [gateui r8 link fix] GetFlag @0x821F2C88 is `ld r11,0x860(r3); and; cntlzw-normalise` --
     // a pure muFlags bit test. Its out-of-line body lives only in an UNMOUNTED (and currently
     // non-compiling) TU, and the round-8 PREPARE_FOR_MODE re-route in the MOUNTED
@@ -194,6 +219,26 @@ public:
     Vector3 GetStartPosition(s32 liStartLocationIndex) const;  // spawn pos for grid slot
     Vector3 GetStartDirection(s32 liStartLocationIndex) const; // facing for grid slot
     s32     GetStartLocationCount() const;                     // # start-grid slots registered
+
+    // [stuntrace waveB fix round, 2026-08-26] DWARF BrnGameModeParams.h:577. X360-INLINED at
+    // every call site (no standalone export): ModeManager::SetStartingGrid @0x82328608 emits it
+    // as "build a 32-byte StartLocation{lPosition, lDirection} and Array<StartLocation,8>::Append
+    // @0x823287D0 it onto maStartLocations (console this+0x150)", guarded by
+    //     CGS_ASSERT( BrnMath::IsNormal( lDirection ), "BrnMath::IsNormal( lDirection )" )
+    // whose baked file/line is BrnGameModeParams.h:1168 (asm `li r5,0x490` @0x823287B4) -- i.e.
+    // the guard belongs to THIS body, and SetStartingGrid carries it only because the console
+    // inlined it there. maStartLocations is private and there is no other public mutator, so
+    // without this method SetStartingGrid cannot seat a single car.
+    //
+    // [!] BANNER CORRECTED 2026-08-26 (wave-B CLOSURE round) -- IT WAS FALSE, AND THE FALSEHOOD
+    // WAS LOAD-BEARING. The committed text justified leaving this declare-only as "matching every
+    // other method on this class (Construct / GetCheckpointCount / GetStartPosition /
+    // GetStartDirection / GetStartLocationCount are all declare-only here)". All five of those
+    // are BODIED, in BrnGameModeParams.cpp:44 / :108 / :129 / :139 / :117 -- so the cited
+    // precedent did not exist and the only method on this class without a body was this one, i.e.
+    // the sole LNK2019 on the seat-the-cars path. Bodied now at BrnGameModeParams.cpp (see the
+    // instruction-for-instruction derivation there).
+    void    AddStartLocation(Vector3 lPosition, Vector3 lDirection);
 
     // ---- Inlined-in-X360 mutators/accessors used by RaceMode::Start --------------------
     // These had no standalone address in the X360 ledger (the compiler inlined them at the
@@ -207,20 +252,51 @@ public:
     void SetFlag(u64 luFlags)                           { muFlags |= luFlags; }
     s32  GetNumRivals() const                           { return miNumRivals; }
 
-    // ScoringSystem::OnModeStart (X360 @ 0x82338220) road-rage / marked-man case
-    // (jumptable cases 0,5; pseudocode `case 3: case 8:`) does, at 0x823382E4:
-    //     lwz r11, 0x858(r29)   ; r29 = GameModeParams*, raw 4-byte word @ +0x858
-    //     stw r11, 0x4B58(r31)  ; r31 = ScoringSystem*, -> miMaximumPlayerCrashedNumber
-    // i.e. it copies the +0x858 field VERBATIM (no float conversion) into the road-rage
-    // durability / crash-target word. The field at +0x858 is meAStarDistanceFunction, NOT
-    // mfOnlineModeTimeLimit (that is the adjacent word @ +0x854): GameModeParams::Construct
-    // (0x8231C370) writes 0 to +0x854 (`stw r11, 0x854(r3)` @ 0x8231C408) and separately
-    // 0 to +0x858 (`stw r11, 0x858(r3)` @ 0x8231C448), proving they are two distinct dwords;
-    // GetFlag's `ld 0x860` fixes muFlags @ +0x860, so working back the DWARF source order is
-    // ...mfOnlineModeTimeLimit(+0x854), meAStarDistanceFunction(+0x858), miPlayerWreckCount(+0x85C).
-    // Returned as the s32 OnModeStart treats this word as (the value stored into the s32 crash
-    // target). Inlined in the X360 build (no standalone export) -> modelled as an inline accessor.
-    s32  GetAStarDistanceFunctionRaw() const            { return static_cast<s32>(meAStarDistanceFunction); }
+    // ===========================================================================================
+    // [!!] OFFSET RUN CORRECTED 2026-08-26 (wave-B fix round) -- THIS WAS A LIVE DEFECT, not a
+    // comment tidy. The committed block here read the run as
+    //     mfOnlineModeTimeLimit(+0x854), meAStarDistanceFunction(+0x858), miPlayerWreckCount(+0x85C)
+    // and bodied `GetAStarDistanceFunctionRaw()` over the +0x858 member so that
+    // ScoringSystem::OnModeStart's road-rage crash target was fed the A* DISTANCE FUNCTION. The run
+    // is ONE SLOT LOW. Four asm facts, all re-dumped this pass, and they cannot all be satisfied by
+    // the old reading:
+    //   (a) ModeManager::SetupPathfinding @0x823291B0 STORES the A*-type identity {0,1,2} as an
+    //       INTEGER to +0x854 (`li r11,1 / li r11,0 ... stw r11, 0x854(r29)` @0x82329250). A float
+    //       time limit cannot be the destination of that store.
+    //   (b) ModeManager::UpdateCurrentMode @0x82350EC8 LOADS +0x850 as a FLOAT (`lfs f0, 0x850(r30)`
+    //       @0x823512FC) immediately before firing the assert whose literal is
+    //       "lpGameModeParams->GetOnlineTimeLimit() > 0.0f", and re-loads it at 0x82351324 as the
+    //       value it passes on. So mfOnlineModeTimeLimit IS +0x850.
+    //   (c) GameModeParams::Construct @0x8231C370 writes 0 to 0x840/0x844/0x848/0x84C/0x854/0x858
+    //       and NEVER to 0x850 -- exactly right if 0x850 is the online-only time limit (set by the
+    //       online mode's Start, not by the generic reset) and 0x854/0x858 are the two resettable
+    //       integers.
+    //   (d) ScoringSystem::OnModeStart @0x82338220 does `lwz r11, 0x858(r29)` @0x823382E4 ->
+    //       `stw r11, 0x4B58(r31)` == miMaximumPlayerCrashedNumber. Under the corrected run that
+    //       word is miPlayerWreckCount -- "how many wrecks the player is allowed" feeding "the max
+    //       number of player crashes", which is the reading that actually makes sense.
+    // CORRECTED RUN: mfOnlineModeTimeLimit(+0x850), meAStarDistanceFunction(+0x854),
+    //                miPlayerWreckCount(+0x858), muFlags(+0x860, fixed by GetFlag's `ld 0x860`).
+    // `GetAStarDistanceFunctionRaw()` is therefore RETIRED (it named the wrong member for its one
+    // consumer) and replaced by the two honest accessors below. All three are X360-INLINED (no
+    // standalone export), so inline bodies are the faithful form.
+    // ===========================================================================================
+
+    // DWARF BrnGameModeParams.h:479. The console's road-rage / marked-man crash allowance; the ONE
+    // consumer is ScoringSystem::OnModeStart's `lwz r11, 0x858` -> miMaximumPlayerCrashedNumber.
+    s32  GetPlayerWreckCount() const                    { return miPlayerWreckCount; }
+
+    // The console assert string names this accessor verbatim: "lpGameModeParams->GetOnlineTimeLimit()
+    // > 0.0f" (BrnModeManager.cpp:2010), fired by UpdateCurrentMode's mode-13 timer-start leg
+    // immediately after `lfs f0, 0x850(r30)`.
+    f32  GetOnlineTimeLimit() const                     { return mfOnlineModeTimeLimit; }
+
+    // DWARF BrnGameModeParams.h:458 `void SetAStarDistanceFunction(BrnAI::AStarDistanceFunction)`.
+    // Typed s32 here ONLY because the member is still the EAStarDistFunc_Stub placeholder -- re-type
+    // both together when BrnAI::AStarDistanceFunction (BrnAStar.h:47) is wired in. X360-INLINED:
+    // ModeManager::SetupPathfinding @0x823291B0 emits it as `stw r11, 0x854(lpGameModeParams)`.
+    void SetAStarDistanceFunction(s32 leAStarDistanceFunction)
+    { meAStarDistanceFunction = static_cast<EAStarDistFunc_Stub>(leAStarDistanceFunction); }
 
     // ⭐ [gateui] ADDED 2026-08-20 (round 8). DWARF-attested method (BrnGameModeParams.h:417,
     // `EGameModeType GetGameModeType() const`), inlined by the X360 compiler at every call site,
@@ -293,9 +369,14 @@ private:
 
 // The immutable event/start description handed to a game mode. DWARF :153 (:303-327). X360 word in
 // [], byte offset in (); offsets NOT x64-faithful -- parity by member. The seven X360-attested
-// methods (Construct/AddCheckpoint/Set+GetTrafficLightTriggerId/SetProgressionRankData/
-// SetProgressionRankAsRatio/SetPlayerVehicleGamePlayData) have bodies in BrnGameModeParams.cpp; the
-// remaining accessors are declared-only (compile gate for committed RaceMode::Start consumers).
+// standalone methods (Construct/AddCheckpoint/Set+GetTrafficLightTriggerId/SetProgressionRankData/
+// SetProgressionRankAsRatio/SetPlayerVehicleGamePlayData) have bodies in BrnGameModeParams.cpp.
+// [x] 2026-08-26 MOUNT-CLOSURE round: the fifteen READ accessors the mounted event core actually
+// calls are now bodied in that same TU as well. They have no out-of-line X360 symbol (all inlined),
+// so each is derived from consumer asm -- see the evidence banner above their block. The remaining
+// declarations here (the Set* twins, GetPlayerPosition, GetCheckpoint*, GetPlayerVehicleGamePlayData,
+// Get/SetPlayerBaseDeformation) are still declared-only: nothing mounted references them, and a
+// body with no live consumer is a body with no way to check its member mapping.
 class StartGameModeParams
 {
 public:
@@ -350,13 +431,20 @@ public:
 private:
     // ---- Data members (DWARF source order :303-327) ----
     CheckpointDataArray                         maCheckpointDataArray;        // :303  [..176]  count @+704
-    CgsID                                       miRaceId;                     // :304  [177] +708  (NOT reset by Construct)
+    // [x] CORRECTED 2026-08-26: +712, not +708, and Construct DOES clear it. 708 is the word
+    // index times four; a CgsID is 8-aligned so the member sits at 712, which is what
+    // ModeManager::Start's `ld r11, 0x2C8(r30)` @0x8234FEB0 reads. Construct's clear is the
+    // easily-missed `std r11(0), 0x2C8(r31)` @0x8231C274 (an 8-byte store, apart from the
+    // scalar cluster). The old SUSPECT flag on this member is discharged.
+    CgsID                                       miRaceId;                     // :304  [177] +712  (cleared by Construct)
     GameStateModuleIO::EGameModeType            meGameModeType;               // :305  [180] +720
     Vector3                                     mPlayerPosition;              // :306  [184] +736
     Vector3                                     mStartDirection;              // :307  [188] +752
     s32                                         miTakedownTarget;             // :308  [192] +768
     EGlobalRaceCarIndex_Stub                    mePursuedCarGlobalIndex;      // :309  [193] +772  (real EGlobalRaceCarIndex)
-    CgsID                                       mPursuedCarID;                // :310  [194] +776  (NOT reset by Construct)
+    // [x] CORRECTED 2026-08-26: Construct DOES clear it -- `std r11(0), 0x308(r31)` @0x8231C280,
+    // the second of the two 8-byte stores the earlier pass read past. See BrnGameModeParams.cpp.
+    CgsID                                       mPursuedCarID;                // :310  [194] +776  (cleared by Construct)
     EGameModeStartMechanism                     meStartMechanism;             // :311  [196] +784
     LightTriggerId                              mTrafficLightTriggerId;       // :312  [197] +788
     f32                                         mfTrafficDensity;             // :314  [198] +792

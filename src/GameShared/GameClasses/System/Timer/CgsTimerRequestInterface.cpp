@@ -74,4 +74,48 @@ void TimerRequestInterface::ApplyToTimers(Timer* lpGameTimer, Timer* lpSimTimer)
         lpSimTimer->SetScaleTarget(mSimTimer.GetMultiplier());
 }
 
+// ============================================================================================
+// TimerRequestInterface::GetGameTimerRequests / GetSimTimerRequests -- DWARF h:100-111
+// ============================================================================================
+// [stuntrace waveB CLOSURE round, 2026-08-26] Bodied. GetSimTimerRequests was DECLARE-ONLY and
+// was one of the five unresolved externals the cross-seam audit found on the wave's mount path
+// (caller: BrnModeManager_Finish.cpp:460, FinishCurrentMode's mode-2 SetTimestepMultiplier leg).
+//
+// X360: header-inlined at every call site, so there is no standalone export -- but the inlining
+// states the answer outright. ModeManager::FinishCurrentMode @0x8234B978, jumptable cases 2,16:
+//
+//   0x8234BB74  mr   r3, r25                                   ; the OutputBuffer
+//   0x8234BB78  bl   GameStateModuleIO::OutputBuffer::GetTimerRequest...   ; -> TimerRequestInterface*
+//   0x8234BB7C  lis  r11, flt_82001C98@ha                       ; image.bin @0x1C98 == 1.0f
+//   0x8234BB80  addi r3, r3, 8                                  ; <- GetSimTimerRequests()
+//   0x8234BB84  lfs  f1, flt_82001C98@l(r11)
+//   0x8234BB88  bl   CgsSystem::TimerRequests::SetTimestepMultiplier
+//
+// `addi r3, r3, 8` IS the whole body: mSimTimer sits at +0x08 (DWARF h:121, and the two
+// TimerRequests are 8 bytes each -- muFlags +0x00, mfMultiplier +0x04), so the accessor is
+// &mSimTimer and nothing else. The game-timer pair is its +0x00 twin (DWARF h:120); both are
+// bodied together rather than one of the four, because a half-bodied symmetric accessor set is
+// precisely the asymmetry that hid GameModeParams::AddStartLocation's link hole this same wave.
+// Reached by NAME here -- no offset arithmetic survives into the source.
+// ============================================================================================
+const TimerRequests* TimerRequestInterface::GetGameTimerRequests() const
+{
+    return &mGameTimer;
+}
+
+TimerRequests* TimerRequestInterface::GetGameTimerRequests()
+{
+    return &mGameTimer;
+}
+
+const TimerRequests* TimerRequestInterface::GetSimTimerRequests() const
+{
+    return &mSimTimer;
+}
+
+TimerRequests* TimerRequestInterface::GetSimTimerRequests()
+{
+    return &mSimTimer;
+}
+
 }

@@ -154,6 +154,17 @@ namespace BrnGameState
         // method's signature or section.
         friend class ScoringSystem;
 
+        // SAME SITUATION, SAME REMEDY (wave-B ModeManager keystone, 2026-08-26): the X360
+        // BrnGameState::ModeManager::ProcessEvent @0x82340AB8 calls DealWithInProgressStunt
+        // DIRECTLY on whichever of the ScoringSystem's two embedded scorers the current mode
+        // selects (`r3 = mScoringSystem + 0x2620` online / `+ 0x350` offline, then
+        // `bl StuntModeScoring::DealWithInProgressStunt`) -- an external caller the tree had no
+        // xref for when that method was placed in the `protected` section. Friendship is granted
+        // here rather than re-opening the section, so no signature, section or mangling changes.
+        // (Filed to the conductor as a header_request: if the console declaration is genuinely
+        // public, move DealWithInProgressStunt up instead and drop this line.)
+        friend class ModeManager;
+
     public:
         // --------------------------------------------------------------------
         // MultiplierOutInfo -- the 24-byte (0x18) output record CalculateMultiplier

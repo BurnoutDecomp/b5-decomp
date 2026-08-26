@@ -210,6 +210,18 @@ struct RaceEventData
         E_MODE_COUNT         = 6,
     };
 
+    // The event's ONLINE mode classification -- a SEPARATE, much shorter enum from EModeType, and
+    // the type of the byte at +0xED. DWARF-attested
+    // (references/DecFIGS/dwarfdump/SharedClasses/Progression/BrnRaceEventData.h:18, source line
+    // 306): `enum EOnlineModeType`.
+    enum EOnlineModeType
+    {
+        E_ONLINE_MODE_RACE             = 0,
+        E_ONLINE_MODE_ROAD_RAGE        = 1,
+        E_ONLINE_MODE_BURNING_HOME_RUN = 2,
+        E_ONLINE_MODE_COUNT            = 3,
+    };
+
     // X360 0x8230F808. Returns &mpaCheckpoints[liCheckpointIndex] (asserts 0 <= index <
     // miCheckpointCount, BrnRaceEventData.h:953). 40-byte stride.
     const CheckpointData* GetCheckpointData(s32 liCheckpointIndex) const;
@@ -231,12 +243,29 @@ struct RaceEventData
     // BrnRaceEventData.h:898). mafRankTimes lives at +0x40.
     f32 GetRankTime(u32 luRank) const;
 
-    // ---- Remaining X360-attested API (bodies + the backing members land in their own TUs) ----
+    // ---- The start-grid rival counts (BODIED 2026-08-26, stuntrace waveB MOUNT-CLOSURE round) --
     // The number of rivals on the start grid / added during the event. RaceMode::Start reads both.
-    // Declared-only here (their backing fields are not in this minimal slice -- a future TU grows
-    // this single owner with the proven offsets). Previously a competing 2-method stub
-    // BrnProgression::RaceEventData lived in BrnGameModeParams.h; that stub is retired and that
-    // header now defers to this single owner (ODR).
+    // They were declare-only because "their backing fields are not in this minimal slice"; the two
+    // fields are now carved at their proven offsets below and the bodies live in
+    // BrnRaceEventData.cpp next to GetMode/GetOnlineMode (their exact siblings in the +0xEC run).
+    //
+    // OFFSETS, PROVEN THREE WAYS AND AGREEING:
+    //   * DWARF BrnRaceEventData.h:268/:271 declares `uint8_t mu8StartRivalCount;` immediately
+    //     followed by `uint8_t mu8AddRivalCount;`, the third and fourth members of the eleven-byte
+    //     mu8Mode..mi8UnlockRank run that starts at +0xEC -- so +0xEE and +0xEF.
+    //   * progression_transcode.py models that run as `(0xEC, 1, 11)` with the record 0xF8 bytes
+    //     and +0xF7 as pad, which fixes the run's base and therefore both bytes.
+    //   * THE CONSUMER'S ASM. RaceMode::Start @0x82330018 reads exactly those two bytes off the
+    //     event record (r23) and nothing else in the run:
+    //         0x82330324  lbz r11, 0xEE(r23)   ; the start-grid count, then
+    //         0x82330328  lbz r10, 0x5C(r24)   ; clamped against the RANK's muRaceRivalsNumber
+    //         0x82330334  cmplw cr6, r9, r8    ; `min(event start count, rank rival number)`
+    //         0x82330414  lbz r11, 0xEF(r23)   ; the add count, then
+    //         0x82330418  lbz r10, 0xEE(r23)   ; summed (`add r11,r11,r10` @0x82330420) and
+    //         0x8233042C  stw r11, 0xBC(r22)   ; stored as the mode's total opponent count.
+    //     The pairing of +0xEE with the rank record's +0x5C is what makes the START/ADD split
+    //     unambiguous: only the START count is the one clamped by the per-rank rival number.
+    // Both are `lbz` with no `extsb`, hence the u8 returns the DWARF also declares.
     u8 GetStartRivalCount() const;
     u8 GetAddRivalCount() const;
 
@@ -246,38 +275,110 @@ struct RaceEventData
     CgsID GetUnlockCarId() const;
 
     // ADDITIVE GROW (declare-only; bodies in the RaceEventData TU) -- BrnSatNavRenderer TU.
-    // The sat-nav icon renderer reads three record fields when caching an on-map event icon:
-    //   * GetEventTypeByte  -- X360 byte +0xEC; the renderer indexes a sat-nav-icon lookup
-    //     table with it to pick the icon's UV row (E_SATNAVICON_EVENT_*).
-    //   * GetIconFrameBase  -- X360 byte +0xED; the icon's animation base frame (renderer
-    //     adds 6 to it for the mini-icon variant).
+    //
+    // NAME CORRECTION (2026-08-26): bytes +0xEC/+0xED are NOT sat-nav presentation fields. They are
+    // the event's game MODE and ONLINE mode, and the DWARF names them so directly --
+    // references/DecFIGS/dwarfdump/SharedClasses/Progression/BrnRaceEventData.h lines 262/265
+    // declare `uint8_t mu8Mode;` then `uint8_t mu8OnlineMode;` as adjacent members, with
+    // `EModeType GetMode() const;` / `EOnlineModeType GetOnlineMode() const;` (lines 308/311). The
+    // repo's own retail-bundle transcoder already agrees: tools/assets/bundles/
+    // progression_transcode.py sets EVENT_MODE = 0xEC, labels the +0xEC..+0xF7 run
+    // "mu8Mode .. mi8UnlockRank", and rejects any event whose +0xEC byte exceeds 5 because
+    // "RaceEventData::EModeType tops out at 5".
+    //
+    // The sat-nav renderer is a CONSUMER, not the owner of the meaning: it merely indexes its own
+    // icon table with the mode. BrnSatNavRenderer.cpp's KAU_EVENTTYPE_TO_ICONROW has exactly six
+    // authored entries {3,1,5,4,2,4} -- one per E_MODE_RACE..E_MODE_PURSUIT -- and the online
+    // path adds 6 to the online mode to reach the online icon-frame block, which is what once
+    // made +0xED look like an "icon frame base". Icon rows are renderer policy; the mode is data.
+    //
+    //   * GetMode            -- byte +0xEC, RaceEventData::EModeType.
+    //   * GetOnlineMode      -- byte +0xED, RaceEventData::EOnlineModeType.
     //   * GetEventInstanceId -- X360 doubleword +0x10; the event-instance id the renderer
     //     compares against the cache's "current" event to special-case the active event.
-    // Declare-only: the backing fields live past this minimal slice (a future TU grows the
-    // single owner with the proven offsets). Returned by accessor so the renderer stays off
-    // raw +0xEC/+0xED/+0x10 casts.
+    // Returned by accessor so consumers stay off raw +0xEC/+0xED/+0x10 casts.
     // [H3b] bodies in BrnRaceEventData.cpp now (the sat-nav renderer links against the
-    // first two); the backing bytes are carved at their proven offsets below.
+    // mode pair); the backing bytes are carved at their proven offsets below.
+    u8    GetMode() const;
+    u8    GetOnlineMode() const;
+    u64   GetEventInstanceId() const;
+
+    // THIN ALIASES, kept only so the already-mounted sat-nav renderer keeps compiling and linking
+    // against the names it was written with (BrnSatNavRenderer.cpp:486, :521, :719). They return
+    // the same two bytes as GetMode / GetOnlineMode. New code must call GetMode / GetOnlineMode --
+    // "event type" and "icon frame base" were both wrong readings of these bytes.
     u8    GetEventTypeByte() const;
     u8    GetIconFrameBase() const;
-    u64   GetEventInstanceId() const;
+
+    // ⭐ [stuntrace wave D, D3] The three leading scalars GameStateModule::StartModeAtLights
+    // @0x82396CF8 reads (the asm citations are on the members). GetSpecialEventCarId is the
+    // correctly-named twin of GetEventInstanceId above -- SAME doubleword, DWARF name.
+    // The X360 emits no standalone symbol for any of the three (all inlined at the reader), so
+    // they are header-inlines, exactly like ProgressionData::GetProgressionRankCount.
+    f32   GetTrafficDensity() const   { return mfTrafficDensity; }
+    f32   GetBoostEarning() const     { return mfBoostEarning; }
+    CgsID GetSpecialEventCarId() const { return mSpecialEventCarId; }
 
 private:
     // The checkpoint-table base is a SERIALISED 32-BIT SLOT -- see the banner above EventJunction.
     // ProgressionData::FixUp/FixDown rebase it in place (`*(event + 24) -= delta` @0x8267F220), and
     // the whole record is 248 bytes with miCheckpointCount at +0x1C; a host pointer here would move
     // the count to +0x20 and grow the record to 256, desynchronising it from the shipped data.
-    u8  maPad_00[0x10];                 // 0x00..0x0F (id / car id / leading scalars -- not in this slice)
-    u64 muEventInstanceId;              // 0x10  event-instance id (GetEventInstanceId; X360 doubleword +0x10)
+    // ⭐⭐ [stuntrace wave D, D3] THE FIRST FIVE MEMBERS ARE CARVED, AND THE NAMES ARE THE
+    // DWARF's OWN. references/DecFIGS/dwarfdump/SharedClasses/Progression/BrnRaceEventData.h
+    // lists `struct BrnProgression::RaceEventData` opening with, in declaration order:
+    //     :586 uint32_t  muId
+    //     :587 uint32_t  muFlags
+    //     :589 float32_t mfTrafficDensity
+    //     :590 float32_t mfBoostEarning
+    //     :592 CgsID     mSpecialEventCarId
+    //     :594 CheckpointData* mpaCheckpoints          <- the +0x18 slot already carved below
+    // which lands mfTrafficDensity at +0x08, mfBoostEarning at +0x0C and mSpecialEventCarId at
+    // +0x10 -- and all three are independently attested by GameStateModule::StartModeAtLights
+    // @0x82396CF8, which reads exactly those three bytes off the event record (r31):
+    //     0x82396FF0  lfs f0, 8(r31)    -> StartGameModeParams+792  (mfTrafficDensity)
+    //     0x82397000  lfs f0, 0xC(r31)  -> StartGameModeParams+796  (mfBoostEarning)
+    //     0x82396F64  ld  r11, 0x10(r31); cmpld against GameStateModule::GetOriginalCarId's
+    //                 CgsID return -- an 8-BYTE id compare, which is what makes +0x10 a CgsID.
+    // ⛔ NAME CORRECTION, AND IT IS A REAL DEFECT THIS WAVE FOUND: this member was committed as
+    // `u64 muEventInstanceId` with the sat-nav renderer named as its owner. The sat-nav is a
+    // CONSUMER of the id; the DWARF and the StartModeAtLights compare both say it is the
+    // SPECIAL-EVENT CAR. Two already-committed call sites had independently worked that out and
+    // said so in their own comments -- BrnPreRaceFlyBy_wJ_06.cpp:170 asserts
+    // `lpEventData->GetEventInstanceId() != 0` with the message "lpEventData->IsSpecialEvent()"
+    // and then assigns the result to `const CgsID lPlayersCarId`, and
+    // BrnProgressionManager_EventFinish.cpp:352-358 casts it to CgsID with a NAME NOTE saying the
+    // semantically-right accessor is GetUnlockCarId(). BrnGameActions.h:1287's JunctionInfoAction
+    // is the third witness (it records "RaceEventData+0x10 -> GuiEventJunctionInfo::
+    // mSpecialEventCarId"). GetEventInstanceId() and GetUnlockCarId() are KEPT as aliases so no
+    // committed caller has to change; new code calls GetSpecialEventCarId().
+    u32   muId;                         // 0x00  (DWARF :586)
+    u32   muFlags;                      // 0x04  (DWARF :587)
+    f32   mfTrafficDensity;             // 0x08  (DWARF :589)  GetTrafficDensity
+    f32   mfBoostEarning;               // 0x0C  (DWARF :590)  GetBoostEarning
+    CgsID mSpecialEventCarId;           // 0x10  (DWARF :592)  GetSpecialEventCarId
     u32 muaCheckpointsOffset;           // 0x18  checkpoint table base (FixUp-rebased 32-bit slot)
     s32 miCheckpointCount;              // 0x1C  live checkpoint count
     u8  maPad_20[0x08];                 // 0x20..0x27 (not in this slice)
     s32 maiRankScores[KU_NUM_RANKS];    // 0x28  rank target scores (6 * 4 == 0x18 -> 0x40)
     f32 mafRankTimes[KU_NUM_RANKS];     // 0x40  rank target times  (6 * 4 == 0x18 -> 0x58)
     u8  maPad_58[0x94];                 // 0x58..0xEB (remaining record -- not in this slice)
-    u8  mu8EventType;                   // 0xEC  sat-nav icon row selector (GetEventTypeByte)
-    u8  mu8IconFrameBase;               // 0xED  icon animation base frame (GetIconFrameBase)
-    u8  maPad_EE[0x0A];                 // 0xEE..0xF7 (sizeof == 0xF8)
+    // DWARF BrnRaceEventData.h:262/265 (source lines 608/609): mu8Mode then mu8OnlineMode, the
+    // first two of the eleven-byte run mu8Mode..mi8UnlockRank (+0xEC..+0xF6) that closes the 0xF8
+    // record over one alignment byte at +0xF7 -- the same run progression_transcode.py models as
+    // `(0xEC, 1, 11)  # mu8Mode .. mi8UnlockRank (0xF7 pad)`. GROWN IN PLACE 2026-08-26: the next
+    // two of that run, mu8StartRivalCount (DWARF :268) and mu8AddRivalCount (DWARF :271), are now
+    // carved because RaceMode::Start links against their accessors -- see the accessor banner
+    // above for the asm that pins both bytes. The SEVEN still inside maPad_F0 are, in DWARF order,
+    // mu8TakeDownBronze (+0xF0), mu8TakeDownSilver (+0xF1), mu8TakeDownGold (+0xF2),
+    // mu8DamageLimit (+0xF3), mu8ExtensionTimeCount (+0xF4), mu8AStarType (+0xF5) and
+    // mi8UnlockRank (+0xF6), with +0xF7 the closing alignment byte; carve one here when a caller
+    // needs it. Do not fork this owner.
+    u8  mu8Mode;                        // 0xEC  RaceEventData::EModeType       (GetMode)
+    u8  mu8OnlineMode;                  // 0xED  RaceEventData::EOnlineModeType (GetOnlineMode)
+    u8  mu8StartRivalCount;             // 0xEE  (DWARF :268)  GetStartRivalCount
+    u8  mu8AddRivalCount;               // 0xEF  (DWARF :271)  GetAddRivalCount
+    u8  maPad_F0[0x08];                 // 0xF0..0xF7 (sizeof == 0xF8)
 
     // ProgressionData's relocation walks the event table and rebases muaCheckpointsOffset.
     friend struct ProgressionData;

@@ -162,6 +162,21 @@ public:
     u32                            GetActiveTriggerCount() const;
     u16                            GetActiveTrigger(u32 liIndex) const;
 
+    // ⭐ ACCESSOR GROW (stuntrace wave B, agent 9). The loaded traffic-lane resource at this+1600
+    // (0x640), the sibling of mpTriggerData above. This is the OTHER half of the old
+    // "ModeManager +0x6D60 / +0x640 GetTrafficData mystery holder": the holder is this manager, and
+    // ModeManager::GetTrafficData() is a header-inline that does exactly
+    // `ResourcePtr<TrafficData>::GetMemoryResource(mpTriggerQueryManager + 0x640)`.
+    // PINNED FROM ASM: ModeManager::GetStartDataForTrafficLight @0x82327310 opens with
+    //   `lwz r11, 0x6D60(r3); addi r3, r11, 0x640; bl BrnTraffic::TrafficData_::GetMemor`
+    // and then fires its own `"lpTrafficData"` assert (BrnModeManager.h:1631) on a null answer --
+    // i.e. the console inlines GetTrafficData() there. GetMemoryResource (not operator->) is used
+    // so the message the container itself bakes matches the console symbol the call resolves to.
+    // The X360 emits no standalone TriggerQueryManager::GetTrafficData symbol -- every caller
+    // renders as that same two-instruction adjust -- so this is defined inline, exactly like
+    // GetTriggerData above.
+    const BrnTraffic::TrafficData* GetTrafficData() const { return mpTrafficData.GetMemoryResource(); }
+
 private:
 
     // ---- leading preamble (offsets 0..911), grown in place 2026-08-01 -----------------------

@@ -42,8 +42,14 @@ namespace CgsSystem
 
     struct TimerRequestInterface
     {
-        // DWARF h:99-111 -- their own ledger functions (declaration-only here).
+        // DWARF h:99. Its own ledger function (declaration-only here).
         void Clear();
+
+        // DWARF h:100-111. [x] BODIED 2026-08-26 (stuntrace waveB CLOSURE round) in this TU's
+        // .cpp -- all four, from the `addi r3, r3, 8` the X360 emits where it inlines the sim
+        // accessor (ModeManager::FinishCurrentMode @0x8234BB80). GetSimTimerRequests was one of
+        // the wave's unresolved externals (BrnModeManager_Finish.cpp:460); the game-timer twin is
+        // bodied alongside it so the symmetric set cannot go half-linked.
         const TimerRequests* GetGameTimerRequests() const;
         TimerRequests*       GetGameTimerRequests();
         const TimerRequests* GetSimTimerRequests() const;

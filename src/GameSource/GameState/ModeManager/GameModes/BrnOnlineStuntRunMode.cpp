@@ -24,8 +24,16 @@ namespace
     // so the literals below are named, honestly-FLAGGED stand-ins (provably not 0.0 -- the timer is
     // armed to one and counted down to compare against zero). Same convention the committed sibling
     // OnlineRaceMode.cpp uses for its unresolved .data floats. INTEGRATOR: resolve from the XEX.
-    const f32 KF_STUNT_RUN_TIME_SECONDS = 60.0f; // flt_82CDB7B8 (.data value UNRESOLVED; estimate, not 0.0)
-    const f32 KF_SCORING_GRACE_SECONDS  = 5.0f;  // flt_82CDB7B4 (.data value UNRESOLVED; estimate, not 0.0)
+    // RESOLVED 2026-08-26 from the image (offset VA-0x82000000, BE; the 0x82CDB7xx region is
+    // verified-static, not dyn-init):
+    //   flt_82CDB7B8 = 0x47D2F000 = 108000.0f  -- ⚠ SUSPECT NAME: at this magnitude it reads
+    //     like a SCORE threshold, not seconds; the ShouldFinish comparison below that consumes
+    //     it as elapsed-time needs re-deriving against the 0x8233A3F0 export before trust.
+    //   flt_82CDB7B4 = 0x42B40000 = 90.0f      -- the online stunt run's mode time limit
+    //     (written to GameModeParams+0x6C mfModeTimeLimit in Start below).
+    const f32 KF_STUNT_RUN_TIME_SECONDS = 108000.0f; // flt_82CDB7B8 (see SUSPECT note above)
+    const f32 KF_SCORING_GRACE_SECONDS  = 90.0f;     // flt_82CDB7B4 (the 90 s clock; name kept
+                                                     // for the ShouldFinish use, same float)
 
     // flt_82020F98 == 5.0: the hard cap ShouldFinish clamps the remaining time down to once the only
     // still-playing team is the winning team (so the run wraps up promptly). Low-region .rodata,
@@ -76,22 +84,32 @@ f32 OnlineStuntRunMode::GetOutroTimeout() const
 // pre-world pass, then -- once the scoring system's mode timer has started -- ticks the stunt-run
 // countdown down by the elapsed frame time.
 //
-// SHAPE NOTE (kept committed base shape): the committed GameMode::PreWorldUpdate is no-arg
-// (BrnGameMode.h); the X360 build receives the per-frame world-IO buffers + the live ScoringSystem
-// as arguments. The X360 body gates on a per-frame PreWorldInputBuffer flag (>= 0) and then does
-//     mfTimeRemaining -= lpPreWorldInputBuffer->GetTimerStatusInterface()
+// SIGNATURE WIDENED 2026-08-26 (wave-B fix round): this overrides GameMode vtable slot 2, which the
+// console dispatches with SIX arguments (UpdateCurrentMode @0x82350EC8:
+// `(*(**(a1+3480)+8))(mode, a2, a3, a8, a28, a30, a1+3504)`). The previous declaration was no-arg,
+// matching the then-committed base; once the base was corrected to the console shape, a no-arg
+// override would have silently minted a NEW vtable slot instead of binding to slot 2.
+//
+// [!] STILL PARKED -- the countdown decrement. The X360 body gates on a per-frame
+// PreWorldInputBuffer flag (>= 0) and then does
+//     mfTimeRemaining -= lpInput->GetTimerStatusInterface()
 //                            ->maEntries[1].mfValue04 * ...->maEntries[1].mfValue08;
-// Both inputs are the dropped per-frame arguments the kept no-arg shape does not carry; the
-// decrement is left as a documented no-op (mfTimeRemaining holds its armed value) until the
-// signature is widened, exactly as the committed OnlineRaceMode::PreWorldUpdate documents for its
-// dropped per-frame inputs.
-void OnlineStuntRunMode::PreWorldUpdate()
+// The ARGUMENT is now present, but GameStateModuleIO::PreWorldInputBuffer is forward-declared only
+// in this header's include set (BrnGameMode.h keeps BrnGameStateModuleIO.h out on purpose -- see
+// the dual-enum ban there), so the accessor chain cannot be walked from this TU as it stands.
+// DELETE-WHEN: this TU includes BrnGameStateModuleIO.h and the TimerStatusInterface entry-1 pair
+// is reachable; then the decrement replaces this comment. While parked, mfTimeRemaining holds its
+// armed value, so ShouldFinish below never trips on the countdown.
+void OnlineStuntRunMode::PreWorldUpdate(GameStateModuleIO::OutputBuffer* lpOutput,
+                                        const GameStateModuleIO::PreWorldInputBuffer* lpInput,
+                                        const BrnWorld::RaceCarEntityModuleIO::RCEntityGlobalRaceCarOutputInterface* lpGlobalRaceCars,
+                                        const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpActiveRaceCars,
+                                        bool lbPaused,
+                                        const ScoringSystem* lpScoringSystem)
 {
-    OnlineGameMode::PreWorldUpdate();
-
-    // STUB (dropped per-frame input): see SHAPE NOTE. The recovered control flow -- run the base
-    // pass, then (if the mode timer has started) decrement mfTimeRemaining by the elapsed frame
-    // step -- is preserved; the decrement is filled in when the DWARF signature is restored.
+    // The console forwards its own arguments straight through to the base pass.
+    OnlineGameMode::PreWorldUpdate(lpOutput, lpInput, lpGlobalRaceCars, lpActiveRaceCars,
+                                   lbPaused, lpScoringSystem);
 }
 
 // X360: BrnGameState::OnlineStuntRunMode::ShouldFinish (0x8233A3F0).
@@ -197,12 +215,23 @@ void OnlineStuntRunMode::Start(const StartGameModeParams* lpStartGameModeParams,
     const GameStateModuleIO::StartNetworkGameEvent* lpStartNetworkGameEvent =
         lpNetworkRoundManager->GetNetworkGameEvent();
 
-    // Re-roll the random start grid only on the very first round of the game (X360 computes
-    // v9 = (miTotalRounds - miRoundsRemaining == 1)).
-    const bool lbFirstRound =
-        (lpNetworkRoundManager->GetTotalRounds() - lpNetworkRoundManager->GetCurrentRound()) == 1;
+    // Re-roll the random start grid only on the very first round of the game.
+    // [stuntrace waveB fix round, 2026-08-26] CORRECTED (verify batch 5 MF4). The console at
+    // 0x82339E9C..0x82339EB8 is
+    //     lwz r11,0x12C(nrm) / lwz r10,0x128(nrm) / subf r11,r10,r11 / addi r11,r11,-1
+    //     / cntlzw / extrwi          ->  (miTotalRounds - miRoundsRemaining - 1) == 0
+    // and that whole expression IS NetworkRoundManager::GetCurrentRound() under the round-accessor
+    // ruling now landed in BrnNetworkRoundManager.cpp. The previous spelling here,
+    // `GetTotalRounds() - GetCurrentRound() == 1`, evaluates to `miRoundsRemaining + 1 == 1`, i.e.
+    // it fired on the LAST round instead of the first.
+    const bool lbFirstRound = (lpNetworkRoundManager->GetCurrentRound() == 0);
 
-    mbConstructed = true;   // *(this+172) = 1 (GameMode base mbConstructed)
+    // `stb r27, 0xAC(r29)` @0x82339EA4 -> *(this+172) = 1.
+    // [!] NAME CORRECTED 2026-08-26 (wave-B fix round): +0xAC is mbIsOnline, not `mbConstructed`.
+    // OfflineGameMode::Construct @0x8232FE78 stores 0 into the same byte and OnlineGameMode::
+    // Construct @0x8232FEB4 stores 1; no OFFLINE mode's Start touches +0xAC, while all three
+    // ONLINE Start bodies re-assert it. See the +160..+179 table in BrnGameMode.h.
+    mbIsOnline = true;
 
     lpGameModeParams->Construct(lpStartGameModeParams->GetGameModeType());
 
@@ -219,7 +248,11 @@ void OnlineStuntRunMode::Start(const StartGameModeParams* lpStartGameModeParams,
     lpGameModeParams->SetStartMechanism(E_GAMEMODESTARTMECHANISM_SPIN_WHEELS_AT_LIGHTS); // *(a3+60) = 2
     lpGameModeParams->meOnlineBoostStrategy =
         static_cast<EBoostType_Stub>(lpStartNetworkGameEvent->meBoostType); // *(a3+320) = *(v6+236)
-    lpGameModeParams->mfNeedForBronze = KF_SCORING_GRACE_SECONDS;           // *(a3+108) = flt_82CDB7B4
+    // *(a3+108) = flt_82CDB7B4 (90.0f): +0x6C is mfModeTimeLimit under the pinned medal run
+    // (+0x60 bronze / +0x64 silver / +0x68 gold / +0x6C time limit -- StuntAttackMode::Start's
+    // own 120.0f default lands at 0x6C, `stfs f0,0x6C(r31)` @0x823322A4). This is the online
+    // stunt run's 90-second clock, not a bronze threshold. Fixed 2026-08-26 closure verify.
+    lpGameModeParams->mfModeTimeLimit = KF_SCORING_GRACE_SECONDS;
 
     // The online start flag is added when this mode reports a loading screen and the START PARAMS
     // event type is the online-fugitive mode (12), or unconditionally for the mode-end id (17). The
@@ -367,5 +400,15 @@ LightTriggerId OnlineStuntRunMode::GetBestStartGridID(LightTriggerId luTriggerId
     CGS_ASSERT(liBestLightIndex >= 0, "liBestLightIndex >= 0");
 
     return aPackedIds[liBestLightIndex];
+}
+
+// X360 vtable slot 24 (vtbl+96): 0x82C296C8 == `li r3,1; blr` at slot 24 of vtable 0x820D08E0,
+// against the GameMode base's 0x827E2F38 == `li r3,0; blr`. SetupGameMode @0x8234B158 reads it
+// twice and HandleLoadingScreenLoaded @0x8234B8A8 once. Start() above also reads it directly, in
+// the online-start-flag gate -- while this override was missing that gate could never fire.
+// NOTE: this is the ONLINE stunt run; the OFFLINE StuntAttackMode inherits the base FALSE.
+bool OnlineStuntRunMode::HasLoadingScreen() const
+{
+    return true;
 }
 }

@@ -35,8 +35,15 @@ public:
 
     const GameStateModuleIO::StartNetworkGameEvent*  GetNetworkGameEvent() const;
     const GameStateModuleIO::StartNetworkRoundEvent* GetNetworkRoundEvent() const;
+    // [stuntrace waveB fix round, 2026-08-26] SEMANTICS RULED, BODIES LANDED (verify batch 5 MF4 --
+    // these three were declare-only and the wave was spelling the same console expression two
+    // contradictory ways). GetCurrentRound() is the ZERO-BASED CURRENT ROUND INDEX, i.e. the
+    // console's `NRM+300 - NRM+296 - 1` (miTotalRounds - miRoundsRemaining - 1) -- see the full
+    // ruling banner above the bodies in BrnNetworkRoundManager.cpp. It is NOT miRoundsRemaining;
+    // callers that want the raw remaining count use GetRoundsRemaining().
     s32  GetCurrentRound() const;
     s32  GetTotalRounds() const;
+    s32  GetRoundsRemaining() const;
     bool IsLastRound();
     bool IsRankedMatch();
     bool GetStartingFreeburnLobbyDueToPlayerJoin();

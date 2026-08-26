@@ -37,6 +37,11 @@ namespace CgsDev
     {
         E_PMP_GENERAL = 0,
         E_PMP_4       = 4,   // CgsPhysics::PhysicsSimulationModule::Construct's four "Sim *" monitors
+        E_PMP_5       = 5,   // [stuntrace waveB] BrnGameState::ModeManager::Construct's two
+                             // "ModeManager PreWorld" / "ModeManager PostWorld" monitors: the
+                             // AddMonitor call at 0x823406C4 is preceded by `li r4, 5` @0x823406BC
+                             // (with r3 = "ModeManager PostWorld", r5 = 0, r7 = 1, f1 = the 1.0f
+                             // budget at flt_82001C98)
         E_PMP_6       = 6,   // BrnPhysics::Vehicle::VehicleManager::Construct's "PHYS ValidateRCWorldContact"
         E_PMP_9       = 9,   // BrnNetwork::BrnServerInterfaceX360::Construct's two "Int - * Update" monitors
         E_PMP_12      = 12,  // VehicleManager::Construct's other twenty-nine "VMan: ..." monitors (`li r4, 0xC`)

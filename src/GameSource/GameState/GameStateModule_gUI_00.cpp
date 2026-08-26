@@ -24,6 +24,7 @@
 #include "GameSource/GameState/BrnGameStateModule.h"
 
 #include <stdlib.h>                                                     // getenv ([UI-gate] diag)
+#include <string.h>                                                     // memcpy / memset (the case-20 payload view)
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                      // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"              // CgsDev::Log::gpDebugPrint
@@ -39,6 +40,14 @@
 #include "SharedClasses/Trigger/BrnTriggerData.h"                       // TriggerData::GetRegion
 #include "SharedClasses/Trigger/BrnTriggerBase.h"                       // TriggerRegion::GetType
 #include "SharedClasses/Trigger/BrnGenericRegion.h"                     // GenericRegion::Type (SMASH / OVERDRIVE_BOOST)
+
+// ---- [D4 stuntrace WAVE D -- THE PUMP] ------------------------------------------------------
+#include "GameSource/GameState/ModeManager/BrnModeManager.h"            // ModeManager::Pre/PostWorldUpdate, StartGameMode
+#include "GameSource/GameState/ModeManager/GameModes/BrnGameMode.h"     // GameMode::GetCurrentState / GetIntroDurationSeconds
+#include "GameSource/GameState/ModeManager/GameModes/BrnGameModeParams.h" // StartGameModeParams (the case-20 local)
+#include "GameSource/GameState/ModeManager/Scoring/BrnScoringSystem.h"  // ScoringSystem::GetStuntScorer
+#include "GameSource/GameState/ModeManager/Scoring/BrnStuntModeScoring.h" // StuntModeScoring::Update (THE scoring tick)
+#include "GameShared/GameClasses/System/Timer/CgsTimerStatusInterface.h"  // CgsSystem::TimerStatusInterface (the pump's new argument)
 
 namespace BrnGameState
 {
@@ -76,7 +85,8 @@ DeveloperChallengeManager* GameStateModule::GetDeveloperChallengeManager()
 void GameStateModule::PostWorldUpdateStuntBringUp(
         const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface*
                                                       lpActiveRaceCarOutputInterface,
-        const CgsModule::VariableEventQueue<1536, 16>* lpWorldGameEventQueue)
+        const CgsModule::VariableEventQueue<1536, 16>* lpWorldGameEventQueue,
+        f32                                           lfDelta)
 {
     // ---- leg 1: refresh the cached active-race-car snapshot ---------------------------------
     // ⚠️ COPIED BY ASSIGNMENT, NEVER AT THE CONSOLE'S LITERAL 10480 BYTES. 10480 is the X360
@@ -124,7 +134,74 @@ void GameStateModule::PostWorldUpdateStuntBringUp(
                 << "[UI-gate] carry n=" << mGameEventCarryQueue.GetLength() << "\n";
         }
     }
+
+    // ============================================================================
+    // ⭐⭐⭐ [D4 stuntrace WAVE D] LEG 3 -- THE SCORING TICK (console PostWorldUpdate #19).
+    //
+    // CONSOLE POSITION, exact. GameStateModule::PostWorldUpdate @0x8238F358's `bl` stream:
+    //     #6/#7   GetActiveRaceCarOutputInterface + XMemCpy   <- leg 1 above
+    //     #14/#15 GetGameEventQueue + Append<1536,16>         <- leg 2 above
+    //     #18     GameStateModule::CacheTakedownManagerPostWorldInputData   (no body on this tree)
+    //     #19     BrnGameState::ModeManager::PostWorldUpdate   <- THIS LEG, immediately after leg 2
+    //     #23     TriggerQueryManager::PostWorldUpdate
+    //
+    // ⛔⛔ WHY THIS IS AN EXTRACTED LEG AND NOT `mModeManager.PostWorldUpdate(...)`.
+    // The committed ModeManager::PostWorldUpdate (BrnModeManager_WorldTick.cpp:532) takes a
+    // `const GameStateModuleIO::PostWorldInputBuffer*` and dereferences it unconditionally
+    // (GetActiveRaceCarOutputInterface, CheckForOutOfRangeCarsReachingFinish(buffer),
+    // mpCurrentGameMode->PostWorldUpdate(buffer)). NOTHING ON THIS BUILD CREATES ONE: the console
+    // stages it in DoUpdate_GameStatePostWorld @0x823E92A8 via CreateIOBuffer<PostWorldInputBuffer>,
+    // which is not reconstructed, and -- unlike the PRE-world twin, where the module owns a
+    // stand-in (mpPreWorldInputBuffer) -- there is no post-world sibling.
+    // ⚠ AND SYNTHESISING ONE WOULD BE A LAYOUT LIE, which is exactly the bug class this campaign
+    // keeps re-catching: PostWorldInputBuffer's active-race-car seat is
+    // `u8 mActiveRaceCarOutputInterfaceStorage[0x2890]` -- RAW X360-SIZED BYTES
+    // (BrnGameStateModuleIO.h) -- so GetActiveRaceCarOutputInterface() on a home-made buffer hands
+    // back storage that is NOT a host RCEntityActiveRaceCarOutputInterface, and every read through
+    // it lands at an X360 offset on an x64 object. mLastActiveRaceCarInterface, by contrast, is a
+    // REAL host-typed member with a real writer (leg 1, immediately above), so this leg takes it
+    // DIRECTLY -- the same "THE ARGUMENTS ARE THE DEVIATION, NOT THE BODY" deviation this entry
+    // point already carries, for the same reason.
+    //
+    // WHAT IS REPRODUCED, verbatim from BrnModeManager_WorldTick.cpp's own reconstruction of
+    // the per-mode scorer fork at 0x8234AD2C..0x8234AD90:
+    //     if (meCurrentGameModeType == E_MODE_STUNT_ATTACK && IsGameModeInProgress(mode))
+    //         mScoringSystem.GetStuntScorer()->Update(lpActiveRaceCarOutput, lfDelta);
+    // reached through ModeManager::GetScoringSystem() and ScoringSystem::GetStuntScorer(), both
+    // public named accessors -- NO offset off `this` (hazards H9). This IS the call that drives
+    // StuntModeScoring::Update -> UpdateStunts -> the four detectors -> UpdateScore.
+    //
+    // [X] NOT REPRODUCED, named rather than faked -- every other leg of the console's
+    // PostWorldUpdate, because each one needs the buffer: CheckForOutOfRangeCarsReachingFinish,
+    // GameMode::PostWorldUpdate (vtbl slot 3), the player-scoring-slot binding sweep +
+    // PlayerHasSpawned, UpdateTeamStats, UpdateDistanceToPlayer, StoreCarIds, UpdateGeneralStats,
+    // UpdateNumberOfCarsInMode, DetectPlayerStationary, and the takedown/crash pair. Behaviour cost
+    // on an offline stunt run: the mode's own post-world hook and the general per-car stats do not
+    // run; the STUNT SCORE does, which is what this wave's oracle needs.
+    //
+    // ⚠ StuntModeScoring::Update opens with CGS_ASSERT(mbStuntModeActive), whose only writer is
+    // StuntModeScoring::Activate <- ScoringSystem::OnModeStart(case 7) <- ModeManager::
+    // UpdateCurrentMode <- StuntAttackMode::Start. The mode-7 + IN_PROGRESS gate below is what
+    // keeps this leg behind that writer, exactly as the console's fork does -- do not widen it.
+    //
+    // DELETE-WHEN a real PostWorldInputBuffer exists (DoUpdate_GameStatePostWorld lands, or the
+    // module grows a post-world stand-in the way it grew mpPreWorldInputBuffer): this whole block
+    // then collapses to `mModeManager.PostWorldUpdate(lpPostWorldInput, lfDelta);`.
+    // ============================================================================
+    {
+        ModeManager* lpModeManager = GetModeManager();
+        const GameMode* lpCurrentGameMode = lpModeManager->GetCurrentGameMode();
+
+        if (lpModeManager->GetCurrentGameModeType() == GameStateModuleIO::E_MODE_STUNT_ATTACK &&
+            lpCurrentGameMode != 0 &&
+            lpCurrentGameMode->GetCurrentState() == GameStateModuleIO::E_GMS_IN_PROGRESS)
+        {
+            lpModeManager->GetScoringSystem()->GetStuntScorer()->Update(
+                &mLastActiveRaceCarInterface, lfDelta);
+        }
+    }
 }
+
 
 // ============================================================================
 // ⭐⭐ [gateui] ProcessGameEventsPropHitBringUp -- the extracted CASE-111 arm of
@@ -352,7 +429,9 @@ void GameStateModule::ProcessGameEventsPauseBringUp(
 // PreWorldUpdate @0x823A5328, IN THE CONSOLE'S OWN ORDER. The header carries the line-by-line map
 // of the source function and both named reductions; the body annotates each leg again.
 // ============================================================================
-void GameStateModule::PreWorldUpdateStuntBringUp(f32 lfGameTimestep, bool lbIsAGameModeActive)
+void GameStateModule::PreWorldUpdateStuntBringUp(
+        f32 lfGameTimestep, bool lbIsAGameModeActive,
+        const CgsSystem::TimerStatusInterface& lrTimerStatusInterface)
 {
     if (mpOutputBuffer == 0)
     {
@@ -393,7 +472,84 @@ void GameStateModule::PreWorldUpdateStuntBringUp(f32 lfGameTimestep, bool lbIsAG
     // CheckGameActions (BrnGameModule, the console's DoUpdate_GameStatePreWorld tail) reads
     // them back this same sub-step and stops/starts the sim timer.
     ProcessGameEventsPauseBringUp(&mGameEventCarryQueue, lpActionQueue);
+    // ⭐⭐ [D4 stuntrace WAVE D] the dispatcher's CASE-20 arm (E_EVENT_PLAYER_ACCEPTED_MODE ->
+    // ModeManager::StartGameMode) and the INTRO/RESULTS exit arms (cases 24/25/26/27). Same walk,
+    // same must-run-before-the-Clear constraint as every arm above; the case-20 arm needs the
+    // OutputBuffer because ModeManager::StartGameMode takes it (console r27).
+    ProcessGameEventsStartGameModeBringUp(&mGameEventCarryQueue, mpOutputBuffer);
+    ProcessGameEventsModeIntroBringUp(&mGameEventCarryQueue);
     mGameEventCarryQueue.Clear();
+
+    // ---- 1b) THE MODE MANAGER'S PRE-WORLD TICK (console #86) ---------------------------------
+    // ⭐⭐⭐ [D4 stuntrace WAVE D] X360 PreWorldUpdate @0x823A5328 reaches ModeManager through ONE
+    // hop, and this is that hop de-inlined:
+    //     0x823A5A9C  bl GameStateModule::EmmPreWorldUpdate      (#86)
+    //       @0x8238EF50, whose own body:
+    //         v22 = PreWorldInputBuffer::GetTimerStatusInterface(a2);
+    //         *(a1 + 208328 .. +208372) = v22[0..11]                 ; the 48-byte timer copy
+    //         if (IsSimPaused(a1,1,0))  ModeManager::PausedUpdate(a1 + 4128, a3);
+    //         else                      ModeManager::PreWorldUpdate(a1 + 4128, a3 /*out*/,
+    //                                       a2 /*in*/, a1 + 208328 /*timer*/,
+    //                                       GetPlayerActiveRaceCarIndex(a1),
+    //                                       GetPlayerGlobalRaceCarIndex(a1),
+    //                                       a5 /*isOnline byte, gsm+0x3C041*/, <action queue>, ...);
+    // POSITION IS THE CONSOLE'S: after ProcessGameEvents (#68), before TriggerQueryManager::
+    // PreWorldUpdate (#93). Do not move it below the trigger legs.
+    //
+    // ⚠ gsm+4128 (0x1020) IS mModeManager, and it is reached BY NAME through GetModeManager()
+    // here -- never as an offset. (The stale campaign note "ModeManager is embedded at gsm+46640"
+    // is wrong; +46640 is mTrainingManager.)
+    //
+    // ⛔ THE READ LOCK IS LOAD-BEARING. ModeManager::PreWorldUpdate calls
+    // lpPreWorldInputBuffer->GetPlayerStatusInterface() and ->GetNetworkPlayerResultsInterface(),
+    // and BOTH are the read-lock halves ("Not locked for reading", BrnGameStateModuleIO.h:147/149).
+    // The console holds IOBuffer::LockForRead over the whole span (@0x823A5328 `bl` #16). Without
+    // the bracket those two accessors assert every frame the moment a mode starts. They are the
+    // ONLY buffer derefs in the function and both sit inside `if (mpCurrentGameMode != NULL)`, so
+    // in free-burn the buffer is never touched -- which is why this leg is safe to run always.
+    //
+    // [FLAG PC bring-up] FOUR named deviations, none of them silent:
+    //   (a) THE TIMER INTERFACE comes from the caller (BrnGameModule::mTimerStatusInterface, filled
+    //       every sub-step by the console's own TimerStatusInterface::StoreTimers at
+    //       BrnGameModule.cpp:1411) instead of from the 48-byte copy out of the PreWorldInputBuffer.
+    //       Nothing on PC fills that buffer's timer block, so the console route would hand
+    //       ModeManager an all-zero interface and every mode clock, the countdown and the mode
+    //       timer would stand still. Same data, one copy earlier. See the header for the full note.
+    //   (b) lpGlobalRaceCarOutput is 0. The console's is the world's
+    //       RCEntityGlobalRaceCarOutputInterface; BrnWorldIO::UpdateOutputBuffer exposes only the
+    //       ACTIVE one (BrnWorldModuleIO.h typedefs the global flavour but hands out no getter), so
+    //       there is nothing to pass. MEASURED SAFE ON THIS PATH: ModeManager::PreWorldUpdate only
+    //       forwards it, UpdateCurrentMode only forwards it, and GameMode::PreWorldUpdate
+    //       (BrnGameMode.cpp:274) does `(void)lpGlobalRaceCars;`. Race-position work is the
+    //       consumer that will need it. DELETE-WHEN the world output buffer grows the getter.
+    //   (c) lbPaused is false. The console's tenth argument is a stacked byte the IDA export
+    //       renders as register residue (v50..v64), and EmmPreWorldUpdate reaches PreWorldUpdate
+    //       only down its NOT-sim-paused arm, so "paused" here is not the sim pause. Not guessed
+    //       at a value it might have had; passed the arm's own falsity.
+    //   (d) [X] ModeManager::PausedUpdate (the console's sim-paused arm) is PARKED: it has no
+    //       declaration and no body anywhere in the tree. While the sim is paused this leg is
+    //       skipped entirely, which is what the console does with PreWorldUpdate on that arm --
+    //       what is lost is PausedUpdate's own work, not this one's.
+    if (mpPreWorldInputBuffer != 0 && !IsSimPaused(true, false))
+    {
+        mpPreWorldInputBuffer->LockForRead();
+        mModeManager.PreWorldUpdate(
+            mpOutputBuffer,
+            mpPreWorldInputBuffer,
+            lrTimerStatusInterface,
+            GetPlayerActiveRaceCarIndex(),
+            static_cast<::EGlobalRaceCarIndex>(GetPlayerGlobalRaceCarIndex()),
+            IsOnlineGameMode(),
+            lpActionQueue,
+            /*lpGlobalRaceCarOutput -- FLAG (b)*/ 0,
+            &mLastActiveRaceCarInterface,
+            /*lbPaused -- FLAG (c)*/ false);
+        mpPreWorldInputBuffer->UnlockForRead();
+
+        // ⭐ [D4] THE TEMPORARY OFFLINE-INTRO SELF-TRIGGER (see the body of
+        // ProcessGameEventsModeIntroBringUp for why it is needed and when it dies).
+        HarnessOfflineIntroSelfTriggerBringUp(lfGameTimestep);
+    }
 
     // ---- 2) TriggerQueryManager: ARM the trigger set -----------------------------------------
     // X360 line 310 calls TriggerQueryManager::PreWorldUpdate @0x8239F5C8, whose FIRST statement
@@ -484,6 +640,59 @@ void GameStateModule::PreWorldUpdateStuntBringUp(f32 lfGameTimestep, bool lbIsAG
         }
     }
 
+    // ---- 2c) JUNCTION DETECTION + THE START ARM (console #96 and #98) ------------------------
+    // ⭐⭐⭐ [D4 stuntrace WAVE D] The two D3-owned functions, staged in the console's own body
+    // order. From PreWorldUpdate @0x823A5328's `bl` stream:
+    //     #93   TriggerQueryManager::PreWorldUpdate            <- the two legs immediately above
+    //     #95   ProgressionManager::PreWorldUpdate             <- [X] NOT STAGED (see below)
+    //     #96   GameStateModule::CheckIfPlayerIsAtJunctionWithAnEvent   @0x82390418
+    //     #97   GameStateModule::SendSetUpAllDriveThrusMessage  <- [X] NOT STAGED (see below)
+    //     #98   GameStateModule::DetectModeStarts               @0x8239A428
+    //     #103  StuntManager::Update                            <- the leg immediately below
+    // Both take (r3 = this, r4 = r30, r5 = r29), and 0x823A5B2C..0x823A5B3C pins that pair as
+    // (lpPreWorldInputBuffer, lpOutputBuffer) -- the identical r30/r29 the TriggerQueryManager call
+    // four instructions earlier takes as its "in, out".
+    //
+    // ⚠ THE ORDER IS LOAD-BEARING IN BOTH DIRECTIONS.
+    //   * #96 runs AFTER #93 because it reads TriggerQueryManager::mbPlayerInTrafficLightRegion /
+    //     mPlayerCurrentTrafficLightId, and GetPlayerCurrentTrafficLightId() asserts
+    //     IsPlayerInTrafficLightRegion() -- so it must see THIS frame's light-region state.
+    //   * #98 runs AFTER #96 because ShouldStartSnapRaceMode gates on the junction cache #96 fills;
+    //     with the two swapped the first frame of a hold would test last frame's junction.
+    //   * both run BEFORE #103 (StuntManager::Update), which is the console's own placement.
+    //
+    // [X] #95 ProgressionManager::PreWorldUpdate NOT STAGED: its console argument list
+    // (0x823A5B84..0x823A5B9C) carries two floats plus four interface pointers this build does not
+    // stage, and nothing in the junction/start chain reads what it writes. Named, not forgotten.
+    // [X] #97 SendSetUpAllDriveThrusMessage NOT STAGED: the console gates it on a one-shot byte at
+    // gsm+0x2C988 that it clears in the same breath (0x823A5BB4..0x823A5BD4), and the tree's
+    // DriveThruManager is itself parked (see PreWorldUpdatePlayerTriggersBringUp's own FLAG).
+    //
+    // ⛔ CROSS-LANE: THE BODIES ARE AGENT D3'S. This lane owns the CALL SITES and the two
+    // declarations in BrnGameStateModule.h (see the [D4 PUMP SEAM] block there). Until D3's landing
+    // is consolidated these two are unresolved externals at LINK time -- the per-TU compile gate
+    // passes, the exe does not link. That is the parallel-wave contract, stated rather than hidden.
+    //
+    // Read-locked for the same reason leg 1b is: whatever D3's bodies read off the buffer, they
+    // read through the read-lock halves of its accessors.
+    if (mpPreWorldInputBuffer != 0)
+    {
+        mpPreWorldInputBuffer->LockForRead();
+        CheckIfPlayerIsAtJunctionWithAnEvent(mpPreWorldInputBuffer, mpOutputBuffer);
+        // [!] D3's DetectModeStarts carries a THIRD argument the console does not: the
+        // module's cached game timestep at +292284, whose producer (PreWorldUpdate's own
+        // timer leg) is not reconstructed -- see its declaration. Fed the same game-timer
+        // product every other leg in this function uses.
+        DetectModeStarts(mpPreWorldInputBuffer, mpOutputBuffer, lfGameTimestep);
+
+        // ⭐ [D4] THE HARNESS START INJECTION (NOT IN THE X360 BINARY). Runs immediately after
+        // DetectModeStarts, inside the same read-lock bracket, because it stands in for exactly
+        // what DetectModeStarts' gesture gate decides. Env-gated off; see the body.
+        HarnessInjectEventStartBringUp(mpOutputBuffer);
+
+        mpPreWorldInputBuffer->UnlockForRead();
+    }
+
     // ---- 3) StuntManager::Update: CONSUME the latch ------------------------------------------
     // X360 line 332:
     //     v51 = GameStateModuleIO::OutputBuffer::GetGameActionQueue(a5);
@@ -494,8 +703,472 @@ void GameStateModule::PreWorldUpdateStuntBringUp(f32 lfGameTimestep, bool lbIsAG
     mStuntManager.Update(lpActionQueue, &mLastActiveRaceCarInterface,
                          lfGameTimestep, lbIsAGameModeActive);
 
+    // [DIAG BRN_QUEUE_WATERMARK] NOT IN THE X360 BINARY -- THE 13312 GAME-ACTION QUEUE WATERMARK.
+    // ⚠⚠ WHY IT EARNS ITS PLACE, and why a plain assert does not cover it: this queue is
+    // GameStateModuleIO::GameActionQueue == CgsModule::VariableEventQueue<13312,16>, and its
+    // AddEvent (CgsVariableEventQueue.h:427) DOES NOT RETURN after the overflow assert -- it fires
+    // "Queue overflow." at CgsVariableEventQueue.h:469 and then MEMCPYS ANYWAY, past macData[13312],
+    // into whatever follows the queue in the OutputBuffer. On a build with asserts routed to the
+    // log rather than to a break, a single overflow silently corrupts the buffer.
+    // The exposure is NEW this wave and it is large: ModeManager::PrepareForMode posts action 23 at
+    // 2272 BYTES (BrnModeManager.h's own size table), and action 24 at 48 on top of it -- three
+    // mode starts in one sub-step is over half the buffer. Nothing before wave D could post 2 KB in
+    // one action.
+    // Reports the running PEAK of GetSizeInBytes() (== miBufferWritePos - miFirstEventOffset, the
+    // bytes actually written this sub-step) so a near-miss shows up BEFORE the overflow does, and
+    // only when the peak moves, so a quiet drive prints a handful of lines and a mode start prints
+    // one. Off unless BRN_QUEUE_WATERMARK is set.
+    {
+        static const bool sbWatermarkDiag = (getenv("BRN_QUEUE_WATERMARK") != 0);
+        static s32        siPeakBytes     = 0;
+        if (sbWatermarkDiag && CgsDev::Log::gpDebugPrint != 0)
+        {
+            const s32 liBytes = lpActionQueue->GetSizeInBytes();
+            if (liBytes > siPeakBytes)
+            {
+                siPeakBytes = liBytes;
+                *CgsDev::Log::gpDebugPrint
+                    << "[queue-wm] game-action queue peak " << siPeakBytes
+                    << " / 13312 bytes, n=" << lpActionQueue->GetLength() << "\n";
+            }
+        }
+    }
+
     mbIsUpdating = false;
     mpOutputBuffer->UnlockForWrite();
+}
+
+
+// ============================================================================
+// [D4 stuntrace WAVE D] ProcessGameEventsStartGameModeBringUp -- the extracted CASE-20 arm
+// of GameStateModule::ProcessGameEvents @0x823A0A18 (asm 0x823A2680..0x823A2718; source
+// BrnGameStateModule.cpp:2456 per the DWARF unity dump, which lists exactly this callee set:
+// StartGameModeParams ctor, RCEntityActiveRaceCarOutputInterface::GetPlayerPosition,
+// StartGameModeParams::Construct, LightTriggerId::SetInvalid, Array<CheckpointData,16>::Construct,
+// StartGameModeParams::AddCheckpoint, and a four-shift StrStream debug print).
+//
+// The full asm is quoted at the declaration in BrnGameStateModule.h. Reproduced here:
+//   * the !mpCurrentGameMode gate (console `lwz r11, 0x1DB8(r31)` == gsm+7608 ==
+//     mModeManager.mpCurrentGameMode -- ModeManager sits at gsm+4128 and mpCurrentGameMode at
+//     ModeManager+3480, and 4128+3480 == 7608),
+//   * the local StartGameModeParams and its Construct(mode, playerPosition, mechanism),
+//   * the AddCheckpoint loop over the event's landmark/section pairs,
+//   * ModeManager::StartGameMode(&mModeManager, lpOutputBuffer, &params).
+//
+// [!][!] THE HEADLINE CORRECTION, PROVEN FROM THE ASM (restated here because it changes what this
+// arm is FOR): `li r4, 0` / `li r5, 0` at 0x823A26C0 / 0x823A26BC are Construct's two GPR
+// arguments, and Construct @0x8231C1F8 stores r4 to +0x2D0 (meGameModeType) and r5 to +0x310
+// (meStartMechanism) -- verified in that function's own store cluster, not inferred from the
+// pseudocode. So case 20 unconditionally starts E_MODE_OFFLINE_RACE (0) with
+// E_GAMEMODESTARTMECHANISM_DEFAULT (0), and it reads NEITHER the event's meModeType (+0x48) NOR
+// its mRaceId (+0x00). CASE 20 IS NOT THE STUNT-RACE START. The offline stunt start is
+// GameStateModule::StartModeAtLights @0x82396CF8 (mechanism 2, runtime mode resolved through
+// ProgressionManager::GetEvent) -- agent D3's function, staged at console position #98 above.
+// Do not "fix" the hard-coded zeros; they are the binary's.
+// ============================================================================
+namespace
+{
+    // ------------------------------------------------------------------------
+    // The CASE-20 payload, as a READ-ONLY VIEW pinned to the offsets the console arm actually
+    // loads. It is deliberately NOT promoted into BrnGameEvents.h yet, because the asm and the
+    // DWARF disagree and this lane will not mint a layout it cannot prove:
+    //
+    //   ASM (0x823A26D0..0x823A26FC), unambiguous -- r30 starts at event+8 and steps by 2:
+    //       lbz r11, 0x4C(r25)   -> muNumLandmarks   @ +0x4C  (u8)
+    //       lhz r4,  0(r30)      -> section id [i]   @ +0x08 + 2i  (u16)
+    //       lhz r5,  0x24(r30)   -> landmark idx [i] @ +0x2C + 2i  (u16)
+    //
+    //   DWARF (BrnGameEvents.h:1279-1286) declares, in this order: CgsID mRaceId;
+    //       uint16_t mauLandmarkSectionIds[16]; LandmarkIndex maLandmarkIndices[16];
+    //       EGameModeType meModeType; uint8_t muNumLandmarks;
+    //   which would put maLandmarkIndices at +0x28, not +0x2C. The 4-byte discrepancy is real and
+    //   unresolved (the only self-consistent reading of the asm is that meModeType sits at +0x28,
+    //   i.e. BETWEEN the two arrays -- which the DWARF's source-line order contradicts).
+    //
+    // [!] FLAG: only the three offsets the console arm READS are claimed below. meModeType and
+    // mRaceId are deliberately absent -- the arm does not touch them and this view will not guess
+    // where they live. When the discrepancy is settled, promote a real
+    // GameStateModuleIO::PlayerAcceptedModeEvent into BrnGameEvents.h and delete this view.
+    // ------------------------------------------------------------------------
+    struct D4_PlayerAcceptedModeEventView
+    {
+        static const s32 KI_OFFSET_SECTION_IDS      = 0x08;   // lhz 0(r30),   r30 = event + 8
+        static const s32 KI_OFFSET_LANDMARK_INDICES = 0x2C;   // lhz 0x24(r30)
+        static const s32 KI_OFFSET_NUM_LANDMARKS    = 0x4C;   // lbz 0x4C(r25)
+        static const s32 KI_MAX_LANDMARKS           = 16;     // Array<CheckpointData,16u>
+
+        static u8 GetNumLandmarks(const CgsModule::Event* lpEvent)
+        {
+            return reinterpret_cast<const u8*>(lpEvent)[KI_OFFSET_NUM_LANDMARKS];
+        }
+        static u16 GetSectionId(const CgsModule::Event* lpEvent, s32 liIndex)
+        {
+            const u8* lpuBytes = reinterpret_cast<const u8*>(lpEvent);
+            u16 luValue = 0;
+            memcpy(&luValue, lpuBytes + KI_OFFSET_SECTION_IDS + 2 * liIndex, sizeof(u16));
+            return luValue;
+        }
+        static u16 GetLandmarkIndex(const CgsModule::Event* lpEvent, s32 liIndex)
+        {
+            const u8* lpuBytes = reinterpret_cast<const u8*>(lpEvent);
+            u16 luValue = 0;
+            memcpy(&luValue, lpuBytes + KI_OFFSET_LANDMARK_INDICES + 2 * liIndex, sizeof(u16));
+            return luValue;
+        }
+    };
+}
+
+void GameStateModule::ProcessGameEventsStartGameModeBringUp(
+        const CgsModule::VariableEventQueue<1536, 16>* lpGameEventQueue,
+        GameStateModuleIO::OutputBuffer*               lpOutputBuffer)
+{
+    if (lpGameEventQueue == 0 || lpOutputBuffer == 0)
+    {
+        return;
+    }
+
+    const CgsModule::Event* lpEvent = 0;
+    s32                     liSize  = 0;
+    s32                     liType  = lpGameEventQueue->GetFirstEvent(&lpEvent, &liSize);
+
+    while (lpEvent != 0)
+    {
+        // Game EVENT ids are NOT subject to the +5 game-ACTION shift (see BrnGameActions.h's
+        // correction note): X360 jump-table case 20 == DWARF E_EVENT_PLAYER_ACCEPTED_MODE == 20.
+        // Pinned by its neighbours in the same table, each of which names its own callee:
+        // 21 -> MarkedManLoaded, 23 -> FinishedSplashScreen, 24 -> FinishedMapPan,
+        // 25 -> FinishOfflineModeIntro, 26 -> ResultsAccept, 27 -> UserCancelCurrentMode.
+        if (liType == 20)
+        {
+            // The console's own gate: only when nothing is running (0x823A2680..0x823A2688).
+            // (i) INSTRUMENTED ON PURPOSE: a SECOND start attempt must read as "a mode is already
+            // running", not as "the start failed". Both arms log.
+            const GameMode* lpCurrentGameMode = mModeManager.GetCurrentGameMode();
+
+            if (lpCurrentGameMode != 0)
+            {
+                // [DIAG] NOT IN THE X360 BINARY.
+                if (CgsDev::Log::gpDebugPrint != 0)
+                {
+                    *CgsDev::Log::gpDebugPrint
+                        << "[start] event 20 IGNORED -- mpCurrentGameMode is live (mode type "
+                        << static_cast<s32>(mModeManager.GetCurrentGameModeType())
+                        << ", state " << lpCurrentGameMode->GetCurrentState()
+                        << "); the console's case-20 gate rejects it too\n";
+                }
+            }
+            else
+            {
+                // The console's local. Its embedded Array<CheckpointData,16u> is default-
+                // constructed by the declaration (the pseudocode's
+                // _vector_constructor_iterator_(v569, 44, 16, CheckpointData::CheckpointData) and
+                // the -1 sentinel store at +704 are that construction, inlined) and then
+                // Construct()ed to empty-but-usable inside StartGameModeParams::Construct.
+                StartGameModeParams lStartGameModeParams;
+
+                // 0x823A26AC..0x823A26B4: sub_823102F0(&tmp, gsm + 235488) is
+                // RCEntityActiveRaceCarOutputInterface::GetPlayerPosition -- it asserts
+                // mePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT and
+                // IsPlayerCarActive() and returns maRaceCars[playerIndex] + 1360. Reached here
+                // through the module's own cached snapshot, which is the same object the console
+                // passes (gsm+235488 == mLastActiveRaceCarInterface).
+                const Vector3 lPlayerPosition = mLastActiveRaceCarInterface.GetPlayerPosition();
+
+                // [!] THE TWO ZEROS ARE THE CONSOLE'S -- see the banner above. E_MODE_OFFLINE_RACE
+                // and E_GAMEMODESTARTMECHANISM_DEFAULT, spelled by name so nobody reads them as
+                // placeholders.
+                lStartGameModeParams.Construct(GameStateModuleIO::E_MODE_OFFLINE_RACE,
+                                               lPlayerPosition,
+                                               E_GAMEMODESTARTMECHANISM_DEFAULT);
+
+                // The AddCheckpoint loop, 0x823A26D0..0x823A2704. AddCheckpoint's declared order is
+                // (landmarkIndex, aiSectionIndex) and the console passes r4 = the +0x08 array,
+                // r5 = the +0x2C array -- so the +0x08 run is the LANDMARK argument and the +0x2C
+                // run is the SECTION argument, which is the opposite of the DWARF member names.
+                // [!] FLAG: the arm follows the ASM's argument positions, not the member names; the
+                // two disagree and the asm is what runs. Named, not silently reconciled.
+                const s32 liNumLandmarks =
+                    static_cast<s32>(D4_PlayerAcceptedModeEventView::GetNumLandmarks(lpEvent));
+
+                // The console has no bound check -- its loop runs to the event's own count. The
+                // clamp below is NOT a behaviour change on any well-formed event (the payload
+                // carries 16 slots and the destination Array is 16 deep); it exists because the
+                // 4-byte layout discrepancy in the view above means a MALFORMED count would walk
+                // off both arrays. Stated as a deviation rather than hidden.
+                const s32 liClampedCount =
+                    (liNumLandmarks > D4_PlayerAcceptedModeEventView::KI_MAX_LANDMARKS)
+                        ? D4_PlayerAcceptedModeEventView::KI_MAX_LANDMARKS
+                        : liNumLandmarks;
+
+                for (s32 liIndex = 0; liIndex < liClampedCount; ++liIndex)
+                {
+                    lStartGameModeParams.AddCheckpoint(
+                        static_cast<LandmarkIndex>(
+                            D4_PlayerAcceptedModeEventView::GetSectionId(lpEvent, liIndex)),
+                        D4_PlayerAcceptedModeEventView::GetLandmarkIndex(lpEvent, liIndex));
+                }
+
+                // [DIAG] NOT IN THE X360 BINARY -- but the console DOES print here (the DWARF unity
+                // dump lists a four-shift StrStream in this exact scope), so a line at this
+                // position is console-shaped. This one names what the arm is about to start.
+                if (CgsDev::Log::gpDebugPrint != 0)
+                {
+                    *CgsDev::Log::gpDebugPrint
+                        << "[start] event 20 -> StartGameMode mode="
+                        << static_cast<s32>(GameStateModuleIO::E_MODE_OFFLINE_RACE)
+                        << " mechanism=" << static_cast<s32>(E_GAMEMODESTARTMECHANISM_DEFAULT)
+                        << " checkpoints=" << liClampedCount
+                        << " (event count " << liNumLandmarks << ")\n";
+                }
+
+                // 0x823A2708..0x823A2714. gsm+0x1020 == mModeManager, reached by name.
+                mModeManager.StartGameMode(lpOutputBuffer, &lStartGameModeParams);
+            }
+        }
+
+        const CgsModule::Event* lpCurrent = lpEvent;
+        liType = lpGameEventQueue->GetNextEvent(lpCurrent, &lpEvent, &liSize);
+    }
+}
+
+// ============================================================================
+// [D4 stuntrace WAVE D] ProcessGameEventsModeIntroBringUp -- the extracted CASES 24/25/26/27
+// of ProcessGameEvents @0x823A0A18 (pseudocode lines 1121-1134; case 26's asm at 0x823A272C).
+// The console arms, verbatim:
+//     case 24: ModeManager::FinishedMapPan(v23 + 4128)
+//     case 25: ModeManager::FinishOfflineModeIntro(v23 + 4128)
+//     case 26: ModeManager::ResultsAccept(v23 + 4128); *(v23 + 181413) = 1
+//     case 27: ModeManager::UserCancelCurrentMode(v23 + 4128);
+//              TakedownManager::ClearRaceCarData(v23 + 568)
+//
+// [!] ONLY CASE 25 IS ARMED. FinishOfflineModeIntro @0x823119B0 is bodied
+// (BrnModeManager_IntroPlay.cpp:540). FinishedMapPan / ResultsAccept / UserCancelCurrentMode and
+// TakedownManager::ClearRaceCarData have NO declaration and NO body anywhere in the tree -- a
+// tree-wide grep, not an assumption -- so their arms are written out and PARKED. Nothing faked.
+// DELETE-WHEN those four land: un-park each arm exactly as quoted above.
+//
+// (i) WHY CASE 25 IS THE ONE THAT MATTERS TODAY. IntroState::OnEnter sets mbUseCountdown only for
+// online modes and offline Showtime, so an offline stunt run's intro state has NO timer at all --
+// its ONLY exit is this event. The producer half is already live and mounted
+// (BridgeGuiToGameState case 163 -> game event 25, GameBridgeGUIToX_GameState.cpp:153); what is
+// missing is the pre-event GUI that sends 163, which is why HarnessOfflineIntroSelfTriggerBringUp
+// exists.
+//
+// [!][!] AND WHAT HAPPENS NEXT IS NOT THIS FUNCTION'S FAULT: FinishOfflineModeIntro advances the
+// mode to E_GMS_COUNTDOWN, and CountdownState::Update advances only when
+// (mfCountdownSeconds <= 0 && mpGameMode->ShouldCountdownEnd()). StuntAttackMode::ShouldCountdownEnd
+// returns mbPlayerPointingInStartDirection, whose ONLY writer is StuntAttackMode::PreWorldUpdate
+// (@0x82344EE0, BrnStuntAttackMode.cpp:467) -- so the countdown DELIBERATELY HOLDS until the car
+// faces the junction's start direction. A "stuck countdown" is very probably a car pointing the
+// wrong way, not a missing clock. The diag rung below says so in the log.
+// ============================================================================
+void GameStateModule::ProcessGameEventsModeIntroBringUp(
+        const CgsModule::VariableEventQueue<1536, 16>* lpGameEventQueue)
+{
+    if (lpGameEventQueue == 0)
+    {
+        return;
+    }
+
+    const CgsModule::Event* lpEvent = 0;
+    s32                     liSize  = 0;
+    s32                     liType  = lpGameEventQueue->GetFirstEvent(&lpEvent, &liSize);
+
+    while (lpEvent != 0)
+    {
+        switch (liType)
+        {
+        case 24:   // E_EVENT_FINISHED_MAP_PAN
+            // [X] PARKED: ModeManager::FinishedMapPan has no declaration and no body on this tree.
+            //     mModeManager.FinishedMapPan();
+            break;
+
+        case 25:   // E_EVENT_GUI_FINISHED_OFFLINE_PRE_EVENT
+            // The console's whole arm. FinishOfflineModeIntro asserts IsInGameMode() &&
+            // !IsOnlineGameMode() and then sends E_GME_NEXT to the current mode, so it must not be
+            // called with no mode running -- the console does not guard it either, and its own
+            // asserts are the guard. The gate here is the same predicate its first assert names,
+            // so on a stray event the log says which, instead of the assert storming.
+            if (mModeManager.GetCurrentGameMode() != 0)
+            {
+                if (CgsDev::Log::gpDebugPrint != 0)
+                {
+                    *CgsDev::Log::gpDebugPrint
+                        << "[start] event 25 -> FinishOfflineModeIntro (mode state "
+                        << mModeManager.GetCurrentGameMode()->GetCurrentState()
+                        << " -> countdown; the countdown then HOLDS until "
+                        << "StuntAttackMode::mbPlayerPointingInStartDirection is true, i.e. until "
+                        << "the car faces the junction start direction)\n";
+                }
+                mModeManager.FinishOfflineModeIntro();
+            }
+            else if (CgsDev::Log::gpDebugPrint != 0)
+            {
+                *CgsDev::Log::gpDebugPrint
+                    << "[start] event 25 DROPPED -- no game mode running (console asserts "
+                       "IsInGameMode() here)\n";
+            }
+            break;
+
+        case 26:   // E_EVENT_RESULTS_FINISHED
+            // [X] PARKED: ModeManager::ResultsAccept has no body on this tree, and the console's
+            // companion store *(gsm + 181413) = 1 writes a byte with no member on this build.
+            //     mModeManager.ResultsAccept();
+            //     <gsm+181413> = 1;
+            break;
+
+        case 27:   // E_EVENT_POST_EVENT_LEAVE
+            // [X] PARKED: neither ModeManager::UserCancelCurrentMode nor
+            // TakedownManager::ClearRaceCarData exists on this tree.
+            //     mModeManager.UserCancelCurrentMode();
+            //     mTakedownManager.ClearRaceCarData();
+            break;
+
+        default:
+            break;
+        }
+
+        const CgsModule::Event* lpCurrent = lpEvent;
+        liType = lpGameEventQueue->GetNextEvent(lpCurrent, &lpEvent, &liSize);
+    }
+}
+
+// ============================================================================
+// [D4 stuntrace WAVE D] HarnessOfflineIntroSelfTriggerBringUp -- TEMPORARY, NOT CONSOLE CODE.
+// The full justification and the DELETE-WHEN are at the declaration in BrnGameStateModule.h.
+// Shape: while the current mode sits in E_GMS_INTRO, accumulate the frame timestep; once it passes
+// the mode's own GameMode::GetIntroDurationSeconds() (vtable slot 8; StuntAttackMode's override
+// returns 6.0f, X360 0x827E2538 loading flt [0x82021240]), post game event 25 -- ONE byte, the
+// same "signal" shape BridgeGuiToGameState uses for its 163 -> 25 relay
+// (GameBridgeGUIToX_GameState.cpp:153-155) -- into the carry queue, where the case-25 arm above
+// drains it on the next pre-world leg. The accumulator resets whenever the mode leaves INTRO, so a
+// second event gets its own full intro.
+// ============================================================================
+void GameStateModule::HarnessOfflineIntroSelfTriggerBringUp(f32 lfGameTimestep)
+{
+    static f32  sfIntroElapsed = 0.0f;
+    static bool sbPosted       = false;
+
+    const GameMode* lpCurrentGameMode = mModeManager.GetCurrentGameMode();
+
+    // E_GMS_INTRO is the state IntroState owns; anything else (or no mode) rearms the trigger.
+    if (lpCurrentGameMode == 0 ||
+        lpCurrentGameMode->GetCurrentState() != GameStateModuleIO::E_GMS_INTRO)
+    {
+        sfIntroElapsed = 0.0f;
+        sbPosted       = false;
+        return;
+    }
+
+    if (sbPosted)
+    {
+        return;
+    }
+
+    sfIntroElapsed += lfGameTimestep;
+
+    const f32 lfIntroDuration = lpCurrentGameMode->GetIntroDurationSeconds();
+    if (sfIntroElapsed < lfIntroDuration)
+    {
+        return;
+    }
+
+    sbPosted = true;
+
+    if (CgsDev::Log::gpDebugPrint != 0)
+    {
+        *CgsDev::Log::gpDebugPrint
+            << "[start] HARNESS-ONLY offline-intro self-trigger: intro ran "
+            << sfIntroElapsed << " s >= GetIntroDurationSeconds() " << lfIntroDuration
+            << " -- posting game event 25 in place of the unreconstructed pre-event GUI "
+               "(GUI command 163)\n";
+    }
+
+    // The 1-byte signal payload, exactly as the GUI bridge posts it.
+    unsigned char lSignal = 0;
+    mGameEventCarryQueue.AddEvent(reinterpret_cast<const CgsModule::Event*>(&lSignal), 25, 1);
+}
+
+// ============================================================================
+// [D4 stuntrace WAVE D] HarnessInjectEventStartBringUp -- HARNESS-ONLY, NOT IN THE X360 BINARY.
+//
+// WHAT IT IS FOR: the console's offline start gesture is ANALOGUE -- SetButtonPressed @0x823BA240
+// computes the pre-world buffer's ControllerInput byte +0x45 (mbRaceModePressed) as
+// (padAction[+0x00] > 0.25f && padAction[+0x08] > 0.25f), i.e. both analogue triggers
+// (accelerator AND brake), and ShouldStartSnapRaceMode @0x82363700 then requires it held for
+// 0.35 s at speed <= 30 before it writes start mechanism 2 and DetectModeStarts calls
+// StartModeAtLights. A scripted boot-drive (tools/diagnostics/flow_run.ps1) cannot hold two
+// analogue triggers, so this leg stands in for the HOLD -- and for nothing else.
+//
+// WHAT IT SUBSTITUTES AND WHAT IT DOES NOT. It calls StartModeAtLights @0x82396CF8 directly with
+// E_GAMEMODESTARTMECHANISM_SPIN_WHEELS_AT_LIGHTS (2) -- the exact value ShouldStartSnapRaceMode
+// writes at a junction, and the value StartModeAtLights EARLY-RETURNS without
+// (`cmpwi cr6, r31, 2 / bne loc_82397300` @0x82396D64). Everything downstream of that point is
+// the console's own: the junction lookup, the RaceEventData fetch, the mu8Mode -> runtime-mode map
+// through ProgressionManager::GetEvent, the special-event-car gate, ModeManager::StartGameMode.
+// So this bypasses the GESTURE, not the START. If the junction is wrong, or the event does not
+// resolve, or the special-event-car gate rejects the current car (it posts action 272 and returns
+// -- expected on Burning Route junctions with an arbitrary car), this leg fails exactly the way
+// the real gesture would, which is the point.
+//
+// GATES, all three required, and it fires AT MOST ONCE per process:
+//   1. BRN_START_EVENT=1 in the environment (read once, like every other diag gate in this file),
+//   2. TriggerQueryManager::IsPlayerInTrafficLightRegion() -- the player is actually standing in a
+//      traffic-light trigger box. This is the console's own precondition for mechanism 2, and it
+//      is also what makes GetPlayerCurrentTrafficLightId() safe to read (it asserts the same
+//      predicate). Its writer is TriggerQueryManager's light-region leg; if this never becomes
+//      true, the junction detection is the thing that is broken, not this hook.
+//   3. no game mode already running (the same !mpCurrentGameMode gate the console's own start
+//      arms carry).
+//
+// [!] IT IS NOT THE CASE-20 PATH, DELIBERATELY. The case-20 arm in this same file hard-codes
+// E_MODE_OFFLINE_RACE / mechanism DEFAULT -- that is the binary's, proven at that arm's banner --
+// so injecting through case 20 would start an offline RACE, never a stunt run.
+//
+// DELETE-WHEN the offline event flow can be driven by a real pad in the harness (or the gesture is
+// scriptable): this function and its one call site go together.
+// ============================================================================
+void GameStateModule::HarnessInjectEventStartBringUp(GameStateModuleIO::OutputBuffer* lpOutputBuffer)
+{
+    static const bool sbHarnessStart = (getenv("BRN_START_EVENT") != 0);
+    static bool       sbFired        = false;
+
+    if (!sbHarnessStart || sbFired || lpOutputBuffer == 0 || mpPreWorldInputBuffer == 0)
+    {
+        return;
+    }
+
+    if (!mTriggerQueryManager.IsPlayerInTrafficLightRegion())
+    {
+        return;
+    }
+
+    if (mModeManager.GetCurrentGameMode() != 0)
+    {
+        return;
+    }
+
+    sbFired = true;
+
+    if (CgsDev::Log::gpDebugPrint != 0)
+    {
+        // GetPlayerCurrentTrafficLightId asserts IsPlayerInTrafficLightRegion(), which the gate
+        // above has already established -- this read is safe here and nowhere else.
+        *CgsDev::Log::gpDebugPrint
+            << "[start] ***** HARNESS-ONLY START INJECTION (BRN_START_EVENT=1) ***** "
+            << "light trigger id "
+            << static_cast<s32>(mTriggerQueryManager.GetPlayerCurrentTrafficLightId())
+            << " -- bypassing the 0.35 s analogue accelerator+brake hold and calling "
+            << "StartModeAtLights with mechanism "
+            << static_cast<s32>(E_GAMEMODESTARTMECHANISM_SPIN_WHEELS_AT_LIGHTS)
+            << " (the value ShouldStartSnapRaceMode writes at a junction). Everything downstream "
+            << "is the console's own. One-shot; will not fire again this process.\n";
+    }
+
+    // The caller holds the pre-world buffer's READ lock and the output buffer's WRITE lock, which
+    // is the same bracket DetectModeStarts runs under one line above.
+    StartModeAtLights(mpPreWorldInputBuffer, lpOutputBuffer,
+                      E_GAMEMODESTARTMECHANISM_SPIN_WHEELS_AT_LIGHTS);
 }
 
 }

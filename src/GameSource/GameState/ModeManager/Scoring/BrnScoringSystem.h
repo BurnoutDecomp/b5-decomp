@@ -545,8 +545,14 @@ namespace BrnGameState
         void SetPlayerStatus(EActiveRaceCarIndex leRaceCarIndex, CarData::EPlayerStatus leStatus); // :891
         void SetPlayerEliminated(EActiveRaceCarIndex leRaceCarIndex, EActiveRaceCarIndex leEliminator); // :897 / 0x823267A0
         void SetPlayerDisconnected(BrnNetwork::NetworkPlayerID lID);                          // :902 / 0x8231D950
-        bool GetPlayerDisconnected(EActiveRaceCarIndex leRaceCarIndex) const;                 // :907 / 0x8231DA00
-        bool GetPlayerDisconnected(BrnNetwork::NetworkPlayerID lID) const;                    // :911
+        // [!] ADDRESSES CORRECTED 2026-08-26 (wave-B fix round) -- the two overloads were swapped.
+        // I dumped both: 0x8231DA00 fires "lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID"
+        // (@0x8231DA30) and ends in `lbz r3, 0x4F69(r11)` -- that is the NetworkPlayerID overload.
+        // The EActiveRaceCarIndex overload is the header-inline the compiler folded at 0x82326878:
+        // its assert is "(leActiveRaceCarIndex>E_ACTIVE_RACE_CAR..." (BrnScoringSystem.h:1900) and
+        // its body is `GetCarData(i) ? carData+0x69 : 0` (`lbz r3, 0x69(r3)` @0x823268E4).
+        bool GetPlayerDisconnected(EActiveRaceCarIndex leRaceCarIndex) const;                 // :907 / folded @0x82326878
+        bool GetPlayerDisconnected(BrnNetwork::NetworkPlayerID lID) const;                    // :911 / 0x8231DA00
         void ClearDisconnectedPlayers();                                                      // :915 / 0x8231DBB0
 
         // ===== team (declare-only -- search) =====
@@ -669,8 +675,35 @@ namespace BrnGameState
         void ResetOnlineCheckpointsVisited(EActiveRaceCarIndex leRaceCarIndex);               // :1188
         void ReducePlayerDurability();                                                        // :1192
 
-    private:
+        // [!!] MOVED TO public 2026-08-26 (wave-B fix round) -- ACCESS ONLY, declaration text
+        // unchanged. The DWARF's `private:` placement cannot be right for this build: the X360
+        // ModeManager::SendModeStopMessages @0x8234BEC0 calls it directly from OUTSIDE the class --
+        // `addi r3, r28, 0xDB0` (== &mScoringSystem) / `mr r4, r29` / `bl ScoringSystem::ClearData`
+        // at 0x8234C6B0 -- and a cross-class caller cannot reach a private member (measured:
+        // C2248 when the parked call site is un-parked). Keeping it private is what forces that
+        // call to stay parked, and while it is parked every event's scores/timers/finish flags leak
+        // into the next event.
+        // [x] LINK FRONTIER CLOSED 2026-08-26 (stuntrace waveB CLOSURE round). The note that used
+        // to stand here -- "ClearData(bool) has NO body anywhere in src/" -- is REFUTED: the body
+        // is BrnScoringSystem_Lookup.cpp:474 `void ScoringSystem::ClearData(bool lbResetCarData)`,
+        // a full reconstruction of 0x8232A4A8 (ClearModeTimer / ClearTimeLimit, the six sub-scorer
+        // resets, the FLT_MAX distance seeds). Both halves are therefore in the tree, and
+        // BrnModeManager_Start.cpp:828 calls it un-parked -- that call site's own banner records
+        // what was at stake (every event's scores/timers/finish flags leaking into the next).
         void ClearData(bool lbFull);                                                          // :1197 / 0x8232A4A8
+
+        // [stuntrace waveB fix round, 2026-08-26] DECLARE-ONLY. maRaceCarPositioningData[8] is
+        // private with no accessor, and two console legs reach it from ModeManager:
+        // StartGameMode's 8-iteration `*(this + 0x677C + 24*i) = 0` loop and
+        // SetUpCheckPointsForGameMode's identical sweep at 0x82329188-0x823291A4 -- both are
+        // "every car is back at no-checkpoint/no-finish-position". ss+0x59C0 stride 0x18 is already
+        // pinned in the tree (BrnCarData.cpp:33, BrnScoringSystem_UpdateA.cpp:367), so 0x59CC is the
+        // fourth dword. hazards H9 forbids reaching it by raw offset from ModeManager, which is why
+        // both legs are parked without this pair.
+        RaceCarPositioningData*       GetRaceCarPositioningData(::EActiveRaceCarIndex leActiveRaceCarIndex);
+        const RaceCarPositioningData* GetRaceCarPositioningData(::EActiveRaceCarIndex leActiveRaceCarIndex) const;
+
+    private:
 
         // ===== data members (DWARF declared order + types) =====
         CgsSystem::Time mStartTime;                  // :1199
@@ -692,10 +725,24 @@ namespace BrnGameState
         // but ScoringSystem reaches it by NAME only (no byte-exact sizeof asserted on the keystone).
         StuntModeScoring    mOnlineStuntModeScoring; // X360 ss+0x2620 (online stunt scorer)
         RoadRageModeScoring mRoadRageModeScoring;    // :1212 (by value)
-        s32  miMaximumPlayerCrashedNumber;           // :1213
-        s32  miCurrentPlayerCrashedNumber;           // :1214
-        bool mbPlayerTotalled;                       // :1215
-        u32  mauiMedalScores[4];                     // :1216
+        s32  miMaximumPlayerCrashedNumber;           // :1213  X360 ss+0x4B58
+        s32  miCurrentPlayerCrashedNumber;           // :1214  X360 ss+0x4B5C
+        // [!!] ORDER CORRECTED 2026-08-26 (wave-B fix round). The DWARF declaration order put
+        // mbPlayerTotalled first, which seats the bool at ss+0x4B60 and the array at 0x4B64..0x4B74.
+        // The asm says the opposite, and it is not a judgement call -- the two claims are mutually
+        // exclusive and both halves are attested:
+        //   * mbPlayerTotalled is a BYTE at ss+0x4B70: `stb r30, 0x4B70(r31)` in
+        //     ScoringSystem::Construct @0x823381BC and in OnModeStart @0x823382F8, `stb r29, 0x4B70`
+        //     in OnRoadRagePlayerCrashed @0x823445AC, and it is read back as a byte by
+        //     SurvivorMode::FillInGameModeSpecificResults @0x823163A8 (`lbz r11, 0x4B70(r4)`).
+        //   * the medal scores are WORDS starting at ss+0x4B60: ModeManager::SetupGameMode
+        //     @0x8234B158 writes the run in one go -- `stw r29, 0x4B60` / `stw r9, 0x4B64` /
+        //     `stw r8, 0x4B68` @0x8234B5D0..0x8234B5D8.
+        // The old order also happened to end at 0x4B74 (where mOnlineRaceModeScoring starts), so the
+        // "the 28 bytes only close with this order" argument is NOT what settles it -- the byte
+        // store at 0x4B70 and the word stores at 0x4B60/64/68 are.
+        u32  mauiMedalScores[4];                     // :1216  X360 ss+0x4B60..0x4B6F
+        bool mbPlayerTotalled;                       // :1215  X360 ss+0x4B70
 
         OnlineRaceModeScoring           mOnlineRaceModeScoring;        // :1219 (by value)  X360 ss+0x4B74
         OnlineRoadRageModeScoring       mOnlineRoadRageScoring;        // :1220 (by value)  X360 ss+0x4BF8

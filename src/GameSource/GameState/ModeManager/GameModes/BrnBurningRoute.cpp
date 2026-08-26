@@ -16,4 +16,12 @@ f32 BurningRouteMode::GetOutroTimeout() const
 {
     return KF_OUTRO_TIME_SECONDS;
 }
+
+// X360 vtable slot 23 (vtbl+92), folded leaf 0x827E2F38 == `li r3,0; blr` at slot 23 of
+// BurningRouteMode's vtable 0x820D06B8; the GameMode base is 0x82C296C8 == `li r3,1`.
+// SetupGameMode @0x8234B158 gates the WaitForStreaming path on this.
+bool BurningRouteMode::RequiresStreaming() const
+{
+    return false;
+}
 }
