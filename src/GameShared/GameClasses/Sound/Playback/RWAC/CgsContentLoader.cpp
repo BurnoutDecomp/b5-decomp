@@ -248,15 +248,15 @@ namespace Playback
             if (lbOk)
             {
                 // X360: (*mpLoadService->vtbl[0])(mpLoadService, mi16CurrentRequest,
-                //         arSpec.mu8LoadMethod, lacPath, this) -- issue the load request.
-                typedef bool (*LoadRequestFn)(void*, s16, u8, const char*, ContentLoader<ResType>*);
-                void* lpLoadService = arContent.mpLoadService;
-                LoadRequestFn lpfnLoad = (*reinterpret_cast<LoadRequestFn**>(lpLoadService))[0];
-                lbOk = lpfnLoad(lpLoadService,
-                                mpLoadData->mi16CurrentRequest,
-                                arSpec.mu8LoadMethod,
-                                lacPath,
-                                this);
+                //         arSpec.mu8LoadMethod, lacPath, this) -- issue the load
+                // request. (Phase B4: mpLoadService is the REAL typed
+                // IContentLoadService, so the vtbl[0] dispatch IS this virtual
+                // call -- DoServiceContentLoadRequest, the interface's only slot.)
+                lbOk = arContent.mpLoadService->DoServiceContentLoadRequest(
+                    static_cast<u32>(mpLoadData->mi16CurrentRequest),
+                    static_cast<EContentLoadMethod>(arSpec.mu8LoadMethod),
+                    lacPath,
+                    this);
             }
 
             if (lbOk)

@@ -9,6 +9,8 @@
 #include "GameShared/GameClasses/Sound/Playback/CgsCommon.h"    // Name
 #include "GameShared/GameClasses/Sound/Playback/CgsDataStructures.h" // ContentType, ContentClass
 
+namespace rw { namespace audio { namespace core { class System; } } }   // the Update-context alias below
+
 // NOTE (fold DONE 2026-08-25, audio-faithfulness wave 3): there is now ONE
 // CgsSound::Playback::Object -- the canonical CgsObject.h home, which CgsContent.h
 // includes (its old private copy is deleted). Voice derives from that single Object.
@@ -51,7 +53,10 @@ class Voice;
 class PlayerVoice;
 
 // Fwd decls for the grown Voice surface (each bodied in its own TU).
-class System;          // opaque per-frame Update context (rw::audio::core::System)
+// (2026-08-25, phase B4: the former opaque `class System;` fwd decl is now the
+// REAL alias -- the per-frame Update context IS the engine System, and the
+// environment's UpdateVoices hands the same pointer to both.)
+typedef rw::audio::core::System System;
 class SubmixVoice;     // Connect target (Voice subclass, own TU)
 class VoiceSpec;       // referenced by ctor/GetAllocationSize (own TU)
 class Factory;         // owning module factory (own TU)
@@ -242,6 +247,18 @@ public:
     EPlaybackState GetPlaybackState() const
     {
         return static_cast<EPlaybackState>(mu8PlaybackState & 0x7F);
+    }
+
+    // DWARF CgsVoice.h:1454 / :1461 -- the CHANGED-bit pair (test / clear of the
+    // +0x10 0x80 bit). The environment's UpdateVoices @0x826C01B8 drives the
+    // clear each frame after the per-voice tick.
+    bool HasPlaybackStateChanged() const
+    {
+        return (mu8PlaybackState & E_PLAYBACK_STATE_CHANGED) != 0;
+    }
+    void AcknowledgePlaybackStateChange()
+    {
+        mu8PlaybackState &= 0x7F;
     }
 
     // Ident read. INLINE in the original (Logic::Voice::GetIdent @0x826AD988 returns

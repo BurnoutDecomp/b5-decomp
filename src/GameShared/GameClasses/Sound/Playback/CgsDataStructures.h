@@ -31,6 +31,16 @@ namespace CgsSound
 namespace Playback
 {
 
+// DWARF CgsDataStructures.h:1773. How a piece of playback content gets loaded --
+// the IContentLoadService::DoServiceContentLoadRequest method selector (the
+// Module's override @0x826F9F88 services only the RESOURCE_MODULE method,
+// returning false for anything else).
+enum EContentLoadMethod
+{
+    E_CONTENT_LOAD_INVALID         = 0,
+    E_CONTENT_LOAD_RESOURCE_MODULE = 1,
+};
+
 // CgsDataStructures.h:210
 struct IEntityFixer
 {

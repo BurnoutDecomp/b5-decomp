@@ -6,6 +6,7 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourceID.h"        // CgsResource::ID (64-bit hash)
 #include "GameShared/GameClasses/System/Resource/CgsSmallResource.h"     // SmallResourceDescriptor (Entry::ResourceDescriptor form)
 #include "GameShared/GameClasses/System/Resource/CgsResourceBundle2.h"   // BundleV2 (struct) + nested ResourceEntry
+#include "GameShared/GameClasses/System/FileSystem/CgsReadStream.h"      // CgsFileSystem::ReadStream (ReadStreamEvent carries it by value)
 
 namespace CgsModule { class BaseEventReceiverQueue; }   // referenced by pointer only
 namespace CgsResource { struct ResourceHandle; }        // AcquireResourceListRequest::mpHandles (by pointer)
@@ -95,28 +96,94 @@ namespace Events
     {
     };
 
-    // CgsResourceIOEvents.h -- the request to open a streaming handle on a file. Recovered from
-    // CgsResource::Events::OpenStreamRequest::SetFileName @ 0x82680278 (called by
-    // CgsSound::Playback::Module::DoOpenStream and CgsResource::BundleLoaderModule::CheckForLoads).
-    // SetFileName copies a NUL-terminated path into the inline macFileName[128] buffer at +8 via
-    // the inlined CgsStringUtils.h:65 bounded-copy helper (asserting length < 128, the buffer size:
-    // "String <name> is too long. Buffer size = 128"); a null source clears macFileName[0] to '\0'.
-    // Field offsets are X360-store-confirmed against SetFileName / the DoOpenStream call site:
-    //   +0   miField0   (caller-written leading field)   stw into 0(request)
-    //   +4   miField4   (caller-written leading field)   stw into 4(request)
-    //   +8   macFileName[128] (NUL-terminated path)       SetFileName stbx loop into request+8
-    // The two leading fields are typed s32 (the only attestation is their 32-bit store width at the
-    // DoOpenStream call site); they are named by offset pending a richer DWARF/caller signature.
-    struct OpenStreamRequest : public Event
+    // DWARF CgsResourceIOEvents.h:933-946 -- the base of every file/stream IO event: the
+    // requester's receiver queue (where the response is posted back) + the per-request event id.
+    // (2026-08-25, faithful-audio-engine phase B4: this base + the full OpenStreamRequest member
+    // list below replace the earlier by-offset model -- the DWARF names the old miField0/miField4
+    // pair mpUser/miEventId, and the sound Module::DoOpenStream @0x826FA020 call site attests
+    // every tail field store.)
+    struct FileEvent : public Event
     {
-        s32  miField0;            // +0    (caller-written)
-        s32  miField4;            // +4    (caller-written)
-        char macFileName[128];    // +8    NUL-terminated path to stream
+        // :933 -- fill the base pair (the X360 inlines these stores at every request build site).
+        void Construct(CgsModule::BaseEventReceiverQueue* lpUser, s32 liEventId)
+        {
+            mpUser    = lpUser;
+            miEventId = liEventId;
+        }
+        CgsModule::BaseEventReceiverQueue* GetUser() const { return mpUser; }       // :936
+        s32  GetEventId() const            { return miEventId; }                     // :939
+        void SetEventId(s32 liEventId)     { miEventId = liEventId; }                // :942
 
+    protected:
+        CgsModule::BaseEventReceiverQueue* mpUser;    // :945  (X360 +0)
+        s32                                miEventId; // :946  (X360 +4)
+    };
+
+    // DWARF CgsResourceIOEvents.h:972-1025 -- the request to open a streaming handle on a file
+    // (the console 160-byte record the sound Module::DoOpenStream builds and posts, queue event
+    // type 16). SetFileName @ 0x82680278 copies a NUL-terminated path into the inline
+    // macFileName[128] buffer via the inlined CgsStringUtils.h:65 bounded-copy helper (asserting
+    // length < 128: "String <name> is too long. Buffer size = 128"); a null source clears
+    // macFileName[0] to '\0'. Console offsets: macFileName +8, mpBuffer +136, muBufferSize +140,
+    // muNumBlocks +144, miNormalPriority +148, miHighPriority +152, mbUseHDCache +156.
+    struct OpenStreamRequest : public FileEvent
+    {
         // X360 0x82680278. Copy a NUL-terminated path into macFileName (bounded by the 128-byte
         // buffer); a null source clears the buffer. Returns this (the X360 SetFileName returns its
         // incoming `result`).
-        OpenStreamRequest* SetFileName(const char* lpcFileName);
+        OpenStreamRequest* SetFileName(const char* lpcFileName);   // :993
+
+        // The DWARF accessor surface (:975-:1008); trivial field access, inline.
+        const char* GetFileName() const        { return macFileName; }            // :975
+        u32   GetBufferSize() const            { return muBufferSize; }           // :978
+        u32   GetNumBlocks() const             { return muNumBlocks; }            // :981
+        s32   GetNormalPriority() const        { return miNormalPriority; }       // :984
+        s32   GetHighPriority() const          { return miHighPriority; }         // :987
+        void* GetBuffer() const                { return mpBuffer; }               // :990
+        void  SetBufferSize(u32 luSize)        { muBufferSize = luSize; }         // :996
+        void  SetNumBlocks(u32 luBlocks)       { muNumBlocks = luBlocks; }        // :999
+        void  SetNormalPriority(s32 liPriority){ miNormalPriority = liPriority; } // :1002
+        void  SetHighPriority(s32 liPriority)  { miHighPriority = liPriority; }   // :1005
+        void  SetBuffer(void* lpBuffer)        { mpBuffer = lpBuffer; }           // :1008
+        void  SetUseHDCache(bool lbUseHDCache) { mbUseHDCache = lbUseHDCache; }   // (the +156 byte the DoOpenStream build zeroes)
+
+    protected:
+        char  macFileName[128];   // :1019  NUL-terminated path to stream
+        void* mpBuffer;           // :1020  the caller-carved stream buffer
+        u32   muBufferSize;       // :1021
+        u32   muNumBlocks;        // :1022
+        s32   miNormalPriority;   // :1023
+        s32   miHighPriority;     // :1024
+        bool  mbUseHDCache;       // :1025
+    };
+
+    // DWARF: the read-side open request -- structurally the OpenStreamRequest (no extra fields).
+    struct OpenReadStreamRequest : public OpenStreamRequest
+    {
+    };
+
+    // DWARF CgsResourceIOEvents.h:1070-1080 -- a file event carrying a ReadStream handle by value
+    // (the console 12-byte record the sound Module::DoCloseStream posts, queue event type 18).
+    struct ReadStreamEvent : public FileEvent
+    {
+        // :1070 -- base pair + the stream (the X360 inlines the three stores at the
+        // DoCloseStream build site).
+        void Construct(CgsModule::BaseEventReceiverQueue* lpUser, s32 liEventId,
+                       CgsFileSystem::ReadStream lStream)
+        {
+            FileEvent::Construct(lpUser, liEventId);
+            mStream = lStream;
+        }
+        CgsFileSystem::ReadStream GetStream() const       { return mStream; }    // :1073
+        void SetStream(CgsFileSystem::ReadStream lStream) { mStream = lStream; } // :1076
+
+    protected:
+        CgsFileSystem::ReadStream mStream;   // :1080  (X360 +8)
+    };
+
+    // DWARF: the read-side close request -- structurally the ReadStreamEvent (no extra fields).
+    struct CloseReadStreamRequest : public ReadStreamEvent
+    {
     };
 
     // ===== ADDITIVE GROW (Wave 49): deprecated write-stream request event types =====

@@ -41,6 +41,13 @@ namespace CgsSound
 namespace Io
 {
 
+// DWARF (canonical home CgsCommandStream.h, alongside the Command/DataStream
+// queues that carry it; parked here until that TU lands): the 4-byte element the
+// sound-IO word queues move around -- e.g. the playback OutputBuffer's
+// freed-stream-buffer array Array<QueueElement,3> carries the freed records'
+// voice idents.
+typedef u32 QueueElement;
+
 // Leading header block of a sound message.
 class MessageHeader
 {

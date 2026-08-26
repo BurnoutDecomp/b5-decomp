@@ -24,6 +24,8 @@
 #include "GameShared/GameClasses/Sound/Playback/CgsObject.h"
 #include "GameShared/GameClasses/Sound/Playback/CgsFactory.h"     // complete Factory (GetR's name compare)
 #include "GameShared/GameClasses/Sound/Playback/RWAC/CgsGenericRwacFactory.h"
+#include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"  // the Update sub-pass monitors (phase B4)
+#include "rw/audio/core/PlugIn.h"                                  // rw::audio::core::System (muDeferredRingHighWater)
 #include "rw/rwcore_structs.h"                                     // rw::Resource / ResourceDescriptor / IResourceAllocator
 
 #include <new>                                                     // placement new (the co-located carve)
@@ -448,6 +450,131 @@ size_t Environment::GetAllocatedSize()
          + sizeof(Registry)
          + mpRegistry->GetStringTableSize()
          + mpRegistry->GetDataSize();
+}
+
+// =============================================================================
+// Environment::UpdateContent  @ 0x826C00B8  (bodied phase B4)
+//
+// Tick every live content slot: Content::Update(dt); clear the CHANGED high bit
+// off mu8ContentState (console `if (state & ~0x7F) state &= 0x7F`); dispose
+// entries whose mu8RemoveState reached E_CONTENT_REMOVE_REMOVED (Object::Release
+// -- @0x82680938 on the console -- then null the slot); count muActiveContent.
+// Bracketed by the miContentUpdate CPU monitor.
+// =============================================================================
+void Environment::UpdateContent(f32 af32TimeStep)
+{
+    CgsDev::PerfMonCpu::StartMonitor(mCpuMonitors.miContentUpdate);
+
+    muActiveContent = 0;
+    for (u32 lu = 0; lu < mu32ContentCount; ++lu)
+    {
+        Content* lpContent = mphContent[lu].GetObject();
+        if (!lpContent)
+            continue;
+
+        lpContent->Update(af32TimeStep);
+
+        if (lpContent->HasContentStateChanged())
+            lpContent->AcknowledgeContentStateChange();   // drop E_CONTENT_STATE_CHANGED
+
+        if (lpContent->mu8RemoveState == E_CONTENT_REMOVE_REMOVED)
+        {
+            if (mphContent[lu].GetObject())
+                mphContent[lu].GetObject()->Release();
+            mphContent[lu].SetObject(0);
+        }
+
+        ++muActiveContent;
+    }
+
+    CgsDev::PerfMonCpu::StopMonitor(mCpuMonitors.miContentUpdate);
+}
+
+// =============================================================================
+// Environment::UpdateVoices  @ 0x826C01B8  (bodied phase B4)
+//
+// Zero muActiveVoices + the five mafVoiceTypeTickTotals, then tick every live
+// voice: Voice::Update(system, dt); accumulate its GetCpuTicks() into the
+// per-GetProfileVoiceType() tick total (console vtbl +8 / +16 -- Object's
+// [dtor, DoDispose] head precedes Voice's own virtuals, so those slots ARE
+// GetCpuTicks / GetProfileVoiceType); clear the CHANGED high bit off
+// mu8PlaybackState; release voices whose mu8RemoveState reached the REMOVED(3)
+// rung (the console inlines Object::Release -- refcount assert CgsObject.h:117,
+// decrement, DoDispose at zero) and null the slot. Bracketed by the
+// miVoiceUpdate CPU monitor.
+// =============================================================================
+void Environment::UpdateVoices(rw::audio::core::System* apSystem, f32 af32TimeStep)
+{
+    CgsDev::PerfMonCpu::StartMonitor(mCpuMonitors.miVoiceUpdate);
+
+    muActiveVoices = 0;
+    for (u32 lu = 0; lu < 5; ++lu)
+        mafVoiceTypeTickTotals[lu] = 0.0f;
+
+    for (u32 lu = 0; lu < mu32VoiceCount; ++lu)
+    {
+        Voice* lpVoice = mphVoice[lu].GetObject();
+        if (!lpVoice)
+            continue;
+
+        lpVoice->Update(apSystem, af32TimeStep);
+        ++muActiveVoices;
+
+        mafVoiceTypeTickTotals[lpVoice->GetProfileVoiceType()] += lpVoice->GetCpuTicks();
+
+        if (lpVoice->HasPlaybackStateChanged())
+            lpVoice->AcknowledgePlaybackStateChange();   // drop the CHANGED bit
+
+        if (lpVoice->GetRemoveState() == E_VOICE_REMOVE_REMOVED)
+        {
+            Voice* lpDeadVoice = mphVoice[lu].GetObject();
+            if (lpDeadVoice)
+                lpDeadVoice->Release();
+            mphVoice[lu].SetObject(0);
+        }
+    }
+
+    CgsDev::PerfMonCpu::StopMonitor(mCpuMonitors.miVoiceUpdate);
+}
+
+// =============================================================================
+// Environment::UpdateFactories  @ 0x826A2200  (bodied phase B4)
+//   per live factory: Factory::Update(dt) -> virtual DoUpdate (console vtbl +16 --
+//   Factory slot [4]).
+// =============================================================================
+void Environment::UpdateFactories(f32 af32TimeStep)
+{
+    for (u32 lu = 0; lu < mu32FactoryCount; ++lu)
+    {
+        Factory* lpFactory = mphFactory[lu].GetObject();
+        if (lpFactory)
+            lpFactory->Update(af32TimeStep);   // the public front (DWARF h:310) -> the console vtbl+16 DoUpdate dispatch
+    }
+}
+
+// =============================================================================
+// Environment::Update  @ 0x826D7500  (bodied phase B4)
+//
+// The per-frame engine pump: UpdateContent, then -- under the RWAC system lock
+// -- UpdateVoices + UpdateFactories, the command-ring high-water assert (the
+// console builds "Command buffer high water mark. <n>" through a StrStream;
+// kept as a static CGS_ASSERT string), unlock.
+// =============================================================================
+void Environment::Update(f32 af32TimeStep)
+{
+    UpdateContent(af32TimeStep);
+
+    rw::audio::core::System* lpSystem = GetDefaultRwacSystem();
+    CGS_ASSERT(lpSystem != 0, "mpSystem");
+    rw::audio::core::RwacSystemLock(lpSystem);
+
+    UpdateVoices(lpSystem, af32TimeStep);
+    UpdateFactories(af32TimeStep);
+
+    CGS_ASSERT(lpSystem->muDeferredRingHighWater < 157286u,
+               "Command buffer high water mark.");
+
+    rw::audio::core::RwacSystemUnlock(lpSystem);
 }
 
 } // namespace Playback
