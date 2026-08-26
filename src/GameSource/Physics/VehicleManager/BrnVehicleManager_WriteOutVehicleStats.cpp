@@ -319,7 +319,8 @@ void VehicleManager::WriteOutVehicleStats(VehicleOutputInterface* lpOutputInterf
 //               { maRaceCarHandlingBodyIDs[index], mfRoadRageHowCloseToWrecked,
 //                 meDeformationResetType }
 // 0x82617DF0  if (mbResetTransform) VehiclePhysics::Reset(mInitialVelocity)     THE RE-SEED
-// else                  vtable slot 1 (the non-transform reset)      PARKED (P3)
+//   0x82617E00  else                  VehiclePhysics::ClearCrashing()  == vtable slot 1
+//                                     LANDED 2026-08-26 -- (P3) is RESOLVED, not parked
 //   0x82617E28  RaceCarResetEvent::AddEvent(managerOut+0x5B0,
 //               { index, mbResettingAfterWreck, <the transform's translation row, v125> })
 //   0x82617E34+ the `index == player` tail: a bit test at +0x1908, SetAllNetworkRaceCarsHidden,
@@ -330,9 +331,67 @@ void VehicleManager::WriteOutVehicleStats(VehicleOutputInterface* lpOutputInterf
 //      restored in the body above.
 // (P2) Wheel::IsAttached has no reconstructed body; the assert is debug-only and its absence
 //      cannot change behaviour.
-// (P3) the `!mbResetTransform` arm dispatches vtable slot 1 on RaceCarPhysics, whose occupant is
-//      not settled in this tree's vtable map. Every producer that exists on this build sets
-//      mbResetTransform, so the arm is unreachable here; it LOGS ONCE rather than guessing.
+// (P3) ⭐⭐ RESOLVED 2026-08-26 (resetpump wave) -- THE SLOT IS SETTLED AND BOTH HALVES OF THE
+//      OLD NOTE WERE WRONG. Read off the image, not reasoned about: the RaceCarPhysics vtable
+//      lives at 0x820D1034 (pinned by VehiclePhysics.h's own slot-5 note, and slot 0 there is
+//      VehiclePhysics::GetSteeringAngle, which confirms the base), and
+//          vtable[1] == 0x825D5450 == BrnPhysics::Vehicle::VehiclePhysics::ClearCrashing
+//      The same pointer sits in the VehiclePhysics/TrafficPhysics vtable @0x820D0C68, so it is
+//      NOT overridden. 0x825D5450 is an ARTIST export HOLE (no JSON), recovered the documented
+//      way -- its name is in a NEIGHBOUR'S xrefs_to (CgsDev::Assert::BeginAssert @0x82817548
+//      lists `0x825D5450 BrnPhysics::Vehicle::VehiclePhysics::ClearCrashing`) -- and then
+//      disassembled straight out of the image (44 insns, 0x825D5450..0x825D54FC).
+//
+//      ⛔⛔ AND "the arm is unreachable here" IS FALSE, MEASURED: the reset events this build
+//      has actually processed all carried resetTransform == 0, so THIS is the live arm.
+//      ⚠️ BUT THAT IS NOT "every reset", AND THE DIFFERENCE IS THE WHOLE STORY -- see below.
+//
+//      ⭐ WHAT ClearCrashing DOES (image-read):
+//          0x825D5464  CGS_ASSERT(IsCrashing(), "IsCrashing()")   VehiclePhysics.cpp:7408
+//          0x825D54B0  mbCrashing            = false      (+0x710)
+//          0x825D54B4  mbIsFatalyCrashing    = false      (+0x711)
+//          0x825D54BC  four f32 lanes at +0x1114/+0x1118/+0x111C/+0x1120 = flt_82001CC0 (0.0f)
+//          0x825D54C0  a byte at +0x1128 = -1, and a VMX block zeroed from +0x1130
+//      ⭐⭐⭐ THIS IS THE ONE THING KEEPING BRN_ENABLE_CRASH_ENTRY OFF. The reset-on-track pump
+//      now puts a crashed car back on the road (resetpump wave), but nothing clears mbCrashing,
+//      so the recovered car drives on flagged crashing for ever. This dispatch is what clears it.
+//
+//      ⭐⭐ THE ENTRY ASSERT WAS FEARED AS A TRAP. IT IS NOT ONE -- IT IS A TAUTOLOGY, and
+//      settling that is what let this land (crashclear wave, 2026-08-26). The note that stood
+//      here read: "on this build the !mbResetTransform arm runs for EVERY reset -- the junkyard
+//      hand-off, the harness teleport, the crash recovery -- and only the last of those has a
+//      crashing car, so un-parking it naively HANGS THE BOOT". FALSE TWICE OVER. Recorded rather
+//      than quietly deleted, because the reasoning error is reusable:
+//
+//        (a) MEASURED. Run rp_default is a full flow to DRIVING -- junkyard hand-off, 2.1 km
+//            drive -- and contains ZERO `[teleport]` lines of ANY kind. The hand-off is
+//            PlaceOnTrackManager's INITIAL PLACEMENT (E_STATE_WAITING -> E_STATE_ACTIVE, 16
+//            [PLACEONTRACK] lines), which never enqueues a ResetVehicleEvent and never reaches
+//            this function at all. Only the crash runs produce a reset event: exactly one each.
+//
+//        (b) STRUCTURAL, from the producer's own asm. RaceCarEntityModule::ResetActiveRaceCar's
+//            re-reset arm @0x822F4990 -- already bodied in this tree -- classifies:
+//                if (IsCrashing()) { IsDriveableAfterCrash() -> resetTransform = 0   <-- ONLY 0
+//                                    else                    -> resetTransform = 1 }
+//                else                                        -> resetTransform = 1
+//                                             (`li r26, 1` @0x822F4960, never overwritten)
+//            So mbResetTransform == 0 is reachable on EXACTLY ONE path: a car that is CRASHING
+//            and is DRIVEABLE AFTER THE CRASH. A non-crash reset always carries 1 and always
+//            takes the VehiclePhysics::Reset(velocity) arm above. This arm is therefore, BY
+//            CONSTRUCTION, unreachable with a non-crashing car -- which is exactly what
+//            CGS_ASSERT(IsCrashing()) inside ClearCrashing states. The two agree.
+//
+//      ⭐ THE ERROR CLASS, named so it is not repeated: the earlier note observed
+//      `resetTransform=0` on the only two reset events that had ever existed -- both crash
+//      recoveries -- and generalised "0 on every reset that ARRIVES" into "every reset takes
+//      this arm". A condition's truth over the events that arrive says NOTHING about WHICH
+//      events arrive. (Same shape as the standing rule that "X reads Y and Y is never written"
+//      is a claim about ONE BRANCH of X.)
+//
+//      ⇒ THE ASSERT STAYS VERBATIM, THE CALL IS UN-GATED, NOTHING IS INVENTED. Deleting the
+//      assert to "get past it" would have been the invented-arm class this campaign has paid
+//      for twice; gating the call on IsCrashing() would have hidden exactly the producer defect
+//      the console's own assert exists to catch.
 // (P4) the player tail is the network-car un-hide + four debug streams; the un-hide's own
 //      SetAllNetworkRaceCarsHidden IS bodied, but its guard is the +0x1908 bit of an unnamed
 //      member. Parked for the same reason as (P1), and it is a no-op with no network cars.
@@ -454,15 +513,30 @@ void VehicleManager::ProcessResetEvents(
         }
         else
         {
-            // (P3) -- see the banner. Loud, once, never silent.
-            static bool sbLoggedNonTransformReset = false;
-            if (!sbLoggedNonTransformReset && CgsDev::Log::gpDebugPrint != 0)
+            // 0x82617E00 `lwz r11,0(r31) ; lwz r11,4(r11) ; mtctr r11 ; bctrl` -- RaceCarPhysics
+            // vtable slot 1 == VehiclePhysics::ClearCrashing @0x825D5450, reached BY NAME.
+            //
+            // THIS IS THE ONLY THING ON THE ENTIRE RESET PATH THAT ENDS A CRASH. The chain it
+            // feeds, so the next reader does not have to rediscover it: ClearCrashing zeroes
+            // mbCrashing (+0x710) -> VehicleOutputInterface::UpdateRaceCarState copies it into
+            // RaceCarState::mbCrashing -> RCEntityActiveRaceCarOutputInterface::
+            // IsPlayerCarCrashing reads it -> BridgeWorldVehicleDataToGui turns its FALLING
+            // EDGE into GUI event 377, payload 1 == E_CRASHBARSTATE_LEAVE_CRASHED.
+            //
+            // Reachable only with a crashing car -- see (P3)(b): the producer hardcodes
+            // resetTransform = 1 for every non-crash reset. The callee's own
+            // CGS_ASSERT(IsCrashing()) is kept verbatim as the tripwire for that invariant.
+            const bool lbWasCrashing = lpRaceCar->IsCrashing();
+
+            lpRaceCar->ClearCrashing();
+
+            if (CgsDev::Log::gpDebugPrint != 0)
             {
-                sbLoggedNonTransformReset = true;
                 *CgsDev::Log::gpDebugPrint
-                    << "[teleport] ProcessResetEvents PARK: the !mbResetTransform arm dispatches "
-                       "RaceCarPhysics vtable slot 1 (X360 0x82617E00); that slot's occupant is "
-                       "not settled in this tree, so nothing is dispatched\n";
+                    << "[crash-clear] ProcessResetEvents car " << liRaceCar
+                    << ": ClearCrashing() via vtable slot 1 -- crashing "
+                    << (lbWasCrashing ? 1 : 0) << " -> "
+                    << (lpRaceCar->IsCrashing() ? 1 : 0) << "\n";
             }
         }
 

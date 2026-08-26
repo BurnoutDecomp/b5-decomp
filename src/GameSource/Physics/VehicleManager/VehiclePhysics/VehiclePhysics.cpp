@@ -5439,6 +5439,70 @@ namespace Vehicle
     mLinearVelocity.z  += mLinearVelocity.z  * lrCrashFactors.w;
     }
 
+    // ==============================================================================================
+    //  @0x825D5450  BrnPhysics::Vehicle::VehiclePhysics::ClearCrashing   (virtual override)
+    //
+    //  RACECARPHYSICS VTABLE SLOT 1 -- SETTLED 2026-08-26 BY PROBING THE IMAGE, NOT BY REASONING
+    //  (the tree has paid once already for guessing a slot's identity: the slot-0 `Create` shim).
+    //  How it was pinned, so no later wave repeats the work:
+    //    * VehicleManager::VehicleManager @0x827E4D58 seats `off_820D1034` as the FINAL vptr of
+    //      every element of the 0x1460-stride maRaceCarVehicles array (`v2 = a1 + 1856 ; ... ;
+    //      *v2 = off_820D1034 ; v2 += 1304`), so 0x820D1034 IS the RaceCarPhysics vtable.
+    //    * Cross-check, independent of that constructor: 0x820D1034 + 0x30 == 0x820D1064 ==
+    //      0x82639CB8 == RaceCarPhysics::Prepare, which this tree already documents as reached
+    //      through "vtable slot +0x30" (see SetTransformFromPositionOnRoad's banner).
+    //    * vtable[1] (0x820D1038) == 0x825D5450. That address is an EXPORT-SET HOLE -- there is no
+    //      .json for it -- so it was read out of the image bytes directly.
+    //    * Its identity is MEASURED, not inferred. It opens with CGS_ASSERT("IsCrashing()") citing
+    //      ".../Physics/VehicleManager/VehiclePhysics/VehiclePhysics.cpp":7408 (both strings read
+    //      from .rdata at 0x82094B54 and 0x82094860), and its first two stores are the whole body
+    //      of SimpleVehiclePhysics::ClearCrashing @0x825B8EA8, byte for byte
+    //      (`li r11,0 ; stb r11,0x710(r3) ; stb r11,0x711(r3) ; blr`). It is therefore the derived
+    //      override of the virtual declared in BrnSimpleVehiclePhysics.h.
+    //    * The neighbouring slots agree with the declared virtual order:
+    //        [0] 0x825D4028 VehiclePhysics::GetSteeringAngle
+    //        [1] 0x825D5450 THIS
+    //        [2] 0x825FFBB0 VehiclePhysics::SetCrashing   (the `vtable +8` this tree already cites)
+    //        [3] 0x826415E8 RaceCarPhysics::Update
+    //
+    //  THE TAIL IS NOT NEW MATH. 0x825D54BC..0x825D54E8 is the SAME partial slam/shunt clear that
+    //  VehiclePhysics::Reset and VehiclePhysics::Destruct already emit in this TU, instruction for
+    //  instruction: `stfs f0,0x1114/0x1118/0x111C/0x1120` with f0 == flt_82001CC0 == 0.0f,
+    //  `stb -1,0x1128`, `stvx128 <zero> -> +0x1130`, then the two vrlimi128 read-modify-writes of
+    //  +0x1140 -- word 0x19840710 is `vrlimi128 v12, v0, 4, 0` (calibrated against the IDA-labelled
+    //  copy of that identical word at 0x82633AE0; mask 4 == lane .y) and word 0x18086F10 is mask 8
+    //  == lane .x, with v13 == vcfsx(vspltisw -1) == splat(-1.0f).
+    //  It is PARTIAL ON PURPOSE, exactly as at the other two sites: mSlamEffect.mForce, .mfDecay
+    //  and .mfRecoveryTime survive, and so do the .z/.w lanes of the shunt register.
+    //
+    //  WHAT IT DOES **NOT** DO, said out loud because a reader will go looking for it: it does not
+    //  clear mfTimeCrashing (+0xEF0 lane .y). The console does not clear it here either -- the
+    //  counter simply stops accumulating, because its only writer (UpdateCrashing) is gated on
+    //  mbCrashing, and SetCrashing re-seeds the register at the start of the next crash.
+    // ==============================================================================================
+    void VehiclePhysics::ClearCrashing()
+    {
+        // 0x825D5464..0x825D548C -- the console's own assert, kept verbatim. It is also a genuine
+        // tripwire on this build: it says the only legal caller is a reset that FOLLOWS a crash.
+        CGS_ASSERT(IsCrashing(), "IsCrashing()");
+
+        // 0x825D54B0 / 0x825D54B4 -- SimpleVehiclePhysics::ClearCrashing's two stores, which
+        // Breaker inlined here rather than chaining to the base body.
+        mbCrashing               = false;   // +0x710
+        mbStartedFatallyCrashing = false;   // +0x711
+
+        // The intentionally partial effect clears -- see the banner.
+        mSlamEffect.mfSteering         = 0.0f;   // +0x1114
+        mSlamEffect.mfOriginalSteering = 0.0f;   // +0x1118
+        mSlamEffect.mfSlamLife         = 0.0f;   // +0x111C
+        mSlamEffect.mfTotalSlamTime    = 0.0f;   // +0x1120
+        mSlamEffect.mi8SlamNumber      = -1;     // +0x1128
+
+        mShuntEffect.mDirectionPlusDesiredSpeed.SetZero();     // +0x1130 (whole register)
+        mShuntEffect.mv4_Life_SpeedIncreaseToQuit.y =  0.0f;   // +0x1140 vrlimi128 mask 4 == .y
+        mShuntEffect.mv4_Life_SpeedIncreaseToQuit.x = -1.0f;   // +0x1140 vrlimi128 mask 8 == .x
+    }
+
     // the vtable-closure gate `IsIgnoringPassedOnImpulses`
     // that lived here is RETIRED. The +0x10 slot is now image-settled as the DWARF virtual
     // IsPlayerVehicleInShowtime (both concrete vtables read off the image -- see the header's

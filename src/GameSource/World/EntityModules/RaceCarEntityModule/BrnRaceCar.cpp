@@ -258,10 +258,13 @@ void RaceCar::RemoveFromWorld()
 //     [teleport] ResetActiveRaceCar RE-RESET car 0 -> road (...)   <- the car IS put back
 // and the car then drove about a kilometre. The FAILURE arm is the console's designed fallback,
 // not a hole: it is what routes the reset through THIS car's own GetResetCoords.
-// ⛔ WHAT STILL FAILS is one rung further down and is NOT in this chain at all: nothing clears
-// the crash STATE (mbCrashing stays 1, mfTimeCrashing climbs, no LEAVE_CRASHED). See
-// BrnVehicleManager.cpp::SetRaceCarCrashing's banner -- it names the single parked vtable
-// dispatch in VehicleManager::ProcessResetEvents that would do it.
+// ⭐ AND THE ONE RUNG THAT STILL FAILED WHEN THAT WAS WRITTEN IS NOW CLOSED TOO (crashclear
+// wave, 2026-08-26): the crash STATE is cleared. The dispatch it referred to -- the
+// `!mbResetTransform` arm of VehicleManager::ProcessResetEvents @0x82617E00 -- is
+// VehiclePhysics::ClearCrashing @0x825D5450 (RaceCarPhysics vtable slot 1, probed off the
+// image), and it is landed and called by name. mbCrashing goes to 0 on the recovery and its
+// falling edge becomes GUI 377 LEAVE_CRASHED. See (P3) in
+// BrnVehicleManager_WriteOutVehicleStats.cpp for the working-out.
 // The paragraphs below are kept because their SHAPE of the chain, their instruction counts and
 // their working-out are still the best map of it; only their status verbs have expired.
 //
