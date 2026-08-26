@@ -1330,6 +1330,32 @@ struct GuiTakedownEvent
 };
 static_assert(sizeof(GuiTakedownEvent) == 40, "X360 AddGuiEvent size 40 (id 363)");
 
+// GuiSoftTakedownEvent (id 364, 32 bytes) -- [boost-msg wave 2026-08-26] RECOVERED, retiring
+// BOTH the opaque BrnGuiDemangledEventTypes.h shell AND the soft arm this tree had parked:
+// GameBridgeGameStateToX.cpp's TranslateTakedownsToGuiEvents decoded the producer stores
+// (@0x823E1CDC..0x823E1D1C: two CgsIDs at +0x00/+0x08, the two indices at +0x10/+0x14, the
+// takedown type at +0x18 and the two status bytes pulled forward to +0x1C/+0x1D) and asked
+// for exactly this grow. The consumer half corroborates: AddGuiEvent<GuiSoftTakedownEvent>
+// @0x823D9AD0 -> AddEvent(q, ev, 364, 32), and BoostMessageManager::RecvEvent case 364
+// compares +0x10 (the aggressor index) against GuiCache::mePlayerActiveRaceCarIndex
+// (@0x82420B18). Same family layout as GuiTakedownEvent above, minus the two chain counts.
+struct GuiSoftTakedownEvent
+{
+    CgsID                       mAggressorCarID;     // +0x00 <- producer src +0x08
+    CgsID                       mVictimCarID;        // +0x08 <- producer src +0x10
+    EActiveRaceCarIndex         meAggressorIndex;    // +0x10 <- producer src +0x00
+    EActiveRaceCarIndex         meVictimIndex;       // +0x14 <- producer src +0x04
+    BrnGameState::ETakedownType meTakedownType;      // +0x18 <- producer src +0x18
+    bool                        mbMarkedManTakeDown; // +0x1C <- producer src +0x24
+    bool                        mbSettledScore;      // +0x1D <- producer src +0x26
+    u8                          maPad1E[2];          // +0x1E tail pad to the 32-byte record
+
+    s32 GetEventType() const { return 364; }
+};
+static_assert(sizeof(GuiSoftTakedownEvent) == 32, "X360 AddGuiEvent size 32 (id 364)");
+static_assert(__builtin_offsetof(GuiSoftTakedownEvent, meAggressorIndex) == 0x10,
+              "X360 RecvEvent case 364 compares +0x10 to the active race-car index");
+
 // (GuiShutdownEvent -- DWARF :3618 {CgsID mVictimCarID} -- KEEPS its
 // BrnGuiDemangledEventTypes.h placeholder, id 373 size 8: HandleShutdown is not part of
 // this keystone's fan-out and the analyzer header only forward-declares the type.)

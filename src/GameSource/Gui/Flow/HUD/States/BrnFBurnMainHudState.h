@@ -12,6 +12,7 @@
 #include "GameSource/Gui/Flow/HUD/Components/BrnOdometerComponent.h"         // BrnGui::OdometerComponent
 #include "GameSource/Gui/Flow/HUD/Components/BrnRoadRuleComponent.h"        // BrnGui::RoadRuleComponent (H2 wave)
 #include "GameSource/Gui/SatNav/BrnSatNavComponent.h"                        // [H3b] BrnGui::SatNavComponent (+0x160)
+#include "GameSource/Gui/Flow/HUD/Components/BrnBoostMessageManager.h"      // BrnGui::BoostMessageManager (+0x8B0) [boost-msg wave]
 #include "GameSource/Gui/Flow/Shared/FlaptComponents/BrnGuiFlaptIconComponent.h" // BrnGui::FlaptAnimatorComponent
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiComponent.h"          // CgsGui::GuiComponent (the apt-side animator half)
 
@@ -31,10 +32,10 @@ namespace BrnGui
     // sub-object vtables); the X360 byte offsets recorded on each member below are the
     // ASM displacements. Per the x64 gate the host layout is semantic-parity-by-named-
     // members: components with complete recon headers are embedded by value; components
-    // whose TUs are not yet reconstructed (the SatNav body, BoostMessageManager) are
-    // documented absentees -- their calls are FLAG'd deferrals in the .cpp and their
-    // storage is not fabricated here. (H1 wave 2026-08-25: Odometer, JunctionInfo and the
-    // full DistrictMarker are REAL embedded members now.)
+    // whose TUs are not yet reconstructed are documented absentees -- their calls are
+    // FLAG'd deferrals in the .cpp and their storage is not fabricated here. (H1 wave
+    // 2026-08-25: Odometer, JunctionInfo and the full DistrictMarker became REAL embedded
+    // members; boost-msg wave 2026-08-26: BoostMessageManager joined them.)
     struct FBurnMainHudState : public CgsGui::State
     {
         // The internal phase word (X360 this+0x38; OnEnter stores 0, OnLeave stores 4).
@@ -130,9 +131,12 @@ namespace BrnGui
                                                    //         word also guards the county
                                                    //         refresh in UpdateRunning)
 
-        // FLAG absent member: BoostMessageManager (+0x8B0..~+0xA3F) -- TU not
-        // reconstructed (symbols demangle-mishomed to CgsStrStream.h in the ledger);
-        // calls deferred behind mbBoostMessagesEnabled.
+        // [boost-msg wave 2026-08-26] The former "absent member" FLAG is retired: the
+        // BoostMessageManager TU is reconstructed (its ledger rows had been
+        // demangle-mishomed to CgsStrStream.h with no committed body anywhere) and the
+        // five deferred call sites in the .cpp are live. sizeof == 0x190 == the X360
+        // +0x8B0..+0xA3F span this carve documented.
+        BoostMessageManager mBoostMessages;        // +0x8B0
 
         // The "EventHud_Animator" pair: the APT half (a plain named GuiComponent -- the
         // X360 UpdateWFInit calls CgsGui::GuiComponent::AddOutputAptViewState on

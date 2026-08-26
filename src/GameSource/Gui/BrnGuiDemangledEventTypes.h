@@ -7,6 +7,8 @@
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"   // CgsGui::GuiEvent<N> (12-byte event header)
 #include "GameShared/GameClasses/Core/CgsID.h"
 #include "GameSource/GameState/BrnCgsPlayerName.h"  // CgsNetwork::PlayerName (scoreboard request payloads)        // CgsID (GuiPlayerInfoResponse::mCarId)
+#include "SharedClasses/Traffic/BrnTrafficVehicleType.h"  // BrnTraffic::VehicleClass / VehicleScoreCategory (GuiHitVehicleEvent)
+#include "GameSource/World/EntityModules/RaceCarEntityModule/NearMisses/BrnNearMissManager.h" // BrnWorld::ENearMissType (GuiNearMissEvent)
 
 // ============================================================================
 // b5-decomp/src/GameSource/Gui/BrnGuiDemangledEventTypes.h
@@ -63,14 +65,43 @@ namespace BrnGui
     struct GuiCarUnlockedLiveryEvent : public CgsGui::GuiEvent<413> { u8 maPayload[60]; };  // id 413 size 72 (12B GuiEvent header + opaque payload)
     struct GuiChallengeNotActiveStartEvent : public CgsGui::GuiEvent<583> { u8 maPayload[28]; };  // id 583 size 40 (12B GuiEvent header + opaque payload)
     struct GuiChangeCarEvent { u8 maData[8]; s32 GetEventType() const { return 415; } };  // id 415 size 8 (raw; size not GuiEvent-shaped)
-    struct GuiCompletedStuntEvent : public CgsGui::GuiEvent<390> { u8 maPayload[20]; };  // id 390 size 32 (12B GuiEvent header + opaque payload)
+    // [boost-msg wave 2026-08-26] RECOVERED (was the opaque GuiEvent<390>+u8[20] shell).
+    // DWARF BrnGuiEventTypeDefs.h:4414 (PS3 :4416..:4425) supplies the field NAMES; the X360
+    // wire shape is raw -- no 12-byte GuiEvent base -- pinned by three witnesses:
+    //   AddGuiEvent<GuiCompletedStuntEvent> @0x823D2888 -> AddEvent(q, ev, 390, 32);
+    //   BoostMessageManager::HandleOnCompletedStunt @0x82411CC8 reads muStuntActionComplete
+    //   at +0x00, mfCompletedBarrelRollAngle at +0x04 and miCompletedBarrelRolls at +0x18.
+    // The PS3 DWARF derives this class from GuiEvent<385> AND lists mbSuccessfulLanding
+    // before miCompletedBarrelRolls; the X360 record's size (32) and the handler's own
+    // reads place the count at +0x18 with the bool trailing -- binary wins.
+    struct GuiCompletedStuntEvent
+    {
+        u32     muStuntActionComplete;             // +0x00 (bit0 barrel roll, bit3 clean landing, bit4 successful)
+        f32     mfCompletedBarrelRollAngle;        // +0x04
+        f32     mfCompletedAirSpinAngle;           // +0x08
+        f32     mfCompletedHandbreakTurnAngle;     // +0x0C
+        f32     mfCompletedDriftTime;              // +0x10
+        f32     mfCompletedDriftDistance;          // +0x14
+        s32     miCompletedBarrelRolls;            // +0x18 (handler read @0x82411CE8)
+        bool    mbSuccessfulLanding;               // +0x1C
+        u8      maPad1D[3];                        // +0x1D..+0x1F
+
+        s32 GetEventType() const { return 390; }
+    };
+    static_assert(sizeof(GuiCompletedStuntEvent) == 32, "X360 AddGuiEvent size 32 (id 390)");
+    static_assert(__builtin_offsetof(GuiCompletedStuntEvent, muStuntActionComplete) == 0x00 &&
+                  __builtin_offsetof(GuiCompletedStuntEvent, mfCompletedBarrelRollAngle) == 0x04 &&
+                  __builtin_offsetof(GuiCompletedStuntEvent, miCompletedBarrelRolls) == 0x18,
+                  "X360 handler reads @0x82411CC8");
     struct GuiCrashComboEvent { u8 maData[8]; s32 GetEventType() const { return 347; } };  // id 347 size 8 (raw; size not GuiEvent-shaped)
     struct GuiCrashScoreUpdate : public CgsGui::GuiEvent<434> { u8 maPayload[4]; };  // id 434 size 16 (12B GuiEvent header + opaque payload)
     // GuiDeveloperChallengesCompleted (id 596) has been RECOVERED and now lives in
     // BrnGuiEventTypeDefs.h as a real FastBitArray<15> payload. The opaque u8[8]
     // placeholder that stood here was deleted rather than left to shadow it -- this
     // header includes BrnGuiEventTypeDefs.h, so every includer still sees the type.
-    struct GuiDriftingEvent { u8 maData[4]; s32 GetEventType() const { return 385; } };  // id 385 size 4 (raw; size not GuiEvent-shaped)
+    // [boost-msg wave] RECOVERED: DWARF BrnGuiEventTypeDefs.h:4404 {f32 mfDistance}; raw 4-byte
+    // wire record (BoostMessageManager::RecvEvent case 385 loads the float at +0, @0x8242095C).
+    struct GuiDriftingEvent { f32 mfDistance; s32 GetEventType() const { return 385; } };  // id 385 size 4
     // [gateui r3] GuiDriveThroughEvent (id 366) has been RECOVERED and now lives in
     // BrnGuiEventTypeDefs.h with its real DWARF field set (DWARF :5097 + the nested DriveThroughType enum, sizeof 8).
     // The opaque placeholder that stood here was DELETED rather than left to shadow it.
@@ -225,11 +256,37 @@ namespace BrnGui
     // RECOVERED and now live in BrnGuiEventTypeDefs.h with their real DWARF fields
     // (:6170 / :6199 / :5343 / :6194). Their four handlers read named words off the record.
     struct GuiHUDMessageStuntTimeUp { u8 maData[1]; s32 GetEventType() const { return 431; } };  // id 431 size 1 (raw; size not GuiEvent-shaped)
-    struct GuiHitVehicleEvent : public CgsGui::GuiEvent<394> { u8 maPayload[12]; };  // id 394 size 24 (12B GuiEvent header + opaque payload)
+    // [boost-msg wave] RECOVERED (was the opaque GuiEvent<394>+u8[12] shell). DWARF
+    // BrnGuiEventTypeDefs.h:4563 (:4565..:4570) names the fields; the wire is RAW -- pinned by
+    // AddGuiEvent<GuiHitVehicleEvent> @0x823D9680 -> AddEvent(q, ev, 394, 24) and
+    // BoostMessageManager::RecvEvent case 394 (@0x82420C34: category at +0x08, the score the
+    // +0x0C base + +0x10 chain-bonus sum).
+    struct GuiHitVehicleEvent
+    {
+        BrnTraffic::VehicleClass          meVehicleClass;         // +0x00
+        s32                               miVehicleClassTotalHit; // +0x04
+        BrnTraffic::VehicleScoreCategory  meVehicleScoreCategory; // +0x08
+        s32                               miVehicleBaseScore;     // +0x0C
+        s32                               miVehicleChainBonus;    // +0x10
+        u16                               muVehicleIndex;         // +0x14
+        u16                               maPad16;                // +0x16 trailing pad to 24
+
+        s32 GetEventType() const { return 394; }
+    };
+    static_assert(sizeof(GuiHitVehicleEvent) == 24, "X360 AddGuiEvent size 24 (id 394)");
     struct GuiImageGalleryCollectedCountEvent { u8 maData[8]; s32 GetEventType() const { return 520; } };  // id 520 size 8 (raw; size not GuiEvent-shaped)
     struct GuiImageGalleryCollectedDataEvent : public CgsGui::GuiEvent<522> { u8 maPayload[4]; };  // id 522 size 16 (12B GuiEvent header + opaque payload)
     struct GuiImageGalleryImageInfoEvent : public CgsGui::GuiEvent<518> { u8 maPayload[36]; };  // id 518 size 48 (12B GuiEvent header + opaque payload)
-    struct GuiInAirEvent { u8 maData[8]; s32 GetEventType() const { return 387; } };  // id 387 size 8 (raw; size not GuiEvent-shaped)
+    // [boost-msg wave] RECOVERED: DWARF BrnGuiEventTypeDefs.h:4460 {mfCumulativeAirTime,
+    // mfCurrentJumpAirTime}; the manager's RecvEvent case 387 latches the CURRENT jump time
+    // from +0x04 (@0x82420BB8).
+    struct GuiInAirEvent
+    {
+        f32 mfCumulativeAirTime;   // +0x00
+        f32 mfCurrentJumpAirTime;  // +0x04
+
+        s32 GetEventType() const { return 387; }
+    };  // id 387 size 8
     // [gateui r3] GuiInEventFinisher (id 423) has been RECOVERED and now lives in
     // BrnGuiEventTypeDefs.h with its real DWARF field set (DWARF :5651, sizeof 8).
     // The opaque placeholder that stood here was DELETED rather than left to shadow it.
@@ -238,7 +295,22 @@ namespace BrnGui
     // The opaque placeholder that stood here was DELETED rather than left to shadow it.
     struct GuiInEventNeckAndNeck { u8 maData[1]; s32 GetEventType() const { return 421; } };  // id 421 size 1 (raw; size not GuiEvent-shaped)
     struct GuiInEventRivalProgress : public CgsGui::GuiEvent<422> { u8 maPayload[12]; };  // id 422 size 24 (12B GuiEvent header + opaque payload)
-    struct GuiInProgressStuntEvent : public CgsGui::GuiEvent<391> { u8 maPayload[12]; };  // id 391 size 24 (12B GuiEvent header + opaque payload)
+    // [boost-msg wave] RECOVERED (was the opaque GuiEvent<391>+u8[12] shell). DWARF
+    // BrnGuiEventTypeDefs.h:4433 (:4435..:4441); RAW wire pinned by AddGuiEvent @0x823D2940
+    // -> AddEvent(q, ev, 391, 24) and HandleOnInProgressStunt @0x82411C70 reading the mask at
+    // +0x00, the air-spin angle at +0x08 and the handbrake angle at +0x0C.
+    struct GuiInProgressStuntEvent
+    {
+        u32 muStuntActionInProgress;            // +0x00 (bit1 air spin, bit2 handbrake turn)
+        f32 mfInProgressBarrelRollAngle;        // +0x04
+        f32 mfInProgressAirSpinAngle;           // +0x08 (radians; the handler converts x57.29578)
+        f32 mfInProgressHandbreakTurnAngle;     // +0x0C (degrees)
+        f32 mfInProgressDriftTime;              // +0x10
+        f32 mfInProgressDriftDistance;          // +0x14
+
+        s32 GetEventType() const { return 391; }
+    };
+    static_assert(sizeof(GuiInProgressStuntEvent) == 24, "X360 AddGuiEvent size 24 (id 391)");
     struct GuiLastBlueTeamMemberEvent { u8 maData[1]; s32 GetEventType() const { return 452; } };  // id 452 size 1 (raw; size not GuiEvent-shaped)
     // [gateui] GuiLeaderPassedKMBoundaryEvent (449) and GuiLeaderPassedMileBoundaryEvent
     // (448) have been RECOVERED and now live in BrnGuiEventTypeDefs.h as
@@ -246,16 +318,38 @@ namespace BrnGui
     struct GuiLeaptVehicleEvent { u8 maData[1]; s32 GetEventType() const { return 393; } };  // id 393 size 1 (raw; size not GuiEvent-shaped)
     struct GuiLocalPlayerEliminatedEvent { u8 maData[1]; s32 GetEventType() const { return 451; } };  // id 451 size 1 (raw; size not GuiEvent-shaped)
     struct GuiMugshotControlEvent : public CgsGui::GuiEvent<325> { u8 maPayload[12]; };  // id 325 size 24 (12B GuiEvent header + opaque payload)
-    struct GuiNearMissEvent { u8 maData[8]; s32 GetEventType() const { return 384; } };  // id 384 size 8 (raw; size not GuiEvent-shaped)
+    // [boost-msg wave] RECOVERED: DWARF BrnGuiEventTypeDefs.h:4392 {miCount,
+    // meNearMissType}. The manager's RecvEvent case 384 reads both words and treats
+    // NEAR_MISS_TYPE 2/3 (the two crash-escape flavours) as "crash escape" (@0x82420BF0).
+    struct GuiNearMissEvent
+    {
+        s32                    miCount;         // +0x00 running near-miss chain count
+        BrnWorld::ENearMissType meNearMissType;  // +0x04 (2/3 = crash-escape variants)
+
+        s32 GetEventType() const { return 384; }
+    };  // id 384 size 8
     struct GuiNetworkLastStunRunEvent { u8 maData[1]; s32 GetEventType() const { return 490; } };  // id 490 size 1 (raw; size not GuiEvent-shaped)
     struct GuiNetworkStuntRunEliminationEvent : public CgsGui::GuiEvent<487> {};  // id 487 size 12
     struct GuiNetworkStuntRunLeadingEvent : public CgsGui::GuiEvent<488> {};  // id 488 size 12
     struct GuiNetworkStuntRunVictoryEvent : public CgsGui::GuiEvent<489> {};  // id 489 size 12
     struct GuiNetworkSuntRunInfoMessageEvent : public CgsGui::GuiEvent<491> {};  // id 491 size 12
-    struct GuiOncomingEvent { u8 maData[4]; s32 GetEventType() const { return 388; } };  // id 388 size 4 (raw; size not GuiEvent-shaped)
+    // [boost-msg wave] RECOVERED: DWARF BrnGuiEventTypeDefs.h:4472 {f32 mfDistance};
+    // RecvEvent case 388 latches it with a single float load (@0x82420B38).
+    struct GuiOncomingEvent { f32 mfDistance; s32 GetEventType() const { return 388; } };  // id 388 size 4
     struct GuiOnlineCarStatusEvent { u8 maData[8]; s32 GetEventType() const { return 563; } };  // id 563 size 8 (raw; size not GuiEvent-shaped)
     struct GuiOverlayWaitFinishRequest { u8 maData[8]; s32 GetEventType() const { return 188; } };  // id 188 size 8 (raw; size not GuiEvent-shaped)
     struct GuiOvertakeEvent { u8 maData[8]; s32 GetEventType() const { return 371; } };  // id 371 size 8 (raw; size not GuiEvent-shaped)
+    // [boost-msg wave] NEW HOME (no committed record existed). DWARF
+    // BrnGuiEventTypeDefs.h:4369 {CgsID mShortcutId}; PS3 GuiEvent<377>, X360 id 382.
+    // BoostMessageManager::RecvEvent case 382 latches the qword at +0x00 into mShortcutId
+    // (@0x82420928 `ld/std`). No AddGuiEvent<T> instantiation was located for this id, so
+    // the size is pinned by the consumer load (offsetof 0x00, 8-byte width), not a literal.
+    struct GuiOffenceShortcutEvent
+    {
+        CgsID mShortcutId;   // +0x00
+
+        s32 GetEventType() const { return 382; }
+    };  // id 382 size 8 (consumer-pinned)
     struct GuiPFXHookEvent : public CgsGui::GuiEvent<495> { u8 maPayload[52]; };  // id 495 size 64 (12B GuiEvent header + opaque payload)
     struct GuiPFXHookStopEvent : public CgsGui::GuiEvent<496> { u8 maPayload[28]; };  // id 496 size 40 (12B GuiEvent header + opaque payload)
     struct GuiPFXStartBackgroundHookEvent : public CgsGui::GuiEvent<498> { u8 maPayload[32]; };  // id 498 size 44 (12B GuiEvent header + opaque payload)
@@ -298,12 +392,31 @@ namespace BrnGui
     struct GuiShowtimeJustBounced { u8 maData[2]; s32 GetEventType() const { return 402; } };  // id 402 size 2 (raw; size not GuiEvent-shaped)
     struct GuiShowtimeScoreUpdate : public CgsGui::GuiEvent<396> {};  // id 396 size 12
     struct GuiShowtimeTriggered { u8 maData[1]; s32 GetEventType() const { return 392; } };  // id 392 size 1 (raw; size not GuiEvent-shaped)
+    // [boost-msg wave] NEW HOME (no committed record existed). DWARF
+    // BrnGuiEventTypeDefs.h:3694 {s32 miChainCount}; PS3 GuiEvent<362>, X360 id 367.
+    // BoostMessageManager::RecvEvent case 367 latches word0 into miStuntChain and raises
+    // mbStuntDone (@0x824208BC). No AddGuiEvent<T> instantiation located -- size pinned by
+    // the consumer read, not a literal.
+    struct GuiStuntEvent
+    {
+        s32 miChainCount;   // +0x00
+
+        s32 GetEventType() const { return 367; }
+    };  // id 367 size 4 (consumer-pinned)
     struct GuiShutdownEvent { u8 maData[8]; s32 GetEventType() const { return 373; } };  // id 373 size 8 (raw; size not GuiEvent-shaped)
     struct GuiShutdownFinishedEvent { u8 maData[1]; s32 GetEventType() const { return 374; } };  // id 374 size 1 (raw; size not GuiEvent-shaped)
-    struct GuiSoftTakedownEvent : public CgsGui::GuiEvent<364> { u8 maPayload[20]; };  // id 364 size 32 (12B GuiEvent header + opaque payload)
-    struct GuiSpinningEvent { u8 maData[4]; s32 GetEventType() const { return 386; } };  // id 386 size 4 (raw; size not GuiEvent-shaped)
-    struct GuiTailgatingEvent { u8 maData[4]; s32 GetEventType() const { return 389; } };  // id 389 size 4 (raw; size not GuiEvent-shaped)
-    struct GuiTrafficCheckEvent { u8 maData[4]; s32 GetEventType() const { return 383; } };  // id 383 size 4 (raw; size not GuiEvent-shaped)
+    // [boost-msg wave 2026-08-26] RETIRED -- GuiSoftTakedownEvent now lives as a real raw
+    // 32-byte record in BrnGuiEventTypeDefs.h next to its GuiTakedownEvent sibling (this
+    // header includes that one). This retires GameBridgeGameStateToX.cpp's parked soft arm too.
+    // [boost-msg wave] RECOVERED: DWARF BrnGuiEventTypeDefs.h:4449 {f32 mfSpinAngle};
+    // RecvEvent case 386 asserts it >= 0 and latches it (@0x824209C0).
+    struct GuiSpinningEvent { f32 mfSpinAngle; s32 GetEventType() const { return 386; } };  // id 386 size 4
+    // [boost-msg wave] RECOVERED: DWARF BrnGuiEventTypeDefs.h:4483 {f32 mfDistance};
+    // RecvEvent case 389 latches it (@0x82420BC8).
+    struct GuiTailgatingEvent { f32 mfDistance; s32 GetEventType() const { return 389; } };  // id 389 size 4
+    // [boost-msg wave] RECOVERED: DWARF BrnGuiEventTypeDefs.h:4381 {s32 miCount};
+    // RecvEvent case 383 latches the count and raises mbChecking (@0x82420BD8).
+    struct GuiTrafficCheckEvent { s32 miCount; s32 GetEventType() const { return 383; } };  // id 383 size 4
 
     // ============================================================================
     // OUTPUT-FAMILY GUI-event PAYLOAD homes (ADDITIVE GROW -- output GUI event wave).

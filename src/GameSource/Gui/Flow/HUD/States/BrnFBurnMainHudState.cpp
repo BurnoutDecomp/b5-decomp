@@ -390,9 +390,10 @@ namespace BrnGui
 
         mbDistrictRefreshArmed = true;   // X360 +0x8AC := 1
 
-        // FLAG deferred (Slice B): BoostMessageManager::Construct/Prepare
-        // ("BoostManager") -- TU not reconstructed.
-        LogDeferredComponent("BoostMessageManager");
+        // X360 OnEnter @0x8247B3A8..C8: Construct("BoostManager", mpStateInterface, 0)
+        // then Prepare("BoostManager", lFile) on the +0x8B0 member.
+        mBoostMessages.Construct("BoostManager", mpStateInterface, 0);
+        mBoostMessages.Prepare("BoostManager", lFile);
 
         // The "EventHud_Animator" pair + the road-rule/friends components are real.
         mEventHudAnimatorIcon.Construct("EventHud_Animator", mpStateInterface, 0);
@@ -1087,7 +1088,9 @@ namespace BrnGui
                 CGS_ASSERT(mpGuiCache != 0, "mpCache != NULL");   // cpp:595
                 if (mbBoostMessagesEnabled)
                 {
-                    // FLAG deferred (Slice B): BoostMessageManager::RecvEvent(id).
+                    // X360 UpdateRunning @0x8247C03C: RecvEvent(+0x8B0, lpEvent, id,
+                    // mpGuiCache) for every id in this family.
+                    mBoostMessages.RecvEvent(lpEvent, liEventId, mpGuiCache);
                 }
                 break;
             case 379:   // engine state changed
@@ -1157,7 +1160,12 @@ namespace BrnGui
         }
         if (mbBoostMessagesEnabled)
         {
-            // FLAG deferred (Slice B): BoostMessageManager::Update(cache time).
+            // X360 UpdateRunning @0x8247C4AC: Update(+0x8B0, cache->mfTimeStep,
+            // mode == CRASH(2) || SHOWTIME(16)). In the showtime modes the manager runs
+            // ONLY its showtime ticker.
+            const s32 liGameMode = mpGuiCache->GetGameMode();
+            mBoostMessages.Update(mpGuiCache->GetTimeStep(),
+                                  (liGameMode == 2 || liGameMode == 16));
         }
         if (mbInGameMessagesEnabled)
         {
@@ -1362,7 +1370,12 @@ namespace BrnGui
         if (mbBoostMessagesEnabled)
         {
             CGS_ASSERT(mpGuiCache != 0, "mpCache != NULL");   // cpp:1807
-            // FLAG deferred (Slice B): BoostMessageManager RecvEvent(21).
+            // X360 ProcessAptEvents @0x8247525C: RecvEvent(+0x8B0, lpEvent, 21,
+            // mpGuiCache). Id 21 is the apt-trigger record the manager's switch
+            // deliberately ignores (its jump table starts at 206) -- the call is made
+            // and falls through to default, exactly as shipped.
+            mBoostMessages.RecvEvent(reinterpret_cast<const CgsModule::Event*>(lpEvent),
+                                     21, mpGuiCache);
         }
     }
 
@@ -1375,7 +1388,10 @@ namespace BrnGui
         if (mbBoostMessagesEnabled)
         {
             CGS_ASSERT(mpGuiCache != 0, "mpCache != NULL");   // cpp:1639
-            // FLAG deferred (Slice B): BoostMessageManager RecvEvent(206).
+            // X360 ProcessBoostInfo @0x8247502C: RecvEvent(+0x8B0, lpEvent, 206,
+            // mpGuiCache) -- the boost-type latch that tints every posted message.
+            mBoostMessages.RecvEvent(static_cast<const CgsModule::Event*>(lpEvent),
+                                     206, mpGuiCache);
         }
     }
 

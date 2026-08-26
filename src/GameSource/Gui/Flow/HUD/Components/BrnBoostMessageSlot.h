@@ -57,6 +57,19 @@ namespace BrnGui
         // frames (slot 9/18/26/33 with the <=34 tripwire; item 12/44/65).
         void Update(f32 lfTimeStep);
 
+        // GROWN for BrnBoostMessageManager [boost-msg wave 2026-08-26]: the manager reads
+        // and pokes these slot fields directly on the console -- AddMessage @0x8242E7B8
+        // gates on mbInUse/mbInTransition/miSlotPosition, Update @0x8243E198 ticks +
+        // compacts through them, and its shortcut arm raises mfTimeToLive to a floor
+        // (@0x8243E650 `stfs f0, 0x40(r3)`). Same additive-grow idiom as the
+        // BoostMessageItem growth below.
+        bool IsInUse() const                     { return mbInUse; }
+        bool IsInTransition() const              { return mbInTransition; }
+        s32  GetSlotPosition() const             { return miSlotPosition; }
+        f32  GetTimeToLive() const               { return mfTimeToLive; }
+        void RaiseTimeToLiveFloor(f32 lfMinTtl)  { if (mfTimeToLive < lfMinTtl) mfTimeToLive = lfMinTtl; }
+        s32  GetMessageId() const                { return miMessageId; }
+
     private:
         BoostMessageItem mMessageItem;   // X360 +0x0C ("<name>_MessageItem")
         bool mbInUse;                    // X360 +0x34
