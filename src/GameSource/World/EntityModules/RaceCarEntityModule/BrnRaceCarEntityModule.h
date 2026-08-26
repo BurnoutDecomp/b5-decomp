@@ -181,6 +181,27 @@ public:
                 RaceCarEntityModuleIO::InputBuffer_PostPhysics* lpInput );
 
         // ====================================================================
+        // THE RESET-ON-TRACK RING'S TWO DRIVERS (aicar_reset wave 2026-08-26).
+        // Bodies in BrnRaceCarEntityModule_ResetOnTrack.cpp. Between them they make
+        // ActiveRaceCar::mPrevTransforms -- the ring ActiveRaceCar::GetResetCoords reads --
+        // hold real data on this build for the first time.
+        // ====================================================================
+
+        // X360 0x822D2280 (159). Per active car, per physics readback: take the collision tag
+        // the above-ground ray hit under the car, hand its AI-SECTION half to
+        // ActiveRaceCar::SetAISection, and (player only) run the wrong-way / traffic-direction
+        // state machine. Called from ReadUpdatedActiveRaceCarDataFromPhysics, just BEFORE
+        // ActiveRaceCar::UpdateDeformationState. See the .cpp for what is parked.
+        void UpdateRaceCarCollisionTagging(
+                s32 liActiveRaceCarIndex,
+                const BrnPhysics::Vehicle::RaceCarState* lpRaceCarState );
+
+        // X360 0x822CF1A0 (a bare 0..7 loop). Run ActiveRaceCar::UpdateResetTransform on every
+        // slot. Its only caller is PostPhysicsUpdate @0x82307538 (the `bl` at 0x82307688,
+        // inside the sim-paused skip, between the physics readback and UpdateCurrentWorldRegion).
+        void UpdateActiveRaceCarTransforms();
+
+        // ====================================================================
         // THE THREE SCENE LEGS OF PostPhysicsUpdate (wave Q5, cluster G1 -- the car's
         // half of the scene volume-collision middle). All three are console functions
         // called only from PostPhysicsUpdate @0x82307538, at these exact `bl` sites:

@@ -106,6 +106,33 @@ namespace AIModuleIO
         void SetPlayerVehicleControls(const void* lpControls);
         // X360 0x827AC960 (W) -- Clear()+Append the reset-on-track request queue at this+0xFBB0.
         void AppendAIModuleRequestInterface(const void* lpRequestInterface);
+
+        // ⛔⛔ X360 0x8278AB80 -- THE BUFFER'S OWN Construct, LANDED 2026-08-26 (aicar_reset
+        // wave), AND IT CLOSES A LATENT ACCESS VIOLATION OF EXACTLY THE CLASS ITS SIBLING
+        // BrnAIModuleIO_OutputBuffer.h's banner describes.
+        //
+        // CgsIOBufferStack::CreateIOBuffer<T> calls T::Construct(). This type declared none, so it
+        // inherited CgsModule::IOBuffer::Construct -- which writes ONE status byte and leaves every
+        // embedded queue UNCONSTRUCTED. The reset-on-track request queue at +0xFBB0 is a
+        // CgsModule::EventQueue<ResetOnTrackRequest,128>, whose base `mpEvents` is set ONLY by
+        // EventQueue::Construct. AppendAIModuleRequestInterface above does `Clear(); Append(src);`
+        // and Append memcpy's through mpEvents -- i.e. through whatever bytes happened to be in
+        // the allocation. That is a write through an uninitialised pointer the first time anything
+        // posts a reset-on-track request.
+        //
+        // ⭐ NOTHING HAD FIRED ONLY BECAUSE NOTHING HAD EVER POSTED ONE. [[un-gating a producer
+        // CREATES the fault]] -- the very next wave to land RaceCarEntityModule::
+        // SendResetOnTrackRequests would have been the first, and it would have looked like that
+        // wave's bug.
+        //
+        // ⚠️ PARTIAL, AND EVERY OMISSION IS NAMED IN THE .cpp: the console's Construct also builds
+        // eight OTHER queues/interfaces in this buffer (the traffic rival ring, three
+        // VariableEventQueues, the timer + race-distance interfaces, the takedown ring, the race
+        // route request ring) and zeroes ~30 scalars. Those members live inside this type's
+        // attested-offset IMAGE BLOB with no named homes, so constructing them would mean poking
+        // raw offsets into an opaque payload. The two the reset-on-track path touches are
+        // constructed by NAME through the same accessor spine the rest of the class uses.
+        void Construct();
         // X360 0x827A9560 (W) -- Append the race-route request queue at this+0x137D0.
         void AppendRaceRouteRequestQueue(const void* lpQueue);
         // X360 0x827A9618 (W) -- Clear()+Append the takedown event queue at this+0x1B898.

@@ -608,6 +608,24 @@ namespace Vehicle
         //   ~4,750 instructions, and ProcessResetOnTrackResultQueue. So a heavy crash still
         //   pins. Full ladder in BrnRaceCarEntityModule_CrashExit.cpp's banner.
         //
+        // ⭐ BOUNDARY MOVED AGAIN 2026-08-26 (aicar_reset wave). Of the five things the note
+        //   above lists as missing, TWO ARE NOW LANDED: the 35-entry AI-car array (AIModule::
+        //   maAICars, seeded to E_AI_CAR_STATE_INACTIVE and passed to the manager's Construct)
+        //   and ResetOnTrackManager::{Update, ProcessResetOnTrackRequest, ComputeResetOnTrack,
+        //   ComputeInitialCoordinatesStandard}. The manager can now resolve a request; nothing
+        //   calls it. ⛔ AND TWO BLOCKERS UNDER THE PLUMBING WERE MEASURED, not inferred:
+        //     * VehicleManager::GenerateAboveGroundLineTests @0x82633990 is ABSENT, so
+        //       RaceCarState::mAboveGroundTestResult.mbValid is false every frame and no car
+        //       ever enters the AI section system ([collision-tag] aboveGroundValid=0).
+        //     * RaceCarEntityModule::WriteUpdatedAIData @0x822D1FC8 is ABSENT, so
+        //       AIModuleIO::RaceCarAIInterface::mbPlayerDataSet is never set -- and
+        //       AIModule::Update @0x8279B478 skips its ENTIRE body on that flag.
+        //   ⭐⭐ AND ONE THING THIS BANNER FAMILY HAS BEEN GETTING WRONG SINCE 2026-08-25 IS
+        //   RETRACTED: ActiveRaceCar::GetResetCoords does NOT need the mPrevTransforms ring to
+        //   be full. Its empty-ring arm (asm 0x822BF37C) hands out the car's LIVE transform, and
+        //   a booted run confirms it tracks the player. So the recovery does not wait on the AI
+        //   road network -- it waits on the pump. See BrnRaceCar.cpp::RequestResetOnTrack.
+        //
         // ⭐ THIS IS NOT ONE OF THE NINE STALE GATES THAT WERE CORRECTLY DELETED on 2026-08-25.
         //   Those claimed a function was unmounted or had no body anywhere in the tree, and every
         //   one of those claims was FALSE. This flag claims nothing about the code below it: that
@@ -660,12 +678,21 @@ namespace Vehicle
                             << " Crash entry is reconstructed and correct; crash RECOVERY needs"
                             << " the BrnAI::ResetOnTrackManager REQUEST/RESULT PUMP. The module"
                             << " lifecycle under it is real as of 2026-08-26 (AI.dat loads,"
-                            << " WorldMapData resolves, the manager is Constructed -- see the"
-                            << " [ai] lines above), but nothing pumps requests through it yet"
-                            << " (SendResetOnTrackRequests, the AI-car array, AIModule::Update,"
-                            << " ResetOnTrackManager::Update, ProcessResetOnTrackResultQueue),"
-                            << " so a heavy crash would still pin the car. Set"
-                            << " BRN_ENABLE_CRASH_ENTRY=1 to exercise the full chain.\n";
+                            << " WorldMapData resolves, the manager is Constructed with its"
+                            << " 35-entry AI-car array -- see the [ai] lines above), and"
+                            << " ResetOnTrackManager::{Update, ProcessResetOnTrackRequest,"
+                            << " ComputeResetOnTrack} are bodied. What is still missing is the"
+                            << " PLUMBING that would call them: RCEM::SendResetOnTrackRequests,"
+                            << " the two AI bridges, AIModule::Update, and"
+                            << " ProcessResetOnTrackResultQueue. Two MEASURED blockers sit under"
+                            << " those (2026-08-26): VehicleManager::GenerateAboveGroundLine"
+                            << "Tests is absent, so no car ever enters the AI section system"
+                            << " ([collision-tag] aboveGroundValid=0); and"
+                            << " RCEM::WriteUpdatedAIData is absent, so"
+                            << " RaceCarAIInterface::mbPlayerDataSet is never set and"
+                            << " AIModule::Update would skip its whole body. So a heavy crash"
+                            << " would still pin the car. Set BRN_ENABLE_CRASH_ENTRY=1 to"
+                            << " exercise the full chain.\n";
                     }
                     ++sliSuppressed;
                     *CgsDev::Log::gpDebugPrint

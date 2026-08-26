@@ -281,14 +281,33 @@ void RaceCar::RemoveFromWorld()
 //   ⛔ mbToBeResetOnTrack IS STILL READ BY NOBODY, and a heavy crash still pins: what remains
 //   is the REQUEST/RESULT PUMP above the lifecycle --
 //     SendResetOnTrackRequests @0x822CE178 (57)         [absent]
-//     the 35-entry AI-car array AIModule::Construct parks [absent -- and it gates all of the
-//         below: ResetOnTrackManager::Update dereferences GetAICar's result at +2714 on its
-//         FIRST request, so a null array faults the moment the pump delivers anything]
+//     the 35-entry AI-car array AIModule::Construct parks [⭐ LANDED 2026-08-26, aicar_reset]
 //     AIModule::Update / UpdateResetOnTrackManager       [still boot gates]
-//     ResetOnTrackManager::Update + 32 siblings          [~4,750 insns, one bodied]
+//     ResetOnTrackManager::Update + 32 siblings          [⭐ Update / ProcessResetOnTrackRequest
+//         / ComputeResetOnTrack / ComputeInitialCoordinatesStandard LANDED 2026-08-26; the
+//         remaining 28 are the geometry, parked at their own sites]
 //     ProcessResetOnTrackResultQueue @0x822F4580 (192)   [absent]
 //   Everything the paragraph below says about the SHAPE of the chain still holds; only its
 //   claim about WHERE the break is has moved one rung up.
+//
+// ⭐⭐⭐ UPDATE 2026-08-26 (aicar_reset wave) -- AND ONE OF THE THINGS THIS FILE HAS BEEN
+//   REPEATING SINCE 2026-08-25 IS WRONG. See the SHORTCUT paragraph further down: it says
+//   GetResetCoords "would place the car at the origin". IT WOULD NOT. The asm has a second arm
+//   (0x822BF37C) for an EMPTY ring that hands out mPhysicsState.mTransform's {wAxis, zAxis} --
+//   the car's LIVE pose. MEASURED on a booted drive run: the ring is empty (depth 0) and
+//   GetResetCoords returns the player's own moving position, tracking it down the road.
+//   ⇒ the reset-on-track chain does NOT need the AI road network to produce a USABLE pose; it
+//   needs the pump to run so the FAILURE result reaches ProcessResetOnTrackResultQueue's
+//   GetResetCoords arm.
+//   ⛔ THE PUMP'S REMAINING BLOCKERS, MEASURED THIS WAVE (not inferred):
+//     * VehicleManager::GenerateAboveGroundLineTests @0x82633990 is ABSENT, so
+//       RaceCarState::mAboveGroundTestResult.mbValid is FALSE every frame
+//       ([collision-tag] aboveGroundValid=0 on every sample) -- which is why the newly landed
+//       UpdateRaceCarCollisionTagging never sets an AI section and the reset ring stays empty.
+//     * RaceCarEntityModule::WriteUpdatedAIData @0x822D1FC8 is ABSENT, so
+//       AIModuleIO::RaceCarAIInterface::mbPlayerDataSet is never set -- and AIModule::Update
+//       @0x8279B478 skips its ENTIRE body on `if (GetRaceCarAIInterface()->mbPlayerDataSet)`.
+//       Landing AIModule::Update without it would be a body that provably never runs.
 //
 // ⭐⭐ AND THE MANAGER IS NOT THE BLOCKER -- THE AI MODULE IS, BECAUSE IT DOES NOT RUN AT ALL.
 //   [SUPERSEDED 2026-08-26 -- see the block immediately above.]
@@ -317,6 +336,16 @@ void RaceCar::RemoveFromWorld()
 // ⛔ THE SHORTCUT IS STILL REFUTED, RE-VERIFIED: ActiveRaceCar::GetResetCoords @0x822BF2D0
 //   reads mPrevTransforms, which this tree Constructs, Clear()s and NEVER WRITES
 //   (BrnPlaceOnTrackManager.cpp:325 flags it). Do not invent a reset position.
+//   ⚠️⚠️ RETRACTED 2026-08-26 (aicar_reset wave) -- HALF OF THIS IS FALSE AND IT COST FOUR WAVES.
+//   The first clause was true until this wave (mPrevTransforms is now WRITTEN, by
+//   ActiveRaceCar::UpdateResetTransform at RCEM::UpdateActiveRaceCarTransforms' console slot).
+//   The implied second clause -- that an unwritten ring makes GetResetCoords useless -- was
+//   NEVER true: the function has an explicit empty-ring arm at 0x822BF37C that returns
+//   mPhysicsState.mTransform's {wAxis, zAxis}. Using it is NOT inventing a reset position; it is
+//   calling the console's own function and getting the console's own answer.
+//   ⭐ THE LESSON, AND IT IS THE CAMPAIGN'S OWN: "X reads Y and Y is never written" is a claim
+//   about ONE BRANCH of X. Read the other branch before writing it down as a refutation --
+//   [[check your witness observes the right branch]].
 //
 // DELETE-WHEN the AI module runs its own lifecycle, AI.dat/WorldMapData loads, and a heavy
 // crash recovers. Until then crash ENTRY is disabled on the public path -- see the bring-up

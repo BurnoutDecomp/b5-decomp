@@ -49,6 +49,25 @@
 //       gates in WorldLinkStubs.cpp
 //   (4) ResetOnTrackManager::Update and its 32 siblings (~4,750 insns, one bodied)
 //   (5) ProcessResetOnTrackResultQueue @0x822F4580 (192)
+//
+// ⭐⭐ BOUNDARY MOVED AGAIN 2026-08-26 (aicar_reset wave). (2) and the reachable half of (4) ARE
+// LANDED: AIModule::maAICars[35] is a real member seeded to E_AI_CAR_STATE_INACTIVE and passed to
+// the manager's Construct, and ResetOnTrackManager::{Update, ProcessResetOnTrackRequest,
+// ComputeResetOnTrack, ComputeInitialCoordinatesStandard} are bodied. The manager can resolve a
+// request; nothing calls it. (1), (3) and (5) -- the PLUMBING -- remain.
+// ⛔ TWO BLOCKERS UNDER THE PLUMBING, MEASURED on a booted drive rather than inferred:
+//   * VehicleManager::GenerateAboveGroundLineTests @0x82633990 is ABSENT, so
+//     RaceCarState::mAboveGroundTestResult.mbValid is false every frame and no car ever enters
+//     the AI section system ([collision-tag] aboveGroundValid=0 on every sample).
+//   * RaceCarEntityModule::WriteUpdatedAIData @0x822D1FC8 is ABSENT, so
+//     AIModuleIO::RaceCarAIInterface::mbPlayerDataSet is never set -- and AIModule::Update
+//     @0x8279B478 wraps its WHOLE body in `if (GetRaceCarAIInterface()->mbPlayerDataSet)`.
+//     Landing (3) before that would be a body that provably never executes.
+// ⭐⭐ AND THE RECOVERY DOES NOT WAIT ON THE AI ROAD NETWORK. ActiveRaceCar::GetResetCoords
+// (landed 2026-08-26) has an EMPTY-RING arm at 0x822BF37C that returns the car's LIVE transform,
+// measured tracking the player on a drive run -- so once the pump runs, the manager's FAILURE
+// result already yields a usable pose. Every banner in this tree that said that path "would place
+// the car at the origin" was wrong; see BrnRaceCar.cpp::RequestResetOnTrack.
 // =================================================================================================
 
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnRaceCarEntityModule.h"
@@ -247,11 +266,17 @@ void RaceCarEntityModule::PostSceneUpdate(
                    " NO LONGER THE BLOCKER -- AIModule::Construct/Prepare/LoadMapData are real,"
                    " AI.dat loads, WorldMapData resolves (version 12, 7639 sections) and"
                    " BrnAI::ResetOnTrackManager IS Constructed with a bound road network."
-                   " What is still missing is the REQUEST/RESULT PUMP above it, in this order:"
-                   " (1) this SendResetOnTrackRequests, (2) the AI-car array AIModule::Construct"
-                   " still parks, (3) AIModule::Update + UpdateResetOnTrackManager (still boot"
-                   " gates), (4) ResetOnTrackManager::Update and its 32 siblings, (5)"
-                   " ProcessResetOnTrackResultQueue. So a heavy crash STILL pins the car and"
+                   " What is still missing is the REQUEST/RESULT PUMP above it. UPDATED"
+                   " 2026-08-26 (aicar_reset): the 35-entry AI-car array and"
+                   " ResetOnTrackManager::{Update, ProcessResetOnTrackRequest,"
+                   " ComputeResetOnTrack} are now BODIED -- the manager can resolve a request."
+                   " What remains is the PLUMBING that would call it: (1) this"
+                   " SendResetOnTrackRequests, (2) the two AI bridges, (3) AIModule::Update,"
+                   " (4) ProcessResetOnTrackResultQueue -- plus two MEASURED blockers under"
+                   " them: VehicleManager::GenerateAboveGroundLineTests is absent (no car ever"
+                   " enters the AI section system) and RCEM::WriteUpdatedAIData is absent"
+                   " (RaceCarAIInterface::mbPlayerDataSet never set, so AIModule::Update would"
+                   " skip its whole body). So a heavy crash STILL pins the car and"
                    " crash ENTRY stays off the public path (BRN_ENABLE_CRASH_ENTRY)."
                    " See BrnRaceCar.cpp::RequestResetOnTrack [FLAG]\n";
         }

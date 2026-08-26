@@ -322,14 +322,26 @@ void PlaceOnTrackManager::PlaceCarOnTrack(
         // then ActiveRaceCar::GetResetCoords(car, &lResetPosition, &lResetDirection) and
         // lResetNormal = the world Y axis (unk_82181510).
         //
-        // ⚠️ [FLAG PC bring-up] GetResetCoords is NOT reconstructed, and substituting it
-        // blindly here would be actively WRONG on this build: it reads the car's
-        // mPrevTransforms ring buffer, which ActiveRaceCar::Attach has just Clear()ed for a
-        // freshly spawned car -- it would place the car at the origin. The requested
-        // position is used instead, which is what the Feb-2007 tree's own no-intersection
-        // arm does and is exactly the pose the request carried.
-        // DELETE-WHEN GetResetCoords lands AND the scene fine-query round trip produces
-        // real results (at which point this arm stops being the one that runs).
+        // ⚠️⚠️ CORRECTED 2026-08-26 (aicar_reset wave) -- THE HALF OF THIS NOTE THAT SAID
+        // "it would place the car at the origin" WAS WRONG, AND IT IS THE HALF FOUR OTHER
+        // BANNERS IN THIS TREE COPIED. GetResetCoords IS reconstructed now
+        // (BrnActiveRaceCar.cpp), and the asm settles what an empty ring does:
+        //     0x822BF318  lwz r11, 0x5A0(r31)          <- mPrevTransforms.miLength
+        //     0x822BF320  bgt cr6, loc_822BF33C        <- length > 0 : read the ring
+        //     0x822BF37C  li r11, 0x300 ; li r10, 0x2F0
+        //     0x822BF384  lvx128 v0, r31, r11          <- length == 0 : mPhysicsState.mTransform
+        // An empty ring falls back to the car's LIVE transform ({wAxis, zAxis}), NOT the origin.
+        //
+        // ⚠️ [FLAG PC bring-up] IT STAYS PARKED HERE ANYWAY, for the reason that survives: this
+        // arm runs for a car ActiveRaceCar::Attach has just spawned, whose mPhysicsState is
+        // itself unseeded at that moment -- so the fallback would hand out THAT, not a pose. The
+        // requested position is used instead, which is what the Feb-2007 tree's own
+        // no-intersection arm does and is exactly the pose the request carried.
+        // ⭐ The ring itself is now WRITTEN per frame (ActiveRaceCar::UpdateResetTransform, landed
+        // 2026-08-26), but it only fills while the car is inside the AI section system, which
+        // needs the above-ground line-test round trip -- see that function's banner.
+        // DELETE-WHEN the ring fills on a booted drive AND the scene fine-query round trip
+        // produces real results (at which point this arm stops being the one that runs).
         lResetPosition = lpActiveRaceCar->GetPlaceOnTrackPosition();
         lResetNormal   = Vector3{ 0.0f, 1.0f, 0.0f, 0.0f };
     }
