@@ -42,7 +42,7 @@ namespace BrnGui
         // transition is running on either clip, play the item's "MessageRefresh".
         void Refresh(f32 lfTimeToLive, bool lbPlayRefreshAnim);
 
-        // @0x82411F40 (this TU, cpp:283/:285) / @0x824120E8 (cpp:313/:315) -- step
+        // @0x82411F40 (this TU, cpp:283/:284/:285) / @0x824120E8 (cpp:313/:314/:315) -- step
         // the slot one stack position up/down (the "%d-%d" transition frame on the
         // slot clip; asserts folded static, non-gating).
         void ShuffleUp();
@@ -54,7 +54,9 @@ namespace BrnGui
         // @0x82420E60 (this TU, cpp:266) -- the per-frame tick: run the ttl down
         // (transitioning the item out at zero, expiring the slot once both clips
         // settle), and consume the two clips' transition latches on their settle
-        // frames (slot 9/18/26/33 with the <=34 tripwire; item 12/44/65).
+        // frames, ONE-based as GetCurrentFrameOneBased returns them (slot 10/19/27/34
+        // with the <=34 tripwire; item 13/45/66 -- the asm does lhz +0x28 then addi 1
+        // before every compare, so do NOT "correct" the .cpp to the zero-based values).
         void Update(f32 lfTimeStep);
 
         // GROWN for BrnBoostMessageManager [boost-msg wave 2026-08-26]: the manager reads
