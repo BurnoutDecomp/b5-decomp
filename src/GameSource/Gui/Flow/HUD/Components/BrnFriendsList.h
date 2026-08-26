@@ -33,8 +33,10 @@
 #include "GameSource/Gui/Flapt/BrnFlaptTextFieldRef.h"   // [friends wave] branch labels/title
 #include "GameSource/Gui/Flapt/BrnFlaptMovieClipRef.h"  // [friends wave] arrow clips
 #include "GameSource/Gui/Flapt/BrnFlaptFileRef.h"      // Prepare(const FileRef&)
-#include "GameSource/GameState/BrnCgsPlayerName.h"     // [friends wave] mHighlightedName
+#include "GameSource/GameState/BrnCgsPlayerName.h"
+#include "GameSource/Gui/Flow/Shared/FlaptComponents/BrnGuiFlaptComponent.h" // [friends wave] real base (DWARF h:49)     // [friends wave] mHighlightedName
 #include "GameSource/Gui/BrnGuiCache.h"   // BrnGui::GuiCache (the cache pointer + far field)
+#include "GameSource/Gui/Flow/HUD/Components/BrnFriendsListEntry.h" // [friends wave] maEntries[5]
 
 namespace BrnGui
 {
@@ -49,7 +51,9 @@ namespace BrnGui
         E_SHORTCUTOPTION_COUNT  = 21,
     };
 
-    class FriendsListComponent
+    // [friends wave] base corrected: the X360 Construct stores the interface at +0x00
+    // and invalidates the clip pair at +0x04/+0x08 -- the BrnFlaptComponent shape.
+    class FriendsListComponent : public BrnFlaptComponent
     {
     public:
         // DWARF BrnFriendsList.h:13 -- friends-list branch/transition state; drives the
@@ -109,7 +113,7 @@ namespace BrnGui
         void BuildShortcutOptions();                                                    // 0x82414288
         void SortFullList();                                                            // 0x82423708
         void RemoveUnneededFriends();                                                   // 0x824146C0
-        void MoveHighlightDueToBranchOpen();                                            // 0x82414868
+        bool MoveHighlightDueToBranchOpen();                                            // 0x82414868
         void SaveCurrentState();                                                        // 0x824149E8
         void UpdateAptVariables();                                                      // 0x82423558
         void WithdrawBranches();                                                        // 0x824234B8
@@ -134,11 +138,11 @@ namespace BrnGui
     private:
         // ---- current selection cursor (X360 +0x870..+0x894) ----
         u32 muCachedCacheField;   // +0x870 -- cached GuiCache far field (set by SetGuiCachePointer)
-        u32 muSelectionA;         // +0x874 -> snapshot mSnapshotC
-        u32 muSelectionB;         // +0x878 -> snapshot mSnapshotA
-        u32 muSelectionC;         // +0x87C -> snapshot mSnapshotB
-        u8  mbSelectionFlagA;     // +0x880 -> snapshot mbSnapshotFlagA
-        u8  mbSelectionFlagB;     // +0x881 -> snapshot mbSnapshotFlagB
+        s32 meListType;           // +0x874 -- 1 friends / 2 shortcuts / 3 challenges (SaveCurrentState switch @0x82414A10)
+        s32 mePanelState;         // +0x878 -- 0 closed / 1 opening / 2 open / 5 dismissed
+        s32 meBranchState;        // +0x87C -- EFriendListBranchState
+        s8  mi8FirstVisibleIndex; // +0x880 -- scroll-window top row
+        s8  mi8SelectedRowIndex;  // +0x881 -- highlighted row within window
         s8  mi8SelectedIndex;     // +0x882 -- highlighted entry (signed); drives the scroll indicator
         u32 muNumEntries;         // +0x894 -- total entries (scroll-indicator bound)
 
@@ -174,6 +178,7 @@ namespace BrnGui
 
     private:
         // ---- [friends wave] asm-pinned additions (offsets in comments) ----
+        FriendsListEntry maEntries[KI_VISIBLE_ROWS];                // +0x8A0 (stride 0x98)
         s32  maeAvailableShortcutOptions[E_SHORTCUTOPTION_COUNT];   // +0x00C, sentinel NONE(21)
         s32  mauNumBranches[3];                                     // +0x060 (Construct seeds 15)
         CgsID mau64ChallengeIds[KI_MAX_FRIEND_RECORDS];             // +0x070 ((idx+14)*8 addressing)
@@ -184,8 +189,6 @@ namespace BrnGui
         BrnFlapt::MovieClipRef  mThirdClip;                         // +0xBD8 (chain tail)
         SFriendRecord maRecords[KI_MAX_FRIEND_RECORDS];             // +0xBEC (memset span 0x3390)
         s32  maeDisplayTypes[KI_MAX_FRIEND_RECORDS];                // +0x3F70 (EFriendListEntryState)
-        s8   mi8FirstVisibleIndex;                                  // +0x880 (scroll window top)
-        s8   mi8SelectedRowIndex;                                   // +0x881
         s8   mi8CurrentlyHighlightedBranch;                         // +0x883
         CgsNetwork::PlayerName mHighlightedName;                    // +0x884
         u8   mabEntryFlags[2];                                      // +0x898
