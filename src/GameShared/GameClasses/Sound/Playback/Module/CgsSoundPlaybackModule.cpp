@@ -20,6 +20,10 @@
 
 #include "rw/rwcore_structs.h"   // rw::Resource / rw::IResourceAllocator (the Release-machine DoFree wraps)
 
+#include "GameShared/GameClasses/Memory/CgsLinearMalloc.h"                 // Prepare's stream-buffer bump path
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"                 // gpDebugPrint / gxMessageFilterFlags
+#include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"  // the 8 environment CPU monitors
+
 #include <cstring>  // memcpy
 
 namespace CgsSound
@@ -28,6 +32,32 @@ namespace Playback
 {
 namespace Module
 {
+
+namespace
+{
+    // The console's `rw::IResourceAllocator::AllocateMemoryResource` @0x823FF7D0 is an
+    // INLINE that builds a five-entry serialised descriptor and tail-calls the
+    // allocator's DoAllocate slot; the PC rwcore models the narrower <4> alias, so the
+    // descriptor is built as <5> and reinterpret_cast down at the call -- the same
+    // idiom CgsDebugManager.cpp / CgsPhysicsSimulationModule.cpp already use. The name
+    // rides through DoAllocate's second parameter.
+    void* AllocateMemoryResource(rw::IResourceAllocator* lpAllocator, u32 luSize,
+                                 u32 luAlignment, const char* lpcName)
+    {
+        rw::BaseResourceDescriptors<5> lDescriptor;
+        for (u32 luEntry = 0u; luEntry < 5u; ++luEntry)
+        {
+            lDescriptor.m_baseResourceDescriptors[luEntry].m_size      = 0u;
+            lDescriptor.m_baseResourceDescriptors[luEntry].m_alignment = 1u;
+        }
+        lDescriptor.m_baseResourceDescriptors[0].m_size      = luSize;
+        lDescriptor.m_baseResourceDescriptors[0].m_alignment = luAlignment;
+
+        rw::Resource lResource = lpAllocator->DoAllocate(
+            reinterpret_cast<const rw::ResourceDescriptor&>(lDescriptor), lpcName);
+        return lResource.m_baseResources[0];
+    }
+}
 
 // ---------------------------------------------------------------------------
 // Module::Module  @ 0x827DFA98
@@ -108,6 +138,167 @@ void Module::Construct(s32 li32PoolId)
     }
 
     mbIsNewModule = true;
+}
+
+// ---------------------------------------------------------------------------
+// Module::Prepare  @ 0x826E90C0  (DWARF: Prepare(rw::IResourceAllocator*,
+// CgsMemory::LinearMalloc*); bodied 2026-08-25, faithful-audio-engine phase B3)
+//
+// The stage machine (each rung bumps mePrepareStage via the @0x82681C70
+// operator and lowers the meReleaseStage countdown cursor):
+//   0 -> 1: bump.
+//   1: base Prepare + receiver Clear + deferred-queue Prepare (either false ->
+//      still preparing); release cursor = 5.
+//   2: Environment::Create with the DWARF-constant spec {allocator,
+//      SKU32_FACTORY_COUNT=4, SKU32_VOICE_COUNT=192, SKU32_CONTENT_COUNT=128,
+//      {SKU32_MAIN_REGISTRY_ENTITY_COUNT=2048, SKU_MAIN_REGISTRY_DATA_SIZE=
+//      388608, 0}} -> mhEnvironment (assert cpp:177) + the filtered debug size
+//      print; release cursor = 3.
+//   3: the three factory creates + the stream-buffer carve + the 8 environment
+//      CPU monitors; release cursor = 2 (via the raw bump + the .h:500 assert).
+//   4 (DONE): release cursor = 0; return true.
+//
+// FLAG [the AEMS keystone -- stage 3's factory block is DEFERRED]: the console
+// creates the three factories through GenericRwacFactory::Create @0x826C7AD0
+// (spec {mpSystem=off_83271928, 128 entities, 32384 data} -- carve
+// 4*(entities+4111)+sizes through the ENVIRONMENT's allocator, assert
+// "lSpec.mpSystem" h:906), AemsFactory::Create @0x826DAC28 (spec
+// {Handle<RwacFactory>, 128, 32384}; carve 4*(entities+354)+sizes; its refcount
+// rides at +8 -- the AemsRWSampleFactory base) and SplicerFactory::Create
+// @0x826DB130 (carve 4*(entities+448)+sizes), asserting mhRwacFactory /
+// mhAemsFactory / mhSplicerFactory (cpp:196/:207/:219). NONE of the three
+// factory ctors is reconstructed, AemsFactory does not derive Factory on the
+// host yet (the ledgered keystone), and the mounted factory TUs must not gain
+// unresolved ctor externals -- so the block is documented here and the handles
+// stay null until that slice lands. The off_82FFBA0C interface-global publish
+// (`= &this->+0x228 sub-object`) lands with the same slice (its consumer is the
+// SndPlayer1 side).
+// ---------------------------------------------------------------------------
+bool Module::Prepare(rw::IResourceAllocator* apAllocator,
+                     CgsMemory::LinearMalloc* apLinearMalloc)
+{
+    CGS_ASSERT(apAllocator != 0, "lpAllocator");
+
+    switch (mePrepareStage)
+    {
+    case E_PREPARESTAGE_0:
+        mePrepareStage++;
+        // fall through
+    case E_PREPARESTAGE_1:
+        if (!CgsModule::ModuleSingleBuffered::Prepare())
+            return false;
+        mResourceReceiverQueue.Clear();
+        if (!mDeferredResourceRequestQueue.Prepare())
+            return false;
+        mePrepareStage++;
+        meReleaseStage = static_cast<EReleaseStage>(5);
+        // fall through
+    case E_PREPARESTAGE_2:
+    {
+        EnvironmentSpec lSpec;
+        lSpec.mpAllocator      = apAllocator;
+        lSpec.mu32FactoryCount = 4;      // SKU32_FACTORY_COUNT (DWARF h:346)
+        lSpec.mu32VoiceCount   = 192;    // SKU32_VOICE_COUNT (h:348; the 0xC0 word)
+        lSpec.mu32ContentCount = 128;    // SKU32_CONTENT_COUNT (h:347; the 0x80 word)
+        lSpec.mRegistrySpec.mu32EntityCount   = 2048;    // SKU32_MAIN_REGISTRY_ENTITY_COUNT (h:349)
+        lSpec.mRegistrySpec.muDataSize        = 388608;  // SKU_MAIN_REGISTRY_DATA_SIZE (h:350)
+        lSpec.mRegistrySpec.muStringTableSize = 0;
+
+        Handle<Environment> lhEnvironment = Environment::Create(lSpec);
+        if (mhEnvironment.GetObject())
+            mhEnvironment.GetObject()->Release();
+        mhEnvironment.SetObject(lhEnvironment.GetObject());
+        // (the transient handle's reference transfers to the member; the console
+        // releases the temp after the assign -- net one owned reference)
+        CGS_ASSERT(mhEnvironment.GetObject() != 0, "mhEnvironment");
+
+        if ((CgsDev::Message::gxMessageFilterFlags & 1u) != 0)
+        {
+            *CgsDev::Log::gpDebugPrint
+                << "Sound Playback - Environment (+ Registry) is "
+                << static_cast<s32>(mhEnvironment.GetObject()->GetAllocatedSize())
+                << " bytes in size.\n";
+        }
+
+        mePrepareStage++;
+        meReleaseStage = static_cast<EReleaseStage>(3);
+        // fall through
+    }
+    case E_PREPARESTAGE_3:
+    {
+        // [FLAG, the AEMS keystone -- see the banner]: the three factory creates
+        // land with the factory-ctor slice; the handles stay null meanwhile.
+
+        // The stream-buffer carve (real): LinearMalloc-backed when supplied
+        // (size = GetSize()/3, 2 blocks, main-allocator flag OFF -> Malloc), else
+        // 0x20000-byte buffers, 4 blocks, flag ON -> AllocateMemoryResource.
+        u32 lu32BufferSize;
+        if (apLinearMalloc)
+        {
+            apLinearMalloc->SetAlignment(16);
+            lu32BufferSize = static_cast<u32>(apLinearMalloc->GetSize() / 3u);
+            muStreamNumBlocks           = 2;
+            mbStreamsUsingMainAllocator = false;
+        }
+        else
+        {
+            muStreamNumBlocks           = 4;
+            lu32BufferSize              = 0x20000;
+            mbStreamsUsingMainAllocator = true;
+        }
+        muStreamBufferSize = lu32BufferSize;
+
+        for (u32 lu = 0; lu < 3; ++lu)
+        {
+            void* lpBuffer;
+            if (mbStreamsUsingMainAllocator)
+                lpBuffer = AllocateMemoryResource(apAllocator, muStreamBufferSize, 16,
+                                                  "SndPlayer1_CgsStreamMod Stream Buffer");
+            else
+                lpBuffer = apLinearMalloc->Malloc(muStreamBufferSize);
+            CGS_ASSERT(lpBuffer != 0, "lpBuffer");
+            maStreamBuffers[lu].mpBuffer       = lpBuffer;
+            maStreamBuffers[lu].mu32Reserved04 = 4;
+        }
+
+        // The 8 environment CPU monitors, BY NAME through the env's CpuMonitors
+        // (the console v27[2/4/6/5/8/9/10/7] word stores == env+8 .. -- the
+        // CpuMonitors sub-object's fields in declaration order).
+        CGS_ASSERT(mhEnvironment.GetObject(), "mpObject");
+        CpuMonitors& lrMonitors = mhEnvironment.GetObject()->GetCpuMonitors();
+        {
+            using CgsDev::PerfMonCpu::AddMonitor;
+            using CgsDev::PerfMonCpuPage;
+
+            lrMonitors.miModule = AddMonitor(
+                "Playback", static_cast<PerfMonCpuPage>(14), false, 1.0f, true);
+            lrMonitors.miEnvironmentUpdate = AddMonitor(
+                " Environment", static_cast<PerfMonCpuPage>(14), false, 1.0f, true);
+            lrMonitors.miAemsFactoryUpdate = AddMonitor(
+                "  Aems factory", static_cast<PerfMonCpuPage>(14), false, 1.0f, true);
+            lrMonitors.miRwacFactoryUpdate = AddMonitor(
+                "  Rwac factory", static_cast<PerfMonCpuPage>(14), false, 1.0f, true);
+            lrMonitors.miSplicerFactoryUpdate = AddMonitor(
+                "  Splicer factory", static_cast<PerfMonCpuPage>(14), false, 1.0f, true);
+            lrMonitors.miContentUpdate = AddMonitor(
+                "  Content update", static_cast<PerfMonCpuPage>(14), false, 1.0f, true);
+            lrMonitors.miVoiceUpdate = AddMonitor(
+                "  Voice update", static_cast<PerfMonCpuPage>(14), false, 1.0f, true);
+            lrMonitors.miAemsFactoryUpdate2 = AddMonitor(
+                "Aems Update", static_cast<PerfMonCpuPage>(19), false, 1.0f, true);
+        }
+
+        mePrepareStage++;   // the raw bump with the .h:500 bound assert (inlined op++)
+        meReleaseStage = static_cast<EReleaseStage>(2);
+        // fall through
+    }
+    case E_PREPARESTAGE_DONE:
+        meReleaseStage = static_cast<EReleaseStage>(0);
+        return true;
+    default:
+        CGS_ASSERT(false, "Invalid Prepare Stage");
+        return false;
+    }
 }
 
 // ---------------------------------------------------------------------------

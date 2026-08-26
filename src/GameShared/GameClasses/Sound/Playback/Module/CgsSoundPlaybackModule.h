@@ -19,6 +19,7 @@
 
 // Pointer-only members (the phase-B4 Io pair retypes them).
 namespace CgsModule { struct IOBuffer; }
+namespace CgsMemory { class LinearMalloc; }   // Prepare's stream-buffer bump path
 
 // =============================================================================
 // CgsSoundPlaybackModule.h  (HOME for CgsSound::Playback::Module::Module)
@@ -195,6 +196,16 @@ public:
     // Construct() keeps its own slot and is hidden by name, as on the X360.)
     virtual void Construct(s32 li32PoolId);
     using CgsModule::ModuleSingleBuffered::Construct;   // keep the base overload visible
+
+    // Module::Prepare @ 0x826E90C0 (virtual -- the console vtable slot the
+    // RootSoundModule PLAYBACK_MODULE Prepare stage dispatches; phase B3). The
+    // 5-rung prepare stage machine: base+queues (1), Environment::Create with
+    // the DWARF-constant spec (2), factories + stream buffers + the 8
+    // environment CPU monitors (3), done (4). Returns false while still
+    // preparing. The stage-3 factory creates are DEFERRED (the AEMS keystone --
+    // see the .cpp banner); the handles stay null until that slice lands.
+    virtual bool Prepare(rw::IResourceAllocator* apAllocator,
+                         CgsMemory::LinearMalloc* apLinearMalloc);
 
     // Module::Release @ 0x826C0FB8 (virtual). The release COUNTDOWN machine run
     // forward from meReleaseStage: free the string-table chain through the
