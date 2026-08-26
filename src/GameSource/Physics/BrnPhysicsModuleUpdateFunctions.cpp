@@ -230,6 +230,27 @@ namespace BrnPhysics
 
         const bool lbNetworkCatchup = (lUpdateSet & 1) != 0;   // r30 = lUpdateSet & 1
 
+        // [pausebit] witness. NOT X360. Value-change only; pairs with the probe in
+        // PropEntityModule::PostPhysicsUpdate. When bit 0 is set this function does NOT call
+        // BridgeSimulationToOutput, so the output buffer's contact-spy interface keeps its
+        // Construct-time NULL for the frame -- which is exactly why the prop module must skip
+        // ProcessContacts on the same frame. The two probes must agree, always.
+        {
+            static u32 suLastSet = 0xFFFFFFFFu;
+            const u32 luSet = static_cast<u32>(lUpdateSet);
+            if (luSet != suLastSet && CgsDev::Log::gpDebugPrint != 0)
+            {
+                suLastSet = luSet;
+                *CgsDev::Log::gpDebugPrint
+                    << "[pausebit] PhysicsModule::Update updateSet="
+                    << CgsDev::E_PRINTMODE_HEXONCE << luSet
+                    << " bit0=" << static_cast<s32>(luSet & 1)
+                    << " -> the bit alone would "
+                    << (lbNetworkCatchup ? "SKIP" : "REACH")
+                    << " BridgeSimulationToOutput\n";
+            }
+        }
+
         // PC-BUILD GUARD (conductor wave 2026-08-09). On the PC the world spine reaches
         // this function during BOOT/marketing frames too -- states in which the SIM TIMER has
         // never started, so both timer products are 0.0. The console never conducted physics
@@ -244,6 +265,25 @@ namespace BrnPhysics
         const bool lbSimTimerRunning =
             lpPhysicsModuleInputBuffer->GetTimerInterface()->GetSimTimerStatus()->IsRunning();
         lpPhysicsModuleInputBuffer->UnlockForRead();
+        // [pausebit] witness. NOT X360. TRANSITION-logged, not one-shot -- and the difference is
+        // the whole point: the one-shot line below fires during BOOT and then never again, so it
+        // can say nothing about whether this guard also fires later, mid-game. This one reports
+        // every change of the guard's verdict.
+        {
+            static s32 siLastRunning = -1;
+            const s32 liRunning = lbSimTimerRunning ? 1 : 0;
+            if (liRunning != siLastRunning && CgsDev::Log::gpDebugPrint != 0)
+            {
+                siLastRunning = liRunning;
+                *CgsDev::Log::gpDebugPrint
+                    << "[pausebit] PhysicsModule::Update PC sim-timer guard: running=" << liRunning
+                    << (liRunning ? " -> the frame is conducted"
+                                  : " -> EARLY RETURN, BridgeSimulationToOutput NOT reached, the"
+                                    " output buffer's contact-spy interface stays NULL")
+                    << "\n";
+            }
+        }
+
         if (!lbSimTimerRunning)
         {
             static bool s_bLoggedNotRunning = false;
