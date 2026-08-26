@@ -345,4 +345,21 @@ namespace BrnAI
     static_assert(offsetof(AICar, mbRouteRequested)     == 0x154D, "AICar::mbRouteRequested @ +0x154D");
     static_assert(offsetof(AICar, mbIsInMasterRoute)    == 0x154E, "AICar::mbIsInMasterRoute @ +0x154E");
     static_assert(offsetof(AICar, mbUseChosenDistanceFunction) == 0x1550, "AICar::mbUseChosenDistanceFunction @ +0x1550");
+
+    // ⭐⭐ THE WHOLE-OBJECT STRIDE, MEASURED 2026-08-26 (aimodule wave) AND NOW PINNED.
+    // Every offset above pins a member; NONE of them pins the SIZE, and the size is what the
+    // console indexes this class by. BrnAI::AIModule::GetAICar @0x82765AD0 returns
+    //     module + 560 + 5472 * index
+    // and BrnAI::ResetOnTrackManager::GetAICar @0x82765878 does the same off its own array
+    // pointer -- both with the literal 5472 baked in. That arithmetic is only correct on this
+    // host if sizeof(AICar) really is 5472, and it IS: measured 5472 == 0x1560 exactly (the
+    // last member ends at 0x1551 and Vector3's 16-byte alignment rounds the object to 0x1560).
+    // ⛔ IT IS TRUE BY ACCIDENT OF TODAY'S PAD MODEL, NOT BY CONSTRUCTION. This class is an
+    // explicitly-padded reproduction of a 32-bit layout; the moment a grow carves a POINTER out
+    // of one of the pads, the host object grows past 0x1560 and every one of those baked strides
+    // silently starts walking the array at the wrong pitch -- silently, because every address it
+    // produces is still inside the allocation. [[serialized slots stay 32-bit]] in reverse.
+    // This assert is the tripwire: if it ever fires, the fix is to replace the console constants
+    // with `&mpaAICars[index]` on the host type, NOT to adjust the padding to hide it.
+    static_assert(sizeof(AICar) == 0x1560, "AICar stride: the console bakes 5472 into GetAICar");
 }
