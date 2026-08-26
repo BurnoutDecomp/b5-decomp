@@ -127,6 +127,38 @@ void TextFieldRef::SetLocalisedText(const char* lpcStringId, s32 liStringIdType)
     SetText(lacBuffer, true);
 }
 
+// ---- SetLocalisedText(id, type, s32 value, valueFormat) @ 0x8246D2B0 --------
+// [aimodule wave 2026-08-26] The single-INTEGER-parameter form, and the float form
+// directly below is its line-for-line twin. The header already declared it (ADDITIVE
+// GROW, "bodied in its own sibling TU") -- that TU never existed, so the declaration
+// was a promise no compiler could keep and only the LINK could find it:
+// BrnBoostMessageItem::SetText @0x82411B00 is its caller, and mounting that TU turned
+// the promise into LNK2019. Reconstructed from the ARTIST body (an export HOLE --
+// exported as sub_8246D2B0, identified by its baked assert path
+// "GameSource/Gui/Flapt/BrnFlaptTextFieldRef.cpp" line 254, which is why it sits HERE,
+// ahead of the float sibling's 282).
+//   assert the id (cpp:254) -> GetLanguageManager -> FormatTextFromInt(buf, 1024, id,
+//   type, value, valueFormat) -> SetText(buf, /*already localised*/ true) -> return 1.
+// ⚠️ The 1024 is the CONSOLE's: its stack slot is 1104 bytes but it passes 1024 as the
+// cap, exactly as FormatTextFromFloat's caller does. Reproduced, not "fixed".
+bool TextFieldRef::SetLocalisedText(const char* lpcStringId, s32 liStringIdType,
+                                    s32 liValue, s32 liValueFormatType)
+{
+    CGS_ASSERT(lpcStringId != 0, "Text field is invalid in TextField::SetLocalisedText");
+
+    CgsLanguage::LanguageManager* lpLanguageManager = GetLanguageManager();
+
+    char lacBuffer[1024];
+    lpLanguageManager->FormatTextFromInt(
+        lacBuffer, 1024, lpcStringId,
+        static_cast<CgsLanguage::LanguageManager::ParameterFormatType>(liStringIdType),
+        liValue,
+        static_cast<CgsLanguage::LanguageManager::ParameterFormatType>(liValueFormatType));
+
+    SetText(lacBuffer, true);
+    return true;
+}
+
 // ---- SetLocalisedText(id, type, f32 value, valueFormat) @ 0x8246D398 --------
 // [H1 wave 2026-08-25] The single-float-parameter form (the odometer's mileage
 // readout path): assert the id (cpp:282), resolve + format through

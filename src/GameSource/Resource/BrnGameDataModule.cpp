@@ -263,9 +263,34 @@ namespace BrnResource
             u32 lauAlign[3]  = { 16u, 16u, 16u };
             for (s32 lt = 0; lt < 3; ++lt)
             {
-                const u32 luHeapSize = lrDef.mauHeapSize[lt];
+                u32 luHeapSize = lrDef.mauHeapSize[lt];
                 if (luHeapSize == 0)
                     continue;
+
+                // ⭐ [FLAG PC platform: PORTED DATA IS BIGGER THAN THE CONSOLE MEMORY MAP]
+                // MEASURED 2026-08-25 (aimodule wave), on the pool-FULL report this build now
+                // prints by name:
+                //     heap FULL, pool 5 'GameData' type 0: wanted 3273824 B, free 3133632 B
+                //                of 6845120 B
+                // That "wanted" is the WorldMapData resource out of AI.dat -- and AI.DAT is
+                // 3.27 MB in build/game against 1.66 MB on the X360, because the ported bundles
+                // are 64-bit (bnd2 platform byte @+8 == 4). The console's row is sized for the
+                // 32-bit resource; the same resource on this host is ~2x, so it missed by
+                // 140 KB and the AI ROAD NETWORK SIMPLY DID NOT LOAD -- silently, since a
+                // refused resource just yields a both-null acquire handle downstream.
+                // The table itself stays the console's ground truth (it is generated from
+                // progress/memory_map_artist.yaml); the deviation lives HERE with the two
+                // deviations already above it. Doubled, matching the measured port ratio.
+                // ⚠️ TARGETED, NOT BLANKET: pool 5 is the one that was measured to refuse. The
+                // other 26 rows carry the same latent risk, and the report above will name any
+                // of them by pool id + name the moment it bites. Do NOT pre-emptively double
+                // them all -- pool 3 alone is 90 MB, and a blanket multiplier would also hide
+                // the fragmentation failure this same report is meant to distinguish.
+                if (lrDef.miId == 5 && lt == 0)
+                {
+                    luHeapSize *= 2u;
+                }
+
                 lOpt.maHeapInfo[lt].muMaxNodes       = luMaxNodes;
                 lOpt.maHeapInfo[lt].muHeapMemorySize = luHeapSize;
                 lOpt.maHeapInfo[lt].muHeapAlignment  = lrDef.mauHeapAlign[lt];

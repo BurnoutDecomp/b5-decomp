@@ -35,6 +35,9 @@ namespace CgsResource
 {
     namespace
     {
+        // [FLAG PC diagnostic] one heap-FULL report per pool id (see the report site below).
+        bool sabLoggedPoolFull[64] = { false };
+
         u32 GetManagementHashLength(u32 luMaxResources)
         {
             const u32 luRequiredEntries = 3u * luMaxResources;
@@ -310,13 +313,24 @@ namespace CgsResource
                 // BrnWorldEntityModule::OnWorldGraphicsLoadComplete). RESTORE the plain
                 // CGS_ASSERT when the defragmenter lands.
                 {
-                    static bool sbLoggedPoolFull = false;
-                    if (!sbLoggedPoolFull && (CgsDev::Message::gxMessageFilterFlags & 1))
+                    // ⭐ 2026-08-25 (aimodule wave): the message now NAMES THE POOL AND THE
+                    // NUMBERS. It used to say only "heap full", once, for the whole process --
+                    // which is a diagnostic that reports something other than its name: it
+                    // cannot distinguish "this pool's budget is too small for the PORTED data"
+                    // from "a long run fragmented a heap", and those want opposite fixes. It
+                    // cost this wave one full boot to find out which one AI.dat had hit.
+                    // Budgeted per pool (once each) so a streaming run cannot flood the log.
+                    if (miId >= 0 && miId < 64 && !sabLoggedPoolFull[miId] &&
+                        (CgsDev::Message::gxMessageFilterFlags & 1))
                     {
-                        sbLoggedPoolFull = true;
+                        sabLoggedPoolFull[miId] = true;
                         *CgsDev::Log::gpDebugPrint
-                            << "CgsResource::Pool: heap full for memory type -- further"
-                               " resources in this pool are refused [FLAG PC boot gate]\n";
+                            << "CgsResource::Pool: heap FULL, pool " << miId << " '"
+                            << macName << "' type " << static_cast<s32>(luMemType)
+                            << ": wanted " << static_cast<s32>(luSize)
+                            << " B, free " << static_cast<s32>(maHeaps[luMemType].GetAmountFreeBytes()) << " B of " << static_cast<s32>(maHeaps[luMemType].GetTotalSizeBytes())
+                            << " B -- further resources in this pool are refused"
+                               " [FLAG PC boot gate]\n";
                     }
                 }
                 return false;

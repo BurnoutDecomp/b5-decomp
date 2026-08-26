@@ -43,7 +43,22 @@
 //   mCamera                   @0x38C  Camera (opaque, 0x164 -> ends 0x4F0)
 //   mRandom                   @0x4F0  CgsNumeric::Random (0x30)
 //   mHelperNodeNext/Prev      @0x520 / @0x530 RouteNode (16B each)
-//   mResetOnTrackDebugComponent@0x540 opaque 0x330 -> footprint 0x870
+//   mResetOnTrackDebugComponent@0x540 opaque 0x870 -> footprint 0xDB0
+//
+// ⚠️⚠️ SIZE CORRECTED 2026-08-25 (aimodule wave) -- THE DEBUG COMPONENT WAS DECLARED
+// 0x540 BYTES TOO SMALL, AND THE OLD COMMENT DESCRIBED THE MISTAKE. It read "opaque 0x330 ->
+// footprint 0x870", i.e. it used 0x870 as the manager's END. The X360 Construct @0x82791A48
+// settles it -- its LAST store is `*(this + 3488) = 60` (0xDA0), and between 1344 (0x540) and
+// there it builds TWO ring buffers inside the component (mpData = this+1392 cap 16, and
+// mpData = this+2704 cap 16) plus a 7-byte flag block at this+3480. So 0x870 is the
+// COMPONENT'S OWN SIZE (1344 + 2160 == 3504 == 0xDB0) and 0xDB0 is the footprint. Everything
+// below 0x540 cross-checks exactly (mCamera 0x38C + 0x164 == 0x4F0 == mRandom; mRandom + 0x30
+// == 0x520; two 0x10 helper nodes == 0x540), which is what makes the last member the only one
+// that could be wrong -- and it was.
+// A faithful Construct against the old declaration would have written 1344 bytes past the end
+// of the member, into the AIModule this object is EMBEDDED IN. Nothing had fired only because
+// nothing had ever constructed it. Same family as the console-sized blob memcpy'd out of a
+// differently-sized host type.
 //
 // NOTE vs container namespaces: `Array<T,N>` is GLOBAL (CgsArray.h declares it with no
 // namespace; CgsContainers::Array is only the DWARF mangling). FixedRingBuffer is in
@@ -81,8 +96,14 @@ namespace BrnAI
             f32     mfTime;    // +0x10
         };
 
-        // ---- public API (only GetAICar bodied in this batch) -----------------------------
+        // ---- public API -------------------------------------------------------------------
+        // X360 0x82791A48. Called from EXACTLY ONE site in the whole image: AIModule::Prepare
+        // @0x82798070 stage 3.
         void Construct(CgsResource::ResourcePtr<AISectionsData> lAISectionData, AICar* lpaAICars);
+
+        // Has Construct bound a road network? (Raw test, no assert.)
+        bool HasAISectionData() const { return mpAISectionData.HasMemoryResource(); }
+        const AICar* GetAICarArray() const { return mpaAICars; }
         void Update(AIModuleResultInterface* lpResults, EGlobalRaceCarIndex lePlayer, f32 lfTime);
 
         // @0x82769E88. Append a reset-on-track request to mResetOnTrackRequestQueue
@@ -122,8 +143,9 @@ namespace BrnAI
         u8 mHelperNodeNext[0x10];
         u8 mHelperNodePrev[0x10];
 
-        // +0x540 : embedded debug component (opaque; footprint runs to 0x870).
-        u8 mResetOnTrackDebugComponent[0x330];
+        // +0x540 : embedded debug component (opaque; 0x870 bytes -- the manager footprint
+        // runs to 0xDB0). See the SIZE CORRECTED note in the banner: this was 0x330.
+        u8 mResetOnTrackDebugComponent[0x870];
 
     private:
         // ---- DWARF static perf-mon handles (BrnResetOnTrackManager.h:349-351). ----

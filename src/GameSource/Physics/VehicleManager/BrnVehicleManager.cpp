@@ -591,10 +591,22 @@ namespace Vehicle
         // ⛔⛔ BRING-UP FLAG -- NOT IN THE X360 BINARY -- CRASH ENTRY IS OFF ON THE PUBLIC PATH.
         //
         //   crash ENTRY is reconstructed and correct; crash RECOVERY needs
-        //   BrnAI::ResetOnTrackManager (37 fns / 5,307 insns -- and the AI MODULE ITSELF, which
-        //   does not run at all on this build). Until that lands, a heavy crash
+        //   BrnAI::ResetOnTrackManager. Until that lands, a heavy crash
         //   pins the car, so the public path keeps crash entry disabled.
         //   DELETE-WHEN ResetOnTrackManager lands and a heavy crash recovers.
+        //
+        // ⭐ BOUNDARY MOVED 2026-08-26 (aimodule slice 1) -- HALF THE OLD REASON IS NOW FALSE.
+        //   The parenthesis this note used to carry ("and the AI MODULE ITSELF, which does not
+        //   run at all on this build") no longer holds: AIModule::Construct / Prepare /
+        //   LoadMapData are real bodies now, AI.dat loads, "WorldMapData" resolves, and
+        //   ResetOnTrackManager IS Constructed against a bound road network (measured on the
+        //   boot log: version 12, 7639 sections, 3273824 B). ⛔ THE FLAG STILL STANDS, because
+        //   what is missing moved UP a level, not away: nothing pumps the request/result round
+        //   trip yet -- SendResetOnTrackRequests, the 35-entry AI-car array (which
+        //   ResetOnTrackManager::Update dereferences on its first request), AIModule::Update +
+        //   UpdateResetOnTrackManager (still boot gates), ResetOnTrackManager::Update's own
+        //   ~4,750 instructions, and ProcessResetOnTrackResultQueue. So a heavy crash still
+        //   pins. Full ladder in BrnRaceCarEntityModule_CrashExit.cpp's banner.
         //
         // ⭐ THIS IS NOT ONE OF THE NINE STALE GATES THAT WERE CORRECTLY DELETED on 2026-08-25.
         //   Those claimed a function was unmounted or had no body anywhere in the tree, and every
@@ -608,11 +620,10 @@ namespace Vehicle
         //   consumer of that flag (RCEM::SendResetOnTrackRequests -> the AI ResetOnTrackRequest
         //   queue -> BrnAI::ResetOnTrackManager -> ProcessResetOnTrackResultQueue ->
         //   RequestPlaceOnTrack) does not exist yet. MEASURED 2026-08-25: the direct closure is
-        //   37 functions / 5,307 instructions, and the real blocker sits ONE LEVEL HIGHER --
-        //   ResetOnTrackManager is an embedded member of AIModule (+286128) constructed only by
-        //   AIModule::Prepare, and every AIModule lifecycle entry point is an inert boot gate in
-        //   WorldLinkStubs.cpp, so AI.dat / "WorldMapData" never loads and the manager is never
-        //   Constructed. Full working-out in BrnRaceCar.cpp::RequestResetOnTrack. So a HEAVY
+        //   37 functions / 5,307 instructions. ⭐ 2026-08-26: the LOWEST rung of that closure is
+        //   now paid -- the module lifecycle and the manager's own Construct -- so what is left
+        //   is the request/result pump listed at the top of this banner. Full working-out in
+        //   BrnRaceCar.cpp::RequestResetOnTrack. So a HEAVY
         //   crash ends logically and the car is never placed back on the road: it pins.
         //   (Measured, with the control that could falsify it: run cx_flow3 pinned at
         //   (2932,-10.8,~209) for 80 s on the identical build that "recovered" in cx_flow6 --
@@ -647,9 +658,13 @@ namespace Vehicle
                         *CgsDev::Log::gpDebugPrint
                             << "[bringup] CRASH ENTRY DISABLED (BRN_ENABLE_CRASH_ENTRY is not set)."
                             << " Crash entry is reconstructed and correct; crash RECOVERY needs"
-                            << " BrnAI::ResetOnTrackManager (37 fns / 5307 insns) AND the AI"
-                            << " module lifecycle it hangs off, which is an inert boot gate on"
-                            << " this build, so a heavy crash would pin the car. Set"
+                            << " the BrnAI::ResetOnTrackManager REQUEST/RESULT PUMP. The module"
+                            << " lifecycle under it is real as of 2026-08-26 (AI.dat loads,"
+                            << " WorldMapData resolves, the manager is Constructed -- see the"
+                            << " [ai] lines above), but nothing pumps requests through it yet"
+                            << " (SendResetOnTrackRequests, the AI-car array, AIModule::Update,"
+                            << " ResetOnTrackManager::Update, ProcessResetOnTrackResultQueue),"
+                            << " so a heavy crash would still pin the car. Set"
                             << " BRN_ENABLE_CRASH_ENTRY=1 to exercise the full chain.\n";
                     }
                     ++sliSuppressed;

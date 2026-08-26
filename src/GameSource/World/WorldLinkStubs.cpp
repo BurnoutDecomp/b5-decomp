@@ -224,14 +224,14 @@ const char* EA::GameTalk::GameTalkMessage::GetKeyContent(const char*) const
 // -------------------------------------------------------------------------
 // BrnAI::AIModule
 // -------------------------------------------------------------------------
-// BOOT-GATE (world-module mount 2026-07-26): REACHED at boot by the wired
-// WorldModule::Construct @0x827CF540 fleet cascade; quiet no-op -- the member
-// stays inert/unprepared (zero-initialised static storage), which the boot
-// path tolerates. Reconstruct from X360 before wiring the world Prepare.
-// FLAG PC-platform leaf: boot-gate no-op (world-module mount 2026-07-26) -- reached by the wired WorldModule::Construct cascade; real body pending X360 reconstruction (see note above).
-void BrnAI::AIModule::Construct()
-{
-}
+// GATE RETIRED 2026-08-25 (aimodule wave). BrnAI::AIModule::Construct @0x82794D08 now lives in
+// GameSource/World/AI/BrnAIModule.cpp. The gate's own text ("the member stays inert/unprepared
+// (zero-initialised static storage), which the boot path tolerates") was true, and that was the
+// whole problem: AIModule did not even DERIVE from CgsModule::ModuleSingleBuffered, so there was
+// no base lifecycle for the call to reach, Module::mbIsNewModule was never set, and the module's
+// prepare/release stage machines, its resource receiver queue and the RouteMapModule base were
+// never initialised. See the banner in BrnAIModule.cpp for what the real body does and, just as
+// importantly, what it still parks.
 
 // BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
 // one-shot log. This symbol is REACHED every frame now that WorldModule::Update
@@ -249,41 +249,14 @@ void BrnAI::AIModule::Destruct()
     }
 }
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
-//
-// ⛔⛔ THIS STUB IS THE REASON A CRASHED CAR CANNOT BE PUT BACK ON THE ROAD (measured
-// 2026-08-25). The real body @0x82798070 (224 insns) is a 5-stage machine, and stages 2 and 3
-// are load-bearing for the whole reset-on-track subsystem:
-//   stage 2  AIModule::LoadMapData @0x82795340 (167) -- LoadBundle("AI.dat") then a request for
-//            CgsResource::ID::HashString("WorldMapData") type 5. THE AI ROAD NETWORK. Never
-//            loaded on this build. (The data is fine and already ported: build/game/AI.DAT,
-//            bnd2 platform byte @+8 == 4, 3.27 MB. The hole is code, not assets.)
-//   stage 3  ResetOnTrackManager::Construct(module+286128, GetAISectionsData(), module+560) --
-//            the ONLY construction of BrnAI::ResetOnTrackManager anywhere in the image.
-//   stage 4  AIDriver::Prepare @0x82792CA8 over the 8 active race cars.
-// So today ResetOnTrackManager is an unconstructed embedded object with a null section-data
-// pointer, and RaceCar::mbToBeResetOnTrack (set by the crash exit) has no consumer at all.
-// See the measured chain in BrnRaceCar.cpp::RequestResetOnTrack and the bring-up flag in
-// BrnVehicleManager.cpp::SetRaceCarCrashing that keeps crash entry off the public path until
-// this lands. ⚠️ BrnAIModule.h models this module as 250 KB of opaque padding with no named
-// member for the stage machine (+294764), the route-map ready flag (+295896), the manager
-// (+286128), the AI-car array (+560) or the resource receiver queue (+73708): the named-member
-// surgery is part of the slice, not a follow-up. Reference: scratchpad resetontrack_log.md.
-bool BrnAI::AIModule::Prepare(class BrnResource::GameDataIO::AllocatorList *,struct BrnAI::AIModuleIO::OutputBuffer *)
-{
-    // BOOT-GATE (attribsys wave 2026-07-26): REACHED by the world Prepare stage
-    // chain. One-shot log + report success so the scripted load advances toward
-    // WORLDENTITY; the module stays inert (zero-initialised storage) and its
-    // deeper consumers keep their traps. Reconstruct from X360.
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "AIModule::Prepare: inert [FLAG PC boot gate]\n";
-    }
-    return true;
-}
+// ⭐⭐⭐ GATE RETIRED 2026-08-25 (aimodule wave) -- THIS WAS THE REASON A CRASHED CAR COULD NOT
+// BE PUT BACK ON THE ROAD. The real body @0x82798070 now lives in
+// GameSource/World/AI/BrnAIModule.cpp together with its stage-2 helper LoadMapData @0x82795340.
+// With the gate in place AI.dat was never loaded, "WorldMapData" was never acquired, the AI road
+// network did not exist in this build, and BrnAI::ResetOnTrackManager -- an embedded member of
+// AIModule whose ONLY constructor call site in the whole image is that Prepare's stage 3 -- was
+// never Constructed. Read BrnAIModule.cpp's banner for the parked remainder (the AI cars, the AI
+// drivers and stage 4): the module is NOT whole yet.
 
 // BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
 // one-shot log. This symbol is REACHED every frame now that WorldModule::Update
@@ -305,73 +278,14 @@ bool BrnAI::AIModule::Release()
 // -------------------------------------------------------------------------
 // BrnAI::AIModuleIO::OutputBuffer
 // -------------------------------------------------------------------------
-// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
-// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
-// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
-// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
-// not this gate.
-struct BrnAI::AIModuleIO::AICarOutputInterface const * BrnAI::AIModuleIO::OutputBuffer::GetAICarOutputInterfaceConst() const
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "BrnAI::AIModuleIO::OutputBuffer::GetAICarOutputInterfaceConst: inert (body not reconstructed) [FLAG PC boot gate]\n";
-    }
-    return 0;
-}
-
-// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
-// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
-// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
-// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
-// not this gate.
-struct BrnResource::GameDataIO::RequestInterface<4096> const * BrnAI::AIModuleIO::OutputBuffer::GetAIResourceRequestInterface() const
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "BrnAI::AIModuleIO::OutputBuffer::GetAIResourceRequestInterface: inert (body not reconstructed) [FLAG PC boot gate]\n";
-    }
-    return 0;
-}
-
-// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
-// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
-// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
-// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
-// not this gate.
-class CgsModule::VariableEventQueue<1536,16> const * BrnAI::AIModuleIO::OutputBuffer::GetGameEventQueueConst() const
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "BrnAI::AIModuleIO::OutputBuffer::GetGameEventQueueConst: inert (body not reconstructed) [FLAG PC boot gate]\n";
-    }
-    return 0;
-}
-
-// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
-// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
-// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
-// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
-// not this gate.
-class CgsModule::EventQueue<struct BrnAI::RouteMapModuleIO::RouteResponse,16> const * BrnAI::AIModuleIO::OutputBuffer::GetRouteResponseQueue() const
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "BrnAI::AIModuleIO::OutputBuffer::GetRouteResponseQueue: inert (body not reconstructed) [FLAG PC boot gate]\n";
-    }
-    return 0;
-}
+// GATES RETIRED 2026-08-25 (aimodule wave). The four const getters
+// (GetAICarOutputInterfaceConst / GetAIResourceRequestInterface / GetGameEventQueueConst /
+// GetRouteResponseQueue) returned NULL here, which is why WorldModule::BridgeAIModuleToOutput
+// carries four null guards around its four transfers. They now have real bodies in
+// GameSource/World/AI/SharedIO/BrnAIModuleIO_OutputBuffer.cpp, returning the addresses of REAL
+// TYPED MEMBERS -- read that file's header banner: until this wave the buffer declared no members
+// at all, so every one of its eleven accessors handed out `this + <X360 offset>` (up to
+// this+110448) out of a ONE-BYTE host allocation.
 
 // -------------------------------------------------------------------------
 // BrnDirector::Camera -- DESTUBBED (2026-07-26 wave): Camera::Clear @0x8223CE70,

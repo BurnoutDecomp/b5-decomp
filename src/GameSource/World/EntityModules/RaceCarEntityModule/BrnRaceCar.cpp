@@ -270,7 +270,28 @@ void RaceCar::RemoveFromWorld()
 //      -> VehicleInputInterface::ResetRaceCar -> the ResetVehicleEvent drain. ALL REAL, ALL LIVE.
 //   Direct closure, counted from the ARTIST export set: 37 functions / 5,307 instructions.
 //
+// ⭐⭐⭐ THE PARAGRAPH BELOW IS THE 2026-08-25 MEASUREMENT AND IT IS NOW HISTORY -- READ THIS
+//   FIRST. On 2026-08-26 (aimodule slice 1) the AI module lifecycle LANDED:
+//   AIModule::{Construct, Prepare, LoadMapData} are real bodies in
+//   GameSource/World/AI/BrnAIModule.cpp, AI.dat loads, "WorldMapData" resolves and
+//   BrnAI::ResetOnTrackManager IS Constructed against a bound road network -- measured on the
+//   boot log, with the control that could falsify it (AISectionsData::muVersion reads 12, the
+//   value KU_AI_SECTIONS_DATA_VERSION names, over 7639 sections and 3273824 B, which no
+//   garbage pointer produces). So "the AI module does not run at all" is FALSE from that date.
+//   ⛔ mbToBeResetOnTrack IS STILL READ BY NOBODY, and a heavy crash still pins: what remains
+//   is the REQUEST/RESULT PUMP above the lifecycle --
+//     SendResetOnTrackRequests @0x822CE178 (57)         [absent]
+//     the 35-entry AI-car array AIModule::Construct parks [absent -- and it gates all of the
+//         below: ResetOnTrackManager::Update dereferences GetAICar's result at +2714 on its
+//         FIRST request, so a null array faults the moment the pump delivers anything]
+//     AIModule::Update / UpdateResetOnTrackManager       [still boot gates]
+//     ResetOnTrackManager::Update + 32 siblings          [~4,750 insns, one bodied]
+//     ProcessResetOnTrackResultQueue @0x822F4580 (192)   [absent]
+//   Everything the paragraph below says about the SHAPE of the chain still holds; only its
+//   claim about WHERE the break is has moved one rung up.
+//
 // ⭐⭐ AND THE MANAGER IS NOT THE BLOCKER -- THE AI MODULE IS, BECAUSE IT DOES NOT RUN AT ALL.
+//   [SUPERSEDED 2026-08-26 -- see the block immediately above.]
 //   ResetOnTrackManager is an EMBEDDED MEMBER of AIModule at +286128, and its only constructor
 //   call site is AIModule::Prepare @0x82798070 stage 3:
 //       ResetOnTrackManager::Construct(module+286128, GetAISectionsData(), module+560)
