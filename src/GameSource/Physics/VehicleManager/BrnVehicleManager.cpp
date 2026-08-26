@@ -11,7 +11,6 @@
 
 #include <cmath>    // std::fabs, std::acos
 #include <cstddef>  // offsetof (layout asserts)
-#include <cstdlib>  // std::getenv -- the BRN_ENABLE_CRASH_ENTRY bring-up flag ONLY (see below)
 
 // BrnPhysics::Vehicle::VehicleManager -- the car-vs-car takedown chain.
 // This TU bodies the contact entry point HandleRaceCarRaceCarContact (STAGE 1), the classifier
@@ -588,181 +587,31 @@ namespace Vehicle
         (void)lpDeformationInterface;
 
         // ===========================================================================================
-        // ⛔⛔ BRING-UP FLAG -- NOT IN THE X360 BINARY -- CRASH ENTRY IS OFF ON THE PUBLIC PATH.
-        //
-        //   crash ENTRY is reconstructed and correct; crash RECOVERY needs
-        //   BrnAI::ResetOnTrackManager. Until that lands, a heavy crash
-        //   pins the car, so the public path keeps crash entry disabled.
-        //   DELETE-WHEN ResetOnTrackManager lands and a heavy crash recovers.
-        //
-        // ⭐ BOUNDARY MOVED 2026-08-26 (aimodule slice 1) -- HALF THE OLD REASON IS NOW FALSE.
-        //   The parenthesis this note used to carry ("and the AI MODULE ITSELF, which does not
-        //   run at all on this build") no longer holds: AIModule::Construct / Prepare /
-        //   LoadMapData are real bodies now, AI.dat loads, "WorldMapData" resolves, and
-        //   ResetOnTrackManager IS Constructed against a bound road network (measured on the
-        //   boot log: version 12, 7639 sections, 3273824 B). ⛔ THE FLAG STILL STANDS, because
-        //   what is missing moved UP a level, not away: nothing pumps the request/result round
-        //   trip yet -- SendResetOnTrackRequests, the 35-entry AI-car array (which
-        //   ResetOnTrackManager::Update dereferences on its first request), AIModule::Update +
-        //   UpdateResetOnTrackManager (still boot gates), ResetOnTrackManager::Update's own
-        //   ~4,750 instructions, and ProcessResetOnTrackResultQueue. So a heavy crash still
-        //   pins. Full ladder in BrnRaceCarEntityModule_CrashExit.cpp's banner.
-        //
-        // ⭐ BOUNDARY MOVED AGAIN 2026-08-26 (aicar_reset wave). Of the five things the note
-        //   above lists as missing, TWO ARE NOW LANDED: the 35-entry AI-car array (AIModule::
-        //   maAICars, seeded to E_AI_CAR_STATE_INACTIVE and passed to the manager's Construct)
-        //   and ResetOnTrackManager::{Update, ProcessResetOnTrackRequest, ComputeResetOnTrack,
-        //   ComputeInitialCoordinatesStandard}. The manager can now resolve a request; nothing
-        //   calls it. ⛔ AND TWO BLOCKERS UNDER THE PLUMBING WERE MEASURED, not inferred:
-        //     * VehicleManager::GenerateAboveGroundLineTests @0x82633990 is ABSENT, so
-        //       RaceCarState::mAboveGroundTestResult.mbValid is false every frame and no car
-        //       ever enters the AI section system ([collision-tag] aboveGroundValid=0).
-        //     * RaceCarEntityModule::WriteUpdatedAIData @0x822D1FC8 is ABSENT, so
-        //       AIModuleIO::RaceCarAIInterface::mbPlayerDataSet is never set -- and
-        //       AIModule::Update @0x8279B478 skips its ENTIRE body on that flag.
-        //   ⭐⭐ AND ONE THING THIS BANNER FAMILY HAS BEEN GETTING WRONG SINCE 2026-08-25 IS
-        //   RETRACTED: ActiveRaceCar::GetResetCoords does NOT need the mPrevTransforms ring to
-        //   be full. Its empty-ring arm (asm 0x822BF37C) hands out the car's LIVE transform, and
-        //   a booted run confirms it tracks the player. So the recovery does not wait on the AI
-        //   road network -- it waits on the pump. See BrnRaceCar.cpp::RequestResetOnTrack.
-        //
-        // ⭐ THIS IS NOT ONE OF THE NINE STALE GATES THAT WERE CORRECTLY DELETED on 2026-08-25.
-        //   Those claimed a function was unmounted or had no body anywhere in the tree, and every
-        //   one of those claims was FALSE. This flag claims nothing about the code below it: that
-        //   code is bodied, mounted, measured end to end, and it RUNS -- with the flag set, a
-        //   player crash still opens a RaceCarCrash record, ticks its cleanup timer, posts
-        //   RaceCarCrashCompleteEvent and delivers it to RaceCarEntityModule, exactly as it does
-        //   today (scratchpad crash_exit_log.md §03, run cx_flow6). What is missing is one rung
-        //   BELOW the exit: ProcessRaceCarCrashCompleteEvents receives the event with
-        //   mbCrashing == 1, so RaceCar::RequestResetOnTrack sets mbToBeResetOnTrack -- and the
-        //   consumer of that flag (RCEM::SendResetOnTrackRequests -> the AI ResetOnTrackRequest
-        //   queue -> BrnAI::ResetOnTrackManager -> ProcessResetOnTrackResultQueue ->
-        //   RequestPlaceOnTrack) does not exist yet. MEASURED 2026-08-25: the direct closure is
-        //   37 functions / 5,307 instructions. ⭐ 2026-08-26: the LOWEST rung of that closure is
-        //   now paid -- the module lifecycle and the manager's own Construct -- so what is left
-        //   is the request/result pump listed at the top of this banner. Full working-out in
-        //   BrnRaceCar.cpp::RequestResetOnTrack. So a HEAVY
-        //   crash ends logically and the car is never placed back on the road: it pins.
-        //
-        // ⭐⭐⭐ BOUNDARY MOVED AGAIN 2026-08-26 (resetpump wave), AND THE PARAGRAPH ABOVE IS
-        //   NOW HISTORY, NOT STATUS. THE PUMP IS PLUMBED AND A REQUEST HAS TRAVERSED IT.
-        //   RCEM::{WriteUpdatedAIData, SendResetOnTrackRequests, ProcessResetOnTrackResultQueue},
-        //   the two AI bridges, AIModule::{Update slice, ProcessRequestInterface,
-        //   UpdateResetOnTrackManager} and VehicleManager::GenerateAboveGroundLineTests are all
-        //   REAL. MEASURED (runs rp_crash2 / rp_crash3, asserts=0, no AV): a forced heavy crash
-        //   ends, the request leaves the race-car module, the AI module receives and resolves it,
-        //   the result comes back, and ActiveRaceCar::RequestPlaceOnTrack PUTS THE CAR BACK ON
-        //   THE ROAD -- after which it drives about a kilometre.
-        //
-        // ⛔⛔ THE FLAG STAYS ANYWAY, FOR A DIFFERENT AND SMALLER REASON, AND SAYING SO IS THE
-        //   WHOLE POINT OF KEEPING IT: NOTHING CLEARS THE CRASH STATE. After the recovery
-        //   mbCrashing is STILL 1, mfTimeCrashing restarts and climbs (74 s while the car was
-        //   driving normally), and no LEAVE_CRASHED is ever posted. A player would be recovered
-        //   and then drive for ever with the crash bar up and every reader of
-        //   IsPlayerCarCrashing lying.
-        //   ⭐ THE NEXT RUNG IS ONE DISPATCH, and it is not in this file:
-        //   VehicleManager::ProcessResetEvents @0x82617820 ends its per-car work with
-        //       if (mbResetTransform) VehiclePhysics::Reset(transform);   // 0x82617DF8
-        //       else                  (*(vtbl(car) + 4))(car);            // 0x82617E00  <- LIVE
-        //   Every reset this build issues carries resetTransform == 0, so the ELSE arm is the one
-        //   that runs. ⭐⭐ THE SLOT IS SETTLED -- PROBED, NOT REASONED ABOUT:
-        //   vtable 0x820D1034[1] == 0x825D5450 == VehiclePhysics::ClearCrashing, an ARTIST
-        //   export HOLE recovered from CgsDev::Assert::BeginAssert's xrefs_to and disassembled
-        //   out of the image. It clears mbCrashing (+0x710) and mbStartedFatallyCrashing
-        //   (+0x711) plus the partial slam/shunt bank. Working-out at (P3) in
-        //   BrnVehicleManager_WriteOutVehicleStats.cpp and on the body in VehiclePhysics.cpp.
-        //   ⭐⭐⭐ AND IT IS NOW DISPATCHED (crashclear wave, 2026-08-26). The intermediate note
-        //   here -- "ClearCrashing opens with CGS_ASSERT(IsCrashing()) and this arm runs for
-        //   EVERY reset, so un-parking it HANGS THE BOOT on the junkyard hand-off" -- was FALSE
-        //   TWICE OVER, and the correction is kept because the error is reusable:
-        //     (a) MEASURED: rp_default is a full flow to DRIVING WITH the junkyard hand-off and
-        //         a 2.1 km drive, and contains ZERO [teleport] lines. The hand-off is
-        //         PlaceOnTrackManager's INITIAL PLACEMENT and never enqueues a reset event.
-        //     (b) STRUCTURAL: ResetActiveRaceCar @0x822F4990 hardcodes resetTransform = 1 for
-        //         every NON-crash reset (`li r26,1` @0x822F4960, never overwritten); zero is
-        //         reachable only from IsCrashing() && IsDriveableAfterCrash(). The assert is a
-        //         TAUTOLOGY of the producer's own classification, not a trap.
-        //   The earlier note generalised "resetTransform==0 on every reset that ARRIVES" into
-        //   "every reset takes this arm". A condition's truth over the events that arrive says
-        //   nothing about WHICH events arrive.
-        //   (Measured, with the control that could falsify it: run cx_flow3 pinned at
-        //   (2932,-10.8,~209) for 80 s on the identical build that "recovered" in cx_flow6 --
-        //   and cx_flow6's re-acceleration began BEFORE the complete event, i.e. it was physics
-        //   rolling away from a light knock, not recovery.)
-        //
-        // ⚠️ IT IS A CAPABILITY SWITCH, NOT A BEHAVIOUR CHANGE. When the flag is set the console
-        //   path below is entered unmodified; when it is clear this returns at exactly the point
-        //   the console's OWN suppression gates return (the two invulnerability latches /
-        //   mbStopPlayerCrashing / mbStopAICrashing, four lines below), so no half-committed
-        //   crash state can exist either way. Nothing downstream is stubbed, faked or reordered.
-        //
-        // ⭐ OPT IN with the environment variable  BRN_ENABLE_CRASH_ENTRY=1  (the BRN_* precedent:
-        //   BRN_PROP_DIAG / BRN_TRICACHE_PROBE / BRN_INPUT_ALLOW_BACKGROUND). Waves working the
-        //   crash chain set it and get today's full behaviour, bit for bit. flow_run.ps1 clears
-        //   it on every default run and exposes it as -CrashEntry, so a leftover shell variable
-        //   cannot ride into a run that calls itself default.
-        //
-        //   Reference: scratchpad resetontrack_log.md (JOB 1), crash_exit_log.md §03.
+        // ✅ THE BRN_ENABLE_CRASH_ENTRY BRING-UP FLAG IS **DELETED** (endcrash wave, 2026-08-27).
+        // It gated this whole function -- the crash-entry sink -- behind an environment variable for
+        // three waves. Its reasons were retired one at a time and the last one fell today:
+        //   * "crash RECOVERY needs BrnAI::ResetOnTrackManager, so a heavy crash pins the car" --
+        //     retired 2026-08-26 (resetpump wave): the request/result pump is plumbed end to end and
+        //     a crashed car is put back on the road and drives away.
+        //   * "NOTHING CLEARS THE CRASH STATE, so the recovered car keeps the crash bar up and every
+        //     reader of IsPlayerCarCrashing lies" -- retired 2026-08-26 (crashclear wave):
+        //     ProcessResetEvents dispatches RaceCarPhysics vtable slot 1 ==
+        //     VehiclePhysics::ClearCrashing @0x825D5450, mbCrashing goes 1 -> 0 and LEAVE_CRASHED is
+        //     posted.
+        //   * "the HUD never comes back -- the HUD FSM enters the crashed state and cannot leave" --
+        //     retired 2026-08-27 (endcrash wave). The missing piece was never an arm, it was a STATE:
+        //     BrnGui::CrashedHudState declared no virtuals at all, so it never registered, never
+        //     updated and never sent END_CRASH. It has OnEnter/OnLeave/Update/UpdatePermenant now
+        //     (BrnCrashedHudState.cpp), and its TU is finally in the exe source list.
+        // MEASURED, run ec_crash1 (-Frames -Drive -CrashPlayer 5700), asserts=0, no AV, full flow to
+        // DRIVING: TWO crashes, each  START_CRASHED -> START_CRASH -> [HUD hidden] -> ClearCrashing
+        // 1 -> 0 -> LEAVE_CRASHED -> END_CRASH -> [HUD BACK], and the HUD is still on screen at the
+        // last dumped frame. Frame-measured, not just logged: the minimap box is empty across both
+        // crash windows and full on both sides of them.
+        // ⚠️ Crash entry is now ON for every run, including default ones. The console path below
+        // is what always ran when the flag was set -- deleting the gate changes no behaviour that a
+        // -CrashEntry run did not already have.
         // ===========================================================================================
-        {
-            static const bool sbCrashEntryEnabled = (std::getenv("BRN_ENABLE_CRASH_ENTRY") != 0);
-            if (!sbCrashEntryEnabled)
-            {
-                // Budgeted witness: the banner once, then one short line per suppressed crash up
-                // to 16, so scoring an ABSENCE downstream is not scoring a silent diagnostic.
-                static s32 sliSuppressed = 0;
-                if (CgsDev::Log::gpDebugPrint != 0 && sliSuppressed < 16)
-                {
-                    if (sliSuppressed == 0)
-                    {
-                        *CgsDev::Log::gpDebugPrint
-                            << "[bringup] CRASH ENTRY DISABLED (BRN_ENABLE_CRASH_ENTRY is not set)."
-                            << " BOUNDARY MOVED 2026-08-26 (resetpump wave), and the REASON THIS LINE"
-                            << " USED TO PRINT IS RETIRED: the reset-on-track REQUEST/RESULT PUMP IS"
-                            << " PLUMBED END TO END AND A REQUEST HAS TRAVERSED IT. Measured, runs"
-                            << " rp_crash2 / rp_crash3: crash -> CRASH COMPLETE -> [resetpump] request"
-                            << " SENT -> RECEIVED by the AI module -> [rot] request resolved -> RESULT"
-                            << " applied -> ActiveRaceCar::RequestPlaceOnTrack, and the car IS put back"
-                            << " on the road (ResetActiveRaceCar RE-RESET + a seated pose) and drives"
-                            << " ~1 km afterwards, asserts=0, no AV.\n"
-                            << "[bringup] ...AND THE PHYSICS-SIDE REASON THIS LINE USED TO GIVE IS"
-                            << " ALSO RETIRED (crashclear wave, 2026-08-26). It said 'NOTHING CLEARS"
-                            << " THE CRASH STATE'. It does now: the !mbResetTransform arm of"
-                            << " VehicleManager::ProcessResetEvents @0x82617E00 is RaceCarPhysics"
-                            << " vtable slot 1 == VehiclePhysics::ClearCrashing @0x825D5450 (probed"
-                            << " off the image; vtable base 0x820D1034 pinned by the VehicleManager"
-                            << " ctor), and it is now dispatched BY NAME. MEASURED, run cc_crash1,"
-                            << " asserts=0: crash -> recover -> `[crash-clear] ... crashing 1 -> 0`"
-                            << " -> `[crash-hud] posting GUI 377 ... state=1 (LEAVE_CRASHED)`, TWICE"
-                            << " in one run, and mfTimeCrashing stops climbing instead of reaching"
-                            << " 74 s. Every consumer of IsPlayerCarCrashing is now correct.\n"
-                            << "[bringup] ...SO THE FLAG NOW STAYS FOR A DIFFERENT AND SMALLER"
-                            << " REASON, ONE RUNG FURTHER DOWNSTREAM AND IN THE GUI, NOT THE"
-                            << " PHYSICS: THE HUD NEVER COMES BACK. BrnFBurnMainHudState maps GUI"
-                            << " 377 payload 0|2 -> SendStateEvent(\"START_CRASH\") but has NO"
-                            << " END_CRASH arm anywhere in the tree, so the HUD FSM enters the"
-                            << " crashed state and cannot leave. MEASURED with the control that"
-                            << " could falsify it: in cc_crash1 the whole HUD (minimap, district"
-                            << " panel, miles-driven) disappears at the second crash and is still"
-                            << " gone 5000 presents later at the end of the run, while the DEFAULT"
-                            << " run cc_default -- same drive, same wall, no crash entry -- ends"
-                            << " with the full HUD on screen. Ship this on today and one crash"
-                            << " costs the player their HUD for the session."
-                            << " THE NEXT RUNG IS THE END_CRASH CONSUMER in"
-                            << " BrnFBurnMainHudState::ProcessGameEvents (payload 1|3)."
-                            << " Set BRN_ENABLE_CRASH_ENTRY=1 to exercise the full chain.\n";
-                    }
-                    ++sliSuppressed;
-                    *CgsDev::Log::gpDebugPrint
-                        << "[bringup] crash entry suppressed #" << sliSuppressed
-                        << " victim index "
-                        << static_cast<s32>((lVictimEntityId.muValue >> 10) & 0x3FFF)
-                        << " cause sub-code "
-                        << static_cast<s32>((lAggressorEntityId.muValue >> 24) & 0xFF) << "\n";
-                }
-                return;
-            }
-        }
 
         // ---- Step 1: index + early-out suppression gates (asm v36/v38/v43/v44/v45) ----
         const s32 liVictimIndex = static_cast<s32>((lVictimEntityId.muValue >> 10) & 0x3FFF);
