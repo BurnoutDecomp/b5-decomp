@@ -83,7 +83,12 @@ public:
     // GetName is const (a pure accessor; Environment::GetR reads the name through a
     // const Factory&).
     Name GetName() const;
-    void Update(f32 af32DeltaTime);
+
+    // DWARF h:310 -- the public per-frame front the environment's
+    // UpdateFactories @0x826A2200 drives; on the console it is inlined to the
+    // bare vtbl+16 dispatch, i.e. exactly this virtual DoUpdate forward (made
+    // header-inline phase B4).
+    void Update(f32 af32DeltaTime) { DoUpdate(af32DeltaTime); }
 
     // DWARF h:334. The owning environment, by name (the X360 reads Factory+0x0C;
     // ContentLoader's allocator walk and Content::DoDispose go through here).

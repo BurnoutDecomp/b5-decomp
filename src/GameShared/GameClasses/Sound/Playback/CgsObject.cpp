@@ -74,5 +74,26 @@ void Content::DoDispose()
     lpAllocator->DoFree(lResource);
 }
 
+// ---------------------------------------------------------------------------
+// Content::Update  @ 0x82680BA8  (bodied 2026-08-25, faithful-audio-engine
+// phase B4 -- the base per-frame tick Environment::UpdateContent drives)
+//   if (!mu16LoadCount && DoLoad()) ++mu16LoadCount;    // vtbl slot [2]
+//   DoUpdate(dt);                                        // vtbl slot [6]
+//   if (REMOVING && state == UNLOADED) removeState = REMOVED;
+// ---------------------------------------------------------------------------
+void Content::Update(f32 af32DeltaTime)
+{
+    if (mu16LoadCount == 0 && DoLoad())
+        ++mu16LoadCount;
+
+    DoUpdate(af32DeltaTime);
+
+    if (mu8RemoveState == E_CONTENT_REMOVE_REMOVING &&
+        mu8ContentState == E_CONTENT_STATE_UNLOADED)
+    {
+        mu8RemoveState = E_CONTENT_REMOVE_REMOVED;
+    }
+}
+
 } // namespace Playback
 } // namespace CgsSound

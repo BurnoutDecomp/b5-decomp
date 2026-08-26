@@ -165,6 +165,12 @@ namespace Playback
         void StartDac();                          // @0x82680F50
         void StopDac();                           // @0x82680FE8
 
+        // @0x826D7500 (bodied phase B4). The per-frame engine pump the playback
+        // Module::Update drives: UpdateContent, then (under the RWAC system
+        // lock) UpdateVoices + UpdateFactories + the command-ring high-water
+        // assert (muDeferredRingHighWater >= 157286, CgsEnvironment.cpp:192).
+        void Update(f32 af32TimeStep);
+
         // @0x826BFDF8 (this TU, DWARF h:535) -- the ref-count-zero disposer:
         // snapshot the owning allocator, run the (non-deleting) destructor, then
         // release the carve through the allocator-keyed operator delete. The X360
@@ -181,6 +187,18 @@ namespace Playback
         // path). Adopts the spec, wires the three handle tables + the Registry
         // into the co-located carve tail, zeroes the tables/monitors/counters.
         explicit Environment(const EnvironmentSpec& lrSpec);
+
+        // The Update sub-passes (private; bodied phase B4):
+        // @0x826C00B8 -- tick every live content (Content::Update), clear the
+        //   CHANGED high bit, dispose REMOVED entries, count muActiveContent.
+        void UpdateContent(f32 af32TimeStep);
+        // @0x826C01B8 -- zero + rebuild mafVoiceTypeTickTotals (per
+        //   GetProfileVoiceType, by GetCpuTicks), tick every live voice
+        //   (Voice::Update), clear its CHANGED bit, release REMOVED voices,
+        //   count muActiveVoices.
+        void UpdateVoices(rw::audio::core::System* apSystem, f32 af32TimeStep);
+        // @0x826A2200 -- per-factory virtual DoUpdate(dt).
+        void UpdateFactories(f32 af32TimeStep);
 
         CpuMonitors             mCpuMonitors;             // h:404 (X360 +0x08)
         rw::IResourceAllocator* mpAllocator;              // h:405 (X360 +0x30 -- the DoDispose snapshot)

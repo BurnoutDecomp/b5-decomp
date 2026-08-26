@@ -23,8 +23,12 @@
 #include "GameShared/GameClasses/Memory/CgsLinearMalloc.h"                 // Prepare's stream-buffer bump path
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                 // gpDebugPrint / gxMessageFilterFlags
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"  // the 8 environment CPU monitors
+#include "GameShared/GameClasses/Sound/Playback/RWAC/CgsGenericRwacFactory.h" // GetDefaultRwacSystem + RwacSystemLock (phase B4)
+#include "GameShared/GameClasses/System/Resource/CgsResourceIOEvents.h"    // OpenReadStreamRequest / ReadStreamEvent (phase B4)
+#include "GameShared/GameClasses/System/Resource/CgsResourceID.h"          // ID::HashString (DoServiceContentLoadRequest)
+#include "GameShared/GameClasses/System/Resource/CgsResourcePtr.h"         // BaseResourcePtr (the type-4 response rebind)
 
-#include <cstring>  // memcpy
+#include <cstring>  // memcpy / memset (the 0xF0 stream-buffer scrub)
 
 namespace CgsSound
 {
@@ -66,19 +70,15 @@ namespace
 // off_820CE500 + the two RWMutex(NULL, true) builds @+0x10/+0x118 -- since phase
 // B1 that IS the inherited base ctor here), installs the two interface-base
 // vptrs (off_820CE350/58, overwritten with the final off_820CFA24/20 by the
-// derived hand-off), zeroes the environment + factory handles, builds the
-// stream mutex (Mutex(NULL, true) -- asm r4=0, r5=1), zeroes the deferred
-// queue's leading count byte (+0x2298; the queue's Construct() re-establishes
-// it), and nulls the string-table head.
-//
-// FLAG (interface bases): the +0x228/+0x22C vptr slots' concrete interfaces are
-// not typed yet (the +0x22C one is the DWARF IContentLoadService), so the raw
-// slots are left null rather than fabricating tables.
+// derived hand-off -- since phase B4 those ARE the real IStreamProvider /
+// IContentLoadService base sub-objects, and the paired installs are exactly the
+// compiler's MI base-then-derived construction), zeroes the environment +
+// factory handles, builds the stream mutex (Mutex(NULL, true) -- asm r4=0,
+// r5=1), zeroes the deferred queue's leading count byte (+0x2298; the queue's
+// Construct() re-establishes it), and nulls the string-table head.
 // ---------------------------------------------------------------------------
 Module::Module()
     : CgsModule::ModuleSingleBuffered()
-    , mpSecondaryVtbl(0)     // X360: off_820CE350 then off_820CFA24 (see FLAG)
-    , mpTertiaryVtbl(0)      // X360: off_820CE358 then off_820CFA20 (see FLAG)
     , mhEnvironment()        // X360 +0x2258 = 0
     , mhRwacFactory()        // X360 +0x225C = 0
     , mhAemsFactory()        // X360 +0x2260 = 0
@@ -116,7 +116,7 @@ void Module::Construct(s32 li32PoolId)
 
     CgsModule::ModuleSingleBuffered::Construct();
 
-    mePrepareStage = E_PREPARESTAGE_0;
+    mePrepareStage = E_PREPARESTAGE_START;
     meReleaseStage = E_RELEASESTAGE_DONE;
 
     mResourceReceiverQueue.Construct();
@@ -127,14 +127,9 @@ void Module::Construct(s32 li32PoolId)
 
     mDeferredResourceRequestQueue.Construct();
 
-    for (u32 lu = 0; lu < 3; ++lu)
+    for (u32 lu = 0; lu < SKU_NUMBER_OF_STREAM_BUFFERS; ++lu)
     {
-        maStreamBuffers[lu].mpBuffer       = 0;
-        maStreamBuffers[lu].mu32Reserved04 = 4;
-        maStreamBuffers[lu].mu32Reserved08 = 0;
-        maStreamBuffers[lu].mu32Reserved0C = 0;
-        maStreamBuffers[lu].mu32Reserved10 = 0;
-        maStreamBuffers[lu].mf32Reserved14 = 0.0f;
+        maStreamBuffers[lu].Construct();   // {0, E_FREE_BUFFER, 0, 0, false, 0.0}
     }
 
     mbIsNewModule = true;
@@ -181,19 +176,19 @@ bool Module::Prepare(rw::IResourceAllocator* apAllocator,
 
     switch (mePrepareStage)
     {
-    case E_PREPARESTAGE_0:
+    case E_PREPARESTAGE_START:
         mePrepareStage++;
         // fall through
-    case E_PREPARESTAGE_1:
+    case E_PREPARESTAGE_MANAGER:
         if (!CgsModule::ModuleSingleBuffered::Prepare())
             return false;
         mResourceReceiverQueue.Clear();
         if (!mDeferredResourceRequestQueue.Prepare())
             return false;
         mePrepareStage++;
-        meReleaseStage = static_cast<EReleaseStage>(5);
+        meReleaseStage = E_RELEASESTAGE_MANAGER;
         // fall through
-    case E_PREPARESTAGE_2:
+    case E_PREPARESTAGE_ENVIRONMENT:
     {
         EnvironmentSpec lSpec;
         lSpec.mpAllocator      = apAllocator;
@@ -221,10 +216,10 @@ bool Module::Prepare(rw::IResourceAllocator* apAllocator,
         }
 
         mePrepareStage++;
-        meReleaseStage = static_cast<EReleaseStage>(3);
+        meReleaseStage = E_RELEASESTAGE_ENVIRONMENT;
         // fall through
     }
-    case E_PREPARESTAGE_3:
+    case E_PREPARESTAGE_FACTORIES:
     {
         // [FLAG, the AEMS keystone -- see the banner]: the three factory creates
         // land with the factory-ctor slice; the handles stay null meanwhile.
@@ -257,8 +252,8 @@ bool Module::Prepare(rw::IResourceAllocator* apAllocator,
             else
                 lpBuffer = apLinearMalloc->Malloc(muStreamBufferSize);
             CGS_ASSERT(lpBuffer != 0, "lpBuffer");
-            maStreamBuffers[lu].mpBuffer       = lpBuffer;
-            maStreamBuffers[lu].mu32Reserved04 = 4;
+            maStreamBuffers[lu].mpBuffer      = lpBuffer;
+            maStreamBuffers[lu].mBufferStatus = StreamBuffer::E_FREE_BUFFER;
         }
 
         // The 8 environment CPU monitors, BY NAME through the env's CpuMonitors
@@ -289,11 +284,11 @@ bool Module::Prepare(rw::IResourceAllocator* apAllocator,
         }
 
         mePrepareStage++;   // the raw bump with the .h:500 bound assert (inlined op++)
-        meReleaseStage = static_cast<EReleaseStage>(2);
+        meReleaseStage = E_RELEASESTAGE_FACTORIES;
         // fall through
     }
     case E_PREPARESTAGE_DONE:
-        meReleaseStage = static_cast<EReleaseStage>(0);
+        meReleaseStage = E_RELEASESTAGE_START;
         return true;
     default:
         CGS_ASSERT(false, "Invalid Prepare Stage");
@@ -357,8 +352,8 @@ bool Module::Release()
         for (u32 lu = 0; lu < 3; ++lu)
         {
             void* lpBuffer = maStreamBuffers[lu].mpBuffer;
-            maStreamBuffers[lu].mu32Reserved08 = 0;
-            maStreamBuffers[lu].mpBuffer       = 0;
+            maStreamBuffers[lu].mReadStream = CgsFileSystem::ReadStream();   // the console +8 word zero
+            maStreamBuffers[lu].mpBuffer    = 0;
             if (mbStreamsUsingMainAllocator)
             {
                 CGS_ASSERT(lpMainAllocator != 0, "lpMainAllocator");
@@ -380,7 +375,7 @@ bool Module::Release()
         meReleaseStage++;
         // fall through
     case E_RELEASESTAGE_DONE:
-        mePrepareStage = E_PREPARESTAGE_0;
+        mePrepareStage = E_PREPARESTAGE_START;
         return true;
     default:
         CGS_ASSERT(false, "Invalid Release Stage");
@@ -717,12 +712,10 @@ Content** Module::CreateContent(Content** lppContentOut, u32 lu32Ident,
 
     // Wire the freshly created content's owner fields BY NAME (the module's own
     // `stw +0x10 / stw +0x14` stores after the factory call): mIdent, and the
-    // IContentLoadService base sub-object pointer (this+0x22C -- the DWARF-declared
-    // `: protected IContentLoadService` base this class models as the tertiary
-    // vptr slot until the MI shape is recovered).
-    (*lhContent).mIdent = lu32Ident;                                    // Content +0x10
-    void* lpOwner = this ? reinterpret_cast<char*>(this) + 0x22C : 0;
-    (*lhContent).mpLoadService = lpOwner;                               // Content +0x14
+    // IContentLoadService base sub-object pointer -- since phase B4 the REAL MI
+    // upcast (the console's this+0x22C adjustment IS this static_cast).
+    (*lhContent).mIdent = lu32Ident;                                       // Content +0x10
+    (*lhContent).SetLoadService(static_cast<IContentLoadService*>(this));  // Content +0x14
 
     Content* lpContent = lhContent.GetObject();
     *lppContentOut = lpContent;
@@ -737,6 +730,383 @@ Content** Module::CreateContent(Content** lppContentOut, u32 lu32Ident,
     lpContent->Release();
     lpFactory->Release();
     return lppContentOut;
+}
+
+namespace
+{
+    // Access adapter for the type-4 receiver arm: the console's bare
+    // `bl BaseResourcePtr::CreateFromHandle` there is the inlined ResourcePtr
+    // rebind (the AddListResource family emits the identical two-instruction
+    // shape); CreateFromHandle is protected on the committed type, so the rebind
+    // is expressed through this data-free derived adapter rather than loosening
+    // the committed access.
+    struct ResourcePtrBinder : public CgsResource::BaseResourcePtr
+    {
+        static void Bind(CgsResource::BaseResourcePtr* lpTarget,
+                         const CgsResource::ResourceHandle* lpHandle)
+        {
+            static_cast<ResourcePtrBinder*>(lpTarget)->CreateFromHandle(lpHandle);
+        }
+    };
+
+    // The content-load response record (receiver event type 4) -- the resource
+    // side's echo of the request DoServiceContentLoadRequest posts. Console word
+    // view (the ProcessResourceReceiverQueue asm): [1] the requester's resource
+    // pointer (the load request's lpUserData), [6..] the embedded ResourceHandle
+    // whose mpResourceMemory the cpp:598 assert dereferences. Host contract:
+    // the same fields at host widths (the PC producer -- the item-3 content
+    // slice -- builds this record).
+    struct ContentLoadResponse
+    {
+        void*                        mpUser;       // [0]  the receiver-queue route echo
+        CgsResource::BaseResourcePtr* mpTarget;    // [1]  the requester's ResourcePtr
+        void*                        mapReserved[4];// [2..5]
+        CgsResource::ResourceHandle  mHandle;      // [6..] the resolved resource
+    };
+}
+
+// ---------------------------------------------------------------------------
+// Module::Update  @ 0x826E9700  (bodied 2026-08-25, faithful-audio-engine
+// phase B4 -- the per-frame pump)
+//
+// Console offsets, all closed by name: env handle +0x2258 (each read re-guarded
+// through the CgsHandle.h:305 assert == GetEnvironment()), the env's
+// miModule/miEnvironmentUpdate monitors (env+8/+16), buffers +0x2250/+0x2254,
+// the output queue Clear + freed-count zero (== OutputBuffer::Clear), the
+// deferred-queue drain (Append<1024,16> into the 4096 queue) + stream tick
+// under mStreamMutex, the receiver drain, then Environment::Update(+0x2700
+// mf32TimeStep).
+// ---------------------------------------------------------------------------
+void Module::Update(Io::InputBuffer* apInputBuffer, Io::OutputBuffer* apOutputBuffer)
+{
+    CgsDev::PerfMonCpu::StartMonitor(GetEnvironment()->GetCpuMonitors().miModule);
+
+    mpInputBuffer  = apInputBuffer;
+    mpOutputBuffer = apOutputBuffer;
+    apInputBuffer->LockForRead();
+    apOutputBuffer->LockForWrite();
+
+    apOutputBuffer->Clear();   // queue Clear + freed-array count zero (the console inline)
+
+    mStreamMutex.Lock();
+    apOutputBuffer->GetResourceRequestQueue().Append(mDeferredResourceRequestQueue);
+    mDeferredResourceRequestQueue.Clear();
+    UpdateStreamBuffers(apOutputBuffer->GetStreamBuffersFreed());
+    mStreamMutex.Unlock();
+
+    apInputBuffer->UnlockForRead();
+
+    ProcessResourceReceiverQueue();
+
+    CgsDev::PerfMonCpu::StartMonitor(GetEnvironment()->GetCpuMonitors().miEnvironmentUpdate);
+    GetEnvironment()->Update(mf32TimeStep);
+    CgsDev::PerfMonCpu::StopMonitor(GetEnvironment()->GetCpuMonitors().miEnvironmentUpdate);
+
+    apOutputBuffer->UnlockForWrite();
+    mpInputBuffer  = 0;
+    mpOutputBuffer = 0;
+
+    CgsDev::PerfMonCpu::StopMonitor(GetEnvironment()->GetCpuMonitors().miModule);
+}
+
+// ---------------------------------------------------------------------------
+// Module::ProcessResourceReceiverQueue  @ 0x826A25C0  (bodied phase B4)
+//
+// Drain mResourceReceiverQueue (see the header note per arm), then Clear it.
+// The stream arms run under the RWAC system lock + the stream mutex, exactly
+// bracketing the console's Lock/Unlock pairs.
+// ---------------------------------------------------------------------------
+void Module::ProcessResourceReceiverQueue()
+{
+    if (mResourceReceiverQueue.GetCount() > 0)
+    {
+        const CgsModule::Event* lpEvent = 0;
+        s32 liSize = 0;
+        s32 liType = mResourceReceiverQueue.GetFirstEvent(&lpEvent, &liSize);
+
+        while (lpEvent)
+        {
+            switch (liType)
+            {
+            case 4:   // content-load response
+            {
+                const ContentLoadResponse* lpResponse =
+                    reinterpret_cast<const ContentLoadResponse*>(lpEvent);
+                ResourcePtrBinder::Bind(lpResponse->mpTarget, &lpResponse->mHandle);
+                CGS_ASSERT(*static_cast<void* const*>(lpResponse->mHandle.mpResourceMemory) != 0,
+                           "lpResponse->GetHandle().GetResource()->GetMemoryResource()");
+                break;
+            }
+            case 16:  // stream-open response
+            {
+                const CgsResource::Events::ReadStreamEvent* lpResponse =
+                    reinterpret_cast<const CgsResource::Events::ReadStreamEvent*>(lpEvent);
+
+                rw::audio::core::System* lpSystem = GetDefaultRwacSystem();
+                CGS_ASSERT(lpSystem != 0, "mpSystem");
+                rw::audio::core::RwacSystemLock(lpSystem);
+                mStreamMutex.Lock();
+
+                const u32 luIndex = static_cast<u32>(lpResponse->GetEventId());
+                CGS_ASSERT(luIndex < SKU_NUMBER_OF_STREAM_BUFFERS,
+                           "( liIndex >= 0 ) && ( liIndex < SKU_NUMBER_OF_STREAM_BUFFERS )");
+                StreamBuffer& lrBuffer = maStreamBuffers[luIndex];
+                CGS_ASSERT(lrBuffer.GetStatus() == StreamBuffer::E_USING_BUFFER,
+                           "E_USING_BUFFER == GetStatus()");
+                lrBuffer.SetReadStream(lpResponse->GetStream());
+                lrBuffer.SetStatus(StreamBuffer::E_STREAM_OPEN);
+
+                mStreamMutex.Unlock();
+                rw::audio::core::RwacSystemUnlock(lpSystem);
+                break;
+            }
+            case 18:  // stream-close response
+            {
+                const CgsResource::Events::ReadStreamEvent* lpResponse =
+                    reinterpret_cast<const CgsResource::Events::ReadStreamEvent*>(lpEvent);
+
+                rw::audio::core::System* lpSystem = GetDefaultRwacSystem();
+                CGS_ASSERT(lpSystem != 0, "mpSystem");
+                rw::audio::core::RwacSystemLock(lpSystem);
+                mStreamMutex.Lock();
+
+                const u32 luIndex = static_cast<u32>(lpResponse->GetEventId());
+                CGS_ASSERT(luIndex < SKU_NUMBER_OF_STREAM_BUFFERS,
+                           "( lIndex >= 0 ) && ( lIndex < SKU_NUMBER_OF_STREAM_BUFFERS )");
+                StreamBuffer& lrBuffer = maStreamBuffers[luIndex];
+                CGS_ASSERT(lrBuffer.GetStatus() == StreamBuffer::E_WAITING_FOR_CLOSE,
+                           "StreamBuffer::E_WAITING_FOR_CLOSE == mStreamBuffers[ lIndex ].GetStatus()");
+                std::memset(lrBuffer.mpBuffer, 0xF0, muStreamBufferSize);   // the scrub pattern
+                lrBuffer.SetStatus(StreamBuffer::E_WAITING_GRACE_PERIOD);
+
+                mStreamMutex.Unlock();
+                rw::audio::core::RwacSystemUnlock(lpSystem);
+                break;
+            }
+            default:
+                // The console streams the message then fires; kept as a static
+                // string (the typo is the X360's own).
+                CGS_ASSERT(false, "Unanticiapated Resource Response. Eek.\n");
+                break;
+            }
+
+            const CgsModule::Event* lpNext = 0;
+            liType = mResourceReceiverQueue.GetNextEvent(lpEvent, &lpNext, &liSize);
+            lpEvent = lpNext;
+        }
+    }
+
+    mResourceReceiverQueue.Clear();
+}
+
+// ---------------------------------------------------------------------------
+// Module::UpdateStreamBuffers  @ 0x826A28E8  (bodied phase B4; caller holds
+// mStreamMutex)
+//
+// Per record: a queued close on a now-open stream re-dispatches the virtual
+// DoCloseStream (the console `vtbl+4` on the +0x228 IStreamProvider sub-object);
+// an E_WAITING_GRACE_PERIOD record accumulates mf32TimeStep, stomp-scans its
+// 0xF0-scrubbed buffer (assert "STOMP OCCURRED" -- the console streams the
+// time/index/address; kept static), and after the first tick appends its voice
+// id to the freed list and resets to E_FREE_BUFFER (mpBuffer kept).
+// ---------------------------------------------------------------------------
+void Module::UpdateStreamBuffers(Io::OutputBuffer::FreedBuffersArray& arFreedBuffers)
+{
+    for (u32 lu = 0; lu < SKU_NUMBER_OF_STREAM_BUFFERS; ++lu)
+    {
+        StreamBuffer& lrBuffer = maStreamBuffers[lu];
+
+        if (lrBuffer.GetQueuedForClose() &&
+            lrBuffer.GetStatus() == StreamBuffer::E_STREAM_OPEN)
+        {
+            DoCloseStream(&lrBuffer.GetReadStream());
+        }
+
+        if (lrBuffer.GetStatus() == StreamBuffer::E_WAITING_GRACE_PERIOD)
+        {
+            lrBuffer.mfGraceWaitTime += mf32TimeStep;
+
+            bool lbStomped = false;
+            const u8* lpBytes = static_cast<const u8*>(lrBuffer.mpBuffer);
+            for (u32 luByte = 0; luByte < muStreamBufferSize; ++luByte)
+            {
+                if (lpBytes[luByte] != 0xF0u)
+                    lbStomped = true;
+            }
+            CGS_ASSERT(!lbStomped, "STOMP OCCURRED");
+
+            if (lrBuffer.mfGraceWaitTime > 0.0f)
+            {
+                arFreedBuffers.Append(lrBuffer.mVoiceId);
+                lrBuffer.mfGraceWaitTime  = 0.0f;
+                lrBuffer.mReadStream      = CgsFileSystem::ReadStream();
+                lrBuffer.mVoiceId         = 0;
+                lrBuffer.mbQueuedForClose = false;
+                lrBuffer.mBufferStatus    = StreamBuffer::E_FREE_BUFFER;
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Module::FindStreamBuffer  @ 0x82689CE0  (bodied phase B4)
+//   index = (lpReadStream - &maStreamBuffers[0].mReadStream) / record; -1 when
+//   the pointer is not one of the 3 records' mReadStream members.
+// ---------------------------------------------------------------------------
+s32 Module::FindStreamBuffer(const CgsFileSystem::ReadStream* lpReadStream)
+{
+    CGS_ASSERT(lpReadStream != 0, "0 != lpReadStream");
+
+    for (s32 li = 0; li < static_cast<s32>(SKU_NUMBER_OF_STREAM_BUFFERS); ++li)
+    {
+        if (lpReadStream == &maStreamBuffers[li].mReadStream)
+            return li;
+    }
+    return -1;
+}
+
+// ---------------------------------------------------------------------------
+// Module::DoServiceContentLoadRequest  @ 0x826F9F88  (the IContentLoadService
+// override; bodied phase B4)
+//
+// RESOURCE_MODULE loads only: assert the user data (cpp:1171), hash the content
+// name, and post the 24-byte load request {&mResourceReceiverQueue, lpUserData,
+// mi32PoolId, hash64} as event type 4 into the attached output buffer's request
+// queue. The console widens the 32-bit hash into the trailing 64-bit id slot.
+// ---------------------------------------------------------------------------
+bool Module::DoServiceContentLoadRequest(u32 lu32Ident, EContentLoadMethod leMethod,
+                                         const char* lpcName, void* lpUserData)
+{
+    (void)lu32Ident;   // carried by the request protocol's event id on the console side
+
+    if (leMethod != E_CONTENT_LOAD_RESOURCE_MODULE)
+        return false;
+
+    CGS_ASSERT(lpUserData != 0, "lpUserData");
+
+    const s32 liHash = CgsResource::ID::HashString(
+        reinterpret_cast<const u8*>(lpcName));
+
+    // The 24-byte console request record: {route, userData, poolId, hash64}.
+    struct ContentLoadRequest
+    {
+        CgsModule::BaseEventReceiverQueue* mpUser;
+        void*                              mpUserData;
+        s32                                miPoolId;
+        u64                                muResourceId;
+    } lRequest;
+    lRequest.mpUser       = &mResourceReceiverQueue;
+    lRequest.mpUserData   = lpUserData;
+    lRequest.miPoolId     = mi32PoolId;
+    lRequest.muResourceId = static_cast<u64>(static_cast<u32>(liHash));
+
+    CGS_ASSERT(mpOutputBuffer != 0, "mpOutputBuffer");
+    return mpOutputBuffer->GetResourceRequestQueue().AddEvent(
+        reinterpret_cast<const CgsModule::Event*>(&lRequest), 4, sizeof(lRequest));
+}
+
+// ---------------------------------------------------------------------------
+// Module::DoOpenStream  @ 0x826FA020  (the IStreamProvider override; bodied
+// phase B4 -- see the header note for the full contract)
+// ---------------------------------------------------------------------------
+CgsFileSystem::ReadStream* Module::DoOpenStream(IStreamProvider::StreamSpec& lrSpec)
+{
+    mStreamMutex.Lock();
+
+    // First free record.
+    s32 liIndex = -1;
+    for (u32 lu = 0; lu < SKU_NUMBER_OF_STREAM_BUFFERS; ++lu)
+    {
+        if (maStreamBuffers[lu].GetStatus() == StreamBuffer::E_FREE_BUFFER)
+        {
+            liIndex = static_cast<s32>(lu);
+            break;
+        }
+    }
+    if (liIndex < 0)
+    {
+        CGS_ASSERT(false, "We've run out of Audio Stream Buffers.");
+        mStreamMutex.Unlock();
+        return 0;
+    }
+
+    // Resolve the requesting plug-in's content out of the environment.
+    Handle<Content> lhContent = GetEnvironment()->GetR(
+        static_cast<u32>(reinterpret_cast<uintptr_t>(lrSpec.mpPlugin)));
+    CGS_ASSERT(lhContent.GetObject() != 0, "lHandle");
+
+    // Seed the record and hand the carve buffer back through the spec.
+    StreamBuffer& lrBuffer = maStreamBuffers[liIndex];
+    lrBuffer.mfGraceWaitTime  = 0.0f;
+    lrBuffer.mReadStream      = CgsFileSystem::ReadStream();
+    lrBuffer.mBufferStatus    = StreamBuffer::E_USING_BUFFER;
+    lrBuffer.mVoiceId         = lhContent.GetObject()->mIdent;
+    lrBuffer.mbQueuedForClose = false;
+    *lrSpec.mppvBuffer = lrBuffer.mpBuffer;
+
+    // Build + post the open request (event type 16) into the deferred queue.
+    CgsResource::Events::OpenReadStreamRequest lRequest;
+    lRequest.Construct(&mResourceReceiverQueue, liIndex);
+    lRequest.SetFileName(lrSpec.mpFilename);
+    lRequest.SetBuffer(*lrSpec.mppvBuffer);
+    lRequest.SetBufferSize(muStreamBufferSize);
+    lRequest.SetNumBlocks(muStreamNumBlocks);
+    lRequest.SetNormalPriority(lrSpec.mi32PriorityLow);
+    lRequest.SetHighPriority(lrSpec.mi32PriorityHigh);
+    lRequest.SetUseHDCache(false);
+
+    if (!mDeferredResourceRequestQueue.AddEvent(
+            reinterpret_cast<const CgsModule::Event*>(&lRequest), 16, sizeof(lRequest)))
+    {
+        CGS_ASSERT(false, "mDeferredResourceRequestQueue.OpenReadStream( lRequest )");
+    }
+
+    // Release the transient content reference (the console's inline refcount
+    // decrement + DoDispose-at-zero == Object::Release).
+    lhContent.GetObject()->Release();
+
+    mStreamMutex.Unlock();
+    return &lrBuffer.mReadStream;
+}
+
+// ---------------------------------------------------------------------------
+// Module::DoCloseStream  @ 0x826FA2B8  (the IStreamProvider override; bodied
+// phase B4 -- see the header note for the full contract)
+// ---------------------------------------------------------------------------
+void Module::DoCloseStream(const CgsFileSystem::ReadStream* lpReadStream)
+{
+    mStreamMutex.Lock();
+
+    const s32 liIndex = FindStreamBuffer(lpReadStream);
+    CGS_ASSERT(liIndex != -1, "Can't Find this Stream Index");
+
+    StreamBuffer& lrBuffer = maStreamBuffers[liIndex];
+    if (lrBuffer.GetStatus() == StreamBuffer::E_STREAM_OPEN)
+    {
+        // Post the close request (event type 18) into the deferred queue, then
+        // advance the record to E_WAITING_FOR_CLOSE.
+        CgsResource::Events::CloseReadStreamRequest lRequest;
+        lRequest.Construct(&mResourceReceiverQueue, liIndex, lrBuffer.GetReadStream());
+
+        if (!mDeferredResourceRequestQueue.AddEvent(
+                reinterpret_cast<const CgsModule::Event*>(&lRequest), 18, sizeof(lRequest)))
+        {
+            CGS_ASSERT(false, "mDeferredResourceRequestQueue.CloseReadStream( lRequest )");
+        }
+
+        lrBuffer.SetStatus(StreamBuffer::E_WAITING_FOR_CLOSE);
+    }
+    else
+    {
+        // Not open yet: it must still be opening -- queue the close for
+        // UpdateStreamBuffers to re-dispatch once the open response lands.
+        CGS_ASSERT(lrBuffer.GetStatus() == StreamBuffer::E_USING_BUFFER,
+                   "StreamBuffer::E_USING_BUFFER == mStreamBuffers[ lIndex ].GetStatus()");
+        CGS_ASSERT(!lrBuffer.GetQueuedForClose(), "!mbQueuedForClose");
+        lrBuffer.SetQueuedForClose();
+    }
+
+    mStreamMutex.Unlock();
 }
 
 // ---------------------------------------------------------------------------

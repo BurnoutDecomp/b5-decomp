@@ -6,6 +6,7 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Sound/Playback/CgsRegistry.h" // Entity (ContentSpec base)
 #include "GameShared/GameClasses/Sound/Playback/CgsObject.h"   // Object (canonical DWARF home -- fold done, see the note below)
+#include "GameShared/GameClasses/Sound/Playback/CgsDataStructures.h" // EContentLoadMethod (IContentLoadService's selector)
 
 #include <cstddef> // size_t
 
@@ -37,6 +38,24 @@ namespace Playback
     };
 
     struct Content;
+
+    // DWARF CgsContent.h:70 -- the content-load service interface (one virtual).
+    // The playback Module derives it as its SECOND interface base (console
+    // sub-object +0x22C); each new Content's mpLoadService is wired to exactly
+    // this sub-object by Module::CreateContent, and Content load requests come
+    // back through DoServiceContentLoadRequest (the Module's override
+    // @0x826F9F88 posts a resource request into its output buffer). The u32
+    // ident param is the DWARF's Module::StreamBuffer::Ident (typedef u32,
+    // CgsCommon.h:91), spelled u32 here to avoid the Module-header cycle.
+    struct IContentLoadService
+    {
+        // CgsContent.h:81 (the only virtual, slot 0 after the compiler-emitted
+        // vtable head; declared pure -- no base body exists in the X360 image).
+        virtual bool DoServiceContentLoadRequest(u32 lu32Ident,
+                                                 EContentLoadMethod leMethod,
+                                                 const char* lpcName,
+                                                 void* lpUserData) = 0;
+    };
 
     // (2026-08-25, audio-faithfulness wave 3): the former TU-local rival
     // `class Factory { GetContentDisposer(); }` + ContentDisposer +
@@ -118,6 +137,32 @@ namespace Playback
         // ContentLoader<>::UpdateResourceModuleLoading on the FINISHED transition.
         void SetContentState(int liState);
 
+        // DWARF CgsContent.h:445 / :452 -- the CHANGED-bit pair (test / clear of
+        // the mu8ContentState 0x80 bit). The environment's UpdateContent
+        // @0x826C00B8 drives the clear each frame after the per-content tick.
+        bool HasContentStateChanged() const
+        {
+            return (mu8ContentState & E_CONTENT_STATE_CHANGED) != 0;
+        }
+        void AcknowledgeContentStateChange()
+        {
+            mu8ContentState &= 0x7Fu;
+        }
+
+        // DWARF CgsContent.h:500 -- wire the owning load service (the playback
+        // Module's IContentLoadService base sub-object; Module::CreateContent's
+        // console `stw +0x14` store).
+        void SetLoadService(IContentLoadService* lpLoadService)
+        {
+            mpLoadService = lpLoadService;
+        }
+
+        // @ 0x82680BA8 (bodied in CgsObject.cpp, phase B4). The base per-frame
+        // tick the environment's UpdateContent drives: re-issue DoLoad when the
+        // load count dropped to zero, virtual DoUpdate(dt), then commit the
+        // REMOVING -> REMOVED transition once the content is back to UNLOADED.
+        void Update(f32 af32DeltaTime);
+
         // FLAG (committed-home DEFECT corrected to match DWARF ground truth):
         // CgsContent.h DWARF (line 141/301) declares Content::DoDispose() returning
         // *void*, matching Object::DoDispose() (CgsObject.h:27, also void). The prior
@@ -148,7 +193,7 @@ namespace Playback
         Factory& mFactory;
         const ContentSpec& mContentSpec;
         u32 mIdent;
-        void* mpLoadService;
+        IContentLoadService* mpLoadService;   // (retyped from void* phase B4 -- the DWARF :496 type)
         u32 mu32DataSize;
         u16 mu16LoadCount;
         u8 mu8ContentState;
