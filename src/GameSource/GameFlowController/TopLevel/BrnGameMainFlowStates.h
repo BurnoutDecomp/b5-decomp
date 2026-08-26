@@ -256,13 +256,24 @@ private:
     bool mbIsCollisionWorldPrepared;
 };
 
-// The in-game simulation update set. ConstructUpdateSetFromFsm @0x823BD420 starts at 0x80
-// and ORs 0x08 once the flow state machine reports in-game, giving 0x88 (it also folds 0x40
-// for save/load and 0x20 for video states, neither of which reaches the world tick below).
-// Mirrored here because that method is private to BrnGameModule. WorldModule::Update only
-// tests 0x1 / 0x80 / 0x100, so the 0x08 bit is inert there -- this cannot change the world's
-// behaviour relative to the loading drive, only how often it runs.
-const BrnUpdateSet KU_INGAME_UPDATE_SET = 0x88;
+// ---------------------------------------------------------------------------------------------
+// KU_INGAME_UPDATE_SET IS DELETED (pause wave, 2026-08-26). It read
+//     const BrnUpdateSet KU_INGAME_UPDATE_SET = 0x88;
+// and its banner made two claims, BOTH FALSE, and the pair of them is why the in-game world
+// could never be paused:
+//   1. "Mirrored here because that method is private to BrnGameModule."
+//      ConstructUpdateSetFromFsm is PUBLIC -- BrnGameModule.hpp:327, inside the public block
+//      that opens at :150. Nothing ever required a mirror.
+//   2. "WorldModule::Update only tests 0x1 / 0x80 / 0x100, so the 0x08 bit is inert there --
+//      this cannot change the world's behaviour."
+//      The reasoning is about the wrong bit. 0x08 is indeed inert; what the frozen constant
+//      actually did was make bit 0x1 -- THE SIM-PAUSE BIT, the one WorldModule::Update very much
+//      does test -- permanently UNREACHABLE in game. ConstructUpdateSetFromFsm ORs 0x1 when
+//      mbSimPaused (BrnGameModule.cpp), so hardcoding 0x88 pinned the game to "never paused"
+//      no matter what the pause FSM decided.
+// A hardcoded mirror of a FUNCTION OF STATE is not a constant. DriveInGameWorldUpdate now calls
+// the method, exactly as the LOADING spine at BrnGameMainFlowStates.cpp:323 already did.
+// ---------------------------------------------------------------------------------------------
 
 // The per-frame world UPDATE leg, shared by the scripted-load spine and the in-game state.
 // See the commentary on DriveWorldUpdateFrame in the .cpp for why the world previously

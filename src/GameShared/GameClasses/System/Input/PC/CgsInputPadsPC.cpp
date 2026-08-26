@@ -1,7 +1,9 @@
 #include "GameShared/GameClasses/System/Input/PC/CgsInputPadsPC.h"
 
 #include <cstring>   // std::memset
-#include <cstdlib>   // std::getenv (the harness focus-gate bypass)
+#include <cstdlib>   // std::getenv (the harness focus-gate bypass + the offline-pause gate)
+
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // CgsDev::Log::WriteToLog (the pause gate's one-shot)
 
 // ============================================================================
 // FLAG PC-platform leaf (whole file): the host pad source standing in for the
@@ -275,6 +277,11 @@ namespace
     const int KAI_KEYS_HORN[]       = { 'H', 0 };
     const int KAI_KEYS_SPIN_LEFT[]  = { 'Q', 0 };
     const int KAI_KEYS_SPIN_RIGHT[] = { 'E', 0 };
+    // FLAG PC binding choice (this table is the one place bindings live -- see the banner):
+    // action 46 == KI_ACTION_PAUSE_MAIN_MAP, the OFFLINE pause. 'M' for map. Deliberately NOT
+    // on a pad button: KU_XPAD_START is already action 8 and KU_XPAD_BACK already action 7,
+    // and stacking pause onto either would fire two actions from one press.
+    const int KAI_KEYS_PAUSE_MAP[]  = { 'M', 0 };
 
     const PcActionBinding KA_BINDINGS[] =
     {
@@ -297,6 +304,15 @@ namespace
         { 13, KAI_KEYS_HORN,       KU_XPAD_LTHUMB,   E_PCANALOGUE_NONE     }, // HORN        (L3 / H)
         { 54, KAI_KEYS_SPIN_LEFT,  KU_XPAD_LSHOULDER, E_PCANALOGUE_NONE    }, // GUI_LSHOULDER -> -mfSpin
         { 55, KAI_KEYS_SPIN_RIGHT, KU_XPAD_RSHOULDER, E_PCANALOGUE_NONE    }, // GUI_RSHOULDER -> +mfSpin
+
+        // -- the offline pause (pause wave, 2026-08-26) --------------------------------
+        // ADDITIVE. Action 46 was ABSENT FROM THIS TABLE ENTIRELY, which is why the offline
+        // pause could not be reached from a PC keyboard at all: InGame::HandleControllerInput
+        // has had `case KI_ACTION_PAUSE_MAIN_MAP: PauseGame(true,false)` all along
+        // (BrnInGame.cpp:436) and nothing could ever deliver a 46.
+        // ⚠️ This is NOT the documented 45-vs-49 accept-vocabulary defect and it does not touch
+        // row 45 -- that repair is a separate decision and is deliberately not made in passing.
+        { 46, KAI_KEYS_PAUSE_MAP,  0,                 E_PCANALOGUE_NONE    }, // PAUSE_MAIN_MAP (M)
     };
     const u32 KU_NUM_BINDINGS = sizeof(KA_BINDINGS) / sizeof(KA_BINDINGS[0]);
 
@@ -369,6 +385,9 @@ namespace
         case  0: lpcEventName = "Local\\BurnoutPC_Input_Accelerate"; break;
         case  1: lpcEventName = "Local\\BurnoutPC_Input_Brake";      break;
         case  2: lpcEventName = "Local\\BurnoutPC_Input_HandBrake";  break;
+        // -- the offline pause. AUTO-RESET like the four menu channels (a TAP): one press
+        //    opens the map, one press of Accept inside it comes back out.
+        case 46: lpcEventName = "Local\\BurnoutPC_Input_PauseMap";   break;
         default: return false;
         }
 
@@ -376,7 +395,9 @@ namespace
         // before launching the game, so a successful zero-time wait says the control is down
         // this update (and, for the auto-reset menu channels, consumes the one request).
         // The handle cache is indexed by KA_BINDINGS row, so every id in the switch above must
-        // also be a bound row -- 45/49/41/42 are rows 0..3 and 0/1/2 are rows 4..6.
+        // also be a bound row -- 45/49/41/42 are rows 0..3 and 0/1/2 are rows 4..6. Action 46
+        // is the appended last row; the lookup below is BY ACTION ID, not by a fixed index, so
+        // appending grows the cache without disturbing any existing row.
         static void* sapHarnessEvents[KU_NUM_BINDINGS] = {};
         u32 luBinding = 0;
         while (luBinding < KU_NUM_BINDINGS
@@ -477,10 +498,66 @@ namespace CgsInput
         // so it is full scale; a trigger carries its normalised curve), and the status is the
         // console muStatus contract (bit0 held, bit1 pressed-this-frame, bit2 released-this-
         // frame) with "held" being DeviceX360Pad::Update's `raw > 0.2` control-down test.
+        // ⛔⛔ THE OFFLINE-PAUSE GATE (pause wave, 2026-08-26). Action 46 is bound above and the
+        // whole chain behind it is RECONSTRUCTED AND MEASURED WORKING -- pressing it freezes the
+        // world (run cc_pause2: the 3D frame goes bit-identical at 0.000 while the debug overlay
+        // keeps ticking ~9 luma/frame, i.e. a paused WORLD under a LIVE renderer), and the FSM
+        // round trip closes in the log (0x88 -> 0x89 -> 0x88, RequestPause(4) -> RequestUnpause(4)).
+        //
+        // BUT THE RESUME FRAME FIRES A HALTING DEV ASSERT and the game stops dead there:
+        //     [ASSERT] mpData != NULL   (BrnContactSpyInterface.h:82)
+        //         BrnWorld::PropEntityModule::ProcessContacts
+        //         BrnWorld::PropEntityModule::PostPhysicsUpdate
+        // Measured in run cc_pause3, and measured as a HANG rather than a pause by the same
+        // overlay control: after the assert BOTH the world AND the overlay read 0.000 for the
+        // remaining ~2900 presents. (⭐ That control is the whole reason this was not published
+        // as "the pause works": a frozen 3D frame alone cannot tell a pause from a hang.)
+        //
+        // ⭐⭐ THE CAUSE IS NAMED AND IT IS NOT IN THIS FILE: update-set BIT 0x1 IS READ UNDER TWO
+        // DIFFERENT MEANINGS. BrnGameModule::ConstructUpdateSetFromFsm sets it for
+        // `mbSimPaused || IsSaveLoadState()`, and BrnRaceCarEntityModule reads it as sim-paused --
+        // but BrnPhysicsModuleUpdateFunctions.cpp:231 names the SAME bit
+        //     const bool lbNetworkCatchup = (lUpdateSet & 1) != 0;
+        // and passes it to PropManager::ProcessInputsPreScene at :947. Turning bit 0x1 on in game
+        // -- which was IMPOSSIBLE before this wave, because the frozen KU_INGAME_UPDATE_SET made
+        // it unreachable -- sends the physics module down a path that never binds the output
+        // buffer's contact-spy interface, so PropEntityModule::ProcessContacts finds mpData null.
+        // Classic "un-gating a producer CREATES the fault": no code that reads this bit in game
+        // has ever executed before.
+        // ⛔ SETTLE THE BIT'S MEANING IN PhysicsModule::Update FROM THE X360 ASM before removing
+        // this gate. Do NOT "fix" it by silencing the assert or by null-checking mpData -- the
+        // assert is the console's and it is reporting a real unbound interface.
+        //
+        // ⭐ OPT IN with  BRN_ENABLE_PAUSE=1  (the BRN_ENABLE_CRASH_ENTRY precedent). Everything
+        // above this line ships unchanged; only the KEY is unreachable.
+        static const bool sbPauseEnabled = (std::getenv("BRN_ENABLE_PAUSE") != 0);
+
         static bool sabWasDown[KU_NUM_BINDINGS] = {};
         for (u32 luBind = 0; luBind < KU_NUM_BINDINGS; ++luBind)
         {
             const PcActionBinding& lrBinding = KA_BINDINGS[luBind];
+
+            if (lrBinding.iActionId == 46 && !sbPauseEnabled)
+            {
+                static bool sbLoggedPauseGate = false;
+                if (!sbLoggedPauseGate)
+                {
+                    sbLoggedPauseGate = true;
+                    CgsDev::Log::WriteToLog(
+                        "[bringup] OFFLINE PAUSE KEY DISABLED (BRN_ENABLE_PAUSE is not set). The pause"
+                        " itself WORKS and is measured: action 46 -> CrashNavMapMain::OnEnter ->"
+                        " GuiEventActivateCrashNav(false) -> game event 93 -> RequestPause(4) ->"
+                        " action 86 -> in-game update set 0x88 -> 0x89, and the world freezes while"
+                        " the renderer keeps running. The key is gated because the RESUME frame trips"
+                        " a halting assert (mpData != NULL, PropEntityModule::ProcessContacts):"
+                        " update-set bit 0x1 is read as 'sim paused' by the race-car module and as"
+                        " 'network catchup' by BrnPhysicsModuleUpdateFunctions.cpp:231, and the"
+                        " latter path never binds the contact-spy interface. Settle that bit's"
+                        " meaning from the X360 asm, then delete this gate."
+                        " Set BRN_ENABLE_PAUSE=1 to exercise the chain.\n");
+                }
+                continue;
+            }
 
             f32 lfValue = 0.0f;
             if (lbForeground && AnyKeyDown(lrBinding.paiVKeys))

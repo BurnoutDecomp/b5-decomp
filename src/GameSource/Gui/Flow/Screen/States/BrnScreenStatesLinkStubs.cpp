@@ -14,6 +14,10 @@
 
 // The three online-screen reconstructions whose declared-but-undefined ctors/virtuals this TU
 // has to satisfy for the exe to link at all -- see the DELETE-WHEN block at the bottom.
+#include "GameSource/Gui/BrnGuiEventTypeDefs.h"                          // GuiEventActivateCrashNav
+#include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"  // StateInterface, GuiEventNetworkSuspension
+#include "GameShared/GameClasses/Gui/CgsGuiEvent.h"                       // CgsGui::GuiEvent
+#include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"          // the state in-queue
 #include "GameSource/Gui/Flow/Screen/States/BrnCrashNavEnterOnline.h"
 #include "GameSource/Gui/Flow/Screen/States/BrnCrashNavEnterOnlineMod.h"
 #include "GameSource/Gui/Flow/Screen/States/BrnOnlineCustomMatch.h"
@@ -66,12 +70,134 @@ namespace BrnGui
     void CrashNavMapEvent::Update()  {}
 
     // ---- CN_MAP_MAIN ------------------------------------------------------------------
-    // FLAG PC-platform leaf: placeholder lifecycle for the un-reconstructed CrashNavMapMain.
-    void CrashNavMapMain::OnEnter() { LogUnreconstructedState("CrashNavMapMain", "OnEnter"); }
-    // FLAG PC-platform leaf: placeholder lifecycle for the un-reconstructed CrashNavMapMain.
-    void CrashNavMapMain::OnLeave() {}
-    // FLAG PC-platform leaf: placeholder lifecycle for the un-reconstructed CrashNavMapMain.
-    void CrashNavMapMain::Update()  {}
+    // ⭐⭐ PARTIAL RECONSTRUCTION (pause wave, 2026-08-26), NOT a stub any more -- and the
+    // reason it is worth doing before the map itself exists is that ENTERING THE OFFLINE MAP
+    // *IS* THE OFFLINE PAUSE. Two banners are RETRACTED by this:
+    //   * hudscope_log's "OFFLINE THERE IS NO PAUSE MENU ... Map does NOT freeze the sim on
+    //     console" -- false.
+    //   * the memory note "activating the map UNpauses; the deactivate pauses" -- the first
+    //     half is false.
+    // CrashNavMapMain::OnEnter @0x824CC9E8, read as ASM (not pseudocode; the stack slots
+    // var_40..var_34 at 0x824CCA2C-0x824CCA50) posts TWO records:
+    //     { 8, 191, 12, 0, 0 } ch 40 size 20  == GuiEventActivateCrashNav(FALSE)
+    //     { 4,  45, 12, 1    } ch 40 size 16  == GuiEventNetworkSuspension(TRUE)
+    // The first is byte-identical to BrnOnlinePlay.cpp:172's "Deactivate CrashNav"; its
+    // ACTIVATE twin { 8, 191, 12, 1, 0 } is what BrnInGame.cpp:381 posts. Both are reached
+    // here BY NAME through the types this tree already owns, not as hand-built records.
+    // The 191{0} is what GameBridgeGUIToX_GameState's case 191 turns into game event 93
+    // payload 1 -> RequestPause(4) -> action 86 -> mbSimPaused = 1.
+    //
+    // ⛔ STILL PARKED: the CrashNavMap BASE half (the class really derives from CrashNavMap,
+    // whose 19 written bodies are UNMOUNTED and whose ctor/OnLeave/PlaceCursorOnPlayer/
+    // SetFilterFromPanel do not exist). NO MAP IS DRAWN. This state currently freezes the
+    // world and shows the frozen frame; the map quad is Wave B/C.
+    // The 19 observed GUI event ids, read out of .rdata at dword_82066358 (the exact pointer
+    // CrashNavMapMain::OnEnter @0x824CCA0C and OnLeave @0x824CCA98 both hand to
+    // (Un)RegisterForEvents with a count of 19). Id 6 == KI_EVENT_CONTROLLER is the first entry
+    // and is the one the exit arm below needs.
+    const s32 CrashNavMapMain::maiEventToObserve[19] =
+    {
+        6, 7, 8, 14, 16, 43, 44, 202, 224, 213, 199, 64, 436, 334, 516, 438, 189, 344, 332
+    };
+    const s32 CrashNavMapMain::miNumEventsObserved = 19;
+
+    void CrashNavMapMain::OnEnter()
+    {
+        // 0x824CCA0C -- REGISTER FIRST. ⭐⭐ Omitting this was a MEASURED defect and
+        // not a cosmetic one: run cc_pause2 paused correctly and then could never come back,
+        // because a state that observes nothing receives nothing, so the exit arm in Update
+        // below was dead code no matter how faithfully it was written. The pause was ONE-WAY.
+        // ⭐ The lesson, which this campaign keeps re-learning: A BODIED CONSUMER IS NOT A
+        // REACHED CONSUMER. Check what DELIVERS to it, not just that it exists.
+        mpStateInterface->RegisterForEvents(maiEventToObserve, miNumEventsObserved);
+
+        // 0x824CCA44/4C/50 -- the deactivate record.
+        GuiEventActivateCrashNav lDeactivate(false);
+        mpStateInterface->GetOutputEventQueue()->AddEvent(
+            reinterpret_cast<const CgsModule::Event*>(&lDeactivate), 40,
+            static_cast<s32>(sizeof(GuiEventActivateCrashNav)));
+
+        // The second record: { 4, 45, 12, 1 } == GuiEvent<45> == GuiEventNetworkSuspension(true).
+        CgsGui::GuiEventNetworkSuspension lSuspend(true);
+        mpStateInterface->GetOutputEventQueue()->AddEvent(
+            reinterpret_cast<const CgsModule::Event*>(&lSuspend), 40,
+            static_cast<s32>(sizeof(CgsGui::GuiEventNetworkSuspension)));
+
+        // ⛔ NOT reproduced: the console's `*(this+24928) = 1` and `*(this+56) = 1` both land
+        // past sizeof(CgsGui::State) == 56, i.e. inside the CrashNavMap base this declaration
+        // does not have. Writing them here would corrupt whatever follows the object.
+        //
+        // One-shot: the base half is not reconstructed, so say so rather than look complete.
+        static bool sbLoggedBasePark = false;
+        if (!sbLoggedBasePark)
+        {
+            sbLoggedBasePark = true;
+            LogUnreconstructedState("CrashNavMapMain", "OnEnter[CrashNavMap base half PARKED -- no map drawn]");
+        }
+    }
+
+    // @0x824CCA98 -- PARTIAL. The console does three things; the first is reproduced and the
+    // other two belong to the parked halves:
+    //     UnRegisterForEvents(maiEventToObserve, 19)          <- reproduced (symmetric with OnEnter)
+    //     CrashNavPanel::StoreSettings(this + 1760, 0)        <- ⛔ PARKED (CrashNavPanel is 4-of-~20)
+    //     CrashNavMap::OnLeave(this)                          <- ⛔ PARKED (the base half)
+    // The unregister is NOT optional bookkeeping: the observer table is 4 slots wide
+    // (CgsGui::KI_MAX_OBSERVERS), so registering on every entry without releasing would run it
+    // out after four visits to the map.
+    void CrashNavMapMain::OnLeave()
+    {
+        mpStateInterface->UnRegisterForEvents(maiEventToObserve, miNumEventsObserved);
+    }
+
+    // The EXIT arm, from CrashNavMapMain::HandleCrashNavInputPressed @0x824CCAE8, cases
+    // 0x2D (45) and 0x32 (50). The console reaches it from the base spine's event walk; this
+    // partial drains the in-queue directly for the ONE event that matters
+    // (6 == KI_EVENT_CONTROLLER, action sub-id at payload +4, the same layout
+    // InGame::HandleControllerInput reads) and runs the console's four steps in order.
+    void CrashNavMapMain::Update()
+    {
+        typedef CgsModule::VariableEventQueue<18432, 16> StateInputQueue;
+        StateInputQueue* lpInQueue = reinterpret_cast<StateInputQueue*>(mpInGuiEventQueue);
+        if (lpInQueue == 0)
+            return;
+
+        const CgsModule::Event* lpEvent = 0;
+        s32 liSize = 0;
+        for (s32 liEventId = lpInQueue->GetFirstEvent(&lpEvent, &liSize);
+             lpEvent != 0;
+             liEventId = lpInQueue->GetNextEvent(lpEvent, &lpEvent, &liSize))
+        {
+            if (liEventId != 6)
+                continue;
+
+            const s32 liAction =
+                *reinterpret_cast<const s32*>(reinterpret_cast<const u8*>(lpEvent) + 4);
+            if (liAction != 45 && liAction != 50)
+                continue;
+
+            // 0x824CCAE8 case 0x2D / 0x32, in the console's own order.
+            CgsGui::GuiEventNetworkSuspension lResume(false);
+            mpStateInterface->GetOutputEventQueue()->AddEvent(
+                reinterpret_cast<const CgsModule::Event*>(&lResume), 40,
+                static_cast<s32>(sizeof(CgsGui::GuiEventNetworkSuspension)));
+
+            GuiEventActivateCrashNav lActivate(true);          // <- THE UNPAUSE
+            mpStateInterface->GetOutputEventQueue()->AddEvent(
+                reinterpret_cast<const CgsModule::Event*>(&lActivate), 40,
+                static_cast<s32>(sizeof(GuiEventActivateCrashNav)));
+
+            // { 1, 533, 12 } ch 40 size 16.
+            CgsGui::GuiEvent<533> lDone(1, 12);
+            mpStateInterface->GetOutputEventQueue()->AddEvent(
+                reinterpret_cast<const CgsModule::Event*>(&lDone), 40, 16);
+
+            SendStateEvent("GO_BACK");                         // CN_MAP_MAIN(5) -> INGAME(4)
+            break;
+        }
+
+        // The base spine clears its own queue at the end of the walk.
+        lpInQueue->Clear();
+    }
 
     // ---- CN_PROFILE ---------------------------------------------------------------------
     // FLAG PC-platform leaf: placeholder for the un-reconstructed CrashNavProfile's wider
