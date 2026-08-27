@@ -46,7 +46,14 @@ public:
     void                  AddBlockSectionId(u32 luBlockSectionId);   // declared-only
     void                  SetDistrict(s32 leDistrict);               // declared-only (real arg BrnWorld::EDistrict)
     LandmarkIndex         GetLandmarkIndex() const;                  // declared-only
-    u16                   GetAISectionIndex() const;                 // declared-only
+    // [stuntrace start-grid wave, 2026-08-27] BODIED, header-inline, for the same reason the
+    // ctor and Construct above are: there is no BrnCheckpointData.cpp on this tree
+    // (grep-verified), so a declared-only accessor is an LNK2019 for its first caller. That
+    // caller is RaceCarEntityModule::SetupOpponents @0x82307DF0, where the console emits the
+    // read INLINE as `lhz r31, 2(r3)` immediately after Array<CheckpointData,16>::Ge(0)
+    // (asm 0x82307EAC..0x82307EB0) -- one halfword off +0x02, which is exactly this member.
+    // Fold it back out-of-line if a real BrnCheckpointData.cpp ever lands.
+    u16                   GetAISectionIndex() const { return muAISectionIndex; }
     s32                   GetDistrict() const;                       // declared-only
     const Array<u32, 8u>* GetBlockSectionIds() const;               // declared-only
 

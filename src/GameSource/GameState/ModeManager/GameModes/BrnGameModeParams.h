@@ -252,6 +252,15 @@ public:
     void SetFlag(u64 luFlags)                           { muFlags |= luFlags; }
     s32  GetNumRivals() const                           { return miNumRivals; }
 
+    // [stuntrace start-grid wave, 2026-08-27] The WHOLE 64-bit word, not a bit test. The
+    // console copies it wholesale in RaceCarEntityModule::HandlePrepareForModeAction
+    // @0x82309480 -- `ld r11, 0x860(r25)` / `stdx r11, r31, 0x18358` -- into the world module's
+    // own mxGameModeFlags mirror, which SetUpPlayerCarForMode @0x823058F8 and SetupOpponents
+    // @0x82307DF0 then read back through RaceCarEntityModule::GetGameModeFlag @0x822A3A20.
+    // Same (de_inlined) treatment as SetFlag/GetFlag above; muFlags is private and there is no
+    // other way to express that one instruction by name.
+    u64  GetFlags() const                               { return muFlags; }
+
     // ===========================================================================================
     // [!!] OFFSET RUN CORRECTED 2026-08-26 (wave-B fix round) -- THIS WAS A LIVE DEFECT, not a
     // comment tidy. The committed block here read the run as

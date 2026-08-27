@@ -67,6 +67,9 @@ namespace BrnGameState { namespace GameStateModuleIO {
     struct ResetPlayerCarAction;
     struct PrepareForModeAction;
 } }
+// [stuntrace start-grid wave] SetupOpponents / SetUpPlayerCarForMode take the mode's parameter
+// block by pointer; the .cpp includes BrnGameModeParams.h for the members.
+namespace BrnGameState { class GameModeParams; }
 namespace BrnAI       { namespace AIModuleIO         { struct RaceCarAIInterface;   } }
 namespace BrnPhysics  { namespace Vehicle            { struct VehicleInputInterface; } }
 // DetachActiveRaceCar's fourth argument (DWARF spells it
@@ -601,6 +604,30 @@ public:
     // +0x182F8) is included; SetupOpponents @0x82307DF0 always passes true.
     void SetAllCarsOnStartLine(ActiveRaceCar::ERaceStartState leRaceStartState,
                                bool lbIncludePlayer);
+
+    // ------------------------------------------------------------------------
+    // ⭐ [stuntrace start-grid wave 2026-08-27] THE MODE-START PLACEMENT PAIR.
+    // HandlePrepareForModeAction @0x823092F0 -> SetupOpponents @0x82307DF0 ->
+    // SetUpPlayerCarForMode @0x823058F8 is the console's "seat the player on the event's
+    // start grid" chain. Bodies (and what is parked in each) in ModeArming.cpp.
+    // ------------------------------------------------------------------------
+
+    // X360 0x82307DF0. Read the player's current car/wheel ids and the event's first
+    // checkpoint AI section, then drive the four mode-start legs. THREE arguments (this /
+    // the mode params / the pre-scene OUTPUT buffer; r27/r30/r26 in the prologue).
+    void SetupOpponents(const BrnGameState::GameModeParams* lpGameModeParams,
+                        RaceCarEntityModuleIO::OutputBuffer_PreScene* lpOutput);
+
+    // X360 0x823058F8. Put the PLAYER's car on start-grid slot 0 (offline: a place-on-track
+    // request; online: a remove/respawn at the built transform), carry its colour across,
+    // publish the AI module's AddCarToCurrentModeEvent, and map the player's scoring slot.
+    // SIX arguments -- Hex-Rays renders twenty-two (the callee's own home-area spills).
+    // SetupOpponents supplies lCarModelId / lWheelModelId / lu16StartAISectionIndex.
+    void SetUpPlayerCarForMode(const BrnGameState::GameModeParams* lpGameModeParams,
+                               RaceCarEntityModuleIO::OutputBuffer_PreScene* lpOutput,
+                               CgsID lCarModelId,
+                               CgsID lWheelModelId,
+                               u16 lu16StartAISectionIndex);
 
     // X360 0x822A37C8 -- find the player slot currently mapped to leActiveRaceCarIndex
     // and reset it to the sentinel (8). If no slot maps to it, do nothing.
