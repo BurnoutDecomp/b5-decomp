@@ -106,7 +106,7 @@ ProgressionManager::ProgressionManager()
 
     // Prepare2 back-pointers start null.
     mpTriggerData        = nullptr;
-    mpGameStateModule    = nullptr;
+    mpModeManager        = nullptr;
     mpAchievementManager = nullptr;
 
     // [stuntrace waveB MOUNT-CLOSURE round] The landmark -> AI-section cache starts blank.
@@ -295,7 +295,7 @@ bool ProgressionManager::LoadProgressionData(BrnGameState::GameStateModuleIO::Ou
 // compile). The three back-pointer stores -- the observable side effects -- are reproduced.
 // ------------------------------------------------------------------------------------
 bool ProgressionManager::Prepare2(BrnGameState::GameStateModuleIO::OutputBuffer* lpOutput,
-                                  void* lpGameStateModule,
+                                  BrnGameState::ModeManager* lpModeManager,
                                   CgsModule::EventReceiverQueue<3072, 16>* lpReceiverQueue,
                                   void* lpTriggerData,
                                   BrnGameState::AchievementManagerBase* lpAchievementManager)
@@ -325,7 +325,7 @@ bool ProgressionManager::Prepare2(BrnGameState::GameStateModuleIO::OutputBuffer*
 
     CGS_ASSERT(lpTriggerData != nullptr, "lpTriggerData");
     mpTriggerData     = lpTriggerData;           // X360 +0x20924 (a5)
-    mpGameStateModule = lpGameStateModule;       // X360 +0x2093C (a3)
+    mpModeManager = lpModeManager;               // X360 +0x2093C (a3) -- the MODE manager; see the header
 
     CGS_ASSERT(lpAchievementManager != nullptr, "lpAchievementManager");
     mpAchievementManager = lpAchievementManager; // X360 +0x20938 (a6)
@@ -333,7 +333,7 @@ bool ProgressionManager::Prepare2(BrnGameState::GameStateModuleIO::OutputBuffer*
     // X360 then calls, in order:
     //   ComputeLandmarkAISectionIndices(this);
     //   ProcessLoadedPresetRaces(this);
-    //   ProgressionDebugComponent::Construct(&mDebugComponent, this, lpGameStateModule);
+    //   ProgressionDebugComponent::Construct(&mDebugComponent, this, lpModeManager);
     //   CgsDev::DebugComponent::Register(&mDebugComponent);
     //   SetupRoamingSections(this, ...);
     // (helper bodies land with their own TUs; see FLAG above.)

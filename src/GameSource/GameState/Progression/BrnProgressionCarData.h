@@ -62,7 +62,12 @@ namespace BrnProgression
         // site is a raw +0x0A / +0x0C / +0x10 access, e.g. ReallyEnterJunkyardAtStartOfGame
         // @0x823931F8 writes the start-of-game deform as a bare `*(carData + 12) = 0.85f`).
         bool       WasUnlockSequenceAlreadyShown() const { return mbUnlockSequenceAlreadyShown; }
-        void       SetUnlockSequenceAlreadyShown();
+        // ⭐ BODIED INLINE 2026-08-27 (drive-thru link-closure wave). It was DECLARED here and
+        // defined NOWHERE in the tree -- a latent unresolved external that only appeared when a
+        // caller was finally mounted (ProgressionManager::UnlockSpecialCars). The X360 emits no
+        // symbol for it either: `stb r26, 0xA(r31)` @0x8237B054 is the whole thing, exactly as
+        // the four siblings around it are inlined.
+        void       SetUnlockSequenceAlreadyShown() { mbUnlockSequenceAlreadyShown = true; }
         UnlockType GetUnlockType() const                 { return meUnlockType; }
         void       SetUnlockType(UnlockType leType);
         f32        GetUnlockDeformationAmount() const    { return mfUnlockDeformedAmount; }

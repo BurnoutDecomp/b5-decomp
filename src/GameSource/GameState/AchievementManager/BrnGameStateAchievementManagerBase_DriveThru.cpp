@@ -44,6 +44,7 @@ namespace
     const EAchievement E_X360_ACHIEVEMENT_FIND_ALL_EVENTS          = static_cast<EAchievement>(25); // (see OnFindAllEvents)
     const EAchievement E_X360_ACHIEVEMENT_FIND_ALL_CARPARKS        = static_cast<EAchievement>(26); // OnFindAllCarParks    @0x8235AED8
     const EAchievement E_X360_ACHIEVEMENT_FIND_ALL_DRIVE_THRUS     = static_cast<EAchievement>(32); // OnFindAllDriveThrus  @0x8235AE78
+    const EAchievement E_X360_ACHIEVEMENT_COMPLETE_GAME            = static_cast<EAchievement>(34); // OnGameCompletion     @0x8235B1B0
 }
 
 // ----------------------------------------------------------------------------
@@ -64,6 +65,28 @@ void AchievementManagerBase::OnBodyShop(GameStateModuleIO::EGameModeType leGameM
         && mpScoringSystem->GetNewlyWreckedCarCount() == 1)
     {
         AchievementEarnt(E_X360_ACHIEVEMENT_SHUTDOWN_ROADRAGE_VAN);
+    }
+}
+
+// ----------------------------------------------------------------------------
+// OnGameCompletion  (X360 0x8235B1B0)
+//
+// [drive-thru link-closure wave, 2026-08-27] The fourth member of this family, added
+// with its caller: ProgressionManager::CheckForSpecialCarUnlocks @0x82396058 fires it on
+// the 100%-completion arm (`lwzx r3, r31, 0x20938` then the call). It was declared in
+// BrnGameStateAchievementManagerBase.h and defined nowhere.
+//
+// ⚠️ Hex-Rays renders this as `result = slot1(a1, 34); if (!result) return slot0(a1, 34);`
+// -- the two vtable calls are IsAchievementEarnt (slot 1, `lwz r11, 4(r11)`) and
+// AchievementEarnt (slot 0, `lwz r11, 0(r11)`), and the second runs when the first
+// answers FALSE. That is the same "first time only" shape as every sibling below; it just
+// reads inverted because the console reuses the return register.
+// ----------------------------------------------------------------------------
+void AchievementManagerBase::OnGameCompletion()
+{
+    if (!IsAchievementEarnt(E_X360_ACHIEVEMENT_COMPLETE_GAME))
+    {
+        AchievementEarnt(E_X360_ACHIEVEMENT_COMPLETE_GAME);
     }
 }
 

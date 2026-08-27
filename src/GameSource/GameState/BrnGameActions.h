@@ -352,6 +352,11 @@ enum EGameActionType
     //       CheckForAllEventsOfATypeFound @0x823822C8, which has no body in this tree yet; it is
     //       deliberately NOT enumerated here until its producer lands.
     E_ACTION_ALL_EVENTS_DISCOVERED                       = 202,  // DWARF 194 (+8 X360); size 1
+    // [drive-thru wave 2026-08-27] 208, size 8. Producer ProgressionManager::
+    // SendGameCompletionResults @0x82395C28 (`li r5, 0xD0` / `li r6, 8` @0x82395CC0/C4). It is
+    // posted from the ONE place the game decides it is finished, so the name is the producer's
+    // own symbol name (PINNED tier), not a band extrapolation.
+    E_ACTION_GAME_COMPLETION_RESULTS                     = 208,  // size 8
 
     // =========================================================================================
     // [!!] [stuntrace waveB CLOSURE round, 2026-08-26] THE MODE-LIFECYCLE / TRANSMIT BLOCK.
@@ -1374,6 +1379,27 @@ struct JunctionInfoAction : public GameAction<E_ACTION_EVENT_AT_JUNCTION_AVAILAB
 };
 static_assert(sizeof(JunctionInfoAction) == 40,
               "X360 CheckIfPlayerIsAtJunctionWithAnEvent posts action 201 with size 40");
+// ---- 208 ---------------------------------------------------------------------------------
+// [drive-thru wave 2026-08-27] The game-completion results record. Producer
+// ProgressionManager::SendGameCompletionResults @0x82395C28; every field is one of its stores
+// into the var_30-based frame it hands to AddEvent (`li r6, 8`):
+//     stw  r11, var_30   rec+0x00  <- lwz r11, 0xD94(mpModeManager) == meCurrentGameModeType
+//     stb  r30, var_2C   rec+0x04  <- 1 on the >= 100% arm, 0 on the other (li r11,0 / stb x2)
+//     stb  r10, var_2B   rec+0x05  <- lbzx manager+118400 == Profile+118032,
+//                                     mb100PercentCompletionSequenceShown
+// The two trailing bytes are never stored; they are the record's tail padding to the attested 8.
+// ⚠️ The console does NOT clear the frame -- rec+0x06/0x07 carry stack residue, and on the
+// below-100% arm rec+0x00 still holds the mode. Value-initialised here (ours, not the console's).
+struct GameCompletionResultsAction : public GameAction<E_ACTION_GAME_COMPLETION_RESULTS>
+{
+    EGameModeType meGameMode;                  // +0x00 the mode the player was in when it landed
+    bool          mbGameComplete;              // +0x04 ComputeCompletionPercentage() >= 100.0f
+    bool          mbCompletionAlreadyRecorded;  // +0x05 Profile::GetSeen100PercentCompletionSequence()
+    u8            maPad06[2];                   // +0x06 never stored; pads to the producer's `li r6,8`
+};
+static_assert(sizeof(GameCompletionResultsAction) == 8,
+              "X360 SendGameCompletionResults posts action 208 with size 8");
+
 // ---- 146 ---------------------------------------------------------------------------------
 // [showtime S7b-b, 2026-08-27] The showtime-intro latch record. Producer: the DetectModeStarts
 // @0x8239A428 `else` arm (both posts); consumer: PhysicsModule::HandleGameActions case 146.
