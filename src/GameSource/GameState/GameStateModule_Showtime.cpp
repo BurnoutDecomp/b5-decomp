@@ -1,60 +1,69 @@
 // =================================================================================================
 // GameStateModule_Showtime.cpp
 //
-// The SHOWTIME (crash-mode) start leg. Landed 2026-08-27 (showtime S7b-a wave), immediately after
-// PhysicsModule::HandleGameActions @0x825A72F0 landed (b5-decomp e7f9f116) and made
-// VehicleManager::SetPlayerCarToShowtimeMode reachable at all.
+// The SHOWTIME (crash-mode) start leg. Started 2026-08-27 (showtime S7b-a wave) with StartCrashMode
+// alone plus a harness stand-in; CLOSED the same day (S7b-b) by landing the two console gates that
+// stand above it, and the harness leg was deleted with them.
 //
-// WHAT IS HERE, AND WHAT IS DELIBERATELY NOT
-// ------------------------------------------
-// ONE console function, reconstructed:
-//     GameStateModule::StartCrashMode @0x8236B580 (80 insns)
-// ONE harness leg, NOT in the X360 binary and clearly marked:
-//     GameStateModule::HarnessInjectShowtimeBringUp
+// ⭐⭐⭐ WHY S7b-b EXISTS: A PLAYER REPORTED SHOWTIME DOES NOT WORK ON THE PUBLISHED BUILD.
+// "i don't think showtime works ... unless you have to activate it in a crash, but just driving
+// around the buttons to activate it do nothing." They were right, and the reason was structural:
+// what shipped in place of the two missing upper links was HarnessInjectShowtimeBringUp, gated on
+// getenv("BRN_START_SHOWTIME"), which the published build does not set. Holding both bumpers
+// reached a one-shot that was switched off. The fix is not a wider hook -- it is the console's own
+// gate stack, which is what this file now carries.
 //
-// The console's showtime chain is
-//     DetectModeStarts @0x8239A428 (the `else` arm, 0x8239A568..0x8239A8EC, ~225 insns)
-//       -> ShouldStartShowtimeMode @0x82356B18 (166 insns)
-//         -> StartCrashMode @0x8236B580          <-- LANDED HERE
+// THE CONSOLE CHAIN, COMPLETE:
+//     DetectModeStarts @0x8239A428 (the `else` arm, 0x8239A568..0x8239A8EC)  <-- GameStateModule_gSR_00.cpp
+//       -> ShouldStartShowtimeMode @0x82356B18 (166 insns)                   <-- HERE
+//         -> StartCrashMode @0x8236B580 (80 insns)                           <-- HERE
 //           -> StartGameModeParams::Construct @0x8231C1F8   (mounted)
 //           -> ModeManager::StartGameMode      @0x8234FCE8   (mounted)
-// The two upper links are NOT reconstructed and this file does not pretend otherwise. The `else`
-// arm is a named PARK in GameStateModule_gSR_00.cpp (a squared-speed compare against 10.0f, a
-// 0.5 s window latch at gsm+284448, a cached direction vector at gsm+284464, a facing dot-product
-// re-test, an alignment bit at gsm+284510, a sign latch at gsm+284452, and two posts of game event
-// 146); ShouldStartShowtimeMode is a 166-instruction gate stack over eleven GameStateModule
-// members that this slice does not home. What the harness leg stands in for is EXACTLY those two,
-// and nothing below them.
+// plus the two showtime-intro accessors the arm's latch pair backs:
+//     IsInShowtimeIntro        @0x82356A60 (11 insns)
+//     GetShowtimeIntroSteering @0x82356A90 (33 insns)
 //
-// ⭐ THAT IS THE SAME TRADE, IN THE SAME PLACE, AS HarnessInjectEventStartBringUp. That hook
-// (GameStateModule_gUI_00.cpp, 2026-08-26) substitutes for ShouldStartSnapRaceMode's 0.35 s
-// analogue hold and calls StartModeAtLights directly. This one substitutes for
-// ShouldStartShowtimeMode's hold/speed/facing stack and calls StartCrashMode directly. In both
-// cases everything downstream of the call is the console's own, and a failure downstream fails
-// exactly the way the real gesture would -- which is the point of doing it this way rather than
-// poking a mode type into ModeManager.
-//
-// ⭐⭐ AND THE GESTURE ITSELF IS REAL. This hook does NOT invent its trigger: it reads
-// `ControllerInput::mbCrashModePressed` (+0x42) off the pre-world input buffer -- the console's
-// own both-bumpers-held byte, written every frame by BrnGameStateModuleIO.cpp:92 from action rows
-// 54 and 55, which are bound to LSHOULDER/RSHOULDER (and to the keyboard) in
-// CgsInputPadsPC.cpp's KA_BINDINGS. A player holding both bumpers on a real pad drives this, and
-// so does the harness, through the ordinary input chain. The env gate exists so a DEFAULT run
-// cannot leave free burn, not because the gesture is fake.
+// ⭐⭐ THE GESTURE WAS ALWAYS REAL AND IS UNCHANGED. `ControllerInput::mbCrashModePressed` (+0x42)
+// is the console's own both-bumpers-held byte, written every frame by BrnGameStateModuleIO.cpp:92
+// from action rows 54 and 55, which are bound to LSHOULDER/RSHOULDER (and to the keyboard) in
+// CgsInputPadsPC.cpp's KA_BINDINGS. Nothing in this wave touched the input path; what was missing
+// was everything ABOVE it.
 // =================================================================================================
 
 #include "GameSource/GameState/BrnGameStateModule.h"
-#include "GameSource/GameState/BrnGameStateSharedIO.h"                      // EGameModeType, IsOnlineFreeBurnLobby
+#include "GameSource/GameState/BrnGameStateSharedIO.h"                      // EGameModeType, EGameModeState, IsOnlineFreeBurnLobby
 #include "GameSource/GameState/BrnGameStateModuleIO.h"                      // PreWorldInputBuffer / OutputBuffer / ControllerInput
+#include "GameSource/GameState/BrnGameStateTypes.h"                         // EShowtimeBehaviour
 #include "GameSource/GameState/ModeManager/BrnModeManager.h"
+#include "GameSource/GameState/ModeManager/GameModes/BrnGameMode.h"         // GameMode::IsOnline / GetCurrentState
 #include "GameSource/GameState/ModeManager/GameModes/BrnGameModeParams.h"   // StartGameModeParams
+#include "GameSource/GameState/Progression/BrnProgressionManager.h"         // AreRoadRulesAvailable
+#include "GameSource/GameState/CarSelect/BrnCarSelectManager.h"             // GetJunkyardId
+#include "GameShared/GameClasses/System/Timer/CgsTimerRequestInterface.h"   // CgsSystem::TimerRequests
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 
-#include <cstdlib>   // getenv (the harness gate, same shape as every other diag gate in this module)
-
 namespace BrnGameState
 {
+namespace
+{
+    // [DIAG] NOT IN THE X360 BINARY. ONE line per process, naming the gate that refused a
+    // both-bumpers press. It exists because the defect this file closes was reported by a player
+    // as "the buttons do nothing", and a gate stack with nine terms has nine ways to look exactly
+    // like a dead button. Deliberately NOT env-gated (see the call sites); at most one line ever.
+    void LogShowtimeRefusalOnce(const char* lpcReason)
+    {
+        static bool sbLogged = false;
+        if (!sbLogged && CgsDev::Log::gpDebugPrint != 0)
+        {
+            sbLogged = true;
+            *CgsDev::Log::gpDebugPrint
+                << "[showtime] BOTH BUMPERS held, but ShouldStartShowtimeMode @0x82356B18 refused: "
+                << lpcReason << "\n";
+        }
+    }
+}
+
     // =============================================================================================
     // GameStateModule::StartCrashMode  @0x8236B580  (80 insns)
     //   source BrnGameStateModule.cpp:5579/5580/5582 (the three baked assert line numbers)
@@ -131,115 +140,191 @@ namespace BrnGameState
         mModeManager.StartGameMode(lpOutput, &lStartGameModeParams);
     }
 
+
     // =============================================================================================
-    // GameStateModule::HarnessInjectShowtimeBringUp -- HARNESS-ONLY, NOT IN THE X360 BINARY.
+    // GameStateModule::ShouldStartShowtimeMode  @0x82356B18  (166 insns)
     //
-    // WHAT IT SUBSTITUTES: `ShouldStartShowtimeMode @0x82356B18` (166 insns) and the
-    // `DetectModeStarts` else-arm that calls it. Between them those two require: a squared-speed
-    // compare against 10.0f, a 0.5 s window latch, a cached facing direction re-tested by dot
-    // product, an alignment bit, a sign latch, a hold timer at gsm+284440 counting down from
-    // 0.0099999998, and eleven GameStateModule members none of which is homed on this slice.
+    // ⭐⭐⭐ THE GATE STACK. Called twice per frame by the DetectModeStarts else arm and returns
+    // true on the ONE frame the crash-start hold expires with every condition satisfied. Every
+    // refusal below the timer arms re-arms that hold, so a gesture that is interrupted starts over.
     //
-    // WHAT IT DOES NOT SUBSTITUTE: anything below StartCrashMode. The mode type, the player
-    // position, the params construction, ModeManager::StartGameMode, PrepareForMode's action-23
-    // post with KU_FLAG_USE_SHOWTIME_VEHICLE_BEHAVIOUR, and PhysicsModule::HandleGameActions'
-    // case-23 arm calling SetPlayerCarToShowtimeMode are ALL the console's own. If showtime does
-    // not start after this fires, the failure is downstream and real.
+    // ARGUMENTS -- and the phantom-parameter trap, resolved two ways.
+    //   Hex-Rays renders this `(int a1, double a2, int a3, char a4, unsigned int* a5)`: FIVE
+    //   arguments. It is THREE. The f32 rides f1 and consumes the r4 GPR slot, so r4 is never read
+    //   in the body; the bool is r5 (`clrlwi r11, r5, 24` @0x82356C18) and the pointer is r6
+    //   (`lwz r11, 0(r6)` @0x82356BF0). DecFIGS agrees independently -- BrnGameStateModule.h:781
+    //   spells `bool ShouldStartShowtimeMode(float32_t, bool, TimerRequests*)`. Rung 1 and rung 2
+    //   give the same three arguments in the same order, which is why this is stated rather than
+    //   flagged. [[invented-arms-and-the-c4715-ratchet]] -- do not "restore" a fourth argument.
     //
-    // ⭐ THE TRIGGER IS THE REAL GESTURE. `mbCrashModePressed` is ControllerInput +0x42, and its
-    // producer is the console's own -- BrnGameStateModuleIO.cpp:92, `(row 54 held) && (row 55
-    // held)`, i.e. BOTH BUMPERS. Rows 54/55 are bound to LSHOULDER/RSHOULDER in KA_BINDINGS, so a
-    // pad player holding both bumpers reaches this, and so does the scripted harness through the
-    // two shoulder channels ConsumeHarnessAction serves. This hook does NOT fabricate an input.
+    // ASM SPINE (0x82356B18..0x82356DAC), in the console's own order:
+    //   0x82356B38  mModeManager.mpCurrentGameMode ? GameMode::mbIsOnline (+0xAC) : 0
+    //   0x82356B5C  when NOT online: the inlined ProgressionManager::AreRoadRulesAvailable()
+    //               (`>= 4u` on Profile+42512 || pm+133456 || pm+133460) -- refuse if false
+    //   0x82356BB4  mfTimeSinceLastCrashMode > 0 -> decrement, re-arm the hold, refuse
+    //   0x82356BF0  any of the SIM TimerRequests bits 0/1/2 set -> refuse (WITHOUT re-arming)
+    //   0x82356C18  the and-chain, every failure branching to the shared re-arm tail loc_82356D7C
+    //   0x82356D50  hold -= dt ; return hold <= 0.0f
     //
-    // GATES, all four required, and it fires AT MOST ONCE per process:
-    //   1. BRN_START_SHOWTIME=1 in the environment (read once, like every other diag gate here).
-    //      ⛔ IT IS A CAPABILITY, NOT AN INSTRUMENT: a run carrying it can leave free burn, so it
-    //      must be in flow_run.ps1's CLEARED list and no golden may be banked or gated through it.
-    //   2. mbCrashModePressed -- the gesture above.
-    //   3. no game mode already running (the same !mpCurrentGameMode gate every console start arm
-    //      carries, and the same one HarnessInjectEventStartBringUp uses).
-    //   4. the player car is active -- because GetPlayerPosition() inside StartCrashMode asserts
-    //      IsPlayerCarActive() and would otherwise read maRaceCars[-1].
-    //      ⚠️ THAT GATE IS THE CONSOLE'S TOO, one level up: ShouldStartShowtimeMode's own chain
-    //      calls RCEntityActiveRaceCarOutputInterface::IsPlayerCarActive @0x82277B90 before it can
-    //      ever reach StartCrashMode. Checking it here reproduces that ordering rather than adding
-    //      a guard the console lacks.
-    //
-    // DELETE-WHEN: ShouldStartShowtimeMode and the DetectModeStarts else-arm land. This function
-    // and its one call site go together.
+    // ⚠️ THE SIM-TIMER REFUSAL IS THE ONE ARM THAT DOES **NOT** RE-ARM THE HOLD (@0x82356BFC /
+    // 0x82356C08 / 0x82356C14 all jump to loc_82356D90 == `li r3,0 ; blr`, not to loc_82356D7C).
+    // That asymmetry is the console's and it is deliberate: a frame in which something else has
+    // already asked the sim timer to start/stop/retime is skipped, not treated as a broken hold.
     // =============================================================================================
-    void GameStateModule::HarnessInjectShowtimeBringUp(
-        const GameStateModuleIO::PreWorldInputBuffer* lpInput,
-        GameStateModuleIO::OutputBuffer*              lpOutputBuffer)
+    bool GameStateModule::ShouldStartShowtimeMode(f32                       lfGameTimestep,
+                                                  bool                      lbCrashModePressed,
+                                                  CgsSystem::TimerRequests* lpSimTimerRequests)
     {
-        static const bool sbHarnessShowtime = (getenv("BRN_START_SHOWTIME") != 0);
-        static bool       sbFired           = false;
+        // The console's own re-arm literal: flt_82029F24, image-read 0x3C23D70A == 0.0099999998f.
+        const f32 KF_CRASH_START_HOLD_SECONDS = 0.0099999998f;
 
-        if (!sbHarnessShowtime || sbFired || lpInput == 0 || lpOutputBuffer == 0)
-        {
-            return;
-        }
+        const GameMode* const lpCurrentGameMode = mModeManager.GetCurrentGameMode();
+        const bool lbOnlineModeRunning =
+            (lpCurrentGameMode != 0) && lpCurrentGameMode->IsOnline();
 
-        const GameStateModuleIO::ControllerInput* const lpControllerInput =
-            lpInput->GetControllerInput();
-        if (lpControllerInput == 0 || !lpControllerInput->mbCrashModePressed)
+        // @0x82356B5C..0x82356BB0. Offline, the whole function is gated on road rules being
+        // available. The console inlines ProgressionManager::AreRoadRulesAvailable @0x82311520
+        // here -- the identical three-term test, term for term and register for register
+        // (`>= 4u` on the Profile medal count, then the two road-rule tallies) -- and that body is
+        // already committed and mounted, so it is reached BY NAME rather than re-open-coded.
+        // ⚠️ THIS IS A REAL PROGRESSION GATE, not a bring-up artefact: on a profile that has never
+        // won four events and has never ruled a road, showtime does not start offline. That is the
+        // console's behaviour and it is reproduced, not softened.
+        if (!lbOnlineModeRunning && !mProgressionManager.AreRoadRulesAvailable())
         {
-            return;
-        }
-
-        // [DIAG] ONE line the first time the gesture is SEEN, before the two remaining gates, so a
-        // run that presses the bumpers and gets nothing says WHICH gate refused rather than looking
-        // like a dead input channel. Without this, "no showtime" and "no button press" print the
-        // same thing -- nothing. [[diagnostics-that-lie]] -- ask what the probe cannot see.
-        {
-            static bool sbGestureSeen = false;
-            if (!sbGestureSeen && CgsDev::Log::gpDebugPrint != 0)
+            if (lbCrashModePressed)
             {
-                sbGestureSeen = true;
-                *CgsDev::Log::gpDebugPrint
-                    << "[showtime] gesture SEEN: ControllerInput::mbCrashModePressed (both bumpers)"
-                    << " is true; modeRunning="
-                    << ((mModeManager.GetCurrentGameMode() != 0) ? 1 : 0)
-                    << " playerCarActive="
-                    << (mLastActiveRaceCarInterface.IsPlayerCarActive() ? 1 : 0) << "\n";
+                LogShowtimeRefusalOnce("road rules are not available yet -- the profile needs "
+                                       "4 medals from the start, or one ruled road "
+                                       "(ProgressionManager::AreRoadRulesAvailable @0x82311520)");
             }
+            return false;
         }
 
-        if (mModeManager.GetCurrentGameMode() != 0)
+        // @0x82356BB4..0x82356BEC. The two-second post-mode lockout.
+        if (mfTimeSinceLastCrashMode > 0.0f)
         {
-            return;
+            if (lbCrashModePressed)
+            {
+                LogShowtimeRefusalOnce("the 2 s post-mode lockout (mfTimeSinceLastCrashMode) "
+                                       "has not expired");
+            }
+            mfTimeSinceLastCrashMode        -= lfGameTimestep;
+            mfTimeSpentDoingCrashStartAction = KF_CRASH_START_HOLD_SECONDS;
+            return false;
         }
 
-        if (!mLastActiveRaceCarInterface.IsPlayerCarActive())
+        // @0x82356BF0..0x82356C14. See the warning in the banner -- no re-arm on this path.
+        if (lpSimTimerRequests == 0)
         {
-            return;
+            // [GUARD] Not X360. The console dereferences r6 unconditionally; both of its call
+            // sites hand it OutputBuffer::GetTimerRequest() + 8, which cannot be null. Refusing
+            // here is the same shape of guard StartCrashMode carries for lpOutput.
+            return false;
         }
-
-        sbFired = true;
-
-        if (CgsDev::Log::gpDebugPrint != 0)
+        if (lpSimTimerRequests->IsStartRequested()  ||
+            lpSimTimerRequests->IsStopRequested()   ||
+            lpSimTimerRequests->IsMultiplierRequested())
         {
-            *CgsDev::Log::gpDebugPrint
-                << "[showtime] ***** HARNESS-ONLY SHOWTIME INJECTION (BRN_START_SHOWTIME=1) *****"
-                << " the gesture is REAL (mbCrashModePressed, both bumpers, the console's own"
-                << " +0x42 byte); what is bypassed is ShouldStartShowtimeMode @0x82356B18's"
-                << " hold/speed/facing gate stack. Calling StartCrashMode @0x8236B580 --"
-                << " everything below it is the console's own. One-shot.\n";
+            return false;
         }
 
-        StartCrashMode(lpInput, lpOutputBuffer);
+        // -----------------------------------------------------------------------------------------
+        // @0x82356C18..0x82356D4C. Nine tests, in the console's order, each of which branches to the
+        // SAME tail (loc_82356D7C: re-arm the hold, return false). Written as one short-circuiting
+        // chain because that is exactly what the branch structure is; the address on each line is
+        // the console instruction that tests it.
+        // -----------------------------------------------------------------------------------------
 
-        if (CgsDev::Log::gpDebugPrint != 0)
+        // [X][X] DIVERGENCE at the fourth test (@0x82356C50..0x82356C60): the console reads
+        // gsm+35880, which is mModeManager.mChallengeManager.meChallengeManagerStatus -- the
+        // ChallengeManager sits at ModeManager+28160 and the status word at ChallengeManager+3592
+        // (0xE08), pinned by twenty-one of its own methods, of which Construct @0x82332DB0 stores 0,
+        // BeginChallenge stores 1, TriggerFreeburnChallenge stores 2 and EndChallenge stores 3.
+        // ModeManager does NOT embed the ChallengeManager on this build (the divergence is recorded
+        // at its console seat in BrnModeManager.h: 29 TUs, ~35 unresolved externals), so no freeburn
+        // challenge can be begun and the status can only ever hold its Construct value.
+        // => The term is written as the constant the object's absence forces, NOT as a convenient
+        // one: it is false because nothing on this build can make it true, and the moment the
+        // ChallengeManager mount lands this line must become the real read.
+        // DELETE-WHEN ModeManager embeds mChallengeManager.
+        const bool lbFreeburnChallengeRunning = false;
+
+        const GameStateModuleIO::EGameModeType leCurrentGameModeType =
+            mModeManager.GetCurrentGameModeType();
+
+        const bool lbConditionsMet =
+               lbCrashModePressed                                                   // @0x82356C18
+            && mLastActiveRaceCarInterface.IsPlayerCarActive()                      // @0x82356C2C
+            && !IsSimPaused(false, false)                                           // @0x82356C44 (raw miSimPauseFlags == 0)
+            && !lbFreeburnChallengeRunning                                          // @0x82356C58 [X][X] see above
+            && (mCarSelectManager.GetJunkyardId() == 0)                             // @0x82356C6C (an 8-byte `ldx`: no junkyard flow)
+            && (lpCurrentGameMode == 0 ||
+                lpCurrentGameMode->GetCurrentState() ==
+                    GameStateModuleIO::E_GMS_IN_PROGRESS)                           // @0x82356C8C
+            && (meShowtimeBehaviour != E_SHOWTIME_MODE_OFF)                         // @0x82356CC8
+            && (!lbOnlineModeRunning ||
+                leCurrentGameModeType == GameStateModuleIO::E_MODE_ONLINE_FREE_BURN_LOBBY ||
+                leCurrentGameModeType == GameStateModuleIO::E_MODE_ONLINE_SHOWTIME) // @0x82356CDC
+            && (leCurrentGameModeType != GameStateModuleIO::E_MODE_OFFLINE_SHOWTIME &&
+                leCurrentGameModeType != GameStateModuleIO::E_MODE_ONLINE_SHOWTIME);// @0x82356D28
+
+        if (!lbConditionsMet)
         {
-            // The post-condition, by name. ModeManager::StartGameMode is synchronous, so by this
-            // line the mode object either exists or the start refused -- and this says which.
-            const GameMode* const lpMode = mModeManager.GetCurrentGameMode();
-            *CgsDev::Log::gpDebugPrint
-                << "[showtime] StartCrashMode returned: mpCurrentGameMode "
-                << ((lpMode != 0) ? "LIVE" : "still null")
-                << " modeType " << static_cast<s32>(mModeManager.GetCurrentGameModeType())
-                << " (2 == E_MODE_OFFLINE_SHOWTIME, 16 == E_MODE_ONLINE_SHOWTIME)\n";
+            // [DIAG] one line, once, naming the FIRST gate that said no. Not behind an env guard,
+            // for the same reason StartModeAtLights' wrong-car line is not (GameStateModule_gSR_00
+            // .cpp): from the outside a refusal and a dead input channel print the same thing --
+            // nothing -- and that is exactly the ambiguity the player report started from. The
+            // terms are re-evaluated here, not captured above, so the decision path stays the
+            // console's short-circuit chain; every one of them is a pure read.
+            // [[diagnostics-that-lie]] -- a probe must say what it could not see.
+            if (lbCrashModePressed)
+            {
+                const char* lpcReason =
+                    (!mLastActiveRaceCarInterface.IsPlayerCarActive())      ? "no active player car"
+                  : (IsSimPaused(false, false))                             ? "the sim is paused (miSimPauseFlags != 0)"
+                  : (lbFreeburnChallengeRunning)                            ? "a freeburn challenge is running"
+                  : (mCarSelectManager.GetJunkyardId() != 0)                ? "a junkyard flow is active"
+                  : (lpCurrentGameMode != 0 &&
+                     lpCurrentGameMode->GetCurrentState() !=
+                         GameStateModuleIO::E_GMS_IN_PROGRESS)              ? "a game mode is running and is not IN_PROGRESS"
+                  : (meShowtimeBehaviour == E_SHOWTIME_MODE_OFF)            ? "meShowtimeBehaviour is E_SHOWTIME_MODE_OFF"
+                  : (leCurrentGameModeType == GameStateModuleIO::E_MODE_OFFLINE_SHOWTIME ||
+                     leCurrentGameModeType == GameStateModuleIO::E_MODE_ONLINE_SHOWTIME) ? "showtime is already running"
+                  :                                                           "the online mode type is not a lobby/showtime";
+                LogShowtimeRefusalOnce(lpcReason);
+            }
+            mfTimeSpentDoingCrashStartAction = KF_CRASH_START_HOLD_SECONDS;   // loc_82356D7C
+            return false;
         }
+
+        // @0x82356D50..0x82356D74. `f0 = hold - dt ; store ; return f0 <= 0.0f`.
+        mfTimeSpentDoingCrashStartAction -= lfGameTimestep;
+        return mfTimeSpentDoingCrashStartAction <= 0.0f;
+    }
+
+    // =============================================================================================
+    // GameStateModule::IsInShowtimeIntro  @0x82356A60  (11 insns)
+    //
+    // The whole body is `lfsx f13, this, 0x45720 ; fcmpu f13, flt_82001CC0 (0.0f) ; bgt -> 1`.
+    // =============================================================================================
+    bool GameStateModule::IsInShowtimeIntro() const
+    {
+        return mfShowtimeIntroTimeLeft > 0.0f;
+    }
+
+    // =============================================================================================
+    // GameStateModule::GetShowtimeIntroSteering  @0x82356A90  (33 insns)
+    //
+    // The same `> 0.0f` test, this time as a NON-RETURNING assert (BrnGameStateModule.cpp:5050),
+    // then `lfsx f1, this, 0x45724`. The console fires the assert and reads the word anyway; that
+    // is reproduced -- an early return would invent a value the binary never has.
+    // ⓘ ITS CONSUMER IS ALREADY WAITING: GameBridgeControllerToX.cpp carries a FLAG'd leg that
+    // wants exactly this pair to force the player's steering during the intro window.
+    // =============================================================================================
+    f32 GameStateModule::GetShowtimeIntroSteering() const
+    {
+        CGS_ASSERT(IsInShowtimeIntro(), "IsInShowtimeIntro()");   // :5050
+        return mfShowtimeIntroSteering;
     }
 }

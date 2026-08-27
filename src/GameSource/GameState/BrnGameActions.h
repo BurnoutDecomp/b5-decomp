@@ -496,6 +496,13 @@ enum EGameActionType
     // miFramesUntilModeSwitchSend hits exactly 0. PrepareForMode arms that counter for modes 2
     // and 16 ONLY -- the offline/online showtime pair -- which is the corroboration.
     E_ACTION_SHOWTIME_MODE_SWITCH                        = 143,  // DWARF 135 (+8 X360); size 16 BAND
+    // BAND (+8), DWARF 138. THE SHOWTIME INTRO LATCH BROADCAST. Producer: the DetectModeStarts
+    // @0x8239A428 `else` arm, twice -- `li r6,0x20 / li r5,0x92` at 0x8239A684/0x8239A688 (the
+    // arm-the-intro post, mbStart == 1) and again at 0x8239A8E0/0x8239A8E4 (the cancel post,
+    // mbStart == 0). Consumer: PhysicsModule::HandleGameActions' case-146 arm, already committed
+    // and mounted (BrnPhysicsModuleGameActions.cpp), which reads the record's FIRST 16 BYTES as
+    // the aim vector and hands it to RaceCarPhysics::SetShowtimeAimDirection.
+    E_ACTION_SHOWTIME_INTRO_START                        = 146,  // DWARF 138 (+8 X360); size 32 BAND
     // FLAG -- NAME UNRECOVERED. ModeManager::UpdateCurrentMode @0x82351824 (`li r5,0x98`
     // @0x82351808 + `li r6,8` @0x82351804), mode 13 (E_MODE_ONLINE_BURNING_HOME_RUN) only, and
     // the payload is a live CgsSystem::Time copied straight out of
@@ -1359,6 +1366,31 @@ struct JunctionInfoAction : public GameAction<E_ACTION_EVENT_AT_JUNCTION_AVAILAB
 };
 static_assert(sizeof(JunctionInfoAction) == 40,
               "X360 CheckIfPlayerIsAtJunctionWithAnEvent posts action 201 with size 40");
+// ---- 146 ---------------------------------------------------------------------------------
+// [showtime S7b-b, 2026-08-27] The showtime-intro latch record. Producer: the DetectModeStarts
+// @0x8239A428 `else` arm (both posts); consumer: PhysicsModule::HandleGameActions case 146.
+//
+// ⚠️ THE FIELD ORDER IS THE X360's, NOT THE DWARF's, AND THE TWO DISAGREE. DecFIGS
+// (BrnGameActions.h:4771) declares `struct ShowtimeIntro { bool mbStart; Vector3 mAimDirection; }`
+// -- bool first. The X360 frame is the other way round and both ends prove it:
+//   * producer @0x8239A674..0x8239A67C stores the 16-byte direction at var_A0 (the record base,
+//     displacement ZERO) and the bool at var_90 == record+16 (0x8239A664 / 0x8239A8D8);
+//   * consumer @0x825A785C does `lvx128 v1, r0, r29` -- displacement ZERO -- on the payload
+//     pointer before calling RaceCarPhysics::SetShowtimeAimDirection.
+// Rung 1 (ARTIST asm) arbitrates over rung 2 (DWARF declaration shape), so the vector leads.
+// The 32-byte size is the console's own `li r6,0x20` and follows from Vector3's 16-byte
+// alignment (16 + 1 -> 32).
+struct ShowtimeIntroAction : public GameAction<E_ACTION_SHOWTIME_INTRO_START>
+{
+    Vector3 mAimDirection;   // +0x00 RCEntityActiveRaceCarOutputInterface::GetPlayerDirection()
+    bool    mbStart;         // +0x10 true == the intro is armed, false == it was cancelled
+};
+static_assert(sizeof(ShowtimeIntroAction) == 32,
+              "X360 DetectModeStarts posts action 146 with size 32");
+static_assert(offsetof(ShowtimeIntroAction, mAimDirection) == 0x00 &&
+              offsetof(ShowtimeIntroAction, mbStart) == 0x10,
+              "action-146 field offsets are the producer's var_A0/var_90 stores");
+
 // ---- 272 ---------------------------------------------------------------------------------
 // [stuntrace wave D, D3] The wrong-car abort. One CgsID: the car the junction's event demands.
 // Producer StartModeAtLights @0x82396CF8 (the `std r11, var_3E0` / `li r6,8` pair cited on the

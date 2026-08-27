@@ -58,6 +58,8 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"                      // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"              // gpDebugPrint / gxMessageFilterFlags
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"        // VariableEventQueue<13312,16>::AddEvent
+#include "GameShared/GameClasses/System/Timer/CgsTimerRequestInterface.h" // CgsSystem::TimerRequests (the showtime arm's third argument)
+#include "rw/math/vpu/vector3_operation.h"                              // Dot (the showtime arm's two vmsum3fp128)
 
 #include "GameSource/GameState/BrnGameStateModuleIO.h"                  // PreWorldInputBuffer / OutputBuffer / ControllerInput
 #include "GameSource/GameState/BrnGameActions.h"                        // JunctionInfoAction / WrongCarForChallengeAction
@@ -175,6 +177,26 @@ bool SnapDiagEnabled()
     static const bool sbDiag = (getenv("BRN_PROP_DIAG") != 0);
     return sbDiag && CgsDev::Log::gpDebugPrint != 0;
 }
+
+// [DIAG] the `[showtime]` rung -- NOT IN THE X360 BINARY, same guard and same logger.
+bool ShowtimeDiagEnabled()
+{
+    static const bool sbDiag = (getenv("BRN_PROP_DIAG") != 0);
+    return sbDiag && CgsDev::Log::gpDebugPrint != 0;
+}
+
+// ---- the showtime arm's three console literals, all image-read out of the ARTIST .rdata -----
+// flt_82CDB8CC == 0x41200000 == 10.0f. The arm squares it (`fmuls f30, f0, f0` @0x8239A60C) and
+// compares the squared speed against the square, so this is the minimum speed in the linear
+// velocity's own units (m/s -- RaceCarState::mLinearVelocity is raw, see GetPlayerLinearVelocity's
+// banner), i.e. about 22 mph.
+const f32 KF_SHOWTIME_MIN_SPEED = 10.0f;
+// flt_82CDB8D0 == 0x3F000000 == 0.5f. The showtime-intro window.
+const f32 KF_SHOWTIME_INTRO_SECONDS = 0.5f;
+// flt_82004884 == 0x3727C5AC == 9.99999975e-06f. Not a "nearly zero" placeholder: it is a
+// deliberate hair above zero, so IsInShowtimeIntro() stays true and the next frame re-enters the
+// decision arm. That is how the console waits for a car that is still airborne to land.
+const f32 KF_SHOWTIME_INTRO_RETRY_SECONDS = 9.99999975e-06f;
 
 // --------------------------------------------------------------------------------------------
 // [FLAG PC bring-up, NOT in the X360 binary] BRN_SKIP_TRAINING_TIP -- the harness tip bypass.
@@ -829,16 +851,9 @@ bool GameStateModule::ShouldStartSnapRaceMode(bool                     lbRaceMod
 //     asymmetry is the console's: the online lobby modes let the gesture be DETECTED (the online
 //     path consumes it elsewhere) but never let it start an OFFLINE event.
 //
-// [PARKED] THE SHOWTIME (CRASH-MODE) ARM -- the whole `else` branch, 0x8239A568..0x8239A8EC.
-// It is the second, independent gesture in this function (both bumpers, ControllerInput +0x42
-// mbCrashModePressed) and it drives ShouldStartShowtimeMode / StartCrashMode through a VMX-heavy
-// body: a squared-speed compare against flt_82CDB8CC (10.0f, image-read), a 0.5 s window latch at
-// gsm+284448 (flt_82CDB8D0 == 0.5f), a cached 16-byte direction vector at gsm+284464, a facing
-// dot-product re-test, an "aligned" bit at gsm+284510, a sign latch at gsm+284452 (+/-1.0f), and
-// two posts of game event 146 (32 bytes) carrying that direction. NONE of those members exists
-// on this slice and BOTH callees are absent from the tree. Parked as a unit rather than
-// half-landed: this wave is the STUNT start, and a half-wired showtime latch would post event
-// 146 into a queue with no consumer.
+// ✅ THE SHOWTIME (CRASH-MODE) ARM IS NO LONGER PARKED -- it is landed below, in full
+// (0x8239A568..0x8239A8EC). See its own banner at the `else` for what it does, for the three
+// errors the old park note carried, and for the two timesteps it needs. [showtime S7b-b]
 // ============================================================================================
 void GameStateModule::DetectModeStarts(const GameStateModuleIO::PreWorldInputBuffer* lpInput,
                                        GameStateModuleIO::OutputBuffer*             lpOutput,
@@ -880,7 +895,260 @@ void GameStateModule::DetectModeStarts(const GameStateModuleIO::PreWorldInputBuf
             StartModeAtLights(lpInput, lpOutput, leStartMechanism);
         }
     }
-    // else: [PARKED] the showtime arm -- see the banner above.
+    // ---------------------------------------------------------------------------------------
+    // ⭐⭐⭐ [showtime S7b-b, 2026-08-27] THE SHOWTIME (CRASH-MODE) ARM -- the whole `else`
+    // branch, 0x8239A568..0x8239A8EC. It was PARKED here since wave D; this is it landed.
+    //
+    // ⚠️⚠️ THE PARK NOTE THAT SAT HERE WAS WRONG IN THREE PLACES, and each error would have cost
+    // a re-derivation, so they are corrected on the record rather than quietly fixed:
+    //   1. "two posts of game EVENT 146" -- they are posts of game ACTION 146. The queue is
+    //      `GameStateModuleIO::Ou(lpOutput)` @0x8231D4B8, which returns lpOutput+4 with the
+    //      "Not locked for writing" assert from BrnGameStateModuleIO.h:266 -- i.e. it IS
+    //      OutputBuffer::GetGameActionQueue(). Action 146 == E_ACTION_SHOWTIME_INTRO_START.
+    //   2. "a half-wired showtime latch would post into a queue with no consumer" -- THE CONSUMER
+    //      IS MOUNTED AND LIVE. PhysicsModule::HandleGameActions' case-146 arm
+    //      (BrnPhysicsModuleGameActions.cpp) reads the record's first 16 bytes and hands them to
+    //      RaceCarPhysics::SetShowtimeAimDirection. It landed after the park note was written.
+    //   3. "an alignment bit at gsm+284510" -- it is not an alignment bit. It is
+    //      mbShowtimeIntroHasTouchedGround (DWARF BrnGameStateModule.h:857), OR-ed each frame with
+    //      `!IsPlayerInAir()`, and it is the LAST gate before StartCrashMode.
+    // [[gates-are-stale-not-dead]] -- ask when a park note last ran, not whether it exists.
+    //
+    // WHAT THE ARM IS. A two-phase latch around a 0.5 s "showtime intro" window:
+    //
+    //   PHASE 1 (mfShowtimeIntroTimeLeft <= 0), @0x8239A568..0x8239A738
+    //     ShouldStartShowtimeMode(dt, mbCrashModePressed, simTimerRequests) must pass, AND the
+    //     player must either already be crashing or be doing at least 10 m/s
+    //     (`dot3(v,v) >= 10.0f*10.0f`, flt_82CDB8CC image-read as 41200000 == 10.0f). Then:
+    //       * post action 146 with mbStart = 1 and the car's current heading;
+    //       * open the window (mfShowtimeIntroTimeLeft = 0.5f, flt_82CDB8D0 image-read);
+    //       * cache that heading in mShowtimeIntroOriginalDirection;
+    //       * clear mbShowtimeIntroHasTouchedGround;
+    //       * latch mfShowtimeIntroSteering to -1.0f when the car's angular velocity Y is >= 0,
+    //         else +1.0f (flt_820037C8 / flt_82001C98, both image-read).
+    //
+    //   PHASE 2 (the window is open), @0x8239A73C..0x8239A8EC
+    //     Decrement the window; OR the touched-ground bit with `!IsPlayerInAir()`; dot the current
+    //     heading against the cached one. DECIDE as soon as ANY of these is true --
+    //       the window expired | the car is airborne | the car is crashing |
+    //       the un-writable byte at gsm+245952 is set | the heading dot has gone <= 0.0f
+    //     -- otherwise keep waiting. On DECIDE: clear the window, re-ask
+    //     ShouldStartShowtimeMode with the button treated as held (`li r5,1` @0x8239A884), and
+    //       * if it passes AND mbShowtimeIntroHasTouchedGround -> StartCrashMode;
+    //       * if it passes but the car has never touched the ground -> re-arm the window to
+    //         9.99999975e-06f (flt_82004884) and try again next frame -- i.e. WAIT FOR A LANDING;
+    //       * if it refuses -> post action 146 again with mbStart = 0 (the cancel).
+    //
+    // ⚠️ VMX DECODE NOTES, since this arm is the VMX-heavy one:
+    //   * `vmsum3fp128 v0, v0, v0` @0x8239A62C is dot3(v,v) over the first three lanes, splatted;
+    //     the following `vcmpgefp.` + `mfocrf r11, 2` + `extrwi r11,r11,1,24` reads CR6's
+    //     "all lanes true" bit, which after a splat is just the scalar compare.
+    //   * `vspltw v0, v0, 1` @0x8239A6F4 selects WORD 1 of the angular-velocity vector -- lane
+    //     order is [X,Y,Z,W] from the MSB, so word 1 is Y.
+    //   * ⛔ NO +32 SOURCE-REGISTER CORRECTION IS NEEDED ANYWHERE IN THIS ARM. Every VMX source
+    //     here (v0, v13, v127) has a defining instruction a few lines above it in the same
+    //     listing, so the [[ida-vmx-plus32-and-rdata-unlock]] rule does not fire -- stated
+    //     because a reader who applies it blindly gets v95/v96 and a dead end.
+    //
+    // ⚠️⚠️ TWO TIMESTEPS, AND THEY ARE NOT THE SAME ONE. The console feeds ShouldStartShowtimeMode
+    // `*(f32*)(Get()+8) * *(f32*)(Get()+4)` where Get() is PreWorldInputBuffer's TimerStatusInterface
+    // accessor @0x8231CE28 -- i.e. CgsSystem::TimerStatus::GetCurrentTimeStep() on the GAME timer
+    // (mfBaseTimeStep * mfTimeStepMultiplier) -- while the window decrement at 0x8239A74C uses the
+    // module's own cached mfSimTimeStep at gsm+292284. NEITHER has a producer on this build (see
+    // the [FLAG] at the site), and a zero dt here is NOT inert: it would mean the 10 ms crash-start
+    // hold never counts down and the gate never fires -- a silent no-op indistinguishable from a
+    // dead input. Both are therefore taken from this function's PC-only lfGameTimestep parameter,
+    // which is the same substitution ShouldStartSnapRaceMode above already runs on.
+    // ---------------------------------------------------------------------------------------
+    else
+    {
+        // @0x8239A56C..0x8239A588. The console's own expression, computed first so that the
+        // moment PreWorldInputBuffer::SetTimerStatusInterface gets a producer this reverts to the
+        // real value with no edit. maEntries[0] is the GAME timer status; mfValue04/mfValue08 are
+        // CgsSystem::TimerStatus::mfBaseTimeStep / mfTimeStepMultiplier (the local
+        // GameStateModuleIO::TimerStatusInterface is a padding-fork of CgsSystem's -- same 24-byte
+        // TimerStatus pair, different declaration; not unified here, it is not this wave's file).
+        f32 lfShowtimeTimestep = 0.0f;
+        const GameStateModuleIO::TimerStatusInterface* const lpTimerStatus =
+            lpInput->GetTimerStatusInterface();
+        if (lpTimerStatus != 0)
+        {
+            lfShowtimeTimestep =
+                lpTimerStatus->maEntries[0].mfValue04 * lpTimerStatus->maEntries[0].mfValue08;
+        }
+        // [FLAG PC bring-up] nothing on this build calls PreWorldInputBuffer::SetTimerStatusInterface
+        // (grep: the definition exists, the call does not), and GameStateModule::Construct value-
+        // initialises the buffer -- so the product above is exactly 0.0f today. Falling back to the
+        // caller's timestep keeps the gate live; the test is `== 0.0f` so the substitution retires
+        // itself. DELETE-WHEN that setter has a caller.
+        if (lfShowtimeTimestep == 0.0f)
+        {
+            lfShowtimeTimestep = lfGameTimestep;
+        }
+
+        // @0x8239A5A4 / @0x8239A87C: `GetTimerRequest(out)` then `addi r6, r11, 8` -- the SIM half
+        // of the output buffer's TimerRequestInterface (mGameTimer @+0, mSimTimer @+8).
+        CgsSystem::TimerRequestInterface* const lpTimerRequests =
+            lpOutput->GetTimerRequestInterface();
+        CgsSystem::TimerRequests* const lpSimTimerRequests =
+            (lpTimerRequests != 0) ? lpTimerRequests->GetSimTimerRequests() : 0;
+
+        // `lbz r5, 0x42(r23)` @0x8239A5B0 -- ControllerInput::mbCrashModePressed, i.e. BOTH
+        // BUMPERS HELD (BrnGameStateModuleIO.cpp:92 ANDs action rows 54 and 55, bound to
+        // LSHOULDER/RSHOULDER in CgsInputPadsPC.cpp's KA_BINDINGS).
+        const bool lbCrashModePressed =
+            (lpControllerInput != 0) && lpControllerInput->mbCrashModePressed;
+
+        // The console's 32-byte stack record at var_A0/var_90, shared by BOTH posts.
+        // ⓘ On the cancel post the console's aim vector is whatever the frame left in that slot
+        // (it is only written on the arm-the-intro path), and the consumer stores it regardless of
+        // mbStart. Here the host's Vector3 default constructor decides instead; either way the
+        // value is meaningless when mbStart is false, and no reconstructed code reads it.
+        GameStateModuleIO::ShowtimeIntroAction lShowtimeIntro;
+
+        if (mfShowtimeIntroTimeLeft <= 0.0f)   // `lfs f12, 0(r26) ; fcmpu ; bgt` @0x8239A590
+        {
+            // ---- PHASE 1: the gesture, and opening the window ---------------------------------
+            if (ShouldStartShowtimeMode(lfShowtimeTimestep, lbCrashModePressed, lpSimTimerRequests))
+            {
+                // @0x8239A5D0..0x8239A654. Already crashing? then the speed test is skipped
+                // entirely (`bne cr6, loc_8239A658`). Otherwise the car must be doing 10 m/s.
+                bool lbMayStartIntro = mLastActiveRaceCarInterface.IsPlayerCarCrashing();
+                if (!lbMayStartIntro)
+                {
+                    // `sub_82310240(iface)` == GetPlayerRaceCarState(); `lvx128 v0, r3, 0x330`
+                    // == element +816 == RaceCarState::mLinearVelocity, raw m/s.
+                    const BrnPhysics::Vehicle::RaceCarState* const lpPlayerRaceCarState =
+                        mLastActiveRaceCarInterface.GetPlayerRaceCarState();
+                    const f32 lfSpeedSquared = static_cast<f32>(
+                        rw::math::vpu::Dot(lpPlayerRaceCarState->mLinearVelocity,
+                                           lpPlayerRaceCarState->mLinearVelocity));
+                    lbMayStartIntro = (lfSpeedSquared >= KF_SHOWTIME_MIN_SPEED *
+                                                          KF_SHOWTIME_MIN_SPEED);
+                }
+
+                if (lbMayStartIntro)
+                {
+                    // loc_8239A658..0x8239A738. `sub_82310398` == GetPlayerDirection() ==
+                    // mTransform.At(), the car's forward row. The console calls it TWICE
+                    // (@0x8239A668 and @0x8239A6A4) with the same argument; it is pure, so it is
+                    // called once here and the value used twice.
+                    const Vector3 lPlayerDirection =
+                        mLastActiveRaceCarInterface.GetPlayerDirection();
+
+                    lShowtimeIntro.mbStart       = true;              // `stb r11(1), var_90` @0x8239A664
+                    lShowtimeIntro.mAimDirection = lPlayerDirection;  // `stvx128 v0, var_A0`  @0x8239A67C
+                    lpOutput->GetGameActionQueue()->AddEvent(
+                        reinterpret_cast<const CgsModule::Event*>(&lShowtimeIntro),
+                        GameStateModuleIO::E_ACTION_SHOWTIME_INTRO_START,
+                        static_cast<s32>(sizeof(GameStateModuleIO::ShowtimeIntroAction)));
+
+                    mfShowtimeIntroTimeLeft         = KF_SHOWTIME_INTRO_SECONDS;  // @0x8239A6A0
+                    mShowtimeIntroOriginalDirection = lPlayerDirection;           // @0x8239A6C4
+                    mbShowtimeIntroHasTouchedGround = false;                      // @0x8239A6C8
+
+                    // @0x8239A6CC..0x8239A738. `sub_82310240` again, `lvx128 v0, r0, r3+0x340`
+                    // == element +832 == mAngularVelocity, then `vspltw v0, v0, 1` == lane Y.
+                    // NOTE THE SIGN: Y >= 0 latches MINUS one (the `bne` arm), Y < 0 latches PLUS.
+                    const BrnPhysics::Vehicle::RaceCarState* const lpPlayerRaceCarState =
+                        mLastActiveRaceCarInterface.GetPlayerRaceCarState();
+                    const f32 lfAngularVelocityY = lpPlayerRaceCarState->mAngularVelocity.y;
+                    mfShowtimeIntroSteering = (lfAngularVelocityY >= 0.0f) ? -1.0f : 1.0f;
+
+                    if (ShowtimeDiagEnabled())
+                    {
+                        *CgsDev::Log::gpDebugPrint
+                            << "[showtime] INTRO OPEN -- both bumpers held, gate passed."
+                            << " crashing=" << (mLastActiveRaceCarInterface.IsPlayerCarCrashing() ? 1 : 0)
+                            << " steering=" << mfShowtimeIntroSteering
+                            << " window=" << mfShowtimeIntroTimeLeft << "s\n";
+                    }
+                }
+            }
+            // Either refusal falls into loc_8239A73C, which re-reads the window; it is still
+            // <= 0 in this phase, so the console does nothing more this frame.
+        }
+        else
+        {
+            // ---- PHASE 2: the window is open --------------------------------------------------
+            // @0x8239A748..0x8239A754. See the two-timesteps warning: the console decrements by
+            // mfSimTimeStep (gsm+292284), which has no producer here.
+            mfShowtimeIntroTimeLeft -= lfGameTimestep;
+
+            // @0x8239A758..0x8239A7BC. `mbShowtimeIntroHasTouchedGround |= !IsPlayerInAir()`.
+            // The console spells the negation as `cntlzw` + bit 5 (32 when the input was 0), then
+            // ORs it into the byte and stores it straight back.
+            const bool lbPlayerInAir = mLastActiveRaceCarInterface.IsPlayerInAir();
+            if (!lbPlayerInAir)
+            {
+                mbShowtimeIntroHasTouchedGround = true;
+            }
+
+            // @0x8239A7A8..0x8239A7D8. dot3(current heading, the heading cached when the window
+            // opened). `vmsum3fp128 v0, v0, v127` with v127 == the +284464 vector.
+            const f32 lfHeadingDot = static_cast<f32>(
+                rw::math::vpu::Dot(mLastActiveRaceCarInterface.GetPlayerDirection(),
+                                   mShowtimeIntroOriginalDirection));
+
+            // @0x8239A7DC..0x8239A870. Any one of these ends the wait.
+            const bool lbDecideNow =
+                   (mfShowtimeIntroTimeLeft <= 0.0f)                              // @0x8239A7DC
+                || mLastActiveRaceCarInterface.IsPlayerInAir()                    // @0x8239A7E0
+                || mLastActiveRaceCarInterface.IsPlayerCarCrashing()              // @0x8239A820
+                || false /* gsm+245952 -- see the FLAG below */                   // @0x8239A84C
+                || (lfHeadingDot <= 0.0f);                                        // @0x8239A860
+            // [FLAG] gsm+245952 is a byte with NO WRITER anywhere in the 30,084-function export
+            // set -- measured on the ASM, not just the pseudocode: the only three functions whose
+            // listings form 0x3C0C0 are this one, ShouldAllowTimedTutorialTips @0x82356DB0 and
+            // TrainingManager::RequestTraining @0x82365B20, and all three only READ it. A member
+            // the console never sets reads as its zero-init, which is what the term above says.
+            // ShouldAllowTimedTutorialTips already carries the identical FLAG for the identical
+            // byte; named as a gap, not modelled.
+
+            if (lbDecideNow)
+            {
+                mfShowtimeIntroTimeLeft = 0.0f;   // `stfs f31, 0(r26)` @0x8239A878
+
+                // @0x8239A884: `li r5, 1` -- during the window the button is treated as HELD.
+                if (ShouldStartShowtimeMode(lfShowtimeTimestep, true, lpSimTimerRequests))
+                {
+                    if (mbShowtimeIntroHasTouchedGround)
+                    {
+                        if (ShowtimeDiagEnabled())
+                        {
+                            *CgsDev::Log::gpDebugPrint
+                                << "[showtime] WINDOW CLOSED, ground touched -> StartCrashMode"
+                                << " (dot " << lfHeadingDot << ")\n";
+                        }
+                        StartCrashMode(lpInput, lpOutput);              // @0x8239A8BC
+                    }
+                    else
+                    {
+                        // @0x8239A8C4: re-arm a hair above zero so the next frame lands back in
+                        // PHASE 2 and re-decides -- the console's "wait until the car lands".
+                        mfShowtimeIntroTimeLeft = KF_SHOWTIME_INTRO_RETRY_SECONDS;
+                    }
+                }
+                else
+                {
+                    // @0x8239A8D4..0x8239A8EC. The cancel post: the same 32-byte record with
+                    // mbStart cleared, onto the same queue.
+                    lShowtimeIntro.mbStart = false;                     // `stb r28(0), var_90`
+                    lpOutput->GetGameActionQueue()->AddEvent(
+                        reinterpret_cast<const CgsModule::Event*>(&lShowtimeIntro),
+                        GameStateModuleIO::E_ACTION_SHOWTIME_INTRO_START,
+                        static_cast<s32>(sizeof(GameStateModuleIO::ShowtimeIntroAction)));
+
+                    if (ShowtimeDiagEnabled())
+                    {
+                        *CgsDev::Log::gpDebugPrint
+                            << "[showtime] WINDOW CLOSED but the gate refused -- posted the"
+                               " cancel (action 146, mbStart 0)\n";
+                    }
+                }
+            }
+        }
+    }
 }
 
 // ============================================================================================

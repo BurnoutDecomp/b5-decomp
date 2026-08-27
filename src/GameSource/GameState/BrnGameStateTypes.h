@@ -99,6 +99,24 @@ enum EStuntType : s32
     E_STUNT_TYPE_ERRORS           = 98304,
 };
 
+// How the showtime (crash-mode) bounce is driven (DWARF BrnGameStateTypes.h:139). Held by
+// GameStateModule::meShowtimeBehaviour (X360 +284480) and forwarded to the physics side as the
+// 4-byte payload of game action 138 (E_ACTION_TOGGLE_SHOWTIME_BEHAVIOUR), whose consumer is
+// VehicleManager::SetShowtimeBehaviour -- and THAT function asserts the value is < 3, which is the
+// X360 attestation of E_SHOWTIME_MODE_COUNT. GameStateModule::Construct @0x82380388 seeds the
+// member to 2 (`*(a1 + 284480) = 2`) and UpdateShowtimeMode @0x82380EF8 cycles it
+// `(x + 1) % 3` each time the debug toggle byte at +284512 is set.
+// ⭐ ShouldStartShowtimeMode @0x82356B18 REFUSES while this is E_SHOWTIME_MODE_OFF -- that is the
+// "showtime is switched off" gate, and the console's own seed of 2 is what keeps it open.
+// This is the single owner (DWARF home BrnGameStateTypes.h); grow here, do not fork.
+enum EShowtimeBehaviour : s32
+{
+    E_SHOWTIME_MODE_OFF        = 0,
+    E_SHOWTIME_MODE_ON         = 1,
+    E_SHOWTIME_MODE_ON_SIXAXIS = 2,
+    E_SHOWTIME_MODE_COUNT      = 3,
+};
+
 // Stunt-element classification id (DWARF BrnGameStateTypes.h:58). Identifies the kind of
 // world stunt element (a jump/smash/billboard trigger) that the stunt sub-systems
 // complete and the action queue reports. DealWithStunt (X360 0x8232CEB0) uses this as the

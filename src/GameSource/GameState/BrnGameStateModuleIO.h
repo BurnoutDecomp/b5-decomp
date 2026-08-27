@@ -30,6 +30,7 @@
 #include "GameSource/World/EntityModules/TriggerEntityModule/SharedIO/BrnTriggerEntityModuleInputInterface.h" // BrnWorld::TriggerEntityModuleIO::TriggerManagementInputInterface (OutputBuffer +0x9050, embedded by value)
 #include "GameSource/GameState/SharedIO/BrnGameStateToGuiIOInterfaces.h" // GameStateToGuiInterface (OutputBuffer +0x4450, embedded by value -- see its member's ⚠️)
 #include "GameSource/GameState/BrnGameStateSharedIO.h"      // SetUpAllEventStartsInterface (OutputBuffer console +176368, embedded by value)
+#include "GameShared/GameClasses/System/Timer/CgsTimerRequestInterface.h" // CgsSystem::TimerRequestInterface (OutputBuffer +16420) -- see the typedef below
 
 // PostWorldInputBuffer hands out the active-race-car output interface by pointer only
 // (GetActiveRaceCarOutputInterface, X360 0x8231D2C0); forward-declare its real home.
@@ -276,7 +277,19 @@ namespace GameStateModuleIO
     // Placeholder member types for the OutputBuffer interface members the OutputBuffer TU
     // returns by named pointer. Swap for the real DWARF types (TimerRequestInterface,
     // FrameRateTypeRequestInterface, InputBuffer::GuiEventQueue) when those are homed.
-    struct OutputBufferTimerRequestInterface     { u8 maOpaque[16]; };
+    // ⭐ [showtime S7b-b, 2026-08-27] PLACEHOLDER RETIRED. This used to be
+    //     struct OutputBufferTimerRequestInterface { u8 maOpaque[16]; };
+    // and the comment above it said "swap for the real DWARF type when it is homed". It IS homed
+    // -- CgsSystem::TimerRequestInterface (GameShared/.../CgsTimerRequestInterface.h), two 8-byte
+    // TimerRequests blocks, sizeof 16 on the host exactly as on the console, with
+    // GetGameTimerRequests()/GetSimTimerRequests() bodied since 2026-08-26. Aliasing the name
+    // rather than renaming it keeps every existing signature and call site intact while making
+    // the type real; the three call sites that were reinterpret_cast-ing THROUGH the placeholder
+    // (BrnModeManager_Finish.cpp, BrnModeManager_Prepare.cpp's FLAG, GameStateModule_gUI_00.cpp)
+    // no longer have to. THE REASON IT MATTERS HERE: ShouldStartShowtimeMode @0x82356B18 takes a
+    // `CgsSystem::TimerRequests*` (DWARF BrnGameStateModule.h:781) and reads its request bits, so
+    // the showtime gate needs the real type, not a 16-byte blob.
+    typedef CgsSystem::TimerRequestInterface OutputBufferTimerRequestInterface;
     struct OutputBufferFrameRateTypeReqInterface { u8 maOpaque[12]; };
     struct OutputBufferGuiEventQueue             { u8 maOpaque[1008]; };
 
