@@ -15,6 +15,9 @@
 
 namespace BrnPhysics
 {
+    // The embedding host -- declared only for the friend declaration below.
+    class PhysicsModule;
+
     namespace Deformation
     {
         class DeformationInputInterface
@@ -156,6 +159,14 @@ namespace BrnPhysics
                 mSetModelCullingGroupEventQueue.Clear();
                 mbResetPlayerScratches = false;
             }
+
+            // ⭐ ADDED 2026-08-27 (showtime S3 wave). PhysicsModule::HandleGameActions
+            // @0x825A72F0 case 98 is a single `stbx r28, r31, r18` with r18 == 0x60B30 == +396080
+            // == mDeformationInput + 5056 == mbResetPlayerScratches. The console has no setter for
+            // it -- the store is inlined at the call site off the physics-module base. Friendship
+            // lets that ONE store keep its console shape and be spelled by name, the same trade
+            // BrnPhysicalTrafficManager.h:953 already documents.
+            friend class BrnPhysics::PhysicsModule;
 
         private:
             CgsModule::EventQueue<AddDeformationModelEvent, 20>        mAddDeformationModelQueue;          // X360 +0

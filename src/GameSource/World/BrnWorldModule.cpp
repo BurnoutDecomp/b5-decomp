@@ -41,6 +41,9 @@
 #include "GameSource/World/AI/SharedIO/BrnAIModuleIO_OutputBuffer.h"
 #include "GameSource/Physics/BrnPhysicsModuleIO.h"
 #include "GameSource/Physics/VehicleManager/BrnVehicleManager.h"
+// ADDED 2026-08-27 (showtime S3 wave): HandleGameActions' case-23 arm reads the PrepareForModeAction
+// record BY NAME now instead of by X360 word index -- see the banner at that arm.
+#include "GameSource/GameState/BrnGameActions.h"             // PrepareForModeAction + GameModeParams
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // the SCENE-stage allocator-hold one-shot log
 #include "GameShared/GameClasses/System/AttribSys/CgsAttribSysSharedIO.h"
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/AttributeKey.h" // Attrib::StringToKey
@@ -1546,21 +1549,77 @@ WorldModule::HandleGameActions(
 
             case 23:  // game-mode change: derive every car's control policy
             {
-                if ( lpiPayload[ 0 ] == 0 || lpiPayload[ 0 ] == 1 )
+                // ⛔⛔ FIXED 2026-08-27 (showtime S3 wave) -- THIS ARM WAS READING OFF THE END OF
+                // THE RECORD, AND HAD BEEN SINCE IT WAS WRITTEN.
+                // It used to be:
+                //     if ( lpiPayload[0] == 0 || lpiPayload[0] == 1 ) {
+                //         liControl = ( lpiPayload[549] & 0x10000 ) ? 2
+                //                   : ( lpiPayload[94] == 15 ) ? 1 : 0;
+                // -- word indices transcribed straight off the X360 (549*4 == 2196 == the flag
+                // word, 94*4 == 376 == the mode-type word). Those displacements are correct FOR THE
+                // CONSOLE RECORD, which is 0x8E0 == 2272 bytes. The host `PrepareForModeAction` is a
+                // fully typed struct and measures **1792** bytes on this build (printed by the
+                // [s3-action] witness in BrnPhysicsModuleGameActions.cpp, which is how this was
+                // found): +2196 is 404 bytes PAST THE END of the object -- an out-of-bounds read
+                // whose result was reliably 0, i.e. "no AI control", the most plausible-looking
+                // wrong answer available. +376 landed mid-member and could never equal 15 except by
+                // accident. So EVERY car's control policy was being derived from garbage, silently,
+                // on every mode prepare. No gate could see it: the read is in-bounds as far as the
+                // compiler is concerned and the answer is a legal enum value.
+                // [[serialized-slots-stay-32-bit]] -- host layout is NOT console layout.
+                //
+                // Both fields now come through the same accessors
+                // RaceCarEntityModule::HandlePrepareForModeAction uses, and the two magic numbers
+                // are named: 0x10000 is KU_FLAG_SET_ALL_CARS_TO_STARTING_AI_CONTROL
+                // (BrnGameModeParams.h:154) and 15 is E_MODE_ONLINE_FREEBURN_LOBBY. The `lpiPayload[0]`
+                // guard was the one read that WAS right (mePrepareForModeStage is the first member);
+                // it is spelled as IsFirstPrepareForMode(), whose own banner derives it from the
+                // same `cmpwi 0 / cmpwi 1` pair.
+                const BrnGameState::GameStateModuleIO::PrepareForModeAction* const lpPFMAction =
+                    reinterpret_cast<
+                        const BrnGameState::GameStateModuleIO::PrepareForModeAction*>( lpEventData );
+
+                if ( lpPFMAction->IsFirstPrepareForMode() )
                 {
+                    const BrnGameState::GameModeParams* const lpModeParams =
+                        lpPFMAction->GetGameModeParams();
+                    CGS_ASSERT( lpModeParams, "lpModeParams" );
+
                     s32 liControl;
-                    if ( ( lpiPayload[ 549 ] & 0x10000 ) != 0 )
+                    if ( lpModeParams->GetFlag(
+                             BrnGameState::GameModeParams::KU_FLAG_SET_ALL_CARS_TO_STARTING_AI_CONTROL ) )
                     {
                         liControl = 2;
                     }
                     else
                     {
-                        liControl = ( lpiPayload[ 94 ] == 15 ) ? 1 : 0;
+                        liControl =
+                            ( static_cast<s32>( lpModeParams->GetGameModeType() ) == 15 ) ? 1 : 0;
                     }
 
                     for ( s32 liI = 0; liI < 8; liI++ )
                     {
                         maeCarControls[ liI ] = liControl;
+                    }
+
+                    // NOT X360. One line, once: this arm produced a wrong answer for its whole life
+                    // and the only reason anyone noticed was a witness that printed a VALUE.
+                    // DELETE-WHEN: the mode-prepare chain has been exercised in anger and the
+                    // control policy is confirmed against a real online/offline mode.
+                    {
+                        static bool sbLogged = false;
+                        if ( !sbLogged && CgsDev::Log::gpDebugPrint != 0 )
+                        {
+                            sbLogged = true;
+                            *CgsDev::Log::gpDebugPrint
+                                << "[s3-action] WorldModule case 23: modeType "
+                                << static_cast<s32>( lpModeParams->GetGameModeType() )
+                                << " startAI "
+                                << ( lpModeParams->GetFlag(
+                                         BrnGameState::GameModeParams::
+                                             KU_FLAG_SET_ALL_CARS_TO_STARTING_AI_CONTROL ) ? 1 : 0 )
+                                << " -> maeCarControls[0..7] = " << liControl << "\n";
+                        }
                     }
                 }
                 break;

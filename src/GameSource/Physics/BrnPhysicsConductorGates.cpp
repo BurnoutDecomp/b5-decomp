@@ -148,13 +148,14 @@ namespace
 
 namespace BrnPhysics
 {
-    // @0x825A72F0 (185 insns; PS3 0x69CD60). The game-action dispatch -- drags ~10
-    // VehicleManager mode/showtime/impact methods.
-    void PhysicsModule::HandleGameActions(
-        const BrnGameState::GameStateModuleIO::GameActionQueue*, PhysicsModuleIO::OutputBuffer*)
-    {
-        BRN_CONDUCTOR_GATE("PhysicsModule::HandleGameActions @0x825A72F0 (185)");
-    }
+    // ⭐⭐⭐ GATE DELETED 2026-08-27 (showtime S3 wave): PhysicsModule::HandleGameActions
+    // @0x825A72F0 (185 insns) is REAL, in BrnPhysicsModuleGameActions.cpp. This was the #1 wall on
+    // showtime: `VehicleManager::SetPlayerCarToShowtimeMode @0x8259C108` has exactly ONE console
+    // caller and it is that function's case 23. The five VehicleManager leaves it needs
+    // (SwitchPlayerAIDonuttingAttribs / OnGameModePrepare / OnGameModeStop / StartImpactTime /
+    // EndImpactTime -- 32 X360 instructions between them) landed in the same commit, in
+    // BrnVehicleManagerPlayerStats.cpp. If a gate for it ever reappears here the link will say so
+    // (LNK2005).
 
     // =============================================================================================
     // ⭐ ADDED 2026-08-10 (create-path wave): the three PostSceneUpdate callees whose own closures
@@ -165,10 +166,27 @@ namespace BrnPhysics
     // =============================================================================================
 
     // @0x825A70C0 (63 insns). The POST-scene game-action dispatch. Distinct from HandleGameActions
-    // above and much smaller: DeformationManager::ProcessDebugResetDeformationModels, then a switch
-    // over the same VariableEventQueue<13312,16> with four arms -- 23 OnPrepareGameMode,
-    // 34 OnStartGameMode, 97 ProcessResetDeformationModelEvent (bracketed by two VerifyPartIndices
-    // sweeps), 99 OnJunkYardDriveThru. None of those five callees is reconstructed.
+    // (now real, in BrnPhysicsModuleGameActions.cpp) and much smaller:
+    // DeformationManager::ProcessDebugResetDeformationModels, then a switch over the same
+    // VariableEventQueue<13312,16> with four arms -- 23 OnPrepareGameMode, 34 OnStartGameMode,
+    // 97 ProcessResetDeformationModelEvent (bracketed by two VerifyPartIndices sweeps),
+    // 99 OnJunkYardDriveThru.
+    //
+    // ⚠️ STILL GATED, AND THE BOUNDARY IS EXACT (re-verified 2026-08-27, showtime S3 wave):
+    // ZERO of its five callees is available, which is why the pre-scene sibling could be landed
+    // this wave and this one could not.
+    //   VehicleManager::OnPrepareGameMode  @0x825B5770  -- ⚠️ AN IDA EXPORT HOLE (no JSON at all).
+    //       Read it headless (x360rd + ppcdis) before recording it as absent.
+    //       ⛔ DO NOT CONFUSE IT WITH `OnGameModePrepare` @0x825B5708, which IS landed this wave
+    //       (BrnVehicleManagerPlayerStats.cpp). Two different functions, near-anagram names, one
+    //       called from each of the two dispatches.
+    //   VehicleManager::OnStartGameMode    @0x825B5838 (46)  -- absent
+    //   VehicleManager::OnJunkYardDriveThru@0x825EB050 (60)  -- absent
+    //   DeformationManager::ProcessDebugResetDeformationModels @0x82641E50 -- DECLARED
+    //       (BrnDeformationManager.h:492), never defined -> LNK2019 if called.
+    //   DeformationManager::ProcessResetDeformationModelEvent  @0x82641D50 -- DECLARED
+    //       (BrnDeformationManager.h:487), never defined -> LNK2019 if called.
+    //   (and VerifyPartIndices @0x826042F8 is itself a conductor gate, further down this file.)
     void PhysicsModule::HandleGameActionsPostScene(
         const BrnGameState::GameStateModuleIO::GameActionQueue*,
         CgsPhysics::PhysicsSimulationIO::InputBuffer*,

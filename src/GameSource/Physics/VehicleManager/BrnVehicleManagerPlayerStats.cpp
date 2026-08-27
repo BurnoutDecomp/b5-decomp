@@ -358,5 +358,98 @@ namespace Vehicle
     // eight per-record +132 == 1 bytes, +172036 == 1, and the four +172364..+172376 zero-inits -- are
     // documented here and will be reproduced when the records become real typed members.)
     // -------------------------------------------------------------------------------------------
+
+    // ===============================================================================================
+    // ⭐ ADDED 2026-08-27 (showtime S3 wave) -- the five game-action leaves.
+    //
+    // These are the five VehicleManager methods PhysicsModule::HandleGameActions @0x825A72F0 calls
+    // and that had no declaration anywhere in the tree. Together they are 32 X360 instructions. They
+    // are grouped here rather than in a TU of their own because every one of them touches only the
+    // player-index / mode / impact-time block this TU already owns.
+    // ===============================================================================================
+
+    // -------------------------------------------------------------------------------------------
+    // SwitchPlayerAIDonuttingAttribs  @0x8262AEC8  (7 insns)
+    //
+    //   0x8262AEC8  lis  r11, 2 ; ori r11, r11, 0xA0AC   ; 0x2A0AC == +172204
+    //   0x8262AED0  lwzx r11, r3, r11                    ; mePlayerActiveRaceCarIndex
+    //   0x8262AED4  mulli r11, r11, 0x1460               ; sizeof(RaceCarPhysics) == 5216
+    //   0x8262AED8  add  r11, r11, r3
+    //   0x8262AEDC  addi r3,  r11, 0x740                 ; maRaceCarVehicles == this + 1856
+    //   0x8262AEE0  b    VehiclePhysics::SwitchAIDonuttingAttribs
+    //
+    // The (0x1460, 0x740) pair is the SAME stride/base SetPlayerCarToShowtimeMode resolves above, so
+    // the whole address computation collapses to one named subscript. RaceCarPhysics derives from
+    // VehiclePhysics, so the tail call is an ordinary inherited call.
+    //
+    // ⚠️ NO BOUNDS CHECK AND NO ASSERT -- unlike SetPlayerCarToShowtimeMode, whose asserts ARE in
+    // the console body, this function has neither. It is seven instructions and there is nowhere
+    // for one to hide. Do not add one: an index of -1 here is a real producer failure and must stay
+    // visible as one. [[invented-arms-and-the-c4715-ratchet]]
+    // -------------------------------------------------------------------------------------------
+    void VehicleManager::SwitchPlayerAIDonuttingAttribs(bool lbDonutting)
+    {
+        maRaceCarVehicles[static_cast<s32>(mePlayerActiveRaceCarIndex)]
+            .SwitchAIDonuttingAttribs(lbDonutting);
+    }
+
+    // -------------------------------------------------------------------------------------------
+    // OnGameModePrepare  @0x825B5708  (4 insns)
+    //   `lis r11,2 ; ori r11,r11,0xA15C ; stwx r4,r3,r11 ; blr`   -- 0x2A15C == +172380.
+    //
+    // ⭐⭐ +172380 IS meCurrentGameModeType, THE SHOWTIME GATE. ProcessDeformationStates tests it
+    // against 2 (E_MODE_OFFLINE_SHOWTIME) / 16 (E_MODE_ONLINE_SHOWTIME). Before this wave the member
+    // was seeded to -1 by Construct and NEVER WRITTEN AGAIN by anything in the tree, so every
+    // showtime-gated arm downstream of it was unreachable by construction rather than by state.
+    // -------------------------------------------------------------------------------------------
+    void VehicleManager::OnGameModePrepare(s32 leGameModeType)
+    {
+        meCurrentGameModeType = leGameModeType;   // asm: stwx @ +172380
+    }
+
+    // -------------------------------------------------------------------------------------------
+    // OnGameModeStop  @0x825B5718  (5 insns)
+    //   `li r10,-1 ; stwx r10,r3,0x2A15C ; blr`  -- meCurrentGameModeType = -1 (E_MODE_NONE).
+    //
+    // ⚠️ The call site (HandleGameActions cases 37/39) does `lwz r4, 0(r29)` immediately before the
+    // branch. That is a DEAD STORE into the argument register -- this body never reads r4, and the
+    // console prototype takes no second parameter. Do not add one to "match the call site".
+    // -------------------------------------------------------------------------------------------
+    void VehicleManager::OnGameModeStop()
+    {
+        meCurrentGameModeType = -1;   // asm: li r10,-1 ; stwx @ +172380
+    }
+
+    // -------------------------------------------------------------------------------------------
+    // StartImpactTime  @0x825B5730  (8 insns)
+    //   `stbx 1  -> +0x2A110 (172304 mbImpactTime)`
+    //   `stbx r5 -> +0x2A11A (172314 mbAftertouchIsForceAdditive)`
+    //
+    // ⚠️⚠️ THE FLOAT PARAMETER IS REAL AND THE BODY IGNORES IT. Call site @0x825A76A0:
+    //     addi r3, r31, 0x4AA0      ; the manager
+    //     lbz  r5, 4(r29)           ; the bool -- IN r5, NOT r4
+    //     lfs  f1, 0(r29)           ; the float
+    // The bool landing in r5 is the whole proof: on this ABI a float argument consumes its
+    // positional GPR slot, so a `(this, bool)` signature would have put it in r4. Hex-Rays renders
+    // the call as `StartImpactTime(a1 + 19104, *_R29)` -- one argument, and typed as the float's
+    // memory. [[reconstruction-gotchas]] Hex-Rays drops arguments.
+    // The console accepts the duration and drops it; that is reproduced, not repaired.
+    // -------------------------------------------------------------------------------------------
+    void VehicleManager::StartImpactTime(f32 lfImpactTimeDuration, bool lbForceAdditiveAftertouch)
+    {
+        (void)lfImpactTimeDuration;   // f1 is passed and never read by the console body
+
+        mbImpactTime                 = true;                          // asm: stbx 1  @ +172304
+        mbAftertouchIsForceAdditive  = lbForceAdditiveAftertouch;      // asm: stbx r5 @ +172314
+    }
+
+    // -------------------------------------------------------------------------------------------
+    // EndImpactTime  @0x825B5750  (8 insns) -- both bytes back to zero.
+    // -------------------------------------------------------------------------------------------
+    void VehicleManager::EndImpactTime()
+    {
+        mbImpactTime                = false;   // asm: stbx 0 @ +172304
+        mbAftertouchIsForceAdditive = false;   // asm: stbx 0 @ +172314
+    }
 }
 }

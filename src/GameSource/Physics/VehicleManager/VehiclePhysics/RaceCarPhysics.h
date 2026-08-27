@@ -401,7 +401,16 @@ namespace Vehicle
                                         f32 lfPlayerCarDamageLimit);
 
         // @0x825B8AF0: stash the showtime aim direction (a single VMX register) into the singleton.
-        void SetShowtimeAimDirection(const Vector3& lvAimDirection);
+        // ⭐ STATIC as of 2026-08-27 (showtime S3 wave), and that is the CONSOLE's shape, not a
+        // convenience. The whole body is
+        //     lis r11, msPlayerParams@ha ; li r10, 0x20 ; addi r11, r11, @l ; stvx128 v1, r11, r10
+        // -- it never touches r3. Its only console caller, PhysicsModule::HandleGameActions case
+        // 146 (asm 0x825A785C), correspondingly never SETS r3: it loads the vector into v1 and
+        // branches. A non-static declaration would have forced that call site to invent a `this` --
+        // in practice the player car, implying a per-car aim slot the singleton design does not
+        // have, and requiring a player index the arm never reads. Existing `obj.Set...(v)` call
+        // syntax still compiles against a static member, so this is source-compatible.
+        static void SetShowtimeAimDirection(const Vector3& lvAimDirection);
 
         // @0x8262EBE8: camera-relative air-steer. Normalizes the camera matrix's X and Z axes, reads
         // stick deflection via GetAftertouchValues (yaw/pitch/scalar, + optional SIXAXIS tilt), and

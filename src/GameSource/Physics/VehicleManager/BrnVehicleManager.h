@@ -76,6 +76,10 @@
 // so the forward declaration below stays alive until their own wave retires them.
 namespace BrnPhysics { namespace Vehicle { struct VehicleOutputRequestInterface; } }
 namespace BrnPhysics { namespace Deformation { class DeformationInputInterface; } }
+// The embedding host. Declared only so VehicleManager can befriend it (see the friend block at
+// the end of the public section); BrnPhysicsModule.h includes THIS header, so it must not be
+// included back.
+namespace BrnPhysics { class PhysicsModule; }
 namespace BrnGameState { namespace GameStateModuleIO { class VehicleOutputInterface; } }
 
 // Crash-prediction (race-car-vs-world) collaborators -- forward-declared in their real
@@ -1405,6 +1409,46 @@ namespace Vehicle
         void SetPlayerCarToShowtimeMode(bool lbInShowtime);
 
         // ==========================================================================================
+        // ⭐ ADDED 2026-08-27 (showtime S3 wave). The five leaf methods PhysicsModule::
+        // HandleGameActions @0x825A72F0 calls out of its game-action switch. Every one is a
+        // handful of instructions read straight out of the X360 asm; none of them was declared
+        // anywhere in the tree before this wave, which is part of why the 185-insn dispatch above
+        // them stayed a boot gate. Bodies: BrnVehicleManagerPlayerStats.cpp.
+        // ==========================================================================================
+
+        // @0x8262AEC8 (7 insns). `lwzx r11,r3,0x2A0AC ; mulli 0x1460 ; addi 0x740 ; b
+        // VehiclePhysics::SwitchAIDonuttingAttribs` -- the player car's own AI-donutting attrib
+        // swap. 0x1460/0x740 are exactly the stride/base of maRaceCarVehicles (the same pair
+        // SetPlayerCarToShowtimeMode above resolves), and 0x2A0AC == +172204 ==
+        // mePlayerActiveRaceCarIndex, so this is spelled by name with no offset arithmetic.
+        void SwitchPlayerAIDonuttingAttribs(bool lbDonutting);
+
+        // @0x825B5708 (4 insns). `stwx r4, r3, 0x2A15C` -- meCurrentGameModeType = the mode type.
+        // ⭐ THAT MEMBER (+172380) IS THE ONE ProcessDeformationStates GATES SHOWTIME ON
+        // (2 == E_MODE_OFFLINE_SHOWTIME, 16 == E_MODE_ONLINE_SHOWTIME). Before this wave nothing
+        // in the tree wrote it, which is why the showtime-gated deformation arm could never run.
+        void OnGameModePrepare(s32 leGameModeType);
+
+        // @0x825B5718 (5 insns). `li r10,-1 ; stwx r10, r3, 0x2A15C` -- meCurrentGameModeType = -1.
+        // ⚠️ The call site passes r4 (`lwz r4, 0(r29)`); Hex-Rays drops it and the body ignores it.
+        // Declared without the argument because the CONSOLE BODY takes none -- the caller's extra
+        // register write is a dead store, not a parameter. [[invented-arms-and-the-c4715-ratchet]]
+        void OnGameModeStop();
+
+        // @0x825B5730 (8 insns). `stbx 1 -> +0x2A110 ; stbx r5 -> +0x2A11A`, i.e.
+        // mbImpactTime = true ; mbAftertouchIsForceAdditive = lbForceAdditive.
+        // ⚠️⚠️ HEX-RAYS RENDERS THE CALL AS `StartImpactTime(vm, *_R29)` -- ONE ARGUMENT, WRONG
+        // TYPE. The asm at the call site is `lfs f1, 0(r29) ; lbz r5, 4(r29)`: a FLOAT in f1 and a
+        // BYTE in r5. On this ABI a float argument consumes its GPR slot, which is exactly why the
+        // byte lands in r5 and not r4 -- that displacement is the proof the float parameter is
+        // real. The body never reads f1; the duration is accepted and dropped by the console
+        // itself, so it is (void)-cast here rather than deleted from the signature.
+        void StartImpactTime(f32 lfImpactTimeDuration, bool lbForceAdditiveAftertouch);
+
+        // @0x825B5750 (8 insns). mbImpactTime = false ; mbAftertouchIsForceAdditive = false.
+        void EndImpactTime();
+
+        // ==========================================================================================
         // DoCrashPrediction @0x82645FE0 (814 insns) -- BODIED 2026-08-22 (wave T3 r2 owner B fix
         // round) in BrnVehicleManager_DoCrashPrediction.cpp. The 2026-08-09 census below is kept
         // only as the closure map; every "absent from the tree" claim in it is now STALE.
@@ -1561,6 +1605,23 @@ namespace Vehicle
         // outlined here per the de-optimisation rule. STATIC because it reads nothing off the
         // manager -- only the body it is handed.
         static bool IsFrontCornerClip(const SimpleVehiclePhysics& lrBody, Vector3 lContactPoint);
+
+        // ==========================================================================================
+        // ⭐ ADDED 2026-08-27 (showtime S3 wave).
+        // PhysicsModule::HandleGameActions @0x825A72F0 does NOT go through accessors for six of the
+        // flags its switch writes -- it stores them with `stbx r11, r31, rN` off the PHYSICS MODULE
+        // base, because on the console mVehicleManager is embedded at +0x4AA0 and the compiler
+        // folded the two offsets together:
+        //     this+190568 -> mbSlamsAndShuntsOn                    this+191413 -> mbCrashPlayerNextUpdate
+        //     this+190569 -> mbAllowSlamsAndShuntsEffectsForRivals this+191417 -> mbTrafficCheckingAllowed
+        //     this+191409 -> mbEasyCrashingEnabled                 this+191552 -> meStationaryPlayerWheelAngle
+        // There is NO console accessor for any of them (the export name index has no
+        // SetEasyCrashing / SetTrafficCheckingAllowed / ... at all), so inventing six setters would
+        // be inventing API. Friendship reproduces the console's bare stores by NAME instead --
+        // exactly the reason, and exactly the wording, already used for
+        // `friend class VehicleManager;` in BrnPhysicalTrafficManager.h:953: routing them through
+        // accessors would add asserts the console does not fire there.
+        friend class BrnPhysics::PhysicsModule;
 
     private:
         // DecFIGS BrnVehicleManager.h:1454/:1459; both are X360-attested calls in
