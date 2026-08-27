@@ -72,6 +72,16 @@ const SatNavEventDisplayInfo* GuiCache::GetPresetEventDisplayInfo(u32 luEventId)
 // crashes, FBurnMain's sat-nav pre-pass kept running for the rest of a drive instead of stopping
 // at the first crash, so the lookup is now attempted far more often. Un-gating a consumer makes a
 // pre-existing fault reachable; it does not create it. (Control-run proven, endcrash wave §06.)
+//
+// ⭐⭐ THE PER-TICK STORM WAS A SEPARATE, CALLER-SIDE DEFECT -- FOUND AND FIXED 2026-08-27.
+// A run measured 3,178 fires of the assert below (12,712 across the four-site chain). That was
+// NOT this function repeating a legitimate report: SatNavRenderer::RefreshSatNavIconInfo's PC
+// bring-up guard was returning BEFORE the console's unconditional slot claim + count increment,
+// so its own "already cached" scan could never hit and every repost of the same event id redid
+// the lookup. The console's producer reposts action 201 -> GUI 311 EVERY SIM TICK while the
+// player car sits in a traffic-light trigger region, so one unresolvable id became an unbounded
+// storm. With the console's stores restored this assert fires ONCE PER DISTINCT EVENT ID, which
+// is the console's own shape. See BrnSatNavRenderer.cpp for the full measurement.
 const SatNavEventDisplayInfo* GuiCache::GetProfileEventDisplayInfo(u32 luEventId) const
 {
     CGS_ASSERT(miEventStartsCount != -1,
