@@ -14,10 +14,13 @@ namespace BrnPhysics
 {
 namespace Deformation
 {
-    // Carried across with the body (BrnPhysicalBodyPart.cpp:110). `static const` so each TU keeps its
-    // own copy -- no ODR surface. The recovered literal (the lvlx/vspltw 5.0 stack temp), NOT a
-    // placeholder.
-    static const f32 KF_PART_MASS = 5.0f;   // Construct stores 5.0 into mfMass (+208)
+    // ⛔ RENAMED 2026-08-27 (detach-2 wave) -- IT IS NOT kfPartMass. This 5.0 is an UNNAMED rodata
+    // literal, flt_8200426C, that Construct @0x825B41C4/D0 loads for ExternalPhysicsBody::SetMass.
+    // The DWARF's namespace-scope `kfPartMass` is a DIFFERENT symbol, at 0x82F2A380, and it holds
+    // 100.0 -- see the recovered run in BrnPhysicalBodyPart.cpp. Calling this one KF_PART_MASS made
+    // the two look like one value and made the sibling file's placeholder-zero look already solved.
+    // `static const` so each TU keeps its own copy -- no ODR surface.
+    static const f32 KF_PART_CONSTRUCT_MASS = 5.0f;   // flt_8200426C -- Construct's own literal
 
 
     // =========================================================================================
@@ -49,9 +52,9 @@ namespace Deformation
 
         // v14 = 5.0 ; lvlx/vspltw v0 ; stvx128 v0 -> this+208  (mfMass = 5.0, broadcast).
         // mfMass lives inside mRwBody (+208 in the console layout). The asm stores 5.0 BETWEEN
-        // ExternalPhysicsBody::Construct() (above) and ::Prepare() (below). KF_PART_MASS = 5.0f is the
-        // recovered literal (the lvlx/vspltw 5.0 stack temp), not a placeholder.
-        mRwBody.SetMass(KF_PART_MASS);
+        // ExternalPhysicsBody::Construct() (above) and ::Prepare() (below). It is the recovered
+        // literal flt_8200426C, not a placeholder -- and not kfPartMass (100.0), see the rename note.
+        mRwBody.SetMass(KF_PART_CONSTRUCT_MASS);
 
         // BrnPhysics::ExternalPhysicsBody::Prepare().
         mRwBody.Prepare();

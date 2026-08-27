@@ -219,7 +219,13 @@ namespace Deformation
         EntityId GetEntityId() const;
 
         // BrnPhysicalBodyPart.h:161. The packed body-part id.
-        BurnoutBodyPartID GetRigidBodyId() const;
+        // ⭐ INLINED 2026-08-27 (detach-2 wave): DECLARE-ONLY until now, and its first caller
+        // (PhysicalBodyPartPool::UpdatePart's :173 tripwire) turned it into an LNK2019. There is no
+        // out-of-line X360 emission -- the whole subsystem reaches the handle with a bare
+        // `ld 0x1D0(part)` at every site (AddToSim @0x8260AD80, AddToScene @0x8260A9C0/F8,
+        // UpdatePart's own compare, FixupBodyPartVehicleContact @0x825A0D64), i.e. the inlined
+        // accessor. Same evidence pattern as IsAddedToScene / IsJoinedToVehicle / IsFrozen above.
+        BurnoutBodyPartID GetRigidBodyId() const { return mRigidBodyId; }
 
         // BrnPhysicalBodyPart.h:164. The owning vehicle's global entity id (mGlobalVehicleId).
         EntityId GetGlobalEntityId() const;
@@ -245,8 +251,14 @@ namespace Deformation
 
         // BrnPhysicalBodyPart.h:185. Register the part as a free rigid body in the physics sim,
         // seeding it with a world transform + linear/angular velocity (used when the part detaches).
-        void AddToSim(CgsPhysics::PhysicsSimulationIO::InputBuffer* lpSimInput, Matrix44Affine lTransform,
-                      Vector3 lLinearVelocity, Vector3 lAngularVelocity);
+        // ⭐ PARAMETER NAMES + THE `const Matrix44Affine&` ARE DWARF-AUTHORITATIVE (DecFIGS
+        // dwarfdump/.../BrnPhysicalBodyPart.cpp:784 spells the definition
+        // `AddToSim(InputBuffer*, const rw::math::vpu::Matrix44Affine& lVehicleTransform,
+        //           const Vector3 lInitialLinearVelocity, const Vector3 lInitialAngularVelocity)`),
+        // and the reference matches the X360 ABI, which hands the matrix in r5 as a pointer.
+        void AddToSim(CgsPhysics::PhysicsSimulationIO::InputBuffer* lpSimInput,
+                      const Matrix44Affine& lVehicleTransform,
+                      Vector3 lInitialLinearVelocity, Vector3 lInitialAngularVelocity);
 
         // BrnPhysicalBodyPart.h:188. The part's current linear velocity.
         // ⭐ INLINE 2026-08-06 (bridge de-facade wave): no out-of-line emission exists --
@@ -403,9 +415,10 @@ namespace Deformation
         CgsSceneManager::VolumeInstanceId GetContactVolumeInstanceId() const
         {
             CgsSceneManager::VolumeInstanceId lId;
-            lId.muId = (static_cast<u64>(mRigidBodyId.muEntityWord) << 32)
-                     | (static_cast<u64>(mRigidBodyId.muSubA) << 16)
-                     |  static_cast<u64>(mRigidBodyId.muSubB);
+            // ⭐ 2026-08-27: the pack itself moved onto BurnoutBodyPartID::GetBaseRigidBodyID()
+            // (the console's own name for it, read off UpdatePart's assert string) so the sim-side
+            // and scene-side readings of this handle cannot drift apart. Same three shifts.
+            lId.muId = mRigidBodyId.GetBaseRigidBodyID();
             return lId;
         }
 

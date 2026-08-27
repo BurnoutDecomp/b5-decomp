@@ -141,6 +141,16 @@ namespace physics
         f32                    mAngularDrag;  // :182  +0x24
     };
 
+    // ⭐ ADDED 2026-08-27 (detach-2 wave). The DECLARATION for rw::physics::ComputeFatBoxInertia
+    // @0x82BC6C80, whose body has been committed (and unmounted) since the rw::physics landing at
+    // src/vendor/renderware/physics/FatBoxInertia.cpp. It had no header anywhere in the tree, so
+    // the first real caller (PhysicalBodyPart::AddToSim) had nothing to include; the body is
+    // unchanged, only its declaration is new. Fills *lpOut with the per-unit-mass diagonal inertia
+    // (Ixx,Iyy,Izz,0) of a box with the given HALF-extents grown by `lfMargin`, and returns the
+    // fat box's volume (the value the console leaves live in f1 at `blr`; AddToSim ignores it).
+    f32 ComputeFatBoxInertia(f32 lfHalfX, f32 lfHalfY, f32 lfHalfZ, f32 lfMargin,
+                             rw::math::vpu::Vector4* lpOut);
+
     // RELOCATED HERE 2026-08-04 (task #141) from CgsPhysicsSimulationModule.cpp:225..231,
     // where they pinned the now-retired `CgsPhysics::Inertia` copy. They belong next to the
     // definition they describe: pins that live in a different TU from the layout they gate
