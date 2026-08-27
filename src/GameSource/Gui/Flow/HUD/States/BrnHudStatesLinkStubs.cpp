@@ -183,12 +183,11 @@ namespace BrnGui
     //      with real array construction and mounted.
     MapManager::MapManager() {}
 
-    // ---- CRASHEDSTNT ----------------------------------------------------------------
-    const CgsGui::sResourceTuple CrashedStuntHudState::maResourcesToLoad[1] =
-        { { 0u, CgsGui::E_GUI_RESOURCETYPE_START } };   // FLAG: unrecovered .rdata @0x82F26488
-    const u32 CrashedStuntHudState::muNumResourcesToLoad = 0;
-
-    void CrashedStuntHudState::OnEnter() { LogUnreconstructedState("CrashedStuntHudState", "OnEnter"); }
-    void CrashedStuntHudState::OnLeave() {}
-    void CrashedStuntHudState::Update()  {}
+    // ---- CRASHEDSTNT: SCAFFOLD RETIRED 2026-08-27 (crashed-stunt HUD wave) -------------
+    // The real TU is MOUNTED: BrnCrashedStuntHudState.cpp carries the recovered 4-entry
+    // resource table (read from the XEX image at 0x82F26488, count 4 at 0x82F264A8 -- the
+    // FLAG placeholder that stood here is paid off), the 12-entry event table @0x8205B17C,
+    // the real OnEnter/OnLeave/Update lifecycle and the COMPLETE UpdatePermenant including
+    // the "END_CSTNT" exit arm that returns the FSM to RACE_MAIN. The placeholder statics
+    // and log-and-return lifecycle that stood here are deleted -- LNK2005 otherwise.
 }

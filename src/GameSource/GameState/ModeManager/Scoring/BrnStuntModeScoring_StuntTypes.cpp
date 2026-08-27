@@ -77,7 +77,10 @@
 // the spin/roll/air ratings need.
 #include "rw/math/vpu/vector3_operation.h"
 
-#include <cmath>   // std::fabs (abs-spin / abs-roll magnitudes)
+#include <cmath>    // std::fabs (abs-spin / abs-roll magnitudes)
+#include <stdlib.h> // getenv (the [stunt-boost] BRN_PROP_DIAG rung -- not in the X360 binary)
+
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"  // CgsDev::Log::gpDebugPrint (same rung)
 
 namespace BrnGameState
 {
@@ -386,7 +389,7 @@ namespace BrnGameState
     //       UpdateScore(BURNOUT, lpBoost->muNumChained * KF_STUNT_ATTACK_SCORE_PER_BURNOUT_CHAINED)
     //       return true;
     //   }
-    //   else if ( lpBoost->mbIsInAir
+    //   else if ( lpBoost->mbIsBoosting
     //             && GetPlayerRaceCarState()->mfTimeBoosting > KF_STUNT_ATTACK_MIN_BOOST_TIME
     //             && RegisterStunt() )
     //   {
@@ -399,8 +402,40 @@ namespace BrnGameState
     //
     // NOTE: the dossier's `*(... + 6)` / `*(... >> 32)` / `HIDWORD(v7)+12` are the X360
     // 64-bit-register artifacts of the SAME BoostOutputInfo* load: byte +6 == the 7th bool
-    // (mbWasChainJustCompleted), +12 == muNumChained (first non-bool after the 12 bools),
-    // and the in-air retest reads mbIsInAir (byte +1). Reached BY NAME here.
+    // (mbWasChainJustCompleted) and +12 == muNumChained (first non-bool after the 12 bools).
+    // Reached BY NAME here.
+    //
+    // ⛔ THE SECOND-ARM GATE IS mbIsBoosting (byte +0), NOT mbIsInAir (byte +1) -- this is
+    // THE "boost does not keep the combo alive" defect, and the round-1 draft read the wrong
+    // byte off IDA's `*(... >> 32)` 64-bit-register artifact rather than off the asm.
+    // The asm is unambiguous: 0x8232CCBC `bl RCEntit` then 0x8232CCC0 `lbz r11, 0(r3)` --
+    // byte OFFSET ZERO of the returned BoostOutputInfo, which the committed layout
+    // (BrnRaceCarEntityModuleOutputInterface.h:74) names mbIsBoosting. (The first arm's
+    // `lbz r11, 6(r3)` at 0x8232CC48 is the +6 bool, mbWasChainJustCompleted -- the two
+    // loads are a byte apart in the same struct and pin each other.) The sibling consumer
+    // BrnChallengeManager_wB_05.cpp:90 reads the same field off the same accessor and
+    // annotates it "X360 lbz +0 (mbIsBoosting)".
+    //
+    // ⚠ WHY THE WRONG BYTE MADE THE WHOLE ARM DEAD, not merely narrow. The paired term
+    // `GetPlayerRaceCarState()->mfTimeBoosting > 0.01` is fed from the physics boost lane
+    // (RaceCarState.mfTimeBoosting @1048 <- VehiclePhysics
+    // mvSideForceMag_TimeBoosting_TimeSinceLastBoostKick_CurrentBoostKickTime.y, published by
+    // BrnVehicleOutputInterface_UpdateRaceCarState.cpp:297), and VehiclePhysics::UpdateBoost
+    // only ACCUMULATES that lane on the `lbApply` path, which requires BOTH rear wheels on
+    // the ground -- every other path executes `lrBoost.y = 0.0f`
+    // (VehiclePhysics.cpp:2344). So "in the air" and "mfTimeBoosting > 0" are MUTUALLY
+    // EXCLUSIVE by construction: `mbIsInAir && mfTimeBoosting > 0.01f` can never be true, the
+    // BOOST arm never fired once, and RegisterStunt() was never reached from boosting.
+    //
+    // ⓘ WHY THAT IS THE COMBO BUG. RegisterStunt (0x82313370) is what sets
+    // mbStuntInProgress, and UpdateCombo (0x82320FF0) holds the combo-loss countdown at zero
+    // for exactly that reason: `if (mbStuntInProgress || HasAnyPendingScore())
+    // mfTimeSinceLastStunt = 0.0f;` else it accumulates toward
+    // KF_TIME_WITHOUT_STUNT_TO_LOSE_COMBO (5 s) and calls EndCombo. UpdateCombo takes no
+    // boost input of its own (its X360 signature is (this, delta) -- verified: the asm at
+    // 0x82320FF0 touches only f1 and `this`), so THIS gate is the console's entire
+    // "USE BOOST TO LINK STUNTS" mechanism: boosting re-registers a BOOST stunt every frame,
+    // which pins mfTimeSinceLastStunt at 0 and holds the chain open.
     bool StuntModeScoring::UpdateBoostStunts(f32 lfSimTimeStep,
                                              const ActiveRaceCarOutputInterface* lpActiveRaceCarInterface)
     {
@@ -414,13 +449,36 @@ namespace BrnGameState
                         E_STUNT_TYPE_BURNOUT, true);
             return true;
         }
-        else if (lpBoost->mbIsInAir
+        else if (lpBoost->mbIsBoosting        // X360 0x8232CCC0 `lbz r11, 0(r3)` -- byte +0
                  && lpActiveRaceCarInterface->GetPlayerRaceCarState()->mfTimeBoosting
                         > KF_STUNT_ATTACK_MIN_BOOST_TIME
                  && RegisterStunt())
         {
             if ((muStuntTypesInProgress & (1u << E_STUNT_TYPE_BOOST)) == 0u)
             {
+                // [DIAG] NOT IN THE X360 BINARY -- the boost-link arm's own tripwire, on the
+                // console's OWN once-per-boost-run edge (the BOOST bit is set by the
+                // UpdateScore below and cleared only when the buffer banks), so it cannot
+                // flood; first-N capped on top of that. It exists because the D2 symptom
+                // ("boost does not keep the combo alive") is invisible in the log otherwise:
+                // this rung firing is the proof that RegisterStunt() is reached from boosting
+                // and therefore that UpdateCombo holds mfTimeSinceLastStunt at 0.
+                {
+                    static const bool sbBoostDiag  = (getenv("BRN_PROP_DIAG") != 0);
+                    static s32        siBoostLines = 0;
+                    const s32         KI_BOOST_DIAG_MAX = 16;
+                    if (sbBoostDiag && siBoostLines < KI_BOOST_DIAG_MAX
+                        && CgsDev::Log::gpDebugPrint != 0)
+                    {
+                        ++siBoostLines;
+                        *CgsDev::Log::gpDebugPrint
+                            << "[stunt-boost] boost link armed -- timeBoosting "
+                            << lpActiveRaceCarInterface->GetPlayerRaceCarState()->mfTimeBoosting
+                            << " combo " << (mbComboInProgress ? 1 : 0)
+                            << " mult " << miComboMultiplier << "\n";
+                    }
+                }
+
                 UpdateScore(KF_STUNT_ATTACK_SCORE_PER_SECOND_OF_BOOST * KF_STUNT_ATTACK_MIN_BOOST_TIME,
                             E_STUNT_TYPE_BOOST, true);
             }
