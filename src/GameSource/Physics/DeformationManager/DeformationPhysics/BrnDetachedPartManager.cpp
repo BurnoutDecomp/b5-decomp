@@ -55,8 +55,9 @@ namespace PhysicsSimulationIO
     // opaque, 16-byte-aligned 192-byte span -- the element STRIDE is X360-attested off
     // BaseEventQueue<OutUpdateRigidBody>::AddEvent @ 0x828A66F8 (`slwi r9,r11,1; add; slwi r11,r11,6`
     // == miLength*192). The earlier local placeholder (a best-effort 176-byte span, stride NOT
-    // attested) is removed in favour of that homed type; this TU's only observed read off the event
-    // is the EntityId owner byte at +4 (well within 192), and the forwarded event pointer is
+    // attested) is removed in favour of that homed type. ⛔ The rest of this sentence USED TO SAY
+    // "this TU's only observed read off the event is the EntityId owner byte at +4"; that offset was
+    // wrong and is retired (see the call site). The one read is `mID >> 56`, and the forwarded pointer is
     // re-spelled to the deformation-side BrnPhysics::Deformation::OutUpdateRigidBody the pool's
     // UpdatePart is declared over (the cast at the forward point bridges the two spellings).
 
@@ -85,13 +86,12 @@ namespace Deformation
     static const u32 KU_OWNER_RACECAR_DEFORMABLE_PART = 6;  // BrnWorld::E_ENTITYTYPE_RACECAR_DEFORMABLE_PART
     static const u32 KU_OWNER_TRAFFIC_DEFORMABLE_PART = 7;  // BrnWorld::E_ENTITYTYPE_TRAFFIC_DEFORMABLE_PART
 
-    // X360-attested byte offset, inside an OutUpdateRigidBody event, of the updated body's
-    // EntityId owner byte. The asm reads `BYTE4(*event)` -- byte +4 of the event -- which is
-    // the high (owner) byte of the rigid body's packed EntityId word (bits [24..31], stored at
-    // event +4 in the X360 sim RigidBodyId). FLAG: the X360 sim RigidBodyId is not homed in
-    // tree; this byte offset is taken directly from the asm and is the only field this pass
-    // reads off the event before forwarding it.
-    static const u32 KU_EVENT_OWNER_BYTE_OFFSET = 4;
+    // ⛔ RETIRED 2026-08-27 (detach-2 wave): `KU_EVENT_OWNER_BYTE_OFFSET = 4` and its banner are
+    // GONE, not corrected in place, because the banner asserted an X360 attestation the asm does not
+    // make. The owner is bits 56..63 of the event's mID -- see the call site's own note. Every other
+    // owner read in this whole subsystem already spelled it `muId >> 56` (BrnDeformationManager_
+    // Contacts / _ContactFixups / _ContactBridges / _VehicleContactFixUp, nine sites); this was the
+    // single outlier, which is why nothing else in the deformation module was affected.
 
     // Transform-validation epsilon (asm: v60[0] = 0.0099999998f, the vcmpgtfp threshold the two
     // MakePartPhysical orthonormal tripwires compare the squared deviation against).
@@ -266,9 +266,27 @@ namespace Deformation
             const CgsPhysics::PhysicsSimulationIO::OutUpdateRigidBody& lUpdatedBodyEvent =
                 lpUpdatedBodyQueue->GetEvent(liUpdatedBodyEventIndex);
 
-            // The updated body's EntityId owner byte (asm BYTE4(*event) -- event byte +4).
-            const u8 lu8Owner = *(reinterpret_cast<const u8*>(&lUpdatedBodyEvent)
-                                  + KU_EVENT_OWNER_BYTE_OFFSET);
+            // ⛔⛔ CORRECTED 2026-08-27 (detach-2 wave) -- THIS WAS THE FIRST OF THREE SILENT BREAKS
+            // ON THE SIM-ECHO PATH, and it is the one that would have made the other two look fine.
+            // The line here read `*((const u8*)&event + KU_EVENT_OWNER_BYTE_OFFSET)` with the offset
+            // at 4, from a banner that said "asm BYTE4(*event) -- event byte +4". THE ASM SAYS
+            // SOMETHING ELSE. @0x8260E194..0x8260E1AC it is:
+            //     ld    r11, 0(r4)      ; the whole 8-byte mID
+            //     srdi  r11, r11, 32    ; -> the entity word
+            //     srwi  r11, r11, 24    ; -> its TOP byte
+            //     cmplwi 6 / cmplwi 7
+            // i.e. the owner is bits 56..63 of the handle, which is the entity word's OWNER field
+            // (BurnoutBodyPartIDLayout::KU_OWNER_BASE == 24). Byte +4 of a little-endian u64 is bits
+            // 32..39 -- the entity word's LOW byte, which carries the part index, and which can never
+            // equal 6 or 7 for any real part. ⇒ the forward below NEVER FIRED, so every echo the sim
+            // produced for a shed panel was discarded here, one frame after it was computed.
+            // [[diagnostics-that-lie]] in its purest form: a byte offset transcribed out of a
+            // big-endian disassembly onto a little-endian host, with a comment that names the wrong
+            // instruction. No gate, no assert and no link could see it -- the read is in bounds and
+            // yields a plausible small integer.
+            // Spelled through the one packing accessor now (BurnoutBodyPartID::GetBaseRigidBodyID's
+            // banner carries the two attested readings of this handle).
+            const u8 lu8Owner = static_cast<u8>(lUpdatedBodyEvent.mID >> 56);
 
             if (lu8Owner == KU_OWNER_RACECAR_DEFORMABLE_PART
                 || lu8Owner == KU_OWNER_TRAFFIC_DEFORMABLE_PART)

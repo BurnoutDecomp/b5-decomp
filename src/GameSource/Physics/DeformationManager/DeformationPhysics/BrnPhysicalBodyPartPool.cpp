@@ -6,6 +6,7 @@
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"  // gpDebugPrint ([detach-pose] probe)
+#include "GameShared/GameClasses/Physics/CgsPhysicsSimulationIO_Events.h"  // OutUpdateRigidBody (UpdatePart's echo event)
 #include <cstdlib>   // getenv/atoi ([detach-pose] latch)
 
 // ============================================================================
@@ -383,17 +384,44 @@ namespace Deformation
         
     }
 
-    void PhysicalBodyPartPool::UpdatePart(const OutUpdateRigidBody* /*lpEvent*/, CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* /*lpSceneInterface*/)
+    // ------------------------------------------------------------------------------------------
+    // UpdatePart @ 0x8260CB08  (74 instructions) -- ⭐⭐ RECONSTRUCTED 2026-08-27 (detach-2 wave).
+    // THE GATE IS GONE. This is the THIRD link in the sim-echo chain and the one that made a shed
+    // part's new pose land back on the part: without it the sim integrated the body every frame and
+    // the answer was dropped on the floor.
+    //
+    // It is a bounds-checked forwarder, and it is small. The asm, store for store:
+    //   r27 = this (pool)   r26 = lpUpdateEvent   r25 = lpSceneInterface
+    //   ld     r11, 0(r26)            ; the event's mID, read WHOLE (8 bytes)
+    //   clrlwi r28, r11, 16           ; lu16PartIndex := the id's LOW 16 BITS == the pool slot
+    //   cmplwi r28, 0x32 ; blt ok     ; CgsBitArray.h:203 StrStream "invalid index : " << i << " < " << 50
+    //   <mUsedParts.IsBitSet tripwire>                     BrnPhysicalBodyPartPool.cpp:172
+    //   <id-match tripwire>                                BrnPhysicalBodyPartPool.cpp:173
+    //   bl PhysicalBodyPart::Update(&maParts[idx], event, sceneInterface)   ; 496*idx + this
+    // All three asserts are NON-GATING: the asm falls straight through into the Update call.
+    //
+    // ⚠️ THE LOW-16 READ IS WHY BurnoutBodyPartID::GetBaseRigidBodyID() had to exist. The slot is
+    // the handle's muSubB field, which only lands in the low 16 bits of the u64 under the console's
+    // big-endian byte image of the record; that pack now lives in exactly one place (see the
+    // accessor's own banner) and both this reading and UpdatePostPhysics' owner-byte reading are
+    // spelled against it.
+    // ------------------------------------------------------------------------------------------
+    void PhysicalBodyPartPool::UpdatePart(const OutUpdateRigidBody* lpUpdateEvent,
+                                          CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* lpSceneInterface)
     {
-        static bool sbLoggedUP = false;
-        if ( !sbLoggedUP )
-        {
-            sbLoggedUP = true;
-            if ( CgsDev::Message::gxMessageFilterFlags & 1 )
-                *CgsDev::Log::gpDebugPrint << "conductor gate: PhysicalBodyPartPool::UpdatePart reached but not "
-                                              "reconstructed [FLAG PC boot gate]\n";
-        }
+        const u64 lu64EventId =
+            reinterpret_cast<const CgsPhysics::PhysicsSimulationIO::OutUpdateRigidBody*>(lpUpdateEvent)->mID;
+        const u16 lu16PartIndex = static_cast<u16>(lu64EventId & 0xFFFFu);
 
+        // CgsBitArray.h:203 -- the inlined bound tripwire, non-gating.
+        CGS_ASSERT(lu16PartIndex < KU_MAX_DETACHED_PARTS, "invalid index : lu16PartIndex < 50");
+
+        // :172 / :173 -- both non-gating.
+        CGS_ASSERT(mUsedParts.IsBitSet(lu16PartIndex), "mUsedParts.IsBitSet( lu16PartIndex )");
+        CGS_ASSERT(maParts[lu16PartIndex].GetRigidBodyId().GetBaseRigidBodyID() == lu64EventId,
+                   "maParts[ lu16PartIndex ].GetRigidBodyId().GetBaseRigidBodyID() == lpUpdateEvent->mID");
+
+        maParts[lu16PartIndex].Update(lpUpdateEvent, lpSceneInterface);
     }
 
     // =========================================================================================

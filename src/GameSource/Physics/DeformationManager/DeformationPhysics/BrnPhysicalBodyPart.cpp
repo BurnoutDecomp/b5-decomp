@@ -10,9 +10,14 @@
 #include "GameShared/GameClasses/SceneManager/CgsEntityId.h"                                   // CgsSceneManager::EntityId
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                             // CGS_ASSERT
 #include "rw/math/vpu/vector3_operation.h"                                                     // rw::math::vpu::IsValid (UpdateRW finiteness tripwires)
+#include "GameShared/GameClasses/Physics/CgsPhysicsSimulationModuleIO.h"                       // InputBuffer::GetAddRigidBodyQueue (AddToSim)
+#include "GameShared/GameClasses/Physics/CgsPhysicsSimulationIO_Events.h"                      // InAddRigidBody / NewRigidBody / OutUpdateRigidBody
+#include "rw/physics/rigidbody.h"                                                              // rw::physics::ACTIVE_BODY / FROZEN_BODY, RigidBody::GetTransform
+#include "rw/physics/inertia.h"                                                                // Inertia setters + ComputeFatBoxInertia
 
 #include <cstring>   // memset (matching the X360 memset of the BBox scratch tail)
 #include <cmath>     // std::sqrt (the vrsqrtefp magnitude refinements converge to this)
+#include <cstdlib>   // getenv/atoi -- [DIAG] BRN_DEFORM_TRACE only, host-side
 
 // ============================================================================
 // GameSource/Physics/DeformationManager/DeformationPhysics/BrnPhysicalBodyPart.cpp
@@ -105,16 +110,66 @@ namespace Deformation
     static char maBoxInitialiseBuffer[96] = {};
 
     // ----- part rigid-body tuning (DWARF BrnPhysicalBodyPart.cpp:28-33) ---------------------------
-    // FLAGGED PLACEHOLDERS: the namespace-scope part drag/velocity/mass/inertia tuning floats the
-    // X360 image holds in rodata. The Construct asm seeds mfMass = 5.0 (the lvlx/vspltw store of the
-    // 5.0 stack temp into +208), which is the only concrete value recovered; the rest are not in the
-    // exports and are carried as honest zeros (NEVER fabricated). Marked extern in the DWARF.
-    static const f32 KF_PART_LINEAR_DRAG        = 0.0f;   // FLAG: rodata not recovered
-    static const f32 KF_PART_ANGULAR_DRAG       = 0.0f;   // FLAG: rodata not recovered
-    static const f32 KF_PART_MAX_LINEAR_VELOCITY  = 0.0f; // FLAG: rodata not recovered
-    static const f32 KF_PART_MAX_ANGULAR_VELOCITY = 0.0f; // FLAG: rodata not recovered
-    static const f32 KF_PART_MASS               = 5.0f;   // Construct stores 5.0 into mfMass (+208)
-    static const f32 KF_PART_INERTIA_MULTIPLIER = 0.0f;   // FLAG: rodata not recovered
+    // ⭐⭐⭐ ALL SIX RECOVERED 2026-08-27 (detach-2 wave). The banner that stood here said they were
+    // "not in the exports and are carried as honest zeros". They were never rodata-invisible at all:
+    // they are a contiguous run of PLAIN .data floats at 0x82F2A370..0x82F2A384, and every one of
+    // them reads its real value straight out of the image. What was missing was a reader that went
+    // to the DATA section rather than to the pseudocode -- the same shape as the six VMX splats the
+    // previous wave recovered. [[literal-scans-miss-real-stores]].
+    //
+    // Each address is the `lis rX,@ha ; lfs f0,@l(rX)` pair AddToSim @0x8260AD38 itself materialises,
+    // decoded from the raw instruction words (not from the IDA label text):
+    //     kfPartLinearDrag         0x82F2A370  @0x8260ADE4/EC  = 0.005
+    //     kfPartAngularDrag        0x82F2A374  @0x8260ADDC/E0  = 0.005
+    //     kfPartMaxLinearVelocity  0x82F2A378  @0x8260ADFC/AE04= 30.0
+    //     kfPartMaxAngularVelocity 0x82F2A37C  @0x8260ADF0/F8  = 30.0
+    //     kfPartMass               0x82F2A380  @0x8260AD6C/AE10= 100.0
+    //     kfPartInertiaMultiplier  0x82F2A384  @0x8260AE80/84  = 1.2
+    // CALIBRATION CONTROL, same decoder, same instruction shape, on a value already committed in
+    // this tree: the pair at 0x8260AD68/0x8260AD84 resolves to 0x82001C98 = 1.0f, which
+    // rw/physics/inertia.h:63 already carries as the byte-verified reciprocal numerator. And the
+    // run is the same .data block that holds kbAllowRandomPartDetachment @0x82F2A344 (recovered
+    // last wave), so the section reading is corroborated by an independent prior result.
+    //
+    // ⛔ AND THE CONFLATION THE OLD BANNER SHIPPED: "the Construct asm seeds mfMass = 5.0 ... which
+    // is the only concrete value recovered" read the 5.0 as if it WERE kfPartMass. It is not.
+    // Construct @0x825B4178 loads an UNNAMED rodata literal flt_8200426C (= 5.0) for
+    // ExternalPhysicsBody::SetMass; kfPartMass is a DIFFERENT symbol at 0x82F2A380 holding 100.0,
+    // and it is what AddToSim divides into 1.0 for the event's inverse mass. Two masses, both real:
+    // the body carries 5.0, the sim is told 100.0. Neither is a stand-in for the other, and
+    // BrnPhysicalBodyPart_Construct.cpp's own copy is renamed to say so.
+    static const f32 KF_PART_LINEAR_DRAG          = 0.0049999999f; // RECOVERED 0x82F2A370
+    static const f32 KF_PART_ANGULAR_DRAG         = 0.0049999999f; // RECOVERED 0x82F2A374
+    static const f32 KF_PART_MAX_LINEAR_VELOCITY  = 30.0f;         // RECOVERED 0x82F2A378
+    static const f32 KF_PART_MAX_ANGULAR_VELOCITY = 30.0f;         // RECOVERED 0x82F2A37C
+    static const f32 KF_PART_MASS                 = 100.0f;        // RECOVERED 0x82F2A380 (NOT the 5.0)
+    static const f32 KF_PART_INERTIA_MULTIPLIER   = 1.2f;          // RECOVERED 0x82F2A384
+
+    // ----- AddToSim's own three numeric inputs ----------------------------------------------------
+    // The fat-box rounding margin AddToSim hands ComputeFatBoxInertia: `lfs f4, flt_82001CC0`
+    // @0x8260AE5C, byte-read = 0.0f. (A zero margin means the "fat" box degenerates to the plain
+    // box -- the fat-box code path is still the one the console calls, and it is faithful to call it.)
+    static const f32 KF_PART_FAT_BOX_MARGIN = 0.0f;                // RECOVERED flt_82001CC0
+
+    // The additive inertia FLOOR of the vmaddfp at 0x8260AEE0 (`unk_82FB95B0`). ⭐ RECOVERED
+    // 2026-08-27 by the same initialiser-scan the previous wave calibrated: it reads all-zero on
+    // disk because it is a runtime VMX splat, and its block is at 0x82C5DBA8..0x82C5DBDC --
+    //   lfs f0, flt_82004744 ; three stfs into -16(r1) ; stw 0 into the w lane ; lvx ; stvx 0x82FB95B0
+    // with flt_82004744 = 0.2f. ⭐ CALIBRATION: flt_8200473C (= 0.4, kfJointForceMultiplier) and
+    // flt_82004740 (= 0.30000001, KF_ROTATION_PROPORTION_GATE) sit in the SAME rodata run and both
+    // match values this tree already carries; the very next initialiser block in the image
+    // (0x82C5DBE0) materialises flt_820047C8 = 0.05, which FatBoxInertia.cpp already carries
+    // byte-verified as KF_FivePct. Three independent controls on one reader.
+    // ⛔ AND THE ZERO WAS NOT INERT. It is the ADDEND of `fatBox*mass*multiplier + floor`, and with
+    // CalculateSkinnedPoint still a placeholder the fat-box term is tiny, so a zero floor makes the
+    // inverse inertia enormous -- a shed panel would spin up violently on the first contact.
+    // 0.2 is what keeps it bounded. FLAG on the NAME only (role-derived from the arithmetic); the
+    // VALUE is measured.
+    static const Vector4 KV_PART_INERTIA_FLOOR = { 0.2f, 0.2f, 0.2f, 0.0f };  // RECOVERED 0x82FB95B0
+
+    // The "Bad inertia: " tripwire's threshold -- stru_8208F620 lane 0, byte-read = 1.1920929e-07
+    // (FLT_EPSILON). The asm splats lane 0 and tests CR6 bit 2 (== none of the lanes is greater).
+    static const f32 KF_INERTIA_DEGENERATE_EPSILON = 1.1920929e-07f;          // RECOVERED 0x8208F620
 
     namespace
     {
@@ -195,6 +250,21 @@ namespace Deformation
 
         // Broadcast a scalar into all four lanes (the vspltw idiom).
         inline Vector4 Splat(f32 lfValue) { return Vector4{ lfValue, lfValue, lfValue, lfValue }; }
+
+        // [DIAG] NOT IN THE X360 BINARY. The same BRN_DEFORM_TRACE latch BrnDeformableObject_Detach.cpp
+        // uses, duplicated here (file-local, no ODR surface) so the sim-entry witness is on the SAME
+        // switch as the [detach-gate]/[detach-make]/[detach-part] lines it has to be read alongside.
+        // DELETE-WHEN the detach question is closed and banked.
+        inline bool DetachProbeOn()
+        {
+            static s32 siProbe = -1;
+            if ( siProbe < 0 )
+            {
+                const char* lpcEnv = getenv("BRN_DEFORM_TRACE");
+                siProbe = (lpcEnv != 0 && atoi(lpcEnv) > 0) ? 1 : 0;
+            }
+            return (siProbe == 1) && (CgsDev::Log::gpDebugPrint != 0);
+        }
     }
     // ==========================================================================================
     // PhysicalBodyPart::Construct @0x825B4178 MOVED OUT on 2026-08-03 (task #116) to
@@ -279,10 +349,22 @@ namespace Deformation
         mWorldPenetrationPlusCollisionMagnitude.SetZero();     // +432
         mAverageCollisionPointPlusNumCollisions.SetZero();     // +448
 
-        // Express the COM/initial-joint anchor in the bbox-orientation basis (the +48 row of the body
-        // transform), then build the oriented box from lBBoxOrientation. The dense VMX cascade is the
-        // change-of-basis FMA; modelled by storing the bbox-relative graphics origin into the body's
-        // transform position row (the stvx128 v0 -> this+48 = mRwBody.mTransform.wAxis).
+        // ⚠️⚠️ FLAG SHARPENED 2026-08-27 (detach-2 wave) -- THIS IS THE PART'S POSE, AND IT IS NOT
+        // RECONSTRUCTED. The console writes ALL FOUR rows of mRwBody.mTransform here, TWICE: at
+        // 0x82626924..0x82626938 (stvx128 into this+0 / +0x10 / +0x20 / +0x30, from r31/r27/r26/r23)
+        // and again at 0x82626964..0x82626978 after CalcBoundingBox. Both are the tail of a dense
+        // vmaddfp cascade that composes lGraphicsTransform with the vehicle frame -- i.e. the part's
+        // WORLD pose. This line reproduces only the shape (a transform lands in the body); the
+        // compose itself is not decoded, and the caller currently passes IDENTITY for
+        // lBBoxOrientation (the previous wave set it so, after measuring that passing the vehicle's
+        // world transform injected the car's world position into a LOCAL offset).
+        // ⇒ CONSEQUENCE, stated so nobody reads it off a picture: after Prepare the body's pose is
+        // IDENTITY, so PhysicalBodyPart::AddToSim -- which on the console READS this pose and posts
+        // it to the sim -- has to seed it from its own lVehicleTransform argument first. That seed
+        // is the only reason a shed panel does not enter the simulation at the world origin. See
+        // AddToSim's banner; the two notes are one story and must be retired together.
+        // ⛔ The claim "PhysicalBodyPart::Prepare never gives the embedded body a pose" (previous
+        // wave, AddToSim's banner) is true of THIS body and FALSE of the console's.
         mRwBody.SetTransform(lBBoxOrientation);
 
         // result = CalcBoundingBox(lBBoxOrientation).
@@ -383,36 +465,45 @@ namespace Deformation
     // matrix, push them through SetRigidBodyTransform (republishing to the scene), then read the body's
     // pose + properties back out of RenderWare (ReadFromRenderware / ReadPropertiesFromRenderware).
     // =========================================================================================
+    // ⛔⛔ RE-SPELLED 2026-08-27 (detach-2 wave) -- THE RAW OFFSETS HERE WERE A LIVE HOST DEFECT,
+    // and it was the SECOND of three silent breaks on the sim-echo path.
+    // The body used to read the frozen flag as `*(u32*)((char*)event + 156)`, transcribed from the
+    // console's `lwz r11, 0x9C(r31)`. On the X360 that word IS RigidBody::mState, because the console
+    // packs mState into the mIsplt register's w lane. THIS TREE DOES NOT: rw/physics/rigidbody.h
+    // promotes all ten packed scalars (mId/mRight/mLeft/mStasis/mInertia/mTag/mInvm/mState/mKine/
+    // mCool) out of the w lanes into real members past the eleven vectors, precisely because five of
+    // them are POINTERS that widen on x64. So event+156 on the host is mIsplt's unused PADDING lane,
+    // and mbFrozen was being set from whatever happened to be in it. [[serialized-slots-stay-32-bit]]
+    // -- a raw offset read off a big-endian asm dump, applied to a type that was deliberately widened.
+    // No gate could see it: the read is well-formed, in-bounds, and produces a plausible bool.
+    // The transform rows happened to survive (the eleven Vector4s still lead the record at the same
+    // offsets) but they are spelled through GetTransform() now for the same reason.
     void PhysicalBodyPart::Update(const OutUpdateRigidBody* lpUpdateEvent,
                                   CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* lpSceneInterface)
     {
-        // *(this+486) = (*(a2+156) & 2) != 0  -- the event's frozen flag word (+156, bit 1).
-        const u32 luEventFlags = *reinterpret_cast<const u32*>(
-            reinterpret_cast<const char*>(lpUpdateEvent) + 156);
-        mbFrozen = (luEventFlags & 2u) != 0;
+        // The event carries a whole rw::physics::RigidBody by value at +0x10.
+        const rw::physics::RigidBody& lrRigidBody =
+            reinterpret_cast<const CgsPhysics::PhysicsSimulationIO::OutUpdateRigidBody*>(lpUpdateEvent)
+                ->mRigidBody;
+
+        // *(this+486) = (mState & 2) != 0 -- the asm's `lwz 0x9C(event)` + `extrwi r11,r11,1,30`,
+        // i.e. bit 1 of the body state == rw::physics::FROZEN_BODY.
+        mbFrozen = (lrRigidBody.GetState() & rw::physics::FROZEN_BODY) != 0;
 
         // Tripwire: !IsJoinedToVehicle().
         CGS_ASSERT(!mbJoinedToVehicle, "!IsJoinedToVehicle()");
 
         if ( !mbFrozen )   // if ( !*(this+486) )
         {
-            // Build the event's transform from its rows at +16/+64/+80/+96 (the asm's four lvx128 from
-            // a2+16.. into v17). The rows are: row0 @ +64, row1 @ +80, row2 @ +96, row3 @ +16.
-            const char* lpEventBase = reinterpret_cast<const char*>(lpUpdateEvent) + 16;
-            Matrix44Affine lTransform;
-            lTransform.xAxis = *reinterpret_cast<const Vector3*>(lpEventBase + 64);
-            lTransform.yAxis = *reinterpret_cast<const Vector3*>(lpEventBase + 80);
-            lTransform.zAxis = *reinterpret_cast<const Vector3*>(lpEventBase + 96);
-            lTransform.wAxis = *reinterpret_cast<const Vector3*>(lpEventBase + 16);
+            // The asm's four lvx128 from event+0x50/+0x60/+0x70/+0x20 into the by-value matrix it
+            // hands SetRigidBodyTransform. Those are mRi / mUp / mAt / mCom -- i.e. exactly
+            // RigidBody::GetTransform(), whose committed body reads the same four registers.
+            SetRigidBodyTransform(lrRigidBody.GetTransform(), lpSceneInterface);
 
-            SetRigidBodyTransform(lTransform, lpSceneInterface);
-
-            // Read the body's pose + physical properties back out of the RW rigid body (a2 = the event,
-            // which carries the RW rigid-body view the read functions mirror in).
-            const rw::physics::RigidBody* lpRigidBody =
-                reinterpret_cast<const rw::physics::RigidBody*>(lpEventBase);
-            mRwBody.ReadFromRenderware(lpRigidBody);
-            mRwBody.ReadPropertiesFromRenderware(lpRigidBody);
+            // Read the body's pose + physical properties back out of the RW rigid body (r4 = the
+            // event's embedded RigidBody in both calls).
+            mRwBody.ReadFromRenderware(&lrRigidBody);
+            mRwBody.ReadPropertiesFromRenderware(&lrRigidBody);
         }
     }
 
@@ -1217,53 +1308,192 @@ namespace Deformation
     }
 
     // =============================================================================================
-    // AddToSim @0x8260AD38 (310) -- ⚠️ STILL A PARTIAL. Read all of this before trusting it.
+    // AddToSim @0x8260AD38 (310) -- RECONSTRUCTED 2026-08-27 (detach-2 wave). THE GATE IS GONE.
     //
-    // WHAT THE CONSOLE DOES: build the part's AABB (CalculateAABBExtents @0x825E2EA0), derive its
-    // inverse inertia (rw::physics::ComputeFatBoxInertia), assemble a large InAddRigidBody event
-    // carrying { mass, inertia multiplier, kfPartLinearDrag / kfPartAngularDrag /
-    // kfPartMaxLinearVelocity / kfPartMaxAngularVelocity, the reciprocal inertia diagonal, the
-    // transform, both velocities, flags 4 and 1 }, tripwire the inertia ("Bad inertia: " /
-    // " Bounding box half dimensions: ", BrnPhysicalBodyPart.cpp:548) and
-    // `CgsPhysics::PhysicsSimulationIO::InAddRigidBody::AddEvent` it onto the sim input queue.
-    // From there the SIM owns the body and echoes its pose back through OutUpdateRigidBody ->
-    // DetachedPartManager::UpdatePostPhysics -> PhysicalBodyPartPool::UpdatePart.
+    // WHAT THE GATE THAT STOOD HERE SAID, AND WHY IT WAS THE HEADLINE BLOCKER: "NONE OF THAT IS
+    // RECONSTRUCTED. The InAddRigidBody event layout, the fat-box inertia and the sim-side consumer
+    // are all absent, so a detached part is NEVER SIMULATED on this build: it does not fall, tumble
+    // or bounce." Two of those three claims were STALE and the third was a name search failing:
+    //   * the event layout is fully gated in CgsPhysicsSimulationIO_Events.h (InAddRigidBody stride
+    //     192 + NewRigidBody's six offsets, X360-attested off ProcessAddRigidBodyQueue @0x828A2708);
+    //   * the sim-side consumer is BODIED AND LIVE -- ProcessAddRigidBodyQueue drains it and
+    //     PhysicsSimulationModule::AddActiveBodiesToOutputQueue @0x828A6CC8 echoes every ACTIVE
+    //     body back as an OutUpdateRigidBody;
+    //   * the fat-box inertia was COMMITTED THE WHOLE TIME at vendor/renderware/physics/
+    //     FatBoxInertia.cpp -- it simply had no declaration in any header and was not in the bat,
+    //     so no caller could reach it. [[unnamed-sub-bodies-and-env-faults]].
+    // Nothing here needed reconstructing from scratch; it needed a producer written against parts
+    // that already existed.
     //
-    // ⛔ NONE OF THAT IS RECONSTRUCTED. The InAddRigidBody event layout, the fat-box inertia and
-    // the sim-side consumer are all absent, so a detached part is NEVER SIMULATED on this build:
-    // it does not fall, tumble or bounce. Do not read a static shed panel as a physics bug.
+    // ---- THE RECORD, OFFSET BY OFFSET (record base == var_130 == the pointer handed to AddEvent) -
+    // Every console offset below is matched to the member a committed static_assert already pins,
+    // so none of this is an offset cast. (NewRigidBody sits at InAddRigidBody+0x10 and Inertia at
+    // NewRigidBody+0x60, so Inertia+0x18 == record+0x88 and so on.)
+    //   +0x00 mID                              `ld 0x1D0(this)` @0x8260AD80 -> `std` @0x8260ADA4
+    //   +0x10..+0x40 mRigidBody.mTransform     lvx128 this+0/+0x10/+0x20/+0x30 -> four stvx128
+    //   +0x50 mRigidBody.mVelocity             `stvx128 v127` (v1 == lInitialLinearVelocity)
+    //   +0x60 mRigidBody.mAngularVelocity      `stvx128 v126` (v2 == lInitialAngularVelocity)
+    //   +0x70 mInertia.mInvTens                `stvx128 v11`  @0x8260AF04
+    //   +0x80 mInertia.mInvMass                `stfs` @0x8260AE18   = 1.0f / kfPartMass
+    //   +0x84 mInertia.mSpherical              `stfs` (the 1/min(x,y,z) SetInverseInertia tail)
+    //   +0x88 mInertia.mMaxVelocity            `stfs` @0x8260AE0C   = kfPartMaxLinearVelocity
+    //   +0x8C mInertia.mMaxOmega               `stfs` @0x8260AE00   = kfPartMaxAngularVelocity
+    //   +0x90 mInertia.mLinearDrag             `stfs` @0x8260ADF4   = kfPartLinearDrag
+    //   +0x94 mInertia.mAngularDrag            `stfs` @0x8260ADE8   = kfPartAngularDrag
+    //   +0xA0 mRigidBody.mbSpy                 `li r10,1 ; stb`     -- TRUE (props store 0 here)
+    //   +0xB0 meState                          `li r10,4 ; stw`     == rw::physics::ACTIVE_BODY
     //
-    // ⭐ WHAT IS LANDED, AND WHY IT IS NOT AN INVENTION: PhysicalBodyPart::Prepare never gives the
-    // embedded body a pose -- ExternalPhysicsBody::Construct leaves mTransform at identity, and on
-    // the console the FIRST pose a detached part ever has comes from the sim echo. With the echo
-    // absent, every consumer of GetRigidBodyTransform() / GetRenderTransform() /
-    // GetEventRenderTransform() reads identity, i.e. every shed panel renders AT THE WORLD ORIGIN.
-    // So the three arguments this function is HANDED are routed into the three members they are
-    // handed for. That is argument plumbing, not a fabricated value: the caller already computed
-    // them and the console's own event carries exactly these three fields.
-    // Observable effect: a shed panel is drawn at the pose it had the instant it came off and then
-    // stays there while the car drives on -- a real, visible separation, and an honest one, because
-    // "it does not move afterwards" is precisely the piece that is still missing.
-    // DELETE-WHEN the InAddRigidBody producer + the sim echo land; the sim then owns the pose and
-    // these three stores become redundant.
+    // THE MAX-VELOCITY PAIR IS **UNCROSSED** HERE, and that is worth recording because the
+    // PropManager pair is not. PropManager_wQ2_04.cpp carries a measured, deliberately-unresolved
+    // cross-wiring (KF_PROP_MAX_ANGULAR_VEL -> +0x18, the LINEAR clamp). This site stores
+    // kfPartMaxLinearVelocity into +0x88 (mMaxVelocity, the linear clamp) and
+    // kfPartMaxAngularVelocity into +0x8C (mMaxOmega). IT DOES NOT SETTLE THE PROP QUESTION and
+    // is not used to: both part constants are 30.0, so this site cannot discriminate the two VALUES.
+    // What it does corroborate is the OFFSET -> MEMBER map (+0x18 linear, +0x1C angular), which is
+    // the half of the prop puzzle that was already twice-attested. Left as a datum, not a verdict.
+    //
+    // ---- THE TRANSFORM IS **READ**, NOT WRITTEN, BY THE CONSOLE ------------------------------
+    // MEASURED AND FLAGGED. The console loads the four transform rows from `this+0..0x30` -- the
+    // embedded body's own pose -- and never stores a transform; the only stores it makes back into
+    // the part are `stvx128 v127, this+0x40` (mLinearVelocity) and `stvx128 v126, this+0x50`
+    // (mAngularVelocity). That is because the console's Prepare @0x82626700 DOES pose the body: it
+    // writes all four rows of this+0..0x30 twice (0x82626924..0x82626938 and again at
+    // 0x82626964..0x82626978, around CalcBoundingBox), from the graphics-transform x vehicle-frame
+    // compose. THE PREVIOUS WAVE'S BANNER SAID "PhysicalBodyPart::Prepare never gives the
+    // embedded body a pose" -- that is true of THIS TREE'S Prepare, which models the compose as
+    // `mRwBody.SetTransform(lBBoxOrientation)` with the caller now passing identity, and it is FALSE
+    // of the console. Corrected there too.
+    // => So this body keeps the seeding store the previous wave landed (mRwBody.SetTransform of the
+    // caller's vehicle transform) and then reads the pose back exactly as the console does. With a
+    // reconstructed Prepare compose the store becomes a no-op and should be deleted; until then,
+    // deleting it would post an IDENTITY transform to the sim and put every shed panel at the world
+    // origin. FLAG: the panel therefore enters the sim at the CAR's origin, not at the panel's own
+    // spot on the bodywork. Its RENDER position is unaffected (GetEventRenderTransform re-adds the
+    // part-local graphics offset); its COLLISION box is offset by that same amount.
+    // DELETE-WHEN Prepare's compose is reconstructed.
+    //
+    // ---- THE INERTIA CHAIN -------------------------------------------------------------------
+    //   extents = CalculateAABBExtents()                       (bodied, this file)
+    //   ComputeFatBoxInertia(extents.x/.y/.z, margin=flt_82001CC0=0.0, &lInertia)
+    //   lInertia = lInertia * kfPartMass * splat(kfPartInertiaMultiplier) + KV_PART_INERTIA_FLOOR
+    //   -- THE vmaddfp OPERAND ORDER IS DECODED, NOT ASSUMED. IDA prints the raw field order
+    //      (vD, vA, vB, vC) and the operation is vD = vA*vC + vB; the word at 0x8260AEE0 is
+    //      0x100C6AAE -> vD=v0 vA=v12(fatBox*mass) vB=v13(the floor) vC=v10(splat(multiplier)).
+    //      CALIBRATION CONTROL: the same decoder on 0x8260FCB0 (0x118A62EE) inside
+    //      HandleContactWithLeanProp yields vA=v10 vB=v12 vC=v11 == `v*m + F*dt`, which is exactly
+    //      what this tree's committed ExternalPhysicsBody::GetLinearMomentum banner says that site
+    //      computes. Method calibrated against a result the tree already holds.
+    //   inverseInertia = per-axis 1.0f/lInertia  ; Inertia::SetInverseInertia(inverseInertia)
+    //   mRwBody.SetInverseInertia(diag(inverseInertia))        (the three this+0x70/0x80/0x90 rows)
+    // The "Bad inertia: " / " Bounding box half dimensions: " assert (BrnPhysicalBodyPart.cpp:548)
+    // is a NON-GATING tripwire and fires when NO lane of |inertia| exceeds stru_8208F620 lane 0
+    // (== 1.1920929e-07, FLT_EPSILON, byte-read from the image) -- i.e. it catches a DEGENERATE
+    // inertia, not a large one. CR6 bit 2 ("none true") is the bit the asm tests.
     // =============================================================================================
-    void PhysicalBodyPart::AddToSim(CgsPhysics::PhysicsSimulationIO::InputBuffer* /*lpSimInput*/,
-                                    Matrix44Affine lTransform, Vector3 lLinearVelocity,
-                                    Vector3 lAngularVelocity)
+    void PhysicalBodyPart::AddToSim(CgsPhysics::PhysicsSimulationIO::InputBuffer* lpSimInput,
+                                    const Matrix44Affine& lVehicleTransform,
+                                    Vector3 lInitialLinearVelocity, Vector3 lInitialAngularVelocity)
     {
-        mRwBody.SetTransform(lTransform);
-        mRwBody.SetLinearVelocity(lLinearVelocity);
-        mRwBody.SetAngularVelocity(lAngularVelocity);
+        // NOT IN THE X360 BODY -- the compensation for the un-reconstructed Prepare compose
+        // described in the banner. See DELETE-WHEN above.
+        mRwBody.SetTransform(lVehicleTransform);
 
-        static bool sbLoggedATS = false;
-        if ( !sbLoggedATS )
+        CgsPhysics::PhysicsSimulationIO::InAddRigidBody lAddBodyEvent;
+
+        // +0x00. `ld r10, 0x1D0(r30)` -- the part's packed BurnoutBodyPartID IS its RigidBodyId.
+        lAddBodyEvent.mID = mRigidBodyId.GetBaseRigidBodyID();
+
+        // +0x10..+0x40 -- the four rows the console lvx128's from this+0/0x10/0x20/0x30.
+        lAddBodyEvent.mRigidBody.mTransform = mRwBody.GetTransform();
+
+        // +0x50 / +0x60 -- the two velocity arguments, straight through (v127 = v1, v126 = v2).
+        lAddBodyEvent.mRigidBody.mVelocity        = lInitialLinearVelocity;
+        lAddBodyEvent.mRigidBody.mAngularVelocity = lInitialAngularVelocity;
+
+        // +0x80/+0x88/+0x8C/+0x90/+0x94 -- the five scalar tuning fields.
+        lAddBodyEvent.mRigidBody.mInertia.SetInverseMass(1.0f / KF_PART_MASS);
+        lAddBodyEvent.mRigidBody.mInertia.SetMaxLinearVelocity(KF_PART_MAX_LINEAR_VELOCITY);
+        lAddBodyEvent.mRigidBody.mInertia.SetMaxAngularVelocity(KF_PART_MAX_ANGULAR_VELOCITY);
+        lAddBodyEvent.mRigidBody.mInertia.SetLinearDrag(KF_PART_LINEAR_DRAG);
+        lAddBodyEvent.mRigidBody.mInertia.SetAngularDrag(KF_PART_ANGULAR_DRAG);
+
+        // +0xA0 `stb 1` -- TRUE here (the prop producers store 0). The sim's spy flag.
+        lAddBodyEvent.mRigidBody.mbSpy = true;
+        // +0xB0 `stw 4`.
+        lAddBodyEvent.meState = rw::physics::ACTIVE_BODY;
+
+        // ---- the fat-box inertia --------------------------------------------------------------
+        // The console seeds the out-vector with (1,1,1,0) before the call (three `stfs f31` of the
+        // 1.0 it already holds plus a `stw 0`); ComputeFatBoxInertia overwrites all four lanes, so
+        // the seed is dead. Reproduced because it is a real store, not because it is load-bearing.
+        Vector4 lInertia = { 1.0f, 1.0f, 1.0f, 0.0f };
+
+        const Vector3 lAABBHalfExtents = CalculateAABBExtents();
+        rw::physics::ComputeFatBoxInertia(lAABBHalfExtents.x, lAABBHalfExtents.y,
+                                          lAABBHalfExtents.z, KF_PART_FAT_BOX_MARGIN, &lInertia);
+
+        // lInertia = (fatBox * mass) * splat(multiplier) + the floor vector. Lane 3 is not read.
+        lInertia.x = lInertia.x * KF_PART_MASS * KF_PART_INERTIA_MULTIPLIER + KV_PART_INERTIA_FLOOR.x;
+        lInertia.y = lInertia.y * KF_PART_MASS * KF_PART_INERTIA_MULTIPLIER + KV_PART_INERTIA_FLOOR.y;
+        lInertia.z = lInertia.z * KF_PART_MASS * KF_PART_INERTIA_MULTIPLIER + KV_PART_INERTIA_FLOOR.z;
+
+        // NON-GATING tripwire, exactly as the asm spells it: the abs of the three lanes (the w lane
+        // is replaced by a copy of x by the vrlimi128 so it cannot poison the reduction) compared
+        // against a splat of stru_8208F620 lane 0, testing CR6 bit 2 == "none of the lanes is
+        // greater". Fires on a DEGENERATE inertia and falls straight through.
         {
-            sbLoggedATS = true;
-            if ( CgsDev::Message::gxMessageFilterFlags & 1 )
-                *CgsDev::Log::gpDebugPrint
-                    << "conductor gate: PhysicalBodyPart::AddToSim @0x8260AD38 (310) -- the detach POSE is "
-                       "seeded from the arguments, but the InAddRigidBody event is NOT emitted, so the "
-                       "part is never simulated and will not move after it comes off [FLAG PC boot gate]\n";
+            const f32 lfAbsX = (lInertia.x < 0.0f) ? -lInertia.x : lInertia.x;
+            const f32 lfAbsY = (lInertia.y < 0.0f) ? -lInertia.y : lInertia.y;
+            const f32 lfAbsZ = (lInertia.z < 0.0f) ? -lInertia.z : lInertia.z;
+            CGS_ASSERT(lfAbsX > KF_INERTIA_DEGENERATE_EPSILON
+                       || lfAbsY > KF_INERTIA_DEGENERATE_EPSILON
+                       || lfAbsZ > KF_INERTIA_DEGENERATE_EPSILON,
+                       "Bad inertia: ");
+        }
+
+        // The three `fdivs f31(1.0), lane` reciprocals, reassembled by the vperm/vrlimi128 pair.
+        const Vector3 lInverseInertia = { 1.0f / lInertia.x, 1.0f / lInertia.y,
+                                          1.0f / lInertia.z, 0.0f };
+
+        // +0x70 mInvTens and +0x84 mSpherical == 1/min(x,y,z) -- Inertia::SetInverseInertia exactly.
+        lAddBodyEvent.mRigidBody.mInertia.SetInverseInertia(lInverseInertia);
+
+        // this+0x70/+0x80/+0x90 -- the body's own LOCAL inverse-inertia tensor, built as the
+        // diagonal of the same reciprocal vector (gIVector/(0,1,0,0)/(0,0,1,0) each vrlimi128'd
+        // with one lane of v11). mWorldInverseInertia (+0xA0) is deliberately NOT rebuilt --
+        // the asm makes no store there. See ExternalPhysicsBody::SetInverseInertia's banner.
+        {
+            Matrix33 lLocalInverseInertia;
+            lLocalInverseInertia.xAxis = { lInverseInertia.x, 0.0f, 0.0f, 0.0f };
+            lLocalInverseInertia.yAxis = { 0.0f, lInverseInertia.y, 0.0f, 0.0f };
+            lLocalInverseInertia.zAxis = { 0.0f, 0.0f, lInverseInertia.z, 0.0f };
+            mRwBody.SetInverseInertia(&lLocalInverseInertia);
+        }
+
+        // this+0x40 / this+0x50 -- the two velocity stores the asm makes back into the part.
+        mRwBody.SetLinearVelocity(lInitialLinearVelocity);
+        mRwBody.SetAngularVelocity(lInitialAngularVelocity);
+
+        // 0x8260AF3C `bl CgsPhysics::PhysicsSimulationIO::InputBuffer::GetAddRigidBodyQueue` then
+        // `bl BaseEventQueue<InAddRigidBody>::AddEvent @0x825A3000`.
+        lpSimInput->GetAddRigidBodyQueue()->AddEvent(lAddBodyEvent);
+
+        // [DIAG] NOT IN THE X360 BINARY. The win-condition witness for this wave, at the site and
+        // after the event is built, printing the values that decide whether the part can move at
+        // all: a non-ACTIVE state or a zero/NaN inverse mass means it is in the sim and inert.
+        if ( DetachProbeOn() )
+        {
+            const Vector3 lPos = lAddBodyEvent.mRigidBody.mTransform.wAxis;
+            *CgsDev::Log::gpDebugPrint
+                << "[detach-sim] ENTERED SIM id " << CgsDev::E_PRINTMODE_HEXONCE
+                << static_cast<u64>(lAddBodyEvent.mID)
+                << " state " << (lAddBodyEvent.meState == rw::physics::ACTIVE_BODY ? "ACTIVE" : "NOT-ACTIVE")
+                << " invMass " << lAddBodyEvent.mRigidBody.mInertia.GetInverseMass()
+                << " invI (" << lInverseInertia.x << ", " << lInverseInertia.y << ", "
+                << lInverseInertia.z << ")"
+                << " pos (" << lPos.x << ", " << lPos.y << ", " << lPos.z << ")"
+                << " vel (" << lInitialLinearVelocity.x << ", " << lInitialLinearVelocity.y << ", "
+                << lInitialLinearVelocity.z << ")\n";
         }
     }
 

@@ -73,6 +73,32 @@ namespace Deformation
         // and carries the two non-gating index tripwires. Behaviour change toward the console.
         void Set(u32 luOwningVehicleID, u16 luPartIndex, u16 luSubA, u16 luSubB = 0);
 
+        // ⭐ ADDED 2026-08-27 (detach-2 wave). THE NAME IS THE CONSOLE'S OWN: it is baked verbatim
+        // into PhysicalBodyPartPool::UpdatePart's assert string @0x8260CB08 --
+        //   "maParts[ lu16PartIndex ].GetRigidBodyId().GetBaseRigidBodyID() == lpUpdateEvent->mID"
+        // (BrnPhysicalBodyPartPool.cpp:173). The console reads the handle whole with a single
+        // `ld 0x1D0(part)` (AddToSim @0x8260AD80, AddToScene @0x8260A9C0/F8, FixupBodyPartVehicle-
+        // Contact @0x825A0D64 all do), so the u64 IS the record's big-endian byte image:
+        // entity word in the high dword, {muSubA, muSubB} in the low.
+        //
+        // ⚠️ THE PACKING IS LOAD-BEARING IN TWO DIRECTIONS and both consumers are attested:
+        //   * `(id >> 56) & 0xFF` is the OWNER tag DetachedPartManager::UpdatePostPhysics
+        //     branches on -- its asm is `ld ; srdi 32 ; srwi 24 ; cmplwi 6 / 7` @0x8260E194..A8;
+        //   * `id & 0xFFFF` is the POOL SLOT PhysicalBodyPartPool::UpdatePart indexes with --
+        //     its asm is `ld ; clrlwi r28, r11, 16` @0x8260CB20.
+        // Spelling the pack ONCE here is what keeps those two readings consistent; the previous
+        // spelling of the owner read as a raw host byte offset (+4) silently selected the entity
+        // word's LOW byte on a little-endian host and could never equal 6 or 7.
+        u64 GetBaseRigidBodyID() const
+        {
+            return (static_cast<u64>(muEntityWord) << 32)
+                 | (static_cast<u64>(muSubA) << 16)
+                 |  static_cast<u64>(muSubB);
+        }
+
+        // The owner tag the deformation consumers branch on -- the entity word's top byte.
+        u32 GetOwner() const { return muEntityWord >> BurnoutBodyPartIDLayout::KU_OWNER_BASE; }
+
         u32 muEntityWord;   // this+0 (high dword): owner | entityIndex | partIndex
         u16 muSubA;         // this+4
         u16 muSubB;         // this+6

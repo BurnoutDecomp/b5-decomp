@@ -204,6 +204,32 @@ namespace BrnPhysics
         // site (a single f32 mass arg).
         void SetMass(f32 lfMass);
 
+        // ⭐ ADDED 2026-08-27 (detach-2 wave). SIGNATURE IS DWARF-AUTHORITATIVE: the DecFIGS dump
+        // references/DecFIGS/dwarfdump/GameSource/Physics/PhysicsUtilities/ExternalPhysicsBody.h:178
+        // reads `void SetInverseInertia(const rw::math::vpu::Matrix33 *);` and sits above that
+        // class's `protected:`.
+        //
+        // NO CONSOLE ADDRESS OF ITS OWN -- the X360 compiler inlines it. Recovered store-for-store
+        // from PhysicalBodyPart::AddToSim @0x8260AEF8..0x8260AF2C, which is the only site in this
+        // subsystem that writes the tensor from outside the class:
+        //     addi r11, r30, 112            ; r11 = &mLocalInverseInertia (this+0x70)
+        //     lvx128 v0,  gIVector          ; (1,0,0,0)   -> vrlimi128 v0,  v11, 8, 0
+        //     lvx128 v13, unk_82181510      ; (0,1,0,0)   -> vrlimi128 v13, v11, 4, 0
+        //     lvx128 v12, unk_82181520      ; (0,0,1,0)   -> vrlimi128 v12, v11, 2, 0
+        //     stvx128 v0, r0, r11 ; stvx128 v13, r11, 16 ; stvx128 v12, r11, 32
+        // i.e. the caller builds a DIAGONAL Matrix33 from the per-axis reciprocal inertia and the
+        // three rows land at +0x70/+0x80/+0x90.
+        //
+        // ⚠️ MEASURED, AND DELIBERATELY NOT "CORRECTED": the inlined setter writes ONLY
+        // mLocalInverseInertia. It does NOT re-derive mWorldInverseInertia (+0xA0) -- there is no
+        // store to +0xA0 anywhere in AddToSim's 310 instructions. The world tensor is rebuilt later,
+        // by the sim's own InertiaUpdate, on the echo. Adding a world-tensor rebuild here would be
+        // an invention.
+        void SetInverseInertia(const rw::math::vpu::Matrix33* lpLocalInverseInertia)
+        {
+            mLocalInverseInertia = *lpLocalInverseInertia;
+        }
+
         // ⭐ ADDED 2026-08-06 (UpdateVehiclePhysics wave). Read accessor over mfMass -- the
         // console reaches the register directly (`lvx128 v10, body, 0xD0` in the manager's
         // shipped-dead inertia recompute @0x82645AAC); exposed BY NAME so that read stays
