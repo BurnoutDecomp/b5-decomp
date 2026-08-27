@@ -21,6 +21,22 @@
 
 // [diag] BRN_IM2D_TRACE: per-draw attribution trace (throttled to every 60th present).
 // The present counter lives in device.cpp; the last-bound texture is tracked below.
+//
+// ⚠️⚠️ WHAT THIS TRACE CANNOT SEE (2026-08-27 -- read this before drawing a conclusion from
+// its silence). The name says "Im2d", but this probe sits in `ImRenderer<V>::Render` and
+// therefore covers ONLY the IMMEDIATE 2D backend -- FLAPT, the loading screen, the movie
+// quads, the debug/thread-monitor overlay. The other 2D backend,
+// `ImRenderBuffer<V>::Dispatch`, reaches D3D9 through its OWN `DrawPrimitiveUP`
+// (CgsImRenderBufferTemplate.cpp) and never enters this function, so the entire DEFERRED
+// channel -- the sat-nav map, every Apt menu surface, the black clear, the boost bar, the
+// in-game message -- used to be INVISIBLE here. A predecessor read that silence as "the map
+// is not drawn where I expected" and built a false mechanism (a "present boundary", and a
+// named occluder quad whose alpha byte is 00) on top of it.
+// The same env var now also arms `[DispTrace]` in Dispatch's RENDER_PRIMITIVES case, with the
+// same %60 gate and the same LOGICAL-space `xy=`/`rgba=`/`tex=` format, so one run
+// interleaves both channels in one log and the true PIXEL order is readable.
+// ⭐⭐ THE LESSON, which generalises past this file: ask what a probe CANNOT see, not just
+// what it reports -- a subsystem with two backends needs a witness on EACH.
 namespace renderengine { extern u32 guPresentCount; }
 namespace CgsDev { namespace Log { void WriteToLog(const char*); } }
 
