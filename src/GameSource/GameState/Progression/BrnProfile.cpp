@@ -929,24 +929,24 @@ void ProfileEvent::SetFound(bool lbFound)
 }
 
 // ====================================================================================
-// Profile::IncrementNumDiscoveredEvents
+// ⛔ Profile::IncrementNumDiscoveredEvents -- DELETED 2026-08-27 (drive-thru link-closure wave).
 //
-// ⭐⭐ THE NAME IS WRONG AND THE ASM SAYS SO. It is not a generic "one more event found"
+// ⭐⭐ THE NAME WAS WRONG AND THE ASM SAID SO. It was never a generic "one more event found"
 // counter: the target is a FIXED word, ProgressionManager+0x244 == Profile+212, and
 // 212 == 192 + 4*5 -- element FIVE of maGameModeTypeAmountDiscovered, whose owner is the
 // DWARF-attested Profile::AddGameModeTypeToDiscovered @0x82354AA0 (`++v3[a2 + 48]`, i.e.
-// `++*(Profile + 192 + 4*type)`). The 5 is not a coincidence: the same `li r11, 5` two
-// instructions earlier is the game-mode word this arm writes into its own 40-byte action-201
-// record, and 5 == GameStateModuleIO::E_MODE_BURNING_ROUTE -- which is exactly what
-// UnlockCarChallengeForCar unlocks. The compiler folded 192 + 4*5 into the constant 0x244,
-// which is what makes the call look like an anonymous increment.
-// The sibling discovery arm in GameStateModule_gSR_00.cpp:395 makes the same call with the
-// mode read from the event instead of folded, and spells it AddGameModeTypeToDiscovered.
+// `++*(Profile + 192 + 4*type)`). The compiler folded 192 + 4*5 into the constant 0x244, which
+// is what made the call look like an anonymous increment.
+// ⚠️ PRECISION FIX to the note this replaces: the corroborating `li r11, 5` @0x82386A38 is
+// FOUR instructions earlier, not two, and it is consumed by `stw r11, var_88` @0x82386A44 --
+// the record's meGameModeType at rec+0x18 -- NOT by the 0x244 access, which reloads r11 from
+// `lwz r11, 0x244(r10)` @0x82386A48. That makes it INDEPENDENT corroboration rather than the
+// same operand: the arm writes mode 5 into the action AND bumps discovered-counter 5, and
+// 5 == GameStateModuleIO::E_MODE_BURNING_ROUTE is exactly what UnlockCarChallengeForCar
+// unlocks. The sibling discovery arm in GameStateModule_gSR_00.cpp:395 makes the same call with
+// the mode read from the event instead of folded, and already spells it
+// AddGameModeTypeToDiscovered -- which is now what the drive-thru arm spells too.
 // ====================================================================================
-void Profile::IncrementNumDiscoveredEvents()
-{
-    AddGameModeTypeToDiscovered(BrnGameState::GameStateModuleIO::E_MODE_BURNING_ROUTE);
-}
 
 // ====================================================================================
 // Profile::FindProfileEventByRaceEventId

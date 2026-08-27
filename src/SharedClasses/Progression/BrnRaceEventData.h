@@ -71,13 +71,13 @@ struct EventJunction
     // ---- Remaining attested API (bodies in their own TUs; declaration-only) ----
     void Construct(u32 luID, const RaceEventData* lpOfflineEvent, const RaceEventData* lpOnlineEvent, s32 liShotGroup);
 
-    // ADDITIVE GROW (declare-only; bodies in the EventJunction/ProgressionData TU).
-    // DriveThruManager::UnlockCarChallengeForCar reads the junction's event id (to find the matching
-    // ProfileEvent) and the junction's own id (for the SendJunctionPlayerIsAt payload). The X360
-    // junction-id read is a CgsID-width word; declared returning CgsID. FLAG: these widen the existing
-    // u32 GetID() read; bodies resolve the exact source word in their own TU.
-    CgsID GetEventId() const;
-    CgsID GetId() const;
+    // ⛔ RETIRED 2026-08-27 (drive-thru link-closure wave): `CgsID GetEventId() const` and
+    // `CgsID GetId() const`. They were two CgsID-returning aliases minted by the
+    // DriveThruManager::UnlockCarChallengeForCar reconstruction for the two places that arm
+    // reads the junction record -- but @0x82386988 and @0x82386A54 are BOTH `lwz r11, 0(r30)`:
+    // offset zero, load-WORD, i.e. the muID below, which the DWARF-attested GetID() already
+    // returns. The widening was never in the binary, and it is what let the action-201 payload
+    // be written as an 8-byte field. Sole caller now uses GetID(); do not re-mint these.
 
     u32 muID;                    // 0x00 (DWARF :80)
     u32 muOfflineEventOffset;    // 0x04 (DWARF :82)  serialised 32-bit slot (FixUp-rebased)
