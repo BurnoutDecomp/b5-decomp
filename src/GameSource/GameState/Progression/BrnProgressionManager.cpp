@@ -468,8 +468,30 @@ void ProgressionManager::UnlockToProgressionRank(s8 li8Rank,
             AddEventTypeToEventTotals(lpcJunction);
         }
 
-        // ⛔ PARK Q1 + Q2 -- UnlockDefaultPlayerCars and the starting-drive-thru/trophy tail.
-        // See the banner; both need bodies that do not exist in this tree.
+        // ⛔ PARK Q1 -- UnlockDefaultPlayerCars @0x8237BF98 (`bl` @0x8239DF44), still bodiless.
+        //
+        // ⭐⭐ PARK Q2 IS NO LONGER BLOCKED ON WHAT THIS SITE SAID IT WAS (2026-08-27,
+        // drive-thru link-closure wave). The old text named "OnTrophyUnlock @0x82389740 + the
+        // unmounted AchievementManagerBase" as the blockers; OnTrophyUnlock is bodied now
+        // (BrnProgressionManager_Unlocks.cpp) and the AchievementManagerBase drive-thru split IS
+        // mounted. Leaving that text in place would send the next reader chasing two things that
+        // are already there -- a diagnostic naming the wrong blocker costs exactly as much as one
+        // naming the wrong object.
+        //
+        // WHAT Q2 ACTUALLY IS, from the asm @0x8239DF48..0x8239DFC4: THE STARTING BODY SHOP
+        // REGISTERS ITSELF. `lis r11,6 / ori r31, r11, 0xC72D` builds the CgsID 0x6C72D, tests it
+        // against mProfile.mBodyShopsDriveThruSet (manager+0xA7B8 == Profile+42568) with
+        // Set<s64,11>::Contains, and on a MISS Inserts it -- then, if the set is now full
+        // (GetLength() == 11), fires OnTrophyUnlock(20 == E_UNLOCKTYPE_FIND_ALL_BODYSHOPS) and,
+        // when every drive-thru category is complete, OnTrophyUnlock(21) on top. It is
+        // OnDriveThru's body-shop leg, inlined at boot for the one drive-thru the player starts
+        // standing in.
+        // ⚠️ DELIBERATELY NOT LANDED IN THIS WAVE. It WRITES INTO THE SAVED PROFILE on the boot
+        // path, and this wave could not exercise it: flow_run.ps1's phase machine does not reach
+        // DRIVING on the returning-player path (measured 2026-08-28 -- both new cues fire in the
+        // log but the promotion does not, so -Drive silently holds no throttle), which means no
+        // drive could be driven to confirm it. Landing a profile-mutating boot arm that has never
+        // once run is how a save ends up with a wrong set in it. Land it with a drive behind it.
         if (CgsDev::Log::gpDebugPrint != 0)
         {
             *CgsDev::Log::gpDebugPrint
@@ -477,9 +499,10 @@ void ProgressionManager::UnlockToProgressionRank(s8 li8Rank,
                    "event list populated -- "
                 << mProfile.GetEventCount()
                 << " records from " << luJunctionCount
-                << " authored junctions. PARKED on this path: UnlockDefaultPlayerCars "
-                   "@0x8237BF98 and the starting-drive-thru/trophy tail (OnTrophyUnlock "
-                   "@0x82389740 + the unmounted AchievementManagerBase).\n";
+                << " authored junctions. STILL PARKED on this path: UnlockDefaultPlayerCars "
+                   "@0x8237BF98, and the starting-body-shop drive-thru registration "
+                   "(CgsID 0x6C72D -> mBodyShopsDriveThruSet, @0x8239DF48) which is UNBLOCKED "
+                   "but unverified -- see the note at this call site.\n";
         }
     }
     else
