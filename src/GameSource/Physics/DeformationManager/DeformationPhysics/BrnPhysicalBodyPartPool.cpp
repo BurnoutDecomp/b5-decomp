@@ -5,6 +5,8 @@
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnIKBodyPart.h"        // IKBodyPart::GetMeshId / GetPartType (OutputEvents' trailer fields)
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"  // gpDebugPrint ([detach-pose] probe)
+#include <cstdlib>   // getenv/atoi ([detach-pose] latch)
 
 // ============================================================================
 // BrnPhysics::Deformation::PhysicalBodyPartPool
@@ -429,6 +431,37 @@ namespace Deformation
             lPositionEvent.mVehicleEntityId = lrPart.GetGlobalEntityId();
             lPositionEvent.meType           = lpIKPart->GetPartType();      // spec+0x1DC
             lpOutput->mDetachedPartCurrentPositionQueue.AddEvent(lPositionEvent);
+
+            // [detach-pose] NOT X360. The pose witness for the 2026-08-27 detach wave, latched on
+            // BRN_DEFORM_TRACE (0/unset == inert). Prints the WORLD POSITION the shed panel is
+            // actually drawn at, per slot, whenever it moves by more than a centimetre -- which is
+            // the only thing that can distinguish "the panel separated" from "the panel is still
+            // being drawn on the car". Pixels cannot answer that on their own at this camera
+            // distance. DELETE-WHEN the detach question is closed and banked.
+            {
+                static s32 siPoseProbe = -1;
+                if (siPoseProbe < 0)
+                {
+                    const char* lpcEnv = getenv("BRN_DEFORM_TRACE");
+                    siPoseProbe = (lpcEnv != 0 && atoi(lpcEnv) > 0) ? 1 : 0;
+                }
+                if (siPoseProbe == 1 && CgsDev::Log::gpDebugPrint != 0 && liSlot < 16)
+                {
+                    static s32 saiLastX[16] = { 0 }; static s32 saiLastZ[16] = { 0 };
+                    const s32 liXcm = static_cast<s32>(lTransform.wAxis.x * 100.0f);
+                    const s32 liZcm = static_cast<s32>(lTransform.wAxis.z * 100.0f);
+                    if (liXcm != saiLastX[liSlot] || liZcm != saiLastZ[liSlot])
+                    {
+                        saiLastX[liSlot] = liXcm; saiLastZ[liSlot] = liZcm;
+                        *CgsDev::Log::gpDebugPrint
+                            << "[detach-pose] slot " << liSlot
+                            << " mesh " << lpIKPart->GetMeshId()
+                            << " attached " << (lrPart.IsJoinedToVehicle() ? 1 : 0)
+                            << " world (" << lTransform.wAxis.x << ", " << lTransform.wAxis.y
+                            << ", " << lTransform.wAxis.z << ")\n";
+                    }
+                }
+            }
         }
     }
 }

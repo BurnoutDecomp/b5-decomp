@@ -1210,17 +1210,55 @@ namespace Deformation
         
     }
 
-    void PhysicalBodyPart::AddToSim(CgsPhysics::PhysicsSimulationIO::InputBuffer* /*lpSimInput*/, Matrix44Affine /*lTransform*/, Vector3 /*lLinearVelocity*/, Vector3 /*lAngularVelocity*/)
+    // =============================================================================================
+    // AddToSim @0x8260AD38 (310) -- ⚠️ STILL A PARTIAL. Read all of this before trusting it.
+    //
+    // WHAT THE CONSOLE DOES: build the part's AABB (CalculateAABBExtents @0x825E2EA0), derive its
+    // inverse inertia (rw::physics::ComputeFatBoxInertia), assemble a large InAddRigidBody event
+    // carrying { mass, inertia multiplier, kfPartLinearDrag / kfPartAngularDrag /
+    // kfPartMaxLinearVelocity / kfPartMaxAngularVelocity, the reciprocal inertia diagonal, the
+    // transform, both velocities, flags 4 and 1 }, tripwire the inertia ("Bad inertia: " /
+    // " Bounding box half dimensions: ", BrnPhysicalBodyPart.cpp:548) and
+    // `CgsPhysics::PhysicsSimulationIO::InAddRigidBody::AddEvent` it onto the sim input queue.
+    // From there the SIM owns the body and echoes its pose back through OutUpdateRigidBody ->
+    // DetachedPartManager::UpdatePostPhysics -> PhysicalBodyPartPool::UpdatePart.
+    //
+    // ⛔ NONE OF THAT IS RECONSTRUCTED. The InAddRigidBody event layout, the fat-box inertia and
+    // the sim-side consumer are all absent, so a detached part is NEVER SIMULATED on this build:
+    // it does not fall, tumble or bounce. Do not read a static shed panel as a physics bug.
+    //
+    // ⭐ WHAT IS LANDED, AND WHY IT IS NOT AN INVENTION: PhysicalBodyPart::Prepare never gives the
+    // embedded body a pose -- ExternalPhysicsBody::Construct leaves mTransform at identity, and on
+    // the console the FIRST pose a detached part ever has comes from the sim echo. With the echo
+    // absent, every consumer of GetRigidBodyTransform() / GetRenderTransform() /
+    // GetEventRenderTransform() reads identity, i.e. every shed panel renders AT THE WORLD ORIGIN.
+    // So the three arguments this function is HANDED are routed into the three members they are
+    // handed for. That is argument plumbing, not a fabricated value: the caller already computed
+    // them and the console's own event carries exactly these three fields.
+    // Observable effect: a shed panel is drawn at the pose it had the instant it came off and then
+    // stays there while the car drives on -- a real, visible separation, and an honest one, because
+    // "it does not move afterwards" is precisely the piece that is still missing.
+    // DELETE-WHEN the InAddRigidBody producer + the sim echo land; the sim then owns the pose and
+    // these three stores become redundant.
+    // =============================================================================================
+    void PhysicalBodyPart::AddToSim(CgsPhysics::PhysicsSimulationIO::InputBuffer* /*lpSimInput*/,
+                                    Matrix44Affine lTransform, Vector3 lLinearVelocity,
+                                    Vector3 lAngularVelocity)
     {
+        mRwBody.SetTransform(lTransform);
+        mRwBody.SetLinearVelocity(lLinearVelocity);
+        mRwBody.SetAngularVelocity(lAngularVelocity);
+
         static bool sbLoggedATS = false;
         if ( !sbLoggedATS )
         {
             sbLoggedATS = true;
             if ( CgsDev::Message::gxMessageFilterFlags & 1 )
-                *CgsDev::Log::gpDebugPrint << "conductor gate: PhysicalBodyPart::AddToSim reached but not "
-                                              "reconstructed [FLAG PC boot gate]\n";
+                *CgsDev::Log::gpDebugPrint
+                    << "conductor gate: PhysicalBodyPart::AddToSim @0x8260AD38 (310) -- the detach POSE is "
+                       "seeded from the arguments, but the InAddRigidBody event is NOT emitted, so the "
+                       "part is never simulated and will not move after it comes off [FLAG PC boot gate]\n";
         }
-        
     }
 
     void PhysicalBodyPart::PostVehicleUpdate()
