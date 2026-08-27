@@ -82,13 +82,25 @@ namespace PhysicsSimulationIO
 namespace CgsSceneManager { namespace SceneManagerIO { struct InSceneUpdateInterface; } }
 // ⚠ CLASS-KEYS FIXED 2026-08-06 (big-five #2): `struct` per CgsPhysicsSimulationModuleIO.h.
 namespace CgsPhysics { namespace PhysicsSimulationIO { struct InputBuffer; struct OutputBuffer; } }
+// ⭐ 2026-08-27 (detach wave): TestJointForBreaking's second parameter is the PHYSICS-MODULE output
+// buffer, not the sim one. Proof is the PS3 mangle at 0x75528C:
+//   _ZN10BrnPhysics11Deformation16PhysicalBodyPart20TestJointForBreaking
+//      EPN10CgsPhysics19PhysicsSimulationIO11InputBufferE PNS_15PhysicsModuleIO12OutputBufferE
+// i.e. (CgsPhysics::PhysicsSimulationIO::InputBuffer*, BrnPhysics::PhysicsModuleIO::OutputBuffer*).
+// Its two callers agree: DetachedPartManager::TestJointForBreaking (PS3 0x761F2C) and
+// DeformableObject::CheckForDetachment (PS3 0x762570) both carry PhysicsModuleIO::OutputBuffer* in
+// that seat, and the X360 passes the register straight through all three frames. The old spelling
+// forked the type mid-chain, which is why BrnDeformableObject_Detach.cpp had to declare its OWN
+// free-function TestJointForBreaking/EmitDetachedPartNotification overloads to compile.
+// [[odr-forks-link-silently]] -- and one of those forked overloads had NO definition anywhere.
+namespace BrnPhysics { namespace PhysicsModuleIO { class OutputBuffer; } }
 namespace BrnPhysics
 {
 namespace Deformation
 {
     void RemoveTriangleCacheSlot(CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* lpSceneInput,
                                  u16 lu16TriangleCacheSlot);                                   // FLAG: provisional
-    void EmitDetachedPartNotification(CgsPhysics::PhysicsSimulationIO::OutputBuffer* lpSimOutput,
+    void EmitDetachedPartNotification(BrnPhysics::PhysicsModuleIO::OutputBuffer* lpOutput,
                                       const void* lpEventBlob);                                 // FLAG: provisional
     void EmitUpdateExternalBodyEvent(CgsPhysics::PhysicsSimulationIO::InputBuffer* lpSimInput,
                                      const void* lpEventBlob);                                  // FLAG: provisional
@@ -101,7 +113,7 @@ namespace Deformation
 {
     // Static IK rig data for this part (its joints + bbox skin + graphics transform). The
     // physical part holds a const pointer back to its spec. Owned by BrnIKBodyPart.h.
-    class IKBodyPart;
+    struct IKBodyPart;
 
     // The owning aggregate -- the whole vehicle's deformable model. PhysicalBodyPart holds a
     // const back-pointer to it (GetTransformDelta, sensor lookups, ...). Owned by
@@ -338,8 +350,10 @@ namespace Deformation
 
         // BrnPhysicalBodyPart.h:281. Test whether the joint's accumulated stress breaks it this
         // frame; if so, emit the detach onto the sim/output buffers. Returns true if it broke.
+        // ⭐ PARAM 2 CORRECTED 2026-08-27 to PhysicsModuleIO::OutputBuffer per the PS3 mangle
+        // (0x75528C) -- see the note above the free hooks at the top of this header.
         bool TestJointForBreaking(CgsPhysics::PhysicsSimulationIO::InputBuffer* lpSimInput,
-                                  CgsPhysics::PhysicsSimulationIO::OutputBuffer* lpSimOutput);
+                                  BrnPhysics::PhysicsModuleIO::OutputBuffer* lpOutput);
 
         // BrnPhysicalBodyPart.h:285. Write this part's contact-spy debug record.
         void AddContactSpy(ContactSpyData* lpContactSpyData);

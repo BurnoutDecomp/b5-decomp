@@ -2,11 +2,15 @@
 
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnIKBodyPart.h"        // IKBodyPart::CheckForDetachment / GetTagPoint / GetNumberOf* / SetActiveJointIndex / GetActiveJointSpec
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnPhysicalBodyPart.h"   // PhysicalBodyPart::GetIKPartIndex / SetJoinedToVehicle / AddToSim
+#include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnDetachedPartManager.h" // DetachedPartManager::MakePartPhysical / TestJointForBreaking (called by name 2026-08-27)
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnTagPoint.h"           // TagPoint::GetJointIndex
 #include "GameShared/GameClasses/Numeric/CgsRandom.h"                                       // CgsNumeric::Random
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                          // CGS_ASSERT
 
-#include <cmath>   // std::exp / std::log -- the vexptefp / vlogefp angular-decay refinement converges here
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"  // gpDebugPrint / gxMessageFilterFlags ([detach-probe])
+
+#include <cmath>    // std::exp / std::log -- the vexptefp / vlogefp angular-decay refinement converges here
+#include <cstdlib>  // getenv ([detach-probe] latch)
 
 // ============================================================================
 // GameSource/Physics/DeformationManager/DeformationPhysics/BrnDeformableObject_Detach.cpp
@@ -61,26 +65,51 @@
 //   +3904             mAngularVelocitySum           (VecFloat; the per-frame spin accumulator)
 //   +3920..3923       mu8WheelTagPointIndices[4]    (u8; reset to 0xFF when the matching panel detaches)
 //
-// FLAG -- LAYOUT-DERIVED (not byte-proven) member identifications. A few flag/counter offsets do not
-// fall on a uniquely-named frozen member by the recovered layout arithmetic (the committed
-// ApplyCarCarImpulse slice hit the same wall at +26392/+26413/+26414 and retained reconstructed
-// members). They are reached here through the best-fit NAMED frozen members below, each FLAGGED, so
-// the control flow is faithful and the identification can be re-homed when the exact byte layout is
-// re-derived. NONE fabricates a value; NONE is a raw-offset poke:
-//   * +26409 (bool) -- the per-object "attached parts may impulse-detach this frame" gate
-//     (CheckForDetachment). Mapped to mbForceWheelsToDetach (the recovered per-object detach-enable
-//     latch in the bool block; the closest-fit named flag).
-//   * +26400 (s16) -- a small "remaining structural/bonnet parts" counter the hinge path tests >1 and
-//     decrements (CheckForDetachment + DetachPart). Mapped to mi8NumPartsToForceHinging (the recovered
-//     small force-hinge counter; widened compare is value-preserving for the >1 test).
-//   * +26417 (s16) -- the "max attached jointed parts" budget CheckForForcedDetachment differences
-//     against mi16NumHingedParts (>0 => room to force one more off). Modelled as the KI_MAX_PHYSICAL_PARTS
-//     cap (the same 20-slot budget every detach is gated against), preserving the "is there room"
-//     semantics without a fabricated member.
-//   * +26460 (EPartState) -- a per-object overall part state the outer CheckForDetachment gate
-//     early-outs on when == DETATCHED. Modelled via meAbsorptionSet's neighbouring per-object state;
-//     here the equivalent observable is "are all parts already detached", derived from
-//     mi16NumPhysicalParts vs miNumIKBodyParts (no raw-offset read).
+// ⭐⭐⭐ RE-HOMED 2026-08-27 (detach wave) -- ALL FOUR OF THIS FILE'S "LAYOUT-DERIVED" MEMBER
+// IDENTIFICATIONS WERE WRONG, AND TWO OF THEM WERE KILL SWITCHES.
+//
+// The bool block was re-derived from the DecFIGS DWARF member ORDER (BrnDeformableObject.h:219-264)
+// and anchored on four asm-proven offsets; the arithmetic closes EXACTLY, and it only closes if
+// EGlassState is 4 bytes wide (it is: `enum EGlassState : s32`). That exactness is the proof:
+//   +26396 mfNoDamageTimer  f32   [asm: Update `*(+26396) -= step`]
+//   +26400 miNumAttachedExhausts  s16   [asm: the `lhz r11,0x6720(r31)` >1 test below]
+//   +26402 mbActive · +26404 mCullGroup (4-aligned)
+//   +26408 mbHasDeformedThisFrame · +26409 mbIKUpdateRequired  [asm: Update `*(+26409) |= *(+26408)`,
+//          and Update RETURNS *(+26409)]
+//   +26410 mbDoSweptSphereTests · +26411/12 bonnet · +26413 mbForceWheelsToDetach
+//   +26414 mbShowtimeShunting · +26415 mbDontPlayGlassPaneEffects · +26416 mbResetDeformationNextUpdate
+//   +26417 mi8NumPartsToForceHinging  s8 · +26420 maGlassPaneStates[10] (40 B, ends 26459)
+//   +26460 meAbsorptionSet  u32
+//
+// | offset | this file USED to say  | TRUTH                    | what the error did                  |
+// |--------|------------------------|--------------------------|-------------------------------------|
+// | +26409 | mbForceWheelsToDetach  | mbIKUpdateRequired       | ⛔ KILL SWITCH. NOTHING in the tree  |
+// |        |                        |                          | ever writes mbForceWheelsToDetach,   |
+// |        |                        |                          | so arm A of CheckForDetachment was   |
+// |        |                        |                          | permanently closed. mbIKUpdateRequired|
+// |        |                        |                          | is set on every deforming frame -- and|
+// |        |                        |                          | UpdateIKAndLocators ASSERTS it        |
+// |        |                        |                          | immediately before calling here.      |
+// | +26400 | mi8NumPartsToForceHinging | miNumAttachedExhausts | the "don't shed the last one" guard  |
+// |        |                        |                          | read the wrong counter -- and aliased |
+// |        |                        |                          | the +26417 budget onto the same byte. |
+// | +26417 | KI_MAX_PHYSICAL_PARTS (20)| mi8NumPartsToForceHinging | ⛔ POLARITY INVERTED. `20 - hinged  |
+// |        |                        |                          | > 0` is ~always TRUE, so once the     |
+// |        |                        |                          | MakeDetachedPart forward went live    |
+// |        |                        |                          | CheckForForcedDetachment would have   |
+// |        |                        |                          | force-hinged a random panel EVERY     |
+// |        |                        |                          | frame. The real budget is ~always 0.  |
+// | +26460 | "all parts detached", derived | meAbsorptionSet != 4 | the outer gate means "not          |
+// |        | from mi16NumPhysicalParts vs  | (E_ABSORPTIONSET_    | INVINCIBLE", not "not fully shed".  |
+// |        | miNumIKBodyParts              |  INVINCIBLE)         | asm: `lwz r11,26460; cmpwi 4; beq`. |
+//
+// ⭐⭐ WHY THIS STAYED INVISIBLE: three different TUs of ONE class gave three different
+// identifications of byte +26409 (here, _Lifecycle.cpp:791, and the correct one in _Update.cpp).
+// No link and no gate can see that -- every spelling compiles, links and produces a plausible
+// "nothing detached". [[shadowing-redeclarations]]-adjacent, but strictly worse.
+//
+// The remaining genuinely layout-derived (not byte-proven) identification in this file is
+// IKBodyPartSpec +456, reached through GetMeshId() -- see DetachPart's own FLAG.
 //
 // FLAGGED-0 PLACEHOLDERS (rodata NOT in the per-function exports -- NEVER fabricated):
 //   * KF_ANGULAR_VELOCITY_DECAY          (UpdateSpinningDetachment: per-step exponential spin decay)
@@ -92,31 +121,34 @@
 // over-threshold pick + hinge a random still-attached part) is exact; the numeric decay stays inert
 // until the rodata is recovered.
 //
-// The detached-part manager + notification queue are NOT homed in-tree. The asm calls
-// DetachedPartManager::MakePart, DetachedPartManager::TestJointForBreaking, builds a
-// DetachedPartNotificationEvent and AddEventSafeAppend's it onto the sim OutputBuffer. Per the per-TU
-// gate rule (mirroring BrnPhysicalBodyPart.cpp's EmitDetachedPartNotification hook), those un-homed
-// callees are reached through the FLAGGED provisional free-function hooks declared below -- the owning
-// TUs emit the authoritative bodies and may relocate these decls.
+// ⭐⭐⭐ 2026-08-27 (detach wave) -- THE TWO PROVISIONAL FREE HOOKS ARE GONE.
+// The banner that used to stand here said "the detached-part manager + notification queue are NOT
+// homed in-tree", and the two hooks below it returned nullptr / false unconditionally. BOTH real
+// bodies were already bodied AND mounted the whole time:
+//   * DetachedPartManager::MakePartPhysical @0x82626E30 -- BrnDetachedPartManager.cpp:133
+//   * DetachedPartManager::TestJointForBreaking @0x8260E3C0 -- bodied 2026-08-27 in the same TU,
+//     27 instructions, a pure forwarder into PhysicalBodyPart::TestJointForBreaking @0x8260C0F8
+//     (also long since bodied + mounted). The old gate's banner claimed "@0x825E??? (PS3 0x761F2C,
+//     401)" -- wrong address, wrong size. [[unnamed-sub-bodies-and-env-faults]].
+// Both are now called BY NAME through lpPartMgr. The hooks' only reason to exist was an ODR type
+// fork on the OutputBuffer seat (see the note at the top of BrnPhysicalBodyPart.h); with the PS3
+// mangles applied the whole chain carries BrnPhysics::PhysicsModuleIO::OutputBuffer* and the
+// forwards type-check directly.
+// ⚠️ STILL A HOOK: EmitDetachedPartNotification. The packed DetachedPartNotificationEvent blob and
+// the AddEventSafeAppend onto the module output queue are NOT reconstructed. It is declared ONCE now,
+// in BrnPhysicalBodyPart.h, and bodied once in BrnPhysicalBodyPart.cpp -- the duplicate declaration
+// that used to sit in this file was a second overload with NO definition anywhere in the tree.
+// The notification is a GAMEPLAY/AUDIO signal (its PS3 consumers are BrnSound::Logic::Collision::
+// InputCollision / CollisionStateManager::ImportContactSpies); the VISIBLE detached part is driven
+// by DetachedPartRenderEvent out of DetachedPartManager::OutputEvents, which is live.
 
 namespace BrnPhysics
 {
 namespace Deformation
 {
-    // -----------------------------------------------------------------------------------------
-    // Provisional hooks for the not-yet-homed detached-part manager + sim-output notification
-    // queue (FLAG -- shape recovered from the asm call sites; owning TUs author the real bodies).
-    // -----------------------------------------------------------------------------------------
-    PhysicalBodyPart* MakeDetachedPart(DetachedPartManager* lpPartMgr,
-                                       CgsPhysics::PhysicsSimulationIO::InputBuffer* lpInput,
-                                       u16 lu16DeformableObjectIndex, DeformableObject* lpObject,
-                                       EntityId lGlobalEntityId, RigidBodyId lHandlingBodyId,
-                                       s32 liPartIndex, IKBodyPart* lpIKPart);                  // FLAG: provisional
-    void EmitDetachedPartNotification(BrnPhysics::PhysicsModuleIO::OutputBuffer* lpOutput,
-                                      const void* lpEventBlob);                                  // FLAG: provisional
-    bool TestJointForBreaking(DetachedPartManager* lpPartMgr, s32 liJointHandle,
-                              CgsPhysics::PhysicsSimulationIO::InputBuffer* lpInput,
-                              BrnPhysics::PhysicsModuleIO::OutputBuffer* lpOutput);          // FLAG: provisional
+    // MakeDetachedPart / TestJointForBreaking free hooks REMOVED 2026-08-27 -- both real bodies are
+    // mounted and are now called by name on lpPartMgr (see the file header).
+    // EmitDetachedPartNotification is declared once, in BrnPhysicalBodyPart.h (included above).
 
     // FLAG: the +1808 "is the body actively simulating" flag the asm reads off the attached body
     // (*(*(this+6476)+1808)). The attached-body slice does not expose that flag by name yet; modelled
@@ -138,10 +170,13 @@ namespace Deformation
         // "detached parts full" warning) AND the forced-detach budget (+26417, see file header).
         const s16 KI_MAX_PHYSICAL_PARTS = 20;
 
-        // The two part-type ids the hinge logic treats as "structural / bonnet-ish" (the asm's
-        // `type == 84 || type == 85` test that gates the structural-part counter). FLAG: asm literals.
-        const s32 KI_BODY_PART_STRUCTURAL_A = 84;   // 0x54
-        const s32 KI_BODY_PART_STRUCTURAL_B = 85;   // 0x55
+        // The two part-type ids the hinge logic guards a counter on (the asm's `type == 84 ||
+        // type == 85`). ⭐ 2026-08-27: that counter is +26400 == miNumAttachedExhausts, and
+        // _Lifecycle's seeding loop counts exactly these two types into it -- so 84/85 are the
+        // EXHAUST part types, not "structural / bonnet-ish". The names are kept (they are load-
+        // bearing at four call sites) but the semantics are: don't shed the last exhaust.
+        const s32 KI_BODY_PART_STRUCTURAL_A = 84;   // 0x54  exhaust A
+        const s32 KI_BODY_PART_STRUCTURAL_B = 85;   // 0x55  exhaust B
 
         // 0xFF wheel-tag-point sentinel the DetachPart wheel-panel switch writes (== -1 as u8) is the
         // frozen-header member DeformableObject::KU_INVALID_WHEEL_TAG_POINT_INDEX (DWARF :610); used
@@ -165,6 +200,34 @@ namespace Deformation
         inline f32 MagnitudeSquared3(const VecFloat& lvf)
         {
             return lvf.x * lvf.x + lvf.y * lvf.y + lvf.z * lvf.z;
+        }
+
+        // =========================================================================================
+        // [detach-probe] -- NOT X360. Host-side witness for the 2026-08-27 detach wave, opt-in via
+        // the SAME latch the deformation witness uses (BRN_DEFORM_TRACE; 0/unset == fully inert).
+        //
+        // ⭐ IT IS BUILT TO FALSIFY THE SUCCESS, not to announce it. Three lines, and the useful
+        // one is the line that prints when NOTHING detaches:
+        //   [detach-gate]  the three OUTER gate values + how many parts sat in each state + how
+        //                  many passed arm A's own predicate. If parts never come off, this says
+        //                  WHICH gate closed -- and a probe-gated 0 is distinguishable from a
+        //                  gate that never ran, because the line prints either way.
+        //   [detach-make]  printed at the MakePartPhysical call site, for BOTH outcomes. A null
+        //                  return (pool full / no free slot) is a different failure from "the
+        //                  call site was never reached", and only printing successes would hide it.
+        //   [detach-part]  printed only on a real promotion, carrying the counter the win
+        //                  condition is stated in (mi16NumPhysicalParts, before -> after).
+        // DELETE-WHEN the detach question is closed and banked.
+        // =========================================================================================
+        inline bool DetachProbeOn()
+        {
+            static s32 siProbe = -1;
+            if (siProbe < 0)
+            {
+                const char* lpcEnv = getenv("BRN_DEFORM_TRACE");
+                siProbe = (lpcEnv != 0 && atoi(lpcEnv) > 0) ? 1 : 0;
+            }
+            return (siProbe == 1) && (CgsDev::Log::gpDebugPrint != 0);
         }
     }
 
@@ -220,12 +283,18 @@ namespace Deformation
                                               BrnPhysics::PhysicsModuleIO::OutputBuffer* lpOutput,
                                               DetachedPartManager* lpPartMgr, f32 lfTimeStep)
     {
-        // Outer gate. +26460 overall "already fully detached" state modelled as "every IK part is now
-        // a physical part" (mi16NumPhysicalParts >= miNumIKBodyParts) -- see file-header FLAG.
-        const bool lbAllDetached =
-            ( miNumIKBodyParts > 0 && mi16NumPhysicalParts >= miNumIKBodyParts );
+        // Outer gate, re-read from the asm 2026-08-27 (0x8263ABE4..0x8263AC08), store for store:
+        //   lhz  r11, 26286(r31) ; extsh ; cmpwi 20 ; bge  -> return   (mi16NumPhysicalParts < 20)
+        //   lwz  r11, 26460(r31) ;         cmpwi  4 ; beq  -> return   (meAbsorptionSet != INVINCIBLE)
+        //   lwz  r11, 26232(r31) ;         cmpwi  0 ; ble  -> return   (miNumIKBodyParts > 0)
+        // The middle test is a 4-BYTE load of +26460 == meAbsorptionSet, NOT the "is every part
+        // already shed" predicate this file used to synthesise. An INVINCIBLE car sheds nothing.
+        // [detach-probe] gate witness -- see the block at the top of this file.
+        s32 liProbeAttached = 0, liProbeHinged = 0, liProbeArmAHits = 0, liProbeJointBreaks = 0;
+        const bool lbProbe = DetachProbeOn();
+
         if ( mi16NumPhysicalParts < KI_MAX_PHYSICAL_PARTS
-             && !lbAllDetached
+             && meAbsorptionSet != E_ABSORPTIONSET_INVINCIBLE   // +26460 (asm-proven)
              && miNumIKBodyParts > 0 )
         {
             const s32 liNumParts = miNumIKBodyParts;       // _R31[6558] bound
@@ -233,34 +302,47 @@ namespace Deformation
             {
                 const u8 lu8State = maPartStates[li];      // v12 = *v8
 
-                if ( lu8State == KU_PART_STATE_ATTACHED_IK && mbForceWheelsToDetach )   // +26409 (FLAG)
+                // asm 0x8263AC3C: `lbz r10, 26409(r31) ; cmplwi 0 ; beq -> next part`. +26409 is a
+                // BYTE and it is mbIKUpdateRequired -- the flag UpdateIKAndLocators asserts is set
+                // immediately before calling this function, i.e. the gate is OPEN on every
+                // deforming frame. (It used to read mbForceWheelsToDetach, which no writer exists
+                // for anywhere in the tree -- see the file-header table.)
+                if ( lu8State == KU_PART_STATE_ATTACHED_IK && mbIKUpdateRequired )   // +26409 (asm-proven)
                 {
                     // IKBodyPart::CheckForDetachment(part, impulse, &detachJointOut). The asm passes
                     // a2 (the accumulated-impulse arg) + a 16-byte scratch out (v17).
                     s32 liDetachJointOut = 0;                          // v17[] scratch
                     const f32 lfImpulse = lfTimeStep;                  // a2 (the impulse arg; see note below)
+                    if ( lbProbe ) { ++liProbeAttached; }
                     if ( maIKParts[li].CheckForDetachment(lfImpulse, liDetachJointOut) )
                     {
+                        if ( lbProbe ) { ++liProbeArmAHits; }
                         // Promote the panel to a free PhysicalBodyPart (no hinge -> lbHinge == false).
                         DetachPart(lpInput, lpOutput, lpPartMgr, li, /*liJointIndex*/ 0, /*lbHinge*/ false);
                     }
                 }
                 else if ( lu8State == KU_PART_STATE_HINGED )
                 {
+                    if ( lbProbe ) { ++liProbeHinged; }
                     // Structural-part predicate: type == 84 || type == 85 (the asm's v13/v14 latch).
                     const s32 liType = static_cast<s32>(maIKParts[li].GetPartType());   // *(*v9 + 476)
                     const bool lbStructural =
                         ( liType == KI_BODY_PART_STRUCTURAL_A || liType == KI_BODY_PART_STRUCTURAL_B );
 
-                    // Run the joint-break test unless this is a structural part whose budget is spent.
-                    // (asm: `if ( !v14 || *(_R31 + 13200) > 1 )` -- not structural OR budget > 1.)
-                    if ( !lbStructural || mi8NumPartsToForceHinging > 1 )   // +26400 (FLAG)
+                    // Run the joint-break test unless this is an exhaust and it is the last one.
+                    // asm 0x8263ACC8: `lhz r11, 0x6720(r31) ; extsh ; cmpwi 1 ; ble -> next part`,
+                    // reached only when the type-84/85 latch is set. +26400 is a 16-BIT load and it
+                    // is miNumAttachedExhausts -- which is exactly what part types 84/85 are, as
+                    // _Lifecycle's seeding loop (count attached type-84/85 parts) confirms.
+                    if ( !lbStructural || miNumAttachedExhausts > 1 )   // +26400 (asm-proven, lhz)
                     {
-                        // DetachedPartManager::TestJointForBreaking(partMgr, jointHandle, in, out).
-                        // jointHandle == v9[2] == maIKParts[li] pool/joint handle (+12 region).
+                        // asm 0x8263ACD8: `lhz r11, 4(r28)` (r28 == &maIKParts[li].mpSpec, so +4 is
+                        // the part's pool index) ; `extsh r4, r11` ; r3=partMgr, r5=lpInput,
+                        // r6=lpOutput ; `bl 0x8260E3C0` == DetachedPartManager::TestJointForBreaking.
                         const s32 liJointHandle = maIKParts[li].GetPartPoolIndex();   // v9[2]
-                        if ( TestJointForBreaking(lpPartMgr, liJointHandle, lpInput, lpOutput) )
+                        if ( lpPartMgr->TestJointForBreaking(liJointHandle, lpInput, lpOutput) )
                         {
+                            if ( lbProbe ) { ++liProbeJointBreaks; }
                             // The joint broke. There must be a hinged part to consume.
                             CGS_ASSERT(mi16NumHingedParts > 0, "mi16NumHingedParts > 0");
 
@@ -268,18 +350,52 @@ namespace Deformation
                             mAngularVelocitySum.SetZero();
 
                             maPartStates[li] = KU_PART_STATE_DETATCHED;   // *v8 = 4
-                            --mi16NumHingedParts;                         // --*(_R31 + 13144)
+                            --mi16NumHingedParts;                         // --*(_R31 + 26288) (lhz/sth)
                             if ( lbStructural )                           // if ( v16 )
-                                --mi8NumPartsToForceHinging;              // --*(_R31 + 13200)  (+26400, FLAG)
+                                --miNumAttachedExhausts;                  // --*(_R31 + 26400) (lhz/sth)
                         }
                     }
                 }
             }
         }
 
-        // NOTE: the X360 passes the accumulated-impulse value in a2 (an integer-register float). The
-        // clean signature here exposes the trailing arg as lfTimeStep; the impulse and time-step occupy
-        // the same dropped-arg region in the Hex-Rays view. FLAG: the exact arg mapping is best-effort.
+        // ⭐ 2026-08-27: the "impulse vs time-step" ambiguity in the note below is now MOOT and the
+        // FLAG is retired. The asm at 0x826422DC..0x826422E8 is `lfs f31, 240(r1)` (the x lane of the
+        // spilled lvfTimeStep) then `fmr f1, f31` -- the float arg IS lvfTimeStep.x. And
+        // IKBodyPart::CheckForDetachment IGNORES it (`(void)lfImpulse;` -- the impulse it actually
+        // bands against is folded from the tag points' own sensors). So passing the time-step here is
+        // both faithful and observationally inert; it was NOT a fifth kill switch.
+        (void)lfTimeStep;
+
+        // [detach-probe] gate witness. Prints EVERY call it is enabled for, including the calls where
+        // nothing happens -- that is the whole point.
+        if ( lbProbe )
+        {
+            static u32 sluProbeCalls = 0;
+            static s32 siLastPhysical = -1;
+            ++sluProbeCalls;
+            const bool lbInteresting = ( liProbeArmAHits > 0 || liProbeJointBreaks > 0
+                                      || static_cast<s32>(mi16NumPhysicalParts) != siLastPhysical );
+            if ( lbInteresting || (sluProbeCalls % 600u) == 0u )
+            {
+                siLastPhysical = static_cast<s32>(mi16NumPhysicalParts);
+                *CgsDev::Log::gpDebugPrint
+                    << "[detach-gate] call " << static_cast<s32>(sluProbeCalls)
+                    << " ent " << static_cast<s32>(mGlobalEntityId.muValue)
+                    << " nPhys " << static_cast<s32>(mi16NumPhysicalParts)
+                    << " nHinged " << static_cast<s32>(mi16NumHingedParts)
+                    << " absorb " << static_cast<s32>(meAbsorptionSet)
+                    << " ikReq " << (mbIKUpdateRequired ? 1 : 0)
+                    << " nIK " << miNumIKBodyParts
+                    << " exhausts " << static_cast<s32>(miNumAttachedExhausts)
+                    << " forceHinge " << static_cast<s32>(mi8NumPartsToForceHinging)
+                    << " attachedSeen " << liProbeAttached
+                    << " hingedSeen " << liProbeHinged
+                    << " armAHits " << liProbeArmAHits
+                    << " jointBreaks " << liProbeJointBreaks
+                    << "\n";
+            }
+        }
     }
 
     // =============================================================================================
@@ -302,10 +418,16 @@ namespace Deformation
                                                     DetachedPartManager* lpPartMgr,
                                                     CgsNumeric::Random* lpRandom, f32 lfTimeStep)
     {
-        // *(result+26286)<20 && *(result+26417)-*(result+26288)>0. The +26417 budget is the
-        // KI_MAX_PHYSICAL_PARTS cap (FLAG, see file header), differenced against mi16NumHingedParts.
+        // asm: *(result+26286)<20 && *(result+26417)-*(result+26288)>0.
+        // ⛔⛔ POLARITY FIX 2026-08-27: +26417 is mi8NumPartsToForceHinging, NOT the 20-slot cap.
+        // The old spelling `20 - mi16NumHingedParts > 0` is TRUE for any car with fewer than 20
+        // hinged parts -- i.e. essentially always. This function force-hinges a RANDOM still-attached
+        // panel every time it passes, so with the constant substituted AND the MakeDetachedPart
+        // forward wired (this wave) the car would have shed a panel per frame until it ran out.
+        // The real budget is a per-object latch seeded to 0 by DeformableObject::Reset and armed only
+        // on the PLAYER_EXTREME (showtime) path -- so the honest gate is ~always closed.
         if ( mi16NumPhysicalParts < KI_MAX_PHYSICAL_PARTS
-             && ( KI_MAX_PHYSICAL_PARTS - mi16NumHingedParts ) > 0 )
+             && ( mi8NumPartsToForceHinging - mi16NumHingedParts ) > 0 )   // +26417 - +26288
         {
             // (1) random part ordinal -> resolve to a real attached jointed part.
             const u32 luPartDraw = lpRandom->RandomUInt();             // inline LCG draw (*(a5+32))
@@ -490,8 +612,9 @@ namespace Deformation
         bool lbProceed = false;
         if ( lpSpec != nullptr && lrPart.GetMeshId() != -1 )         // *(_R29 + 456) != -1 (FLAG: +456 proxy)
         {
-            // Structural budget shortcut: budget > 1 always proceeds (asm: `if (*(_R31+26400) > 1) goto LABEL_11`).
-            if ( mi8NumPartsToForceHinging > 1 )                      // *(_R31 + 26400) > 1 (FLAG)
+            // Exhaust-count shortcut: more than one attached exhaust always proceeds
+            // (asm: `if (*(_R31+26400) > 1) goto LABEL_11`). +26400 == miNumAttachedExhausts.
+            if ( miNumAttachedExhausts > 1 )                          // *(_R31 + 26400) > 1
             {
                 lbProceed = true;
             }
@@ -519,34 +642,68 @@ namespace Deformation
         // are FLAGGED-inert where unrecovered. (The scratch blobs v77 / v79 / v80 / v70 the asm
         // assembles are the transform + the two velocity vectors handed to AddToSim + the notify.)
 
-        // DetachedPartManager::MakePart(partMgr, in, objectIndex, this, globalId, handlingBodyId,
-        //   partIndex, &part). asm args (line 3138): a4=partMgr, a2=in, *(this+26290)=mu16DeformableObjectIndex,
-        //   _R31=this, *(this+26388)=mGlobalEntityId, *(this+26392)=mu32GameModeState, a5=partIndex,
-        //   v16+25380=&maIKParts[partIndex]. NOTE: the asm's 6th arg is the +26392 game-mode/state word
-        //   (mu32GameModeState), NOT mHandlingBodyID (+26384, which is only read later for the notify at
-        //   line 3232/3237). FLAG: MakeDetachedPart is a provisional hook whose 6th param is typed
-        //   RigidBodyId; the value is sourced from mu32GameModeState (+26392) wrapped to match, per the asm.
-        // ⚠️⚠️ FLAG SHARPENED 2026-08-11 (handle-widening wave) -- THE WRAP HAD TO CHANGE, AND
-        // NOT CHANGING IT WOULD HAVE BEEN A SILENT DROP I INTRODUCED.
-        // `RigidBodyId` is now the real 8-byte CgsPhysics::RigidBodyId. The old spelling
-        // `RigidBodyId{ mu32GameModeState }` aggregate-initialised the 4-byte stand-in's ONLY
-        // field, so the word landed where every consumer read it. Against the 8-byte type the same
-        // brace-init widens the u32 into the LOW dword -- the half every consumer discards
-        // (they all do `ld` then `srdi 32`; see ProcessAddDeformationModelEvents @0x82644940).
-        // It would have compiled, linked and delivered zero. So the word is promoted into the HIGH
-        // dword, which is what EVERY other producer of a RigidBodyId in this subsystem does
-        // (ProcessCreateEvents `sldi r26,<word>,32`, ProcessCollisionEvents `extldi r,r,64,32`,
-        // DetachedWheelManager's `v13 = (a3<<32)|1`).
-        // ⛔ STILL PROVISIONAL, and now doubly so -- see the mu32GameModeState flag in
-        // BrnDeformableObject.h: at the CONSOLE's real layout (mHandlingBodyID 8 bytes at +26384)
-        // the offset +26392 this argument is sourced from is **mGlobalEntityId**, not a separate
-        // game-mode word, and the seats the banner above quotes (+26388 / +26392) were read
-        // against the narrow layout. This whole call's argument mapping is owed a re-read against
-        // the corrected offsets. UNMOUNTED TU -- nothing shipped depends on it today.
-        PhysicalBodyPart* lpPhysicalBodyPart = MakeDetachedPart(
-            lpPartMgr, lpInput, mu16DeformableObjectIndex, this, mGlobalEntityId,
-            CgsPhysics::RigidBodyId(static_cast<u64>(mu32GameModeState) << 32),
-            liPartIndex, &lrPart);   // 6th arg = *(this+26392) (FLAG -- see above)
+        // =====================================================================================
+        // DetachedPartManager::MakePartPhysical @0x82626E30 -- CALLED BY NAME 2026-08-27.
+        //
+        // ⭐⭐ THE ARGUMENT MAPPING IS NOW ASM-PROVEN, and it retires the "doubly provisional"
+        // mu32GameModeState invention that used to stand here. The GPR arg setup immediately before
+        // the call at 0x826309B4 reads, register for register:
+        //     r3  = a4                     -> lpPartMgr                (the `this`)
+        //     r4  = r23 = a2               -> lpSimInput
+        //     r5  = lhz  26290(r31)        -> mu16DeformableObjectIndex
+        //     r6  = r31                    -> this (the DeformableObject)
+        //     r7  = ld   26384(r31)        -> mHandlingBodyID   ⭐ AN 8-BYTE `ld`, not a synthesised
+        //                                     high-dword wrap of a 4-byte word
+        //     r8  = lwz  26392(r31)        -> mGlobalEntityId   ⭐ the 4-byte load, and at the
+        //                                     CORRECTED layout +26392 IS mGlobalEntityId
+        //     r9  = r24 = a5               -> liPartIndex
+        //     r10 = r28                    -> &maIKParts[liPartIndex]
+        // That is exactly the frozen header's (lpSimInput, lu16DeformableObjectIndex,
+        // lpDeformableObject, lHandlingBodyId, lGlobalCarId, liPartIndex, lpPart) -- and exactly
+        // what the PS3 mangle at 0x756A60 spells. The prior banner read those two seats against the
+        // NARROW (4-byte mHandlingBodyID) layout, which is how a "game-mode state word" got invented
+        // for a parameter the console fills with the handling body id.
+        //
+        // ⚠️ FLAGGED, and this is the honest edge of this wave: the FOUR by-value VMX arguments
+        // (lLocalRenderTransform, lVehicleTransform, lInitialLinearVelocity, lInitialAngularVelocity)
+        // travel in the vector bank / stack spill slots r1+144..r1+256, assembled by the dense
+        // vsubfp/vpermwi/vnmsubfp/vaddfp block at 0x826308C0..0x826309B0 that is NOT decoded. They are
+        // sourced here from the named state the console demonstrably reads in that block -- the asm
+        // does `lwz r30, 6476(r31)` (the attached vehicle body) and then loads matrix rows at
+        // `r30+16 {+0,+16,+32,+48}`, i.e. the body's own transform -- but the per-lane composition
+        // (worldTransform = vehicleTransform o partLocalGraphicsFrame; linearVel = bodyLinearVel +
+        // bodyAngularVel x (partCom - bodyCom)) is NOT reproduced. The detached part therefore
+        // inherits the CAR's velocity rather than the car's velocity plus its own spin arm.
+        // MakePartPhysical's two orthonormal tripwires are satisfied by these sources (both are real
+        // orthonormal bases), which is the check that keeps them from being nonsense.
+        PhysicalBodyPart* lpPhysicalBodyPart = lpPartMgr->MakePartPhysical(
+            lpInput,
+            mu16DeformableObjectIndex,          // r5  = lhz 26290
+            this,                               // r6
+            mHandlingBodyID,                    // r7  = ld  26384  (8 bytes)
+            mGlobalEntityId,                    // r8  = lwz 26392
+            liPartIndex,                        // r9
+            &lrPart,                            // r10
+            lpSpec->GetPartGraphicsTransform(), // FLAG: local render frame, not the composed one
+                                               // (IKBodyPart's own wrapper is declare-only; it
+                                               //  forwards to exactly this spec accessor)
+            GetVehicleBody().GetTransform(),    // FLAG: the body transform the asm loads at body+16
+            GetVehicleBody().GetLinearVelocity(),    // FLAG: no  w x r term
+            GetVehicleBody().GetAngularVelocity());  // FLAG: body spin, not the part's
+
+        // [detach-probe] BOTH outcomes -- a null return (pool full) is a different failure from
+        // "the call site was never reached", and printing only the successes would hide it.
+        if ( DetachProbeOn() )
+        {
+            *CgsDev::Log::gpDebugPrint
+                << "[detach-make] ent " << static_cast<s32>(mGlobalEntityId.muValue)
+                << " part " << liPartIndex
+                << " type " << static_cast<s32>(lrPart.GetPartType())
+                << " hinge " << (lbHinge ? 1 : 0)
+                << " result " << ((lpPhysicalBodyPart != 0) ? "PART" : "NULL")
+                << " nPhysBefore " << static_cast<s32>(li16NumPhysical)
+                << "\n";
+        }
 
         if ( lpPhysicalBodyPart != nullptr )
         {
@@ -599,17 +756,32 @@ namespace Deformation
                                              lpPhysicalBodyPart->GetLinearVelocity(),
                                              lpPhysicalBodyPart->GetExternalBody()->GetAngularVelocity());
 
-                // A structural part (type 84/85) coming off as a free body spends one structural-budget
-                // slot. (asm: `v58 = type; if (84/85) --*(_R31 + 26400)`.)
+                // An exhaust (type 84/85) coming off as a free body decrements the attached-exhaust
+                // count. (asm: `v58 = type; if (84/85) --*(_R31 + 26400)`.)
                 const s32 liType = static_cast<s32>(lrPart.GetPartType());   // *(*(v16+25388) + 476)
                 if ( liType == KI_BODY_PART_STRUCTURAL_A || liType == KI_BODY_PART_STRUCTURAL_B )
-                    --mi8NumPartsToForceHinging;                             // --*(_R31 + 26400) (FLAG)
+                    --miNumAttachedExhausts;                                 // --*(_R31 + 26400)
             }
 
             // Assemble + emit the DetachedPartNotificationEvent onto the sim OutputBuffer's
             // notification queue (the asm builds the packed event from the part transform/velocity +
             // mHandlingBodyID and AddEventSafeAppend's it). Modelled through the FLAGGED emit hook.
             EmitDetachedPartNotification(lpOutput, &mHandlingBodyID);
+
+            // [detach-probe] the win-condition counter, at the site, after the increment.
+            if ( DetachProbeOn() )
+            {
+                *CgsDev::Log::gpDebugPrint
+                    << "[detach-part] PART CAME OFF ent " << static_cast<s32>(mGlobalEntityId.muValue)
+                    << " ikPart " << liPartIndex
+                    << " type " << static_cast<s32>(lrPart.GetPartType())
+                    << " hinge " << (lbHinge ? 1 : 0)
+                    << " poolIndex " << static_cast<s32>(lu8PoolIndex)
+                    << " nPhys " << static_cast<s32>(li16NumPhysical)
+                    << " -> " << static_cast<s32>(mi16NumPhysicalParts)
+                    << " nHinged " << static_cast<s32>(mi16NumHingedParts)
+                    << "\n";
+            }
 
             // Wheel-panel tail switch: invalidate the wheel tag-point lane(s) the detached panel
             // carried, so the wheel renderer stops following the now-detached tag point.
@@ -642,45 +814,15 @@ namespace Deformation
     }
 
     // =============================================================================================
-    // The two provisional free hooks (declared FLAG-provisional above) -- ⚠️ LOG-ONCE GATES
-    // 2026-08-14 (walls leg 4). Both are dead on the junkyard path (no detachments, no hinged
-    // parts): MakeDetachedPart's real body is DetachedPartManager::MakePartPhysical (mounted --
-    // wire the forward when the detach path goes live); TestJointForBreaking's real body is
-    // DetachedPartManager::TestJointForBreaking @0x825E??? (PS3 0x761F2C, 401).
+    // ⛔ THE TWO LOG-ONCE GATES THAT USED TO END THIS FILE ARE DELETED (2026-08-27, detach wave).
+    // They were `return nullptr;` and `return false;` -- kill switches 3 and 4 of four. Both real
+    // bodies were mounted the whole time and are now called by name on lpPartMgr:
+    //   MakeDetachedPart      -> DetachedPartManager::MakePartPhysical    @0x82626E30 (DetachPart)
+    //   TestJointForBreaking  -> DetachedPartManager::TestJointForBreaking @0x8260E3C0
+    //                            (CheckForDetachment; bodied 2026-08-27, 27 insns)
+    // ⭐ [[invented-arms-and-the-c4715-ratchet]] -- fixed by DELETION, not by re-predication.
+    // Their two runtime log strings are gone with them; nothing else in the tree printed them.
     // =============================================================================================
-    PhysicalBodyPart* MakeDetachedPart(DetachedPartManager* /*lpPartMgr*/,
-                                       CgsPhysics::PhysicsSimulationIO::InputBuffer* /*lpInput*/,
-                                       u16 /*lu16DeformableObjectIndex*/, DeformableObject* /*lpObject*/,
-                                       EntityId /*lGlobalEntityId*/, RigidBodyId /*lHandlingBodyId*/,
-                                       s32 /*liPartIndex*/, IKBodyPart* /*lpIKPart*/)
-    {
-        static bool sbLoggedMakePartGate = false;
-        if ( !sbLoggedMakePartGate )
-        {
-            sbLoggedMakePartGate = true;
-            if ( CgsDev::Message::gxMessageFilterFlags & 1 )
-                *CgsDev::Log::gpDebugPrint
-                    << "conductor gate: MakeDetachedPart hook reached but not wired to "
-                       "DetachedPartManager::MakePartPhysical -- part NOT detached [FLAG PC boot gate]\n";
-        }
-        return nullptr;
-    }
-
-    bool TestJointForBreaking(DetachedPartManager* /*lpPartMgr*/, s32 /*liJointHandle*/,
-                              CgsPhysics::PhysicsSimulationIO::InputBuffer* /*lpInput*/,
-                              BrnPhysics::PhysicsModuleIO::OutputBuffer* /*lpOutput*/)
-    {
-        static bool sbLoggedTestJointGate = false;
-        if ( !sbLoggedTestJointGate )
-        {
-            sbLoggedTestJointGate = true;
-            if ( CgsDev::Message::gxMessageFilterFlags & 1 )
-                *CgsDev::Log::gpDebugPrint
-                    << "conductor gate: TestJointForBreaking hook reached but not reconstructed "
-                       "(PS3 0x761F2C) [FLAG PC boot gate]\n";
-        }
-        return false;
-    }
 
 }
 }

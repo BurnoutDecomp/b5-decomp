@@ -177,6 +177,44 @@ namespace Deformation
     }
 
     // ------------------------------------------------------------------------------------------
+    // TestJointForBreaking @ 0x8260E3C0  -- 27 instructions, LANDED 2026-08-27 (detach wave)
+    //
+    // ⛔ THE PRIOR BANNER FOR THIS FUNCTION WAS WRONG ON BOTH ADDRESS AND SIZE. The log-once gate in
+    // BrnDeformableObject_Detach.cpp recorded it as "@0x825E??? (PS3 0x761F2C, 401)" -- a 401-insn
+    // body at an unknown address. It is 27 instructions at 0x8260E3C0, and it is a PURE FORWARDER
+    // whose one real callee (PhysicalBodyPart::TestJointForBreaking @0x8260C0F8) was already bodied
+    // and mounted the whole time. [[unnamed-sub-bodies-and-env-faults]] -- "unrecoverable" was a NAME
+    // search failing, recorded as an address.
+    //
+    // The asm, store for store:
+    //   r31=this r30=liPartIndex r29=lpSimInput r28=lpSimOutput
+    //   bl PhysicalBodyPartPool::IsPartIndexUsed(this, liPartIndex)   @0x825A0758
+    //   if (!used) BeginAssert / FireAssert("IsPartIndexUsed( liPoolIndex )",
+    //                                       BrnDetachedPartManager.cpp, 207) / EndAssert  [NON-GATING]
+    //   extsh r4, r30                                                 (the index narrows to s16)
+    //   bl PhysicalBodyPartPool::GetPart(this, (s16)liPartIndex)      @0x825A0858
+    //   bl PhysicalBodyPart::TestJointForBreaking(part, lpSimInput, lpSimOutput)  @0x8260C0F8
+    //   -> return its result.
+    // Both pool accessors reach the pool with the MANAGER address as `this` (mPartPool is this
+    // manager's one member, at +0) -- the same header-inline-forward evidence pattern the
+    // GetPartFromIndex / IsPartIndexUsed wrappers are spelled with, so they go through mPartPool here.
+    //
+    // ⚠️ The assert is NON-GATING: the asm falls straight through into GetPart with an unused index,
+    // exactly as spelled. GetPart returns the slot regardless; the console does the same.
+    // ------------------------------------------------------------------------------------------
+    bool DetachedPartManager::TestJointForBreaking(
+        s32 liPartIndex,
+        CgsPhysics::PhysicsSimulationIO::InputBuffer* lpSimInput,
+        BrnPhysics::PhysicsModuleIO::OutputBuffer* lpOutput)
+    {
+        CGS_ASSERT(mPartPool.IsPartIndexUsed(liPartIndex), "IsPartIndexUsed( liPoolIndex )");
+
+        PhysicalBodyPart* lpPart = mPartPool.GetPart(static_cast<s16>(liPartIndex));
+
+        return lpPart->TestJointForBreaking(lpSimInput, lpOutput);
+    }
+
+    // ------------------------------------------------------------------------------------------
     // UpdatePostPhysics @ 0x8260E118
     //
     //   Advance the detached-part pool after the physics step, in the asm's exact order:
