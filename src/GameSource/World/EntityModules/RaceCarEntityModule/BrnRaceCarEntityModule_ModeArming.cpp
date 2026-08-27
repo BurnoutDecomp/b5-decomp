@@ -24,6 +24,7 @@
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnRaceCar.h"
 #include "GameSource/GameState/BrnGameActions.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // CgsDev::Log::gpDebugPrint ([scoring-map] diag)
 
 namespace BrnWorld
 {
@@ -99,6 +100,93 @@ void RaceCarEntityModule::HandlePrepareForModeAction(
         // ARTIST 0x823099D8..0x823099F0: non-Showtime modes cannot earn until
         // game action 34 (START_PLAYING_MODE) reenables it.
         mBoostManager.SetBoostEarningEnabled(false);
+    }
+
+    // ========================================================================================
+    // ⭐⭐⭐ [stuntrace frontier round 3, 2026-08-27] THE PLAYER-SCORING-SLOT MAP -- the
+    // extracted tail of the console's OFFLINE opponents arm, at its own position.
+    //
+    // ⛔ WHY IT IS HERE AND WHY IT IS ONE STATEMENT. The console reaches it through two
+    // functions this tree does not body:
+    //     0x82309888  bl SetupOpponents                          (@0x82307DF0)
+    //       0x82307E60  bl SetUpPlayerCarForMode                 (@0x823058F8)
+    //         0x82305DD4  bl SetActiveRaceCarForPlayerScoringIndex   <-- THIS STATEMENT
+    // SetupOpponents' other legs (RemoveRivals, SetUpAIForMode, SetAllCarsOnStartLine) and
+    // SetUpPlayerCarForMode's own body (the start-grid respawn / place-on-track arm, the
+    // colour-palette asserts, the AI AddCarToCurrentModeEvent) are NOT reproduced here --
+    // they need the pre-scene output buffer and the AI interfaces this call site does not
+    // hold. Only the mapping store is lifted, and it is lifted because it is the ONE leg of
+    // that chain with a live downstream consumer on this build.
+    //
+    // ⭐ THE STORE IS UNCONDITIONAL INSIDE SetUpPlayerCarForMode. Its whole body sits behind
+    // `if (mxGameModeFlags & KU_FLAG_SET_CARS_TO_START_GRID)` (asm 0x82305950..0x82305970,
+    // `beq cr6, loc_82305DBC`), and loc_82305DBC IS the mapping block -- so the flag skips
+    // the respawn, never the map.
+    //
+    // ⭐ THE SCORING SLOT IS miNumRivals, and that is asm, not inference (0x82305DBC..0x82305DD4):
+    //     lbz   r10, 0(r29)            ; r29 == lpGameModeParams; the BYTE at +0 == miNumRivals
+    //     extsb r4, r10                ; -> the EPlayerScoringIndex argument
+    //     lwzx  r5, r28, 0x182F8       ; mePlayerActiveRaceCarIndex
+    //     bl    SetActiveRaceCarForPlayerScoringIndex
+    // GameModeParams+0 is miNumRivals and +1 is miNumNetworkPlayers -- the same two bytes
+    // ModeManager::PrepareForGameMode reads as `lbz 0(r29)` / `lbz 1(r29)` to size its player
+    // loop (BrnModeManager_Prepare.cpp:583). The player is therefore the LAST grid slot: with N
+    // rivals the roster's AddPlayer() walk hands scoring slots 0..N-1 to the rivals and slot N
+    // to the player. StuntAttackMode::Start sets miNumRivals to 0 (BrnStuntAttackMode.cpp:249,
+    // `stb r23, 0(r31)`), so an offline stunt run maps player scoring slot 0.
+    //
+    // ⭐ WHAT IT FIXES (run scratch/flow_run/20260827_140514): with this map never written,
+    // RaceCarEntityModule::CopyActiveRaceCarToPlayerScoringMappingToOutput publishes the
+    // all-sentinel table ClearAllActiveRaceCarToPlayerScoringMappings left three statements
+    // above, ModeManager's binding sweep skips every slot, ScoringSystem::maCarData[0] keeps
+    // the E_ACTIVE_RACE_CAR_INDEX_INVALID that ScoringSystem::AddPlayer stamped, and
+    // ScoringSystem::GetCarData returns NULL at the end of the mode:
+    //     [ASSERT 31113] lpCarData (BrnScoringSystem_Timer.cpp:341)
+    //     [EXCEPTION] ACCESS_VIOLATION reading 0x18  StopModeTimer + 0xE5
+    //         <- FinishCurrentMode + 0x3FC <- ModeManager::PreWorldUpdate
+    // -- assert-is-not-a-guard again: StopModeTimer's `lpCarData != NULL` tripwire fires and
+    // falls straight through into lpCarData->GetScoreData()->GetDistanceToFinishLive(), which
+    // is CarScoreData +0x18 off a null CarData. This is the first of that chain's three
+    // missing producers (the other two are in RaceCarEntityModule::PostPhysicsUpdate and
+    // GameStateModule::PostWorldUpdateStuntBringUp).
+    //
+    // [FLAG PC bring-up] THE ONLINE/OFFLINE FORK IS NOT REPRODUCED -- ON PURPOSE, and the
+    // reason is already on the record. The console picks between the network grid loop
+    // (AddRaceCarToStartingGridOrFreeburnLobby, 0x823097E4/0x8230985C) and this offline
+    // SetupOpponents arm on `lbz r11, 0x94(r25)` @0x82309670 -- the SAME unnamed
+    // GameModeParams+0x94 byte BrnModeManager_Prepare.cpp's "THE SECOND-PHASE CACHE" banner
+    // refuses to name (laying the DWARF member run between the two asm-pinned anchors comes up
+    // 24 bytes short, so +0x94 lands inside a float under every consistent reading). That
+    // banner's finding applies unchanged here: GameModeParams::Construct zeroes the block, so
+    // on the whole offline campaign path the byte is zero and the offline arm is the one the
+    // console takes. Taking it unconditionally therefore diverges only on the online paths,
+    // which are parked wholesale.
+    // DELETE-WHEN GameModeParams+0x94 is a named member: restore the fork.
+    //
+    // The mode-type half of the console's outer gate (`lwz r11, 0x148(r25)` @0x8230962C, the
+    // 15/16 pair, `bne -> loc_8230988C` skips the whole grid/opponents block) IS reproduced --
+    // it reads a member this tree does have.
+    // ========================================================================================
+    if (meGameModeType != BrnGameState::GameStateModuleIO::E_MODE_ONLINE_FREE_BURN_LOBBY &&
+        meGameModeType != BrnGameState::GameStateModuleIO::E_MODE_ONLINE_SHOWTIME)
+    {
+        SetActiveRaceCarForPlayerScoringIndex(
+            static_cast<BrnGameState::GameStateModuleIO::EPlayerScoringIndex>(
+                lpGameModeParams->miNumRivals),
+            mePlayerActiveRaceCarIndex);
+
+        // [DIAG] NOT IN THE X360 BINARY -- one line per prepare-for-mode, the proof rung for
+        // the three-leg chain above. Pairs with the "[scoring-bind]" rung in
+        // GameStateModule::PostWorldUpdateStuntBringUp: this one says what the world module
+        // mapped, that one says what the scoring system bound.
+        if (CgsDev::Log::gpDebugPrint != 0)
+        {
+            *CgsDev::Log::gpDebugPrint
+                << "[scoring-map] prepare-for-mode: player scoring slot "
+                << static_cast<s32>(lpGameModeParams->miNumRivals)
+                << " -> active race car " << static_cast<s32>(mePlayerActiveRaceCarIndex)
+                << " (mode " << static_cast<s32>(meGameModeType) << ")\n";
+        }
     }
 
     SetAllActiveCarsInGameMode(mbCarSelectAllowedInGameMode);

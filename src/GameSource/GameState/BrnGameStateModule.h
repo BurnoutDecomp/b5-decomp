@@ -274,6 +274,11 @@ public:
     // added for ModeManager's back-pointer wiring (ConstructInterModeStateBringUp): the console
     // passes &mProgressionManager as ModeManager::Construct's argument at the sole call site;
     // the bring-up seam reaches it through this accessor instead of a raw offset.
+    // [PC bring-up observer -- NOT an X360 method.] See mbPrepare2Complete's note: true once
+    // Prepare2's progression AND street legs have both completed, i.e. once the two bundles the
+    // GUI lane's WorldDataController::Prepare2 acquires by name are resident in pool 5.
+    bool IsPrepare2Complete() const { return mbPrepare2Complete; }
+
     BrnProgression::ProgressionManager*       GetProgressionManager()       { return &mProgressionManager; }
     const BrnProgression::ProgressionManager* GetProgressionManager() const { return &mProgressionManager; }
 
@@ -405,6 +410,33 @@ public:
     // timer block is filled: this parameter then goes and the body reads it off the buffer.
     void PreWorldUpdateStuntBringUp(f32 lfGameTimestep, bool lbIsAGameModeActive,
                                     const CgsSystem::TimerStatusInterface& lrTimerStatusInterface);
+
+    // ⭐⭐⭐ [A9 scoring-feed wave 2026-08-27] CopyScoringDataToOutput -- X360 0x8236CDC0, REAL,
+    // whole. Not an extracted leg: this is the console function, one for one.
+    //
+    // WHY IT IS LOAD-BEARING. It is the SOLE caller of ModeManager::WriteDataToOutput
+    // @0x82337B70 (bodied + mounted, BrnModeManager.cpp:285) -> ScoringSystem::WriteDataToOutput
+    // @0x8232AE98 (bodied + mounted, BrnScoringSystem_Lifecycle.cpp:385) -- both of which had NO
+    // caller at all -- and it itself writes the twelve ScoringOutputInterface scalars the
+    // GameState->Gui bridge gates on, meGameModeType (+0xA3C) and mbTimerActive (+0xAA8) among
+    // them. Without it the bridge posts GUI id 424 every frame with an all-zero payload (and a
+    // clear mbTimerActive, which FREEZES mfEventTime rather than zeroing it) and never posts id
+    // 428 at all, because that build gate reads the scoring interface's meGameModeType.
+    //
+    // CONSOLE CALL SITE, exact: GameStateModule::PreWorldUpdate @0x823A5328's ONLY xref-to,
+    // between `RumbleManager::UpdatePauseState` and the `(a6 & 8)` TriggerQueryManager block,
+    // inside the `LockForWrite(lpOutput)` bracket, monitored by the +292348 PerfMon slot.
+    //
+    // [FLAG PC bring-up] ONE deviation, the same one PreWorldUpdateStuntBringUp above carries
+    // and for the same measured reason: the frame's Time comes from a TimerStatusInterface
+    // handed in by the caller instead of from the module's own 48-byte copy of the
+    // PreWorldInputBuffer's timer block (the console reads gsm+208368, which is that copy's
+    // mSimTimerStatus.mTime -- EmmPreWorldUpdate @0x8238EF50 fills gsm+208328..+208372 with the
+    // twelve-word copy). Nothing on PC fills that block, so the console route would hand this
+    // function an all-zero "now" and every published mode time would be garbage. Same data, one
+    // copy earlier. DELETE-WHEN DoUpdate_GameStatePreWorld stages a real PreWorldInputBuffer.
+    void CopyScoringDataToOutput(GameStateModuleIO::OutputBuffer* lpOutput,
+                                 const CgsSystem::TimerStatusInterface& lrTimerStatusInterface);
 
     // ⭐⭐ [D4 stuntrace WAVE D] X360 ProcessGameEvents @0x823A0A18, THE CASE-20 ARM
     // (E_EVENT_PLAYER_ACCEPTED_MODE; asm 0x823A2680..0x823A2718, source BrnGameStateModule.cpp:2456
@@ -632,6 +664,17 @@ public:
     // maSpawnLocations[1]. Its two console call sites are ProcessGameEvents case 110 and
     // PreWorldUpdate @0x823A5328 (behind the one-shot latch below).
     void SendSetupPlayerCarEvent(GameStateModuleIO::GameActionQueue* lpActionQueue);
+
+    // ⭐⭐ X360 0x823759D0 -- SendSetUpAllEventStartsMessage. THE EVENT-START TABLE PRODUCER, and
+    // the only path in the image to SetUpAllEventStartsInterface::AddEventStart @0x82361398.
+    // Walks every light trigger of every TrafficData hull, keeps the junctions that carry BOTH
+    // start grids, and publishes {junction position, light-trigger id, junction id, event junction
+    // id, county, nearest AI section} into the output buffer's SetUpAllEventStartsInterface, then
+    // raises its valid flag for BridgeGameStateToGui to turn into GUI event 203.
+    // Its two console call sites are PreWorldUpdate @0x823A5328 (the one-shot latch below, which
+    // is where this build calls it) and ProcessGameEvents @0x823A0A18.
+    // Body: GameStateModule_SendSetUpAllEventStarts.cpp (read its banner before touching this).
+    void SendSetUpAllEventStartsMessage(GameStateModuleIO::OutputBuffer* lpOutput);
 
     // X360 0x82363450 -- the player-scoring slot currently mapped to leActiveRaceCarIndex.
     // Linear scan of the scoring module's eight per-player records (stride 344 bytes) for the one
@@ -1334,6 +1377,14 @@ private:
         E_PREPARE2STAGE_DONE           = 3,
     };
     EPrepare2Stage mePrepare2Stage = E_PREPARE2STAGE_START;
+
+    // [PC bring-up observer -- NOT an X360 member.] True once Prepare2 has completed BOTH legs,
+    // i.e. once "Progression.dat" and "STREETDATA.DAT" are resident in pool 5. It cannot be
+    // derived from mePrepare2Stage: the console never writes 3 into that word (case 3 is only
+    // `li r28, 1`), so the stage word stops at 2. Read by BrnGameModule::ResourceUpdateThread
+    // through IsPrepare2Complete() to hold the GUI lane's WorldDataController::Prepare2 until
+    // the two resources it acquires by name actually exist. See the latch site in Prepare2.
+    bool mbPrepare2Complete = false;
 
     // DWARF BrnGameStateModule.h:201 (X360 this+42320). The track-trigger dispatcher that owns
     // the loaded TriggerData / traffic-lane resources. Held BY VALUE as the console holds it.

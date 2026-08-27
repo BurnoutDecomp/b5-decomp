@@ -252,6 +252,18 @@ public:
     // shops read its id and write its colour/palette.
     CarData* GetCurrentCarData();
 
+    // The chosen-livery record for that car (NULL when none). ADDITIVE GROW (A9 scoring-feed
+    // wave 2026-08-27): the console has no out-of-line accessor -- every reader inlines the
+    // `manager + 133332` adjust -- and this is the second such reader to need it.
+    //   AddDistanceDriven @0x823668F0 ACCUMULATES into `*(*(this + 133332) + 16)`;
+    //   GameStateModule::CopyScoringDataToOutput @0x8236CDC0 PUBLISHES the same float
+    //   (`lwzx r11, gsm+47920, 0x208D4 ; lfs f0, 0x10(r11) ; stfs f0, 0xAA4(out)`) as
+    //   ScoringOutputInterface::mfDistanceDrivenInCurrentCar, or 0.0f when the pointer is null.
+    // LiveryData::mfDistanceDriven is at +0x10 (BrnProgressionLiveryData.h, pinned by
+    // Profile::SetChosenLiveryIdForBaseCar's `stfs 0.0, 0x10(r11)`), which is what makes the
+    // +133332 seat -- and this accessor -- the right one rather than mpCurrentCarData@+133328.
+    LiveryData* GetCurrentLiveryData();
+
     // The loaded ProgressionData resource (the event-junction table UnlockCarChallengeForCar walks).
     const ProgressionData* GetProgressionData() const;
 

@@ -97,7 +97,15 @@ public:
     const TrafficLightController* GetLight(u32 luLight) const;      // :87
     bool    IsLightRed(u32 luState, u32 luLight) const;             // :88
     u32     GetEventJunctionID() const    { return muEventJunctionID; }    // :90 (see GetID above)
-    Vector3 GetPosition() const;                       // :94
+
+    // ⭐ [event-starts producer wave 2026-08-27] BODIED (was declare-only), on the same terms as
+    // GetID/GetEventJunctionID above: the X360 emits no standalone symbol, every reader renders as
+    // a bare load of the +0x110 lane. Attested at GameStateModule::SendSetUpAllEventStartsMessage
+    // @0x82375C88 -- `li r16, 0x110` hoisted out of the loop, then `lvx128 v127, r30, r16` with r30
+    // == the JunctionLogicBox TrafficData::GetJunctionLogicBoxForTrafficLight just returned, and v1
+    // (== v127) is handed straight to SetUpAllEventStartsInterface::AddEventStart as the record's
+    // position lane. Which is what puts the event icon on the sat-nav map at the right place.
+    Vector3 GetPosition() const           { return mPosition; }            // :94
     void    FixUp(const void* lpBaseData);             // :119
     void    FixDown(const void* lpBaseData);           // :124
 

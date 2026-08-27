@@ -13,6 +13,7 @@
 #include "SharedClasses/DataLists/VehicleList.h"                             // mVehicleList (X360 a1+444336)
 #include "SharedClasses/DataLists/ICEList.h"                                 // mICEList     (X360 a1+457664)
 #include "SharedClasses/DataLists/WheelList.h"                               // mWheelList   (X360 a1+458696)
+#include "SharedClasses/DataLists/ChallengeList.h"                           // mChallengeList (X360 a1+462800)
 #include "SharedClasses/DataLists/BrnHudMessageController.h"                 // [gateui r3] mHudMessageController (X360 a1+416080 == 0x65950)
 #include "rw/rwcore_structs.h"                                               // rw::Resource / ResourceDescriptor (maGeneratedRaw*)
 
@@ -64,11 +65,14 @@ namespace BrnResource
             E_PREPARE_DONE = 7,
             // The X360 numbers its data-table stages 9..14 (PrepareVehicleList 9,
             // PrepareFreeburnChallengeList 10, PrepareICEList 11, PrepareWheelList 12,
-            // PrepareHudMessages 13, PreparePopups 14). The three that are live here keep the
-            // console's numbers; the DLC 16-18 / GameTalk 7 stages and 10/13/14 are still
+            // PrepareHudMessages 13, PreparePopups 14). The four that are live here keep the
+            // console's numbers; the DLC 16-18 / GameTalk 7 stages and 14 are still
             // skipped between ATTRIBSYS and DONE. (Order of execution comes from the switch's
             // fall-through order below, not from the numeric value.)
             E_PREPARE_VEHICLE_LIST = 9,
+            // [challenge-list wave 2026-08-27] X360 stage 10, PrepareFreeburnChallengeList
+            // @0x8266C088 -- "OnlineChallenges.bndl" / "B5ChallengeList" into POOL 26.
+            E_PREPARE_CHALLENGE_LIST = 10,
             E_PREPARE_ICE_LIST     = 11,
             E_PREPARE_WHEEL_LIST   = 12,
             // [gateui r3] X360 stage 13, PrepareHudMessages @0x8266C8E0 -- the HUD-message
@@ -182,6 +186,17 @@ namespace BrnResource
         // manager's AddListResource. Returns true only in the terminal state.
         bool PrepareVehicleList();   // 0x8266C410  "Vehicles/VehicleList.bundle" / "B5VehicleList"
         bool PrepareWheelList();     // 0x8266D1F8  "Wheels/WheelList.bundle"     / "B5WheelList"
+        // [challenge-list wave 2026-08-27] @0x8266C088 -- Prepare stage 10. The SAME six-state
+        // machine over "OnlineChallenges.bndl" / "B5ChallengeList", but on POOL 26 (`li r25,
+        // 0x1A` at 0x8266C0F0, stored as BOTH the LoadBundleRequest's miPoolId @+0x8C and the
+        // AcquireResourceRequest's miPoolId @+0x08) with mbAllowFailiure = TRUE (`li r11, 1`
+        // stored at +0x90). Its terminal step feeds the handle to
+        // BrnResource::ChallengeList::AddListResource @0x8267B598. Both string literals are the
+        // IDA asm's own string comments on off_82F2A6F0 / off_82F2A718, and both are CONFIRMED
+        // against the shipped bundle: HashString("B5ChallengeList") == 0x0D82D720 is exactly the
+        // single resource id in build/game/ONLINECHALLENGES.BNDL (type 0x1001F).
+        // Assert lines: cpp:716 / 769 / 776 / 803.
+        bool PrepareFreeburnChallengeList();  // 0x8266C088
         // @0x8266CEB0 -- Prepare stage 11, the SAME six-state machine over
         // "Cameras.bundle" / "StandardICETakes" (both string literals read straight off the
         // asm's own string comments at off_82F2A6F8 / off_82F2A71C, and both confirmed by
@@ -330,6 +345,16 @@ namespace BrnResource
         void ProcessGetICEListRequest(CgsResource::ResourceIO::InputBuffer* lpResourceInput,
                                       const GameDataIO::GameDataAssetEvent* lpEvent,
                                       s32 liEventId, s32 liSlotIndex);                 // 0x826667C8
+        // [challenge-list wave 2026-08-27] the FOURTH list GET, id 53. Same 20-instruction
+        // shape as the vehicle handler, with the two X360 immediates mId ==
+        // 0x5AF30CD3F949F838 (the id RequestInterface<N>::GetFreeburnChallengeList puts in the
+        // request) and the resource-memory lane carrying `this + 462800` == &mChallengeList
+        // (X360 `addis r11, r31, 7 ; addi r11, r11, 0xFD0` -- 0x70000 + 0xFD0 == 462800, the
+        // SAME expression PrepareFreeburnChallengeList's AddListResource uses, which is what
+        // pins the member).
+        void ProcessGetFreeburnChallengeListRequest(CgsResource::ResourceIO::InputBuffer* lpResourceInput,
+                                                    const GameDataIO::GameDataAssetEvent* lpEvent,
+                                                    s32 liEventId, s32 liSlotIndex);    // 0x82666728
         void ProcessGetWheelListRequest(CgsResource::ResourceIO::InputBuffer* lpResourceInput,
                                         const GameDataIO::GameDataAssetEvent* lpEvent,
                                         s32 liEventId, s32 liSlotIndex);               // 0x82666868
@@ -341,6 +366,8 @@ namespace BrnResource
         BrnResource::VehicleList& GetVehicleList() { return mVehicleList; }
         BrnResource::ICEList&     GetICEList()     { return mICEList; }
         BrnResource::WheelList&   GetWheelList()   { return mWheelList; }
+        // [challenge-list wave 2026-08-27] the fourth resident table (X360 `this + 462800`).
+        BrnResource::ChallengeList& GetChallengeList() { return mChallengeList; }
 
         // [gateui r3] ADDITIVE accessor. The console never spells one: the module's OWNER
         // hands `&gameDataModule.mHudMessageController` (== `this + 0x65950`) to
@@ -443,8 +470,17 @@ namespace BrnResource
         BrnResource::VehicleList       mVehicleList;
         BrnResource::ICEList           mICEList;
         BrnResource::WheelList         mWheelList;
-        // X360 a1[140] / a1[141] / a1[142] -- the three data-table prepares' own stage words
-        // (each Prepare* helper owns one; a1[141] is PrepareICEList's, X360 offset 0x234).
+        // [challenge-list wave 2026-08-27] X360 a1+462800 -- the resident FREEBURN CHALLENGE
+        // table, the fourth member of the same family. Attested TWICE and identically:
+        // PrepareFreeburnChallengeList @0x8266C088 hands `a1 + 115700` (dwords == 462800 bytes)
+        // to ChallengeList::AddListResource, and ProcessGetFreeburnChallengeListRequest
+        // @0x82666728 replies with `this + 0x70000 + 0xFD0` -- the same object.
+        BrnResource::ChallengeList     mChallengeList;
+        // X360 a1[139] / a1[140] / a1[141] / a1[142] -- the four data-table prepares' own stage
+        // words (each Prepare* helper owns one; a1[139] is PrepareFreeburnChallengeList's, X360
+        // offset 0x22C -- `lwz r11, 0x22C(r30)` at its switch head; a1[141] is PrepareICEList's,
+        // X360 offset 0x234).
+        s32                            miChallengeListPrepareStage;
         s32                            miVehicleListPrepareStage;
         s32                            miICEListPrepareStage;
         s32                            miWheelListPrepareStage;

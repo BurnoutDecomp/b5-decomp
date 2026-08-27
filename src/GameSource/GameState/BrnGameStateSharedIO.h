@@ -363,32 +363,53 @@ namespace BrnGameState
 
             // One per-event start record. 48-byte stride (X360-authoritative: AddEventStart builds
             // the record then the append copies 6 QWORDs == 48 bytes into &maElements[miCount], and
-            // 175 * 48 == 0x20D0 == the miCount offset). Field roles recovered from the X360 store
-            // map at the EventSta call setup (0x823614C4..): a leading 16-byte block, then five
-            // scalar words the caller passes. The two words the AddEventStart scan/assert touch are
-            // named by role (the +0x14 word is the scanned event index, the +0x18 word is the event
-            // id matched by "luEventID == maEventStarts.GetItem(...).GetEventID()"); the remaining
-            // caller-supplied words have no attested semantics and are spelled by their source arg.
+            // 175 * 48 == 0x20D0 == the miCount offset).
+            //
+            // ⭐ EVERY FIELD IS NAMED BY ROLE NOW (2026-08-27, the event-starts producer wave). The
+            // earlier pass could only spell the five scalars by their source register because the
+            // ONE producer -- GameStateModule::SendSetUpAllEventStartsMessage @0x823759D0 -- was
+            // unreconstructed. It is bodied now, and its AddEventStart call setup
+            // (0x82375C7C..0x82375CAC) names all six arguments outright:
+            //     v1 = lvx128 v127, r30, 0x110   -> JunctionLogicBox::mPosition   -> +0x00
+            //     r6 = r29                        -> the packed LightTriggerId     -> +0x10
+            //     r4 = lwz r27, 0(r30)            -> JunctionLogicBox::muID        -> +0x14
+            //     r5 = lwz r28, 0x38(r30)         -> JunctionLogicBox::muEventJunctionID -> +0x18
+            //     r7 = WorldRegion::DistrictToCounty(WorldMap2D::GetValue(pos))    -> +0x1C
+            //     r8 = AISectionsData::FindNearestAISection(pos, pointMap)         -> +0x20
+            // and the console's own WARNING print in the miss arm labels r27 "junction id" and r28
+            // "event junction id", which is what makes the +0x14/+0x18 pair unambiguous.
+            //
+            // The GUI cache models the SAME console record as BrnGui::SatNavEventDisplayInfo
+            // (BrnGuiEventTypeDefs.h) -- GuiCache::RecEvent's case-203 arm memcpys this whole
+            // interface over the cache's own copy at GuiCache+0x5690.
+            //
+            // ⚠️ mv3Position IS 16-BYTE ALIGNED AND THAT IS LOAD-BEARING: it is what makes
+            // sizeof(EventStart) == 0x30 and sizeof(SetUpAllEventStartsInterface) == 0x20E0 (8416),
+            // the two literals the console bakes into the bridge memcpy and AddEvent size. The
+            // static_asserts at the bottom of this class pin both.
             class EventStart
             {
             public:
-                // Inline read of the event id (matched by AddEventStart's assert) and the event
-                // index (matched by AddEventStart's linear scan). No standalone X360 symbols --
-                // both are inlined at the AddEventStart compare/assert sites.
-                s32 GetEventIndex() const { return miEventIndex; }
-                s32 GetEventID() const    { return miEventID; }
+                // Inline reads. No standalone X360 symbols -- every one renders as a bare load at
+                // its consumer (AddEventStart's compare/assert sites, the bridge's record copy).
+                s32     GetEventIndex() const     { return miEventIndex; }
+                s32     GetEventID() const        { return miEventID; }
+                Vector3 GetPosition() const       { return mv3Position; }
+                u32     GetLightTriggerId() const { return muLightTriggerId; }
+                s32     GetCounty() const         { return miCounty; }
+                s16     GetAISectionIndex() const { return mi16AISectionIndex; }
 
             private:
                 // AddEventStart builds a record field-by-field from the caller's args.
                 friend class SetUpAllEventStartsInterface;
 
-                u8  maLeadingBlock[16]; // +0x00  16-byte block from the caller's vector arg (v1)
-                s32 miWord10;           // +0x10  caller arg a4 (r6)
-                s32 miEventIndex;       // +0x14  caller arg a2 (r4); AddEventStart's scan key
-                s32 miEventID;          // +0x18  caller arg a3 (r5); GetEventID()
-                s32 miWord1C;           // +0x1C  caller arg a5 (r7)
-                s16 miWord20;           // +0x20  caller arg a6 (r8, __int16)
-                u8  maPad0x22[0x30 - 0x22]; // pad the record to its 0x30 (48-byte) stride
+                Vector3 mv3Position;        // +0x00  JunctionLogicBox::GetPosition() (the v1 lane)
+                u32     muLightTriggerId;   // +0x10  the packed BrnTraffic LightTriggerId (arg a4/r6)
+                s32     miEventIndex;       // +0x14  JunctionLogicBox::GetID(); AddEventStart's scan key
+                s32     miEventID;          // +0x18  JunctionLogicBox::GetEventJunctionID(); GetEventID()
+                s32     miCounty;           // +0x1C  BrnWorld::ECounty of the junction position
+                s16     mi16AISectionIndex; // +0x20  nearest AI section (u16 answer, stored as __int16)
+                u8      maPad0x22[0x30 - 0x22]; // pad the record to its 0x30 (48-byte) stride
             };
 
             // X360 0x82361398. Find the EventStart whose event index == liEventIndex (linear scan
@@ -396,12 +417,33 @@ namespace BrnGameState
             // liEventID and return that record. Otherwise assert the over-capacity guard
             // (maEventStarts.GetLength() < maEventStarts.GetCapacity(), :1728), build a fresh
             // EventStart from the supplied fields and Append it, returning the new record.
-            EventStart* AddEventStart(const u8* lpLeadingBlock, s32 liEventIndex, s32 liEventID,
-                                      s32 liWord10, s32 liWord1C, s16 liWord20);
+            EventStart* AddEventStart(Vector3 lv3Position, s32 liEventIndex, s32 liEventID,
+                                      u32 luLightTriggerId, s32 liCounty, s16 li16AISectionIndex);
 
             // X360 0x824F7688. The live count of registered event-start records; returns
             // maEventStarts.GetLength() (BrnGuiCache::GetNumEventStarts forwards to this).
             u32 GetNumEventStarts() const;
+
+            // The read side the GameState->Gui bridge walks (X360: the bridge memcpys the whole
+            // interface, so it emits no accessor; de-inlined here because the host copy is
+            // member-wise, not a byte blit -- see GameBridgeGameStateToX_EventStartsGuiEvents.cpp).
+            const EventStart& GetEventStart(u32 luIndex) const { return maEventStarts.GetItem(luIndex); }
+
+            // The console's own `stw r11, var_C0(r1)` with r11 == 0 @0x82375A94 -- the local
+            // interface SendSetUpAllEventStartsMessage builds is Construct'd (count -1 -> 0)
+            // before the first AddEventStart, which is what keeps the CgsArray.h:336
+            // "Array used before Construct/Clear was called" guard silent.
+            void Construct() { maEventStarts.Construct(); }
+
+            // Layout pin. NEVER CALLED; in-class because the member it measures is private.
+            static void _AssertLayout()
+            {
+                static_assert(sizeof(EventStart) == 0x30,
+                              "EventStart stride -- the X360 append copies 6 QWORDs");
+                static_assert(sizeof(SetUpAllEventStartsInterface) == 0x20E0,
+                              "SetUpAllEventStartsInterface -- the 0x20E0 the console memcpys "
+                              "(0x82375E44) and AddGuiEvent<GuiEventUpdateEventStarts> sizes (0x823D1394)");
+            }
 
         private:
             // X360 0x8235B7D8 (Hex-Rays "...::EventSta"): the inlined generic

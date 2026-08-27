@@ -200,6 +200,14 @@ struct ChallengeListEntry
     static const int32_t KI_CHALLENGE_VERSION              = 1;   // :327
     static const int32_t KI_MAX_ACTIONS_PER_CHALLENGE      = 2;   // :328
     static const int32_t KI_MAX_CHALLENGE_STRING_ID_LENGTH = 16;  // :329
+    // [challenge-list wave 2026-08-27] ADDITIVE GROW (FLAG -- name from the baked assert
+    // text, value from the binary). SetNumPlayers' second guard, inlined into
+    // ChallengeList::AddListResource @0x8267B598, fires "liNumPlayers <= KI_MAX_PLAYERS"
+    // (ChallengeListEntry.h:876) when the count exceeds EIGHT (`cmpwi r31, 8 ; ble`). The
+    // constant is not in the PS3 DWARF for this class, so it is named here from the assert
+    // string and sized from that compare; 8 is also the engine-wide player cap
+    // (BrnGameActions.h KI_MAX_PLAYERS == BrnWorld::KI_MAX_ACTIVE_RACE_CARS).
+    static const int32_t KI_MAX_PLAYERS                    = 8;
 
     // -- ChallengeListEntry.h:331 --
     enum ECarRestrictionType
@@ -424,11 +432,69 @@ inline CgsID ChallengeListEntry::GetChallengeID() const
 //     0x8251FA74  bl   BrnGui__GuiHudMessage__AddParam   (type 6 == STRINGID, string 1)
 // +0xB0 is macTitleStringID (DWARF ChallengeListEntry.h:456), the 16-byte char array
 // right after macDescriptionStringID -- so the accessor returns the embedded array, not a
-// stored pointer, and there is nothing to null-check. (Its twin GetDescriptionStringID
-// @+0xA0 is the identical shape; left declared-only until a caller needs it.)
+// stored pointer, and there is nothing to null-check.
 inline const char* ChallengeListEntry::GetTitleStringID() const
 {
     return macTitleStringID;
+}
+
+// [gateui] the twin, identical shape over macDescriptionStringID (+0xA0). A caller arrived
+// 2026-08-27: RaceMainHudState::StartFreeburnChallengeTicker @0x8247ABC0 inlines it as
+// `addi r21, r20, 0xA0`.
+inline const char* ChallengeListEntry::GetDescriptionStringID() const
+{
+    return macDescriptionStringID;
+}
+
+// [gateui] the per-challenge player count. X360 always inlines it: StartFreeburnChallengeTicker
+// @0x8247AAC0/0x8247AAC4 does `lbz r11, 0xD3(r20) ; clrlwi r6, r11, 28` == muNumPlayers & 0xF,
+// the same read BrnChallengeManager_wB_03.cpp:118 and _wC_01.cpp:259 record. Replaces the
+// BrnFriendsListLinkGates.cpp return-0 gate (deleted in the same change -- its "unreachable
+// today" premise died when the ticker mounted).
+inline int32_t ChallengeListEntry::GetNumPlayers() const
+{
+    return muNumPlayers & 0xF;
+}
+
+// [challenge-list wave 2026-08-27] The other half of the muNumPlayers byte. X360-inlined;
+// recovered from ChallengeList::AddListResource @0x8267B598, whose post-load pass reads the
+// LOW nibble, range-checks it and stores `17 * n` back -- i.e. the byte is a PAIR of nibbles
+// {original << 4 | current}, and 17*n writes the same value into both. MEASURED against the
+// shipped build/game/ONLINECHALLENGES.BNDL: every one of its 458 records already carries a
+// matched pair (0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88 -- nothing else), so the store is
+// idempotent on retail data, exactly as a "publish the authored count into both nibbles"
+// pass should be.
+inline int32_t ChallengeListEntry::GetOriginalNumPlayers() const
+{
+    return ( muNumPlayers >> 4 ) & 0xF;
+}
+
+// ChallengeListEntry::SetNumPlayers (DWARF :412) -- X360-inlined into
+// ChallengeList::AddListResource @0x8267B598, verbatim:
+//     v23 = *(entry + 0xD3) & 0xF;
+//     if (v23 == 0)  FireAssert("liNumPlayers >= 1",            ChallengeListEntry.h, 874);
+//     if (v23 > 8)   FireAssert("liNumPlayers <= KI_MAX_PLAYERS", ChallengeListEntry.h, 876);
+//     ...
+//     *(entry + 0xD3) = 17 * v23;
+// Both guards are the console's own, in the console's order, and both are non-fatal
+// (log-and-continue) exactly as CGS_ASSERT is. The 17 is `(n << 4) | n` -- see
+// GetOriginalNumPlayers above.
+inline void ChallengeListEntry::SetNumPlayers( int32_t liNum )
+{
+    CGS_ASSERT( liNum >= 1, "liNumPlayers >= 1" );
+    CGS_ASSERT( liNum <= KI_MAX_PLAYERS, "liNumPlayers <= KI_MAX_PLAYERS" );
+
+    muNumPlayers = static_cast<uint8_t>( 17 * liNum );
+}
+
+// ChallengeListEntryAction::SetCombineAction (DWARF :253) -- X360-inlined into
+// ChallengeList::AddListResource's post-load pass, which is the ONLY writer of the byte in
+// the whole image (`*(80 * actionIndex + entry + 3) = <value>`). +0x03 is
+// muCombineActionType; the write carries no guard of its own on the console (the guards at
+// the call site belong to GetAction's index range).
+inline void ChallengeListEntryAction::SetCombineAction( ECombineActionType leType )
+{
+    muCombineActionType = static_cast<uint8_t>( leType );
 }
 
 inline const ChallengeListEntryAction* ChallengeListEntry::GetAction( int32_t liActionIndex ) const

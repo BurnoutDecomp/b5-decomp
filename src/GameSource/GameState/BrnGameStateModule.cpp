@@ -4,6 +4,9 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"              // [diagnostic] Prepare's per-stage log line
 #include "GameSource/GameState/ModeManager/BrnModeManager.h"            // BrnGameState::ModeManager::GetCurrentGameMode
 #include "GameSource/GameState/ModeManager/GameModes/BrnGameMode.h"     // BrnGameState::GameMode::IsOnline
+#include "GameSource/GameState/ModeManager/Scoring/BrnScoringSystem.h"  // [A9] ScoringSystem timer + medal accessors (CopyScoringDataToOutput)
+#include "GameShared/GameClasses/System/Timer/CgsTimerStatusInterface.h" // [A9] CgsSystem::TimerStatusInterface / Time (the frame's "now")
+#include "GameSource/GameState/Progression/BrnProgressionLiveryData.h"  // [A9] BrnProgression::LiveryData::mfDistanceDriven
 #include "GameSource/GameState/BrnGameStateSharedIO.h"                  // GameStateModuleIO::EGameModeType (E_MODE_*_SHOWTIME)
 #include "GameSource/GameState/Progression/BrnProgressionManager.h"     // BrnProgression::ProgressionManager::GetProfile
 #include "GameSource/GameState/Progression/BrnProfile.h"                // BrnProgression::Profile::SetCarUnlockAlreadyShown
@@ -900,6 +903,19 @@ bool GameStateModule::Prepare2(GameStateModuleIO::OutputBuffer* lpOutputBuffer)
         // The console does NOT write 3 into the stage word here (case 3 is only `li r28, 1`), so
         // a later re-entry re-runs the street leg -- which is idempotent once loaded. Reproduced:
         // no store.
+        //
+        // [PC bring-up observer, 2026-08-27 -- NOT an X360 store, and deliberately NOT the stage
+        // word.] Latch that BOTH second-pass bundles ("Progression.dat" and "STREETDATA.DAT")
+        // are now resident in pool 5. The GUI lane's own second-pass machine,
+        // BrnGui::WorldDataController::Prepare2, ACQUIRES those two resources BY NAME out of the
+        // same pool -- and an acquire for an absent resource is ANSWERED (with a null memory
+        // pointer), not queued, so running it early does not retry, it binds nothing and latches
+        // its terminal state for the rest of the session. On the console the module scheduler's
+        // Prepare2 pass orders the two lanes; on PC the GUI lane is driven from
+        // BrnGameModule::ResourceUpdateThread, which starts long before this flow state runs, so
+        // it needs this signal to hold off. DELETE-WHEN the module scheduler's real Prepare2 pass
+        // orders the two lanes.
+        mbPrepare2Complete = true;
         lbDone = true;
         break;
 
@@ -1904,7 +1920,24 @@ void GameStateModule::PreWorldUpdateSetupPlayerCarBringUp(bool lbMayCompleteJunk
     if (mbSendSetupPlayerCarPending)
     {
         mbSendSetupPlayerCarPending = false;   // the console's `stb r17, 0(r28)` -- one-shot
+
+        // ⭐⭐ THE FLAG THAT USED TO STAND AT THE BOTTOM OF THIS FUNCTION IS RETIRED
+        // (2026-08-27, event-starts producer wave). SendSetUpAllEventStartsMessage @0x823759D0 is
+        // BODIED now (GameStateModule_SendSetUpAllEventStarts.cpp) and this is the console's own
+        // partner call on this same one-shot latch -- PreWorldUpdate @0x823A5510..0x823A5540 runs
+        // SendSetupPlayerCarEvent AND SendSetUpAllEventStartsMessage(lpOutput) under it, in this
+        // order, inside the write lock this bracket already holds (which is required: the
+        // publish's SetSetUpAllEventStartsInterfaceIsValid asserts the buffer is locked for
+        // writing). It publishes the event-start table -- the ONLY path in the image to
+        // SetUpAllEventStartsInterface::AddEventStart @0x82361398, and therefore the only thing
+        // that ever puts a record in the GUI cache's maEventStarts. Until it ran,
+        // GuiCache::GetProfileEventDisplayInfo walked a zero-length array on every sat-nav
+        // refresh and fired the console's own "Unable to find event start with event id: ".
+        // ⓘ ONE-SHOT: the latch fires at the end of Prepare's terminal stage, which is the first
+        // moment the producer's three data preconditions (TrafficData, AI lanes, district map)
+        // are all satisfied.
         SendSetupPlayerCarEvent(lpActionQueue);
+        SendSetUpAllEventStartsMessage(mpOutputBuffer);
     }
     if (lbMayCompleteJunkyardEntry)
     {
@@ -1912,20 +1945,6 @@ void GameStateModule::PreWorldUpdateSetupPlayerCarBringUp(bool lbMayCompleteJunk
     }
     mbIsUpdating = false;
     mpOutputBuffer->UnlockForWrite();
-
-    // [FLAG PC bring-up] SendSetUpAllEventStartsMessage (the console's partner call on this same
-    // latch) is not reconstructed. It publishes the event-start table to the GUI -- i.e. it is
-    // the ONLY thing that ever reaches SetUpAllEventStartsInterface::AddEventStart @0x82361398,
-    // and therefore the only thing that ever puts a record in maEventStarts.
-    // ⛔ THE "no consumer on this build" HALF OF THIS FLAG IS RETRACTED (2026-08-27). It stopped
-    // being true when the HUD H3b sat-nav slice landed (2026-08-25): BrnGui::GuiCache::
-    // GetProfileEventDisplayInfo is a live consumer, reached every drive from
-    // SatNavRenderer::RefreshSatNavIconInfo, and because this producer never runs it walks an
-    // empty array and fires the console's own "Unable to find event start with event id: "
-    // assert (BrnGuiCache_wH3b.cpp, where the full chain is written down). The assert is
-    // faithful and non-gating -- the caller carries a FLAG'd null guard -- but it is a STANDING
-    // RUNTIME REPORT OF THIS GAP, and it will keep firing until this call is reconstructed.
-    // DELETE-WHEN: SendSetUpAllEventStartsMessage is bodied.
 }
 
 // ============================================================================
@@ -2070,6 +2089,165 @@ void GameStateModule::ProcessGameEventsActivateCarSelectBringUp(s32 liAction, s3
 
     mbIsUpdating = false;
     mpOutputBuffer->UnlockForWrite();
+}
+
+// ================================================================================================
+// ⭐⭐⭐ [A9 scoring-feed wave 2026-08-27] GameStateModule::CopyScoringDataToOutput -- X360
+// 0x8236CDC0, REAL and WHOLE (not an extracted leg). See the declaration in BrnGameStateModule.h
+// for why this one function unblocks the entire event score/timer feed, and for the ONE named PC
+// deviation (the frame's Time arrives through a TimerStatusInterface argument instead of through
+// the module's copy of the PreWorldInputBuffer timer block at gsm+208328).
+//
+// The console body, in order, with every base decoded:
+//   r28 = a1 + 235488  == mLastActiveRaceCarInterface           (the cached active-car snapshot)
+//   r26 = a2 + 173240  == lpOutput->GetScoringOutputInterface()
+//   r29 = a2 + 175976  == lpOutput->GetOnlineScoringOutputInterface()
+//   r23 = a1 + 4128    == mModeManager
+//   r20 = a1 + 7632    == mModeManager.GetScoringSystem()        (ModeManager + 0xDB0)
+// then
+//   0x8236CDF4  IsPlayerCarActive() / GetPlayerActiveRaceCarIndex() on the INTERFACE (the two
+//               asserts at BrnRaceCarEntityModuleOutputInterface.h:967 and :980 are theirs)
+//   0x8236CE78  IsOnlineGameMode()
+//   0x8236CE90  ModeManager::WriteDataToOutput(scoringOut, onlineOut, online, playerIndex)
+//   0x8236CEBC  the mabValid[8] per-active-slot presence sweep
+//   0x8236CF7C  mePlayerRaceCarIndex / meGameModeType / mbIsOnlineGameMode
+//   0x8236CFA8  the timer block, behind ScoringSystem::IsTimeLimitActive()
+//   0x8236D0D0  mfDistanceDrivenInCurrentCar
+// ================================================================================================
+void GameStateModule::CopyScoringDataToOutput(
+        GameStateModuleIO::OutputBuffer* lpOutput,
+        const CgsSystem::TimerStatusInterface& lrTimerStatusInterface)
+{
+    if (lpOutput == 0)
+    {
+        return;
+    }
+
+    GameStateModuleIO::ScoringOutputInterface* const lpScoringOut =
+        lpOutput->GetScoringOutputInterface();
+    GameStateModuleIO::OnlineScoringOutputInterface* const lpOnlineScoringOut =
+        lpOutput->GetOnlineScoringOutputInterface();
+
+    // ---- the player's active slot, as the console derives it ----------------------------------
+    // @0x8236CDF4..0x8236CE6C. IDA renders this as raw loads at interface+0x2858 / +0x2860 with
+    // two baked asserts; both asserts belong to the interface accessors the build inlined, so the
+    // calls are restored. IsPlayerCarActive() carries ":967 mePlayerActiveRaceCarIndex <
+    // E_ACTIVE_RACE_CAR_INDEX_COUNT"; GetPlayerActiveRaceCarIndex() carries ":980 Player car index
+    // hasn't been set".
+    // ⚠️ EXPLICITLY GLOBAL-QUALIFIED, type AND enumerators. Two distinct
+    // `enum EActiveRaceCarIndex : s32` live in this tree -- the global one (BurnoutConstants.h,
+    // which the race-car output interface and ModeManager::WriteDataToOutput both take) and
+    // BrnGameState::EActiveRaceCarIndex (BrnTakedownManagerTypes.h). Unqualified inside
+    // `namespace BrnGameState` the enumerators bind to the WRONG one. Same pin
+    // BrnGameStateModuleIO.h's GetActivePaybackAggressor already carries, and for the same reason.
+    ::EActiveRaceCarIndex lePlayerRaceCarIndex = ::E_ACTIVE_RACE_CAR_INDEX_INVALID;
+    if (mLastActiveRaceCarInterface.IsPlayerCarActive())
+    {
+        lePlayerRaceCarIndex = mLastActiveRaceCarInterface.GetPlayerActiveRaceCarIndex();
+    }
+
+    // ---- the delegation the whole scoring chain hangs off --------------------------------------
+    // @0x8236CE78/0x8236CE90. THE ONLY CALLER of ModeManager::WriteDataToOutput anywhere in the
+    // image -- and therefore the only caller of ScoringSystem::WriteDataToOutput behind it.
+    const bool lbOnlineGameMode = IsOnlineGameMode();
+    mModeManager.WriteDataToOutput(lpScoringOut, lpOnlineScoringOut,
+                                   lbOnlineGameMode, lePlayerRaceCarIndex);
+
+    // ---- mabValid[8]: "is there a live race car in this active slot?" --------------------------
+    // @0x8236CEBC..0x8236CF74. For each active slot, linear-search the interface's live race list
+    // for an entry whose meActiveRaceCarIndex matches; the slot is valid iff the search found one.
+    // ⓘ The console fires CgsArray.h:336 ("Array used before Construct/Clear was called") on each
+    // GetCount(); that assert is Array<T,N>::GetCount()'s own and the committed CgsArray.h
+    // GetCount() does not carry it. Not re-added here -- it belongs to the container.
+    // The `leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT` assert (BurnoutConstants.h:39) IS carried,
+    // by the range-guarded post-increment on EActiveRaceCarIndex this loop uses, in the console's
+    // own position (after the store, before the loop test).
+    for (::EActiveRaceCarIndex leActive = ::E_ACTIVE_RACE_CAR_INDEX_0;
+         leActive < ::E_ACTIVE_RACE_CAR_INDEX_COUNT;
+         leActive++)
+    {
+        const s32 liCarsInRace = mLastActiveRaceCarInterface.maCarsInTheRace.GetCount();
+        s32 liEntry = 0;
+        while (liEntry < liCarsInRace &&
+               mLastActiveRaceCarInterface.maCarsInTheRace[static_cast<u32>(liEntry)]
+                   .meActiveRaceCarIndex != leActive)
+        {
+            ++liEntry;
+        }
+        lpScoringOut->mabValid[leActive] = (liEntry < liCarsInRace);   // stbx out+0xA08 + slot
+    }
+
+    // ---- the three identity scalars ------------------------------------------------------------
+    lpScoringOut->mePlayerRaceCarIndex = GetPlayerActiveRaceCarIndex();         // stw out+0xA34
+    // @0x8236CF84 `lwz r11, 0x1DB4(r21)` == gsm+7604 == mModeManager.meCurrentGameModeType.
+    // ⭐ THIS is the word BrnGameModule::BridgeGameStateToGui gates its id-428 GuiAttackScoreUpdate
+    // build on, and the one its id-424 GuiEventScoreUpdate record is built alongside.
+    lpScoringOut->meGameModeType = mModeManager.GetCurrentGameModeType();       // stw out+0xA3C
+    // @0x8236CF8C..0x8236CFA4: the console does NOT re-call IsOnlineGameMode here -- it inlines the
+    // identical `mpCurrentGameMode ? mode->IsOnline() : false` pair a second time. De-inlined to
+    // the same two named accessors (the mbIsUpdating assert already fired on the call above).
+    {
+        const GameMode* const lpCurrentGameMode = mModeManager.GetCurrentGameMode();
+        lpScoringOut->mbIsOnlineGameMode =
+            (lpCurrentGameMode != 0) ? lpCurrentGameMode->IsOnline() : false;   // stb out+0xA40
+    }
+
+    // ---- THE HUD CLOCK -------------------------------------------------------------------------
+    // @0x8236CFA8..0x8236D0CC. The gate is `scoring->mStartTime.miSeconds >= 0 &&
+    // scoring->mEndTime.miSeconds >= 0` (asm `lwz 0(r20)` / `lwz 8(r20)`, both `cmpwi 0 ; blt`),
+    // which is EXACTLY ScoringSystem::IsTimeLimitActive() -- de-inlined to it.
+    ScoringSystem* const lpScoringSystem = mModeManager.GetScoringSystem();
+    // The frame's "now". Console: gsm+208368 == the module's copy of the PreWorldInputBuffer timer
+    // block (gsm+208328) at +40, i.e. TimerStatusInterface::mSimTimerStatus.mTime. See the FLAG at
+    // the declaration for why it arrives as an argument on PC.
+    const CgsSystem::Time lTimeNow = lrTimerStatusInterface.GetSimTimerStatus()->GetTime();
+
+    if (lpScoringSystem->IsTimeLimitActive())
+    {
+        // `Time::operator-(&tmp, &now, scoring+0)` then float(seconds)+fraction -> out+0xA90.
+        // (The X360 also carries a dead alternative arm reading scoring+0x10 (mTotalTime) for the
+        //  mStartTime.miSeconds < 0 case -- unreachable behind the gate above, so it is not
+        //  reproduced. Named, not silently dropped.)
+        lpScoringOut->mfModeTimeElapsed =
+            lpScoringSystem->GetElapsedTime(lTimeNow).GetFloatVal();            // stfs out+0xA90
+        // @0x8236D048 `ScoringSystem::GetModeTimeRemaining(&ret, scoring, &now)` -- an sret call,
+        // and THE number the stunt-run HUD clock counts down.
+        lpScoringOut->mfModeTimeRemaining =
+            lpScoringSystem->GetModeTimeRemaining(lTimeNow).GetFloatVal();      // stfs out+0xA94
+        // @0x8236D080 `Time::operator-(&tmp, scoring+8, scoring+0)` == mEndTime - mStartTime, the
+        // mode's total authored duration. Spelled through the two public accessors that name those
+        // same members: GetElapsedTime(x) IS `x - mStartTime` and GetTimeLimit() IS mEndTime, so
+        // GetElapsedTime(GetTimeLimit()) is that difference with no offset poke (hazards H9).
+        lpScoringOut->mfCurrentTargetModeTime =
+            lpScoringSystem->GetElapsedTime(lpScoringSystem->GetTimeLimit()).GetFloatVal(); // stfs out+0xA98
+        lpScoringOut->meCurrentMedalTarget   = lpScoringSystem->GetCurrentMedalTarget();    // stw  out+0xA9C
+        lpScoringOut->meCurrentMedalAchieved = lpScoringSystem->GetCurrentMedalAchieved();  // stw  out+0xAA0
+        lpScoringOut->mbTimerActive          = true;                                        // stb  out+0xAA8 (li r10,1)
+    }
+    else
+    {
+        // @0x8236D0C4..0x8236D0CC. flt_82001CC0, read from the image rodata at VA 0x82001CC0:
+        // 00 00 00 00 == 0.0f. ⚠️ ONLY these two are written on this arm -- mfModeTimeElapsed and
+        // mfCurrentTargetModeTime keep their previous values, which is what makes a stopped mode
+        // clock FREEZE on the HUD rather than snap to zero (the same shape as the mbTimerActive
+        // gate in GuiCache::RecEvent's case-424 arm, one hop later).
+        lpScoringOut->mfModeTimeRemaining = 0.0f;                               // stfs out+0xA94
+        lpScoringOut->mbTimerActive       = false;                              // stb  out+0xAA8
+    }
+
+    // ---- distance driven in the current car ----------------------------------------------------
+    // @0x8236D0D0..0x8236D100: `lis r11,2 ; ori r10,r11,0x8D4 ; addis r11,r21,1 ; addi r11,r11,
+    // -0x44D0 ; lwzx r11, r11, r10` == *(gsm + 47920 + 133332) -- mProgressionManager (gsm+47920,
+    // pinned by GameStateModule::Construct's AchievementManagerBase::Construct call) at +0x208D4,
+    // which BrnProgressionManager.h names mpCurrentLiveryData. When non-null publish its +0x10
+    // float (LiveryData::mfDistanceDriven -- the very field ProgressionManager::AddDistanceDriven
+    // @0x823668F0 accumulates into), else 0.0f (flt_82001CC0 again).
+    {
+        const BrnProgression::LiveryData* const lpLiveryData =
+            mProgressionManager.GetCurrentLiveryData();
+        lpScoringOut->mfDistanceDrivenInCurrentCar =
+            (lpLiveryData != 0) ? lpLiveryData->mfDistanceDriven : 0.0f;        // stfs out+0xAA4
+    }
 }
 
 }

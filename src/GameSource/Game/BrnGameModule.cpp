@@ -632,7 +632,7 @@ namespace BrnGame
                 lEvent.meFsmToRun      = static_cast<BrnGui::EHUDFSMs>(liFsmToRun);
                 lEvent.meFlowToUse     = static_cast<BrnGui::GuiFlow>(liFlowToUse);
                 lpBuffer->GetGuiEvents()->AddEvent(
-                    reinterpret_cast<const CgsModule::Event*>(&lEvent), 144,
+                    reinterpret_cast<const CgsModule::Event*>(&lEvent), lEvent.GetEventType(),
                     static_cast<s32>(sizeof(lEvent)));
             }
         };
@@ -2951,6 +2951,40 @@ namespace BrnGame
         // Stops re-entering once the machine reports done; while a stage is parked on a
         // request no PC producer answers it only re-checks its queue (it does not re-issue),
         // which is the console's own arm -- see the banner in BrnGuiWorldDataController.cpp.
+        //
+        // ⭐⭐ [event-starts wave 2026-08-27] AND THE SECOND MACHINE, WorldDataController::Prepare2
+        // @0x82516CB8 -- the ONLY writer of the controller's mpProgressionData / mpStreetData, and
+        // therefore the thing that makes GetEventInfoFromEventId answer with a real RaceEventData
+        // instead of NULL (the sat-nav's `lpRaceEventData` assert, BrnSatNavRenderer.cpp:1307).
+        //
+        // ⛔ THE TWO MACHINES SHARE ONE RECEIVER QUEUE, so exactly one of them is pumped per
+        // sub-step. THE ORDER IS THE CONSOLE'S OWN AND IS NO LONGER A WORKAROUND (corrected
+        // 2026-08-27, challenge-list wave): Prepare runs to COMPLETION first, then Prepare2.
+        //
+        // ⚠️ WHAT THIS REPLACED, AND WHY IT HAD TO GO. The previous form handed the queue to
+        // Prepare2 the moment Prepare merely PARKED at PREPARING_ACQUIRING_STREET_DATA, because
+        // no PC producer answered its GetFreeburnChallengeList and parking was permanent. That
+        // producer LANDED IN THIS WAVE (GameDataModule Prepare stage 10 +
+        // ProcessGetFreeburnChallengeListRequest, id 53), so Prepare now parks at stage 9 only
+        // until the reply arrives -- and the old "parked" test would have handed the queue away
+        // in exactly that window and let Prepare2's ProgressionData acquire consume the reply
+        // meant for Prepare. Each stage takes "the one event on the queue" WITHOUT checking what
+        // it is, so that is not untidy, it is a cross-bind. Gating on mbWorldDataPrepared instead
+        // makes the hand-off happen once, after Prepare has genuinely finished.
+        //
+        // ⚠️ AND PREPARE2 NEEDS A SECOND, INDEPENDENT PRECONDITION -- the root cause of the
+        // "[GuiWorldData] Prepare2 done: mpProgressionData bound = 0" line this wave inherited.
+        // Prepare2 does not stream anything: it ACQUIRES "ProgressionData" and "StreetData" BY
+        // NAME out of pool 5, and the two bundles that put them there ("Progression.dat",
+        // "STREETDATA.DAT") are loaded by the GAME-STATE lane's own second pass,
+        // GameStateModule::Prepare2, which runs from the scripted-load flow much later than this
+        // thread starts. An acquire for an absent resource is ANSWERED (with a null memory
+        // pointer), not queued -- so running Prepare2 early does not retry: it completes, binds
+        // NOTHING, and latches meState2 == 5 for the rest of the session, which is exactly what
+        // the boot log showed (GUI Prepare2 done at log line 240; ProgressionManager LOADED at
+        // line 518). IsPrepare2Complete() is the PC observer that says both bundles are resident.
+        // DELETE-WHEN the module scheduler's real Prepare2 pass orders the two lanes (the console
+        // has no such gate because the scheduler runs GameState's Prepare2 before the GUI's).
         if (!mbWorldDataPrepared && lpGameDataInput != 0)
         {
             lpGameDataInput->LockForWrite();
@@ -2971,6 +3005,51 @@ namespace BrnGame
                     << " (" << mGuiModule.GetWorldDataController().GetVehicleList()->GetVehicleCount()
                     << " entries), state "
                     << static_cast<s32>(mGuiModule.GetWorldDataController().GetState()) << "\n";
+            }
+
+            // [diagnostic, one-shot] NOT IN THE X360 BINARY. Prepare reaching
+            // WFPLAYERCARCOLOURS (11) is what un-gates the five meState-asserting accessors --
+            // that is the whole point of the challenge-list wave -- but FOUR of them go straight
+            // through mpTriggerData with no null path of their own, and the stage-2/3
+            // "TriggerData" acquire is ANSWERED even when Triggers.dat is not yet resident. So
+            // report which pointers the machine actually ended up holding, not just that it
+            // finished. DELETE-WHEN the acquire reports a miss as a miss.
+            static bool s_bLoggedGuiWorldDataDone = false;
+            if (!s_bLoggedGuiWorldDataDone && mbWorldDataPrepared && CgsDev::Log::gpDebugPrint != 0)
+            {
+                s_bLoggedGuiWorldDataDone = true;
+                const BrnGui::WorldDataController& lrWdc = mGuiModule.GetWorldDataController();
+                *CgsDev::Log::gpDebugPrint
+                    << "[GuiWorldData] Prepare done: state " << static_cast<s32>(lrWdc.GetState())
+                    << ", triggerData bound = " << (lrWdc.HasTriggerData() ? 1 : 0)
+                    << ", carColours bound = " << (lrWdc.HasPlayerCarColours() ? 1 : 0)
+                    << ", challengeList = "
+                    << const_cast<void*>(static_cast<const void*>(lrWdc.GetFreeburnChallengeList()))
+                    << "\n";
+            }
+        }
+        else if (!mbWorldData2Prepared && lpGameDataInput != 0
+                 && mGameStateModule.IsPrepare2Complete())
+        {
+            lpGameDataInput->LockForWrite();
+            mbWorldData2Prepared = mGuiModule.PrepareWorldData2(lpGameDataInput);
+            lpGameDataInput->UnlockForWrite();
+
+            // [diagnostic, one-shot] NOT IN THE X360 BINARY -- the line that proves the GUI lane's
+            // progression binding took, which is the precondition for every event icon on the map.
+            // DELETE-WHEN the sat-nav event-icon path has a regression test behind it.
+            static bool s_bLoggedGuiProgression = false;
+            if (!s_bLoggedGuiProgression && mbWorldData2Prepared
+                && CgsDev::Log::gpDebugPrint != 0)
+            {
+                s_bLoggedGuiProgression = true;
+                *CgsDev::Log::gpDebugPrint
+                    << "[GuiWorldData] Prepare2 done: mpProgressionData bound = "
+                    << (mGuiModule.GetWorldDataController().HasProgressionData() ? 1 : 0)
+                    << ", state2 "
+                    << static_cast<s32>(mGuiModule.GetWorldDataController().GetState2())
+                    << ", state " << static_cast<s32>(mGuiModule.GetWorldDataController().GetState())
+                    << "\n";
             }
         }
 
@@ -3615,6 +3694,14 @@ namespace BrnGame
                         // status posts precede the translate call @0x823EF22C).
                         BrnGame::BridgeGameStateToGui_EventStatus(
                             &mTimerStatusInterface, lpcGameStateOutput, mpGuiInputBuffer);
+                        // ⭐⭐ [event-starts producer wave 2026-08-27] the event-start table hop
+                        // (@0x823EF1A0..0x823EF1DC), in the console's own position: after the
+                        // status builds, before TranslateGameActionsToGuiEvents @0x823EF22C.
+                        // It is what carries GameStateModule::SendSetUpAllEventStartsMessage's
+                        // table into GuiCache::maEventStarts -- without it the sat-nav's profile
+                        // event lookup walks an empty array on every refresh.
+                        BrnGame::BridgeGameStateToGui_EventStarts(
+                            lpcGameStateOutput, mpGuiInputBuffer);
                         TranslateGameActionsToGuiEvents(mpGuiInputBuffer, lpcGameStateOutput);
                         mpGuiInputBuffer->UnlockForWrite();
                         mGameStateModule.GetOutputBuffer()->UnlockForRead();

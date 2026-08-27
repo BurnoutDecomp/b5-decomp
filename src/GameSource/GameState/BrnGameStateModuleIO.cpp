@@ -355,6 +355,30 @@ void OutputBuffer::Construct()
     mTriggerManagementInputInterface.GetRemoveTriggerEventQueue().Construct();
     mTriggerQueryInputInterface.Construct();
 
+    // ⭐⭐ 2026-08-27 (stunt-races frontier round 2, defect D2): the console's
+    //     GameStateToGuiInterface::Construct(this + 17488)
+    // -- transcribed in the list above and, until today, sitting in the "STILL NOT MADE"
+    // checklist at the end of this body because the member was an opaque span. It is now a typed
+    // member (see its ⚠️ in the header) and its Construct (X360 0x82379908) is bodied in
+    // BrnGameStateToGuiIOInterfaces.cpp, so the console's own call is finally made.
+    //
+    // WITHOUT it every EventQueue inside the interface stayed mpEvents == NULL / miMaxLength == 0
+    // -- the buffer is value-initialised by `new OutputBuffer()`, and BaseEventQueue's Construct
+    // is the only thing that points a queue at its inline storage. The first publisher to fire
+    // was ModeManager::FinishCurrentMode -> AddFinishedRaceEvent at the end of the first stunt
+    // run; run scratch/flow_run/20260827_134528/BrnGame.log ends
+    //     [ASSERT 30517] mpEvents != NULL (CgsBaseEventQueue.h:35)
+    //     [ASSERT 30518] EventQueue::AddEvent - Reached Max length (CgsBaseEventQueue.h:36)
+    //     [EXCEPTION] EXCEPTION_ACCESS_VIOLATION ... WRITING 0x0000000000000000
+    // -- assert-is-not-a-guard: AddEvent appends unconditionally (console behaviour), so both
+    // tripwires fired and the store went through anyway. The four other Add* publishers on this
+    // interface (BrnPaybackManager's dirty-trick pair, overtake, took-lead/last/on-tail) were
+    // sitting on the same null and would each have crashed in turn.
+    //
+    // Constructed WITHOUT the write lock for the same reason the two queues above are: Construct
+    // runs before anybody can lock the buffer.
+    mGameStateToGuiInterface.Construct();
+
     //     this+173180 = 3 (EPaybackType); this+173184 = -1 (aggressor)
     //     Time::SetFloatVal(this + 173188, 0.0f)
     // NOTE the payback seeds are NOT zero: the console's "no payback" idle value is 3, and the
@@ -385,6 +409,15 @@ void OutputBuffer::Construct()
             lpOnline->maOnlineAwards[liCar] = static_cast<EOnlineAwardID>(-1);
     }
 
+    // ⭐ [event-starts producer wave 2026-08-27] The event-start table starts EMPTY, not at the
+    // CgsArray -1 sentinel. The console's OutputBuffer is re-Constructed by the module scheduler
+    // every frame and is BSS-resident besides; on PC this buffer is one persistent heap object, so
+    // without this Construct the count word would hold whatever `new OutputBuffer()` left there and
+    // the FIRST reader -- the bridge's per-record walk -- would either see the -1 sentinel (the
+    // CgsArray.h:336 "Array used before Construct/Clear was called" assert) or a garbage length.
+    // Initialisation-site difference only; the console reaches the same state.
+    mSetUpAllEventStartsInterface.Construct();
+
     //     this+192488/489/490 = 0
     mbSetUpAllEventStartsInterfaceIsValid  = false;
     mbSpecificGameModeEventInterfaceIsValid = false;
@@ -400,8 +433,15 @@ void OutputBuffer::Construct()
     //     moment that member is typed.
     //   * DirtyTrickEvent<..,28>::Construct + GameStateToNetworkInterface::Clear (this + 16784),
     //     the two input bind/unbind request queues (this + 17324 / 17400),
-    //     GameStateToGuiInterface::Construct (this + 17488),
     //     VariableEventQueue<18432,16>::Construct (this + 18496) -- all still opaque.
+    //     ⚠️ THAT LAST ONE IS THE SAME TRAP D2 JUST PAID OFF, ONE MEMBER ALONG: the GUI event
+    //     queue at +18496 is handed out by GetGuiEventQueue() as OutputBufferGuiEventQueue, which
+    //     is still the `u8 maOpaque[1008]` PLACEHOLDER in the header, not the console's real
+    //     VariableEventQueue<18432,16>. Nothing can construct it until it is retyped, and a
+    //     VariableEventQueue that is only zero-filled fires "Not Constructed" on its first
+    //     AddEvent. Retype it BEFORE wiring any producer onto it.
+    //   * GameStateToGuiInterface::Construct (this + 17488) -- ⭐ MADE 2026-08-27 (defect D2),
+    //     see the call above; it is no longer on this list.
     //   * the console's `this+175860 = -1` seed inside the scoring snapshot (== scoring + 2620).
     //     DELIBERATELY NOT REPRODUCED: the x64 ScoringOutputInterface layout is 2672 bytes against
     //     the console's 2736, so console byte 2620 does not name a member here. Poking it would be
@@ -450,7 +490,7 @@ TakedownEventOutputQueueType* OutputBuffer::GetTakedownEventOutputQueue()
 GameStateToGuiInterface* OutputBuffer::GetGameStateToGuiInterface()
 {
     CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
-    return reinterpret_cast<GameStateToGuiInterface*>(&mGameStateToGuiInterfaceStorage);
+    return &mGameStateToGuiInterface;
 }
 
 // X360 0x823B9D80 - read-lock (const) twin accessor for the game-state-to-GUI interface (this+0x4450,
@@ -458,7 +498,7 @@ GameStateToGuiInterface* OutputBuffer::GetGameStateToGuiInterface()
 const GameStateToGuiInterface* OutputBuffer::GetGameStateToGuiInterface() const
 {
     CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
-    return reinterpret_cast<const GameStateToGuiInterface*>(&mGameStateToGuiInterfaceStorage);
+    return &mGameStateToGuiInterface;
 }
 
 // X360 0x823630F0 - write-lock accessor for the race-car race-distance interface (this+0x2A48C).
@@ -542,6 +582,25 @@ const OnlineScoringOutputInterface* OutputBuffer::GetOnlineScoringOutputInterfac
     static_assert(sizeof(OnlineScoringOutputInterface) <= (176140 - 175976),
                   "OnlineScoringOutputInterface must fit the console's +175976 span (164 bytes)");
     return reinterpret_cast<const OnlineScoringOutputInterface*>(&mOnlineScoringOutputInterfaceStorage);
+}
+
+// ---- write-side twins (A9 scoring-feed wave 2026-08-27) ------------------------------------
+// ALSO INLINED on the X360 -- GameStateModule::CopyScoringDataToOutput @0x8236CDC0 computes
+// `outputBuffer + 173240` / `+ 175976` itself (0x8236CDD4..0x8236CDE8) and writes through them.
+// The lock side differs from the const twins above: the console holds the buffer's WRITE lock
+// over that whole span (PreWorldUpdate @0x823A5328's `IOBuffer::LockForWrite(lpOutput)`).
+// Same "console-width opaque storage viewed through the committed type" contract as the const
+// halves -- see the ⚠️ note there for why the storage is NOT a typed member.
+ScoringOutputInterface* OutputBuffer::GetScoringOutputInterface()
+{
+    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    return reinterpret_cast<ScoringOutputInterface*>(&mScoringOutputInterfaceStorage);
+}
+
+OnlineScoringOutputInterface* OutputBuffer::GetOnlineScoringOutputInterface()
+{
+    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    return reinterpret_cast<OnlineScoringOutputInterface*>(&mOnlineScoringOutputInterfaceStorage);
 }
 
 // INLINED on the X360 -- BridgeGameStateToSound @0x823CDE50 computes `outputBuffer + 176344`
@@ -671,6 +730,22 @@ void OutputBuffer::SetSetUpAllEventStartsInterfaceIsValid(bool lbValid)
 {
     CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
     mbSetUpAllEventStartsInterfaceIsValid = lbValid;
+}
+
+// ⭐ [event-starts producer wave 2026-08-27] The interface the two flag accessors above guard.
+// X360-INLINED at both ends (the raw `out + 0x2B0F0` adjust the producer's memcpy destination and
+// the bridge's memcpy source both spell), so there is no console symbol here -- this pair IS that
+// adjust and nothing more, the same de-inlining GetLastActiveRaceCarInterface already carries.
+// NO LOCK ASSERT: the console does not lock-check the adjust itself, only the valid flag beside it,
+// and both call sites take the buffer's lock around the flag read/write that gates the copy.
+SetUpAllEventStartsInterface& OutputBuffer::GetSetUpAllEventStartsInterface()
+{
+    return mSetUpAllEventStartsInterface;
+}
+
+const SetUpAllEventStartsInterface& OutputBuffer::GetSetUpAllEventStartsInterface() const
+{
+    return mSetUpAllEventStartsInterface;
 }
 
 // X360 0x823BA190 - read-lock getter for mbSpecificGameModeEventInterfaceIsValid (this+192489).

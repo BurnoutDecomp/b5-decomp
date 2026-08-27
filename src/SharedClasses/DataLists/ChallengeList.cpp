@@ -21,9 +21,11 @@
 
 #include "SharedClasses/DataLists/ChallengeList.h"
 #include "GameShared/GameClasses/System/Resource/CgsResourceHandle.h"  // CgsResource::ResourceHandle (used by value below)
-#include "SharedClasses/DataLists/ChallengeListResourceType.h"          // ChallengeListResource (complete: operator-> + mpEntries)
+#include "SharedClasses/DataLists/ChallengeListResourceType.h"          // ChallengeListResource (complete: operator-> + GetEntry)
 #include "SharedClasses/DataLists/ChallengeListEntry.h"                 // ChallengeListEntry (complete: mChallengeID, content-bought type)
-#include "GameShared/GameClasses/Core/CgsAssert.h"                      // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssert.h"                      // CGS_ASSERT + BeginAssert/FireAssert/EndAssert
+#include "GameShared/GameClasses/Development/CgsStrStream.h"            // CgsDev::StrStream (AddListResource's streamed overflow message)
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"              // CgsDev::Log::gpDebugPrint + Message::gxMessageFilterFlags (the two post-load notices)
 
 namespace BrnResource
 {
@@ -40,6 +42,60 @@ namespace
     // (CgsResource::NULLResourcePtr is not yet a defined global in this port; once it
     //  lands it should be referenced directly instead of this local.)
     const CgsResource::ResourceHandle skInvalidHandle = {};
+
+    // The serialised entry stride the X360 multiplies by inside GetChallengeData
+    // (`mulli r11, r11, 0xD8`), == sizeof(ChallengeListEntry).
+    const u32 KU_CHALLENGE_LIST_ENTRY_STRIDE = 216;
+
+    // The console's baked assert file for this TU (it ships as part of the `unity` build,
+    // hence the path shape). Used only by the ONE streamed message in AddListResource; the
+    // plain-string asserts go through CGS_ASSERT, which supplies __FILE__/__LINE__ per this
+    // project's convention.
+    const char* const KAC_CHALLENGELIST_FILE =
+        "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
+        "../../SharedClasses/DataLists/ChallengeList.cpp";
+
+    // ⛔ X360/DWARF ENUM DRIFT -- BINARY AUTHORITATIVE, and the committed
+    // ChallengeListEntryAction::ECombineActionType is deliberately NOT redefined (the same
+    // call this family already made for EChallengeActionType; see ChallengeListEntry.h's
+    // GetActionType note). AddListResource's post-load pass is the ONLY writer of the
+    // combine byte in the whole image, and the values it tests and stores do not fit the
+    // committed (PS3-DWARF) enum, which ends at E_COMBINE_ACTION_INDEPENDENT == 4 /
+    // E_COMBINE_ACTION_COUNT == 5:
+    //   * it logs "CHAIN ON LAST ACTION" for the byte value 0   -> CHAIN really is 0 in both;
+    //   * it logs "SIMULTANEOUS ON LAST ACTION" for the value 4 -> SIMULTANEOUS is 4 on the
+    //     X360, not the committed 3, so the X360 enum has one extra enumerator below it;
+    //   * it propagates the value 5 across every action of a challenge whose FIRST action
+    //     carries 5, and
+    //   * it stores 6 into the LAST action in three separate arms.
+    // MEASURED over the shipped build/game/ONLINECHALLENGES.BNDL the authored combine bytes
+    // are {0: 197, 1: 3, 3: 14, 4: 22, 5: 275} -- so 5 is a live authored value and the
+    // committed COUNT of 5 is simply wrong for this build. Named by their X360 role and
+    // used as raw byte values; RE-EXPRESS them as enumerators the moment the X360 enum is
+    // decoded (its owner is the challenge-manager TU family, not this one).
+    const u8 KU_COMBINE_CHAIN_X360        = 0;
+    const u8 KU_COMBINE_SIMULTANEOUS_X360 = 4;
+    const u8 KU_COMBINE_PROPAGATE_X360    = 5;
+    const u8 KU_COMBINE_TERMINATOR_X360   = 6;
+}
+
+// ChallengeListResource::GetNumChallenges -- the count word at +0x00 (X360 reads it through
+// the truncated accessor BrnResource::ChallengeListRes(a2) inside AddListResource).
+u32 ChallengeListResource::GetNumChallenges() const
+{
+    return muNumChallenges;
+}
+
+// ChallengeListResource::GetEntry -- inlined inside ChallengeList::GetChallengeData on the
+// X360 (no standalone symbol; the body is the `*(resource+4) + 216*index` tail). The entry
+// array base is the FixUp-rebased 32-bit slot at +0x04, resolved through the project's
+// low-4 GB PointerFromU32 convention. No bounds check here -- the caller (GetChallengeData)
+// owns the index assert. Identical shape to the VehicleList / WheelList siblings.
+const ChallengeListEntry* ChallengeListResource::GetEntry(s32 liEntryIndex) const
+{
+    const u8* lpBase = reinterpret_cast<const u8*>(static_cast<uintptr_t>(muEntriesOffset));
+    return reinterpret_cast<const ChallengeListEntry*>(
+        lpBase + KU_CHALLENGE_LIST_ENTRY_STRIDE * static_cast<u32>(liEntryIndex));
 }
 
 // ChallengeList::Construct @ 0x82677D00
@@ -72,6 +128,161 @@ void ChallengeList::Destruct()
     {
         maStaticDataLists[ liIndex ] = skInvalidHandle;
     }
+}
+
+// ============================================================================================
+// ⭐ ChallengeList::AddListResource @ 0x8267B598 -- THE ONE FUNCTION THAT MAKES THE FREEBURN
+// CHALLENGE TABLE REAL. Its only caller is GameDataModule::PrepareFreeburnChallengeList
+// @0x8266C088 (Prepare stage 10). Two halves:
+//
+//   (1) REGISTRATION -- the same three steps the VehicleList/WheelList siblings do: bounds,
+//       store the resource in the next list slot, then register one slot per challenge
+//       (entry index = challenge ordinal, list index = this list) and bump the counts.
+//       X360 offsets: `12*(miCount+86) + this` == &maSlots[miCount].miEntryIndex (because
+//       12*(miCount+86) == 0x400 + 12*miCount + 8) and `12*miCount + this + 0x404` ==
+//       &maSlots[miCount].miListIndex. mbBought is left untouched (only Construct zeroes it).
+//
+//   (2) POST-LOAD FIXUP -- what the two siblings do NOT have, and what makes landing the
+//       reply handler without this function a lie: a pass over EVERY registered challenge
+//       that (a) republishes muNumPlayers into both nibbles and (b) normalises the per-action
+//       combine bytes, terminating the last action. The console runs it inside
+//       AddListResource, so the data every consumer reads is ALREADY normalised; a table
+//       registered without it would be subtly different data wearing the same shape.
+//
+// ⚠️ THE PASS WRITES INTO THE LOADED RESOURCE. That is the console's own behaviour -- it
+// reads each record back through the CONST GetChallengeData and stores through the returned
+// pointer -- so the const is stripped here at the one site, deliberately and visibly, rather
+// than forking a non-const accessor the DWARF does not declare.
+//
+// ⚠️ The X360 bumps miCount BEFORE reading a challenge back through GetChallengeData (that
+// accessor asserts index < miCount), exactly as VehicleList::AddListResource does.
+// ============================================================================================
+void ChallengeList::AddListResource( CgsResource::ResourcePtr<ChallengeListResource>& lrResource )
+{
+    // X360 @0x8267B5B0: if (miListCount >= 32) fire assert (ChallengeList.cpp:797).
+    CGS_ASSERT( miListCount < KI_MAX_CHALLENGE_LISTS, "No space for more challenge lists\n" );
+
+    const u32 luNumChallenges = lrResource->GetNumChallenges();
+
+    // X360 @0x8267B60C: if (numChallenges + miCount > 1000) fire assert (ChallengeList.cpp:798).
+    // This one is STREAMED, so it is built into a local assert buffer and fired directly --
+    // the BrnGuiWorldDataController.cpp precedent for a streamed console message (the X360
+    // streams into the global CgsDev::Assert::gpcMessageBuffer; a stack buffer is
+    // behaviourally identical).
+    if ( static_cast<s32>( luNumChallenges ) + miCount > KI_MAX_FREEBURN_CHALLENGES )
+    {
+        char lacMessageBuffer[ CgsDev::Assert::KI_MESSAGEBUFFERSIZE ];
+        CgsDev::StrStream lStream( lacMessageBuffer, CgsDev::Assert::KI_MESSAGEBUFFERSIZE );
+        lStream << "Not enough space for " << static_cast<s32>( luNumChallenges )
+                << " more challenges. Already have " << miCount << "\n";
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert( lacMessageBuffer, KAC_CHALLENGELIST_FILE, 798 );
+        CgsDev::Assert::EndAssert();
+    }
+
+    // X360 @0x8267B6E0: CreateFromHandle(&maStaticDataLists[miListCount], a2 + 0x14) -- the
+    // inlined ResourcePtr copy-assign. Restored as the source-level operator=.
+    maStaticDataLists[ miListCount ] = lrResource;
+
+    // X360 @0x8267B6F4..0x8267B72C: one slot per challenge in this resource.
+    for ( u32 luChallenge = 0; luChallenge < luNumChallenges; ++luChallenge )
+    {
+        maSlots[ miCount ].miEntryIndex = static_cast<s32>( luChallenge );
+        maSlots[ miCount ].miListIndex  = miListCount;
+        ++miCount;
+    }
+
+    // X360 @0x8267B738: ++miListCount, BEFORE the post-load pass (which resolves every slot
+    // through maStaticDataLists, so the list must already be registered).
+    ++miListCount;
+
+    // ---- (2) the post-load fixup pass, over every registered challenge -------------------
+    for ( s32 liChallenge = 0; liChallenge < miCount; ++liChallenge )
+    {
+        // X360: `result = GetChallengeData(this, liChallenge); if (!result) continue;`
+        ChallengeListEntry* lpEntry =
+            const_cast<ChallengeListEntry*>( GetChallengeData( liChallenge ) );
+        if ( lpEntry == 0 )
+        {
+            continue;
+        }
+
+        // X360: read the LOW nibble, range-check it, store 17*n back -- i.e.
+        // SetNumPlayers(GetNumPlayers()), which publishes the authored count into BOTH
+        // nibbles. Both guards live in ChallengeListEntry.h (lines 874 / 876) and are
+        // carried by the SetNumPlayers inline.
+        const s32 liNumActions = lpEntry->GetNumActions();
+        lpEntry->SetNumPlayers( lpEntry->GetNumPlayers() );
+
+        // X360 `if (v24 == 1)`: a single-action challenge has nothing to chain, so its one
+        // action is terminated outright.
+        if ( liNumActions == 1 )
+        {
+            lpEntry->GetAction( 0 )->SetCombineAction(
+                static_cast<ChallengeListEntryAction::ECombineActionType>(
+                    KU_COMBINE_TERMINATOR_X360 ) );
+            continue;
+        }
+
+        // X360 `if (*(entry + 3) == 5)`: when the FIRST action carries the propagate value,
+        // every action of the challenge is forced to it.
+        if ( static_cast<u8>( lpEntry->GetAction( 0 )->GetCombineAction() )
+                 == KU_COMBINE_PROPAGATE_X360 )
+        {
+            for ( s32 liAction = 0; liAction < liNumActions; ++liAction )
+            {
+                lpEntry->GetAction( liAction )->SetCombineAction(
+                    static_cast<ChallengeListEntryAction::ECombineActionType>(
+                        KU_COMBINE_PROPAGATE_X360 ) );
+            }
+        }
+
+        // X360: the last action may not be left CHAIN or SIMULTANEOUS -- there is nothing
+        // after it to chain to / run simultaneously with. Each arm reports the offending
+        // challenge id and then terminates the action. Both notices are gated on the
+        // console's own `CgsDev::Message::gxMessageFilterFlags & 1`.
+        const s32 liLastAction = liNumActions - 1;
+
+        if ( static_cast<u8>( lpEntry->GetAction( liLastAction )->GetCombineAction() )
+                 == KU_COMBINE_CHAIN_X360 )
+        {
+            if ( ( CgsDev::Message::gxMessageFilterFlags & 1 ) && CgsDev::Log::gpDebugPrint != 0 )
+            {
+                *CgsDev::Log::gpDebugPrint
+                    << "CHAIN ON LAST ACTION: Challenge ID: " << lpEntry->GetChallengeID() << "\n";
+            }
+            lpEntry->GetAction( liLastAction )->SetCombineAction(
+                static_cast<ChallengeListEntryAction::ECombineActionType>(
+                    KU_COMBINE_TERMINATOR_X360 ) );
+        }
+
+        if ( static_cast<u8>( lpEntry->GetAction( liLastAction )->GetCombineAction() )
+                 == KU_COMBINE_SIMULTANEOUS_X360 )
+        {
+            if ( ( CgsDev::Message::gxMessageFilterFlags & 1 ) && CgsDev::Log::gpDebugPrint != 0 )
+            {
+                *CgsDev::Log::gpDebugPrint
+                    << "SIMULTANEOUS ON LAST ACTION: Challenge ID: " << lpEntry->GetChallengeID()
+                    << "\n";
+            }
+            lpEntry->GetAction( liLastAction )->SetCombineAction(
+                static_cast<ChallengeListEntryAction::ECombineActionType>(
+                    KU_COMBINE_TERMINATOR_X360 ) );
+        }
+    }
+}
+
+// ChallengeList::GetChallengeCount -- X360-INLINED everywhere (it has no ledger row of its
+// own; every caller open-codes the `lwz` of miCount, e.g. the loop bound GetChallengeIndex
+// @0x82326168 re-reads each iteration). Declared at ChallengeList.h:95.
+//
+// ⭐ REPLACES the return-0 [[silent-drop-stub]] that lived in BrnFriendsListLinkGates.cpp
+// (deleted in the same change). That gate's own DELETE-WHEN said "Land the body with that
+// mount" -- this wave is that mount: GameDataModule Prepare stage 10 now fills the table, so
+// answering 0 would no longer be "no challenges exist", it would be a lie about 458 of them.
+s32 ChallengeList::GetChallengeCount() const
+{
+    return miCount;
 }
 
 // ---------------------------------------------------------------------------
@@ -128,7 +339,7 @@ u8   gbChallengeContentBoughtTypeB  = 0;        // byte_82FFA871  (+0x81)
 // ChallengeList::GetChallengeData(s32) @ 0x82326080
 // X360: range-guard the index against miCount ("Index out of range", ChallengeList.h:162,
 // non-fatal), then resolve the entry as
-//   maStaticDataLists[ maSlots[liIndex].miListIndex ]->mpEntries[ maSlots[liIndex].miEntryIndex ]
+//   maStaticDataLists[ maSlots[liIndex].miListIndex ]->GetEntry( maSlots[liIndex].miEntryIndex )
 // The list ResourcePtr is dereferenced through operator-> (the X360 BrnResource::ChallengeL
 // helper @0x82324D20 == ResourcePtr<ChallengeListResource>::operator-> const, baked assert
 // CgsResourcePtr.h:563), and the entry is reached by indexing mpEntries (216-byte stride).
@@ -136,11 +347,25 @@ const ChallengeListEntry* ChallengeList::GetChallengeData( s32 liIndex ) const
 {
     CGS_ASSERT( liIndex >= 0 && liIndex < miCount, "Index out of range\n" );
 
+    // [marked deviation] the console assert is log-and-continue and then indexes maSlots
+    // anyway; on the PC host that is an out-of-bounds read of the owning module object.
+    // Guard, exactly as the VehicleList sibling does.
+    if ( liIndex < 0 || liIndex >= miCount )
+    {
+        return 0;
+    }
+
     const ChallengeSlot& lrSlot = maSlots[ liIndex ];
+    if ( lrSlot.miListIndex < 0 || lrSlot.miListIndex >= KI_MAX_CHALLENGE_LISTS )
+    {
+        return 0;   // [marked deviation] unregistered slot (Construct seeds -1)
+    }
 
-    const ChallengeListResource* lpResource = maStaticDataLists[ lrSlot.miListIndex ].operator->();
-
-    return &lpResource->mpEntries[ lrSlot.miEntryIndex ];
+    // The entry is reached through the resource's own 32-bit entry-array slot (216-byte
+    // stride) -- see ChallengeListResource::GetEntry. It used to be spelled
+    // `&lpResource->mpEntries[...]` against an 8-byte host pointer the FixUp never wrote;
+    // that read a garbage base. See the ⚠️ CORRECTED note in ChallengeListResourceType.h.
+    return maStaticDataLists[ lrSlot.miListIndex ]->GetEntry( lrSlot.miEntryIndex );
 }
 
 // [gateui] ChallengeList::GetChallengeData(CgsID) -- the id-keyed overload.
@@ -175,7 +400,10 @@ s32 ChallengeList::GetChallengeIndex( CgsID lID ) const
 {
     for ( s32 liIndex = 0; liIndex < miCount; ++liIndex )
     {
-        if ( GetChallengeData( liIndex )->GetChallengeID() == lID )
+        // [marked deviation] the console dereferences unconditionally; GetChallengeData now
+        // has a range/unregistered-slot guard that can answer NULL (see its body).
+        const ChallengeListEntry* lpEntry = GetChallengeData( liIndex );
+        if ( lpEntry != 0 && lpEntry->GetChallengeID() == lID )
         {
             return liIndex;
         }

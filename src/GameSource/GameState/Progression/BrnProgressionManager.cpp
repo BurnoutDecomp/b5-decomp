@@ -657,6 +657,15 @@ CarData* ProgressionManager::GetCurrentCarData()
     return mpCurrentCarData;
 }
 
+// The chosen-livery record for that car (X360 this+133332). See the header for the two
+// console readers that inline this adjust (AddDistanceDriven @0x823668F0 writes
+// `(*this+133332)->mfDistanceDriven`; GameStateModule::CopyScoringDataToOutput @0x8236CDC0
+// publishes it).
+LiveryData* ProgressionManager::GetCurrentLiveryData()
+{
+    return mpCurrentLiveryData;
+}
+
 // X360 this+133448 -- the loaded vehicle list. See the header FLAG on the install site.
 void ProgressionManager::SetVehicleList(const BrnResource::VehicleList* lpVehicleList)
 {
