@@ -55,6 +55,22 @@ bool ProfileEvent::IsFlagSet(Flags leFlag) const
     return (muFlags & leFlag) != 0;
 }
 
+// EnableFlags / ClearFlags -- DWARF BrnProfile.h:328 / :332. Both are inlined at every console
+// site: the discovery arm of GameStateModule::CheckIfPlayerIsAtJunctionWithAnEvent open-codes
+// EnableFlags(E_FLAG_DISCOVERED) as `lhz r11, 4(r30) / ori r11, r11, 1 / sth r11, 4(r30)`
+// (0x82390750..0x82390760), and ProgressionDebugComponent::DEBUG_ClearMedals @0x8235A168 uses
+// the andi. form. Declared here since the odometer/drive-thru waves; bodied now that the
+// discovery arm has a caller.
+void ProfileEvent::EnableFlags(u16 lu16Flags)
+{
+    muFlags = static_cast<u16>(muFlags | lu16Flags);
+}
+
+void ProfileEvent::ClearFlags(u16 lu16Flags)
+{
+    muFlags = static_cast<u16>(muFlags & static_cast<u16>(~lu16Flags));
+}
+
 // ------------------------------------------------------------------------------------
 // CarData::Construct -- initialise one owned-car record (X360 inlines this in AddCar).
 // ------------------------------------------------------------------------------------
@@ -323,6 +339,41 @@ ProfileEvent* Profile::AddEvent(u32 luEventID)
 
     lEvent.Construct(luEventID);   // X360 open-codes: id = luEventID, flags = 0
     return &lEvent;
+}
+
+// ====================================================================================
+// Profile::FindEvent  (const + non-const)  -- DWARF BrnProfile.h:709 / :713
+//
+// The id->record lookup the console open-codes at every one of its four sites. Verbatim from
+// UnlockToProgressionRank @0x8239DEDC (the shortest copy):
+//     lwz  r9, 0x278(r3)          ; miEventCount
+//     cmpwi r9, 0 / ble  -> miss  ; SIGNED zero-trip guard
+//     addi r10, r3, 0x7080        ; &maEvents[0]
+//   loop:
+//     lwz  r8, 0(r10)             ; muEventID
+//     cmplw r8, r4 / beq -> hit
+//     addi r11, r11, 1 / addi r10, r10, 8 / cmpw r11, r9 / blt loop
+// No assert on either end -- the console's callers fire their own ("lpProfileEvent",
+// "lpEvent") on the NULL answer, which is why none is invented here.
+// ====================================================================================
+const ProfileEvent* Profile::FindEvent(u32 luEventID) const
+{
+    for (s32 liIndex = 0; liIndex < miEventCount; ++liIndex)
+    {
+        if (maEvents[liIndex].GetID() == luEventID)
+        {
+            return &maEvents[liIndex];
+        }
+    }
+    return 0;
+}
+
+ProfileEvent* Profile::FindEvent(u32 luEventID)
+{
+    // The X360 scan walks the mutable array; the const body is the identical instruction run,
+    // so the non-const form delegates (the Profile::GetPlayerBaseDeformAmount precedent).
+    return const_cast<ProfileEvent*>(
+        static_cast<const Profile*>(this)->FindEvent(luEventID));
 }
 
 // ====================================================================================
@@ -774,6 +825,20 @@ s32 Profile::GetDriveThrusFound() const
                             mBodyShopsDriveThruSet.GetLength() +
                             mPaintShopsDriveThruSet.GetLength() +
                             mGasStationsDriveThruSet.GetLength());
+}
+
+// ====================================================================================
+// Profile::AddGameModeTypeToTotals  -- DWARF BrnProfile.h:751; inlined @0x82366628
+// Bump the "this many events of this type exist" tally for one game-mode type. The console
+// body is the two instructions ProgressionManager::AddEventTypeToEventTotals ends with,
+// `++*(4*(mode+30) + profile)` == ++maGameModeTypeAmount[mode], behind the range assert whose
+// baked location is BrnProfile.h:2047 (identical string to the three siblings below).
+// ====================================================================================
+void Profile::AddGameModeTypeToTotals(GsmIO::EGameModeType lEGameModeType)
+{
+    CGS_ASSERT(lEGameModeType > GsmIO::E_MODE_NONE, "lEGameModeType > GsmIO::E_MODE_NONE");
+
+    ++maGameModeTypeAmount[lEGameModeType];
 }
 
 // ====================================================================================

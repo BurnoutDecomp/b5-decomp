@@ -352,23 +352,80 @@ void GameStateModule::CheckIfPlayerIsAtJunctionWithAnEvent(
                     (GetOriginalCarId(mActivePlayerCarId) == lSpecialEventCarId);
             }
 
-            // [PARKED] THE DISCOVERY ARM (0x823905C8..0x823907E8), gated on
-            // `!mbJunctionNewlyDiscovered && !mpCurrentGameMode && !IsOnlineGameMode()`. Console
-            // body, written out for whoever lands it:
-            //   * linear-scan the Profile's event table (base Profile+28800 == maEvents, 8-byte
-            //     ProfileEvent stride, count at Profile+632) for muEventJunctionID; assert
-            //     "lpProfileEvent" (:6957) on a miss;
-            //   * if ((ProfileEvent+4 & 1) == 0) -- not discovered yet:
-            //         assert "lpProfile" (:6962); ProfileEvent+4 |= 1;
-            //         Profile::AddGameModeTypeToDiscovered(GetEvent(<the data mode>));
-            //         mbJunctionNewlyDiscovered = true;
-            //         AddEvent(actionQueue, {0}, /*action*/55, 1);
-            //         CheckForAllEventsOfATypeFound(profile, queue, lpRaceEvent->GetMode());
-            //         CheckForAllEventsBeingFound(profile, queue);
-            // It needs a ProfileEvent flag-bit mutator this tree does not model. Its ONLY effect
-            // on the action-201 record is mbIsNewlyDiscovered (+0x22), which therefore reads
-            // false for the whole run on this build -- the banner still pops, it just never
-            // carries the "NEW" flag and never forces itself on at speed.
+            // ⭐ THE DISCOVERY ARM (0x823905C8..0x823907E8) -- LANDED 2026-08-27 (D1
+            // profile-event-list wave). It was parked on two things, and both are now gone: the
+            // ProfileEvent flag-bit mutator this tree did not model (ProfileEvent::EnableFlags,
+            // DWARF BrnProfile.h:328, now bodied in BrnProfile.cpp) and the fact that the profile
+            // held NO event records at all, so the ":6957 lpProfileEvent" assert would have fired
+            // on every single junction arrival. ProgressionManager::UnlockToProgressionRank
+            // @0x8239DDE8 now populates the table at boot, so the lookup below finds its record.
+            //
+            // WHY THIS ARM IS LOAD-BEARING AND NOT COSMETIC: E_FLAG_DISCOVERED (bit 0) is what
+            // ProgressionManager::OnEventFinishUpdateProfile @0x823A0040 asserts on before it
+            // writes the win flags ("lpEvent->IsFlagSet( ProfileEvent::E_FLAG_DISCOVERED )",
+            // BrnProgressionManager.cpp:1672). Standing at the junction is what sets it, and
+            // standing at the junction is exactly how the player starts the event they then win.
+            //
+            // The gate is the console's: `!mbJunctionNewlyDiscovered && !mpCurrentGameMode &&
+            // !IsOnlineGameMode()` (@0x82390684..0x823906AC).
+            // (`lpRaceEvent != 0` is this file's standing [GUARD] class, not a new one: the
+            // console asserts it at :6944 above and then dereferences it here regardless --
+            // see the file banner's "TWO CLASSES OF NULL GUARD" note.)
+            if (lpRaceEvent != 0 &&
+                !mbJunctionNewlyDiscovered &&
+                mModeManager.GetCurrentGameMode() == 0 &&
+                !IsOnlineGameMode())
+            {
+                BrnProgression::Profile* lpProfile = mProgressionManager.GetProfile();
+
+                // @0x823906B0..0x8239071C: the open-coded scan of maEvents for the junction id,
+                // then the ":6957 lpProfileEvent" assert on a miss. Routed through the named
+                // finder (Profile::FindEvent, DWARF BrnProfile.h:713).
+                BrnProgression::ProfileEvent* lpProfileEvent =
+                    (lpProfile != 0) ? lpProfile->FindEvent(luEventJunctionID) : 0;
+                CGS_ASSERT(lpProfileEvent != 0, "lpProfileEvent");                 // :6957
+
+                // `lhz r11, 4(r30) / clrlwi 31 / bne` -- already discovered, nothing to do.
+                if (lpProfileEvent != 0 && !lpProfileEvent->IsFlagSet(
+                        BrnProgression::ProfileEvent::E_FLAG_DISCOVERED))
+                {
+                    CGS_ASSERT(lpProfile != 0, "lpProfile");                       // :6962
+
+                    // @0x82390750..0x82390760: `lhz / ori 1 / sth`.
+                    lpProfileEvent->EnableFlags(
+                        static_cast<u16>(BrnProgression::ProfileEvent::E_FLAG_DISCOVERED));
+
+                    // @0x82390764..0x82390780: the SAME data-mode -> runtime-mode hop the
+                    // action-201 arm below makes, including the +180972 override word whose
+                    // retail value is the 6 sentinel (see that arm's FLAG for the full cite).
+                    lpProfile->AddGameModeTypeToDiscovered(
+                        static_cast<GameStateModuleIO::EGameModeType>(
+                            mProgressionManager.GetEvent(static_cast<s32>(lpRaceEvent->GetMode()))));
+
+                    // @0x82390798: the latch the action-201 record reads as mbIsNewlyDiscovered
+                    // (and which the post below clears again).
+                    mbJunctionNewlyDiscovered = true;
+
+                    // @0x8239079C..0x823907AC: `li r11,0 / stb / AddEvent(queue, &byte, 0x37, 1)`.
+                    // NOTE the payload byte is ZERO here -- OnEventFinishUpdateProfile's copy of
+                    // the same action posts 1. Reproduced as written.
+                    const u8 lu8AutoSavePayload = 0;
+                    lpOutput->GetGameActionQueue()->AddEvent(
+                        reinterpret_cast<const CgsModule::Event*>(&lu8AutoSavePayload),
+                        GameStateModuleIO::E_ACTION_REQUEST_AUTOSAVE,
+                        static_cast<s32>(sizeof(lu8AutoSavePayload)));
+
+                    // ⛔ [PARKED] the arm's last two calls, @0x823907B0..0x823907E8:
+                    //     CheckForAllEventsOfATypeFound(profile, queue, lpRaceEvent->GetMode());
+                    //     CheckForAllEventsBeingFound(profile, queue);
+                    // GameStateModule::CheckForAllEventsBeingFound @0x82382460 is DECLARE-ONLY in
+                    // this tree (BrnGameStateModule.h:1027, grown for the DriveThruManager TU and
+                    // never bodied) and CheckForAllEventsOfATypeFound @0x823822C8 has no
+                    // declaration at all. Both are "have you now found every event / every event
+                    // of this type" trophy checks; neither feeds the action-201 record. Landing
+                    // the calls would add two unresolved externals to a MOUNTED TU.
+                }
+            }
         }
     }
     else

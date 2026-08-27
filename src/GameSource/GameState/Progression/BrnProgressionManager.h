@@ -41,6 +41,9 @@ namespace BrnProgression
 // [stuntrace waveB / agent 10] pointer-only in this header (SharedClasses/Progression/
 // BrnRaceEventData.h is the owner; BrnProgressionManager_EventFinish.cpp includes it).
 struct RaceEventData;
+// [D1 profile-event-list wave, 2026-08-27] same treatment for the junction record
+// AddEventTypeToEventTotals / UnlockToProgressionRank take by pointer. Same owner header.
+struct EventJunction;
 
 // MINIMAL OWNING HEADER for BrnProgression::ProgressionManager.
 //
@@ -456,6 +459,38 @@ public:
     void SetTrainingManager(BrnGameState::TrainingManager* lpTrainingManager);
 
     // ========================================================================
+    // ⭐⭐ [D1 profile-event-list wave, 2026-08-27] THE PROFILE EVENT-LIST PRODUCER.
+    // Bodies in BrnProgressionManager.cpp. These two are the ONLY console writers of the
+    // profile's ProfileEvent table anywhere in the image: Profile::AddEvent @0x82359EB8 has
+    // EXACTLY ONE xref in BURNOUT_X360_ARTIST.XEX and it is UnlockToProgressionRank.
+    //
+    // Before this landed, mProfile.GetEventCount() was 0 for the whole run and every consumer
+    // that looks a record up got NULL -- which is the root of the "winning an offline event
+    // asserts `lpEvent` (BrnProgressionManager.cpp:1669) then crashes" class, and of the five
+    // [PC GUARD]s the 2026-08-27 flyby wave had to add in BrnPreRaceFlyBy_wJ_06/07.cpp.
+    // ========================================================================
+
+    // X360 0x8239DDE8. DWARF :674 `void UnlockToProgressionRank(int8_t, InputBuffer::
+    // GameActionQueue*);`. Two disjoint bodies selected by the rank argument:
+    //   li8Rank == 0 -> the NEW-PROFILE unlock: walk every authored EventJunction and give the
+    //                   profile a ProfileEvent for each junction that has an OFFLINE event,
+    //                   tallying its game-mode type; then the default-car / starting-drive-thru
+    //                   arms and the rank tail.
+    //   li8Rank != 0 -> the RANK-UP path: AchievementManagerBase::OnLicenseUpgrade + the
+    //                   licence-upgrade telemetry event, then the same rank tail.
+    // Console callers: UpdatePlayerMedals @0x8239FE50 (via PreWorldUpdate's medals-dirty gate)
+    // and four ProgressionDebugComponent skip-to-rank entries. See the body banner for exactly
+    // which arms are landed and which are parked on unmounted siblings.
+    void UnlockToProgressionRank(s8 li8Rank,
+                                 BrnGameState::GameStateModuleIO::GameActionQueue* lpGameActionQueue);
+
+    // X360 0x82366628. DWARF :678 `void AddEventTypeToEventTotals(const EventJunction*);`.
+    // Maps the junction's OFFLINE event's data mode (RaceEventData +0xEC) through GetEvent()
+    // to a runtime EGameModeType and bumps mProfile.maGameModeTypeAmount for it -- the
+    // denominator of every "Races 3/12"-style progression readout.
+    void AddEventTypeToEventTotals(const EventJunction* lpEventJunction);
+
+    // ========================================================================
     // BODIED in this TU (BrnProgressionManager.cpp). All nine X360-asm-attested. Each reaches
     // its members BY NAME through the layout modelled below; no raw-offset pointer arithmetic.
     // ========================================================================
@@ -589,6 +624,14 @@ private:
     // boot seam in Prepare2 (the console's outer Construct/Prepare pair own that call; neither
     // outer is reconstructed yet -- see the Prepare2 banner). Not a console member.
     bool mbProfileConstructed = false;
+
+    // [FLAG PC bring-up, 2026-08-27 D1 profile-event-list wave] once-latch for the
+    // UnlockToProgressionRank(0) boot seam in Prepare2. The console reaches that call through
+    // PreWorldUpdate @0x823A4F68 -> (medals-dirty byte +133491) -> UpdatePlayerMedals
+    // @0x8239FE50; NEITHER of those two is reconstructed, so the rank-0 unlock is driven from
+    // the same Prepare2 seam that already owns Profile::Construct. Not a console member.
+    // DELETE-WHEN UpdatePlayerMedals + PreWorldUpdate land and drive it the console's way.
+    bool mbInitialRankUnlockDone = false;
 
     // The player's road-rules-ruled tallies (X360 +133456 / +133460 / +133464).
     // *** FLAG -- COMMITTED-NAME CORRECTION (StreetManager keystone, wave B) ***

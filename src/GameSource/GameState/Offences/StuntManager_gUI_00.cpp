@@ -186,43 +186,76 @@ void StuntManager::ProcessStuntElement(GameStateModuleIO::GameActionQueue* lpAct
     const GameMode* lpCurrentGameMode = mpModeManager->GetCurrentGameMode();
     const bool      lbIsOnline        = (lpCurrentGameMode != 0) && lpCurrentGameMode->IsOnline();
 
-    // ⚠️⚠️ [gateui] ROUND-3 PARK (verify_r2_fixgsm F3b / verify_r2_deps N4). The console call is
+    // ⭐⭐⭐ [stuntrace frontier D2, 2026-08-27] THE PARK IS LIFTED -- THIS IS THE CONSOLE CALL.
     //     mpModeManager->GetScoringSystem()->DealWithStunt(&lWorldStuntAction, lbIsOnline);
     // (X360 ScoringSystem::DealWithStunt @0x823384F0 -- the ABI splits the small WorldStuntAction
-    // across r4/r5; the tree models it by pointer in the scorer's home, so the record built above
-    // would be reused.)
+    // across r4/r5; the tree models it by pointer in the scorer's home, so the record built at
+    // step 3 above is reused verbatim, exactly as the console reuses the r4/r5 pair it just posted.)
     //
-    // ⛔ CORRECTION TO THE BRIEF/N4 FIRST: this symbol is NOT bodiless. `ScoringSystem::DealWithStunt`
-    // has a REAL, complete body at `ModeManager/Scoring/BrnScoringSystem_UpdateB.cpp ::
-    // ScoringSystem::DealWithStunt`, and its callee `StuntModeScoring::DealWithStunt` @0x8232CEB0
-    // is equally real at `Scoring/BrnStuntModeScoring_Register.cpp`. What is missing is a LINK:
-    // neither TU is mounted, and mounting them is not a two-line change. MEASURED this round with
-    // `cl /c` + `dumpbin /SYMBOLS` over the whole `GameState/ModeManager/Scoring/**` directory:
-    //   * the minimal transitive set (UpdateB + StuntModeScoring _Register/_Combo/_Queries/
-    //     _UpdatePass + ScoringSystem _Lookup/_Standings/_Queries) still leaves 16 game-side
-    //     externals open and pulls in _Lifecycle, _Timer, _StuntTypes, CrashModeScoring,
-    //     BurnoutSkillzData and BaseOnlineModeScoring behind them;
-    //   * the FULL directory (all 22 .cpp) does not even compile -- 5 hard errors in
-    //     BrnStuntModeScoringOnline.cpp (C2664/C2440, the BrnGameState::EActiveRaceCarIndex vs
-    //     BrnWorld::EActiveRaceCarIndex fork at :401/:405/:523/:527/:537) -- and still leaves
-    //     ~40 symbols with NO body anywhere in the tree (every OnlineRace/OnlineStuntRun/
-    //     OnlineBurningHomeRun Construct/Prepare/Update/Release, StuntModeScoring::Prepare,
-    //     CrashModeScoring's five getters, RoadRageModeScoring::SetTakeDownTarget -- that last one
-    //     is a direct callee of THIS function's own TU).
-    // So the honest choice is not "body it or fabricate it" but "park it or block the wave":
-    // keeping the call means the whole gsm mount LNK2019s and not one `[UI-gate]` line prints.
+    // ⛔ ROOT CAUSE OF "SMASH GATES DO NOT COUNT DURING A STUNT RUN" -- it was THIS ONE LINE.
+    // Everything on both sides of it is live and was live before this change:
+    //   * the PRODUCER reaches here on every gate. RUN EVIDENCE build/game/BrnGame.log (mode=7 ==
+    //     E_MODE_STUNT_ATTACK, i.e. inside the offline Stunt Run):
+    //         [UI-gate] stunt-element type=1 action=58 count=1/400 county=4 mode=7
+    //         [UI-gate] stunt-element type=1 action=58 count=4/400 county=4 mode=7
+    //     -- four SMASH gates (StuntElementType 1) completed mid-run, each posting action 58 and
+    //     popping the "Smashes 4/400" banner, and NOT ONE of them reaching a scorer.
+    //   * the CONSUMER is bodied AND mounted. `ScoringSystem::DealWithStunt` is real at
+    //     Scoring/BrnScoringSystem_UpdateB.cpp and its callee `StuntModeScoring::DealWithStunt`
+    //     @0x8232CEB0 is real at Scoring/BrnStuntModeScoring_Register.cpp (the SMASH arm being
+    //     `if (RegisterStunt()) UpdateScore(100.0f, E_STUNT_TYPE_SUPER_SMASH, false);`).
+    //   * the LINK the round-3 park measured as impossible is now CLOSED: every one of the 22
+    //     `GameState/ModeManager/Scoring/*.cpp` this park listed as unmountable is mounted by
+    //     tools/build/build_game_exe.bat today (BrnScoringSystem_UpdateB.cpp and
+    //     BrnStuntModeScoring_Register.cpp among them), and the same scorer object is already
+    //     ticking on this very run -- `[stunt-boost] boost link armed -- ... combo 1 mult 4` in
+    //     the same log is StuntModeScoring::UpdateBoostStunts calling RegisterStunt/UpdateScore.
+    // The park's own RESTORE-WHEN ("the Scoring subsystem mounts; the call is one line and the
+    // record it needs is already built") is therefore satisfied to the letter. Restored as one line.
     //
-    // ⓘ COST OF THE PARK, stated plainly: completed stunt elements stop feeding the STUNT-RUN /
-    // CRASH-MODE scorer. On the path this wave proves it costs nothing measurable -- the freeburn
-    // drive test runs with `mbStuntModeActive == false`, and `StuntModeScoring::DealWithStunt`'s
-    // first statement is `if (!mbStuntModeActive) return;`. It also writes NONE of the five fields
-    // of the action-58 record built further down (those come from the progression set count, this
-    // class's own census table and ModeManager::meCurrentGameModeType), so the HUD popup is
-    // unaffected. Same treatment as ModeManager::HandleWorldStunt below.
-    // RESTORE-WHEN the Scoring subsystem mounts (see the mount-cost measurement above); the call is
-    // one line and the record it needs is already built.
-    (void)lbIsOnline;
-    (void)lWorldStuntAction;
+    // ⓘ WHAT THE PLAYER NOW GETS, per the console's own arms in StuntModeScoring::DealWithStunt:
+    //   SMASH(1)     -> RegisterStunt() + UpdateScore(100.0f, E_STUNT_TYPE_SUPER_SMASH) -- and
+    //                   NOT de-duped into mRecentStuntElementSet, so re-smashing a respawned gate
+    //                   scores again (the console's asm gotos past the Insert; see that body).
+    //   JUMP(0)      -> 2000.0f as E_STUNT_TYPE_SUPER_JUMP + UpdateStuntRating, de-duped.
+    //   BILLBOARD(2) -> 1000.0f as E_STUNT_TYPE_BILLBOARD  + UpdateStuntRating, de-duped.
+    // RegisterStunt() is the combo lifeline: it opens a combo when none is running and holds
+    // mbStuntInProgress, so a gate both scores AND keeps the chain from lapsing -- the second half
+    // of the retail behaviour this build was missing.
+    // ⚠️ STATED PRECISELY so nobody over-claims off this comment: the award goes in with
+    // lbAwesome == FALSE, so it lands in mfPendingNonGuaranteedScore and sets bit 5 in
+    // muStuntTypesInProgress (which IS in ShouldBankScore's 0x11EF7 bankable mask). It does NOT
+    // enter muAwesomeStuntTypesInProgress, and CalculateMultiplier's base term is the popcount of
+    // the AWESOME mask -- so a smash raises the SCORE and sustains the combo, it does not by itself
+    // raise miComboMultiplier. SUPER_SMASH is also absent from UpdateScore's 0x20308 repetition-
+    // falloff mask, so every gate is worth the full 100, not a decaying share.
+    // (All three magnitudes were re-verified big-endian out of the decrypted image this round:
+    //  flt_82CDB718=2000.0f, flt_82CDB71C=100.0f, flt_82CDB720=1000.0f.)
+    ScoringSystem* lpScoringSystem = mpModeManager->GetScoringSystem();
+    lpScoringSystem->DealWithStunt(&lWorldStuntAction, lbIsOnline);
+
+    // [DIAG] NOT IN THE X360 BINARY. The [stunt-boost] rung's twin, on the other producer: it
+    // reads the scorer's OWN score/multiplier straight back out after the hop, so the log proves
+    // the gate moved the number rather than merely proving the call was made. Read off
+    // GetStuntScorer() (== the OFFLINE scorer, ScoringSystem this+0x350) and therefore printed
+    // only on the offline path -- on the online path DealWithStunt selects a DIFFERENT object
+    // (mOnlineStuntModeScoring, this+0x2620) and these fields would be the wrong scorer's.
+    // First-N capped through this file's own BRN_PROP_DIAG helper.
+    if (!lbIsOnline)
+    {
+        static s32 siScoreDiagCount = 0;
+        if (UIGateDiagFirstN(&siScoreDiagCount))
+        {
+            const StuntModeScoring* lpStuntScorer = lpScoringSystem->GetStuntScorer();
+            *CgsDev::Log::gpDebugPrint
+                << "[stunt-score] world stunt -> scorer type=" << static_cast<s32>(leElementType)
+                << " score=" << lpStuntScorer->GetCurrentScore()
+                << "/" << lpStuntScorer->GetTargetScore()
+                << " combo=" << lpStuntScorer->GetComboScore()
+                << " mult=" << lpStuntScorer->GetComboMultiplier()
+                << " inProgress=" << (lpStuntScorer->IsComboInProgress() ? 1 : 0) << "\n";
+        }
+    }
 
     // ---- 5) the training-tip arm ----------------------------------------------------------
     // The X360 emits an inlined TrainingManager gauntlet THREE times here, once per stunt type

@@ -193,21 +193,18 @@ void PreRaceFlyByState::SetFreestyleDescription()
             break;
         }
     }
-    // The console dereferences this unconditionally -- a NULL read when the running event
-    // has no profile record. [PC GUARD, NOT in the X360 binary] On this build a fresh /
-    // harness profile carries an EMPTY event list (the profile-event producer chain is not
-    // reconstructed), so the walk above finds nothing for a perfectly valid running event
-    // and the unconditional read AV'd at ProfileEvent+0x4 (proof: run 20260827_133948,
-    // callstack SetupComponents -> SetFreestyleDescription -> ProfileEvent::GetFlags,
-    // reading 0x4). Missing record == "never ranked-won", flag 0.
-    // DELETE-WHEN the profile event list is populated on this build (then the guard is
-    // unreachable for a running event, exactly as on console).
-    lDescription.mbEventFlag = 0;
-    if (lpProfileEvent != 0)
-    {
-        lDescription.mbEventFlag = static_cast<u8>(
-            (lpProfileEvent->GetFlags() & BrnProgression::ProfileEvent::E_FLAG_RANK_WIN) != 0);
-    }
+    // The console dereferences this unconditionally.
+    // [PC GUARD RETIRED 2026-08-27, D1 profile-event-list wave] -- this was THE guard that took
+    // the AV (run 20260827_133948, callstack SetupComponents -> SetFreestyleDescription ->
+    // ProfileEvent::GetFlags reading 0x4), and its DELETE-WHEN ("the profile event list is
+    // populated on this build") is now due. The cause was that Profile::AddEvent @0x82359EB8 had
+    // no caller: its ONE xref in the whole XEX is ProgressionManager::UnlockToProgressionRank
+    // @0x8239DDE8, which is now bodied and runs at boot, giving the profile one ProfileEvent per
+    // authored event junction (120 on the retail Progression.dat). GuiCache::muEventID IS that
+    // junction id (GuiCache::RecEvent case 93, `muEventID = lpPrepare->muEventJunctionID`), so a
+    // running event always has a record and the walk above always hits. Console read restored.
+    lDescription.mbEventFlag = static_cast<u8>(
+        (lpProfileEvent->GetFlags() & BrnProgression::ProfileEvent::E_FLAG_RANK_WIN) != 0);
 
     mpStateInterface->GetOutputEventQueue()->AddEvent(&lDescription, KI_CHANNEL_GUI_OUT,
                                                      static_cast<s32>(sizeof(lDescription)));
@@ -293,16 +290,12 @@ void PreRaceFlyByState::SetRoadRageDescription()
             break;
         }
     }
-    // The console dereferences this unconditionally. [PC GUARD, NOT in the X360 binary] --
-    // the fresh/harness profile's event list is EMPTY on this build, see the twin guard in
-    // SetFreestyleDescription above (run 20260827_133948 AV proof). Missing record == flag 0.
-    // DELETE-WHEN the profile event list is populated on this build.
-    lDescription.mbEventFlag = 0;
-    if (lpProfileEvent != 0)
-    {
-        lDescription.mbEventFlag = static_cast<u8>(
-            (lpProfileEvent->GetFlags() & BrnProgression::ProfileEvent::E_FLAG_RANK_WIN) != 0);
-    }
+    // The console dereferences this unconditionally.
+    // [PC GUARD RETIRED 2026-08-27, D1 profile-event-list wave] -- twin of the guard retired in
+    // SetFreestyleDescription above; same DELETE-WHEN, same producer, same key. Console read
+    // restored.
+    lDescription.mbEventFlag = static_cast<u8>(
+        (lpProfileEvent->GetFlags() & BrnProgression::ProfileEvent::E_FLAG_RANK_WIN) != 0);
 
     mpStateInterface->GetOutputEventQueue()->AddEvent(&lDescription, KI_CHANNEL_GUI_OUT,
                                                      static_cast<s32>(sizeof(lDescription)));
