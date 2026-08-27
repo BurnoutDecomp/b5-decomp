@@ -314,4 +314,26 @@ namespace BrnGameState
 
         return lFastestLapTime;
     }
+
+    // ------------------------------------------------------------------------------------
+    // ScoringSystem::GetNewlyWreckedCarCount
+    //
+    // "Bodies land with the ScoringSystem TU; declare-only suffices for the `cl /c` compile
+    // gate" -- that note (BrnScoringSystem.h:458) expires here: the compile gate is not the
+    // gate any more, because AchievementManagerBase::OnBodyShop is now a LINK requirement of
+    // the mounted drive-thru chain, and this is its only unresolved callee.
+    //
+    // The offsets the header calls "out of scope" ARE mapped now, and they are two ordinary
+    // members of this class: X360 OnBodyShop @0x8235AA18 computes
+    // `*(mpScoringSystem + 0x4B58) - *(mpScoringSystem + 0x4B5C)` and tests it == 1, and
+    // 0x4B58 / 0x4B5C are miMaximumPlayerCrashedNumber / miCurrentPlayerCrashedNumber
+    // (BrnScoringSystem.h:728/:729, DWARF :1213/:1214). So the count is the HIGH-WATER wreck
+    // count minus the wrecks still outstanding -- i.e. how many of the player's wrecks have
+    // been cleared, which is exactly "newly wrecked-but-not-yet-repaired" read from the other
+    // end. No assert: the console has none and neither word is indexed.
+    // ------------------------------------------------------------------------------------
+    s32 ScoringSystem::GetNewlyWreckedCarCount() const
+    {
+        return miMaximumPlayerCrashedNumber - miCurrentPlayerCrashedNumber;
+    }
 }

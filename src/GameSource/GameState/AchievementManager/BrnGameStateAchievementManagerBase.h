@@ -181,6 +181,13 @@ public:
     // ===== remaining base hooks declared in the DWARF (bodies in other TUs) =====
     void OnShutdown(CgsID lCarId);                                              // DWARF :98
     void OnDrivenDistance();                                                    // DWARF :117
+    // ⭐ BODIED (2026-08-27), in BrnGameStateAchievementManagerBase_DriveThru.cpp. It has no
+    // standalone X360 symbol because the console INLINES it into GameStateModule::
+    // CheckForAllEventsBeingFound @0x82382460, whose tail is the identical
+    // IsAchievementEarnt/AchievementEarnt pair one id along from its OnFindAll* siblings
+    // (id 25 vs 26 / 32). That the caller had to enter through a member of THIS class is not a
+    // guess: both virtuals are `protected` in the DWARF (:219/:224), so GameStateModule cannot
+    // name them -- and the DWARF declares exactly this method for exactly that hook.
     void OnFindAllEvents();                                                     // DWARF :128
     void OnStuntRunMultiplier(s32 liMultiplier);                               // DWARF :148
     void OnShowTimeMultiplier(s32 liMultiplier);                              // DWARF :153

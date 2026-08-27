@@ -1168,4 +1168,78 @@ void GameStateModule::StartModeAtLights(const GameStateModuleIO::PreWorldInputBu
     // in full so landing them is a lookup, not a re-derivation.
 }
 
+// ==============================================================================================
+// GameStateModule::CheckForAllEventsBeingFound  (X360 0x82382460)
+//
+// ⭐ THE [PARKED] NOTE IN OnEventFinishUpdateProfile ABOVE IS PAID -- and this is not a
+// nice-to-have: with BrnDriveThruManager.cpp mounted it is ON THE LIVE DRIVING PATH. Measured
+// 2026-08-27 with a trap stub in its place: a plain junkyard -> car-select -> free-burn run
+// broke into the debugger 9.5 s after the first throttle input, at
+//   CheckForAllEventsBeingFound  <-  DriveThruManager::HandleDriveThru
+//                                <-  TriggerQueryManager::ProcessPlayerTriggers
+//                                <-  ...PreWorldUpdatePlayerTriggersBringUp
+// so it runs the moment the player is near any drive-thru region.
+//
+// "Has the player now discovered EVERY event in the profile?" -- walk the profile's event
+// records, stop at the first one whose DISCOVERED bit is clear, and if the walk ran to the end,
+// fire the find-all-events achievement (once) and post the 1-byte all-events-discovered action.
+//
+// ASM, @0x8238247C..0x82382540, store for store:
+//     lwz    r11, 0x278(r29)                   ; Profile::miEventCount
+//     cmplwi r11, 0 / beq -> tail              ; count == 0 skips the loop ENTIRELY, and the
+//                                              ; tail's `0 >= 0` then reports ALL FOUND
+//     addi   r30, r29, 0x7084                  ; &maEvents[0].muFlags   (0x7080 + 4)
+//   loop:
+//     cmplw  r31, r11 / blt ok                 ; UNSIGNED index-vs-count check ...
+//     FireAssert("luIndex < static_cast<uint32_t>(miEventCount)", ..., 3004)
+//   ok:                                        ; ... i.e. this loop body IS Profile::GetEvent
+//     lhz    r11, 0(r30) / clrlwi r11, r11, 31 ; muFlags & 1 == E_FLAG_DISCOVERED
+//     cmplwi r11, 0 / beq -> tail              ; first UNdiscovered record ends the walk
+//     lwz    r11, 0x278(r29) / addi r31,r31,1 / addi r30,r30,8 / cmplw / blt loop
+//   tail:
+//     lwz    r11, 0x278(r29) / cmplw r31, r11 / blt -> return
+//     addis  r31, r26, 3 / addi r31, r31, -0x3A50   ; this + 181680 == mAchievementManager
+//     li     r4, 0x19 / slot 1 -> IsAchievementEarnt(25); if clear, slot 0 -> AchievementEarnt(25)
+//     li     r6, 1 / li r5, 0xCA / AddEvent(queue, &stackbyte, 202, 1)
+// The achievement pair is spelled through AchievementManagerBase::OnFindAllEvents(), which is
+// exactly those four instructions and is where they have to live -- both virtuals are protected
+// in the DWARF, so this class cannot name them. See that function's banner for the inference.
+//
+// ⚠️ The console's 1-byte payload for action 202 is an UNINITIALISED stack slot -- var_50 is
+// handed to AddEvent with no preceding store (unlike the sibling id-55 post in
+// UnlockCarChallengeForCar, which does `v21[0] = 0` first). A zero is written here instead of
+// reproducing an indeterminate read: no consumer of 202 exists in this tree to read it, and
+// posting stack garbage would be a real defect, not fidelity. FLAG, deliberate.
+// ==============================================================================================
+void GameStateModule::CheckForAllEventsBeingFound(BrnProgression::Profile* lpProfile,
+                                                  GameStateModuleIO::GameActionQueue* lpQueue)
+{
+    u32 luIndex = 0;
+    if (lpProfile->GetEventCount() != 0)
+    {
+        // The console's do/while: the first record is read before any continue test, and the
+        // walk stops at the first record whose DISCOVERED bit is clear.
+        do
+        {
+            if (!lpProfile->GetEvent(luIndex)->IsFlagSet(
+                    BrnProgression::ProfileEvent::E_FLAG_DISCOVERED))
+            {
+                break;
+            }
+            ++luIndex;
+        }
+        while (luIndex < lpProfile->GetEventCount());
+    }
+
+    if (luIndex >= lpProfile->GetEventCount())
+    {
+        mAchievementManager.OnFindAllEvents();
+
+        const u8 lu8Payload = 0;   // FLAG: the console hands AddEvent an uninitialised stack byte
+        lpQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lu8Payload),
+                          GameStateModuleIO::E_ACTION_ALL_EVENTS_DISCOVERED,
+                          static_cast<s32>(sizeof(lu8Payload)));
+    }
+}
+
 }   // namespace BrnGameState

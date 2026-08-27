@@ -98,25 +98,14 @@ void AchievementManagerBase::Construct(BrnProgression::ProgressionManager* lpPro
 }
 
 // ----------------------------------------------------------------------------
-// OnBodyShop  (X360 0x8235AA18)
-//   Fires REPAIR_FIRST_WRECKED_CAR unconditionally (first time). Then, in
-//   ROAD_RAGE (mode == 3) with exactly one car newly wrecked-but-not-repaired,
-//   fires the road-rage repair shutdown achievement (id 8).
+// OnBodyShop  (X360 0x8235AA18)  -- MOVED, not deleted.
+//   Its body now lives in the sibling BrnGameStateAchievementManagerBase_DriveThru.cpp,
+//   together with OnFindAllDriveThrus / OnFindAllCarParks / OnFindAllEvents, because the
+//   mounted drive-thru chain link-requires those four while this TU as a whole still cannot
+//   be mounted (six of its other hooks' ScoringSystem / ProgressionManager callees are
+//   bodiless -- see that file's banner and the note in tools/build/build_game_exe.bat).
+//   ⭐ DELETE-WHEN those land: fold the split file back in here.
 // ----------------------------------------------------------------------------
-void AchievementManagerBase::OnBodyShop(GameStateModuleIO::EGameModeType leGameMode)
-{
-    if (!IsAchievementEarnt(E_X360_ACHIEVEMENT_REPAIR_FIRST_WRECKED_CAR))
-    {
-        AchievementEarnt(E_X360_ACHIEVEMENT_REPAIR_FIRST_WRECKED_CAR);
-    }
-
-    if (!IsAchievementEarnt(E_X360_ACHIEVEMENT_SHUTDOWN_ROADRAGE_VAN)
-        && leGameMode == GameStateModuleIO::E_MODE_ROAD_RAGE
-        && mpScoringSystem->GetNewlyWreckedCarCount() == 1)
-    {
-        AchievementEarnt(E_X360_ACHIEVEMENT_SHUTDOWN_ROADRAGE_VAN);
-    }
-}
 
 // ----------------------------------------------------------------------------
 // OnSetRoadRule  (X360 0x8235AC08)
@@ -328,26 +317,10 @@ void AchievementManagerBase::OnCollectStunt(StuntElementType leStuntType)
 }
 
 // ----------------------------------------------------------------------------
-// OnFindAllDriveThrus  (X360 0x8235AE78)
+// OnFindAllDriveThrus (X360 0x8235AE78) and OnFindAllCarParks (X360 0x8235AED8)
+//   MOVED, not deleted -- see the OnBodyShop note above. Both bodies now live in
+//   BrnGameStateAchievementManagerBase_DriveThru.cpp beside the new OnFindAllEvents.
 // ----------------------------------------------------------------------------
-void AchievementManagerBase::OnFindAllDriveThrus()
-{
-    if (!IsAchievementEarnt(E_X360_ACHIEVEMENT_FIND_ALL_DRIVE_THRUS))
-    {
-        AchievementEarnt(E_X360_ACHIEVEMENT_FIND_ALL_DRIVE_THRUS);
-    }
-}
-
-// ----------------------------------------------------------------------------
-// OnFindAllCarParks  (X360 0x8235AED8)
-// ----------------------------------------------------------------------------
-void AchievementManagerBase::OnFindAllCarParks()
-{
-    if (!IsAchievementEarnt(E_X360_ACHIEVEMENT_FIND_ALL_CARPARKS))
-    {
-        AchievementEarnt(E_X360_ACHIEVEMENT_FIND_ALL_CARPARKS);
-    }
-}
 
 // ----------------------------------------------------------------------------
 // OnCollectAllStunts  (X360 0x8235AF38)
