@@ -61,6 +61,10 @@ namespace BrnTrigger     { struct TriggerData; }
 namespace CgsWorld       { struct WorldMap2D; }
 // Prepare's 2nd/3rd arguments (pointer-only; the reconstructed stages do not dereference them).
 namespace CgsModule      { struct IOBufferStack; }
+// [showtime S7b-b] ShouldStartShowtimeMode takes the output buffer's SIM timer request block by
+// pointer only (DWARF BrnGameStateModule.h:781). Forward-declared rather than included to keep
+// this very widely-included header off the timer chain; the .cpp includes the real header.
+namespace CgsSystem      { struct TimerRequests; }
 namespace BrnResource    { namespace GameDataIO { class AllocatorList; } }
 
 namespace BrnGameState
@@ -534,20 +538,35 @@ public:
     void StartCrashMode(const GameStateModuleIO::PreWorldInputBuffer* lpInput,
                         GameStateModuleIO::OutputBuffer*              lpOutput);
 
-    // ⭐ HARNESS-ONLY, NOT IN THE X360 BINARY. Env-gated (BRN_START_SHOWTIME=1) one-shot that
-    // substitutes for ShouldStartShowtimeMode @0x82356B18 (166 insns) and the DetectModeStarts
-    // `else` arm that calls it -- and for nothing else: it calls StartCrashMode directly, so every
-    // hop downstream is the console's.
-    // ⭐⭐ ITS TRIGGER IS THE REAL GESTURE, not an invented one: ControllerInput::mbCrashModePressed
-    // (+0x42), the console's own BOTH-BUMPERS-HELD byte, written every frame by
-    // BrnGameStateModuleIO.cpp:92 from action rows 54/55. A pad player reaches this; so does the
-    // harness, through the ordinary input chain.
-    // Gated additionally on no mode already running and on IsPlayerCarActive() (which
-    // GetPlayerPosition asserts, and which ShouldStartShowtimeMode's own chain tests one level up).
-    // ⛔ DELETE-WHEN ShouldStartShowtimeMode and the else arm land -- this and its call site go
-    // together.
-    void HarnessInjectShowtimeBringUp(const GameStateModuleIO::PreWorldInputBuffer* lpInput,
-                                      GameStateModuleIO::OutputBuffer*              lpOutputBuffer);
+    // ⭐⭐⭐ X360 0x82356B18 (166 insns) -- THE SHOWTIME GATE STACK. Returns true on the single
+    // frame the crash-start hold expires with every condition met; every refusal re-arms that hold.
+    //
+    // SIGNATURE IS THE DWARF's (BrnGameStateModule.h:781
+    // `bool ShouldStartShowtimeMode(float32_t, bool, TimerRequests*)`) AND THE ASM AGREES, which is
+    // what settles the phantom-argument trap: Hex-Rays renders this
+    // `(int a1, double a2, int a3, char a4, unsigned int* a5)` -- FIVE arguments -- because the f32
+    // rides f1 and CONSUMES the r4 GPR slot. r4 is never read in the body; the bool is r5
+    // (`clrlwi r11, r5, 24` @0x82356C18) and the pointer is r6 (`lwz r11, 0(r6)` @0x82356BF0).
+    // Three arguments, in the DWARF's order.
+    //
+    // The third argument is the OUTPUT buffer's SIM timer request block --
+    // `OutputBuffer::GetTimerRequest() + 8` at the call sites, i.e.
+    // GetTimerRequestInterface()->GetSimTimerRequests(); the gate refuses while any of its three
+    // request bits is already set this frame.
+    bool ShouldStartShowtimeMode(f32                       lfGameTimestep,
+                                 bool                      lbCrashModePressed,
+                                 CgsSystem::TimerRequests*  lpSimTimerRequests);
+
+    // ⭐ X360 0x82356A60 (11 insns) -- `mfShowtimeIntroTimeLeft > 0.0f`. The showtime intro is the
+    // 0.5 s window DetectModeStarts' else arm opens between the gesture completing and
+    // StartCrashMode firing; while it is open the controller bridge overrides the player's steering
+    // with GetShowtimeIntroSteering() (see GameBridgeControllerToX.cpp's FLAG on that leg).
+    bool IsInShowtimeIntro() const;
+
+    // ⭐ X360 0x82356A90 (33 insns) -- returns mfShowtimeIntroSteering, asserting IsInShowtimeIntro()
+    // first (BrnGameStateModule.cpp:5050). The value is +/-1.0f, latched by the else arm from the
+    // sign of the player car's angular velocity Y at the moment the intro opens.
+    f32 GetShowtimeIntroSteering() const;
 
     // ⭐ [D4 stuntrace WAVE D] TEMPORARY, NOT IN THE X360 BINARY. The offline event intro has NO
     // timer by design (IntroState::OnEnter raises mbUseCountdown only for online modes and offline
@@ -1528,7 +1547,85 @@ private:
     // ShouldStartSnapRaceMode decrements it by the frame timestep and fires when it crosses 0;
     // every bail arm re-arms it to 0.35 (`li`-free: the console stores the literal 0x3EB33333
     // == 0.35f, rendered by Hex-Rays both as `0.34999999` and as the raw `1051931443`).
+    // ⓘ [showtime S7b-b] THE CONSOLE NAME FOR THIS MEMBER IS `mfTimeSpentDoingStartRaceAction`
+    // (DWARF BrnGameStateModule.h:851) -- it is the immediate neighbour of, and the exact twin of,
+    // mfTimeSpentDoingCrashStartAction below (:852, +284440). Not renamed here because
+    // ShouldStartSnapRaceMode and its call sites are another lane's live work this session; the
+    // DWARF name is recorded so a later pass is a rename, not a re-derivation.
     f32  mfSnapRaceStartHoldSeconds     = 0.35f;
+
+    // =========================================================================================
+    // ⭐⭐⭐ [showtime S7b-b, 2026-08-27] THE SEVEN SHOWTIME MEMBERS ShouldStartShowtimeMode
+    // @0x82356B18 and the DetectModeStarts @0x8239A428 `else` arm bind to. Every NAME is the
+    // DecFIGS DWARF's (BrnGameStateModule.h:852..860) and every OFFSET is a store or a load in
+    // one of those two bodies or in a THIRD function that independently pins it -- cited per
+    // member. As elsewhere on this minimal slice the members are NOT laid out at the console
+    // offsets; the offsets are the identity proof, not a layout.
+    //
+    // ⚠️ THE DWARF DECLARATION ORDER AND THE X360 LAYOUT DISAGREE in this run (the DWARF puts the
+    // two bools :857/:858 between the Vector3 and the enum; the X360 asm puts the enum at +284480,
+    // immediately after the Vector3, and a bool at +284510). Names come from rung 2, offsets from
+    // rung 1 -- so each member below is matched to its offset by BEHAVIOUR, not by counting
+    // declarations. The three that carry an independent witness are marked ✅.
+    //
+    // ⓘ INITIALISERS. GameStateModule::Construct @0x82380388 seeds four of these
+    // (`*(a1+284448) = 0.0`, `*(a1+284440) = 0.0099999998`, `*(a1+284444) = 2.0`,
+    // `*(a1+284480) = 2`) and this tree's Construct() does not reproduce that block, so the values
+    // are carried as member initialisers -- the same FLAG shape muNetworkGameRandomSeed uses. Each
+    // value IS the console's, image-cited from Construct, not a placeholder.
+    // =========================================================================================
+
+    // X360 +284440 (0x45718), DWARF :852. The BOTH-BUMPERS hold countdown -- the crash-start twin
+    // of mfSnapRaceStartHoldSeconds. ShouldStartShowtimeMode subtracts the frame timestep and
+    // fires when it crosses 0; EVERY refusal arm re-arms it to the console's 0.0099999998f
+    // (flt_82029F24, image-read: 0x3C23D70A). Ten milliseconds -- i.e. ONE frame of holding both
+    // bumpers with every gate satisfied.
+    f32                mfTimeSpentDoingCrashStartAction = 0.0099999998f;
+
+    // X360 +284444 (0x4571C), DWARF :853. ✅ The post-mode LOCKOUT, and it counts DOWN despite the
+    // name. Construct @0x82380388 and OnModeEnd @0x823767E0 both store 2.0f into it; while it is
+    // above zero ShouldStartShowtimeMode decrements it, re-arms the hold and refuses. So showtime
+    // cannot be re-entered for two seconds after any mode ends -- and cannot be entered for the
+    // first two seconds of a session.
+    f32                mfTimeSinceLastCrashMode         = 2.0f;
+
+    // X360 +284448 (0x45720), DWARF :854. ✅ THE 0.5 s INTRO WINDOW. Two independent witnesses:
+    // IsInShowtimeIntro @0x82356A60 is nothing but `*(this+284448) > 0.0f`, and
+    // GetShowtimeIntroSteering @0x82356A90 asserts on exactly that expression. Opened to
+    // flt_82CDB8D0 (0.5f, image-read) by the else arm, decremented every frame, and cleared to 0
+    // when the arm takes its decision.
+    f32                mfShowtimeIntroTimeLeft          = 0.0f;
+
+    // X360 +284452 (0x45724), DWARF :855. ✅ The forced steering the intro applies, +/-1.0f
+    // (flt_82001C98 / flt_820037C8, both image-read). GetShowtimeIntroSteering @0x82356A90 returns
+    // exactly this word. Latched by the else arm from the SIGN of the player car's angular
+    // velocity Y, so the car keeps spinning the way it was already turning.
+    // ⓘ Construct does NOT seed it (the console only ever reads it behind IsInShowtimeIntro(), and
+    // the arm always writes it before opening the window); zeroed here for determinism.
+    f32                mfShowtimeIntroSteering          = 0.0f;
+
+    // X360 +284464 (0x45730), DWARF :856. The heading the car had when the intro opened, cached as
+    // a whole 16-byte vector (`stvx128 v0, r30, r10` with r10 == 0x45730, @0x8239A6C4) and
+    // re-loaded each frame (`lvx128 v127, r30, r10`, @0x8239A7A8) to be dotted against the current
+    // heading. When that dot goes non-positive -- the car has turned more than 90 degrees -- the
+    // arm stops waiting and decides.
+    Vector3            mShowtimeIntroOriginalDirection;
+
+    // X360 +284480 (0x45740), DWARF :859. ✅ Which showtime bounce behaviour is selected.
+    // UpdateShowtimeMode @0x82380EF8 cycles it `(x + 1) % 3` and posts the new value as the 4-byte
+    // payload of game action 138 (E_ACTION_TOGGLE_SHOWTIME_BEHAVIOUR), whose consumer
+    // VehicleManager::SetShowtimeBehaviour asserts `< 3` -- which is what pins both the type and
+    // E_SHOWTIME_MODE_COUNT. ShouldStartShowtimeMode refuses while it is E_SHOWTIME_MODE_OFF.
+    EShowtimeBehaviour meShowtimeBehaviour              = E_SHOWTIME_MODE_ON_SIXAXIS;   // Construct: 2
+
+    // X360 +284510 (0x4575E), DWARF :857. "The car has been on the ground at some point during the
+    // intro window." Cleared when the window opens (`stbx r28(0), r30, r9`, r9 == 0x4575E,
+    // @0x8239A6C8) and OR-ed every frame with `!(mfTimeInAir > 0.0f)` (@0x8239A7A0..0x8239A7BC).
+    // ⭐ IT IS THE LAST GATE BEFORE StartCrashMode: when the window closes with this byte still
+    // clear the arm does NOT start showtime -- it re-arms the window to 9.99999975e-06f
+    // (flt_82004884, image-read) and retries next frame. A car that is airborne for the whole
+    // window waits until it lands.
+    bool               mbShowtimeIntroHasTouchedGround  = false;
 
     // ⭐⭐⭐ X360 +284513 (0x45761). [bounce wave] THE SHOWTIME RISING-EDGE LATCH, and the reason
     // ~1900 instructions of showtime physics had never executed on this build.
