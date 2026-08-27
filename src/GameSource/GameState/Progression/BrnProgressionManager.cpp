@@ -486,12 +486,27 @@ void ProgressionManager::UnlockToProgressionRank(s8 li8Rank,
         // when every drive-thru category is complete, OnTrophyUnlock(21) on top. It is
         // OnDriveThru's body-shop leg, inlined at boot for the one drive-thru the player starts
         // standing in.
-        // ⚠️ DELIBERATELY NOT LANDED IN THIS WAVE. It WRITES INTO THE SAVED PROFILE on the boot
-        // path, and this wave could not exercise it: flow_run.ps1's phase machine does not reach
-        // DRIVING on the returning-player path (measured 2026-08-28 -- both new cues fire in the
-        // log but the promotion does not, so -Drive silently holds no throttle), which means no
-        // drive could be driven to confirm it. Landing a profile-mutating boot arm that has never
-        // once run is how a save ends up with a wrong set in it. Land it with a drive behind it.
+        // ⚠️ DELIBERATELY NOT LANDED. It WRITES INTO THE SAVED PROFILE on the boot path, and it
+        // should not land until a run has driven through the starting body shop behind it: landing
+        // a profile-mutating boot arm that has never once run is how a save ends up with a wrong
+        // set in it.
+        //
+        // ⚠️⚠️ THE REASON THIS NOTE GAVE FOR "could not exercise it" WAS WRONG, and re-measuring it
+        // is what found the real bug (2026-08-28, gas-station wave). The text said "flow_run.ps1's
+        // phase machine does not reach DRIVING on the returning-player path ... so -Drive silently
+        // holds no throttle". Both halves fail on measurement:
+        //   * the phase machine DOES reach DRIVING on that path now (flow_run.ps1's newprof+ingame
+        //     promotion, run gas_r1_probe: phase=DRIVING at 32 s), and the throttle IS held --
+        //   * but the car still did not move, because on the returning-player path the player's
+        //     ENGINE IS NEVER STARTED (no GuiPlayerEngineEvent engineOn=1 in the whole run; the
+        //     drive-thru gate reports gear=0 and never re-opens). The harness was innocent; the
+        //     boot path is missing the engine start. THAT is the remaining blocker for this park
+        //     on the returning path, and it is not a harness bug.
+        // On the FRESH-profile path the car now does drive (the authored-extent fix in
+        // BrnTriggerQueryManager.cpp), so the drive this park is waiting for is available there --
+        // the starting body shop is drive-thru region id 444205 == 0x6C72D at (3345.78, 2.19,
+        // -1712.68), which is the same CgsID the asm builds, confirmed against the live region
+        // dump. Land it with that drive behind it. [[gates-are-stale-not-dead]]
         if (CgsDev::Log::gpDebugPrint != 0)
         {
             *CgsDev::Log::gpDebugPrint

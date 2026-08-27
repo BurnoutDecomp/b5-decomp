@@ -1019,11 +1019,30 @@ void TriggerQueryManager::PreWorldUpdatePlayerTriggersBringUp(
             // HALF. So this is not a tuning choice between two defensible readings -- one of the
             // two in-tree callers was simply wrong, and it was this one.
             //
+            // ✅ VERIFIED END TO END, same day, run scratch/flow_run/gas_r3_fresh (fresh profile,
+            // -Drive -Steer left -Teleport onto gas station 285279). The numbers, and they are
+            // arithmetic rather than judgement -- junkyard 250700 is centred (3007.889, -0.810,
+            // -1956.691) with authored dims (10, 5, 14), and the junkyard-exit placement puts the
+            // car at (3007.972, -3.210, -1945.167), i.e. 11.52 m away along Z:
+            //     authored half-extent Z = 7.0   -> 11.52 > 7.0    OUTSIDE  (correct)
+            //     dims taken as half-extents = 14.0 -> 11.52 < 14.0  INSIDE (the bug)
+            // The log carries exactly that, as one line:
+            //     [trig-box] region 3669 id=250700 genericType=0 dims=(10,5,14)
+            //                insideFull=1 insideHalf=0
+            // and then, for the first time on this build: NO "CarSelectManager: EnterJunkyard",
+            // ONE "GuiPlayerEngineEvent engineOn=1" with no engineOn=0 after it, and a car that
+            // drove out of the junkyard under its own throttle -- which is what armed the 8 m
+            // teleport that the whole gas-station measurement then hung off.
+            //
             // ⚠️ THE JUMP LADDER IS THE THING TO RE-VERIFY (the deferred note's stated worry): jump
             // regions shrink to their authored size here, so a jump the 2x box used to catch early
-            // is now caught at its real boundary. The [jump-ladder] rungs still print; the
-            // `insideFull`/`insideHalf` witness below makes every difference this change makes
-            // visible in one line rather than inferred from a missing event.
+            // is now caught at its real boundary. NOT YET RE-VERIFIED -- that run's route passed no
+            // E_TYPE_JUMP region at all, so it is silent on the question rather than reassuring
+            // about it. What it DOES say is that the whole population of verdict changes it saw was
+            // three regions -- the junkyard above and two type-18 PICTURE_PARADISE boxes (609120,
+            // 609131) -- and no genericType=7 among them. The `insideFull`/`insideHalf` witness
+            // below is what a jump-route run should be read against: every difference this change
+            // makes prints as one line, rather than being inferred from a missing event.
             // The BROADPHASE above is deliberately left on the summed full dimensions: it can only
             // over-accept, and over-accepting into an exact test is free.
             const bool lbInsideAuthored =
