@@ -338,11 +338,31 @@ public:
     CgsID GetSpawnWheelId() const              { return mSpawnWheelId; }
     void  SetSpawnWheelId(CgsID lWheelId)      { mSpawnWheelId = lWheelId; }
 
-    // ADDITIVE GROW: the gold/silver derived-car unlock flags at +42516/+42517. The X360 tests
-    // the gold one inline in ProgressionManager::AddCar @0x8237A970 (`lwz *(progMgr + 42884)`,
-    // i.e. Profile+42516) to decide whether to fan a new car out to its derived variants.
-    bool GetGoldCarsUnlocked() const           { return mbGoldCarsUnlocked; }
+    // ⭐⭐ THE PAIR WAS SWAPPED (fixed 2026-08-27). The two derived-car unlock flags at
+    // +42516/+42517 were named in DWARF DECLARATION ORDER (mbGoldCarsUnlocked first), and the
+    // ARTIST asm says that order is wrong. ProgressionManager::CheckForSpecialCarUnlocks
+    // @0x82396058 prints each flag next to its own accessor name, and the load is right there:
+    //     ori  r28, r10, 0xA784      ; 42884 == Profile+42516
+    //     lbzx r29, r31, r28         ; @0x823960A4
+    //     addi r4, r11, aMprofileAresil@l   ; "mProfile.AreSilverCarsUnlocked(): "
+    // ...and +42885 (Profile+42517) is the one printed "mProfile.AreGoldCarsUnlocked() : ".
+    // The GATES corroborate it independently, and match the shipped game:
+    //     +42516  <- GetCurrentProgressionRank() >= ProgressionData+0x14   (a licence rank) = SILVER
+    //     +42517  <- ComputeCompletionPercentage() >= 100.0f               (game complete)  = GOLD
+    // Rung 1 arbitrates over rung 2; DecFIGS additionally declares the accessor pair as
+    // AreChromeCarsUnlocked/AreGoldCarsUnlocked (BrnProfile.h:757/:760), i.e. by ARTIST the
+    // first flag's accessor had been renamed Chrome -> Silver, which is how the member names
+    // and the accessor names drifted apart in the first place.
+    // ⚠️ NOTHING MOVES: this is a rename only. Both bytes keep their offsets, and
+    // BrnProfile_SaveImage.cpp stores them at image+42500/+42501 in the same offset order, so
+    // the save layout is byte-identical before and after (the two KU_ names are renamed with
+    // them so the pairing stays honest).
+    // The X360 tests the SILVER one inline in ProgressionManager::AddCar @0x8237A970
+    // (`lwz *(progMgr + 42884)`, i.e. Profile+42516) to decide whether to fan a new car out to
+    // its derived variants -- which is why that leg's own comment already called itself the
+    // "derived-(silver)-car fan-out" while testing a member spelled Gold.
     bool GetSilverCarsUnlocked() const         { return mbSilverCarsUnlocked; }
+    bool GetGoldCarsUnlocked() const           { return mbGoldCarsUnlocked; }
 
     // ADDITIVE GROW: the two profile reads BrnGui::LicenseComponent inlines. Neither has a
     // standalone symbol in the X360 image -- every call site open-codes the load pair -- so
@@ -667,8 +687,12 @@ private:
     ProfileEvent maEvents[175];                              // +0x7080 (28800)
     Set<CgsID, 512u> maStuntElements[3];                     // +30200
     u32   muMedalCountFromTheStart;                          // +42512
-    bool  mbGoldCarsUnlocked;                                // +42516
-    bool  mbSilverCarsUnlocked;                              // +42517
+    // ⭐⭐ ORDER IS THE X360's, NOT THE DWARF's -- see the accessor pair above. DecFIGS declares
+    // mbGoldCarsUnlocked first (BrnProfile.h:1228/:1229); CheckForSpecialCarUnlocks @0x82396058
+    // prints +42516 as AreSilverCarsUnlocked() and gates it on the progression rank, and prints
+    // +42517 as AreGoldCarsUnlocked() and gates it on 100% completion.
+    bool  mbSilverCarsUnlocked;                              // +42516  (rank-gated)
+    bool  mbGoldCarsUnlocked;                                // +42517  (100%-completion-gated)
     Set<CgsID, 5u>  mJunkYardsDriveThruSet;                  // +42520 (len word +42560)
     Set<CgsID, 11u> mBodyShopsDriveThruSet;                  // +42568 (len word +42656)
     Set<CgsID, 5u>  mPaintShopsDriveThruSet;                 // +42664 (len word +42704)

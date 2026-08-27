@@ -2711,6 +2711,48 @@ void GuiModule::Destruct()
                 }
             }
         }
+        // ⭐⭐ [drive-thru wave 2026-08-27] THE `else` ARM: THE 300-SECOND PERIODIC AUTOSAVE.
+        // The block above is only the CONSUMER of the latch; this is the second PRODUCER, and it
+        // was missing entirely -- so until now the game only ever autosaved on the event-driven
+        // path (the id-356 GuiAutosaveRequestEvent arm at :1974). X360 @0x825296AC..0x82529700,
+        // store for store (r26 == the module, r30 == module+0x18D844 == the pending latch):
+        //     ori   r11, r11, 0x979C   ; 0xF979C == 1021852 == mGuiCache + 0x405C
+        //     lwzx  r11, r26, r11      ; GuiCache::mpProfile
+        //     cmpwi r11, 0 / beq       ; null-guarded
+        //     ori   r10, r10, 0xA615   ; 42517
+        //     lbzx  r11, r11, r10      ; Profile+42517, a BYTE
+        //     cmplwi r11, 1 / bne      ; == 1 exactly, not "non-zero"
+        //     bl    GuiCache::GetTime  ; module+0xF5740 == 1005376 == mGuiCache
+        //     lfsx  f13, r26, 0x18D840 ; mfLastProfileAutosaveTime
+        //     lfs   f0, flt_8201A258   ; 300.0f
+        //     fadds f0, f13, f0 / fcmpu f1, f0 / ble
+        //     li    r11, 1 / stb r11, 0(r30)   ; mbProfileAutosavePending = true
+        // It ARMS the latch only; mbForceProfileAutosave is untouched, so the actual save
+        // happens on the NEXT Update through the arm above -- whose own 60 s throttle is
+        // trivially satisfied once 300 s have passed. That is why the two windows differ.
+        //
+        // ⚠️ THE GATE IS THE GOLD-CARS FLAG, AND THAT IS NOT A TYPO. Profile+42517 is the
+        // 100%-completion flag (see the ⭐⭐ note on the pair in BrnProfile.h: the two flags were
+        // named in DWARF declaration order and were swapped; CheckForSpecialCarUnlocks
+        // @0x82396058 prints +42517 as "mProfile.AreGoldCarsUnlocked() : " and sets it from
+        // ComputeCompletionPercentage() >= 100.0f). So the console's periodic autosave only runs
+        // for a completed profile. Reproduced as-is -- it is a fixed byte compare against 1, not
+        // an inference -- and flagged rather than "corrected" into a nicer-looking gate.
+        // Consequence worth knowing when testing: on a fresh profile this arm never fires, and
+        // the event-driven path above remains the only autosave. That matches the measured
+        // behaviour (a fresh boot writes its container from the id-356 arm, not from here).
+        else
+        {
+            const BrnProgression::Profile* lpCacheProfile = mGuiCache.GetProfile();
+            if (lpCacheProfile != 0 && lpCacheProfile->GetGoldCarsUnlocked())
+            {
+                const f32 KF_AUTOSAVE_PERIOD_SECONDS = 300.0f;   // flt_8201A258
+                if (mGuiCache.GetTime() > (mfLastProfileAutosaveTime + KF_AUTOSAVE_PERIOD_SECONDS))
+                {
+                    mbProfileAutosavePending = true;
+                }
+            }
+        }
         mbForceProfileAutosave = false;   // the console's per-Update stack byte
 
         // Pump the always-available components manager (the top-left save-icon spinner + the

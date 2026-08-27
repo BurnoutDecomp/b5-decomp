@@ -115,8 +115,10 @@ namespace SaveImage
     const u32 KU_EVENTS                         = 28784;    // 0x7070 == BrnGuiSaveLoad::Profile::maVersionManifest
     const u32 KU_STUNT_ELEMENT_SETS             = 30184;    // 0x75E8, memcpy 0x3018
     const u32 KU_MEDAL_COUNT_FROM_THE_START     = 42496;    // 0xA600
-    const u32 KU_GOLD_CARS_UNLOCKED             = 42500;    // 0xA604
-    const u32 KU_SILVER_CARS_UNLOCKED           = 42501;    // 0xA605
+    // Renamed 2026-08-27 with the live members: image+42500 mirrors Profile+42516 (SILVER,
+    // rank-gated) and image+42501 mirrors Profile+42517 (GOLD, 100%-gated). Offsets unchanged.
+    const u32 KU_SILVER_CARS_UNLOCKED           = 42500;    // 0xA604 <- Profile+42516
+    const u32 KU_GOLD_CARS_UNLOCKED             = 42501;    // 0xA605 <- Profile+42517
     const u32 KU_JUNK_YARDS_SET                 = 42504;    // NEVER WRITTEN -- see the note at the copy site
     const u32 KU_BODY_SHOPS_SET                 = 42552;    // 0xA638, memcpy 0x60
     const u32 KU_PAINT_SHOPS_SET                = 42648;    // 0xA698, six std
@@ -424,8 +426,8 @@ void Profile::Serialise(BrnGuiSaveLoad::Profile* lpImage,
     StoreImageBlock(lpaImage, SaveImage::KU_STUNT_ELEMENT_SETS, maStuntElements, sizeof(maStuntElements));
 
     StoreImageField(lpaImage, SaveImage::KU_MEDAL_COUNT_FROM_THE_START, muMedalCountFromTheStart);
-    StoreImageField(lpaImage, SaveImage::KU_GOLD_CARS_UNLOCKED,         mbGoldCarsUnlocked);
     StoreImageField(lpaImage, SaveImage::KU_SILVER_CARS_UNLOCKED,       mbSilverCarsUnlocked);
+    StoreImageField(lpaImage, SaveImage::KU_GOLD_CARS_UNLOCKED,         mbGoldCarsUnlocked);
 
     // FLAG (console defect, reproduced): the JUNK YARD drive-thru set is never serialised.
     // The X360 emits the body-shop copy TWICE, back to back with identical operands
@@ -675,8 +677,8 @@ void Profile::Deserialise(const BrnGuiSaveLoad::Profile* lpImage,
     LoadImageBlock(lpaImage, SaveImage::KU_STUNT_ELEMENT_SETS, maStuntElements, sizeof(maStuntElements));
 
     LoadImageField(lpaImage, SaveImage::KU_MEDAL_COUNT_FROM_THE_START, muMedalCountFromTheStart);
-    LoadImageField(lpaImage, SaveImage::KU_GOLD_CARS_UNLOCKED,         mbGoldCarsUnlocked);
     LoadImageField(lpaImage, SaveImage::KU_SILVER_CARS_UNLOCKED,       mbSilverCarsUnlocked);
+    LoadImageField(lpaImage, SaveImage::KU_GOLD_CARS_UNLOCKED,         mbGoldCarsUnlocked);
 
     // The mirrored duplicated body-shop restore (see Serialise): mJunkYardsDriveThruSet is
     // NOT restored, so it stays zeroed by the memset above. Console defect, reproduced.

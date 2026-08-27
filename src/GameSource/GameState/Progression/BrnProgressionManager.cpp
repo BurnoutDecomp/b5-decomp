@@ -1285,13 +1285,15 @@ s8 ProgressionManager::GetProgressionRankForGameMode(BrnGameState::GameStateModu
 // ARG SHAPE FROM ASM: r3=this, r4=carId, r5=unlockType. (ProgressionManager::OnPlayerCarChange
 // @0x8237AC38 calls it as `li r5,0` -> unlock type E_UNLOCK_TYPE_UNLOCK.)
 //
-// ⛔ HONEST PARTIAL -- the derived-car leg. When the profile's mbGoldCarsUnlocked flag is set the
+// ⛔ HONEST PARTIAL -- the derived-car leg. When the profile's mbSilverCarsUnlocked flag is set the
 // console builds the car's colour-livery list (BrnProgression::DerivedCarArray::
 // ConstructColourLiveryList @0x82374F60), walks it, and for every entry whose livery kind == 4 it
 // adds that derived car to the profile too and marks its unlock sequence already-shown. That
 // whole path needs BrnDerivedCars.h (DerivedCarArray + ConstructColourLiveryList +
 // UnlockDerivedCarCollection + DEBUG_PrintArray, ~600 X360 instructions), which is NOT
-// reconstructed. It is gated on mbGoldCarsUnlocked, which a fresh profile leaves FALSE, so it is
+// reconstructed. It is gated on mbSilverCarsUnlocked (Profile+42516 -- the pair was renamed
+// 2026-08-27 to match the X360's own debug strings; the byte and the test are unchanged), which
+// a fresh profile leaves FALSE, so it is
 // off the start-of-game path entirely -- and it announces itself in the log when it is hit.
 // DELETE-WHEN BrnDerivedCars.h lands.
 // --------------------------------------------------------------------------------------------
@@ -1318,7 +1320,7 @@ CarData* ProgressionManager::AddCar(CgsID lCarId, s32 leUnlockType)
         ++miSponsorCarCount;
     }
 
-    if (mProfile.GetGoldCarsUnlocked())
+    if (mProfile.GetSilverCarsUnlocked())   // Profile+42516, the console's `lwz *(progMgr+42884)`
     {
         if (CgsDev::Log::gpDebugPrint != 0)
         {
