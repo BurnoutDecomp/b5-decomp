@@ -127,7 +127,11 @@ public:
     // StuntManager::OnPropHit @0x8236EE18 (8 -> SMASH, 12 -> BILLBOARD) and
     // ProcessStuntElement @0x8239CDB0 keys the stunt element on the +0x2C word,
     // falling back to TriggerRegion::GetId() (+0x24) when it is zero.
-    bool            IsDriveThru() const;   // still declaration-only -- see the FLAG below
+    // ⭐ [drive-thru wave 2026-08-27] BODIED in BrnGenericRegion.cpp; the FLAG that parked it is
+    // retired there. The type SET is now attested -- the console inlines the five-way test into
+    // DriveThruManager::Prepare @0x8236E3C0. See the body for the asm and for why it stays a set
+    // rather than becoming a range compare.
+    bool            IsDriveThru() const;
 
     // The stunt-element KEY. X360 ProcessStuntElement @0x8239CDB0 does
     // `lwz r11, 0x2C(region); extsw r11, r11` -- a SIGN-EXTENDING word read into the
@@ -154,14 +158,10 @@ public:
     void            FixDown();
     void            FixUp();
 
-    // FLAG [gateui]: `IsDriveThru()` is deliberately LEFT declaration-only. Unlike the
-    // six above it is not a member read -- the console tests meType against the
-    // drive-thru type SET, and that set is not attested by anything in this wave's
-    // evidence (the only consumer, DriveThruManager::ProcessDriveThru @0x8239B6E8,
-    // is an unmounted TU and inlines the test inside a 1300-line body). Guessing
-    // "meType <= E_TYPE_CAR_PARK" would be a fabrication with a live behavioural
-    // consequence (every junkyard/gas-station/body-shop/paint-shop/car-park trigger
-    // gates on it), so it is parked for the owner of the DriveThruManager TU.
+    // [RETIRED 2026-08-27] The FLAG that stood here parked IsDriveThru() as
+    // declaration-only because the drive-thru type set was unattested. It is attested
+    // now (DriveThruManager::Prepare @0x8236E3C0 inlines the five-way test); the body
+    // and the full evidence are in BrnGenericRegion.cpp.
 
 private:
     // Layout (DWARF, after the 44-byte TriggerRegion base subobject @ 0x00..0x2B):
