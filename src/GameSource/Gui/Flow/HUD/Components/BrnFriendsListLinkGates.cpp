@@ -97,28 +97,17 @@ namespace BrnGui
 
 namespace BrnResource
 {
-    // ChallengeList far accessor @0x8242B894 (declared-only, ChallengeList.h:95).
-    // ⛔ RETURNS 0, WHICH IS A [[silent-drop-stub]] BY CONSTRUCTION: every caller loops
-    // `for (i = 0; i < GetChallengeCount(); ++i)`, so zero means "no challenges exist" and the
-    // loop body never runs. That is harmless ONLY while the sole caller is the cold friends
-    // list. ⚠️ BrnChallengeManager_wB_03.cpp and BrnChallengeManagerDebugComponent.cpp call it
-    // too and are NOT mounted today -- mounting either of them WITHOUT landing the real body
-    // would make the challenge system quietly empty. Land the body with that mount.
-    s32 ChallengeList::GetChallengeCount() const
-    {
-        static bool sbLogged = false;
-        LogGateOnce(sbLogged, "BrnResource::ChallengeList::GetChallengeCount");
-        return 0;
-    }
+    // (GetChallengeCount: gate RETIRED 2026-08-27, challenge-list wave -- its own DELETE-WHEN
+    // ("Land the body with that mount") came due. GameDataModule::Prepare stage 10
+    // (PrepareFreeburnChallengeList @0x8266C088) now streams OnlineChallenges.bndl into pool 26
+    // and hands the resource to ChallengeList::AddListResource, so the table holds the shipped
+    // 458 freeburn challenges and returning 0 would no longer be "none exist" -- it would be a
+    // lie about all 458. The real one-line body lives in SharedClasses/DataLists/ChallengeList.cpp
+    // next to GetChallengeData / GetChallengeIndex.)
 
-    // ChallengeListEntry far byte +0xD3 (declared-only, ChallengeListEntry.h:375). Unreachable
-    // today: its only caller sits inside the GetChallengeCount()==0 loop above.
-    int32_t ChallengeListEntry::GetNumPlayers() const
-    {
-        static bool sbLogged = false;
-        LogGateOnce(sbLogged, "BrnResource::ChallengeListEntry::GetNumPlayers");
-        return 0;
-    }
+    // (GetNumPlayers: gate RETIRED 2026-08-27 -- RaceMainHudState::StartFreeburnChallengeTicker
+    // made it reachable, and the console body is a one-line inline now in
+    // ChallengeListEntry.h (muNumPlayers & 0xF, attested @0x8247AAC0).)
 }
 
 // RETIRED 2026-08-26 (same day, other session): the std::strcmp LobbyNameCmp STAND-IN that

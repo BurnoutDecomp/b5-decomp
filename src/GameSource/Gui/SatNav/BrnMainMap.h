@@ -18,23 +18,27 @@ namespace BrnGui { struct CrashNavMap; }  // friend of MainMapComponent (reads m
 // map view, and outputs a GuiEventRenderMainMap each frame for the custom map renderer.
 //
 // X360 authority (BURNOUT_X360_ARTIST.XEX):
-//   Construct                  @ 0x8245E228
-//   RecvEvent                  @ 0x82458370
+//   Construct                  @ 0x8245E228   (bodied, BrnMainMap.cpp)
+//   Prepare                    @ 0x8244F4A8   (bodied, BrnMainMap.cpp)
+//   RecvEvent                  @ 0x82458370   (bodied, BrnMainMap.cpp)
+//   SetStandardDefZoomParams   @ 0x82447ED8   (bodied, BrnMainMap.cpp)
 //   Update                     @ 0x824696E8
 //   SnapToLocation             @ 0x8245EBA0
 //   ApplyZoom                  @ 0x8245EE78
 //   SetZoom                    @ 0x82469A38
-//   SetStandardDefZoomParams   @ 0x82447ED8
+//   CalculatePositionedWorldRect @ 0x8245E5F0
+//   CalculateViewPaddingOffset   @ 0x82447D38
 // DWARF: references/DecFIGS/dwarfdump/GameSource/Gui/SatNav/BrnMainMap.h
 //
 // LAYOUT NOTE: the X360 `this` embeds MapManager at +0x8C (4-byte-pointer ABI). Members are
 // reached BY NAME (semantic parity, not byte offsets) so the PC x64 widths differ from the
 // documented X360 offsets -- every X360 offset in this file is a COMMENT, never arithmetic.
-// The full DWARF instance-member run (BrnMainMap.h:209-232) is declared below; the bodies of
-// Construct / Update / SnapToLocation / ApplyZoom / SetZoom that animate it are still todo
-// (they depend on the still-unrecovered sub_8245A080 vector helper, the CalculateViewPaddingOffset
-// / CalculatePositionedWorldRect methods, and the OutputViewState<> / GuiAudioTriggerEvent /
-// MapTransform collaborators).
+// The full DWARF instance-member run (BrnMainMap.h:209-232) is declared below. Construct and
+// Prepare -- the two that run on the stunt-run fly-by path -- are bodied in BrnMainMap.cpp as
+// of 2026-08-27; Update / SnapToLocation / ApplyZoom / SetZoom are still todo (they depend on
+// the still-unrecovered sub_8245A080 vector helper, the CalculateViewPaddingOffset /
+// CalculatePositionedWorldRect methods, and the OutputViewState<> / GuiAudioTriggerEvent
+// collaborators).
 
 namespace BrnGui
 {
@@ -98,7 +102,7 @@ namespace BrnGui
         // @0x8245E228
         void    Construct(CgsGui::StateInterface* lpStateInterface,
                           MainMapParameterBundle* lpParameters);
-        // @0x82464F?? (Prepare/Release are separate todo funcs of this class)
+        // @0x8244F4A8 -- mark active and park the desired centre on the world-rect centre.
         bool    Prepare();
         bool    Release();
         // @0x824696E8 -- advance the animated map view and emit the render event.
@@ -111,9 +115,44 @@ namespace BrnGui
         void    SetZoom(ZoomFactor leZoomFactor, float lfCustomZoom, bool lbApplyNow);
         void    IncreaseZoom();
         void    DecreaseZoom();
-        void    SetDesiredWorldCentre(Vector2 lv2Centre);
+
+        // DWARF BrnMainMap.h:379 -- `void SetDesiredWorldCentre(Vector2)`, a HEADER-INLINE
+        // method on the console: the dump gives it a BrnMainMap.h decl line (not a .cpp one)
+        // and there is no out-of-line address for it in scratch/func_index.tsv, so its
+        // faithful home is a body here.
+        //
+        // It is a straight 16-byte lane store into mv2DesiredCentre. Attested inlined at
+        // CrashNavMapMain::HandleCrashNavInputPressed @0x824CCCB0-ish, which does exactly
+        // `li r10, 1712 ; lvx128 v0, r0, &unk_82FB4C20 ; stvx128 v0, r31, r10` -- and 1712
+        // is state+96 (the embedded component) + 1616 (mv2DesiredCentre). Whole-quadword,
+        // so all four lanes of the caller's Vector2 are committed, not just x/y.
+        void    SetDesiredWorldCentre(Vector2 lv2DesiredWorldCentre)   // param name: DWARF BrnGuiComponentUnity.cpp:3839
+        {
+            mv2DesiredCentre = lv2DesiredWorldCentre;
+        }
+
         bool    IsZooming() const;
-        void    SetStickMapToScreenEdges(bool lbTop, bool lbBottom, bool lbLeft, bool lbRight);
+
+        // DWARF BrnMainMap.h:415 -- `void SetStickMapToScreenEdges(bool, bool, bool, bool)`,
+        // header-inline on the console for the same two reasons as above. Writes the four
+        // stick flags, whose offset ORDER is pinned by the _AssertLayout block below and by
+        // CalculatePositionedWorldRect @0x8245E5F0, which reads +0x67A/+0x67B/+0x678/+0x679
+        // as the left / right / up / down edge tests.
+        //
+        // The ARGUMENT-to-member mapping IS attested: the DWARF definition rows name the
+        // parameters, in order, lbStickUp / lbStickDown / lbStickLeft / lbStickRight
+        // (references/DecFIGS/dwarfdump/_compile/BrnGuiComponentUnity.cpp:6751, repeated at
+        // BrnGuiOnlineScreenUnity.cpp:1158 and BrnGuiScreenUnity.cpp:3933), which pins each
+        // to its like-named member with no call-site evidence needed. (Every inlined call
+        // site in the export set happens to pass a uniform value anyway.)
+        void    SetStickMapToScreenEdges(bool lbStickUp, bool lbStickDown,
+                                         bool lbStickLeft, bool lbStickRight)
+        {
+            mbStickMapUp    = lbStickUp;
+            mbStickMapDown  = lbStickDown;
+            mbStickMapLeft  = lbStickLeft;
+            mbStickMapRight = lbStickRight;
+        }
 
         // ---- the DWARF accessor block (BrnMainMap.h:297-465) --------------------------
         // Every entry below carries a DWARF decl line in BrnMainMap.h itself, never a
@@ -126,14 +165,20 @@ namespace BrnGui
         // each accessor reads. Signatures transcribed verbatim from
         // references/DecFIGS/dwarfdump/GameSource/Gui/SatNav/BrnMainMap.h.
         void       SetMapManager(MapManager* lpMapManager);   // DWARF h:297
-        // FLAG, X360-vs-PS3 delta worth knowing before anyone re-plumbs this: the world
-        // rect the DWARF models as the instance member mv4WorldRect is, on the X360, a
-        // single process-wide Vector4 at .data 0x82FB31F0. Measured (headless IDA,
-        // scratchpad/waveJ/g07_rect.txt): it is WRITTEN only by this class's own
+        // ⭐ CORRECTED 2026-08-27 (stunt-race UI wave): the Vector4 at .data 0x82FB31F0 that
+        // the DWARF models as the instance member mv4WorldRect is
+        // `BrnGui::MapTransform::smv4WorldRect` -- already homed and valued at
+        // SharedClasses/Gui/SatNav/BrnMapUtils.cpp ({-4375.42, -5842.42, 5363.15, 3904.74}),
+        // and declared `const` there. It is READ-ONLY: the previous note here called
         // Prepare @0x8244F4D0 / Construct @0x8245E514 / CalculatePositionedWorldRect
-        // @0x8245E61C, and READ by CrashNavMap::MoveCursor @0x824BF2F4 and
-        // RoadSignIconManager::SetupComponent @0x8250AEFC. No static member is declared for
-        // it here because the DWARF has none; the instance shape below is the attested one.
+        // @0x8245E61C its WRITERS, but every one of those addresses is the `addi rN, rN,
+        // flt_82FB31F0@l` half of an @ha/@l address formation feeding an `lvx`, i.e. a LOAD.
+        // Grepping every `st*` to that symbol across the export set returns ZERO writers; the
+        // other two sites (CrashNavMap::MoveCursor @0x824BF2F4, RoadSignIconManager::
+        // SetupComponent @0x8250AEFC) are reads too. Construct copies it into the member
+        // below; Prepare reads the global directly (same value either way).
+        // No static member is declared for it here because the DWARF has none; the instance
+        // shape below is the attested one.
         Vector4    GetWorldRect() const;                      // DWARF h:314
         Vector4    GetViewRect() const;                       // DWARF h:330
         // DWARF spells this return type fully qualified (`const rw::math::vpu::Vector4&`);
@@ -190,10 +235,14 @@ namespace BrnGui
         // SetDesiredWorldCentre target.
         Vector2 mv2DesiredCentre;                   // DWARF h:216, X360 comp+1616
 
-        // Two file-scope float[4] zoom-scale tables the DWARF places INSIDE the class as
-        // private statics (h:218 / h:219). Declared, not defined: SetStandardDefZoomParams
-        // copies flt_82F259EC -> flt_82F259DC and those .rodata values are not in the IDA
-        // export, so the definitions land with that body in BrnMainMap.cpp.
+        // Two float[4] zoom-scale tables the DWARF places INSIDE the class as private
+        // statics (h:218 / h:219). ⭐ DEFINED as of 2026-08-27 in BrnMainMap.cpp, alongside
+        // SetStandardDefZoomParams (which copies flt_82F259EC -> flt_82F259DC). The values
+        // were never in the IDA export because they are .data, not code: read from the raw
+        // image (scratch/postfx_step9_final/envfix/work/image.bin, big-endian, file offset =
+        // VA - 0x82000000) -- flt_82F259DC = {6500, 3500, 2500, 0} (the live/HD table) and
+        // flt_82F259EC = {5000, 2750, 1000, 0} (the standard-def source). Indexed by
+        // ZoomFactor; Construct seeds both zoom scalars from [E_ZOOMFACTOR_HIGH].
         static f32 mfZoomScalFactors[4];            // DWARF h:218
         static f32 mfStandardDefZoomScalFactors[4]; // DWARF h:219
 

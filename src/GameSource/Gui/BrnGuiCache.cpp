@@ -782,6 +782,18 @@ namespace BrnGui
         return mStateLoadingHelper.EnsureResourcesAreUnloaded(lpResources, luCount);
     }
 
+    // @ 0x824FEB60 -- the single-tuple GuiCache face, and the same two-instruction shape as
+    // the four above: `addi r3, r3, 8` + `b BrnGui__StateLoadingHelper__UnloadResource`.
+    // The tail-branch leaves r4 (the sResourceTuple reference) untouched, which is why the
+    // IDA pseudocode shows only one parameter -- the DWARF signature (BrnGuiCache.h:638,
+    // `void UnloadResource(const sResourceTuple&)`) is the attested one, and the +8 is
+    // mStateLoadingHelper. PreRaceFlyByState::OnLeave is the caller
+    // (BrnPreRaceFlyBy_wJ_02.cpp:324 / :334).
+    void GuiCache::UnloadResource(const CgsGui::sResourceTuple& lResource)
+    {
+        mStateLoadingHelper.UnloadResource(lResource);
+    }
+
     void GuiCache::UnloadResources(const CgsGui::sResourceTuple* lpResources, u32 luCount)
     {
         for (u32 luResource = 0; luResource < luCount; ++luResource)
@@ -1004,6 +1016,57 @@ namespace BrnGui
                     maRaceCarCrashing[liSlot]     = lpInfoEvent->GetCrashingFlag(liSlot); // +0xA104
                 }
                 miNumRaceCarsInInfo = lpInfoEvent->GetNumEntries();                        // +0xA0E0
+            }
+            break;
+
+        case 203:
+            // ⭐⭐ [event-starts producer wave 2026-08-27] THE EVENT-START TABLE, consumer half.
+            // X360 case 203 @0x8250DDF0: `memcpy(this + 22160, payload, 8416)` -- 22160 == 0x5690,
+            // the base of this cache's embedded mSetUpAllEventStartsInterface (maEventStarts[175]
+            // + miEventStartsCount @+0x7760, BrnGuiCache.h), and 8416 == the whole interface.
+            // The payload IS a BrnGameState::GameStateModuleIO::SetUpAllEventStartsInterface with
+            // no GuiEvent header in front of it (see GuiEventUpdateEventStarts in
+            // BrnGuiEventTypeDefs.h for the asm that settles that).
+            //
+            // ⭐ THIS ARM IS WHAT SILENCES "Unable to find event start with event id: ". Before it
+            // landed, NOTHING anywhere wrote maEventStarts: the whole producer chain
+            // (SendSetUpAllEventStartsMessage -> the output interface -> the bridge -> here) was
+            // missing at its first link, so miEventStartsCount stayed 0 and BOTH display-info
+            // lookups walked a zero-length array and fell through to their console asserts on
+            // every sat-nav refresh. The assert was never wrong; it was reporting this gap.
+            //
+            // ⚠️ REPRODUCED MEMBER-WISE, not as the console's byte blit -- the same call the
+            // case-207 arm below makes, and for the same reason. The two ends are two names for
+            // ONE console record (BrnGameState's EventStart / BrnGui's SatNavEventDisplayInfo)
+            // and their host layouts agree field for field, but a raw memcpy would couple them
+            // silently. Each side's own _AssertLayout/static_assert pins the 0x30 stride, so a
+            // future drift on either side becomes a compile error here instead of a wrong icon.
+            // The count is CLAMPED to the cache's capacity: the source array cannot exceed 175
+            // (AddEventStart asserts it) but the clamp costs nothing and keeps a corrupt length
+            // out of a 175-element array.
+            {
+                const BrnGui::GuiEventUpdateEventStarts* lpEventStarts =
+                    reinterpret_cast<const BrnGui::GuiEventUpdateEventStarts*>(lpEvent);
+
+                s32 liCount = static_cast<s32>(lpEventStarts->mEventStarts.GetNumEventStarts());
+                if (liCount > 175)
+                    liCount = 175;
+
+                for (s32 liIndex = 0; liIndex < liCount; ++liIndex)
+                {
+                    const BrnGameState::GameStateModuleIO::SetUpAllEventStartsInterface::EventStart&
+                        lrSource = lpEventStarts->mEventStarts.GetEventStart(
+                                       static_cast<u32>(liIndex));
+
+                    SatNavEventDisplayInfo& lrDest = maEventStarts[liIndex];
+                    lrDest.mv3Position       = lrSource.GetPosition();              // +0x00
+                    lrDest.muLightTriggerId  = lrSource.GetLightTriggerId();         // +0x10
+                    lrDest.muJunctionId      = static_cast<u32>(lrSource.GetEventIndex()); // +0x14
+                    lrDest.muEventInstanceId = static_cast<u32>(lrSource.GetEventID());    // +0x18
+                    lrDest.muCounty          = static_cast<u32>(lrSource.GetCounty());     // +0x1C
+                    lrDest.mi16AISectionIndex = lrSource.GetAISectionIndex();              // +0x20
+                }
+                miEventStartsCount = liCount;                                        // +0x7760
             }
             break;
 
@@ -1232,6 +1295,181 @@ namespace BrnGui
             }
             break;
 
+        // ================================================================================
+        // ⭐⭐⭐ [A9 mode-type arm 2026-08-27] THE MODE-START SEED -- and THE writer of
+        // meGameModeType (+0x9E58).
+        //
+        // X360 GuiCache::RecEvent @0x8250DDF0, `jumptable 8250DE3C case 89` @0x8250E7E0
+        // (the first sub-switch rebases by -4, so jump-table case N == GUI event id N + 4;
+        // 89 + 4 == 93 == GuiEventPrepareForModeStart). Producer:
+        // BrnGame::TranslateEventFlowGameActionToGuiEvent's case-23 arm
+        // (GameBridgeGameStateToX_EventFlowGuiEvents.cpp:509), mounted and called.
+        //
+        // ⛔ WHY THIS ARM IS THE #1 BLOCKER IT IS. meGameModeType had NO writer anywhere in
+        // src before this. It is the switch variable of EventInfoComponent::Update
+        // @0x82435430 (`if (lpCache->GetGameMode() == meCurrentEventType) switch (...)`), the
+        // gate RaceMainHudState::SetupEventInfo @0x82474A60 seeds the component's event type
+        // from, and the mode word RecEvent's OWN case-424 and case-428 arms assert against.
+        // With it stuck at 0 the stunt readout could never reach its case 7 -- the whole
+        // score / timer / multiplier column rendered blank no matter what the producers did.
+        // ================================================================================
+        case 93:
+        {
+            const BrnGui::GuiEventPrepareForModeStart* lpPrepare =
+                reinterpret_cast<const BrnGui::GuiEventPrepareForModeStart*>(lpEvent);
+
+            // ---- the mode identity (@0x8250E7E4..0x8250E8F0) --------------------------
+            meGameModeType = lpPrepare->meGameModeType;              // stw  +0x9E58
+            muEventID      = lpPrepare->muEventJunctionID;           // stw  +0x9E5C
+            muJunctionID   = lpPrepare->muJunctionID;                // stw  +0x9E60
+
+            // `li r8, 3` @0x8250E7E8 -- the medal target is seeded to the console's literal
+            // 3 (E_CURRENT_MEDAL_TARGET_TIME_NONE); RecEvent's case-424 arm overwrites it
+            // every frame from ScoringOutputInterface::meCurrentMedalTarget.
+            meCurrentMedalTarget = 3;                                // stw  +0x9F28
+
+            // `lbz 0x90(payload) ; stb 0x4B4C` @0x8250E8FC/0x8250E904. The SAME byte this arm
+            // gates its own online tail on, five statements down.
+            mbOnlineStartInProgress = (lpPrepare->mbIsOnline != 0);  // stb  +0x4B4C
+
+            // ---- the timers + the medal score targets --------------------------------
+            // ⚠️ mfEventTime and mfTargetTime take the SAME payload word (+0x84,
+            // GameModeParams::mfModeTimeLimit): @0x8250E90C `lfs f13, 0x84(r11)` -> +0x9F2C
+            // and @0x8250E91C `lfs f13, 0x84(r30)` -> +0x9F30. Not a transcription slip --
+            // at mode start the elapsed clock IS the full limit, and case 424 then drives
+            // the two apart every frame.
+            mfEventTime  = lpPrepare->mfModeTimeLimit;               // stfs +0x9F2C
+            mfTargetTime = lpPrepare->mfModeTimeLimit;               // stfs +0x9F30
+            // Highest medal first: [0] gold (+0x80), [1] silver (+0x7C), [2] bronze (+0x78).
+            mafTargetScores[0] = lpPrepare->mfNeedForGold;           // stfs +0x9F34
+            mafTargetScores[1] = lpPrepare->mfNeedForSilver;         // stfs +0x9F38
+            mafTargetScores[2] = lpPrepare->mfNeedForBronze;         // stfs +0x9F3C
+            // (mafTargetScores[3] @+0x9F40 is NOT written by this arm.)
+
+            // ---- the "nothing scored yet" reset run (r29 == -1 throughout) ------------
+            miPursuitRivalDamageLeft_9FE8 = -1;                      // stwx +0x9FE8
+            miTakedownsCurrent            = -1;                      // stwx +0x9FBC
+            // flt_820037C8, read from the image rodata at VA 0x820037C8: BF 80 00 00 == -1.0f.
+            // The NEGATIVE sentinel is load-bearing: RecEvent's case-424 arm only lifts the
+            // cached distance back to 0.0f when it has gone negative.
+            mfDistanceInEvent             = -1.0f;                   // stfsx +0x9F48
+            miScoreCurrent                = -1;                      // stwx +0x9FC4
+            miScoreTarget                 = -1;                      // stwx +0x9FC8
+            miScoreCombo                  = -1;                      // stwx +0x9FCC
+            miComboMultiplier             = -1;                      // stwx +0x9FD0
+
+            // ---- the per-mode scalars carried straight off the wire -------------------
+            miPursuitRivalTotalDamage = lpPrepare->miPursuitRivalTotalDamage;  // stwx +0x9FEC
+            mPursuedCarID             = lpPrepare->mPursuedCarId;              // stdx +0x9FE0 (8B)
+            miCheckpointReached       = 0;                                     // stwx +0x9FB4
+            // BYTE store on the console (`lbz 0x8C ; stbx 0x9FB8`) into a u8 member -- see
+            // the width correction on muCheckpointsInEvent in BrnGuiCache.h.
+            muCheckpointsInEvent      = lpPrepare->mu8CheckpointCount;         // stbx +0x9FB8
+            // ⚠️ SIGN-EXTENDED, not zero-extended: `lbz r11, 0x8F(r30) ; extsb r11, r11 ;
+            // stwx r11, r31, r19` @0x8250E97C..0x8250E984. A road-rage threshold of 0xFF on
+            // the wire means -1 ("no target"), which a zero-extending read would turn into
+            // 255 takedowns.
+            miTakedownTarget          = lpPrepare->mi8RoadRageThreshold;       // extsb + stwx +0x9FC0
+            miOpponentsInEvent        = static_cast<s8>(lpPrepare->mu8CarCount); // stbx +0x9F44
+
+            // [FLAG deferred] @0x8250E990 `bl BrnGui::GuiEventOnlinePostEvent::Clear` on
+            // `this + 43524` (== cache +0xAA04) -- the cache's embedded online-post-event
+            // record, reset at every mode start. NOT called here because the record has no
+            // named member on this class yet AND the committed carve of that region is in
+            // conflict with it: BrnGuiEventOnlinePostEvent.h pins Clear's 8-record loop at
+            // `r3 + 0x24` (stride 0x38), which from +0xAA04 puts record[0] at +0xAA28, while
+            // BrnGuiCache.h carries `PerRacerPair_AA30 maPerRacerData_AA30[8]` (the SAME
+            // 8 x 0x38 shape, ctor-inferred) at +0xAA30 -- eight bytes apart. Two models of
+            // one array; arbitrating them is a header carve of its own and nothing on the
+            // offline stunt path reads either. Naming it rather than faking a member.
+            // DELETE-WHEN the +0xAA04 GuiEventOnlinePostEvent embed is arbitrated.
+
+            mbOnlineTimeoutPending      = false;                     // stbx +0x13B5C (r24 == 0)
+            mbEventPreparedForModeStart = true;                      // stbx +0xA014 (r20 == 1)
+            // @0x8250E9B8..0x8250E9C8: `addi r11, r31, 0x4B7C ; mtctr 8 ; stw ; addi 4 ; bdnz`.
+            for (s32 liLane = 0; liLane < 8; ++liLane)
+                maPerRaceCarWord_4B7C[liLane] = 0;
+
+            // ---- the checkpoint tables (@0x8250E9CC..0x8250EA98) ----------------------
+            // Copy the wire's live entries, then fill the remainder of BOTH tables up to
+            // KI_MAX_LANDMARKS_IN_MODE. Nothing is written at all when the count is zero --
+            // the console guards the whole block on it.
+            if (lpPrepare->mu8CheckpointCount != 0)
+            {
+                const s32 KI_MAX_LANDMARKS_IN_MODE = 16;   // `cmplwi r11, 0x10` @0x8250E9E4
+                CGS_ASSERT(static_cast<s32>(lpPrepare->mu8CheckpointCount) <= KI_MAX_LANDMARKS_IN_MODE,
+                           "lpGuiEventPrepareForModeStart->muCheckpointsInEvent <= KI_MAX_LANDMARKS_IN_MODE"); // cpp:2094
+
+                s32 liCheckpoint = 0;
+                for (; liCheckpoint < static_cast<s32>(lpPrepare->mu8CheckpointCount); ++liCheckpoint)
+                {
+                    maCheckpointLandmarks[liCheckpoint] = lpPrepare->mau16CheckpointLandmark[liCheckpoint]; // sth +0x9F54
+                    maCheckpointDistricts[liCheckpoint] = lpPrepare->maiCheckpointDistrict[liCheckpoint];   // stw +0x9F74
+                }
+                for (; liCheckpoint < KI_MAX_LANDMARKS_IN_MODE; ++liCheckpoint)
+                {
+                    maCheckpointLandmarks[liCheckpoint] = 0;    // `sth 0`
+                    maCheckpointDistricts[liCheckpoint] = 18;   // `stw 18` == BrnWorld::E_DISTRICT_INVALID
+                }
+            }
+
+            if (mbOnlineStartInProgress)
+            {
+                // ---- the ONLINE tail (@0x8250EAA8..) ---------------------------------
+                miOnlineRoundIndex = lpPrepare->miCurrentRound;      // stw +0xA7FC
+                CGS_ASSERT(miOnlineRoundIndex >= 0 && static_cast<u32>(miOnlineRoundIndex) < 10u,
+                           "miRoundIndex>=0 && uint32_t(miRoundIndex)<BrnGameState::GameStateModuleIO::"
+                           "KU_MAX_ONLINE_ROUNDS_IN_MODE");        // cpp:2115 (`cmplwi r11, 0xA`)
+
+                // [FLAG deferred -- ONLINE ONLY, unreachable from this wave's offline stunt run]
+                // Three console legs of this tail are named rather than faked:
+                //   (a) `sub_82507070(this, &maOnlineGameModeOptions[round])` -- the GuiTracker
+                //       refresh: it walks the round's SpecificGameModeEventInterface events,
+                //       resolves each through GuiCache::GetLandmarkInfoFromIndex (declared-only,
+                //       BrnGuiCache.h:465, no body in src) and posts the 3088-byte record to
+                //       GuiTracker::RecEvent @0x82501D28. Both callees are un-bodied here.
+                //   (b) the meGameModeType 10/11 arm: mEventDestinationLandmarkIndex <- the
+                //       round's first event index, then mEventDestinationDistrict <-
+                //       WorldDataController::GetLandmarkInfoFromIndex(...)+50, behind the
+                //       console's own `mpWorldDataController` (cpp:2126) and `lpLandmark`
+                //       (cpp:2129) asserts. The ELSE half of that arm IS reproduced below.
+                //   (c) the free-burn-lobby reset (meGameModeType 15/16 AND the wire's
+                //       mbOnlineLobbyTransition byte clear): zeroes cache+47180 (8 words) and
+                //       cache+47196[0..7], both inside unmodelled padding, then falls out of
+                //       the arm early.
+                // DELETE-WHEN GetLandmarkInfoFromIndex / UpdateTrackerInfo land and the
+                // +47180 lobby run is carved.
+                mEventDestinationDistrict      = 18;                     // stw  +0x9F50 (E_DISTRICT_INVALID)
+                // word_82F27F00, read from the image rodata at VA 0x82F27F00: FF FF == the
+                // invalid LandmarkIndex sentinel.
+                mEventDestinationLandmarkIndex = 0xFFFFu;                // sth  +0x9F4C
+            }
+            else
+            {
+                // ---- the OFFLINE tail (@0x8250EBxx) ----------------------------------
+                // The event's destination is checkpoint 0 when the mode carries checkpoints,
+                // and the invalid pair otherwise.
+                if (lpPrepare->mu8CheckpointCount != 0)
+                {
+                    mEventDestinationLandmarkIndex = lpPrepare->mau16CheckpointLandmark[0]; // sth +0x9F4C
+                    mEventDestinationDistrict      = lpPrepare->maiCheckpointDistrict[0];   // stw +0x9F50
+                }
+                else
+                {
+                    mEventDestinationDistrict      = 18;      // stw +0x9F50 (E_DISTRICT_INVALID)
+                    mEventDestinationLandmarkIndex = 0xFFFFu; // sth +0x9F4C (word_82F27F00)
+                }
+                // [FLAG deferred] `GuiCache::UpdateTrackerInfo(this, payload + 24, count)` --
+                // the SAME un-bodied function the case-492 arm above already defers (there is
+                // no UpdateTrackerInfo body anywhere in src). It feeds the landmark TRACKER
+                // panel, not the event-info readout. DELETE-WHEN UpdateTrackerInfo lands;
+                // this is its second call site.
+            }
+
+            miSatNavZoomLevel = 0;   // stw +0x803C -- both tails converge on this
+            break;
+        }
+
         case 77:
             // ADDITIVE (car-select wave 2026-08-02). The X360 switch (rebased by -4) reaches
             // `jumptable 8250DE3C case 77` at 0x8250EE20 and does exactly this: one
@@ -1457,10 +1695,9 @@ namespace BrnGui
     // @ 0x82472E78 -- the per-score-type road-rule live flags (@0xAC44). [H2 wave
     // 2026-08-25: body landed with the FBurnMainHudState WFInit sweep -- the H2 link
     // round caught the declaration-only state.]
-    bool GuiCache::IsRoadRuleActive(s32 liRoadRuleType) const
-    {
-        return maRoadRuleActiveByType[liRoadRuleType];
-    }
+    // (IsRoadRuleActive: this TU's assert-less copy retired 2026-08-27 -- the faithful body
+    // with the console's two "Invalid score type" asserts lives in BrnGuiCache_wB_08.cpp,
+    // which mounted this wave for ZoomSatNavOut; two definitions were LNK2005.)
 
     // The sat-nav renderer's world-camera lane (@0x4AE0; header note). [H2 wave
     // 2026-08-25: same link round -- the header promised "body links from the GuiCache

@@ -148,6 +148,8 @@ namespace BrnGui
         // stores are real and inline on console; friendship is the honest exposure
         // (the OnlineGameRoomPlayerInfo / GuiCache consumer-friend rule).
         friend struct FBurnMainHudState;
+        friend struct RaceMainHudState;   // 2026-08-27: the in-event HUD's UpdateSatNav pre-pass
+                                          // reaches mpPlayerInfo/mpIconManager the same way
 
         void UpdateFreeRoaming();                                         // @0x82447638 (DWARF :231)
 

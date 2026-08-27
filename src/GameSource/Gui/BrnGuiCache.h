@@ -73,6 +73,7 @@ namespace BrnGui
     struct OnlineGameOptions;        // friend of GuiCache (reads its wave-I-carved members by name)
     struct CrashNavEnterOnlineBase;  // friend of GuiCache (reads its wave-I-carved members by name)
     struct OnlineCustomMatch;        // friend of GuiCache (reads its ranked/unranked bytes by name)
+    class  EventInfoComponent;       // friend of GuiCache (reads the id-428 stunt block by name)
     // Defined later in this header (minimal-slice records returned by GetPresetEvent /
     // the inlined event-display helpers).
     struct PresetEvent;
@@ -238,14 +239,26 @@ namespace BrnGui
     //          straight after `bl sub_824F8AF0`, stored into muSelectedJunctionID.
     //   +0x18 muEventInstanceId -- the profile matcher (@0x824F8AF0 compares element+0x18)
     //          and the preset path's WDC lookup id.
-    // FLAG: consumer-named -- no DWARF row exists for this record.
+    //   +0x1C muCounty / +0x20 mi16AISectionIndex -- ⭐ CARVED 2026-08-27 out of the old
+    //          mPad_1C, and NOT consumer-named: the PRODUCER names them. This record is the
+    //          GUI's copy of BrnGameState::GameStateModuleIO::SetUpAllEventStartsInterface::
+    //          EventStart, and GameStateModule::SendSetUpAllEventStartsMessage @0x823759D0
+    //          fills those two words with DistrictToCounty(WorldMap2D::GetValue(pos)) and
+    //          AISectionsData::FindNearestAISection(pos, map) (its AddEventStart args r7/r8
+    //          @0x82375C94/@0x82375C9C). No GUI consumer reads them yet -- the console's own
+    //          copy is a whole-interface memcpy, so they ride along either way -- but they are
+    //          real data and modelling them is what keeps the member-wise copy in
+    //          GuiCache::RecEvent's case-203 arm lossless.
+    // FLAG: the record has no DWARF row; the field names above +0x18 are the producer's.
     struct SatNavEventDisplayInfo
     {
-        Vector3 mv3Position;       // +0x00 (16-byte VMX lane copied to the cached icon)
-        u32     muLightTriggerId;  // +0x10 (preset display-info matcher)
-        u32     muJunctionId;      // +0x14
-        u32     muEventInstanceId; // +0x18 (profile matcher + preset WDC lookup id)
-        u8      mPad_1C[0x14];     // +0x1C..+0x2F (array stride pad)
+        Vector3 mv3Position;        // +0x00 (16-byte VMX lane copied to the cached icon)
+        u32     muLightTriggerId;   // +0x10 (preset display-info matcher)
+        u32     muJunctionId;       // +0x14
+        u32     muEventInstanceId;  // +0x18 (profile matcher + preset WDC lookup id)
+        u32     muCounty;           // +0x1C (BrnWorld::ECounty of the junction position)
+        s16     mi16AISectionIndex; // +0x20 (nearest AI section; 0x7FFF == invalid)
+        u8      mPad_22[0x30 - 0x22]; // +0x22..+0x2F (array stride pad)
     };
     static_assert(sizeof(SatNavEventDisplayInfo) == 0x30,
                   "maEventStarts element stride (X360 indexer @0x824F65E0: 48*i)");
@@ -579,6 +592,51 @@ namespace BrnGui
             mbGameplayHudReadyC    = lbReady;
         }
 
+        // ==== [stuntrace wS2 wave 2026-08-27] the RACE_MAIN HUD gate accessors ==========
+        // The four cache reads BrnRaceMainHudState_wS2.cpp needs that were unnamed padding
+        // until this wave. Each member below carries the consuming instruction.
+
+        // THE in-event reveal gate: RaceMainHudState::UpdateWFInit @0x82480200 loads it as
+        // `lis r10,0 ; ori r26,r10,0xA014 ; lbzx r10,r11,r26` (@0x824803BC/C0) and branches
+        // the whole reveal ladder on it -- CLEAR -> RevealHud(true) immediately; SET -> wait
+        // for the pre-race countdown (or mbOnlineStartInProgress). The same byte is re-read
+        // `== 1` @0x82480554 for the mode-4 post. The MEMBER was carved by the A9 mode-type
+        // arm in this same wave (see it for the two producers); this is only its accessor
+        // face, added because the wS2 partfile must not read it as raw padding.
+        bool IsEventPreparedForModeStart() const { return mbEventPreparedForModeStart; }  // +0xA014
+
+        // The player's live race position, straight to PositionIndicator::SetPosition.
+        // RaceMainHudState::UpdateRunning @0x8247FEE4 `lbz r4, 0x4B24(r11)` -> the value is
+        // passed in r4 and range-checked `0 < r4 <= 8` @0x8247FF10/18; 0 hides the indicator.
+        u8   GetPlayerRacePosition() const    { return mu8PlayerRacePosition; }     // +0x4B24
+        // The override that skips that range/enable check (@0x8247FEF8 `lbz r11, 0x4B25(r11)`
+        // -> branch straight to SetPosition). FLAG: consumer-named, producer unrecovered.
+        bool IsPlayerRacePositionOverridden() const { return mbPlayerRacePositionOverride; } // +0x4B25
+
+        // The friends-list pair. RaceMainHudState::OnLeave @0x824797FC
+        // (`ori r10,r10,0xB86C ; lbzx` -> FriendsListComponent::Close) and ::UpdateWFInit
+        // @0x824805B8 (`ori r10,r10,0xB86D ; lbzx ; cmplwi 1` -> FriendsListChangeIcon::ShowNow).
+        // FLAG: consumer-named -- neither producer is recovered.
+        bool IsFriendsListOpen() const        { return mbFriendsListOpen; }          // +0xB86C
+        bool IsFriendsListChangePending() const { return mbFriendsListChangePending; } // +0xB86D
+
+        // The online-event timeout-timer gate. RaceMainHudState::UpdateWFInit @0x824802A8
+        // (`lis r10,1 ; ori r10,r10,0x3B5C` == +0x13B5C, `lbzx`) ANDs it with the state's own
+        // mbOnlineTimeoutTimer flag before OnlineTimeoutComponent::Show.
+        // ⚠️ The s2 scout dossier spells this offset "+0x13B1C"; the asm encodes 0x13B5C
+        // (Hex-Rays' decimal 80732 == 0x13B5C, not 0x13B1C). Member carved by the A9
+        // mode-type arm in this same wave; this is only its accessor face.
+        bool IsOnlineTimeoutPending() const   { return mbOnlineTimeoutPending; }    // +0x13B5C
+
+        // The payback "award available" trio RaceMainHudState::UpdateWFInit @0x824805FC-620
+        // reads as a group -- `lbz r10,0x4B64` gates, then `lwz r4,0x4B5C ; lwz r5,0x4B60`
+        // become the two PaybackComponent::ShowAvailableInstantly arguments (skipped when the
+        // type word is 3). FLAG: consumer-named -- the producer side is unrecovered.
+        bool IsPaybackAvailable() const       { return mbPaybackAvailable; }         // +0x4B64
+        s32  GetPaybackAvailableType() const  { return mePaybackAvailableType; }     // +0x4B5C
+        s32  GetPaybackVictimRaceCarIndex() const { return mePaybackVictimRaceCarIndex; } // +0x4B60
+        // ================================================================================
+
         bool IsOnlineStartInProgress() const  { return mbOnlineStartInProgress; }  // +0x4B4C
         bool IsInviteInProgress() const       { return mbInviteInProgress; }       // +0x4B4D
         bool IsPerformingInvite() const       { return mbPerformingInvite; }       // +0x4B4F
@@ -822,7 +880,7 @@ namespace BrnGui
         BrnGameState::LandmarkIndex
             GetEventDestinationLandmarkIndex() const; // X360 @0x8240FA88 (mEventDestinationLandmarkIndex @0x9F4C)
         BrnGameState::LandmarkIndex
-            GetEventFinishLandmark() const;         // X360 @0x824EC610 (checkpoint-landmark view @+0x9F52; see note)
+            GetEventFinishLandmark() const;         // X360 @0x824EC610 (maCheckpointLandmarks[count-1]; see the array's note)
         BrnGameState::LandmarkIndex
             GetOnlineLandmarkIndex(u32 luCheckpointIndex) const; // X360 @0x8240FB50 (miOnlineRoundIndex @0xA7FC + maOnlineGameModeOptions @0xA800)
 
@@ -1000,6 +1058,20 @@ namespace BrnGui
         // accessor row -- the same situation, and the same answer, as the analyzer above.
         friend struct HudMessageDirector;
 
+        // [stunt-readout wave A8 2026-08-27] Same exposure rule once more for the in-race
+        // event-info HUD component: UpdateStuntAttack @0x82429C08 inlines FIVE raw loads
+        // off the cache that have no DWARF accessor row -- the id-428 stunt block
+        // muCurrentStunts (`lwzx r11, r23, 0xAC64` @0x8242A628, tested & 0x100),
+        // muAllStunts (`lwzx` @0x8242A6A8, tested & 0x4000), mfComboWarningTimeActive
+        // (`lfsx f0, r23, 0xAC6C` @0x8242A04C -- a FLOAT truncated by fctiwz),
+        // mbComboWarningActive (`lbzx r11, r23, 0xAC70` @0x8242A028) and the
+        // maStuntToDisplay terminator walk (@0x8242A548, the GetNumberOfStuntsToDisplay()
+        // the sibling GetStuntToDisplay @0x8240F770 also inlines and names in its own
+        // assert text). The scored/timed members it reads DO have accessors and go through
+        // them (GetTargetScoreInEvent / GetCurrentScoreInEvent / GetCurrentTimeInEvent /
+        // GetCurrentComboInEvent / GetMultiplierInEvent / GetStuntToDisplay / GetTime).
+        friend class BrnGui::EventInfoComponent;
+
         // ===================================================================
         //  DATA LAYOUT -- named anchors at asm-proven `this+offset`, gaps
         //  reserved with explicit padding (AGENTS.md "LAYOUT RECOVERY WITH
@@ -1133,7 +1205,17 @@ namespace BrnGui
         // Construct @0x82505860 seeds it 0 -- so the HUD composes on its INVISIBLE frame and
         // stays there until the world posts the ignition. That is the console's reveal gate.
         s32  mePlayerEngineState;                         // +0x4B20 (19232) case 379
-        u8   mPad_4B24[2];                                // +0x4B24..+0x4B25
+        // ADDITIVE CARVE ([stuntrace wS2] wave, 2026-08-27) out of the whole former
+        // mPad_4B24[2] -- the two bytes RaceMainHudState::UpdateRunning @0x8247E898 drives
+        // the race-position indicator from. Both are BYTE loads, back to back:
+        //     0x8247FEE4  lbz r4,  0x4B24(r11)   ; the position VALUE (goes straight into r4,
+        //                                        ;   SetPosition's argument; 0 -> SetVisible(0))
+        //     0x8247FF18  cmplwi cr6, r4, 8      ; and it is range-checked 1..8
+        //     0x8247FEF8  lbz r11, 0x4B25(r11)   ; the override that skips that range/enable check
+        // No member is shifted (1 + 1 == 2). FLAG: consumer-named -- neither producer is
+        // recovered on this build (both read 0, i.e. no position indicator).
+        u8   mu8PlayerRacePosition;                       // +0x4B24 (19236) 1..8; 0 == none
+        bool mbPlayerRacePositionOverride;                // +0x4B25 (19237)
         // ADDITIVE CARVE (H3c MapIconManager::UpdateWorldIcons @0x82511C88): the byte gating
         // the "show the nearest body shop on the sat-nav" pass (`lbz mpGuiCache+0x4B26`; the
         // pass runs when this byte is set AND the mode is freeburn (-1/15), or unconditionally
@@ -1218,7 +1300,22 @@ namespace BrnGui
         bool mbGameplayHudReadyC;                        // +0x4B58 (19288) FLAG consumer-named (see +0x4B54)
         bool mbFreeBurnInputDisabled;                    // +0x4B59 (19289) gates ALL freeburn controller handling
         bool mbOnlineEventCompleted;                     // +0x4B5A (19290) set when the online event ends; HandleGuiCacheEvent consumes it (ClearTracker + "TO_ST_POST" when meGameModeType==16), then clears it
-        u8   mPad_4B5B[0x15];                            // +0x4B5B..+0x4B6F
+        u8   mPad_4B5B[1];                               // +0x4B5B
+        // ADDITIVE CARVE ([stuntrace wS2] wave, 2026-08-27) from the HEAD of the former
+        // mPad_4B5B[0x15] -- the payback "award available" trio RaceMainHudState::UpdateWFInit
+        // @0x82480200 reads as one group (asm @0x824805FC..0x82480620):
+        //     lbz r10, 0x4B64(r11)   ; the gate -- nothing shown while clear
+        //     lwz r4,  0x4B5C(r11)   ; -> ShowAvailableInstantly arg 1 (payback type; 3 is skipped)
+        //     lwz r5,  0x4B60(r11)   ; -> ShowAvailableInstantly arg 2 (victim ARCI)
+        // Widths are the asm's (two `lwz`, one `lbz`). The two words are spelled s32 per this
+        // boundary header's enum convention (the real homes are BrnNetwork::EPaybackType and
+        // ::EActiveRaceCarIndex, both in headers this one deliberately does not pull in).
+        // No member is shifted (1 + 4 + 4 + 1 + 11 == 0x15). FLAG: consumer-named -- the
+        // producer side is unrecovered (all three read 0 on this build, i.e. no payback).
+        s32  mePaybackAvailableType;                     // +0x4B5C (19292) BrnNetwork::EPaybackType
+        s32  mePaybackVictimRaceCarIndex;                // +0x4B60 (19296) ::EActiveRaceCarIndex
+        bool mbPaybackAvailable;                         // +0x4B64 (19300)
+        u8   mPad_4B65[0xB];                             // +0x4B65..+0x4B6F
         // ADDITIVE CARVE (BrnCarSelectMain wave G): which car-select flow is running.
         // DWARF h:1687 `BrnGameState::GameStateModuleIO::ECarSelectType meCarSelectType`;
         // the member NAME is baked into the X360 assert string "meCarSelectType >
@@ -1237,7 +1334,21 @@ namespace BrnGui
         // pending flag bytes (Hex-Rays field_4B75 / field_4B76). FLAG: consumer-named.
         bool mbCarUnlockPending;                         // +0x4B75 (19317) set 1 when an un-shown unlocked car remains
         bool mbCarUnlockDetermined;                      // +0x4B76 (19318) set 1 on entry (determination has run)
-        u8   mPad_4B77[0x4F9C - 0x4B77];                 // +0x4B77..+0x4F9B
+        u8   mPad_4B77[0x4B7C - 0x4B77];                 // +0x4B77..+0x4B7B
+        // ADDITIVE CARVE (A9 mode-type arm, 2026-08-27) from the head of the former
+        // mPad_4B77 -- an 8-word run, zeroed at both of its recovered writers:
+        //   GuiCache::Construct @0x82505DD8..0x82505DF4 walks `r11 = this + 0x4B7C`, storing
+        //   zero to `0(r11)` AND to `0x5594(r11)` (== the twin run at +0xA110) eight times,
+        //   `addi r11, r11, 4` per step -- so both runs are 8 x s32.
+        //   GuiCache::RecEvent case 93 @0x8250E9B8..0x8250E9C8 re-zeroes this one alone
+        //   (`addi r11, r31, 0x4B7C`, `mtctr 8`, `stw ; addi r11,r11,4 ; bdnz`).
+        // FLAG: NAME INFERRED. There is no recovered READER anywhere in the exports, no DWARF
+        // row, and no accessor; what is attested is the base, the stride, the count and the
+        // reset. Named as a per-active-race-car lane run because it is 8 words wide and is
+        // reset on mode start, the shape every other 8-lane table on this class has.
+        // No member is shifted (5 + 32 + 1024 == 0x4F9C - 0x4B77).
+        s32  maPerRaceCarWord_4B7C[8];                   // +0x4B7C (19324) FLAG: name inferred, no reader recovered
+        u8   mPad_4B9C[0x4F9C - 0x4B9C];                 // +0x4B9C..+0x4F9B
         // ADDITIVE CARVE (E1 event-status wave 2026-08-26) from the TAIL of the former
         // mPad_4B77 -- the count of remaining checkpoints the id-492 GuiEventCurrentStatus
         // record carries. X360 GuiCache::RecEvent case 112 @0x82510540/0x82510558:
@@ -1342,24 +1453,43 @@ namespace BrnGui
         f32 mfDistanceInEvent;                           // +0x9F48 (40776) GetDistanceInEvent @0x8240F398 (result[10194], >= 0)
         u16 mEventDestinationLandmarkIndex;              // +0x9F4C (40780) LandmarkIndex (s16)
         u8  mPad_9F4E[2];                                // +0x9F4E..+0x9F4F
-        // +0x9F50 event-destination region (union). Race-style modes store the resolved
-        // district word here (mEventDestinationDistrict @+0x9F50). Checkpoint modes reuse the
-        // SAME storage from +0x9F52 as the per-checkpoint finish-landmark list: GetEventFinishLandmark
-        // @0x824EC610 reads the u16 at +0x9F52 + 2*checkpoint (overlapping the district's high
-        // half), so the two views are modelled as a union to keep both named at their exact
-        // X360 offsets. FLAG: maCheckpointLandmarks bound (49) is region-derived (fills the
-        // 100-byte span to the next member); only the +0x9F52 base + 2-byte stride are attested.
-        union
-        {
-            s32 mEventDestinationDistrict;               // +0x9F50 (40784) BrnWorld::EDistrict
-            struct
-            {
-                u8  mPad_9F50_pre[2];                    // +0x9F50..+0x9F51 (low half of the district word)
-                u16 maCheckpointLandmarks[49];           // +0x9F52.. per-checkpoint finish LandmarkIndex view
-            };
-        };
+        // ⛔ THE UNION IS RETIRED (A9 mode-type arm, 2026-08-27). It used to read
+        //       union { s32 mEventDestinationDistrict;                      // +0x9F50
+        //               struct { u8 mPad_9F50_pre[2]; u16 maCheckpointLandmarks[49]; } };  // +0x9F52
+        // on the premise that GetEventFinishLandmark @0x824EC610's `2*(count + 0x4FA9)` load
+        // pinned the landmark array's BASE at +0x9F52 -- which forced it to overlap the
+        // district word and made its 49-entry bound region-derived guesswork.
+        // REFUTED, and by the only writer of the region: GuiCache::RecEvent's case-93 arm
+        // (@0x8250EA18..0x8250EA60) copies GuiEventPrepareForModeStart's two checkpoint
+        // tables into TWO SEPARATE arrays with clean bases and clean bounds --
+        //     `addi r9, r31, -0x60AC` == cache+0x9F54, `sth` per entry   (u16 landmark)
+        //     `addi r7, r31, -0x608C` == cache+0x9F74, `stw` per entry   (s32 district)
+        // and the tail-fill loop right after it (@0x8250EA68..) fills the REMAINDER of both up
+        // to 16 entries (`4*(i + 10205) + this` == 0x9F74 + 4i, seeded 18 == E_DISTRICT_INVALID;
+        // `2*(i + 20394) + this` == 0x9F54 + 2i, seeded 0) with the console's own
+        // KI_MAX_LANDMARKS_IN_MODE bound of 16 (its assert literal, BrnGuiCache.cpp:2094,
+        // `cmplwi 0x10`). 4 + 32 + 64 == 100 == the exact span to miCheckpointReached, with no
+        // overlap and no slack -- the run is PINNED, not derived.
+        // GetEventFinishLandmark: `+0x9F52 + 2*count` IS `maCheckpointLandmarks[count - 1]`,
+        // i.e. the LAST checkpoint's landmark, which is what "finish landmark" means. Its body
+        // in BrnGuiCache_wB_res.cpp indexes [count - 1] accordingly (fixed 2026-08-27 -- the
+        // pre-rebase body indexed [count], one u16 past the console's slot).
+        s32 mEventDestinationDistrict;                   // +0x9F50 (40784) BrnWorld::EDistrict
+        u16 maCheckpointLandmarks[16];                   // +0x9F54 (40788) per-checkpoint LandmarkIndex (KI_MAX_LANDMARKS_IN_MODE)
+        s32 maCheckpointDistricts[16];                   // +0x9F74 (40820) per-checkpoint BrnWorld::EDistrict
         s32 miCheckpointReached;                         // +0x9FB4 (40884)
-        u32 muCheckpointsInEvent;                        // +0x9FB8 (40888)
+        // ⚠️ WIDTH CORRECTED (A9, 2026-08-27): this is a **u8**, not a u32. Two independent
+        // pins, both single-byte: GuiCache::GetCheckpointsInEvent @0x8240F1C0 reads it with
+        // `lbzx r3, r31, r30` (r30 == 0x9FB8) and its caller GetEventFinishLandmark masks the
+        // result with `clrlwi r30, r3, 24`; and RecEvent's case-93 arm WRITES it with
+        // `lbz r11, 0x8C(r30) ; stbx r11, r31, r21` (r21 == 0x9FB8). The console's own assert
+        // literal spells the type: "lu8NumCheckpointsInEvent > 0" (BrnGuiCache.h:4108).
+        // As a u32 on the little-endian host a byte store would land in the LOW byte while the
+        // console's lands in the HIGH one -- the offsets/strides class of bug this campaign
+        // keeps re-catching. Name kept (readers spell it muCheckpointsInEvent); 3 bytes of
+        // explicit pad keep miTakedownsCurrent at +0x9FBC. No member is shifted.
+        u8  muCheckpointsInEvent;                        // +0x9FB8 (40888)
+        u8  mPad_9FB9[3];                                // +0x9FB9..+0x9FBB
         s32 miTakedownsCurrent;                          // +0x9FBC (40892)
         s32 miTakedownTarget;                            // +0x9FC0 (40896)
         s32 miScoreCurrent;                              // +0x9FC4 (40900)
@@ -1383,12 +1513,35 @@ namespace BrnGui
         s32 miGameFlowResetWord_9FD8;                    // +0x9FD8 (40920)
         u8  mPad_9FDC[4];                                // +0x9FDC..+0x9FDF
         CgsID mPursuedCarID;                             // +0x9FE0 (40928)
-        u8  mPad_9FE8[8];                                // +0x9FE8..+0x9FEF
+        // ADDITIVE CARVE (A9 mode-type arm, 2026-08-27) from mPad_9FE8[8]. Both words are
+        // written by GuiCache::Construct @0x82505CF8/0x82505CFC (`stwx r29`, r29 == -1) and
+        // again by RecEvent's case-93 arm: `stwx r29, r31, r24` with r24 == 0x9FE8 (-1) and
+        // `lwz r11, 0x88(r30) ; stwx r11, r31, r23` with r23 == 0x9FEC (the wire's
+        // miPursuitRivalTotalDamage, GameModeParams+0x50). The +0x9FEC name is the producer's;
+        // FLAG: +0x9FE8 has no recovered reader at all -- producer-named after its neighbour
+        // (the pursuit pair the DWARF run puts here), reset-to--1 semantics only.
+        // No member is shifted (4 + 4 == 8).
+        s32 miPursuitRivalDamageLeft_9FE8;               // +0x9FE8 (40936) FLAG: name inferred; only writers recovered
+        s32 miPursuitRivalTotalDamage;                   // +0x9FEC (40940)
         CgsID mShutdownCarID;                            // +0x9FF0 (40944)
         u8  mPad_9FF8[8];                                // +0x9FF8..+0x9FFF
         s32 meTrophyCarUnlockType;                       // +0xA000 (40960) TrophyUnlockData::UnlockType
         // ---- mRaceCarInfo SoA (ARCI-indexed, 8 lanes) carved from the former mPad_A004[0x9C4] ----
-        u8  mPad_A004[17];                               // +0xA004..+0xA014
+        u8  mPad_A004[16];                               // +0xA004..+0xA013
+        // ADDITIVE CARVE (A9 mode-type arm, 2026-08-27) from the tail of the former
+        // mPad_A004[17]. A single byte, and every recovered access is a byte access:
+        //   WRITTEN 0 by GuiCache::Construct @0x82505D6C (`stbx r30, r31, r9`, r9 == 0xA014)
+        //   WRITTEN 1 by GuiCache::RecEvent case 93 @0x8250E9B4 (`stbx r20, r31, r11`, r20 == 1)
+        //   READ     by RaceMainHudState::UpdateWFInit @0x824803C0 (gates the event-info /
+        //            countdown branch), ::UpdateSetupState @0x8247A260 (gates the
+        //            GetEventDestinationDistrict lookup), ::UpdateRunning @0x8247F124,
+        //            InGame::PauseAllowed @0x824B8E44 (set == pause NOT allowed) and
+        //            InGame::PauseGame @0x824DF05C (set == suppress the "ON_PAUSE" state event).
+        // FLAG: NAME INFERRED. The DWARF has no row for this byte and the console has no
+        // accessor for it; "an event has been prepared for / is starting" is what the one
+        // writer and the five readers agree on, and it is what the case-93 arm means.
+        // No member is shifted (16 + 1 == 17).
+        bool mbEventPreparedForModeStart;                // +0xA014 (40980) FLAG: name inferred
         // ADDITIVE CARVE (BrnPreRaceFlyBy wave J): the fly-by-active gate byte. NAME from
         // DWARF (BrnGuiCache.h:569 mbIsPreRaceFlyByActive, with the DWARF accessor pair
         // IsPreRaceFlyByActive/SetPreRaceFlyByActive); OFFSET X360-attested by the two
@@ -1546,7 +1699,23 @@ namespace BrnGui
         // (stores 1/2/3), EndWait (@0x82443018 clear) -- no DWARF accessor row;
         // consumer-named. Exposed by friendship below.
         u32 muFriendsPanelBranchMirror;                  // +0xB868 (47208)
-        u8 mPad_B86C[12];                                // +0xB86C..+0xB877
+        // ADDITIVE CARVE ([stuntrace wS2] wave, 2026-08-27) from the HEAD of the former
+        // mPad_B86C[12] -- the two friends-list gate bytes the RACE_MAIN HUD state reads.
+        // Both are `lbzx` through a materialised offset (the far-member idiom):
+        //   +0xB86C  RaceMainHudState::OnLeave     @0x824797FC `ori r10,r10,0xB86C ; lbzx`
+        //            -> the ONLY gate on FriendsListComponent::Close (@0x82479810), i.e.
+        //            "the friends panel is currently open, tear it down on the way out".
+        //   +0xB86D  RaceMainHudState::UpdateWFInit @0x824805B8 `ori r10,r10,0xB86D ; lbzx ;
+        //            cmplwi cr6, r11, 1` -> FriendsListChangeIconComponent::ShowNow
+        //            (@0x824805CC), i.e. "a friends-list change arrived while the HUD was
+        //            down -- pop the change icon straight away, no animate-in".
+        // Note the mirrored neighbour muFriendsPanelBranchMirror at +0xB868 above: this whole
+        // cluster is the cache's friends-panel mirror, which is what makes the carve safe.
+        // No member is shifted (1 + 1 + 10 == 12). FLAG: consumer-named -- neither producer
+        // is recovered, so both read 0 on this build (no panel, no pending change).
+        bool mbFriendsListOpen;                          // +0xB86C (47212)
+        bool mbFriendsListChangePending;                 // +0xB86D (47213)
+        u8 mPad_B86E[10];                                // +0xB86E..+0xB877
         u8 mOptionsDataProfileStorage[0x8000];           // +0xB878 (X360 object: 0x7370 bytes)
         // +0x12BE8 (76776) -- the live DLC-pack-1 options block, which the X360 lays
         // immediately after the options profile (47224 + 0x7370 == 76776). Unlike the block
@@ -1582,7 +1751,17 @@ namespace BrnGui
         // is exactly an Xbox 360 with no camera plugged in, and selects the retail
         // no-camera path in every one of those readers.
         s32 miCamStatus;                                 // +0x13B58 (80728)
-        u8  mPad_13B5C[2];                               // +0x13B5C..+0x13B5D
+        // ADDITIVE CARVE (A9 mode-type arm, 2026-08-27) from the head of mPad_13B5C[2]. One
+        // byte, all three recovered accesses byte-wide:
+        //   WRITTEN 0 by GuiCache::Construct @0x825061C4 (`stbx r30, r31, r8`, r8 == 0x13B5C)
+        //   WRITTEN 0 by GuiCache::RecEvent case 93 @0x8250E9AC (`stbx r24, r31, r10`, r24 == 0)
+        //   READ     by RaceMainHudState::UpdateWFInit @0x824802AC -- and it is the ONLY gate on
+        //            `OnlineTimeoutComponent::Show(this + 0x65D0)` (@0x824802BC), behind the
+        //            state's own mbOnlineTimeout byte at +0x163.
+        // FLAG: NAME INFERRED from that single consumer (no DWARF row, no console accessor).
+        // No member is shifted (1 + 1 == 2).
+        bool mbOnlineTimeoutPending;                     // +0x13B5C (80732) FLAG: name inferred
+        u8  mPad_13B5D[1];                               // +0x13B5D
         // +0x13B5E (80734). Carved out of the old mPad_13B5C span (2 + 1 + 53 == 56, so the
         // layout is unchanged). The one-shot "skip the car-select presentation" gate; every
         // access image-verified 2026-08-24:

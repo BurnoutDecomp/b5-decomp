@@ -24,6 +24,7 @@
 
 #include "types.hpp"
 #include "BrnCommonTypes.h"                                          // CgsID (typedef u64)
+#include "GameShared/GameClasses/Core/CgsAssert.h"                   // CGS_ASSERT (the inlined SetGuiCachePointer leaf)
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiComponent.h"  // CgsGui::GuiComponent base
 #include "GameSource/Gui/BrnGuiTextField.h"                          // BrnGui::TextField (by value)
 
@@ -48,9 +49,33 @@ namespace BrnGui
 
         // ---- declared-only (each reconstructed in its own TU) ----
         bool IsVisible();
-        void SetChallengeList(const BrnResource::ChallengeList* lpChallengeList);
-        void SetGuiCachePointer(GuiCache* lpGuiCache);
         void HandleControllerInput(const CgsGui::GuiEventControllerInputPressed* lpEvent);
+
+        // ADDITIVE GROW ([stuntrace F2] wave, 2026-08-27) -- the two DWARF-declared
+        // one-line setters (BrnChallengeSelector.h:249 / :275). NEITHER has a symbol in
+        // scratch/func_index.tsv: the X360 compiler INLINED both at every call site, so
+        // the earlier "reconstructed in its own TU" note was optimistic -- there is
+        // nothing to reconstruct out-of-line and a bare declaration would be an
+        // unresolved external. Bodied here from their one attested call site each,
+        // RaceMainHudState::UpdateWFInit @0x82480200:
+        //     0x82480338  stw r3, 0x78FC(r31)   ; == mChallengeSelectorComponent(+0x67A0)
+        //                                       ;    + 0x115C == mpChallengeList
+        //     0x82480650  addi r30, r11, aLpguicache         ; "lpGuiCache",
+        //     0x824806B4  li   r5, 0x115                     ;  BrnChallengeSelector.h:277
+        //     0x824806C8  stw  r29, 0x7900(r31)  ; == +0x67A0 + 0x1160 == mpGuiCache
+        // -- i.e. the "lpGuiCache" assert belongs to THIS leaf (its cited line 277 is
+        // this header's, not the state's), and it is non-gating on console: the store
+        // follows unconditionally. SetChallengeList carries no assert at all.
+        void SetChallengeList(const BrnResource::ChallengeList* lpChallengeList)
+        {
+            mpChallengeList = lpChallengeList;
+        }
+
+        void SetGuiCachePointer(GuiCache* lpGuiCache)
+        {
+            CGS_ASSERT(lpGuiCache != 0, "lpGuiCache");   // BrnChallengeSelector.h:277
+            mpGuiCache = lpGuiCache;
+        }
 
         // ---- this TU's ledger functions ----
         // @ 0x82440138 -- resolve a challenge id to its available slot and select it

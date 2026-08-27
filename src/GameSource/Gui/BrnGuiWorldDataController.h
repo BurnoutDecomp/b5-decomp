@@ -98,9 +98,30 @@ namespace BrnGui
         // BrnGui::GuiModule::Prepare stage 14 with the module scheduler's GameData INPUT buffer.
         bool Prepare(BrnResource::GameDataIO::InputBuffer* lpGameDataInput);
 
+        // ⭐⭐ X360 0x82516CB8 -- THE SECOND, INDEPENDENT ACQUIRE MACHINE, and THE ONLY WRITER OF
+        // mpProgressionData / mpStreetData anywhere in the image. Two acquires by name hash,
+        // "ProgressionData" then "StreetData", each bound with CreateFromHandle off its
+        // AcquireResourceResponse. Its console driver is BrnGui::GuiModule::Prepare2 @0x825194B8.
+        //
+        // ⚠️ IT HAS ITS OWN STATE WORD. Prepare drives meState (WDC+0x00, the word every readiness
+        // accessor asserts on); THIS drives meState2 (WDC+0x04) -- `lwz r10, 4(r28)` at its switch
+        // head @0x82516CCC against Prepare's `lwz r11, 0(r28)`. So reaching the end of Prepare2
+        // does NOT satisfy "E_WORLDDATACONTROLLERSTATE_READY <= meState"; it only makes the
+        // progression/street resources readable. The two facts were conflated once already -- the
+        // banner in the .cpp said "some other producer fills them" without naming this function.
+        //
+        // ⛔ BOTH MACHINES SHARE mReceiverQueue, SO THEY MUST NEVER BE PUMPED IN THE SAME PHASE:
+        // each stage consumes "the one event on the queue" without checking what it is, so a reply
+        // to one machine would be eaten by the other. See the driver in BrnGuiModule.cpp
+        // (PrepareWorldData2) for the sequencing that guarantees exclusive use.
+        bool Prepare2(BrnResource::GameDataIO::InputBuffer* lpGameDataInput);
+
         // The live state (the readiness gate the accessors assert on). Exposed so the driver can
         // stop pumping without re-entering the machine.
         EWorldDataControllerState GetState() const { return meState; }
+
+        // The Prepare2 machine's own state (WDC+0x04). Exposed for the same reason as GetState().
+        EWorldDataControllerState GetState2() const { return meState2; }
 
         // [PC bring-up helper -- NOT an X360 method, and deliberately NOT a state test.]
         // True once the stage-6/7 "CarColours" acquire has bound a resource with real memory
@@ -111,6 +132,22 @@ namespace BrnGui
         // for the same reason -- calling operator-> on an unbound ResourcePtr fires its own
         // assert before the caller can decide anything.
         bool HasPlayerCarColours() const { return mpPlayerCarColours.HasMemoryResource(); }
+
+        // [PC bring-up helper -- NOT an X360 method.] Same RESOURCE-not-STATE question as
+        // HasPlayerCarColours above, for the pointer Prepare2 binds. The driver's one-shot
+        // diagnostic reads it; GetProgressionData() still carries the console's meState assert.
+        bool HasProgressionData() const { return mpProgressionData.HasMemoryResource(); }
+
+        // [PC bring-up helper -- NOT an X360 method.] Third of the same family, added
+        // 2026-08-27 with the challenge-list wave. It matters NOW because that wave lets
+        // Prepare reach WFPLAYERCARCOLOURS for the first time, which un-gates the five
+        // meState-asserting accessors -- and FOUR of them (GetTotalNumberOfLandmarks,
+        // GetTotalNumberOfOnlineLandmarks, GetLandmarkInfoFrom{Index,ID}, GetTriggerVolumeRegion)
+        // go straight through mpTriggerData->... with no null path of their own. Stage 2/3's
+        // "TriggerData" acquire is answered even when Triggers.dat is not yet resident (a null
+        // memory pointer, not a failure), so the binding is NOT guaranteed. The driver's one-shot
+        // diagnostic reports it; nothing branches on it yet.
+        bool HasTriggerData() const { return mpTriggerData.HasMemoryResource(); }
 
         // ---- Accessors (bodies in BrnGuiWorldDataController.cpp) --------------------------------
 
@@ -158,11 +195,17 @@ namespace BrnGui
         // through GetLength/GetFirstEvent/Clear. X360 offsets stay in the comments and are NOT
         // host-asserted (the base's buffer pointer widens on x64; callers reach members BY NAME).
         EWorldDataControllerState meState;               // X360 +0x000  (DWARF :182)
+        // ⭐ [event-starts wave 2026-08-27] THE "4 BYTES OF ALIGNMENT/UNKNOWN" BELOW ARE NOT
+        // ALIGNMENT -- they are Prepare2's own state word. Prepare2 @0x82516CB8 opens with
+        // `lwz r10, 4(r28) ; cmplwi r10, 5 ; bgt default` and writes the same slot at every one of
+        // its five stage latches, exactly as Prepare does to +0x00. Named rather than padded now.
+        EWorldDataControllerState meState2;              // X360 +0x004  (Prepare2's machine)
         CgsModule::EventReceiverQueue<1024, 16> mReceiverQueue;  // X360 base FIELDS +0x008 / buffer +0x20
         // ^ Prepare @0x82516770 pins the console queue handle at this+0x8 (mpUser = this+8,
-        //   Clear(this+8), count read at this+0x10, buffer at +0x20 = +0x8 + the 0x18 base) --
-        //   i.e. 4 bytes of alignment/unknown sit between meState and the base fields. Host
-        //   layout is by-name; the X360 offsets are comments only.
+        //   Clear(this+8), count read at this+0x10, buffer at +0x20 = +0x8 + the 0x18 base).
+        //   ⛔ ONE QUEUE, TWO MACHINES: Prepare2 uses THIS SAME queue (its requests all carry
+        //   `&this->field_8` as mpUser). See Prepare2's declaration for why that makes the two
+        //   mutually exclusive. Host layout is by-name; the X360 offsets are comments only.
         s32                       miResourceCount;       // X360 +0x420  (DWARF :184)
 
         CgsResource::ResourcePtr<BrnTrigger::TriggerData>          mpTriggerData;      // X360 +0x424  (DWARF :186)

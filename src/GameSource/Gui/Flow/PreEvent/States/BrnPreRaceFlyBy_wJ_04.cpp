@@ -55,6 +55,8 @@
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"                           // GuiEventUpdateSatNav::SatNavIconInfo / GuiFlow
 #include "GameSource/Gui/BrnGuiDemangledEventTypes.h"                     // GuiEventShowHideSatNav
 
+#include <stdlib.h>                                                       // getenv (the [flyby] diag gate only)
+
 namespace GSM = BrnGameState::GameStateModuleIO;
 
 namespace BrnGui
@@ -367,6 +369,41 @@ void PreRaceFlyByState::Update()
     }
 
     HandleIncomingEvents();
+
+    // =================================================================================
+    // [DIAG] [FLAG PC bring-up] NOT IN THE X360 BINARY -- the `[flyby]` state-edge rung.
+    // Same logger, same BRN_PROP_DIAG env gate and the same first-N latch as the
+    // `[evt-flow]` ladder in GameBridgeGameStateToX_EventFlowGuiEvents.cpp.
+    //
+    // WHY IT IS HERE: the fly-by has no other observable. Every transition past
+    // E_PRERACE_ACTIVE_EVENT_TITLES is driven by an apt TRANSITION_COMPLETE trigger the
+    // movie's own ActionScript posts (CgsAptCommunicator::sMethod_SendAptEvent -> event 21),
+    // and the exit is driven by GUI event 164 -- so "the overlay never goes away" has three
+    // different possible stopping points (no 164, no trans-out transition-complete, or a
+    // state that never left EVENT_TITLES) and NOTHING in the log distinguishes them.
+    // Placed AFTER HandleIncomingEvents so an event-driven transition is reported on the
+    // frame it happens, not the next one. Edge-filtered, so a stalled state prints once.
+    // DELETE-WHEN the fly-by is confirmed to reach E_PRERACE_INVALID through
+    // TriggerExitState in a boot-drive run.
+    // =================================================================================
+    {
+        static const bool sbDiag           = ( getenv( "BRN_PROP_DIAG" ) != 0 );
+        static s32        siFlyByDiagLeft  = 32;
+        static s32        siLastLoggedState = -2;   // not any EPreRaceState value
+
+        if ( sbDiag && siFlyByDiagLeft > 0 &&
+             static_cast<s32>(meCurrentState) != siLastLoggedState &&
+             CgsDev::Log::gpDebugPrint != 0 )
+        {
+            --siFlyByDiagLeft;
+            siLastLoggedState = static_cast<s32>(meCurrentState);
+            *CgsDev::Log::gpDebugPrint
+                << "[flyby] meCurrentState -> " << static_cast<s32>(meCurrentState)
+                << " (-1=INVALID/exited 0=UNLOADED 1=LOADING 2=ICONDELAY 3=TITLES 4=MAPINTRO"
+                   " 5=SHOWMAP 6=MEDALS 7=TRANSOUT 8=DONE) timeRemaining " << mfTimeRemaining
+                << " endRequestSent " << (mbEndRequestSent ? 1 : 0) << "\n";
+        }
+    }
 }
 
 }

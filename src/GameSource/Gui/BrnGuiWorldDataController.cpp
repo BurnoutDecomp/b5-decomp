@@ -54,29 +54,28 @@ namespace BrnGui
 // while its reply has not arrived. The console's caller (GuiModule::Prepare stage 14) re-enters
 // it every pass until it returns true.
 //
-// ⚠️ WHAT ACTUALLY HAPPENS ON THIS BUILD -- CORRECTED 2026-08-02, THE OLD NOTE WAS WRONG TWICE.
-// It said the machine settles at PREPARING_ACQUIRING_PROGRESSION (7) because "no PC producer
-// answers the CarColours acquire". Boot-measured, it settles at PREPARING_ACQUIRING_STREET_DATA
-// (9): the CarColours acquire IS answered (the pool always answers an acquire, even when the
-// resource is absent -- it replies with a null memory pointer), so stage 7 advances. The one
-// stage that cannot complete is stage 9, waiting on GetFreeburnChallengeList, which
-// GameDataModule::ProcessGetGameDataEvent routes to DeferredGameDataRequest ("CL__").
+// ⚠️ WHAT USED TO HAPPEN ON THIS BUILD -- and what changed. From 2026-08-02 to 2026-08-27 the
+// machine settled at PREPARING_ACQUIRING_STREET_DATA (9): the CarColours acquire IS answered
+// (the pool always answers an acquire, even when the resource is absent -- it replies with a
+// null memory pointer), so stage 7 advances, but stage 9's GetFreeburnChallengeList was routed
+// by GameDataModule::ProcessGetGameDataEvent to DeferredGameDataRequest ("CL__") and never
+// answered. meState therefore never reached WFPLAYERCARCOLOURS (11), and every readiness-gated
+// accessor asserted the moment live play reached it.
 //
-// ⛔ AND THE REPLY HANDLER IS DELIBERATELY STILL NOT IMPLEMENTED. The console's
-// ProcessGetFreeburnChallengeListRequest @0x82666728 is trivial -- 20 instructions that post
-// reply id 53 carrying `&mChallengeList` (the resident table at X360 this+462800), exactly like
-// ProcessGetVehicleListRequest. What makes it correct on the console is GameDataModule::Prepare
-// STAGE 10 (PrepareFreeburnChallengeList @0x8266C088) having FILLED that table first. Stage 10
-// is deferred on this build and there is no challenge-list bundle in build/game to fill it
-// from. Writing the reply handler alone would hand every consumer a live-looking, permanently
-// EMPTY table -- a plausible-but-wrong answer indistinguishable from "this profile has no
-// challenges", i.e. the silent-drop shape this project keeps getting bitten by. Land stage 10
-// and the handler together, or not at all.
-//
-// ⚠️ Parking at 9 costs LESS than the old note implied. It does NOT affect the colour picker
-// (see below), and it is not what fires any assert in the current whole-run set. What it does
-// gate is the five genuinely meState-gated accessors (landmarks, events, progression), none of
-// which is reached on the junkyard -> car-select -> handover path.
+// ⭐⭐ CLOSED 2026-08-27 (challenge-list wave). The park was USER-BLOCKING: driving near an event
+// junction fires SatNavRenderer::RecvEvent -> GetEventInfoFromEventId, which is one of the
+// meState-gated five, so the player got the "E_WORLDDATACONTROLLERSTATE_READY <= meState" dialog
+// (cpp:511) in the middle of the game. The prior wave's rule was "land GameDataModule::Prepare
+// stage 10 and the reply handler together, or not at all"; BOTH landed, so stage 9 now completes:
+//   * ProcessGetFreeburnChallengeListRequest @0x82666728 -- 20 instructions that post reply id 53
+//     carrying `&mChallengeList` (the resident table at X360 this+462800), exactly like
+//     ProcessGetVehicleListRequest; and
+//   * Prepare stage 10, PrepareFreeburnChallengeList @0x8266C088, which FILLS that table first.
+// The premise that killed the earlier attempt -- "there is no challenge-list bundle in
+// build/game to fill it from" -- was FALSE: build/game/ONLINECHALLENGES.BNDL ships, already
+// ported to little-endian platform 4, one resource, id 0x0D82D720 == HashString("B5ChallengeList"),
+// type 0x1001F, 458 challenges. See the banner over PrepareFreeburnChallengeList in
+// BrnGameDataModule.cpp for the full measurement.
 //
 // ⚠️ AND: "the readiness-gated accessors (landmarks, events, colour palettes) will assert" was
 // wrong for the colour palette. GetColourPaletteFromType @0x824BDA40 has NO meState compare --
@@ -123,6 +122,12 @@ namespace BrnGui
 void WorldDataController::Construct()
 {
     meState = E_WORLDDATACONTROLLERSTATE_CONSTRUCTED;   // X360 `*(gm + 307836) = 1`
+    // [event-starts wave 2026-08-27] Prepare2's own state word (WDC+0x04). The X360 Construct
+    // inline does not store it -- the console GuiModule is BSS-resident so it is already 0, and 0
+    // is E_WORLDDATACONTROLLERSTATE_DESTRUCTED, which is Prepare2's first case anyway. On the host
+    // this controller is a by-value sub-object of BrnGuiModule, so it is seeded explicitly to the
+    // same starting value. Initialisation-site difference only.
+    meState2 = E_WORLDDATACONTROLLERSTATE_DESTRUCTED;
     mReceiverQueue.Construct();                         // capacity 1024 / alignment 16, then Clear
     miResourceCount  = 0;
     mpVehicleList    = 0;                               // X360 `*(gm + 308960) = 0`
@@ -284,6 +289,147 @@ bool WorldDataController::Prepare(BrnResource::GameDataIO::InputBuffer* lpGameDa
     }
 }
 
+// ================================================================================================
+// ⭐⭐ X360 0x82516CB8 -- WorldDataController::Prepare2. THE PROGRESSION / STREET BINDER.
+// [event-starts wave 2026-08-27] This function is the answer to the "⛔ STILL TRUE AND STILL A GAP"
+// paragraph in this file's top banner, which recorded that "nothing in Prepare ever writes
+// mpProgressionData (+0x444) or mpStreetData (+0x488) -- some other producer fills them". THIS is
+// that producer, and it was sitting in the export set the whole time; the gap was that it had no
+// body and no driver here. WHAT IT BUYS: WorldDataController::GetEventInfoFromEventId can finally
+// answer, which is what SatNavRenderer::RefreshSatNavIconInfo needs for its `lpRaceEventData`
+// (BrnSatNavRenderer.cpp:1307) -- one of the four asserts the sat-nav fires per event.
+//
+// THE MACHINE, five stages over meState2 (+0x04), structurally the twin of Prepare above:
+//   0/1 DESTRUCTED/CONSTRUCTED : AcquireResourceRequest{ &mReceiverQueue, eventId 2, pool 5,
+//                                HashString("ProgressionData") } onto the GameData request
+//                                queue (AddEvent id 4, size 24); FALL THROUGH (the console's
+//                                `goto LABEL_3`).
+//   2   PREPARING_FOR_TRIGGERS : reply not in -> return false. Otherwise CreateFromHandle(
+//                                &mpProgressionData, payload + 0x18), Clear, fall through.
+//   3   PREPARING_ACQUIRING_TRIGGERS : the same request shape for "StreetData"; fall through.
+//   4   PREPARING_FOR_VEHICLES : reply not in -> return false. Otherwise CreateFromHandle(
+//                                &mpStreetData, payload + 0x18), Clear, fall through.
+//   5   PREPARING_ACQUIRING_VEHICLES : return TRUE.
+// The stage NAMES are the console's own enum reused for a second machine -- they describe
+// Prepare's phases, not this one's; kept because they are what the binary stores.
+// Assert line numbers are the console's baked BrnGuiWorldDataController.cpp lines
+// (293/301/304 for the first wait, 332/340/343 for the second, 360 for the default arm).
+//
+// ⛔ THE ONE THING IT DOES **NOT** DO, said plainly because it is the easy wrong conclusion:
+// it never touches meState, so "E_WORLDDATACONTROLLERSTATE_READY <= meState" (the assert every
+// readiness accessor fires, including GetEventInfoFromEventId's own) is UNAFFECTED. That gate
+// needs Prepare to get past stage 9, which needs the GetFreeburnChallengeList reply -- landed
+// 2026-08-27, see the top banner. Prepare2 turns the accessor's ANSWER from null into the real
+// record; it never silences the accessor's state assert. The two are independent fixes and this
+// wave needed BOTH: stage 9 stops the dialog, Prepare2 makes the answer useful.
+//
+// ⚠️ AND IT HAS A SECOND PRECONDITION THAT IS NOT VISIBLE FROM HERE. Prepare2 streams nothing --
+// it acquires "ProgressionData" and "StreetData" BY NAME out of pool 5, and the bundles that put
+// them there ("Progression.dat" / "STREETDATA.DAT") are loaded by the GAME-STATE lane's own
+// second pass. An acquire for an absent resource is ANSWERED with a null memory pointer, so
+// running this machine early does not retry: it completes, binds nothing, and latches meState2
+// at 5 for the session -- which is exactly what "[GuiWorldData] Prepare2 done: mpProgressionData
+// bound = 0" meant in the 2026-08-27 boot log. The ordering gate lives in the driver
+// (BrnGameModule::ResourceUpdateThread), not in this function; see its comment.
+// ================================================================================================
+bool WorldDataController::Prepare2(BrnResource::GameDataIO::InputBuffer* lpGameDataInput)
+{
+    if (lpGameDataInput == 0)
+    {
+        return false;
+    }
+
+    switch (meState2)
+    {
+    case E_WORLDDATACONTROLLERSTATE_DESTRUCTED:
+    case E_WORLDDATACONTROLLERSTATE_CONSTRUCTED:
+    {
+        meState2 = E_WORLDDATACONTROLLERSTATE_CONSTRUCTED;
+        CgsResource::Events::AcquireResourceRequest lRequest;
+        lRequest.mpUser    = &mReceiverQueue;
+        lRequest.miEventId = 2;                    // X360 `li r29, 2` -- NOT Prepare's 1 or 0
+        lRequest.miPoolId  = 5;                    // X360 `li r24, 5`
+        lRequest.mResourceId.SetHash(static_cast<u64>(static_cast<u32>(
+            CgsResource::ID::HashString(reinterpret_cast<const u8*>("ProgressionData")))));
+        lpGameDataInput->GetRequestInterface()->mRequestQueue.AddEvent(
+            reinterpret_cast<const CgsModule::Event*>(&lRequest), 4,
+            static_cast<s32>(sizeof(lRequest)));
+    }
+        // fall through
+    case E_WORLDDATACONTROLLERSTATE_PREPARING_FOR_TRIGGERS:
+    {
+        meState2 = E_WORLDDATACONTROLLERSTATE_PREPARING_FOR_TRIGGERS;
+        if (mReceiverQueue.GetLength() == 0)
+            return false;
+        CGS_ASSERT(mReceiverQueue.GetLength() == 1, "1 == mReceiverQueue.GetLength()");   // cpp:293
+
+        const CgsModule::Event* lpEvent = PeekFirstPayload(mReceiverQueue);
+        CGS_ASSERT(lpEvent != 0, "NULL != lpEvent");                                      // cpp:301
+        const CgsResource::Events::AcquireResourceResponse* lpAcquire =
+            reinterpret_cast<const CgsResource::Events::AcquireResourceResponse*>(lpEvent);
+        CGS_ASSERT(lpAcquire != 0, "NULL != lpAcquire");                                  // cpp:304
+        if (lpAcquire != 0)
+        {
+            // X360 `CreateFromHandle(this + 0x444, payload + 0x18)` -- the same trailing
+            // {mpResourceMemory, mpSourceEntry} pair Prepare's own binds read, through the same
+            // ResourcePtr<T>::operator=(const ResourceHandle&) face.
+            CgsResource::ResourceHandle lHandle;
+            lHandle.mpResourceMemory = lpAcquire->mpResourceMemory;
+            lHandle.mpSourceEntry    = lpAcquire->mpSourceEntry;
+            mpProgressionData = lHandle;
+        }
+        mReceiverQueue.Clear();
+    }
+        // fall through
+    case E_WORLDDATACONTROLLERSTATE_PREPARING_ACQUIRING_TRIGGERS:
+    {
+        meState2 = E_WORLDDATACONTROLLERSTATE_PREPARING_ACQUIRING_TRIGGERS;
+        CgsResource::Events::AcquireResourceRequest lRequest;
+        lRequest.mpUser    = &mReceiverQueue;
+        lRequest.miEventId = 2;
+        lRequest.miPoolId  = 5;
+        lRequest.mResourceId.SetHash(static_cast<u64>(static_cast<u32>(
+            CgsResource::ID::HashString(reinterpret_cast<const u8*>("StreetData")))));
+        lpGameDataInput->GetRequestInterface()->mRequestQueue.AddEvent(
+            reinterpret_cast<const CgsModule::Event*>(&lRequest), 4,
+            static_cast<s32>(sizeof(lRequest)));
+    }
+        // fall through
+    case E_WORLDDATACONTROLLERSTATE_PREPARING_FOR_VEHICLES:
+    {
+        meState2 = E_WORLDDATACONTROLLERSTATE_PREPARING_FOR_VEHICLES;
+        if (mReceiverQueue.GetLength() == 0)
+            return false;
+        CGS_ASSERT(mReceiverQueue.GetLength() == 1, "1 == mReceiverQueue.GetLength()");   // cpp:332
+
+        const CgsModule::Event* lpEvent = PeekFirstPayload(mReceiverQueue);
+        CGS_ASSERT(lpEvent != 0, "NULL != lpEvent");                                      // cpp:340
+        const CgsResource::Events::AcquireResourceResponse* lpAcquire =
+            reinterpret_cast<const CgsResource::Events::AcquireResourceResponse*>(lpEvent);
+        CGS_ASSERT(lpAcquire != 0, "NULL != lpAcquire");                                  // cpp:343
+        if (lpAcquire != 0)
+        {
+            CgsResource::ResourceHandle lHandle;
+            lHandle.mpResourceMemory = lpAcquire->mpResourceMemory;
+            lHandle.mpSourceEntry    = lpAcquire->mpSourceEntry;
+            mpStreetData = lHandle;
+        }
+        mReceiverQueue.Clear();
+    }
+        // fall through
+    case E_WORLDDATACONTROLLERSTATE_PREPARING_ACQUIRING_VEHICLES:
+        meState2 = E_WORLDDATACONTROLLERSTATE_PREPARING_ACQUIRING_VEHICLES;
+        return true;
+
+    default:
+        // X360 cpp:360, streamed: "Unhandled state [" << meState << "] in
+        // WorldDataController::Prepare" -- note the console streams meState (+0x00), NOT the
+        // meState2 it switched on. Reproduced as the same static message this file's Prepare uses.
+        CGS_ASSERT(false, "Unhandled state in WorldDataController::Prepare");
+        return false;
+    }
+}
+
 // X360 0x8248E6D8. Total landmark count in the loaded trigger data (TriggerData::miLandmarkCount @+0x34).
 s32 WorldDataController::GetTotalNumberOfLandmarks() const
 {
@@ -398,12 +544,14 @@ WorldDataController::GetEventInfoFromEventId(u32 luEventId) const
     CGS_ASSERT(meState >= E_WORLDDATACONTROLLERSTATE_WFPLAYERCARCOLOURS,
         "E_WORLDDATACONTROLLERSTATE_READY <= meState");
 
-    // [FLAG PC bring-up guard, 2026-08-26] The GUI lane's own progression binding
-    // (mpProgressionData, bound by this controller's state machine on the console) is not yet
-    // staged on this build, so the first live mode-start GUI event (SatNavRenderer::RecvEvent
-    // on GuiEventPrepareForModeStart) reached here with NULL -- boot-proven AV. The null
-    // answer is "no event info", which every caller already handles (this function returns
-    // NULL on no-match anyway). DELETE-WHEN the WorldDataController data binding lands.
+    // [FLAG PC bring-up guard, 2026-08-26; still live 2026-08-27] Prepare2 IS staged now and
+    // binds mpProgressionData for real (see its banner + the ordering gate in
+    // BrnGameModule::ResourceUpdateThread), so on a healthy boot this arm is not taken. It stays
+    // because the acquire it depends on is ANSWERED even when the resource is absent -- a
+    // "ProgressionData" miss binds a null ResourcePtr rather than failing loudly, and
+    // operator-> would then fire the CONTAINER's assert here instead of the caller's own. The
+    // null answer is "no event info", which every caller already handles (this function returns
+    // NULL on no-match anyway). DELETE-WHEN the acquire reports a miss as a miss.
     if (!mpProgressionData.HasMemoryResource())
     {
         return NULL;

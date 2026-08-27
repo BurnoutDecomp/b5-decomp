@@ -156,6 +156,13 @@ namespace BrnGui
         // machine's own done flag.
         bool PrepareWorldData(BrnResource::GameDataIO::InputBuffer* lpGameDataInput);
 
+        // ⭐ [event-starts wave 2026-08-27] X360 GuiModule::Prepare2 @0x825194B8's
+        // WorldDataController leg -- WorldDataController::Prepare2 @0x82516CB8, the only writer of
+        // mpProgressionData / mpStreetData. Same FLAG'd PC drive point as PrepareWorldData above.
+        // ⛔ MUTUALLY EXCLUSIVE WITH PrepareWorldData: both machines drain the SAME receiver
+        // queue. The body's banner spells out what overlapping them corrupts.
+        bool PrepareWorldData2(BrnResource::GameDataIO::InputBuffer* lpGameDataInput);
+
         // True once PrepareWorldData has reported done (or has parked on a request no PC
         // producer answers -- see the banner in BrnGuiWorldDataController.cpp). The driver
         // reads it only for its one-shot diagnostic.
