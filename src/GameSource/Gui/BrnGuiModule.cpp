@@ -1065,6 +1065,34 @@ namespace BrnGui
         MapTransform::SetSatNavRect(MapTransform::GetSatNavViewRect());
         SetMaskAspectCorrectionMatrix(&mGuiCache);
 
+        // ⭐ [stuntrace] THE FREEBURN-CHALLENGE MANAGER HAND-OFF -- the missing writer of
+        // GuiCache::mpChallengeManager. X360 GuiModule::Construct @0x82518028, the two lines
+        // that follow the mask-matrix build and the BurnoutSkillsManager pair, verbatim:
+        //     BrnGui::FreeburnChallengeManager::Construct(gm + 309584, gm + 1005376);
+        //     if (gm == -309584) { ... FireAssert("lpChallengeManager",
+        //                          "..\\..\\..\\GameSource\\Gui/BrnGuiCache.h", 2374); ... }
+        //     *(gm + 1021868) = gm + 309584;          // == GuiCache +0x406C
+        // (1021868 - 1005376 == 16492 == 0x406C, the member BrnGuiCache.h:1105 pins.) The
+        // setter carries the console's own assert, so nothing is restated here.
+        //
+        // This is the GUI-OBJECT half of the freeburn-challenge chain and is SEPARATE from the
+        // challenge-LIST data half (GameDataModule streams OnlineChallenges.bndl and
+        // WorldDataController publishes the list GuiCache::GetFreeburnChallengeList returns).
+        // The list landed first; this pointer had no producer at all, which is what made
+        // RaceMainHudState::UpdateRunning's case-6 arm (BrnRaceMainHudState_wS3.cpp:261, an
+        // UNCONDITIONAL GetFreeburnChallengeManager per controller-input event) fire
+        // "mpChallengeManager" once per input frame for the whole of a live stunt race.
+        //
+        // The console's BurnoutSkillsManager pair that sits between the mask matrix and this
+        // one (BurnoutSkillsManager::Construct(gm + 309032) + the "lpSkillsManager" assert at
+        // BrnGuiCache.h:2341 -> `*(gm + 1021864)`) is NOT landed here: GuiCache::mpSkillsManager
+        // is still writer-less. It costs no assert -- GetBurnoutSkillsManager
+        // (BrnGuiCache.h:799) is a plain inline read with no guard -- and its readers
+        // (PlayerPositionSingleComponent::RenderValue's today's-best arm) are game-mode 15/16
+        // only, so no offline event reaches them. Named as the known gap, not fabricated.
+        mFreeburnChallengeManager.Construct(&mGuiCache);
+        mGuiCache.SetChallengeManager(&mFreeburnChallengeManager);
+
         // X360 GuiModule::Construct wires the shared state-access bundle here, before
         // any flow is allowed to run: ViewModule::GetAptAux/GetLanguageManager,
         // ViewModule::GetFlaptManager, and this GuiCache are the four live owners.
@@ -2743,6 +2771,29 @@ namespace BrnGui
             mModelInputBuffer.GetEventQueueNonConst()->Clear();
             mModelInputBuffer.UnlockForWrite();
         }
+
+        // ⭐ [stuntrace] the freeburn-challenge tracker's per-frame tick. X360
+        // GuiModule::Update @0x82527A58 runs it in exactly this seat -- the two manager ticks
+        // immediately before the base module update that drives the flows:
+        //     BrnGui::BurnoutSkillsManager::Update(gm + 309032);
+        //     BrnGui::FreeburnChallengeManager::Update(gm + 309584);
+        //     CgsGui::GuiModule::Update(gm, ...);      // == the flow ticks below
+        // The body is the AUTO_ROTATE page timer and is entirely behind
+        // `meInternalState != E_INTERNAL_STATE_OFF`, so on an offline event it costs one
+        // compare per frame. (The skills-manager twin above it is not landed -- see the gap
+        // note at the Construct hand-off.)
+        //
+        // The manager's OTHER console drives are its GuiModule::Update EVENT arms, which are
+        // NOT landed: 544 -> SelectNext, 574 -> StartChallenge, 576 -> TriggerChallenge,
+        // 577 -> HandleNewData, 578 -> meInternalState = RESULTS, 579 -> FinishChallenge,
+        // 581 -> memcpy(manager + 184 /*mCompletedData*/, event, 2104), 583 ->
+        // StartNotActiveChallenge, 584 -> meInternalState = OFF. Every one of them is a
+        // FREEBURN-challenge record; none is produced on this build and none can reach an
+        // offline event, so the manager correctly rests in E_INTERNAL_STATE_OFF for the whole
+        // of a stunt race and every consumer's IsActive/IsNotActive/IsRunning/
+        // IsShowingResults gate reads false. Landing them is the follow-up that turns the
+        // challenge ticker on, and it needs the freeburn producers first.
+        mFreeburnChallengeManager.Update();
 
         // ---- 4. the flow ticks (each current state's PreUpdate/Update/PostUpdate) -----
         mScreenFlow.Update();

@@ -21,6 +21,88 @@
 namespace BrnGui
 {
 
+// The auto-rotate dwell the X360 Update adds to the clock (`*(a1 + 8) = Time + 5.0`,
+// @0x824F3F10). FLAG: constant name not DWARF-attested; the VALUE is X360-attested.
+static const f32 KF_PAGE_ROTATE_SECONDS = 5.0f;
+
+// @ 0x82501C80 — Construct. Latch the owning GuiCache and reset every tracked word to the
+// "no challenge" resting state. Store-for-store from the X360 body (byte offsets shown as the
+// members they are):
+//     if (!a2) FireAssert("lpCache", "...BrnGuiFreeburnChallengeManager.cpp", 46);
+//     *a1        = a2;    // mpGuiCache
+//     *(a1+8)    = 0.0;   // mfTimeToNextChange
+//     *(a1+12)   = 1;     // mePageState        = E_PAGE_STATE_AUTO_ROTATE
+//     *(a1+20)   = 0;     // mpCurrentChallenge
+//     *(a1+4)    = 0;     // meInternalState    = E_INTERNAL_STATE_OFF
+//     *(a1+16)   = 0;     // miCurrentTargetIndex
+//     *(a1+28)   = 0;     // miTargetsCount
+//     *(a1+24)   = 0;     // mbIsLocalHost
+//     *(a1+176)  = 0;     // miCurrentAction
+//     XMemSet(a1+32, 0, 8);                               // maeChallengeTargetTypes[2]
+//     FburnChallengeEveryPlayerStatusData::Construct(a1+184);   // mCompletedData
+//
+// E_INTERNAL_STATE_OFF is the resting state: every consumer of this manager gates on
+// IsActive()/IsNotActive()/IsRunning()/IsShowingResults() first, and all four are false while
+// the state is OFF, so a constructed-but-idle manager is exactly what an offline event
+// (E_MODE_STUNT_ATTACK included) sees for its whole run.
+//
+// ⚠️ FLAG deferred (ONE console leg, unreachable on this build): the trailing
+// FburnChallengeEveryPlayerStatusData::Construct(a1+184). mCompletedData is deliberately NOT
+// modelled by this struct -- BrnGuiFreeburnChallengeManager.h:148 records that HONEST BOUNDARY
+// (its real home is the GameState IO header graph) -- so there is no member to construct. It
+// costs nothing here: the only producer is GuiModule::Update's case 581 (a 2104-byte memcpy
+// into manager+184) and the only reader is RaceMainHudState::StartFreeburnChallengeTicker's
+// already-deferred completed-challenge bit; neither is on this build.
+// DELETE-WHEN BrnGuiFreeburnChallengeManager.h models mCompletedData -- this becomes
+// `mCompletedData.Construct();`.
+void FreeburnChallengeManager::Construct( GuiCache* lpCache )
+{
+    CGS_ASSERT( lpCache, "lpCache" );   // BrnGuiFreeburnChallengeManager.cpp:46
+
+    mpGuiCache           = lpCache;
+    mfTimeToNextChange   = 0.0f;
+    mePageState          = E_PAGE_STATE_AUTO_ROTATE;
+    mpCurrentChallenge   = nullptr;
+    meInternalState      = E_INTERNAL_STATE_OFF;
+    miCurrentTargetIndex = 0;
+    miTargetsCount       = 0;
+    mbIsLocalHost        = false;
+    miCurrentAction      = 0;
+
+    // the X360 XMemSet(a1 + 32, 0, 8) -- the two target-type words
+    for ( s32 liTarget = 0; liTarget < KI_MAX_TARGETS; ++liTarget )
+    {
+        maeChallengeTargetTypes[ liTarget ] =
+            static_cast<BrnResource::ChallengeListEntryAction::EChallengeDataType>( 0 );
+    }
+}
+
+// @ 0x824F3F10 — Update. The AUTO_ROTATE page timer: while a challenge is live and the page
+// state is auto-rotate, step miCurrentTargetIndex (wrapping at miTargetsCount) every five
+// seconds of GuiCache time. The X360 reads miTargetsCount and the incremented index BEFORE the
+// stores and re-reads GetTime for the new deadline; the shape below is store-for-store with it.
+// The "mpGuiCache" assert is the console's own (cpp:75) and is NON-GATING -- but the cache is
+// bound by Construct and this manager has exactly one construction site, so it is a tripwire.
+// Note the whole body is behind `meInternalState != E_INTERNAL_STATE_OFF`, so an idle manager
+// does not even read the clock.
+void FreeburnChallengeManager::Update()
+{
+    CGS_ASSERT( mpGuiCache, "mpGuiCache" );   // BrnGuiFreeburnChallengeManager.cpp:75
+
+    if ( meInternalState != E_INTERNAL_STATE_OFF &&
+         mePageState == E_PAGE_STATE_AUTO_ROTATE &&
+         mpGuiCache->GetTime() >= mfTimeToNextChange )
+    {
+        const s32 liTargetsCount = miTargetsCount;
+        const s32 liNextTarget   = miCurrentTargetIndex + 1;
+
+        mfTimeToNextChange   = mpGuiCache->GetTime() + KF_PAGE_ROTATE_SECONDS;
+        miCurrentTargetIndex = liNextTarget;
+        if ( liNextTarget >= liTargetsCount )
+            miCurrentTargetIndex = 0;
+    }
+}
+
 // @ 0x8240EC30 — guard meInternalState != OFF, return mpCurrentChallenge.
 const BrnResource::ChallengeListEntry* FreeburnChallengeManager::GetCurrentChallenge() const
 {

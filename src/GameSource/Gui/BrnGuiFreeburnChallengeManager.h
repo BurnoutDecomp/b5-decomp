@@ -81,6 +81,18 @@ struct FreeburnChallengeManager
     static const s32 KI_MAX_TARGETS = 2; // == BrnResource::ChallengeListEntry::KI_MAX_ACTIONS_PER_CHALLENGE
     static const s32 KI_MAX_ARCI    = 8; // == E_ACTIVE_RACE_CAR_INDEX_COUNT
 
+    // ---- lifecycle (X360 out-of-line) ----
+    // ⭐ [stuntrace] THE OWNER'S ENTRY POINT. BrnGui::GuiModule::Construct @0x82518028 is the
+    // manager's ONE constructor call site (`FreeburnChallengeManager::Construct(gm + 309584,
+    // gm + 1005376)`) and the store that follows it -- `*(gm + 1021868) = gm + 309584`, i.e.
+    // GuiCache +0x406C -- is the ONLY writer of GuiCache::mpChallengeManager in the image.
+    void Construct(GuiCache* lpCache);                                   // @0x82501C80
+
+    // @0x824F3F10 -- the page auto-rotate tick. BrnGui::GuiModule::Update @0x82527A58 calls it
+    // once per frame, immediately after BurnoutSkillsManager::Update and immediately before
+    // the base CgsGui::GuiModule::Update that ticks the flows.
+    void Update();
+
     // ---- reconstructed state transitions (X360 out-of-line) ----
     void StartChallenge(const GuiChallengeStartEvent* lpEvent);          // @0x82509D60
     void TriggerChallenge(const GuiChallengeTriggerResponse* lpEvent);   // @0x8250A160
