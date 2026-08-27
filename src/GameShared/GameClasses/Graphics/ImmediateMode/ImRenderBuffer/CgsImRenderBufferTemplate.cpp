@@ -883,6 +883,25 @@ namespace CgsGraphics
             return siState == 1;
         }
 
+        // [diag] BRN_IM2D_TRACE -- the DEFERRED-channel half of the same witness.
+        // ⭐⭐ `[Im2dTrace]` (CgsIm2d.cpp:190) lives in `ImRenderer<V>::Render` and therefore
+        // sees ONLY the immediate channel. `ImRenderBuffer<V>::Dispatch` reaches D3D9 through
+        // its own `DrawPrimitiveUP` below and never enters `ImRenderer<V>::Render`, so under
+        // BRN_IM2D_TRACE alone the entire recorded channel -- the sat-nav map, every Apt menu,
+        // the boost bar -- is INVISIBLE. A predecessor built a whole (wrong) mechanism on that
+        // silence. One env var now lights BOTH backends: a subsystem with two backends needs a
+        // witness on each.
+        bool DispTraceEnabled()
+        {
+            static int siState = -1;
+            if (siState < 0)
+            {
+                char lacBuf[8];
+                siState = (GetEnvironmentVariableA("BRN_IM2D_TRACE", lacBuf, sizeof(lacBuf)) > 0) ? 1 : 0;
+            }
+            return siState == 1;
+        }
+
         void CxformTraceLog(f32 lfSR, f32 lfSG, f32 lfSB, f32 lfSA,
                             f32 lfTR, f32 lfTG, f32 lfTB, f32 lfTA)
         {
@@ -1606,6 +1625,38 @@ namespace CgsGraphics
                     lpDevice->SetTextureStageState(luShiftStage, D3DTSS_COLORARG2, D3DTA_TFACTOR);
                     lpDevice->SetTextureStageState(luShiftStage, D3DTSS_ALPHAOP, D3DTOP_SELECTARG1);
                     lpDevice->SetTextureStageState(luShiftStage, D3DTSS_ALPHAARG1, D3DTA_CURRENT);
+                }
+
+                // [diag] BRN_IM2D_TRACE: the DEFERRED channel's witness, immediately before the
+                // draw that actually reaches D3D9. Same env var and same `% 60` present gate as
+                // `[Im2dTrace]` (CgsIm2d.cpp:190), and the bounds are reported in the SAME space
+                // -- LOGICAL 1280x720 -- by dividing the back-buffer scale back out, so the two
+                // tags are directly comparable line for line. Interleaving them in one log is the
+                // only way to read the true PIXEL order of the two 2D backends.
+                if (DispTraceEnabled() && (renderengine::guPresentCount % 60u) == 0u &&
+                    lfScaleX > 0.0f && lfScaleY > 0.0f)
+                {
+                    f32 lfTMinX = saBatch[0].x, lfTMaxX = saBatch[0].x;
+                    f32 lfTMinY = saBatch[0].y, lfTMaxY = saBatch[0].y;
+                    for (u32 luB = 1; luB < luCount; ++luB)
+                    {
+                        if (saBatch[luB].x < lfTMinX) lfTMinX = saBatch[luB].x;
+                        if (saBatch[luB].x > lfTMaxX) lfTMaxX = saBatch[luB].x;
+                        if (saBatch[luB].y < lfTMinY) lfTMinY = saBatch[luB].y;
+                        if (saBatch[luB].y > lfTMaxY) lfTMaxY = saBatch[luB].y;
+                    }
+                    const u32 luC0 = saBatch[0].color;   // D3DCOLOR_ARGB
+                    char lacDispMsg[192];
+                    std::snprintf(lacDispMsg, sizeof(lacDispMsg),
+                                  "[DispTrace] f=%u n=%u xy=(%.0f,%.0f)-(%.0f,%.0f) "
+                                  "rgba=%02X%02X%02X%02X tex=%p\n",
+                                  renderengine::guPresentCount, luCount,
+                                  lfTMinX / lfScaleX, lfTMinY / lfScaleY,
+                                  lfTMaxX / lfScaleX, lfTMaxY / lfScaleY,
+                                  (luC0 >> 16) & 0xFFu, (luC0 >> 8) & 0xFFu,
+                                  luC0 & 0xFFu, (luC0 >> 24) & 0xFFu,
+                                  lpTraceBoundTexture);
+                    CgsDev::Log::WriteToLog(lacDispMsg);
                 }
 
                 lpDevice->DrawPrimitiveUP(leTopology, luPrimCount, saBatch, sizeof(DispatchScreenVertex));

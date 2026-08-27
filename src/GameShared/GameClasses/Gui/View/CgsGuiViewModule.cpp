@@ -13,6 +13,11 @@
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsIm2dTransform.h" // Im2dTransform (RenderBlackScreen's unit-to-screen)
 #include "GameShared/GameClasses/Graphics/VertexDescriptors/CgsBasic2dColouredTexturedVertex.h" // the clear-quad vertices
 
+// [diag] BRN_IM2D_TRACE (risk R1, RenderBlackScreen): the present counter the 2D traces
+// gate on, and the Win32 env read. Both are diagnostic-only.
+#include <windows.h>                                   // [diag] GetEnvironmentVariableA
+namespace renderengine { extern u32 guPresentCount; }  // [diag]
+
 namespace CgsGui
 {
     // ⛔ `struct CustomRendererManagerWiring` DELETED (2026-08-16).
@@ -531,6 +536,31 @@ namespace CgsGui
     // square whose colour is black at mfClearScreenAlpha (+0xE004), and close the block.
     void ViewModule::RenderBlackScreen()
     {
+        // [diag] BRN_IM2D_TRACE -- risk R1's witness, emitted ONCE PER FRAME at the head of
+        // the GUI render so the [Im2dTrace] (immediate/FLAPT) and [DispTrace] (deferred/Apt)
+        // lines that follow are attributable to a known clear-screen state. The question R1
+        // asks: is the in-game HUD hidden in menus by a REAL hide, or merely by being painted
+        // over? If the latter, moving the Apt flush earlier makes the HUD bleed THROUGH the
+        // pause menu. `clear=1` with `alpha=1.00` is the full-screen black clear; a FLAPT
+        // quad count of 0 after this line is the pass condition for that frame.
+        {
+            static int siR1State = -1;
+            if (siR1State < 0)
+            {
+                char lacR1Buf[8];
+                siR1State = (GetEnvironmentVariableA("BRN_IM2D_TRACE", lacR1Buf, sizeof(lacR1Buf)) > 0) ? 1 : 0;
+            }
+            if (siR1State == 1 && (renderengine::guPresentCount % 60u) == 0u)
+            {
+                char lacR1Msg[128];
+                CgsCore::SPrintf(lacR1Msg, sizeof(lacR1Msg),
+                                 "[R1] f=%u clear=%d alpha=%.2f\n",
+                                 renderengine::guPresentCount,
+                                 mbClearScreenEnabled ? 1 : 0, mfClearScreenAlpha);
+                CgsDev::Log::WriteToLog(lacR1Msg);
+            }
+        }
+
         if (!mbClearScreenEnabled)
             return;
 

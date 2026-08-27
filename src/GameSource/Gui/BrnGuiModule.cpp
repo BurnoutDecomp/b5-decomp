@@ -2,6 +2,7 @@
 #include "SharedClasses/Gui/SatNav/BrnMapUtils.h"   // [H3b] MapTransform (the sat-nav view-rect install)
 
 #include <cstdio>                                                         // std::snprintf (log formatting)
+#include <windows.h>                                                      // [gate] GetEnvironmentVariableA (BRN_FLAPT_AFTER_DISPATCH)
 #include <chrono>   // the PC frame clock for the view time-step event (FLAG: wall clock)
 #include <cstring>  // std::strcmp (ARTIST GUI-audio action-name table)
 
@@ -826,6 +827,39 @@ namespace BrnGui
     // Hard-gated on the bring-up flags: never swaps a buffer RenderInternal did not
     // just fill (the view render itself is gated by GuiModule::Render on IsReady()).
     // -------------------------------------------------------------------------
+    // [gate] BRN_FLAPT_AFTER_DISPATCH -- flush the Apt/GUI command buffer EARLIER, inside
+    // BrnGui::ViewModule::RenderInternal and ahead of mFlaptManager.Render(), so the immediate
+    // FLAPT channel paints OVER the deferred channel the way the console's single recorded
+    // buffer replays it. See BrnGui::DrainAptRenderResidueBeforeFlapt at the foot of this file
+    // for the full mechanism.
+    //
+    // ⭐ DEFAULT IS **ON** (2026-08-27): this is the shipped 2D pixel order, and it is what
+    // makes the sat-nav player arrow visible at all. `BRN_FLAPT_AFTER_DISPATCH=0` restores the
+    // OLD order on the SAME binary -- deliberately kept, because it is the falsification
+    // control for this fix: the arrow must vanish again under =0 and come back under =1
+    // without recompiling. Any other value (or unset) means ON.
+    //
+    // Evidence the reorder is safe (measured, not argued -- risk R1, "is the HUD hidden in
+    // menus by a real FLAPT hide or merely by being painted over?"): across the car-select Apt
+    // menu (73 deferred draws with 7 opaque FLAPT quads underneath) and the full-screen title
+    // surface + black clear, the A/B pixel difference INSIDE every FLAPT quad rect is exactly
+    // ZERO, while the same runs' frame-to-frame animation noise is thousands of pixels. The
+    // FLAPT quads that survive into menu states carry empty textures, so promoting them above
+    // the Apt surfaces changes no pixel. If a future menu makes them opaque, this is the knob
+    // that isolates the regression.
+    bool FlaptAfterDispatchEnabled()
+    {
+        static int siState = -1;
+        if (siState < 0)
+        {
+            char lacBuf[8] = { 0 };
+            const DWORD luLen = GetEnvironmentVariableA("BRN_FLAPT_AFTER_DISPATCH", lacBuf, sizeof(lacBuf));
+            // Unset => ON. Set => ON unless it is explicitly "0".
+            siState = (luLen > 0 && lacBuf[0] == '0' && lacBuf[1] == '\0') ? 0 : 1;
+        }
+        return siState == 1;
+    }
+
     void DispatchAptRenderResidue()
     {
         if (!s_bRuntimeReady || !s_bAuxReady || !s_bRenderBufferReady)
@@ -2985,5 +3019,46 @@ namespace BrnGui
     AlwaysAvailableComponentsManager* GetAlwaysAvailableComponentsManager(GuiModule* lpGuiModule)
     {
         return lpGuiModule->GetAlwaysAvailableComponentsManager();
+    }
+
+    // ---- DrainAptRenderResidueBeforeFlapt (free hook, declared in BrnGuiViewModule.h) ----
+    // ⭐⭐ THE 2D PIXEL-ORDER FIX. Console: EVERY 2D submitter -- FLAPT included -- records
+    // into ONE CgsGraphics::Im2dRenderBuffer, and Im2dRenderBuffer::Dispatch @0x827F9BA0
+    // replays them in RECORD order, so FLAPT's records (which sit at the tail) paint OVER
+    // the sat-nav map. PC has TWO backends: FlaptRenderSet::mpIm2dRenderBuffer is typed
+    // CgsGraphics::Im2d*, so FLAPT binds Im2dBase<V>::BatchTransformTextureBlendRenderStatic
+    // (CgsIm2d.cpp:484), which reaches D3D9 IMMEDIATELY, while every other 2D submitter
+    // records a command. The single flush -- DispatchAptRenderResidue() -- runs AFTER
+    // mViewModule.Render() returns. Net effect: CALL order is map->arrow but PIXEL order is
+    // arrow->map, every frame, and the opaque map erases the HUD drawn under it.
+    //
+    // ⛔ The "more faithful" repair -- routing FLAPT through the command buffer -- is NOT
+    // this change. The two PC backends disagree on POSITION SPACE (Im2dBase folds
+    // transform->NDC->logical; Dispatch's RENDER_PRIMITIVES treats the transform output as
+    // logical already, and the PC producers were adapted to Dispatch on purpose) and on
+    // COLOUR-SCALE IDENTITY (FoldIm2dColourChannel identity 1.0 vs DispatchColourScaleOnly
+    // identity 255) while SHARING opcodes 16/2, so Dispatch cannot tell an Apt record from a
+    // FLAPT one without a producer-side marker we would have to invent. Recording FLAPT
+    // today would put the HUD in a 2x2-pixel blob at the origin at 1/255 brightness.
+    // Unifying the conventions is a whole-GUI campaign, not this fix.
+    //
+    // So: MOVE THE FLUSH, NOT THE SUBMITTER. Draining here -- between the base view render
+    // and mFlaptManager.Render() -- reproduces the console's RECORDED order as the PC's
+    // PIXEL order. It touches no convention, adds no opcode and adds no buffer.
+    // ⭐ Any reorder that keeps BOTH submissions inside the recording phase is a pixel
+    //   NO-OP; that is why swapping the statements at BrnGuiViewModule.cpp:167-169 cannot
+    //   work, and why the flush -- which is in a DIFFERENT TU -- is the thing that moves.
+    //
+    // GuiModule::Render's own DispatchAptRenderResidue() call is deliberately LEFT IN PLACE.
+    // It is a proven no-op once this drain has run: Dispatch bounds its walk by the dispatch
+    // buffer's muCommandBufferWritePos (GetFirstCommand/GetNextCommand), and this drain's
+    // Swap->Clear zeroed that buffer's write position, so the second flush walks an EMPTY
+    // buffer. Keeping it means the residue path still covers anything recorded after the
+    // view render, and it keeps the OFF path byte-identical to today.
+    void DrainAptRenderResidueBeforeFlapt()
+    {
+        if (!FlaptAfterDispatchEnabled())
+            return;
+        DispatchAptRenderResidue();
     }
 }
