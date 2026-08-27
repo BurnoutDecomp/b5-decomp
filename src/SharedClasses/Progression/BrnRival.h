@@ -63,7 +63,16 @@ struct Rival
     u8             GetNumMedalsToUnlock() const;
     void           SetNumMedalsToUnlock(u8 luNumMedals);
     void           IsUsedForRankUpGiftCar(bool lbIsUsed);
-    bool           GetIsUsedForRankUpGiftCar() const;
+
+    // ---- ADDITIVE (drive-thru link-closure wave, 2026-08-27) ---------------------------
+    // BODIED (it was in the declared-only list and defined nowhere -- the same latent
+    // unresolved-external state GetId/GetDistrict were in, and it surfaced the moment its
+    // first caller was mounted). No standalone X360 symbol: ProgressionManager::
+    // GetTrueNumberOfRivals @0x8236FB10 and ::GetNumberOfBeatenRivals @0x8236FBC8 both read it
+    // as a bare `lbz r11, 0x17(r11)` on the 56-byte-strided record, so a header inline IS the
+    // faithful shape. SEMANTICS: a rival flagged here exists only to carry a rank-up gift car,
+    // so both functions SKIP it -- it is not an opponent you can beat.
+    bool           GetIsUsedForRankUpGiftCar() const { return mbIsUsedForRankUpGiftCar; }
     void           FixDown();
     void           FixUp();
 

@@ -43,6 +43,8 @@
 #include "SharedClasses/DataLists/VehicleListEntry.h"               // BrnResource::VehicleListEntry (GetId/GetParentId/GetLiveryType)
 #include "GameSource/GameState/BrnGameActions.h"                    // GameStateModuleIO::TrophyUnlockAction
 #include "GameShared/GameClasses/Core/CgsAssert.h"                  // CgsDev::Assert::Begin/Fire/End
+#include "GameSource/GameState/AchievementManager/BrnGameStateAchievementManagerBase.h" // OnFindAllDriveThrus
+#include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"    // VariableEventQueue<13312,16>::AddEvent
 
 namespace BrnProgression
 {
@@ -401,6 +403,88 @@ void ProgressionManager::OnTrophyUnlock(s32 liTrophyType)
             }
         }
     }
+}
+
+
+// ===================================================================================
+// ProgressionManager::OnDriveThru  @ 0x82399DD0   ⭐⭐⭐ THE LAST UNRESOLVED EXTERNAL
+//
+// Record the discovery of a drive-thru and fan out everything that follows from it.
+// DriveThruManager::HandleDriveThru is its only caller, and that path is HOT: a
+// __debugbreak() left in this symbol's place broke into the debugger ~9.5 s into an
+// ordinary junkyard -> car-select -> free-burn drive, via ProcessPlayerTriggers.
+//
+// ⚠️ ARG SHAPE FROM ASM (0x82399DDC..0x82399DF0): r3=this, r4=the drive-thru id ->r30,
+// r5=the region type ->r29, r6=the game-action queue ->r27, and r31 = this+0x170, the
+// embedded Profile. The Profile calls that "take no arguments" in the pseudocode
+// (IsDriveThruDiscoverd) are the compiler leaving r4/r5 untouched from the prologue --
+// nothing clobbers them between `mr r30, r4` and the call, which is why only `mr r3, r31`
+// is emitted.
+//
+// ⭐ THE WHOLE CASCADE IS GATED, AND ONLY THE FIRST GATE IS COMMON. A re-entered
+// drive-thru returns immediately (IsDriveThruDiscoverd). A newly discovered one runs
+// AddDriveThru; only when THAT awards a trophy does OnTrophyUnlock fire; and the
+// completion pair (CheckForSpecialCarUnlocks + SendGameCompletionResults) needs every
+// drive-thru in the world found. The unconditional part is the action-55 autosave post
+// and the dirty flag.
+//
+// ⚠️ THE AUTOSAVE POST CARRIES A ZERO PAYLOAD (`li r11, 0` / `stb r11, var_40` before
+// `li r5, 0x37`), i.e. an UNFORCED autosave: GuiModule ORs that byte into
+// mbForceProfileAutosave, so a zero leaves the 60-second throttle in charge. The
+// completion path's own request (mbAutosaveRequested, drained by PreWorldUpdate) posts
+// the same action with a payload of ONE and does bypass it. Same id, different urgency.
+// ===================================================================================
+void ProgressionManager::OnDriveThru(CgsID lId, BrnTrigger::GenericRegion::Type leType,
+                                     BrnGameState::GameStateModuleIO::GameActionQueue* lpQueue)
+{
+    if (mProfile.IsDriveThruDiscoverd(lId, leType))
+    {
+        return;
+    }
+
+    // AddDriveThru returns the TrophyUnlockData::UnlockType this discovery completed, or
+    // E_UNLOCKTYPE_NONE (0) when the category is not finished yet.
+    const s32 liTrophyType = mProfile.AddDriveThru(lId, leType);
+    if (liTrophyType != TrophyUnlockData::E_UNLOCKTYPE_NONE)
+    {
+        OnTrophyUnlock(liTrophyType);
+
+        // `li r4, 0x15` == 21 == E_UNLOCKTYPE_FIND_ALL_DRIVE_THRUS -- the umbrella trophy on
+        // top of the per-category one, awarded only when this was the last category to close.
+        if (mProfile.AreAllDriveThrusCompleted())
+        {
+            OnTrophyUnlock(TrophyUnlockData::E_UNLOCKTYPE_FIND_ALL_DRIVE_THRUS);
+        }
+    }
+
+    if (mProfile.AreAllDriveThrusCompleted())
+    {
+        // `lwzx r3, r28, 0x20938` -- the achievement manager, dereferenced with no null test
+        // by the console. Guarded here for the same reason every other consumer in this tree
+        // guards it: nothing in the mounted set calls Prepare2, so it reads NULL today.
+        BrnGameState::AchievementManagerBase* lpAchievementManager = GetAchievementManager();
+        if (lpAchievementManager != 0)
+        {
+            lpAchievementManager->OnFindAllDriveThrus();
+        }
+    }
+
+    if (lpQueue != 0)
+    {
+        if (mProfile.AreAllDriveThrusCompleted())
+        {
+            CheckForSpecialCarUnlocks();
+            SendGameCompletionResults(lpQueue);
+        }
+
+        u8 lu8AutosaveIsForced = 0;
+        lpQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lu8AutosaveIsForced),
+                          BrnGameState::GameStateModuleIO::E_ACTION_REQUEST_AUTOSAVE, 1);
+    }
+
+    // `stbx r10(1), r28, 0x20988` == manager+133512, unconditional on the not-yet-discovered
+    // path (it sits AFTER the `if (lpQueue)` block, not inside it).
+    mbDriveThrusDirty = true;
 }
 
 }

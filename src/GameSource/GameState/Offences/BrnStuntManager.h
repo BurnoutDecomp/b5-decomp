@@ -122,6 +122,19 @@ namespace BrnGameState
         // member BY NAME so the debug component does not reach into the private layout.
         const CgsWorld::WorldMap2D& GetDistrictMap() const { return mWorldMap2D; }
 
+        // Additive accessor (FLAG: not its own X360 function -- inlined at the call site).
+        // ProgressionManager::ComputeCompletionPercentage @0x8238A198 reads the three world
+        // totals straight off this manager through its own +0x20944 back-pointer:
+        //     lwzx r10, r29, 0x20944      ; mpStuntManager
+        //     lhz  r11, 0x5C4(r10)        ; [JUMP]      (then 0x5C8 [BILLBOARD], 0x5C6 [SMASH])
+        //     extsh r11, r11              ; SIGNED -- they are the s16 the DWARF declares
+        // and divides the profile's per-type completed counts by them. Exposed BY NAME so the
+        // progression side does not reach into the private layout.
+        s16 GetTotalStuntElementCount(StuntElementType leStuntElementType) const
+        {
+            return maiTotalStuntElementCounts[leStuntElementType];
+        }
+
     private:
         // ---- private methods (declaration-only; each owned by its own X360 TU) ----
         void              Clear();                                              // :166 (own TU)

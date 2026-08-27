@@ -376,6 +376,22 @@ public:
     { return mbPlayerLicencePictureIsValid ? &mPlayerLicencePicture : 0; }
     bool GetHaveSet100PercentCompletedDate() const { return mbHaveSet100PercentCompletedDate; }
 
+    // ---- [drive-thru wave 2026-08-27] the three setters the completion chain needs.
+    // The X360 emits no standalone symbol for any of them -- ProgressionManager::
+    // SendGameCompletionResults @0x82395C28 and ::CheckForSpecialCarUnlocks @0x82396058 poke
+    // the bytes directly through the manager (manager+118405, manager+42884/+42885) while
+    // inlining -- so they are defined inline here, the same precedent as the getters above.
+    //   Set100PercentCompletedDateAsNow: `CgsSystem::DateAndTime::Update(Profile + 118008)`
+    //     followed by `stbx 1 -> Profile + 118037` (0x82395C9C / 0x82395CA8) -- ONE operation
+    //     in the console, so it is one method here rather than two that can be called apart.
+    void Set100PercentCompletedDateAsNow()
+    {
+        mDate100PercentCompleted.Update();
+        mbHaveSet100PercentCompletedDate = true;
+    }
+    void SetSilverCarsUnlocked(bool lbUnlocked) { mbSilverCarsUnlocked = lbUnlocked; }  // +42516
+    void SetGoldCarsUnlocked(bool lbUnlocked)   { mbGoldCarsUnlocked   = lbUnlocked; }  // +42517
+
     void DEBUG_ClearMedals();
 
     // ------------------------------------------------------------------------

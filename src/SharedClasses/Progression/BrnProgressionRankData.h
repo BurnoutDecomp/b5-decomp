@@ -135,6 +135,12 @@ public:
     // DWARF :91. Takedowns needed to win a road rage at this rank (3/6/10/15/20/30).
     u16 GetRoadRageTakedownTarget() const { return muRoadRageTakedownTarget; }
 
+    // DWARF :294. Medals needed to reach the NEXT rank (the authored series 2/7/15/26/40/120).
+    // ProgressionManager::GetPercentageOfEventsCompleted @0x8237B390 divides the player's total
+    // win count by it (`lhz r11, 0x4C(r11)` + `extsh` @0x8237B480, so it is read SIGNED there);
+    // the X360 has no standalone symbol for the read, hence the inline, same as the siblings.
+    u16 GetMedalThresholdToNextRank() const { return mu16MedalThresholdToNextRank; }
+
     // DWARF :97. Seconds a road-rage time extension is worth at this rank.
     u16 GetRoadRageExtensionTime() const { return muRoadRageExtensionTime; }
 

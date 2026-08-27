@@ -28,6 +28,11 @@ namespace BrnGameState    { class AchievementManagerBase; }
 // Both are POINTER-ONLY here (BrnTrainingManager.h itself includes THIS header, so pulling it
 // in from here would be a cycle); BrnProgressionManager_EventFinish.cpp includes the real homes.
 namespace BrnGameState    { class TrainingManager; }
+// [drive-thru wave 2026-08-27] Construct's other two sibling managers, POINTER-ONLY here for the
+// same reason as TrainingManager: BrnStuntManager.h forward-declares THIS class, and
+// BrnGameStateStreetManager.h is a large closure. Tags match the committed homes -- both are
+// `struct` (BrnGameStateStreetManager.h:234 / BrnStuntManager.h:67) -- to avoid C4099.
+namespace BrnGameState    { struct StreetManager; struct StuntManager; class ModeManager; }
 // [stuntrace waveB CLOSURE round] pointer-only parameters of GetStuntRunScoreTarget (declared
 // below). Their real home is GameSource/GameState/ModeManager/GameModes/BrnGameModeParams.h,
 // which this header must NOT pull in (it would drag the whole GameModeParams closure into every
@@ -249,6 +254,25 @@ public:
     // GetLiveryType) equals lu8LiveryType and whose PARENT car the profile already owns.
     // CheckForSpecialCarUnlocks calls it with 4 (the rank-gated set) and 3 (the 100%-gated set).
     void UnlockSpecialCars(u8 lu8LiveryType);
+
+    // ⭐⭐ X360 0x8238A198 (321 instructions) -- THE GAME-COMPLETION PERCENTAGE. The weighted sum
+    // both special-car unlocks and the game-completion results record test against 100.0f.
+    // The six .rdata weights close EXACTLY on 100, which is the cross-check that they were read
+    // correctly: 9 (time road rules) + 9 (crash road rules) + 11 (rivals beaten) + 11 (the three
+    // stunt-element fractions MULTIPLIED) + 2.5 (drive-thrus) + 2.5 (events found) == 45, and
+    // GetPercentageOfEventsCompleted contributes the other 55.
+    f32 ComputeCompletionPercentage();
+
+    // X360 0x8237B390. The progression-rank half of the completion sum: the sum of the authored
+    // per-rank contributions for every rank already earned, plus the next rank's contribution
+    // scaled by progress toward its medal threshold, normalised to a 0..55 range.
+    f32 GetPercentageOfEventsCompleted();
+
+    // X360 0x8236FBC8 / 0x8236FB10. The rivals term's numerator and denominator. "True" rivals
+    // are the ones NOT flagged Rival::mbIsUsedForRankUpGiftCar (+0x17) -- the gift-car entries
+    // are not opponents you can beat.
+    s32 GetNumberOfBeatenRivals();
+    s32 GetTrueNumberOfRivals();
 
     // X360 0x82396058. Re-evaluates whether any special car should unlock after a stunt-element
     // milestone; CheckForTrophyUnlocks calls it unconditionally after the trophy path.
@@ -528,15 +552,22 @@ public:
     // pointers, loads the progression resource, wires the trigger-data + achievement back-pointers,
     // computes landmark AI-section indices, processes the loaded preset races, registers the debug
     // component and sets up the roaming sections. Returns true on a successful load.
-    // FLAG: a3 (mpGameStateModule back-pointer, stored at +0x2093C) and the SetupRoamingSections
-    // argument list are modelled as the void* the X360 forwards; reconcile when those TUs land.
+    // ⭐⭐ NAME + TYPE CORRECTION (drive-thru wave, 2026-08-27): a3 is the MODE MANAGER, not the
+    // GameState module. It was committed as `void* lpGameStateModule` -> `mpGameStateModule`, but
+    // (a) the sole caller already passes `&mModeManager` (BrnGameStateModule.cpp:887), and (b) the
+    // console proves the type: SendGameCompletionResults @0x82395C28 does `lwzx r11, r31, 0x2093C`
+    // then `lwz r11, 0xD94(r11)` -- +0xD94 == 3476 == ModeManager::meCurrentGameModeType, whose
+    // getter this header can now call. A void* back-pointer that is silently the wrong class is how
+    // a +3476 read lands in the wrong object.
+    // FLAG: the SetupRoamingSections argument list is still modelled as the void* the X360 forwards.
     //
     // ⚠️ SIGNATURE CORRECTION (2026-08-11): the fourth argument is the GameState module's
     // EventReceiverQueue<3072,16> (X360 `a1 + 232384`, the same queue GameStateModule::Prepare
     // hands TriggerQueryManager::Prepare), NOT the VariableEventQueue<13312,16> game-action queue
     // the earlier declaration named. LoadProgressionData below drains replies out of it, so the
     // wrong type was not merely cosmetic.
-    bool Prepare2(BrnGameState::GameStateModuleIO::OutputBuffer* lpOutput, void* lpGameStateModule,
+    bool Prepare2(BrnGameState::GameStateModuleIO::OutputBuffer* lpOutput,
+                  BrnGameState::ModeManager* lpModeManager,
                   CgsModule::EventReceiverQueue<3072, 16>* lpReceiverQueue,
                   void* lpTriggerData, BrnGameState::AchievementManagerBase* lpAchievementManager);
 
@@ -688,8 +719,20 @@ private:
 
     // Prepare2 back-pointers (X360 +0x20924 / +0x2093C / +0x20938). Typed as the X360 forwards them.
     void*                                  mpTriggerData;        // X360 +0x20924 (a5)
-    void*                                  mpGameStateModule;    // X360 +0x2093C (a3)
+    BrnGameState::ModeManager*             mpModeManager;        // X360 +0x2093C (Prepare2's a3)
     BrnGameState::AchievementManagerBase*  mpAchievementManager; // X360 +0x20938 (a6)
+
+    // ---- [drive-thru wave 2026-08-27] the two CONSTRUCT back-pointers ComputeCompletionPercentage
+    // reads. NAMED BY THE CONSOLE'S OWN ASSERT STRINGS: ProgressionManager::Construct @0x8237A5F8
+    // asserts "lpStreetManager != NULL" / "lpStuntManager != NULL" on its 3rd and 5th arguments and
+    // then stores them at +133424 and +133444 respectively (`*(a1 + 133424) = a3;
+    // *(a1 + 133444) = a5;`). These are Construct's, not Prepare2's.
+    // ⚠️ FLAG (PC bring-up, NOT introduced here): nothing in the mounted set calls
+    // ProgressionManager::Construct, so both read NULL today -- the same hole mpVehicleList /
+    // mpAchievementManager / mpTrainingManager already sit in. ComputeCompletionPercentage guards
+    // each one and logs once rather than dereferencing; see its body.
+    BrnGameState::StreetManager*           mpStreetManager = 0;  // X360 +133424 (0x20930)
+    BrnGameState::StuntManager*            mpStuntManager  = 0;  // X360 +133444 (0x20944)
 
     // ---- [stuntrace waveB MOUNT-CLOSURE round, 2026-08-26] the landmark -> AI-section cache ----
     // DWARF BrnProgressionManager.h:809/:810 give the record verbatim:
@@ -788,6 +831,15 @@ private:
     // CarSelectManager::UpdateExitState sets to 1 on junkyard exit.
     bool      mbUpdateRivalsRequested = false;
     bool      mbDriveThrusDirty = false;
+    // ⭐ X360 +133487 (0x2096F). The FORCED-autosave request latch. CheckForSpecialCarUnlocks
+    // raises it on the 100%-completion arm (`stbx r22, r31, 0x2096F` @0x82396288) and
+    // PreWorldUpdate @0x823A4F68 drains it: `if (*(this + 133487)) { payload = 1;
+    // AddEvent(queue, &payload, 55, 1); *(this + 133487) = 0; }`.
+    // ⭐ The payload byte is what makes this the FORCED half of the autosave pair -- GuiModule's
+    // id-356 arm ORs it into mbForceProfileAutosave, which bypasses the 60 s throttle. The
+    // drive-thru arm posts the same action 55 with a payload of ZERO (unforced). Same action,
+    // different urgency, and the byte is the whole difference.
+    bool      mbAutosaveRequested = false;
 
     // ---- [stuntrace waveB / agent 10] the deferred "all win types for this mode" check -------
     // X360 +133440 (0x20940). The training manager the progression layer queues its
