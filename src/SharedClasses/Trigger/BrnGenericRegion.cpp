@@ -55,4 +55,39 @@ GenericRegion::GetTypeName() const
     return KAPC_GENERIC_REGION_TYPE_STRINGS[meType];
 }
 
+// ============================================================================
+// ⭐ [drive-thru wave 2026-08-27] IsDriveThru() -- BODIED, and the header's FLAG is retired.
+//
+// That FLAG parked this deliberately: "the console tests meType against the drive-thru type SET,
+// and that set is not attested by anything in this wave's evidence ... Guessing
+// `meType <= E_TYPE_CAR_PARK` would be a fabrication ... parked for the owner of the
+// DriveThruManager TU." This wave owns that TU, and the set IS attested -- the console inlines
+// the test into DriveThruManager::Prepare @0x8236E3C0, right after its "lpGenericRegion != NULL"
+// assert (cpp:213):
+//     v13 = *(v12 + 54);                      // meType @ +0x36
+//     if ( v13 == 3 || v13 == 2 || !*(v12 + 54) || v13 == 1
+//          || (v15 = v13 != 4, v14 = 0, !v15) )
+//         v14 = 1;
+// i.e. an explicit five-way equality test against 3, 2, 0, 1 and 4 -- exactly
+// PAINT_SHOP / BODY_SHOP / JUNK_YARD / GAS_STATION / CAR_PARK, and nothing else.
+//
+// ⓘ Written as the five-way test the compiler emitted, NOT as the `meType <= E_TYPE_CAR_PARK`
+// range compare it happens to be equivalent to today. The two are only equivalent because those
+// five enumerators are currently 0..4 and contiguous; a range compare would silently absorb any
+// future enumerator that lands inside the range, which is precisely the fabrication the FLAG
+// warned about. The set is the console's; keep it a set.
+// ⓘ Independently corroborated by the consumer: TriggerQueryManager::ProcessPlayerTriggers
+// @0x8239BF80 routes exactly these five case labels to DriveThruManager::HandleDriveThru.
+// ============================================================================
+bool
+GenericRegion::IsDriveThru() const
+{
+    const Type leType = GetType();
+    return leType == E_TYPE_JUNK_YARD
+        || leType == E_TYPE_GAS_STATION
+        || leType == E_TYPE_BODY_SHOP
+        || leType == E_TYPE_PAINT_SHOP
+        || leType == E_TYPE_CAR_PARK;
+}
+
 } // namespace BrnTrigger
