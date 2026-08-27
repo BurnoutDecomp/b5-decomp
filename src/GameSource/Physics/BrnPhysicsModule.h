@@ -401,9 +401,13 @@ namespace Vehicle         { struct VehicleManagerOutputBuffer; } // home BrnVehi
         // GameStateModuleIO::GameActionQueue (== the DWARF's BaseGameActionQueue<13312>
         // == VariableEventQueue<13312,16>; see BrnGameStateSharedIO.h's collapse note),
         // which is byte-compatible with the InputBuffer's GameActionQueueStorage member the
-        // caller feeds it. FLAG: DECLARED for Update's closure; body still a LOUD
-        // one-shot gate (BrnPhysicsConductorGates.cpp) -- its 185-insn switch drags ~10
-        // VehicleManager mode/showtime methods that are not reconstructed yet.
+        // caller feeds it.
+        // ⭐⭐⭐ BODIED 2026-08-27 (showtime S3 wave) in BrnPhysicsModuleGameActions.cpp; the
+        // conductor gate is deleted. The old FLAG here ("its 185-insn switch drags ~10
+        // VehicleManager mode/showtime methods that are not reconstructed yet") was TRUE and is now
+        // spent: five of them were 32 X360 instructions in total and landed alongside it, three of
+        // the remaining arms (ids 11/116/198) carry named one-shot deferrals inside the body, and
+        // one (id 176) turned out to be a no-op the linker had ICF'd onto an unrelated name.
         void HandleGameActions( const BrnGameState::GameStateModuleIO::GameActionQueue* lpGameActionQueue,
                                 PhysicsModuleIO::OutputBuffer* lpOutputBuffer );
 
