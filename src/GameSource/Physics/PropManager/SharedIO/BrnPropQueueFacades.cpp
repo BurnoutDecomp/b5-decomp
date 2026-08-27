@@ -1,5 +1,6 @@
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // BeginAssert / FireAssert / EndAssert
+#include "GameShared/GameClasses/Development/CgsStrStream.h"   // CgsDev::StrStreamBase (StreamOutCellId)
 
 // ============================================================================
 // BrnPhysics::Props — out-of-line template-instance FACADES (X360 ARTIST build)
@@ -20,6 +21,9 @@
 //
 // FLAG (mis-demangled symbols): the IDA names are truncations of longer mangled
 // template symbols; the real demangled identities are annotated per-function below.
+// MOUNTED 2026-08-27 (detach-2 wave) -- see StreamOutCellId's own banner for what the FIRST LINK
+// of this TU found: an invented extern "C" hook with no definition anywhere, plus three stale
+// un-homed claims. The queue/resource facades below are unchanged.
 // FLAG (un-homed element types): the queue element strides (64 and 112 bytes) and the
 // resource-pointer pointee types are NOT pinned to a committed payload struct in this
 // batch, so the facades take/return raw byte pointers rather than typed T&. They are
@@ -108,56 +112,51 @@ namespace Props
     }
 
     // ---- CellId stream-out facade (0x822A3FD0) ------------------------------------
-    // FLAG (un-homed): this is `StrStream& operator<<(StrStream&, CellId)`. The stream
-    // object is reached through a vtable (`(*(vtbl+4))(stream, literal)` is
-    // StrStream::operator<<(const char*)) and the coordinate insert is the un-homed
-    // helper sub_821F0E50 (StrStream::operator<<(unsigned short)). Neither the StrStream
-    // vtable layout nor sub_821F0E50 is homed in this batch, so they are modelled as
-    // opaque function-pointer dispatch / an extern declaration that reproduces the exact
-    // call sequence and argument order from the asm. CellId is a 32-bit pair: the HIGH
-    // 16 bits are the X coordinate, the LOW 16 bits the Z coordinate; either == 0xFFFF
-    // marks the id invalid.
+    // This is `StrStream& operator<<(StrStream&, CellId)`. A CellId is a 32-bit pair: the HIGH 16
+    // bits are the X coordinate, the LOW 16 bits the Z coordinate; either == 0xFFFF marks it invalid.
     //
-    // Opaque StrStream view: first word is the vtable pointer; slot +1 (byte +4) is
-    // operator<<(const char*).
-    struct RawStrStream
-    {
-        void* (**mpVTable)(); // [0] vtable; entry at index 1 (+4 bytes) = op<<(char*)
-    };
-    typedef void* (*StrStreamPutString)(RawStrStream*, const char*);
-
-    // sub_821F0E50: StrStream::operator<<(unsigned short) — un-homed; declared extern so
-    // the facade links against the real emission once that TU is homed. Returns the
-    // chained StrStream* (asm reuses the return value for the next insert).
-    extern "C" RawStrStream* BrnPhysics_Props_StrStreamPutU16(RawStrStream* lpStream,
-                                                              u16 luValue);
-
-    RawStrStream* StreamOutCellId(RawStrStream* lpStream, u32 luCellId)
+    // MOUNTED 2026-08-27 (detach-2 wave), AND MOUNTING IT IS WHAT FOUND THE BUG. This TU was absent
+    // from the bat, so the whole block below never reached a linker. It declared
+    //     extern "C" RawStrStream* BrnPhysics_Props_StrStreamPutU16(RawStrStream*, u16);
+    // and called it twice. NOTHING IN THE TREE DEFINES THAT SYMBOL, and nothing ever could -- it was
+    // invented here as a stand-in. That is exactly the shape the odr/shadowing lessons name: a free
+    // function with a declaration and no definition anywhere is invisible to every compile gate and
+    // shows up only when a real link reaches the call. The first mount produced LNK2019 immediately.
+    //
+    // THREE STALE FLAGS RETIRED WITH IT, all three checkable against the tree as it already stands:
+    //  1. "sub_821F0E50 (StrStream::operator<<(unsigned short))" -- IT IS THE s32 ("%d") FORMATTER.
+    //     This tree says so in four other places, most explicitly PropManager_wQ2_04.cpp:256, which
+    //     distinguishes it from the "%u" one at 0x821F0EC8 at a call site in the same subsystem
+    //     (CgsCommon.cpp:127 and BrnRaceMode.cpp:63 agree). A u16 argument reaches it by the usual
+    //     integer promotion; there is no unsigned-short overload to home.
+    //  2. "Neither the StrStream vtable layout nor sub_821F0E50 is homed in this batch" -- both are.
+    //     CgsDev::StrStreamBase (GameShared/GameClasses/Development/CgsStrStream.h) declares the pure
+    //     virtual operator<<(const char*) the asm dispatches through slot +1 AND the scalar overloads,
+    //     and they are bodied in its own mounted TU.
+    //  3. The opaque `RawStrStream` view with hand-rolled vtable indexing is gone. It modelled a type
+    //     the tree owns, and a hand-indexed `mpVTable[1]` is a silent-fork waiting to happen the
+    //     moment a virtual is added ahead of it.
+    // The call ORDER and the chaining are unchanged -- that part was read from the asm and is right:
+    // "X: " then the X word, then " Z: " on the CHAINED stream, then the Z word; the invalid arm
+    // writes one literal and nothing else.
+    CgsDev::StrStreamBase& StreamOutCellId(CgsDev::StrStreamBase& lrStream, u32 luCellId)
     {
         // asm: v3 = HIWORD (X), v4 = LOWORD (Z); valid unless either half == 0xFFFF.
         const u16 luX = static_cast<u16>(luCellId >> 16);
         const u16 luZ = static_cast<u16>(luCellId);
 
         // `if ( HIWORD==0xFFFF || LOWORD==0xFFFF ) invalid` (asm short-circuit form).
-        const bool lbValid = !(luX == 0xFFFFu || luZ == 0xFFFFu);
-
-        StrStreamPutString lpfnPutString =
-            reinterpret_cast<StrStreamPutString>(lpStream->mpVTable[1]);
-
-        if (lbValid)
+        if ( luX == 0xFFFFu || luZ == 0xFFFFu )
         {
-            lpfnPutString(lpStream, "X: ");
-            RawStrStream* lpChained = BrnPhysics_Props_StrStreamPutU16(lpStream, luX);
-            StrStreamPutString lpfnPutString2 =
-                reinterpret_cast<StrStreamPutString>(lpChained->mpVTable[1]);
-            lpfnPutString2(lpChained, " Z: ");
-            BrnPhysics_Props_StrStreamPutU16(lpChained, luZ);
+            lrStream << "Invalid Cell Id";
+            return lrStream;
         }
-        else
-        {
-            lpfnPutString(lpStream, "Invalid Cell Id");
-        }
-        return lpStream;
+
+        lrStream << "X: ";
+        CgsDev::StrStreamBase& lrChained = (lrStream << static_cast<s32>(luX));
+        lrChained << " Z: ";
+        lrChained << static_cast<s32>(luZ);
+        return lrStream;
     }
 }
 }

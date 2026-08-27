@@ -57,9 +57,13 @@
 //   (BrnPhysicsModuleIO.h "FLAG (foreign types)") while the RaceCarEntityModuleIO setters take the
 //   real BrnPhysics::Deformation::* / OutputBuffer_PreScene::SceneInputInterface types -- bridging
 //   today is a 1-byte-onto-multi-KB copy. DELETE-WHEN those seats are promoted to their real types.
-// GATE leg 6 (contact spy). BLOCKER: only the NON-const physics accessor exists in this tree and
-//   this bridge holds a `const OutputBuffer*`; the console's read-locked const twin is @0x8279F8E0.
-//   DELETE-WHEN that const twin is declared and bodied.
+// leg 6 (contact spy) LIVE 2026-08-27. Its recorded blocker -- "only the NON-const physics
+//   accessor exists in this tree" -- was STALE: the read-locked const twin @0x8279F8E0 is declared
+//   at BrnPhysicsModuleIO.h:178 and bodied at BrnPhysicsModuleIO_OutputBuffer.cpp:246, and the
+//   traffic bridge below has been calling it as its leg 4 all along. Mounting the copy does NOT
+//   by itself make the contact-spy ARM do anything: VehicleManager::ProcessContactSpies @0x82646C98
+//   is still a boot gate and all thirteen GameSource/Physics/ContactSpies/*.cpp are absent from the
+//   bat. This leg carries the handle; nothing fills it yet.
 // =================================================================================================
 
 namespace WorldModule
@@ -99,8 +103,17 @@ namespace WorldModule
         lpRaceCarInputBuffer_PostPhysics->SetDeformationOutputInterface(
             lpPhysicsModuleOutputBuffer->GetDeformationOutputInterface());
 
-        // Legs 5-6: still parked (scene-update Append @0x827A9340; contact spy @0x8279F8E0's
-        // race-car seat). See this file's banner for the per-leg blocker.
+        // Leg 6 LIVE 2026-08-27 (detach-2 wave) -- and its blocker had ALREADY EXPIRED.
+        // The banner said "only the NON-const physics accessor exists in this tree ... DELETE-WHEN
+        // that const twin is declared and bodied". The const twin @0x8279F8E0 IS declared
+        // (BrnPhysicsModuleIO.h:178) and IS bodied (BrnPhysicsModuleIO_OutputBuffer.cpp:246), and
+        // the SIBLING bridge in this very file has been calling it as its own leg 4 since it
+        // landed. Both ends of this copy were sitting there; only the call was missing.
+        //   leg 6: GetContactSpyInterface() const @0x8279F8E0 -> SetContactSpyInterface @0x8279E3B8
+        lpRaceCarInputBuffer_PostPhysics->SetContactSpyInterface(
+            lpPhysicsModuleOutputBuffer->GetContactSpyInterface());
+
+        // Leg 5: still parked (scene-update Append @0x827A9340). See this file's banner.
         {
             static bool sbLoggedBridgeParks = false;
             if (!sbLoggedBridgeParks)
@@ -108,9 +121,9 @@ namespace WorldModule
                 sbLoggedBridgeParks = true;
                 *CgsDev::Log::gpDebugPrint
                     << "[FLAG PC bring-up] BridgePhysicsModuleToRaceCarModule_PostPhysics: legs "
-                       "1-4 (vehicle output, vehicle-manager output, deformation-for-entity-"
-                       "modules, deformation) are LIVE; leg 5 (scene-update Append @0x827A9340) "
-                       "and leg 6 (contact spy @0x8279F8E0's race-car seat) remain parked.\n";
+                       "1-4 and 6 (vehicle output, vehicle-manager output, deformation-for-entity-"
+                       "modules, deformation, contact spy) are LIVE; leg 5 (scene-update Append "
+                       "@0x827A9340) remains parked.\n";
             }
         }
     }

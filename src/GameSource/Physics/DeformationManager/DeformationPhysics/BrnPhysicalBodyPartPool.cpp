@@ -9,6 +9,13 @@
 #include "GameShared/GameClasses/Physics/CgsPhysicsSimulationIO_Events.h"  // OutUpdateRigidBody (UpdatePart's echo event)
 #include <cstdlib>   // getenv/atoi ([detach-pose] latch)
 
+// [detach-pose] host-side present counter, for EXACT frame correlation -- the same extern the
+// other correlated instruments use (BrnActiveRaceCar.cpp:59, CgsIm2d.cpp:24, BrnRendererModule
+// .cpp:288). BRN_FRAME_DUMP names its BMPs bb_<guPresentCount>.bmp, so printing this number
+// turns "the frame where the panel is at y = -3" from an ESTIMATE into a filename. A trace
+// correlated against a dump of a DIFFERENT frame has already produced a false lead in this tree.
+namespace renderengine { extern u32 guPresentCount; }
+
 // ============================================================================
 // BrnPhysics::Deformation::PhysicalBodyPartPool
 //
@@ -490,7 +497,8 @@ namespace Deformation
                     {
                         saiLastX[liSlot] = liXcm; saiLastZ[liSlot] = liZcm;
                         *CgsDev::Log::gpDebugPrint
-                            << "[detach-pose] slot " << liSlot
+                            << "[detach-pose] present " << renderengine::guPresentCount
+                            << " slot " << liSlot
                             << " mesh " << lpIKPart->GetMeshId()
                             << " attached " << (lrPart.IsJoinedToVehicle() ? 1 : 0)
                             << " world (" << lTransform.wAxis.x << ", " << lTransform.wAxis.y
