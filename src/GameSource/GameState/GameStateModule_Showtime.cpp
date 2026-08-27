@@ -38,6 +38,7 @@
 #include "GameSource/GameState/ModeManager/GameModes/BrnGameMode.h"         // GameMode::IsOnline / GetCurrentState
 #include "GameSource/GameState/ModeManager/GameModes/BrnGameModeParams.h"   // StartGameModeParams
 #include "GameSource/GameState/Progression/BrnProgressionManager.h"         // AreRoadRulesAvailable
+#include "GameSource/GameState/Progression/BrnProfile.h"                    // GetMedalCountFromTheStart (the refusal diagnostic)
 #include "GameSource/GameState/CarSelect/BrnCarSelectManager.h"             // GetJunkyardId
 #include "GameShared/GameClasses/System/Timer/CgsTimerRequestInterface.h"   // CgsSystem::TimerRequests
 #include "GameShared/GameClasses/Core/CgsAssert.h"
@@ -194,6 +195,27 @@ namespace
         {
             if (lbCrashModePressed)
             {
+                // [DIAG] the three NUMBERS, not just the name of the gate: a bare "road rules are
+                // not available" cannot be told apart from "the profile never loaded", and those
+                // want opposite fixes. Printed once, through the same one-shot as every other
+                // refusal reason. (The accessors are the public console ones.)
+                static bool sbNumbersLogged = false;
+                if (!sbNumbersLogged && CgsDev::Log::gpDebugPrint != 0)
+                {
+                    sbNumbersLogged = true;
+                    const BrnProgression::Profile* const lpProfile = mProgressionManager.GetProfile();
+                    *CgsDev::Log::gpDebugPrint
+                        << "[showtime] AreRoadRulesAvailable @0x82311520 terms: medalsFromTheStart="
+                        << ((lpProfile != 0)
+                                ? static_cast<s32>(lpProfile->GetMedalCountFromTheStart()) : -1)
+                        << " (needs >= 4) parCrashRoadsRuled="
+                        << static_cast<s32>(
+                               mProgressionManager.GetNumberOfParCrashRoadRulesRuledByPlayer())
+                        << " parTimeRoadsRuled="
+                        << static_cast<s32>(
+                               mProgressionManager.GetNumberOfParTimeRoadRulesRuledByPlayer())
+                        << " (either > 0 also opens the gate)\n";
+                }
                 LogShowtimeRefusalOnce("road rules are not available yet -- the profile needs "
                                        "4 medals from the start, or one ruled road "
                                        "(ProgressionManager::AreRoadRulesAvailable @0x82311520)");
