@@ -92,6 +92,31 @@ namespace BrnGui
 // fires the "lpProgressionData != NULL" assert in GameStateModule::OnPlayerCarChange -- that
 // one reads ProgressionManager::mpProgressionData, a different object entirely, loaded from
 // Progression.dat by ProgressionManager::LoadProgressionData @0x82399ED0.)
+//
+// ⭐⭐ "SOME OTHER PRODUCER" IS NAMED NOW (2026-08-27, satnav-assert wave). It is this class's
+// OWN SECOND STATE MACHINE: BrnGui::WorldDataController::Prepare2 @0x82516CB8, driven from
+// BrnGui::GuiModule::Prepare2 @0x825194B8, running on a SEPARATE stage member (`meState2`, the
+// one its default arm streams alongside meState) and acquiring exactly the two missing members:
+//     "ProgressionData" -> CreateFromHandle(&this->field_444, payload + 0x18)   == mpProgressionData
+//     "StreetData"      -> CreateFromHandle(&this->field_488, payload + 0x18)   == mpStreetData
+// Same request shape as the two acquires above (AcquireResourceRequest, queue id 4, 24 bytes,
+// miPoolId 5, mpUser == &mReceiverQueue), same resumable "reply not here yet -> return false"
+// structure, with its own baked assert lines (293/301/304/332/340/343/360).
+//
+// ⛔⛔ IT HAS NO BODY IN THIS TREE, AND THE LEDGER SAYS OTHERWISE. progress/status.json carries
+// BrnGui::WorldDataController::Prepare2 as `reviewed`; there is no Prepare2 anywhere under
+// b5-decomp/src for this class (the tree's other Prepare2 hits are GameStateModule's /
+// ProgressionManager's / StreetManager's). That is a phantom-done ledger row -- re-anchor with
+// `work reconcile-from-files`, do not trust the row. Its sibling
+// BrnGameState::GameStateModule::SendSetUpAllEventStartsMessage @0x823759D0 (the ONLY producer of
+// GuiCache::maEventStarts) is marked `reviewed` on the same false basis.
+//
+// ⚠️ AND LANDING Prepare2 ALONE DOES NOT SILENCE THE :374 GATE BELOW. Prepare2 advances
+// `meState2`, not `meState`; the `meState >= WFPLAYERCARCOLOURS` compare every gated accessor
+// makes still needs THIS machine to clear stage 9 (GetFreeburnChallengeList), which is the
+// deliberately-deferred pair described above. Landing Prepare2 fixes the NULL mpProgressionData
+// (and with it SatNavRenderer's `lpRaceEventData` assert at BrnSatNavRenderer.cpp:1307); the
+// :374 state assert needs stage 10 of GameDataModule::Prepare as well.
 // ================================================================================================
 
 // X360-inlined in GuiModule::Construct @0x82518028 (stores at guiModule+307836..+309028).

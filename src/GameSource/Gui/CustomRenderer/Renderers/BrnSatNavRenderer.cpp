@@ -728,23 +728,83 @@ void SatNavRenderer::RefreshSatNavIconInfo(s32 liEventId)
     if (luIconIndex >= KU_MAX_SATNAV_ICONS)
         FireSatNavAssert("luIconIndex < KU_MAX_SATNAV_ICONS", 1308);
 
-    // [FLAG PC bring-up guard, 2026-08-26] The console fires the asserts above and then
-    // dereferences anyway (its WDC is always bound + display info always resolves before this
-    // runs). On this build the WDC progression binding is unstaged, so both can be null on the
-    // first live event start -- the asserts have already named the gap; bail instead of
-    // crashing. DELETE-WHEN the WDC data binding lands.
-    if (lpDisplay == 0 || lpRaceEventData == 0 || luIconIndex >= KU_MAX_SATNAV_ICONS)
+    // [FLAG PC bring-up guard, 2026-08-26; RESHAPED 2026-08-27 -- see below]
+    // The console fires the asserts above and then does the append UNCONDITIONALLY (its WDC is
+    // always bound + display info always resolves before this runs). Only the OUT-OF-BOUNDS case
+    // is a real memory fault for us, so only it still returns.
+    //
+    // ⭐⭐ WHY THE OLD `lpDisplay == 0 || lpRaceEventData == 0` EARLY-RETURN WAS A DEFECT, NOT A
+    // GUARD -- measured 2026-08-27. It skipped the SLOT CLAIM and the COUNT INCREMENT as well as
+    // the two dereferences, and those two stores are what BOUND this function on the console.
+    // Read straight off the 0x824458A0 asm tail, which has NO branch over any of it:
+    //   0x824459B8  blt   loc_824459D8          <- the LAST branch; the 1308 assert only
+    //   0x824459F4  stwx  r27, r9, r31          <- miEventId  = liEventId  (idx*32 + 0x5C0)
+    //   0x824459F8  stw   r25, 0x5C8(r11)       <- meSatNavIconType = 0
+    //   0x824459FC  lbz   r9, 0xEC(r29)         <- FIRST deref of lpRaceEventData
+    //   0x82445A10  lvx128 v0, r0, r28          <- FIRST deref of lpEventStart
+    //   0x82445A38..A40  lwz/addi/stw r11, 0x1870  <- ++muNumberOfSatNavIcons
+    // i.e. the cache key is claimed and the count bumped OUTSIDE every assert and BEFORE either
+    // pointer is touched. With the slot never claimed on our side, the cache
+    // scan at the top of this function could never hit, so EVERY repost of the same event id
+    // redid the whole lookup -- and the console's producer reposts action 201 -> GUI event 311
+    // EVERY SIM TICK for as long as the player car sits inside a traffic-light trigger region
+    // (GameStateModule::CheckIfPlayerIsAtJunctionWithAnEvent @0x82390418 has no "changed" gate;
+    // its arrival arm is `IsPlayerInTrafficLightRegion() && (show || mbAtJunctionWithEvent)`).
+    // So one unresolvable event id became an unbounded per-tick assert storm.
+    //
+    // ⭐ MEASURED BEFORE/AFTER, same recipe both sides (flow_run.ps1 -MaxSeconds 400 -Drive
+    // -Teleport "3390.2,0.2,-1620.0,182", default one-at-a-time assert release):
+    //     BEFORE  scratch/flow_run/satnav_BEFORE   3,243 fires PER SITE, 12,972 total
+    //             (an exact reproduction of scratch/flow_run/anchor_verify_E)
+    //     AFTER   scratch/flow_run/satnav_AFTER        1 fire  PER SITE,      4 total
+    // Those four sites are the ENTIRE assert census of both runs. The producer is provably still
+    // live in the AFTER run (same teleport, car parked in the same junction, the JunctionInfo HUD
+    // sound fires the same 2 times) -- only the redundant re-lookup is gone.
+    // ⚠️ The counts are release-throttled by the harness, so they measure "how much the release
+    // loop drained", not the true tick rate; they are comparable only because both runs used the
+    // same release mode. The BEFORE run had already banked 2,188 fires within ~8 s of the
+    // handover, so the AFTER run's shorter drive does not explain the drop.
+    // ⚠️ PIXEL-NEUTRAL, checked not assumed: RenderIconsForSatNav returns at !mbRenderEventStarts
+    // on this build (ZERO fires of :1013 / :1015 / :1265 in either run), so nothing reads
+    // maCachedSatNavIcons at all today. Confirmed on matched driving frames -- both minimaps draw
+    // map + player arrow only, no icon appears.
+    // Restoring the console's two stores makes it fire ONCE PER DISTINCT EVENT ID, which is what
+    // the console would do if its lookups ever missed.
+    // ⚠️ CAVEAT: past 150 distinct unresolvable ids in one drive the bounds guard below starts
+    // returning again and the storm resumes. The console has the same cliff (it asserts 1292/1308
+    // and writes out of bounds anyway); 150 junctions in one drive is far outside any run so far.
+    //
+    // ⛔ The asserts themselves are NOT touched. They are the console's own, at the console's
+    // sites, on the console's conditions, and they are still reporting three real gaps:
+    // GuiCache::maEventStarts is never populated (GameStateModule::SendSetUpAllEventStartsMessage
+    // @0x823759D0 unreconstructed), WorldDataController::mpProgressionData is never bound, and
+    // that controller parks at PREPARING_ACQUIRING_STREET_DATA so its meState gate (:374) fails.
+    if (luIconIndex >= KU_MAX_SATNAV_ICONS)
     {
         return;
     }
 
     IconRendererSatNavIconInfo& lIcon = maCachedSatNavIcons[luIconIndex];
-    lIcon.miEventId        = liEventId;
+    lIcon.miEventId        = liEventId;                      // X360: stored before any deref
     lIcon.meSatNavIconType = E_SATNAVICON_EVENT_NOTATTEMPTED;
 
-    const u32 luIconRow = KAU_EVENTTYPE_TO_ICONROW[lpRaceEventData->GetEventTypeByte()];
-    lIcon.muEventTypeIndex = luIconRow;
-    lIcon.mv3Position      = lpDisplay->mv3Position;
+    // [FLAG PC bring-up guard] Only the two stores that DEREFERENCE the looked-up records stay
+    // conditional. Leaving muEventTypeIndex at 0 alongside meSatNavIconType == 0 is not an
+    // invented value: that pair IS this renderer's own encoding of an unfilled slot --
+    // RenderIconsForSatNav tests exactly `muEventTypeIndex == 0 && meSatNavIconType == 0`
+    // (X360 @0x8245FB40, two loads off +0x5C4/+0x5C8) and skips drawing such a slot.
+    // DELETE-WHEN the WDC data binding + the event-start producer land.
+    lIcon.muEventTypeIndex = (lpRaceEventData != 0)
+        ? KAU_EVENTTYPE_TO_ICONROW[lpRaceEventData->GetEventTypeByte()]
+        : 0u;
+    if (lpDisplay != 0)
+    {
+        lIcon.mv3Position = lpDisplay->mv3Position;
+    }
+    else
+    {
+        lIcon.mv3Position.SetZero();   // deterministic; empty slot, never drawn in the icon loop
+    }
 
     // The X360 then overrides row 2 -> 0 when this event is the cache's current online event (it
     // compares two far GuiCache id members at +19192/+19196). Those members are not yet recovered
