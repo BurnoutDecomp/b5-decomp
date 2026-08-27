@@ -21,6 +21,7 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"            // CgsDev::Log::gpDebugPrint (the two FLAG lines)
 #include "BrnProgressionCarData.h"                                    // BrnProgression::CarData (colour/palette/unlock type)
 #include "SharedClasses/Progression/BrnProgressionData.h"             // BrnProgression::ProgressionData (rank count)
+#include "SharedClasses/Progression/BrnRaceEventData.h"               // BrnProgression::EventJunction / RaceEventData (the event-list producer)
 // [stuntrace waveB MOUNT-CLOSURE round, 2026-08-26] RE-POINTED, exactly as the note that stood
 // here asked. GetRankThresholdForEvent dereferences the per-rank record, so it needs
 // BrnProgression::ProgressionRankData COMPLETE -- BrnProgressionData.h only forward-declares it
@@ -325,7 +326,198 @@ bool ProgressionManager::Prepare2(BrnGameState::GameStateModuleIO::OutputBuffer*
     //   CgsDev::DebugComponent::Register(&mDebugComponent);
     //   SetupRoamingSections(this, ...);
     // (helper bodies land with their own TUs; see FLAG above.)
+
+    // ⭐⭐ THE PROFILE EVENT-LIST SEAM (landed 2026-08-27, D1 wave) -- the twin of the
+    // Profile::Construct seam above, and the reason it has to sit HERE rather than up there:
+    // the population reads the loaded ProgressionData, so it cannot run until the acquire
+    // above has bound mpProgressionData.
+    //
+    // WHAT WAS BROKEN: Profile::Construct zeroes miEventCount, and the ONLY console writer of
+    // the ProfileEvent table -- UnlockToProgressionRank, the single xref to Profile::AddEvent
+    // @0x82359EB8 in the whole XEX -- had no caller on this build. So mProfile.GetEventCount()
+    // stayed 0 for the entire run, every id->record lookup answered NULL, and winning an
+    // offline event fired `lpEvent` (BrnProgressionManager.cpp:1669) in
+    // OnEventFinishUpdateProfile and then crashed on the null record.
+    //
+    // THE CONSOLE SEAT is PreWorldUpdate @0x823A4F68 -> `if (mbMedalsUpdateRequested)` ->
+    // UpdatePlayerMedals @0x8239FE50, which computes CalculateRankFromMedalTotal(0 medals) == 0,
+    // sees it above the profile's -2 "rank not set" seed, and calls UnlockToProgressionRank(0).
+    // Neither PreWorldUpdate nor UpdatePlayerMedals is reconstructed, so the rank-0 call is made
+    // from this seam at the same boot position, latched to run once. The population itself is
+    // idempotent (it skips any junction the profile already holds a record for), which is the
+    // console's own guarantee -- the latch only keeps the arms AROUND it single-shot.
+    // DELETE-WHEN UpdatePlayerMedals + PreWorldUpdate land.
+    //
+    // The HasMemoryResource() test guards THIS SEAM, not console code: LoadProgressionData also
+    // answers true from its corrupt-stage default arm (which fires its own :2799 assert and
+    // reports DONE), and the rank-0 arm dereferences mpProgressionData unconditionally the way
+    // the console can afford to. It is a [PC GUARD] on a PC-invented call site.
+    // DELETE-WHEN this call moves to its console seat in UpdatePlayerMedals.
+    if (!mbInitialRankUnlockDone && mpProgressionData.HasMemoryResource())
+    {
+        mbInitialRankUnlockDone = true;
+        UnlockToProgressionRank(0, 0);
+    }
+
     return true;
+}
+
+// ------------------------------------------------------------------------------------
+// ProgressionManager::UnlockToProgressionRank  @ 0x8239DDE8
+// DWARF BrnProgressionManager.h:674 -- `void UnlockToProgressionRank(int8_t,
+// InputBuffer::GameActionQueue*);`
+//
+// ⭐ THE PROFILE EVENT-LIST PRODUCER. Profile::AddEvent @0x82359EB8 has EXACTLY ONE xref in
+// BURNOUT_X360_ARTIST.XEX and it is the loop below: this function IS how a Burnout Paradise
+// profile comes to hold one ProfileEvent per authored event junction.
+//
+// THE ASM, ARM BY ARM (0x8239DDE8..0x8239E0F8+):
+//   0x8239DE14  the `!PlayerHasFinishedLastRank()` assert (:965) -- fires BEFORE either arm.
+//   0x8239DE4C  `extsb r21, r4 / cmpwi 0 / bne` -- the rank argument selects the two bodies.
+//   0x8239DE60  RANK-0 ARM: walk the ProgressionData event-junction table (count +0x1C, base
+//               +0x18, 16-byte stride). Per junction: skip it when its OFFLINE event slot
+//               (+0x04) is null; otherwise open-code the profile's id->record scan and, on a
+//               MISS, `Profile::AddEvent(junction id)` + `AddEventTypeToEventTotals(junction)`.
+//               Then UnlockDefaultPlayerCars and the starting-drive-thru/trophy tail.
+//   0x8239E034  RANK-N ARM: AchievementManagerBase::OnLicenseUpgrade + the licence-upgrade
+//               telemetry event (id 228, size 20).
+//   0x8239E094  the shared rank tail: clamp the cached rank byte, pick the lowest car-type
+//               affinity, walk the cached rank up to the requested one, mirror it onto the
+//               profile, zero the three car-type affinities, ClearMedalsOnRankUp, and clear
+//               the 18 per-rank completed counts.
+//
+// ⛔ HONEST PARTIAL -- WHAT IS LANDED AND WHAT IS PARKED.
+// LANDED: the :965 assert and the whole rank-0 EVENT-LIST arm (the junction walk, the
+//   duplicate test, AddEvent and AddEventTypeToEventTotals). That is the arm this build's
+//   single caller uses and the arm the whole `lpEvent`-assert class hangs on.
+// PARKED, each on a sibling that has NO body anywhere in b5-decomp/src (landing the calls
+//   would add unresolved externals to a MOUNTED TU -- the F2 failure mode this campaign keeps
+//   re-learning), with the console body written out for whoever lands it:
+//   Q1  UnlockDefaultPlayerCars @0x8237BF98 (absent) -- the rank-0 starting-garage fill.
+//   Q2  the starting-drive-thru tail: `if (!mBodyShopsDriveThruSet.Contains(0x6C72D)) {
+//         mBodyShopsDriveThruSet.Insert(0x6C72D);
+//         if (GetLength() == 11) { OnTrophyUnlock(20);
+//                                  if (mProfile.AreAllDriveThrusCompleted()) OnTrophyUnlock(21); }
+//         if (mProfile.AreAllDriveThrusCompleted() && !mpAchievementManager->IsAwarded(32))
+//             mpAchievementManager->Award(32);
+//         mbDriveThrusDirty = true; }`
+//       -- OnTrophyUnlock @0x82389740 is declared and parked tree-wide (the same P2 park
+//       OnEventFinishUpdateProfile carries), and the two AchievementManagerBase vtable slots
+//       route into a TU that is deliberately NOT MOUNTED.
+//   Q3  the RANK-N arm: AchievementManagerBase::OnLicenseUpgrade @0x8235ADC8 (same unmounted
+//       TU) + `TelemetryData::AddParameter(22, "%i" % rank)` and `queue->AddEvent(record, 228,
+//       20)`. UNREACHABLE from this build's only caller, which passes rank 0.
+//   Q4  the shared rank tail, which needs ClearMedalsOnRankUp @0x823705D8 (absent) plus two
+//       un-homed words (the manager's chosen-car-type slot +133480 and the profile byte
+//       +118404 the `rank >= 5` store targets). Leaving it parked means the profile's
+//       mi8CurrentProgressionRank keeps the -2 "rank not set" seed Profile::Construct wrote,
+//       which is the value this build already ships to the GUI -- landing HALF the tail would
+//       change that reading without the medal/rank machinery that gives it meaning.
+// The lpGameActionQueue parameter is consumed only by Q3, so this build's caller passes 0
+// exactly as the console's UpdatePlayerMedals passes its own (unused-on-this-path) queue.
+// ------------------------------------------------------------------------------------
+void ProgressionManager::UnlockToProgressionRank(s8 li8Rank,
+                                                 BrnGameState::GameStateModuleIO::GameActionQueue* /*lpGameActionQueue*/)
+{
+    // @0x8239DE14 -- `lwz r11, 0x14(r3)` vs the cached rank byte, i.e. PlayerHasFinishedLastRank().
+    if (PlayerHasFinishedLastRank())
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("!PlayerHasFinishedLastRank()", KAC_PROGMGR_FILE, 965);
+        CgsDev::Assert::EndAssert();
+    }
+
+    if (li8Rank == 0)
+    {
+        // ---- @0x8239DE60..0x8239DF3C -- THE EVENT-LIST POPULATION -------------------------
+        const ProgressionData* lpcProgressionData = mpProgressionData.operator->();
+        const u32 luJunctionCount = lpcProgressionData->GetEventJunctionCount();
+
+        for (u32 luEventJunctionIndex = 0; luEventJunctionIndex < luJunctionCount; ++luEventJunctionIndex)
+        {
+            // The console re-reads the resource pointer and re-checks the index against the
+            // count every iteration (the bounds assert baked at BrnProgressionData.h:386 lives
+            // inside GetEventJunction, which is where this routes it).
+            const EventJunction* lpcJunction = lpcProgressionData->GetEventJunction(luEventJunctionIndex);
+
+            // `lwz r11, 4(r31) / cmpwi 0 / beq` -- a junction with no OFFLINE event gets no
+            // profile record. This is what makes the record set exactly "the offline events".
+            if (lpcJunction->GetOfflineEvent() == 0)
+            {
+                continue;
+            }
+
+            // The open-coded id scan at 0x8239DEDC, routed through the named finder.
+            if (mProfile.FindEvent(lpcJunction->GetID()) != 0)
+            {
+                continue;
+            }
+
+            mProfile.AddEvent(lpcJunction->GetID());
+            AddEventTypeToEventTotals(lpcJunction);
+        }
+
+        // ⛔ PARK Q1 + Q2 -- UnlockDefaultPlayerCars and the starting-drive-thru/trophy tail.
+        // See the banner; both need bodies that do not exist in this tree.
+        if (CgsDev::Log::gpDebugPrint != 0)
+        {
+            *CgsDev::Log::gpDebugPrint
+                << "[FLAG PC bring-up] ProgressionManager::UnlockToProgressionRank(0): profile "
+                   "event list populated -- "
+                << mProfile.GetEventCount()
+                << " records from " << luJunctionCount
+                << " authored junctions. PARKED on this path: UnlockDefaultPlayerCars "
+                   "@0x8237BF98 and the starting-drive-thru/trophy tail (OnTrophyUnlock "
+                   "@0x82389740 + the unmounted AchievementManagerBase).\n";
+        }
+    }
+    else
+    {
+        // ⛔ PARK Q3 -- the RANK-N licence-upgrade arm (@0x8239E034). Unreachable from this
+        // build's only caller (Prepare2 passes rank 0); see the banner for the console body.
+        if (CgsDev::Log::gpDebugPrint != 0)
+        {
+            *CgsDev::Log::gpDebugPrint
+                << "[FLAG PC bring-up] ProgressionManager::UnlockToProgressionRank("
+                << static_cast<s32>(li8Rank)
+                << "): the licence-upgrade arm is PARKED (AchievementManagerBase::"
+                   "OnLicenseUpgrade @0x8235ADC8 lives in a TU that is not mounted).\n";
+        }
+    }
+
+    // ⛔ PARK Q4 -- the shared rank tail (@0x8239E094 onward). See the banner.
+}
+
+// ------------------------------------------------------------------------------------
+// ProgressionManager::AddEventTypeToEventTotals  @ 0x82366628
+// DWARF BrnProgressionManager.h:678 -- `void AddEventTypeToEventTotals(const EventJunction*);`
+//
+// Nine instructions plus two asserts, verbatim:
+//     r3 = GetEvent( *(*(junction + 4) + 236) )    ; the OFFLINE event's data mode byte +0xEC,
+//                                                  ; mapped through the mode table to a runtime
+//                                                  ; GsmIO::EGameModeType
+//     if (r3 == -1) assert "lEGameModeType != GsmIO::E_MODE_NONE"   (BrnProgressionManager.cpp:797)
+//     if (r3 <= -1) assert "lEGameModeType > GsmIO::E_MODE_NONE"    (BrnProfile.h:2047)
+//     ++*(4*(r3 + 30) + profile)                   ; == ++maGameModeTypeAmount[mode]
+// The second assert is the INLINED Profile::AddGameModeTypeToTotals's own, which is why it
+// carries a BrnProfile.h location; routing through the named Profile method keeps it there.
+// ------------------------------------------------------------------------------------
+void ProgressionManager::AddEventTypeToEventTotals(const EventJunction* lpEventJunction)
+{
+    const BrnGameState::GameStateModuleIO::EGameModeType lEGameModeType =
+        static_cast<BrnGameState::GameStateModuleIO::EGameModeType>(
+            GetEvent(static_cast<s32>(lpEventJunction->GetOfflineEvent()->GetMode())));
+
+    if (lEGameModeType == BrnGameState::GameStateModuleIO::E_MODE_NONE)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("lEGameModeType != GsmIO::E_MODE_NONE", KAC_PROGMGR_FILE, 797);
+        CgsDev::Assert::EndAssert();
+        return;   // the X360 falls through into maGameModeTypeAmount[-1]; bail instead of
+                  // corrupting the tally array (the OnPlayerCarChange precedent in this TU).
+    }
+
+    mProfile.AddGameModeTypeToTotals(lEGameModeType);
 }
 
 // ------------------------------------------------------------------------------------

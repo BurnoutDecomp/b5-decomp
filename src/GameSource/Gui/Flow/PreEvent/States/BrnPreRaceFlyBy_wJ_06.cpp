@@ -221,18 +221,19 @@ void PreRaceFlyByState::SetBurningRouteDescription()
             break;
         }
     }
-    // Same console null-dereference on no-match as SetRaceDescription. [PC GUARD, NOT in
-    // the X360 binary] -- the fresh/harness profile's event list is EMPTY on this build
-    // (run 20260827_133948 AV proof, wJ_07 twin guards). Missing record == flag 0.
-    // DELETE-WHEN the profile event list is populated on this build.
+    // [PC GUARD RETIRED 2026-08-27, D1 profile-event-list wave] -- its own DELETE-WHEN ("the
+    // profile event list is populated on this build") came due. The guard existed because
+    // Profile::AddEvent @0x82359EB8 had no caller on this build, so the profile's event table was
+    // empty for the whole run; ProgressionManager::UnlockToProgressionRank @0x8239DDE8 -- the
+    // single xref to AddEvent in the whole XEX -- now runs at boot and gives the profile one
+    // ProfileEvent per authored event junction. The key matches by construction: GuiCache's
+    // muEventID IS the event-junction id (GuiCache::RecEvent case 93, `muEventID =
+    // lpPrepare->muEventJunctionID`), and the junction id is exactly what the producer stores
+    // in each record. Console read (unconditional, no null test) restored.
     // This worker takes the SPECIAL-EVENT bit, not the rank-win bit.
-    lDescription.mbEventFlag = false;
-    if (lpProfileEvent != 0)
-    {
-        lDescription.mbEventFlag =
-            (lpProfileEvent->GetFlags()
-             & BrnProgression::ProfileEvent::E_FLAG_WON_SPECIAL_EVENT_BEFORE) != 0;
-    }
+    lDescription.mbEventFlag =
+        (lpProfileEvent->GetFlags()
+         & BrnProgression::ProfileEvent::E_FLAG_WON_SPECIAL_EVENT_BEFORE) != 0;
 
     mpStateInterface->GetOutputEventQueue()->AddEvent(
         &lDescription, KI_GUI_OUT_EVENT_CHANNEL, static_cast<s32>(sizeof(lDescription)));
@@ -297,16 +298,11 @@ void PreRaceFlyByState::SetMarkedManDescription()
             break;
         }
     }
-    // Same console null-dereference on no-match as SetRaceDescription. [PC GUARD, NOT in
-    // the X360 binary] -- empty fresh/harness profile event list on this build (run
-    // 20260827_133948 AV proof). Missing record == flag 0.
-    // DELETE-WHEN the profile event list is populated on this build.
-    lDescription.mbEventFlag = false;
-    if (lpProfileEvent != 0)
-    {
-        lDescription.mbEventFlag =
-            (lpProfileEvent->GetFlags() & BrnProgression::ProfileEvent::E_FLAG_RANK_WIN) != 0;
-    }
+    // [PC GUARD RETIRED 2026-08-27, D1 profile-event-list wave] -- twin of the guard retired in
+    // SetBurningRouteDescription above; same DELETE-WHEN, same producer
+    // (ProgressionManager::UnlockToProgressionRank @0x8239DDE8), same key. Console read restored.
+    lDescription.mbEventFlag =
+        (lpProfileEvent->GetFlags() & BrnProgression::ProfileEvent::E_FLAG_RANK_WIN) != 0;
 
     mpStateInterface->GetOutputEventQueue()->AddEvent(
         &lDescription, KI_GUI_OUT_EVENT_CHANNEL, static_cast<s32>(sizeof(lDescription)));
@@ -373,17 +369,14 @@ void PreRaceFlyByState::SetRaceDescription()
             break;
         }
     }
-    // NOTE: the X360 leaves the record pointer NULL when the walk finds no match (and when
-    // the profile holds no events at all) and reads its flags half-word regardless -- a
-    // genuine console null-dereference. [PC GUARD, NOT in the X360 binary] -- empty
-    // fresh/harness profile event list on this build (run 20260827_133948 AV proof).
-    // Missing record == flag 0. DELETE-WHEN the profile event list is populated.
-    lDescription.mbEventFlag = false;
-    if (lpProfileEvent != 0)
-    {
-        lDescription.mbEventFlag =
-            (lpProfileEvent->GetFlags() & BrnProgression::ProfileEvent::E_FLAG_RANK_WIN) != 0;
-    }
+    // NOTE: the X360 leaves the record pointer NULL when the walk finds no match and reads its
+    // flags half-word regardless -- a genuine console null-dereference, reproduced.
+    // [PC GUARD RETIRED 2026-08-27, D1 profile-event-list wave] the guard that stood here was
+    // there only because the profile held no events at all on this build; its DELETE-WHEN is now
+    // due (ProgressionManager::UnlockToProgressionRank @0x8239DDE8 populates the table at boot --
+    // see the retirement banner in SetBurningRouteDescription above). Console read restored.
+    lDescription.mbEventFlag =
+        (lpProfileEvent->GetFlags() & BrnProgression::ProfileEvent::E_FLAG_RANK_WIN) != 0;
 
     mpStateInterface->GetOutputEventQueue()->AddEvent(
         &lDescription, KI_GUI_OUT_EVENT_CHANNEL, static_cast<s32>(sizeof(lDescription)));

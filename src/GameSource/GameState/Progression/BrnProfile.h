@@ -373,6 +373,14 @@ public:
     s32  GetDriveThrusFound() const;                                                // 0x82361778 (car parks excluded!)
 
     // Game-mode tallies (indexed by GsmIO::EGameModeType; the X360 [18] arrays below).
+    // ⭐ [D1 profile-event-list wave, 2026-08-27] AddGameModeTypeToTotals is DWARF-attested
+    // (BrnProfile.h:751 `void AddGameModeTypeToTotals(EGameModeType)`) and has no standalone X360
+    // symbol -- ProgressionManager::AddEventTypeToEventTotals @0x82366628 INLINES it as
+    // `++*(4*(mode+30) + profile)`, i.e. `++maGameModeTypeAmount[mode]`, immediately after firing
+    // the range assert whose baked location is BrnProfile.h:2047 (the same "lEGameModeType >
+    // GsmIO::E_MODE_NONE" string its three siblings below carry). It is the "how many events of
+    // this type exist at all" tally -- the denominator of the HUD's "Races 3/12".
+    void AddGameModeTypeToTotals(BrnGameState::GameStateModuleIO::EGameModeType lEGameModeType);  // inlined @0x82366628
     void AddGameModeTypeCompleted(BrnGameState::GameStateModuleIO::EGameModeType lEGameModeType);    // 0x82354B10
     void AddGameModeTypeToDiscovered(BrnGameState::GameStateModuleIO::EGameModeType lEGameModeType); // 0x82354AA0
     s32  GetGameModeTypeAmount(BrnGameState::GameStateModuleIO::EGameModeType lEGameModeType) const;     // 0x82354A38
@@ -416,6 +424,19 @@ public:
 
     // Event records / medals.
     const ProfileEvent* GetEvent(u32 luIndex) const;                                // 0x82354DA0
+
+    // ⭐ [D1 profile-event-list wave, 2026-08-27] THE id->record lookup, DWARF-attested as a
+    // const/non-const overload pair (BrnProfile.h:709 / :713 -- `const ProfileEvent* FindEvent
+    // (uint32_t) const` / `ProfileEvent* FindEvent(uint32_t)`), matching the FindCar / FindRival
+    // pair above. No standalone X360 symbol: every console caller inlines the same open-coded
+    // scan (`lwz r9, 0x278(profile)` as the bound, `addi r10, profile, 0x7080` as the base, 8-byte
+    // stride, `cmplw` against muEventID @+0) -- ProgressionManager::UnlockToProgressionRank
+    // @0x8239DEDC, GameStateModule::CheckIfPlayerIsAtJunctionWithAnEvent @0x823906B0,
+    // ProgressionManager::OnEventFinishUpdateProfile @0x823A0084 and
+    // HasEventBeenWonPreviously @0x82366B30 are four copies of it. NULL when the id is unknown
+    // (the console's own "not found" answer -- its callers then fire their own assert).
+    const ProfileEvent* FindEvent(u32 luEventID) const;                             // inlined (see banner)
+          ProfileEvent* FindEvent(u32 luEventID);                                   // inlined (see banner)
 
     // ADDITIVE GROW (BrnGui::PreRaceFlyByState::Set*Description). The live length of maEvents.
     // DWARF BrnProfile.h:833 gives the shape -- `uint32_t GetEventCount() const` -- while the
@@ -472,6 +493,12 @@ public:
     s32  GetNumDriveThrusDiscovered(BrnTrigger::GenericRegion::Type leType) const;
     f32  GetPlayerBaseDeformAmount(CgsID lCarId) const;
     void IncrementNumDiscoveredEvents();
+    // ⚠️ [D1 profile-event-list wave, 2026-08-27] NAME NOTE -- this is the SAME scan as the
+    // DWARF-attested Profile::FindEvent pair declared above (:709/:713), under an invented name
+    // and a widened key, named by the not-yet-mounted BrnDriveThruManager TU. FindEvent is now
+    // bodied; when DriveThruManager is mounted, retire this declaration in favour of it rather
+    // than writing a second body. Same for ProfileEvent::IsFound / SetFound above, which are the
+    // DWARF's EnableFlags / ClearFlags / IsFlagSet(E_FLAG_DISCOVERED) under invented names.
     ProfileEvent* FindProfileEventByRaceEventId(CgsID lEventId);
 
     s32             GetCarCount() const;
