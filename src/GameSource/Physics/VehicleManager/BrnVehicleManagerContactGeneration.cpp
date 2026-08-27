@@ -67,6 +67,27 @@ namespace Vehicle
         const u32 KU_COLLIDE_USER_TAG_A       = 11;    // luUserTagA -- the baked `li r5, 11`
         const u16 KU16_COLLIDE_USER_TAG_B     = 0;     // lu16UserTagB -- the baked `li r6, 0`
 
+        // ---- StartPartContactGeneration's own literals (2026-08-27, detach-3 wave) ----------------
+        // Its three CollidePrimitivePairList calls bake `li r5, 0x64` (100 results), `li r7, 0`
+        // (tag B) and tag A 3 / 4 / 2 in that order (0x8262C280 / 0x8262C2C8 / 0x8262C310); its
+        // stream factory bakes `li r4, 0x64`.
+        const u16 KU16_PART_COLLIDE_MAX_RESULTS = 100;
+        const u16 KU16_PART_COLLIDE_USER_TAG_B  = 0;
+        const u32 KU_PART_VS_CAR_USER_TAG_A     = 3;
+        const u32 KU_WHEEL_VS_CAR_USER_TAG_A    = 4;
+        const u32 KU_HINGED_VS_CAR_USER_TAG_A   = 2;
+        const s32 KI_PART_STREAM_MAX_COMMANDS   = 100;
+
+        // The three AddEntry key words, `lis`-materialised whole (0x8262C290..0x8262C2A0 etc.):
+        // owner 6 == RACECAR_DEFORMABLE_PART, 9 == the detached wheel, 1 == RACECAR.
+        const u32 KU_ENTITY_WORD_RACECAR_DEFORMABLE_PART = 0x06000000u;
+        const u32 KU_ENTITY_WORD_DETACHED_WHEEL          = 0x09000000u;
+        const u32 KU_ENTITY_WORD_RACECAR                 = 0x01000000u;
+
+        // EndPartContactGeneration's queue-id bound (`cmplwi r26, 0xE` @0x8261B820) --
+        // PotentialContactInterface::E_NUM_CUSTOM_QUEUE_TYPES.
+        const u32 KU_NUM_CUSTOM_CONTACT_QUEUES  = 14;
+
         // DoRaceCarWorldContactGeneration's two contact-padding floats, image-read (x360rd):
         // flt_82001D9C == 2.0f rides the in-place sphere pass, flt_82001DA0 == 0.5f the swept
         // (continuous) pass. Both go to the poster's f1 and land in StreamCommand::mfPadding.
@@ -1203,42 +1224,242 @@ namespace Vehicle
     }
 
     // ==============================================================================================
-    // StartPartContactGeneration @0x8262C220 (114) -- PARTIAL.
+    // StartPartContactGeneration @0x8262C220 (114) -- COMPLETE 2026-08-27 (detach-3 wave).
     //
-    // REAL: the function's FIRST store — `miFirstPartContactGenEntry = mpContactGenList->
-    // GetNumEntries()` (X360 0x8262C238: `lwz r11, 0xC08(list) ; stw r11, 0x2A1D4(this)`).
-    // That boundary stamp is what AddContactResultsToQueue walks: the vehicle-pass entries
-    // occupy [0, stamp), the part-pass entries append after it. Without the stamp the harvest
-    // reads a permanent 0 and drains nothing — measured on the first leg-3 boot (both new
-    // witnesses silent, 24 kernel results parked), which is exactly how this line was found.
+    // The PART half of the frame's contact generation, the twin of StartVehicleContactGeneration
+    // above. It was a PARTIAL body: only its first store (the miFirstPartContactGenEntry boundary
+    // stamp the harvest walks) was real, and everything after it was a log-once gate.
     //
-    // GATED (log-once): everything after the stamp — the three pair-list Collide legs
-    // (part/wheel/hinged builders, queue tags 3/4/2, with their marker AddEntry calls), the
-    // part-vs-triangle collide stream create (@sub_82811DD0)/Begin/Run, and the two
-    // DeformationManager Do*WorldContactGeneration drivers. That is the PART contact family
-    // (EndPartContactGeneration @0x8261B690 is its harvest twin) — a later leg.
+    // The whole tail is now transcribed from the raw asm (0x8262C268..0x8262C3DC):
+    //   1) the THREE pair-list collides -- detached-part-vs-car, detached-wheel-vs-car and
+    //      hinged-part-vs-car -- each gated on its own builder's GetNumTests(), each followed by the
+    //      ContactGenList entry that keys its result list. StartVehicleContactGeneration FILLS those
+    //      three builders (AddRaceCarBodyPartPair / AddRaceCarWheelPair / AddHingedBodyPartPairs);
+    //      this is where they are collided and drained;
+    //   2) the part-vs-WORLD collide stream is created and seated in mpBodyPartWithWorldStream;
+    //   3) the two DeformationManager world-contact-generation walks run into it -- the reason this
+    //      function exists, and what puts a detached part in front of the road triangles at all;
+    //   4) Begin() the producer and dispatch the collide job.
+    //
+    // ⚠️ THE THREE TAGS ARE luUserTagA VALUES, NOT FLAGS -- 3 / 4 / 2, the same parameter
+    // StartVehicleContactGeneration passes 11 in. They ride the CollisionResultList header into the
+    // harvest, which uses them to route each result list to a PotentialContactInterface queue. The
+    // fourth argument is lu16UserTagB and is 0 on all three (`li r7, 0`).
     // ==============================================================================================
     void VehicleManager::StartPartContactGeneration(
-        const CgsSceneManager::SceneManagerIO::TriangleCacheInterface* /*lpTriangleCacheInterface*/,
+        const CgsSceneManager::SceneManagerIO::TriangleCacheInterface* lpTriangleCacheInterface,
+        f32 /*lfTimeStep*/,
+        BrnPhysics::Deformation::DeformationManager* lpDeformationManager,
+        CgsModule::IOBufferStack* /*lpIOBufferStack*/,
+        BrnPhysics::PhysicsModuleIO::PotentialContactInterface* /*lpPotentialContactInterface*/,
+        CgsMemory::LinearMalloc* lpLinearMalloc)
+    {
+        // The boundary stamp: the vehicle-pass entry count. Everything this function appends lands
+        // after it, and EndPartContactGeneration harvests exactly [stamp, GetNumEntries()).
+        miFirstPartContactGenEntry = mpContactGenList->GetNumEntries();          // +172516
+
+        // ---- (1) the three pair-list collides ----------------------------------------------------
+        if (mDetachedPartPrimPairBuilder.GetNumTests() != 0)                     // +172482
+        {
+            mpContactGenerator->CollidePrimitivePairList(&mDetachedPartPrimPairBuilder,
+                                                         KU16_PART_COLLIDE_MAX_RESULTS,
+                                                         KU_PART_VS_CAR_USER_TAG_A,
+                                                         KU16_PART_COLLIDE_USER_TAG_B);
+            mpContactGenList->AddEntry(EntityId{ KU_ENTITY_WORD_RACECAR_DEFORMABLE_PART },
+                                       EntityId{ KU_ENTITY_WORD_RACECAR }, 0, 0);
+        }
+        if (mDetachedWheelPrimPairBuilder.GetNumTests() != 0)                    // +172494
+        {
+            mpContactGenerator->CollidePrimitivePairList(&mDetachedWheelPrimPairBuilder,
+                                                         KU16_PART_COLLIDE_MAX_RESULTS,
+                                                         KU_WHEEL_VS_CAR_USER_TAG_A,
+                                                         KU16_PART_COLLIDE_USER_TAG_B);
+            mpContactGenList->AddEntry(EntityId{ KU_ENTITY_WORD_DETACHED_WHEEL },
+                                       EntityId{ KU_ENTITY_WORD_RACECAR }, 0, 0);
+        }
+        if (mHingedPartVsVehiclePairBuilder.GetNumTests() != 0)                  // +172506
+        {
+            mpContactGenerator->CollidePrimitivePairList(&mHingedPartVsVehiclePairBuilder,
+                                                         KU16_PART_COLLIDE_MAX_RESULTS,
+                                                         KU_HINGED_VS_CAR_USER_TAG_A,
+                                                         KU16_PART_COLLIDE_USER_TAG_B);
+            mpContactGenList->AddEntry(EntityId{ KU_ENTITY_WORD_RACECAR_DEFORMABLE_PART },
+                                       EntityId{ KU_ENTITY_WORD_RACECAR }, 0, 0);
+        }
+
+        // ---- (2) the part-vs-WORLD collide stream ------------------------------------------------
+        // sub_82811DD0 == CreateCollidePrimitiveListWithTriangleListStream (the identity is MEASURED,
+        // see the banner in CgsCollisionGenerator.h). The producer is seated BEFORE the two walks
+        // because they post their commands straight into it.
+        mpBodyPartWithWorldStream =
+            mpContactGenerator->CreateCollidePrimitiveListWithTriangleListStream(
+                KI_PART_STREAM_MAX_COMMANDS);                                   // +172576
+
+        // ---- (3) THE TWO WORLD WALKS -- what actually puts a detached part on the road ------------
+        // Argument order read register-for-register off 0x8262C34C..0x8262C388: r4 the tri-cache,
+        // r5 *mpContactGenList, r6 *mpContactGenerator, r7 the stream, r8 the malloc.
+        lpDeformationManager->DoBodyPartWorldContactGeneration(lpTriangleCacheInterface,
+                                                              mpContactGenList, mpContactGenerator,
+                                                              mpBodyPartWithWorldStream,
+                                                              lpLinearMalloc);
+        lpDeformationManager->DoDetachedWheelWorldContactGeneration(lpTriangleCacheInterface,
+                                                                    mpContactGenList, mpContactGenerator,
+                                                                    mpBodyPartWithWorldStream,
+                                                                    lpLinearMalloc);
+
+        // ---- (4) begin the producer and dispatch -------------------------------------------------
+        // The console INLINES SimpleDataStreamProducer::Begin here (the six mShared field copies at
+        // 0x8262C398..0x8262C3C4, the &mCommandPoster store at +0x18, the mbIsStreaming byte at
+        // +0x100, then the bl to DataStreamCommandPoster::Begin) -- byte-for-byte the committed
+        // body in CgsSimpleDataStreamProducer_Begin.cpp.
+        mpBodyPartWithWorldStream->Begin();
+        mpContactGenerator->RunCollidePrimitiveListWithTriangleListStream(mpBodyPartWithWorldStream);
+    }
+
+    // ==============================================================================================
+    // EndPartContactGeneration @0x8261B690 (276) -- BODIED 2026-08-27 (detach-3 wave). Its loud named
+    // gate in BrnPhysicsConductorGates.cpp is DELETED in the same commit; that gate was its only
+    // definition, so nothing else has to be retired with it.
+    //
+    // The PART harvest, and the last link in the chain: without it every contact
+    // StartPartContactGeneration just produced is computed and thrown away.
+    //
+    //   1) Finish() the generator and End() the part-vs-world stream producer (the console inlines
+    //      SimpleDataStreamProducer::End as DataStreamCommandPoster::End(producer+0x80) plus the
+    //      mbIsStreaming drop -- 0x8261B6C4..0x8261B6E4);
+    //   2) walk the contact-gen entries [miFirstPartContactGenEntry, GetNumEntries()) -- exactly the
+    //      window the Start stamped -- and post one PotentialContact per result;
+    //   3) PhysicalTrafficManager::AddArticulatedJointContacts (see the FLAG below).
+    //
+    // ⚠️⚠️ IT IS **NOT** AddContactResultsToQueue WITH A DIFFERENT WINDOW, and reusing that body
+    // would have been wrong in two measured ways. Read against 0x8261BA00..0x8261BA78:
+    //   * THE NORMAL SOURCE IS ALWAYS mPrimitive1Normal (+0x10). Both arms of the tag branch issue
+    //     `lvx128 v?, r31, r10` with r10 == 0x10; the tag does NOT select between +0x00 and +0x10 the
+    //     way it does in the vehicle harvest.
+    //   * THE NEGATION IS CONDITIONAL. mu16UserTagB == 0 negates (vspltisw/vslw/vxor -- the
+    //     0x80000000 splat); mu16UserTagB != 0 passes the normal through unflipped. The vehicle
+    //     harvest negates unconditionally.
+    //   * THE VOLUME-INSTANCE IDS ARE COPIED VERBATIM. `ld 0(entry+8)` / `ld 8(entry+8)` -- the two
+    //     whole 8-byte ids straight out of the ContactGenEntry, with NO
+    //     "+ mIdAVolInstOffset + primitive index" arithmetic. The part path already encodes the part
+    //     in the handle DoBodyPartWorldContactGeneration keyed the entry on.
+    //
+    // Argument mapping: r3 this, f1 lfTimeStep (the r4 GPR slot is reserved for it), r5 the
+    // DeformationManager, r6 the IOBufferStack, r7 the PotentialContactInterface (`stw r7, arg_34`
+    // at 0x8261B6A0, reloaded at every use). The DeformationManager and IOBufferStack parameters are
+    // UNUSED in the console body -- checked in the asm, not assumed.
+    // ==============================================================================================
+    void VehicleManager::EndPartContactGeneration(
         f32 /*lfTimeStep*/,
         BrnPhysics::Deformation::DeformationManager* /*lpDeformationManager*/,
         CgsModule::IOBufferStack* /*lpIOBufferStack*/,
-        BrnPhysics::PhysicsModuleIO::PotentialContactInterface* /*lpPotentialContactInterface*/,
-        CgsMemory::LinearMalloc* /*lpLinearMalloc*/)
+        BrnPhysics::PhysicsModuleIO::PotentialContactInterface* lpPotentialContactInterface)
     {
-        // The boundary stamp (REAL): the vehicle-pass entry count, read by the harvest.
-        miFirstPartContactGenEntry = mpContactGenList->GetNumEntries();          // +172516
+        typedef CgsSceneManager::CgsCollision::CollisionResultList CollisionResultList;
+        typedef CgsSceneManager::CgsCollision::PrimitiveTestResult PrimitiveTestResult;
+        typedef CgsSceneManager::SceneManagerIO::PotentialContact  PotentialContact;
 
-        static bool s_bLoggedPartGate = false;
-        if (!s_bLoggedPartGate)
+        // ---- (1) join / close ---------------------------------------------------------------------
+        mpContactGenerator->Finish();                                            // +172472
+        mpBodyPartWithWorldStream->End();                                        // +172576
+
+        // ---- (2) the harvest window ---------------------------------------------------------------
+        const s32 liFirstEntry = miFirstPartContactGenEntry;                     // +172516
+        const s32 liNumEntries = mpContactGenList->GetNumEntries();
+
+        for (s32 liEntry = liFirstEntry; liEntry < liNumEntries; ++liEntry)
         {
-            s_bLoggedPartGate = true;
-            if (CgsDev::Message::gxMessageFilterFlags & 1)
-                *CgsDev::Log::gpDebugPrint
-                    << "conductor gate: VehicleManager::StartPartContactGeneration @0x8262C220 "
-                       "(114) PARTIAL -- the miFirstPartContactGenEntry boundary stamp is real, "
-                       "the part-contact generation tail is not reconstructed [FLAG PC boot "
-                       "gate]. Reported once, not per frame\n";
+            // Result list i belongs to entry i (every Do*ContactGeneration appends exactly one entry
+            // and carves exactly one result list, so the two indices advance in lockstep). The fetch
+            // carries the console's own "luIndex < mu16NumUsedResultLists" tripwire
+            // (CgsCollisionGenerator.h:303 -- the baked `li r5, 0x12F`).
+            const CollisionResultList lResultList =
+                mpContactGenerator->GetResultList(static_cast<u16>(liEntry));
+
+            CGS_ASSERT(lResultList.mu32UserTagA < KU_NUM_CUSTOM_CONTACT_QUEUES,
+                       "Bad queue id: ");                                        // :691
+            CGS_ASSERT(lResultList.mu16NumResults <= lResultList.mu16MaxNumResults,
+                       "Bad num results: ");                                     // :694
+
+            const u16 lu16NumResults = lResultList.mu16NumResults;
+            if (lu16NumResults == 0)
+            {
+                continue;
+            }
+
+            // "liEntry < miNumEntries" (BrnContactGenerationList.h:89) rides the fetch.
+            const ContactGenList::ContactGenEntry& lrEntry = mpContactGenList->GetEntry(liEntry);
+
+            // meResultType == 0 lists carry 80-byte PrimitiveTestResults; the console walks the raw
+            // 80 stride (`R31 += 80`), not the 112-stride GetResult.
+            const PrimitiveTestResult* lpaResults =
+                reinterpret_cast<const PrimitiveTestResult*>(lResultList.mpResults);
+
+            for (u16 lu16Result = 0; lu16Result < lu16NumResults; ++lu16Result)
+            {
+                const PrimitiveTestResult& lrRecord = lpaResults[lu16Result];
+
+                PotentialContact lContact;
+                lContact.mPointOnA = Vector3{ lrRecord.mPrimitive0Contact.x,
+                                              lrRecord.mPrimitive0Contact.y,
+                                              lrRecord.mPrimitive0Contact.z,
+                                              lrRecord.mPrimitive0Contact.w };   // +0x20, triangle point
+                lContact.mPointOnB = Vector3{ lrRecord.mPrimitive1Contact.x,
+                                              lrRecord.mPrimitive1Contact.y,
+                                              lrRecord.mPrimitive1Contact.z,
+                                              lrRecord.mPrimitive1Contact.w };   // +0x30, part point
+
+                // ALWAYS +0x10, negated only when tag B is zero -- see the banner.
+                if (lResultList.mu16UserTagB != 0)
+                {
+                    lContact.mNormal = lrRecord.mPrimitive1Normal;
+                }
+                else
+                {
+                    lContact.mNormal.x = -lrRecord.mPrimitive1Normal.x;
+                    lContact.mNormal.y = -lrRecord.mPrimitive1Normal.y;
+                    lContact.mNormal.z = -lrRecord.mPrimitive1Normal.z;
+                    lContact.mNormal.w = -lrRecord.mPrimitive1Normal.w;
+                }
+
+                // The two ids verbatim out of the entry (`ld`/`ld` at entry+0 and entry+8).
+                lContact.muVolumeInstanceIdA = lrEntry.mIdA;
+                lContact.muVolumeInstanceIdB = lrEntry.mIdB;
+
+                lContact.muPolyTagA          = lrRecord.muPrimitive0Tag;         // +0x40
+                lContact.muPolyTagB          = lrRecord.muPrimitive1Tag;         // +0x44
+                lContact.mu16PrimitiveIndexA = lrRecord.muPrimitive0Index;       // +0x48
+                lContact.mu16PrimitiveIndexB = lrRecord.muPrimitive1Index;       // +0x4A
+
+                // sub_825E73D0 == PotentialContactInterface::AddEvent(u32, const PotentialContact&).
+                lpPotentialContactInterface->AddEvent(lResultList.mu32UserTagA, lContact);
+            }
+        }
+
+        // ---- (3) the articulated-joint tail -------------------------------------------------------
+        // FLAG (scoped deferral, named not silent): the console tail-calls
+        // BrnPhysics::Vehicle::PhysicalTrafficManager::AddArticulatedJointContacts @0x825F3000 --
+        // 508 instructions, NO body anywhere in this tree and no declaration on
+        // PhysicalTrafficManager (checked, not assumed; the only AddArticulatedJointContacts here is
+        // DeformationManager's unrelated @0x825DB190). It drains the ARTICULATED-TRAFFIC joints --
+        // trailers and the like -- and is orthogonal to detached car parts, which is why this wave
+        // scoped it out rather than half-landing 508 instructions of traffic articulation inside a
+        // deformation change. The log-once below is what makes it a NAMED absence rather than a
+        // quiet one -- an omitted call that says nothing is the failure mode this project treats
+        // as an audit failure.
+        {
+            static bool sbLoggedArticulatedJointGate = false;
+            if (!sbLoggedArticulatedJointGate)
+            {
+                sbLoggedArticulatedJointGate = true;
+                if (CgsDev::Message::gxMessageFilterFlags & 1)
+                    *CgsDev::Log::gpDebugPrint
+                        << "conductor gate: EndPartContactGeneration's tail call "
+                           "PhysicalTrafficManager::AddArticulatedJointContacts @0x825F3000 (508) "
+                           "is NOT reconstructed -- articulated TRAFFIC joint contacts are not "
+                           "drained [FLAG PC boot gate]. The detached-part harvest above it is "
+                           "complete. Reported once, not per frame\n";
+            }
         }
     }
 

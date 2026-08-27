@@ -49,5 +49,61 @@ namespace Deformation
         return mUsedWheels.IsBitSet(static_cast<u32>(lu16Slot));
     }
 
+    // ============================================================================================
+    // GetWheel (by owning entity + wheel ordinal) @0x825E8308 (198 insns) -- BODIED 2026-08-27
+    // (detach-3 wave). IDA leaves it `sub_825E8308`; the identity is pinned by its one caller
+    // (DeformableObject::DoDetachedWheelWorldContactGeneration passes the car's mGlobalEntityId and
+    // a 0..3 wheel ordinal and uses the result as a PhysicalWheel*) and by the DWARF declaration
+    // BrnDetachedWheelManager.h:112 this header already carried BODYLESS.
+    //
+    // A BitArray<20> walk over mUsedWheels (the manager+2960 field the sibling IsSlotUsed reads),
+    // taking the first slot that matches on ALL THREE of, read off 0x825E83C8..0x825E8420:
+    //   1. maWheelOwnerType[slot] == lEntityId.GetOwner()       (`lwzx` at this + 4*(slot+0x2D0),
+    //      i.e. this+2880 stride 4, vs `srwi r10, r14, 24`)
+    //   2. the wheel handle's entity INDEX == lEntityId.GetEntityIndex()
+    //      (`ld 0x70(&maWheels[slot]) ; srdi 32 ; srwi 10 ; xor ; clrlwi 18` -- an xor/mask
+    //       equality on the 14-bit field, which is a compare)
+    //   3. the wheel handle's PART index == liWheelOrdinal     (`clrlwi r10, r10, 22` == & 0x3FF)
+    // and returning nullptr when the walk runs out (`li r3, 0`).
+    //
+    // The "invalid index : N < 20" strings the function materialises belong to the inlined
+    // GetNextNonZeroBit tripwire (CgsBitArray.h:203), which lives in the committed BitArray, so it
+    // is not restated here.
+    //
+    // The handle is read through GetVolumeInstanceId() rather than the private mWheelBodyId: it
+    // packs the same three fields into the same 64-bit word the console `ld`s, so the high dword is
+    // bit-for-bit the entity word the asm shifts out.
+    // ============================================================================================
+    const PhysicalWheel* DetachedWheelManager::GetWheel(EntityId lEntityId, s32 liWheelOrdinal) const
+    {
+        const CgsSceneManager::EntityId lQueryId(lEntityId.muValue);
+
+        for (s32 liSlot = mUsedWheels.GetFirstNonZeroBit();
+             liSlot != -1;
+             liSlot = mUsedWheels.GetNextNonZeroBit(liSlot))
+        {
+            if (static_cast<u32>(maWheelOwnerType[liSlot]) != static_cast<u32>(lQueryId.GetOwner()))
+            {
+                continue;
+            }
+
+            const CgsSceneManager::EntityId lWheelId(
+                static_cast<u32>(maWheels[liSlot].GetVolumeInstanceId().muId >> 32));
+
+            if (lWheelId.GetEntityIndex() != lQueryId.GetEntityIndex())
+            {
+                continue;
+            }
+            if (static_cast<s32>(lWheelId.GetPartIndex()) != liWheelOrdinal)
+            {
+                continue;
+            }
+
+            return &maWheels[liSlot];
+        }
+
+        return nullptr;
+    }
+
 }
 }

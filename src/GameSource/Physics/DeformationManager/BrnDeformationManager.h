@@ -131,7 +131,9 @@ namespace CgsGeometric
     struct SweptSphere; // GetSweptSpheresForCar element (DWARF SweptSphere)
 }
 
-namespace CgsMemory { class SimpleDataStreamProducer; class LinearMalloc; }
+// ⚠⚠ CLASS-KEY FIXED 2026-08-27 (detach-3 wave): `struct` per CgsSimpleDataStreamProducer.h:39 --
+// `class` here mangled every signature carrying it as ?AV instead of ?AU.
+namespace CgsMemory { struct SimpleDataStreamProducer; class LinearMalloc; }
 
 namespace CgsSceneManager
 {
@@ -141,7 +143,9 @@ namespace CgsSceneManager
         struct InSceneUpdateInterface;   // == OutputBuffer::SceneInputInterface (DWARF)
         struct PotentialContact;         // CgsSceneManager contact record (ReadPotentialContact / fix-up args)
         struct InAddPotentialContact;    // SetupPartContact out-param (DWARF InAddPotentialContact&)
+        struct TriangleCacheInterface;   // the real home of the world-contact-gen tri-cache arg (see :277)
     }
+    namespace CgsCollision { struct CollisionGenerator; }   // the real home of the contact-gen arg (see :277)
 }
 
 namespace CgsPhysics
@@ -150,7 +154,10 @@ namespace CgsPhysics
     // CgsPhysicsSimulationModuleIO.h (:43/:321); `class` here silently mangled every
     // cross-TU signature carrying them (?AV vs ?AU) -- found by an LNK2019 pair.
     namespace PhysicsSimulationIO { struct InputBuffer; struct OutputBuffer; }   // sim IO buffers
-    class CollisionGenerator;   // contact-generation arg (same qualified home as BrnDeformableObject.h)
+    // ⭐⭐ 2026-08-27 (detach-3 wave): `class CollisionGenerator;` DELETED from this namespace, and
+    // from BrnDeformableObject.h with it. It named no type that exists or could exist; the real one
+    // is CgsSceneManager::CgsCollision::CollisionGenerator, forward-declared above. Left as a
+    // deliberate absence so a future re-introduction is an error, not a silent second fork.
 }
 
 namespace BrnPhysics
@@ -274,7 +281,13 @@ namespace Deformation
     // UpdateTriangleCache arg (DWARF InputBuffer_Update*). ALIASED to the real homed CgsSceneManager
     // type so GetSceneUpdateInterface() resolves. FLAG: additive.
     using InputBuffer_Update = CgsSceneManager::SceneManagerIO::InputBuffer_Update;
-    struct VehicleInTriangleCacheInterface; // == VehicleInputInterface::InTriangleCacheInterface (world-contact-gen arg)
+    // ⭐⭐ 2026-08-27 (detach-3 wave): was `struct VehicleInTriangleCacheInterface;` -- a declare-only
+    // fork with NO definition anywhere in the tree, so DoBodyPartWorldContactGeneration /
+    // DoDetachedWheelWorldContactGeneration mangled to symbols no TU could define. ALIASED to the
+    // real homed type, which is what BrnVehicleInputInterface.h:33 already typedefs the DWARF's
+    // nested VehicleInputInterface::InTriangleCacheInterface to, and what the one caller
+    // (VehicleManager::StartPartContactGeneration) already carries. FLAG: additive.
+    using VehicleInTriangleCacheInterface = CgsSceneManager::SceneManagerIO::TriangleCacheInterface;
 
     // ========================================================================
     // BrnPhysics::Deformation::DeformationManager
@@ -427,7 +440,7 @@ namespace Deformation
         // / LinearMalloc are the qualified CgsSceneManager::CgsCollision:: / CgsMemory:: homes.
         void DoBodyPartWorldContactGeneration(const VehicleInTriangleCacheInterface* lpTriCache,
                                               ContactGenList* lpGenList,
-                                              CgsPhysics::CollisionGenerator* lpGen,
+                                              CgsSceneManager::CgsCollision::CollisionGenerator* lpGen,
                                               CgsMemory::SimpleDataStreamProducer* lpProducer,
                                               CgsMemory::LinearMalloc* lpAlloc) const;
 
@@ -462,7 +475,7 @@ namespace Deformation
         // :242. Generate the detached-wheel-vs-world contacts. const. (Same FLAG as :203.)
         void DoDetachedWheelWorldContactGeneration(const VehicleInTriangleCacheInterface* lpTriCache,
                                                    ContactGenList* lpGenList,
-                                                   CgsPhysics::CollisionGenerator* lpGen,
+                                                   CgsSceneManager::CgsCollision::CollisionGenerator* lpGen,
                                                    CgsMemory::SimpleDataStreamProducer* lpProducer,
                                                    CgsMemory::LinearMalloc* lpAlloc) const;
 
@@ -478,7 +491,7 @@ namespace Deformation
 
         // :258. Add the body-part-vs-world collision results into the potential-contact queue.
         void AddBodyPartWorldResultsToContactQueue(const ContactGenList* lpGenList,
-                                                   CgsPhysics::CollisionGenerator* lpGen,
+                                                   CgsSceneManager::CgsCollision::CollisionGenerator* lpGen,
                                                    PhysicsModuleIO::PotentialContactInterface* lpContacts);
 
         // ----- reset events / contact fix-up (DWARF :264-305) ----------------------------
