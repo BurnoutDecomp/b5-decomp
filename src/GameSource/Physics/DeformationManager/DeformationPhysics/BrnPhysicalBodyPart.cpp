@@ -1087,11 +1087,44 @@ namespace Deformation
     // rotation-proportion gate (0.3) are ALL RECOVERED now -- see the constant block at the top of this
     // file for the initialiser addresses and the calibration control. Arm (4b) is therefore FAITHFUL
     // end to end (its magnitude was already the asm's own +400 w lane).
-    // ⚠️ STILL FLAGGED: arm (4a)'s MAGNITUDE. The asm assembles a real joint-force vector through a
-    // vperm/vaddfp chain at 0x8260C390..0x8260C3CC and dots it with the joint rotation axis
-    // (vmsum3fp128 @0x8260C3D4); that chain is not decoded, so the magnitude fed to arm (4a) here is
-    // still the INVENTED proxy `mWorldPenetrationPlusCollisionMagnitude.GetPlus()` (+432 w). The
-    // multiplier it is scaled by is now real, the magnitude is not.
+    // ⭐⭐⭐ 2026-08-27 (detach-2 wave): ARM (4a) IS NOW FAITHFUL TOO. The vperm/vaddfp chain at
+    // 0x8260C390..0x8260C3CC IS DECODED -- it is a cross product, and the whole arm was carrying an
+    // invented magnitude AND was missing a gate the console has.
+    //
+    // THE CHAIN, instruction by instruction. `vpermwi128 x, 0x63` is the word-permute-immediate with
+    // selector fields [01,10,00,11] == lanes (y, z, x, w) -- the yzx rotation. With A = the vehicle
+    // body's angular velocity and D = (part position - vehicle position):
+    //     0x8260C3A8  vsubfp128 v13, v126, v0        D   = partPos - bodyPos
+    //     0x8260C3B0  vpermwi128 v11, v0, 0x63       perm(A)
+    //     0x8260C3BC  vpermwi128 v13, v13, 0x63      perm(D)
+    //     0x8260C3C0  vmulfp128  v0, v0, v13         A * perm(D)
+    //     0x8260C3C4  vnmsubfp   v0, v11, v0, v10    (A*perm(D)) - perm(A)*D
+    //     0x8260C3C8  vpermwi128 v0, v0, 0x63        -> cross(A, D), lanes rotated back
+    //     0x8260C3CC  vaddfp128  v124, v0, v12       + the body's LINEAR velocity
+    // i.e. v124 = omega x r + v -- THE WORLD VELOCITY OF THE PART'S ORIGIN under the vehicle's rigid
+    // motion. (`vnmsubfp vD,vA,vC,vB` is vB - vA*vC, and IDA prints the raw field order (vD,vA,vB,vC);
+    // the operand order is the same one calibrated against HandleContactWithLeanProp in AddToSim's
+    // banner.) The lane pattern is the textbook SIMD cross product and it closes exactly.
+    //
+    // ⭐ AND THE POINTER CHAIN CORROBORATES A FINDING THIS TREE ALREADY PAID FOR. The asm does
+    //     lwz r10, 0x194C(mpDeformableObject)   ; the attached vehicle physics
+    //     addi r11, r10, 0x10                   ; <-- and THEN indexes 0x30/0x40/0x50 off r11
+    // The +0x10 is the vptr adjustment: SimpleVehiclePhysics introduces the vtable, so the
+    // non-polymorphic ExternalPhysicsBody base subobject sits 16 bytes into the derived object. That
+    // is the SAME +16 the walls-leg-4 wave discovered the hard way (BrnDeformableObject.h's
+    // GetVehicleBody banner: a reinterpret_cast that missed it read every transform row one row low
+    // and stomped the vptr). Two unrelated functions, one adjustment. So r11+0x30/+0x40/+0x50 are
+    // ExternallySimulatedBody's mTransform.wAxis / mLinearVelocity / mAngularVelocity, by name.
+    //
+    // ⛔ AND ARM (4a) IS GATED, WHICH THE PREVIOUS SPELLING DID NOT HAVE AT ALL. Before the chain
+    // above, 0x8260C364..0x8260C388 computes `axis * dot(axis, mWorldPenetrationPlusCollisionMagnitude)`
+    // , takes its abs, and compares it against a splat of stru_8208F620 lane 0 (== 1.1920929e-07,
+    // FLT_EPSILON, byte-read). The branch tests CR6 bit 26 -- the "NONE TRUE" bit -- and jumps PAST
+    // arm (4a) when it is set. So arm (4a) only runs when the joint axis has a non-negligible
+    // projection of the accumulated world penetration. Running it unconditionally, as this file did,
+    // is a strictly LOOSER predicate than the console's.
+    // ⇒ the arm's old magnitude (`mWorldPenetrationPlusCollisionMagnitude.GetPlus()`, the +432 w lane)
+    // is retired: that scalar's VECTOR half turns out to be the gate's input, not the magnitude.
     // =========================================================================================
     bool PhysicalBodyPart::TestJointForBreaking(CgsPhysics::PhysicsSimulationIO::InputBuffer* lpSimInput,
                                                 BrnPhysics::PhysicsModuleIO::OutputBuffer* lpOutput)
@@ -1141,19 +1174,65 @@ namespace Deformation
 
         bool lbBreak = false;   // v34
 
-        // (4a) joint force along axis. The asm forms vmsum3fp128(jointForce, rotationAxis) @0x8260C3D4,
-        // takes its absolute value (vandc against the 0x80000000 mask @0x8260C410), scales by
-        // kfJointForceMultiplier (vmulfp128 @0x8260C414) and compares > maxStress (vcmpgtfp.
-        // @0x8260C418). ⚠️⚠️ THE MULTIPLIER IS NOW REAL BUT THE MAGNITUDE IS STILL INVENTED: the
-        // vperm/vaddfp chain at 0x8260C390..0x8260C3CC that assembles the joint-force vector is
-        // undecoded, so the body's accumulated collision magnitude (+432 w lane) stands in for the
-        // dot. This arm's numeric value is therefore NOT attributable to the console; arm (4b) is.
+        // (4a) joint force along axis -- FAITHFUL as of 2026-08-27; see the banner for the decode.
         {
-            const f32 lfJointForceMagnitude = mWorldPenetrationPlusCollisionMagnitude.GetPlus();   // +432 w
-            const f32 lfScaledForce = lfJointForceMagnitude * KF_JOINT_FORCE_MULTIPLIER;
-            if ( lfScaledForce > lfMaxStress )   // vcmpgtfp scaledForce, maxStress
+            // The joint's rotation axis, rotated out of the part's own frame by its rw-body basis
+            // (0x8260C354..0x8260C360: xAxis*s.x + yAxis*s.y + zAxis*s.z, each lane splatted from
+            // the spec's mJointAxis at spec+0x10).
+            const Vector3 lLocalAxis = lpActiveJoint->GetRotationAxis();
+            const Matrix44Affine lPartTransform = mRwBody.GetTransform();
+            const Vector3 lWorldAxis = {
+                lPartTransform.xAxis.x * lLocalAxis.x + lPartTransform.yAxis.x * lLocalAxis.y
+                    + lPartTransform.zAxis.x * lLocalAxis.z,
+                lPartTransform.xAxis.y * lLocalAxis.x + lPartTransform.yAxis.y * lLocalAxis.y
+                    + lPartTransform.zAxis.y * lLocalAxis.z,
+                lPartTransform.xAxis.z * lLocalAxis.x + lPartTransform.yAxis.z * lLocalAxis.y
+                    + lPartTransform.zAxis.z * lLocalAxis.z,
+                0.0f
+            };
+
+            // THE GATE (0x8260C364..0x8260C388): |axis * dot(axis, worldPenetration)| must exceed
+            // FLT_EPSILON in at least one lane. CR6 bit 26 is "none true", and the branch skips this
+            // whole arm when it is set.
+            const Vector3 lWorldPenetration = mWorldPenetrationPlusCollisionMagnitude.GetVector3();
+            const f32 lfPenetrationAlongAxis = lWorldAxis.x * lWorldPenetration.x
+                                             + lWorldAxis.y * lWorldPenetration.y
+                                             + lWorldAxis.z * lWorldPenetration.z;
+            auto lfAbs = [](f32 lf) { return lf < 0.0f ? -lf : lf; };
+            const bool lbAxisEngaged =
+                   lfAbs(lWorldAxis.x * lfPenetrationAlongAxis) > KF_INERTIA_DEGENERATE_EPSILON
+                || lfAbs(lWorldAxis.y * lfPenetrationAlongAxis) > KF_INERTIA_DEGENERATE_EPSILON
+                || lfAbs(lWorldAxis.z * lfPenetrationAlongAxis) > KF_INERTIA_DEGENERATE_EPSILON;
+
+            if ( lbAxisEngaged )
             {
-                lbBreak = true;
+                // v124 = omega x (partPos - bodyPos) + v  -- the world velocity of the part's origin
+                // under the vehicle's rigid motion (the decoded cross-product chain).
+                const ExternalPhysicsBody& lrVehicleBody = mpDeformableObject->GetVehicleBody();
+                const Vector3 lBodyPos = lrVehicleBody.GetTransform().wAxis;        // body +0x30
+                const Vector3 lBodyLinVel = lrVehicleBody.GetLinearVelocity();      // body +0x40
+                const Vector3 lBodyAngVel = lrVehicleBody.GetAngularVelocity();     // body +0x50
+                const Vector3 lLever = { lPartTransform.wAxis.x - lBodyPos.x,
+                                         lPartTransform.wAxis.y - lBodyPos.y,
+                                         lPartTransform.wAxis.z - lBodyPos.z, 0.0f };
+
+                const Vector3 lPointVelocity = {
+                    lBodyAngVel.y * lLever.z - lBodyAngVel.z * lLever.y + lBodyLinVel.x,
+                    lBodyAngVel.z * lLever.x - lBodyAngVel.x * lLever.z + lBodyLinVel.y,
+                    lBodyAngVel.x * lLever.y - lBodyAngVel.y * lLever.x + lBodyLinVel.z,
+                    0.0f
+                };
+
+                // vmsum3fp128 @0x8260C3D4, vandc @0x8260C410 (abs), vmulfp128 @0x8260C414
+                // (* kfJointForceMultiplier), vcmpgtfp. @0x8260C418 (> maxStress).
+                const f32 lfJointForceMagnitude = lPointVelocity.x * lWorldAxis.x
+                                                + lPointVelocity.y * lWorldAxis.y
+                                                + lPointVelocity.z * lWorldAxis.z;
+                const f32 lfScaledForce = lfAbs(lfJointForceMagnitude) * KF_JOINT_FORCE_MULTIPLIER;
+                if ( lfScaledForce > lfMaxStress )
+                {
+                    lbBreak = true;
+                }
             }
         }
 

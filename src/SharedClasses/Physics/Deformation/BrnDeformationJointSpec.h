@@ -68,7 +68,12 @@ namespace Deformation
         Vector3 GetCarSpacePosition() const;
 
         // BrnIKBodyPartSpec.h:103. The hinge rotation axis (mJointAxis).
-        Vector3 GetRotationAxis() const;
+        // ⭐ INLINED 2026-08-27 (detach-2 wave): DECLARE-ONLY until its first caller
+        // (PhysicalBodyPart::TestJointForBreaking's arm 4a) turned it into an LNK2019. There is no
+        // out-of-line X360 emission -- the console reads the member directly, `lvx128 v0, r3, r28`
+        // with r28 == 0x10 @0x8260C344, i.e. the inlined accessor over mJointAxis at spec+0x10.
+        // Same evidence pattern as GetMaxStress below.
+        Vector3 GetRotationAxis() const { return mJointAxis; }
 
         // BrnIKBodyPartSpec.h:106. The rest/default direction (mJointDefaultDirection).
         Vector3 GetDefaultDirection() const;
