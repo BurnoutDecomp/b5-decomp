@@ -73,8 +73,9 @@ namespace PhysicsSimulationIO
 //     CgsSceneManager::TriangleCacheManagerIO::InEventRemoveFromCache on the scene's tri-cache
 //     manager). Modelled as a free hook taking the scene interface + the part's tri-cache slot.
 //   * The detached-part notification emit at the tail of TestJointForBreaking @0x8260C0F8 (the asm
-//     builds a DetachedPartNotificationEvent and AddEventSafeAppend's it onto the sim OutputBuffer's
-//     notification queue). Modelled as a free hook taking the output buffer + the packed event blob.
+//     builds a DetachedPartNotificationEvent and AddEventSafe's it onto the deformation output
+//     interface's +0x3A0 notification queue). LANDED 2026-08-27 -- no longer a hook; the record is
+//     built at the two call sites out of its three named fields.
 //   * The "update external body" event emit at the tail of UpdateRW @0x825E7998 (the asm fetches the
 //     sim InputBuffer's InUpdateExternalBody queue -- `bl CgsPhysi`(InputBuffer) returning the channel
 //     -- and AddEvent's a packed {bodyId, transform, linearVel, angularVel} event onto it). Modelled
@@ -91,7 +92,8 @@ namespace CgsPhysics { namespace PhysicsSimulationIO { struct InputBuffer; struc
 // DeformableObject::CheckForDetachment (PS3 0x762570) both carry PhysicsModuleIO::OutputBuffer* in
 // that seat, and the X360 passes the register straight through all three frames. The old spelling
 // forked the type mid-chain, which is why BrnDeformableObject_Detach.cpp had to declare its OWN
-// free-function TestJointForBreaking/EmitDetachedPartNotification overloads to compile.
+// free-function TestJointForBreaking/EmitDetachedPartNotification overloads to compile. (The
+// EmitDetachedPartNotification half of that pair is gone entirely as of 2026-08-27.)
 // [[odr-forks-link-silently]] -- and one of those forked overloads had NO definition anywhere.
 namespace BrnPhysics { namespace PhysicsModuleIO { class OutputBuffer; } }
 namespace BrnPhysics
@@ -100,8 +102,11 @@ namespace Deformation
 {
     void RemoveTriangleCacheSlot(CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* lpSceneInput,
                                  u16 lu16TriangleCacheSlot);                                   // FLAG: provisional
-    void EmitDetachedPartNotification(BrnPhysics::PhysicsModuleIO::OutputBuffer* lpOutput,
-                                      const void* lpEventBlob);                                 // FLAG: provisional
+    // EmitDetachedPartNotification's DECLARATION IS RETIRED 2026-08-27 (detach-2 wave). It was
+    // FLAG-provisional and it was a fabricated API: an untyped `const void* lpEventBlob` standing in
+    // for a NAMED 32-byte record (Deformation::DetachedPartNotificationEvent, three named fields).
+    // Both console sites build that record inline and AddEventSafe it onto the deformation output
+    // interface's +0x3A0 queue; the two call sites now do the same. See either one's banner.
     void EmitUpdateExternalBodyEvent(CgsPhysics::PhysicsSimulationIO::InputBuffer* lpSimInput,
                                      const void* lpEventBlob);                                  // FLAG: provisional
 }

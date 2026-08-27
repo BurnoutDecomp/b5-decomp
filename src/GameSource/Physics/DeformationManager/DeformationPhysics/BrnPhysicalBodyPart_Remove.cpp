@@ -70,8 +70,33 @@ namespace Deformation
     // ⛔ "which is empty until a part detaches" -- PARTS DETACH NOW (2026-08-27): that walk has
     // live slots on any crash, so this gate is on the LIVE path and is what keeps a shed panel
     // out of the scene (it renders, but it has no scene presence and no collision).
-    // ⇒ PROMOTED IN PRIORITY. Reconstruct against the RemoveFromScene asm's add-side twins and
-    // DELETE this gate.
+    // ⇒ PROMOTED IN PRIORITY -- AND SCOPED 2026-08-27 (detach-2 wave), so the next attempt does
+    // not start by re-measuring it. It is @0x8260A938, 157 instructions, and it is NOT the mirror of
+    // RemoveFromScene: it builds a collision VOLUME first and then makes five separate calls.
+    //   0x8260A97C  a 20-byte record seeded with a descriptor pointer (unk_82FB7C30) and
+    //               `bl rw::collision::BoxVolume::Initialize` with v1 == mBoundingBoxHalfDimensions
+    //   0x8260A984..0x8260A9BC  copy the four mBBoxOrientation rows (this+0x120..0x150) into the
+    //               volume the call returned
+    //   0x8260A9F4  InSceneUpdateInterface::AddDynamicVolume(id32, volume, 4)
+    //   0x8260AA1C  InSceneUpdateInterface::AddEntity(mRigidBodyId's entity word, v1 = this+0x30,
+    //               f1 = flt_82098EF4, 4)
+    //   0x8260AA60  InSceneUpdateInterface::AddVolumeInstance(id64, id32, the four rows)
+    //   0x8260AB4C  InEventAddForCollision::AddEvent onto sceneInput + 0x71040
+    //   0x8260AB5C  SetVolumeInstanceCullingGroup(id64, 9)
+    //   0x8260AB78  GetSphereRadius() + 1.0 -> InEventAddToCache::AddEvent (cache slot
+    //               (handle & 0xFF) + 0x49 -- the SAME slot RemoveFromScene drops, above)
+    //   0x8260AB9C  mbAddedToScene = 1
+    // ⛔ THE REAL BLOCKER IS NOT ANY OF THOSE CALLS -- IT IS A TYPE. `rw::collision::BoxVolume`
+    // DOES NOT EXIST ANYWHERE IN THIS TREE: no header, no body, and no other producer of
+    // InEventAddDynamicVolume in the whole game side (only the queue's own AddEvent/Append
+    // instantiations). Its 20-byte seed + Initialize + the volume record all have to land first.
+    // ⛔⛔ AND LANDING IT ALONE BUYS NOTHING OBSERVABLE. `EmitUpdateTriangleCacheEvent`
+    // (BrnDetachedWheelManager.cpp:315) is ALSO a log-once gate, and it is the only emitter
+    // DetachedPartManager::UpdateTriangleCache has -- so a scene-added part would still publish no
+    // cached position, and the world triangles around it would never be fetched. Collision for a
+    // shed panel needs BOTH, plus whatever the contact bridge then wants. Do not half-land this and
+    // report "collision"; the panel would look identical and fall through the road exactly as it
+    // does today (measured: slot 0 reaches y = -752 and is still going).
     // =============================================================================================
     void PhysicalBodyPart::AddToScene(CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* /*lpSceneInput*/)
     {
