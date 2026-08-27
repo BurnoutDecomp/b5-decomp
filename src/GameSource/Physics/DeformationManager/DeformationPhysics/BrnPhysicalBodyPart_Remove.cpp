@@ -66,9 +66,12 @@ namespace Deformation
     // =============================================================================================
     // AddToScene -- ⚠️ LOG-ONCE GATE 2026-08-14 (walls leg 4). The INVERSE of RemoveFromScene
     // above (the four scene adds + the cache add) is NOT reconstructed yet; the only caller is
-    // the pool's AddPartsToScene walk, which is empty until a part detaches (0 physical parts on
-    // the junkyard path). Reconstruct against the RemoveFromScene asm's add-side twins and DELETE
-    // this gate.
+    // the pool's AddPartsToScene walk.
+    // ⛔ "which is empty until a part detaches" -- PARTS DETACH NOW (2026-08-27): that walk has
+    // live slots on any crash, so this gate is on the LIVE path and is what keeps a shed panel
+    // out of the scene (it renders, but it has no scene presence and no collision).
+    // ⇒ PROMOTED IN PRIORITY. Reconstruct against the RemoveFromScene asm's add-side twins and
+    // DELETE this gate.
     // =============================================================================================
     void PhysicalBodyPart::AddToScene(CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* /*lpSceneInput*/)
     {
