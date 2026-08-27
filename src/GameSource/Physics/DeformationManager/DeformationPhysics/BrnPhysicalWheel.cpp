@@ -2,6 +2,9 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // gpDebugPrint (walls leg 4 gates)
 
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_SceneUpdate.h"   // InSceneUpdateInterface::SetVolumeInstanceTransform (pulls in CgsSceneManager::EntityId)
+#include "vendor/renderware/collision/CylinderVolume.hpp"   // rw::collision::CylinderVolume (AddToScene's volume)
+#include "rw/rwcore_structs.h"                              // rw::Resource (the Initialize slot record)
+#include "rw/physics/rigidbody.h"                           // rw::physics::ACTIVE_BODY (AddForCollision's body state)
 
 // ============================================================================
 // BrnPhysics::Deformation::PhysicalWheel -- per-frame body for the lean detached-wheel
@@ -60,15 +63,66 @@ namespace BrnPhysics
 {
 namespace Deformation
 {
-    // ----- file-scope scratch (DWARF BrnPhysicalWheel.h:202, `extern char[96]`) ------------------
+    // ----- maCylinderInitialiseBuffer (DWARF BrnPhysicalWheel.h:202, `extern char[96]`) -----------
     //
-    // maCylinderInitialiseBuffer is the wheel's cylinder-initialisation scratch buffer. It is a
-    // file-scope STATIC (NOT an instance member -- the frozen header deliberately omits it from the
-    // layout) shared by the lifecycle/geometry methods (Construct / GetCylinder) authored elsewhere
-    // in this TU. It is declared here, in the .cpp data home, exactly as the sibling
-    // BrnPhysicalBodyPart.cpp keeps maBoxInitialiseBuffer. The two functions bodied below do not
-    // touch it.
-    static char maCylinderInitialiseBuffer[96];
+    // ⭐ RE-DESCRIBED 2026-08-27 (detached-part collision wave). The banner that stood here called
+    // this "the wheel's cylinder-initialisation scratch buffer ... shared by the lifecycle/geometry
+    // methods (Construct / GetCylinder)". It is not scratch and neither of those touches it: it is
+    // X360 0x82FB7C90, and it is the memory block PhysicalWheel::AddToScene @0x8260C540 -- its ONLY
+    // referrer in the entire export set -- placement-news one rw::collision::CylinderVolume into.
+    //
+    // SIZE 96, MEASURED: the X360 lays three of these volume-initialise statics end to end with an
+    // exact 96-byte stride (0x82FB7C30 the body-part box / 0x82FB7C90 THIS ONE / 0x82FB7CF0
+    // VehicleManager's box), and the CylinderVolume record's own static_asserts put its last member
+    // muFlags at +0x5C. See BrnPhysicalBodyPart_Remove.cpp's twin banner for the full three-way
+    // reading and for why the 128 that appears in this chain is the CONSUMER's over-read
+    // (AddDynamicVolume block-copies a fixed 128-byte volume image out of whatever pointer it is
+    // handed) and not the constructed object's size. Do NOT widen the array; the neighbour those
+    // extra 32 bytes land in is modelled explicitly instead.
+    //
+    // ⚠️ ALIGNMENT: `alignas(16)` matches the console's .data placement and does not change sizeof
+    // (96 is already a multiple of 16), so no offset, stride or layout anywhere moves.
+    namespace
+    {
+        struct CylinderInitialiseStorage
+        {
+            alignas(16) char maCylinderInitialiseBuffer[96];  // DWARF BrnPhysicalWheel.h:202
+            char maConsoleNeighbourTail[32];                  // NOT a source member -- see above
+        };
+        CylinderInitialiseStorage gCylinderInitialiseStorage = {};
+
+        // ---- AddToScene's literal inputs (X360-attested; the body-part twin's are identical
+        //      except for the cache-slot base and the entity radius) --------------------------------
+        const u8  KU8_WHEEL_VOLUME_TYPE_FLAG        = 4u;   // li r6, 4  @0x8260C5C0
+        const u32 KU_WHEEL_SCENE_ENTITY_TYPE_FLAG   = 4u;   // li r5, 4  @0x8260C64C
+        const s32 KI_CULLING_GROUP_DETACHED_WHEEL   = 9;    // li r8, 9  @0x8260C68C / li r5,9 @0x8260C75C
+        const f32 KF_WHEEL_CACHE_SPHERE_PADDING     = 1.0f; // flt_82001C98, byte-verified elsewhere
+        const u32 KU_WHEEL_TRIANGLE_CACHE_SLOT_BASE = 0x7Bu;// 123 -- the SAME base RemoveFromScene drops
+
+        // Initialize's fatness argument: `lfs f31, flt_82001CC0` @0x8260C568 -> `fmr f3, f31`.
+        // flt_82001CC0 is the byte-verified 0.0f this tree already carries in three other places.
+        const f32 KF_WHEEL_VOLUME_FATNESS = 0.0f;
+
+        // The two frame rows AddToScene overwrites AFTER Initialize has stamped the identity basis
+        // (0x8260C5A4..0x8260C5FC). Rows 1 and 3 keep Initialize's own values (+Y basis, zero
+        // centre); only rows 0 and 2 are replaced, which swings the cylinder's local frame a quarter
+        // turn about Y so its axis lies along the wheel's spin axis.
+        //   maFrame[0] = { 0, 0, -1, 0 }   (flt_820037C8 == -1.0f into lane z; lanes x/y/w = 0)
+        //   maFrame[2] = { 1, 0,  0, 0 }   (flt_82001C98 ==  1.0f into lane x; lanes y/z/w = 0)
+        const f32 KF_WHEEL_FRAME_MINUS_ONE = -1.0f;   // flt_820037C8
+        const f32 KF_WHEEL_FRAME_PLUS_ONE  =  1.0f;   // flt_82001C98
+
+        // The VOLUME key both PhysicalWheel::AddToScene (@0x8260C604..0x8260C62C) and
+        // RemoveFromScene (@0x825E8274..0x825E82A0) build from the wheel handle's entity word --
+        // instruction for instruction the same repack the body-part pair uses. Factored so the add
+        // and the remove can never post two different volume keys.
+        u32 PackWheelVolumeWord(u32 luEntityWord)
+        {
+            return (((luEntityWord >> 10) & 0xFFu) << 8)
+                 | ((luEntityWord >> 24) << 16)
+                 | (static_cast<u32>(static_cast<u16>(static_cast<s16>(static_cast<s8>(luEntityWord & 0xFFu)))));
+        }
+    }
 
     // ----- OutUpdateRigidBody byte offsets the asm indexes (event type un-homed) -----------------
     namespace
@@ -183,32 +237,139 @@ namespace Deformation
         }
     }
 
-    void PhysicalWheel::RemoveFromScene(CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* /*lpSceneInput*/)
+    // =============================================================================================
+    // RemoveFromScene @ 0x825E8258 (43 instructions) -- ⭐ LANDED 2026-08-27, replacing the
+    // log-once gate. The exact twin of PhysicalBodyPart::RemoveFromScene @0x825E7818, with the
+    // wheel's own +0x7B cache-slot base. Every id comes from the ONE `ld r29, 0x70(r30)`:
+    //   RemoveForCollision  (r4 = r29, the WHOLE 64-bit handle)
+    //   RemoveVolumeInstance(r4 = r29, the WHOLE 64-bit handle)
+    //   RemoveVolume        (r4 = r27, the repacked volume word)
+    //   RemoveEntity        (r4 = r28, the `srdi`-extracted entity word; r5 = 0)
+    //   mRemoveFromCacheQueue.AddEvent{ slot = (handle & 0xFF) + 0x7B }   (scene + 0xC77E0)
+    //   mbAddedToScene = 0
+    // ⚠️ CALL ORDER DIFFERS from the body part's (the wheel removes the entity LAST, the part
+    // FIRST) -- transcribed as the asm has it, not made uniform.
+    // =============================================================================================
+    void PhysicalWheel::RemoveFromScene(CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* lpSceneInput)
     {
-        static bool sbLoggedWRFS = false;
-        if ( !sbLoggedWRFS )
+        if ( lpSceneInput == 0 )
         {
-            sbLoggedWRFS = true;
-            if ( CgsDev::Message::gxMessageFilterFlags & 1 )
-                *CgsDev::Log::gpDebugPrint << "conductor gate: PhysicalWheel::RemoveFromScene reached but not "
-                                              "reconstructed [FLAG PC boot gate]\n";
+            return;   // PC-safety guard (the console has no null test here)
         }
-        
+
+        const CgsSceneManager::VolumeInstanceId lVolumeInstanceId = GetVolumeInstanceId();
+        const u64 luHandle     = lVolumeInstanceId.muId;
+        const u32 luEntityWord = static_cast<u32>(luHandle >> 32);
+        const CgsSceneManager::VolumeId lVolumeId(
+            static_cast<u64>(PackWheelVolumeWord(luEntityWord)));
+
+        lpSceneInput->RemoveForCollision(lVolumeInstanceId);                       // mr r4, r29
+        lpSceneInput->RemoveVolumeInstance(lVolumeInstanceId);                     // mr r4, r29
+        lpSceneInput->RemoveVolume(lVolumeId);                                     // mr r4, r27
+        lpSceneInput->RemoveEntity(CgsSceneManager::EntityId(luEntityWord), 0u);   // mr r4, r28 ; li r5,0
+
+        CgsSceneManager::TriangleCacheManagerIO::InEventRemoveFromCache lRemoveEvent;
+        lRemoveEvent.miCacheSlot =
+            static_cast<s32>((luHandle & 0xFFull) + KU_WHEEL_TRIANGLE_CACHE_SLOT_BASE);
+        lpSceneInput->mRemoveFromCacheQueue.AddEvent(lRemoveEvent);
+
+        mbAddedToScene = false;   // stb 0 -> wheel+0x81
     }
 
-
-    // LOG-ONCE GATE 2026-08-14 (walls leg 4): the wheel's scene ADD (the RemoveFromScene twin's
-    // inverse) is not reconstructed; dead today (0 detached wheels). Reconstruct and DELETE.
-    void PhysicalWheel::AddToScene(CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* /*lpSceneInput*/)
+    // =============================================================================================
+    // AddToScene @ 0x8260C540 (157 instructions) -- THE DETACHED WHEEL'S SCENE REGISTRATION.
+    // ⭐ LANDED 2026-08-27 (detached-part collision wave), replacing the log-once gate. Structurally
+    // identical to the body-part twin @0x8260A938 -- same six posts, same order, same culling group
+    // 9, same ACTIVE_BODY / E_DO_NOT_ADD_TO_CACHE_MANAGER pair, same zero collision padding -- with
+    // four wheel-specific differences, all measured:
+    //
+    //   * the volume is a CYLINDER, not a box:
+    //       CylinderVolume::Initialize(slot, f1 = mfRadius (+0x7C), f2 = mfHalfHeight (+0x78),
+    //                                  f3 = 0.0f)                                    @0x8260C59C
+    //   * only frame rows 0 and 2 are overwritten afterwards, to { 0,0,-1,0 } and { 1,0,0,0 }
+    //     (rows 1 and 3 keep Initialize's +Y basis and zero centre)                  @0x8260C5EC..FC
+    //   * AddEntity's bounding radius is mfHalfHeight + mfRadius (`fadds f1, f0, f13`, NOT a
+    //     rodata constant -- the body part uses the flt_82098EF4 literal instead)    @0x8260C650
+    //   * the triangle-cache slot base is 0x7B (123), and the cache sphere radius is the wheel's
+    //     RAW mfRadius + 1.0 (the body part uses GetSphereRadius())                  @0x8260C77C
+    //
+    // The volume instance and the scene entity are both keyed off the SAME `ld r11, 0x70(r31)`
+    // wheel handle, and the AddVolumeInstance transform argument is `mr r6, r31` -- the wheel
+    // pointer itself, i.e. &mRenderTransform, which is the class's first member.
+    //
+    // PC-SAFETY GUARD (not console behaviour, stated so): the early return on a null scene
+    // interface mirrors the sibling body-part AddToScene and BrnActiveRaceCar_wQ5_01.cpp.
+    // =============================================================================================
+    void PhysicalWheel::AddToScene(CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* lpSceneInput)
     {
-        static bool sbLoggedWATS = false;
-        if ( !sbLoggedWATS )
+        if ( lpSceneInput == 0 )
         {
-            sbLoggedWATS = true;
-            if ( CgsDev::Message::gxMessageFilterFlags & 1 )
-                *CgsDev::Log::gpDebugPrint << "conductor gate: PhysicalWheel::AddToScene reached "
-                                              "but not reconstructed [FLAG PC boot gate]\n";
+            return;
         }
+
+        // ---- 1. build the cylinder ---------------------------------------------------------------
+        // The console stages a 5-word rw::Resource on the stack, zeroes every word, and puts the
+        // static buffer in word 0; Initialize reads only word 0 (`lwz r11, 0(r3)`), so the X360's
+        // five-entry BaseResources vs the host's four is inert (the <4>-vs-<5> drift AGENTS.md
+        // records). CylinderVolume::Initialize's own DWARF/asm signature takes that slot directly.
+        rw::Resource lVolumeResource = {};
+        lVolumeResource.m_baseResources[0] = gCylinderInitialiseStorage.maCylinderInitialiseBuffer;
+
+        rw::collision::CylinderVolume* lpVolume = rw::collision::CylinderVolume::Initialize(
+            reinterpret_cast<rw::collision::CylinderVolume**>(&lVolumeResource.m_baseResources[0]),
+            mfRadius, mfHalfHeight, KF_WHEEL_VOLUME_FATNESS);
+        if ( lpVolume == 0 )
+        {
+            return;   // Initialize's own empty-slot arm (`lwz r11,0(r3) ; beq -> return 0`)
+        }
+
+        // Rows 0 and 2 only (rows 1 and 3 keep what Initialize stamped).
+        lpVolume->maFrame[0].x = 0.0f;
+        lpVolume->maFrame[0].y = 0.0f;
+        lpVolume->maFrame[0].z = KF_WHEEL_FRAME_MINUS_ONE;
+        lpVolume->maFrame[0].w = 0.0f;
+
+        lpVolume->maFrame[2].x = KF_WHEEL_FRAME_PLUS_ONE;
+        lpVolume->maFrame[2].y = 0.0f;
+        lpVolume->maFrame[2].z = 0.0f;
+        lpVolume->maFrame[2].w = 0.0f;
+
+        // ---- 2. the five scene posts -------------------------------------------------------------
+        const CgsSceneManager::VolumeInstanceId lVolumeInstanceId = GetVolumeInstanceId();
+        const u64 luHandle     = lVolumeInstanceId.muId;
+        const u32 luEntityWord = static_cast<u32>(luHandle >> 32);
+        const CgsSceneManager::VolumeId lVolumeId(
+            static_cast<u64>(PackWheelVolumeWord(luEntityWord)));
+
+        lpSceneInput->AddDynamicVolume(lVolumeId, lpVolume, KU8_WHEEL_VOLUME_TYPE_FLAG);
+
+        lpSceneInput->AddEntity(CgsSceneManager::EntityId(luEntityWord),
+                                KU_WHEEL_SCENE_ENTITY_TYPE_FLAG,
+                                mRenderTransform.wAxis,          // lvx128 v1, r31, 0x30
+                                mfHalfHeight + mfRadius);        // fadds f1, f0, f13
+
+        lpSceneInput->AddVolumeInstance(lVolumeInstanceId, lVolumeId, mRenderTransform);  // mr r6, r31
+
+        lpSceneInput->AddForCollision(
+            lVolumeInstanceId,
+            static_cast<CgsSceneManager::SceneManagerIO::InEventAddForCollision::CullingGroup>(
+                KI_CULLING_GROUP_DETACHED_WHEEL),                                // li r8, 9
+            rw::physics::ACTIVE_BODY,                                            // li r8, 4
+            Vector3{ 0.0f, 0.0f, 0.0f, 0.0f },                                   // the zeroed vmx lane
+            CgsSceneManager::SceneManagerIO::E_DO_NOT_ADD_TO_CACHE_MANAGER);     // li r8, 2
+
+        lpSceneInput->SetVolumeInstanceCullingGroup(lVolumeInstanceId,
+                                                    KI_CULLING_GROUP_DETACHED_WHEEL);
+
+        // ---- 3. claim the triangle-cache slot ----------------------------------------------------
+        // MEASURED: like the body-part twin, this post emits NO "queue too small" tripwire.
+        CgsSceneManager::TriangleCacheManagerIO::InEventAddToCache lAddEvent;
+        lAddEvent.miCacheSlot =
+            static_cast<s32>((luHandle & 0xFFull) + KU_WHEEL_TRIANGLE_CACHE_SLOT_BASE);
+        lAddEvent.mfCacheSphereRadius = mfRadius + KF_WHEEL_CACHE_SPHERE_PADDING;
+        lpSceneInput->mAddToCacheQueue.AddEvent(lAddEvent);
+
+        mbAddedToScene = true;   // stb 1 -> wheel+0x81
     }
 
 }

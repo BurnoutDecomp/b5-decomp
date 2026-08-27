@@ -1,5 +1,8 @@
 #include "vendor/renderware/collision/CylinderVolume.hpp"
 
+#include "vendor/renderware/collision/AABBox.hpp"       // AABBox + math::vpu::Vector3 -- moved OUT of
+                                                        //   CylinderVolume.hpp on 2026-08-27 so game
+                                                        //   TUs can include the header; see its banner
 #include "vendor/renderware/collision/GPInstance.hpp"   // GPInstance + g_aGPVolumeMethods
 
 #include <cmath>     // sqrt, fabs

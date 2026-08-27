@@ -105,12 +105,14 @@ namespace BrnPhysics
 {
 namespace Deformation
 {
-    // ----- file-scope static scratch (DWARF maBoxInitialiseBuffer, BrnPhysicalBodyPart.h:297) -----
-    // A 96-byte box-initialisation scratch buffer. It is a file-scope STATIC (NOT an instance
-    // member -- it is intentionally absent from the frozen layout) used as transient working space
-    // for the oriented-box build. Carried here as honest zeros; its concrete seed contents are not
-    // in the exports and are NOT fabricated.
-    static char maBoxInitialiseBuffer[96] = {};
+    // ----- maBoxInitialiseBuffer MOVED OUT 2026-08-27 (detached-part collision wave) --------------
+    // The DWARF static (BrnPhysicalBodyPart.h:297, `extern char[96]`, X360 0x82FB7C30) used to sit
+    // here, zero-filled and DEAD, with a banner calling it "transient working space ... its concrete
+    // seed contents are not in the exports". Both halves of that were wrong: it is not scratch and
+    // it has no seed contents. It is the memory block `rw::collision::BoxVolume` is placement-new'd
+    // into by PhysicalBodyPart::AddToScene @0x8260A938 -- its ONLY user in the whole X360 export set
+    // -- so it now lives in AddToScene's TU, BrnPhysicalBodyPart_Remove.cpp, where its size, its
+    // alignment and the consumer's 128-byte over-read are all documented and measured.
 
     // ----- part rigid-body tuning (DWARF BrnPhysicalBodyPart.cpp:28-33) ---------------------------
     // ⭐⭐⭐ ALL SIX RECOVERED 2026-08-27 (detach-2 wave). The banner that stood here said they were

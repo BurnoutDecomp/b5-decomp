@@ -4,7 +4,11 @@
 #include "GameShared/GameClasses/Physics/CgsPhysicsSimulationModuleIO.h"   // the REAL sim OutputBuffer (walls leg 4: local model retired)
 #include "GameShared/GameClasses/Physics/CgsPhysicsSimulationIO_Events.h" // CgsPhysics::PhysicsSimulationIO::Event (OutUpdateRigidBody base)
 #include "GameShared/GameClasses/Core/CgsAssert.h"                 // CGS_ASSERT
+#include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_SceneUpdate.h"   // InSceneUpdateInterface::UpdateCachedObjectPosition (the real tri-cache producer)
 #include "rw/math/vpu/vector3_operation.h"                         // rw::math::vpu::MagnitudeSquared (transform validation tripwires)
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // gpDebugPrint -- [part-rest] DIAG only
+
+#include <cstdlib>   // getenv/atoi -- [part-rest] DIAG only, host-side
 
 // ============================================================================
 // GameSource/Physics/DeformationManager/DeformationPhysics/BrnDetachedPartManager.cpp
@@ -73,11 +77,10 @@ namespace BrnPhysics
 {
 namespace Deformation
 {
-    // The shared swept-cache emission hook (declared FLAG-provisional in BrnDetachedWheelManager.h;
-    // the walls-leg-4 gate body lives in that TU).
-    void EmitUpdateTriangleCacheEvent(CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* lpSceneUpdateInterface,
-                                      u64 lu64VolumeInstanceId, const Vector3& lvSweptPosition,
-                                      f32 lfSphereRadius);
+    // ⛔⛔ The local re-declaration of `EmitUpdateTriangleCacheEvent` that stood here is GONE
+    // (2026-08-27, detached-part collision wave). It was a FABRICATED API -- see the retirement
+    // banner in BrnDetachedWheelManager.h for the three-way confirmation. UpdateTriangleCache below
+    // now calls the real producer, InSceneUpdateInterface::UpdateCachedObjectPosition.
 
     // X360 deformation owner tags (see BrnBurnoutBodyPartID.h). The post-physics pass forwards
     // a rigid-body update event to the part pool ONLY when the updated body's EntityId owner is
@@ -96,6 +99,22 @@ namespace Deformation
     // Transform-validation epsilon (asm: v60[0] = 0.0099999998f, the vcmpgtfp threshold the two
     // MakePartPhysical orthonormal tripwires compare the squared deviation against).
     static const f32 KF_ORTHONORMAL_EPSILON = 0.0099999998f;
+
+    // [DIAG] NOT IN THE X360 BINARY. The [part-rest] witness' latch -- the same BRN_DEFORM_TRACE
+    // env var BrnDeformableObject_Detach.cpp / BrnPhysicalBodyPart.cpp already gate their detach
+    // probes on, read as a sampling PERIOD in frames. DELETE-WHEN the detached-part collision
+    // question is closed and banked.
+    static s32 PartRestProbePeriod()
+    {
+        static s32 siPeriod = -1;
+        if ( siPeriod < 0 )
+        {
+            const char* lpcEnv = getenv("BRN_DEFORM_TRACE");
+            const s32 liValue = (lpcEnv != 0) ? atoi(lpcEnv) : 0;
+            siPeriod = (liValue > 0 && CgsDev::Log::gpDebugPrint != 0) ? liValue : 0;
+        }
+        return siPeriod;
+    }
 
     // ------------------------------------------------------------------------------------------
     // MakePartPhysical (X360 "MakePar") @ 0x82626E30
@@ -309,57 +328,137 @@ namespace Deformation
     }
 
     // =============================================================================================
-    // UpdateTriangleCache @0x8260E1F8 (113) -- ⭐ 2026-08-14 (walls leg 4). The part-pool twin of
-    // DetachedWheelManager::UpdateTriangleCache (same swept-sphere event emission, same 1/60 +
-    // 0.1-padding immediates): assert the scene interface (:161); for every used pool part that
-    // IS in the scene (+485) and NOT frozen (+484 clear on the X360 read), emit an
-    // update-cached-position event at the velocity-swept render position with the padded radius.
-    // ⛔ "Dead-at-runtime today (0 physical parts)" -- NO LONGER TRUE as of 2026-08-27: parts DO
-    // detach and the pool has live slots. The emission hook is still the wheel TU's shared gate,
-    // and a detached part is still never scene-added (PhysicalBodyPart::AddToScene is a gate), so
-    // this walk finds parts but has nothing to publish for them yet.
+    // UpdateTriangleCache @0x8260E1F8 (113) -- the part-pool twin of
+    // DetachedWheelManager::UpdateTriangleCache: assert the scene interface (:161); for every used
+    // pool part that IS in the scene and is NOT joined to the vehicle, tell the triangle-cache
+    // manager where that part's cache sphere now is.
+    //
+    // ⭐⭐ THREE CORRECTIONS 2026-08-27 (detached-part collision wave). Every one of them was
+    // invisible to every gate in this project, because all three compile, link and produce
+    // plausible numbers.
+    //
+    //  (1) THE FILTER TESTED THE WRONG FLAG. The banner used to read "IS in the scene (+485) and
+    //      NOT frozen (+484 clear on the X360 read)" and the code called `lpPart->IsFrozen()`.
+    //      +484 is NOT mbFrozen. The frozen byte is +486 (0x1E6); +484 (0x1E4) is
+    //      mbJoinedToVehicle, exactly as this class' own frozen header lays it out
+    //      (+484 joined / +485 addedToScene / +486 frozen). The asm reads BOTH bytes, in this
+    //      order: `lbz r11, 0x1E5(r3) ; beq skip` then `lbz r11, 0x1E4(r3) ; bne skip`. So the
+    //      predicate is `IsAddedToScene() && !IsJoinedToVehicle()`, which is the one that makes
+    //      sense: a part still hinged to the car is moved by the joint, not by the sim, and has no
+    //      independent cache sphere to reposition. A frozen (settled) part still does.
+    //      [[diagnostics-that-lie]] -- the comment named the wrong member and the code followed it.
+    //
+    //  (2) THE POSITION IS NOT SWEPT. Identical to the wheel twin's correction (1), same register
+    //      trace: `lvx128 v11, r3, 0x30 ; vrlimi128 v11, v12, 1, 0 ; stvx128 v11, r1+var_A0`
+    //      @0x8260E2C0..0x8260E36C stores the rigid-body translation UNMODIFIED, and the swept
+    //      distance only ever reaches the RADIUS (`fadds f0, f0, f30` @0x8260E354, then
+    //      `fadds f0, f1, f0` @0x8260E37C onto GetSphereRadius()'s result). The displaced centre
+    //      was fabricated; it put the cached triangle region up to one frame of travel AHEAD of
+    //      the part, i.e. not under it.
+    //
+    //  (3) THE LOOP BOUND IS THE POOL'S LIVE COUNT, NOT 50. `lbz r11, 0x60EC(r25)` @0x8260E23C and
+    //      again @0x8260E39C -- that byte is PhysicalBodyPartPool::mu8NumDetachedParts (the same
+    //      +0x60EC the committed BrnPhysicalBodyPartPool_Remove.cpp:35 already names), and the walk
+    //      is `for (i = 0; i < count; ++i)` with an early-out when the count is zero. The 50 was
+    //      the pool's CAPACITY. Transcribed as the console has it: the guard is still
+    //      IsPartIndexUsed(i) per slot.
+    //
+    // The emission is the real producer now (InSceneUpdateInterface::UpdateCachedObjectPosition ->
+    // mUpdateCachedPositionQueue), not the fabricated EmitUpdateTriangleCacheEvent hook. Its first
+    // argument is an s32 CACHE SLOT: `ld r10, 0x1D0(r3) ; clrlwi r10,r10,24 ; addi r10,r10,0x49 ;
+    // clrlwi r11,r10,16` -- (handle & 0xFF) + 73, the SAME slot PhysicalBodyPart::AddToScene claims
+    // and RemoveFromScene drops.
     // =============================================================================================
     void DetachedPartManager::UpdateTriangleCache(
         CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* lpSceneUpdateInterface)
     {
         CGS_ASSERT(lpSceneUpdateInterface != nullptr, "lpSceneUpdateInterface != NULL");   // :161
-
-        const f32 KF_FRAME_TIMESTEP        = 0.016666668f;   // asm immediate (1/60)
-        const f32 KF_TRIANGLE_CACHE_PADDING = 0.1f;          // asm immediate
-
-        for ( u8 lu8Part = 0; lu8Part < 50u; ++lu8Part )
+        if ( lpSceneUpdateInterface == nullptr )
         {
-            if ( !mPartPool.IsPartIndexUsed(lu8Part) )
+            return;   // PC-safety guard (the console asserts and dereferences anyway)
+        }
+
+        // `lfs f30, flt_82004014` @0x8260E264 (0.1f, byte-verified) and
+        // `lfs f31, flt_82095EE0` @0x8260E26C (1/60) -- named rodata, not bare immediates.
+        const f32 KF_FRAME_TIMESTEP         = 0.016666668f;
+        const f32 KF_TRIANGLE_CACHE_PADDING = 0.1f;
+        // `addi r10, r10, 0x49` -- the body part's cache-slot base (the wheel's is 123).
+        const u32 KU_PART_TRIANGLE_CACHE_SLOT_BASE = 0x49u;   // 73
+
+        // -----------------------------------------------------------------------------------------
+        // [part-rest] NOT IN THE X360 BINARY -- a host-side witness, opt-in on the existing
+        // BRN_DEFORM_TRACE latch (value = a sampling PERIOD in frames). It walks the pool's whole
+        // CAPACITY, not the console's live-count bound, and prints every used slot REGARDLESS of the
+        // scene/joined filter below, so a run made before AddToScene existed and a run made after it
+        // are directly comparable. Prints world Y and vertical velocity: a part that is colliding
+        // with the road settles to a constant Y with vy -> 0; a part that is passing through it
+        // shows Y falling without bound. DELETE-WHEN the detached-part collision question is banked.
+        // -----------------------------------------------------------------------------------------
+        if ( PartRestProbePeriod() > 0 )
+        {
+            static u32 sluRestFrames = 0;
+            ++sluRestFrames;
+            if ( (sluRestFrames % static_cast<u32>(PartRestProbePeriod())) == 0u )
+            {
+                for ( s32 liProbe = 0; liProbe < 50; ++liProbe )
+                {
+                    if ( !mPartPool.IsPartIndexUsed(liProbe) )
+                    {
+                        continue;
+                    }
+                    const PhysicalBodyPart* lpProbePart = mPartPool.GetPart(static_cast<s16>(liProbe));
+                    const Vector3 lvProbePos = lpProbePart->GetRigidBodyTransform().wAxis;
+                    const Vector3 lvProbeVel = lpProbePart->GetLinearVelocity();
+                    *CgsDev::Log::gpDebugPrint
+                        << "[part-rest] f " << static_cast<s32>(sluRestFrames)
+                        << " slot " << liProbe
+                        << " inScene " << (lpProbePart->IsAddedToScene() ? 1 : 0)
+                        << " joined "  << (lpProbePart->IsJoinedToVehicle() ? 1 : 0)
+                        << " frozen "  << (lpProbePart->IsFrozen() ? 1 : 0)
+                        << " y " << lvProbePos.y
+                        << " vy " << lvProbeVel.y
+                        << " r " << lpProbePart->GetSphereRadius()
+                        << "\n";
+                }
+            }
+        }
+
+        const s32 liNumDetachedParts = static_cast<s32>(mPartPool.GetNumDetachedParts());
+        for ( s32 liPart = 0; liPart < liNumDetachedParts; ++liPart )
+        {
+            if ( !mPartPool.IsPartIndexUsed(liPart) )
             {
                 continue;
             }
-            const PhysicalBodyPart* lpPart = mPartPool.GetPart(static_cast<s16>(lu8Part));
-            if ( !lpPart->IsAddedToScene() || lpPart->IsFrozen() )
+            const PhysicalBodyPart* lpPart = mPartPool.GetPart(static_cast<s16>(liPart));
+
+            // lbz +0x1E5 (mbAddedToScene) then lbz +0x1E4 (mbJoinedToVehicle) -- see correction (1).
+            if ( !lpPart->IsAddedToScene() || lpPart->IsJoinedToVehicle() )
             {
                 continue;
             }
 
+            // The swept distance feeds the RADIUS only -- see correction (2).
             const Vector3 lvVelocity = lpPart->GetLinearVelocity();
             const f32 lfSpeed = std::sqrt(lvVelocity.x * lvVelocity.x
                                         + lvVelocity.y * lvVelocity.y
                                         + lvVelocity.z * lvVelocity.z);
             const f32 lfSweptDistance = lfSpeed * KF_FRAME_TIMESTEP;
 
-            Vector3 lvSweptPosition = lpPart->GetRigidBodyTransform().wAxis;
-            if ( lfSpeed != 0.0f )
-            {
-                const f32 lfInvSpeed = 1.0f / lfSpeed;
-                lvSweptPosition.x += lvVelocity.x * lfInvSpeed * lfSweptDistance;
-                lvSweptPosition.y += lvVelocity.y * lfInvSpeed * lfSweptDistance;
-                lvSweptPosition.z += lvVelocity.z * lfInvSpeed * lfSweptDistance;
-            }
+            // The sphere is centred on the part's own rigid-body translation, w lane cleared
+            // (`vrlimi128 v11, v12, 1, 0`) because the event packs the radius into that lane.
+            Vector3 lvPosition = lpPart->GetRigidBodyTransform().wAxis;
+            lvPosition.w = 0.0f;
 
             const f32 lfSphereRadius =
                 lpPart->GetSphereRadius() + KF_TRIANGLE_CACHE_PADDING + lfSweptDistance;
 
-            EmitUpdateTriangleCacheEvent(lpSceneUpdateInterface,
-                                         lpPart->GetContactVolumeInstanceId().muId,
-                                         lvSweptPosition, lfSphereRadius);
+            const s32 liCacheSlot = static_cast<s32>(
+                (lpPart->GetContactVolumeInstanceId().muId & 0xFFull)
+                + KU_PART_TRIANGLE_CACHE_SLOT_BASE);
+
+            lpSceneUpdateInterface->UpdateCachedObjectPosition(liCacheSlot, lvPosition,
+                                                               lfSphereRadius);
         }
     }
 
