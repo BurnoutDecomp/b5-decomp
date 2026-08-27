@@ -215,8 +215,8 @@ void Profile::Construct()
         maStuntElements[liIndex].Clear();
 
     muMedalCountFromTheStart = 0;
-    mbGoldCarsUnlocked   = false;
-    mbSilverCarsUnlocked = false;
+    mbSilverCarsUnlocked = false;   // +42516
+    mbGoldCarsUnlocked   = false;   // +42517
 
     mJunkYardsDriveThruSet.Clear();
     mBodyShopsDriveThruSet.Clear();
