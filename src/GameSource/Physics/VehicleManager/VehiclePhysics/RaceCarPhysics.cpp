@@ -419,6 +419,24 @@ namespace Vehicle
     // latches -- because "did the P6 bounce chain execute" is a question about
     // mbJustBounced / muBounceChainCount, not about whether showtime was entered.
     // Opt-in via BRN_SHOWTIME_WATCH so a default run is untouched.
+    //
+    // ⭐⭐⭐ HOW TO READ THE LINE IT PRINTS, and what its FIRST measurement already said.
+    // On 2026-08-27 a real showtime run produced 164 of these. The car entered showtime, took the
+    // launch impulse, flew a genuine arc (velY +5.2 -> 0.1 -> -5.1 with hasAir going 1 -> 0) and
+    // tumbled (angMag to 5.6). And across every one of those lines:
+    //     justBounced=0  bouncedThisFrame=0  chain=0  boosting=0  usingAftertouch=0
+    //     pushT=0.400000
+    // ⚠️ `pushT` IS THE TELL, AND IT IS THE ONE FIELD THAT CANNOT LIE HERE. mfTimeUntilPush is
+    // decremented by the timestep on exactly ONE line in the whole tree -- UpdateShowtimePhysics,
+    // ~:1228 below -- and SetPlayerVehicleInShowtime had just seeded it to 0.4. A timer that is
+    // seeded and then never ticks proves its owning body never ran, which is a far stronger claim
+    // than "the bounce flags are zero" (those could be zero because nothing hit anything).
+    // The gate is `VehiclePhysics::UpdateCrashing`'s `if (lbPlayerAftertouchForceAdditive)` --
+    // console-faithful, asm 0x82638E30 `beq` -- fed by VehicleManager::mbAftertouchIsForceAdditive,
+    // whose only writer is game action 42, which nothing in the tree posts. The full five-link
+    // diagnosis is written out at that arm in BrnPhysicsModuleGameActions.cpp.
+    // ⇒ ENTERING showtime and RUNNING showtime are two different milestones. This witness is what
+    // keeps the first from being reported as the second.
     // =======================================================================================
     void RaceCarPhysics::Update(VecFloat lvfSimTimeStep, VecFloat lvfRealTimeStep,
                                 const rw::math::vpu::Matrix44Affine* lpCameraMatrix,

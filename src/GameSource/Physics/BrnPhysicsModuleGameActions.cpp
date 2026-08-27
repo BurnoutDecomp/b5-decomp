@@ -422,6 +422,47 @@ namespace BrnPhysics
                 // 42 -- asm 0x825A76A0. See StartImpactTime's banner: the float in f1 and the bool
                 // in r5 are BOTH arguments, and Hex-Rays shows one.
                 // -------------------------------------------------------------------------------
+                // ⭐⭐⭐ AND THIS ARM IS THE WALL THE BOUNCE CHAIN IS BEHIND. MEASURED 2026-08-27,
+                // in the first run that actually entered showtime.
+                //
+                // `StartImpactTime` writes TWO VehicleManager bytes: mbImpactTime (+172304) and
+                // mbAftertouchIsForceAdditive (+172314). The second one gates the ENTIRE showtime
+                // physics dispatch, and the gate is the console's own, not ours:
+                //     VehiclePhysics::UpdateCrashing @0x82638810, asm 0x82638E30:
+                //         clrlwi r11, r24, 24 ; cmplwi cr6, r11, 0 ; beq cr6, loc_82638E7C
+                //     -- r24 is the `aftertouch additive` argument, and the branch SKIPS
+                //     `UpdateAftertouch` @0x8262EBE8 entirely. UpdateShowtimePhysics @0x825FFBD8
+                //     (which owns mfTimeUntilPush, the bounce sensors and the whole P6 chain) is
+                //     called ONLY from UpdateAftertouch's tail.
+                // The feed is BrnVehicleManager_UpdateVehiclePhysics.cpp:635 --
+                // `mbAftertouchIsForceAdditive && (car == player)` -- and the ONLY writer of that
+                // member is this arm.
+                //
+                // ⛔ NOTHING IN THE TREE POSTS GAME ACTION 42. Three independent checks agree:
+                //   * no [s3-action] "FIRST arrival of game action id 42" line has ever printed;
+                //   * `E_ACTION_IMPACT_TIME_START` is not even an ENUMERATOR in BrnGameActions.h
+                //     (only its partner E_ACTION_IMPACT_TIME_END == 43 is);
+                //   * the pad feed for it, `ControllerInput::mbImpactTimeDown` (the right bumper's
+                //     held bit), is WRITTEN EVERY FRAME at BrnGameStateModuleIO.cpp:90 and has NO
+                //     READER ANYWHERE IN THE TREE.
+                // ⇒ mbAftertouchIsForceAdditive is false for the whole session, so
+                // UpdateAftertouch never runs, so UpdateShowtimePhysics never runs, so the P6
+                // bounce chain -- aim direction, the push timer, maBounceSensors[20], the
+                // aftertouch channels -- has still never executed.
+                //
+                // ⭐ AND THE MEASUREMENT NAMES THE LINK. Over 164 [showtime-watch] lines of a real
+                // showtime run the car launched, flew (velY +5.2 -> 0.1 -> -5.1, hasAir 1 -> 0),
+                // tumbled (angMag to 5.6) and settled -- while `pushT=0.400000` NEVER MOVED.
+                // mfTimeUntilPush is decremented by the timestep on ONE line, inside
+                // UpdateShowtimePhysics (RaceCarPhysics.cpp:1228). A launch that seeds the timer
+                // with a body that never ticks it is exactly this gate, and nothing else.
+                // [[a-condition-s-truth-over-the-events-that-arrive]] -- entering showtime and
+                // RUNNING showtime are two different questions.
+                //
+                // THIS ARM IS CORRECT AND COMPLETE. What is missing is upstream: the producer of
+                // action 42. DO NOT "fix" the bounce by defaulting mbAftertouchIsForceAdditive to
+                // true -- that is inventing an arm the console does not have
+                // [[invented-arms-and-the-c4715-ratchet]]. Find action 42's producer.
                 case KI_ACTION_START_IMPACT_TIME:
                 {
                     const f32 lfDuration =
