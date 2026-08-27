@@ -1709,9 +1709,69 @@ EActiveRaceCarIndex RaceCarEntityModule::AttachActiveRaceCar(
     // so every leg that early-outs on it (PostSceneUpdate / PostPhysicsUpdate / wrapping /
     // SetupCarColour) stays exactly as it was. DELETE-WHEN action 23 is posted on the freeburn
     // entry path (the ModeManager PrepareForMode caller -- stuntrace campaign F2).
+    //
+    // ⭐⭐⭐ [engine wave 2026-08-28] THE COST OF THAT MISSING BYTE IS NOW MEASURED, AND IT IS
+    // BIGGER THAN THE FLAG ABOVE SAYS: ON A RETURNING-PROFILE BOOT THE PLAYER CANNOT DRIVE AT ALL.
+    // The stand-in below guesses "we are in game mode" from `!mbInCarSelectScreen`. On a boot that
+    // finds a Profile.sav that guess is WRONG for the whole run, and the guess failing is the whole
+    // defect -- not the harness, and not a missing engine-start call.
+    //
+    // THE CHAIN, each rung measured on this build (run scratch/flow_run/eng_b2_probe, returning
+    // profile, throttle held 74 s), not reasoned:
+    //   1. GameStateModule::PreWorldUpdateSetupPlayerCarBringUp gates the case-78 arm that
+    //      COMPLETES the junkyard entry on MainDirector::IsNewProfileIntroActive() -- a
+    //      NEW-PROFILE-ONLY signal (BrnGui::InGame's first-boot gate, command 476). A returning
+    //      boot never raises it, so the arm never fires.
+    //   2. So the entry stays HALF DONE, exactly as BrnGameStateModule.cpp's SendSetupPlayerCarEvent
+    //      banner warns: CarSelectManager::EnterJunkyardAtStartOfGame has already posted its
+    //      ResetPlayerCarAction with mbInCarSelectScreen = TRUE (BrnCarSelectManager.cpp:1333), but
+    //      nothing posts the transition-in, so car select never comes up, ACCEPT never arrives,
+    //      ExitJunkyard never runs, and the counterpart reset that CLEARS the flag never exists.
+    //   3. mbInCarSelectScreen is therefore TRUE for the whole run, so the stand-in below yields
+    //      carInGameMode = 0 ...
+    //   4. ... and in ActiveRaceCar::UpdateEngineState @0x822A4F50 that blocks BOTH ignition arms:
+    //      the force-RUNNING early-out @0x822A4FD0 needs (mbIsInGameMode && !inCarSelect), and case
+    //      OFF's gas pedal @0x822A506C needs (demand && !inCarSelect) -- the console's own "the car
+    //      on the car-select podium never cranks" rule, applied because the module believes the
+    //      player is standing on the podium. The engine stays OFF, ProcessPlayerVehicleInput
+    //      @0x822FFE30 zero-fills the driver-controls record below RUNNING, and the car cannot move
+    //      however long the throttle is held. The [ignition] rung below prints exactly this:
+    //        [ignition] attach slot 0 type=0 moduleInGameMode=0 inCarSelect=1 -> carInGameMode=0
+    //        [ignition] tick state=0 active=1 carInGameMode=0 inCarSelect=1 accel=0 brake=0
+    //
+    // ⚠️ THE FRESH PATH ONLY ESCAPES BY ACCIDENT, which is why this went unnoticed: the junkyard
+    // EXIT re-attaches the player car (log "Removing race car 0 / Created race car 0"), and at THAT
+    // attach mbInCarSelectScreen is finally false, so the stand-in yields 1 and ActiveRaceCar::
+    // Attach seeds the engine RUNNING outright. That is the single "engineOn=1 (raw state 0 -> 2)"
+    // in a fresh run, and it arrives 4 lines after the re-attach.
+    //
+    // ⛔ THE CONSOLE DOES NOT DIFFER HERE AND MUST NOT BE "FIXED" BY CLEARING mbInCarSelectScreen:
+    // GameStateModule::OnProfileLoaded @0x82397310 -- the console's OWN returning-player entry,
+    // read from the ARTIST asm -- calls the SAME EnterJunkyardAtStartOfGame and sets the SAME
+    // *(this + 232306) latch as the new-game path, so a returning console player IS in the junkyard
+    // with this flag set. The console drives out because HandlePrepareForModeAction has already put
+    // the MODULE byte to 1 (`*(a1 + 99140) = 1`, unconditional, verified in that function's asm) --
+    // it never needs the car-select flag at all. So the fix is the module byte, i.e. action 23, and
+    // NOT a better guess here. The DELETE-WHEN above is the whole fix for both paths.
     const bool lbInGameMode = mbIsInGameMode ||
         ( lpRaceCar->GetType() == E_RACE_CAR_TYPE_PLAYER && !mbInCarSelectScreen );
     lpActiveRaceCar->SetInGameMode( lbInGameMode );            // this[99140] -> car+0x777
+
+    // [DIAG] NOT IN THE X360 BINARY. The IGNITION-SEED rung: every input the two engine
+    // decisions above and in UpdateEngineState read, at the instant they are read. One line per
+    // attach (there are at most three in a boot), because "the engine never started" is
+    // otherwise indistinguishable from "the engine started and was switched off"
+    // [[diagnostics-that-lie]]. Delete with the rest of the bring-up diagnostics.
+    if( CgsDev::Log::gpDebugPrint != 0 )
+    {
+        *CgsDev::Log::gpDebugPrint
+            << "[ignition] attach slot " << static_cast<s32>( leSlot )
+            << " type=" << static_cast<s32>( lpRaceCar->GetType() )
+            << " moduleInGameMode=" << ( mbIsInGameMode ? 1 : 0 )
+            << " inCarSelect=" << ( mbInCarSelectScreen ? 1 : 0 )
+            << " dontStreamAudio=" << ( mbCarSelectDontStreamAudio ? 1 : 0 )
+            << " -> carInGameMode=" << ( lbInGameMode ? 1 : 0 ) << "\n";
+    }
     lpActiveRaceCar->Attach( lpRaceCar, mbCarSelectDontStreamAudio );
 
     // The streamer's "stream this car's audio" flag: true only for the PLAYER's car, and
