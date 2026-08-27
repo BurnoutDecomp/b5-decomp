@@ -4,6 +4,7 @@
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_SceneUpdate.h"   // InSceneUpdateInterface::SetVolumeInstanceTransform (pulls in CgsSceneManager::EntityId)
 #include "vendor/renderware/collision/CylinderVolume.hpp"   // rw::collision::CylinderVolume (AddToScene's volume)
 #include "rw/rwcore_structs.h"                              // rw::Resource (the Initialize slot record)
+#include "GameShared/GameClasses/Geometric/Primitives/CgsCylinder.h"   // CgsGeometric::Cylinder (GetCylinder out-param)
 #include "rw/physics/rigidbody.h"                           // rw::physics::ACTIVE_BODY (AddForCollision's body state)
 
 // ============================================================================
@@ -370,6 +371,50 @@ namespace Deformation
         lpSceneInput->mAddToCacheQueue.AddEvent(lAddEvent);
 
         mbAddedToScene = true;   // stb 1 -> wheel+0x81
+    }
+
+    // ==============================================================================================
+    // GetCylinder -- BrnPhysicalWheel.h:191, DECLARED here since 2026-08-06 and BODYLESS until now.
+    //
+    // ⭐ 2026-08-27 (detach-3 wave). There is NO standalone X360 symbol for this: the console folds
+    // it into its one caller, DeformableObject::DoDetachedWheelWorldContactGeneration @0x82609878,
+    // where the expansion is unmistakable (0x826099xx, the block between the TriangleList validation
+    // and the AddPrimitive(Cylinder*) call):
+    //     lvx128 v13, r0,  wheel        ; row 0 of mRenderTransform
+    //     lvx128 v12, wheel+0x10        ; row 1
+    //     lvx128 v10, wheel+0x20        ; row 2
+    //     lvx128 v11, wheel+0x30        ; row 3 (translation)
+    //     vspltisw v0,-1 ; vslw v0,v0,v0 ; vxor v0, v10, v0     ; row 2 NEGATED (the 0x80000000 splat)
+    //     stvx128 v0  -> cyl+0x00       ; -row2
+    //     stvx128 v12 -> cyl+0x10       ;  row1
+    //     stvx128 v13 -> cyl+0x20       ;  row0
+    //     stvx128 v11 -> cyl+0x30       ;  row3
+    //     lfs/stfs wheel+0x7C -> cyl+0x40 ; mfRadius
+    //     lfs/stfs wheel+0x78 -> cyl+0x44 ; mfHalfHeight
+    // So the collision cylinder's local frame is the wheel's render frame turned a quarter turn
+    // about Y -- basis (-at, up, right) -- which puts the cylinder's own axis (its X row) along the
+    // wheel's SPIN axis. That is the same quarter-turn AddToScene bakes into the shared
+    // CylinderVolume's frame rows 0 and 2 above; the two agree, which is the cross-check that this
+    // de-inlining is the real GetCylinder and not a local scratch build.
+    //
+    // ⚠️ mfLength takes mfHalfHeight VERBATIM -- the console does not double it. Not "corrected":
+    // the tyre is as wide as the console makes it, and inventing a 2x here would be exactly the
+    // "our code is better than the console's" defect this project treats as a bug report.
+    // ==============================================================================================
+    void PhysicalWheel::GetCylinder(CgsGeometric::Cylinder& lCylinderOut) const
+    {
+        Matrix44Affine lCylinderTransform;
+        // The vxor sign-flip is a full 16-byte lane operation on the console -- all four lanes,
+        // w included -- so it is spelled that way here rather than as a Vector3 negate.
+        lCylinderTransform.xAxis.x = -mRenderTransform.zAxis.x;   // row 0 <- NEGATED render row 2
+        lCylinderTransform.xAxis.y = -mRenderTransform.zAxis.y;
+        lCylinderTransform.xAxis.z = -mRenderTransform.zAxis.z;
+        lCylinderTransform.xAxis.w = -mRenderTransform.zAxis.w;
+        lCylinderTransform.yAxis   =  mRenderTransform.yAxis;     // row 1 <- render row 1
+        lCylinderTransform.zAxis   =  mRenderTransform.xAxis;     // row 2 <- render row 0
+        lCylinderTransform.wAxis   =  mRenderTransform.wAxis;     // row 3 <- render row 3
+
+        lCylinderOut.Set(lCylinderTransform, mfRadius, mfHalfHeight);
     }
 
 }

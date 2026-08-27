@@ -29,7 +29,8 @@
 #include "GameShared/GameClasses/SceneManager/CgsVolumeId.h"                               // CgsSceneManager::VolumeId (returned BY VALUE)
 
 // ---- forward declarations (cross-TU types referenced only by pointer/reference) ----
-namespace CgsGeometric { class Cylinder; }   // GetCylinder out-param (DWARF Cylinder&)
+// class-key FIXED 2026-08-27 (detach-3): Cylinder is a struct in CgsCylinder.h:44 -- ?AV vs ?AU.
+namespace CgsGeometric { struct Cylinder; }   // GetCylinder out-param (DWARF Cylinder&)
 
 namespace CgsSceneManager
 {
@@ -137,10 +138,22 @@ namespace Deformation
         }
 
         // BrnPhysicalWheel.h:178. This wheel's slot index inside its pool.
-        u8 GetPoolIndex() const;
+        // INLINE 2026-08-27 (detach-3 wave): declared since 2026-08-06 and BODYLESS, which is an
+        // LNK2019 the moment anything calls it -- DoDetachedWheelWorldContactGeneration now does.
+        // There is no out-of-line X360 emission: every site reads the handle inline
+        // (`ld 0x70(wheel) ; clrlwi r,r,24` at 0x82609A4C and 0x82609A1C -- the LOW byte of the
+        // 8-byte packed id, i.e. mWheelBodyId.muSubB's low byte). Identical shape to the committed
+        // PhysicalBodyPart::GetPoolIndex, which reads `ld 0x1D0(part) ; clrlwi 24`.
+        u8 GetPoolIndex() const { return static_cast<u8>(mWheelBodyId.muSubB); }
 
         // BrnPhysicalWheel.h:182. The triangle-cache slot this wheel's collision mesh occupies.
-        u16 GetTriangleCacheSlot() const;
+        // INLINE for the same reason; base 123 (`addi r30, r11, 0x7B` @0x8260995C), the SAME base
+        // AddToScene stamps into its InEventAddToCache and RemoveFromScene drops. The body-part
+        // twin's base is 73 -- the two pools occupy disjoint cache-slot ranges.
+        u16 GetTriangleCacheSlot() const
+        {
+            return static_cast<u16>((mWheelBodyId.muSubB & 0xFFu) + 123u);
+        }
 
         // ----- queries / geometry --------------------------------------------------------
 

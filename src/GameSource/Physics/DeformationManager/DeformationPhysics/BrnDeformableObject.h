@@ -66,17 +66,38 @@ namespace CgsNumeric { class Random; }
 //      records the DWARF spelling and the signature uses the underlying forward-declared type. ----
 namespace CgsGeometric { struct Box; struct AxisAlignedBox; }
 namespace CgsDev { class Debug3DImmediateRender; }
-namespace CgsMemory { class SimpleDataStreamProducer; class LinearMalloc; }
+// ⚠⚠ CLASS-KEY FIXED 2026-08-27 (detach-3 wave): SimpleDataStreamProducer is a `struct` in its
+// real home (CgsSimpleDataStreamProducer.h:39). `class` here mangled every signature carrying it
+// as ?AV instead of ?AU -- the same ODR fork the 2026-08-06 note below records for the sim buffers.
+namespace CgsMemory { struct SimpleDataStreamProducer; class LinearMalloc; }
 // (ResourceHandle is the complete BrnPhysics::Deformation::ResourceHandle from BrnDeformationEvents.h,
 //  included above -- ValidateDeformationModel takes it unqualified, same namespace.)
 namespace CgsSceneManager
 {
     struct VolumeInstanceId;                                    // GetDeformationSphereFromVolumeInstance arg
     namespace SceneManagerIO { struct InSceneUpdateInterface; } // == OutputBuffer::SceneInputInterface (DWARF)
+    // ⭐⭐ 2026-08-27 (detach-3 wave). The two world-contact-generation methods below used to take a
+    // pointer to a phantom "CgsPhysics::CollisionGenerator" and to a locally invented
+    // "InTriangleCacheInterface". NEITHER TYPE EXISTS ANYWHERE IN THIS TREE -- they were
+    // declare-only forks with no definition and no possible definition, so every call site mangled
+    // to a symbol no TU could ever define ([[shadowing-redeclarations]], the exact fork shape this
+    // header warns about 60 lines down). That, not the "opaque callee" story the .cpp banner told,
+    // is why the whole detached-part contact chain stayed a gate.
+    // The REAL types are these, proven from the X360 asm rather than assumed:
+    //   * the tri-cache pointer is handed straight to TriangleCacheInterface::GetNumCachedTriangle-
+    //     Batches @0x82277880 and ::GetCache @0x82277810 (bl targets at 0x8260957C / 0x82609594),
+    //     so it IS a CgsSceneManager::SceneManagerIO::TriangleCacheInterface. The DWARF's nested
+    //     spelling VehicleInputInterface::InTriangleCacheInterface is the same object seen through
+    //     the vehicle input buffer -- VehicleManager::StartPartContactGeneration, the only caller,
+    //     already carries it as this type and passes it through unchanged.
+    //   * the generator pointer is handed to BaseCollisionGenerator::CollidePrimitiveListAgainst-
+    //     TriangleList / ::AddPrimitiveListWithTriangleListToStream, i.e. the real
+    //     CgsSceneManager::CgsCollision::CollisionGenerator (a struct, CgsCollisionGenerator.h:516).
+    namespace SceneManagerIO { struct TriangleCacheInterface; }
+    namespace CgsCollision   { struct CollisionGenerator; }
 }
 namespace CgsPhysics
 {
-    class CollisionGenerator;                                   // contact-generation arg
     // ⚠ CLASS-KEYS FIXED 2026-08-06 (big-five #2): `struct` per CgsPhysicsSimulationModuleIO.h.
     namespace PhysicsSimulationIO { struct InputBuffer; struct OutputBuffer; }  // sim IO buffers
 }
@@ -134,8 +155,13 @@ namespace Deformation
     struct PenetrationSolver;
     struct CarState;
     struct OutUpdateRigidBody;       // per-frame rigid-body update event (UpdateHandlingBody). FLAG: forward-declared.
-    struct InTriangleCacheInterface; // tri-cache contact-gen input. FLAG: DWARF nests it as
-                                     //   VehicleInputInterface::InTriangleCacheInterface; modelled standalone here.
+    // ⭐⭐ 2026-08-27 (detach-3 wave): was `struct InTriangleCacheInterface;` -- a declare-only fork
+    // with no definition anywhere in the tree. ALIASED to the real homed type, which is the SAME
+    // spelling BrnVehicleInputInterface.h:33 already uses for the DWARF's nested name:
+    //     typedef CgsSceneManager::SceneManagerIO::TriangleCacheInterface InTriangleCacheInterface;
+    // so this is not a choice, it is the tree's own existing answer. See the evidence block beside
+    // the CgsSceneManager forward declarations at the top of this header.
+    using InTriangleCacheInterface = CgsSceneManager::SceneManagerIO::TriangleCacheInterface;
 
     class DeformableObject
     {
@@ -360,14 +386,14 @@ namespace Deformation
         // not in-tree), and CollisionGenerator / LinearMalloc are the qualified CgsPhysics:: /
         // CgsMemory:: forward-declared homes. All referenced by pointer only.
         void DoBodyPartWorldContactGeneration(const InTriangleCacheInterface* lpTriCache,
-                                              ContactGenList* lpGenList, CgsPhysics::CollisionGenerator* lpGen,
+                                              ContactGenList* lpGenList, CgsSceneManager::CgsCollision::CollisionGenerator* lpGen,
                                               CgsMemory::SimpleDataStreamProducer* lpProducer,
-                                              const DetachedPartManager* lpPartMgr, u32 luFlags,
+                                              const DetachedPartManager* lpPartMgr, u32 luResultListTag,
                                               CgsMemory::LinearMalloc* lpAlloc) const;            // :491
         void DoDetachedWheelWorldContactGeneration(const InTriangleCacheInterface* lpTriCache,
-                                                   ContactGenList* lpGenList, CgsPhysics::CollisionGenerator* lpGen,
+                                                   ContactGenList* lpGenList, CgsSceneManager::CgsCollision::CollisionGenerator* lpGen,
                                                    CgsMemory::SimpleDataStreamProducer* lpProducer,
-                                                   const DetachedWheelManager* lpWheelMgr, u32 luFlags,
+                                                   const DetachedWheelManager* lpWheelMgr, u32 luResultListTag,
                                                    CgsMemory::LinearMalloc* lpAlloc) const;       // :501
         Vector3 GetMeshOffset() const;                                                          // :504
         Vector3 GetComOffset() const;                                                           // :507

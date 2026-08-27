@@ -276,17 +276,16 @@ namespace Vehicle
     // ⭐⭐ GATE DELETED 2026-08-14 (walls leg 3): VehicleManager::EndVehicleContactGeneration
     // @0x8261AC38 (661) is REAL in BrnVehicleManagerContactGeneration.cpp — the harvest runs.
 
-    // ⭐ GATE MOVED 2026-08-14 (walls leg 3): VehicleManager::StartPartContactGeneration
-    // @0x8262C220 is a PARTIAL body in BrnVehicleManagerContactGeneration.cpp now — its FIRST
-    // store (the miFirstPartContactGenEntry boundary stamp the harvest reads) is real; the
-    // part-contact-generation tail stays a named log-once gate there.
+    // ⭐⭐ GATE DELETED 2026-08-27 (detach-3 wave): VehicleManager::StartPartContactGeneration
+    // @0x8262C220 is now a COMPLETE body in BrnVehicleManagerContactGeneration.cpp — the three
+    // pair-list collides, the part-vs-world stream, both DeformationManager world walks and the
+    // dispatch, not just the miFirstPartContactGenEntry boundary stamp the 2026-08-14 note describes.
 
-    void VehicleManager::EndPartContactGeneration(f32, BrnPhysics::Deformation::DeformationManager*,
-                                                  CgsModule::IOBufferStack*,
-                                                  BrnPhysics::PhysicsModuleIO::PotentialContactInterface*)
-    {
-        BRN_CONDUCTOR_GATE("VehicleManager::EndPartContactGeneration @0x8261B690 (276)");
-    }
+    // ⭐⭐ GATE DELETED 2026-08-27 (detach-3 wave): VehicleManager::EndPartContactGeneration
+    // @0x8261B690 (276) is REAL in BrnVehicleManagerContactGeneration.cpp — the PART harvest runs,
+    // so the contacts Start generates reach the potential-contact queues instead of being dropped.
+    // Its one scoped omission (the PhysicalTrafficManager::AddArticulatedJointContacts tail call) is
+    // a named log-once FLAG at the site, not here.
 
     // ⭐⭐ GATE DELETED 2026-08-14 (walls leg 3): VehicleManager::DoRaceCarWorldContactValidation
     // @0x825EB6C8 (416) is REAL in BrnVehicleManagerContactGeneration.cpp, and its callee

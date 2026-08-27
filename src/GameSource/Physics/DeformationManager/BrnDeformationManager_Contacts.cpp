@@ -39,6 +39,21 @@
 #include <cstdlib>   // getenv  ([wall] bring-up probe only)
 #include <cmath>     // sqrtf   ([wall] bring-up probe only)
 
+// ---- the part/wheel world-contact-generation forwarders (2026-08-27, detach-3 wave) ------------
+#include "GameShared/GameClasses/SceneManager/Collision/ContactGenerator/CgsCollisionGenerator.h"  // CollisionGenerator (the real one)
+#include "GameSource/Physics/BrnContactGenerationList.h"                                           // ContactGenList
+
+namespace BrnPhysics
+{
+namespace Deformation
+{
+    // The result-list tag each walk hands to DeformableObject: "li r10, 1" in the body-part wrapper
+    // @0x82622B28, the register left at 0 in the wheel wrapper @0x82622E08. See the banner below.
+    static const u32 KU_BODY_PART_RESULT_LIST_TAG      = 1u;
+    static const u32 KU_DETACHED_WHEEL_RESULT_LIST_TAG = 0u;
+}
+}
+
 namespace BrnPhysics
 {
 namespace Deformation
@@ -380,5 +395,71 @@ namespace Deformation
     // MOUNTED home TU BrnDeformationManager.cpp (it was the one symbol the mount needed from this
     // still-unmounted slice). Verbatim. Fold back when this TU mounts.
     // ==========================================================================================
+    // ==========================================================================================
+    // DoBodyPartWorldContactGeneration      @0x82622B28 (184 insns)
+    // DoDetachedWheelWorldContactGeneration @0x82622E08 (184 insns)
+    //
+    // ⭐⭐ BODIED 2026-08-27 (detach-3 wave). BOTH HAD NO DEFINITION ANYWHERE -- not a gate, not a
+    // stub, nothing: their declarations named a phantom `VehicleInTriangleCacheInterface` no TU could
+    // define, so the only caller (VehicleManager::StartPartContactGeneration) could not have called
+    // them even if its tail had been written. See the evidence block at BrnDeformationManager.h:277.
+    //
+    // The pair are byte-identical walks apart from three constants. Each iterates mModelsAdded -- a
+    // BitArray<28> whose lowest-set-bit scan the console inlines as the `field*64 + 63 - clz64(x&-x)`
+    // idiom this TU's banner already documents, i.e. GetFirstNonZeroBit / GetNextNonZeroBit -- and
+    // forwards to the matching DeformableObject method on mpaModels[bit] (`26496 * bit + *mpaModels`).
+    // The three differences, read off the two asm listings side by side:
+    //     body part : callee DeformableObject::DoBodyPartWorldContactGeneration,
+    //                 manager arg = mDetachedPartManager  (this+48112, the pseudocode's +12028 dwords),
+    //                 result-list tag = 1
+    //     wheel     : callee DeformableObject::DoDetachedWheelWorldContactGeneration,
+    //                 manager arg = mDetachedWheelManager (this+72928, the pseudocode's +18232 dwords),
+    //                 result-list tag = 0
+    // The CgsBitArray.h:203 "invalid index : N < 28" tripwire the console's inlined scan carries is
+    // inside the committed GetNextNonZeroBit, so it is not restated here.
+    //
+    // ⚠️ The tag is NOT a flag word. It reaches DeformableObject as luResultListTag and is asserted
+    // > 0 there ("luResultListTag > 0", BrnDeformableObject.cpp:3675) -- but ONLY on the hinged-part
+    // arm, which the wheel path does not have. That is why 0 is correct for the wheel walk and would
+    // be a live assert on the body-part one.
+    // ==========================================================================================
+    void DeformationManager::DoBodyPartWorldContactGeneration(
+        const VehicleInTriangleCacheInterface* lpTriCache,
+        ContactGenList* lpGenList,
+        CgsSceneManager::CgsCollision::CollisionGenerator* lpGen,
+        CgsMemory::SimpleDataStreamProducer* lpProducer,
+        CgsMemory::LinearMalloc* lpAlloc) const
+    {
+        for (s32 liModel = mModelsAdded.GetFirstNonZeroBit();
+             liModel != -1;
+             liModel = mModelsAdded.GetNextNonZeroBit(liModel))
+        {
+            mpaModels[liModel].DoBodyPartWorldContactGeneration(
+                lpTriCache, lpGenList, lpGen, lpProducer,
+                &mDetachedPartManager,
+                KU_BODY_PART_RESULT_LIST_TAG,
+                lpAlloc);
+        }
+    }
+
+    void DeformationManager::DoDetachedWheelWorldContactGeneration(
+        const VehicleInTriangleCacheInterface* lpTriCache,
+        ContactGenList* lpGenList,
+        CgsSceneManager::CgsCollision::CollisionGenerator* lpGen,
+        CgsMemory::SimpleDataStreamProducer* lpProducer,
+        CgsMemory::LinearMalloc* lpAlloc) const
+    {
+        for (s32 liModel = mModelsAdded.GetFirstNonZeroBit();
+             liModel != -1;
+             liModel = mModelsAdded.GetNextNonZeroBit(liModel))
+        {
+            mpaModels[liModel].DoDetachedWheelWorldContactGeneration(
+                lpTriCache, lpGenList, lpGen, lpProducer,
+                &mDetachedWheelManager,
+                KU_DETACHED_WHEEL_RESULT_LIST_TAG,
+                lpAlloc);
+        }
+    }
+
 }
 }
