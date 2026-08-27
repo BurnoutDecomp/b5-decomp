@@ -53,7 +53,7 @@ namespace BrnGameState
 {
 
 // ============================================================================
-// ⭐ [gateui] GetDeveloperChallengeManager -- the body behind the declaration the StreetManager
+// â­ [gateui] GetDeveloperChallengeManager -- the body behind the declaration the StreetManager
 // wave added with no member behind it.
 //
 // The console never emits an accessor for this subobject: every call site reaches it through the
@@ -70,7 +70,7 @@ DeveloperChallengeManager* GameStateModule::GetDeveloperChallengeManager()
 }
 
 // ============================================================================
-// ⭐⭐ [gateui] PostWorldUpdateStuntBringUp -- the two stunt-chain legs of the console's
+// â­â­ [gateui] PostWorldUpdateStuntBringUp -- the two stunt-chain legs of the console's
 // PostWorldUpdate @0x8238F358, which reads (inside its `LockForRead(lpPostWorldInput)` bracket):
 //
 //     v11 = sub_8231D2C0(a4);                    // PostWorldInputBuffer::GetActiveRaceCarOutputInterface
@@ -89,7 +89,7 @@ void GameStateModule::PostWorldUpdateStuntBringUp(
         f32                                           lfDelta)
 {
     // ---- leg 1: refresh the cached active-race-car snapshot ---------------------------------
-    // ⚠️ COPIED BY ASSIGNMENT, NEVER AT THE CONSOLE'S LITERAL 10480 BYTES. 10480 is the X360
+    // âš ï¸ COPIED BY ASSIGNMENT, NEVER AT THE CONSOLE'S LITERAL 10480 BYTES. 10480 is the X360
     // sizeof; on the host every embedded pointer in that interface widened, so a literal byte
     // count would truncate the tail (or, if the host object were smaller, run off the end). Same
     // class of correction the tree already made to StreetManager::LoadDistrictMap's 24-byte
@@ -136,7 +136,7 @@ void GameStateModule::PostWorldUpdateStuntBringUp(
     }
 
     // ============================================================================
-    // ⭐⭐⭐ [D4 stuntrace WAVE D] LEG 3 -- THE SCORING TICK (console PostWorldUpdate #19).
+    // â­â­â­ [D4 stuntrace WAVE D] LEG 3 -- THE SCORING TICK (console PostWorldUpdate #19).
     //
     // CONSOLE POSITION, exact. GameStateModule::PostWorldUpdate @0x8238F358's `bl` stream:
     //     #6/#7   GetActiveRaceCarOutputInterface + XMemCpy   <- leg 1 above
@@ -145,7 +145,7 @@ void GameStateModule::PostWorldUpdateStuntBringUp(
     //     #19     BrnGameState::ModeManager::PostWorldUpdate   <- THIS LEG, immediately after leg 2
     //     #23     TriggerQueryManager::PostWorldUpdate
     //
-    // ⛔⛔ WHY THIS IS AN EXTRACTED LEG AND NOT `mModeManager.PostWorldUpdate(...)`.
+    // â›”â›” WHY THIS IS AN EXTRACTED LEG AND NOT `mModeManager.PostWorldUpdate(...)`.
     // The committed ModeManager::PostWorldUpdate (BrnModeManager_WorldTick.cpp:532) takes a
     // `const GameStateModuleIO::PostWorldInputBuffer*` and dereferences it unconditionally
     // (GetActiveRaceCarOutputInterface, CheckForOutOfRangeCarsReachingFinish(buffer),
@@ -153,7 +153,7 @@ void GameStateModule::PostWorldUpdateStuntBringUp(
     // stages it in DoUpdate_GameStatePostWorld @0x823E92A8 via CreateIOBuffer<PostWorldInputBuffer>,
     // which is not reconstructed, and -- unlike the PRE-world twin, where the module owns a
     // stand-in (mpPreWorldInputBuffer) -- there is no post-world sibling.
-    // ⚠ AND SYNTHESISING ONE WOULD BE A LAYOUT LIE, which is exactly the bug class this campaign
+    // âš  AND SYNTHESISING ONE WOULD BE A LAYOUT LIE, which is exactly the bug class this campaign
     // keeps re-catching: PostWorldInputBuffer's active-race-car seat is
     // `u8 mActiveRaceCarOutputInterfaceStorage[0x2890]` -- RAW X360-SIZED BYTES
     // (BrnGameStateModuleIO.h) -- so GetActiveRaceCarOutputInterface() on a home-made buffer hands
@@ -179,7 +179,7 @@ void GameStateModule::PostWorldUpdateStuntBringUp(
     // on an offline stunt run: the mode's own post-world hook and the general per-car stats do not
     // run; the STUNT SCORE does, which is what this wave's oracle needs.
     //
-    // ⚠ StuntModeScoring::Update opens with CGS_ASSERT(mbStuntModeActive), whose only writer is
+    // âš  StuntModeScoring::Update opens with CGS_ASSERT(mbStuntModeActive), whose only writer is
     // StuntModeScoring::Activate <- ScoringSystem::OnModeStart(case 7) <- ModeManager::
     // UpdateCurrentMode <- StuntAttackMode::Start. The mode-7 + IN_PROGRESS gate below is what
     // keeps this leg behind that writer, exactly as the console's fork does -- do not widen it.
@@ -191,6 +191,98 @@ void GameStateModule::PostWorldUpdateStuntBringUp(
     {
         ModeManager* lpModeManager = GetModeManager();
         const GameMode* lpCurrentGameMode = lpModeManager->GetCurrentGameMode();
+
+        // ------------------------------------------------------------------------------------
+        // â­â­â­ [stuntrace frontier round 3, 2026-08-27] THE PLAYER-SCORING-SLOT BINDING SWEEP --
+        // the LAST producer of the three-leg chain, lifted out of ModeManager::PostWorldUpdate
+        // (BrnModeManager_WorldTick.cpp:629-676, console 0x8234AAF0..0x8234AB7C) into this
+        // extracted-leg block for the SAME reason the stunt-scorer fork below is here: the
+        // committed ModeManager::PostWorldUpdate dereferences a PostWorldInputBuffer nothing on
+        // this build creates, while mLastActiveRaceCarInterface is a real host-typed member with
+        // a real writer (leg 1 of this very function). "THE ARGUMENTS ARE THE DEVIATION, NOT
+        // THE BODY" -- the loop below is that function's own, statement for statement.
+        //
+        // â“˜ POSITION IS THE CONSOLE'S: the sweep runs BEFORE the per-mode scorer fork
+        // (0x8234AB10 vs 0x8234AD2C), and inside the same `mpCurrentGameMode != NULL` gate.
+        //
+        // â›” WHY IT IS SUDDENLY LOAD-BEARING. ScoringSystem::SetPlayerRaceCarIndex is the ONLY
+        // writer of a per-car record's active-race-car index anywhere in the tree
+        // (BrnScoringSystem_Lifecycle.cpp:220 -- ScoringSystem::AddPlayer stamps
+        // E_ACTIVE_RACE_CAR_INDEX_INVALID, never a real car), and ScoringSystem::GetCarData is a
+        // linear search for a record carrying the queried index. With the sweep parked, GetCarData
+        // could only ever return NULL, and the first consumer to dereference it -- ModeManager::
+        // FinishCurrentMode -> ScoringSystem::StopModeTimer, at the end of the first offline
+        // stunt run -- crashed. RUN EVIDENCE scratch/flow_run/20260827_140514/BrnGame.log:
+        //     [ASSERT 31113] lpCarData (BrnScoringSystem_Timer.cpp:341)
+        //     [EXCEPTION] EXCEPTION_ACCESS_VIOLATION ... access violation READING 0x18
+        //         StopModeTimer + 0xE5 <- FinishCurrentMode + 0x3FC <- ModeManager::PreWorldUpdate
+        // -- assert-is-not-a-guard: StopModeTimer's `lpCarData != NULL` tripwire fires and falls
+        // through into lpCarData->GetScoreData()->GetDistanceToFinishLive(), CarScoreData +0x18
+        // off a null CarData (rdi == 0 in the register dump). Exactly the shape of the
+        // AddFinishedRaceEvent null-queue defect one function earlier, and the same fix: run the
+        // console's missing producer, not a guard at the consumer.
+        //
+        // â“˜ THE OTHER TWO PRODUCERS landed with this one and the sweep is inert without them:
+        // RaceCarEntityModule::HandlePrepareForModeAction now writes the module's
+        // maActiveRaceCarForPlayerScoringIndex (the extracted SetUpPlayerCarForMode tail), and
+        // RaceCarEntityModule::PostPhysicsUpdate now publishes it into the interface this loop
+        // reads (CopyActiveRaceCarToPlayerScoringMappingToOutput, console @0x823075D8).
+        //
+        // âš ï¸ E_ACTIVE_RACE_CAR_INDEX_COUNT (8), NOT _INVALID (-1), is this table's empty-slot
+        // value -- console `cmpwi r28, 8`, and RCEntityActiveRaceCarOutputInterface::Clear seeds
+        // every cell to it. The two sentinels are distinct on this path; do not merge them.
+        //
+        // [X] NOT REPRODUCED, named rather than faked: the first-bind
+        // `mpCurrentGameMode->PlayerHasSpawned(leActiveRaceCarIndex)` hook (vtbl slot 19).
+        // ModeManager::GetCurrentGameMode() is const-only on this tree, and PlayerHasSpawned is a
+        // non-const virtual, so calling it from here would need a header change. COST MEASURED,
+        // AND IT IS ZERO ON THIS PATH: GameMode's base body is the console's folded `blr`
+        // (BrnGameMode.cpp:697) and the image's ONLY override is OnlineFreeBurnLobbyMode's
+        // @0x823315A8 -- an online mode. DELETE-WHEN ModeManager grows a non-const
+        // GetCurrentGameMode(), or when this block collapses into the real PostWorldUpdate.
+        // ------------------------------------------------------------------------------------
+        if (lpCurrentGameMode != 0)
+        {
+            ScoringSystem* lpScoringSystem = lpModeManager->GetScoringSystem();
+
+            for (s32 liSlot = 0; liSlot < GameStateModuleIO::E_PLAYER_SCORING_INDEX_COUNT; ++liSlot)
+            {
+                const GameStateModuleIO::EPlayerScoringIndex lePlayerScoringIndex =
+                    static_cast<GameStateModuleIO::EPlayerScoringIndex>(liSlot);
+
+                const ::EActiveRaceCarIndex leActiveRaceCarIndex =
+                    mLastActiveRaceCarInterface.GetActiveRaceCarIndex(lePlayerScoringIndex);
+
+                if (leActiveRaceCarIndex == E_ACTIVE_RACE_CAR_INDEX_COUNT)
+                {
+                    continue;
+                }
+                if (!lpScoringSystem->IsPlayerInScoringSystem(lePlayerScoringIndex))
+                {
+                    continue;
+                }
+
+                CarData* lpCarData =
+                    lpScoringSystem->GetCarDataFromPlayerScoringIndex(lePlayerScoringIndex);
+                const bool lbFirstBind =
+                    (lpCarData->GetActiveRaceCarIndex() == E_ACTIVE_RACE_CAR_INDEX_INVALID);
+
+                lpScoringSystem->SetPlayerRaceCarIndex(lePlayerScoringIndex, leActiveRaceCarIndex);
+
+                // [DIAG] NOT IN THE X360 BINARY -- the first-bind rung, one line per binding.
+                // It fires exactly where the console would have called PlayerHasSpawned, so it
+                // doubles as the park's own tripwire: pairs 1:1 with the "[scoring-map]" line
+                // BrnRaceCarEntityModule_ModeArming.cpp emits at prepare-for-mode. Bounded by
+                // the first-bind edge (a bound slot never re-binds), so it cannot flood.
+                if (lbFirstBind && CgsDev::Log::gpDebugPrint != 0)
+                {
+                    *CgsDev::Log::gpDebugPrint
+                        << "[scoring-bind] player scoring slot " << liSlot
+                        << " bound to active race car " << static_cast<s32>(leActiveRaceCarIndex)
+                        << "\n";
+                }
+            }
+        }
 
         if (lpModeManager->GetCurrentGameModeType() == GameStateModuleIO::E_MODE_STUNT_ATTACK &&
             lpCurrentGameMode != 0 &&
@@ -204,7 +296,7 @@ void GameStateModule::PostWorldUpdateStuntBringUp(
 
 
 // ============================================================================
-// ⭐⭐ [gateui] ProcessGameEventsPropHitBringUp -- the extracted CASE-111 arm of
+// â­â­ [gateui] ProcessGameEventsPropHitBringUp -- the extracted CASE-111 arm of
 // GameStateModule::ProcessGameEvents @0x823A0A18 (the arm's verbatim asm is in the header).
 //
 // The console's dispatcher is a ~180-case jump table over the merged event queue; this tree
@@ -215,7 +307,7 @@ void GameStateModule::PostWorldUpdateStuntBringUp(
 // { Vector3 mPosition@0x00; u16 muZoneId@0x10; u16 muPropId@0x12; bool mbHitBefore@0x14 } is
 // exactly the three fields the console's three loads take.
 //
-// ⓘ Game EVENT ids are NOT shifted the way game ACTION ids are in this range (see the long
+// â“˜ Game EVENT ids are NOT shifted the way game ACTION ids are in this range (see the long
 // correction note in BrnGameActions.h): E_EVENT_RECORD_PROP_HIT == 111 matches the X360 jump
 // table's case 111 directly.
 // ============================================================================
@@ -249,7 +341,7 @@ void GameStateModule::ProcessGameEventsPropHitBringUp(
             // WHY IT EARNS ITS PLACE: on the run-9 drive the two rungs either side of this one were
             // in perfect 1:1 lockstep (8 `bridged prop-hit` lines, 8 `OnPropHit` lines, every latch
             // SMASH), which is what proved the first-gate failure is upstream of GameState
-            // entirely. ⭐ ROUND-8 CORRECTIONS: (i) this round-7 note used to add "each pair 2 log
+            // entirely. â­ ROUND-8 CORRECTIONS: (i) this round-7 note used to add "each pair 2 log
             // lines apart" -- MEASURED, 3 of the 8 pairs are 2 lines apart and 5 are 3, so do NOT
             // use spacing as a matching heuristic; the 1:1 COUNT is the claim that holds.
             // (ii) this rung is instrumentation for a garbled-payload failure, not evidence about
@@ -294,7 +386,7 @@ void GameStateModule::ProcessGameEventsPropHitBringUp(
 }
 
 // ============================================================================
-// ⭐ [H1 district wave 2026-08-25] ProcessGameEventsWorldRegionBringUp -- the extracted
+// â­ [H1 district wave 2026-08-25] ProcessGameEventsWorldRegionBringUp -- the extracted
 // CASE-115 arm of GameStateModule::ProcessGameEvents @0x823A0A18 (banner + the console
 // arm's three statements in the header). The queue walk is the dispatcher's own; the
 // payload is read BY MEMBER through GameStateImageManagerBase.h's WorldRegionChangeEvent
@@ -351,7 +443,7 @@ void GameStateModule::ProcessGameEventsWorldRegionBringUp(
 }
 
 // ============================================================================
-// ⭐ [P1 sim-pause] PostWorldInput -- the free-function accessor BridgeGuiToGameState posts
+// â­ [P1 sim-pause] PostWorldInput -- the free-function accessor BridgeGuiToGameState posts
 // through (X360: returns the module's post-world input GameEventQueue). PC body: the CARRY
 // QUEUE, the named reduction spelled out at the declaration (BrnGameStateModule.h).
 // ============================================================================
@@ -364,7 +456,7 @@ namespace GameStateModuleIO
 }
 
 // ============================================================================
-// ⭐ [P1 sim-pause] ProcessGameEventsPauseBringUp -- the extracted pause-family arms of
+// â­ [P1 sim-pause] ProcessGameEventsPauseBringUp -- the extracted pause-family arms of
 // GameStateModule::ProcessGameEvents @0x823A0A18 (cases 33 / 35 / 36 / 93; the console
 // bodies are quoted at the declaration). Same queue walk, same must-run-before-the-Clear
 // position as the case-111/113/115 arms.
@@ -403,7 +495,7 @@ void GameStateModule::ProcessGameEventsPauseBringUp(
             break;
 
         case GameStateModuleIO::E_EVENT_CRASHNAV_STATE_CHANGED:       // 93
-            // ⚠️ inverted by design: payload 1 == the crash-nav map DEACTIVATED -> pause.
+            // âš ï¸ inverted by design: payload 1 == the crash-nav map DEACTIVATED -> pause.
             // [DIAG] NOT IN THE X360 BINARY -- the pause spine's middle rung.
             if (CgsDev::Log::gpDebugPrint != 0)
                 *CgsDev::Log::gpDebugPrint
@@ -425,7 +517,7 @@ void GameStateModule::ProcessGameEventsPauseBringUp(
 }
 
 // ============================================================================
-// ⭐⭐ [gateui] PreWorldUpdateStuntBringUp -- the three stunt-chain legs of the console's
+// â­â­ [gateui] PreWorldUpdateStuntBringUp -- the three stunt-chain legs of the console's
 // PreWorldUpdate @0x823A5328, IN THE CONSOLE'S OWN ORDER. The header carries the line-by-line map
 // of the source function and both named reductions; the body annotates each leg again.
 // ============================================================================
@@ -457,22 +549,22 @@ void GameStateModule::PreWorldUpdateStuntBringUp(
     // the local queue would be a byte-for-byte copy of the carry queue. The Clear IS the
     // console's, and it is what makes the queue a strict one-frame buffer.
     ProcessGameEventsPropHitBringUp(&mGameEventCarryQueue);
-    // ⭐ [tut-ticker] the dispatcher's CASE-113 arm, over the same merged queue in the same
+    // â­ [tut-ticker] the dispatcher's CASE-113 arm, over the same merged queue in the same
     // walk position (the console's ProcessGameEvents handles every case in one pass; this
     // tree extracts one arm per function -- see the arm's banner in BrnGameStateModule.cpp).
     // MUST run before the Clear below, for the same reason the prop-hit arm does.
     ProcessGameEventsTrainingRequestBringUp(&mGameEventCarryQueue);
-    // ⭐ [H1 district wave] the dispatcher's CASE-115 arm (the HUD district marker's feed),
+    // â­ [H1 district wave] the dispatcher's CASE-115 arm (the HUD district marker's feed),
     // same walk, same must-run-before-the-Clear constraint; it posts onto the action queue
     // this function already holds the write lock for.
     ProcessGameEventsWorldRegionBringUp(&mGameEventCarryQueue, lpActionQueue);
-    // ⭐ [P1 sim-pause] the dispatcher's pause-family arms (cases 33/35/36/93), same walk,
+    // â­ [P1 sim-pause] the dispatcher's pause-family arms (cases 33/35/36/93), same walk,
     // same must-run-before-the-Clear constraint; RequestPause/RequestUnpause post actions
     // 86/87/88 onto the action queue this function already holds the write lock for --
     // CheckGameActions (BrnGameModule, the console's DoUpdate_GameStatePreWorld tail) reads
     // them back this same sub-step and stops/starts the sim timer.
     ProcessGameEventsPauseBringUp(&mGameEventCarryQueue, lpActionQueue);
-    // ⭐⭐ [D4 stuntrace WAVE D] the dispatcher's CASE-20 arm (E_EVENT_PLAYER_ACCEPTED_MODE ->
+    // â­â­ [D4 stuntrace WAVE D] the dispatcher's CASE-20 arm (E_EVENT_PLAYER_ACCEPTED_MODE ->
     // ModeManager::StartGameMode) and the INTRO/RESULTS exit arms (cases 24/25/26/27). Same walk,
     // same must-run-before-the-Clear constraint as every arm above; the case-20 arm needs the
     // OutputBuffer because ModeManager::StartGameMode takes it (console r27).
@@ -481,7 +573,7 @@ void GameStateModule::PreWorldUpdateStuntBringUp(
     mGameEventCarryQueue.Clear();
 
     // ---- 1b) THE MODE MANAGER'S PRE-WORLD TICK (console #86) ---------------------------------
-    // ⭐⭐⭐ [D4 stuntrace WAVE D] X360 PreWorldUpdate @0x823A5328 reaches ModeManager through ONE
+    // â­â­â­ [D4 stuntrace WAVE D] X360 PreWorldUpdate @0x823A5328 reaches ModeManager through ONE
     // hop, and this is that hop de-inlined:
     //     0x823A5A9C  bl GameStateModule::EmmPreWorldUpdate      (#86)
     //       @0x8238EF50, whose own body:
@@ -496,11 +588,11 @@ void GameStateModule::PreWorldUpdateStuntBringUp(
     // POSITION IS THE CONSOLE'S: after ProcessGameEvents (#68), before TriggerQueryManager::
     // PreWorldUpdate (#93). Do not move it below the trigger legs.
     //
-    // ⚠ gsm+4128 (0x1020) IS mModeManager, and it is reached BY NAME through GetModeManager()
+    // âš  gsm+4128 (0x1020) IS mModeManager, and it is reached BY NAME through GetModeManager()
     // here -- never as an offset. (The stale campaign note "ModeManager is embedded at gsm+46640"
     // is wrong; +46640 is mTrainingManager.)
     //
-    // ⛔ THE READ LOCK IS LOAD-BEARING. ModeManager::PreWorldUpdate calls
+    // â›” THE READ LOCK IS LOAD-BEARING. ModeManager::PreWorldUpdate calls
     // lpPreWorldInputBuffer->GetPlayerStatusInterface() and ->GetNetworkPlayerResultsInterface(),
     // and BOTH are the read-lock halves ("Not locked for reading", BrnGameStateModuleIO.h:147/149).
     // The console holds IOBuffer::LockForRead over the whole span (@0x823A5328 `bl` #16). Without
@@ -546,13 +638,13 @@ void GameStateModule::PreWorldUpdateStuntBringUp(
             /*lbPaused -- FLAG (c)*/ false);
         mpPreWorldInputBuffer->UnlockForRead();
 
-        // ⭐ [D4] THE TEMPORARY OFFLINE-INTRO SELF-TRIGGER (see the body of
+        // â­ [D4] THE TEMPORARY OFFLINE-INTRO SELF-TRIGGER (see the body of
         // ProcessGameEventsModeIntroBringUp for why it is needed and when it dies).
         HarnessOfflineIntroSelfTriggerBringUp(lfGameTimestep);
     }
 
     // ---- 1c) THE SECOND LEG OF THE SAME HOP (console #86, EmmPreWorldUpdate's own tail) -------
-    // ⭐⭐⭐ [bounce wave] EmmPreWorldUpdate @0x8238EF50 does not stop at ModeManager. Its `bl`
+    // â­â­â­ [bounce wave] EmmPreWorldUpdate @0x8238EF50 does not stop at ModeManager. Its `bl`
     // stream continues:
     //     0x8238F168  bl ModeManager::PreWorldUpdate            <- leg 1b above
     //     0x8238F170  bl PerfMonCpu::StopMonitor
@@ -562,19 +654,19 @@ void GameStateModule::PreWorldUpdateStuntBringUp(
     // and the console guards it with `if (!IsSimPaused)` -- the SAME arm test leg 1b sits on,
     // which is why it is staged immediately after it and inside nothing new.
     //
-    // ⚠️ IT IS ITS OWN `if`, NOT AN `else`. In the console the ModeManager call sits inside
+    // âš ï¸ IT IS ITS OWN `if`, NOT AN `else`. In the console the ModeManager call sits inside
     // `if (IsSimPaused) PausedUpdate else PreWorldUpdate`, and THEN a separate
     // `if (!IsSimPaused) { UpdateRoadRulesManager }` follows. Both arms are the not-paused arm,
     // so the observable order and gating are identical either way; kept as a separate statement
     // so the shape matches the binary rather than reading as an else-branch that is not there.
     //
-    // ⭐ WHY THIS LEG EXISTS AT ALL: its action-42 post is the ONLY producer of impact time in
+    // â­ WHY THIS LEG EXISTS AT ALL: its action-42 post is the ONLY producer of impact time in
     // the entire image, and without it VehiclePhysics::UpdateCrashing's aftertouch gate never
     // opens, so RaceCarPhysics::UpdateShowtimePhysics -- the whole P6 bounce chain -- never runs.
     // The full derivation, the four arms deliberately NOT landed, and the method that found the
     // post are all in GameStateModule_RoadRules.cpp.
     //
-    // ⛔ NOT staged inside the 1b block above: 1b additionally requires mpPreWorldInputBuffer to
+    // â›” NOT staged inside the 1b block above: 1b additionally requires mpPreWorldInputBuffer to
     // be non-null (it passes the buffer to ModeManager), and this leg does not touch that buffer
     // at all. Nesting it there would add a condition the console does not have -- and on a build
     // where nothing constructs a PreWorldInputBuffer that condition is exactly the kind of
@@ -584,6 +676,45 @@ void GameStateModule::PreWorldUpdateStuntBringUp(
         UpdateRoadRulesManagerImpactTimeBringUp(lpActionQueue);
     }
 
+    // (merge 2026-08-27: both waves added a leg at this seam the same day -- the bounce wave's
+    // 1c above is EmmPreWorldUpdate's own tail; the scoring publish below runs AFTER
+    // EmmPreWorldUpdate returns, per its console position. Both kept, console order.)
+
+    // ---- 1d) PUBLISH THE SCORING SNAPSHOT (console #(RumbleManager::UpdatePauseState + 1)) ----
+    // â­â­â­ [A9 scoring-feed wave 2026-08-27] GameStateModule::CopyScoringDataToOutput @0x8236CDC0.
+    //
+    // POSITION IS THE CONSOLE'S, and it is exact. GameStateModule::PreWorldUpdate @0x823A5328 --
+    // this function's source and CopyScoringDataToOutput's SOLE xref-to -- runs it here:
+    //     bl GameStateModule::EmmPreWorldUpdate            (#86; the ModeManager tick above)
+    //     bl RumbleManager::UpdatePauseState
+    //     bl CgsDev::PerfMonCpu::StartMonitor(*(this+292348))
+    //     bl GameStateModule::CopyScoringDataToOutput(this, lpOutput)     <-- THIS CALL
+    //     bl CgsDev::PerfMonCpu::StopMonitor(*(this+292348))
+    //     if (a6 & 8) { bl TriggerQueryManager::PreWorldUpdate ... }      <-- leg 2 below
+    // i.e. AFTER the mode tick and BEFORE the trigger legs. Do not move it: ModeManager::
+    // PreWorldUpdate is what advances mStartTime/mEndTime and the per-car score records this
+    // publishes, so running the copy first would publish a one-frame-stale snapshot.
+    //
+    // â“˜ UNCONDITIONAL, deliberately. The console's ModeManager tick sits inside
+    // EmmPreWorldUpdate's not-sim-paused arm (and here inside the same guard, plus the PC-only
+    // `mpPreWorldInputBuffer != 0`), but this call is OUTSIDE it -- while the sim is paused the
+    // console still republishes the last scoring state every frame, which is what keeps the HUD
+    // clock showing its frozen value instead of collapsing to zero.
+    //
+    // â“˜ The write lock this function already holds is the console's own
+    // (`IOBuffer::LockForWrite(lpOutput)` at PreWorldUpdate's top) and it is required: the two
+    // scoring-interface accessors CopyScoringDataToOutput goes through are write-lock asserted.
+    // The mbIsUpdating bracket is required too -- GetPlayerActiveRaceCarIndex() and
+    // IsOnlineGameMode() both assert it.
+    //
+    // [FLAG PC bring-up] the TimerStatusInterface argument is the ONE deviation, the same one this
+    // function's own ModeManager call carries and for the same measured reason (nothing on PC
+    // fills the module's copy of the PreWorldInputBuffer timer block at gsm+208328, which is where
+    // the console reads its "now" from). Fully written up at the declaration in
+    // BrnGameStateModule.h. DELETE-WHEN DoUpdate_GameStatePreWorld stages a real
+    // PreWorldInputBuffer whose timer block is filled.
+    CopyScoringDataToOutput(mpOutputBuffer, lrTimerStatusInterface);
+
     // ---- 2) TriggerQueryManager: ARM the trigger set -----------------------------------------
     // X360 line 310 calls TriggerQueryManager::PreWorldUpdate @0x8239F5C8, whose FIRST statement
     // is `UpdateTriggers(this, lpOutput, lpActiveRaceCarInterface)`. That is the ONLY writer of
@@ -592,7 +723,7 @@ void GameStateModule::PreWorldUpdateStuntBringUp(
     // per-player-trigger fan-out that posts action 109 and calls ProcessPlayerTriggers, the
     // killzone-action drain) walk Array<u16,32> members this tree's TriggerQueryManager slice does
     // not model; parked, not faked.
-    // ⓘ IT RUNS AFTER ProcessGameEvents, so OnPropHit above walked the PREVIOUS frame's armed
+    // â“˜ IT RUNS AFTER ProcessGameEvents, so OnPropHit above walked the PREVIOUS frame's armed
     // set. That is the console's own order and it is deliberate -- do not "fix" it.
     mTriggerQueryManager.UpdateTriggers(mpOutputBuffer, &mLastActiveRaceCarInterface);
 
@@ -609,7 +740,7 @@ void GameStateModule::PreWorldUpdateStuntBringUp(
     // see BrnTriggerQueryManager.cpp for the leg-by-leg map and for the ONE documented PC
     // bring-up stand-in it carries (the producer of maLastPlayerTriggers, whose console producer
     // -- the world TriggerEntityModule line-test chain -- is inert on this build).
-    // ⓘ ORDER IS THE CONSOLE'S: the fan-out runs AFTER UpdateTriggers (it reads the set
+    // â“˜ ORDER IS THE CONSOLE'S: the fan-out runs AFTER UpdateTriggers (it reads the set
     // UpdateTriggers just armed) and BEFORE StuntManager::Update (which consumes the latch it
     // writes). Both halves of that sandwich are load-bearing -- do not reorder.
     // [FLAG PC bring-up] the DriveThruManager argument is NULL: the console passes
@@ -627,7 +758,7 @@ void GameStateModule::PreWorldUpdateStuntBringUp(
     // region" from "the trigger pump never ran" -- the wave's known blocker. Same logger and same
     // env guard (BRN_PROP_DIAG) as the "[prop-diag] BREAK" rung this ladder hangs off.
     //
-    // ⓘ ROUND-7 NOTE -- READ THIS BEFORE DRAWING A CONCLUSION FROM THIS LINE. It is a ONE-SHOT and
+    // â“˜ ROUND-7 NOTE -- READ THIS BEFORE DRAWING A CONCLUSION FROM THIS LINE. It is a ONE-SHOT and
     // it fires at the FIRST non-empty set, which on a junk-yard start is the junk-yard interior:
     // run 9 printed `armed smash=0 billboard=0 of=3` (BrnGame.log:863) and that line says NOTHING
     // about what was armed later. The per-rebuild timeline that does answer that question lives in
@@ -674,7 +805,7 @@ void GameStateModule::PreWorldUpdateStuntBringUp(
     }
 
     // ---- 2c) JUNCTION DETECTION + THE START ARM (console #96 and #98) ------------------------
-    // ⭐⭐⭐ [D4 stuntrace WAVE D] The two D3-owned functions, staged in the console's own body
+    // â­â­â­ [D4 stuntrace WAVE D] The two D3-owned functions, staged in the console's own body
     // order. From PreWorldUpdate @0x823A5328's `bl` stream:
     //     #93   TriggerQueryManager::PreWorldUpdate            <- the two legs immediately above
     //     #95   ProgressionManager::PreWorldUpdate             <- [X] NOT STAGED (see below)
@@ -686,7 +817,7 @@ void GameStateModule::PreWorldUpdateStuntBringUp(
     // (lpPreWorldInputBuffer, lpOutputBuffer) -- the identical r30/r29 the TriggerQueryManager call
     // four instructions earlier takes as its "in, out".
     //
-    // ⚠ THE ORDER IS LOAD-BEARING IN BOTH DIRECTIONS.
+    // âš  THE ORDER IS LOAD-BEARING IN BOTH DIRECTIONS.
     //   * #96 runs AFTER #93 because it reads TriggerQueryManager::mbPlayerInTrafficLightRegion /
     //     mPlayerCurrentTrafficLightId, and GetPlayerCurrentTrafficLightId() asserts
     //     IsPlayerInTrafficLightRegion() -- so it must see THIS frame's light-region state.
@@ -701,7 +832,7 @@ void GameStateModule::PreWorldUpdateStuntBringUp(
     // gsm+0x2C988 that it clears in the same breath (0x823A5BB4..0x823A5BD4), and the tree's
     // DriveThruManager is itself parked (see PreWorldUpdatePlayerTriggersBringUp's own FLAG).
     //
-    // ⛔ CROSS-LANE: THE BODIES ARE AGENT D3'S. This lane owns the CALL SITES and the two
+    // â›” CROSS-LANE: THE BODIES ARE AGENT D3'S. This lane owns the CALL SITES and the two
     // declarations in BrnGameStateModule.h (see the [D4 PUMP SEAM] block there). Until D3's landing
     // is consolidated these two are unresolved externals at LINK time -- the per-TU compile gate
     // passes, the exe does not link. That is the parallel-wave contract, stated rather than hidden.
@@ -718,19 +849,19 @@ void GameStateModule::PreWorldUpdateStuntBringUp(
         // product every other leg in this function uses.
         DetectModeStarts(mpPreWorldInputBuffer, mpOutputBuffer, lfGameTimestep);
 
-        // ⭐ [D4] THE HARNESS START INJECTION (NOT IN THE X360 BINARY). Runs immediately after
+        // â­ [D4] THE HARNESS START INJECTION (NOT IN THE X360 BINARY). Runs immediately after
         // DetectModeStarts, inside the same read-lock bracket, because it stands in for exactly
         // what DetectModeStarts' gesture gate decides. Env-gated off; see the body.
         HarnessInjectEventStartBringUp(mpOutputBuffer);
 
-        // ⭐⭐⭐ [showtime S7b-a, 2026-08-27] THE SHOWTIME START INJECTION (NOT IN THE X360 BINARY).
+        // â­â­â­ [showtime S7b-a, 2026-08-27] THE SHOWTIME START INJECTION (NOT IN THE X360 BINARY).
         // Same bracket, same reason, same discipline as the line above -- but for the SECOND
         // gesture DetectModeStarts carries: both bumpers (ControllerInput +0x42
         // mbCrashModePressed), whose whole `else` arm is a named PARK in GameStateModule_gSR_00.cpp.
         // Its TRIGGER is that real byte; what it bypasses is ShouldStartShowtimeMode @0x82356B18's
         // hold/speed/facing gate stack. Env-gated off (BRN_START_SHOWTIME); body in
         // GameStateModule_Showtime.cpp.
-        // ⛔ DELETE-WHEN the else arm lands -- this call and that function go together.
+        // â›” DELETE-WHEN the else arm lands -- this call and that function go together.
         HarnessInjectShowtimeBringUp(mpPreWorldInputBuffer, mpOutputBuffer);
 
         mpPreWorldInputBuffer->UnlockForRead();
@@ -747,7 +878,7 @@ void GameStateModule::PreWorldUpdateStuntBringUp(
                          lfGameTimestep, lbIsAGameModeActive);
 
     // [DIAG BRN_QUEUE_WATERMARK] NOT IN THE X360 BINARY -- THE 13312 GAME-ACTION QUEUE WATERMARK.
-    // ⚠⚠ WHY IT EARNS ITS PLACE, and why a plain assert does not cover it: this queue is
+    // âš âš  WHY IT EARNS ITS PLACE, and why a plain assert does not cover it: this queue is
     // GameStateModuleIO::GameActionQueue == CgsModule::VariableEventQueue<13312,16>, and its
     // AddEvent (CgsVariableEventQueue.h:427) DOES NOT RETURN after the overflow assert -- it fires
     // "Queue overflow." at CgsVariableEventQueue.h:469 and then MEMCPYS ANYWAY, past macData[13312],
@@ -1091,6 +1222,19 @@ void GameStateModule::HarnessOfflineIntroSelfTriggerBringUp(f32 lfGameTimestep)
 {
     static f32  sfIntroElapsed = 0.0f;
     static bool sbPosted       = false;
+
+    // â­ 2026-08-27 (frontier round 2): STAND DOWN when the REAL 163 producer exists. With
+    // BRN_EVENT_FSM armed the HUD flow runs the real PreRaceFlyByState, whose Update tail
+    // posts GUI 163 at the end of the fly-by (proven: run 20260827_134528 log:6815 carried a
+    // SECOND event 25 at intro+6.15 s -- the fly-by's own). Both firing made
+    // FinishOfflineModeIntro run TWICE and the second SendEvent(E_GME_NEXT) short-circuited
+    // CountdownState to 0.13 s. This stand-in exists ONLY for runs where the fly-by cannot
+    // run (the FSM hop gated off); it dies entirely with the BRN_EVENT_FSM exe gate.
+    static const bool sbRealFlyByArmed = (getenv("BRN_EVENT_FSM") != 0);
+    if (sbRealFlyByArmed)
+    {
+        return;
+    }
 
     const GameMode* lpCurrentGameMode = mModeManager.GetCurrentGameMode();
 

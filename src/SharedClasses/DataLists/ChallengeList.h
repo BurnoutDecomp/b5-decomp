@@ -51,9 +51,15 @@ public:
     void Construct();   // :77  RECONSTRUCTED
     void Destruct();    // :80  RECONSTRUCTED
 
+    // :92  RECONSTRUCTED @0x8267B598 (challenge-list wave 2026-08-27) -- registration +
+    // the console's post-load fixup pass. Its only caller is
+    // BrnResource::GameDataModule::PrepareFreeburnChallengeList @0x8266C088 (Prepare stage 10).
+    void                       AddListResource(CgsResource::ResourcePtr<ChallengeListResource>& lrResource);
+    // :95  RECONSTRUCTED (X360-inlined; replaces the return-0 gate that lived in
+    // BrnFriendsListLinkGates.cpp until this wave made the table real).
+    s32                        GetChallengeCount() const;
+
     // ---- declared-only (each reconstructed in its own TU) ----
-    void                       AddListResource(CgsResource::ResourcePtr<ChallengeListResource>& lrResource); // :92
-    s32                        GetChallengeCount() const;                            // :95
     const ChallengeListEntry*  GetChallengeData(s32 liIndex) const;                  // :98
     const ChallengeListEntry*  GetChallengeData(CgsID lID) const;                    // :101
     s32                        GetChallengeIndex(CgsID lID) const;                   // :104

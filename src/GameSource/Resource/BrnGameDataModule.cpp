@@ -20,6 +20,8 @@
 #include "GameSource/Resource/BrnGameDataModuleIO.h"                            // GameDataIO In/OutputBuffer (Update pump)
 #include "GameShared/GameClasses/Core/CgsID.h"                                  // CgsIDUnCompress / CgsIDConvertToString / CgsIDCompress
 #include "SharedClasses/DataLists/VehicleListEntry.h"                           // VehicleListEntry (the vehicle-table probe)
+#include "SharedClasses/DataLists/ChallengeListResourceType.h"                  // ChallengeListResource (complete: the stage-10 ResourcePtr)
+#include "SharedClasses/DataLists/ChallengeListEntry.h"                         // ChallengeListEntry (the challenge-table probe)
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                         // CgsCore::SPrintf
 #include "GameShared/GameClasses/Development/CgsStrStream.h"                    // CgsDev::StrStream (prop bundle name build)
 #include "GameShared/GameClasses/System/Resource/CgsResourceID.h"               // CgsResource::ID::HashString
@@ -125,7 +127,18 @@ namespace BrnResource
             if (!PrepareVehicleList())
                 return false;
             // fall through
-            // (X360 stage 10 PrepareFreeburnChallengeList sits here -- still deferred.)
+        case E_PREPARE_CHALLENGE_LIST:
+            // [challenge-list wave 2026-08-27] X360 stage 10 (LABEL_27):
+            // PrepareFreeburnChallengeList @0x8266C088. ⭐ THIS IS WHAT MAKES THE `CL__` GET
+            // ANSWERABLE. Its reply (id 53) is the ONE thing
+            // BrnGui::WorldDataController::Prepare's stage 9 waits on, so until this stage ran
+            // that machine parked at PREPARING_ACQUIRING_STREET_DATA for the whole session and
+            // every readiness-gated accessor -- GetEventInfoFromEventId included -- fired
+            // "E_WORLDDATACONTROLLERSTATE_READY <= meState" in live play near an event junction.
+            mePrepareStage = E_PREPARE_CHALLENGE_LIST;
+            if (!PrepareFreeburnChallengeList())
+                return false;
+            // fall through
         case E_PREPARE_ICE_LIST:
             // X360 stage 11 (LABEL_28): PrepareICEList.
             mePrepareStage = E_PREPARE_ICE_LIST;
@@ -980,6 +993,14 @@ namespace BrnResource
         // PreparePopups @0x8266CBA0 uses the same 11. Reading 5 here would push the HUD
         // message bundle into the GameData pool and the acquire would miss.
         const s32 KI_GUI_DATA_POOL_ID  = 11;  // X360 immediate (`li r26, 0xB`)
+
+        // [challenge-list wave 2026-08-27] and a THIRD pool: PrepareFreeburnChallengeList
+        // @0x8266C088 uses `li r25, 0x1A` (26) at 0x8266C0F0, stored as the LoadBundleRequest's
+        // miPoolId (+0x8C) and again as the AcquireResourceRequest's miPoolId (+0x08). 26 is the
+        // memory map's "Freeburn Challenges" pool (BrnMemoryMapData.h -- 0x3F000 bytes, 20
+        // resources), which is exactly the right size for the shipped 98944-byte payload.
+        // Reading 5 here would push the bundle into the GameData pool and the acquire would miss.
+        const s32 KI_FREEBURN_CHALLENGE_POOL_ID = 26;  // X360 immediate (`li r25, 0x1A`)
     }
 
     bool GameDataModule::PrepareDataListResource(s32& lriStage, const char* lpcBundleFileName,
@@ -1025,7 +1046,7 @@ namespace BrnResource
             const CgsModule::Event* lpEvent = 0;
             s32 liSize = 0;
             const s32 liType = mReceiverQueue.GetFirstEvent(&lpEvent, &liSize);
-            CGS_ASSERT(liType == 2, "Invalid event id received\n");   // X360 cpp:875 / 1383
+            CGS_ASSERT(liType == 2, "Invalid event id received\n");   // X360 cpp:875 / 1383 / 716
         }
         // fall through
         case 3:
@@ -1056,12 +1077,12 @@ namespace BrnResource
             const CgsModule::Event* lpEvent = 0;
             s32 liSize = 0;
             const s32 liType = mReceiverQueue.GetFirstEvent(&lpEvent, &liSize);
-            CGS_ASSERT(liType == 4, "Invalid event id received\n");   // X360 cpp:907 / 1415
+            CGS_ASSERT(liType == 4, "Invalid event id received\n");   // X360 cpp:907 / 1415 / 769
 
             const CgsResource::Events::AcquireResourceResponse* lpResponse =
                 reinterpret_cast<const CgsResource::Events::AcquireResourceResponse*>(lpEvent);
             CGS_ASSERT(lpResponse != 0 && lpResponse->miEventId == 0,
-                       "Invalid event id received\n");                // X360 cpp:914 / 1422
+                       "Invalid event id received\n");                // X360 cpp:914 / 1422 / 776
 
             // X360: BaseResourcePtr::CreateFromHandle(&localPtr, &response.mHandle) then
             // <List>::AddListResource(this + <offset>, &localPtr). The handle is handed back
@@ -1085,7 +1106,7 @@ namespace BrnResource
             mReceiverQueue.Clear();
             return true;
         default:
-            CGS_ASSERT(false, "Invalid Stage\n");   // X360 cpp:946 / 1446
+            CGS_ASSERT(false, "Invalid Stage\n");   // X360 cpp:946 / 1446 / 803
             lbFallThrough = false;
             break;
         }
@@ -1150,6 +1171,82 @@ namespace BrnResource
                 << "  entry0 name='" << (lpFirst != 0 ? lpFirst->GetName() : "<null>")
                 << "' rank=" << (lpFirst != 0 ? (s32)lpFirst->GetUnlockRank() : -1)
                 << " carType=" << (lpFirst != 0 ? (s32)lpFirst->GetCarType() : -1) << "\n";
+        }
+        return true;
+    }
+
+    // ========================================================================================
+    // ⭐ @ 0x8266C088 -- Prepare stage 10, PrepareFreeburnChallengeList.
+    //
+    // The SAME six-state machine as PrepareVehicleList/PrepareICEList/PrepareWheelList, over
+    // its own stage word (X360 this+0x22C == a1[139]) with:
+    //     bundle    "OnlineChallenges.bndl" (off_82F2A6F0)
+    //     resource  "B5ChallengeList"       (off_82F2A718)
+    //     pool      26                      (`li r25, 0x1A` @0x8266C0F0 -- NOT the shared 5;
+    //                                        the SAME immediate is stored as the bundle
+    //                                        request's miPoolId @+0x8C and the acquire's @+0x08)
+    //     allowFail true                    (`li r11, 1` -> stb at +0x90 == mbAllowFailiure)
+    //     consumer  BrnResource::ChallengeList::AddListResource(this + 462800, &ptr)
+    //     asserts   cpp:716 / 769 / 776 / 803 ("Invalid Stage\n")
+    // Both string literals are the IDA asm's own string comments on those two rodata slots.
+    //
+    // ⭐ WHY IT WAS PARKED, AND WHY IT NO LONGER IS. The prior wave's rule was "land stage 10
+    // and the reply handler together, or not at all", because a handler without this stage
+    // hands every consumer a live-looking, permanently EMPTY table. It also recorded a premise
+    // that turns out to be FALSE: "there is no challenge-list bundle in build/game to fill it
+    // from". MEASURED -- build/game/ONLINECHALLENGES.BNDL ships and is a correct
+    // already-ported little-endian platform-4 bundle: bnd2 v2, ONE resource, id 0x0D82D720 ==
+    // HashString("B5ChallengeList"), type 0x1001F (ChallengeListResourceType, registered in
+    // CgsResourceTypeRegistration.cpp as of this wave), payload {muNumChallenges = 458,
+    // muEntriesOffset = 0x10} + 458 * 216 bytes == the entry's 98944-byte uncompressed size
+    // exactly. POOL 26 ("Freeburn Challenges", 0x3F000 bytes / 20 resources) is one of the 27
+    // the memory map creates, so the target pool is real too. Both halves land here.
+    //
+    // ⭐ WHAT IT BUYS BEYOND THE CHALLENGE TABLE ITSELF: it is the precondition for
+    // ProcessGetFreeburnChallengeListRequest (id 53), which is the ONE reply
+    // BrnGui::WorldDataController::Prepare stage 9 waits on -- see the stage-10 comment in
+    // Prepare above.
+    // ========================================================================================
+    bool GameDataModule::PrepareFreeburnChallengeList()
+    {
+        CgsResource::ResourceHandle lHandle;
+        lHandle.Clear();
+        if (!PrepareDataListResource(miChallengeListPrepareStage,
+                                     "OnlineChallenges.bndl", "B5ChallengeList",
+                                     true /*mbAllowFailiure -- the X360 stores 1 here*/,
+                                     KI_FREEBURN_CHALLENGE_POOL_ID,
+                                     &lHandle))
+            return false;
+
+        if (lHandle.mpResourceMemory != 0)
+        {
+            CgsResource::ResourcePtr<ChallengeListResource> lResourcePtr(lHandle);
+            mChallengeList.AddListResource(lResourcePtr);
+        }
+        else
+        {
+            // [marked deviation] the console has no null path here (mbAllowFailiure only
+            // covers the bundle load); report instead of registering a null list. Same shape
+            // and same reason as PrepareVehicleList's own arm.
+            *CgsDev::Log::gpDebugPrint
+                << "[GameData] PrepareFreeburnChallengeList: B5ChallengeList did not resolve"
+                   " -- freeburn challenge table is EMPTY\n";
+        }
+
+        // [PC diagnostic] the same "RESIDENT IS NOT USABLE" probe the vehicle/wheel/ICE stages
+        // carry: the count proves registration, and reading a record back proves the type
+        // handler's FixUp actually rebased the 32-bit entry-array slot (an un-FixUp'd list
+        // shows up here as a garbage id rather than as an AV three subsystems later).
+        {
+            const s32 liCount = mChallengeList.GetChallengeCount();
+            const BrnResource::ChallengeListEntry* lpFirst =
+                (liCount > 0) ? mChallengeList.GetChallengeData(0) : 0;
+            *CgsDev::Log::gpDebugPrint
+                << "[GameData] PrepareFreeburnChallengeList: " << liCount << " challenges"
+                << " | entry0 id=" << (lpFirst != 0 ? lpFirst->GetChallengeID() : (CgsID)0)
+                << " title='" << (lpFirst != 0 ? lpFirst->GetTitleStringID() : "<null>")
+                << "' players=" << (lpFirst != 0 ? lpFirst->GetNumPlayers() : -1)
+                << " actions=" << (lpFirst != 0 ? lpFirst->GetNumActions() : -1) << "\n";
         }
         return true;
     }
@@ -1426,6 +1523,7 @@ namespace BrnResource
         miWorldCollisionValidatePending = 0;
         miResourcePrepareStage          = 0;
         miVehicleListPrepareStage       = 0;
+        miChallengeListPrepareStage     = 0;   // [challenge-list wave] X360 a1[139] (0x22C)
         miICEListPrepareStage           = 0;
         miWheelListPrepareStage         = 0;
         miHudMessagesPrepareStage       = 0;   // [gateui r3] X360 a1[145]
@@ -1436,6 +1534,13 @@ namespace BrnResource
         // stages 9/12: AddListResource appends into slot tables that Construct seeds with -1.
         mVehicleList.Construct();
         mWheelList.Construct();
+
+        // [challenge-list wave 2026-08-27] the third of the trio the X360 Construct brings up
+        // here (ChallengeList::Construct @0x82677D00 lists GameDataModule::Construct as its
+        // only caller, exactly like the two above). It MUST run before Prepare stage 10:
+        // AddListResource appends into a slot table Construct seeds with -1, and every
+        // maStaticDataLists ResourcePtr has to be self-linked before it is assigned into.
+        mChallengeList.Construct();
 
         // [gateui r3] X360 0x82671D1C: HudMessageController::Construct(this + 0x65950) --
         // through the ICF-folded one-store symbol at 0x82676600 (see the banner on
@@ -2057,7 +2162,11 @@ namespace BrnResource
         }
         else if (memcmp(lacName, "CL__", 4) == 0)
         {
-            DeferredGameDataRequest("GetFreeburnChallengeList (id 53)", lpSlot);
+            // [challenge-list wave 2026-08-27] UN-DEFERRED. The handler is only honest now that
+            // Prepare stage 10 (PrepareFreeburnChallengeList) fills mChallengeList first --
+            // that was the prior wave's "land stage 10 and the handler together, or not at all"
+            // rule, and both land in this change.
+            ProcessGetFreeburnChallengeListRequest(lpResourceInput, lpEvent, 53, liIndex);
         }
         else if (memcmp(lacName, "IL__", 4) == 0)
         {
@@ -3279,6 +3388,56 @@ namespace BrnResource
                 << "[GameData] ProcessGetICEListRequest: replied id " << liEventId
                 << " with &mICEList=" << static_cast<void*>(&mICEList)
                 << " (" << mICEList.GetICEMovieCount() << " takes)\n";
+        }
+
+        mGameDataEventSlotPool.PushIndex(static_cast<s16>(liSlotIndex));
+    }
+
+    // ⭐ @ 0x82666728 -- the FREEBURN CHALLENGE LIST GET (id 53). Instruction-for-instruction
+    // the vehicle handler with two different immediates: the reply's mId is the fixed CgsID
+    // 0x5AF30CD3F949F838 (the SAME id RequestInterface<N>::GetFreeburnChallengeList
+    // @0x8250BBE0 / @0x82396AB8 puts in the request -- see BrnGameDataRequestQueueImpl.h) and
+    // the resource-memory lane carries `this + 462800`, i.e. &mChallengeList (X360
+    // `addis r11, r31, 7 ; addi r11, r11, 0xFD0` == this + 0x70000 + 0xFD0 -- the identical
+    // address PrepareFreeburnChallengeList's AddListResource uses, which is what pins the
+    // member). Like its three siblings it streams NOTHING: the table was made resident by
+    // Prepare stage 10, so the GET just posts the pointer and recycles the slot.
+    //
+    // ⭐ THIS REPLY IS THE ONE BrnGui::WorldDataController::Prepare STAGE 9 BLOCKS ON. With it
+    // deferred that machine could never reach E_WORLDDATACONTROLLERSTATE_WFPLAYERCARCOLOURS,
+    // and every readiness-gated accessor asserted in live play (BrnGuiWorldDataController.cpp:511
+    // from SatNavRenderer::RecvEvent, near an event junction). BrnGameState::GameStateModule::
+    // Prepare stage 5 wants the same reply.
+    void GameDataModule::ProcessGetFreeburnChallengeListRequest(
+            CgsResource::ResourceIO::InputBuffer* /*lpResourceInput*/,
+            const GameDataIO::GameDataAssetEvent* lpEvent, s32 liEventId, s32 liSlotIndex)
+    {
+        GameDataIO::GameDataAssetEvent lResponse;
+        memset(&lResponse, 0, sizeof(lResponse));
+        lResponse.miEventId       = lpEvent->miEventId;
+        lResponse.mpReceiverQueue = 0;
+        lResponse.miPoolId        = 5;                       // X360 immediate (`li r10, 5`)
+        lResponse.mId             = 0x5AF30CD3F949F838ull;   // CgsID("CL__CHALLIST")
+        lResponse.meType          = static_cast<EAssetSet>(3);
+        lResponse.mbFailFlag      = false;
+        lResponse.mHandle.mpResourceMemory = &mChallengeList;
+        lResponse.mHandle.mpSourceEntry    = 0;
+
+        lpEvent->mpReceiverQueue->AddEvent(
+            reinterpret_cast<const CgsModule::Event*>(&lResponse), liEventId,
+            static_cast<s32>(sizeof(lResponse)));
+
+        // [PC diagnostic -- PRODUCER end] one-shot, the same shape the ICE handler carries.
+        // The consumer that matters is BrnGui::WorldDataController::Prepare stage 9; printing
+        // what was actually sent lets the two ends be compared without guessing.
+        static bool s_bLoggedChallengeListReply = false;
+        if (!s_bLoggedChallengeListReply)
+        {
+            s_bLoggedChallengeListReply = true;
+            *CgsDev::Log::gpDebugPrint
+                << "[GameData] ProcessGetFreeburnChallengeListRequest: replied id " << liEventId
+                << " with &mChallengeList=" << static_cast<void*>(&mChallengeList)
+                << " (" << mChallengeList.GetChallengeCount() << " challenges)\n";
         }
 
         mGameDataEventSlotPool.PushIndex(static_cast<s16>(liSlotIndex));

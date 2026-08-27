@@ -1697,7 +1697,21 @@ EActiveRaceCarIndex RaceCarEntityModule::AttachActiveRaceCar(
     ActiveRaceCar* lpActiveRaceCar = GetActiveRaceCar( leSlot );
 
     lpActiveRaceCar->Prepare();
-    lpActiveRaceCar->SetInGameMode( mbIsInGameMode );          // this[99140] -> car+0x777
+    // [FLAG PC bring-up 2026-08-27] ModeManager::PrepareForMode @0x82342930 never posts game
+    // action 23 on this build's freeburn entry path, so the module byte mbIsInGameMode
+    // (this[99140]; sole setter HandlePrepareForModeAction @0x823092F0) is stuck FALSE and the
+    // PLAYER car attaches with the FRONT-END ignition (1.2 s crank / 15 s idle-shutdown,
+    // BrnActiveRaceCar.cpp UpdateEngineState pad machine) instead of the console's in-game
+    // force-RUNNING early-out (@0x822A4FD0..0x822A4FF0 + 0x822A51BC). Net effect: the whole HUD
+    // reveal -- correctly slaved to engine state -- was on screen only for the ~24 s the pad
+    // happened to keep the engine cranked (proven by the 20260827_120443 frame/log correlation).
+    // Only the PER-CAR byte (car+0x777) is bridged for the PLAYER; the MODULE byte stays false
+    // so every leg that early-outs on it (PostSceneUpdate / PostPhysicsUpdate / wrapping /
+    // SetupCarColour) stays exactly as it was. DELETE-WHEN action 23 is posted on the freeburn
+    // entry path (the ModeManager PrepareForMode caller -- stuntrace campaign F2).
+    const bool lbInGameMode = mbIsInGameMode ||
+        ( lpRaceCar->GetType() == E_RACE_CAR_TYPE_PLAYER && !mbInCarSelectScreen );
+    lpActiveRaceCar->SetInGameMode( lbInGameMode );            // this[99140] -> car+0x777
     lpActiveRaceCar->Attach( lpRaceCar, mbCarSelectDontStreamAudio );
 
     // The streamer's "stream this car's audio" flag: true only for the PLAYER's car, and
@@ -4311,6 +4325,40 @@ void RaceCarEntityModule::PostPhysicsUpdate(
             lpActiveRaceCar->RestoreTickRenderPose();
         }
     }
+
+    // ⭐⭐⭐ [stuntrace frontier round 3, 2026-08-27] THE PLAYER-SCORING-MAP PUBLISH, at the
+    // console's OWN first slot -- `bl CopyActiveRaceCarToPlayerScoringMappingToOutput`
+    // @0x823075D8, immediately after LockForRead/LockForWrite and BEFORE
+    // ProcessRaceCarCrashEvents_PostPhysics @0x823075E8 and ProcessCreateVehicleEvents
+    // @0x823075F8 (the call order is already written out in this file's "THE THREE SCENE LEGS
+    // OF PostPhysicsUpdate" banner, which listed this leg from the asm and did not run it).
+    //
+    // ⛔ IT MUST STAY ABOVE EVERYTHING. OutputBuffer_PostPhysics::Clear() drives every cell of
+    // mActiveRaceCarOutputInterface's maeActiveRaceCarIndex[] back to the
+    // E_ACTIVE_RACE_CAR_INDEX_COUNT sentinel (RCEntityActiveRaceCarOutputInterface::Clear,
+    // BrnRCEntityActiveRaceCarOutputInterface.cpp:171), so the copy has to re-publish the map
+    // every tick -- exactly why the console puts it first.
+    //
+    // WHY IT WAS MISSING AND WHAT IT FIXES: this is the middle producer of the three-leg
+    // player-scoring chain
+    //     RaceCarEntityModule::maActiveRaceCarForPlayerScoringIndex     (written by
+    //        HandlePrepareForModeAction's extracted SetUpPlayerCarForMode tail)
+    //  -> RCEntityActiveRaceCarOutputInterface::maeActiveRaceCarIndex   (THIS leg; the world
+    //        bridge then hands the whole interface to the world UpdateOutputBuffer --
+    //        WorldBridgeEntityModulesToOutput.cpp:473)
+    //  -> ScoringSystem::maCarData[slot].meRaceCarIndex                 (bound by
+    //        ModeManager's sweep, run from GameStateModule::PostWorldUpdateStuntBringUp)
+    // With this leg absent the interface published the all-sentinel table forever, so
+    // ScoringSystem::GetCarData returned NULL and ModeManager::FinishCurrentMode's
+    // StopModeTimer dereferenced it at the end of every offline stunt run
+    // (run scratch/flow_run/20260827_140514: ASSERT 31113 "lpCarData" then an ACCESS_VIOLATION
+    // reading 0x18 at StopModeTimer + 0xE5).
+    //
+    // The console takes the WRITE half of the accessor here (it is inside its own LockForWrite
+    // bracket); the callee's own EPlayerScoringIndex / EActiveRaceCarIndex asserts are in
+    // BrnRaceCarEntityModule_ScoringMapping.cpp and are not restated at the call site.
+    CopyActiveRaceCarToPlayerScoringMappingToOutput(
+        lpOutput->GetActiveRaceCarOutputInterface() );
 
     // ⭐⭐ THE REAL LEG, at its own console position (@0x823075F8 -- early, BEFORE the
     // physics readback at @0x8230761C). Landed 2026-08-18 (wave Q5); its own banner carries

@@ -176,6 +176,63 @@ bool SnapDiagEnabled()
     return sbDiag && CgsDev::Log::gpDebugPrint != 0;
 }
 
+// --------------------------------------------------------------------------------------------
+// [FLAG PC bring-up, NOT in the X360 binary] BRN_SKIP_TRAINING_TIP -- the harness tip bypass.
+//
+// The boot-time tutorial tip ("Find an Auto-Repair shop...") is a MODAL type (< 77), so
+// IsBlockingTrainingTipActive above is TRUE for it, and it holds the junction canEnter gate down
+// for minutes of real time. It does clear on its own -- this is not a defect and this flag is not
+// a fix for one -- but a harness run is 275 s long and spends most of that boot-time window
+// standing at a junction with the start-hint glyphs suppressed, so the hint chain cannot be
+// exercised at all under the harness.
+//
+// OPT IN ONLY: OFF unless the environment carries BRN_SKIP_TRAINING_TIP, cached once in the same
+// `static const bool` shape as SnapDiagEnabled's BRN_PROP_DIAG read, so a retail-shaped run
+// (no env) is bit-identical to the console gate.
+//
+// ⛔ SCOPE. This wrapper is called from the TWO canEnter computations in
+// CheckIfPlayerIsAtJunctionWithAnEvent ONLY (mbCanEnterEventAtJunction and the action record's
+// own mbCanEnterEvent). IsBlockingTrainingTipActive itself is NOT modified, because its third
+// caller -- ShouldStartSnapRaceMode's pre-gate @0x82363700 -- is the gesture-hold arm, and that
+// one must keep the console's behaviour: a bypass there would let a harness run actually START a
+// mode out of a tip-blocked state, which is a capability -StartEvent already owns explicitly.
+//
+// DELETE-WHEN the training flow's tip lifecycle is fully reconstructed and fast-forwardable
+// (i.e. TrainingManager's RequestTip / GetTimeSinceLastTip / tip-expiry path is bodied and the
+// harness can retire or complete a pending tip directly, so nothing needs to ignore one).
+// --------------------------------------------------------------------------------------------
+bool IsBlockingTrainingTipActiveForCanEnterGate(const TrainingManager* lpTrainingManager)
+{
+    const bool lbBlocking = IsBlockingTrainingTipActive(lpTrainingManager);
+    if (!lbBlocking)
+    {
+        return false;
+    }
+
+    static const bool sbSkipTip = (getenv("BRN_SKIP_TRAINING_TIP") != 0);
+    if (!sbSkipTip)
+    {
+        return true;
+    }
+
+    // One shot, and only when the flag CHANGED the answer -- so a log proves the bypass did
+    // something rather than merely that the variable was set.
+    if (SnapDiagEnabled())
+    {
+        static bool sbLoggedSuppression = false;
+        if (!sbLoggedSuppression)
+        {
+            sbLoggedSuppression = true;
+            *CgsDev::Log::gpDebugPrint
+                << "[snap] BRN_SKIP_TRAINING_TIP -- blocking training tip (type "
+                << static_cast<s32>(lpTrainingManager->GetCurrentTrainingType())
+                << ") IGNORED for the junction canEnter gate."
+                << " [FLAG PC bring-up, NOT in the X360 binary]\n";
+        }
+    }
+    return false;
+}
+
 }   // anonymous namespace
 
 // ============================================================================================
@@ -361,10 +418,13 @@ void GameStateModule::CheckIfPlayerIsAtJunctionWithAnEvent(
 
         // mbCanEnterEventAtJunction (gsm+284369), @0x82390904..0x82390984: no game mode running,
         // no blocking training tip, and at or below 30 mph (flt_82029F30, image-read).
+        // [FLAG PC bring-up, NOT in the X360 binary] the tip term goes through the
+        // BRN_SKIP_TRAINING_TIP wrapper (banner at its definition above). With the env var unset
+        // -- every retail-shaped run -- it is IsBlockingTrainingTipActive verbatim.
         bool lbCanEnterEvent = false;
         if (mModeManager.GetCurrentGameMode() == 0)
         {
-            lbCanEnterEvent = !IsBlockingTrainingTipActive(mpTrainingManager) &&
+            lbCanEnterEvent = !IsBlockingTrainingTipActiveForCanEnterGate(mpTrainingManager) &&
                               (lpState->mfSpeedMPH <= 30.0f);
         }
 
@@ -487,10 +547,13 @@ void GameStateModule::CheckIfPlayerIsAtJunctionWithAnEvent(
             // LABEL_118 (@0x82390D5C..0x82390DA0): the record's OWN mbCanEnterEvent is the member
             // AND the unlocked flag AND "no blocking tip", recomputed here because the console
             // recomputes it (the member was latched before the event lookup ran).
+            // [FLAG PC bring-up, NOT in the X360 binary] same BRN_SKIP_TRAINING_TIP wrapper as the
+            // member gate above -- both halves of canEnter must agree or the record would say
+            // "cannot enter" while the member said it could.
             bool lbActionCanEnterEvent = false;
             if (mbCanEnterEventAtJunction && lbEventUnlocked)
             {
-                lbActionCanEnterEvent = !IsBlockingTrainingTipActive(mpTrainingManager);
+                lbActionCanEnterEvent = !IsBlockingTrainingTipActiveForCanEnterGate(mpTrainingManager);
             }
             lAction.mbCanEnterEvent = lbActionCanEnterEvent;
         }

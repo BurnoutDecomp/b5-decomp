@@ -904,6 +904,12 @@ namespace BrnGame
         // Prepare reports done, so ResourceUpdateThread stops re-entering it. On the console
         // the equivalent latch is GuiModule::Prepare's own stage word reaching 15.
         bool mbWorldDataPrepared;
+        // [event-starts wave 2026-08-27] The done latch for the controller's SECOND acquire
+        // machine (WorldDataController::Prepare2 @0x82516CB8 -- mpProgressionData / mpStreetData).
+        // Separate from mbWorldDataPrepared because the two machines complete independently and,
+        // on this build, one of them never completes at all. See the ⛔ at the driver's call site
+        // for why they are pumped mutually exclusively.
+        bool mbWorldData2Prepared = false;
 
         // [FLAG PC stand-in] (no console member): the GUI events 406 + 412 have gone out for the
         // car-select screen currently on the flow. Cleared when that screen unsubscribes, so a

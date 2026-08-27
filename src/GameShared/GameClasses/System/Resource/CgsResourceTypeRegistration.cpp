@@ -38,6 +38,7 @@
 #include "SharedClasses/Traffic/BrnTrafficGraphicsStubResourceType.h"          // BrnTraffic::GraphicsStubResourceType (0x10015)
 #include "SharedClasses/DataLists/VehicleListResourceType.h"                   // BrnResource::VehicleListResourceType (0x10005)
 #include "SharedClasses/DataLists/WheelListResourceType.h"                     // BrnResource::WheelListResourceType (0x10009)
+#include "SharedClasses/DataLists/ChallengeListResourceType.h"                 // BrnResource::ChallengeListResourceType (0x1001F)
 #include "SharedClasses/World/BrnVehicleGraphicsSpecResourceType.h"            // BrnVehicle::GraphicsSpecResourceType (0x10006)
 #include "SharedClasses/World/BrnWheelGraphicsSpecResourceType.h"              // BrnWheel::GraphicsSpecResourceType (0x1000A)
 #include "SharedClasses/World/BrnEnvironmentKeyframeResourceType.h"       // EnvironmentSettings::KeyframeResourceType (0x10012)
@@ -189,6 +190,16 @@ namespace CgsResource
         TypeRegistry::Register(&sVehicleList, "VehicleList");
         static BrnResource::WheelListResourceType     sWheelList;    // 0x10009 (65545)
         TypeRegistry::Register(&sWheelList, "WheelList");
+        // [challenge-list wave 2026-08-27] The THIRD member of the same family, and it is
+        // load-bearing for exactly the same reason: GameDataModule::Prepare stage 10
+        // (PrepareFreeburnChallengeList @0x8266C088) streams "OnlineChallenges.bndl" into
+        // POOL 26 and acquires "B5ChallengeList". MEASURED against the shipped
+        // build/game/ONLINECHALLENGES.BNDL: one resource, id 0x0D82D720 ==
+        // HashString("B5ChallengeList"), type 0x1001F (65567) -- and with no registered
+        // handler the pool stores a NULL mpResourceType, skips FixUp, and every one of the
+        // 458 challenge records is then reached through an un-rebased 32-bit offset.
+        static BrnResource::ChallengeListResourceType sChallengeList; // 0x1001F (65567)
+        TypeRegistry::Register(&sChallengeList, "ChallengeList");
         // The per-car graphics bundle's own spec resource. Measured over
         // build/game/VEHICLES/VEH_PUSMC01_GR.BIN (275 resources): its type set is
         // {0, 1, 10, 12, 13, 14, 15, 42, 65542}, and 65542 was the only one without a handler.

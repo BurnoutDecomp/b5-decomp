@@ -441,4 +441,42 @@ const BrnStreetData::StreetData* StreetManager::GetStreetData()
     return mpStreetData.operator->();
 }
 
+// ============================================================================================
+// [event-starts producer wave 2026-08-27] Two reads this manager already OWNED but never
+// published, both needed by GameStateModule::SendSetUpAllEventStartsMessage @0x823759D0.
+// Homed here because this is the TU that BINDS both members (LoadAIData binds mpAISectionData,
+// LoadDistrictMap stores mDistrictMapResourceHandle) -- keeping producer and reader in one file.
+// ============================================================================================
+
+// DWARF BrnGameStateStreetManager.h:468 -- declared since the keystone landed, bodied now.
+// The X360 emits no standalone symbol (StreetManager::SetupParRivals @0x8233F5E0 reaches the
+// handle by the inline `this + 0x1D08` adjust); this accessor IS that adjust.
+const CgsResource::ResourceHandle* StreetManager::GetDistrictMapResourceHandle() const
+{
+    return &mDistrictMapResourceHandle;
+}
+
+// ⚠️ [FLAG PC bring-up] NOT AN X360 ACCESSOR -- and the deviation is the OWNER, not the data.
+// SendSetUpAllEventStartsMessage reads the AI-section resource through the PROGRESSION manager's
+// own copy (`sub_82367718(gameStateModule + 181300)` @0x82375A44/@0x82375C60 ==
+// ResourcePtr<AISectionsData>::operator-> on mProgressionManager + 133380, since
+// mProgressionManager sits at GameStateModule + 47920 and 47920 + 133380 == 181300 exactly).
+// ProgressionManager::mpAISectionData HAS NO BINDER ANYWHERE IN THIS TREE -- grep it: the only
+// two hits are comments, and ProgressionManager::LoadProgressionData binds mpProgressionData and
+// nothing else. Calling operator-> on it would fire the ResourcePtr's own "Can not instance
+// resource pointer - it has no main memory resource" assert and hand back a null the console's
+// shape then dereferences inside BuildAISectionPointMap.
+// THIS manager's mpAISectionData is the SAME resource (both are the AI-lanes acquire) and IS
+// bound, by LoadAIData in this very file. So the producer reads it from here instead, and says so.
+// DELETE-WHEN ProgressionManager::mpAISectionData gets its console binder (the same
+// ComputeLandmarkAISectionIndices @0x82370008 frontier BrnProgressionManager.cpp:601 names).
+const BrnAI::AISectionsData* StreetManager::GetAISectionData() const
+{
+    if (!mpAISectionData.HasMemoryResource())
+    {
+        return 0;
+    }
+    return mpAISectionData.operator->();
+}
+
 } // namespace BrnGameState

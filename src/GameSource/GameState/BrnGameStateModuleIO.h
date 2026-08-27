@@ -28,6 +28,8 @@
 #include "GameSource/Network/BrnNetworkModuleIO.h"                 // BrnNetwork::BrnNetworkModuleIO::PlayerResultsInterface (embedded @ +0x36B8)
 #include "GameSource/Network/SharedIO/BrnNetworkModuleInGamePlayerStatusInterface.h" // InGamePlayerStatusInterface (embedded @ +0x2CC8)
 #include "GameSource/World/EntityModules/TriggerEntityModule/SharedIO/BrnTriggerEntityModuleInputInterface.h" // BrnWorld::TriggerEntityModuleIO::TriggerManagementInputInterface (OutputBuffer +0x9050, embedded by value)
+#include "GameSource/GameState/SharedIO/BrnGameStateToGuiIOInterfaces.h" // GameStateToGuiInterface (OutputBuffer +0x4450, embedded by value -- see its member's ⚠️)
+#include "GameSource/GameState/BrnGameStateSharedIO.h"      // SetUpAllEventStartsInterface (OutputBuffer console +176368, embedded by value)
 
 // PostWorldInputBuffer hands out the active-race-car output interface by pointer only
 // (GetActiveRaceCarOutputInterface, X360 0x8231D2C0); forward-declare its real home.
@@ -249,7 +251,11 @@ namespace GameStateModuleIO
     // layout change. Asserted in the .cpp.
     typedef BrnResource::GameDataIO::RequestInterface<3072> ResourceRequestInterface; // OutputBuffer +0x3414
     class TakedownEventOutputQueueType;    // OutputBuffer +0x4040
-    struct GameStateToGuiInterface;        // OutputBuffer +0x4450 (complete def: BrnGameStateToGuiIOInterfaces.h)
+    // GameStateToGuiInterface (OutputBuffer +0x4450) used to be forward-declared here and carried
+    // as an opaque span. It is a REAL TYPED MEMBER as of 2026-08-27 -- its complete definition
+    // arrives with the BrnGameStateToGuiIOInterfaces.h include at the top of this file, because
+    // OutputBuffer::Construct has to run the interface's own Construct (X360 0x82379908) BY NAME.
+    // See the member declaration below for the host-width note.
     class RaceCarRaceDistanceInterface;    // OutputBuffer +0x2A48C (complete def: BrnGameStateSharedIO.h)
     // The two scoring snapshots BridgeGameStateToWorld (X360 0x823E1890) forwards. Both are
     // COMMITTED types with real member sets (BrnGameStateSharedIO.h); they are returned by
@@ -608,6 +614,19 @@ namespace GameStateModuleIO
         const ScoringOutputInterface*          GetScoringOutputInterface() const;
         // INLINED on X360 (bridge computes this+175976).
         const OnlineScoringOutputInterface*    GetOnlineScoringOutputInterface() const;
+        // ---- write-side twins (A9 scoring-feed wave 2026-08-27) --------------------------
+        // ALSO INLINED on X360, on the PRODUCER side this time: GameStateModule::
+        // CopyScoringDataToOutput @0x8236CDC0 opens by materialising both addresses off its
+        // OutputBuffer argument (`addis r26,r4,3 ; addi r26,r26,-0x5B48` == out+173240 and
+        // `addis r29,r4,3 ; addi r29,r29,-0x5098` == out+175976, 0x8236CDD4..0x8236CDE8) and
+        // hands them straight to ModeManager::WriteDataToOutput before writing the 12 scalars
+        // itself. De-inlined to these named accessors so no reconstructed body pokes a byte
+        // offset into a foreign buffer (hazards H9). The console holds the buffer's WRITE lock
+        // across that whole span (GameStateModule::PreWorldUpdate @0x823A5328 does
+        // `IOBuffer::LockForWrite(lpOutput)` at the top), so these carry the write-lock assert
+        // the other write-side accessors on this class carry.
+        ScoringOutputInterface*                GetScoringOutputInterface();
+        OnlineScoringOutputInterface*          GetOnlineScoringOutputInterface();
         // INLINED on X360 (BridgeGameStateToSound @0x823CDE50 computes this+176344; phase C3b).
         const GameModeOutputInterface*         GetGameModeOutputInterface() const;
 
@@ -651,6 +670,16 @@ namespace GameStateModuleIO
         bool GetSetUpAllEventStartsInterfaceIsValid() const;         // 0x823BA0E0 read, line 328
         void SetSetUpAllEventStartsInterfaceIsValid(bool lbValid);   // 0x82363198 write, line 329
 
+        // ⭐ [event-starts producer wave 2026-08-27] THE INTERFACE THE FLAG ABOVE GUARDS.
+        // X360-INLINED at both ends -- the console reaches it by the raw adjust and memcpys the
+        // whole 0x20E0 object, so there is no standalone accessor symbol to match:
+        //   producer  SendSetUpAllEventStartsMessage @0x82375E44
+        //             `addis r3, r29, 3 / addi r3, r3, -0x4F10` == out + 0x2B0F0 (176368), 0x20E0 in
+        //   consumer  BridgeGameStateToGui           @0x823EF1B8  the identical adjust, 0x20E0 out
+        // De-inlined to this named pair so neither side pokes the buffer at an absolute offset.
+        SetUpAllEventStartsInterface&       GetSetUpAllEventStartsInterface();
+        const SetUpAllEventStartsInterface& GetSetUpAllEventStartsInterface() const;
+
         // SpecificGameModeEvent interface valid flag (mbSpecificGameModeEventInterfaceIsValid @+192489)
         bool GetSpecificGameModeEventInterfaceIsValid() const;       // 0x823BA190 read, line 334
         void SetSpecificGameModeEventInterfaceIsValid(bool lbValid); // 0x82363248 write, line 335
@@ -665,7 +694,28 @@ namespace GameStateModuleIO
         u8  mTakedownEventOutputQueueStorage[0x43AC - 0x4040];            // TakedownEventOutputQueue     @ +0x4040 (16448)
         GameStateToControllerInterface mGameStateToControllerInterface;   // @ +0x43AC (17324, named opaque)
         u8  maPadToGameStateToGui[0x4450 - (0x43AC + sizeof(GameStateToControllerInterface))]; // -> +0x4450
-        u8  mGameStateToGuiInterfaceStorage[0x4840 - 0x4450];             // GameStateToGuiInterface      @ +0x4450 (17488)
+        // ⭐ 2026-08-27 (stunt-races frontier round 2, defect D2): was
+        //     u8 mGameStateToGuiInterfaceStorage[0x4840 - 0x4450];
+        // an opaque 1008-byte span, and BECAUSE it was opaque OutputBuffer::Construct could not
+        // run GameStateToGuiInterface::Construct on it (that line is in the console's own
+        // construct list, and it sat in this body's "STILL NOT MADE" checklist). Every queue in
+        // the interface therefore stayed mpEvents == NULL, and the first publisher to fire --
+        // ModeManager::FinishCurrentMode -> AddFinishedRaceEvent, at the end of the first stunt
+        // run -- wrote through the null. Run scratch/flow_run/20260827_134528/BrnGame.log:
+        // "mpEvents != NULL" then EXCEPTION_ACCESS_VIOLATION WRITING 0x0. Typed by value here so
+        // the Construct call is by-name, exactly as mTriggerManagementInputInterface above.
+        //
+        // ⚠️ HOST WIDTH, MEASURED on this x64 build: sizeof(GameStateToGuiInterface) == 1032
+        // against the console's 1008-byte span (0x4840-0x4450). The nine BaseEventQueue<T> heads
+        // widen from 12 to 16 bytes each on LLP64 (T* mpEvents 4 -> 8 plus alignment), which
+        // pushes the trailing crash queue from console +480 to host +504. Every member after this
+        // one therefore sits 24 bytes past its console offset -- fine, and safe for the SAME
+        // reason the trigger interfaces' 4-byte overshoot is: every access to this buffer is BY
+        // NAMED MEMBER (nothing pokes it at an absolute offset), and the buffer is heap-allocated
+        // at sizeof by GameStateModule::Construct's `new OutputBuffer()`. Keeping the console's
+        // 1008-byte span here would have been the bug: a 1032-byte object viewed through a
+        // 1008-byte blob, overlapping mGuiEventQueueStorage's first 24 bytes.
+        GameStateToGuiInterface mGameStateToGuiInterface;                 // console +0x4450 (17488)
         u8  mGuiEventQueueStorage[0x9050 - 0x4840];                       // GuiEventQueue                @ +18496 .. +0x9050
         // ⛔ CORRECTED 2026-08-01 (BridgeGameStateToWorld wave). These two members used to be
         //     TriggerManagementInputInterface mTriggerManagementInputInterface;   // 16-byte placeholder
@@ -705,7 +755,25 @@ namespace GameStateModuleIO
         u8  mOnlineScoringOutputInterfaceStorage[176140 - 175976];        // console +175976 (164)
         u8  maPadToGameMode[176344 - 176140];                             // console +176140 .. +176344
         u8  mGameModeOutputInterfaceStorage[176360 - 176344];             // console +176344 (16; phase C3b)
-        u8  maUnmodelledTailStorage[192488 - 176360];                     // console +176360 .. +192488
+        // ⭐ [event-starts producer wave 2026-08-27] THE TAIL IS NOT UNMODELLED ANY MORE, and the
+        // carve is EXACT rather than approximate. It used to be one 16128-byte
+        // `maUnmodelledTailStorage[192488 - 176360]` blob; the two interfaces inside it are both
+        // named by BridgeGameStateToGui @0x823EF1A0..0x823EF218, which reads each valid flag and
+        // then memcpys a fixed span out of this buffer at a fixed adjust:
+        //     out + 0x2B0F0 (176368), size 0x20E0 (8416)  -> GuiEventUpdateEventStarts   (id 203)
+        //     out + 0x2D1D0 (184784), size 0x1E18 (7704)  -> GuiEventSpecificPresetRaces (id 205)
+        // and 176360 + 8 + 8416 + 7704 == 192488 EXACTLY -- the two spans plus the 8-byte 16-align
+        // hole in front of the first one fill the old blob with nothing left over, which is the
+        // arithmetic that proves the carve rather than assuming it.
+        // Only the FIRST is typed here: SetUpAllEventStartsInterface is a complete type in
+        // BrnGameStateSharedIO.h (included above) and its _AssertLayout pins sizeof == 0x20E0.
+        // SpecificGameModeEventInterface stays CONSOLE-WIDTH OPAQUE storage -- its host sizeof is
+        // not yet pinned against the console's 7704 and nothing in this tree produces or consumes
+        // it, so widening it here could shift mbSetUpAllEventStartsInterfaceIsValid off the byte
+        // three accessors already agree on. Type it when its producer lands.
+        u8  maPadToSetUpAllEventStarts[176368 - 176360];                  // console +176360 (8; 16-align)
+        SetUpAllEventStartsInterface mSetUpAllEventStartsInterface;       // console +176368 (8416)
+        u8  mSpecificGameModeEventInterfaceStorage[192488 - 184784];      // console +184784 (7704)
         bool mbSetUpAllEventStartsInterfaceIsValid;                       // console +192488
         bool mbSpecificGameModeEventInterfaceIsValid;                     // console +192489
         bool mbControllerActive;                                          // console +192490

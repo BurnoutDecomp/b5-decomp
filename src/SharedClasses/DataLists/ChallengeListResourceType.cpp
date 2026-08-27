@@ -8,8 +8,8 @@
 //   BrnResource::ChallengeListResourceType::FixUp    @ 0x8267DE80
 //   BrnResource::ChallengeListResourceType::GetTypeID@ 0x826757A8
 //
-// The resource is { u32 muCount; ChallengeRecord* mpRecords }; the only relocatable
-// pointer is mpRecords (word 1). FixUp adds the delta (the rw::Resource's load base),
+// The resource is { u32 muNumChallenges; u32 muEntriesOffset }; the only relocatable
+// slot is muEntriesOffset (word 1). FixUp adds the delta (the rw::Resource's load base),
 // FixDown subtracts it. (The X360 also walks the nested records, but that traversal
 // writes nothing here — the nested fields are offsets, not pointers — so it is a
 // no-op and omitted. The X360 FixUp returned the record count; the virtual is void.)
@@ -26,7 +26,7 @@ namespace BrnResource
     }
 
     // GetSerialisedResourceDescriptor @ 0x8267BCC0 (store-for-store). The serialised payload is a
-    // ChallengeListResource ({ muNumChallenges; ChallengeListEntry* mpEntries; 16-byte pad }) followed
+    // ChallengeListResource ({ muNumChallenges; muEntriesOffset; 16-byte pad }) followed
     // by muNumChallenges ChallengeListEntry records of 216 (0xD8) bytes each. The X360:
     //   r9 = *a3 (muNumChallenges); r9 = 216 * r9; r9 += 16   -> entry0 size = 216*count + 16
     // then writes all five alignments (1) and the four trailing sizes (0), and a single 64-bit store
@@ -49,13 +49,21 @@ namespace BrnResource
         return lDescriptor;
     }
 
+    // [challenge-list wave 2026-08-27] BY NAME, not `reinterpret_cast<u32*>(res)[1]`. Word 1 of
+    // the serialised record IS muEntriesOffset -- but only now that the member is the 4-byte
+    // slot the console ships (it used to be declared as an 8-byte host pointer, which MSVC x64
+    // places at +0x08, so the raw word-1 write rebased the alignment padding instead and the
+    // entry array stayed unreachable). Same correction, same reason, same idiom as the
+    // VehicleList / WheelList siblings.
     void ChallengeListResourceType::FixDown(void* lpResource, const rw::Resource& lrResource) const
     {
-        reinterpret_cast<u32*>(lpResource)[1] -= CgsResource::GetLoadBase(lrResource);
+        static_cast<ChallengeListResource*>(lpResource)->muEntriesOffset -=
+            CgsResource::GetLoadBase(lrResource);
     }
 
     void ChallengeListResourceType::FixUp(void* lpResource, const rw::Resource& lrResource) const
     {
-        reinterpret_cast<u32*>(lpResource)[1] += CgsResource::GetLoadBase(lrResource);
+        static_cast<ChallengeListResource*>(lpResource)->muEntriesOffset +=
+            CgsResource::GetLoadBase(lrResource);
     }
 }

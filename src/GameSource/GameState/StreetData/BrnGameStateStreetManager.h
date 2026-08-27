@@ -471,6 +471,14 @@ namespace BrnGameState
         ::CgsID GetRightPlayerRoadId();                                  // :465
         const CgsResource::ResourceHandle* GetDistrictMapResourceHandle() const;   // :468
 
+        // ⚠️ [FLAG PC bring-up] ACCESSOR GROW, not an X360 method. The loaded AI-lanes resource
+        // this manager's LoadAIData binds; read by GameStateModule::SendSetUpAllEventStartsMessage
+        // because the copy the CONSOLE reads (ProgressionManager::mpAISectionData) has no binder in
+        // this tree. Returns 0 while unbound rather than firing the ResourcePtr's own assert, the
+        // same HasMemoryResource() idiom ProgressionManager::GetProgressionData uses.
+        // See the body in BrnGameStateStreetManager_wB_01.cpp for the offset proof + DELETE-WHEN.
+        const BrnAI::AISectionsData* GetAISectionData() const;
+
         // @ 0x8233F350 / 0x8233F230 / 0x8233F2C0. Tally the player's ruled roads and
         // mirror the result into the ProgressionManager counters (+133456/+133460/+133464).
         s32 GetNumberOfCompleteRoadsRuledByLocalPlayer();

@@ -39,9 +39,13 @@ SetUpAllEventStartsInterface::AppendEventStart(const EventStart& lrEventStart)
 }
 
 // X360 0x82361398 - linear-scan AddEventStart.
+// [2026-08-27 event-starts producer wave] The six parameters are named by role now that the ONE
+// caller (GameStateModule::SendSetUpAllEventStartsMessage @0x823759D0) is bodied and its call setup
+// @0x82375C7C..0x82375CAC names every argument -- see the EventStart banner in
+// BrnGameStateSharedIO.h. No behaviour changed; only the spelling of the arguments.
 SetUpAllEventStartsInterface::EventStart*
-SetUpAllEventStartsInterface::AddEventStart(const u8* lpLeadingBlock, s32 liEventIndex, s32 liEventID,
-                                            s32 liWord10, s32 liWord1C, s16 liWord20)
+SetUpAllEventStartsInterface::AddEventStart(Vector3 lv3Position, s32 liEventIndex, s32 liEventID,
+                                            u32 luLightTriggerId, s32 liCounty, s16 li16AISectionIndex)
 {
     // Linear scan of the live elements for a record already keyed to this event index.
     const u32 luCount = maEventStarts.GetLength();
@@ -62,15 +66,14 @@ SetUpAllEventStartsInterface::AddEventStart(const u8* lpLeadingBlock, s32 liEven
                "maEventStarts.GetLength() < maEventStarts.GetCapacity()");
 
     EventStart lEventStart;
-    for (u32 luByte = 0; luByte < sizeof(lEventStart.maLeadingBlock); ++luByte)
-    {
-        lEventStart.maLeadingBlock[luByte] = lpLeadingBlock[luByte];
-    }
-    lEventStart.miWord10     = liWord10;
-    lEventStart.miEventIndex = liEventIndex;
-    lEventStart.miEventID    = liEventID;
-    lEventStart.miWord1C     = liWord1C;
-    lEventStart.miWord20     = liWord20;
+    // The X360 stack-builds the record at var_90 in exactly this order: `stvx128 v127` (the
+    // position lane) then the five scalars at +0x10/+0x14/+0x18/+0x1C/+0x20.
+    lEventStart.mv3Position        = lv3Position;
+    lEventStart.muLightTriggerId   = luLightTriggerId;
+    lEventStart.miEventIndex       = liEventIndex;
+    lEventStart.miEventID          = liEventID;
+    lEventStart.miCounty           = liCounty;
+    lEventStart.mi16AISectionIndex = li16AISectionIndex;
     // X360-authoritative: the not-found path returns whatever AppendEventStart/EventSta
     // returns (0x823614E8 -> LABEL_15 falls straight through to the epilogue with r3
     // untouched), which per AppendEventStart above is `this`, not the new element.
