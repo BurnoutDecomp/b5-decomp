@@ -515,9 +515,7 @@ void TriggerQueryManager::ProcessPlayerTriggers(
         case BrnTrigger::GenericRegion::E_TYPE_PAINT_SHOP:
         case BrnTrigger::GenericRegion::E_TYPE_CAR_PARK:
         {
-            // ⛔⛔ [gateui r4] PARK (verify_r3_fix3gsm F2) -- THE DRIVE-THRU LEG IS REMOVED BEHIND
-            // THIS FLAG, exactly the way the E_TYPE_ROAD_LIMIT arm below was parked in round 3.
-            // It is NOT fabricated. The console arm is one call, transcribed from the asm:
+            // ⭐⭐⭐ [drive-thru wave 2026-08-27] UNPARKED. The console arm, transcribed from the asm:
             //
             //     // 0x8239BF80 BrnGameState::TriggerQueryManager::ProcessPlayerTriggers,
             //     // switch (*(a4 + 54)) == lpGenericRegion->GetType(), cases 0..4:
@@ -525,46 +523,40 @@ void TriggerQueryManager::ProcessPlayerTriggers(
             //     //   a7 = lpDriveThruManager (this)   a4 = lpGenericRegion
             //     //   a3 = lpActiveRaceCarInterface    a8 = lpVehicleList   a5 = lpOutput
             //
-            // i.e. exactly
-            //     lpDriveThruManager->HandleDriveThru(lpGenericRegion, lpActiveRaceCarInterface,
-            //                                         lpVehicleList, lpOutput);
-            //
-            // WHY IT IS PARKED, measured rather than argued:
-            // `DriveThruManager::HandleDriveThru` @0x8239B010 DOES have a body --
-            // `GameSource/GameState/Offences/BrnDriveThruManager.cpp` -- but that TU DOES NOT
-            // COMPILE, so it cannot be mounted and the call is an unconditional LNK2019 in the
-            // mandatory `BrnTriggerQueryManager.cpp` mount. Re-measured 2026-08-20 with
-            // `selfcheck.py`:
-            //     BrnDriveThruManager.h(76,106,111,118): C2039/C2061 "GameActionQueue" is not a
-            //         member of BrnGameState::GameStateModuleIO -- the header forward-declares
-            //         only `struct OutputBuffer` and never includes BrnGameStateModuleIO.h,
-            //         where the typedef lives.
-            //     BrnDriveThruManager.cpp(403,404): C2440/C2664  BrnGameState::EActiveRaceCarIndex
-            //         vs the global EActiveRaceCarIndex.
-            //     BrnDriveThruManager.cpp(487,497): C2511/C2597 downstream of the header errors.
-            // Fixing the header is small, but landing that TU is NOT a one-file job: it drags the
-            // SIX bodiless training symbols this wave has already parked twice (the identical list
-            // `StuntManager_gUI_00.cpp :: ProcessStuntElement` names) --
-            //     TrainingManager::IsTipPending            (BrnTrainingManager.h:108)
-            //     TrainingManager::IsTipAllowedInGameMode  (:123)
-            //     TrainingManager::GetProfile              (:112)
-            //     TrainingManager::GetTimeSinceLastTip     (:115)
-            //     TrainingManager::RequestTip              (:118)
-            //     Profile::HasPlayerSeenTrainingType       (BrnProfile.h:468)
-            // -- reached from `BrnDriveThruManager.cpp :: TryPlayTrainingTip`, which its junk-yard /
-            // gas / paint / car-park arms all call. None has a body or a link stub anywhere in
-            // b5-decomp/src.
-            //
-            // ⓘ COST OF THE PARK: driving through a junk yard / gas station / body shop / paint
-            // shop / car park stops opening that shop's flow. That is a REAL behavioural loss --
-            // and it is off this wave's path (drive-thru regions post no stunt element, touch
-            // neither the StuntManager latch nor game action 58). Without the park
-            // `BrnTriggerQueryManager.cpp` cannot be mounted at all, which costs the wave BOTH
-            // `[UI-gate] OnPropHit ... latch=` (OnPropHit walks maActiveTriggers, written only by
-            // this file's UpdateTriggers) AND everything downstream of it.
-            // RESTORE-WHEN BrnDriveThruManager.cpp compiles and its training-tip callees land.
-            (void)lpDriveThruManager;
-            (void)lpVehicleList;
+            // ⚠️⚠️ THE PARK NOTE THAT STOOD HERE WAS STALE, AND IT WAS STALE IN BOTH OF ITS TWO
+            // MEASURED CLAIMS. Re-measured 2026-08-27 [[gates-are-stale-not-dead]]:
+            //  (1) "BrnDriveThruManager.cpp DOES NOT COMPILE". It does now, and the fix was TWO
+            //      LINES, not the multi-file job the note implied: BrnDriveThruManager.h was
+            //      missing `#include BrnGameStateSharedIO.h` (the home of the
+            //      GameStateModuleIO::GameActionQueue typedef its four signatures name -- the
+            //      header only ever forward-declared `struct OutputBuffer`), and
+            //      BrnDriveThruManager.cpp:403 needed `::EActiveRaceCarIndex` because
+            //      BrnGameState declares its own enum of that name. `selfcheck.py` now returns
+            //      STATUS=pass. Every other error in the note's list was a cascade of those two.
+            //  (2) "it drags the SIX bodiless training symbols ... None has a body or a link stub
+            //      anywhere in b5-decomp/src". FALSE since 2026-08-24, four days after the note was
+            //      written: the [tut-ticker] wave landed and MOUNTED BrnTrainingManager.cpp, which
+            //      bodies IsTipPending (:808), IsTipAllowedInGameMode (:685), GetTimeSinceLastTip
+            //      (:818), RequestTip (:824) and the GetProfile accessor, and BrnProfile.cpp:532
+            //      bodies HasPlayerSeenTrainingType. Zero of the six were still missing.
+            // The lesson is the project's own: ASK WHEN THE NOTE LAST RAN. This one cost the whole
+            // drive-thru chain a week for a missing `#include` and a missing `::`.
+            lpDriveThruManager->HandleDriveThru(lpGenericRegion, lpActiveRaceCarInterface,
+                                                lpVehicleList, lpOutput);
+
+            // [DIAG] NOT IN THE X360 BINARY. ENTRY DETECTION, logged SEPARATELY from the effect.
+            // A drive-thru is a trigger-region crossing and this build's producer of
+            // maLastPlayerTriggers is a POINT test (see PreWorldUpdatePlayerTriggersBringUp's own
+            // stand-in FLAG), so on a frame-starved box the car can step clean over a volume. That
+            // failure and "the action did nothing" produce the identical symptom, so they must
+            // never share one log line [[diagnostics-that-lie]]. This rung answers ONLY "did the
+            // region fire"; whether the effect applied is a different rung entirely.
+            if (CgsDev::Log::gpDebugPrint != 0)
+            {
+                *CgsDev::Log::gpDebugPrint
+                    << "[drivethru] ENTER type=" << static_cast<s32>(lpGenericRegion->GetType())
+                    << " id=" << static_cast<u64>(lpGenericRegion->GetId()) << "\n";
+            }
             break;
         }
 

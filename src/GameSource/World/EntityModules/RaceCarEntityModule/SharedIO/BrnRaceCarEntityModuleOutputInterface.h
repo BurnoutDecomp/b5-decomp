@@ -191,13 +191,42 @@ namespace RaceCarEntityModuleIO
                 return false;
             return maRaceCarStates[mePlayerActiveRaceCarIndex].mbCrashing;
         }
+        // [drive-thru wave 2026-08-27] HEADER INLINE, same precedent and same shape as
+        // IsPlayerCarCrashing() directly above: the image has no out-of-line symbol, and the one
+        // consumer reaches the member through an inlined element adjust. Recovered from
+        // DriveThruManager::Update @0x8239EEF0, which computes its "the player may use a
+        // drive-thru" gate as
+        //     v43 = *(a6 + 10328);                              // mePlayerActiveRaceCarIndex
+        //     v45 = (v43 != -1) ? (*(1120*v43 + a6 + 1908) == 0) : 0;
+        // 1908 - 816 (maRaceCarStates base) == element +1092 == RaceCarState::mi8Gear
+        // (BrnVehicleEvents.h:138), read as a plain byte. Like IsPlayerCarCrashing it does NOT
+        // bounds-assert -- only the -1 sentinel is tested -- so the sentinel returns 0.
+        s8 GetPlayerGear() const
+        {
+            if (mePlayerActiveRaceCarIndex == E_ACTIVE_RACE_CAR_INDEX_INVALID)
+                return 0;
+            return maRaceCarStates[mePlayerActiveRaceCarIndex].mi8Gear;
+        }
         bool IsPlayerCarDeforming() const;                                                   // :299 (own TU)
         bool IsThePlayerDrivableFromCrash() const;                                           // :302 (own TU)
         bool IsPlayerCarFatalyCrashing() const;                                              // :305 (own TU)
         bool IsPlayerInAir() const;                                                          // :308 (own TU)
         f32  TimePlayerInAir() const;                                                        // :311 (own TU)
         bool IsPlayerInReverseGear() const;                                                  // :314 (own TU)
-        bool IsPlayerEngineOn() const;                                                       // :317 (own TU)
+        // [drive-thru wave 2026-08-27] BODIED AS A HEADER INLINE. It was marked "own TU", but there
+        // is no out-of-line symbol for it anywhere in the ARTIST image (no entry in
+        // progress/identity.json) -- the console inlines it, so a header inline IS the faithful
+        // form, not a shortcut. The expression is the no-index specialisation of the
+        // IsRaceCarEngineOn pair below, whose combined form is asm-attested at
+        // BridgeWorldToDirector @0x823E3AB0: for the player's own slot the `idx != player` arm
+        // drops out and only the RUNNING(2) test remains. Its consumer is
+        // DriveThruManager::Update @0x8239EEF0, which gates the "drive-thru discovered" HUD post on
+        // the player being active AND the engine running (the console's `engine state == 2` test).
+        bool IsPlayerEngineOn() const
+        {
+            return mePlayerActiveRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID &&
+                   mePlayerEngineState == E_ACTIVE_RACE_CAR_ENGINE_STATE_RUNNING;
+        }
         bool IsPlayerEngineStarting() const;                                                 // :320 (own TU)
         EActiveRaceCarEngineState GetPlayerEngineState() const;                              // :323 (own TU)
         // :327 / :331 -- HEADER INLINES (no out-of-line symbols). Recovered from the pair

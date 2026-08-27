@@ -7,6 +7,16 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourcePtr.h"  // CgsResource::ResourcePtr<T>
 #include "SharedClasses/Trigger/BrnRegion.h"                 // BrnTrigger::BoxRegion (mBoxRegionCache by value)
 #include "SharedClasses/Trigger/BrnGenericRegion.h"          // BrnTrigger::GenericRegion (REAL home; Type enum, meType @0x36)
+// [drive-thru wave 2026-08-27] GameStateModuleIO::GameActionQueue -- the typedef this header's
+// Update/ProcessDriveThru/UnlockCarChallengeForCar/SetPlayerCarDriver signatures name. It was
+// only ever forward-declared here as `namespace GameStateModuleIO { struct OutputBuffer; }`, so
+// every one of those four declarations was C2039/C2061 ("GameActionQueue is not a member of
+// BrnGameState::GameStateModuleIO") and the whole class failed to parse -- which is the ACTUAL
+// reason this TU never compiled and never mounted. The typedef's real home is
+// BrnGameStateSharedIO.h:52 (`typedef CgsModule::VariableEventQueue<13312,16> GameActionQueue`);
+// include it rather than re-forward-declaring (AGENTS.md "Reconstruct includes; don't fake them").
+// No cycle: BrnGameStateSharedIO.h does not reach back to this header.
+#include "GameSource/GameState/BrnGameStateSharedIO.h"       // BrnGameState::GameStateModuleIO::GameActionQueue
 
 // Forward declarations of the types the manager routes through (pointers only).
 namespace BrnResource    { struct VehicleList; struct VehicleListEntry; }
@@ -14,7 +24,13 @@ namespace BrnWorld       { struct GlobalColourPalette;
                            namespace RaceCarEntityModuleIO { struct RCEntityActiveRaceCarOutputInterface; } }
 namespace BrnProgression { class  ProgressionManager; }
 namespace BrnTrigger     { struct TriggerData; }
-namespace CgsSystem      { class  TimerRequestInterface; }
+// ⚠️ [drive-thru wave 2026-08-27] `struct`, NOT `class`. CgsTimerRequestInterface.h:43 declares it
+// `struct TimerRequestInterface`, and MSVC mangles the class-key into the symbol: with `class` here
+// this header's Update/SetPlayerCarDriver declarations mangled to ...PEAVTimerRequestInterface...
+// while the definitions (which see the real header) mangled to ...PEAUTimerRequestInterface..., so
+// every call site linked against a symbol NO TU COULD DEFINE. The compile gate cannot see it -- only
+// a LINK can [[shadowing-redeclarations]]. Measured: it was one of the LNK2019s on the first mount.
+namespace CgsSystem      { struct TimerRequestInterface; }
 namespace BrnGameState
 {
     class CarSelectManager;

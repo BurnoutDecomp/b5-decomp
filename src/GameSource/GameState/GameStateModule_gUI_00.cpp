@@ -593,6 +593,60 @@ void GameStateModule::PreWorldUpdateStuntBringUp(
     CGS_ASSERT(lpActionQueue != 0, "lpActionQueue != NULL");   // BrnGameStateModule.cpp:1149
     mbIsUpdating = true;
 
+    // ---- 0) DRIVE-THRU TICK (console #? -- PreWorldUpdate @0x823A5328 pseudocode line 220) ---
+    // ⭐⭐⭐ [drive-thru wave 2026-08-27] DriveThruManager::Update @0x8239EEF0. This is the leg that
+    // turns a latched drive-thru into its game action: HandleDriveThru (leg 2b below) only CACHES
+    // the region type in meDriveThruCache; Update is what dispatches it through ProcessDriveThru
+    // and posts action 100 / 97 / 98. It also ages the 46 activation timers.
+    //
+    // ⚠️ POSITION IS THE CONSOLE'S AND IT IS DELIBERATELY *BEFORE* THE TRIGGER FAN-OUT. The
+    // console's own body order is
+    //     220  DriveThruManager::Update            <-- HERE
+    //     252  ProcessGameEvents
+    //     305  CopyScoringDataToOutput
+    //     310  TriggerQueryManager::PreWorldUpdate  <-- calls HandleDriveThru (leg 2b)
+    //     332  StuntManager::Update
+    // so a region entered on frame N is PROCESSED ON FRAME N+1 -- the same one-frame deferral the
+    // game-event carry queue uses. Moving this call after leg 2b would "fix" a latency that is the
+    // console's own and is what gives the presentation timer a frame to arm. Do not reorder.
+    //
+    // ARGUMENTS FROM THE ASM (0x823A56C0..0x823A5708), not from the pseudocode's numbering: the
+    // f32 timestep goes in f1 and consumes the r6 slot, so the integer args are
+    // r4,r5,[r6 skipped],r7,r8,r9,r10 then stack. Pinned by the last stack slot, which the console
+    // loads from r31+0x456E8 == the module's mpVehicleList == this call's trailing argument.
+    //
+    // [FLAG PC bring-up] TWO arguments are PC derivations, named rather than hidden:
+    //   * lbIsFreeburn -- the console reads it off the current game mode; no accessor for it
+    //     exists in this tree. Derived as "no game mode is running", which is what freeburn IS on
+    //     this build. It gates ONLY mbPlayerCanUseJunkyards, not the shop path.
+    //   * lbIsInJunkyard / lbInviteInProgress -- both false on this offline build: nothing here
+    //     runs the junkyard-occupancy latch or the invite manager.
+    // The rest are real: IsOnlineGameMode(), IsShowtimeGameMode() and IsSimPaused() are committed
+    // X360 reconstructions on this module, and the vehicle list is the console's own +0x456E8.
+    //
+    // THE TIMER INTERFACE IS THE CONSOLE'S OWN SLOT, reached through a cast rather than a fake.
+    // The console passes OutputBuffer::GetTimerRequest(lpOutput); this tree's OutputBuffer models
+    // that member as the opaque `OutputBufferTimerRequestInterface { u8 maOpaque[16]; }`
+    // (BrnGameStateModuleIO.h:279) only because nothing had needed its shape yet. It IS a
+    // CgsSystem::TimerRequestInterface: that type is two TimerRequests (each {u32 muFlags;
+    // f32 mfMultiplier}) at +0 and +8, i.e. exactly 16 bytes, and the storage slot is exactly 16
+    // bytes at +16420. So this is a re-type of the same object at the same address, not a
+    // substitute -- the identical move, and the identical justification, as AsActionQueue() in
+    // BrnDriveThruManager.cpp. DELETE-WHEN BrnGameStateModuleIO.h declares the slot's real type.
+    mDriveThruManager.Update(
+        lpActionQueue,
+        reinterpret_cast<CgsSystem::TimerRequestInterface*>(
+            mpOutputBuffer->GetTimerRequestInterface()),
+        lfGameTimestep,
+        &mLastActiveRaceCarInterface,
+        IsOnlineGameMode(),
+        /*lbIsFreeburn*/ !lbIsAGameModeActive,
+        IsShowtimeGameMode(),
+        IsSimPaused(true, false),
+        /*lbIsInJunkyard*/ false,
+        /*lbInviteInProgress*/ false,
+        GetVehicleList());
+
     // ---- 1) the merged queue -> ProcessGameEvents (case 111 LATCHES) ------------------------
     // X360 lines 239-245 Construct a LOCAL <1536,16> queue and Append THREE sources into it -- the
     // carry queue (+248384), the PreWorldInputBuffer's queue, and the InviteManager's (+2032) --
@@ -796,14 +850,14 @@ void GameStateModule::PreWorldUpdateStuntBringUp(
     // â“˜ ORDER IS THE CONSOLE'S: the fan-out runs AFTER UpdateTriggers (it reads the set
     // UpdateTriggers just armed) and BEFORE StuntManager::Update (which consumes the latch it
     // writes). Both halves of that sandwich are load-bearing -- do not reorder.
-    // [FLAG PC bring-up] the DriveThruManager argument is NULL: the console passes
-    // GameStateModule+44240, a sub-object this tree's GameStateModule does not model, and
-    // ProcessPlayerTriggers' drive-thru arm is itself parked ((void)lpDriveThruManager, see the
-    // measured LNK cost recorded there), so the pointer is never dereferenced.
-    // DELETE-WHEN BrnDriveThruManager.cpp compiles and the sub-object is modelled.
+    // ⭐ [drive-thru wave 2026-08-27] THE DriveThruManager ARGUMENT IS REAL NOW. The FLAG that
+    // stood here ("the argument is NULL ... DELETE-WHEN BrnDriveThruManager.cpp compiles and the
+    // sub-object is modelled") is paid on both counts: the TU compiles and GameStateModule embeds
+    // mDriveThruManager at the console's this+44240 position. The console passes exactly this
+    // sub-object (PreWorldUpdate @0x823A5328 -> `a1 + 44240`).
     mTriggerQueryManager.PreWorldUpdatePlayerTriggersBringUp(
         mpOutputBuffer, &mLastActiveRaceCarInterface, &mStuntManager,
-        /*lpDriveThruManager*/ 0, GetVehicleList());
+        &mDriveThruManager, GetVehicleList());
 
     // [DIAG] NOT IN THE X360 BINARY. Rung 0 of the `[UI-gate]` ladder, one-shot on the first frame
     // the armed set is non-empty: how many armed regions are SMASH (generic-region sub-type 8) and

@@ -172,6 +172,26 @@ void GameStateModule::Construct()
     mStuntManager.Construct(&mProgressionManager, &mTriggerQueryManager, &mModeManager,
                             mpTrainingManager, this);
 
+    // ⭐ [drive-thru wave 2026-08-27] THE DRIVE-THRU SUB-OBJECT, wired with the console's own five
+    // arguments. X360 0x82380388 line 116, immediately after RoadRulesManager::Construct:
+    //     BrnGameState::DriveThruManager::Construct(a1 + 44240,   // &mDriveThruManager
+    //                                               a1 + 183712,  // &mCarSelectManager
+    //                                               a1 + 46640,   // the TrainingManager
+    //                                               a1 + 4128,    // &mModeManager
+    //                                               a1,           // this
+    //                                               a1 + 47920);  // &mProgressionManager
+    // Verbatim, same argument order. Construct is the manager's ONLY initialiser: it seeds all 46
+    // DriveThruTriggerData timers to the -1.0 "inactive" sentinel, nulls their region pointers,
+    // zeroes the six per-type totals and sets meDriveThruCache / meDiscoveredDriveThruType to the
+    // E_TYPE_COUNT (32) "nothing cached" sentinel. Without it Update's per-frame sweep reads 46
+    // uninitialised timers and its `meDriveThruCache != E_TYPE_COUNT` gate is a coin flip
+    // [[valid-pointer-invalid-object]].
+    // ⓘ The TrainingManager argument is the heap object, not a sub-object, for the same include
+    // cycle documented at mStuntManager.Construct above; it is allocated further up, so the
+    // pointer stored here is final and non-null.
+    mDriveThruManager.Construct(&mCarSelectManager, mpTrainingManager, &mModeManager,
+                                this, &mProgressionManager);
+
     // ⭐ [gateui] THE GAME-EVENT CARRY QUEUE (X360 this+248384). The console Constructs it right
     // here: `CgsModule::VariableEventQueue<1536,16>::Construct(a1 + 248384)` @0x82380388, in the
     // block of queue Constructs near the end of the body. This is the never-Constructed-queue
@@ -667,9 +687,31 @@ bool GameStateModule::Prepare(GameStateModuleIO::OutputBuffer* lpOutputBuffer,
         // GetProfileCarData and StartCarSelectState all resolve their car records through
         // CarSelectManager::mpVehicleList, and nothing had ever written it.
         //
-        // [deferred] the OTHER half of this stage -- DriveThruManager::Prepare(this+44240,
-        // mTriggerQueryManager's TriggerData, the CarColours palette) -- and the
-        // OnlineCarSelectManager leg (its TU is unmounted).
+        // ⭐ [drive-thru wave 2026-08-27] REAL now -- the "[deferred]" half of this stage is paid.
+        // X360 0x8239E578 @LABEL_55 (pseudocode lines 271-273), the two lines immediately BEFORE
+        // the four car-select list stores below:
+        //     Memor = BrnTrigger::TriggerData_::GetMemor(a1 + 43888);   // mTriggerQueryManager's
+        //                                                              //   ResourcePtr<TriggerData>
+        //     v25   = BrnWorld::GlobalColour(v33, a1 + 284400);         // the CarColours palette
+        //     BrnGameState::DriveThruManager::Prepare(a1 + 44240, Memor, v25);
+        // Prepare is what turns the loaded TriggerData into the manager's working set: it walks
+        // every generic region, keeps the IsDriveThru() ones into maDriveThruTriggerData[46] with
+        // their world position, and tallies miTotalJunkYards / miTotalGasStations / miTotalBodyShops
+        // / miTotalPaintShops / miTotalCarParks. Without it every one of those totals stays 0 and
+        // HandleDriveThru's "find this region's entry" scan can never match, so the whole drive-thru
+        // chain is inert even with the call sites restored.
+        // ⚠️ [FLAG PC bring-up] THE PALETTE IS NULL ON THIS BUILD. Stage 11/12
+        // (E_PREPARESTAGE_REQUEST_PLAYERCARCOLOURS) still logs "acquire \"CarColours\" (pool 5) +
+        // bind [deferred]" and never binds this+284400, so a DEFAULT-CONSTRUCTED (null) ResourcePtr
+        // is passed -- which is the honest value, not a stand-in. Consequence, stated rather than
+        // hidden: ProcessDriveThru's PAINT_SHOP arm is the ONE arm that dereferences it
+        // (mpPlayerCarColours->maPalettes[2].miNumColours), so driving through a paint shop will
+        // fire the ResourcePtr assert. Gas station and body shop do not touch it.
+        // DELETE-WHEN stage 11/12 binds the CarColours resource for real.
+        mDriveThruManager.Prepare(mTriggerQueryManager.GetTriggerData(),
+                                  CgsResource::ResourcePtr<BrnWorld::GlobalColourPalette>());
+
+        // [deferred] the OnlineCarSelectManager leg (its TU is unmounted).
         mCarSelectManager.Prepare(mpVehicleList, mpWheelList);
 
         // ⭐ AND THE PROGRESSION LAYER'S COPY (X360 ProgressionManager +133448). MEASURED:
@@ -734,7 +776,24 @@ bool GameStateModule::Prepare(GameStateModuleIO::OutputBuffer* lpOutputBuffer,
         // drives are console code. DELETE-WHEN the arming event handler lands.
         mbSendSetupPlayerCarPending = true;
 
-        LogPrepareStageOnce(26, "car-select list publish REAL; DriveThruManager::Prepare [deferred] -- prepare DONE");
+        // [drive-thru wave 2026-08-27] One-shot: prove Prepare actually classified regions. A
+        // non-zero miTotalGasStations is the precondition for every later gas-station claim; a zero
+        // here means the TriggerData had no drive-thru regions, NOT that the effect failed.
+        if ((CgsDev::Message::gxMessageFilterFlags & 1) && CgsDev::Log::gpDebugPrint != 0)
+        {
+            *CgsDev::Log::gpDebugPrint
+                << "[drivethru] Prepare: gas=" << mDriveThruManager.GetTotalDriveThrusOfType(
+                       BrnTrigger::GenericRegion::E_TYPE_GAS_STATION)
+                << " body=" << mDriveThruManager.GetTotalDriveThrusOfType(
+                       BrnTrigger::GenericRegion::E_TYPE_BODY_SHOP)
+                << " paint=" << mDriveThruManager.GetTotalDriveThrusOfType(
+                       BrnTrigger::GenericRegion::E_TYPE_PAINT_SHOP)
+                << " junk=" << mDriveThruManager.GetTotalDriveThrusOfType(
+                       BrnTrigger::GenericRegion::E_TYPE_JUNK_YARD)
+                << " carpark=" << mDriveThruManager.GetTotalDriveThrusOfType(
+                       BrnTrigger::GenericRegion::E_TYPE_CAR_PARK) << "\n";
+        }
+        LogPrepareStageOnce(26, "car-select list publish REAL; DriveThruManager::Prepare REAL -- prepare DONE");
         // X360 tail: `*(this + 552) = 1; *(this + 560) = 0;` -- the machine re-arms at MANAGER
         // for a later re-prepare and clears the +560 flag. (CORRECTION 2026-08-11: +560 is NOT
         // Prepare2's stage word, as an earlier note here claimed -- Prepare2 @0x8239ED10 switches
