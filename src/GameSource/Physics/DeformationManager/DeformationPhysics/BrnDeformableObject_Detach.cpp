@@ -112,14 +112,15 @@
 // IKBodyPartSpec +456, reached through GetMeshId() -- see DetachPart's own FLAG.
 //
 // FLAGGED-0 PLACEHOLDERS (rodata NOT in the per-function exports -- NEVER fabricated):
-//   * KF_ANGULAR_VELOCITY_DECAY          (UpdateSpinningDetachment: per-step exponential spin decay)
-//   * KF_ANGULAR_VELOCITY_FOR_DETACHMENT (UpdateSpinningDetachment: spin-speed^2 hinge threshold)
-//   * KB_ALLOW_RANDOM_PART_DETACHMENT    (UpdateSpinningDetachment master switch; file-static bool)
+// ⭐ RECOVERED 2026-08-27: KF_ANGULAR_VELOCITY_DECAY (0.99), KF_ANGULAR_VELOCITY_FOR_DETACHMENT
+// (8.0) and KB_ALLOW_RANDOM_PART_DETACHMENT (true) -- see the constant block below for the
+// initialiser addresses and how the two float roles were pinned by USE ORDER rather than guessed.
+// STILL FLAGGED here:
 //   * the vexptefp/vlogefp Chebyshev polynomial coefficient rows (&unk_82014A?0) the asm uses to
-//     refine 2^x / log2(x) for the decay -- carried as a documented exp()/log() model.
+//     refine 2^x / log2(x) for the decay -- carried as a documented exp()/log() model. That is a
+//     precision difference on a converging series, not a behaviour difference.
 // The decay/threshold SHAPE (decay the accumulator, compare its magnitude to the threshold, and on
-// over-threshold pick + hinge a random still-attached part) is exact; the numeric decay stays inert
-// until the rodata is recovered.
+// over-threshold pick + hinge a random still-attached part) is exact, and now so are its numbers.
 //
 // ⭐⭐⭐ 2026-08-27 (detach wave) -- THE TWO PROVISIONAL FREE HOOKS ARE GONE.
 // The banner that used to stand here said "the detached-part manager + notification queue are NOT
@@ -192,9 +193,29 @@ namespace Deformation
         const s32 KI_BODY_PART_WHEEL_01 = 0x83;   // invalidates lanes 0 + 1
 
         // FLAGGED-0 PLACEHOLDERS for the spinning-detachment rodata (NEVER fabricated). Honest zeros.
-        const f32  KF_ANGULAR_VELOCITY_DECAY          = 0.0f;   // FLAG: rodata kfAngularVelocityDecay unrecovered
-        const f32  KF_ANGULAR_VELOCITY_FOR_DETACHMENT = 0.0f;   // FLAG: rodata kfAngularVelocityForDetachment unrecovered
-        const bool KB_ALLOW_RANDOM_PART_DETACHMENT    = true;   // FLAG: rodata kbAllowRandomPartDetachment unrecovered
+        // ⭐⭐ ALL THREE RECOVERED 2026-08-27 (detach wave), by the same initialiser-scan method that
+        // recovered the joint multipliers -- and the master switch was not rodata at all, it is a
+        // plain .data byte that reads straight out of the image:
+        //   kbAllowRandomPartDetachment  @0x82F2A344  byte = 1        -> TRUE
+        //   0x82C5D6D8  flt_820224B0 = 0.99  -> stvx 0x82FB9BA0       -> the DECAY
+        //   0x82C5D6B0  flt_82004C88 = 8.0   -> stvx 0x82FB9AA0       -> the THRESHOLD
+        // ROLES ARE PINNED BY USE ORDER, not guessed: 0x82FB9BA0 is materialised at 0x8263A7E0,
+        // immediately after `lfs 60.0` from flt_82092BC4 -- i.e. pow(0.99, timeStep*60), a
+        // per-frame decay normalised to 60 fps, which is also why the four vexptefp/vlogefp
+        // Chebyshev rows at 0x82014AC0..0x82014AF0 are loaded right there. 0x82FB9AA0 is
+        // materialised at 0x8263A900, at the vcmpgtfp against the spin magnitude.
+        //
+        // ⭐ AND THE OLD ZEROS WERE NOT INERT -- THEY WERE THE WRONG WAY ROUND. The threshold is
+        // compared `spinSpeedSquared > threshold`, so a FLAGGED-0 threshold left this gate WIDE
+        // OPEN for any non-zero spin whatsoever, with the master switch guessed (correctly) as
+        // true. Landing 8.0 makes the gate STRICTLY TIGHTER than what shipped in this tree, and
+        // landing the 0.99 decay shrinks the accumulator that feeds it instead of holding it flat.
+        // Both changes reduce the chance of a spurious hinge; neither can create one.
+        // [[placeholder-identity-element]] once more: 0 is the identity of `+`, not of `>`.
+        const f32  KF_ANGULAR_VELOCITY_DECAY          = 0.99000001f;   // RECOVERED 0x82FB9BA0
+        const f32  KF_ANGULAR_VELOCITY_FOR_DETACHMENT = 8.0f;          // RECOVERED 0x82FB9AA0
+        const f32  KF_ANGULAR_DECAY_REFERENCE_RATE    = 60.0f;         // RECOVERED flt_82092BC4
+        const bool KB_ALLOW_RANDOM_PART_DETACHMENT    = true;          // RECOVERED @0x82F2A344 == 1
 
         // SIMD magnitude-squared of a VecFloat's xyz lanes (vmsum3fp128 / the spin-speed^2 compared).
         inline f32 MagnitudeSquared3(const VecFloat& lvf)
@@ -471,9 +492,8 @@ namespace Deformation
     //
     // Gate: the global kbAllowRandomPartDetachment master switch. If off (or the attached body is not
     // actively simulating, *(body+1808) == 0), zero the spin accumulator and return.
-    //   1) Decay the spin accumulator (+3904) by the per-step exponential KF_ANGULAR_VELOCITY_DECAY
-    //      raised to (timeStep) -- the vexptefp/vlogefp polynomial the asm builds. With FLAGGED-0
-    //      decay this is exp(0)==1 (no decay); SHAPE is exact.
+    //   1) Decay the spin accumulator (+3904) by pow(0.99, timeStep * 60) -- the vexptefp/vlogefp
+    //      polynomial the asm builds, with the 60.0 reference rate loaded in the same block.
     //   2) Compare the decayed spin magnitude-squared against KF_ANGULAR_VELOCITY_FOR_DETACHMENT
     //      (vcmpgtfp). Below threshold: return.
     //   3) Over threshold: draw a random attached jointed part, assert it is ATTACHED_IK + joint-count
@@ -502,18 +522,20 @@ namespace Deformation
         }
 
         // (1) decay the spin accumulator. The asm samples the body's angular velocity (lvx body+96),
-        // folds it into the accumulator, then multiplies by pow(KF_ANGULAR_VELOCITY_DECAY, timeStep)
-        // built via the exp/log polynomial. With FLAGGED-0 decay the factor is exp(0)==1 (the
-        // accumulator is held, not amplified).
+        // folds it into the accumulator, then multiplies by pow(0.99, timeStep * 60) built via the
+        // exp/log polynomial.
         const f32 lfTimeStep = lvfTimeStep.x;
         const Vector3 lBodyOmega = GetVehicleBody().GetAngularVelocity();   // lvx body+96
         mAngularVelocitySum.x += lBodyOmega.x;
         mAngularVelocitySum.y += lBodyOmega.y;
         mAngularVelocitySum.z += lBodyOmega.z;
 
-        const f32 lfDecayFactor = ( KF_ANGULAR_VELOCITY_DECAY > 0.0f )
-                                    ? std::exp( std::log( KF_ANGULAR_VELOCITY_DECAY ) * lfTimeStep )
-                                    : 1.0f;   // FLAGGED-0 decay -> identity
+        // pow(0.99, timeStep * 60) -- the asm's exp/log polynomial with the 60.0 reference rate the
+        // same block loads (flt_82092BC4 @0x8263A7CC). At a 60 fps step this is exactly 0.99 per
+        // frame; at any other step it is the frame-rate-independent equivalent, which matters on a
+        // host that does not hold 60.
+        const f32 lfDecayFactor =
+            std::exp( std::log( KF_ANGULAR_VELOCITY_DECAY ) * ( lfTimeStep * KF_ANGULAR_DECAY_REFERENCE_RATE ) );
         mAngularVelocitySum.x *= lfDecayFactor;
         mAngularVelocitySum.y *= lfDecayFactor;
         mAngularVelocitySum.z *= lfDecayFactor;
