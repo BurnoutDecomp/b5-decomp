@@ -206,6 +206,17 @@ namespace Deformation
         // BrnPhysicalBodyPartPool.h:120. Whether the given slot index is currently in use.
         bool IsPartIndexUsed(s32 liIndex);
 
+        // ⭐ ADDED 2026-08-27 (detached-part collision wave). The live part COUNT, i.e. the pool
+        // byte at console +0x60EC that CreatePart increments and RemovePart decrements
+        // (BrnPhysicalBodyPartPool_Remove.cpp:35 already names that offset). It is the LOOP BOUND
+        // DetachedPartManager::UpdateTriangleCache @0x8260E1F8 walks to -- `lbz r11, 0x60EC(r25)`
+        // at 0x8260E23C and 0x8260E39C -- and that manager's `this` IS this pool (mPartPool is the
+        // manager's one member, at +0), so the console reads the byte inline with no accessor.
+        // A public documented accessor over the same byte, following this subsystem's established
+        // GetContactVolumeInstanceId / GetHandlingBodyIdHighByte precedent: no friendship, no raw
+        // offsets, no layout change (statics and inlines add no storage).
+        u8 GetNumDetachedParts() const { return mu8NumDetachedParts; }
+
         // BrnPhysicalBodyPartPool.h:126. Emit the detached-part render + current-position events
         // for every used part into the two deformation output interfaces.
         void OutputEvents(DeformationOutputInterfaceForEntityModules* lpOutputForEntityModules,

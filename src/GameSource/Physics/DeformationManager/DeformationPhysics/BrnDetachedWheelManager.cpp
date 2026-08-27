@@ -4,6 +4,7 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                 // gpDebugPrint / gxMessageFilterFlags (walls leg 4 gates)
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_SceneUpdate.h"   // InSceneUpdateInterface::UpdateCachedObjectPosition (the real tri-cache producer)
 
 #include <cmath>   // std::sqrt (the vrsqrtefp velocity-magnitude refinement converges to this)
 
@@ -46,16 +47,19 @@
 // dropped (the macro supplies __FILE__/__LINE__).
 //
 // UN-HOMED DEEP IO: RemoveWheel's rigid-body-removal AddEvent (InRemoveRigidBody on the sim
-// InputBuffer) and UpdateTriangleCache's InEventUpdateCachedPosition (TriangleCacheManagerIO on the
-// scene update interface) reach event types not yet homed in-tree. They are routed through the two
-// provisional free hooks declared in this class' own header (EmitRemoveRigidBodyEvent /
-// EmitUpdateTriangleCacheEvent), exactly as the sibling BrnPhysicalBodyPart slice routes its
-// un-homed tri-cache removal through RemoveTriangleCacheSlot. The owning TUs emit the real bodies.
+// InputBuffer) still reaches an event type not homed in-tree, and is routed through the one
+// remaining provisional free hook declared in this class' own header (EmitRemoveRigidBodyEvent).
+// ⛔ THE SECOND HOOK IS GONE. This banner used to name `EmitUpdateTriangleCacheEvent` alongside it
+// and claimed UpdateTriangleCache's InEventUpdateCachedPosition was likewise "not yet homed
+// in-tree". That was false as of 2026-08-18 and the hook itself was a FABRICATED API -- retired
+// 2026-08-27, see BrnDetachedWheelManager.h's banner. The event, its 32-byte element, its queue
+// (mUpdateCachedPositionQueue), its AddEvent instantiation and its producer
+// (InSceneUpdateInterface::UpdateCachedObjectPosition) are all committed and mounted.
 //
 // FLAGGED CONSTANTS: the swept-sphere update uses two asm-attested rodata constants -- the frame
-// timestep KF_FRAME_TIMESTEP == 0.016666668 (1/60, the asm's `v50[0] = 0.016666668`) and the
-// padding radius KF_TRIANGLE_CACHE_PADDING == 0.1 (the asm's `*&v45 = v53 + 0.1`). Both are read
-// directly from the asm immediates (NOT fabricated).
+// timestep KF_FRAME_TIMESTEP (flt_82095EE0 == 1/60) and the padding radius
+// KF_TRIANGLE_CACHE_PADDING (flt_82004014 == 0.1, byte-verified). Both are named rodata loads, NOT
+// bare immediates as this banner previously said, and NOT fabricated.
 //
 // Callers (X360 xrefs): GetWheel/IsSlotUsed <- DeformationManager + PhysicsModule (contact bridging);
 // RemoveVehicleWheels <- DeformableObject::ResetDeformation / ::Release; RemoveWheel <-
@@ -69,11 +73,19 @@ namespace Deformation
     // ----- asm-attested swept-sphere constants (UpdateTriangleCache) ----------------------------
     namespace
     {
-        // The per-frame timestep the swept-sphere position uses (asm immediate `v50[0] = 0.016666668`).
+        // The per-frame timestep the swept RADIUS term uses. ⭐ NAMED SOURCE 2026-08-27: it is not
+        // a bare "asm immediate" -- it is `lfs f31, flt_82095EE0` @0x8260EAE4 (IDA's read: 1/60).
         static const f32 KF_FRAME_TIMESTEP = 0.016666668f;
 
-        // The padding added to the wheel's collision sphere (asm immediate `v53 + 0.1`).
+        // The padding added to the wheel's collision sphere: `lfs f30, flt_82004014` @0x8260EAD4,
+        // the same rodata word CgsSceneManagerIO_SceneUpdate.h:311 already byte-verified as
+        // 3D CC CC CD == 0.1f.
         static const f32 KF_TRIANGLE_CACHE_PADDING = 0.1f;
+
+        // The wheel's triangle-cache slot base: `addi r9, r9, 0x7B` @0x8260EB74, and the SAME 123
+        // PhysicalWheel::AddToScene @0x8260C540 claims and RemoveFromScene @0x825E8258 drops. The
+        // three must never drift; a mismatch would silently reposition somebody else's slot.
+        static const u32 KU_WHEEL_TRIANGLE_CACHE_SLOT_BASE = 0x7Bu;   // 123
     }
 
     // ============================================================================================
@@ -203,20 +215,42 @@ namespace Deformation
     //   walk every used slot (GetFirstNonZeroBit / GetNextNonZeroBit over mUsedWheels):
     //     lpWheel = &maWheels[slot]
     //     if ( mbAddedToScene (+129) ):
-    //       timestep = 0.016666668 (1/60)
-    //       v = mLinearVelocity ; speed = |v| ; sweptDistance = speed * timestep
-    //       sphereRadius = mfRadius + 0.1 + sweptDistance
-    //       position = render-transform translation displaced by (v normalised) * sweptDistance
-    //       emit InEventUpdateCachedPosition { volumeInstanceId, position, sphereRadius }
-    //         (SetRadius + UpdateCachedObjectPosition + AddEvent on the tri-cache queue)
+    //       timestep = flt_82095EE0 = 0.016666668 (1/60)     [f31, loaded @0x8260EAE4]
+    //       v = mLinearVelocity (+0x60) ; speed = |v| ; sweptDistance = speed * timestep
+    //       UpdateCachedObjectPosition( (handle & 0xFF) + 123,
+    //                                   mRenderTransform.wAxis,           <-- NOT swept
+    //                                   mfRadius + 0.1 + sweptDistance )
     //
-    // The asm's VMX block is the standard normalise-and-sweep: `vmsum3fp128` is the velocity dot
-    // product (speed^2), the `vrsqrtefp` + two `vnmsubfp/vmaddfp` steps are the Newton-Raphson
+    // The asm's VMX block is the standard normalise: `vmsum3fp128` is the velocity dot product
+    // (speed^2), the `vrsqrtefp` + two `vnmsubfp/vmaddfp` steps are the Newton-Raphson
     // reciprocal-sqrt refinement that converges to 1/|v| (modelled as the exact divide), and
-    // `vsel ... vcmpeqfp` guards the |v|==0 case (a zero-velocity wheel sweeps nowhere). The
-    // padded radius is `mfRadius + 0.1 + sweptDistance`; the 0.1 is the asm immediate (`v53 + 0.1`).
-    // The un-homed InEventUpdateCachedPosition build is routed through the provisional
-    // EmitUpdateTriangleCacheEvent hook (volume instance id + swept world position + padded radius).
+    // `vsel ... vcmpeqfp` guards the |v|==0 case. The 0.1 is f30 = flt_82004014 (byte-read
+    // 3D CC CC CD), loaded @0x8260EAD4.
+    //
+    // ⛔⛔ TWO CORRECTIONS 2026-08-27 (detached-part collision wave):
+    //
+    //  (1) THE POSITION IS NOT SWEPT, AND THE SWEEP THIS BODY USED TO APPLY WAS FABRICATED.
+    //      The banner above used to say "position = render-transform translation displaced by
+    //      (v normalised) * sweptDistance", and the code did exactly that. Read the stores:
+    //        0x8260EB50  lvx128   v9, r11, 0x30        ; v9 = mRenderTransform.wAxis
+    //        0x8260EB80  vrlimi128 v9, v12, 1, 0       ; v9 = { pos.xyz, 0 }
+    //        0x8260EBAC  stvx128  v9, r1+var_100       ; [0x80] = that, UNMODIFIED
+    //        0x8260EBB0  vmr      v9, v12              ; v9 is now the ZERO vsel arm -- the
+    //                                                  ;   position register is DEAD from here
+    //        0x8260EC18  stfs     f0, r1+var_F4        ; [0x8C] == the W LANE of [0x80] = radius
+    //        0x8260EC20  lvx128   v0, r1+var_100       ; reload [0x80]
+    //        0x8260EC24  stvx128  v0, event+0x10       ; -> mNewPositionAndRadius
+    //      The swept distance NEVER touches xyz. It goes into the RADIUS only (0x8260EBF4
+    //      `fadds f0, f0, f30` then 0x8260EC14 `fadds f0, f0, f13`), i.e. the console inflates the
+    //      cache sphere to cover a frame of travel and leaves the sphere CENTRED on the wheel.
+    //      The displaced centre was an invention that moved the cached region off the wheel by up
+    //      to one frame of travel in the direction of motion -- in the WRONG place at both ends.
+    //
+    //  (2) The emission is a real producer, not a hook -- see the header banner for why
+    //      EmitUpdateTriangleCacheEvent was fabricated. `UpdateCachedObjectPosition` takes an
+    //      s32 CACHE SLOT, not a volume-instance id: `ld r9, 0x70(r11) ; clrlwi r9,r9,24 ;
+    //      addi r9,r9,0x7B ; clrlwi r9,r9,16` @0x8260EB48..0x8260EB84 -- (handle & 0xFF) + 123,
+    //      the SAME slot PhysicalWheel::AddToScene claims and RemoveFromScene drops.
     // ============================================================================================
     void DetachedWheelManager::UpdateTriangleCache(CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* lpSceneUpdateInterface)
     {
@@ -235,7 +269,8 @@ namespace Deformation
                 continue;
             }
 
-            // Velocity-based swept distance over one frame.
+            // Velocity-based swept distance over one frame. It feeds the RADIUS only (see the
+            // banner's correction (1)); the |v|==0 vsel arm makes it exactly 0 for a still wheel.
             const Vector3 lvVelocity = lpWheel->GetLinearVelocity();
             const f32 lfSpeedSquared = lvVelocity.x * lvVelocity.x
                                      + lvVelocity.y * lvVelocity.y
@@ -243,26 +278,22 @@ namespace Deformation
             const f32 lfSpeed = std::sqrt(lfSpeedSquared);            // 1/vrsqrtefp refined -> |v|
             const f32 lfSweptDistance = lfSpeed * KF_FRAME_TIMESTEP;
 
-            // Swept world position: the render-transform translation displaced along the velocity
-            // direction by the swept distance (the |v|==0 guard leaves it at the translation).
+            // The cache sphere is centred on the wheel's own render translation, w lane cleared
+            // (`vrlimi128 v9, v12, 1, 0`) because that lane carries the radius in the event.
             const Matrix44Affine* lpRenderTransform = lpWheel->GetRenderTransform();
-            Vector3 lvSweptPosition = lpRenderTransform->wAxis;
-            if (lfSpeed != 0.0f)
-            {
-                const f32 lfInvSpeed = 1.0f / lfSpeed;               // vsel(1/|v|, 0, |v|==0)
-                lvSweptPosition.x += lvVelocity.x * lfInvSpeed * lfSweptDistance;
-                lvSweptPosition.y += lvVelocity.y * lfInvSpeed * lfSweptDistance;
-                lvSweptPosition.z += lvVelocity.z * lfInvSpeed * lfSweptDistance;
-            }
+            Vector3 lvPosition = lpRenderTransform->wAxis;
+            lvPosition.w = 0.0f;
 
             // Padded collision sphere radius: wheel radius + the 0.1 cache padding + the swept term
-            // (the asm's `v52 = *(_R11 + 31) + v54`, with v54 carrying the `+ 0.1` and the sweep).
-            const f32 lfSphereRadius = lpWheel->GetRadius() + KF_TRIANGLE_CACHE_PADDING + lfSweptDistance;
+            // (`fadds f0, f0, f30` then `fadds f0, f0, f13`).
+            const f32 lfSphereRadius =
+                lpWheel->GetRadius() + KF_TRIANGLE_CACHE_PADDING + lfSweptDistance;
 
-            EmitUpdateTriangleCacheEvent(lpSceneUpdateInterface,
-                                         lpWheel->GetVolumeInstanceId().muId,
-                                         lvSweptPosition,
-                                         lfSphereRadius);
+            // The wheel's triangle-cache slot: (packed handle & 0xFF) + 123.
+            const s32 liCacheSlot = static_cast<s32>(
+                (lpWheel->GetVolumeInstanceId().muId & 0xFFull) + KU_WHEEL_TRIANGLE_CACHE_SLOT_BASE);
+
+            lpSceneUpdateInterface->UpdateCachedObjectPosition(liCacheSlot, lvPosition, lfSphereRadius);
         }
     }
 
@@ -308,25 +339,16 @@ namespace Deformation
     }
 
     // =============================================================================================
-    // The two provisional emission hooks (declared FLAG-provisional in the header) -- ⚠️ LOG-ONCE
-    // GATES 2026-08-14 (walls leg 4). Both are dead until a wheel/part detaches AND is in scene;
-    // the real bodies are the InEventUpdateCachedPosition / RemoveRigidBody queue AddEvents.
+    // ⛔⛔ EmitUpdateTriangleCacheEvent DELETED 2026-08-27 -- a FABRICATED API. See the header's
+    // banner for the three-way confirmation (no such symbol in any build; the real call is
+    // InSceneUpdateInterface::UpdateCachedObjectPosition -> mUpdateCachedPositionQueue; and its
+    // signature took a 64-bit volume-instance id where the event's field is an s32 cache slot).
+    // Both its call sites now go straight to the real producer.
+    //
+    // The remaining provisional hook (declared FLAG-provisional in the header) -- ⚠️ LOG-ONCE
+    // GATE 2026-08-14 (walls leg 4). Dead until a wheel detaches; the real body is the
+    // sim input buffer's InRemoveRigidBody queue AddEvent.
     // =============================================================================================
-    void EmitUpdateTriangleCacheEvent(CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* /*lpSceneUpdateInterface*/,
-                                      u64 /*lu64VolumeInstanceId*/, const Vector3& /*lvSweptPosition*/,
-                                      f32 /*lfSphereRadius*/)
-    {
-        static bool sbLoggedEmitCacheGate = false;
-        if ( !sbLoggedEmitCacheGate )
-        {
-            sbLoggedEmitCacheGate = true;
-            if ( CgsDev::Message::gxMessageFilterFlags & 1 )
-                *CgsDev::Log::gpDebugPrint
-                    << "conductor gate: EmitUpdateTriangleCacheEvent reached but not "
-                       "reconstructed [FLAG PC boot gate]\n";
-        }
-    }
-
     void EmitRemoveRigidBodyEvent(CgsPhysics::PhysicsSimulationIO::InputBuffer* /*lpSimInput*/,
                                   u32 /*luWheelEntityWord*/)
     {

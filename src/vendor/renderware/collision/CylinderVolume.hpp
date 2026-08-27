@@ -4,7 +4,6 @@
 
 #include "types.hpp"
 #include "vendor/renderware/collision/Feature.hpp"    // Vec4 / RwBool / FeatureEdge / Feature
-#include "vendor/renderware/collision/AABBox.hpp"      // AABBox / math::vpu::Vector3 (GetBBox / GetBBoxDiag out)
 
 // ===========================================================================
 // rw::collision::CylinderVolume -- the RenderWare collision "cylinder volume":
@@ -77,10 +76,45 @@
 // vocabulary FeatureEdge / Feature / TriangleVolume trade in.
 // ===========================================================================
 
+// ---------------------------------------------------------------------------
+// ⭐ 2026-08-27 (detached-part collision wave): `#include AABBox.hpp` REPLACED by the two
+// forward declarations below, for exactly the reason CollisionVolume.hpp:89-96 already
+// states about the SAME header -- AABBox.hpp drags the EATech `rw::math::vpu` vector
+// vocabulary, which is a hard FORK with the vendor `rw::math::vpu::Vector3` that
+// BrnCommonTypes.h defines. Until now that never mattered, because no GAME translation
+// unit had ever included this header (grepped: only CylinderVolume.cpp and
+// VolumeVTables.cpp did). BrnPhysicalWheel.cpp now does -- PhysicalWheel::AddToScene
+// @0x8260C540 calls CylinderVolume::Initialize -- and co-including both vocabularies is a
+// 100-error redefinition cascade, measured. A reference out-parameter and a
+// declaration-only return type need no definition, so both are NAMED here instead and the
+// two vendor TUs that actually CALL them include AABBox.hpp themselves.
+//
+// ⚠️ FLAGGED, NOT SMOOTHED: this means `GetBBoxDiag`'s return type resolves to the EATech
+// `class Vector3` in the vendor TUs and to the vendor `struct Vector3` in a game TU, which
+// mangle differently (V.. vs U..). That is SAFE ONLY BECAUSE no game TU calls GetBBoxDiag
+// -- a declaration emits no symbol. If one ever does, it will be an LNK2019, not silent
+// breakage. The underlying duplicate-vocabulary fork is the one CollisionVolume.hpp:57-65
+// records as a separate outstanding job; this header does not resolve it, it stays out of
+// its way.
+// ---------------------------------------------------------------------------
+namespace rw
+{
+namespace math
+{
+namespace vpu
+{
+    class Vector3;   // GetBBoxDiag's BY-VALUE return -- legal incomplete in a declaration
+}
+}
+}
+
 namespace rw
 {
 namespace collision
 {
+
+class AABBox;        // vendor/renderware/collision/AABBox.hpp -- GetBBox's reference out-param
+                     // (same NAMED-not-included precedent as CollisionVolume.hpp:89-96)
 
 struct GPInstance;   // vendor/renderware/collision/GPInstance.hpp (same
                      // forward-decl precedent as CapsuleVolume.hpp:56)

@@ -90,11 +90,26 @@ namespace PhysicsSimulationIO
 //     sim InputBuffer's InRemoveRigidBody queue -- `sub_825BCF58(lpSimInput)` returns the channel --
 //     and InRemoveRigidBody_::AddEvent's the wheel's packed scene-entity id onto it). Modelled as a
 //     free hook taking the input buffer + the packed wheel-body id word.
-//   * The swept-sphere triangle-cache update producer in the body of UpdateTriangleCache @0x8260E9F8
-//     (the asm builds a CgsSceneManager::TriangleCacheManagerIO::InEventUpdateCachedPosition event --
-//     SetRadius + UpdateCachedObjectPosition -- and AddEvent's it onto the scene update interface's
-//     tri-cache queue). Modelled as a free hook taking the scene interface + the wheel's volume
-//     instance id, its swept world position, and the padded sphere radius.
+//
+// ⛔⛔ `EmitUpdateTriangleCacheEvent` RETIRED 2026-08-27 (detached-part collision wave). It was a
+// FABRICATED API -- an "invented arm" of exactly the class this project already documents, and the
+// second one found in the detach path (the first was retired in commit 7dca72e4, "the hook it
+// replaced was a fabricated API"). CONFIRMED FABRICATED, not merely unhomed, three ways:
+//   1. No such symbol exists anywhere in the X360 export set (nor in DecFIGS DWARF, nor Feb-2007).
+//   2. What UpdateTriangleCache @0x8260E9F8 actually calls is one `bl` at 0x8260EC28 to
+//      CgsSceneManager::TriangleCacheManagerIO::InEventUpdateCachedPositi<on>::AddEvent @0x825E4768,
+//      with r3 = <scene interface> + 0xC5290 == mUpdateCachedPositionQueue. That queue, its 32-byte
+//      element, its AddEvent instantiation AND the producer that stages the event
+//      (InSceneUpdateInterface::UpdateCachedObjectPosition, CgsSceneManagerIO_SceneUpdate.h:342)
+//      are ALL committed and mounted -- the producer's own banner has said since 2026-08-18 that
+//      "that gate's whole body collapses to one forward to this producer".
+//   3. Its SIGNATURE was wrong in a way that proves it was never read off the binary: it took the
+//      wheel's 64-bit VolumeInstanceId, but the event's first field is an s32 CACHE SLOT
+//      ((handle & 0xFF) + 123 for a wheel, + 73 for a body part -- the same slot the matching
+//      AddToScene claims and RemoveFromScene drops). A volume-instance id would have addressed a
+//      slot that does not exist.
+// The one remaining provisional hook below (EmitRemoveRigidBodyEvent) is NOT known to be fabricated
+// and is untouched by this wave -- but it deserves the same treatment before it is trusted.
 namespace CgsSceneManager { namespace SceneManagerIO { struct InSceneUpdateInterface; } }
 namespace BrnPhysics
 {
@@ -102,9 +117,6 @@ namespace Deformation
 {
     void EmitRemoveRigidBodyEvent(CgsPhysics::PhysicsSimulationIO::InputBuffer* lpSimInput,
                                   u32 luWheelEntityWord);                                       // FLAG: provisional
-    void EmitUpdateTriangleCacheEvent(CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* lpSceneUpdateInterface,
-                                      u64 lu64VolumeInstanceId, const Vector3& lvSweptPosition,
-                                      f32 lfSphereRadius);                                       // FLAG: provisional
 }
 }
 
