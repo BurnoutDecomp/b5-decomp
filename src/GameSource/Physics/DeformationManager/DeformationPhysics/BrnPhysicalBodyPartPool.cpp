@@ -109,17 +109,31 @@ namespace Deformation
         const u32 luSlot = static_cast<u32>(liFreeSlot);
         PhysicalBodyPart* lpPart = &maParts[luSlot];
 
-        // Pack the part id. The X360 calls BurnoutBodyPartID::Set(owningVehicleId, 0, indexValue):
-        // owningVehicleID == the owning vehicle's global EntityId, partIndex field == 0, and the
-        // IK-part index threaded into the sub field. FLAG: the asm Set call (BurnoutBodyPartID::Set(
-        // &id, a4, 0, a3) @ 0x826269A0) passes only THREE value args -- there is NO 4th (sub) value
-        // arg in the asm, so the pool slot index is NOT threaded into Set here.
-        // FLAG: the Hex-Rays Create arg soup (a3/a4) does not pin which CreatePart parameter is the
-        // owning-vehicle id vs. the index value; modelled with lGlobalVehicleId as the owner and
-        // lu16IKPartIndex as the index value, per the header param semantics (GetGlobalEntityId ==
-        // owning vehicle; the IK-part index is the part's spec slot).
+        // ⭐⭐ THE ID PACK, RE-READ FROM THE ASM 2026-08-27 (detach wave). The banner that stood here
+        // claimed the asm passes "only THREE value args" and packed 0 into the partIndex field. It
+        // passes FOUR, and the partIndex field is the MESH/IK part index. The register setup at
+        // 0x82626A44..0x82626A64, immediately before `bl BurnoutBodyPartID::Set @0x825C1A10`:
+        //     0x82626A44  rldicl r10, r7, 32, 0    ; r7 == lRigidBodyId (8 bytes) -> its HIGH dword
+        //     0x82626A4C  mr     r6, r5            ; luSubA = lu16IKPartIndex  (saved BEFORE r5 is
+        //                                          ;          overwritten two instructions later)
+        //     0x82626A50  rlwinm r4, r10, 0,0,31   ; luOwningVehicleID = (u32)(lRigidBodyId >> 32)
+        //     0x82626A54  rlwinm r7, r25, 0,16,31  ; luSubB = the free POOL SLOT (r25 -- the value
+        //                                          ;          `cmpwi r25, 50` bounds just above)
+        //     0x82626A58  rlwinm r5, r9, 0,16,31   ; luPartIndex = liMeshIndex
+        //
+        // ⛔ AND THE OLD MAPPING WAS A LIVE DEFECT, caught by the CONSOLE'S OWN ASSERT the first
+        // time a part was ever detached on this build: DeformableObject::DetachPart asserts
+        //     lpPhysicalBodyPart->GetIKPartIndex() == liPartIndex
+        // and GetIKPartIndex() reads muEntityWord & 0x3FF -- the partIndex field. With 0 packed
+        // there that assert can only pass for part 0. The in-image assert is independent evidence
+        // for this reading: the console REQUIRES partIndex == the IK part index.
+        // (`lRigidBodyId >> 32` is the same `ld` + `srdi 32` idiom every other RigidBodyId consumer
+        // in this subsystem uses; spelled through GetEntityId() so the shift lives in one place.)
         BurnoutBodyPartID lPartId;
-        lPartId.Set(lGlobalVehicleId.muValue, 0, lu16IKPartIndex);
+        lPartId.Set(static_cast<u32>(lRigidBodyId.GetEntityId()),
+                    static_cast<u16>(liMeshIndex),
+                    lu16IKPartIndex,
+                    static_cast<u16>(luSlot));
 
         // Bind the part to its vehicle + IK spec, building the joint/graphics/COM/bbox frames.
         lpPart->Prepare(lPartId, lGlobalVehicleId, lpDeformableObject, lpIKPart,

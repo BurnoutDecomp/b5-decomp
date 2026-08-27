@@ -58,7 +58,7 @@ namespace SceneManagerIO
 
 // The REAL potential-contact interface (home BrnPhysicsModuleIO_PotentialContactInterface.h;
 // class key `struct`). Pointer-only here.
-namespace BrnPhysics { namespace PhysicsModuleIO { struct PotentialContactInterface; } }
+namespace BrnPhysics { namespace PhysicsModuleIO { struct PotentialContactInterface; class OutputBuffer; } }
 
 namespace CgsPhysics
 {
@@ -80,7 +80,7 @@ namespace Deformation
     //   * PotentialContactInterface / ContactSpyData / DeformationOutputInterface(ForEntityModules)
     //                        -- declared by BrnPhysicalBodyPartPool.h (included above)
     class DeformableObject;          // MakePartPhysical owning-model arg. Owned by BrnDeformableObject.h.
-    class IKBodyPart;                // MakePartPhysical IK-spec arg. Owned by BrnIKBodyPart.h.
+    struct IKBodyPart;                // MakePartPhysical IK-spec arg. Owned by BrnIKBodyPart.h.
 
     // ========================================================================
     // BrnPhysics::Deformation::DetachedPartManager
@@ -196,9 +196,14 @@ namespace Deformation
         // BrnDetachedPartManager.h:124. Test the joint of the part in slot liPartIndex for
         // breaking this frame (consults the post-physics body update), detaching it if the
         // joint exceeded its break threshold.
+        // ⭐ PARAM 3 CORRECTED 2026-08-27 to PhysicsModuleIO::OutputBuffer per the PS3 mangle
+        // (0x761F2C: ...EiPN10CgsPhysics19PhysicsSimulationIO11InputBufferEPNS_15PhysicsModuleIO12
+        // OutputBufferE). Both the caller (DeformableObject::CheckForDetachment) and the callee
+        // (PhysicalBodyPart::TestJointForBreaking) carry the same type -- the X360 forwards the
+        // register untouched. BODIED 2026-08-27 in BrnDetachedPartManager.cpp (@0x8260E3C0, 27 insns).
         bool TestJointForBreaking(s32 liPartIndex,
                                   CgsPhysics::PhysicsSimulationIO::InputBuffer* lpSimInput,
-                                  CgsPhysics::PhysicsSimulationIO::OutputBuffer* lpSimOutput);
+                                  BrnPhysics::PhysicsModuleIO::OutputBuffer* lpOutput);
 
         // BrnDetachedPartManager.h:129. Debug consistency check: every live joint references a
         // live part and vice versa (DEBUG-only tripwire).

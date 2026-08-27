@@ -311,6 +311,13 @@ namespace Deformation
         mbDoSweptSphereTests      = lrEvent.mbDoSweptSphereTests;
         mi16NumPhysicalParts      = 0;   // 0x826421C8 sth 0, +0x66AE
         mi16NumHingedParts        = 0;   // 0x826421CC sth 0, +0x66B0
+        // ⭐ LANDED 2026-08-27: the two byte latches the banner above already named but no line
+        // emitted. +26417 == mi8NumPartsToForceHinging (the forced-hinge budget CheckForForced-
+        // Detachment gates on -- it MUST start at 0), +26415 == mbDontPlayGlassPaneEffects.
+        // +26460 == meAbsorptionSet, cleared to NORMAL by the `stw 0`.
+        mi8NumPartsToForceHinging  = 0;   // stb 0, +26417
+        mbDontPlayGlassPaneEffects = false;   // stb 0, +26415
+        meAbsorptionSet            = E_ABSORPTIONSET_NORMAL;   // stw 0, +26460
 
         // The +6372 25-dword scratch header the asm zeroes before the reset (the world-sphere/scratch
         // block). Cleared by name via the shared ClearVariables init the asm inlines here.
@@ -682,8 +689,8 @@ namespace Deformation
         }
 
         // Count the hinged/attached physical parts among the toughened part types (asm: scan parts,
-        // part-type == 84 or 85 with state ATTACHED_IK(2)/HINGED(3) -> ++mi16NumHingedParts-region).
-        s16 li16NumHingedish = 0;
+        // part-type == 84 or 85 with state ATTACHED_IK(2)/HINGED(3) -> the +26400 accumulator).
+        s16 li16NumAttachedExhausts = 0;
         for (s32 liPart = 0; liPart < miNumIKBodyParts; ++liPart)
         {
             const s32 liType = static_cast<s32>(maIKParts[liPart].GetPartType());
@@ -692,10 +699,16 @@ namespace Deformation
                 const u8 luState = maPartStates[liPart];
                 if (luState == static_cast<u8>(E_PART_STATE_ATTACHED_IK) ||
                     luState == static_cast<u8>(E_PART_STATE_HINGED))
-                    ++li16NumHingedish;
+                    ++li16NumAttachedExhausts;
             }
         }
-        mi16NumHingedParts = li16NumHingedish;   // asm: +26400 region accumulator
+        // ⭐ RE-HOMED 2026-08-27: +26400 is miNumAttachedExhausts (s16), NOT mi16NumHingedParts
+        // (which lives at +26288). This loop counts part types 84/85 -- and CheckForDetachment's
+        // `lhz r11,0x6720(r31); cmpwi 1; ble` guard reads the SAME offset to refuse shedding the
+        // last one, while DetachPart decrements it when one comes off. All three agree: 84/85 are
+        // the exhaust part types and +26400 is how many are still attached. Writing this into
+        // mi16NumHingedParts instead clobbered the hinged-part count on every reset.
+        miNumAttachedExhausts = li16NumAttachedExhausts;   // asm: +26400
 
         // Pull the IK once (asm: UpdateIK(this, 1.0); the 1.0 amount is a broadcast VecFloat from
         // vcsxwfp128 of int 1); a forced full-settle does 50 more passes when damage is PRESENT (v43)
@@ -767,10 +780,23 @@ namespace Deformation
         // No-damage cooldown: an extreme initial-damage reset arms the cooldown band (asm: if (v43 &&
         // v155) { spec-bbox *= unk_82FB9B80; +26417 = bbox.x + 1 } else +26417 = 0). FLAG: unk_82FB9B80
         // is the unrecovered per-axis scale (FLAGGED-0); the +26417 latch path is preserved by shape.
+        // ⭐ RE-HOMED 2026-08-27: +26417 is mi8NumPartsToForceHinging -- the SAME member
+        // CheckForForcedDetachment differences against mi16NumHingedParts. The "bbox latch" and the
+        // "forced-hinge budget" were never two things.
+        // ⚠️ THE ARMED ARM STAYS UNLANDED, DELIBERATELY: `+26417 = scaledBBox.x + 1` needs the
+        // per-axis scale unk_82FB9B80, which is still FLAGGED-0. Landing it with a zero scale would
+        // write 0*bbox + 1 == 1, which is NOT the identity of this expression -- it would OPEN the
+        // forced-hinge gate on every damaged reset with a fabricated budget.
+        // [[placeholder-identity-element]], the same trap the joint multipliers were.
+        // The `else` arm needs no rodata and IS landed: the console clears the latch.
         if (lbDamagePresent && lbDamageZeroOrType1)
         {
             (void)KVF_INITIAL_DAMAGE_BBOX_SCALE;   // FLAG: spec-bbox *= unk_82FB9B80 (value unrecovered)
-            // mu8...+26417 = scaledBBox.x + 1;  // FLAG: reconstructed latch, value inert until rodata
+            // mi8NumPartsToForceHinging = scaledBBox.x + 1;  // FLAG: NOT landed -- see above
+        }
+        else
+        {
+            mi8NumPartsToForceHinging = 0;   // asm: else +26417 = 0
         }
 
         // The bonnet latch flags only stay set if the existing flag was set AND v155 is false (asm:
@@ -786,9 +812,16 @@ namespace Deformation
             mbBonnetLatchedDown = false;
 
         // Seed the rest of the per-frame state (asm: +26409/+26415 = v43; +26413/+26414 = 0;
-        // +26460 = 0; the +26464 vector cleared; +26480 = 0). +26415 has no named member -> not
-        // emitted (the asm also writes it = v43).
-        mbResetDeformationNextUpdate = lbDamagePresent;   // asm: +26409 = v43 (damage present)
+        // +26460 = 0; the +26464 vector cleared; +26480 = 0).
+        // ⭐ RE-HOMED 2026-08-27: +26409 is mbIKUpdateRequired -- the THIRD different identification
+        // this class's own TUs gave that one byte (this file said mbResetDeformationNextUpdate,
+        // _Detach.cpp said mbForceWheelsToDetach, _Update.cpp had it right all along). Arming
+        // mbIKUpdateRequired here is what makes a car that reset WITH damage present run its IK/
+        // detachment pass on the very next frame -- which is exactly what the asm's `+26409 = v43`
+        // (v43 == damage present) says. And +26415 DOES have a named member: mbDontPlayGlassPaneEffects
+        // (the old "+26415 has no named member" note was the same off-by-one block).
+        mbIKUpdateRequired          = lbDamagePresent;   // asm: +26409 = v43 (damage present)
+        mbDontPlayGlassPaneEffects  = lbDamagePresent;   // asm: +26415 = v43
         mbHasBouncedThisFrame        = 0u;      // asm: +26414 = 0
         mbBounceRandomParity         = 0u;      // asm: +26413 = 0
         meAbsorptionSet              = E_ABSORPTIONSET_NORMAL;   // asm: +26460 = 0 (the absorption set slot)
@@ -1311,7 +1344,12 @@ namespace Deformation
             if (liGameMode == -1)
             {
                 meAbsorptionSet = E_ABSORPTIONSET_SHUTDOWN;   // asm: +26460 = 3
-                // +26417 = 10;  // FLAG: reconstructed cooldown latch (no named member)
+                // ⭐ RE-HOMED 2026-08-27: +26417 == mi8NumPartsToForceHinging (it always had a named
+                // member). This is the PLAYER_EXTREME / showtime arm arming the forced-hinge budget
+                // to 10 -- i.e. "shed up to ten panels". It is UNREACHABLE today because
+                // lbExtremeEligible above is a FLAGGED false, so landing it changes nothing yet;
+                // landed anyway so the member stops being a mystery in a third place.
+                mi8NumPartsToForceHinging = 10;   // asm: +26417 = 10
             }
             else
             {

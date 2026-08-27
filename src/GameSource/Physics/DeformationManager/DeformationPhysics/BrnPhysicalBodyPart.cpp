@@ -57,11 +57,16 @@
 //    triple does (no early-out). The assert message strings are the asm's FireAssert
 //    strings (source paths/line numbers stripped per project rule).
 //
-//  * FLAGGED-0 / placeholder rodata: several SIMD constants the asm loads from XEX rodata
-//    (&unk_82FB9DD0 min-bbox clamp, &unk_82FB9AC0 / &unk_82FB95F0 joint tuning, the
-//    chebyshev/atan polynomial tables &unk_82000BD0.., kfJointForceMultiplier /
-//    kfJointPenetrationMultiplier, &unk_82FB9E00 rotation-proportion gate, ...) are NOT in
-//    the per-function exports. Per project rule they are carried as correctly-shaped,
+//  * ⭐⭐ 2026-08-27 (detach wave): SIX of the "not in the exports" SIMD constants are RECOVERED --
+//    kfJointForceMultiplier (0.4), kfJointPenetrationMultiplier (1.5), &unk_82FB96E0 min-bbox extent
+//    (0.1), &unk_82FB9DD0 min-bbox HALF (0.05), &unk_82FB9B00 KV_BIG_VECTOR (100000) and (earlier)
+//    &unk_82FB9E00 (0.3). They were never rodata CONSTANTS: each is a runtime-initialised VMX splat
+//    written by its own tiny initialiser block in 0x82C5D700-0x82C5DE00, so an image dump of the
+//    static reads zero and the value only exists after the boot initialisers run. THAT is why sweep
+//    after sweep recorded them "unrecoverable" -- the method, not the data, was missing.
+//  * FLAGGED-0 / placeholder rodata that IS still outstanding: &unk_82FB9AC0 / &unk_82FB95F0 /
+//    &unk_82FB9D60 / &unk_82FB9E30 joint integration tuning, and the chebyshev/atan polynomial
+//    tables &unk_82000BD0.. They are NOT in the per-function exports. Per project rule they are carried as correctly-shaped,
 //    clearly-labelled placeholders (honest zeros / best-guess) -- NEVER fabricated numbers.
 //    The control flow (which lane, which compare, which store, which call) is exact; the
 //    numeric output of the gated tuning stays inert until the real rodata is recovered.
@@ -113,19 +118,35 @@ namespace Deformation
 
     namespace
     {
-        // ----- min-bbox clamp vector (asm &unk_82FB9DD0, used by CalcBoundingBox/UpdateBoundingBox) -
-        // The half-dimensions are max'd against this floor so a near-degenerate panel still has a
-        // non-zero box. FLAGGED PLACEHOLDER: the concrete rodata is not in the exports; carried as
-        // honest zeros (NEVER fabricated). vmaxfp against zero is a no-op floor -- behaviourally inert
-        // until the real minimum is recovered.
-        const Vector4 KV_MIN_BBOX_SIZE = { 0.0f, 0.0f, 0.0f, 0.0f };
+        // ----- min-bbox clamp vector + the two box magnitude bounds ---------------------------------
+        // ⭐⭐⭐ ALL THREE RECOVERED 2026-08-27 (detach wave), by the same initialiser-scan method
+        // that recovered the two joint multipliers above -- they are runtime-initialised VMX splats,
+        // not rodata, which is why five sweeps recorded them "not in the exports". Each has the same
+        // three-lane block shape (`lfs f0,<rodata>` ; three `stfs` into the -16(r1) scratch ; `stw 0`
+        // into the w lane ; `lvx` ; `stvx <0x82FBxxxx>`), i.e. each is Vector3(v,v,v) with w == 0:
+        //     0x82C5DC50  flt_82004014 = 0.1      -> 0x82FB96E0   KV_MIN_BBOX_SIZE
+        //     0x82C5DBE0  flt_820047C8 = 0.05     -> 0x82FB9DD0   the CalcBoundingBox HALF-dim floor
+        //     0x82C5DC18  flt_820080E8 = 100000.0 -> 0x82FB9B00   KV_BIG_VECTOR (seed + upper bound)
+        // ⭐ THE READING SELF-CHECKS: CalcBoundingBox computes half = extent * 0.5 and floors it at
+        // 0x82FB9DD0, while CalculateBoundingBoxExtents floors the FULL extent at 0x82FB96E0.
+        // 0.05 is EXACTLY half of 0.1. Two independently-read statics that must be in a 2:1 ratio,
+        // and are. (The 1.0e30 that stood in for KV_BIG_VECTOR.x was five orders too big.)
+        //
+        // ⛔ AND THE ZERO HERE WAS A LIVE DEFECT, not an inert default. [[placeholder-identity-element]]
+        // again: this floor is applied with vmaxfp, and 0 IS NOT the identity of max for a quantity
+        // that is itself 0. With CalculateSkinnedPoint still a documented placeholder returning the
+        // origin, every corner reduces to 0, extent = 0, and `max(0, 0.0f)` left it 0 -- so the very
+        // first part ever detached on this build fired
+        //   "Magnitude(lBoundingBoxMax - lBoundingBoxMin) > 0.00001f"  (:693)
+        // on the frame the detach path went live. With the real 0.1 floor the clamp does its job,
+        // |extent| = sqrt(3*0.01) = 0.1732, and BOTH tripwires pass -- as they must on the console,
+        // whose skinned points are real. The assert is NOT suppressed; it now measures something.
+        const Vector4 KV_MIN_BBOX_SIZE = { 0.1f, 0.1f, 0.1f, 0.0f };        // RECOVERED 0x82FB96E0
+        const Vector4 KV_MIN_BBOX_HALF_SIZE = { 0.05f, 0.05f, 0.05f, 0.0f };// RECOVERED 0x82FB9DD0
 
-        // ----- "is the box big enough / not too big" assert bounds (CalculateBoundingBoxExtents) ---
-        // The asm asserts Magnitude(max-min) > 0.00001f and < KV_BIG_VECTOR.GetX(). 0.00001f is the
-        // recovered lower bound (the v37[0]=0.0000099999997 store); the upper bound KV_BIG_VECTOR.x is
-        // rodata-not-recovered -- carried as a large finite placeholder so the assert is well-formed.
+        // The asm asserts Magnitude(max-min) > 0.00001f and < KV_BIG_VECTOR.GetX().
         const f32 KF_MIN_BBOX_MAGNITUDE = 0.00001f;                 // recovered (v37[0])
-        const f32 KF_BIG_VECTOR_X       = 1.0e30f;                  // FLAG: KV_BIG_VECTOR.GetX() rodata not recovered
+        const f32 KF_BIG_VECTOR_X       = 100000.0f;                // RECOVERED 0x82FB9B00 <- flt_820080E8
 
         // ----- LimitVelocities curve constants (recovered from the function's fsel/immediate soup) --
         // The asm computes time-scaled linear/angular velocity caps from a flag-guarded one-shot
@@ -137,15 +158,29 @@ namespace Deformation
         const f32 KF_PROPORTION_OF_MAX_TO_CAP_TO = 0.80000001f;   // the v55/v51 = 0.8 store
 
         // ----- joint-break tuning (TestJointForBreaking / UpdateJoint) ------------------------------
-        // FLAGGED PLACEHOLDERS: kfJointForceMultiplier / kfJointPenetrationMultiplier (the asm scales
-        // the active joint's GetMaxStress() by these before comparing against the accumulated force /
-        // penetration magnitude), the joint integration tuning at &unk_82FB9AC0 / &unk_82FB95F0 /
-        // &unk_82FB9750 (0.975 recovered) / &unk_82FB9D60 / &unk_82FB9E30, and the rotation-proportion
-        // gate at &unk_82FB9E00. Not in the exports; carried as honest zeros / recovered literals.
-        // Multiplying GetMaxStress() by a placeholder 0 makes the break compare `accum > 0` -- a
-        // documented INERT behaviour-shift, not a fabricated threshold.
-        const f32 KF_JOINT_FORCE_MULTIPLIER       = 0.0f;   // FLAG: kfJointForceMultiplier rodata not recovered
-        const f32 KF_JOINT_PENETRATION_MULTIPLIER = 0.0f;   // FLAG: kfJointPenetrationMultiplier rodata not recovered
+        // ⭐⭐⭐ RECOVERED 2026-08-27 (detach wave). kfJointForceMultiplier / kfJointPenetrationMultiplier
+        // are NOT rodata constants -- they are runtime-initialised VMX splats, which is why they read
+        // as zero in a straight image dump and why five prior sweeps recorded them "not recovered".
+        // Each has its own tiny initialiser block that materialises a rodata float, splats it, and
+        // stores the splat to the 0x82FBxxxx VMX static the break predicate lvx's:
+        //     0x82C5DDA0  lfs f0, flt_8200473C (0.4f) -> vspltw -> stvx 0x82FB96F0   <- FORCE
+        //     0x82C5DD78  lfs f0, flt_820945DC (1.5f) -> vspltw -> stvx 0x82FB95D0   <- PENETRATION
+        // CALIBRATION CONTROL, same method, on a value this file ALREADY had:
+        //     0x82C5DDC8  lfs f0, flt_82004740 (0.30000001) -> stvx 0x82FB9E00 == KF_ROTATION_PROPORTION_GATE.
+        // WHICH-IS-WHICH is proven at the two USE sites, not assumed: the force arm materialises
+        // 0x82FB96F0 at 0x8260C3D8-E4 (right after the vmsum3fp128 of the assembled joint force at
+        // 0x8260C3D4), and the penetration arm materialises 0x82FB95D0 at 0x8260C438-48 (right beside
+        // `addi r10, r31, 400` -- the this+0x190 penetration lane).
+        // ⛔ [[placeholder-identity-element]] -- WHY THIS MATTERED: the predicate is
+        // `magnitude * multiplier > maxStress`, so a placeholder 0 is NOT an inert default; 0 is not
+        // the identity of `*`. `x * 0 > maxStress` is false for EVERY finite stress, i.e. the honest
+        // zero was a hard kill switch: no joint could break at any energy. The old banner below called
+        // that "a documented INERT behaviour-shift" -- it was the single biggest reason no part had
+        // ever come off a car on this build.
+        const f32 KF_JOINT_FORCE_MULTIPLIER       = 0.40000001f;   // RECOVERED: 0x82FB96F0 @82C5DDA0 <- flt_8200473C
+        const f32 KF_JOINT_PENETRATION_MULTIPLIER = 1.5f;          // RECOVERED: 0x82FB95D0 @82C5DD78 <- flt_820945DC
+        // STILL FLAGGED (same block, not recovered): the joint integration tuning at &unk_82FB9AC0 /
+        // &unk_82FB95F0 / &unk_82FB9750 (0.975 recovered) / &unk_82FB9D60 / &unk_82FB9E30.
         const f32 KF_JOINT_RELAX                  = 0.97500002f;   // recovered (v58[0])
         const f32 KF_ROTATION_PROPORTION_GATE     = 0.300000012f;   // unk_82FB9E00 @82C5DDC8 <- flt_82004740
 
@@ -165,8 +200,12 @@ namespace Deformation
     // PhysicalBodyPart::Construct @0x825B4178 MOVED OUT on 2026-08-03 (task #116) to
     // BrnPhysicalBodyPart_Construct.cpp, verbatim. WHY: PhysicsModule::Construct @0x825AE308 was
     // a live empty stub; un-stubbing it reaches DetachedPartManager::Construct ->
-    // PhysicalBodyPartPool::Construct -> this, 50 times. THIS TU cannot be mounted -- a MEASURED
-    // trial link (task #116, M2) put it at 16 unresolved externals from TestJointForBreaking /
+    // PhysicalBodyPartPool::Construct -> this, 50 times.
+    // ⛔ STALE BANNER, CORRECTED 2026-08-27: the text below ("THIS TU cannot be mounted") describes
+    // the state on 2026-08-03. THIS TU IS MOUNTED (build_game_exe.bat: BrnPhysicalBodyPart.cpp) and
+    // has been since the deformation-mount wave; the 16 unresolved externals were closed. The
+    // re-merge note is kept for the history of WHY Construct lives next door.
+    // (historic) a MEASURED trial link (task #116, M2) put it at 16 unresolved externals from TestJointForBreaking /
     // RemoveFromScene / SetJoinedToVehicle / UpdateJoint / UpdateRW / AddContact. Exactly ONE of
     // the 16 was referenced from Construct -- ExternalPhysicsBody::SetMass, which was declare-only
     // everywhere and is now bodied in its own home, ExternalPhysicsBody.cpp (already mounted).
@@ -704,10 +743,13 @@ namespace Deformation
             0.0f
         };
 
-        // mBoundingBoxHalfDimensions = max(half, KV_MIN_BBOX_SIZE) (vmaxfp v13 against &unk_82FB9DD0).
-        if ( lHalf.x < KV_MIN_BBOX_SIZE.x ) lHalf.x = KV_MIN_BBOX_SIZE.x;
-        if ( lHalf.y < KV_MIN_BBOX_SIZE.y ) lHalf.y = KV_MIN_BBOX_SIZE.y;
-        if ( lHalf.z < KV_MIN_BBOX_SIZE.z ) lHalf.z = KV_MIN_BBOX_SIZE.z;
+        // mBoundingBoxHalfDimensions = max(half, KV_MIN_BBOX_HALF_SIZE) (vmaxfp v13 against
+        // &unk_82FB9DD0). ⭐ 2026-08-27: this is the HALF floor (0.05), a DIFFERENT static from the
+        // full-extent floor (0.1) at &unk_82FB96E0 -- both were zero placeholders, so the two were
+        // indistinguishable and this site used the wrong one.
+        if ( lHalf.x < KV_MIN_BBOX_HALF_SIZE.x ) lHalf.x = KV_MIN_BBOX_HALF_SIZE.x;
+        if ( lHalf.y < KV_MIN_BBOX_HALF_SIZE.y ) lHalf.y = KV_MIN_BBOX_HALF_SIZE.y;
+        if ( lHalf.z < KV_MIN_BBOX_HALF_SIZE.z ) lHalf.z = KV_MIN_BBOX_HALF_SIZE.z;
         mBoundingBoxHalfDimensions = lHalf;   // +416
 
         // centre = (max + min) * 0.5, transformed through the part's OWN mBBoxOrientation rows (the asm
@@ -768,9 +810,9 @@ namespace Deformation
             (lvBoundingBoxMax.z - lvBoundingBoxMin.z) * 0.5f,
             0.0f
         };
-        if ( lHalf.x < KV_MIN_BBOX_SIZE.x ) lHalf.x = KV_MIN_BBOX_SIZE.x;
-        if ( lHalf.y < KV_MIN_BBOX_SIZE.y ) lHalf.y = KV_MIN_BBOX_SIZE.y;
-        if ( lHalf.z < KV_MIN_BBOX_SIZE.z ) lHalf.z = KV_MIN_BBOX_SIZE.z;
+        if ( lHalf.x < KV_MIN_BBOX_HALF_SIZE.x ) lHalf.x = KV_MIN_BBOX_HALF_SIZE.x;   // &unk_82FB9DD0
+        if ( lHalf.y < KV_MIN_BBOX_HALF_SIZE.y ) lHalf.y = KV_MIN_BBOX_HALF_SIZE.y;
+        if ( lHalf.z < KV_MIN_BBOX_HALF_SIZE.z ) lHalf.z = KV_MIN_BBOX_HALF_SIZE.z;
         mBoundingBoxHalfDimensions = lHalf;   // +416
     }
 
@@ -950,14 +992,18 @@ namespace Deformation
     // Tripwires inside the break path: IsJoinedToVehicle() (:949), mpIKPart != NULL (:950),
     // GetActiveJointSpec() != NULL (:951).
     //
-    // FLAG: kfJointForceMultiplier / kfJointPenetrationMultiplier and the rotation-proportion gate are
-    // rodata-not-recovered. The break PREDICATE STRUCTURE (which magnitudes, which OR, the early-outs)
-    // is exact; with the multipliers carried as 0 the force/penetration compares reduce to `magnitude
-    // * 0 > maxStress` (false for finite maxStress), so the joint does not spuriously break -- a
-    // documented inert default, never an invented threshold.
+    // ⭐ 2026-08-27: kfJointForceMultiplier (0.4) / kfJointPenetrationMultiplier (1.5) and the
+    // rotation-proportion gate (0.3) are ALL RECOVERED now -- see the constant block at the top of this
+    // file for the initialiser addresses and the calibration control. Arm (4b) is therefore FAITHFUL
+    // end to end (its magnitude was already the asm's own +400 w lane).
+    // ⚠️ STILL FLAGGED: arm (4a)'s MAGNITUDE. The asm assembles a real joint-force vector through a
+    // vperm/vaddfp chain at 0x8260C390..0x8260C3CC and dots it with the joint rotation axis
+    // (vmsum3fp128 @0x8260C3D4); that chain is not decoded, so the magnitude fed to arm (4a) here is
+    // still the INVENTED proxy `mWorldPenetrationPlusCollisionMagnitude.GetPlus()` (+432 w). The
+    // multiplier it is scaled by is now real, the magnitude is not.
     // =========================================================================================
     bool PhysicalBodyPart::TestJointForBreaking(CgsPhysics::PhysicsSimulationIO::InputBuffer* lpSimInput,
-                                                CgsPhysics::PhysicsSimulationIO::OutputBuffer* lpSimOutput)
+                                                BrnPhysics::PhysicsModuleIO::OutputBuffer* lpOutput)
     {
         // (1) tripwire.
         CGS_ASSERT(mpIKPart->GetActiveJointIndex() != IKBodyPart::KU8_NO_ACTIVE_JOINT,
@@ -1004,10 +1050,13 @@ namespace Deformation
 
         bool lbBreak = false;   // v34
 
-        // (4a) joint force along axis. The asm forms vmsum3fp128(jointForce, rotationAxis) and scales
-        // by kfJointForceMultiplier. With the joint force assembled from the (rodata-tuned) integrator
-        // and the multiplier rodata-not-recovered, the magnitude is carried as the body's accumulated
-        // collision magnitude (+432 w lane) -- the closest recovered proxy -- scaled by the placeholder.
+        // (4a) joint force along axis. The asm forms vmsum3fp128(jointForce, rotationAxis) @0x8260C3D4,
+        // takes its absolute value (vandc against the 0x80000000 mask @0x8260C410), scales by
+        // kfJointForceMultiplier (vmulfp128 @0x8260C414) and compares > maxStress (vcmpgtfp.
+        // @0x8260C418). ⚠️⚠️ THE MULTIPLIER IS NOW REAL BUT THE MAGNITUDE IS STILL INVENTED: the
+        // vperm/vaddfp chain at 0x8260C390..0x8260C3CC that assembles the joint-force vector is
+        // undecoded, so the body's accumulated collision magnitude (+432 w lane) stands in for the
+        // dot. This arm's numeric value is therefore NOT attributable to the console; arm (4b) is.
         {
             const f32 lfJointForceMagnitude = mWorldPenetrationPlusCollisionMagnitude.GetPlus();   // +432 w
             const f32 lfScaledForce = lfJointForceMagnitude * KF_JOINT_FORCE_MULTIPLIER;
@@ -1049,7 +1098,7 @@ namespace Deformation
         // Build + emit the DetachedPartNotificationEvent onto the sim OutputBuffer's notification queue
         // (the asm assembles the packed event from mpIKPart / mGlobalVehicleId / the body id, then
         // AddEventSafeAppend's it). Modelled through the flagged emit hook with the packed event blob.
-        EmitDetachedPartNotification(lpSimOutput, &mRigidBodyId);
+        EmitDetachedPartNotification(lpOutput, &mRigidBodyId);
 
         return true;   // _restvmx_121(1)
     }
@@ -1200,7 +1249,7 @@ namespace Deformation
         
     }
 
-    void EmitDetachedPartNotification(CgsPhysics::PhysicsSimulationIO::OutputBuffer* /*lpSimOutput*/, const void* /*lpEventBlob*/)
+    void EmitDetachedPartNotification(BrnPhysics::PhysicsModuleIO::OutputBuffer* /*lpOutput*/, const void* /*lpEventBlob*/)
     {
         static bool sbLoggedEDPN = false;
         if ( !sbLoggedEDPN )

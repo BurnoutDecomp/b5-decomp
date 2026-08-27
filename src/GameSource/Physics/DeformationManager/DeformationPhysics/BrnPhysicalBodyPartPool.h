@@ -123,7 +123,7 @@ namespace PhysicsModuleIO
 namespace Deformation
 {
     // Already forward-declared by BrnPhysicalBodyPart.h (re-stated here for local clarity):
-    class IKBodyPart;                // static IK rig spec (CreatePart arg). Owned by BrnIKBodyPart.h.
+    struct IKBodyPart;                // static IK rig spec (CreatePart arg). Owned by BrnIKBodyPart.h.
     class DeformableObject;          // owning deformable model (CreatePart arg). Owned by BrnDeformableObject.h.
     struct OutUpdateRigidBody;       // per-frame rigid-body update event (UpdatePart). FLAG: forward-declared.
 
