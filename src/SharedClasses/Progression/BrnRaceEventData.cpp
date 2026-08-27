@@ -134,4 +134,38 @@ u8 RaceEventData::GetAddRivalCount() const
     return mu8AddRivalCount;
 }
 
+// ---------------------------------------------------------------------------------------------
+// EventJunction::GetEventId / EventJunction::GetId
+//
+// ⚠️⚠️ BOTH READ THE SAME WORD, AND THE ONE WORD IS 32 BITS. The X360 has no standalone symbol
+// for either -- the two names come from the reconstruction of DriveThruManager::
+// UnlockCarChallengeForCar, which reads the junction record TWICE in one arm and spelled the two
+// reads as two accessors. The asm (@0x82386988 for the search key, @0x82386A54 for the payload)
+// is `lwz r11, 0(r30)` both times: offset ZERO, load-word, i.e. muID -- the same u32 the
+// DWARF-attested GetID() already returns. There is no second id and no 64-bit field in the
+// record: EventJunction is 16 bytes of {muID, muOfflineEventOffset, muOnlineEventOffset,
+// miShotGroup}, a stride ProgressionData::FixDown @0x8267F220 walks and the transcoder ports.
+//
+// ⛔ SO THE DECLARED CgsID RETURN IS A WIDENING THE BINARY DOES NOT HAVE. It is honoured here
+// because the mangled names the link demands (`?GetId@EventJunction@BrnProgression@@QEBA_KXZ`
+// / `?GetEventId@...`) are the caller's contract and that caller is committed and mounted; the
+// zero-extension is done in the open, once, right at the source word. Neither accessor may be
+// used to serialise a junction id -- the record's id IS four bytes.
+// ⭐ RETIRE-WHEN the caller is rewritten onto GetID(); these two should not outlive it.
+//
+// ⚠️ Related, in the caller and NOT fixed here (its file is another wave's): the console stores
+// that u32 into its 40-byte action-201 record at record+0x04 as a WORD (`stw r11,
+// 0x100+var_9C(r1)`, with the record base at var_A0), while the committed reconstruction
+// memcpy's an 8-byte CgsID to record+0x14. Offset and width both differ; reported, not edited.
+// ---------------------------------------------------------------------------------------------
+CgsID EventJunction::GetEventId() const
+{
+    return static_cast<CgsID>(muID);
+}
+
+CgsID EventJunction::GetId() const
+{
+    return static_cast<CgsID>(muID);
+}
+
 }

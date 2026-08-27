@@ -624,7 +624,40 @@ s32 ModeManager::GetNumberOfCarsInFlyby()
 //   interface they were handed).
 //
 // ModeManager::GetScoringSystem() x2        -> ModeManager_gUI_00.cpp (hazards H1: never twice).
-// ModeManager::OnDriveThruRepairAvailable() -> not this wave (DriveThruManager TU; header FLAG).
 // The sixteen committed bodies                 -> BrnModeManager.cpp (hazards H2).
+
+// ==============================================================================================
+// ModeManager::OnDriveThruRepairAvailable
+//
+// ⭐ THE HEADER FLAG SAID "name/dispatch not in exports". THE DISPATCH IS IN THE EXPORTS -- it
+// is just not a symbol, because the console never had a ModeManager method here at all. This
+// name was minted by the reconstruction of DriveThruManager::HandleDriveThru, which spelled the
+// console's inline forward as a call on the manager. The X360 run it stands for is
+// @0x8239B334..0x8239B354, five instructions, verbatim:
+//     lwz    r11, 0x92C(r29)     ; DriveThruManager::mpModeManager
+//     lwz    r10, 0xD98(r11)     ; ModeManager + 3480 == mpCurrentGameMode
+//     cmplwi cr6, r10, 0
+//     beq    cr6, skip           ; the NULL guard is the console's, not invented
+//     mr     r3, r10             ; `this` = the CURRENT MODE, not the manager
+//     lwz    r11, 0(r3)          ; its vtable
+//     lwz    r11, 0x64(r11)      ; slot 0x64/4 == 25
+//     mtctr  r11 / bctrl         ; no arguments
+// GameMode vtable slot 25 (BrnGameMode.h:339, vtbl+100) is OnPlayerUsesPaintShop -- already
+// declared in console slot order and already bodied (BrnGameMode.cpp:746, base empty), so this
+// forward costs the link nothing and reaches the real overrides.
+//
+// ⚠️ THE NAME IS A MISNOMER, KEPT ONLY BECAUSE THE CALLER IS COMMITTED. The console hook is
+// "the player used a paint shop", and the call site is HandleDriveThru's paint-shop arm (past
+// the CanAutoRepair and the GetPlayerBaseDeformAmount > 0 early-outs). RETIRE-WHEN that caller
+// is rewritten onto `mpModeManager->GetCurrentGameMode()->OnPlayerUsesPaintShop()`; this
+// forward should not outlive it.
+// ==============================================================================================
+void ModeManager::OnDriveThruRepairAvailable()
+{
+    if (mpCurrentGameMode != 0)
+    {
+        mpCurrentGameMode->OnPlayerUsesPaintShop();
+    }
+}
 
 } // namespace BrnGameState

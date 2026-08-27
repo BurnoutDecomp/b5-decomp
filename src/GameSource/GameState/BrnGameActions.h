@@ -355,6 +355,13 @@ enum EGameActionType
     E_ACTION_SET_COUNTDOWN                               = 47,   // DWARF 42  (+5 X360)
     E_ACTION_UPDATE_PLAYER_MEDALS                        = 200,  // DWARF 192 (+8 X360)
     E_ACTION_EVENT_AT_JUNCTION_AVAILABLE                 = 201,  // DWARF 193 (+8 X360)
+    //  202  producer BrnGameState::GameStateModule::CheckForAllEventsBeingFound @0x82382460
+    //       (`li r5, 0xCA` / `li r6, 1` @0x82382530, size 1). DWARF :204
+    //       E_ACTION_ALL_EVENTS_DISCOVERED == 194 (+8) -- the same +8 the whole 200-band takes.
+    //       Its sibling E_ACTION_ALL_EVENTS_OF_TYPE_DISCOVERED (DWARF 195 -> X360 203) belongs to
+    //       CheckForAllEventsOfATypeFound @0x823822C8, which has no body in this tree yet; it is
+    //       deliberately NOT enumerated here until its producer lands.
+    E_ACTION_ALL_EVENTS_DISCOVERED                       = 202,  // DWARF 194 (+8 X360); size 1
 
     // =========================================================================================
     // [!!] [stuntrace waveB CLOSURE round, 2026-08-26] THE MODE-LIFECYCLE / TRANSMIT BLOCK.
