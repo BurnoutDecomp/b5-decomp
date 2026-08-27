@@ -225,15 +225,12 @@ void ModeManager::StartGameMode(GameStateModuleIO::OutputBuffer* lpOutputBuffer,
 {
     GameModeParams lGameModeParams;
 
-    // [X] PARKED LEG -- HUDMessageLogic. Console: `addi r3, r31, 0x6B00; bl HUDMessageLogic::Prepare`
-    // @0x8234FD28 (ONE argument: the embedded logic at this+27392; the pseudocode's extra five
-    // arguments are register residue). PARKED PER CONDUCTOR DECISION #4 -- the HUD-message
-    // lifecycle (Construct / Prepare / PreWorldUpdate / PostWorldUpdate) belongs to the event-GUI
-    // wave and BrnHUDMessageLogic.h declares no Prepare at all (only the six
-    // GenerateOnlineStuntRun* generators). The MEMBER exists; only this call is parked.
-    // header_request #2. Behaviour cost: online stunt-run HUD messages are not re-armed at mode
-    // start -- offline stunt races post no HUD messages through this path.
-    //     mHUDMessageLogic.Prepare();
+    // [x] UN-PARKED 2026-08-27 (stunt-scorer latch-drain fix). Console: `addi r3, r31, 0x6B00;
+    // bl HUDMessageLogic::Prepare` @0x8234FD28 (ONE argument: the embedded logic at this+27392;
+    // the pseudocode's extra five arguments are register residue). It was parked per conductor
+    // decision #4 only because BrnHUDMessageLogic.h declared no Prepare; that lifecycle has now
+    // landed with the HUD-message pump, so the console's re-arm at mode start runs again.
+    mHUDMessageLogic.Prepare();
 
     // The old mode is torn down "as a quit" unless we are leaving the online free-burn lobby or
     // online showtime, which hand over rather than quit.

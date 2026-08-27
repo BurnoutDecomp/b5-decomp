@@ -248,14 +248,19 @@ void ModeManager::Construct(GameStateModule*                      lpGameStateMod
     mScoringSystem.Construct(lpAchievementManager);
 
     // ------------------------------------------------------------------------
-    // [X] PARKED LEG 3 -- HUDMessageLogic. Console: BrnGameState::HUDMessageLogic::Construct(this + 27392).
-    // PARKED PER CONDUCTOR DECISION #4: the HUD-message lifecycle (Construct / Prepare /
-    // PreWorldUpdate / PostWorldUpdate) belongs to the event-GUI wave; Hud/BrnHUDMessageLogic.cpp
-    // bodies only the six GenerateOnlineStuntRun* generators and declares none of the four. The
-    // MEMBER exists (mHUDMessageLogic) so the layout and the offsets behind it are right; only the
-    // seeding is deferred. Consequence while parked: the stunt-run message edge trackers start at
-    // whatever the allocation holds rather than at their -1 / 0 seeds.
+    // [x] UN-PARKED 2026-08-27 (stunt-scorer latch-drain fix) -- LEG 3, HUDMessageLogic.
+    // Console 0x82340008: BrnGameState::HUDMessageLogic::Construct(this + 27392).
+    //
+    // It was PARKED PER CONDUCTOR DECISION #4 (the HUD-message lifecycle belonged to the event-GUI
+    // wave). The park turned out to be load-bearing in the worst way: HUDMessageLogic::
+    // GenerateStuntMessage is the image's ONLY consumer of StuntModeScoring's one-shot
+    // mbRecentStunt latch, so with the whole lifecycle parked the latch was armed on every banked
+    // stunt and never drained, and StuntModeScoring::UpdateBufferedScore's opening
+    // CGS_ASSERT(!mbRecentStunt) fired mid-run in every offline stunt race.
+    // Construct binds mActionQueue's buffer (an un-Constructed VariableEventQueue has none) and
+    // seeds meCurrentGameModeType to E_MODE_NONE, so it is the prerequisite for the drain.
     // ------------------------------------------------------------------------
+    mHUDMessageLogic.Construct();
 
     mbFinishCurrentModeNextUpdate = false;                               // +38135 (0x94F7)
     mbOnlineFinalStandingsShown   = false;                               // +38136 (0x94F8)
