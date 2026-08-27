@@ -184,6 +184,18 @@ void ModeManager::ConstructInterModeStateBringUp(GameStateModule* lpGameStateMod
     // DELETE the null when the manager types unify and that call re-emits.
     mScoringSystem.Construct(/*lpAchievementManager*/ nullptr);
 
+    // [mbRecentStunt wave 2026-08-27] THE HUD-MESSAGE PUMP CONSTRUCT -- the real
+    // ModeManager::Construct's `bl HUDMessageLogic::Construct` @0x82340008 leg, extracted
+    // here for the same reason as every line above: THIS seam is what boot actually runs
+    // (the real Construct is still uncalled -- its own banner says so), and the latch-drain
+    // fix un-parked mHUDMessageLogic.PreWorldUpdate, whose bulk-Append hit the <256,16>
+    // queue's "Not Constructed" tripwire EVERY pre-world tick from the first frame
+    // (boot-proven, live-play log 2026-08-27: assert quartet per tick at boot). The call is
+    // fully self-contained (it constructs the object's own embedded queue; no unmounted
+    // callees), which is the seam's admission rule. The twin call in the real Construct
+    // (BrnModeManager_Lifecycle.cpp:263) stays for the day that path takes over.
+    mHUDMessageLogic.Construct();
+
     meCurrentGameModeType       = GameStateModuleIO::E_MODE_NONE;           // +3476  = -1
     mePreviousGameModeType      = GameStateModuleIO::E_MODE_NONE;           // +3484  = -1
     mePreviousGameModeState     = GameStateModuleIO::E_GMS_INVALID;         // +3488  = -1
