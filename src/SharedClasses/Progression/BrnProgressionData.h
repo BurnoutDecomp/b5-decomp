@@ -81,6 +81,12 @@ struct ProgressionData
     // X360 0x823569F0. Returns &mpaTrophyUnlocks[luIndex] (asserts the bound).
     TrophyUnlockData* GetTrophyUnlock(u32 luIndex) const;
 
+    // The trophy table's length. The X360 has no standalone symbol -- ProgressionManager::
+    // OnTrophyUnlock @0x82389740 inlines the read as `lwz r14, 0x44(r3)` right after the
+    // operator-> -- so it is defined inline here, the same precedent as GetProgressionRankCount
+    // and GetRivalCount. No layout change.
+    u32 GetTrophyUnlockCount() const { return muTrophyUnlockCount; }
+
     // X360 0x82676820. Blends the ahead/behind graphs of two AI-balance entries by lfBlend and
     // returns the result by value (the catch-up cut-off ratio is left zeroed).
     OpponentBalanceData GetInterpolatedAIBalanceGraph(s32 liIndexA, s32 liIndexB, f32 lfBlend) const;

@@ -88,6 +88,17 @@ ProgressionManager::ProgressionManager()
     // symbol off_820CDE4C is not yet homed; modelled as the seeded-null slot.
     mDebugComponent.mpVTable = nullptr;
 
+    // ⚠️⚠️ [drive-thru wave 2026-08-27] THE TROPHY QUEUE MUST BE CLEARED HERE, and this is a
+    // HOST-ONLY initialisation site, not an invented behaviour. The console clears it in
+    // ProgressionManager::Construct @0x8237A5F8 (`*(a1 + 133320) = 0`, the count word) -- but
+    // that Construct is NOT reconstructed, and Array<T,N> has no default constructor, so on the
+    // host miCount would start as stack garbage. That is not inert: Append's own
+    // "Array used before Construct/Clear was called" guard tests miCount != -1, which garbage
+    // passes, and the next line writes maElements[garbage]. [[valid-pointer-invalid-object]] --
+    // the guard is satisfied by a value that is not a count.
+    // ⭐ MOVE-WHEN ProgressionManager::Construct lands; this Clear belongs there.
+    mQueueOfTrophyCarUnLocks.Clear();
+
     // road-rules ruled tallies start clear (the ctor leaves the +133456..+133464 region 0).
     miNumberOfParCrashRoadRulesRuledByPlayer         = 0;
     miNumberOfParTimeRoadRulesRuledByPlayer          = 0;

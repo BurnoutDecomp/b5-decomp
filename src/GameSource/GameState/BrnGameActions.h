@@ -12,6 +12,7 @@
 #include "GameSource/GameState/BrnGameStateTypes.h"           // BrnGameState::StuntElementType (WorldStuntAction / OnStuntElementCompleteAction)
 #include "SharedClasses/World/BrnWorldRegion.h"               // [gateui] BrnWorld::ECounty (OnStuntElementCompleteForCountyAction)
 #include "SharedClasses/Progression/BrnTrainingTypes.h"       // [stuntrace] BrnProgression::ETrainingType (RequestGameTrainingAction)
+#include "SharedClasses/Progression/BrnTrophyUnlockData.h"    // BrnProgression::TrophyUnlockData (TrophyUnlockAction::meUnlockType) -- see the note below
 
 namespace BrnResource
 {
@@ -24,23 +25,12 @@ enum ECarType : int;
 // template spine (the real build adds only a static type tag, no instance data/vtable); its real
 // Event base + the per-action mseType definitions land with the full BrnGameActions TU.
 
-// Provisional enum home for the TrophyUnlockAction element's unlock-type field. No committed
-// home exists for BrnProgression::TrophyUnlockData::UnlockType; declare just the type tag (the
-// full 35-value enum + the TrophyUnlockData struct are their own TU,
-// SharedClasses/Progression/BrnTrophyUnlockData.h). Append/Erase never read this member -- it
-// only needs the element type to be a complete 16-byte type so the memberwise copy is the right
-// width. (DWARF SharedClasses/Progression/BrnTrophyUnlockData.h:48, E_UNLOCKTYPE_COUNT=35.)
-namespace BrnProgression
-{
-struct TrophyUnlockData
-{
-    enum UnlockType
-    {
-        E_UNLOCKTYPE_NONE  = 0,
-        E_UNLOCKTYPE_COUNT = 35,
-    };
-};
-}
+// ⭐ [drive-thru wave 2026-08-27] THE PLACEHOLDER IS RETIRED. This used to declare a local
+// `struct TrophyUnlockData { enum UnlockType { E_UNLOCKTYPE_NONE, E_UNLOCKTYPE_COUNT = 35 }; };`
+// -- a HOLLOW SHELL with the enum tag and no members, whose own comment claimed it was "a
+// complete 16-byte type". An empty struct is ONE byte, so the bodied
+// ProgressionData::GetTrophyUnlock(i) (`&GetTrophyUnlocks()[luIndex]`) was striding the
+// serialised table by 1 instead of 16. The real record now has its DWARF home; include it.
 
 // Provisional enum home for PowerParkResultAction::meOutcome. The committed owner is
 // BrnWorld::EPowerParkOutcome, whose real home (DWARF
@@ -745,13 +735,31 @@ struct RankInfoResponseAction : public GameAction<E_ACTION_RANK_INFO_RESPONSE>
 };
 
 // X360 element of Array<TrophyUnlockAction,12> @ 0x8235E1F0 / ::Erase @ 0x8235E318. DWARF
-// BrnGameActions.h:2438; 16-byte stride (UnlockType@0x00 + 8-byte-aligned CgsID@0x08). GameAction<T>
-// base carries only a static type tag (no instance data/vtable), so the struct is exactly the two members.
+// BrnGameActions.h:2438; 16-byte stride. GameAction<T> base carries only a static type tag (no
+// instance data/vtable), so the struct is exactly the two members.
+//
+// ⚠️⚠️ THE FIELD ORDER IS THE X360's, AND IT IS THE REVERSE OF THE DWARF's DECLARATION ORDER
+// (fixed 2026-08-27; it used to be UnlockType@0x00 + CgsID@0x08, taken from DWARF :2440/:2441).
+// BOTH ENDS PROVE THE CONSOLE ORDER, and the consumer even carries the field names:
+//   * PRODUCER UnlockCarFromTrophy @0x8237B0E8 builds the record in a 16-byte frame slot and
+//     hands its base to Append -- `std r30, 0x90+var_40(r1)` (r1+0x50, the CgsID) and
+//     `stw r28, 0x90+var_38(r1)` (r1+0x58, the type), with `addi r4, r1, 0x90+var_40`.
+//   * CONSUMER SendTrophyUnlockUpdate @0x823892B8 asserts on both fields BY NAME:
+//         lwz  r11, 8(r3)  -> "mQueueOfTrophyCarUnLocks[...].meUnlockType != ...E_UNLOCKTYPE_NONE"
+//         ld   r11, 0(r3)  -> "mQueueOfTrophyCarUnLocks[...].mCarToUnlock != kCGSID_NULL"
+//     -- an `ld` at ZERO for the car id and an `lwz` at EIGHT for the type.
+// It then posts the record verbatim as game action 204, size 16, so a swapped pair would have
+// handed the GUI the low half of a car id as an unlock type and vice-versa. Rung 1 over rung 2.
 struct TrophyUnlockAction : public GameAction<E_ACTION_TROPHY_UNLOCK>
 {
-    BrnProgression::TrophyUnlockData::UnlockType meUnlockType;  // 0x00  (DWARF BrnGameActions.h:2440)
-    CgsID                                        mCarToUnlock;  // 0x08  (DWARF BrnGameActions.h:2441)
+    CgsID                                        mCarToUnlock;  // 0x00  (DWARF BrnGameActions.h:2441)
+    BrnProgression::TrophyUnlockData::UnlockType meUnlockType;  // 0x08  (DWARF BrnGameActions.h:2440)
 };
+static_assert(sizeof(TrophyUnlockAction) == 16,
+              "SendTrophyUnlockUpdate posts the record as action 204 with `li r6, 0x10`");
+static_assert(offsetof(TrophyUnlockAction, mCarToUnlock) == 0x00 &&
+              offsetof(TrophyUnlockAction, meUnlockType) == 0x08,
+              "the producer's std/stw pair and the consumer's ld 0(r3) / lwz 8(r3) asserts");
 
 // X360 0x8230FDF0 (Construct), 0x822A0198 (GetPlayerDisconnected), 0x8230FD60 (SetPlayerDisconnected).
 // True owning home (DWARF BrnGameActions.h:853); all DWARF members/methods declared, only the three
