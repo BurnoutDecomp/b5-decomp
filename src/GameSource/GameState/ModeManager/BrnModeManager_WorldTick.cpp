@@ -366,10 +366,15 @@ ModeManager::PreWorldUpdate(GameStateModuleIO::OutputBuffer*              lpOutp
     TransmitAndIncrementCheckPointsReached(lpGameActionQueue);
     TransmitAndIncrementFinishReached(lpGameActionQueue);
 
-    // [!] [stuntrace] PARKED (conductor decision #4 -- HUDMessageLogic lifecycle belongs to the
-    // event-GUI wave; the MEMBER exists, but the four lifecycle callees have no bodies in
-    // Hud/BrnHUDMessageLogic.cpp). Console 0x82353CF4:
+    // [x] UN-PARKED 2026-08-27 (stunt-scorer latch-drain fix). Console 0x82353CF4:
     //   HUDMessageLogic::PreWorldUpdate(&mHUDMessageLogic, lpGameActionQueue);
+    // THE DRAIN half of the HUD-message pump: it bulk-Appends the frame's notifications into the
+    // outgoing game-action queue and Clears the local <256,16> one. Without it the post-world
+    // producer (GenerateStuntMessage, now live) would fill a 256-byte queue that nothing empties
+    // and trip CgsVariableEventQueue.h's overflow assert after a handful of stunts. The GUI bridge
+    // ignores the four notification types it has no arm for (TranslateGameActionsToGuiEvents'
+    // `default:` returns false), so appending them is inert until those arms land.
+    mHUDMessageLogic.PreWorldUpdate(lpGameActionQueue);
 
     // `stbx r27(=0), r31, 0x950B`. THIS IS THE ONLY WRITER OF muUnkByte_0x950B ANYWHERE: the byte
     // is cleared unconditionally every pre-world tick, before the two latch arms below. The header
@@ -840,14 +845,24 @@ ModeManager::PostWorldUpdate(const GameStateModuleIO::PostWorldInputBuffer* lpPo
         // StuntModeScoring::Update above.
     }
 
-    // [!] [stuntrace] PARKED (conductor decision #4). Console 0x8234B0E8 -- eight register arguments
-    // plus f1 plus TWO stack ones (IDA's pseudocode shows only the register set):
+    // [!] [stuntrace] STILL PARKED HERE -- but the leg is LIVE, in the extracted post-world leg.
+    // Console 0x8234B0E8 -- eight register arguments plus f1 plus TWO stack ones (IDA's pseudocode
+    // shows only the register set):
     //   HUDMessageLogic::PostWorldUpdate(&mHUDMessageLogic, lpActiveRaceCarOutput,
     //       meCurrentGameModeType, this, &mScoringSystem,
     //       lpPostWorldInputBuffer->GetRaceCarCrashEventQueue(),
     //       lpPostWorldInputBuffer->GetVehicleOutputInterface(),
     //       lpTakedownQueue, lfDelta,
     //       [sp+0x5C] mePlayerActiveRaceCarIndex, [sp+0x67] IsGameModeInProgress(mpCurrentGameMode));
+    //
+    // ⓘ 2026-08-27 (stunt-scorer latch-drain fix): HUDMessageLogic::PostWorldUpdate is now bodied
+    // (reduced argument set) and CALLED -- but from GameStateModule::PostWorldUpdateStuntBringUp's
+    // LEG 4, not from here, because THIS function has no call site on this build (see the TU
+    // banner: nothing creates a PostWorldInputBuffer). It is the ONLY consumer of the stunt
+    // scorer's mbRecentStunt latch; leaving it unreached is what made
+    // StuntModeScoring::UpdateBufferedScore's CGS_ASSERT(!mbRecentStunt) fire mid-run.
+    // DELETE-WHEN this function becomes the live post-world caller again: the extracted leg then
+    // folds back to `mHUDMessageLogic.PostWorldUpdate(...)` right here, with the full argument set.
 
     // `lbzx 0x94F5 -> stbx 0x94F6`: the mode-start-region edge detector's one-frame history. This
     // is the ONLY writer of mbLastInModeStartRegion, and it runs every post-world tick, mode or not.

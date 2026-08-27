@@ -346,6 +346,15 @@ public:
 
     ScoringSystem*       GetScoringSystem();                              // == &mScoringSystem (X360 +0xDB0; console inlines the adjust)
     const ScoringSystem* GetScoringSystem() const;
+
+    // == &mHUDMessageLogic (X360 +0x6B00). The console emits NO accessor -- every call site
+    // (Construct 0x82340008, Destruct 0x823406E0, StartGameMode 0x8234FCE8, PreWorldUpdate
+    // 0x82353CF4, PostWorldUpdate 0x8234B0E8) reaches it through the inlined `this + 27392`
+    // pointer adjust. Named here for the SAME reason GetScoringSystem is: the live post-world
+    // caller on this build is GameStateModule::PostWorldUpdateStuntBringUp's extracted leg, which
+    // is not a member of this class and must not poke a byte offset (hazards H9).
+    HUDMessageLogic*     GetHUDMessageLogic()       { return &mHUDMessageLogic; }
+    const HUDMessageLogic* GetHUDMessageLogic() const { return &mHUDMessageLogic; }
     GameStateModule*     GetGameStateModule();                            // asserts "mpGameStateModule"
     BrnProgression::ProgressionManager* GetProgressionManager() const;    // returns mpProgressionManager (+0x6D5C)
     const NetworkRoundManager*          GetNetworkRoundManager() const;   // returns mpNetworkRoundManager (+0x6D64)

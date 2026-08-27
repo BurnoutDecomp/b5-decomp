@@ -11,6 +11,10 @@
 //        -> PostWorldUpdateStuntBringUp                  (X360 PostWorldUpdate @0x8238F358)
 //             * refresh mLastActiveRaceCarInterface      <- WITHOUT THIS NOTHING ARMS
 //             * Append into mGameEventCarryQueue
+//             * the stunt scorer tick                    (leg 3, arms mbRecentStunt)
+//             * HUDMessageLogic::PostWorldUpdate         (leg 4, DRAINS mbRecentStunt --
+//                                                         without it UpdateBufferedScore's
+//                                                         !mbRecentStunt assert fires)
 //        -> PreWorldUpdateStuntBringUp                   (X360 PreWorldUpdate @0x823A5328)
 //             * ProcessGameEventsPropHitBringUp          (X360 ProcessGameEvents @0x823A0A18,
 //                                                         case 111 -> StuntManager::OnPropHit)
@@ -47,6 +51,7 @@
 #include "GameSource/GameState/ModeManager/GameModes/BrnGameModeParams.h" // StartGameModeParams (the case-20 local)
 #include "GameSource/GameState/ModeManager/Scoring/BrnScoringSystem.h"  // ScoringSystem::GetStuntScorer
 #include "GameSource/GameState/ModeManager/Scoring/BrnStuntModeScoring.h" // StuntModeScoring::Update (THE scoring tick)
+#include "GameSource/GameState/ModeManager/Hud/BrnHUDMessageLogic.h"     // HUDMessageLogic::PostWorldUpdate (THE latch drain)
 #include "GameShared/GameClasses/System/Timer/CgsTimerStatusInterface.h"  // CgsSystem::TimerStatusInterface (the pump's new argument)
 
 namespace BrnGameState
@@ -291,6 +296,54 @@ void GameStateModule::PostWorldUpdateStuntBringUp(
             lpModeManager->GetScoringSystem()->GetStuntScorer()->Update(
                 &mLastActiveRaceCarInterface, lfDelta);
         }
+    }
+
+    // ============================================================================
+    // ⭐⭐⭐ [stuntrace 2026-08-27] LEG 4 -- THE STUNT-SCORER LATCH DRAIN
+    // (console PostWorldUpdate #~40, HUDMessageLogic::PostWorldUpdate @0x8234B0E8).
+    //
+    // ⛔ WHY THIS LEG EXISTS -- IT IS A MISSING CONSUMER, NOT A NEW FEATURE.
+    // StuntModeScoring::UpdateBufferedScore (0x8232C118) opens with
+    //     CGS_ASSERT(!mbRecentStunt, "!mbRecentStunt")
+    // and, further down, ARMS that latch itself (`mbRecentStunt = mRecentStunt.miStuntScore > 0`)
+    // every time a stunt banks. The invariant only holds because something drains the latch
+    // between two frames -- and in the whole X360 image exactly ONE thing does:
+    //     HUDMessageLogic::GenerateStuntMessage (0x82394DF8)
+    //       -> StuntModeScoring::WasStuntRecentlyPerformed (0x82313280, vtable slot +0x18)
+    // reached from HUDMessageLogic::PostWorldUpdate's case-7 arm. Neither query has a single
+    // direct xref in the image; both are vtable-dispatched from there and nowhere else.
+    // On the console the whole cycle happens inside ONE ModeManager::PostWorldUpdate: the scorer
+    // fork at 0x8234AD2C arms the latch (leg 3 above), the HUD pump at 0x8234B0E8 drains it.
+    // With the HUDMessageLogic lifecycle parked, leg 3 armed a latch nothing ever read, and the
+    // assert fired on the SECOND stunt banked in any offline stunt race:
+    //     [ASSERT 1] !mbRecentStunt (BrnStuntModeScoring_UpdatePass.cpp:352)
+    //       StuntModeScoring::UpdateBufferedScore <- ::Update <- PostWorldUpdateStuntBringUp
+    // ⚠ ASSERT-IS-NOT-A-GUARD: the fix is the missing producer-side consumer, never a softened
+    // assert -- the tripwire is correct and stays exactly as it is.
+    //
+    // ⓘ POSITION IS THE CONSOLE'S: after the per-mode scorer fork, and -- like the console --
+    // OUTSIDE the `mpCurrentGameMode != NULL` gate and outside the mode-7/IN_PROGRESS gate.
+    // HUDMessageLogic::PostWorldUpdate runs every post-world tick, mode or not; its own latched
+    // mode member is what selects the arm, and E_MODE_NONE selects none.
+    //
+    // ⛔ WHY IT IS AN EXTRACTED LEG, same reason as legs 1-3: the committed
+    // ModeManager::PostWorldUpdate dereferences a PostWorldInputBuffer nothing on this build
+    // creates, so it has no call site. mLastActiveRaceCarInterface (leg 1's own output) and the
+    // ModeManager's public named accessors are real, so this leg takes them directly. THE
+    // ARGUMENTS ARE THE DEVIATION, NOT THE BODY -- the console passes ten, the mounted body reads
+    // four, and BrnHUDMessageLogic.cpp names every dropped argument and every unmounted arm.
+    //
+    // DELETE-WHEN a real PostWorldInputBuffer exists: this block collapses into
+    // `mModeManager.PostWorldUpdate(lpPostWorldInput, lfDelta)` together with legs 1-3.
+    // ============================================================================
+    {
+        ModeManager* lpModeManager = GetModeManager();
+
+        lpModeManager->GetHUDMessageLogic()->PostWorldUpdate(
+            &mLastActiveRaceCarInterface,
+            lpModeManager->GetCurrentGameModeType(),
+            lpModeManager->GetScoringSystem(),
+            lfDelta);
     }
 }
 

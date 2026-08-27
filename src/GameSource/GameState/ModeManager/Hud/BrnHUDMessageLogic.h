@@ -5,7 +5,8 @@
 #include "GameSource/BurnoutConstants.h"  // EActiveRaceCarIndex, E_ACTIVE_RACE_CAR_INDEX_COUNT (== 8)
 #include "GameShared/GameClasses/Containers/CgsBitArray.h"   // BitArray<N>
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h" // VariableEventQueue<256,16>
-#include "GameSource/GameState/ModeManager/Scoring/BrnScoringSystem.h" // ScoringSystem, CarData (by pointer)
+#include "GameSource/GameState/ModeManager/Scoring/BrnScoringSystem.h" // ScoringSystem, CarData (by pointer),
+                                                                       // StuntModeScoring + StuntInfo (GenerateStuntMessage)
 #include "GameSource/GameState/BrnGameStateSharedIO.h"               // GameStateModuleIO::EPlayerTeam
 #include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h"          // BrnNetwork::NetworkPlayerID
 #include "GameShared/GameClasses/System/Timer/CgsTime.h"             // CgsSystem::Time
@@ -52,6 +53,21 @@ public:
         E_HUD_MESSAGE_STUNT_RUN_COMBO_END   = 269,  // 0x10D  GenerateOnlineStuntRunTimeMessages (combo)
         E_HUD_MESSAGE_STUNT_RUN_SCORE       = 270,  // 0x10E  GenerateOnlineStuntRunScoreMessages
         E_HUD_MESSAGE_STUNT_RUN_TIME        = 271,  // 0x10F  GenerateOnlineStuntRunTimeMessages (30s)
+
+        // ---- the stunt-scorer notification set (X360 GenerateStuntMessage @0x82394DF8) ----
+        // GenerateStuntMessage queues exactly ONE of the three notification records per frame and,
+        // for the stunt and combo records, follows it with the running-score record. The four
+        // literals are the X360's own AddEvent type arguments (`li r5, 0x85` @0x82394E98,
+        // `li r5, 0x84` @0x82394EF8, `li r5, 0x86` @0x82394F44, `li r5, 0x14` @0x82394EB0/F20).
+        // FLAG (names, not values): the DecFIGS EGameActionType dump is the PS3 enum and carries
+        // this semantic triple as E_ACTION_HUD_MESSAGE_STUNT_PERFORMED / _COMBO_PERFORMED /
+        // _STUNT_TIME_UP; the names below are taken from it, the VALUES from the X360 asm. The
+        // fourth (20) is the running-score push both banking arms make -- name is role-derived.
+        // Re-confirm all four when the X360 EGameActionType band holding 20 / 132..134 is dumped.
+        E_HUD_MESSAGE_SCORE_UPDATE          = 20,   // 0x14   running score, 4 bytes
+        E_HUD_MESSAGE_STUNT_PERFORMED       = 132,  // 0x84   the banked StuntInfo record
+        E_HUD_MESSAGE_COMBO_PERFORMED       = 133,  // 0x85   combo timer + score + validity
+        E_HUD_MESSAGE_STUNT_TIME_UP         = 134,  // 0x86   1 byte, no payload
     };
 
     // ------------------------------------------------------------------------
@@ -88,6 +104,70 @@ public:
         f32 mfWarningTimeSeconds;
     };
 
+    // The banked-stunt notification: the StuntInfo record WasStuntRecentlyPerformed hands back.
+    // The X360 posts the very buffer it passed to that query (`addi r4, r1, var_30` is both the
+    // query's out-param and the AddEvent payload), with liSize 24 -- the X360 sizeof(StuntInfo)
+    // (6 dwords, matching the query's own `v5 = 6` copy loop). The host StuntInfo is 20 bytes,
+    // so the SIZE is taken from sizeof() at the call site, never from the X360 literal.
+    struct StuntPerformedMessage : public CgsModule::Event
+    {
+        StuntInfo mStuntInfo;
+    };
+
+    // 12-byte combo-completed notification. The X360 builds it as the THREE out-params of
+    // WasComboRecentlyPerformed in three adjacent stack slots and posts the block from the lowest
+    // of them (`addi r6, r1, var_48` = the f32*, `addi r4, r1, var_44` = the s32*, `addi r5, r1,
+    // var_40` = the bool*; AddEvent takes var_48 with liSize 12) -- so the record IS
+    // { f32; s32; bool } in that order, and the query fills it in place.
+    struct ComboPerformedMessage : public CgsModule::Event
+    {
+        f32  mfComboTime;   // +0  mfRecentComboTime      (+0x88)
+        s32  miComboScore;  // +4  miRecentComboScore     (+0x84)
+        bool mbValidCombo;  // +8  miRecentComboScore >= miCurrentScore/2
+    };
+
+    // 4-byte running-score notification, pushed straight after a stunt or combo record.
+    struct ScoreUpdateMessage : public CgsModule::Event
+    {
+        s32 miScore;
+    };
+
+    // 1-byte "stunt time is up" notification. The X360 posts an UNINITIALISED one-byte stack local
+    // (`addi r4, r1, var_50`, no preceding store): the type ID carries the whole meaning.
+    struct StuntTimeUpMessage : public CgsModule::Event
+    {
+        u8 muUnused;
+    };
+
+    // ------------------------------------------------------------------------
+    // Lifecycle + per-frame entry points.
+    // ------------------------------------------------------------------------
+
+    // X360 0x8236F530. Binds the action queue's buffer, seeds the latched mode type to
+    // E_MODE_NONE and runs Prepare(). ModeManager::Construct calls it (console 0x82340008).
+    void Construct();
+
+    // X360 0x82366478. Re-seeds every message edge-tracker. Called by Construct and by
+    // PostWorldUpdate the first frame the game mode changes.
+    void Prepare();
+
+    // X360 0x82389248. Drains a frame of notifications into the module's outgoing game-action
+    // queue and empties the local one. ModeManager::PreWorldUpdate calls it (console 0x82353CF4).
+    void PreWorldUpdate(GameStateModuleIO::GameActionQueue* lpOutputGameActionQueue);
+
+    // X360 0x8239D998. Latches the game mode, ticks the in-mode clock and runs the per-mode
+    // message generators. REDUCED ARGUMENT SET -- see the body for the console's full ten and
+    // for the arms this build does not reproduce.
+    void PostWorldUpdate(const StuntModeScoring::ActiveRaceCarOutputInterface* lpActiveRaceCarInterface,
+                         GameStateModuleIO::EGameModeType leGameModeType,
+                         ScoringSystem* lpScoringSystem,
+                         f32 lfDelta);
+
+    // X360 0x82394DF8. THE stunt scorer's notification pump, and the ONLY consumer of the
+    // scorer's three one-shot latches (mbRecentCombo / mbRecentStunt / the time-up edge) in the
+    // whole image. Runs for the offline stunt-attack mode and the online stunt-run family.
+    void GenerateStuntMessage(ScoringSystem* lpScoringSystem);
+
     // ------------------------------------------------------------------------
     // Online stunt-run per-frame message generators (this TU). Each takes the live
     // ScoringSystem and the local player's active-race-car index, examines the relevant
@@ -114,6 +194,17 @@ private:
     // The action queue is the first member (object offset 0): the X360 passes `this`
     // directly as the queue pointer to AddEvent.
     CgsModule::VariableEventQueue<256, 16> mActionQueue;
+
+    // The game mode this object is currently generating messages for (X360 +0x1C0). Construct
+    // seeds it to E_MODE_NONE (`stw r28(-1), 0x1C0(r31)` @0x8236F5D8) and PostWorldUpdate latches
+    // the incoming mode into it, re-running Prepare() on every change. GenerateStuntMessage reads
+    // it to pick the online vs offline stunt scorer -- it is NOT a copy of ModeManager's own
+    // meCurrentGameModeType, it is this object's one-frame-latched view of it.
+    GameStateModuleIO::EGameModeType meCurrentGameModeType;   // +0x1C0 (448)
+
+    // Seconds spent in the latched mode (X360 +0x1C4). PostWorldUpdate accumulates the frame
+    // delta into it; Prepare zeroes it.
+    f32                 mfTimeInMode;                 // +0x1C4 (452)
 
     // Stunt-run score-milestone tracker (X360 +0x1D0..+0x1D8): the rival whose milestone
     // is being watched plus the previous/current score samples used to detect the
