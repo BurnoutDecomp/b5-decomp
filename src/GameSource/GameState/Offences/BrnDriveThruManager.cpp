@@ -28,6 +28,8 @@
 #include "GameSource/GameState/BrnGameStateModule.h"               // BrnGameState::GameStateModule (CheckForAllEventsBeingFound)
 #include "GameSource/GameState/AchievementManager/BrnGameStateAchievementManagerBase.h" // OnFindAllCarParks/OnBodyShop
 #include "GameSource/GameState/BrnGameStateModuleIO.h"             // GameStateModuleIO::OutputBuffer
+#include "GameSource/GameState/BrnGameActions.h"                   // GameStateModuleIO::JunctionInfoAction (the action-201 record)
+                                                                   //   + EGameModeType (E_MODE_BURNING_ROUTE)
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h" // RCEntityActiveRaceCarOutputInterface
 
 namespace BrnGameState
@@ -1130,9 +1132,13 @@ void DriveThruManager::UnlockCarChallengeForCar(CgsID lRepairedCarID, GameStateM
 
     // Resolve the ProfileEvent for this junction (X360 linear search of the profile's race-event
     // id table; word +1000 == count, +29168 == id table base).
+    // ⭐ THE SEARCH KEY IS A 32-BIT WORD. @0x82386988 `lwz r7, 0(r30)` loads the junction's muID
+    // and @0x823869A0/A4 compares it with `lwz r6, 0(r10)` / `cmplw` -- a WORD compare, not a
+    // doubleword one. (Was `GetEventId()`, a CgsID-returning alias for the same muID; that
+    // widening is not in the binary and the accessor is retired with this call site.)
     BrnProgression::Profile* lpProfile = mpProgressionManager->GetProfile();
     BrnProgression::ProfileEvent* lpProfileEvent =
-        lpProfile->FindProfileEventByRaceEventId(lpEventJunction->GetEventId());
+        lpProfile->FindProfileEventByRaceEventId(lpEventJunction->GetID());
     if (lpProfileEvent == 0)
     {
         CgsDev::Assert::BeginAssert();
@@ -1146,15 +1152,59 @@ void DriveThruManager::UnlockCarChallengeForCar(CgsID lRepairedCarID, GameStateM
     if (!lpProfileEvent->IsFound())   // ProfileEvent flag bit 0 (X360 lhz +4, bit0)
     {
         lpProfileEvent->SetFound(true);
-        lpProfile->IncrementNumDiscoveredEvents();   // *(Profile + 580)++
 
-        // SendJunctionPlayerIsAtAction (40 bytes); only the junction id (+0x14) is X360-attested.
-        // FLAG: full struct layout not in exports.
-        u8 lacJunction[40];
-        std::memset(lacJunction, 0, sizeof(lacJunction));
-        const CgsID lJunctionId = lpEventJunction->GetId();
-        std::memcpy(lacJunction + 0x14, &lJunctionId, sizeof(lJunctionId));
-        lpQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(lacJunction), KI_ACTION_SEND_JUNCTION_PLAYER_AT, 40);
+        // ⭐⭐ THE OBJECT IS THE MANAGER, NOT THE PROFILE. @0x82386A40 `lwz r10, 0x950(r22)`
+        // reloads mpProgressionManager and @0x82386A48..A50 does `lwz/addi/stw 0x244(r10)` --
+        // i.e. ProgressionManager+580. The Profile sits at ProgressionManager+368, so the word
+        // is Profile+212 == 192 + 4*5, element FIVE of maGameModeTypeAmountDiscovered. The
+        // previous comment here said `*(Profile + 580)++`, which is a DIFFERENT word (it would
+        // be ProgressionManager+948) -- a comment naming the wrong object is how a later reader
+        // "fixes" the code onto the wrong member.
+        // ⭐ 5 == E_MODE_BURNING_ROUTE, and the SAME 5 is stored into the record's
+        // meGameModeType below (`li r11, 5` @0x82386A38 -> record+0x18), which is the
+        // independent corroboration that the folded index is a game-mode type and not a
+        // nameless counter. Spelled with the DWARF-attested owner (Profile::
+        // AddGameModeTypeToDiscovered @0x82354AA0) rather than the caller-invented
+        // `IncrementNumDiscoveredEvents` alias.
+        lpProfile->AddGameModeTypeToDiscovered(GameStateModuleIO::E_MODE_BURNING_ROUTE);
+
+        // ⭐⭐ THE ACTION-201 RECORD IS `JunctionInfoAction`, AND THE CONSOLE FILLS SIX FIELDS.
+        // This used to be a bare `u8[40]` with an 8-byte CgsID memcpy'd to +0x14 and everything
+        // else zero. Both the width and the offset were wrong, and five stores were missing.
+        // The X360 frame is `addi r4, r1, 0x100+var_A0` (record base = var_A0 = r1+0x60,
+        // `li r6,0x28 / li r5,0xC9` -> AddEvent(q, rec, 201, 40)); every store below is cited:
+        //     stw  r11, var_9C  (r1+0x64 == rec+0x04)  <- lwz r11, 0(r30), the junction muID
+        //     stw  r11, var_88  (r1+0x78 == rec+0x18)  <- li r11, 5
+        //     stb  r20, var_82  (r1+0x7E == rec+0x1E)  <- r20 == 0
+        //     stb  r20, var_81  (r1+0x7F == rec+0x1F)  <- r20 == 0
+        //     stb  r11, var_80  (r1+0x80 == rec+0x20)  <- r11 == 1
+        //     stb  r11, var_7F  (r1+0x81 == rec+0x21)  <- r11 == 1
+        //     stb  r11, var_7E  (r1+0x82 == rec+0x22)  <- r11 == 1
+        //     stb  r11, var_7D  (r1+0x83 == rec+0x23)  <- r11 == 1
+        // ⚠️⚠️ [[serialized-slots-stay-32-bit]]: muEventJunctionID is FOUR bytes because the
+        // junction record's id IS four bytes (EventJunction is the 16-byte serialised
+        // {muID, muOfflineEventOffset, muOnlineEventOffset, miShotGroup} that
+        // ProgressionData::FixUp rebases). Widening it to a CgsID did not merely move the
+        // field -- it overwrote rec+0x14..0x1B, i.e. the tail of maPad0C and the low half of
+        // mSpecialEventCarId, and left muEventJunctionID itself at zero. The GUI arm
+        // @0x823EA810 reads muEventJunctionID into GuiEventJunctionInfo::miEventID, so the
+        // event this posts identified itself as event 0.
+        // ⚠️ FLAG (ours, not the console's): the X360 does NOT clear the frame -- the eleven
+        // never-stored bytes are whatever the stack held. Value-initialising is the only
+        // reproducible choice on the host and is strictly safer; it is called out because it is
+        // behaviour the binary does not have.
+        GameStateModuleIO::JunctionInfoAction lJunctionInfo = {};
+        lJunctionInfo.muEventJunctionID        = lpEventJunction->GetID();
+        lJunctionInfo.meGameModeType           = GameStateModuleIO::E_MODE_BURNING_ROUTE;  // 5
+        lJunctionInfo.mbOnEntry                = false;
+        lJunctionInfo.mbCanEnterEvent          = false;
+        lJunctionInfo.mbEventUnlocked          = true;
+        lJunctionInfo.mbSpecificCarEventValid  = true;
+        lJunctionInfo.mbIsNewlyDiscovered      = true;
+        lJunctionInfo.mbIsAutoUnlockedChallenge = true;
+        lpQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lJunctionInfo),
+                          KI_ACTION_SEND_JUNCTION_PLAYER_AT,
+                          static_cast<s32>(sizeof(lJunctionInfo)));   // the console's `li r6,0x28`
 
         u8 lacAuto[1] = { 0 };
         lpQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(lacAuto), KI_ACTION_REQUEST_AUTO_SAVE, 1);

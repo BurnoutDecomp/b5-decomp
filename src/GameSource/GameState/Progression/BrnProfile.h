@@ -492,7 +492,13 @@ public:
     bool IsDriveThruDiscoverd(CgsID lId, BrnTrigger::GenericRegion::Type leType) const;
     s32  GetNumDriveThrusDiscovered(BrnTrigger::GenericRegion::Type leType) const;
     f32  GetPlayerBaseDeformAmount(CgsID lCarId) const;
-    void IncrementNumDiscoveredEvents();
+    // ⛔ RETIRED 2026-08-27 (drive-thru link-closure wave): `void IncrementNumDiscoveredEvents()`.
+    // Its RETIRE-WHEN is discharged -- DriveThruManager::UnlockCarChallengeForCar, its only
+    // caller, now spells the store as AddGameModeTypeToDiscovered(E_MODE_BURNING_ROUTE), which
+    // is the DWARF-attested owner of the word the console increments (ProgressionManager+0x244
+    // == Profile+212 == 192 + 4*5). The alias's name claimed a generic "events discovered"
+    // counter that does not exist; leaving an unreferenced wrong-named forward is how it gets
+    // picked up again. Do not re-mint it.
     // ⚠️ [D1 profile-event-list wave, 2026-08-27] NAME NOTE -- this is the SAME scan as the
     // DWARF-attested Profile::FindEvent pair declared above (:709/:713), under an invented name
     // and a widened key, named by the not-yet-mounted BrnDriveThruManager TU. FindEvent is now

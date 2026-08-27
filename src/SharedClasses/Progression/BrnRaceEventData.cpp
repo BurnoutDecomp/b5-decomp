@@ -135,7 +135,14 @@ u8 RaceEventData::GetAddRivalCount() const
 }
 
 // ---------------------------------------------------------------------------------------------
-// EventJunction::GetEventId / EventJunction::GetId
+// ⛔ EventJunction::GetEventId / EventJunction::GetId -- DELETED 2026-08-27.
+//
+// The RETIRE-WHEN below is discharged: DriveThruManager::UnlockCarChallengeForCar, their only
+// caller, now reads GetID() at both sites and posts the junction id into JunctionInfoAction::
+// muEventJunctionID as the 4-byte word the console stores. Nothing declares or references the
+// two aliases any more, so the definitions go with the declarations rather than sitting here as
+// an unreferenced widening someone can pick up again. The analysis is kept verbatim because it
+// is the evidence for the caller's fix:
 //
 // ⚠️⚠️ BOTH READ THE SAME WORD, AND THE ONE WORD IS 32 BITS. The X360 has no standalone symbol
 // for either -- the two names come from the reconstruction of DriveThruManager::
@@ -146,26 +153,16 @@ u8 RaceEventData::GetAddRivalCount() const
 // record: EventJunction is 16 bytes of {muID, muOfflineEventOffset, muOnlineEventOffset,
 // miShotGroup}, a stride ProgressionData::FixDown @0x8267F220 walks and the transcoder ports.
 //
-// ⛔ SO THE DECLARED CgsID RETURN IS A WIDENING THE BINARY DOES NOT HAVE. It is honoured here
-// because the mangled names the link demands (`?GetId@EventJunction@BrnProgression@@QEBA_KXZ`
-// / `?GetEventId@...`) are the caller's contract and that caller is committed and mounted; the
-// zero-extension is done in the open, once, right at the source word. Neither accessor may be
-// used to serialise a junction id -- the record's id IS four bytes.
-// ⭐ RETIRE-WHEN the caller is rewritten onto GetID(); these two should not outlive it.
+// ⛔ SO THE DECLARED CgsID RETURN IS A WIDENING THE BINARY DOES NOT HAVE. Neither accessor may
+// be used to serialise a junction id -- the record's id IS four bytes.
 //
-// ⚠️ Related, in the caller and NOT fixed here (its file is another wave's): the console stores
-// that u32 into its 40-byte action-201 record at record+0x04 as a WORD (`stw r11,
-// 0x100+var_9C(r1)`, with the record base at var_A0), while the committed reconstruction
-// memcpy's an 8-byte CgsID to record+0x14. Offset and width both differ; reported, not edited.
+// ✅ FIXED 2026-08-27 in the caller (BrnDriveThruManager.cpp): the console stores that u32 into
+// its 40-byte action-201 record at record+0x04 as a WORD (`stw r11, 0x100+var_9C(r1)`, record
+// base var_A0), while the committed reconstruction memcpy'd an 8-byte CgsID to record+0x14.
+// Both the offset and the width were wrong; the widened write also clobbered rec+0x14..0x1B
+// (JunctionInfoAction::maPad0C tail + mSpecialEventCarId) and left muEventJunctionID at zero,
+// so every junction this arm announced identified itself to the GUI as event 0. The caller now
+// builds a real JunctionInfoAction and fills the six fields the console fills.
 // ---------------------------------------------------------------------------------------------
-CgsID EventJunction::GetEventId() const
-{
-    return static_cast<CgsID>(muID);
-}
-
-CgsID EventJunction::GetId() const
-{
-    return static_cast<CgsID>(muID);
-}
 
 }
