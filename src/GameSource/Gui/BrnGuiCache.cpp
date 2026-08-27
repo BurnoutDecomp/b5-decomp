@@ -1714,6 +1714,16 @@ namespace BrnGui
         return mpChallengeManager;
     }
 
+    // ⭐ [stuntrace] X360-INLINED at BrnGuiCache.h:2374 -- BrnGui::GuiModule::Construct
+    // @0x82518028 fires the "lpChallengeManager" assert then stores the module's own
+    // FreeburnChallengeManager into the cache (`*(gm + 1021868) = gm + 309584`, i.e.
+    // cache+0x406C). Sole writer of the member the accessor above asserts.
+    void GuiCache::SetChallengeManager(FreeburnChallengeManager* lpChallengeManager)
+    {
+        CGS_ASSERT(lpChallengeManager != nullptr, "lpChallengeManager");   // BrnGuiCache.h:2374
+        mpChallengeManager = lpChallengeManager;
+    }
+
     // @ 0x82472D00
     const BrnResource::HudMessageController* GuiCache::GetHudMessageController() const
     {

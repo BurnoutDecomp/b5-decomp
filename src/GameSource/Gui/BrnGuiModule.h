@@ -21,6 +21,7 @@
 #include "GameShared/GameClasses/Gui/CgsGuideIntegration.h"             // CgsGui::SystemUserProfile (module-owned; X360 +949152)
 #include "GameSource/Gui/BrnGuiCache.h"                                 // BrnGui::GuiCache (the flow states' cache)
 #include "GameSource/Gui/SatNav/BrnMapIconManager.h"   // [H3b] BrnGui::MapIconManager (by-value member)
+#include "GameSource/Gui/BrnGuiFreeburnChallengeManager.h" // BrnGui::FreeburnChallengeManager (module-owned; X360 +309584)
 #include "GameSource/Gui/BrnGuiHudMessageDirector.h"                    // BrnGui::HudMessageDirector (module-owned; X360 +639264)
 #include "GameSource/Gui/BrnGuiHudMessageAnalyzer.h"                    // BrnGui::HudMessageAnalyzer (module-owned; X360 +660992)
 #include "GameSource/Gui/BrnGuiWorldDataController.h"                   // BrnGui::WorldDataController (module-owned; X360 +307836)
@@ -299,6 +300,19 @@ namespace BrnGui
         // [H3b] the shared map-icon manager (X360 +1088304; ctor from GuiModule::GuiModule
         // @0x827E5D7C, Construct + GuiCache::SetMapIconManager from GuiModule::Construct).
         MapIconManager    mMapIconManager;
+
+        // ⭐ [stuntrace] X360 +309584 -- THE GUI-SIDE FREEBURN-CHALLENGE TRACKER, and the
+        // object GuiCache::mpChallengeManager points at. GuiModule::Construct @0x82518028
+        // constructs it against the cache and binds it in (SetChallengeManager, the console's
+        // `*(gm + 1021868) = gm + 309584`); GuiModule::Update @0x82527A58 ticks it once per
+        // frame. It is the ONE owner in the image -- the manager is a plain by-value member of
+        // this module, exactly like mWorldDataController/mMapIconManager above.
+        //
+        // Until this member existed, GuiCache::mpChallengeManager had ZERO writers and every
+        // in-event HUD frame that touched a freeburn-challenge arm of RaceMainHudState fired
+        // the "mpChallengeManager" assert (BrnGuiCache.h:2390) and then read off a null
+        // pointer -- the user-blocking dialog on starting a stunt race.
+        FreeburnChallengeManager mFreeburnChallengeManager;   // X360 +309584
         BrnScreenFlow     mScreenFlow;      // X360 mScreenFlow (SCREEN = E_GUIFLOW_SCREEN, the front-end)
         BrnHudFlow        mHudFlow;         // X360 +638904-adjacent flow set (HUD = E_GUIFLOW_HUD)
         BrnOverlayFlow    mOverlayFlow;     // X360 mOverlayFlow (OVERLAY = E_GUIFLOW_OVERLAY)

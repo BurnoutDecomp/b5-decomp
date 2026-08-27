@@ -530,6 +530,20 @@ namespace BrnGui
 
         const FreeburnChallengeManager* GetFreeburnChallengeManager() const; // X360 @0x8240F168
 
+        // ⭐ [stuntrace] X360-INLINED at BrnGuiCache.h:2374 -- THE ONLY WRITER of
+        // mpChallengeManager in the whole image. BrnGui::GuiModule::Construct @0x82518028
+        // constructs the module's own FreeburnChallengeManager and stores it here:
+        //     BrnGui::FreeburnChallengeManager::Construct(gm + 309584, gm + 1005376);
+        //     if (gm == -309584) { ... FireAssert("lpChallengeManager",
+        //                                "..\\..\\..\\GameSource\\Gui/BrnGuiCache.h", 2374); }
+        //     *(gm + 1021868) = gm + 309584;    // 1021868 - 1005376 == 16492 == +0x406C
+        // -- the same shape as the SetSkillsManager pair four lines above it
+        // (BrnGuiCache.h:2341) and the SetWorldDataController/SetHudMessageController/
+        // SetHudMessageDirector trio. Until it landed, GetFreeburnChallengeManager's
+        // "mpChallengeManager" assert (BrnGuiCache.h:2390) fired on every in-event HUD frame
+        // that reached the freeburn-challenge arms of RaceMainHudState.
+        void SetChallengeManager(FreeburnChallengeManager* lpChallengeManager);
+
         // ADDITIVE GROW (OnlineGameRoomPlayerInfo keystone, wave H): the sat-nav GUI
         // tracker pointer @X360 +0x4054. The screen's HandleGuiCacheEvent asserts
         // "mpGuiCache->GetGuiTracker()" then ClearTracker()s it (@0x824A3F60 region);
