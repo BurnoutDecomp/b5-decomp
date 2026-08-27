@@ -1914,8 +1914,18 @@ void GameStateModule::PreWorldUpdateSetupPlayerCarBringUp(bool lbMayCompleteJunk
     mpOutputBuffer->UnlockForWrite();
 
     // [FLAG PC bring-up] SendSetUpAllEventStartsMessage (the console's partner call on this same
-    // latch) is not reconstructed; it publishes the event-start table to the GUI and has no
-    // consumer on this build.
+    // latch) is not reconstructed. It publishes the event-start table to the GUI -- i.e. it is
+    // the ONLY thing that ever reaches SetUpAllEventStartsInterface::AddEventStart @0x82361398,
+    // and therefore the only thing that ever puts a record in maEventStarts.
+    // ⛔ THE "no consumer on this build" HALF OF THIS FLAG IS RETRACTED (2026-08-27). It stopped
+    // being true when the HUD H3b sat-nav slice landed (2026-08-25): BrnGui::GuiCache::
+    // GetProfileEventDisplayInfo is a live consumer, reached every drive from
+    // SatNavRenderer::RefreshSatNavIconInfo, and because this producer never runs it walks an
+    // empty array and fires the console's own "Unable to find event start with event id: "
+    // assert (BrnGuiCache_wH3b.cpp, where the full chain is written down). The assert is
+    // faithful and non-gating -- the caller carries a FLAG'd null guard -- but it is a STANDING
+    // RUNTIME REPORT OF THIS GAP, and it will keep firing until this call is reconstructed.
+    // DELETE-WHEN: SendSetUpAllEventStartsMessage is bodied.
 }
 
 // ============================================================================

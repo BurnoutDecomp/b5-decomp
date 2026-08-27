@@ -70,7 +70,17 @@ void TrafficEntityModule::PreSceneUpdate(CgsModule::IOBufferStack* lpInputBuffer
 {
     (void)lpInputBufferStack;
     (void)lpOutputBufferStack;
-    (void)lUpdateSet;
+
+    // ⭐⭐ THE SIM-PAUSED BIT, RECOVERED FROM THE IMAGE (pauseresume wave, 2026-08-27).
+    // 0x8274A994 `mr r30, r8` puts the update set (the 6th argument) in r30, and the prologue
+    // splits it into the two bits this function cares about:
+    //     0x8274A9A4  rlwinm r11, r30, 24, 24, 31   ; (updateSet >> 8) & 0xFF
+    //     0x8274A9AC  rlwinm r29, r11, 0,  31, 31   ; r29 = BIT 8  -- mbInReplay; it drives the
+    //                                               ;   EnterReplay @0x827081D8 / LeaveReplay
+    //                                               ;   @0x82708248 latch at 0x8274A9C4..0x8274A9D8
+    //     0x8274A9B0  rlwinm r27, r30, 0,  31, 31   ; r27 = updateSet & 1 -- THE SIM-PAUSED BIT
+    // i.e. `clrlwi r27, r30, 31`, the same decode PostPhysicsUpdate does at 0x8274E710.
+    const bool lbSimPaused = ((lUpdateSet & 1u) != 0);
 
     {
         // GATE: the console's PerfMonCpu Start/StopMonitor(miPerfMon_PreSceneUpdate) bracket.
@@ -83,18 +93,25 @@ void TrafficEntityModule::PreSceneUpdate(CgsModule::IOBufferStack* lpInputBuffer
             "are gated; same reason the sibling partfile gates PostPhysicsUpdate's bracket");
     }
 
-    // GATE: the update-set decode (lbSimPaused, mbInReplay) plus the ship's EnterReplay
-    // @0x827081D8 / LeaveReplay @0x82708248 latch. BrnUpdateSet is a bare `typedef u16` in
-    // SharedClasses/BrnSharedConstants.h with no named bits, and the ARTIST body is an export
-    // hole, so the masks cannot be read off anything.
-    // DELETE WHEN: PreSceneUpdate's body is recovered, or BrnUpdateSet gets named bits.
+    // ⛔ THE OLD NOTE HERE IS RETRACTED (2026-08-27). It said: "BrnUpdateSet is a bare
+    // `typedef u16` ... with no named bits, and the ARTIST body is an export hole, so THE MASKS
+    // CANNOT BE READ OFF ANYTHING." **An ARTIST export hole is not an IMAGE hole.** Both masks
+    // were read straight out of the instruction bytes at 0x8274A9A4..0x8274A9B0 (see the decode
+    // above); the export set simply carries no per-function JSON for this address. ⭐ "The export
+    // does not have it" is a fact about the export, never about the binary.
+    //
+    // The SIM-PAUSED half is LIVE now (it gates the block below, and it is what makes a paused
+    // traffic sim actually stop). The REPLAY half stays gated: bit 8 is decoded above in the
+    // console and drives EnterReplay @0x827081D8 / LeaveReplay @0x82708248, neither of which has
+    // a body in this tree, and replay is not this wave's surface.
+    // DELETE WHEN: EnterReplay/LeaveReplay are bodied.
     {
         static bool sbLogged = false;
         LogMissingLeg(sbLogged,
-            "PreSceneUpdate update-set decode (lbSimPaused from E_HLA_UPDATE_PAUSED, mbInReplay "
-            "from E_HLA_UPDATE_PLAYING_REPLAY) and the ship's EnterReplay @0x827081D8 / "
-            "LeaveReplay @0x82708248 latch -- BrnUpdateSet is a bare typedef with NO named bits "
-            "in this tree and the ARTIST body is an EXPORT HOLE, so the masks cannot be read");
+            "PreSceneUpdate REPLAY latch -- update-set BIT 8 (E_HLA_UPDATE_PLAYING_REPLAY) is "
+            "decoded by the console at 0x8274A9A4/0x8274A9AC and drives EnterReplay @0x827081D8 "
+            "/ LeaveReplay @0x82708248 at 0x8274A9C4..0x8274A9D8; neither callee is bodied in "
+            "this tree. The SIM-PAUSED half of the decode (bit 0, 0x8274A9B0) is LIVE");
     }
 
     lpOutput->LockForWrite();
@@ -131,12 +148,31 @@ void TrafficEntityModule::PreSceneUpdate(CgsModule::IOBufferStack* lpInputBuffer
     {
     // Leg order follows Feb-2007 BrnTrafficEntityModule.cpp:1145..:1174.
     //
-    // BEHAVIOUR DELTA: the leak's guard is `!IsPaused() && !lbSimPaused`; only IsPaused() is
-    // written. PostPhysicsUpdate's asm attests update-set bit 0 as sim-paused for ITSELF
-    // (0x8274E710 `clrlwi r27, r30, 31`), but nothing attests that PreSceneUpdate decodes the
-    // same bit, and this function is an export hole. IsPaused() alone runs the legs on a frame
-    // the console might have skipped, which at worst registers a scene entity one frame early.
-    // DELETE WHEN: PreSceneUpdate's body is recovered, or BrnUpdateSet gets named bits.
+    // ✅ THE BEHAVIOUR DELTA THAT STOOD HERE IS CLOSED (2026-08-27, pauseresume wave).
+    // It said: "the leak's guard is `!IsPaused() && !lbSimPaused`; only IsPaused() is written ...
+    // nothing attests that PreSceneUpdate decodes the same bit, and this function is an export
+    // hole ... IsPaused() alone runs the legs on a frame the console might have skipped, WHICH AT
+    // WORST REGISTERS A SCENE ENTITY ONE FRAME EARLY."
+    // ⛔⛔ THE RISK ASSESSMENT WAS WRONG, and instructively so. It rated the block by looking at
+    // CreateNewVehicleEntities and stopped there -- but `UpdateTimers` is in the SAME guarded
+    // block, and UpdateTimers is **the only writer of mbDecisionFrame in the whole image**, i.e.
+    // this module's frame clock. With only `!IsPaused()`, the clock FREE-RAN for the entire
+    // duration of a sim pause: PostPhysicsUpdate's paused arm (correctly empty) consumed nothing,
+    // so the param time-slice cursor stood still while decision frames kept being minted, and the
+    // first decision frame after the resume tripped `muLastParamCalculated >= KU_MAX_PARAMS`
+    // (UpdateParams, _wT2_02.cpp:96). Not one frame early -- an entire pause of free-running.
+    // ⭐ THE CLASS: a claim about ONE BRANCH of a block published as a claim about the block.
+    //
+    // The console's guard, read out of the image (the export hole notwithstanding):
+    //     0x8274ABC4  bl     TrafficEntityModule::IsPaused (0x82707560)
+    //     0x8274ABC8  rlwinm r11, r3, 0, 24, 31
+    //     0x8274ABD0  bc  -> 0x8274AC28        ; skip the block if IsPaused()
+    //     0x8274ABD4  rlwinm r11, r27, 0, 24, 31    ; r27 == lUpdateSet & 1 (prologue, above)
+    //     0x8274ABDC  bc  -> 0x8274AC28        ; skip the block if the SIM-PAUSED bit is set
+    //     0x8274ABE8  bl     TrafficEntityModule::UpdateTimers (0x82715858)
+    // -- exactly the leak's `!IsPaused() && !lbSimPaused`. Restored below; a RESTORATION, not an
+    // invented arm. (The console's block also carries UpdateCrashSlider @0x82715A18 and
+    // GenerateCrashedVehicleEvents @0x82720030, which stay gated with the tail legs.)
     case E_STATE_RUNNING:
     {
         {
@@ -147,11 +183,11 @@ void TrafficEntityModule::PreSceneUpdate(CgsModule::IOBufferStack* lpInputBuffer
                 "no body in this tree; ONLINE-only (it drains the network hull-sync ring)");
         }
 
-        if (!IsPaused())
+        if (!IsPaused() && !lbSimPaused)
         {
             // UpdateTimers @0x82715858 is the only writer of mbDecisionFrame in the image, so
-            // everything downstream of IsDecisionFrame() depends on this call. Body in
-            // _wT1_06.cpp.
+            // everything downstream of IsDecisionFrame() depends on this call -- and that is
+            // exactly why it must stand behind the sim-paused bit too. Body in _wT1_06.cpp.
             UpdateTimers(lpInput);
 
             // The REMOVE half of the scene registration (bodies in

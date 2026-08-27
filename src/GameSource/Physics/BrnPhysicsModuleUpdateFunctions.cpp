@@ -39,7 +39,7 @@
 #include "GameShared/GameClasses/Memory/CgsIOStackLinearMalloc.h"           // CgsMemory::IOStackLinearMalloc<1048576>
 #include "GameShared/GameClasses/SceneManager/Collision/ContactGenerator/CgsCollisionGenerator.h" // CgsCollision::CollisionGenerator
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"   // CgsDev::PerfMonCpu::Start/StopMonitor
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"                  // gpDebugPrint / gxMessageFilterFlags (the PC boot guard)
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"                  // gpDebugPrint / gxMessageFilterFlags (the [pausebit] witnesses + the prop-diag trace)
 
 namespace BrnPhysics
 {
@@ -251,62 +251,66 @@ namespace BrnPhysics
             }
         }
 
-        // PC-BUILD GUARD (conductor wave 2026-08-09). On the PC the world spine reaches
-        // this function during BOOT/marketing frames too -- states in which the SIM TIMER has
-        // never started, so both timer products are 0.0. The console never conducted physics
-        // in that state (its boot flow doesn't drive WorldModule::Update -- the BF_LOADING
-        // note), and the sim module's own shipped asserts prove it: a conducted frame with
-        // timestep 0 fires `mfTimeStep > 0.0f` + `muMaxIterations > 0` EVERY FRAME (measured:
-        // 934 assert dialogs in one 275s boot, flow never leaves BOOT). Until the sim timer
-        // runs, behave exactly as the retired boot gate did -- log once, do nothing. GUARD
-        // TESTS THE EXACT STATE THE CONSOLE NEVER ENTERED; delete when the boot flow stops
-        // driving world updates through dead timers.
-        lpPhysicsModuleInputBuffer->LockForRead();
-        const bool lbSimTimerRunning =
-            lpPhysicsModuleInputBuffer->GetTimerInterface()->GetSimTimerStatus()->IsRunning();
-        lpPhysicsModuleInputBuffer->UnlockForRead();
-        // [pausebit] witness. NOT X360. TRANSITION-logged, not one-shot -- and the difference is
-        // the whole point: the one-shot line below fires during BOOT and then never again, so it
-        // can say nothing about whether this guard also fires later, mid-game. This one reports
-        // every change of the guard's verdict.
-        {
-            static s32 siLastRunning = -1;
-            const s32 liRunning = lbSimTimerRunning ? 1 : 0;
-            if (liRunning != siLastRunning && CgsDev::Log::gpDebugPrint != 0)
-            {
-                siLastRunning = liRunning;
-                *CgsDev::Log::gpDebugPrint
-                    << "[pausebit] PhysicsModule::Update PC sim-timer guard: running=" << liRunning
-                    << (liRunning ? " -> the frame is conducted"
-                                  : " -> EARLY RETURN, BridgeSimulationToOutput NOT reached, the"
-                                    " output buffer's contact-spy interface stays NULL")
-                    << "\n";
-            }
-        }
-
-        if (!lbSimTimerRunning)
-        {
-            static bool s_bLoggedNotRunning = false;
-            if (!s_bLoggedNotRunning)
-            {
-                s_bLoggedNotRunning = true;
-                if (CgsDev::Message::gxMessageFilterFlags & 1)
-                    *CgsDev::Log::gpDebugPrint << "PhysicsModule::Update: sim timer not running -- "
-                                                  "inert this frame [FLAG PC boot guard]\n";
-            }
-            return;
-        }
-        {
-            static bool s_bLoggedConducting = false;
-            if (!s_bLoggedConducting)
-            {
-                s_bLoggedConducting = true;
-                if (CgsDev::Message::gxMessageFilterFlags & 1)
-                    *CgsDev::Log::gpDebugPrint << "PhysicsModule::Update: CONDUCTING -- the sim "
-                                                  "timer is live, the full per-frame pipeline runs "
-                                                  "from here on\n";
-            }
-        }
+        // ⭐⭐⭐ THE PC SIM-TIMER GUARD IS **DELETED** (pauseresume wave, 2026-08-27), and this
+        // banner is its obituary because deleting a guard silently is how the next wave puts it
+        // back. What stood here from 2026-08-09 was:
+        //     lbSimTimerRunning = GetTimerInterface()->GetSimTimerStatus()->IsRunning();
+        //     if (!lbSimTimerRunning) { log once; return; }        // "[FLAG PC boot guard]"
+        // justified as: "the world spine reaches this function during BOOT frames too -- states in
+        // which the SIM TIMER has never started, so BOTH TIMER PRODUCTS ARE 0.0 ... a conducted
+        // frame with timestep 0 fires `mfTimeStep > 0.0f` EVERY FRAME (measured: 934 assert
+        // dialogs in one 275s boot)", with the DELETE-WHEN "when the boot flow stops driving world
+        // updates through dead timers".
+        //
+        // ⛔ IT HAD NO CONSOLE COUNTERPART. X360 PhysicsModule::Update @0x825B0640 is 1999
+        // instructions and reaches the timer block twice, both through
+        // InputBuffer::GetTimerInterface @0x8259FC90 (which returns `a1 + 327152` -- the block is
+        // EMBEDDED, not a pointer):
+        //     0x825B0860  addi r21, r3, 0x18     ; r21 = the SIM TimerStatus (+24)
+        //     0x825B0864  lfs  f0,  8(r21)       ; mfTimeStepMultiplier
+        //     0x825B086C  lfs  f13, 4(r21)       ; mfBaseTimeStep
+        //     0x825B0870  fmuls f31, f0, f13     ; THE SIM TIMESTEP  (the pair read below)
+        //     0x825B0878..88                     ; the same two loads off the GAME block (+0)
+        // EXHAUSTIVE, not anecdotal: every use of r21 across its whole live range (0x825B0860 to
+        // its reload at 0x825B0DC4) is +4, +8, +0x10, +0x14 -- **+0xC (`mbRunning`) is never
+        // touched**, and the only `lbz` in the entire function (0x825B0C98, `0x713(r11)`) is
+        // nowhere near the timer block. The console reads the timer's PRODUCTS and never its
+        // RUNNING FLAG. Update-set bit 0 is the sole gate, and it gates the three sites this file
+        // already reproduces (contact gen + UpdateVehiclePhysics, the prop read-back, and
+        // BridgeSimulationToOutput -- the sole binder of the contact-spy interface).
+        //
+        // ⛔⛔ AND IT BROKE THE RESUME, because it made a STALE MIRROR load-bearing. The timer
+        // status this function sees is a SNAPSHOT (StoreTimers -> BridgeTimers -> the world input
+        // -> SetTimerInterface's 48-byte copy), published one frame before the CheckGameActions
+        // that flips mSimTimer's running flag. The console's snapshot is stale by the same one
+        // frame -- DoUpdate @0x823F0AF8 runs BridgeTimers @0x823F0DE4 BEFORE
+        // DoUpdate_GameStatePreWorld @0x823F10CC (which is where CheckGameActions lives) and
+        // DoUpdate_World @0x823F14B4 after both -- so the staleness is FAITHFUL; READING it was
+        // not. On the resume frame ConstructUpdateSetFromFsm reads mbSimPaused LIVE (bit 0 clears
+        // at once) while the snapshot still said stopped, so this guard early-returned,
+        // BridgeSimulationToOutput never ran, and PropEntityModule::ProcessContacts -- correctly
+        // ungated by the same clear bit -- found the contact-spy interface still NULL and fired
+        // `mpData != NULL`. That is a THIRD state the console never has: bit 0 clear but physics
+        // inert. INVENTED-ARM class.
+        //
+        // ⭐⭐ WHY DELETED OUTRIGHT RATHER THAN RE-PREDICATED ON THE TIMESTEP. Measured at this
+        // exact site, in this exact branch (run pr_measure, a probe printing both predicates):
+        //     line 1057  running=1 baseStep=0.016667 mult=1.000000 step=0.016667  -> conducted
+        //     line 4387  running=0 baseStep=0.016667 mult=1.000000 step=0.016667  -> EARLY RETURN
+        // (a) The two predicates DISAGREE: the guard's own justification was "both timer products
+        //     are 0.0", but at the pause the timestep is a perfectly good 1/60. It was firing on a
+        //     state its banner said it did not cover.
+        // (b) The one-shot line "sim timer not running -- inert this frame [FLAG PC boot guard]"
+        //     printed at log line 4388 -- during the PAUSE, ~130 s in -- while its CONDUCTING twin
+        //     printed at 1058, BEFORE it. **The boot guard never fired at boot.** The first time
+        //     this function is ever reached the snapshot is already published and running, and in a
+        //     whole 150 s session it early-returned exactly once: the pause. Its DELETE-WHEN was
+        //     satisfied silently some time ago, so there was nothing left to re-predicate.
+        // ⇒ A timestep-shaped replacement would have been a guard for a state measured
+        //   unreachable -- an invention preserved by renaming. If a future boot path ever does
+        //   reach here with a Construct-cleared (all-zero, never-published) timer block, the
+        //   symptom is the sim module's own `mfTimeStep > 0.0f` assert storm, which is loud,
+        //   attributable, and a truer report than a silent early return.
 
         // The ten per-frame contact-spy container clears (mContactData.Clear() inlined on
         // the console -- see BrnContactSpyData.cpp), then the first state sweep.
