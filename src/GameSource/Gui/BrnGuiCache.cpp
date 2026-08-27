@@ -236,6 +236,40 @@ namespace BrnGui
         meChangeDistrictCounty    =
             BrnWorld::WorldRegion::DistrictToCounty(BrnWorld::E_DISTRICT_INVALID);
         mu8ChangeDistrictConsumed = 0;
+
+        // ⭐⭐ THE TWO ARRAY COUNTS THE SAT-NAV ICON PATH READS AS **UNSIGNED**.
+        // X360 GuiCache::Construct @0x82505860 zeroes both -- `*(this + 40532) = 0` and
+        // `*(this + 80724) = 0`, two stores apart in the same far-member run as the +79320
+        // and +80728 stores -- AFTER the ctor @0x827E05B8 has seeded +40532 with the CgsArray
+        // "used before Construct/Clear" sentinel -1. This slice reproduced the ctor's -1
+        // (see GuiCache::GuiCache above) and not Construct's 0, so on this build
+        // mEventsCtorSentinel stayed -1 for the whole session.
+        //
+        // ⛔ WHY THAT IS A LOADED GUN, not a cosmetic gap. SatNavRenderer::GetNumIcons
+        // @0x82451400 returns these counts AS u32:
+        //     display type 1 (ONLINE_EVENT_STARTS) -> GuiCache::GetNumPresetEvents,
+        //                                             which returns mEventsCtorSentinel
+        //     display type 0 (OFFLINE_EVENTS)      -> GuiCache::GetNumProfileEvents,
+        //                                             which returns (u32)miProfileEventsCount
+        // and InitSatNavIcons @0x824514B0 then loops `for (u32 i = 0; i < count; ++i)
+        // GetIconInformation(i, &maCachedSatNavIcons[i])` over a 150-entry array. -1 read as
+        // u32 is 0xFFFFFFFF: ~4 billion 32-byte writes straight off the end of the renderer.
+        // The console's own `luNumberOfIcons <= KU_MAX_SATNAV_ICONS` assert fires first and
+        // does NOT gate -- it is a CGS_ASSERT, and the loop runs regardless, exactly as on
+        // the X360.
+        // ⚠️ MEASURED, NOT ASSUMED, WHICH HALF IS LIVE: the MOUNTED ctor is the memset form in
+        // this file (BrnGuiCache_wB_12.cpp, which sets BOTH to -1, is not in the exe source
+        // list), so miProfileEventsCount already starts 0 and only the PRESET/display-type-1
+        // half was armed. Both stores are restored anyway, because both are the console's and
+        // whichever ctor is mounted must not change the answer.
+        // It has been inert only because RenderIconsForSatNav returns at !mbRenderEventStarts
+        // -- i.e. it was one enable event away from live.
+        // (The rest of Construct's far-member run -- +18736/+18744/+18752, +42996/+43000,
+        //  +77576/+77577, +79320, +80728..+80734, the +80736 eight-entry seed, +80788 --
+        //  remains the documented partial this slice always was; these two are the pair the
+        //  icon path reads.)
+        mEventsCtorSentinel  = 0;   // X360 `*(v47 + 40532) = 0`  (mEvents / GetNumPresetEvents)
+        miProfileEventsCount = 0;   // X360 `*(v47 + 80724) = 0`  (GetNumProfileEvents)
     }
 
     // @0x8250DC30 -- publish the queue selected on the previous frame, clear it,
