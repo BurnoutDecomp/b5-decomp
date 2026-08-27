@@ -227,6 +227,12 @@ namespace BrnGui
         // GameState->Gui bridge lands (RecEvent's case 77 already consumes it).
         meCarSelectType = 1;   // BrnGameState::GameStateModuleIO::E_CAR_SELECT_TYPE_JUNKYARD
 
+        // [profile-save] X360 GuiCache::Construct @0x82505AF0: `stb r11, 0x4B78(r31)` with
+        // r11 == 1 -- the post-title intro video plays by default, and only a LOADED profile
+        // whose mbIsNewProfile is clear turns it off (ProfileManager::ReportTaskCompleted's
+        // PROFILE_LOADED arm mirrors that byte here). See the member's carve note.
+        mbPlayIntroVideo = true;
+
         // X360 0x82505860 mid-body (h1_dump2.txt): seed the district-marker source words --
         // district INVALID, county derived from it (== E_COUNTY_INVALID -> the "Anywhere"
         // icon), consumed byte clear. The clear consumed byte is what makes

@@ -716,6 +716,11 @@ namespace BrnGui
             return meCarSelectType;
         }
         bool IsJunkyardCarUnlockPending() const          { return mbJunkyardCarUnlockPending; }  // +0x4B74 (19316)
+        // [profile-save] the post-title intro-video gate (+0x4B78 -- see the member's carve
+        // note). Console read site: PostTitleScreenLoad::Update; console write sites:
+        // GuiCache::Construct (1) and ProfileManager::ReportTaskCompleted (= mbIsNewProfile).
+        bool ShouldPlayIntroVideo() const                { return mbPlayIntroVideo; }            // +0x4B78 (19320)
+        void SetPlayIntroVideo(bool lbPlay)              { mbPlayIntroVideo = lbPlay; }          // +0x4B78 (19320)
 
         // DWARF h:1425 SetDoDisconnectPopup(const CgsModule::Event*). Latch the error word the
         // disconnect popup shows: the event's leading word, or 0 when no event rode along. The
@@ -1348,7 +1353,23 @@ namespace BrnGui
         // pending flag bytes (Hex-Rays field_4B75 / field_4B76). FLAG: consumer-named.
         bool mbCarUnlockPending;                         // +0x4B75 (19317) set 1 when an un-shown unlocked car remains
         bool mbCarUnlockDetermined;                      // +0x4B76 (19318) set 1 on entry (determination has run)
-        u8   mPad_4B77[0x4B7C - 0x4B77];                 // +0x4B77..+0x4B7B
+        u8   mPad_4B77[0x4B78 - 0x4B77];                 // +0x4B77
+        // ⭐⭐ ADDITIVE CARVE ([profile-save] wave, 2026-08-27) out of the head of the former
+        // mPad_4B77 run -- THE POST-TITLE INTRO-VIDEO GATE. Three X360 sites pin it, and
+        // together they are the console's own "a returning player does not watch the intro
+        // again" rule:
+        //   GuiCache::Construct              @0x82505860  `stb r11(1), 0x4B78(r31)` @0x82505AF0
+        //                                                 -- default 1: a cold cache plays it.
+        //   ProfileManager::ReportTaskCompleted @0x82513EC0 `stb r11, 0x4B78(r9)` @0x82514024,
+        //                                                 the PROFILE_LOADED arm's last store:
+        //                                                 `*(cache + 19320) = *(profile + 118033)`
+        //                                                 == BrnProgression::Profile::mbIsNewProfile.
+        //   PostTitleScreenLoad::Update      @0x8247E2B8  `lbz r11, 0x4B78(r11)` @0x8247E408
+        //                                                 -- set == play "intro", clear == post
+        //                                                 phase-complete (70) immediately.
+        // No shift: one byte carved from a five-byte pad, four bytes of pad left behind.
+        bool mbPlayIntroVideo;                           // +0x4B78 (19320)
+        u8   mPad_4B79[0x4B7C - 0x4B79];                 // +0x4B79..+0x4B7B
         // ADDITIVE CARVE (A9 mode-type arm, 2026-08-27) from the head of the former
         // mPad_4B77 -- an 8-word run, zeroed at both of its recovered writers:
         //   GuiCache::Construct @0x82505DD8..0x82505DF4 walks `r11 = this + 0x4B7C`, storing

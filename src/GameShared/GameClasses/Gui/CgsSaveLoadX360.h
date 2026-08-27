@@ -483,7 +483,13 @@ namespace CgsGui
         const char* mpacSaveFilePath;             // +0x17C save-file path (CreateFileA)
         bool   mbField180;                        // +0x180 (Construct sets true)
         bool   mbSilentMode;                      // +0x181 (Construct sets false; SetSilentMode)
-        u8     mPad182;                           // +0x182 alignment
+        // +0x182 : the boot-up AUTO-LOAD byte. NOT padding -- BootupStart @0x82855A60 reads it
+        // (`lbz r11, 0x182(r31)` @0x82855A88, `cmplwi cr6, r11, 1`) and it is the whole branch
+        // that decides whether the boot-up dispatches the memory-card read with TWO load entries
+        // (the title save + the mugshot blob) or with a count of ZERO. Construct does not touch
+        // it (no 0x182 store anywhere in the ARTIST body); its only writer is the Bootup task
+        // starter, which always runs before BootupStart on every path.
+        bool   mbAutoLoad;                        // +0x182
         bool   mbField183;                        // +0x183 (Construct sets false)
         RealmcIface::MemcardInterface* mpMemcardInterface; // +0x184
         LanguageManager* mpLanguageManager;       // +0x188

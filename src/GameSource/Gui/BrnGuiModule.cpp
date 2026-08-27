@@ -1631,7 +1631,22 @@ namespace BrnGui
         return true;
     }
 
-    void GuiModule::Destruct()
+    // ---------------------------------------------------------------------------
+// [profile-save] GuiModule::ProfileAutosaveResultHandler::HandleProfileTaskResult
+//   The body of BrnGui::ProfileHost::HandleProfileTaskResult @0x827E21E0 -- a pure
+//   diagnostic; the console does nothing else when a profile task finishes. Hosted on a
+//   module-owned object because this build embeds the ProfileManager directly instead of
+//   through a ProfileHost (see the header note on the member).
+// ---------------------------------------------------------------------------
+void GuiModule::ProfileAutosaveResultHandler::HandleProfileTaskResult()
+{
+    if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0 && CgsDev::Log::gpDebugPrint != 0)
+    {
+        *CgsDev::Log::gpDebugPrint << "SaveLoad: Finished\n";
+    }
+}
+
+void GuiModule::Destruct()
     {
         mMovieManager.Destruct();
         // X360 GuiModule::Destruct @0x82507690: ColourCalibrationScreen::Destruct is the LAST
@@ -2578,6 +2593,75 @@ namespace BrnGui
             }
             lrProfileOut.Clear();
         }
+
+        // ---- 3b'. THE PROFILE AUTOSAVE TAIL --------------------------------------------
+        // ⭐⭐ [profile-save 2026-08-27] X360 GuiModule::Update @0x825295CC..0x825296A4,
+        // store for store (r26 == the module, r30 == module+0x18D844, r31 == 0x18D840):
+        //     if (*(module + 1628228) == 1) {                     // the autosave-pending latch
+        //         r11 = 1;
+        //         if (*(module + 1024648) != 0) r11 = 0;          // the cache's suppress byte
+        //         else if (!(GuiCache::GetTime() > *(module + 1628224) + 60.0f)) r11 = 0;
+        //         if ((v142 | r11) == 1) {                        // v142 == the FORCE flag
+        //             if (v143 == 1) GuiModule::AutosaveProfile(v186);   // with an image record
+        //             else if (*(module + 949156) == 1 && *(module + 686280)) {
+        //                 ProfileManager::Autosave(&mProfileManager, &host, 0, 0);
+        //                 *(module + 1628228) = 0;
+        //                 *(module + 1628224) = GuiCache::GetTime();
+        //             }
+        //         }
+        //     }
+        // flt_82004C6C == 60.0f. The v143/AutosaveProfile arm is the id-358
+        // (GuiEventSaveImageFileAndAutosave) mugshot path, which nothing in this build posts
+        // yet -- named here, not faked; when a producer lands, GuiModule::AutosaveProfile
+        // @0x8251A568 goes in beside this block.
+        //
+        // The two gates, and what each is on PC:
+        //  * module+1024648 == GuiCache+19272 -- GuiCache::Construct @0x82505860 zeroes it
+        //    (`*(a1 + 19272) = 0;`) and its ONLY writer is a GuiCache::RecEvent @0x8250DDF0 arm
+        //    for an event id this build does not route, so it is 0 for the whole run: no
+        //    suppression. Reproduced as the console's initial value rather than as a fake read.
+        //  * module+686280 == mProfileManager.mSaveLoadSystem's autosave-enabled word, which is
+        //    exactly ProfileManager::AutosaveIsEnabled() (the committed accessor over the same
+        //    word) -- tested below.
+        //  * module+949156 == mSystemUserProfile.miState (1 == E_USERSIGNINSTATE_SIGNEDIN).
+        //    ⚠️ FLAG PC bring-up DEVIATION, deliberate and named: that state machine is driven
+        //    by Xbox XNotify sign-in notifications (SystemUserProfile::Update ->
+        //    UpdateUserSigninState -> XUserGetSigninState), none of which fires on PC, so
+        //    miState stays 0 for the entire run and gating on it would make the console's own
+        //    autosave permanently unreachable here. The rest of this build already answers the
+        //    same "is a user signed in" question the other way (BrnGuiProfile.cpp's
+        //    SaveLoadSystem_GetSignedInUserIndex PC leaf reports slot 0, and BF_PROFILE drives
+        //    ProfileManager::Bootup through the same gate unguarded), so the gate is dropped
+        //    HERE for the same reason and in the same place -- not silently widened.
+        //    DELETE-WHEN a PC sign-in path drives mSystemUserProfile.miState.
+        if (mbProfileAutosavePending)
+        {
+            // flt_82004C6C == 60.0f (the throttle window, X360 `fadds f0,f13,f0`).
+            const f32 KF_AUTOSAVE_THROTTLE_SECONDS = 60.0f;
+            const f32 lfNow = mGuiCache.GetTime();
+            const bool lbThrottleElapsed = lfNow > (mfLastProfileAutosaveTime + KF_AUTOSAVE_THROTTLE_SECONDS);
+
+            if (mbForceProfileAutosave || lbThrottleElapsed)
+            {
+                if (mProfileManager.AutosaveIsEnabled())
+                {
+                    // The console's 4-arg call with count 0 / records NULL: save the profile
+                    // image with no image files attached. The handler is the ProfileHost the
+                    // module embeds; this build drives the manager directly, so it is the
+                    // manager's own task-result handler that the boot states already use.
+                    mProfileManager.Autosave(&mProfileAutosaveResultHandler, 0, 0);
+                    mbProfileAutosavePending  = false;
+                    mfLastProfileAutosaveTime = mGuiCache.GetTime();
+
+                    if (CgsDev::Log::gpDebugPrint != 0)
+                    {
+                        *CgsDev::Log::gpDebugPrint
+                            << "[profile-save] autosave requested (t=" << lfNow << ")\n";
+                    }
+                }
+            }
+        }
+        mbForceProfileAutosave = false;   // the console's per-Update stack byte
 
         // Pump the always-available components manager (the top-left save-icon spinner + the
         // in-game EATrax/achievement/showtime overlays). The console GuiModule::Update
