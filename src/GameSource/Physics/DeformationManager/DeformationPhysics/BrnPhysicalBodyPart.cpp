@@ -1194,8 +1194,14 @@ namespace Deformation
 
     // =============================================================================================
     // LOG-ONCE GATES 2026-08-14 (walls leg 4). Declared methods/hooks the newly-mounted family
-    // links against whose real bodies are NOT reconstructed yet. ALL are dead on the junkyard
-    // path (0 physical parts / 0 hinged joints). Reconstruct and DELETE each gate.
+    // links against whose real bodies are NOT reconstructed yet.
+    // ⛔ "ALL are dead on the junkyard path (0 physical parts / 0 hinged joints)" -- STALE as of
+    // 2026-08-27. Parts detach now (mi16NumPhysicalParts 0 -> 7 on the player car in the
+    // deterministic junkyard crash), so AddToSim, AddContactSpy, PostVehicleUpdate and
+    // EmitDetachedPartNotification are ALL ON THE LIVE PATH. Hinged joints are still 0 -- nothing
+    // has taken the hinge arm yet -- so the joint-side gates remain untested rather than dead.
+    // Reconstruct and DELETE each gate; AddToSim @0x8260AD38 is the one that matters most (it is
+    // why a shed panel never moves). See its own banner below.
     // =============================================================================================
     void PhysicalBodyPart::AddContactSpy(ContactSpyData* /*lpContactSpyData*/)
     {

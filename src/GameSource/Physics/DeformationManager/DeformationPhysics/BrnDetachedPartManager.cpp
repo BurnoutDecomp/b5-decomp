@@ -296,7 +296,10 @@ namespace Deformation
     // 0.1-padding immediates): assert the scene interface (:161); for every used pool part that
     // IS in the scene (+485) and NOT frozen (+484 clear on the X360 read), emit an
     // update-cached-position event at the velocity-swept render position with the padded radius.
-    // Dead-at-runtime today (0 physical parts); the emission hook is the wheel TU's shared gate.
+    // ⛔ "Dead-at-runtime today (0 physical parts)" -- NO LONGER TRUE as of 2026-08-27: parts DO
+    // detach and the pool has live slots. The emission hook is still the wheel TU's shared gate,
+    // and a detached part is still never scene-added (PhysicalBodyPart::AddToScene is a gate), so
+    // this walk finds parts but has nothing to publish for them yet.
     // =============================================================================================
     void DetachedPartManager::UpdateTriangleCache(
         CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* lpSceneUpdateInterface)

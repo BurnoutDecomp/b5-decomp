@@ -68,10 +68,14 @@ namespace Deformation
     // ==========================================================================================
     // PhysicalBodyPartPool::Construct MOVED OUT on 2026-08-03 (task #116) to
     // BrnPhysicalBodyPartPool_Construct.cpp, verbatim. WHY: PhysicsModule::Construct @0x825AE308
-    // was a live empty stub; un-stubbing it reaches DetachedPartManager::Construct -> this. THIS
-    // TU cannot be mounted -- a MEASURED trial link (task #116, M2) put it at 9 unresolved
+    // was a live empty stub; un-stubbing it reaches DetachedPartManager::Construct -> this.
+    // ⛔ STALE BANNER, CORRECTED 2026-08-27 (detach wave): the text below described 2026-08-03.
+    // THIS TU IS MOUNTED (build_game_exe.bat: BrnPhysicalBodyPartPool.cpp) and the 9 unresolved
+    // externals are closed. The re-merge note survives only as the history of WHY Construct is
+    // next door.
+    // (historic) a MEASURED trial link (task #116, M2) put it at 9 unresolved
     // externals, all from CreatePart / UpdateRWBodies / UpdateJoinedParts. NONE were referenced
-    // from Construct. TO RE-MERGE: close the 9, mount this TU, move the body back.
+    // from Construct. TO RE-MERGE: mount this TU and move the body back.
     // ==========================================================================================
 
 
@@ -320,7 +324,11 @@ namespace Deformation
     // AddPartsToScene @0x8260CF38 (178) -- ⭐ 2026-08-14 (walls leg 4). Walk mUsedParts; every
     // live part that is neither frozen (+486) nor already in the scene (+485) gets
     // PhysicalBodyPart::AddToScene(scene). Caller: DeformationManager::UpdatePostPhysics (via the
-    // manager forward). Dead-at-runtime today (0 physical parts on the junkyard path).
+    // manager forward).
+    // ⛔ "Dead-at-runtime today (0 physical parts on the junkyard path)" -- NO LONGER TRUE as of
+    // 2026-08-27: parts DO detach, mi16NumPhysicalParts reaches 7 on the player car in the
+    // deterministic junkyard crash, so this walk has live slots. What it reaches instead is
+    // PhysicalBodyPart::AddToScene, which is itself still a log-once gate.
     // =============================================================================================
     void PhysicalBodyPartPool::AddPartsToScene(
         CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* lpSceneInterface)
