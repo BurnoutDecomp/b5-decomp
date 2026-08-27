@@ -93,6 +93,7 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // CgsDev::Log::gpDebugPrint
 
 #include <cmath>   // powf / sqrtf
+#include <stdlib.h> // getenv / atoi ([deform-upload] control, host-side diagnostic only)
 
 // The global runtime shader-constant register (X360 symbol mShaderConstantTable; bodied
 // by the CgsShaderConstants TU). Mirrors the committed extern in the sibling TUs.
@@ -499,6 +500,59 @@ RaceCarEntityModule::RenderRaceCar( CgsGraphics::DispatchFrame* lpDispatchFrame,
     // PC. Cost is one 2 KB copy per car per pass.
     // RESTORE the console gate if the Z-only skinned program is ever shown to ignore the array.
     {
+        // ---- [deform-upload] THE CONTROL FOR [deform-trace]. NOT X360; opt-in, shares the
+        // BRN_DEFORM_TRACE latch. The per-frame witness in ActiveRaceCar::UpdateDeformationState
+        // reports max|verlet| off mRenderParams -- one leg upstream of here and one frame of
+        // slack away from it. This line reports the SAME statistic off the array actually being
+        // handed to SetShaderConstantArrayData(22), at the instant it is handed over.
+        // ⭐ If [deform-trace]'s maxVerlet is non-zero and this stays 0.000000, the witness is
+        // measuring an array the GPU never sees, and every conclusion drawn from it is void.
+        // Rate-limited hard (this runs per car PER PASS, several times a frame).
+        // DELETE-WHEN the crash-deformation question is closed and banked.
+        {
+            static s32 siUploadOn = -1;
+            if ( siUploadOn < 0 )
+            {
+                const char* lpcEnv = getenv( "BRN_DEFORM_TRACE" );
+                siUploadOn = ( lpcEnv != 0 && atoi( lpcEnv ) > 0 ) ? 1 : 0;
+            }
+            if ( siUploadOn == 1 && CgsDev::Log::gpDebugPrint != 0 )
+            {
+                static u32 sluUploadCalls = 0;
+                static f32 sfLastMax      = -1.0f;   // holds the SUM (see below)
+                ++sluUploadCalls;
+
+                // ⛔ SUM, not max -- see the statistic note in ActiveRaceCar::UpdateDeformationState.
+                // The preset pins one row high enough to mask every other row's movement.
+                const Vector3Plus* lpV = lpRenderParams->GetVerletOffsets();
+                f32 lfMax = 0.0f;
+                f32 lfSum = 0.0f;
+                s32 liNnz = 0;
+                for ( u32 luRow = 0; luRow < 128u; ++luRow )
+                {
+                    const f32 lfRow = std::fabs( lpV[luRow].x )
+                                    + std::fabs( lpV[luRow].y )
+                                    + std::fabs( lpV[luRow].z );
+                    lfSum += lfRow;
+                    if ( lfRow > 1.0e-6f ) { ++liNnz; }
+                    if ( lfRow > lfMax ) { lfMax = lfRow; }
+                }
+
+                // Print on a real change, or once every 600 uploads as a liveness heartbeat.
+                if ( std::fabs( lfSum - sfLastMax ) > 1.0e-6f || ( sluUploadCalls % 600u ) == 0u )
+                {
+                    sfLastMax = lfSum;
+                    *CgsDev::Log::gpDebugPrint
+                        << "[deform-upload] call " << static_cast< s32 >( sluUploadCalls )
+                        << " damaged " << ( lbDamaged ? 1 : 0 )
+                        << " sumVerlet " << lfSum
+                        << " nnzVerlet " << liNnz
+                        << " maxVerlet " << lfMax
+                        << "\n";
+                }
+            }
+        }
+
         CgsGraphics::mShaderConstantTable.SetShaderConstantArrayData(
             22, reinterpret_cast< const Vector4* >( lpRenderParams->GetVerletOffsets() ) );
 

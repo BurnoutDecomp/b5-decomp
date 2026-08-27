@@ -51,6 +51,14 @@
 #include <cstring>   // memset (the console's own inlined clears)
 #include <cmath>     // std::fabs (UpdateDeformationState's vandc sign-mask ABS)
 
+// [deform-trace] host-side present counter, for EXACT frame correlation. Same extern the
+// other correlated instruments use (CgsIm2d.cpp:24, CgsImRenderBufferTemplate.cpp:34,
+// BrnRendererModule.cpp:288). BRN_FRAME_DUMP names its BMPs bb_<guPresentCount>.bmp, so
+// printing this number turns "the frame around the impact" from an ESTIMATE into a filename.
+// ⛔ A trace correlated against a dump of a DIFFERENT frame has already produced a false lead
+// in this tree (device.cpp:255) -- do not go back to inferring the frame from a call index.
+namespace renderengine { extern u32 guPresentCount; }
+
 namespace BrnWorld
 {
 
@@ -1320,6 +1328,13 @@ void ActiveRaceCar::UpdateDeformationState(
     // [deform-readback] one-shot measurement: the first NON-ZERO summed displacement seen
     // (the deform-land wave's acceptance metric -- prove the dents are real numbers, not a
     // texture trick). Prints once per boot.
+    //
+    // ⛔⛔ READ THIS BEFORE QUOTING THE LINE IT PRINTS. It is a ONE-SHOT, it says "first",
+    // and it fires at the junkyard 0.85 deform preset. It therefore proves EXACTLY one
+    // thing: the sensor pipeline came alive once. It is NOT a series, it says NOTHING about
+    // whether a value ever changes, and quoting it as "the deformation number in a crash run"
+    // is a category error (2026-08-27: nearly concluded "crashes don't deform" from it).
+    // ⭐ THE SERIES IS THE [deform-trace] BLOCK BELOW -- use that.
     {
         static bool sbReportedDisplacement = false;
         if (!sbReportedDisplacement && lpCarState->GetSummedDisplacementSquared() > 0.0f
@@ -1333,6 +1348,157 @@ void ActiveRaceCar::UpdateDeformationState(
                 << ", " << lpCarState->maSensors[0].mDisplacement.y
                 << ", " << lpCarState->maSensors[0].mDisplacement.z
                 << ") numSensors=" << static_cast<u32>(lpCarState->mu8NumSensors) << "\n";
+        }
+    }
+
+    // =========================================================================================
+    // [deform-trace] PER-FRAME deformation witness. NOT X360 -- a host-side instrument, opt-in
+    // via BRN_DEFORM_TRACE (a sampling PERIOD in calls; 0/unset = inert, 1 = every call).
+    //
+    // WHY IT EXISTS: the one-shot above cannot answer "does the car deform IN A CRASH", because
+    // a single sample cannot show growth. This block emits a SERIES, and pins every axis the
+    // question turns on so no line of it can be read as being about something else:
+    //   WHICH CAR   -- entity id, plus IsPlayer()/IsCrashing() read AT THIS CALL (not inferred
+    //                  from a branch elsewhere in the frame).
+    //   WHICH VALUE -- BOTH ends of the chain on one line:
+    //                    dispSq  = CarState::mfSummedDisplacementSquared, the SIM's summed
+    //                              squared sensor displacement (-> mfDeformationSquared, the
+    //                              damage SCALAR: shading, lights-out, audio).
+    //                    maxVer  = max |xyz| over RenderParams::maVerletOffsets[128], the array
+    //                              that becomes shader constant 22 and is the ONLY thing that
+    //                              actually MOVES A VERTEX (BrnRaceCarEntityModule_Render.cpp:503).
+    //                  ⭐ These are DIFFERENT QUANTITIES. A run where dispSq climbs and maxVer
+    //                  stays 0 is a car that is "damaged" in every scalar sense and visibly
+    //                  undented. Reporting one as the other is the trap this block exists to
+    //                  make impossible.
+    //   WHEN        -- a monotone call counter, so growth is orderable without trusting a clock.
+    //
+    // ⚠️ ONE-FRAME SKEW, NAMED: maVerletOffsets is filled by the L4 skinned-model copy in
+    // RaceCarEntityModule::ReadUpdatedActiveRaceCarDataFromPhysics (BrnRaceCarEntityModule.cpp
+    // L4, ~:3652). Whether that leg runs before or after this one within a frame decides whether
+    // maxVer here is this frame's or last frame's. Either way it is the array constant 22 gets;
+    // the skew is at most one frame and cannot manufacture or hide a sustained change.
+    // ⭐ THE CONTROL for "you measured the wrong array" is the low-rate [deform-upload] line at
+    // the constant-22 upload site itself; the two maxVer values must agree.
+    //
+    // Emission rule: print when (calls % period == 0) OR when either measured quantity has
+    // MOVED since this car's last printed line -- so flat stretches stay cheap and every change
+    // is captured at full resolution.
+    // DELETE-WHEN the crash-deformation question is closed and banked.
+    // =========================================================================================
+    {
+        static s32 siTracePeriod = -1;
+        if (siTracePeriod < 0)
+        {
+            const char* lpcEnv = getenv("BRN_DEFORM_TRACE");
+            siTracePeriod = (lpcEnv != 0) ? atoi(lpcEnv) : 0;
+            if (siTracePeriod < 0) { siTracePeriod = 0; }
+        }
+
+        if (siTracePeriod > 0 && CgsDev::Log::gpDebugPrint != 0)
+        {
+            const f32 lfDispSq = lpCarState->GetSummedDisplacementSquared();
+
+            // max |xyz| over the 128 verlet rows -- the uploaded vertex offset magnitude.
+            // (w is the scratch AMOUNT lane, not a position: DEBUG_OverrideScratchAmount owns
+            // it, and constant 22's consumer offsets a vertex by xyz. Including w here would
+            // report the debug lane as if it were a dent.)
+            // ⛔⛔ A MAX ALONE IS THE WRONG STATISTIC HERE, and reading it as "the mesh did not
+            // move" is a false negative waiting to happen: the junkyard preset pins ONE row
+            // (row 41) at a value the running dents never exceed, so max stays flat while any
+            // number of other rows change underneath it. The SUM and the non-zero ROW COUNT are
+            // what actually move when the mesh moves; max is kept only to name the worst row.
+            // (2026-08-27: caught mid-campaign, before the flat max was reported as an answer.)
+            const Vector3Plus* lpVerlet = mRenderParams.GetVerletOffsets();
+            f32 lfMaxVerlet = 0.0f;
+            f32 lfSumVerlet = 0.0f;
+            s32 liMaxVerletRow = -1;
+            s32 liNonZeroRows  = 0;
+            for (u32 luRow = 0; luRow < 128u; ++luRow)
+            {
+                const f32 lfRow = std::fabs(lpVerlet[luRow].x)
+                                + std::fabs(lpVerlet[luRow].y)
+                                + std::fabs(lpVerlet[luRow].z);
+                lfSumVerlet += lfRow;
+                if (lfRow > 1.0e-6f) { ++liNonZeroRows; }
+                if (lfRow > lfMaxVerlet) { lfMaxVerlet = lfRow; liMaxVerletRow = static_cast<s32>(luRow); }
+            }
+
+            // max |displacement| over the live sensors, and which sensor carries it.
+            f32 lfMaxSensor = 0.0f;
+            s32 liMaxSensor = -1;
+            const u32 luNumSensors = static_cast<u32>(lpCarState->mu8NumSensors);
+            const u32 luScan = (luNumSensors < BrnPhysics::Deformation::CarState::KU_MAX_SENSORS)
+                             ? luNumSensors : BrnPhysics::Deformation::CarState::KU_MAX_SENSORS;
+            for (u32 luSensor = 0; luSensor < luScan; ++luSensor)
+            {
+                const f32 lfMag = std::fabs(lpCarState->maSensors[luSensor].mDisplacement.x)
+                                + std::fabs(lpCarState->maSensors[luSensor].mDisplacement.y)
+                                + std::fabs(lpCarState->maSensors[luSensor].mDisplacement.z);
+                if (lfMag > lfMaxSensor) { lfMaxSensor = lfMag; liMaxSensor = static_cast<s32>(luSensor); }
+            }
+
+            // Per-car "did it move" memory. Eight slots, keyed by entity id; a car whose id is
+            // not resident evicts the least-recently-seen slot. Purely diagnostic storage --
+            // NOT a member, so no attested ActiveRaceCar/RenderParams offset is disturbed.
+            static u32 sauTraceIds[8]   = { 0, 0, 0, 0, 0, 0, 0, 0 };
+            static f32 safTraceDisp[8]  = { 0, 0, 0, 0, 0, 0, 0, 0 };
+            static f32 safTraceVer[8]   = { 0, 0, 0, 0, 0, 0, 0, 0 };
+            static bool sabTraceUsed[8] = { false, false, false, false, false, false, false, false };
+            static u32 sluTraceNext     = 0;
+            static u32 sluTraceCalls    = 0;
+
+            ++sluTraceCalls;
+
+            const u32 luId = mPhysicsState.mEntityId.muValue;
+            s32 liSlot = -1;
+            for (u32 luS = 0; luS < 8u; ++luS)
+            {
+                if (sabTraceUsed[luS] && sauTraceIds[luS] == luId) { liSlot = static_cast<s32>(luS); break; }
+            }
+            if (liSlot < 0)
+            {
+                liSlot = static_cast<s32>(sluTraceNext % 8u);
+                ++sluTraceNext;
+                sauTraceIds[liSlot]  = luId;
+                sabTraceUsed[liSlot] = true;
+                safTraceDisp[liSlot] = -1.0f;   // force a first print for a newly seen car
+                safTraceVer[liSlot]  = -1.0f;
+            }
+
+            // ⚠️ CHANGE-DETECTION IS PLAYER-ONLY, AND THAT IS A MEASUREMENT DECISION, not tidiness.
+            // maVerletOffsets moves EVERY frame on every car even when nothing is dented -- the
+            // suspension leg (DeformableObject::UpdateIKSuspensionOffsets) writes the four wheel
+            // tag rows from live suspension compression. So "changed" is true ~always, and with
+            // eight cars that is ~480 log lines a second. This build is FRAME-COUPLED (above 60 fps
+            // the game speeds up), so an instrument heavy enough to move the frame rate changes the
+            // very sim it is measuring. Player car gets full resolution; the rest get the period.
+            const bool lbIsPlayer = IsPlayer();
+            const bool lbMoved = lbIsPlayer
+                              && ( (std::fabs(lfDispSq    - safTraceDisp[liSlot]) > 1.0e-6f)
+                                || (std::fabs(lfSumVerlet - safTraceVer[liSlot])  > 1.0e-6f) );
+            const bool lbPeriodic = ((sluTraceCalls % static_cast<u32>(siTracePeriod)) == 0u);
+
+            if (lbMoved || lbPeriodic)
+            {
+                safTraceDisp[liSlot] = lfDispSq;
+                safTraceVer[liSlot]  = lfSumVerlet;
+
+                *CgsDev::Log::gpDebugPrint
+                    << "[deform-trace] call " << static_cast<s32>(sluTraceCalls)
+                    << " present " << static_cast<s32>(renderengine::guPresentCount)
+                    << " ent " << luId
+                    << " player " << (lbIsPlayer ? 1 : 0)
+                    << " crashing " << (IsCrashing() ? 1 : 0)
+                    << " wrecked " << (IsWrecked() ? 1 : 0)
+                    << " dispSq " << lfDispSq
+                    << " maxSensor " << lfMaxSensor << " @" << liMaxSensor
+                    << " nSensors " << static_cast<s32>(luNumSensors)
+                    << " sumVerlet " << lfSumVerlet
+                    << " nnzVerlet " << liNonZeroRows
+                    << " maxVerlet " << lfMaxVerlet << " @" << liMaxVerletRow
+                    << "\n";
+            }
         }
     }
 
