@@ -432,6 +432,21 @@ enum EGameActionType
     //   timestep multiplier to 1.0 for OFFLINE_SHOWTIME -- i.e. the end of crash-mode impact
     //   time, which is what the DWARF name says.
     E_ACTION_IMPACT_TIME_END                             = 43,   // DWARF 38 (+5 X360); size 1  BAND
+    // ---- ⭐⭐⭐ [bounce wave] THE PARTNER THAT WAS MISSING -------------------------------------
+    // BAND (+5), and it is the ONLY producer of impact time in the whole image. Recovered by
+    // scanning the ARTIST image for `li r5,<id>` sites that carry a `li r6,<size>` before them
+    // and a `bl` after -- i.e. real posts rather than the constant 42 (which occurs 100+ times):
+    //   `li r6,8` @0x823814FC + `li r5,0x2A` @0x82381500 + `bl VariableEventQueue<13312,16>::
+    //   AddEvent` @0x82381508, inside GameStateModule::UpdateRoadRulesManager @0x82381258.
+    // ⭐ THE SAME QUEUE AND THE SAME AddEvent (0x8233FAE8) as BOTH proven action-43 posts above.
+    // Every other `li r5,42` in the image resolves to a different callee.
+    // Payload (8 bytes, asm 0x823814C4..0x82381504): f32 duration @+0 (IMAGE-CITED
+    // flt_82001C98 == 0x3F800000 == 1.0f, loaded from the SAME address on the offline and the
+    // online arm -- not a Hex-Rays fold), u8 @+4, u8 @+5, two bytes of stack residue.
+    // ⭐⭐ It meets the consumer on the byte: PhysicsModule::HandleGameActions' case-42 arm
+    // (BrnPhysicsModuleGameActions.cpp) reads f32 @+0 and u8 @+4 -- and that decode was recovered
+    // from the OTHER end, from the consumer's asm, by a different wave.
+    E_ACTION_IMPACT_TIME_START                           = 42,   // DWARF 37 (+5 X360); size 8  BAND
     // ---- ProgressionManager::OnEventFinishUpdateProfile @0x823A0040 --------------------------
     // BAND (+4). `li r5,0x1C` @0x823A0608 + `li r6,4` @0x823A0604. Independently corroborated:
     // BrnGameState::GameStateModule::OnProfileLoaded posts the same id at the same size -- a
