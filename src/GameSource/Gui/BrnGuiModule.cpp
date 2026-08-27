@@ -1022,6 +1022,23 @@ namespace BrnGui
         // followed by ColourCalibrationScreen::Construct (gm+301600 then gm+306752), with
         // EffectsArbitrator::Construct just ahead of the pair.
         mColourCalibrationScreen.Construct();
+
+        // ---- [profile-save] THE AUTOSAVE LATCH'S OWN INITIALISERS -------------------------
+        // X360 GuiModule::Construct @0x82518028, the run that immediately follows
+        // ColourCalibrationScreen::Construct (pseudocode lines 413..421):
+        //     *(gm + 1628216..1628220) = 0;      // the four sibling bytes (not landed here)
+        //     *(gm + 1628224)          = 0.0;    // mfLastProfileAutosaveTime
+        //     *(gm + 1628228)          = 0;      // mbProfileAutosavePending
+        // ⛔ These two were MISSING from the pair's landing commit, which left the tail's
+        // `if (mbProfileAutosavePending)` reading an indeterminate byte on the first Update.
+        mfLastProfileAutosaveTime = 0.0f;
+        mbProfileAutosavePending  = false;
+        // The console keeps the FORCE flag in a per-Update stack byte it zeroes at the top of
+        // Update (@0x82527A58, `v142 = 0` before the event walk). This build carries it as a
+        // member (the walk and the tail are two functions), so it gets the same defined start
+        // here; the tail clears it again at the end of every Update.
+        mbForceProfileAutosave    = false;
+
         mAlwaysAvailableComponentsManager.Construct();
 
         // X360 GuiModule::GuiModule @0x827E5B28 constructs the custom-renderer manager as a
@@ -1924,6 +1941,39 @@ void GuiModule::Destruct()
                     // GuiCache::maEventStarts, the table GetProfileEventDisplayInfo walks.
                     mGuiCache.RecEvent(lpEvent, liId);
                     break;
+
+                case 356:   // [profile-save] GuiAutosaveRequestEvent -- THE AUTOSAVE LATCH
+                {
+                    // ⭐⭐ X360 GuiModule::Update's event walk @0x82529054 (jumptable
+                    // 0x82528C5C case 0 == GUI id 356), instruction for instruction:
+                    //     lbz  r11, 0(r30)          ; the request's one payload byte
+                    //     lbz  r10, var_430(r1)     ; v142, the per-Update FORCE byte
+                    //     or   r11, r11, r10
+                    //     stb  r11, var_430(r1)     ; v142 |= payload
+                    //     li   r11, 1
+                    //     stbx r11, r26, r15        ; *(module + 0x18D844) = 1  (pending)
+                    //
+                    // ⛔⛔ THIS ARM IS THE ONE LINK THE AUTOSAVE COMMIT DID NOT LAND. Its
+                    // message claims "case 356 raises the pending byte", but the diff only
+                    // added the CONSUMER (Update's tail) -- `mbProfileAutosavePending` had a
+                    // reader and a clearer and NO WRITER, so the latch could never rise and
+                    // ProfileManager::Autosave was unreachable. Measured 2026-08-27: a full
+                    // junkyard->car-select->driving run logged
+                    // `[profile-save] action 55 -> gui 356 (flag 0)` and then never wrote
+                    // Memcard\Profile.sav, because the byte on the other side of this arm
+                    // stayed down. The 1-byte record is the AutosaveRequestWire356 both
+                    // GameBridgeGameStateToX_{Stunt,EventFlow}GuiEvents.cpp post.
+                    //
+                    // ⚠️ The producers in this build post a payload of ZERO (CarSelectManager's
+                    // exit post, BrnCarSelectManager.cpp:1185), so the force byte stays clear
+                    // and the tail's 60-second throttle is what actually times the save --
+                    // exactly as on the console. Only the paused-game arm (case 505) and the
+                    // mugshot arm (case 358) force it.
+                    mbForceProfileAutosave =
+                        mbForceProfileAutosave || (*reinterpret_cast<const u8*>(lpEvent) != 0);
+                    mbProfileAutosavePending = true;
+                    break;
+                }
 
                 default:
                     // The other module-level consumers (profile/skills/overlays/keyboard/

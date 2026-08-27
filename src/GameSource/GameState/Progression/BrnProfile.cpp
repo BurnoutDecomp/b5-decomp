@@ -801,6 +801,174 @@ s32 Profile::AddDriveThru(CgsID lId, BrnTrigger::GenericRegion::Type leType)
 }
 
 // ====================================================================================
+// Profile::IsDriveThruDiscoverd  @ 0x8236ABA8   [sic -- the console's own spelling]
+// The read twin of AddDriveThru: has this id already been recorded in its category's set?
+// Same five-case switch over the drive-thru GenericRegion types, each arm a Set::Contains
+// on the SAME set AddDriveThru inserts into (asm jump table @0x8236ABC0: case 0 ->
+// this+42520, 1 -> +42712, 2 -> +42568, 3 -> +42664, 4 -> +42832 -- exactly the five
+// members below), and the same streamed assert (BrnProfile.h:2587) on any other type.
+//
+// SIGNATURE from the MANGLED NAME, not the Hex-Rays render: the export decompiles as a
+// ten-argument mess because the 32-bit PPC ABI passes the 64-bit CgsID in a register PAIR
+// and Hex-Rays folded `this` into the high half of its `a1` (`HIDWORD(a1) + 42520` IS
+// `this + 42520`). The link-time mangled form is
+// `IsDriveThruDiscoverd(unsigned __int64, BrnTrigger::GenericRegion::Type) const`, which
+// matches the header declaration; the switch is on the TYPE, the id is what Contains tests.
+// ====================================================================================
+bool Profile::IsDriveThruDiscoverd(CgsID lId, BrnTrigger::GenericRegion::Type leType) const
+{
+    switch (leType)
+    {
+    case BrnTrigger::GenericRegion::E_TYPE_JUNK_YARD:
+        return mJunkYardsDriveThruSet.Contains(lId);
+
+    case BrnTrigger::GenericRegion::E_TYPE_GAS_STATION:
+        return mGasStationsDriveThruSet.Contains(lId);
+
+    case BrnTrigger::GenericRegion::E_TYPE_BODY_SHOP:
+        return mBodyShopsDriveThruSet.Contains(lId);
+
+    case BrnTrigger::GenericRegion::E_TYPE_PAINT_SHOP:
+        return mPaintShopsDriveThruSet.Contains(lId);
+
+    case BrnTrigger::GenericRegion::E_TYPE_CAR_PARK:
+        return mCarParksDriveThruSet.Contains(lId);
+
+    default:
+        CGS_ASSERT(false, "We must know what type of drive through this is! Right now we don't\n");
+        break;
+    }
+
+    return false;   // X360 `result = 0` on the assert arm
+}
+
+// ====================================================================================
+// Profile::GetNumDriveThrusDiscovered  @ 0x823619F8
+// How many of that category have been found -- the same five-case switch, each arm a
+// Set::GetLength on the same set (asm jump table @0x82361A20: case 0 -> this+42520 via
+// Set<CgsID,5>::GetLength, 1 -> +42712 (14), 2 -> +42568 (11), 3 -> +42664 (5),
+// 4 -> +42832 (11)); the default arm streams the same assert (BrnProfile.h:2538) and
+// returns 0. The capacities the jump table's GetLength instantiations name are exactly the
+// five declared set widths, which is what pins each arm to its member.
+// ====================================================================================
+s32 Profile::GetNumDriveThrusDiscovered(BrnTrigger::GenericRegion::Type leType) const
+{
+    switch (leType)
+    {
+    case BrnTrigger::GenericRegion::E_TYPE_JUNK_YARD:
+        return static_cast<s32>(mJunkYardsDriveThruSet.GetLength());
+
+    case BrnTrigger::GenericRegion::E_TYPE_GAS_STATION:
+        return static_cast<s32>(mGasStationsDriveThruSet.GetLength());
+
+    case BrnTrigger::GenericRegion::E_TYPE_BODY_SHOP:
+        return static_cast<s32>(mBodyShopsDriveThruSet.GetLength());
+
+    case BrnTrigger::GenericRegion::E_TYPE_PAINT_SHOP:
+        return static_cast<s32>(mPaintShopsDriveThruSet.GetLength());
+
+    case BrnTrigger::GenericRegion::E_TYPE_CAR_PARK:
+        return static_cast<s32>(mCarParksDriveThruSet.GetLength());
+
+    default:
+        CGS_ASSERT(false, "We must know what type of drive through this is! Right now we don't\n");
+        break;
+    }
+
+    return 0;   // X360 `result = 0` on the assert arm
+}
+
+// ====================================================================================
+// THE THREE CALLER-NAMED ALIASES DriveThruManager::UnlockCarChallengeForCar NEEDS.
+//
+// ⚠️⚠️ NONE OF THESE THREE NAMES IS IN THE BINARY OR IN THE DWARF. The DecFIGS
+// declaration of BrnProgression::ProfileEvent (BrnProfile.h:293) has EXACTLY seven methods --
+// Construct, GetID, GetFlags, SetFlags, IsFlagSet, EnableFlags, ClearFlags -- and no IsFound
+// or SetFound; Profile has no IncrementNumDiscoveredEvents and no FindProfileEventByRaceEventId.
+// The X360 open-codes all of them INSIDE UnlockCarChallengeForCar @0x82386840, and the
+// already-committed reconstruction of that caller spelled each open-coded run as a named
+// method. They are bodied here -- as thin, documented forwards onto the DWARF-attested methods
+// that own the same stores -- because a mounted caller with no callee is an LNK2019 and a
+// duplicated second scan/second bit-poke would be a real ODR-shaped fork of the same state.
+// ⭐ RETIRE-WHEN the caller is rewritten onto the attested names; the header note at
+// BrnProfile.h:495 says the same thing from the declaration side.
+//
+// ASM, @0x823869F4..0x82386A50, the whole run these three cover:
+//     lhz    r11, 4(r31)              ; muFlags
+//     clrlwi r10, r11, 31             ; r10 = muFlags & 1                 -> IsFound()
+//     cmplwi cr6, r10, 0 / bne  -> skip
+//     li     r11, 1
+//     rlwimi r10, r11, 0,31,15        ; r10 = (muFlags & ~1) | 1          -> SetFound(true)
+//     sth    r10, 4(r31)
+//     li     r11, 5                   ; E_MODE_BURNING_ROUTE
+//     lwz    r10, 0x950(r22)          ; mpProgressionManager
+//     lwz    r11, 0x244(r10)          ; ProgressionManager + 580
+//     addi   r11, r11, 1
+//     stw    r11, 0x244(r10)          ; ++   (a 32-bit word)
+// ====================================================================================
+bool ProfileEvent::IsFound() const
+{
+    // `muFlags & 1` -- bit 0 IS E_FLAG_DISCOVERED, so this is IsFlagSet, nothing more.
+    return IsFlagSet(E_FLAG_DISCOVERED);
+}
+
+void ProfileEvent::SetFound(bool lbFound)
+{
+    // `rlwimi r10, r11, 0,31,15` inserts bit 0 of r11 into r10 and leaves bits 1..15 alone:
+    // a SET when the inserted bit is 1, a CLEAR when it is 0. The console's only call site
+    // passes 1, so only the Enable arm is exercised by the binary; the Clear arm is the same
+    // instruction with r11 == 0 and is spelled with the attested ClearFlags.
+    if (lbFound)
+    {
+        EnableFlags(E_FLAG_DISCOVERED);
+    }
+    else
+    {
+        ClearFlags(E_FLAG_DISCOVERED);
+    }
+}
+
+// ====================================================================================
+// Profile::IncrementNumDiscoveredEvents
+//
+// ⭐⭐ THE NAME IS WRONG AND THE ASM SAYS SO. It is not a generic "one more event found"
+// counter: the target is a FIXED word, ProgressionManager+0x244 == Profile+212, and
+// 212 == 192 + 4*5 -- element FIVE of maGameModeTypeAmountDiscovered, whose owner is the
+// DWARF-attested Profile::AddGameModeTypeToDiscovered @0x82354AA0 (`++v3[a2 + 48]`, i.e.
+// `++*(Profile + 192 + 4*type)`). The 5 is not a coincidence: the same `li r11, 5` two
+// instructions earlier is the game-mode word this arm writes into its own 40-byte action-201
+// record, and 5 == GameStateModuleIO::E_MODE_BURNING_ROUTE -- which is exactly what
+// UnlockCarChallengeForCar unlocks. The compiler folded 192 + 4*5 into the constant 0x244,
+// which is what makes the call look like an anonymous increment.
+// The sibling discovery arm in GameStateModule_gSR_00.cpp:395 makes the same call with the
+// mode read from the event instead of folded, and spells it AddGameModeTypeToDiscovered.
+// ====================================================================================
+void Profile::IncrementNumDiscoveredEvents()
+{
+    AddGameModeTypeToDiscovered(BrnGameState::GameStateModuleIO::E_MODE_BURNING_ROUTE);
+}
+
+// ====================================================================================
+// Profile::FindProfileEventByRaceEventId
+//
+// The SAME linear scan as the DWARF-attested Profile::FindEvent(u32) above -- count word at
+// +0x278, base at +0x7080, 8-byte stride, first record whose muEventID matches, NULL on miss.
+// The X360 run at 0x82386988..0x823869B4 is instruction-for-instruction the one FindEvent's
+// banner already quotes from UnlockToProgressionRank.
+//
+// ⚠️ THE WIDENED KEY IS THE CALLER'S, NOT THE BINARY'S. The mangled name the link demands is
+// `...FindProfileEventByRaceEventId(unsigned __int64)`, but the console compare is a 32-bit
+// `cmplw` of maEvents[i].muEventID against `lwz r11, 0(r30)` == EventJunction::muID, a u32
+// field of a 16-byte record with no 64-bit member anywhere in it. So the u64 parameter is a
+// widening introduced when the caller was reconstructed, and the narrowing back to the u32 the
+// record actually stores happens HERE, once, in the open -- not silently inside a compare.
+// ====================================================================================
+ProfileEvent* Profile::FindProfileEventByRaceEventId(CgsID lEventId)
+{
+    return FindEvent(static_cast<u32>(lEventId));
+}
+
+// ====================================================================================
 // Profile::AreAllDriveThrusCompleted  @ 0x82361870
 // True when every drive-thru category's set is full (the X360 short-circuits in this
 // exact order: junk yards, body shops, paint shops, gas stations, car parks).
