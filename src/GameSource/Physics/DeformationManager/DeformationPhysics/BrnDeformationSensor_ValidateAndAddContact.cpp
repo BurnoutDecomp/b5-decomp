@@ -21,6 +21,7 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // gpDebugPrint -- the opt-in [latch] probe only
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnDeformableObject.h"    // DeformableObject
 #include "rw/math/vpu/matrix44affine_operation.h"    // rw::math::vpu::TransformPoint (the localB rebase)
+#include "rw/math/vpu/vector3_operation.h"           // rw::math::vpu::Magnitude (the normal-magnitude tripwire)
 
 #include <cstdlib>   // getenv    -- the opt-in [latch] bring-up probe only
 #include <cstdint>   // uintptr_t -- the opt-in [latch] bring-up probe only
@@ -102,8 +103,36 @@ namespace Deformation
 		const Vector3  lPointOnB = { lpPotential[1].x, lpPotential[1].y, lpPotential[1].z, 0.0f };
 		const Vector3  lNormal   = { lpPotential[2].x, lpPotential[2].y, lpPotential[2].z, 0.0f };
 
-		const f32 lfNormalMag = Dot3(lNormal, lNormal);   // vmsum3fp128 (squared; rsqrt-normalised in asm)
-		CGS_ASSERT(lfNormalMag >= 1.0f - KF_NORMAL_TOLERANCE && lfNormalMag <= 1.0f + KF_NORMAL_TOLERANCE,
+		// ⭐⭐⭐ FIXED 2026-08-27 (traffic-bus ram). This compared the SQUARED length against the
+		// 0.01 window -- `Dot3(lNormal, lNormal)` in [0.99, 1.01] -- which is a window on |n| of
+		// [0.994987, 1.004988], roughly HALF the console's, and it is not what the asm computes.
+		// The X360 prologue (0x825E17DC..0x825E1864) spells the full magnitude, then the test:
+		//   0x825E17DC  vmsum3fp128 v0,  v124(NORMAL), v124        ; dot = |n|^2
+		//   0x825E1820  vrsqrtefp   v13, v0                        ; 1/sqrt(dot), estimate...
+		//   0x825E1830..0x825E1850                                 ; ...+ TWO Newton refines
+		//   0x825E1854  vmulfp128   v0,  v0, v13                   ; dot * 1/sqrt(dot) == |n|
+		//   0x825E1858  vsel        v0,  v0, v10(zero), v5         ; dot == 0 -> magnitude 0
+		//   0x825E185C  vsubfp128   v0,  v0, v126(1.0)             ; |n| - 1
+		//   0x825E1860  vandc       v0,  v0, v9(0x80000000 splat)  ; abs
+		//   0x825E1864  vcmpgtfp    v0,  v0, v11(0.0099999998)     ; > 0.01 -> fire
+		// i.e. EXACTLY `| Magnitude(n) - 1 | > 0.01`, which is what the assert string has always
+		// said, and byte-for-byte the SAME predicate PhysicsModule::BridgeContactsToSimulation
+		// runs on this very record moments earlier (queue [7] :384 @0x825AA62C, queue [13] :422
+		// @0x825AA9C0, queue [8] :463 @0x825AB178 -- all three vrsqrtefp/vsel/vandc/vcmpgtfp
+		// cascades are identical to the one above, and none of them writes the normal back).
+		//
+		// ⛔ WHAT IT COST. Queues [7]/[13]/[8] hand the sensor the producer's RAW normal -- unlike
+		// [6]/[9], the console does NOT renormalise those copies -- so a contact normal that is
+		// 0.5%-1% off unit is issued, passes the console's test at BOTH sites, and deforms
+		// normally. On the host it passed the bridge (which models Magnitude correctly) and then
+		// tripped this squared variant: a user-blocking assert on a car-vs-traffic ram that the
+		// console never produces. Ramming a bus was the first time deformation had ever seen a
+		// traffic contact, so nothing had exercised the split before.
+		// Use the vendor Magnitude -- it is the same helper the bridge tripwires call, and its
+		// zero-dot vsel guard reproduces 0x825E1858 (a zero normal still fails: |0 - 1| > 0.01).
+		const f32 lfNormalMag   = rw::math::vpu::Magnitude(lNormal);
+		const f32 lfNormalDelta = lfNormalMag - 1.0f;
+		CGS_ASSERT((lfNormalDelta < 0.0f ? -lfNormalDelta : lfNormalDelta) <= KF_NORMAL_TOLERANCE,
 		           "RwMathVPU::IsZero( RwMath::Magnitude( lNormal ) - RwMathVPU::GetVecFloat_One(), 0.01f )");
 
 		// --- (2) build the candidate contact ------------------------------------------------------

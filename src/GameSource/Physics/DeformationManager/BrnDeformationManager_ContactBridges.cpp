@@ -10,9 +10,9 @@
 // CONTENTS:
 //   * ReadPotentialVehicleWorldContact @0x82604590 -- MOVED VERBATIM from
 //     BrnDeformationManager_Contacts.cpp (this TU is mounted; that one is not). One change,
-//     flagged inline: the "Un-normalised" tripwire's old always-pass placeholder is upgraded
-//     to the faithful renormalise-delta test -- the committed rw::math::vpu Normalize family
-//     it was waiting on exists (vector3_operation_inline.h, FAITHFUL).
+//     flagged inline: the "Un-normalised" tripwire's old always-pass placeholder was upgraded
+//     to a real predicate at the move (2026-08-06), and that predicate was corrected to the
+//     console's |Magnitude(n) - 1| > 0.01 form on 2026-08-27 -- see IsNormalisedWithinEpsilon.
 //   * FindModelIndexByGlobalEntityID @0x825B45B0 -- MOVED VERBATIM (same reason; callee of
 //     the above).
 //   * ReadPotentialContact @0x826053F8 -- reconstructed from the
@@ -76,26 +76,27 @@ namespace Deformation
         // vendor vpu tree's own IsValid(Vector3).
         inline bool IsValidVec3Lanes(const Vector3& lrV) { return rw::math::vpu::IsValid(lrV); }
 
-        // The consoles' "Un-normalised ..." tripwire predicate: renormalise the vector
-        // (vrsqrtefp + double Newton-Raphson + the zero-guard vsel -- the committed Normalize
-        // reproduces all of it), then per-lane compare |renormalised - original| against the
-        // splatted epsilon 0.0099999998 (vsubfp / vandc-abs / vcmpgtfp). True == acceptably
-        // unit-length (no lane's delta exceeds the epsilon).
+        // The consoles' "Un-normalised ..." tripwire predicate.
+        // ⭐⭐ CORRECTED 2026-08-27 (traffic-bus ram wave): this used to RENORMALISE the vector and
+        // compare the per-lane |renormalised - original| against the epsilon. That is not the
+        // console's predicate -- it is looser by up to sqrt(3) (the lane delta of a vector of
+        // length 1+e is e*n_lane, never more than e) and it is a different computation. The X360
+        // body spells the SCALAR magnitude and subtracts ONE, exactly as the assert text says:
+        //   0x826047E4  vmsum3fp128 v13, v12(NORMAL), v12    ; dot = |n|^2
+        //   0x8260480C  vrsqrtefp   v12, v13                 ; 1/sqrt(dot) + two Newton refines
+        //   0x8260483C  vmulfp128   v0,  v13, v0             ; dot * 1/sqrt(dot) == |n|
+        //   0x82604840  vsel        v0,  v0,  v7(zero), v3   ; dot == 0 -> magnitude 0
+        //   0x82604844  vsubfp      v0,  v0,  v11(1.0)       ; |n| - 1   (v11 = vcfsx(1,0))
+        //   0x82604848  vandc       v0,  v0,  v9             ; abs (0x80000000 splat)
+        //   0x8260484C  vcmpgtfp    v0,  v0,  v8(0.0099999998)
+        // which is the SAME predicate the bridge's own tripwires (BrnPhysicsModuleBridgeFunctions
+        // .cpp IsUnitLength) and DeformationSensor::ValidateAndAddContact @0x825E1864 run. One
+        // console idiom, one spelling. rw::math::vpu::Magnitude carries the zero-dot guard that
+        // reproduces the vsel, so a zero normal still fails.
         inline bool IsNormalisedWithinEpsilon(const Vector3& lrV)
         {
-            const Vector3 lRenormalised = rw::math::vpu::Normalize(lrV);
-            const f32 laDeltas[3] = { lRenormalised.x - lrV.x,
-                                      lRenormalised.y - lrV.y,
-                                      lRenormalised.z - lrV.z };
-            for (int liLane = 0; liLane < 3; ++liLane)
-            {
-                const f32 lfDelta = laDeltas[liLane];
-                if ((lfDelta < 0.0f ? -lfDelta : lfDelta) > 0.0099999998f)
-                {
-                    return false;
-                }
-            }
-            return true;
+            const f32 lfDelta = rw::math::vpu::Magnitude(lrV) - 1.0f;
+            return (lfDelta < 0.0f ? -lfDelta : lfDelta) <= 0.0099999998f;
         }
 
         // The orthonormal-affine inverse both consoles inline in ReadPotentialContact
@@ -183,11 +184,12 @@ namespace Deformation
         Matrix44Affine lWorldTransform;
         BuildWorldToModel(lWorldTransform, lTransform);
 
-        // Normalised-normal tripwire (non-gating). ⭐ UPGRADED AT MOVE 2026-08-06: the old body
-        // carried an honest always-pass placeholder ("no faithful Vector3 normalise helper is
-        // homed") -- the committed rw::math::vpu Normalize family (vector3_operation_inline.h,
-        // FAITHFUL banner) retires that FLAG, so the renormalise-delta predicate (epsilon
-        // 0.0099999998, per-lane) is now emitted for real. The streamed "Car transform: " message
+        // Normalised-normal tripwire (non-gating). ⭐ UPGRADED AT MOVE 2026-08-06 (the old body
+        // carried an honest always-pass placeholder), ⭐⭐ CORRECTED 2026-08-27 to the console's
+        // own scalar |Magnitude(n) - 1| > 0.01 predicate @0x826047E4..0x8260484C -- see
+        // IsNormalisedWithinEpsilon. This site is the SAFE one either way: queues [6]/[9]
+        // renormalise their copy before calling here (BrnPhysicsModuleBridgeFunctions.cpp :821 /
+        // :846), so the normal is unit by construction. The streamed "Car transform: " message
         // tail is still lowered to the static prefix per the standing project rule.
         CGS_ASSERT(IsNormalisedWithinEpsilon(lrPotentialContact.mNormal),
                    "Un-normalised vehicle-world contact: ");   // BrnDeformationManager.cpp:1198
