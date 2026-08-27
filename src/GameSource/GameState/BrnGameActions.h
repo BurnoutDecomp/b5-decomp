@@ -100,7 +100,17 @@ enum EGameActionType
     // freeburn-challenge block and REQUEST_GAME_TRAINING (141 -> 149).
     E_ACTION_ONLINE_ROUND_RESULT        = 230,   // DWARF 222 (+8 X360); size 68
     E_ACTION_RANK_INFO_RESPONSE         = 173,   // DWARF BrnGameActions.h:183
-    E_ACTION_TROPHY_UNLOCK              = 196,   // DWARF BrnGameActions.h:206
+    // ⛔ VALUE CORRECTION 2026-08-27 (drive-thru link-closure wave) -- was the raw PS3-DWARF
+    // value (196), which is not what the X360 posts. PRODUCER-PINNED at both ends:
+    // ProgressionManager::SendTrophyUnlockUpdate @0x823892B8 posts `li r5, 0xCC` (204) with
+    // `li r6, 0x10` (16) @0x82389384/0x82389388, and 16 is exactly sizeof(TrophyUnlockAction)
+    // below -- the size match is what makes this a proof rather than a shift inference. It is
+    // also DWARF 196 + 8, the same +8 the whole 200-band takes (UPDATE_PLAYER_MEDALS 192->200,
+    // EVENT_AT_JUNCTION_AVAILABLE 193->201, ALL_EVENTS_DISCOVERED 194->202).
+    // Nothing in the tree posted or consumed it by this constant, so the correction is
+    // call-site-free -- but a future producer would have posted 196 and no consumer would have
+    // heard it.
+    E_ACTION_TROPHY_UNLOCK              = 204,   // DWARF 196 (+8 X360); size 16
     // ⛔ VALUE CORRECTION 2026-08-26 (stuntrace waveB fix round) -- this carried the raw PS3-DWARF
     // value (31), which matches NEITHER X360 action. The X360 SPLITS the DWARF's single
     // E_ACTION_FINISHED_MODE into two, and both were re-dumped from the exports this pass:
