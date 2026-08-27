@@ -551,6 +551,39 @@ void GameStateModule::PreWorldUpdateStuntBringUp(
         HarnessOfflineIntroSelfTriggerBringUp(lfGameTimestep);
     }
 
+    // ---- 1c) THE SECOND LEG OF THE SAME HOP (console #86, EmmPreWorldUpdate's own tail) -------
+    // ⭐⭐⭐ [bounce wave] EmmPreWorldUpdate @0x8238EF50 does not stop at ModeManager. Its `bl`
+    // stream continues:
+    //     0x8238F168  bl ModeManager::PreWorldUpdate            <- leg 1b above
+    //     0x8238F170  bl PerfMonCpu::StopMonitor
+    //     0x8238F198  bl PerfMonCpu::StartMonitor
+    //     0x8238F1A0  bl GameStateModuleIO::PreWorl<dInputBuffer::Get...>
+    //     0x8238F1B0  bl GameStateModule::UpdateRoadRulesManager    <- THIS LEG
+    // and the console guards it with `if (!IsSimPaused)` -- the SAME arm test leg 1b sits on,
+    // which is why it is staged immediately after it and inside nothing new.
+    //
+    // ⚠️ IT IS ITS OWN `if`, NOT AN `else`. In the console the ModeManager call sits inside
+    // `if (IsSimPaused) PausedUpdate else PreWorldUpdate`, and THEN a separate
+    // `if (!IsSimPaused) { UpdateRoadRulesManager }` follows. Both arms are the not-paused arm,
+    // so the observable order and gating are identical either way; kept as a separate statement
+    // so the shape matches the binary rather than reading as an else-branch that is not there.
+    //
+    // ⭐ WHY THIS LEG EXISTS AT ALL: its action-42 post is the ONLY producer of impact time in
+    // the entire image, and without it VehiclePhysics::UpdateCrashing's aftertouch gate never
+    // opens, so RaceCarPhysics::UpdateShowtimePhysics -- the whole P6 bounce chain -- never runs.
+    // The full derivation, the four arms deliberately NOT landed, and the method that found the
+    // post are all in GameStateModule_RoadRules.cpp.
+    //
+    // ⛔ NOT staged inside the 1b block above: 1b additionally requires mpPreWorldInputBuffer to
+    // be non-null (it passes the buffer to ModeManager), and this leg does not touch that buffer
+    // at all. Nesting it there would add a condition the console does not have -- and on a build
+    // where nothing constructs a PreWorldInputBuffer that condition is exactly the kind of
+    // invented gate that would silently keep the chain dead [[invented-arms-and-the-c4715-ratchet]].
+    if (!IsSimPaused(true, false))
+    {
+        UpdateRoadRulesManagerImpactTimeBringUp(lpActionQueue);
+    }
+
     // ---- 2) TriggerQueryManager: ARM the trigger set -----------------------------------------
     // X360 line 310 calls TriggerQueryManager::PreWorldUpdate @0x8239F5C8, whose FIRST statement
     // is `UpdateTriggers(this, lpOutput, lpActiveRaceCarInterface)`. That is the ONLY writer of

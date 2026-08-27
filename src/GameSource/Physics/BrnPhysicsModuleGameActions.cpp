@@ -438,31 +438,48 @@ namespace BrnPhysics
                 // `mbAftertouchIsForceAdditive && (car == player)` -- and the ONLY writer of that
                 // member is this arm.
                 //
-                // ⛔ NOTHING IN THE TREE POSTS GAME ACTION 42. Three independent checks agree:
-                //   * no [s3-action] "FIRST arrival of game action id 42" line has ever printed;
-                //   * `E_ACTION_IMPACT_TIME_START` is not even an ENUMERATOR in BrnGameActions.h
-                //     (only its partner E_ACTION_IMPACT_TIME_END == 43 is);
-                //   * the pad feed for it, `ControllerInput::mbImpactTimeDown` (the right bumper's
-                //     held bit), is WRITTEN EVERY FRAME at BrnGameStateModuleIO.cpp:90 and has NO
-                //     READER ANYWHERE IN THE TREE.
-                // ⇒ mbAftertouchIsForceAdditive is false for the whole session, so
-                // UpdateAftertouch never runs, so UpdateShowtimePhysics never runs, so the P6
-                // bounce chain -- aim direction, the push timer, maBounceSensors[20], the
-                // aftertouch channels -- has still never executed.
+                // ✅✅✅ [bounce wave 2026-08-27] THE WALL IS DOWN. THIS BANNER USED TO SAY
+                // "NOTHING IN THE TREE POSTS GAME ACTION 42", and that is no longer true --
+                // corrected here in the same commit that made it false.
+                // The producer is `GameStateModule::UpdateRoadRulesManager @0x82381258`, whose
+                // action-42 post (`li r6,8` @0x823814FC + `li r5,0x2A` @0x82381500 + `bl
+                // VariableEventQueue<13312,16>::AddEvent` @0x82381508) fires on the RISING EDGE of
+                // the game mode type becoming E_MODE_OFFLINE_SHOWTIME / E_MODE_ONLINE_SHOWTIME.
+                // It is landed in GameStateModule_RoadRules.cpp and staged at the console's own
+                // position in PreWorldUpdate (EmmPreWorldUpdate's second leg, #86).
+                // ⭐ The three checks the old banner listed were all TRUE and all pointed at the
+                // TREE, not at the image -- "X is never written" was a claim about what this build
+                // contained, and the answer was in the binary the whole time. Two of them are now
+                // resolved (the enumerator exists; the arrival prints); the third still stands and
+                // is still worth its ink:
+                //   ⓘ STILL OPEN: the pad feed `ControllerInput::mbImpactTimeDown` (the right
+                //     bumper's held bit) is WRITTEN EVERY FRAME at BrnGameStateModuleIO.cpp:90 and
+                //     has NO READER ANYWHERE IN THE TREE. It is NOT this arm's producer -- the
+                //     console's impact time starts from the mode edge, not from a button -- so
+                //     that dangling feed is a separate, unrelated recovery.
+                // ⇒ mbAftertouchIsForceAdditive is now set on showtime entry, so UpdateAftertouch
+                // runs, so UpdateShowtimePhysics runs, so the P6 bounce chain -- aim direction,
+                // the push timer, maBounceSensors[20], the aftertouch channels -- EXECUTES.
                 //
-                // ⭐ AND THE MEASUREMENT NAMES THE LINK. Over 164 [showtime-watch] lines of a real
-                // showtime run the car launched, flew (velY +5.2 -> 0.1 -> -5.1, hasAir 1 -> 0),
-                // tumbled (angMag to 5.6) and settled -- while `pushT=0.400000` NEVER MOVED.
-                // mfTimeUntilPush is decremented by the timestep on ONE line, inside
-                // UpdateShowtimePhysics (RaceCarPhysics.cpp:1228). A launch that seeds the timer
-                // with a body that never ticks it is exactly this gate, and nothing else.
+                // ⭐⭐⭐ AND THE MEASUREMENT THAT NAMED THE LINK IS ALSO THE ONE THAT PROVES THE
+                // FIX. Before: over 164 [showtime-watch] lines of a real showtime run the car
+                // launched, flew (velY +5.2 -> 0.1 -> -5.1, hasAir 1 -> 0), tumbled (angMag to
+                // 5.6) and settled -- while `pushT=0.400000` NEVER MOVED. mfTimeUntilPush is
+                // decremented by the timestep on ONE line, inside UpdateShowtimePhysics
+                // (RaceCarPhysics.cpp:1228), so a launch that seeds the timer with a body that
+                // never ticks it was exactly this gate and nothing else.
+                // ⭐⭐ THAT IS WHY pushT WAS THE TELL AND THE FLAGS WERE NOT: `justBounced=0`
+                // proved nothing (nothing had to hit anything), but a timer seeded and never
+                // ticked proves its owning body never ran. The same number read the other way is
+                // now the win condition -- if pushT DECREMENTS, the body is executing.
                 // [[a-condition-s-truth-over-the-events-that-arrive]] -- entering showtime and
-                // RUNNING showtime are two different questions.
+                // RUNNING showtime are two different questions, and this arm is the bridge.
                 //
-                // THIS ARM IS CORRECT AND COMPLETE. What is missing is upstream: the producer of
-                // action 42. DO NOT "fix" the bounce by defaulting mbAftertouchIsForceAdditive to
-                // true -- that is inventing an arm the console does not have
-                // [[invented-arms-and-the-c4715-ratchet]]. Find action 42's producer.
+                // ⛔ THE STANDING PROHIBITION SURVIVES THE FIX, because it is what made the fix
+                // findable: DO NOT "fix" the bounce by defaulting mbAftertouchIsForceAdditive to
+                // true, and do not add any second road into impact time. This arm's input comes
+                // from the console's own producer or from nothing
+                // [[invented-arms-and-the-c4715-ratchet]].
                 case KI_ACTION_START_IMPACT_TIME:
                 {
                     const f32 lfDuration =

@@ -1457,5 +1457,25 @@ private:
     // every bail arm re-arms it to 0.35 (`li`-free: the console stores the literal 0x3EB33333
     // == 0.35f, rendered by Hex-Rays both as `0.34999999` and as the raw `1051931443`).
     f32  mfSnapRaceStartHoldSeconds     = 0.35f;
+
+    // ⭐⭐⭐ X360 +284513 (0x45761). [bounce wave] THE SHOWTIME RISING-EDGE LATCH, and the reason
+    // ~1900 instructions of showtime physics had never executed on this build.
+    // UpdateRoadRulesManager @0x82381258 reads it (`lbzx r11, r31, r9`, r9 == 0x45761, @0x82381484)
+    // and immediately re-stores the CURRENT in-showtime truth into it (`stbx r11, r31, r9`
+    // @0x823814B8). The post of game action 42 (E_ACTION_IMPACT_TIME_START) fires on the frame the
+    // mode type FIRST becomes E_MODE_OFFLINE_SHOWTIME/E_MODE_ONLINE_SHOWTIME and on no other frame.
+    // ⭐ The neighbouring byte at +284512 is mbToggleShowtimeBehaviour (see the accessor's banner
+    // above) -- a showtime bool pair, which is independent corroboration of the offset's meaning.
+    // Starts false: the console's own initial state is "not in showtime", so the first entry into
+    // showtime IS a rising edge, which is exactly what makes the first post happen.
+    bool mbWasInShowtimeGameMode        = false;
+
+public:
+    // ⭐⭐⭐ [bounce wave] ONE ARM of X360 GameStateModule::UpdateRoadRulesManager @0x82381258,
+    // staged at the console's own PreWorldUpdate position. See the body for the full arm
+    // inventory and for which arms are deferred and why. Takes the action queue the caller
+    // already holds the output buffer's write lock for, the same way every other ...BringUp leg
+    // in GameStateModule_gUI_00.cpp does.
+    void UpdateRoadRulesManagerImpactTimeBringUp(GameStateModuleIO::GameActionQueue* lpActionQueue);
 };
 }

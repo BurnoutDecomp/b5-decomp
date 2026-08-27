@@ -460,7 +460,17 @@ namespace Vehicle
                         << "[showtime-watch] mbPlayerCarInShowtime -> " << (lbIn ? 1 : 0)
                         << " (reached through the console chain, not injected)\n";
                 }
-                if (lbIn && (siFrameMod++ % 30) == 0)
+                // ⭐⭐⭐ [bounce wave] ASK WHAT THIS PROBE CANNOT SEE. The 30-frame period is
+                // HALF A SECOND at 60 fps, and mfTimeUntilPush is seeded to 0.4 -- so the push
+                // window is SHORTER THAN ONE SAMPLE. At period 30 this witness can only ever
+                // print the seed and then a zero, and it is structurally incapable of showing the
+                // decrement in between. That is exactly how a body that ran ONCE with a huge
+                // timestep and a body that ticked properly at 60 Hz would look identical here.
+                // So while the timer is live, sample EVERY frame. Costs a handful of lines (the
+                // window is ~24 frames) and turns "pushT changed" into "pushT decremented, at
+                // this rate, over this many frames" -- a VALUE instead of a fact.
+                const bool lbPushWindow = (msPlayerParams.mfTimeUntilPush > 0.0f);
+                if (lbIn && (lbPushWindow || (siFrameMod++ % 30) == 0))
                 {
                     const Vector3 lvVel = GetLinearVelocity();
                     const Vector3 lvAng = GetAngularVelocity();
