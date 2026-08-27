@@ -215,6 +215,25 @@ namespace
                         << static_cast<s32>(
                                mProgressionManager.GetNumberOfParTimeRoadRulesRuledByPlayer())
                         << " (either > 0 also opens the gate)\n";
+
+                    // ⭐ AND THE NINE TERMS BELOW IT, so the line answers "is the progression
+                    // gate the ONLY thing in the way" rather than just "it is the FIRST thing".
+                    // The console short-circuits and never evaluates these when road rules are
+                    // unavailable; every one is a pure read, so evaluating them HERE (in a
+                    // one-shot diagnostic, off the decision path) changes nothing.
+                    *CgsDev::Log::gpDebugPrint
+                        << "[showtime] the nine gates BELOW it, evaluated for the record: "
+                        << "playerCarActive=" << (mLastActiveRaceCarInterface.IsPlayerCarActive() ? 1 : 0)
+                        << " simPaused="      << (IsSimPaused(false, false) ? 1 : 0)
+                        << " junkyardId="     << ((mCarSelectManager.GetJunkyardId() != 0) ? 1 : 0)
+                        << " modeState="      << ((lpCurrentGameMode != 0)
+                                                     ? lpCurrentGameMode->GetCurrentState() : -1)
+                        << " showtimeBehaviour=" << static_cast<s32>(meShowtimeBehaviour)
+                        << " modeType="       << static_cast<s32>(mModeManager.GetCurrentGameModeType())
+                        << " postModeLockout=" << mfTimeSinceLastCrashMode
+                        << " crashStartHold=" << mfTimeSpentDoingCrashStartAction
+                        << "  (want: active=1 paused=0 junkyard=0 modeState=-1or2 behaviour!=0"
+                           " modeType!=2and!=16)\n";
                 }
                 LogShowtimeRefusalOnce("road rules are not available yet -- the profile needs "
                                        "4 medals from the start, or one ruled road "
