@@ -48,16 +48,24 @@ namespace BrnGameState
 {
 namespace
 {
-    // [DIAG] NOT IN THE X360 BINARY. ONE line per process, naming the gate that refused a
-    // both-bumpers press. It exists because the defect this file closes was reported by a player
-    // as "the buttons do nothing", and a gate stack with nine terms has nine ways to look exactly
-    // like a dead button. Deliberately NOT env-gated (see the call sites); at most one line ever.
-    void LogShowtimeRefusalOnce(const char* lpcReason)
+    // [DIAG] NOT IN THE X360 BINARY. Names the gate that refused a both-bumpers press. It exists
+    // because the defect this file closes was reported by a player as "the buttons do nothing",
+    // and a gate stack with ten terms has ten ways to look exactly like a dead button.
+    // Deliberately NOT env-gated (see the call sites); bounded to one line PER DISTINCT REASON.
+    void LogShowtimeRefusal(const char* lpcReason)
     {
-        static bool sbLogged = false;
-        if (!sbLogged && CgsDev::Log::gpDebugPrint != 0)
+        // ⚠️ ONCE PER **REASON**, NOT ONCE PER PROCESS -- and the difference is the whole point.
+        // A plain one-shot reports the gate that happened to be down on the FIRST frame the
+        // gesture was seen, and then goes quiet for ever. Measured this session: that first frame
+        // is the junkyard-exit frame, where a term that clears seconds later still reads as down,
+        // so the run's only line named a transient. Every distinct reason now gets exactly one
+        // line, so the log shows the gate stack PEELING rather than a single snapshot -- and the
+        // volume is still bounded, because there are only ten reasons and they are literals.
+        // [[diagnostics-that-lie]] -- ask what the probe cannot see, then make it see that.
+        static const char* spcLastReason = 0;
+        if (spcLastReason != lpcReason && CgsDev::Log::gpDebugPrint != 0)
         {
-            sbLogged = true;
+            spcLastReason = lpcReason;
             *CgsDev::Log::gpDebugPrint
                 << "[showtime] BOTH BUMPERS held, but ShouldStartShowtimeMode @0x82356B18 refused: "
                 << lpcReason << "\n";
@@ -199,10 +207,14 @@ namespace
                 // not available" cannot be told apart from "the profile never loaded", and those
                 // want opposite fixes. Printed once, through the same one-shot as every other
                 // refusal reason. (The accessors are the public console ones.)
-                static bool sbNumbersLogged = false;
-                if (!sbNumbersLogged && CgsDev::Log::gpDebugPrint != 0)
+                // Re-armed on a CHANGE of the junkyard term, for the reason spelled out on
+                // LogShowtimeRefusal above: the first press lands on the junkyard-exit frame, and
+                // a snapshot taken there reports a term that may clear seconds later.
+                static s32 siLastJunkyardTerm = -1;
+                const s32  liJunkyardTerm = (mCarSelectManager.GetJunkyardId() != 0) ? 1 : 0;
+                if (siLastJunkyardTerm != liJunkyardTerm && CgsDev::Log::gpDebugPrint != 0)
                 {
-                    sbNumbersLogged = true;
+                    siLastJunkyardTerm = liJunkyardTerm;
                     const BrnProgression::Profile* const lpProfile = mProgressionManager.GetProfile();
                     *CgsDev::Log::gpDebugPrint
                         << "[showtime] AreRoadRulesAvailable @0x82311520 terms: medalsFromTheStart="
@@ -235,7 +247,7 @@ namespace
                         << "  (want: active=1 paused=0 junkyard=0 modeState=-1or2 behaviour!=0"
                            " modeType!=2and!=16)\n";
                 }
-                LogShowtimeRefusalOnce("road rules are not available yet -- the profile needs "
+                LogShowtimeRefusal("road rules are not available yet -- the profile needs "
                                        "4 medals from the start, or one ruled road "
                                        "(ProgressionManager::AreRoadRulesAvailable @0x82311520)");
             }
@@ -247,7 +259,7 @@ namespace
         {
             if (lbCrashModePressed)
             {
-                LogShowtimeRefusalOnce("the 2 s post-mode lockout (mfTimeSinceLastCrashMode) "
+                LogShowtimeRefusal("the 2 s post-mode lockout (mfTimeSinceLastCrashMode) "
                                        "has not expired");
             }
             mfTimeSinceLastCrashMode        -= lfGameTimestep;
@@ -333,7 +345,7 @@ namespace
                   : (leCurrentGameModeType == GameStateModuleIO::E_MODE_OFFLINE_SHOWTIME ||
                      leCurrentGameModeType == GameStateModuleIO::E_MODE_ONLINE_SHOWTIME) ? "showtime is already running"
                   :                                                           "the online mode type is not a lobby/showtime";
-                LogShowtimeRefusalOnce(lpcReason);
+                LogShowtimeRefusal(lpcReason);
             }
             mfTimeSpentDoingCrashStartAction = KF_CRASH_START_HOLD_SECONDS;   // loc_82356D7C
             return false;
