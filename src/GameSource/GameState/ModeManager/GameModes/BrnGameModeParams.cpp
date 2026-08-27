@@ -117,6 +117,33 @@ s32 GameModeParams::GetCheckpointCount() const
 }
 
 // -----------------------------------------------------------------------------
+// GetCheckpointData - one registered checkpoint, by index.
+//
+// [stuntrace start-grid wave, 2026-08-27] BODIED. It was declared-only (BrnGameModeParams.h:209
+// /:210) since the wave-B fix round, which is a LNK2019 for the first caller that needs it --
+// and RaceCarEntityModule::SetupOpponents @0x82307DF0 is that caller: at 0x82307EAC it does
+// `Array<CheckpointData,16>::Ge(params+0x260, 0)` and reads `lhz 2(r3)`, i.e. checkpoint 0's
+// muAISectionIndex, to pick the section the mode-start car drives towards.
+//
+// [!] NO INDEX ASSERT HERE, deliberately -- the same rule that header's own banner records:
+// Array<T,N>::Ge OWNS the CgsArray.h:336 constructed-assert and the CgsArray.h:338 bounds
+// assert ("Array index out of bounds"), and the console emits them from inside the helper
+// (`Array<CheckpointData,16>::GetIt @0x8231A7D8`). Restating either here would double-fire.
+// Note the asymmetry with GetStartPosition/GetStartDirection above: those two carry a
+// KU_MAX_ACTIVE_RACE_CARS assert because the CONSOLE emits one at their sites (it is the
+// grid-slot range check, not the array's), and this one has no such console assert.
+// -----------------------------------------------------------------------------
+const CheckpointData* GameModeParams::GetCheckpointData(s32 liIndex) const
+{
+    return &maCheckpointDataArray.Ge(static_cast<u32>(liIndex));
+}
+
+CheckpointData* GameModeParams::GetCheckpointData(s32 liIndex)
+{
+    return &maCheckpointDataArray.Ge(static_cast<u32>(liIndex));
+}
+
+// -----------------------------------------------------------------------------
 // GetStartLocationCount - number of start-grid slots registered.
 // -----------------------------------------------------------------------------
 s32 GameModeParams::GetStartLocationCount() const
