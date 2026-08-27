@@ -392,9 +392,18 @@ void DriveWorldUpdateFrame(BrnResource::GameDataIO::InputBuffer* lpGameDataInput
     // director camera behaviour advance). So this is real data, not a stand-in.
     //
     // WorldModule::Update hands this block to WorldModule::BridgeInputToPhysicsModule
-    // @0x827AB830, which copies it into the physics input buffer; PhysicsModule::Update
-    // @0x825B0640 short-circuits ("sim timer not running -- inert this frame") for as long as
-    // the block stays Construct-cleared. With the timer staged the module runs for real.
+    // @0x827AB830, which copies its 48 bytes into the physics input buffer, and every timestep
+    // PhysicsModule::Update @0x825B0640 uses comes out of that copy. Without this line the block
+    // stays Construct-cleared, GetCurrentTimeStep() reads 0, and the module conducts frames with
+    // a zero timestep. With the timer staged it runs for real.
+    // ⚠️ STALE HALF CORRECTED 2026-08-27: this note used to add that PhysicsModule::Update
+    // "short-circuits ('sim timer not running -- inert this frame') for as long as the block
+    // stays Construct-cleared". IT NO LONGER DOES -- that PC-only early return was an invented
+    // arm with no console counterpart (the X360 body never reads the status block's mbRunning at
+    // all) and it broke the sim-pause RESUME, so it was deleted in the pauseresume wave. Its full
+    // obituary, asm proof and measurement are at the site in
+    // BrnPhysicsModuleUpdateFunctions.cpp. This staging line is now the ONLY thing standing
+    // between the module and a zero-timestep frame, which makes it more load-bearing, not less.
     //
     // ⛔ THE 2026-08-09 MEASUREMENT THAT GATED THIS LINE, AND WHAT ANSWERED IT.
     // Staging it on the previous build produced 906 asserts per session and a boot that never

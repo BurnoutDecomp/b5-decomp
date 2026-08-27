@@ -1,7 +1,7 @@
 #include "GameShared/GameClasses/System/Input/PC/CgsInputPadsPC.h"
 
 #include <cstring>   // std::memset
-#include <cstdlib>   // std::getenv (the harness focus-gate bypass + the offline-pause gate)
+#include <cstdlib>   // std::getenv (the harness focus-gate bypass)
 
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // CgsDev::Log::WriteToLog (the pause gate's one-shot)
 
@@ -498,103 +498,66 @@ namespace CgsInput
         // so it is full scale; a trigger carries its normalised curve), and the status is the
         // console muStatus contract (bit0 held, bit1 pressed-this-frame, bit2 released-this-
         // frame) with "held" being DeviceX360Pad::Update's `raw > 0.2` control-down test.
-        // ⛔⛔ THE OFFLINE-PAUSE GATE (pause wave, 2026-08-26). Action 46 is bound above and the
-        // whole chain behind it is RECONSTRUCTED AND MEASURED WORKING -- pressing it freezes the
-        // world (run cc_pause2: the 3D frame goes bit-identical at 0.000 while the debug overlay
-        // keeps ticking ~9 luma/frame, i.e. a paused WORLD under a LIVE renderer), and the FSM
-        // round trip closes in the log (0x88 -> 0x89 -> 0x88, RequestPause(4) -> RequestUnpause(4)).
+        // ✅✅ THE OFFLINE PAUSE SHIPS (pauseresume wave, 2026-08-27). Action 46 is bound above
+        // and the whole chain behind it works, pause AND resume, repeatedly:
+        //     action 46 -> CrashNavMapMain::OnEnter -> GuiEventActivateCrashNav(false) ->
+        //     game event 93 -> RequestPause(4) -> action 86 -> BrnGameModule::CheckGameActions
+        //     sets mbSimPaused + stops the sim timer -> ConstructUpdateSetFromFsm raises
+        //     update-set bit 0x1 -> the in-game set goes 0x88 -> 0x89 and the WORLD FREEZES.
+        // Accept (action 45) walks it back: 0x89 -> 0x88, and the world runs again.
         //
-        // BUT THE RESUME FRAME FIRES A HALTING DEV ASSERT and the game stops dead there:
-        //     [ASSERT] mpData != NULL   (BrnContactSpyInterface.h:82)
-        //         BrnWorld::PropEntityModule::ProcessContacts
-        //         BrnWorld::PropEntityModule::PostPhysicsUpdate
-        // Measured in run cc_pause3, and measured as a HANG rather than a pause by the same
-        // overlay control: after the assert BOTH the world AND the overlay read 0.000 for the
-        // remaining ~2900 presents. (⭐ That control is the whole reason this was not published
-        // as "the pause works": a frozen 3D frame alone cannot tell a pause from a hang.)
+        // ✅ BRN_ENABLE_PAUSE IS DELETED (2026-08-27), the same retirement BRN_ENABLE_CRASH_ENTRY
+        // got a day earlier. It gated the KEY -- not the chain -- for one reason: the resume frame
+        // tripped a halting dev assert (`mpData != NULL`, BrnContactSpyInterface.h:82, under
+        // PropEntityModule::ProcessContacts). That reason is GONE, and the fix was not here.
         //
-        // ⛔⛔ RETRACTED 2026-08-27 (pausebit wave). The note that stood here said: "THE CAUSE
-        // IS NAMED -- update-set BIT 0x1 IS READ UNDER TWO DIFFERENT MEANINGS. ConstructUpdateSetFromFsm
-        // sets it for `mbSimPaused || IsSaveLoadState()` and BrnRaceCarEntityModule reads it as
-        // sim-paused, but BrnPhysicsModuleUpdateFunctions.cpp:231 names the SAME bit
-        // `lbNetworkCatchup` and passes it to PropManager::ProcessInputsPreScene at :947 -- a path
-        // that never binds the output buffer's contact-spy interface."
-        // **THAT IS FALSE.** Settled from the X360 asm exactly as the note asked, at three
-        // independent sites, and the bit turns out to have ONE meaning everywhere:
-        //   * PhysicsModule::Update @0x825B0640 -- `clrlwi r30, r18, 31` @0x825B0688 is the ONLY
-        //     mask ever applied to the update-set argument. The bit is stashed (var_1B8) and tested
-        //     THREE times: 0x825B0910 (skip contact generation + UpdateVehiclePhysics), 0x825B216C
-        //     (skip the prop read-back / OutputUpdatedProps), and 0x825B2270 -- which skips
-        //     **BridgeSimulationToOutput @0x825B2304, the SOLE binder of the contact-spy interface**.
-        //   * PhysicsModule::PostSceneUpdate @0x825ABC10 -- `clrlwi r23, r28, 31` @0x825ABCE4,
-        //     handed to PropManager::ProcessInputsPreScene as arg 3 (`mr r6, r23` @0x825ABE80).
-        //     (:947 and :231 are DIFFERENT FUNCTIONS in the same TU; reading them as one call chain
-        //     is what produced the "two meanings" story.)
-        //   * PropEntityModule::PostPhysicsUpdate @0x823031D8 -- `clrlwi r29, r8, 31` @0x823031F4,
-        //     `bne` @0x82303238 **skips ProcessContacts + UpdateProps**.
-        // ⭐⭐ So the console's design is SYMMETRIC and deliberate: when bit 0 is set the physics
-        // module leaves the contact-spy interface at its Construct-time NULL, and every consumer of
-        // that interface is gated on the same bit. `lbNetworkCatchup` and "sim paused" are the same
-        // thing -- "this frame carries no physics result". THE ASSERT IS THE GUARD ON THAT
-        // INVARIANT, and this tree already reproduces BOTH gates faithfully
-        // (BrnPhysicsModuleUpdateFunctions.cpp :714/:748, PropEntityModule_wQ2_02.cpp :256).
+        // ⭐⭐ WHAT IT ACTUALLY WAS, and it took two waves to find because the first two answers
+        // were both wrong in an instructive way:
+        //   * REFUTED (pausebit wave): "update-set bit 0x1 is read under TWO different meanings".
+        //     It is not. Settled from the X360 asm at three independent sites -- PhysicsModule::
+        //     Update @0x825B0640 (`clrlwi r30, r18, 31` @0x825B0688 is the ONLY mask ever applied
+        //     to the update-set argument, tested three times, the third skipping
+        //     BridgeSimulationToOutput @0x825B2304, the SOLE binder of the contact-spy interface),
+        //     PhysicsModule::PostSceneUpdate @0x825ABC10, and PropEntityModule::PostPhysicsUpdate
+        //     @0x823031D8. ONE bit, ONE meaning: "this frame carries no physics result", with every
+        //     consumer of the interface gated on it. The assert is that invariant's guard, and this
+        //     tree already reproduced every gate faithfully. (The "two meanings" story came from
+        //     reading two line numbers in one TU as one call chain; they were two functions.)
+        //   * THE ACTUAL CAUSE (this wave): a PC-BUILD GUARD **WE** ADDED at the top of
+        //     PhysicsModule::Update -- `if (!GetSimTimerStatus()->IsRunning()) return;` -- made a
+        //     one-frame-stale MIRROR of the timer load-bearing. On the resume frame
+        //     ConstructUpdateSetFromFsm reads mbSimPaused LIVE, so bit 0 clears at once, while the
+        //     physics module's timer SNAPSHOT still said stopped: physics went inert on a frame
+        //     whose bit 0 said "results are coming". A THIRD state the console never has.
+        //     The console's own Update never reads that flag at all (exhaustively: every access to
+        //     the sim TimerStatus in all 1999 instructions is +4/+8/+0x10/+0x14 -- never +0xC).
+        //     THE GUARD IS DELETED; its full obituary, asm proof and measurement live at the site,
+        //     in BrnPhysicsModuleUpdateFunctions.cpp.
+        // ⭐ INVENTED-ARM class, third sighting: defensive code we added that the console lacks.
+        // The fix was to delete the invention, NOT to silence the assert or null-check mpData --
+        // that assert is the console's and was correctly reporting a genuinely unbound interface.
         //
-        // ⭐⭐⭐ THE REAL CAUSE, MEASURED (run ec_pause3, the [pausebit] transition probes):
-        //        4020  PhysicsModule::Update updateSet=0x89 bit0=1   (the pause)
-        //        4021  PropEntityModule::PostPhysicsUpdate 0x89 bit0=1 -> ProcessContacts skipped
-        //        4022  PC sim-timer guard: running=0 -> EARLY RETURN, BridgeSimulationToOutput
-        //              NOT reached, the contact-spy interface stays NULL
-        //        4072  in-game update set -> 0x88            (the resume)
-        //        4073  PhysicsModule::Update 0x88 bit0=0
-        //        4074  PropEntityModule::PostPhysicsUpdate 0x88 bit0=0 -> ProcessContacts RUNS
-        //        4075  [ASSERT] mpData != NULL
-        // and there is NO `running=1` transition between 4022 and 4075. On the resume frame the
-        // update set has already gone back to 0x88 while THE SIM TIMER IS STILL STOPPED, so
-        // PhysicsModule::Update takes the **PC-BUILD GUARD's early return**
-        // (BrnPhysicsModuleUpdateFunctions.cpp, "sim timer not running -- inert this frame
-        // [FLAG PC boot guard]") and never reaches the bind.
-        // ⛔⛔ THAT GUARD IS OURS, NOT THE CONSOLE'S. It creates a THIRD state the console never
-        // has -- *bit 0 clear but physics inert* -- and the console's invariant
-        // "bit0 == 0 => the contact-spy interface is bound" is exactly what it breaks. This is the
-        // INVENTED-ARM class again (defensive code WE ADDED that the console lacks), and it has now
-        // been paid for three times.
-        // ⭐ NEXT RUNG, and it is NOT "gate the prop module too" (that would be a second invented
-        // arm): make the sim timer's running state and update-set bit 0 agree across the resume, or
-        // retire the PC guard per its own DELETE-WHEN ("when the boot flow stops driving world
-        // updates through dead timers"). ⛔ Do NOT silence the assert or null-check mpData -- it is
-        // the console's and it is correctly reporting a genuinely unbound interface.
+        // ⚠️ THE SECOND HALF OF THE FIX IS NOT IN THIS FILE EITHER. Deleting the physics guard
+        // exposed a real reconstruction gap one module over: TrafficEntityModule::PreSceneUpdate
+        // guarded its block on `!IsPaused()` alone, dropping the console's `&& !lbSimPaused`, so
+        // the traffic frame-clock FREE-RAN through a pause and the first decision frame after the
+        // resume tripped `muLastParamCalculated >= KU_MAX_PARAMS`. Restored (asm-attested) in
+        // BrnTrafficEntityModule_wT1_02.cpp; the full note is there.
         //
-        // ⭐ OPT IN with  BRN_ENABLE_PAUSE=1  (the pattern BRN_ENABLE_CRASH_ENTRY used until that
-        // flag was deleted on 2026-08-27, its last reason retired). Everything
-        // above this line ships unchanged; only the KEY is unreachable.
-        static const bool sbPauseEnabled = (std::getenv("BRN_ENABLE_PAUSE") != 0);
-
+        // ⭐⭐ THE CONTROL THAT KEPT TWO WRONG ANSWERS FROM BEING PUBLISHED, and it is worth
+        // keeping: a frozen 3D frame CANNOT tell a pause from a hang. Measure the debug-overlay
+        // strip separately from the world -- a paused WORLD under a LIVE renderer freezes one band
+        // and not the other, while a hang freezes both. Measured on this build over three
+        // pause/resume cycles: inside a pause the world band's frame-to-frame mean |luma delta|
+        // sits at 0.018-0.024 while the overlay band stays at 2.3-3.1 (the running-world floor is
+        // ~0.15, so the world is an order of magnitude below it and the overlay is untouched).
+        // The 2026-08-26 assert FAILED that test -- BOTH bands went to 0.000 for the remaining
+        // ~2900 presents. ⛔ The absolute numbers are band-definition-specific; what transfers is
+        // the SPLIT, never a threshold copied between waves.
         static bool sabWasDown[KU_NUM_BINDINGS] = {};
         for (u32 luBind = 0; luBind < KU_NUM_BINDINGS; ++luBind)
         {
             const PcActionBinding& lrBinding = KA_BINDINGS[luBind];
-
-            if (lrBinding.iActionId == 46 && !sbPauseEnabled)
-            {
-                static bool sbLoggedPauseGate = false;
-                if (!sbLoggedPauseGate)
-                {
-                    sbLoggedPauseGate = true;
-                    CgsDev::Log::WriteToLog(
-                        "[bringup] OFFLINE PAUSE KEY DISABLED (BRN_ENABLE_PAUSE is not set). The pause"
-                        " itself WORKS and is measured: action 46 -> CrashNavMapMain::OnEnter ->"
-                        " GuiEventActivateCrashNav(false) -> game event 93 -> RequestPause(4) ->"
-                        " action 86 -> in-game update set 0x88 -> 0x89, and the world freezes while"
-                        " the renderer keeps running. The key is gated because the RESUME frame trips"
-                        " a halting assert (mpData != NULL, PropEntityModule::ProcessContacts):"
-                        " update-set bit 0x1 is read as 'sim paused' by the race-car module and as"
-                        " 'network catchup' by BrnPhysicsModuleUpdateFunctions.cpp:231, and the"
-                        " latter path never binds the contact-spy interface. Settle that bit's"
-                        " meaning from the X360 asm, then delete this gate."
-                        " Set BRN_ENABLE_PAUSE=1 to exercise the chain.\n");
-                }
-                continue;
-            }
 
             f32 lfValue = 0.0f;
             if (lbForeground && AnyKeyDown(lrBinding.paiVKeys))

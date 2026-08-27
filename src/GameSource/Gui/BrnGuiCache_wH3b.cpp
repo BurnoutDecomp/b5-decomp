@@ -41,6 +41,37 @@ const SatNavEventDisplayInfo* GuiCache::GetPresetEventDisplayInfo(u32 luEventId)
 
 // @ 0x824F8AF0 -- the PROFILE flavour: same walk, matching the +0x18 event-instance id
 // ("Unable to find event start with event id: " on the X360 failure path).
+//
+// ⭐⭐ THIS ASSERT FIRES ON THIS BUILD, AND IT IS **FAITHFUL** -- SETTLED 2026-08-27, NOT SILENCED.
+// The X360 body @0x824F8AF0 is structurally identical: the same `!= -1` constructed-guard, the
+// same linear walk over the count at interface+0x20D0, and the same fall-through that opens an
+// assert and streams "Unable to find event start with event id: " before AppendFormat'ing the id.
+// (Ours drops the id only because CGS_ASSERT takes a plain `const char*`; that is this tree's
+// standing lowering convention, applied here as everywhere else.) So the assert is the console's,
+// at the console's site, on the console's condition.
+//
+// ⛔ WHY IT FIRES HERE AND NOT ON THE CONSOLE, named precisely rather than guessed:
+// `maEventStarts` is NEVER POPULATED on this build. Its only producer is
+// SetUpAllEventStartsInterface::AddEventStart @0x82361398 (Interface_SetUpAllEventStarts.cpp),
+// whose only caller is the console's GameStateModule::SendSetUpAllEventStartsMessage -- and that
+// function is UNRECONSTRUCTED (flagged at BrnGameStateModule.cpp, in ProcessGameEvents' latch
+// tail). The array is Construct'd, so the `!= -1` guard above passes and stays silent; the count
+// is simply 0, so EVERY profile lookup walks an empty array and falls through. The assert is
+// therefore reporting exactly what is true: this build cannot resolve any profile event id.
+// ⇒ There is nothing to fix IN THIS FUNCTION. Silencing it here -- a null-return without the
+// assert, an early `if (miEventStartsCount == 0) return 0;`, anything -- would delete the only
+// runtime report that a real producer is missing, which is the silent-drop-stub class.
+// The fix is to reconstruct SendSetUpAllEventStartsMessage (and the WDC progression binding its
+// consumer also needs); that is the progression/WDC wave's work, not the GuiCache's.
+//
+// ⚠️ NON-GATING, and checked rather than assumed: the sole live caller,
+// SatNavRenderer::RefreshSatNavIconInfo, already carries a FLAG'd PC bring-up guard
+// (BrnSatNavRenderer.cpp: `if (lpDisplay == 0 || lpRaceEventData == 0 || ...) return;`) with its
+// own DELETE-WHEN. No null is dereferenced; the run completes with the HUD up.
+// ⚠️ REACHABILITY CHANGED 2026-08-26 WITHOUT THIS CODE CHANGING: once the HUD began surviving
+// crashes, FBurnMain's sat-nav pre-pass kept running for the rest of a drive instead of stopping
+// at the first crash, so the lookup is now attempted far more often. Un-gating a consumer makes a
+// pre-existing fault reachable; it does not create it. (Control-run proven, endcrash wave §06.)
 const SatNavEventDisplayInfo* GuiCache::GetProfileEventDisplayInfo(u32 luEventId) const
 {
     CGS_ASSERT(miEventStartsCount != -1,
