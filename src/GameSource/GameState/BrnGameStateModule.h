@@ -308,6 +308,12 @@ public:
     StuntManager*       GetStuntManager()       { return &mStuntManager; }
     const StuntManager* GetStuntManager() const { return &mStuntManager; }
 
+    // [drive-thru wave 2026-08-27] Same de-inlining as GetStuntManager above: the console reaches
+    // the drive-thru sub-object through an inlined `this + 44240` adjust and names no accessor, so
+    // one is provided here rather than letting any body poke the byte offset.
+    DriveThruManager*       GetDriveThruManager()       { return &mDriveThruManager; }
+    const DriveThruManager* GetDriveThruManager() const { return &mDriveThruManager; }
+
     // ------------------------------------------------------------------------
     // ⭐⭐ [gateui] X360 PostWorldUpdate @0x8238F358 -- ITS TWO STUNT-CHAIN LEGS.
     //
@@ -1408,6 +1414,21 @@ private:
     // bookkeeper, embedded BY VALUE as the console embeds it. See GetStuntManager() above for the
     // five console attestations of the offset and for why the console never names an accessor.
     StuntManager                            mStuntManager;
+
+    // ⭐ [drive-thru wave 2026-08-27] X360 this+44240 (0x ACD0). The junk-yard / gas-station /
+    // body-shop / paint-shop / car-park drive-thru bookkeeper, embedded BY VALUE as the console
+    // embeds it. Console attestations for the offset:
+    //   * GameStateModule::Prepare @0x8239E578 stage 27 calls DriveThruManager::Prepare(this+44240,
+    //     the TriggerQueryManager's TriggerData, the CarColours palette) immediately BEFORE the
+    //     car-select list publish this tree already reproduces in E_PREPARESTAGE_DONE.
+    //   * PreWorldUpdate @0x823A5328 passes `a1 + 44240` as TriggerQueryManager::
+    //     ProcessPlayerTriggers' lpDriveThruManager argument (the drive-thru fan-out leg).
+    // The member is NOT laid out at the console byte offset (semantic parity by named members,
+    // AGENTS.md) -- the offset is the identity proof. The type is already complete here:
+    // BrnGameActions.h (included above) includes BrnDriveThruManager.h for GenericRegion::Type,
+    // and BrnDriveThruManager.h forward-declares GameStateModule rather than including this
+    // header, so there is no cycle.
+    DriveThruManager                        mDriveThruManager;
 
     // ⭐ [gateui] X360 this+185712 (0x2D570). The developer-challenge tracker, embedded BY VALUE:
     // Construct @0x82380388 runs `DeveloperChallengeManager::Construct(a1 + 185712, a1 + 47920,

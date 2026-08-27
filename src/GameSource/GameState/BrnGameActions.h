@@ -146,6 +146,22 @@ enum EGameActionType
     E_ACTION_STOP_MODE_INTRO            = 30,    // DWARF 26  (+4 X360)
     E_ACTION_ALLOW_BOOST_EARNING        = 70,
     E_ACTION_STOP_BOOSTING              = 71,
+    // ⭐ [drive-thru wave 2026-08-27] The three shop drive-thru posts, all size 144 (0x90).
+    // PINNED at both ends. Producer: DriveThruManager::ProcessDriveThru @0x8239B6E8 --
+    // `li r5,0x64`/`li r5,0x61`/`li r5,0x62` with `li r6,0x90` into
+    // VariableEventQueue<13312,16>::AddEvent (gas @0x8239B9A0, body @0x8239BB98, paint
+    // @0x8239BD9C). Consumers (an exhaustive sweep of xrefs_to GetFirstEvent @0x821FC0A0 --
+    // 24 functions, 11 of which react to 97/98/99/100): RaceCarEntityModule::HandleGameActions
+    // @0x8230BE08 (100 -> boost strategy slot 46; 97/98 -> per-car state + colour),
+    // PhysicsModule::HandleGameActionsPostScene @0x825A70C0 (97 -> the deformation reset),
+    // MainDirector::ProcessInputQueue @0x822372F8 (the drive-thru camera),
+    // TranslateGameActionsToGuiEvents @0x823E9CE0 (GuiDriveThroughEvent type 1/2/3),
+    // BridgeGameStateToNetwork @0x823E2398 (net msg 37/36/41), the sound logic module and the
+    // traffic module. The 144-byte payload layout is documented at PostShopAction in
+    // BrnDriveThruManager.cpp (transform @+0, identity matrix @+64, per-action scalars @+128).
+    E_ACTION_BODY_SHOP_DRIVE_THRU       = 97,   // size 144
+    E_ACTION_PAINT_SHOP_DRIVE_THRU      = 98,   // size 144
+    E_ACTION_GAS_STATION_DRIVE_THRU     = 100,  // size 144
     // ⛔ VALUE CORRECTION 2026-08-20 -- this carried the PS3-DWARF value (19). The X360 ARTIST
     // build posts 23, asm-pinned at BOTH ends:
     //   producer  ModeManager::PrepareForMode @0x82342930 -- `li r5,0x17` (23) + `li r6,0x8E0`

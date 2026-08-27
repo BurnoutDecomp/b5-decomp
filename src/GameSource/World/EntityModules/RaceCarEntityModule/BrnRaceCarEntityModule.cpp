@@ -2411,6 +2411,51 @@ void RaceCarEntityModule::HandleGameActions(
             mBoostManager.TurnOffBoosting();
             break;
 
+        // ⭐⭐⭐ [drive-thru wave 2026-08-27] THE GAS-STATION BOOST REFILL -- the last link in the
+        // chain, and the one that was missing. Action 100 is posted by
+        // DriveThruManager::ProcessDriveThru @0x8239B6E8 case 1 and reaches this module unfiltered
+        // (BridgeGameStateToWorld -> BridgeActionsToRaceCarModule both Append the WHOLE queue).
+        //
+        // ARTIST @0x8230CD84..0x8230CD94, the `case 100` arm of the low jump table:
+        //     lwzx  r3, r31, r17     ; r17 == 0x17CE0 == 97504 == mBoostManager.mpBoostStrategy
+        //     lwz   r11, 0(r3)       ; vtable
+        //     lwz   r11, 0xB8(r11)   ; 0xB8 == 184 == slot 46
+        //     mtctr r11 / bctrl      ; ONE argument (this)
+        // Slot 46 is BoostStrategy::OnDriveThru (pinned in BrnBoostBurnout5.h:174), whose B5 body
+        // is `UpdateMaxBoost(true)` -- i.e. the bar is snapped to max. The offset arithmetic is
+        // confirmed independently: BoostManager sits at +96400 and SetBoostStrategy @0x822A3288
+        // stores the active strategy at manager+1104; 96400 + 1104 == 97504.
+        //
+        // THE PAYLOAD IS NOT READ BY THIS ARM. The console reaches the strategy directly off the
+        // module; the action-100 payload's only reader is MainDirector::ProcessInputQueue (which
+        // takes the region transform for the drive-thru camera). So this arm is correct with the
+        // event untouched -- do not "improve" it by decoding the payload.
+        case BrnGameState::GameStateModuleIO::E_ACTION_GAS_STATION_DRIVE_THRU: // 100
+        {
+            BoostStrategy* lpBoostStrategy = mBoostManager.GetBoostStrategy();
+            CGS_ASSERT(lpBoostStrategy != 0, "lpBoostStrategy != NULL");
+            if (lpBoostStrategy == 0)
+            {
+                break;
+            }
+            // [DIAG] NOT IN THE X360 BINARY. THE HEADLINE MEASUREMENT: the boost value either
+            // side of the refill, read through the manager's own accessor. It is deliberately
+            // ONE line carrying BOTH numbers so a "before" can never be paired with the wrong
+            // "after", and it is deliberately independent of the [drivethru] ENTER rung -- a
+            // missed trigger volume on a frame-starved box and an ineffective action produce the
+            // same silence otherwise [[diagnostics-that-lie]].
+            const f32 lfBoostBefore = mBoostManager.GetBoostAmount();
+            lpBoostStrategy->OnDriveThru();
+            const f32 lfBoostAfter = mBoostManager.GetBoostAmount();
+            if (CgsDev::Log::gpDebugPrint != 0)
+            {
+                *CgsDev::Log::gpDebugPrint
+                    << "[drivethru] GAS REFILL boost " << lfBoostBefore
+                    << " -> " << lfBoostAfter << "\n";
+            }
+            break;
+        }
+
         // X360 `case 79`: ChangePlayerCarColour(payload[0], payload[4]). The payload is
         // CarSelectChangeColourAction -- PALETTE first (see the record's banner in
         // BrnGameActions.h). This is the action that carries the car's AUTHORED default
