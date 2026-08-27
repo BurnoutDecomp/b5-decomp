@@ -690,6 +690,16 @@ void GameStateModule::PreWorldUpdateStuntBringUp(
         // what DetectModeStarts' gesture gate decides. Env-gated off; see the body.
         HarnessInjectEventStartBringUp(mpOutputBuffer);
 
+        // ⭐⭐⭐ [showtime S7b-a, 2026-08-27] THE SHOWTIME START INJECTION (NOT IN THE X360 BINARY).
+        // Same bracket, same reason, same discipline as the line above -- but for the SECOND
+        // gesture DetectModeStarts carries: both bumpers (ControllerInput +0x42
+        // mbCrashModePressed), whose whole `else` arm is a named PARK in GameStateModule_gSR_00.cpp.
+        // Its TRIGGER is that real byte; what it bypasses is ShouldStartShowtimeMode @0x82356B18's
+        // hold/speed/facing gate stack. Env-gated off (BRN_START_SHOWTIME); body in
+        // GameStateModule_Showtime.cpp.
+        // ⛔ DELETE-WHEN the else arm lands -- this call and that function go together.
+        HarnessInjectShowtimeBringUp(mpPreWorldInputBuffer, mpOutputBuffer);
+
         mpPreWorldInputBuffer->UnlockForRead();
     }
 

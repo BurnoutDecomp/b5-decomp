@@ -56,10 +56,14 @@
 // cntlzw/extrwi pair is the compiler's branchless `!x`, not a computation.
 // [[check-what-a-zeroed-field-means]] -- the member and the flag have OPPOSITE polarity.
 //
-// ⚠️ FOUR ARMS ARE NOT LANDED HERE, AND THEY ARE NAMED, NOT SILENT. Ids 11 / 116 / 198 each call a
+// ⚠️ TWO ARMS ARE NOT LANDED HERE, AND THEY ARE NAMED, NOT SILENT. Ids 11 and 116 each call a
 // body that does not exist anywhere in the tree; each gets its own one-shot deferral line so a
 // future run says which one was hit rather than producing a plausible nothing.
-// [[silent-drop-stubs]]. None of the three is on the showtime path.
+// [[silent-drop-stubs]].
+// ⛔⛔ ID 198 WAS ON THAT LIST, WITH THE NOTE "not on the showtime path". IT WAS, AND THE FIRST RUN
+// THAT ACTUALLY REACHED SHOWTIME PROVED IT BY ASSERTING INSIDE THE CHAIN -- see the banner on that
+// arm. "Not on the live path" expires silently, and un-gating a consumer is what makes a missing
+// producer visible.
 // =================================================================================================
 
 #include "GameSource/Physics/BrnPhysicsModule.h"
@@ -541,18 +545,46 @@ namespace BrnPhysics
 
                 // -------------------------------------------------------------------------------
                 // 198 -- PhysicsModule::HandlePlayerStatsUpdate @0x8259C910 (26 insns).
-                // DEFERRED: declared nowhere in the tree. Not on the showtime path.
+                //
+                // ⛔⛔ THIS ARM WAS DEFERRED FOR ~90 MINUTES WITH THE NOTE "not on the showtime
+                // path". IT IS ON THE SHOWTIME PATH, AND THE FIRST RUN THAT REACHED SHOWTIME SAID
+                // SO, IN THE GAME'S OWN CALLSTACK:
+                //     [ASSERT] lfPlayerCarDamageLimit > 0.0f && lfPlayerCarDamageLimit < 100.0f
+                //              (RaceCarPhysics.cpp:1031)
+                //       RaceCarPhysics::SetPlayerVehicleInShowtime
+                //       VehicleManager::SetPlayerCarToShowtimeMode
+                //       PhysicsModule::HandleGameActions
+                // SetPlayerCarToShowtimeMode forwards mfPlayerStatStrength (+172320) and
+                // mfPlayerStatDamageLimit (+172324) into the showtime entry, and the ONLY writer of
+                // that pair is VehicleManager::ApplyPlayerStats -- whose only console caller is
+                // THIS ARM. Deferring it left both at their Construct value, so the very first
+                // showtime entry asserted on a zero damage limit.
+                // ⇒ [[silent-drop-stubs]] -- "not on the live path" expires silently, and this one
+                // expired the moment the path it was not on became reachable. Un-gating a consumer
+                // is what makes a missing producer visible.
+                //
+                // The body is 26 instructions: an assert and a forward. ApplyPlayerStats
+                // @0x8259BF00 was bodied and mounted the whole time
+                // (BrnVehicleManagerPlayerStats.cpp:67); only the 26-instruction shim was missing.
+                // Reproduced INLINE rather than as a separate PhysicsModule::HandlePlayerStatsUpdate
+                // method: the console has that symbol, but it is a pure forwarder with one caller,
+                // and adding a declaration for it would put a second name on one action arm.
+                // DELETE-WHEN: nothing. If HandlePlayerStatsUpdate is ever wanted as its own
+                // symbol, move these three lines into it.
                 // -------------------------------------------------------------------------------
                 case KI_ACTION_PLAYER_STATS_UPDATE:
                 {
-                    static bool sbLogged = false;
-                    if (!sbLogged && CgsDev::Log::gpDebugPrint != 0)
-                    {
-                        sbLogged = true;
-                        *CgsDev::Log::gpDebugPrint
-                            << "[s3-action] id 198 DEFERRED: PhysicsModule::HandlePlayerStatsUpdate"
-                               " @0x8259C910 (26) has no body in the tree [FLAG]\n";
-                    }
+                    // asm 0x8259C92C: `cmplwi r31, 0 / bne` -> assert "lpSendCarStatsAction"
+                    // (BrnPhysicsModuleUpdateFunctions.cpp:1358 == 0x54E). Non-returning, as the
+                    // console's is.
+                    CGS_ASSERT(lpEventData != 0, "lpSendCarStatsAction");
+
+                    // asm 0x8259C954: `mr r4, r31 / addi r3, r30, 0x4AA0 / bl ApplyPlayerStats`.
+                    // The `const f32*` parameter type is ApplyPlayerStats' own (its FLAG explains
+                    // why the payload is really integers and is bit-reinterpreted inside); the cast
+                    // here matches that declaration and does not reinterpret anything itself.
+                    mVehicleManager.ApplyPlayerStats(
+                        reinterpret_cast<const f32*>(lpEventData));
                     break;
                 }
 
