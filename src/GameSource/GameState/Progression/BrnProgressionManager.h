@@ -6,6 +6,8 @@
 #include "SharedClasses/Trigger/BrnGenericRegion.h"  // BrnTrigger::GenericRegion::Type (OnDriveThru param)
 #include "BrnProfile.h"                              // BrnProgression::Profile (embedded sub-object, mProfile)
 #include "GameShared/GameClasses/System/Resource/CgsResourcePtr.h" // CgsResource::ResourcePtr (mpProgressionData / mpAISectionData)
+#include "GameShared/GameClasses/Containers/CgsArray.h"       // Array<T,N> (mQueueOfTrophyCarUnLocks)
+#include "GameSource/GameState/BrnGameActions.h"                  // BrnGameState::GameStateModuleIO::TrophyUnlockAction (that array's element, by value)
 
 #include <cstddef> // offsetof (uncalled _AssertLayout)
 #include "GameSource/GameState/BrnGameStateSharedIO.h" // BrnGameState::GameStateModuleIO::GameActionQueue (real typedef)
@@ -213,18 +215,40 @@ public:
     // `BrnProgression::TrophyUnlockData::UnlockType` (an enum with no owning header in this
     // tree yet), which is consistent with the s32 model.
     //
-    // ⛔ [gateui] PARKED 2026-08-20, NOT bodied -- the round-2 brief's "every one is small"
-    // does not hold for this one. 0x82389740 is a 12-case trophy-condition machine over the
-    // loaded PROGRESSION.DAT trophy table (`ProgressionData` +64 table base / +68 count,
-    // 16-byte records of {threshold, unlockType, carId}), and it needs THREE bodies that do
-    // not exist anywhere in b5-decomp/src:
-    //     BrnProgression::ProgressionManager::UnlockCarFromTrophy      @0x8237B0E8 (56 insns)
-    //     BrnProgression::Profile::GetTotalWinCount                    -- EXISTS (BrnProfile.cpp)
-    //     an owning header for BrnProgression::ProgressionData's trophy table -- MISSING
-    // plus four unmodelled manager/Profile fields (+776, +780, +482, the +133456/60/64 road
-    // rules tallies which DO exist). Landing it would ADD net UNDEFs, which is exactly the
-    // failure mode verify_gsm/VERDICT.md F2 fails the wave for. See report_r2_deps.md.
+    // ⭐⭐ BODIED 2026-08-27 (drive-thru link-closure wave), in BrnProgressionManager_Unlocks.cpp.
+    // The 2026-08-20 park below is DISCHARGED, and two of its three blockers had already gone
+    // stale by the time it was written:
+    //   * "an owning header for ProgressionData's trophy table -- MISSING" -- the table's ROOT
+    //     was already modelled (BrnProgressionData.h muaTrophyUnlocks/muTrophyUnlockCount @0x40,
+    //     with GetTrophyUnlock @0x823569F0 bodied). What was genuinely missing was the ELEMENT:
+    //     TrophyUnlockData existed only as a members-less placeholder in BrnGameActions.h, so
+    //     the bodied accessor was indexing a 16-byte serialised table with a stride of ONE. It
+    //     now has its DWARF home, SharedClasses/Progression/BrnTrophyUnlockData.h.
+    //   * "four unmodelled manager/Profile fields (+776, +780, +482 ...)" -- all three ARE
+    //     modelled: manager+776/+780/+482 are Profile+408/+412/+114, i.e.
+    //     miTotalTakedownCount / miTotalOnlineVerticleTakedownCount /
+    //     mi8PowerParkingBetweenOtherPlayersBestRating. Only their accessors were missing.
+    //   * UnlockCarFromTrophy @0x8237B0E8 was real, and is bodied in the same TU.
+    // ⚠️ Parameter stays s32, not the DWARF's TrophyUnlockData::UnlockType: the console passes
+    // it in r4 as a plain word and compares it with `cmpw` against the record's zero-extended
+    // u16, Profile::AddDriveThru already returns the awarded type as s32, and the committed call
+    // sites pass integer literals. The enum's values are the ones in BrnTrophyUnlockData.h.
     void OnTrophyUnlock(s32 liTrophyType);
+
+    // X360 0x8237B0E8. Award the car a trophy unlocks. Returns false (and does nothing) when the
+    // profile already owns it -- which is what stops OnTrophyUnlock's table walk from re-awarding
+    // the same car on every re-evaluation, and is why OnTrophyUnlock breaks out of its loop on a
+    // true. On success it adds the car as E_UNLOCK_TYPE_TROPHY, seeds its unlock-sequence deform
+    // to 0.85f, and appends a TrophyUnlockAction to mQueueOfTrophyCarUnLocks below.
+    // ⚠️ ARG SHAPE FROM ASM: r3=this, r4=the 64-bit CgsID, r5=the unlock type. Hex-Rays renders
+    // this `(__int64 a1, int a2)` because it fused r3:r4 into one 64-bit `a1` -- the classic PPC
+    // register-pair confusion. There is no doubleword first argument.
+    bool UnlockCarFromTrophy(CgsID lCarId, s32 liTrophyType);
+
+    // X360 0x8237AF38. Award every vehicle-list entry whose LIVERY TYPE (VehicleListEntry+0xE9,
+    // GetLiveryType) equals lu8LiveryType and whose PARENT car the profile already owns.
+    // CheckForSpecialCarUnlocks calls it with 4 (the rank-gated set) and 3 (the 100%-gated set).
+    void UnlockSpecialCars(u8 lu8LiveryType);
 
     // X360 0x82396058. Re-evaluates whether any special car should unlock after a stunt-element
     // milestone; CheckForTrophyUnlocks calls it unconditionally after the trophy path.
@@ -632,6 +656,19 @@ private:
     // the same Prepare2 seam that already owns Profile::Construct. Not a console member.
     // DELETE-WHEN UpdatePlayerMedals + PreWorldUpdate land and drive it the console's way.
     bool mbInitialRankUnlockDone = false;
+
+    // ⭐ X360 +133128 (0x20808) -- THE TROPHY-CAR UNLOCK QUEUE, named by the console's own assert
+    // strings: SendTrophyUnlockUpdate @0x823892B8 fires
+    // "mQueueOfTrophyCarUnLocks[lTrophyUnlockToSend].meUnlockType != TrophyUnlockData::
+    //  E_UNLOCKTYPE_NONE" and "...mCarToUnlock != kCGSID_NULL" against its elements.
+    // UnlockCarFromTrophy appends; SendTrophyUnlockUpdate posts the tail element as game action
+    // 204 (size 16) and Erases it. The 12-entry bound is the X360 template instantiation
+    // Array<TrophyUnlockAction,12> (Append @0x8235E1F0 / Erase @0x8235E318), and the arithmetic
+    // closes: 12 * 16 == 192 == 0xC0, and Construct @0x8237A5F8 zeroes exactly +133320 ==
+    // 133128 + 192, which is the count word SendTrophyUnlockUpdate's "Array used before
+    // Construct/Clear was called" assert reads.
+    Array<BrnGameState::GameStateModuleIO::TrophyUnlockAction, 12>
+        mQueueOfTrophyCarUnLocks;                              // X360 +133128 (count word +133320)
 
     // The player's road-rules-ruled tallies (X360 +133456 / +133460 / +133464).
     // *** FLAG -- COMMITTED-NAME CORRECTION (StreetManager keystone, wave B) ***

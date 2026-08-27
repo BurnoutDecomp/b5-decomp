@@ -406,6 +406,23 @@ public:
     s32  GetGameModeTypeAmount(BrnGameState::GameStateModuleIO::EGameModeType lEGameModeType) const;     // 0x82354A38
     s32  GetGameModeTypeDiscovered(BrnGameState::GameStateModuleIO::EGameModeType lEGameModeType) const; // 0x8240E940
 
+    // ---- [drive-thru wave 2026-08-27] the four tallies ProgressionManager::OnTrophyUnlock
+    // @0x82389740 reads. The X360 emits NO standalone symbol for any of them -- that function
+    // reaches each one as a raw interior offset off the MANAGER while inlining the accessor
+    // (manager+776/+780/+482, i.e. Profile+408/+412/+114, and Profile+304/+308/+316 for the
+    // completed tallies) -- so they are defined inline here, the same precedent as
+    // GetNumWinsForGameMode / GetIsNewProfile above. Named-member access replaces the console's
+    // offset arithmetic; nothing is widened or moved.
+    s32  GetTotalTakedownCount() const                  { return miTotalTakedownCount; }
+    s32  GetTotalOnlineVerticleTakedownCount() const    { return miTotalOnlineVerticleTakedownCount; }  // sic -- DWARF spelling
+    // Profile+114. OnTrophyUnlock loads it with `lbz` + `extsb` (a SIGNED byte) for the
+    // E_UNLOCKTYPE_NUM_PERCENTAGE_PARALLELPARK_ONLINE trophy.
+    s8   GetPowerParkingBetweenOtherPlayersBestRating() const { return mi8PowerParkingBetweenOtherPlayersBestRating; }
+    s32  GetGameModeTypeCompleted(BrnGameState::GameStateModuleIO::EGameModeType lEGameModeType) const
+    {
+        return maGameModeTypeAmountCompleted[lEGameModeType];
+    }
+
     // Offline win/loss tallies.
     void AddWinForGameMode(BrnGameState::GameStateModuleIO::EGameModeType leGameModeType);   // 0x82354C80
     void AddLossForGameMode(BrnGameState::GameStateModuleIO::EGameModeType leGameModeType);  // 0x8230FB20
