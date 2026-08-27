@@ -79,6 +79,24 @@ namespace
     };
     static_assert(sizeof(TickerCustomMessageWire537) == 2072,
                   "X360 AddGuiEvent<GuiEventTickerCustomMessage> posts 2072 bytes (id 537)");
+
+    // =========================================================================
+    // [profile-save] the on-queue record of GUI event 356 (BrnGui::GuiAutosaveRequestEvent),
+    // TU-LOCAL for exactly the reason the 537 record above is: this TU cannot include
+    // BrnGuiDemangledEventTypes.h (the C2011 fork pair documented in the include banner).
+    // The identical TU-local record already exists in the sibling
+    // GameBridgeGameStateToX_EventFlowGuiEvents.cpp (AutosaveRequestWire356) for its case-37
+    // post; both are file-static in an anonymous namespace, so there is no ODR fork -- the
+    // canonical type stays BrnGuiDemangledEventTypes.h:56.
+    // Wire shape: AddGuiEvent<GuiAutosaveRequestEvent> @0x823D03E0 posts ONE byte (id 356,
+    // size 1) -- the console builds it with a single `stb` and never a GuiEvent header.
+    // =========================================================================
+    struct AutosaveRequestWire356
+    {
+        u8 mu8Flag;                             // +0x00 (the console's `stb` byte)
+        s32 GetEventType() const { return 356; }
+    };
+    static_assert(sizeof(AutosaveRequestWire356) == 1, "id 356 size 1");
 }
 
     // =========================================================================
@@ -322,6 +340,37 @@ namespace
                     *CgsDev::Log::gpDebugPrint
                         << "[UI-gate] gui-event id=" << lEvent.GetEventType()
                         << " type=" << static_cast<s32>(lEvent.meStuntElementType) << "\n";
+                }
+                break;
+            }
+
+            // ---- 55  E_ACTION_REQUEST_AUTOSAVE (1 byte) ----------------------------------
+            // ⭐⭐ [profile-save 2026-08-27] THE PROFILE-AUTOSAVE REQUEST. X360 @0x823EB818:
+            //     case 55:
+            //       HIBYTE(v282) = *v7;                                  // the action's own byte
+            //       AddGuiEvent<BrnGui::GuiAutosaveRequestEvent>(module+7252512, &v282, input);
+            //       goto LABEL_512;
+            // -- a straight one-byte relay of the action payload onto GUI id 356. This is the
+            // console's ONE general-purpose "the profile just changed, save it" path: the
+            // producers are CarSelectManager's exit state (already live in this build --
+            // BrnCarSelectManager.cpp posts KI_ACTION_AUTOSAVE on car confirm),
+            // DriveThruManager::ProcessDriveThru (x2), DriveThruManager::UnlockCarChallengeForCar
+            // and StreetManager::ProcessNewRoadScore. The consumer is GuiModule::Update's case
+            // 356, which raises the module's autosave-pending latch; its tail then runs the
+            // 60-second throttle and calls ProfileManager::Autosave.
+            // The banner above names this arm as the nearest sibling for whoever came next.
+            case BrnGameState::GameStateModuleIO::E_ACTION_REQUEST_AUTOSAVE:
+            {
+                AutosaveRequestWire356 lEvent;
+                lEvent.mu8Flag = *reinterpret_cast<const u8*>(lpAction);   // X360 `HIBYTE(v282) = *v7`
+                PushGuiEvent(lEvent, lpGuiInput);
+
+                if ( sbPropDiag && siDiagLinesLeft > 0 && CgsDev::Log::gpDebugPrint != 0 )
+                {
+                    --siDiagLinesLeft;
+                    *CgsDev::Log::gpDebugPrint
+                        << "[profile-save] action 55 -> gui 356 (flag "
+                        << static_cast<s32>(lEvent.mu8Flag) << ")\n";
                 }
                 break;
             }

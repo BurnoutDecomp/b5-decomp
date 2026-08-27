@@ -377,7 +377,7 @@ namespace CgsGui
     // (the console behaviour) until the user answers CONTINUE; the prior PC leaf finished the task
     // synchronously here, which is why the prompt never appeared.
     void SaveLoadSystem::Bootup(SaveLoadTaskResultHandler* lpResultHandler, const void* lpMetadata,
-                                bool /*lbAutoLoad*/)
+                                bool lbAutoLoad)
     {
         u8 laSaveInfo[336];
         std::memset(laSaveInfo, 0, 288);
@@ -385,6 +385,23 @@ namespace CgsGui
         mpActiveMessageDisplay = reinterpret_cast<MessageDisplay*>(lpResultHandler);   // +0x130
 
         SetMetadata(lpMetadata, laSaveInfo);
+        // The auto-load argument is the byte BootupStart branches on (`lbz r11,0x182` /
+        // `cmplwi 1` @0x82855A88): set == dispatch the memory-card boot-up READ with the two
+        // load entries, clear == dispatch with a count of zero. It was previously dropped, so
+        // the boot-up never took the read arm at all.
+        mbAutoLoad = lbAutoLoad;                                                       // +0x182
+
+        // The X360 capture of the metadata's stored-data view is INSIDE SetMetadata: its tail
+        // @0x8284C4BC..0x8284C4D0 copies the metadata's +0x30/+0x34 word pair to this+0x200/
+        // +0x204 (`addi r11,r18,0x30; addi r10,r19,0x200; lwz/stw; lwz/stw`), and on the 32-bit
+        // console that pair IS SaveLoadMetadata::mStoredData {ptr, size} -- which is exactly what
+        // BootupStart then reads back (`lwz r11,0x200` / `lwz r11,0x204` @0x82855AB4/0x82855ACC)
+        // into the title load entry, and what LoadReady @0x828521A0 hands the SDK as the read
+        // DESTINATION buffer. On the x64 host that pair no longer fits two u32 words, so the
+        // host-width capture is mStoredDataView -- and it must happen here for the same reason it
+        // happens in the exported sibling Load @0x82859B70. Without it the boot-up read has no
+        // destination.
+        CaptureStoredDataView(*static_cast<const SaveLoadMetadata*>(lpMetadata));
 
         BootupShowAutosaveWarning();
     }
@@ -465,8 +482,16 @@ namespace CgsGui
             mpMugshotBufferData, static_cast<u32>(GetMugshotBufferSizeBytes()),
             macSaveInfoComment, macSaveInfoDescription);
 
-        CgsDev::Log::WriteToLog(lbOk ? "[SaveLoadPC] profile container WRITTEN\n"
-                                     : "[SaveLoadPC] profile container write FAILED\n");
+        // [DIAG] NOT IN THE X360 BINARY -- the storage edge's byte counts, so a save can be
+        // measured (image bytes + mugshot bytes) rather than inferred from "it said WRITTEN".
+        if (CgsDev::Log::gpDebugPrint != 0)
+        {
+            *CgsDev::Log::gpDebugPrint
+                << "[SaveLoadPC] profile container " << (lbOk ? "WRITTEN" : "write FAILED")
+                << " name='" << macTitle
+                << "' image=" << mStoredDataView.miSize
+                << " mugshots=" << GetMugshotBufferSizeBytes() << "\n";
+        }
 
         Update();
         reinterpret_cast<SaveLoadTaskResultHandler*>(mpActiveMessageDisplay)
@@ -722,20 +747,71 @@ namespace CgsGui
     {
         mpMessageDisplay->ShowAutosaveIcon(false);   // X360: (*(vtbl+12))(mpMessageDisplay, 0)
 
-        // FLAG PC-platform leaf: the X360 continues by building RealmcIface load-entry records
-        // (sub_82B51A08 + CreateRealmcMugshotLoadEntryInfo + CreateRealmcSaveInfo) and starting the
-        // memory-card boot-up READ (mpMemcardInterface vtable +0x24), then pumps Update(); the
-        // read's ASYNC completion later reports the result to the bound handler (+0x130). The
-        // Realmc SDK is the unrecovered console storage backend and the PC interface is the inert
-        // no-op boundary, so no read starts or completes. Report the boot-up result to the bound
-        // handler HERE -- the PC substitute for the async read's completion. SUCCESS is the "no
-        // save present" outcome the prior PC boot-up leaf reported: ProfileManager::BootupResult
-        // enables autosave and the fresh profile is reset by the version-mismatch path. This runs
-        // only after the user answered CONTINUE (HandleOption -> BootupStart), so it is NOT a
-        // shortcut past the autosave-warning prompt (which the prior leaf skipped entirely).
+        // The X360 body is ONE branch on the auto-load byte (`lbz r11,0x182; cmplwi 1;
+        // bne loc_82855B34` @0x82855A88):
+        //   set   -> build TWO RealmcIface load entries -- entry 0 = { macTitle (this+0x1E0),
+        //            {0,0}, {this+0x200, this+0x204} } via sub_82B51A08, entry 1 =
+        //            CreateRealmcMugshotLoadEntryInfo -- and dispatch mpMemcardInterface vtable
+        //            +0x24 with count 2;
+        //   clear -> dispatch the SAME slot with count 0 and a null entry array.
+        // Both arms then `bl SaveLoadSystem::Update` (@0x82855B74).
+        //
+        // FLAG PC-platform leaf (the storage edge only -- the branch above is the console's):
+        // the Realmc SDK is the unrecovered console memory-card backend and the PC interface is
+        // the inert no-op boundary, so the +0x24 dispatch cannot read anything and its ASYNC
+        // completion never arrives at the bound handler (+0x130). On PC the storage edge is the
+        // CgsSaveLoadPC container, so the AUTO-LOAD arm reads it synchronously into exactly the
+        // two destinations the console's two entries name -- the metadata's stored-data view
+        // (mStoredDataView, the +0x200/+0x204 pair) and the mugshot blob -- and reports the real
+        // I/O outcome here, in the console's read-then-Update-then-complete order. This is the
+        // same substitution LoadHandleConfirmLoad's confirm arm already makes for the Load task.
+        bool lbOk = true;
+        if (mbAutoLoad)
+        {
+            const SaveLoadPC::EContainerReadResult leResult =
+                mStoredDataView.mpData != nullptr
+                    ? SaveLoadPC::ReadContainer(macTitle, mStoredDataView.mpData,
+                                                mStoredDataView.miSize, mpMugshotBufferData,
+                                                static_cast<u32>(GetMugshotBufferSizeBytes()))
+                    : SaveLoadPC::E_CONTAINERREAD_MISSING;
+
+            // MISSING is the first-ever-boot case and is NOT a failure: the console's memory-card
+            // boot-up creates/uses an empty container and reports success, and the manager's own
+            // first-boot story depends on it -- ProfileManager::Bootup ran ReadProfileData (->
+            // Profile::Serialise) BEFORE handing the image to the storage boot-up, so the stored
+            // image already holds a version-current default profile that ValidateProfiles accepts.
+            // Reporting success leaves that default in place, byte for byte what this leaf did
+            // before the read existed.
+            // CORRUPT/MISMATCH is a real failure: the container exists and is not this build's, so
+            // report FAILURE -- BootupResult then leaves miSaveLoadResult at INVALID and
+            // ReportTaskCompleted never deserialises the half-read image over the live profile.
+            lbOk = leResult == SaveLoadPC::E_CONTAINERREAD_OK ||
+                   leResult == SaveLoadPC::E_CONTAINERREAD_MISSING;
+
+            // [DIAG] NOT IN THE X360 BINARY -- the byte counts the read actually moved, so a
+            // boot-up load is measured and not inferred from the result code alone.
+            if (CgsDev::Log::gpDebugPrint != 0)
+            {
+                *CgsDev::Log::gpDebugPrint
+                    << "[SaveLoadPC] bootup read: "
+                    << (leResult == SaveLoadPC::E_CONTAINERREAD_OK        ? "OK"
+                        : leResult == SaveLoadPC::E_CONTAINERREAD_MISSING ? "MISSING (fresh profile)"
+                        : leResult == SaveLoadPC::E_CONTAINERREAD_CORRUPT ? "CORRUPT"
+                                                                          : "layout MISMATCH")
+                    << " name='" << macTitle
+                    << "' image=" << mStoredDataView.miSize
+                    << " mugshots=" << GetMugshotBufferSizeBytes() << "\n";
+            }
+        }
+        else
+        {
+            CgsDev::Log::WriteToLog("[SaveLoadPC] bootup: auto-load off, no read\n");
+        }
+
         Update();
         reinterpret_cast<SaveLoadTaskResultHandler*>(mpActiveMessageDisplay)
-            ->HandleSaveLoadTaskResult(E_SAVELOADTASKRESULT_SUCCESS);
+            ->HandleSaveLoadTaskResult(lbOk ? E_SAVELOADTASKRESULT_SUCCESS
+                                            : E_SAVELOADTASKRESULT_FAILURE);
     }
 
     // X360 0x82855EC0. The confirm-load prompt handler routed from Load(). luOption == 1 is the

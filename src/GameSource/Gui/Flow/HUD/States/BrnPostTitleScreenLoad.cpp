@@ -3,6 +3,7 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"
+#include "GameSource/Gui/BrnGuiCache.h"            // BrnGui::GuiCache (the intro-video gate at +0x4B78)
 #include "GameSource/Gui/BrnGuiVideoEvents.h"
 #include "GameShared/GameClasses/System/Resource/CgsResourceID.h"   // CgsResource::ID::HashString (video id)
 #include "GameShared/GameClasses/Sound/Playback/CgsCommon.h"        // CgsSound::Playback::Name::MakeHash
@@ -153,10 +154,18 @@ namespace BrnGui
         // no-op until the cache member is recovered (nothing on the PC boot reads it).
         void CacheSetPostTitlePhase(GuiCache* /*lpCache*/) {}
 
-        // X360 *(cache+19320) -- "play the post-title intro video" gate. Faithful
-        // retail default: the intro montage plays after the title screen (the
-        // missing-file skip path still advances the flow if INTRO is absent).
-        bool CacheShouldPlayIntroVideo(const GuiCache* /*lpCache*/) { return true; }
+        // ⭐⭐ [profile-save 2026-08-27] X360 `lbz r11, 0x4B78(r11)` @0x8247E408 --
+        // *(cache+19320), the "play the post-title intro video" gate, NOW A REAL MEMBER
+        // (GuiCache::mbPlayIntroVideo). It is not a constant on the console: GuiCache::Construct
+        // @0x82505AF0 seeds it 1, and ProfileManager::ReportTaskCompleted @0x82514024 overwrites
+        // it with BrnProgression::Profile::mbIsNewProfile every time a profile LOADS -- so a
+        // returning player's boot clears it and this state posts phase-complete instead of
+        // playing "intro". The old `return true` leaf is what made the montage replay on every
+        // boot regardless of the save.
+        bool CacheShouldPlayIntroVideo(const GuiCache* lpCache)
+        {
+            return lpCache == 0 || lpCache->ShouldPlayIntroVideo();   // X360 unconditional read
+        }
     }
 
     // @ 0x8247E2B8 -- consume this frame's events, then walk the post-title phases:

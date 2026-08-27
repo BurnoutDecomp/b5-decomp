@@ -186,9 +186,36 @@ namespace
     // byte (+118033, inside the serialised image) into GuiCache+19320; both offsets are
     // un-named interiors of foreign TUs. No-op.
     // FLAG PC-platform leaf: un-named GuiCache/profile-image interiors (see above).
-    void GuiCache_MirrorLicenceFlagFromProfile(GuiCache* /*lpGuiCache*/,
-                                               const BrnProgression::Profile* /*lpProfile*/)
+    // ⭐⭐ [profile-save 2026-08-27] THIS IS THE INTRO-VIDEO GATE, and the prior empty leaf is
+    // why a returning player watched the intro again. X360 ReportTaskCompleted @0x82514024,
+    // the PROFILE_LOADED arm's LAST store:
+    //     a7 = this->mpGuiCache;
+    //     *(a7 + 19320) = *(*v9 + 118033);       // stb r11, 0x4B78(r9)
+    // i.e. `mpGuiCache->mbPlayIntroVideo = mpProgressionProfile->mbIsNewProfile`. (+118033 is
+    // BrnProgression::Profile::mbIsNewProfile, the same byte BrnGui::InGame::Update reads to
+    // fire "TO_INTRO" and BrnGui::Intro::OnLeave clears; +0x4B78 is what
+    // PostTitleScreenLoad::Update tests before playing "intro".) The leaf's old name said
+    // "licence flag", which is what a consumer-side guess called it -- the store is the
+    // new-profile byte, so the name is corrected here rather than kept.
+    void GuiCache_MirrorIsNewProfileToIntroVideoGate(GuiCache* lpGuiCache,
+                                                     const BrnProgression::Profile* lpProfile)
     {
+        if (lpGuiCache != 0 && lpProfile != 0)   // X360 unconditional; PC null-guard
+        {
+            lpGuiCache->SetPlayIntroVideo(lpProfile->GetIsNewProfile());
+
+            // [DIAG] NOT IN THE X360 BINARY. This prints the value the DESERIALISE actually
+            // produced, not the fact that the load "succeeded" -- the two are different claims
+            // and only the first one decides whether the intro replays.
+            if (CgsDev::Log::gpDebugPrint != 0)
+            {
+                *CgsDev::Log::gpDebugPrint
+                    << "[profile-save] deserialised: isNewProfile="
+                    << (lpProfile->GetIsNewProfile() ? 1 : 0)
+                    << " -> playIntroVideo="
+                    << (lpGuiCache->ShouldPlayIntroVideo() ? 1 : 0) << "\n";
+            }
+        }
     }
 
     // The live DLC1 options block (X360 GuiCache+76776, right after the live
@@ -1298,7 +1325,7 @@ void ProfileManager::ReportTaskCompleted()
 
                 PostByteEvent(mEventQueue, KI_EVENT_PROFILE_LOAD_COMPLETE);
 
-                GuiCache_MirrorLicenceFlagFromProfile(mpGuiCache, mpProgressionProfile);
+                GuiCache_MirrorIsNewProfileToIntroVideoGate(mpGuiCache, mpProgressionProfile);
             }
             break;
         }
