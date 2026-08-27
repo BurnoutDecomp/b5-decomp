@@ -388,6 +388,21 @@ namespace
         // -- the offline pause. AUTO-RESET like the four menu channels (a TAP): one press
         //    opens the map, one press of Accept inside it comes back out.
         case 46: lpcEventName = "Local\\BurnoutPC_Input_PauseMap";   break;
+        // ⭐⭐ -- the two SHOULDER rows (showtime S7b-a wave, 2026-08-27). MANUAL-RESET, i.e. a
+        //    HOLD, because the control they stand in for is a hold: BrnGameStateModuleIO.cpp:92
+        //    computes ControllerInput::mbCrashModePressed (+0x42) as
+        //        (row 54 HELD) && (row 55 HELD)
+        //    -- both bumpers down at the same time -- and that byte is the showtime/crash-mode
+        //    gesture DetectModeStarts' `else` arm reads. A tap channel cannot express "both, at
+        //    once, for a frame the game samples", which is exactly the distinction the driving
+        //    rows above already document.
+        //    ⚠️ NO NEW KA_BINDINGS ROW IS ADDED, AND NONE IS NEEDED: rows 54 and 55 have been in
+        //    that table all along (LSHOULDER / RSHOULDER, plus their keyboard keys). All that was
+        //    missing was a harness channel for them, and the lookup below is BY ACTION ID, so the
+        //    existing rows are found unchanged. The game sees an ordinary pad holding both
+        //    bumpers; nothing here writes a game-state flag.
+        case 54: lpcEventName = "Local\\BurnoutPC_Input_ShoulderL";  break;
+        case 55: lpcEventName = "Local\\BurnoutPC_Input_ShoulderR";  break;
         default: return false;
         }
 

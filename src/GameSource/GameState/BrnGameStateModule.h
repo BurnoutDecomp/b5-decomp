@@ -479,6 +479,38 @@ public:
     // switch that sets the env var. Full note at the body.
     void HarnessInjectEventStartBringUp(GameStateModuleIO::OutputBuffer* lpOutputBuffer);
 
+    // ==============================================================================================
+    // ⭐⭐⭐ [showtime S7b-a wave, 2026-08-27] THE SHOWTIME START. Both bodies live in
+    // GameStateModule_Showtime.cpp.
+    // ==============================================================================================
+
+    // ⭐ X360 0x8236B580 (80 insns; asserts baked at BrnGameStateModule.cpp:5579/5580/5582).
+    // Build a StartGameModeParams at the player's position for E_MODE_OFFLINE_SHOWTIME (2) or
+    // E_MODE_ONLINE_SHOWTIME (16) and hand it to ModeManager::StartGameMode. Console arguments,
+    // from the prologue and the two `bl` sites: r3 = this, r4 = lpInput, r5 = lpOutput.
+    // ⚠️ lpInput IS ASSERTED AND THEN NEVER READ -- r4 is reloaded with `this + 235488` two
+    // instructions later. The parameter is the console's; do not drop it.
+    // ⭐ THIS IS THE FUNCTION THE WHOLE SHOWTIME CHAIN BOTTOMS OUT IN: it is what eventually makes
+    // ModeManager::PrepareForMode post action 23 with KU_FLAG_USE_SHOWTIME_VEHICLE_BEHAVIOUR, which
+    // is the ONLY console road into VehicleManager::SetPlayerCarToShowtimeMode @0x8259C108.
+    void StartCrashMode(const GameStateModuleIO::PreWorldInputBuffer* lpInput,
+                        GameStateModuleIO::OutputBuffer*              lpOutput);
+
+    // ⭐ HARNESS-ONLY, NOT IN THE X360 BINARY. Env-gated (BRN_START_SHOWTIME=1) one-shot that
+    // substitutes for ShouldStartShowtimeMode @0x82356B18 (166 insns) and the DetectModeStarts
+    // `else` arm that calls it -- and for nothing else: it calls StartCrashMode directly, so every
+    // hop downstream is the console's.
+    // ⭐⭐ ITS TRIGGER IS THE REAL GESTURE, not an invented one: ControllerInput::mbCrashModePressed
+    // (+0x42), the console's own BOTH-BUMPERS-HELD byte, written every frame by
+    // BrnGameStateModuleIO.cpp:92 from action rows 54/55. A pad player reaches this; so does the
+    // harness, through the ordinary input chain.
+    // Gated additionally on no mode already running and on IsPlayerCarActive() (which
+    // GetPlayerPosition asserts, and which ShouldStartShowtimeMode's own chain tests one level up).
+    // ⛔ DELETE-WHEN ShouldStartShowtimeMode and the else arm land -- this and its call site go
+    // together.
+    void HarnessInjectShowtimeBringUp(const GameStateModuleIO::PreWorldInputBuffer* lpInput,
+                                      GameStateModuleIO::OutputBuffer*              lpOutputBuffer);
+
     // ⭐ [D4 stuntrace WAVE D] TEMPORARY, NOT IN THE X360 BINARY. The offline event intro has NO
     // timer by design (IntroState::OnEnter raises mbUseCountdown only for online modes and offline
     // Showtime), so its ONLY console exit is GUI command 163 -> game event 25 ->

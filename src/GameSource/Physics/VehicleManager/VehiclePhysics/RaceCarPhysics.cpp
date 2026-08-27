@@ -391,29 +391,34 @@ namespace Vehicle
     //   (mfUncappedSpeedTimer), 0x826418E4 (mfTimeSinceTookDownPlayer) and 0x826419CC (+0x1408).
     // ---------------------------------------------------------------------------------------
     // =======================================================================================
-    // [showtime-probe] RunShowtimeBringUpProbe -- NOT an X360 function, and DELIBERATELY
-    // PERMANENT (the BRN_CAR_TELEPORT precedent: a TRIGGER, not a mechanism). Inert unless
-    // BRN_SHOWTIME_TEST is set (one getenv on the first Update, one bool test per frame after).
+    // =======================================================================================
+    // [showtime-watch] -- NOT an X360 function. A per-frame WITNESS on the REAL showtime state.
     //
-    // WHY IT EXISTS. The showtime/aftertouch cluster landed 2026-08-24 is 1:1 against the asm,
-    // but NOTHING in this build can reach it through gameplay: the sole console caller of
-    // VehicleManager::SetPlayerCarToShowtimeMode (the game-mode/action chain) is not
-    // reconstructed, so meCurrentGameModeType never becomes a showtime mode and every landed
-    // body stays cold on a boot-drive run. A "verified" that never executed is exactly the
-    // reverse-control trap; this probe exists so the branch can be WITNESSED.
+    // ⛔⛔ IT REPLACES `RunShowtimeBringUpProbe`, AND THAT PROBE'S OWN DELETE-WHEN IS WHY.
+    // The block that stood here was armed by BRN_SHOWTIME_TEST and, once the car passed 25 mph,
+    // CALLED `SetPlayerVehicleInShowtime(true, 5.0, 50.0)` and `SetCrashing(true)` itself, then
+    // drove `UpdateAftertouch` by hand every frame. Its banner said exactly why:
+    //     "NOTHING in this build can reach it through gameplay: the sole console caller of
+    //      VehicleManager::SetPlayerCarToShowtimeMode (the game-mode/action chain) is not
+    //      reconstructed ... ⛔ DELETE-WHEN: the game-mode chain lands and a real showtime run
+    //      replaces this witness."
+    // ⭐⭐⭐ THAT CONDITION IS MET AS OF 2026-08-27. `PhysicsModule::HandleGameActions @0x825A72F0`
+    // is real (BrnPhysicsModuleGameActions.cpp) and `GameStateModule::StartCrashMode @0x8236B580`
+    // is real (GameStateModule_Showtime.cpp); a run that holds both bumpers now reaches
+    // SetPlayerCarToShowtimeMode through the console's own chain, and the game's own assert
+    // callstack printed it:
+    //     RaceCarPhysics::SetPlayerVehicleInShowtime <- VehicleManager::SetPlayerCarToShowtimeMode
+    //       <- PhysicsModule::HandleGameActions <- PhysicsModule::Update
+    // So the FABRICATED ENTRY IS DELETED. Keeping it would leave a second, invented road into
+    // showtime alongside the real one -- and the two would diverge silently.
     //
-    // WHAT IT DOES, all through real console entries on this car:
-    //   * once the car is driving above the trigger speed (default 25 mph;
-    //     BRN_SHOWTIME_TEST="mph" overrides), it calls SetPlayerVehicleInShowtime(true, 5.0,
-    //     50.0) -- the exact physics-side entry SetPlayerCarToShowtimeMode forwards to (the two
-    //     scalars stand in for the manager's cached player stats; both satisfy the console's own
-    //     range assert) -- then SetCrashing(true), the Breaker's showtime/crash entry, so
-    //     UpdateCrashing dispatches the aftertouch/showtime chain exactly as the console mode
-    //     manager would.
-    //   * for the next ~6 s it prints one [showtime-probe] state line every 30 frames: the
-    //     gates (in-showtime / crashing / has-air), the singleton latches (disable / launch /
-    //     boosting / push timer) and the speeds the caps act on.
-    // ⛔ DELETE-WHEN: the game-mode chain lands and a real showtime run replaces this witness.
+    // WHAT SURVIVES is the half that was never fabricated: the state line. It is now gated on the
+    // REAL `mbPlayerCarInShowtime` instead of on an injected one, so it can only print when the
+    // console's own chain has put the car in showtime. It fires on the transition and then every
+    // 30 frames while showtime lasts, and it carries the BOUNCE counters as well as the launch
+    // latches -- because "did the P6 bounce chain execute" is a question about
+    // mbJustBounced / muBounceChainCount, not about whether showtime was entered.
+    // Opt-in via BRN_SHOWTIME_WATCH so a default run is untouched.
     // =======================================================================================
     void RaceCarPhysics::Update(VecFloat lvfSimTimeStep, VecFloat lvfRealTimeStep,
                                 const rw::math::vpu::Matrix44Affine* lpCameraMatrix,
@@ -422,72 +427,41 @@ namespace Vehicle
                                 CgsNumeric::Random& lrRandom)
     {
         {
-            enum EProbeStage { E_PROBE_UNREAD = 0, E_PROBE_OFF, E_PROBE_ARMED, E_PROBE_RUNNING, E_PROBE_DONE };
-            static EProbeStage seStage = E_PROBE_UNREAD;
-            static f32 sfTriggerMPH = 25.0f;
-            static s32 siFramesLeft = 0;
-            static s32 siFrameMod = 0;
-            if (seStage == E_PROBE_UNREAD)
-            {
-                seStage = E_PROBE_OFF;
-                const char* lpcSpec = std::getenv("BRN_SHOWTIME_TEST");
-                if (lpcSpec != 0 && lpcSpec[0] != '\0')
-                {
-                    const f32 lfParsed = static_cast<f32>(std::atof(lpcSpec));
-                    if (lfParsed > 0.0f)
-                        sfTriggerMPH = lfParsed;
-                    seStage = E_PROBE_ARMED;
-                    if (CgsDev::Log::gpDebugPrint != 0)
-                        *CgsDev::Log::gpDebugPrint
-                            << "[showtime-probe] armed: fires once a race car passes "
-                            << sfTriggerMPH << " mph\n";
-                }
-            }
-            if (seStage == E_PROBE_ARMED && GetSpeedMPH().x > sfTriggerMPH)
-            {
-                seStage = E_PROBE_RUNNING;
-                siFramesLeft = 360;   // ~6 s of witness at 60 Hz
-                if (CgsDev::Log::gpDebugPrint != 0)
-                    *CgsDev::Log::gpDebugPrint
-                        << "[showtime-probe] FIRING at " << GetSpeedMPH().x
-                        << " mph: SetPlayerVehicleInShowtime(true, 5.0, 50.0) + SetCrashing(true)\n";
-                SetPlayerVehicleInShowtime(true, 5.0f, 50.0f);   // the real physics-side entry
-                SetCrashing(true);                               // the Breaker's crash entry
-            }
-            if (seStage == E_PROBE_RUNNING)
-            {
-                // Drive the aftertouch/showtime chain the way UpdateCrashing would if the
-                // manager's mbAftertouchIsForceAdditive flag had a reconstructed setter (it
-                // defaults false and its console writer -- the game-side aftertouch mode
-                // chain -- is not in the tree yet). One real virtual invocation per frame with
-                // the LIVE camera/controls/dt; the normal dispatch stays cold (flag false), so
-                // this never double-invokes.
-                UpdateAftertouch(lpControls, lpCameraMatrix, lvfSimTimeStep,
-                                 /*additive*/ true, /*sixaxis*/ false);
+            static const bool sbWatch = (std::getenv("BRN_SHOWTIME_WATCH") != 0);
+            static bool       sbWasInShowtime = false;
+            static s32        siFrameMod      = 0;
 
-                if ((siFrameMod++ % 30) == 0 && CgsDev::Log::gpDebugPrint != 0)
+            if (sbWatch && CgsDev::Log::gpDebugPrint != 0)
+            {
+                const bool lbIn = mbPlayerCarInShowtime;
+                if (lbIn != sbWasInShowtime)
+                {
+                    sbWasInShowtime = lbIn;
+                    siFrameMod = 0;
+                    *CgsDev::Log::gpDebugPrint
+                        << "[showtime-watch] mbPlayerCarInShowtime -> " << (lbIn ? 1 : 0)
+                        << " (reached through the console chain, not injected)\n";
+                }
+                if (lbIn && (siFrameMod++ % 30) == 0)
                 {
                     const Vector3 lvVel = GetLinearVelocity();
                     const Vector3 lvAng = GetAngularVelocity();
                     *CgsDev::Log::gpDebugPrint
-                        << "[showtime-probe] inShowtime=" << (mbPlayerCarInShowtime ? 1 : 0)
-                        << " crashing=" << (IsCrashing() ? 1 : 0)
+                        << "[showtime-watch] crashing=" << (IsCrashing() ? 1 : 0)
                         << " hasAir=" << (mbHasAir ? 1 : 0)
                         << " usingAftertouch=" << (mbUsingAftertouch ? 1 : 0)
                         << " | disable=" << (msPlayerParams.mbDisableShowtime ? 1 : 0)
                         << " launch=" << (msPlayerParams.mbLaunchActive ? 1 : 0)
-                        << " boosting=" << (msPlayerParams.mbBounceBoosting ? 1 : 0)
                         << " pushT=" << msPlayerParams.mfTimeUntilPush
+                        // THE BOUNCE CHAIN, which is the question this witness exists to answer:
+                        << " | justBounced=" << (msPlayerParams.mbJustBounced ? 1 : 0)
+                        << " bouncedThisFrame=" << (msPlayerParams.mbBouncedThisFrame ? 1 : 0)
+                        << " chain=" << static_cast<s32>(msPlayerParams.muBounceChainCount)
+                        << " boosting=" << (msPlayerParams.mbBounceBoosting ? 1 : 0)
+                        << " boostPending=" << (msPlayerParams.mbBounceBoostPending ? 1 : 0)
                         << " | speed=" << std::sqrt(vpu::MagnitudeSquared(lvVel))
                         << " velY=" << lvVel.y
-                        << " angMag=" << std::sqrt(vpu::MagnitudeSquared(lvAng))
-                        << " active=" << (IsPlayerVehicleInShowtime() ? 1 : 0) << "\n";
-                }
-                if (--siFramesLeft <= 0)
-                {
-                    seStage = E_PROBE_DONE;
-                    if (CgsDev::Log::gpDebugPrint != 0)
-                        *CgsDev::Log::gpDebugPrint << "[showtime-probe] window closed\n";
+                        << " angMag=" << std::sqrt(vpu::MagnitudeSquared(lvAng)) << "\n";
                 }
             }
         }
