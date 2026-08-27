@@ -51,10 +51,10 @@ namespace BrnGui
         bool           mbIsLoaded;       // +0x168 (DWARF h:80; OnEnter clears it)
 
         // The GUI event ids this state observes (DecFIGS BrnIdleHudState.cpp:24/:29;
-        // miNumEventsObserved == 1). The id table lives in .data (@0x8205B224 == unk_8205B224)
-        // and carries no value in the IDA export, so it is declared here and resolved at link
-        // time (as BrnGui::BootAttract).
-        static const s32 maiEventToObserve[1];   // BrnIdleHudState.cpp:24 (@0x8205B224)
+        // miNumEventsObserved == 1). The id table lives in .data (@0x8205B224 == unk_8205B224).
+        // The IDA export set is function-only, so the word was read out of the XEX image; both
+        // values and the checks that bound them are in the .cpp banner.
+        static const s32 maiEventToObserve[1];   // BrnIdleHudState.cpp:24 (@0x8205B224 == 64)
         static const s32 miNumEventsObserved;    // BrnIdleHudState.cpp:29 (== 1)
 
         static const CgsGui::sResourceTuple maResourcesToLoad[];  // @ 0x82F264BC (unk_82F264BC, .data)

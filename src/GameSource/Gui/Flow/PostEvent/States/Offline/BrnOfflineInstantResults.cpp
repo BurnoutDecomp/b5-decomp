@@ -19,15 +19,28 @@
 namespace BrnGui
 {
     // ---- static resource list -------------------------------------------------------------
-    // *** UNRECOVERED VALUES -- CONSOLIDATOR MUST FILL ***  The tuple/id contents (X360 .rdata
-    // @0x82F26AFC / @0x82F26B0C) were not decoded in this wave; defined here as a placeholder so
-    // the state links (mirrors the committed BrnReplayLoading sibling). Replace with the real
-    // { muId, meType } and count when recovered.
+    // RECOVERED (was the "*** UNRECOVERED VALUES -- CONSOLIDATOR MUST FILL ***" placeholder: a
+    // single { 0, 0 } tuple with count 1). Read out of the XEX image -- the IDA export set is
+    // function-only, so no data symbol carries these.
+    //
+    // GetResourcesToLoad's asm @0x82500808 pins both addresses (`lis/addi unk_82F26AFC` -> *r4,
+    // `lwz dword_82F26B0C` -> *r5). The extent is self-confirming: 0x82F26B0C - 0x82F26AFC ==
+    // 0x10 == exactly two 8-byte tuples, and the count word itself reads 2. The table is bounded
+    // on both sides by unrelated pointer data (0x820016C4 before, 0x82065268 after), so it is
+    // neither longer nor shorter. Each id is named via off_82F278E0[id] from the same image --
+    // the name table the RaceMainHudState 21-entry recovery used, re-checked here against its
+    // published names (192 -> "B5RaceHud", 32 -> "Timer", 199 -> "SatNavMap" all reproduce).
+    //
+    // NOTE the committed count was 1, not 2: the placeholder omitted the SECOND entry, so the
+    // offline instant-results screen never requested its manufacturer icon. Type 4 here is
+    // E_GUI_RESOURCETYPE_APT, not the FLAPT_HD_BUNDLE the in-game HUD states use; that is what
+    // the image says and it is kept as read.
     const CgsGui::sResourceTuple InstantResultsState::maResourcesToLoad[] =
     {
-        { 0u, static_cast<CgsGui::ResourceRequestTypes>(0) },   // @0x82F26AFC (values not yet decoded)
+        { 217u, CgsGui::E_GUI_RESOURCETYPE_APT },   // Results
+        {  55u, CgsGui::E_GUI_RESOURCETYPE_APT },   // B5ManufacturersIcon
     };
-    const u32 InstantResultsState::muNumResourcesToLoad = 1;    // @0x82F26B0C (TODO: real count)
+    const u32 InstantResultsState::muNumResourcesToLoad = 2;    // @0x82F26B0C
 
     // @0x825006D8 -- default constructor. The X360 image inlines this as a flat sequence of
     // vtable-pointer stores into every embedded GUI sub-component slot (each member's own
