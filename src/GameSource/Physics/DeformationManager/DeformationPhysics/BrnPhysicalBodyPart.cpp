@@ -14,6 +14,9 @@
 #include "GameShared/GameClasses/Physics/CgsPhysicsSimulationIO_Events.h"                      // InAddRigidBody / NewRigidBody / OutUpdateRigidBody
 #include "rw/physics/rigidbody.h"                                                              // rw::physics::ACTIVE_BODY / FROZEN_BODY, RigidBody::GetTransform
 #include "rw/physics/inertia.h"                                                                // Inertia setters + ComputeFatBoxInertia
+#include "GameSource/Physics/BrnPhysicsModuleIO.h"                                             // PhysicsModuleIO::OutputBuffer::GetDeformationOutputInterface
+#include "GameSource/Physics/DeformationManager/SharedIO/BrnDeformationOutputInterface.h"          // DeformationOutputInterface::mDetachedPartNotificationQueue
+#include "GameSource/Physics/DeformationManager/SharedIO/BrnDeformationEvents.h"                    // DetachedPartNotificationEvent
 
 #include <cstring>   // memset (matching the X360 memset of the BBox scratch tail)
 #include <cmath>     // std::sqrt (the vrsqrtefp magnitude refinements converge to this)
@@ -760,6 +763,22 @@ namespace Deformation
     // transform is the same vmaddfp cascade. The control-point geometry is rodata-not-recovered, so the
     // skinned points resolve through the (placeholder) skin helper -- the min/max REDUCTION structure
     // is exact, the numeric extent stays inert until the skin data is recovered.
+    //
+    // ⚠️ SCOPED 2026-08-27 (detach-2 wave) so the next attempt does not have to re-measure it, and
+    // DELIBERATELY NOT ATTEMPTED. CalculateSkinnedPoint @0x825E2560 is **392 instructions** -- not the
+    // small helper "declare-only" suggests. Its shape, from the prologue: r28 = 3 influences per
+    // point, walking a per-influence byte index (`lbz 0(r29)`, r29 stepping from spec+0x1C) and
+    // branching on whether that index is BELOW `*(spec+0x1D8)` (a TAG point) or above it (a DRIVEN
+    // point, re-indexed by subtracting the same count and bounds-checked against `*(spec+0x1D0)`),
+    // then loading a 48-byte-stride record and blending. The two assert strings it bakes name both
+    // arrays outright: "liIndex < GetNumberOfTagPoints()" (:0xF3) and
+    // "liIndex < GetNumberOfDrivenPoints()" (:0xF4).
+    // ⇒ WHAT LANDING IT WOULD ACTUALLY BUY, measured rather than assumed: the bbox half-extents feed
+    // exactly two things -- CalculateAABBExtents (hence the fat-box inertia AddToSim posts) and the
+    // collision volume AddToScene builds. AddToScene is still a gate, so today the ONLY observable
+    // effect would be that shed parts stop all sharing one inertia (every part currently lands on the
+    // 0.1 floor and therefore on invI == 2.5, visible in the [detach-sim] line). That is a realism
+    // refinement, not a behaviour. It is worth doing AFTER collision, not before.
     // =========================================================================================
     void PhysicalBodyPart::CalculateBoundingBoxExtents(Vector3& lvBoundingBoxMin, Vector3& lvBoundingBoxMax)
     {
@@ -1265,10 +1284,33 @@ namespace Deformation
         // *(this+484) = 0 (no longer joined).
         mbJoinedToVehicle = false;
 
-        // Build + emit the DetachedPartNotificationEvent onto the sim OutputBuffer's notification queue
-        // (the asm assembles the packed event from mpIKPart / mGlobalVehicleId / the body id, then
-        // AddEventSafeAppend's it). Modelled through the flagged emit hook with the packed event blob.
-        EmitDetachedPartNotification(lpOutput, &mRigidBodyId);
+        // Build + emit the DetachedPartNotificationEvent. FAITHFUL as of 2026-08-27 (detach-2 wave);
+        // the `EmitDetachedPartNotification(buffer, const void* blob)` hook this used to go through is
+        // DELETED. That hook was a fabricated API in two ways at once: its second parameter was an
+        // untyped blob (the event is a named 32-byte record with three named fields), and the pointer
+        // handed to it here -- &mRigidBodyId -- is not one of the three fields the console writes.
+        // The asm at 0x8260C4B8..0x8260C514 assembles the record on the stack and appends it:
+        //     stvx128 v126 -> event+0x00   mPointOnA  == v126 == *(this+0x30), the part's WORLD
+        //                                  position (the same register the arm-4a lever arm uses)
+        //     lwz 0x1D8(this) -> +0x10     mVehicleId == mGlobalVehicleId
+        //     lwz 8(mpIKPart) ; lwz 0x1DC(spec) -> +0x14   meType == the IK spec's part type
+        //     bl OutputBuffer::GetDeformationOutputInterface ; addi r3,r3,0x3A0
+        //     bl BaseEventQueue<DetachedPartNotificationEvent>::AddEventSafe
+        // +0x3A0 is mDetachedPartNotificationQueue, exactly where BrnDeformationOutputInterface.h:77
+        // already puts it, so the accessor + offset agree with a layout this tree had committed.
+        // ⚠️ HONEST ABOUT THE PAYOFF: NOTHING IN THIS TREE READS THAT QUEUE YET (only Construct /
+        // Clear / Append touch it). The PS3 consumers are BrnSound -- this is the hook crash audio
+        // will hang off. Landing it retires a stub and an invented signature; it does not yet make a
+        // sound. And this particular call site is on the hinge path, which has never run (nHinged 0).
+        {
+            Deformation::DetachedPartNotificationEvent lNotification;
+            lNotification.mPointOnA  = mRwBody.GetTransform().wAxis;
+            lNotification.mVehicleId = mGlobalVehicleId;
+            lNotification.meType     = static_cast<EBodyParts>(mpIKPart->GetPartType());
+
+            lpOutput->GetDeformationOutputInterface()
+                    ->mDetachedPartNotificationQueue.AddEventSafe(lNotification);
+        }
 
         return true;   // _restvmx_121(1)
     }
@@ -1602,18 +1644,12 @@ namespace Deformation
         
     }
 
-    void EmitDetachedPartNotification(BrnPhysics::PhysicsModuleIO::OutputBuffer* /*lpOutput*/, const void* /*lpEventBlob*/)
-    {
-        static bool sbLoggedEDPN = false;
-        if ( !sbLoggedEDPN )
-        {
-            sbLoggedEDPN = true;
-            if ( CgsDev::Message::gxMessageFilterFlags & 1 )
-                *CgsDev::Log::gpDebugPrint << "conductor gate: EmitDetachedPartNotification hook reached but not "
-                                              "reconstructed [FLAG PC boot gate]\n";
-        }
-        
-    }
+    // ⛔ EmitDetachedPartNotification's GATE IS DELETED (2026-08-27, detach-2 wave), and so is the
+    // free function itself -- see the two call sites (this file's TestJointForBreaking and
+    // BrnDeformableObject_Detach.cpp's DetachPart), which now build the real
+    // Deformation::DetachedPartNotificationEvent and AddEventSafe it onto the deformation output
+    // interface's +0x3A0 queue, exactly as the console does. The hook took a `const void*` blob,
+    // which was never a real parameter of anything.
 
     void EmitUpdateExternalBodyEvent(CgsPhysics::PhysicsSimulationIO::InputBuffer* /*lpSimInput*/, const void* /*lpEventBlob*/)
     {

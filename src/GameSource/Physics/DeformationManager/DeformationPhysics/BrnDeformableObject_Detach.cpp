@@ -6,6 +6,9 @@
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnTagPoint.h"           // TagPoint::GetJointIndex
 #include "GameShared/GameClasses/Numeric/CgsRandom.h"                                       // CgsNumeric::Random
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                          // CGS_ASSERT
+#include "GameSource/Physics/BrnPhysicsModuleIO.h"                                          // PhysicsModuleIO::OutputBuffer::GetDeformationOutputInterface (the notification emit)
+#include "GameSource/Physics/DeformationManager/SharedIO/BrnDeformationOutputInterface.h"     // DeformationOutputInterface::mDetachedPartNotificationQueue
+#include "GameSource/Physics/DeformationManager/SharedIO/BrnDeformationEvents.h"                 // DetachedPartNotificationEvent
 
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"  // gpDebugPrint / gxMessageFilterFlags ([detach-probe])
 
@@ -135,13 +138,19 @@
 // fork on the OutputBuffer seat (see the note at the top of BrnPhysicalBodyPart.h); with the PS3
 // mangles applied the whole chain carries BrnPhysics::PhysicsModuleIO::OutputBuffer* and the
 // forwards type-check directly.
-// ⚠️ STILL A HOOK: EmitDetachedPartNotification. The packed DetachedPartNotificationEvent blob and
-// the AddEventSafeAppend onto the module output queue are NOT reconstructed. It is declared ONCE now,
-// in BrnPhysicalBodyPart.h, and bodied once in BrnPhysicalBodyPart.cpp -- the duplicate declaration
-// that used to sit in this file was a second overload with NO definition anywhere in the tree.
-// The notification is a GAMEPLAY/AUDIO signal (its PS3 consumers are BrnSound::Logic::Collision::
-// InputCollision / CollisionStateManager::ImportContactSpies); the VISIBLE detached part is driven
-// by DetachedPartRenderEvent out of DetachedPartManager::OutputEvents, which is live.
+// ⭐ EmitDetachedPartNotification IS NO LONGER A HOOK (2026-08-27, detach-2 wave) -- the hook and
+// its declaration are DELETED, not bodied. Its signature was itself a fabrication: a `const void*
+// lpEventBlob` standing in for a NAMED 32-byte record with three named fields
+// (Deformation::DetachedPartNotificationEvent). Both console sites build that record inline and
+// AddEventSafe it onto the deformation output interface's +0x3A0 queue -- the offset
+// BrnDeformationOutputInterface.h:77 already committed -- and the two call sites now do the same.
+// See the banner at this file's own emission site for the field-by-field asm cites.
+// ⚠️ WHAT IT DOES *NOT* BUY, said plainly: NOTHING IN THIS TREE READS THAT QUEUE. Only
+// Construct / Clear / Append touch it. The notification is a GAMEPLAY/AUDIO signal (its PS3 consumers
+// are BrnSound::Logic::Collision::InputCollision / CollisionStateManager::ImportContactSpies), so
+// this is the hook crash audio will hang off once BrnSound's side lands -- it is not audio. The
+// VISIBLE detached part is driven by DetachedPartRenderEvent out of DetachedPartManager::
+// OutputEvents, which is live and unaffected.
 
 namespace BrnPhysics
 {
@@ -149,7 +158,7 @@ namespace Deformation
 {
     // MakeDetachedPart / TestJointForBreaking free hooks REMOVED 2026-08-27 -- both real bodies are
     // mounted and are now called by name on lpPartMgr (see the file header).
-    // EmitDetachedPartNotification is declared once, in BrnPhysicalBodyPart.h (included above).
+    // EmitDetachedPartNotification's free hook is GONE (2026-08-27) -- see the file header.
 
     // FLAG: the +1808 "is the body actively simulating" flag the asm reads off the attached body
     // (*(*(this+6476)+1808)). The attached-body slice does not expose that flag by name yet; modelled
@@ -826,10 +835,73 @@ namespace Deformation
                     --miNumAttachedExhausts;                                 // --*(_R31 + 26400)
             }
 
-            // Assemble + emit the DetachedPartNotificationEvent onto the sim OutputBuffer's
-            // notification queue (the asm builds the packed event from the part transform/velocity +
-            // mHandlingBodyID and AddEventSafeAppend's it). Modelled through the FLAGGED emit hook.
-            EmitDetachedPartNotification(lpOutput, &mHandlingBodyID);
+            // Assemble + emit the DetachedPartNotificationEvent. LANDED 2026-08-27 (detach-2 wave);
+            // the `EmitDetachedPartNotification(buffer, const void* blob)` hook is deleted -- its
+            // second parameter was an untyped blob standing in for a named 32-byte record.
+            // The asm at 0x82630BA0..0x82630C30:
+            //     ld 0x6710(this) ; srdi 32 -> event+0x10   mVehicleId == mHandlingBodyID's entity id
+            //     lwz 0x632C(ikPart) ; lwz 0x1DC -> +0x14   meType == the IK spec's part type
+            //     three vmaddfp of v126's splatted lanes through the four rows at var_100/F0/E0/D0
+            //       -> event+0x00   mPointOnA == transform(lVehicleTransform, v126)
+            // var_100 is the SAME stack matrix handed to AddToSim as its lVehicleTransform argument
+            // (`addi r5, r1, var_100` @0x82630B54), so the transform is the vehicle's world pose and
+            // v126 is a part-LOCAL point.
+            // ⚠️ THE LOCAL POINT INHERITS AN EXISTING PLACEHOLDER, it does not introduce a new one.
+            // v126 is the same register this body already hands SetJoinedToVehicle as its
+            // lLocalComPosition on the hinge arm above -- and that call passes Vector3{0,0,0} today,
+            // flagged there. So mPointOnA resolves to the vehicle transform's translation until that
+            // one value is recovered; the transform SHAPE is the asm's. Retire both together.
+            // ⚠️ AND NOTHING READS THIS QUEUE YET (Construct/Clear/Append only). Its PS3 consumers
+            // are BrnSound; this is the hook crash audio will hang off, not audio itself.
+            {
+                Deformation::DetachedPartNotificationEvent lNotification;
+
+                const Matrix44Affine lVehicleTransform = GetVehicleBody().GetTransform();
+                const Vector3 lLocalComPosition = { 0.0f, 0.0f, 0.0f, 0.0f };   // FLAG: see above
+                lNotification.mPointOnA.x = lVehicleTransform.xAxis.x * lLocalComPosition.x
+                                          + lVehicleTransform.yAxis.x * lLocalComPosition.y
+                                          + lVehicleTransform.zAxis.x * lLocalComPosition.z
+                                          + lVehicleTransform.wAxis.x;
+                lNotification.mPointOnA.y = lVehicleTransform.xAxis.y * lLocalComPosition.x
+                                          + lVehicleTransform.yAxis.y * lLocalComPosition.y
+                                          + lVehicleTransform.zAxis.y * lLocalComPosition.z
+                                          + lVehicleTransform.wAxis.y;
+                lNotification.mPointOnA.z = lVehicleTransform.xAxis.z * lLocalComPosition.x
+                                          + lVehicleTransform.yAxis.z * lLocalComPosition.y
+                                          + lVehicleTransform.zAxis.z * lLocalComPosition.z
+                                          + lVehicleTransform.wAxis.z;
+                lNotification.mPointOnA.w = 0.0f;
+
+                // The asm's `ld 0x6710(this) ; srdi r8, r8, 32` -- the handling body id's HIGH dword.
+                // Two DIFFERENT EntityId types meet here and neither is wrong: RigidBodyId::
+                // GetEntityId() hands back a CgsSceneManager::EntityId (the packed scene handle with
+                // its owner/index/part accessors), while this event field is the plain 32-bit
+                // ::EntityId of BrnCommonTypes.h. They are the same four bytes -- the whole point of
+                // the "EntityId GENUINELY IS 32 BITS" note in BrnCommonTypes.h -- so the word is
+                // carried across explicitly rather than by a conversion that does not exist.
+                lNotification.mVehicleId.muValue =
+                    static_cast<u32>(mHandlingBodyID.GetEntityId());
+                lNotification.meType     = static_cast<EBodyParts>(lrPart.GetPartType());
+
+                lpOutput->GetDeformationOutputInterface()
+                        ->mDetachedPartNotificationQueue.AddEventSafe(lNotification);
+
+                // [detach-notify] NOT X360. The queue LENGTH after the add -- the only thing that can
+                // tell "the event was appended" from "the emit ran and the queue is still empty",
+                // which is exactly the distinction the deleted hook could never make. Latched on
+                // BRN_DEFORM_TRACE. DELETE-WHEN a consumer exists and can be measured instead.
+                if ( DetachProbeOn() )
+                {
+                    *CgsDev::Log::gpDebugPrint
+                        << "[detach-notify] appended DetachedPartNotificationEvent type "
+                        << static_cast<s32>(lNotification.meType)
+                        << " vehicle " << static_cast<s32>(lNotification.mVehicleId.muValue)
+                        << " queueLen "
+                        << lpOutput->GetDeformationOutputInterface()
+                                   ->mDetachedPartNotificationQueue.GetLength()
+                        << "\n";
+                }
+            }
 
             // [detach-probe] the win-condition counter, at the site, after the increment.
             if ( DetachProbeOn() )
