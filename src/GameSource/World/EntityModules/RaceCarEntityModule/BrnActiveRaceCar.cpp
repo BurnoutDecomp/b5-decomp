@@ -1648,6 +1648,31 @@ void ActiveRaceCar::UpdateEngineState(f32 lfTimeStep,
                                || ( lfBraking      > KF_CONTROL_DEAD_BAND )
                                || lbIsInOnlineGameMode;
 
+    // [DIAG] NOT IN THE X360 BINARY. The IGNITION-TICK rung, paired with the [ignition] attach
+    // line in BrnRaceCarEntityModule.cpp. It reports the state machine's own inputs on the FIRST
+    // tick and on every state change thereafter, so a car whose engine never leaves OFF names the
+    // arm that held it there instead of leaving it to be inferred from a missing event
+    // [[diagnostics-that-lie]]. Delete with the rest of the bring-up diagnostics.
+    {
+        static s32 siLastReported = -1;
+        static s32 siTicks        = 0;
+        const s32  liState        = static_cast<s32>( meEngineState );
+        if( ( liState != siLastReported || siTicks < 3 ) && CgsDev::Log::gpDebugPrint != 0 )
+        {
+            *CgsDev::Log::gpDebugPrint
+                << "[ignition] tick state=" << liState
+                << " active=" << ( IsActive() ? 1 : 0 )
+                << " enableSwitchOff=" << ( mbEnableEngineSwitchOff ? 1 : 0 )
+                << " carInGameMode=" << ( mbIsInGameMode ? 1 : 0 )
+                << " inCarSelect=" << ( lbInCarSelectScreen ? 1 : 0 )
+                << " crashing=" << ( IsCrashing() ? 1 : 0 )
+                << " accel=" << lfAcceleration
+                << " brake=" << lfBraking << "\n";
+        }
+        siLastReported = liState;
+        ++siTicks;
+    }
+
     if( !IsActive() )
     {
         mfEngineStateTime = 0.0f;                                        // 0x822A4FC0
