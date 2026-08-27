@@ -676,6 +676,25 @@ namespace Deformation
         // inherits the CAR's velocity rather than the car's velocity plus its own spin arm.
         // MakePartPhysical's two orthonormal tripwires are satisfied by these sources (both are real
         // orthonormal bases), which is the check that keeps them from being nonsense.
+        // ⚠️⚠️ arg 9 (lVehicleTransform) IS A LOCAL BASIS, NOT A WORLD ONE -- and getting that wrong
+        // was MEASURED, not reasoned. PhysicalBodyPart::Prepare adopts this argument as
+        // mBBoxOrientation, and CalcBoundingBox then transforms the box centre through
+        // mBBoxOrientation's rows AND ADDS ITS TRANSLATION ROW before storing it into
+        // mLocalInitialComPositionPlusMaxJointAngle. GetEventRenderTransform subtracts that member
+        // from the local graphics position. So handing the VEHICLE'S WORLD transform here injects
+        // the car's world position into a LOCAL offset: the first attempt put every shed panel
+        // ~3000 units from the car (measured: body (3008.2, -1.4, -1865.4) -> event (8.8, 36.4,
+        // 15.8), and 3008 - 3000 is exactly where that 8.8 comes from).
+        // The console builds mBBoxOrientation from the IK spec's bbox-skin orientation
+        // (*(mpIKPart->GetSpec()+8)+64), which is NOT recovered -- BBoxPointSkinData::
+        // HackSwapHandedness is an honest VMX stub and CalculateSkinnedPoint is declare-only.
+        // Identity is the honest stand-in: it is orthonormal and right-handed (so both of
+        // MakePartPhysical's tripwires and Prepare's handedness tripwire pass on their own merits,
+        // not by suppression) and it keeps the box centre LOCAL, which is the property the
+        // arithmetic actually depends on. FLAG it, do not read the box as real.
+        Matrix44Affine lLocalBBoxOrientation;
+        lLocalBBoxOrientation.SetIdentity();
+
         PhysicalBodyPart* lpPhysicalBodyPart = lpPartMgr->MakePartPhysical(
             lpInput,
             mu16DeformableObjectIndex,          // r5  = lhz 26290
@@ -684,10 +703,14 @@ namespace Deformation
             mGlobalEntityId,                    // r8  = lwz 26392
             liPartIndex,                        // r9
             &lrPart,                            // r10
-            lpSpec->GetPartGraphicsTransform(), // FLAG: local render frame, not the composed one
+            lpSpec->GetPartGraphicsTransform(), // the part's LOCAL render frame. VERIFIED against
+                                               // the renderer 2026-08-27: its .Pos() is identical
+                                               // to lpCarGraphicsSpec->GetPartLocators()[mesh]'s
+                                               // translation for the same part (e.g. mesh 10 ->
+                                               // (-0.000000, 0.664476, 2.148275) on both sides).
                                                // (IKBodyPart's own wrapper is declare-only; it
-                                               //  forwards to exactly this spec accessor)
-            GetVehicleBody().GetTransform(),    // FLAG: the body transform the asm loads at body+16
+                                               //  forwards to exactly this spec accessor.)
+            lLocalBBoxOrientation,             // FLAG -- see the note above this call
             GetVehicleBody().GetLinearVelocity(),    // FLAG: no  w x r term
             GetVehicleBody().GetAngularVelocity());  // FLAG: body spin, not the part's
 
@@ -702,6 +725,13 @@ namespace Deformation
                 << " hinge " << (lbHinge ? 1 : 0)
                 << " result " << ((lpPhysicalBodyPart != 0) ? "PART" : "NULL")
                 << " nPhysBefore " << static_cast<s32>(li16NumPhysical)
+                << " meshId " << lrPart.GetMeshId()
+                << " vehPos (" << GetVehicleBody().GetTransform().wAxis.x
+                << ", " << GetVehicleBody().GetTransform().wAxis.y
+                << ", " << GetVehicleBody().GetTransform().wAxis.z << ")"
+                << " specGfxPos (" << lpSpec->GetPartGraphicsTransform().wAxis.x
+                << ", " << lpSpec->GetPartGraphicsTransform().wAxis.y
+                << ", " << lpSpec->GetPartGraphicsTransform().wAxis.z << ")"
                 << "\n";
         }
 
@@ -750,11 +780,22 @@ namespace Deformation
             else
             {
                 // Free-body path. Add the part to the sim seeded with the assembled world transform +
-                // linear/angular velocity (the v77 blob). The transform/velocity build is the dense
-                // VMX block above; modelled by the part's own seeded pose.
-                lpPhysicalBodyPart->AddToSim(lpInput, lpPhysicalBodyPart->GetRigidBodyTransform(),
-                                             lpPhysicalBodyPart->GetLinearVelocity(),
-                                             lpPhysicalBodyPart->GetExternalBody()->GetAngularVelocity());
+                // linear/angular velocity (the v77 blob).
+                // ⛔ FIXED 2026-08-27: this used to hand AddToSim the PART'S OWN transform and
+                // velocities -- which are the state AddToSim exists to SET. Prepare never poses the
+                // embedded body, so the arguments were identity/zero and every shed panel would have
+                // been posed at the world origin. The seed is the VEHICLE's world pose and motion,
+                // which is what the asm's own documented composition starts from
+                // (worldTransform = vehicleTransform o partLocalGraphicsFrame; the part-local half is
+                // already carried by mLocalGraphicsPositionPlusJointVelocity and is re-applied by
+                // GetEventRenderTransform, so seeding the vehicle transform puts the panel exactly
+                // where it was drawn the frame before it came off -- continuity at the detach instant).
+                // ⚠️ FLAG: the linear seed is the body velocity WITHOUT the asm's
+                // `+ bodyAngularVel x (partCom - bodyCom)` arm; that cross term is in the undecoded
+                // VMX block. It biases the seed, it does not fabricate one.
+                lpPhysicalBodyPart->AddToSim(lpInput, GetVehicleBody().GetTransform(),
+                                             GetVehicleBody().GetLinearVelocity(),
+                                             GetVehicleBody().GetAngularVelocity());
 
                 // An exhaust (type 84/85) coming off as a free body decrements the attached-exhaust
                 // count. (asm: `v58 = type; if (84/85) --*(_R31 + 26400)`.)
@@ -780,6 +821,12 @@ namespace Deformation
                     << " nPhys " << static_cast<s32>(li16NumPhysical)
                     << " -> " << static_cast<s32>(mi16NumPhysicalParts)
                     << " nHinged " << static_cast<s32>(mi16NumHingedParts)
+                    << " bodyPos (" << lpPhysicalBodyPart->GetRigidBodyTransform().wAxis.x
+                    << ", " << lpPhysicalBodyPart->GetRigidBodyTransform().wAxis.y
+                    << ", " << lpPhysicalBodyPart->GetRigidBodyTransform().wAxis.z << ")"
+                    << " evtPos (" << lpPhysicalBodyPart->GetEventRenderTransform().wAxis.x
+                    << ", " << lpPhysicalBodyPart->GetEventRenderTransform().wAxis.y
+                    << ", " << lpPhysicalBodyPart->GetEventRenderTransform().wAxis.z << ")"
                     << "\n";
             }
 
