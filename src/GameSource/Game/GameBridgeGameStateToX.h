@@ -101,6 +101,20 @@ namespace BrnGame
         const BrnGameState::GameStateModuleIO::OutputBuffer* lpGameStateOutput,
         CgsGui::CgsGuiModuleIO::InputBuffer*                 lpGuiInput);
 
+    // ⭐⭐ [event-starts producer wave 2026-08-27] The EVENT-START TABLE slice of
+    // BridgeGameStateToGui @0x823EE880 -- its @0x823EF1A0..0x823EF1DC arm:
+    //     if (lpGameStateOutput->GetSetUpAllEventStartsInterfaceIsValid())
+    //         { memcpy(local, out + 0x2B0F0, 0x20E0); AddGuiEvent<GuiEventUpdateEventStarts>(...); }
+    // i.e. the ONE hop that carries the table GameStateModule::SendSetUpAllEventStartsMessage
+    // publishes over to GuiCache::RecEvent's case-203 arm. Called from BrnGameModule's GUI leg
+    // inside the same read/write-locked bracket as the status slice above, in the console's own
+    // order (this arm sits between the online-post-event build and TranslateGameActionsToGuiEvents
+    // @0x823EF22C).
+    // Body: GameBridgeGameStateToX_EventStartsGuiEvents.cpp.
+    void BridgeGameStateToGui_EventStarts(
+        const BrnGameState::GameStateModuleIO::OutputBuffer* lpGameStateOutput,
+        CgsGui::CgsGuiModuleIO::InputBuffer*                 lpGuiInput);
+
 } // namespace BrnGame
 
 #include "GameShared/GameClasses/Gui/CgsGuiModuleIO.h"   // CgsGui::CgsGuiModuleIO::InputBuffer::GetGuiEvents()

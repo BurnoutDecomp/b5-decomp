@@ -22,6 +22,7 @@
 #include "GameSource/Gui/CustomRenderer/Renderers/BrnSatNavRenderer.h"
 
 #include "GameSource/Gui/BrnGuiCache.h"                 // BrnGui::GuiCache, BrnGui::PresetEvent
+#include "GameSource/Gui/BrnGuiEventTypeDefs.h"         // BrnGui::GuiEventJunctionInfo (the case-311 typed read)
 #include "GameSource/Gui/BrnGuiWorldDataController.h"   // BrnGui::WorldDataController
 #include "GameSource/GameState/Progression/BrnProfile.h"// BrnProgression::ProfileEvent
 #include "SharedClasses/Progression/BrnRaceEventData.h" // BrnProgression::RaceEventData
@@ -386,7 +387,15 @@ void SatNavRenderer::RecvEvent(const CgsModule::Event* lpEvent, s32 liEventType)
     switch (liEventType)
     {
     case KI_EVENT_REFRESH_ICON_INFO:
-        RefreshSatNavIconInfo(static_cast<s32>(lpuEventWords[4])); // event->[+0x10]
+        // ⭐ stuntrace-UI wave 2026-08-27: the console reads miEventID at record +0x10, but on
+        // this host GuiEventJunctionInfo derives from CgsGui::GuiEvent<311> whose 3-word header
+        // pads to 16 under the leading CgsID's alignment -- +0x10 is mSpecialEventCarId (ZERO on
+        // every stunt junction), and miEventID sits at +0x20. The word-index read handed the
+        // car-id low dword to RefreshSatNavIconInfo, which then re-fired its lookup asserts
+        // EVERY frame (the null guard early-returns before ++muNumberOfSatNavIcons, so the id
+        // never caches). Typed by-name read, the same shape FBurnMainHudState's case-311 uses.
+        RefreshSatNavIconInfo(
+            reinterpret_cast<const BrnGui::GuiEventJunctionInfo*>(lpEvent)->miEventID);
         break;
 
     case KI_EVENT_SET_CACHE:

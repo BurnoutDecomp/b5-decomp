@@ -251,6 +251,7 @@ namespace BrnGui
         friend struct PreRaceFlyByState;
         friend struct SatNavComponent;   // H3a: Update's owner-change pokes (mbIsDisplayingEventInfo /
                                          // mbRotateSatNav / meIconSizeMode) + Construct's miNumUsedIcons reset
+        friend struct RaceMainHudState;  // 2026-08-27: the in-event HUD's twin pre-pass
         friend struct FBurnMainHudState; // H3b: the freeburn HUD's per-frame pre-pass clears
                                          // miNumUsedIcons through the component's manager pointer
                                          // (X360 UpdateRunning @0x8247B660 head)   // meIconFilterMode, mbIsDisplayingEventInfo,

@@ -12,6 +12,8 @@
 
 #include "rw/math/vpu/types.h"   // Vector4, MaskScalar
 
+#include <cmath>                 // std::sqrt (Magnitude)
+
 namespace rw
 {
 namespace math
@@ -162,6 +164,21 @@ namespace vpu
     inline MaskScalar IsGreater(Vector4 lLhs, Vector4 lRhs)
     {
         return CompGreaterThan(lLhs, lRhs);
+    }
+
+    // ADDITIVE GROW 2026-08-27 (stunt-race UI wave): the full-4 Magnitude, under its SDK
+    // name. Shipped rwmath bodies it at the EATech reference copy
+    // (src/SDKs/EATech/include/rw/math/vpu/detail/vector4_operation_inline.h:273) as the
+    // 4-lane dot (vmsum4fp128) -> vrsqrtefp + Newton refinement, with a vsel that forces the
+    // result to 0 when the dot is exactly 0 -- i.e. sqrt(dot) with sqrt(0) == 0. Scalar
+    // lowering here per this header's convention (the Vector3 sibling does the same); the
+    // zero-dot guard falls out of std::sqrt(0.0f) == 0.0f. First consumer: the
+    // MainMapComponent::Construct world-rect sanity assert @0x8245E514.
+    inline float Magnitude(const Vector4& lrVector)
+    {
+        const float lfDot = lrVector.x * lrVector.x + lrVector.y * lrVector.y +
+                            lrVector.z * lrVector.z + lrVector.w * lrVector.w;
+        return std::sqrt(lfDot);
     }
 
     // ADDITIVE GROW 2026-08-04 (task #144): the FOUR-lane sibling of the three-lane

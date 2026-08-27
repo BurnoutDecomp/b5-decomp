@@ -7,6 +7,7 @@
 #include "GameSource/Gui/Flow/Shared/FlaptComponents/BrnGuiFlaptIconComponent.h" // BrnGui::FlaptAnimatorComponent (mPlayerMarkerAnimator)
 #include "GameSource/Gui/Flapt/BrnFlaptMovieClipRef.h"                           // BrnFlapt::MovieClipRef (embedded clips)
 #include "GameShared/GameClasses/Language/CgsSku.h"                              // CgsLanguage::ELanguage (FormatDirectionLetters param)
+#include "GameShared/GameClasses/Core/CgsAssert.h"                               // CGS_ASSERT (the inlined SetGuiCachePointer leaf)
 
 namespace BrnGameState { class LandmarkIndex; }   // ShowLandmarkOnCompass param (by value; complete type pulled in the .cpp)
 
@@ -81,6 +82,25 @@ namespace BrnGui
         // @ 0x824115E8 -- play the visible / transin / invisible / transout timeline label
         // on the component's own apt clip.
         void SetVisibility(bool lbVisible, bool lbImmediate);
+
+        // ADDITIVE GROW ([stuntrace wS2] wave, 2026-08-27). DWARF-declared
+        // (BrnCompassComponent.h:101 `void SetGuiCachePointer(BrnGui::GuiCache *)`), but the
+        // X360 compiler INLINED it at every call site -- there is no symbol for it in
+        // func_index.tsv -- so the body is reconstructed here from the one attested call
+        // site rather than in the .cpp. RaceMainHudState::UpdateWFInit @0x82480200 emits it
+        // as the assert + store pair
+        //     0x8248065C  cmplwi cr6, r29, 0
+        //     0x82480664  bl CgsDev::Assert::BeginAssert           ; "lpGuiCache",
+        //     0x8248066C  li r5, 0xD0                              ;  BrnCompassComponent.h:208
+        //     0x82480684  stw r29, 0x66C4(r31)                     ; == this(+0x6680) + 0x44
+        // -- i.e. the assert is INSIDE this leaf (its line 208 is this header's, not the
+        // state's) and the store lands on mpGuiCache at +0x44. The assert is non-gating on
+        // console: the store follows unconditionally.
+        void SetGuiCachePointer(GuiCache* lpGuiCache)
+        {
+            CGS_ASSERT(lpGuiCache != 0, "lpGuiCache");   // BrnCompassComponent.h:208
+            mpGuiCache = lpGuiCache;
+        }
 
     private:
         // @ 0x8241EBA8 -- on a state change, latch it and play the matching animator

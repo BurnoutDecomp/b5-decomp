@@ -111,7 +111,7 @@ namespace BrnGui
         // console effect. FLAG PC defensive: the PODs are additionally zeroed here because
         // the state is carved out of CgsMemory::LinearMalloc, which is not guaranteed
         // zeroed on the host; on console every one of them is rewritten before its first
-        // read (OnEnter @0x82478EF8 stores 0 to +0x038, +0x140 and the whole +0x150..+0x169
+        // read (OnEnter @0x82478EF8 stores 0 to +0x038, +0x140 and the whole +0x150..+0x168
         // flag block on entry). Defined inline so that the mounted BrnHudFlow.cpp can
         // construct the state whether or not BrnRaceMainHudState.cpp is on the build.
         RaceMainHudState()
@@ -130,7 +130,6 @@ namespace BrnGui
             , mbDistrictMarker(false)
             , mbPlayerPositionTable(false)
             , mbFriendsList(false)
-            , mbTemporaryReplayIndicator(false)
             , mbAboveCarIcons(false)
             , mbRoadRuleComponent(false)
             , mbPreEventOverlay(false)
@@ -168,7 +167,16 @@ namespace BrnGui
         virtual void Update();    // @ 0x82481898
 
         // @ 0x82508368 - hands the race main-HUD state's static resource list to the
-        // loader (X360: *r4 = &maResourcesToLoad; *r5 = muNumResourcesToLoad).
+        // loader. VERIFIED against the X360 body (A3 wave 2026-08-27) -- it is five
+        // instructions and nothing else:
+        //     lis  r11, unk_82F25F88@ha ; addi r11, r11, unk_82F25F88@l
+        //     stw  r11, 0(r4)                      ; *lppResourceTuples = maResourcesToLoad
+        //     lis  r11, dword_82F25F84@ha ; lwz r11, dword_82F25F84@l(r11)
+        //     stw  r11, 0(r5)                      ; *lpuNumberOfResources = muNumResourcesToLoad
+        // Deliberately kept INLINE here rather than moved into BrnRaceMainHudState.cpp:
+        // BrnHudFlow.cpp is on the build and needs the vtable, and while this TU is
+        // unmounted an out-of-line body would add a fourth undefined symbol that
+        // BrnHudStatesLinkStubs.cpp does not carry (it stubs only OnEnter/OnLeave/Update).
         virtual void GetResourcesToLoad(const CgsGui::sResourceTuple** lppResourceTuples,
                                         u32* lpuNumberOfResources) const
         {
@@ -215,8 +223,15 @@ namespace BrnGui
         // GameSource/Game/GameBridgeNetworkToX.h and GameSource/Gui/BrnGuiDemangledEventTypes.h.)
 
         // ---- the static .rdata tables (DWARF BrnRaceMainHudState.h:217..221) ----------
-        static const s32 maiEventToObserve[];    // 77 entries (DWARF .cpp:33)
-        static const s32 miNumEventsObserved;    // == 77      (DWARF .cpp:130)
+        // 76 entries; values read from the XEX image at 0x8205AC08 and landed in the .cpp.
+        // [FLAG DWARF-vs-RETAIL] the DWARF says 77 (`extern const int32_t[77]
+        // maiEventToObserve` / `miNumEventsObserved = 77`); the retail X360 passes 76 --
+        // OnEnter @0x82479018 `li r5, 0x4C` into RegisterForEvents and OnLeave @0x824798C4
+        // `li r5, 0x4C` into UnRegisterForEvents -- and the .rdata run is exactly 76 words
+        // wide (0x8205AC08 .. 0x8205AD38, where maIconIdentifiers begins). The 77 is a
+        // PS3-build source-line artifact. DELETE-WHEN: never (retail shape).
+        static const s32 maiEventToObserve[];    // 76 entries (DWARF .cpp:33)
+        static const s32 miNumEventsObserved;    // == 76      (DWARF .cpp:130)
         // 21 entries; values read from the XEX image, resolved + landed in the .cpp.
         static const CgsGui::sResourceTuple maResourcesToLoad[];  // @ 0x82F25F88 (.rdata)
         static const u32                    muNumResourcesToLoad; // @ 0x82F25F84 (.rdata) == 21
@@ -229,7 +244,17 @@ namespace BrnGui
         static const char  macDistrictMarkerName[10];                // .h:305
         static const char  macBoostManagerComponentName[13];         // .h:313
         static const char  macEventCountdownName[9];                 // .h:326
+        // .h:329 -- the countdown icon's frame labels, indexed by EventCountdownState:
+        // {"invisible","go","one","two","three","invisible"} (@0x8205AD38, image-read).
+        // OnEnter also hands the ARRAY ITSELF to mEventCountdownIcon.Construct as the
+        // (unused, debug-only) parent-name argument -- `addi r6, r11, off_8205AD38@l`
+        // @0x8247928C loads the address, not the first element.
         static const char* maIconIdentifiers[6];                     // .h:329
+        // The 18 pre-event overlay ids, indexed by GsmIO::EGameModeType (@0x82F261E0,
+        // image-read). Not in the DWARF member list; named by the X360 assert strings
+        // "KAPC_PRE_EVENT_OVERLAYS[meModeOverlayDisplayed]" (.cpp:1668, OnLeave) and
+        // "KAPC_PRE_EVENT_OVERLAYS[leGameModeType]" (.cpp:2615, UpdateSetupState).
+        static const char* KAPC_PRE_EVENT_OVERLAYS[18];
         static const char  macPositionIndicatorName[21];             // .h:338
         static const char  macPlayerPositionTableName[23];           // .h:344
         static const char  macFriendListName[11];                    // .h:351
@@ -274,10 +299,49 @@ namespace BrnGui
         // BrnFlapt::MovieClipRef::SetVisible on this+0x148.
         BrnFlapt::MovieClipRef mMainHUDMovieclip;
 
-        // The 26 component-enable flags. PINNED as a BLOCK at +0x150..+0x169: OnEnter
-        // @0x82478EF8 stores 0 to every byte of 0x150..0x169 in one run, and
+        // The 25 component-enable flags. PINNED as a BLOCK at +0x150..+0x168: OnEnter
+        // @0x82478EF8 stores 0 to every byte of 0x150..0x168 in one run of EXACTLY 25
+        // `stb r30, <off>(r31)` (0x82479020..0x82479090; +0x169 is NEVER written), and
         // UpdateSetupState @0x82479B48 re-drives the same byte range. Individual byte
         // assignment below is that block laid out in DWARF declaration order.
+        //
+        // [FLAG DWARF-vs-RETAIL 2026-08-27] THE DWARF DECLARES 26 FLAGS; THE RETAIL X360
+        // OBJECT HAS 25, so exactly one DWARF name has no retail slot and every name from
+        // +0x15B on is otherwise off by one. The dropped name is
+        // **mbTemporaryReplayIndicator** (DWARF BrnRaceMainHudState.h:255, between
+        // mbFriendsList and mbAboveCarIcons). That is not a judgement call:
+        //   (a) OnEnter emits 25 stb, +0x150..+0x168, and +0x169 is never touched;
+        //   (b) OnLeave @0x82479770 pins the shifted names at instruction level --
+        //         0x82479AF4  lbz  r11, 0x15C(r31)
+        //         0x82479B00  addi r3,  r31, 0x5F60          ; == &mRoadRuleComponent
+        //         0x82479B04  bl   RoadRuleComponent::EndTimers
+        //       and
+        //         0x82479814  lbz  r11, 0x15D(r31)           ; gates the
+        //         0x82479840  addi r30, r11, off_82F261E0    ; KAPC_PRE_EVENT_OVERLAYS /
+        //         0x82479884  bl   GuiOverlayWaitFinishRequest::Construct
+        //       so +0x15C == mbRoadRuleComponent and +0x15D == mbPreEventOverlay, i.e.
+        //       the block is one byte EARLIER than the 26-name list from +0x15B on.
+        //       UpdateWFInit @0x82480200 corroborates independently (its IDA-typed
+        //       field_15C -> HandleRoadRuleBegin, field_15F -> PaybackComponent::Initialize,
+        //       field_163 -> OnlineTimeoutComponent::Show, field_164 ->
+        //       CompassComponent::SetVisibility).
+        //   (c) THE TIEBREAK, FROM A SECOND CLASS. The DWARF's BrnFBurnMainHudState.h
+        //       declares ELEVEN flags (mbSatNav, mbHudMessages, mbBoostBar, mbBoostMessages,
+        //       mbTemporaryReplayIndicator, mbRoadRuleComponent, mbFriendsList,
+        //       mbJunctionInfo, mbOdometer, mbB5Ident, mbDistrictMarker) while the retail
+        //       FBurn object -- whose offsets BrnFBurnMainHudState.h pinned independently,
+        //       from its own X360 bodies -- has TEN, at +0x14C..+0x155, with RoadRule@+0x150,
+        //       FriendsList@+0x151, JunctionInfo@+0x152, Odometer@+0x153 and
+        //       DistrictMarker@+0x155. Deleting mbTemporaryReplayIndicator -- and ONLY that
+        //       name -- makes all ten line up. It is a PS3-build-only flag that never
+        //       shipped on X360, in BOTH main-HUD states.
+        //       (The s2 dossier's proposed tiebreak "off_82FB3C98[12]'s label string" does
+        //        not exist: 0x82FB3C98 is .bss -- it is the ForceReenter override POINTER
+        //        mspbDEBUG_ComponentEnabledStates, a RUNTIME bool array, not a name table.
+        //        Read back from the XEX image: 40 consecutive zero words. UpdateSetupState's
+        //        debug block indexes it as data, `*(a1+347) = *(off_82FB3C98 + 12)`.)
+        // DELETE-WHEN: never -- this IS the retail shape. The dropped name is recorded here
+        // so a later DWARF-driven pass does not "restore" it and re-break the block.
         bool mbSatNav;                        // +0x150
         bool mbSatNavStatic;                  // +0x151
         bool mbHudMessages;                   // +0x152
@@ -289,21 +353,21 @@ namespace BrnGui
         bool mbDistrictMarker;                // +0x158
         bool mbPlayerPositionTable;           // +0x159
         bool mbFriendsList;                   // +0x15A
-        bool mbTemporaryReplayIndicator;      // +0x15B
-        bool mbAboveCarIcons;                 // +0x15C
-        bool mbRoadRuleComponent;             // +0x15D
-        bool mbPreEventOverlay;               // +0x15E
-        bool mbMugShotComponent;              // +0x15F
-        bool mbPaybackComponent;              // +0x160
-        bool mbShowTimeBar;                   // +0x161
-        bool mbB5Ident;                       // +0x162
-        bool mbBurnoutSkillz;                 // +0x163
-        bool mbOnlineTimeoutTimer;            // +0x164
-        bool mbCompass;                       // +0x165
-        bool mbFreeburnChallengeButtonStart;  // +0x166
-        bool mbFreeburnChallengeSelector;     // +0x167
-        bool mbFreeburnChallengeTicker;       // +0x168
-        bool mbFreeburnChallengeOnComponent;  // +0x169
+        // (DWARF BrnRaceMainHudState.h:255 mbTemporaryReplayIndicator -- NOT IN RETAIL.)
+        bool mbAboveCarIcons;                 // +0x15B
+        bool mbRoadRuleComponent;             // +0x15C
+        bool mbPreEventOverlay;               // +0x15D
+        bool mbMugShotComponent;              // +0x15E
+        bool mbPaybackComponent;              // +0x15F
+        bool mbShowTimeBar;                   // +0x160
+        bool mbB5Ident;                       // +0x161
+        bool mbBurnoutSkillz;                 // +0x162
+        bool mbOnlineTimeoutTimer;            // +0x163
+        bool mbCompass;                       // +0x164
+        bool mbFreeburnChallengeButtonStart;  // +0x165
+        bool mbFreeburnChallengeSelector;     // +0x166
+        bool mbFreeburnChallengeTicker;       // +0x167
+        bool mbFreeburnChallengeOnComponent;  // +0x168
 
         // PINNED +0x170 -- EventInfoComponent::{Construct,Prepare,SetEventType,Update,
         // MoveAnimation} are all called on this+0x170. THE stunt-run score / multiplier /

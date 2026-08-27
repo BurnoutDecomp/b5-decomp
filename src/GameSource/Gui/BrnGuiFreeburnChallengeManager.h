@@ -115,6 +115,20 @@ struct FreeburnChallengeManager
     // @0x82422100); the member itself is the DWARF miTargetsCount.
     s32 GetTargetsCount() const   { return miTargetsCount; }
 
+    // ADDITIVE GROW ([stuntrace wS2] wave, 2026-08-27). RaceMainHudState::UpdateWFInit
+    // @0x82480200 and ::UpdatePermenant @0x824806E8 inline three more reads of the same
+    // two words this struct already exposes as IsRunning/IsActive:
+    //   `lwz r10, 4(r3) ; cmpwi r10, 1`   (@0x8248038C) -- the NOT_ACTIVE ticker arm:
+    //       IsActive() -> StartFreeburnChallengeTicker, else state == 1 ->
+    //       StartFreeburnChallengeNotActiveTicker.
+    //   `lbz r11, 0x18(r3) ; cmplwi r11, 1` (@0x82480310) -- the host gate on the
+    //       freeburn-challenge START button: shown only when this machine is the local host.
+    // Neither has a standalone X360 symbol (both call sites fold the load), so both are
+    // header inlines like IsRunning/IsActive above. FLAG: accessor names not DWARF-attested;
+    // the MEMBERS are the DWARF meInternalState (:199) and mbIsLocalHost (:206).
+    bool IsNotActive() const      { return meInternalState == E_INTERNAL_STATE_NOT_ACTIVE; }
+    bool IsLocalHost() const      { return mbIsLocalHost; }
+
 
 private:
     // ---- layout (DWARF order; word offsets X360-verified through miCurrentAction) ----

@@ -10,8 +10,8 @@
 //   GameBridgeGameStateToX_StuntGuiEvents.cpp   -- MapStuntEnumsFromGameplayToGui @0x823AA4A8
 //                                                  and the member TranslateGameActionsToGuiEvents
 //                                                  itself, carrying arms 58 / 59 / 60 / 112 / 148.
-//   THIS FILE                                   -- the EVENT-FLOW arms: 23, 37, 38, 39, 44, 47,
-//                                                  200, 201.
+//   THIS FILE                                   -- the EVENT-FLOW arms: 23, 30, 37, 38, 39, 44,
+//                                                  47, 200, 201.
 //
 // WHY A SIBLING TU AND NOT MORE ARMS IN THE STUNT TU: the same reason that TU exists at all
 // (its banner, and the ConvertTrainingTypeToStringId split of 2026-08-16) -- the parent
@@ -20,23 +20,13 @@
 // in the stunt TU, so this file cannot re-define it; it exposes the arms as a dispatch-seam
 // helper instead, shaped exactly like the switch body it came from.
 //
-// WIRE REQUEST (owner: the conductor; ONE LINE, and the arms are dead until it lands).
-// This slice is CALLERLESS as committed. To wire it:
-//   1. add to GameSource/Game/GameBridgeGameStateToX.h, inside `namespace BrnGame`:
-//          bool TranslateEventFlowGameActionToGuiEvent(
-//              s32 liActionType,
-//              const CgsModule::Event* lpAction,
-//              CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInput,
-//              const BrnGameState::GameStateModuleIO::OutputBuffer* lpGameStateOutput);
-//   2. replace the `default:` arm of TranslateGameActionsToGuiEvents in
-//      GameBridgeGameStateToX_StuntGuiEvents.cpp with
-//          default:
-//              TranslateEventFlowGameActionToGuiEvent(
-//                  liActionType, lpAction, lpGuiInput, lpGameStateOutput);
-//              break;
-//   3. mount this file (see the mount request in the wave report).
-// The declaration is repeated at the top of this file so the definition is checked against the
-// same signature the header will carry.
+// ✅ WIRED (2026-08-27 audit; the wire-request banner that stood here was STALE). All three
+// steps landed: the declaration is in GameSource/Game/GameBridgeGameStateToX.h:87, the
+// `default:` arm of TranslateGameActionsToGuiEvents calls it
+// (GameBridgeGameStateToX_StuntGuiEvents.cpp:399-406), and this file is mounted (bat 4388).
+// Runtime-proven: BrnGame.log shows action 201 -> gui 311 flowing and action 23 driving the
+// FSM hop to PRE_FLY_BY. The declaration is repeated at the top of this file so the definition
+// is checked against the same signature the header carries.
 //
 // WHAT THIS BUYS, IN ORDER OF VISIBILITY
 //   201 -> GuiEventJunctionInfo(311)   THE ORACLE. The consumer half is COMPLETE AND MOUNTED
@@ -47,6 +37,14 @@
 //                                      without further reconstruction.
 //    23 -> GuiEventPrepareForModeStart(93) + GuiEventRunFsm(144, BRNEVENTFSM / E_GUI_HUD_EVENT)
 //                                      -- the FSM hop that puts the GUI into the event HUD.
+//    30 -> CgsGui::GuiEvent<164>        [ADDED 2026-08-27, stunt-race frontier round 2 / D1]
+//                                      THE FLY-BY EXIT. 23 gets the GUI INTO PRE_FLY_BY; this arm
+//                                      is the only thing in the image that gets it back out. Its
+//                                      consumer (PreRaceFlyByState's KI_EVENT_FLYBY_END arm) is
+//                                      mounted, so landing this arm closes the whole
+//                                      163 -> 25 -> IntroState::OnLeave -> action 30 -> 164 ->
+//                                      "BF_PROCEED" loop. See the arm's own banner.
+//                                      (Online lobby/showtime take the other branch: 269 / 279.)
 //    47 -> GuiEventUpdateEventCountdown(234)
 //    44 -> GuiEventEnterEventStartLocation(166)
 //    38 -> GuiEventFinishedModeResults(321)
@@ -179,6 +177,48 @@ namespace
     };
     static_assert(sizeof(PrepareForModeStartWire93) == 152,
                   "X360 AddGuiEvent<GuiEventPrepareForModeStart> posts 152 bytes (id 93)");
+
+    // id 164 size 1 -- AddGuiEvent<CgsGui::GuiEvent<164>> @0x823D2B68 (`li r6,1` / `li r5,0xA4`
+    // into VariableEventQueue<32768,16>::AddEvent, asm 0x823D2C04..0x823D2C10).
+    // ⭐ THE FLY-BY'S EXIT SIGNAL. The mangled name carries no BrnGui type name (the console posts
+    // the bare CgsGui::GuiEvent<164> tag) and the case-30 arm hands it a 1-byte stack slot it never
+    // writes (`addi r4, r1, var_3543` @0x823EB330, with no preceding store), so there is no payload
+    // to model. Reproduced as a zeroed byte -- the host must not post uninitialised memory; the
+    // consumer never reads it. Same accommodation as FinishedModeResultsWire321 below.
+    // The CONSUMER IS MOUNTED and reads only the id: BrnGui::PreRaceFlyByState::HandleIncomingEvents'
+    // KI_EVENT_FLYBY_END arm (BrnPreRaceFlyBy_wJ_03.cpp:129), which plays the trans-out and ends in
+    // TriggerExitState -> SendStateEvent("BF_PROCEED") -- the ONLY producer of the lua BRNEVENTFSM's
+    // PRE_FLY_BY exit edge. 164 is also one of the eight ids the state registers for
+    // (PreRaceFlyByState::maiEventToObserve @0x82065CAC == {6,21,64,159,160,162,164,213}).
+    struct PreRaceFlyByEndWire164
+    {
+        u8 mu8Unused;                          // +0x00  never written by the arm
+        s32 GetEventType() const { return 164; }
+    };
+    static_assert(sizeof(PreRaceFlyByEndWire164) == 1, "id 164 size 1");
+
+    // id 269 size 4 -- AddGuiEvent<BrnGui::GuiEventNetworkSplashEvent> @0x823D2C20
+    // (`AddEvent(q, ev, 269, 4)`). Store map: one word, `stw r19` (0) @0x823EB344 on the first post
+    // and `stw r14` (1) @0x823EB37C on the second.
+    // FLAG: the field NAME is role-derived from those two values only -- nothing in b5-decomp
+    // consumes id 269, so there is no consumer to arbitrate it. The COPY is exact.
+    struct NetworkSplashWire269
+    {
+        s32 miSplashState;                     // +0x00
+        s32 GetEventType() const { return 269; }
+    };
+    static_assert(sizeof(NetworkSplashWire269) == 4, "id 269 size 4");
+
+    // id 279 size 2 -- AddGuiEvent<BrnGui::GuiEventNetworkShowFreeBurnIntro> @0x823D2AB0
+    // (`AddEvent(q, ev, 279, 2)`). Store map: `addi r4, r1, var_3568` is the record base and the
+    // arm writes `stb r19, var_3567` + `stb r19, var_3568` @0x823EB35C/0x823EB364 -- both bytes 0.
+    // FLAG: no consumer in b5-decomp, so the two bytes stay unnamed.
+    struct NetworkShowFreeBurnIntroWire279
+    {
+        u8 maZero[2];                          // +0x00..+0x01
+        s32 GetEventType() const { return 279; }
+    };
+    static_assert(sizeof(NetworkShowFreeBurnIntroWire279) == 2, "id 279 size 2");
 
     // id 234 size 4 -- AddGuiEvent<GuiEventUpdateEventCountdown> @0x823D25A8.
     // Store map: `lwz r11,0(r31); stw r11, var_35D8` @0x823EAD50.
@@ -341,9 +381,8 @@ namespace
                   "X360 AddGuiEvent<GuiEventOfflinePostEvent> posts 192 bytes (id 289)");
 
     // ---------------------------------------------------------------------------------------
-    // GuiEventRunFsm is NOT posted through PushGuiEvent -- see the banner: its GetEventType()
-    // returns the dead PS3 id 142 while the wire (and the mounted BrnGuiModule case) is 144.
-    // Same three lines the tree's own live producer uses (BrnGameModule.cpp:625-637).
+    // GuiEventRunFsm posts through the raw queue (24-byte controller record, not a PushGuiEvent
+    // payload); GetEventType() is 144, corrected from the dead PS3 id 142 on 2026-08-27.
     // ---------------------------------------------------------------------------------------
     void PostRunFsm(CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInput,
                     const char* lpacFsmName, const char* lpacInitialState,
@@ -360,7 +399,7 @@ namespace
         lEvent.meFsmToRun      = leFsmToRun;
         lEvent.meFlowToUse     = leFlowToUse;
         lpGuiInput->GetGuiEvents()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lEvent), 144,
+            reinterpret_cast<const CgsModule::Event*>(&lEvent), lEvent.GetEventType(),
             static_cast<s32>(sizeof(lEvent)));
     }
 }   // anonymous namespace
@@ -447,9 +486,18 @@ namespace
             lEvent.mbIsAutoUnlockedChallenge = lpJunction->mbIsAutoUnlockedChallenge;
             PushGuiEvent(lEvent, lpGuiInput);
 
-            if ( sbDiag && siDiagLinesLeft > 0 && CgsDev::Log::gpDebugPrint != 0 )
+            // ⭐ 2026-08-27: OWN counter, not the shared siDiagLinesLeft. Action 201 posts EVERY
+            // FRAME while the player stands in a light region, so 24 frames of idling at the
+            // junction burned the whole shared budget before action 23 ever printed -- the later
+            // arms then went BLIND, not quiet (the S4 audit's "e-count (never)" hazard). Edge-
+            // filtered on the event id so one line per junction visit, 8 visits per run.
+            static s32 siJunctionDiagLeft = 8;
+            static s32 siLastDiagEventId  = -1;
+            if ( sbDiag && siJunctionDiagLeft > 0 && lEvent.miEventID != siLastDiagEventId &&
+                 CgsDev::Log::gpDebugPrint != 0 )
             {
-                --siDiagLinesLeft;
+                --siJunctionDiagLeft;
+                siLastDiagEventId = lEvent.miEventID;
                 *CgsDev::Log::gpDebugPrint
                     << "[evt-flow] action 201 -> gui 311 (event " << lEvent.miEventID
                     << " mode " << static_cast<s32>(lEvent.meGameModeType)
@@ -591,8 +639,22 @@ namespace
             }
             if (lbRunEventFsm)
             {
-                PostRunFsm(lpGuiInput, "BRNEVENTFSM", 0,
-                           BrnGui::E_GUI_HUD_EVENT, BrnGui::E_GUIFLOW_HUD);
+                // [FLAG PC bring-up gate 2026-08-27, NOT in the X360 binary] The hop itself is
+                // console-faithful and PROVEN live (BrnGame.log: action 23 -> PRE_FLY_BY OnEnter),
+                // but today both destination states (PRE_FLY_BY / RACE_MAIN) are inert scaffolds
+                // in BrnHudStatesLinkStubs.cpp, and the hop's side effect is FBurnMainHudState::
+                // OnLeave tearing down the whole HUD apt (PlayAptMovie("",1) + UnRegisterForEvents)
+                // with nothing to rebuild it -- the HUD vanishes for the rest of the process.
+                // Until the real states land, the hop is OPT-IN: set BRN_EVENT_FSM=1 to take it;
+                // default keeps the freeburn HUD (junction panel, odometer, sat-nav) alive through
+                // the event. DELETE-WHEN: PreRaceFlyBy wJ set + RaceMainHudState.cpp are MOUNTED
+                // with real OnEnter bodies -- then the gate inverts the console behaviour and lies.
+                static const bool sbEventFsm = ( getenv( "BRN_EVENT_FSM" ) != 0 );
+                if (sbEventFsm)
+                {
+                    PostRunFsm(lpGuiInput, "BRNEVENTFSM", 0,
+                               BrnGui::E_GUI_HUD_EVENT, BrnGui::E_GUIFLOW_HUD);
+                }
             }
 
             // @0x823EB05C..0x823EB06C -- unconditional tail.
@@ -607,6 +669,97 @@ namespace
                     << "[evt-flow] action 23 -> gui 93 (mode " << liGameModeType
                     << " round " << lEvent.miCurrentRound
                     << ") runEventFsm=" << (lbRunEventFsm ? 1 : 0) << "\n";
+            }
+            return true;
+        }
+
+        // ---- 30  E_ACTION_STOP_MODE_INTRO (8 bytes) ----------------------------------------
+        // ⭐⭐ THE OTHER HALF OF CASE 23: 23 puts the GUI INTO the event FSM's PRE_FLY_BY state,
+        // and THIS arm is the only thing in the whole image that gets it back out again.
+        //
+        // @0x823EB304..0x823EB38C, instruction for instruction (r19 == 0, r14 == 1, r31 == the
+        // action record):
+        //   lwz  r11, 0(r31)            -- action->meGameMode
+        //   cmpwi 0xF / beq ; cmpwi 0x10 / bne   -- r11 = (mode == 15 || mode == 16)
+        //   cmplwi 0 / bne loc_823EB340          -- ONLINE lobby/showtime takes the far branch
+        //   [offline]  addi r4, r1, var_3543 (a 1-byte slot, NEVER WRITTEN)
+        //              bl AddGuiEvent<CgsGui::GuiEvent<164>>          ; id 164 size 1
+        //              b  default
+        //   [online]   stw r19, var_35D8 ; bl AddGuiEvent<GuiEventNetworkSplashEvent>      (0)
+        //              stb r19, var_3567 ; stb r19, var_3568
+        //              bl AddGuiEvent<GuiEventNetworkShowFreeBurnIntro>                    (0,0)
+        //              lbz r11, 4(r31)   ; beq default                 -- mbMovingBetweenLobbyModes
+        //              stw r14, var_35D8 ; bl AddGuiEvent<GuiEventNetworkSplashEvent>      (1)
+        //
+        // THE WHOLE CONSOLE CHAIN THIS CLOSES, producer to consumer, every rung already mounted
+        // except this one:
+        //   PreRaceFlyByState::Update tail (BrnPreRaceFlyBy_wJ_04.cpp:360) posts GUI-out 163 once
+        //     mfTimeRemaining (KAF_MODE_TYPE_PRE_EVENT_DURATION[mode]) expires
+        //   -> BridgeGuiToGameState case 163 -> game event 25 (GameBridgeGUIToX_GameState.cpp:153)
+        //   -> GameStateModule::ProcessGameEvents case 25 -> ModeManager::FinishOfflineModeIntro
+        //      -> GameMode::SendEvent(E_GME_NEXT)
+        //   -> IntroState::OnLeave sets GameMode::mbIntroJustFinished (+176)
+        //   -> ModeManager::UpdateCurrentMode's latch arm (BrnModeManager_UpdateMode.cpp:345)
+        //      -> ModeManager::StopModeIntro posts ACTION 30
+        //   -> **THIS ARM** -> GUI event 164
+        //   -> PreRaceFlyByState::HandleIncomingEvents KI_EVENT_FLYBY_END -> trans-out (or an
+        //      immediate TriggerExitState when nothing is on screen yet)
+        //   -> TriggerExitState -> SendStateEvent("BF_PROCEED") -> the lua BRNEVENTFSM leaves
+        //      PRE_FLY_BY.
+        // Every rung above 30 was proven live in scratch/flow_run/20260827_134528/BrnGame.log
+        // (the SECOND "[start] event 25 -> FinishOfflineModeIntro" at t+6.15 s is the fly-by's own
+        // 163 arriving 0.13 s after the one-shot harness self-trigger); the flow stopped dead here
+        // because action 30 had no arm and fell through the caller's `default:`.
+        case BrnGameState::GameStateModuleIO::E_ACTION_STOP_MODE_INTRO:
+        {
+            const BrnGameState::GameStateModuleIO::StopModeIntroAction* lpStopIntro =
+                reinterpret_cast<
+                    const BrnGameState::GameStateModuleIO::StopModeIntroAction*>(lpAction);
+
+            const s32 liGameModeType = static_cast<s32>(lpStopIntro->meGameMode);
+
+            if (!IsOnlineLobbyOrShowtimeMode(liGameModeType))
+            {
+                PreRaceFlyByEndWire164 lFlyByEnd;
+                lFlyByEnd.mu8Unused = 0;                 // console: the slot is left unwritten
+                PushGuiEvent(lFlyByEnd, lpGuiInput);
+            }
+            else
+            {
+                NetworkSplashWire269 lSplashOff;
+                lSplashOff.miSplashState = 0;            // `stw r19` @0x823EB344
+                PushGuiEvent(lSplashOff, lpGuiInput);
+
+                NetworkShowFreeBurnIntroWire279 lFreeBurnIntro;
+                lFreeBurnIntro.maZero[0] = 0;            // `stb r19` @0x823EB364
+                lFreeBurnIntro.maZero[1] = 0;            // `stb r19` @0x823EB35C
+                PushGuiEvent(lFreeBurnIntro, lpGuiInput);
+
+                if (lpStopIntro->mbMovingBetweenLobbyModes)   // `lbz r11, 4(r31)` @0x823EB36C
+                {
+                    NetworkSplashWire269 lSplashOn;
+                    lSplashOn.miSplashState = 1;         // `stw r14` @0x823EB37C
+                    PushGuiEvent(lSplashOn, lpGuiInput);
+                }
+            }
+
+            // [DIAG] NOT IN THE X360 BINARY. OWN counter, not the shared siDiagLinesLeft: this is
+            // the one line the fly-by-exit investigation needs, and actions 44/47/201 can burn the
+            // shared budget long before a mode intro ever stops (the 2026-08-27 lesson on the
+            // action-201 arm -- a spent shared budget makes later arms BLIND, not quiet).
+            {
+                static s32 siStopIntroDiagLeft = 8;
+                if ( sbDiag && siStopIntroDiagLeft > 0 && CgsDev::Log::gpDebugPrint != 0 )
+                {
+                    --siStopIntroDiagLeft;
+                    *CgsDev::Log::gpDebugPrint
+                        << "[evt-flow] action 30 -> gui "
+                        << (IsOnlineLobbyOrShowtimeMode(liGameModeType) ? 269 : 164)
+                        << " (mode " << liGameModeType
+                        << " movingBetweenLobbyModes "
+                        << (lpStopIntro->mbMovingBetweenLobbyModes ? 1 : 0)
+                        << ") -- fly-by exit signal\n";
+                }
             }
             return true;
         }

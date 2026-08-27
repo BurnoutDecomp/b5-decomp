@@ -194,9 +194,20 @@ void PreRaceFlyByState::SetFreestyleDescription()
         }
     }
     // The console dereferences this unconditionally -- a NULL read when the running event
-    // has no profile record.
-    lDescription.mbEventFlag = static_cast<u8>(
-        (lpProfileEvent->GetFlags() & BrnProgression::ProfileEvent::E_FLAG_RANK_WIN) != 0);
+    // has no profile record. [PC GUARD, NOT in the X360 binary] On this build a fresh /
+    // harness profile carries an EMPTY event list (the profile-event producer chain is not
+    // reconstructed), so the walk above finds nothing for a perfectly valid running event
+    // and the unconditional read AV'd at ProfileEvent+0x4 (proof: run 20260827_133948,
+    // callstack SetupComponents -> SetFreestyleDescription -> ProfileEvent::GetFlags,
+    // reading 0x4). Missing record == "never ranked-won", flag 0.
+    // DELETE-WHEN the profile event list is populated on this build (then the guard is
+    // unreachable for a running event, exactly as on console).
+    lDescription.mbEventFlag = 0;
+    if (lpProfileEvent != 0)
+    {
+        lDescription.mbEventFlag = static_cast<u8>(
+            (lpProfileEvent->GetFlags() & BrnProgression::ProfileEvent::E_FLAG_RANK_WIN) != 0);
+    }
 
     mpStateInterface->GetOutputEventQueue()->AddEvent(&lDescription, KI_CHANNEL_GUI_OUT,
                                                      static_cast<s32>(sizeof(lDescription)));
@@ -282,10 +293,16 @@ void PreRaceFlyByState::SetRoadRageDescription()
             break;
         }
     }
-    // The console dereferences this unconditionally -- a NULL read when the running event
-    // has no profile record (see the note above).
-    lDescription.mbEventFlag = static_cast<u8>(
-        (lpProfileEvent->GetFlags() & BrnProgression::ProfileEvent::E_FLAG_RANK_WIN) != 0);
+    // The console dereferences this unconditionally. [PC GUARD, NOT in the X360 binary] --
+    // the fresh/harness profile's event list is EMPTY on this build, see the twin guard in
+    // SetFreestyleDescription above (run 20260827_133948 AV proof). Missing record == flag 0.
+    // DELETE-WHEN the profile event list is populated on this build.
+    lDescription.mbEventFlag = 0;
+    if (lpProfileEvent != 0)
+    {
+        lDescription.mbEventFlag = static_cast<u8>(
+            (lpProfileEvent->GetFlags() & BrnProgression::ProfileEvent::E_FLAG_RANK_WIN) != 0);
+    }
 
     mpStateInterface->GetOutputEventQueue()->AddEvent(&lDescription, KI_CHANNEL_GUI_OUT,
                                                      static_cast<s32>(sizeof(lDescription)));

@@ -70,6 +70,14 @@ namespace BrnFlapt
         // off the instance pointer (the instance and its apt string share address +0x00).
         const CgsGraphics::TextObject& GetTextObject() const { return mAptString.mTextObject; }
 
+        // ADDITIVE GROW (stunt-readout wave A8 2026-08-27): the embedded apt string
+        // itself. TextFieldRef::GetText @0x8246E0C0 hands the INSTANCE pointer straight
+        // to CgsGui::CgsAptString::GetText @0x8246D9A0 (`lwz r3, 0(r31)` then `bl`) --
+        // legal on the console only because the instance and its apt string share
+        // address +0x00. Exposing the member is how that inlined identity is spelled on
+        // a host where the two are not interchangeable by cast.
+        const CgsGui::CgsAptString& GetAptString() const { return mAptString; }
+
         // Mutable twin (ADDITIVE GROW, H2 2026-08-25): TextFieldRef::SetColour
         // @0x8246E120 writes the field's packed text colour in place -- byte stores
         // into instance+0x14..0x17 == mAptString.mTextObject.mTextColour.

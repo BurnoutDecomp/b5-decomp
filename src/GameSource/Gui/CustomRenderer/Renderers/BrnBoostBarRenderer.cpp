@@ -401,6 +401,23 @@ void BoostBarRenderer::RecvEvent(const CgsModule::Event* lpEvent, s32 liEventTyp
             // The 28-byte payload copied whole (the console's 7-dword loop into +132).
             mGuiEventBoostInfo = *reinterpret_cast<const GuiEventBoostInfo*>(lpEvent);
 
+            // [FLAG PC diag 2026-08-27, NOT in the X360 binary] One-shot witness for the
+            // invisible-boost-bar question: distinguishes "206 never arrives" (this line
+            // absent) from "206 arrives saying not-allowed" (allowed=0 -- then the fix is
+            // the mode-arming action 34 chain, not this renderer). The not-allowed path
+            // draws nothing AND asserts nothing by design, so without this line both
+            // failure modes are the same silence.
+            static bool sbFirst206Logged = false;
+            if (!sbFirst206Logged && CgsDev::Log::gpDebugPrint != 0)
+            {
+                sbFirst206Logged = true;
+                *CgsDev::Log::gpDebugPrint
+                    << "[boost-bar] first 206: max=" << mGuiEventBoostInfo.mfMaxBoost
+                    << " amt=" << mGuiEventBoostInfo.mfBoostAmount
+                    << " allowed=" << (mGuiEventBoostInfo.mbAllowedToBoost ? 1 : 0)
+                    << " type=" << static_cast<s32>(mGuiEventBoostInfo.meBoostType) << "\n";
+            }
+
 
             if (mGuiEventBoostInfo.mfMaxBoost <= 0.0f)
             {

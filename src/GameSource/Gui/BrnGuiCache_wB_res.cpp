@@ -99,14 +99,17 @@ namespace BrnGui
     }
 
     // @ 0x824EC610 -- the event's finish landmark. Fetches the checkpoint count
-    // (GetCheckpointsInEvent), asserts it is non-zero, then returns the per-checkpoint finish-
-    // landmark entry indexed by that count: the u16 at maCheckpointLandmarks[checkpoints]
-    // (@+0x9F52 + 2*checkpoints), wrapped as a LandmarkIndex.
+    // (GetCheckpointsInEvent), asserts it is non-zero, then returns the LAST checkpoint's
+    // landmark. The console computes `cache + 0x9F52 + 2*count` -- under the 2026-08-27 header
+    // (the union retired, maCheckpointLandmarks based at +0x9F54) that address IS
+    // maCheckpointLandmarks[count - 1]; indexing by the raw count here would read one u16 PAST
+    // the console's slot (and past the array end at count == 16). The assert above guarantees
+    // count >= 1.
     BrnGameState::LandmarkIndex GuiCache::GetEventFinishLandmark() const
     {
         const u8 lu8NumCheckpointsInEvent = GetCheckpointsInEvent();
         CGS_ASSERT(lu8NumCheckpointsInEvent > 0, "lu8NumCheckpointsInEvent > 0");
-        return BrnGameState::LandmarkIndex(maCheckpointLandmarks[lu8NumCheckpointsInEvent]);
+        return BrnGameState::LandmarkIndex(maCheckpointLandmarks[lu8NumCheckpointsInEvent - 1]);
     }
 
     // @ 0x8241E520 -- index the preset (online) event list (mEvents @0x8040). The X360 front-

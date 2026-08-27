@@ -49,6 +49,8 @@ namespace BrnGui
         // stw +0x1034 on the embedded component == mfTargetCrashScore /
         // miCrashMultiplier) -- same friend-grant pattern as the marker header.
         friend struct FBurnMainHudState;
+        friend struct RaceMainHudState;   // 2026-08-27: the in-event HUD reads the crash-score
+                                          // members the same way (RaceMainHudState_wS3.cpp)
         // DWARF :69.
         typedef BrnFlapt::TextFieldRef RoadRulesTextfield;
 
@@ -154,7 +156,22 @@ namespace BrnGui
         void EndTimers();                                                            // :188
         f32  GetCurrentCrashScore() const;                                           // :195
         void SetCachePointer(GuiCache* lpGuiCache);                                  // :201
-        void SetIfInShowTime(bool lbInShowTime);                                     // :206
+
+        // ADDITIVE GROW ([stuntrace F2] wave, 2026-08-27). DWARF-declared (:206) but the
+        // X360 compiler INLINED it at every call site -- no symbol in
+        // scratch/func_index.tsv -- so the body joins this header's three other
+        // X360-emitted header-inlines rather than waiting on a .cpp that will never
+        // define it. Reconstructed from its one attested call site,
+        // RaceMainHudState::UpdateWFInit @0x82480200:
+        //     0x8248049C  cmpwi cr6, r11, 2       ; GuiCache::GetGameMode()
+        //     0x824804A4  cmpwi cr6, r11, 0x10
+        //     0x824804B4  stb   r11, 0x646C(r31)  ; == mRoadRuleComponent(+0x5F60) + 0x50C
+        // -- +0x50C is mbInShowTime (the caller supplies the mode==2||mode==16 test; the
+        // leaf itself is a bare named-member store with no assert).
+        void SetIfInShowTime(bool lbInShowTime)                                      // :206
+        {
+            mbInShowTime = lbInShowTime;
+        }
 
     private:
         // ---- private helpers (DWARF :464-:587) -- declared-only except EnterRoad.

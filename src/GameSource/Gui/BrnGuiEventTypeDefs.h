@@ -137,7 +137,11 @@ struct GuiEventRunFsm : public CgsModule::Event
     {
     }
 
-    s32 GetEventType() const { return 142; }
+    // 144 is the LIVE wire id on this build: the mounted consumer is BrnGuiModule.cpp's
+    // case 144 -> GuiFsmController::RunFsm, and both producers post 144. The DecFIGS text
+    // carried the dead PS3 id 142 here, which forced two hand-rolled AddEvent(...,144,...)
+    // workarounds until 2026-08-27; the header is now truthful and the producers use it.
+    s32 GetEventType() const { return 144; }
 };
 
 static_assert(sizeof(GuiEventRunFsm) == 24, "GuiEventRunFsm controller payload is 24 bytes");
@@ -2197,6 +2201,40 @@ static_assert(__builtin_offsetof(GuiEventCurrentStatus, mfDistanceDrivenInCurren
               __builtin_offsetof(GuiEventCurrentStatus, maiRemainingCheckpointIndexes) == 0x38,
               "GuiEventCurrentStatus wire drift (RecEvent case 112 @0x82510540/0x825105A0/0x825105B0)");
 
+// =========================================================================================
+// ⭐⭐ [event-starts producer wave 2026-08-27] GuiEventUpdateEventStarts (id 203, size 8416)
+// -- RECOVERED, and MOVED HERE out of BrnGuiDemangledEventTypes.h for the usual two reasons:
+// its consumer is GuiCache::RecEvent (which cannot include that header -- see the note above
+// GuiEventCurrentStatus), and the placeholder that stood there was WRONG, not merely opaque.
+//
+// ⛔ WHAT THE PLACEHOLDER GOT WRONG. It read `GuiEvent<203> + u8 maPayload[8404]`, i.e. "a
+// 12-byte GuiEvent header then 8404 bytes of payload" -- the honest default the demangled
+// header applies when nothing is known. The asm says otherwise: THERE IS NO HEADER. The one
+// producer, BridgeGameStateToGui @0x823EF1B8..0x823EF1DC, does
+//     li r5, 0x20E0 ; addi r4, r15, 0x2B0F0 ; addi r3, r1, var_2180 ; bl memcpy
+//     addi r4, r1, var_2180 ; bl AddGuiEvent<GuiEventUpdateEventStarts>
+// -- it memcpys the OutputBuffer's SetUpAllEventStartsInterface onto a bare stack local and
+// hands that local straight to AddGuiEvent, which queues `sizeof(T)` bytes from offset 0
+// (@0x823D1394 `li r6, 0x20E0 ; li r5, 0xCB`). So the queued 8416 bytes ARE the interface,
+// starting at its first EventStart's position lane. Under the old shape the first 12 of them
+// would have been read as a GuiEvent header and the array would have been 12 bytes out --
+// silently, since the size literal matched either way.
+// The consumer confirms it from the other end: RecEvent's case-203 arm is
+// `memcpy(cache + 22160, payload, 8416)` and cache+0x5690 is the FIRST EventStart of the
+// cache's own embedded copy (GuiCache.h's maEventStarts[175] + miEventStartsCount @+0x7760).
+//
+// So the record IS the interface, spelled by name rather than as an opaque span. That also
+// makes the 8416 self-proving: SetUpAllEventStartsInterface::_AssertLayout already pins its
+// own sizeof at 0x20E0 against the SAME two console literals.
+struct GuiEventUpdateEventStarts
+{
+    BrnGameState::GameStateModuleIO::SetUpAllEventStartsInterface mEventStarts;
+
+    s32 GetEventType() const { return 203; }
+};
+static_assert(sizeof(GuiEventUpdateEventStarts) == 0x20E0,
+              "X360 AddGuiEvent size 8416 (id 203) @0x823D1394 == the bridge memcpy 0x20E0 @0x823EF1C0");
+
 // [E1 event-status wave 2026-08-26] RECOVERED (was the opaque `GuiEvent<424> + u8[8]`
 // shell). THE RECORD IS RAW: AddGuiEvent<GuiEventScoreUpdate> @0x823D0EA8 ends
 //     li r6, 0x14 ; li r5, 0x1A8 ; mr r4, r27 ; bl ...AddEvent
@@ -2278,5 +2316,67 @@ static_assert(__builtin_offsetof(GuiAttackScoreUpdate, mfComboWarningTimeActive)
               __builtin_offsetof(GuiAttackScoreUpdate, meStuntToDisplayType)     == 0x1C &&
               __builtin_offsetof(GuiAttackScoreUpdate, mbComboWarningActive)     == 0x24,
               "GuiAttackScoreUpdate wire drift (RecEvent case 48 @0x825109E4/0x825109FC/0x825109EC)");
+
+// =========================================================================================
+// [A9 mode-type arm 2026-08-27] RECOVERED (was the opaque `GuiEvent<93> + u8[140]` shell in
+// BrnGuiDemangledEventTypes.h, which mis-modelled the wire as a 12-byte GuiEvent header plus
+// 140 payload bytes). THE RECORD IS RAW: AddGuiEvent<GuiEventPrepareForModeStart> @0x823D27D0
+// posts the object AS PASSED, and GuiCache::RecEvent's case-93 arm reads the 8-byte pursued-car
+// id with `ld r11, 0(r30)` (@0x8250E968) -- i.e. the 152 queued bytes OPEN with that id.
+// Size 152 and id 93 are unchanged, so the AddGuiEvent<T> instantiation
+// (CgsGuiModule_AddGuiEvent_Inst.cpp:140) is unaffected.
+//
+// Pinned at BOTH ends, field for field:
+//   producer  BrnGame::TranslateEventFlowGameActionToGuiEvent case 23 -- the console's
+//             GameBridgeGameStateToX @0x823EADCC..0x823EAFD0 store map, transcribed in
+//             GameSource/Game/GameBridgeGameStateToX_EventFlowGuiEvents.cpp (the TU-local
+//             `PrepareForModeStartWire93` this type supersedes -- see the conductor request).
+//   consumer  GuiCache::RecEvent @0x8250E7E0..0x8250EAA0 (jumptable 8250DE3C case 89 ==
+//             GUI id 93; the console's jump-table index is `id - 4`).
+//             +0x0C -> cache 0x9E58 meGameModeType   *** THE EventInfoComponent::Update GATE ***
+//             +0x10 -> 0x9E5C muEventID       +0x14 -> 0x9E60 muJunctionID
+//             +0x84 -> 0x9F2C mfEventTime AND 0x9F30 mfTargetTime (the SAME word, twice)
+//             +0x80/+0x7C/+0x78 -> 0x9F34/0x9F38/0x9F3C mafTargetScores[0..2]
+//             +0x88 -> 0x9FEC   +0x8C -> 0x9FB8 (lbz/stb)   +0x8E -> 0x9F44 (lbz/stb)
+//             +0x8F -> 0x9FC0 (lbz + EXTSB + stw -- a SIGNED byte widened to a word)
+//             +0x90 -> 0x4B4C (lbz/stb)   +0x00 -> 0x9FE0 (ld/std, the 8-byte CgsID)
+//             +0x18[i] -> 0x9F54 + 2i (sth)   +0x38[i] -> 0x9F74 + 4i (stw)
+// The trailing 6 bytes are the record's tail padding to the attested 152 (the console posts a
+// stack frame that width; nothing reads +0x92..+0x97).
+struct GuiEventPrepareForModeStart
+{
+    CgsID mPursuedCarId;                   // +0x00  GameModeParams::mPursuedCarID
+    s32   miCurrentRound;                  // +0x08  action->GetCurrentRound()
+    s32   meGameModeType;                  // +0x0C  GameModeParams::GetGameModeType()
+    u32   muEventJunctionID;               // +0x10  GameModeParams::muEventJunctionID
+    u32   muJunctionID;                    // +0x14  GameModeParams::muJunctionID
+    u16   mau16CheckpointLandmark[16];     // +0x18  CheckpointData[i]+0x00
+    s32   maiCheckpointDistrict[16];       // +0x38  CheckpointData[i]+0x04
+    f32   mfNeedForBronze;                 // +0x78  GameModeParams+0x60
+    f32   mfNeedForSilver;                 // +0x7C  GameModeParams+0x64
+    f32   mfNeedForGold;                   // +0x80  GameModeParams+0x68
+    f32   mfModeTimeLimit;                 // +0x84  GameModeParams+0x6C
+    s32   miPursuitRivalTotalDamage;       // +0x88  GameModeParams+0x50
+    u8    mu8CheckpointCount;              // +0x8C  (u8)GameModeParams::GetCheckpointCount()
+    u8    mu8DifficultyLevel;              // +0x8D  GameModeParams::muDifficultyLevel
+    u8    mu8CarCount;                     // +0x8E  mbIsOnline ? miNumNetworkPlayers : miNumRivals
+    s8    mi8RoadRageThreshold;            // +0x8F  (s8)GameModeParams::miRoadRageThreshold
+                                           //        ⚠️ SIGNED: RecEvent widens it with `extsb`.
+    u8    mbIsOnline;                      // +0x90  GameModeParams::mbIsOnline
+    u8    mbOnlineLobbyTransition;         // +0x91  (name FLAGGED at the producer)
+    u8    maPad92[6];                      // +0x92..+0x97 tail padding to the attested 152
+
+    s32 GetEventType() const { return 93; }
+};
+static_assert(sizeof(GuiEventPrepareForModeStart) == 152,
+              "X360 AddGuiEvent size 152 (id 93) @0x823D27D0");
+static_assert(__builtin_offsetof(GuiEventPrepareForModeStart, meGameModeType)          == 0x0C &&
+              __builtin_offsetof(GuiEventPrepareForModeStart, mau16CheckpointLandmark) == 0x18 &&
+              __builtin_offsetof(GuiEventPrepareForModeStart, maiCheckpointDistrict)   == 0x38 &&
+              __builtin_offsetof(GuiEventPrepareForModeStart, mfModeTimeLimit)         == 0x84 &&
+              __builtin_offsetof(GuiEventPrepareForModeStart, mu8CheckpointCount)      == 0x8C &&
+              __builtin_offsetof(GuiEventPrepareForModeStart, mbIsOnline)              == 0x90,
+              "GuiEventPrepareForModeStart wire drift (RecEvent case 89 @0x8250E7E4/0x8250E90C/"
+              "0x8250E9CC/0x8250E8FC)");
 
 } // namespace BrnGui

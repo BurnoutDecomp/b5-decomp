@@ -139,6 +139,16 @@ namespace BrnGui
         static int  BuddySortFunction(const void* lpA, const void* lpB);                // 0x824147A8
 
     private:
+        // ADDITIVE GRANT ([stuntrace wS2] wave, 2026-08-27) -- the same friend-grant pattern
+        // BrnDistrictMarker.h and BrnRoadRuleComponent.h already use for FBurnMainHudState.
+        // RaceMainHudState::UpdatePermenant @0x824806E8 pokes this component's second entry
+        // flag byte INLINE, with no accessor anywhere in the ledger:
+        //     0x82480B70  stb r11, 0x25F1(r29)   ; r29 == the state, 0x25F1 - 0x1D58 == +0x899
+        //     0x82480B78  bl  FriendsListComponent::UpdateAptVariables
+        // (r11 == 1 when meGameModeType is 15 or 16, else 0). Friendship rather than a
+        // fabricated setter, because the byte's semantics are not recovered.
+        friend struct RaceMainHudState;
+
         // ---- current selection cursor (X360 +0x870..+0x894) ----
         u32 muCachedCacheField;   // +0x870 -- cached GuiCache far field (set by SetGuiCachePointer)
         s32 meListType;           // +0x874 -- 1 friends / 2 shortcuts / 3 challenges (SaveCurrentState switch @0x82414A10)
@@ -187,9 +197,20 @@ namespace BrnGui
         CgsID mau64ChallengeIds[KI_MAX_FRIEND_RECORDS];             // +0x070 ((idx+14)*8 addressing)
         BrnFlapt::TextFieldRef  maBranchLabelFields[3];             // +0xB98 ("branchOptionOne_txt" chain)
         BrnFlapt::TextFieldRef  mListTitleField;                    // +0xBBC ("listTitle_mc"/"listTitle_txt")
-        BrnFlapt::MovieClipRef  mUpArrowClip;                       // +0xBC8 ("upArrow_mc"/"arrow")
-        BrnFlapt::MovieClipRef  mDownArrowClip;                     // +0xBD0 ("downArrow_mc")
-        BrnFlapt::MovieClipRef  mThirdClip;                         // +0xBD8 (chain tail)
+        // CORRECTED [stuntrace F2] 2026-08-27 -- these three were named ONE SLOT OFF
+        // (mUpArrowClip/mDownArrowClip/mThirdClip at +0xBC8/+0xBD0/+0xBD8). Prepare
+        // @0x8242B188 binds them in this order, which pins each one by its apt name:
+        //   @0x8242B3A0  mAptRef.FindChildMovieClip("branch_mc")                        -> +0xBC8
+        //   @0x8242B3D4/E4 mAptRef["upArrow_mc"].FindChildMovieClip("arrow")            -> +0xBD0
+        //   @0x8242B410/20 mAptRef["downArrow_mc"].FindChildMovieClip("arrow")          -> +0xBD8
+        // UpdateAptVariables @0x82423558 corroborates it independently: +0xBC8 takes the
+        // BRANCH-state frame label and the highlighted branch row's Y position, while
+        // +0xBD0/+0xBD8 are the two SetVisible targets of the 0..3 scroll indicator
+        // (SetDirty's base 2 == "can scroll up" -> +0xBD0, its +1 == "can scroll down"
+        // -> +0xBD8). No other TU referenced the old names.
+        BrnFlapt::MovieClipRef  mBranchClip;                        // +0xBC8 ("branch_mc")
+        BrnFlapt::MovieClipRef  mUpArrowClip;                       // +0xBD0 ("upArrow_mc"/"arrow")
+        BrnFlapt::MovieClipRef  mDownArrowClip;                     // +0xBD8 ("downArrow_mc"/"arrow")
         SFriendRecord maRecords[KI_MAX_FRIEND_RECORDS];             // +0xBEC (memset span 0x3390)
         s32  maeDisplayTypes[KI_MAX_FRIEND_RECORDS];                // +0x3F70 (EFriendListEntryState)
         s8   mi8CurrentlyHighlightedBranch;                         // +0x883

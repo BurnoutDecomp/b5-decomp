@@ -1570,6 +1570,25 @@ namespace BrnGui
         return mWorldDataController.Prepare(lpGameDataInput);
     }
 
+    // ⭐ [event-starts wave 2026-08-27] X360 GuiModule::Prepare2 @0x825194B8's WorldDataController
+    // leg, split out for exactly the same reason as PrepareWorldData above (the PC has no module
+    // scheduler to hand GuiModule::Prepare2 the GameData IO pair). The machine itself is the
+    // console's, unaltered -- see WorldDataController::Prepare2.
+    //
+    // ⛔ THE CALLER MUST NOT PUMP THIS AND PrepareWorldData IN THE SAME PHASE. Both machines drain
+    // the SAME mReceiverQueue and neither checks what the one queued reply belongs to, so
+    // overlapping them makes each eat the other's answer -- and on this build that is not
+    // hypothetical: Prepare parks forever at stage 9 waiting on a GetFreeburnChallengeList reply
+    // that no PC producer sends, so a Prepare2 reply arriving while Prepare is still pumped would
+    // be consumed as the challenge list AND falsely advance meState to WFPLAYERCARCOLOURS.
+    // BrnGameModule's driver enforces the exclusion; see the ⛔ at its call site.
+    bool GuiModule::PrepareWorldData2(BrnResource::GameDataIO::InputBuffer* lpGameDataInput)
+    {
+        if (lpGameDataInput == 0)
+            return false;
+        return mWorldDataController.Prepare2(lpGameDataInput);
+    }
+
     bool GuiModule::Release()
     {
         mProfileManager.Release();   // detach the sign-in listener + release the SLS
@@ -1831,6 +1850,8 @@ namespace BrnGui
                 case 492:   // [E1] GuiEventCurrentStatus  -- distance driven + player-team table
                 case 424:   // [E1] GuiEventScoreUpdate    -- THE EVENT TIMER (mfEventTime/mfTargetTime)
                 case 428:   // [E1] GuiAttackScoreUpdate   -- THE STUNT SCORE (current/target/combo/multiplier)
+                case 203:   // [event-starts] GuiEventUpdateEventStarts -- THE EVENT-START TABLE
+                case 93:    // [A9] GuiEventPrepareForModeStart -- THE MODE-TYPE SEED (meGameModeType)
                     // [H1 wave 2026-08-25] On the console EVERY module-input event reaches
                     // GuiCache::RecEvent (its ~180-case switch consumes what it wants);
                     // this build's pump routes selectively, so the two cache-consumed ids
@@ -1843,6 +1864,21 @@ namespace BrnGui
                     // terms: BridgeGameStateToGui's stunt slice posts them and GuiCache::RecEvent
                     // now has the matching three arms. None of the three is re-consumed off the
                     // notification queue, so forwarding them here delivers exactly once.
+                    // [A9 mode-type arm 2026-08-27] 93 joins on exactly the same terms and it is
+                    // the one that makes the other three mean anything: BrnGame::
+                    // TranslateEventFlowGameActionToGuiEvent's case-23 arm posts it (mounted +
+                    // called), GuiCache::RecEvent's case-93 arm above is its only consumer, and
+                    // it is the SOLE writer of meGameModeType -- the switch variable case 424
+                    // and case 428 assert against and EventInfoComponent::Update switches on.
+                    // ⭐ SELECTIVE, NOT BLANKET (the gateui-campaign house rule): 93 is not
+                    // observed by any flow (RouteEventToFlow drops it) and is not re-consumed
+                    // off the notification queue, so this forward delivers it exactly once.
+                    // [event-starts wave 2026-08-27] 203 joins on identical terms: its only
+                    // producer is BridgeGameStateToGui's event-start arm (landed as
+                    // GameBridgeGameStateToX_EventStartsGuiEvents.cpp), GuiCache::RecEvent's
+                    // case-203 arm is its only consumer, and nothing else in the pump touches
+                    // it -- so this forward delivers it exactly once. It is the SOLE writer of
+                    // GuiCache::maEventStarts, the table GetProfileEventDisplayInfo walks.
                     mGuiCache.RecEvent(lpEvent, liId);
                     break;
 

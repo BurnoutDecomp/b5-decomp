@@ -131,6 +131,20 @@ namespace BrnGui
         void SetCache(GuiCache* lpCache);
         f32 GetValue() const { return mfValue; }   // trivial accessor (header-inline)
 
+        // ADDITIVE GROW ([stuntrace F2] wave, 2026-08-27). DWARF-declared PUBLIC
+        // (BrnPlayerPositionSingle.h:199 `void SetValueChanged()`, and the DWARF's own
+        // BrnPlayerPositionTable.cpp:1334 shows PlayerPositionTableComponent::SetValuesDirty
+        // as a loop over it), but the X360 compiler INLINED it at every call site -- there
+        // is no symbol for it in scratch/func_index.tsv -- so the body lands here.
+        // Attested by the raise-loop the sibling table's SetupGameMode @0x8243E6F8 emits
+        // twice (@0x8243E7A8 and @0x8243E818):
+        //     addi r10, r31, 0xCC      ; == maPlayerComponents[0] (+0x0C) + 0xC0
+        //     li   r11, 9              ; KI_MAX_BARS_NEEDED rows
+        //     li   r9, 1
+        //     stb  r9, 0(r10) ; addi r10, r10, 0xCC   ; stride == sizeof(row)
+        // -- +0xC0 is mbValueChanged. A bare named-member store; no assert on console.
+        void SetValueChanged() { mbValueChanged = true; }
+
     private:
         // DWARF cpp:868/cpp:889 -- the "wow" gates (value beats the per-type limit).
         // No standalone X360 symbols (inlined into RenderValue @0x8242212C/@0x8242241C);

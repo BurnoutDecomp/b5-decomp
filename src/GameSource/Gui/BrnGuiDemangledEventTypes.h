@@ -185,7 +185,14 @@ namespace BrnGui
     struct GuiEventPlayerWrecked { u8 maData[1]; s32 GetEventType() const { return 548; } };  // id 548 size 1 (raw; size not GuiEvent-shaped)
     struct GuiEventPreRaceMessages : public CgsGui::GuiEvent<159> { u8 maPayload[1732]; };  // id 159 size 1744 (12B GuiEvent header + opaque payload)
     struct GuiEventPrepareForInvite { u8 maData[1]; s32 GetEventType() const { return 128; } };  // id 128 size 1 (raw; size not GuiEvent-shaped)
-    struct GuiEventPrepareForModeStart : public CgsGui::GuiEvent<93> { u8 maPayload[140]; };  // id 93 size 152 (12B GuiEvent header + opaque payload)
+    // [A9 mode-type arm 2026-08-27] GuiEventPrepareForModeStart (id 93) has been RECOVERED and
+    // now lives in BrnGuiEventTypeDefs.h with its real flat wire shape (the opaque
+    // `GuiEvent<93> + u8[140]` shell that stood here read the 152-byte record as "12-byte
+    // GuiEvent header + 140 payload"; the 152 bytes ARE the payload -- GuiCache::RecEvent's
+    // case-93 arm @0x8250E7E0 reads the 8-byte pursued-car id straight off `ld 0(payload)`).
+    // Same reason for the move as GuiAttackScoreUpdate / GuiEventCurrentStatus above:
+    // GuiCache::RecEvent, its consumer, cannot include THIS header (the
+    // GuiEventAudioTraxUpdate C2011 pair). Deleted rather than left to shadow the real home.
     struct GuiEventPreraceTrigger { u8 maData[4]; s32 GetEventType() const { return 160; } };  // id 160 size 4 (raw; size not GuiEvent-shaped)
     // GuiEventProgressionProfileData (id 350, size 12) MOVED to
     // GameSource/Gui/BrnGuiEventTypeDefs.h with its real field shape
@@ -252,7 +259,15 @@ namespace BrnGui
     struct GuiEventTogglePictureParadise { u8 maData[1]; s32 GetEventType() const { return 222; } };  // id 222 size 1 (raw; size not GuiEvent-shaped)
     struct GuiEventTriggerOnlinePostEvent { u8 maData[1]; s32 GetEventType() const { return 320; } };  // id 320 size 1 (raw; size not GuiEvent-shaped)
     struct GuiEventUpdateEventCountdown { u8 maData[4]; s32 GetEventType() const { return 234; } };  // id 234 size 4 (raw; size not GuiEvent-shaped)
-    struct GuiEventUpdateEventStarts : public CgsGui::GuiEvent<203> { u8 maPayload[8404]; };  // id 203 size 8416 (12B GuiEvent header + opaque payload)
+    // [event-starts producer wave 2026-08-27] GuiEventUpdateEventStarts (id 203) has been
+    // RECOVERED and now lives in BrnGuiEventTypeDefs.h as the real record -- the queued 8416
+    // bytes ARE a BrnGameState::GameStateModuleIO::SetUpAllEventStartsInterface, with NO
+    // GuiEvent header in front of them (the producer memcpys the interface onto a bare local
+    // and AddGuiEvent queues it from offset 0; see that header for the asm). The opaque
+    // `GuiEvent<203> + u8[8404]` shell that stood here was DELETED rather than left to shadow
+    // the real home -- its 12-byte-header assumption would have put the array 12 bytes out
+    // while still matching the size literal. Moved for the same include reason as
+    // GuiAttackScoreUpdate above: the consumer is GuiCache::RecEvent.
     // [hud H3b tracking slice 2026-08-25] GuiEventUpdateHud (147) has been RECOVERED and
     // now lives in BrnGuiEventTypeDefs.h with its real X360 record shape (the raw
     // {speed, rpm, gear} words). The opaque GuiEvent<147> shell that stood here was

@@ -61,7 +61,21 @@ namespace BrnGui
         void ProcessDistrictTransitionComplete(const char* lpcComponentName);                                     // @0x82412AB0
         void OnLoad(const char* lpcComponentName);
         void Hide();
-        void SetOnline(bool lbOnline);
+
+        // ADDITIVE GROW ([stuntrace F2] wave, 2026-08-27). DWARF-declared
+        // (BrnDistrictMarker.h:116 `void SetOnline(bool)`), but the X360 compiler INLINED
+        // it at every call site -- there is no symbol for it in scratch/func_index.tsv --
+        // so the body lands here rather than in the .cpp. Reconstructed from the one
+        // attested call site, RaceMainHudState::UpdateWFInit @0x82480200:
+        //     0x824805E4  lwz r11, 0x140(r31)     ; mpCache
+        //     0x824805E8  lbz r11, 0x4B4C(r11)    ; GuiCache::mbOnlineStartInProgress
+        //     0x824805EC  stb r11, 0x1062(r31)    ; == mDistrictMarker(+0xFFC) + 0x66
+        // -- +0x66 is mbOnline. A bare named-member store; no assert on console.
+        void SetOnline(bool lbOnline)
+        {
+            mbOnline = lbOnline;
+        }
+
         void TransIn();
         void TransOut();
         void SetHideCountyIcon(bool lbHide);                              // @0x824733B8 (bodied; re-homed from the retired View slice)
@@ -72,6 +86,13 @@ namespace BrnGui
         // "transout") -- the X360 state reaches the embedded members directly, with no
         // accessor in the ledger. Friend-granted rather than fabricating one.
         friend struct FBurnMainHudState;
+        // RaceMainHudState::OnLeave @0x82479770 does the identical inline poke on the same
+        // two container movies (`addi r30, r31, 0xFFC` == &mDistrictMarker, then
+        // `lwz r11, 0xC(r30)` / `lwz r11, 0x20(r30)` -> vtable byte +0xC == slot 3 ==
+        // FlaptIconComponent::SetState, with "transout") -- @0x824798F0..0x82479920. Same
+        // reason as the sibling above: the X360 state reaches the embedded members
+        // directly and the ledger carries no accessor, so friendship beats fabricating one.
+        friend struct RaceMainHudState;
         // Static frame-trigger callbacks (registered in Prepare); forward to the matching
         // Process*TransitionComplete on the user-data'd instance.
         static void CountyTransitionCompleteCallback(void* lpUserData, u16 luArg);   // @0x82412B40

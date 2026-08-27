@@ -221,11 +221,18 @@ void PreRaceFlyByState::SetBurningRouteDescription()
             break;
         }
     }
-    // Same console null-dereference on no-match as SetRaceDescription -- reproduced.
+    // Same console null-dereference on no-match as SetRaceDescription. [PC GUARD, NOT in
+    // the X360 binary] -- the fresh/harness profile's event list is EMPTY on this build
+    // (run 20260827_133948 AV proof, wJ_07 twin guards). Missing record == flag 0.
+    // DELETE-WHEN the profile event list is populated on this build.
     // This worker takes the SPECIAL-EVENT bit, not the rank-win bit.
-    lDescription.mbEventFlag =
-        (lpProfileEvent->GetFlags()
-         & BrnProgression::ProfileEvent::E_FLAG_WON_SPECIAL_EVENT_BEFORE) != 0;
+    lDescription.mbEventFlag = false;
+    if (lpProfileEvent != 0)
+    {
+        lDescription.mbEventFlag =
+            (lpProfileEvent->GetFlags()
+             & BrnProgression::ProfileEvent::E_FLAG_WON_SPECIAL_EVENT_BEFORE) != 0;
+    }
 
     mpStateInterface->GetOutputEventQueue()->AddEvent(
         &lDescription, KI_GUI_OUT_EVENT_CHANNEL, static_cast<s32>(sizeof(lDescription)));
@@ -290,10 +297,16 @@ void PreRaceFlyByState::SetMarkedManDescription()
             break;
         }
     }
-    // Same console null-dereference on no-match as SetRaceDescription -- the X360 reads the
-    // flags half-word off a NULL record pointer. Reproduced rather than guarded.
-    lDescription.mbEventFlag =
-        (lpProfileEvent->GetFlags() & BrnProgression::ProfileEvent::E_FLAG_RANK_WIN) != 0;
+    // Same console null-dereference on no-match as SetRaceDescription. [PC GUARD, NOT in
+    // the X360 binary] -- empty fresh/harness profile event list on this build (run
+    // 20260827_133948 AV proof). Missing record == flag 0.
+    // DELETE-WHEN the profile event list is populated on this build.
+    lDescription.mbEventFlag = false;
+    if (lpProfileEvent != 0)
+    {
+        lDescription.mbEventFlag =
+            (lpProfileEvent->GetFlags() & BrnProgression::ProfileEvent::E_FLAG_RANK_WIN) != 0;
+    }
 
     mpStateInterface->GetOutputEventQueue()->AddEvent(
         &lDescription, KI_GUI_OUT_EVENT_CHANNEL, static_cast<s32>(sizeof(lDescription)));
@@ -362,9 +375,15 @@ void PreRaceFlyByState::SetRaceDescription()
     }
     // NOTE: the X360 leaves the record pointer NULL when the walk finds no match (and when
     // the profile holds no events at all) and reads its flags half-word regardless -- a
-    // genuine console null-dereference. Reproduced rather than guarded.
-    lDescription.mbEventFlag =
-        (lpProfileEvent->GetFlags() & BrnProgression::ProfileEvent::E_FLAG_RANK_WIN) != 0;
+    // genuine console null-dereference. [PC GUARD, NOT in the X360 binary] -- empty
+    // fresh/harness profile event list on this build (run 20260827_133948 AV proof).
+    // Missing record == flag 0. DELETE-WHEN the profile event list is populated.
+    lDescription.mbEventFlag = false;
+    if (lpProfileEvent != 0)
+    {
+        lDescription.mbEventFlag =
+            (lpProfileEvent->GetFlags() & BrnProgression::ProfileEvent::E_FLAG_RANK_WIN) != 0;
+    }
 
     mpStateInterface->GetOutputEventQueue()->AddEvent(
         &lDescription, KI_GUI_OUT_EVENT_CHANNEL, static_cast<s32>(sizeof(lDescription)));

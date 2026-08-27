@@ -45,6 +45,9 @@ namespace BrnGui
         void SetPosition(s32 liPosition);
 
     private:
+        friend struct RaceMainHudState;   // 2026-08-27: the in-event HUD's first-frame reset
+                                          // clears mbFirstFrame directly (RaceMainHudState_wS3.cpp)
+
         // The clip frame labels this component drives (XEX .data table @0x82F249BC;
         // slots 1/3 are not consumed by this TU's bodies but belong to the same
         // 5-entry table) and the per-position localisation keys (@0x82F24A8C).

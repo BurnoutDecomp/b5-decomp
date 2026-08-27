@@ -274,4 +274,28 @@ void TextFieldRef::SetColour(Vector4 lv4Colour)
                              | (luBlue << 16) | (luGreen << 8) | luRed;
 }
 
+// ---- GetText @ 0x8246E0C0 ---------------------------------------------------
+// [stunt-readout wave A8 2026-08-27] Read the field's current text back. Three
+// instructions of body: assert the handle (cpp:408) and tail-call
+// CgsGui::CgsAptString::GetText @0x8246D9A0 on it.
+//
+// The console passes the INSTANCE pointer straight into the apt-string accessor
+// (`lwz r3, 0(r31)` then `bl`), which is legal there only because TextFieldInstance
+// embeds its CgsAptString at +0x00. On the host the two are distinct types, so the
+// identity is spelled out through TextFieldInstance::GetAptString().
+//
+// The apt string hands back its cached UTF-8 buffer (mTextObject.mpUtf8String, X360
+// +0x74); this Ref's declared return type is the plain `const char*` its callers
+// (EventInfoComponent::UpdateStuntAttack @0x82429C08's stunt-name hand-off,
+// InGameMessagesComponent::RefreshString, the FriendsList branch handlers) feed
+// straight into SetText / PlayerName::Construct, so the code-unit pointer is
+// re-spelled -- no conversion happens on the console either.
+const char* TextFieldRef::GetText() const
+{
+    CGS_ASSERT(mpTextFieldInstance != 0, "mpTextFieldInst");   // cpp:408 (non-gating)
+
+    return reinterpret_cast<const char*>(
+        static_cast<const TextFieldInstance*>(mpTextFieldInstance)->GetAptString().GetText());
+}
+
 }

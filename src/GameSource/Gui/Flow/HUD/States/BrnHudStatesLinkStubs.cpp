@@ -39,41 +39,19 @@ namespace
 
 namespace BrnGui
 {
-    // ---- RACE_MAIN ------------------------------------------------------------------
-    // PAIRED-EDIT NOTE (2026-08-26): the REAL 21-entry table @0x82F25F88 is now recovered in
-    // BrnRaceMainHudState.cpp (unmounted). Mounting that TU REQUIRES deleting these two
-    // definitions in the same change, or LNK2005; until it mounts, these inert stubs are what
-    // the exe links and the recovery is deliberately dormant.
-    const CgsGui::sResourceTuple RaceMainHudState::maResourcesToLoad[1] =
-        { { 0u, CgsGui::E_GUI_RESOURCETYPE_START } };   // stub; real table recovered, see note
-    const u32 RaceMainHudState::muNumResourcesToLoad = 0;
+    // ---- RACE_MAIN: SCAFFOLD RETIRED 2026-08-27 (stunt-race UI wave) ------------------
+    // The real TU set is MOUNTED: BrnRaceMainHudState.cpp (the recovered 21-entry table +
+    // OnEnter/OnLeave/UpdateSetupState family) + partfiles _wS2/_wS3/_wS4. The placeholder
+    // statics and log-and-return lifecycle that stood here are deleted -- LNK2005 otherwise.
 
-    void RaceMainHudState::OnEnter() { LogUnreconstructedState("RaceMainHudState", "OnEnter"); }
-    void RaceMainHudState::OnLeave() {}
-    void RaceMainHudState::Update()  {}
-
-    // ---- PRE_FLY_BY (2026-08-26 fork retirement scaffold) -----------------------------
-    // BrnHudFlow.cpp now includes the REAL PreEvent header (the empty HUD-shell fork is
-    // deleted), so NewPoolState<PreRaceFlyByState> allocates the full host object and the
-    // 4160-byte undersized-slot hazard is closed -- but the seven real body partfiles
-    // (Flow/PreEvent/States/BrnPreRaceFlyBy_wJ_0*.cpp) cannot mount yet: their closure still
-    // needs BrnGui::MainMapComponent::{Construct,Prepare,Update,SetZoom,SetDesiredWorldCentre,
-    // SetStickMapToScreenEdges}, MapTransform::CalculateZoomFactor, GuiCache::
-    // GetLandmarkInfoFromIndex and MapManager::MapManager (measured 2026-08-26 verify wave).
-    // This scaffold satisfies the link meanwhile. DELETE THIS WHOLE BLOCK (statics + 4 bodies)
-    // when the wJ partfile set + the MainMap/MapTransform closure mount -- the real
-    // definitions live there and the two must never coexist in one build.
-    // The statics carry the REAL recovered values (header comments @0x82F26BE0/@0x82F26BE8):
-    // one FLAPT HD bundle, id 200 (the BRNPRERACEFLYBY* family).
-    const CgsGui::sResourceTuple PreRaceFlyByState::maResourcesToLoad[1] =
-        { { 200u, CgsGui::E_GUI_RESOURCETYPE_FLAPT_HD_BUNDLE } };
-    const u32 PreRaceFlyByState::muNumResourcesToLoad = 1;
-
-    PreRaceFlyByState::PreRaceFlyByState() {}   // console ctor @0x82514E58 = vtable stores +
-                                                // default member construction only (wJ_01)
-    void PreRaceFlyByState::OnEnter() { LogUnreconstructedState("PreRaceFlyByState", "OnEnter"); }
-    void PreRaceFlyByState::OnLeave() {}
-    void PreRaceFlyByState::Update()  {}
+    // ---- PRE_FLY_BY: SCAFFOLD RETIRED 2026-08-27 (stunt-race UI wave) -----------------
+    // The seven real body partfiles (Flow/PreEvent/States/BrnPreRaceFlyBy_wJ_0*.cpp) are
+    // MOUNTED, with their measured closure: BrnMainMap.cpp (Construct/Prepare/RecvEvent +
+    // the header-inline setters + the zoom tables) and BrnMainMapLinkGates.cpp (FLAG gates
+    // for the siblings that are provably dead on the stunt path -- IsMapApplicableToGameMode
+    // returns FALSE for STUNT_ATTACK, so the fly-by legitimately shows titles + description
+    // and no minimap). The statics, ctor and lifecycle stubs that stood here are deleted --
+    // the real definitions live in the wJ set and the two must never coexist in one build.
 
     // (FBURN_MAIN is no longer stubbed here: BrnFBurnMainHudState.cpp now carries the
     // real reconstruction -- lifecycle, phase machine, and the 42-entry resource table
@@ -142,23 +120,60 @@ namespace BrnGui
         LogUnreconstructedState("PaybackComponent", "Construct");
     }
 
-    // ---- RoadRuleShotComponent (real TU: BrnRoadRuleShotComponent.cpp, X360 Construct
-    //      @0x82424600). Measured residual: TWO GuiCache accessors, both declared with their
-    //      member and console offset already pinned in BrnGuiCache.h --
-    //          BrnGui::GuiCache::GetRoadRuleShotCapturedLineGate() const  (h:792,
-    //              mbRoadRuleShotCapturedLineGate @+0xAC5A)
-    //          BrnGui::GuiCache::GetRoadRuleShotOpponentARCI() const      (h:786,
-    //              meRoadRuleShotOpponentARCI @+0xAC48)
-    //      Their home is BrnGuiCache.cpp (mounted, and the event-GUI wave's hot file), so they
-    //      are reported rather than written here. NOTE the signature: this component's virtual
-    //      takes `const void*` name parameters, following the committed FlaptIconComponent
-    //      virtual (BrnRoadRuleShotComponent.h:43-46) -- not `const char*` like its siblings.
-    void RoadRuleShotComponent::Construct(const void* /*lpDEBUGName*/,
-                                          CgsGui::StateInterface* /*lpStateInterface*/,
-                                          const void* /*lpcParentName*/)
+    // ---- the RACE_MAIN mount's measured residual gates (2026-08-27 trial links) -------
+    // Each symbol below is referenced by the mounted BrnRaceMainHudState TU set but its
+    // owning TU was TRIED and opens more holes than it closes (see the bat's SatNav/HUD
+    // block notes). Every one is RUNTIME-DEAD on the STUNT_ATTACK path: UpdateSetupState
+    // turns Compass / PlayerPositionTable / Payback OFF for mode 7, so the gated calls sit
+    // behind component-enable flags that are false. One-shot logs make any future live hit
+    // attributable.
+    //
+    // Compass (real TU BrnCompassComponent.cpp, all three bodied there; its own residual =
+    // ShowPositionOnCompass + FormatDirectionLetters + ChallengeListEntryAction::
+    // GetNumLocations). DELETE-WHEN BrnCompassComponent.cpp mounts.
+    void CompassComponent::Construct(const char* /*lpacName*/, CgsGui::StateInterface* /*lpStateInterface*/,
+                                     const char* /*lpacParentName*/, s32 /*liParentAptLayerIndex*/)
     {
-        LogUnreconstructedState("RoadRuleShotComponent", "Construct");
+        LogUnreconstructedState("CompassComponent", "Construct");
     }
+    void CompassComponent::Prepare(const char* /*lpacName*/, const BrnFlapt::FileRef& /*lrFile*/)
+    {
+        LogUnreconstructedState("CompassComponent", "Prepare");
+    }
+    void CompassComponent::SetVisibility(bool /*lbVisible*/, bool /*lbImmediate*/)
+    {
+        LogUnreconstructedState("CompassComponent", "SetVisibility");
+    }
+
+    // PlayerPositionTable (real TU BrnPlayerPositionTable.cpp, SetCache @0x82473458 +
+    // SetupGameMode @0x8243E6F8 bodied there; its residual = SingleComponent::SetCache,
+    // SetTitleText @0x82437AD0, SetSkillsText @0x82413B30, CgsNetwork::UsernameCompare,
+    // BurnoutSkillsManager::GetCurrentSkill). DELETE-WHEN the table pair mounts.
+    void PlayerPositionTableComponent::SetCache(GuiCache* /*lpCache*/)
+    {
+        LogUnreconstructedState("PlayerPositionTableComponent", "SetCache");
+    }
+    void PlayerPositionTableComponent::SetupGameMode()
+    {
+        LogUnreconstructedState("PlayerPositionTableComponent", "SetupGameMode");
+    }
+
+    // Payback (real TU BrnPaybackComponent.cpp, unmounted -- see the Construct scaffold
+    // above; these two join it). DELETE-WHEN BrnPaybackComponent.cpp mounts.
+    void PaybackComponent::Initialize(GuiCache* /*lpCache*/)
+    {
+        LogUnreconstructedState("PaybackComponent", "Initialize");
+    }
+    void PaybackComponent::ShowAvailableInstantly(BrnNetwork::EPaybackType /*lePaybackType*/,
+                                                  EActiveRaceCarIndex /*leCarIndex*/)
+    {
+        LogUnreconstructedState("PaybackComponent", "ShowAvailableInstantly");
+    }
+
+    // ---- RoadRuleShotComponent: SCAFFOLD RETIRED 2026-08-27 (stunt-race UI wave). The
+    //      real TU BrnRoadRuleShotComponent.cpp was fully bodied all along and is MOUNTED;
+    //      its two-accessor link residual (GetRoadRuleShotCapturedLineGate /
+    //      GetRoadRuleShotOpponentARCI) landed in BrnGuiCache_wS1.cpp.
 
     // ---- MapManager ctor gate (mount-closure verify 2026-08-26) -----------------------
     //      The by-value SatNav components reach BrnGui::MapManager::MapManager(); its real
