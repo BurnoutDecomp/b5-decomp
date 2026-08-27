@@ -385,6 +385,13 @@ bool DriveThruManager::Prepare(const BrnTrigger::TriggerData* lpTriggerData,
     // so a test run can be teleported onto a pump (flow_run.ps1 -Teleport "x,y,z,heading") instead
     // of being driven across Paradise City hoping to find one. Env-gated; delete with the rest of
     // the bring-up diagnostics.
+    // ⭐ [gas-station wave 2026-08-28] WIDENED, and the widening is the point. The dump used to
+    // filter to GAS_STATION/BODY_SHOP and print the POSITION ONLY. That is precisely the shape that
+    // cannot answer the question a drive-thru investigation actually asks -- "is the car inside this
+    // box" -- and it hid the junkyard, which is the region that turned out to be firing wrongly
+    // (see the authored-extent banner in BrnTriggerQueryManager.cpp). Every drive-thru type is
+    // dumped now, with its authored box DIMENSIONS next to its centre, so a log alone is enough to
+    // decide inside/outside for any recorded car position.
     if (getenv("BRN_DRIVETHRU_DIAG") != 0 && CgsDev::Log::gpDebugPrint != 0)
     {
         for (s32 liIndex = 0; liIndex < miTotalDriveThrus; ++liIndex)
@@ -393,14 +400,14 @@ bool DriveThruManager::Prepare(const BrnTrigger::TriggerData* lpTriggerData,
             if (lrEntry.mpGenericRegion == 0)
                 continue;
             const BrnTrigger::GenericRegion::Type leType = lrEntry.mpGenericRegion->GetType();
-            if (leType != BrnTrigger::GenericRegion::E_TYPE_GAS_STATION &&
-                leType != BrnTrigger::GenericRegion::E_TYPE_BODY_SHOP)
-                continue;
+            const BrnTrigger::BoxRegion* lpBox = lrEntry.mpGenericRegion->GetBoxRegion();
             *CgsDev::Log::gpDebugPrint
                 << "[drivethru] region type=" << static_cast<s32>(leType)
                 << " id=" << static_cast<u64>(lrEntry.mpGenericRegion->GetId())
                 << " pos=(" << lrEntry.mPosition.x << "," << lrEntry.mPosition.y
-                << "," << lrEntry.mPosition.z << ")\n";
+                << "," << lrEntry.mPosition.z << ")"
+                << " dims=(" << lpBox->GetDimensionX() << "," << lpBox->GetDimensionY()
+                << "," << lpBox->GetDimensionZ() << ")\n";
         }
     }
 
@@ -807,14 +814,24 @@ void DriveThruManager::Update(GameStateModuleIO::GameActionQueue*  lpActionQueue
     // closed gate and a missed trigger volume are indistinguishable from the outside, and this
     // rung answers only "was the player allowed to use a drive-thru at all"
     // [[diagnostics-that-lie]]. Delete with the rest of the bring-up diagnostics.
+    // ⚠️ [gas-station wave 2026-08-28] IT NOW REPORTS BOTH EDGES, and the missing one was a
+    // diagnostic that lies by omission. This rung only ever printed the transition TO closed, so a
+    // log carrying exactly one "GATE CLOSED ... gear=0" line is EQUALLY consistent with "the gate
+    // shut at boot and re-opened a second later" (harmless, the normal case) and with "the gate
+    // shut at boot and stayed shut for the whole run" (the feature is dead). Both were observed on
+    // 2026-08-28 -- runs gas_r1_probe and gas_r2_pump each printed that one line, and in BOTH the
+    // gate never re-opened because the player's engine was never started -- and the single line
+    // could not tell them apart [[diagnostics-that-lie]]. The OPEN edge costs one line per run.
     {
         static bool sbLastCanUse = true;
-        if (!mbPlayerCanUseDriveThrus && sbLastCanUse && CgsDev::Log::gpDebugPrint != 0)
+        if (mbPlayerCanUseDriveThrus != sbLastCanUse && CgsDev::Log::gpDebugPrint != 0)
         {
             *CgsDev::Log::gpDebugPrint
-                << "[drivethru] GATE CLOSED: showtiming=" << (lbIsShowtiming ? 1 : 0)
+                << "[drivethru] GATE " << (mbPlayerCanUseDriveThrus ? "OPEN" : "CLOSED")
+                << ": showtiming=" << (lbIsShowtiming ? 1 : 0)
                 << " crashing=" << (lbPlayerCrashing ? 1 : 0)
-                << " gear=" << static_cast<s32>(lpRcOutputInterface->GetPlayerGear()) << "\n";
+                << " gear=" << static_cast<s32>(lpRcOutputInterface->GetPlayerGear())
+                << " junkyards=" << (mbPlayerCanUseJunkyards ? 1 : 0) << "\n";
         }
         sbLastCanUse = mbPlayerCanUseDriveThrus;
     }

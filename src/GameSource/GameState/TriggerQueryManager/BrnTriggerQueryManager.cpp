@@ -984,20 +984,82 @@ void TriggerQueryManager::PreWorldUpdatePlayerTriggersBringUp(
             }
 
             const Matrix44Affine lBoxTransform = lpBoxRegion->ComputeTransform();
-            // ⛔ CONDUCTOR / FLAG, found by the waveD D1 light-region pass and NOT acted on here
-            // because it changes boot-verified jump behaviour: `lHalfExtents` above is
-            // BoxRegion::GetDimensions() UNSCALED, and the console's box dimensions are FULL
-            // extents. TriggerEntityModule::ProcessAddTriggerEvents @0x822D9520..0x822D9554
+
+            // ⭐⭐⭐ [gas-station wave 2026-08-28] THE FACTOR-OF-TWO IS PAID, and it was not a
+            // cosmetic one: it was making the car UNDRIVEABLE.
+            //
+            // The FLAG that stood here said `GetDimensions()` is UNSCALED, that the console's box
+            // dimensions are FULL extents, that BrnMath::IsPointInsideBox takes HALF extents, and
+            // that this stand-in therefore tested every armed generic region at TWICE its authored
+            // size in each axis (8x the volume) -- and then deferred the fix as too risky for a
+            // drive-by. MEASURED CONSEQUENCE, boot log of 2026-08-28 (scratch/flow_run/
+            // showtime_S7bb_realexe/BrnGame.log), one causal chain, five lines apart:
+            //     3901  [UI-gate] trig rebuild #1 pos=(3007.97,-2.54,-1945.17) armed=3
+            //     3902  [drivethru] ENTER type=0 id=250700     <- junkyard, at the EXIT position
+            //     3907  === CarSelectManager: EnterJunkyard:
+            //     3908  === CarSelectManager: Transition In [Start]
+            //     3933  HIDE_ONLINE: Removing race car 0 / Created race car 0
+            //     3948  [hud-reveal] GuiPlayerEngineEvent engineOn=0 (raw state 2 -> 0)
+            // i.e. the junkyard drive-thru fired ON THE JUNKYARD EXIT PLACEMENT, ProcessDriveThru's
+            // case-0 arm re-entered car select, that tore the player car down and rebuilt it, and
+            // the engine went off and never came back. The car then sat at the junkyard spawn with
+            // gear 0 for the rest of the run -- which is exactly the "-Drive does nothing" symptom
+            // that has been blamed on the harness twice. A gate that fires 8x too large does not
+            // merely over-report: here it re-entered a flow the player had just left.
+            //
+            // THE CONSOLE'S OWN ANSWER, from a reconstruction of the console's own asm rather than
+            // from reasoning: ChallengeManager::IsPointInTriggerRegion @0x82333368
+            // (BrnChallengeManager_wC_04.cpp:148) is the SAME predicate over the SAME armed set,
+            // and it passes `lpBoxRegion->GetDimensions() * 0.5f` -- and takes its bounding-sphere
+            // radius as `maxDimension * 0.5f` for the same reason. Corroborated upstream by
+            // TriggerEntityModule::ProcessAddTriggerEvents @0x822D9520..0x822D9554, which
             // multiplies InAddBoxTriggerEvent::mDimensions by 0.5 (`vspltisw128 v126,1 ;
-            // vcsxwfp128 v127,v126,1 ; vmulfp128 v1,v0,v127`) before
-            // rw::collision::BoxVolume::Initialize, and BrnMath::IsPointInsideBox takes HALF
-            // extents -- so this test currently arms every generic region at TWICE its authored
-            // size in each axis. ChallengeManager::IsPointInTriggerRegion's reconstruction
-            // (BrnChallengeManager_wC_04.cpp:148) already passes `GetDimensions() * 0.5f`, i.e.
-            // the two in-tree callers of the same predicate disagree. The new light-region stage
-            // (0b) below uses the halved form. Decide and unify in one pass, with a jump-ladder
-            // re-verify -- do not "fix" it as a drive-by.
-            if (BrnMath::IsPointInsideBox(lBoxTransform, lPlayerPosition, lHalfExtents))
+            // vcsxwfp128 v127,v126,1 ; vmulfp128 v1,v0,v127`) before BoxVolume::Initialize. Two
+            // independent console sites agree: GetDimensions() is FULL extents, the predicate wants
+            // HALF. So this is not a tuning choice between two defensible readings -- one of the
+            // two in-tree callers was simply wrong, and it was this one.
+            //
+            // ⚠️ THE JUMP LADDER IS THE THING TO RE-VERIFY (the deferred note's stated worry): jump
+            // regions shrink to their authored size here, so a jump the 2x box used to catch early
+            // is now caught at its real boundary. The [jump-ladder] rungs still print; the
+            // `insideFull`/`insideHalf` witness below makes every difference this change makes
+            // visible in one line rather than inferred from a missing event.
+            // The BROADPHASE above is deliberately left on the summed full dimensions: it can only
+            // over-accept, and over-accepting into an exact test is free.
+            const bool lbInsideAuthored =
+                BrnMath::IsPointInsideBox(lBoxTransform, lPlayerPosition, lHalfExtents * 0.5f);
+
+            // [DIAG] NOT IN THE X360 BINARY. THE ATTRIBUTION RUNG for the change above: it reports
+            // the OLD verdict alongside the new one, so a region that stops firing is never left to
+            // be inferred from silence -- the failure mode this file's own 'exitst' banner exists
+            // to stop. Prints only where the two verdicts DISAGREE (the whole population of
+            // behaviour changes), first N only.
+            {
+                const bool lbInsideDoubled =
+                    BrnMath::IsPointInsideBox(lBoxTransform, lPlayerPosition, lHalfExtents);
+                if (lbInsideDoubled != lbInsideAuthored)
+                {
+                    static s32 siExtentDiagLines = 0;
+                    const s32  KI_EXTENT_DIAG_FIRST_N = 16;
+                    if (siExtentDiagLines < KI_EXTENT_DIAG_FIRST_N && CgsDev::Log::gpDebugPrint != 0)
+                    {
+                        ++siExtentDiagLines;
+                        const BrnTrigger::GenericRegion* lpDiagGeneric =
+                            static_cast<const BrnTrigger::GenericRegion*>(lpArmedRegion);
+                        *CgsDev::Log::gpDebugPrint
+                            << "[trig-box] region " << luRegionIndex
+                            << " id=" << static_cast<u64>(lpArmedRegion->GetId())
+                            << " genericType=" << static_cast<s32>(lpDiagGeneric->GetType())
+                            << " dims=(" << lHalfExtents.x << "," << lHalfExtents.y
+                            << "," << lHalfExtents.z << ")"
+                            << " insideFull=" << (lbInsideDoubled ? 1 : 0)
+                            << " insideHalf=" << (lbInsideAuthored ? 1 : 0)
+                            << "  (authored-extent fix 2026-08-28)\n";
+                    }
+                }
+            }
+
+            if (lbInsideAuthored)
             {
                 maLastPlayerTriggers.Append(luRegionIndex);
             }
