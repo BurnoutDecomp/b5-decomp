@@ -69,6 +69,15 @@ namespace BrnDirector
 {
     namespace
     {
+        // ⭐ The FLOOR MainDirector::Update clamps the camera's requested sim time scale to
+        // before publishing it as the sim timer's multiplier (`fsel f1, f13, f31, f0` with
+        // f0 == flt_8200CE04, @0x8227513C..0x82275144). A camera may not slow the simulation
+        // below 1/200 of real time.
+        // ⚠️ THIS IS A READ VALUE, NOT A PLACEHOLDER. Hex-Rays renders it 0.0049999999, which
+        // is the exact decimal expansion of the IEEE-754 f32 0x3BA3D70A -- i.e. it is the
+        // literal that is in .rdata, printed at double precision, not a decompiler guess.
+        const f32 KF_MINIMUM_SIM_TIME_SCALE = 0.005f;   // flt_8200CE04
+
         // The collision-generator view of an embedded aggregate. Takes a NAMED member's
         // address (never an offset into this class's storage) -- the X360 tears the embedded
         // CgsGraphics::Camera down through BaseCollisionGenerator::Destruct because on this
@@ -1632,6 +1641,27 @@ namespace BrnDirector
         mCameraFinaliser.Update(lpIO->mpInputBuffer, &maGameState, lpIO->mpResourceManager,
                                 &lCamera);
 
+        // ⭐⭐ X360 lines 836-848 (@0x82275008..0x82275064) -- THE SLOW-MOTION PERMISSION GATE.
+        // ⚠️ THE VALUE IT GUARDS IS NOT A SEPARATE LOCAL: IDA calls it `v220` / `var_40C`, but
+        // var_40C == sp+0x1C4, and the stack camera `v211` is var_510 == sp+0xC0, so
+        // 0xC0 + 0x104 == 0x1C4 -- i.e. var_40C IS lCamera.mEffects.mfSimTimeScale, split out
+        // of the stack object by IDA's frame analysis. (That also explains why the asm has only
+        // two stores to it and no initialiser: the "initialiser" is Camera::Construct.) This is
+        // the reading that makes the tail below the game's slow-motion channel rather than a
+        // read of uninitialised stack.
+        //
+        // `_R30 + 211168` is maGameState + 0x100 == GameState::mbCanUseSlomo (Construct seeds
+        // it to 1, so slomo IS permitted by default); `_R30 + 0x33105` is the second of the two
+        // camera-car flag bytes, whose role is recovered HERE for the first time: it is the
+        // "assert if a slomo request survives into a no-slomo frame" dev flag, and Construct
+        // seeds it to 0, so the assert is off in retail.
+        if (!maGameState.mbCanUseSlomo)
+        {
+            CGS_ASSERT(!(maCameraCarFlags[1] != 0 && lCamera.GetEffects().mfSimTimeScale != 1.0f),
+                       "Trying to use slomo when not allowed");
+            lCamera.GetEffects().mfSimTimeScale = 1.0f;
+        }
+
         // Carry the finalised camera into the next frame.
         mLastCamera = lCamera;
 
@@ -1646,6 +1676,47 @@ namespace BrnDirector
 
         lpIO->mpOutputBuffer->SetCgsCamera(mCgsCamera);
         lpIO->mpOutputBuffer->SetCameraOutput(lCamera);
+
+        // ⭐⭐ X360 lines 871-875 (@0x82275128..0x82275148) -- THE TIME-DILATION PUBLISH, and the
+        // whole reason a camera can slow the game down. It was GATED here with the note "none of
+        // them alters the published camera -- the two publish calls are already done", which is
+        // true and beside the point: this call does not alter the camera, it converts the camera
+        // into the SIM TIMESTEP. Every crash / takedown / close-up / hard-stop camera in the
+        // game writes its request into Camera::mEffects.mfSimTimeScale (Camera::
+        // SetRequestedTimeDilation is a one-line setter on exactly that field), and THIS is the
+        // only place that value leaves the director. While the line was commented out the whole
+        // director side of the game's slow motion was inert -- the requests landed on the camera
+        // and were dropped.
+        //
+        //   0x82275128  lwz  r3, 4(r14)                  ; the director OUTPUT buffer
+        //   0x8227512C  lfs  f31, 0x5D0+var_40C(r1)      ; lCamera.mEffects.mfSimTimeScale
+        //   0x82275130  bl   OutputBuffer::GetTimerRequestInterfac
+        //   0x82275138  addi r3, r3, 8                   ; <- GetSimTimerRequests()
+        //   0x8227513C  lfs  f0, flt_8200CE04            ; 0.005f
+        //   0x82275140  fsubs f13, f31, f0
+        //   0x82275144  fsel  f1, f13, f31, f0           ; (scale - 0.005 >= 0) ? scale : 0.005
+        //   0x82275148  bl   TimerRequests::SetTimestepMultiplier
+        //
+        // `addi r3, r3, 8` is the inlined GetSimTimerRequests(): this is the SIM timer, not the
+        // game timer -- the same +8 ModeManager::FinishCurrentMode and DriveThruManager emit.
+        // The 0.005 is a FLOOR, not a default: a camera may not slow the simulation below 1/200
+        // of real time. It is a genuine clamp with a non-identity value, so it is transcribed
+        // rather than dropped.
+        //
+        // ⚠️ The consumer end is BrnGameModule::UpdateTimers, whose Append/ApplyToTimers half
+        // was gated for the same reason and is live as of the same wave. Landing only one of
+        // the two would still be inert.
+        {
+            const f32 lfRequestedTimeScale = lCamera.GetEffects().mfSimTimeScale;
+            const f32 lfClampedTimeScale   =
+                ((lfRequestedTimeScale - KF_MINIMUM_SIM_TIME_SCALE) >= 0.0f)
+                    ? lfRequestedTimeScale
+                    : KF_MINIMUM_SIM_TIME_SCALE;
+
+            lpIO->mpOutputBuffer->GetTimerRequestInterfac()
+                ->GetSimTimerRequests()
+                ->SetTimestepMultiplier(lfClampedTimeScale);
+        }
 
         // ⭐ X360 line 878 -- BehaviourManager::PrepareBehaviours(&mBehaviourManager,
         // lpIO->mpResourceManager). UNCONDITIONAL (outside the live-player-car branch above),
