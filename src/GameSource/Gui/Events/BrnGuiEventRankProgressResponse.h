@@ -36,6 +36,17 @@ namespace BrnGui
         // "finished last rank" sentinel (the X360 returns the value regardless).
         s32 GetPlayerRank() const;
 
+        // ADDITIVE GROW (CrashNavDriverDetails::UpdateSetupLicense @0x824C1C58): does the
+        // response carry the "finished the last rank" sentinel? The X360 consumer reads
+        // miCurrentRank INLINE (`lwz r11, 0x20(r30); cmpwi r11, -1` @0x824C1CE4) rather
+        // than through GetPlayerRank, because the sentinel is exactly what it is testing
+        // for and GetPlayerRank asserts against it. Exposed by name so that caller stays
+        // off the raw offset AND out of the assert. One comparison, no layout change.
+        bool HasFinishedLastRank() const
+        {
+            return miCurrentRank == KI_PLAYER_HAS_FINISHED_LAST_RANK;
+        }
+
         // AddGuiEvent<GuiEventRankProgressResponse> @0x823D7290 -> AddEvent(&event, 438, 36).
         s32 GetEventType() const { return 438; }
 

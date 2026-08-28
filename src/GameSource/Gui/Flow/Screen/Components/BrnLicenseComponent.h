@@ -195,6 +195,18 @@ namespace BrnGui
         // ShowLicense's transition-complete and HideLicense.)
         bool IsReady() { return meCurrentLicenseState == E_LICENSE_SHOWING_NORMAL; }
 
+        // ADDITIVE GROW (CrashNavDriverDetails, pause wave 2026-08-28): the sibling of
+        // IsReady above, for the OTHER state the X360 tests inline. Three sites in
+        // CrashNavDriverDetails read `lwz +0x50C4 ; cmpwi 2` on this component --
+        // UpdateRunning @0x824B83E0 (only show the card once its first resource is in) and
+        // the photo-booth select/cancel arms of HandleControllerInputPressed
+        // @0x824CF468/@0x824CF4A8 -- with no call, so it is exposed by name here rather
+        // than reached through the raw offset. One comparison, no layout change.
+        bool IsFirstResourceLoaded() const
+        {
+            return meCurrentLicenseState == E_LICENSE_FIRST_RESOURCE_LOADED;
+        }
+
     private:
         // @0x8242D898 (cpp:1160) -- push the "apt_dirtLevel" control variable.
         void UpdateDirt();

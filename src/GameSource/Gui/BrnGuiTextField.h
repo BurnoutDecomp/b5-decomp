@@ -86,6 +86,37 @@ namespace BrnGui
         bool SetLocalisedText(s32 liValue,
                               CgsLanguage::LanguageManager::ParameterFormatType leFormat);
 
+        // @0x824E7608 (BrnTextField.cpp:194) -- the FLOAT variant (ledger-unnamed
+        // sub_824E7608, the sibling of the integer one above): format lfValue under
+        // leFormat into macText (128 cap) through the language manager's float formatter
+        // and push the apt data. Always reports success (the X360 returns 1).
+        // ⚠️ THE ARGUMENT IS AN f32 AND THAT IS ASM-PINNED, NOT INFERRED. The value
+        // arrives in f1 and the format in r5 -- the float consumes the r4 GPR slot, which
+        // is exactly the documented Hex-Rays phantom-parameter shape (its listing shows a
+        // spurious `int a3`). CrashNavDriverDetails::HandleStatData @0x824B8618 converts
+        // its integer stat words up with `extsw/std/lfd/fcfid/frsp` before every call,
+        // which is only meaningful if the callee takes a float.
+        // ⛔ THIS OVERLOAD MATTERS FOR CORRECTNESS, not just for linking: without it an
+        // `f32` argument silently narrows into the s32 overload above and the value is
+        // formatted by the INTEGER formatter (so an AUTO_DISTANCE mileage would print as
+        // a bare count). Declared before the first caller landed for that reason.
+        bool SetLocalisedText(f32 lfValue,
+                              CgsLanguage::LanguageManager::ParameterFormatType leFormat);
+
+        // @0x824E7C30 (BrnTextField.cpp:356) -- the ONE-INTEGER-PARAMETER variant
+        // (ledger-unnamed sub_824E7C30): resolve lpacText under leFormat with liValue
+        // substituted as its single parameter under leValueFormat, through
+        // LanguageManager::FormatTextFromInt (1024-byte scratch), then adopt the result
+        // with SetDatabaseText. Asserts a non-null, <127-character source string
+        // (BrnTextField.cpp:356/:357). Always reports success (the X360 returns 1).
+        // ⚠️ Distinct from the variadic form below, whose third argument is a PARAMETER
+        // COUNT -- a 4-argument call binds here, and must, or the value would be read as
+        // a count.
+        bool SetLocalisedText(const char* lpacText,
+                              CgsLanguage::LanguageManager::ParameterFormatType leFormat,
+                              s32 liValue,
+                              CgsLanguage::LanguageManager::ParameterFormatType leValueFormat);
+
         // @0x824E7800 (BrnTextField.cpp:264/:265/:266) -- the POSITIONAL-PARAMETER variant
         // (ledger-unnamed sub_824E7800). liNumParams (1..3) `(const char* text, u32 format)`
         // pairs follow in the varargs; the source id and every parameter are resolved through

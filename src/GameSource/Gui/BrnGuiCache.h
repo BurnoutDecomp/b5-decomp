@@ -634,6 +634,12 @@ namespace BrnGui
         bool IsFriendsListOpen() const        { return mbFriendsListOpen; }          // +0xB86C
         bool IsFriendsListChangePending() const { return mbFriendsListChangePending; } // +0xB86D
 
+        // ADDITIVE GROW (pause wave, 2026-08-28) -- the two carved far members above.
+        // Both are inlined at every X360 consumer (no standalone symbol), so exposing them
+        // as one-load accessors keeps those consumers off the raw offsets.
+        bool IsHighDefinition() const         { return mbIsHighDef; }                // +0x4B49
+        u16  GetLicencePointsToNextRank() const { return mu16LicencePointsToNextRank; } // +0xB874
+
         // The online-event timeout-timer gate. RaceMainHudState::UpdateWFInit @0x824802A8
         // (`lis r10,1 ; ori r10,r10,0x3B5C` == +0x13B5C, `lbzx`) ANDs it with the state's own
         // mbOnlineTimeoutTimer flag before OnlineTimeoutComponent::Show.
@@ -1290,7 +1296,19 @@ namespace BrnGui
         // boundary, which this member replaces when that TU is next touched). Raw s32 per
         // this boundary header's enum convention (see GetCurrentGameModeType).
         s32  meLastDisconnectedError;                     // +0x4B40 (19264) 0 == none
-        u8   mPad_4B44[6];                                // +0x4B44..+0x4B49
+        u8   mPad_4B44[5];                                // +0x4B44..+0x4B48
+        // ADDITIVE CARVE (pause wave, 2026-08-28) from the TAIL of the former
+        // mPad_4B44[6] -- the cache's HIGH-DEFINITION byte. Five consumers read it, all
+        // with the far-member `lbz +0x4B49` idiom, and all of them pick between an HD and
+        // an SD layout constant: MainMapComponent::Construct @0x8245E5D4,
+        // BootLegal::Update @0x824778D8, CrashNavDriverDetails::UpdateWFInit @0x824BFEB8
+        // (HD -> KV2_LICENSE_POSITION, SD -> KV2_LICENSE_POSITION_SD),
+        // CrashNavMapMain::HandleCrashNavInputPressed @0x824CCC74 and
+        // RoadSignIconManager::Update @0x82517014. BrnMainMap.cpp:168 asked for exactly
+        // this carve by name; it is made here so that its FLAG boundary can retire.
+        // No member is shifted (5 + 1 == 6). FLAG: consumer-named -- there is NO writer
+        // anywhere in the export set, so it reads 0 (== SD) on this build.
+        bool mbIsHighDef;                                // +0x4B49 (19273)
         bool mbInEventColouringGate;                     // +0x4B4A (19274) RoadRuleComponent::ShouldUseInEventColouring gate byte
         u8   mPad_4B4B[1];                                // +0x4B4B
         // ADDITIVE GROW (BrnOnlinePlay TU): the online-play main-menu invite / online-start flag
@@ -1777,7 +1795,16 @@ namespace BrnGui
         // is recovered, so both read 0 on this build (no panel, no pending change).
         bool mbFriendsListOpen;                          // +0xB86C (47212)
         bool mbFriendsListChangePending;                 // +0xB86D (47213)
-        u8 mPad_B86E[10];                                // +0xB86E..+0xB877
+        u8 mPad_B86E[6];                                 // +0xB86E..+0xB873
+        // ADDITIVE CARVE (pause wave, 2026-08-28) from the TAIL of the former
+        // mPad_B86E[10] -- the licence card's "points to the next rank" counter, read as a
+        // HALFWORD (`ori r10,r10,0xB874 ; lhzx r27, r11, r10`, the far-member idiom) by
+        // CrashNavDriverDetails::UpdateSetupLicense @0x824C1D20 and handed straight to
+        // LicenseComponent::SetPlayerInfo's liPointsToNextRank slot. u16 because the
+        // console loads it with lhzx, not lwz. No member is shifted (6 + 2 + 2 == 10).
+        // FLAG: consumer-named -- the producer is not recovered, so it reads 0 here.
+        u16 mu16LicencePointsToNextRank;                 // +0xB874 (47220)
+        u8 mPad_B876[2];                                 // +0xB876..+0xB877
         u8 mOptionsDataProfileStorage[0x8000];           // +0xB878 (X360 object: 0x7370 bytes)
         // +0x12BE8 (76776) -- the live DLC-pack-1 options block, which the X360 lays
         // immediately after the options profile (47224 + 0x7370 == 76776). Unlike the block
