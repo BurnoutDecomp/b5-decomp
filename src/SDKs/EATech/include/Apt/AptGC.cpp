@@ -358,20 +358,11 @@ void AptGC::CleanUnreachable()
         // console *(pool+0x28)) -- an independent witness to the walk's `values`.
         // They must agree; a walk that sees fewer than the pool holds is a walk that
         // silently exempts most of the heap from collection.
-        // Where does the walk stop? Count the pool CHAIN it is willing to cross and
-        // whether the outside-allocation list is even tracked, so "the walk is short"
-        // becomes "the walk stops HERE".
-        int liPools = 0;
-        int lbOutside = 0;
-        const void* lpFirstOutside = nullptr;
-        AptValueGCPool_DescribeArena(gpGCPoolManager, &liPools, &lbOutside, &lpFirstOutside);
-        char lac[256];
+        char lac[220];
         std::snprintf(lac, sizeof(lac),
-            "[aptlife] CleanUnreachable pass #%u: %u values, %u roots, %u marked, %u deleted "
-            "(pool says %d, %d pools, outside=%d/%p)\n",
+            "[aptlife] CleanUnreachable pass #%u: %u values, %u roots, %u marked, %u deleted (pool says %d)\n",
             suPasses, luVisited, luRoots, luMarked, luDeleted,
-            AptValueGCPool_GetAllocatedCount(gpGCPoolManager),
-            liPools, lbOutside, lpFirstOutside);
+            AptValueGCPool_GetAllocatedCount(gpGCPoolManager));
         CgsDev::Log::WriteToLog(lac);
     }
 
