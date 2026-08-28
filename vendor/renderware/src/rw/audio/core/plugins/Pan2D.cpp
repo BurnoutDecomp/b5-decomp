@@ -70,7 +70,11 @@ static const f32 KF_PAN2D_DEFAULT_SPREAD  = 135.0f; // flt_82F8EECC
 // -------------------------------------------------------------------------------------
 int Pan2D::GetSize()
 {
-    return 240; // li r3, 0xF0
+    // X360-LITERAL TRAP (the stage-carve audit, phase-D follow-up): the console
+    // immediate under-allocates the widened host object -- GetSize is the stage
+    // factory's allocation stride, so return host sizeof (the RawPuller2/Send/
+    // SinePlayer precedent).
+    return static_cast<int>(sizeof(Pan2D));   // X360: li r3, 0xF0 (240)
 }
 
 // -------------------------------------------------------------------------------------

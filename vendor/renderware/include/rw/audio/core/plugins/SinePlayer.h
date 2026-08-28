@@ -12,7 +12,7 @@
 // NO matching Feb-2007 leak source, NO DecFIGS DWARF, and no ProStreet08 rwaudio PDB
 // entry for this type, so each offset below is grounded directly in the disassembly of:
 //   CreateInstance                @0x82BA3FB8  (install vtable, clear phase/frequency)
-//   GetSize                       @0x82B98308  -> the X360 constant 72 (0x48), NOT host sizeof
+//   GetSize                       @0x82B98308  (X360 constant 72 == 0x48; host sizeof)
 //   PlayHandler                   @0x82B9B900  -> X360 li r3,0x10; host sizeof(SinePlayerPlayCommand)
 //                                                (deferred play cmd: latch start time)
 //   StopHandler                   @0x82B9B920  -> X360 li r3,8;    host sizeof(SinePlayerStopCommand)
