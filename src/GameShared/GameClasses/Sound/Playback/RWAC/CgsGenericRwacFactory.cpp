@@ -43,6 +43,7 @@
 #include "rw/audio/core/DecoderRegistry.h"
 #include "rw/audio/core/Pcm16BigDec.h"
 #include "rw/audio/core/plugins/Dac.h"               // the output plug-in (phase D)
+#include "GameShared/GameClasses/Sound/Playback/Plugins/GainArray/CgsGainArrayPlugin.h" // the game-side 'JGA0'
 
 #include <cstdint> // intptr_t (the RwacPlugInEvent r5 ride-through)
 #include <new>   // placement new (the in-carve construct)
@@ -237,7 +238,7 @@ GenericRwacFactory::GenericRwacFactory(Environment& arEnvironment,
         PlugInRegistry* lpPlugInRegistry =
             rw::audio::core::System::GetPlugInRegistry(mpSystem);
 
-        // The 25 RegisterPlugInRunTime calls in EXACT console order. TWENTY are
+        // The 25 RegisterPlugInRunTime calls in EXACT console order. TWENTY-TWO are
         // LIVE (descriptor-record wave 2026-08-28: their PlugInDescRunTime
         // records are REAL host records -- XEX-recovered fields + host callback
         // pointers, every callback bodied in its mounted vendor TU; proof
@@ -246,9 +247,11 @@ GenericRwacFactory::GenericRwacFactory(Environment& arEnvironment,
         //   * SndPlayer1 -- no PC plug-in home yet (Dac landed with the phase-D
         //     slice; GainFader, LowPassButterworth and SubMix got theirs with the
         //     phase-E waves);
-        //   * the three custom game descriptors (GinsuPlayer off_82F2D094 /
-        //     SndPlayer1_CgsStreamMod off_82F2E124 / GainArray off_82F2E664)
-        //     -- their game-side plug-in bodies are not reconstructed.
+        //   * two of the three custom game descriptors (GinsuPlayer off_82F2D094
+        //     and SndPlayer1_CgsStreamMod off_82F2E124) -- their game-side plug-in
+        //     bodies are not reconstructed yet. GainArray off_82F2E664 IS live: its
+        //     three callbacks were already bodied and are now folded onto the real
+        //     PlugIn/Mixer types (phase E).
         // An unregistered id makes GetPlugInHandle return null and the
         // voice-create paths fail through their guarded callbacks.
         //
@@ -294,7 +297,7 @@ GenericRwacFactory::GenericRwacFactory(Environment& arEnvironment,
         CGS_RWAC_REGISTER(rw::audio::core::SubMix::GetPlugInDescRunTime());              // 22 @0x82B9C370 (phase E)
         // 23 "GinsuPlayer" off_82F2D094 -- FLAG deferred (game-side plug-in not reconstructed)
         // 24 "SndPlayer1_CgsStreamMod" off_82F2E124 -- FLAG deferred (same)
-        // 25 "GainArray" off_82F2E664 -- FLAG deferred (same)
+        CGS_RWAC_REGISTER(CgsSound::Playback::Plugins::GainArray::GetPlugInDescRunTime()); // 25 off_82F2E664 (phase E)
         #undef CGS_RWAC_REGISTER
 
         // The decoder pass: the standard runtime set (Xas1 -> Xas -> EaXma, inside
