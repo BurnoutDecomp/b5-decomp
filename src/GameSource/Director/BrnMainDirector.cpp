@@ -1752,8 +1752,30 @@ namespace BrnDirector
                     ? lfRequestedTimeScale
                     : KF_MINIMUM_SIM_TIME_SCALE;
 
-            // ⛔⛔ [FLAG PC bring-up] THE PUBLISH IS HELD BEHIND BRN_DIRECTOR_SLOMO, AND THE
-            // REASON IS AN UPSTREAM DEFECT THIS LINE MADE VISIBLE -- not a doubt about the line.
+            // ✅✅ THE GATE IS GONE (2026-08-28, crash-camera wave). THE PUBLISH IS THE CONSOLE'S,
+            // UNCONDITIONAL, AS THE ASM ABOVE HAS IT. Its own DELETE-WHEN condition -- "an
+            // unauthored TIME_SCALE reads 100, verify with BRN_ICE_TIMESCALE_DIAG" -- is MET
+            // and MEASURED on this build:
+            //     [ice-timescale] raw TIME_SCALE=100.000000 -> mfSimTimeScale=1.000000
+            //     [slomo] simScale=1.000000 gameScale=1.000000 simStep=0.016667 gameStep=0.016667
+            // ONE [slomo] line for a 150 s run that reached DRIVING with 0 asserts -- the probe is
+            // edge-triggered, so one line means the published scale never left 1.0. The same
+            // command on the previous build printed simScale=0.005000 simStep=0.000083, i.e. the
+            // frozen game the gate existed to prevent.
+            //
+            // ⛔ AND BOTH CANDIDATE DIAGNOSES BELOW WERE WRONG -- recorded so nobody re-chases them.
+            // The take's value table being memclear-seeded is CORRECT (the console memclears it
+            // too, ICEDataICETake.cpp:26), and the TIME channel is NOT lost in the asset port.
+            // The zero was OURS: ICEElementDescription::GetDefaultFloat() was written as a raw
+            // union read, `return mDefault.GetFloat();`, so an INTEGER-typed default came back as
+            // its own bits reinterpreted as IEEE-754. TIME_SCALE's DEFAULT = (s32)100 read as
+            // 1.401e-43, and the eICE_UINT round-half-up in ICETake::SetParameter stored 0. The
+            // console's inlined body (@0x82530894, the only call site) branches on mDataType
+            // FIRST and converts with fcfid/frsp. Fixed in ICEDataEnums.hpp with that asm quoted.
+            //
+            // ⭐ THE HISTORY BELOW IS KEPT because the *mechanism* it documents is still the
+            // mechanism: this call is what converts a camera into the sim timestep, and every
+            // crash / takedown / close-up camera reaches the simulation through it.
             //
             // MEASURED 2026-08-28, twice, with BRN_SLOMO_DIAG: the frame camera arrives here
             // carrying mfSimTimeScale == 0.000000 from the moment the junkyard ICE cameras take
@@ -1784,19 +1806,10 @@ namespace BrnDirector
             // reached CgsSystem::Timer::mfScaleCurrent and changed the simulation timestep by a
             // factor of 200. What is missing is a correct value, not a path.
             //
-            // DELETE-WHEN: the ICE take's element table is seeded from
-            // ICEElementDescriptions[i]'s DEFAULT (or the TIME channel survives the asset port)
-            // so an unauthored TIME_SCALE reads 100. Verify with BRN_ICE_TIMESCALE_DIAG, which
-            // reports the raw channel value at the point KeyAnimController consumes it.
-            // Until then the GAME-STATE producers (DriveThruManager, ModeManager) still reach
-            // the sim timer through BrnGameModule::UpdateTimers -- only the DIRECTOR leg is held.
-            static const bool sbDirectorSlomoArmed = (getenv("BRN_DIRECTOR_SLOMO") != 0);
-            if (sbDirectorSlomoArmed)
-            {
-                lpIO->mpOutputBuffer->GetTimerRequestInterfac()
-                    ->GetSimTimerRequests()
-                    ->SetTimestepMultiplier(lfClampedTimeScale);
-            }
+            // (BRN_DIRECTOR_SLOMO is retired. It gated only this call; nothing else read it.)
+            lpIO->mpOutputBuffer->GetTimerRequestInterfac()
+                ->GetSimTimerRequests()
+                ->SetTimestepMultiplier(lfClampedTimeScale);
         }
 
         // ⭐ X360 line 878 -- BehaviourManager::PrepareBehaviours(&mBehaviourManager,
