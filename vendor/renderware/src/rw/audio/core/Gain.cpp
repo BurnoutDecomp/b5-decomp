@@ -33,9 +33,14 @@ static void *const KGN_BasePlugInVTable = nullptr; // off_820AA810
 // off_82F8CB70 -- the "Gain" runtime descriptor, REAL (descriptor-record wave; the
 // console GetSize is the ICF-folded RawPuller2::GetSize @0x82B97348 -- the host
 // record carries the same shared body). Metadata FLAG'd null.
+// The console record's GetSize slot is the ICF-folded RawPuller2::GetSize @0x82B97348 (the console
+// footprints coincide); the HOST objects differ, so the fold is unfolded here --
+// the slot must size THIS type's host object (the stage-carve audit).
+static int GainGetSizeThunk() { return static_cast<int>(sizeof(Gain)); }
+
 static PlugInDescRunTime g_GainDesc = {
     "Gain",
-    reinterpret_cast<void *>(&RawPuller2::GetSize),  // @0x82B97348 (folded/shared)
+    reinterpret_cast<void *>(&GainGetSizeThunk),                                       // @0x82B97348 (console ICF fold; host unfolded)
     reinterpret_cast<void *>(&Gain::CreateInstance), // @0x82BA2BD0
     0,
     reinterpret_cast<void *>(&Gain::Process),        // @0x82B97600

@@ -66,7 +66,11 @@ char **Limiter1::GetPlugInDescRunTime()
 // -------------------------------------------------------------------------------------
 int Limiter1::GetSize()
 {
-    return 168; // 0xA8
+    // X360-LITERAL TRAP (the stage-carve audit, phase-D follow-up): the console
+    // immediate under-allocates the widened host object -- GetSize is the stage
+    // factory's allocation stride, so return host sizeof (the RawPuller2/Send/
+    // SinePlayer precedent).
+    return static_cast<int>(sizeof(Limiter1));   // X360: li r3, 0xA8 (168)
 }
 
 // -------------------------------------------------------------------------------------

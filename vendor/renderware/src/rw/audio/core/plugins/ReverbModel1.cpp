@@ -317,7 +317,11 @@ enum { KI_REVERB_SCRATCH_SAMPLES = 768 };
 // -------------------------------------------------------------------------------------
 int ReverbModel1::GetSize()
 {
-    return 1088; // li r3, 0x440
+    // X360-LITERAL TRAP (the stage-carve audit, phase-D follow-up): the console
+    // immediate under-allocates the widened host object -- GetSize is the stage
+    // factory's allocation stride, so return host sizeof (the RawPuller2/Send/
+    // SinePlayer precedent).
+    return static_cast<int>(sizeof(ReverbModel1));   // X360: li r3, 0x440 (1088)
 }
 
 // -------------------------------------------------------------------------------------
