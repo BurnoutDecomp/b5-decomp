@@ -401,12 +401,26 @@ namespace BrnGui
     // ------------------------------------------------ UpdateSelectionMenu @ 0x82473978
     void BootLegal::UpdateSelectionMenu(s32 liAction)
     {
-        // Action 41 = move down (menu vtable +0x38 == HighlightNext), 42 = move up
-        // (+0x34 == HighlightPrevious).
+        // ⚠⚠ THE TWO SLOTS WERE THE WRONG WAY ROUND, AND SO WAS THE COMMENT THAT
+        // JUSTIFIED THEM (fixed 2026-08-28). The X360 dispatch is not in doubt --
+        // @0x82473994 action 0x29 loads `lwz r11, 0x38(vtable)` and @0x824739AC action 0x2A
+        // loads `lwz r11, 0x34(vtable)` -- but the previous revision asserted +0x38 ==
+        // HighlightNext without reading the table. It is the other way round. Read out of
+        // BrnGui::MenuComponent's vtable at off_82074068:
+        //     +0x34 (slot 13) -> 0x824E4DE0  `li r4,0 ; b SelectableGroup::HighlightNext`
+        //     +0x38 (slot 14) -> 0x824E4DE8  `li r4,0 ; b SelectableGroup::HighlightPrevious`
+        // (0x824E4DE0 carries the ICF-folded name BrnGui::TableRow::HighlightNext; the BODY
+        // is what matters, and its tail-call names it.)
+        // So the console moves the highlight BACKWARD on action 41 and FORWARD on 42, and
+        // this menu had them swapped -- the boot/attract selection menu moved the wrong way.
+        // ⭐ Corroboration that this is the tree's settled reading, not a new theory:
+        // BrnCrashNavEnterOnline_wI_04.cpp:172/176 and BrnOnlineCustomMatch_wJ_04.cpp:99
+        // already map +0x38 -> HighlightPrevious and +0x34 -> HighlightNext. This file was
+        // the only consumer disagreeing with them.
         if (liAction == KI_ACTION_MENU_NEXT)
-            mSelectionMenu.HighlightNext();
+            mSelectionMenu.HighlightPrevious();   // vtable +0x38
         else if (liAction == KI_ACTION_MENU_PREV)
-            mSelectionMenu.HighlightPrevious();
+            mSelectionMenu.HighlightNext();       // vtable +0x34
 
         // Read the highlighted row straight off the menu's SelectableGroup (the X360 reads its
         // cached +0x3BD copy of this).
