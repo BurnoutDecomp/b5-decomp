@@ -368,7 +368,7 @@ void TrafficEntityModule::EnsureVehicleRemovedFromCrashModule(u32 luVehicle)
 // blockers -- "GetVehicleSpecies / Vehicle::DetachArticulation /
 // StaticTrafficParam::SetShouldBeRemoved are not bodied". Checked against the tree, one by one:
 //   * GetVehicleSpecies                      -- bodied, and has been for a while, as a header
-//                                               inline in BrnTrafficVehicle.h:413.
+//                                               inline in BrnTrafficVehicle.h:419.
 //   * Vehicle::DetachArticulation            -- bodied, BrnTrafficVehicle.cpp:1379.
 //   * StaticTrafficParam::SetShouldBeRemoved -- bodied, BrnTrafficStaticParam.cpp.
 // All three were STALE. Meanwhile the list omitted the two things that actually had to exist:
@@ -397,8 +397,19 @@ void TrafficEntityModule::EnsureVehicleRemovedFromCrashModule(u32 luVehicle)
 // The two ladders differ in three ways and the difference is the whole point of the function:
 //   STANDARD: divergent marks the param SetShouldBeRemoved(); ordinary marks it SetZombie().
 //   STATIC:   divergent SetShouldBeRemoved();                  ordinary SetZombie().
-//   TRAILER:  divergent detaches then kills the trailer;       ordinary detaches and ORPHANS it
-//             (SetOrphan @0x8272E900) so a later RemoveVehicle takes the first arm.
+//   TRAILER:  divergent detaches then kills the trailer immediately and RETURNS; ordinary
+//             detaches, calls SetOrphan @0x8272E900, and then FALLS THROUGH to the shared tail
+//             which kills it anyway.
+// ⛔ THE TRAILER ROW ABOVE SAID THE OPPOSITE FOR ONE COMMIT, AND A REVIEWER CAUGHT IT. It read
+// "ordinary detaches and ORPHANS it so a later RemoveVehicle takes the first arm". There is no
+// later call: 0x8272E900 `bl SetOrphan` is immediately followed by 0x8272E904 `b loc_8272E9B0`,
+// and the tail at 0x8272E9BC is `SetDead(r3 == r30 == the SUBJECT, r4 == r31 == luVehicle)`.
+// ⭐ AND THE ORPHAN BIT DOES NOT EVEN SURVIVE THE CALL. Vehicle::SetDead @0x8270E870 is
+// `andi. r11, r11, 0xDE` (0x8270EA04) -- 0xDE clears 0x01 (E_FLAG_ALIVE) AND 0x20
+// (E_FLAG_ORPHAN). So the ordinary TRAILER arm sets a flag that the next call in the same arm
+// erases, and SetOrphan's only lasting effect here is its own internal IsAlive() assert. That
+// is a console quirk worth knowing; the comment that hid it was written by the very wave that
+// spent its first hour on four OTHER notes saying things their own code contradicted.
 // The default (species >= 3) arms differ too: the divergent one RETURNS after the assert
 // (0x8272E48C `b __restgprlr_20`), the ordinary one FALLS THROUGH to the shared
 // SetDead + EnsureVehicleRemovedFromCrashModule tail at loc_8272E9B0 (0x8272E80C `b`).
@@ -521,15 +532,16 @@ void TrafficEntityModule::RemoveVehicle(u32 luVehicle)
             // .cpp 4261. Streamed: "Traffic vehicle " << luVehicle
             // << " has unknown species " << GetVehicleSpecies(luVehicle).
             // 0x8272E48C `b __restgprlr_20` -- this arm RETURNS, unlike its ordinary twin.
-            CGS_ASSERT(false, "Traffic vehicle has unknown species");
+            CGS_ASSERT(false, "Traffic vehicle ");
             return;
         }
     }
 
     // ========================================================================================
     // ARM 3 -- loc_8272E728. The ordinary (network-safe) path: mark the param a ZOMBIE and let
-    // the shared tail retire the vehicle. A trailer is ORPHANED rather than killed, so both
-    // halves come out over two frames in a peer-reproducible order.
+    // the shared tail retire the vehicle. Every species arm here falls through to that tail, so
+    // the subject is always killed -- including the TRAILER arm, which calls SetOrphan first
+    // and then has the orphan bit cleared again by SetDead's 0xDE mask. See the banner.
     // ========================================================================================
     CGS_ASSERT(lpVehicle->IsAlive(), "lpVehicle->IsAlive()");               // .cpp 4269
     CGS_ASSERT(!lpVehicle->IsOrphan(), "!lpVehicle->IsOrphan()");           // .cpp 4270
@@ -581,7 +593,7 @@ void TrafficEntityModule::RemoveVehicle(u32 luVehicle)
     default:
         // .cpp 4322, the same streamed message as the divergent twin -- but this one FALLS
         // THROUGH to the shared tail (0x8272E80C `b loc_8272E9B0`).
-        CGS_ASSERT(false, "Traffic vehicle has unknown species");
+        CGS_ASSERT(false, "Traffic vehicle ");
         break;
     }
 
