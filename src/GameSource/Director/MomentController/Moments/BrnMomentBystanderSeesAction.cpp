@@ -213,4 +213,32 @@ void MomentBystanderSeesAction::Update(f32 /*lfTimeStep*/, void* lrBehaviourCont
     }
 }
 
+// ----------------------------------------------------------------------------
+// MomentBystanderSeesAction::SetPerceivedDistanceModificationFactor @0x822197E0
+//
+// ⭐ ADDED 2026-08-29 (crash-camera wave). ArbStateCrashing::Update calls this with 0.5 once a
+// bystander shot has held a crash for longer than kfMomentTime, pulling the framing in so the
+// car stays readable in a long crash.
+//   lbz    r11, 0x184(this)     ; mBystander.IsAllocated()
+//   ... assert "IsAllocated()" (BrnBehaviourManager.h:589) ...
+//   lwz r4, 0x188 / lwz r3, 0x18C / bl <GetBehaviour>
+//   lfs    f0,  0x358(behaviour)
+//   fcmpu  f31, f0 ; beq -> return          ; ONLY writes when the value actually changes
+//   stfs   f31, 0x358(behaviour)            ; mfPerceivedDistanceModificationFactor
+//   stb    1,   0xCF(behaviour)             ; the "re-solve the vantage" latch
+// The inequality guard is the whole point: raising the latch every frame would make the camera
+// re-solve its vantage continuously.
+// ----------------------------------------------------------------------------
+void MomentBystanderSeesAction::SetPerceivedDistanceModificationFactor(f32 lfFactor)
+{
+    CGS_ASSERT(mBystander.IsAllocated(), "IsAllocated()");   // BrnBehaviourManager.h:589
+
+    Camera::BehaviourBystanderCam* lpBystander = mBystander.GetBehaviour();
+
+    if (lfFactor != lpBystander->GetPerceivedDistanceModificationFactor())
+    {
+        lpBystander->SetPerceivedDistanceModificationFactor(lfFactor);
+    }
+}
+
 }

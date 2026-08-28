@@ -867,4 +867,18 @@ bool BehaviourIceAnim::HasFinishedOrFailed() const
     return false;
 }
 
+// ----------------------------------------------------------------------------
+// SetSecondaryVehicleRefToRaceCar
+// ----------------------------------------------------------------------------
+// ⭐ ADDED 2026-08-29 (crash-camera wave). The de-inlined form of the console's
+//     VehicleRef::SetToRaceCar(behaviour + 0xE00, raceCarIndex)
+// -- one real out-of-line call, emitted by ArbStateCrashing::Update @0x8226BFB0 when the player
+// is taken down mid-crash, so the takedown ICE camera anchors on the killer's car. The member is
+// private, so the setter lives here rather than letting the arbitrator state form the offset.
+// ----------------------------------------------------------------------------
+void BehaviourIceAnim::SetSecondaryVehicleRefToRaceCar(EActiveRaceCarIndex leRaceCar)
+{
+    mSecondaryVehicleRef.SetToRaceCar(leRaceCar);
+}
+
 } } // namespace BrnDirector::Camera

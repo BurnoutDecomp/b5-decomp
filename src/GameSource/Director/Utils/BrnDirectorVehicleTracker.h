@@ -99,50 +99,36 @@ public:
 // minimal slice that used to live here. GetCurrentEventState()/IsInCountdown() and the
 // E_EVENT_STATE_RACING alias are provided there.
 
-namespace DirectorIO
-{
-    // The motion data for one tracked vehicle the input buffer hands out. Update reads the
-    // MPH, the linear velocity, and the world transform's position out of it. The vehicle
-    // array is strided (0x4F0 per entry); the tracker indexes it by miVehicleIndex.
-    struct VehicleInfo
-    {
-        f32                       GetMphLastFrame() const;        // +0x3CC
-        rw::math::vpu::Vector3    GetLinearVelocity() const;      // +0x330
-        rw::math::vpu::Vector3    GetWorldPosition() const;       // transform Pos (+0x220)
-        // True while this vehicle is mid-crash (drives the crash-energy classification).
-        bool                      IsCrashing() const;
-        // The vehicle's top speed in MPH (the crash thresholds are measured below it).
-        f32                       GetMaxMph() const;
-    };
-
-    // The per-frame timer the world timestep is sampled from.
-    struct TimerStatusInterface
-    {
-        // The world sim timestep this frame (the body multiplies two timer fields: the raw
-        // step at +0x1C by the slow-mo scale at +0x20).
-        f32 GetWorldSimTimeStep() const;
-    };
-
-    class InputBuffer
-    {
-    public:
-        // The bitset of race-car slots currently in use (Update asserts the tracked slot is set).
-        const void*                 GetUsedRaceCars() const;
-        bool                        IsRaceCarUsed(s32 liIndex) const;
-        // The strided vehicle-info array (indexed by the tracked slot).
-        const VehicleInfo&          GetVehicleInfo(s32 liIndex) const;
-        // The frame timer interface.
-        const TimerStatusInterface& GetTimerStatusInterface() const;
-        // The score block for the tracked player car (copied into mScoreData).
-        const CarScoreData&         GetPlayerScoreData() const;
-        // The player car's current speed in MPH (the crash classifier compares it to the
-        // vehicle's max MPH minus the band thresholds). InputBuffer +0x7900.
-        f32                         GetPlayerSpeedMph() const;
-        // The "force the next world crash to be a high-energy top-down" gate the arbitrator
-        // raises on the input buffer. InputBuffer +0x7904.
-        bool                        IsForcedFastTopDownCrashArmed() const;
-    };
-}
+// ⛔⛔ THE PRIVATE `namespace DirectorIO { VehicleInfo; TimerStatusInterface; InputBuffer; }`
+// FORK THAT STOOD HERE MOVED INTO THE .cpp (2026-08-29, crash-camera wave), UNCHANGED.
+//
+// It was three declaration-only slices of types whose REAL homes are
+// DirectorModule/BrnDirectorModuleIO.h -- i.e. an ODR fork of BrnDirector::DirectorIO::
+// InputBuffer / VehicleInfo, exactly the species this project's rules forbid. It survived only
+// because no HEADER had ever pulled this file into a TU that also reaches the real ones.
+//
+// ⚠️ THE MOMENT ONE DID, IT WAS SIX BROKEN TUs. ArbStateCrashing embeds
+// VehicleTracker::ECrashType by value, so BrnArbStateCrashing.h includes this file, and the
+// arbitrator state CONTAINER includes that -- which put this fork in front of
+// BrnDirectorModuleIO.h in BrnMainDirector.cpp, BrnDirectorModule.cpp, BrnDirectorArbitrator.cpp,
+// BrnGameModule.cpp and both GameBridge TUs. Every one of them died on
+//   BrnDirectorModuleIO.h(145): error C2011: 'BrnDirector::DirectorIO::InputBuffer': 'class'
+//   type redefinition
+// and then on ~30 follow-on C2027s. Moving the block to the .cpp -- its only consumer -- makes
+// this header safe to include from anywhere, which is what a header carrying a type other
+// classes embed by value has to be.
+//
+// DELETE-WHEN (the real fix, still owed): VehicleTracker::Update is re-fitted to the REAL
+// InputBuffer API (GetUsedRaceCars / GetRaceCarInfo / GetTimerStatusInterface) and the .cpp's
+// copy goes too. The accessors this TU wants -- IsRaceCarUsed, GetVehicleInfo(idx),
+// GetWorldSimTimeStep, GetPlayerScoreData, GetPlayerSpeedMph, IsForcedFastTopDownCrashArmed --
+// are all declaration-only today, so nothing is emitted for them and the move costs nothing.
+// ⚠️ CLASS-KEY: `struct`, matching the real home (BrnDirectorModuleIO.h:145) and
+// BrnCameraFinaliser.h's forward declaration. MSVC mangles the class-key into the symbol, so
+// declaring it `class` here -- which the moved fork did -- made every TU that saw THIS header
+// FIRST emit `VInputBuffer` while BrnCameraFinaliser.cpp emitted `UInputBuffer`, and
+// CameraFinaliser::Update came up unresolved out of BrnMainDirector.obj. Measured, this build.
+namespace DirectorIO { struct InputBuffer; }
 
 class VehicleTracker
 {

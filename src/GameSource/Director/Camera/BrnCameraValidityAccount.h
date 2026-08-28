@@ -13,6 +13,14 @@
 // range bounds are modelled, the flag names land with the account's own TU.
 namespace BrnDirector
 {
+    // The two dev sinks the Print overloads write to. Reference-only here, so the forward
+    // declarations suffice (their real home is DirectorModule/BrnDirectorModuleDebugPrinter.h).
+    // ⚠️ CLASS-KEY: `struct DebugPrinter` / `class DebugLog`, matching that home exactly -- MSVC
+    // mangles the class-key into the symbol, so getting either wrong mints a symbol no TU can
+    // ever define.
+    struct DebugPrinter;
+    class  DebugLog;
+
 namespace Camera
 {
     // ADDITIVE (attested by CameraState::Clear @0x82220950, which asserts
@@ -39,6 +47,24 @@ namespace Camera
             E_FIRST_NOCUTFROM_FLAG = 27,
             E_END_NOCUTFROM_FLAG   = 31,
         };
+
+        // ---- the two dev read-outs (DWARF BrnCameraValidityAccount.h:85 / :88) -------------
+        // Both are `void Print(...) const` overloads: one dumps the raised reason bits to the
+        // on-screen debug printer, the other appends them to the scrolling debug log. They are
+        // DECLARATION-ONLY here; the bodies are trap stubs in DirectorLinkStubs.cpp (GROUP G)
+        // until the reason-name table they walk is recovered.
+        //
+        // ⭐ ADDED 2026-08-29 (crash-camera wave). Both are X360-attested by
+        // ArbStateCrashing: SelectNormalCrashCamera @0x82254FB0 calls the DebugPrinter form on
+        // the selected moment's camera account and on its own, and ProcessPossibleStateChanges
+        // @0x8224F5B0 calls the DebugLog form (the export's unnamed `sub_8223E6E0`, identified
+        // as this overload by the DWARF pair and by its argument being mpDebugLog).
+        // ⚠️ EVERY call site in that state is inside `if (IsDebugDisplayActive())`, and
+        // ArbStateCrashing::Construct seeds that flag FALSE, so retail never reaches them --
+        // which is exactly why a loud trap body is the honest placeholder rather than a quiet
+        // one. DELETE-WHEN: the reason-name table lands and the bodies can be written.
+        void Print(DebugPrinter& lrDebugPrinter) const;
+        void Print(DebugLog& lrDebugLog) const;
 
         // @0x82204028 (class TU; body in BrnCameraValidityAccount.cpp) -- record a
         // failure reason: range-check it, then raise its bit.

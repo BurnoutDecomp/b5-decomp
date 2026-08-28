@@ -12,6 +12,7 @@
 #include "GameSource/Director/Arbitrator/States/BrnArbStatePostEvent.h" // BrnDirector::ArbStatePostEvent (real layout)
 #include "GameSource/Director/Arbitrator/States/BrnArbStateDriveThru.h" // BrnDirector::ArbStateDriveThru (real layout)
 #include "GameSource/Director/Arbitrator/States/BrnArbStateCarSelect.h" // BrnDirector::ArbStateCarSelect (real layout)
+#include "GameSource/Director/Arbitrator/States/BrnArbStateCrashing.h"  // BrnDirector::ArbStateCrashing (real layout)
 #include "GameSource/Director/Utils/BrnICEMoviePlayer.h"                // BrnDirector::SharedPlaylists
 
 // ----------------------------------------------------------------------------
@@ -47,7 +48,15 @@ namespace BrnDirector
     // BrnArbStateOnlineRaceIntro.h / BrnArbStatePostEvent.h / BrnArbStateDriveThru.h,
     // #included above) -- de-forked from the placeholders so each TU and the container share
     // one definition.
-    class ArbStateCrashing        : public ArbitratorState {};
+    // ⭐⭐⭐ ArbStateCrashing IS DE-FORKED (2026-08-29, crash-camera wave). Its placeholder --
+    // `class ArbStateCrashing : public ArbitratorState {};` -- was the single most consequential
+    // empty shell in this file: E_STATE_CRASHING is the state ArbStateRoaming ENTERS on a crash
+    // (it only TESTS crash mode), so every crash in the game drove a do-nothing base Update that
+    // never wrote meState and had no exit edge. That is why crashes kept the ordinary chase
+    // camera and never slowed down. The real header is #included above.
+    // ⛔ It de-forks together with MainDirector's mbCrashActive writer, deliberately: with only
+    // the writer, the arbitrator would finally reach the shell and freeze the camera for the
+    // rest of the session out of a green build.
     class ArbStateTakedown        : public ArbitratorState {};
     // ✅ ArbStateCarSelect is DE-FORKED here as of 2026-07-30: its placeholder is gone and the
     // real header is #included above, exactly as the eight sibling states did. The blocker the

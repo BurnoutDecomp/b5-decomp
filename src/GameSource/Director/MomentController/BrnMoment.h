@@ -209,6 +209,14 @@ namespace BrnDirector
         const char* GetName() const override;                                  // @0x821F7608
         EType GetInstanceType() override { return E_MOMENT_BYSTANDER_SEES_ACTION; }
 
+        // @0x822197E0 -- ⭐ ADDED 2026-08-29 (crash-camera wave). Squash the bystander camera's
+        // perceived distance so a long crash stays readable. ArbStateCrashing::Update calls it
+        // with 0.5 once this moment has held the crash for longer than kfMomentTime.
+        // The console body is: assert mBystander.IsAllocated() (BrnBehaviourManager.h:589),
+        // resolve the behaviour through the handle, and -- only if the value actually changes --
+        // write it and raise the behaviour's re-frame flag. Bodied in this moment's own TU.
+        void SetPerceivedDistanceModificationFactor(f32 lfFactor);
+
     private:
         // DWARF h:87/h:89 (X360 +0x180 / +0x184).
         const Parameters* mpParameters;

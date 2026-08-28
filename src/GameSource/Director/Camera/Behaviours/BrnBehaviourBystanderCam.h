@@ -100,6 +100,16 @@ public:
     bool HasFailed() const        { return mbFailed; }
     bool CanSwitchToMeNow() const { return mbCanSwitchToMeNow; }
 
+    // ⭐ ADDED 2026-08-29 (crash-camera wave). The perceived-distance squash and its change
+    // latch, reached by MomentBystanderSeesAction::SetPerceivedDistanceModificationFactor
+    // @0x822197E0 -- which only writes when the value actually differs, then raises the latch.
+    f32  GetPerceivedDistanceModificationFactor() const { return mfPerceivedDistanceModificationFactor; }
+    void SetPerceivedDistanceModificationFactor(f32 lfFactor)
+    {
+        mfPerceivedDistanceModificationFactor = lfFactor;   // stfs 0x358(this)
+        mbPerceivedDistanceChanged            = true;       // stb  1, 0xCF(this)
+    }
+
 private:
 
     // FLAG: only the members these three functions touch are modelled at their asm-attested
@@ -112,7 +122,14 @@ private:
     bool              mbCanSwitchToMeNow;             // +0x00B  the Behaviour-base switch-to gate (DWARF base name)
     u8                maReserved00C[0x10 - 0x0C];     // +0x00C .. +0x00F
     s32               mParamWord1;                    // +0x010  cached lpParameters->miParamWord1
-    u8                maReserved014[0xD0 - 0x14];     // +0x014 .. +0x0CF (rig members not modelled here)
+    u8                maReserved014[0xCF - 0x14];     // +0x014 .. +0x0CE (rig members not modelled here)
+    // ⭐ CARVED 2026-08-29 (crash-camera wave). MomentBystanderSeesAction::
+    // SetPerceivedDistanceModificationFactor @0x822197E0 raises this byte whenever it CHANGES
+    // the factor below (`stb 1, 0xCF(behaviour)` guarded by the `fcmpu` inequality test), i.e.
+    // it is the "the framing distance moved, re-solve the vantage" latch.
+    // FLAG: the byte's ROLE name is inferred from that one writer; the WRITE and its guard are
+    //   asm-attested. RENAME-WHEN: the full bystander rig TU lands with the DWARF member list.
+    bool              mbPerceivedDistanceChanged;     // +0x0CF
     u8                maCollisionPolicy[0x340 - 0xD0]; // +0x0D0  mCollisionPolicy (opaque, &-of by GetCol)
 
     // --- mTarget (Behaviour::VehicleRef) sub-block SetTarget writes, +0x340 .. +0x34F ---
@@ -123,7 +140,12 @@ private:
     u8                maReserved34D[0x350 - 0x34D];   // +0x34D .. +0x34F (VehicleRef tail not modelled)
 
     const Parameters* mpParameters;                   // +0x350  the adopted parameter block
-    u8                maReserved354[0x35C - 0x354];   // +0x354 .. +0x35B (rig members not modelled here)
+    u8                maReserved354[0x358 - 0x354];   // +0x354 (rig member not modelled here)
+    // ⭐ CARVED 2026-08-29 (crash-camera wave): the framing squash the crash camera drives
+    // through MomentBystanderSeesAction. The sibling reconstruction of this class
+    // (Behaviours/BehaviourBystanderCam.h) already names the same +0x358 float
+    // mfPerceivedDistanceModificationFactor and seeds it to 1.0 in Construct, so the two agree.
+    f32               mfPerceivedDistanceModificationFactor;   // +0x358
     u8                mbField35C;                      // +0x35C  flag set (= 1) by SetTarget (re-acquire)
 };
 

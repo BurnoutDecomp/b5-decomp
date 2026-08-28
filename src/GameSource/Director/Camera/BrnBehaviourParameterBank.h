@@ -9,6 +9,7 @@
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourBystanderCam.h"       // BehaviourBystanderCam::Parameters
 #include "GameSource/Director/Camera/Behaviours/BehaviourPassengerCam.h"            // BehaviourPassengerCam::Parameters
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourRotateAboutVehicle.h" // BehaviourRotateAboutVehicle::Parameters
+#include "GameSource/Director/Camera/Behaviours/BrnBehaviourSpirallingDeathcam.h" // BehaviourSpirallingDeathcam::Parameters
 
 // ============================================================================
 // GameSource/Director/Camera/BrnBehaviourParameterBank.h
@@ -124,12 +125,39 @@ namespace BrnDirector
             maLookAroundCarCamParameters.mLookerParams.mfTargetSubjectYSize         =  0.75f;
             maLookAroundCarCamParameters.mLookerParams.mfTargetSubjectXScreenOffset =  0.125f;
             maLookAroundCarCamParameters.mLookerParams.mfTargetSubjectYScreenOffset = -0.125f;
+
+            // ⭐ 2026-08-29: seed the deathcam block too, with its own attested Construct
+            // (@0x821FB498). Without this the block would be pool garbage and
+            // BehaviourSpirallingDeathcam::SetParameters' type-tag tripwire would fire on the
+            // first road-rage-totalled crash.
+            maSpirallingDeathcamParameters.Construct();
+        }
+
+        // ⭐ ADDED 2026-08-29 (crash-camera wave). The spiralling-deathcam parameter block
+        // ArbStateCrashing::Prepare @0x822655E8 hands to BehaviourSpirallingDeathcam::
+        // SetParameters: `lwz r11, 0x1C(sharedInfo)` (mpNamedParameters) then
+        // `addi r29, r11, 0x23B4`. It is the console's block at NamedParameters +0x23B4, i.e.
+        // 0x80 past the look-around block above.
+        //
+        // ⚠️ IT IS DELIBERATELY *NOT* PLACED AT +0x23B4 HERE, and that is not sloppiness.
+        // This reconstruction's LookAroundCarCamParameters is 136 bytes (0x88) against the
+        // console block's 0x80 -- the Looker::Parameters slice inside it is modelled wider than
+        // the console's -- so the two blocks cannot both sit at their console offsets in one
+        // struct without forking a type. Parity here is BY NAMED MEMBER (the same rule the
+        // arbitrator state container states for its embedded states): the block exists, it is
+        // named, it is seeded, and the ONE consumer reaches it through the accessor. The
+        // +0x23B4 above is provenance.
+        const Camera::BehaviourSpirallingDeathcam::Parameters& GetSpirallingDeathcamParameters() const
+        {
+            return maSpirallingDeathcamParameters;
         }
 
         // The reserved span places the addressed block at the asm-attested +0x2334. The rest of
         // the bank (the earlier named Parameters blocks) is not modelled here.
         u8                         maReservedHead[0x2334];           // +0x0000 .. +0x2333
         LookAroundCarCamParameters maLookAroundCarCamParameters;     // +0x2334
+        Camera::BehaviourSpirallingDeathcam::Parameters
+                                   maSpirallingDeathcamParameters;   // console +0x23B4 (see note)
     };
 
     namespace Camera

@@ -50,7 +50,11 @@ namespace BrnDirector
 // MSVC mangles the class-key into the symbol, so a `class` here would emit
 // `AEAUDebugPrinter`-vs-`AEAVDebugPrinter` and open an unresolved external at link.
 struct DebugPrinter;
-class  AllVehicleData;
+// ⚠️ CLASS-KEY again: `struct AllVehicleData`, matching its real home
+// (Utils/BrnDirectorAllVehicleData.h:46). It was `class` here, and that alone left both
+// controllers' Update unresolved from ArbStateCrashing -- the caller saw the real header
+// (struct -> `U`) while this TU compiled the definition against `class` (-> `V`).
+struct AllVehicleData;
 class  VehicleTracker;
 struct VehicleRef;
 

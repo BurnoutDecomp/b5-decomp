@@ -661,14 +661,12 @@ namespace BrnDirector
     void ArbStateCarSelect::Update(ArbStateSharedInfo& lrSharedInfo)
     {
         GameState&                     lrGameState = *lrSharedInfo.mpGameState;
-        // ArbStateSharedInfo forward-declares mpPlayerCar's pointee as
-        // BrnDirector::VehicleInfo, but the real home is BrnDirector::Camera::VehicleInfo
-        // (SharedIO/BrnPlayerInfo.h) -- the shared header's forward declaration is in the
-        // wrong namespace. Bound to the REAL named type here so every read below is by
-        // member NAME (the sibling states read the same pointer by raw byte offset).
-        // DELETE-WHEN: ArbStateSharedInfo::mpPlayerCar / mpRaceCars are re-typed.
-        const Camera::VehicleInfo&     lrPlayerCar =
-            *reinterpret_cast<const Camera::VehicleInfo*>(lrSharedInfo.mpPlayerCar);
+        // ✅ THE CAST IS GONE (2026-08-29, crash-camera wave). This used to launder
+        // mpPlayerCar through a reinterpret_cast because ArbStateSharedInfo forward-declared its
+        // pointee as `BrnDirector::VehicleInfo` -- a namespace fork of a type that does not
+        // exist. That DELETE-WHEN ("ArbStateSharedInfo::mpPlayerCar / mpRaceCars are re-typed")
+        // is now discharged: the member is a `const Camera::VehicleInfo*`.
+        const Camera::VehicleInfo&     lrPlayerCar = *lrSharedInfo.mpPlayerCar;
         Camera::BehaviourManager&      lrManager   = *lrSharedInfo.mpBehaviourManager;
         const DirectorResourceManager& lrResources = *lrSharedInfo.mpDirectorResourceManager;
 
