@@ -29,6 +29,7 @@
 #include "rw/audio/core/CpuLoadBalancer.h" // the CPU-load governor the Dac drives
 #include "rw/audio/core/Profiler.h"        // Profiler (spProfiler)
 
+#include <cstring> // memset (the fresh-page-parity mixer clear)
 #include <new> // placement new (the vtable install in the create thunk)
 
 namespace rw
@@ -295,7 +296,15 @@ int Dac::CreateInstance(Dac *self)
     void *lpMixerBlock = System::Alloc(lpSystem, static_cast<u32>(sizeof(Mixer)), 0, 128, 0);
     self->mpMixer = static_cast<Mixer *>(lpMixerBlock);
     if (lpMixerBlock)
+    {
+        // FLAG PC-platform parity: the console block comes from freshly-mapped
+        // physical pages, which the kernel hands over ZEROED -- the sample regions
+        // start silent, and an interleave before any producer writes them emits
+        // silence. The host allocator gives no such guarantee, so the zero is made
+        // explicit here (same observable state, not an invented store).
+        std::memset(lpMixerBlock, 0, sizeof(Mixer));
         self->mpMixer = Mixer::Mixer_ctor(static_cast<Mixer *>(lpMixerBlock));
+    }
     if (!self->mpMixer)
         return 0;
 

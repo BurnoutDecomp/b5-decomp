@@ -102,9 +102,19 @@ struct VoiceStageData
 // -------------------------------------------------------------------------------------
 struct VoiceStageConfig
 {
-    u32 mField0;                // +0x00
+    // ⭐ (phase-D probe crash root-cause, 2026-08-28): the +0x00 word is the stage's
+    // CREATE CONTEXT POINTER -- the console PlugIn::CreateInstance reads this SAME
+    // record as its `a4` (context at +0, init byte at +8); the splice staging's
+    // config literals ({&1.0f,'SnP1',1}...) put the ctor-param float pointer here.
+    // The former separate 'PlugInCreateDesc' host view diverged from this layout on
+    // x64 (its +8 byte landed INSIDE the widened mpDesc pointer -- a garbage channel
+    // count that overran the mixer), so the view is RETIRED and the create path
+    // reads THIS record by name.
+    void *mpContext;             // +0x00 -- the create-context pointer (0 when unused)
     PlugInDescRunTime *mpDesc;   // +0x04 -- describes this stage's plug-in
-    u32 mFlagAndField8;         // +0x08 -- low byte = the `flag` passed to PlugIn::CreateInstance
+    u32 mFlagAndField8;          // +0x08 -- low byte = the `flag` passed to
+                                 //   PlugIn::CreateInstance AND the init/channel byte
+                                 //   copied into PlugIn::mOutputChannels
 };
 
 // -------------------------------------------------------------------------------------
