@@ -309,6 +309,33 @@ void KeyAnimController::UpdateCameraFromICE(const ICE::ICETake& lrTake,
     Camera::CameraEffects& lrEffects = lpCamera->GetEffects();
 
     // TIME_SCALE is authored as a percentage of normal speed.
+    // ⛔⛔ THIS LINE IS THE PRODUCER OF THE DIRECTOR'S ZERO TIME DILATION (measured 2026-08-28,
+    // slow-motion transport wave). On this build the take reads 0 here, so every ICE-anim
+    // camera asks the simulation to run at 0% of real time -- and with the console's own 0.005
+    // floor in MainDirector::Update that is 1/200 speed, i.e. a frozen game. The zero is NOT
+    // this line's fault and NOT the console's shape: TIME_SCALE's own element description
+    // (SDKs/Packages/ICE/ICEData.cpp:254, element [19]) carries DEFAULT=100, min 0, max 100 --
+    //     { "TIME_SCALE", "Time Scale", 4, eICE_UINT, 7,
+    //       ICEValue((s32)100), ICEValue((s32)0), ICEValue((s32)100), ... }
+    // -- while the take's value table is seeded to (s32)0 for EVERY element (ICEData.cpp:1665).
+    // 0 is not the identity of a percentage scale, so an unauthored TIME channel reads
+    // "stop time" rather than "real time". Either the seed must come from the description's
+    // default or the TIME channel is being lost in the asset port; BRN_ICE_TIMESCALE_DIAG below
+    // reports the raw value so a run can tell those two apart.
+    // The consumer is held behind BRN_DIRECTOR_SLOMO in BrnMainDirector.cpp until this is fixed.
+    if (getenv("BRN_ICE_TIMESCALE_DIAG") != 0 && CgsDev::Log::gpDebugPrint != 0)
+    {
+        static f32 sfLastRaw = -1.0f;
+        const f32  lfRaw     = lrTake.GetValueFloat(E_ICE_TIME_SCALE);
+        if (lfRaw != sfLastRaw)
+        {
+            sfLastRaw = lfRaw;
+            *CgsDev::Log::gpDebugPrint
+                << "[ice-timescale] raw TIME_SCALE=" << lfRaw
+                << " -> mfSimTimeScale=" << (lfRaw * KF_PERCENT_TO_UNIT)
+                << " (element default is 100)\n";
+        }
+    }
     lrEffects.mfSimTimeScale = lrTake.GetValueFloat(E_ICE_TIME_SCALE) * KF_PERCENT_TO_UNIT;
 
     // The shake request triple.
