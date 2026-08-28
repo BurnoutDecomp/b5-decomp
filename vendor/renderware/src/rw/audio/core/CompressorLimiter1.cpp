@@ -30,33 +30,35 @@ void *CompressorLimiter1::ClearBuffer(CompressorLimiter1 *self)
 
 // -------------------------------------------------------------------------------------
 // Configure @0x82B67188   (FLAG: rwaudio PDB reconcile 2026-06-27 -- member names)
-//   self->mThresholdOn        = threshold;                 // stfs f1 @ +0x30
-//   self->mThresholdOff       = ratioParam;                // stfs f2 @ +0x34
-//   self->mCompExponent       = makeupGain;                // stfs f3 @ +0x38
-//   self->mAttackSamples      = attack;                    // stw  r7 @ +0x3C
-//   self->mReleaseSamples     = release;                   // stw  r8 @ +0x40
-//   self->mGroupChannels      = (stereoLink != 0);         // cntlzw/extrwi/xori @ +0x4C
-//   self->mCompExponentStepOn = makeupGain / (f32)attack;  // fcfid/frsp/fdivs @ +0x44
-//   self->mCompExponentStepOff= makeupGain / (f32)release; // fcfid/frsp/fdivs @ +0x48
+//   self->mThresholdOn        = thresholdOn;                 // stfs f1 @ +0x30
+//   self->mThresholdOff       = thresholdOff;                // stfs f2 @ +0x34
+//   self->mCompExponent       = compExponent;                // stfs f3 @ +0x38
+//   self->mAttackSamples      = attackSamples;               // stw  r7 @ +0x3C
+//   self->mReleaseSamples     = releaseSamples;              // stw  r8 @ +0x40
+//   self->mGroupChannels      = (groupChannels != 0);        // cntlzw/extrwi/xori @ +0x4C
+//   self->mCompExponentStepOn = compExponent / (f32)attack;  // fcfid/frsp/fdivs @ +0x44
+//   self->mCompExponentStepOff= compExponent / (f32)release; // fcfid/frsp/fdivs @ +0x48
+// (store ORDER per the asm: +0x30, +0x34, +0x38, +0x3C, +0x40, +0x4C, then +0x44, +0x48 --
+// the two derived steps come last, not in ascending offset order.)
 //
-// The +0x4C byte is the asm's `cntlzw(stereoLink&0xFF); extrwi bit26; xori 1`, i.e. it
-// is set exactly when the low byte of `stereoLink` is nonzero. The attack/release
-// divisors are sign-extended-to-i64 then converted to f32 (fcfid+frsp) before the
-// divide, matching the asm's stack round-trip.
+// The +0x4C byte is the asm's `cntlzw(groupChannels&0xFF); extrwi bit26; xori 1`, i.e. it
+// is set exactly when the low byte is nonzero. The attack/release divisors are
+// sign-extended-to-i64 then converted to f32 (fcfid+frsp) before the divide, matching the
+// asm's stack round-trip. r3 is never written, so the machine return is the incoming self.
 // -------------------------------------------------------------------------------------
-CompressorLimiter1 *CompressorLimiter1::Configure(CompressorLimiter1 *self, f32 threshold,
-                                                  f32 ratioParam, f32 makeupGain,
-                                                  s32 attack, s32 release, s32 stereoLink,
-                                                  u32 /*a8*/, u32 /*a9*/, u8 /*a10*/)
+CompressorLimiter1 *CompressorLimiter1::Configure(CompressorLimiter1 *self, f32 thresholdOn,
+                                                  f32 thresholdOff, f32 compExponent,
+                                                  s32 attackSamples, s32 releaseSamples,
+                                                  s32 groupChannels)
 {
-    self->mThresholdOn = threshold;
-    self->mThresholdOff = ratioParam;
-    self->mCompExponent = makeupGain;
-    self->mAttackSamples = attack;
-    self->mReleaseSamples = release;
-    self->mGroupChannels = static_cast<u8>((stereoLink & 0xFF) != 0 ? 1 : 0);
-    self->mCompExponentStepOn = makeupGain / static_cast<f32>(static_cast<s64>(attack));
-    self->mCompExponentStepOff = makeupGain / static_cast<f32>(static_cast<s64>(release));
+    self->mThresholdOn = thresholdOn;
+    self->mThresholdOff = thresholdOff;
+    self->mCompExponent = compExponent;
+    self->mAttackSamples = attackSamples;
+    self->mReleaseSamples = releaseSamples;
+    self->mGroupChannels = static_cast<u8>((groupChannels & 0xFF) != 0 ? 1 : 0);
+    self->mCompExponentStepOn = compExponent / static_cast<f32>(static_cast<s64>(attackSamples));
+    self->mCompExponentStepOff = compExponent / static_cast<f32>(static_cast<s64>(releaseSamples));
     return self;
 }
 
@@ -78,6 +80,17 @@ CompressorLimiter1 *CompressorLimiter1::Configure(CompressorLimiter1 *self, f32 
 // mGroupChannels) is the
 // follow-up once the VMX128 lane math is decoded; this stub keeps the type's layout/ABI
 // linkable in the meantime and never claims a fabricated result.
+//
+// AUDIBLE CONSEQUENCE, stated plainly (phase E 2026-08-28, when Limiter1 went LIVE in the
+// RWAC registration pass): both callers -- Limiter1::Process @0x82B9E3A0 and
+// Compressor1::Process @0x82B9D988 -- run this kernel for its IN-PLACE effect on the
+// context's source buffer and then return BUFFERSTATUS_AVAILABLE WITHOUT swapping the
+// src/dst slots. With the kernel inert the audio therefore passes through the stage
+// COMPLETELY UNMODIFIED (a transparent limiter), which is a safe, honest degradation
+// rather than silence or a scribble: no buffer is written, no count is republished, and
+// the surrounding Configure/state machine is fully faithful. What is lost is only the
+// dynamics processing itself -- peaks that the console would have limited are passed at
+// full level. Decoding the VMX128 lane math is the standing follow-up.
 // -------------------------------------------------------------------------------------
 int CompressorLimiter1::Process(CompressorLimiter1 * /*self*/,
                                 AudioProcessContext * /*ctx*/, u8 /*channelCount*/)

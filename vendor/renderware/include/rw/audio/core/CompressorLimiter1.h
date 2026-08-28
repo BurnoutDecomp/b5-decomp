@@ -69,12 +69,19 @@ public:
     // @0x82B671F0 -- zero the 48-byte per-channel envelope/gain scratch.
     static void *ClearBuffer(CompressorLimiter1 *self);
 
-    // @0x82B67188 -- store the threshold/ratio/makeup, the attack/release lengths and
-    // their derived per-sample coefficients, plus the stereo-link flag.
-    static CompressorLimiter1 *Configure(CompressorLimiter1 *self, f32 threshold,
-                                         f32 ratioParam, f32 makeupGain, s32 attack,
-                                         s32 release, s32 stereoLink, u32 a8, u32 a9,
-                                         u8 a10);
+    // @0x82B67188 -- store the two thresholds and the compressor exponent, the attack/release
+    // lengths and their derived per-sample step coefficients, plus the channel-link flag.
+    //
+    // ABI CORRECTED (phase E 2026-08-28, decode report limiter1_configure_decode_codex.md):
+    // the former `u32 a8, u32 a9, u8 a10` tail was a Hex-Rays artifact. The callee reads
+    // exactly r3/f1/f2/f3/r7/r8/r9 -- the FP arguments occupy ABI positions 2..4, which is
+    // why the three integers land in r7..r9 and IDA invented phantom slots for r4..r6. No
+    // caller (Limiter1::Configure @0x82B97AB0, Compressor1::Configure @0x82B96B28) prepares
+    // an r10 or a stack tail argument. Parameter names are the members each one is stored to.
+    static CompressorLimiter1 *Configure(CompressorLimiter1 *self, f32 thresholdOn,
+                                         f32 thresholdOff, f32 compExponent,
+                                         s32 attackSamples, s32 releaseSamples,
+                                         s32 groupChannels);
 
     // @0x82B64DB0 -- the per-block envelope-follower + gain-curve kernel. KEYSTONE:
     // this body is hand-written X360 VMX (Altivec/VMX128) over lvx128/stvx128 vectors

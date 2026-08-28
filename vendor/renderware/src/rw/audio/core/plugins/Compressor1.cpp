@@ -169,10 +169,12 @@ int Compressor1::CreateInstance(Compressor1 *self)
 // ABI each parameter owns one doubleword slot, so the three float args consume the r4/r5/r6
 // slots and r7/r8/r9 are parameters 5/6/7 -- seven arguments total. The callee @0x82B67188
 // confirms it: it reads exactly r3/f1/f2/f3/r7/r8/r9 and touches no further argument register.
-// The a8/a9/a10 tail parameters on the committed CompressorLimiter1::Configure declaration are
-// Hex-Rays artifacts; the console leaves those slots UNSET and the callee never reads them, so
-// the 0,0,0 passed below is inert filler, not a recovered value. (The honest fix is to drop
-// a8/a9/a10 from that declaration, but CompressorLimiter1.h is outside this TU.)
+// The a8/a9/a10 tail parameters that used to sit on the CompressorLimiter1::Configure
+// declaration were Hex-Rays artifacts; the console leaves those slots UNSET and the callee
+// never reads them. FIXED 2026-08-28 (phase E): the filed fix landed -- the three phantom
+// parameters are GONE from CompressorLimiter1.h, and the inert `0, 0, 0` filler that used to
+// pad this call site is retired with them. (The independent Limiter1::Configure decode
+// reached the identical seven-argument conclusion from its own call site.)
 //
 // The return value is whatever CompressorLimiter1::Configure leaves in r3 -- it never writes
 // r3, so it is the engine pointer that was passed in. Process discards it.
@@ -240,8 +242,7 @@ CompressorLimiter1 *Compressor1::Configure(Compressor1 *self, f32 lfSampleRate)
                                          KF_ONE / self->mfRatio - KF_ONE,        // f3
                                          liAttackSamples,                        // r7
                                          liReleaseSamples,                       // r8
-                                         liGroupChannels,                        // r9
-                                         0, 0, 0);                               // never set by the asm
+                                         liGroupChannels);                       // r9
 }
 
 // -------------------------------------------------------------------------------------

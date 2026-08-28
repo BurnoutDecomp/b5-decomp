@@ -11,6 +11,7 @@
 
 #include "rw/audio/core/plugins/Pan2D1.h"
 #include "rw/audio/core/MixKernels.h" // CopyWithGain / MixWithGain / CopyWithGainRamp / MixWithGainRamp
+#include "rw/audio/core/PlugIn.h"     // PlugInDescRunTime (the real descriptor record)
 
 #include <cmath>
 #include <cstring> // memcpy (the X360 blkmov intrinsic)
@@ -49,12 +50,19 @@ const f64 KF_TWO         = 2.0;          // flt_82001D9C
 const f64 KF_RAMP_STEP   = 0.015625;     // flt_820ADC00 (1 / GAIN_DECLICK_FRAME_SIZE == 1/64)
 const s32 KI_FRAME       = 256;          // MIXER_FRAME_SIZE (r6/r7 == 0x100 at every kernel call)
 
-// off_82F8F140 -- the registered run-time descriptor record (its +0x00 label is the string
-// "Pan2D1"). off_820AA810 -- the base PlugIn v-table the deleting destructor reinstalls
-// (shared with Gain / Limiter1 / ReverbModel1). These are opaque data symbols in the XEX;
-// modelled as honest placeholders so the bodies link without fabricating their contents.
-char       *g_Pan2D1Desc      = nullptr; // off_82F8F140 (the "Pan2D1" record)
+// off_8217F4B4 -- the Pan2D1 v-table CreateInstance installs. off_820AA810 -- the base
+// PlugIn v-table the deleting destructor reinstalls (shared with Gain / Limiter1 /
+// ReverbModel1). These are opaque data symbols in the XEX; modelled as honest placeholders
+// so the bodies link without fabricating their contents.
+void *const KPAN_PAN2D1_VTAB  = nullptr; // off_8217F4B4
 void *const KBASE_PLUGIN_VTAB = nullptr; // off_820AA810
+
+// The CreateInstance defaults (rodata, re-read big-endian from the decrypted XEX):
+const f32 KF_DEG2RAD          = 0.017453292f; // flt_8217F364
+const f32 KF_DEFAULT_FRONT_DEG = 45.0f;       // flt_82F8EFEC -- vendor mDefaultConstructorFrontAngle
+const f32 KF_DEFAULT_REAR_DEG  = 135.0f;      // flt_82F8EFF0 -- vendor mDefaultConstructorRearAngle
+const f32 KF_DEFAULT_NORM_MODE = 2.0f;        // flt_82F8EFF4 -- vendor mDefaultConstructorNormMode
+                                              //   (== NORMALIZATIONMODE_SQRT_NUM_INPUT_CHANNELS)
 
 // Finish one EmitterConfig pan target: store the position, clamp its squared magnitude to
 // 1.0 (renormalising the position when it exceeds the unit circle), then set the angle from
@@ -76,6 +84,32 @@ void FinishTarget(Pan2D1::PanTarget &t, f64 x, f64 y)
 }
 } // namespace
 
+// The dispatch thunk for the record's Process slot: the console callback takes the instance
+// in r3 and the PC body is a member, so this static forward IS the dispatched shape. (The
+// console's r5 flag is Process's `bImmediate` -- an immediate re-pan with no de-click ramp.)
+static int Pan2D1ProcessThunk(Pan2D1 *self, AudioProcessContext *ctx, bool bImmediate)
+{
+    return self->Process(ctx, bImmediate);
+}
+
+// off_82F8F140 -- the "Pan2D1" runtime descriptor, REAL (descriptor-record wave; record
+// dump progress/scratch_dossiers/plugindesc_layout_codex.md). Metadata FLAG'd null per the
+// descriptor-wave convention. The tail's numConstructorParameters == 3 matches the
+// three-float ConstructorParams record CreateInstance reads, and numAttributes == 7 the
+// attribute block at +0x28.
+static PlugInDescRunTime g_Pan2D1Desc = {
+    "Pan2D1",
+    reinterpret_cast<void *>(&Pan2D1::GetSize),        // @0x82B982C8
+    reinterpret_cast<void *>(&Pan2D1::CreateInstance), // @0x82BA3540
+    0,
+    reinterpret_cast<void *>(&Pan2D1ProcessThunk),     // @0x82B997C8
+    0, 0, 0, 0,
+    0,
+    0x506E3231u,       // 'Pn21'
+    4, 3, 7, 0, 0, 0,
+    0
+};
+
 // ---------------------------------------------------------------------------
 // GetPlugInDescRunTime @0x82B98748 -- return the address of the registered descriptor record
 // (its label is the string "Pan2D1").
@@ -83,7 +117,7 @@ void FinishTarget(Pan2D1::PanTarget &t, f64 x, f64 y)
 // ---------------------------------------------------------------------------
 char **Pan2D1::GetPlugInDescRunTime()
 {
-    return &g_Pan2D1Desc; // &off_82F8F140
+    return reinterpret_cast<char **>(&g_Pan2D1Desc); // &off_82F8F140
 }
 
 // ---------------------------------------------------------------------------
@@ -92,7 +126,89 @@ char **Pan2D1::GetPlugInDescRunTime()
 // ---------------------------------------------------------------------------
 int Pan2D1::GetSize()
 {
-    return 440; // 0x1B8
+    // X360-LITERAL TRAP (the stage-carve audit): the console immediate under-allocates the
+    // widened host object -- GetSize is the stage factory's allocation stride, so return
+    // host sizeof (the RawPuller2/Send/Rechannel precedent).
+    return static_cast<int>(sizeof(Pan2D1));   // X360: li r3, 0x1B8 (440)
+}
+
+// ---------------------------------------------------------------------------
+// CreateInstance @0x82BA3540 -- placement-init a Pan2D1 over `self` (phase-E callback wave).
+//
+// Installs the vtable, bases the attribute table, derives the emitter/speaker counts from
+// the base channel counts (each independently folded 6 -> 5, because the 6th channel is the
+// LFE and is not a panned position), takes the speaker half-angles and the normalization
+// mode from the constructor record (or the 45/135/sqrt defaults when it is null), seeds the
+// seven live attributes and their change-guard caches, and builds the speaker matrices.
+// Returns true unconditionally.
+// ---------------------------------------------------------------------------
+int Pan2D1::CreateInstance(Pan2D1 *self, const ConstructorParams *params)
+{
+    if (self)
+        self->mBase.mpVTable = KPAN_PAN2D1_VTAB;   // off_8217F4B4 (skipped only for a null
+                                                   // self; every following access still
+                                                   // dereferences it -- null is NOT a
+                                                   // supported input, matching the console)
+
+    // Point the base attribute-table slot at the seven-attribute block at self+0x28.
+    self->mBase.mpAttributes = &self->mfAzimuthDeg;
+
+    // The two counts are clamped SEPARATELY (the asm does two independent lbz + test pairs).
+    // Six input channels pan as five emitters; six output channels drive five speakers.
+    s32 liEmitters = self->mBase.mbFlag20;         // lbz +0x20 (input channels)
+    if (liEmitters == 6)
+        liEmitters = 5;
+    self->miNumSources = liEmitters;               // stw +0xCC
+
+    s32 liSpeakers = self->mBase.mbChannelCount;   // lbz +0x21 (output channels)
+    if (liSpeakers == 6)
+        liSpeakers = 5;
+    self->miNumSpeakers = liSpeakers;              // stw +0xD0
+
+    f32 lfNormMode;
+    if (params)
+    {
+        self->mfSpeakerAngle0 = static_cast<f32>(params->frontAngle * KF_DEG2RAD); // stfs +0x7C
+        self->mfSpeakerAngle1 = static_cast<f32>(params->rearAngle * KF_DEG2RAD);  // stfs +0x80
+        lfNormMode = params->normalizationMode;
+    }
+    else
+    {
+        self->mfSpeakerAngle0 = KF_DEFAULT_FRONT_DEG * KF_DEG2RAD; // 45 deg
+        self->mfSpeakerAngle1 = KF_DEFAULT_REAR_DEG * KF_DEG2RAD;  // 135 deg
+        lfNormMode = KF_DEFAULT_NORM_MODE;                          // sqrt(N)
+    }
+
+    // The normalization gain. Each test is an EXACT float compare, so an out-of-range mode
+    // -- NaN included -- leaves mfNormGain UNWRITTEN (the console stores nothing on that
+    // path; it is not defaulted to 1.0). The count used is the POST-CLAMP emitter count, so
+    // a 6-channel input normalizes as five emitters.
+    if (lfNormMode == static_cast<f32>(KNORM_UNIT))
+    {
+        self->mfNormGain = static_cast<f32>(KF_ONE);                       // stfs +0x84
+    }
+    else if (lfNormMode == static_cast<f32>(KNORM_NUMCHANNELS))
+    {
+        self->mfNormGain = static_cast<f32>(KF_ONE / static_cast<f64>(liEmitters));
+    }
+    else if (lfNormMode == static_cast<f32>(KNORM_SQRTNUMCHANNELS))
+    {
+        self->mfNormGain =
+            static_cast<f32>(KF_ONE / std::sqrt(static_cast<f64>(liEmitters)));
+    }
+
+    // The seven attribute/cache pairs, in the console's exact store order (cache first,
+    // then the live value, for each).
+    self->mfCached[0] = static_cast<f32>(KF_ZERO); self->mfAzimuthDeg  = static_cast<f32>(KF_ZERO); // +0x60/+0x28
+    self->mfCached[1] = static_cast<f32>(KF_ONE);  self->mfRadius      = static_cast<f32>(KF_ONE);  // +0x64/+0x30
+    self->mfCached[2] = static_cast<f32>(KF_ONE);  self->mfWidth       = static_cast<f32>(KF_ONE);  // +0x68/+0x38
+    self->mfCached[3] = static_cast<f32>(KF_ZERO); self->mfSpreadDeg   = static_cast<f32>(KF_ZERO); // +0x6C/+0x40
+    self->mfCached[4] = static_cast<f32>(KF_ONE);  self->mfFocus       = static_cast<f32>(KF_ONE);  // +0x70/+0x48
+    self->mfCached[5] = static_cast<f32>(KF_ONE);  self->mfLevel       = static_cast<f32>(KF_ONE);  // +0x74/+0x50
+    self->mfCached[6] = static_cast<f32>(KF_ZERO); self->mfCentreLevel = static_cast<f32>(KF_ZERO); // +0x78/+0x58
+
+    self->SpeakerConfig();   // result discarded
+    return 1;
 }
 
 // ---------------------------------------------------------------------------

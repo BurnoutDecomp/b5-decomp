@@ -6,16 +6,24 @@
 // length up or down as the amount crosses 0.0 / 1.0.
 //
 // EARenderWare "rwaudio". Reconstructed from BURNOUT_X360_ARTIST.XEX (PowerPC); the asm
-// is authoritative for every member offset. No Feb-2007 leak source and no DecFIGS DWARF
-// exist, so each offset is grounded in CreateInstance @0x82BA36B8, PreProcess
-// @0x82B9A140, GetSize @0x82B982D0, GetPlugInDescRunTime @0x82B9A130 and the scalar
-// deleting destructor @0x82BA1B48.
+// is authoritative for every member offset, grounded in CreateInstance @0x82BA36B8,
+// PreProcess @0x82B9A140, Process @0x82B9A218, GetSize @0x82B982D0,
+// GetPlugInDescRunTime @0x82B9A130 and the scalar deleting destructor @0x82BA1B48.
+//
+// ⭐ VENDOR HEADER (phase E 2026-08-28): references/Feb-2007/BrnEntityModuleUnity/SDKs/
+// Packages/rwaudiocore/2.11.00/include/rw/audio/core/plugins/pause.h is the authoritative
+// naming source and MATCHES this layout member-for-member (it also confirms the ProStreet
+// PDB reconcile that already renamed these fields). It supplies what the asm alone could
+// not: the PauseControl / PauseState / Attribute enums and PAUSE_RAMP_SAMPLES == 64 -- the
+// 0x40 immediate PreProcess stores into mSamplesRemainingUntilStateChange. The earlier
+// "no leak source" note is retired.
 //
 // Lowercase rw::audio:: namespaces match the third-party middleware API.
 // =====================================================================================
 
 #include "types.hpp" // f32, s16, u8
 #include "rw/audio/core/PlugIn.h" // PlugIn::Attribute_t (rwaudio PDB reconcile)
+#include "rw/audio/core/Iir2Filters.h" // PlugInBaseView / AudioProcessContext
 
 namespace rw
 {
@@ -45,27 +53,57 @@ namespace core
 class Pause
 {
 public:
+    // Vendor enums (pause.h). The pause CONTROL is the graph attribute the game writes;
+    // the pause STATE is the internal ramp position it drives.
+    enum PauseControl
+    {
+        PAUSECONTROL_UNPAUSED = 0,
+        PAUSECONTROL_PAUSED = 1,
+        PAUSECONTROL_MAX = 2
+    };
+
+    enum Attribute
+    {
+        ATTRIBUTE_SETPAUSECONTROL = 0,
+        ATTRIBUTE_MAX = 1
+    };
+
+    enum PauseState
+    {
+        STATE_PAUSED = 0,
+        STATE_PAUSING = 1,
+        STATE_UNPAUSED = 2,
+        STATE_UNPAUSING = 3
+    };
+
+    // Vendor constant: the 0x40 immediate PreProcess arms the ramp with.
+    enum { KU_PAUSE_RAMP_SAMPLES = 64 };
+
     static int CreateInstance(Pause *self);                         // @0x82BA36B8
     static char **GetPlugInDescRunTime();                           // @0x82B9A130
     static int GetSize();                                           // @0x82B982D0
     static int PreProcess(Pause *self, int a2, char force, int length); // @0x82B9A140
+    static int Process(Pause *self, AudioProcessContext *ctx,
+                       bool discontinuity);                         // @0x82B9A218
     static void *ScalarDeletingDestructor(Pause *self, char flags); // @0x82BA1B48
 
     // FLAG (rwaudio PDB reconcile -- IDA Files/ProStreet08Milestone.pdb,
     // rw::audio::core::Pause [sizeof=64] : public rw::audio::core::PlugIn): the ARTIST-asm
-    // offsets MATCH the PDB exactly (field order + sizeof 0x40 identical), so the PDB
-    // member NAMES/TYPES are authoritative and replace the earlier semantic guesses.
-    // +0x00..+0x21 is the PlugIn base body (kept opaque here; reconciled in PlugIn.h);
-    // the +0xNN are the X360 (32-bit) offsets, now PDB-verified.
-    void *mpVTable;            // +0x00
-    u8    mBase04[0x28 - 0x04]; // +0x04..+0x27 -- opaque PlugIn base body (mpAttribute @+0x0C lives here)
-    PlugIn::Attribute_t mAttribute[1]; // +0x28  (was guessed mfPauseAmount/f32; PDB: Attribute_t[1], 8 bytes spanning +0x28..+0x2F -- the base attr ptr points here)
+    // offsets MATCH the PDB exactly (field order + sizeof 0x40 identical), and the vendor
+    // pause.h agrees, so these names are authoritative.
+    // The +0x00..+0x27 span is the PlugIn base body. It is now the SHARED PlugInBaseView
+    // (phase E) rather than an opaque byte array: Process reads the base's OUTPUT CHANNEL
+    // COUNT at +0x21 as its per-channel loop bound, and that member has to be reachable by
+    // name (mBase.mbChannelCount) instead of through a raw offset into a blob.
+    PlugInBaseView mBase;      // +0x00..+0x23 (vptr, mpSystem, mpVoice, mpAttributes @+0x0C, ...)
+    u8    mPad24[0x28 - 0x24]; // +0x24..+0x27
+    PlugIn::Attribute_t mAttribute[ATTRIBUTE_MAX]; // +0x28 (8 bytes; the base attr ptr points here)
     f32   mGain;               // +0x30  (was mfOne)
     u16   mOutputSamplesRequested; // +0x34  (was miLength/s16; PDB: unsigned short)
     u8    mSamplesRemainingUntilStateChange; // +0x36  (was muOutLength)
     u8    mPauseState;         // +0x37  (was mState)
     u8    mDiscontinuity;      // +0x38  (was mbActive)
-    u8    mPad39[0x40 - 0x39]; // +0x39..+0x3F -- tail pad to sizeof 0x40
+    u8    mPad39[0x40 - 0x39]; // +0x39..+0x3F -- tail pad to the X360 sizeof 0x40
 };
 
 } // namespace core

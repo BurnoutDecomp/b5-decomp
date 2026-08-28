@@ -234,17 +234,12 @@ GenericRwacFactory::GenericRwacFactory(Environment& arEnvironment,
         PlugInRegistry* lpPlugInRegistry =
             rw::audio::core::System::GetPlugInRegistry(mpSystem);
 
-        // The 25 RegisterPlugInRunTime calls in EXACT console order. TWELVE are
+        // The 25 RegisterPlugInRunTime calls in EXACT console order. SEVENTEEN are
         // LIVE (descriptor-record wave 2026-08-28: their PlugInDescRunTime
         // records are REAL host records -- XEX-recovered fields + host callback
         // pointers, every callback bodied in its mounted vendor TU; proof
         // progress/scratch_dossiers/plugindesc_layout_codex.md). The rest stay
         // FLAG-deferred in place, each for a stated reason:
-        //   * Limiter1/Pause/Resample (a Process body absent) and HighPassIir2/
-        //     Pan2D1 (a CreateInstance body absent) -- registering a record with
-        //     a null callback slot is a poison-in-waiting for the dispatch
-        //     sites; their missing bodies' dossiers are re-exported and the
-        //     decode is in flight (plugin_callbacks_decode_codex.md);
         //   * GainFader, LowPassButterworth, SndPlayer1, SubMix -- no PC plug-in
         //     home yet (Dac registered LIVE with the phase-D slice 2026-08-28);
         //   * the three custom game descriptors (GinsuPlayer off_82F2D094 /
@@ -252,6 +247,22 @@ GenericRwacFactory::GenericRwacFactory(Environment& arEnvironment,
         //     -- their game-side plug-in bodies are not reconstructed.
         // An unregistered id makes GetPlugInHandle return null and the
         // voice-create paths fail through their guarded callbacks.
+        //
+        // PHASE E CALLBACK WAVE 2026-08-28: the five that were deferred for a
+        // missing callback body are now LIVE -- HighPassIir2 (6), Limiter1 (9),
+        // Pan2D1 (14), Pause (15) and Resample (18). Each missing body was
+        // decoded store-for-store from the ARTIST asm and adversarially
+        // re-verified against it (plugin_callbacks_decode_codex.md +
+        // limiter1_configure_decode_codex.md), and the vendor Feb-2007
+        // rwaudiocore headers -- which DO cover these five -- supplied the
+        // authoritative member/enum names. Every slot in all five records now
+        // points at a real bodied callback, so none of them is the null-slot
+        // poison the deferral was guarding against.
+        // ONE honest gap rides along, stated rather than hidden: Limiter1's
+        // dynamics kernel is CompressorLimiter1::Process, still an unbodied
+        // VMX128 keystone, so a registered Limiter1 voice passes audio through
+        // UNMODIFIED (its Configure/state machine are faithful; only the gain
+        // reduction is absent). That is a transparent stage, not a corrupt one.
         #define CGS_RWAC_REGISTER(GETTER) \
             PlugInRegistry::RegisterPlugInRunTime(lpPlugInRegistry, \
                 reinterpret_cast<PlugInDescRunTime*>(GETTER))
@@ -260,19 +271,19 @@ GenericRwacFactory::GenericRwacFactory(Environment& arEnvironment,
         CGS_RWAC_REGISTER(rw::audio::core::Dac::GetPlugInDescRunTime());                // 3  @0x82B96DB8 (phase D)
         CGS_RWAC_REGISTER(rw::audio::core::Gain::GetPlugInDescRunTime());                // 4  @0x82B97350
         // 5  GainFader @0x82B97368 -- FLAG deferred (no PC home; off_82F8CC50)
-        // 6  HighPassIir2 @0x82B978B0 -- FLAG deferred (CreateInstance @0x82BA2E40 body absent)
+        CGS_RWAC_REGISTER(rw::audio::core::HighPassIir2::GetPlugInDescRunTime());        // 6  @0x82B978B0 (phase E)
         CGS_RWAC_REGISTER(rw::audio::core::HighPassButterworth::GetPlugInDescRunTime()); // 7  @0x82B976D0
         CGS_RWAC_REGISTER(rw::audio::core::HighShelfIir2::GetPlugInDescRunTime());       // 8  @0x82B97978
-        // 9  Limiter1 @0x82B97AA0 -- FLAG deferred (Process @0x82B9E3A0 body absent)
+        CGS_RWAC_REGISTER(rw::audio::core::Limiter1::GetPlugInDescRunTime());            // 9  @0x82B97AA0 (phase E)
         CGS_RWAC_REGISTER(rw::audio::core::LowPassIir2::GetPlugInDescRunTime());         // 10 @0x82B97DB0
         // 11 LowPassButterworth @0x82B97BF0 -- FLAG deferred (no PC home; off_82F8D24C)
         CGS_RWAC_REGISTER(rw::audio::core::LowShelfIir2::GetPlugInDescRunTime());        // 12 @0x82B97E70
         CGS_RWAC_REGISTER(rw::audio::core::Pan2D::GetPlugInDescRunTime());               // 13 @0x82B984E8
-        // 14 Pan2D1 @0x82B98748 -- FLAG deferred (CreateInstance @0x82BA3540 body absent)
-        // 15 Pause @0x82B9A130 -- FLAG deferred (Process @0x82B9A218 body absent)
+        CGS_RWAC_REGISTER(rw::audio::core::Pan2D1::GetPlugInDescRunTime());              // 14 @0x82B98748 (phase E)
+        CGS_RWAC_REGISTER(rw::audio::core::Pause::GetPlugInDescRunTime());               // 15 @0x82B9A130 (phase E)
         CGS_RWAC_REGISTER(rw::audio::core::PeakingIir2::GetPlugInDescRunTime());         // 16 @0x82B9A460
         CGS_RWAC_REGISTER(rw::audio::core::Rechannel::GetPlugInDescRunTime());           // 17 @0x82B9A718
-        // 18 Resample @0x82B9A850 -- FLAG deferred (Process @0x82B9F3E8 body absent)
+        CGS_RWAC_REGISTER(rw::audio::core::Resample::GetPlugInDescRunTime());            // 18 @0x82B9A850 (phase E)
         CGS_RWAC_REGISTER(rw::audio::core::ReverbModel1::GetPlugInDescRunTime());        // 19 @0x82B9AD98
         CGS_RWAC_REGISTER(rw::audio::core::Send::GetPlugInDescRunTime());                // 20 @0x82B9B798
         // 21 SndPlayer1 @0x82B9BE60 -- FLAG deferred (no PC home; off_82F901C4)
