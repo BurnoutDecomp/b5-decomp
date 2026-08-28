@@ -17,6 +17,7 @@
 // =====================================================================================
 
 #include "rw/audio/core/PlugIn.h"       // rw::audio::core::System (+ PlugInRegistry, hooks)
+#include "rw/audio/core/Mixer.h"        // StackAllocator (the typed static object table)
 #include "rw/audio/core/Voice.h"        // Voice / VoiceListLink / VoiceActiveNode
 #include "rw/audio/core/TimerManager.h" // rw::audio::core::TimerManager
 #include "rw/audio/core/Profiler.h"     // rw::audio::core::Profiler / KPF_ProfilerVTable
@@ -83,13 +84,13 @@ void CsisMutexUnlock() { Csis::System::Unlock(); }
 // (mftb); the host fold is the x86 TSC low word.
 u32 GetCpuCycle() { return static_cast<u32>(__rdtsc()); }
 
-// The shared 4-word table the constructor points mpObjectTable at (dword_83271930..0x3C).
-// rwaudio PDB: this is the static StackAllocator {System* mpSystem, u32 mpUpperLimit,
-// u32 mpLowerLimit, u32 mpTop} -- Mixer::Mixer @0x82B6D880 seeds mpSystem/the limits, and
-// AiffWriter/Delay read slot [3] (mpTop) as the mixer scratch-stack top. Kept as the
-// opaque word table this TU's own bodies treat it as (only the ctor zeroes it here);
-// home the real StackAllocator type when a Mixer/StackAllocator slice needs it.
-static u32 skSystemObjectTable[4] = { 0, 0, 0, 0 };
+// The shared object table the constructor points mpObjectTable at (dword_83271930..0x3C):
+// the static StackAllocator (rwaudio PDB name; TYPED with the phase-D Mixer slice
+// 2026-08-28 -- rw/audio/core/Mixer.h). Mixer::Mixer @0x82B6D880 seeds mpSystem + the
+// scratch-arena limits, and AiffWriter/Delay read slot [3] (mpTop) as the mixer
+// scratch-stack top through System::mpObjectTable's pointer-width slots -- the former
+// u32[4] model under-sized those host reads.
+static StackAllocator skSystemStackAllocator = { 0, 0, 0, 0 };
 
 // The 8-byte deferred-teardown record ReleaseHandler reads: { handler, System* }.
 struct SystemReleaseCommand
@@ -134,11 +135,11 @@ System *System::System_ctor(System *self)
     self->mpExpelledVoiceList = 0;   // +0x10
     self->mpTimerListHead = 0;       // +0x5C
     TimerManager::TimerManager_ctor(&self->mTimerManager); // +0x60
-    skSystemObjectTable[0] = 0;
-    skSystemObjectTable[1] = 0;
-    skSystemObjectTable[2] = 0;
-    skSystemObjectTable[3] = 0;
-    self->mpObjectTable = skSystemObjectTable; // +0x00
+    skSystemStackAllocator.mpSystem = 0;
+    skSystemStackAllocator.mpUpperLimit = 0;
+    skSystemStackAllocator.mpLowerLimit = 0;
+    skSystemStackAllocator.mpTop = 0;
+    self->mpObjectTable = &skSystemStackAllocator; // +0x00
     return self;
 }
 

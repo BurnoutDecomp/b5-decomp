@@ -61,6 +61,14 @@ public:
     // Open/Close for the same reason the overlay does.
     static void SetVoiceFill(FillFn lpFill, void* lpUser);
 
+    // Register the additive ENGINE fill (the rw::audio::core Dac's mixed frame --
+    // phase D of the faithful-audio-engine campaign; producer CgsDacOutputPC.cpp).
+    // Mixed saturating like the overlay/voice slots and persistent across Open/Close
+    // for the same reason: the primary owner churns with the movie/music streams,
+    // the engine mix must not. End state (phase G): this is the only producer left
+    // as the per-path fills retire onto the engine mix.
+    static void SetEngineFill(FillFn lpFill, void* lpUser);
+
     // Diagnostic: route a finite 440 Hz sine through the backend (lfSeconds) to confirm
     // output works by ear, then fall silent. Opens the device first if needed.
     static void PlayTestTone(float lfSeconds);

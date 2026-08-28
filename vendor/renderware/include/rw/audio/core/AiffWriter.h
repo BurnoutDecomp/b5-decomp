@@ -65,7 +65,8 @@ namespace core
 {
 
 class System;                // owning sub-system (pointer member; full def in PlugIn.h)
-struct AudioProcessContext;  // Process's graph context (Iir2Filters.h); pointer param only
+class Mixer;                             // the stage process context (unified; Mixer.h)
+typedef Mixer AudioProcessContext;       // pointer param only
 
 // -------------------------------------------------------------------------------------
 // AiffWriter -- see the file header for the byte-exact layout.

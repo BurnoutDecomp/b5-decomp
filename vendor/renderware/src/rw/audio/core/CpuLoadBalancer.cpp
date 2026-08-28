@@ -108,7 +108,7 @@ u32 CpuLoadBalancer::Balance(CpuLoadBalancer *self)
             do
             {
                 --luVoiceCount;
-                lfProjected = node->mpVoice->mafBandFreq[0] * KF_VOICE_COST_SCALE + lfProjected;
+                lfProjected = node->mpVoice->mfAverageCpuTicks * KF_VOICE_COST_SCALE + lfProjected;
                 ++node;
             } while (luVoiceCount != 0);
         }
@@ -175,6 +175,19 @@ Voice *CpuLoadBalancer::FindLowestPriorityVoice(CpuLoadBalancer *self)
 
     if (lfBestPriority < KF_MAX_LOAD)
         return lpBest;
+    return 0;
+}
+
+// -------------------------------------------------------------------------------------
+// CullVoices @0x82B6E410 -- expel lowest-priority voices until the frame cost fits the
+// CPU budget (the ledgered "separate TU"; called only from Balance's overrun gate).
+// FLAG honest stub (phase-D Dac slice 2026-08-28, mounted for the Balance link): the
+// @0x82B6E410 dossier is NOT exported yet (targeted re-export pending), and the gate
+// is UNREACHABLE today -- zero active voices project zero cost, so Balance never
+// overruns. Declines (0 voices culled); body it with the phase-E voice slices.
+// -------------------------------------------------------------------------------------
+u32 CpuLoadBalancer::CullVoices(CpuLoadBalancer * /*self*/)
+{
     return 0;
 }
 
