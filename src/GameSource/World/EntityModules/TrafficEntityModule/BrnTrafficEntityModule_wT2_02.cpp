@@ -27,6 +27,8 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "GameShared/GameClasses/Containers/CgsFastBitArray.h"
 
+#include <cstdlib>   // getenv (the [DIAG] force switches below)
+
 
 namespace BrnTraffic
 {
@@ -74,23 +76,50 @@ f32 Neighbour::ConvertOurParameterToTheirs(f32 lfOurParam) const
 }
 
 // ----------------------------------------------------------------------------
-// TrafficEntityModule::UpdateParams  @0x82744A80  (DWARF :1626, .cpp 10021)  PARTIAL
+// TrafficEntityModule::UpdateParams  @0x82744A80  (DWARF :1626, .cpp 10021)
 //
 // The per-decision-frame driver. TWO stack blocks in the console:
-//   * the Array<CrashingThingData,168> at var_15B0 feeds ONLY the two crash arms -- both are
-//     wave-3 surface, so the array and its producer are gated together.
+//   * the Array<CrashingThingData,168> at var_15B0 feeds the two crash arms; its count word
+//     is Clear()ed at 0x82744C50 and the producer fills it immediately after.
 //   * the ten-quadword bit set at var_1600 is a FastBitArray<601> intersection built inline
 //     from mVehicleSoaData.mAliveVehicles (module +164560) AND .mPhysicalVehicles (+164800),
 //     named by DEBUGValidateSoaData @0x82714A60's assert strings. It is passed to
-//     UpdateParams_CalcDesiredSpeed and IS built for real -- gating it starves the speed
-//     calculation.
+//     UpdateParams_CalcDesiredSpeed and to the crash-list producer.
 //
-// GATED, by name + address: UpdateParams_BuildListOfCrashingThings @0x82737270,
-// UpdateParams_TryAvoidCrashing @0x82716948, UpdateParams_TryStartSympatheticCrashing
-// @0x827165D8 -- crash surface, wave 3.
+// [crash-surface wave 2026-08-28] THE THREE CRASH LEGS ARE LIVE. They were gated here as
+// "crash surface, wave 3 (needs the gated CrashingThingData list)"; that note was circular and
+// stale -- CrashingThingData is homed in the header, both Array<CrashingThingData,168>
+// accessors have been committed since 2026-07-04, and the list itself is just this function's
+// own stack local. Bodies: BrnTrafficEntityModule_wT2_06.cpp.
 // ----------------------------------------------------------------------------
 void TrafficEntityModule::UpdateParams(const BrnTrafficIO::InputBuffer_PostPhysics* lpInput)
 {
+    // ---- [DIAG] NOT IN THE X360 BINARY, OFF BY DEFAULT -------------------------------------
+    // The two crash arms below are gated by NeedToTakeActionAgainstJunctionFUP() and
+    // ShouldBeHollywoodAction(). Both predicates are bodied and correct, but the members they
+    // read are never WRITTEN in this tree: mfJunctionFUP's only producer is UpdateJunctionFUP
+    // @0x82745218 (still gated in _wQ7_01.cpp) and mfCrashSliderFinalValue's is UpdateCrashSlider
+    // @0x82715A18 (still gated in _wT1_02.cpp) -- so both predicates are constant false and both
+    // arms are unreachable until those two land.
+    //
+    // These env switches set the CONSOLE'S OWN debug members -- mbDEBUGOverrideJunctionFUP (:866)
+    // and mbDEBUGTestSympCrash (:858), the exact overrides the two predicates already honour --
+    // so the arms can be exercised and measured meanwhile. Nothing here invents a value or a
+    // branch; with the vars unset the binary behaves identically to one without this block.
+    // DELETE-WHEN UpdateJunctionFUP and UpdateCrashSlider have bodies.
+    {
+        static const bool sbForceJunctionFUP  = (getenv("BRN_TRAFFIC_FORCE_AVOID") != 0);
+        static const bool sbForceSympCrash    = (getenv("BRN_TRAFFIC_FORCE_SYMPCRASH") != 0);
+        if (sbForceJunctionFUP)
+        {
+            mbDEBUGOverrideJunctionFUP = true;
+        }
+        if (sbForceSympCrash)
+        {
+            mbDEBUGTestSympCrash = true;
+        }
+    }
+
     CgsDev::PerfMonCpu::StartMonitor(miPerfMon_UpdateParam);
 
     CGS_ASSERT(muLastParamCalculated >= KU_MAX_PARAMS, "muLastParamCalculated >= KU_MAX_PARAMS");
@@ -108,13 +137,14 @@ void TrafficEntityModule::UpdateParams(const BrnTrafficIO::InputBuffer_PostPhysi
     lPhysicalAliveVehicles.SetAnd(mVehicleSoaData.mAliveVehicles,
                                   mVehicleSoaData.mPhysicalVehicles);
 
-    {
-        static bool sbLogged = false;
-        LogMissingLeg(sbLogged,
-                      "UpdateParams -> UpdateParams_BuildListOfCrashingThings @0x82737270 "
-                      "(with its Array<CrashingThingData,168>) -- crash surface, wave 3");
-    }
-    (void)lpInput;   // forwarded to BuildListOfCrashingThings as its lpInput; gated above.
+    // The per-frame list of things traffic reacts to. The console's own stack local: the
+    // Array at var_15B0, whose count word is cleared at 0x82744C50 (`stw r17(0), var_B0`,
+    // and var_15B0 - var_B0 == 0x1500 == 168 * sizeof(CrashingThingData)) -- i.e. Clear()
+    // immediately before the producer runs. Body in _wT2_06.cpp.
+    ::Array<CrashingThingData, 168u> laCurrentCrashingThings;
+    laCurrentCrashingThings.Clear();
+    UpdateParams_BuildListOfCrashingThings(&laCurrentCrashingThings, lpInput,
+                                           lPhysicalAliveVehicles);
 
     const u32 luMaxLaneChangeDiceRoll =
         static_cast<u32>(KF_LANE_CHANGE_DICE_ROLL_NUMERATOR / mfSimTimeSinceLastDecision);
@@ -161,19 +191,16 @@ void TrafficEntityModule::UpdateParams(const BrnTrafficIO::InputBuffer_PostPhysi
         UpdateParams_CalcDesiredSpeed(luParam, lpSection, lpHull, lPhysicalAliveVehicles);
         UpdateParams_IncrementParam(luParam, &lpHull, &lpSection);
 
+        // The two reactions. Bodies in _wT2_06.cpp; both were parked here as "crash surface,
+        // wave 3 (needs the gated CrashingThingData list)" -- a note whose blockers had all
+        // been false since wave T3 (see that file's banner).
         if (NeedToTakeActionAgainstJunctionFUP())
         {
-            static bool sbLogged = false;
-            LogMissingLeg(sbLogged,
-                          "UpdateParams -> UpdateParams_TryAvoidCrashing @0x82716948 -- crash "
-                          "surface, wave 3 (needs the gated CrashingThingData list)");
+            UpdateParams_TryAvoidCrashing(luParam, &laCurrentCrashingThings);
         }
         else if (ShouldBeHollywoodAction())
         {
-            static bool sbLogged = false;
-            LogMissingLeg(sbLogged,
-                          "UpdateParams -> UpdateParams_TryStartSympatheticCrashing @0x827165D8 "
-                          "-- crash surface, wave 3 (needs the gated CrashingThingData list)");
+            UpdateParams_TryStartSympatheticCrashing(luParam, &laCurrentCrashingThings);
         }
 
         // IncrementParam can kill the param (it runs off the end of a dead-end section).

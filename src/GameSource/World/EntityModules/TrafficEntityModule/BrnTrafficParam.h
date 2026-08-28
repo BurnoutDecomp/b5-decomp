@@ -130,8 +130,23 @@ public:
     };
 
     // UpdateParams_UpdateBehaviour @0x82716C90 asserts miBehaviour in [0, 7).
-    // FLAG: only the NORMAL enumerator is attested (Initialise @0x82755F40 seeds 6).
-    // The other six ship enumerators are not recoverable from this TU.
+    //
+    // [crash-surface wave 2026-08-28] FOUR OF THE SIX PREVIOUSLY-"NOT RECOVERABLE" ENUMERATORS
+    // ARE ATTESTED -- by the console's own baked assert STRINGS, which are the original source
+    // expressions verbatim. UpdateParams_UpdateBehaviour @0x82716C90 fires
+    //   "lpParamNeedToSlowData->miBehaviour != Param::E_BEHAVIOUR_SLOWING_FOR_CRASH"        vs 0
+    //   "...!= Param::E_BEHAVIOUR_STOPPING_FOR_OBSTRUCTION"                                 vs 1
+    //   "...!= Param::E_BEHAVIOUR_DRIVING_AROUND_OBSTRUCTION"                               vs 2
+    //   "...!= Param::E_BEHAVIOUR_FOLLOWING_RACE_CAR"                                       vs 3
+    // and _wT2_03.cpp already compares those literals beside those exact strings. The two
+    // remaining ship enumerators (4 and 5, written by UpdateParams_PrecalcBehaviourParams)
+    // carry no assert string and stay unnamed -- do NOT invent them.
+    // The KI_ spelling (not E_) matches this header's existing constants; the console's E_
+    // names live in the assert strings above.
+    static const s8 KI_BEHAVIOUR_SLOWING_FOR_CRASH            = 0;
+    static const s8 KI_BEHAVIOUR_STOPPING_FOR_OBSTRUCTION     = 1;
+    static const s8 KI_BEHAVIOUR_DRIVING_AROUND_OBSTRUCTION   = 2;
+    static const s8 KI_BEHAVIOUR_FOLLOWING_RACE_CAR           = 3;
     static const s8 KI_BEHAVIOUR_NORMAL   = 6;
     static const s8 KI_BEHAVIOUR_INVALID  = -1;   // Construct @0x82751B60 seed
     static const s32 KI_BEHAVIOURS_COUNT  = 7;
