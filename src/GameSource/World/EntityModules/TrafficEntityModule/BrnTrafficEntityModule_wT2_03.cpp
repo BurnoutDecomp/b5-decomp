@@ -79,6 +79,18 @@ namespace
     const f32 KF_CRASH_SLOW_TARGET_SPEED = 0.0f;   // flt_8300C958 == flt_830180B0 * 80.0f
     const f32 KF_CRASH_SLOW_MAX_ACCEL    = 0.0f;   // flt_8300C95C == flt_830180B0 *  2.0f
 
+    // UpdateParams_HandleLaneChanges' carry-out (@0x827259B0..0x82725C40).
+    // The first two are unk_8300CBB0 lanes 0/1 (dyn-init thunk @0x82C66360, from
+    // flt_820BA5C0 / flt_8200D514 -- both plain .rdata, so no initialiser-order hazard);
+    // the last two are plain .rdata read directly.
+    const f32 KF_LANE_CHANGE_MIN_DIST_FROM_PLAYER = 50.0f;         // unk_8300CBB0.x
+    const f32 KF_LANE_CHANGE_MIN_COS_TO_PLAYER    = 0.707099974f;  // unk_8300CBB0.y (45 deg)
+    const f32 KF_LANE_CHANGE_MIN_GAP_AHEAD        = 15.0f;         // flt_820BA2A8
+    const f32 KF_LANE_CHANGE_MIN_GAP_BEHIND       = 20.0f;         // flt_820BA7E4
+    // The two "none" sentinels the swap writes; 0xFFFE for the neighbour links, not 0xFFFF.
+    const u8  KU8_LANE_CHANGE_NO_STOPLINE   = 0xFFu;
+    const u16 KU16_LANE_CHANGE_NO_NEIGHBOUR = 0xFFFEu;
+
     // UpdatePlan's lane-change arm (@0x827381D8 / @0x827382DC) and FindNearestParamInFront
     // (@0x827252C4 / 0x82725840).
     const f32 KF_PARAM_LANE_CHANGE_RUNG_LOOKAHEAD = 2.0f;    // the +2 rungs the carry-out books
@@ -765,11 +777,19 @@ void TrafficEntityModule::UpdateParams_IncrementParam(u32 luParam,
 // Carries out a queued E_TYPE_CHANGE_LANE plan once the param reaches the rung it was booked
 // for. The outer plan bookkeeping (drop a plan whose rung has already gone past) is real.
 //
-// GATED LEG -- the carry-out itself (@0x827259A0..0x82725B70). BLOCKER: the local-player
-// proximity guard reads unk_8300CBB0, an unnamed dyn-init .data lane block with no recovered
-// value. GetParamBehind and Section::CalcDistanceAlongSection have both landed, and
-// UpdateParams_UpdatePlan now books CHANGE_LANE plans, so this is the last hole in the chain.
-// DELETE-WHEN unk_8300CBB0 is recovered from its 0x82C6xxxx dyn-init thunk.
+// ✅ COMPLETE as of 2026-08-28: the carry-out (@0x827259B0..0x82725C9C) is landed. It was the
+// last hole in the lane-change chain -- UpdateParams_UpdatePlan books the plans, GetParamBehind
+// and Section::CalcDistanceAlongSection are bodied, and unk_8300CBB0 is
+// { 50.0f, 0.707099974f, 0.0f, 0.0f } from its dyn-init thunk @0x82C66360.
+//
+// ⚠️⚠️ READ THIS BEFORE CITING IT AS "TRAFFIC STEERS". The carry-out is a re-parameterisation,
+// not a manoeuvre: Neighbour::ConvertOurParameterToTheirs maps the param onto the adjacent
+// lane's parameter space and the param is SNAPPED there in one frame, with its stop line and
+// both neighbour links invalidated. The console therefore refuses to do it anywhere the player
+// could see the snap -- the guard below carries it out only at 50 m or more, and only inside
+// the player's forward 45-degree cone. So a lane change is a traffic-pattern edit ahead of the
+// player, not a visible swerve, and miBehaviour == DRIVING_AROUND_OBSTRUCTION merely SUPPRESSES
+// it. Nothing in this file makes a car visibly steer aside near the camera.
 // ----------------------------------------------------------------------------
 void TrafficEntityModule::UpdateParams_HandleLaneChanges(u32 luParam,
                                                          const Hull* lpHull,
@@ -796,18 +816,146 @@ void TrafficEntityModule::UpdateParams_HandleLaneChanges(u32 luParam,
         }
     }
 
-    if (GetParamPlan(luParam, 0)->muType == ParamPlan::E_TYPE_CHANGE_LANE &&
-        lpParam->miBehaviour == Param::KI_BEHAVIOUR_NORMAL)
+    const ParamPlan* lpLanePlan = GetParamPlan(luParam, 0);
+    if (lpLanePlan->muType != ParamPlan::E_TYPE_CHANGE_LANE ||
+        lpParam->miBehaviour != Param::KI_BEHAVIOUR_NORMAL)   // 0x827259A4 `lbz 0x1B ; cmplwi 6`
     {
-        // unk_8300CBB0 IS RECOVERED as of 2026-08-28 -- { 50.0f, 0.707099974f, 0.0f, 0.0f },
-        // dyn-init thunk @0x82C66360 from flt_820BA5C0(50.0) and flt_8200D514(0.70710). What is
-        // still missing is the guard's own body (0x82725A08 onward), not its constant.
-        static bool sbLogged = false;
-        LogMissingLeg(sbLogged,
-                      "UpdateParams_HandleLaneChanges @0x82725880 carry-out -- the proximity "
-                      "guard body is unwritten; its lane block unk_8300CBB0 is now recovered "
-                      "as { 50.0f, 0.707099974f, 0.0f, 0.0f }");
+        return;
     }
+
+    // ---- THE LOCAL-PLAYER PLACEMENT GUARD, 0x827259B0..0x82725AB4 -------------------------
+    // UN-GATED 2026-08-28. unk_8300CBB0 == { 50.0f, 0.707099974f, 0.0f, 0.0f } (dyn-init thunk
+    // @0x82C66360, built from flt_820BA5C0(50.0) / flt_8200D514(0.70710) / flt_82001CC0(0.0) --
+    // all three plain .rdata, so unlike the crash-slow pair this thunk has NO initialiser-order
+    // hazard: its table slot is 0x82CD2354 and it depends on nothing dynamic).
+    // The two lanes are selected by `vperm` with an `lvsl(0,0)` / `lvsl(0,4)` control, i.e.
+    // lane 0 broadcast then lane 1 broadcast -- 50 metres and cos(45 degrees).
+    //
+    // ⚠️ WHAT THE GUARD ACTUALLY SAYS, and it is the opposite of "hide it from the player":
+    // a lane change is carried out ONLY when the param is at least 50 m away AND inside the
+    // player's forward 45-degree cone. Both tests SKIP the carry-out when they fail
+    // (`bne cr6, loc_82725CA0`, the function's exit), so near the player nothing happens.
+    // That is because the carry-out is a discrete SNAP -- SetParamAlong + a section swap, not
+    // a steered manoeuvre -- so the console only performs it far enough ahead that the player
+    // never sees the jump, in the direction he is heading so the pattern is already right when
+    // he arrives. ⛔ Do not read this function as "traffic swerves"; it does not.
+    if (mbAllowDivergentBehaviour &&                                    // 0x827259B8 +0x717E7
+        meLocalPlayerIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID)          // 0x827259CC +0x713F0
+    {
+        // 0x827259EC / 0x827259F0. The console calls GetDeterministicParamPos (@0x82714258,
+        // declaration-only here); its body is ParamTransform::GetDeterministicPos, reached the
+        // same way _wT2_06.cpp's cone tests reach it.
+        const Vector3 lParamPos = GetParamTransform(luParam)->GetDeterministicPos();
+        const Vector3 lPlayerToParam = lParamPos - mLocalPlayerPosition;   // +0x713D0
+
+        // 0x82725A34..0x82725A68: vmsum3fp + vrsqrtefp with two Newton-Raphson steps, then
+        // `v0 = v0 * rsqrt` -- the LENGTH, not the square -- with a vsel that maps a
+        // zero-length delta to 0 rather than to a NaN.
+        const f32 lfDistanceSq = rw::math::vpu::Dot(lPlayerToParam, lPlayerToParam);
+        const f32 lfDistance   = (lfDistanceSq > 0.0f) ? std::sqrt(lfDistanceSq) : 0.0f;
+
+        if (lfDistance < KF_LANE_CHANGE_MIN_DIST_FROM_PLAYER)
+        {
+            return;   // 0x82725A78 -- too close; the snap would be visible
+        }
+
+        // 0x82725A7C..0x82725AB4. The unit direction player -> param against the player's
+        // facing; cos >= 0.7071 is the forward 45-degree cone.
+        const Vector3 lPlayerToParamDir = lPlayerToParam * (1.0f / lfDistance);
+        const f32 lfCosToParam = rw::math::vpu::Dot(mLocalPlayerDirection,   // +0x713E0
+                                                    lPlayerToParamDir);
+        if (lfCosToParam < KF_LANE_CHANGE_MIN_COS_TO_PLAYER)
+        {
+            return;   // 0x82725AB4 -- behind or beside the player; not worth doing
+        }
+    }
+
+    // ---- THE CARRY-OUT, 0x82725AB8..0x82725C9C -------------------------------------------
+    const u32 luNewSectionIndex = lpLanePlan->mChangeLaneData.muNewSection;      // plan +4
+    const Section* const lpNewSection = lpHull->GetSection(luNewSectionIndex);   // 0x82725AC4
+
+    // 0x82725AD0/0x82725ADC. The neighbour record maps our parameter onto the adjacent lane's
+    // own parameter space -- this IS the lane change, expressed as a re-parameterisation.
+    const Neighbour* const lpNeighbour =
+        lpHull->GetNeighbour(lpLanePlan->mChangeLaneData.muNeighbourData);
+    const f32 lfNewParamAlong = lpNeighbour->ConvertOurParameterToTheirs(lpParam->mfParamAlong);
+
+    // 0x82725AFC `fctidz/stfiwx` -- the SEGMENT argument is the truncated parameter, not the
+    // param's own muCurrentSegment (which still belongs to the old lane). The two calls below
+    // pass the neighbour's muCurrentSegment instead, exactly as the console does.
+    const f32* const lpafNewRungLengths = lpHull->GetRungLengthsForSection(lpNewSection);
+    const f32 lfOurDistance = lpNewSection->CalcDistanceAlongSection(
+        lfNewParamAlong, static_cast<u32>(lfNewParamAlong), lpafNewRungLengths);
+
+    // 0x82725B34. The nearest param already in the target lane at that distance.
+    bool lbRoom = true;
+    const u32 luNextParam = FindNextParam(lpParam->muHullIndex, luNewSectionIndex,
+                                          lfNewParamAlong);
+    if (luNextParam != KU_INVALID_PARAM)
+    {
+        const Param* const lpNextParam = GetParam(luNextParam);
+
+        // 0x82725B54..0x82725BAC. A param that is not actually in this hull+section any more
+        // does not bound us; the section's own length does.
+        f32 lfGapAhead;
+        if (lpNextParam->muHullIndex == lpParam->muHullIndex &&
+            lpNextParam->muSectionIndex == luNewSectionIndex)
+        {
+            lfGapAhead = lpNewSection->CalcDistanceAlongSection(lpNextParam->mfParamAlong,
+                                                                lpNextParam->muCurrentSegment,
+                                                                lpafNewRungLengths)
+                       - lfOurDistance;
+        }
+        else
+        {
+            lfGapAhead = lpNewSection->mfLength - lfOurDistance;   // 0x82725BA8 `lfs 0x28`
+        }
+
+        if (lfGapAhead < KF_LANE_CHANGE_MIN_GAP_AHEAD)
+        {
+            return;   // 0x82725BC0
+        }
+
+        // 0x82725BC4..0x82725C40. And the car behind the gap has to be far enough back.
+        const u32 luParamBehind = GetParamBehind(luNextParam);
+        if (luParamBehind != KU_INVALID_PARAM)
+        {
+            const Param* const lpBehind = GetParam(luParamBehind);
+            if (lpBehind->muHullIndex == lpParam->muHullIndex &&
+                lpBehind->muSectionIndex == luNewSectionIndex)
+            {
+                const f32 lfGapBehind =
+                    lpNewSection->CalcDistanceAlongSection(lpBehind->mfParamAlong,
+                                                           lpBehind->muCurrentSegment,
+                                                           lpafNewRungLengths)
+                    - lfOurDistance;
+                lbRoom = (lfGapBehind >= KF_LANE_CHANGE_MIN_GAP_BEHIND);
+            }
+        }
+    }
+
+    if (!lbRoom)
+    {
+        return;
+    }
+
+    // 0x82725C44..0x82725C9C -- the swap itself.
+    *lpapSection = lpNewSection;                                     // `stw r29, 0(r21)`
+    Param* const lpMutableParam = &maParams[luParam];
+    lpMutableParam->SetParamAlong(lfNewParamAlong);
+    lpMutableParam->muSectionIndex = static_cast<u8>(luNewSectionIndex);
+    lpMutableParam->SetChangedSection();
+    lpMutableParam->PushHistory(lpMutableParam->muCurrentSegment + lpNewSection->muRungOffset,
+                                lpMutableParam->muHullIndex);
+
+    // 0x82725C90/0x82725C94/0x82725C98 -- the stop line and both neighbour links belong to the
+    // OLD lane, so all three are invalidated. 0xFFFE, not 0xFFFF: the neighbour table's own
+    // "none" sentinel (`lis r11,0 ; ori r11,r11,0xFFFE`).
+    lpMutableParam->muNextStopLineIndex = KU8_LANE_CHANGE_NO_STOPLINE;
+    lpMutableParam->mauNeighbourData[0] = KU16_LANE_CHANGE_NO_NEIGHBOUR;
+    lpMutableParam->mauNeighbourData[1] = KU16_LANE_CHANGE_NO_NEIGHBOUR;
+
+    EatParamsNextPlan(luParam);
 }
 
 // ----------------------------------------------------------------------------
