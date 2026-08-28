@@ -38,6 +38,7 @@
 
 #include "types.hpp" // f32, s32, u8, u16
 #include "rw/audio/core/Iir2.h"
+#include "rw/audio/core/Mixer.h" // Mixer / SampleBuffer / MixerExecuteParams (the unified context types)
 
 namespace rw
 {
@@ -117,21 +118,16 @@ struct PlugInBaseView
 // Only the two fields the filters touch are named; the rest is opaque header so the
 // observed offsets hold.
 // -------------------------------------------------------------------------------------
-struct AudioChannelBuffer
-{
-    char  mHeader00[0x04];        // +0x00 -- opaque descriptor header
-    f32  *mpSamples;              // +0x04 -- base sample pointer
-    char  mHeader08[0x0E - 0x08]; // +0x08 .. +0x0D -- opaque
-    u16   muStride;               // +0x0E -- per-channel sample stride (halfword)
-};
+// ⭐ UNIFIED (phase-D Dac slice 2026-08-28): the record is the rwaudio SampleBuffer --
+// one of the three static master descriptors Mixer::Execute re-seeds every frame
+// (rw/audio/core/Mixer.h; the former opaque header word +0x00 is the owning System).
+typedef SampleBuffer AudioChannelBuffer;
 
 // The audio output format record (reached at ctx dword 49158 == byte +0x30018);
 // the filters read its sample rate at +0x0C.
-struct AudioFormat
-{
-    char mHeader00[0x0C]; // +0x00 -- opaque
-    f32  mfSampleRate;    // +0x0C -- output sample rate (Hz)
-};
+// ⭐ UNIFIED: the "format" the stages read IS the MixerExecuteParams block Dac::Mix
+// fills each frame -- its +0x0C IS the output sample rate (Mixer.h).
+typedef MixerExecuteParams AudioFormat;
 
 // -------------------------------------------------------------------------------------
 // The audio Process context passed to every PlugIn::Process (IDA's `a2`). The filters
@@ -153,24 +149,15 @@ struct AudioFormat
 //   +0x3002C  mbChannelCount (the channel count of the currently-active src buffer;
 //                             Rechannel::Process latches it and rewrites it to its own
 //                             output channel count after remapping/swapping the buffers.)
-// The 0x30000 base + opaque body are preserved as a byte span so the named fields land
-// exactly. Process swaps the src/dst slots after filtering (ping-pong).
+// Process swaps the src/dst slots after filtering (ping-pong).
+// ⭐ UNIFIED (phase-D Dac slice 2026-08-28): the context IS the rw::audio::core::Mixer
+// -- the r4 every stage process receives is the mix executive itself, whose canonical
+// home is now rw/audio/core/Mixer.h (this TU's former local struct kept the same
+// spellings, which the Mixer class adopted; the "opaque graph buffers" span is the
+// mixer's 3 x 64-channel x 256-frame sample regions, and the former +0x30008 pad is
+// its System back-pointer).
 // -------------------------------------------------------------------------------------
-struct AudioProcessContext
-{
-    char                mBody[0x30000];                 // +0x00 .. +0x2FFFF -- opaque graph buffers
-    f64                 mdStreamTime;                   // +0x30000 -- frame-start stream time (s)
-    char                mPad30008[0x3000C - 0x30008];   // +0x30008 .. +0x3000B
-    AudioChannelBuffer *mpSrcBuffer;                    // +0x3000C
-    AudioChannelBuffer *mpDstBuffer;                    // +0x30010
-    char                mPad30014[0x30018 - 0x30014];   // +0x30014
-    AudioFormat        *mpFormat;                       // +0x30018
-    char                mPad3001C[0x30020 - 0x3001C];   // +0x3001C .. +0x3001F
-    u32                 mNumSamples;                    // +0x30020 -- active frame sample count
-    f32                 mfSampleRate;                   // +0x30024 -- active output sample rate (Hz)
-    f32                 mfResampleGain;                 // +0x30028 -- Resample-scaled gain
-    u8                  mbChannelCount;                 // +0x3002C -- active src-buffer channel count
-};
+typedef Mixer AudioProcessContext;
 
 // -------------------------------------------------------------------------------------
 // Low-pass 2nd-order IIR. Layout grounded in CreateInstance @0x82BA3130, Process

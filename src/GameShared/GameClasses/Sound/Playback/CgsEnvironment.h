@@ -165,6 +165,14 @@ namespace Playback
         void StartDac();                          // @0x82680F50
         void StopDac();                           // @0x82680FE8
 
+        // FLAG PC seam (phase D 2026-08-28): the console writer of mpDacPlugin is
+        // not located (no exported body stores env+0x50 -- the DAC voice is
+        // DATA-created, its spec arriving with the phase-F registry content, and
+        // the store is inside that unexported create path). Until it lands, the
+        // playback Module's phase-D bring-up stores the created Dac through this
+        // setter; retire it when the real writer is decoded.
+        void SetDacPlugin(rw::audio::core::PlugIn* apPlugIn) { mpDacPlugin = apPlugIn; }
+
         // @0x826D7500 (bodied phase B4). The per-frame engine pump the playback
         // Module::Update drives: UpdateContent, then (under the RWAC system
         // lock) UpdateVoices + UpdateFactories + the command-ring high-water

@@ -39,7 +39,9 @@
 #include "rw/audio/core/plugins/ReverbModel1.h"
 #include "rw/audio/core/DecoderRegistry.h"
 #include "rw/audio/core/Pcm16BigDec.h"
+#include "rw/audio/core/plugins/Dac.h"               // the output plug-in (phase D)
 
+#include <cstdint> // intptr_t (the RwacPlugInEvent r5 ride-through)
 #include <new>   // placement new (the in-carve construct)
 
 // The process-wide System singleton the vendor System.cpp publishes from
@@ -63,6 +65,17 @@ namespace core
     void RwacSystemUnlock(System* apSystem)
     {
         System::Unlock(apSystem);
+    }
+    // The 3-arg engine event entry (bodied with the phase-D Dac slice 2026-08-28;
+    // the BrnBaselineLinkStubs placeholder is retired): the console callers
+    // (Environment::StartDac @0x82680F50 / StopDac @0x82680FE8) `bl
+    // rw::audio::core::PlugIn::Event` -- the pass-through tail-vcall into the
+    // plug-in's vt[1] (the Dac's EventEvent). The int arg rides as the console r5
+    // (a param-block pointer for events 0..2; 0 for start/stop).
+    void RwacPlugInEvent(PlugIn* apPlugIn, int aiEvent, int aiArg)
+    {
+        PlugIn::Event(apPlugIn, aiEvent,
+                      reinterpret_cast<void*>(static_cast<intptr_t>(aiArg)));
     }
 } // namespace core
 } // namespace audio
@@ -232,8 +245,8 @@ GenericRwacFactory::GenericRwacFactory(Environment& arEnvironment,
         //     a null callback slot is a poison-in-waiting for the dispatch
         //     sites; their missing bodies' dossiers are re-exported and the
         //     decode is in flight (plugin_callbacks_decode_codex.md);
-        //   * Dac (phase D), GainFader, LowPassButterworth, SndPlayer1, SubMix
-        //     -- no PC plug-in home yet;
+        //   * GainFader, LowPassButterworth, SndPlayer1, SubMix -- no PC plug-in
+        //     home yet (Dac registered LIVE with the phase-D slice 2026-08-28);
         //   * the three custom game descriptors (GinsuPlayer off_82F2D094 /
         //     SndPlayer1_CgsStreamMod off_82F2E124 / GainArray off_82F2E664)
         //     -- their game-side plug-in bodies are not reconstructed.
@@ -244,7 +257,7 @@ GenericRwacFactory::GenericRwacFactory(Environment& arEnvironment,
                 reinterpret_cast<PlugInDescRunTime*>(GETTER))
         CGS_RWAC_REGISTER(rw::audio::core::AiffWriter::GetPlugInDescRunTime());          // 1  @0x82B968B0
         CGS_RWAC_REGISTER(rw::audio::core::BandPassIir2::GetPlugInDescRunTime());        // 2  @0x82B96A40
-        // 3  Dac @0x82B96DB8 -- FLAG deferred (phase D; descriptor off_82F8C7A8)
+        CGS_RWAC_REGISTER(rw::audio::core::Dac::GetPlugInDescRunTime());                // 3  @0x82B96DB8 (phase D)
         CGS_RWAC_REGISTER(rw::audio::core::Gain::GetPlugInDescRunTime());                // 4  @0x82B97350
         // 5  GainFader @0x82B97368 -- FLAG deferred (no PC home; off_82F8CC50)
         // 6  HighPassIir2 @0x82B978B0 -- FLAG deferred (CreateInstance @0x82BA2E40 body absent)

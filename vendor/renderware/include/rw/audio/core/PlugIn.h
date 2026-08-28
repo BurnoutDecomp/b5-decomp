@@ -107,14 +107,19 @@ public:
 
     // vtable[0] / vtable[1] / vtable[3] are virtual; declared so dispatch compiles.
     virtual ~PlugIn() {}
-    virtual int Event() { return 0; }     // vt[1] -- reached through PlugIn::Event
+    // vt[1] -- reached through the static PlugIn::Event below. THREE-ARG (phase-D Dac
+    // slice 2026-08-28): the static entry @0x82B6A8F8 is a pass-through tail-vcall, so
+    // r4/r5 ride untouched into the slot -- Dac::EventEvent @0x82BA27F0 (the Dac's
+    // vt[1]) consumes them as (eventId, paramPtr). The base returns 0 (no plug-in
+    // without an Event override is ever evented on the committed paths).
+    virtual int Event(int /*aiEventId*/, void * /*apParam*/) { return 0; }
     virtual int VFunc2() { return 0; }     // vt[2] -- unmodelled slot
     virtual void Destroy(int /*a*/) {}     // vt[3] -- reached through CreateInstance fail path
 
     // ---- bodied in PlugIn.cpp (offsets above are authoritative) ----
     static PlugIn *CreateInstance(PlugIn *self, Voice *voice, PlugInDescRunTime *pDesc,
                                   void *typeRecord, char flag);
-    static int Event(PlugIn *self);
+    static int Event(PlugIn *self, int aiEventId, void *apParam);
     static PlugIn *GetAttribute(PlugIn *self, int index, f32 *outValue);
     static PlugIn *SetAttribute(PlugIn *self, int index, f32 value);
     static int SetAttributeHandler(void *cmd);
@@ -134,6 +139,17 @@ public:
     u32 mCpuTicks;                        // +0x1C  (was mState)
     u8 mInputChannels;                    // +0x20  (was mbFlag20)
     u8 mOutputChannels;                   // +0x21  (was mbFlag21)
+};
+
+// The companion `a4` record PlugIn::CreateInstance consumes beside the descriptor
+// (a "context" pointer at +0 and an init flag byte at +8; grounded @0x82B6A818's
+// `lwz 0(a4)` / `lbz 8(a4)`). Moved here from PlugIn.cpp with the phase-D Dac
+// slice -- the playback module's bring-up seam builds one.
+struct PlugInCreateDesc
+{
+    void *mpContext; // +0x00 -- passed as the argument to the create callback
+    int mField4;     // +0x04
+    char mbInitFlag; // +0x08 -- copied into PlugIn::mOutputChannels
 };
 
 // A queued SetAttribute command, pushed into the System command ring by

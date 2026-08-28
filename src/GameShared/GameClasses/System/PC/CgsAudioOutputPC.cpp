@@ -55,9 +55,14 @@ void*                   g_overlayUser = nullptr;
 // with the music stream AND the presentation blips.
 AudioOutputPC::FillFn   g_voiceFill   = nullptr;
 void*                   g_voiceUser   = nullptr;
+// The additive ENGINE fill (the rw::audio Dac's mixed frame; phase D). Persistent
+// across Open/Close like the overlay/voice slots.
+AudioOutputPC::FillFn   g_engineFill  = nullptr;
+void*                   g_engineUser  = nullptr;
 s16                     g_buf[kBuffers][kFrames * kMaxChannels];
 s16                     g_overlayBuf[kFrames * kMaxChannels];
 s16                     g_voiceBuf[kFrames * kMaxChannels];
+s16                     g_engineBuf[kFrames * kMaxChannels];
 
 // Saturating add of one already-filled mix source into the outgoing buffer.
 void MixInto(s16* lpDst, const s16* lpSrc, int liValues)
@@ -89,6 +94,11 @@ void SubmitBuffer(int liIndex)
     {
         g_voiceFill(g_voiceBuf, kFrames, g_voiceUser);
         MixInto(lpBuf, g_voiceBuf, liValues);
+    }
+    if (g_engineFill)
+    {
+        g_engineFill(g_engineBuf, kFrames, g_engineUser);
+        MixInto(lpBuf, g_engineBuf, liValues);
     }
 
     XAUDIO2_BUFFER lBuf;
@@ -232,6 +242,8 @@ void AudioOutputPC::SetFill(FillFn lpFill, void* lpUser) { g_fill = lpFill; g_us
 void AudioOutputPC::SetOverlayFill(FillFn lpFill, void* lpUser) { g_overlayFill = lpFill; g_overlayUser = lpUser; }
 
 void AudioOutputPC::SetVoiceFill(FillFn lpFill, void* lpUser) { g_voiceFill = lpFill; g_voiceUser = lpUser; }
+
+void AudioOutputPC::SetEngineFill(FillFn lpFill, void* lpUser) { g_engineFill = lpFill; g_engineUser = lpUser; }
 
 void AudioOutputPC::PlayTestTone(float lfSeconds)
 {

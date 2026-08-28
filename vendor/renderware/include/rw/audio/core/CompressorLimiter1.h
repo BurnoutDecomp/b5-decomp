@@ -33,7 +33,8 @@ namespace core
 
 // The per-block audio process context passed to Process (defined in Iir2Filters.h). Only a
 // pointer is needed here, so forward-declare it to avoid the include cascade.
-struct AudioProcessContext;
+class Mixer;                             // the stage process context (unified; Mixer.h)
+typedef Mixer AudioProcessContext;
 
 // -------------------------------------------------------------------------------------
 // CompressorLimiter1

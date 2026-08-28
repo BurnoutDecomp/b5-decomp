@@ -26,6 +26,10 @@
 #include "GameShared/GameClasses/Sound/Playback/RWAC/CgsGenericRwacFactory.h" // GetDefaultRwacSystem + RwacSystemLock (phase B4)
 #include "GameShared/GameClasses/Sound/Playback/AEMS/CgsAemsFactory.h"        // AemsFactory::Create (the stage-3 create, cascade slice 2)
 #include "GameShared/GameClasses/Sound/Playback/Splicer/CgsSplicerFactory.h"  // SplicerFactory::Create (the stage-3 create, cascade slice 3)
+#include "GameShared/GameClasses/System/PC/CgsDacOutputPC.h"                  // DacOutputPC::Attach (the phase-D output bridge)
+#include "rw/audio/core/plugins/Dac.h"                                        // the Dac plug-in (phase D)
+
+#include <new>   // placement new (the phase-D Dac pre-construction)
 
 // The stage-3 stream-provider interface global (X360 off_82FFBA0C): Prepare
 // publishes the module's IStreamProvider sub-object (console `= &this->+0x228`)
@@ -347,6 +351,52 @@ bool Module::Prepare(rw::IResourceAllocator* apAllocator,
                 "  Voice update", static_cast<PerfMonCpuPage>(14), false, 1.0f, true);
             lrMonitors.miAemsFactoryUpdate2 = AddMonitor(
                 "Aems Update", static_cast<PerfMonCpuPage>(19), false, 1.0f, true);
+        }
+
+        // ---- the phase-D output bridge: create + start the engine's Dac ----
+        // FLAG PC seam (phase D 2026-08-28): the console creates the Dac as the
+        // DATA-driven DAC voice's terminal stage (Voice::CreateInstance ->
+        // PlugIn::CreateInstance @0x82B6A818 with the 'Dac0' record -- the
+        // VoiceSpec arrives with the phase-F registry content) and starts it from
+        // SoundLogicModule::ProcessGuiEvents @0x826ED6C8 (not yet reconstructed).
+        // Until those land, the Dac is created here through the SAME generic
+        // descriptor path (registry lookup -> GetSize carve -> the base fill +
+        // create callback) and started immediately; the create-record channel
+        // bytes (6) are the DAC's own count, the data value being unrecovered.
+        {
+            using rw::audio::core::PlugIn;
+            using rw::audio::core::PlugInRegistry;
+            using rw::audio::core::PlugInDescRunTime;
+            using rw::audio::core::PlugInCreateDesc;
+            typedef int (*DacGetSizeFn)();
+
+            rw::audio::core::System* lpRwacSystem = GetDefaultRwacSystem();
+            PlugInRegistry* lpPlugInRegistry =
+                rw::audio::core::System::GetPlugInRegistry(lpRwacSystem);
+            PlugInDescRunTime* lpDacDesc = static_cast<PlugInDescRunTime*>(
+                PlugInRegistry::GetPlugInHandle(lpPlugInRegistry, 0x44616330)); // 'Dac0'
+            CGS_ASSERT(lpDacDesc != 0, "lpDacDesc");
+
+            int liDacSize = reinterpret_cast<DacGetSizeFn>(lpDacDesc->pGetSize)();
+            void* lpDacMemory = rw::audio::core::System::Alloc(
+                lpRwacSystem, static_cast<u32>(liDacSize), 0, 16, 0);
+            CGS_ASSERT(lpDacMemory != 0, "lpDacMemory");
+
+            // Pre-construct the host Dac so the generic path's fail branch can
+            // virtual-dispatch (the create callback re-installs the same vtable --
+            // the console's `*a1 = off_8217F3C4` store).
+            PlugIn* lpDacBase = ::new (lpDacMemory) rw::audio::core::Dac;
+            PlugInCreateDesc lCreateRecord;
+            lCreateRecord.mpContext  = 0;
+            lCreateRecord.mField4    = 0;
+            lCreateRecord.mbInitFlag = 6;
+            PlugIn* lpDacPlugIn =
+                PlugIn::CreateInstance(lpDacBase, 0, lpDacDesc, &lCreateRecord, 6);
+            CGS_ASSERT(lpDacPlugIn != 0, "lpDacPlugIn");
+
+            mhEnvironment.GetObject()->SetDacPlugin(lpDacPlugIn);
+            DacOutputPC::Attach(static_cast<rw::audio::core::Dac*>(lpDacPlugIn));
+            mhEnvironment.GetObject()->StartDac();
         }
 
         mePrepareStage++;   // the raw bump with the .h:500 bound assert (inlined op++)
