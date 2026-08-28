@@ -27,6 +27,9 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (X360 RenderStart guards)
 
 #include <cstdio>   // [diag] BRN_CXFORM_TRACE line formatting
+#include <cstring>  // std::strlen (the D3DCompile source length below) -- was reached
+            //          only transitively; a header change made that accidental include
+            //          disappear and the TU stopped compiling. Named explicitly now.
 // [diag] BRN_CXFORM_TRACE writes through the engine log (same hook CgsIm2d.cpp's trace uses),
 // and stamps each line with the present counter that lives in device.cpp so a traced batch can
 // be correlated against the BRN_FRAME_DUMP image of the SAME frame.
@@ -1077,6 +1080,158 @@ namespace CgsGraphics
             if (lfOut > 1.0f) lfOut = 1.0f;
             return static_cast<u8>(lfOut * 255.0f + 0.5f);
         }
+
+        // -------------------------------------------------------------------------------------
+        // [PC platform leaf] The 1x1 opaque-white raster that stands in for the immediate-mode
+        // state library's white texture (X360 dword_83010F58 == mgStateLibrary.mpTexture_White).
+        // The console pushes it as a MASK whenever a caller wants "clip to this rect and shape
+        // nothing"; BoostBarRenderer does it for the fire end cap, the boosting flame, the grow
+        // fireball and the tiled background. On this backend that global is a no-op, so the
+        // state initialises over a null raster -- and a null raster silently means "leave the
+        // PREVIOUS mask bound", which is not the console's behaviour at all.
+        // -------------------------------------------------------------------------------------
+        IDirect3DBaseTexture9* DispatchWhiteMaskTexture(IDirect3DDevice9* lpDevice)
+        {
+            static IDirect3DTexture9* spWhite = nullptr;
+            static bool sbTried = false;
+            if (spWhite == nullptr && !sbTried)
+            {
+                sbTried = true;
+                if (SUCCEEDED(lpDevice->CreateTexture(1, 1, 1, 0, D3DFMT_A8R8G8B8,
+                                                      D3DPOOL_MANAGED, &spWhite, nullptr)) &&
+                    spWhite != nullptr)
+                {
+                    D3DLOCKED_RECT lLock;
+                    if (SUCCEEDED(spWhite->LockRect(0, &lLock, nullptr, 0)))
+                    {
+                        *static_cast<u32*>(lLock.pBits) = 0xFFFFFFFFu;
+                        spWhite->UnlockRect(0);
+                    }
+                    else
+                    {
+                        spWhite->Release();
+                        spWhite = nullptr;
+                    }
+                }
+            }
+            return spWhite;
+        }
+
+        // -------------------------------------------------------------------------------------
+        // THE BOOST-BAR GRADIENT PROGRAM (console program 3 == E_SHADERS_BOOSTBAR).
+        //
+        // Recovered from the ARTIST image, not guessed. Im2d::Construct @0x827FBDB8 binds exactly
+        // two pixel-shader constants on the boost-bar program pair, by name:
+        //     GetPixelProgram(liShader + E_SHADERS_BOOSTBAR)->GetVariableHandleByName(
+        //         "gv3OuterColour", maBoostBarOuterColours[liShader])   -> c0
+        //         "gv3InnerColour", maBoostBarInnerColours[liShader])   -> c1
+        // and Im2dRenderBuffer::PushBoostBarColours @0x824502A8 records {v1 = OUTER, v2 = INNER}
+        // in the opcode-21 record at +16/+32. The unmasked program's Xenos microcode (guest
+        // 0x820D36C0, ucode @0x820D37D0) disassembles to five instructions:
+        //     tfetch r3.xyw_, r2.xy, tf0     ; r3.x = tex.R, r3.y = tex.G, r3.z = tex.A
+        //     mul    r2.xyz, r3.xxxx, c1.xyz ; = tex.R * gv3InnerColour
+        //     maxs   PS,     r3.zz           ; PS = tex.A
+        //     mad    r2.xyz, r3.yyyy, c0.xyz, r2.xyz   ; += tex.G * gv3OuterColour
+        //     mul    r2.xyz, r2.xyz, r1.xyz  ; * the interpolated (scaled) vertex colour
+        //     muls_prev r2.w, r1.w           ; alpha = tex.A * vertex alpha
+        //     add    export0, r2, r0         ; + the interpolated colour SHIFT
+        // The masked sibling (0x820D39F8) computes the identical RGB and multiplies only ALPHA
+        // by the mask samples -- see the PUSH_MASK case.
+        //
+        // So the texture is NOT a colour: its RED and GREEN channels are two independent
+        // WEIGHTS selecting between the boost type's inner and outer colour, which is why the
+        // shipped fire atlases (boostfirebody, boostbarendcap, boostbarboosting) read as
+        // "magenta" -- their R and B are one weight and their G is the other. Fixed-function
+        // D3D9 cannot express a per-pixel red/green REPLICATE, so this is the one place in the
+        // 2D dispatch that needs a real pixel shader. It is compiled through the same
+        // d3dcompiler entry point the world fallback shader already uses (XenonD3D9Shims.cpp),
+        // at ps_2_0 so it stays legal under fixed-function vertex processing (XYZRHW). If the
+        // compiler DLL is unavailable the caller falls back to the previous per-vertex 50/50
+        // approximation, which keeps the hue but has no gradient.
+        // -------------------------------------------------------------------------------------
+        typedef HRESULT (WINAPI* DispatchD3DCompileProc)(
+            LPCVOID pSrcData, SIZE_T SrcDataSize, LPCSTR pSourceName, const void* pDefines,
+            void* pInclude, LPCSTR pEntrypoint, LPCSTR pTarget, UINT Flags1, UINT Flags2,
+            void** ppCode, void** ppErrorMsgs);
+
+        struct DispatchBlobLite
+        {
+            // The ID3DBlob vtable entries used, reached positionally (same shim shape as
+            // XenonD3D9Shims.cpp's ID3DBlobLite -- no d3dcompiler import lib is linked).
+            virtual HRESULT __stdcall QueryInterface(const void*, void**) = 0;
+            virtual ULONG   __stdcall AddRef() = 0;
+            virtual ULONG   __stdcall Release() = 0;
+            virtual LPVOID  __stdcall GetBufferPointer() = 0;
+            virtual SIZE_T  __stdcall GetBufferSize() = 0;
+        };
+
+        const char* const KPC_BOOSTBAR_PS_SOURCE =
+            "sampler2D gDiffuse : register(s0);\n"
+            "sampler2D gMask    : register(s1);\n"
+            "float4 gOuter : register(c0);\n"   // gv3OuterColour
+            "float4 gInner : register(c1);\n"   // gv3InnerColour
+            "float4 gShift : register(c2);\n"   // the interpolated colour shift (per-batch here)
+            "float4 main(float2 uv0 : TEXCOORD0, float2 uv1 : TEXCOORD1,\n"
+            "            float4 col : COLOR0) : COLOR\n"
+            "{\n"
+            "    float4 t = tex2D(gDiffuse, uv0);\n"
+            "    float3 mix = t.r * gInner.rgb + t.g * gOuter.rgb;\n"
+            "    float4 o;\n"
+            "    o.rgb = mix * col.rgb + gShift.rgb;\n"
+            "    o.a   = t.a * col.a;\n"
+            "#ifdef BOOSTBAR_MASKED\n"
+            "    o.a  *= tex2D(gMask, uv1).a;\n"
+            "#endif\n"
+            "    return o;\n"
+            "}\n";
+
+        // 0 = unmasked, 1 = masked. nullptr once a compile has been attempted and failed.
+        IDirect3DPixelShader9* DispatchBoostBarShader(IDirect3DDevice9* lpDevice, bool lbMasked)
+        {
+            static IDirect3DPixelShader9* sapShader[2] = { nullptr, nullptr };
+            static bool                   sabTried[2]  = { false, false };
+            const int liSlot = lbMasked ? 1 : 0;
+            if (sapShader[liSlot] != nullptr || sabTried[liSlot])
+                return sapShader[liSlot];
+            sabTried[liSlot] = true;
+
+            HMODULE lhCompiler = ::LoadLibraryA("d3dcompiler_47.dll");
+            if (lhCompiler == nullptr)
+                lhCompiler = ::LoadLibraryA("d3dcompiler_43.dll");
+            if (lhCompiler == nullptr)
+                return nullptr;
+            DispatchD3DCompileProc lpfnCompile = reinterpret_cast<DispatchD3DCompileProc>(
+                ::GetProcAddress(lhCompiler, "D3DCompile"));
+            if (lpfnCompile == nullptr)
+                return nullptr;
+
+            // D3D_SHADER_MACRO is {const char* Name; const char* Definition;}, NULL-terminated.
+            struct Macro { const char* mpcName; const char* mpcValue; };
+            const Macro laMacros[2] = { { "BOOSTBAR_MASKED", "1" }, { nullptr, nullptr } };
+            const void* lpDefines = lbMasked ? static_cast<const void*>(laMacros) : nullptr;
+
+            DispatchBlobLite* lpCode   = nullptr;
+            DispatchBlobLite* lpErrors = nullptr;
+            const HRESULT lhr = lpfnCompile(KPC_BOOSTBAR_PS_SOURCE,
+                                            std::strlen(KPC_BOOSTBAR_PS_SOURCE),
+                                            "BoostBarShader_ps", lpDefines, nullptr,
+                                            "main", "ps_2_0", 0, 0,
+                                            reinterpret_cast<void**>(&lpCode),
+                                            reinterpret_cast<void**>(&lpErrors));
+            if (SUCCEEDED(lhr) && lpCode != nullptr)
+            {
+                lpDevice->CreatePixelShader(static_cast<const DWORD*>(lpCode->GetBufferPointer()),
+                                            &sapShader[liSlot]);
+                lpCode->Release();
+            }
+            else
+            {
+                CgsDev::Log::WriteToLog("[Im2d] boost-bar pixel shader compile FAILED -- "
+                                        "falling back to the flat per-vertex tint\n");
+            }
+            if (lpErrors != nullptr) lpErrors->Release();
+            return sapShader[liSlot];
+        }
     }
 
     // -------------------------------------------------------------------------
@@ -1132,16 +1287,17 @@ namespace CgsGraphics
         // The console's program 3 is the boost-bar gradient pixel shader: it shades the fire
         // building blocks between an OUTER and an INNER colour (BoostBarRenderer pushes the
         // meCurrentBoostType pair via opcode 21; ShowDebugScreen's 4x5 grid visualises it).
-        // [FLAG PC-platform leaf] this fixed-function backend has no programmable 2D pipeline,
-        // so the gradient is approximated per-VERTEX: while program 3 is latched, every draw's
-        // vertex RGB is additionally modulated by the clamped 50/50 mix of the latched pair
-        // (the mix keeps the type's hue -- gold / red-orange / green -- where either colour
-        // alone drifts; the pair's components are HDR-range, so the mix is clamped to 1).
-        // DELETE-WHEN the real program-3 formula is recovered (the shipped TUB PC build carries
-        // it as D3D9 shader bytecode) and a shader path lands in this dispatch.
+        // The real program-3 formula is now RECOVERED from the ARTIST Xenos microcode and
+        // reproduced by a ps_2_0 compiled in DispatchBoostBarShader (see its banner):
+        //     rgb = (tex.R * gv3InnerColour + tex.G * gv3OuterColour) * vertexColour + shift
+        //     a   =  tex.A * vertexAlpha  [* the mask alpha while a mask is open]
+        // The 50/50 per-vertex mix below survives ONLY as the fallback for a box with no
+        // d3dcompiler DLL; it keeps the boost type's hue but has no per-pixel gradient.
         s8   li8LatchedProgram = 0;
         bool lbBoostPairLatched = false;
         f32  lfBoostTintR = 255.0f, lfBoostTintG = 255.0f, lfBoostTintB = 255.0f;
+        f32  lfBoostOuterR = 1.0f, lfBoostOuterG = 1.0f, lfBoostOuterB = 1.0f;
+        f32  lfBoostInnerR = 1.0f, lfBoostInnerG = 1.0f, lfBoostInnerB = 1.0f;
         // [diag] BRN_CXFORM_TRACE: the texture currently bound on stage 0, so a traced batch
         // records whether it was MODULATEd by a texel or took its diffuse straight through.
         const void* lpTraceBoundTexture = nullptr;
@@ -1300,12 +1456,24 @@ namespace CgsGraphics
             {
                 const ImCommandPushBoostBarColours* lpSet =
                     static_cast<const ImCommandPushBoostBarColours*>(lpCommand);
-                // maColours[0] == the OUTER colour, [1] == the INNER (the RenderComponent /
-                // ShowDebugScreen push order). Clamped 50/50 mix in the 0..255 scale space
+                // maColours[0] == the OUTER colour (v1), [1] == the INNER (v2) -- the argument
+                // order Im2dRenderBuffer::PushBoostBarColours @0x824502A8 stores at +16/+32,
+                // and the order Im2d::Construct binds to c0 = gv3OuterColour, c1 = gv3InnerColour.
+                // Kept UNCLAMPED for the shader path: the console's constants are HDR (the
+                // danger/aggression outer colours run to 2.0) and the clamp belongs at the
+                // export, not at the constant.
+                lfBoostOuterR = lpSet->maColours[0].x;
+                lfBoostOuterG = lpSet->maColours[0].y;
+                lfBoostOuterB = lpSet->maColours[0].z;
+                lfBoostInnerR = lpSet->maColours[1].x;
+                lfBoostInnerG = lpSet->maColours[1].y;
+                lfBoostInnerB = lpSet->maColours[1].z;
+                // The per-vertex FALLBACK tint (used only when the pixel shader cannot be
+                // compiled): the clamped 50/50 mix in the 0..255 scale space
                 // DispatchColourScaleOnly consumes (identity == 255).
-                const f32 lfMixR = (lpSet->maColours[0].x + lpSet->maColours[1].x) * 0.5f;
-                const f32 lfMixG = (lpSet->maColours[0].y + lpSet->maColours[1].y) * 0.5f;
-                const f32 lfMixB = (lpSet->maColours[0].z + lpSet->maColours[1].z) * 0.5f;
+                const f32 lfMixR = (lfBoostOuterR + lfBoostInnerR) * 0.5f;
+                const f32 lfMixG = (lfBoostOuterG + lfBoostInnerG) * 0.5f;
+                const f32 lfMixB = (lfBoostOuterB + lfBoostInnerB) * 0.5f;
                 lfBoostTintR = (lfMixR > 1.0f ? 1.0f : (lfMixR < 0.0f ? 0.0f : lfMixR)) * 255.0f;
                 lfBoostTintG = (lfMixG > 1.0f ? 1.0f : (lfMixG < 0.0f ? 0.0f : lfMixG)) * 255.0f;
                 lfBoostTintB = (lfMixB > 1.0f ? 1.0f : (lfMixB < 0.0f ? 0.0f : lfMixB)) * 255.0f;
@@ -1343,8 +1511,20 @@ namespace CgsGraphics
                         lpPush->mpVertices);
                     lpMaskTexture = lpPush->mpTexture;
                 }
-                if (lpCorners != nullptr && lpMaskTexture != nullptr &&
-                    lpMaskTexture->mpD3DTexture != nullptr)
+                // [PC platform leaf] The console's WHITE-TEXTURE mask. BoostBarRenderer's
+                // SetMaskRect(mpWhiteTextureState, ...) pushes the immediate-mode state
+                // library's white texture, which has no PC backing (InitResources builds that
+                // state over a null raster), and a null raster used to skip this whole block --
+                // which does NOT mean "no mask", it means "keep the PREVIOUS mask bound", i.e.
+                // the exact opposite of what the console does. On the console a white mask is
+                // alpha 1 inside the pushed rect and the sampler's border outside it, so it
+                // clips to the rect and shapes nothing. A 1x1 opaque-white raster under the
+                // same BORDER addressing reproduces that exactly.
+                IDirect3DBaseTexture9* lpMaskD3D =
+                    (lpMaskTexture != nullptr) ? lpMaskTexture->mpD3DTexture : nullptr;
+                if (lpMaskD3D == nullptr)
+                    lpMaskD3D = DispatchWhiteMaskTexture(lpDevice);
+                if (lpCorners != nullptr && lpMaskD3D != nullptr)
                 {
                     // The screen->maskUV map the PS3 constant fold encodes: reciprocals of the
                     // corner extents + the corner UV range (a degenerate extent maps flat).
@@ -1359,36 +1539,39 @@ namespace CgsGraphics
                     lfMaskDU   = lpCorners[1].mv2Tex0UV.x - lpCorners[0].mv2Tex0UV.x;
                     lfMaskDV   = lpCorners[1].mv2Tex0UV.y - lpCorners[0].mv2Tex0UV.y;
 
-                    // Stage 1 = the mask sample. The two opcodes carry DIFFERENT mask-asset
-                    // conventions, verified against the shipped textures (hud H3b 2026-08-25):
-                    //   * 18 (Apt PushMaskGeometry): the Apt mask rasters carry the shape in
-                    //     ALPHA -- colour passes through, alpha modulates by the mask alpha
-                    //     (the PS3 masked-program observable, unchanged).
-                    //   * 17 (Im2dRenderBuffer::PushMask -- the GUI SetMaskRect states): the
-                    //     GUI mask assets (SatNavMask, boostbarmask..., all DXT5 in
-                    //     GUITEXTURES) carry the shape in the COLOUR channel (white keep /
-                    //     dark cut: SatNavMask interior RGB 255 with its corner notch dark;
-                    //     the boost strip masks' ALPHA is identically ZERO, so an alpha
-                    //     modulate erases every masked draw -- the drive-5 vanishing-map
-                    //     A/B). The console draws these masked passes opaque and folds the
-                    //     mask texel into the COLOUR; alpha passes through.
-                    lpDevice->SetTexture(1, lpMaskTexture->mpD3DTexture);
-                    if (lpCommand->muType == IM_CMD_PUSH_MASK)
-                    {
-                        lpDevice->SetTextureStageState(1, D3DTSS_COLOROP,   D3DTOP_MODULATE);
-                        lpDevice->SetTextureStageState(1, D3DTSS_COLORARG1, D3DTA_TEXTURE);
-                        lpDevice->SetTextureStageState(1, D3DTSS_COLORARG2, D3DTA_CURRENT);
-                        lpDevice->SetTextureStageState(1, D3DTSS_ALPHAOP,   D3DTOP_SELECTARG2);
-                        lpDevice->SetTextureStageState(1, D3DTSS_ALPHAARG2, D3DTA_CURRENT);
-                    }
-                    else
-                    {
-                        lpDevice->SetTextureStageState(1, D3DTSS_COLOROP,   D3DTOP_SELECTARG2);
-                        lpDevice->SetTextureStageState(1, D3DTSS_COLORARG2, D3DTA_CURRENT);
-                        lpDevice->SetTextureStageState(1, D3DTSS_ALPHAOP,   D3DTOP_MODULATE);
-                        lpDevice->SetTextureStageState(1, D3DTSS_ALPHAARG1, D3DTA_TEXTURE);
-                        lpDevice->SetTextureStageState(1, D3DTSS_ALPHAARG2, D3DTA_CURRENT);
-                    }
+                    // Stage 1 = the mask sample. ONE convention for both opcodes: the mask
+                    // multiplies ALPHA by the mask texture's ALPHA and leaves COLOUR alone.
+                    //
+                    // ⭐ RECOVERED FROM THE ARTIST ASM (2026-08-28), not inferred from assets.
+                    // The console's masked Im2d pixel shader (the "+1" sibling Im2d::SetProgram
+                    // @0x827F1820 selects while a mask is open) is the boost-bar masked program
+                    // at guest 0x820D39F8; its Xenos microcode disassembles to:
+                    //     tfetch r5.__w_, r3.xy, tf1      ; MaskSampler0 -> r5.z = mask0.ALPHA
+                    //     tfetch r5.___w, r3.zw, tf2      ; MaskSampler1 -> r5.w = mask1.ALPHA
+                    //     sge    r4.xy, c255.xxxx, r4.xy  ; the in-rect position test
+                    //     mul    r2.yz, r4.xy, r5.zw      ; factor = inRect * maskAlpha
+                    //     max    r0.xy, r2.yz, r5.xy      ; ...or 1 where gvMaskUseFlags is off
+                    //     muls   r0.x,  r0.xy             ; combine the two mask slots
+                    //     mul    export0.___w, r0.x, r2.x ; ALPHA *= the combined mask
+                    // export0.xyz is written by an earlier `mad` that never touches the mask.
+                    // So: alpha-modulate, colour untouched -- and the border-black sampler
+                    // below is the PC realisation of the `sge` in-rect test.
+                    //
+                    // ⛔ This case used to COLOUR-modulate for opcode 17, on the reading that
+                    // "the boost strip masks' ALPHA is identically ZERO". That measurement was
+                    // real but it was measuring a BROKEN ASSET: tools/assets/bundles/x360_tex.py
+                    // ported every fully-packed texture (min(w,h) <= 16 -- boostbarmask 256x8
+                    // among them) out of the wrong mip-tail slot, so the whole texture arrived
+                    // as zeros and its alpha only looked "identically zero". Ported correctly,
+                    // boostbarmask is RGB 255 everywhere with the shape in a 0..255 ALPHA ramp,
+                    // which a colour modulate cannot see at all. SatNavMask carries its shape
+                    // in BOTH channels, so it reads the same either way.
+                    lpDevice->SetTexture(1, lpMaskD3D);
+                    lpDevice->SetTextureStageState(1, D3DTSS_COLOROP,   D3DTOP_SELECTARG2);
+                    lpDevice->SetTextureStageState(1, D3DTSS_COLORARG2, D3DTA_CURRENT);
+                    lpDevice->SetTextureStageState(1, D3DTSS_ALPHAOP,   D3DTOP_MODULATE);
+                    lpDevice->SetTextureStageState(1, D3DTSS_ALPHAARG1, D3DTA_TEXTURE);
+                    lpDevice->SetTextureStageState(1, D3DTSS_ALPHAARG2, D3DTA_CURRENT);
                     lpDevice->SetSamplerState(1, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
                     lpDevice->SetSamplerState(1, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
                     lpDevice->SetSamplerState(1, D3DSAMP_MIPFILTER, D3DTEXF_NONE);
@@ -1436,6 +1619,14 @@ namespace CgsGraphics
                     luCount = static_cast<u32>(KI_DISPATCH_MAX);
                 }
 
+                // The boost-bar gradient program: a real pixel shader when this box can compile
+                // one (the console formula, per pixel), else the flat per-vertex fallback.
+                IDirect3DPixelShader9* lpBoostPs = nullptr;
+                if (li8LatchedProgram == 3 && lbBoostPairLatched)
+                    lpBoostPs = DispatchBoostBarShader(lpDevice, lbMaskStageBound);
+                const bool lbBoostVertexTint =
+                    (li8LatchedProgram == 3 && lbBoostPairLatched && lpBoostPs == nullptr);
+
                 // Fold the batch transform into each vertex, scale logical->back-buffer, pack colour.
                 for (u32 luIndex = 0; luIndex < luCount; ++luIndex)
                 {
@@ -1474,12 +1665,11 @@ namespace CgsGraphics
                         lu8B = DispatchColourScaleOnly(lu8B, lfColScaleB);
                         lu8A = DispatchColourScaleOnly(lu8A, lfColScaleA);
                     }
-                    // [boost-bar 2026-08-25] the program-3 gradient fold: while the boost-bar
-                    // gradient program is latched, modulate the vertex RGB by the latched
-                    // colour-pair mix (see the latch note above). Alpha is untouched (the
-                    // pair's w lanes are authored 0 -- the console shader takes alpha from
-                    // the texture/vertex, not the pair).
-                    if (li8LatchedProgram == 3 && lbBoostPairLatched)
+                    // The program-3 FALLBACK fold (no pixel shader available): modulate the
+                    // vertex RGB by the latched colour-pair mix. Alpha is untouched (the pair's
+                    // w lanes are authored 0 -- the console shader takes alpha from the
+                    // texture/vertex, not the pair).
+                    if (lbBoostVertexTint)
                     {
                         lu8R = DispatchColourScaleOnly(lu8R, lfBoostTintR);
                         lu8G = DispatchColourScaleOnly(lu8G, lfBoostTintG);
@@ -1613,9 +1803,26 @@ namespace CgsGraphics
                 // first free texture stage (stage 1 normally; stage 2 while a clip mask owns
                 // stage 1). Alpha passes through -- the shipped data has shift.w == 0 in every
                 // record, and adding to alpha would change coverage rather than colour.
-                const bool lbNeedShift = lbHaveTransform &&
+                //
+                // While the boost-bar pixel shader is bound the whole texture-stage cascade is
+                // bypassed by the runtime, so the shader adds the shift itself (its c2) and this
+                // stage must stay off.
+                const bool lbNeedShift = lbHaveTransform && lpBoostPs == nullptr &&
                     (lfColShiftR != 0.0f || lfColShiftG != 0.0f || lfColShiftB != 0.0f);
                 const DWORD luShiftStage = lbMaskStageBound ? 2u : 1u;
+                if (lpBoostPs != nullptr)
+                {
+                    // c0 = gv3OuterColour, c1 = gv3InnerColour -- the console's own register
+                    // assignment (Im2d::Construct's GetVariableHandleByName pair, CTAB reg 0/1).
+                    const f32 lafOuter[4] = { lfBoostOuterR, lfBoostOuterG, lfBoostOuterB, 0.0f };
+                    const f32 lafInner[4] = { lfBoostInnerR, lfBoostInnerG, lfBoostInnerB, 0.0f };
+                    const f32 lafShift[4] = { lfColShiftR / 255.0f, lfColShiftG / 255.0f,
+                                              lfColShiftB / 255.0f, 0.0f };
+                    lpDevice->SetPixelShaderConstantF(0, lafOuter, 1);
+                    lpDevice->SetPixelShaderConstantF(1, lafInner, 1);
+                    lpDevice->SetPixelShaderConstantF(2, lafShift, 1);
+                    lpDevice->SetPixelShader(lpBoostPs);
+                }
                 if (lbNeedShift)
                 {
                     lpDevice->SetRenderState(D3DRS_TEXTUREFACTOR,
@@ -1661,6 +1868,11 @@ namespace CgsGraphics
 
                 lpDevice->DrawPrimitiveUP(leTopology, luPrimCount, saBatch, sizeof(DispatchScreenVertex));
 
+                if (lpBoostPs != nullptr)
+                {
+                    // Back to fixed function for every non-boost-bar batch in this walk.
+                    lpDevice->SetPixelShader(nullptr);
+                }
                 if (lbNeedShift)
                 {
                     // Leave the cascade as the next batch expects to find it.

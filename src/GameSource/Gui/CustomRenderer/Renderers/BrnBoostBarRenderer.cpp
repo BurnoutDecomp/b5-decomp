@@ -571,8 +571,17 @@ Vector3 BoostBarRenderer::GetOuterBoostBarColour()
 // [FLAG PC fold] the white texture: the console reads the immediate-mode state library's
 // white texture global (X360 dword_83010F58 == mgStateLibrary.mpTexture_White). That library
 // is a documented no-op on this backend (ImmediateModePCLeaf.cpp ConstructOnceOnly), so the
-// white slot initialises over a null texture; the render paths guard it (the PC Apt dispatch
-// draws untextured records as solid colour, which IS what a white-texture quad produces).
+// white slot initialises over a null texture.
+// ⚠️ CORRECTED 2026-08-28. The old justification here -- "the render paths guard it (the PC
+// Apt dispatch draws untextured records as solid colour, which IS what a white-texture quad
+// produces)" -- was an ARGUMENT, and it was wrong: every use of this slot in this TU is a
+// SetMaskRect(mpWhiteTextureState, ...) MASK push, and in the PC Im2d dispatch a mask whose
+// raster is null used to skip the whole mask-binding block, which does not mean "no mask", it
+// means "keep the PREVIOUS mask bound". Measured consequence in a real drive: the fire END CAP
+// was the only part of the bar that drew at all, and it drew with no clip. The dispatch now
+// substitutes a 1x1 opaque-white raster for a null mask push (DispatchWhiteMaskTexture in
+// CgsImRenderBufferTemplate.cpp), which under the same border-black addressing is exactly what
+// the console's white mask does: clip to the pushed rect, shape nothing.
 // ---------------------------------------------------------------------------------------------
 namespace
 {
@@ -1215,10 +1224,18 @@ void BoostBarRenderer::RenderDebugFireGlow(const Vector4& lv4FireRect,
 //   0: {0,0,0,0} / {1,1,1,0}          1: {1,1,1,0} / {0,0,0,0}
 //   2: {0,0,0,0} / inner[type]        3: outer[type] / {0,0,0,0}
 //   4: outer[type] / inner[type]           (type = meCurrentBoostType)
-// [FLAG PC-platform leaf] the PC Im2d dispatch has no programmable 2D pipeline: SetProgram
-// records ride the stream but select nothing (the fixed-function fold shades every batch the
-// same way), and the opcode-21 colour pairs are recorded but not yet consumed. The grid still
-// draws -- the textures/masks/billboards are all live -- without the gradient tinting.
+// ⭐ FLAG CLEARED 2026-08-28. This used to read "the PC Im2d dispatch has no programmable 2D
+// pipeline ... the opcode-21 colour pairs are recorded but not yet consumed", which was stale
+// on both halves. The pairs ARE consumed, and the console's program-3 formula is now recovered
+// from the ARTIST Xenos microcode rather than approximated:
+//     rgb = (tex.R * gv3InnerColour + tex.G * gv3OuterColour) * vertexColour + colourShift
+//     a   =  tex.A * vertexAlpha  [* the mask alpha while a mask is open]
+// (unmasked program @0x820D36C0, masked sibling @0x820D39F8; the two constants are bound by
+// name in Im2d::Construct @0x827FBDB8 to c0 = OUTER, c1 = INNER). The fire atlases are
+// therefore NOT colour maps -- their R and G channels are the two blend WEIGHTS, which is why
+// they read as "magenta" when sampled directly. The PC dispatch reproduces the formula with a
+// ps_2_0 compiled through the same d3dcompiler path the world fallback shader uses; see
+// DispatchBoostBarShader in CgsImRenderBufferTemplate.cpp.
 void BoostBarRenderer::ShowDebugScreen()
 {
     Im2dCommandBuffer* lpRenderBuffer = ResolveBoostBarBuffer(mpImRenderers);
