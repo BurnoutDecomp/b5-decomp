@@ -7,8 +7,9 @@
 // rw::audio::core::Mixer names (layout proof: rw/audio/core/Mixer.h header note).
 //   Mixer::Mixer (placement ctor)         @0x82B6D880
 //   Mixer::Execute                        @0x82B6D900
-//   Mixer::ProcessInputPlugIns            @0x82B6A048 (FLAG honest stub below)
-//   Mixer::HandleBufferStatusUnavailable  @0x82B69F78 (FLAG honest stub below)
+//   Mixer::ProcessInputPlugIns            @0x82B6A048 (REAL -- register decode:
+//                                          mixer_voicepath_decode_codex.md section 1)
+//   Mixer::HandleBufferStatusUnavailable  @0x82B69F78 (REAL -- section 2)
 // =====================================================================================
 
 #include "rw/audio/core/Mixer.h"
@@ -16,6 +17,7 @@
 #include "rw/audio/core/Voice.h"  // Voice / VoiceActiveNode / VoiceStageData
 
 #include <cstdint> // uintptr_t (the console's clrrwi alignment at host width)
+#include <cstring> // memcpy / memset (the console XMemCpy / XMemSet)
 
 namespace rw
 {
@@ -212,30 +214,190 @@ int Mixer::Execute(Mixer *self, MixerExecuteParams *apParams)
 }
 
 // -------------------------------------------------------------------------------------
-// Mixer::ProcessInputPlugIns @0x82B6A048 -- run a voice's source/input stages (the
-// decoder pull + stage-buffer binding through the StackAllocator).
-// FLAG honest stub: the register-level decode is in flight
-// (progress/scratch_dossiers/mixer_voicepath_decode_codex.md). UNREACHABLE today --
-// Execute only calls it for a voice with a source stage, and no voice exists until the
-// phase-E staging lights the first ones. DECLINES (status 0) so a premature voice
-// mixes silence instead of an invented frame.
+// Mixer::ProcessInputPlugIns @0x82B6A048 -- run a voice's source/input stages: chunked
+// pull (pre-process backwards from the source stage cascading the requested count,
+// process forwards from stage 0), each good chunk appended into the aux region until a
+// full 256-sample frame is assembled, then published into the dst slot and the src/dst
+// pair ping-ponged. Register-level decode:
+// progress/scratch_dossiers/mixer_voicepath_decode_codex.md section 1 (the terminate/
+// publish tail re-verified from the raw XEX words in-session: EVERY termination path
+// forces produced=256 and falls into the unconditional publish block).
+// The incoming node (r5) is decode-attested UNUSED. The caller guarantees a valid
+// source-stage index (Execute rejects the 0xFF sentinel first).
 // -------------------------------------------------------------------------------------
-int Mixer::ProcessInputPlugIns(Mixer * /*self*/, VoiceStageData * /*apStageData*/,
-                               VoiceActiveNode * /*apNode*/, Voice * /*apVoice*/)
+int Mixer::ProcessInputPlugIns(Mixer *self, VoiceStageData *apStageData,
+                               VoiceActiveNode * /*apNode -- r5, unused (attested)*/,
+                               Voice *apVoice)
 {
-    return 0;
+    // The pre-process callback shape from the copied VoiceStageData::mpPreProcess slot:
+    // (plugin, mixer, alreadyProcessedThisFrame, requestedCount) -> the count handed to
+    // the next lower stage. Cast at the call site (bctrl @0x82B6A124).
+    typedef int (*VoiceStagePreProcessFn)(PlugIn *, Mixer *, int, int);
+
+    int liProduced = 0;             // r22 -- samples assembled into the aux region
+    int liStatus = 0;               // r20 -- the running/returned stage status
+    u8 lu8LastGoodChannels = 0;     // r21 -- channel count of the last appended chunk
+    f32 lfSavedSampleRate = 0.0f;   // f31 -- the remembered +0x30024
+    bool lbFirstChunk = true;       // first-outer-chunk gate (the mCpuTicks clear)
+
+    while (liProduced < KU_FRAME_SIZE)   // the 0x82B6A350 backedge
+    {
+        int liCount = KU_FRAME_SIZE - liProduced;   // remaining
+        self->mfResampleGain = 1.0f;                // stfs -> +0x30028 every iteration
+
+        // --- pre-process: source stage DOWN through stage 0; the returned count
+        // cascades (capped at 256, not lower-clamped) ---
+        const int liSourceStage = apVoice->mcSourceStageIndex;   // lbz +0x46
+        int liEnteringStageZero = liCount;   // r24 -- the argument of the LAST call
+        for (int liStage = liSourceStage; liStage >= 0; --liStage)
+        {
+            PlugIn *lpPlugIn = apVoice->mpPlugIns[liStage];
+            liEnteringStageZero = liCount;   // r24 updated immediately before the call
+            u32 luStartCycle = GetCpuCycle();
+            VoiceStagePreProcessFn lpfnPreProcess = reinterpret_cast<VoiceStagePreProcessFn>(
+                apStageData[liStage].mpPreProcess);
+            liCount = lpfnPreProcess(lpPlugIn, self,
+                                     liStage > apVoice->mucFlag45 ? 1 : 0, liCount);
+            if (liCount > KU_FRAME_SIZE)
+                liCount = KU_FRAME_SIZE;
+            if (lbFirstChunk)
+                lpPlugIn->mCpuTicks = 0;     // cleared once, first chunk only
+            lpPlugIn->mCpuTicks += GetCpuCycle() - luStartCycle;
+        }
+
+        // --- process: stage 0 UP through the source stage ---
+        for (int liStage = 0; liStage <= liSourceStage; ++liStage)
+        {
+            u32 luStartCycle = GetCpuCycle();
+            PlugIn *lpPlugIn = apVoice->mpPlugIns[liStage];
+            VoiceStageProcessFn lpfnProcess = reinterpret_cast<VoiceStageProcessFn>(
+                apStageData[liStage].mpProcess);
+            liStatus = lpfnProcess(lpPlugIn, self,
+                                   liStage > apVoice->mucFlag45 ? 1 : 0);
+            if (liStatus)
+            {
+                if (liStage == 0)
+                    apVoice->mfParam2C = 0.0f;   // stage-0 SUCCESS clears the decay accumulator
+            }
+            else
+            {
+                // THIS site passes the count that entered stage zero (r24) -- unlike
+                // Execute's later-stage site, which passes the literal 256.
+                liStatus = HandleBufferStatusUnavailable(self, apVoice, lpPlugIn,
+                                                         liEnteringStageZero);
+                if (!liStatus)
+                {
+                    lpPlugIn->mCpuTicks += GetCpuCycle() - luStartCycle;
+                    break;   // hard decline -- leave the stage loop
+                }
+            }
+            lpPlugIn->mCpuTicks += GetCpuCycle() - luStartCycle;
+        }
+
+        if (liStatus == 1)
+        {
+            // --- append the chunk: src slot channel starts -> aux at [produced] ---
+            u8 lu8Channels = self->mbChannelCount;   // lbz +0x3002C
+            int liChunkSamples = self->mNumSamples;  // lwz +0x30020
+            if (liChunkSamples != 0)
+            {
+                SampleBuffer *lpSrc = self->mpSrcBuffer;
+                SampleBuffer *lpAccum = self->mpAuxBuffer;
+                for (u8 lu8Ch = 0; lu8Ch < lu8Channels; ++lu8Ch)
+                {
+                    std::memcpy(lpAccum->mpSamples + lpAccum->muStride * lu8Ch + liProduced,
+                                lpSrc->mpSamples + lpSrc->muStride * lu8Ch,
+                                sizeof(f32) * liChunkSamples);
+                }
+                lu8LastGoodChannels = lu8Channels;
+                lfSavedSampleRate = self->mfSampleRate;   // remember +0x30024
+                // Advance the frame clock by chunk/outputRate (the f32 division the
+                // asm performs -- fcfid/frsp then fdivs against params +0x0C).
+                self->mdStreamTime = self->mdStreamTime
+                    + static_cast<f32>(liChunkSamples) / self->mpFormat->mfSampleRate;
+                liProduced += liChunkSamples;
+            }
+            // (A status-1 chunk with mNumSamples == 0 does not advance -- the console
+            // relies on the callback contract; reproduced.)
+        }
+        else
+        {
+            // --- terminate: pad the partial frame (if any chunk landed), else bail ---
+            if (liProduced != 0)
+            {
+                SampleBuffer *lpAccum = self->mpAuxBuffer;
+                if (lu8LastGoodChannels != 0)
+                {
+                    for (u8 lu8Ch = 0; lu8Ch < lu8LastGoodChannels; ++lu8Ch)
+                    {
+                        std::memset(lpAccum->mpSamples + lpAccum->muStride * lu8Ch + liProduced,
+                                    0, sizeof(f32) * (KU_FRAME_SIZE - liProduced));
+                    }
+                }
+                self->mfSampleRate = lfSavedSampleRate;      // restore +0x30024
+                liStatus = 1;                                // coerce (li r20, 1)
+                self->mbChannelCount = lu8LastGoodChannels;  // stbx -> +0x3002C
+            }
+            liProduced = KU_FRAME_SIZE;   // li r22, 0x100 -- force completion (both arms)
+        }
+        lbFirstChunk = false;
+    }
+
+    // --- the unconditional publish block (0x82B6A358): aux -> the dst slot per the
+    // CURRENT channel count (a zero count skips the copy only), the full-frame count
+    // published, the src/dst pair ping-ponged, the (possibly coerced) status returned.
+    {
+        u8 lu8Channels = self->mbChannelCount;
+        SampleBuffer *lpAccum = self->mpAuxBuffer;
+        SampleBuffer *lpDst = self->mpDstBuffer;
+        for (u8 lu8Ch = 0; lu8Ch < lu8Channels; ++lu8Ch)
+        {
+            std::memcpy(lpDst->mpSamples + lpDst->muStride * lu8Ch,
+                        lpAccum->mpSamples + lpAccum->muStride * lu8Ch,
+                        sizeof(f32) * KU_FRAME_SIZE);   // li r5, 0x400
+        }
+        self->mNumSamples = KU_FRAME_SIZE;   // stwx 0x100 -> +0x30020
+        SampleBuffer *lpOldSrc = self->mpSrcBuffer;
+        self->mpSrcBuffer = self->mpDstBuffer;
+        self->mpDstBuffer = lpOldSrc;
+    }
+    return liStatus;
 }
 
 // -------------------------------------------------------------------------------------
-// Mixer::HandleBufferStatusUnavailable @0x82B69F78 -- a stage reported no buffer: bind
-// the fallback silence buffer for the downstream stages.
-// FLAG honest stub: same in-flight decode, same unreachable-until-voices reasoning.
-// DECLINES (0) -- Execute then ends that voice's walk for the frame.
+// Mixer::HandleBufferStatusUnavailable @0x82B69F78 -- a stage reported no buffer: ring
+// the voice's decay tail out as silence. Clamp the decay target up to at least the
+// fade start, and while the accumulator has not reached it: advance the accumulator by
+// the sample count, zero the src slot's channels (the PLUG-IN's output channel count)
+// and report the silence chunk as available (1). Once the tail is rung out: clear
+// mucFlag45 and decline for good (0). Register-level decode:
+// mixer_voicepath_decode_codex.md section 2.
 // -------------------------------------------------------------------------------------
-int Mixer::HandleBufferStatusUnavailable(Mixer * /*self*/, Voice * /*apVoice*/,
-                                         PlugIn * /*apPlugIn*/, int /*aiNumSamples*/)
+int Mixer::HandleBufferStatusUnavailable(Mixer *self, Voice *apVoice,
+                                         PlugIn *apPlugIn, int aiNumSamples)
 {
-    return 0;
+    // fadeEnd = max(fadeEnd, fadeStart) -- the literal clamp.
+    if (apVoice->mfFadeEnd < apVoice->mfFadeStart)
+        apVoice->mfFadeEnd = apVoice->mfFadeStart;
+
+    if (apVoice->mfParam2C >= apVoice->mfFadeEnd)
+    {
+        apVoice->mucFlag45 = 0;
+        return 0;   // the tail is rung out -- decline
+    }
+
+    apVoice->mfParam2C += static_cast<f32>(aiNumSamples);   // fcfid/frsp then fadds
+
+    // Zero the src slot's channels from sample 0 (the PLUG-IN's output channel count
+    // bounds the loop; the mixer's own +0x3002C is NOT written here).
+    SampleBuffer *lpSrc = self->mpSrcBuffer;
+    for (u8 lu8Ch = 0; lu8Ch < apPlugIn->mOutputChannels; ++lu8Ch)
+    {
+        std::memset(lpSrc->mpSamples + lpSrc->muStride * lu8Ch, 0,
+                    sizeof(f32) * aiNumSamples);
+    }
+    self->mNumSamples = aiNumSamples;   // stwx -> +0x30020
+    return 1;
 }
 
 } // namespace core
