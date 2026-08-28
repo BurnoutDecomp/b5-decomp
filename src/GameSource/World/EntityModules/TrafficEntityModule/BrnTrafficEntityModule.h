@@ -895,6 +895,16 @@ namespace BrnTrafficIO { class InputBuffer_PreScene; class OutputBuffer_PreScene
         // `!IsPaused() && !lbSimPaused` guard.
         void UpdateCrashSlider();
 
+        // @0x8271FBE8 (185 insns). Body in BrnTrafficEntityModule_wT5_01.cpp.
+        // Takes a vehicle back out of the physics/crash module's books: clears its
+        // mVehiclesAddedToCrashModule bit and queues it on maRecentlyRemovedVehicles, then --
+        // if it was mid-slam-recovery -- queues it on maRecentlyRecoveredSlammedTraffic and
+        // resets its crash type to eCrashTrafficType_Invalid. Four callers, all still gated
+        // or unreconstructed (StopVehicleBeingPhysical, StaticVehicles_KillParam, KillParam,
+        // RemoveVehicle), so landing it changes no behaviour yet; it retires one of the three
+        // blockers each of those park notes names.
+        void EnsureVehicleRemovedFromCrashModule(u32 luVehicle);
+
         // @0x82745218, DWARF :1875. Body in BrnTrafficEntityModule_wT5_01.cpp.
         // THE ONLY WRITER of mfJunctionFUP, i.e. the only producer of the input
         // NeedToTakeActionAgainstJunctionFUP() reads -- which gates UpdateParams_TryAvoidCrashing
