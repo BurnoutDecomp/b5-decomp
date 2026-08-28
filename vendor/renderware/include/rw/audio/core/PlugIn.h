@@ -345,6 +345,12 @@ public:
     // Lazily create + return the plug-in registry (@+0x28). @0x82B6DDC0.
     static PlugInRegistry *GetPlugInRegistry(System *self);
 
+    // Lazily create + return the decoder registry (@+0x2C). @0x82B6DD78 (dossier
+    // re-exported for the RWAC/AEMS factory registration pass, 2026-08-28): the exact
+    // sibling of GetPlugInRegistry -- DecoderRegistry::CreateInstance(off_83271928)
+    // on first use, cached at mpDecoderRegistry.
+    static DecoderRegistry *GetDecoderRegistry(System *self);
+
     // Deferred-teardown handler queued into the command ring by Release: release every
     // active voice, then every voice on the expelled list. Returns its own record size --
     // host sizeof(SystemReleaseCommand) (X360: 8) per the ring contract. @0x82B6EA50.

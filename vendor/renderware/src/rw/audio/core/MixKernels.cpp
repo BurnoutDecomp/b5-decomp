@@ -841,3 +841,18 @@ void GainVectorSine(f32 *pGainVector, s32 numSamples, f32 startGain,
 } // namespace core
 } // namespace audio
 } // namespace rw
+
+// ---------------------------------------------------------------------------
+// FLAG PC link-closure stub (AEMS-cascade wave 2026-08-28): the 6->1 remap
+// kernel has no vendor body in the Feb-2007 tree (the dispatcher above calls
+// it). Reached only when a 6-channel source mixes to mono -- not on any current
+// path. Writes silence (the Write-family overwrite contract) until the kernel
+// is decoded from ARTIST.
+// ---------------------------------------------------------------------------
+namespace rw { namespace audio { namespace core {
+void ReChannelGainWrite6x1(f32 **ppDst, f32 ** /*ppSrc*/, f32 /*gain*/, int numSamples)
+{
+    for (int i = 0; i < numSamples; ++i)
+        ppDst[0][i] = 0.0f;
+}
+} } }

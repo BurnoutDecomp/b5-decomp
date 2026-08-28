@@ -518,3 +518,20 @@ void *AiffWriter::ScalarDeletingDestructor(AiffWriter *self, char flags)
 } // namespace core
 } // namespace audio
 } // namespace rw
+
+// ---------------------------------------------------------------------------
+// FLAG PC link-closure stubs (AEMS-cascade wave 2026-08-28). AiffWriter is the
+// offline WAV-dump plug-in -- registered by the RWAC factory pass but on no
+// runtime path this build exercises. The two helpers referenced above have no
+// vendor body in the Feb-2007 tree; each is an honest no-op until the AiffWriter
+// timer slice is decoded from ARTIST.
+// ---------------------------------------------------------------------------
+namespace rw { namespace audio { namespace core {
+int AiffWriter::RwacTimerClient(AiffWriter * /*self*/)
+{
+    return 0;
+}
+void AiffWriter_DestructTimerHandle(TimerHandle * /*handle*/)
+{
+}
+} } }

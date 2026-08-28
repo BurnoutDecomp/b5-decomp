@@ -221,8 +221,33 @@ bool Module::Prepare(rw::IResourceAllocator* apAllocator,
     }
     case E_PREPARESTAGE_FACTORIES:
     {
-        // [FLAG, the AEMS keystone -- see the banner]: the three factory creates
-        // land with the factory-ctor slice; the handles stay null meanwhile.
+        // The THREE factory creates (console @0x826E92B8..; AEMS-cascade wave).
+        // [1/3] RWAC -- REAL (GenericRwacFactory::Create @0x826C7AD0): spec
+        // {off_83271928, 128 entities, 32384 data, 0 strings} built at
+        // @0x826E92B8-D8 (the by-value r5:r6 packing); the returned temp handle
+        // is assigned into +0x225C and asserted (cpp:196 "mhRwacFactory").
+        // Interim plain-store Handle model: the create's explicit Acquire IS the
+        // member's owned ref, so no temp-release is emitted beside the store
+        // (the console's temp Object::Release balances ITS real-ref-model
+        // assign; emitting it here would drop the only ref).
+        {
+            GenericRwacFactorySpec lRwacSpec;
+            lRwacSpec.mpSystem            = GetDefaultRwacSystem();
+            lRwacSpec.mu32EntityCount     = 128;
+            lRwacSpec.mu32DataSize        = 32384;
+            lRwacSpec.mu32StringTableSize = 0;
+            Handle<GenericRwacFactory> lhRwacFactory =
+                GenericRwacFactory::Create(*mhEnvironment, lRwacSpec);
+            mhRwacFactory = Handle<Factory>(lhRwacFactory.GetObject());
+            CGS_ASSERT(!!mhRwacFactory, "mhRwacFactory");
+        }
+        // [2/3][3/3] FLAG deferred: AemsFactory::Create @0x826DAC28 (spec
+        // {Handle<RwacFactory>, 128, 32384}; its refcount rides at +8 -- the
+        // AemsRWSampleFactory MI base) and SplicerFactory::Create @0x826DB130,
+        // each asserting its handle (cpp:207/:219), plus the off_82FFBA0C
+        // interface-global publish (`= &this->+0x228`) that follows the third
+        // create -- the AEMS/Splicer ctor slices land next (full decode banked
+        // in progress/scratch_dossiers/aems_factory_cascade_codex.md).
 
         // The stream-buffer carve (real): LinearMalloc-backed when supplied
         // (size = GetSize()/3, 2 blocks, main-allocator flag OFF -> Malloc), else

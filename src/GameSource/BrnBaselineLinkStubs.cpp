@@ -607,31 +607,33 @@ namespace Playback
 
     // The per-factory registry accessors + the reserved-name/init-submix hooks
     // (declared in CgsSoundPlaybackModule.h, each FLAG'd DEFER there -- the
-    // AEMS-keystone surface). Null/empty until the factory slices land.
-    Registry* GetRwacFactoryRegistry(Factory* /*lpRwacFactory*/)
-    {
-        return 0;
-    }
+    // AEMS-keystone surface). GetRwacFactoryRegistry is REAL now (AEMS-cascade
+    // wave: bodied in CgsGenericRwacFactory.cpp on the real +0x401C registry);
+    // the AEMS one stays null until its factory slice lands.
     Registry* GetAemsFactoryRegistry(Factory* /*lpAemsFactory*/)
     {
         return 0;
     }
     const Name& GenericRwacFactorySkName()
     {
-        // The interned source of the console dword_83008650 is not decoded yet
-        // (the writer is the RWAC factory bring-up); an uninterned Name cannot
-        // match any real request name, so the init-submix assert path stays cold.
-        static const Name SK_NAME;
+        // DECODED (AEMS-cascade wave; progress/scratch_dossiers/
+        // aems_factory_cascade_codex.md): the console dword_83008650 writer is the
+        // static initializer sub_82C654A8, which stores
+        // Name::MakeHash("~GenericRwacFactory::SK_NAME~"). The intern is real now.
+        static const Name SK_NAME("~GenericRwacFactory::SK_NAME~");
         return SK_NAME;
     }
     void HACK_SetSnd9InitSubmix(Handle<Voice>* /*lphVoice*/)
     {
     }
 
-    // The two interned-name globals Environment::GetR keys on (X360
-    // dword_83008650 / dword_830080A8 -- both written by the un-decoded RWAC
-    // bring-up interns; zero matches nothing, so GetR returns empty until then).
-    const u32 gu32VoiceTypeTag      = 0;
+    // The interned-name globals Environment::GetR keys on. gu32VoiceTypeTag IS
+    // the console dword_83008650 (the wave-3 decode: GetR's "type tag" compares
+    // voice->mFactory.mName against it) -- now the real
+    // "~GenericRwacFactory::SK_NAME~" intern (writer sub_82C654A8, AEMS-cascade
+    // wave). dword_830080A8 (the FindNamedSlot Name) stays un-decoded; zero
+    // matches nothing, so that path stays cold.
+    const u32 gu32VoiceTypeTag      = Name("~GenericRwacFactory::SK_NAME~").GetValue();
     const u32 gu32NamedSlotSentinel = 0;
 
     // The serialised-entity type names Registry::GetEntity<T> compares slots
