@@ -288,7 +288,9 @@ private:
 void DriveWorldUpdateFrame(BrnResource::GameDataIO::InputBuffer* lpGameDataInputBuffer,
                            BrnUpdateSet lUpdateSet,
                            BrnSound::Module::Io::RootPreUpdateOutputBuffer* lpSoundPreUpdateOutput = 0);
-void DriveInGameWorldUpdate();
+// The sound pre-update buffer (phase C4b) rides through to DriveWorldUpdateFrame's
+// BridgeSoundToWorld staging, exactly as on the loading spine; null = no sound this frame.
+void DriveInGameWorldUpdate(BrnSound::Module::Io::RootPreUpdateOutputBuffer* lpSoundPreUpdateOutput = 0);
 
 struct MainGameFlowStateInGame : public MainGameFlowState
 {

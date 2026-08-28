@@ -1747,7 +1747,7 @@ MainGameFlowStateInGame::MainGameFlowStateInGame() {}
 // resource tick (BrnGameModule::ResourceUpdateThread) drains it for every flow state,
 // so no extra pump is needed here.
 // ---------------------------------------------------------------------------
-void DriveInGameWorldUpdate()
+void DriveInGameWorldUpdate(BrnSound::Module::Io::RootPreUpdateOutputBuffer* lpSoundPreUpdateOutput)
 {
     BrnGame::BrnGameModule* lpGameModule = BrnGame::GetMainGameModule();
     if (lpGameModule == 0)
@@ -1779,5 +1779,5 @@ void DriveInGameWorldUpdate()
         }
     }
 
-    DriveWorldUpdateFrame(&s_GameDataInput, lUpdateSet);
+    DriveWorldUpdateFrame(&s_GameDataInput, lUpdateSet, lpSoundPreUpdateOutput);
 }
