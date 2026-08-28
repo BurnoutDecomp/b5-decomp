@@ -37,6 +37,7 @@
 // =====================================================================================
 
 #include "rw/audio/core/Send.h"
+#include "rw/audio/core/SubMix.h" // SubMix (the real class; moved out of SubMixConnector.h)
 #include "rw/audio/core/PlugIn.h"      // rw::audio::core::System (deferred-command ring)
 #include "rw/audio/core/MixKernels.h"  // ReChannelGainWrite / ReChannelGainMix / ...RampMix
 
@@ -302,14 +303,14 @@ int Send::ConnectByPointerHandler(void* cmd)
         SubMixConnector* lpConn = &lpSend->mSubMixConnector; // conn = send+0x30
         lpConn->mpSubMix = lpSubMix;                                     // stw 0xC(conn)
         lpConn->mpSubMixBuffer = lpSubMix->mpSubMixBuffer;               // lwz 0x24 -> stw 8
-        lpConn->mNumSubMixChannels = static_cast<u8>(lpSubMix->mbNumChannels); // lbz 0x21 -> stb 0x10
+        lpConn->mNumSubMixChannels = lpSubMix->mOutputChannels;              // lbz 0x21 -> stb 0x10
 
-        SubMixConnector* lpHead = lpSubMix->mpConnectorHead;            // lwz 0x28(subMix)
+        SubMixConnector* lpHead = lpSubMix->GetSendListHead();          // lwz 0x28(subMix)
         lpConn->mppPrev = 0;                                            // stw 0, 4(conn)
         lpConn->mpNext = lpHead;                                        // stw head, 0(conn)
         if (lpHead)
             lpHead->mppPrev = reinterpret_cast<SubMixConnector**>(lpConn); // stw conn, 4(head)
-        lpSubMix->mpConnectorHead = lpConn;                            // stw conn, 0x28(subMix)
+        lpSubMix->SetSendListHead(lpConn);                             // stw conn, 0x28(subMix)
     }
     return static_cast<int>(sizeof(SendConnectByPointerCommand)); // X360: li r3, 0xC @0x82B9FF64
 }

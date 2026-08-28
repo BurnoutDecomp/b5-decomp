@@ -149,6 +149,10 @@ namespace Playback
     {
         return 0;
     }
+    // The console body @0x8284CB38 is a bare `blr` (raw 4E 80 00 20) -- an ICF-shared
+    // empty function. This empty body is therefore the FAITHFUL one, not a stub:
+    // verified 2026-08-28 by the AEMS control-surface decode, which resolved the
+    // AemsRWSampleFactory vtable and read the slot's bytes directly.
     void AemsRWSampleFactory::Release()
     {
     }
@@ -159,6 +163,22 @@ namespace Playback
     // demands link homes; no player is ever CONSTRUCTED until the AEMS
     // sample-player creation slice (CreateInstance above returns null), so each
     // is an honest unreachable no-op until its console body is reconstructed.
+    //
+    // ⭐ ALL SIX ARE NOW LOCATED (2026-08-28 AEMS control-surface decode). The
+    // player vtable is off_820AD960 and every slot has a REAL console body:
+    //     Release     @0x826A2EC8
+    //     Pause       @0x8268A970
+    //     Unpause     @0x8268AA18
+    //     SetInput    @0x8268A180
+    //     SetAzimuth  @0x8268A510
+    //     GetOutputs  @0x8268A7E8
+    // The load-bearing shape is also resolved: these drive the underlying voice's
+    // plug-in graph through PlugIn::SetAttribute -- SetInput writes Resample /
+    // Gain / Send attribute 0, SetAzimuth writes Pan2D attribute 0, and
+    // GetOutputs reads SndPlayer1 attributes 0/1/2. (Notably there is NO Pan2D1
+    // path, so an AEMS player pans through Pan2D, not the newer shape.)
+    // They stay unbodied only because nothing constructs a player yet; body them
+    // with the AEMS sample-player creation slice, when SndPlayer1 lands.
     // ------------------------------------------------------------------------
     void AemsRWSamplePlayer::Release() {}
     void AemsRWSamplePlayer::Pause() {}
