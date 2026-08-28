@@ -207,14 +207,134 @@ namespace BrnDirector
     // `u8 maReservedHead[0x2334]` plus ONE named block. Carve BehaviourAftertouchCrash::
     // Parameters at bank+0x7C, or land the Prepare with that one leg FLAG-gated.
     //
-    // ORDER TO DO IT IN: (1) home BrnArbStateCrashing.h from the DWARF and de-fork the empty
-    // placeholder in the container; (2) body the 8 functions (ApplySlomoAndShake first -- it is
-    // the slow motion, and its two controllers are already homed); (3) mount it; (4) THEN mount
-    // BrnArbStateCrashMode.cpp with its Prepare, and delete both stub lines below.
-    // ⭐ AND THE SLOW MOTION STILL NEEDS ITS TRANSPORT ARMED: the director's leg of the
-    // time-dilation publish is held behind BRN_DIRECTOR_SLOMO in BrnMainDirector.cpp until the
-    // ICE TIME_SCALE zero is fixed (full diagnosis at that call site). Landing ArbStateCrashing
-    // without that fix produces a crash camera that requests a dilation nothing applies.
+    // ═══════════════════════════════════════════════════════════════════════════════════════
+    // ⭐⭐ REMAINDER, REWRITTEN 2026-08-28/29 (crash-camera wave). Everything below is read off
+    // the ARTIST asm, the committed tree, or a measured run. THE PREVIOUS ORDER WAS INCOMPLETE:
+    // it had four steps and the chain has FIVE breaks, one of which nothing in this note named.
+    // Two of the five are now CLOSED.
+    // ═══════════════════════════════════════════════════════════════════════════════════════
+    //
+    // ✅ CLOSED (1). THE DIRECTOR'S TIME-DILATION TRANSPORT. It was held behind
+    //    BRN_DIRECTOR_SLOMO because every ICE camera published mfSimTimeScale == 0 and arming it
+    //    froze the game at the console's 0.005 floor. The cause was NEITHER of the two candidates
+    //    that note left open (the take's memclear seed / the asset port): it was
+    //    ICEElementDescription::GetDefaultFloat() type-punning an INTEGER default through the
+    //    ICEValue union, so TIME_SCALE's DEFAULT=(s32)100 read back as 1.401e-43 and rounded to 0.
+    //    Fixed in ICEDataEnums.hpp against the console's own type-aware body @0x82530894; the
+    //    flag is retired and MainDirector publishes unconditionally. Measured:
+    //        [ice-timescale] raw TIME_SCALE=100.000000 -> mfSimTimeScale=1.000000
+    //        [slomo] simScale=1.000000 gameScale=1.000000 simStep=0.016667
+    //
+    // ✅ CLOSED (2). mfSimTimestep WAS PUBLISHED AS A HARD 0 by a stale gate in
+    //    MainDirector::UpdateArbitrator. ArbStateCrashMode's SEVEN intro timers (flash, borders,
+    //    blur in/out, blur ramp, tilt) are all `-= lrSharedInfo.mfSimTimestep`, so they would
+    //    have hung forever the moment that TU mounted. Now real. See that call site.
+    //
+    // ⛔ OPEN (3). NOTHING WRITES GameState::mbCrashActive, SO THE ARBITRATOR NEVER EVEN TRIES.
+    //    This is the break the old note missed entirely, and it is UPSTREAM of everything else
+    //    here. ArbStateRoaming::ProcessPossibleStateChanges gates its crash edge on
+    //    lrGameState.mbCrashActive; the only writer in the image is the tail of
+    //    MainDirector::ProcessInputQueue @0x822372F8 (pseudocode 854-873), which is GATED in our
+    //    reconstruction. The console block is transcribed verbatim at that gate and its old
+    //    blocker -- "+0x44A, a byte with no recovered name" -- is resolved: +0x44A == 1098 ==
+    //    Camera::VehicleInfo::mRaceCarState.mbCrashing.
+    //    MEASURED with BRN_CRASH_PLAYER: a real committed player crash (mbCrashing=1 for 300+
+    //    frames, bridged to the director) produced NO state change and NO dilation -- one
+    //    [slomo] line at simStep=0.016667, BRN_FRAME_DUMP_ARM=slomo wrote frames=0, and the
+    //    physics' own mfTimeCrashing advanced 0.016667 s/frame throughout.
+    //    ⛔⛔ IT MUST LAND IN THE SAME COMMIT AS (4). On its own it hands the first crash to the
+    //    empty ArbStateCrashing shell, whose base Update never writes meState and which has no
+    //    exit edge -- a camera frozen for the rest of the session, out of a green build.
+    //
+    // ⛔ OPEN (4). ArbStateCrashing ITSELF. Home BrnArbStateCrashing.h from the DWARF, de-fork
+    //    the container placeholder, body the 9 functions, mount it.
+    //
+    // ⛔ OPEN (5). THEN mount BrnArbStateCrashMode.cpp with its Prepare, and delete both stub
+    //    lines below.
+    //
+    // ───────────────────────────────────────────────────────────────────────────────────────
+    // WHAT (4) NEEDS THAT IS NOT YET IN THE TREE -- checked, not assumed:
+    //   * BehaviourBystanderCam.cpp IS NOT MOUNTED, and it owns BOTH controllers' Update bodies
+    //     (ImpactSlomoController::Update @0x82227230, ImpactShakeController::Update @0x82243720).
+    //     They are fully bodied there -- so ApplySlomoAndShake is a mount away, not a decompile
+    //     away. ⭐ ImpactSlomoController::Update is literally the crash slow motion: it writes
+    //     Camera_SetTimeScale(camera, 0.2857143f) for a 2.0 s burst, i.e. the finished chain
+    //     should show simStep 0.016667 -> 0.004762 for two seconds. That is the number to gate on.
+    //   * MomentSelector::SnoopNumValidMoments @0x8221BD28 (needed by Prepare) and
+    //     ResetTimeActive (needed by Update case 0) are DECLARE-ONLY -- two new unresolved
+    //     externals unless bodied. Its Update/Prepare/Release/AddMoment/SelectBestMomentWith-
+    //     Exclusion ARE bodied and the TU IS mounted.
+    //   * ArbStateSharedInfo::mpPlayerCar is the `BrnDirector::VehicleInfo` NAMESPACE FORK
+    //     BrnDirectorAllVehicleData.h:38 already documents and fixed for its own surface: no such
+    //     type exists, the real one is BrnDirector::Camera::VehicleInfo. CanRun cannot be written
+    //     without fixing the forward declaration in BrnDirectorArbitratorState.h the same way.
+    //   * PlayerCrashInfo has NO layout (forward-declared only), and step 13 of
+    //     BridgeWorldToDirector ("build the 48-byte PlayerCrashInfo block") is itself dropped --
+    //     see that TU's banner. Update reads mpPlayerCrashInfo+0x26 for the "Wrecked" vs "Crash"
+    //     effect name and mbPlayerWasWreckedThisCrash. Both ends are missing; land them together.
+    //
+    // ───────────────────────────────────────────────────────────────────────────────────────
+    // LAYOUT, pinned from Construct @0x82259EA0 + Update @0x8226BFB0 (console offsets; parity is
+    // BY NAME as always -- these are provenance, and Hex-Rays prints them in DECIMAL):
+    //     +0x180  BehaviourHandle<BehaviourSpirallingDeathcam> mDeathcam        (0x14 bytes)
+    //     +0x194  BehaviourHandle<BehaviourIceAnim>            mTakenDownCam    (0x14)
+    //     +0x1A8  ImpactSlomoController mImpactSlomoController                  (12)
+    //     +0x1B4  ImpactShakeController mImpactShakeController                  (20 -- see below)
+    //     +0x1C8  MomentSelector        mMomentSelector                         (0x1E4)
+    //     +0x3AC  VehicleTracker::ECrashType meCrashType   (Prepare: = mpPlayerTracker->+0x298)
+    //     +0x3B0  f32  mfTimeActive       (+= mfTimestep)     +0x3B4 f32 mfMomentTimer
+    //     +0x3B8  f32  mfFailsafeTimer    +0x3BC bool mbAftertouchingSinceStart
+    //     +0x3BD  bool mbAftertouchActivated                  +0x3BE bool mbShouldUseDeathcam
+    //     +0x3BF  bool mbPlayerWasWreckedThisCrash            +0x3C0 bool mbPlayerWasTakenDown
+    //     +0x3C4  EActiveRaceCarIndex mePlayerKillerIndex     +0x3C8 EState meState
+    // Hex-Rays' `field_3A8/3A9/3AA` are NOT state members -- they are mMomentSelector's own
+    // +0x1E0/+0x1E1/+0x1E2, i.e. mbHasSelectedMoment / mbPrepared / mbHasMaxLimit. Likewise
+    // field_390 == miFramesActive, field_398 == muValidMoments, field_38C == mfTimeActive.
+    // ⚠️ ImpactShakeController IS 20 BYTES, not the 68 BehaviourBystanderCam.h currently models
+    // (`f32 + u8 maImpactEffect[0x40]`, itself FLAGged as a guess). ApplySlomoAndShake clears
+    // exactly five floats at +0x1B4..+0x1C4 and mMomentSelector starts at +0x1C8; the DWARF says
+    // the class holds one member, `CameraImpactEffect mImpactEffect`, and BrnCameraImpactEffect.h
+    // already models that as f32 + u8[16] == 20. De-fork it to the real type when you home this.
+    //
+    // ⭐ Construct's two "clear" blocks and ApplySlomoAndShake's two "else" arms are the SAME
+    // stores -- they are `mImpactSlomoController.Construct()` (mfTimeSinceLastSlomo = FLT_MAX,
+    // mfTimeInSlomo = 0, mbFirstFrameOfSlomo = false) and `mImpactShakeController.Construct()`
+    // (five zero floats). Both Constructs are inline-only (no X360 symbol); those are the bodies.
+    //
+    // ⛔⛔ HEX-RAYS GARBLES ApplySlomoAndShake's THREE PREDICATES -- read the asm. It emits
+    // `v7 = v5; if (v7 || ...)`, aliasing the FIRST block into the test. The asm computes three
+    // separate values and the test uses the SECOND (r28 = block1 @0x8224F930, r29 = block2
+    // @0x8224F96C, then r10 = block2 and r29 = block3 @0x8224F9A4/A8):
+    //     lbHardStop = mMomentSelector.HasSelectedMoment() &&
+    //                  GetSelectedMoment()->GetType() == E_MOMENT_HARD_STOP;   // moment +0x170
+    //     block1 = lbHardStop && meCrashType == E_CRASH_NORMAL;      // -> lbDontSetRealTime arg
+    //     block2 = lbHardStop && meCrashType != E_CRASH_NORMAL;      // -> SUPPRESS the slomo
+    //     block3 = lbHardStop && meCrashType == E_CRASH_HIGH_ENERGY; // -> SUPPRESS the shake
+    //     slomo: if (block2 || meCrashType == E_CRASH_LOW_ENERGY || meEventType == 3 ||
+    //                meEventType == 0 || mpGameState->mbImpactTimeActive)
+    //                mImpactSlomoController.Construct();
+    //            else mImpactSlomoController.Update(mCamera, mfTimestep, *mpAllVehicleData,
+    //                                               *mpPlayerTracker, *mpDebugPrinter, block1);
+    //     shake: if (block3) mImpactShakeController.Construct();
+    //            else mImpactShakeController.Update(mCamera, mfTimestep, *mpAllVehicleData,
+    //                     *mpPlayerTracker, *mpRandom, *mpDebugPrinter, <stack VehicleRef>);
+    // The shake's 7th argument is a 16-byte stack record built at 0x8224FA78..0x8224FA88:
+    // { s32 0, s32 -1, s32 0, bool true }. ⚠️ Neither call's argument list survives Hex-Rays:
+    // f1 (the timestep) consumes the r5 GPR slot, so r5 is never assigned and the decompiler
+    // drops four of the six pointer arguments. Take the signature from the asm.
+    //
+    // CONSTANTS (dumped from the ARTIST image this wave; the .data pool cross-checks the
+    // CarSelect wave's calibration -- flt_82CDADA0 really is 2.0):
+    //     kfMomentTime = kfFailsafeTime = 2.0f   (flt_82001D9C; both compares in Select/Process)
+    //     the AFTERCRASH duration            = 0.5f   (flt_82CDAD90, Update case 3)
+    //     the bystander distance factor      = 0.5f   (flt_82001DA0)
+    //     FLT_MAX = flt_8200173C, 1.0 = flt_82001C98, 0.0 = flt_82001CC0
+    // GameState fields Update/Process read, by name: mbGoToCrashModeAfterIntro (+0x11C),
+    // mEventState.GetCurrent() (+0x124), mbCrashActive (+0xF9), mfCrashTimeRemaining (+0xFC,
+    // `<= 1.0f` is the lbTooLateToSwitchCameras argument), mbImpactTimeActive (+0x105),
+    // meEventType (+0x120), mbPlayerWasTakenDown (+0x1C3), mePlayerKillerIndex (+0x1C4).
+    // Container hand-offs: Process's `+13744` is state table[4] == E_STATE_CRASH_MODE (that is
+    // the "Switching to crash mode" edge) and Update's `+13732` is table[1] == E_STATE_ROAMING.
     BRN_DIRECTOR_STUB_ARBSTATE(ArbStateCrashMode,       "ArbStateCrashMode")
     BRN_DIRECTOR_STUB_ARBSTATE(ArbStateDriveThru,       "ArbStateDriveThru")
     BRN_DIRECTOR_STUB_ARBSTATE(ArbStateOnlineCarSelect, "ArbStateOnlineCarSelect")
