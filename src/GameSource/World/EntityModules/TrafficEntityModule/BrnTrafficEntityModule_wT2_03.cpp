@@ -39,6 +39,7 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 
 #include <cmath>     // std::floor, std::sqrt
+#include <cstdlib>   // getenv (the BRN_TRAFFIC_DIAG probe)
 
 namespace BrnTraffic
 {
@@ -59,6 +60,18 @@ namespace
                 << "[T2-traffic-leg] TrafficEntityModule leg NOT RECONSTRUCTED, skipped: "
                 << lpcLegNameAndReason << " [FLAG PC partial gate]\n";
         }
+    }
+
+    // [DIAG] NOT IN THE X360 BINARY. Same BRN_TRAFFIC_DIAG switch the crash-surface probes in
+    // _wT2_06.cpp use. DELETE-WHEN-STABLE.
+    CgsDev::Log::DebugPrint* LaneChangeDiagStream()
+    {
+        static const bool skbOn = (std::getenv("BRN_TRAFFIC_DIAG") != 0);
+        if (!skbOn || CgsDev::Log::gpDebugPrint == 0)
+        {
+            return 0;
+        }
+        return CgsDev::Log::gpDebugPrint;
     }
 
     // .rdata literals this TU reads by value, each named by the expression it appears in.
@@ -954,6 +967,24 @@ void TrafficEntityModule::UpdateParams_HandleLaneChanges(u32 luParam,
     lpMutableParam->muNextStopLineIndex = KU8_LANE_CHANGE_NO_STOPLINE;
     lpMutableParam->mauNeighbourData[0] = KU16_LANE_CHANGE_NO_NEIGHBOUR;
     lpMutableParam->mauNeighbourData[1] = KU16_LANE_CHANGE_NO_NEIGHBOUR;
+
+    // [DIAG] NOT IN THE X360 BINARY, off unless BRN_TRAFFIC_DIAG is set. Capped, because a
+    // carry-out that never happens and one that happens constantly are the two failure modes
+    // and only a count separates them. DELETE-WHEN-STABLE.
+    if (LaneChangeDiagStream() != 0)
+    {
+        static u32 suLaneChanges = 0;
+        ++suLaneChanges;
+        if (suLaneChanges <= 40u || (suLaneChanges % 50u) == 0u)
+        {
+            *LaneChangeDiagStream()
+                << "[T5-lane] param=" << static_cast<s32>(luParam)
+                << " -> section=" << static_cast<s32>(luNewSectionIndex)
+                << " newAlong=" << lfNewParamAlong
+                << " total=" << static_cast<s32>(suLaneChanges)
+                << " [DELETE-WHEN-STABLE]\n";
+        }
+    }
 
     EatParamsNextPlan(luParam);
 }
