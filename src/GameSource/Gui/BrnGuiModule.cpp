@@ -105,27 +105,24 @@ namespace
     u8 s_profileHeapBacking[192u * 1024u];
     u8 s_profileLinearBacking[2u * 1024u * 1024u];
 
-    // FLAG PC-platform leaf: the live progression + live-revenge profile blocks the
-    // console's progression/network modules install on the ProfileManager via GuiModule
-    // events (SetProgressionProfile / SetLiveRevengeProfile, event 351). Those subsystems
-    // are not wired on PC, so the manager's mpProgressionProfile/mpProgressionData/
-    // mpLiveRevengeProfile stay null and ProfileManager::Bootup->ReadProfileData faults
-    // (memcpy from mpLiveRevengeProfile; ValidateProfiles derefs mpProgressionData as the
-    // ExpectedManifest). These zeroed stand-ins are a blank first-boot profile -- exactly
-    // what the console holds before any save loads -- installed in Prepare below. Sized to
-    // the real segment widths (BrnGuiProfile.h): live-revenge is memcpy'd 30016 B, the
-    // manifest is dereferenced by value, the progression profile is only read by the
-    // (FLAG'd no-op) serialiser.
+    // FLAG PC-platform leaf: the live-revenge profile block the console's NETWORK module
+    // installs on the ProfileManager via GUI event 351 (SetLiveRevengeProfile). That
+    // subsystem is not wired on PC, so mpLiveRevengeProfile stays null and
+    // ProfileManager::Bootup->ReadProfileData faults (memcpy from mpLiveRevengeProfile).
+    // This zeroed stand-in is a blank first-boot profile -- exactly what the console holds
+    // before any save loads -- installed in Prepare below, at the real segment width
+    // (BrnGuiProfile.h: live-revenge is memcpy'd 30016 B).
     //
-    // SIZE TRAP (intro wave, 2026-07-30): the progression block must be sizeof(Profile),
-    // NOT KI_PROGRESSION_PROFILE_SIZE_BYTES (118064). Those are two different numbers --
-    // 118064 is the SERIALISED segment width inside BrnGuiSaveLoad::Profile, while the live
-    // object is 120840 bytes on X360 (BrnProfile.h:151) and wider still on the x64 target.
-    // The array used to be 118064, which was harmless only while nothing ever wrote the live
-    // object; the moment Profile::Construct() runs over it, an 118064-byte array overruns by
-    // thousands of bytes into the next static (an access violation a few frames later).
-    alignas(16) u8 s_pcProgressionProfileBacking[sizeof(BrnProgression::Profile)];
-    alignas(16) u8 s_pcProgressionManifestBacking[4096];    // ExpectedManifest (generous)
+    // ⛔⛔ [one-profile wave 2026-08-28] s_pcProgressionProfileBacking (sizeof(Profile)) and
+    // s_pcProgressionManifestBacking (4096 "ExpectedManifest") ARE DELETED, not moved. They
+    // were a SECOND BrnProgression::Profile: the save deserialised into them while every
+    // gameplay reader used GameStateModule::mProgressionManager::mProfile. The console's own
+    // installer -- GuiModule::Update's case-350 arm consuming GameStateModule::PreWorldUpdate's
+    // action-193 record -- now runs (see the arm and Prepare below), so both pointers are the
+    // live game-state objects and neither stand-in has anything to stand in for.
+    // ⛔ DO NOT RE-ADD either one to "guard" a null: the console's ProfileManager::Construct
+    // zeroes both members too, and nothing dereferences them before BF_PROFILE -- which runs
+    // hundreds of log lines after the first sub-step's event-350 post.
     alignas(16) u8 s_pcLiveRevengeProfileBacking[30016];    // KI_LIVEREVENGE_PROFILE_SIZE_BYTES
 
     // The shared access-pointer bundle the HUD flow's state interface hands its GUI
@@ -1336,23 +1333,25 @@ namespace BrnGui
         mProfileLinear.Create(s_profileLinearBacking, sizeof(s_profileLinearBacking));
         mProfileManager.Prepare(&mProfileHeap, &mProfileLinear);
 
-        // Install the PC-boundary blank profile blocks (see the statics above): the
-        // console's progression + network modules do this via SetProgressionProfile /
-        // SetLiveRevengeProfile; without them Bootup->ReadProfileData faults on the null
-        // pointers. std::memset zeroes them (a fresh, unsaved profile).
-        std::memset(s_pcProgressionProfileBacking, 0, sizeof(s_pcProgressionProfileBacking));
-        std::memset(s_pcProgressionManifestBacking, 0, sizeof(s_pcProgressionManifestBacking));
+        // Install the PC-boundary blank LIVE-REVENGE block (see the static above): the
+        // console's network module does this via SetLiveRevengeProfile (GUI event 351);
+        // without it Bootup->ReadProfileData faults on the null pointer. std::memset zeroes
+        // it (a fresh, unsaved profile).
+        //
+        // ⛔⛔ [one-profile wave 2026-08-28] THE PROGRESSION PAIR IS NO LONGER INSTALLED HERE,
+        // and this was the whole defect. There is exactly ONE BrnProgression::Profile on the
+        // console -- GameStateModule::mProgressionManager::mProfile, embedded at GSM+48288 --
+        // and GameStateModule::PreWorldUpdate posts its address as game action 193 every
+        // pre-world update; ProfileManager::SetProgressionProfile @0x824ECC98 has exactly one
+        // xref in the whole image and it is GuiModule::Update's case-350 arm consuming that
+        // record. We had no case-350 arm, so the manager could never be told the live address
+        // and this Prepare installed a module static instead. The result was measurable and
+        // permanent: Profile::Deserialise wrote the SAVE into the static while every gameplay
+        // reader (ProgressionManager::AreRoadRulesAvailable, the medal/event/car tables, the
+        // TrainingManager flags) read mProgressionManager.mProfile -- which was Construct()ed
+        // and never loaded into, so it answered mbIsNewProfile = 1 on every boot, for ever.
+        // The case-350 arm now does the console's install and the static is gone.
         std::memset(s_pcLiveRevengeProfileBacking, 0, sizeof(s_pcLiveRevengeProfileBacking));
-        // ...then run the REAL BrnProgression::Profile::Construct @0x823708A8 over the
-        // progression block. On the console the live profile is a member of the GameState
-        // module and its Construct is what seeds the empty-profile state -- including
-        // mbIsNewProfile = true, which is the byte BrnGui::InGame::Update tests to enter
-        // the licence/photo INTRO on a first boot. A raw memset leaves that byte 0, i.e.
-        // "an old profile", which is NOT the console's fresh-profile state.
-        reinterpret_cast<BrnProgression::Profile*>(s_pcProgressionProfileBacking)->Construct();
-        mProfileManager.SetProgressionProfile(
-            reinterpret_cast<BrnProgression::Profile*>(s_pcProgressionProfileBacking),
-            reinterpret_cast<const BrnProgression::ProgressionData*>(s_pcProgressionManifestBacking));
         mProfileManager.SetLiveRevengeProfile(
             reinterpret_cast<BrnNetwork::LiveRevengeProfile*>(s_pcLiveRevengeProfileBacking));
 
@@ -1900,6 +1899,26 @@ void GuiModule::Destruct()
                     break;
 
                 case 350:   // GuiEventProgressionProfileData -- the live-profile handoff
+                    // ⭐⭐⭐ [one-profile wave 2026-08-28] THE MISSING HALF OF CASE 350, and
+                    // the reason this build owned TWO BrnProgression::Profile objects where the
+                    // console owns one. X360 BrnGui::GuiModule::Update @0x82527A58:
+                    //     case 350:
+                    //       BrnGui::ProfileManager::SetProgressionProfile(a1 + 681696, *v61, v61[1]);
+                    // i.e. the event's two payload words ARE the manager's mpProgressionProfile /
+                    // mpProgressionData, and this is the ONLY writer of either on the console
+                    // (SetProgressionProfile @0x824ECC98 has exactly one xref, and it is this).
+                    // We routed 350 to the GuiCache only, so the manager never learned the live
+                    // profile's address and BrnGuiModule::Prepare installed a module-static
+                    // stand-in instead -- a SECOND Profile that Deserialise wrote into and no
+                    // gameplay code ever read. The static and its install are deleted with this
+                    // arm; the console's own chain is now the only installer.
+                    {
+                        const BrnGui::GuiEventProgressionProfileData* lpProfileData =
+                            reinterpret_cast<const BrnGui::GuiEventProgressionProfileData*>(lpEvent);
+                        mProfileManager.SetProgressionProfile(lpProfileData->mpProfile,
+                                                              lpProfileData->mpProgressionData);
+                    }
+                    // fall through -- the record also feeds GuiCache::mpProfile (case 350 below)
                 case 169:   // GuiEventChangeDistrict -- the district-marker source words
                 case 147:   // [H3b] GuiEventUpdateHud -- the player {speed,rpm,gear} words
                 case 199:   // [H3b] GuiEventUpdateSatNav -- the icon array (player position arm)

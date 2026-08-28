@@ -3849,30 +3849,45 @@ namespace BrnGame
                     // ProfileManager::SetProgressionProfile, and the registered flow states
                     // latch the profile pointer -- which is how BrnGui::InGame gets the
                     // mpProfile whose mbIsNewProfile byte gates "TO_INTRO".
-                    // WHY A STAND-IN: none of that chain exists on PC. mGameStateModule is a
-                    // placeholder (BrnGameModule.cpp:204), BrnGameModule::DoUpdate is a
-                    // documented no-op, and GameBridgeGameStateToX.cpp explicitly defers
-                    // BridgeGameStateToGui. The GUI module is therefore the only owner of a
-                    // BrnProgression::Profile in the process -- BrnGuiModule::Prepare installs
-                    // it through the very accessor the console's event-350 handler calls -- so
-                    // this posts the SAME pair the console's action 193 carries, from the same
-                    // point in the sub-step (inside the GUI-input write bracket, before the
-                    // GUI drive), through the same AddGuiEvent<T> boundary. Replace it with
-                    // the real translator when the GameState module lands.
+                    // WHY A STAND-IN: the TRANSPORT does not exist on PC --
+                    // BrnGameModule::DoUpdate is a documented no-op and
+                    // GameBridgeGameStateToX.cpp defers BridgeGameStateToGui -- so the record
+                    // is published straight onto the GUI input queue from the same point in
+                    // the sub-step the console's action 193 travels through (inside the
+                    // GUI-input write bracket, before the GUI drive), via the same
+                    // AddGuiEvent<T> boundary. Replace it with the real translator when the
+                    // GameState bridge lands.
+                    //
+                    // ⭐⭐⭐ [one-profile wave 2026-08-28] THE PAYLOAD IS NOW THE CONSOLE'S.
+                    // It used to read the profile pointer straight BACK OUT of the GUI's own
+                    // ProfileManager (`mGuiModule.GetProfileManager().GetProgressionProfile()`)
+                    // and re-post it -- an echo that could only ever name the module-static
+                    // stand-in BrnGuiModule::Prepare had installed. The console's producer
+                    // names the GAME STATE module's own embedded profile:
+                    //     v96[0] = a1 + 48288;    // == &this->mProgressionManager.mProfile
+                    //     v96[1] = *(a1 + 181268) ? ProgressionData(a1 + 181268) : 0;
+                    //     v97    = (*(a1 + 90800) >= 4u) || *(a1 + 181376) || *(a1 + 181380);
+                    //     AddEvent(gameActionQueue, v96, 193, 12);
+                    // and every one of those three offsets resolves through mProgressionManager
+                    // (GameStateModule + 47920):
+                    //     47920 + 368    == 48288  -> ProgressionManager::mProfile   (+0x170)
+                    //     47920 + 133348 == 181268 -> mpProgressionData (the ResourcePtr)
+                    //     47920 + 42880  == 90800  -> mProfile.muMedalCountFromTheStart
+                    //     47920 + 133456 == 181376 -> miNumberOfParCrashRoadRulesRuledByPlayer
+                    //     47920 + 133460 == 181380 -> miNumberOfParTimeRoadRulesRuledByPlayer
+                    // -- so the flag word is literally AreRoadRulesAvailable() inlined, and the
+                    // profile word is the ONE Profile the console has. Reading it from the
+                    // manager is what makes ProfileManager::Deserialise land in the object
+                    // gameplay actually reads.
                     {
+                        BrnProgression::ProgressionManager* const lpProgressionManager =
+                            mGameStateModule.GetProgressionManager();
+
                         BrnGui::GuiEventProgressionProfileData lProgressionProfile;
-                        lProgressionProfile.mpProfile =
-                            mGuiModule.GetProfileManager().GetProgressionProfile();
-                        lProgressionProfile.mpProgressionData =
-                            mGuiModule.GetProfileManager().GetProgressionData();
-                        // The console's flag byte ORs Profile::muMedalCountFromTheStart >= 4
-                        // with two game-state-module words that have no PC equivalent; the
-                        // medal-count half is the readable one (it is the same test
-                        // ProgressionManager::AreRoadRulesAvailable makes) and no
-                        // reconstructed consumer reads the byte yet.
+                        lProgressionProfile.mpProfile          = lpProgressionManager->GetProfile();
+                        lProgressionProfile.mpProgressionData  = lpProgressionManager->GetProgressionData();
                         lProgressionProfile.mbRoadRulesAvailable =
-                            lProgressionProfile.mpProfile != 0
-                            && lProgressionProfile.mpProfile->GetMedalCountFromTheStart() >= 4u;
+                            lpProgressionManager->AreRoadRulesAvailable();
                         if (lProgressionProfile.mpProfile != 0)
                         {
                             // The three steps of AddGuiEvent<GuiEventProgressionProfileData>
@@ -3884,6 +3899,84 @@ namespace BrnGame
                                 reinterpret_cast<const CgsModule::Event*>(&lProgressionProfile),
                                 lProgressionProfile.GetEventType(),
                                 static_cast<s32>(sizeof(lProgressionProfile)));
+                        }
+
+                        // [DIAG one-profile] NOT IN THE X360 BINARY. The two candidate owners
+                        // side by side, from the ONE place both are addressable, so the claim
+                        // "there is a single Profile" is settled by POINTER IDENTITY and not by
+                        // two log lines 57 apart. Three payload fields as well, because equal
+                        // isNewProfile bytes can agree by coincidence and an event count of
+                        // 120-vs-0 cannot. Reports only on a change of the tuple.
+                        if (CgsDev::Log::gpDebugPrint != 0)
+                        {
+                            const BrnProgression::Profile* const lpcGameStateProfile =
+                                lProgressionProfile.mpProfile;
+                            const BrnProgression::Profile* const lpcProfileManagerProfile =
+                                mGuiModule.GetProfileManager().GetProgressionProfile();
+
+                            struct OneProfileSample
+                            {
+                                const void* mpGameState;
+                                const void* mpProfileManager;
+                                s32         miNewGs;
+                                s32         miNewPm;
+                                u32         muMedalsGs;
+                                u32         muMedalsPm;
+                                u32         muEventsGs;
+                                u32         muEventsPm;
+                                u64         muSpawnCarGs;
+                                u64         muSpawnCarPm;
+                            };
+                            OneProfileSample lSample;
+                            lSample.mpGameState       = lpcGameStateProfile;
+                            lSample.mpProfileManager  = lpcProfileManagerProfile;
+                            lSample.miNewGs     = (lpcGameStateProfile != 0)
+                                                  ? (lpcGameStateProfile->GetIsNewProfile() ? 1 : 0) : -1;
+                            lSample.miNewPm     = (lpcProfileManagerProfile != 0)
+                                                  ? (lpcProfileManagerProfile->GetIsNewProfile() ? 1 : 0) : -1;
+                            lSample.muMedalsGs  = (lpcGameStateProfile != 0)
+                                                  ? lpcGameStateProfile->GetMedalCountFromTheStart() : 0xFFFFFFFFu;
+                            lSample.muMedalsPm  = (lpcProfileManagerProfile != 0)
+                                                  ? lpcProfileManagerProfile->GetMedalCountFromTheStart() : 0xFFFFFFFFu;
+                            lSample.muEventsGs  = (lpcGameStateProfile != 0)
+                                                  ? lpcGameStateProfile->GetEventCount() : 0xFFFFFFFFu;
+                            lSample.muEventsPm  = (lpcProfileManagerProfile != 0)
+                                                  ? lpcProfileManagerProfile->GetEventCount() : 0xFFFFFFFFu;
+                            // ⭐ THE SECOND FIELD, chosen because it CANNOT agree by coincidence:
+                            // Profile::Construct leaves mSpawnCarId zero and only
+                            // ProgressionManager::OnPlayerCarChange (car select) or a Deserialise
+                            // writes it, so a returning boot that reads back PUSMC01 read it off
+                            // the save. mbIsNewProfile alone is a single byte with two states.
+                            lSample.muSpawnCarGs = (lpcGameStateProfile != 0)
+                                                   ? static_cast<u64>(lpcGameStateProfile->GetSpawnCarId()) : 0u;
+                            lSample.muSpawnCarPm = (lpcProfileManagerProfile != 0)
+                                                   ? static_cast<u64>(lpcProfileManagerProfile->GetSpawnCarId()) : 0u;
+
+                            static bool             sbHaveLast = false;
+                            static OneProfileSample sLast;
+                            if (!sbHaveLast
+                                || std::memcmp(&sLast, &lSample, sizeof(lSample)) != 0)
+                            {
+                                sbHaveLast = true;
+                                sLast      = lSample;
+                                char lacProbe[384];
+                                std::snprintf(
+                                    lacProbe, sizeof(lacProbe),
+                                    "[one-profile] gameState.mProgressionManager.mProfile=%p"
+                                    " profileManager.mpProgressionProfile=%p same=%d |"
+                                    " isNewProfile gs=%d pm=%d | medalsFromTheStart gs=%d pm=%d |"
+                                    " eventCount gs=%d pm=%d | spawnCarId gs=%016llX pm=%016llX\n",
+                                    lSample.mpGameState, lSample.mpProfileManager,
+                                    (lSample.mpGameState == lSample.mpProfileManager) ? 1 : 0,
+                                    lSample.miNewGs, lSample.miNewPm,
+                                    static_cast<s32>(lSample.muMedalsGs),
+                                    static_cast<s32>(lSample.muMedalsPm),
+                                    static_cast<s32>(lSample.muEventsGs),
+                                    static_cast<s32>(lSample.muEventsPm),
+                                    static_cast<unsigned long long>(lSample.muSpawnCarGs),
+                                    static_cast<unsigned long long>(lSample.muSpawnCarPm));
+                                CgsDev::Log::WriteToLog(lacProbe);
+                            }
                         }
                     }
                     // FLAG GameState stand-in (THE CAR-SELECT CAR LIST -- GUI events 406 + 412).

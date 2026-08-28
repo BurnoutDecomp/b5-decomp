@@ -30,6 +30,11 @@
 
 #include "types.hpp"
 
+// The build's "expected manifest" is the authored progression data itself -- see the
+// ValidateProfile note below. Only pointer/reference use is needed here, but the body reads
+// its junction table, so the owning header is included rather than forward-declared.
+#include "SharedClasses/Progression/BrnProgressionData.h"   // BrnProgression::ProgressionData
+
 namespace BrnGuiSaveLoad
 {
     class Profile
@@ -50,22 +55,24 @@ namespace BrnGuiSaveLoad
             u32 muData;      // +0x04 (manifest payload; unread on the profile side)
         };
 
-        // The build's "expected versions" manifest passed to ValidateProfile. The X360 reads
-        // the entry pointer at +0x18 and the entry count at +0x1C; each entry is 16 bytes
-        // (the scan steps +0x10) with the id at +0 and a non-zero "valid" flag at +0x04.
-        struct ExpectedManifest
-        {
-            struct Entry
-            {
-                u32 muId;        // +0x00 (resource id, matched against the stored manifest)
-                u32 muFlag;      // +0x04 (must be non-zero for the entry to validate)
-                u8  maPad[8];    // +0x08 .. +0x17 -> 16-byte stride
-            };
-
-            u8           maReserved[0x18];   // +0x00 .. +0x17 (unmodeled descriptor head)
-            const Entry* mpEntries;          // +0x18 (entry array pointer)
-            s32          miCount;            // +0x1C (entry count)
-        };
+        // ⭐⭐ [one-profile wave 2026-08-28] THE "EXPECTED MANIFEST" IS `BrnProgression::
+        // ProgressionData`, AND THE LOCAL `ExpectedManifest` FORK IS DELETED. The X360 reads
+        // the entry pointer at desc+0x18 and the entry count at desc+0x1C and walks the
+        // entries with a 16-byte stride, matching an id word at +0 and requiring +0x04
+        // non-zero. Those are, exactly:
+        //     ProgressionData::muaEventJunctions   @0x18   (EventJunction[], 16-byte stride)
+        //     ProgressionData::muEventJunctionCount@0x1C
+        //     EventJunction::muID                  @0x00
+        //     EventJunction::muOfflineEventOffset  @0x04   (the "valid" flag == has an offline event)
+        // and DecFIGS DWARF spells the parameter outright, three times:
+        //     bool ValidateProfile(const BrnProgression::ProgressionData *) const;
+        //         (BrnProfile.h:679 / :1582 / :2451)
+        // ⛔ WHY THE FORK HAD TO GO, not just be renamed: it modelled the entry array as a
+        // native `const Entry*` at +0x18, which is 8 bytes on x64 -- so `miCount` sat at +0x20
+        // instead of +0x1C and the entry pointer read two SERIALISED 32-BIT SLOTS as one host
+        // pointer. ProgressionData is an 0x50 serialised record whose table words stay 32-bit
+        // and are rebased through TableFromSlot (static_assert(sizeof==0x50) guards it), so the
+        // cast could only ever have worked against the all-zero stand-in it was actually given.
 
         // OUTLINED from BrnProgression::Profile::Serialise @0x8237C1F0 -- the two stores it
         // makes to this image that do NOT come from the live profile:
@@ -78,10 +85,12 @@ namespace BrnGuiSaveLoad
         // offset poke into the byte image.
         void ConstructImage();
 
-        // @0x824EFE30 - validate the save image against lrExpected: require the version word
-        // to be current and the stored manifest to match the expected manifest entry-for-entry
-        // (same count; every stored id present in the expected set with its valid flag set).
-        bool ValidateProfile(const ExpectedManifest& lrExpected);
+        // @0x824EFE30 - validate the save image against the authored progression data: require
+        // the version word to be current and the stored manifest to match the event-junction
+        // table entry-for-entry (same count; every stored event id present in the junction
+        // table, and that junction carrying an offline event).
+        // DWARF shape (BrnProfile.h:679): `bool ValidateProfile(const ProgressionData*) const`.
+        bool ValidateProfile(const BrnProgression::ProgressionData* lpProgressionData) const;
 
     private:
         s32 miVersion;            // +0x000 (compared to KI_VERSION_CURRENT)
