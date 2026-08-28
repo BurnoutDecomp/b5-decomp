@@ -18,6 +18,8 @@
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   BrnGame::BrnGameModule::BridgeGuiToReplay_PostSim      @ 0x823CCA00
 //   BrnGame::BrnGameModule::BridgeGuiToSound               @ 0x823C0A58
+//     ^^ MOVED OUT (faithful-audio-engine phase C4) to GameBridgeGUIToX_Sound.cpp -- same
+//        split, same reason, now that the C4 spine wiring gave it a caller.
 //   BrnGame::BrnGameModule::BridgeGuiToGameState           @ 0x823DDB78
 //     ^^ MOVED OUT (2026-08-25, P1 sim-pause) to GameBridgeGUIToX_GameState.cpp so it can be
 //        MOUNTED on its own: this TU's other two members reference six symbols with no home
@@ -108,23 +110,10 @@ namespace BrnGame
         }
     }
 
-    // @ 0x823C0A58 -- hand the GUI output buffer's out-event queue to the sound root input
-    // buffer (SetGuiEventQueue) so the sound module can drain GUI events.
-    void BrnGameModule::BridgeGuiToSound(
-        BrnSound::Module::Io::RootInputBuffer* lpSoundModuleInputBuffer,
-        const CgsGui::CgsGuiModuleIO::OutputBuffer* lpGuiOutputBuffer)
-    {
-        CGS_ASSERT(lpSoundModuleInputBuffer != 0 && lpGuiOutputBuffer != 0,
-                   "lpSoundModuleInputBuffer && lpGuiOutputBuffer");
-
-        const CgsModule::VariableEventQueue<18432, 16>* lpGuiEventQueue =
-            GetGuiOutEventQueue(lpGuiOutputBuffer);
-        CGS_ASSERT(lpGuiEventQueue != 0, "lpGuiEventQueue");
-
-        lpSoundModuleInputBuffer->SetGuiEventQueue(
-            reinterpret_cast<const BrnSound::Module::Io::RootInputBuffer::GuiEventQueue*>(
-                lpGuiEventQueue));
-    }
+    // @ 0x823C0A58 BridgeGuiToSound: MOVED OUT (faithful-audio-engine phase C4) to
+    // GameBridgeGUIToX_Sound.cpp so it can be MOUNTED on its own, exactly as
+    // BridgeGuiToGameState was before it (this TU's remaining members still reference
+    // the six un-homed symbols). Moved, not copied.
 
     // =========================================================================
     // TranslateGuiEventsToNetworkEvents  (X360 0x823DEEB8)

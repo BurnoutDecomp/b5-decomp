@@ -579,3 +579,17 @@ int Pan2D1::Process(AudioProcessContext *ctx, bool bImmediate)
 } // namespace core
 } // namespace audio
 } // namespace rw
+
+// ---------------------------------------------------------------------------
+// FLAG PC link-closure stub (AEMS-cascade wave 2026-08-28): ComputeInteriorTerm
+// has no vendor body in the Feb-2007 tree (ComputeLevels calls it). Reached only
+// when a Pan2D1 voice actually pans -- no voice can play until the content slice
+// lands. Decode from ARTIST with the splicer-voice wave; 0 keeps the interior
+// term inert meanwhile.
+// ---------------------------------------------------------------------------
+namespace rw { namespace audio { namespace core {
+int Pan2D1::ComputeInteriorTerm(int /*arg*/)
+{
+    return 0;
+}
+} } }

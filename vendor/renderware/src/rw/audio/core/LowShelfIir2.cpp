@@ -13,6 +13,8 @@
 // =====================================================================================
 
 #include "rw/audio/core/Iir2Filters.h"
+#include "rw/audio/core/PlugIn.h"        // PlugInDescRunTime (the real descriptor record)
+#include "rw/audio/core/plugins/Delay.h" // Delay::GetSize (the ICF-shared GetSize body)
 #include "rw/audio/core/Voice.h"   // the owning Voice (mfFadeStart decay accumulator)
 
 #include <cmath>
@@ -26,7 +28,28 @@ namespace core
 
 // off_82F8D4A0 -- run-time plug-in descriptor (undecoded rodata; accessor returns its
 // address). FLAGGED: descriptor payload is undecoded rodata.
-static char *g_LowShelfIir2Desc = 0; // off_82F8D4A0
+// off_82F8D4A0 -- the "LowShelfIir2" runtime descriptor, REAL (descriptor-record
+// wave; console GetSize = the ICF-folded Delay::GetSize @0x82B96A38). Metadata FLAG'd null.
+// The dispatch thunk for the record's Process slot: the console callback takes
+// the instance in r3; the PC body is a member, so this static forward IS the
+// dispatched (instance, ctx) shape.
+static int LowShelfIir2ProcessThunk(LowShelfIir2 *self, AudioProcessContext *ctx)
+{
+    return self->Process(ctx);
+}
+
+static PlugInDescRunTime g_LowShelfIir2Desc = {
+    "LowShelfIir2",
+    reinterpret_cast<void *>(&Delay::GetSize),               // @0x82B96A38 (folded/shared)
+    reinterpret_cast<void *>(&LowShelfIir2::CreateInstance), // @0x82BA3198
+    0,
+    reinterpret_cast<void *>(&LowShelfIir2ProcessThunk),        // @0x82B9E720
+    0, 0, 0, 0,
+    0,
+    0x4C533230u,       // 'LS20'
+    4, 0, 2, 0, 0, 0,
+    0
+};
 
 // sqrtf helper matching the X360 fsqrts (single-precision square root).
 static inline f64 Fsqrts(f64 x) { return static_cast<f32>(sqrt(x)); }
@@ -36,7 +59,7 @@ static inline f64 Fsqrts(f64 x) { return static_cast<f32>(sqrt(x)); }
 // -------------------------------------------------------------------------------------
 char **LowShelfIir2::GetPlugInDescRunTime()
 {
-    return &g_LowShelfIir2Desc;
+    return reinterpret_cast<char **>(&g_LowShelfIir2Desc);
 }
 
 // -------------------------------------------------------------------------------------

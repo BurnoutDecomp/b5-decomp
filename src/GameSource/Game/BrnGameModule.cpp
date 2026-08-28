@@ -27,6 +27,9 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h" // RegisterFunction (the Debug/Sim actions)
 #include "GameSource/Graphics/BrnRendererModuleIO.h"    // RendererIO::InputBuffer/OutputBuffer (GamePrepare's renderer pair)
 #include "GameSource/Director/DirectorModule/BrnDirectorModuleIO.h"          // DirectorIO::InputBuffer (DoUpdate_Director)
+#include "GameSource/Director/DirectorModule/BrnDirectorModuleIOOutputBuffer.hpp" // DirectorIO::OutputBuffer::GetCameraOutput (DoUpdate_Sound)
+#include "GameSource/Replays/BrnReplayModuleIO.h"                            // ReplayIO::OutputBuffer_PreSim::GetStatusInterface (DoUpdate_Sound)
+#include "GameSource/Effects/SharedIO/BrnEffectsModuleIO_OutputBuffer.h"     // EffectsIO::OutputBuffer (DoUpdate_Sound lock-only participant)
 #include "GameSource/GameState/BrnGameStateModuleIO.h" // GameStateModuleIO::OutputBuffer (BridgeGameStateToDirector)
 #include "GameSource/Director/DirectorModule/BrnDirectorModuleIOSceneQuery.h" // DirectorIO::SceneQuery{Input,Output}Buffer
 #include "GameSource/Effects/Particles/ParticleModuleBringUp.h"               // BrnParticle::PCBringUpProduceParticleRenderData (DoDispatch's particle-render-data seam)
@@ -1230,6 +1233,158 @@ namespace BrnGame
         return 0;
     }
 
+    // @ 0x823EE4D8 -- the SOUND pre-update leg (faithful-audio-engine phase C4). Called by
+    // BOTH console spines ahead of the network/game-state/world drives: the loading spine
+    // @0x823F2714 and the full DoUpdate cascade. Statement for statement against the 42-instr
+    // X360 body (progress/scratch_dossiers/spine_sound_leg_0x823F22D8.md section 4):
+    //   * the miUT_Sound + miUT_SoundUpdate monitor pair brackets the WHOLE body (the only
+    //     sound perfmon anywhere on the loading spine);
+    //   * RootSoundModule::PreUpdate publishes the logic module's pre-update block into the
+    //     caller's RootPreUpdateOutputBuffer (the stack arg is only forwarded there);
+    //   * under the console's W(guiIn)+R(preUpdateOut) helper bracket (sub_823B6FE0 /
+    //     sub_823B7060, reproduced inline -- the per-source idiom this repo already uses),
+    //     the pre-update GuiOut queue (VariableEventQueue<256,16>) is bulk-appended into the
+    //     GUI input buffer's 32768 event queue (Append<256,16> @0x823DAF20), then
+    //     BridgeSoundToTraining walks the audio-effects message queue.
+    void BrnGameModule::DoPreUpdate_Sound(CgsModule::IOBufferStack* lpUpdateOutputBufferStack,
+                                          BrnSound::Module::Io::RootPreUpdateOutputBuffer* lpSoundPreUpdateOutputBuffer,
+                                          CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInputBuffer)
+    {
+        CgsDev::PerfMonCpu::StartMonitor(mCpuMonitors.miUT_Sound);
+        CgsDev::PerfMonCpu::StartMonitor(mCpuMonitors.miUT_SoundUpdate);
+
+        mSoundModule.PreUpdate(lpUpdateOutputBufferStack, lpSoundPreUpdateOutputBuffer);
+
+        // Console lock-pair helper sub_823B6FE0: assert both, W(dest guiIn), R(src preUpdateOut).
+        CGS_ASSERT(lpGuiInputBuffer != 0, "lpInputBuffer");
+        CGS_ASSERT(lpSoundPreUpdateOutputBuffer != 0, "lpOutputBuffer0");
+        lpGuiInputBuffer->LockForWrite();
+        lpSoundPreUpdateOutputBuffer->LockForRead();
+
+        lpGuiInputBuffer->GetGuiEvents()->Append<256, 16>(
+            lpSoundPreUpdateOutputBuffer->GetGuiEventQueue());
+
+        BridgeSoundToTraining(lpSoundPreUpdateOutputBuffer);
+
+        // sub_823B7060: unlock in reverse.
+        lpSoundPreUpdateOutputBuffer->UnlockForRead();
+        lpGuiInputBuffer->UnlockForWrite();
+
+        CgsDev::PerfMonCpu::StopMonitor(mCpuMonitors.miUT_SoundUpdate);
+        CgsDev::PerfMonCpu::StopMonitor(mCpuMonitors.miUT_Sound);
+    }
+
+    // @ 0x823DCEC0 -- the SOUND leg of the full cascade (faithful-audio-engine phase C4b).
+    // Statement for statement against the 121-instr X360 body; the full register-level
+    // decode is progress/scratch_dossiers/doupdate_sound_0x823DCEC0.md. Console facts
+    // honored here: the RootInputBuffer is SELF-CARVED per call ("Sound", off the
+    // update-INPUT stack -- the same instantiation the loading spine uses); the six-buffer
+    // lock helper sub_823B7620 takes W(rootIn) + R(director/world/gamestate/gui/replays)
+    // and the effects output is a LOCK-ONLY participant on an interleaved bracket (nothing
+    // reads it -- keep the pair); the bridge order is WorldToSound -> SetCameraInput ->
+    // GameStateToSound -> GuiToSound -> SetReplayStatusInterface (a DIFFERENT order from
+    // the loading spine, plus the two installs it never does); every leg is UNCONDITIONAL
+    // on console; all locks release BEFORE RootSoundModule::Update (it takes its own); the
+    // perfmon pair covers everything but the DestroyIOBuffer; NO resource forward here
+    // (the caller drains the root output in its own tail).
+    // FLAG PC null-tolerance: the console lock helper asserts every buffer non-null. On
+    // this build the replay pre-sim output (module not driven per-frame yet) and the
+    // effects output (module unmounted) arrive null, and the world/director/game-state/gui
+    // statics can be null on defensive frames -- each leg skips its absent source rather
+    // than faking one. Retire the guards as the modules come live.
+    void BrnGameModule::DoUpdate_Sound(CgsModule::IOBufferStack* lpInputBufferStack,
+                                       CgsModule::IOBufferStack* lpOutputBufferStack,
+                                       BrnGameState::GameStateModuleIO::OutputBuffer* lpGameStateOutputBuffer,
+                                       BrnWorldIO::UpdateOutputBuffer* lpWorldOutputBuffer,
+                                       BrnDirector::DirectorIO::OutputBuffer* lpDirectorOutputBuffer,
+                                       BrnReplays::ReplayIO::OutputBuffer_PreSim* lpReplaysPreSimOutputBuffer,
+                                       BrnSound::Module::Io::RootOutputBuffer* lpSoundOutputBuffer,
+                                       CgsGui::CgsGuiModuleIO::OutputBuffer* lpGuiOutputBuffer,
+                                       BrnEffects::EffectsIO::OutputBuffer* lpEffectsOutputBuffer,
+                                       BrnUpdateSet leUpdateSet)
+    {
+        typedef BrnSound::Module::Io::RootInputBuffer RootIn;
+
+        CgsDev::PerfMonCpu::StartMonitor(mCpuMonitors.miUT_Sound);
+        CgsDev::PerfMonCpu::StartMonitor(mCpuMonitors.miUT_SoundUpdate);
+
+        // The self-carved "Sound" root input (console @0x823DCF20, the CgsModuleIOHelper
+        // create/destroy pair with the h:52/h:57 asserts).
+        RootIn* lpSoundInputBuffer = 0;
+        const bool lbCreated = lpInputBufferStack->CreateIOBuffer(&lpSoundInputBuffer, "Sound");
+        CGS_ASSERT(lbCreated, "mpStack->CreateIOBuffer( &mpBuffer, lpcName )");  // CgsModuleIOHelper.h:52
+        (void)lbCreated;
+
+        // sub_823B7620 (bracket A), then the effects read lock (bracket B, interleaved).
+        lpSoundInputBuffer->LockForWrite();
+        if (lpDirectorOutputBuffer != 0)     lpDirectorOutputBuffer->LockForRead();
+        if (lpWorldOutputBuffer != 0)        lpWorldOutputBuffer->LockForRead();
+        if (lpGameStateOutputBuffer != 0)    lpGameStateOutputBuffer->LockForRead();
+        if (lpGuiOutputBuffer != 0)          lpGuiOutputBuffer->LockForRead();
+        if (lpReplaysPreSimOutputBuffer != 0) lpReplaysPreSimOutputBuffer->LockForRead();
+        if (lpEffectsOutputBuffer != 0)      lpEffectsOutputBuffer->LockForRead();
+
+        // @0x823DCF98 -- the world -> sound copy + installs (the update set feeds the
+        // bit-0x100 replay-source select).
+        if (lpWorldOutputBuffer != 0)
+            BridgeWorldToSound(lpSoundInputBuffer, lpWorldOutputBuffer, leUpdateSet);
+
+        // @0x823DCFA0/AC -- the director camera into the root input (+0x2F20 on console).
+        // FLAG width: mDirectorCamera is still the nominal 4-byte opaque model, so this
+        // install copies the model's span, not the console Camera::operator= full image;
+        // widen with the member when a PC reader appears (none exists yet).
+        if (lpDirectorOutputBuffer != 0)
+            lpSoundInputBuffer->SetCameraInput(
+                reinterpret_cast<const RootIn::DirectorCamera*>(
+                    lpDirectorOutputBuffer->GetCameraOutput()));
+
+        // @0x823DCFBC -- the game-state bridge (this leg is its ONLY console caller).
+        if (lpGameStateOutputBuffer != 0)
+            BridgeGameStateToSound(lpSoundInputBuffer, lpGameStateOutputBuffer);
+
+        // @0x823DCFD4 -- the GUI out-queue install (console reloads the gm+0x9A0BD8
+        // member; on PC the caller passes the same static buffer).
+        if (lpGuiOutputBuffer != 0)
+            BridgeGuiToSound(lpSoundInputBuffer, lpGuiOutputBuffer);
+
+        // @0x823DCFDC/E8 -- the replay status interface into the root input (+0x4).
+        if (lpReplaysPreSimOutputBuffer != 0)
+            lpSoundInputBuffer->SetReplayStatusInterface(
+                reinterpret_cast<const RootIn::ReplayStatusInterface*>(
+                    lpReplaysPreSimOutputBuffer->GetStatusInterface()));
+
+        // sub_823B7760 (reverse of bracket A), then the effects unlock (bracket B).
+        if (lpReplaysPreSimOutputBuffer != 0) lpReplaysPreSimOutputBuffer->UnlockForRead();
+        if (lpGuiOutputBuffer != 0)          lpGuiOutputBuffer->UnlockForRead();
+        if (lpGameStateOutputBuffer != 0)    lpGameStateOutputBuffer->UnlockForRead();
+        if (lpWorldOutputBuffer != 0)        lpWorldOutputBuffer->UnlockForRead();
+        if (lpDirectorOutputBuffer != 0)     lpDirectorOutputBuffer->UnlockForRead();
+        lpSoundInputBuffer->UnlockForWrite();
+        if (lpEffectsOutputBuffer != 0)      lpEffectsOutputBuffer->UnlockForRead();
+
+        // @0x823DD054 -- the pump, with the console's exact timer products (identical to
+        // the loading spine's @0x823F2AC8; cross-confirmed in the decode).
+        {
+            const CgsSystem::Timer& lrGameTimer = mGameTimer;
+            const CgsSystem::Timer& lrSimTimer  = mSimTimer;
+            mSoundModule.Update(
+                lrGameTimer.GetScaleCurrent() * lrGameTimer.GetRate(),
+                lrSimTimer.GetScaleCurrent() * lrSimTimer.GetRate(),
+                lpInputBufferStack,
+                lpOutputBufferStack,
+                lpSoundInputBuffer,
+                lpSoundOutputBuffer,
+                leUpdateSet);
+        }
+
+        CgsDev::PerfMonCpu::StopMonitor(mCpuMonitors.miUT_SoundUpdate);
+        CgsDev::PerfMonCpu::StopMonitor(mCpuMonitors.miUT_Sound);
+
+        const bool lbDestroyed = lpInputBufferStack->DestroyIOBuffer(&lpSoundInputBuffer);
+        CGS_ASSERT(lbDestroyed, "mpStack->DestroyIOBuffer( &mpBuffer )");  // CgsModuleIOHelper.h:57
+        (void)lbDestroyed;
+    }
+
     // @ 0x823E8BD0 -- DoUpdate's WORLD leg. Reconstructed against the X360 body; the
     // per-frame world drive itself (the vtable +76 dispatch and the boot-video variant) is
     // REAL here. NOTE the caller DoUpdate is still the PC-platform leaf above (the PC host
@@ -1270,14 +1425,16 @@ namespace BrnGame
         CGS_ASSERT(lbCreated, "mpStack->CreateIOBuffer( &mpBuffer, lpcName )");  // CgsModuleIOHelper.h:52
         (void)lbCreated;
 
-        // Two of the six X360 input-staging bridges are committed now: the CONTROLLER leg and
-        // (2026-08-01) the GAME-STATE leg.
-        // [FLAG PC boot gate] BridgeNetworkToWorld @0x823DF8B0, BridgeGuiToWorld @0x823CBE90,
-        // BridgeSoundToWorld @0x823CDC98 and the replay-status latch
-        // (ReplayIO::OutputBuffer_PreSim::GetStatusInterface) are still not reconstructed; their
-        // source modules' output buffers are not threaded into this leg on the PC yet, so that
-        // staging is omitted rather than faked. The X360's SetTimerStatusInterface(gm+10095372)
-        // is part of the same staging. Restore them with the DoUpdate cascade.
+        // Three of the six X360 input-staging bridges are committed now: the CONTROLLER leg,
+        // (2026-08-01) the GAME-STATE leg, and (phase C3a/C4) the SOUND leg -- BridgeSoundToWorld
+        // @0x823CDC98 is bodied (GameBridgeSoundToX.cpp) and the live world drive
+        // (DriveWorldUpdateFrame) stages it when the spine threads the pre-update buffer through.
+        // [FLAG PC boot gate] BridgeNetworkToWorld @0x823DF8B0, BridgeGuiToWorld @0x823CBE90 and
+        // the replay-status latch (ReplayIO::OutputBuffer_PreSim::GetStatusInterface) are still
+        // not reconstructed; their source modules' output buffers are not threaded into this leg
+        // on the PC yet, so that staging is omitted rather than faked. The X360's
+        // SetTimerStatusInterface(gm+10095372) is part of the same staging. Restore them with
+        // the DoUpdate cascade.
         lpWorldInput->LockForWrite();
         BridgeControllerToWorld(lpWorldInput, lpInputOutputBuffer);
         lpWorldInput->UnlockForWrite();

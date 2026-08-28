@@ -51,6 +51,7 @@ namespace core
     class Voice;   // RenderWare audio voice (forward-declared; dtor reads nothing)
     class PlugIn;  // RenderWare audio plug-in (forward-declared)
     class PlugInRegistry;  // RenderWare plug-in registry (AemsRWSampleFactory member)
+    class System;  // RenderWare audio system (the Playback::System typedef target)
 }
 }
 }
@@ -61,18 +62,29 @@ namespace Playback
 {
     // Engine collaborators (full homes elsewhere). Forward-declared -- the dtor
     // reads none of them, so incomplete types suffice for the pointer/ref members.
+    // (Playback::System is the CgsVoice.h:59 TYPEDEF of rw::audio::core::System --
+    // a `struct System;` fwd decl here collides with it the moment both are in one
+    // TU (C2371, cascade slice 2), so the rw class is forward-declared above and
+    // the typedef spelled locally.)
     struct Environment;
-    struct System;
+    typedef rw::audio::core::System System;
     struct AemsPlayerVoice;
     struct AemsPlayerInputAccessor;   // AemsRWSampleFactory::CreateInstance arg (ptr).
 
-    // CgsAemsInterfaceImplementation.h (DWARF). A 12-byte plug-in config slot the
-    // AemsRWSampleFactory holds three of, by value. Modelled as an opaque 12-byte
-    // block (its fields are not read by the destructor TU). FLAG: minimal by-value
-    // member -- full layout DEFERRED to the PlugInConfig home.
+    // CgsAemsInterfaceImplementation.h (DWARF). A plug-in config slot the
+    // AemsRWSampleFactory holds three of, by value (console 12 bytes: ptr @+0,
+    // handle @+4, count byte @+8). TYPED (AEMS-cascade slice 2) from the
+    // AemsRWSampleFactory ctor's store triples (@0x826C26B8 orders 17-25: word+0
+    // = an initial-value pointer or 0, word+4 = a plug-in handle, byte+8 = the
+    // channel count) -- the same triple shape the SpliceManager voice helpers
+    // build on the stack (Voice::CreateInstance's stage-config records).
     struct PlugInConfig
     {
-        u8 mau8Opaque[12];
+        void*     mpInitialValue;    // console +0 (stack-float pointer or 0)
+        uintptr_t muPlugInHandle;    // console +4 (a PlugInRegistry handle -- a 4-byte
+                                     // node word on console, host-width here: the host
+                                     // GetPlugInHandle returns a pointer-sized handle)
+        u8        mu8ChannelCount;   // console +8
     };
 
     // CgsAemsInterfaceImplementation.h:102 (DWARF):
@@ -132,18 +144,28 @@ namespace Playback
     };
 
     // ========================================================================
-    // CgsAemsInterfaceImplementation.h:48 (DWARF). AemsRWSampleFactory : public
-    // Factory -- the AEMS sample-player factory. Added for the Wave-6 scalar-deleting
-    // destructor TU (@0x826C2848). All members are trivially destructible (a
-    // PlugInConfig[3] block, an rw PlugInRegistry*, and nine PlugInHandle words), so
-    // the class destructor body is empty; the Factory base dtor does the teardown.
-    // PlugInConfig / rw::audio::core::PlugInRegistry are engine collaborators with
-    // their own homes -- forward-declared here (the dtor touches none of them).
-    // Members pinned BY NAME + SEQUENCE (host-width FLAG).
+    // CgsAemsInterfaceImplementation.h:48 (DWARF). The AEMS sample-player factory.
+    // ⭐ MI CORRECTED (AEMS-cascade slice 2): the DWARF renders ONE base
+    // (`: public Factory`) -- the known dwarfdump single-base limitation (the
+    // SplicerPlayerVoice wave-6 lesson: zero MI renderings corpus-wide; MI must
+    // be proven from the asm). The X360 ctor @0x826C26B8 PROVES the dual base:
+    // the provisional IAemsSamplePlayerFactory vptr (off_820AB168) stores at
+    // overall +0x00 BEFORE the Factory base constructs at overall +0x04, both
+    // final vptrs restore (+0x00 off_820B2F84 / +0x04 off_820B2F70), and the
+    // creates increment the refcount at overall +0x08 == Factory-subobject +0x04.
+    // Environment::AddFactory receives overallThis+4 (the Factory subobject).
+    //
+    // All members are trivially destructible (a PlugInConfig[3] block, an rw
+    // PlugInRegistry*, and eight handle words), so the class destructor body is
+    // empty; the Factory base dtor does the teardown. Members pinned BY NAME +
+    // SEQUENCE (host-width FLAG); console offsets in the comments.
     // ========================================================================
-    struct AemsRWSampleFactory : public Factory
+    struct AemsRWSampleFactory : public Snd9::IAemsSamplePlayerFactory, public Factory
     {
-        AemsRWSampleFactory(Name aName, Environment& arEnvironment);   // own TU
+        // @ 0x826C26B8 (AEMS-cascade slice 2; full store-order decode in
+        // progress/scratch_dossiers/aems_factory_cascade_codex.md). Body in
+        // CgsAemsInterfaceImplementation.cpp.
+        AemsRWSampleFactory(Name aName, Environment& arEnvironment);
 
         // CgsAemsInterfaceImplementation.cpp:460 (own TUs; declared for vtable shape).
         virtual Snd9::IAemsSamplePlayer* CreateInstance(void* apParams, int aiNumOutputs,
@@ -155,18 +177,21 @@ namespace Playback
         // CgsAemsInterfaceImplementation.h:48 @ 0x826C2848 (scalar-deleting dtor).
         virtual ~AemsRWSampleFactory();
 
-    private:
+    protected:
         // Layout faithful to DWARF (CgsAemsInterfaceImplementation.h:84..95).
-        PlugInConfig                     maAemsSubMixPlugInConfig[3]; // :84
-        rw::audio::core::PlugInRegistry* mpPlugInRegistry;            // :87
-        u32 mGainHandle;      // :88  PlugInRegistry::PlugInHandle
-        u32 mPan2DHandle;     // :89
-        u32 mRouteHandle;     // :90
-        u32 mSendHandle;      // :91
-        u32 mSndPlayer1Handle;// :92
-        u32 mRechannelHandle; // :93
-        u32 mResampleHandle;  // :94
-        u32 mSubMixHandle;    // :95
+        // Handle words host-widened (console 4-byte PlugInRegistry::PlugInHandle
+        // node words; the host GetPlugInHandle returns pointer-sized handles) --
+        // by-name access only, the AEMS-cascade slice-2 convention.
+        PlugInConfig                     maAemsSubMixPlugInConfig[3]; // :84  (console +0x14/+0x20/+0x2C)
+        rw::audio::core::PlugInRegistry* mpPlugInRegistry;            // :87  (console +0x38)
+        uintptr_t mGainHandle;      // :88  (console +0x3C)
+        uintptr_t mPan2DHandle;     // :89  (console +0x40)
+        uintptr_t mRouteHandle;     // :90  (console +0x44)
+        uintptr_t mSendHandle;      // :91  (console +0x48, 'Sen0' lookup)
+        uintptr_t mSndPlayer1Handle;// :92  (console +0x4C)
+        uintptr_t mRechannelHandle; // :93  (console +0x50)
+        uintptr_t mResampleHandle;  // :94  (console +0x54)
+        uintptr_t mSubMixHandle;    // :95  (console +0x58, 'Sub0' lookup)
     };
 
 } // namespace Playback

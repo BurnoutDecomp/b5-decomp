@@ -393,6 +393,18 @@ PlugInRegistry *System::GetPlugInRegistry(System *self)
 }
 
 // -------------------------------------------------------------------------------------
+// GetDecoderRegistry @0x82B6DD78 -- lazily create the decoder registry (@+0x2C); the
+// exact sibling of GetPlugInRegistry (dossier re-exported 2026-08-28 for the factory
+// registration pass: `if (!+0x2C) +0x2C = DecoderRegistry::CreateInstance(off_83271928)`).
+// -------------------------------------------------------------------------------------
+DecoderRegistry *System::GetDecoderRegistry(System *self)
+{
+    if (!self->mpDecoderRegistry)
+        self->mpDecoderRegistry = DecoderRegistry::CreateInstance(off_83271928);
+    return self->mpDecoderRegistry;
+}
+
+// -------------------------------------------------------------------------------------
 // GetProfiler @0x82B6DE08 -- lazily seed the file-scope Profiler singleton (@dword_832718F0)
 // and cache it at mpProfiler (@+0x34). Field order is the asm's store order.
 // -------------------------------------------------------------------------------------

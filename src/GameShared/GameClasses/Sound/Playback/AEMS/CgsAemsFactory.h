@@ -3,6 +3,10 @@
 
 #include "types.hpp"
 
+#include "GameShared/GameClasses/Sound/Playback/AEMS/CgsAemsInterfaceImplementation.h" // AemsRWSampleFactory (the real base)
+#include "GameShared/GameClasses/Sound/Playback/CgsRegistry.h"  // Registry + RegistrySpec (the in-place carve)
+#include "GameShared/GameClasses/Sound/Playback/CgsHandle.h"    // Handle<AemsFactory>
+
 // =============================================================================
 // CgsSound::Playback::AemsFactory  (+ supporting CSIS command types)
 //   GameShared/GameClasses/Sound/Playback/aems/CgsAemsFactory.h (DWARF home) +
@@ -132,35 +136,76 @@ struct CsisUpdateCommand : public CsisCommand
 
 const u32 KU_MAX_PATCH_MONITORS = 16; // CgsAemsFactory.h:373 (DWARF)
 
-// CgsAemsFactory.h:291 (DWARF): AemsFactory : public AemsRWSampleFactory.
-// MINIMAL home -- see file banner FLAG. Only the patch-monitor table and the two
-// leaf functions are modelled; the engine factory base is a typed-by-name
-// placeholder.
-class AemsFactory
+// The sizing spec Create/ctor consume (console spec words +0 the retained RWAC
+// factory handle / +4 entityCount / +8 dataBytes / +0xC stringBytes -- the
+// ref-spec r5 lowering, unlike RWAC's by-value packing).
+struct AemsFactorySpec
 {
+    Factory*  mpRwacFactory;        // +0x00 (Handle<GenericRwacFactory> raw pointer)
+    u32       mu32EntityCount;      // +0x04
+    u32       mu32DataSize;         // +0x08
+    u32       mu32StringTableSize;  // +0x0C
+};
+
+// CgsAemsFactory.h:291 (DWARF): AemsFactory : public AemsRWSampleFactory.
+// REAL base chain now (AEMS-cascade slice 2 -- the former minimal placeholder
+// modelled the base as an untyped span). Console layout (host: name+sequence):
+//   AemsRWSampleFactory base            through +0x5B
+//   muPatchMonitorCount                 +0x5C  (:= 0 LAST, after the CSIS check)
+//   mpRegistry                          +0x60  -> the in-place Registry @ +0x56C
+//   mpRwacFactory                       +0x64  (retained raw handle from the spec)
+//   mCommandQueue payload               +0x68..+0x463 (255-deep CommandQueue<uintptr_t>;
+//                                       ctor-untouched) + the two control words
+//                                       +0x464/+0x468 (:= 0)
+//   maPatchMonitors[16]                 +0x46C
+//   (the in-place Registry follows      +0x56C)
+class AemsFactory : public AemsRWSampleFactory
+{
+public:
+    // @ 0x826DAC28 (AEMS-cascade slice 2; full decode progress/scratch_dossiers/
+    // aems_factory_cascade_codex.md). The ref-spec create: carve (console
+    // 4*(entities+0x162)+data+strings at host widths) through the ENVIRONMENT's
+    // allocator tagged "AemsFactory", construct, return the handle with one
+    // explicit Acquire -- the console increments overall +0x08 == the
+    // Factory-subobject refcount, the load-bearing MI proof.
+    static Handle<AemsFactory> Create(Environment& arEnvironment,
+                                      const AemsFactorySpec& akrSpec);
+
+    // @ 0x826DAAD0. Base (Name = the "~AemsFactory::SK_NAME~" intern == console
+    // dword_83008664, writer sub_82C65788), the member stores in console order,
+    // the in-place Registry, the CSIS-inited assert, and the global
+    // sample-player-factory install. Body in CgsAemsFactory.cpp.
+    AemsFactory(Environment& arEnvironment, const AemsFactorySpec& akrSpec);
+
+    // The nested registry (console +0x60), by name -- the GetAemsFactoryRegistry
+    // accessor (CgsSoundPlaybackModule.h:100) reads it off the generic Factory*.
+    Registry* GetRegistry() { return mpRegistry; }
+
 protected:
-    // CgsAemsFactory.cpp @ 0x8268A018 (DWARF CgsAemsFactory.cpp:397, protected,
-    // returns void). Debug-prints lpcText through the engine log front-end when
-    // the log-category filter is enabled. (X360 prints "<NULLSTRING>" when handed
-    // a null pointer.)
-    void CsisPrint(const char* lpcText);
+    // CgsAemsFactory.cpp @ 0x8268A018 (DWARF CgsAemsFactory.cpp:397, returns
+    // void). Debug-prints lpcText through the engine log front-end when the
+    // log-category filter is enabled (X360 prints "<NULLSTRING>" for null).
+    // ⭐ STATIC (ABI corrected, slice 2): the ctor @0x826DAAD0 materializes this
+    // function's RAW ADDRESS as a one-argument callback (the console callee
+    // consumes the text in r3); a hidden-this member ABI cannot match.
+    static void CsisPrint(const char* lpcText);
 
     // CgsAemsFactory.cpp @ 0x82689E98. Linear-search the patch-monitor table
     // for the monitor whose mpName matches lpcName; returns it, or null if none.
     PatchMonitor* FindPatchMonitor(const char* lpcName);
 
 private:
-    // --- members (DWARF order; X360 offsets in comments, NOT asserted) ---
-    // FLAG: placeholder for the un-homed AemsRWSampleFactory base sub-object that
-    // precedes muPatchMonitorCount in the X360 layout. Not modelled by field.
-    u32         muPatchMonitorCount;       // CgsAemsFactory.h:364  (+0x5C X360)
-    void*       mpRegistry;                // CgsAemsFactory.h:366  (Registry*, opaque)
-    void*       mhRwacFactory;             // CgsAemsFactory.h:367  (GenericRwacFactoryHandle, opaque)
-    // CgsAemsFactory.h:368 mCommandQueue (CsisCommandQueue: 255-deep CommandQueue<uintptr_t>).
-    // Modelled only by size so maPatchMonitors keeps its position relative to the
-    // count; contents are not used by this TU's functions.
-    uintptr_t   maCommandQueuePlaceholder[256]; // count word + 255 slots
-    PatchMonitor maPatchMonitors[16];      // CgsAemsFactory.h:375  (+0x46C X360)
+    // --- members (console offsets in comments; host by NAME + SEQUENCE) ---
+    u32          muPatchMonitorCount;            // CgsAemsFactory.h:364  (+0x5C)
+    Registry*    mpRegistry;                     // CgsAemsFactory.h:366  (+0x60)
+    Factory*     mpRwacFactory;                  // CgsAemsFactory.h:367  (+0x64, retained)
+    // CgsAemsFactory.h:368 mCommandQueue (CsisCommandQueue: 255-deep
+    // CommandQueue<uintptr_t>). Payload ctor-untouched; only the two control
+    // words are zeroed (console +0x464/+0x468).
+    uintptr_t    maCommandQueuePayload[255];     // (+0x68..+0x463)
+    u32          mu32CommandQueueControl0;       // (+0x464)
+    u32          mu32CommandQueueControl1;       // (+0x468)
+    PatchMonitor maPatchMonitors[16];            // CgsAemsFactory.h:375  (+0x46C)
 };
 
 } // namespace Playback

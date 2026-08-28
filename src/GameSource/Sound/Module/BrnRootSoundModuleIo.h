@@ -68,13 +68,47 @@ namespace Io
     // (phase C3b: WIDTH ATTESTED -- the +0x10520..+0x13730 span == 0x3210 == 12816
     // == the world UpdateOutputBuffer's own PropUpdateNotificationQueue width; the
     // old nominal 0x40 under-sized the append target.)
-    struct PropUpdateNotificationQueue { u8 mData[0x3210]; };
+    // The host header shape of CgsModule::BaseEventQueue<T> -- {T* mpEvents; s32
+    // miMaxLength; s32 miLength;} with the 16-aligned inline maEvents landing at +16
+    // (8+4+4 == 16 on host; 4+4+4+pad == 16 on console). This is the SAME layout
+    // identity the typed appender views (BridgeWorldToSound's world-side EventQueue
+    // casts over these spans) already rely on; it lets the opaque twins below
+    // reproduce the console's three Construct stores (BaseEventQueue::Construct ==
+    // {mpEvents = &maEvents; miMaxLength = N; miLength = 0}, attested at 0x822E4F10)
+    // without dragging the element-type headers into this shared header.
+    struct EventQueueHeaderView { void* mpEvents; s32 miMaxLength; s32 miLength; };
+
+    struct PropUpdateNotificationQueue
+    {
+        u8 mData[0x3210];
+        // @0x825A80D8 -- EventQueue<PropUpdateNotification,200>::Construct, called by
+        // the console RootInputBuffer::Construct @0x826C82D8 (phase C4).
+        void Construct()
+        {
+            EventQueueHeaderView* lpView = reinterpret_cast<EventQueueHeaderView*>(mData);
+            lpView->mpEvents    = mData + 16;
+            lpView->miMaxLength = 200;
+            lpView->miLength    = 0;
+        }
+    };
 
     // The prop-became-physical event queue handed out (by pointer) from
     // RootInputBuffer::GetPropBecamePhysicalEventQueue @ +0x103D0. Opaque, correctly
     // sized to its X360-attested span (+0x103D0 .. +0x10520 == 0x150 bytes) so the
     // following PropUpdateNotificationQueue keeps its +0x10520 offset.
-    struct PropBecamePhysicalEventQueue { u8 mData[0x10520 - 0x103D0]; }; // 0x150 attested span
+    struct PropBecamePhysicalEventQueue
+    {
+        u8 mData[0x10520 - 0x103D0];   // 0x150 attested span
+        // @0x822E4F10 -- EventQueue<PropBecamePhysicalEvent,20>::Construct, called by
+        // the console RootInputBuffer::Construct @0x826C82CC (phase C4).
+        void Construct()
+        {
+            EventQueueHeaderView* lpView = reinterpret_cast<EventQueueHeaderView*>(mData);
+            lpView->mpEvents    = mData + 16;
+            lpView->miMaxLength = 20;
+            lpView->miLength    = 0;
+        }
+    };
 
     // =========================================================================
     // BrnSound::Module::Io::PreUpdateOutput -- MINIMAL SLICE (canonical home is
@@ -193,7 +227,14 @@ namespace Io
         struct ReplayStatusInterface         { u8 mData[4]; };
         struct DirectorCamera                { u8 mData[4]; };
         struct InputContactSpyQueueInterface { u32 mData; };
-        struct GameEventQueue                { u8 mData[4]; };
+        // ⭐ TYPED (faithful-audio-engine phase C4; was opaque u8[4] + pad). Two-source
+        // attestation, same arithmetic as GameActionQueue below: the console
+        // RootInputBuffer::Construct @0x826C81D8 calls VariableEventQueue<1536,16>::
+        // Construct @0x822C6F78 on this+0x6494, and BridgeWorldToSound's append twin
+        // named the same template arguments (its Append<1536,16> fired the "Not
+        // Constructed" assert the moment the C4 spine went live -- the queue was real,
+        // the Construct was missing). Span 0x610 = 1536+16 inside the 0x6494..0x6AB0 gap.
+        typedef CgsModule::VariableEventQueue<1536, 16> GameEventQueue;
         struct TrafficSoundOutputInterface   { u8 mData[4]; };
         struct PhysicalTrafficStateQueue     { u8 mData[16]; };
         struct DeformationInterface          { u8 mData[4]; };
@@ -358,22 +399,53 @@ namespace Io
     //     "Not locked for writing", BrnRootSoundModuleIo.h:346) -- copies the source
     //     PreUpdateOutput into mPreUpdateOutput (POD spans by memcpy, the
     //     audio-car-loaded queue by Clear()+Append).
-    // @ BrnSound::Module::Io::RootInputBuffer::Construct -- base, then the embedded queues
-    // that are real types. Only mGameActionQueue is typed today (boot audit F-P6-7); the rest
-    // are still opaque storage and need nothing. Add each to this body as it is typed.
+    // @ 0x826C81D8 -- the REAL console RootInputBuffer::Construct (phase C4; decoded whole
+    // when the first live BridgeWorldToSound append hit the missing 1536-queue Construct).
+    // Console call/store order, reproduced below where the member is typed and FLAG-noted
+    // where it is still opaque storage with no PC reader:
+    //   stb 1,0(this)                                  -> IOBuffer base Construct
+    //   RCEntityActiveRaceCarOutputInterface::Clear @0x8227D550 (this+0x620)
+    //   Camera::Construct @0x82255E68 (this+0x2F20)    [FLAG deferred: mDirectorCamera is
+    //     opaque u8[4]+pad; no PC reader until the DoUpdate_Sound leg installs a real one]
+    //   ContactSpyInterface::Construct @0x82A61A18 (this+0x3080) [deferred: opaque u32,
+    //     overwritten by SetContactSpyQueueInterface each bridged frame]
+    //   VEQ<13312,16>::Construct @0x82211348 (this+0x3084)
+    //   VEQ<1536,16>::Construct  @0x822C6F78 (this+0x6494)
+    //   DeformationOutputInterface::Construct @0x8228F1B0 (this+0xB490) [deferred: opaque]
+    //   SoundWorldLoadEvent,25::Construct @0x822E50D0 (this+0xEAD4)     [deferred: opaque]
+    //   inline: this+0xEBA8 ptr := 0; this+0xEBAC..BB8 := -1 x4 words; this+0x4 := 0;
+    //     six string-head clears at +0x108 stride 0x101 + {-1,-1,flt_82001CC0} at
+    //     +0x610/+0x614/+0x618  [FLAG deferred: un-modelled members inside maPad1 --
+    //     no PC accessor reads that span yet]; sth 0 @+0x6AB0; stb 0 @+0xEBBC
+    //   PhysicalTrafficState,20::Construct @0x8228DB90 (this+0x74C0)    [deferred: opaque]
+    //   AudioCarDataLoadedEvent,16::Construct @0x822E3670 (this+0xED50)
+    //   PropBecamePhysicalEvent,20::Construct @0x822E4F10 (this+0x103D0)
+    //   PropUpdateNotification,200::Construct @0x825A80D8 (this+0x10520)
+    //   35x { flt_82F2E758 -> AICar+0x140C+4i ; 0x7FFF -> AICar+0x1498+2i } [FLAG deferred:
+    //     inside the opaque AICarOutputInterface; SetAICarOutputInterface's 0x14E8 copy
+    //     overwrites the whole span on every bridged frame]
+    //   this+0x13730 := 0 (u32) + flt_82001CC0 @+0x13734 [the results word cleared below;
+    //     the float slot is past the nominal 4-byte model -- FLAG deferred with it]
+    //   stw 0, this+0x2F10                              -> mePlayerActiveRaceCarIndex
     inline void RootInputBuffer::Construct()
     {
         CgsModule::IOBuffer::Construct();
-        mGameActionQueue.Construct();
-        mGameActionQueue.Clear();
-        // phase C3b: the new real members' own bring-up -- the audio-car queue
-        // and the vehicle interface's live-count arrays (so a reader before the
-        // first SetVehicleData copy sees empty, not the -1 sentinel).
+        mVehicleData.Clear();                       // @0x8227D550 -- the interface's own Clear
+        mGameActionQueue.Construct();               // VEQ Construct runs Clear() itself
+        mGameEventQueue.Construct();                // the C4 fix: BridgeWorldToSound's append target
+        mpGuiEventQueue = 0;
+        std::memset(&mGameModeInterface, 0xFF, sizeof(mGameModeInterface));   // -1 x4 words
+        std::memset(&mReplayStatusInterface, 0, sizeof(mReplayStatusInterface));
+        std::memset(&mTrafficOutputInterface, 0, 2);                          // sth 0 @+0x6AB0
+        mUpdateInfo.mData[0] = 0;                                             // stb 0 @+0xEBBC
         mAudioCarDataLoadedQueue.Construct();
-        mVehicleData.maCarsInTheRace.Clear();   // the interface's one live-count array
-        // (the rest of mVehicleData stays as-carved: SetVehicleData overwrites it
-        // wholesale before any consumer reads, per the per-frame bridge order)
-        mePlayerActiveRaceCarIndex = E_ACTIVE_RACE_CAR_INDEX_INVALID;
+        mPropBecamePhysicalEventQueue.Construct();
+        mPropUpdateNotificationQueue.Construct();
+        std::memset(&mGuiAudioEventResults, 0, sizeof(mGuiAudioEventResults)); // the results word
+        // ⚠️ CORRECTED (C4): the console stores literal 0 here (`li r30,0` ... `stw r30,
+        // 0x2F10(r31)`) == E_ACTIVE_RACE_CAR_INDEX_0 -- NOT the -1 INVALID sentinel the
+        // C3b bring-up seeded. SetVehicleData republishes the live value each bridged frame.
+        mePlayerActiveRaceCarIndex = E_ACTIVE_RACE_CAR_INDEX_0;                // stw 0 @+0x2F10
     }
 
     struct RootPreUpdateOutputBuffer : public CgsModule::IOBuffer
@@ -397,6 +469,17 @@ namespace Io
 
         // BrnRootSoundModuleIo.h:338 (DWARF). X360 0x823B8BB8.
         const PreUpdateOutput& GetPreUpdateOutput() const;
+
+        // The GuiOut event-queue view (faithful-audio-engine phase C4). The X360 body
+        // is the SAME code as GetPreUpdateOutput (assert read-locked, return this+0x8 --
+        // the PreUpdateOutput's leading member IS the queue), so the linker folds both
+        // onto 0x823B8BB8; DoPreUpdate_Sound @0x823EE4D8 consumes this typed view for
+        // its VariableEventQueue<32768,16>::Append<256,16> into the GUI input buffer.
+        const CgsModule::VariableEventQueue<256, 16>& GetGuiEventQueue() const
+        {
+            return *reinterpret_cast<const CgsModule::VariableEventQueue<256, 16>*>(
+                GetPreUpdateOutput().maGuiOutEventQueueStorage);
+        }
 
         // BrnRootSoundModuleIo.h:346 (DWARF). X360 0x826E0C10.
         void SetPreUpdateOutput(const PreUpdateOutput& lPreUpdateOutput);
