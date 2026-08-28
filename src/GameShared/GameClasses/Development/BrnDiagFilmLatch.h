@@ -33,6 +33,15 @@ namespace BrnDiag
         // be tied to the same instant without trusting a timestamp.
         f32 mfLatchedSimScale;
         f32 mfLatchedSimStep;
+
+        // ⭐ THE LIVE scale, refreshed every sub-step. The frame writer stamps it into a sidecar
+        // CSV beside the dump, so every captured frame CARRIES the timestep it was rendered
+        // under. Without it a strip cannot be told apart from an ordinary one: the drive-thru
+        // dilates the SIM timer only, so the camera and the HUD keep running at full rate and
+        // "the picture looks slow" is not something the eye can adjudicate. A frame that names
+        // its own timestep can be.
+        f32 mfLiveSimScale;
+        f32 mfLiveSimStep;
     };
 
     // Defined in GameSource/Game/BrnGameModule.cpp (the only writer).
