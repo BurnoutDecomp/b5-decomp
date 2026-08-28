@@ -39,16 +39,14 @@ static_assert(offsetof(CameraImpactEffect::Parameters, mfShakeMagnitude) == 0x14
 static_assert(offsetof(CameraImpactEffect::Parameters, mfShakeFrequencyScale) == 0x18,
               "CameraImpactEffect::Parameters::mfShakeFrequencyScale @ +0x18");
 
-// @ 0x821F3648 -- BrnCameraShake.h:221 tripwire (non-gating), then keep the larger
-// of the pending factor and the new magnitude (the asm's branchless
-// `fsel(mfImpactFactor - lfImpulseMagnitude, mfImpactFactor, lfImpulseMagnitude)`).
-void CameraImpactEffect::RegisterImpact(f32 lfImpulseMagnitude)
-{
-    CGS_ASSERT(lfImpulseMagnitude >= 0.0f, "lfImpulseMagnitude >= 0.0f");   // :221
-
-    if (mfImpactFactor - lfImpulseMagnitude < 0.0f)
-        mfImpactFactor = lfImpulseMagnitude;
-}
+// ⭐ RegisterImpact @0x821F3648 MOVED OUT (2026-08-29, crash-camera wave), to the partfile
+//     Camera/Utils/BrnCameraImpactEffectRegisterImpact.cpp
+// Same split, same reason as CameraShake::Update -> BrnCameraShakeUpdate.cpp: this TU's three
+// explicit Parameters::Serialise<S> instantiations drag DebugMenuSerialiser /
+// TextFileWriteSerialiser / TextFileReadSerialiser, none of which is on the exe source list, so
+// mounting this file to reach ONE tiny impact accumulator opens serialiser externals to close an
+// impact one. The partfile has no dependency but this header, so it mounts for free.
+// DELETE-WHEN: the three camera-tunings serialisers are mounted -- then fold it back in.
 
 // ----------------------------------------------------------------------------
 // CameraImpactEffect::Parameters::Serialise<S> -- the ONE impact-shake field-walk visitor body.

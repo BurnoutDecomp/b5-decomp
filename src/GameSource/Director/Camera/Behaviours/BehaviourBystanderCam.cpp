@@ -451,211 +451,34 @@ bool BehaviourBystanderCam::Update(Camera& lrCamera, const BehaviourSharedInfo& 
 
     return true;
 }
-
+// ============================================================================
+// ⭐⭐ THE TWO IMPACT CONTROLLERS' Update BODIES MOVED OUT (2026-08-29, crash-camera wave), to
+//     Behaviours/BehaviourBystanderCamImpactControllers.cpp   (declarations: the matching .h)
+//
+// They were here, complete -- ImpactSlomoController::Update @0x82227230 and
+// ImpactShakeController::Update @0x82243720 -- and a handoff recorded that the crash camera's
+// slow motion was therefore "a MOUNT away, not a decompile away". ⛔ IT WAS NOT.
+// This TU reaches every foreign object through the `namespace detail` free-function shims at
+// the top of the file, and NOT ONE OF THEM IS DEFINED anywhere in the tree. Mounting this file
+// to reach the controllers would have opened ~28 unresolved externals -- and the one carrying
+// the entire feature, `Camera_SetTimeScale`, is the ONLY observable effect of the slow-motion
+// controller. Satisfying it with a quiet stub would have linked green and produced no slow
+// motion at all: the classic silent-drop shape.
+//
+// So the two bodies were re-expressed against the REAL types (Camera / AllVehicleData /
+// VehicleTracker / VehicleRef / CameraImpactEffect / CameraShake) in the partfile, which is
+// mounted; this TU stays unmounted until its own detail layer is de-shimmed.
+// ⭐ The move also settled the time-scale slot: `stfs f0, 0x104(camera)` is
+// Camera::mEffects.mfSimTimeScale (mEffects @camera+0x68, mfSimTimeScale @effects+0x9C), i.e.
+// exactly the float MainDirector's slow-motion gate already reads.
+// ⚠️ And it corrected two member names: the player-record probes at +0x1E8 / +0x1E0 are
+// RaceCarState::mAboveGroundTestResult.mbValid and .mfVerticalDistance -- NOT "isOnGround" and
+// "airTime", which is what the comment here used to call them.
+//
+// DELETE-WHEN: this TU's detail shims are replaced by the real callees and it is mounted.
+// Then the partfile can fold back in (and BehaviourBystanderCamImpactControllers.h with it,
+// once the two BehaviourBystanderCam.h reconstructions are merged).
 // ============================================================================
-// BrnDirector::Camera::ImpactSlomoController::Update @0x82227230
-//
-// A three-state slow-mo timer driven by the crash. State is held in two floats (mfTimeSinceLastSlomo
-// @+0, mfTimeInSlomo @+4 -- DWARF/asm order) and the first-frame latch (+8):
-//
-//   mbFirstFrameOfSlomo = false
-//   if (mfTimeInSlomo <= 0.0) {                         // not currently in a burst
-//       lbShouldDoSlomo = false
-//       if (MagnitudeSquared(player.linVel.current) > K_MIN_VELOCITY_SQUARED_MPS &&
-//           player.linVel.previous.y > 0 && player.linVel.current.y < 0 &&        // a vertical flip
-//           (!player.isOnGround || player.airTime > 1.0))                          // airborne / long air
-//           lbShouldDoSlomo = true
-//       if (mfTimeSinceLastSlomo >= K_MIN_TIME_BETWEEN_SLOMOS && lbShouldDoSlomo) {
-//           mfTimeInSlomo += dt; camera.timeScale = 0.2857143; mbFirstFrameOfSlomo = true   // enter
-//       } else if (!lbDontSetRealTime) {
-//           camera.timeScale = 1.0                                                          // real time
-//       }
-//       mfTimeSinceLastSlomo += dt
-//   } else if (mfTimeInSlomo < K_SLOMO_DURATION) {       // sustaining the burst
-//       mfTimeInSlomo += dt; camera.timeScale = 0.2857143
-//   } else {                                             // burst expired
-//       mfTimeInSlomo = 0.0; mfTimeSinceLastSlomo = 0.0
-//       if (!lbDontSetRealTime) camera.timeScale = 1.0
-//   }
-//
-// The vector tests are the asm's vmsum3fp128 / vspltw.y / vcmpgtfp pairs over the player tracker's
-// velocity journal (current @ GetCurrent, previous @ GetPrevious); the player record's on-ground
-// flag (+0x1E8) and air-time (+0x1E0) come from AllVehicleData::GetPlayer. The camera time-scale
-// slot the asm writes is +0x104.
-// ============================================================================
-void ImpactSlomoController::Update(Camera& lrCamera, f32 lfTimestep,
-                                   const AllVehicleData& lrVehicles,
-                                   const VehicleTracker& lrPlayerTracker,
-                                   BrnDirector::DebugPrinter& /*lrDebugPrinter*/,
-                                   bool lbDontSetRealTime)
-{
-    // console-pinned constants, read from the X360 .rdata (BURNOUT_X360_ARTIST.XEX.i64).
-    const f32 KF_SLOMO_DURATION          = 2.0f;       // flt_82CDAD34 = 2.0 (burst length, seconds)
-    const f32 KF_MIN_TIME_BETWEEN_SLOMOS = 2.0f;       // flt_82CDAD30 = 2.0 (cool-down, seconds)
-    const f32 KF_SLOMO_TIME_SCALE        = 0.2857143f; // flt_8200177C = 0.2857143 (in-slomo time-scale)
-    const f32 KF_REAL_TIME_SCALE         = 1.0f;       // flt_82001C98 = 1.0 (normal real-time scale)
-    // unk_82FAA730 is a 16-byte vector literal that the asm splats lane 0 of; the .rdata value is
-    // genuinely all-zero, so K_MIN_VELOCITY_SQUARED_MPS = 0.0 (the vcmpgtfp gate is "magSq > 0").
-    // ⭐⭐ RECOVERED 2026-08-03, and the NAME is confirmed along with the number. The initialiser
-    // @82C49480 multiplies flt_8200D5F8 (30.0) by flt_82F31928 (0.447039992 = MPH->m/s) and squares:
-    // (30 MPH -> 13.4112 m/s)^2 = 179.860275 exactly. So the constant is a minimum-speed gate of
-    // 30 MPH held in squared m/s -- which is what "MIN_VELOCITY_SQUARED_MPS" says, unit and all.
-    // ⚠️ Carried as 0.0 the gate passed at ANY speed, so the bystander camera never rejected a
-    // stationary or crawling car.
-    const f32 KF_MIN_VELOCITY_SQUARED_MPS = 179.860275f;   // unk_82FAA730 = (30 MPH in m/s)^2
-
-    void* lpCamera = &lrCamera;
-    const void* lpVehicles = &lrVehicles;
-    const void* lpPlayerTracker = &lrPlayerTracker;
-
-    mbFirstFrameOfSlomo = false;                       // stb 0, 8(this)
-
-    if (mfTimeInSlomo <= 0.0f)                          // not currently in a burst
-    {
-        // decide whether a fresh burst should start this frame, from the player's velocity journal.
-        bool lbShouldDoSlomo = false;
-
-        // the asm resolves the player twice up-front (the two GetPlayer calls before the journal).
-        AllVehicleData_GetPlayer(lpVehicles);
-        AllVehicleData_GetPlayer(lpVehicles);
-
-        const f32 lfSpeedSq  = PlayerTracker_GetCurrentVelMagSq(lpPlayerTracker); // |linVel.current|^2
-        if (lfSpeedSq > KF_MIN_VELOCITY_SQUARED_MPS)
-        {
-            const f32 lfPrevVelY = PlayerTracker_GetPreviousVelY(lpPlayerTracker); // linVel.previous.y
-            if (lfPrevVelY > 0.0f)
-            {
-                const f32 lfCurrVelY = PlayerTracker_GetCurrentVelY(lpPlayerTracker); // linVel.current.y
-                if (lfCurrVelY < 0.0f)   // a downward flip-over: prev going up, now coming down
-                {
-                    void* lpPlayer = AllVehicleData_GetPlayer(lpVehicles);
-                    if (!Player_IsOnGround(lpPlayer))
-                    {
-                        lbShouldDoSlomo = true;
-                    }
-                    else
-                    {
-                        lpPlayer = AllVehicleData_GetPlayer(lpVehicles);
-                        if (Player_GetAirTime(lpPlayer) > 1.0f)
-                            lbShouldDoSlomo = true;
-                    }
-                }
-            }
-        }
-
-        if (mfTimeSinceLastSlomo >= KF_MIN_TIME_BETWEEN_SLOMOS && lbShouldDoSlomo)
-        {
-            mfTimeInSlomo += lfTimestep;               // stfs ..., 4(this)  (start the burst clock)
-            Camera_SetTimeScale(lpCamera, KF_SLOMO_TIME_SCALE);   // timeScale = 0.2857143 (+0x104)
-            mbFirstFrameOfSlomo = true;                // stb 1, 8(this)
-        }
-        else if (!lbDontSetRealTime)
-        {
-            Camera_SetTimeScale(lpCamera, KF_REAL_TIME_SCALE);    // timeScale = 1.0
-        }
-
-        mfTimeSinceLastSlomo += lfTimestep;            // stfs ..., 0(this)  (advance the cool-down)
-    }
-    else if (mfTimeInSlomo < KF_SLOMO_DURATION)        // sustaining the burst
-    {
-        mfTimeInSlomo += lfTimestep;                   // stfs ..., 4(this)
-        Camera_SetTimeScale(lpCamera, KF_SLOMO_TIME_SCALE);       // timeScale = 0.2857143
-    }
-    else                                               // burst expired
-    {
-        mfTimeInSlomo        = 0.0f;                   // stfs 0.0, 4(this)
-        mfTimeSinceLastSlomo = 0.0f;                   // stfs 0.0, 0(this)
-        if (!lbDontSetRealTime)
-            Camera_SetTimeScale(lpCamera, KF_REAL_TIME_SCALE);    // timeScale = 1.0
-    }
-}
-
-// ============================================================================
-// BrnDirector::Camera::ImpactShakeController::Update @0x82243720
-//
-// Compute an impact strength from the player vehicle's collision force, attenuated by speed and by
-// distance to the player, register it as a one-shot camera impact, then advance the embedded shake.
-//
-//   strength = K_IMPACT_FORCE_SCALE * vehicle.collisionForce          // *(veh+0x4E0) * 82CDAD7C
-//   absSpeed = |vehicle.speed|                                        // |*(veh+0x3CC)|
-//   if (absSpeed < K_SPEED_RANGE)                                     // 82CDAD78
-//       strength *= absSpeed / K_SPEED_RANGE                          // low-speed dampening
-//   strength = clamp(strength, 0.0, 0.5)                              // fsel pair -> [0, 0.5]
-//   distSq = |camera.pos - vehicle.pos|^2
-//   if (distSq > K_FADE_NEAR)                                         // 82CDAD74
-//       strength *= 1 - (clamp(distSq, near, far) - near) / (far - near)   // distance fade
-//   strength = clamp(strength, 0.0, 1.0)
-//   zoom = GetZoomFromFOVDegs(camera.fovDegrees)                      // *(camera+0x58)
-//   RegisterImpact(this, strength / zoom)
-//   shakeParams = { 0.06, 0.0, 1.15, 0.11, 0.05, 15.0, 5.0 }         // the 820047xx quad+tail
-//   CameraShake::Update(&mImpactEffect.shake, camera, shakeParams, ..., dt*5.0, mfImpactScalar*15.0)
-//   mfImpactScalar += -mfImpactScalar * 0.05                          // ease the scalar toward 0
-// ============================================================================
-void ImpactShakeController::Update(Camera& lrCamera, f32 lfTimestep,
-                                   const AllVehicleData& lrVehicles,
-                                   const VehicleTracker& lrPlayerTracker,
-                                   Utils::Random& lrRandom,
-                                   BrnDirector::DebugPrinter& /*lrDebugPrinter*/,
-                                   const VehicleRef& lrVehicleRef)
-{
-    // console-pinned constants, read from the X360 .rdata (BURNOUT_X360_ARTIST.XEX.i64).
-    const f32 KF_IMPACT_FORCE_SCALE = 8.0e-08f;  // flt_82CDAD7C = 7.99999995e-08 (force -> strength)
-    const f32 KF_SPEED_RANGE        = 30.0f;     // flt_82CDAD78 = 30.0 (low-speed dampening range)
-    const f32 KF_FADE_NEAR          = 25.0f;     // flt_82CDAD74 = 25.0 (distance-fade near radius^2)
-    const f32 KF_FADE_FAR           = 6400.0f;   // flt_82CDAD70 = 6400.0 (distance-fade far radius^2)
-    const f32 KF_MAX_IMPACT_STRENGTH = 0.5f;     // flt_82001DA0 = 0.5 (the clamp upper bound)
-
-    void* lpCamera = &lrCamera;
-    const void* lpVehicles = &lrVehicles;
-    const void* lpPlayerTracker = &lrPlayerTracker;
-    const void* lpVehicleRef = &lrVehicleRef;
-    (void)lpVehicles; (void)lpPlayerTracker;
-
-    // resolve the impacting vehicle twice (asm: the two VehicleRef::Get calls with the tracker args).
-    f32 lfStrength = KF_IMPACT_FORCE_SCALE *
-        Vehicle_GetCollisionForce(VehicleRef_Get(lpVehicleRef, 0));   // collisionForce (+0x4E0)
-
-    const f32 lfAbsSpeed = std::fabs(
-        Vehicle_GetSpeed(VehicleRef_Get(lpVehicleRef, 0)));           // |speed| (+0x3CC)
-    if (lfAbsSpeed < KF_SPEED_RANGE)
-        lfStrength = (lfAbsSpeed / KF_SPEED_RANGE) * lfStrength;
-
-    // clamp(strength, 0.0, KF_MAX_IMPACT_STRENGTH) -- the fneg/fsel pair (lower 0.0, upper 0.5).
-    if (lfStrength < 0.0f) lfStrength = 0.0f;
-    if (lfStrength > KF_MAX_IMPACT_STRENGTH) lfStrength = KF_MAX_IMPACT_STRENGTH;
-
-    // distance fade: distSq = |camera.pos - vehicle.pos|^2 (vsubfp + vmsum3fp128).
-    const f32 lfDistSq = ImpactShake_CamToVehicleDistSq(lpCamera, VehicleRef_Get(lpVehicleRef, 0));
-    if (lfDistSq > KF_FADE_NEAR)
-    {
-        const f32 lfClamped = (lfDistSq < KF_FADE_FAR) ? lfDistSq : KF_FADE_FAR;
-        const f32 lfFade = 1.0f - ((lfClamped - KF_FADE_NEAR) / (KF_FADE_FAR - KF_FADE_NEAR));
-        lfStrength = lfFade * lfStrength;
-    }
-
-    // clamp(strength, 0.0, 1.0).
-    if (lfStrength < 0.0f) lfStrength = 0.0f;
-    if (lfStrength > 1.0f) lfStrength = 1.0f;
-
-    const f32 lfZoom = GetZoomFromFOVDegs(Camera_GetFovDegrees(lpCamera));   // camera.fovDegrees (+0x58)
-    CameraImpactEffect_RegisterImpact(&mfImpactScalar, lfStrength / lfZoom);
-
-    // advance the embedded shake with the impact shake-param block. asm store order (stack var_70..
-    // var_58, 4 bytes apart) pins each lane's source literal:
-    float laShakeParams[7];
-    laShakeParams[0] = 0.06f;   // flt_820047B8 = 0.06
-    laShakeParams[1] = 0.0f;    // flt_82001CC0 = 0.0
-    laShakeParams[2] = 1.15f;   // flt_820047BC = 1.15
-    laShakeParams[3] = 0.11f;   // flt_820047C0 = 0.11
-    laShakeParams[4] = 0.05f;   // flt_820047C8 = 0.05
-    laShakeParams[5] = 15.0f;   // flt_820047C4 = 15.0
-    laShakeParams[6] = 5.0f;    // flt_8200426C = 5.0
-    CameraShake_Update(&maImpactEffect, lpCamera, laShakeParams, &lrRandom,
-                       lfTimestep * 5.0f, mfImpactScalar * 15.0f);
-
-    // ease the registered scalar back toward zero: scalar += -scalar * 0.05.
-    mfImpactScalar = (-mfImpactScalar * 0.05f) + mfImpactScalar;
-}
 
 } // namespace Camera
 } // namespace BrnDirector
