@@ -13,6 +13,8 @@
 // =====================================================================================
 
 #include "rw/audio/core/Iir2Filters.h"
+#include "rw/audio/core/PlugIn.h"        // PlugInDescRunTime (the real descriptor record)
+#include "rw/audio/core/plugins/Delay.h" // Delay::GetSize (the ICF-shared GetSize body)
 #include "rw/audio/core/Voice.h"   // the owning Voice (mfFadeStart decay accumulator)
 
 #include <cmath>
@@ -26,14 +28,36 @@ namespace core
 
 // off_82F8C3D0 -- run-time plug-in descriptor (undecoded rodata; accessor returns its
 // address). FLAGGED: descriptor payload is undecoded rodata.
-static char *g_BandPassIir2Desc = 0; // off_82F8C3D0
+// off_82F8C3D0 -- the "BandPassIir2" runtime descriptor, REAL (descriptor-record
+// wave; the console GetSize is the ICF-folded Delay::GetSize @0x82B96A38 -- the
+// host record carries the same shared body). Metadata FLAG'd null.
+// The dispatch thunk for the record's Process slot: the console callback takes
+// the instance in r3; the PC body is a member, so this static forward IS the
+// dispatched (instance, ctx) shape.
+static int BandPassIir2ProcessThunk(BandPassIir2 *self, AudioProcessContext *ctx)
+{
+    return self->Process(ctx);
+}
+
+static PlugInDescRunTime g_BandPassIir2Desc = {
+    "BandPassIir2",
+    reinterpret_cast<void *>(&Delay::GetSize),               // @0x82B96A38 (folded/shared)
+    reinterpret_cast<void *>(&BandPassIir2::CreateInstance), // @0x82BA2398
+    0,
+    reinterpret_cast<void *>(&BandPassIir2ProcessThunk),        // @0x82B9D778
+    0, 0, 0, 0,
+    0,
+    0x42493230u,       // 'BI20'
+    4, 0, 2, 0, 0, 0,
+    0
+};
 
 // -------------------------------------------------------------------------------------
 // GetPlugInDescRunTime @0x82B96A40 -- return &off_82F8C3D0.
 // -------------------------------------------------------------------------------------
 char **BandPassIir2::GetPlugInDescRunTime()
 {
-    return &g_BandPassIir2Desc;
+    return reinterpret_cast<char **>(&g_BandPassIir2Desc);
 }
 
 // -------------------------------------------------------------------------------------

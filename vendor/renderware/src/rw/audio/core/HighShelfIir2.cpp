@@ -13,6 +13,8 @@
 // =====================================================================================
 
 #include "rw/audio/core/Iir2Filters.h"
+#include "rw/audio/core/PlugIn.h"        // PlugInDescRunTime (the real descriptor record)
+#include "rw/audio/core/plugins/Delay.h" // Delay::GetSize (the ICF-shared GetSize body)
 #include "rw/audio/core/Voice.h"   // the owning Voice (mfFadeStart decay accumulator)
 
 #include <cmath>
@@ -26,7 +28,28 @@ namespace core
 
 // off_82F8D014 -- run-time plug-in descriptor (undecoded rodata; accessor returns its
 // address). FLAGGED: descriptor payload is undecoded rodata.
-static char *g_HighShelfIir2Desc = 0; // off_82F8D014
+// off_82F8D014 -- the "HighShelfIir2" runtime descriptor, REAL (descriptor-record
+// wave; console GetSize = the ICF-folded Delay::GetSize @0x82B96A38). Metadata FLAG'd null.
+// The dispatch thunk for the record's Process slot: the console callback takes
+// the instance in r3; the PC body is a member, so this static forward IS the
+// dispatched (instance, ctx) shape.
+static int HighShelfIir2ProcessThunk(HighShelfIir2 *self, AudioProcessContext *ctx)
+{
+    return self->Process(ctx);
+}
+
+static PlugInDescRunTime g_HighShelfIir2Desc = {
+    "HighShelfIir2",
+    reinterpret_cast<void *>(&Delay::GetSize),                // @0x82B96A38 (folded/shared)
+    reinterpret_cast<void *>(&HighShelfIir2::CreateInstance), // @0x82BA2EA8
+    0,
+    reinterpret_cast<void *>(&HighShelfIir2ProcessThunk),        // @0x82B9E1F8
+    0, 0, 0, 0,
+    0,
+    0x48533230u,       // 'HS20'
+    4, 0, 2, 0, 0, 0,
+    0
+};
 
 static inline f64 Fsqrts(f64 x) { return static_cast<f32>(sqrt(x)); }
 
@@ -35,7 +58,7 @@ static inline f64 Fsqrts(f64 x) { return static_cast<f32>(sqrt(x)); }
 // -------------------------------------------------------------------------------------
 char **HighShelfIir2::GetPlugInDescRunTime()
 {
-    return &g_HighShelfIir2Desc;
+    return reinterpret_cast<char **>(&g_HighShelfIir2Desc);
 }
 
 // -------------------------------------------------------------------------------------

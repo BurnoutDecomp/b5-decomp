@@ -14,6 +14,7 @@
 // =====================================================================================
 
 #include "rw/audio/core/Rechannel.h"
+#include "rw/audio/core/PlugIn.h"  // PlugInDescRunTime (the real descriptor record)
 #include "rw/audio/core/MixKernels.h" // ReChannelGainWrite
 
 namespace rw
@@ -31,7 +32,21 @@ namespace core
 // contents -- the same idiom Gain.cpp / Send.cpp use.
 static void *const KRC_RechannelVTable = nullptr;   // off_8217F4F4
 static void *const KRC_BasePlugInVTable = nullptr;  // off_820AA810
-static char       *g_RechannelDesc = const_cast<char *>("Rechannel"); // off_82F8F884 (label "Rechannel")
+// off_82F8F884 -- the "Rechannel" runtime descriptor, REAL (descriptor-record wave;
+// the one registered plug-in with a live PreProcess AND variable input channels).
+// Metadata FLAG'd null.
+static PlugInDescRunTime g_RechannelDesc = {
+    "Rechannel",
+    reinterpret_cast<void *>(&Rechannel::GetSize),        // @0x82B982E0
+    reinterpret_cast<void *>(&Rechannel::CreateInstance), // @0x82BA37D0
+    reinterpret_cast<void *>(&Rechannel::PreProcess),     // @0x82B97F98
+    reinterpret_cast<void *>(&Rechannel::Process),        // @0x82B9A728
+    0, 0, 0, 0,
+    0,
+    0x52636830u,       // 'Rch0'
+    1, 0, 0, 0, 1, 0,
+    0
+};
 
 // The whole instance is the embedded PlugIn base view (X360 GetSize() == 36 == 0x24; the
 // host sizeof is larger because the base view's pointers widen to 8 bytes -- see Send.h's
@@ -57,7 +72,7 @@ int Rechannel::CreateInstance(Rechannel *self)
 // -------------------------------------------------------------------------------------
 char **Rechannel::GetPlugInDescRunTime()
 {
-    return &g_RechannelDesc; // &off_82F8F884
+    return reinterpret_cast<char **>(&g_RechannelDesc); // &off_82F8F884 (the record address)
 }
 
 // -------------------------------------------------------------------------------------

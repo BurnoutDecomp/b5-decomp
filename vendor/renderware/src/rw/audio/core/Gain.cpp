@@ -12,6 +12,8 @@
 // =====================================================================================
 
 #include "rw/audio/core/Gain.h"
+#include "rw/audio/core/PlugIn.h"      // PlugInDescRunTime (the real descriptor record)
+#include "rw/audio/core/RawPuller2.h"  // RawPuller2::GetSize (the ICF-shared GetSize body)
 #include "rw/audio/core/MixKernels.h" // CopyWithGainRamp
 
 namespace rw
@@ -28,7 +30,21 @@ namespace core
 // storage so the bodies below link without fabricating their contents.
 static void *const KGN_GainVTable = nullptr;    // off_8217F3D4
 static void *const KGN_BasePlugInVTable = nullptr; // off_820AA810
-static char       *g_GainDesc = nullptr;        // off_82F8CB70 (the "Gain" record)
+// off_82F8CB70 -- the "Gain" runtime descriptor, REAL (descriptor-record wave; the
+// console GetSize is the ICF-folded RawPuller2::GetSize @0x82B97348 -- the host
+// record carries the same shared body). Metadata FLAG'd null.
+static PlugInDescRunTime g_GainDesc = {
+    "Gain",
+    reinterpret_cast<void *>(&RawPuller2::GetSize),  // @0x82B97348 (folded/shared)
+    reinterpret_cast<void *>(&Gain::CreateInstance), // @0x82BA2BD0
+    0,
+    reinterpret_cast<void *>(&Gain::Process),        // @0x82B97600
+    0, 0, 0, 0,
+    0,
+    0x47616930u,       // 'Gai0'
+    4, 0, 1, 0, 0, 0,
+    0
+};
 
 // The full mixer frame is processed per Process call (li r7, 0x100 == MIXER_FRAME_SIZE),
 // and the de-click ramp spans GAIN_DECLICK_FRAME_SIZE (64) samples, so the per-sample step
@@ -42,7 +58,7 @@ static const f32 KF_GAIN_DECLICK_STEP = 0.015625f; // 1 / GAIN_DECLICK_FRAME_SIZ
 // -------------------------------------------------------------------------------------
 char **Gain::GetPlugInDescRunTime()
 {
-    return &g_GainDesc; // &off_82F8CB70
+    return reinterpret_cast<char **>(&g_GainDesc); // &off_82F8CB70 (the record address)
 }
 
 // -------------------------------------------------------------------------------------

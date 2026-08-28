@@ -31,19 +31,13 @@ static inline uintptr_t AlignUp(uintptr_t v, uintptr_t a)
     return (v + (a - 1)) & ~(a - 1);
 }
 
-// View over the PlugInDescRunTime fields CreateInstance reads while sizing/wiring each
-// stage. PlugIn.h keeps these opaque; interpreted here by name, matching the local-view
-// idiom PlugIn::CreateInstance uses for its factory/descriptor arguments.
-struct VoiceStageDesc
-{
-    void *mSlot00;                                       // +0x00
-    u32 (*mpfnGetSize)(const VoiceStageConfig *config);  // +0x04 -- stage byte/sample size
-    void *mSlot08;                                       // +0x08
-    void *mpPreProcess;                                  // +0x0C
-    void *mpProcess;                                     // +0x10
-    u8 mPad14[0x2C - 0x14];                              // +0x14..0x2B
-    u8 mucPlugInType;                                    // +0x2C -- <= 3 marks the source stage
-};
+// (The former VoiceStageDesc local view over the then-opaque PlugInDescRunTime is
+// RETIRED -- descriptor-record wave 2026-08-28: PlugIn.h types the record in full,
+// and the console-offset pad the view carried would have misread a host-width
+// record past the pointer block. Reads below go through the real type BY NAME;
+// the GetSize dispatch cast happens at the one call site, exactly where the
+// console's generic dispatch is.)
+typedef u32 (*VoiceStageGetSizeFn)(const VoiceStageConfig *config);
 
 // The deferred-command records the Voice methods push into the System ring buffer. Each is
 // { handler, voice[, payload] }; replayed later by the matching *Handler.
@@ -86,8 +80,8 @@ Voice *Voice::CreateInstance(u8 priority, int numStages, VoiceStageConfig *confi
         static_cast<u32>(numStages) * sizeof(VoiceStageData);
     for (int i = 0; i < numStages; ++i)
     {
-        VoiceStageDesc *desc = reinterpret_cast<VoiceStageDesc *>(configs[i].mpDesc);
-        u32 stageSize = desc->mpfnGetSize(&configs[i]);
+        PlugInDescRunTime *desc = reinterpret_cast<PlugInDescRunTime *>(configs[i].mpDesc);
+        u32 stageSize = reinterpret_cast<VoiceStageGetSizeFn>(desc->pGetSize)(&configs[i]);
         blockSize = stageSize + static_cast<u32>(AlignUp(blockSize, 16));
     }
 
@@ -134,13 +128,14 @@ Voice *Voice::CreateInstance(u8 priority, int numStages, VoiceStageConfig *confi
     u8 flag = 0;
     for (int i = 0; i < numStages; ++i)
     {
-        VoiceStageDesc *desc = reinterpret_cast<VoiceStageDesc *>(configs[i].mpDesc);
+        PlugInDescRunTime *desc = reinterpret_cast<PlugInDescRunTime *>(configs[i].mpDesc);
         VoiceStageData *stage = &voice->mpStageData[i];
 
-        if (desc->mucPlugInType <= 3)
+        if (desc->mu8PlugInType <= 3)
             voice->mcSourceStageIndex = static_cast<s8>(i);
 
-        u16 sampleCount = static_cast<u16>(desc->mpfnGetSize(&configs[i]));
+        u16 sampleCount = static_cast<u16>(
+            reinterpret_cast<VoiceStageGetSizeFn>(desc->pGetSize)(&configs[i]));
         placementCursor = AlignUp(placementCursor, 16);
         stage->muSampleCount = sampleCount;
         PlugIn *placement = reinterpret_cast<PlugIn *>(placementCursor);
@@ -154,8 +149,8 @@ Voice *Voice::CreateInstance(u8 priority, int numStages, VoiceStageConfig *confi
             Voice::ReleaseImmediate(voice, 1);
             return 0;
         }
-        stage->mpProcess = desc->mpProcess;
-        stage->mpPreProcess = desc->mpPreProcess;
+        stage->mpProcess = desc->pProcess;
+        stage->mpPreProcess = desc->pPreProcess;
         flag = static_cast<u8>(configs[i].mFlagAndField8);
     }
 

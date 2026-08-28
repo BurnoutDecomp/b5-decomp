@@ -110,6 +110,12 @@ namespace BrnGameState { class TrainingManager; }
 // bridge body includes the real homes) to keep the heavy IO headers out of this keystone header.
 namespace BrnReplays { namespace ReplayIO { struct InputBuffer_PostSim; } }
 namespace BrnSound { namespace Module { namespace Io { struct RootInputBuffer; } } }
+// DoUpdate_Sound @0x823DCEC0 parameter types (phase C4b) -- the sound root OUTPUT buffer,
+// the replay pre-sim OUTPUT buffer, and the effects OUTPUT buffer. Forward-declared; the
+// leg body includes the real homes.
+namespace BrnSound { namespace Module { namespace Io { struct RootOutputBuffer; } } }
+namespace BrnReplays { namespace ReplayIO { struct OutputBuffer_PreSim; } }
+namespace BrnEffects { namespace EffectsIO { struct OutputBuffer; } }
 // The event-translating bridges (BridgeGuiToGameState / TranslateGuiEventsToNetworkEvents /
 // BridgeGuiToGame) take/return CgsModule::VariableEventQueue<N,16> pointers. Forward-declared
 // here (the bridge bodies include the real CgsVariableEventQueue.h) to keep the heavy template
@@ -175,6 +181,43 @@ namespace BrnGame
         //   DoDispatch -- the game module's per-frame render-dispatch spine (MainGameFlowStateInGame::Render)
         int DoUpdate();
         int DoDispatch();
+
+        // @ 0x823EE4D8 -- the SOUND pre-update leg of the per-frame cascade (both the full
+        // spine and LoadingScriptedState::Update @0x823F2714 call it, ahead of the network /
+        // game-state / world drives). Console body, statement for statement:
+        //   StartMonitor(mCpuMonitors.miUT_Sound); StartMonitor(miUT_SoundUpdate);
+        //   mSoundModule.PreUpdate(lpStack, lpPreUpdateOut);
+        //   { W(guiIn) + R(preUpdateOut) lock pair (console helper sub_823B6FE0):
+        //     guiIn->GetGuiEvents()->Append<256,16>(preUpdateOut's GuiOut queue);
+        //     BridgeSoundToTraining(preUpdateOut); unlock pair }
+        //   StopMonitor(miUT_SoundUpdate); StopMonitor(miUT_Sound);
+        // The stack argument is the update-OUTPUT stack (only forwarded into PreUpdate,
+        // which carves its "SoundLogicPreUpdateOutput" scratch from it).
+        void DoPreUpdate_Sound(CgsModule::IOBufferStack* lpUpdateOutputBufferStack,
+                               BrnSound::Module::Io::RootPreUpdateOutputBuffer* lpSoundPreUpdateOutputBuffer,
+                               CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInputBuffer);
+
+        // @ 0x823DCEC0 -- the SOUND leg of the full per-frame cascade (DoUpdate's post-world
+        // position: after DoUpdate_Effects, before DoUpdate_ReplaysPostSim). The console body
+        // (11 params + this; full decode progress/scratch_dossiers/doupdate_sound_0x823DCEC0.md):
+        // perfmon pair; self-carve a RootInputBuffer "Sound" off the INPUT stack; under the
+        // console's six-buffer lock helper (W rootIn + R director/world/gamestate/gui/replays)
+        // plus the interleaved effects read lock (a lock-only participant nothing reads):
+        // BridgeWorldToSound -> SetCameraInput(director camera output) -> BridgeGameStateToSound
+        // -> BridgeGuiToSound -> SetReplayStatusInterface; all locks released, then
+        // RootSoundModule::Update (the same timer products as the loading spine); stops;
+        // destroy the self-carved buffer. NO resource forward here -- the caller drains the
+        // root output in its own tail.
+        void DoUpdate_Sound(CgsModule::IOBufferStack* lpInputBufferStack,
+                            CgsModule::IOBufferStack* lpOutputBufferStack,
+                            BrnGameState::GameStateModuleIO::OutputBuffer* lpGameStateOutputBuffer,
+                            BrnWorldIO::UpdateOutputBuffer* lpWorldOutputBuffer,
+                            BrnDirector::DirectorIO::OutputBuffer* lpDirectorOutputBuffer,
+                            BrnReplays::ReplayIO::OutputBuffer_PreSim* lpReplaysPreSimOutputBuffer,
+                            BrnSound::Module::Io::RootOutputBuffer* lpSoundOutputBuffer,
+                            CgsGui::CgsGuiModuleIO::OutputBuffer* lpGuiOutputBuffer,
+                            BrnEffects::EffectsIO::OutputBuffer* lpEffectsOutputBuffer,
+                            BrnUpdateSet leUpdateSet);
 
         // @ 0x823E8BD0 -- the WORLD leg of the per-frame update cascade: create this
         // frame's BrnWorldIO::UpdateInputBuffer on the update input stack, stage the
@@ -325,6 +368,15 @@ namespace BrnGame
         // the frame's update set from the flow state before deciding whether to drive the
         // world at all (the others are DoDispatch, ConstructUpdateSet and DoUpdate).
         BrnUpdateSet ConstructUpdateSetFromFsm();
+
+        // ⭐ ADDITIVE (faithful-audio-engine phase C4; header-only inlines). The console
+        // computes RootSoundModule::Update's two f32 time steps inline in each spine --
+        // LoadingScriptedState::Update @0x823F2AB0-C4 and DoUpdate_Sound @0x823DCEC0 both
+        // load gameTimer(gm+0x9A0AD4)/simTimer(gm+0x9A0AF0) fields [+0x10]*[+0xC]
+        // (mfScaleCurrent * mfRate) straight off the module. Exposed BY NAME so the live
+        // PC spine reads the same pair without a console byte offset.
+        const CgsSystem::Timer& GetGameTimer() const { return mGameTimer; }
+        const CgsSystem::Timer& GetSimTimer() const  { return mSimTimer; }
 
     private:
         // @ BrnGameModule.cpp:1845 - the per-frame update spine: latch frame-rate stepping,
@@ -571,6 +623,13 @@ namespace BrnGame
         // This sub-step's GUI module INPUT buffer (live between CreateStaticIOBuffers /
         // DestroyStaticIOBuffers; the flow states' initial-FSM post reaches it here).
         CgsGui::CgsGuiModuleIO::InputBuffer* GetGuiInputBuffer() { return mpGuiInputBuffer; }
+        // This sub-step's GUI module OUTPUT buffer (same lifetime; the sound spine's
+        // BridgeGuiToSound source -- faithful-audio-engine phase C4).
+        CgsGui::CgsGuiModuleIO::OutputBuffer* GetGuiOutputBuffer() { return mpGuiOutputBuffer; }
+        // This sub-step's DIRECTOR OUTPUT buffer (CreateStaticIOBuffers lifetime; the console
+        // holds it as the persistent member gm+0x9A0BDC and DoUpdate passes it into
+        // DoUpdate_Sound's SetCameraInput leg -- phase C4b).
+        BrnDirector::DirectorIO::OutputBuffer* GetDirectorOutputBuffer() { return mpDirectorOutputBuffer; }
         // The console reaches the GUI module through the module scheduler (`*off_830102D0 +
         // 0x6EAA20`, the raw member address, in LoadGUIModule @0x823EF310 and everywhere else
         // on the loading path). The PC has no scheduler, so the loading-screen state reaches

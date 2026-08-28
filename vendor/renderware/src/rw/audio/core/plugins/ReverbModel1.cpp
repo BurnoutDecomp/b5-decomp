@@ -65,7 +65,20 @@ extern "C" System *off_83271928;
 // storage so the bodies below link without fabricating their contents.
 static void *const KRV_ReverbModel1VTable = nullptr; // off_8217F59C
 static void *const KRV_BasePlugInVTable   = nullptr; // off_820AA810 (base PlugIn v-table the dtor reinstalls)
-static char       *KRV_ReverbModel1Desc = nullptr;   // off_82F8FA14 (the "ReverbModel1" record)
+// off_82F8FA14 -- the "ReverbModel1" runtime descriptor, REAL (descriptor-record
+// wave). Metadata FLAG'd null.
+static PlugInDescRunTime KRV_ReverbModel1Desc = {
+    "ReverbModel1",
+    reinterpret_cast<void *>(&ReverbModel1::GetSize),        // @0x82B9ADA8
+    reinterpret_cast<void *>(&ReverbModel1::CreateInstance), // @0x82BA67F8
+    0,
+    reinterpret_cast<void *>(&ReverbModel1::Process),        // @0x82B9F7D0
+    0, 0, 0, 0,
+    0,
+    0x524D3130u,       // 'RM10'
+    4, 0, 3, 0, 0, 0,
+    0
+};
 
 // The full mixer frame is processed per Process call; the reverb targets a 48 kHz internal
 // rate (flt_820AA808) and its section maths use these fixed immediates.
@@ -313,7 +326,7 @@ int ReverbModel1::GetSize()
 // -------------------------------------------------------------------------------------
 char **ReverbModel1::GetPlugInDescRunTime()
 {
-    return &KRV_ReverbModel1Desc; // &off_82F8FA14
+    return reinterpret_cast<char **>(&KRV_ReverbModel1Desc); // &off_82F8FA14 (the record address)
 }
 
 // -------------------------------------------------------------------------------------

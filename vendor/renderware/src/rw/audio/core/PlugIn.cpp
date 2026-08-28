@@ -16,17 +16,12 @@ namespace audio
 namespace core
 {
 
-// The factory/feature passed to CreateInstance exposes a virtual-like slot at +8
-// that is a "begin/validate" hook returning a bool (asm: lwz r11,8(a3); bctrl, with
-// r3=self and r4=*(a4)). The companion descriptor `a4` carries the initial-state
-// payload: a "context" pointer at +0 and an init flag byte at +8. Both are modelled
-// as reconstructed views so the call/stores stay member-by-name.
-struct PlugInFactory
-{
-    void *mpSlot0;                         // +0x00
-    void *mpSlot4;                         // +0x04
-    int (*mpBegin)(PlugIn *self, void *context); // +0x08 -- the validate/begin hook
-};
+// (The former PlugInFactory local view over the then-opaque descriptor is RETIRED --
+// descriptor-record wave 2026-08-28: the "+8 begin/validate hook" IS the typed
+// PlugInDescRunTime::pCreateInstance slot; the dispatch below casts at the call, the
+// console's own generic-dispatch site.) The companion `a4` record keeps its view:
+// a "context" pointer at +0 and an init flag byte at +8.
+typedef int (*PlugInCreateInstanceFn)(PlugIn *self, void *context);
 
 struct PlugInCreateDesc
 {
@@ -64,8 +59,8 @@ PlugIn *PlugIn::CreateInstance(PlugIn *self, Voice *voice, PlugInDescRunTime *pD
     PlugInCreateDesc *desc = static_cast<PlugInCreateDesc *>(typeRecord);
     self->mOutputChannels = desc->mbInitFlag; // lbz 8(a4) -> stb 0x21
 
-    PlugInFactory *fac = reinterpret_cast<PlugInFactory *>(pDesc);
-    if (!fac->mpBegin(self, desc->mpContext)) // (*(a3+8))(self, *(a4))
+    if (!reinterpret_cast<PlugInCreateInstanceFn>(pDesc->pCreateInstance)(
+            self, desc->mpContext)) // (*(a3+8))(self, *(a4))
     {
         // Begin failed: virtually destruct (vt[0]) then Destroy(0) (vt[3]) and bail.
         self->~PlugIn();                      // (**self)(self)
