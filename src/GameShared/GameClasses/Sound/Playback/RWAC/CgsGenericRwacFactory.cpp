@@ -258,11 +258,11 @@ GenericRwacFactory::GenericRwacFactory(Environment& arEnvironment,
         // authoritative member/enum names. Every slot in all five records now
         // points at a real bodied callback, so none of them is the null-slot
         // poison the deferral was guarding against.
-        // ONE honest gap rides along, stated rather than hidden: Limiter1's
-        // dynamics kernel is CompressorLimiter1::Process, still an unbodied
-        // VMX128 keystone, so a registered Limiter1 voice passes audio through
-        // UNMODIFIED (its Configure/state machine are faithful; only the gain
-        // reduction is absent). That is a transparent stage, not a corrupt one.
+        // Limiter1's dynamics kernel (CompressorLimiter1::Process @0x82B64DB0,
+        // 2,294 instructions of hand-written VMX128) was the one honest gap in
+        // this wave; it is now DECODED AND BODIED too, so a registered Limiter1
+        // voice really limits. Its single marked deviation is the VMX estimate
+        // pair behind the gain curve, which has no bit-identical portable form.
         #define CGS_RWAC_REGISTER(GETTER) \
             PlugInRegistry::RegisterPlugInRunTime(lpPlugInRegistry, \
                 reinterpret_cast<PlugInDescRunTime*>(GETTER))
