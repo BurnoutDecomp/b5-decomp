@@ -477,12 +477,51 @@ namespace CgsGui
         (void)lpOutput;
     }
 
-    // X360 @0x828586E8 -- NOT YET RECONSTRUCTED (the ledger dossier holds the
-    // reviewed body): the unload-request notification (15). Land with the
-    // load-ownership slice.
+    // =========================================================================
+    // ⭐⭐ ProcessIncomingUnloadRequestNotification @0x828586E8 -- THE OTHER HALF of the
+    // load notification above, and until this wave it was an EMPTY BODY: the notification
+    // was already routed here (view dispatch case 15) and then thrown away. A silent-drop
+    // stub in the exact shape this project keeps getting bitten by -- it compiled, linked,
+    // ran, and lost every un-registration.
+    //
+    // WHAT THE DROP COST, MEASURED 2026-08-28: entering a screen that releases an apt
+    // bundle and then RE-ENTERING it crashed the game. AddAptData is idempotent BY NAME
+    // (it returns the already-registered header), so with nothing ever removing an entry,
+    // the reload handed the Apt linker the STALE header from the freed bundle --
+    // AptCharacterAnimation::IncCharacterList then walked a dead character list. The whole
+    // fix is the three statements the console has and this body did not.
+    //
+    // The X360 body:
+    //   assert(a2, "Invalid event in ViewModule::ProcessIncomingUloadNotification");  // :723 (sic)
+    //   assert(a2[2], "Invalid filename sent to ViewModule::ProcessIncomingUnloadRequestNotification"); // :726
+    //   if ((unsigned)(a2[0] - 4) <= 3) AptDataHandler::RemoveAptData(this + 57372, a2[2]);
+    // -- i.e. the SAME request-type 4..7 apt family the load arm handles, keyed by the
+    // notification's muFileNameHash (GuiResourceModule::AddToBundleLoadQueue hashes the bare
+    // movie name into it with the same CgsHash::CalculateHash the header registration uses,
+    // so the two keys are the same key). `this + 57372` is the embedded AptAux's data
+    // handler, reached by name here.
+    // =========================================================================
     void ViewModule::ProcessIncomingUnloadRequestNotification(const void* lpEvent)
     {
-        (void)lpEvent;
+        CGS_ASSERT(lpEvent != 0,
+                   "Invalid event in ViewModule::ProcessIncomingUloadNotification");   // :723 (X360 spelling)
+
+        if (lpEvent == 0)
+        {
+            return;
+        }
+
+        const GuiEventUnloadNotification* lpNotification =
+            static_cast<const GuiEventUnloadNotification*>(lpEvent);
+
+        CGS_ASSERT(lpNotification->muFileNameHash != 0,
+                   "Invalid filename sent to ViewModule::ProcessIncomingUnloadRequestNotification");  // :726
+
+        const s32 liRequestType = static_cast<s32>(lpNotification->meRequestType);
+        if (liRequestType >= 4 && liRequestType <= 7)
+        {
+            mAptAux.mAptDataHandler.RemoveAptData(lpNotification->muFileNameHash);
+        }
     }
 
     // GetMovieNameByLevel @0x824EBCA8. The guest arithmetic `32*(liLevel+1783) + this`

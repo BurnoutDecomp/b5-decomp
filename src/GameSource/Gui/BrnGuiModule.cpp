@@ -2083,18 +2083,39 @@ void GuiModule::Destruct()
             s32 liId = lpNotifications->GetFirstEvent(&lpEvent, &liSize);
             while (liId >= 0 && lpEvent != 0)
             {
-                bool lbAptMovie = false;
+                bool lbAptMovie   = false;
+                bool lbAptUnload  = false;
                 if (liId == 14)
                 {
                     const s32 liReqType = static_cast<s32>(
                         reinterpret_cast<const CgsGui::GuiEventLoadNotification*>(lpEvent)->meRequestType);
                     lbAptMovie = (liReqType >= 4 && liReqType <= 7) || liReqType == 10;
                 }
+                else if (liId == 15)
+                {
+                    // ⭐⭐ [driver-details pause wave 2026-08-28] THE MISSING OTHER HALF of the
+                    // line above, and the reason a released apt movie was never un-registered.
+                    // GuiResourceModule::UnloadBundle posts a type-15 unload-REQUEST notification
+                    // (OutputBuffer::AddUnloadRequestNotification @0x8285AC08, `li r5,0xF`), whose
+                    // console consumer is ViewModule::ProcessIncomingUnloadRequestNotification
+                    // @0x828586E8 -> AptDataHandler::RemoveAptData. This bridge forwarded ONLY the
+                    // type-14 loads to the view, so the removal end of the pair could never run --
+                    // AddAptData is idempotent by name, so every reload of a released movie handed
+                    // the Apt linker the STALE header. Same apt request-type gate as the load side
+                    // (the view's own arm re-tests 4..7, which is the console's gate).
+                    const s32 liReqType = static_cast<s32>(
+                        reinterpret_cast<const CgsGui::GuiEventUnloadRequestNotification*>(
+                            lpEvent)->meRequestType);
+                    lbAptUnload = (liReqType >= 4 && liReqType <= 7);
+                }
                 mModelOutputBuffer.GetLoadNotificationsNonConst()->AddEvent(
                     lpEvent, liId, liSize);
                 if (lbAptMovie)
                     mViewInputBuffer.GetViewStateQueue()
                         .CgsModule::VariableEventQueue<65536, 16>::AddEvent(lpEvent, 14, liSize);
+                else if (lbAptUnload)
+                    mViewInputBuffer.GetViewStateQueue()
+                        .CgsModule::VariableEventQueue<65536, 16>::AddEvent(lpEvent, 15, liSize);
                 const CgsModule::Event* lpNext = 0;
                 liId = lpNotifications->GetNextEvent(lpEvent, &lpNext, &liSize);
                 lpEvent = lpNext;

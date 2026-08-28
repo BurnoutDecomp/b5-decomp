@@ -66,8 +66,17 @@ namespace CgsGui
         // kept for callers whose name string is already resolved; the import fallback path).
         AptDataHeader* AddAptData(AptDataHeader* lpHeader, const char* lpacName);
 
-        // The remaining methods (Construct / Prepare / Release / Destruct / RemoveAptData)
-        // are homed by their own ledger TUs; declared there.
+        // X360 0x8284A338 (CgsAptDataHandler.cpp). Un-register a loaded AptDataHeader BY ITS
+        // NAME HASH -- the counterpart to AddAptData, and the one this table was missing.
+        // AddAptData is idempotent by name, so without this a movie whose bundle has been
+        // unloaded stays registered and a later reload hands every consumer the STALE header.
+        // Its sole console caller is ViewModule::ProcessIncomingUnloadRequestNotification
+        // @0x828586E8, which passes the unload notification's muFileNameHash. Body in
+        // CgsAptDataHandler.cpp.
+        void RemoveAptData(u32 luNameHash);
+
+        // The remaining methods (Construct / Prepare / Release / Destruct) are homed by their
+        // own ledger TUs; declared there.
 
     private:
         s32                 miNumLoadedAptData;                      // +0x000 (h:97)
