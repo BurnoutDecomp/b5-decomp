@@ -51,7 +51,7 @@ namespace CgsSystem { u32 GetSystemTimerBaseTime(); u32 GetSystemTimerFrequency(
 // [DIAG] The time-dilation film latch (BrnDiagFilmLatch.h). Defined here because
 // BrnGameModule::UpdateTimers is its only writer; read by the back-buffer writer in
 // pc/gcm/renderengine/device.cpp under BRN_FRAME_DUMP_ARM=slomo. NOT in the X360 binary.
-namespace BrnDiag { FilmLatch gFilmLatch = { 0u, 0.0f, 0.0f }; }
+namespace BrnDiag { FilmLatch gFilmLatch = { 0u, 0.0f, 0.0f, 1.0f, 0.0f }; }
 
 namespace BrnGame
 {
@@ -1645,6 +1645,11 @@ namespace BrnGame
         {
             const f32  lfSimScale = mSimTimer.GetScaleCurrent();
             const bool lbDilated  = (lfSimScale != 1.0f);
+
+            // The LIVE pair the frame writer stamps beside every dumped frame, so a captured
+            // strip carries the timestep each of its frames was rendered under.
+            BrnDiag::gFilmLatch.mfLiveSimScale = lfSimScale;
+            BrnDiag::gFilmLatch.mfLiveSimStep  = mSimTimer.GetRate() * lfSimScale;
 
             static bool sbWasDilated  = false;
             static u32  suEpisode     = 0u;

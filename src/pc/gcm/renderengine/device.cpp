@@ -418,6 +418,24 @@ static void DumpBackBufferIfRequested()
                     fwrite(static_cast<const u8*>(lLock.pBits) + y * lLock.Pitch, 1, luW * 4u, lpFile);
                 }
                 fclose(lpFile);
+
+                // [diag] Stamp the SIMULATION timestep this frame was rendered under into a
+                // sidecar CSV beside the dump. ⭐ WITHOUT IT A CAPTURE OF A TIME DILATION
+                // CANNOT BE READ: a drive-thru / crash dilation scales the SIM timer only, so
+                // the camera and the HUD keep running at full rate and no eye can tell a
+                // dilated frame from an ordinary one. With it, every frame names its own
+                // timestep and a strip is self-labelling.
+                char lacCsv[620];
+                std::snprintf(lacCsv, sizeof(lacCsv), "%s\\frames.csv", sacDir);
+                FILE* lpCsv = std::fopen(lacCsv, "a");
+                if (lpCsv != nullptr)
+                {
+                    std::fprintf(lpCsv, "%u,%.6f,%.6f\n",
+                                 renderengine::guPresentCount,
+                                 BrnDiag::gFilmLatch.mfLiveSimScale,
+                                 BrnDiag::gFilmLatch.mfLiveSimStep);
+                    std::fclose(lpCsv);
+                }
             }
             lpSys->UnlockRect();
         }
