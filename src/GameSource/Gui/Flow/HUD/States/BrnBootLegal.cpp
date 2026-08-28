@@ -468,8 +468,18 @@ namespace BrnGui
                 {
                     UpdateSelectionMenu(liSubId);
                 }
-                if (liSubId == KI_ACTION_BACK)
-                    lbStartPressed = true;   // X360: a 45 also falls through to the "start" path
+                // [FLAG DELIBERATE PC DIVERGENCE -- user decision 2026-08-27] the console
+                // sets lbStartPressed for 45 (START) ONLY; 49 (A / GUI_SELECT) sets just
+                // lbBackRequested, which at the PRESS-START stage falls through into the
+                // menu's shared accept handler and accepts the never-displayed selector --
+                // the RETAIL A-at-title bug (see the fall-through banner below). Per the
+                // user's call, A is repaired to behave EXACTLY like START here: 49 sets
+                // lbStartPressed too, so the lbStartPressed arm runs first and opens the
+                // selector properly. lbStartPressed is consumed ONLY by the START_PRESSED
+                // stage, so every other stage's 49 handling (menu accept, attract stop) is
+                // byte-identical to the console.
+                if (liSubId == KI_ACTION_BACK || liSubId == KI_ACTION_STOP)
+                    lbStartPressed = true;   // X360: 45 only -- see the divergence note above
                 break;
 
             case KI_EVENT_CACHE_READY:
@@ -695,18 +705,16 @@ namespace BrnGui
             }
             // fall through to the shared accept handler.
             //
-            // ⚠️⚠️ THE RETAIL A-AT-TITLE BUG LIVES IN THIS FALL-THROUGH -- DO NOT "FIX" IT.
-            // At the PRESS-START stage, GUI_SELECT (49, the A button) sets ONLY
-            // lbBackRequested (the 45/49 arm above), never lbStartPressed -- so it skips the
-            // lbStartPressed arm (no DisplaySelectionMenu, no MENU_ACTIVE entry) and lands
-            // straight in the shared accept handler below, accepting menu index 0 of a
-            // selector that was never shown and skipping its whole setup. The ORIGINAL GAME
-            // shipped this: pressing A instead of START at the title skipped the
-            // BURNOUT PARADISE / BEAT THE TEAM menu and left the flow in a broken state
-            // (user-confirmed against retail, 2026-08-27, after the input-vocabulary repair
-            // made the PC's A/Enter produce the console's real 49 for the first time).
-            // It is authentic console behaviour, reproduced deliberately; the CORRECT press
-            // at the title is START (45 -- pad Start / keyboard P).
+            // ⚠️ THE RETAIL A-AT-TITLE BUG lived in this fall-through: on console, GUI_SELECT
+            // (49, the A button) set ONLY lbBackRequested, so at the PRESS-START stage it
+            // skipped the lbStartPressed arm (no DisplaySelectionMenu, no MENU_ACTIVE entry)
+            // and landed straight in the shared accept handler below -- accepting menu index
+            // 0 of the never-shown BURNOUT PARADISE / BEAT THE TEAM selector and leaving the
+            // flow broken (user-confirmed against retail, 2026-08-27). [FLAG DELIBERATE PC
+            // DIVERGENCE -- user decision 2026-08-27] REPAIRED at the flag-accumulation arm
+            // above: 49 now sets lbStartPressed exactly like 45, so an A press at the title
+            // opens the selector just as START does, and this fall-through can only be
+            // reached the way the healthy console paths reach it.
             /* fallthrough */
 
         case E_STAGE_MENU_ACTIVE:
