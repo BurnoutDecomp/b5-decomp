@@ -46,6 +46,10 @@ extern int                     gbAptSavedInputActive;
 // declared here by name rather than dragging in the whole linker header.
 void AptRegisterGlobalReferences();
 
+// [aptlife] instrumentation only -- the DOGMA base's own live-allocation counter
+// (mnItemsAllocated, console *(pool+0x28)). Homed in AptValueGCPoolManager.cpp.
+extern int AptValueGCPool_GetAllocatedCount(void* pPool);
+
 // ---------------------------------------------------------------------------
 // sReferenceRegistrationCb @0x82AD9C80 -- mark-walk callback.
 // ---------------------------------------------------------------------------
@@ -350,10 +354,24 @@ void AptGC::CleanUnreachable()
     {
         static uint32_t suPasses = 0u;
         ++suPasses;
-        char lac[160];
+        // `pool` is the DOGMA base's OWN live-allocation counter (mnItemsAllocated,
+        // console *(pool+0x28)) -- an independent witness to the walk's `values`.
+        // They must agree; a walk that sees fewer than the pool holds is a walk that
+        // silently exempts most of the heap from collection.
+        // Where does the walk stop? Count the pool CHAIN it is willing to cross and
+        // whether the outside-allocation list is even tracked, so "the walk is short"
+        // becomes "the walk stops HERE".
+        int liPools = 0;
+        int lbOutside = 0;
+        const void* lpFirstOutside = nullptr;
+        AptValueGCPool_DescribeArena(gpGCPoolManager, &liPools, &lbOutside, &lpFirstOutside);
+        char lac[256];
         std::snprintf(lac, sizeof(lac),
-            "[aptlife] CleanUnreachable pass #%u: %u values, %u roots, %u marked, %u deleted\n",
-            suPasses, luVisited, luRoots, luMarked, luDeleted);
+            "[aptlife] CleanUnreachable pass #%u: %u values, %u roots, %u marked, %u deleted "
+            "(pool says %d, %d pools, outside=%d/%p)\n",
+            suPasses, luVisited, luRoots, luMarked, luDeleted,
+            AptValueGCPool_GetAllocatedCount(gpGCPoolManager),
+            liPools, lbOutside, lpFirstOutside);
         CgsDev::Log::WriteToLog(lac);
     }
 
