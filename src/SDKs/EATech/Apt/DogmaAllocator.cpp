@@ -91,6 +91,56 @@ void DOGMA_FreeSized(void* pBlock, size_t nSize)
 // rather than raw pointer indexing.
 // ===========================================================================
 
+// ---------------------------------------------------------------------------
+// ⭐ THE FREE-ITEM SLOT WIDTH -- the console `4` that has to be an `8` on x64.
+//
+// A DOGMA free item stores its bookkeeping (the free-list next link, and
+// optionally the block size) in slots of one machine word. The console word is
+// 32-bit, so its ctor scales a BYTE offset into a slot index with `>> 2`, sizes
+// the per-size bucket array `4 * ((max >> 2) + 1)`, and indexes it `size >> 2` --
+// three separate spellings of the same literal 4.
+//
+// The x64 arbiter (Burnout_External_Xbox_One, rung 1 for Apt) replaces ALL THREE
+// with 8. The out-of-line ctor sub_140827C60 is unambiguous:
+//     v11 = a6 + 8;  if ( a7 && a8 + 8 > v11 ) v11 = a8 + 8;
+//     *a1 = alloc(8 * (a5 >> 3) + 8);   memset(v14, 0, 8 * (max >> 3) + 8);
+//     *(a1 + 32) = a6 >> 3;             *(a1 + 36) = a8 >> 3;
+// and Allocate (sub_14082D590) / Deallocate (inlined at sub_140828040) index the
+// slots as `*(pItem + 8 * mnOffsetToStoreNext)` / `*(pItem + 8 * mnOffsetToStoreSize)`
+// and the buckets as `*a1 + 8 * (size >> 3)`.
+//
+// ⛔ WHY THIS MATTERED (measured 2026-08-28): only the bucket ELEMENT width had been
+// widened; the two `>> 2` shifts survived. With gAptValueGCSizeOffset == 8 that made
+// mnOffsetToStoreSize == 2, so Deallocate wrote the freed block's size at byte +16
+// while the GC pool walk (AptValueGCPoolManager.cpp ItemSizeWord, and the x64 walk
+// sub_140838090: `v5 += *(v5 + 8) & ~1`) reads it at byte +8. Byte +8 still held the
+// dead AptValue's bitfield, whose top 7 bits are meValueType -- so the "size" the walk
+// stepped by was >= 0x02000000 and the very first freed block threw the cursor clean
+// out of the pool. The walk agreed with mnItemsAllocated exactly until the first free
+// and never again: 617/617 at pass 3, 618 vs 766 at pass 4, 632 vs 2767 by pass 10.
+// ~77% of live AptValues were never marked, never swept, never PreDestroy'd, so
+// AptCIH::PreDestroy never fired pfnOnUnload and the AptCommunicator's 256-entry
+// component table overflowed on the second Driver Details entry.
+// ---------------------------------------------------------------------------
+static const size_t KN_FREE_SLOT_BYTES = sizeof(uintptr_t);   // x64: 8 (console: 4)
+static const uint32_t KN_FREE_SLOT_SHIFT = (sizeof(uintptr_t) == 8) ? 3u : 2u;
+
+// Per-size bucket index: the console's `(nSize & ~3) >> 2` is "byte size -> word
+// index" for its 4-byte slot; x64 sub_14082D590 spells it `v3 >> 3`. Sizes reaching
+// here are already slot-aligned by Allocate/Deallocate, so the mask is redundant on
+// both -- kept implicit in the shift.
+static inline size_t DogmaSizeToBucket(size_t nSize)
+{
+    return nSize >> KN_FREE_SLOT_SHIFT;
+}
+
+// Bucket count for a given max allocation: (max >> slotShift) + 1 -- x64
+// `8 * (a5 >> 3) + 8` bytes.
+static inline size_t DogmaBucketCount(size_t nMaxSizeAllocation)
+{
+    return (nMaxSizeAllocation >> KN_FREE_SLOT_SHIFT) + 1;
+}
+
 // The three DOGMA free-list spinlocks (X360 globals unk_8324E758 / unk_8324E8EC
 // / unk_8324E720). One guards the per-size free lists, one the overflow pool
 // list, one the outside-allocation list.
@@ -160,11 +210,17 @@ DOGMA_PoolManager::DOGMA_PoolManager(size_t mainPoolSizeBytes,
     mbTrackOutsideAllocations = bTrackOusideAllocations;   // a1[8] = a28
 
     // Smallest item must hold the in-free-item bookkeeping (next ptr, and the
-    // optional size word): minimum = max(nOffsetToStoreNext + 4,
-    // bStoreFreeBlockSize ? nOffsetToStoreSize + 4 : 0).
-    size_t nMinimumItemSize = (size_t)nOffsetToStoreNextInFreeItem + 4;        // v32 = a6 + 4
-    if (bStoreFreeBlockSize && (size_t)nOffsetToStoreSizeInFreeItem + 4 > nMinimumItemSize)
-        nMinimumItemSize = (size_t)nOffsetToStoreSizeInFreeItem + 4;           // v32 = a8 + 4
+    // optional size word): minimum = max(nOffsetToStoreNext + KN_FREE_SLOT_BYTES,
+    // bStoreFreeBlockSize ? nOffsetToStoreSize + KN_FREE_SLOT_BYTES : 0).
+    //
+    // (x64 widening, Phase-0 regime): the console literal is `+ 4` because a free-item
+    // slot is one 32-bit word there. The x64 arbiter widens it -- XB1 sub_140827C60:
+    // `v11 = a6 + 8; if ( a7 && a8 + 8 > v11 ) v11 = a8 + 8;`. Keeping the console 4
+    // left the minimum at 12, one slot short of the 16 bytes a free item actually needs
+    // (next @ +0, size @ +8).
+    size_t nMinimumItemSize = (size_t)nOffsetToStoreNextInFreeItem + KN_FREE_SLOT_BYTES;   // v11 = a6 + 8
+    if (bStoreFreeBlockSize && (size_t)nOffsetToStoreSizeInFreeItem + KN_FREE_SLOT_BYTES > nMinimumItemSize)
+        nMinimumItemSize = (size_t)nOffsetToStoreSizeInFreeItem + KN_FREE_SLOT_BYTES;      // v11 = a8 + 8
 
     mpaFirstFreeBySize = 0;       // *a1   = 0  (re-assigned below)
     mpFirstPool = 0;              // a1[1] = 0  (re-assigned below)
@@ -177,8 +233,11 @@ DOGMA_PoolManager::DOGMA_PoolManager(size_t mainPoolSizeBytes,
     if (minSizeAllocation < nMinimumItemSize)
         mnMinimumAllocationSize = (uint32_t)nMinimumItemSize;                  // a1[6] = v32
 
-    mnOffsetToStoreNext = nOffsetToStoreNextInFreeItem >> 2;                   // a1[4] = v30 >> 2
-    mnOffsetToStoreSize = nOffsetToStoreSizeInFreeItem >> 2;                   // a1[5] = a8 >> 2
+    // (x64 widening, Phase-0 regime -- see KN_FREE_SLOT_SHIFT above): a BYTE offset
+    // scaled to a free-item SLOT index. Console `>> 2` (4-byte slot); x64
+    // sub_140827C60 `*(a1 + 32) = a6 >> 3; *(a1 + 36) = a8 >> 3` (8-byte slot).
+    mnOffsetToStoreNext = nOffsetToStoreNextInFreeItem >> KN_FREE_SLOT_SHIFT;   // a1[4] = a6 >> 3
+    mnOffsetToStoreSize = nOffsetToStoreSizeInFreeItem >> KN_FREE_SLOT_SHIFT;   // a1[5] = a8 >> 3
 
     // PC static-init accommodation (boot-verified): the X360 never constructs a DOGMA pool with a
     // 0-byte main size -- gAptValueGCPool is HEAP-allocated at AptInit (AptAllocatorInitialize
@@ -194,20 +253,22 @@ DOGMA_PoolManager::DOGMA_PoolManager(size_t mainPoolSizeBytes,
         return;
     }
 
-    // Per-size free-list head array: one head per 4-byte size bucket up to the
-    // max allocation, plus the zero bucket -- ((maxSize>>2)+1) buckets. (x64
-    // widening, Phase-0 regime): each bucket is a uintptr_t* (the free-list head), so the array is
-    // sizeof(uintptr_t*) per bucket -- NOT the console literal 4. Allocating 4*N
-    // here left buckets 33..64 (for maxSize 256) past the block, read as garbage
-    // free-list pointers by Allocate -> returned to the caller -> access violation.
-    const size_t nFreeListBytes = sizeof(uintptr_t*) * ((maxSizeAllocation >> 2) + 1);
+    // Per-size free-list head array: one head per SLOT-SIZED size bucket up to the
+    // max allocation, plus the zero bucket. (x64 widening, Phase-0 regime): both the
+    // element width AND the bucket stride widen -- x64 sub_140827C60 allocates
+    // `8 * (a5 >> 3) + 8` and memsets `8 * (max >> 3) + 8`, i.e.
+    // sizeof(uintptr_t*) * ((maxSize >> 3) + 1); the console is 4 * ((maxSize >> 2) + 1).
+    // Only the element width had been widened before: the stride stayed `>> 2`, which
+    // merely over-allocated (harmless), but the SAME `>> 2` on the two free-item slot
+    // offsets was not harmless -- see KN_FREE_SLOT_SHIFT.
+    const size_t nFreeListBytes = sizeof(uintptr_t*) * DogmaBucketCount(maxSizeAllocation);
     mpaFirstFreeBySize = (uintptr_t**)DOGMA_Malloc(nFreeListBytes);
 
     // First (main) pool.
     DOGMA_MemPool* pFirstPool = (DOGMA_MemPool*)DOGMA_Malloc(mainPoolSizeBytes);
     mpFirstPool = pFirstPool;
 
-    memset(mpaFirstFreeBySize, 0, sizeof(uintptr_t*) * ((mnMaxSizeAllocation >> 2) + 1));
+    memset(mpaFirstFreeBySize, 0, sizeof(uintptr_t*) * DogmaBucketCount(mnMaxSizeAllocation));
 
     pFirstPool->SetupPool(0, mainPoolSizeBytes);   // *v36=0; v36[1]=v36[2]=a2-15
 }
@@ -231,7 +292,7 @@ DOGMA_PoolManager::~DOGMA_PoolManager()
     // Deferred construction must have deferred destruction; the pool-chain loop below already
     // mirrors it, this is the same fix for the free-list array.
     if (mpaFirstFreeBySize)
-        DOGMA_FreeSized(mpaFirstFreeBySize, sizeof(uintptr_t*) * ((mnMaxSizeAllocation >> 2) + 1));
+        DOGMA_FreeSized(mpaFirstFreeBySize, sizeof(uintptr_t*) * DogmaBucketCount(mnMaxSizeAllocation));
 
     // Free every pool in the chain. (while, not do/while: an empty/deferred pool has
     // mpFirstPool == 0 -- see the 0-size guard in the ctor -- and must not be dereffed.)
@@ -289,10 +350,17 @@ void* DOGMA_PoolManager::Allocate(size_t nAllocatedSize)
     // dword) shares a word with adjacent free-filled memory -> 0xBAADF00D corruption
     // (the EAStringC use-after-free in Add2). Round to 8 so every carved block stays
     // 8-aligned. Deallocate mirrors this so the per-size free-list buckets still match.
+    // ORDER MATTERS and is the x64 arbiter's, not the console's: sub_14082D590 rounds
+    // FIRST (`if ( (a2 & 7) != 0 ) v3 = (a2 & ~7) + 8;`) and clamps to the minimum
+    // SECOND (`if ( v3 < *(a1 + 40) ) v3 = *(a1 + 40);`). That is only safe because the
+    // minimum is itself slot-aligned -- which it is once the ctor's `+ 4` is the
+    // arbiter's `+ 8` (see KN_FREE_SLOT_BYTES); with the old 12 the two orders
+    // disagreed and the clamped size was not 8-aligned.
     size_t nSize = nAllocatedSize;                          // v3
+    if (nSize & (KN_FREE_SLOT_BYTES - 1))
+        nSize = (nSize & ~(KN_FREE_SLOT_BYTES - 1)) + KN_FREE_SLOT_BYTES;
     if (nSize < mnMinimumAllocationSize)
         nSize = mnMinimumAllocationSize;
-    nSize = (nSize + 7) & ~static_cast<size_t>(7);
 
     size_t nMax = mnMaxSizeAllocation;                      // v4
     ++mnItemsAllocated;
@@ -305,12 +373,12 @@ void* DOGMA_PoolManager::Allocate(size_t nAllocatedSize)
         gDogmaPoolFreeListLock.Lock();
         {
             uintptr_t** paBySize = mpaFirstFreeBySize;                 // v25 = *a1
-            uintptr_t* pFree = paBySize[(nSize & 0xFFFFFFFC) >> 2];    // v26 = *(((v3&~3)) + *a1)
+            uintptr_t* pFree = paBySize[DogmaSizeToBucket(nSize)];     // v7 = (*a1 + 8 * (v3 >> 3))
             if (pFree)
             {
                 pResult = pFree;
-                // Unlink: head = *(free + mnOffsetToStoreNext).
-                paBySize[(nSize & 0xFFFFFFFC) >> 2] = (uintptr_t*)pFree[mnOffsetToStoreNext];
+                // Unlink: head = *(free + 8 * mnOffsetToStoreNext).
+                paBySize[DogmaSizeToBucket(nSize)] = (uintptr_t*)pFree[mnOffsetToStoreNext];
                 --mnItemsFreed;
             }
             else
@@ -395,12 +463,15 @@ bool DOGMA_PoolManager::Deallocate(void* pNowFree, size_t nAllocatedSize)
         return true;
     }
 #endif
-    // x64 alignment fix (Phase-0 regime -- MUST mirror Allocate so the per-size free-list
-    // buckets match): round to an 8-byte multiple, not the console's 4-byte one.
+    // x64 alignment fix (Phase-0 regime -- MUST mirror Allocate, same order, so the
+    // per-size free-list buckets match): round to the slot width, then clamp.
+    // (x64 sub_140828040 shows only the clamp because its caller's size is already
+    // 8-aligned and the compiler folded the round away.)
     size_t nSize = nAllocatedSize;                          // v5
+    if (nSize & (KN_FREE_SLOT_BYTES - 1))
+        nSize = (nSize & ~(KN_FREE_SLOT_BYTES - 1)) + KN_FREE_SLOT_BYTES;
     if (nSize < mnMinimumAllocationSize)
         nSize = mnMinimumAllocationSize;
-    nSize = (nSize + 7) & ~static_cast<size_t>(7);
 
     size_t nMax = mnMaxSizeAllocation;                      // v6
     --mnItemsAllocated;
@@ -415,11 +486,14 @@ bool DOGMA_PoolManager::Deallocate(void* pNowFree, size_t nAllocatedSize)
             uintptr_t** paBySize = mpaFirstFreeBySize;                 // v27 = *a1
             uint32_t nNextOffset = mnOffsetToStoreNext;                // v28 = a1[4]
             ++mnItemsFreed;
-            // *(free + mnOffsetToStoreNext) = current head.
-            pFreed[nNextOffset] = (uintptr_t)paBySize[(nSize & 0xFFFFFFFC) >> 2];
+            // *(free + 8 * mnOffsetToStoreNext) = current head.
+            pFreed[nNextOffset] = (uintptr_t)paBySize[DogmaSizeToBucket(nSize)];
+            // *(free + 8 * mnOffsetToStoreSize) = nSize -- and with mnOffsetToStoreSize
+            // now 1 (== gAptValueGCSizeOffset 8 >> 3) this lands at byte +8, exactly where
+            // the GC pool walk reads a free item's stride. That is the whole fix.
             if (mbStoreFreeBlockSize)
-                pFreed[mnOffsetToStoreSize] = nSize;                   // a2[a1[5]] = v5
-            paBySize[(nSize & 0xFFFFFFFC) >> 2] = pFreed;              // head = a2
+                pFreed[mnOffsetToStoreSize] = nSize;                   // *(v7 + 8 * *(v9 + 36)) = v10
+            paBySize[DogmaSizeToBucket(nSize)] = pFreed;               // head = a2
         }
         gDogmaPoolFreeListLock.Unlock();
 

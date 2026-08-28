@@ -19,11 +19,19 @@
 // external/middleware API, not project-owned code.
 //
 // A DOGMA_PoolManager is a fixed-size-bucket free-list allocator backed by one
-// or more contiguous "pools". Each requested size is rounded up to a 4-byte
-// multiple (and clamped to mnMinimumAllocationSize) and indexes a per-size
-// free-list head stored in mpaFirstFreeBySize. Requests larger than
+// or more contiguous "pools". Each requested size is rounded up to a FREE-ITEM
+// SLOT multiple (4 bytes on the consoles, 8 on x64 -- see KN_FREE_SLOT_BYTES in
+// DogmaAllocator.cpp), then clamped to mnMinimumAllocationSize, and indexes a
+// per-size free-list head stored in mpaFirstFreeBySize. Requests larger than
 // mnMaxSizeAllocation fall back either to a tracked "outside allocation" wrapper
 // (when mbTrackOutsideAllocations) or to a bare DOGMA_Malloc.
+//
+// ⚠️ mnOffsetToStoreNext / mnOffsetToStoreSize are SLOT indices, not byte offsets:
+// the free item's links live at `pItem[mnOffsetToStoreNext]` / `pItem[mnOffsetToStoreSize]`
+// with uintptr_t indexing, so the ctor scales the caller's BYTE offset by the slot
+// width. Every one of the console's three literal 4s (the `+ 4` minimum, the `>> 2`
+// scale, the 4-byte bucket stride) is an 8 on x64; the x64 arbiter for all three is
+// Burnout_External_Xbox_One sub_140827C60.
 // ===========================================================================
 
 #include <cstddef>
