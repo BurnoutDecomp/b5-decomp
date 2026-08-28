@@ -611,7 +611,13 @@ namespace BrnTrafficIO { class InputBuffer_PreScene; class OutputBuffer_PreScene
         // GetVehicle overload below). Return width is the console's 8-byte key.
         VehicleTypeRuntime::AttribKey GetCarAssetAttribKey(u32 luVehicle) const;
         void  GetDeterministicParamPos(u32 luParam);                 // @ 0x82714258 (FLAG: ParamTransform)
-        void  GetSympCrashingTargetPos(u32 luParam, void* lpOut);    // @ 0x82708C10 (FLAG)
+        // @0x82708C10. SIGNATURE CORRECTED 2026-08-28 from the asm, which was never a
+        // `void f(u32, void*)`: r4 is the sympathetic-crash target's EntityId (the body splits
+        // its owner byte and 14-bit index), r5 is a Vector3 out-slot, and r3 returns 0/1
+        // ("found a live target position"). The FLAG that stood here said it was an ARTIST
+        // export hole with no body -- STALE, the per-function export exists (77 asm lines) and
+        // the body is in _wT2_06.cpp.
+        bool  GetSympCrashingTargetPos(EntityId lTargetEntityId, Vector3* lpOutPos) const;
         // @0x82714500 (153). BODIED in _wT3_00.cpp. DWARF :1242/:1245
         // (`GetTrafficPhysicsInfoForVehicle`; the X360/ledger symbol truncates the name).
         // Returns &maTrafficPhysicsInfoList[ GetVehicle(luVehicle)->GetPhysicalPartsIndex() ].
