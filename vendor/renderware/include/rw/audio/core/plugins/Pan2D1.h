@@ -102,9 +102,31 @@ public:
         f32 angle; // +0x0C -- atan2(y, x)
     };
 
+    // The 12-byte constructor-parameter record CreateInstance @0x82BA3540 consumes (the
+    // stage config's mpContext; null selects the 45/135/mode-2 defaults). Grounded in the
+    // three lfs loads at params +0x00/+0x04/+0x08.
+    struct ConstructorParams
+    {
+        f32 frontAngle;        // +0x00 -- degrees
+        f32 rearAngle;         // +0x04 -- degrees
+        f32 normalizationMode; // +0x08 -- NormalizationMode encoded as a float
+    };
+
+    // Normalization-mode selector (debug-type-confirmed): how mfNormGain derives from the
+    // post-clamp emitter count. Any OTHER value (NaN included) leaves mfNormGain UNTOUCHED.
+    enum NormalizationMode
+    {
+        KNORM_UNIT       = 0, // mfNormGain = 1.0
+        KNORM_NUMCHANNELS = 1, // mfNormGain = 1 / emitters
+        KNORM_SQRTNUMCHANNELS = 2, // mfNormGain = 1 / sqrt(emitters)
+        KNORM_MAX        = 3
+    };
+
     // ---- entry points (asm addresses above) --------------------------------------------
     static char **GetPlugInDescRunTime();                       // @0x82B98748
     static int    GetSize();                                    // @0x82B982C8 -> 440
+    static int    CreateInstance(Pan2D1 *self,
+                                 const ConstructorParams *params); // @0x82BA3540
     static void  *ScalarDeletingDestructor(Pan2D1 *self,
                                            char flags);         // @0x82BA1B00
 

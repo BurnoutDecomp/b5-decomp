@@ -26,9 +26,10 @@
 #include "rw/audio/core/DecoderRegistry.h"  // DecoderRegistry (the Xas/Xas1 registrations)
 #include "rw/audio/core/Xas1Dec.h"          // Xas1Dec::GetDecoderDesc
 #include "rw/audio/core/XasDec.h"           // XasDec::GetDecoderDesc
-#include "rw/audio/core/Gain.h"             // the three live descriptor registrations
+#include "rw/audio/core/Gain.h"             // the four live descriptor registrations
 #include "rw/audio/core/plugins/Pan2D.h"
 #include "rw/audio/core/Rechannel.h"
+#include "rw/audio/core/Resample.h"         // LIVE with the phase-E callback wave
 
 namespace CgsSound
 {
@@ -70,12 +71,17 @@ namespace Playback
 
             mpPlugInRegistry = rw::audio::core::System::GetPlugInRegistry(lpSystem);
 
-            // Orders 9-14: the six descriptor registrations. THREE are LIVE
+            // Orders 9-14: the six descriptor registrations. FOUR are LIVE
             // (descriptor-record wave: real host records; RegisterPlugInRunTime
             // dupe-detects against the RWAC pass and hands back the existing
-            // node, exactly the console behaviour). Route (record un-recovered),
-            // SndPlayer1 (no PC home) and Resample (Process body absent --
-            // decode in flight) stay FLAG-deferred at 0.
+            // node, exactly the console behaviour). Route (record un-recovered)
+            // and SndPlayer1 (no PC home) stay FLAG-deferred at 0.
+            // Resample went LIVE with the phase-E callback wave 2026-08-28 (its
+            // Process @0x82B9F3E8 and the raw-decoded LinearInterpolate
+            // @0x82B9A918 are bodied); because the RWAC pass registers the same
+            // record first, this call takes the console's dupe-detect path and
+            // returns that existing node -- which is exactly the handle this
+            // member is supposed to hold.
             mGainHandle = reinterpret_cast<uintptr_t>(
                 rw::audio::core::PlugInRegistry::RegisterPlugInRunTime(mpPlugInRegistry,
                     reinterpret_cast<rw::audio::core::PlugInDescRunTime*>(
@@ -90,7 +96,10 @@ namespace Playback
                 rw::audio::core::PlugInRegistry::RegisterPlugInRunTime(mpPlugInRegistry,
                     reinterpret_cast<rw::audio::core::PlugInDescRunTime*>(
                         rw::audio::core::Rechannel::GetPlugInDescRunTime())));  // @0x82B9A718 -> +0x50
-            mResampleHandle   = 0;   // Resample @0x82B9A850 -- FLAG deferred
+            mResampleHandle = reinterpret_cast<uintptr_t>(
+                rw::audio::core::PlugInRegistry::RegisterPlugInRunTime(mpPlugInRegistry,
+                    reinterpret_cast<rw::audio::core::PlugInDescRunTime*>(
+                        rw::audio::core::Resample::GetPlugInDescRunTime())));   // @0x82B9A850 -> +0x54
 
             // Orders 15-16: the two handle lookups ('Sen0' 0x53656E30 -> +0x48,
             // 'Sub0' 0x53756230 -> +0x58). Read-only walks; null on the

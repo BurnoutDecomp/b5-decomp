@@ -184,12 +184,15 @@ public:
 
 // -------------------------------------------------------------------------------------
 // High-pass 2nd-order IIR. Same layout as LowPass; CalculateFilterCoefficients
-// @0x82B978C0, Process @0x82B9E0A0. (No CreateInstance of its own in the export set.)
+// @0x82B978C0, Process @0x82B9E0A0, CreateInstance @0x82BA2E40 (dossier re-exported
+// with the phase-E callback wave; the earlier "no CreateInstance in the export set"
+// note is retired).
 // -------------------------------------------------------------------------------------
 class HighPassIir2
 {
 public:
     static char **GetPlugInDescRunTime();                   // @0x82B978B0
+    static int    CreateInstance(HighPassIir2 *self);       // @0x82BA2E40
     void CalculateFilterCoefficients(f64 omega);            // @0x82B978C0
     int  Process(AudioProcessContext *ctx);                 // @0x82B9E0A0
 
