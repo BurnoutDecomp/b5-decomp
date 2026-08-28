@@ -14,6 +14,7 @@
 #include "GameSource/Director/DirectorModule/BrnDirectorModuleIOOutputBuffer.hpp" // DirectorIO::OutputBuffer (stage 3)
 #include "GameSource/GameState/BrnGameStateModule.h"    // BrnGameState::GameStateModule::GetOutputBuffer (BridgeGameStateToWorld source)
 #include "GameSource/GameState/BrnGameStateModuleIO.h"  // GameStateModuleIO::OutputBuffer (its lock bracket)
+#include "GameShared/GameClasses/Gui/CgsGuiModuleIO.h"  // CgsGuiModuleIO::Input/OutputBuffer (the C4 sound-leg GUI endpoints)
 
 // Engine clock (same source the loading-screen renderer animates from). Defined in
 // CgsTimeUtils.cpp; used here to pace the (currently stubbed) load so it is visible.
@@ -309,7 +310,8 @@ bool LoadingScriptedState::LoadGameState2(
 //     interface (RequestInterface<4096>) into the GameData input, then bulk-append its
 //     AttribSys vault request queue (<2048> into VariableEventQueue<32768,16>) -- the same
 //     pair LoadWorldModule runs during the prepare stages, now running per frame.
-void LoadingScriptedState::UpdateWorldModule(BrnResource::GameDataIO::InputBuffer* lpGameDataInputBuffer)
+void LoadingScriptedState::UpdateWorldModule(BrnResource::GameDataIO::InputBuffer* lpGameDataInputBuffer,
+                                             BrnSound::Module::Io::RootPreUpdateOutputBuffer* lpSoundPreUpdateOutput)
 {
     // ⭐ CORRECTED 2026-08-16 (boot audit F-P3-5 / F-P6-13). The update set was the
     // hard-coded constant KU_LOADING_UPDATE_SET (0x80) for the whole boot. The console
@@ -336,10 +338,14 @@ void LoadingScriptedState::UpdateWorldModule(BrnResource::GameDataIO::InputBuffe
         }
     }
 
+    // On 0x20/0x40 frames the console still runs BridgeSoundToWorld (@0x823F2818 sits
+    // BEFORE the bit test @0x823F282C) -- but into a worldIn nothing then reads: the world
+    // vcall is suppressed and the frame-spanned buffer dies unread at the teardown batch.
+    // Skipping the whole drive here is therefore behaviourally identical, not a divergence.
     if ((lUpdateSet & 0x20) != 0 || (lUpdateSet & 0x40) != 0)
         return;
 
-    DriveWorldUpdateFrame(lpGameDataInputBuffer, lUpdateSet);
+    DriveWorldUpdateFrame(lpGameDataInputBuffer, lUpdateSet, lpSoundPreUpdateOutput);
 }
 
 // The same leg, callable from ANY flow state.
@@ -361,7 +367,8 @@ void LoadingScriptedState::UpdateWorldModule(BrnResource::GameDataIO::InputBuffe
 // into the real DoUpdate cascade when the module scheduler moves under the game module's own
 // spines.
 void DriveWorldUpdateFrame(BrnResource::GameDataIO::InputBuffer* lpGameDataInputBuffer,
-                           BrnUpdateSet lUpdateSet)
+                           BrnUpdateSet lUpdateSet,
+                           BrnSound::Module::Io::RootPreUpdateOutputBuffer* lpSoundPreUpdateOutput)
 {
     BrnGame::BrnGameModule* lpGameModule = BrnGame::GetMainGameModule();
     CgsModule::IOBufferStack* lpUpdateInputStack  = lpGameModule->GetUpdateInputBufferStack();
@@ -483,6 +490,24 @@ void DriveWorldUpdateFrame(BrnResource::GameDataIO::InputBuffer* lpGameDataInput
             lpWorldInput->UnlockForWrite();
             lpGameStateOutput->UnlockForRead();
         }
+    }
+
+    // ⭐⭐ THE SOUND -> WORLD BRIDGE (X360 BridgeSoundToWorld @0x823CDC98, staged from the
+    // loading spine @0x823F2818 and from DoUpdate_World's five-source staging on the full
+    // spine -- LAST of the input bridges, immediately before the FreeAll + world dispatch).
+    // One append: the world input's audio-car-loaded queue takes the sound pre-update
+    // block's queue. The console bracket is R(preUpdateOut) + W(worldIn) (spec
+    // progress/scratch_dossiers/spine_sound_leg_0x823F22D8.md section 5), the same
+    // per-source pair this function already uses for the controller and game-state legs.
+    // Null means the caller has no sound pre-update this frame (phase C4 threads it from
+    // the scripted spine; the in-game leg arrives with the DoUpdate_Sound slice).
+    if (lpSoundPreUpdateOutput != 0)
+    {
+        lpSoundPreUpdateOutput->LockForRead();
+        lpWorldInput->LockForWrite();
+        lpGameModule->BridgeSoundToWorld(lpWorldInput, lpSoundPreUpdateOutput);
+        lpWorldInput->UnlockForWrite();
+        lpSoundPreUpdateOutput->UnlockForRead();
     }
 
     // X360: LinearMalloc::FreeAll(gm->mpWorldUpdateFrameAllocator) then the vtable+76
@@ -694,6 +719,32 @@ void LoadingScriptedState::Update()
 {
     EnsureScriptedLoadGameDataIO();
 
+    // ---- the frame's SOUND IO trio (faithful-audio-engine phase C4) --------------------
+    // X360 @0x823F23CC/0x823F23E0/0x823F23F8 -- creation positions 3-5 of the spine's
+    // 16-buffer batch, ahead of the GameData lock bracket, destroyed in exact reverse
+    // order at the tail (@0x823F2C88-0x823F2CA8). The RootInputBuffer comes off the
+    // update-INPUT stack, the RootOutputBuffer and the pre-update buffer off the
+    // update-OUTPUT stack, each destroyed through the stack that carved it (LIFO holds:
+    // every inner carve this frame -- the world pair, the module's own scratch buffers --
+    // nests inside the trio's lifetime). Full decode:
+    // progress/scratch_dossiers/spine_sound_leg_0x823F22D8.md.
+    BrnGame::BrnGameModule* lpGameModule = BrnGame::GetMainGameModule();
+    BrnSound::Module::Io::RootInputBuffer*           lpSoundRootInput       = 0;
+    BrnSound::Module::Io::RootOutputBuffer*          lpSoundRootOutput      = 0;
+    BrnSound::Module::Io::RootPreUpdateOutputBuffer* lpSoundPreUpdateOutput = 0;
+    {
+        const bool lbSoundIn = lpGameModule->GetUpdateInputBufferStack()
+            ->CreateIOBuffer<BrnSound::Module::Io::RootInputBuffer>(&lpSoundRootInput, "Sound");
+        const bool lbSoundOut = lpGameModule->GetUpdateOutputBufferStack()
+            ->CreateIOBuffer<BrnSound::Module::Io::RootOutputBuffer>(&lpSoundRootOutput, "Sound");
+        const bool lbSoundPre = lpGameModule->GetUpdateOutputBufferStack()
+            ->CreateIOBuffer<BrnSound::Module::Io::RootPreUpdateOutputBuffer>(
+                &lpSoundPreUpdateOutput, "SoundRootPreUpdateOutput");
+        CGS_ASSERT(lbSoundIn && lbSoundOut && lbSoundPre,
+                   "mpStack->CreateIOBuffer( &mpBuffer, lpcName )");  // CgsModuleIOHelper.h:52
+        (void)lbSoundIn; (void)lbSoundOut; (void)lbSoundPre;
+    }
+
     if (gBrnScriptedLoadStage != 8)
     {
         s_GameDataInput.LockForWrite();
@@ -748,32 +799,26 @@ void LoadingScriptedState::Update()
                 //     VariableEventQueue<13312,16>::AddEvent(rootIn->GetGameActionQueue(),
                 //                                            &rec, /*id*/ 0x129, /*size*/ 1);
                 //     UnlockForWrite(rootIn);   then stage := 8
-                // This was "[deferred: the per-frame sound IO bracket is not threaded through
-                // this spine yet]" -- but the cue does not need the bracket, it needs a Root
-                // INPUT buffer, and one is carved here the same way LoadSoundModule carves
-                // its pair. The queue is the GameActionQueue: the AddEvent symbol names its
+                // The console posts into the FRAME's RootInputBuffer (r15, carved in the
+                // spine's 16-buffer batch) -- since phase C4 threads that trio through this
+                // function, the cue now uses it directly; the interim per-cue carve is
+                // retired. The queue is the GameActionQueue: the AddEvent symbol names its
                 // template arguments outright, and the member's attested span 0x3410 is
                 // 13312+16, which is exactly VariableEventQueue<13312,16>.
                 //
                 // The 1-byte payload's stack slot is never written before the call in the
                 // console body either -- the consumer keys on the id, not the content -- so a
-                // zero byte is the faithful record, not a stand-in value.
+                // zero byte is the faithful record, not a stand-in value. The cue now ALSO
+                // reaches the engine the same frame: RootSoundModule::Update below consumes
+                // this very buffer, exactly as the console spine does.
                 LogScriptedStageOnce(6, "sound world-loaded cue (event 297) -> DONE");
+                if (lpSoundRootInput != 0)
                 {
-                    BrnGame::BrnGameModule* lpGameModuleForCue = BrnGame::GetMainGameModule();
-                    BrnSound::Module::Io::RootInputBuffer* lpRootInForCue = 0;
-                    lpGameModuleForCue->GetUpdateInputBufferStack()
-                        ->CreateIOBuffer<BrnSound::Module::Io::RootInputBuffer>(&lpRootInForCue, "Sound");
-                    if (lpRootInForCue != 0)
-                    {
-                        lpRootInForCue->LockForWrite();
-                        u8 lu8CueRecord = 0;
-                        lpRootInForCue->GetGameActionQueue().AddEvent(
-                            reinterpret_cast<const CgsModule::Event*>(&lu8CueRecord), 0x129, 1);
-                        lpRootInForCue->UnlockForWrite();
-                        lpGameModuleForCue->GetUpdateInputBufferStack()
-                            ->DestroyIOBuffer<BrnSound::Module::Io::RootInputBuffer>(&lpRootInForCue);
-                    }
+                    lpSoundRootInput->LockForWrite();
+                    u8 lu8CueRecord = 0;
+                    lpSoundRootInput->GetGameActionQueue().AddEvent(
+                        reinterpret_cast<const CgsModule::Event*>(&lu8CueRecord), 0x129, 1);
+                    lpSoundRootInput->UnlockForWrite();
                 }
                 gBrnScriptedLoadStage = 8;
                 break;
@@ -799,6 +844,23 @@ void LoadingScriptedState::Update()
         s_GameDataInput.UnlockForWrite();
     }
 
+    // ---- the SOUND pre-update leg (X360 @0x823F2714 -- phase C4) ------------------------
+    // Console position: after DoUpdate_InputPreWorld, before the network / game-state /
+    // world drives. DoPreUpdate_Sound @0x823EE4D8 brackets the sound perfmon pair, runs
+    // RootSoundModule::PreUpdate into the frame's pre-update buffer, appends its GuiOut
+    // queue into the GUI INPUT buffer and walks BridgeSoundToTraining.
+    // FLAG PC seam (buffer source only): the console spine carves its OWN "Gui" input
+    // buffer in the same 16-buffer batch; the PC GUI module is driven from GameMain, so
+    // the leg targets the game module's static per-sub-step GUI input buffer -- the same
+    // object the GUI module will consume this frame. Skipped defensively if the static
+    // pair is not up (the flow states always run inside the sub-step, so it is).
+    if (lpSoundPreUpdateOutput != 0 && lpGameModule->GetGuiInputBuffer() != 0)
+    {
+        lpGameModule->DoPreUpdate_Sound(lpGameModule->GetUpdateOutputBufferStack(),
+                                        lpSoundPreUpdateOutput,
+                                        lpGameModule->GetGuiInputBuffer());
+    }
+
     {
         // ---- the per-frame WORLD UPDATE leg (X360 0x823F22D8, stage > 5) ------------
         // Once the scripted load is past LoadWorldModule (stage > 5) the spine drives the
@@ -816,12 +878,11 @@ void LoadingScriptedState::Update()
         // The loading update set is 0x80 (ConstructUpdateSetFromFsm @0x823BD420 base),
         // so neither the boot-video (0x20) nor the paused (0x40) bit is set here.
         //
-        // [deferred] BridgeSoundToWorld: the per-frame Root sound IO bracket is not
-        // threaded through this spine yet (same deferral as the stage-6 sound cue), and
-        // BridgeWorldToSound likewise. Neither feeds the streamer.
+        // BridgeSoundToWorld rides inside DriveWorldUpdateFrame now (phase C4) -- the
+        // pre-update buffer threads through UpdateWorldModule to the staging site.
         if (gBrnScriptedLoadStage > 5)
         {
-            UpdateWorldModule(&s_GameDataInput);
+            UpdateWorldModule(&s_GameDataInput, lpSoundPreUpdateOutput);
         }
 
         // The GameData pump used to run here. It has MOVED to the frame level -- the game
@@ -830,8 +891,98 @@ void LoadingScriptedState::Update()
         // requests are serviced, not just this spine's. The X360's scripted-load spine
         // @0x823F22D8 does not pump the module either: the resource thread does, concurrently.
     }
+
+    // ---- the post-world SOUND legs (X360 @0x823F2A14-0x823F2B74 -- phase C4) ------------
+    // Console order after the GUI module vcall: BridgeGuiToSound (unconditional),
+    // BridgeWorldToSound (stage > 5), RootSoundModule::Update (unconditional, no
+    // caller-held locks -- the module takes its own), then the two sound->resource
+    // forwards under W(gameDataIn)+R(rootOut). The PC GUI/world sources are the game
+    // module's static per-sub-step buffers (GameMain drove the GUI earlier this sub-step;
+    // DriveWorldUpdateFrame above published into the static world output buffer).
+    if (lpSoundRootInput != 0 && lpSoundRootOutput != 0)
+    {
+        const BrnUpdateSet lUpdateSet = lpGameModule->ConstructUpdateSetFromFsm();
+
+        // BridgeGuiToSound @0x823C0A58 (console @0x823F2A2C): R(guiOut) + W(rootIn).
+        {
+            CgsGui::CgsGuiModuleIO::OutputBuffer* lpGuiOutput = lpGameModule->GetGuiOutputBuffer();
+            if (lpGuiOutput != 0)
+            {
+                lpGuiOutput->LockForRead();
+                lpSoundRootInput->LockForWrite();
+                lpGameModule->BridgeGuiToSound(lpSoundRootInput, lpGuiOutput);
+                lpSoundRootInput->UnlockForWrite();
+                lpGuiOutput->UnlockForRead();
+            }
+        }
+
+        // BridgeWorldToSound @0x823CD580 (console @0x823F2A6C, stage > 5 only):
+        // R(worldOut) + W(rootIn); the update set feeds the bit-0x100 replay-source select.
+        if (gBrnScriptedLoadStage > 5)
+        {
+            BrnWorldIO::UpdateOutputBuffer* lpWorldOutput = lpGameModule->GetWorldUpdateOutputBuffer();
+            if (lpWorldOutput != 0)
+            {
+                lpWorldOutput->LockForRead();
+                lpSoundRootInput->LockForWrite();
+                lpGameModule->BridgeWorldToSound(lpSoundRootInput, lpWorldOutput, lUpdateSet);
+                lpSoundRootInput->UnlockForWrite();
+                lpWorldOutput->UnlockForRead();
+            }
+        }
+
+        // RootSoundModule::Update @0x826FB238 (console @0x823F2AC8). The two f32 time
+        // steps are the console's exact products (@0x823F2AB0-C4): gameTimer/simTimer
+        // [+0x10]*[+0xC] == mfScaleCurrent * mfRate -- scaled delta seconds off the pair
+        // UpdateTimers ticks each sub-step.
+        {
+            const CgsSystem::Timer& lrGameTimer = lpGameModule->GetGameTimer();
+            const CgsSystem::Timer& lrSimTimer  = lpGameModule->GetSimTimer();
+            lpGameModule->GetSoundModule().Update(
+                lrGameTimer.GetScaleCurrent() * lrGameTimer.GetRate(),
+                lrSimTimer.GetScaleCurrent() * lrSimTimer.GetRate(),
+                lpGameModule->GetUpdateInputBufferStack(),
+                lpGameModule->GetUpdateOutputBufferStack(),
+                lpSoundRootInput,
+                lpSoundRootOutput,
+                lUpdateSet);
+        }
+
+        // The sound->resource forwards (console @0x823F2B40 + @0x823F2B54): the root
+        // output's AttribSys event queue (<2048> @+0x1014) into the GameData input's
+        // 32768 queue, then its resource RequestInterface (<4096> @+0x4) merged in --
+        // the same pair LoadSoundModule forwards during the prepare stages, now per
+        // frame. Bracket: W(gameDataIn) + R(rootOut), the DriveWorldUpdateFrame idiom.
+        {
+            s_GameDataInput.LockForWrite();
+            lpSoundRootOutput->LockForRead();
+            {
+                const BrnSound::Module::Io::RootOutputBuffer* lpSoundRootOutputRead = lpSoundRootOutput;
+                s_GameDataInput.GetAttribSysRequestInterface()->mRequestQueue.Append(
+                    lpSoundRootOutputRead->GetAttribSysRequestInterface()->mRequestQueue);
+                s_GameDataInput.GetRequestInterface()->mRequestQueue.Append(
+                    lpSoundRootOutputRead->GetResourceRequestInterface()->mRequestQueue);
+            }
+            lpSoundRootOutput->UnlockForRead();
+            s_GameDataInput.UnlockForWrite();
+        }
+    }
+
+    // ---- the sound trio teardown (X360 @0x823F2C88/0x823F2C98/0x823F2CA8) ---------------
+    // Exact reverse creation order, each through the stack that carved it.
+    if (lpSoundPreUpdateOutput != 0)
+        lpGameModule->GetUpdateOutputBufferStack()
+            ->DestroyIOBuffer<BrnSound::Module::Io::RootPreUpdateOutputBuffer>(&lpSoundPreUpdateOutput);
+    if (lpSoundRootOutput != 0)
+        lpGameModule->GetUpdateOutputBufferStack()
+            ->DestroyIOBuffer<BrnSound::Module::Io::RootOutputBuffer>(&lpSoundRootOutput);
+    if (lpSoundRootInput != 0)
+        lpGameModule->GetUpdateInputBufferStack()
+            ->DestroyIOBuffer<BrnSound::Module::Io::RootInputBuffer>(&lpSoundRootInput);
     // stage 8 (DONE): the X360 runs the full module cascade (BrnGameModule::DoUpdate);
-    // the PC host loop owns the module drive -- see DoUpdate's PC-platform note.
+    // the PC host loop owns the module drive -- see DoUpdate's PC-platform note. The
+    // sound legs above ARE that cascade's sound slice, staged here for the same reason
+    // the world leg is (both sites move together).
 }
 
 // @ 0x823E75A8 - one frame of the sound-module load. The X360 body:

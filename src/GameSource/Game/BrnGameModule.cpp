@@ -1230,6 +1230,47 @@ namespace BrnGame
         return 0;
     }
 
+    // @ 0x823EE4D8 -- the SOUND pre-update leg (faithful-audio-engine phase C4). Called by
+    // BOTH console spines ahead of the network/game-state/world drives: the loading spine
+    // @0x823F2714 and the full DoUpdate cascade. Statement for statement against the 42-instr
+    // X360 body (progress/scratch_dossiers/spine_sound_leg_0x823F22D8.md section 4):
+    //   * the miUT_Sound + miUT_SoundUpdate monitor pair brackets the WHOLE body (the only
+    //     sound perfmon anywhere on the loading spine);
+    //   * RootSoundModule::PreUpdate publishes the logic module's pre-update block into the
+    //     caller's RootPreUpdateOutputBuffer (the stack arg is only forwarded there);
+    //   * under the console's W(guiIn)+R(preUpdateOut) helper bracket (sub_823B6FE0 /
+    //     sub_823B7060, reproduced inline -- the per-source idiom this repo already uses),
+    //     the pre-update GuiOut queue (VariableEventQueue<256,16>) is bulk-appended into the
+    //     GUI input buffer's 32768 event queue (Append<256,16> @0x823DAF20), then
+    //     BridgeSoundToTraining walks the audio-effects message queue.
+    void BrnGameModule::DoPreUpdate_Sound(CgsModule::IOBufferStack* lpUpdateOutputBufferStack,
+                                          BrnSound::Module::Io::RootPreUpdateOutputBuffer* lpSoundPreUpdateOutputBuffer,
+                                          CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInputBuffer)
+    {
+        CgsDev::PerfMonCpu::StartMonitor(mCpuMonitors.miUT_Sound);
+        CgsDev::PerfMonCpu::StartMonitor(mCpuMonitors.miUT_SoundUpdate);
+
+        mSoundModule.PreUpdate(lpUpdateOutputBufferStack, lpSoundPreUpdateOutputBuffer);
+
+        // Console lock-pair helper sub_823B6FE0: assert both, W(dest guiIn), R(src preUpdateOut).
+        CGS_ASSERT(lpGuiInputBuffer != 0, "lpInputBuffer");
+        CGS_ASSERT(lpSoundPreUpdateOutputBuffer != 0, "lpOutputBuffer0");
+        lpGuiInputBuffer->LockForWrite();
+        lpSoundPreUpdateOutputBuffer->LockForRead();
+
+        lpGuiInputBuffer->GetGuiEvents()->Append<256, 16>(
+            lpSoundPreUpdateOutputBuffer->GetGuiEventQueue());
+
+        BridgeSoundToTraining(lpSoundPreUpdateOutputBuffer);
+
+        // sub_823B7060: unlock in reverse.
+        lpSoundPreUpdateOutputBuffer->UnlockForRead();
+        lpGuiInputBuffer->UnlockForWrite();
+
+        CgsDev::PerfMonCpu::StopMonitor(mCpuMonitors.miUT_SoundUpdate);
+        CgsDev::PerfMonCpu::StopMonitor(mCpuMonitors.miUT_Sound);
+    }
+
     // @ 0x823E8BD0 -- DoUpdate's WORLD leg. Reconstructed against the X360 body; the
     // per-frame world drive itself (the vtable +76 dispatch and the boot-video variant) is
     // REAL here. NOTE the caller DoUpdate is still the PC-platform leaf above (the PC host
@@ -1270,14 +1311,16 @@ namespace BrnGame
         CGS_ASSERT(lbCreated, "mpStack->CreateIOBuffer( &mpBuffer, lpcName )");  // CgsModuleIOHelper.h:52
         (void)lbCreated;
 
-        // Two of the six X360 input-staging bridges are committed now: the CONTROLLER leg and
-        // (2026-08-01) the GAME-STATE leg.
-        // [FLAG PC boot gate] BridgeNetworkToWorld @0x823DF8B0, BridgeGuiToWorld @0x823CBE90,
-        // BridgeSoundToWorld @0x823CDC98 and the replay-status latch
-        // (ReplayIO::OutputBuffer_PreSim::GetStatusInterface) are still not reconstructed; their
-        // source modules' output buffers are not threaded into this leg on the PC yet, so that
-        // staging is omitted rather than faked. The X360's SetTimerStatusInterface(gm+10095372)
-        // is part of the same staging. Restore them with the DoUpdate cascade.
+        // Three of the six X360 input-staging bridges are committed now: the CONTROLLER leg,
+        // (2026-08-01) the GAME-STATE leg, and (phase C3a/C4) the SOUND leg -- BridgeSoundToWorld
+        // @0x823CDC98 is bodied (GameBridgeSoundToX.cpp) and the live world drive
+        // (DriveWorldUpdateFrame) stages it when the spine threads the pre-update buffer through.
+        // [FLAG PC boot gate] BridgeNetworkToWorld @0x823DF8B0, BridgeGuiToWorld @0x823CBE90 and
+        // the replay-status latch (ReplayIO::OutputBuffer_PreSim::GetStatusInterface) are still
+        // not reconstructed; their source modules' output buffers are not threaded into this leg
+        // on the PC yet, so that staging is omitted rather than faked. The X360's
+        // SetTimerStatusInterface(gm+10095372) is part of the same staging. Restore them with
+        // the DoUpdate cascade.
         lpWorldInput->LockForWrite();
         BridgeControllerToWorld(lpWorldInput, lpInputOutputBuffer);
         lpWorldInput->UnlockForWrite();
