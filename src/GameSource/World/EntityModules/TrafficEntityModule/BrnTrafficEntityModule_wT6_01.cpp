@@ -116,6 +116,7 @@ void TrafficEntityModule::NukeTrafficJams()
     // once so the env lookup is not in the per-param path.
     static const bool sbDIAGSuppressFlagging = (getenv("BRN_TRAFFIC_NO_JAM_NUKE") != 0);
     u32 luDIAGJamsFound  = 0;
+    u32 luDIAGAliveSeen  = 0;
     u32 luDIAGLongestRun = 0;
     u32 luDIAGWouldFlag  = 0;
     u32 luDIAGFlagged    = 0;
@@ -138,6 +139,7 @@ void TrafficEntityModule::NukeTrafficJams()
          ++lItParam)
     {
         const s32 liParam = lItParam.GetIndex();
+        ++luDIAGAliveSeen;   // [DIAG]
 
         // 0x82735958..0x82735980. The console tests the local set with the ITERATOR'S cached
         // mask rather than re-deriving 1<<(i&63) -- same bit, one instruction cheaper. Spelled
@@ -233,14 +235,19 @@ void TrafficEntityModule::NukeTrafficJams()
             }
         }
 
+        // [DIAG] the longest run collected THIS PASS, jam or not -- without it a session that
+        // reports no jams cannot distinguish "queues form but stay short" from "behaviour 5
+        // never happens at all", and those need completely different follow-up.
+        if (static_cast<u32>(laJamRun.GetCount()) > luDIAGLongestRun)
+        {
+            luDIAGLongestRun = static_cast<u32>(laJamRun.GetCount());
+        }
+
         // ---- drain -------------------------------------------------------------------------
         // 0x82735F08..0x82736200. FIVE cars or more, and then only every third one.
         if (laJamRun.GetCount() > KI_JAM_MIN_RUN_LENGTH)
         {
             ++luDIAGJamsFound;
-            luDIAGLongestRun = (static_cast<u32>(laJamRun.GetCount()) > luDIAGLongestRun)
-                             ? static_cast<u32>(laJamRun.GetCount())
-                             : luDIAGLongestRun;
 
             for (u32 luSlot = 0;
                  luSlot < static_cast<u32>(laJamRun.GetCount());
@@ -308,14 +315,32 @@ void TrafficEntityModule::NukeTrafficJams()
     // gone from a screenshot, because SetShouldBeRemoved is a request to UpdateParams, not a
     // removal. Counting the request and calling it a removal is exactly the class of gate
     // that has shipped broken work here three times.
-    if (luDIAGJamsFound != 0 && getenv("BRN_TRAFFIC_DIAG") != 0
+    static u32 suDIAGPass        = 0;
+    static u32 suDIAGBestEverRun = 0;
+    ++suDIAGPass;
+    if (luDIAGLongestRun > suDIAGBestEverRun)
+    {
+        suDIAGBestEverRun = luDIAGLongestRun;
+    }
+
+    // Print on a jam, on a NEW session-best run length, or as a 600-pass heartbeat -- so a
+    // session with no jams still says how close it got and how many params were alive to
+    // queue in the first place.
+    const bool lbReport = (luDIAGJamsFound != 0)
+                       || (luDIAGLongestRun >= 2 && luDIAGLongestRun == suDIAGBestEverRun)
+                       || ((suDIAGPass % 600u) == 0u);
+
+    if (lbReport && getenv("BRN_TRAFFIC_DIAG") != 0
         && (CgsDev::Message::gxMessageFilterFlags & 1) != 0 && CgsDev::Log::gpDebugPrint != 0)
     {
         *CgsDev::Log::gpDebugPrint
-            << "[jam-nuke] jams=" << static_cast<s32>(luDIAGJamsFound)
-            << " longestRun="     << static_cast<s32>(luDIAGLongestRun)
-            << " passedGuards="   << static_cast<s32>(luDIAGWouldFlag)
-            << " flagged="        << static_cast<s32>(luDIAGFlagged)
+            << "[jam-nuke] pass="  << static_cast<s32>(suDIAGPass)
+            << " aliveParams="     << static_cast<s32>(luDIAGAliveSeen)
+            << " longestRun="      << static_cast<s32>(luDIAGLongestRun)
+            << " bestEver="        << static_cast<s32>(suDIAGBestEverRun)
+            << " jams="            << static_cast<s32>(luDIAGJamsFound)
+            << " passedGuards="    << static_cast<s32>(luDIAGWouldFlag)
+            << " flagged="         << static_cast<s32>(luDIAGFlagged)
             << (sbDIAGSuppressFlagging ? " [SUPPRESSED]" : "")
             << "\n";
     }
