@@ -170,11 +170,29 @@ public:
     // HudMessageAnalyzer::TriggerDeveloperChallengeMessageDEBUG (@0x825204EC..0x82520660)
     // pins the contract: construction positions at the lowest set bit, an empty array
     // positions at tuNumBits (== End()), and GetIndex() returns the raw index either way.
-    // Its two asserts (h:235, h:282) are caller-owned per this header's policy.
+    // Its asserts (h:235, h:282, h:284, h:314, h:316, h:374, h:396, h:415, h:431) are
+    // caller-owned per this header's policy.
     //
-    // FLAG: the single-field scan and the empty-array result are MEASURED; the
-    // multi-field advance (the miIndex/64 field walk) is INFERRED, since no multi-field
-    // instantiation of Begin() is inlined anywhere in the X360 spine decoded so far.
+    // ⭐ FLAG RETIRED 2026-08-29 (jam-valve wave). It read: "the single-field scan and the
+    // empty-array result are MEASURED; the multi-field advance (the miIndex/64 field walk) is
+    // INFERRED, since no multi-field instantiation of Begin() is inlined anywhere in the X360
+    // spine decoded so far." That instantiation has now been decoded:
+    // TrafficEntityModule::NukeTrafficJams @0x827353E8 folds the whole <600> (== ten field)
+    // Iterator inline, both the constructor (0x82735424..0x827357EC) and operator++
+    // (0x827362CC..0x82736508). Advance() below is that measurement, and it is a DIFFERENT
+    // SHAPE from the inferred one -- which the console's own baked assert LINE NUMBERS prove
+    // independently of the disassembly: the "Internal mask has wrapped" assert is emitted at
+    // CgsFastBitArray.h:282 from one loop and at :314 from a second, and "Index has gone out of
+    // range" at :284 and :316 respectively. One source loop cannot bake two line numbers, so
+    // the source has TWO loops -- a within-field scan and a next-non-empty-field walk -- not
+    // the single bit-at-a-time loop that was inferred here.
+    //
+    // The two forms are behaviourally identical (they select the same next set bit), so no
+    // committed consumer changes meaning; the measured one skips empty fields wholesale
+    // instead of stepping 64 dead bits at a time. One observable-in-principle difference,
+    // recorded rather than "fixed": on exhaustion the console sets miIndex = tuNumBits and
+    // LEAVES mxMask at its last value, where the inferred version also zeroed mxMask. Nothing
+    // reads the mask at End(), and zeroing it is behaviour the binary does not have.
     class Iterator
     {
     public:
@@ -197,25 +215,64 @@ public:
         u64 GetMask() const { return mxMask; }                              // DWARF h:369
 
     private:
-        // Scan forward for the next set bit; stop at tuNumBits (== End()) when none.
+        // Advance to the next set bit, or to tuNumBits (== End()) when there is none.
+        // MEASURED off NukeTrafficJams' inlined <600> operator++ (X360 0x827362CC..0x82736508).
         void Advance()
         {
-            do
+            const u32 luField = static_cast<u32>(miIndex) / KU_NUMBER_OF_BITS_IN_BIT_FIELD;
+            const u64 lxWord  = mpxSourceMasks[luField];
+
+            // 0x827362F4..0x82736300. "Is there anything left in THIS field above me?" The
+            // console spells it `(63 - bitPosition) > cntlzd(word)` -- cntlzd counts the zeros
+            // above the field's highest set bit, so that compares "highest set bit" against
+            // "where I am". De-optimised to the exact equivalent: shift my own position out
+            // and see if anything survives. (Written as two shifts, not `>> (luBit + 1)`,
+            // because luBit can be 63 and a 64-bit shift by 64 is undefined in C++.)
+            const u32 luBit = static_cast<u32>(miIndex)
+                            - luField * KU_NUMBER_OF_BITS_IN_BIT_FIELD;
+
+            if (((lxWord >> luBit) >> 1) != 0)
             {
-                ++miIndex;
-                if (miIndex >= static_cast<s32>(tuNumBits))
+                // 0x82736308..0x82736374. Scan within the current field. Caller-owned asserts:
+                // h:282 on a wrapped mask, h:284 on an out-of-range index.
+                do
                 {
-                    mxMask = 0;   // exhausted -- parked at End()
+                    mxMask <<= 1;
+                    ++miIndex;
+                }
+                while ((mxMask & lxWord) == 0);
+                return;
+            }
+
+            // 0x827363DC..0x8273640C. This field is done: walk to the next non-empty one,
+            // skipping empty fields 64 bits at a time.
+            mxMask  = 1;
+            miIndex = static_cast<s32>((luField + 1) * KU_NUMBER_OF_BITS_IN_BIT_FIELD);
+
+            for (u32 luNextField = luField + 1;
+                 luNextField < KU_NUMBER_OF_BIT_FIELDS;
+                 ++luNextField)
+            {
+                const u64 lxNextWord = mpxSourceMasks[luNextField];
+
+                if (lxNextWord != 0)
+                {
+                    // 0x8273642C..0x827364A8. Same within-field scan; asserts h:314 / h:316.
+                    while ((mxMask & lxNextWord) == 0)
+                    {
+                        mxMask <<= 1;
+                        ++miIndex;
+                    }
                     return;
                 }
-                mxMask = (mxMask == 0) ? 1 : (mxMask << 1);
-                if (mxMask == 0)  // 64-bit boundary: wrap into the next field
-                {
-                    mxMask = 1;
-                }
+
+                miIndex += static_cast<s32>(KU_NUMBER_OF_BITS_IN_BIT_FIELD);
             }
-            while ((mpxSourceMasks[miIndex / static_cast<s32>(KU_NUMBER_OF_BITS_IN_BIT_FIELD)]
-                    & mxMask) == 0);
+
+            // Exhausted. The console parks at tuNumBits (`li r10, 0x258` in the constructor's
+            // twin of this walk, 0x8273553C) -- which is what End() compares against. It does
+            // NOT clear mxMask.
+            miIndex = static_cast<s32>(tuNumBits);
         }
 
         s32        miIndex;          // DWARF h:91

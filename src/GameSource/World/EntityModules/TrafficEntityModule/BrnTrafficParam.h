@@ -53,9 +53,24 @@ class  VehicleTypeRuntime;
 static const u32 KU_PARAM_NUM_SEGMENTS_TO_REMEMBER = 6;
 static const u32 KU_PARAM_NUM_PLANS = 2;
 
-// CgsFastBitArray out-of-range assert uses 600 as "max bits"; the SoA sets are
-// FastBitArray<601> so a valid traffic param index is in [0, 600).
-static const u32 KU_PARAM_MAX_PARAMS = 601;
+// [!] CORRECTED 2026-08-29 (jam-valve wave): WAS 601, AND THE COMMENT ARGUED ITSELF BACKWARDS.
+// It read "the assert uses 600 as max bits; the SoA sets are FastBitArray<601>" -- but that
+// assert PRINTS tuNumBits. NukeTrafficJams @0x827353E8 inlines the whole <N> instantiation and
+// bakes N four independent ways, all 0x258 == 600:
+//   * the streamed range assert's own operand -- `li r5, 0x258` @0x8273582C / @0x82735850,
+//     feeding the "%d" after " is out of range (max bits: ";
+//   * the bounds tests themselves -- `cmpwi r19, 0x258` at 0x82735630 / 0x82735894 / 0x827358FC;
+//   * Iterator EXHAUSTION -- `li r10, 0x258 ; stw r10, it.miIndex` @0x8273553C, i.e. the
+//     iterator parks at tuNumBits;
+//   * End() at the loop bottom -- `cmpwi r27, 0x258 ; bne` @0x8273650C.
+// A 601 would have to show as 0x259 in all four. It is also the value the tree ALREADY derived
+// for the sibling constant by the same route (BrnTrafficConstants.h: "DWARF :55 says 601 (PS3).
+// SHIP == 600 (400 + 199 + 1), asserted as 0x258"), so this was the last un-corrected copy.
+// The 601 was NOT harmless: at 601 the iterator treats index 600 as a live position, and bit
+// 600 lives inside the tenth field, so an exhausted walk can hand a consumer index 600 -- one
+// past every KU_MAX_PARAMS accessor's bound. Field count is unchanged ((600+63)/64 == 10 ==
+// (601+63)/64), so the 0x50 stride and the ParamSoaData embed_check offsets are untouched.
+static const u32 KU_PARAM_MAX_PARAMS = 600;
 
 // ParamSoaData: three FastBitArray<601> membership sets, one quadword-block each.
 // Offsets proven by the asm: mAliveParams @0x00, mDyingParams @0x50, mZombieParams @0xA0.
