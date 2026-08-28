@@ -573,23 +573,42 @@ namespace BrnDirector
         // TimerStatus is `miFrameCount@+0, mfBaseTimeStep@+4, mfTimeStepMultiplier@+8`. So
         // +8*+4 IS the GAME timer's GetCurrentTimeStep() (the same reach the committed
         // CameraFinaliser::Update makes) and +32*+28 is the SIM timer's.
-        const CgsSystem::TimerStatus* lpGameTimerStatus =
-            reinterpret_cast<const CgsSystem::TimerStatus*>(lpInput->GetTimerStatusInterface());
+        // (The GAME half used to be a reinterpret_cast of the interface pointer straight to
+        // TimerStatus*, which only worked because mGameTimerStatus happens to sit at +0. Now
+        // that the accessors are defined it goes through GetGameTimerStatus() like its sibling.)
+        const CgsSystem::TimerStatusInterface* lpTimerStatusInterface =
+            lpInput->GetTimerStatusInterface();
 
-        f32 lfTimestep = lpGameTimerStatus->GetCurrentTimeStep();
+        f32 lfTimestep = lpTimerStatusInterface->GetGameTimerStatus()->GetCurrentTimeStep();
 
-        // ⚠️ QUIET GATE: mfSimTimestep. The sim timer sits at TimerStatusInterface +24, and
-        //   `CgsSystem::TimerStatusInterface::GetSimTimerStatus()` is DECLARATION-ONLY in the
-        //   committed CgsTimerStatusInterface.h -- a GameShared header this wave does not own.
-        //   Reaching +24 by hand would be a raw offset into a foreign type (bug class (c)), so
-        //   the slot is published as 0 instead of a fabricated value.
-        //   CONSEQUENCE: an arbitrator state that scales by the SIM timestep would see 0. None
-        //   on the live path does -- Arbitrator::Update reads only mfTimestep (+0x5C), and no
-        //   committed state reads +0x60.
-        //   DELETE-WHEN: the one-line body `{ return &mSimTimerStatus; }` is given to
-        //   TimerStatusInterface::GetSimTimerStatus (recipe in the wave log's PART 4), then
-        //   this becomes `…GetSimTimerStatus()->GetCurrentTimeStep()`.
-        f32 lfSimTimestep = 0.0f;
+        // ✅✅ THE QUIET GATE ON mfSimTimestep IS GONE (2026-08-28, crash-camera wave). It was
+        // STALE, and BOTH halves of its justification had stopped being true:
+        //
+        //   (1) "GetSimTimerStatus() is DECLARATION-ONLY". It is not, and has not been for a
+        //       while: CgsTimerStatusInterface.h:100-103 define all four accessors inline
+        //       (`{ return &mSimTimerStatus; }`), which is verbatim the recipe this gate's own
+        //       DELETE-WHEN asked for. Nobody came back to flip it -- the "gates are STALE, not
+        //       dead" class: ask when a gate's condition last held, not whether it reads true.
+        //   (2) "no committed state reads +0x60". EIGHT sites do, and seven of them are on the
+        //       crash path: ArbStateCrashMode reads mfSimTimestep for mfTiltChangeTime,
+        //       mfFlashTime, mfBlurInTime, mfBlurOutTime, mfCurrentBlur (twice) and
+        //       mfBordersTime; ArbStateOnlineRaceIntro reads it for mfTimeInState. Both states
+        //       are stubbed in DirectorLinkStubs.cpp today, which is the only reason the zero
+        //       has not shown up on screen.
+        //
+        // ⛔ WHY THIS MATTERED FOR THE CRASH CAMERA. Every crash-mode intro timer is a
+        // `mfXxxTime -= lrSharedInfo.mfSimTimestep` countdown. Published as a hard 0 they
+        // decrement by nothing, so the entry flash, the black borders, the motion-blur ramp and
+        // the camera tilt would each have hung at their seeded value FOREVER the moment
+        // BrnArbStateCrashMode.cpp was mounted -- a landmine sitting directly under this goal,
+        // with a green link, no assert, and a plausible-looking timer that simply never expires.
+        // It is the placeholder-identity class again: 0 is the identity of `+=`, not of `-=`
+        // against a deadline.
+        //
+        // The console reads `timer[+32] * timer[+28]`, which the committed layout above makes
+        // exactly mSimTimerStatus.mfTimeStepMultiplier * mfBaseTimeStep -- i.e.
+        // GetSimTimerStatus()->GetCurrentTimeStep(). Reached BY NAME, no offset arithmetic.
+        f32 lfSimTimestep = lpTimerStatusInterface->GetSimTimerStatus()->GetCurrentTimeStep();
 
         // ⚠️ GATE: `if ( maStateFlagTail[+0x3543C] ) { lfTimestep = 0; lfSimTimestep = 0; }`
         //   -- the ICE-owns-the-frame latch lives in the un-homed flag tail. CONSEQUENCE: the
@@ -1297,9 +1316,62 @@ namespace BrnDirector
             maGameState.mbRankUpMessageReceivedThisFrame = true;
         }
 
-        // ⚠️ GATE: `if (<flag tail +0x35431>) mbCanUseSlomo = false;`, the crash-active leg
-        //   (it indexes the published VehicleInfo at element +0x44A, a byte with no recovered
-        //   name), and the whole debug-render tail.
+        // ⚠️ GATE: `if (<flag tail +0x35431>) mbCanUseSlomo = false;` and the whole debug-render
+        //   tail. (Both still blocked on the un-homed MainDirector flag tail.)
+        //
+        // ⛔⛔ THE CRASH-ACTIVE LEG IS NO LONGER BLOCKED ON A NAME -- IT IS BLOCKED ON A STATE.
+        // This gate used to read "it indexes the published VehicleInfo at element +0x44A, a byte
+        // with no recovered name". THE NAME IS RECOVERED (2026-08-28, crash-camera wave):
+        //   +0x44A == 1098 == Camera::VehicleInfo::mRaceCarState.mbCrashing
+        // pinned twice, independently: BrnVehicleEvents.h:88 maps serialised @1098 <- physics
+        // +0x710 -> mbCrashing, and ArbStateCrashing::CanRun @0x821F6258 is nothing but
+        // `lwz r11, 0x48(r4) / lbz r3, 0x44A(r11)` -- the same byte off mpPlayerCar.
+        //
+        // ⭐ THIS IS THE ONLY WRITER OF GameState::mbCrashActive IN THE WHOLE IMAGE. An
+        // image-wide scan of all ARTIST exports for the director-relative offset 211161
+        // (== maGameState +0xF9) returns exactly one function: this one. And mbCrashActive is
+        // the gate on ArbStateRoaming::ProcessPossibleStateChanges' crash edge -- so while this
+        // leg is absent the arbitrator can NEVER attempt E_STATE_CRASHING, no matter what the
+        // world does. CONTROL for "no writer": the same grep over the tree finds 13 assignments
+        // to the neighbouring meEventType and 1 to mbPlayerWasTakenDown, so it does find writers
+        // when they exist; mbCrashActive, mbTakedownActive, mfCrashTimeRemaining,
+        // mbGoToCrashModeAfterIntro, mbCrashActiveWithSlomoSinceStart and mbImpactTimeActive all
+        // return ZERO.
+        //
+        // MEASURED 2026-08-28 with BRN_CRASH_PLAYER=5000 (a real, committed player crash --
+        // `[crash-probe] UpdateCrashing ... mbCrashing=1` for 300+ frames, bridged to the
+        // director as `mbPlayerCarCrashing=1`): the sim timestep never left real time. Three
+        // independent witnesses agreed -- one edge-triggered [slomo] line (simStep=0.016667),
+        // BRN_FRAME_DUMP_ARM=slomo wrote frames=0 for the whole 220 s run, and the physics'
+        // own mfTimeCrashing advanced 0.016667 s per frame from frame 1 to frame 300.
+        //
+        // THE CONSOLE BLOCK, transcribed (pseudocode 854-873 @0x822372F8), ready to land:
+        //     if (maGameState.mbCrashActive &&                       // last frame's value
+        //         !raceCars[input->GetPlayerCarIndex()].mRaceCarState.mbCrashing)
+        //         maGameState.mbPlayerWasTakenDown = false;          // +0x1C3, crash ended
+        //     maGameState.mbCrashActive =                            // +0x0F9
+        //         raceCars[input->GetPlayerCarIndex()].mRaceCarState.mbCrashing;
+        //     maGameState.mfCrashTimeRemaining =                     // +0x0FC
+        //         maGameState.mbCrashActive
+        //             ? maGameState.mfCrashTimeRemaining - <sim timestep>
+        //             : 6.0f;                                        // the console's reload
+        // (The 1264 stride Hex-Rays prints is 0x4F0 == sizeof the published VehicleInfo, so
+        //  `raceCars[idx]` is the ordinary indexed read this TU already makes at the
+        //  lpPlayerCar line above -- no offset arithmetic is needed to land it.)
+        // mfCrashTimeRemaining is what ArbStateCrashing::Update passes to
+        // SelectNormalCrashCamera as lbTooLateToSwitchCameras (`<= 1.0f`), so the countdown is
+        // load-bearing, not cosmetic.
+        //
+        // ⛔⛔ DO NOT LAND THIS LEG ON ITS OWN -- IT MUST SHIP WITH BrnArbStateCrashing.cpp.
+        // E_STATE_CRASHING's container slot is still `class ArbStateCrashing : public
+        // ArbitratorState {};` (BrnDirectorArbitratorStateContainer.h:50). With mbCrashActive
+        // live, ArbStateRoaming hands the frame to that empty shell on the first crash; its
+        // Update is the base's do-nothing, so no code path ever writes meState again and no exit
+        // edge exists. The camera would stop being driven and never recover -- a permanently
+        // frozen view from the first crash of the session, out of a green build. Reasoned from
+        // the shape (base Update is empty, no other writer of that state's meState exists), NOT
+        // measured -- deliberately not tried, because a shared tree is not the place to test a
+        // change whose failure mode is an unrecoverable camera.
     }
 
     // ------------------------------------------------------------------------
