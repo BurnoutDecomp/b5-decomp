@@ -364,13 +364,20 @@ void TrafficEntityModule::UpdateCollidableVehicles(
     //
     // Vehicle::SetDead masks mxFlags with 0xDE -- it clears ALIVE and ORPHAN and deliberately
     // leaves E_FLAG_COLLIDABLE and the SoA bit alone, because on the console the remove half
-    // (KillDyingVehicleEntities @0x82741E40 / RemoveVehicle @0x8272E370) tears the scene
-    // registration down. BOTH are gated in this tree, and the main walk below only visits
-    // (alive & withEntities), so a killed driving-traffic car would keep a live AddForCollision
-    // registration at its last position for the rest of the session -- an invisible solid car.
-    // KillParam (_wT2_01.cpp:653) reaches SetDead on a normal drive, so this is reachable, not
-    // theoretical.
-    // DELETE-WHEN KillDyingVehicleEntities or RemoveVehicle lands.
+    // (KillDyingVehicleEntities @0x82741E40) tears the scene registration down. The main walk
+    // below only visits (alive & withEntities), so a killed driving-traffic car would keep a
+    // live AddForCollision registration at its last position for the rest of the session -- an
+    // invisible solid car. KillParam (_wT2_01.cpp:653) reaches SetDead on a normal drive, so
+    // this is reachable, not theoretical.
+    //
+    // ⚠️ NOTE CORRECTED 2026-08-28. This note used to name RemoveVehicle @0x8272E370 as the
+    // other half of the teardown and say "DELETE-WHEN KillDyingVehicleEntities or RemoveVehicle
+    // lands". RemoveVehicle HAS NOW LANDED (_wT5_01.cpp) and this sweep is NOT retired by it:
+    // read end to end, RemoveVehicle frees no pool slot, deletes no param and touches no scene
+    // or collision registration at all -- it retires LIVENESS (Vehicle::SetDead), the
+    // crash-module bookkeeping and any articulation, and MARKS the param. The scene/collision
+    // teardown was always KillDyingVehicleEntities' alone.
+    // DELETE-WHEN KillDyingVehicleEntities' scene-remove leg is proven live on the shipped path.
     // ------------------------------------------------------------------------------------
     {
         TrafficBitArray lStaleCollidable;
