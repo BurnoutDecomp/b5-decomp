@@ -5344,21 +5344,84 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
     {
         const char* lpcFreeEnv = std::getenv( "BRN_WORLD_CAMFREE" );
         siCamFree = ( lpcFreeEnv != 0 && lpcFreeEnv[0] != '0' ) ? 1 : 0;
+    }
 
-        // [DIAG] BRN_WORLD_CAMTRAFFIC (see the swerve-camera block further down) IMPLIES the
-        // free camera: framing a traffic car is meaningless while the director override is
-        // still pointing the view at the player. One variable, not two, so a capture cannot
-        // half-arm itself. DELETE-WHEN-STABLE.
-        const char* lpcSwerveCamEnv = std::getenv( "BRN_WORLD_CAMTRAFFIC" );
-        if ( lpcSwerveCamEnv != 0 && lpcSwerveCamEnv[0] != '0' )
+    // ---- [DIAG] BRN_WORLD_CAMTRAFFIC -- FRAME THE SWERVING TRAFFIC CAR ---------------------
+    // NOT IN THE X360 BINARY. Capture-only, inert unless the variable is set, and DELETE-WHEN-
+    // STABLE. Declared here (rather than beside the tour path below) because the director
+    // override is consumed two lines down and this mode has to be able to keep it.
+    //
+    // WHY. The avoidance chain (UpdateParams_TryAvoidCrashing -> CalcSwerveAmount ->
+    // CalcTargetPos -> MoveToTarget) is complete and its DECISION is measured by [T5-avoid],
+    // but no frame had ever SHOWN a traffic car altering course -- every camera on this build
+    // follows the player, who is by construction either crashed or driving away from the cars
+    // reacting to him.
+    //
+    // ⛔⛔ IT DOES **NOT** IMPLY BRN_WORLD_CAMFREE, AND THAT IS THE WHOLE DESIGN. It did, for
+    // one build, and the result was MEASURED: with the free camera armed from frame one, the
+    // tour camera latches at the SPAWN point and never moves, so mCameraLastFrame -- which the
+    // traffic module uses as its BEHAVIOUR CENTRE -- freezes there too. The [T-anchor] rung
+    // showed the player 570 m away from a `cam` that had not moved since the junkyard, and the
+    // run produced ZERO swerves and ZERO junction-FUP action where the SAME BINARY, unarmed,
+    // produced seven swerves and nine RemoveVehicle removals. ⭐ BRN_WORLD_CAMFREE does not
+    // merely change what is photographed; it changes the SIMULATION, because traffic behaviour
+    // is keyed off the camera. So this mode leaves the director camera exactly alone until the
+    // swerve happens, and only then takes the view.
+    //
+    // ⭐ AND IT THEN HOLDS STILL, also deliberately. A camera that TRACKS the car keeps it
+    // centred, and a centred car cannot be seen to deviate -- the camera would cancel exactly
+    // the evidence being gathered. A fixed wide shot at the place the swerve began lets the car
+    // drive THROUGH the frame, which is the only framing in which a bent path is a visible fact
+    // rather than an assertion.
+    //
+    // =1 latches on the first swerve of any kind (including the ordinary
+    // get-out-of-the-player's-way one); =2 latches only on a miBehaviour==2 publish, i.e. the
+    // CRASH-AVOIDANCE swerve, which is the arm the junction-FUP gate controls.
+    static bool    sbPathLatched      = false;
+    static bool    sbFramingCar       = false;
+    static Vector3 sPathOrigin;
+    static f32     sfPathRadius       = 1.0f;
+    static f32     sfPathAngle        = 0.0f;
+    static bool    sbSwerveCamLatched = false;
+    static s32     siSwerveCam        = -1;
+    if ( siSwerveCam < 0 )
+    {
+        const char* lpcSwerveEnv = std::getenv( "BRN_WORLD_CAMTRAFFIC" );
+        siSwerveCam = ( lpcSwerveEnv != 0 && lpcSwerveEnv[0] != '0' )
+                    ? ( lpcSwerveEnv[0] == '2' ? 2 : 1 )
+                    : 0;
+    }
+    if ( siSwerveCam != 0 && !sbSwerveCamLatched )
+    {
+        const u32 luTrigger = ( siSwerveCam == 2 ) ? BrnTraffic::gSwerveWatch.muBehaviour2
+                                                   : BrnTraffic::gSwerveWatch.muPublishes;
+        if ( luTrigger != 0u )
         {
-            siCamFree = 1;
+            sPathOrigin.x = BrnTraffic::gSwerveWatch.mfPosX;
+            sPathOrigin.y = BrnTraffic::gSwerveWatch.mfPosY;
+            sPathOrigin.z = BrnTraffic::gSwerveWatch.mfPosZ;
+            sPathOrigin.w = 0.0f;
+            sfPathRadius       = 9.0f;
+            sbFramingCar       = true;
+            sbPathLatched      = true;
+            sbSwerveCamLatched = true;
+            // Arms the back-buffer writer under BRN_FRAME_DUMP_ARM -- see BrnTrafficSwerveWatch.h.
+            BrnTraffic::gSwerveWatch.muCameraLatched = 1u;
+            if ( CgsDev::Log::gpDebugPrint != 0 )
+            {
+                *CgsDev::Log::gpDebugPrint
+                    << "[T5-swervecam] LATCHED on traffic vehicle "
+                    << BrnTraffic::gSwerveWatch.miVehicle
+                    << " behaviour " << BrnTraffic::gSwerveWatch.miBehaviour << " at ("
+                    << sPathOrigin.x << ", " << sPathOrigin.y << ", " << sPathOrigin.z
+                    << ") -- the camera is now STATIC; the car drives through the frame\n";
+            }
         }
     }
 
     // Consume this frame's director-camera override (one frame only -- see the header).
     const bool                          lbUseDirectorCamera =
-        mbBringUpCameraOverrideValid && ( siCamFree == 0 );
+        mbBringUpCameraOverrideValid && ( siCamFree == 0 ) && !sbSwerveCamLatched;
     const rw::math::vpu::Matrix44Affine lDirectorTransform  = mBringUpCameraOverride;
     const f32                           lfDirectorFOVDegs   = mfBringUpCameraOverrideFOV;
     mbBringUpCameraOverrideValid = false;
@@ -5547,54 +5610,6 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
         if ( lpcSwerveCamEnv2 != 0 && lpcSwerveCamEnv2[0] != '0' && lpcSpeedEnv == 0 )
         {
             sfCamSpeed = 0.0f;
-        }
-    }
-
-    static bool    sbPathLatched = false;
-    static bool    sbFramingCar  = false;
-    static Vector3 sPathOrigin;
-    static f32     sfPathRadius = 1.0f;
-    static f32     sfPathAngle  = 0.0f;
-
-    // ---- [DIAG] BRN_WORLD_CAMTRAFFIC -- FRAME THE SWERVING TRAFFIC CAR ---------------------
-    // NOT IN THE X360 BINARY. Capture-only, exactly like the three BRN_WORLD_CAM* switches
-    // above, and inert unless the variable is set. DELETE-WHEN-STABLE.
-    //
-    // WHY. The avoidance chain (UpdateParams_TryAvoidCrashing -> CalcSwerveAmount ->
-    // CalcTargetPos -> MoveToTarget) is complete and its DECISION is measured by the
-    // [T5-avoid] rung, but no frame had ever SHOWN a traffic car altering course -- every
-    // camera on this build follows the player, who is by construction either crashed or
-    // driving away from the cars reacting to him.
-    //
-    // ⭐ IT LATCHES ON THE FIRST SWERVE AND THEN HOLDS STILL, deliberately. A camera that
-    // TRACKS the car keeps it centred, and a centred car cannot be seen to deviate -- the
-    // deviation would be cancelled by the camera. A fixed wide shot at the place the swerve
-    // began lets the car drive THROUGH the frame, which is the only framing in which a bent
-    // path is a visible fact rather than an assertion. BRN_WORLD_CAMDIST still scales it.
-    static bool sbSwerveCamLatched = false;
-    static s32  siSwerveCam        = -1;
-    if ( siSwerveCam < 0 )
-    {
-        const char* lpcSwerveEnv = std::getenv( "BRN_WORLD_CAMTRAFFIC" );
-        siSwerveCam = ( lpcSwerveEnv != 0 && lpcSwerveEnv[0] != '0' ) ? 1 : 0;
-    }
-    if ( siSwerveCam != 0 && !sbSwerveCamLatched && BrnTraffic::gSwerveWatch.muPublishes != 0u )
-    {
-        sPathOrigin.x = BrnTraffic::gSwerveWatch.mfPosX;
-        sPathOrigin.y = BrnTraffic::gSwerveWatch.mfPosY;
-        sPathOrigin.z = BrnTraffic::gSwerveWatch.mfPosZ;
-        sPathOrigin.w = 0.0f;
-        sfPathRadius       = 9.0f;
-        sbFramingCar       = true;
-        sbPathLatched      = true;
-        sbSwerveCamLatched = true;
-        if ( CgsDev::Log::gpDebugPrint != 0 )
-        {
-            *CgsDev::Log::gpDebugPrint
-                << "[T5-swervecam] LATCHED on traffic vehicle "
-                << BrnTraffic::gSwerveWatch.miVehicle << " at ("
-                << sPathOrigin.x << ", " << sPathOrigin.y << ", " << sPathOrigin.z
-                << ") -- the camera is now STATIC; the car drives through the frame\n";
         }
     }
 

@@ -31,11 +31,16 @@
 #include <cmath>
 #include <cstdlib>   // getenv (the BRN_TRAFFIC_DIAG probe)
 
+// [DIAG] the renderer's present counter. BRN_FRAME_DUMP names its BMPs bb_<guPresentCount>.bmp,
+// so stamping the traffic track with it makes a logged number and a dumped pixel come from ONE
+// frame -- the same discipline CgsIm2d.cpp and CgsImRenderBufferTemplate.cpp already follow.
+namespace renderengine { extern u32 guPresentCount; }
+
 namespace BrnTraffic
 {
 // [DIAG] NOT IN THE X360 BINARY. The one definition of the swerve watch the world module's
 // bring-up camera reads under BRN_WORLD_CAMTRAFFIC. DELETE-WHEN-STABLE.
-SwerveWatch gSwerveWatch = { 0.0f, 0.0f, 0.0f, -1, 0u };
+SwerveWatch gSwerveWatch = { 0.0f, 0.0f, 0.0f, -1, -1, 0u, 0u, 0u };
 
 namespace
 {
@@ -458,6 +463,51 @@ void UpdateVehiclesJob::UpdateVehicle()
 
     const Param* lpParam = GetCurrentParam();
 
+    // [DIAG] NOT IN THE X360 BINARY, OFF BY DEFAULT. THE TRACK that turns the swerve camera's
+    // pictures into a measurement. Once BRN_WORLD_CAMTRAFFIC has latched its static shot on a
+    // vehicle, every frame of that ONE vehicle is logged: the present count (which is also the
+    // dumped frame's filename, bb_<present>.bmp, so a pixel and a number come from the same
+    // frame), the world position, the heading, and -- the number that matters --
+    // GetObjectEstimatedDistanceToLaneCenterAccordingToParam applied to the CAR ITSELF, i.e.
+    // how far it is from the lane centre its own param says it should be on. A swerve is that
+    // value walking away from zero and coming back. DELETE-WHEN-STABLE.
+    if (TrafficDiagStream() != 0 && gSwerveWatch.muCameraLatched != 0u &&
+        static_cast<s32>(muCurrentVehicle) == gSwerveWatch.miVehicle)
+    {
+        static u32 suTracked = 0u;
+        const u32 KU_TRACK_CAP = 1500u;
+        if (suTracked < KU_TRACK_CAP)
+        {
+            ++suTracked;
+            const Matrix44Affine lTrackTransform = GetCurrentVehicleTransform();
+            const Vector3 lTrackPos = lTrackTransform.Pos();
+            const Vector3 lTrackAt  = lTrackTransform.At();
+
+            // The lane-centre estimate walks the param's hull/section rungs, so it is only
+            // meaningful while the car is still param-driven. A promoted (physical) car reports
+            // -999 rather than a number nobody can interpret.
+            f32 lfLaneOffset = -999.0f;
+            if (!lpVehicle->IsPhysical())
+            {
+                Vector3 lTrackPredicted = ZeroV3();
+                lfLaneOffset =
+                    GetObjectEstimatedDistanceToLaneCenterAccordingToParam(lTrackPos,
+                                                                          lTrackPredicted).x;
+            }
+
+            *TrafficDiagStream()
+                << "[T5-track] frame=" << static_cast<s32>(renderengine::guPresentCount)
+                << " veh=" << static_cast<s32>(muCurrentVehicle)
+                << " pos=" << lTrackPos.x << "," << lTrackPos.y << "," << lTrackPos.z
+                << " at=" << lTrackAt.x << "," << lTrackAt.z
+                << " laneOffset=" << lfLaneOffset
+                << " physical=" << (lpVehicle->IsPhysical() ? 1 : 0)
+                << " behaviour=" << static_cast<s32>(lpParam->miBehaviour)
+                << " manoeuvre=" << static_cast<s32>(lpVehicle->GetCurrentManoeuvre())
+                << " [DELETE-WHEN-STABLE]\n";
+        }
+    }
+
     if (!lpVehicle->IsPhysical())
     {
         // Param+0x14 (mfSpeed) then Param+0x1A bit 0. Bit 0 of mxEffectAndHistoryState has
@@ -541,11 +591,17 @@ void UpdateVehiclesJob::UpdateVehicle()
                 const Vector3 lRightAfter = lAfter.Right();
                 const Vector3 lToPlayer = lRaceCarPosition - lPosAfter;
 
+                const s32 liBehaviour = static_cast<s32>(GetCurrentParam()->miBehaviour);
                 gSwerveWatch.mfPosX = lPosAfter.x;
                 gSwerveWatch.mfPosY = lPosAfter.y;
                 gSwerveWatch.mfPosZ = lPosAfter.z;
                 gSwerveWatch.miVehicle = static_cast<s32>(muCurrentVehicle);
+                gSwerveWatch.miBehaviour = liBehaviour;
                 ++gSwerveWatch.muPublishes;
+                if (liBehaviour == Param::KI_BEHAVIOUR_DRIVING_AROUND_OBSTRUCTION)
+                {
+                    ++gSwerveWatch.muBehaviour2;
+                }
 
                 static u32 suSwerveLogged = 0;
                 const u32 KU_SWERVE_LOG_CAP = 4000;

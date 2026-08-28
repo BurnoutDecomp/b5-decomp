@@ -8,6 +8,7 @@
 
 #include "pc/gcm/renderengine/ShadowPassPCLeaf.h"   // PCInstallDefaultRenderTargetState
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"  // [diag] Device::Start failure paths
+#include "GameSource/Jobs/Traffic/BrnTrafficSwerveWatch.h"  // [diag] BRN_FRAME_DUMP_ARM
 
 // PC / D3D9 renderengine device bring-up, reversed from TUB (Burnout Paradise: The
 // Ultimate Box):
@@ -316,6 +317,44 @@ static void DumpBackBufferIfRequested()
     if (sacDir[0] == 0 || (renderengine::guPresentCount % renderengine::FrameDumpEvery()) != 0u)
     {
         return;
+    }
+
+    // [diag] BRN_FRAME_DUMP_ARM=1 -- HOLD the writer until the traffic swerve camera latches,
+    // and BRN_FRAME_DUMP_MAX=<n> -- stop after n frames. Both default off, so an ordinary
+    // BRN_FRAME_DUMP run is byte-for-byte unchanged.
+    //
+    // ⭐ WHY, MEASURED. Dumping every 2nd present for a 130 s run writes ~16 GB, and this
+    // simulation is FRAME-COUPLED: the run that filmed itself that hard produced ZERO traffic
+    // swerves and zero junction-FUP action, where the SAME BINARY unfilmed produced seven
+    // swerves and nine RemoveVehicle removals. Filming the whole run destroys the event the
+    // film exists to show. Armed + capped, the capture is a few seconds at every present.
+    {
+        static int siArm = -1;
+        static u32 suMax = 0u;
+        if (siArm < 0)
+        {
+            char lacArm[32];
+            DWORD luArmLen = GetEnvironmentVariableA("BRN_FRAME_DUMP_ARM", lacArm, sizeof(lacArm));
+            siArm = (luArmLen != 0 && luArmLen < sizeof(lacArm) && lacArm[0] != '0') ? 1 : 0;
+
+            char lacMax[32];
+            DWORD luMaxLen = GetEnvironmentVariableA("BRN_FRAME_DUMP_MAX", lacMax, sizeof(lacMax));
+            if (luMaxLen != 0 && luMaxLen < sizeof(lacMax))
+            {
+                const int liMax = atoi(lacMax);
+                if (liMax > 0) { suMax = static_cast<u32>(liMax); }
+            }
+        }
+        if (siArm != 0 && BrnTraffic::gSwerveWatch.muCameraLatched == 0u)
+        {
+            return;
+        }
+        if (suMax != 0u)
+        {
+            static u32 suWritten = 0u;
+            if (suWritten >= suMax) { return; }
+            ++suWritten;
+        }
     }
 
     IDirect3DSurface9* lpBack = nullptr;
