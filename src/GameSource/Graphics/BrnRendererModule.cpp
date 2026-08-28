@@ -5016,7 +5016,24 @@ void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispa
         // for a short linger past the cycle's end to cover the event-queue hops between
         // one video's finish-report and the next play command (logo -> logo) or the
         // title state's hide/589-overlay takeover (last logo -> BF_LEGAL).
-        const bool lbPresenting = BrnGui::gpActiveMovieManager->IsMoviePresentationActive();
+        // ⭐ [loading-fade seat 2026-08-27] THE FADE-OUT-INTO-THE-FIRST-VIDEO FIX. On the
+        // console the XMV presentation cannot own the screen the same frame the loading
+        // screen is told to hide: the video's start sits behind REAL async work (the
+        // VIDEODATA resource acquire off disc, the collision-world / car-pool invalidation
+        // round trips, the XMV spin-up), and the loading screen's 0.5s hide fade completes
+        // inside that gap -- fade to black, then the logo fades in. The PC fold loads and
+        // preps synchronously (measured: MoviePlayer.Prepare lands ONE LOG LINE after the
+        // hide command), so the ownership underlay + video quad below were burying the
+        // fade on its first frame -- the long-standing "loading screen doesn't fade out
+        // into the first video". The seat: presentation ownership is HELD while the
+        // loading screen's foreground hide fade is still in flight (mbVisible through the
+        // fade tail; save/load-background mode excluded), exactly the observable console
+        // ordering. The manager's Update/decode clock is untouched -- only the screen
+        // take-over waits.
+        const bool lbLoadingFadePending =
+            mLoadingScreenRenderer.IsForegroundHideFadePending();
+        const bool lbPresenting = !lbLoadingFadePending &&
+            BrnGui::gpActiveMovieManager->IsMoviePresentationActive();
         const u32  lu32PresentNow  = CgsSystem::GetSystemTimerBaseTime();
         const u32  lu32PresentFreq = CgsSystem::GetSystemTimerFrequency();
         if (lbPresenting)
@@ -5025,7 +5042,8 @@ void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispa
             gbMoviePresentTickValid  = true;
         }
         const bool lbOwnsScreen = lbPresenting ||
-            (gbMoviePresentTickValid && lu32PresentFreq != 0u &&
+            (!lbLoadingFadePending &&
+             gbMoviePresentTickValid && lu32PresentFreq != 0u &&
              (lu32PresentNow - gu32LastMoviePresentTick) < lu32PresentFreq / 4u);
         // [diag] BRN_IM2D_TRACE: surface the underlay latch state on the same cadence as
         // the Im2d draw trace (queued id + manager state + owns-screen).
@@ -5056,7 +5074,9 @@ void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispa
             EmitColouredQuad(&mIm2dRenderer, 0.0f, 0.0f, 1280.0f, 720.0f, KC_MOVIE_BLACK);
             mIm2dRenderer.EndRendering();
         }
-        BrnGui::gpActiveMovieManager->Render(&mIm2dRenderer);
+        // The video frame quad holds with the ownership underlay -- see the fade seat above.
+        if (!lbLoadingFadePending)
+            BrnGui::gpActiveMovieManager->Render(&mIm2dRenderer);
     }
 
     // The debug-overlay FLUSH point. On the X360, BrnGameModule::DebugManagerRender @0x823BCB88

@@ -7,6 +7,7 @@
 #include <cstdlib>  // [diag] atoi -- BRN_FRAME_DUMP_EVERY period override
 
 #include "pc/gcm/renderengine/ShadowPassPCLeaf.h"   // PCInstallDefaultRenderTargetState
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"  // [diag] Device::Start failure paths
 
 // PC / D3D9 renderengine device bring-up, reversed from TUB (Burnout Paradise: The
 // Ultimate Box):
@@ -144,15 +145,32 @@ bool renderengine::Device::Initialize()
 // then show the window.
 void renderengine::Device::Start()
 {
+    // [diag 2026-08-27] every early-return below used to be SILENT, and a failed Start is
+    // unrecoverable (nothing retries CreateDevice): the run boots to the end of the load
+    // ladder with gDevice null, renders nothing, and the first movie never acquires --
+    // indistinguishable in the log from a flow bug. Name the exact step that failed.
+    if (hWnd == nullptr)
+    {
+        CgsDev::Log::WriteToLog("[device] Start: hWnd is null (InitializeHardware made no window) -- NO DEVICE this run\n");
+        return;
+    }
+
     gD3D9 = Direct3DCreate9(D3D_SDK_VERSION);
     if (gD3D9 == nullptr)
     {
+        CgsDev::Log::WriteToLog("[device] Start: Direct3DCreate9 returned null -- NO DEVICE this run\n");
         return;
     }
 
     D3DCAPS9 lCaps;
-    if (FAILED(gD3D9->GetDeviceCaps(gAdapterIndex, D3DDEVTYPE_HAL, &lCaps)))
+    HRESULT lhCapsResult = gD3D9->GetDeviceCaps(gAdapterIndex, D3DDEVTYPE_HAL, &lCaps);
+    if (FAILED(lhCapsResult))
     {
+        char lacMsg[128];
+        std::snprintf(lacMsg, sizeof(lacMsg),
+                      "[device] Start: GetDeviceCaps failed hr=0x%08X -- NO DEVICE this run\n",
+                      static_cast<unsigned>(lhCapsResult));
+        CgsDev::Log::WriteToLog(lacMsg);
         return;
     }
 
@@ -180,11 +198,18 @@ void renderengine::Device::Start()
     lPresentParams.PresentationInterval =
         (gVSync != 0) ? D3DPRESENT_INTERVAL_DEFAULT : D3DPRESENT_INTERVAL_IMMEDIATE;
 
-    if (FAILED(gD3D9->CreateDevice(gAdapterIndex, D3DDEVTYPE_HAL, hWnd, luBehaviorFlags,
-                                   &lPresentParams, &gDevice)))
+    HRESULT lhCreateResult = gD3D9->CreateDevice(gAdapterIndex, D3DDEVTYPE_HAL, hWnd,
+                                                 luBehaviorFlags, &lPresentParams, &gDevice);
+    if (FAILED(lhCreateResult))
     {
+        char lacMsg[128];
+        std::snprintf(lacMsg, sizeof(lacMsg),
+                      "[device] Start: CreateDevice failed hr=0x%08X -- NO DEVICE this run\n",
+                      static_cast<unsigned>(lhCreateResult));
+        CgsDev::Log::WriteToLog(lacMsg);
         return;
     }
+    CgsDev::Log::WriteToLog("[device] Start: device created, window shown.\n");
 
     // The engine's "device's own surface" state (rw::graphics::postfx::gpDefaultRenderTargetState,
     // X360 dword_83271614) is installed HERE on the console too -- Device::Start is what publishes
@@ -317,14 +342,14 @@ static void DumpBackBufferIfRequested()
                 const u32 luW = lDesc.Width, luH = lDesc.Height;
                 const u32 luImageBytes = luW * luH * 4u;
                 u8 laHdr[54] = { 'B','M' };
-                *reinterpret_cast<u32*>(laHdr + 2)  = 54u + luImageBytes;
-                *reinterpret_cast<u32*>(laHdr + 10) = 54u;
-                *reinterpret_cast<u32*>(laHdr + 14) = 40u;
-                *reinterpret_cast<s32*>(laHdr + 18) = static_cast<s32>(luW);
-                *reinterpret_cast<s32*>(laHdr + 22) = -static_cast<s32>(luH);   // top-down
-                *reinterpret_cast<u16*>(laHdr + 26) = 1;
-                *reinterpret_cast<u16*>(laHdr + 28) = 32;
-                *reinterpret_cast<u32*>(laHdr + 34) = luImageBytes;
+                *reinterpret_cast<u32*>(laHdr + 2)  = 54u + luImageBytes;       // BMP file-format header blob
+                *reinterpret_cast<u32*>(laHdr + 10) = 54u;                      // BMP file-format header blob
+                *reinterpret_cast<u32*>(laHdr + 14) = 40u;                      // BMP file-format header blob
+                *reinterpret_cast<s32*>(laHdr + 18) = static_cast<s32>(luW);    // BMP file-format header blob
+                *reinterpret_cast<s32*>(laHdr + 22) = -static_cast<s32>(luH);   // top-down BMP file-format header blob
+                *reinterpret_cast<u16*>(laHdr + 26) = 1;                        // BMP file-format header blob
+                *reinterpret_cast<u16*>(laHdr + 28) = 32;                       // BMP file-format header blob
+                *reinterpret_cast<u32*>(laHdr + 34) = luImageBytes;             // BMP file-format header blob
                 fwrite(laHdr, 1, sizeof(laHdr), lpFile);
                 for (u32 y = 0; y < luH; ++y)
                 {

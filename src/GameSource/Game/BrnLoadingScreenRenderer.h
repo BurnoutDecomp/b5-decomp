@@ -45,6 +45,11 @@ namespace BrnGame
         void RenderForeground(CgsGraphics::Im2d* lpIm2dRenderBuffer);
         void RenderBackground(CgsGraphics::Im2d* lpIm2dRenderBuffer);
         bool IsRenderingLoadingScreen() { return mbVisible; }
+        // [loading-fade seat 2026-08-27] the foreground hide-fade-in-flight face the movie
+        // presentation gate reads (mbVisible stays true through the whole 0.5s hide fade;
+        // the save/load-background mode is excluded so an in-game video over the dimmed
+        // backdrop is never held). ADDITIVE accessor over existing members.
+        bool IsForegroundHideFadePending() const { return mbVisible && !mbRenderInBackground; }
 
     private:
         renderengine::Texture2D* SetupLoadingScreenTexture(f32 lfWidth, f32 lfHeight,
