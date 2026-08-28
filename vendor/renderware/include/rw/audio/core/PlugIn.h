@@ -118,7 +118,7 @@ public:
 
     // ---- bodied in PlugIn.cpp (offsets above are authoritative) ----
     static PlugIn *CreateInstance(PlugIn *self, Voice *voice, PlugInDescRunTime *pDesc,
-                                  void *typeRecord, char flag);
+                                  struct VoiceStageConfig *apConfig, char flag);
     static int Event(PlugIn *self, int aiEventId, void *apParam);
     static PlugIn *GetAttribute(PlugIn *self, int index, f32 *outValue);
     static PlugIn *SetAttribute(PlugIn *self, int index, f32 value);
@@ -129,7 +129,12 @@ public:
     // the PDB exactly (every field aligns), so the PDB member NAMES/TYPES are
     // authoritative and replace the earlier semantic guesses. x64 widths (real pointers);
     // the +0xNN are the X360 (32-bit) offsets, now PDB-verified.
-    void *mpVTable;                       // +0x00  vfptr
+    // (The former explicit `void *mpVTable` +0x00 member is RETIRED, phase-D Dac slice
+    // 2026-08-28: the class is polymorphic, so the HIDDEN host vptr IS the +0x00 word --
+    // carrying both shifted every generic-path field one slot off the PlugInBaseView
+    // composition layout the leaf plug-ins read the SAME memory through. With it gone
+    // the two views line up slot-for-slot: [vptr][System*][Voice*][Attribute_t*][desc*]
+    // [f32][f32][u32][u8][u8].)
     System *mpSystemUseGetSystemAccessor; // +0x04  (PDB name; access via GetSystem())
     Voice *mpVoice;                       // +0x08  (was guessed mpInput/PlugIn*)
     Attribute_t *mpAttribute;             // +0x0C  (was mpAttributes)
@@ -141,16 +146,10 @@ public:
     u8 mOutputChannels;                   // +0x21  (was mbFlag21)
 };
 
-// The companion `a4` record PlugIn::CreateInstance consumes beside the descriptor
-// (a "context" pointer at +0 and an init flag byte at +8; grounded @0x82B6A818's
-// `lwz 0(a4)` / `lbz 8(a4)`). Moved here from PlugIn.cpp with the phase-D Dac
-// slice -- the playback module's bring-up seam builds one.
-struct PlugInCreateDesc
-{
-    void *mpContext; // +0x00 -- passed as the argument to the create callback
-    int mField4;     // +0x04
-    char mbInitFlag; // +0x08 -- copied into PlugIn::mOutputChannels
-};
+// (The former separate `PlugInCreateDesc` a4-record view is RETIRED -- the record
+// PlugIn::CreateInstance reads at `a4` IS the VoiceStageConfig (Voice.h): context
+// at +0, init byte at +8. The host view's own layout diverged from the widened
+// config -- the phase-D probe crash -- so the create path reads the config by name.)
 
 // A queued SetAttribute command, pushed into the System command ring by
 // SetAttribute and replayed by SetAttributeHandler. Grounded in SetAttribute

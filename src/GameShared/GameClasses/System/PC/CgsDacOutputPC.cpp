@@ -5,6 +5,8 @@
 #include "rw/audio/core/Mixer.h"       // Mixer::KU_FRAME_SIZE
 #include "rw/audio/core/PlugIn.h"      // System (ExecuteCommands + the two locks)
 
+#include "GameShared/GameClasses/Development/Log/CgsLog.h" // the one-shot first-valid-frame diagnostic
+
 #include <cstring> // memset (the silence frames)
 
 // ===========================================================================
@@ -63,6 +65,18 @@ namespace
 
         if (liFrameValid == 1)
         {
+            // One-shot diagnostic: the first VALID engine frame through the fill
+            // (log-visible proof the full console path produced output). The
+            // probe-era peak scan that accompanied it is retired with the probe
+            // (2026-08-28: 440 Hz confirmed by ear + a logged peak of 0.999).
+            static bool s_bLoggedFirstValid = false;
+            if (!s_bLoggedFirstValid)
+            {
+                s_bLoggedFirstValid = true;
+                if (CgsDev::Log::gpDebugPrint)
+                    (*CgsDev::Log::gpDebugPrint)
+                        << "[Audio] engine fill: first VALID mixed frame reached the device\n";
+            }
             // The engine frame is interleaved WAVE-order f32 in the Dac's static
             // buffer ({FL,FR,C,LFE,BL,BR} x 256, already clipped to [-1,1]).
             // FLAG PC-platform fold: the console hands all six channels to its 5.1

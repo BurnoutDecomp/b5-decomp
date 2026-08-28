@@ -58,14 +58,10 @@ int SinePlayer::CreateInstance(SinePlayer *self)
 // ---------------------------------------------------------------------------
 // GetSize @0x82B98308 -- the plug-in instance footprint the factory allocates.
 //   li r3, 0x48
-// This is the CONSOLE footprint (72), NOT host sizeof(SinePlayer) (96 on x64 -- the five
-// PlugInBaseView pointers widened). The constant is reproduced verbatim to match the committed
-// sibling plug-ins (RawPuller2::GetSize 56, Delay::GetSize 184, Limiter1 168, Pan2D 240,
-// ReverbModel1 1088); switching this family to host sizeof is a tree-wide decision, not a
-// per-TU one. Unlike the command-ring handlers below, this value is not a cursor stride.
-// NOTE: Compressor1::GetSize has already moved to host sizeof (its console 192 under-allocates
-// the 216-byte host object by 24 bytes), so the family is no longer uniform -- the sweep of the
-// remaining plug-ins is a filed follow-up, not evidence that the console literal is correct.
+// The console footprint is 72 (li r3,0x48); the host object is wider (the widened
+// PlugInBaseView pointers), and GetSize is the stage factory's allocation stride --
+// host sizeof (the tree-wide stage-carve audit landed with the phase-D Dac slice;
+// the whole family is uniform on host sizeof now).
 // ---------------------------------------------------------------------------
 int SinePlayer::GetSize()
 {
