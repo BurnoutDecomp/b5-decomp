@@ -1634,11 +1634,23 @@ void TrafficEntityModule::PostPhysicsUpdate(CgsModule::IOBufferStack* lpInputBuf
     {
         static bool sbLogged = false;
         LogMissingLeg(sbLogged,
-            "PostPhysicsUpdate head legs UpdateDEBUG @0x8271DC78 / HandleExternalRequests -- "
-            "neither is bodied in this tree. Consequence: the module never consumes game-mode "
-            "requests, so mfGameModeDensityScale keeps the value ResetEventData seeded "
-            "(mfBaseDensityScale == 1.0f), which is the density parked cars need");
+            "PostPhysicsUpdate head leg UpdateDEBUG @0x8271DC78 -- not bodied in this tree");
     }
+
+    // ⭐ GATE PARTIALLY REMOVED 2026-08-29 (jam-valve wave). HandleExternalRequests
+    // @0x8274B660 is now bodied in _wT6_03.cpp -- PARTIAL, but the one arm it runs for real is
+    // action 23 (PREPARE_FOR_MODE), which is the ONLY caller of HandlePrepareForModeAction and
+    // therefore the only route by which mbPlayingShowtimeMode is ever set outside the debug
+    // menu. Until this call existed the handler was not merely unreached, it was DISCARDED by
+    // /OPT:REF and absent from Burnout_PC.map.
+    //
+    // ⚠️ The old banner's consequence claim was HALF right and is corrected here: it said the
+    // module "never consumes game-mode requests, so mfGameModeDensityScale keeps the value
+    // ResetEventData seeded". mfGameModeDensityScale is written by TWO arms -- action 28
+    // (SetTrafficScaleBasedOnRank), still gated, AND action 23, which is now live and copies
+    // GameModeParams::mfTrafficDensityScale into it. So the density is no longer pinned at
+    // mfBaseDensityScale once a mode is prepared.
+    HandleExternalRequests(lpInput, lpOutput);
 
     // The streamer pump, head call (`bl UpdateStreaming` @0x8274E740, before UpdateDensity's
     // at 0x8274E7A0). This is what makes the game ASK for a VEH_T*_GR bundle: SetAssetList

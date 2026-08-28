@@ -52,8 +52,11 @@
 #include "GameShared/GameClasses/Containers/CgsArray.h"        // Array<u16,64>
 #include "GameShared/GameClasses/Containers/CgsFastBitArray.h" // FastBitArray<600> + Iterator
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"     // [DIAG] only
 
 #include "rw/math/vpu/vector3_operation.h"                     // operator-, Magnitude
+
+#include <cstdlib>                                             // [DIAG] getenv
 
 
 namespace BrnTraffic
@@ -109,6 +112,14 @@ void TrafficEntityModule::NukeTrafficJams()
     //     five-car jam is drained once and not once per member (the ten `stdx r24` fields at
     //     0x8273540C..0x8273541C);
     //   * the run collector (`stw r24, var_120` == Array<u16,64>::Clear at 0x82735428).
+    // [DIAG] NOT IN THE X360 BINARY. DELETE-WHEN-STABLE. Counters + the A/B suppressor; read
+    // once so the env lookup is not in the per-param path.
+    static const bool sbDIAGSuppressFlagging = (getenv("BRN_TRAFFIC_NO_JAM_NUKE") != 0);
+    u32 luDIAGJamsFound  = 0;
+    u32 luDIAGLongestRun = 0;
+    u32 luDIAGWouldFlag  = 0;
+    u32 luDIAGFlagged    = 0;
+
     CgsContainers::FastBitArray<KU_PARAM_MAX_PARAMS> lxParamsAlreadyInAJam;
     lxParamsAlreadyInAJam.Construct();
 
@@ -226,6 +237,11 @@ void TrafficEntityModule::NukeTrafficJams()
         // 0x82735F08..0x82736200. FIVE cars or more, and then only every third one.
         if (laJamRun.GetCount() > KI_JAM_MIN_RUN_LENGTH)
         {
+            ++luDIAGJamsFound;
+            luDIAGLongestRun = (static_cast<u32>(laJamRun.GetCount()) > luDIAGLongestRun)
+                             ? static_cast<u32>(laJamRun.GetCount())
+                             : luDIAGLongestRun;
+
             for (u32 luSlot = 0;
                  luSlot < static_cast<u32>(laJamRun.GetCount());
                  luSlot += KU_JAM_KILL_STRIDE)
@@ -261,15 +277,47 @@ void TrafficEntityModule::NukeTrafficJams()
                     }
                 }
 
+                ++luDIAGWouldFlag;
+
+                // [DIAG] NOT IN THE X360 BINARY. DELETE-WHEN-STABLE. The A/B switch the
+                // before/after capture needs: with BRN_TRAFFIC_NO_JAM_NUKE set, the walk, the
+                // run collection and every guard above still run exactly as the console does
+                // them -- only the flag store is withheld, so the two runs differ in ONE
+                // store and nothing else. That is the point: an A/B built from two different
+                // binaries, or one that also skipped the walk, would not isolate the valve.
+                if (sbDIAGSuppressFlagging)
+                {
+                    continue;
+                }
+
                 // 0x827361BC..0x827361F8. The whole point of the function. UpdateParams
                 // (_wT2_02.cpp) picks the flag up on its next pass and calls KillParam.
                 CGS_ASSERT(GetParam(luParamToKill)->IsAlive(), "IsAlive()");
                 GetParam(luParamToKill)->SetShouldBeRemoved();
+                ++luDIAGFlagged;
             }
         }
 
         // 0x82736204. Reused for the next seed param, drained or not.
         laJamRun.Clear();
+    }
+
+    // [DIAG] NOT IN THE X360 BINARY. DELETE-WHEN-STABLE. One line per pass that found a jam,
+    // so the pixels have numbers beside them. ⚠️ The PIXELS are the evidence, not this: a jam
+    // that this line says was flagged has still only been PROVEN cleared when the cars are
+    // gone from a screenshot, because SetShouldBeRemoved is a request to UpdateParams, not a
+    // removal. Counting the request and calling it a removal is exactly the class of gate
+    // that has shipped broken work here three times.
+    if (luDIAGJamsFound != 0 && getenv("BRN_TRAFFIC_DIAG") != 0
+        && (CgsDev::Message::gxMessageFilterFlags & 1) != 0 && CgsDev::Log::gpDebugPrint != 0)
+    {
+        *CgsDev::Log::gpDebugPrint
+            << "[jam-nuke] jams=" << static_cast<s32>(luDIAGJamsFound)
+            << " longestRun="     << static_cast<s32>(luDIAGLongestRun)
+            << " passedGuards="   << static_cast<s32>(luDIAGWouldFlag)
+            << " flagged="        << static_cast<s32>(luDIAGFlagged)
+            << (sbDIAGSuppressFlagging ? " [SUPPRESSED]" : "")
+            << "\n";
     }
 }
 
