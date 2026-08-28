@@ -144,6 +144,77 @@ namespace BrnDirector
     // (It declares no Release()/Destruct() of its own -- those are not in its exported X360
     //  function set, so the base declarations stand.)
 
+    // ⛔⛔⛔ READ THIS BEFORE MOUNTING ArbStateCrashMode -- IT IS NOT THE CRASH CAMERA.
+    // (Mapped 2026-08-28, slow-motion transport wave. Every claim below is read off the asm or
+    //  the committed tree, not inferred from the state's name.)
+    //
+    // THE CRASH CAMERA THE GAME ACTUALLY ENTERS IS ArbStateCrashing, AND IT DOES NOT EXIST.
+    // ArbStateRoaming::ProcessPossibleStateChanges @0x82219C58 is the crash gate. It TESTS
+    // crash mode and then ENTERS A DIFFERENT STATE -- BrnArbStateRoaming.cpp:912-919:
+    //     lrContainer.GetState(E_STATE_CRASH_MODE)->CanRun(...)          // index 4, the TEST
+    //     ArbUtils::ChangeToStateWithoutRelease(..., E_STATE_CRASHING,   // index 2, the ENTRY
+    //                                           meState, E_STATE_CHANGING_TO_CRASHING, ...)
+    // and E_STATE_CRASHING's container slot is `class ArbStateCrashing : public ArbitratorState {};`
+    // -- an EMPTY placeholder in BrnDirectorArbitratorStateContainer.h:50 with no overrides at
+    // all, so every crash drives a do-nothing base Update. That is the hollow-shell shape, and
+    // it is why crashes today keep the ordinary chase camera and never slow down.
+    // ArbStateCrashMode (index 4) is only ever REACHED from ArbStateCrashing::
+    // ProcessPossibleStateChanges @0x8224F5B0 (its debug line is literally "Switching to crash
+    // mode"), so mounting crash mode alone changes NOTHING on screen.
+    //
+    // ArbStateCrashing IS in the X360 ledger -- 8 functions, TU `blocked`, no file in the tree:
+    //     Construct                   @0x82259EA0    88 asm
+    //     Prepare                     @0x822655E8    62
+    //     Update                      @0x8226BFB0   408
+    //     Release                     @0x82234F70    33
+    //     CanRun                      @0x821F6258     4
+    //     GetName                     @0x821F6248     4
+    //     SelectNormalCrashCamera     @0x82254FB0   218
+    //     ProcessPossibleStateChanges @0x8224F5B0   201
+    //     ApplySlomoAndShake          @0x8224F8D8   113   <- THE IMPACT SLOW MOTION
+    // ⚠️ ApplySlomoAndShake is NOT in `work show`'s list for that TU: its DecFIGS primary_file
+    // is CgsArray.h (the usual inlined-header misattribution), so a TU-scoped dossier misses it.
+    // Its DWARF members (BrnArbStateCrashing.h:105-129) name the whole camera:
+    //     BehaviourHandle<BehaviourSpirallingDeathcam> mDeathcam;
+    //     BehaviourHandle<BehaviourIceAnim>            mTakenDownCam;
+    //     ImpactSlomoController  mImpactSlomoController;   // BehaviourBystanderCam.h:102
+    //     ImpactShakeController  mImpactShakeController;   // BehaviourBystanderCam.h:~135
+    //     MomentSelector mMomentSelector; VehicleTracker::ECrashType meCrashType; ...
+    //     EState { INACTIVE, PREPARING, ACTIVE, AFTERCRASH, AFTERCRASH_SLOW,
+    //              INTERPOLATING_TO_ROAMING, CHANGING_TO_ROAMING, RELEASING }
+    // Both controllers and BehaviourSpirallingDeathcam.cpp already exist in this tree.
+    //
+    // AND ArbStateCrashMode's OWN MOUNT IS NOT FREE EITHER. BrnArbStateCrashMode.h:58 declares
+    // `bool Prepare(ArbStateSharedInfo&) override;` with NO definition -- a shadowing
+    // redeclaration only a LINK can find. The body DOES exist (@0x82265F70; its primary_file is
+    // misattributed to BrnBehaviourManager.h, which is why the TU dossier shows 5 functions and
+    // not 6). It is byte-for-byte the shape of ArbStateAttractMode::Prepare @0x8225B220 --
+    //     if (meState == ACTIVE || meState == CHANGING_TO_ROAMING) return true;
+    //     meState = PREPARING;
+    //     if (!mAftertouch.IsAllocated())
+    //         manager->NewBehaviour<BehaviourAftertouchCrash>(mAftertouch, this, 0, 1);
+    //         mAftertouch.GetBehaviour()->SetParameters(<bank + 0x7C>);
+    //     return mAftertouch.IsReadyToPrepare();
+    // -- with ONE polarity difference worth stating, because it is exactly the kind of thing a
+    // copy-paste from the sibling gets wrong: AttractMode's callee is the NON-negating
+    // BehaviourHandle<T>::IsWaitingToPrepare instantiation (`BehaviourRoadRun` @0x82212AC8) and
+    // it negates at the call site (clrlwi/cntlzw/extrwi); CrashMode's callee is the ALREADY-
+    // negating IsReadyToPrepare (`BehaviourAfterto` @0x8222D0E8, whose body ends
+    // `IsBehaviourWaitingToPrepare(...) == 0`) and it returns the value RAW. Both spell
+    // `return mHandle.IsReadyToPrepare();` in this tree -- through different symbols.
+    // The remaining blocker on that Prepare is the parameters argument: `manager + 0x125AC` ==
+    // BehaviourParameterBank + 0x7C, and BrnBehaviourParameterBank.h models the bank as
+    // `u8 maReservedHead[0x2334]` plus ONE named block. Carve BehaviourAftertouchCrash::
+    // Parameters at bank+0x7C, or land the Prepare with that one leg FLAG-gated.
+    //
+    // ORDER TO DO IT IN: (1) home BrnArbStateCrashing.h from the DWARF and de-fork the empty
+    // placeholder in the container; (2) body the 8 functions (ApplySlomoAndShake first -- it is
+    // the slow motion, and its two controllers are already homed); (3) mount it; (4) THEN mount
+    // BrnArbStateCrashMode.cpp with its Prepare, and delete both stub lines below.
+    // ⭐ AND THE SLOW MOTION STILL NEEDS ITS TRANSPORT ARMED: the director's leg of the
+    // time-dilation publish is held behind BRN_DIRECTOR_SLOMO in BrnMainDirector.cpp until the
+    // ICE TIME_SCALE zero is fixed (full diagnosis at that call site). Landing ArbStateCrashing
+    // without that fix produces a crash camera that requests a dilation nothing applies.
     BRN_DIRECTOR_STUB_ARBSTATE(ArbStateCrashMode,       "ArbStateCrashMode")
     BRN_DIRECTOR_STUB_ARBSTATE(ArbStateDriveThru,       "ArbStateDriveThru")
     BRN_DIRECTOR_STUB_ARBSTATE(ArbStateOnlineCarSelect, "ArbStateOnlineCarSelect")
