@@ -168,22 +168,34 @@ struct PlugInSetAttributeCommand
 class PlugInDescRunTime
 {
 public:
-    // Only the fields the bodied registry walks touch are modelled by name; the
-    // gap before +0x24 is the (un-homed) object header / per-type hooks and is
-    // preserved as opaque storage so offsets stay exact.
-    char mHeader[0x24]; // +0x00 .. +0x23 -- opaque object header (un-homed here)
-    // FLAG (rwaudio PDB reconcile -- ProStreet08Milestone.pdb): PDB struct
-    // rw::audio::core::PlugInDescRunTime [sizeof=52] names the +0x00..+0x23 prefix this
-    // recon left opaque: +0x00 char* name; +0x04 GetSize(PlugInConfig*); +0x08
-    // CreateInstance(PlugIn*,void*); +0x0C pPreProcess; +0x10 pProcess; +0x14 pChannelMaps;
-    // +0x18 pParameterDescRunTime; +0x1C pEventDescRunTime; +0x20 pPlugInDescToolSide; then
-    // +0x24 listNode (== mpNext), +0x28 guid (== muId), +0x2C plugInType, +0x2D
-    // numConstructorParameters, +0x2E numAttributes... Kept opaque here (the registry walk
-    // only touches +0x24/+0x28); expand when a TU needs the descriptor body.
-    void *mpNext;       // +0x24 -- intrusive next link (PDB listNode)
-    u32 muId;           // +0x28 -- registration id (PDB guid)
-    char mPad2C[0x32 - 0x2C]; // +0x2C .. +0x31 -- opaque (PDB plugInType/numCtorParams/numAttributes..)
-    char mbSeq;         // +0x32 -- registry sequence snapshot
+    // ⭐ FULLY TYPED (descriptor-record wave 2026-08-28; the field-by-field consumer
+    // proof is progress/scratch_dossiers/plugindesc_layout_codex.md, cross-checked
+    // against the ProStreet08Milestone.pdb rw::audio::core::PlugInDescRunTime
+    // [sizeof=52] names). Console offsets in the comments; host layout is the natural
+    // pointer widening -- every consumer reads BY NAME now (the former Voice.cpp /
+    // PlugIn.cpp local views over the opaque header are retired with this).
+    // The four callback slots are typed void* -- each plugin's record stores its own
+    // functions and the TWO dispatch sites (Voice::CreateInstance's GetSize call,
+    // PlugIn::CreateInstance's create call) cast to the dispatched signature, exactly
+    // where the console's generic dispatch happens.
+    const char *pName;               // +0x00 (rodata-proven: points at the plug-in name)
+    void *pGetSize;                  // +0x04 -- u32(*)(const VoiceStageConfig*) (Voice::CreateInstance @0x82B6ECA0)
+    void *pCreateInstance;           // +0x08 -- int(*)(PlugIn*, void*) (PlugIn::CreateInstance @0x82B6A868)
+    void *pPreProcess;               // +0x0C -- nullable; copied into the stage slot (@0x82B6EE44)
+    void *pProcess;                  // +0x10 -- copied into the stage slot (@0x82B6EE28)
+    void *pChannelMaps;              // +0x14 (PDB name; UNPROVEN-consumer on X360 -- null on PC until a reader lands)
+    void *pParameterDescRunTime;     // +0x18 (same)
+    void *pEventDescRunTime;         // +0x1C (same)
+    void *pPlugInDescToolSide;       // +0x20 (zero in all 25 console records)
+    void *mpNext;                    // +0x24 -- intrusive next link (PDB listNode)
+    u32 muId;                        // +0x28 -- registration id fourcc (PDB guid)
+    u8 mu8PlugInType;                // +0x2C -- stage classification (<=3 marks the source stage, @0x82B6EDD0)
+    u8 mu8NumConstructorParameters;  // +0x2D (PDB name; unproven-consumer)
+    u8 mu8NumAttributes;             // +0x2E (same)
+    u8 mu8NumEvents;                 // +0x2F (same)
+    u8 mbVariableInputChannels;      // +0x30 (same)
+    u8 mbVariableOutputChannels;     // +0x31 (same)
+    char mbSeq;                      // +0x32 -- registry sequence snapshot (@0x82B6A998)
 };
 
 // -------------------------------------------------------------------------------------

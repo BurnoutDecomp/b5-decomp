@@ -552,3 +552,16 @@ void DelayLine::Release()
 } // namespace core
 } // namespace audio
 } // namespace rw
+
+// ---------------------------------------------------------------------------
+// FLAG PC link-closure stub (descriptor-record wave 2026-08-28): SetDelay is
+// declared-only in DelayLine.h (grounded solely by its Delay::Process call
+// site; no exact console address recovered). The Delay plug-in itself is NOT
+// registered on this build, so Process -- and therefore this -- is unreachable;
+// decode the real re-target body when the Delay plug-in's slice lands.
+// ---------------------------------------------------------------------------
+namespace rw { namespace audio { namespace core {
+void DelayLine::SetDelay(s32 /*delaySamples*/)
+{
+}
+} } }

@@ -49,7 +49,22 @@ extern "C" void *XMemCpy(void *pDest, const void *pSrc, unsigned int uiCount);
 // -------------------------------------------------------------------------------------
 static void *const KAIFF_WriterVTable = nullptr; // off_8217F308
 static void *const KAIFF_BaseVTable   = nullptr; // off_820AA810
-static char       *g_AiffWriterDesc   = nullptr; // off_82F8C228 (the "AiffWriter" record)
+// off_82F8C228 -- the "AiffWriter" runtime descriptor, REAL (descriptor-record wave
+// 2026-08-28; XEX record recovery + field proof: progress/scratch_dossiers/
+// plugindesc_layout_codex.md). Host callbacks; the four metadata pointers are
+// FLAG'd null (unproven-consumer on X360; console 82F8C1F4/82F8C1F8/82F8C218/0).
+static PlugInDescRunTime g_AiffWriterDesc = {
+    "AiffWriter",
+    reinterpret_cast<void *>(&AiffWriter::GetSize),        // @0x82B96838
+    reinterpret_cast<void *>(&AiffWriter::CreateInstance), // @0x82B9D488
+    0,
+    reinterpret_cast<void *>(&AiffWriter::Process),        // @0x82BA2168
+    0, 0, 0, 0,
+    0,                 // mpNext
+    0x41695730u,       // 'AiW0'
+    4, 0, 0, 2, 0, 0,  // type/ctorParams/attrs/events/varIn/varOut (console tail)
+    0                  // seq
+};
 
 // The clamp / scale constants Process uses (flt_82001C98 == 1.0, flt_820037C8 == -1.0,
 // flt_820AD310 == 32767.0 -- the full-scale s16 magnitude).
@@ -127,7 +142,7 @@ int AiffWriter::GetSize()
 // -------------------------------------------------------------------------------------
 char **AiffWriter::GetPlugInDescRunTime()
 {
-    return &g_AiffWriterDesc; // &off_82F8C228
+    return reinterpret_cast<char **>(&g_AiffWriterDesc); // &off_82F8C228 (the record address)
 }
 
 // -------------------------------------------------------------------------------------

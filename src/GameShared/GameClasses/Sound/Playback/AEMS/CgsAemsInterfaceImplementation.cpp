@@ -26,6 +26,9 @@
 #include "rw/audio/core/DecoderRegistry.h"  // DecoderRegistry (the Xas/Xas1 registrations)
 #include "rw/audio/core/Xas1Dec.h"          // Xas1Dec::GetDecoderDesc
 #include "rw/audio/core/XasDec.h"           // XasDec::GetDecoderDesc
+#include "rw/audio/core/Gain.h"             // the three live descriptor registrations
+#include "rw/audio/core/plugins/Pan2D.h"
+#include "rw/audio/core/Rechannel.h"
 
 namespace CgsSound
 {
@@ -67,13 +70,27 @@ namespace Playback
 
             mpPlugInRegistry = rw::audio::core::System::GetPlugInRegistry(lpSystem);
 
-            // Orders 9-14: the six descriptor registrations -- FLAG-deferred (banner).
-            mGainHandle       = 0;
-            mPan2DHandle      = 0;
-            mRouteHandle      = 0;
-            mSndPlayer1Handle = 0;
-            mRechannelHandle  = 0;
-            mResampleHandle   = 0;
+            // Orders 9-14: the six descriptor registrations. THREE are LIVE
+            // (descriptor-record wave: real host records; RegisterPlugInRunTime
+            // dupe-detects against the RWAC pass and hands back the existing
+            // node, exactly the console behaviour). Route (record un-recovered),
+            // SndPlayer1 (no PC home) and Resample (Process body absent --
+            // decode in flight) stay FLAG-deferred at 0.
+            mGainHandle = reinterpret_cast<uintptr_t>(
+                rw::audio::core::PlugInRegistry::RegisterPlugInRunTime(mpPlugInRegistry,
+                    reinterpret_cast<rw::audio::core::PlugInDescRunTime*>(
+                        rw::audio::core::Gain::GetPlugInDescRunTime())));       // @0x82B97350 -> +0x3C
+            mPan2DHandle = reinterpret_cast<uintptr_t>(
+                rw::audio::core::PlugInRegistry::RegisterPlugInRunTime(mpPlugInRegistry,
+                    reinterpret_cast<rw::audio::core::PlugInDescRunTime*>(
+                        rw::audio::core::Pan2D::GetPlugInDescRunTime())));      // @0x82B984E8 -> +0x40
+            mRouteHandle      = 0;   // Route @0x82B9B258 -- FLAG deferred
+            mSndPlayer1Handle = 0;   // SndPlayer1 @0x82B9BE60 -- FLAG deferred
+            mRechannelHandle = reinterpret_cast<uintptr_t>(
+                rw::audio::core::PlugInRegistry::RegisterPlugInRunTime(mpPlugInRegistry,
+                    reinterpret_cast<rw::audio::core::PlugInDescRunTime*>(
+                        rw::audio::core::Rechannel::GetPlugInDescRunTime())));  // @0x82B9A718 -> +0x50
+            mResampleHandle   = 0;   // Resample @0x82B9A850 -- FLAG deferred
 
             // Orders 15-16: the two handle lookups ('Sen0' 0x53656E30 -> +0x48,
             // 'Sub0' 0x53756230 -> +0x58). Read-only walks; null on the

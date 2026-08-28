@@ -66,7 +66,20 @@ static void* const skpSendVTable = &skSendVTableSlot;             // off_8217F53
 
 static void* const skpSendBaseVTable = gpBasePlugInVTableSentinel;  // off_820AA810 (SHARED sentinel, PlugIn.h -- wave 5)
 
-static char* const skpSendDescName = const_cast<char*>("Send");   // off_82F8FF60 (label "Send")
+// off_82F8FF60 -- the "Send" runtime descriptor, REAL (descriptor-record wave).
+// Metadata FLAG'd null.
+static PlugInDescRunTime g_SendDesc = {
+    "Send",
+    reinterpret_cast<void *>(&Send::GetSize),        // @0x82B98300
+    reinterpret_cast<void *>(&Send::CreateInstance), // @0x82BA3E98
+    0,
+    reinterpret_cast<void *>(&Send::Process),        // @0x82B9B7A8
+    0, 0, 0, 0,
+    0,
+    0x53656E30u,       // 'Sen0'
+    4, 0, 1, 2, 0, 0,
+    0
+};
 
 // Full mixer frame processed per Process call (li r?, 0x100).
 enum { KI_MIXER_FRAME_SIZE = 256 };
@@ -89,7 +102,7 @@ int Send::GetSize()
 // -------------------------------------------------------------------------------------
 char** Send::GetPlugInDescRunTime()
 {
-    return const_cast<char**>(&skpSendDescName);
+    return reinterpret_cast<char**>(&g_SendDesc); // &off_82F8FF60 (the record address)
 }
 
 // -------------------------------------------------------------------------------------

@@ -220,38 +220,54 @@ GenericRwacFactory::GenericRwacFactory(Environment& arEnvironment,
 
         PlugInRegistry* lpPlugInRegistry =
             rw::audio::core::System::GetPlugInRegistry(mpSystem);
-        (void)lpPlugInRegistry;
 
-        // FLAG [the descriptor-record deferral -- the WHOLE plug-in pass]: the
-        // console registers 25 PlugInDescRunTime records here, in this exact
-        // order (each getter address below). It CANNOT run yet: every vendor
-        // getter on this build returns a PLACEHOLDER (&g_XxxDesc -- a single
-        // static pointer standing in for the un-recovered console record), and
-        // RegisterPlugInRunTime writes the record's mpNext/muId link fields ~40
-        // bytes in -- registering a placeholder SCRIBBLES the neighbouring
-        // globals (measured: the first live pass corrupted the loading-stage
-        // table + the menu-music stream headers; boot log "loading stage
-        // <garbage>"). The pass lands when the PlugInDescRunTime field layout is
-        // decoded (from PlugIn::CreateInstance / Voice::CreateInstance's reads)
-        // and each plugin's record is BUILT with host callback pointers --
-        // recovered rodata alone cannot carry the console's function pointers.
-        // Console order, addresses:
-        //   1  AiffWriter          @0x82B968B0    2  BandPassIir2  @0x82B96A40
-        //   3  Dac                 @0x82B96DB8    4  Gain          @0x82B97350
-        //   5  GainFader           @0x82B97368    6  HighPassIir2  @0x82B978B0
-        //   7  HighPassButterworth @0x82B976D0    8  HighShelfIir2 @0x82B97978
-        //   9  Limiter1            @0x82B97AA0   10  LowPassIir2   @0x82B97DB0
-        //  11  LowPassButterworth  @0x82B97BF0   12  LowShelfIir2  @0x82B97E70
-        //  13  Pan2D               @0x82B984E8   14  Pan2D1        @0x82B98748
-        //  15  Pause               @0x82B9A130   16  PeakingIir2   @0x82B9A460
-        //  17  Rechannel           @0x82B9A718   18  Resample      @0x82B9A850
-        //  19  ReverbModel1        @0x82B9AD98   20  Send          @0x82B9B798
-        //  21  SndPlayer1          @0x82B9BE60   22  SubMix        @0x82B9C370
-        //  23  "GinsuPlayer" custom off_82F2D094  24  "SndPlayer1_CgsStreamMod"
-        //  custom off_82F2E124                    25  "GainArray" custom off_82F2E664
-        // An empty registry keeps GetPlugInHandle returning null, so every
-        // voice-create path fails through its guarded callback -- the honest
-        // degraded state.
+        // The 25 RegisterPlugInRunTime calls in EXACT console order. TWELVE are
+        // LIVE (descriptor-record wave 2026-08-28: their PlugInDescRunTime
+        // records are REAL host records -- XEX-recovered fields + host callback
+        // pointers, every callback bodied in its mounted vendor TU; proof
+        // progress/scratch_dossiers/plugindesc_layout_codex.md). The rest stay
+        // FLAG-deferred in place, each for a stated reason:
+        //   * Limiter1/Pause/Resample (a Process body absent) and HighPassIir2/
+        //     Pan2D1 (a CreateInstance body absent) -- registering a record with
+        //     a null callback slot is a poison-in-waiting for the dispatch
+        //     sites; their missing bodies' dossiers are re-exported and the
+        //     decode is in flight (plugin_callbacks_decode_codex.md);
+        //   * Dac (phase D), GainFader, LowPassButterworth, SndPlayer1, SubMix
+        //     -- no PC plug-in home yet;
+        //   * the three custom game descriptors (GinsuPlayer off_82F2D094 /
+        //     SndPlayer1_CgsStreamMod off_82F2E124 / GainArray off_82F2E664)
+        //     -- their game-side plug-in bodies are not reconstructed.
+        // An unregistered id makes GetPlugInHandle return null and the
+        // voice-create paths fail through their guarded callbacks.
+        #define CGS_RWAC_REGISTER(GETTER) \
+            PlugInRegistry::RegisterPlugInRunTime(lpPlugInRegistry, \
+                reinterpret_cast<PlugInDescRunTime*>(GETTER))
+        CGS_RWAC_REGISTER(rw::audio::core::AiffWriter::GetPlugInDescRunTime());          // 1  @0x82B968B0
+        CGS_RWAC_REGISTER(rw::audio::core::BandPassIir2::GetPlugInDescRunTime());        // 2  @0x82B96A40
+        // 3  Dac @0x82B96DB8 -- FLAG deferred (phase D; descriptor off_82F8C7A8)
+        CGS_RWAC_REGISTER(rw::audio::core::Gain::GetPlugInDescRunTime());                // 4  @0x82B97350
+        // 5  GainFader @0x82B97368 -- FLAG deferred (no PC home; off_82F8CC50)
+        // 6  HighPassIir2 @0x82B978B0 -- FLAG deferred (CreateInstance @0x82BA2E40 body absent)
+        CGS_RWAC_REGISTER(rw::audio::core::HighPassButterworth::GetPlugInDescRunTime()); // 7  @0x82B976D0
+        CGS_RWAC_REGISTER(rw::audio::core::HighShelfIir2::GetPlugInDescRunTime());       // 8  @0x82B97978
+        // 9  Limiter1 @0x82B97AA0 -- FLAG deferred (Process @0x82B9E3A0 body absent)
+        CGS_RWAC_REGISTER(rw::audio::core::LowPassIir2::GetPlugInDescRunTime());         // 10 @0x82B97DB0
+        // 11 LowPassButterworth @0x82B97BF0 -- FLAG deferred (no PC home; off_82F8D24C)
+        CGS_RWAC_REGISTER(rw::audio::core::LowShelfIir2::GetPlugInDescRunTime());        // 12 @0x82B97E70
+        CGS_RWAC_REGISTER(rw::audio::core::Pan2D::GetPlugInDescRunTime());               // 13 @0x82B984E8
+        // 14 Pan2D1 @0x82B98748 -- FLAG deferred (CreateInstance @0x82BA3540 body absent)
+        // 15 Pause @0x82B9A130 -- FLAG deferred (Process @0x82B9A218 body absent)
+        CGS_RWAC_REGISTER(rw::audio::core::PeakingIir2::GetPlugInDescRunTime());         // 16 @0x82B9A460
+        CGS_RWAC_REGISTER(rw::audio::core::Rechannel::GetPlugInDescRunTime());           // 17 @0x82B9A718
+        // 18 Resample @0x82B9A850 -- FLAG deferred (Process @0x82B9F3E8 body absent)
+        CGS_RWAC_REGISTER(rw::audio::core::ReverbModel1::GetPlugInDescRunTime());        // 19 @0x82B9AD98
+        CGS_RWAC_REGISTER(rw::audio::core::Send::GetPlugInDescRunTime());                // 20 @0x82B9B798
+        // 21 SndPlayer1 @0x82B9BE60 -- FLAG deferred (no PC home; off_82F901C4)
+        // 22 SubMix @0x82B9C370 -- FLAG deferred (no PC home; off_82F902E0)
+        // 23 "GinsuPlayer" off_82F2D094 -- FLAG deferred (game-side plug-in not reconstructed)
+        // 24 "SndPlayer1_CgsStreamMod" off_82F2E124 -- FLAG deferred (same)
+        // 25 "GainArray" off_82F2E664 -- FLAG deferred (same)
+        #undef CGS_RWAC_REGISTER
 
         // The decoder pass: the standard runtime set (Xas1 -> Xas -> EaXma, inside
         // RegisterStandardRunTimeDecoders @0x82B6B538) + Pcm16Big registered
