@@ -64,6 +64,7 @@
 #include "rw/math/vpu/vector3_operation.h"   // rw::math::vpu::Dot, operator-
 
 #include <cstdlib>   // getenv (the BRN_TRAFFIC_DIAG probes)
+#include <cmath>     // std::sqrt (the [T5-miss] probe)
 
 
 namespace BrnTraffic
@@ -420,6 +421,38 @@ void TrafficEntityModule::UpdateParams_TryAvoidCrashing(
             }
         }
         return;
+    }
+
+    // [DIAG] NOT IN THE X360 BINARY. A run that swerves nothing has to say WHY, or "0 swerves"
+    // is indistinguishable from a dead function. This re-walks the same list and reports the
+    // closest miss against the cone's own two thresholds. DELETE-WHEN-STABLE.
+    if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())
+    {
+        static u32 suMissSample = 0;
+        if ((suMissSample++ % 2000u) == 0u && lpaCrashingThings->GetLength() != 0)
+        {
+            const Vector3 lParamPos = lpParamTransform->GetDeterministicPos();
+            const Vector3 lParamDir = lpParamTransform->GetDirection();
+            f32 lfBestDist = 3.4028235e38f;
+            f32 lfBestCos  = -1.0f;
+            for (u32 luThing = 0; luThing < lpaCrashingThings->GetLength(); ++luThing)
+            {
+                const Vector3 lToThing = (*lpaCrashingThings)[luThing].mPosition - lParamPos;
+                const f32 lfDistSq = rw::math::vpu::Dot(lToThing, lToThing);
+                if (lfDistSq <= 0.0f || lfDistSq >= lfBestDist * lfBestDist)
+                {
+                    continue;
+                }
+                lfBestDist = std::sqrt(lfDistSq);
+                lfBestCos  = rw::math::vpu::Dot(lToThing, lParamDir) / lfBestDist;
+            }
+            *lpDiag << "[T5-miss] param=" << static_cast<s32>(luParam)
+                    << " things=" << static_cast<s32>(lpaCrashingThings->GetLength())
+                    << " nearest=" << lfBestDist << "m cos=" << lfBestCos
+                    << " need dist<=" << kfParamAvoidCrashCone_CosAngle_Length_RecipYScale_W.y
+                    << " cos>=" << kfParamAvoidCrashCone_CosAngle_Length_RecipYScale_W.x
+                    << " [DELETE-WHEN-STABLE]\n";
+        }
     }
 }
 
