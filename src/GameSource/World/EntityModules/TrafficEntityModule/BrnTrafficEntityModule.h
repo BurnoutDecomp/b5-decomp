@@ -826,6 +826,12 @@ namespace BrnTrafficIO { class InputBuffer_PreScene; class OutputBuffer_PreScene
         bool IsDecisionFrame();          // @ 0x827074E0
         void UpdateDensity();            // @ 0x82716318
 
+        // DWARF :1140 gives the shape; the X360 has no standalone export because every call
+        // site inlines it to the flag load (SpawnShowtimeTraffic @0x82743088:
+        // `lis r11,7 / ori r11,r11,0x17DD / lbzx r11,r30,r11 / cmplwi r11,0`). Inline here for
+        // the same reason.
+        bool IsPlayingShowtimeGameMode() const { return mbPlayingShowtimeMode; }
+
         // ---- the streamer pump. Bodies in BrnTrafficEntityModule_wT1_04.cpp. ----
         //
         // DWARF :1554 returns void even though the X360 body leaves the tail Append's bool in
@@ -861,6 +867,14 @@ namespace BrnTrafficIO { class InputBuffer_PreScene; class OutputBuffer_PreScene
         void SpawnNewTraffic(const ActiveHullSet& lrNewActiveHulls);      // @ 0x82748A40
         void FillNewHull(u16 luHull);                                     // @ 0x82743600
         u8   PickVehicleToSpawn(u32 luFlowTypeId);                        // @ 0x827235F8
+
+        // The SHOWTIME half of the ladder (bodies in _wT1_07.cpp). DWARF :1566 / :1548 /
+        // :1611; shapes are the DWARF's. SpawnShowtimeTraffic is UpdateDecisionFrame's
+        // showtime-only second spawn source, and the two helpers are the spacing tests it
+        // and the authored generator both need.
+        void SpawnShowtimeTraffic();                                       // @ 0x82743038
+        bool IsParamTooClose(u32 luHull, u32 luSection, f32 lfParamAlong);  // @ 0x82726470
+        u32  CountParamsOnSection(u32 luHull, u32 luSection) const;        // @ 0x82723D10
 
         // ---- the static (parked) vehicle sub-system ----
         void StaticVehicles_Generate(u8 luVehicleType, u16 luHull, u8 luIndexOnHull); // @ 0x82722680

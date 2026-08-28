@@ -15,10 +15,10 @@
 // frame takes the non-decision branch for ever. That is why the three land together and why
 // _wT1_02.cpp un-gates the UpdateTimers call in the same change.
 //
-// Live legs: KillOutOfAreaTraffic, UpdateParams, UpdateVehicles, UpdateLerpedParamTransforms
-// and UpdateParams_DoTimeSlicedLogic. Still gated: UpdateJunctions, UpdateTrailers,
-// SpawnShowtimeTraffic, KillTrafficOnStartGridWholeSale, NukeTrafficJams; each gate names its
-// own blocker and cost.
+// Live legs: KillOutOfAreaTraffic, SpawnNewTraffic, SpawnShowtimeTraffic (_wT1_07.cpp),
+// UpdateParams, UpdateVehicles, UpdateLerpedParamTransforms and
+// UpdateParams_DoTimeSlicedLogic. Still gated: UpdateJunctions, UpdateTrailers,
+// KillTrafficOnStartGridWholeSale, NukeTrafficJams; each gate names its own blocker and cost.
 // ============================================================================
 
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficEntityModule.h"
@@ -221,10 +221,14 @@ void TrafficEntityModule::UpdateDecisionFrame(
 
     if (mbPlayingShowtimeMode)
     {
-        static bool sbLogged = false;
-        LogMissingLeg(sbLogged,
-            "UpdateDecisionFrame leg SpawnShowtimeTraffic (DWARF :1566) -- no body. "
-            "SHOWTIME-only; mbPlayingShowtimeMode is false on a normal boot (ResetEventData)");
+        // The showtime top-up (DWARF :1566, @0x82743038) -- LANDED, body in _wT1_07.cpp.
+        // It is a SECOND spawn source layered on SpawnNewTraffic above, refilling every
+        // active section at a fixed 20 vpm scaled by mfShowtimeTrafficDensityScale instead
+        // of the section's authored rate. Still inert on a normal boot: mbPlayingShowtimeMode
+        // is seeded false by ResetEventData and the console's only writers of it are
+        // HandlePrepareForModeAction @0x827480D8 (unreconstructed) and UpdateCrashSlider
+        // @0x82715A18's mbDEBUGFakeShowtime arm (_wT5_01.cpp, LIVE).
+        SpawnShowtimeTraffic();
     }
 
     {

@@ -2443,6 +2443,21 @@ void TrafficEntityModule::Construct()
     mbDEBUGOverrideJunctionFUP  = false;   // 0x72875
     mbDEBUGFakeShowtime         = false;   // 0x72876
     mbDEBUGPickVehicleFromCamera= false;   // 0x72877
+
+    // [DIAG] NOT IN THE X360 BINARY -- but the FLAG is, and so is its checkbox. The console
+    // ships a debug-menu toggle literally labelled "Fake Showtime" bound to this very byte:
+    // BrnTraffic::DebugComponent::OnActivate @0x8276335C registers `&module + 0x72876` under
+    // that name. UpdateCrashSlider @0x82715A28 (LIVE, _wT5_01.cpp) then raises
+    // mbPlayingShowtimeMode from it every frame -- which is the whole showtime chain,
+    // including UpdateDecisionFrame's SpawnShowtimeTraffic leg and FillNewHull's
+    // showtime-only parked records.
+    // DebugComponent::OnActivate is not reconstructed and the debug UI is not built, so this
+    // env switch stands in for pressing that shipped checkbox. It writes the console's own
+    // member and nothing else; it invents no predicate. DELETE-WHEN the debug UI can set it.
+    if (getenv("BRN_TRAFFIC_FAKE_SHOWTIME") != 0)
+    {
+        mbDEBUGFakeShowtime = true;
+    }
     muDEBUGPickedVehicle        = 0xFFFFFFFFu; // 0x72878 stwx r10 (r10 == -1)
     mbDEBUGPick_StopVehicle     = false;   // 0x7287C
     mbDEBUGPick_DontStopForPickedVehicle = false; // 0x7287D
