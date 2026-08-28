@@ -19,16 +19,10 @@ namespace core
 // (The former PlugInFactory local view over the then-opaque descriptor is RETIRED --
 // descriptor-record wave 2026-08-28: the "+8 begin/validate hook" IS the typed
 // PlugInDescRunTime::pCreateInstance slot; the dispatch below casts at the call, the
-// console's own generic-dispatch site.) The companion `a4` record keeps its view:
-// a "context" pointer at +0 and an init flag byte at +8.
+// console's own generic-dispatch site.) The companion `a4` record
+// (PlugInCreateDesc) moved to PlugIn.h with the phase-D Dac slice -- the playback
+// module's bring-up seam builds one.
 typedef int (*PlugInCreateInstanceFn)(PlugIn *self, void *context);
-
-struct PlugInCreateDesc
-{
-    void *mpContext; // +0x00 -- passed as the argument to PlugInFactory::mpBegin
-    int mField4;     // +0x04
-    char mbInitFlag; // +0x08 -- copied into PlugIn::mbFlag21
-};
 
 // off_83271928 -- the shared System-singleton POINTER installed into PlugIn::mpSystem
 // at construction time (the owner of the deferred SetAttribute command ring). The
@@ -72,10 +66,15 @@ PlugIn *PlugIn::CreateInstance(PlugIn *self, Voice *voice, PlugInDescRunTime *pD
 
 // -------------------------------------------------------------------------------------
 // PlugIn::Event @0x82B6A8F8 -- tail-call into the per-instance Event virtual (vt[1]).
+// THREE-ARG (phase-D Dac slice): the console entry is `lwz r11,0(r3); lwz r11,4(r11);
+// mtctr; bctr` -- r4/r5 pass through untouched into the slot, and the Dac's vt[1]
+// (Dac::EventEvent @0x82BA27F0) consumes them as (eventId, paramPtr). Callers:
+// Environment::StartDac/StopDac @0x82680F50/@0x82680FE8 (events 3/4, param 0), the
+// splice-voice pair frees, the factory CreateInstance paths.
 // -------------------------------------------------------------------------------------
-int PlugIn::Event(PlugIn *self)
+int PlugIn::Event(PlugIn *self, int aiEventId, void *apParam)
 {
-    return self->Event(); // (*(*self+4))(self)
+    return self->Event(aiEventId, apParam); // (*(*self+4))(self, r4, r5)
 }
 
 // -------------------------------------------------------------------------------------
