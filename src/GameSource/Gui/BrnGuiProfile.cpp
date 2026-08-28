@@ -1492,12 +1492,16 @@ void ProfileManager::ReadProfileData()
 // ---------------------------------------------------------------------------
 bool ProfileManager::ValidateProfiles()
 {
-    // The progression save image validates against the build's expected-version
-    // manifest, which the progression data leads with.
+    // The progression save image validates against the authored progression data: its
+    // event-junction table IS the "expected manifest" the X360 walks at desc+0x18/+0x1C.
+    // ⭐ [one-profile wave 2026-08-28] mpProgressionData is passed AS ITSELF now -- the
+    // ExpectedManifest reinterpret_cast is retired with the forked type (see
+    // BrnGuiSaveLoadProfile.h). It was only ever safe because the pointer it received was a
+    // zeroed module static; against the real 0x50 serialised record it would have read the
+    // 32-bit table slot and the count word as one x64 pointer.
     const bool lbProgressionValid =
-        reinterpret_cast<BrnGuiSaveLoad::Profile*>(mStoredData.mProgressionProfile.maData)
-            ->ValidateProfile(*reinterpret_cast<const BrnGuiSaveLoad::Profile::ExpectedManifest*>(
-                mpProgressionData));
+        reinterpret_cast<const BrnGuiSaveLoad::Profile*>(mStoredData.mProgressionProfile.maData)
+            ->ValidateProfile(mpProgressionData);
 
     const bool lbProgressionDLC1Valid = mStoredData.mProgressionProfileDLC1.ValidateProfile();
 
@@ -1509,6 +1513,21 @@ bool ProfileManager::ValidateProfiles()
 
     const bool lbLiveRevengeValid =
         LiveRevengeProfile_ValidateProfile(mStoredData.mLiveRevengeProfile.maData);
+
+    // [DIAG one-profile] NOT IN THE X360 BINARY. A rejected save is otherwise INVISIBLE --
+    // ReportTaskCompleted just skips the deserialise arm, and the boot then looks exactly
+    // like a first boot. Name the five terms and, for the one that can legitimately reject a
+    // real save, the two counts it compares.
+    if (CgsDev::Log::gpDebugPrint != 0)
+    {
+        *CgsDev::Log::gpDebugPrint
+            << "[profile-save] ValidateProfiles: progression=" << (lbProgressionValid ? 1 : 0)
+            << " progressionDLC1=" << (lbProgressionDLC1Valid ? 1 : 0)
+            << " options=" << (lbOptionsValid ? 1 : 0)
+            << " optionsDLC1=" << (lbOptionsDLC1Valid ? 1 : 0)
+            << " liveRevenge=" << (lbLiveRevengeValid ? 1 : 0)
+            << "  (the progression term prints its own two counts above)\n";
+    }
 
     return lbProgressionValid & lbProgressionDLC1Valid & lbOptionsValid &
            lbOptionsDLC1Valid & lbLiveRevengeValid;

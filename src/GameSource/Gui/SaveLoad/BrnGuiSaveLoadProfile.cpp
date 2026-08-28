@@ -11,6 +11,7 @@
 
 #include "GameShared/GameClasses/Development/CgsStrStream.h"   // CgsDev::StrStreamBase
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"     // CgsDev::Log::gpDebugPrint, Message::gxMessageFilterFlags
+#include "SharedClasses/Progression/BrnRaceEventData.h"        // BrnProgression::EventJunction (GetID / GetOfflineEvent)
 
 #include <cstring>   // std::memset (the Serialise-prologue image clear)
 
@@ -34,7 +35,13 @@ namespace BrnGuiSaveLoad
     }
 
     // @0x824EFE30
-    bool Profile::ValidateProfile(const ExpectedManifest& lrExpected)
+    //
+    // The X360 body reads the descriptor as `*(a2+28)` (count) / `*(a2+24)` (entry base) and
+    // walks the entries `v24 += 4` on a _DWORD* (== 16 bytes), matching `*v24` and testing
+    // `v24[1]`. That descriptor is BrnProgression::ProgressionData and those entries are its
+    // EventJunction table -- see the header note. Read here through the owning type's own
+    // accessors, so no offset arithmetic and no serialised-slot width assumption survives.
+    bool Profile::ValidateProfile(const BrnProgression::ProgressionData* lpProgressionData) const
     {
         using namespace CgsDev;
 
@@ -55,8 +62,25 @@ namespace BrnGuiSaveLoad
             return false;
         }
 
-        const s32 liProfileCount  = muManifestCount;   // +0x268
-        const s32 liExpectedCount = lrExpected.miCount; // desc+0x1C
+        // desc+0x1C / desc+0x18. The X360 dereferences the descriptor unconditionally and so
+        // does this: on the console the progression data is resolved long before any profile
+        // task completes, and the PC boot order is the same (Progression.dat lands during the
+        // scripted load, BF_PROFILE's Bootup runs hundreds of lines later). No invented guard.
+        const s32 liProfileCount  = muManifestCount;
+        const s32 liExpectedCount =
+            static_cast<s32>(lpProgressionData->GetEventJunctionCount());
+
+        // [DIAG one-profile] NOT IN THE X360 BINARY. A count mismatch here rejects the whole
+        // save and ReportTaskCompleted then silently skips the deserialise -- a boot that
+        // looks exactly like a first boot. Print the two numbers so "the save did not load"
+        // can be told apart from "the save loaded and was empty".
+        if (Log::gpDebugPrint != 0)
+        {
+            *Log::gpDebugPrint
+                << "[profile-save] ValidateProfile: version=" << liVersion
+                << " storedEventCount=" << liProfileCount
+                << " expectedJunctions=" << liExpectedCount << "\n";
+        }
 
         // The stored and expected manifests must have the same number of entries.
         if (liExpectedCount != liProfileCount)
@@ -84,19 +108,24 @@ namespace BrnGuiSaveLoad
 
             const u32 luStoredId = maVersionManifest[liProfileIndex].muId;
 
+            // The scan index never reaches liExpectedCount without returning, so the
+            // accessor's own `luIndex < muEventJunctionCount` assert cannot fire here.
             s32 liExpectedIndex = 0;
-            while (lrExpected.mpEntries[liExpectedIndex].muId != luStoredId)
+            while (lpProgressionData
+                       ->GetEventJunction(static_cast<u32>(liExpectedIndex))->GetID() != luStoredId)
             {
                 ++liExpectedIndex;
                 if (liExpectedIndex >= liExpectedCount)
                 {
-                    return false;   // stored id not present in the expected manifest
+                    return false;   // stored id not present in the junction table
                 }
             }
 
-            if (lrExpected.mpEntries[liExpectedIndex].muFlag == 0)
+            // X360 `if (!v24[1]) break;` -> the junction's offline-event slot (+0x04).
+            if (lpProgressionData
+                    ->GetEventJunction(static_cast<u32>(liExpectedIndex))->GetOfflineEvent() == 0)
             {
-                return false;       // matched entry is not flagged valid
+                return false;       // the matched junction has no offline event
             }
         }
 
