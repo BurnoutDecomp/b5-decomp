@@ -396,6 +396,25 @@ void TrafficEntityModule::UpdateParams_BuildListOfCrashingThings(
 // { cos(10 deg), 30.0f, 0.25f, 0.0f } -- a 10-degree half-angle, 30 m long, with the vertical
 // axis squashed to a quarter before the test.
 //
+// ⭐ WHERE THE DECISION REACHES THE WHEELS (traced 2026-08-28; the note this replaces said the
+// steering half was "downstream and still gated", and that is NOT what the tree says).
+// Exactly fifteen X360 functions read Param+0x1B, and the one that steers is
+// BrnTraffic::UpdateVehiclesJob::CalcSwerveAmount @0x8291CF18 -- BODIED, in
+// GameSource/Jobs/Traffic/BrnUpdateVehiclesJob.cpp. Its tail (@0x8291D794) is
+//     if (GetCurrentParam()->miBehaviour == 2) { isExtreme = false;
+//                                                isNormalPhysical = true;
+//                                                swerveAmount = 1.0f; }
+// i.e. a drive-around param swerves at FULL amplitude, bypassing the usual proximity scaling.
+// UpdateVehicle then feeds that into CalcTargetPos, whose lateral term is
+// `lfSwerve.x * KF_APPROX_LANE_WIDTH` -- one whole lane width -- and MoveToTarget drives the
+// non-physical car there. So the chain from this decision to a moved car is COMPLETE, with
+// three live preconditions the console also has: within 150 m of mBehaviourCentre
+// (lbPartialUpdate), mbGameModeAllowsSwerving (Construct sets it true), and
+// FindInterestingRaceCar succeeding.
+// ⚠️ What IS still gated inside CalcSwerveAmount is only its predicted-intersection
+// refinement @0x8291D644 (GetLineLineIntersectionParamXZ), which polishes WHERE the swerve
+// aims -- not whether it happens.
+//
 // The three early-outs are the console's, in order: divergent behaviour off; the param has
 // already been promoted to a physics body (a body is steered by physics, not by this); and the
 // physical-traffic pool has fewer than four free slots.
