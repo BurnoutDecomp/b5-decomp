@@ -76,6 +76,12 @@ namespace BrnResource { struct VehicleList; }   // mpVehicleList (:943) -- by po
 // GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h;
 // including it here would pull the race-car IO graph into BrnWorldModule.h.
 namespace BrnWorld { namespace RaceCarEntityModuleIO { struct RCEntityActiveRaceCarOutputInterface; } }
+// HandlePrepareForModeAction's action record, by pointer only (forward-declaration exception
+// (b)). Real home GameSource/GameState/BrnGameActions.h; including it here would pull the whole
+// game-action graph -- GameModeParams, the drive-thru manager, the progression trophy data --
+// into BrnWorldModule.h through this header. Class key `struct` matches that home, and MSVC
+// mangles struct vs class, so it is load-bearing.
+namespace BrnGameState { namespace GameStateModuleIO { struct PrepareForModeAction; } }
 
 namespace BrnTraffic
 {
@@ -949,6 +955,23 @@ namespace BrnTrafficIO { class InputBuffer_PreScene; class OutputBuffer_PreScene
         // _wT1_06.cpp, PARTIAL for the same reason.
         void UpdateNonDecisionFrame(const BrnTrafficIO::InputBuffer_PostPhysics* lpInput,
                                     BrnTrafficIO::OutputBuffer_PostPhysics* lpOutput);
+
+        // @0x827480D8. The per-event arming handler, dispatched from HandleExternalRequests
+        // @0x8274B660 on game action 23 (E_ACTION_PREPARE_FOR_MODE). ⭐ Sole non-debug writer
+        // of mbPlayingShowtimeMode, and the writer of meGameMode, the swerve/killzone/
+        // clear-traffic flags, mfGameModeDensityScale, miBigVehicleAmount, mfSpeedMultiplier
+        // and the crash-slider block. THREE arguments (this / lpInput / lpPFMAction) -- the
+        // prologue reads r3/r4/r5 only; Hex-Rays' a4/a5 are phantoms. Body in _wT6_02.cpp.
+        void HandlePrepareForModeAction(
+            const BrnTrafficIO::InputBuffer_PostPhysics* lpInput,
+            const BrnGameState::GameStateModuleIO::PrepareForModeAction* lpPFMAction);
+
+        // @0x827353E8, DWARF :1551. The jam relief valve UpdateNonDecisionFrame runs when
+        // mbNeedToRunTrafficJamNuker is latched: collect each maximal run of consecutive
+        // behaviour-5 params under 5 m/s and, when a run is longer than four, mark every third
+        // of them SetShouldBeRemoved. Independent of the junction FUP score, so a junction
+        // pinned below the 65 threshold cannot starve it. Body in _wT6_01.cpp.
+        void NukeTrafficJams();
 
         // ---- the driving-traffic set. DECLARATIONS ONLY: every body belongs to a later
         //      cluster of this round. Each signature is the DecFIGS DWARF's, checked argument
