@@ -55,6 +55,8 @@
 #include "GameSource/AttribSys/Generated/classes/cameraexternalbehaviour.h"  // Attrib::Gen::cameraexternalbehaviour
 
 #include <cstring>   // std::memcpy (the game actions' packed CgsID / word payloads)
+#include <cstdlib>   // [diag] getenv -- BRN_SLOMO_DIAG
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [diag] CgsDev::Log::gpDebugPrint
 
 // FLAG: CgsSceneManager::CgsCollision::BaseCollisionGenerator has no reconstructed home
 //   layout yet (the committed CgsSceneManagerModule.h forward-declares it only). Destruct /
@@ -77,6 +79,37 @@ namespace BrnDirector
         // is the exact decimal expansion of the IEEE-754 f32 0x3BA3D70A -- i.e. it is the
         // literal that is in .rdata, printed at double precision, not a decompiler guess.
         const f32 KF_MINIMUM_SIM_TIME_SCALE = 0.005f;   // flt_8200CE04
+
+        // [DIAG] BRN_SLOMO_DIAG -- NOT IN THE X360 BINARY. Edge-triggered per call site, so a
+        // steady 1.0 costs one line for the whole session. It exists because the published time
+        // scale is a value that arrives from a camera several copies away, and a wrong one is
+        // indistinguishable from a right one in every other log this build writes.
+        void BrnDiag_ReportSimTimeScale(const char* lpcWhere, f32 lfScale);
+
+        void BrnDiag_ReportSimTimeScale(const char* lpcWhere, f32 lfScale)
+        {
+            static const bool sbOn = (getenv("BRN_SLOMO_DIAG") != 0);
+            if (!sbOn || CgsDev::Log::gpDebugPrint == 0)
+                return;
+
+            // One remembered value per distinct call site (the sites pass string literals).
+            static const char* spcLastWhere[4] = { 0, 0, 0, 0 };
+            static f32         safLastScale[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+
+            for (int liSlot = 0; liSlot < 4; ++liSlot)
+            {
+                if (spcLastWhere[liSlot] == 0 || spcLastWhere[liSlot] == lpcWhere)
+                {
+                    if (spcLastWhere[liSlot] != 0 && safLastScale[liSlot] == lfScale)
+                        return;
+                    spcLastWhere[liSlot] = lpcWhere;
+                    safLastScale[liSlot] = lfScale;
+                    *CgsDev::Log::gpDebugPrint
+                        << "[slomo] camera " << lpcWhere << " mfSimTimeScale=" << lfScale << "\n";
+                    return;
+                }
+            }
+        }
 
         // The collision-generator view of an embedded aggregate. Takes a NAMED member's
         // address (never an offset into this class's storage) -- the X360 tears the embedded
@@ -1634,12 +1667,18 @@ namespace BrnDirector
             // ⭐ The arbitrator picks and runs the state that owns this frame's camera.
             UpdateArbitrator(lpIO, lCamera, liPlayerCarIndex);
 
+            // [diag] BRN_SLOMO_DIAG -- where the published time scale comes from.
+            BrnDiag_ReportSimTimeScale("post-arbitrator", lCamera.GetEffects().mfSimTimeScale);
+
             // ⚠️ GATE: the ~550-line VMX / effect-hook / world-map remainder (lines 271-823).
         }
 
         // Finalise: camera inertia + shake (the CameraFinaliser owns the InertiaController).
         mCameraFinaliser.Update(lpIO->mpInputBuffer, &maGameState, lpIO->mpResourceManager,
                                 &lCamera);
+
+        // [diag] BRN_SLOMO_DIAG
+        BrnDiag_ReportSimTimeScale("post-finaliser", lCamera.GetEffects().mfSimTimeScale);
 
         // ⭐⭐ X360 lines 836-848 (@0x82275008..0x82275064) -- THE SLOW-MOTION PERMISSION GATE.
         // ⚠️ THE VALUE IT GUARDS IS NOT A SEPARATE LOCAL: IDA calls it `v220` / `var_40C`, but

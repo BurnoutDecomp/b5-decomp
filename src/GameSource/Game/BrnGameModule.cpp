@@ -1593,8 +1593,16 @@ namespace BrnGame
             mpDirectorOutputBuffer->LockForRead();
 
             // Fold the game-state module's game/sim requests into this sub-step's accumulator.
-            CgsSystem::TimerRequestInterface* const lpGameStateRequests =
-                lpGameStateOutput->GetTimerRequestInterface();
+            // ⚠️ THE CONST OVERLOAD, DELIBERATELY. GetTimerRequestInterface() comes in a pair:
+            // the non-const one (X360 0x8231D608) asserts the WRITE lock, the const one
+            // (X360 0x823B98E8) the READ lock -- and this function holds a READ lock, so the
+            // console's call here is the const half. Measured: taking the non-const overload
+            // fired "Not locked for writing" 7,800 times in one 135 s boot and stalled the flow
+            // before the fly-by. A `const` that is load-bearing, not stylistic.
+            const BrnGameState::GameStateModuleIO::OutputBuffer* const lpcGameStateOutput =
+                lpGameStateOutput;
+            const CgsSystem::TimerRequestInterface* const lpGameStateRequests =
+                lpcGameStateOutput->GetTimerRequestInterface();
 
             mTimerRequestInterface.GetGameTimerRequests()->Append(
                 *lpGameStateRequests->GetGameTimerRequests());
