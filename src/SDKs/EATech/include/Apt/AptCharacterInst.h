@@ -88,6 +88,14 @@ struct AptCharacterInst
     // @0x817D40 -- factory: build the right AptCharacterInst for a character.
     static AptCharacterInst* CreateCharacterInst(AptCharacter* pCharacter);
 
+    // The PC seat of the console's manual-vtable SLOT-0 scalar deleting destructor
+    // (`(**pInst)(pInst, 1)`), which every retire site calls. This family's destructors
+    // are deliberately NON-virtual, so an open-coded `p->~AptCharacterInst()` runs the
+    // BASE dtor only and loses every derived teardown -- including the animation
+    // inst's release of its movie AptFile. Dispatches on the type tag and frees the
+    // subtype's own size, mirroring CreateCharacterInst. Body in the .cpp.
+    static void DestroyCharacterInst(AptCharacterInst* pInst);
+
     // ItemInserted @0x82AECD70 -- render-tree "item (re)inserted" notification.
     // Static helper: it takes the scene NODE (re-reads mpCharacterInst from it),
     // clears the item's deletion mark, and notifies the render-tree manager.

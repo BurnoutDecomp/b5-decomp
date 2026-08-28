@@ -21,6 +21,8 @@
 #include "SDKs/EATech/Apt/AptValueGCPoolManager.h"           // AptValueGC_PoolManager (the live-value walk)
 #include "SDKs/EATech/include/Apt/AptDefine.h"               // gpGCPoolManager (off_8324D834)
 #include "SDKs/EATech/include/Apt/AptString/EAString.h"
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"    // [aptlife] CgsDev::Log::WriteToLog
+#include <cstdio>                                             // [aptlife] snprintf
 
 // =====================================================================
 //  Sibling-owned callees/globals referenced below; declared here so this TU
@@ -335,6 +337,20 @@ void AptLinker::Load(EAStringC* pName, EAStringC* pFileName)
                                                        /*scopeChain*/1,
                                                        /*direct*/1);                 // ...,1,1,0
     AptValue* pValue = pVar;
+    // [aptlife] opt-in witness: which target this loadMovie/unloadMovie resolved to.
+    // An EMPTY name is the UNMOUNT half (StateInterface::PlayAptMovie("", level)), and
+    // it is exactly the arm that silently does nothing when the level variable does not
+    // resolve -- so print the resolution, not just the request.
+    if (AptLifeDiagEnabled())
+    {
+        char lac[256];
+        std::snprintf(lac, sizeof(lac),
+            "[aptlife] Linker::Load name='%s' target='%s' value=%p\n",
+            pName ? pName->GetBuffer() : "(null)",
+            pFileName ? pFileName->GetBuffer() : "(null)",
+            static_cast<const void*>(pValue));
+        CgsDev::Log::WriteToLog(lac);
+    }
     if (pValue == nullptr)
         goto done;
 

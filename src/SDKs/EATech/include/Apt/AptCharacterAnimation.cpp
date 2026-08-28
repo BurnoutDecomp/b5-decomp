@@ -1039,9 +1039,9 @@ void* AptCharacterAnimation::ExecuteInitActions(void* pA2, int32_t nId)
 // EmbeddedMovieOff); Image live-unit@+0x20; StaticText recordCount@+0x48/
 // records@+0x50 stride 0x40 w/ the glyph-array slot@+0x38; xref slots
 // @+0x20/+0x28).
-void* AptCharacterAnimation::Unresolve(int32_t nBase)
+void* AptCharacterAnimation::Unresolve(intptr_t nBase)
 {
-    const intptr_t nB = static_cast<intptr_t>(static_cast<uint32_t>(nBase));
+    const intptr_t nB = nBase;
     void* result = nullptr;
     mnParsedValueCount = 0;                                   // *(a1+0x50) = 0
 

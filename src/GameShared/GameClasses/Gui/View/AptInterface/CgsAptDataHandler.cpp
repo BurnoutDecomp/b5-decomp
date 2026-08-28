@@ -4,6 +4,8 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"            // CGS_ASSERT, CgsDev::Assert::Begin/Fire/EndAssert
 #include "GameShared/GameClasses/Development/CgsStrStream.h"   // CgsDev::StrStream (dynamic assert message)
 #include "GameShared/GameClasses/Containers/CgsHash.h"         // CgsContainers::CgsHash::CalculateHash (the name -> hash key)
+#include "SDKs/EATech/include/Apt/AptTarget.h"                 // gpAptTarget / AptTarget::GetLoader (the unload invalidation)
+#include "SDKs/EATech/include/Apt/AptLoader.h"                 // AptLoader::InvalidateLoadedData
 
 #include <cstddef>   // size_t
 #include <cstring>   // strlen (name length for the hash)
@@ -179,6 +181,22 @@ namespace CgsGui
             if (maAptDataHeaderInfo[li].mHashKey != luNameHash)
             {
                 continue;
+            }
+
+            // ⭐⭐ FLAG PC-platform leaf: tell the Apt engine the data behind this header
+            // is gone. See AptLoader::InvalidateLoadedData's banner -- on the console the
+            // engine has already let go by reference count at this point (which is why
+            // RemoveAptData only WARNS when the header is still ACTIVE); on this build a
+            // residual reference keeps the AptFile alive, and without this the next load
+            // of the same bundle reuses that file's state-4 handle and never re-runs
+            // Resolve/Fixup on the new bytes. Runs BEFORE the table entry is moved so the
+            // header pointer is still readable.
+            if (gpAptTarget != 0)
+            {
+                if (AptLoader* lpLoader = gpAptTarget->GetLoader())
+                {
+                    lpLoader->InvalidateLoadedData(maAptDataHeaderInfo[li].mpAptDataHeader);
+                }
             }
 
             const s32 liLast = miNumLoadedAptData - 1;

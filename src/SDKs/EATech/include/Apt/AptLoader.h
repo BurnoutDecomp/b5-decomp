@@ -115,6 +115,33 @@ struct AptLoader
     // @0x82AFF958 -- teardown: cancel every still-registered preloaded animation,
     // then drain the weak list. Body in AptLoader.cpp.
     ~AptLoader();
+
+    // ⭐⭐ FLAG PC-platform leaf: THE HOST-UNLOAD INVALIDATION.
+    //
+    // On the console an AptFile is released by REFERENCE COUNT: unmounting a movie
+    // (StateInterface::PlayAptMovie("", level)) retires its AptCharacterAnimationInst,
+    // that release cascades through the render item and the root AptCharacter to the
+    // AptFile, whose ~AptFile unlinks the loader node -- all before the GUI frees the
+    // bundle the movie's AptData lived in. The engine has no explicit "the data is gone"
+    // entry point because on the console the data cannot go while a file references it.
+    //
+    // On this build that cascade does not complete (a residual reference survives each
+    // mount/unmount cycle; the leak itself is NOT fixed here -- see the commit note), so
+    // an AptFile can outlive the bundle it was resolved against. The GUI then re-loads
+    // that bundle -- frequently into the very same pool block -- and the surviving file
+    // still reports mnState 4, so AptLinker::Load short-circuits on IsLoaded and
+    // CompleteLoad -> Resolve -> Fixup never runs on the NEW bytes. MEASURED: the movie
+    // def base then still holds raw file OFFSETS (charTable == 0x4CF0 rather than a
+    // pointer) and the linker AVs in AptCharacterAnimation::IncCharacterList.
+    //
+    // This is the seat where the host KNOWS the data went: the AptDataHandler is
+    // un-registering that exact AptDataHeader. Every AptFile resolved against it
+    // (AptFile::mpDataBlock == the header -- an identity test, not a name match) is put
+    // back into the "requested" state so the loader's own faithful state machine
+    // re-drives the real load next frame. Nothing is freed here: the blob belongs to the
+    // caller and the file keeps its identity and its references.
+    // DELETE-WHEN the reference cascade completes and ~AptFile runs on unmount.
+    void InvalidateLoadedData(const void* pDataBlock);
 };
 
 // ---------------------------------------------------------------------------
@@ -126,3 +153,13 @@ struct AptLoader
 struct AptConstFile;
 void AptCompleteAnimationAsyncLoad(AptFilePtr* pHandle, void* pBase, struct AptConstFile* pConstFile,
                                    void* pAptDataHeader);
+
+// ---------------------------------------------------------------------------
+// [aptlife] -- the movie-lifetime witness (NOT X360; opt-in via BRN_APT_LIFE=1).
+// Prints one line per lifetime seat with the three facts that decide whether a
+// re-load actually resolved: the AptFile's refcount/state/mpData and the movie
+// def base's character table -- a POINTER once Fixup has run, a raw file OFFSET
+// while it has not. Bodied in AptLoader.cpp.
+// ---------------------------------------------------------------------------
+bool AptLifeDiagEnabled();
+void AptLifeLog(const char* pWhat, const char* pName, const AptFile* pFile);

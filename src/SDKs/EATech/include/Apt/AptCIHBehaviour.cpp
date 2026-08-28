@@ -274,8 +274,13 @@ void AptCIH::SetCharacterInst(AptCharacterInst* pCharacterInst, bool bMoveRender
         // GC-tear-down + free the old instance (the X360's DestroyGCPointers + the
         // vtable-0 scalar-deleting destructor; AptCharacterInst is DOGMA-pool-backed).
         pOld->DestroyGCPointers();
-        pOld->~AptCharacterInst();
-        gpNonGCPoolManager->Deallocate(pOld, sizeof(AptCharacterInst));
+        // ⭐⭐ THE RELEASE THAT WAS MISSING. This is the console's
+        // `(**pOld)(pOld, 1)` -- the manual-vtable slot-0 scalar deleting destructor.
+        // The open-coded `pOld->~AptCharacterInst()` that stood here ran the BASE dtor
+        // only, so retiring an ANIMATION inst never released its movie's AptFile and the
+        // Apt loader kept that movie "loaded" for ever. See
+        // AptCharacterInst::DestroyCharacterInst for the measured consequence.
+        AptCharacterInst::DestroyCharacterInst(pOld);
     }
 
     // Notify the render tree the node's render item moved (the X360 reads the
@@ -2084,8 +2089,10 @@ void AptCIH::ClearCIH(bool bClearGCRoots)
             pOld->mpProperties = nullptr;
         }
         pOld->DestroyGCPointers();
-        pOld->~AptCharacterInst();
-        gpNonGCPoolManager->Deallocate(pOld, sizeof(AptCharacterInst));
+        // The console's manual-vtable slot-0 scalar deleting destructor (see
+        // AptCharacterInst::DestroyCharacterInst): the open-coded base-dtor call that
+        // stood here ran only ~AptCharacterInst.
+        AptCharacterInst::DestroyCharacterInst(pOld);
 
         // AS-changed clear (x64 bit 0) + vtable slot 5 == SetHasClass(0) (see the
         // null-inst arm note above).

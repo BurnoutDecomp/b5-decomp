@@ -22,6 +22,7 @@
 #include "SDKs/EATech/include/Apt/AptCharacterSpriteInstBase.h"   // the sprite/movie-clip subtype (type 5)
 #include "SDKs/EATech/include/Apt/AptCharacterTextInst.h"          // the dynamic-text subtype (type 2)
 #include "SDKs/EATech/include/Apt/AptCharacterMorphInst.h"          // the morph subtype (type 8)
+#include "SDKs/EATech/include/Apt/AptCharacterAnimationInst.h"      // the animation subtype (type 9 -- DestroyCharacterInst)
 #include "SDKs/EATech/include/Apt/AptPseudoCIH.h"                 // gpAptPseudoDataPool (off_8324D808, the ctor's pool)
 
 #include <new>   // placement new (factory)
@@ -162,6 +163,76 @@ AptCharacterInst* AptCharacterInst::CreateCharacterInst(AptCharacter* pCharacter
     // Any OTHER type: BOTH binaries return null (X360 @0x82AFFF70 switch default;
     // x64 0x140835410 falls through to `return 0`) -- no base-inst fallback exists.
     return nullptr;
+}
+
+// ---------------------------------------------------------------------------
+// ⭐⭐ DestroyCharacterInst -- the PC seat of the console's `(**pInst)(pInst, 1)`, i.e.
+// the MANUAL-VTABLE SLOT-0 SCALAR DELETING DESTRUCTOR every retire site calls
+// (AptCIH::SetCharacterInst @0x82B00548, AptCIH::ClearCIH, the display-list retire).
+//
+// ⛔⛔ WHY THIS EXISTS. Every one of those sites was open-coded as
+//         pOld->~AptCharacterInst();
+//         gpNonGCPoolManager->Deallocate(pOld, sizeof(AptCharacterInst));
+// and this family's destructors are DELIBERATELY NON-VIRTUAL (the manual vtable lives
+// in mpVTable_unused at +0x00; a C++ `virtual` would inject a second vptr and fork the
+// layout -- see the banners in AptCharacterSpriteInstBase.h / AptCharacterAnimationInst.h).
+// A non-virtual `pOld->~AptCharacterInst()` therefore runs the BASE destructor ONLY, so
+// every derived teardown was dropped without a trace:
+//   * ~AptCharacterAnimationInst (tag 9) releases mAnimationFilePtr -- the movie's AptFile
+//     reference. Skipping it means the AptFile NEVER reaches refcount 0, so ~AptFile never
+//     runs, AptLoader::Invalidate never unlinks it, and the loader keeps answering
+//     IsLoaded(name) with a handle in state 4. MEASURED CONSEQUENCE: after the GUI unloads
+//     and re-loads that movie's bundle, AptLinker::Load short-circuits on that stale handle,
+//     so AptLoader::CompleteLoad -> Resolve -> Fixup never runs on the NEW bytes and the
+//     movie def base still holds RAW FILE OFFSETS. Re-entering the Driver Details pause
+//     screen then AV'd in AptCharacterAnimation::IncCharacterList reading
+//     mpCharacterTable[1] where mpCharacterTable was 0x4CF0 -- the un-relocated offset,
+//     printed verbatim by the [aptlife] witness beside the first entry's real pointer.
+//   * ~AptCharacterSpriteInstBase (tag 5) drops the embedded display list.
+// The paired Deallocate was wrong for the same reason: `sizeof(AptCharacterInst)` returned
+// a 0x40 sprite / 0x30 anim block to the 0x20 bucket. Sizes come from the type, exactly as
+// CreateCharacterInst above takes them from the type.
+//
+// The dispatch is the family's own discriminator -- the type tag in mTypeFlags' low 6 bits,
+// which is what the console's per-type vtable pointer encodes and what every IsXxxInst
+// predicate already reads. The arms MIRROR the factory above one-for-one so allocate and
+// free stay symmetric by construction; tag 9 is the one the factory does not build
+// (MakeCharacterAnimationInst does, AptCharacterAnimationInst.cpp).
+// ---------------------------------------------------------------------------
+void AptCharacterInst::DestroyCharacterInst(AptCharacterInst* pInst)
+{
+    if (pInst == nullptr)
+        return;
+
+    switch (pInst->GetTypeTag())
+    {
+    case 9u:   // animation (MakeCharacterAnimationInst) -- releases mAnimationFilePtr
+    {
+        AptCharacterAnimationInst* const p = static_cast<AptCharacterAnimationInst*>(pInst);
+        p->~AptCharacterAnimationInst();
+        gpNonGCPoolManager->Deallocate(p, sizeof(AptCharacterAnimationInst));
+        break;
+    }
+    case 5u:   // sprite / movie-clip -- releases the embedded display list
+    {
+        AptCharacterSpriteInstBase* const p = static_cast<AptCharacterSpriteInstBase*>(pInst);
+        p->~AptCharacterSpriteInstBase();
+        gpNonGCPoolManager->Deallocate(p, sizeof(AptCharacterSpriteInstBase));
+        break;
+    }
+    case 2u:   // dynamic text -- base teardown, text-inst-sized block
+        pInst->~AptCharacterInst();
+        gpNonGCPoolManager->Deallocate(pInst, sizeof(AptCharacterTextInst));
+        break;
+    case 8u:   // morph -- base teardown, morph-sized block
+        pInst->~AptCharacterInst();
+        gpNonGCPoolManager->Deallocate(pInst, sizeof(AptCharacterMorphInst));
+        break;
+    default:   // 1 shape / 10 static text / 15 level-or-null: the plain base
+        pInst->~AptCharacterInst();
+        gpNonGCPoolManager->Deallocate(pInst, sizeof(AptCharacterInst));
+        break;
+    }
 }
 
 // ---- render item ----------------------------------------------------------

@@ -18,6 +18,7 @@
 #include "SDKs/EATech/include/Apt/AptLoader.h"   // GetTarget / AptLoader::Invalidate
 #include "SDKs/EATech/include/Apt/AptTarget.h"   // AptTarget::GetLoader (full type for the member call)
 #include "SDKs/EATech/include/Apt/AptCharacterAnimation.h"   // AptImportEntry (import-table record) + AptCharacter
+#include "SDKs/EATech/include/Apt/AptCIH.h"                  // KU_AptEmbeddedMovieOff (native-8 character-header size)
 #include "SDKs/EATech/include/Apt/AptSharedPtr.h"            // AptSharedPtr<AptFile>::Dispose
 
 // ---------------------------------------------------------------------------
@@ -53,6 +54,8 @@ void AptFile_FreeLoadedBlock(void* pDataBlock)
 
 AptFile::~AptFile()
 {
+    AptLifeLog("~AptFile   ", mFileName.GetBuffer(), this);   // [aptlife] opt-in witness
+
     // 1. Unregister from the current target's loader (null-guarded: a file torn
     //    down after the target instance is destroyed sees GetTarget() null).
     if (AptTarget* pTarget = GetTarget())
@@ -68,14 +71,24 @@ AptFile::~AptFile()
     if (mnState >= 3 && mnState <= 6 && mpData)
     {
         // Inverse of the load-time Fixup: run AptCharacterAnimation::Unresolve on the
-        // AptCharacterAnimation embedded at the movie root (mpData) + 0x10, passing the
-        // load base (mpResolveContext) as nBase.
+        // AptCharacterAnimation embedded in the movie root (mpData), passing the load
+        // base (mpResolveContext) as nBase.
         // PS3: AptCharacterAnimation::Unresolve(*(this+5) + 16, *(this+4)).
+        //
+        // ⚠️⚠️ THE LITERAL 16 WAS THE CONSOLE'S, LEFT ON A NATIVE-8 RECORD. mpData is
+        // the movie ROOT CHARACTER HEADER, and the embedded AptCharacterAnimation def
+        // base sits one character header past it: 0x10 on the 32-bit console, 0x20 on
+        // the widened native-8 data this build ships (KU_AptEmbeddedMovieOff -- the
+        // same constant AptCharacterAnimationInst's ctor, AptCIH::GetMovie,
+        // AptCharacterHelper and the Fixup walk all already use for this exact step,
+        // and AptCharacterAnimation.h's own layout banner pins charTable at def+0x20).
+        // At the console offset the walk read charCount from def+0x08 and charTable
+        // from def+0x10 -- i.e. it unresolved a movie that was not there, so no
+        // imported character was ever released and no import's AptFile refcount ever
+        // reached zero.
         AptCharacterAnimation* pAnimation = reinterpret_cast<AptCharacterAnimation*>(
-            reinterpret_cast<char*>(mpData) + 0x10);   // [c:] *(this+5) + 16
-        // FLAG (raw-ptr-as-id): the load base (mpResolveContext, a pointer) is passed
-        // into Unresolve's int32_t nBase param; preserved verbatim.
-        pAnimation->Unresolve(static_cast<int32_t>(reinterpret_cast<intptr_t>(mpResolveContext)));
+            reinterpret_cast<char*>(mpData) + KU_AptEmbeddedMovieOff);   // [c:] *(this+5) + 16
+        pAnimation->Unresolve(reinterpret_cast<intptr_t>(mpResolveContext));
         AptFile_FreeLoadedBlock(mpDataBlock);
     }
 
