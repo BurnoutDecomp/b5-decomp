@@ -7,13 +7,15 @@
 //   ClearBuffer   @0x82B64980 -- store-for-store
 //   CreateInstance@0x82B6C420 -- store-for-store
 //   GetSize       @0x82B6C408 -- store-for-store
-//   CalculateFilterCoefficients @0x82B64698 -- KEYSTONE, not reconstructed (see below).
+//   CalculateFilterCoefficients @0x82B64698 -- the cascade designer, DECODED AND
+//                              BODIED 2026-08-28 (phase E); see its header comment.
 // See Butterworth.h for the byte-exact layout.
 // =====================================================================================
 
 #include "rw/audio/core/Butterworth.h"
 
 #include <cstring> // memset (the X360 XMemSet)
+#include <cmath>   // std::tan / std::pow / std::fma (the design maths)
 
 namespace rw
 {
@@ -199,45 +201,154 @@ void Butterworth::Filter(AudioProcessContext *ctx)
     *srcSlot = dst;
 }
 
-// -------------------------------------------------------------------------------------
-// CalculateFilterCoefficients @0x82B64698 -- KEYSTONE (body not yet reconstructed), but
-// its ABI is now RECOVERED and its first blocker is GONE.
+// =====================================================================================
+// CalculateFilterCoefficients @0x82B64698 -- the cascade designer. NO LONGER A KEYSTONE:
+// decoded and bodied 2026-08-28 (phase E; report
+// progress/scratch_dossiers/butterworth_coefficients_decode_codex.md).
 //
-// The X360 body (1) computes a frequency pre-warp via tan, (2) calls a helper six times to
-// evaluate the transfer-function polynomial, and (3) reads three rodata coefficient tables
-// (unk_82F87B88, unk_82F87BD8, unk_82F87D68; strides 0x14 / 0x64) indexed by the filter
-// order to build and normalise the cascade coefficients written into the +0x00..+0x24
-// header.
+// It had TWO blockers and both are now gone:
+//   * the "anonymous, fully un-typed helper sub_82C09970" it calls six times is the X360
+//     CRT's double-precision pow(x, y) core (x in f1, y in f2, result in f1), identified
+//     while unblocking Limiter1::Configure;
+//   * the three rodata design tables are not bespoke tuning curves at all -- they are the
+//     textbook pieces of a bilinear-transform Butterworth design, named by the same-era
+//     ProStreet rwaudiocore map:
+//       unk_82F87B88 = sButterworthPolynomials[4][5]  -- the normalized analog
+//                      denominators, i.e. 1 / sqrt(2) / 2,2 / the order-4 row
+//       unk_82F87BD8 = sCoefficientAMultipliers[4][5][5] -- the EXACT integer matrix
+//                      expanding (1+z)^(N-j) (1-z)^j; all 100 cells verified to 0.0 error
+//       unk_82F87D68 = sCoefficientsB[4][5]           -- Pascal's triangle, C(N,k)
+//     The last two are exact integers and could be recomputed; the first is embedded as
+//     recovered VALUES because the image stores slightly rounded source literals
+//     (1.414214f, 2.613126f, 3.414214f -- up to 4 ULP off the exact irrationals), and
+//     recomputing them with sqrt would silently change the target's single-precision
+//     results.
 //
-// ⭐ BLOCKER 1 RESOLVED (phase E 2026-08-28): the "anonymous, fully un-typed helper
-// sub_82C09970" this stub was blocked on is the X360 CRT's double-precision pow(x, y) core
-// -- x in f1, y in f2, double result in f1. Proof (its log2(e)/ln(2) polynomial block, its
-// negative-base integral-exponent classification, its _decomp/_get_exp/_set_exp call tree,
-// and the named pow wrapper at 0x82674CD0 that frsp's its result) is in
-// progress/scratch_dossiers/limiter1_configure_decode_codex.md, which identified it while
-// unblocking Limiter1::Configure. Six pow calls is exactly the shape of a cascaded
-// Butterworth design.
+// The design: clear the ten coefficient slots, pre-warp the cutoff with tan, build the
+// basis {1, w, w^(2^shape), w^(3^shape), w^(4^shape)} with the six pow calls, combine the
+// three tables into b[] and a[], normalise both by a[0], and finally scale b[] so the gain
+// is unity at DC (low-pass) or Nyquist (high-pass).
 //
-// ⭐ THE ABI IS ALSO RECOVERED, from the callee together with BOTH callers: r3=self,
-// f1=cutoff, f2=sampleRate, f3=the third shaping attribute, r5=the fctidz'd order,
-// r7=the type selector (0 low-pass, 1 high-pass). r6 is never initialised by either caller
-// and never read by the callee -- that phantom slot was the whole "un-recoverable argument
-// shape" story. The declaration now carries the true parameters, so the two Process bodies
-// pass their real design values through instead of discarding them at the call site.
-//
-// BLOCKER 2 REMAINS: the three rodata design tables are still undecoded, so the polynomial
-// this fills the header with cannot yet be written without fabricating coefficients. A
-// targeted decode is in flight (progress/scratch_dossiers/butterworth_coefficients_decode_codex.md).
-// Until it lands, the header keeps whatever CreateInstance left there and the filter runs
-// with an unconfigured cascade -- documented, not guessed.
-// -------------------------------------------------------------------------------------
-int Butterworth::CalculateFilterCoefficients(Butterworth * /*self*/, f32 /*afCutoff*/,
-                                             f32 /*afSampleRate*/, f32 /*afShape*/,
-                                             s32 /*aiOrder*/, s32 /*aiType*/)
+// FLOATING-POINT FIDELITY NOTE: the console evaluates this in single precision with one
+// fused multiply-add per accumulation step (fmadds). The host expresses those as explicit
+// std::fma calls; do NOT let a build enable reassociation or implicit contraction around
+// the non-FMA operations, or the designed coefficients will drift from the target's.
+// The `shape` attribute is exponentiated as pow(2/3/4, shape) and then used as an exponent
+// on the warp -- deliberately NOT collapsed to integer powers, because shape is a live
+// float attribute and the nesting is what the console computes.
+// =====================================================================================
+namespace
 {
-    // KEYSTONE: still requires the three rodata Butterworth design tables
-    // (unk_82F87B88 / unk_82F87BD8 / unk_82F87D68). No fabricated coefficients are written.
-    return 0;
+    // ---- the three recovered design tables ------------------------------------------
+    // Row index is (order - 1); orders 1..4 (the console's MAX_ORDER).
+    const f32 KAF_BUTTERWORTH_POLYNOMIALS[4][5] = {
+        { 1.0f, 1.0f,      0.0f,      0.0f,      0.0f },
+        { 1.0f, 1.414214f, 1.0f,      0.0f,      0.0f },   // word 3FB504F7
+        { 1.0f, 2.0f,      2.0f,      1.0f,      0.0f },
+        { 1.0f, 2.613126f, 3.414214f, 2.613126f, 1.0f }    // words 40273D75 / 405A827B
+    };
+
+    // M[k][j] = coefficient of z^k in (1+z)^(N-j) (1-z)^j -- exact small integers.
+    const f32 KAF_COEFFICIENT_A_MULTIPLIERS[4][5][5] = {
+        { { 1,  1, 0, 0, 0 }, { 1, -1, 0, 0, 0 }, { 0, 0, 0, 0, 0 },
+          { 0,  0, 0, 0, 0 }, { 0,  0, 0, 0, 0 } },
+        { { 1,  1,  1, 0, 0 }, { 2,  0, -2, 0, 0 }, { 1, -1,  1, 0, 0 },
+          { 0,  0,  0, 0, 0 }, { 0,  0,  0, 0, 0 } },
+        { { 1,  1,  1,  1, 0 }, { 3,  1, -1, -3, 0 }, { 3, -1, -1,  3, 0 },
+          { 1, -1,  1, -1, 0 }, { 0,  0,  0,  0, 0 } },
+        { { 1,  1,  1,  1,  1 }, { 4,  2,  0, -2, -4 }, { 6,  0, -2,  0,  6 },
+          { 4, -2,  0,  2, -4 }, { 1, -1,  1, -1,  1 } }
+    };
+
+    // C(N, k) -- Pascal's triangle, the numerator binomials.
+    const f32 KAF_COEFFICIENTS_B[4][5] = {
+        { 1, 1, 0, 0, 0 },
+        { 1, 2, 1, 0, 0 },
+        { 1, 3, 3, 1, 0 },
+        { 1, 4, 6, 4, 1 }
+    };
+
+    const f32 KF_TWO_PI = 6.2831854820251465f;   // the pre-warp's 2*pi (NOT folded with the 0.5)
+    const f32 KF_HALF_W = 0.5f;
+}
+
+int Butterworth::CalculateFilterCoefficients(Butterworth *self, f32 afCutoff,
+                                             f32 afSampleRate, f32 afShape,
+                                             s32 aiOrder, s32 aiType)
+{
+    // XMemSet(self, 0, 0x28) -- exactly the nested coefficient object, nothing else.
+    XMemSet(&self->mCoefficients, 0, sizeof(self->mCoefficients));
+
+    // ---- the frequency pre-warp -------------------------------------------------------
+    // Low-pass warps to cot(theta), high-pass to tan(theta). ANY other selector leaves
+    // both the warp and the basis at the zero just installed -- reproduced, not "fixed".
+    f32 lafPowers[5] = { 1.0f, 0.0f, 0.0f, 0.0f, 0.0f };
+    f32 lfWarp = 0.0f;
+    if (aiType == KFILTER_LOWPASS || aiType == KFILTER_HIGHPASS)
+    {
+        const f32 lfAngle = ((afCutoff * KF_TWO_PI) / afSampleRate) * KF_HALF_W;
+        const f32 lfTangent = static_cast<f32>(std::tan(static_cast<f64>(lfAngle)));
+        lfWarp = (aiType == KFILTER_LOWPASS) ? (1.0f / lfTangent) : lfTangent;
+        lafPowers[1] = lfWarp;
+    }
+
+    // ---- the {1, w, w^(2^shape), w^(3^shape), w^(4^shape)} basis: the six pow calls ----
+    for (int liTerm = 2; liTerm <= 4; ++liTerm)
+    {
+        const f32 lfExponent = static_cast<f32>(
+            std::pow(static_cast<f64>(liTerm), static_cast<f64>(afShape)));
+        lafPowers[liTerm] = static_cast<f32>(
+            std::pow(static_cast<f64>(lfWarp), static_cast<f64>(lfExponent)));
+    }
+
+    // The console indexes the tables with (order - 1) and never validates it; the callers
+    // seed order 4 and the binary's contract is 1 <= order <= 4.
+    const int liRow = aiOrder - 1;
+
+    // ---- combine the three tables into the raw polynomials ----------------------------
+    // The alternating sign is the high-pass spectral flip (z -> -z); low-pass keeps +1.
+    for (int liK = 0; liK <= aiOrder; ++liK)
+    {
+        const f32 lfSign = (aiType != 0 && (liK & 1)) ? -1.0f : 1.0f;
+        self->mCoefficients.a[liK] = 0.0f;
+        self->mCoefficients.b[liK] = KAF_COEFFICIENTS_B[liRow][liK] * lfSign;
+
+        for (int liJ = 0; liJ <= aiOrder; ++liJ)
+        {
+            const f32 lfTerm = (KAF_COEFFICIENT_A_MULTIPLIERS[liRow][liK][liJ]
+                                * KAF_BUTTERWORTH_POLYNOMIALS[liRow][liJ])
+                             * lafPowers[liJ];
+            self->mCoefficients.a[liK] =
+                std::fma(lfTerm, lfSign, self->mCoefficients.a[liK]);   // fmadds
+        }
+    }
+
+    // ---- normalise both polynomials by a[0] (the console walks DOWNWARD) ---------------
+    const f32 lfInverseA0 = 1.0f / self->mCoefficients.a[0];
+    for (int liK = aiOrder; liK >= 0; --liK)
+    {
+        const f32 lfB = self->mCoefficients.b[liK];
+        const f32 lfA = self->mCoefficients.a[liK];
+        self->mCoefficients.b[liK] = lfB * lfInverseA0;
+        self->mCoefficients.a[liK] = lfA * lfInverseA0;
+    }
+
+    // ---- unity-gain scaling: at z=1 for low-pass, z=-1 for high-pass -------------------
+    f32 lfSumA = 0.0f;
+    f32 lfSumB = 0.0f;
+    for (int liK = 0; liK <= aiOrder; ++liK)
+    {
+        const f32 lfSign = (aiType != 0 && (liK & 1)) ? -1.0f : 1.0f;
+        lfSumA = std::fma(self->mCoefficients.a[liK], lfSign, lfSumA);
+        lfSumB = std::fma(self->mCoefficients.b[liK], lfSign, lfSumB);
+    }
+    const f32 lfGain = lfSumA / lfSumB;
+    for (int liK = 0; liK <= aiOrder; ++liK)
+        self->mCoefficients.b[liK] = self->mCoefficients.b[liK] * lfGain;
+
+    // The machine leaves order+1 in r3; both callers ignore it (the same-middleware
+    // ProStreet shape is void).
+    return aiOrder + 1;
 }
 
 } // namespace core
