@@ -358,6 +358,77 @@ namespace CgsGui
             }
         }
 
+        // ⭐⭐ RETRACT WHAT AN UNLOAD JUST INVALIDATED (2026-08-28, driver-details pause wave).
+        //
+        // THE DEFECT THIS FIXES, MEASURED: pressing START a SECOND time crashed the game with an
+        // access violation in CgsGui::AptDataHandler::AddAptData (reading 0x0), preceded by
+        // "Invalid memory resource in GuiResourceModule::ParseResource" and "Invalid resource
+        // pointer" in GuiCache::RecEvent. Cause: both registries above were APPEND-ONLY, while
+        // UnloadBundle (case 3) really does release the pool entries. So after the first
+        // CrashNavDriverDetails::OnLeave released B5LicenseRank0:
+        //   * the stale lead still matched the re-acquire by swf hash, and handed back
+        //     &entry.m_baseResources[MAINMEMORY] -- a NON-NULL pointer to a NOW-NULL slot. That
+        //     is exactly the shape both asserts test for (handle present, *handle == 0), and the
+        //     null then reached AddAptData through the load notification.
+        //   * s_apAttributedAptData still held the freed header pointers, so even a successful
+        //     reload could be skipped by the lead scan (the allocator very often hands the same
+        //     address back), leaving the bundle with no lead at all.
+        //
+        // ⓘ THIS IS THE HOST STAND-IN CATCHING UP WITH THE CONSOLE, not new behaviour. The
+        // console responder these registries stand in for is PoolModule::DoAcquireResourceRequest
+        // @0x828FCD48, which resolves through Pool::FindResource with STATUS MASK 2 (loaded) --
+        // a released entry simply stops matching. Our by-hash shortcut had no equivalent of that
+        // mask, so it kept answering for entries the pool had already let go. Sweeping both
+        // registries against the live pool restores the mask's effect.
+        //
+        // Written as a re-derivation from the pool rather than a per-bundle removal on purpose:
+        // RecordAptBundleLead only remembers the LEAD entry, not every header a bundle
+        // contributed, so "what did this bundle own" is not recoverable from the registry -- but
+        // "what is still live" is, and it is the property both registries actually need.
+        void RetireUnloadedAptRegistrations(CgsResource::Pool* lpPool)
+        {
+            // 1) Leads whose entry no longer holds main memory: the acquire must miss again, so
+            //    that a later request drives a real LoadBundle exactly as the first one did.
+            u32 luKeptLeads = 0;
+            for (u32 lu = 0; lu < s_uAptBundleLeadCount; ++lu)
+            {
+                const CgsResource::Entry* lpEntry = s_aAptBundleLeads[lu].mpLeadEntry;
+                const bool lbLive = (lpEntry != 0) &&
+                    (lpEntry->mResource.m_baseResources[CgsResource::E_MEMTYPE_MAINMEMORY] != 0);
+                if (!lbLive)
+                    continue;
+                if (luKeptLeads != lu)
+                    s_aAptBundleLeads[luKeptLeads] = s_aAptBundleLeads[lu];
+                ++luKeptLeads;
+            }
+            s_uAptBundleLeadCount = luKeptLeads;
+
+            // 2) Attributed AptData headers that no longer belong to a live entry of this pool.
+            //    Anything not currently owned is either freed or about to be re-handed out.
+            u32 luKeptAttrib = 0;
+            for (u32 lu = 0; lu < s_uAttributedAptDataCount; ++lu)
+            {
+                void* const lpHeader = s_apAttributedAptData[lu];
+                bool lbLive = false;
+                const u32 luMax = (lpPool != 0) ? lpPool->GetMaxResources() : 0u;
+                for (u32 luSlot = 0; luSlot < luMax && !lbLive; ++luSlot)
+                {
+                    if (lpPool->GetEntryStatusDirect(static_cast<s32>(luSlot)) == 0)
+                        continue;
+                    const CgsResource::Entry* lpEntry =
+                        lpPool->GetEntryDirect(static_cast<s32>(luSlot));
+                    lbLive = (lpEntry->mResource.m_baseResources[
+                                  CgsResource::E_MEMTYPE_MAINMEMORY] == lpHeader);
+                }
+                if (!lbLive)
+                    continue;
+                if (luKeptAttrib != lu)
+                    s_apAttributedAptData[luKeptAttrib] = s_apAttributedAptData[lu];
+                ++luKeptAttrib;
+            }
+            s_uAttributedAptDataCount = luKeptAttrib;
+        }
+
         // Parse the movie name out of "GuiApt\<NAME>.bundle" (the LoadBundleRequest path) into lpacOut.
         void ParseAptBundleName(const char* lpacFileName, char* lpacOut, u32 luOutSize)
         {
@@ -606,10 +677,19 @@ namespace CgsGui
                         const s32 liUnloaded =
                             lLoader.UnloadBundle(lpRequest->macFileName, &s_AptStreamedBankPool);
 
+                        // ⭐⭐ The registries the acquire path answers from are host-side and were
+                        // append-only: sweep out everything this unload just invalidated, or the
+                        // next acquire for the same movie resolves to a released entry and hands
+                        // AddAptData a null. See RetireUnloadedAptRegistrations for the measured
+                        // crash this closes.
+                        RetireUnloadedAptRegistrations(&s_AptStreamedBankPool);
+
                         char lac[208];
                         std::snprintf(lac, sizeof(lac),
-                                      "[GuiResourceModule] streamed apt bundle '%s' unload -> %d resources released.\n",
-                                      lpRequest->macFileName, liUnloaded);
+                                      "[GuiResourceModule] streamed apt bundle '%s' unload -> %d resources released"
+                                      " (leads now %u, attributed %u).\n",
+                                      lpRequest->macFileName, liUnloaded,
+                                      s_uAptBundleLeadCount, s_uAttributedAptDataCount);
                         CgsDev::Log::WriteToLog(lac);
                     }
 

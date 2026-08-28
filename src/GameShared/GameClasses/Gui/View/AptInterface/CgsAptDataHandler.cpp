@@ -141,4 +141,60 @@ namespace CgsGui
         maAptDataHeaderInfo[miNumLoadedAptData - 1].mpAptDataHeader = lpHeader;
         return nullptr;   // the asm returns the (null) FindAptData result on the add path
     }
+
+    // =========================================================================
+    // ⭐⭐ RemoveAptData @0x8284A338 -- un-register a loaded AptDataHeader by its name hash.
+    // DECOMPILED FAITHFULLY from BURNOUT_X360_ARTIST.XEX. The counterpart AddAptData never
+    // had: scan the live part of the table for the hash, SWAP THE LAST ENTRY INTO THE HOLE,
+    // zero the vacated tail slot and decrement the count; if no entry matched, fire the
+    // "non-existent" assert (CgsAptDataHandler.cpp:202).
+    //
+    // The X360 body, statement for statement:
+    //   v6 = 0; v7 = a1 + 1;                       // &maAptDataHeaderInfo[0].mHashKey
+    //   while (*v7 != a2) { ++v6; v7 += 2; if (v6 >= *a1) goto notfound; }
+    //   v8 = &a1[2 * v6];                          // v8[1] == hash[v6], v8[2] == header[v6]
+    //   if (*(v8[2] + 20) == 2 && (gxMessageFilterFlags & 1))  <warning print>
+    //   v18 = &a1[2 * *a1 - 1];                    // the LAST entry
+    //   v8[1] = *v18; v8[2] = v18[1];              // move last -> hole
+    //   a1[2 * *a1 - 1] = 0; a1[2 * (*a1)--] = 0;  // clear the tail, drop the count
+    //
+    // ⭐ THE SWAP IS LOAD-BEARING, not tidiness: FindAptData scans all 128 slots regardless of
+    // the count, so a hole left with its old hash would keep answering lookups for a header
+    // that is gone. Moving the tail in and zeroing it is what makes the entry unreachable.
+    //
+    // ⓘ ONE CONSOLE STATEMENT IS DELIBERATELY NOT REPRODUCED, and it is a debug print with no
+    // behaviour: the "*** WARNING: AptDataHandler: Trying to remove an active AptDataHeader"
+    // stream, gated on the header's +20 state word == 2 AND CgsDev::Message::gxMessageFilterFlags
+    // bit 0. AptDataHeader is an incomplete type in this slice (its full home is its own TU), so
+    // reproducing it would mean poking +20 through a raw offset cast -- which this project
+    // forbids -- to print a line. Named here rather than faked; restore it when this TU can see
+    // the header's real layout.
+    // =========================================================================
+    void AptDataHandler::RemoveAptData(u32 luNameHash)
+    {
+        bool lbRemoved = false;
+
+        for (s32 li = 0; li < miNumLoadedAptData; ++li)
+        {
+            if (maAptDataHeaderInfo[li].mHashKey != luNameHash)
+            {
+                continue;
+            }
+
+            const s32 liLast = miNumLoadedAptData - 1;
+            maAptDataHeaderInfo[li].mHashKey        = maAptDataHeaderInfo[liLast].mHashKey;
+            maAptDataHeaderInfo[li].mpAptDataHeader = maAptDataHeaderInfo[liLast].mpAptDataHeader;
+            maAptDataHeaderInfo[liLast].mHashKey        = 0;
+            maAptDataHeaderInfo[liLast].mpAptDataHeader = nullptr;
+            --miNumLoadedAptData;
+
+            lbRemoved = true;
+            break;
+        }
+
+        // The X360 streams the offending hash into the message ("... RemoveAptData, hash=%u");
+        // reduced to the static condition, per this tree's convention for streamed asserts.
+        CGS_ASSERT(lbRemoved,
+                   "Trying to remove non-existent Apt Data in AptDataHandler::RemoveAptData");
+    }
 }
