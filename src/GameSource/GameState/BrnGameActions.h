@@ -353,6 +353,19 @@ enum EGameActionType
     E_ACTION_STOP_MODE                                   = 39,   // DWARF 34  (+5 X360)
     E_ACTION_SET_IN_MODE_START_REGION                    = 44,   // DWARF 39  (+5 X360)
     E_ACTION_SET_COUNTDOWN                               = 47,   // DWARF 42  (+5 X360)
+    //   75  ⭐⭐⭐ [returning-player wave 2026-08-28] THE GUI HALF OF THE JUNKYARD CAR SELECT.
+    //       producer BrnGameState::CarSelectManager::StartCarSelectState @0x823872D0 (id 75,
+    //       size 4, payload word 1 -- BrnCarSelectManager.cpp:560 already posts it);
+    //       consumer @0x823EA700 `lwz r11,0(r31); stw r11,var_35D8;
+    //       AddGuiEvent<GuiCarSelectStartEvent>` -> GUI event 81 size 4 (the instantiation
+    //       @0x823D1690 ends `AddEvent(q, payload, 81, 4)`).
+    //       DWARF :80 E_ACTION_CAR_SELECT_READY == 70 (+5) -- the same +5 the whole car-select
+    //       band takes (CHANGE_COLOUR 74->79 immediately below is the neighbouring proof).
+    //       ⓘ The X360 switch has a SECOND arm onto the same GUI event, case 72
+    //       (DWARF :77 E_ACTION_CAR_SELECT_START_GUI_ON_GAME_START == 67, +5) @0x823EA6E8,
+    //       which posts the literal 1 instead of forwarding the action's word. Nothing in this
+    //       tree posts 72 yet, so only the 75 arm is landed.
+    E_ACTION_CAR_SELECT_READY                            = 75,   // DWARF 70  (+5 X360)
     E_ACTION_UPDATE_PLAYER_MEDALS                        = 200,  // DWARF 192 (+8 X360)
     E_ACTION_EVENT_AT_JUNCTION_AVAILABLE                 = 201,  // DWARF 193 (+8 X360)
     //  202  producer BrnGameState::GameStateModule::CheckForAllEventsBeingFound @0x82382460
@@ -1547,6 +1560,19 @@ struct SetCountdownAction : public GameAction<E_ACTION_SET_COUNTDOWN>
 };
 static_assert(sizeof(SetCountdownAction) == 4,
               "X360 CheckCountdownDisplay posts action 47 with size 4");
+
+// ---- 75 ----------------------------------------------------------------------------------
+// Producer CarSelectManager::StartCarSelectState @0x823872D0 (`li r5,0x4B / li r6,4`), whose
+// only value is 1 ("the junkyard car-select screen is ready -- bring the GUI up"). The record
+// is already posted by this tree (BrnCarSelectManager.cpp:560, `s32 liReady = 1`).
+// Consumer @0x823EA700 forwards the word verbatim into GuiCarSelectStartEvent (id 81, size 4);
+// BrnGui::InGame::Update's case-81 arm then does SendStateEvent("TO_CSELECT").
+struct CarSelectReadyAction : public GameAction<E_ACTION_CAR_SELECT_READY>
+{
+    s32 miCarSelectFlow;      // +0x00  1 == the offline junkyard flow (the only value posted)
+};
+static_assert(sizeof(CarSelectReadyAction) == 4,
+              "X360 StartCarSelectState posts action 75 with size 4");
 
 // ---- 44 ----------------------------------------------------------------------------------
 // Producer ModeManager::StartModeIntro @0x82343018 (`li r6,4 / li r5,0x2C` @0x82343060): stores

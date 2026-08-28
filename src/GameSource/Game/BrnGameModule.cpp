@@ -3359,27 +3359,21 @@ namespace BrnGame
                         }
                     }
 
-                    // ⭐ THE SECOND ARGUMENT IS THE ORDERING STAND-IN FOR GAME EVENT 78.
-                    // The console completes the start-of-game junkyard entry when the GUI tells
-                    // it to (BrnGui::InGame::OnEnter's command 145 -> BridgeGuiToGameState ->
-                    // game event 78 -> ProcessGameEvents case 78). That bridge is not plumbed
-                    // here, and its event provably arrives BEFORE the latch it tests exists on
-                    // this build (measured: InGame::OnEnter logs ~40 lines ahead of
-                    // SendSetupPlayerCarEvent), so the entry is completed on the GUI's OTHER
-                    // first-boot signal instead: mbNewProfileIntroActive, which BrnGui::InGame's
-                    // own first-boot gate raises (command 476, the same screen state that posts
-                    // the 145) and which BridgeGuiToDirector + MainDirector::PostGuiUpdate carry
-                    // into the director's GameState.
-                    // ⚠️ IT IS NOT A DELAY FOR SAFETY'S SAKE -- it is the CORRECT arm selector.
-                    // ArbStateCarSelect::Prepare reads exactly this flag to choose between the
-                    // authored GAME-INTRO movies and the junkyard E_STATE_INTRO, and completing
-                    // the entry before it is up sends the state down the wrong arm and then trips
-                    // that arm's own `!mbGameIntroFlybyActive` tripwire once per frame.
-                    // [FLAG PC bring-up] DELETE-WHEN BridgeGuiToGameState has a caller and
-                    // ProcessGameEvents drains a real post-world input buffer.
-                    const bool lbGuiFirstBootIntroLive =
-                        mDirectorModule.GetMainDirector().IsNewProfileIntroActive();
-                    mGameStateModule.PreWorldUpdateSetupPlayerCarBringUp(lbGuiFirstBootIntroLive);
+                    // ⭐⭐⭐ [returning-player wave 2026-08-28] THE ORDERING STAND-IN IS GONE.
+                    // This call used to pass MainDirector::IsNewProfileIntroActive() as
+                    // "lbMayCompleteJunkyardEntry", a stand-in for game event 78. That signal is
+                    // NEW-PROFILE-ONLY, so on any boot that finds a Profile.sav the start-of-game
+                    // junkyard entry never completed, mbInCarSelectScreen was never cleared, and
+                    // ActiveRaceCar::UpdateEngineState refused to crank -- A RETURNING PLAYER
+                    // COULD NOT DRIVE AT ALL (measured, scratch/flow_run/eng_b2_probe: 74 s of
+                    // held throttle, engine state 0 for every tick).
+                    // The leg now drains the console's own event 78 out of the carry queue that
+                    // BridgeGuiToGameState (called further down this same DoUpdate) fills from
+                    // BrnGui::InGame::OnEnter's command 145. Every rung of that bridge exists and
+                    // is plumbed; the stand-in was justified by a measurement that read
+                    // BrnGameMainFlowInGameState::OnEnter instead of BrnGui::InGame::OnEnter (see
+                    // the retraction in BrnGameStateModule.h's case-78 banner).
+                    mGameStateModule.PreWorldUpdateSetupPlayerCarBringUp();
 
                     // ⭐⭐ THE CAR-SELECT LEG (X360 PreWorldUpdate @0x823A5904..0x823A5958), in
                     // the console's own body order: the one-shot entry leg above, then the

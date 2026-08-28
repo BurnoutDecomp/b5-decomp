@@ -1710,6 +1710,53 @@ EActiveRaceCarIndex RaceCarEntityModule::AttachActiveRaceCar(
     // SetupCarColour) stays exactly as it was. DELETE-WHEN action 23 is posted on the freeburn
     // entry path (the ModeManager PrepareForMode caller -- stuntrace campaign F2).
     //
+    // ⛔⛔⛔ [returning-player wave 2026-08-28] READ THIS BEFORE THE BLOCK BELOW: THE "MISSING
+    // ACTION 23" DIAGNOSIS IS **REFUTED**, AND THE DEFECT IT DESCRIBES IS **FIXED ELSEWHERE**.
+    //
+    // The engine-wave block that follows correctly traced the symptom (mbInCarSelectScreen stuck
+    // TRUE ⇒ no ignition ⇒ a returning player cannot drive) but drew the wrong conclusion about
+    // the CONSOLE'S mechanism, and therefore proposed the wrong fix ("post game action 23 on the
+    // freeburn entry path"). The refutation is four X360 facts, each read from the image:
+    //
+    //   1. `mbIsInGameMode` (+99140) has exactly ONE setter -- HandlePrepareForModeAction
+    //      @0x823092F0 -- and one clearer, HandleStopModeAction @0x82307A30. (Tree-wide scan of
+    //      every ARTIST pseudocode body for `+ 99140`; the full hit list is 12 functions, 10 of
+    //      them readers.) So the byte can only be raised by game action 23.
+    //   2. Action 23's ONLY producer is ModeManager::PrepareForMode @0x82342930, whose only two
+    //      callers are ModeManager::SetupGameMode @0x8234B158 and ModeManager::
+    //      HandleLoadingScreenLoaded @0x8234B8A8 -- and BOTH open with `if (mpCurrentGameMode)`
+    //      (`lwz r11, 0xD98(this)` / `*(result + 3480)`).
+    //   3. THERE IS NO OFFLINE FREE-BURN GAME MODE. EGameModeType runs
+    //      E_MODE_NONE = -1, offline modes 0..9, online 10..16 -- free roam is E_MODE_NONE, and
+    //      ModeManager::IsInGameMode() @BrnModeManager_Accessors.cpp:115 is literally
+    //      `mpCurrentGameMode != NULL`. GameStateModule::OnProfileLoaded @0x82397310 even calls
+    //      ExitCurrentMode(…, 1, 18) on its way in, which stores `*(this+3480) = 0`.
+    //   ⇒ 4. ON THE CONSOLE, DRIVING AROUND PARADISE CITY OFFLINE, `mbIsInGameMode` IS FALSE.
+    //      There is no action 23 to post on the freeburn entry path, and adding one would be an
+    //      invented arm -- it would drag the car to the in-race force-RUNNING early-out that the
+    //      console reaches only inside an actual event.
+    //
+    // ⭐ WHAT THE CONSOLE ACTUALLY DOES, therefore, is the plain pad ignition below: engine OFF at
+    // the junkyard-exit attach, then case OFF's `demand && !inCarSelect` cranks it when the player
+    // touches the throttle. The ONLY thing that has to be true is `!mbInCarSelectScreen` -- and
+    // the console clears it the same way on both paths, with the ResetPlayerCarAction that
+    // CarSelectManager::UpdateExitState posts on the junkyard EXIT (BrnCarSelectManager.cpp:1124,
+    // the one builder of the five that leaves payload +0x40 zero).
+    //
+    // ⇒ SO THE REAL DEFECT WAS THAT THE RETURNING PLAYER NEVER *REACHED* THE EXIT: the extracted
+    // ProcessGameEvents case-78 arm that COMPLETES the junkyard entry was gated on
+    // MainDirector::IsNewProfileIntroActive(), a new-profile-only signal. That gate is now the
+    // console's own game event 78 (GUI command 145 from BrnGui::InGame::OnEnter, via
+    // BridgeGuiToGameState) -- see BrnGameStateModule.h's case-78 banner. The DELETE-WHEN at the
+    // top of this comment stands ONLY for the in-race force-RUNNING early-out and the HUD-reveal
+    // behaviour inside a real event; it is NOT the fix for free-burn driving and never was.
+    //
+    // ---------------------------------------------------------------------------------------
+    // ⓘ THE ENGINE WAVE'S ORIGINAL BLOCK, KEPT VERBATIM BELOW because rungs 1-4 of its chain are
+    // correct and were measured; only its rung-5 conclusion (the ⛔ paragraph at the end) is the
+    // part this wave retracts.
+    // ---------------------------------------------------------------------------------------
+    //
     // ⭐⭐⭐ [engine wave 2026-08-28] THE COST OF THAT MISSING BYTE IS NOW MEASURED, AND IT IS
     // BIGGER THAN THE FLAG ABOVE SAYS: ON A RETURNING-PROFILE BOOT THE PLAYER CANNOT DRIVE AT ALL.
     // The stand-in below guesses "we are in game mode" from `!mbInCarSelectScreen`. On a boot that
@@ -1745,14 +1792,26 @@ EActiveRaceCarIndex RaceCarEntityModule::AttachActiveRaceCar(
     // Attach seeds the engine RUNNING outright. That is the single "engineOn=1 (raw state 0 -> 2)"
     // in a fresh run, and it arrives 4 lines after the re-attach.
     //
-    // ⛔ THE CONSOLE DOES NOT DIFFER HERE AND MUST NOT BE "FIXED" BY CLEARING mbInCarSelectScreen:
-    // GameStateModule::OnProfileLoaded @0x82397310 -- the console's OWN returning-player entry,
-    // read from the ARTIST asm -- calls the SAME EnterJunkyardAtStartOfGame and sets the SAME
-    // *(this + 232306) latch as the new-game path, so a returning console player IS in the junkyard
-    // with this flag set. The console drives out because HandlePrepareForModeAction has already put
-    // the MODULE byte to 1 (`*(a1 + 99140) = 1`, unconditional, verified in that function's asm) --
-    // it never needs the car-select flag at all. So the fix is the module byte, i.e. action 23, and
-    // NOT a better guess here. The DELETE-WHEN above is the whole fix for both paths.
+    // ⛔ [engine wave] "THE CONSOLE DOES NOT DIFFER HERE AND MUST NOT BE FIXED BY CLEARING
+    // mbInCarSelectScreen: GameStateModule::OnProfileLoaded @0x82397310 -- the console's OWN
+    // returning-player entry, read from the ARTIST asm -- calls the SAME EnterJunkyardAtStartOfGame
+    // and sets the SAME *(this + 232306) latch as the new-game path, so a returning console player
+    // IS in the junkyard with this flag set. The console drives out because
+    // HandlePrepareForModeAction has already put the MODULE byte to 1 (`*(a1 + 99140) = 1`,
+    // unconditional, verified in that function's asm) -- it never needs the car-select flag at all.
+    // So the fix is the module byte, i.e. action 23, and NOT a better guess here."
+    //
+    // ⛔⛔ RETRACTED (returning-player wave, 2026-08-28) -- SECOND HALF ONLY. The first two
+    // sentences are RIGHT and still load-bearing: OnProfileLoaded really does run the same
+    // EnterJunkyardAtStartOfGame + latch, so a returning console player IS in the junkyard with
+    // this flag set, and clearing it by hand here would be a lie.
+    // The third sentence is WRONG. HandlePrepareForModeAction's store is unconditional *within
+    // that function*, but the function only runs on game action 23, action 23 only exists inside a
+    // GameMode, and offline free burn has no GameMode (the four-fact proof at the head of this
+    // comment). A returning console player leaving the junkyard has mbIsInGameMode == FALSE. What
+    // clears the car-select flag on the console is the junkyard EXIT's own ResetPlayerCarAction --
+    // the player is not *stuck* in the junkyard on the console, they drive out of it, and this
+    // build's returning path could not because its entry never completed.
     const bool lbInGameMode = mbIsInGameMode ||
         ( lpRaceCar->GetType() == E_RACE_CAR_TYPE_PLAYER && !mbInCarSelectScreen );
     lpActiveRaceCar->SetInGameMode( lbInGameMode );            // this[99140] -> car+0x777
