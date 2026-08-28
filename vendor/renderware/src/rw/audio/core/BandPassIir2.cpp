@@ -39,9 +39,14 @@ static int BandPassIir2ProcessThunk(BandPassIir2 *self, AudioProcessContext *ctx
     return self->Process(ctx);
 }
 
+// The console record's GetSize slot is the ICF-folded Delay::GetSize @0x82B96A38 (the console
+// footprints coincide); the HOST objects differ, so the fold is unfolded here --
+// the slot must size THIS type's host object (the stage-carve audit).
+static int BandPassIir2GetSizeThunk() { return static_cast<int>(sizeof(BandPassIir2)); }
+
 static PlugInDescRunTime g_BandPassIir2Desc = {
     "BandPassIir2",
-    reinterpret_cast<void *>(&Delay::GetSize),               // @0x82B96A38 (folded/shared)
+    reinterpret_cast<void *>(&BandPassIir2GetSizeThunk),                                       // @0x82B96A38 (console ICF fold; host unfolded)
     reinterpret_cast<void *>(&BandPassIir2::CreateInstance), // @0x82BA2398
     0,
     reinterpret_cast<void *>(&BandPassIir2ProcessThunk),        // @0x82B9D778

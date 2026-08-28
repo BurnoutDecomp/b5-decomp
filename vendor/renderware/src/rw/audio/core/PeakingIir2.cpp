@@ -66,7 +66,11 @@ char **PeakingIir2::GetPlugInDescRunTime()
 // -------------------------------------------------------------------------------------
 int PeakingIir2::GetSize()
 {
-    return 200;
+    // X360-LITERAL TRAP (the stage-carve audit, phase-D follow-up): the console
+    // immediate under-allocates the widened host object -- GetSize is the stage
+    // factory's allocation stride, so return host sizeof (the RawPuller2/Send/
+    // SinePlayer precedent).
+    return static_cast<int>(sizeof(PeakingIir2));   // X360: li r3, 0xC8 (200)
 }
 
 // -------------------------------------------------------------------------------------

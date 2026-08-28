@@ -80,7 +80,11 @@ char **Rechannel::GetPlugInDescRunTime()
 // -------------------------------------------------------------------------------------
 int Rechannel::GetSize()
 {
-    return 36;
+    // X360-LITERAL TRAP (the stage-carve audit, phase-D follow-up): the console
+    // immediate under-allocates the widened host object -- GetSize is the stage
+    // factory's allocation stride, so return host sizeof (the RawPuller2/Send/
+    // SinePlayer precedent).
+    return static_cast<int>(sizeof(Rechannel));   // X360: li r3, 0x24 (36)
 }
 
 // -------------------------------------------------------------------------------------

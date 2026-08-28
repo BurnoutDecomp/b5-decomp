@@ -23,6 +23,8 @@
 // =====================================================================================
 
 #include "rw/audio/core/plugins/HighPassButterworth.h"
+
+#include <cstddef> // offsetof (the host header span in GetSize)
 #include "rw/audio/core/PlugIn.h"  // PlugInDescRunTime (the real descriptor record)
 #include "rw/audio/core/Voice.h"   // the owning Voice (mfFadeStart decay accumulator)
 
@@ -102,7 +104,12 @@ int HighPassButterworth::GetSize(HighPassButterworth *desc)
 {
     // asm: lbz r3, 8(this) -- the parked count byte in the pre-init +0x08 slot.
     const u8 order = desc->mBase.GetPreInitOrderByte();
-    return static_cast<int>(Butterworth::GetSize(order) + 96u);
+    // The console +96 (0x60) is the header span before the embedded kernel; the
+    // host header is wider (widened pointers), so the span is the host offsetof
+    // (the stage-carve audit). Butterworth::GetSize itself is pointer-free f32
+    // arithmetic and holds on the host.
+    return static_cast<int>(Butterworth::GetSize(order)
+                            + offsetof(HighPassButterworth, mButterworth));   // X360: +0x60
 }
 
 // -------------------------------------------------------------------------------------
