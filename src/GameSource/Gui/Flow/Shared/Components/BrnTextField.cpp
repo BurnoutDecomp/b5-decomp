@@ -162,6 +162,58 @@ bool TextField::SetLocalisedText(s32 liValue,
     return true;
 }
 
+// @ 0x824E7608 -- cpp:194. The FLOAT variant (ledger-unnamed sub_824E7608), the sibling of
+// the integer one above: format lfValue under leFormat straight into macText through the
+// language manager's float formatter (128 cap), then push the apt data. Always reports
+// success (the X360 returns 1).
+// ⚠️ SIGNATURE FROM THE ASM, NOT THE PSEUDOCODE. The prologue is `mr r27, r5` (the format)
+// and `fmr f31, f1` (the value): the f32 argument rides f1 and CONSUMES the r4 GPR slot, so
+// the format lands in r5 -- which is why Hex-Rays prints a phantom `int a3` between them.
+// The call sites confirm it: CrashNavDriverDetails::HandleStatData converts each integer
+// stat word up with extsw/std/lfd/fcfid/frsp before every one of its five calls here.
+bool TextField::SetLocalisedText(f32 lfValue,
+                                 CgsLanguage::LanguageManager::ParameterFormatType leFormat)
+{
+    CGS_ASSERT(leFormat < CgsLanguage::LanguageManager::E_FORMAT_COUNT,
+               "Invalid Localisation Format supplied to TextField::SetLocalisedText");  // :194 (streamed; folded)
+
+    CgsLanguage::LanguageManager* lpLanguageManager =
+        TextFieldGetLanguageManager(mpStateInterface);
+
+    lpLanguageManager->FormatText(macText, KU_MAX_TEXTFIELD_LEN, lfValue, leFormat);
+    OutputAptData();
+    return true;
+}
+
+// @ 0x824E7C30 -- cpp:356/:357. The ONE-INTEGER-PARAMETER variant (ledger-unnamed
+// sub_824E7C30): resolve lpacText under leFormat with liValue substituted as its single
+// parameter under leValueFormat, through LanguageManager::FormatTextFromInt into the same
+// 1024-capped scratch the positional forms use, then adopt the result with SetDatabaseText
+// and push the apt data. Always reports success (the X360 returns 1).
+// ⚠️ Not the variadic form: this one's third argument is a VALUE, not a parameter count.
+bool TextField::SetLocalisedText(const char* lpacText,
+                                 CgsLanguage::LanguageManager::ParameterFormatType leFormat,
+                                 s32 liValue,
+                                 CgsLanguage::LanguageManager::ParameterFormatType leValueFormat)
+{
+    CGS_ASSERT(lpacText != 0,
+               "Text field is invalid in TextField::SetLocalisedText");                 // :356 (streamed; folded)
+    CGS_ASSERT(std::strlen(lpacText) < KU_MAX_TEXTFIELD_LEN - 1,
+               "Text string too long in TextField::SetLocalisedText");                  // :357 (streamed; folded)
+
+    CgsLanguage::LanguageManager* lpLanguageManager =
+        TextFieldGetLanguageManager(mpStateInterface);
+
+    char lacFormatted[1136];   // X360 sp+0x70 local (the formatter writes through a 1024 cap)
+
+    lpLanguageManager->FormatTextFromInt(lacFormatted, 1024, lpacText, leFormat,
+                                         liValue, leValueFormat);
+
+    SetDatabaseText(lacFormatted);
+    OutputAptData();
+    return true;
+}
+
 // @ 0x824E7800 -- cpp:264/:265/:266. The POSITIONAL-PARAMETER variant (ledger-unnamed
 // sub_824E7800). The X360 spills its variadic register block and hands the cursor straight
 // to LanguageManager::FormatTextV, which walks liNumParams (const char*, format) pairs;

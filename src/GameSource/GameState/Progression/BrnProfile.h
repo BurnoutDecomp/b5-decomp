@@ -392,6 +392,16 @@ public:
     void SetSilverCarsUnlocked(bool lbUnlocked) { mbSilverCarsUnlocked = lbUnlocked; }  // +42516
     void SetGoldCarsUnlocked(bool lbUnlocked)   { mbGoldCarsUnlocked   = lbUnlocked; }  // +42517
 
+    // ADDITIVE GROW (pause wave, 2026-08-28) -- the DWARF-named readers (BrnProfile.h:757/
+    // :760) for the two bytes the setters above write. CrashNavDriverDetails::
+    // UpdateSetupLicense @0x824C1D6C reads +42517 inline (`ori r10,r10,0xA615 ; lbzx`) and
+    // hands it to LicenseComponent::SetPlayerInfo's lbFinishedGame slot -- i.e. "the card
+    // shows the completed-game face once the gold cars are unlocked", which is exactly the
+    // 100%-completion gate documented at :351. Exposed by name so that caller stays off
+    // the raw offset. No layout change.
+    bool AreSilverCarsUnlocked() const { return mbSilverCarsUnlocked; }                 // +42516
+    bool AreGoldCarsUnlocked() const   { return mbGoldCarsUnlocked; }                   // +42517
+
     void DEBUG_ClearMedals();
 
     // ------------------------------------------------------------------------

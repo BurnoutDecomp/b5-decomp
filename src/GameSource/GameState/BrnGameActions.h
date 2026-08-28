@@ -99,7 +99,25 @@ enum EGameActionType
     // than a shift inference. DWARF 222 + 8, the same shift this enum already records for the
     // freeburn-challenge block and REQUEST_GAME_TRAINING (141 -> 149).
     E_ACTION_ONLINE_ROUND_RESULT        = 230,   // DWARF 222 (+8 X360); size 68
-    E_ACTION_RANK_INFO_RESPONSE         = 173,   // DWARF BrnGameActions.h:183
+    // ⛔ VALUE CORRECTION 2026-08-28 (driver-details pause wave) -- was the raw PS3-DWARF value
+    // (173), which is not what the X360 posts or consumes. PRODUCER-PINNED AND CONSUMER-PINNED,
+    // with the size matching at both ends:
+    //   producer  GameStateModule::ProcessGameEvents @0x823A0A18, `jumptable 823A107C case 80`
+    //             @0x823A2D54: after SetProgressionRanks + SetProgressionRankEventWins it posts
+    //               0x823A2E50  li   r6, 0x24            (36)
+    //               0x823A2E54  li   r5, 0xB5            (181)
+    //               0x823A2E58  addi r4, r1, var_1A00    (the RankInfoResponseAction it just built)
+    //               0x823A2E60  bl   VariableEventQueue<13312,16>::AddEvent
+    //   consumer  BrnGameModule::TranslateGameActionsToGuiEvents @0x823E9CE0,
+    //             `jumptable 823EA1F0 case 181` @0x823ECC90 -> GuiEventRankProgressResponse::
+    //             Construct(&event, action) + AddGuiEvent (GUI event 438, also size 36).
+    // 36 == sizeof(RankInfoResponseAction) below (9 s32 words), so the id and the record identity
+    // are attested at one site -- the same class of proof that pinned E_ACTION_TROPHY_UNLOCK (204)
+    // and E_ACTION_ONLINE_GAME_RESULT (229). DWARF 173 + 8, exactly the shift the whole 135..226
+    // band takes. 181 was unoccupied (grep-verified) and nothing in the tree dispatched on 173, so
+    // the correction is call-site-free -- but the producer this wave adds would have posted 173 and
+    // the consumer it adds would never have heard it.
+    E_ACTION_RANK_INFO_RESPONSE         = 181,   // DWARF :183 gives 173 (+8 X360); size 36
     // ⛔ VALUE CORRECTION 2026-08-27 (drive-thru link-closure wave) -- was the raw PS3-DWARF
     // value (196), which is not what the X360 posts. PRODUCER-PINNED at both ends:
     // ProgressionManager::SendTrophyUnlockUpdate @0x823892B8 posts `li r5, 0xCC` (204) with
