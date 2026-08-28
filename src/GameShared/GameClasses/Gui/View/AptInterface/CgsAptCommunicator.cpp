@@ -17,6 +17,8 @@
 #include "SDKs/EATech/include/Apt/AptScriptFunctionBase.h"      // Push/PopStaticData (the call register frame)
 #include "SDKs/EATech/include/Apt/AptCharacterHelper.h"         // AptGetAnimationAtLevel (root-scope object resolve)
 #include "SDKs/EATech/include/Apt/AptCIH.h"                     // AptGetAnimationAtLevel's AptCIH -> AptValue
+#include "SDKs/EATech/include/Apt/AptLoader.h"                  // AptLifeDiagEnabled ([aptlife] opt-in witness)
+#include "GameShared/GameClasses/Core/CgsStringUtils.h"        // CgsCore::SnPrintf ([aptlife] witness)
 
 extern AptActionInterpreter gAptActionInterpreter;   // AptGlobals.cpp (&dword_8324E760)
 
@@ -535,6 +537,25 @@ namespace CgsGui
             {
                 mAptComponentList.MoveComponent(static_cast<s32>(muNumActivecomponents) - 1, liComponent);
                 --muNumActivecomponents;
+                // [aptlife] opt-in witness (BRN_APT_LIFE=1). The component table is a
+                // HARD 256 and the second entry into a screen overflowed it, so the one
+                // fact that matters is whether this drain fires at all -- and how far
+                // the table actually falls. Rate-limited (the unload hook fires for every
+                // destroyed clip, not just registered ones), so it prints the first few
+                // and then only every 32nd.
+                if (AptLifeDiagEnabled())
+                {
+                    static u32 suRemoved = 0;
+                    ++suRemoved;
+                    if (suRemoved <= 4u || (suRemoved % 32u) == 0u)
+                    {
+                        char lac[112];
+                        CgsCore::SnPrintf(lac, sizeof(lac),
+                            "[aptlife] component removed #%u -> %u active\n",
+                            suRemoved, muNumActivecomponents);
+                        CgsDev::Log::WriteToLog(lac);
+                    }
+                }
                 return;
             }
         }
