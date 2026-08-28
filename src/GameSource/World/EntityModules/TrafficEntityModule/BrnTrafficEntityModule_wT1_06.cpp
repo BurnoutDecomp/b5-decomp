@@ -331,14 +331,33 @@ void TrafficEntityModule::UpdateNonDecisionFrame(
 
     if (mbNeedToRunTrafficJamNuker && !mbNeedToKillAllZombies)
     {
-        // GATE: NukeTrafficJams (DWARF :1551), no body. The flag clear is gated with it, since
-        // clearing a request whose work never ran would mark it serviced. Nothing else reads
-        // mbNeedToRunTrafficJamNuker, so leaving it latched high is inert.
+        // GATE: NukeTrafficJams (DWARF :1551, @0x827353E8), no body. The flag clear is gated
+        // with it, since clearing a request whose work never ran would mark it serviced.
+        // Nothing else reads mbNeedToRunTrafficJamNuker, so leaving it latched high is inert.
+        //
+        // ⭐⭐ WHAT IT IS, read out of the asm 2026-08-29 so the next wave does not re-derive it.
+        // This IS the console's jam relief valve, and it is the missing half of a chain whose
+        // other half is ALREADY LIVE in this tree:
+        //   * it walks runs of consecutive params whose Param::mfSpeed (+0x14) is below
+        //     5.0f m/s (flt_8200426C, compared at 0x82735A5C and 0x82735CE4), collecting them
+        //     into a stack Set<u16,64> and stopping when that set is full;
+        //   * for each collected param it reads mbAllowDivergentBehaviour (+0x717E7,
+        //     0x82735F5C). OFFLINE (divergent) it projects the param through
+        //     ParamTransform::GetLerpedPos and SKIPS any car within 40.0f m of mCameraLastFrame
+        //     (flt_820BA590, the `vcmpgtfp.` at 0x82736188) -- i.e. it never pops a car in the
+        //     player's face. ONLINE it skips that distance test entirely;
+        //   * the action is `mxFlags |= 0x10` at 0x827361F4 -- Param::SetShouldBeRemoved(),
+        //     after asserting IsAlive() (BrnTrafficParam.h:813).
+        // And UpdateParams (_wT2_02.cpp) ALREADY tests E_FLAG_SHOULD_BE_REMOVED and calls the
+        // bodied KillParam. ⇒ landing this one function closes the whole valve.
+        // ⭐ It does NOT consult the junction FUP score, so it is NOT subject to the 65
+        // threshold that leaves two permanently stuck cars pinned at a score of 40.
         static bool sbLogged = false;
         LogMissingLeg(sbLogged,
             "UpdateNonDecisionFrame leg NukeTrafficJams (DWARF :1551) -- no body; the "
             "mbNeedToRunTrafficJamNuker clear is gated WITH it so a request whose work never "
-            "ran is not marked serviced. Jams are a DRIVING-traffic condition (wave 2)");
+            "ran is not marked serviced. It marks jammed params (<5 m/s, >40 m from camera) "
+            "SetShouldBeRemoved, and UpdateParams' KillParam consumer is already live");
     }
 }
 
