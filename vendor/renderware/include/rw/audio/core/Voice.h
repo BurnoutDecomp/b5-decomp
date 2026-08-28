@@ -22,8 +22,11 @@
 // packed PlugIn instances form a hand-rolled sub-allocation inside the one block, so
 // CreateInstance computes their positions arithmetically (offsetof/sizeof/alignment), the
 // same layout the asm builds by hand.
-//   +0x00  mafBandFreq[3]        (3x f32, init 800.0; zeroed when the voice is silenced)
-//   +0x0C  mUnk0C
+//   +0x00  mfAverageCpuTicks + mafCpuTickHistory[2] (3x f32, init 800.0 -- the fresh-voice
+//          deprioritisation seed; zeroed when the voice is silenced. Mixer::Execute
+//          @0x82B6D900 grounds the semantics: +0x00 = the 3-sample moving average of the
+//          voice's per-frame mix cost, +0x04/+0x08 = the two toggled history samples)
+//   +0x0C  muCpuHistoryIndex     (Mixer::Execute's history-slot toggle, 0<->1)
 //   +0x10  mpSystem              (owning System)
 //   +0x14  mpName                ("Unknown" by default)
 //   +0x18  mpStageData           (points at the inline per-stage record array in this block)
@@ -34,7 +37,7 @@
 //   +0x30  mfFadeEnd             (f32, init 0.0; ExpelAfterDecay copies mfFadeStart here)
 //   +0x34  muCreateStamp         (snapshot of System::muFrameCounter at create time)
 //   +0x38  mfPriority            (f32, init 100.0; SetPriorityHandler writes here)
-//   +0x3C  mField3C              (init 0; zeroed on expel)
+//   +0x3C  miLastFrameCpuTicks   (init 0; zeroed on expel; Mixer::Execute's raw frame cost)
 //   +0x40  muBlockSize           (total allocation size; also the active-node key)
 //   +0x44  mucNumStages          (plug-in stage count)
 //   +0x45  mucFlag45             (init 0)
@@ -110,10 +113,10 @@ struct VoiceStageConfig
 class Voice
 {
 public:
-    // Default ctor = zero mUnk0C only. Grounded in System::New2<Voice> @0x82B6E140, whose
+    // Default ctor = zero muCpuHistoryIndex only. Grounded in System::New2<Voice> @0x82B6E140, whose
     // inlined construction performs exactly this one store (every other field is written
     // by CreateInstance afterwards).
-    Voice() : mUnk0C(0) {}
+    Voice() : muCpuHistoryIndex(0) {}
 
     // @0x82B6EC50 -- allocate + lay out a voice for `numStages` stages, placement-construct
     // each stage's PlugIn, insert the create-handler command into the ring. Returns the
@@ -160,8 +163,11 @@ public:
     static int SetPriorityHandler(void *cmd);
 
     // ---- layout (X360 byte offsets in the file-header comment; x64 widths, by-name access) ----
-    f32 mafBandFreq[3];    // +0x00
-    u32 mUnk0C;            // +0x0C
+    // The per-voice mix-cost stat block (semantics grounded by Mixer::Execute
+    // @0x82B6D900; formerly the mafBandFreq/mUnk0C guesses).
+    f32 mfAverageCpuTicks;      // +0x00 -- 3-sample moving average of the frame cost
+    f32 mafCpuTickHistory[2];   // +0x04 -- the two toggled history samples
+    u32 muCpuHistoryIndex;      // +0x0C -- which history slot Execute overwrites (0<->1)
     System *mpSystem;      // +0x10
     const char *mpName;    // +0x14
     VoiceStageData *mpStageData; // +0x18
@@ -172,7 +178,7 @@ public:
     f32 mfFadeEnd;         // +0x30
     u32 muCreateStamp;     // +0x34
     f32 mfPriority;        // +0x38
-    s32 mField3C;          // +0x3C
+    s32 miLastFrameCpuTicks; // +0x3C -- raw cycles of the last mix frame
     u32 muBlockSize;       // +0x40
     u8 mucNumStages;       // +0x44
     u8 mucFlag45;          // +0x45

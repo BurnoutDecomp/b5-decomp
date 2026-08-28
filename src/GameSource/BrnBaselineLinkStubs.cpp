@@ -652,22 +652,9 @@ namespace Logic
 }
 }
 
-namespace rw
-{
-namespace audio
-{
-namespace core
-{
-    // The 3-arg engine event entry Environment::StartDac/StopDac dispatch
-    // (events 3/4 at the DAC plug-in). The vendor PlugIn TU models the 1-arg
-    // command-ring Event only; the 3-arg form lands with the phase-D Dac slice,
-    // and mpDacPlugin is null until then (StartDac asserts it first).
-    void RwacPlugInEvent(PlugIn* /*apPlugIn*/, int /*aiEvent*/, int /*aiArg*/)
-    {
-    }
-}
-}
-}
+// (The former RwacPlugInEvent placeholder is RETIRED -- the phase-D Dac slice
+// 2026-08-28 bodied the real 3-arg engine event entry beside RwacSystemLock/Unlock
+// in RWAC/CgsGenericRwacFactory.cpp.)
 
 namespace CgsSound
 {

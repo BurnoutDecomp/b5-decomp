@@ -114,10 +114,10 @@ Voice *Voice::CreateInstance(u8 priority, int numStages, VoiceStageConfig *confi
     voice->muCreateStamp = system->muFrameCounter;
     voice->mfPriority = 100.0f;
     voice->mcSourceStageIndex = -1;
-    voice->mField3C = 0;
-    voice->mafBandFreq[0] = 800.0f;
-    voice->mafBandFreq[1] = 800.0f;
-    voice->mafBandFreq[2] = 800.0f;
+    voice->miLastFrameCpuTicks = 0;
+    voice->mfAverageCpuTicks = 800.0f;      // the fresh-voice deprioritisation seed
+    voice->mafCpuTickHistory[0] = 800.0f;
+    voice->mafCpuTickHistory[1] = 800.0f;
     voice->mpStageData = stageData;
     voice->mucExpelImmediate = 0;
 
@@ -253,11 +253,11 @@ Voice *Voice::ExpelImmediate(Voice *self, u8 immediate)
 
     u8 numStages = self->mucNumStages;
     self->mucExpelImmediate = immediate;
-    self->mafBandFreq[0] = 0.0f;
-    self->mField3C = 0;
-    self->mafBandFreq[1] = 0.0f;
+    self->mfAverageCpuTicks = 0.0f;
+    self->miLastFrameCpuTicks = 0;
+    self->mafCpuTickHistory[0] = 0.0f;
     self->mucState = 2;
-    self->mafBandFreq[2] = 0.0f;
+    self->mafCpuTickHistory[1] = 0.0f;
 
     for (u8 i = 0; i < numStages; ++i)
         self->mpPlugIns[i]->mCpuTicks = 0;
