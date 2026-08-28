@@ -68,6 +68,17 @@ namespace
     const f32 KF_PARAM_BRAKE_LIGHT_ACCEL    = -0.6f;    // flt_820BC9D4
     const f32 KF_PARAM_BRAKE_LIGHT_SPEED    = 2.5f;     // flt_82005548
 
+    // CalcAcceleration's E_BEHAVIOUR_SLOWING_FOR_CRASH arm (@0x82717870..0x82717898).
+    // ⚠️⚠️ BOTH ARE ZERO ON THE CONSOLE AND THAT IS NOT A PLACEHOLDER -- see the banner on
+    // UpdateParams_CalcAcceleration below. Their dyn-init thunks multiply flt_830180B0
+    // (m/s -> mph, 2.2369363f) by 80.0f and 2.0f, but the CRT runs those two thunks 527
+    // initialiser slots BEFORE the one that computes flt_830180B0, so both products are
+    // taken against its image 0.0f. Do not "restore" 178.955f / 4.4739f: that is the value
+    // the source intended and NOT the value the shipped game computes, and it would make the
+    // slow-for-crash arm accelerate.
+    const f32 KF_CRASH_SLOW_TARGET_SPEED = 0.0f;   // flt_8300C958 == flt_830180B0 * 80.0f
+    const f32 KF_CRASH_SLOW_MAX_ACCEL    = 0.0f;   // flt_8300C95C == flt_830180B0 *  2.0f
+
     // UpdatePlan's lane-change arm (@0x827381D8 / @0x827382DC) and FindNearestParamInFront
     // (@0x827252C4 / 0x82725840).
     const f32 KF_PARAM_LANE_CHANGE_RUNG_LOOKAHEAD = 2.0f;    // the +2 rungs the carry-out books
@@ -399,24 +410,37 @@ void TrafficEntityModule::UpdateParams_CalcDesiredSpeed(
 //   * the slam / extreme-swerve arm @0x827174A0 -- BLOCKER: flt_8300CB50 and the
 //     unk_8300CB40 / unk_8300CA30 / unk_8300CCA0 / unk_8300CB20 lane block, all dyn-init
 //     .data (see scratchpad recovered_constants.md for the thunk-walk recipe).
-//   * switch case 0 @0x82717844 -- BLOCKER, and the blocker is now NAMED rather than merely
-//     unknown. The arm is
-//         accel = clamp(flt_8300C958 - mfSpeed, -flt_8300C95C, +flt_8300C95C)
-//     and both constants ARE recoverable in shape but not in value: their dyn-init thunks
-//     (@0x82C66BF0 and @0x82C66C10) compute them as
-//         flt_8300C958 = flt_830180B0 * flt_820BA4E0(80.0f)
-//         flt_8300C95C = flt_830180B0 * flt_820BA86C(2.0f)
-//     so BOTH hang on flt_830180B0 -- itself a .data slot another translation unit's dynamic
-//     initialiser fills, which reads 0.0 in the image and is therefore NOT its runtime value.
-//     ⛔ Do NOT take the image's 0.0: a zero here makes the arm return a constant 0
-//     acceleration, which is the identity of the expression, not its meaning. Recover
-//     flt_830180B0's OWN thunk first. (Recipe: run idat headless over the ARTIST .i64, walk
-//     XrefsTo the address, and disassemble the one xref that is not inside a function -- the
-//     dyn-init thunks are all unnamed blr-terminated fragments around 0x82C6xxxx.)
+//   * ✅ switch case 0 @0x82717844 -- NO LONGER A BLOCKER, AND THE ANSWER IS THE OPPOSITE OF
+//     WHAT THE NOTE THAT STOOD HERE PREDICTED (2026-08-28). It said, of flt_8300C958 /
+//     flt_8300C95C: "reads 0.0 in the image and is therefore NOT its runtime value... ⛔ Do
+//     not take the image's 0.0". Walked to the end, the chain says the console's OWN runtime
+//     value is 0.0, for a reason the image alone cannot show -- a static-initialisation-ORDER
+//     bug in the shipped game.
+//
+//     The arm is  accel = clamp(flt_8300C958 - mfSpeed, -flt_8300C95C, +flt_8300C95C)
+//     (fsubs/fsel/fsel @0x82717888..0x82717898), and the two constants are dyn-init:
+//         @0x82C66BF0  flt_8300C958 = flt_830180B0 * flt_820BA4E0(80.0f)
+//         @0x82C66C10  flt_8300C95C = flt_830180B0 * flt_820BA86C( 2.0f)
+//         @0x82C6D0C0  flt_830180B0 = flt_82001C98(1.0f) / flt_82F31928(0.44703999f)
+//                                   = 2.2369363f, i.e. m/s -> mph.
+//     ⭐ BUT THE INITIALISER TABLE ORDERS THEM THE WRONG WAY ROUND. The CRT walks its
+//     function-pointer array ASCENDING, and in it
+//         0x82CD2400 -> 0x82C66BF0   (writes flt_8300C958)
+//         0x82CD2404 -> 0x82C66C10   (writes flt_8300C95C)
+//         0x82CD2C3C -> 0x82C6D0C0   (writes flt_830180B0)   <-- 527 entries LATER
+//     so both products are computed while flt_830180B0 is still its image 0.0. The console
+//     therefore runs this arm with 0.0f and 0.0f, and
+//         clamp(0 - mfSpeed, -0, +0) == 0
+//     for any speed >= 0. The reconstruction below writes the console's expression with the
+//     console's constants rather than a bare `0.0f`, so the zero is a RESULT and not a
+//     placeholder.
+//     ⛔ DO NOT "FIX" THE CONSTANTS TO 178.955f / 4.4739f. That is what the values would be
+//     if the initialisers ran in source order, and it is not what the shipped game does: it
+//     would give a stopped chain-crashing car +4.47 m/s^2 of acceleration -- the arm would
+//     ACCELERATE the car it is supposed to be slowing.
 //   * The lane block for the OTHER gate in this file is no longer unknown:
 //         unk_8300CBB0 == { 50.0f, 0.707099974f, 0.0f, 0.0f }  (thunk @0x82C66360)
 //     built from flt_820BA5C0(50.0) and flt_8200D514(0.70710) with two zero lanes.
-// DELETE-WHEN flt_830180B0 is recovered.
 // ----------------------------------------------------------------------------
 f32 TrafficEntityModule::UpdateParams_CalcAcceleration(
         u32 luParam,
@@ -446,12 +470,26 @@ f32 TrafficEntityModule::UpdateParams_CalcAcceleration(
     {
         case 0:   // E_BEHAVIOUR_SLOWING_FOR_CRASH
         {
-            CGS_ASSERT(mbAllowDivergentBehaviour, "AllowDivergentBehaviour()");
-            static bool sbLogged = false;
-            LogMissingLeg(sbLogged,
-                          "UpdateParams_CalcAcceleration @0x82717844 behaviour 0 arm -- "
-                          "flt_8300C958 / flt_8300C95C are unnamed dyn-init .data floats");
-            lfAcceleration = 0.0f;
+            // 0x82717844..0x8271789C. UN-GATED 2026-08-28: both constants are recovered and
+            // both are 0.0f on the console, by the static-init ORDER bug documented in the
+            // banner (their dyn-init thunks read flt_830180B0 527 initialisers before it is
+            // written). Written as the console's expression so the zero is a result, not a
+            // placeholder -- and so that anyone tempted to "correct" the constants has to
+            // read the banner first.
+            CGS_ASSERT(mbAllowDivergentBehaviour, "AllowDivergentBehaviour()");   // .cpp 11021
+
+            const f32 lfCrashSlowTargetSpeed = KF_CRASH_SLOW_TARGET_SPEED;   // flt_8300C958
+            const f32 lfCrashSlowMaxAccel    = KF_CRASH_SLOW_MAX_ACCEL;      // flt_8300C95C
+
+            lfAcceleration = lfCrashSlowTargetSpeed - lpParam->mfSpeed;
+            if (lfAcceleration < -lfCrashSlowMaxAccel)
+            {
+                lfAcceleration = -lfCrashSlowMaxAccel;
+            }
+            if (lfAcceleration > lfCrashSlowMaxAccel)
+            {
+                lfAcceleration = lfCrashSlowMaxAccel;
+            }
             break;
         }
 
