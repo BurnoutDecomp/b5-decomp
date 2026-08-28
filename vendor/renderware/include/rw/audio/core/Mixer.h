@@ -18,9 +18,9 @@
 // is authoritative for every member offset and store:
 //   Mixer::Mixer (placement ctor)         @0x82B6D880
 //   Mixer::Execute                        @0x82B6D900
-//   Mixer::ProcessInputPlugIns            @0x82B6A048 (decode in flight -- see the
-//                                          honest stub in Mixer.cpp)
-//   Mixer::HandleBufferStatusUnavailable  @0x82B69F78 (same)
+//   Mixer::ProcessInputPlugIns            @0x82B6A048 (REAL -- register decode:
+//                                          mixer_voicepath_decode_codex.md)
+//   Mixer::HandleBufferStatusUnavailable  @0x82B69F78 (REAL -- same report)
 // No Feb-2007 leak source and no DecFIGS DWARF exist for this TU.
 //
 // The console Mixer is one 0x30080-byte block: 3 x 0x10000 bytes of channel-sample
@@ -139,19 +139,22 @@ public:
     // reports no buffer; folds the per-voice CPU cycle costs into the voice's stat
     // block. Returns the LAST stage status (1 = the src slot holds a valid frame;
     // 0 with zero voices -- the Dac then emits silence, the faithful idle state).
+    // (The former in-flight-decode stubs of the two callees below are RETIRED --
+    // both bodies are real now.)
     static int Execute(Mixer *self, MixerExecuteParams *apParams);
 
-    // @0x82B6A048 -- run a voice's source/input stages (decoder pull + buffer binding).
-    // FLAG honest stub in Mixer.cpp: the register-level decode is in flight
-    // (progress/scratch_dossiers/mixer_voicepath_decode_codex.md); UNREACHABLE until a
-    // voice exists (phase E lights the first voices), and stubbed DECLINING (status 0)
-    // so a premature voice mixes silence instead of an invented frame.
+    // @0x82B6A048 -- run a voice's source/input stages: the chunked source pull
+    // (pre-process backwards cascading the requested count, process forwards from
+    // stage 0), good chunks assembled into the aux region until a full 256-sample
+    // frame publishes into the dst slot and the src/dst pair ping-pongs. REAL
+    // (register decode: mixer_voicepath_decode_codex.md section 1).
     static int ProcessInputPlugIns(Mixer *self, VoiceStageData *apStageData,
                                    VoiceActiveNode *apNode, Voice *apVoice);
 
-    // @0x82B69F78 -- a stage returned buffer-unavailable: bind/clear the fallback
-    // buffer so downstream stages see silence. FLAG honest stub (same decode in
-    // flight, same unreachable-until-voices reasoning; declines with 0).
+    // @0x82B69F78 -- a stage returned buffer-unavailable: ring the voice's decay
+    // tail out as silence (advance the +0x2C accumulator toward the clamped fade
+    // target, zeroing the src channels), declining for good once rung out. REAL
+    // (register decode: mixer_voicepath_decode_codex.md section 2).
     static int HandleBufferStatusUnavailable(Mixer *self, Voice *apVoice,
                                              PlugIn *apPlugIn, int aiNumSamples);
 
