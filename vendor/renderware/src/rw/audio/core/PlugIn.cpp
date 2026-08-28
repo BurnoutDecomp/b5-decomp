@@ -8,6 +8,7 @@
 // =====================================================================================
 
 #include "rw/audio/core/PlugIn.h"
+#include "rw/audio/core/Voice.h" // VoiceStageConfig (the a4 record CreateInstance reads)
 
 namespace rw
 {
@@ -19,9 +20,8 @@ namespace core
 // (The former PlugInFactory local view over the then-opaque descriptor is RETIRED --
 // descriptor-record wave 2026-08-28: the "+8 begin/validate hook" IS the typed
 // PlugInDescRunTime::pCreateInstance slot; the dispatch below casts at the call, the
-// console's own generic-dispatch site.) The companion `a4` record
-// (PlugInCreateDesc) moved to PlugIn.h with the phase-D Dac slice -- the playback
-// module's bring-up seam builds one.
+// console's own generic-dispatch site. The companion `a4` record IS the
+// VoiceStageConfig -- see Voice.h's phase-D root-cause note.)
 typedef int (*PlugInCreateInstanceFn)(PlugIn *self, void *context);
 
 // off_83271928 -- the shared System-singleton POINTER installed into PlugIn::mpSystem
@@ -40,7 +40,7 @@ extern "C" System *off_83271928;
 // begin hook; on failure it virtually destroys/cleans up and returns null.
 // -------------------------------------------------------------------------------------
 PlugIn *PlugIn::CreateInstance(PlugIn *self, Voice *voice, PlugInDescRunTime *pDesc,
-                               void *typeRecord, char flag)
+                               VoiceStageConfig *apConfig, char flag)
 {
     self->mLatencyInSamples = 0.0f;          // stfs flt(0) -> 0x14
     self->mpVoice = voice;                     // stw a2 -> 0x08
@@ -50,11 +50,11 @@ PlugIn *PlugIn::CreateInstance(PlugIn *self, Voice *voice, PlugInDescRunTime *pD
     self->mpSystemUseGetSystemAccessor = off_83271928; // lwz off_83271928 ; stw -> 0x04
     self->mInputChannels = flag;             // stb a5 -> 0x20
 
-    PlugInCreateDesc *desc = static_cast<PlugInCreateDesc *>(typeRecord);
-    self->mOutputChannels = desc->mbInitFlag; // lbz 8(a4) -> stb 0x21
+    self->mOutputChannels =
+        static_cast<u8>(apConfig->mFlagAndField8); // lbz 8(a4) -> stb 0x21
 
     if (!reinterpret_cast<PlugInCreateInstanceFn>(pDesc->pCreateInstance)(
-            self, desc->mpContext)) // (*(a3+8))(self, *(a4))
+            self, apConfig->mpContext)) // (*(a3+8))(self, *(a4))
     {
         // Begin failed: virtually destruct (vt[0]) then Destroy(0) (vt[3]) and bail.
         self->~PlugIn();                      // (**self)(self)
