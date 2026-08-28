@@ -2,6 +2,10 @@
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Sound/Playback/Splicer/CgsSplicerFactory.h"  // the REAL SplicerFactory : public Factory
+#include "GameShared/GameClasses/Sound/Playback/Splicer/SpliceManager.h"      // the trailing-arena SpliceManager (slice 3)
+#include "rw/rwcore_structs.h"   // rw::IResourceAllocator / BaseResourceDescriptors (the carve)
+
+#include <new>   // placement new (the in-carve constructs)
 
 // ============================================================================
 // GameShared/GameClasses/Sound/Playback/Splicer/CgsSplicerFactory.cpp
@@ -65,6 +69,108 @@ void* SplicerFactory::SplicerAssertFunc(const char* lpcExpression)
         "..\\..\\..\\GameShared\\GameClasses\\Sound/Playback/Splicer/CgsSplicerFactory.cpp",
         140);
     return CgsDev::Assert::EndAssert();
+}
+
+// ===========================================================================
+// SplicerFactory Create + ctor (AEMS-cascade slice 3; register-level decode:
+// progress/scratch_dossiers/aems_factory_cascade_codex.md, Splicer section)
+// ===========================================================================
+
+namespace
+{
+    // The interned factory name (console dword_83008404, written at static-init by
+    // sub_82C65938 = Name::MakeHash("~SplicerFactory::SK_NAME~")).
+    const Name skSplicerFactoryName("~SplicerFactory::SK_NAME~");
+
+    // The five-pair allocator-descriptor inline (the RWAC/AEMS TU-local convention).
+    void* AllocateMemoryResource(rw::IResourceAllocator* lpAllocator, size_t luSize,
+                                 u32 luAlignment, const char* lpcName)
+    {
+        rw::BaseResourceDescriptors<5> lDescriptor;
+        for (u32 luEntry = 0u; luEntry < 5u; ++luEntry)
+        {
+            lDescriptor.m_baseResourceDescriptors[luEntry].m_size      = 0u;
+            lDescriptor.m_baseResourceDescriptors[luEntry].m_alignment = 1u;
+        }
+        lDescriptor.m_baseResourceDescriptors[0].m_size      = static_cast<u32>(luSize);
+        lDescriptor.m_baseResourceDescriptors[0].m_alignment = luAlignment;
+
+        rw::Resource lResource = lpAllocator->DoAllocate(
+            reinterpret_cast<const rw::ResourceDescriptor&>(lDescriptor), lpcName);
+        return lResource.m_baseResources[0];
+    }
+}
+
+// @ 0x826DB130. The ref-spec create: console carve 4*(entityCount+0x1C0)+data+
+// strings (the 0x1C0-word term == the fixed head + registry header + the
+// SpliceManager arena); host: the same regions at host sizeofs. Allocated
+// through the ENVIRONMENT's allocator tagged "SplicerFactory"; the returned
+// handle carries one explicit Acquire (the interim plain-store Handle model).
+Handle<SplicerFactory> SplicerFactory::Create(Environment& arEnvironment,
+                                              const SplicerFactorySpec& akrSpec)
+{
+    const size_t luBytes = sizeof(SplicerFactory)
+                         + sizeof(Registry)
+                         + sizeof(void*) * akrSpec.mu32EntityCount
+                         + akrSpec.mu32DataSize
+                         + akrSpec.mu32StringTableSize
+                         + sizeof(SpliceManager);
+
+    void* lpMemory = AllocateMemoryResource(arEnvironment.GetAllocator(), luBytes,
+                                            4, "SplicerFactory");
+    if (lpMemory == 0)
+    {
+        return Handle<SplicerFactory>();
+    }
+
+    SplicerFactory* lpFactory = ::new (lpMemory) SplicerFactory(arEnvironment, akrSpec);
+
+    lpFactory->Acquire();
+    return Handle<SplicerFactory>(lpFactory);
+}
+
+// @ 0x826DB010. Store order per the decode: base Factory (name = the intern
+// above), the final vtable (host: implicit), the retained RWAC handle (+0x14),
+// the registry pointer (+0x10) + the in-place Registry (+0x1C), the trailing
+// SpliceManager (its address derived from the registry's own table/data/string
+// spans -- the console's lwz+4/+0x10/+8 arithmetic at host widths), and the
+// manager's assert-sink install (manager+0x610 := &SplicerAssertFunc, the
+// ABI-corrected static one-argument callback).
+SplicerFactory::SplicerFactory(Environment& arEnvironment,
+                               const SplicerFactorySpec& akrSpec)
+    : Factory(skSplicerFactoryName, arEnvironment)
+{
+    // +0x14: the retained RWAC factory handle (raw pointer + explicit retain).
+    mpRwacFactory = akrSpec.mpRwacFactory;
+    if (mpRwacFactory != 0)
+    {
+        mpRwacFactory->Acquire();
+    }
+
+    // +0x10 -> the in-place Registry immediately after the fixed head (console +0x1C).
+    RegistrySpec lRegistrySpec;
+    lRegistrySpec.mu32EntityCount   = akrSpec.mu32EntityCount;
+    lRegistrySpec.muDataSize        = akrSpec.mu32DataSize;
+    lRegistrySpec.muStringTableSize = akrSpec.mu32StringTableSize;
+    u8* lpRegistryBase = reinterpret_cast<u8*>(this) + sizeof(SplicerFactory);
+    mpRegistry = ::new (lpRegistryBase) Registry(lRegistrySpec);
+
+    // +0x18 -> the trailing SpliceManager arena: past the registry header, its
+    // entity table, its data blob and its string table (the console's
+    // registry-member arithmetic, host sizeofs).
+    u8* lpManagerBase = lpRegistryBase
+                      + sizeof(Registry)
+                      + sizeof(void*) * akrSpec.mu32EntityCount
+                      + akrSpec.mu32DataSize
+                      + akrSpec.mu32StringTableSize;
+    mpManager = ::new (lpManagerBase)
+        SpliceManager(arEnvironment, 0x40, 0x18);   // mono 64 / stereo 24 (console literals)
+
+    // manager+0x610 := the assert sink (the post-construction callback store).
+    // SplicerAssertFunc returns EndAssert's pointer result; the manager's
+    // one-argument sink type discards it -- the console callers do too.
+    mpManager->SetAssertCallbackFunction(
+        reinterpret_cast<SpliceManager::AssertCallbackFunc>(&SplicerFactory::SplicerAssertFunc));
 }
 
 } // namespace Playback

@@ -64,43 +64,14 @@ struct SPLICE_Data
 };
 static_assert( sizeof( SPLICE_Data ) == 24, "SPLICE_Data must keep its 24-byte FindSplice stride" );
 
-namespace SpliceManagerDetail
-{
-// The polymorphic heap the SpliceManager forwards block allocations to. The X360
-// builds a small allocation descriptor on the stack and calls through the heap
-// object's vtable at +0x10 (the 5th slot). The descriptor's exact per-pool
-// semantics are not recoverable from this TU, so it is modelled as a named
-// AllocationRequest that reproduces the X360 stores field-for-field, and the
-// heap exposes the one virtual entry point Allocate exercises.
-struct AllocationRequest
-{
-    // var_30 / v7: the X360 packs { LODWORD = 4 (alignment), HIDWORD = size }.
-    s32 miAlignment;   // LODWORD(v5) = 4
-    s32 miSize;        // HIDWORD(v5) = requested size
-
-    // var_28..var_C / v8..v15: four (size, 1) per-pool hint pairs the X360 fills
-    // before the call (v8=v10=v12=v14 = size; v9=v11=v13=v15 = 1).
-    s32 maiPoolSize[4];
-    s32 maiPoolFlag[4];
-};
-
-struct Heap
-{
-    struct VTable
-    {
-        // Padding so Allocate lands at vtable byte offset 0x10 (index 4) -- the
-        // slot the X360 loads via `lwz r11,0x10(r11); mtctr; bctrl`.
-        void* mapReserved[4];
-        // The polymorphic block allocator: (out-result, this, &request, tag).
-        // Returns the allocated block (or null on failure) into the out result.
-        void* (*mpfnAllocate)( void* lpResult, Heap* lpHeap,
-                               const AllocationRequest* lprRequest,
-                               const char* lpcTag );
-    };
-
-    const VTable* mpVTable;   // +0x00
-};
-}
+// (The former SpliceManagerDetail::Heap/AllocationRequest console-ABI view is
+// RETIRED -- AEMS-cascade slice 3: the +0x6C4 member IS the DWARF
+// `const Environment&` (the ctor @0x826C30C8 saves its r4), Allocate's +0x30 hop
+// is Environment::GetAllocator, and its stack descriptor is the standard rw
+// five-pair {(size,4),(0,1)x4} the whole playback engine uses. The view's
+// result-first call shape was also the CONSOLE ABI -- it could never dispatch a
+// host allocator vtable correctly, the divergence the cascade decode flagged.)
+namespace CgsSound { namespace Playback { struct Environment; } }
 
 struct SpliceManager
 {
@@ -232,10 +203,24 @@ private:
     void* pannerHandle;                                      // :235 (+0x6BC)
     void* sendHandle;                                        // :236 (+0x6C0)
 
-    // :240 -- DWARF `const CgsSound::Playback::Environment& mEnvironment` (guest +0x6C4).
-    // Modelled as the polymorphic heap the manager forwards allocations through (the
-    // Environment's +0x30 block allocator); kept as mpHeap for the committed Allocate body.
-    SpliceManagerDetail::Heap* mpHeap;                       // :240 (+0x6C4)
+    // :240 -- DWARF `const CgsSound::Playback::Environment& mEnvironment` (guest
+    // +0x6C4; the ctor @0x826C30C8 stores its incoming r4). Pointer-modelled so
+    // the struct stays default-constructible-shaped; Allocate reaches the block
+    // allocator through it (the console's +0x30 hop == Environment::GetAllocator).
+    const CgsSound::Playback::Environment* mpEnvironment;    // :240 (+0x6C4)
+
+public:
+    // @ 0x826C30C8 (AEMS-cascade slice 3; full decode progress/scratch_dossiers/
+    // aems_factory_cascade_codex.md). Constructed in place at the tail of the
+    // SplicerFactory carve. Body in SpliceManager.cpp.
+    SpliceManager( const CgsSound::Playback::Environment& arEnvironment,
+                   u32 auMonoVoiceCount, u32 auStereoVoiceCount );
+
+    // The assert-sink installer (the SplicerFactory ctor's manager+0x610 store).
+    void SetAssertCallbackFunction( AssertCallbackFunc apfnAssert )
+    {
+        mAssertCallbackFunc = apfnAssert;
+    }
 };
 
 // The global SpliceManager instance (X360 off_82FFB9F0 / DWARF spSpliceManager). The
