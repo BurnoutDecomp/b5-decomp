@@ -694,6 +694,19 @@ namespace BrnGui
                 return;
             }
             // fall through to the shared accept handler.
+            //
+            // ⚠️⚠️ THE RETAIL A-AT-TITLE BUG LIVES IN THIS FALL-THROUGH -- DO NOT "FIX" IT.
+            // At the PRESS-START stage, GUI_SELECT (49, the A button) sets ONLY
+            // lbBackRequested (the 45/49 arm above), never lbStartPressed -- so it skips the
+            // lbStartPressed arm (no DisplaySelectionMenu, no MENU_ACTIVE entry) and lands
+            // straight in the shared accept handler below, accepting menu index 0 of a
+            // selector that was never shown and skipping its whole setup. The ORIGINAL GAME
+            // shipped this: pressing A instead of START at the title skipped the
+            // BURNOUT PARADISE / BEAT THE TEAM menu and left the flow in a broken state
+            // (user-confirmed against retail, 2026-08-27, after the input-vocabulary repair
+            // made the PC's A/Enter produce the console's real 49 for the first time).
+            // It is authentic console behaviour, reproduced deliberately; the CORRECT press
+            // at the title is START (45 -- pad Start / keyboard P).
             /* fallthrough */
 
         case E_STAGE_MENU_ACTIVE:
