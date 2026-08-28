@@ -114,13 +114,21 @@ void TrafficEntityModule::UpdateParams(const BrnTrafficIO::InputBuffer_PostPhysi
     // mfJunctionFUP from PrePhysicsUpdate every frame, so
     // NeedToTakeActionAgainstJunctionFUP() is now a live measurement of the jam.
     //
-    // ⚠️ IT IS NOT CLOSED FOR THE HOLLYWOOD ARM, and the difference matters. UpdateCrashSlider
-    // is live, but it only DECAYS and NORMALISES mfCrashSliderCrashScore plus schedules
-    // showtime spikes; outside showtime the score is raised by HandleExternalResponses
-    // @0x827330B0 (`score += factor * <crash event>`) and seeded by HandlePrepareForModeAction
-    // @0x827480D8, NEITHER of which is bodied here. So in ordinary driving
-    // mfCrashSliderFinalValue is still 0 and ShouldBeHollywoodAction() is still false -- by
-    // missing producer, not by design. BRN_TRAFFIC_FORCE_SYMPCRASH stays until those land.
+    // ✅ AND IT IS CLOSED FOR THE HOLLYWOOD ARM TOO, which is NOT obvious from UpdateCrashSlider
+    // alone -- that function only decays/normalises the score and schedules showtime spikes, so
+    // it looks like a showtime-only feature. It is not. The chain in ordinary driving is:
+    //   Construct / Reset (_wT1_01.cpp)   seed mfCrashSliderCrashScoreFactor = 0.8, Decay = 0.5
+    //   HandleExternalResponses (_wT3_04.cpp, BODIED)  per crashed traffic car does
+    //       mfCrashSliderCrashScore += 0.8 * 50.0  == 40 points a car
+    //   UpdateCrashSlider (_wT5_01.cpp, THE MISSING LINK)  normalises that into
+    //       mfCrashSliderFinalValue = clamp((score - 10) / 90, 0, 1)
+    // Two crashed traffic cars is 80 points, i.e. a final value of ~0.78, and
+    // ShouldBeHollywoodAction() tests > 0.01. The score was ALREADY accumulating before this
+    // wave; nothing consumed it, because mfCrashSliderFinalValue had no writer at all.
+    // ⚠️ The window is short by design: decay 0.5 per second of proportional decay takes 80
+    // points back under the 10-point floor in about four seconds, so the hollywood arm is a
+    // few-second reaction to a fresh crash, not a mode.
+    // BRN_TRAFFIC_FORCE_SYMPCRASH stays only as a way to exercise the arm without crashing.
     //
     // These env switches set the CONSOLE'S OWN debug members -- mbDEBUGOverrideJunctionFUP (:866)
     // and mbDEBUGTestSympCrash (:858), the exact overrides the two predicates already honour --
