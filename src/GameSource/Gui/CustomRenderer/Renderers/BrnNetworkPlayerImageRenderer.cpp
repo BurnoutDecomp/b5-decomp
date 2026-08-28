@@ -8,6 +8,7 @@
 #include "GameShared/GameClasses/Network/Utilities/CgsNetworkImageConverter.h" // CgsNetwork::NetworkImageConverter
 #include "GameShared/GameClasses/Core/CgsAssert.h"                           // CGS_ASSERT
 #include "pc/gcm/renderengine/pixelformat.h"                                  // renderengine::PixelFormat
+#include "pc/gcm/renderengine/device.h"                                       // renderengine::gDevice (the PC device gate)
 
 #include <cstring>   // memset
 
@@ -125,6 +126,20 @@ namespace BrnGui
         case E_PREPARESTAGE_TEXTURES:
         {
             mePrepareStage = E_PREPARESTAGE_TEXTURES;
+
+            // [FLAG PC-platform device gate 2026-08-27] every Texture2D::Initialize below
+            // needs the D3D device. On a healthy boot the device exists before any prepare
+            // runs (renderengine::Device::Start is called from EnginePrepare, before
+            // gGameModule.Construct -- BrnMain.cpp). But Device::Start can FAIL wholesale
+            // and unrecoverably (measured: GetDeviceCaps hr=0x8876086C D3DERR_NOTAVAILABLE
+            // when the user's session is DISCONNECTED -- an RDP drop leaves the whole run
+            // headless; Device::Start's [device] diag line names the step). Without this
+            // gate such a run dies on 21 "maapTextureBuffer[...]" asserts (null Initialize
+            // returns) instead of limping on like every other device consumer does. Defer
+            // exactly like the AptRT text bring-up ("device not up yet -- deferred"):
+            // report not-ready and let the GuiModule prepare PUMP retry next frame.
+            if (renderengine::gDevice == 0)
+                return false;
 
             // Build the three resource descriptors: normal (A1R5G5B5), YUY2 (G8B8) and
             // compressed (DXT1), all 160x120, one mip. The X360 fills a Texture2D::Parameters

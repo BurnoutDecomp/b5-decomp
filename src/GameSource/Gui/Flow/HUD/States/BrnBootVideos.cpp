@@ -73,6 +73,21 @@ namespace BrnGui
                 reinterpret_cast<const CgsModule::Event*>(&lEvent), liChannel, 16);
         }
 
+        // [loading-fade seat 2026-08-27] the 20-byte clear-screen record OnEnter posts on
+        // the view-state channel -- DECODED from the @0x824786B8 asm (stw 0 / stfs
+        // flt_82001C98(=1.0f) into the payload pair, head {8, 25, 12}, AddEvent ch 0x29
+        // size 0x14): {8, 25, 12, mode 0, alpha 1.0f} == the ViewModule case-25
+        // ClearScreenBody enable at full black. Same shape BrnBootLegal.cpp's
+        // GuiOptionEvent20 already posts; the old "field semantics unresolved" FLAG that
+        // kept it unposted is PAID OFF.
+        struct GuiClearScreenEvent20 : public CgsGui::GuiEvent<25>
+        {
+            s32 miMode;    // 0 == enable the black clear, 1 == disable
+            f32 mfAlpha;   // the clear alpha (1.0f == opaque black)
+            explicit GuiClearScreenEvent20(s32 liMode)
+                : CgsGui::GuiEvent<25>(8, 12), miMode(liMode), mfAlpha(1.0f) {}
+        };
+
         // Emit a GuiEventPlayVideo at the MovieManager (via the StateInterface output queue).
         //
         // ⭐ CORRECTED 2026-08-16 (boot audit F-P8b-5). The X360 payload carries THREE things
@@ -129,32 +144,35 @@ namespace BrnGui
         mpGuiCache = 0;
     }
 
-    // @ 0x824786B8 -- register and drop the loading screen. NB the console does NOT reset
-    // the stage here (Construct does); resetting it made a re-entry replay the logos
-    // (boot audit F-P8b-7).
+    // @ 0x824786B8 -- register, drop the loading screen, and raise the black clear under
+    // it (both posts asm-decoded; the old P8b "unresolved record" FLAG is paid off --
+    // the 20-byte record is the ViewModule's case-25 ClearScreenBody, enable @ alpha 1.0,
+    // NOT a string-carrying shape; the strlen concern belonged to the id-17..20 apt family).
     void BootVideos::OnEnter()
     {
         if (mpStateInterface != 0)
         {
             mpStateInterface->RegisterForEvents(KAI_OBSERVED_EVENTS, KI_NUM_OBSERVED_EVENTS);
             PostCommand16<20>(mpStateInterface, KI_CHANNEL_GUI_OUT);      // stop the loading screen
-            // [FLAG] The console also posts a view-state record here, {8,25,12,0,1.0f} on
-            // channel 41. Its layout is NOT the 16-byte command shape -- the view module
-            // reads a string out of these records (ProcessIncomingViewEvents strlen's a
-            // field), and posting the command shape faults it. The record's field semantics
-            // are unresolved (boot audit P8b BLOCKER note), so it stays unposted rather than
-            // guessed at.
+            // {8, 25, 12, 0, 1.0f} ch 41 size 20 (@0x82478738-58): black clear ON under the
+            // loading screen's hide fade, so the fade lands on black and the logo fades in
+            // from it -- the console's fade-out-into-the-first-video look.
+            GuiClearScreenEvent20 lClearOn(0);
+            mpStateInterface->GetOutputEventQueue()->AddEvent(
+                reinterpret_cast<const CgsModule::Event*>(&lClearOn), KI_CHANNEL_VIEW_STATE, 20);
         }
     }
 
-    // @ 0x82478D38 -- unregister and post the leave record on the view-state channel.
+    // @ 0x82478D38 -- unregister and clear the level-1 apt movie (asm-decoded: the
+    // {8, 18, 12, &"", 1} channel-41 record IS StateInterface::PlayAptMovie("", 1) --
+    // the type-18 play-apt-movie record with the empty-string constant unk_820046A7 and
+    // level 1; the old "unresolved -> unposted" FLAG is paid off).
     void BootVideos::OnLeave()
     {
         if (mpStateInterface != 0)
         {
             mpStateInterface->UnRegisterForEvents(KAI_OBSERVED_EVENTS, KI_NUM_OBSERVED_EVENTS);
-            // [FLAG] as OnEnter: the console's {8,18,12,&"",1} channel-41 record carries a
-            // string pointer, not the 16-byte command shape. Unresolved -> unposted.
+            mpStateInterface->PlayAptMovie("", 1);   // {8,18,12,"",1} @0x82478D60-A8
         }
     }
 
