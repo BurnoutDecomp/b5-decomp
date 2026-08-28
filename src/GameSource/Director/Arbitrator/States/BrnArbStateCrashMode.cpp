@@ -69,14 +69,35 @@ namespace BrnDirector
         //   flt_82CDA4D4 -> KF_MIN_TIME_BETWEEN_CLOSEUPS
         //   flt_82CDA4D8 -> KF_CLOSEUP_DURATION         flt_82CDA4DC -> KF_CLOSEUP_BLEND_IN_DURATION
         //
-        // ⚠️ THE TWO INTRO DURATIONS ARE STILL NOT PINNED, and for a different reason than the
-        // rest: 0x82FAA5E0/E4 are NOT in the .rdata pool at all -- they are in the writable
-        // 0x82FAxxxx data segment, where the image-at-rest reads 0.0 for every word probed
-        // (0x82FAAAF0 and 0x82FAA990, the two crash-nav distance globals, read 0.0 as well).
-        // A zero there is indistinguishable from "runtime-initialised, zero at rest", so the
-        // two values below stay flagged placeholders. Do NOT copy 0.0 in from the image.
-        const f32 KF_INTRO_FLASH_DURATION     = 0.5f;    // flt_82FAA5E0  FLAG: still a placeholder (writable segment)
-        const f32 KF_INTRO_BORDERS_DURATION   = 0.5f;    // flt_82FAA5E4  FLAG: still a placeholder (writable segment)
+        // ⭐⭐ THE TWO INTRO DURATIONS ARE PINNED AT LAST, AND THE ANSWER IS 0.0 (2026-08-28).
+        // The note this replaces said: "a zero there is indistinguishable from 'runtime-
+        // initialised, zero at rest', so the two values below stay flagged placeholders. Do NOT
+        // copy 0.0 in from the image." The first half was the right worry and the conclusion was
+        // wrong -- the two cases ARE distinguishable, by asking whether anything writes them.
+        //
+        // THE TEST, WITH ITS CONTROL. Grepping all ~27.5k dumped X360 function bodies for each
+        // address:
+        //     flt_82FAA5E0  -> 1 referencing function   ArbStateCrashMode::Update  (READ:
+        //     flt_82FAA5E4  -> 1 referencing function     `lfs f0/f13` @0x82235530/0x82235534)
+        //   CONTROL, the two nearest neighbours in the SAME writable segment (+0x8 and +0xC):
+        //     flt_82FAA5D0  -> 4 referencing functions, ONE of which STORES
+        //     byte_82FAA5EC -> 4 referencing functions, ONE of which STORES
+        //                      (both stores are ValidityAccount::SetupFailFlagMask)
+        // So the method finds a writer when there is one, twelve bytes away -- and finds NONE
+        // for these two. Their only appearance in the whole image is the read below.
+        //
+        // A non-const global float that nothing ever writes holds exactly what the image holds,
+        // and the image holds 0.0. There is no dynamic initialiser to recover and therefore no
+        // CRT-init-order question to answer: this is the SIMPLER of the two cases the brief
+        // asks about -- retail really does run 0.0, the same shape (though not the same
+        // mechanism) as the deceleration-arm constants whose initialiser ran 527 CRT slots too
+        // late. The shape that fits is a GameTalk-tweakable tuning global defaulting to 0.0,
+        // which is also what its neighbours in that segment are.
+        // ⇒ A "plausible" 0.5f here is the invention, not the zero. Consequence: the crash-mode
+        // intro flash and letterbox borders are seeded ALREADY EXPIRED, i.e. retail shows
+        // neither. Restore a non-zero value only if a live GameTalk capture writes one.
+        const f32 KF_INTRO_FLASH_DURATION     = 0.0f;    // flt_82FAA5E0  (image value; no writer exists)
+        const f32 KF_INTRO_BORDERS_DURATION   = 0.0f;    // flt_82FAA5E4  (image value; no writer exists)
         const f32 KF_INTRO_BLUR_IN_DURATION   = 2.0f;    // flt_82CDA4A4  (was 0.25f)
         const f32 KF_INTRO_BLUR_OUT_DURATION  = 1.0f;    // flt_82CDA4A8  (was 0.25f)
         const f32 KF_INTRO_BLUR_RAMP_SPEED    = 1.0f;    // flt_82CDA4AC  (was 4.0f)
