@@ -379,11 +379,30 @@ namespace CgsGui
             if (muNumActivecomponents > suHighWater)
             {
                 suHighWater = muNumActivecomponents;
-                char lac[160];
+                // ⭐ The one question the count alone cannot answer: are the rows we are
+                // NOT dropping still pointing at LIVE AptValues, or at pool memory the
+                // value was freed from without its unload hook firing? A dead row is the
+                // "valid pointer, invalid object" shape -- the registration outlives the
+                // clip, the pool recycles the block, and the next mount registers a NEW
+                // row for the SAME address. Counts rows whose AptValue no longer carries
+                // mbIsAllocated (bit 0 of the +8 bitfield). Diagnostic only.
+                s32 liDead = 0;
+                s32 liSelf = 0;
+                for (s32 liRow = 0; liRow < liNew; ++liRow)
+                {
+                    const AptValue* lpRef = mAptComponentList.GetAptValue(liRow);
+                    if (lpRef == 0)
+                        continue;
+                    if ((lpRef->mnValueData & 1u) == 0u)
+                        ++liDead;
+                    if (lpRef == lpMovieClip)
+                        ++liSelf;   // this address is ALREADY registered under another row
+                }
+                char lac[200];
                 CgsCore::SnPrintf(lac, sizeof(lac),
-                    "[aptlife] component high-water %u/%d: '%s'\n",
+                    "[aptlife] component high-water %u/%d: '%s' (rows: %d dead, %d dup-addr)\n",
                     suHighWater, static_cast<int>(AptComponentList::KU_MAX_COMPONENTS),
-                    lpacName ? lpacName : "<null>");
+                    lpacName ? lpacName : "<null>", liDead, liSelf);
                 CgsDev::Log::WriteToLog(lac);
             }
         }
