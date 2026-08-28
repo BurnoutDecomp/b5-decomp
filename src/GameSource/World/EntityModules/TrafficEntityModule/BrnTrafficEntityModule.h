@@ -899,11 +899,23 @@ namespace BrnTrafficIO { class InputBuffer_PreScene; class OutputBuffer_PreScene
         // Takes a vehicle back out of the physics/crash module's books: clears its
         // mVehiclesAddedToCrashModule bit and queues it on maRecentlyRemovedVehicles, then --
         // if it was mid-slam-recovery -- queues it on maRecentlyRecoveredSlammedTraffic and
-        // resets its crash type to eCrashTrafficType_Invalid. Four callers, all still gated
-        // or unreconstructed (StopVehicleBeingPhysical, StaticVehicles_KillParam, KillParam,
-        // RemoveVehicle), so landing it changes no behaviour yet; it retires one of the three
-        // blockers each of those park notes names.
+        // resets its crash type to eCrashTrafficType_Invalid. Callers: StopVehicleBeingPhysical,
+        // StaticVehicles_KillParam, KillParam and RemoveVehicle -- the last of which is now
+        // bodied beside it (below), so this one is live on the shipped path.
         void EnsureVehicleRemovedFromCrashModule(u32 luVehicle);
+
+        // @0x8272E370 (499 insns), DWARF BrnTrafficEntityModule.h:1797. Body in
+        // BrnTrafficEntityModule_wT5_01.cpp.
+        // THE JUNCTION-FUP RELIEF VALVE, and the module's single kill entry point: eleven
+        // callers (UpdateJunctionFUP, JunctionFUP_TryClearupNonMovingPhysical,
+        // ReturnPhysicalVehicleToTraffic, TryClearupOffscreenTraffic, ClearupCrashedTraffic,
+        // CleanUpCrashedVehicles, HandleRecycledTraffic, KillAllTrafficInCylinder,
+        // FireKillZone, HideAllTraffic, PostPhysicsUpdate). It retires the vehicle's SoA
+        // liveness and its crash-module registration and breaks any cab/trailer articulation;
+        // it marks the PARAM (zombie or should-be-removed depending on
+        // mbAllowDivergentBehaviour) rather than freeing it -- the actual pool recycle is
+        // KillDyingVehicleEntities' job, and the scene/collision teardown stays there too.
+        void RemoveVehicle(u32 luVehicle);
 
         // @0x82745218, DWARF :1875. Body in BrnTrafficEntityModule_wT5_01.cpp.
         // THE ONLY WRITER of mfJunctionFUP, i.e. the only producer of the input

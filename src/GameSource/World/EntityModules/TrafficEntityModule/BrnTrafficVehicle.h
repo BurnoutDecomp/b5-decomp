@@ -170,6 +170,12 @@ public:
     // call site; the bodies below assert against them by NAME). ----
     bool IsAlive() const { return (mxFlags & E_FLAG_ALIVE) != 0; }
     bool IsPhysical() const { return (mxFlags & E_FLAG_PHYSICAL) != 0; }
+    // ADDITIVE. The console inlines this read everywhere rather than calling it, but it names
+    // the predicate itself: RemoveVehicle @0x8272E370 bakes the assert string
+    // "!lpVehicle->IsOrphan()" (BrnTrafficEntityModule.cpp:4270) two instructions after
+    // `lbz r11,5(r30) ; rlwinm r11,r11,0,26,26` -- bit 26 counted from the MSB is 1<<5 ==
+    // E_FLAG_ORPHAN. Same read gates that function's whole first arm (0x8272E3DC).
+    bool IsOrphan() const { return (mxFlags & E_FLAG_ORPHAN) != 0; }
     bool IsOfTrailerSpecies() const { return (muSpecies & 0xF) == E_SPECIES_TRAILER; }
     // DriveTowardsTarget @0x8273E080 / @0x8273E0C4 (`lbz r11,4(this) ; clrlwi r11,r11,28`).
     bool IsOfStandardSpecies() const { return (muSpecies & 0xF) == E_SPECIES_STANDARD; }

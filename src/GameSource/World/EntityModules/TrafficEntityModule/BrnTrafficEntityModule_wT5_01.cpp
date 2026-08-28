@@ -353,6 +353,244 @@ void TrafficEntityModule::EnsureVehicleRemovedFromCrashModule(u32 luVehicle)
 }
 
 // --------------------------------------------------------------------------------------------
+// TrafficEntityModule::RemoveVehicle  @0x8272E370  (499 insns)
+//   DWARF BrnTrafficEntityModule.h:1797 -- `void RemoveVehicle(uint32_t)`
+//
+// THE MODULE'S SINGLE KILL ENTRY POINT, and the JUNCTION-FUP RELIEF VALVE this file's
+// UpdateJunctionFUP and JunctionFUP_TryClearupNonMovingPhysical have been logging a gate for.
+// Eleven callers (xrefs_to on 0x8272E370): UpdateJunctionFUP, JunctionFUP_TryClearupNonMoving-
+// Physical, ReturnPhysicalVehicleToTraffic, TryClearupOffscreenTraffic, ClearupCrashedTraffic,
+// CleanUpCrashedVehicles, HandleRecycledTraffic, KillAllTrafficInCylinder, FireKillZone,
+// HideAllTraffic, PostPhysicsUpdate.
+//
+// ⚠️ THE PARK NOTES THAT GUARDED THIS WERE WRONG, AND WRONG IN BOTH DIRECTIONS.
+// Four sites (_wT1_01.cpp, _wT2_01.cpp, _wT3_02.cpp, _wT5_01.cpp) all named the same three
+// blockers -- "GetVehicleSpecies / Vehicle::DetachArticulation /
+// StaticTrafficParam::SetShouldBeRemoved are not bodied". Checked against the tree, one by one:
+//   * GetVehicleSpecies                      -- bodied, and has been for a while, as a header
+//                                               inline in BrnTrafficVehicle.h:413.
+//   * Vehicle::DetachArticulation            -- bodied, BrnTrafficVehicle.cpp:1379.
+//   * StaticTrafficParam::SetShouldBeRemoved -- bodied, BrnTrafficStaticParam.cpp.
+// All three were STALE. Meanwhile the list omitted the two things that actually had to exist:
+//   * TrafficEntityModule::EnsureVehicleRemovedFromCrashModule -- called on FOUR of the six
+//     exit paths below; landed in this file by the previous wave, which is what made this
+//     function reachable at all.
+//   * Vehicle::IsOrphan() -- the predicate that selects the WHOLE first arm (0x8272E3DC
+//     `lbz r11,5(r30) ; rlwinm r11,r11,0,26,26`). E_FLAG_ORPHAN existed and SetOrphan existed,
+//     but nothing could READ the bit. Added to BrnTrafficVehicle.h beside IsAlive/IsPhysical;
+//     the console names it itself in the baked assert string "!lpVehicle->IsOrphan()".
+// ⇒ The park note was a list of names nobody re-checked. Every one of its three entries had
+//   been landed by an earlier wave that never went back to retire the notes.
+//
+// WHAT IT DOES NOT DO -- worth stating, because two other park notes assume otherwise.
+// RemoveVehicle does NOT free a pool slot, does NOT touch the scene/collision registration,
+// and does NOT delete a param. It retires LIVENESS (Vehicle::SetDead), retires the crash-module
+// bookkeeping, breaks articulation, and MARKS the param -- zombie on the normal path,
+// should-be-removed when divergent behaviour is allowed. The recycle and the
+// AddForCollision/AddVolumeInstance teardown remain KillDyingVehicleEntities' job, so
+// _wT4_01.cpp's stale-collidable PC-safety sweep is NOT retired by this landing.
+//
+// STRUCTURE, straight off the asm. Three top-level arms, selected before any species test:
+//   0x8272E3DC  IsOrphan()                -> loc_8272E9D4, the orphaned-half arm
+//   0x8272E3EC  mbAllowDivergentBehaviour -> the "offline, may diverge" species ladder
+//   otherwise                             -> loc_8272E728, the ordinary species ladder
+// The two ladders differ in three ways and the difference is the whole point of the function:
+//   STANDARD: divergent marks the param SetShouldBeRemoved(); ordinary marks it SetZombie().
+//   STATIC:   divergent SetShouldBeRemoved();                  ordinary SetZombie().
+//   TRAILER:  divergent detaches then kills the trailer;       ordinary detaches and ORPHANS it
+//             (SetOrphan @0x8272E900) so a later RemoveVehicle takes the first arm.
+// The default (species >= 3) arms differ too: the divergent one RETURNS after the assert
+// (0x8272E48C `b __restgprlr_20`), the ordinary one FALLS THROUGH to the shared
+// SetDead + EnsureVehicleRemovedFromCrashModule tail at loc_8272E9B0 (0x8272E80C `b`).
+//
+// The two SoA references are the console's `this + 0x282D0` (mVehicleSoaData, built as
+// `lis 2 ; ori 0x82D0` at 0x8272E49C/0x8272E784 and as `addis 3 ; addi -0x7D30` at
+// 0x8272E6DC/0x8272E9FC -- the same address twice) and `this + 0x3D700` (mParamSoaData,
+// `addis 4 ; addi -0x2900` at 0x8272E91C). Both are reached by name here.
+//
+// The console composes four of the asserts through CgsDev::StrStream. Per this tree's
+// convention (see GetTrailerVehicle's "Out of range trailer vehicle") the baked literal
+// prefix is kept as the CGS_ASSERT message and the streamed tail is documented inline; the
+// CONDITION is transcribed exactly.
+// --------------------------------------------------------------------------------------------
+void TrafficEntityModule::RemoveVehicle(u32 luVehicle)
+{
+    // 0x8272E388..0x8272E3CC. TWO asserts fire here on the console, back to back: this one and
+    // the `luIndex < KU_MAX_TOTAL_TRAFFIC` baked at BrnTrafficEntityModule.h:2459, which is
+    // GetVehicle's own bound -- the compiler inlined that one accessor at this site
+    // (`addi r11,r31,0x55 ; slwi r11,r11,7 ; add r30,r11,r23`) while calling it out of line
+    // everywhere else in the same function. Our GetVehicle carries the second assert.
+    CGS_ASSERT(luVehicle < KU_MAX_TOTAL_TRAFFIC, "luVehicle < KU_MAX_TOTAL_TRAFFIC");  // .cpp 4190
+
+    Vehicle* const lpVehicle = GetVehicle(luVehicle);
+
+    // ========================================================================================
+    // ARM 1 -- loc_8272E9D4. An ORPHAN: a trailer whose cab has already gone. There is nothing
+    // left to co-ordinate, so it dies immediately, regardless of mbAllowDivergentBehaviour.
+    // ========================================================================================
+    if (lpVehicle->IsOrphan())
+    {
+        CGS_ASSERT(lpVehicle->IsAlive(), "lpVehicle->IsAlive()");           // .cpp 4335
+
+        lpVehicle->SetDead(luVehicle, mVehicleSoaData);                     // 0x8272EA10
+        EnsureVehicleRemovedFromCrashModule(luVehicle);                     // 0x8272EA1C
+
+        // 0x8272EA24..0x8272EA2C `cmpwi cr6, r3, 0 ; bne` -- ONLY a standard vehicle goes on to
+        // look for a trailer. (A trailer that is itself an orphan has no cab by definition, and
+        // GetTrailerIndex asserts IsOfStandardSpecies(), so the species test is load-bearing.)
+        if (GetVehicleSpecies(luVehicle) == Vehicle::E_SPECIES_STANDARD)
+        {
+            if (lpVehicle->GetTrailerIndex() != static_cast<u16>(KU_INVALID_VEHICLE))
+            {
+                const u32 luTrailer = lpVehicle->GetTrailerIndex();
+                Vehicle* const lpTrailer = GetVehicle(luTrailer);
+
+                // .cpp 4350. Streamed: "Mismatched artic parts: cab id=" << luVehicle
+                // << ", thinks trailer is " << luTrailer
+                // << ", trailer thinks cab is " << lpTrailer->GetCabIndex().
+                CGS_ASSERT(lpTrailer->GetCabIndex() == luVehicle,
+                           "Mismatched artic parts: cab id=");
+
+                lpTrailer->DetachArticulation(luTrailer, mVehicleSoaData);  // 0x8272EB04
+                lpVehicle->DetachArticulation(luVehicle, mVehicleSoaData);  // 0x8272EB14
+                lpTrailer->SetDead(luTrailer, mVehicleSoaData);             // 0x8272EB24
+                EnsureVehicleRemovedFromCrashModule(luTrailer);             // 0x8272EB30
+            }
+        }
+        return;
+    }
+
+    // ========================================================================================
+    // ARM 2 -- 0x8272E3EC..0x8272E724. mbAllowDivergentBehaviour (+0x717E7) is the offline /
+    // single-player switch: the module is free to make the world diverge from what a remote
+    // peer would see, so a removal is IMMEDIATE and the param is flagged should-be-removed.
+    // ========================================================================================
+    if (mbAllowDivergentBehaviour)
+    {
+        switch (GetVehicleSpecies(luVehicle))                               // 0x8272E404
+        {
+        case Vehicle::E_SPECIES_STANDARD:                                   // loc_8272E5CC
+            GetParam(luVehicle)->SetShouldBeRemoved();                      // 0x8272E5D8
+
+            if (lpVehicle->GetTrailerIndex() != static_cast<u16>(KU_INVALID_VEHICLE))
+            {
+                const u32 luTrailer = lpVehicle->GetTrailerIndex();
+                Vehicle* const lpTrailer = GetVehicle(luTrailer);
+
+                // .cpp 4216. Streamed: "Mismatched artic parts: cab id=" << luVehicle
+                // << ", thinks trailer is " << lpVehicle->GetTrailerIndex()
+                // << ", trailer thinks cab is " << lpTrailer->GetCabIndex().
+                CGS_ASSERT(lpTrailer->GetCabIndex() == luVehicle,
+                           "Mismatched artic parts: cab id=");
+                CGS_ASSERT(lpTrailer->IsAlive(), "lpTrailer->IsAlive()");   // .cpp 4218
+
+                lpTrailer->DetachArticulation(luTrailer, mVehicleSoaData);  // 0x8272E6F0
+                lpVehicle->DetachArticulation(luVehicle, mVehicleSoaData);  // 0x8272E700
+                lpTrailer->SetDead(luTrailer, mVehicleSoaData);             // 0x8272E710
+                EnsureVehicleRemovedFromCrashModule(luTrailer);             // 0x8272E71C
+            }
+            // ⚠️ NOTE: this arm returns WITHOUT killing lpVehicle itself. The param is flagged
+            // and the pool sweep does the rest; only the TRAILER half is killed outright.
+            return;
+
+        case Vehicle::E_SPECIES_STATIC:                                     // loc_8272E5B4
+            GetStaticTrafficParamFromFullV(luVehicle)->SetShouldBeRemoved(); // 0x8272E5C0
+            return;
+
+        case Vehicle::E_SPECIES_TRAILER:                                    // loc_8272E490
+            if (lpVehicle->GetCabIndex() != static_cast<u16>(KU_INVALID_VEHICLE))
+            {
+                const u32 luCab = lpVehicle->GetCabIndex();
+                Vehicle* const lpCab = GetVehicle(luCab);
+
+                // .cpp 4246. Streamed: "Mismatched artic parts: trailer id=" << luVehicle
+                // << ", thinks cab is " << lpVehicle->GetCabIndex()
+                // << ", cab thinks trailer is " << lpCab->GetTrailerIndex().
+                CGS_ASSERT(lpCab->GetTrailerIndex() == luVehicle,
+                           "Mismatched artic parts: trailer id=");
+
+                lpVehicle->DetachArticulation(luVehicle, mVehicleSoaData);  // 0x8272E57C
+                lpCab->DetachArticulation(luCab, mVehicleSoaData);          // 0x8272E58C
+            }
+            // loc_8272E590 -- and here the trailer IS killed.
+            lpVehicle->SetDead(luVehicle, mVehicleSoaData);                 // 0x8272E59C
+            EnsureVehicleRemovedFromCrashModule(luVehicle);                 // 0x8272E5A8
+            return;
+
+        default:
+            // .cpp 4261. Streamed: "Traffic vehicle " << luVehicle
+            // << " has unknown species " << GetVehicleSpecies(luVehicle).
+            // 0x8272E48C `b __restgprlr_20` -- this arm RETURNS, unlike its ordinary twin.
+            CGS_ASSERT(false, "Traffic vehicle has unknown species");
+            return;
+        }
+    }
+
+    // ========================================================================================
+    // ARM 3 -- loc_8272E728. The ordinary (network-safe) path: mark the param a ZOMBIE and let
+    // the shared tail retire the vehicle. A trailer is ORPHANED rather than killed, so both
+    // halves come out over two frames in a peer-reproducible order.
+    // ========================================================================================
+    CGS_ASSERT(lpVehicle->IsAlive(), "lpVehicle->IsAlive()");               // .cpp 4269
+    CGS_ASSERT(!lpVehicle->IsOrphan(), "!lpVehicle->IsOrphan()");           // .cpp 4270
+
+    switch (GetVehicleSpecies(luVehicle))                                   // 0x8272E780
+    {
+    case Vehicle::E_SPECIES_STANDARD:                                       // loc_8272E91C
+        GetParam(luVehicle)->SetZombie(luVehicle, mParamSoaData);           // 0x8272E938
+
+        // ⚠️ NO mismatch assert in this arm -- the console does not check the back-reference
+        // here, only in the three arms above. Transcribed as written.
+        if (lpVehicle->GetTrailerIndex() != static_cast<u16>(KU_INVALID_VEHICLE))
+        {
+            const u32 luTrailer = lpVehicle->GetTrailerIndex();
+            Vehicle* const lpTrailer = GetVehicle(luTrailer);
+
+            lpVehicle->DetachArticulation(luVehicle, mVehicleSoaData);      // 0x8272E980
+            lpTrailer->DetachArticulation(luTrailer, mVehicleSoaData);      // 0x8272E990
+            lpTrailer->SetDead(luTrailer, mVehicleSoaData);                 // 0x8272E9A0
+            EnsureVehicleRemovedFromCrashModule(luTrailer);                 // 0x8272E9AC
+        }
+        break;
+
+    case Vehicle::E_SPECIES_STATIC:                                        // loc_8272E908
+        GetStaticTrafficParamFromFullV(luVehicle)->SetZombie();            // 0x8272E914
+        break;
+
+    case Vehicle::E_SPECIES_TRAILER:                                       // loc_8272E810
+        if (lpVehicle->GetCabIndex() != static_cast<u16>(KU_INVALID_VEHICLE))
+        {
+            const u32 luCab = lpVehicle->GetCabIndex();
+            Vehicle* const lpCab = GetVehicle(luCab);
+
+            // .cpp 4311. Streamed: "Mismatched artic parts: trailer id=" << luVehicle
+            // << ", thinks cab is " << luCab << ", cab thinks trailer is "
+            // << lpCab->GetTrailerIndex(). (This arm streams the LOCAL luCab through the
+            // u32 overload at 0x8272E8B0, where the divergent twin re-called GetCabIndex()
+            // and used the u16 one -- which is how the DWARF's `uint32_t luCab` local is
+            // visible in the encoding.)
+            CGS_ASSERT(lpCab->GetTrailerIndex() == luVehicle,
+                       "Mismatched artic parts: trailer id=");
+
+            lpCab->DetachArticulation(luCab, mVehicleSoaData);              // 0x8272E8E8
+            lpVehicle->DetachArticulation(luVehicle, mVehicleSoaData);      // 0x8272E8F8
+            lpVehicle->SetOrphan();                                         // 0x8272E900
+        }
+        break;
+
+    default:
+        // .cpp 4322, the same streamed message as the divergent twin -- but this one FALLS
+        // THROUGH to the shared tail (0x8272E80C `b loc_8272E9B0`).
+        CGS_ASSERT(false, "Traffic vehicle has unknown species");
+        break;
+    }
+
+    // loc_8272E9B0 -- the shared tail of arm 3.
+    lpVehicle->SetDead(luVehicle, mVehicleSoaData);                         // 0x8272E9BC
+    EnsureVehicleRemovedFromCrashModule(luVehicle);                         // 0x8272E9C8
+}
+
+// --------------------------------------------------------------------------------------------
 // TrafficEntityModule::JunctionFUP_StopOffscreenTraffic  @0x82719868
 //   DWARF BrnTrafficEntityModule.h:1884 --
 //     void JunctionFUP_StopOffscreenTraffic(const FastBitArray<601>::Iterator&, bool)
@@ -429,23 +667,14 @@ bool TrafficEntityModule::JunctionFUP_TryClearupNonMovingPhysical(
         return false;
     }
 
-    // 0x8273F3FC..0x8273F408.
+    // 0x8273F3FC..0x8273F408 -- UNGATED: RemoveVehicle is bodied above in this file.
+    if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())
     {
-        // GATE: RemoveVehicle @0x8272E370 (499 insns) is UNRECONSTRUCTED tree-wide -- its own
-        // blockers (GetVehicleSpecies / Vehicle::DetachArticulation /
-        // StaticTrafficParam::SetShouldBeRemoved) have no bodies either, and
-        // ReturnPhysicalVehicleToTraffic (_wT3_02.cpp) already logs the same hole.
-        // COST, and it is a REAL behaviour delta, not a cosmetic one: the junction-FUP RELIEF
-        // VALVE never runs, so a jam that pushes the score over 65 is never cleared by this
-        // path. The score itself is still correct -- UpdateJunctionFUP recomputes it from
-        // scratch every frame -- so the gate the wave exists to open is unaffected; what is
-        // missing is the console's way of ending the jam.
-        // DELETE-WHEN RemoveVehicle lands.
-        static bool sbLoggedRemoveVehicle = false;
-        LogMissingLeg(sbLoggedRemoveVehicle,
-                      "JunctionFUP_TryClearupNonMovingPhysical's RemoveVehicle @0x8272E370 -- "
-                      "unreconstructed; the stuck offscreen car is not deleted");
+        *lpDiag << "[T5-kill] TryClearupNonMovingPhysical veh=" << luVehicle
+                << " fatal=" << (lpPhysInfo->mbIsFatallyCrashing ? 1 : 0)
+                << " notDriving=" << lpPhysInfo->mfTimeNotDriving << "\n";
     }
+    RemoveVehicle(luVehicle);
     return true;
 }
 
@@ -576,14 +805,16 @@ void TrafficEntityModule::UpdateJunctionFUP()
         if (mfJunctionFUP_TimeTillNextPhysicalKill <= 0.0f &&
             luNextKillVehicle != KU_JUNCTION_FUP_NO_KILL_VEHICLE)
         {
+            // 0x82745BB4..0x82745BC0 -- UNGATED: RemoveVehicle is bodied above in this file.
+            // This is THE RELIEF VALVE: the furthest offender leaves, the score drops below 65
+            // next frame, and SpawnNewTraffic comes off its brake.
+            if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())
             {
-                // GATE: RemoveVehicle @0x8272E370 -- see the note in
-                // JunctionFUP_TryClearupNonMovingPhysical above. Same hole, same cost.
-                static bool sbLoggedRemoveVehicle = false;
-                LogMissingLeg(sbLoggedRemoveVehicle,
-                              "UpdateJunctionFUP's RemoveVehicle @0x8272E370 -- "
-                              "unreconstructed; the furthest jammed car is not deleted");
+                *lpDiag << "[T5-kill] UpdateJunctionFUP score=" << mfJunctionFUP
+                        << " killing veh=" << luNextKillVehicle
+                        << " distSq=" << lfFurthestDistance << "\n";
             }
+            RemoveVehicle(luNextKillVehicle);
 
             // 0x82745BC4..0x82745BEC. Offline (divergent behaviour allowed) waits a full
             // second between kills; online only half.
