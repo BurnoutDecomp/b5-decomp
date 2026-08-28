@@ -27,23 +27,52 @@ namespace Playback
 
 class GenericRwacFactory;
 
+// The sizing spec Create/ctor consume (console spec words +0 the retained RWAC
+// factory handle / +4 entityCount / +8 dataBytes / +0xC stringBytes -- the same
+// ref-spec r5 lowering as AEMS).
+struct SplicerFactorySpec
+{
+    Factory*  mpRwacFactory;        // +0x00 (Handle<GenericRwacFactory> raw pointer)
+    u32       mu32EntityCount;      // +0x04
+    u32       mu32DataSize;         // +0x08
+    u32       mu32StringTableSize;  // +0x0C
+};
+
 struct SplicerFactory : public Factory
 {
-    // The ctor (registers with the environment) is its own TU; declared for shape so
-    // the base construction is well-formed. FLAG (DEFER): declared-only.
-    SplicerFactory(Name aName, Environment& arEnvironment);
+    // @ 0x826DB130 (AEMS-cascade slice 3; full decode progress/scratch_dossiers/
+    // aems_factory_cascade_codex.md). Carve (console 4*(entities+0x1C0)+data+
+    // strings at host widths: the fixed head + the in-place Registry + the
+    // trailing SpliceManager arena) through the ENVIRONMENT's allocator tagged
+    // "SplicerFactory"; construct; return the handle with one explicit Acquire.
+    static Handle<SplicerFactory> Create(Environment& arEnvironment,
+                                         const SplicerFactorySpec& akrSpec);
+
+    // @ 0x826DB010. Base (Name = the "~SplicerFactory::SK_NAME~" intern ==
+    // console dword_83008404, writer sub_82C65938), the RWAC retain, the
+    // in-place Registry (+0x1C), the trailing SpliceManager (mono 0x40 / stereo
+    // 0x18 pool counts) and the manager's assert-sink install (+0x610 :=
+    // &SplicerAssertFunc). Body in CgsSplicerFactory.cpp.
+    SplicerFactory(Environment& arEnvironment, const SplicerFactorySpec& akrSpec);
 
     // @ 0x826DB0E0. Empty out-of-line dtor (Factory base dtor runs implicitly).
     virtual ~SplicerFactory();
 
-    // @ 0x8268ABA0. The splice factory's assertion sink (always fires; returns the
-    // assert front-end's leave result). Bodied in CgsSplicerFactory.cpp.
-    void* SplicerAssertFunc(const char* lpcExpression);
+    // @ 0x8268ABA0. The splice factory's assertion sink (always fires; returns
+    // the assert front-end's leave result). Bodied in CgsSplicerFactory.cpp.
+    // ⭐ STATIC (ABI corrected, slice 3): the ctor stores this function's RAW
+    // ADDRESS into the manager's +0x610 one-argument callback slot and the
+    // manager call sites pass only the message -- a hidden-this member ABI
+    // cannot match.
+    static void* SplicerAssertFunc(const char* lpcExpression);
+
+    // The nested registry (console +0x10), by name.
+    Registry* GetRegistry() { return mpRegistry; }
 
 private:
-    Registry*                  mpRegistry;     // CgsSplicerFactory.h:128
-    Handle<GenericRwacFactory> mhRwacFactory;  // CgsSplicerFactory.h:129
-    SpliceManager*             mpManager;      // CgsSplicerFactory.h:130
+    Registry*      mpRegistry;     // CgsSplicerFactory.h:128 (console +0x10 -> the in-place Registry @ +0x1C)
+    Factory*       mpRwacFactory;  // CgsSplicerFactory.h:129 (console +0x14, retained raw handle)
+    SpliceManager* mpManager;      // CgsSplicerFactory.h:130 (console +0x18 -> the trailing arena)
 };
 
 } // namespace Playback
