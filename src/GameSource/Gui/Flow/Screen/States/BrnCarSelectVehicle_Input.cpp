@@ -58,20 +58,9 @@ namespace BrnGui
         const s32 KI_ACTION_CAROUSEL_NEXT     = 44;   // 0x2C
         const s32 KI_ACTION_ACCEPT            = 49;   // 0x31 (EGameInputActions GUI_SELECT)
 
-        // FLAG PC-platform input bridge (the third site to need this -- BrnIntro.cpp:165 and
-        // BrnBootProfile.cpp:44 document the same one): the console A-button "select" arrives
-        // as action 49, but the PC input reconstruction (CgsInput::InputPadsPC, KA_BINDINGS)
-        // binds the accept key (ENTER / SPACE / pad-A) to action 45 instead. With only 49
-        // recognised the CONTINUE prompt on this screen can never be pressed on PC -- boot
-        // -measured, the carousel just sat there. Recognised alongside 49; the console arm is
-        // untouched, so nothing about the X360 behaviour changes.
-        // ⚠️ ROOT CAUSE, NOT FIXED HERE: 45 is not the console's select at all (BrnInGame
-        // uses it for pause->driver-details, BrnBootLegal for back-out); the console
-        // vocabulary is 49 GUI_SELECT / 50 GUI_CANCEL (BrnOnlineGameRoomPlayerInfo_wH_10.cpp
-        // :66). The one-line repair is in the PC leaf's KA_BINDINGS table, but it moves every
-        // boot-chain press at once (the title SelectionMenu consumes 45 today) -- its own
-        // task, not this screen's.
-        const s32 KI_ACTION_ACCEPT_PC         = 45;
+        // ([input vocabulary repair 2026-08-27] the KI_ACTION_ACCEPT_PC == 45 compensation is
+        // RETIRED: CgsInputPadsPC binds the accept key / pad-A to the console's 49 GUI_SELECT
+        // -- the root-cause repair this banner used to defer.)
 
         // The GuiAudioTriggerEvent action word TriggerSound posts (X360 `li r4, 7`).
         const s32 KI_AUDIO_ACTION_CAROUSEL = 7;
@@ -279,9 +268,7 @@ namespace BrnGui
 
                 mCarouselOverviewSelectableGroup.HighlightIndex(2);
             }
-            else if ((lpInput->miButtonId == KI_ACTION_ACCEPT
-                      || lpInput->miButtonId == KI_ACTION_ACCEPT_PC)   // FLAG PC bridge, see above
-                     && !IsLoading())
+            else if (lpInput->miButtonId == KI_ACTION_ACCEPT && !IsLoading())
             {
                 // ⭐ THE VALIDATE PRESS. IsLoading() is dispatched through this class's own
                 // vtable slot +0x2C, so a car change still in flight swallows the press.

@@ -52,15 +52,8 @@ namespace BrnGui
         const s32 KI_ACTION_BACK         = 50;   // 0x32 -- GUI_CANCEL
         const s32 KI_ACTION_RESTORE      = 52;   // 0x34 -- restore the factory paint
 
-        // FLAG PC-platform input bridge (the fourth site to need this -- see
-        // BrnCarSelectVehicle_Input.cpp:74, BrnIntro.cpp:165, BrnBootProfile.cpp:44): the
-        // console A-button "select" arrives as action 49, but CgsInput::InputPadsPC's
-        // KA_BINDINGS binds the accept key (ENTER / SPACE / pad-A) to action 45 instead. With
-        // only 49 recognised the CONTINUE prompt on this screen could never be pressed on PC.
-        // Recognised alongside 49; the console arm is untouched.
-        // ⚠️ ROOT CAUSE, DELIBERATELY NOT FIXED HERE: the one-line repair is in the PC leaf's
-        // KA_BINDINGS table, but it moves EVERY boot-chain press at once -- its own task.
-        const s32 KI_ACTION_ACCEPT_PC    = 45;
+        // ([input vocabulary repair 2026-08-27] the KI_ACTION_ACCEPT_PC == 45 compensation is
+        // RETIRED: CgsInputPadsPC binds the accept key / pad-A to the console's 49 GUI_SELECT.)
 
         // The PresentationAction words TriggerSound is called with (X360 `li r4, 7 / 8 / 9`).
         const s32 KI_AUDIO_ACTION_SCROLL = 7;
@@ -281,7 +274,6 @@ namespace BrnGui
         }
 
         case KI_ACTION_ACCEPT:
-        case KI_ACTION_ACCEPT_PC:   // FLAG PC bridge, see above
         {
             // ⭐⭐ THE VALIDATE PRESS -- the last user action of the Junkyard flow.
             // mbExiting latches it so a second press cannot re-enter ExitCarSelection, and

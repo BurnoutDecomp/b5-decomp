@@ -232,12 +232,22 @@ namespace
     // menu accept row, and Escape stays on the menu stop row. Nothing is stolen from the
     // verified boot chain: every pre-existing row below is byte-identical to what it was.
     //
-    // ⚠️ PRE-EXISTING DEFECT, NOT TOUCHED HERE (it is its own task, and the tree already
-    // documents it at BrnCarSelectVehicle_Input.cpp:63): the console vocabulary is
-    // 49 GUI_SELECT = accept and 50 GUI_CANCEL = back, but the four rows below bind the
-    // accept key to 45 GUI_START and the Escape key to 49 GUI_SELECT. Several GUI screens
-    // carry a compensating "accept is 45 on PC" arm. Repairing it moves every boot-chain
-    // press at once, so it is left exactly as the boot-verified build has it.
+    // ⭐ [input vocabulary repair 2026-08-27] THE 45-vs-49 DEFECT IS FIXED. The console
+    // vocabulary -- DWARF GameInputActions.h:24, EGameInputActions -- is:
+    //     45 GUI_START  (the Start button)   49 GUI_SELECT (the A button / accept)
+    //     46 GUI_BACK                        50 GUI_CANCEL (the B button / back)
+    // The old rows bound the accept key to 45 and Escape to 49 (inverted), and several
+    // GUI screens grew compensating "accept is 45 on PC" arms -- which is why A could
+    // not skip the boot videos (BootVideos::Update faithfully answers the console's 49
+    // and nothing on this host ever produced it from A). The rows below now bind:
+    //     ENTER / SPACE / pad-A     -> 49 GUI_SELECT
+    //     ESCAPE / pad-B            -> 50 GUI_CANCEL
+    //     P / pad-START             -> 45 GUI_START  (alongside driving row 8, exactly the
+    //                                  console's one-control-many-actions Start button)
+    // and every compensating arm is retired in the same change (BrnBootProfile /
+    // BrnCarSelectLivery_Input / BrnCarSelectVehicle_Input / BrnIntro). Screens that
+    // accept BOTH 45 and 49 natively on console (BrnCarSelectUnlock's cmpwi 0x2D/0x31)
+    // keep both -- that is console behaviour, not a compensation.
     //
     // ⚠️ NOT BOUND (honest gaps, all of them consumed by the bridge but with no defensible
     // host control): action 10 POWERSWERVE_R -> mbToggle, action 4 CRASHBREAKER, action 6
@@ -285,12 +295,15 @@ namespace
 
     const PcActionBinding KA_BINDINGS[] =
     {
-        // -- the four menu rows the boot chain was verified on (order fixed: the harness
-        //    event channel below indexes this table and only knows these four) ----------
-        { 45, KAI_KEYS_ACCEPT, static_cast<unsigned short>(KU_XPAD_A | KU_XPAD_START), E_PCANALOGUE_NONE },
-        { 49, KAI_KEYS_STOP,   KU_XPAD_B,                                              E_PCANALOGUE_NONE },
+        // -- the menu rows, in the CONSOLE action vocabulary (see the repair banner) -----
+        { 49, KAI_KEYS_ACCEPT, KU_XPAD_A,                                              E_PCANALOGUE_NONE }, // GUI_SELECT (A / Enter,Space)
+        { 50, KAI_KEYS_STOP,   KU_XPAD_B,                                              E_PCANALOGUE_NONE }, // GUI_CANCEL (B / Escape)
         { 41, KAI_KEYS_NEXT,   static_cast<unsigned short>(KU_XPAD_DPAD_DOWN | KU_XPAD_DPAD_RIGHT), E_PCANALOGUE_NONE },
         { 42, KAI_KEYS_PREV,   static_cast<unsigned short>(KU_XPAD_DPAD_UP   | KU_XPAD_DPAD_LEFT),  E_PCANALOGUE_NONE },
+        // GUI_START: the Start button's GUI face. On the console ONE physical Start feeds
+        // both driving action 8 and GUI action 45 (the ActionMapping's one-control-many-
+        // actions shape); the P key + pad Start reproduce that pair with driving row 8 below.
+        { 45, KAI_KEYS_START,  KU_XPAD_START,                                          E_PCANALOGUE_NONE }, // GUI_START (Start / P)
 
         // -- driving ------------------------------------------------------------------
         //  id  EGameInputActions       keyboard         pad button        pad analogue
@@ -374,8 +387,12 @@ namespace
         const char* lpcEventName = 0;
         switch (liActionId)
         {
-        case 45: lpcEventName = "Local\\BurnoutPC_Input_Accept";     break;
-        case 49: lpcEventName = "Local\\BurnoutPC_Input_Stop";       break;
+        // [input vocabulary repair 2026-08-27] the harness channels are named by INTENT and
+        // follow their rows: Accept rides GUI_SELECT (49), Stop rides GUI_CANCEL (50), and
+        // GUI_START (45) gets its own channel. Harness scripts keep their event names.
+        case 49: lpcEventName = "Local\\BurnoutPC_Input_Accept";     break;
+        case 50: lpcEventName = "Local\\BurnoutPC_Input_Stop";       break;
+        case 45: lpcEventName = "Local\\BurnoutPC_Input_Start";      break;
         case 41: lpcEventName = "Local\\BurnoutPC_Input_Next";       break;
         case 42: lpcEventName = "Local\\BurnoutPC_Input_Prev";       break;
         // -- driving. These three ids are the rows BridgeControllerToWorld reads straight out
@@ -410,9 +427,8 @@ namespace
         // before launching the game, so a successful zero-time wait says the control is down
         // this update (and, for the auto-reset menu channels, consumes the one request).
         // The handle cache is indexed by KA_BINDINGS row, so every id in the switch above must
-        // also be a bound row -- 45/49/41/42 are rows 0..3 and 0/1/2 are rows 4..6. Action 46
-        // is the appended last row; the lookup below is BY ACTION ID, not by a fixed index, so
-        // appending grows the cache without disturbing any existing row.
+        // also be a bound row; the lookup below is BY ACTION ID, not by a fixed index, so
+        // reordering or appending rows never disturbs the cache mapping.
         static void* sapHarnessEvents[KU_NUM_BINDINGS] = {};
         u32 luBinding = 0;
         while (luBinding < KU_NUM_BINDINGS
