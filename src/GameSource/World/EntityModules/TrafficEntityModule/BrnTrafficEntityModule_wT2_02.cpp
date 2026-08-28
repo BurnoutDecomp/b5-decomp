@@ -27,7 +27,7 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "GameShared/GameClasses/Containers/CgsFastBitArray.h"
 
-#include <cstdlib>   // getenv (the [DIAG] force switches below)
+#include <cstdlib>   // getenv / atoi (the [DIAG] force switches below)
 
 
 namespace BrnTraffic
@@ -53,6 +53,19 @@ namespace
 
     // .rdata literals this TU reads by value.
     const f32 KF_LANE_CHANGE_DICE_ROLL_NUMERATOR = 1275.0f;   // flt_820BFF68 (255 * 5)
+
+    // [DIAG] NOT IN THE X360 BINARY. Reads a BRN_TRAFFIC_FORCE_* variable as "arm after this
+    // many decision frames"; absent or <= 0 means never. A bare "1" arms on the first frame.
+    s32 EnvDecisionFrameDelay(const char* lpcName)
+    {
+        const char* lpcValue = getenv(lpcName);
+        if (lpcValue == 0)
+        {
+            return 0;
+        }
+        const s32 liFrames = atoi(lpcValue);
+        return (liFrames > 0) ? liFrames : 0;
+    }
 }
 
 // ----------------------------------------------------------------------------
@@ -106,16 +119,39 @@ void TrafficEntityModule::UpdateParams(const BrnTrafficIO::InputBuffer_PostPhysi
     // and mbDEBUGTestSympCrash (:858), the exact overrides the two predicates already honour --
     // so the arms can be exercised and measured meanwhile. Nothing here invents a value or a
     // branch; with the vars unset the binary behaves identically to one without this block.
+    //
+    // ⚠️ THE VALUE IS A DELAY IN DECISION FRAMES (0.1 s each), and it is not decoration.
+    // NeedToTakeActionAgainstJunctionFUP() also gates SpawnNewTraffic @0x82748A40, which returns
+    // immediately when it is true -- so arming the junction-FUP override at frame 0 stops traffic
+    // generation and the pool drains to nothing, leaving nothing to swerve. Measured: a run armed
+    // from frame 0 went from 79 alive params at d=10 to 0 by d=1310. Arm it AFTER traffic has
+    // built up ("400" == 40 s) and there is a population to observe.
     // DELETE-WHEN UpdateJunctionFUP and UpdateCrashSlider have bodies.
     {
-        static const bool sbForceJunctionFUP  = (getenv("BRN_TRAFFIC_FORCE_AVOID") != 0);
-        static const bool sbForceSympCrash    = (getenv("BRN_TRAFFIC_FORCE_SYMPCRASH") != 0);
-        if (sbForceJunctionFUP)
+        static const s32 skiForceJunctionFUPAt = EnvDecisionFrameDelay("BRN_TRAFFIC_FORCE_AVOID");
+        static const s32 skiForceSympCrashAt   = EnvDecisionFrameDelay("BRN_TRAFFIC_FORCE_SYMPCRASH");
+        static s32 siDiagDecisionFrame = 0;
+        ++siDiagDecisionFrame;
+
+        if (skiForceJunctionFUPAt > 0 && siDiagDecisionFrame >= skiForceJunctionFUPAt)
         {
+            if (!mbDEBUGOverrideJunctionFUP && CgsDev::Log::gpDebugPrint != 0)
+            {
+                *CgsDev::Log::gpDebugPrint
+                    << "[T5-force] mbDEBUGOverrideJunctionFUP armed at decision frame "
+                    << siDiagDecisionFrame << " -- the AVOID arm is now reachable, and "
+                    << "SpawnNewTraffic is now off [DELETE-WHEN-STABLE]\n";
+            }
             mbDEBUGOverrideJunctionFUP = true;
         }
-        if (sbForceSympCrash)
+        if (skiForceSympCrashAt > 0 && siDiagDecisionFrame >= skiForceSympCrashAt)
         {
+            if (!mbDEBUGTestSympCrash && CgsDev::Log::gpDebugPrint != 0)
+            {
+                *CgsDev::Log::gpDebugPrint
+                    << "[T5-force] mbDEBUGTestSympCrash armed at decision frame "
+                    << siDiagDecisionFrame << " [DELETE-WHEN-STABLE]\n";
+            }
             mbDEBUGTestSympCrash = true;
         }
     }
