@@ -46,9 +46,9 @@
 // -- BrnProfile.cpp (GetLicenceIssuedDate / SetLicenceIssuedDateAsNow) is mounted too.
 // What remains in the anonymous namespace is only the two un-named GuiCache far members.
 //
-// ⚠ 8 -> 9 IS A CONTROLLER PRESS and the PC input bridge delivers the accept as action 45,
-// not the console's 49 -- see KI_ACTION_CONFIRM_PC below. Recognising only 49 parks the state
-// in PHOTOBOOTH forever (boot-measured).
+// ⚠ 8 -> 9 IS A CONTROLLER PRESS. ([input vocabulary repair 2026-08-27] the accept now
+// ARRIVES as the console's 49 GUI_SELECT -- CgsInputPadsPC was repaired -- so the old
+// KI_ACTION_CONFIRM_PC == 45 compensation is retired.)
 // ===================================================================================
 
 #include "GameSource/Gui/Flow/Screen/States/BrnIntro.h"
@@ -156,13 +156,8 @@ namespace BrnGui
         // committed BrnPauseScreen / BrnInGame slices use.
         const s32 KI_ACTION_CONFIRM = 49;
         const s32 KI_ACTION_BACK    = 50;
-        // FLAG PC-platform input bridge (the same one BrnBootProfile.cpp:44 documents): the
-        // console A-button "select" arrives as action 49, but the PC input reconstruction
-        // (CgsInput::InputPadsPC) maps the accept key (ENTER / SPACE / pad-A) to action 45 --
-        // the action the title SelectionMenu consumes. Boot-measured: with only 49 recognised,
-        // BrnGui::Intro parks in PHOTOBOOTH forever because the confirm press it is waiting for
-        // is delivered as 45. Recognised alongside 49; behaviour is otherwise identical.
-        const s32 KI_ACTION_CONFIRM_PC = 45;
+        // ([input vocabulary repair 2026-08-27] the KI_ACTION_CONFIRM_PC == 45 compensation
+        // is RETIRED: CgsInputPadsPC binds the accept key / pad-A to the console's 49.)
 
         const s32 KI_CHANNEL_GUI_OUT      = 40;  // GuiEventOut
         const s32 KI_CHANNEL_GUI_INTERNAL = 42;  // internal/HUD-component channel
@@ -772,7 +767,7 @@ namespace BrnGui
             // "press A to skip the intro video" path, kept because the console kept it.
             const s32 liVideoAction =
                 reinterpret_cast<const GuiEventControllerAction*>(lpEvent)->miAction;
-            if (liVideoAction == KI_ACTION_CONFIRM || liVideoAction == KI_ACTION_CONFIRM_PC)
+            if (liVideoAction == KI_ACTION_CONFIRM)
             {
                 GuiEventStopVideo lStopVideo;
                 mpStateInterface->OutputGuiEvent(lStopVideo);
@@ -805,7 +800,7 @@ namespace BrnGui
             const s32 liAction =
                 reinterpret_cast<const GuiEventControllerAction*>(lpEvent)->miAction;
 
-            if (liAction == KI_ACTION_CONFIRM || liAction == KI_ACTION_CONFIRM_PC)
+            if (liAction == KI_ACTION_CONFIRM)
             {
                 lbAdvance = mPhotoBoothComponent.Select();
             }
