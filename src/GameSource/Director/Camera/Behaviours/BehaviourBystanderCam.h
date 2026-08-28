@@ -92,62 +92,24 @@ enum EBehaviourTypeBystanderCam
 {
     eBehaviourBystanderCam = 5
 };
-
 // ----------------------------------------------------------------------------
-// The crash slow-motion controller (BehaviourBystanderCam.cpp; DWARF :44). Decides, from the
-// player vehicle's linear-velocity journal, whether to enter / sustain / leave a short slow-mo
-// burst, and drives BrnDirector::CameraEffects' real-time / slo-mo toggles through the camera's
-// time-scale slot. Only Update is bodied by this TU; Construct/IsFirstFrameOfSlomo land inlined.
+// ⭐ THE TWO IMPACT CONTROLLERS MOVED OUT (2026-08-29, crash-camera wave), to
+//     Behaviours/BehaviourBystanderCamImpactControllers.h
+// They are still DWARF-homed in this file (:44 and :75) and nothing about them changed
+// conceptually -- but ArbStateCrashing embeds BOTH by value, its header is #included by the
+// arbitrator state CONTAINER, and the container is reached by TUs that already reach the OTHER
+// reconstruction of this same source file (BrnBehaviourBystanderCam.h, via
+// BrnBehaviourParameterBank.h). Two definitions of BrnDirector::Camera::BehaviourBystanderCam
+// in one TU is a hard C2011, so dragging this whole header in behind the container would have
+// detonated that fork across the build. The controllers share no member with the behaviour, so
+// carving just them out costs nothing and leaves both reconstructions untouched.
+// ⚠️ ImpactShakeController is 20 BYTES there, not the 68 this file used to model
+// (`f32 mfImpactScalar + u8 maImpactEffect[0x40]`, itself FLAGged as a guess): the DWARF gives
+// the class exactly one member, a CameraImpactEffect, and ArbStateCrashing::ApplySlomoAndShake
+// clears exactly five floats over it.
+// The two Update BODIES moved with them, to the matching .cpp partfile -- see the banner in
+// BehaviourBystanderCam.cpp for why they could not stay here.
 // ----------------------------------------------------------------------------
-class ImpactSlomoController
-{
-public:
-    // Seed the controller (declared; the body is inlined at the behaviour's Construct site).
-    void Construct();
-
-    // Advance the slow-mo state machine for one frame. @0x82227230.
-    //   lrCamera                 the camera whose time-scale slot (+0x104) is written
-    //   lfTimestep               this frame's delta (a3, the double-widened f1)
-    //   lrVehicles               the all-vehicle data (a5; GetPlayer reads the player record)
-    //   lrPlayerTracker          the player's vehicle tracker (a6; its velocity journal @+0x90)
-    //   lrDebugPrinter           dev print sink (a7; threaded only)
-    //   lbDontSetRealTime        when set, suppress the "return to real time" write (a8)
-    void Update(Camera& lrCamera, f32 lfTimestep, const AllVehicleData& lrVehicles,
-                const VehicleTracker& lrPlayerTracker, BrnDirector::DebugPrinter& lrDebugPrinter,
-                bool lbDontSetRealTime);
-
-    // True only on the first frame of an active slow-mo burst (declared; inlined elsewhere).
-    bool IsFirstFrameOfSlomo() const { return mbFirstFrameOfSlomo; }
-
-private:
-    f32  mfTimeSinceLastSlomo;   // +0x00  cool-down accumulator since the last burst (DWARF :67; asm: *(this+0))
-    f32  mfTimeInSlomo;          // +0x04  elapsed time inside the current burst (DWARF :68; asm: *(this+4))
-    bool mbFirstFrameOfSlomo;    // +0x08  first-frame latch (DWARF :69; asm: stb @8(this))
-};
-
-// ----------------------------------------------------------------------------
-// The impact camera-shake controller (BehaviourBystanderCam.cpp; DWARF :75). Computes an impact
-// strength from the player's collision force and distance, registers it as a one-shot camera
-// impact, then advances the embedded CameraImpactEffect's shake. Only Update is bodied here.
-// ----------------------------------------------------------------------------
-class ImpactShakeController
-{
-public:
-    void Construct();   // inlined at the behaviour's Construct site
-
-    // Register and advance the impact shake for one frame. @0x82243720.
-    void Update(Camera& lrCamera, f32 lfTimestep, const AllVehicleData& lrVehicles,
-                const VehicleTracker& lrPlayerTracker, Utils::Random& lrRandom,
-                BrnDirector::DebugPrinter& lrDebugPrinter, const VehicleRef& lrVehicleRef);
-
-private:
-    // FLAG: minimal slice -- the embedded CameraImpactEffect's real layout lands with its own TU.
-    //   The shake's current scalar lives in the leading float (asm: *a1, the RegisterImpact +
-    //   CameraShake::Update target); the trailing span carries the effect's own shake state.
-    f32 mfImpactScalar;          // +0x00  current registered-impact scalar (asm: *a1)
-    u8  maImpactEffect[0x40];    // +0x04  CameraImpactEffect interior (opaque; shake @ a1+1)
-};
-
 // ----------------------------------------------------------------------------
 // The bystander-cam behaviour. DWARF BehaviourBystanderCam.h:107 (public Behaviour base).
 // ----------------------------------------------------------------------------

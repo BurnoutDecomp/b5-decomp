@@ -8,7 +8,7 @@
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourGyroCam.h"     // Camera::BehaviourGyroCam
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourLooseAttachment.h" // Camera::BehaviourLooseAttachment
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourAftertouchCrash.h" // Camera::BehaviourAftertouchCrash
-#include "GameSource/Director/Camera/Behaviours/BehaviourBystanderCam.h"   // Camera::ImpactShakeController
+#include "GameSource/Director/Camera/Behaviours/BehaviourBystanderCamImpactControllers.h"   // Camera::ImpactShakeController
 #include "GameSource/Director/MomentController/BrnMomentSelector.h"      // BrnDirector::MomentSelector
 #include "GameSource/Director/Arbitrator/States/BrnSimpleIceTakedownPlayer.h" // TakedownPlayer, SimpleIceTakedownPlayer
 
