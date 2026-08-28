@@ -191,7 +191,11 @@ int HighPassButterworth::Process(AudioProcessContext *ctx)
     const f32 lowGuard = nyquist * KF_MARGIN;                  // v8 = Nyquist * margin
     const f32 highGuard = nyquist - lowGuard;                  // Nyquist * (1 - margin)
 
-    if (cutoff >= lowGuard)
+    // NaN POLARITY (phase-E fix): the console tests the IN-BAND side with fcmpu + a
+    // "not less-than" branch, so an unordered (NaN) cutoff falls to the BYPASS arm. Writing
+    // it as the negated ordered predicate reproduces that; a plain `cutoff >= lowGuard`
+    // would send NaN the other way.
+    if (!(cutoff < lowGuard))
     {
         // Clamp the live cutoff down into the upper guard band.
         if (cutoff > highGuard)
@@ -202,11 +206,14 @@ int HighPassButterworth::Process(AudioProcessContext *ctx)
             mfFilterOrder != mfLastFilterOrder ||
             mfParam3 != mfLastParam3)
         {
-            // KEYSTONE call (see file header + Butterworth.cpp). X360 passes
-            // (bw, ctx, (int)mfFilterOrder, <uninit r6>, 1, mfCutoffFreq, mfParam3) into the
-            // un-decodable coefficient designer; only the grounded `self` is forwarded to the
-            // committed blocked stub, the rest documented but not fabricated.
-            Butterworth::CalculateFilterCoefficients(bw);
+            // The coefficient designer's ABI is now RECOVERED (see Butterworth.cpp): the
+            // console passes r3=bw, f1=cutoff, f2=sampleRate, f3=mfParam3, r5=fctidz(order),
+            // r7=1 (the HIGH-pass selector). Those real arguments are passed here instead of
+            // being dropped; only the designer's BODY is still a keystone (it needs the three
+            // rodata design tables).
+            Butterworth::CalculateFilterCoefficients(
+                bw, mfCutoffFreq, ctx->mpFormat->mfSampleRate, mfParam3,
+                static_cast<s32>(mfFilterOrder), Butterworth::KFILTER_HIGHPASS);
             mfLastCutoffFreq = mfCutoffFreq;   // stfs +0x40
             mfLastFilterOrder = mfFilterOrder; // stfs +0x48  (note: +0x50/mfLastParam3 NOT latched)
         }
@@ -216,7 +223,10 @@ int HighPassButterworth::Process(AudioProcessContext *ctx)
     else
     {
         // Cutoff below the guard band: flush the filter state the first frame it drops out.
-        if (mfLastCutoffFreq >= lowGuard)
+        // NaN POLARITY (phase-E fix): the console skips the clear only on an ORDERED
+        // less-than, so an unordered cached cutoff DOES clear. The negated form preserves
+        // that; the previous `mfLastCutoffFreq >= lowGuard` inverted it for NaN.
+        if (!(mfLastCutoffFreq < lowGuard))
             bw->ClearBuffer();
         mfLastCutoffFreq = mfCutoffFreq; // stfs +0x40
     }

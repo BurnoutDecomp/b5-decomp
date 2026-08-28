@@ -200,26 +200,43 @@ void Butterworth::Filter(AudioProcessContext *ctx)
 }
 
 // -------------------------------------------------------------------------------------
-// CalculateFilterCoefficients @0x82B64698 -- KEYSTONE (NOT reconstructed).
+// CalculateFilterCoefficients @0x82B64698 -- KEYSTONE (body not yet reconstructed), but
+// its ABI is now RECOVERED and its first blocker is GONE.
 //
-// The X360 body is hand-written PowerPC that (1) computes a frequency pre-warp via tan,
-// (2) calls an undecoded helper sub_82C09970 six times to evaluate a transfer-function
-// polynomial, and (3) reads three undecoded rodata coefficient tables (unk_82F87B88,
-// unk_82F87BD8, unk_82F87D68; strides 0x14 / 0x64) indexed by the filter order to build
-// and normalise the cascade coefficients written into the +0x00..+0x24 header.
+// The X360 body (1) computes a frequency pre-warp via tan, (2) calls a helper six times to
+// evaluate the transfer-function polynomial, and (3) reads three rodata coefficient tables
+// (unk_82F87B88, unk_82F87BD8, unk_82F87D68; strides 0x14 / 0x64) indexed by the filter
+// order to build and normalise the cascade coefficients written into the +0x00..+0x24
+// header.
 //
-// Neither sub_82C09970 (an anonymous, fully un-typed leaf whose register-level argument
-// shape IDA cannot recover) nor the three rodata tables are decoded, so a faithful,
-// store-for-store reconstruction is not possible from the available exports. Per the
-// project rule, this is flagged as a keystone rather than fabricated; the surrounding
-// Butterworth bodies (Filter/ClearBuffer/CreateInstance/GetSize) are fully reconstructed
-// and the coefficient header they consume is left for the keystone to fill.
+// ⭐ BLOCKER 1 RESOLVED (phase E 2026-08-28): the "anonymous, fully un-typed helper
+// sub_82C09970" this stub was blocked on is the X360 CRT's double-precision pow(x, y) core
+// -- x in f1, y in f2, double result in f1. Proof (its log2(e)/ln(2) polynomial block, its
+// negative-base integral-exponent classification, its _decomp/_get_exp/_set_exp call tree,
+// and the named pow wrapper at 0x82674CD0 that frsp's its result) is in
+// progress/scratch_dossiers/limiter1_configure_decode_codex.md, which identified it while
+// unblocking Limiter1::Configure. Six pow calls is exactly the shape of a cascaded
+// Butterworth design.
+//
+// ⭐ THE ABI IS ALSO RECOVERED, from the callee together with BOTH callers: r3=self,
+// f1=cutoff, f2=sampleRate, f3=the third shaping attribute, r5=the fctidz'd order,
+// r7=the type selector (0 low-pass, 1 high-pass). r6 is never initialised by either caller
+// and never read by the callee -- that phantom slot was the whole "un-recoverable argument
+// shape" story. The declaration now carries the true parameters, so the two Process bodies
+// pass their real design values through instead of discarding them at the call site.
+//
+// BLOCKER 2 REMAINS: the three rodata design tables are still undecoded, so the polynomial
+// this fills the header with cannot yet be written without fabricating coefficients. A
+// targeted decode is in flight (progress/scratch_dossiers/butterworth_coefficients_decode_codex.md).
+// Until it lands, the header keeps whatever CreateInstance left there and the filter runs
+// with an unconfigured cascade -- documented, not guessed.
 // -------------------------------------------------------------------------------------
-int Butterworth::CalculateFilterCoefficients(Butterworth * /*self*/)
+int Butterworth::CalculateFilterCoefficients(Butterworth * /*self*/, f32 /*afCutoff*/,
+                                             f32 /*afSampleRate*/, f32 /*afShape*/,
+                                             s32 /*aiOrder*/, s32 /*aiType*/)
 {
-    // KEYSTONE: requires decoding sub_82C09970 (@0x82C09970) and the three rodata
-    // Butterworth design tables (unk_82F87B88 / unk_82F87BD8 / unk_82F87D68). Not
-    // reconstructed; see the comment above. No fabricated coefficients are written.
+    // KEYSTONE: still requires the three rodata Butterworth design tables
+    // (unk_82F87B88 / unk_82F87BD8 / unk_82F87D68). No fabricated coefficients are written.
     return 0;
 }
 
