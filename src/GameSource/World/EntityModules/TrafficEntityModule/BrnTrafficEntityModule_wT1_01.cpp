@@ -1855,8 +1855,10 @@ void TrafficEntityModule::PostPhysicsUpdate(CgsModule::IOBufferStack* lpInputBuf
             "PostPhysicsUpdate E_STATE_TEARING_DOWN arm -- the WIPING pass (KillParam over "
             "400 params, RemoveVehicle over 600 vehicles, StaticVehicles_KillParam over 199 "
             "static params), FLUSHING and the WAITING_TO_RESET countdown into Reset(). "
-            "KillParam @? and RemoveVehicle @? have no bodies, so wiping cannot be emitted "
-            "without dropping half of it");
+            "⚠️ NOTE HALF-CORRECTED 2026-08-28: RemoveVehicle @0x8272E370 IS bodied now "
+            "(_wT5_01.cpp) and is live on three other call sites; the remaining blockers are "
+            "KillParam and StaticVehicles_KillParam, so wiping still cannot be emitted "
+            "without dropping part of it");
     }
     break;
 
