@@ -38,9 +38,14 @@ static int LowShelfIir2ProcessThunk(LowShelfIir2 *self, AudioProcessContext *ctx
     return self->Process(ctx);
 }
 
+// The console record's GetSize slot is the ICF-folded Delay::GetSize @0x82B96A38 (the console
+// footprints coincide); the HOST objects differ, so the fold is unfolded here --
+// the slot must size THIS type's host object (the stage-carve audit).
+static int LowShelfIir2GetSizeThunk() { return static_cast<int>(sizeof(LowShelfIir2)); }
+
 static PlugInDescRunTime g_LowShelfIir2Desc = {
     "LowShelfIir2",
-    reinterpret_cast<void *>(&Delay::GetSize),               // @0x82B96A38 (folded/shared)
+    reinterpret_cast<void *>(&LowShelfIir2GetSizeThunk),                                       // @0x82B96A38 (console ICF fold; host unfolded)
     reinterpret_cast<void *>(&LowShelfIir2::CreateInstance), // @0x82BA3198
     0,
     reinterpret_cast<void *>(&LowShelfIir2ProcessThunk),        // @0x82B9E720

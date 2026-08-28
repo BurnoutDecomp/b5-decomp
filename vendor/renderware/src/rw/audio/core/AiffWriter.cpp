@@ -133,7 +133,11 @@ static inline void StoreBE32(u8 *p, u32 v)
 // -------------------------------------------------------------------------------------
 int AiffWriter::GetSize()
 {
-    return 0x50; // li r3, 0x50
+    // X360-LITERAL TRAP (the stage-carve audit, phase-D follow-up): the console
+    // immediate under-allocates the widened host object -- GetSize is the stage
+    // factory's allocation stride, so return host sizeof (the RawPuller2/Send/
+    // SinePlayer precedent).
+    return static_cast<int>(sizeof(AiffWriter));   // X360: li r3, 0x50
 }
 
 // -------------------------------------------------------------------------------------

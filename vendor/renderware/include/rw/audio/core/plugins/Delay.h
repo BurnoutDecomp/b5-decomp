@@ -61,7 +61,8 @@ namespace core
 class System; // owning rwaudio sub-system (PlugIn.h) -- used only through the .cpp
 
 // -------------------------------------------------------------------------------------
-// Delay -- byte-exact X360 layout (X360 sizeof 0xB8 == 184; GetSize is hard-coded).
+// Delay -- the X360 layout (console sizeof 0xB8 == 184; the host widens the base
+// view's pointers, and GetSize returns host sizeof -- the stage-carve audit).
 //
 // One feedback DelayLine (mDelayLine) coloured by one DelayFilter (mFilter), reconfigured by
 // a profiling TimerHandle (mTimer). mState is the crossfade machine: 0 = idle/priming,
@@ -71,7 +72,7 @@ class Delay
 {
 public:
     // ---- factory / v-table surface ----
-    static int    GetSize();                                       // @0x82B96A38 -> 184
+    static int    GetSize();                                       // @0x82B96A38 (X360 184; host sizeof)
     static Delay *Delay_ctor(Delay *self);                         // @0x82B9DD90
     static u32    GetPpuTicksEvent(Delay *self);                   // @0x82B9DDE0
     static int    CreateInstance(Delay *self, f32 *pMaxDelayTime); // @0x82BA2918
@@ -104,7 +105,7 @@ public:
     DelayLine   mDelayLine;               // +0x5C -- delay ring (miReadPosition @+0x84)
     TimerHandle mTimer;                   // +0x98 -- profiling / reconfigure timer (mCpuTicks @+0xA8)
     u8         mbActive;                  // +0xB0 -- the reconfigure timer is registered
-    char       mPadB1[0xB8 - 0xB1];       // +0xB1 (X360 sizeof 0xB8 == 184; GetSize is hard-coded)
+    char       mPadB1[0xB8 - 0xB1];       // +0xB1 (X360 sizeof 0xB8 == 184)
 };
 
 } // namespace core

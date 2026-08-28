@@ -63,7 +63,11 @@ static const s32 KI_SCRATCH_SAMPLES = 704; // li r5, 0x2C0
 // -------------------------------------------------------------------------------------
 int Delay::GetSize()
 {
-    return 184; // li r3, 0xB8
+    // X360-LITERAL TRAP (the stage-carve audit, phase-D follow-up): the console
+    // immediate under-allocates the widened host object -- GetSize is the stage
+    // factory's allocation stride, so return host sizeof (the RawPuller2/Send/
+    // SinePlayer precedent).
+    return static_cast<int>(sizeof(Delay));   // X360: li r3, 0xB8 (184)
 }
 
 // -------------------------------------------------------------------------------------
