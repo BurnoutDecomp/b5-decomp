@@ -36,6 +36,7 @@
 // =====================================================================================
 
 #include "rw/audio/core/SubMixConnector.h"
+#include "rw/audio/core/SubMix.h" // SubMix (the real class; moved out of SubMixConnector.h)
 
 namespace rw
 {
@@ -50,9 +51,9 @@ SubMixConnector *SubMixConnector::Disconnect(SubMixConnector *self, const f32 *f
     if (submix)
     {
         // ---- unlink from the SubMix's doubly-linked connector list ----
-        SubMixConnector *head = submix->mpConnectorHead; // v3 = *(v2+0x28)
+        SubMixConnector *head = submix->GetSendListHead(); // v3 = *(v2+0x28)
         if (self == head)
-            submix->mpConnectorHead = self->mpNext;      // head = this->mpNext
+            submix->SetSendListHead(self->mpNext);       // head = this->mpNext
 
         SubMixConnector **prev = self->mppPrev;          // v4 = *(this+4)
         if (prev)
@@ -64,10 +65,10 @@ SubMixConnector *SubMixConnector::Disconnect(SubMixConnector *self, const f32 *f
         // ---- optional gain fold-back ----
         if (foldBackGains)
         {
-            self->mpSubMix->mbDirty = 1;                 // *(v2+0x8D) = 1
-            for (int i = 0; i < self->mpSubMix->mbNumChannels; ++i)
-                self->mpSubMix->mafChannelGain[i] =
-                    foldBackGains[i] + self->mpSubMix->mafChannelGain[i];
+            self->mpSubMix->mDeClickRequired = 1;        // *(v2+0x8D) = 1
+            for (int i = 0; i < self->mpSubMix->mOutputChannels; ++i)
+                self->mpSubMix->mDeClickValueTotal[i] =
+                    foldBackGains[i] + self->mpSubMix->mDeClickValueTotal[i];
         }
 
         // ---- clear the owning-SubMix / cursor / flag fields ----
