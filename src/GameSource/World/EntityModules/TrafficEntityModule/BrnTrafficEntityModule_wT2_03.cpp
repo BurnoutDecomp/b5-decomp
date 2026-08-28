@@ -399,8 +399,24 @@ void TrafficEntityModule::UpdateParams_CalcDesiredSpeed(
 //   * the slam / extreme-swerve arm @0x827174A0 -- BLOCKER: flt_8300CB50 and the
 //     unk_8300CB40 / unk_8300CA30 / unk_8300CCA0 / unk_8300CB20 lane block, all dyn-init
 //     .data (see scratchpad recovered_constants.md for the thunk-walk recipe).
-//   * switch case 0 @0x82717844 -- BLOCKER: flt_8300C958 / flt_8300C95C, same dyn-init class.
-// DELETE-WHEN those five globals are recovered.
+//   * switch case 0 @0x82717844 -- BLOCKER, and the blocker is now NAMED rather than merely
+//     unknown. The arm is
+//         accel = clamp(flt_8300C958 - mfSpeed, -flt_8300C95C, +flt_8300C95C)
+//     and both constants ARE recoverable in shape but not in value: their dyn-init thunks
+//     (@0x82C66BF0 and @0x82C66C10) compute them as
+//         flt_8300C958 = flt_830180B0 * flt_820BA4E0(80.0f)
+//         flt_8300C95C = flt_830180B0 * flt_820BA86C(2.0f)
+//     so BOTH hang on flt_830180B0 -- itself a .data slot another translation unit's dynamic
+//     initialiser fills, which reads 0.0 in the image and is therefore NOT its runtime value.
+//     ⛔ Do NOT take the image's 0.0: a zero here makes the arm return a constant 0
+//     acceleration, which is the identity of the expression, not its meaning. Recover
+//     flt_830180B0's OWN thunk first. (Recipe: run idat headless over the ARTIST .i64, walk
+//     XrefsTo the address, and disassemble the one xref that is not inside a function -- the
+//     dyn-init thunks are all unnamed blr-terminated fragments around 0x82C6xxxx.)
+//   * The lane block for the OTHER gate in this file is no longer unknown:
+//         unk_8300CBB0 == { 50.0f, 0.707099974f, 0.0f, 0.0f }  (thunk @0x82C66360)
+//     built from flt_820BA5C0(50.0) and flt_8200D514(0.70710) with two zero lanes.
+// DELETE-WHEN flt_830180B0 is recovered.
 // ----------------------------------------------------------------------------
 f32 TrafficEntityModule::UpdateParams_CalcAcceleration(
         u32 luParam,
@@ -745,10 +761,14 @@ void TrafficEntityModule::UpdateParams_HandleLaneChanges(u32 luParam,
     if (GetParamPlan(luParam, 0)->muType == ParamPlan::E_TYPE_CHANGE_LANE &&
         lpParam->miBehaviour == Param::KI_BEHAVIOUR_NORMAL)
     {
+        // unk_8300CBB0 IS RECOVERED as of 2026-08-28 -- { 50.0f, 0.707099974f, 0.0f, 0.0f },
+        // dyn-init thunk @0x82C66360 from flt_820BA5C0(50.0) and flt_8200D514(0.70710). What is
+        // still missing is the guard's own body (0x82725A08 onward), not its constant.
         static bool sbLogged = false;
         LogMissingLeg(sbLogged,
-                      "UpdateParams_HandleLaneChanges @0x82725880 carry-out -- unk_8300CBB0, the "
-                      "unrecovered dyn-init .data lane block the proximity guard reads");
+                      "UpdateParams_HandleLaneChanges @0x82725880 carry-out -- the proximity "
+                      "guard body is unwritten; its lane block unk_8300CBB0 is now recovered "
+                      "as { 50.0f, 0.707099974f, 0.0f, 0.0f }");
     }
 }
 
@@ -960,16 +980,34 @@ void TrafficEntityModule::UpdateParams_PrecalcBehaviourParams(u32 luParam,
     Param*               lpParam      = &maParams[luParam];
     ParamNeedToSlowData* lpNeedToSlow = &maParamNeedToSlowData[luParam];
 
-    if (lpParam->miBehaviour == 0)
+    // 0x82717CD8..0x82717D50 -- the sympathetic-crash HOLD. A param that UpdateParams_TryStart
+    // SympatheticCrashing put into SLOWING_FOR_CRASH keeps that behaviour, and its current stop
+    // distance and target speed, for as long as its latched target still resolves to a live
+    // position; the moment it does not, the param drops back to NORMAL and re-enters the fuzzy
+    // scoring below. Without this arm the crash decision was overwritten by NORMAL on the very
+    // next decision frame, so it could never last more than one frame.
+    //
+    // [crash-surface wave 2026-08-28] THE GATE THAT STOOD HERE WAS STALE. It read
+    // "GetSympCrashingTargetPos @0x82708C10 is an ARTIST export hole (no body)" -- but the
+    // per-function export exists (77 asm lines) and every member it reads was already homed.
+    // Body now in _wT2_06.cpp.
+    //
+    // ⚠️ THE OUT-POSITION IS DELIBERATELY DISCARDED. The console passes a stack Vector3
+    // (var_160) and never reads it back: `b loc_827185AC` leaves for the function tail straight
+    // after the three stores. Only the BOOL matters here -- the call is a liveness test, not a
+    // steering input. Do not "fix" this into an aim point.
+    if (lpParam->miBehaviour == Param::KI_BEHAVIOUR_SLOWING_FOR_CRASH)
     {
-        // GATE: the sympathetic-crash arm @0x82717CE4..0x82717D4C.
-        // BLOCKER: GetSympCrashingTargetPos @0x82708C10 is an ARTIST export hole (no body).
-        // DELETE-WHEN it lands. This takes its false arm, which is the console's own path
-        // for a param with no reachable crash target.
-        static bool sbLoggedSymp = false;
-        LogMissingLeg(sbLoggedSymp,
-                      "UpdateParams_PrecalcBehaviourParams @0x82717C48 sympathetic-crash arm -- "
-                      "GetSympCrashingTargetPos @0x82708C10 is an export hole with no body");
+        Vector3 lTargetPos;
+        if (GetSympCrashingTargetPos(lpParam->mSympCrashTarget, &lTargetPos))
+        {
+            CGS_ASSERT(mbAllowDivergentBehaviour, "AllowDivergentBehaviour()");   // .cpp 11415
+
+            lpNeedToSlow->miBehaviour   = Param::KI_BEHAVIOUR_SLOWING_FOR_CRASH; // 0x82717D38
+            lpNeedToSlow->mfStopDist    = lpParam->mfStopDist;                   // 0x82717D40
+            lpNeedToSlow->mfTargetSpeed = lpParam->mfTargetSpeed;                // 0x82717D48
+            return;                                                             // 0x82717D4C
+        }
 
         lpNeedToSlow->miBehaviour = Param::KI_BEHAVIOUR_NORMAL;   // 0x82717D50
     }

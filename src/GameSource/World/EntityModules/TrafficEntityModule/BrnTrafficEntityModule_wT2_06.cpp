@@ -103,6 +103,11 @@ namespace
     const u32 KU_RACE_CAR_OWNER_PACKED     = 0x01000000u;
     const u32 KU_NUM_BITS_FOR_ENTITY_NUM   = 14;
 
+    // The same two owner bytes, unpacked (GetSympCrashingTargetPos @0x82708C24 `srwi r11,id,24`
+    // then `cmplwi 2` / `cmplwi 1`).
+    const u32 KU_ENTITY_OWNER_RACE_CAR = 1;
+    const u32 KU_ENTITY_OWNER_TRAFFIC  = 2;
+
     // A showtime list entry only becomes a crash magnet with this bit set
     // (`lbz r11, 4(r29) ; rlwinm r11,r11,0,30,30` @0x82737C40). The producer,
     // SpawnShowtimeTraffic @0x82743038, has no body in this tree yet, and nothing else in the
@@ -144,6 +149,55 @@ namespace
         }
         return CgsDev::Log::gpDebugPrint;
     }
+}
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::GetSympCrashingTargetPos  @0x82708C10  (.cpp 16518)
+//
+// Resolves the id TryStartSympatheticCrashing latched in Param::mSympCrashTarget back to a
+// world position -- the step that turns "I decided to chain off that crash" into somewhere to
+// aim. Two owners only, split off the id's high byte:
+//   owner 2 (traffic, MakeTrafficEntityId's byte): the target's own vehicle transform, but only
+//           while that vehicle is still alive;
+//   owner 1 (race car): the per-frame cache CacheRaceCarState fills -- mabRaceCarActive gates
+//           maActiveRaceCarPositions, both indexed by EActiveRaceCarIndex.
+// Anything else is the console's streamed assert and a zeroed out-slot.
+//
+// PARKED AS AN "ARTIST EXPORT HOLE WITH NO BODY" in _wT2_03.cpp's sympathetic arm. That was
+// STALE: 0x82708C10 has a per-function export, 77 asm lines, and every member it reads was
+// already homed. The header's `void f(u32, void*)` declaration was wrong too -- see there.
+// ----------------------------------------------------------------------------
+bool TrafficEntityModule::GetSympCrashingTargetPos(EntityId lTargetEntityId,
+                                                   Vector3* lpOutPos) const
+{
+    // `srwi r11, r28, 24` then `extrwi r30, r28, 14, 8` -- the same 8/14/10 split
+    // MakeTrafficEntityId packs.
+    const u32 luOwner = lTargetEntityId.muValue >> 24;
+    const u32 luIndex = EntityIdToEntityIndex(lTargetEntityId);
+
+    if (luOwner == KU_ENTITY_OWNER_TRAFFIC)
+    {
+        if (!GetVehicle(luIndex)->IsAlive())   // `lbz r11, 5(vehicle)` bit 0
+        {
+            return false;
+        }
+        *lpOutPos = GetVehicleTransform(luIndex).Pos();   // transform +0x30
+        return true;
+    }
+
+    if (luOwner == KU_ENTITY_OWNER_RACE_CAR)
+    {
+        if (!mRaceCarState.mabRaceCarActive[luIndex])              // +0x716C0 + index
+        {
+            return false;
+        }
+        *lpOutPos = mRaceCarState.maActiveRaceCarPositions[luIndex];// +0x716D0 + 16*index
+        return true;
+    }
+
+    CGS_ASSERT(false, "Unknown type of symp. crash target. Entity id=");   // .cpp 16518
+    lpOutPos->SetZero();
+    return false;
 }
 
 // ----------------------------------------------------------------------------
