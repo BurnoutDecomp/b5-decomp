@@ -25,6 +25,13 @@
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"  // the 8 environment CPU monitors
 #include "GameShared/GameClasses/Sound/Playback/RWAC/CgsGenericRwacFactory.h" // GetDefaultRwacSystem + RwacSystemLock (phase B4)
 #include "GameShared/GameClasses/Sound/Playback/AEMS/CgsAemsFactory.h"        // AemsFactory::Create (the stage-3 create, cascade slice 2)
+#include "GameShared/GameClasses/Sound/Playback/Splicer/CgsSplicerFactory.h"  // SplicerFactory::Create (the stage-3 create, cascade slice 3)
+
+// The stage-3 stream-provider interface global (X360 off_82FFBA0C): Prepare
+// publishes the module's IStreamProvider sub-object (console `= &this->+0x228`)
+// after the third factory create; the SndPlayer1_CgsStreamMod side reads it.
+// Defined here (the publisher's TU); C linkage keeps the console symbol name.
+extern "C" CgsSound::Playback::IStreamProvider* off_82FFBA0C = 0;
 #include "GameShared/GameClasses/System/Resource/CgsResourceIOEvents.h"    // OpenReadStreamRequest / ReadStreamEvent (phase B4)
 #include "GameShared/GameClasses/System/Resource/CgsResourceID.h"          // ID::HashString (DoServiceContentLoadRequest)
 #include "GameShared/GameClasses/System/Resource/CgsResourcePtr.h"         // BaseResourcePtr (the type-4 response rebind)
@@ -261,11 +268,27 @@ bool Module::Prepare(rw::IResourceAllocator* apAllocator,
             mhAemsFactory = Handle<Factory>(lhAemsFactory.GetObject());
             CGS_ASSERT(!!mhAemsFactory, "mhAemsFactory");
         }
-        // [3/3] FLAG deferred: SplicerFactory::Create @0x826DB130 (assert
-        // cpp:219) plus the off_82FFBA0C interface-global publish (`= &this->
-        // +0x228`) that follows it -- the Splicer ctor slice next (SpliceManager
-        // + VoicePool::Prepare @0x8268AC40, dossier re-exported; full decode in
-        // progress/scratch_dossiers/aems_factory_cascade_codex.md).
+        // [3/3] SPLICER -- REAL (SplicerFactory::Create @0x826DB130, cascade
+        // slice 3): spec {the RWAC handle, 128, 32384, 0}; the temp assigned
+        // into +0x2264 and asserted (cpp:219). The console then releases the
+        // temp and the spec's RWAC handle (the interim plain-store model manages
+        // both refs beside the stores, the [1/3]-[2/3] precedent), and finally
+        // PUBLISHES the module's IStreamProvider sub-object (+0x228) to the
+        // off_82FFBA0C interface global -- the SndPlayer1_CgsStreamMod side's
+        // stream-provider hook.
+        {
+            SplicerFactorySpec lSplicerSpec;
+            lSplicerSpec.mpRwacFactory       = mhRwacFactory.GetObject();
+            lSplicerSpec.mu32EntityCount     = 128;
+            lSplicerSpec.mu32DataSize        = 32384;
+            lSplicerSpec.mu32StringTableSize = 0;
+            Handle<SplicerFactory> lhSplicerFactory =
+                SplicerFactory::Create(*mhEnvironment, lSplicerSpec);
+            mhSplicerFactory = Handle<Factory>(lhSplicerFactory.GetObject());
+            CGS_ASSERT(!!mhSplicerFactory, "mhSplicerFactory");
+
+            off_82FFBA0C = static_cast<IStreamProvider*>(this);
+        }
 
         // The stream-buffer carve (real): LinearMalloc-backed when supplied
         // (size = GetSize()/3, 2 blocks, main-allocator flag OFF -> Malloc), else
