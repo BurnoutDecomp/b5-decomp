@@ -176,12 +176,10 @@ namespace BrnGui
     //      GetRoadRuleShotOpponentARCI) landed in BrnGuiCache_wS1.cpp.
 
     // ---- MapManager ctor gate (mount-closure verify 2026-08-26) -----------------------
-    //      The by-value SatNav components reach BrnGui::MapManager::MapManager(); its real
-    //      TU BrnMapManager.cpp CANNOT mount (two undefined hand-declared CRT-shaped helpers,
-    //      see the cluster banner above). Inert is safe on the same RACE_MAIN-never-entered
-    //      argument; members default-construct. DELETE-WHEN BrnMapManager.cpp is rewritten
-    //      with real array construction and mounted.
-    MapManager::MapManager() {}
+    //      MapManager::MapManager() SCAFFOLD RETIRED 2026-08-27 (map arm): BrnMapManager.cpp
+    //      was rewritten member-by-name (the two undefined CRT-shaped helper externs died
+    //      with the raw-offset ctor) and is MOUNTED -- its real ctor + Construct + RecvEvent
+    //      now link from there. Re-adding a body here is LNK2005.
 
     // ---- CRASHEDSTNT: SCAFFOLD RETIRED 2026-08-27 (crashed-stunt HUD wave) -------------
     // The real TU is MOUNTED: BrnCrashedStuntHudState.cpp carries the recovered 4-entry

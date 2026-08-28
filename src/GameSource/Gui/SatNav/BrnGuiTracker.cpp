@@ -8,6 +8,7 @@
 // the accessor returns a pointer to the named record element.
 // ===================================================================================
 #include "GameSource/Gui/SatNav/BrnGuiTracker.h"
+#include "GameSource/Gui/BrnGuiCache.h"              // [map arm] GuiCache::GetWorldCameraPosition (RecEvent case 64)
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 
 namespace BrnGui
@@ -66,40 +67,213 @@ namespace BrnGui
     //                               stw   r11, 4(r3)       -> miTrackerCount     = 0
     //   li    r10, -1            /  stwx  r10, r3, 0x65060 -> word @+0x65060     = -1
     //
-    // Notes on the two spans this has to reach through, both held opaque by the owning
-    // header (BrnGuiTracker.h), which recovered only the offsets its three accessors read:
-    //
-    //  * The three `stb 0` at +0x00/+0x01/+0x02 land in maHeadReserved. They are three
-    //    separate byte flags, not a vtable pointer: the X360 writes single bytes into them,
-    //    and IsRouteInfoAvailable reads a fourth byte flag (mbHasRoute) immediately after at
-    //    +0x03. ClearTracker deliberately does NOT clear mbHasRoute -- the has-route flag
-    //    survives the clear.
-    //  * The `stw -1` at +0x65060 lands inside maRouteInfoTail, the reserved span between
-    //    the route-info count word (+0x65050) and the route distance (+0x65068). -1 is the
-    //    same "used before Construct/Clear was called" sentinel the CgsArray count carries
-    //    (see the assert in IsRouteInfoAvailable), so this word is very likely a second
-    //    array's count being returned to the unconstructed state -- but no X360 reader of
-    //    +0x65060 is recovered, so it is left unnamed rather than given an invented name.
-    //    It is written through the named reserved member; -1 is all-ones, so the byte-wise
-    //    store reproduces the 32-bit store exactly on either host endianness.
+    // [map arm 2026-08-27] the head byte trio and the +0x65060 word are NAMED now (the
+    // RecEvent decode identified them -- see the header banner): the trio is
+    // mbTrackingActive / mbRouteDataPending / mu8SetTrackerFlag, and +0x65060 is
+    // miCurrentlyTrackedIndex (-1 == none, exactly this clear's sentinel). ClearTracker
+    // deliberately does NOT clear mbHasRoute -- the has-route flag survives the clear.
     void GuiTracker::ClearTracker()
     {
         mfRouteDistance  = 0.0f;   // stfsx flt_82001CC0 (0.0f), r3, 0x65068
         miRouteInfoCount = 0;      // stwx  0,  r3, 0x65050
 
-        maHeadReserved[0] = 0;     // stb   0,  0(r3)
-        maHeadReserved[1] = 0;     // stb   0,  1(r3)
-        maHeadReserved[2] = 0;     // stb   0,  2(r3)
+        mbTrackingActive   = 0;    // stb   0,  0(r3)
+        mbRouteDataPending = 0;    // stb   0,  1(r3)
+        mu8SetTrackerFlag  = 0;    // stb   0,  2(r3)
 
         miTrackerCount = 0;        // stw   0,  4(r3)
 
-        // stwx -1, r3, 0x65060 -- see the note above.
-        const s32 KI_TAIL_SENTINEL_BYTE = 0x65060 - 0x65054;   // offset within maRouteInfoTail
-        static_assert(KI_TAIL_SENTINEL_BYTE + 4 <= sizeof(maRouteInfoTail),
-                      "the +0x65060 word lies inside the reserved route-info span");
-        for (s32 liByte = 0; liByte < 4; ++liByte)
+        miCurrentlyTrackedIndex = -1;   // stwx -1, r3, 0x65060
+    }
+
+    // =============================================================================================
+    // [map arm 2026-08-27] the tracker's event consumer + the two route builders, decompiled
+    // from the X360 bodies (RecEvent @0x82501D28, GenerateRouteData @0x824FA008,
+    // RegenerateRouteData @0x824F41E0). The 232 producers live in BrnGuiCache_wMap.cpp.
+    // =============================================================================================
+
+    // @ 0x82501D28. The console streams its null-event diagnostic through the global assert
+    // buffer; lowered to the house static-text sequence per the project convention.
+    void GuiTracker::RecEvent(const void* lpEvent, s32 liEventId)
+    {
+        CGS_ASSERT(lpEvent != 0, "Invalid event pointer");   // BrnGuiTracker.cpp:104
+
+        switch (liEventId)
         {
-            maRouteInfoTail[KI_TAIL_SENTINEL_BYTE + liByte] = 0xFFu;
+        case 64:
+        {
+            // The per-frame GuiCache pointer publish: refresh the player's tracker record
+            // from the cache's world-camera lane, and latch the cache pointer once.
+            const GuiCache* const* lppCache =
+                reinterpret_cast<const GuiCache* const*>(lpEvent);
+            CGS_ASSERT(*lppCache != 0, "lpcacheEvent->mpCachePointer");   // :189
+            const GuiCache* lpCache = *lppCache;
+            CGS_ASSERT(lpCache != 0, "lpPlayerInfo");                     // :192 (the +19168 view)
+
+            // X360: stw 0 @+0xC10 (the player record's head word), then stvx the cache's
+            // world-camera lane (cache+0x4AE0) into the record's position lane @+0xC20.
+            mPlayersTrackerInfo.maHeadStorage[0] = 0;
+            mPlayersTrackerInfo.maHeadStorage[1] = 0;
+            mPlayersTrackerInfo.maHeadStorage[2] = 0;
+            mPlayersTrackerInfo.maHeadStorage[3] = 0;
+            {
+                const Vector4& lv4Camera = lpCache->GetWorldCameraPosition();
+                mPlayersTrackerInfo.mv3Position.x = lv4Camera.x;
+                mPlayersTrackerInfo.mv3Position.y = lv4Camera.y;
+                mPlayersTrackerInfo.mv3Position.z = lv4Camera.z;
+                mPlayersTrackerInfo.mv3Position.w = lv4Camera.w;
+            }
+            if (mpGuiCache == 0)
+                mpGuiCache = const_cast<GuiCache*>(lpCache);
+            break;
         }
+
+        case 165:
+        {
+            // Checkpoint reached: only while tracking is live, and only when the event's
+            // landmark index matches the CURRENTLY tracked record's.
+            if (mbTrackingActive == 0)
+                break;
+            const u16 luEventLandmarkIndex = *reinterpret_cast<const u16*>(lpEvent);
+            const s32 liTracked = miCurrentlyTrackedIndex;
+            if (luEventLandmarkIndex !=
+                static_cast<u16>(maTrackerRecords[liTracked].miLandmarkIndex))
+                break;
+
+            miCurrentlyTrackedIndex = liTracked + 1;
+            if (miCurrentlyTrackedIndex != miTrackerCount)
+            {
+                GenerateRouteData();   // the shared mid-route rebuild (X360 LABEL_19)
+            }
+            else
+            {
+                // The FINAL checkpoint: drop the whole tracked state.
+                mbTrackingActive        = 0;
+                mbRouteDataPending      = 0;
+                mu8SetTrackerFlag       = 0;
+                miTrackerCount          = 0;
+                miRouteInfoCount        = 0;
+                miCurrentlyTrackedIndex = -1;
+                mfRouteDistance         = 0.0f;
+            }
+            break;
+        }
+
+        case 211:
+        {
+            // One route-information leg: copy it whole into its tracker-stack slot,
+            // accumulate the distance, and build the route once every leg is in.
+            const RouteInformation* lpLeg =
+                reinterpret_cast<const RouteInformation*>(lpEvent);
+            CGS_ASSERT(lpLeg->miEventId >= 0 && lpLeg->miEventId < KI_TRACKER_STACK_SIZE,
+                       "lpRouteInformaton->miEventId >= 0 && lpRouteInformaton->miEventId < KI_TRACKER_STACK_SIZE");   // :166
+            maRouteLegs[lpLeg->miEventId] = *lpLeg;   // the console's 5136-byte memcpy
+            ++miNumRouteLegsReceived;
+            mfRouteDistance += lpLeg->mfDistance;
+            if (miNumRouteLegsReceived >= miTrackerCount - 1)
+                GenerateRouteData();
+            else
+                mbRouteDataPending = 1;
+            break;
+        }
+
+        case 232:
+        {
+            // The SetTracker publish: adopt the whole tracked-record stack.
+            const SetTrackerEvent* lpSet = reinterpret_cast<const SetTrackerEvent*>(lpEvent);
+            if (static_cast<u32>(lpSet->miNumTrackedItems) >=
+                static_cast<u32>(KI_TRACKER_STACK_SIZE))
+            {
+                CGS_ASSERT(false, "Invalid number of trackers");   // :112 (streamed on console)
+            }
+            if (lpSet->miNumTrackedItems != 0)
+            {
+                miTrackerCount          = lpSet->miNumTrackedItems;
+                miNumRouteLegsReceived  = 0;
+                mbTrackingActive        = 1;
+                mu8SetTrackerFlag       = lpSet->mu8Flag;
+                mbRouteDataPending      = (lpSet->miNumTrackedItems > 1) ? 1 : 0;
+                mbHasRoute              = 0;
+                mfRouteDistance         = 0.0f;
+                miCurrentlyTrackedIndex = lpSet->miCurrentlyTrackedIndex;
+                for (s32 liRecord = 0; liRecord < lpSet->miNumTrackedItems; ++liRecord)
+                    maTrackerRecords[liRecord] = lpSet->maEntries[liRecord];   // 48B copies
+            }
+            else
+            {
+                mbTrackingActive        = 0;
+                mbRouteDataPending      = 0;
+                mu8SetTrackerFlag       = 0;
+                miTrackerCount          = 0;
+                miRouteInfoCount        = 0;
+                mfRouteDistance         = 0.0f;
+                miCurrentlyTrackedIndex = -1;
+            }
+            break;
+        }
+
+        case 233:
+            muPendingTargetSectionId = *reinterpret_cast<const s32*>(lpEvent);
+            RegenerateRouteData();
+            break;
+
+        default:
+            break;
+        }
+    }
+
+    // @ 0x824FA008. Flatten every received leg's polyline into the route-point array.
+    // The console appends through Array<rw::math::vpu::Vector3, 5120>::Append; the raw
+    // carve here reproduces its store + count bump, with the capacity assert the Array
+    // family fires (CgsArray.h precedent).
+    void GuiTracker::GenerateRouteData()
+    {
+        const s32 liNumLegs = miNumRouteLegsReceived;
+        miRouteInfoCount = 0;
+        for (s32 liLeg = 0; liLeg < liNumLegs; ++liLeg)
+        {
+            const RouteInformation& lrLeg = maRouteLegs[liLeg];
+            for (s32 liPoint = 0; liPoint < lrLeg.miNumPoints; ++liPoint)
+            {
+                CGS_ASSERT(miRouteInfoCount < KI_ROUTE_POINT_CAPACITY,
+                           "miRouteInfoCount < KI_ROUTE_POINT_CAPACITY");
+                maRouteInfoPoints[miRouteInfoCount] = lrLeg.maPoints[liPoint];
+                ++miRouteInfoCount;
+            }
+        }
+        mbRouteDataPending = 0;
+        mbHasRoute         = 1;
+    }
+
+    // @ 0x824F41E0. Rebuild the tracked stack from the CURRENT position: stamp the player
+    // record with the pending target section id, make it record 0, follow it with the
+    // records not yet reached, and reset the leg counter for the fresh route build.
+    void GuiTracker::RegenerateRouteData()
+    {
+        // The console snapshots the whole 64-record stack first (the in-place compaction
+        // below reads from the snapshot).
+        TrackerInformation laRecordsCopy[KI_TRACKER_STACK_SIZE];
+        for (s32 liRecord = 0; liRecord < KI_TRACKER_STACK_SIZE; ++liRecord)
+            laRecordsCopy[liRecord] = maTrackerRecords[liRecord];
+
+        mPlayersTrackerInfo.muTargetSectionId = static_cast<u32>(muPendingTargetSectionId);
+        CGS_ASSERT(mPlayersTrackerInfo.muTargetSectionId != 0x7FFFu,
+                   "mPlayersTrackerInfo.muTargetSectionId != BrnWorld::KI_INVALID_SECTION_INDEX");   // :280
+
+        maTrackerRecords[0] = mPlayersTrackerInfo;
+
+        CGS_ASSERT(miCurrentlyTrackedIndex != -1, "miCurrentlyTrackedIndex != -1");   // :284
+
+        const s32 liRemaining = miTrackerCount - miCurrentlyTrackedIndex;
+        miTrackerCount = 1;
+        for (s32 liRecord = 0; liRecord < liRemaining; ++liRecord)
+        {
+            maTrackerRecords[1 + liRecord] = laRecordsCopy[miCurrentlyTrackedIndex + liRecord];
+            ++miTrackerCount;
+        }
+
+        miCurrentlyTrackedIndex = 1;
+        mbRouteDataPending      = 1;
+        miNumRouteLegsReceived  = 0;
     }
 }

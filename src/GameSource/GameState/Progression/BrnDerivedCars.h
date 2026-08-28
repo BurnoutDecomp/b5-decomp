@@ -38,20 +38,18 @@
 //     GetLiveryType (inlined)                -> h:232 (via AddCar @0x8237A970 and
 //                                               UnlockDerivedCarCollection @0x8237AD70)
 //     DEBUG_PrintArray           @0x8236ACE8 -> h:248
-// So there is NO BrnDerivedCars.cpp to link against, and the four declare-only members
-// below will stay unresolved at link until someone writes their bodies HERE.
-// Only GetLiveryType is reconstructed in this pass (its body needs nothing outside this
-// header). The two Construct builders are NOT, deliberately: their bodies read fields of
-// BrnResource::VehicleListEntry that the committed VehicleListEntry.h does not expose yet
-// (the parent-car id at entry+0x08, the livery-kind byte at entry+0xE9 behind an
-// IsLiveryColour() predicate) and that header is owned elsewhere. See the note on
-// ELiveryType at the bottom of this file before adding them.
+// So there is NO BrnDerivedCars.cpp to link against; bodies land HERE.
+// [map arm 2026-08-27] BOTH Construct builders are now bodied in this header:
+// VehicleListEntry.h grew the faces they needed (IsLiveryColour() over the corrected
+// ELiveryType values; GetParentId/GetLiveryType were already committed), and the
+// BrnMainMapLinkGates.cpp stand-in for ConstructPatternLiveryList died with the change.
+// Still declaration-only: GetParentId (element-0 inference unproven, see its note) and
+// DEBUG_PrintArray (needs the CgsDev::Message stream helpers; no caller in the tree).
 //
-// CONSUMERS presently blocked on this type: BrnGui::PreRaceFlyByState::
-// SetBurningRouteDescription @0x824C76D8 (wave J), plus the two committed HONEST PARTIALs
-// that name it -- BrnCarSelectManager.cpp:473 and BrnProgressionManager.cpp:345. Those two
-// "DELETE-WHEN BrnDerivedCars.h lands" notes must STAY: only the declarations landed here,
-// the ~600 instructions of builder body they describe are still missing.
+// CONSUMERS now servable: BrnGui::PreRaceFlyByState::SetBurningRouteDescription
+// @0x824C76D8 (wave J), plus the two committed HONEST PARTIALs that name this class --
+// BrnCarSelectManager.cpp:473 and BrnProgressionManager.cpp:345 (their notes can retire
+// when those TUs are next touched).
 // ===================================================================================
 
 #include <cstddef>   // offsetof (DerivedCarArray::_AssertLayout)
@@ -61,11 +59,10 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"       // CGS_ASSERT (GetLiveryType bounds guard)
 #include "GameShared/GameClasses/Containers/CgsArray.h"  // Array<T,N> -- the base AND the member
 #include "SharedClasses/DataLists/VehicleListEntry.h"    // BrnResource::VehicleListEntry::ELiveryType
-
-namespace BrnResource
-{
-    struct VehicleList;   // SharedClasses/DataLists/VehicleList.h (full home) -- by pointer only
-}
+// [map arm 2026-08-27] the two builder bodies below walk the vehicle list, so the full
+// type is required -- consistent with the original header-resident bodies (the CGS_ASSERT
+// __FILE__ evidence in the banner), which could not have compiled against a fwd-decl.
+#include "SharedClasses/DataLists/VehicleList.h"         // BrnResource::VehicleList (the builder walks)
 
 namespace BrnProgression
 {
@@ -81,20 +78,111 @@ namespace BrnProgression
     struct DerivedCarArray : public Array<CgsID, KU_MAX_AMOUNT_OF_DERIVED_CARS>
     {
         // DWARF h:56, body h:~90-140 IN THIS HEADER, emitted out-of-line @0x82374F60.
-        // Builds the colour-livery family of lParentOrSiblingCarId: resolve the entry,
-        // hop to its parent when the entry is itself a colour livery, clear both count
-        // words, Append the parent, then Append every vehicle-list entry whose parent id
-        // matches AND whose livery kind is one of the colour kinds. Parameter names are
-        // the X360 assert strings (h:93 "lpVehicleList", h:94
-        // "lParentOrSiblingCarId != kCGSID_NULL").
+        // [map arm 2026-08-27] BODIED (the BrnMainMapLinkGates stand-in died with it).
+        // Builds the colour-livery family of lParentOrSiblingCarId: resolve the seed
+        // entry, hop to its parent when the seed is itself a colour livery, clear both
+        // parallel arrays, Append the parent (id + its own livery kind), then Append
+        // every vehicle-list entry whose parent id matches AND whose livery kind is in
+        // the colour set. Parameter/assert text verbatim from the X360 (h:93/94/97/112/
+        // 120/130); the console file path in those asserts is the original P4 one -- the
+        // house CGS_ASSERT carries the expression strings only.
         void ConstructColourLiveryList(const BrnResource::VehicleList* lpVehicleList,
-                                       const CgsID& lParentOrSiblingCarId);
+                                       const CgsID& lParentOrSiblingCarId)
+        {
+            CGS_ASSERT(lpVehicleList != 0, "lpVehicleList");                          // h:93
+            CGS_ASSERT(lParentOrSiblingCarId != 0, "lParentOrSiblingCarId != kCGSID_NULL");   // h:94
+
+            // Resolve the seed entry (index < 0 and a null row both fire h:97).
+            const s32 liSeedIndex = lpVehicleList->GetVehicleIndex(lParentOrSiblingCarId);
+            const BrnResource::VehicleListEntry* lpVehicleListEntry =
+                (liSeedIndex >= 0) ? lpVehicleList->GetVehicleData(liSeedIndex) : 0;
+            CGS_ASSERT(lpVehicleListEntry != 0, "lpVehicleListEntry");                // h:97
+
+            // A colour-livery seed hops to its parent; a base car IS the parent.
+            const CgsID lParentCarId = lpVehicleListEntry->IsLiveryColour()
+                                           ? lpVehicleListEntry->GetParentId()
+                                           : lParentOrSiblingCarId;
+            CGS_ASSERT(lParentCarId != 0, "lParentCarId != kCGSID_NULL");             // h:112
+
+            Clear();                 // the CgsID array count   (X360 `*(this+64)=0`)
+            maLiveryTypes.Clear();   // the parallel kind array (X360 `*(this+104)=0`)
+
+            // Resolve the PARENT's entry (h:120), then seed both arrays with it.
+            const s32 liParentIndex = lpVehicleList->GetVehicleIndex(lParentCarId);
+            const BrnResource::VehicleListEntry* lpParentEntry =
+                (liParentIndex >= 0) ? lpVehicleList->GetVehicleData(liParentIndex) : 0;
+            CGS_ASSERT(lpParentEntry != 0, "lpVehicleListEntry");                     // h:120
+            Append(lParentCarId);
+            maLiveryTypes.Append(static_cast<BrnResource::VehicleListEntry::ELiveryType>(
+                lpParentEntry->GetLiveryType()));
+
+            // Every entry parented on lParentCarId whose kind is in the colour set.
+            for (s32 liEntry = 0;
+                 liEntry < lpVehicleList->GetVehicleCount(); ++liEntry)
+            {
+                const BrnResource::VehicleListEntry* lpEntry =
+                    lpVehicleList->GetVehicleData(liEntry);
+                CGS_ASSERT(lpEntry != 0, "lpVehicleListEntry");                       // h:130
+                if (lpEntry->GetParentId() == lParentCarId && lpEntry->IsLiveryColour())
+                {
+                    Append(lpEntry->GetId());
+                    maLiveryTypes.Append(static_cast<BrnResource::VehicleListEntry::ELiveryType>(
+                        lpEntry->GetLiveryType()));
+                }
+            }
+        }
 
         // DWARF h:61, body h:~156-205 IN THIS HEADER, emitted out-of-line @0x823751C0.
-        // Same walk for the PATTERN livery kind; additionally asserts the seed entry is
-        // not a colour livery (h:164 "!lpVehicleListEntry->IsLiveryColour()").
+        // [map arm 2026-08-27] BODIED. Same walk for the PATTERN livery kind (== 2);
+        // additionally asserts the seed entry is not a colour livery (h:164), and the
+        // parent hop keys on the seed being a PATTERN livery rather than a colour one.
         void ConstructPatternLiveryList(const BrnResource::VehicleList* lpVehicleList,
-                                        const CgsID& lParentOrSiblingCarId);
+                                        const CgsID& lParentOrSiblingCarId)
+        {
+            CGS_ASSERT(lpVehicleList != 0, "lpVehicleList");                          // h:159
+            CGS_ASSERT(lParentOrSiblingCarId != 0, "lParentOrSiblingCarId != kCGSID_NULL");   // h:160
+
+            const s32 liSeedIndex = lpVehicleList->GetVehicleIndex(lParentOrSiblingCarId);
+            const BrnResource::VehicleListEntry* lpVehicleListEntry =
+                (liSeedIndex >= 0) ? lpVehicleList->GetVehicleData(liSeedIndex) : 0;
+            CGS_ASSERT(lpVehicleListEntry != 0, "lpVehicleListEntry");                // h:163
+            CGS_ASSERT(!lpVehicleListEntry->IsLiveryColour(),
+                       "!lpVehicleListEntry->IsLiveryColour()");                      // h:164
+
+            const CgsID lParentCarId =
+                (lpVehicleListEntry->GetLiveryType() ==
+                 BrnResource::VehicleListEntry::E_LIVERY_TYPE_PATTERN)
+                    ? lpVehicleListEntry->GetParentId()
+                    : lParentOrSiblingCarId;
+            CGS_ASSERT(lParentCarId != 0, "lParentCarId != kCGSID_NULL");             // h:178
+
+            Clear();                 // X360 `*(this+64)=0`
+            maLiveryTypes.Clear();   // X360 `*(this+104)=0`
+
+            const s32 liParentIndex = lpVehicleList->GetVehicleIndex(lParentCarId);
+            const BrnResource::VehicleListEntry* lpParentEntry =
+                (liParentIndex >= 0) ? lpVehicleList->GetVehicleData(liParentIndex) : 0;
+            CGS_ASSERT(lpParentEntry != 0, "lpVehicleListEntry");                     // h:186
+            Append(lParentCarId);
+            maLiveryTypes.Append(static_cast<BrnResource::VehicleListEntry::ELiveryType>(
+                lpParentEntry->GetLiveryType()));
+
+            for (s32 liEntry = 0;
+                 liEntry < lpVehicleList->GetVehicleCount(); ++liEntry)
+            {
+                const BrnResource::VehicleListEntry* lpEntry =
+                    lpVehicleList->GetVehicleData(liEntry);
+                CGS_ASSERT(lpEntry != 0, "lpVehicleListEntry");                       // h:196
+                if (lpEntry->GetParentId() == lParentCarId
+                    && lpEntry->GetLiveryType() ==
+                           BrnResource::VehicleListEntry::E_LIVERY_TYPE_PATTERN)
+                {
+                    Append(lpEntry->GetId());
+                    maLiveryTypes.Append(static_cast<BrnResource::VehicleListEntry::ELiveryType>(
+                        lpEntry->GetLiveryType()));
+                }
+            }
+        }
 
         // DWARF h:64 (returns CgsID by value, const-qualified as spelled). Body NOT
         // recovered: unlike the others it is never emitted out-of-line and never shows up
@@ -150,14 +238,8 @@ namespace BrnProgression
 }
 
 // ---------------------------------------------------------------------------------------
-// FLAG for whoever writes the two builder bodies -- DO NOT trust the enumerator VALUES in
-// BrnResource::VehicleListEntry::ELiveryType (VehicleListEntry.h) as they stand today. That
-// enum is commented there as "modelled" (colour=0, pattern=1, count=2), but the X360 livery
-// kind byte read from entry+0xE9 is tested against 1, 2, 3 and 4:
-//     0x82374F60  colour build : kind == 1 || kind == 3 || kind == 4  -> IsLiveryColour()
-//     0x823751C0  pattern build: kind == 2                            -> the pattern kind
-//     0x8237A970  AddCar       : kind == 4                            -> the "silver" cars
-// so the real enumeration has at least five values and 0 is not the colour kind. Fixing it
-// belongs to the VehicleListEntry.h owner, not here; recorded so the discrepancy is not
-// discovered the hard way inside a builder body.
+// (The old tail FLAG about ELiveryType's wrong modelled values is PAID OFF -- [map arm
+// 2026-08-27] VehicleListEntry.h now carries the corrected enumeration ({1,3,4} = the
+// colour set behind IsLiveryColour(), 2 = pattern, 4 = the AddCar "silver" arm) with the
+// evidence table in its own banner.)
 // ---------------------------------------------------------------------------------------

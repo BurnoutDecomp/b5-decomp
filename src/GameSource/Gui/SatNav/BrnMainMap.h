@@ -22,23 +22,23 @@ namespace BrnGui { struct CrashNavMap; }  // friend of MainMapComponent (reads m
 //   Prepare                    @ 0x8244F4A8   (bodied, BrnMainMap.cpp)
 //   RecvEvent                  @ 0x82458370   (bodied, BrnMainMap.cpp)
 //   SetStandardDefZoomParams   @ 0x82447ED8   (bodied, BrnMainMap.cpp)
-//   Update                     @ 0x824696E8
-//   SnapToLocation             @ 0x8245EBA0
-//   ApplyZoom                  @ 0x8245EE78
-//   SetZoom                    @ 0x82469A38
-//   CalculatePositionedWorldRect @ 0x8245E5F0
-//   CalculateViewPaddingOffset   @ 0x82447D38
+//   Update                     @ 0x824696E8   (bodied, BrnMainMap.cpp -- main-map slice)
+//   SnapToLocation             @ 0x8245EBA0   (bodied, BrnMainMap.cpp -- main-map slice)
+//   ApplyZoom                  @ 0x8245EE78   (bodied, BrnMainMap.cpp -- main-map slice)
+//   SetZoom                    @ 0x82469A38   (bodied, BrnMainMap.cpp -- main-map slice)
+//   CalculatePositionedWorldRect @ 0x8245E5F0 (bodied, BrnMainMap.cpp -- main-map slice)
+//   CalculateViewPaddingOffset   @ 0x82447D38 (bodied, BrnMainMap.cpp -- main-map slice)
 // DWARF: references/DecFIGS/dwarfdump/GameSource/Gui/SatNav/BrnMainMap.h
 //
 // LAYOUT NOTE: the X360 `this` embeds MapManager at +0x8C (4-byte-pointer ABI). Members are
 // reached BY NAME (semantic parity, not byte offsets) so the PC x64 widths differ from the
 // documented X360 offsets -- every X360 offset in this file is a COMMENT, never arithmetic.
-// The full DWARF instance-member run (BrnMainMap.h:209-232) is declared below. Construct and
-// Prepare -- the two that run on the stunt-run fly-by path -- are bodied in BrnMainMap.cpp as
-// of 2026-08-27; Update / SnapToLocation / ApplyZoom / SetZoom are still todo (they depend on
-// the still-unrecovered sub_8245A080 vector helper, the CalculateViewPaddingOffset /
-// CalculatePositionedWorldRect methods, and the OutputViewState<> / GuiAudioTriggerEvent
-// collaborators).
+// The full DWARF instance-member run (BrnMainMap.h:209-232) is declared below. The whole
+// ledger set is bodied in BrnMainMap.cpp as of the 2026-08-27 main-map slice (the old
+// blockers fell: "sub_8245A080" IS MapTransform::Transform(Vector2, Vector4, Vector4),
+// now bodied in BrnMapUtils.cpp, and the OutputViewState<> / GuiAudioTriggerEvent
+// collaborators were already homed). Still declared-only: Release, IncreaseZoom,
+// DecreaseZoom, SetZoomLevel, SetMapManager and the DWARF accessor block.
 
 namespace BrnGui
 {

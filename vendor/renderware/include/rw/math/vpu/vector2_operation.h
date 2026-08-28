@@ -26,6 +26,8 @@
 
 #include "rw/math/vpu/types.h"    // rw::math::vpu::Vector2
 
+#include <cmath>                  // std::sqrt (Magnitude)
+
 namespace rw
 {
 namespace math
@@ -36,6 +38,25 @@ namespace vpu
     inline float Dot(const Vector2& lLhs, const Vector2& lRhs)
     {
         return lLhs.x * lRhs.x + lLhs.y * lRhs.y;
+    }
+
+    // ADDITIVE GROW 2026-08-27 (main-map slice): the TWO-lane Magnitude, under its SDK
+    // name (sibling of the Vector4 full-4 Magnitude in vector4_operation.h). The X360
+    // inlines it as
+    //   vmulfp128 v0, v, v          ; lane-wise square
+    //   vspltw    v13, v0, 1        ; broadcast lane y
+    //   vspltw    v0,  v0, 0        ; broadcast lane x
+    //   vaddfp    v0,  v0, v13      ; x^2 + y^2   (z/w lanes never read)
+    //   vrsqrtefp + 2x Newton-Raphson, * dot      ; == sqrt(dot)
+    //   vsel <0 guard>                            ; sqrt(0) == 0 exactly
+    // -- MainMapComponent::SnapToLocation @0x8245ECC4..0x8245ED0C (the console's own
+    // assert text names it: "RwMathVPU::Magnitude(mv2DesiredCentre) < 1000000.0f") and
+    // twice more in MainMapComponent::ApplyZoom @0x8245EFF0 / @0x8245F25C. Scalar
+    // lowering per this header's convention; the zero-dot vsel guard falls out of
+    // std::sqrt(0.0f) == 0.0f.
+    inline float Magnitude(const Vector2& lrVector)
+    {
+        return std::sqrt(lrVector.x * lrVector.x + lrVector.y * lrVector.y);
     }
 }
 }
