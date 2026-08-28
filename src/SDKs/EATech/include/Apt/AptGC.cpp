@@ -4,6 +4,10 @@
 // ===========================================================================
 
 #include <cstring>   // std::memmove (the zombie-vector compaction)
+#include <cstdio>    // [aptlife] snprintf -- diagnostic only
+
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [aptlife] CgsDev::Log::WriteToLog
+#include "SDKs/EATech/include/Apt/AptLoader.h"                // AptLifeDiagEnabled
 
 #include "SDKs/EATech/include/Apt/AptGC.h"
 #include "SDKs/EATech/include/Apt/AptValue/AptGCReleaseVector.h"   // the deferred-release vector
@@ -35,6 +39,12 @@
 // ---------------------------------------------------------------------------
 extern AptValueVector*         gpValuesToRelease;   // off_8324E51C (AptGlobals.cpp)
 extern int                     gbAptSavedInputActive;
+
+// AptRegisterGlobalReferences @0x82AE38B8 -- the mark phase's global-holder pass
+// (every target's animation director + the Object.registerClass registry). HOMED in
+// AptLinker.cpp beside the ReferenceReplaceCb machinery it shares the callback with;
+// declared here by name rather than dragging in the whole linker header.
+void AptRegisterGlobalReferences();
 
 // ---------------------------------------------------------------------------
 // sReferenceRegistrationCb @0x82AD9C80 -- mark-walk callback.
@@ -226,6 +236,126 @@ void AptFlushDeferredReleases()
 void AptPartialGarbageCollection()
 {
     gbAptZombiesDirty = true;
+}
+
+// ---------------------------------------------------------------------------
+// ⭐⭐ CleanUnreachable -- THE PARTIAL MARK/SWEEP, AND UNTIL NOW AN EMPTY BODY.
+//
+// It sat in AptRenderLinkStubs.cpp as `void AptGC::CleanUnreachable() {}` behind
+// the note "No per-address export in the dump set" -- which was a NAME SEARCH
+// failing, not a hole in the image: AptUpdate @0x82B0DB68 calls it by name
+// (`bl AptGC__CleanUnreachable` @0x82B0DC48), and the PS3 EXTERNAL ELF carries the
+// whole body under ._ZN5AptGC16CleanUnreachableEv @0x7F19F0. Decompiled from that,
+// with the X360 call site and this file's already-homed CleanAll (@0x82AE4A40,
+// same primitives in the same order) as the cross-check.
+//
+// WHAT THE EMPTY BODY COST, MEASURED 2026-08-28: this is the ONLY thing that
+// reclaims an unreachable Apt value on a live frame, so NOTHING was ever collected.
+// Every AptCIH a screen's movie placed stayed allocated after the movie was
+// unmounted, which is why (a) re-entering the Driver Details pause screen filled
+// the AptCommunicator's hard 256-entry component table -- the registrations are
+// dropped by AptCIH::PreDestroy's pfnOnUnload hook, which only runs when the value
+// is actually destroyed -- and (b) a movie's AptFile never reached refcount 0, so
+// ~AptFile never ran and the loader kept handing out a stale "loaded" handle.
+//
+// The PS3 body, phase for phase:
+//   1. gpValuesToRelease->ReleaseValues()                     -- drain the deferred vector
+//   2. MARK: swap AptValue::sReferenceRegistrationCb to AptGC::sReferenceRegistrationCb,
+//      walk the value pool and, for every value with a NON-ZERO GC ROOT COUNT that is
+//      not already marked, mark it and run its RegisterReferences (vtbl +0x34) -- the
+//      callback recurses through everything it reaches. Then AptRegisterGlobalReferences()
+//      (the targets + the class registry), then restore the callback.
+//      (PS3 root test `((v[1] >> 8) & 0x3F) == 0` is mnGCRootCount -- bits 13..8 of the
+//      big-endian bitfield; `v[1] & 0x40000000` is bit 30 == mbHasRegisterReferenceMark,
+//      i.e. getGCMark. Both read here through the named accessors.)
+//   3. PRE-DESTROY the UNMARKED, with refcount-driven deletion suspended so the graph
+//      stays walkable: PreDestroy (vtbl +0x24) then DestroyGCPointers (vtbl +0x28).
+//   4. SWEEP: DeleteThis (vtbl +0x20) every unmarked value -- fetching the next link
+//      BEFORE deleting the current one -- and clear the mark on every survivor, so the
+//      next sweep starts from a clean slate.
+//   5. ReleaseValues again, then clear the integer / float / temporary-string pools.
+// ---------------------------------------------------------------------------
+void AptGC::CleanUnreachable()
+{
+    // 1. Flush anything already queued for deferred release.
+    if (gpValuesToRelease != nullptr)
+        gpValuesToRelease->ReleaseValues();
+
+    if (gpGCPoolManager == nullptr)
+        return;
+
+    // 2. Mark every value reachable from a GC root.
+    AptValue::ReferenceRegistrationCb pPrevCb = AptValue::sReferenceRegistrationCb;
+    AptValue::sReferenceRegistrationCb = &AptGC::sReferenceRegistrationCb;
+    for (AptValue* pValue = gpGCPoolManager->GetFirstAptValue(); pValue != nullptr;
+         pValue = gpGCPoolManager->GetNextAptValue(pValue))
+    {
+        if (pValue->getGCRoot() == 0u || pValue->getGCMark())
+            continue;                   // not a root, or already reached by the walk
+        pValue->setGCMark(true);
+        pValue->RegisterReferences();   // vtbl +0x34 -- recurses via the callback
+    }
+    AptRegisterGlobalReferences();
+    AptValue::sReferenceRegistrationCb = pPrevCb;
+
+    // 3. Pre-destroy the unreachable ones with refcount-driven deletion suspended,
+    //    so tearing one down cannot free another mid-walk.
+    const bool bWasSuspended = AptValue::sbSuspendRefcountDeletions;
+    AptValue::sbSuspendRefcountDeletions = true;
+    for (AptValue* pValue = gpGCPoolManager->GetFirstAptValue(); pValue != nullptr;
+         pValue = gpGCPoolManager->GetNextAptValue(pValue))
+    {
+        if (pValue->getGCMark())
+            continue;                       // reachable -- keep
+        pValue->PreDestroy();               // vtbl +0x24 (AptCIH's fires the unload hook)
+        pValue->DestroyGCPointers();        // vtbl +0x28
+    }
+    AptValue::sbSuspendRefcountDeletions = bWasSuspended;
+
+    // 4. Delete the unreachable ones (next link fetched before the delete) and clear
+    //    the mark on everything that survives.
+    uint32_t luVisited = 0u;
+    uint32_t luDeleted = 0u;
+    for (AptValue* pValue = gpGCPoolManager->GetFirstAptValue(); pValue != nullptr; )
+    {
+        AptValue* const pNext = gpGCPoolManager->GetNextAptValue(pValue);
+        ++luVisited;
+        if (!pValue->getGCMark())
+        {
+            ++luDeleted;
+            pValue->DeleteThis();           // vtbl +0x20
+        }
+        else
+        {
+            pValue->setGCMark(false);
+        }
+        pValue = pNext;
+    }
+
+    // [aptlife] opt-in witness (BRN_APT_LIFE=1). NOT X360. The one thing a sweep must
+    // be able to answer is "did you run, and did you reclaim anything" -- without it,
+    // an inert sweep and a sweep with nothing to do are indistinguishable in the log.
+    // Rate-limited: the first few passes, then every 64th.
+    if (AptLifeDiagEnabled())
+    {
+        static uint32_t suPasses = 0u;
+        ++suPasses;
+        if (suPasses <= 4u || (suPasses % 64u) == 0u)
+        {
+            char lac[128];
+            std::snprintf(lac, sizeof(lac),
+                "[aptlife] CleanUnreachable pass #%u: %u values, %u deleted\n",
+                suPasses, luVisited, luDeleted);
+            CgsDev::Log::WriteToLog(lac);
+        }
+    }
+
+    // 5. Final flush, then the value free-lists / temporary string pool.
+    if (gpValuesToRelease != nullptr)
+        gpValuesToRelease->ReleaseValues();
+    AptInteger::ClearPool();
+    AptFloat::ClearPool();
+    StringPool::ClearTemporaryPool();
 }
 
 // ---------------------------------------------------------------------------

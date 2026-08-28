@@ -375,13 +375,13 @@
     // bit-layout oracle and the leaked Apt 3.02 SDK as the naming source. The notes
     // above were the reconstruction's map and are kept for the record.
 
-    // AptGC::CleanUnreachable -- the partial sweep AptUpdate runs on the
-    // zombies-dirty flag (raised by AptPartialGarbageCollection). No per-address
-    // export in the dump set; the empty body leaves the values to the full
-    // CleanAll teardown until it is exported + reconstructed (AptUpdate still
-    // clears the flag, matching the state before AptUpdate existed, where
-    // nothing consumed the flag at all).
-    void AptGC::CleanUnreachable() {}
+    // AptGC::CleanUnreachable -- RETIRED 2026-08-28. The note that stood here said
+    // "No per-address export in the dump set", and that was a NAME SEARCH failing,
+    // not a hole in the image: AptUpdate @0x82B0DB68 calls it BY NAME
+    // (bl AptGC__CleanUnreachable @0x82B0DC48) and the PS3 EXTERNAL ELF carries the
+    // whole body under ._ZN5AptGC16CleanUnreachableEv @0x7F19F0. The real mark/sweep
+    // is homed in AptGC.cpp beside CleanAll; the empty body here was the only reason
+    // no Apt value was ever reclaimed on a live frame.
 
     // The saved-input REPLAY driver (sub_82B0D7E8, ~4.3KB): drains the recorded
     // input stream instead of live-ticking. Gated on gbAptSavedInputActive (boot
