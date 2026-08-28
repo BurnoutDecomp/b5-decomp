@@ -38,7 +38,19 @@ public:
     // Number of bytes per work-buffer row: 5 f32 (one 2nd-order section's I/O history).
     enum { KU_ROW_BYTES = 20 };
 
-    static int          CalculateFilterCoefficients(Butterworth *self); // @0x82B64698 (KEYSTONE)
+    // The cascade design entry. ⭐ ABI RECOVERED (phase E 2026-08-28, from the callee and
+    // BOTH callers -- HighPassButterworth::Process @0x82B976E0 and
+    // LowPassButterworth::Process @0x82B97C00): r3=self, f1=cutoff, f2=sampleRate,
+    // f3=the third shaping attribute, r5=the fctidz'd filter order, r7=the type selector
+    // (0 == low-pass, 1 == high-pass). r6 is never initialised by either caller and never
+    // read by the callee -- the "un-decodable ABI" the old one-argument stub cited was
+    // that phantom slot. The BODY is still a keystone (it needs the three rodata design
+    // tables); its declaration is now the true shape so both callers can pass real
+    // arguments instead of dropping them.
+    enum FilterType { KFILTER_LOWPASS = 0, KFILTER_HIGHPASS = 1 };
+    static int          CalculateFilterCoefficients(Butterworth *self, f32 afCutoff,
+                                                    f32 afSampleRate, f32 afShape,
+                                                    s32 aiOrder, s32 aiType); // @0x82B64698
     void                Filter(AudioProcessContext *ctx);                 // @0x82B649E8
     void                ClearBuffer();                                    // @0x82B64980
     static Butterworth *CreateInstance(int order, Butterworth *self);     // @0x82B6C420
