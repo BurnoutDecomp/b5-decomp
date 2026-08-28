@@ -198,14 +198,20 @@ namespace
 //     0x8274AC14  bl  UpdateCollidableVehicles (0x827302C8)
 //     0x8274AC20  bl  GenerateCrashedVehicleEvents (0x82720030)
 //
-// ⚠️ WHAT THIS DOES *NOT* DO, and the previous brief had it the other way round: the showtime
-// block only SCHEDULES spikes. The score itself is raised elsewhere -- HandleExternalResponses
-// @0x827330B0 does `mfCrashSliderCrashScore += mfCrashSliderCrashScoreFactor * <event value>`
-// per incoming crash event, and HandlePrepareForModeAction @0x827480D8 seeds the three
-// members. Neither is bodied in this tree, so OUTSIDE showtime the score has no producer yet
-// and mfCrashSliderFinalValue stays 0 -- i.e. landing this function alone does NOT make the
-// sympathetic-crash arm fire in ordinary driving. It makes it correct, and it makes showtime
-// drive it. Say so plainly rather than reporting a swerve that is not there.
+// ⚠️ READ THE WHOLE CHAIN BEFORE CONCLUDING THIS IS SHOWTIME-ONLY -- it is not, and the first
+// draft of this banner said it was. The showtime block below only SCHEDULES spikes; the score
+// itself is raised in ORDINARY driving by HandleExternalResponses @0x82732C68 (BODIED, in
+// _wT3_04.cpp), which does `mfCrashSliderCrashScore += mfCrashSliderCrashScoreFactor * 50.0`
+// per crashed traffic car -- and Construct / Reset (_wT1_01.cpp) seed that factor to 0.8 and
+// the decay to 0.5. So a crashed traffic car is worth 40 points, two are 80, and the
+// normalisation at the bottom of this function turns 80 into ~0.78 against
+// ShouldBeHollywoodAction()'s 0.01 threshold.
+// ⇒ The score was already accumulating before this wave. What was missing was the ONLY writer
+// of mfCrashSliderFinalValue, which is the last line of this function -- so the arm was dead
+// for want of a normalisation, not for want of a score.
+// ⚠️ The window is short by design: proportional decay at 0.5 takes 80 points back under the
+// 10-point floor in about four seconds. Hollywood action is a few-second reaction to a fresh
+// crash, not a mode.
 // --------------------------------------------------------------------------------------------
 void TrafficEntityModule::UpdateCrashSlider()
 {
