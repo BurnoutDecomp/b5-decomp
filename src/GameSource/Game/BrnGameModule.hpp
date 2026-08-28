@@ -838,7 +838,15 @@ namespace BrnGame
         CgsSystem::Timer                mGameTimer;                  // h:466  gm+10095316
         CgsSystem::Timer                mSimTimer;                   // h:467  gm+10095344
         CgsSystem::TimerStatusInterface mTimerStatusInterface;       // h:468  gm+10095372
-        // [h:469-471: the two TimerRequests + the request interface - omitted]
+        // ⭐ gm+10095420 -- THE PER-SUB-STEP REQUEST ACCUMULATOR, and the single choke point
+        // every slow-motion producer in the game funnels through. DWARF
+        // BrnGameModule.h:281 `TimerRequestInterface mTimerRequestInterface;`; the X360
+        // addresses it at gm+0x9A0B3C == 10095420, i.e. directly after mTimerStatusInterface,
+        // and treats it as ONE 16-byte TimerRequestInterface (UpdateTimers @0x823BCFD0
+        // Appends into +0 and +8 and then hands the same base to ApplyToTimers). It used to be
+        // elided as "[h:469-471: the two TimerRequests + the request interface - omitted]";
+        // that reading counted the interface's own two sub-members as siblings.
+        CgsSystem::TimerRequestInterface mTimerRequestInterface;     // h:281  gm+10095420
         CgsSystem::FrameRateManager      mFrameRateManager;          // h:472
         CgsSystem::EFrameRateManagerType meFrameRateManagerType;     // h:473
         // ⚠️ FLAG PC quality-of-life (no console counterpart -- the console reads this rate

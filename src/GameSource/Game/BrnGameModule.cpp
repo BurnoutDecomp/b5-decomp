@@ -1,5 +1,6 @@
 #include "GameSource/Game/BrnGameModule.hpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CgsDev::Assert
+#include "GameShared/GameClasses/Development/BrnDiagFilmLatch.h" // [diag] BrnDiag::gFilmLatch (time-dilation capture arm)
 #include "SDKs/EA/GameTalk/GameTalk.h"               // EA::GameTalk::GameTalkMessage (RenderMetricsMessageHandler)
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"      // BrnGui::GuiAudioTriggerEvent (GUI-out event 201) + GuiEventProgressionProfileData (350)
 #include "GameSource/Game/GameBridgeGameStateToX.h"  // BrnGame::BridgeGameStateToGui_EventStatus (the GUI-leg status seam)
@@ -46,6 +47,11 @@ extern "C" unsigned long XShowDirtyDiscErrorUI(unsigned long dwUserIndex);
 // The high-resolution frame timer DebugManagerRender's fps ring reads (defined in
 // CgsTimeUtils.cpp; declared locally by convention -- see that TU's note).
 namespace CgsSystem { u32 GetSystemTimerBaseTime(); u32 GetSystemTimerFrequency(); }
+
+// [DIAG] The time-dilation film latch (BrnDiagFilmLatch.h). Defined here because
+// BrnGameModule::UpdateTimers is its only writer; read by the back-buffer writer in
+// pc/gcm/renderengine/device.cpp under BRN_FRAME_DUMP_ARM=slomo. NOT in the X360 binary.
+namespace BrnDiag { FilmLatch gFilmLatch = { 0u, 0.0f, 0.0f }; }
 
 namespace BrnGame
 {
@@ -1530,19 +1536,131 @@ namespace BrnGame
     //     CgsSystem::Timer::Update(gm+10095316);
     //     CgsSystem::Timer::Update(gm+10095344);
     //
-    // ⚠️ QUIET GATE (the request half): the two producers -- the GameState module's timer
-    // request block and DirectorIO::OutputBuffer::GetTimerRequestIn -- are BOTH un-staged on
-    // this build (the GameState module is a placeholder, and the director output's timer
-    // request interface is never written). Appending from unwritten sources would apply
-    // garbage pause/slomo scales to the timers, which is strictly worse than applying none:
-    // with no requests, ApplyToTimers is the identity (scale target stays 1.0) and the two
-    // Update calls below are the whole observable effect. So only the tail runs.
-    // DELETE-WHEN: the GameState module is real and the director stages its timer requests.
+    // ⭐⭐ THE REQUEST HALF IS LIVE (2026-08-28, crash-slomo transport wave). THE OLD GATE NOTE
+    // WAS STALE IN BOTH OF ITS CLAIMS, and it was load-bearing: it said "the two producers are
+    // BOTH un-staged on this build (the GameState module is a placeholder, and the director
+    // output's timer request interface is never written)". Measured against the tree:
+    //   * The GameState producer is REAL and SHIPPING. DriveThruManager::SetPlayerCarDriver
+    //     (BrnDriveThruManager.cpp, mounted 2026-08-27) calls
+    //     `GetSimTimerRequests()->SetTimestepMultiplier(0.52631581f)` -- the drive-thru's own
+    //     slow-motion presentation -- off exactly this buffer's GetTimerRequestInterface(),
+    //     handed to it by GameStateModule_gUI_00.cpp:751. ModeManager::FinishCurrentMode
+    //     (BrnModeManager_Finish.cpp:460) posts the 1.0f restore on the same slot.
+    //   * The director producer is written as of this wave (MainDirector::Update's
+    //     SetTimestepMultiplier publish, previously gated -- see BrnMainDirector.cpp).
+    // ⛔ THIS FUNCTION IS THE SINGLE CHOKE POINT FOR EVERY SLOW-MOTION REQUEST IN THE GAME.
+    // The X360 has exactly four callers of TimerRequests::SetTimestepMultiplier (checked
+    // against the whole export set): MainDirector::Update, ModeManager::SetupGameMode,
+    // ModeManager::FinishCurrentMode and DriveThruManager::SetPlayerCarDriver. All four post
+    // into one of the two request interfaces this function drains, so while the Appends were
+    // commented out NO producer anywhere in the game could dilate time -- the writes landed
+    // and were dropped on the floor, with green logs and a plausible 1.0.
+    //
+    // The `(GetTimerR(...)[2] >> 2) & 1` test is `lwz r11, 8(r3); extrwi r11, r11, 1, 29`
+    // @0x823BD02C-0x823BD030: the word at interface+8 is mSimTimer.muFlags and bit 2 is
+    // KU_FLAG_MULTIPLIER -- i.e. the GAME-STATE module's sim slow-mo request WINS, and the
+    // director's is folded in only when the game state did not ask for one this frame. (The
+    // old comment glossed it as "the director owns the timers" bit, which reads the priority
+    // backwards.)
+    //
+    // [FLAG PC bring-up] TWO stated deviations, neither of which changes what is applied:
+    //  1. NO PARAMETERS. The console signature is
+    //     UpdateTimers(GameStateModuleIO::OutputBuffer*, DirectorIO::OutputBuffer*) and its
+    //     caller passes exactly the two objects reached below as members. Reaching them
+    //     directly keeps the one call site (DoUpdate's sub-step loop) unchanged.
+    //  2. THE WHOLE REQUEST CYCLE IS GATED ON THE DIRECTOR MODULE BEING PREPARED. The reset
+    //     half of this cycle lives in BridgeTimers (the console clears the accumulator there),
+    //     and on this build BridgeTimers runs inside DoUpdate_Director, which returns early
+    //     until the module reports prepared. Draining requests without the matching reset
+    //     would latch KU_FLAG_MULTIPLIER in the accumulator for ever -- the last multiplier
+    //     would stick and TimerRequests::Append's "only 1 slowmo request per frame" assert
+    //     would fire every frame after. Accumulate-and-reset is ONE cycle; it runs whole or
+    //     not at all. Nothing posts a request before the director is prepared (all four
+    //     producers are in-game). DELETE-WHEN BridgeTimers runs unconditionally.
+    //     ⚠️ ORDER: within a sub-step this runs BEFORE DoUpdate_Director, so the DIRECTOR's
+    //     request is read one sub-step after it is published (the game-state producer, which
+    //     runs earlier in the same sub-step, is same-frame). That is the same one-leg
+    //     staleness the position note above already documents, not a dropped request.
     // ------------------------------------------------------------------------------------
     void BrnGameModule::UpdateTimers()
     {
+        BrnGameState::GameStateModuleIO::OutputBuffer* const lpGameStateOutput =
+            mGameStateModule.GetOutputBuffer();
+
+        if (lpGameStateOutput != 0 && mpDirectorOutputBuffer != 0 && mDirectorModule.IsPrepared())
+        {
+            lpGameStateOutput->LockForRead();
+            mpDirectorOutputBuffer->LockForRead();
+
+            // Fold the game-state module's game/sim requests into this sub-step's accumulator.
+            CgsSystem::TimerRequestInterface* const lpGameStateRequests =
+                lpGameStateOutput->GetTimerRequestInterface();
+
+            mTimerRequestInterface.GetGameTimerRequests()->Append(
+                *lpGameStateRequests->GetGameTimerRequests());
+            mTimerRequestInterface.GetSimTimerRequests()->Append(
+                *lpGameStateRequests->GetSimTimerRequests());
+
+            // ...and the director's, but only when the game state has not already claimed the
+            // sim multiplier this frame (asm @0x823BD02C: test mSimTimer.muFlags bit 2).
+            if (!lpGameStateRequests->GetSimTimerRequests()->IsMultiplierRequested())
+            {
+                CgsSystem::TimerRequestInterface* const lpDirectorRequests =
+                    mpDirectorOutputBuffer->GetTimerRequestIn();
+
+                mTimerRequestInterface.GetGameTimerRequests()->Append(
+                    *lpDirectorRequests->GetGameTimerRequests());
+                mTimerRequestInterface.GetSimTimerRequests()->Append(
+                    *lpDirectorRequests->GetSimTimerRequests());
+            }
+
+            mpDirectorOutputBuffer->UnlockForRead();
+            lpGameStateOutput->UnlockForRead();
+
+            // Drain the accumulator onto the two timers (start/stop/scale target).
+            mTimerRequestInterface.ApplyToTimers(&mGameTimer, &mSimTimer);
+        }
+
         mGameTimer.Update();
         mSimTimer.Update();
+
+        // ---- [DIAG] the time-dilation film latch (see BrnDiagFilmLatch.h) ------------------
+        // Unconditional three-word write, no environment read on the hot path; the READER
+        // (pc/gcm/renderengine/device.cpp) is the side that is gated, and it does nothing unless
+        // BRN_FRAME_DUMP_ARM=slomo. Sticky by design.
+        if (BrnDiag::gFilmLatch.muSlomoLatched == 0u && mSimTimer.GetScaleCurrent() != 1.0f)
+        {
+            BrnDiag::gFilmLatch.mfLatchedSimScale = mSimTimer.GetScaleCurrent();
+            BrnDiag::gFilmLatch.mfLatchedSimStep  =
+                mSimTimer.GetRate() * mSimTimer.GetScaleCurrent();
+            BrnDiag::gFilmLatch.muSlomoLatched    = 1u;
+        }
+
+        // ---- BRN_SLOMO_DIAG (opt-in, edge-triggered) ---------------------------------------
+        // ⚠️ NOT A CONSOLE ARM. The measurement hook for the time-dilation transport: it prints
+        // the SIM timer's live scale only when it MOVES, so a run either shows the dilation
+        // arriving or it does not. Edge-triggered on purpose -- a per-frame print would be
+        // 60 lines/second of noise and would itself perturb a frame-coupled sim.
+        if (getenv("BRN_SLOMO_DIAG") != 0 && CgsDev::Log::gpDebugPrint != 0)
+        {
+            static f32 sfLastSimScale  = -1.0f;
+            static f32 sfLastGameScale = -1.0f;
+
+            const f32 lfSimScale  = mSimTimer.GetScaleCurrent();
+            const f32 lfGameScale = mGameTimer.GetScaleCurrent();
+
+            if (lfSimScale != sfLastSimScale || lfGameScale != sfLastGameScale)
+            {
+                sfLastSimScale  = lfSimScale;
+                sfLastGameScale = lfGameScale;
+                *CgsDev::Log::gpDebugPrint
+                    << "[slomo] simScale=" << lfSimScale
+                    << " gameScale=" << lfGameScale
+                    << " simStep=" << (mSimTimer.GetRate() * lfSimScale)
+                    << " gameStep=" << (mGameTimer.GetRate() * lfGameScale)
+                    << "\n";
+            }
+        }
     }
 
     // ------------------------------------------------------------------------------------
@@ -1555,16 +1673,25 @@ namespace BrnGame
     //       <48-byte copy of gm+10095372 into DirectorIO::InputBuffer::GetTimerStatusInterface()>
     //     UnlockForWrite(directorInput);
     //
-    // The two TimerRequests resets belong to the un-staged request half documented on
-    // UpdateTimers above (they clear the accumulators the Appends would have filled); with no
-    // producers there is nothing to clear, so they are gated with it. The StoreTimers snapshot
-    // and the copy into the director input are the live, load-bearing half: without them the
-    // director input's timer status stays at DoUpdate_Director's zero-fill, every
-    // TimerStatus::GetCurrentTimeStep() reads 0, and the whole camera-behaviour middle
+    // ⭐ THE TWO RESETS ARE LIVE (2026-08-28, crash-slomo transport wave). They are the RESET
+    // half of the accumulate-and-reset cycle whose accumulate half UpdateTimers above now runs;
+    // the old note gated them on "with no producers there is nothing to clear", which stopped
+    // being true the moment the drive-thru and the director started posting. Without them the
+    // accumulator's KU_FLAG_MULTIPLIER latches on the first request and the last multiplier
+    // sticks for the rest of the session.
+    // The four console stores ARE TimerRequests::Clear inlined twice (asm @0x823BD198..0x823BD1A4;
+    // see the body now in CgsTimerRequestInterface.h) -- mfMultiplier = 1.0f, muFlags = 0, per
+    // half. ⚠️ 1.0f, not 0.0f: a zero here would drive the sim timer's scale target to zero and
+    // stop the world.
+    // The StoreTimers snapshot and the copy into the director input are the other live half:
+    // without them the director input's timer status stays at DoUpdate_Director's zero-fill,
+    // every TimerStatus::GetCurrentTimeStep() reads 0, and the whole camera-behaviour middle
     // advances by `speed * 0` per frame.
     // ------------------------------------------------------------------------------------
     void BrnGameModule::BridgeTimers(BrnDirector::DirectorIO::InputBuffer* lpDirectorInput)
     {
+        mTimerRequestInterface.Clear();
+
         mTimerStatusInterface.StoreTimers(&mGameTimer, &mSimTimer);
 
         lpDirectorInput->LockForWrite();
@@ -1757,6 +1884,24 @@ namespace BrnGame
         // same buffer contents).
         if (!lbPostGui)
             BridgeTimers(lpDirectorInput);
+
+        // ⭐ [FLAG PC lifecycle, 2026-08-28 crash-slomo transport wave] RETIRE LAST SUB-STEP'S
+        // DIRECTOR TIMER REQUEST, immediately before MainDirector::Update publishes this one.
+        // Console equivalence: the module scheduler builds a fresh DirectorIO::OutputBuffer per
+        // frame, so its TimerRequestInterface starts cleared and MainDirector::Update's
+        // SetTimestepMultiplier is always the FIRST write of the frame -- which is what that
+        // function's `!IsMultiplierRequested()` assert ("Attempt to change slowmo multiple
+        // times") is asserting. On PC the buffer is the persistent mpDirectorOutputBuffer, so
+        // the clear is explicit. It is here rather than at the sub-step's retire block because
+        // UpdateTimers() reads this slot EARLIER in the sub-step than the director writes it
+        // (see UpdateTimers' order note): clearing at the retire point would wipe the request
+        // before its consumer ever saw it.
+        if (!lbPostGui)
+        {
+            mpDirectorOutputBuffer->LockForWrite();
+            mpDirectorOutputBuffer->GetTimerRequestInterfac()->Clear();
+            mpDirectorOutputBuffer->UnlockForWrite();
+        }
 
         // ⭐ THE GUI -> DIRECTOR BRIDGE. X360 DoUpdate_DirectorPostGUI @0x823DCE38 runs it on
         // the POST-GUI pass, bracketed by the same write lock, immediately before
@@ -3865,6 +4010,19 @@ namespace BrnGame
                     {
                         lpGameStateOutput->LockForWrite();
                         lpGameStateOutput->GetGameActionQueue()->Clear();
+                        // ⭐ [FLAG PC lifecycle, 2026-08-28 crash-slomo transport wave] THE TIMER
+                        // REQUEST SLOT RETIRES WITH THE ACTION QUEUE, and for exactly the reason
+                        // spelt out above: on the console this whole OutputBuffer is re-Constructed
+                        // by the module scheduler every frame, so a posted TimerRequests entry is
+                        // ONE-SHOT; on PC the module owns one persistent buffer. UpdateTimers() has
+                        // already drained it this sub-step. Without this retire, the first
+                        // DriveThruManager::SetPlayerCarDriver would latch KU_FLAG_MULTIPLIER here
+                        // for the rest of the session: its 0.52631581f presentation timestep would
+                        // be re-Appended every sub-step (tripping SetTimestepMultiplier's
+                        // "Attempt to change slowmo multiple times" assert on the producer side and
+                        // Append's "only 1 slowmo request" on the consumer side), and the sim would
+                        // never come back to real time when the drive-thru hands control back.
+                        lpGameStateOutput->GetTimerRequestInterface()->Clear();
                         lpGameStateOutput->UnlockForWrite();
                     }
                 }

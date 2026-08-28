@@ -5,10 +5,12 @@
 #include <cstring>
 #include <cstdio>   // [diag] BRN_FRAME_DUMP back-buffer BMP writer
 #include <cstdlib>  // [diag] atoi -- BRN_FRAME_DUMP_EVERY period override
+#include <string.h> // [diag] _stricmp -- BRN_FRAME_DUMP_ARM mode select (MSVC canonical)
 
 #include "pc/gcm/renderengine/ShadowPassPCLeaf.h"   // PCInstallDefaultRenderTargetState
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"  // [diag] Device::Start failure paths
 #include "GameSource/Jobs/Traffic/BrnTrafficSwerveWatch.h"  // [diag] BRN_FRAME_DUMP_ARM
+#include "GameShared/GameClasses/Development/BrnDiagFilmLatch.h" // [diag] BRN_FRAME_DUMP_ARM=slomo
 
 // PC / D3D9 renderengine device bring-up, reversed from TUB (Burnout Paradise: The
 // Ultimate Box):
@@ -329,13 +331,30 @@ static void DumpBackBufferIfRequested()
     // swerves and nine RemoveVehicle removals. Filming the whole run destroys the event the
     // film exists to show. Armed + capped, the capture is a few seconds at every present.
     {
-        static int siArm = -1;
+        // BRN_FRAME_DUMP_ARM selects WHICH latch holds the writer:
+        //   unset / "0"  -- no arm; dump from the first present (the original behaviour)
+        //   "slomo"      -- hold until the simulation timestep leaves real time
+        //                   (BrnDiag::gFilmLatch, raised by BrnGameModule::UpdateTimers)
+        //   anything else truthy -- hold until the traffic swerve camera latches (the
+        //                   original arm; unchanged, so every existing recipe still works)
+        static int siArm = -1;      // 0 none, 1 swerve camera, 2 slomo
         static u32 suMax = 0u;
         if (siArm < 0)
         {
             char lacArm[32];
             DWORD luArmLen = GetEnvironmentVariableA("BRN_FRAME_DUMP_ARM", lacArm, sizeof(lacArm));
-            siArm = (luArmLen != 0 && luArmLen < sizeof(lacArm) && lacArm[0] != '0') ? 1 : 0;
+            if (luArmLen == 0 || luArmLen >= sizeof(lacArm) || lacArm[0] == '0')
+            {
+                siArm = 0;
+            }
+            else if (_stricmp(lacArm, "slomo") == 0)
+            {
+                siArm = 2;
+            }
+            else
+            {
+                siArm = 1;
+            }
 
             char lacMax[32];
             DWORD luMaxLen = GetEnvironmentVariableA("BRN_FRAME_DUMP_MAX", lacMax, sizeof(lacMax));
@@ -345,7 +364,11 @@ static void DumpBackBufferIfRequested()
                 if (liMax > 0) { suMax = static_cast<u32>(liMax); }
             }
         }
-        if (siArm != 0 && BrnTraffic::gSwerveWatch.muCameraLatched == 0u)
+        if (siArm == 1 && BrnTraffic::gSwerveWatch.muCameraLatched == 0u)
+        {
+            return;
+        }
+        if (siArm == 2 && BrnDiag::gFilmLatch.muSlomoLatched == 0u)
         {
             return;
         }
