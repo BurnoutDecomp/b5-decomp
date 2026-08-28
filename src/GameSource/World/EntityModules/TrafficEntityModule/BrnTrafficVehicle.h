@@ -184,6 +184,15 @@ public:
     // KU_INVALID_VEHICLE == 0xFFFF, which a u8 could never hold.
     u16 GetCabIndex() const;
 
+    // DWARF BrnTrafficVehicle.h:338, X360 @0x8270E468 -- GetCabIndex's twin, over the SAME
+    // halfword, with the mirrored assert: `lbz r11,4(this) ; clrlwi r11,r11,28 ; cmplwi 0` then
+    // IsOfStandardSpecies() baked at BrnTrafficVehicle.h:770 (0x302), then `lhz r3,2(this)`.
+    // ⚠️ NOTE THE POLARITY: the console asserts the species byte's low nibble is ZERO, i.e.
+    // E_SPECIES_STANDARD -- only a CAB may ask for its trailer, exactly as only a TRAILER may
+    // ask for its cab. Three park notes in this cluster (_wT3_01.cpp, _wT3_04.cpp, _wT2_01.cpp)
+    // name this accessor as their blocker; it is 23 instructions.
+    u16 GetTrailerIndex() const;
+
     // The UNASSERTED read of the same halfword. ADDITIVE GROW: the console reaches
     // it this way where the species is not yet known -- ReturnPhysicalVehicleToTraffic
     // @0x8273DF18 is a bare `lhz r11, 2(r24)` with no assert before it, and the species test

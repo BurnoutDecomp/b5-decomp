@@ -1368,6 +1368,17 @@ u16 Vehicle::GetCabIndex() const
     return muOtherHalfIndex;
 }
 
+// Vehicle::GetTrailerIndex @0x8270E468, DWARF BrnTrafficVehicle.h:338. GetCabIndex's twin:
+// the same `lhz 2(this)` behind the MIRRORED assert -- IsOfStandardSpecies(), baked at header
+// line 0x302 == 770. Only a cab may ask for its trailer. Landed 2026-08-28: it was named as
+// the blocker by three separate park notes (_wT3_01.cpp:225, _wT3_04.cpp:44, _wT2_01.cpp:611)
+// and by TrafficEntityModule::RemoveVehicle @0x8272E370, and it is twenty-three instructions.
+u16 Vehicle::GetTrailerIndex() const
+{
+    CGS_ASSERT(IsOfStandardSpecies(), "IsOfStandardSpecies()");  // BrnTrafficVehicle.h:770
+    return muOtherHalfIndex;
+}
+
 // SetFlashingHeadlights (X360 @0x827536D0). The asm inlines
 // CgsNumeric::Random::RandomUInt() (muSeed >> 32, then muSeed = muSeed * 0x5851F42D4C957F2D
 // + 1 @0x827537D0..E4) and the unsigned %3 reduction (mulhwu 0xAAAAAAAB @0x827537E8). The
