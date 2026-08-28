@@ -35,6 +35,10 @@ namespace rw { namespace core { struct GeneralResourceAllocator; } }
 // here; the helper bodies include the real home, GameSource/Resource/BrnGameDataModuleIO.h).
 namespace BrnResource { namespace GameDataIO { struct InputBuffer; struct OutputBuffer; } }
 
+// The sound pre-update payload the spine threads into the world drive for BridgeSoundToWorld
+// (pointer-only here; real home GameSource/Sound/Module/BrnRootSoundModuleIo.h).
+namespace BrnSound { namespace Module { namespace Io { struct RootPreUpdateOutputBuffer; } } }
+
 namespace BrnGameMainFlowController
 {
     // The GameData IO pair the scripted-load spine brackets every frame.
@@ -131,7 +135,10 @@ protected:
     // (vtable +76) with the frame's world IO pair and the loading update set, then run
     // BridgeWorldToResource @0x823E5300 -- the forward that carries the world streamer's
     // per-frame LoadBundle requests (TRK / PVS / prop graphics) into the GameData pump.
-    void UpdateWorldModule(BrnResource::GameDataIO::InputBuffer* lpGameDataInputBuffer);
+    // The sound pre-update buffer (phase C4) rides through to DriveWorldUpdateFrame's
+    // BridgeSoundToWorld staging; null keeps the pre-C4 no-sound behaviour.
+    void UpdateWorldModule(BrnResource::GameDataIO::InputBuffer* lpGameDataInputBuffer,
+                           BrnSound::Module::Io::RootPreUpdateOutputBuffer* lpSoundPreUpdateOutput = 0);
 
     // X360 0x823E74C0 -- the E_LOADINGSTAGE_DIRECTORMODULE leg. Creates this frame's director
     // OUTPUT buffer on the update output stack, runs the module's staged
@@ -279,7 +286,8 @@ private:
 // See the commentary on DriveWorldUpdateFrame in the .cpp for why the world previously
 // stopped updating the moment the flow left the loading screen.
 void DriveWorldUpdateFrame(BrnResource::GameDataIO::InputBuffer* lpGameDataInputBuffer,
-                           BrnUpdateSet lUpdateSet);
+                           BrnUpdateSet lUpdateSet,
+                           BrnSound::Module::Io::RootPreUpdateOutputBuffer* lpSoundPreUpdateOutput = 0);
 void DriveInGameWorldUpdate();
 
 struct MainGameFlowStateInGame : public MainGameFlowState

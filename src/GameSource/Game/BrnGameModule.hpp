@@ -176,6 +176,21 @@ namespace BrnGame
         int DoUpdate();
         int DoDispatch();
 
+        // @ 0x823EE4D8 -- the SOUND pre-update leg of the per-frame cascade (both the full
+        // spine and LoadingScriptedState::Update @0x823F2714 call it, ahead of the network /
+        // game-state / world drives). Console body, statement for statement:
+        //   StartMonitor(mCpuMonitors.miUT_Sound); StartMonitor(miUT_SoundUpdate);
+        //   mSoundModule.PreUpdate(lpStack, lpPreUpdateOut);
+        //   { W(guiIn) + R(preUpdateOut) lock pair (console helper sub_823B6FE0):
+        //     guiIn->GetGuiEvents()->Append<256,16>(preUpdateOut's GuiOut queue);
+        //     BridgeSoundToTraining(preUpdateOut); unlock pair }
+        //   StopMonitor(miUT_SoundUpdate); StopMonitor(miUT_Sound);
+        // The stack argument is the update-OUTPUT stack (only forwarded into PreUpdate,
+        // which carves its "SoundLogicPreUpdateOutput" scratch from it).
+        void DoPreUpdate_Sound(CgsModule::IOBufferStack* lpUpdateOutputBufferStack,
+                               BrnSound::Module::Io::RootPreUpdateOutputBuffer* lpSoundPreUpdateOutputBuffer,
+                               CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInputBuffer);
+
         // @ 0x823E8BD0 -- the WORLD leg of the per-frame update cascade: create this
         // frame's BrnWorldIO::UpdateInputBuffer on the update input stack, stage the
         // controller / network / game-state / GUI / replay / sound state into it, then
@@ -325,6 +340,15 @@ namespace BrnGame
         // the frame's update set from the flow state before deciding whether to drive the
         // world at all (the others are DoDispatch, ConstructUpdateSet and DoUpdate).
         BrnUpdateSet ConstructUpdateSetFromFsm();
+
+        // ⭐ ADDITIVE (faithful-audio-engine phase C4; header-only inlines). The console
+        // computes RootSoundModule::Update's two f32 time steps inline in each spine --
+        // LoadingScriptedState::Update @0x823F2AB0-C4 and DoUpdate_Sound @0x823DCEC0 both
+        // load gameTimer(gm+0x9A0AD4)/simTimer(gm+0x9A0AF0) fields [+0x10]*[+0xC]
+        // (mfScaleCurrent * mfRate) straight off the module. Exposed BY NAME so the live
+        // PC spine reads the same pair without a console byte offset.
+        const CgsSystem::Timer& GetGameTimer() const { return mGameTimer; }
+        const CgsSystem::Timer& GetSimTimer() const  { return mSimTimer; }
 
     private:
         // @ BrnGameModule.cpp:1845 - the per-frame update spine: latch frame-rate stepping,
@@ -571,6 +595,9 @@ namespace BrnGame
         // This sub-step's GUI module INPUT buffer (live between CreateStaticIOBuffers /
         // DestroyStaticIOBuffers; the flow states' initial-FSM post reaches it here).
         CgsGui::CgsGuiModuleIO::InputBuffer* GetGuiInputBuffer() { return mpGuiInputBuffer; }
+        // This sub-step's GUI module OUTPUT buffer (same lifetime; the sound spine's
+        // BridgeGuiToSound source -- faithful-audio-engine phase C4).
+        CgsGui::CgsGuiModuleIO::OutputBuffer* GetGuiOutputBuffer() { return mpGuiOutputBuffer; }
         // The console reaches the GUI module through the module scheduler (`*off_830102D0 +
         // 0x6EAA20`, the raw member address, in LoadGUIModule @0x823EF310 and everywhere else
         // on the loading path). The PC has no scheduler, so the loading-screen state reaches
