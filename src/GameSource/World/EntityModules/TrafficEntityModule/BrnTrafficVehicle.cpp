@@ -1368,6 +1368,25 @@ u16 Vehicle::GetCabIndex() const
     return muOtherHalfIndex;
 }
 
+// Vehicle::DetachArticulation @0x8270F6C8 (151 insns). Breaks a cab/trailer pair. The 151
+// instructions are almost entirely the two inlined CgsFastBitArray range asserts (h:396 for
+// the IsBitSet and h:452 for the UnSetBit, each streaming "Index N is out of range (max bits:
+// 600)"); the work is four lines. `a3 + 320` is lSoaData + 0x140 == mArticulatedVehicles, the
+// fourth 80-byte set. Landed 2026-08-28 -- it is the third and last named blocker on
+// TrafficEntityModule::RemoveVehicle @0x8272E370, the junction-FUP relief valve; it is also
+// cited by _wT1_01.cpp, _wT2_01.cpp and BrnTrafficEntityModule_KillDyingVehicleEntities.cpp.
+// No live caller yet, so this changes nothing today.
+void Vehicle::DetachArticulation(u32 luVehicle, VehicleSoaData& lSoaData)
+{
+    CGS_ASSERT(muOtherHalfIndex != static_cast<u16>(KU_INVALID_VEHICLE),
+               "muOtherHalfIndex != KU_INVALID_VEHICLE");                    // .h 1079 (0x437)
+    CGS_ASSERT(lSoaData.mArticulatedVehicles.IsBitSet(luVehicle),
+               "lSoaData.mArticulatedVehicles.IsBitSet( luVehicle )");       // .h 1080 (0x438)
+
+    muOtherHalfIndex = static_cast<u16>(KU_INVALID_VEHICLE);   // `li r11,-1 ; sth r11,2(r15)`
+    lSoaData.mArticulatedVehicles.UnSetBit(luVehicle);
+}
+
 // Vehicle::GetTrailerIndex @0x8270E468, DWARF BrnTrafficVehicle.h:338. GetCabIndex's twin:
 // the same `lhz 2(this)` behind the MIRRORED assert -- IsOfStandardSpecies(), baked at header
 // line 0x302 == 770. Only a cab may ask for its trailer. Landed 2026-08-28: it was named as

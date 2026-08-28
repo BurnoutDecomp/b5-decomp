@@ -294,6 +294,12 @@ public:
     void StartGiveUpManoeuvre();
     void CopyEffectsFromCab(const Vehicle* lpCab);
 
+    // X360 @0x8270F6C8 (151 insns), DWARF BrnTrafficVehicle.h:1079/:1080 for its two asserts.
+    // Breaks a cab/trailer pair: clears muOtherHalfIndex and drops the vehicle's bit out of
+    // lSoaData.mArticulatedVehicles (`a3 + 320` == the 4th 80-byte set). r4 is the vehicle's
+    // own index, r5 the SoA. Body in BrnTrafficVehicle.cpp.
+    void DetachArticulation(u32 luVehicle, VehicleSoaData& lSoaData);
+
     void SetPhysical(s8 liPartsIndex, u32 luVehicle, VehicleSoaData& lSoaData);
     void SetNotPhysical(u32 luVehicle, VehicleSoaData& lSoaData);
     void SetDead(u32 luVehicle, VehicleSoaData& lSoaData);
