@@ -83,15 +83,21 @@ public:
                                          s32 attackSamples, s32 releaseSamples,
                                          s32 groupChannels);
 
-    // @0x82B64DB0 -- the per-block envelope-follower + gain-curve kernel. KEYSTONE:
-    // this body is hand-written X360 VMX (Altivec/VMX128) over lvx128/stvx128 vectors
-    // with vlogefp/vexptefp/vctsxs/vrfiz/vsel lane ops; its DSP semantics are NOT
-    // recoverable store-for-store as portable C++ from the Hex-Rays transliteration.
-    // Declared here for the layout/ABI; intentionally NOT bodied (see CompressorLimiter1.cpp).
+    // @0x82B64DB0 -- the per-block envelope-follower + gain-curve kernel. Hand-written
+    // X360 VMX128 (2,294 instructions); DECODED AND BODIED 2026-08-28 (phase E; report
+    // progress/scratch_dossiers/compressorlimiter1_process_vmx_decode_codex.md). Every
+    // algorithmic element is recovered -- the one-pole envelope and its three rodata
+    // coefficients, the on/off hysteresis, the exponent attack/release stepping, the
+    // level^exponent gain curve, both channel topologies, the fixed 256-sample frame, the
+    // destination-as-gain-scratch protocol and the buffer-slot swap. See the .cpp for the
+    // single marked deviation (the vlogefp/vexptefp ESTIMATE pair has no bit-identical
+    // portable form) and for the exact state/rounding order.
     //
     // ABI corrected 3-arg (was Process(self) placeholder) from the asm-attested call sites in
     // Compressor1::Process @0x82B9DA8C and Limiter1::Process: r3=self, r4=the audio process
-    // context, r5=the base channel count (lbz 0x21). The keystone body still ignores them.
+    // context, r5=the base channel count (lbz 0x21). The console forms NO return value (the
+    // independent path even reuses r3 as a pointer delta) and both callers discard it; the
+    // `int` return is kept only as the committed declaration's shape and always returns 0.
     static int Process(CompressorLimiter1 *self, AudioProcessContext *ctx, u8 channelCount);
 
     History mChannelHistory[6];  // +0x00..+0x2F (48 bytes)

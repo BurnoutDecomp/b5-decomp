@@ -276,6 +276,9 @@ int Limiter1::Process(Limiter1 *self, AudioProcessContext *ctx, bool /*discontin
         self->mLastSampleRate  = lfSampleRate;                                        // +0x9C
     }
 
+    // The kernel reads the source, writes the destination, and performs the src/dst SWAP
+    // ITSELF -- which is exactly why this body does not swap (the two must stay distinct
+    // while the gain curve is being built in the destination).
     CompressorLimiter1::Process(&self->mCompressorLimiter1, ctx,
                                 self->mBase.mbChannelCount); // lbz +0x21
     return 1;                                                 // BUFFERSTATUS_AVAILABLE
