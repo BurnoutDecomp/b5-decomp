@@ -31,8 +31,10 @@
 #include "rw/audio/core/Rechannel.h"
 #include "rw/audio/core/Resample.h"
 #include "rw/audio/core/Send.h"
+#include "rw/audio/core/plugins/GainFader.h"
 #include "rw/audio/core/plugins/HighPassButterworth.h"
 #include "rw/audio/core/plugins/Limiter1.h"
+#include "rw/audio/core/plugins/LowPassButterworth.h"
 #include "rw/audio/core/plugins/Pan2D.h"
 #include "rw/audio/core/plugins/Pan2D1.h"
 #include "rw/audio/core/plugins/Pause.h"
@@ -234,14 +236,15 @@ GenericRwacFactory::GenericRwacFactory(Environment& arEnvironment,
         PlugInRegistry* lpPlugInRegistry =
             rw::audio::core::System::GetPlugInRegistry(mpSystem);
 
-        // The 25 RegisterPlugInRunTime calls in EXACT console order. SEVENTEEN are
+        // The 25 RegisterPlugInRunTime calls in EXACT console order. NINETEEN are
         // LIVE (descriptor-record wave 2026-08-28: their PlugInDescRunTime
         // records are REAL host records -- XEX-recovered fields + host callback
         // pointers, every callback bodied in its mounted vendor TU; proof
         // progress/scratch_dossiers/plugindesc_layout_codex.md). The rest stay
         // FLAG-deferred in place, each for a stated reason:
-        //   * GainFader, LowPassButterworth, SndPlayer1, SubMix -- no PC plug-in
-        //     home yet (Dac registered LIVE with the phase-D slice 2026-08-28);
+        //   * SndPlayer1 and SubMix -- no PC plug-in home yet (Dac registered
+        //     LIVE with the phase-D slice; GainFader and LowPassButterworth got
+        //     theirs with the phase-E filter wave);
         //   * the three custom game descriptors (GinsuPlayer off_82F2D094 /
         //     SndPlayer1_CgsStreamMod off_82F2E124 / GainArray off_82F2E664)
         //     -- their game-side plug-in bodies are not reconstructed.
@@ -270,13 +273,13 @@ GenericRwacFactory::GenericRwacFactory(Environment& arEnvironment,
         CGS_RWAC_REGISTER(rw::audio::core::BandPassIir2::GetPlugInDescRunTime());        // 2  @0x82B96A40
         CGS_RWAC_REGISTER(rw::audio::core::Dac::GetPlugInDescRunTime());                // 3  @0x82B96DB8 (phase D)
         CGS_RWAC_REGISTER(rw::audio::core::Gain::GetPlugInDescRunTime());                // 4  @0x82B97350
-        // 5  GainFader @0x82B97368 -- FLAG deferred (no PC home; off_82F8CC50)
+        CGS_RWAC_REGISTER(rw::audio::core::GainFader::GetPlugInDescRunTime());           // 5  @0x82B97368 (phase E)
         CGS_RWAC_REGISTER(rw::audio::core::HighPassIir2::GetPlugInDescRunTime());        // 6  @0x82B978B0 (phase E)
         CGS_RWAC_REGISTER(rw::audio::core::HighPassButterworth::GetPlugInDescRunTime()); // 7  @0x82B976D0
         CGS_RWAC_REGISTER(rw::audio::core::HighShelfIir2::GetPlugInDescRunTime());       // 8  @0x82B97978
         CGS_RWAC_REGISTER(rw::audio::core::Limiter1::GetPlugInDescRunTime());            // 9  @0x82B97AA0 (phase E)
         CGS_RWAC_REGISTER(rw::audio::core::LowPassIir2::GetPlugInDescRunTime());         // 10 @0x82B97DB0
-        // 11 LowPassButterworth @0x82B97BF0 -- FLAG deferred (no PC home; off_82F8D24C)
+        CGS_RWAC_REGISTER(rw::audio::core::LowPassButterworth::GetPlugInDescRunTime());  // 11 @0x82B97BF0 (phase E)
         CGS_RWAC_REGISTER(rw::audio::core::LowShelfIir2::GetPlugInDescRunTime());        // 12 @0x82B97E70
         CGS_RWAC_REGISTER(rw::audio::core::Pan2D::GetPlugInDescRunTime());               // 13 @0x82B984E8
         CGS_RWAC_REGISTER(rw::audio::core::Pan2D1::GetPlugInDescRunTime());              // 14 @0x82B98748 (phase E)
