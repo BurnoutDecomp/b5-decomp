@@ -631,8 +631,22 @@ namespace BrnTrafficIO { class InputBuffer_PreScene; class OutputBuffer_PreScene
         // / GetStaticTrafficParamFro) are non-const here; add it once those gain const
         // overloads. The body only reads, so it is const-correct in substance.
         bool  IsVehiclesParamAZombie(u32 luVehicle);                 // @ 0x82715D70 (DWARF :1323)
-        void  JunctionFUP_StopOffscreenTraffic(void* lpData, bool lbFlag); // @ 0x82719868 (FLAG)
-        void  JunctionFUP_TryClearupNonMovingPhysical();             // @ 0x8273F2E8 (FLAG)
+        // @0x82719868 / @0x8273F2E8. SIGNATURES CORRECTED 2026-08-28 from the asm; BODIES in
+        // _wT5_01.cpp. The FLAG that stood here carried TWO wrong declarations:
+        // `void JunctionFUP_StopOffscreenTraffic(void*, bool)` and, worse,
+        // `void JunctionFUP_TryClearupNonMovingPhysical()` -- no parameters and a void return
+        // for a function the console calls with two arguments and whose r3 returns 0/1
+        // (0x8273F308 `li r3,0` / 0x8273F408 `li r3,1`). The first parameter is the LIVE
+        // FastBitArray iterator, not an opaque blob: both bodies do `lwz r11, 0(r4)` == its
+        // miIndex, and both DWARF dumps spell it `const FastBitArray<601>::Iterator&`
+        // (BrnTrafficEntityModule.h:1884/:1887). Spelled through VehicleSoaData's own
+        // KU_MAX_VEHICLES so the iterator type matches the sets UpdateJunctionFUP walks.
+        void  JunctionFUP_StopOffscreenTraffic(
+                  const CgsContainers::FastBitArray<VehicleSoaData::KU_MAX_VEHICLES>::Iterator& lrItVehicle,
+                  bool lbRenderedLastFrame);
+        bool  JunctionFUP_TryClearupNonMovingPhysical(
+                  const CgsContainers::FastBitArray<VehicleSoaData::KU_MAX_VEHICLES>::Iterator& lrItVehicle,
+                  bool lbRenderedLastFrame);
         // @ 0x82741E40 / @ 0x8272EB40 -- the REMOVE half of the scene registration (bodies in
         // BrnTrafficEntityModule_KillDyingVehicleEntities.cpp). The output buffer is the same
         // PreScene one CreateNewVehicleEntities takes (assert .cpp 4410/4463); the callee takes
@@ -873,6 +887,21 @@ namespace BrnTrafficIO { class InputBuffer_PreScene; class OutputBuffer_PreScene
         // StaticVehicles_* updates never run. Its one caller is PreSceneUpdate's
         // E_STATE_RUNNING arm (@0x8274A968).
         void UpdateTimers(const BrnTrafficIO::InputBuffer_PreScene* lpInput);
+
+        // @0x82715A18, DWARF :1290. Body in BrnTrafficEntityModule_wT5_01.cpp.
+        // THE ONLY WRITER of mfCrashSliderFinalValue, i.e. the only producer of the input
+        // ShouldBeHollywoodAction() reads. Called from PreSceneUpdate's E_STATE_RUNNING arm
+        // immediately after UpdateTimers (`bl 0x82715A18` @0x8274ABF0), inside the same
+        // `!IsPaused() && !lbSimPaused` guard.
+        void UpdateCrashSlider();
+
+        // @0x82745218, DWARF :1875. Body in BrnTrafficEntityModule_wT5_01.cpp.
+        // THE ONLY WRITER of mfJunctionFUP, i.e. the only producer of the input
+        // NeedToTakeActionAgainstJunctionFUP() reads -- which gates UpdateParams_TryAvoidCrashing
+        // AND SpawnNewTraffic @0x82748A40. Called from PrePhysicsUpdate between
+        // BuildPotentialCollisionList and GenerateDriverInputs (`bl 0x82745218` @0x8274C7B0,
+        // r3 == this only).
+        void UpdateJunctionFUP();
 
         // @0x8274E508, DWARF :1476. The per-decision-frame call set the console runs in
         // E_STATE_RUNNING. Body in _wT1_06.cpp, PARTIAL: the driving-traffic legs are named

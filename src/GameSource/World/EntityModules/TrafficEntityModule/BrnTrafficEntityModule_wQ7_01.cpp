@@ -283,10 +283,17 @@ void TrafficEntityModule::PrePhysicsUpdate( CgsModule::IOBufferStack* /*lpInputB
             // already owns a slot when contact generation runs. Mount _wT4_02.cpp in
             // tools/build/build_game_exe.bat or this call is an LNK2019 at exe link.
             BuildPotentialCollisionList( lpInput, lpOutput, &lCreatedBodies );
-            {
-                static bool sbLogged = false;
-                LogMissingLeg( sbLogged, "UpdateJunctionFUP (no export dumped)" );
-            }
+
+            // 0x8274C7B0 -- UN-GATED. The note that stood here said "no export dumped"; that
+            // was FALSE, the per-function export exists with 1365 asm lines
+            // (.ida-exports/BURNOUT_X360_ARTIST.XEX/0x82745218.json) and the body is now in
+            // _wT5_01.cpp. It is the ONLY writer of mfJunctionFUP, so with it gated
+            // NeedToTakeActionAgainstJunctionFUP() was constant false and BOTH the traffic
+            // avoid arm (UpdateParams_TryAvoidCrashing) and SpawnNewTraffic's jam brake were
+            // unreachable. Mount _wT5_01.cpp in tools/build/build_game_exe.bat or this call is
+            // an LNK2019 at exe link.
+            UpdateJunctionFUP();
+
             // 0x8274C7BC -- LIVE (cluster C3 owns the body).
             GenerateDriverInputs( lpOutput );
 

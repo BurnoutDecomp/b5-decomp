@@ -190,6 +190,15 @@ void TrafficEntityModule::PreSceneUpdate(CgsModule::IOBufferStack* lpInputBuffer
             // exactly why it must stand behind the sim-paused bit too. Body in _wT1_06.cpp.
             UpdateTimers(lpInput);
 
+            // 0x8274ABF0 -- UN-GATED. Body in _wT5_01.cpp; it is the ONLY writer of
+            // mfCrashSliderFinalValue, so with it gated ShouldBeHollywoodAction() was constant
+            // false and the sympathetic-crash arm in UpdateParams was unreachable. Its slot is
+            // read straight out of the image (PreSceneUpdate is an ARTIST export hole):
+            // `bl 0x82715858` (UpdateTimers) then `bl 0x82715A18` two instructions later,
+            // before KillDyingVehicleEntities @0x8274ABF8. Mount _wT5_01.cpp in
+            // tools/build/build_game_exe.bat or this call is an LNK2019 at exe link.
+            UpdateCrashSlider();
+
             // The REMOVE half of the scene registration (bodies in
             // BrnTrafficEntityModule_KillDyingVehicleEntities.cpp). Landing it closed the
             // param-pool leak behind the "traffic is anchored to the junkyard" user report
@@ -217,10 +226,11 @@ void TrafficEntityModule::PreSceneUpdate(CgsModule::IOBufferStack* lpInputBuffer
             static bool sbLogged = false;
             LogMissingLeg(sbLogged,
                 "PreSceneUpdate E_STATE_RUNNING remaining legs -- GenerateCrashedVehicleEvents "
-                "@0x82720030 / ManageTriggers @0x82747518 / UpdateSerialiser @0x8272DA80 / "
-                "UpdateCrashSlider @0x82715A18. None bodied; all are crash/trigger/replay "
-                "surface (waves 2 and 3). The leak's KillTrafficTooCloseToRaceCars is NOT in "
-                "the ship's callee list and is therefore not written");
+                "@0x82720030 / ManageTriggers @0x82747518 / UpdateSerialiser @0x8272DA80. "
+                "None bodied; all are crash/trigger/replay surface (waves 2 and 3). "
+                "UpdateCrashSlider @0x82715A18 WAS in this list and is now live above. The "
+                "leak's KillTrafficTooCloseToRaceCars is NOT in the ship's callee list and is "
+                "therefore not written");
         }
     }
     break;

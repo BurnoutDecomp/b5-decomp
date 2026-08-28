@@ -108,12 +108,19 @@ f32 Neighbour::ConvertOurParameterToTheirs(f32 lfOurParam) const
 void TrafficEntityModule::UpdateParams(const BrnTrafficIO::InputBuffer_PostPhysics* lpInput)
 {
     // ---- [DIAG] NOT IN THE X360 BINARY, OFF BY DEFAULT -------------------------------------
-    // The two crash arms below are gated by NeedToTakeActionAgainstJunctionFUP() and
-    // ShouldBeHollywoodAction(). Both predicates are bodied and correct, but the members they
-    // read are never WRITTEN in this tree: mfJunctionFUP's only producer is UpdateJunctionFUP
-    // @0x82745218 (still gated in _wQ7_01.cpp) and mfCrashSliderFinalValue's is UpdateCrashSlider
-    // @0x82715A18 (still gated in _wT1_02.cpp) -- so both predicates are constant false and both
-    // arms are unreachable until those two land.
+    // ✅ 2026-08-28: BOTH PRODUCERS NOW EXIST (_wT5_01.cpp) and both calls are live, so the
+    // paragraph that stood here -- "both predicates are constant false and both arms are
+    // unreachable" -- is CLOSED for the avoid arm. UpdateJunctionFUP @0x82745218 writes
+    // mfJunctionFUP from PrePhysicsUpdate every frame, so
+    // NeedToTakeActionAgainstJunctionFUP() is now a live measurement of the jam.
+    //
+    // ⚠️ IT IS NOT CLOSED FOR THE HOLLYWOOD ARM, and the difference matters. UpdateCrashSlider
+    // is live, but it only DECAYS and NORMALISES mfCrashSliderCrashScore plus schedules
+    // showtime spikes; outside showtime the score is raised by HandleExternalResponses
+    // @0x827330B0 (`score += factor * <crash event>`) and seeded by HandlePrepareForModeAction
+    // @0x827480D8, NEITHER of which is bodied here. So in ordinary driving
+    // mfCrashSliderFinalValue is still 0 and ShouldBeHollywoodAction() is still false -- by
+    // missing producer, not by design. BRN_TRAFFIC_FORCE_SYMPCRASH stays until those land.
     //
     // These env switches set the CONSOLE'S OWN debug members -- mbDEBUGOverrideJunctionFUP (:866)
     // and mbDEBUGTestSympCrash (:858), the exact overrides the two predicates already honour --
