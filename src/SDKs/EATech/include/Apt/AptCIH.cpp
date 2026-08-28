@@ -212,8 +212,11 @@ void AptCIH::DestroyGCPointers()
             gpNonGCPoolManager->Deallocate(pCI->mpProperties, sizeof(AptNativeHash));
             pCI->mpProperties = nullptr;
         }
-        pCI->~AptCharacterInst();
-        gpNonGCPoolManager->Deallocate(pCI, sizeof(AptCharacterInst));
+        // The console's manual-vtable slot-0 scalar deleting destructor. A direct
+        // `pCI->~AptCharacterInst()` runs the BASE dtor only (this family's dtors are
+        // non-virtual) and drops every derived teardown -- see
+        // AptCharacterInst::DestroyCharacterInst.
+        AptCharacterInst::DestroyCharacterInst(pCI);
     }
 }
 

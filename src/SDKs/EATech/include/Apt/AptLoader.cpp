@@ -35,6 +35,53 @@
 
 #include <new>       // placement new (init the AptFile's EAStringC member in pool memory)
 #include <cstring>   // strlen
+#include <cstdio>    // [aptlife] snprintf -- diagnostic only
+#include <cstdlib>   // [aptlife] getenv latch -- diagnostic only
+
+#include "SDKs/EATech/include/Apt/AptCIH.h"   // KU_AptEmbeddedMovieOff ([aptlife] def-base probe)
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [aptlife] CgsDev::Log::WriteToLog
+
+// ---------------------------------------------------------------------------
+// [aptlife] -- the movie-lifetime witness. NOT X360; opt-in via BRN_APT_LIFE=1.
+//
+// It exists because an apt bundle can be unloaded and re-loaded under a live
+// AptLoader, and the only way to tell a re-load that RESOLVED from one that
+// silently reused a stale AptFile is to print, at each seat, the three facts
+// that decide it: the file's load state, its mpData, and the movie def base's
+// character table (a POINTER after Fixup, a raw file OFFSET before it).
+// ---------------------------------------------------------------------------
+bool AptLifeDiagEnabled()
+{
+    static const bool sbOn = (std::getenv("BRN_APT_LIFE") != nullptr);
+    return sbOn;
+}
+
+void AptLifeLog(const char* lpacWhat, const char* lpacName, const AptFile* lpFile)
+{
+    if (!AptLifeDiagEnabled())
+        return;
+
+    const void*   lpData      = lpFile ? lpFile->mpData : nullptr;
+    int           liState     = lpFile ? lpFile->mnState : -1;
+    int           liRefs      = lpFile ? lpFile->mnRefCount : -1;
+    long long     lnCharCount = -1;
+    const void*   lpCharTable = nullptr;
+    if (lpData != nullptr)
+    {
+        const AptCharacterAnimation* lpAnim =
+            reinterpret_cast<const AptCharacterAnimation*>(
+                reinterpret_cast<const char*>(lpData) + KU_AptEmbeddedMovieOff);
+        lnCharCount = lpAnim->mnCharacterCount;
+        lpCharTable = lpAnim->mpCharacterTable;
+    }
+
+    char lac[256];
+    std::snprintf(lac, sizeof(lac),
+        "[aptlife] %s '%s' file=%p refs=%d state=%d mpData=%p charCount=%lld charTable=%p\n",
+        lpacWhat, lpacName ? lpacName : "(null)", static_cast<const void*>(lpFile),
+        liRefs, liState, lpData, lnCharCount, lpCharTable);
+    CgsDev::Log::WriteToLog(lac);
+}
 
 // The one global lock for the loader's list. (EA::Thread::Mutex is recursive,
 // which IsLoaded/Load rely on.)
@@ -176,6 +223,7 @@ AptFilePtr AptLoader::Load(const EAStringC& fileName)
         MutexAptLoader.Unlock();
         result.pData = found.pData;
         AptSharedPtrIncRef(found.pData);
+        AptLifeLog("Load HIT   ", fileName.GetBuffer(), found.pData);
     }
     else
     {
@@ -203,6 +251,7 @@ AptFilePtr AptLoader::Load(const EAStringC& fileName)
         AptSharedPtrIncRef(f);                       // 1 -> 2 (returned ref)
         if (AptSharedPtrDecRef(f) == 0)              // 2 -> 1
             AptSharedPtrDelete(f);
+        AptLifeLog("Load NEW   ", fileName.GetBuffer(), f);
         // `found` is null in this branch -> the cleanup below is a no-op.
     }
 
@@ -354,6 +403,8 @@ void AptLoader::CompleteLoad(AptFilePtr filePtr, void* pBase, AptConstFile* pCon
     f->mpData           = pRoot;    // f[5]  (+0x14)  = the movie root
     f->mnField12        = f->mnState;   // record the previous state
     f->mnState          = 3;            // loaded / resolved
+
+    AptLifeLog("CompleteLd ", f->mFileName.GetBuffer(), f);
 
     // FLAG PC-platform leaf: the console then notifies/frees the const-file chunk
     // through the HOST load-complete hook (dword_8324E840(a4) -- a host-installed
@@ -651,6 +702,71 @@ void AptLoader::CancelPreloadedAnimation(const EAStringC& fileName)
         // Release the findFile reference on the named file.
         if (AptSharedPtrDecRef(pFile) == 0)
             AptSharedPtrDelete(pFile);
+    }
+
+    MutexAptLoader.Unlock();
+}
+
+// ---------------------------------------------------------------------------
+// InvalidateLoadedData -- FLAG PC-platform leaf (see the header banner for why the
+// console needs no such entry point). Put every AptFile that was resolved against
+// pDataBlock back into the "requested" state, so the loader's own faithful state
+// machine (Update: 1 -> 2 -> the host stream hook -> AptCallbackFile::LoadAnimation ->
+// AptCompleteAnimationAsyncLoad -> CompleteLoad -> Resolve -> Fixup) re-runs against
+// whatever bytes the next load brings, instead of IsLoaded handing out a file whose
+// mpData points into a block the host has re-filled with un-relocated file offsets.
+//
+// The key is AptFile::mpDataBlock, which CompleteLoad sets to the AptDataHeader the
+// movie resolved from -- so the match is by IDENTITY of the header being un-registered,
+// never by name. mnField12 keeps the outgoing state, exactly as every other state
+// advance in this file records it.
+// ---------------------------------------------------------------------------
+void AptLoader::InvalidateLoadedData(const void* pDataBlock)
+{
+    if (pDataBlock == nullptr)
+        return;
+
+    MutexAptLoader.Lock();
+
+    AptLoaderNode* pPrev = nullptr;
+    AptLoaderNode* pNode = mpHead;
+    while (pNode != nullptr)
+    {
+        AptFile* const pFile = pNode->mpFile;
+        if (pFile == nullptr || pFile->mpDataBlock != pDataBlock)
+        {
+            pPrev = pNode;
+            pNode = pNode->mpNext;
+            continue;
+        }
+
+        AptLifeLog("Orphan     ", pFile->mFileName.GetBuffer(), pFile);
+
+        // Cut the file loose from its (gone) data. mpData null also makes the
+        // ~AptFile resolved-teardown branch a no-op, so the orphan can never
+        // Unresolve a freed blob if its last reference ever does drop.
+        pFile->mnField12        = pFile->mnState;
+        pFile->mnState          = 0;         // orphaned: neither requested nor loaded
+        pFile->mpData           = nullptr;
+        pFile->mpDataBlock      = nullptr;
+        pFile->mpResolveContext = nullptr;
+
+        // ⭐ UNLINK the weak node -- do NOT leave the file "requested" in the list.
+        // Leaving it there makes the very next AptLoader::Update re-kick a load for a
+        // movie nobody asked for, in the same frame the GUI is tearing the screen down;
+        // MEASURED, that eager re-load pulled the movie in through the host's fallback
+        // per-movie bundle path and left the HUD unable to re-mount after the resume.
+        // Off the list, findFile/IsLoaded/Update never see the orphan again, so the next
+        // real request builds a FRESH AptFile and runs the full faithful load.
+        // The orphan itself stays alive on its residual references -- that leak is the
+        // open half of this bug and is NOT fixed here.
+        AptLoaderNode* const pDead = pNode;
+        pNode = pNode->mpNext;
+        if (pPrev == nullptr)
+            mpHead = pNode;
+        else
+            pPrev->mpNext = pNode;
+        gpNonGCPoolManager->Deallocate(pDead, sizeof(AptLoaderNode));
     }
 
     MutexAptLoader.Unlock();

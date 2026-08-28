@@ -2509,8 +2509,66 @@ void GuiModule::Destruct()
                     mpOutputBuffer->AddEvent(lpEvent, liId, liSize);
                     break;
 
-                case 42:   // internal command channel (preload-done 72 etc.) -- consumers
-                    break; // are module-internal follow-ons. [FLAG]
+                case 42:
+                {
+                    // ⭐⭐ CHANNEL 42 IS *NOT* A DEAD-END, AND THE [FLAG] THAT STOOD HERE
+                    // ("consumers are module-internal follow-ons") THREW THE WHOLE CHANNEL
+                    // AWAY. It is the console's OutputInternalState<T> channel -- the twin
+                    // of channel 40's OutputGuiEvent<T>, differing only in the AddEvent
+                    // selector (`li r5,0x2A` vs `li r5,0x28`; compare
+                    // StateInterface::OutputInternalState<GuiEventShowHideHud> @0x82493C98
+                    // with OutputGuiEvent<GuiEventShowHideHud> @0x82493988 -- byte for byte
+                    // the same 16-byte {1,148,12,flag} record).
+                    //
+                    // The console consumes it in EventInterpreterModule::ProcessOutEvents
+                    // @0x8285E1D0, case '*' (== 42) @0x8285E6C8:
+                    //     lwz  r11, 8(r22)      ; headerOffset  (record[2] == 12)
+                    //     addi r3, r18, 0x15C0  ; the module's OWN internal in-queue
+                    //     lwz  r6, 0(r22)       ; payload size  (record[0])
+                    //     add  r4, r11, r22     ; payload = record + headerOffset (BYTES)
+                    //     lwz  r5, 4(r22)       ; event type    (record[1])
+                    //     bl   VariableEventQueue<18432,16>::AddEvent
+                    // i.e. it UNWRAPS the record and re-posts the inner event -- exactly as
+                    // the sibling cases '(' (40) and ')' (41) unwrap theirs -- into a queue
+                    // that EventInterpreterModule::Update @0x8285F670 splices into the
+                    // inbound stream at the top of the NEXT frame:
+                    //     EventQueue->Append(this + 0x15C0); (this + 0x15C0)->Clear();
+                    //     ProcessInEvents(this, EventQueue);
+                    // so an internal-state event is fanned to every registered observer
+                    // one frame later, like any other GUI event.
+                    //
+                    // WHAT THE DROP COST, MEASURED: the in-game HUD stayed drawn ON TOP of
+                    // the pause screen. InGame::OpenDriverDetails @0x824DA700 (and
+                    // OpenMainMap / OpenEventMap / ShutDownHudComponents) post exactly this
+                    // record -- GuiEventShowHideHud{0} -- and it is what
+                    // FBurnMainHudState::UpdatePermenant's case 148 turns into
+                    // SendStateEvent("PAUSE"), and what PausedHudState::Update's case 148
+                    // (payload byte non-zero, from InGame::OnEnter's flag=1 twin) turns
+                    // back into "UNPAUSE". Producers, consumers and the HUD flow's PAUSED
+                    // slot were all already here; only this hop was missing.
+                    //
+                    // RouteEventToFlow is this build's ProcessInEvents fan-out, and this
+                    // drain runs AFTER the flows have ticked and after the per-frame
+                    // in-queue Clear -- so posting here lands the event for the next
+                    // frame's flow Update, which is the console's one-frame defer exactly.
+                    const u32 luHeaderSize = reinterpret_cast<const u32*>(lpEvent)[2];
+                    const s32 liInnerId    =
+                        static_cast<s32>(reinterpret_cast<const u32*>(lpEvent)[1]);
+                    const s32 liPayload    =
+                        static_cast<s32>(reinterpret_cast<const u32*>(lpEvent)[0]);
+                    // :958 "Invalid raw event in EventInterpreterModule::ProcessOutEvents"
+                    CGS_ASSERT(luHeaderSize >= 12u,
+                               "Invalid raw event in EventInterpreterModule::ProcessOutEvents");
+                    if (luHeaderSize >= 12u &&
+                        static_cast<s32>(luHeaderSize) + liPayload <= liSize)
+                    {
+                        RouteEventToFlow(
+                            reinterpret_cast<const CgsModule::Event*>(
+                                reinterpret_cast<const u8*>(lpEvent) + luHeaderSize),
+                            liInnerId, liPayload);
+                    }
+                    break;
+                }
 
                 default:
                     // Resource requests (39) and the other state outputs are follow-ons.

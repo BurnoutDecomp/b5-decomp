@@ -161,7 +161,12 @@ struct AptCharacterAnimation
     // animation refs, un-relocates every record's pointer slot (subtracting the load
     // base), tears down the imports, and stamps the freed characters. nBase is the
     // load base (r4). Returns the last sub-result. Body in the .cpp.
-    void* Unresolve(int32_t nBase);
+    // ⚠️ nBase is the LOAD BASE, i.e. a POINTER. The console's r4 is a 32-bit pointer
+    // so its `int` spelling is lossless there; on x64 the same value is a 64-bit heap
+    // address and an int32_t parameter TRUNCATES it, making every un-relocation in
+    // pass 2 subtract the wrong number. Widened to intptr_t (the x64 native-8 rule);
+    // the single caller is AptFile::~AptFile.
+    void* Unresolve(intptr_t nBase);
 
     // @0x82AD92A8 (PS3 @0x7E37A4) -- restore the init-indicator list (declared above
     // as ResetInitIndicators); body now in the .cpp.

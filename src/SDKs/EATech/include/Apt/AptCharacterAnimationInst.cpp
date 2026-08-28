@@ -26,6 +26,7 @@
 #include "SDKs/EATech/include/Apt/AptFile.h"                     // AptFile (the shared pointee)
 #include "SDKs/EATech/include/Apt/AptCharacter.h"                // AptCharacter base (the embedded movie root follows it)
 #include "SDKs/EATech/include/Apt/AptCIH.h"                      // KU_AptEmbeddedMovieOff (native-8 header size 0x20)
+#include "SDKs/EATech/include/Apt/AptLoader.h"                   // AptLifeLog ([aptlife] opt-in witness)
 
 // ---------------------------------------------------------------------------
 // AptGetMovieCharacterAnimation -- a movie/animation AptCharacter embeds its
@@ -233,6 +234,8 @@ AptCharacterAnimationInst* MakeCharacterAnimationInst(AptFile* pFile)
     // the host facade DEFERS calling this factory until the converter fix (see
     // BrnGuiAptRuntime: the movie-root instantiation is held off with the tick). The
     // body here stays the faithful, un-gated console decompile.
+    AptLifeLog("MakeInst   ", pFile->mFileName.GetBuffer(), pFile);   // [aptlife] opt-in witness
+
     AptFilePtr laIncArg;
     laIncArg.pData = laHeldFile.pData;                // v16[0] = *a3
     if (laIncArg.pData != nullptr)

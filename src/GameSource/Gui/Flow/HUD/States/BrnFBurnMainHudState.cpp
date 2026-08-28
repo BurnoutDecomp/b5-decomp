@@ -1228,17 +1228,30 @@ namespace BrnGui
              liEventId = lpInQueue->GetNextEvent(lpEvent, &lpEvent, &liSize))
         {
             const s32* lpiPayload = reinterpret_cast<const s32*>(lpEvent);
+            // ⚠️ THE PAYLOAD WIDTH IS PER-ARM, AND IT IS TAKEN FROM THE ASM.
+            // UpdatePermenant @0x824810F0 reads each record with the load its record
+            // size demands, and two of the three are BYTE loads:
+            //   case 0x135 (309) @0x824811B4/@0x824811C0: `lbz r11,0(r30)` cmplwi 1 +
+            //                    `lbz r11,1(r30)` cmplwi 0   -- TWO u8s
+            //   case 0x94  (148) @0x82481154:             `lbz r11,0(r30)`  -- ONE u8
+            //   case 0x179 (377) @0x824811DC:             `lwz r11,0(r30)`  -- an s32
+            // and the record sizes agree at the producer: GuiEventGameCompleted is
+            // `u8 maData[2]` (id 309 size 2) and GuiEventShowHideHud is `u8 maData[1]`
+            // (id 148 size 1) -- BrnGuiDemangledEventTypes.h:159/246. Reading either as
+            // an s32 pair walked 8 bytes off a 2-byte record and 4 off a 1-byte one, so
+            // the tests could only pass on whatever the queue happened to hold next.
+            const u8* lpu8Payload = reinterpret_cast<const u8*>(lpEvent);
             switch (liEventId)
             {
             case 309:
-                if (lpiPayload[0] == 1 && lpiPayload[1] == 0)
+                if (lpu8Payload[0] == 1u && lpu8Payload[1] == 0u)
                     SendStateEvent("PAUSE");
                 break;
             case 21:
                 ProcessAptEvents(lpiPayload);
                 break;
             case 148:
-                if (lpiPayload[0] != 0)
+                if (lpu8Payload[0] != 0u)
                 {
                     // [H3b] the sat-nav events-filter re-arm (X360: pick by the
                     // mirrored enable byte).
