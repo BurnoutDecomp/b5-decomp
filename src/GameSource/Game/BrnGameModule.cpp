@@ -1636,12 +1636,44 @@ namespace BrnGame
         // Unconditional three-word write, no environment read on the hot path; the READER
         // (pc/gcm/renderengine/device.cpp) is the side that is gated, and it does nothing unless
         // BRN_FRAME_DUMP_ARM=slomo. Sticky by design.
-        if (BrnDiag::gFilmLatch.muSlomoLatched == 0u && mSimTimer.GetScaleCurrent() != 1.0f)
+        // ⚠️ IT COUNTS EPISODES, AND THAT IS NOT A LUXURY. Measured 2026-08-28: the FIRST
+        // dilation of a free-burn session is the JUNKYARD-EXIT drive-thru, which fires while
+        // the car is parked -- so an unconditional latch spends the whole 300-frame budget on a
+        // stationary car and films nothing. BRN_SLOMO_LATCH_SKIP=<n> skips the first n episodes
+        // (an episode is one 1.0 -> non-1.0 transition), so a capture can land on the drive-thru
+        // that actually moves the car.
         {
-            BrnDiag::gFilmLatch.mfLatchedSimScale = mSimTimer.GetScaleCurrent();
-            BrnDiag::gFilmLatch.mfLatchedSimStep  =
-                mSimTimer.GetRate() * mSimTimer.GetScaleCurrent();
-            BrnDiag::gFilmLatch.muSlomoLatched    = 1u;
+            const f32  lfSimScale = mSimTimer.GetScaleCurrent();
+            const bool lbDilated  = (lfSimScale != 1.0f);
+
+            static bool sbWasDilated  = false;
+            static u32  suEpisode     = 0u;
+            static s32  siSkip        = -1;
+            if (siSkip < 0)
+            {
+                const char* const lpcSkip = getenv("BRN_SLOMO_LATCH_SKIP");
+                siSkip = (lpcSkip != 0) ? atoi(lpcSkip) : 0;
+                if (siSkip < 0) { siSkip = 0; }
+            }
+
+            if (lbDilated && !sbWasDilated)
+            {
+                ++suEpisode;
+                if (BrnDiag::gFilmLatch.muSlomoLatched == 0u &&
+                    suEpisode > static_cast<u32>(siSkip))
+                {
+                    BrnDiag::gFilmLatch.mfLatchedSimScale = lfSimScale;
+                    BrnDiag::gFilmLatch.mfLatchedSimStep  = mSimTimer.GetRate() * lfSimScale;
+                    BrnDiag::gFilmLatch.muSlomoLatched    = 1u;
+                    if (CgsDev::Log::gpDebugPrint != 0)
+                    {
+                        *CgsDev::Log::gpDebugPrint
+                            << "[slomo] FILM LATCH raised on dilation episode " << suEpisode
+                            << " (scale " << lfSimScale << ")\n";
+                    }
+                }
+            }
+            sbWasDilated = lbDilated;
         }
 
         // ---- BRN_SLOMO_DIAG (opt-in, edge-triggered) ---------------------------------------
