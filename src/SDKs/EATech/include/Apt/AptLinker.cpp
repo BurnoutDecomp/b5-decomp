@@ -21,6 +21,7 @@
 #include "SDKs/EATech/Apt/AptValueGCPoolManager.h"           // AptValueGC_PoolManager (the live-value walk)
 #include "SDKs/EATech/include/Apt/AptDefine.h"               // gpGCPoolManager (off_8324D834)
 #include "SDKs/EATech/include/Apt/AptString/EAString.h"
+#include "SDKs/EATech/include/Apt/Apt.h"                      // AptUserFunctions -- the gAptFuncs link-notify slots
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"    // [aptlife] CgsDev::Log::WriteToLog
 #include <cstdio>                                             // [aptlife] snprintf
 
@@ -63,6 +64,17 @@ int ReplaceReferences(AptValue* pOld, AptValue* pNew, AptValue** ppTable, int nC
 // the shipped default).
 extern int gbAptSavedInputActive;                              // dword_8324D7F0
 
+// The host user-function table (X360 dword_8324E818). Defined once in CgsAptAux.cpp.
+// FireLinkNotifyCallbacks below reaches its +0x2C / +0x18 slots -- the two the X360
+// AptLinker::Update body loads base-relative off r25 (see that function's note).
+extern AptUserFunctions gAptFuncs;                             // dword_8324E818
+
+// The saved-input RECORDER arm's two globals (AptGlobals.cpp). dword_8324E518 is
+// "recording enabled" (0 at the shipped default, so the arm below is inert);
+// dword_8324D820 is the frame tag stamped into each record.
+extern int      gAptInputRecorderEnabled;                      // dword_8324E518
+extern uint32_t gAptInputRecorderTag;                          // dword_8324D820
+
 // The intrusive refcount on AptLinkerThingy (mirroring AptSharedPtrIncRef/DecRef
 // for AptFile -- the thingy carries its count at +0x00). Bodies BELOW in this TU
 // (the out-of-line helper section).
@@ -86,7 +98,7 @@ AptFile*                   MakeAptFile(void* pMem, EAStringC* pName);           
 AptCharacterAnimationInst* MakeCharacterAnimationInst(AptFile* pFile);             // ctor @0x82AFFDE8
 void InstallEmptyCharacterInstVtbl(AptCharacterInst* pInst);                        // *inst = &off_82145FD0
 void EnsureAnimFrameRateCached(AptCharacterAnimationInst* pInst);                   // dword_8324E530 lazy init
-void FireLinkNotifyCallbacks(AptFile* pFile, AptCIH* pCIH);                         // dword_8324E844/E830 hooks
+void FireLinkNotifyCallbacks(AptFile* pFile, AptCIH* pCIH);                         // gAptFuncs +0x2C / +0x18
 
 
 // ---------------------------------------------------------------------
@@ -684,7 +696,10 @@ void AptLinker::Update()
                 // host notify hooks (whose re-entrant Notify can grow / reallocate
                 // mPendingFiles) and restarts the scan when the base moved (`v7 != *v6`).
                 const int32_t lnSizeSnapshot = mPendingFiles.mnSize;       // v7 == *(a1+4): the SIZE word, not the data base
-                FireLinkNotifyCallbacks(pFile, pCIH);                     // dword_8324E844 / dword_8324E830 hooks (PC leaf below)
+                // ⭐ gAptFuncs.pfnLoadAnimationCompleted (+0x2C) -- the ONLY live-frame
+                // producer of gbAptZombiesDirty, i.e. the only thing that ever asks
+                // AptUpdate to run AptGC::CleanUnreachable. Homed below.
+                FireLinkNotifyCallbacks(pFile, pCIH);                     // gAptFuncs +0x2C / +0x18
 
                 // If the pending vector's COUNT changed mid-link, restart the scan
                 // from the (possibly reallocated) base (X360: v7 != *v6 -> v8 = *(a1+12)).
@@ -860,19 +875,88 @@ void EnsureAnimFrameRateCached(AptCharacterAnimationInst* pInst)
 }
 
 // ---------------------------------------------------------------------
-// FireLinkNotifyCallbacks -- after a pending file is linked, fire the two host
-// notification hooks (X360 dword_8324E844 / dword_8324E830, gated by E844 / E518).
-//   X360: if(dword_8324E844) dword_8324E844(file->name+8, cih->assetString+8);
-//         if(dword_8324E518){ build a 6-tag string from file->name; dword_8324E830(&s); }
-// Both are host-installed function-pointer slots (the gAptFuncs host-callback
-// family, the same indirection as pfnSetExternVariable). The console guards each
-// call with its slot, so with no host installer the empty body IS the shipped
-// behaviour.
-// FLAG PC-platform leaf: host link-notify fn-ptr slots (dword_8324E844/8324E830),
-// un-installed on the PC title path -- the console's if(slot) guards skip both.
+// ⭐⭐ FireLinkNotifyCallbacks -- HOMED 2026-08-28, RETIRING AN EMPTY BODY THAT
+// WAS THE ONLY PRODUCER OF THE PARTIAL GC.
+//
+// The note that stood here called dword_8324E844 / dword_8324E830 "host
+// link-notify fn-ptr slots, un-installed on the PC title path", so the empty body
+// looked like the shipped behaviour. It is NOT: they are not standalone globals at
+// all. The X360 materialises the gAptFuncs BASE once, outside the loop --
+//   0x82B0CED4  lis   r11, dword_8324E818@ha
+//   0x82B0CEE4  addi  r25, r11, dword_8324E818@l          ; r25 = &gAptFuncs
+// -- and IDA then prints both loads as base-relative displacements off it:
+//   0x82B0D108  lwz   r11, (dword_8324E844 - 0x8324E818)(r25)   ; gAptFuncs+0x2C
+//   0x82B0D18C  lwz   r11, (dword_8324E830 - 0x8324E818)(r25)   ; gAptFuncs+0x18
+// gAptFuncs == dword_8324E818 (already established by AptInit/DogmaAllocator), so
+// +0x2C is pfnLoadAnimationCompleted and +0x18 is pfnDebugAddSavedInput -- BOTH
+// installed by AptAux::ConstructApt (CgsAptAux.cpp). This is the identical defect
+// the 2026-08-11 pass fixed one family over at gAptFuncs+0x88 (dword_8324E8A0 was
+// aliased to a never-installed gpAptCIHPreDestroyHook, killing pfnOnUnload).
+//
+// WHAT THE EMPTY BODY COST: pfnLoadAnimationCompleted is
+// CgsGui::AptCallbackFile::LoadAnimationCompleted @0x828495B8, whose whole body is
+// AptPartialGarbageCollection() + AptFlushInputQueue(). AptPartialGarbageCollection
+// only raises gbAptZombiesDirty -- the ONE flag AptUpdate @0x82B0DB68 consumes to
+// run AptGC::CleanUnreachable. With this body empty, nothing on a live frame ever
+// raised it (the only other producers are the zombie-conversion paths, which a
+// mount/unmount cycle never enters), so the partial sweep NEVER RAN, no AptCIH was
+// ever destroyed, AptCIH::PreDestroy's pfnOnUnload never fired, and the
+// AptCommunicator's hard 256-entry component table filled up across pause cycles.
+// The SDK drop corroborates the shape exactly (AptLoad.cpp AptLinker::Update: the
+// pfnLoadAnimationCompleted call keyed on AptFileType_Animation, then the
+// gbSavedInputsEnabled checkpoint record).
+//
+// Arguments, from the asm (NOT from the SDK -- the widths are ours):
+//   r3 = *(pFile+4) + 8   == pFile->mFileName.m_pData + sizeof(StringDataC)
+//                         == mFileName.GetBuffer()      (f->GetName().ConstRawPtr())
+//   r4 = *(pCIH+8) + 8    == pCIH->mInstanceName's buffer. Console +8 is the x64
+//                            +0x10 mInstanceName (AptCIH.h's XB1 static_assert).
+// The console does NOT null-guard the E830 call (only the recorder flag gates it);
+// no guard is invented here -- both slots are installed by ConstructApt.
 // ---------------------------------------------------------------------
-void FireLinkNotifyCallbacks(AptFile* /*pFile*/, AptCIH* /*pCIH*/)
+void FireLinkNotifyCallbacks(AptFile* pFile, AptCIH* pCIH)
 {
+    // gAptFuncs+0x2C -- the console's `if (dword_8324E844)` slot guard is the
+    // engine's own optional-callback test (Apt.cpp value-inits the table to 0).
+    if (gAptFuncs.pfnLoadAnimationCompleted != nullptr)
+    {
+        gAptFuncs.pfnLoadAnimationCompleted(pFile->mFileName.GetBuffer(),      // r3
+                                            pCIH->GetInstanceName().GetBuffer()); // r4
+    }
+
+    // The saved-input checkpoint record. Inert at the shipped default
+    // (gAptInputRecorderEnabled == dword_8324E518 == 0), homed for completeness.
+    if (gAptInputRecorderEnabled)
+    {
+        // X360 stack frame: var_1A0 = nTick (stw, +0), var_19C = tag byte (stb, +4),
+        // var_19B.. = the inlined strcpy of the file name (+5).
+        struct LinkCheckpointRecord
+        {
+            int32_t mnTick;        // var_1A0  <- dword_8324D820
+            char    macBuf[257];   // var_19C: [0] = tag, [1..] = the name + NUL
+        } lRecord;
+
+        lRecord.mnTick    = static_cast<int32_t>(gAptInputRecorderTag);   // stw dword_8324D820
+        lRecord.macBuf[0] = 6;   // li r11,6 == SET_CHECKPOINT_INPUT(1) (INPUT_CHECKPOINT|4)
+
+        // `do { c = *src; dst[src++] = c; } while (c);` -- the inlined strcpy at
+        // 0x82B0D164..0x82B0D174, copying the NUL too.
+        const char* lpacName = pFile->mFileName.GetBuffer();
+        char*       lpcDst   = &lRecord.macBuf[1];
+        while ((*lpcDst++ = *lpacName++) != '\0')
+        {
+        }
+
+        // r4 = (lhz 2(name) == m_uSize) + 6, then rounded UP to a multiple of 4
+        // (clrlwi./addi 4/clrrwi 2) -- the console's big-endian record alignment.
+        int32_t lnLength = static_cast<int32_t>(pFile->mFileName.Size()) + 6;
+        if ((lnLength & 3) != 0)
+            lnLength = (lnLength + 4) & ~3;
+
+        // gAptFuncs+0x18 -- pfnDebugAddSavedInput(&record, length).
+        gAptFuncs.pfnDebugAddSavedInput(
+            reinterpret_cast<AptSavedInputRecord*>(&lRecord), lnLength);
+    }
 }
 
 // ---------------------------------------------------------------------

@@ -368,6 +368,25 @@ namespace CgsGui
                           muNumActivecomponents, lpacName ? lpacName : "<null>");
             CgsDev::Log::WriteToLog(lacProbe);
         }
+        // [aptlife] opt-in HIGH-WATER witness (BRN_APT_LIFE=1). NOT X360. The probe above
+        // stops at 40 lines, so it can never show the failure -- the table is a hard 256
+        // and the question is whether repeated pause cycles ratchet toward it or settle.
+        // This prints only when the count reaches a NEW maximum, so a stable cycle is a
+        // handful of lines and a leaking one is a visible staircase.
+        if (AptLifeDiagEnabled())
+        {
+            static u32 suHighWater = 0;
+            if (muNumActivecomponents > suHighWater)
+            {
+                suHighWater = muNumActivecomponents;
+                char lac[160];
+                CgsCore::SnPrintf(lac, sizeof(lac),
+                    "[aptlife] component high-water %u/%d: '%s'\n",
+                    suHighWater, static_cast<int>(AptComponentList::KU_MAX_COMPONENTS),
+                    lpacName ? lpacName : "<null>");
+                CgsDev::Log::WriteToLog(lac);
+            }
+        }
         // lRefText's internal refcount drops here (X360 DecreaseInternalRefCount).
     }
 
@@ -545,16 +564,17 @@ namespace CgsGui
                 // and then only every 32nd.
                 if (AptLifeDiagEnabled())
                 {
+                    // ⭐ 2026-08-28: the rate limit was hiding the answer. Measured over a
+                    // boot + two Driver Details entries, this drain fires FOUR times in the
+                    // whole run while 261 registrations go in -- so every line matters and
+                    // the volume is not a risk. Prints every removal.
                     static u32 suRemoved = 0;
                     ++suRemoved;
-                    if (suRemoved <= 4u || (suRemoved % 32u) == 0u)
-                    {
-                        char lac[112];
-                        CgsCore::SnPrintf(lac, sizeof(lac),
-                            "[aptlife] component removed #%u -> %u active\n",
-                            suRemoved, muNumActivecomponents);
-                        CgsDev::Log::WriteToLog(lac);
-                    }
+                    char lac[112];
+                    CgsCore::SnPrintf(lac, sizeof(lac),
+                        "[aptlife] component removed #%u -> %u active\n",
+                        suRemoved, muNumActivecomponents);
+                    CgsDev::Log::WriteToLog(lac);
                 }
                 return;
             }

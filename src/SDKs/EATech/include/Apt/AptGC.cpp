@@ -285,6 +285,7 @@ void AptGC::CleanUnreachable()
         return;
 
     // 2. Mark every value reachable from a GC root.
+    uint32_t luRoots = 0u;   // [aptlife] instrumentation only (see the witness below)
     AptValue::ReferenceRegistrationCb pPrevCb = AptValue::sReferenceRegistrationCb;
     AptValue::sReferenceRegistrationCb = &AptGC::sReferenceRegistrationCb;
     for (AptValue* pValue = gpGCPoolManager->GetFirstAptValue(); pValue != nullptr;
@@ -292,6 +293,7 @@ void AptGC::CleanUnreachable()
     {
         if (pValue->getGCRoot() == 0u || pValue->getGCMark())
             continue;                   // not a root, or already reached by the walk
+        ++luRoots;
         pValue->setGCMark(true);
         pValue->RegisterReferences();   // vtbl +0x34 -- recurses via the callback
     }
@@ -316,6 +318,7 @@ void AptGC::CleanUnreachable()
     //    the mark on everything that survives.
     uint32_t luVisited = 0u;
     uint32_t luDeleted = 0u;
+    uint32_t luMarked  = 0u;   // [aptlife] instrumentation only
     for (AptValue* pValue = gpGCPoolManager->GetFirstAptValue(); pValue != nullptr; )
     {
         AptValue* const pNext = gpGCPoolManager->GetNextAptValue(pValue);
@@ -327,6 +330,7 @@ void AptGC::CleanUnreachable()
         }
         else
         {
+            ++luMarked;
             pValue->setGCMark(false);
         }
         pValue = pNext;
@@ -335,19 +339,22 @@ void AptGC::CleanUnreachable()
     // [aptlife] opt-in witness (BRN_APT_LIFE=1). NOT X360. The one thing a sweep must
     // be able to answer is "did you run, and did you reclaim anything" -- without it,
     // an inert sweep and a sweep with nothing to do are indistinguishable in the log.
-    // Rate-limited: the first few passes, then every 64th.
+    // ⭐ 2026-08-28: the "did it run" question is now ANSWERED (yes, once its producer was
+    // homed -- see AptLinker::FireLinkNotifyCallbacks), and the NEXT question is why a
+    // running sweep reclaims almost nothing. `roots` and `marked` separate the three
+    // candidate causes: roots ~= values means the ROOT TEST is wrong (everything looks
+    // pinned); marked >> roots means the reference WALK over-reaches; both small with
+    // deleted small is a contradiction that would point at the pool walk itself.
+    // EVERY pass prints (the rate limit hid exactly the passes that mattered).
     if (AptLifeDiagEnabled())
     {
         static uint32_t suPasses = 0u;
         ++suPasses;
-        if (suPasses <= 4u || (suPasses % 64u) == 0u)
-        {
-            char lac[128];
-            std::snprintf(lac, sizeof(lac),
-                "[aptlife] CleanUnreachable pass #%u: %u values, %u deleted\n",
-                suPasses, luVisited, luDeleted);
-            CgsDev::Log::WriteToLog(lac);
-        }
+        char lac[160];
+        std::snprintf(lac, sizeof(lac),
+            "[aptlife] CleanUnreachable pass #%u: %u values, %u roots, %u marked, %u deleted\n",
+            suPasses, luVisited, luRoots, luMarked, luDeleted);
+        CgsDev::Log::WriteToLog(lac);
     }
 
     // 5. Final flush, then the value free-lists / temporary string pool.
