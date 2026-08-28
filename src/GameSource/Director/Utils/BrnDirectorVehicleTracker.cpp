@@ -15,6 +15,61 @@ namespace BrnDirector
 {
 
 // ----------------------------------------------------------------------------
+// ⭐ MOVED HERE FROM THE HEADER (2026-08-29, crash-camera wave), byte for byte. See the banner
+// at BrnDirectorVehicleTracker.h for why: these three are declaration-only SLICES of types whose
+// real homes are DirectorModule/BrnDirectorModuleIO.h, and leaving them in a header made that
+// header impossible to include from any TU that also reaches the real ones -- which broke six
+// TUs the first time an arbitrator state embedded VehicleTracker::ECrashType by value.
+// Nothing is emitted for any of these accessors (all declaration-only), so confining the fork
+// to the single TU that uses it costs nothing and leaks nothing.
+// DELETE-WHEN: Update is re-fitted to the real InputBuffer API.
+// ----------------------------------------------------------------------------
+namespace DirectorIO
+{
+   // The motion data for one tracked vehicle the input buffer hands out. Update reads the
+    // MPH, the linear velocity, and the world transform's position out of it. The vehicle
+    // array is strided (0x4F0 per entry); the tracker indexes it by miVehicleIndex.
+    struct VehicleInfo
+    {
+        f32                       GetMphLastFrame() const;        // +0x3CC
+        rw::math::vpu::Vector3    GetLinearVelocity() const;      // +0x330
+        rw::math::vpu::Vector3    GetWorldPosition() const;       // transform Pos (+0x220)
+        // True while this vehicle is mid-crash (drives the crash-energy classification).
+        bool                      IsCrashing() const;
+        // The vehicle's top speed in MPH (the crash thresholds are measured below it).
+        f32                       GetMaxMph() const;
+    };
+
+    // The per-frame timer the world timestep is sampled from.
+    struct TimerStatusInterface
+    {
+        // The world sim timestep this frame (the body multiplies two timer fields: the raw
+        // step at +0x1C by the slow-mo scale at +0x20).
+        f32 GetWorldSimTimeStep() const;
+    };
+
+    class InputBuffer
+    {
+    public:
+        // The bitset of race-car slots currently in use (Update asserts the tracked slot is set).
+        const void*                 GetUsedRaceCars() const;
+        bool                        IsRaceCarUsed(s32 liIndex) const;
+        // The strided vehicle-info array (indexed by the tracked slot).
+        const VehicleInfo&          GetVehicleInfo(s32 liIndex) const;
+        // The frame timer interface.
+        const TimerStatusInterface& GetTimerStatusInterface() const;
+        // The score block for the tracked player car (copied into mScoreData).
+        const CarScoreData&         GetPlayerScoreData() const;
+        // The player car's current speed in MPH (the crash classifier compares it to the
+        // vehicle's max MPH minus the band thresholds). InputBuffer +0x7900.
+        f32                         GetPlayerSpeedMph() const;
+        // The "force the next world crash to be a high-energy top-down" gate the arbitrator
+        // raises on the input buffer. InputBuffer +0x7904.
+        bool                        IsForcedFastTopDownCrashArmed() const;
+    };
+}
+
+// ----------------------------------------------------------------------------
 // The crash-band thresholds and the race-end ramp constants are file-scope statics in the
 // console image (rodata at 0x82CDA5xx). Their VALUES are not recoverable from the rodata
 // dump here, so they are declared as the named tunables the body reads and given neutral

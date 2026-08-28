@@ -10,6 +10,7 @@
 #include "GameSource/Director/Camera/Camera.h"                              // Camera::Camera (operator= / mState_uFlags)
 #include "rw/math/vpu/types.h"                                              // rw::math::vpu::Vector3
 #include "rw/math/vpu/vector3_operation.h"                                  // MagnitudeSquared / operator-
+#include "GameSource/Director/Camera/SharedIO/BrnPlayerInfo.h"          // Camera::VehicleInfo (mpPlayerCar, by name)
 
 // ============================================================================
 // BrnDirector::ArbStateCrashNav -- reconstructed from BURNOUT_X360_ARTIST.XEX (semantic parity)
@@ -78,27 +79,31 @@ namespace BrnDirector
         inline f32 PlayerToCameraDistanceSquared(const ArbStateSharedInfo& lrSharedInfo,
                                                   const Camera::Camera& lrCamera)
         {
-            // The player car's world position is the lvx128 at shared-info player-car +0x220 (a
-            // Vector3 lane). mpPlayerCar's type (BrnDirector::VehicleInfo) is forward-declared only,
-            // so it is read by attested byte offset -- the same opaque-vehicle read pattern
-            // BrnArbStateRaceIntro uses for the race-car position.
+            // ✅ THE OFFSET HACK IS GONE (2026-08-29, crash-camera wave). The lvx128 at
+            // player-car +0x220 is mRaceCarState.mTransform (@496 == 0x1F0) + 0x30 -- the
+            // transform's position row. The reason it WAS an offset read ("mpPlayerCar's type
+            // BrnDirector::VehicleInfo is forward-declared only") was the namespace fork, now
+            // retired: the member is a `const Camera::VehicleInfo*`.
             const rw::math::vpu::Vector3& lrPlayerPos =
-                *reinterpret_cast<const rw::math::vpu::Vector3*>(
-                    reinterpret_cast<const u8*>(lrSharedInfo.mpPlayerCar) + 0x220);
+                lrSharedInfo.mpPlayerCar->mRaceCarState.mTransform.Pos();
             const rw::math::vpu::Vector3& lrCameraPos =
                 reinterpret_cast<const rw::math::vpu::Vector3&>(lrCamera.GetTransform().wAxis);
 
             return rw::math::vpu::MagnitudeSquared(lrPlayerPos - lrCameraPos);  // vsubfp + vmsum3fp128
         }
 
-        // The player-car "keep crash-nav running" gate byte (X360 byte at shared-info player-car
-        // +0x44D). mpPlayerCar is forward-declared only, so it is read by attested byte offset (the
-        // opaque-vehicle read pattern). FLAG: the +0x44D byte's DWARF name is not recovered; only
-        // the byte READ + its role (OR'd with mbDoing100PercentSequence to keep the fly-by driving)
-        // are asm-attested.
+        // The player-car "keep crash-nav running" gate byte.
+        // ⭐ THE NAME IS RECOVERED (2026-08-29, crash-camera wave) and the offset hack with it:
+        // +0x44D == 1101 == RaceCarState::mbStartedDeforming (BrnVehicleEvents.h:88 maps the
+        // serialised @1098/@1099/@1101 triple back to physics +0x710/+0x711/+0x712 ->
+        // mbCrashing / mbIsFatalyCrashing / mbStartedDeforming). The old FLAG here said the
+        // byte's DWARF name was "not recovered"; it was only unREACHABLE, because mpPlayerCar
+        // was typed as the BrnDirector::VehicleInfo namespace fork. That fork is retired.
+        // ⚠️ The ROLE reading is unchanged and still asm-only: this byte is OR'd with
+        // mbDoing100PercentSequence to keep the fly-by driving.
         inline bool PlayerCarWantsCrashNav(const ArbStateSharedInfo& lrSharedInfo)
         {
-            return *(reinterpret_cast<const u8*>(lrSharedInfo.mpPlayerCar) + 0x44D) != 0;
+            return lrSharedInfo.mpPlayerCar->mRaceCarState.mbStartedDeforming;
         }
 
         // Whether the road-runner fly-by should keep driving the state camera this frame: the take

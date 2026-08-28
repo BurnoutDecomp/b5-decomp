@@ -161,6 +161,54 @@ bool MomentSelector::Prepare(MomentController& lrMomentController,
 // (nine separate `mbIsAllocated` tripwires at BrnMomentController.h:141 in one loop body);
 // hoisting them is the same reads in the same order, so this keeps one local per test group.
 // ---------------------------------------------------------------------------------------
+// SnoopNumValidMoments -- BrnMomentSelector.cpp:255   @0x8221BD28
+//
+// ⭐ BODIED 2026-08-29 (crash-camera wave). It was declaration-only, which was fine only while
+// nothing called it; ArbStateCrashing::Prepare @0x822655E8 calls it on its straight-line path
+// ("this state has been active for fewer than 2 frames AND there is no valid moment => not
+// prepared yet"), so it became an unresolved external the moment the crash camera mounted.
+//
+// It is the RE-COUNT, and the store-back is the point: it walks the whole handle array and
+// writes the answer into muValidMoments (+0x1D0), which is the cached value
+// GetNumValidMoments() and ArbStateRoaming's DRIVING arm read every frame. A moment counts when
+// it is live AND valid AND currently switchable to:
+//     for each registered description index i:
+//         if (!mMomentHandleArray[i].IsAllocated()) continue;
+//         if (mMomentHandleArray[i].GetMoment()->GetState() != E_STATE_VALID) continue;
+//         if ( mMomentHandleArray[i].GetMoment()->CanSwitchToMeNow()) ++muValidMoments;
+//
+// ⚠️ The loop bound is the DESCRIPTION array's length (`*(this+160)` == +0xA0), not the handle
+// array's -- the console runs the description array's own "Array used before Construct/Clear
+// was called" tripwire (CgsArray.h:336) before the loop, unconditionally, exactly as Prepare
+// does. The console also re-fetches the handle and re-calls GetMoment() before each of the two
+// tests (two separate BrnMomentController.h:141 `mbIsAllocated` tripwires per iteration); the
+// re-fetch is the same read in the same order, so it is hoisted to one local per iteration.
+// ---------------------------------------------------------------------------------------
+u32 MomentSelector::SnoopNumValidMoments()
+{
+    const u32 luMomentCount = mMomentDescriptionArray.GetLength();   // +0x0A0, asserted at entry
+
+    muValidMoments = 0;                                              // +0x1D0 -- reset before the walk
+
+    for (u32 luLoop = 0; luLoop < luMomentCount; ++luLoop)
+    {
+        if (!mMomentHandleArray[luLoop].IsAllocated())
+        {
+            continue;
+        }
+
+        const Moment* lpMoment = mMomentHandleArray[luLoop].GetMoment();
+
+        if (lpMoment->GetState() == Moment::E_STATE_VALID && lpMoment->CanSwitchToMeNow())
+        {
+            ++muValidMoments;
+        }
+    }
+
+    return muValidMoments;
+}
+
+// ---------------------------------------------------------------------------------------
 void MomentSelector::Update(f32 lfTimestep)
 {
     CGS_ASSERT(mbPrepared, "mbPrepared");                            // cpp:117 (0x75)

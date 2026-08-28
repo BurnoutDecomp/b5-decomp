@@ -433,6 +433,17 @@ public:
     // not link).
     void SetPrimaryVehicleRefToRaceCar(EActiveRaceCarIndex leRaceCar);
 
+    // ⭐ ADDED 2026-08-29 (crash-camera wave): the SECONDARY-ref sibling of the setter above,
+    // for mSecondaryVehicleRef @+0xE00. ArbStateCrashing::Update @0x8226BFB0 emits exactly
+    // `VehicleRef::SetToRaceCar(behaviour + 0xE00, mePlayerKillerIndex)` when the player is
+    // taken down, so the takedown ICE camera frames whoever did it.
+    // ⚠️ NOT the same call as SetSecondaryVehicleRefToRaceCarIndex above: that one is the
+    // inlined four-word {kind=1, index, 0, valid=1} seed and is DECLARATION-ONLY (no definition
+    // exists anywhere in the tree today); this one is the real out-of-line VehicleRef method,
+    // which IS bodied, in Utils/BrnVehicleRef.cpp. BODIED below in this behaviour's own TU
+    // (which owns the private member).
+    void SetSecondaryVehicleRefToRaceCar(EActiveRaceCarIndex leRaceCar);
+
     // ---- post-event arbitrator-state poke (BrnArbStatePostEvent::Prepare) ---------------
     // Seed the behaviour's BYSTANDER anchor vehicle reference (mBystanderRef @+0xE10) to the
     // fixed value the post-event take frames the winner against. X360 (Prepare @0x8226E228)

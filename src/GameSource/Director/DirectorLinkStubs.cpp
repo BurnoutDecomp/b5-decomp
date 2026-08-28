@@ -896,6 +896,9 @@ namespace Utils
 // ============================================================================
 #include "GameSource/Director/MomentController/BrnMomentSelector.h"     // MomentSelector
 #include "GameSource/Director/MomentController/BrnMomentController.h"   // MomentController
+#include "GameSource/Director/Camera/BrnCameraValidityAccount.h"        // group G: ValidityAccount::Print x2
+#include "GameSource/Director/MomentController/Moments/BrnMomentTumbling.h"  // group G: MomentTumbling
+#include "GameSource/Director/DirectorModule/BrnDirectorModuleDebugPrinter.h" // group G: DebugPrinter / DebugLog
 
 namespace BrnDirector
 {
@@ -979,4 +982,105 @@ namespace BrnDirector
         (void)liExclusion;
         return false;
     }
+
+    // ------------------------------------------------------------------------
+    // ⭐ GROUP G (NEW 2026-08-29, crash-camera wave) -- THE THREE DEV-ONLY LEAVES
+    // BrnArbStateCrashing.cpp REACHES. All three are TRAP stubs, not quiet ones, and that is
+    // deliberate: every call site is inside `if (IsDebugDisplayActive())`, and
+    // ArbStateCrashing::Construct seeds that flag FALSE (the console only raises it from a dev
+    // tool), so retail never reaches any of them. A quiet body would make them look finished
+    // for ever; a trap says "unfinished" and can only fire under the dev flag.
+    //
+    //   MomentSelector::ActualDebugRender  @0x8221C6D8  (~300 asm lines: it walks the handle +
+    //       description arrays and prints one line per candidate through the DebugPrinter)
+    //   ValidityAccount::Print(DebugPrinter&) / Print(DebugLog&)  -- the DWARF-declared pair
+    //       (BrnCameraValidityAccount.h:85/:88). Both walk the raised reason bits and print the
+    //       name of each; the reason-NAME table is what is missing, and inventing 31 strings is
+    //       exactly the kind of fabrication the faithfulness gate exists to stop.
+    //
+    // DELETE-WHEN: ActualDebugRender is bodied from @0x8221C6D8, and the ValidityAccount reason
+    // -name table is recovered (the enumerators themselves already are -- the DecFIGS DWARF for
+    // BrnCameraValidityAccount.h names all 31, EFailedFlag / ENoCutToFlag / ENoCutFromFlag).
+    // ------------------------------------------------------------------------
+    void MomentSelector::ActualDebugRender(DebugPrinter& lrDebugPrinter) const
+    {
+        (void)lrDebugPrinter;
+        CGS_ASSERT(false, "MomentSelector::ActualDebugRender is not reconstructed");
+        __debugbreak();
+    }
+
+    // ------------------------------------------------------------------------
+    // ⭐ AND THE ONE CROSS-SUBSYSTEM TRAP: MomentBystanderSeesAction::
+    // SetPerceivedDistanceModificationFactor @0x822197E0.
+    //
+    // ⚠️ THIS ONE IS *NOT* DEV-ONLY -- read before deleting or before relying on it.
+    // ArbStateCrashing::Update calls it on a live path: when the selected crash moment is a
+    // BYSTANDER_SEES_ACTION shot that has held the crash for longer than kfMomentTime (2.0 s),
+    // it squashes the shot's perceived distance to 0.5 so a long crash stays readable.
+    //
+    // ⭐ THE BODY IS WRITTEN AND COMMITTED, at its real home
+    // (MomentController/Moments/BrnMomentBystanderSeesAction.cpp), together with the two
+    // BehaviourBystanderCam members it needs (mfPerceivedDistanceModificationFactor @+0x358 and
+    // the re-frame latch @+0xCF, both carved this wave). It is the MOUNT that is blocked, not
+    // the code: mounting that TU opens NINE unresolved externals of its own -- seven
+    // `detail::MomentSharedInfo_*` free-function shims that are declared and never defined
+    // anywhere, plus BehaviourParameterBank::GetBystanderCam{,Close}MomentParams. Measured this
+    // wave, on this link.
+    //
+    // ⛔ IT IS A TRAP RATHER THAN A NO-OP ON PURPOSE. A quiet body here would swallow a
+    // camera-framing change on a live path -- the exact silent-drop shape this file's own
+    // GROUP F banner documents. If it ever fires, the fix is the mount, not the stub.
+    // DELETE-WHEN: the seven MomentSharedInfo shims are replaced by the real accessors and
+    // BrnMomentBystanderSeesAction.cpp joins the exe source list.
+    // ------------------------------------------------------------------------
+    void MomentBystanderSeesAction::SetPerceivedDistanceModificationFactor(f32 lfFactor)
+    {
+        (void)lfFactor;
+        CGS_ASSERT(false, "MomentBystanderSeesAction TU is not mounted");
+        __debugbreak();
+    }
+
+    // ------------------------------------------------------------------------
+    // MomentTumbling::SignalIsGoodTimeToPlant @0x8220A078 -- the same shape as the bystander
+    // trap above, and for the same reason: the body is REAL and committed at its own home
+    // (MomentController/Moments/BrnMomentTumbling.cpp -- "on a LEAD-subtype tumble, raise the
+    // gyro rig's plant-request pair"), it is the MOUNT that is missing. ArbStateCrashing::Update
+    // calls it on the first frame of a slow-motion burst when the selected crash moment is a
+    // TUMBLING shot.
+    //
+    // ⭐ IT CANNOT FIRE ON THIS BUILD, and the reason is checkable rather than hopeful: the call
+    // site is guarded by mMomentSelector.HasSelectedMoment(), and NOTHING can select a moment
+    // while MomentController::NewMoment (the GROUP F stub above) allocates nothing and leaves
+    // every MomentHandle !IsAllocated() -- SnoopNumValidMoments counts only allocated handles,
+    // so muValidMoments is pinned at 0 and SelectBestMoment has no candidate. The same argument
+    // covers the bystander trap above. When the moment sub-system comes up, BOTH become live on
+    // the same day, which is exactly why they are traps and not no-ops.
+    // DELETE-WHEN: BrnMomentTumbling.cpp joins the exe source list.
+    // ------------------------------------------------------------------------
+    void MomentTumbling::SignalIsGoodTimeToPlant()
+    {
+        CGS_ASSERT(false, "MomentTumbling TU is not mounted");
+        __debugbreak();
+    }
+}
+
+namespace BrnDirector
+{
+namespace Camera
+{
+    // See the GROUP G banner above -- both overloads are dev-only read-outs.
+    void ValidityAccount::Print(DebugPrinter& lrDebugPrinter) const
+    {
+        (void)lrDebugPrinter;
+        CGS_ASSERT(false, "ValidityAccount::Print(DebugPrinter&) is not reconstructed");
+        __debugbreak();
+    }
+
+    void ValidityAccount::Print(DebugLog& lrDebugLog) const
+    {
+        (void)lrDebugLog;
+        CGS_ASSERT(false, "ValidityAccount::Print(DebugLog&) is not reconstructed");
+        __debugbreak();
+    }
+}
 }

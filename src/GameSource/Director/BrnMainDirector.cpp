@@ -80,6 +80,13 @@ namespace BrnDirector
         // literal that is in .rdata, printed at double precision, not a decompiler guess.
         const f32 KF_MINIMUM_SIM_TIME_SCALE = 0.005f;   // flt_8200CE04
 
+        // The crash window ProcessInputQueue reloads GameState::mfCrashTimeRemaining to on
+        // every frame the player's car is NOT crashing (X360 @0x822372F8, the `else` of the
+        // mbCrashActive leg). ArbStateCrashing::Update compares what is left of it against 1.0
+        // to decide whether the director may still cut to a different camera, so it is the
+        // "how long a crash is allowed to run before we stop re-framing it" budget.
+        const f32 KF_CRASH_TIME_WINDOW = 6.0f;
+
         // [DIAG] BRN_SLOMO_DIAG -- NOT IN THE X360 BINARY. Edge-triggered per call site, so a
         // steady 1.0 costs one line for the whole session. It exists because the published time
         // scale is a value that arrives from a camera several copies away, and a wrong one is
@@ -639,15 +646,21 @@ namespace BrnDirector
         lrSharedInfo.mpDirectorResourceManager = lpIO->mpResourceManager;                       // +0x2C
         lrSharedInfo.mpEffectInterface       = reinterpret_cast<const EffectInterface*>(
                                                   maEffectInterface);                           // +0x30
-        lrSharedInfo.mpPlayerCrashInfo       = reinterpret_cast<const PlayerCrashInfo*>(
+        // The input buffer hands the slot out as raw storage (its own FLAG); the cast is the
+        // one place that types it. ⭐ The pointee is now the REAL, DWARF-declared
+        // Camera::PlayerCrashInfo (2026-08-29) rather than the BrnDirector::PlayerCrashInfo
+        // namespace fork -- so consumers read mbWrecked / mbHitWater by name.
+        lrSharedInfo.mpPlayerCrashInfo       = static_cast<const Camera::PlayerCrashInfo*>(
                                                   lpInput->GetPlayerCrashInfo());               // +0x34
         lrSharedInfo.mpAllVehicleData        = &mAllVehicleData;                                // +0x38
         lrSharedInfo.mpPlayerTracker         = reinterpret_cast<const VehicleTracker*>(
                                                   maVehicleTracker);                            // +0x3C
         lrSharedInfo.mpControllerInfo        = reinterpret_cast<const ControllerInfo*>(
                                                   lpInput->GetControll());                      // +0x40
-        lrSharedInfo.mpRaceCars              = reinterpret_cast<const VehicleInfo*>(lpRaceCars); // +0x44
-        lrSharedInfo.mpPlayerCar             = reinterpret_cast<const VehicleInfo*>(lpPlayerCar);// +0x48
+        // (The two reinterpret_casts that used to launder these through the retired
+        //  BrnDirector::VehicleInfo namespace fork are gone -- 2026-08-29, crash-camera wave.)
+        lrSharedInfo.mpRaceCars              = lpRaceCars;                                       // +0x44
+        lrSharedInfo.mpPlayerCar             = lpPlayerCar;                                      // +0x48
         // X360: mpPlayerCar + 496 -- RaceCarState::mTransform, reached by name.
         lrSharedInfo.mpPlayerCarTransform    = lpPlayerCar ? &lpPlayerCar->mRaceCarState.mTransform
                                                            : 0;                                 // +0x4C
@@ -1319,59 +1332,70 @@ namespace BrnDirector
         // ⚠️ GATE: `if (<flag tail +0x35431>) mbCanUseSlomo = false;` and the whole debug-render
         //   tail. (Both still blocked on the un-homed MainDirector flag tail.)
         //
-        // ⛔⛔ THE CRASH-ACTIVE LEG IS NO LONGER BLOCKED ON A NAME -- IT IS BLOCKED ON A STATE.
-        // This gate used to read "it indexes the published VehicleInfo at element +0x44A, a byte
-        // with no recovered name". THE NAME IS RECOVERED (2026-08-28, crash-camera wave):
-        //   +0x44A == 1098 == Camera::VehicleInfo::mRaceCarState.mbCrashing
-        // pinned twice, independently: BrnVehicleEvents.h:88 maps serialised @1098 <- physics
-        // +0x710 -> mbCrashing, and ArbStateCrashing::CanRun @0x821F6258 is nothing but
-        // `lwz r11, 0x48(r4) / lbz r3, 0x44A(r11)` -- the same byte off mpPlayerCar.
+        // ⭐⭐⭐ THE CRASH-ACTIVE LEG IS LANDED (2026-08-29, crash-camera wave). It is the ONLY
+        // writer of GameState::mbCrashActive in the whole image -- an image-wide scan of every
+        // ARTIST export for the director-relative offset 211161 (== maGameState +0xF9) returns
+        // exactly this function -- and mbCrashActive is the gate on ArbStateRoaming::
+        // ProcessPossibleStateChanges' crash edge. While this leg was absent the arbitrator
+        // could NEVER attempt E_STATE_CRASHING, no matter what the world did, so the entire
+        // crash camera was unreachable out of a build that was green and asserted nothing.
+        // (CONTROL for "no writer": the same scan over the tree found 13 assignments to the
+        //  neighbouring meEventType and 1 to mbPlayerWasTakenDown, so it does find writers when
+        //  they exist. mbCrashActive returned zero.)
         //
-        // ⭐ THIS IS THE ONLY WRITER OF GameState::mbCrashActive IN THE WHOLE IMAGE. An
-        // image-wide scan of all ARTIST exports for the director-relative offset 211161
-        // (== maGameState +0xF9) returns exactly one function: this one. And mbCrashActive is
-        // the gate on ArbStateRoaming::ProcessPossibleStateChanges' crash edge -- so while this
-        // leg is absent the arbitrator can NEVER attempt E_STATE_CRASHING, no matter what the
-        // world does. CONTROL for "no writer": the same grep over the tree finds 13 assignments
-        // to the neighbouring meEventType and 1 to mbPlayerWasTakenDown, so it does find writers
-        // when they exist; mbCrashActive, mbTakedownActive, mfCrashTimeRemaining,
-        // mbGoToCrashModeAfterIntro, mbCrashActiveWithSlomoSinceStart and mbImpactTimeActive all
-        // return ZERO.
+        // ⛔⛔ IT SHIPS WITH BrnArbStateCrashing.cpp, IN ONE COMMIT, AND MUST STAY THAT WAY.
+        // Until that file existed, E_STATE_CRASHING's container slot was
+        // `class ArbStateCrashing : public ArbitratorState {};` -- an empty shell whose
+        // inherited Update never writes meState and which has no exit edge. Landing this leg
+        // alone would have handed the first crash of the session to that shell and frozen the
+        // camera for the rest of the run, out of a green build. The previous wave reasoned that
+        // from the shape and deliberately did NOT test it; this commit removes the shell rather
+        // than testing it.
         //
-        // MEASURED 2026-08-28 with BRN_CRASH_PLAYER=5000 (a real, committed player crash --
-        // `[crash-probe] UpdateCrashing ... mbCrashing=1` for 300+ frames, bridged to the
-        // director as `mbPlayerCarCrashing=1`): the sim timestep never left real time. Three
-        // independent witnesses agreed -- one edge-triggered [slomo] line (simStep=0.016667),
-        // BRN_FRAME_DUMP_ARM=slomo wrote frames=0 for the whole 220 s run, and the physics'
-        // own mfTimeCrashing advanced 0.016667 s per frame from frame 1 to frame 300.
-        //
-        // THE CONSOLE BLOCK, transcribed (pseudocode 854-873 @0x822372F8), ready to land:
-        //     if (maGameState.mbCrashActive &&                       // last frame's value
-        //         !raceCars[input->GetPlayerCarIndex()].mRaceCarState.mbCrashing)
-        //         maGameState.mbPlayerWasTakenDown = false;          // +0x1C3, crash ended
-        //     maGameState.mbCrashActive =                            // +0x0F9
-        //         raceCars[input->GetPlayerCarIndex()].mRaceCarState.mbCrashing;
-        //     maGameState.mfCrashTimeRemaining =                     // +0x0FC
-        //         maGameState.mbCrashActive
-        //             ? maGameState.mfCrashTimeRemaining - <sim timestep>
-        //             : 6.0f;                                        // the console's reload
-        // (The 1264 stride Hex-Rays prints is 0x4F0 == sizeof the published VehicleInfo, so
-        //  `raceCars[idx]` is the ordinary indexed read this TU already makes at the
-        //  lpPlayerCar line above -- no offset arithmetic is needed to land it.)
-        // mfCrashTimeRemaining is what ArbStateCrashing::Update passes to
-        // SelectNormalCrashCamera as lbTooLateToSwitchCameras (`<= 1.0f`), so the countdown is
-        // load-bearing, not cosmetic.
-        //
-        // ⛔⛔ DO NOT LAND THIS LEG ON ITS OWN -- IT MUST SHIP WITH BrnArbStateCrashing.cpp.
-        // E_STATE_CRASHING's container slot is still `class ArbStateCrashing : public
-        // ArbitratorState {};` (BrnDirectorArbitratorStateContainer.h:50). With mbCrashActive
-        // live, ArbStateRoaming hands the frame to that empty shell on the first crash; its
-        // Update is the base's do-nothing, so no code path ever writes meState again and no exit
-        // edge exists. The camera would stop being driven and never recover -- a permanently
-        // frozen view from the first crash of the session, out of a green build. Reasoned from
-        // the shape (base Update is empty, no other writer of that state's meState exists), NOT
-        // measured -- deliberately not tried, because a shared tree is not the place to test a
-        // change whose failure mode is an unrecoverable camera.
+        // The block, off the asm (pseudocode 854-873 @0x822372F8). The published record's +1098
+        // is Camera::VehicleInfo::mRaceCarState.mbCrashing, pinned twice independently:
+        // BrnVehicleEvents.h:88 maps serialised @1098 back to physics +0x710, and
+        // ArbStateCrashing::CanRun @0x821F6258 is nothing but
+        // `lwz r11, 0x48(info) / lbz r3, 0x44A(r11)` on that same byte off mpPlayerCar. The
+        // 1264 stride Hex-Rays prints is 0x4F0 == sizeof the published VehicleInfo, i.e. the
+        // ordinary indexed read this function already makes -- no offset arithmetic needed.
+        {
+            const BrnDirector::Camera::VehicleInfo* lpRaceCars = lpInput->GetRaceCarInfo();
+            const s32 liPlayerCarIndex = static_cast<s32>(lpInput->GetPlayerCarIndex());
+
+            const bool lbPlayerCarCrashing =
+                (lpRaceCars != 0 && liPlayerCarIndex >= 0)
+                    ? lpRaceCars[liPlayerCarIndex].mRaceCarState.mbCrashing
+                    : false;
+
+            // The crash just ENDED: drop the takedown latch so the next one starts clean.
+            if (maGameState.mbCrashActive && !lbPlayerCarCrashing)
+            {
+                maGameState.mbPlayerWasTakenDown = false;              // +0x1C3
+            }
+
+            maGameState.mbCrashActive = lbPlayerCarCrashing;           // +0x0F9
+
+            if (maGameState.mbCrashActive)
+            {
+                // Count the crash window down by this frame's SIM timestep. The console spells
+                // it `-((timer[+32] * timer[+28]) - mfCrashTimeRemaining)`, which is this
+                // subtraction; timer +28/+32 are the SIM TimerStatus' base step and multiplier,
+                // i.e. GetSimTimerStatus()->GetCurrentTimeStep() -- the same accessor
+                // UpdateArbitrator already uses for lfSimTimestep, reached by name.
+                maGameState.mfCrashTimeRemaining -=
+                    lpInput->GetTimerStatusInterface()->GetSimTimerStatus()->GetCurrentTimeStep();
+            }
+            else
+            {
+                // Not crashing: reload the window (flt: 6.0). ⭐ This value is what
+                // ArbStateCrashing::Update turns into SelectNormalCrashCamera's
+                // lbTooLateToSwitchCameras (`<= 1.0f`), so the countdown is load-bearing, not
+                // cosmetic -- it is what stops the director cutting to a fresh camera in the
+                // last second of a crash.
+                maGameState.mfCrashTimeRemaining = KF_CRASH_TIME_WINDOW;
+            }
+        }
     }
 
     // ------------------------------------------------------------------------

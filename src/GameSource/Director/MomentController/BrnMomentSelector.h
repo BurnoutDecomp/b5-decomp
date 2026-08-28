@@ -195,11 +195,37 @@ public:
     void Update(f32 lfTimestep);
 
     void Destruct();                                      // :119 -> cpp:246
-    void SetSelectionMode(ESelectionMode leSelectionMode); // :123
-    void ResetTimeActive();                               // :142
+
+    // ⭐ :123 -- BODIED 2026-08-29 (crash-camera wave) as a header inline. It has NO standalone
+    // X360 symbol because the console inlines it, and ArbStateCrashing::Construct @0x82259EA0
+    // shows the whole body: after SetRecencyFactor / before SetMaxActiveMoments it emits one
+    // bare `stw r31(0), 0x3A4(this)` == mMomentSelector + 0x1DC == meSelectionMode, with no
+    // call. (The store is redundant with Construct()'s own seed, which is exactly what an
+    // inlined `SetSelectionMode(E_MODE_LRU_BEST)` right after `Construct()` looks like.)
+    void SetSelectionMode(ESelectionMode leSelectionMode) { meSelectionMode = leSelectionMode; }
+
+    // ⭐ :142 -- BODIED 2026-08-29 (crash-camera wave) as a header inline, same reasoning: no
+    // standalone X360 symbol, and ArbStateCrashing::Update @0x8226BFB0 case 0 (PREPARING's
+    // predecessor arm) inlines it verbatim immediately before MomentSelector::Prepare --
+    //     stfs flt_82001CC0(0.0), 0x1C4(selector)   ; mfTimeActive   = 0.0f
+    //     stw  0,                 0x1C8(selector)   ; miFramesActive = 0
+    // It was DECLARATION-ONLY, i.e. an unresolved external for the first caller that needed it.
+    void ResetTimeActive() { mfTimeActive = 0.0f; miFramesActive = 0; }
+
     f32  GetTimeActive();                                 // :145
-    s32  GetFramesActive();                               // :148
-    u32  SnoopNumValidMoments();                          // :154 -> cpp:255  (@0x8221BD28)
+
+    // ⭐ :148 -- BODIED 2026-08-29 (crash-camera wave) as a header inline. No standalone X360
+    // symbol; ArbStateCrashing::Prepare @0x822655E8 inlines it to a bare `lwz r11, 0x390(state)`
+    // == selector +0x1C8 == miFramesActive, compared against 2. (DWARF types the member u32
+    // despite the `mi` prefix; the accessor's s32 return is the DWARF's.)
+    s32  GetFramesActive() const { return static_cast<s32>(miFramesActive); }
+
+    // :154 -> cpp:255 (@0x8221BD28). ⭐ BODIED 2026-08-29 in BrnMomentSelector.cpp -- it is on
+    // ArbStateCrashing::Prepare's straight-line path (the "no frames active yet and no valid
+    // moment" gate), so leaving it declaration-only was an unresolved external the moment the
+    // crash camera mounted. It is the RE-COUNT, not the cached read: it walks the handle array
+    // and STORES the result back into muValidMoments. Its cheap sibling is GetNumValidMoments.
+    u32  SnoopNumValidMoments();
 
     // :151 -- BODIED 2026-08-01 as a header inline. It is the plain read of the cached count,
     // NOT the recount: ArbStateRoaming::Update's DRIVING arm @0x822644D4 does a bare
@@ -208,8 +234,20 @@ public:
     // handle array and STORE the result back into +0x1D0 -- so the two are genuinely different
     // functions and only this one matches the roaming arm's single load.)
     u32  GetNumValidMoments() const { return muValidMoments; }
-    bool IsPrepared();                                    // :157
-    void DebugRender(DebugPrinter& lrDebugPrinter) const;  // :193
+
+    // ⭐ :157 -- BODIED 2026-08-29 (crash-camera wave) as a header inline, same shape as the two
+    // above: no standalone X360 symbol, and ArbStateCrashing::Update @0x8226BFB0 opens with the
+    // inlined `lbz r11, 0x3A9(state)` == selector +0x1E1 == mbPrepared, gating the per-frame
+    // MomentSelector::Update call. ⚠️ That +0x3A9 is one of the offsets Hex-Rays prints as a
+    // `field_3A9` on the OWNING STATE; it is this member.
+    bool IsPrepared() const { return mbPrepared; }
+    // :193 -- ⭐ BODIED 2026-08-29 (crash-camera wave) as the inline forwarder it is. The
+    // console has no standalone symbol for it: ArbStateCrashing::Update @0x8226BFB0 emits a
+    // DIRECT `bl MomentSelector::ActualDebugRender`, which is what an inlined public forwarder
+    // onto a private worker looks like -- byte for byte the DebugPrinter::Print -> ActualPrint
+    // shape this tree already recovered. Spelling the call site as ActualDebugRender instead
+    // would be reaching a private member from outside the class.
+    void DebugRender(DebugPrinter& lrDebugPrinter) const { ActualDebugRender(lrDebugPrinter); }
 
 private:
     // DECLARATION-ONLY (same note as above). SelectBestMoment / SelectNewBestMoment above are

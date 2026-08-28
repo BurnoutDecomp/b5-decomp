@@ -132,7 +132,15 @@ namespace BrnDirector
         // lrDebugPrinter.ActualPrint(text, colour).
         void Print(DebugPrinter& lrDebugPrinter);
 
-        void Append(const char* lpcString, CgsDev::RGBA lRGBA);
+        // ⭐ BODIED 2026-08-29 (crash-camera wave) as the inline forwarder it is -- the exact
+        // shape DebugPrinter::Print -> ActualPrint above already has. The console has no
+        // standalone symbol for it: ArbStateCrashing::ProcessPossibleStateChanges @0x8224F5B0
+        // and SelectNormalCrashCamera @0x82254FB0 both emit a DIRECT
+        // `bl BrnDirector::DebugLog::ActualAppend`, which is an inlined public forwarder onto
+        // the private worker. It was declaration-only, i.e. an unresolved external for the first
+        // caller outside this class -- and ActualAppend is private, so the call site cannot
+        // simply be spelled with the worker's name.
+        void Append(const char* lpcString, CgsDev::RGBA lRGBA) { ActualAppend(lpcString, lRGBA); }
         void AppendName(const Moment& lrMoment, CgsDev::RGBA lRGBA);
 
     private:

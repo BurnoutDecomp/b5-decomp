@@ -48,11 +48,27 @@ namespace BrnDirector
     struct Random;
     class  DirectorResourceManager;
     struct EffectInterface;
-    struct PlayerCrashInfo;
+    // ⛔ RETIRED 2026-08-29 -- `struct PlayerCrashInfo;` at BrnDirector scope was the SECOND
+    // namespace fork in this same declaration block (see mpPlayerCar below). The real type is
+    // BrnDirector::Camera::PlayerCrashInfo, and it is fully declared in the DecFIGS DWARF
+    // (BrnPlayerInfo.h:112..:131) -- it was only ever unreachable, not unknown. Three separate
+    // notes in this tree recorded it as "has no homed layout"; all three were looking in the
+    // wrong namespace. See the banner at its home in Camera/SharedIO/BrnPlayerInfo.h.
     class  AllVehicleData;
     class  VehicleTracker;
     struct ControllerInfo;
-    struct VehicleInfo;
+    // ⛔ RETIRED 2026-08-29 (crash-camera wave) -- `struct VehicleInfo;` AT BrnDirector SCOPE WAS
+    // A NAMESPACE FORK, the same one BrnDirectorAllVehicleData.h:35 already retired for its own
+    // surface and that BrnArbStateCarSelect.cpp / BrnArbStateCrashNav.cpp /
+    // BrnArbStateOnlineCarSelect.cpp each worked around at the call site with a cast (see their
+    // DELETE-WHEN notes -- this is that DELETE-WHEN). No such type exists: the real one is
+    // BrnDirector::Camera::VehicleInfo (Camera/SharedIO/BrnPlayerInfo.h). Declared as an
+    // incomplete type that could never be completed, mpRaceCars could not be indexed and
+    // mpPlayerCar could not be dereferenced -- which is why ArbStateCrashing::CanRun, whose
+    // ENTIRE body is `return mpPlayerCar->mRaceCarState.mbCrashing`, could not be written at all.
+    // Forward-declared in the right namespace instead; consumers that need the layout #include
+    // BrnPlayerInfo.h. (`struct`, matching its real home -- the class-key is part of the symbol.)
+    namespace Camera { struct VehicleInfo; struct PlayerCrashInfo; }
     class  Camera2DRotationController;
     class  CameraSphericalRotationController;
 
@@ -79,12 +95,12 @@ namespace BrnDirector
         Random*                                 mpRandom;                     // +0x28
         const DirectorResourceManager*          mpDirectorResourceManager;    // +0x2C
         const EffectInterface*                  mpEffectInterface;            // +0x30
-        const PlayerCrashInfo*                  mpPlayerCrashInfo;            // +0x34
+        const Camera::PlayerCrashInfo*          mpPlayerCrashInfo;            // +0x34
         const AllVehicleData*                   mpAllVehicleData;             // +0x38
         const VehicleTracker*                   mpPlayerTracker;              // +0x3C
         const ControllerInfo*                   mpControllerInfo;             // +0x40
-        const VehicleInfo*                      mpRaceCars;                   // +0x44
-        const VehicleInfo*                      mpPlayerCar;                  // +0x48
+        const Camera::VehicleInfo*              mpRaceCars;                   // +0x44
+        const Camera::VehicleInfo*              mpPlayerCar;                  // +0x48
         const void*                             mpPlayerCarTransform;         // +0x4C  (Matrix44Affine*)
         s32                                     mePlayerActiveRaceCarIndex;   // +0x50  (EActiveRaceCarIndex)
         const Camera2DRotationController*       mpRotationController;         // +0x54

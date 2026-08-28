@@ -13,6 +13,7 @@
 #include "GameSource/Director/Utils/BrnICEMoviePlayer.h"                        // Camera::BehaviourManager (complete)
 #include "GameSource/AttribSys/Generated/classes/shotgroup.h"                   // Attrib::Gen::shotgroup + Attrib::DefaultDataArea
 #include "rw/math/vpu/types.h"                                                  // rw::math::vpu::Vector3 (player-car clamp)
+#include "GameSource/Director/Camera/SharedIO/BrnPlayerInfo.h"          // Camera::VehicleInfo (mpPlayerCar, by name)
 
 // ============================================================================
 // BrnDirector::ArbStateOnlineCarSelect -- reconstructed from BURNOUT_X360_ARTIST.XEX (semantic parity)
@@ -432,12 +433,13 @@ namespace BrnDirector
         // (mCamera.mTransform.Pos()).
         if (lrGameState.mbOnlineCarSelectMustClampToCar)   // GameState +0x1A8
         {
-            // The player-car position is the 16-byte Vector3 lane at the VehicleInfo's +0x220
-            // (an external/engine layout reached by documented offset, as the race-intro state
-            // reads the race-car position). mpPlayerCar is the base-context's const VehicleInfo*.
+            // ✅ THE OFFSET HACK IS GONE (2026-08-29, crash-camera wave). The +0x220 the
+            // console loads is mRaceCarState.mTransform (@496 == 0x1F0) + 0x30, i.e. the
+            // transform's position row -- read here BY NAME now that mpPlayerCar is typed
+            // `const Camera::VehicleInfo*` instead of the retired BrnDirector::VehicleInfo
+            // namespace fork.
             const rw::math::vpu::Vector3& lrPlayerCarPos =
-                *reinterpret_cast<const rw::math::vpu::Vector3*>(
-                    reinterpret_cast<const u8*>(lrSharedInfo.mpPlayerCar) + 0x220);
+                lrSharedInfo.mpPlayerCar->mRaceCarState.mTransform.Pos();
 
             lrCamera.mTransform.Pos() = lrPlayerCarPos;   // X360 stvx128 v0, this+0x40 (== mCamera.mTransform +0x30)
         }
