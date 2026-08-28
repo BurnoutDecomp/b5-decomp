@@ -33,7 +33,19 @@ namespace BrnTraffic
         f32  mfPosY;
         f32  mfPosZ;
         s32  miVehicle;      // the traffic vehicle index that is swerving, -1 == none
+        s32  miBehaviour;    // the param's Param::miBehaviour; 2 == DRIVE_AROUND_OBSTRUCTION
         u32  muPublishes;    // monotonic; a camera can tell "fresh" from "never"
+        u32  muBehaviour2;   // publishes whose miBehaviour was 2 (the crash-avoidance swerve)
+        // Set to 1 by BrnWorldModule when BRN_WORLD_CAMTRAFFIC latches its static shot. Read by
+        // the back-buffer writer (pc/gcm/renderengine/device.cpp) under BRN_FRAME_DUMP_ARM, so a
+        // capture can dump EVERY present for a few seconds around the swerve instead of dumping
+        // the whole run.
+        // ⭐ THIS IS NOT A CONVENIENCE. Dumping every 2nd present for a 130 s run writes ~16 GB,
+        // and the simulation is FRAME-COUPLED: the measured cost of that I/O storm was a run with
+        // ZERO swerves and zero junction-FUP action where the same build, unfilmed, produced
+        // seven swerves and nine removals. The camera has to be able to film a short window, or
+        // filming destroys what it is filming.
+        u32  muCameraLatched;
     };
 
     // Defined in BrnUpdateVehiclesJob.cpp (the publisher).
