@@ -200,6 +200,16 @@ public:
     // KU_INVALID_VEHICLE (0xFFFF) means "no other half".
     u16 GetOtherHalfIndex() const { return muOtherHalfIndex; }
 
+    // The UNASSERTED read of muCrashTrafficType, on the same grounds as GetOtherHalfIndex
+    // above. IsRecoveringFromSlam() tests the same byte but also asserts IsPhysical(), and
+    // EnsureVehicleRemovedFromCrashModule @0x8271FBE8 is a bare `lbz r11,1(this) ; cmplwi 3`
+    // with no such assert -- it runs on a vehicle that is being taken OUT of the physics
+    // module, so IsPhysical() is exactly the thing it may not require. Using the predicate
+    // there would add an assert the console does not have.
+    // eCrashTrafficType_Invalid (255) means "not registered with the crash module".
+    u8 GetCrashTrafficTypeRaw() const { return muCrashTrafficType; }
+    void SetCrashTrafficTypeRaw(u8 lu8Type) { muCrashTrafficType = lu8Type; }
+
     // ---- per-frame state / identity accessors (out-of-line, bodied in the .cpp) ----
     VecFloat GetSpeed() const;
     void SetSpeed(VecFloat lfSpeed);

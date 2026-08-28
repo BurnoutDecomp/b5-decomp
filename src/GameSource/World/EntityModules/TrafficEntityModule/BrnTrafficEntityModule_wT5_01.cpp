@@ -5,6 +5,7 @@
 //   TrafficEntityModule::JunctionFUP_StopOffscreenTraffic       @0x82719868  (83 insns)
 //   TrafficEntityModule::JunctionFUP_TryClearupNonMovingPhysical@0x8273F2E8  (75 insns)
 //   TrafficEntityModule::UpdateJunctionFUP                      @0x82745218  (1365 insns)
+//   TrafficEntityModule::EnsureVehicleRemovedFromCrashModule    @0x8271FBE8  (185 insns)
 //
 // WHY THIS FILE EXISTS. Wave T2/T6 landed the whole crash surface -- the crashing-things
 // producer and both reactions (UpdateParams_TryAvoidCrashing / _TryStartSympatheticCrashing,
@@ -77,6 +78,8 @@
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficConstants.h"
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficParam.h"
 #include "GameSource/World/Traffic/BrnVehicleSoaData.h"
+#include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficVehicle.h"   // Vehicle
+#include "GameSource/Physics/VehicleManager/BrnVehicleConstants.h"            // eCrashTrafficType
 
 #include "GameShared/GameClasses/Containers/CgsFastBitArray.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
@@ -295,6 +298,58 @@ void TrafficEntityModule::UpdateCrashSlider()
     if (lfFinal < 0.0f) { lfFinal = 0.0f; }
     if (lfFinal > 1.0f) { lfFinal = 1.0f; }
     mfCrashSliderFinalValue = lfFinal;
+}
+
+// --------------------------------------------------------------------------------------------
+// TrafficEntityModule::EnsureVehicleRemovedFromCrashModule  @0x8271FBE8  (185 insns)
+//
+// LANDED HERE because it is one of the three blockers on RemoveVehicle @0x8272E370, which is
+// the junction-FUP RELIEF VALVE this file's UpdateJunctionFUP has to leave gated. It is also
+// named as a blocker by three other park notes (_wT1_01.cpp:582 StaticVehicles_KillParam,
+// _wT2_01.cpp:618 KillParam, _wT3_02.cpp:866 StopVehicleBeingPhysical). All four callers are
+// still gated, so this changes no behaviour today -- it shortens the next wave's path.
+//
+// Every offset in it resolves by name:
+//   +164480 == mVehiclesAddedToCrashModule       (:634, the FastBitArray<601> immediately
+//              before mVehicleSoaData -- 164560 minus one 80-byte set)
+//   +359992 == maRecentlyRemovedVehicles         (:681; maNewRemovedVehicles is at +0x57F7C
+//              and an Array<u16,160> is 324 bytes, so 0x57F7C - 0x144 == 0x57E38 == 359992)
+//   +360640 == maRecentlyRecoveredSlammedTraffic (:683 == 0x580C0, and the console's own
+//              assert string at .cpp 4389 names it)
+//   Vehicle +0x01 == muCrashTrafficType, tested against 3 == eCrashTrafficType_Slammed and
+//              reset to -1 == eCrashTrafficType_Invalid.
+// ⚠️ The console reads that byte BARE (`lbz r11,1(r35) ; cmplwi cr6, r11, 3`). Vehicle's
+// IsRecoveringFromSlam() tests the same byte but also asserts IsPhysical(), and this function
+// runs while a vehicle is being taken OUT of physics -- so it uses the unasserted accessor,
+// the same distinction GetOtherHalfIndex draws against GetCabIndex.
+// --------------------------------------------------------------------------------------------
+void TrafficEntityModule::EnsureVehicleRemovedFromCrashModule(u32 luVehicle)
+{
+    CGS_ASSERT(luVehicle < KU_MAX_TOTAL_TRAFFIC,
+               "luVehicle < KU_MAX_TOTAL_TRAFFIC");            // baked .cpp 4371
+
+    // 0x8271FC3C..0x8271FD5C. The IsBitSet / UnSetBit pair carries the console's two
+    // CgsFastBitArray.h range asserts (h:396 and h:452), streamed with the index.
+    if (mVehiclesAddedToCrashModule.IsBitSet(luVehicle))
+    {
+        mVehiclesAddedToCrashModule.UnSetBit(luVehicle);
+        maRecentlyRemovedVehicles.Append(static_cast<u16>(luVehicle));
+    }
+
+    // 0x8271FD84 -- the inlined GetVehicle, assert baked at BrnTrafficEntityModule.h:2459.
+    Vehicle* const lpVehicle = GetVehicle(luVehicle);
+
+    // 0x8271FD98..0x8271FE0C. A car that was mid-slam-recovery has to be told the recovery is
+    // over, or the slam bookkeeping keeps a dead index.
+    if (lpVehicle->GetCrashTrafficTypeRaw() ==
+        static_cast<u8>(BrnPhysics::Vehicle::eCrashTrafficType_Slammed))
+    {
+        CGS_ASSERT(!maRecentlyRecoveredSlammedTraffic.Contains(static_cast<u16>(luVehicle)),
+                   "!maRecentlyRecoveredSlammedTraffic.Contains( luVehicle )");  // .cpp 4389
+        maRecentlyRecoveredSlammedTraffic.Append(static_cast<u16>(luVehicle));
+        lpVehicle->SetCrashTrafficTypeRaw(
+            static_cast<u8>(BrnPhysics::Vehicle::eCrashTrafficType_Invalid));
+    }
 }
 
 // --------------------------------------------------------------------------------------------
