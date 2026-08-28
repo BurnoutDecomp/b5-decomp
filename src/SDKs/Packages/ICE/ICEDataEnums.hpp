@@ -320,7 +320,49 @@ public:
     f32  Decode(u32 luEncoded) const;
 
     // --- Trivial inline-away default accessors ---
-    f32 GetDefaultFloat() const     { return mDefault.GetFloat(); }
+    // ⭐⭐ GetDefaultFloat IS TYPE-AWARE. It has no out-of-line X360 symbol, so its body is
+    // recovered from its one inlined call site: the degenerate (no-interval) arm of
+    // ICE::ICETake::SetParameter @0x82530668, at 0x82530894-0x825308D8, which reads the
+    // description's mDataType (+0xC) BEFORE touching mDefault (+0x14):
+    //     0x82530894  lwz    r10, 0xC(r11)    ; mDataType
+    //     0x82530898  cmplwi cr6, r10, 1
+    //     0x8253089C  blt    cr6, loc_825308C4   ; 0 (INT)      -> integer arm
+    //     0x825308A0  cmplwi cr6, r10, 3
+    //     0x825308A4  blt    cr6, loc_825308B0   ; 1,2 (UINT,HASH) -> integer arm
+    //     0x825308A8  lfs    f0, 0x14(r11)       ; 3,4 (FIXED,FLOAT) -> raw float load
+    //     ...
+    //     0x825308B0  lwz    r11, 0x14(r11)      ; integer arm: load the stored s32
+    //     0x825308B4  extsw  r11, r11
+    //     0x825308B8  std / lfd
+    //     0x825308D4  fcfid  f0, f0              ; CONVERT it, do not reinterpret it
+    //     0x825308D8  frsp   f0, f0
+    // (The two integer arms are byte-identical and differ only in stack slot -- one source
+    //  expression per branch of the type test, both `(f32)mDefault.GetSignedInt()`.) This is
+    // the same IsFloat partition ICETake::GetValueFloat/GetValueInt already apply at both
+    // their overloads; only this accessor had been written as a raw union read.
+    //
+    // ⛔⛔ THE PUN WAS THE ICE TIME_SCALE ZERO (found + fixed 2026-08-28, crash-camera wave).
+    // `return mDefault.GetFloat();` reinterprets an INTEGER default's bits as IEEE-754. For
+    // element [19] TIME_SCALE (eICE_UINT, DEFAULT = (s32)100) that is 100 * 2^-149 =
+    // 1.401e-43, which the UINT round-half-up in SetParameter then stores as mValues[19] = 0.
+    // So every take that does not author the TIME channel asked for 0% of real time, and the
+    // director's dilation publish had to stay gated behind BRN_DIRECTOR_SLOMO or the game
+    // froze at the console's own 0.005 floor. The seed (ICEData.cpp:1665) and the asset port
+    // were BOTH innocent: the console memclears mValues too and recovers through exactly this
+    // default path.
+    // ⭐ CONTROL for "why did nothing else look broken": of the 48 elements, TIME_SCALE is the
+    // ONLY *key* element (index < 28, i.e. the only ones this default path serves) with a
+    // non-zero integer default. CUBIC_EYE[28]/CUBIC_LOOK[29]/CUBIC_RAWFOCUS[38] also default
+    // to (s32)1 but are INTERVAL elements, resampled through GetValue and never through here.
+    // Every other integer key element defaults to (s32)0, whose punned bits are also 0.0f --
+    // so the bug was observable through one channel only, and it was the TIME channel.
+    f32 GetDefaultFloat() const
+    {
+        if (IsFloat())
+            return mDefault.GetFloat();
+
+        return (f32)mDefault.GetSignedInt();
+    }
     s32 GetDefaultSignedInt() const { return mDefault.GetSignedInt(); }
 
     // --- DECLARE-ONLY (raw element-data access / value get-set; bodies elsewhere) ---

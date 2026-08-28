@@ -309,20 +309,19 @@ void KeyAnimController::UpdateCameraFromICE(const ICE::ICETake& lrTake,
     Camera::CameraEffects& lrEffects = lpCamera->GetEffects();
 
     // TIME_SCALE is authored as a percentage of normal speed.
-    // ⛔⛔ THIS LINE IS THE PRODUCER OF THE DIRECTOR'S ZERO TIME DILATION (measured 2026-08-28,
-    // slow-motion transport wave). On this build the take reads 0 here, so every ICE-anim
-    // camera asks the simulation to run at 0% of real time -- and with the console's own 0.005
-    // floor in MainDirector::Update that is 1/200 speed, i.e. a frozen game. The zero is NOT
-    // this line's fault and NOT the console's shape: TIME_SCALE's own element description
-    // (SDKs/Packages/ICE/ICEData.cpp:254, element [19]) carries DEFAULT=100, min 0, max 100 --
-    //     { "TIME_SCALE", "Time Scale", 4, eICE_UINT, 7,
-    //       ICEValue((s32)100), ICEValue((s32)0), ICEValue((s32)100), ... }
-    // -- while the take's value table is seeded to (s32)0 for EVERY element (ICEData.cpp:1665).
-    // 0 is not the identity of a percentage scale, so an unauthored TIME channel reads
-    // "stop time" rather than "real time". Either the seed must come from the description's
-    // default or the TIME channel is being lost in the asset port; BRN_ICE_TIMESCALE_DIAG below
-    // reports the raw value so a run can tell those two apart.
-    // The consumer is held behind BRN_DIRECTOR_SLOMO in BrnMainDirector.cpp until this is fixed.
+    // ✅ RESOLVED 2026-08-28 (crash-camera wave). This line read 0 on every ICE camera, so the
+    // whole director dilation channel had to stay gated. THE ZERO WAS NEITHER OF THE TWO
+    // CANDIDATES THE PREVIOUS WAVE LEFT OPEN -- not the take's memclear seed (ICEData.cpp:1665;
+    // the console memclears mValues too) and not the asset port (the TIME channel is simply not
+    // authored on these takes, which is normal and is what the DEFAULT exists for).
+    // It was ICEElementDescription::GetDefaultFloat(), which was written as `return
+    // mDefault.GetFloat();` -- a raw union read. TIME_SCALE is eICE_UINT with DEFAULT = (s32)100,
+    // so the unauthored-channel path in ICETake::SetParameter collapsed its cubic to
+    // 100-as-float-bits (1.401e-43) and the UINT round stored mValues[19] = 0.
+    // The console's own inlined GetDefaultFloat (@0x82530894, quoted in ICEDataEnums.hpp)
+    // branches on mDataType and converts with fcfid. Fixed there; measured here:
+    //     [ice-timescale] raw TIME_SCALE=100.000000 -> mfSimTimeScale=1.000000
+    // and the director's publish in BrnMainDirector.cpp is now UNGATED and runs at 1.0.
     if (getenv("BRN_ICE_TIMESCALE_DIAG") != 0 && CgsDev::Log::gpDebugPrint != 0)
     {
         static f32 sfLastRaw = -1.0f;
