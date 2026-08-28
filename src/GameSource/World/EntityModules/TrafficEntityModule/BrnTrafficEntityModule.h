@@ -956,6 +956,13 @@ namespace BrnTrafficIO { class InputBuffer_PreScene; class OutputBuffer_PreScene
         void UpdateNonDecisionFrame(const BrnTrafficIO::InputBuffer_PostPhysics* lpInput,
                                     BrnTrafficIO::OutputBuffer_PostPhysics* lpOutput);
 
+        // @0x8274B660 (.cpp 5833). The post-physics game-action dispatch: walks the input
+        // buffer's game-action queue and fans out to sixteen per-action arms. Body in
+        // _wT6_03.cpp, PARTIAL -- only action 23 (PREPARE_FOR_MODE) is reconstructed; the
+        // other fifteen are named gates blocked on callees with no body here.
+        void HandleExternalRequests(const BrnTrafficIO::InputBuffer_PostPhysics* lpInput,
+                                    BrnTrafficIO::OutputBuffer_PostPhysics* lpOutput);
+
         // @0x827480D8. The per-event arming handler, dispatched from HandleExternalRequests
         // @0x8274B660 on game action 23 (E_ACTION_PREPARE_FOR_MODE). ⭐ Sole non-debug writer
         // of mbPlayingShowtimeMode, and the writer of meGameMode, the swerve/killzone/
