@@ -10,6 +10,7 @@
 // =====================================================================================
 
 #include "rw/audio/core/Route.h"
+#include "rw/audio/core/SubMix.h" // SubMix (the real class; moved out of SubMixConnector.h)
 
 namespace rw
 {
@@ -176,14 +177,14 @@ int Route::ConnectByPointerHandler(void* cmd)
     {
         lpConn->mpSubMix = lpSubMix;                                   // stw 0xC(v4)
         lpConn->mpSubMixBuffer = lpSubMix->mpSubMixBuffer;             // lwz 0x24 -> stw 8
-        lpConn->mNumSubMixChannels = static_cast<u8>(lpSubMix->mbNumChannels);// lbz 0x21 -> stb 0x10
+        lpConn->mNumSubMixChannels = lpSubMix->mOutputChannels;               // lbz 0x21 -> stb 0x10
 
-        SubMixConnector* lpHead = lpSubMix->mpConnectorHead;           // lwz 0x28(v6)
+        SubMixConnector* lpHead = lpSubMix->GetSendListHead();         // lwz 0x28(v6)
         lpConn->mppPrev = 0;                                           // stw 0, 4(v4)
         lpConn->mpNext = lpHead;                                       // stw head, 0(v4)
         if (lpHead)
             lpHead->mppPrev = reinterpret_cast<SubMixConnector**>(lpConn); // stw v4, 4(head)
-        lpSubMix->mpConnectorHead = lpConn;                            // stw v4, 0x28(v6)
+        lpSubMix->SetSendListHead(lpConn);                             // stw v4, 0x28(v6)
 
         const f32 lfGain0 = lpCmd->mfGain0; // lfs 0xC(a1)
         const f32 lfGain1 = lpCmd->mfGain1; // lfs 0x10(a1)

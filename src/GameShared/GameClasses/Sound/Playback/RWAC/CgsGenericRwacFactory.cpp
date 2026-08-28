@@ -31,6 +31,7 @@
 #include "rw/audio/core/Rechannel.h"
 #include "rw/audio/core/Resample.h"
 #include "rw/audio/core/Send.h"
+#include "rw/audio/core/SubMix.h"
 #include "rw/audio/core/plugins/GainFader.h"
 #include "rw/audio/core/plugins/HighPassButterworth.h"
 #include "rw/audio/core/plugins/Limiter1.h"
@@ -236,15 +237,15 @@ GenericRwacFactory::GenericRwacFactory(Environment& arEnvironment,
         PlugInRegistry* lpPlugInRegistry =
             rw::audio::core::System::GetPlugInRegistry(mpSystem);
 
-        // The 25 RegisterPlugInRunTime calls in EXACT console order. NINETEEN are
+        // The 25 RegisterPlugInRunTime calls in EXACT console order. TWENTY are
         // LIVE (descriptor-record wave 2026-08-28: their PlugInDescRunTime
         // records are REAL host records -- XEX-recovered fields + host callback
         // pointers, every callback bodied in its mounted vendor TU; proof
         // progress/scratch_dossiers/plugindesc_layout_codex.md). The rest stay
         // FLAG-deferred in place, each for a stated reason:
-        //   * SndPlayer1 and SubMix -- no PC plug-in home yet (Dac registered
-        //     LIVE with the phase-D slice; GainFader and LowPassButterworth got
-        //     theirs with the phase-E filter wave);
+        //   * SndPlayer1 -- no PC plug-in home yet (Dac landed with the phase-D
+        //     slice; GainFader, LowPassButterworth and SubMix got theirs with the
+        //     phase-E waves);
         //   * the three custom game descriptors (GinsuPlayer off_82F2D094 /
         //     SndPlayer1_CgsStreamMod off_82F2E124 / GainArray off_82F2E664)
         //     -- their game-side plug-in bodies are not reconstructed.
@@ -290,7 +291,7 @@ GenericRwacFactory::GenericRwacFactory(Environment& arEnvironment,
         CGS_RWAC_REGISTER(rw::audio::core::ReverbModel1::GetPlugInDescRunTime());        // 19 @0x82B9AD98
         CGS_RWAC_REGISTER(rw::audio::core::Send::GetPlugInDescRunTime());                // 20 @0x82B9B798
         // 21 SndPlayer1 @0x82B9BE60 -- FLAG deferred (no PC home; off_82F901C4)
-        // 22 SubMix @0x82B9C370 -- FLAG deferred (no PC home; off_82F902E0)
+        CGS_RWAC_REGISTER(rw::audio::core::SubMix::GetPlugInDescRunTime());              // 22 @0x82B9C370 (phase E)
         // 23 "GinsuPlayer" off_82F2D094 -- FLAG deferred (game-side plug-in not reconstructed)
         // 24 "SndPlayer1_CgsStreamMod" off_82F2E124 -- FLAG deferred (same)
         // 25 "GainArray" off_82F2E664 -- FLAG deferred (same)

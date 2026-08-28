@@ -79,7 +79,8 @@
 // =====================================================================================
 
 #include "rw/audio/core/Send.h"            // Send, SendConnectByNameCommand
-#include "rw/audio/core/SubMixConnector.h" // SubMix, SubMixConnector, ListDNode, ListDStack
+#include "rw/audio/core/SubMixConnector.h" // SubMixConnector, ListDNode, ListDStack
+#include "rw/audio/core/SubMix.h"          // SubMix (the real class; moved out of SubMixConnector.h)
 
 #include <cstddef> // offsetof -- node-to-owner conversion on the HOST
 #include <cstring> // std::strcmp -- the asm's inlined character loop, de-inlined
@@ -193,14 +194,14 @@ int Send::ConnectByNameHandler(void* cmd)
             SubMixConnector* lpConn = &lpSend->mSubMixConnector; // r11 = r30 + 0x30
             lpConn->mpSubMix = lpSubMix;                                     // stw 0xC(conn)
             lpConn->mpSubMixBuffer = lpSubMix->mpSubMixBuffer;               // lwz 0x24 -> stw 8
-            lpConn->mNumSubMixChannels = static_cast<u8>(lpSubMix->mbNumChannels); // lbz 0x21 -> stb 0x10
+            lpConn->mNumSubMixChannels = lpSubMix->mOutputChannels;              // lbz 0x21 -> stb 0x10
 
-            SubMixConnector* lpHead = lpSubMix->mpConnectorHead; // lwz 0x28(subMix)
+            SubMixConnector* lpHead = lpSubMix->GetSendListHead(); // lwz 0x28(subMix)
             lpConn->mppPrev = 0;                                 // stw r9(=0), 4(conn)
             lpConn->mpNext = lpHead;                             // stw r8, 0(conn)
             if (lpHead)
                 lpHead->mppPrev = reinterpret_cast<SubMixConnector**>(lpConn); // stw r11, 4(r9)
-            lpSubMix->mpConnectorHead = lpConn;                  // stw r11, 0x28(subMix)
+            lpSubMix->SetSendListHead(lpConn);                   // stw r11, 0x28(subMix)
             break; // the asm falls straight through to the epilogue: FIRST match only
         }
     }
