@@ -24,6 +24,7 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                 // gpDebugPrint / gxMessageFilterFlags
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"  // the 8 environment CPU monitors
 #include "GameShared/GameClasses/Sound/Playback/RWAC/CgsGenericRwacFactory.h" // GetDefaultRwacSystem + RwacSystemLock (phase B4)
+#include "GameShared/GameClasses/Sound/Playback/AEMS/CgsAemsFactory.h"        // AemsFactory::Create (the stage-3 create, cascade slice 2)
 #include "GameShared/GameClasses/System/Resource/CgsResourceIOEvents.h"    // OpenReadStreamRequest / ReadStreamEvent (phase B4)
 #include "GameShared/GameClasses/System/Resource/CgsResourceID.h"          // ID::HashString (DoServiceContentLoadRequest)
 #include "GameShared/GameClasses/System/Resource/CgsResourcePtr.h"         // BaseResourcePtr (the type-4 response rebind)
@@ -241,13 +242,30 @@ bool Module::Prepare(rw::IResourceAllocator* apAllocator,
             mhRwacFactory = Handle<Factory>(lhRwacFactory.GetObject());
             CGS_ASSERT(!!mhRwacFactory, "mhRwacFactory");
         }
-        // [2/3][3/3] FLAG deferred: AemsFactory::Create @0x826DAC28 (spec
-        // {Handle<RwacFactory>, 128, 32384}; its refcount rides at +8 -- the
-        // AemsRWSampleFactory MI base) and SplicerFactory::Create @0x826DB130,
-        // each asserting its handle (cpp:207/:219), plus the off_82FFBA0C
-        // interface-global publish (`= &this->+0x228`) that follows the third
-        // create -- the AEMS/Splicer ctor slices land next (full decode banked
-        // in progress/scratch_dossiers/aems_factory_cascade_codex.md).
+        // [2/3] AEMS -- REAL (AemsFactory::Create @0x826DAC28, cascade slice 2):
+        // spec {the RWAC handle, 128, 32384, 0} passed by reference; the temp
+        // assigned into +0x2260 and asserted (cpp:207). The console releases the
+        // temp through the IAems vtable +4 slot and then the spec's RWAC handle
+        // -- both releases balance real-ref-model acquires the interim
+        // plain-store Handle model manages beside the stores instead (the
+        // create's Acquire = the member ref; the ctor's own retain of the RWAC
+        // pointer stands on its own).
+        {
+            AemsFactorySpec lAemsSpec;
+            lAemsSpec.mpRwacFactory       = mhRwacFactory.GetObject();
+            lAemsSpec.mu32EntityCount     = 128;
+            lAemsSpec.mu32DataSize        = 32384;
+            lAemsSpec.mu32StringTableSize = 0;
+            Handle<AemsFactory> lhAemsFactory =
+                AemsFactory::Create(*mhEnvironment, lAemsSpec);
+            mhAemsFactory = Handle<Factory>(lhAemsFactory.GetObject());
+            CGS_ASSERT(!!mhAemsFactory, "mhAemsFactory");
+        }
+        // [3/3] FLAG deferred: SplicerFactory::Create @0x826DB130 (assert
+        // cpp:219) plus the off_82FFBA0C interface-global publish (`= &this->
+        // +0x228`) that follows it -- the Splicer ctor slice next (SpliceManager
+        // + VoicePool::Prepare @0x8268AC40, dossier re-exported; full decode in
+        // progress/scratch_dossiers/aems_factory_cascade_codex.md).
 
         // The stream-buffer carve (real): LinearMalloc-backed when supplied
         // (size = GetSize()/3, 2 blocks, main-allocator flag OFF -> Malloc), else
