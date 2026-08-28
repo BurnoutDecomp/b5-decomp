@@ -60,6 +60,10 @@ struct MapTransform
     static Matrix33 MakeCoordSpaceFromRect(Vector4 lv4Rect);              // @0x82450460
     static Vector2  Transform(Vector2 lv2Point, Matrix33 lm33Transform);  // (X360 inlines the one-matrix apply)
     static Vector2  Transform(Vector2 lv2Point, Matrix33 lm33From, Matrix33 lm33To); // @0x824503C0
+    // @0x8245A080 (main-map slice 2026-08-27) -- the rect-to-rect overload: coord spaces
+    // from the two rects, then the two-matrix Transform. The X360 body is the un-named
+    // sub_8245A080 the MainMapComponent view pipeline calls ~10 times.
+    static Vector2  Transform(Vector2 lv2Point, Vector4 lv4From, Vector4 lv4To);
     static Matrix33 MakeTransform(Matrix33 lm33From, Matrix33 lm33To);    // @0x824435C8
     static Matrix33 MakeCoordSpaceFromPoints(Vector2 lv2Origin, Vector2 lv2XPoint, Vector2 lv2YPoint); // (X360 inlines it; attested by SetZoomedWorldRect / SatNavRenderer::RenderComponent)
     static void     SetZoomedWorldRect(Vector2 lv2CornerA, Vector2 lv2CornerB, Vector2 lv2CornerC); // @0x824504E8
@@ -82,8 +86,8 @@ struct MapTransform
     static const Matrix33& GetZoomedViewportScreen() { return smm33ZoomedViewportScreenTransform; }
 
     // ---- declared-only (DWARF :81-314), out of scope for this slice ----
+    // (Transform(Vector2, Vector4, Vector4) moved up: bodied @0x8245A080, main-map slice.)
     static Vector2  WorldToNormalised(Vector3 lv3World);
-    static Vector2  Transform(Vector2 lv2Point, Vector4 lv4From, Vector4 lv4To);
     static Vector2  Flatten(Vector3 lv3In);
     static Vector3  Unflatten(Vector2 lv2In);
     static bool     IsWithinViewport(Vector3 lv3World, f32 lfMargin, f32 lfScale);

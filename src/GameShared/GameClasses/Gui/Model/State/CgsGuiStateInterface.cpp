@@ -20,6 +20,16 @@ namespace CgsGui
         return mpAccessPointers;
     }
 
+    // [map arm 2026-08-27] The allocator accessor -- console-INLINED at every call site
+    // (its own "mpAllocator != NULL" assert carries the header line, h:337: e.g.
+    // MapManager::Construct @0x82458590's `lwz r11, 8(r30)` bracketed by that assert).
+    // First out-of-line consumer on this host: the mounted BrnMapManager.cpp.
+    rw::IResourceAllocator* StateInterface::GetAllocator()
+    {
+        CGS_ASSERT(mpAllocator != nullptr, "mpAllocator != NULL");   // h:337
+        return mpAllocator;
+    }
+
     // @ 0x8240E438 - the language manager reached through the access pointers. The
     // X360 body inlines GetAccessPointers() twice (once feeding the h:351 manager
     // check, once for the returning load), so the h:344 "mpAccessPointers != NULL"

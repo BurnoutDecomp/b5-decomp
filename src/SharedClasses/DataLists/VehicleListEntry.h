@@ -51,16 +51,39 @@ enum ECarType : int
 
 struct VehicleListEntry
 {
-    // Livery-kind tag for a derived car's livery list. The X360 stores it as a 4-byte word
-    // (Array<ELiveryType,8>::Append @0x8235C6A8 uses stwx). The concrete enumerator names/values
-    // are data-driven (not literal in the asm); modelled with the two kinds the derived-livery
-    // builders distinguish (colour vs pattern) plus the count sentinel.
+    // Livery-kind tag for a derived car's livery list (the muLiveryType byte @+0xE9,
+    // widened to a 4-byte word in the livery arrays -- Array<ELiveryType,8>::Append
+    // @0x8235C6A8 uses stwx).
+    // ⭐ [map arm 2026-08-27] VALUES CORRECTED against the three X360 readers (the old
+    // colour=0/pattern=1 model was flagged wrong by BrnDerivedCars.h's own tail note):
+    //     ConstructColourLiveryList  @0x82374F60: colour set == kind ∈ {1, 3, 4}
+    //     ConstructPatternLiveryList @0x823751C0: pattern     == kind == 2
+    //     ProgressionManager::AddCar @0x8237A970: kind == 4   == the "silver" cars
+    // 0 is the no-livery base car (never matched by any builder). FLAG: the value-1 and
+    // value-3 names are role-named only ("colour kinds" is all the asm attests -- which
+    // is paint vs which is a colour variant is not recovered); 2 and 4 carry attested
+    // roles; the enum has no attested COUNT sentinel, so none is fabricated.
     enum ELiveryType
     {
-        E_LIVERY_TYPE_COLOUR  = 0,
-        E_LIVERY_TYPE_PATTERN = 1,
-        E_LIVERY_TYPE_COUNT   = 2,
+        E_LIVERY_TYPE_NONE       = 0,   // FLAG role-named: the base (non-livery) car
+        E_LIVERY_TYPE_COLOUR     = 1,   // FLAG role-named: colour-set member
+        E_LIVERY_TYPE_PATTERN    = 2,   // the pattern builders' kind
+        E_LIVERY_TYPE_COLOUR_ALT = 3,   // FLAG role-named: colour-set member
+        E_LIVERY_TYPE_SILVER     = 4,   // colour-set member; AddCar's ==4 "silver" arm
     };
+
+    // [map arm 2026-08-27] the colour-set predicate both livery builders test (and whose
+    // negation the pattern builder asserts by name: "!lpVehicleListEntry->IsLiveryColour()",
+    // BrnDerivedCars.h:164). Written as the SET the compiler emitted ({1, 3, 4}), not a
+    // range compare -- the GenericRegion::IsDriveThru precedent: the set and any range
+    // coincide only while the enumerators happen to be contiguous.
+    bool IsLiveryColour() const
+    {
+        const u8 lu8Kind = GetLiveryType();
+        return lu8Kind == E_LIVERY_TYPE_COLOUR
+            || lu8Kind == E_LIVERY_TYPE_COLOUR_ALT
+            || lu8Kind == E_LIVERY_TYPE_SILVER;
+    }
 
     // Destruct the embedded collision keys (VehicleListResourceType::FixUp @0x8267DD60).
     void FixUp();

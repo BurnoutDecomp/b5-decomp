@@ -61,21 +61,9 @@ namespace BrnGui
         return BrnTraffic::GetScoringTrafficDataElement(maScoringTrafficDataStorage, luIndex);
     }
 
-    // @ 0x8240FA88 -- the event's destination landmark index. Valid only in the race-style game
-    // modes (same mode gate as GetEventDestinationDistrict; the X360 skips the assert for
-    // meGameModeType in {0,1,10,6,8,5}); then asserts the stored index is not the invalid-
-    // landmark sentinel. Returns mEventDestinationLandmarkIndex (@0x9F4C) wrapped as a
-    // LandmarkIndex (the X360 copies the raw u16 into the caller's out slot).
-    BrnGameState::LandmarkIndex GuiCache::GetEventDestinationLandmarkIndex() const
-    {
-        CGS_ASSERT(
-            (meGameModeType == 0) || (meGameModeType == 1) || (meGameModeType == 10)
-                || (meGameModeType == 6) || (meGameModeType == 8) || (meGameModeType == 5),
-            "race-style game mode required for GetEventDestinationLandmarkIndex");
-        CGS_ASSERT(mEventDestinationLandmarkIndex != BrnGameState::K_INVALID_LANDMARK,
-                   "mEventDestinationLandmarkIndex != BrnGameState::K_INVALID_LANDMARK");
-        return BrnGameState::LandmarkIndex(mEventDestinationLandmarkIndex);
-    }
+    // (GetEventDestinationLandmarkIndex @0x8240FA88 MOVED to the MOUNTED
+    // BrnGuiCache_wMap.cpp, map arm 2026-08-27 -- the BrnMainMapLinkGates.cpp retirement
+    // prescription. One home only: re-adding it here while wMap is mounted is LNK2005.)
 
     // @ 0x8241E7D8 -- number of online finish points = total set bits across the 256-bit
     // finish-point bitmask (maOnlineFinishPointsMask @0x7770, 4 doublewords). The X360 loads

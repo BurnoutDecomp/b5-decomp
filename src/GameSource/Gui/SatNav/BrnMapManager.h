@@ -61,6 +61,12 @@ namespace BrnGui
 
         MapManager();                                                 // @0x82508550
 
+        // @0x82458590 -- [map arm 2026-08-27] adopt the state interface + its allocator and
+        // reset the whole working set (directories, requested tiles, counters, the low-res
+        // backdrop slot with its unit local BB and whole-world world BB). The console caller
+        // is MainMapComponent::Construct's embedded-MapManager sub-construct.
+        void            Construct(CgsGui::StateInterface* lpStateInterface);
+
         void            SetZoomLevel(EZoomLevel leZoomLevel);         // @0x8244F768
 
         // @0x8244F898 -- on the cache-ready event (type 64), lazily build the low-res backdrop

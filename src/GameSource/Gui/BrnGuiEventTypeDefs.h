@@ -291,6 +291,12 @@ struct GuiEventUpdateSatNav
         {
             return miLandmarkIndex;   // [H3b] the head carve named it; same bytes.
         }
+        // [map arm 2026-08-27] the write sides of the two head fields, attested by the
+        // GuiCache landmark fills: GetLandmarkInfoFromIndex @0x82506688 (`sth r27, 0x20`
+        // -- the caller's index -- and `lbz lm+0x31; stb 0x22` -- the landmark's design
+        // index) and GetLandmarkInfoFromID @0x825067E0 (`lhz lm+0x28; sth 0x20`).
+        void SetLandmarkIndexHalf(s16 liIndex) { miLandmarkIndex = liIndex; }   // @0x20
+        void SetDesignIndex(u8 lu8Design)      { mu8DesignIndex = lu8Design; }  // @0x22
 
         // ADDITIVE GROW (wave-J CrashNavMap + PreRaceFlyBy TUs). Two named faces over head
         // members that are already DWARF-documented but were, until now, buried inside the

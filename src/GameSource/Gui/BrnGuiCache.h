@@ -960,8 +960,28 @@ namespace BrnGui
 
         // DWARF BrnGuiCache.h:993. Re-publish the map state after the fly-by tears its
         // screen down. X360 out-of-line, called by PreRaceFlyByState::OnLeave
-        // (`bl` @0x824C6AE8). DECLARATION-ONLY.
+        // (`bl` @0x824C6AE8). Body: BrnGuiCache_wMap.cpp (map arm 2026-08-27).
         void RefreshMapState();
+
+        // [map arm 2026-08-27] the tracker-refresh worker RefreshMapState's offline arm
+        // tail-calls (@0x82510F7C) and GuiCache::RecEvent case 112's Burning-Home-Run arm
+        // calls (@0x825105F8): resolve `liNumLandmarks` u16 landmark indices to their icon
+        // records and publish the whole set to the GuiTracker as one id-232 SetTracker
+        // event. X360 @0x82506F28. Body: BrnGuiCache_wMap.cpp.
+        void UpdateTrackerInfo(const u16* lpLandmarkIndices, s32 liNumLandmarks);
+
+        // [map arm 2026-08-27] the active-landmark latch: copy the event's u16 landmark
+        // list into maActiveLandmarks (+0x5288) and its count into muNumActiveLandmarks
+        // (+0x5286, BYTE store -- the console truncates a > 255 list; keep it). Asserts
+        // count <= KI_MAX_LANDMARKS_IN_GAME (512). X360 @0x824EE7D0, called by the
+        // HACK_...SetActiveLandmarksByEventID body and (on console) the id-231 RecEvent
+        // arm. Body: BrnGuiCache_wMap.cpp.
+        struct SetActiveLandmarksEvent
+        {
+            u32 muNumLandmarks;                    // +0x00
+            u16 maLandmarkIndices[512];            // +0x04 (KI_MAX_LANDMARKS_IN_GAME)
+        };
+        void HandleSetActiveLandmarksEvent(const SetActiveLandmarksEvent* lpEvent);
 
         // DWARF BrnGuiCache.h:1476 -- EXACT signature (`int32_t (uint32_t, float32_t, bool)`).
         // Re-latch the cache's active-landmark set for one event id at animation parameter
@@ -1424,7 +1444,14 @@ namespace BrnGui
         // @0x8240F1C0) -- two different "checkpoint" counts on this class.
         // No member is shifted (2 + 1 + 9433 == 9436); the u16 array at +0x5288 stays padded.
         u8  muNumActiveLandmarks;                        // +0x5286 (21126)
-        u8  mPad_5287[0x409];                            // +0x5287..+0x568F
+        u8  mPad_5287[1];                                // +0x5287
+        // [map arm 2026-08-27] ADDITIVE CARVE from the former mPad_5287[0x409]: the ACTIVE
+        // landmark-index array HandleSetActiveLandmarksEvent @0x824EE7D0 fills (`addi r10,
+        // r30, 0x5288` + the `sth` copy loop, bounded by the KI_MAX_LANDMARKS_IN_GAME == 512
+        // assert). 512 * 2 == 0x400; the pad keeps its first byte and its 8-byte tail, so no
+        // member shifts (1 + 0x400 + 8 == 0x409).
+        u16 maActiveLandmarks[512];                      // +0x5288..+0x5687 (KI_MAX_LANDMARKS_IN_GAME)
+        u8  mPad_5688[8];                                // +0x5688..+0x568F
         // [H3b ADDITIVE CARVE] the embedded mSetUpAllEventStartsInterface's event-start
         // array (X360 @0x5690, 175 x 0x30 == 0x20D0 bytes -- ends EXACTLY at the count
         // word miEventStartsCount @0x7760 the accessors read at interface+0x20D0).
