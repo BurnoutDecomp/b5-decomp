@@ -938,13 +938,11 @@ void TrafficEntityModule::ReturnPhysicalVehicleToTraffic(u32 luVehicle)
     // handed back.
     if (!lpVehicle->IsOfTrailerSpecies() && !GetParam(luVehicle)->IsAlive())
     {
-        // GATE: RemoveVehicle @0x8272E370 (499) -- unreconstructed. BLOCKER: GetVehicleSpecies /
-        // Vehicle::DetachArticulation / StaticTrafficParam::SetShouldBeRemoved are not bodied.
-        // COST: the record survives with a dead param. DELETE-WHEN RemoveVehicle lands.
-        static bool sbLoggedRemoveVehicle = false;
-        LogMissingLeg(sbLoggedRemoveVehicle,
-                      "ReturnPhysicalVehicleToTraffic's RemoveVehicle @0x8272E370 -- "
-                      "unreconstructed; the demoted car keeps its (dead) param record");
+        // 0x8273DFAC..0x8273DFB4 -- UNGATED: RemoveVehicle @0x8272E370 is bodied in
+        // _wT5_01.cpp. (Its park note here named GetVehicleSpecies /
+        // Vehicle::DetachArticulation / StaticTrafficParam::SetShouldBeRemoved as blockers;
+        // all three had already been landed by earlier waves and nobody retired the note.)
+        RemoveVehicle(luVehicle);
     }
 }
 
