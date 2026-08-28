@@ -717,10 +717,15 @@ public:
     // one-shot semantics and the call it makes are the console's.
     // DELETE-WHEN PreWorldUpdate lands.
     //
-    // lbMayCompleteJunkyardEntry gates the SECOND leg (the extracted ProcessGameEvents case-78
-    // arm below). It is the ordering stand-in for game event 78: the caller passes the GUI's own
-    // first-boot signal, and the body explains what firing without it measurably does.
-    void PreWorldUpdateSetupPlayerCarBringUp(bool lbMayCompleteJunkyardEntry);
+    // ⭐⭐⭐ [returning-player wave 2026-08-28] THE bool IS GONE AND THE STAND-IN WITH IT.
+    // The second leg (the extracted ProcessGameEvents case-78 arm below) used to be gated on an
+    // ORDERING STAND-IN the caller supplied -- MainDirector::IsNewProfileIntroActive(), a
+    // NEW-PROFILE-ONLY signal. That made the start-of-game junkyard entry impossible to complete
+    // on a boot that finds a Profile.sav, which is the whole "a returning player cannot drive"
+    // defect (see the case-78 banner below for the measurement and the retraction). It now drains
+    // the console's own game event 78 out of mGameEventCarryQueue, which BridgeGuiToGameState
+    // fills -- so the trigger is the GUI's, on both paths, exactly as on the console.
+    void PreWorldUpdateSetupPlayerCarBringUp();
 
     // ⭐⭐ X360 ProcessGameEvents @0x823A0A18, THE CASE-78 ARM (0x823A4590..0x823A45F8) --
     // "the GUI says the player is really in the junkyard now, finish the entry".
@@ -734,18 +739,43 @@ public:
     // own gate (mbWaitingToPutPlayerInJunkyard) intact -- so what runs is console code, and the
     // deviation is the TRIGGER, not the body.
     //
-    // [FLAG PC bring-up] the console reaches this arm from game event 78, which
-    // BridgeGuiToGameState @0x823DDB78 translates out of GUI out-event 145
-    // (BrnGui::InGame::OnEnter). Both ends of that bridge exist in this tree, but the bridge is
-    // not plumbed (nothing creates a GameStateModuleIO::PostWorldInputBuffer, and PreWorldUpdate's
-    // three-queue merge is not reconstructed) AND -- measured on this build -- InGame::OnEnter
-    // runs ~40 log lines BEFORE the latch is armed, so a faithfully-plumbed bridge would deliver
-    // the event to a latch that does not yet exist. The arm therefore runs off the latch alone,
-    // in the same sub-step as the arming leg -- which IS the console's own body order inside
-    // PreWorldUpdate (latch leg @0x823A5510, ProcessGameEvents @0x823A58B8).
-    // DELETE-WHEN ProcessGameEvents + the post-world input buffer + BridgeGuiToGameState's caller
-    // are real (then this goes and the GUI's own event drives it).
+    // ✅ [returning-player wave 2026-08-28] THE DELETE-WHEN IS PAID: THE GUI'S OWN EVENT DRIVES IT.
+    // The console reaches this arm from game event 78, which BridgeGuiToGameState @0x823DDB78
+    // translates out of GUI out-event 145 (BrnGui::InGame::OnEnter @0x824D0498). Every rung of
+    // that bridge now exists AND is plumbed: InGame::OnEnter posts 145 (BrnInGame.cpp:388),
+    // BrnGameModule::DoUpdate calls BridgeGuiToGameState every in-game sub-step, and its sink --
+    // GameStateModuleIO::PostWorldInput -- is mGameEventCarryQueue, the very queue the other
+    // extracted ProcessGameEvents arms already walk. So the trigger below is the console's.
+    //
+    // ⛔⛔ THE NOTE THAT USED TO STAND HERE WAS WRONG, AND IT COST A WEEK.
+    // It read: "measured on this build -- InGame::OnEnter runs ~40 log lines BEFORE the latch is
+    // armed, so a faithfully-plumbed bridge would deliver the event to a latch that does not yet
+    // exist", and on that basis the arm was driven off the latch alone, gated by
+    // MainDirector::IsNewProfileIntroActive(). ⭐ THE MEASUREMENT CONFUSED TWO DIFFERENT
+    // "InGame::OnEnter"s. The line it read is BrnGameMainFlowInGameState::OnEnter ("InGame:
+    // OnEnter -> GUI FSM stage 5"), the FLOW-CONTROLLER state -- not BrnGui::InGame::OnEnter, the
+    // GUI SCREEN state that actually posts command 145. The screen state's own observable is the
+    // command-65 line ("in-game screen entered (65)"), and it lands ~200 lines AFTER the latch:
+    //     fresh      (scratch/flow_run/eng_d1_freshreg) SendSetupPlayerCarEvent :1052  65 :1249
+    //     returning  (scratch/flow_run/eng_b2_probe)    SendSetupPlayerCarEvent :1032  65 :1229
+    // The producer therefore fires comfortably AFTER the latch on BOTH paths, and the real event
+    // is a strictly better trigger than the stand-in -- on the fresh path it arrives 20 lines
+    // EARLIER than IsNewProfileIntroActive() used to fire it (:1249 vs :1270, same sub-step
+    // neighbourhood), and on the returning path it arrives at all, which the stand-in never did.
     void ProcessGameEventsReallyEnterJunkyardBringUp(GameStateModuleIO::GameActionQueue* lpActionQueue);
+
+    // ⭐⭐ [returning-player wave 2026-08-28] The QUEUE WALK for the arm above -- the same shape
+    // as ProcessGameEventsPropHitBringUp / ...WorldRegionBringUp / ...PauseBringUp: the console's
+    // dispatcher makes one pass over the merged queue and this tree extracts one arm per
+    // function. Reads mGameEventCarryQueue WITHOUT clearing it (PreWorldUpdateStuntBringUp owns
+    // the console's Clear, later in the same sub-step), so the other arms still see the frame.
+    // ⓘ POSITION IS THE CONSOLE'S: PreWorldUpdate runs the latch leg (@0x823A5510), then
+    // ProcessGameEvents (@0x823A58B8), then the CarSelectManager tick (@0x823A5904) -- so this
+    // walk lives in PreWorldUpdateSetupPlayerCarBringUp, ahead of PreWorldUpdateCarSelectBringUp,
+    // not in the later PreWorldUpdateStuntBringUp pass (which would cost a sub-step).
+    void ProcessGameEventsGuiStartedGameBringUp(
+            const CgsModule::VariableEventQueue<1536, 16>* lpGameEventQueue,
+            GameStateModuleIO::GameActionQueue* lpActionQueue);
 
     // ⭐⭐ X360 PreWorldUpdate @0x823A5328, the CAR-SELECT leg at 0x823A5904..0x823A5958:
     //     PerfMonCpu::StartMonitor(mCpuMonitors.<car-select>);

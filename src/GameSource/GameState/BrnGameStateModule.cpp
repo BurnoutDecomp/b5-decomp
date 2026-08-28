@@ -11,6 +11,8 @@
 #include "GameSource/GameState/Progression/BrnProgressionManager.h"     // BrnProgression::ProgressionManager::GetProfile
 #include "GameSource/GameState/Progression/BrnProfile.h"                // BrnProgression::Profile::SetCarUnlockAlreadyShown
 #include "GameSource/GameState/BrnGameStateModuleIO.h"                  // GameStateModuleIO::OutputBuffer (owned by pointer)
+#include "GameSource/GameState/BrnGameEvents.h"                         // [returning-player wave] E_GUI_HAS_STARTED_GAME (the case-78 trigger)
+#include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"        // VariableEventQueue<1536,16> (the carry-queue walk)
 #include "GameSource/GameState/TrainingManager/BrnTrainingManager.h"    // [gateui] the complete type mpTrainingManager is newed as (see its FLAG in the header)
 #include "SharedClasses/DataLists/VehicleList.h"                        // BrnResource::VehicleList (GetVehicleIndex / GetVehicleData)
 #include "SharedClasses/DataLists/WheelList.h"                          // BrnResource::WheelList (GetWheelCount -- Prepare's list diagnostic)
@@ -1945,27 +1947,38 @@ void GameStateModule::ProcessGameEventsReallyEnterJunkyardBringUp(
 // PreWorldUpdateSetupPlayerCarBringUp -- the extracted one-shot leg of
 // PreWorldUpdate @0x823A5328 (0x823A5510..0x823A5540). See the header for the FLAG.
 // ============================================================================
-void GameStateModule::PreWorldUpdateSetupPlayerCarBringUp(bool lbMayCompleteJunkyardEntry)
+void GameStateModule::PreWorldUpdateSetupPlayerCarBringUp()
 {
     // Two legs of PreWorldUpdate live here now, each behind its own console latch, in the
     // console's own body order: the one-shot setup leg @0x823A5510, then the case-78 arm of
     // ProcessGameEvents @0x823A58B8.
     //
-    // ⚠️ lbMayCompleteJunkyardEntry IS THE ORDERING STAND-IN FOR GAME EVENT 78, and it is
-    // MEASURED, not defensive. See the header FLAG for why the GUI's own event cannot drive the
-    // arm on this build; what the caller supplies instead is the GUI's OTHER first-boot signal
-    // (the new-profile intro being live). Firing without it is not merely early, it is WRONG:
-    // ArbStateCarSelect::Prepare picks its opening arm from mbNewProfileIntroActive, so an entry
-    // that completes before the GUI has raised that flag puts the state in the junkyard
-    // E_STATE_INTRO instead of E_STATE_GAME_INTRO_PART_ONE -- and then the intro's own fly-by
-    // request trips that state's `!mbGameIntroFlybyActive` tripwire (:381) on EVERY frame of the
-    // intro. Measured on this build: 163 asserts in a 98-second run.
+    // ⭐⭐⭐ [returning-player wave 2026-08-28] THE ORDERING STAND-IN IS RETIRED.
+    // This function used to take `bool lbMayCompleteJunkyardEntry` and the caller passed
+    // MainDirector::IsNewProfileIntroActive(). That is a NEW-PROFILE-ONLY signal, so on any boot
+    // that finds a Profile.sav the case-78 arm below never fired, the junkyard entry stayed HALF
+    // DONE for the whole run, RaceCarEntityModule::mbInCarSelectScreen was never cleared (only
+    // CarSelectManager::UpdateExitState posts the reset that clears it), and
+    // ActiveRaceCar::UpdateEngineState's case-OFF arm -- `demand && !inCarSelect` -- refused to
+    // crank the engine however long the throttle was held. A RETURNING PLAYER COULD NOT DRIVE.
+    // The gate is now the console's own game event 78 (see the header banner for why the
+    // "the event arrives before the latch" measurement that justified the stand-in was reading
+    // the WRONG OnEnter).
+    //
+    // ⚠️ THE ARM-SELECTION HAZARD THE OLD NOTE RECORDED IS REAL AND IS *NOT* WHAT THE STAND-IN
+    // WAS FOR. ArbStateCarSelect::Prepare picks its opening arm from mbNewProfileIntroActive, so
+    // an entry that completes before the GUI has raised that flag puts the state in the junkyard
+    // E_STATE_INTRO instead of E_STATE_GAME_INTRO_PART_ONE, and the intro's own fly-by request
+    // then trips that state's `!mbGameIntroFlybyActive` tripwire (:381) once per frame (measured:
+    // 163 asserts in a 98 s run). What protects against that is ORDER, not the new-profile flag:
+    // the real event 78 is posted by BrnGui::InGame::OnEnter, i.e. only once the GUI screen flow
+    // has reached the in-game screen -- which is the same screen state that raises the intro
+    // flag, and ~200 log lines later than the point the arm used to be able to fire from.
     if (mpOutputBuffer == 0)
     {
         return;
     }
-    if (!mbSendSetupPlayerCarPending &&
-        !(mbWaitingToPutPlayerInJunkyard && lbMayCompleteJunkyardEntry))
+    if (!mbSendSetupPlayerCarPending && !mbWaitingToPutPlayerInJunkyard)
     {
         return;
     }
@@ -1998,12 +2011,66 @@ void GameStateModule::PreWorldUpdateSetupPlayerCarBringUp(bool lbMayCompleteJunk
         SendSetupPlayerCarEvent(lpActionQueue);
         SendSetUpAllEventStartsMessage(mpOutputBuffer);
     }
-    if (lbMayCompleteJunkyardEntry)
-    {
-        ProcessGameEventsReallyEnterJunkyardBringUp(lpActionQueue);
-    }
+
+    // The console's ProcessGameEvents pass, restricted to the one arm this tree has extracted.
+    // Runs in the SAME sub-step as the arming leg above and BEFORE the CarSelectManager tick --
+    // the console's own body order inside PreWorldUpdate (0x823A5510 / 0x823A58B8 / 0x823A5904).
+    ProcessGameEventsGuiStartedGameBringUp(&mGameEventCarryQueue, lpActionQueue);
+
     mbIsUpdating = false;
     mpOutputBuffer->UnlockForWrite();
+}
+
+// ============================================================================
+// ⭐⭐ ProcessGameEventsGuiStartedGameBringUp -- the QUEUE WALK that feeds the extracted
+// case-78 arm below. Same shape as the case-111 / 113 / 115 / pause arms in
+// GameStateModule_gUI_00.cpp: the console's dispatcher makes ONE pass over the merged event
+// queue and switches; this tree extracts one arm per function and each does its own walk.
+//
+// ⚠️ IT DOES NOT Clear() THE QUEUE. PreWorldUpdateStuntBringUp owns the console's Clear (the
+// one-frame-buffer invariant), later in the same sub-step, and the other arms must still see
+// this frame's events. This walk is read-only over the same content they will read.
+//
+// Event 78 is a bare 1-byte SIGNAL -- BridgeGuiToGameState @0x823DDB78 case 145 emits
+// `liType = 78; liSize = 1` with an uninitialised payload byte -- so there is nothing to
+// decode; the arrival IS the message.
+// ============================================================================
+void GameStateModule::ProcessGameEventsGuiStartedGameBringUp(
+        const CgsModule::VariableEventQueue<1536, 16>* lpGameEventQueue,
+        GameStateModuleIO::GameActionQueue* lpActionQueue)
+{
+    if (lpGameEventQueue == 0 || lpActionQueue == 0)
+    {
+        return;
+    }
+
+    const CgsModule::Event* lpEvent = 0;
+    s32                     liSize  = 0;
+    s32                     liType  = lpGameEventQueue->GetFirstEvent(&lpEvent, &liSize);
+
+    while (lpEvent != 0)
+    {
+        if (liType == GameStateModuleIO::E_GUI_HAS_STARTED_GAME)
+        {
+            // [DIAG] NOT IN THE X360 BINARY. The one rung that separates "the GUI never told us"
+            // from "it told us and the latch was down" -- the exact ambiguity that hid this
+            // defect behind a stand-in for a week [[diagnostics-that-lie]]. One line per event.
+            if (CgsDev::Log::gpDebugPrint != 0)
+            {
+                *CgsDev::Log::gpDebugPrint
+                    << "[jyentry] game event 78 (GUI has started game) received; waiting="
+                    << (mbWaitingToPutPlayerInJunkyard ? 1 : 0) << "\n";
+            }
+
+            // The console's case-78 arm. Its own gate (mbWaitingToPutPlayerInJunkyard) is inside.
+            ProcessGameEventsReallyEnterJunkyardBringUp(lpActionQueue);
+        }
+
+        // GetNextEvent takes the CURRENT event and writes the next one through its second
+        // parameter; sequenced through a local so the two uses of lpEvent do not alias.
+        const CgsModule::Event* lpCurrent = lpEvent;
+        liType = lpGameEventQueue->GetNextEvent(lpCurrent, &lpEvent, &liSize);
+    }
 }
 
 // ============================================================================

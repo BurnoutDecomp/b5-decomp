@@ -11,7 +11,14 @@
 //                                                  and the member TranslateGameActionsToGuiEvents
 //                                                  itself, carrying arms 58 / 59 / 60 / 112 / 148.
 //   THIS FILE                                   -- the EVENT-FLOW arms: 23, 30, 37, 38, 39, 44,
-//                                                  47, 200, 201.
+//                                                  47, 75, 200, 201.
+//
+// ⭐⭐⭐ ARM 75 IS NOT AN EVENT-FLOW ARM AND IS HERE ON PURPOSE (returning-player wave,
+// 2026-08-28). It belongs to the CAR-SELECT band, but the same three reasons that put every arm
+// above in a sibling TU apply unchanged -- the parent GameBridgeGameStateToX.cpp cannot be
+// mounted, the member function has exactly one definition (in the stunt TU), and this file is
+// already the wired dispatch seam. Opening a third partfile for ONE three-instruction arm would
+// buy nothing and cost another mount. It is listed under its own heading below.
 //
 // WHY A SIBLING TU AND NOT MORE ARMS IN THE STUNT TU: the same reason that TU exists at all
 // (its banner, and the ConvertTrainingTypeToStringId split of 2026-08-16) -- the parent
@@ -229,6 +236,20 @@ namespace
     };
     static_assert(sizeof(UpdateEventCountdownWire234) == 4,
                   "X360 AddGuiEvent<GuiEventUpdateEventCountdown> posts 4 bytes (id 234)");
+
+    // id 81 size 4 -- AddGuiEvent<GuiCarSelectStartEvent> @0x823D1690, whose tail is literally
+    // `li r6,4 / li r5,0x51 / bl VariableEventQueue<32768,16>::AddEvent`.
+    // Store map: `lwz r11,0(r31); stw r11, var_35D8` @0x823EA700 (the case-75 arm).
+    // ⚠️ NOT the shell in BrnGuiDemangledEventTypes.h: that header cannot be included from this
+    // TU (the C2011 documented in the banner), and its `GuiCarSelectStartEvent { u8 maData[4]; }`
+    // is the right size but this record needs its own GetEventType() for PushGuiEvent anyway.
+    struct CarSelectStartWire81
+    {
+        s32 miCarSelectFlow;                   // +0x00
+        s32 GetEventType() const { return 81; }
+    };
+    static_assert(sizeof(CarSelectStartWire81) == 4,
+                  "X360 AddGuiEvent<GuiCarSelectStartEvent> posts 4 bytes (id 81)");
 
     // id 166 size 8 -- AddGuiEvent<GuiEventEnterEventStartLocation> @0x823D1E78.
     // Store map: the case-44 arm's var_3508-based frame @0x823EA948..0x823EA970.
@@ -783,6 +804,57 @@ namespace
                 *CgsDev::Log::gpDebugPrint
                     << "[evt-flow] action 47 -> gui 234 (countdown "
                     << lEvent.miCountdownDisplay << ")\n";
+            }
+            return true;
+        }
+
+        // ---- 75  E_ACTION_CAR_SELECT_READY (4 bytes) ---------------------------------------
+        // ⭐⭐⭐ [returning-player wave 2026-08-28] THE ARM THAT PUTS THE GUI IN THE JUNKYARD
+        // CAR-SELECT SCREEN. @0x823EA700..0x823EA714, three instructions:
+        //     lwz r11, 0(r31)                 -- the action's only word
+        //     stw r11, var_35D8(r1)           -- payload +0x00
+        //     bl  AddGuiEvent<GuiCarSelectStartEvent>      (id 81, size 4)
+        // One word, straight through -- the same shape as the case-47 countdown arm below.
+        //
+        // ⛔ WHY IT IS LOAD-BEARING, MEASURED (scratch/flow_run/rp_A_return, a returning-profile
+        // boot with the junkyard-entry fix landed): CarSelectManager reached E_STATE_CAR_SELECT
+        // and posted this action ("=== CarSelectManager: Car Select", log :1827), and NOTHING
+        // CONSUMED IT -- TranslateGameActionsToGuiEvents is a documented deferral and this arm did
+        // not exist -- so the SCREEN flow stayed in BrnGui::InGame, the car-select screen never
+        // came up, no ACCEPT could ever arrive, CarSelectManager::UpdateExitState never ran, and
+        // the ResetPlayerCarAction that CLEARS RaceCarEntityModule::mbInCarSelectScreen was never
+        // posted. The car therefore could not start its engine for the whole run (the ignition
+        // chain is spelled out in BrnRaceCarEntityModule.cpp's AttachActiveRaceCar banner).
+        //
+        // ⭐ WHY THE FRESH PATH NEVER NEEDED IT, and why that hid this for so long: on a NEW
+        // profile the screen flow reaches the car-select states through the new-profile intro
+        // (the licence / DMV sequence -- "BNLicense", "DmvStamp" in the log), which drives the
+        // scripted screen FSM on its own. A returning boot has no intro, so the console's own
+        // action-75 -> GUI-81 -> InGame::Update case 81 -> SendStateEvent("TO_CSELECT") chain is
+        // the ONLY route -- and every other rung of it was already reconstructed and mounted.
+        case BrnGameState::GameStateModuleIO::E_ACTION_CAR_SELECT_READY:
+        {
+            const BrnGameState::GameStateModuleIO::CarSelectReadyAction* lpReady =
+                reinterpret_cast<
+                    const BrnGameState::GameStateModuleIO::CarSelectReadyAction*>(lpAction);
+
+            CarSelectStartWire81 lEvent;
+            lEvent.miCarSelectFlow = lpReady->miCarSelectFlow;
+            PushGuiEvent(lEvent, lpGuiInput);
+
+            // [DIAG] NOT IN THE X360 BINARY. OWN counter, for the reason the case-30 arm spells
+            // out: this fires ONCE per junkyard entry, long after actions 44/47/201 can have
+            // spent the shared budget, and a spent budget makes an arm BLIND, not quiet.
+            {
+                static s32 siCarSelectDiagLeft = 8;
+                if ( sbDiag && siCarSelectDiagLeft > 0 && CgsDev::Log::gpDebugPrint != 0 )
+                {
+                    --siCarSelectDiagLeft;
+                    *CgsDev::Log::gpDebugPrint
+                        << "[evt-flow] action 75 -> gui 81 (car-select flow "
+                        << lEvent.miCarSelectFlow
+                        << ") -- InGame should now SendStateEvent(\"TO_CSELECT\")\n";
+                }
             }
             return true;
         }

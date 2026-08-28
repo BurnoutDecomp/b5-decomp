@@ -65,6 +65,22 @@ enum EGameEventType
     E_EVENT_ENTER_REPLAY            = 35,    // X360 (PS3 DWARF 36)
     E_EVENT_LEAVE_REPLAY            = 36,    // X360 (PS3 DWARF 37)
     E_EVENT_CRASHNAV_STATE_CHANGED  = 93,    // X360 (PS3 DWARF 94)
+    // ⭐⭐⭐ [returning-player wave 2026-08-28] THE JUNKYARD-ENTRY COMPLETION EVENT.
+    // X360 VALUE IS JUMP-TABLE-ATTESTED, not derived: GameStateModule::ProcessGameEvents
+    // @0x823A0A18 `jumptable 823A107C case 78` @0x823A4590 is the arm that tests
+    // mbWaitingToPutPlayerInJunkyard and calls CarSelectManager::
+    // ReallyEnterJunkyardAtStartOfGame -- i.e. 78 IS the discriminant of "the GUI has entered
+    // the in-game screen, finish the start-of-game junkyard entry".
+    // ⚠️ THE NAME IS THE PS3 DWARF'S NEIGHBOUR, flagged as such: PS3 BrnGameEvents.h numbers
+    // E_EVENT_EVENT_STATE_REQUEST = 78 and E_GUI_HAS_STARTED_GAME = 79, and this region of the
+    // enum carries the same NON-uniform -1 drift the pause family above documents. Only
+    // E_GUI_HAS_STARTED_GAME matches what the X360 arm does, and it is the PS3 id one higher --
+    // exactly the drift direction already attested for cases 32/33/35/36/93. The VALUE below is
+    // the X360's; the spelling is the DWARF's.
+    // PRODUCER: BrnGui::InGame::OnEnter @0x824D0498 posts GUI command 145 on channel 40
+    // (`v19 = 0x100000091LL; AddEvent(queue, &v19, 40, 16)`), and BridgeGuiToGameState
+    // @0x823DDB78 case 145 emits this 1-byte signal event.
+    E_GUI_HAS_STARTED_GAME          = 78,    // X360 case 78 @0x823A4590 (PS3 DWARF 79)
     // Freeburn-challenge events (PS3-DWARF values; used as template tags -- the X360
     // discriminants ChallengeManager::ProcessEvent actually switches on are the raw
     // jump-table case values in that body, which drift from these).
