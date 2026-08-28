@@ -18,6 +18,7 @@
 
 #include "GameSource/Jobs/Traffic/BrnUpdateVehiclesJob.h"
 
+#include "GameSource/Jobs/Traffic/BrnTrafficSwerveWatch.h"   // [DIAG] the swerve witness
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficConstants.h"
@@ -28,11 +29,29 @@
 #include "rw/math/vpu/vector4_operation.h"
 
 #include <cmath>
+#include <cstdlib>   // getenv (the BRN_TRAFFIC_DIAG probe)
 
 namespace BrnTraffic
 {
+// [DIAG] NOT IN THE X360 BINARY. The one definition of the swerve watch the world module's
+// bring-up camera reads under BRN_WORLD_CAMTRAFFIC. DELETE-WHEN-STABLE.
+SwerveWatch gSwerveWatch = { 0.0f, 0.0f, 0.0f, -1, 0u };
+
 namespace
 {
+    // [DIAG] NOT IN THE X360 BINARY, OFF BY DEFAULT. The same BRN_TRAFFIC_DIAG switch the
+    // traffic module's [T5-*] rungs use, so one variable turns the whole decision-to-pixels
+    // trail on at once. DELETE-WHEN-STABLE.
+    CgsDev::Log::DebugPrint* TrafficDiagStream()
+    {
+        static const bool skbOn = (std::getenv("BRN_TRAFFIC_DIAG") != 0);
+        if (!skbOn || CgsDev::Log::gpDebugPrint == 0)
+        {
+            return 0;
+        }
+        return CgsDev::Log::gpDebugPrint;
+    }
+
     // NAMED LEG GATE, file-local. NOT IN THE X360 BINARY.
     inline void LogMissingLeg(bool& lrbAlreadyLogged, const char* lpcLegNameAndReason)
     {
@@ -504,7 +523,48 @@ void UpdateVehiclesJob::UpdateVehicle()
 
         if (!lpVehicle->IsPhysical())
         {
+            // [DIAG] NOT IN THE X360 BINARY, OFF BY DEFAULT. The swerve WITNESS: the position
+            // before MoveToTarget, the position after, and the lateral component of the move
+            // measured against the car's OWN right vector -- which is the number "the car
+            // altered course" means. It also publishes the position for the camera hook (see
+            // BrnTrafficSwerveWatch.h). DELETE-WHEN-STABLE.
+            const bool lbWitness = (TrafficDiagStream() != 0) && lbSwerveActive;
+            const Vector3 lPosBefore = lbWitness ? GetCurrentVehicleTransform().Pos() : ZeroV3();
+
             MoveToTarget(lTargetPos, lbPartialUpdate);
+
+            if (lbWitness)
+            {
+                const Matrix44Affine lAfter = GetCurrentVehicleTransform();
+                const Vector3 lPosAfter = lAfter.Pos();
+                const Vector3 lStep = lPosAfter - lPosBefore;
+                const Vector3 lRightAfter = lAfter.Right();
+                const Vector3 lToPlayer = lRaceCarPosition - lPosAfter;
+
+                gSwerveWatch.mfPosX = lPosAfter.x;
+                gSwerveWatch.mfPosY = lPosAfter.y;
+                gSwerveWatch.mfPosZ = lPosAfter.z;
+                gSwerveWatch.miVehicle = static_cast<s32>(muCurrentVehicle);
+                ++gSwerveWatch.muPublishes;
+
+                static u32 suSwerveLogged = 0;
+                const u32 KU_SWERVE_LOG_CAP = 4000;
+                if (suSwerveLogged < KU_SWERVE_LOG_CAP)
+                {
+                    ++suSwerveLogged;
+                    *TrafficDiagStream()
+                        << "[T5-swerve] veh=" << static_cast<s32>(muCurrentVehicle)
+                        << " behaviour=" << static_cast<s32>(GetCurrentParam()->miBehaviour)
+                        << " swerve=" << lfSwerveAmount
+                        << " normalPhys=" << (lbIsNormalPhysical ? 1 : 0)
+                        << " extreme=" << (lbIsExtreme ? 1 : 0)
+                        << " pos=" << lPosAfter.x << "," << lPosAfter.y << "," << lPosAfter.z
+                        << " lateral=" << rw::math::vpu::Dot(lStep, lRightAfter)
+                        << " target=" << lTargetPos.x << "," << lTargetPos.y << "," << lTargetPos.z
+                        << " toPlayer=" << rw::math::vpu::Magnitude(lToPlayer)
+                        << " [DELETE-WHEN-STABLE]\n";
+                }
+            }
 
             if (!mpParams->mbDEBUGStopTrafficMoving)
             {
