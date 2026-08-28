@@ -11,6 +11,7 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"        // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"   // CgsCore::SPrintf
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiComponent.h"  // CgsGui::GuiComponent (item base construct/name)
+#include "GameSource/Gui/BrnGuiCache.h"                // BrnGui::GuiCache (AppendExpectedAptComponent)
 
 #include <cstring>   // std::strlen (name-length assert)
 
@@ -154,5 +155,22 @@ namespace BrnGui
     bool MenuComponent::HighlightPrevious()
     {
         return SelectableGroup::HighlightPrevious(false);
+    }
+
+    // @0x824E2DE0 -- register every LIVE row's apt component name with the loading-screen
+    // cache, so the owning screen's AreAllAptComponentsInitialised gate waits for the menu.
+    // The X360 walks miNumMenuItems (`lwz +0x10B8`) rows from maItems[0]'s GuiComponent name
+    // (`this + 596` == +0x238 + 0x1C) at the 0xE8 MenuItem stride, and hands each name to
+    // the name-hashing GuiCache::AppendExpectedAptComponent overload (sub_824F87C0, which
+    // measures the string and calls StateLoadingHelper::AppendExpectedAptComponent with its
+    // CRC). Rows beyond miNumMenuItems are never registered -- the loop bound is the count
+    // Construct wrote, not KI_MAX_MENU_ITEMS.
+    void MenuComponent::AppendExpectedAptComponent(GuiFlow leFlow, GuiCache* lpGuiCache)
+    {
+        for (s32 liRow = 0; liRow < miNumMenuItems; ++liRow)
+        {
+            lpGuiCache->AppendExpectedAptComponent(
+                leFlow, maItems[liRow].CgsGui::GuiComponent::GetName());
+        }
     }
 }

@@ -97,10 +97,10 @@ namespace BrnGui
         { { 143, CgsGui::E_GUI_RESOURCETYPE_APT }, { 34, CgsGui::E_GUI_RESOURCETYPE_APT } };
     const u32 CrashNavColourCalibrate::muNumResourcesToLoad = 2;
 
-    // .rdata @0x82066518 / count @0x82066528
-    const CgsGui::sResourceTuple CrashNavDriverDetails::maResourcesToLoad[] =
-        { { 144, CgsGui::E_GUI_RESOURCETYPE_APT }, { 63, CgsGui::E_GUI_RESOURCETYPE_APT } };
-    const u32 CrashNavDriverDetails::muNumResourcesToLoad = 2;
+    // CrashNavDriverDetails's resource table has MOVED to its own TU
+    // (BrnCrashNavDriverDetails.cpp, pause wave 2026-08-28) along with the rest of the
+    // screen. The values here were right -- {144, APT}, {63, APT} -- and are carried over
+    // unchanged; only the home changed, so this stand-in would now be a duplicate symbol.
 
     // .rdata @0x82066114 / count @0x8206611C
     const CgsGui::sResourceTuple CrashNavEnterOnlineBase::maResourceTuplesToLoad[] =
