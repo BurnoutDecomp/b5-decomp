@@ -605,15 +605,9 @@ namespace Playback
     {
     }
 
-    // The per-factory registry accessors + the reserved-name/init-submix hooks
-    // (declared in CgsSoundPlaybackModule.h, each FLAG'd DEFER there -- the
-    // AEMS-keystone surface). GetRwacFactoryRegistry is REAL now (AEMS-cascade
-    // wave: bodied in CgsGenericRwacFactory.cpp on the real +0x401C registry);
-    // the AEMS one stays null until its factory slice lands.
-    Registry* GetAemsFactoryRegistry(Factory* /*lpAemsFactory*/)
-    {
-        return 0;
-    }
+    // (The per-factory registry accessors are BOTH REAL now -- AEMS-cascade
+    // slices 1+2: GetRwacFactoryRegistry in CgsGenericRwacFactory.cpp on the
+    // +0x401C registry, GetAemsFactoryRegistry in CgsAemsFactory.cpp on +0x60.)
     const Name& GenericRwacFactorySkName()
     {
         // DECODED (AEMS-cascade wave; progress/scratch_dossiers/
