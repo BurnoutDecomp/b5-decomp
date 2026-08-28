@@ -1752,9 +1752,51 @@ namespace BrnDirector
                     ? lfRequestedTimeScale
                     : KF_MINIMUM_SIM_TIME_SCALE;
 
-            lpIO->mpOutputBuffer->GetTimerRequestInterfac()
-                ->GetSimTimerRequests()
-                ->SetTimestepMultiplier(lfClampedTimeScale);
+            // ⛔⛔ [FLAG PC bring-up] THE PUBLISH IS HELD BEHIND BRN_DIRECTOR_SLOMO, AND THE
+            // REASON IS AN UPSTREAM DEFECT THIS LINE MADE VISIBLE -- not a doubt about the line.
+            //
+            // MEASURED 2026-08-28, twice, with BRN_SLOMO_DIAG: the frame camera arrives here
+            // carrying mfSimTimeScale == 0.000000 from the moment the junkyard ICE cameras take
+            // over ("[junkyard] LEAVE" / "[ice-prepare] guid 610132"). The probe pins it to the
+            // ARBITRATOR leg -- `camera post-arbitrator mfSimTimeScale=1.000000` while the
+            // roaming camera owns the frame, then 0.000000 one entry later.
+            //
+            // THE PRODUCER OF THE ZERO IS KeyAnimController::UpdateCameraFromICE @0x8221E630
+            // (Shots/ShotControllers/BrnKeyAnimController.cpp):
+            //     lrEffects.mfSimTimeScale = lrTake.GetValueFloat(E_ICE_TIME_SCALE) * 0.01f;
+            // TIME_SCALE is authored as a PERCENTAGE, and this build's take reads 0 for it. Its
+            // own element description says what 0 means (ICEData.cpp:254, element [19]):
+            //     { "TIME_SCALE", "Time Scale", channel 4, eICE_UINT, 7,
+            //       ICEValue((s32)100),   <- DEFAULT
+            //       ICEValue((s32)0),     <- min
+            //       ICEValue((s32)100) }  <- max
+            // The authored DEFAULT is 100 (== real time); the take's value table is seeded to
+            // (s32)0 for every element instead (ICEData.cpp:1665). So an ICE camera whose take
+            // does not author the TIME channel requests 0% of real time -- and 0 is NOT the
+            // identity of a percentage scale. Retail cannot behave this way: with the console's
+            // own 0.005 floor applied it would run the entire junkyard intro at 1/200 speed.
+            //
+            // Publishing it unconditionally therefore does exactly that here -- measured:
+            //     [slomo] simScale=0.005000 gameScale=1.000000 simStep=0.000083
+            // -- a playable build turned into a frozen one, with a green link and green logs.
+            //
+            // ⭐ THE TRANSPORT ITSELF IS PROVEN BY THAT SAME LINE: a value written by a camera
+            // reached CgsSystem::Timer::mfScaleCurrent and changed the simulation timestep by a
+            // factor of 200. What is missing is a correct value, not a path.
+            //
+            // DELETE-WHEN: the ICE take's element table is seeded from
+            // ICEElementDescriptions[i]'s DEFAULT (or the TIME channel survives the asset port)
+            // so an unauthored TIME_SCALE reads 100. Verify with BRN_ICE_TIMESCALE_DIAG, which
+            // reports the raw channel value at the point KeyAnimController consumes it.
+            // Until then the GAME-STATE producers (DriveThruManager, ModeManager) still reach
+            // the sim timer through BrnGameModule::UpdateTimers -- only the DIRECTOR leg is held.
+            static const bool sbDirectorSlomoArmed = (getenv("BRN_DIRECTOR_SLOMO") != 0);
+            if (sbDirectorSlomoArmed)
+            {
+                lpIO->mpOutputBuffer->GetTimerRequestInterfac()
+                    ->GetSimTimerRequests()
+                    ->SetTimestepMultiplier(lfClampedTimeScale);
+            }
         }
 
         // ⭐ X360 line 878 -- BehaviourManager::PrepareBehaviours(&mBehaviourManager,
