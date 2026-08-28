@@ -11,6 +11,7 @@
 // =====================================================================================
 
 #include "rw/audio/core/plugins/Pan2D.h"
+#include "rw/audio/core/PlugIn.h"  // PlugInDescRunTime (the real descriptor record)
 #include "rw/audio/core/MixKernels.h" // CopyWithGain, CopyWithGainRamp
 
 #include <cmath>   // sin, cos, floor, sqrtf
@@ -30,7 +31,20 @@ namespace core
 // storage so the bodies below link without fabricating their contents (same idiom as Gain).
 static void *const KP2_Pan2DVTable      = nullptr; // off_8217F4A4
 static void *const KP2_BasePlugInVTable = nullptr; // off_820AA810
-static char       *g_Pan2DDesc          = nullptr; // off_82F8EFB8 (the "Pan2D" record)
+// off_82F8EFB8 -- the "Pan2D" runtime descriptor, REAL (descriptor-record wave).
+// Metadata FLAG'd null.
+static PlugInDescRunTime g_Pan2DDesc = {
+    "Pan2D",
+    reinterpret_cast<void *>(&Pan2D::GetSize),        // @0x82B982C0
+    reinterpret_cast<void *>(&Pan2D::CreateInstance), // @0x82BA34A0
+    0,
+    reinterpret_cast<void *>(&Pan2D::Process),        // @0x82B99ED8
+    0, 0, 0, 0,
+    0,
+    0x506E3230u,       // 'Pn20'
+    4, 2, 5, 0, 0, 0,
+    0
+};
 
 // Recovered rodata float constants (identified from the pseudocode literals / asm usage).
 static const f32 KF_DEG2RAD     = 0.017453292f; // flt_8217F364 (PI/180)
@@ -65,7 +79,7 @@ int Pan2D::GetSize()
 // -------------------------------------------------------------------------------------
 char **Pan2D::GetPlugInDescRunTime()
 {
-    return &g_Pan2DDesc; // &off_82F8EFB8
+    return reinterpret_cast<char **>(&g_Pan2DDesc); // &off_82F8EFB8 (the record address)
 }
 
 // -------------------------------------------------------------------------------------

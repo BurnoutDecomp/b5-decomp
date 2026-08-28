@@ -14,6 +14,8 @@
 // =====================================================================================
 
 #include "rw/audio/core/Iir2Filters.h"
+#include "rw/audio/core/PlugIn.h"           // PlugInDescRunTime (the real descriptor record)
+#include "rw/audio/core/plugins/Limiter1.h" // Limiter1::GetSize (the ICF-shared GetSize body)
 #include "rw/audio/core/Voice.h"   // the owning Voice (mfFadeStart decay accumulator)
 
 #include <cmath>
@@ -29,14 +31,35 @@ namespace core
 // record; its contents are undecoded and not reconstructed here). The accessor just
 // returns its address, exactly as the X360 build does. FLAGGED: descriptor payload is
 // undecoded rodata.
-static char *g_LowPassIir2Desc = 0; // off_82F8D3D4
+// off_82F8D3D4 -- the "LowPassIir2" runtime descriptor, REAL (descriptor-record
+// wave; console GetSize = the ICF-folded Limiter1::GetSize @0x82B97DA8). Metadata FLAG'd null.
+// The dispatch thunk for the record's Process slot: the console callback takes
+// the instance in r3; the PC body is a member, so this static forward IS the
+// dispatched (instance, ctx) shape.
+static int LowPassIir2ProcessThunk(LowPassIir2 *self, AudioProcessContext *ctx)
+{
+    return self->Process(ctx);
+}
+
+static PlugInDescRunTime g_LowPassIir2Desc = {
+    "LowPassIir2",
+    reinterpret_cast<void *>(&Limiter1::GetSize),           // @0x82B97DA8 (folded/shared)
+    reinterpret_cast<void *>(&LowPassIir2::CreateInstance), // @0x82BA3130
+    0,
+    reinterpret_cast<void *>(&LowPassIir2ProcessThunk),        // @0x82B9E5C8
+    0, 0, 0, 0,
+    0,
+    0x4C493230u,       // 'LI20'
+    4, 0, 1, 0, 0, 0,
+    0
+};
 
 // -------------------------------------------------------------------------------------
 // GetPlugInDescRunTime @0x82B97DB0 -- return &off_82F8D3D4.
 // -------------------------------------------------------------------------------------
 char **LowPassIir2::GetPlugInDescRunTime()
 {
-    return &g_LowPassIir2Desc;
+    return reinterpret_cast<char **>(&g_LowPassIir2Desc);
 }
 
 // -------------------------------------------------------------------------------------

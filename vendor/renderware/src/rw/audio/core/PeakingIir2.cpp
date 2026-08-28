@@ -14,6 +14,7 @@
 // =====================================================================================
 
 #include "rw/audio/core/Iir2Filters.h"
+#include "rw/audio/core/PlugIn.h"  // PlugInDescRunTime (the real descriptor record)
 #include "rw/audio/core/Voice.h"   // the owning Voice (mfFadeStart decay accumulator)
 
 #include <cmath>
@@ -27,7 +28,28 @@ namespace core
 
 // off_82F8F5AC -- run-time plug-in descriptor (undecoded rodata; accessor returns its
 // address). FLAGGED: descriptor payload is undecoded rodata.
-static char *g_PeakingIir2Desc = 0; // off_82F8F5AC
+// off_82F8F5AC -- the "PeakingIir2" runtime descriptor, REAL (descriptor-record
+// wave). Metadata FLAG'd null.
+// The dispatch thunk for the record's Process slot: the console callback takes
+// the instance in r3; the PC body is a member, so this static forward IS the
+// dispatched (instance, ctx) shape.
+static int PeakingIir2ProcessThunk(PeakingIir2 *self, AudioProcessContext *ctx)
+{
+    return self->Process(ctx);
+}
+
+static PlugInDescRunTime g_PeakingIir2Desc = {
+    "PeakingIir2",
+    reinterpret_cast<void *>(&PeakingIir2::GetSize),        // @0x82B982D8
+    reinterpret_cast<void *>(&PeakingIir2::CreateInstance), // @0x82BA3708
+    0,
+    reinterpret_cast<void *>(&PeakingIir2ProcessThunk),        // @0x82B9F168
+    0, 0, 0, 0,
+    0,
+    0x50493230u,       // 'PI20'
+    4, 0, 3, 0, 0, 0,
+    0
+};
 
 static inline f64 Fsqrts(f64 x) { return static_cast<f32>(sqrt(x)); }
 
@@ -36,7 +58,7 @@ static inline f64 Fsqrts(f64 x) { return static_cast<f32>(sqrt(x)); }
 // -------------------------------------------------------------------------------------
 char **PeakingIir2::GetPlugInDescRunTime()
 {
-    return &g_PeakingIir2Desc;
+    return reinterpret_cast<char **>(&g_PeakingIir2Desc);
 }
 
 // -------------------------------------------------------------------------------------

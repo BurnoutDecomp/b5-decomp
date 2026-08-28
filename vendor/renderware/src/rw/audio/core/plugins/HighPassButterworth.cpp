@@ -23,6 +23,7 @@
 // =====================================================================================
 
 #include "rw/audio/core/plugins/HighPassButterworth.h"
+#include "rw/audio/core/PlugIn.h"  // PlugInDescRunTime (the real descriptor record)
 #include "rw/audio/core/Voice.h"   // the owning Voice (mfFadeStart decay accumulator)
 
 namespace rw
@@ -40,7 +41,28 @@ namespace core
 // body, so it is modelled as honest placeholder storage here rather than fabricating an
 // address. These are opaque data symbols; modelled as placeholders so the bodies below link
 // without fabricating their contents.
-static char       *g_HighPassButterworthDesc = nullptr; // off_82F8CE60 (the "HighPassButterworth" record)
+// off_82F8CE60 -- the "HighPassButterworth" runtime descriptor, REAL
+// (descriptor-record wave). Metadata FLAG'd null.
+// The dispatch thunk for the record's Process slot: the console callback takes
+// the instance in r3; the PC body is a member, so this static forward IS the
+// dispatched (instance, ctx) shape.
+static int HighPassButterworthProcessThunk(HighPassButterworth *self, AudioProcessContext *ctx)
+{
+    return self->Process(ctx);
+}
+
+static PlugInDescRunTime g_HighPassButterworthDesc = {
+    "HighPassButterworth",
+    reinterpret_cast<void *>(&HighPassButterworth::GetSize),        // @0x82B9DF88
+    reinterpret_cast<void *>(&HighPassButterworth::CreateInstance), // @0x82BA2CB0
+    0,
+    reinterpret_cast<void *>(&HighPassButterworthProcessThunk),        // @0x82B976E0
+    0, 0, 0, 0,
+    0,
+    0x48504230u,       // 'HPB0'
+    4, 0, 3, 0, 0, 0,
+    0
+};
 static void *const KHB_BasePlugInVTable = nullptr;       // off_820AA810
 static void *const KHB_HighPassButterworthVTable = nullptr; // off_8217F3F4 (installed by Initialize)
 
@@ -63,7 +85,7 @@ static const f32 KF_MARGIN = 0.0099999998f;  // flt_82002138 (~1% Nyquist guard 
 // -------------------------------------------------------------------------------------
 char **HighPassButterworth::GetPlugInDescRunTime()
 {
-    return &g_HighPassButterworthDesc; // &off_82F8CE60
+    return reinterpret_cast<char **>(&g_HighPassButterworthDesc); // &off_82F8CE60 (the record address)
 }
 
 // -------------------------------------------------------------------------------------

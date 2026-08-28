@@ -104,3 +104,18 @@ DelayFilter *DelayFilter::SetFeedback(DelayFilter *self, f32 feedback)
 } // namespace core
 } // namespace audio
 } // namespace rw
+
+// ---------------------------------------------------------------------------
+// FLAG PC link-closure stub (descriptor-record wave 2026-08-28): the cross-fade
+// mix kernel is declared in DelayFilter.h with no vendor body. Reached only via
+// DelayFilterApplyFunc <- Delay::Process, and the Delay plug-in is NOT
+// registered on this build -- unreachable; decode with the Delay plug-in slice.
+// ---------------------------------------------------------------------------
+namespace rw { namespace audio { namespace core {
+void *DelayFilterCrossFadeFunc(s32 /*count*/, f32 /*feedback*/, f32 /*prevFeedback*/,
+                               f32 * /*a4*/, f32 * /*a5*/, s32 /*a6*/, s32 /*a7*/,
+                               f32 * /*a8*/, f32 * /*a9*/)
+{
+    return 0;
+}
+} } }
