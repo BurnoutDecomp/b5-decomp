@@ -40,6 +40,9 @@
 #include "GameSource/GameState/Offences/BrnStuntManager.h"              // StuntManager::OnPropHit / Update
 #include "GameSource/GameState/TriggerQueryManager/BrnTriggerQueryManager.h" // UpdateTriggers / GetActiveTrigger*
 #include "GameSource/GameState/DeveloperChallengeManager/BrnDeveloperChallengeManager.h" // the accessor's return type
+#include "GameSource/GameState/BrnGameActions.h"                        // RankInfoResponseAction (the case-80 record)
+#include "SharedClasses/Progression/BrnProgressionData.h"                // ProgressionData::GetProgressionRankCount
+#include "GameSource/GameState/Progression/BrnProfile.h"                // Profile::GetNumRankWinsForGameMode
 
 #include "SharedClasses/Trigger/BrnTriggerData.h"                       // TriggerData::GetRegion
 #include "SharedClasses/Trigger/BrnTriggerBase.h"                       // TriggerRegion::GetType
@@ -570,6 +573,115 @@ void GameStateModule::ProcessGameEventsPauseBringUp(
 }
 
 // ============================================================================
+// [driver-details pause wave 2026-08-28] ProcessGameEventsRankInfoRequestBringUp -- the
+// extracted CASE-80 arm of GameStateModule::ProcessGameEvents @0x823A0A18. Same queue walk,
+// same must-run-before-the-Clear position as the case-111/113/115 and pause-family arms; the
+// console body (asm @0x823A2D54..0x823A2E60) is transcribed statement-by-statement at the
+// declaration in BrnGameStateModule.h.
+//
+// THIS IS THE MISSING MIDDLE HOP of the START-button pause screen's licence ladder:
+//   GUI 437 (GuiEventRankProgressRequest, posted by CrashNavDriverDetails::UpdateInitSetup)
+//     -> game event 80   [BridgeGuiToGameState case 437, already live]
+//     -> game action 181 [HERE]
+//     -> GUI 438 (GuiEventRankProgressResponse) [TranslateGameActionsToGuiEvents case 181]
+// Without it CrashNavDriverDetails parks forever in E_INTERNALSTATE_SETUPLICENSE.
+// ============================================================================
+void GameStateModule::ProcessGameEventsRankInfoRequestBringUp(
+        const CgsModule::VariableEventQueue<1536, 16>* lpGameEventQueue,
+        GameStateModuleIO::GameActionQueue* lpActionQueue)
+{
+    if (lpGameEventQueue == 0 || lpActionQueue == 0)
+    {
+        return;
+    }
+
+    const CgsModule::Event* lpEvent = 0;
+    s32                     liSize  = 0;
+    s32                     liType  = lpGameEventQueue->GetFirstEvent(&lpEvent, &liSize);
+
+    while (lpEvent != 0)
+    {
+        if (liType == GameStateModuleIO::E_EVENT_RANK_INFO_REQUEST)
+        {
+            // The console's own null-guarded ResourcePtr fetch (`lwz r11,0(ptr); cntlzw/extrwi`
+            // @0x823A2D5C, i.e. ResourcePtr::HasMemoryResource) followed by an UNGUARDED
+            // `lwz r29, 0x14(r3)`. Reproduced with the guard the console has and no guard it
+            // does not: if the progression data is absent the console reads through a null too.
+            // In practice this arm only ever runs from a GUI screen that already holds the
+            // loaded cache, which is why the console never needed one.
+            const BrnProgression::ProgressionData* lpProgressionData =
+                mProgressionManager.GetProgressionData();
+            const s32 liRankCount =
+                static_cast<s32>(lpProgressionData->GetProgressionRankCount());   // lwz 0x14
+
+            // `li r4, 8 / 7 / 3 / 0` in that order, each `extsb`-narrowed on return -- the four
+            // offline progression modes, and the same four SetProgressionRanks stores.
+            const s32 liMarkedMan = static_cast<s32>(static_cast<s8>(
+                mProgressionManager.GetProgressionRankForGameMode(
+                    GameStateModuleIO::E_MODE_MARKED_MAN)));
+            const s32 liStuntAttack = static_cast<s32>(static_cast<s8>(
+                mProgressionManager.GetProgressionRankForGameMode(
+                    GameStateModuleIO::E_MODE_STUNT_ATTACK)));
+            const s32 liRoadRage = static_cast<s32>(static_cast<s8>(
+                mProgressionManager.GetProgressionRankForGameMode(
+                    GameStateModuleIO::E_MODE_ROAD_RAGE)));
+            const s32 liOfflineRace = static_cast<s32>(static_cast<s8>(
+                mProgressionManager.GetProgressionRankForGameMode(
+                    GameStateModuleIO::E_MODE_OFFLINE_RACE)));
+            const s32 liPlayerRank = static_cast<s32>(static_cast<s8>(
+                mProgressionManager.GetProgressionRank()));
+
+            GameStateModuleIO::RankInfoResponseAction lRankInfo;
+            lRankInfo.SetProgressionRanks(liPlayerRank, liRankCount,
+                                          liOfflineRace, liRoadRage, liStuntAttack, liMarkedMan);
+
+            // The four raw `lwzx` reads at ProgressionManager +0x36C/+0x378/+0x388/+0x38C are one
+            // inlined accessor over one array: Profile::GetNumRankWinsForGameMode @0x8230FA40 is
+            // `*(4 * (mode + 127) + this)` == maiRankWinsPerOfflineGameMode[mode] at Profile+0x1FC,
+            // and the embedded Profile is at ProgressionManager+0x170. Same four modes, same order.
+            const BrnProgression::Profile* lpProfile = mProgressionManager.GetProfile();
+            lRankInfo.SetProgressionRankEventWins(
+                lpProfile->GetNumRankWinsForGameMode(GameStateModuleIO::E_MODE_OFFLINE_RACE),
+                lpProfile->GetNumRankWinsForGameMode(GameStateModuleIO::E_MODE_ROAD_RAGE),
+                lpProfile->GetNumRankWinsForGameMode(GameStateModuleIO::E_MODE_STUNT_ATTACK),
+                lpProfile->GetNumRankWinsForGameMode(GameStateModuleIO::E_MODE_MARKED_MAN));
+
+            // `li r11,-1 / stw r11, var_1A00(r1)` -- the sentinel is stamped over word 0 AFTER
+            // SetProgressionRanks has run (which is why that setter's own
+            // "liPlayerRank != KI_PLAYER_HAS_FINISHED_LAST_RANK" assert does not fire here).
+            if (mProgressionManager.PlayerHasFinishedLastRank())
+            {
+                lRankInfo.miPlayerRank =
+                    GameStateModuleIO::RankInfoResponseAction::KI_PLAYER_HAS_FINISHED_LAST_RANK;
+            }
+
+            // `li r6,0x24 / li r5,0xB5` -- action 181, 36 bytes.
+            lpActionQueue->AddEvent(
+                reinterpret_cast<const CgsModule::Event*>(&lRankInfo),
+                GameStateModuleIO::E_ACTION_RANK_INFO_RESPONSE,
+                static_cast<s32>(sizeof(GameStateModuleIO::RankInfoResponseAction)));
+
+            // [DIAG] NOT IN THE X360 BINARY -- the licence ladder's GameState rung, same
+            // change-only idiom as the [district] / [sim-pause] traces above. Rank queries are
+            // one-per-screen-entry, so no first-N cap is needed.
+            if (CgsDev::Log::gpDebugPrint != 0)
+            {
+                *CgsDev::Log::gpDebugPrint
+                    << "[ddetails] game event 80 -> action 181 (rank " << liPlayerRank
+                    << "/" << liRankCount
+                    << " modes " << liOfflineRace << "," << liRoadRage << ","
+                    << liStuntAttack << "," << liMarkedMan
+                    << (mProgressionManager.PlayerHasFinishedLastRank() ? " LAST-RANK" : "")
+                    << ")\n";
+            }
+        }
+
+        const CgsModule::Event* lpCurrent = lpEvent;
+        liType = lpGameEventQueue->GetNextEvent(lpCurrent, &lpEvent, &liSize);
+    }
+}
+
+// ============================================================================
 // â­â­ [gateui] PreWorldUpdateStuntBringUp -- the three stunt-chain legs of the console's
 // PreWorldUpdate @0x823A5328, IN THE CONSOLE'S OWN ORDER. The header carries the line-by-line map
 // of the source function and both named reductions; the body annotates each leg again.
@@ -671,6 +783,12 @@ void GameStateModule::PreWorldUpdateStuntBringUp(
     // CheckGameActions (BrnGameModule, the console's DoUpdate_GameStatePreWorld tail) reads
     // them back this same sub-step and stops/starts the sim timer.
     ProcessGameEventsPauseBringUp(&mGameEventCarryQueue, lpActionQueue);
+    // [driver-details pause wave] the dispatcher's CASE-80 arm (the rank-progress query the
+    // START-button pause screen's licence card waits on), same walk, same
+    // must-run-before-the-Clear constraint; it posts action 181 onto the action queue this
+    // function already holds the write lock for, and TranslateGameActionsToGuiEvents turns that
+    // into GUI event 438 in the SAME sub-step.
+    ProcessGameEventsRankInfoRequestBringUp(&mGameEventCarryQueue, lpActionQueue);
     // â­â­ [D4 stuntrace WAVE D] the dispatcher's CASE-20 arm (E_EVENT_PLAYER_ACCEPTED_MODE ->
     // ModeManager::StartGameMode) and the INTRO/RESULTS exit arms (cases 24/25/26/27). Same walk,
     // same must-run-before-the-Clear constraint as every arm above; the case-20 arm needs the

@@ -641,6 +641,38 @@ public:
         const CgsModule::VariableEventQueue<1536, 16>* lpGameEventQueue,
         GameStateModuleIO::GameActionQueue* lpActionQueue);
 
+    // ⭐⭐ [driver-details pause wave 2026-08-28] X360 ProcessGameEvents @0x823A0A18, THE CASE-80
+    // ARM -- "the GUI asks for the player's rank progress". Same extraction precedent as the
+    // case-111/113/115 and the pause-family arms above. The console arm, verbatim from the asm
+    // @0x823A2D54..0x823A2E60 (Hex-Rays renders the same nine statements):
+    //     data = mProgressionManager.GetProgressionData();          // ResourcePtr, null-guarded
+    //     rankCount = data->muProgressionRankCount;                 // lwz 0x14(data)
+    //     m8 = GetProgressionRankForGameMode(E_MODE_MARKED_MAN);    // li r4, 8
+    //     s7 = GetProgressionRankForGameMode(E_MODE_STUNT_ATTACK);  // li r4, 7
+    //     r3 = GetProgressionRankForGameMode(E_MODE_ROAD_RAGE);     // li r4, 3
+    //     o0 = GetProgressionRankForGameMode(E_MODE_OFFLINE_RACE);  // li r4, 0
+    //     record.SetProgressionRanks(GetProgressionRank(), rankCount, o0, r3, s7, m8);
+    //     record.SetProgressionRankEventWins(<the four maiRankWinsPerOfflineGameMode reads>);
+    //     if (PlayerHasFinishedLastRank()) record.miPlayerRank = -1;   // `li r11,-1; stw r11,+0x00`
+    //     AddEvent(actionQueue, &record, /*action*/181, /*size*/0x24);
+    //
+    // ⭐ THE FOUR WIN COUNTS ARE ONE NAMED ARRAY, not four members. The console reads them as
+    // four raw module offsets (`lwzx r4..r7` from +0xBE9C/+0xBEA8/+0xBEB8/+0xBEBC, i.e.
+    // ProgressionManager +0x36C/+0x378/+0x388/+0x38C) because it INLINED the accessor:
+    // Profile::GetNumRankWinsForGameMode @0x8230FA40 is literally `*(4 * (mode + 127) + this)`,
+    // i.e. maiRankWinsPerOfflineGameMode[mode] at Profile+0x1FC, and the embedded Profile sits at
+    // ProgressionManager+0x170 -- 0x170 + 0x1FC + 4*{0,3,7,8} == exactly those four offsets. So
+    // the arm is four indexed reads through the committed accessor, and the modes are the SAME
+    // four, in the same order, that SetProgressionRanks takes.
+    //
+    // PRODUCER of the event: BridgeGuiToGameState's case 437 (GameBridgeGUIToX_GameState.cpp),
+    // fed by CrashNavDriverDetails::UpdateInitSetup's GuiEventRankProgressRequest.
+    // CONSUMER of the action: TranslateGameActionsToGuiEvents case 181 -> GUI event 438, which is
+    // what CrashNavDriverDetails::UpdateSetupLicense is parked waiting for.
+    void ProcessGameEventsRankInfoRequestBringUp(
+        const CgsModule::VariableEventQueue<1536, 16>* lpGameEventQueue,
+        GameStateModuleIO::GameActionQueue* lpActionQueue);
+
     // ⭐⭐ [tut-ticker] X360 PreWorldUpdate @0x823A5328, THE TRAINING LEG (@0x823A57A4..0x823A57C8):
     //     bl ShouldAllowTimedTutorialTips     ; r3 = this
     //     mr r8, r3                           ; -> Update's trailing bool

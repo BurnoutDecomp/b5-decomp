@@ -81,6 +81,25 @@ enum EGameEventType
     // (`v19 = 0x100000091LL; AddEvent(queue, &v19, 40, 16)`), and BridgeGuiToGameState
     // @0x823DDB78 case 145 emits this 1-byte signal event.
     E_GUI_HAS_STARTED_GAME          = 78,    // X360 case 78 @0x823A4590 (PS3 DWARF 79)
+    // ⭐⭐ [driver-details pause wave 2026-08-28] THE RANK-PROGRESS QUERY. Same region, same
+    // NON-uniform -1 drift the block above documents, and here the drift is pinned by THREE
+    // CONSECUTIVE X360 arms rather than inferred:
+    //   X360 case 79 @0x823A2D18  ChallengeManager::CountCompletedChallenges +
+    //                             ProgressionManager::GetGameStats -> action 180
+    //                             == PS3 E_EVENT_GAME_STATS_REQUEST (80)
+    //   X360 case 80 @0x823A2D54  the four GetProgressionRankForGameMode reads -> action 181
+    //                             == PS3 E_EVENT_RANK_INFO_REQUEST (81)   <-- this one
+    //   X360 case 81 @0x823A2E74  PlayerInfo::Construct -> action 182
+    //                             == PS3 E_EVENT_PLAYER_INFO_REQUEST (82)
+    // The PS3 enum's extra E_GUI_HAS_STARTED_GAME = 79 is the enumerator the X360 build lacks,
+    // which is what makes every id above 78 sit one lower here. The VALUE below is the X360's;
+    // the spelling is the DWARF's (BrnGameEvents.h:91).
+    // PRODUCER: BrnGui::CrashNavDriverDetails::UpdateInitSetup @0x824CF038 posts
+    // GuiEventRankProgressRequest (GUI event 437) when it latches the cache, and
+    // BridgeGuiToGameState's case 437 emits this 1-byte signal event.
+    // CONSUMER: GameStateModule::ProcessGameEventsRankInfoRequestBringUp (this tree's extraction
+    // of case 80), which answers with game action 181 -> GUI event 438.
+    E_EVENT_RANK_INFO_REQUEST       = 80,    // X360 case 80 @0x823A2D54 (PS3 DWARF 81)
     // Freeburn-challenge events (PS3-DWARF values; used as template tags -- the X360
     // discriminants ChallengeManager::ProcessEvent actually switches on are the raw
     // jump-table case values in that body, which drift from these).

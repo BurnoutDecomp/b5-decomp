@@ -32,6 +32,7 @@
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                 // CGS_ASSERT
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"                    // BrnGui::StuntType / GuiEventStunt*
+#include "GameSource/Gui/Events/BrnGuiEventRankProgressResponse.h" // GuiEventRankProgressResponse (case 181)
 #include "GameSource/GameState/BrnGameActions.h"                   // the action payload homes
 #include "GameSource/GameState/BrnGameStateModuleIO.h"             // OutputBuffer / GameActionQueue
 #include "GameShared/GameClasses/Gui/CgsGuiModuleIO.h"             // InputBuffer::GetGuiEvents()
@@ -441,6 +442,46 @@ namespace
                                 << " -> gui 537 id='" << lpcStringId << "'\n";
                         }
                     }
+                }
+                break;
+            }
+
+            // ---- 181  the RANK-PROGRESS RESPONSE (36 bytes) -------------------------------
+            // ⭐⭐ [driver-details pause wave 2026-08-28] X360 case 181 @0x823ECC90, and it is
+            // exactly two calls:
+            //   0x823ECC90  mr   r4, r31                      ; the action record
+            //   0x823ECC94  addi r3, r1, var_35C0             ; a stack-local event
+            //   0x823ECC98  bl   GuiEventRankProgressResponse::Construct
+            //   0x823ECC9C  mr   r5, r20                      ; lpGuiInput
+            //   0x823ECCA0  addi r4, r1, var_35C0
+            //   0x823ECCA4  add  r3, r29, r30                 ; the embedded GuiModule
+            //   0x823ECCA8  bl   AddGuiEvent<GuiEventRankProgressResponse>   ; id 438, 36 bytes
+            // Construct is the nine-word rotation documented in the event's own header.
+            //
+            // THIS IS THE LAST HOP of the START-button pause screen's licence ladder:
+            //   GUI 437 -> game event 80 -> game action 181 -> GUI 438 (here). Without it
+            // CrashNavDriverDetails::UpdateSetupLicense never advances past
+            // E_INTERNALSTATE_SETUPLICENSE and the screen never loads its apt movie.
+            case BrnGameState::GameStateModuleIO::E_ACTION_RANK_INFO_RESPONSE:
+            {
+                const BrnGameState::GameStateModuleIO::RankInfoResponseAction* lpRankInfo =
+                    reinterpret_cast<
+                        const BrnGameState::GameStateModuleIO::RankInfoResponseAction*>(lpAction);
+
+                BrnGui::GuiEventRankProgressResponse lEvent;    // id 438, 36 bytes
+                lEvent.Construct(lpRankInfo);
+                PushGuiEvent(lEvent, lpGuiInput);
+
+                // [DIAG] NOT IN THE X360 BINARY -- the licence ladder's bridge rung, same
+                // change-only idiom as the [district] rung above.
+                if (CgsDev::Log::gpDebugPrint != 0)
+                {
+                    *CgsDev::Log::gpDebugPrint
+                        << "[ddetails] action 181 -> gui 438 (rank "
+                        << lpRankInfo->miPlayerRank << " race " << lpRankInfo->miOfflineRace
+                        << " rage " << lpRankInfo->miRoadRage
+                        << " stunt " << lpRankInfo->miStuntAttack
+                        << " marked " << lpRankInfo->miMarkedMan << ")\n";
                 }
                 break;
             }

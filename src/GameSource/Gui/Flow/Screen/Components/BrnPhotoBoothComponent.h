@@ -93,7 +93,14 @@ namespace BrnGui
         void ShowComponent(bool lbShow);                                              // DWARF h:103
         void HideComponent(bool lbHide);                                              // DWARF h:108
         void SetButtonPromptVisible(bool lbVisible);                                  // DWARF h:113
-        bool IsActive();                                                              // DWARF h:242
+        // DWARF h:242. Defined HERE, inline, because that is where the original defines
+        // it: there is no X360 symbol for it and every call site folds it to the single
+        // `lbz +0x430` load of mbVisible -- e.g. CrashNavDriverDetails::
+        // HandleControllerInputPressed @0x824CF45C/@0x824CF498 and UpdateRunning
+        // @0x824B8410, all reading component+0x430 == the mbVisible ShowComponent/
+        // HideComponent write (BrnPhotoBoothComponent.cpp:288/:326/:411). Same precedent
+        // as BrnCursor.h's header-defined accessors.
+        bool IsActive() { return mbVisible; }
         bool Select();                                                                // DWARF h:121
         bool Cancel();                                                                // DWARF h:125
 
