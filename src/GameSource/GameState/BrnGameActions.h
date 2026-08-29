@@ -653,6 +653,67 @@ struct StopBoostingAction : public GameAction<E_ACTION_STOP_BOOSTING>
 {
 };
 
+// =============================================================================================
+// ⭐ THE THREE CRASH-PLAY ACTION RECORDS (added 2026-08-29 with BrnCrashPlayManager.cpp).
+//
+// ⚠️⚠️ THESE ARE PARTIAL SLICES, ON PURPOSE, AND THEY CARRY NO GameAction<id> BASE.
+// Each is consumed by exactly one CrashPlayManager handler, and each of those handlers reads
+// exactly ONE or TWO fields. What is written below is those fields, at the offsets the ARTIST
+// asm loads them from, with the rest of the record as explicit padding. NOTHING here is
+// inferred from the DecFIGS member list beyond the NAMES -- see the per-record note.
+//
+// ⛔ THEY DELIBERATELY DO NOT DERIVE FROM GameAction<E_ACTION_...>: the X360 action id for each
+// is UNKNOWN (this enum's DWARF->X360 shift is per-band -- +5, +8, +13 in the three bands
+// already mapped above -- so it cannot be extrapolated), and none of the three has a case arm in
+// RaceCarEntityModule::HandleGameActions in this tree yet. Minting an id to satisfy the template
+// would be a guess with no attestation. DELETE-WHEN each producer's `li r5,<id>` is read out and
+// the handler arm is unparked; at that point derive them and add the enumerator.
+//
+// ⚠️ THE DECFIGS LAYOUTS DO NOT FIT ARTIST, WHICH IS WHY THE HEADS ARE PADDING AND NOT MEMBERS.
+// DecFIGS BrnGameActions.h:3438 puts JustBouncedAction::mbFromStationary at +0x04 (behind one
+// int32_t miBounceChain); ARTIST reads it at +0x20. Same story for RoadRulesEnterRoadAction
+// (DWARF puts three Challenge*Entry structs + a CgsID[2] ahead of mRoadId; ARTIST reads mRoadId
+// at +0x10) and SendJunctionPlayerIsAtAction (DWARF leads with a bool mbOnEntry; ARTIST reads
+// muJunctionID at +0x00). This is the same merge-window drift the +5/+8/+13 id bands show. The
+// ARTIST offset wins -- it is rung 1 -- so the heads stay unnamed rather than being back-filled
+// with DWARF members that demonstrably are not there.
+// =============================================================================================
+
+// Consumer: CrashPlayManager::OnBounce @0x822A7EF8 -- `lbz r11, 0x21(r28)` then
+// `lbz r11, 0x20(r28)`, and nothing else.
+//
+// ⭐ THE TWO NAMES ARE NOT GUESSES; each is locked by what the handler DOES with it, and the two
+// are ADJACENT in the DecFIGS member order exactly as +0x20/+0x21 are adjacent here:
+//   +0x21 -> when set, OnBounce zeroes miConsecutiveBouncesOnGround and clears mbAboutToLoseBoost.
+//            A bounce that does NOT count as "on ground" is DecFIGS's `mbOnCar` (:3440).
+//   +0x20 -> when set, OnBounce adds KF_AFTERTOUCH_FOR_STATIONARY_BOUNCE_BOOST to
+//            mfAftertouchPower. DecFIGS BrnCrashPlayManager.cpp:84 names that constant
+//            literally, and DecFIGS BrnGameActions.h:3439 names the bool `mbFromStationary`.
+struct JustBouncedAction
+{
+    u8   maPad00[0x20];      // +0x00 unrecovered ARTIST head -- never read by OnBounce
+    bool mbFromStationary;   // +0x20 DWARF BrnGameActions.h:3439
+    bool mbOnCar;            // +0x21 DWARF BrnGameActions.h:3440
+};
+
+// Consumer: CrashPlayManager::OnEnterRoad @0x822A7D68 -- `ld r11, 0x10(r30)`, twice, and
+// nothing else. The 8-byte load is what types mRoadId as CgsID (== u64); the assert string the
+// same function fires is literally "lpRRAction->mRoadId != 0", so the name is attested by the
+// binary itself and not only by DWARF BrnGameActions.h:4793.
+struct RoadRulesEnterRoadAction
+{
+    u8    maPad00[0x10];     // +0x00 unrecovered ARTIST head -- never read by OnEnterRoad
+    CgsID mRoadId;           // +0x10
+};
+
+// Consumer: CrashPlayManager::OnEnterJunction @0x822A7E30 -- `lwz r11, 0(r30)`, three times,
+// and nothing else. Its assert string is "lpJAction->muJunctionID != 0", so again the member
+// name is attested by the binary, matching DWARF BrnGameActions.h:1557.
+struct SendJunctionPlayerIsAtAction
+{
+    u32 muJunctionID;        // +0x00
+};
+
 // X360 0x822A0250 (HasToChangeLocation).
 //
 // ⭐ GROWN to the FULL 80-byte record (reset-player-car wave 2026-08-01). It was a two-member
