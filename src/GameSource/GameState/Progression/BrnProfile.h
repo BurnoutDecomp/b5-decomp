@@ -448,6 +448,20 @@ public:
     {
         return maGameModeTypeAmountCompleted[lEGameModeType];
     }
+    // ADDITIVE GROW [pause-stats wave 2026-08-29] -- the FOURTH tally array (+336), the sibling
+    // of the +264 one above. AddGameModeTypeCompleted @0x82354B10 increments BOTH, which is what
+    // pins the pair; this is the "since the start of the game" copy that survives a rank reset.
+    // The Driver Details panel's five "won" counters are five indexed reads of exactly this
+    // array -- TranslateGameActionsToGuiEvents case 180 reads Profile+336/+348/+356/+364/+368
+    // (`lwzx` off the module base), i.e. modes 0 / 3 / 5 / 7 / 8 == OFFLINE_RACE / ROAD_RAGE /
+    // BURNING_ROUTE / STUNT_ATTACK / MARKED_MAN, which is exactly how the GUI labels them
+    // (races / road rages / "challenges" == burning routes / stunt runs / marked man).
+    // X360-INLINED at every call site (no standalone symbol), so an inline body is the faithful
+    // form -- the same precedent as GetGameModeTypeCompleted above.
+    s32  GetGameModeTypeCompletedSinceTheStart(BrnGameState::GameStateModuleIO::EGameModeType lEGameModeType) const
+    {
+        return maGameModeTypeAmountCompletedSinceTheStart[lEGameModeType];
+    }
 
     // Offline win/loss tallies.
     void AddWinForGameMode(BrnGameState::GameStateModuleIO::EGameModeType leGameModeType);   // 0x82354C80
@@ -681,6 +695,40 @@ public:
     // guard is the ProcessNewRoadScore callsite's own attested branch.
     s32  GetNewHighShowtimeScore() const { return miHighestShowTimeScore; }
     void SetNewHighShowtimeScore(s32 liScore) { miHighestShowTimeScore = liScore; }
+
+    // ------------------------------------------------------------------------
+    // ADDITIVE GROW [pause-stats wave 2026-08-29] -- the fourteen readers
+    // ProgressionManager::GetGameStats @0x8238A6A0 needs. EVERY ONE of them is inlined there
+    // as a single load off the embedded Profile (the manager reaches it as `r21 = this + 0x170`
+    // and then reads +0x64/+0x68/+0x71/+0x72/+0x74/+0x198/+0x1A0+4t/+0x24C/+0x250/+0x258/
+    // +0x25C/+0x260/+0x264/+0x274/+0x1CD28), so no standalone X360 symbol exists for any of
+    // them -- inline bodies here are the faithful form, the same precedent as
+    // GetNumWinsForGameMode / GetBestStuntRunScore above. NO layout change; every member below
+    // already sits at its console-proven offset.
+    // ⚠️ WIDTHS ARE THE ASM'S. The two power-parking ratings are read `lbz` + `extsb`, i.e.
+    // SIGNED bytes; the five stunt/air records are `lfs` floats that GetGameStats then converts
+    // with `fctiwz` (a truncating float->int convert) rather than reinterpreting.
+    // ------------------------------------------------------------------------
+    f32  GetDistanceDrivenOnline() const      { return mfDistanceDrivenOnline; }        // +100 (lfs 0x64)
+    f32  GetDistanceDrivenOffline() const     { return mfDistanceDrivenOffline; }       // +104 (lfs 0x68)
+    // FLAG: distinct from GetInCarTimePlayed() (+108) -- GetGameStats' TIME_PLAYED reads the
+    // REAL-time counter at +118056 (`lfsx f0, r21, 0x1CD28`), not the in-car one.
+    f32  GetRealTimePlayed() const            { return mfRealTimePlayed; }               // +118056
+    s8   GetPowerParkingBestRating() const    { return mi8PowerParkingBestRating; }      // +113 (lbz/extsb)
+    u32  GetBestNewBurnoutChainScore() const  { return muBestNewBurnoutChainScore; }     // +116
+    s32  GetCompletedBarrelRolls() const      { return miCompletedBarrelRolls; }         // +588
+    f32  GetCompletedAirSpinAngle() const     { return mfCompletedAirSpinAngle; }        // +592 (lfs)
+    f32  GetCompletedDriftDistance() const    { return mfCompletedDriftDistance; }       // +600 (lfs)
+    f32  GetOncomingDistance() const          { return mfOncomingDistance; }             // +604 (lfs)
+    f32  GetAirMaximum() const                { return mfAirMaximum; }                   // +608 (lfs)
+    // maiTakedownTypeCounts (+416), the array AddTakedown writes. The DWARF spells the index
+    // BrnGameState::ETakedownType; kept as s32 here so this header keeps pulling no extra enum.
+    s32  GetTakedownTypeCount(s32 leTakedownType) const { return maiTakedownTypeCounts[leTakedownType]; }
+    // miRivalCount (+0x274) and the rival table's row accessor -- the "greatest rival" scan in
+    // GetGameStats walks maRivals with an 0x38 stride and reads miTakedownFromCount off each.
+    // The DWARF's own FindRival(CgsID) sits above; this is the by-INDEX pair the scan needs.
+    s32  GetRivalCount() const                { return miRivalCount; }                   // +0x274
+    const RivalData* GetRivalData(s32 liIndex) const { return &maRivals[liIndex]; }      // +0x6280 + 0x38*i
 
 private:
     // ----- byte-exact member layout (offsets in comments; all X360-proven) -----

@@ -6,14 +6,6 @@
 
 #include <cstring>   // strncpy
 
-namespace
-{
-// GameStats array bounds (the X360 loop counts; == the declared array extents).
-const s32 KI_TAKEDOWN_TYPE_COUNT     = 13;
-const s32 KI_SCORE_TYPE_COUNT        = 2;
-const s32 KI_COUNTY_VALID_COUNT      = 5;
-const s32 KI_STUNT_ELEMENT_TYPE_COUNT = 3;
-}
 
 namespace BrnGameState
 {
@@ -46,16 +38,22 @@ void PlayerInfo::Construct(const char* lpcName,
 // X360 0x82354F38. Reset the stats block to zero (miTotalRoads excepted -- see NOTE below).
 // The X360 build merges the per-array zero loops and splits boundary words across doubleword/
 // standalone stores; the logical source is the per-array reset the DWARF de-inlined body
-// attests. Array index math against the raw stores fixes maFloatValues at 4 elements (not 3):
-// the asm's 33-word merged loop (result+6..result+38) covers all 32 maIntValues words plus the
-// first maFloatValues word, and the three explicit stores at result[39..41] are the remaining
-// three maFloatValues words -- that is the only split that leaves maTakedownTypeCounts[13]
-// (result[42..54], one clean 13-word loop) and maRoadsRuledCounts[2] (result[55],[56]) exactly
-// matching their X360-attested counts (BrnTakedownType.h E_TAKEDOWN_COUNT=13, BrnChallengeData.h
-// E_SCORE_TYPE_COUNT=2) with no leftover/missing word. The two asserts are the range checks the
-// inlined enum operator++ emits on the stunt/county counters; called directly (not via
-// CGS_ASSERT) with the byte-exact expression/file/line the asm embeds, since CGS_ASSERT's
-// __FILE__/__LINE__ would clobber them with this TU's own location.
+// attests.
+//
+// ⛔⛔ [pause-stats wave 2026-08-29] THE SPLIT DOCUMENTED HERE WAS WRONG, AND IT WAS THE
+// LOAD-BEARING CLAIM. It read: "Array index math against the raw stores fixes maFloatValues at
+// 4 elements (not 3): the asm's 33-word merged loop (result+6..result+38) covers all 32
+// maIntValues words plus the first maFloatValues word". The merged loop DOES run 33 times --
+// `addi r11, r3, 0x18 / li r10, 0x21 / mtctr r10` @0x82354F48 -- but the 33rd word is the 33rd
+// INT, not the 1st float: the X360 maIntValues is [33] and maFloatValues is [3] (the DWARF's
+// own count), which produces the identical 33-words-then-3-explicit-stores shape and the
+// identical sizeof. Both splits pass this function; only GetGameStats @0x8238A6A0 can tell them
+// apart, and it does -- `stfs` at +0x9C/+0xA0/+0xA4 and a plain `stw` at +0x98. See the header.
+//
+// The two asserts are the range checks the inlined enum operator++ emits on the stunt/county
+// counters; called directly (not via CGS_ASSERT) with the byte-exact expression/file/line the
+// asm embeds, since CGS_ASSERT's __FILE__/__LINE__ would clobber them with this TU's own
+// location.
 void GameStats::Construct()
 {
     for (s32 liIntValueTypeIndex = 0; liIntValueTypeIndex < E_INT_VALUE_TYPE_COUNT; ++liIntValueTypeIndex)
@@ -115,8 +113,8 @@ void GameStats::Construct()
     while (liStuntElementType < KI_STUNT_ELEMENT_TYPE_COUNT);
 
     // NOTE: miTotalRoads is intentionally left untouched here -- the X360 asm at 0x82354F38
-    // stores exactly 87 dwords (indices 0-86: 3 CgsID, 32 int, 4 float, 13 takedown, 2 roads-
-    // ruled, then the interleaved 3x5 max/current stunt-element grids) and has no store beyond
+    // stores exactly 87 dwords (indices 0-86: 3 CgsID == 6 words, 33 int, 3 float, 13 takedown,
+    // 2 roads-ruled, then the interleaved 3x5 max/current grids) and has no store beyond
     // the stunt grids, so miTotalRoads is never zeroed by Construct() in the binary.
 }
 }

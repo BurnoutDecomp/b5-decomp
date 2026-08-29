@@ -9,6 +9,10 @@
 #include "GameSource/GameState/BrnCgsPlayerName.h"  // CgsNetwork::PlayerName (scoreboard request payloads)        // CgsID (GuiPlayerInfoResponse::mCarId)
 #include "SharedClasses/Traffic/BrnTrafficVehicleType.h"  // BrnTraffic::VehicleClass / VehicleScoreCategory (GuiHitVehicleEvent)
 #include "GameSource/World/EntityModules/RaceCarEntityModule/NearMisses/BrnNearMissManager.h" // BrnWorld::ENearMissType (GuiNearMissEvent)
+// [pause-stats wave 2026-08-29] GuiEventStatsResponse (436) has been RECOVERED and moved to its
+// own home; included here so this header's existing consumers keep resolving the NAME (there is
+// exactly one type, no ODR fork). See the deleted shell's tombstone below.
+#include "GameSource/Gui/Events/BrnGuiEventStatsResponse.h"
 
 // ============================================================================
 // b5-decomp/src/GameSource/Gui/BrnGuiDemangledEventTypes.h
@@ -245,7 +249,15 @@ namespace BrnGui
     struct GuiEventShowFreeburnChallenge { u8 maData[8]; s32 GetEventType() const { return 582; } };  // id 582 size 8 (raw; size not GuiEvent-shaped)
     struct GuiEventShowHideHud { u8 maData[1]; s32 GetEventType() const { return 148; } };  // id 148 size 1 (raw; size not GuiEvent-shaped)
     struct GuiEventSpecificPresetRaces : public CgsGui::GuiEvent<194> { u8 maPayload[7692]; };  // id 194 size 7704 (12B GuiEvent header + opaque payload)
-    struct GuiEventStatsResponse : public CgsGui::GuiEvent<436> { u8 maPayload[420]; };  // id 436 size 432 (12B GuiEvent header + opaque payload)
+    // ⭐⭐⭐ [pause-stats wave 2026-08-29] GuiEventStatsResponse (id 436, 432 bytes) has been
+    // RECOVERED and now lives in GameSource/Gui/Events/BrnGuiEventStatsResponse.h with its real
+    // DWARF member names (BrnGuiEventTypeDefs.h:4950..:5056). The opaque
+    // `GuiEvent<436> + u8[420]` shell that stood here was DELETED rather than left to shadow the
+    // real home -- the GuiEventUpdateEventStarts / GuiEventUpdateHud precedent below. Its
+    // 12-byte-header assumption was harmless only because both consumers read the record through
+    // a byte cursor off the object base; a named field would have been 12 bytes out.
+    // This header now #includes that home (see the top), so every existing consumer of the NAME
+    // keeps compiling unchanged.
     struct GuiEventStopMode : public CgsGui::GuiEvent<322> {};  // id 322 size 12
     // [gateui] GuiEventStuntAllComplete (id 220) and GuiEventStuntInfo (id 217) have been
     // RECOVERED and now live in BrnGuiEventTypeDefs.h with their real DWARF fields

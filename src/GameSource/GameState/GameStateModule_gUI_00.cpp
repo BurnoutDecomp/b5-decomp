@@ -41,6 +41,8 @@
 #include "GameSource/GameState/TriggerQueryManager/BrnTriggerQueryManager.h" // UpdateTriggers / GetActiveTrigger*
 #include "GameSource/GameState/DeveloperChallengeManager/BrnDeveloperChallengeManager.h" // the accessor's return type
 #include "GameSource/GameState/BrnGameActions.h"                        // RankInfoResponseAction (the case-80 record)
+#include "GameSource/GameState/SharedIO/BrnGameActionData.h"            // GameStats (the case-79 record)
+#include "GameSource/GameState/Progression/BrnProgressionManager.h"     // ProgressionManager::GetGameStats
 #include "SharedClasses/Progression/BrnProgressionData.h"                // ProgressionData::GetProgressionRankCount
 #include "GameSource/GameState/Progression/BrnProfile.h"                // Profile::GetNumRankWinsForGameMode
 
@@ -682,6 +684,106 @@ void GameStateModule::ProcessGameEventsRankInfoRequestBringUp(
 }
 
 // ============================================================================
+// ⭐⭐⭐ [pause-stats wave 2026-08-29] ProcessGameEventsGameStatsRequestBringUp -- the
+// extracted CASE-79 arm of GameStateModule::ProcessGameEvents @0x823A0A18. Same queue walk,
+// same must-run-before-the-Clear position as the case-80 arm immediately above; the console
+// body (asm @0x823A2D18..0x823A2D4C) is transcribed instruction-by-instruction at the
+// declaration in BrnGameStateModule.h.
+//
+// THIS IS THE MISSING MIDDLE HOP of the START-button pause screen's STAT PANEL:
+//   GUI 435 (GuiEventStatsRequest, posted by CrashNavDriverDetails::UpdateInitSetup)
+//     -> game event 79   [BridgeGuiToGameState case 435, already live]
+//     -> game action 180 [HERE]
+//     -> GUI 436 (GuiEventStatsResponse) [TranslateGameActionsToGuiEvents case 180]
+// Without it CrashNavDriverDetails::HandleStatData never runs and the panel draws its labels
+// with no numbers -- which is exactly what it was doing.
+//
+// ⛔⛔ THE THIRD ARGUMENT IS ZERO ON THIS BUILD, AND THAT IS NOT A STUB -- IT IS AN ABSENT
+// OBJECT, AND IT IS INERT. The console's arm opens
+//     addi r3, r31, 0x7E20 / bl ChallengeManager::CountCompletedChallenges / mr r6, r3
+// and gsm+0x7E20 is `ModeManager::mChallengeManager` -- a member this tree DELIBERATELY does
+// not embed (BrnModeManager.h's `[X][X] DIVERGENCE at console +28160` banner: 29 TUs and ~35
+// unresolved externals, freeburn challenges being off the offline-event path; the mount file
+// says the same -- "DELIBERATELY OUT: ChallengeManager/*"). So there is no instance to call the
+// method ON. THE METHOD ITSELF IS ALREADY REAL AND COMMITTED --
+// ChallengeManager::CountCompletedChallenges @0x8233E530, BrnChallengeManager.cpp:290, the
+// value-identical FastBitArray<2000> set-bit scan -- so this wave adds nothing to it.
+// ⭐ AND THE VALUE IS UNOBSERVABLE HERE ANYWAY: it lands in GameStats::maIntValues[32], and
+// TranslateGameActionsToGuiEvents case 180 @0x823EC8A0 -- the only consumer of action 180 --
+// reads the record at +0x00..+0x90, +0x9C..+0xA4, +0xA8..+0xE0 and +0x120..+0x15C, and NEVER at
+// +0x94 or +0x98. Nothing on the Driver Details panel can show it. Passing the real count would
+// change no pixel; passing 0 loses no pixel. DELETE-WHEN the ChallengeManager mount lands.
+// ============================================================================
+void GameStateModule::ProcessGameEventsGameStatsRequestBringUp(
+        const CgsModule::VariableEventQueue<1536, 16>* lpGameEventQueue,
+        GameStateModuleIO::GameActionQueue* lpActionQueue)
+{
+    if (lpGameEventQueue == 0 || lpActionQueue == 0)
+    {
+        return;
+    }
+
+    const CgsModule::Event* lpEvent = 0;
+    s32                     liSize  = 0;
+    s32                     liType  = lpGameEventQueue->GetFirstEvent(&lpEvent, &liSize);
+
+    while (lpEvent != 0)
+    {
+        if (liType == GameStateModuleIO::E_EVENT_GAME_STATS_REQUEST)
+        {
+            // [FLAG PC bring-up] see the banner: no ChallengeManager instance exists on this
+            // build, and this value is not read by the action's only consumer.
+            const s32 liNumChallengesCompleted = 0;
+
+            // `addi r4, r1, var_E30` -- the console builds the record on its own stack frame and
+            // queues it straight from there. 352 bytes; AddEvent copies.
+            GameStateModuleIO::GameStats lGameStats;
+            mProgressionManager.GetGameStats(&lGameStats, &mStuntManager, liNumChallengesCompleted);
+
+            // `li r6, 0x160 / li r5, 0xB4` -- action 180, 352 bytes.
+            lpActionQueue->AddEvent(
+                reinterpret_cast<const CgsModule::Event*>(&lGameStats),
+                GameStateModuleIO::E_ACTION_GAME_STATS_RESPONSE,
+                static_cast<s32>(sizeof(GameStateModuleIO::GameStats)));
+
+            // [DIAG] NOT IN THE X360 BINARY -- the stat panel's GameState rung, same
+            // change-only idiom as the [ddetails] rank rung above. Stat queries are
+            // one-per-screen-entry, so no first-N cap is needed. The values echoed are the ones
+            // that can be corroborated against something else (the save image's own counters and
+            // the world's road/stunt totals), so a wrong number on screen can be attributed to a
+            // hop rather than hunted [[diagnostics-that-lie]].
+            if (CgsDev::Log::gpDebugPrint != 0)
+            {
+                *CgsDev::Log::gpDebugPrint
+                    << "[ddetails] game event 79 -> action 180 (cars "
+                    << lGameStats.GetValue(GameStateModuleIO::GameStats::E_INT_VALUE_TYPE_CARS_COLLECTED)
+                    << " events "
+                    << lGameStats.GetValue(GameStateModuleIO::GameStats::E_INT_VALUE_TYPE_EVENTS_FOUND)
+                    << "/"
+                    << lGameStats.GetValue(GameStateModuleIO::GameStats::E_INT_VALUE_TYPE_EVENTS_TOTAL)
+                    << " takedowns "
+                    << lGameStats.GetValue(GameStateModuleIO::GameStats::E_INT_VALUE_TYPE_TAKEDOWNS)
+                    << " roadsruled "
+                    << lGameStats.GetValue(GameStateModuleIO::GameStats::E_INT_VALUE_TYPE_TOTALROADSRULED)
+                    << "/" << lGameStats.GetTotalRoads()
+                    << " jumps "
+                    << lGameStats.GetValue(GameStateModuleIO::GameStats::E_INT_VALUE_TYPE_JUMPS)
+                    << "/"
+                    << lGameStats.GetValue(GameStateModuleIO::GameStats::E_INT_VALUE_TYPE_JUMPS_MAX)
+                    << " smashes "
+                    << lGameStats.GetValue(GameStateModuleIO::GameStats::E_INT_VALUE_TYPE_SMASHES)
+                    << "/"
+                    << lGameStats.GetValue(GameStateModuleIO::GameStats::E_INT_VALUE_TYPE_SMASHES_MAX)
+                    << ")\n";
+            }
+        }
+
+        const CgsModule::Event* lpCurrent = lpEvent;
+        liType = lpGameEventQueue->GetNextEvent(lpCurrent, &lpEvent, &liSize);
+    }
+}
+
+// ============================================================================
 // â­â­ [gateui] PreWorldUpdateStuntBringUp -- the three stunt-chain legs of the console's
 // PreWorldUpdate @0x823A5328, IN THE CONSOLE'S OWN ORDER. The header carries the line-by-line map
 // of the source function and both named reductions; the body annotates each leg again.
@@ -783,6 +885,17 @@ void GameStateModule::PreWorldUpdateStuntBringUp(
     // CheckGameActions (BrnGameModule, the console's DoUpdate_GameStatePreWorld tail) reads
     // them back this same sub-step and stops/starts the sim timer.
     ProcessGameEventsPauseBringUp(&mGameEventCarryQueue, lpActionQueue);
+    // [pause-stats wave] the dispatcher's CASE-79 arm -- the case-80 arm's immediate neighbour
+    // and the other half of the same GUI latch (CrashNavDriverDetails::UpdateInitSetup posts 435
+    // and 437 back to back, so both events are in the queue on the same frame). Same walk, same
+    // must-run-before-the-Clear constraint; it posts action 180 onto the action queue this
+    // function already holds the write lock for, and TranslateGameActionsToGuiEvents turns that
+    // into GUI event 436 in the SAME sub-step.
+    // ⓘ CALLED BEFORE THE CASE-80 ARM so the two actions reach the queue in the console's own
+    // order: the console runs ONE walk over the merged queue, so it answers events in ARRIVAL
+    // order, and 435 is posted before 437. This tree runs one walk per arm, so arm order is what
+    // sets action order.
+    ProcessGameEventsGameStatsRequestBringUp(&mGameEventCarryQueue, lpActionQueue);
     // [driver-details pause wave] the dispatcher's CASE-80 arm (the rank-progress query the
     // START-button pause screen's licence card waits on), same walk, same
     // must-run-before-the-Clear constraint; it posts action 181 onto the action queue this

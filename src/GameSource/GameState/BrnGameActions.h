@@ -118,6 +118,29 @@ enum EGameActionType
     // the correction is call-site-free -- but the producer this wave adds would have posted 173 and
     // the consumer it adds would never have heard it.
     E_ACTION_RANK_INFO_RESPONSE         = 181,   // DWARF :183 gives 173 (+8 X360); size 36
+    // ⭐⭐ [pause-stats wave 2026-08-29] THE GAME-STATS RESPONSE -- 181's immediate sibling, and
+    // pinned the same way, at the same site, with the same size cross-check. TAKEN FROM THE
+    // `li r5,<id>` / `li r6,<size>` PAIR AT THE POST SITE, NOT FROM THE DWARF (which gives 172;
+    // the previous wave's finding was that the raw DWARF id here is one no X360 consumer hears):
+    //   producer  GameStateModule::ProcessGameEvents @0x823A0A18, `jumptable 823A107C case 79`
+    //             @0x823A2D18: CountCompletedChallenges -> GetGameStats -> then
+    //               0x823A2D3C  li   r6, 0x160           (352)
+    //               0x823A2D40  li   r5, 0xB4            (180)
+    //               0x823A2D44  addi r4, r1, var_E30     (the GameStats it just filled)
+    //               0x823A2D4C  bl   VariableEventQueue<13312,16>::AddEvent
+    //   consumer  BrnGameModule::TranslateGameActionsToGuiEvents @0x823E9CE0,
+    //             `jumptable 823EA1F0 case 180` @0x823EC8A0 -> the inlined
+    //             GuiEventStatsResponse build + AddGuiEvent (GUI event 436, 432 bytes).
+    // 352 == sizeof(BrnGameState::GameStateModuleIO::GameStats) (BrnGameActionData.h), so the id
+    // and the record identity are attested at one site.
+    // ⓘ NO WRAPPER STRUCT BELOW, DELIBERATELY. The DWARF declares
+    // `GameStatsResponseAction : GameAction<E_ACTION_GAME_STATS_RESPONSE> { GameStats mGameStats; }`
+    // (BrnGameActions.h:2502) -- but GameAction<N> carries no data, so the wrapper is
+    // layout-transparent, and the X360 producer never materialises one: case 79 hands
+    // GetGameStats a bare stack GameStats (`addi r4, r1, var_E30`) and queues THAT pointer.
+    // Adding the wrapper would force BrnGameActionData.h into this header for no byte's
+    // difference.
+    E_ACTION_GAME_STATS_RESPONSE        = 180,   // DWARF gives 172 (+8 X360); size 352
     // ⛔ VALUE CORRECTION 2026-08-27 (drive-thru link-closure wave) -- was the raw PS3-DWARF
     // value (196), which is not what the X360 posts. PRODUCER-PINNED at both ends:
     // ProgressionManager::SendTrophyUnlockUpdate @0x823892B8 posts `li r5, 0xCC` (204) with
