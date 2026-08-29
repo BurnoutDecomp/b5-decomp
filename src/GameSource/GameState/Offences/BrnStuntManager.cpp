@@ -481,11 +481,27 @@ bool StuntManager::Prepare(GameStateModuleIO::OutputBuffer* lpOutput)
         const BrnTrigger::GenericRegion* lpGenericRegion = lpTriggerData->GetGenericRegion(liGenericRegionIndex);
         const BrnTrigger::GenericRegion::Type leType = lpGenericRegion->GetType();
 
-        // Signature-takedown groups (region types 5 / 7) de-dupe by group id so a multi-region stunt
-        // counts once. FLAG: the X360 builds this compressed-group-id list but the recovered pseudocode
-        // never consumes lnCompressedGroupIdCount (miSignatureTakedownCount is incremented per-region in
-        // the switch below, NOT from the deduped count). Kept byte-faithful (the list IS built); its
-        // consumer was either inlined away or dropped by the decompiler.
+        // Signature-takedown / jump groups (region types 5 / 7) de-dupe by group id so a multi-region
+        // stunt counts ONCE.
+        //
+        // ⛔⛔ BANNER CORRECTION (measured 2026-08-29, from the ASM -- the previous banner here said
+        // "the recovered pseudocode never consumes lnCompressedGroupIdCount ... its consumer was
+        // either inlined away or dropped by the decompiler". THAT WAS WRONG, and it cost the pause
+        // screen's stat panel a wrong denominator: it printed JUMPS 0/68 against Paradise City's 50.)
+        // The consumer is a BRANCH, not a statement, which is why reading the pseudocode alone missed
+        // it. X360 @0x8239CBE8:
+        //     0x8239CBE8  lwz   r9, 0(r10)        ; laCompressedGroupIds[i]
+        //     0x8239CBEC  cmpw  cr6, r9, r31
+        //     0x8239CBF0  beq   cr6, loc_8239CC08 ;   found
+        //     ...
+        //     0x8239CC04  b     loc_8239CC10      ;   not found -> fall through and ADD
+        //     0x8239CC08  cmpw  cr6, r11, r16
+        //     0x8239CC0C  blt   cr6, def_8239CCDC ; ⭐ FOUND -> jump to the tally switch's DEFAULT
+        //                                         ;   arm, i.e. count NOTHING for this region and
+        //                                         ;   skip the county classify with it.
+        // So an already-seen group id `continue`s the loop. Only types 5 and 7 pass through the
+        // filter, which is exactly why SMASHES (type 8) already totalled the retail 400 while JUMPS
+        // (type 7) over-counted: 68 type-7 regions, 50 distinct jump groups.
         if (leType == BrnTrigger::GenericRegion::E_TYPE_SIGNATURE_TAKEDOWN ||
             leType == BrnTrigger::GenericRegion::E_TYPE_JUMP)
         {
@@ -494,6 +510,8 @@ bool StuntManager::Prepare(GameStateModuleIO::OutputBuffer* lpOutput)
             if (lnRawGroupId == 0)
                 lnRawGroupId = static_cast<int32_t>(lpGenericRegion->GetId());
 
+            // A region with no group of its own (group id 0, or a group id equal to its own id)
+            // never enters the list and is always counted -- the `cmpld`/`beq` at 0x8239CBCC.
             if (lnRawGroupId != static_cast<int32_t>(lpGenericRegion->GetId()))
             {
                 bool lbAlreadySeen = false;
@@ -505,17 +523,19 @@ bool StuntManager::Prepare(GameStateModuleIO::OutputBuffer* lpOutput)
                         break;
                     }
                 }
-                if (!lbAlreadySeen)
+                if (lbAlreadySeen)
                 {
-                    if (lnCompressedGroupIdCount >= KI_MAX_GROUPS)
-                    {
-                        CgsDev::Assert::BeginAssert();
-                        CgsDev::Assert::FireAssert("lnCompressedGroupIdCount < KI_MAX_GROUPS", KAC_FILE, 183);
-                        CgsDev::Assert::EndAssert();
-                    }
-                    laCompressedGroupIds[lnCompressedGroupIdCount] = lnRawGroupId;
-                    ++lnCompressedGroupIdCount;
+                    continue;   // ⭐ `blt cr6, def_8239CCDC` -- this region's group is already tallied
                 }
+
+                if (lnCompressedGroupIdCount >= KI_MAX_GROUPS)
+                {
+                    CgsDev::Assert::BeginAssert();
+                    CgsDev::Assert::FireAssert("lnCompressedGroupIdCount < KI_MAX_GROUPS", KAC_FILE, 183);
+                    CgsDev::Assert::EndAssert();
+                }
+                laCompressedGroupIds[lnCompressedGroupIdCount] = lnRawGroupId;
+                ++lnCompressedGroupIdCount;
             }
         }
 
