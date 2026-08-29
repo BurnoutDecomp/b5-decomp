@@ -132,6 +132,13 @@ struct AptCharacterInst
     // tear down the per-instance property hash (the GC drop path).
     void DestroyGCPointers();
 
+    // (The scalar-deleting-destructor seat lives as the static
+    //  AptCharacterInst::DestroyCharacterInst -- the rebase adjudication of two
+    //  convergent 2026-08-29 fixes kept dev's spelling; the measured leak evidence --
+    //  511 OnUnload calls / 0 matched removals / the 256-entry component table
+    //  saturated -- is recorded at its definition. Custom controls (tag 16) route to
+    //  ~AptCharacterSpriteInstBase there, same as sprites: they own a display list.)
+
     // The writable character / position matrix (through the tick-writable render item).
     AptCharacter* GetCharacterWritable();                // @0x82AE1CC0
     AptMatrix*    GetPositionMatrixWritable();           // @0x82AE6650

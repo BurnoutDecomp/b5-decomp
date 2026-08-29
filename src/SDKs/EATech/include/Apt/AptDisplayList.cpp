@@ -203,8 +203,15 @@ void AptDisplayList::removeObject(AptCIH* pItem)
     if (!pItem)
         return;
 
-    // (pItem[1] >> 27) & 1 -- the "real placed node" flag in the AptValue bitfield.
-    if (((pItem->mnValueData >> 27) & 1u) == 0u)
+    // console @0x82AFD0B0: `if (a2 && ((*(a2 + 4) >> 27) & 1) != 0)`. X360 LSB bit 27
+    // of the AptValue packed word IS mbIsDefined (the same bit setIsDefined writes and
+    // getIsDefined @0x1400C1520 reads with `shr 4` on x64) -- NOT a meValueType bit.
+    // CORRECTED 2026-08-29 (X360 bit-position survivor, the systemic Apt reversal
+    // family): on x64 mbIsDefined is bit 4, and bit 27 lands inside meValueType
+    // (bits 25..31), so `>>27` read `(type >> 2) & 1` -- which is 1 for EVERY
+    // CIH (12) and CIHNone (37) regardless of defined-ness, so undefined placeholder
+    // nodes were treated as real placed nodes here.
+    if (!pItem->getIsDefined())
         return;
 
     if (AptCIH* pParent = pItem->GetDisplayListParent())   // pItem->mpDisplayListParent (pItem[7])
@@ -250,11 +257,27 @@ AptRect* AptDisplayList::GetBoundingRect(int nMode, const AptMatrix* pTransform,
 {
     for (AptCIH* pNode = mpHead ? mpHead->mpFirst : nullptr; pNode; pNode = pNode->GetDisplayListNext())
     {
-        // gate on the "real placed node" bit -- mnValueData bit 27 (a meValueType bit),
-        // exactly as removeObject does. The asm (0x82AD9B5C extrwi r11,r11,1,4) reads bit
-        // 27, NOT mbIsDefined (bit 4, what getIsDefined() reads) -- those select different
-        // node sets, so getIsDefined here accumulated bounds over the wrong children.
-        if (((pNode->mnValueData >> 27) & 1u) == 0u)
+        // SETTLED 2026-08-29 -- which field does the console test here?
+        //   Claim A (an earlier banner): "the asm reads bit 27, NOT mbIsDefined (bit 4)"
+        //     -- i.e. bit 27 is a meValueType bit and getIsDefined() selects a different
+        //     node set.
+        //   Claim B (the verified fix wave): the console tests mbIsDefined; on x64 that
+        //     field is bit 4, so a raw `>>27` reads meValueType bit 2 (set for CIH(12)
+        //     and CIHNone(37) alike, regardless of defined-ness).
+        //   DECIDING EVIDENCE -- Claim B. GetBoundingRect @0x82AD9B38+0x28 is
+        //     `lwz r11,4(r31); extrwi. r11,r11,1,4`. extrwi's start index is MSB-numbered.
+        //     Big-endian MSVC packs AptValue::mValueBitfield MSB-first in declaration
+        //     order: MSB 0 mbIsAllocated, 1 mbHasRegisterReferenceMark,
+        //     2 mbIsInDeferredVector, 3 mbDestroyedGC, 4 mbIsDefined. So MSB bit 4 --
+        //     LSB bit 27 -- IS mbIsDefined, and there is no meValueType bit there at all
+        //     (meValueType is the LAST field, MSB 25..31). Independently pinned by
+        //     setRefCount @0x82AD7E90's `insrwi r10,r4,12,6`: the 12-bit refcount starts
+        //     at MSB 6, i.e. exactly after the six leading flag bits -- the same packing.
+        //     Claim A conflated the X360 MSB index with the x64 LSB index of one field.
+        //   Therefore: the named field is mbIsDefined, and on x64 it must be read through
+        //   getIsDefined() (@0x1400C1520 `shr 4`). A raw `>>27` on the x64 word is wrong
+        //   for EVERY field -- nothing the console tests at X360 bit 27 lives at x64 bit 27.
+        if (!pNode->getIsDefined())
             continue;
         AptCharacterInst* pCharInst = pNode->GetCharacterInst();
         if (pCharInst != nullptr && pCharInst->GetTypeTag() != 15 &&
@@ -440,10 +463,11 @@ AptCIH* AptDisplayList::AddToDisplayList(AptNativeHash* pParentHash, void** ppPl
         pParentHash->Set(pPlaced->GetInstanceName(), static_cast<AptValue*>(pPlaced));
 
     // Add to the target's "new instances" table + reference the placed node for it.
-    void** const pNewInsts = static_cast<void**>(AptAnimationTarget::GetNewInsts());
-    pNewInsts[AptAnimationTarget::GetNewInstSize()] = pPlaced;
-    pPlaced->AddRef();   // console (***node)(node, &mInstanceName) == vtbl[0] AddRef (arg2 discarded)
-    AptAnimationTarget::DecNewInstSize();   // post-increments the new-instance count
+    // (console: `v = 4 * dword_8324E548++; *(off_8324E544 + v) = pPlaced;` + vtbl[0]
+    //  AddRef -- routed through the capacity-guarded PushNewInst; see its body for why
+    //  the console's unguarded store overruns the 656-slot table on the host.)
+    if (AptAnimationTarget::PushNewInst(pPlaced))
+        pPlaced->AddRef();   // console (***node)(node, &mInstanceName) == vtbl[0] AddRef (arg2 discarded)
 
     return pPlaced;
 }
@@ -683,7 +707,20 @@ AptRenderItem* AptDisplayList::instantiateCharacter(int nDepth, AptCharacter* pC
         {
             removeObject(pMatch);
         }
-        else if (((pMatch->mnValueData >> 27) & 1u) != 0u)
+        // SETTLED 2026-08-29 -- same two claims as GetBoundingRect above (raw bit 27 as a
+        // meValueType bit vs. mbIsDefined read through getIsDefined()). DECIDING EVIDENCE
+        // here is self-contained and stronger: instantiateCharacter @0x82B061D0+0x94 is
+        //   0x82B06264  lwz    r11, 4(r5)
+        //   0x82B06268  extrwi. r11, r11, 1,4      <- MSB bit 4 == LSB bit 27
+        //   0x82B0626C  bne    loc_82B062A0        <- set: reuse the placed node
+        //   ... name-match arm ...
+        //   0x82B06294  bl     AptValue::setIsDefined(r5, 1)   <- clear: DEFINE it
+        // The console tests the bit and, on the not-set arm, SETS THAT SAME FIELD via
+        // AptValue::setIsDefined -- the tested field is mbIsDefined by construction, not
+        // a meValueType bit (a type tag is not something setIsDefined writes). Matches the
+        // MSB-first packing argument above. On x64 the field is bit 4, so the read goes
+        // through getIsDefined(); the setIsDefined(true) below is already the named form.
+        else if (pMatch->getIsDefined())
         {
             pNode = pMatch;          // a real placed node -- reuse unchanged
             bCreatedNew = false;
@@ -746,10 +783,10 @@ AptRenderItem* AptDisplayList::instantiateCharacter(int nDepth, AptCharacter* pC
         const uint32_t nTypeTag = pInst->GetTypeTag();
         if (nTypeTag == 5 || nTypeTag == 9 || nTypeTag == 4)
         {
-            void** const pNewInsts = static_cast<void**>(AptAnimationTarget::GetNewInsts());
-            pNewInsts[AptAnimationTarget::GetNewInstSize()] = pNode;
-            AptAnimationTarget::DecNewInstSize();   // post-increments the count
-            pNode->AddRef();                        // vtbl[0]
+            // console `v = 4 * dword_8324E548++; *(off_8324E544 + v) = pNode;` + vtbl[0]
+            // AddRef -- through the capacity-guarded PushNewInst (see its body).
+            if (AptAnimationTarget::PushNewInst(pNode))
+                pNode->AddRef();                    // vtbl[0]
         }
         else if (nTypeTag == 2)
         {
@@ -866,9 +903,34 @@ AptCIH* AptDisplayList::placeObject(AptCIH* pExistingNode, int nDepth, AptCharac
     const uint32_t nTypeTag = pNode->GetCharacterInst()->GetTypeTag();
     if (nTypeTag == 5 || nTypeTag == 9)
     {
-        // When the supplied AS class object carries a class (mnValueData bit 27), clone
-        // its non-reserved members onto the freshly placed instance.
-        if (pClassObject != nullptr && ((pClassObject->mnValueData >> 27) & 1u) != 0u)
+        // SETTLED 2026-08-29 -- the third site of the same pair of claims:
+        //   Claim A: bit 27 is deliberate here because this is the "carries a class" test.
+        //   Claim B: the console tests mbIsDefined; read it via getIsDefined() on x64.
+        //   DECIDING EVIDENCE -- Claim B, on two counts.
+        //   (1) The export's PSEUDOCODE for placeObject @0x82B097D8 stops before the tail,
+        //       but its ASSEMBLY does not; the tail reads:
+        //         0x82B09928  lwz     r3, arg_74(r1)        <- pClassObject
+        //         0x82B0992C  cmplwi  cr6, r3, 0
+        //         0x82B09930  beq     loc_82B099D0          <- null -> skip
+        //         0x82B09934  lwz     r11, 4(r3)            <- the AptValue packed word (+4)
+        //         0x82B09938  extrwi. r11, r11, 1,4         <- MSB bit 4 == mbIsDefined
+        //         0x82B0993C  beq     loc_82B099D0
+        //         0x82B09940  lwz     r11, 0(r3); lwz r11, 8(r11); bctrl
+        //                                              <- console vtbl slot 2 (4-byte slots:
+        //                                                 +0 AddRef, +4 Release,
+        //                                                 +8 GetNativeHashVirtual)
+        //         0x82B09954  bl      AptNativeHash::GetFirstItem   ... member walk ...
+        //                     bl      AptActionInterpreter::setVariable  ==  AptCloneClassMembers
+        //       Identical `extrwi 1,4` form to the two sites above; the MSB-first packing
+        //       argument in GetBoundingRect's banner applies verbatim.
+        //   (2) GetHasClass is a DIFFERENT WORD entirely -- `*(v+28) & 0x400000` -- not the
+        //       +4 AptValue bitfield this instruction loads. So the "carries a class"
+        //       reading is refuted by the operand address, independent of any bit index.
+        //       (Nothing is lost: the class-membership question is answered downstream by
+        //       AptCloneClassMembers walking an empty hash, and by AssociateInstToClass.)
+        //   The guard is therefore "the supplied AS class object is a DEFINED value",
+        //   whose x64 form is getIsDefined().
+        if (pClassObject != nullptr && pClassObject->getIsDefined())
             AptCloneClassMembers(pNode, pClassObject);
         pNode->AssociateInstToClass();
     }
