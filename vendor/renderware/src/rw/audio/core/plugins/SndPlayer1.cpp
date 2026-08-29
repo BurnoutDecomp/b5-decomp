@@ -14,10 +14,17 @@
 //   GetPpuTicksEvent      @0x82BDD2D0 (vt[2])
 //
 // ⚠️ DELIBERATELY NOT REGISTERED YET. The streaming half -- Process, the event surface and
-// the whole decoder/stream chain -- needs the StreamPool and rw::core::filesys::Stream
-// surfaces, which this tree has not homed. Those bodies are honest FLAG'd deferrals below
-// and the descriptor stays unregistered until every slot it would publish is real, which is
-// the rule the RWAC registration site has enforced since the descriptor wave.
+// the whole decoder/stream chain -- needs ONE type this tree has not homed:
+// rw::audio::core::StreamPool. Those bodies are honest FLAG'd deferrals below and the
+// descriptor stays unregistered until every slot it would publish is real, which is the rule
+// the RWAC registration site has enforced since the descriptor wave.
+//
+// ⭐ CORRECTION 2026-08-29: an earlier revision of this banner also named
+// rw::core::filesys::Stream as un-homed. THAT WAS WRONG. It is homed, at
+// b5-decomp/src/SDKs/EATech/rwcore/filesys/stream.h, and it carries QueueFile / GetChunk /
+// ReleaseChunk / GetRequestState / GetState plus Chunk (muSize, mpData) and the
+// ChunkParseCallback typedef -- the exact shapes every SndPlayer1 call site uses. The
+// streaming half must reach for those BY NAME and invent nothing.
 // See plugins/SndPlayer1.h for the layout and the per-field hazards.
 // =====================================================================================
 
@@ -384,11 +391,20 @@ int SndPlayer1::VFunc2()
 //
 // Process @0x82BA0568, EventEvent @0x82BA5C48 (vt[1]) and ReleaseEvent @0x82BA4178 (vt[0])
 // are FULLY DECODED in progress/scratch_dossiers/sndplayer1_bodies_decode.md, but every one
-// of them reaches the StreamPool / rw::core::filesys::Stream surfaces, which this tree has
-// not homed -- Process through the loop/end handlers, EventEvent through PlayHandler's
-// stream open, ReleaseEvent through StreamLostCallback. Writing them against invented
-// stream APIs would be exactly the fabrication the project forbids, so they are honest
-// deferrals until that surface lands, and the descriptor is NOT registered meanwhile.
+// of them reaches rw::audio::core::StreamPool, which this tree has not homed -- Process
+// through the loop/end handlers, EventEvent through PlayHandler's stream open, ReleaseEvent
+// through StreamLostCallback. Writing them against an invented pool API would be exactly the
+// fabrication the project forbids, so they are honest deferrals until that ONE type lands,
+// and the descriptor is NOT registered meanwhile.
+//
+// ⭐ CORRECTION 2026-08-29: rw::core::filesys::Stream, which an earlier revision of this
+// note listed alongside StreamPool, IS homed (src/SDKs/EATech/rwcore/filesys/stream.h). Only
+// the pool is missing. What is attested about it from PlayHandler + AcquireStream @0x82B6BAB0:
+// GetInstance(u32 guid), AcquireStream(pool, f32 priority /*f1*/, StreamLostFn, void* context)
+// returning a 32-byte-stride ENTRY { +0x08 f32 priority, +0x0C the lost-callback,
+// +0x14 rw::core::filesys::Stream*, +0x18 u16 refcount, +0x1A u8 inUse }, and a ReleaseStream.
+// ⚠️ That 0x20 entry stride holds a pointer and a callback, so it does NOT survive x64 --
+// whoever homes the pool must index a typed array, never that literal.
 //
 // These are UNREACHABLE as committed: nothing constructs a SndPlayer1, because registration
 // 21 is still commented out at the RWAC site. The destructor's omitted teardown therefore

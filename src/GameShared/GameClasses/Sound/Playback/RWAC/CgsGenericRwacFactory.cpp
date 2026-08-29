@@ -245,9 +245,16 @@ GenericRwacFactory::GenericRwacFactory(Environment& arEnvironment,
         // pointers, every callback bodied in its mounted vendor TU; proof
         // progress/scratch_dossiers/plugindesc_layout_codex.md). The rest stay
         // FLAG-deferred in place, each for a stated reason:
-        //   * SndPlayer1 -- no PC plug-in home yet (Dac landed with the phase-D
-        //     slice; GainFader, LowPassButterworth and SubMix got theirs with the
-        //     phase-E waves);
+        //   * SndPlayer1 -- ⭐ CORRECTION 2026-08-29: it DOES have a PC home now
+        //     (vendor/renderware/{include,src}/rw/audio/core/plugins/SndPlayer1.*,
+        //     boot-verified), so the old "no PC plug-in home yet" reason is stale.
+        //     What still defers it is narrower and stated at the site: its STREAMING
+        //     half -- Process, the event surface, the decoder/stream chain -- reaches
+        //     rw::audio::core::StreamPool, the one type this tree has not homed. Those
+        //     bodies are honest FLAG'd deferrals, so GetPlugInDescRunTime deliberately
+        //     returns null and this line stays commented rather than publishing a
+        //     record with dead slots. (Dac landed with the phase-D slice; GainFader,
+        //     LowPassButterworth and SubMix got theirs with the phase-E waves.)
         //   * one of the three custom game descriptors (SndPlayer1_CgsStreamMod
         //     off_82F2E124) -- its game-side body is not reconstructed yet.
         //     GainArray off_82F2E664 and GinsuPlayer off_82F2D094 are both LIVE
