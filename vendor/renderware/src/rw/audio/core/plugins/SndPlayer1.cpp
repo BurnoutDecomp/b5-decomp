@@ -29,9 +29,11 @@
 // =====================================================================================
 
 #include "rw/audio/core/plugins/SndPlayer1.h"
-#include "rw/audio/core/Mixer.h"        // Mixer (the process context) + SampleBuffer
+#include "rw/audio/core/Mixer.h"        // Mixer (the process context) + SampleBuffer + StackAllocator
 #include "rw/audio/core/TimerManager.h" // TimerManager::AddTimer
+#include "rw/audio/core/Decoder.h"      // Decoder::Decode / GetSamplesRemaining + DecoderBuffer
 
+#include <cstddef> // offsetof (the SampleBuffer/DecoderBuffer aliasing pins)
 #include <cstring> // std::memset
 
 namespace rw
@@ -387,26 +389,38 @@ int SndPlayer1::VFunc2()
 }
 
 // =====================================================================================
-// FLAG (DEFER) -- the streaming half.
+// FLAG (DEFER) -- what is LEFT of the streaming half.  ⭐ SHRUNK 2026-08-29.
 //
-// Process @0x82BA0568, EventEvent @0x82BA5C48 (vt[1]) and ReleaseEvent @0x82BA4178 (vt[0])
-// are FULLY DECODED in progress/scratch_dossiers/sndplayer1_bodies_decode.md, but every one
-// of them reaches rw::audio::core::StreamPool, which this tree has not homed -- Process
-// through the loop/end handlers, EventEvent through PlayHandler's stream open, ReleaseEvent
-// through StreamLostCallback. Writing them against an invented pool API would be exactly the
-// fabrication the project forbids, so they are honest deferrals until that ONE type lands,
-// and the descriptor is NOT registered meanwhile.
+// Process @0x82BA0568 IS NOW BODIED (below). It was deferred on the belief that it reached
+// StreamPool; it does not. Its whole external surface -- Decoder, Mixer, the System's
+// StackAllocator, rw::core::filesys::Stream -- is homed.
 //
-// ⭐ CORRECTION 2026-08-29: rw::core::filesys::Stream, which an earlier revision of this
-// note listed alongside StreamPool, IS homed (src/SDKs/EATech/rwcore/filesys/stream.h). Only
-// the pool is missing. What is attested about it from PlayHandler + AcquireStream @0x82B6BAB0:
-// GetInstance(u32 guid), AcquireStream(pool, f32 priority /*f1*/, StreamLostFn, void* context)
-// returning a 32-byte-stride ENTRY { +0x08 f32 priority, +0x0C the lost-callback,
-// +0x14 rw::core::filesys::Stream*, +0x18 u16 refcount, +0x1A u8 inUse }, and a ReleaseStream.
-// ⚠️ That 0x20 entry stride holds a pointer and a callback, so it does NOT survive x64 --
-// whoever homes the pool must index a typed array, never that literal.
+// Still deferred: EventEvent @0x82BA5C48 (vt[1]), ReleaseEvent @0x82BA4178 (vt[0]) and
+// RwacTimerClient @0x82BA6980. These DO reach rw::audio::core::StreamPool -- EventEvent
+// through PlayHandler's stream open, ReleaseEvent through StreamLostCallback, the timer
+// through the pool entry's priority republish -- and that one type is not homed yet.
 //
-// These are UNREACHABLE as committed: nothing constructs a SndPlayer1, because registration
+// ⭐ WHAT THE POOL DECODE FOUND, and it reframes this whole deferral
+// (progress/scratch_dossiers/streampool_decode_codex.md, verified three independent ways):
+// StreamPool::GetInstance @0x82B6BA68 reads its registry list head from the .bss global at
+// 0x83271C7C, and NO INSTRUCTION IN THE ENTIRE IMAGE EVER WRITES THAT GLOBAL. So it returns
+// null for every guid on the real console too. AcquireStream @0x82B6BAB0 then dereferences
+// its `this` with no null guard (`lbz r11,0x28(r30)` @0x82B6BAD4), and PlayHandler passes the
+// pool straight in, testing only the RESULT (@0x82BA431C).
+//
+// Therefore SndPlayer1's stream-open path is COMPILED-IN DEAD CODE: reaching it would fault
+// on retail hardware. The guard is RequestExternal::playType (@0x82BA42E4) -- 0 (resident)
+// skips the pool entirely, while 1 (streamed) and 2 (hybrid) walk into it. Retail works, so
+// retail only ever gives a 'SnP1' voice resident requests; real streaming goes through the
+// game's own fork 'JStr' (SndPlayer1_CgsStreamMod) and the module's IStreamProvider, which
+// an independent decode confirmed never touches this pool.
+//
+// ⚠️ CONSEQUENCE FOR WHOEVER FINISHES THIS: the pool home must be FAITHFUL, not defensive.
+// An empty registry whose lookup fails is EXACT -- it fails for the same reason the console's
+// does. Do NOT add a null-pool guard the console lacks; that would hide a genuine content
+// divergence behind silently different behaviour.
+//
+// These remain UNREACHABLE as committed: nothing constructs a SndPlayer1, because registration
 // 21 is still commented out at the RWAC site. The destructor's omitted teardown therefore
 // leaks nothing today -- but it WOULD if the type were registered before this note is
 // retired, which is precisely why it is not.
@@ -430,13 +444,291 @@ void SndPlayer1::Destroy(int /*aFlags*/)
     // equivalent from ~SndPlayer1; this slot exists so the base's dispatch shape holds.
 }
 
-int SndPlayer1::Process(SndPlayer1 * /*self*/, AudioProcessContext * /*ctx*/,
-                        bool /*discontinuity*/)
+// -------------------------------------------------------------------------------------
+// Decoder::Decode takes a DecoderBuffer*; the console hands it the Mixer's SampleBuffer
+// directly, because on the X360 the two records alias over the three fields Decode
+// touches: the sample pointer at +0x04, the cursor at +0x0C and the stride at +0x0E.
+//
+// ⭐ THAT ALIASING SURVIVES x64, but only by arithmetic that is easy to break. SampleBuffer
+// leads with a System* (8 bytes) where DecoderBuffer leads with a u32 that the ABI then pads
+// to 8, so BOTH land their sample pointer at +8, their 16-bit cursor at +20 and their stride
+// at +22. The pins below exist so that a future field edit to either record fails the build
+// instead of silently handing the decoder a misaligned view of the mix buffer.
+// -------------------------------------------------------------------------------------
+static_assert(offsetof(SampleBuffer, mpSamples) == offsetof(DecoderBuffer, mpData),
+              "SampleBuffer/DecoderBuffer: the sample pointer must alias (console +0x04)");
+static_assert(offsetof(SampleBuffer, muStride) == offsetof(DecoderBuffer, muStride),
+              "SampleBuffer/DecoderBuffer: the stride must alias (console +0x0E)");
+static_assert(offsetof(SampleBuffer, muUnk0C) == offsetof(DecoderBuffer, muSampleCursor),
+              "SampleBuffer/DecoderBuffer: the sample cursor must alias (console +0x0C)");
+
+static DecoderBuffer *AsDecoderBuffer(SampleBuffer *apBuffer)
 {
-    // Process @0x82BA0568: decoded in full, deferred with the stream half. Returning
-    // BUFFERSTATUS_UNAVAILABLE is the console's own "nothing to produce" answer, so an
-    // unreachable call would at least not publish a fabricated frame.
-    return 0;
+    return reinterpret_cast<DecoderBuffer *>(apBuffer);
+}
+
+// -------------------------------------------------------------------------------------
+// SndPlayer1::Process @0x82BA0568 -- 428 instructions.
+//
+// ⭐ NO LONGER DEFERRED (2026-08-29). This body reaches the Decoder, the Mixer, the System's
+// StackAllocator and rw::core::filesys::Stream -- every one of them homed. It does NOT touch
+// StreamPool; only the event surface does. See the streaming-half note above.
+//
+// Faithfulness notes that a reader will otherwise "fix" into being wrong:
+//   * The third parameter really is unused: r5 is overwritten with 0 at 0x82BA05C4 before any
+//     read.
+//   * The format handshake compares with `!=`, which is what the console's `bne` after `fcmpu`
+//     gives -- a NaN sample rate is UNORDERED, takes the not-equal path, and re-handshakes.
+//   * The StackAllocator dereference is NOT hoisted to entry. The console reads
+//     System::mpObjectTable only at the carve and again at each restore/re-carve; hoisting it
+//     would add reads on the invalid, no-feed and future-start paths.
+//   * There is no null check before `mpLoadedDecoder = request->pDecoder`, and none is added.
+//   * When `produced == 0` and nothing was skipped and samples were requested, the function
+//     returns 0 leaving ctx->mNumSamples STALE. That is the console's own behaviour and the
+//     caller's contract; zeroing it here would be a silent divergence.
+//   * The feed-retire loop below can retire every consecutive FED record when the loaded
+//     decoder is null. Reproduced, not guarded.
+// -------------------------------------------------------------------------------------
+int SndPlayer1::Process(SndPlayer1 *self, AudioProcessContext *ctx, bool /*abUnused*/)
+{
+    // === 1. DECLICK DISPATCH (0x82BA057C..0x82BA0598) -- BOTH bytes must be non-zero ===
+    if (self->mNumDeclickSamples != 0 && self->mDcOffsetsGathered != 0)
+        return self->Declick(ctx);
+
+    // === 2. ENTRY STATE (0x82BA059C..0x82BA05C4) ===
+    self->mpLoadedDecoder = 0;                                   // EVERY entry
+    RequestInternal *lpRequest = self->GetRequestInternal(self->mCurrentRequest);
+    s32 liSkipped = 0;
+    s32 liProduced = 0;
+    s32 liRemainingInFeed = 0;
+    u8 *lpCarveNew = 0;    // doubles as the console's "a carve is outstanding" flag (r21)
+    u8 *lpCarveSaved = 0;  // the saved scratch top (r22)
+
+    if (IsRequestActive(lpRequest->state))
+    {
+        // === 3. ZERO-LENGTH RETIRE SCAN (0x82BA05C8..0x82BA0660) ===
+        // Zero-length requests are RETIRED, not played. Termination is guaranteed: the ring
+        // is finite and every retired slot becomes COMPLETE, which the validity test rejects.
+        while (lpRequest->numSamples == 0)
+        {
+            lpRequest->state = REQUESTSTATE_COMPLETE;
+            self->AdvanceCurrentRequest();
+            lpRequest = self->GetRequestInternal(self->mCurrentRequest);  // recomputed
+            if (!IsRequestActive(lpRequest->state))
+                goto epilogue;
+        }
+
+        // === 4. FORMAT HANDSHAKE (0x82BA0664..0x82BA0680 -> 0x82BA0BD0) ===
+        if (lpRequest->sampleRate != self->mPreviousSampleRate ||
+            lpRequest->numChannels != self->mOutputChannels)
+        {
+            ctx->mNumSamples = 0;                       // publish an EMPTY available frame
+            ctx->mbChannelCount = lpRequest->numChannels;
+            ctx->mfSampleRate = lpRequest->sampleRate;
+            self->mPreviousSampleRate = lpRequest->sampleRate;
+            self->mOutputChannels = lpRequest->numChannels;
+            return 1;                                   // BUFFERSTATUS_AVAILABLE
+        }
+
+        // === 5. FEED CONSUME SCAN (0x82BA0684..0x82BA06F8) ===
+        // The fill cursor is snapshotted ONCE; every advance of the free cursor is committed
+        // to the object as it happens (the console stores it inside the loop, not after).
+        if (self->mFeedDesc[self->mNextFeedSlotToFree].feedState == FEEDSTATE_FREE)
+        {
+            const u8 lu8Fill = self->mNextFeedSlotToFill;
+            while (self->mNextFeedSlotToFree != lu8Fill)
+            {
+                u8 lu8Next = static_cast<u8>(self->mNextFeedSlotToFree + 1u);
+                if (lu8Next == KU_MAX_DECODERFEEDS)
+                    lu8Next = 0;
+                self->mNextFeedSlotToFree = lu8Next;
+                if (self->mFeedDesc[lu8Next].feedState != FEEDSTATE_FREE)
+                    break;
+            }
+        }
+        if (self->mFeedDesc[self->mNextFeedSlotToFree].feedState != FEEDSTATE_FED)
+            goto epilogue;
+
+        // === 6. START-TIME GATE (0x82BA0700..0x82BA07E4) ===
+        if (lpRequest->startTime != 0.0)
+        {
+            u32 luFrames = 0;
+            if (!self->WaitForStartTime(ctx, lpRequest->startTime, &luFrames))
+            {
+                self->mCurrentRequestSamplesPlayed = 0;
+                goto epilogue;
+            }
+            if (luFrames != 0)
+            {
+                // A near-future start silences the gap. The cap is UNSIGNED (`cmplw`).
+                if (luFrames >= self->mSamplesRequested)
+                    luFrames = self->mSamplesRequested;
+                SampleBuffer *lpDst = ctx->mpDstBuffer;
+                for (u32 luChannel = 0; luChannel < lpRequest->numChannels; ++luChannel)
+                {
+                    std::memset(lpDst->mpSamples + lpDst->muStride * luChannel, 0,
+                                luFrames * sizeof(f32));
+                }
+                ctx->mNumSamples = luFrames;
+                SampleBuffer *lpOldSrc = ctx->mpSrcBuffer;   // the console's buffer SWAP
+                ctx->mpSrcBuffer = lpDst;
+                ctx->mpDstBuffer = lpOldSrc;
+                ctx->mbChannelCount = lpRequest->numChannels;
+                ctx->mfSampleRate = lpRequest->sampleRate;
+                self->mCurrentRequestSamplesPlayed = 0;
+                return 1;
+            }
+            lpRequest->startTime = 0.0;                  // start reached: disarm it
+        }
+
+        // === 7. SCRATCH CARVE (0x82BA07EC..0x82BA0828) -- no decoder-null guard ===
+        {
+            StackAllocator *lpStack = static_cast<StackAllocator *>(
+                self->mpSystemUseGetSystemAccessor->mpObjectTable);
+            const u32 luBytes =
+                (static_cast<u32>(lpRequest->decoderInstanceSize) + 0x7Fu) & ~0x7Fu;
+            lpCarveSaved = lpStack->mpTop;
+            lpCarveNew = lpCarveSaved - luBytes;
+            lpStack->mpTop = lpCarveNew;
+        }
+
+        self->mpLoadedDecoder = lpRequest->pDecoder;
+        Decoder *lpDecoder = self->mpLoadedDecoder;
+        s32 liAvailable = lpDecoder->GetSamplesRemaining(
+            self->mFeedDesc[self->mNextFeedSlotToFree].decoderRequestHandle);
+
+        // === 8. SKIP / DECODE BUDGET (0x82BA0870..0x82BA08F4) -- SIGNED comparisons ===
+        s32 liToSkip = lpRequest->numSamplesToSkipPlayer;
+        if (liAvailable < liToSkip)
+            liToSkip = liAvailable;
+        s32 liToDecode = static_cast<s32>(self->mSamplesRequested);
+        if (liToDecode >= liAvailable - liToSkip)
+            liToDecode = liAvailable - liToSkip;
+
+        lpRequest = self->GetRequestInternal(self->mCurrentRequest);  // re-materialised
+        SampleBuffer *lpDst = ctx->mpDstBuffer;
+        while (liToSkip != 0)                            // `!= 0`, not `> 0`
+        {
+            const s32 liCount = (liToSkip < 256) ? liToSkip : 256;
+            liToSkip -= liCount;
+            liSkipped += lpDecoder->Decode(AsDecoderBuffer(lpDst), liCount);
+        }
+
+        // The main decode runs even at count zero -- the console does not guard it.
+        liProduced = lpDecoder->Decode(AsDecoderBuffer(lpDst), liToDecode);
+
+        SampleBuffer *lpOldSrc = ctx->mpSrcBuffer;
+        ctx->mpSrcBuffer = lpDst;
+        ctx->mNumSamples = liProduced;
+        ctx->mpDstBuffer = lpOldSrc;
+        ctx->mbChannelCount = lpRequest->numChannels;
+        ctx->mfSampleRate = lpRequest->sampleRate;
+
+        // === 9. PUBLISH / ACCOUNT (0x82BA0924..0x82BA0988) ===
+        self->mCurrentRequestHandle = lpRequest->requestHandle;
+        if (self->mCurrentRequestSamplesPlayed == 0)
+        {
+            // Seeded from the STREAM skip plus the DECODER skip (loads +0x24 then +0x20).
+            self->mCurrentRequestSamplesPlayed =
+                lpRequest->numSamplesToSkipStream + lpRequest->numSamplesToSkipDecoder;
+        }
+        liRemainingInFeed = (liAvailable - liProduced) - liSkipped;
+        self->mCurrentRequestSamplesPlayed += liProduced + liSkipped;
+        self->mCurrentRequestSampleRate = lpRequest->sampleRate;
+        self->mCurrentRequestNumSamples = lpRequest->numSamples;
+        self->mFeedDesc[self->mNextFeedSlotToFree].chunkSamplesPlayed += liProduced + liSkipped;
+
+        // === 10. END OF REQUEST: loop, or retire and pre-load the next (0x82BA098C..) ===
+        if (self->mCurrentRequestSamplesPlayed == lpRequest->numSamples)
+        {
+            if (lpRequest->loopStart >= 0)
+            {
+                self->mCurrentRequestSamplesPlayed = lpRequest->loopStart;
+            }
+            else
+            {
+                lpRequest->state = REQUESTSTATE_COMPLETE;
+                if (self->mpLoadedDecoder != 0)
+                {
+                    self->mpLoadedDecoder = 0;
+                    static_cast<StackAllocator *>(
+                        self->mpSystemUseGetSystemAccessor->mpObjectTable)->mpTop = lpCarveSaved;
+                }
+                self->AdvanceCurrentRequest();
+                RequestInternal *lpNext = self->GetRequestInternal(self->mCurrentRequest);
+                // The RE-CARVE is guarded where the first carve was not.
+                if (IsRequestActive(lpNext->state) && lpNext->pDecoder != 0)
+                {
+                    StackAllocator *lpStack = static_cast<StackAllocator *>(
+                        self->mpSystemUseGetSystemAccessor->mpObjectTable);
+                    const u32 luBytes =
+                        (static_cast<u32>(lpNext->decoderInstanceSize) + 0x7Fu) & ~0x7Fu;
+                    lpCarveSaved = lpStack->mpTop;
+                    lpCarveNew = lpCarveSaved - luBytes;
+                    lpStack->mpTop = lpCarveNew;
+                    self->mpLoadedDecoder = lpNext->pDecoder;
+                }
+            }
+        }
+
+        // === 11. FEED ROLL (0x82BA0A50..0x82BA0AF4) ===
+        while (liRemainingInFeed == 0)
+        {
+            SndPlayer1FeedDesc &lFeed = self->mFeedDesc[self->mNextFeedSlotToFree];
+            if (lFeed.feedState != FEEDSTATE_FED)
+                break;
+            lFeed.feedState = FEEDSTATE_DECODECOMPLETED;
+            u8 lu8Next = static_cast<u8>(self->mNextFeedSlotToFree + 1u);
+            if (lu8Next == KU_MAX_DECODERFEEDS)
+                lu8Next = 0;
+            Decoder *lpLoaded = self->mpLoadedDecoder;   // read BEFORE the cursor store
+            self->mNextFeedSlotToFree = lu8Next;
+            if (lpLoaded != 0 && self->mFeedDesc[lu8Next].feedState == FEEDSTATE_FED)
+            {
+                liRemainingInFeed = lpLoaded->GetSamplesRemaining(
+                    self->mFeedDesc[lu8Next].decoderRequestHandle);
+            }
+            // Otherwise the count stays zero and the console loops again -- so a NULL loaded
+            // decoder retires every consecutive FED record. Reproduced, not repaired.
+        }
+    }
+
+epilogue:
+    // === 12. EPILOGUE (0x82BA0AFC..0x82BA0BCC) ===
+    if (self->mpLoadedDecoder != 0)
+    {
+        self->mpLoadedDecoder = 0;
+        if (lpCarveNew != 0)                             // only when a carve is outstanding
+        {
+            static_cast<StackAllocator *>(
+                self->mpSystemUseGetSystemAccessor->mpObjectTable)->mpTop = lpCarveSaved;
+        }
+    }
+
+    // The cached format is published on EVERY exit, including the unavailable one.
+    ctx->mbChannelCount = self->mOutputChannels;
+    ctx->mfSampleRate = self->mPreviousSampleRate;
+    if (liProduced == 0)
+    {
+        if (liSkipped == 0 && self->mSamplesRequested != 0)
+            return 0;          // ⚠️ ctx->mNumSamples DELIBERATELY left stale (console)
+        ctx->mNumSamples = 0;
+        return 1;
+    }
+
+    // === 13. LAST-SAMPLE CAPTURE for the declick ramp -- min(output, max) channels ===
+    u32 luChannels = ctx->mbChannelCount;
+    if (luChannels >= self->mMaxChannels)
+        luChannels = self->mMaxChannels;
+    SampleBuffer *lpSrc = ctx->mpSrcBuffer;
+    f32 *lpDeclick = self->GetDeclickBuffer();
+    for (u32 luChannel = 0; luChannel < luChannels; ++luChannel)
+    {
+        lpDeclick[luChannel] =
+            lpSrc->mpSamples[lpSrc->muStride * luChannel + liProduced - 1];
+    }
+    self->mDcOffsetsGathered = 1;   // arms ONLY this byte; mNumDeclickSamples is untouched
+    return 1;
 }
 
 void SndPlayer1::RwacTimerClient(void * /*apContext*/, f32 /*afTimeToNextCall*/)
