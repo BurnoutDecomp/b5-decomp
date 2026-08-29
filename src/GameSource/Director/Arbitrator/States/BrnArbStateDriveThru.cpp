@@ -22,6 +22,48 @@
 //   Update    @0x82235DB0
 //   Release   @0x82235F00
 //
+// ============================================================================
+// ⭐⭐ STATUS 2026-08-29 (drive-thru camera wave). THIS STATE RUNS. Measured end to end in
+// one run, one binary (scratch/flow_run/dt_cam3, and again for the body shop in dt_body1):
+//
+//   [drivethru] ENTER type=1 id=285279
+//   [drivethru] GAS REFILL boost 35.000000 -> 70.000000
+//   [slomo]     FILM LATCH raised on dilation episode 1 (scale 0.526316)
+//   [drivethru] DIRECTOR action=100 -> active=1 type=3 pos=(3336.82,3.56,-1235.31)
+//   [drivethru] BRIDGE   action=100 -> gui 366 type=3 effective=1
+//   [drivethru] NewBehaviour shot classKey=...:-1449672210  helper=4 behaviour=1
+//   [crashcam]  container current state -> 0 (ArbStateDriveThru)
+//   [crashcam]  container current state -> 1 (ArbStateRoaming)
+//
+// The three breaks that were in the way, and what each turned out to be:
+//   (1) the two `sub_821FCxxx` callees banner-justified as "owning TU not yet identified"
+//       were BehaviourHandle::GetBehaviour / GetProducedCamera all along, hidden by this
+//       class's own private BehaviourHandle fork. Fork retired.
+//   (2) BehaviourManager::NewBehaviour @0x82267418 -- the ATTRIBUTE-driven factory, distinct
+//       from the NewBehaviour<TBehaviour> family -- had no body anywhere. Landed in
+//       BrnBehaviourManager_NewBehaviourFromShot.cpp. The shot really is an ICEANIM
+//       (classKey 0xA997C1EE), so the arm that matters here is complete.
+//   (3) NOTHING WROTE GameState::mbDriveThruActive. MainDirector::ProcessInputQueue cases
+//       97/98/100/102 are its only writers in the image and were gated. Landed.
+//
+// ⛔ WHAT IS STILL WRONG -- THE SHOT IS NOT ANCHORED. Filmed at 1280x720: the ~90 frames this
+// state owns show the underside of an overpass and blank sky, no car in frame, then a clean
+// hand-back to the chase camera
+// (scratch/drivethru_evidence/gasstation_camera_and_message_strip.png). Everything on THIS
+// side is right -- the right shot group is resolved, an iceanim behaviour is allocated, the
+// produced camera is published every frame and the hand-off fires -- so the remainder is the
+// ICE take's eye/look SPACE resolution downstream (ICE::CameraSpaceHandler /
+// KeyAnimController), not the director. mDriveThruTransform is proven correct at the producer:
+// the logged position matches gas-station region 285279 and body-shop region 245759 exactly.
+// ⇒ NEXT WAVE STARTS THERE, not here. Do not re-derive this state.
+//
+// ⚠️ ORDERING WORTH KNOWING: action 102 (STOPPED_DRIVE_THRU) clears mbDriveThruActive one
+// frame BEFORE the container actually swaps to this state, so Prepare's
+// `CGS_ASSERT(mbDriveThruActive)` fires on a normal, successful drive-thru. That is the
+// console's own ordering (ChangeToStateWithoutRelease defers the swap), and the assert is
+// non-gating -- do not "fix" it by moving the write.
+// ============================================================================
+//
 // The director arbitrator state that runs the camera while the player is inside a
 // drive-thru shop. Prepare resolves the shop-specific shot-group, works out whether the
 // bay approach is "reversed" from the bay/player-car transforms, and allocates a generic

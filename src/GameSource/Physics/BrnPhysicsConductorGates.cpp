@@ -187,6 +187,32 @@ namespace BrnPhysics
     //   DeformationManager::ProcessResetDeformationModelEvent  @0x82641D50 -- DECLARED
     //       (BrnDeformationManager.h:487), never defined -> LNK2019 if called.
     //   (and VerifyPartIndices @0x826042F8 is itself a conductor gate, further down this file.)
+    //
+    // ⭐ NARROWED 2026-08-29 (drive-thru wave). THE BODY-SHOP REPAIR IS NOW BLOCKED ON CASE 97
+    // ALONE, and case 97 needs exactly ONE new body, not five. The other three arms' callees
+    // (OnPrepareGameMode / OnStartGameMode / OnJunkYardDriveThru) and
+    // ProcessDebugResetDeformationModels stay absent, but they are independent arms -- a drain
+    // loop with 97 live and 23/34/99 FLAG-gated is a legitimate partial, the same shape
+    // TranslateGameActionsToGuiEvents already ships.
+    // The producer half is DONE and MEASURED: `[drivethru] POST bodyshop action=97
+    // entityId=16777216` is on the queue on a real body-shop drive-thru (2026-08-29), the id
+    // comes from RaceCarState::mEntityId at payload+128, and the deepest callee
+    // DeformableObject::ResetDeformation @0x82639D60 is already reconstructed and already
+    // called live from the deactivate path (BrnDeformationManager.cpp).
+    // ProcessResetDeformationModelEvent is then, from the asm:
+    //     idx = FindModelIndexByEntityID(payload+128)          // header-inline, exists
+    //     if (idx == -1) assert("Failed to find deformation model to deactivate", cpp:505)
+    //     mpaModels[idx].ResetDeformation(lpSimInput, lpSceneInterface,
+    //                                     &mDetachedPartManager, &mDetachedWheelManager,
+    //                                     VecFloat{0,0,0,0}, (DeformationResetType)-1,
+    //                                     false, mRandom);
+    // ⛔⛔ AND THERE IS A HAZARD IN IT THAT NOBODY HAS RECORDED: unlike the DEACTIVATE sibling
+    // (@0x82641C58), which has a real `if (idx == -1) continue;` branch, THIS FUNCTION HAS NO
+    // BRANCH. The console asserts and then dereferences `26496 * -1 + mpaModels` regardless --
+    // a wild pointer on a miss. A faithful reconstruction therefore carries an AV that fires
+    // the moment a body-shop action names an entity with no deformation model. Whoever lands
+    // it should decide that deliberately and say so in the commit, not discover it in a shared
+    // build. (Left unlanded here for exactly that reason, not for lack of callees.)
     void PhysicsModule::HandleGameActionsPostScene(
         const BrnGameState::GameStateModuleIO::GameActionQueue*,
         CgsPhysics::PhysicsSimulationIO::InputBuffer*,
