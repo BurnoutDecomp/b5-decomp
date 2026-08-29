@@ -497,6 +497,19 @@ namespace BrnGame
             CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInput,
             const BrnGameState::GameStateModuleIO::OutputBuffer* lpGameStateOutput);
 
+        // ⭐⭐⭐ [showtime-score wave 2026-08-29] X360 0x823E1988 -- the SHOWTIME slice of the
+        // game-action -> GUI-event translation, and the ONLY producer in the image of every
+        // score-bearing showtime GUI event (396 / 394 / 399 / 401 / 400 / 393 / 397 / 402).
+        // Signature from the asm prologue: r3 = this, r4 = the action type, r5 = the action
+        // record, r6 = the GUI input buffer. Called from TranslateGameActionsToGuiEvents'
+        // jump-table arm for "cases 127,128,139-144" (@0x823ED714), which mode-gates the whole
+        // call on the SCORING output interface's meGameModeType being 2 or 16.
+        // Home GameSource/Game/GameBridgeGameStateToX_ShowtimeGuiEvents.cpp.
+        void TranslateShowtimeActionToGuiEvent(
+            s32 liActionType,
+            const CgsModule::Event* lpAction,
+            CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInput);
+
         // ⭐ [gateui] X360 0x823AA4A8 -- map a gameplay-side StuntElementType onto the GUI's
         // BrnGui::StuntType. IDENTITY for 0/1/2; anything >= 3 fires the streamed assert
         // "Invalid Stunt Enum : <v>" (GameBridgeGameStateToX.cpp:404) and returns 3

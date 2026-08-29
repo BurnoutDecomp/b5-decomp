@@ -8,6 +8,7 @@
 #include "GameShared/GameClasses/Core/CgsID.h"
 #include "GameSource/GameState/BrnCgsPlayerName.h"  // CgsNetwork::PlayerName (scoreboard request payloads)        // CgsID (GuiPlayerInfoResponse::mCarId)
 #include "SharedClasses/Traffic/BrnTrafficVehicleType.h"  // BrnTraffic::VehicleClass / VehicleScoreCategory (GuiHitVehicleEvent)
+#include "GameSource/BurnoutConstants.h"                  // EActiveRaceCarIndex (GuiShowtimeScoreUpdate)
 #include "GameSource/World/EntityModules/RaceCarEntityModule/NearMisses/BrnNearMissManager.h" // BrnWorld::ENearMissType (GuiNearMissEvent)
 // [pause-stats wave 2026-08-29] GuiEventStatsResponse (436) has been RECOVERED and moved to its
 // own home; included here so this header's existing consumers keep resolving the NAME (there is
@@ -465,8 +466,39 @@ namespace BrnGui
     struct GuiReplayStatusEvent : public CgsGui::GuiEvent<524> { u8 maPayload[1548]; };  // id 524 size 1560 (12B GuiEvent header + opaque payload)
     struct GuiRoadRageScoreUpdate { u8 maData[8]; s32 GetEventType() const { return 426; } };  // id 426 size 8 (raw; size not GuiEvent-shaped)
     struct GuiSetEasyDriveNotAllowedEvent { u8 maData[1]; s32 GetEventType() const { return 96; } };  // id 96 size 1 (raw; size not GuiEvent-shaped)
-    struct GuiShowtimeJustBounced { u8 maData[2]; s32 GetEventType() const { return 402; } };  // id 402 size 2 (raw; size not GuiEvent-shaped)
-    struct GuiShowtimeScoreUpdate : public CgsGui::GuiEvent<396> {};  // id 396 size 12
+    // [showtime-score wave 2026-08-29] RECOVERED (was `u8 maData[2]`). DWARF
+    // BrnGuiEventTypeDefs.h:4519/:4520 (PS3 GuiEvent<397>; X360 id 402, record 2 bytes --
+    // AddGuiEvent @0x823D98A8). The producer is TranslateShowtimeActionToGuiEvent's case 144,
+    // which fills the two bytes from JustBouncedAction +0x21 / +0x22 with two `lbz`/`stb`
+    // pairs (@0x823E1BBC..0x823E1BD8).
+    // ⚠️ Hex-Rays renders those two byte stores as `HIWORD(v9) = *(a3 + 33)` -- a 16-bit
+    // big-endian artefact. The asm is two independent bytes; the little-endian host must not
+    // reproduce the HIWORD spelling.
+    struct GuiShowtimeJustBounced
+    {
+        bool mbOnCar;           // +0x00 (DWARF :4519)
+        bool mbBoostedBounce;   // +0x01 (DWARF :4520)
+
+        s32 GetEventType() const { return 402; }
+    };
+    static_assert(sizeof(GuiShowtimeJustBounced) == 2, "X360 AddGuiEvent size 2 (id 402)");
+
+    // [showtime-score wave 2026-08-29] RECOVERED (was the bare `GuiEvent<396>` shell, whose
+    // three inherited words are the queue header -- NOT this record's payload). DWARF
+    // BrnGuiEventTypeDefs.h:6378-6380 (PS3 GuiEvent<391>; X360 id 396, record 12 bytes --
+    // AddGuiEvent @0x823D9458). THE SHOWTIME SCORE ITSELF: the only producer is
+    // TranslateShowtimeActionToGuiEvent's case 142 (@0x823E1A4C..0x823E1A74), which copies
+    // ShowtimeUpdateAction's three words straight across -- so the wire is RAW, three data
+    // words at +0x00/+0x04/+0x08, and the shell's header words were never on it.
+    struct GuiShowtimeScoreUpdate
+    {
+        s32                 mNetworkPlayerID;       // +0x00 (DWARF :6378)
+        EActiveRaceCarIndex meActiveRaceCarIndex;   // +0x04 (DWARF :6379)
+        s32                 miShowtimeScore;        // +0x08 (DWARF :6380)
+
+        s32 GetEventType() const { return 396; }
+    };
+    static_assert(sizeof(GuiShowtimeScoreUpdate) == 12, "X360 AddGuiEvent size 12 (id 396)");
     struct GuiShowtimeTriggered { u8 maData[1]; s32 GetEventType() const { return 392; } };  // id 392 size 1 (raw; size not GuiEvent-shaped)
     // [boost-msg wave] NEW HOME (no committed record existed). DWARF
     // BrnGuiEventTypeDefs.h:3694 {s32 miChainCount}; PS3 GuiEvent<362>, X360 id 367.
