@@ -50,35 +50,24 @@ namespace BrnDirector
         // carries the owning-object pointer -- NULL at this site.)
         const void* const KI_NEW_BEHAVIOUR_ARG_A = 0;
         const s32 KI_NEW_BEHAVIOUR_ARG_B = 1;
-
-        // The dirty-flag bit Update raises on the state's camera while a behaviour is driving
-        // it (X360 mCamera.mState_uFlags |= 2; same bit as the sibling arbitrator states).
-        const s32 KI_CAMERA_DIRTY_BEHAVIOUR_DRIVEN = 2;
     }
 
     // ------------------------------------------------------------------------
-    // Two X360 helper statics whose owning TU is not yet identified (the ledger carries them
-    // as external/unknown -- no attribution to any reconstructed home). They resolve
-    // ArbStateDriveThru::Update's live-behaviour handle (address-of mDriveThruBehaviourHandle
-    // passed as the sole argument, matching a member-style call with `this` in r3) to (a) the
-    // camera the behaviour produced this frame and (b) the live Behaviour* itself. Modelled as
-    // opaque externs called EXACTLY as the asm does, rather than guessing a named accessor --
-    // per project policy, a callee whose identity is not attested is stubbed/declared, not
-    // fabricated. FLAG: bodies land once their owning TU is identified; the per-TU `cl /c`
-    // gate does not link them.
-    //   sub_821FCE10 @0x821FCE10 -- BehaviourHandle<Camera::Behaviour>-style produced-camera
-    //     resolver (X360: bl sub_821FCE10 with r3 = &handle; result fed to Camera::operator=).
-    //   sub_821FCDA8 @0x821FCDA8 -- BehaviourHandle<Camera::Behaviour>-style live-behaviour
-    //     resolver (X360: bl sub_821FCDA8 with r3 = &handle; result is a Camera::Behaviour*
-    //     whose +0xC byte -- Camera::Behaviour::mbBaseFlagC, the canonical DWARF-attested
-    //     field this same offset names in GameSource/Director/Camera/Behaviours/Behaviour.cpp
-    //     -- Update reads).
-    extern "C"
-    {
-        const Camera::Camera* sub_821FCE10(void* lpHandle);   // @ 0x821FCE10
-        Camera::Behaviour*    sub_821FCDA8(void* lpHandle);   // @ 0x821FCDA8
-    }
-
+    // ⛔⛔ THE TWO `extern "C" sub_821FCxxx` SHIMS ARE GONE (2026-08-29, drive-thru camera wave).
+    // They stood here declared-and-never-defined -- the shape of defect that keeps a TU
+    // unmountable -- and their stated reason ("owning TU is not yet identified") was a CATEGORY
+    // ERROR, not a fact: both are the de-inlined per-instantiation copies of accessors this tree
+    // already owns, and the only thing hiding them was this class's own private BehaviourHandle
+    // fork (now retired -- see BrnArbStateDriveThru.h). Read against the ARTIST asm:
+    //   sub_821FCDA8: assert *(h+0) ("IsAllocated()", BrnBehaviourManager.h:589), then
+    //                 `BrnDirec(*(h+8), *(h+4))` -> pool slot -> `lwz r3, 0(r3)`
+    //                 == the live Camera::Behaviour*      == BehaviourHandle::GetBehaviour()
+    //   sub_821FCE10: same assert (BrnBehaviourManager.h:610), same pool resolve, then
+    //                 `addi r3, r3, 0x10`  == BehaviourHelper::mCamera
+    //                                      == BehaviourHandle::GetProducedCamera()
+    // Both are byte-identical to the sub_821FCD40/@0x821FCEE0/@0x821FD450/@0x821FD780 family
+    // BrnBehaviourManager.h already documents as those two members, and to the ones the mounted
+    // sibling states (BrnArbStateCrashing / BrnArbStateTakedown) call by name.
     // ------------------------------------------------------------------------
     // Construct @0x8225AE10 -- build the camera, clear the base camera flags, and zero the
     // behaviour handle / interpolation handle+params / state machine / reversed flag.
@@ -91,17 +80,22 @@ namespace BrnDirector
 
         meState = E_STATE_INACTIVE;        // +0x1B8 = 0
 
-        // The two behaviour handles start unallocated (five-word blocks zeroed).
-        mDriveThruBehaviourHandle = BehaviourHandle<Camera::Behaviour>();
-        mInterpolater             = BehaviourHandle<Camera::BehaviourInterpolate>();
+        // The two behaviour handles start unallocated (five-word blocks zeroed):
+        // X360 stb 0,+0x180 / stw 0,+0x184..+0x190 and stb 0,+0x194 / stw 0,+0x198..+0x1A4.
+        mDriveThruBehaviourHandle.Clear();
+        mInterpolater.Clear();
 
-        // mInterpolaterParams (+0x1A8): the X360 seeds the four selector words {8, 0, 0, 1}.
-        mInterpolaterParams.mauParams[0] = 8u;
-        mInterpolaterParams.mauParams[1] = 0u;
-        mInterpolaterParams.mauParams[2] = 0u;
-        mInterpolaterParams.mauParams[3] = 1u;
+        // mInterpolaterParams (+0x1A8): X360 stw 8,+0x1A8 / 0,+0x1AC / 0,+0x1B0 / 1,+0x1B4 --
+        // BehaviourInterpolate::Parameters::Construct() inlined (type tag 8, no debug name,
+        // E_METHOD_SLERP, E_MAPPING_SINUSOIDAL). The console emits the trailing +0x1B0/+0x1B4
+        // pair twice; a single Construct() is the source that produced it.
+        mInterpolaterParams.Construct();
 
-        mbIsReversed = false;   // +0x1BC = 0
+        // ⚠️ mbIsReversed (+0x1BC) is NOT written by Construct @0x8225AE10 -- there is no store
+        // to +0x1BC anywhere in that body. The previous reconstruction added one. Prepare is the
+        // only writer, and it writes unconditionally before any read, so the console is safe
+        // leaving it at the pool's zero-fill. Removed rather than kept "for tidiness": an added
+        // store is added behaviour.
     }
 
     // ------------------------------------------------------------------------
@@ -255,11 +249,15 @@ namespace BrnDirector
             // FALLTHROUGH
         case E_STATE_ACTIVE:
         {
-            // Drive the state camera from the behaviour and mark it behaviour-driven.
-            lrCamera = *sub_821FCE10(&mDriveThruBehaviourHandle);
-            lrCamera.mState_uFlags |= KI_CAMERA_DIRTY_BEHAVIOUR_DRIVEN;
+            // Drive the state camera from the behaviour this handle owns.
+            // X360 @0x82235E30..0x82235E40: bl sub_821FCE10(&handle) -> Camera::operator=.
+            // ⚠️ THERE IS NO FLAG OR HERE. The previous reconstruction raised
+            // `mState_uFlags |= 2` on the copied camera, citing "X360 mCamera.mState_uFlags |= 2";
+            // Update @0x82235DB0 contains no such store -- the body goes straight from
+            // Camera::operator= to `bl sub_821FCDA8`. Removed: it was invented behaviour.
+            lrCamera = mDriveThruBehaviourHandle.GetProducedCamera();
 
-            Camera::Behaviour* lpBehaviour = sub_821FCDA8(&mDriveThruBehaviourHandle);
+            Camera::Behaviour* lpBehaviour = mDriveThruBehaviourHandle.GetBehaviour();
 
             // Camera::Behaviour +0x0C gates the hand-off. That byte is the base's
             // mbCanSwitchFromMeNow (the retired IceAnim fork called it "flag C"), so the
@@ -314,15 +312,11 @@ namespace BrnDirector
     {
         meState = E_STATE_INACTIVE;   // +0x1B8 = 0
 
-        if (mDriveThruBehaviourHandle.IsAllocated())   // +0x180 block
-        {
-            mDriveThruBehaviourHandle.mpManager->UnSetBehaviourUsedByHandle(
-                mDriveThruBehaviourHandle.muAllocationKey);
-            mDriveThruBehaviourHandle.muHelperIndex = 0;
-            mDriveThruBehaviourHandle.mpManager     = 0;
-            mDriveThruBehaviourHandle.mpBehaviour   = 0;
-            mDriveThruBehaviourHandle.mbAllocated   = false;
-        }
+        // X360 @0x82235F1C..0x82235F40 is BehaviourHandle::Release() inlined, instruction for
+        // instruction: test +0x180, UnSetBehaviourUsedByHandle(+0x18C manager, +0x184 key),
+        // then zero +0x188/+0x18C/+0x190 and +0x180 -- and NOT +0x184, exactly as the canonical
+        // BehaviourHandle<TBehaviour>::Release @0x8222DD00 leaves the allocation key behind.
+        mDriveThruBehaviourHandle.Release();
 
         lrSharedInfo.mpBehaviourManager->CheckNoBehavioursAreAllocatedByState(this);
         return true;

@@ -319,7 +319,14 @@ namespace BrnDirector
     // said no" until it existed. Keep it until item 4's remainder is closed.
     // ===========================================================================================
     BRN_DIRECTOR_STUB_ARBSTATE(ArbStateCrashMode,       "ArbStateCrashMode")
-    BRN_DIRECTOR_STUB_ARBSTATE(ArbStateDriveThru,       "ArbStateDriveThru")
+    // ⭐⭐ ArbStateDriveThru's FIVE STUBS ARE GONE (2026-08-29, drive-thru camera wave).
+    // GameSource/Director/Arbitrator/States/BrnArbStateDriveThru.cpp is on the exe source list
+    // and owns Construct/Prepare/Update/Release/GetName for real. While these stubs stood,
+    // Prepare's unconditional `true` and Update's empty body meant the drive-thru state took
+    // the frame, published a camera nothing had ever written, and never handed back --
+    // structurally identical to what ArbStateCrashing's empty shell did to the crash camera.
+    // (Nothing noticed, because until item (7) above was fixed the arbitrator never left car
+    // select and this state was unreachable anyway.)
     BRN_DIRECTOR_STUB_ARBSTATE(ArbStateOnlineCarSelect, "ArbStateOnlineCarSelect")
     BRN_DIRECTOR_STUB_ARBSTATE(ArbStateOnlineRaceIntro, "ArbStateOnlineRaceIntro")
     BRN_DIRECTOR_STUB_ARBSTATE(ArbStatePostEvent,       "ArbStatePostEvent")
