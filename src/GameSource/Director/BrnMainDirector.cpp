@@ -260,6 +260,13 @@ namespace BrnDirector
         // than pool garbage. ⚠️ GATE (unchanged): the five flag bytes that follow it.
         mAllVehicleData.Construct();
 
+        // -- REAL (2026-08-29, crash-camera wave): the player-car tracker. Its four history
+        // journals have to be Construct()ed before anything reads them -- an unconstructed
+        // DataJournal reports miSize 0, so every GetCurrent()/GetPrevious() is an assert plus a
+        // garbage sample. The tracked slot is bound to the player each frame in
+        // PreSceneQueryUpdate, where the console binds it.
+        mVehicleTracker.Construct();
+
         // ⭐ REAL (was held back for host size): the camera-behaviour manager.
         mBehaviourManager.Construct();
 
@@ -653,8 +660,7 @@ namespace BrnDirector
         lrSharedInfo.mpPlayerCrashInfo       = static_cast<const Camera::PlayerCrashInfo*>(
                                                   lpInput->GetPlayerCrashInfo());               // +0x34
         lrSharedInfo.mpAllVehicleData        = &mAllVehicleData;                                // +0x38
-        lrSharedInfo.mpPlayerTracker         = reinterpret_cast<const VehicleTracker*>(
-                                                  maVehicleTracker);                            // +0x3C
+        lrSharedInfo.mpPlayerTracker         = &mVehicleTracker;                                // +0x3C
         lrSharedInfo.mpControllerInfo        = reinterpret_cast<const ControllerInfo*>(
                                                   lpInput->GetControll());                      // +0x40
         // (The two reinterpret_casts that used to launder these through the retired
@@ -775,8 +781,42 @@ namespace BrnDirector
         // ⭐ X360 line 2 of the guarded body.
         ProcessInputQueue(lpIO);
 
-        // ⚠️ GATE -- VehicleTracker::Update / CrashAnalyser::Update and the GameState latch
-        //   clear (see the banner).
+        // ⭐⭐ X360 LINE 5 IS NO LONGER GATED (2026-08-29, crash-camera wave):
+        //         if (!input->IsSimPaused()) {
+        //             miForcedCameraCarIndex = playerIndex;
+        //             VehicleTracker::Update(maVehicleTracker, maGameState, input, playerIndex, ...)
+        //         }
+        //
+        // ⛔ IT WAS THE SIXTH BREAK IN THE CRASH-CAMERA CHAIN, and the quietest. The tracker owns
+        // the tracked car's LINEAR-VELOCITY JOURNAL, and ImpactSlomoController::Update -- the
+        // crash slow motion itself -- decides whether to start a burst from that journal alone
+        // (speed over 30 MPH, the .y lane rising last frame and falling this one, car airborne).
+        // With the tracker never updated the journal is empty, its magnitude reads 0, and the
+        // entry gate can NEVER pass. MEASURED with the whole rest of the chain already landed:
+        // a forced player crash held mbCrashing for 900+ frames and the sim scale never left
+        // 1.000000. Nothing asserted and nothing looked wrong -- the camera simply never slowed
+        // down, which is exactly the failure mode a "documented quiet gate" produces.
+        //
+        // The gate's own justification -- "VehicleTracker is a named opaque region with no
+        // interior" -- had expired: the type has a full reconstruction and Update has a full
+        // body; what was missing was that the body reached a private ODR fork of
+        // DirectorIO::InputBuffer whose accessors nothing defined. That fork is retired and the
+        // body is re-fitted to the real InputBuffer, so this call is now honest.
+        //
+        // ⚠️ STILL GATED INSIDE Update: the crash-ENERGY classifier and the score copy. See the
+        // two GATE notes in BrnDirectorVehicleTracker.cpp -- the classifier's thresholds are
+        // unrecovered .data floats, and running it on the 0.0f placeholders would answer
+        // E_CRASH_LOW_ENERGY every time, which is the one value that SUPPRESSES the slow motion.
+        if (!lpIO->mpInputBuffer->IsSimPaused())
+        {
+            miForcedCameraCarIndex = liPlayerCarIndex;
+            mVehicleTracker.SetVehicleIndex(liPlayerCarIndex);
+            mVehicleTracker.Update(&maGameState, lpIO->mpInputBuffer,
+                                   static_cast<EActiveRaceCarIndex>(liPlayerCarIndex),
+                                   /*lbForceNextWorldCrashToBeFastTopDown*/ false);
+        }
+
+        // ⚠️ GATE -- CrashAnalyser::Update and the GameState latch clear (see the banner).
 
         // ⭐⭐ X360 LINE 6 (@0x8225BCF0). BODIED SINCE THE BANNER ABOVE WAS WRITTEN AND STILL
         // NOT CALLED -- BehaviourManager::ReleaseBehaviours has a full body in
@@ -1374,6 +1414,19 @@ namespace BrnDirector
                 maGameState.mbPlayerWasTakenDown = false;              // +0x1C3
             }
 
+            // [diag] BRN_CRASHCAM_DIAG -- NOT IN THE X360 BINARY. Edge-triggered: one line
+            // when the crash window opens and one when it closes. This is the FIRST link in the
+            // crash-camera chain, and without it "the camera never slowed down" cannot be told
+            // apart from "the crash was never published to the director at all".
+            if (maGameState.mbCrashActive != lbPlayerCarCrashing &&
+                getenv("BRN_CRASHCAM_DIAG") != 0 && CgsDev::Log::gpDebugPrint != 0)
+            {
+                *CgsDev::Log::gpDebugPrint
+                    << "[crashcam] mbCrashActive -> " << (lbPlayerCarCrashing ? 1 : 0)
+                    << " (playerIdx=" << liPlayerCarIndex
+                    << " raceCars=" << (lpRaceCars != 0 ? 1 : 0) << ")\n";
+            }
+
             maGameState.mbCrashActive = lbPlayerCarCrashing;           // +0x0F9
 
             if (maGameState.mbCrashActive)
@@ -1513,8 +1566,7 @@ namespace BrnDirector
         // ---- the six slots that used to be published as null (see the banner) --------------
         // Each is the console's own `this + <offset>`, reached through the named member.
         lSharedInfo.mpAllVehicleData          = &mAllVehicleData;
-        lSharedInfo.mpPlayerTracker           = reinterpret_cast<const VehicleTracker*>(
-                                                    maVehicleTracker);
+        lSharedInfo.mpPlayerTracker           = &mVehicleTracker;
         lSharedInfo.mpEffectInterface         = reinterpret_cast<const EffectInterface*>(
                                                     maEffectInterface);
         lSharedInfo.mpDebugLog                = reinterpret_cast<DebugLog*>(maDebugLog);
