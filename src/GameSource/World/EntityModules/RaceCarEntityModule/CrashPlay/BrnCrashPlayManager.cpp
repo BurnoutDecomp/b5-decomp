@@ -61,6 +61,7 @@
 #include "rw/math/vpu/vector3_operation.h"
 #include "rw/math/vpu/matrix44affine_operation.h"
 #include "rw/math/fpu/scalar_operation.h"
+#include <cstdlib>   // getenv -- the [crashplay] witness only
 
 namespace BrnWorld
 {
@@ -253,6 +254,55 @@ void CrashPlayManager::ClampBoostLevel()
 }
 
 // =================================================================================================
+// [crashplay] THE WITNESS  (BRN_CRASHPLAY_TRACE=1; flow_run.ps1 -DiagEnv "BRN_CRASHPLAY_TRACE=1")
+// Opt-in harness instrument, NOT console code.
+//
+// It ACCUMULATES and never samples. Every quantity below is a running total taken on the frame the
+// thing happens, so nothing can fall between two sampling periods -- the failure mode that has
+// already cost this cluster one wave. The periodic line exists only to show the CURRENT meter
+// alongside those totals; if the totals move and the meter does not, that is a real finding and
+// not an artefact of the print period.
+//
+// The counters, and what each one PROVES if it is zero:
+//   frames        Update ran at all (0 => the PrePhysicsUpdate call site never fires)
+//   showtime      the showtime branch ran (0 => mbIsInShowtime is still false: the arming half)
+//   press         mbBoostBounce arrived from the pad (0 => THE STIMULUS NEVER HAPPENED -- the
+//                 harness, not the game, and no conclusion about the meter is admissible)
+//   arm           a press was ACCEPTED (press > 0 but arm == 0 => every press landed inside the
+//                 KF_MINIMUM_BOUNCE_BOOST_TIME re-arm window; pulse slower)
+//   charge        OnBounce actually spent boost (arm > 0 but charge == 0 => the bounce game action
+//                 never reaches OnBounce, i.e. the HandleGameActions arm is still parked)
+//   ground        frames the player was charged KF_COST_FOR_BEING_ON_GROUND
+//   spent         total percentage points removed by the ground cost
+// =================================================================================================
+namespace
+{
+    bool CrashPlayTraceOn()
+    {
+        static s32 siOn = -1;
+        if( siOn < 0 )
+        {
+            const char* lpcEnv = getenv( "BRN_CRASHPLAY_TRACE" );
+            siOn = ( lpcEnv != 0 && lpcEnv[0] != '0' ) ? 1 : 0;
+        }
+        return siOn == 1;
+    }
+
+    struct CrashPlayWitness
+    {
+        u32 muFrames;
+        u32 muShowtimeFrames;
+        u32 muPresses;
+        u32 muArms;
+        u32 muCharges;
+        u32 muGroundFrames;
+        f32 mfGroundSpent;
+        f32 mfChargeSpent;
+    };
+    CrashPlayWitness gCrashPlayWitness = { 0u, 0u, 0u, 0u, 0u, 0u, 0.0f, 0.0f };
+}
+
+// =================================================================================================
 // Update  @ 0x82306530  -- the per-frame spine, called from RaceCarEntityModule::PrePhysicsUpdate.
 //
 // ⭐ SIGNATURE RECOVERED FROM THE PROLOGUE, NOT THE PSEUDOCODE. Hex-Rays renders this as a nullary
@@ -335,6 +385,33 @@ void CrashPlayManager::Update( const Matrix44Affine& lCameraTransform,
         mfBoostPercentage = rw::math::fpu::Max( mfBoostPercentage, KF_INITIAL_MIN_BOOST );
     }
 
+    // [crashplay] witness -- see the banner above the function. Not console code.
+    ++gCrashPlayWitness.muFrames;
+    if( mbIsInShowtime )
+    {
+        ++gCrashPlayWitness.muShowtimeFrames;
+    }
+    if( CrashPlayTraceOn() && ( gCrashPlayWitness.muFrames % 30u ) == 0u
+        && CgsDev::Log::gpDebugPrint != 0 )
+    {
+        *CgsDev::Log::gpDebugPrint
+            << "[crashplay] frames=" << static_cast<s32>( gCrashPlayWitness.muFrames )
+            << " showtime=" << static_cast<s32>( gCrashPlayWitness.muShowtimeFrames )
+            << " press=" << static_cast<s32>( gCrashPlayWitness.muPresses )
+            << " arm=" << static_cast<s32>( gCrashPlayWitness.muArms )
+            << " charge=" << static_cast<s32>( gCrashPlayWitness.muCharges )
+            << " ground=" << static_cast<s32>( gCrashPlayWitness.muGroundFrames )
+            << " | boost=" << mfBoostPercentage
+            << " bounceTimer=" << mfBounceBoostTimer
+            << " aftertouch=" << mfAftertouchPower
+            << " tInAir=" << mfTimeSinceLastInAir
+            << " tOnGround=" << mfTimeSinceLastOnGround
+            << " crashPlayTime=" << mfCrashPlayTime
+            << " groundSpent=" << gCrashPlayWitness.mfGroundSpent
+            << " chargeSpent=" << gCrashPlayWitness.mfChargeSpent
+            << "\n";
+    }
+
     // ARTIST tail-calls the debug component's vtable slot 0 through `lwz r11,0(r30) / lwz r11,0(r11)
     // / bctrl` with r3 still == this. Slot 0 of CgsDev::DebugComponent is Update(), and the
     // component is this class's member at +0x000, so `this` doubles as `&mCrashPlayDebugComponent`.
@@ -386,6 +463,8 @@ void CrashPlayManager::UpdateMomentum( f32 lfSimTimerTimeStep,
         if( mfTimeSinceLastInAir > KF_TIME_ON_GROUND_NO_PENALTY )
         {
             mfBoostPercentage -= KF_COST_FOR_BEING_ON_GROUND * lfSimTimerTimeStep;
+            ++gCrashPlayWitness.muGroundFrames;                                       // [crashplay]
+            gCrashPlayWitness.mfGroundSpent += KF_COST_FOR_BEING_ON_GROUND * lfSimTimerTimeStep;
         }
 
         if( mfTimeSinceLastInAir > KF_TIME_ON_GROUND_PROMPT_NEEDED )
@@ -471,6 +550,12 @@ void CrashPlayManager::UpdateBounceBoost( f32 lfSimTimerTimeStep,
     {
         mfBounceBoostTimer   = KF_MAXIMUM_BOUNCE_BOOST_TIME;
         mbBoostChargePending = true;
+        ++gCrashPlayWitness.muArms;                                                   // [crashplay]
+    }
+
+    if( lpPlayerControls->mbBoostBounce )
+    {
+        ++gCrashPlayWitness.muPresses;                                                // [crashplay]
     }
 
     if( mfBounceBoostTimer > 0.0f )
@@ -669,6 +754,8 @@ void CrashPlayManager::OnBounce( const BrnGameState::GameStateModuleIO::JustBoun
                                   * mfDifficultyLevel );
         mfBoostPercentage -= lfBoostCost;
         ClampBoostLevel();
+        ++gCrashPlayWitness.muCharges;                                                // [crashplay]
+        gCrashPlayWitness.mfChargeSpent += lfBoostCost;
     }
 
     if( lpBounceAction->mbOnCar )
