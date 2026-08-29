@@ -290,71 +290,44 @@ namespace BrnGui
     void Credits::OnLeave() {}
     void Credits::Update()  {}
 
-    // ---- InstantResultsState (offline instant results; ctor landed) -------------------
-    // ⭐⭐ THESE THREE STUBS ARE WHY AN OFFLINE EVENT FINISHES WITH NO PIXELS. Measured
-    // 2026-08-29 (event-finish round), and it is NOT what the standing note said.
+    // ---- InstantResultsState: THE THREE LIFECYCLE STUBS ARE GONE -------------------
+    // ⭐⭐ OnEnter / OnLeave / Update are now REAL, in
+    // GameSource/Gui/Flow/PostEvent/States/Offline/BrnOfflineInstantResults.cpp. Those three
+    // stubs were why finishing an offline event produced no pixels: the whole chain in front
+    // of them (FinishCurrentMode -> ShowModeResults -> action 37 -> GUI 291 -> InGame::Update
+    // case 291 -> SendStateEvent("TO_OFF_POST")) succeeded and then landed on a log line.
     //
-    // THE CHAIN IN FRONT OF THEM IS WHOLE, END TO END -- nothing upstream needs work:
-    //   ModeManager::FinishCurrentMode -> ShowModeResults posts game action 37 (232 B)
-    //   -> GameBridgeGameStateToX_EventFlowGuiEvents.cpp:1009 translates it to GUI 291 (+289)
-    //   -> InGame::Update case 291 (BrnInGame.cpp:916) -> SendStateEvent("TO_OFF_POST")
-    //   -> the screen flow enters THIS state -> OnEnter is the logging stub below.
-    // Three independent run logs on disk end with exactly one line after the whole chain
-    // succeeds: "[ScreenFlow] InstantResultsState::OnEnter -- un-reconstructed state (FLAG)."
-    // (scratch/flow_run/evtfin_nofsm1:6277, evtfin_fix1:21865, evtfin_witness1:17591, and
-    // medal1:4296 on a WIN). The flow arrives; the state draws nothing.
+    // What stays here is the OTHER half of the same lesson. The class has 32 functions; this
+    // wave bodied 17. The remaining 15 are declared in BrnOfflineInstantResults.h so the
+    // reconstructed dispatch can name them, and they are bodied HERE -- logged, not silent --
+    // so a run that reaches one says so in BrnGame.log instead of quietly doing nothing.
+    // ⛔ DO NOT "tidy" these into empty bodies. A silent no-op is exactly what made the
+    // original defect invisible to the link, to the ledger and to four run logs.
     //
-    // ⛔ IT IS NOT ProgressionManager::UpdatePlayerMedals. That parked callee produces game
-    // action 200, which the bridge (same file, :957) turns into GUI 307 -- a MEDAL COUNTER
-    // refresh. It cannot open a screen, and landing it would not put one pixel on the display.
-    //
-    // ⛔⛔ THE LEDGER SAYS ALL 32 OF THIS CLASS'S FUNCTIONS ARE `reviewed`. TWENTY-EIGHT OF
-    // THEM HAVE NO BODY ANYWHERE IN b5-decomp -- only the ctor, GetNextSubstate,
-    // ResetStateTimer and SetEventIconResource are real (BrnOfflineInstantResults.cpp), plus
-    // the inline GetResourcesToLoad. `reviewed` is not evidence a body exists; the LINK does
-    // not catch it either, because these three stubs satisfy it.
-    //
-    // WHAT LANDING IT ACTUALLY NEEDS (sized against the X360 asm, 2026-08-29):
-    //  1. THE HEADER MUST STOP BEING PADDING. BrnOfflineInstantResults.h models the class as
-    //     four named members inside ~0x2340 bytes of opaque `mPad*`. OnEnter @0x824C3398 (357
-    //     instructions) constructs TWENTY-FOUR components by value, so the DWARF member list
-    //     has to be declared for real first. The vocabulary is ALL PRESENT -- HelpItem,
-    //     TextField, AnimationComponent, ManufacturersIcon, LicenseComponent,
-    //     PhotoBoothComponent, IconComponent and LargeCarComponent all have committed headers
-    //     -- so this is work, not a blocker.
-    //  2. ⛔ THE ONE REAL BLOCKER: SIX .rdata `const char*` TABLES CANNOT BE READ ON THIS BOX.
-    //     OnEnter passes them straight into IconComponent::Construct and the HelpItem loop:
-    //         0x82F26B10 KAC_HELPITEM_NAMES[3]        0x82F26B1C KAC_RESULTS_FRAMES[6]
-    //         0x82F26B34 KAC_SECOND_RESULTS_FRAMES[3] 0x82F26B40 KAC_RANK_TEXT_FRAMES[3]
-    //         0x82F26B4C KAC_CAR_TEXT_FRAMES[5]       0x82F26B60 KAC_NEW_RIVALS_TEXT_FRAMES[6]
-    //     ⭐ The EXTENTS are already proven and need no image: the DWARF array sizes reproduce
-    //     every one of those six addresses exactly, in one unbroken chain (3*4 -> B1C, 6*4 ->
-    //     B34, 3*4 -> B40, 3*4 -> B4C, 5*4 -> B60), and KAC_RESULTS_FRAMES[6] lines up
-    //     one-for-one with EResultsAnimations' six values. What is missing is only the STRING
-    //     CONTENTS, and they are Apt frame names -- get one wrong and the movie shows nothing,
-    //     so they must be READ, never guessed. The IDA export set is function-only (no data),
-    //     and there is no decompressed X360 image on this box: the XEX at
-    //     BRN_X360_ROOT/BURNOUT_X360_ARTIST.XEX is a real compressed XEX2, and the `image.bin`
-    //     that earlier waves quote (e.g. BrnModeManager.h:210) is not checked in anywhere.
-    //     ⇒ WHOEVER TAKES THIS: produce the image dump FIRST. It unblocks this and every other
-    //     "read it out of the image" recovery in the tree, and it is a tooling task, not a
-    //     reconstruction one.
-    //  3. Then the spine, in call order, ~2,100 instructions of the class's ~5,000:
-    //     OnEnter(357) SetupComponents(492) AppendExpectedScreenComponents(83)
-    //     AppendAllExpectedComponents(31) SelectSubstates(49) Update(244) UpdateSubstate(133)
-    //     UpdateEventResults(184) HandleAptTriggers(475) TickSubstateAndEndIfDone(27)
-    //     HasSubstateTimedOut(52) TriggerExitResults(66) WillShowCredits(59) UpdateLeaving(68)
-    //     OnLeave(208). The car-unlock / rank-up / photo / rivals presentations are separate
-    //     sub-states that SelectSubstates gates off, so they are a later increment, not a
-    //     prerequisite for the results page itself.
-    //  ⭐ Confirmed already-decoded from the pseudocode, so it need not be re-derived: OnEnter
-    //     sets meCurrentMainMovie = 217 ("Results", which is also maResourcesToLoad[0]),
-    //     meActiveSubState = -1, zeroes mabSubStateFlags[10] then raises [8] and [9], sets
-    //     meSubStateState = E_SUBSTATE_INVALID, posts state-interface events 41/42/41 and ends
-    //     in ResetStateTimer() -- which IS already bodied.
-    void InstantResultsState::OnEnter() { LogUnreconstructedState("InstantResultsState", "OnEnter"); }
-    void InstantResultsState::OnLeave() {}
-    void InstantResultsState::Update()  {}
+    // NONE of these is on the path that puts the results movie on screen -- that is Update's
+    // E_RESULTS_STATE_LOADING_RESOURCES arm (two PlayAptMovie calls), which runs before any
+    // sub-state does. These are the sub-state PRESENTATIONS and the component fill.
+    void InstantResultsState::SetupComponents()  { LogUnreconstructedState("InstantResultsState", "SetupComponents"); }
+    void InstantResultsState::HandleAptTriggers(const void*)   { LogUnreconstructedState("InstantResultsState", "HandleAptTriggers"); }
+    void InstantResultsState::HandleControllerInput(const void*) { LogUnreconstructedState("InstantResultsState", "HandleControllerInput"); }
+    void InstantResultsState::UpdateEventResults()      { LogUnreconstructedState("InstantResultsState", "UpdateEventResults"); }
+    void InstantResultsState::UpdateSecondResultsPage() { LogUnreconstructedState("InstantResultsState", "UpdateSecondResultsPage"); }
+    void InstantResultsState::UpdateTakePhotoPage()     { LogUnreconstructedState("InstantResultsState", "UpdateTakePhotoPage"); }
+    void InstantResultsState::UpdateRankUp()            { LogUnreconstructedState("InstantResultsState", "UpdateRankUp"); }
+    void InstantResultsState::UpdateLicense()           { LogUnreconstructedState("InstantResultsState", "UpdateLicense"); }
+    void InstantResultsState::UpdateCarUnlock()         { LogUnreconstructedState("InstantResultsState", "UpdateCarUnlock"); }
+    void InstantResultsState::UpdateFreeCarUnlock()     { LogUnreconstructedState("InstantResultsState", "UpdateFreeCarUnlock"); }
+    void InstantResultsState::UpdateShowingRivals()     { LogUnreconstructedState("InstantResultsState", "UpdateShowingRivals"); }
+    void InstantResultsState::UpdateLeaving()           { LogUnreconstructedState("InstantResultsState", "UpdateLeaving"); }
+    void InstantResultsState::UpdatePhoto()             { LogUnreconstructedState("InstantResultsState", "UpdatePhoto"); }
+    // ⚠️ RETURN VALUES ARE NOT NEUTRAL, so both are stated rather than left to a bare `false`:
+    //  * IsXSCarInUnlockedArray false  => SelectSubstates does not raise CAR_UNLOCK. That is
+    //    the ordinary case (no XS car unlocked), so it degrades to "no car-unlock page".
+    //  * WillShowCredits false => the results screen ADVANCEs instead of handing over to the
+    //    credits. Wrong ONLY on the run that completes the final licence rank. The real body
+    //    needs BrnGui::WorldDataController::GetProgressionData, which has no home in the tree.
+    bool InstantResultsState::IsXSCarInUnlockedArray()  { LogUnreconstructedState("InstantResultsState", "IsXSCarInUnlockedArray"); return false; }
+    bool InstantResultsState::WillShowCredits()         { LogUnreconstructedState("InstantResultsState", "WillShowCredits"); return false; }
 
     // ---- OnlineGameOptionsSummary ------------------------------------------------------
     void OnlineGameOptionsSummary::OnEnter() { LogUnreconstructedState("OnlineGameOptionsSummary", "OnEnter"); }

@@ -54,8 +54,13 @@ namespace BrnGui
         miCtorField_1EEC = 0;
         miEventStartsCount = -1;
         mEventsCtorSentinel = -1;
-        miCtorSentinel_9ED8 = -1;
-        miCtorSentinel_9F00 = -1;
+        // The two -1 stores at +0x9ED8 / +0x9F00 are unchanged; they are simply now expressed
+        // through the named record that was carved out of this span (BrnGuiCache.h +0x9E68,
+        // GuiEventOfflinePostEvent::OfflinePostEventData). +0x9ED8 is that record's
+        // maCarsToUnlockFromSpecialEvent count word (record-relative +112) and +0x9F00 is its
+        // still-un-homed second sub-array sentinel (record-relative +152).
+        mOfflinePostEventData.maCarsToUnlockFromSpecialEvent.MarkUnconstructed();  // +0x9ED8
+        mOfflinePostEventData.miCtorSentinel98 = -1;                               // +0x9F00
         miScoringTrafficCount = -1;
         miCtorSentinel_A7E0 = -1;
 

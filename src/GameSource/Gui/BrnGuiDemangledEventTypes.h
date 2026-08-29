@@ -189,7 +189,15 @@ namespace BrnGui
     struct GuiEventNetworkPostGameProcessingFinished { u8 maData[1]; s32 GetEventType() const { return 274; } };  // id 274 size 1 (raw; size not GuiEvent-shaped)
     struct GuiEventNetworkShowFreeBurnIntro { u8 maData[2]; s32 GetEventType() const { return 279; } };  // id 279 size 2 (raw; size not GuiEvent-shaped)
     struct GuiEventNetworkSplashEvent { u8 maData[4]; s32 GetEventType() const { return 269; } };  // id 269 size 4 (raw; size not GuiEvent-shaped)
-    struct GuiEventOfflinePostEvent : public CgsGui::GuiEvent<289> { u8 maPayload[180]; };  // id 289 size 192 (12B GuiEvent header + opaque payload)
+    // GuiEventOfflinePostEvent (id 289, size 192) MOVED to
+    // GameSource/Gui/BrnGuiEventTypeDefs.h with its real nested OfflinePostEventData
+    // shape. ⚠️ SAME AUTO-DERIVATION ERROR AS GuiEventPrepareForModeStart ABOVE: the
+    // shell that stood here read the 192-byte record as "12-byte GuiEvent<289> header +
+    // 180 payload". The 192 bytes ARE the payload. Two independent measurements say so
+    // -- InstantResultsState::HandleIncomingEvents @0x824DBAD8 case 64 memcpys exactly
+    // 192 bytes into its mResults member, and that member ends exactly where the next
+    // one (mpcAnimatingComponentName @+0x2338) begins, 192 bytes after its own +0x2278.
+    // Deleted rather than left to shadow the real home.
     struct GuiEventOnlineAccountSettings { u8 maData[3]; s32 GetEventType() const { return 125; } };  // id 125 size 3 (raw; size not GuiEvent-shaped)
     struct GuiEventOnlineNumFriendsCount { u8 maData[4]; s32 GetEventType() const { return 101; } };  // id 101 size 4 (raw; size not GuiEvent-shaped)
     struct GuiEventOnlinePostEventScalps : public CgsGui::GuiEvent<319> { u8 maPayload[56]; };  // id 319 size 68 (12B GuiEvent header + opaque payload)

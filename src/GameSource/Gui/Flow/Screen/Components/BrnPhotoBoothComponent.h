@@ -109,6 +109,15 @@ namespace BrnGui
         void SetCachePointer(GuiCache* lpGuiCache);
 
         void SetProfilePointer(BrnProgression::Profile* lpProfile);                  // DWARF h:278
+
+        // ADDITIVE GROW (results-screen wave 2026-08-29). InstantResultsState::Update
+        // @0x824DF760 case E_RESULTS_STATE_UNLOADED writes the component's photo resource id
+        // DIRECTLY (`stw r15, 0x15A4(r31)`, i.e. mPhotoBoothComponent + 0x94 ==
+        // mPhotoResourceToLoad.muId): 93 when the player ranked up this event, 91 otherwise.
+        // The X360 has no setter symbol -- it is a plain inlined store into a sibling class's
+        // member -- so this accessor exists purely so the caller reaches it BY NAME instead of
+        // by offset. FLAG: accessor is ours; the STORE and its two values are the X360's.
+        void SetPhotoResourceId(u32 luResourceId)  { mPhotoResourceToLoad.muId = luResourceId; }
         void SetVisualStyle(EPhotoBoothStyle leStyle);                               // DWARF h:296
 
         // @0x824B34F0 (this TU, DWARF h:339) -- ask the cache to load the component's
