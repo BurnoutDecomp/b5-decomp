@@ -72,10 +72,12 @@
 // here.
 // ============================================================================
 
+#include <cstdlib>                                    // getenv (the [crash-end] BRN_SHOWTIME_WATCH witness)
 #include <cstring>                                    // std::memset (ClearData zeroes the Vector3 members)
 #include <cmath>                                      // std::fabs (Update's IsVectorSet epsilon test)
 #include "GameSource/GameState/ModeManager/Scoring/BrnCrashModeScoringRecentCrash.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (the X360 assert sites in these bodies)
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"  // [diagnostic] the [crash-end] witness
 #include "GameShared/GameClasses/Core/CgsID.h"        // CgsIDUnCompress (GetVehicleScoreData diagnostic)
 // [showtime score wave 2026-08-29] Update's real body needs the two console types its own
 // signature already names by pointer. These are .cpp includes, NOT header includes -- the
@@ -327,15 +329,65 @@ namespace BrnGameState
     // both the player-inactive timer (mfTimeSincePlayerCarMoved) and the event-idle timer
     // (mfTimeSinceLastEvent), each advanced by lfPadding, have exceeded the 3-second
     // threshold. The ~0 test uses the X360's epsilon (FLT_EPSILON ~= 1.1920929e-7).
+    //
+    // ⭐ THIS FUNCTION IS THE ONLY THING THAT ENDS AN OFFLINE SHOWTIME SESSION.
+    // ModeManager::UpdateMode's arm 12 (BrnModeManager_UpdateMode.cpp:505) polls it every
+    // frame the mode is E_GMS_IN_PROGRESS and, on true, calls PlayerFinishedMode -> the
+    // +0x94F7 latch -> FinishCurrentMode -> SendEvent(E_GME_NEXT) -> OUTRO -> RESULTS.
+    // CrashMode overrides neither ShouldFinish (base returns false) nor ShouldExit (folded
+    // `li r3,0`), so no other route exists. A showtime session that only reaches IN_PROGRESS
+    // for ~5 s is therefore THIS predicate answering true, and the witness below says which
+    // of its two `return true` sites did it and on what inputs.
     // ------------------------------------------------------------------------
     bool CrashModeScoring::HasCrashModeEnded(f32 lfPadding) const
     {
+        // [DIAG] NOT IN THE X360 BINARY. The INPUT witness, printed before any branch so it
+        // reports even on the frames the predicate answers false. Every ~2 s at 60 Hz while
+        // the mode is IN_PROGRESS (which is the only state that calls this at all), so it
+        // cannot flood: a 5-second window yields three lines.
+        // ⚠️ It reports the five INPUTS ONLY. The verdict is reported at the two `return true`
+        // sites themselves, so nothing here can drift out of step with the predicate -- the
+        // trap a duplicated copy of the test would walk straight into.
+        {
+            static const bool sbWatch = (getenv("BRN_SHOWTIME_WATCH") != 0);
+            static s32        siCalls = 0;
+            if (sbWatch && CgsDev::Log::gpDebugPrint != 0 && (siCalls++ % 120) == 0)
+            {
+                *CgsDev::Log::gpDebugPrint
+                    << "[crash-end] poll=" << siCalls
+                    << " infinite=" << (mbInfiniteCrashMode ? 1 : 0)
+                    << " crashing="  << (mbPlayerIsCrashing ? 1 : 0)
+                    << " boost%="    << mfPlayerBoostPercentage
+                    << " tMoved="    << mfTimeSincePlayerCarMoved
+                    << " tEvent="    << mfTimeSinceLastEvent
+                    << " tMode="     << mfTimeSinceModeStart
+                    << " pad="       << lfPadding
+                    << "\n";
+            }
+        }
+
         if (mbInfiniteCrashMode)
         {
             return false;
         }
         if (!mbPlayerIsCrashing)
         {
+            // [DIAG] NOT IN THE X360 BINARY. One-shot: the FIRST of the two exits.
+            {
+                static const bool sbWatch = (getenv("BRN_SHOWTIME_WATCH") != 0);
+                static bool       sbReported = false;
+                if (sbWatch && !sbReported && CgsDev::Log::gpDebugPrint != 0)
+                {
+                    sbReported = true;
+                    *CgsDev::Log::gpDebugPrint
+                        << "[crash-end] ENDED via !mbPlayerIsCrashing"
+                        << "  tMode=" << mfTimeSinceModeStart
+                        << " boost%=" << mfPlayerBoostPercentage
+                        << " tMoved=" << mfTimeSincePlayerCarMoved
+                        << " tEvent=" << mfTimeSinceLastEvent
+                        << "\n";
+                }
+            }
             return true;
         }
 
@@ -354,6 +406,23 @@ namespace BrnGameState
         if ((mfTimeSinceLastEvent + lfPadding) <= 3.0f)
         {
             return false;
+        }
+
+        // [DIAG] NOT IN THE X360 BINARY. One-shot: the SECOND exit -- the idle ladder.
+        {
+            static const bool sbWatch = (getenv("BRN_SHOWTIME_WATCH") != 0);
+            static bool       sbReported = false;
+            if (sbWatch && !sbReported && CgsDev::Log::gpDebugPrint != 0)
+            {
+                sbReported = true;
+                *CgsDev::Log::gpDebugPrint
+                    << "[crash-end] ENDED via the IDLE LADDER (boost settled + both 3 s timers)"
+                    << "  tMode=" << mfTimeSinceModeStart
+                    << " boost%=" << mfPlayerBoostPercentage
+                    << " tMoved=" << mfTimeSincePlayerCarMoved
+                    << " tEvent=" << mfTimeSinceLastEvent
+                    << "\n";
+            }
         }
         return true;
     }
@@ -768,6 +837,38 @@ namespace BrnGameState
         // The console inlines the -1-sentinel form verbatim (`lwz 0x2858 ; cmpwi -1 ; else
         // lbz 1120*idx + 0x77A`), which IS IsPlayerCarCrashing(): 1914 - 816 == RaceCarState
         // +1098 == mbCrashing. Reached by name.
+        // [DIAG] NOT IN THE X360 BINARY. THE FALLING EDGE OF THE ONLY LATCH THAT ENDS SHOWTIME.
+        // MEASURED 2026-08-29: an offline showtime session left E_GMS_IN_PROGRESS after 5.7 s and
+        // the [crash-end] witness named the exit "!mbPlayerIsCrashing" -- with boost% frozen at
+        // 0.595307 for the whole session, so the OTHER exit (the idle ladder) was closed the
+        // entire time and cannot be the cause. That leaves this store, and it has TWO completely
+        // different failure modes that the boolean alone cannot tell apart:
+        //   (a) the player's car really stopped crashing, or
+        //   (b) mePlayerActiveRaceCarIndex went to the -1 sentinel, which makes
+        //       IsPlayerCarCrashing() return false with no reference to the car at all
+        //       (BrnRCEntityActiveRaceCarOutputInterface.cpp:804 -- "the -1 arm yields false").
+        // So the witness prints the index, IsPlayerCarActive(), AND the player RaceCarState's own
+        // mbCrashing: (b) is index==-1 or the raw byte still 1; (a) is the raw byte 0 too.
+        // [[diagnostics-that-lie]] -- a false that means "no car" reads exactly like a false that
+        // means "not crashing". One-shot on the 1->0 edge, so it cannot flood.
+        {
+            static const bool sbWatch     = (getenv("BRN_SHOWTIME_WATCH") != 0);
+            static bool       sbReported  = false;
+            const bool        lbNowCrashing = lpActiveRaceCarInterface->IsPlayerCarCrashing();
+            if (sbWatch && !sbReported && mbPlayerIsCrashing && !lbNowCrashing &&
+                CgsDev::Log::gpDebugPrint != 0)
+            {
+                sbReported = true;
+                *CgsDev::Log::gpDebugPrint
+                    << "[crash-latch] mbPlayerIsCrashing 1 -> 0 at tMode=" << mfTimeSinceModeStart
+                    << "  playerIdx="   << static_cast<s32>(lpActiveRaceCarInterface->GetPlayerActiveRaceCarIndex())
+                    << " playerActive=" << (lpActiveRaceCarInterface->IsPlayerCarActive() ? 1 : 0)
+                    << " rawState.mbCrashing=" << (lpPlayerState->mbCrashing ? 1 : 0)
+                    << " (raw 1 => the -1 sentinel or a stale snapshot; raw 0 => the car really"
+                       " stopped crashing)\n";
+            }
+        }
+
         mbPlayerIsCrashing = lpActiveRaceCarInterface->IsPlayerCarCrashing();   // +0x54
 
         // ---- 0x823209A0..0x823209C8: the boost gauge --------------------------------------
