@@ -34,6 +34,7 @@
 #include "BrnCommonTypes.h"                             // Vector3, CgsID
 #include "GameShared/GameClasses/System/Resource/CgsResourceHandle.h"  // CgsResource::ResourceHandle
 #include "GameShared/GameClasses/Containers/CgsFastBitArray.h"  // CgsContainers::FastBitArray
+#include "GameShared/GameClasses/Containers/CgsArray.h"  // Array<T,N> (OfflinePostEventData's DerivedCarArray)
 #include "GameSource/BurnoutConstants.h"                // EActiveRaceCarIndex
 #include "SharedClasses/World/BrnWorldRegion.h"         // BrnWorld::ECounty / EDistrict
 #include "GameShared/GameClasses/Core/CgsAssert.h"      // CGS_ASSERT
@@ -2436,5 +2437,131 @@ static_assert(__builtin_offsetof(GuiEventPrepareForModeStart, meGameModeType)   
               __builtin_offsetof(GuiEventPrepareForModeStart, mbIsOnline)              == 0x90,
               "GuiEventPrepareForModeStart wire drift (RecEvent case 89 @0x8250E7E4/0x8250E90C/"
               "0x8250E9CC/0x8250E8FC)");
+
+// ==========================================================================================
+// GuiEventOfflinePostEvent::OfflinePostEventData -- the 192-byte offline event-result record.
+//
+// WHERE THE SIZE AND BASE COME FROM (both proven, neither guessed):
+//   InstantResultsState::HandleIncomingEvents @0x824DBAD8 case 64 does, verbatim,
+//       memcpy(this + 0x2278, *lpEvent + 40552, 192)
+//   -- so the record is EXACTLY 192 bytes, and the state's copy sits at +0x2278. The far end
+//   is independently confirmed: the very next member the class touches is
+//   mpcAnimatingComponentName at +0x2338, and 0x2278 + 192 == 0x2338 exactly. Two independent
+//   derivations of the same boundary.
+//
+// ⚠️⚠️ THE PS3 DWARF'S DECLARATION ORDER IS **NOT** THE X360 ORDER, SO IT IS NOT USED HERE
+// AS A LAYOUT SOURCE. The DWARF (BrnGuiEventTypeDefs.h:2382-2412) lists
+// meFinishedGameModeType first and mbHasRankedUp fourth-from-last; the X360 asm puts
+// meFinishedGameModeType at +24 and mbHasRankedUp LAST at +184, and gathers every small
+// member into one run at the tail. C++ does not reorder members, so ARTIST's header genuinely
+// declares them in a different order (the FIGS->main merge-window delta, AGENTS.md BUILD
+// LINEAGE). Every offset below therefore comes from the ARTIST **assembly**, and the DWARF is
+// used only to supply the NAME once the asm has pinned the slot.
+//
+// EVERY NAMED MEMBER IS ATTESTED BY THE BINARY, one at a time:
+//   +0x00  mNewlyUnlockedRivalID   `ld r11, 0x2278(r31)` in SelectSubstates @0x824D5A4C --
+//          an EIGHT-byte load whose truth gates mabSubStateFlags[RANK_UP_SHOWING_RIVALS].
+//          ⚠️ Hex-Rays renders this load as `*(a1 + 8828)` (i.e. +0x227C); the ASM says
+//          0x2278 and the asm is rung 1. Do not "correct" this back to +4.
+//   +0x10  mBeatenRival            `ld`, streamed by the debug print "Results.Beaten Rival = "
+//                                  through the CgsID formatter (sub_82203EE8), not the int one.
+//   +0x18  meFinishedGameModeType  `lwz r11, 0x2290(r31)` (SelectSubstates @0x824D59DC);
+//          streamed as "OFFLINE INSTANT RESULTS RECEIVED FOR GAME MODE = " and switched on by
+//          SetupComponents @0x824B3FF0.
+//   +0x20  mfTime                  SPrintf'd into "POSTRACE_FINISH_YOUR_TIME" (SetupComponents
+//                                  case 5) as a float.
+//   +0x30  maCarsToUnlockFromSpecialEvent  `Array<__int64,8>::GetLength(this + 8872)` in the
+//          HandleIncomingEvents debug print "Results.Cars To Unlock Count = ". The DWARF types
+//          it DerivedCarArray, and BrnDerivedCars.h:2 declares
+//          `DerivedCarArray : public Array<CgsID,8u>` -- i.e. Array<u64,8>, whose committed
+//          layout is {T maElements[N]; s32 miCount;}. TRIPLE CHECK: that puts miCount at
+//          0x2278+0x30+64 == 0x22E8, which is EXACTLY where the class constructor
+//          @0x825007F8 emits `stw r11(-1)` -- and CgsArray.h's own comment already records
+//          that the -1 KI_UNCONSTRUCTED sentinel "the X360 emits as a single `stw -1`".
+//   +0xA0..+0xAC  miPlayerOldRank / miPlayerNewRank / miCarsRevealed / miEventsUnlocked --
+//          streamed by name: "Results.Rank Up (Old -> New) = ... ( old = ", ", new = ",
+//          "Results.Cars Revealed = ", "Results.Events Unlocked = ".
+//   +0xB0  miPlayerFinishPosition  streamed "Results.Player Finish Position = "; SetupComponents
+//          uses (it - 1) as the index into KAC_FINISH_POS_STRINGIDS[8] and asserts
+//          "liFinishPositionIndex < KI_NUM_FINISH_POS_STRINGS".
+//   +0xB6  mbCompletedLastRank     streamed "Results.Completed Last Rank = " (bool formatter).
+//   +0xB7  mbHasUnlockedFreeCar    streamed "Results.Unlocked Free Car = "; `lbz 0x232F`.
+//   +0xB8  mbHasRankedUp           `lbz r11, 0x2330(r31)` gating mabSubStateFlags[RANK_UP_LICENSE].
+//
+// ⛔ WHAT IS DELIBERATELY LEFT UNNAMED (six spans). The DWARF supplies four more flag names
+// (mbCrashedOut / mbTimedOut / mbEliminated / mbCountsTowardsProgression) plus miModeScore,
+// miBaseScore, miScoreMultiplier, mfDistanceTravelled and mNewlyUnlockedFreeCarID, but the
+// X360 asm does not pin ANY of them to a slot from this class's code, and the DWARF order is
+// already proven wrong for this struct. SetupComponents reads +0xB3 where the string is
+// "POSTRACE_OUTOFTIME" (so +0xB3 is a timed-out flag) but the DWARF run would put mbEliminated
+// there -- i.e. naming that run from the DWARF would demonstrably mis-name at least one field.
+// They are therefore reserved spans, not guesses. Name them when a producer-side write pins
+// them (the writer is GuiCache +40552; that is the place to look, not this consumer).
+struct GuiEventOfflinePostEvent
+{
+    struct OfflinePostEventData
+    {
+        CgsID mNewlyUnlockedRivalID;             // +0x00  ld @0x824D5A4C (gates substate 7)
+        u8    maReserved08[8];                   // +0x08  UNNAMED -- no X360 access from this class
+        CgsID mBeatenRival;                      // +0x10  ld; "Results.Beaten Rival = "
+        s32   meFinishedGameModeType;            // +0x18  lwz @0x824D59DC; switched on
+        u8    maReserved1C[4];                   // +0x1C  UNNAMED
+        f32   mfTime;                            // +0x20  "POSTRACE_FINISH_YOUR_TIME"
+        u8    maReserved24[12];                  // +0x24  UNNAMED
+        Array<CgsID, 8> maCarsToUnlockFromSpecialEvent;  // +0x30  GetLength; miCount @0x22E8
+        u8    maReserved78[32];                  // +0x78  UNNAMED
+        s32   miCtorSentinel98;                  // +0x98  a SECOND -1 CgsArray sentinel. ITS
+                                                 //   OWNING ARRAY IS DELIBERATELY NOT NAMED:
+                                                 //   the element type and capacity are not
+                                                 //   attested anywhere, so declaring an
+                                                 //   Array<T,N> here would be a guess. What IS
+                                                 //   attested is the store -- and twice over,
+                                                 //   from both sides of the copy: this class's
+                                                 //   ctor @0x825007FC emits `stw -1, 0x2310`
+                                                 //   (== record + 0x98), and the PRODUCER's own
+                                                 //   reconstruction independently recorded the
+                                                 //   twin at GuiCache +0x9F00 (== record + 0x98
+                                                 //   again, with the record based at +0x9E68) as
+                                                 //   "ctor writes -1 (CgsArray sentinel;
+                                                 //   sub-array un-homed)". Two independent waves,
+                                                 //   two independent addresses, same slot.
+        u8    maReserved9C[4];                   // +0x9C  UNNAMED
+        s32   miPlayerOldRank;                   // +0xA0  "( old = "
+        s32   miPlayerNewRank;                   // +0xA4  ", new = "
+        s32   miCarsRevealed;                    // +0xA8  "Results.Cars Revealed = "
+        s32   miEventsUnlocked;                  // +0xAC  "Results.Events Unlocked = "
+        s8    miPlayerFinishPosition;            // +0xB0  "Results.Player Finish Position = "
+        u8    maReservedB1[5];                   // +0xB1  UNNAMED flag run (see the ⛔ above)
+        bool  mbCompletedLastRank;               // +0xB6  "Results.Completed Last Rank = "
+        bool  mbHasUnlockedFreeCar;              // +0xB7  lbz @0x824D5A3C
+        bool  mbHasRankedUp;                     // +0xB8  lbz @0x824D59F0
+        u8    maReservedB9[7];                   // +0xB9  tail padding to the attested 192
+    };
+
+    // The wire record for GUI event id 289 IS the data (see the tombstone left in
+    // BrnGuiDemangledEventTypes.h): the attested record size is 192 and the record carries no
+    // CgsGui::GuiEvent<289> header, exactly like GuiEventPrepareForModeStart (id 93, 152).
+    OfflinePostEventData mPostEventData;
+
+    s32 GetEventType() const { return 289; }
+};
+static_assert(sizeof(GuiEventOfflinePostEvent) == 192,
+              "GuiEventOfflinePostEvent id 289 record is 192 bytes of payload, no GuiEvent<289> header");
+
+// The memcpy length AND the distance to the next member both say 192; this asserts we
+// reproduced it. It holds on x64 too because the record contains no pointers -- CgsID is
+// u64 on both sides, so nothing widens.
+static_assert(sizeof(GuiEventOfflinePostEvent::OfflinePostEventData) == 192,
+              "OfflinePostEventData is 192 bytes (memcpy @0x824DBAD8 case 64; and "
+              "0x2338 - 0x2278 == 192)");
+static_assert(__builtin_offsetof(GuiEventOfflinePostEvent::OfflinePostEventData, mBeatenRival)           == 0x10 &&
+              __builtin_offsetof(GuiEventOfflinePostEvent::OfflinePostEventData, meFinishedGameModeType) == 0x18 &&
+              __builtin_offsetof(GuiEventOfflinePostEvent::OfflinePostEventData, mfTime)                 == 0x20 &&
+              __builtin_offsetof(GuiEventOfflinePostEvent::OfflinePostEventData, maCarsToUnlockFromSpecialEvent) == 0x30 &&
+              __builtin_offsetof(GuiEventOfflinePostEvent::OfflinePostEventData, miPlayerOldRank)        == 0xA0 &&
+              __builtin_offsetof(GuiEventOfflinePostEvent::OfflinePostEventData, miPlayerFinishPosition) == 0xB0 &&
+              __builtin_offsetof(GuiEventOfflinePostEvent::OfflinePostEventData, mbHasRankedUp)          == 0xB8,
+              "OfflinePostEventData slot drift vs the X360 loads (0x2278/0x2288/0x2290/0x2298/"
+              "0x22A8/0x2318/0x2328/0x2330 with the record based at 0x2278)");
 
 } // namespace BrnGui

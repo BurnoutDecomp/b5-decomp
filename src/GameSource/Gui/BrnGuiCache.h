@@ -576,6 +576,21 @@ namespace BrnGui
         // GetBurnoutSkillsManager; no standalone X360 symbols).
         s32 GetGameMode() const                                  { return meGameModeType; }
 
+        // ADDITIVE (results-screen wave 2026-08-29). The offline event-result record at
+        // +0x9E68. InstantResultsState::HandleIncomingEvents @0x824DBAD8 case 64 takes a
+        // wholesale 192-byte copy of it; expressing that as a struct read keeps the copy off
+        // a raw offset cast. No X360 symbol of its own -- the X360 inlines the memcpy at the
+        // consumer, which is exactly why the accessor is marked additive here.
+        const GuiEventOfflinePostEvent::OfflinePostEventData& GetOfflinePostEventData() const
+        {
+            return mOfflinePostEventData;
+        }
+
+        // ADDITIVE (results-screen wave 2026-08-29). The +0x4B77 byte both
+        // InstantResultsState::SelectSubstates and ::WillShowCredits gate on. FLAG:
+        // consumer-named -- see the member's own note.
+        bool IsPostEventPresentationSuppressed() const   { return mbSuppressPostEventPresentation; }
+
         // ADDITIVE GROW (RoadRuleComponent::ShouldUseInEventColouring @0x82410568,
         // which inlines the byte load mpGuiCache+0x4B4A): the "use in-event sign
         // colouring" gate byte.
@@ -1414,7 +1429,16 @@ namespace BrnGui
         // pending flag bytes (Hex-Rays field_4B75 / field_4B76). FLAG: consumer-named.
         bool mbCarUnlockPending;                         // +0x4B75 (19317) set 1 when an un-shown unlocked car remains
         bool mbCarUnlockDetermined;                      // +0x4B76 (19318) set 1 on entry (determination has run)
-        u8   mPad_4B77[0x4B78 - 0x4B77];                 // +0x4B77
+        // ADDITIVE CARVE (results-screen wave 2026-08-29) of the single byte that WAS
+        // mPad_4B77. Two X360 sites in InstantResultsState read it, both as `lbz` on
+        // mpGuiCache + 0x4B77, and both use it the same way: SelectSubstates @0x824D59D0
+        // skips raising the RESULTS / RESULTS_TWO / TAKE_PHOTO / RANK_UP_LICENSE sub-states
+        // when it is set, and WillShowCredits @0x824C5C38 returns false early on it. So the
+        // byte suppresses the post-event presentation.
+        // ⚠️ FLAG: CONSUMER-NAMED, exactly like mbJunkyardCarUnlockPending / mbCarUnlockPending
+        // above. The producer that writes it is not recovered, so this name records only what
+        // the two readers do with it. No member is shifted (1 == 0x4B78 - 0x4B77).
+        bool mbSuppressPostEventPresentation;            // +0x4B77 (19319)
         // ⭐⭐ ADDITIVE CARVE ([profile-save] wave, 2026-08-27) out of the head of the former
         // mPad_4B77 run -- THE POST-TITLE INTRO-VIDEO GATE. Three X360 sites pin it, and
         // together they are the console's own "a returning player does not watch the intro
@@ -1527,11 +1551,28 @@ namespace BrnGui
         // `lwzx r11, cache, 0x9E60` @0x824C7C8C). No member is shifted (4 + 4 + 116 == 124).
         u32 muEventID;                                   // +0x9E5C (40540) GetEventID
         u32 muJunctionID;                                // +0x9E60 (40544) GetJunctionID
-        u8  mPad_9E64[116];                              // +0x9E64..+0x9ED7
-        s32 miCtorSentinel_9ED8;                         // +0x9ED8 (40664) ctor writes -1 (CgsArray sentinel; sub-array un-homed)
-        u8  mPad_9EDC[36];                               // +0x9EDC..+0x9EFF
-        s32 miCtorSentinel_9F00;                         // +0x9F00 (40704) ctor writes -1 (CgsArray sentinel; sub-array un-homed)
-        u8  mPad_9F04[36];                               // +0x9F04..+0x9F27
+        u8  mPad_9E64[4];                                // +0x9E64..+0x9E68
+        // ADDITIVE CARVE (results-screen wave 2026-08-29): the 192 bytes at +0x9E68 are the
+        // OFFLINE EVENT-RESULT RECORD, named here in place of what was mPad_9E64[116] +
+        // miCtorSentinel_9ED8 + mPad_9EDC[36] + miCtorSentinel_9F00 + mPad_9F04[36] (4 + 192
+        // == 4 + 116 + 4 + 36 + 4 + 36; no member below is shifted and sizeof is unchanged).
+        //
+        // ATTESTED BY THE CONSUMER, verbatim: InstantResultsState::HandleIncomingEvents
+        // @0x824DBAD8 case 64 (the "GuiCache is ready" event) does
+        //     memcpy(this + 0x2278, lpCache + 40552, 192)
+        // -- 40552 == 0x9E68 and the length is 192, so base and extent are both read off the
+        // instruction, not inferred.
+        //
+        // ⭐ AND THE CARVE IS SELF-CHECKING. The two -1 ctor sentinels this replaces sat at
+        // +0x9ED8 and +0x9F00 -- i.e. at record-relative +112 and +152. The CONSUMER's own
+        // constructor @0x825007F8/0x825007FC writes `stw -1` at 0x22E8 and 0x2310, which with
+        // its copy based at 0x2278 is record-relative +112 and +152 EXACTLY. Two independent
+        // reconstructions, two unrelated addresses, the same two slots -- which is what pins
+        // the record's base here to the byte. (+112 is now expressible as
+        // maCarsToUnlockFromSpecialEvent.miCount, so the first sentinel is a named field
+        // rather than an anonymous marker; +152 keeps its "un-homed sub-array" status under
+        // the name miCtorSentinel98, and BrnGuiCache_wB_12.cpp still writes both.)
+        GuiEventOfflinePostEvent::OfflinePostEventData mOfflinePostEventData;  // +0x9E68 (40552)
         // ADDITIVE CARVE (E1 event-status wave 2026-08-26) from the TAIL of the former
         // mPad_9F04[40] -- the medal-target word that leads the event medal/time block.
         // X360-attested by GuiCache::RecEvent case 44 (GUI event 424, GuiEventScoreUpdate):
