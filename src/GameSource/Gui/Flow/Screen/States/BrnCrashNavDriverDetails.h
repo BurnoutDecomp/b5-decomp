@@ -145,16 +145,6 @@ namespace BrnGui
             *lpuNumberOfResources = muNumResourcesToLoad;
         }
 
-        // FLAG PC bring-up escape hatch (main-menu wave, 2026-08-29): the real lifecycle is
-        // not reconstructed, but this state sits on the CrashNav tab ring
-        // (CN_MAP_MAIN <-TOGGLE-> CN_D_DETAIL), so an un-hatched placeholder would trap the
-        // player in an invisible state with the world paused. Bodies (stand-ins, in
-        // BrnScreenStatesDataLinkStubs.cpp) register for the controller event and drain
-        // 45/50 -> "GO_BACK", 54/55 -> "TOGGLE_LEFT"/"TOGGLE_RIGHT". DELETE-WHEN the real
-        // class TU lands (the virtuals themselves match the DWARF shape and stay).
-        virtual void OnEnter();
-        virtual void OnLeave();
-        virtual void Update();
 
     private:
         bool UpdateInitSetup();                                          // @0x824CF038
