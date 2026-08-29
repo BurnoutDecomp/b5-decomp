@@ -16,21 +16,26 @@
 // ODR violation inside the game link, with the bodies as raw byte-offset
 // transliterations. Both now include THIS definition.
 //
-// LAYOUT GROUND TRUTH (two sources, reconciled):
-//   * ProStreet08Milestone.pdb `rw::audio::core::SndPlayer1` [sizeof 464,
-//     : public PlugIn] -- authoritative member NAMES/TYPES (mCurrentRequestHandle
-//     IS a float: the request-handle API is float-valued, see `float*
-//     mpRequestHandle`; the old "a handle is not a float" doubt is settled by the
-//     ARTIST asm's lfs/stfs pairs @0x8268CD90-0x8268CD9C).
-//   * BURNOUT_X360_ARTIST asm (AdvanceCurrentRequest @0x8268CD20, GetPpuTicksEvent
-//     @0x8268FE88) -- authoritative Burnout OFFSETS. Burnout DIVERGES from
-//     ProStreet by -80 bytes across the request tail (mCurrentRequestHandle @0x150
-//     vs PDB 0x1A0) => mFeedDesc is [15] not [20] (0x5C..0x14B = 15 * 16), and by
-//     +8 bytes inside the 0x160..0x177 middle block (one extra word vs ProStreet;
-//     see mUnknown170). Every asm-attested offset lands exactly on this layout:
-//     0x150/0x154/0x158/0x15C (request cache), 0x178/0x17A/0x17C (u16 triple, the
-//     asm's lhz 0x17C = mRequestInternalOffset), 0x181/0x182 (mCurrentRequest /
-//     mMaxRequests), +0x50 = mTimerHandle.mCpuTicks (GetPpuTicksEvent).
+// LAYOUT GROUND TRUTH -- ⭐ REPLACED 2026-08-28 (phase E) BY THE DecFIGS DWARF FOR
+// THIS EXACT CLASS: references/DecFIGS/dwarfdump/GameShared/GameClasses/Sound/
+// Playback/Plugins/Streaming/internal/sndplayer1.h declares
+// rw::audio::core::SndPlayer1_CgsStreamMod member-for-member, in order, with its
+// nested SndPlayer1FeedDesc/RequestInternal records and its named constants. That is
+// the authoritative source and it agrees with every ARTIST-attested offset.
+//
+// It SUPERSEDES the previous reconciliation, which extrapolated from the ProStreet
+// PDB's `rw::audio::core::SndPlayer1` -- a DIFFERENT class (the vendor player) -- and
+// then explained the deltas as "Burnout divergences". Two of those explanations were
+// wrong, and both are fixed here: mFeedDesc is [20] of a POINTER-FREE 12-byte record
+// (not [15] of an invented 16-byte one with two stream pointers), and the middle
+// block's "Burnout-only extra word" is the named pair muDataReadForNewSize +
+// mau8NewSize[4]. The old shape survived review because 15*16 == 20*12, so everything
+// after mFeedDesc still landed on its correct offset.
+//
+// Still ARTIST-attested and unchanged: 0x150/0x154/0x158/0x15C (request cache),
+// 0x178/0x17A/0x17C (the u16 triple; the asm's lhz 0x17C = mRequestInternalOffset),
+// 0x181/0x182 (mCurrentRequest / mMaxRequests), and +0x50 = mTimerHandle.mCpuTicks
+// (GetPpuTicksEvent @0x8268FE88).
 //
 // HOST-WIDTH FLAG: pointer members widen on the 64-bit host; members are pinned
 // BY NAME + SEQUENCE (console offsets in comments only, no static_asserts). The
@@ -60,20 +65,37 @@ public:
     // phase A4.
     static const char* spPathPrefix;
 
-    // PDB rw::audio::core::SndPlayer1::SndPlayer1FeedDesc [16 console bytes].
-    // FLAG (erased pointee types): pChunkInfo / pRwCoreStream are
-    // rw::core::filesys::Stream::ChunkInfo* / Stream* in the PDB; held as void*
-    // here (Stream's nested ChunkInfo cannot be forward-declared) until the
-    // rw::core::filesys surface is homed.
+    // ⭐ CORRECTED 2026-08-28 (phase E) FROM THE DecFIGS DWARF FOR THIS EXACT CLASS:
+    // references/DecFIGS/dwarfdump/GameShared/GameClasses/Sound/Playback/Plugins/
+    // Streaming/internal/sndplayer1.h declares
+    //   struct SndPlayer1FeedDesc { bool mbStreamed; int chunkSamplesPlayed;
+    //                               u8 decoderRequestHandle; u8 feedState;
+    //                               u8 requestIndex; }
+    // and `SndPlayer1FeedDesc mFeedDesc[20]` -- so the record is POINTER-FREE with a
+    // 12-byte console stride and there are TWENTY slots.
+    //
+    // The previous shape here (two invented void* members, 16-byte stride, [15]) was
+    // extrapolated from the ProStreet PDB's rw::audio::core::SndPlayer1 -- the VENDOR
+    // player, whose feed record really does carry stream pointers -- and it happened to
+    // span the same 0xF0 bytes (15*16 == 20*12), which is why the offsets after it still
+    // landed correctly and the error went unnoticed. It was still wrong twice over: it
+    // invented two members this class does not have, and it under-counted the slots, so
+    // any feed-ring walk would have run 15 of 20 and mis-strided every entry.
+    //
+    // Being pointer-free is a useful property: this record does NOT widen on the host,
+    // so its console offsets remain literally true.
     struct SndPlayer1FeedDesc
     {
-        void* pChunkInfo;             // +0x00  rw::core::filesys::Stream::ChunkInfo*
-        void* pRwCoreStream;          // +0x04  rw::core::filesys::Stream*
-        s32   chunkSamplesPlayed;     // +0x08
-        u8    decoderRequestHandle;   // +0x0C
-        u8    feedState;              // +0x0D
-        u8    requestIndex;           // +0x0E  (pad to 16)
+        bool  mbStreamed;             // +0x00
+        s32   chunkSamplesPlayed;     // +0x04
+        u8    decoderRequestHandle;   // +0x08
+        u8    feedState;              // +0x09
+        u8    requestIndex;           // +0x0A  (+0x0B pad -> console stride 12)
     };
+
+    enum { KU_MAX_DECODERFEEDS = 20 };        // DWARF MAX_DECODERFEEDS
+    enum { KI_MAX_REQUEST_HANDLE_VALUE = 4194304 }; // DWARF MAX_REQUEST_HANDLE_VALUE
+    enum { KU_NEWSIZE_BUFFER_SIZE = 4 };      // DWARF KU_NEWSIZE_BUFFER_SIZE
 
     // The request-ring entry. PDB `SndPlayer1::RequestInternal` NAMES; BURNOUT
     // console stride is 32 (asm rotlwi r9,r9,5 == index*32), i.e. the ProStreet
@@ -107,23 +129,32 @@ public:
     // mTimerHandle.mCpuTicks by name).
     int GetPpuTicksEvent() const;
 
-    // ---- layout (console offsets in comments; PDB names) ----
+    // ---- layout (console offsets in comments; ⭐ names/order now DWARF-authoritative,
+    //      from the DecFIGS header for THIS class rather than the ProStreet PDB for the
+    //      vendor SndPlayer1) ----
     Attribute_t      mAttribute[3];                          // +0x28
     TimerHandle      mTimerHandle;                           // +0x40 (mCpuTicks @ +0x50)
-    void*            mpRequestExternal;                      // +0x58 (SndPlayer1::RequestExternal*, un-homed)
-    SndPlayer1FeedDesc mFeedDesc[15];                        // +0x5C (BURNOUT: 15 slots; ProStreet has 20)
+    void*            mpRequestExternal;                      // +0x58 (RequestExternal*, un-homed)
+    SndPlayer1FeedDesc mFeedDesc[KU_MAX_DECODERFEEDS];       // +0x5C (20 slots, 12-byte stride)
     Decoder*         mpLoadedDecoder;                        // +0x14C
     f32              mCurrentRequestHandle;                  // +0x150 (asm stfs 0x150)
     f32              mCurrentRequestSampleRate;              // +0x154 (asm stfs 0x154)
     s32              mCurrentRequestSamplesPlayed;           // +0x158 (asm stw 0x158)
     s32              mCurrentRequestNumSamples;               // +0x15C (asm stw 0x15C)
-    f32*             mpRequestHandle;                        // +0x160
+    // ⭐ CORRECTED: this is an EMBEDDED float, not a pointer. The DWARF declares
+    // `float mRequestHandle`, and the asm reads/writes it with lfs/stfs directly at
+    // 0x826DB598..0x826DB5B8 -- a pointer load would be an lwz. (The vendor SndPlayer1
+    // does have a `float *mpRequestHandle`; that is where the old spelling came from.)
+    f32              mRequestHandle;                         // +0x160
     f32              mLastRequestHandleProcessed;            // +0x164
     f32              mLastRequestHandleSuccessfullyProcessed;// +0x168
     f32              mPreviousSampleRate;                    // +0x16C
-    u32              mUnknown170;                            // +0x170 FLAG: Burnout-only extra word vs
-                                                             //        ProStreet (its exact position inside
-                                                             //        0x160..0x177 is unverified)
+    // ⭐ CORRECTED: the former "mUnknown170" is not unknown. The DWARF names this pair,
+    // and the timer fills both at 0x826EA200..0x826EA238 -- it is the streamed-content
+    // "new size" re-read: a byte counter plus the 4-byte big-endian size field being
+    // accumulated out of the stream.
+    u32              muDataReadForNewSize;                   // +0x170
+    u8               mau8NewSize[KU_NEWSIZE_BUFFER_SIZE];    // +0x174
     u16              mSamplesRequested;                      // +0x178
     u16              mDeclickBufferOffset;                   // +0x17A
     u16              mRequestInternalOffset;                 // +0x17C (asm lhz 0x17C; byte offset of the
